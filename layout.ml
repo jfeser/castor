@@ -22,11 +22,19 @@ type dtype =
 
 type relation = {
   name : id;
-  attrs : attr list;
+  fields : field list;
   card : int;
 }
-and attr = { name: id; dtype : dtype }
+and field = {
+  name: id;
+  dtype : dtype;
+}
 [@@deriving show]
+
+type literal =
+  | Bool of bool
+  | Int of int
+  | String of string
 
 type expr =
   | And of expr list
@@ -54,7 +62,7 @@ type t =
     }
 
 type layout =
-  | Element of { name : string; relation : relation; attr : attr; }
+  | Element of { name : string; relation : relation; field : field; }
   | Block of { name : string; count: int; columns: layout list }
 [@@deriving show]
 
@@ -68,7 +76,7 @@ let exec : ?verbose : bool -> ?params : string list -> connection -> string -> s
     let query = match params with
       | [] -> query
       | _ ->
-          List.foldi params ~init:query ~f:(fun i q v ->
+        List.foldi params ~init:query ~f:(fun i q v ->
             String.substr_replace_all ~pattern:(sprintf "$%d" i) ~with_:v q)
     in
     if verbose then print_endline query;
@@ -83,24 +91,24 @@ let relation_from_db : connection -> string -> relation =
       exec ~params:[name] conn "select count(*) from $0"
       |> (fun ([ct_s]::_) -> int_of_string ct_s)
     in
-    let attrs =
+    let fields =
       exec ~params:[name] conn "select column_name, data_type from information_schema.columns where table_name='$0'"
-      |> List.map ~f:(fun [attr_name; dtype_s] ->
+      |> List.map ~f:(fun [field_name; dtype_s] ->
           let distinct =
-            exec ~params:[name; attr_name] conn "select count(*) from (select distinct $1 from $0) as t"
+            exec ~params:[name; field_name] conn "select count(*) from (select distinct $1 from $0) as t"
             |> (fun ([ct_s]::_) -> int_of_string ct_s)
           in
           let dtype = match dtype_s with
             | "character varying" ->
               let [min_bits; max_bits] =
-                exec ~params:[attr_name; name] conn
+                exec ~params:[field_name; name] conn
                   "select min(l), max(l) from (select bit_length($0) as l from $1) as t"
                 |> (fun (t::_) -> List.map ~f:int_of_string t)
               in
               DString { distinct; min_bits; max_bits }
             | "integer" ->
               let [min_val; max_val] =
-                exec ~params:[attr_name; name] conn "select min($0), max($0) from $1"
+                exec ~params:[field_name; name] conn "select min($0), max($0) from $1"
                 |> (fun (t::_) -> List.map ~f:int_of_string t)
               in
               DInt { distinct; min_val; max_val }
@@ -109,9 +117,9 @@ let relation_from_db : connection -> string -> relation =
             | "boolean" -> DBool { distinct }
             | s -> raise (Error (sprintf "Unknown dtype %s" s))
           in
-          { name = attr_name; dtype })
+          { name = field_name; dtype })
     in
-    { name; attrs; card }
+    { name; fields; card }
 
 let fresh_name : string -> string =
   let ctr = ref 0 in
@@ -123,8 +131,8 @@ let rec eval : t -> layout = function
   | Relation r ->
     Block {
       count = r.card;
-      columns = List.map r.attrs ~f:(fun a ->
-          Element { name = fresh_name "e"; relation = r; attr = a });
+      columns = List.map r.fields ~f:(fun a ->
+          Element { name = fresh_name "e"; relation = r; field = a });
       name = fresh_name "b";
     }
   | Comp { head; packing; vars; _ } ->
@@ -133,13 +141,13 @@ let rec eval : t -> layout = function
       List.map head ~f:(function
           | `Var (id, idx) ->
             begin match List.find inputs ~f:(fun (id', _) -> id = id') with
-            | Some (_, Element _) -> failwith "Can't index into an attr."
-            | Some (_, Block { count; columns }) ->
-              begin match List.nth columns idx with
-                | Some col -> (Some count, col)
-                | None -> failwith (sprintf "Index out of bounds (%d)" idx)
-              end
-            | None -> failwith "Unbound name."
+              | Some (_, Element _) -> failwith "Can't index into an field."
+              | Some (_, Block { count; columns }) ->
+                begin match List.nth columns idx with
+                  | Some col -> (Some count, col)
+                  | None -> failwith (sprintf "Index out of bounds (%d)" idx)
+                end
+              | None -> failwith "Unbound name."
             end
           | `Comp comp -> (None, eval comp))
     in
@@ -159,7 +167,7 @@ let layout_to_c : layout -> (string * string) = fun l ->
     | Block { name; count; columns } ->
       let row_type_str =
         List.map columns ~f:(function
-            | Element { name=field_name; attr={ dtype } } ->
+            | Element { name=field_name; field={ dtype } } ->
               begin match dtype with
                 | DInt _ -> sprintf "int %s;" field_name
                 | DString { max_bits; } ->
@@ -182,39 +190,13 @@ let layout_to_c : layout -> (string * string) = fun l ->
   let type_str = !type_decls |> List.rev |> String.concat ~sep:"\n" in
   (top_type, type_str)
 
-(* let paths : layout -> ((relation * attr) * (string -> string list)) list =
- *   let rec paths' = function
- *     | Element { name } -> failwith "unexpected"
- *     | Block { name=bname; count; columns } ->
- *       List.concat_map columns ~f:(function
- *           | Element { name=ename; relation; attr } ->
- *             [((relation, attr), fun i -> [sprintf "%s[%s].%s" bname i ename])]
- *           | Block _ as l ->
- *             paths' l |> List.map ~f:(fun (k, f) -> (k, fun i ->
- *                 List.init count ~f:(fun j ->
- *                     List.map (f i) ~f:(sprintf "%s[%d].%s" bname j))
- *                 |> List.concat)))
- *   in
- *   function
- *   | Element { name } -> failwith "unexpected"
- *   | Block { name=bname; count; columns } ->
- *     List.concat_map columns ~f:(function
- *         | Element { name=ename; relation; attr } ->
- *           [((relation, attr), fun i -> [sprintf "[%s].%s" i ename])]
- *         | Block _ as l ->
- *           paths' l |> List.map ~f:(fun (k, f) -> (k, fun i ->
- *               List.init count ~f:(fun j ->
- *                   List.map (f i) ~f:(sprintf "[%d].%s" j))
- *               |> List.concat))) *)
-
-
-let paths : layout -> ((relation * attr) * (string -> (string -> string) -> string)) list =
+let paths : layout -> ((relation * field) * (string -> (string -> string) -> string)) list =
   let rec paths' = function
     | Element { name } -> failwith "unexpected"
     | Block { name=bname; count; columns } ->
       List.concat_map columns ~f:(function
-          | Element { name=ename; relation; attr } ->
-            let key = (relation, attr) in
+          | Element { name=ename; relation; field } ->
+            let key = (relation, field) in
             let func idx gen_stmt = gen_stmt (sprintf "%s[%s].%s" bname idx ename) in
             [(key, func)]
           | Block _ as l ->
@@ -234,32 +216,32 @@ let paths : layout -> ((relation * attr) * (string -> (string -> string) -> stri
   function
   | Element { name } -> failwith "unexpected"
   | Block { name=bname; count; columns } ->
-      List.concat_map columns ~f:(function
-          | Element { name=ename; relation; attr } ->
-            let key = (relation, attr) in
-            let func idx gen_stmt = gen_stmt (sprintf "[%s].%s" idx ename) in
-            [(key, func)]
-          | Block _ as l ->
-            List.map (paths' l) ~f:(fun (key, func) ->
-                let loop_var = fresh_name "i" in
-                let func idx gen_stmt =
-                  format
-                    [
-                      "i", loop_var;
-                      "count", Int.to_string count;
-                      "stmt", func idx (fun p -> gen_stmt (sprintf "[%s].%s" loop_var p));
-                    ]
-                    "for (int $i = 0; $i < $count; $i++) { $stmt }"
-                in
-                (key, func)))
+    List.concat_map columns ~f:(function
+        | Element { name=ename; relation; field } ->
+          let key = (relation, field) in
+          let func idx gen_stmt = gen_stmt (sprintf "[%s].%s" idx ename) in
+          [(key, func)]
+        | Block _ as l ->
+          List.map (paths' l) ~f:(fun (key, func) ->
+              let loop_var = fresh_name "i" in
+              let func idx gen_stmt =
+                format
+                  [
+                    "i", loop_var;
+                    "count", Int.to_string count;
+                    "stmt", func idx (fun p -> gen_stmt (sprintf "[%s].%s" loop_var p));
+                  ]
+                  "for (int $i = 0; $i < $count; $i++) { $stmt }"
+              in
+              (key, func)))
 
 let rec lookup : 'a -> ('a * 'b) list -> 'b option =
   fun e -> function
     | [] -> None
     | (e', x)::xs -> if e = e' then Some x else lookup e xs
 
-let attr_by_name : relation -> string -> attr option =
-  fun { attrs } n -> List.find attrs ~f:(fun { name } -> name = n)
+let field_by_name : relation -> string -> field option =
+  fun { fields } n -> List.find fields ~f:(fun { name } -> name = n)
 
 let loop : start:string -> bound:string -> body:(string -> string) -> string =
   fun ~start ~bound ~body ->
@@ -272,16 +254,14 @@ let ite : cond:string -> then_:string -> else_:string -> string =
 
 let generate_builder : ?name : string -> connection -> relation list -> layout -> string =
   fun ?(name="builder") conn rels layout ->
-    let template = Stdio.In_channel.read_all "builder.c.tmpl" in
-    let ps = paths layout in
-
-    let stores_funcs = ref [] in
+    let template = Stdio.In_channel.read_all "builder.tmpl" in
     let stores =
+      let ps = paths layout in
       "PGresult *r = NULL;" ::
-      List.concat_map rels ~f:(fun ({ name = rname; attrs; card } as r) ->
+      List.concat_map rels ~f:(fun ({ name = rname; fields; card } as r) ->
           let query =
             let fields_str =
-              List.map attrs ~f:(fun { name; } -> name)
+              List.map fields ~f:(fun { name; } -> name)
               |> String.concat ~sep:", "
             in
             sprintf "r = run_query(\"select %s from %s;\");" fields_str rname
@@ -293,8 +273,12 @@ let generate_builder : ?name : string -> connection -> relation list -> layout -
                     i field_idx (store_one ~idx:i ~src:"val")
                 )
             in
-            List.mapi attrs ~f:(fun idx ({ name; dtype } as a) ->
-                let path = Option.value_exn (lookup (r, a) ps) in
+            List.mapi fields ~f:(fun idx ({ name=aname; dtype } as a) ->
+                let path =
+                  Option.value_exn
+                    ~message:(sprintf "Path to (%s, %s) not found." rname aname)
+                    (lookup (r, a) ps)
+                in
                 let store_one ~idx ~src =
                   match dtype with
                   | DInt _ -> path idx (fun dst -> sprintf "(*data)%s = atoi(%s);" dst src)
@@ -325,7 +309,11 @@ let generate_builder : ?name : string -> connection -> relation list -> layout -
     ] in
     format vars template
 
-(* let nested_loops_join : layout -> relation -> relation -> attr -> attr -> string =
+let filter : layout -> relation -> [`Eq of field * literal] -> (layout * string) =
+  fun layout r (`Eq (f, x)) ->
+    
+
+(* let nested_loops_join : layout -> relation -> relation -> [`Eq of field * field] -> (string * layout) =
  *   fun layout ({ card=r1_card } as r1) ({ card=r2_card } as r2) a1 a2 ->
  *     let path1 = Option.value_exn (lookup (r1, a1) (paths layout)) in
  *     let path2 = Option.value_exn (lookup (r2, a2) (paths layout)) in
@@ -361,41 +349,47 @@ let () =
     let rm = eval (Comp {
         head = [
           `Comp (Comp {
-            head = [`Var ("a", 0); `Var ("a", 1); `Var ("a", 2); `Var ("a", 3); `Var ("a", 4)];
-            packing = `Packed;
-            vars = [("a", Relation app_users)];
-            conds = []
-          });
+              head = [`Var ("a", 0); `Var ("a", 1); `Var ("a", 2); `Var ("a", 3); `Var ("a", 4)];
+              packing = `Packed;
+              vars = [("a", Relation app_users)];
+              conds = []
+            });
           `Comp (Comp {
-            head = [`Var ("b", 0); `Var ("b", 1); `Var ("b", 2); `Var ("b", 3)];
-            packing = `Packed;
-            vars = [("b", Relation app_user_scores)];
-            conds = []
-          });
-          ];
+              head = [`Var ("b", 0); `Var ("b", 1); `Var ("b", 2); `Var ("b", 3)];
+              packing = `Packed;
+              vars = [("b", Relation app_user_scores)];
+              conds = []
+            });
+        ];
         packing = `Packed;
         vars = [];
         conds = []
       })
     in
-    let cm = (eval (Comp {
+    let cm = eval (Comp {
         head = [
           `Comp (Comp {head = [`Var ("a", 0)]; packing = `Packed; vars = [("a", Relation app_users)]; conds = []});
           `Comp (Comp {head = [`Var ("a", 1)]; packing = `Packed; vars = [("a", Relation app_users)]; conds = []});
           `Comp (Comp {head = [`Var ("a", 2)]; packing = `Packed; vars = [("a", Relation app_users)]; conds = []});
           `Comp (Comp {head = [`Var ("a", 3)]; packing = `Packed; vars = [("a", Relation app_users)]; conds = []});
           `Comp (Comp {head = [`Var ("a", 4)]; packing = `Packed; vars = [("a", Relation app_users)]; conds = []});
+
+          `Comp (Comp {head = [`Var ("b", 0)]; packing = `Packed; vars = [("b", Relation app_user_scores)]; conds = []});
+          `Comp (Comp {head = [`Var ("b", 1)]; packing = `Packed; vars = [("b", Relation app_user_scores)]; conds = []});
+          `Comp (Comp {head = [`Var ("b", 2)]; packing = `Packed; vars = [("b", Relation app_user_scores)]; conds = []});
+          `Comp (Comp {head = [`Var ("b", 3)]; packing = `Packed; vars = [("b", Relation app_user_scores)]; conds = []});
         ];
         packing = `Packed;
-        vars = [("a", Relation app_users)];
+        vars = [];
         conds = []
-      }))
+      })
     in
-    (* print_endline (show_layout rm);
-     * print_endline (show_layout cm); *)
+    print_endline (show_layout rm);
+    print_endline (show_layout cm);
     (* print_endline (layout_to_c cm); *)
-    (* print_endline (nested_loops_join rm app_users app_user_scores (Option.value_exn (attr_by_name app_users "app_user_id")) (Option.value_exn (attr_by_name app_user_scores "app_user_id"))); *)
-    Out_channel.write_all "builder.c" (generate_builder ~name:"builder" conn [app_users; app_user_scores] rm);
+    (* print_endline (nested_loops_join rm app_users app_user_scores (Option.value_exn (field_by_name app_users "app_user_id")) (Option.value_exn (field_by_name app_user_scores "app_user_id"))); *)
+    Out_channel.write_all "builder-row-major.c" (generate_builder ~name:"builder" conn [app_users; app_user_scores] rm);
+    Out_channel.write_all "builder-column-major.c" (generate_builder ~name:"builder" conn [app_users; app_user_scores] cm);
     flush_all ()
   with Postgresql.Error e -> print_endline (string_of_error e)
 

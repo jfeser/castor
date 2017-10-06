@@ -3,13 +3,10 @@ CFLAGS = -Wall -Werror -g
 IFLAGS = -I/Applications/Postgres.app/Contents/Versions/latest/include/
 LDFLAGS = -L/Applications/Postgres.app/Contents/Versions/latest/lib -lpq
 
-all: builder
+all: builder-column-major.exe builder-row-major.exe
 
-builder: builder.c
-	$(CC) $(CFLAGS) $(IFLAGS) $(LDFLAGS) builder.c -o builder
-
-builder.c: _build/default/layout.exe builder.c.tmpl
-	_build/default/layout.exe
+builder%.exe: builder%.c 
+	$(CC) $(CFLAGS) $(IFLAGS) $(LDFLAGS) $< -o $@ 
 
 _build/default/layout.exe: layout.ml
 	jbuilder build layout.exe
