@@ -1,0 +1,5 @@
+(jbuild_version 1)
+
+(executables
+ ((names (test_layout test_locality))
+  (libraries (base postgresql dblayout))))

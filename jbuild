@@ -1,6 +1,0 @@
-(jbuild_version 1)
- 
-(executables
- ((names (layout))
-  (libraries (base stdio postgresql))
-  (preprocess (pps (ppx_deriving.std)))))

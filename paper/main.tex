@@ -1,0 +1,67 @@
+\documentclass{vldb}
+\usepackage{balance}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage[activate={true,nocompatibility},final,kerning=true,spacing=true,factor=1100,stretch=10,shrink=10]{microtype}
+% \usepackage[subtle,bibliography]{savetrees}
+\usepackage{amsfonts,amssymb,amsmath}
+\usepackage{xcolor}
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+\usepackage[style=savetrees,firstinits=true,maxcitenames=2]{biblatex}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{graphicx} % includegraphics
+\usepackage{listings} % code samples with syntax hl
+\usepackage{stmaryrd}
+\usepackage{qtree} % for simple tree diagrams
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{positioning}
+\usepackage{xspace}
+\usepackage[all]{nowidow}
+\usepackage{enumitem}
+\usepackage{hyperref} % load after other packages
+\usepackage{cleveref}
+\usepackage{mathtools}
+\usepackage{semantic}
+
+\newcommand\concat{\ensuremath{\mathbin{+\!\!+}}}
+
+\title{Automatic Layout Optimization for Relational Queries}
+\author{John K. Feser}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+  Selecting views and indices is an old problem in the database literature. In
+  this paper we propose a new approach to the problem of selecting an
+  appropriate physical layout for a query workload. We define a language of
+  physical database layouts which can express many common layout schemes, such
+  as row stores, column stores, and clustered indices. Synthesizing a program in
+  our language of layouts 
+\end{abstract}
+
+\input{intro}
+\input{example}
+\input{algorithm}
+\input{eval}
+\input{related}
+\input{conclusion}
+
+\emergencystretch=1em
+\bibstyle{abbrv}
+\printbibliography
+\balance
+
+\end{document}
+
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: t
+%%% End:
