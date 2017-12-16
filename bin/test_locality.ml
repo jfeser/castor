@@ -20,7 +20,27 @@ let () =
                                             Binop (Eq, Field y, Var "yv");]),
                                Relation taxi)))
   in
-  Seq.iter (search conn ralgebra) ~f:(fun r -> print_endline (ralgebra_to_string r))
+
+  Seq.iter (search conn ralgebra) ~f:(fun r ->
+      print_endline (ralgebra_to_string r);
+      let layouts = Ralgebra.layouts r in
+      List.iter layouts ~f:(fun l ->
+          let open Serialize in
+          try
+            let b = serialize l in
+            let t = Type.of_layout_exn l in
+            let f = scan_layout t in
+            print_endline (Sexp.to_string_hum (Implang.sexp_of_func f));
+            Implang.eval b (Implang.Infix.(seq [
+                `S ("f" := call (Var "f") [int 0]);
+                `S (loop (int (ntuples l)) (seq [
+                    `S ("x" += "f");
+                    `Y (Implang.Var "x");
+                  ]))
+              ]))
+            |> Seq.iter ~f:(fun v ->
+                print_endline (Sexp.to_string_hum (Implang.sexp_of_value v)))
+          with e -> Exn.to_string e |> print_endline))
 
   (* let rec loop ct =
    *   if ct <= 0 then () else

@@ -40,7 +40,7 @@ let find_field_exn : relation -> string -> Field.t =
   fun r n -> List.find_exn r.fields ~f:(fun f -> String.(f.name = n))
 
 type scalar_prop = { relation: relation; field: Field.t }
-type tuple_prop = { mutable compinfo : (Cil.compinfo) option }
+type tuple_prop = unit
 type list_prop = { count: int }
 type ptr_prop = unit
 type table_prop = { field : Field.t }
@@ -137,7 +137,7 @@ let layout_of_relation : relation -> t =
     let row =
       List.map fields ~f:(fun f -> Scalar { relation=r; field=f })
     in
-    List (Tuple (row, { compinfo = None }), { count=card })
+    List (Tuple (row, ()), { count=card })
 
 let ctx_of_relations : relation list -> t Map.M(String).t =
   fun rels -> 
@@ -153,7 +153,7 @@ let rec layout_of_expr_exn : t Map.M(String).t -> Expr.t -> t =
       end
     | Expr.Tuple exprs ->
       let layouts = List.map ~f:(layout_of_expr_exn ctx) exprs in
-      Tuple (layouts, { compinfo = None })
+      Tuple (layouts, ())
     | Expr.Comp { body; binds } ->
       (* Flatten out variable bindings. *)
       let all_binds =
@@ -179,37 +179,37 @@ let rec layout_of_expr_exn : t Map.M(String).t -> Expr.t -> t =
       in
       List (layout_of_expr_exn ctx body, { count })
 
-let layout_to_ctype : Cil.file -> t -> (Cil.typ * Cil.file) =
-  let const_array typ elems =
-    Cil.(TArray (typ, Some (Const (CInt64 (elems, IInt, None))), []))
-  in
-  let string_array mb =
-    let bytes = (mb / 8) + (if mb % 8 > 0 then 1 else 0) |> Int64.of_int in
-    const_array (TInt (IChar, [])) bytes 
-  in
-  let rec ltc file = function
-    | Scalar { field = { dtype = DInt _ } } -> Cil.intType, file
-    | Scalar { field = { dtype = DString { min_bits; max_bits; distinct } } } ->
-      string_array max_bits, file
-    | Scalar { field = { dtype = DTimestamp _ } }
-    | Scalar { field = { dtype = DInterval _ } } -> failwith "No translation."
-    | Scalar { field = { dtype = DBool _ } } -> Cil.intType, file
-    | Tuple (ls, prop) ->
-      let fields, file =
-        List.foldi ls ~init:([], file) ~f:(fun i (ts, file) l ->
-            let (t, file) = ltc file l in
-            (((sprintf "f%d" i), t, None, [], Cil.locUnknown)::ts, file))
-      in
-      let compInfo = Cil.mkCompInfo true "t" (fun _ -> fields) [] in
-      prop.compinfo <- Some compInfo;
-      let global = Cil.(GCompTag (compInfo, locUnknown)) in
-      let file = Cil.({ file with globals = List.append file.globals [global] }) in
-      TComp (compInfo, []), file
-    | List (l, { count }) ->
-      let t, file = ltc file l in
-      const_array t (Int64.of_int count), file
-  in
-  ltc
+(* let layout_to_ctype : Cil.file -> t -> (Cil.typ * Cil.file) =
+ *   let const_array typ elems =
+ *     Cil.(TArray (typ, Some (Const (CInt64 (elems, IInt, None))), []))
+ *   in
+ *   let string_array mb =
+ *     let bytes = (mb / 8) + (if mb % 8 > 0 then 1 else 0) |> Int64.of_int in
+ *     const_array (TInt (IChar, [])) bytes 
+ *   in
+ *   let rec ltc file = function
+ *     | Scalar { field = { dtype = DInt _ } } -> Cil.intType, file
+ *     | Scalar { field = { dtype = DString { min_bits; max_bits; distinct } } } ->
+ *       string_array max_bits, file
+ *     | Scalar { field = { dtype = DTimestamp _ } }
+ *     | Scalar { field = { dtype = DInterval _ } } -> failwith "No translation."
+ *     | Scalar { field = { dtype = DBool _ } } -> Cil.intType, file
+ *     | Tuple (ls, prop) ->
+ *       let fields, file =
+ *         List.foldi ls ~init:([], file) ~f:(fun i (ts, file) l ->
+ *             let (t, file) = ltc file l in
+ *             (((sprintf "f%d" i), t, None, [], Cil.locUnknown)::ts, file))
+ *       in
+ *       let compInfo = Cil.mkCompInfo true "t" (fun _ -> fields) [] in
+ *       prop.compinfo <- Some compInfo;
+ *       let global = Cil.(GCompTag (compInfo, locUnknown)) in
+ *       let file = Cil.({ file with globals = List.append file.globals [global] }) in
+ *       TComp (compInfo, []), file
+ *     | List (l, { count }) ->
+ *       let t, file = ltc file l in
+ *       const_array t (Int64.of_int count), file
+ *   in
+ *   ltc *)
 
 let rec fields_in_layout : t -> (Field.t * relation) list =
   function
@@ -217,29 +217,29 @@ let rec fields_in_layout : t -> (Field.t * relation) list =
   | List (l,_) -> fields_in_layout l
   | Tuple (ls,_) -> List.concat_map ls ~f:fields_in_layout
 
-type path_elem =
-  | PScalar of { relation: relation; field: Field.t }
-  | PPtr
-  | PTuple of (Cil.fieldinfo)
-  | PList of int
-  | PCList of int
-type path = path_elem list
-
-let rec paths : t -> path list = function
-  | Scalar { relation=r; field=f } -> [[PScalar { relation = r; field = f }]]
-  | Tuple (ls, { compinfo = Some compinfo }) ->
-    List.concat_mapi ls ~f:(fun i l ->
-        List.map (paths l) ~f:(fun p ->
-            let field = List.nth_exn compinfo.cfields i in
-            PTuple field :: p))
-  | Tuple (_, { compinfo = None }) ->
-    failwith "Tuple not annotated with compinfo."
-  | List (l, { count }) ->
-    List.map (paths l) ~f:(fun p ->
-        if List.exists p ~f:(function PList _ -> true | _ -> false) then
-          PList count :: p
-        else
-          PCList count :: p)
+(* type path_elem =
+ *   | PScalar of { relation: relation; field: Field.t }
+ *   | PPtr
+ *   | PTuple of (Cil.fieldinfo)
+ *   | PList of int
+ *   | PCList of int
+ * type path = path_elem list
+ * 
+ * let rec paths : t -> path list = function
+ *   | Scalar { relation=r; field=f } -> [[PScalar { relation = r; field = f }]]
+ *   | Tuple (ls, { compinfo = Some compinfo }) ->
+ *     List.concat_mapi ls ~f:(fun i l ->
+ *         List.map (paths l) ~f:(fun p ->
+ *             let field = List.nth_exn compinfo.cfields i in
+ *             PTuple field :: p))
+ *   | Tuple (_, { compinfo = None }) ->
+ *     failwith "Tuple not annotated with compinfo."
+ *   | List (l, { count }) ->
+ *     List.map (paths l) ~f:(fun p ->
+ *         if List.exists p ~f:(function PList _ -> true | _ -> false) then
+ *           PList count :: p
+ *         else
+ *           PCList count :: p) *)
 
 module FormatCtx = struct
   let add = List.Assoc.add ~equal:String.equal
@@ -247,84 +247,84 @@ module FormatCtx = struct
   let merge l r = List.fold_left r ~init:l ~f:(fun l (k, v) -> add l k v)
 end
 
-let path_to_writer : layout:Cil.typ -> Cil.file -> path -> (Cil.fundec * Cil.file) =
-  fun ~layout file path ->
-    let fundec = Cil.emptyFunction "" in
-    Cil.setFunctionTypeMakeFormals fundec
-      (Cil.TFun (Cil.TVoid [], Some ["root", layout, []], false, []));
-
-    let query = "" in
-
-    let funLocals = fun n t -> Cil.makeLocalVar fundec n t in
-    let noLocals = fun _ _ -> failwith "Unexpected local variable creation." in
-
-    let rec mk_writer ctx mk_offset ps =
-      let open Formatcil in
-      let open Cil in
-      match ps with
-      | [PScalar { relation=r; field=f }] ->
-        let offset = mk_offset NoOffset in
-        let ctx = FormatCtx.add ctx "offset" (Fo offset) in
-        begin match f.dtype with
-          | DInt _ ->
-            cStmt "%v:root %o:offset = atoi(%v:fieldval);"
-              funLocals locUnknown ctx
-          | DString _ ->
-            cStmt "strcpy(%v:root %o:offset, %v:fieldval);"
-              funLocals locUnknown ctx
-          | DTimestamp _
-          | DInterval _ -> failwith "Unsupported."
-          | DBool _ ->
-            cStmt "%v:root %o:offset = strcmp(%v:fieldval, \"t\") ? 1 : 0;"
-              funLocals locUnknown ctx
-        end
-      | PCList _::ps ->
-        let mk_offset = fun o -> mk_offset (Index (cExp "%v:loopvar" ctx, o)) in
-        mk_writer ctx mk_offset ps 
-      | PList count::ps ->
-        let lv = makeTempVar fundec ~name:"j" (TInt (IInt, [])) in
-        let ctx = FormatCtx.add ctx "lv" (Fv lv) in
-        let mk_offset = fun o -> mk_offset (Index (cExp "%v:lv" ctx, o)) in
-        let body = mk_writer ctx mk_offset ps in
-        let ctx = FormatCtx.add ctx "body" (Fs body) in
-        let ctx = FormatCtx.add ctx "count" (Fd count) in
-        cStmt "for(%v:lv = 0; %v:lv < %d:count; %v:lv++) { %s:body }"
-          noLocals locUnknown ctx
-      | PTuple field::ps ->
-        let mk_offset = fun o -> mk_offset (Cil.Field (field, o)) in
-        mk_writer ctx mk_offset ps
-      | _ -> failwith "Malformed path."
-    in
-
-    let rootvar = List.find_exn fundec.sformals ~f:(fun v -> String.(v.vname = "root")) in
-    let loopvar = Cil.makeLocalVar fundec "i" (Cil.TInt (Cil.IInt, [])) in
-    let fieldval = Cil.makeLocalVar fundec "val" (Cil.TPtr ((Cil.TInt (Cil.IChar, [])), [])) in
-    let ctx = [
-      "atoi", Cil.Fv (Cil.findOrCreateFunc file "atoi"
-                        (Formatcil.cType "char* (int)" []));
-      "strcpy", Cil.Fv (Cil.findOrCreateFunc file "strcpy"
-                          (Formatcil.cType "char* (char*, const char*)" []));
-      "strcmp", Cil.Fv (Cil.findOrCreateFunc file "strcmp"
-                          (Formatcil.cType "int (const char*, const char*)" []));
-      "loopvar", Cil.Fv loopvar;
-      "fieldval", Cil.Fv fieldval;
-      "root", Cil.Fv rootvar;
-      "query", Cil.Fg query;
-    ] in
-    let writer = mk_writer ctx (fun o -> o) path in
-    let ctx = FormatCtx.add ctx "writer" (Cil.Fs writer) in
-
-    let body =
-      Formatcil.cStmt
-        "PGresult *r = run_query(\"%g:query\");
-         for (%v:loopvar = 0; %v:loopvar < PQntuples(r); %v:loopvar++) {
-             %v:fieldval = PQgetvalue(r, %v:loopvar, 0);
-             %s:writer
-         }"
-        funLocals Cil.locUnknown ctx
-    in
-    fundec.sbody <- Cil.mkBlock [body];
-    (fundec, file)
+(* let path_to_writer : layout:Cil.typ -> Cil.file -> path -> (Cil.fundec * Cil.file) =
+ *   fun ~layout file path ->
+ *     let fundec = Cil.emptyFunction "" in
+ *     Cil.setFunctionTypeMakeFormals fundec
+ *       (Cil.TFun (Cil.TVoid [], Some ["root", layout, []], false, []));
+ * 
+ *     let query = "" in
+ * 
+ *     let funLocals = fun n t -> Cil.makeLocalVar fundec n t in
+ *     let noLocals = fun _ _ -> failwith "Unexpected local variable creation." in
+ * 
+ *     let rec mk_writer ctx mk_offset ps =
+ *       let open Formatcil in
+ *       let open Cil in
+ *       match ps with
+ *       | [PScalar { relation=r; field=f }] ->
+ *         let offset = mk_offset NoOffset in
+ *         let ctx = FormatCtx.add ctx "offset" (Fo offset) in
+ *         begin match f.dtype with
+ *           | DInt _ ->
+ *             cStmt "%v:root %o:offset = atoi(%v:fieldval);"
+ *               funLocals locUnknown ctx
+ *           | DString _ ->
+ *             cStmt "strcpy(%v:root %o:offset, %v:fieldval);"
+ *               funLocals locUnknown ctx
+ *           | DTimestamp _
+ *           | DInterval _ -> failwith "Unsupported."
+ *           | DBool _ ->
+ *             cStmt "%v:root %o:offset = strcmp(%v:fieldval, \"t\") ? 1 : 0;"
+ *               funLocals locUnknown ctx
+ *         end
+ *       | PCList _::ps ->
+ *         let mk_offset = fun o -> mk_offset (Index (cExp "%v:loopvar" ctx, o)) in
+ *         mk_writer ctx mk_offset ps 
+ *       | PList count::ps ->
+ *         let lv = makeTempVar fundec ~name:"j" (TInt (IInt, [])) in
+ *         let ctx = FormatCtx.add ctx "lv" (Fv lv) in
+ *         let mk_offset = fun o -> mk_offset (Index (cExp "%v:lv" ctx, o)) in
+ *         let body = mk_writer ctx mk_offset ps in
+ *         let ctx = FormatCtx.add ctx "body" (Fs body) in
+ *         let ctx = FormatCtx.add ctx "count" (Fd count) in
+ *         cStmt "for(%v:lv = 0; %v:lv < %d:count; %v:lv++) { %s:body }"
+ *           noLocals locUnknown ctx
+ *       | PTuple field::ps ->
+ *         let mk_offset = fun o -> mk_offset (Cil.Field (field, o)) in
+ *         mk_writer ctx mk_offset ps
+ *       | _ -> failwith "Malformed path."
+ *     in
+ * 
+ *     let rootvar = List.find_exn fundec.sformals ~f:(fun v -> String.(v.vname = "root")) in
+ *     let loopvar = Cil.makeLocalVar fundec "i" (Cil.TInt (Cil.IInt, [])) in
+ *     let fieldval = Cil.makeLocalVar fundec "val" (Cil.TPtr ((Cil.TInt (Cil.IChar, [])), [])) in
+ *     let ctx = [
+ *       "atoi", Cil.Fv (Cil.findOrCreateFunc file "atoi"
+ *                         (Formatcil.cType "char* (int)" []));
+ *       "strcpy", Cil.Fv (Cil.findOrCreateFunc file "strcpy"
+ *                           (Formatcil.cType "char* (char*, const char*\)" []));
+ *       "strcmp", Cil.Fv (Cil.findOrCreateFunc file "strcmp"
+ *                           (Formatcil.cType "int (const char*, const char*\)" []));
+ *       "loopvar", Cil.Fv loopvar;
+ *       "fieldval", Cil.Fv fieldval;
+ *       "root", Cil.Fv rootvar;
+ *       "query", Cil.Fg query;
+ *     ] in
+ *     let writer = mk_writer ctx (fun o -> o) path in
+ *     let ctx = FormatCtx.add ctx "writer" (Cil.Fs writer) in
+ * 
+ *     let body =
+ *       Formatcil.cStmt
+ *         "PGresult *r = run_query(\"%g:query\");
+ *          for (%v:loopvar = 0; %v:loopvar < PQntuples(r); %v:loopvar++) {
+ *              %v:fieldval = PQgetvalue(r, %v:loopvar, 0);
+ *              %s:writer
+ *          }"
+ *         funLocals Cil.locUnknown ctx
+ *     in
+ *     fundec.sbody <- Cil.mkBlock [body];
+ *     (fundec, file) *)
 
 (* let layout_of_query : ralgebra -> ralgebra list = function
  *   | Filter (Or pp, q) -> [

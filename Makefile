@@ -11,10 +11,17 @@
 # _build/default/layout.exe: layout.ml
 # 	jbuilder build layout.exe
 
-.PHONY: test_locality.exe
+.PHONY: test_eval.exe test
+all: $(wildcard bin/*.ml) test
 
-all: test_locality.exe
+test:
+	jbuilder build test/test.exe
+	ln -sf _build/default/test/test.exe test.exe
 
-test_locality.exe:
-	jbuilder build bin/test_locality.exe
-	ln -sf _build/default/bin/test_locality.exe test_locality.exe
+%.exe : bin/%.ml
+	jbuilder build bin/$@
+	ln -sf _build/default/bin/$@ $@
+
+# test_locality.exe:
+# 	jbuilder build bin/test_locality.exe
+# 	ln -sf _build/default/bin/test_locality.exe test_locality.exe

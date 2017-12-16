@@ -1,7 +1,7 @@
 open Base
 open Base.Polymorphic_compare
 
-module MyList = struct
+module List = struct
   include List
 
   let all_equal_exn : 'a list -> 'a =
@@ -9,6 +9,9 @@ module MyList = struct
     | [] -> failwith "Empty list."
     | (x::xs) -> if List.for_all xs ~f:(fun x' -> x = x') then x else
         failwith "Not all elements equal."
+
+  let all_equal : 'a list -> 'a option = fun l ->
+    try Some (all_equal_exn l) with _ -> None
 
   let fold_left1_exn : 'a t -> f:('b -> 'a -> 'b) -> 'b =
     fun l ~f -> match l with
@@ -51,9 +54,8 @@ module MyList = struct
       in
       List.rev l'
 end
-module List = MyList
 
-module MyMap = struct
+module Map = struct
   include Map
 
   let merge_right : ('k, 'v, _) t -> ('k, 'v, _) t -> ('k, 'v, _) t =
@@ -61,7 +63,6 @@ module MyMap = struct
         | `Right x | `Left x -> Some x
         | `Both (x, y) -> Some y)
 end
-module Map = MyMap
 
 module Seq = struct
   include Sequence
@@ -78,6 +79,16 @@ module Seq = struct
           let row, seqs' = List.unzip x in
           Some (row, seqs')
         | None -> None)
+end
+
+module Bytes = struct
+  include Bytes
+
+  let t_of_sexp : Sexp.t -> t = function
+    | Atom x -> of_string x
+    | _ -> failwith "Bad sexp."
+
+  let sexp_of_t : t -> Sexp.t = fun x -> Atom (to_string x)
 end
 
 module T2 = struct

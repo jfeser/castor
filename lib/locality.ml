@@ -299,6 +299,14 @@ module Ralgebra = struct
         |> String.concat ~sep:", "
       in
       sprintf "%s(%s)" (op_to_string op) ss
+
+  let rec layouts : t -> layout list = function
+    | Project (_, r)
+    | Filter (_, r) -> layouts r
+    | EqJoin (_,_, r1, r2) -> layouts r1 @ layouts r2
+    | Scan l -> [l]
+    | Concat rs -> List.map rs ~f:layouts |> List.concat
+    | Relation _ -> []
 end
 
 (* let rec eval : expr -> primvalue = function
@@ -827,34 +835,32 @@ module Transform = struct
       []
 end
 
+let col_layout : Layout.relation -> layout = fun r -> 
+  let stream = eval_relation r |> Seq.to_list in
+  List.transpose stream
+  |> (fun v -> Option.value_exn v)
+  |> List.map ~f:(fun col ->
+      UnorderedList (List.map col ~f:(fun v -> Scalar v)))
+  |> (fun cols -> ZipTuple cols)
+
+let row_layout : Layout.relation -> layout = fun r -> 
+  eval_relation r
+  |> Seq.map ~f:(fun tup ->
+      CrossTuple (List.map ~f:(fun v -> Scalar v) tup))
+  |> Seq.to_list
+  |> fun l -> UnorderedList l
+
 let tf_col_layout : Transform.t = {
   name = "col-layout";
   f = function
-    | Relation r ->
-      let stream = eval_relation r |> Seq.to_list in
-      let layout =
-        List.transpose stream
-        |> (fun v -> Option.value_exn v)
-        |> List.map ~f:(fun col ->
-            UnorderedList (List.map col ~f:(fun v -> Scalar v)))
-        |> (fun cols -> ZipTuple cols)
-      in
-      [Scan layout]
+    | Relation r -> [Scan (col_layout r)]
     | _ -> []
 }
 
 let tf_row_layout : Transform.t = {
   name = "row-layout";
   f = function
-    | Relation r ->
-      let layout =
-        eval_relation r
-        |> Seq.map ~f:(fun tup ->
-            CrossTuple (List.map ~f:(fun v -> Scalar v) tup))
-        |> Seq.to_list
-        |> fun l -> UnorderedList l
-      in
-      [Scan layout]
+    | Relation r -> [Scan (row_layout r)]
     | _ -> []
 }
 
