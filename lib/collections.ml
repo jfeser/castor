@@ -82,7 +82,7 @@ module Seq = struct
 end
 
 module Bytes = struct
-  include Bytes
+  include Caml.Bytes
 
   let t_of_sexp : Sexp.t -> t = function
     | Atom x -> of_string x

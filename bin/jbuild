@@ -1,5 +1,5 @@
 (jbuild_version 1)
 
 (executables
- ((names (test_layout test_locality test_eval test_pcify))
+ ((names (test_layout test_locality test_eval test_pcify test_codegen))
   (libraries (base postgresql dblayout))))
