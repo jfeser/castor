@@ -309,6 +309,12 @@ module Implang = struct
     let ctr = ref 0 in
     fun () -> Caml.incr ctr; sprintf "%dx" !ctr
 
+
+  let yield_count : func -> int = fun { body } ->
+    List.sum (module Int) body ~f:(function
+        | Yield _ -> 1
+        | _ -> 0)
+
   let lookup : state -> string -> value = fun s v ->
     match Map.find s.ctx v with
     | Some x -> x
@@ -583,6 +589,9 @@ module Implang = struct
 
       let values = Hashtbl.create (module String) ()
       let funcs = Hashtbl.create (module String) ()
+      let indirect_br = ref None
+      let br_addr = ref None
+      let namespace = ref (-1)
 
       let init_name n = (n ^ "$init")
       let step_name n = (n ^ "$step")
@@ -598,6 +607,11 @@ module Implang = struct
         | None ->
           fail (Error.create "Unknown variable." (n, values)
                   [%sexp_of:string * llvalue Hashtbl.M(String).t])
+
+      let get_indirect_br () = Option.value_exn !indirect_br
+      let set_indirect_br x = indirect_br := Some x
+      let get_br_addr () = Option.value_exn !br_addr
+      let set_br_addr x = br_addr := Some x
 
       let rec codegen_type : type_ -> lltype = function
         | IntT -> i32_type global_ctx
@@ -652,14 +666,18 @@ module Implang = struct
         let llcount = codegen_expr count in
 
         (* Create loop block. *)
+        let count =
+          define_qualified_global "count" llcount !namespace module_
+        in
         let loop_bb = append_block global_ctx "loop" llfunc in
         build_br loop_bb builder |> ignore;
         position_at_end loop_bb builder;
-        let var = build_phi [(llcount, start_bb)] "count" builder in
 
         codegen_prog body;
 
-        let var' = build_sub var (const_int int_type 1) "nextcount" builder in
+        let var = build_load count "count" builder in
+        let var' = build_sub var (const_int int_type 1) "count" builder in
+        build_store var' count builder |> ignore;
         let cond =
           build_icmp Icmp.Sle var' (const_int int_type 0) "loopcond" builder
         in
@@ -718,8 +736,28 @@ module Implang = struct
         build_store val_ var builder |> ignore
 
       let codegen_yield ret =
+        let start_bb = insertion_block builder in
+        let llfunc = block_parent start_bb in
+
+        (* Generate yield in new block. *)
+        let bb = append_block global_ctx "yield" llfunc in
+        position_at_end bb builder;
+
+        (* Generate remaining code in new block. *)
+        let end_bb = append_block global_ctx "yieldend" llfunc in
+
+        (* Add indirect branch and set new target. *)
+        add_destination (get_indirect_br ()) end_bb;
+        build_store (block_address llfunc end_bb) (get_br_addr ()) builder |> ignore;
         let llret = codegen_expr ret in
-        build_ret llret builder |> ignore
+        build_ret llret builder |> ignore;
+
+        (* Add unconditional branch from parent block. *)
+        position_at_end start_bb builder;
+        build_br bb builder |> ignore;
+
+        (* Add new bb*)
+        position_at_end end_bb builder
 
       let rec codegen_stmt : stmt -> unit =
         function
@@ -742,12 +780,12 @@ module Implang = struct
               Option.is_some (lookup_function (step_name name) module_))
           then fail (Error.of_string "Function already defined.");
 
-          let ns = Hashtbl.length funcs / 2 in
+          namespace := Hashtbl.length funcs / 2;
 
           (* Create storage space for local variables & iterator args. *)
           List.iter locals ~f:(fun (n, t) ->
               let lltype = codegen_type t in
-              let var = declare_qualified_global lltype n ns module_ in
+              let var = declare_qualified_global lltype n !namespace module_ in
               Hashtbl.set values ~key:n ~data:var);
 
           (* Create initialization function. *)
@@ -760,18 +798,13 @@ module Implang = struct
           let init_func =
             declare_function (init_name name) init_func_t module_
           in
-          let bb = append_block global_ctx "entry" init_func in
-          position_at_end bb builder;
+          let init_bb = append_block global_ctx "entry" init_func in
+          position_at_end init_bb builder;
           List.iteri args ~f:(fun i (n, t) ->
               let lltype = codegen_type t in
-              let var = declare_qualified_global lltype n ns module_ in
+              let var = declare_qualified_global lltype n !namespace module_ in
               Hashtbl.set values ~key:n ~data:var;
               build_store (param init_func i) var builder |> ignore);
-          build_ret_void builder |> ignore;
-
-          Logs.debug (fun m -> m "%s" (string_of_llvalue init_func));
-          Llvm_analysis.assert_valid_function init_func;
-          set_init name init_func func;
 
           (* Create step function. *)
           let step_func_t = function_type (codegen_type ret_type) [||] in
@@ -780,7 +813,32 @@ module Implang = struct
           in
           let bb = append_block global_ctx "entry" step_func in
           position_at_end bb builder;
+
+          (* Create indirect branch. *)
+          let br_addr =
+            declare_qualified_global (pointer_type (i8_type global_ctx))
+              "braddr" !namespace module_
+          in
+          let br = build_indirect_br br_addr (yield_count func) builder in
+          set_br_addr br_addr;
+          set_indirect_br br;
+          let end_bb = append_block global_ctx "postentry" step_func in
+          add_destination br end_bb;
+          position_at_end init_bb builder;
+
+          (* Add initial branch target to init function. *)
+          build_store (block_address step_func end_bb) br_addr builder |> ignore;
+          build_ret_void builder |> ignore;
+
+          (* Codegen the rest of the function body. *)
+          position_at_end end_bb builder;
           codegen_prog body;
+          build_unreachable builder |> ignore;
+
+          Logs.debug (fun m -> m "%s" (string_of_llvalue init_func));
+          Llvm_analysis.assert_valid_function init_func;
+          set_init name init_func func;
+
           Logs.debug (fun m -> m "%s" (string_of_llvalue step_func));
           Llvm_analysis.assert_valid_function step_func;
           set_step name step_func func
