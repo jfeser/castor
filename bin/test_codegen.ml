@@ -12,9 +12,14 @@ open Ralgebra
 open Implang
 
 let main () =
+  Logs.set_reporter (Logs.format_reporter ());
+  Logs.set_level (Some Logs.Debug);
+
   let prog = ["main", Infix.(
-      fun_ [] IntT [] [
-        "x" := int 5;
+      fun_ ["x", IntT] IntT [] [
+        loop (int 10) [
+            Yield (Var "x");
+          ]
       ])]
   in
   let module Gen = Codegen.Make(struct

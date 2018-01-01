@@ -7,5 +7,5 @@
 
 (library
  ((name dblayout)
-  (libraries (base stdio postgresql ounit llvm llvm.analysis))
+  (libraries (base stdio postgresql ounit llvm llvm.analysis logs))
   (preprocess (pps (ppx_sexp_conv ppx_compare ppx_driver.runner -no-check)))))

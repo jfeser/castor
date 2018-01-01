@@ -572,14 +572,32 @@ module Implang = struct
       val builder : llbuilder
     end
 
+    let sexp_of_llvalue : llvalue -> Sexp.t =
+      fun v -> Sexp.Atom (string_of_llvalue v)
+
+    let sexp_of_lltype : lltype -> Sexp.t =
+      fun v -> Sexp.Atom (string_of_lltype v)
+
     module Make (Ctx: CTX) () = struct
       open Ctx
 
       let values = Hashtbl.create (module String) ()
-      let iters = Hashtbl.create (module String) ()
       let funcs = Hashtbl.create (module String) ()
 
-      let get_func n = Hashtbl.find_exn funcs n
+      let init_name n = (n ^ "$init")
+      let step_name n = (n ^ "$step")
+      let set_init n llf f =
+        Hashtbl.set funcs ~key:(init_name n) ~data:(llf, f)
+      let set_step n llf f =
+        Hashtbl.set funcs ~key:(step_name n) ~data:(llf, f)
+      let get_init n = Hashtbl.find_exn funcs (init_name n)
+      let get_step n = Hashtbl.find_exn funcs (step_name n)
+
+      let get_val n = match Hashtbl.find values n with
+        | Some v -> v
+        | None ->
+          fail (Error.create "Unknown variable." (n, values)
+                  [%sexp_of:string * llvalue Hashtbl.M(String).t])
 
       let rec codegen_type : type_ -> lltype = function
         | IntT -> i32_type global_ctx
@@ -601,12 +619,7 @@ module Implang = struct
         | Int x -> const_int int_type x
         | Bool true -> const_int bool_type 1
         | Bool false -> const_int bool_type 0
-        | Var n ->
-          let v = match Hashtbl.find values n with
-            | Some v -> v
-            | None -> fail (Error.of_string "Unknown variable.")
-          in
-          build_load v n builder
+        | Var n -> build_load (get_val n) n builder
         | Binop { op; arg1; arg2 } ->
           let v1 = codegen_expr arg1 in
           let v2 = codegen_expr arg2 in
@@ -632,7 +645,7 @@ module Implang = struct
           end
         | Tuple _ -> failwith "??"
 
-      let codegen_loop codegen_prog count body = 
+      let codegen_loop codegen_prog count body =
         let start_bb = insertion_block builder in
         let llfunc = block_parent start_bb in
 
@@ -687,52 +700,21 @@ module Implang = struct
         position_at_end merge_bb builder
 
       let codegen_step var iter =
-        let iter_struct = match Hashtbl.find values iter with
-          | Some v -> v
-          | None -> fail (Error.of_string "Unknown iterator.")
-        in
-        let iter_func = match Hashtbl.find iters iter with
-          | Some v -> v
-          | None -> fail (Error.of_string "Unknown iterator.")
-        in
-        let ret = build_call iter_func [|iter_struct|] "calltmp" builder in
+        let (step_func, _) = get_step iter in
+        let ret = build_call step_func [||] "steptmp" builder in
         Hashtbl.set values ~key:var ~data:ret
 
       let codegen_iter var func args =
-        let (llfunc, { args = args_t; locals; ret_type }) = get_func func in
-        Hashtbl.set iters ~key:var ~data:llfunc;
-        let args_struct_t =
-          struct_type global_ctx
-            (List.map args_t ~f:(fun (_, t) -> codegen_type t)
-             |> Array.of_list)
-        in
-        let locals_struct_t =
-          struct_type global_ctx
-            (List.map locals ~f:(fun (_, t) -> codegen_type t)
-             |> Array.of_list)
-        in
-        let iter_struct_t =
-          struct_type global_ctx [|args_struct_t; locals_struct_t|]
-        in
-        let iter_struct = build_alloca iter_struct_t "itertmp" builder in
+        let (init_func, { args = args_t }) = get_init func in
         if List.length args <> List.length args_t then
           fail (Error.of_string "Wrong number of arguments.")
         else
-          let args_ptr = build_struct_gep iter_struct 0 "argstmp" builder in
-          List.iteri args ~f:(fun i e ->
-              let v = codegen_expr e in
-              let p = build_struct_gep args_ptr i "argtmp" builder in
-              build_store v p builder |> ignore
-            );
-          Hashtbl.set values ~key:var ~data:iter_struct
+          let llargs = List.map args ~f:codegen_expr |> Array.of_list in
+          build_call init_func llargs "itertmp" builder |> ignore
 
       let codegen_assign lhs rhs =
         let val_ = codegen_expr rhs in
-        let var = match Hashtbl.find values lhs with
-          | Some var -> var
-          | None ->
-            fail (Error.create "Unknown variable." lhs [%sexp_of:string])
-        in
+        let var = (get_val lhs) in
         build_store val_ var builder |> ignore
 
       let codegen_yield ret =
@@ -754,35 +736,58 @@ module Implang = struct
 
       let rec codegen_func : string -> func -> unit =
         fun name ({ args; body; ret_type; locals } as func) ->
-          begin match lookup_function name module_ with
-            | Some _ -> fail (Error.of_string "Function already defined.")
-            | None -> ()
-          end;
-          let func_t =
+          Logs.debug (fun m -> m "Generating func %s" name);
+          (* Check that function is not already defined. *)
+          if (Option.is_some (lookup_function (init_name name) module_) ||
+              Option.is_some (lookup_function (step_name name) module_))
+          then fail (Error.of_string "Function already defined.");
+
+          let ns = Hashtbl.length funcs / 2 in
+
+          (* Create storage space for local variables & iterator args. *)
+          List.iter locals ~f:(fun (n, t) ->
+              let lltype = codegen_type t in
+              let var = declare_qualified_global lltype n ns module_ in
+              Hashtbl.set values ~key:n ~data:var);
+
+          (* Create initialization function. *)
+          let init_func_t =
             let args_t =
               List.map args ~f:(fun (_, t) -> codegen_type t) |> Array.of_list
             in
-            function_type (codegen_type ret_type) (args_t)
+            function_type (void_type global_ctx) args_t
           in
-          let llfunc = declare_function name func_t module_ in
-          let bb = append_block global_ctx "entry" llfunc in
+          let init_func =
+            declare_function (init_name name) init_func_t module_
+          in
+          let bb = append_block global_ctx "entry" init_func in
           position_at_end bb builder;
-
-          (* Create storage space for local variables. *)
-          List.iter locals ~f:(fun (n, t) ->
+          List.iteri args ~f:(fun i (n, t) ->
               let lltype = codegen_type t in
-              let alloca = declare_global )
+              let var = declare_qualified_global lltype n ns module_ in
+              Hashtbl.set values ~key:n ~data:var;
+              build_store (param init_func i) var builder |> ignore);
+          build_ret_void builder |> ignore;
 
+          Logs.debug (fun m -> m "%s" (string_of_llvalue init_func));
+          Llvm_analysis.assert_valid_function init_func;
+          set_init name init_func func;
+
+          (* Create step function. *)
+          let step_func_t = function_type (codegen_type ret_type) [||] in
+          let step_func =
+            declare_function (step_name name) step_func_t module_
+          in
+          let bb = append_block global_ctx "entry" step_func in
+          position_at_end bb builder;
           codegen_prog body;
-
-          dump_value llfunc;
-          Llvm_analysis.assert_valid_function llfunc;
-          Hashtbl.set funcs ~key:name ~data:(llfunc, func)
+          Logs.debug (fun m -> m "%s" (string_of_llvalue step_func));
+          Llvm_analysis.assert_valid_function step_func;
+          set_step name step_func func
 
       let codegen : (string * func) list -> unit = fun fs ->
         List.iter fs ~f:(fun (n, f) -> codegen_func n f);
-        Llvm_analysis.assert_valid_module module_;
-        Hashtbl.iter funcs ~f:(fun (f, _) -> dump_value f)
+        Llvm_analysis.assert_valid_module module_
     end
   end
 end
