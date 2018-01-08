@@ -11,6 +11,8 @@ open Serialize
 open Ralgebra
 open Implang
 
+module Printexc = Caml.Printexc
+
 let main () =
   Logs.set_reporter (Logs.format_reporter ());
   Logs.set_level (Some Logs.Debug);

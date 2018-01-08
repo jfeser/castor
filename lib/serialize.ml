@@ -24,13 +24,13 @@ let int_of_bytes_exn : bytes -> int = fun x ->
   !r
 
 let bytes_of_bool : bool -> bytes = function
-  | true -> Bytes.of_string "\1"
-  | false -> Bytes.of_string "\0"
+  | true -> Bytes.of_string "\x01"
+  | false -> Bytes.of_string "\x00"
 
 let bool_of_bytes_exn : bytes -> bool = fun b ->
   match Bytes.to_string b with
-  | "\0" -> false
-  | "\1" -> true
+  | "\x00" -> false
+  | "\x01" -> true
   | _ -> failwith "Unexpected byte sequence."
 
 let econcat = Bytes.concat Bytes.empty
@@ -40,8 +40,8 @@ let rec serialize : Locality.layout -> bytes = fun l ->
     | Scalar { rel; field; idx; value } ->
       let count = 1 in
       let body = match value with
-        | `Bool true -> Bytes.of_string "\1"
-        | `Bool false -> Bytes.of_string "\0"
+        | `Bool true -> Bytes.of_string "\x01"
+        | `Bool false -> Bytes.of_string "\x00"
         | `Int x -> bytes_of_int x
         | `Unknown x
         | `String x -> Bytes.of_string x

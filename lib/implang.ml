@@ -2,6 +2,8 @@ open Base
 open Printf
 open Collections
 
+module Format = Caml.Format
+
 exception EvalError of Error.t [@@deriving sexp]
 
 let fail : Error.t -> 'a = fun e -> raise (EvalError e)
