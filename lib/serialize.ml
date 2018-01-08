@@ -4,6 +4,7 @@ open Printf
 open Collections
 open Locality
 
+let bsize = 1 (* boolean size *)
 let isize = 8 (* integer size *)
 let hsize = 2 * isize (* block header size *)
 
@@ -139,18 +140,20 @@ module Type = struct
 end
 
 module Fresh = struct
-  type t = { mutable ctr : int; mutable names : Set.M(String).t }
+  type t = { mutable ctr : int; names : Hash_set.M(String).t }
 
-  let create : ?names:Set.M(String).t -> unit -> t =
-    fun ?(names=Set.empty (module String)) () -> { ctr = 0; names; }
+  let create : ?names:Hash_set.M(String).t -> unit -> t =
+    fun ?names () ->
+      match names with
+      | Some x -> { ctr = 0; names = x }
+      | None -> { ctr = 0; names = Hash_set.create (module String) () }
 
   let rec name : t -> (int -> 'a, unit, string) format -> 'a =
     fun x fmt ->
       let n = sprintf fmt x.ctr in
       x.ctr <- x.ctr + 1;
-      if Set.mem x.names n then name x fmt else begin
-        x.names <- Set.add x.names n;
-        name x fmt
+      if Hash_set.mem x.names n then name x fmt else begin
+        Hash_set.add x.names n; n
       end
 end
 
@@ -160,15 +163,13 @@ module Implang = struct
   let fail : Error.t -> 'a = fun e -> raise (EvalError e)
 
   type type_ =
-    | IntT
-    | BoolT
-    | SliceT
+    | BytesT of int
     | TupleT of type_ list
     | IterT of type_
     | VoidT
   [@@deriving compare, sexp]
 
-  type op = Add | Sub | Lt | And | Not | Slice [@@deriving compare, sexp]
+  type op = Add | Sub | Lt | And | Not [@@deriving compare, sexp]
   type value =
     | VCont of { state : state; body : prog }
     | VFunc of func
@@ -188,6 +189,7 @@ module Implang = struct
     | Bool of bool
     | Var of string
     | Tuple of expr list
+    | Slice of expr * int
     | Binop of { op : op; arg1 : expr; arg2 : expr }
     | Unop of { op : op; arg : expr }
 
@@ -246,15 +248,13 @@ module Implang = struct
       | Lt -> "<"
       | And -> "&&"
       | Not -> "not"
-      | Slice -> ":"
     in
     fun fmt -> function
       | Int x -> pp_int fmt x
       | Bool x -> pp_bool fmt x
       | Var v -> fprintf fmt "%s" v
       | Tuple t -> fprintf fmt "(%a)" (pp_tuple pp_expr) t
-      | Binop {op = Slice; arg1; arg2} ->
-        fprintf fmt "buf[%a :@ %a]" pp_expr arg1 pp_expr arg2
+      | Slice (ptr, len) -> fprintf fmt "buf[%a :@ %d]" pp_expr ptr len
       | Binop { op; arg1; arg2 } ->
         fprintf fmt "%a %s@ %a" pp_expr arg1 (op_to_string op) pp_expr arg2
       | Unop { op; arg } -> fprintf fmt "%s@ %a" (op_to_string op) pp_expr arg
@@ -270,7 +270,7 @@ module Implang = struct
       | Step { var; iter } ->
         fprintf fmt "@[<hov>%s =@ next(%s);@]" var iter
       | Iter { var; func; args } ->
-        fprintf fmt "@[<hov>%s =@ %s(%a);@]" var func (pp_tuple pp_expr) args
+        fprintf fmt "@[<hov>init %s(%a);@]" func (pp_tuple pp_expr) args
       | Assign { lhs; rhs } -> fprintf fmt "@[<hov>%s =@ %a;@]" lhs pp_expr rhs
       | Yield e -> fprintf fmt "@[<hov>yield@ %a;@]" pp_expr e
       | Print e -> fprintf fmt "@[<hov>print@ %a;@]" pp_expr e
@@ -298,8 +298,8 @@ module Implang = struct
     let int x = Int x
     let loop c b = Loop { count = c; body = b }
     let call v f a = Iter { var = v; func = f; args = a }
-    let islice x = Binop { op = Slice; arg1 = x; arg2 = int isize }
-    let slice x y = Binop { op = Slice; arg1 = x; arg2 = y }
+    let islice x = Slice (x, isize)
+    let slice x y = Tuple [x; y]
     let ite c t f = If { cond = c; tcase = t; fcase = f }
     let fun_ args ret_type locals body =
       { args; ret_type; locals; body }
@@ -309,11 +309,43 @@ module Implang = struct
     let ctr = ref 0 in
     fun () -> Caml.incr ctr; sprintf "%dx" !ctr
 
-
   let yield_count : func -> int = fun { body } ->
     List.sum (module Int) body ~f:(function
         | Yield _ -> 1
         | _ -> 0)
+
+  (* let rec infer_type : type_ Map.M(String).t -> expr -> type_ =
+   *   fun ctx -> function
+   *     | Int _ -> BytesT isize
+   *     | Bool _ -> BytesT bsize
+   *     | Var x -> Map.find_exn ctx x
+   *     | Tuple xs -> TupleT (List.map xs ~f:(infer_type ctx))
+   *     | Binop { op; arg1; arg2 } ->
+   *       let t1 = infer_type ctx arg1 in
+   *       let t2 = infer_type ctx arg2 in
+   *       begin match op, t1, t2 with
+   *         | Add, IntT, IntT -> BytesT isize
+   *         | Sub, IntT, IntT -> BytesT isize
+   *         | Lt, IntT, IntT -> BytesT bsize
+   *         | And, BoolT, BoolT -> BytesT bsize
+   *         | Not as op, _, _ -> fail (Error.create "Not a binary operator."
+   *                                      op [%sexp_of:op])
+   *         | _ -> fail (Error.create "Type error." (op, t1, t2)
+   *                        [%sexp_of:op * type_ * type_])
+   *       end
+   *     | Unop { op; arg } ->
+   *       let t = infer_type ctx arg in
+   *       begin match op, t with
+   *         | (Not, BoolT) -> BoolT
+   *         | (Add as op, _)
+   *         | (Sub as op, _)
+   *         | (Lt as op, _)
+   *         | (And as op, _) -> fail (Error.create "Not a binary operator."
+   *                                     op [%sexp_of:op])
+   *         | _ -> fail (Error.create "Type error." (op, t) [%sexp_of:op * type_])
+   *       end
+   *     | Slice (_, len) ->
+   *       if len = isize then *) 
 
   let lookup : state -> string -> value = fun s v ->
     match Map.find s.ctx v with
@@ -348,28 +380,27 @@ module Implang = struct
       | Bool x -> VBool x
       | Var v -> lookup s v
       | Tuple t -> VTuple (List.map t ~f:(eval_expr s))
+      | Slice (p, l) ->
+        let p = eval_expr s p |> to_int_exn in
+        let b =
+          try Bytes.sub s.buf p l
+          with Invalid_argument _ ->
+            fail (Error.create "Runtime error: Bad slice."
+                    (p, l) [%sexp_of:int*int])
+        in
+        VBytes b
       | Binop { op; arg1 = x1; arg2 = x2 } ->
         begin match op with
           | Add -> VInt (int x1 + int x2)
           | Sub -> VInt (int x1 - int x2)
           | Lt -> VBool (int x1 < int x2)
           | And -> VBool (bool x1 && bool x2)
-          | Slice -> 
-            let v1, v2 = eval_expr s x1, eval_expr s x2 in
-            let i1, i2 = to_int_exn v1, to_int_exn v2 in
-            let b =
-              try Bytes.sub s.buf i1 i2
-              with Invalid_argument _ ->
-                fail (Error.create "Runtime error: Bad slice."
-                        (i1, i2) [%sexp_of:int*int])
-            in
-            VBytes b
-          | _ -> failwith "Not a binary operator."
+          | Not -> failwith "Not a binary operator."
         end
       | Unop { op; arg = x } ->
         begin match op with
           | Not -> VBool (not (bool x))
-          | _ -> failwith "Not a unary operator."
+          | Add | Sub | Lt | And -> failwith "Not a unary operator."
         end
 
   and eval_stmt : state -> prog -> value option * prog * state =
@@ -589,9 +620,10 @@ module Implang = struct
 
       let values = Hashtbl.create (module String) ()
       let funcs = Hashtbl.create (module String) ()
+      let namespace = ref ""
       let indirect_br = ref None
       let br_addr = ref None
-      let namespace = ref (-1)
+      let buf = ref None
 
       let init_name n = (n ^ "$init")
       let step_name n = (n ^ "$step")
@@ -602,7 +634,9 @@ module Implang = struct
       let get_init n = Hashtbl.find_exn funcs (init_name n)
       let get_step n = Hashtbl.find_exn funcs (step_name n)
 
-      let get_val n = match Hashtbl.find values n with
+      let mangle n = !namespace ^ "_" ^ n
+      let get_val n =
+        match Hashtbl.find values n with
         | Some v -> v
         | None ->
           fail (Error.create "Unknown variable." (n, values)
@@ -612,28 +646,45 @@ module Implang = struct
       let set_indirect_br x = indirect_br := Some x
       let get_br_addr () = Option.value_exn !br_addr
       let set_br_addr x = br_addr := Some x
+      let set_buf x = buf := Some x
+      let get_buf () = Option.value_exn !buf
+
+      let declare_fresh_global : lltype -> string -> llmodule -> llvalue =
+        fun t n m ->
+          let rec loop i =
+            let n = if i = 0 then n else sprintf "%s.%d" n i in
+            if Option.is_some (lookup_global n m) then loop (i + 1) else
+              declare_global t n m
+          in
+          loop 0
 
       let rec codegen_type : type_ -> lltype = function
-        | IntT -> i32_type global_ctx
-        | BoolT -> i1_type global_ctx
-        | SliceT ->
-          struct_type global_ctx
-            [| pointer_type (i8_type global_ctx) ; i32_type global_ctx |]
+        | BytesT x when x = isize -> i32_type global_ctx
+        | BytesT x when x = bsize -> i8_type global_ctx
+        | BytesT _ -> fail (Error.of_string "Unexpected byte length.")
         | TupleT ts ->
           struct_type global_ctx (List.map ts ~f:codegen_type |> Array.of_list)
-        | IterT _
-        | VoidT -> fail (Error.of_string "Bad argument type.")
+        | VoidT -> void_type global_ctx
+        | t -> fail (Error.create "Bad argument type." t [%sexp_of:type_])
 
       let byte_type = integer_type global_ctx 8
-      let int_type = codegen_type IntT
-      let bool_type = codegen_type BoolT
-      let slice_type = codegen_type SliceT
+      let int_type = codegen_type (BytesT isize)
+      let bool_type = codegen_type (BytesT bsize)
 
       let rec codegen_expr : expr -> llvalue = function
         | Int x -> const_int int_type x
         | Bool true -> const_int bool_type 1
         | Bool false -> const_int bool_type 0
         | Var n -> build_load (get_val n) n builder
+        | Slice (p, l) ->
+          let ptr = codegen_expr p in
+          let ptr = build_in_bounds_gep (get_buf ()) [| ptr |] "" builder in
+          let ptr = match l with
+            | 8 -> build_pointercast ptr (pointer_type int_type) "" builder
+            | 1 -> build_pointercast ptr (pointer_type byte_type) "" builder
+            | _ -> failwith "Unexpected byte length."
+          in
+          build_load ptr "slicetmp" builder
         | Binop { op; arg1; arg2 } ->
           let v1 = codegen_expr arg1 in
           let v2 = codegen_expr arg2 in
@@ -642,33 +693,35 @@ module Implang = struct
             | Sub -> build_sub v1 v2 "subtmp" builder
             | Lt -> build_icmp Icmp.Slt v1 v2 "lttmp" builder
             | And -> build_and v1 v2 "andtmp" builder
-            | Slice ->
-              let s = build_alloca slice_type "slicetmp" builder in
-              let ptr = build_struct_gep s 0 "ptrtmp" builder in
-              let len = build_struct_gep s 1 "lentmp" builder in
-              ignore (build_store v1 ptr builder);
-              build_store v2 len builder
             | Not -> fail (Error.of_string "Not a binary operator.")
           end
         | Unop { op; arg } ->
           let v = codegen_expr arg in
           begin match op with
             | Not -> build_not v "nottmp" builder
-            | Add | Sub| Lt| And | Slice ->
+            | Add | Sub| Lt| And ->
               fail (Error.of_string "Not a unary operator.")
           end
-        | Tuple _ -> failwith "??"
+        | (Tuple es) as e ->
+          Logs.debug (fun m -> m "Codegen for %a" pp_expr e);
+          let vs = List.map es ~f:codegen_expr in
+          let ts = List.map vs ~f:type_of |> Array.of_list in
+          let struct_t = struct_type global_ctx ts in
+          let struct_ = build_alloca struct_t "tupleptrtmp" builder in
+          List.iteri vs ~f:(fun i v ->
+              let ptr = build_struct_gep struct_ i "ptrtmp" builder in
+              build_store v ptr builder |> ignore);
+          build_load struct_ "tupletmp" builder
 
       let codegen_loop codegen_prog count body =
         let start_bb = insertion_block builder in
         let llfunc = block_parent start_bb in
 
-        let llcount = codegen_expr count in
-
         (* Create loop block. *)
-        let count =
-          define_qualified_global "count" llcount !namespace module_
-        in
+        let init_count = codegen_expr count in
+        let count = declare_fresh_global int_type (mangle "count") module_ in
+        build_store init_count count builder |> ignore;
+
         let loop_bb = append_block global_ctx "loop" llfunc in
         build_br loop_bb builder |> ignore;
         position_at_end loop_bb builder;
@@ -728,7 +781,7 @@ module Implang = struct
           fail (Error.of_string "Wrong number of arguments.")
         else
           let llargs = List.map args ~f:codegen_expr |> Array.of_list in
-          build_call init_func llargs "itertmp" builder |> ignore
+          build_call init_func llargs "" builder |> ignore
 
       let codegen_assign lhs rhs =
         let val_ = codegen_expr rhs in
@@ -775,17 +828,22 @@ module Implang = struct
       let rec codegen_func : string -> func -> unit =
         fun name ({ args; body; ret_type; locals } as func) ->
           Logs.debug (fun m -> m "Generating func %s" name);
+          Logs.debug (fun m -> m "%a" pp_func func);
           (* Check that function is not already defined. *)
           if (Option.is_some (lookup_function (init_name name) module_) ||
               Option.is_some (lookup_function (step_name name) module_))
           then fail (Error.of_string "Function already defined.");
 
-          namespace := Hashtbl.length funcs / 2;
+          (* Reset function pair specific variables. *)
+          Hashtbl.clear values;
+          indirect_br := None;
+          br_addr := None;
+          namespace := name;
 
           (* Create storage space for local variables & iterator args. *)
           List.iter locals ~f:(fun (n, t) ->
               let lltype = codegen_type t in
-              let var = declare_qualified_global lltype n !namespace module_ in
+              let var = declare_global lltype (mangle n) module_ in
               Hashtbl.set values ~key:n ~data:var);
 
           (* Create initialization function. *)
@@ -802,7 +860,7 @@ module Implang = struct
           position_at_end init_bb builder;
           List.iteri args ~f:(fun i (n, t) ->
               let lltype = codegen_type t in
-              let var = declare_qualified_global lltype n !namespace module_ in
+              let var = declare_global lltype (mangle n) module_ in
               Hashtbl.set values ~key:n ~data:var;
               build_store (param init_func i) var builder |> ignore);
 
@@ -816,8 +874,8 @@ module Implang = struct
 
           (* Create indirect branch. *)
           let br_addr =
-            declare_qualified_global (pointer_type (i8_type global_ctx))
-              "braddr" !namespace module_
+            declare_global (pointer_type (i8_type global_ctx)) (mangle "braddr")
+              module_
           in
           let br = build_indirect_br br_addr (yield_count func) builder in
           set_br_addr br_addr;
@@ -840,172 +898,245 @@ module Implang = struct
           set_init name init_func func;
 
           Logs.debug (fun m -> m "%s" (string_of_llvalue step_func));
+          Logs.debug (fun m -> m "%s"
+                         (Sexp.to_string_hum
+                            ([%sexp_of:llvalue Hashtbl.M(String).t] values)));
           Llvm_analysis.assert_valid_function step_func;
           set_step name step_func func
 
-      let codegen : (string * func) list -> unit = fun fs ->
+      let codegen : bytes -> (string * func) list -> unit = fun buf fs ->
+        (* Generate global constant for buffer. *)
+        let buf =
+          declare_global (array_type byte_type (Bytes.length buf)) "buf"
+            module_
+        in
+        set_buf buf;
         List.iter fs ~f:(fun (n, f) -> codegen_func n f);
         Llvm_analysis.assert_valid_module module_
     end
   end
 end
 
-type scan_prog = { entry : string; funcs : (string * Implang.func) list }
-let rec scan_layout : Fresh.t -> Type.t -> scan_prog = fun fresh t ->
-  let open Implang in
-  let funcs = ref [] in
-  let mfuncs = Hashtbl.create (module String) () in
-  let add_func : string -> Implang.func -> unit = fun n f ->
-    funcs := (n, f)::!funcs;
-    Hashtbl.set ~key:n ~data:f mfuncs
-  in
-  let find_func n = Hashtbl.find_exn mfuncs n in
+module IRGen = struct
+  open Implang
 
-  let start = Var "start" in
-  let scan_empty = {
-    args = ["start", IntT]; body = []; locals = []; ret_type = VoidT;
-  } in
+  type func_builder = {
+    args : (string * type_) list;
+    ret : type_;
+    locals : type_ Hashtbl.M(String).t;
+    body : prog ref;
+  }
 
-  let scan_scalar = function
-    | Type.BoolT -> {
-        args = ["start", IntT];
-        body = Infix.([Yield (Tuple [slice start (start + int 1)])]);
-        locals = [];
-        ret_type = TupleT [SliceT];
+  exception IRGenError of Error.t
+
+  let fail m = raise (IRGenError m)
+
+  let name_of_var = function
+    | Var n -> n
+    | e -> fail (Error.of_string "Expected a variable.")
+
+  let create : (string * type_) list -> type_ -> func_builder =
+    fun args ret ->
+      let locals = match Hashtbl.of_alist (module String) args with
+        | `Ok l -> l
+        | `Duplicate_key _ -> fail (Error.of_string "Duplicate argument.")
+      in
+      { args; ret; locals;
+        body = ref [];
       }
-    | Type.IntT -> {
-        args = ["start", IntT];
-        body = Infix.([Yield (Tuple [islice start])]);
-        locals = [];
-        ret_type = TupleT [SliceT];
+
+  let build_var : string -> type_ -> func_builder -> expr =
+    fun n t { locals } ->
+      if Hashtbl.mem locals n then
+        fail (Error.create "Variable already defined." n [%sexp_of:string])
+      else begin
+        Hashtbl.set locals ~key:n ~data:t; Var n
+      end
+
+  let build_arg : int -> func_builder -> expr =
+    fun i { args } ->
+      match List.nth args i with
+      | Some (n, _) -> Var n
+      | None -> fail (Error.of_string "Not an argument index.")
+
+  let build_yield : expr -> func_builder -> unit =
+    fun e b -> b.body := (Yield e)::!(b.body)
+
+  let build_func : func_builder -> func =
+    fun { args; ret; locals; body } ->
+      { args;
+        ret_type = ret;
+        locals = Hashtbl.to_alist locals;
+        body = List.rev !body;
       }
-    | Type.StringT -> {
-        args = ["start", IntT];
-        body = Infix.([
-            "len" := islice (start - int isize);
-            Yield (Tuple [slice (Var "start") (Var "len")]);
-          ]);
-        locals = [];
-        ret_type = TupleT [SliceT];
-      }
-  in
 
-  let scan_crosstuple scan ts =
-    let funcs = List.map ts ~f:(fun (t, l) -> (scan t, l)) in
-    let width = List.length ts in
-    let yield =
-      [Yield (Tuple (List.init width ~f:(fun i -> Var (sprintf "x%d" i))))]
-    in
-    let inc x = x + 1 in
-    let open Infix in
-    let rec loops start i = function
-      | [] -> yield
-      | (func, l)::rest ->
-        let xv = sprintf "x%d" i in
-        let fv = sprintf "f%d" i in
-        let startv = sprintf "s%d" i in
-        let lenv = sprintf "l%d" i in
-        let lrest =
-          loops (Var startv + Var lenv + int hsize) (inc i) rest in
-        [
-          startv := start;
-          lenv := islice (Var startv + int isize);
-          iter fv func [Var startv + int hsize];
-          loop (int l) ((xv += fv) :: lrest)
-        ]
-    in
-    let body = loops (Var "start" + int hsize) 0 funcs in
-    (* FIXME: Correct locals, ret_type *)
-    { args = ["start", IntT]; body; locals = []; ret_type = VoidT }
-  in
+  let build_assign : expr -> expr -> func_builder -> unit =
+    fun e v b -> b.body := Assign { lhs = name_of_var v; rhs = e }::!(b.body)
 
-  let scan_ziptuple scan Type.({ len; elems = ts}) =
-    let funcs = List.map ts ~f:scan in
-    let open Infix in
-    let inits, inits_t =
-      List.mapi funcs ~f:(fun i f ->
-          let var = sprintf "f%d" i in
-          (* FIXME: Should use correct start position. *)
-          let stmt = iter var f [] in
-          let typ = IterT (find_func f).ret_type in
-          (stmt, (var, typ)))
-      |> List.unzip
-    in
-    let assigns, assigns_t =
-      List.mapi funcs ~f:(fun i f ->
-          let var = sprintf "x%d" i in
-          let stmt = var += sprintf "f%d" i in
-          let typ = (find_func f).ret_type in
-          (stmt, (var, typ)))
-      |> List.unzip
-    in
-    let yield = Yield (Tuple (List.init (List.length funcs) ~f:(fun i ->
-        Var (sprintf "x%d" i))))
-    in
-    let yield_t = TupleT (List.map assigns_t ~f:(fun (_, t) -> t)) in
-    let body = inits @ [loop (int len) (assigns @ [yield])] in
-    {
-      args = ["start", IntT];
-      body;
-      ret_type = yield_t;
-      locals = assigns_t @ inits_t;
-    }
-  in
+  let build_defn : string -> type_ -> expr -> func_builder -> expr =
+    fun v t e b ->
+      let var = build_var v t b in
+      build_assign e var b; var
 
-  let scan_list scan t =
-    let func = scan t in
-    let body =
+  let build_loop : expr -> (func_builder -> unit) -> func_builder -> unit =
+    fun c f b ->
+      (* Be careful when modifying. There's something subtle about this
+         mutation. *)
+      let parent_body = !(b.body) in
+      let loop_body = ref [] in
+      f { b with body = loop_body };
+      let final_body = Loop { count = c; body = !loop_body }::parent_body in
+      b.body := final_body
+
+  let int_t = BytesT isize
+  let bool_t = BytesT bsize
+  let slice_t = TupleT [int_t; int_t]
+
+  module Make () = struct
+    let fresh = Fresh.create ()
+    let funcs = ref []
+    let mfuncs = Hashtbl.create (module String) ()
+    let add_func : string -> Implang.func -> unit = fun n f ->
+      funcs := (n, f)::!funcs;
+      Hashtbl.set ~key:n ~data:f mfuncs
+    let find_func n = Hashtbl.find_exn mfuncs n
+
+    let build_fresh_var : string -> type_ -> func_builder -> expr =
+      fun n t b ->
+        let n = n ^ (Fresh.name fresh "%d") in
+        build_var n t b
+
+    let build_iter : string -> expr list -> func_builder -> unit =
+      fun f a b ->
+        assert (Hashtbl.mem mfuncs f);
+        b.body := Iter { func = f; args = a; var = "" }::!(b.body)
+
+    let build_step : expr -> string -> func_builder -> unit =
+      fun var iter b ->
+        assert (Hashtbl.mem mfuncs iter);
+        b.body := Step { var = name_of_var var; iter }::!(b.body)
+
+    open Infix
+
+    let scan_empty = create ["start", int_t] VoidT |> build_func
+
+    let scan_scalar = function
+      | Type.BoolT ->
+        let b = create ["start", int_t] (TupleT [int_t]) in
+        let start = build_arg 0 b in
+        build_yield (Tuple [Slice (start, bsize)]) b;
+        build_func b
+      | Type.IntT ->
+        let b = create ["start", int_t] (TupleT [int_t]) in
+        let start = build_arg 0 b in
+        build_yield (Tuple [Slice (start, isize)]) b;
+        build_func b
+      | Type.StringT ->
+        let b = create ["start", int_t] (TupleT [slice_t]) in
+        let start = build_arg 0 b in
+        let len = build_var "len" int_t b in
+        build_assign (Slice (start - int isize, isize)) len b;
+        build_yield (Tuple [slice start len]) b;
+        build_func b
+
+    let scan_crosstuple scan ts =
+      let rec loops b col_start vars = function
+        | [] -> build_yield (Tuple (List.rev vars)) b
+        | (func, len)::rest ->
+          build_iter func [col_start + int hsize] b;
+          let var = build_fresh_var "x" (find_func func).ret_type b in
+          build_loop (int len) (fun b ->
+              build_step var func b;
+              let next_start =
+                col_start + (islice (col_start + int isize)) + int hsize
+              in
+              loops b next_start (var::vars) rest
+            ) b;
+      in
+
+      let funcs = List.map ts ~f:(fun (t, l) -> (scan t, l)) in
+      let ret_type = TupleT (List.map funcs ~f:(fun (func, _) ->
+          (find_func func).ret_type))
+      in
+      let b = create ["start", int_t] ret_type in
+      let start = build_arg 0 b in
+      loops b start [] funcs;
+      build_func b
+
+    let scan_ziptuple scan Type.({ len; elems = ts}) =
+      let funcs = List.map ts ~f:scan in
       let open Infix in
-      [
-        "count" := islice (Var "start");
-        "cstart" := Var "start" + int hsize;
-        loop (Var "count") [
-          "ccount" := islice (Var "cstart");
-          "clen" := islice (Var "cstart" + int isize);
-          iter "f" func [ Var "cstart" ];
-          loop (Var "ccount") [
-            "x" += "f";
-            Yield (Var "x");
-          ];
-          "cstart" := Var "cstart" + Var "clen" + int hsize;
-        ];
-      ]
-    in
-    let ret_type = (find_func func).ret_type in
-    let locals = [
-      "count", IntT;
-      "cstart", IntT;
-      "ccount", IntT;
-      "clen", IntT;
-      "f", IterT ret_type;
-      "x", ret_type;
-    ] in
-    { args = ["start", IntT]; ret_type; body; locals; }
-  in
+      let inits, inits_t =
+        List.mapi funcs ~f:(fun i f ->
+            let var = sprintf "f%d" i in
+            (* FIXME: Should use correct start position. *)
+            let stmt = iter var f [] in
+            let typ = IterT (find_func f).ret_type in
+            (stmt, (var, typ)))
+        |> List.unzip
+      in
+      let assigns, assigns_t =
+        List.mapi funcs ~f:(fun i f ->
+            let var = sprintf "x%d" i in
+            let stmt = var += sprintf "f%d" i in
+            let typ = (find_func f).ret_type in
+            (stmt, (var, typ)))
+        |> List.unzip
+      in
+      let yield = Yield (Tuple (List.init (List.length funcs) ~f:(fun i ->
+          Var (sprintf "x%d" i))))
+      in
+      let yield_t = TupleT (List.map assigns_t ~f:(fun (_, t) -> t)) in
+      let body = inits @ [loop (int len) (assigns @ [yield])] in
+      {
+        args = ["start", int_t];
+        body;
+        ret_type = yield_t;
+        locals = assigns_t @ inits_t;
+      }
 
-  let rec scan : Type.t -> string = fun t ->
-    let name = Fresh.name fresh "f%d" in
-    let func = match t with
-      | Type.EmptyT -> scan_empty
-      | Type.ScalarT x -> scan_scalar x
-      | Type.CrossTupleT x -> scan_crosstuple scan x
-      | Type.ZipTupleT x -> scan_ziptuple scan x
-      | Type.ListT x -> scan_list scan x
-      | Type.TableT (_,_) -> failwith "Unsupported."
-    in
-    add_func name func; name
-  in
+    let scan_list scan t =
+      let func = scan t in
+      let ret_type = (find_func func).ret_type in
+      let b = create ["start", int_t] ret_type in
+      let start = build_arg 0 b in
+      let count = build_defn "count" int_t (islice start) b in
+      let cstart = build_defn "cstart" int_t (start + int hsize) b in
+      build_loop count (fun b ->
+          let ccount = build_defn "ccount" int_t (islice cstart) b in
+          let clen = build_defn "clen" int_t (islice (cstart + int isize)) b in
+          build_iter func [cstart] b;
+          build_loop ccount (fun b ->
+              let x = build_var "x" (find_func func).ret_type b in
+              build_step x func b;
+              build_yield x b) b;
+          build_assign (cstart + clen + int hsize) cstart b) b;
+      build_func b
 
-  let entry = scan t in
-  { entry; funcs = List.rev !funcs }
+    let rec scan : Type.t -> string = fun t ->
+      let name = Fresh.name fresh "f%d" in
+      let func = match t with
+        | Type.EmptyT -> scan_empty
+        | Type.ScalarT x -> scan_scalar x
+        | Type.CrossTupleT x -> scan_crosstuple scan x
+        | Type.ZipTupleT x -> scan_ziptuple scan x
+        | Type.ListT x -> scan_list scan x
+        | Type.TableT (_,_) -> failwith "Unsupported."
+      in
+      add_func name func; name
 
-(* let compile_ralgebra : Ralgebra.t -> Implang.func = function
- *   | Scan l -> scan_layout (Type.of_layout_exn l)
- *   | Project (_,_)
- *   | Filter (_,_)
- *   | EqJoin (_,_,_,_)
- *   | Concat _
- *   | Relation _ -> failwith "Expected a layout." *)
+    let rec gen_layout : Type.t -> (string * Implang.func) list =
+      fun t -> scan t |> ignore; List.rev !funcs
+
+    (* let compile_ralgebra : Ralgebra.t -> Implang.func = function
+     *   | Scan l -> scan_layout (Type.of_layout_exn l)
+     *   | Project (_,_)
+     *   | Filter (_,_)
+     *   | EqJoin (_,_,_,_)
+     *   | Concat _
+     *   | Relation _ -> failwith "Expected a layout." *)
+  end
+end
 
 let tests =
   let open OUnit2 in
@@ -1019,4 +1150,3 @@ let tests =
         let x = 3103 in
         assert_equal ~ctxt ~printer:Caml.string_of_int x (int_of_bytes_exn b))
   ]
-
