@@ -60,24 +60,6 @@ let rec serialize : Locality.layout -> bytes = fun l ->
   let len = Bytes.length body in
   econcat [bytes_of_int count; bytes_of_int len; body]
 
-module Fresh = struct
-  type t = { mutable ctr : int; names : Hash_set.M(String).t }
-
-  let create : ?names:Hash_set.M(String).t -> unit -> t =
-    fun ?names () ->
-      match names with
-      | Some x -> { ctr = 0; names = x }
-      | None -> { ctr = 0; names = Hash_set.create (module String) () }
-
-  let rec name : t -> (int -> 'a, unit, string) format -> 'a =
-    fun x fmt ->
-      let n = sprintf fmt x.ctr in
-      x.ctr <- x.ctr + 1;
-      if Hash_set.mem x.names n then name x fmt else begin
-        Hash_set.add x.names n; n
-      end
-end
-
 module Implang = struct
   exception EvalError of Error.t [@@deriving sexp]
 
