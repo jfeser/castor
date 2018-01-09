@@ -670,7 +670,7 @@ module Codegen = struct
   let fail : Error.t -> 'a = fun e -> raise (CodegenError e)
 
   module type CTX = sig
-    val global_ctx : llcontext
+    val ctx : llcontext
     val module_ : llmodule
     val builder : llbuilder
   end
@@ -725,15 +725,15 @@ module Codegen = struct
         loop 0
 
     let rec codegen_type : type_ -> lltype = function
-      | BytesT x when x = Serialize.isize -> i32_type global_ctx
-      | BytesT x when x = Serialize.bsize -> i8_type global_ctx
+      | BytesT x when x = Serialize.isize -> i32_type ctx
+      | BytesT x when x = Serialize.bsize -> i8_type ctx
       | BytesT _ -> fail (Error.of_string "Unexpected byte length.")
       | TupleT ts ->
-        struct_type global_ctx (List.map ts ~f:codegen_type |> Array.of_list)
-      | VoidT -> void_type global_ctx
+        struct_type ctx (List.map ts ~f:codegen_type |> Array.of_list)
+      | VoidT -> void_type ctx
       | t -> fail (Error.create "Bad argument type." t [%sexp_of:type_])
 
-    let byte_type = integer_type global_ctx 8
+    let byte_type = integer_type ctx 8
     let int_type = codegen_type (BytesT Serialize.isize)
     let bool_type = codegen_type (BytesT Serialize.bsize)
 
@@ -772,7 +772,7 @@ module Codegen = struct
         Logs.debug (fun m -> m "Codegen for %a" pp_expr e);
         let vs = List.map es ~f:codegen_expr in
         let ts = List.map vs ~f:type_of |> Array.of_list in
-        let struct_t = struct_type global_ctx ts in
+        let struct_t = struct_type ctx ts in
         let struct_ = build_alloca struct_t "tupleptrtmp" builder in
         List.iteri vs ~f:(fun i v ->
             let ptr = build_struct_gep struct_ i "ptrtmp" builder in
@@ -788,7 +788,7 @@ module Codegen = struct
       let count = declare_fresh_global int_type (mangle "count") module_ in
       build_store init_count count builder |> ignore;
 
-      let loop_bb = append_block global_ctx "loop" llfunc in
+      let loop_bb = append_block ctx "loop" llfunc in
       build_br loop_bb builder |> ignore;
       position_at_end loop_bb builder;
 
@@ -801,7 +801,7 @@ module Codegen = struct
         build_icmp Icmp.Sle var' (const_int int_type 0) "loopcond" builder
       in
       let loop_bb = insertion_block builder in
-      let end_bb = append_block global_ctx "loopend" llfunc in
+      let end_bb = append_block ctx "loopend" llfunc in
       build_cond_br cond loop_bb end_bb builder |> ignore;
       position_at_end end_bb builder
 
@@ -812,19 +812,19 @@ module Codegen = struct
       let llfunc = block_parent start_bb in
 
       (* Create then block. *)
-      let then_bb = append_block global_ctx "then" llfunc in
+      let then_bb = append_block ctx "then" llfunc in
       position_at_end then_bb builder;
       codegen_prog tcase;
       let then_bb = insertion_block builder in
 
       (* Create else block. *)
-      let else_bb = append_block global_ctx "else" llfunc in
+      let else_bb = append_block ctx "else" llfunc in
       position_at_end else_bb builder;
       codegen_prog fcase;
       let else_bb = insertion_block builder in
 
       (* Create merge block. *)
-      let merge_bb = append_block global_ctx "ifcont" llfunc in
+      let merge_bb = append_block ctx "ifcont" llfunc in
       position_at_end merge_bb builder;
 
       (* Insert branches. *)
@@ -859,11 +859,11 @@ module Codegen = struct
       let llfunc = block_parent start_bb in
 
       (* Generate yield in new block. *)
-      let bb = append_block global_ctx "yield" llfunc in
+      let bb = append_block ctx "yield" llfunc in
       position_at_end bb builder;
 
       (* Generate remaining code in new block. *)
-      let end_bb = append_block global_ctx "yieldend" llfunc in
+      let end_bb = append_block ctx "yieldend" llfunc in
 
       (* Add indirect branch and set new target. *)
       add_destination (get_indirect_br ()) end_bb;
@@ -917,12 +917,12 @@ module Codegen = struct
           let args_t =
             List.map args ~f:(fun (_, t) -> codegen_type t) |> Array.of_list
           in
-          function_type (void_type global_ctx) args_t
+          function_type (void_type ctx) args_t
         in
         let init_func =
           declare_function (init_name name) init_func_t module_
         in
-        let init_bb = append_block global_ctx "entry" init_func in
+        let init_bb = append_block ctx "entry" init_func in
         position_at_end init_bb builder;
         List.iteri args ~f:(fun i (n, t) ->
             let lltype = codegen_type t in
@@ -935,18 +935,18 @@ module Codegen = struct
         let step_func =
           declare_function (step_name name) step_func_t module_
         in
-        let bb = append_block global_ctx "entry" step_func in
+        let bb = append_block ctx "entry" step_func in
         position_at_end bb builder;
 
         (* Create indirect branch. *)
         let br_addr =
-          declare_global (pointer_type (i8_type global_ctx)) (mangle "braddr")
+          declare_global (pointer_type (i8_type ctx)) (mangle "braddr")
             module_
         in
         let br = build_indirect_br br_addr (yield_count func) builder in
         set_br_addr br_addr;
         set_indirect_br br;
-        let end_bb = append_block global_ctx "postentry" step_func in
+        let end_bb = append_block ctx "postentry" step_func in
         add_destination br end_bb;
         position_at_end init_bb builder;
 
