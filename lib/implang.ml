@@ -998,19 +998,20 @@ module Codegen = struct
         position_at_end bb builder;
 
         (* Create indirect branch. *)
-        let br_addr =
+        let br_addr_ptr =
           null_fresh_global (pointer_type (i8_type ctx)) (mangle "braddr")
             module_
         in
+        let br_addr = build_load br_addr_ptr "tmpaddr" builder in
         let br = build_indirect_br br_addr (yield_count func) builder in
-        set_br_addr br_addr;
+        set_br_addr br_addr_ptr;
         set_indirect_br br;
         let end_bb = append_block ctx "postentry" step_func in
         add_destination br end_bb;
         position_at_end init_bb builder;
 
         (* Add initial branch target to init function. *)
-        build_store (block_address step_func end_bb) br_addr builder |> ignore;
+        build_store (block_address step_func end_bb) br_addr_ptr builder |> ignore;
         build_ret_void builder |> ignore;
 
         (* Codegen the rest of the function body. *)
