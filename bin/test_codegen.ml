@@ -34,7 +34,7 @@ let main () =
   let t = Type.of_layout_exn l in
 
   let module IGen = IRGen.Make () in
-  let prog = IGen.gen_layout t in
+  let ir_module = IGen.gen_layout t in
 
   let module_ = Llvm.create_module (Llvm.global_context ()) "scanner" in
   let module CGen = Codegen.Make(struct
@@ -45,7 +45,7 @@ let main () =
     end) ()
   in
   let buf = serialize l in
-  CGen.codegen buf prog;
+  CGen.codegen buf ir_module;
 
   Out_channel.with_file buf_file ~f:(fun ch -> Out_channel.output_bytes ch buf);
   Llvm.print_module ir_file module_

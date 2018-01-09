@@ -450,6 +450,11 @@ module IRGen = struct
     body : prog ref;
   }
 
+  type ir_module = {
+    iters : (string * func) list;
+    main : func;
+  }
+
   exception IRGenError of Error.t
 
   let fail m = raise (IRGenError m)
@@ -655,7 +660,7 @@ module IRGen = struct
       in
       add_func name func; name
 
-    let main_printer : string -> (string * func) = fun func ->
+    let main_printer : string -> func = fun func ->
       let open Infix in
       let b = create [] VoidT in
       let start = int 0 in
@@ -665,14 +670,12 @@ module IRGen = struct
           let x = build_var "x" (find_func func).ret_type b in
           build_step x func b;
           build_print x b) b;
-      "main", build_func b
+      build_func b
 
-    let rec gen_layout : Type.t -> (string * func) list =
-      fun t ->
-        scan t |> ignore;
-        let name, _ = List.last_exn !funcs in
-        funcs := ((main_printer name)::(!funcs));
-        List.rev !funcs
+    let rec gen_layout : Type.t -> ir_module = fun t ->
+      scan t |> ignore;
+      let name, _ = List.last_exn !funcs in
+      { iters = List.rev !funcs; main = main_printer name }
 
     (* let compile_ralgebra : Ralgebra.t -> Implang.func = function
      *   | Scan l -> scan_layout (Type.of_layout_exn l)
@@ -739,12 +742,12 @@ module Codegen = struct
     let set_buf x = buf := Some x
     let get_buf () = Option.value_exn !buf
 
-    let declare_fresh_global : lltype -> string -> llmodule -> llvalue =
+    let null_fresh_global : lltype -> string -> llmodule -> llvalue =
       fun t n m ->
         let rec loop i =
           let n = if i = 0 then n else sprintf "%s.%d" n i in
           if Option.is_some (lookup_global n m) then loop (i + 1) else
-            declare_global t n m
+            define_global n (const_null t) m
         in
         loop 0
 
@@ -815,7 +818,7 @@ module Codegen = struct
 
       (* Create loop block. *)
       let init_count = codegen_expr count in
-      let count = declare_fresh_global int_type (mangle "count") module_ in
+      let count = null_fresh_global int_type (mangle "count") module_ in
       build_store init_count count builder |> ignore;
 
       let loop_bb = append_block ctx "loop" llfunc in
@@ -965,7 +968,7 @@ module Codegen = struct
         (* Create storage space for local variables & iterator args. *)
         List.iter locals ~f:(fun (n, t) ->
             let lltype = codegen_type t in
-            let var = declare_global lltype (mangle n) module_ in
+            let var = null_fresh_global lltype (mangle n) module_ in
             Hashtbl.set values ~key:n ~data:var);
 
         (* Create initialization function. *)
@@ -982,7 +985,7 @@ module Codegen = struct
         position_at_end init_bb builder;
         List.iteri args ~f:(fun i (n, t) ->
             let lltype = codegen_type t in
-            let var = declare_global lltype (mangle n) module_ in
+            let var = null_fresh_global lltype (mangle n) module_ in
             Hashtbl.set values ~key:n ~data:var;
             build_store (param init_func i) var builder |> ignore);
 
@@ -996,7 +999,7 @@ module Codegen = struct
 
         (* Create indirect branch. *)
         let br_addr =
-          declare_global (pointer_type (i8_type ctx)) (mangle "braddr")
+          null_fresh_global (pointer_type (i8_type ctx)) (mangle "braddr")
             module_
         in
         let br = build_indirect_br br_addr (yield_count func) builder in
@@ -1027,17 +1030,69 @@ module Codegen = struct
         set_step name step_func func;
         Logs.info (fun m -> m "Codegen for func %s completed." name)
 
-    let codegen : bytes -> (string * func) list -> unit = fun buf fs ->
-      Logs.info (fun m -> m "Codegen started.");
-      (* Generate global constant for buffer. *)
-      let buf =
-        declare_global (array_type byte_type (Bytes.length buf)) "buf"
-          module_
-      in
-      set_buf buf;
-      List.iter fs ~f:(fun (n, f) -> codegen_func n f);
-      assert_valid_module module_;
-      Logs.info (fun m -> m "Codegen completed.")
+    let codegen_main : func -> unit =
+      fun ({ args; body; ret_type; locals } as func) ->
+        let name = "main" in
+        Logs.debug (fun m -> m "Codegen for func %s started." name);
+        Logs.debug (fun m -> m "%a" pp_func func);
+        (* Check that function is not already defined. *)
+        if (Option.is_some (lookup_function (init_name name) module_) ||
+            Option.is_some (lookup_function (step_name name) module_))
+        then fail (Error.of_string "Function already defined.");
+
+        (* Reset function pair specific variables. *)
+        Hashtbl.clear values;
+        indirect_br := None;
+        br_addr := None;
+        namespace := name;
+
+        (* Create function. *)
+        let func_t =
+          let args_t =
+            List.map args ~f:(fun (_, t) -> codegen_type t) |> Array.of_list
+          in
+          function_type (codegen_type ret_type) args_t
+        in
+        let func = declare_function name func_t module_ in
+        let bb = append_block ctx "entry" func in
+        position_at_end bb builder;
+
+        (* Create storage space for local variables & iterator args. *)
+        List.iter locals ~f:(fun (n, t) ->
+            let lltype = codegen_type t in
+            let var = build_alloca lltype (mangle n) builder in
+            Hashtbl.set values ~key:n ~data:var);
+
+        (* Put arguments into symbol table. *)
+        List.iteri args ~f:(fun i (n, t) ->
+            Hashtbl.set values ~key:n ~data:(param func i));
+
+        codegen_prog body;
+        build_ret_void builder |> ignore;
+
+        Logs.debug (fun m -> m "%s" (string_of_llvalue func));
+        assert_valid_function func;
+        Logs.debug (fun m -> m "Codegen for func %s completed." name)
+
+    let codegen : bytes -> IRGen.ir_module -> unit =
+      fun buf { iters = fs; main } ->
+        Logs.info (fun m -> m "Codegen started.");
+
+        (* Generate global constant for buffer. *)
+        let buf =
+          null_fresh_global (array_type byte_type (Bytes.length buf)) "buf"
+            module_
+        in
+        set_buf buf;
+
+        (* Generate code for the iterators *)
+        List.iter fs ~f:(fun (n, f) -> codegen_func n f);
+
+        (* Generate main function. *)
+        codegen_main main;
+
+        assert_valid_module module_;
+        Logs.info (fun m -> m "Codegen completed.")
 
     (* let optimize : unit -> unit = fun () ->
      *   let engine = Execution_engine.create module_ in
