@@ -21,6 +21,11 @@ let main () =
       | Postgresql.Error e -> Some (Postgresql.string_of_error e)
       | _ -> None);
 
+  let ir_file, buf_file = match Caml.Sys.argv with
+    | [|_; x; y|] -> (x, y)
+    | _ -> printf "Usage: test_codegen.exe IR BUF"; Caml.exit 1
+  in
+
   let conn = new connection ~dbname:"sam_analytics_small" () in
   Ctx.global.conn <- Some (conn);
   Ctx.global.testctx <- Some (PredCtx.of_vars ["xv", `Int 10; "yv", `Int 10]);
@@ -31,16 +36,18 @@ let main () =
   let module IGen = IRGen.Make () in
   let prog = IGen.gen_layout t in
 
+  let module_ = Llvm.create_module (Llvm.global_context ()) "scanner" in
   let module CGen = Codegen.Make(struct
       open Llvm
-      let global_ctx = global_context ()
-      let module_ = create_module global_ctx "scanner"
-      let builder = builder global_ctx
-      let values = Hashtbl.create (module String) ()
-      let iters = Hashtbl.create (module String) ()
-      let funcs = Hashtbl.create (module String) ()
+      let ctx = global_context ()
+      let module_ = module_
+      let builder = builder ctx
     end) ()
   in
-  CGen.codegen (serialize l) prog
+  let buf = serialize l in
+  CGen.codegen buf prog;
+
+  Out_channel.with_file buf_file ~f:(fun ch -> Out_channel.output_bytes ch buf);
+  Llvm.print_module ir_file module_
 
 let () = Exn.handle_uncaught ~exit:true main

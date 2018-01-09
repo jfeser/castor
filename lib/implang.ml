@@ -40,7 +40,7 @@ and expr =
   | Unop of { op : op; arg : expr }
 
 and stmt =
-  | Print of expr
+  | Print of type_ * expr
   | Loop of { count : expr; body : prog }
   | If of { cond : expr; tcase : prog; fcase : prog }
   | Iter of { var : string; func : string; args : expr list }
@@ -70,6 +70,14 @@ let rec pp_tuple pp_v fmt =
   | [] -> fprintf fmt ""
   | [x] -> fprintf fmt "%a" pp_v x
   | x::xs -> fprintf fmt "%a,@ %a" pp_v x (pp_tuple pp_v) xs
+
+let rec pp_type : Format.formatter -> type_ -> unit =
+  let open Format in
+  fun fmt -> function
+  | BytesT x -> fprintf fmt "Bytes[%d]" x
+  | TupleT ts -> fprintf fmt "Tuple[%a]" (pp_tuple pp_type) ts
+  | VoidT -> fprintf fmt "Void"
+  | _ -> fail (Error.of_string "Unexpected type.")
 
 let pp_bytes fmt x = Format.fprintf fmt "%S" (Bytes.to_string x)
 let pp_int fmt = Format.fprintf fmt "%d"
@@ -119,7 +127,7 @@ and pp_stmt : Format.formatter -> stmt -> unit =
       fprintf fmt "@[<hov>init %s(%a);@]" func (pp_tuple pp_expr) args
     | Assign { lhs; rhs } -> fprintf fmt "@[<hov>%s =@ %a;@]" lhs pp_expr rhs
     | Yield e -> fprintf fmt "@[<hov>yield@ %a;@]" pp_expr e
-    | Print e -> fprintf fmt "@[<hov>print@ %a;@]" pp_expr e
+    | Print (t, e) -> fprintf fmt "@[<hov>print(%a,@ %a);@]" pp_type t pp_expr e
 
 and pp_prog : Format.formatter -> prog -> unit =
   let open Format in
@@ -159,39 +167,6 @@ let yield_count : func -> int = fun { body } ->
   List.sum (module Int) body ~f:(function
       | Yield _ -> 1
       | _ -> 0)
-
-(* let rec infer_type : type_ Map.M(String).t -> expr -> type_ =
- *   fun ctx -> function
- *     | Int _ -> BytesT isize
- *     | Bool _ -> BytesT bsize
- *     | Var x -> Map.find_exn ctx x
- *     | Tuple xs -> TupleT (List.map xs ~f:(infer_type ctx))
- *     | Binop { op; arg1; arg2 } ->
- *       let t1 = infer_type ctx arg1 in
- *       let t2 = infer_type ctx arg2 in
- *       begin match op, t1, t2 with
- *         | Add, IntT, IntT -> BytesT isize
- *         | Sub, IntT, IntT -> BytesT isize
- *         | Lt, IntT, IntT -> BytesT bsize
- *         | And, BoolT, BoolT -> BytesT bsize
- *         | Not as op, _, _ -> fail (Error.create "Not a binary operator."
- *                                      op [%sexp_of:op])
- *         | _ -> fail (Error.create "Type error." (op, t1, t2)
- *                        [%sexp_of:op * type_ * type_])
- *       end
- *     | Unop { op; arg } ->
- *       let t = infer_type ctx arg in
- *       begin match op, t with
- *         | (Not, BoolT) -> BoolT
- *         | (Add as op, _)
- *         | (Sub as op, _)
- *         | (Lt as op, _)
- *         | (And as op, _) -> fail (Error.create "Not a binary operator."
- *                                     op [%sexp_of:op])
- *         | _ -> fail (Error.create "Type error." (op, t) [%sexp_of:op * type_])
- *       end
- *     | Slice (_, len) ->
- *       if len = isize then *) 
 
 let lookup : state -> string -> value = fun s v ->
   match Map.find s.ctx v with
@@ -287,7 +262,7 @@ and eval_stmt : state -> prog -> value option * prog * state =
       else eval_stmt s (fcase @ xs)
     | Yield e :: xs -> Some (eval_expr s e), xs, s
     | [] -> None, [], s
-    | Print e :: xs ->
+    | Print (_, e) :: xs ->
       Stdio.printf "Output: %s\n"
         (Sexp.to_string_hum ([%sexp_of:value] (eval_expr s e)));
       eval_stmt s xs
@@ -443,6 +418,30 @@ let pcify : Fresh.t -> prog -> pcprog = fun fresh ->
         ]) @ pprog.header;
     }
 
+let rec infer_type : type_ Hashtbl.M(String).t -> expr -> type_ =
+  let open Serialize in
+  fun ctx -> function
+    | Int _ -> BytesT isize
+    | Bool _ -> BytesT bsize
+    | Var x -> Hashtbl.find_exn ctx x
+    | Tuple xs -> TupleT (List.map xs ~f:(infer_type ctx))
+    | Binop { op; arg1; arg2 } ->
+      let t1 = infer_type ctx arg1 in
+      let t2 = infer_type ctx arg2 in
+      begin match op, t1, t2 with
+        | (Add | Sub | And), BytesT x, BytesT y when x = y -> BytesT x
+        | Lt, BytesT x, BytesT y when x = y -> BytesT bsize
+        | _ -> fail (Error.create "Type error."
+                       (op, t1, t2) [%sexp_of:op * type_ * type_])
+      end
+    | Unop { op; arg } ->
+      let t = infer_type ctx arg in
+      begin match op, t with
+        | (Not, BytesT x) -> BytesT x
+        | _ -> fail (Error.create "Type error." (op, t) [%sexp_of:op * type_])
+      end
+    | Slice (_, len) -> TupleT [BytesT isize; BytesT isize]
+
 module IRGen = struct
   type func_builder = {
     args : (string * type_) list;
@@ -477,25 +476,23 @@ module IRGen = struct
         Hashtbl.set locals ~key:n ~data:t; Var n
       end
 
-  let build_arg : int -> func_builder -> expr =
-    fun i { args } ->
-      match List.nth args i with
-      | Some (n, _) -> Var n
-      | None -> fail (Error.of_string "Not an argument index.")
+  let build_arg : int -> func_builder -> expr = fun i { args } ->
+    match List.nth args i with
+    | Some (n, _) -> Var n
+    | None -> fail (Error.of_string "Not an argument index.")
 
-  let build_yield : expr -> func_builder -> unit =
-    fun e b -> b.body := (Yield e)::!(b.body)
+  let build_yield : expr -> func_builder -> unit = fun e b ->
+    b.body := (Yield e)::!(b.body)
 
-  let build_func : func_builder -> func =
-    fun { args; ret; locals; body } ->
-      { args;
-        ret_type = ret;
-        locals = Hashtbl.to_alist locals;
-        body = List.rev !body;
-      }
+  let build_func : func_builder -> func = fun { args; ret; locals; body } ->
+    { args;
+      ret_type = ret;
+      locals = Hashtbl.to_alist locals;
+      body = List.rev !body;
+    }
 
-  let build_assign : expr -> expr -> func_builder -> unit =
-    fun e v b -> b.body := Assign { lhs = name_of_var v; rhs = e }::!(b.body)
+  let build_assign : expr -> expr -> func_builder -> unit = fun e v b ->
+    b.body := Assign { lhs = name_of_var v; rhs = e }::!(b.body)
 
   let build_defn : string -> type_ -> expr -> func_builder -> expr =
     fun v t e b ->
@@ -509,8 +506,12 @@ module IRGen = struct
       let parent_body = !(b.body) in
       let loop_body = ref [] in
       f { b with body = loop_body };
-      let final_body = Loop { count = c; body = !loop_body }::parent_body in
+      let final_body = Loop { count = c; body = List.rev !loop_body }::parent_body in
       b.body := final_body
+
+  let build_print : expr -> func_builder -> unit = fun e b ->
+    let t = infer_type b.locals e in
+    b.body := (Print (t, e))::!(b.body)
 
   let int_t = BytesT Serialize.isize
   let bool_t = BytesT Serialize.bsize
@@ -540,12 +541,13 @@ module IRGen = struct
         assert (Hashtbl.mem mfuncs iter);
         b.body := Step { var = name_of_var var; iter }::!(b.body)
 
-    open Infix
     open Serialize
 
     let scan_empty = create ["start", int_t] VoidT |> build_func
 
-    let scan_scalar = function
+    let scan_scalar =
+      let open Infix in
+      function
       | Type.BoolT ->
         let b = create ["start", int_t] (TupleT [int_t]) in
         let start = build_arg 0 b in
@@ -565,6 +567,8 @@ module IRGen = struct
         build_func b
 
     let scan_crosstuple scan ts =
+      let open Infix in
+
       let rec loops b col_start vars = function
         | [] -> build_yield (Tuple (List.rev vars)) b
         | (func, len)::rest ->
@@ -621,6 +625,7 @@ module IRGen = struct
       }
 
     let scan_list scan t =
+      let open Infix in
       let func = scan t in
       let ret_type = (find_func func).ret_type in
       let b = create ["start", int_t] ret_type in
@@ -650,8 +655,24 @@ module IRGen = struct
       in
       add_func name func; name
 
+    let main_printer : string -> (string * func) = fun func ->
+      let open Infix in
+      let b = create [] VoidT in
+      let start = int 0 in
+      let ntuples = build_defn "ntuples" int_t (islice start) b in
+      build_iter func [start] b;
+      build_loop ntuples (fun b ->
+          let x = build_var "x" (find_func func).ret_type b in
+          build_step x func b;
+          build_print x b) b;
+      "main", build_func b
+
     let rec gen_layout : Type.t -> (string * func) list =
-      fun t -> scan t |> ignore; List.rev !funcs
+      fun t ->
+        scan t |> ignore;
+        let name, _ = List.last_exn !funcs in
+        funcs := ((main_printer name)::(!funcs));
+        List.rev !funcs
 
     (* let compile_ralgebra : Ralgebra.t -> Implang.func = function
      *   | Scan l -> scan_layout (Type.of_layout_exn l)
@@ -665,6 +686,9 @@ end
 
 module Codegen = struct
   open Llvm
+  open Llvm_analysis
+  open Llvm_target
+  module Execution_engine = Llvm_executionengine
 
   exception CodegenError of Error.t [@@deriving sexp]
   let fail : Error.t -> 'a = fun e -> raise (CodegenError e)
@@ -737,11 +761,18 @@ module Codegen = struct
     let int_type = codegen_type (BytesT Serialize.isize)
     let bool_type = codegen_type (BytesT Serialize.bsize)
 
-    let rec codegen_expr : expr -> llvalue = function
+    let rec codegen_expr : expr -> llvalue = fun e ->
+      Logs.debug (fun m -> m "Codegen for %a" pp_expr e);
+      match e with
       | Int x -> const_int int_type x
       | Bool true -> const_int bool_type 1
       | Bool false -> const_int bool_type 0
-      | Var n -> build_load (get_val n) n builder
+      | Var n ->
+        let v = get_val n in
+        Logs.debug (fun m -> m "Loading %s of type %s. %s"
+                       (string_of_llvalue v) (type_of v |> string_of_lltype)
+                   (Sexp.to_string_hum ([%sexp_of:llvalue Hashtbl.M(String).t] values)));
+        build_load v n builder
       | Slice (p, l) ->
         let ptr = codegen_expr p in
         let ptr = build_in_bounds_gep (get_buf ()) [| ptr |] "" builder in
@@ -768,8 +799,7 @@ module Codegen = struct
           | Add | Sub| Lt| And ->
             fail (Error.of_string "Not a unary operator.")
         end
-      | (Tuple es) as e ->
-        Logs.debug (fun m -> m "Codegen for %a" pp_expr e);
+      | Tuple es ->
         let vs = List.map es ~f:codegen_expr in
         let ts = List.map vs ~f:type_of |> Array.of_list in
         let struct_t = struct_type ctx ts in
@@ -838,8 +868,9 @@ module Codegen = struct
 
     let codegen_step var iter =
       let (step_func, _) = get_step iter in
-      let ret = build_call step_func [||] "steptmp" builder in
-      Hashtbl.set values ~key:var ~data:ret
+      let val_ = build_call step_func [||] "steptmp" builder in
+      let var = (get_val var) in
+      build_store val_ var builder |> ignore
 
     let codegen_iter var func args =
       let (init_func, { args = args_t }) = get_init func in
@@ -878,6 +909,31 @@ module Codegen = struct
       (* Add new bb*)
       position_at_end end_bb builder
 
+    let codegen_print type_ expr =
+      Logs.debug (fun m -> m "Codegen for %a." pp_stmt (Print (type_, expr)));
+      let val_ = codegen_expr expr in
+      let printf =
+        declare_function "printf"
+          (var_arg_function_type (i32_type ctx) [|pointer_type (i8_type ctx)|])
+          module_
+      in
+      let rec gen val_ = function
+        | BytesT x ->
+          let fmt_str = const_string ctx (sprintf "%%s.%d" x) in
+          let fmt_str_var = build_alloca (type_of fmt_str) "fmt" builder in
+          build_store fmt_str fmt_str_var builder |> ignore;
+          let fmt_str_ptr =
+            build_bitcast fmt_str_var (pointer_type (i8_type ctx)) "" builder
+          in
+          build_call printf [| fmt_str_ptr; val_ |] "" builder |> ignore
+        | TupleT ts -> List.iteri ts ~f:(fun i t ->
+            let field = build_extractvalue val_ i "fieldtmp" builder in
+            gen field t)
+        | VoidT -> build_call printf [| const_string ctx "()" |] |> ignore
+        | IterT _ -> fail (Error.of_string "Unexpected type.")
+      in
+      gen val_ type_
+
     let rec codegen_stmt : stmt -> unit =
       function
       | Loop { count; body } -> codegen_loop codegen_prog count body
@@ -886,7 +942,7 @@ module Codegen = struct
       | Iter { var; func; args; } -> codegen_iter var func args
       | Assign { lhs; rhs } -> codegen_assign lhs rhs
       | Yield ret -> codegen_yield ret
-      | Print _ -> ()
+      | Print (type_, expr) -> codegen_print type_ expr
 
     and codegen_prog : prog -> unit = fun p ->
       List.iter ~f:codegen_stmt p
@@ -960,15 +1016,15 @@ module Codegen = struct
         build_unreachable builder |> ignore;
 
         Logs.debug (fun m -> m "%s" (string_of_llvalue init_func));
-        Llvm_analysis.assert_valid_function init_func;
+        assert_valid_function init_func;
         set_init name init_func func;
 
         Logs.debug (fun m -> m "%s" (string_of_llvalue step_func));
         Logs.debug (fun m -> m "%s"
                        (Sexp.to_string_hum
                           ([%sexp_of:llvalue Hashtbl.M(String).t] values)));
-        Llvm_analysis.assert_valid_function step_func;
-        set_step name step_func func
+        assert_valid_function step_func;
+        set_step name step_func func;
         Logs.info (fun m -> m "Codegen for func %s completed." name)
 
     let codegen : bytes -> (string * func) list -> unit = fun buf fs ->
@@ -980,9 +1036,14 @@ module Codegen = struct
       in
       set_buf buf;
       List.iter fs ~f:(fun (n, f) -> codegen_func n f);
-      Llvm_analysis.assert_valid_module module_
-
+      assert_valid_module module_;
       Logs.info (fun m -> m "Codegen completed.")
 
+    (* let optimize : unit -> unit = fun () ->
+     *   let engine = Execution_engine.create module_ in
+     *   let pm = PassManager.create_function module_ in
+     *   Execution_engine
+     *   (\* DataLayout.add_to_pass_manager pm (Execution_engine.target_data engine); *\)
+     *   () *)
   end
 end
