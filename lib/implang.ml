@@ -893,7 +893,7 @@ module Codegen = struct
 
     let rec codegen_func : string -> func -> unit =
       fun name ({ args; body; ret_type; locals } as func) ->
-        Logs.debug (fun m -> m "Generating func %s" name);
+        Logs.debug (fun m -> m "Codegen for func %s started." name);
         Logs.debug (fun m -> m "%a" pp_func func);
         (* Check that function is not already defined. *)
         if (Option.is_some (lookup_function (init_name name) module_) ||
@@ -969,8 +969,10 @@ module Codegen = struct
                           ([%sexp_of:llvalue Hashtbl.M(String).t] values)));
         Llvm_analysis.assert_valid_function step_func;
         set_step name step_func func
+        Logs.info (fun m -> m "Codegen for func %s completed." name)
 
     let codegen : bytes -> (string * func) list -> unit = fun buf fs ->
+      Logs.info (fun m -> m "Codegen started.");
       (* Generate global constant for buffer. *)
       let buf =
         declare_global (array_type byte_type (Bytes.length buf)) "buf"
@@ -979,6 +981,8 @@ module Codegen = struct
       set_buf buf;
       List.iter fs ~f:(fun (n, f) -> codegen_func n f);
       Llvm_analysis.assert_valid_module module_
+
+      Logs.info (fun m -> m "Codegen completed.")
 
   end
 end
