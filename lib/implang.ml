@@ -452,7 +452,7 @@ module IRGen = struct
 
   type ir_module = {
     iters : (string * func) list;
-    main : func;
+    funcs : (string * func) list;
   }
 
   exception IRGenError of Error.t
@@ -660,7 +660,7 @@ module IRGen = struct
       in
       add_func name func; name
 
-    let main_printer : string -> func = fun func ->
+    let printer : string -> func = fun func ->
       let open Infix in
       let b = create [] VoidT in
       let start = int 0 in
@@ -674,8 +674,8 @@ module IRGen = struct
 
     let rec gen_layout : Type.t -> ir_module = fun t ->
       scan t |> ignore;
-      let name, _ = List.last_exn !funcs in
-      { iters = List.rev !funcs; main = main_printer name }
+      let name, _ = List.hd_exn !funcs in
+      { iters = List.rev !funcs; funcs = ["printer", printer name] }
 
     (* let compile_ralgebra : Ralgebra.t -> Implang.func = function
      *   | Scan l -> scan_layout (Type.of_layout_exn l)
@@ -748,6 +748,15 @@ module Codegen = struct
           let n = if i = 0 then n else sprintf "%s.%d" n i in
           if Option.is_some (lookup_global n m) then loop (i + 1) else
             define_global n (const_null t) m
+        in
+        loop 0
+
+    let define_fresh_global : llvalue -> string -> llmodule -> llvalue =
+      fun v n m ->
+        let rec loop i =
+          let n = if i = 0 then n else sprintf "%s.%d" n i in
+          if Option.is_some (lookup_global n m) then loop (i + 1) else
+            define_global n v m
         in
         loop 0
 
@@ -921,8 +930,16 @@ module Codegen = struct
           module_
       in
       let rec gen val_ = function
+        | BytesT x when x = 8 ->
+          let fmt_str =
+            define_fresh_global (const_stringz ctx "%d\n") "fmt" module_
+          in
+          let fmt_str_ptr =
+            build_bitcast fmt_str (pointer_type (i8_type ctx)) "" builder
+          in
+          build_call printf [| fmt_str_ptr; |] "" builder |> ignore
         | BytesT x ->
-          let fmt_str = const_string ctx (sprintf "%%s.%d" x) in
+          let fmt_str = const_stringz ctx (sprintf ".%d%%s" x) in
           let fmt_str_var = build_alloca (type_of fmt_str) "fmt" builder in
           build_store fmt_str fmt_str_var builder |> ignore;
           let fmt_str_ptr =
@@ -932,7 +949,7 @@ module Codegen = struct
         | TupleT ts -> List.iteri ts ~f:(fun i t ->
             let field = build_extractvalue val_ i "fieldtmp" builder in
             gen field t)
-        | VoidT -> build_call printf [| const_string ctx "()" |] |> ignore
+        | VoidT -> build_call printf [| const_stringz ctx "()" |] |> ignore
         | IterT _ -> fail (Error.of_string "Unexpected type.")
       in
       gen val_ type_
@@ -950,7 +967,7 @@ module Codegen = struct
     and codegen_prog : prog -> unit = fun p ->
       List.iter ~f:codegen_stmt p
 
-    let rec codegen_func : string -> func -> unit =
+    let rec codegen_iter : string -> func -> unit =
       fun name ({ args; body; ret_type; locals } as func) ->
         Logs.debug (fun m -> m "Codegen for func %s started." name);
         Logs.debug (fun m -> m "%a" pp_func func);
@@ -1031,9 +1048,8 @@ module Codegen = struct
         set_step name step_func func;
         Logs.info (fun m -> m "Codegen for func %s completed." name)
 
-    let codegen_main : func -> unit =
-      fun ({ args; body; ret_type; locals } as func) ->
-        let name = "main" in
+    let codegen_func : string -> func -> unit =
+      fun name ({ args; body; ret_type; locals } as func) ->
         Logs.debug (fun m -> m "Codegen for func %s started." name);
         Logs.debug (fun m -> m "%a" pp_func func);
         (* Check that function is not already defined. *)
@@ -1076,8 +1092,10 @@ module Codegen = struct
         Logs.debug (fun m -> m "Codegen for func %s completed." name)
 
     let codegen : bytes -> IRGen.ir_module -> unit =
-      fun buf { iters = fs; main } ->
+      fun buf { iters; funcs } ->
         Logs.info (fun m -> m "Codegen started.");
+
+        set_data_layout "e-m:o-i64:64-f80:128-n8:16:32:64-S128" module_;
 
         (* Generate global constant for buffer. *)
         let buf =
@@ -1087,10 +1105,10 @@ module Codegen = struct
         set_buf buf;
 
         (* Generate code for the iterators *)
-        List.iter fs ~f:(fun (n, f) -> codegen_func n f);
+        List.iter iters ~f:(fun (n, f) -> codegen_iter n f);
 
-        (* Generate main function. *)
-        codegen_main main;
+        (* Generate code for functions. *)
+        List.iter funcs ~f:(fun (n, f) -> codegen_func n f);
 
         assert_valid_module module_;
         Logs.info (fun m -> m "Codegen completed.")
