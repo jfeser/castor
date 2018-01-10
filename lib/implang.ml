@@ -999,8 +999,7 @@ module Codegen = struct
         let init_bb = append_block ctx "entry" init_func in
         position_at_end init_bb builder;
         List.iteri args ~f:(fun i (n, t) ->
-            let lltype = codegen_type t in
-            let var = null_fresh_global lltype (mangle n) module_ in
+            let var = get_val n in
             Hashtbl.set values ~key:n ~data:var;
             build_store (param init_func i) var builder |> ignore);
 
