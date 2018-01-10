@@ -761,9 +761,7 @@ module Codegen = struct
         loop 0
 
     let rec codegen_type : type_ -> lltype = function
-      | BytesT x when x = Serialize.isize -> i32_type ctx
-      | BytesT x when x = Serialize.bsize -> i8_type ctx
-      | BytesT _ -> fail (Error.of_string "Unexpected byte length.")
+      | BytesT x -> integer_type ctx (x * 8)
       | TupleT ts ->
         struct_type ctx (List.map ts ~f:codegen_type |> Array.of_list)
       | VoidT -> void_type ctx
@@ -785,13 +783,14 @@ module Codegen = struct
                        (string_of_llvalue v) (type_of v |> string_of_lltype)
                    (Sexp.to_string_hum ([%sexp_of:llvalue Hashtbl.M(String).t] values)));
         build_load v n builder
-      | Slice (p, l) ->
-        let ptr = codegen_expr p in
-        let ptr = build_in_bounds_gep (get_buf ()) [| ptr |] "" builder in
-        let ptr = match l with
-          | 8 -> build_pointercast ptr (pointer_type int_type) "" builder
-          | 1 -> build_pointercast ptr (pointer_type byte_type) "" builder
-          | _ -> failwith "Unexpected byte length."
+      | Slice (byte_idx, size_bytes) ->
+        let size_bits = Serialize.isize * size_bytes in
+        let byte_idx = codegen_expr byte_idx in
+        let int_idx = build_sdiv byte_idx (const_int (i64_type ctx) Serialize.isize) "intidx" builder in
+        let buf = build_load (get_buf ()) "buf" builder in
+        let ptr = build_in_bounds_gep buf [| int_idx |] "" builder in
+        let ptr = build_pointercast ptr
+            (pointer_type (integer_type ctx size_bits)) "" builder
         in
         build_load ptr "slicetmp" builder
       | Binop { op; arg1; arg2 } ->
