@@ -1095,10 +1095,10 @@ module Codegen = struct
         set_data_layout "e-m:o-i64:64-f80:128-n8:16:32:64-S128" module_;
 
         (* Generate global constant for buffer. *)
-        let buf =
-          null_fresh_global (array_type byte_type (Bytes.length buf)) "buf"
-            module_
+        let buf_t = pointer_type (array_type int_type
+                                    (Bytes.length buf / Serialize.isize))
         in
+        let buf = define_global "buf" (const_null buf_t)  module_ in
         set_buf buf;
 
         (* Generate code for the iterators *)

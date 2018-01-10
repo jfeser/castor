@@ -3,8 +3,8 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 
-char* buf;
-void printer();
+extern long* buf;
+extern void printer();
 
 int main(int argc, char **argv) {
   int fd, len;
@@ -26,10 +26,13 @@ int main(int argc, char **argv) {
   }
   len = stat.st_size;
 
-  if (mmap(buf, len, PROT_READ, MAP_PRIVATE, fd, 0) < 0) {
+  void *mapped_buf = NULL;
+  if ((mapped_buf = mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0)) ==
+      MAP_FAILED) {
     perror("Mapping db file failed");
     return 1;
   }
+  buf = mapped_buf;
 
   printf("Printing query results:\n");
   printer();
