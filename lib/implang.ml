@@ -928,28 +928,27 @@ module Codegen = struct
           (var_arg_function_type (i32_type ctx) [|pointer_type (i8_type ctx)|])
           module_
       in
+      let call_printf fmt args =
+        let fmt_str =
+          define_fresh_global (const_stringz ctx fmt) "fmt" module_
+        in
+        let fmt_str_ptr =
+          build_bitcast fmt_str (pointer_type (i8_type ctx)) "" builder
+        in
+        let fmt_args = Array.append [| fmt_str_ptr; |] (Array.of_list args) in
+        build_call printf fmt_args "" builder |> ignore
+      in
       let rec gen val_ = function
-        | BytesT x when x = 8 ->
-          let fmt_str =
-            define_fresh_global (const_stringz ctx "%d\n") "fmt" module_
-          in
-          let fmt_str_ptr =
-            build_bitcast fmt_str (pointer_type (i8_type ctx)) "" builder
-          in
-          build_call printf [| fmt_str_ptr; |] "" builder |> ignore
-        | BytesT x ->
-          let fmt_str = const_stringz ctx (sprintf ".%d%%s" x) in
-          let fmt_str_var = build_alloca (type_of fmt_str) "fmt" builder in
-          build_store fmt_str fmt_str_var builder |> ignore;
-          let fmt_str_ptr =
-            build_bitcast fmt_str_var (pointer_type (i8_type ctx)) "" builder
-          in
-          build_call printf [| fmt_str_ptr; val_ |] "" builder |> ignore
-        | TupleT ts -> List.iteri ts ~f:(fun i t ->
+        | BytesT x when x = 8 -> call_printf "%d" [val_]
+        | TupleT ts ->
+          call_printf "(" [];
+          List.iteri ts ~f:(fun i t ->
             let field = build_extractvalue val_ i "fieldtmp" builder in
-            gen field t)
+            gen field t;
+            call_printf " " []);
+          call_printf ")\n" [];
         | VoidT -> build_call printf [| const_stringz ctx "()" |] |> ignore
-        | IterT _ -> fail (Error.of_string "Unexpected type.")
+        | BytesT _ | IterT _ -> fail (Error.of_string "Unexpected type.")
       in
       gen val_ type_
 
