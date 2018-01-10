@@ -50,7 +50,7 @@ let main () =
   Out_channel.with_file buf_file ~f:(fun ch -> Out_channel.output_bytes ch buf);
   Llvm.print_module ir_file module_;
 
-  Caml.Sys.command (sprintf "llc -filetype=obj \"%s\"" ir_file) |> ignore
-  (* Caml.Sys.command (sprintf "clang %s.o -o %s.exe" ir_file ir_file) |> ignore *)
+  Caml.Sys.command (sprintf "llc -O0 -filetype=obj \"%s\"" ir_file) |> ignore;
+  Caml.Sys.command (sprintf "clang -g -O0 scanner.o main.c -o scanner.exe") |> ignore
 
 let () = Exn.handle_uncaught ~exit:true main
