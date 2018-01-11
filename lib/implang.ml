@@ -556,18 +556,18 @@ module IRGen = struct
       | Type.BoolT ->
         let b = create ["start", int_t] (TupleT [int_t]) in
         let start = build_arg 0 b in
-        build_yield (Tuple [Slice (start, bsize)]) b;
+        build_yield (Tuple [islice start]) b;
         build_func b
       | Type.IntT ->
         let b = create ["start", int_t] (TupleT [int_t]) in
         let start = build_arg 0 b in
-        build_yield (Tuple [Slice (start, isize)]) b;
+        build_yield (Tuple [islice start]) b;
         build_func b
       | Type.StringT ->
         let b = create ["start", int_t] (TupleT [slice_t]) in
         let start = build_arg 0 b in
         let len = build_var "len" int_t b in
-        build_assign (Slice (start - int isize, isize)) len b;
+        build_assign (islice (start - int isize)) len b;
         build_yield (Tuple [slice start len]) b;
         build_func b
 
@@ -665,14 +665,12 @@ module IRGen = struct
       let b = create [] VoidT in
       let start = int 0 in
       let ntuples = build_defn "ntuples" int_t (islice start) b in
-      let ct = build_defn "ct" int_t (int 0) b in
-      (* build_iter func [start] b; *)
+      build_iter func [start] b;
       build_loop ntuples (fun b ->
-          (* let x = build_var "x" (find_func func).ret_type b in *)
-          (* build_step x func b; *)
-          build_print ct b;
-          (* build_print x b; *)
-          build_assign (ct + int 1) ct b) b;
+          let x = build_var "x" (find_func func).ret_type b in
+          build_step x func b;
+          build_print x b)
+        b;
       build_func b
 
     let rec gen_layout : Type.t -> ir_module = fun t ->
@@ -763,6 +761,12 @@ module Codegen = struct
         in
         loop 0
 
+    let build_entry_alloca : lltype -> string -> llbuilder -> llvalue =
+      fun t n b ->
+        let entry_bb = insertion_block b |> block_parent |> entry_block in
+        let entry_term = Option.value_exn (block_terminator entry_bb) in
+        builder_before ctx entry_term |> build_alloca t n
+
     let rec codegen_type : type_ -> lltype = function
       | BytesT x -> integer_type ctx (x * 8)
       | TupleT ts ->
@@ -822,7 +826,7 @@ module Codegen = struct
         let vs = List.map es ~f:codegen_expr in
         let ts = List.map vs ~f:type_of |> Array.of_list in
         let struct_t = struct_type ctx ts in
-        let struct_ = build_alloca struct_t "tupleptrtmp" builder in
+        let struct_ = build_entry_alloca struct_t "tupleptrtmp" builder in
         List.iteri vs ~f:(fun i v ->
             let ptr = build_struct_gep struct_ i "ptrtmp" builder in
             build_store v ptr builder |> ignore);
