@@ -455,13 +455,13 @@ module IRGen = struct
     funcs : (string * func) list;
   }
 
-  exception IRGenError of Error.t
+  exception IRGenError of Error.t [@@deriving sexp]
 
   let fail m = raise (IRGenError m)
 
   let name_of_var = function
     | Var n -> n
-    | e -> fail (Error.of_string "Expected a variable.")
+    | e -> fail (Error.create "Expected a variable." e [%sexp_of:expr])
 
   let create : (string * type_) list -> type_ -> func_builder =
     fun args ret ->
@@ -665,11 +665,14 @@ module IRGen = struct
       let b = create [] VoidT in
       let start = int 0 in
       let ntuples = build_defn "ntuples" int_t (islice start) b in
-      build_iter func [start] b;
+      let ct = build_defn "ct" int_t (int 0) b in
+      (* build_iter func [start] b; *)
       build_loop ntuples (fun b ->
-          let x = build_var "x" (find_func func).ret_type b in
-          build_step x func b;
-          build_print x b) b;
+          (* let x = build_var "x" (find_func func).ret_type b in *)
+          (* build_step x func b; *)
+          build_print ct b;
+          (* build_print x b; *)
+          build_assign (ct + int 1) ct b) b;
       build_func b
 
     let rec gen_layout : Type.t -> ir_module = fun t ->
@@ -677,7 +680,7 @@ module IRGen = struct
       let name, _ = List.hd_exn !funcs in
       { iters = List.rev !funcs; funcs = ["printer", printer name] }
 
-    (* let compile_ralgebra : Ralgebra.t -> Implang.func = function
+    (* let gen_ralgebra : Locality.Ralgebra.t -> ir_module = function
      *   | Scan l -> scan_layout (Type.of_layout_exn l)
      *   | Project (_,_)
      *   | Filter (_,_)
@@ -826,28 +829,35 @@ module Codegen = struct
         build_load struct_ "tupletmp" builder
 
     let codegen_loop codegen_prog count body =
+      (* Create all loop blocks. *)
       let start_bb = insertion_block builder in
       let llfunc = block_parent start_bb in
+      let loop_bb = append_block ctx "loop" llfunc in
+      let end_bb = append_block ctx "loopend" llfunc in
 
-      (* Create loop block. *)
+      (* In loop header, set count variable and conditionally branch to loop
+         body. *)
+      position_at_end start_bb builder;
       let init_count = codegen_expr count in
       let count = null_fresh_global int_type (mangle "count") module_ in
       build_store init_count count builder |> ignore;
+      let cond =
+        build_icmp Icmp.Sgt init_count (const_int int_type 0) "loopcond" builder
+      in
+      build_cond_br cond loop_bb end_bb builder |> ignore;
 
-      let loop_bb = append_block ctx "loop" llfunc in
-      build_br loop_bb builder |> ignore;
+      (* Generate the loop body. *)
       position_at_end loop_bb builder;
-
       codegen_prog body;
 
+      (* At the end of the loop body, load the loop counter, decrement, store,
+         and branch. *)
       let var = build_load count "count" builder in
       let var' = build_sub var (const_int int_type 1) "count" builder in
       build_store var' count builder |> ignore;
       let cond =
-        build_icmp Icmp.Sle var' (const_int int_type 0) "loopcond" builder
+        build_icmp Icmp.Sgt var' (const_int int_type 0) "loopcond" builder
       in
-      let loop_bb = insertion_block builder in
-      let end_bb = append_block ctx "loopend" llfunc in
       build_cond_br cond loop_bb end_bb builder |> ignore;
       position_at_end end_bb builder
 
