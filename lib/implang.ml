@@ -788,7 +788,12 @@ module Codegen = struct
         let byte_idx = codegen_expr byte_idx in
         let int_idx = build_sdiv byte_idx (const_int (i64_type ctx) Serialize.isize) "intidx" builder in
         let buf = build_load (get_buf ()) "buf" builder in
-        let ptr = build_in_bounds_gep buf [| int_idx |] "" builder in
+
+        (* Note that the first index is for the pointer. The second indexes into
+           the array. *)
+        let ptr = build_in_bounds_gep buf
+            [| const_int (i64_type ctx) 0; int_idx |] "" builder
+        in
         let ptr = build_pointercast ptr
             (pointer_type (integer_type ctx size_bits)) "" builder
         in
