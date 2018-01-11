@@ -548,6 +548,46 @@ module IRGen = struct
 
     open Serialize
 
+    let len start =
+      let open Infix in
+      function
+      | Type.ScalarT Type.BoolT -> int isize
+      | Type.ScalarT Type.IntT -> int isize
+      | Type.ScalarT Type.StringT -> islice start
+      | Type.EmptyT -> int 0
+      | Type.CrossTupleT _
+      | Type.ZipTupleT _
+      | Type.ListT _ -> islice (start + int isize)
+      | Type.TableT (_,_) -> failwith "Unsupported."
+
+    let len start =
+      let open Infix in
+      let open Type in
+      function
+      | ScalarT BoolT | ScalarT IntT -> int isize
+      | ScalarT StringT -> islice start
+      | EmptyT -> int 0
+      | CrossTupleT _ | ZipTupleT _ | ListT _ -> islice (start + int isize)
+      | TableT (_,_) -> failwith "Unsupported."
+
+    let count start =
+      let open Infix in
+      let open Type in
+      function
+      | ScalarT BoolT | ScalarT IntT | ScalarT StringT -> int 1
+      | EmptyT -> int 0
+      | CrossTupleT _ | ZipTupleT _ | ListT _ -> islice start
+      | TableT (_,_) -> failwith "Unsupported."
+
+    let hsize =
+      let open Infix in
+      let open Type in
+      function
+      | ScalarT BoolT | ScalarT IntT | EmptyT -> int 0
+      | ScalarT StringT -> int isize
+      | CrossTupleT _ | ZipTupleT _ | ListT _ -> int (2 * isize)
+      | TableT (_,_) -> failwith "Unsupported."
+
     let scan_empty = create ["start", int_t] VoidT |> build_func
 
     let scan_scalar =
@@ -556,18 +596,18 @@ module IRGen = struct
       | Type.BoolT ->
         let b = create ["start", int_t] (TupleT [int_t]) in
         let start = build_arg 0 b in
-        build_yield (Tuple [islice (start + int hsize)]) b;
+        build_yield (Tuple [islice start]) b;
         build_func b
       | Type.IntT ->
         let b = create ["start", int_t] (TupleT [int_t]) in
         let start = build_arg 0 b in
-        build_yield (Tuple [islice (start + int hsize)]) b;
+        build_yield (Tuple [islice start]) b;
         build_func b
       | Type.StringT ->
         let b = create ["start", int_t] (TupleT [slice_t]) in
         let start = build_arg 0 b in
-        let len = build_defn "len" int_t (islice (start + int isize)) b in
-        build_yield (Tuple [slice (start + int hsize) len]) b;
+        let len = islice start in
+        build_yield (Tuple [slice (start + int isize) len]) b;
         build_func b
 
     let scan_crosstuple scan ts =
@@ -575,25 +615,25 @@ module IRGen = struct
 
       let rec loops b col_start vars = function
         | [] -> build_yield (Tuple (List.rev vars)) b
-        | (func, len)::rest ->
+        | (func, type_, count)::rest ->
           build_iter func [col_start] b;
           let var = build_fresh_var "x" (find_func func).ret_type b in
-          build_loop (int len) (fun b ->
+          build_loop (int count) (fun b ->
               build_step var func b;
               let next_start =
-                col_start + (islice (col_start + int isize)) + int hsize
+                col_start + (len col_start type_) + (hsize type_)
               in
               loops b next_start (var::vars) rest
             ) b;
       in
 
-      let funcs = List.map ts ~f:(fun (t, l) -> (scan t, l)) in
-      let ret_type = TupleT (List.map funcs ~f:(fun (func, _) ->
+      let funcs = List.map ts ~f:(fun (t, l) -> (scan t, t, l)) in
+      let ret_type = TupleT (List.map funcs ~f:(fun (func, _, _) ->
           (find_func func).ret_type))
       in
       let b = create ["start", int_t] ret_type in
       let start = build_arg 0 b in
-      loops b (start + int hsize) [] funcs;
+      loops b (start + hsize (CrossTupleT ts)) [] funcs;
       build_func b
 
     (* FIXME: This whole function needs rewriting. *)
@@ -635,17 +675,17 @@ module IRGen = struct
       let ret_type = (find_func func).ret_type in
       let b = create ["start", int_t] ret_type in
       let start = build_arg 0 b in
-      let count = build_defn "count" int_t (islice start) b in
-      let cstart = build_defn "cstart" int_t (start + int hsize) b in
-      build_loop count (fun b ->
-          let ccount = build_defn "ccount" int_t (islice cstart) b in
-          let clen = build_defn "clen" int_t (islice (cstart + int isize)) b in
+      let pcount = islice start in
+      let cstart = build_defn "cstart" int_t (start + hsize (ListT t)) b in
+      build_loop pcount (fun b ->
+          let ccount = count cstart t in
+          let clen = len cstart t in
           build_iter func [cstart] b;
           build_loop ccount (fun b ->
               let x = build_var "x" (find_func func).ret_type b in
               build_step x func b;
               build_yield x b) b;
-          build_assign (cstart + clen + int hsize) cstart b) b;
+          build_assign (cstart + clen + hsize t) cstart b) b;
       build_func b
 
     let rec scan : Type.t -> string = fun t ->

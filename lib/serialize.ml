@@ -41,30 +41,28 @@ let align : int -> bytes -> bytes = fun align b ->
 
 let econcat = Bytes.concat Bytes.empty
 
-let rec serialize : Locality.layout -> bytes = fun l ->
-  let count, body = match l with
-    | Scalar { rel; field; idx; value } ->
-      let count = 1 in
-      let body = match value with
-        | `Bool true -> bytes_of_int 1
-        | `Bool false -> bytes_of_int 0
-        | `Int x -> bytes_of_int x
-        | `Unknown x
-        | `String x -> Bytes.of_string x |> align bsize
-      in
-      (count, body)
-    | CrossTuple ls
-    | ZipTuple ls
-    | UnorderedList ls
-    | OrderedList { elems = ls} ->
-      let count = ntuples l in
-      let body = List.map ls ~f:serialize |> econcat in
-      (count, body)
-    | Table _ -> failwith "Unsupported"
-    | Empty -> (0, Bytes.empty)
-  in
-  let len = Bytes.length body in
-  econcat [bytes_of_int count; bytes_of_int len; body]
+let rec serialize : Locality.layout -> bytes = function
+  | Scalar { rel; field; idx; value } -> begin match value with
+      | `Bool true -> bytes_of_int 1
+      | `Bool false -> bytes_of_int 0
+      | `Int x -> bytes_of_int x
+      | `Unknown x
+      | `String x ->
+        let unpadded_body = Bytes.of_string x in
+        let body = unpadded_body |> align bsize in
+        let len = Bytes.length body in
+        econcat [bytes_of_int len; body]
+    end
+  | CrossTuple ls
+  | ZipTuple ls
+  | UnorderedList ls
+  | OrderedList { elems = ls } as l ->
+    let count = ntuples l in
+    let body = List.map ls ~f:serialize |> econcat in
+    let len = Bytes.length body in
+    econcat [bytes_of_int count; bytes_of_int len; body]
+  | Table _ -> failwith "Unsupported"
+  | Empty -> Bytes.empty
 
 let tests =
   let open OUnit2 in
