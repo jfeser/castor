@@ -594,20 +594,20 @@ module IRGen = struct
       let open Infix in
       function
       | Type.BoolT ->
-        let b = create ["start", int_t] (TupleT [int_t]) in
+        let b = create ["start", int_t] int_t in
         let start = build_arg 0 b in
-        build_yield (Tuple [islice start]) b;
+        build_yield (islice start) b;
         build_func b
       | Type.IntT ->
-        let b = create ["start", int_t] (TupleT [int_t]) in
+        let b = create ["start", int_t] int_t in
         let start = build_arg 0 b in
-        build_yield (Tuple [islice start]) b;
+        build_yield (islice start) b;
         build_func b
       | Type.StringT ->
-        let b = create ["start", int_t] (TupleT [slice_t]) in
+        let b = create ["start", int_t] slice_t in
         let start = build_arg 0 b in
         let len = islice start in
-        build_yield (Tuple [slice (start + int isize) len]) b;
+        build_yield (slice (start + int isize) len) b;
         build_func b
 
     let scan_crosstuple scan ts =
