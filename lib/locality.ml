@@ -3,6 +3,52 @@ open Base.Printf
 module Format = Caml.Format
 
 open Collections
+
+type dtype =
+  | DInt of { min_val : int; max_val : int; distinct : int }
+  | DString of { min_bits : int; max_bits : int; distinct : int }
+  | DTimestamp of { distinct : int }
+  | DInterval of { distinct : int }
+  | DBool of { distinct : int }
+[@@deriving compare, sexp]
+
+module Field = struct
+  module T = struct
+    type t = {
+      name: string;
+      dtype : dtype;
+    } [@@deriving compare, sexp]
+  end
+  include T
+  include Comparable.Make(T)
+
+  let dummy = { name = ""; dtype = DBool { distinct = 0 } }
+end
+
+module Relation = struct
+  type t = {
+    name : string;
+    fields : Field.t list;
+    card : int;
+  } [@@deriving compare, sexp]
+
+  let dummy = { name = ""; fields = []; card = 0; }
+end
+
+let exec : ?verbose : bool -> ?params : string list -> Postgresql.connection -> string -> string list list =
+  fun ?(verbose=true) ?(params=[]) conn query ->
+    let query = match params with
+      | [] -> query
+      | _ ->
+        List.foldi params ~init:query ~f:(fun i q v ->
+            String.substr_replace_all ~pattern:(sprintf "$%d" i) ~with_:v q)
+    in
+    if verbose then Stdio.print_endline query;
+    let r = conn#exec query in
+    match r#status with
+    | Postgresql.Fatal_error -> failwith r#error
+    | _ -> r#get_all_lst
+
 (* type op =
  *   | Eq
  *   | Le
@@ -19,8 +65,8 @@ type primvalue =
 module Value = struct
   module T = struct
     type t = {
-      rel : Layout.relation;
-      field : Layout.Field.t;
+      rel : Relation.t;
+      field : Field.t;
       idx : int;
       value : primvalue;
     } [@@deriving compare, sexp]
@@ -39,19 +85,19 @@ module Tuple = struct
   module ValueF = struct
     module T = struct
       type t = Value.t
-      let compare v1 v2 = Layout.Field.compare v1.Value.field v2.Value.field
+      let compare v1 v2 = Field.compare v1.Value.field v2.Value.field
       let sexp_of_t = Value.sexp_of_t
     end
     include T
     include Comparable.Make(T)
   end
 
-  let field : t -> Layout.Field.t -> Value.t option = fun t f ->
-    List.find t ~f:(fun v -> Layout.Field.(f = v.field))
+  let field : t -> Field.t -> Value.t option = fun t f ->
+    List.find t ~f:(fun v -> Field.(f = v.field))
 
-  let field_exn : t -> Layout.Field.t -> Value.t = fun t f ->
+  let field_exn : t -> Field.t -> Value.t = fun t f ->
     Option.value_exn
-      (List.find t ~f:(fun v -> Layout.Field.(f = v.field)))
+      (List.find t ~f:(fun v -> Field.(f = v.field)))
 
   let merge : t -> t -> t = fun t1 t2 ->
     List.append t1 t2
@@ -66,7 +112,7 @@ module PredCtx = struct
   module Key = struct
     module T = struct
       type t =
-        | Field of Layout.Field.t
+        | Field of Field.t
         | Var of string
         | Dummy
       [@@deriving compare, sexp]
@@ -81,18 +127,18 @@ module PredCtx = struct
 
   let of_tuple : Tuple.t -> t = fun t ->
     List.fold_left t ~init:(Map.empty (module Key)) ~f:(fun m v ->
-        Map.add m ~key:(Field v.field) ~data:v.value)
+        Map.set m ~key:(Field v.field) ~data:v.value)
 
   let of_vars : (string * primvalue) list -> t = fun l ->
     List.fold_left l ~init:(Map.empty (module Key)) ~f:(fun m (k, v) ->
-        Map.add m ~key:(Var k) ~data:v)
+        Map.set m ~key:(Var k) ~data:v)
 end
 
 module ValueMap = struct
   module Elem0 = struct
     type t = Value.t = {
-      rel : Layout.relation;
-      field : Layout.Field.t;
+      rel : Relation.t;
+      field : Field.t;
       idx : int;
       value : primvalue;
     } [@@deriving sexp]
@@ -104,7 +150,7 @@ module ValueMap = struct
     include Comparator.Make(Elem0)
 
     let of_primvalue : primvalue -> t = fun p ->
-      { value = p; rel = Layout.dummy_relation; field = Layout.Field.dummy; idx = 0 }
+      { value = p; rel = Relation.dummy; field = Field.dummy; idx = 0 }
   end
   type 'a t = 'a Map.M(Elem).t [@@deriving compare, sexp]
 end
@@ -119,13 +165,13 @@ type layout =
   | Empty
 and range = (PredCtx.Key.t option * PredCtx.Key.t option)
 and ordered_list = {
-  field : Layout.Field.t;
+  field : Field.t;
   order : [`Asc | `Desc];
   elems : layout list;
   lookup : range;
 }
 and table = {
-  field : Layout.Field.t;
+  field : Field.t;
   elems : layout ValueMap.t;
   lookup : PredCtx.Key.t;
 }
@@ -134,7 +180,7 @@ and table = {
 exception TransformError of Error.t
 
 module Schema = struct
-  type t = Layout.Field.t list [@@deriving compare, sexp]
+  type t = Field.t list [@@deriving compare, sexp]
 
   let rec of_layout_exn : layout -> t =
     function
@@ -142,13 +188,13 @@ module Schema = struct
     | Scalar v -> [v.field]
     | ZipTuple ls ->
       List.concat_map ls ~f:of_layout_exn
-      |> List.dedup ~compare:Layout.Field.compare
+      |> List.dedup ~compare:Field.compare
     | CrossTuple ls ->
       List.map ls ~f:of_layout_exn
       |> List.fold_left1_exn ~f:(fun s s' ->
-          let s = List.merge ~cmp:Layout.Field.compare s s' in
+          let s = List.merge ~cmp:Field.compare s s' in
           let has_dups =
-            List.find_consecutive_duplicate s ~equal:Layout.Field.(=)
+            List.find_consecutive_duplicate s ~equal:Field.(=)
             |> Option.is_some
           in
           if has_dups then
@@ -161,27 +207,27 @@ module Schema = struct
       let v_schema =
         Map.data m |> List.map ~f:of_layout_exn |> List.all_equal_exn
       in
-      if not (List.mem ~equal:Layout.Field.(=) v_schema f) then
+      if not (List.mem ~equal:Field.(=) v_schema f) then
         raise (TransformError (Error.of_string "Table values must contain the table key."));
-      List.merge ~cmp:Layout.Field.compare [f] v_schema
+      List.merge ~cmp:Field.compare [f] v_schema
 
   let of_tuple : Tuple.t -> t = List.map ~f:(fun v -> v.Value.field)
 
-  let has_field : t -> Layout.Field.t -> bool = List.mem ~equal:Layout.Field.(=)
+  let has_field : t -> Field.t -> bool = List.mem ~equal:Field.(=)
 
   let overlaps : t list -> bool = fun schemas ->
-    let schemas = List.map schemas ~f:(Set.of_list (module Layout.Field)) in
+    let schemas = List.map schemas ~f:(Set.of_list (module Field)) in
     let tot = List.sum (module Int) schemas ~f:Set.length in
     let utot =
       schemas
-      |> Set.union_list (module Layout.Field)
+      |> Set.union_list (module Field)
       |> Set.length
     in
     tot > utot
 end
 
-let rec field : Layout.Field.t -> Tuple.t -> Value.t =
-  fun f t -> List.find_exn t ~f:(fun x -> Layout.Field.(=) f x.field)
+let rec field : Field.t -> Tuple.t -> Value.t = fun f t ->
+  List.find_exn t ~f:(fun x -> Field.(=) f x.field)
 
 let rec ntuples : layout -> int =
   function
@@ -253,24 +299,24 @@ module Ralgebra = struct
 
     type pred =
       | Var of string
-      | Field of Layout.Field.t
+      | Field of Field.t
       | Binop of (op * pred * pred)
       | Varop of (op * pred list)
     [@@deriving compare, sexp]
 
     type t =
-      | Project of Layout.Field.t list * t
+      | Project of Field.t list * t
       | Filter of pred * t
-      | EqJoin of Layout.Field.t * Layout.Field.t * t * t
+      | EqJoin of Field.t * Field.t * t * t
       | Scan of layout
       | Concat of t list
-      | Relation of Layout.relation
+      | Relation of Relation.t
     [@@deriving compare, sexp]
   end
   include T
   include Comparable.Make(T)
 
-  let rec pred_fields : pred -> Layout.Field.t list = function
+  let rec pred_fields : pred -> Field.t list = function
     | Var _ -> []
     | Field f -> [f]
     | Binop (_, p1, p2) -> (pred_fields p1) @ (pred_fields p2)
@@ -407,24 +453,24 @@ let rec eval_layout : PredCtx.t -> layout -> Tuple.t Seq.t =
       end
     | Empty -> Seq.empty
 
-let eval_relation : Layout.relation -> Tuple.t Seq.t =
+let eval_relation : Relation.t -> Tuple.t Seq.t =
   fun r ->
-    Layout.exec ~verbose:false (Ctx.conn ()) "select * from $0" ~params:[r.Layout.name]
+    exec ~verbose:false (Ctx.conn ()) "select * from $0" ~params:[r.name]
     |> Seq.of_list
     |> Seq.mapi ~f:(fun i vs ->
-        List.map2_exn vs r.Layout.fields ~f:(fun v f ->
+        List.map2_exn vs r.fields ~f:(fun v f ->
             let pval =
-              match f.Layout.Field.dtype with
-              | Layout.DInt _ -> `Int (Int.of_string v)
-              | Layout.DString _ -> `String v
-              | Layout.DBool _ ->
+              match f.Field.dtype with
+              | DInt _ -> `Int (Int.of_string v)
+              | DString _ -> `String v
+              | DBool _ ->
                 begin match v with
                   | "t" -> `Bool true
                   | "f" -> `Bool false
                   | _ -> failwith "Unknown boolean value."
                 end
-              | Layout.DTimestamp _
-              | Layout.DInterval _ -> `Unknown v
+              | DTimestamp _
+              | DInterval _ -> `Unknown v
             in
             let value = Value.({ rel = r; field = f; idx = i; value = pval }) in
             value))
@@ -438,7 +484,7 @@ let eval : PredCtx.t -> Ralgebra.t -> Tuple.t Seq.t =
         eval r
         |> Seq.map ~f:(fun t ->
             List.filter t ~f:(fun v ->
-                List.mem ~equal:Layout.Field.(=) fs v.Value.field))
+                List.mem ~equal:Field.(=) fs v.Value.field))
       | Filter (p, r) ->
         eval r
         |> Seq.filter ~f:(fun t ->
@@ -497,9 +543,9 @@ let eval : PredCtx.t -> Ralgebra.t -> Tuple.t Seq.t =
  *         UnorderedList (Map.map m ~f:(project fs) |> Map.data)
  *     | Empty -> Empty *)
 
-let rec partition : PredCtx.Key.t -> Layout.Field.t -> layout -> layout =
+let rec partition : PredCtx.Key.t -> Field.t -> layout -> layout =
   let p_scalar k f v =
-    if Layout.Field.(f = v.Value.field) then
+    if Field.(f = v.Value.field) then
       Table {
         field = f;
         elems = Map.singleton (module ValueMap.Elem) v (Scalar v);
@@ -531,13 +577,13 @@ let rec partition : PredCtx.Key.t -> Layout.Field.t -> layout -> layout =
   let p_ziptuple k f ls =
     let all_have_f =
       List.for_all ls ~f:(fun l ->
-          List.mem ~equal:Layout.Field.(=) (Schema.of_layout_exn l) f)
+          List.mem ~equal:Field.(=) (Schema.of_layout_exn l) f)
     in
     if all_have_f then
       List.map ls ~f:(partition k f)
       |> List.fold_left ~init:(Map.empty (module ValueMap.Elem))
         ~f:(fun m -> function
-            | Table {field = f'; elems = m'} when Layout.Field.(=) f f' ->
+            | Table {field = f'; elems = m'} when Field.(=) f f' ->
               Map.merge m' m ~f:(fun ~key -> function
                   | `Both (l, ls) -> Some (l::ls)
                   | `Left l -> Some [l]
@@ -552,7 +598,7 @@ let rec partition : PredCtx.Key.t -> Layout.Field.t -> layout -> layout =
     List.map ls ~f:(partition k f)
     |> List.fold_left ~init:(Map.empty (module ValueMap.Elem))
       ~f:(fun m -> function
-          | Table {field = f'; elems = m'} when Layout.Field.(=) f f' ->
+          | Table {field = f'; elems = m'} when Field.(=) f f' ->
             Map.merge m' m ~f:(fun ~key -> function
                 | `Both (l, ls) -> Some (l::ls)
                 | `Left l -> Some [l]
@@ -618,7 +664,7 @@ let rec partition : PredCtx.Key.t -> Layout.Field.t -> layout -> layout =
       match l with
       | Empty -> Empty
       | Scalar x -> p_scalar k f x
-      | Table { field = f' } when Layout.Field.(=) f f' -> l
+      | Table { field = f' } when Field.(=) f f' -> l
       | Table x -> p_table k f x
       | CrossTuple x -> p_crosstuple k f x
       | ZipTuple x -> p_ziptuple k f x
@@ -651,13 +697,13 @@ let flatten : layout -> layout = function
         | l -> [l])
     |> fun x -> UnorderedList x
 
-let rec order : range -> Layout.Field.t -> [`Asc | `Desc] -> layout -> layout =
+let rec order : range -> Field.t -> [`Asc | `Desc] -> layout -> layout =
   fun k f o l ->
     let cmp = match o with
       | `Asc -> Value.compare
       | `Desc -> fun k1 k2 -> Value.compare k2 k1
     in
-    if List.exists (Schema.of_layout_exn l) ~f:(Layout.Field.(=) f) then
+    if List.exists (Schema.of_layout_exn l) ~f:(Field.(=) f) then
       match partition PredCtx.Key.dummy f l with
       | Table { elems = m } ->
         Map.to_alist m
@@ -667,7 +713,7 @@ let rec order : range -> Layout.Field.t -> [`Asc | `Desc] -> layout -> layout =
       | _ -> raise (TransformError (Error.of_string "Expected a table."))
     else l
 
-let merge : range -> Layout.Field.t -> [`Asc | `Desc] -> layout -> layout -> layout =
+let merge : range -> Field.t -> [`Asc | `Desc] -> layout -> layout -> layout =
   fun k f o l1 l2 ->
     let cmp = match o with
       | `Asc -> Value.compare
@@ -684,8 +730,8 @@ let merge : range -> Layout.Field.t -> [`Asc | `Desc] -> layout -> layout -> lay
       |> fun ls -> OrderedList { field = f; order = o; elems = ls; lookup = k }
     | _ -> raise (TransformError (Error.of_string "Expected a table."))
 
-let project : Layout.Field.t list -> layout -> layout = fun fs l ->
-  let f_in = List.mem ~equal:Layout.Field.equal fs in
+let project : Field.t list -> layout -> layout = fun fs l ->
+  let f_in = List.mem ~equal:Field.equal fs in
   let rec project = function
     | Scalar v -> if f_in v.field then Scalar v else Empty
     | CrossTuple ls -> CrossTuple (List.map ls ~f:project)
@@ -835,7 +881,7 @@ module Transform = struct
       []
 end
 
-let col_layout : Layout.relation -> layout = fun r -> 
+let col_layout : Relation.t -> layout = fun r -> 
   let stream = eval_relation r |> Seq.to_list in
   List.transpose stream
   |> (fun v -> Option.value_exn v)
@@ -843,7 +889,7 @@ let col_layout : Layout.relation -> layout = fun r ->
       UnorderedList (List.map col ~f:(fun v -> Scalar v)))
   |> (fun cols -> ZipTuple cols)
 
-let row_layout : Layout.relation -> layout = fun r -> 
+let row_layout : Relation.t -> layout = fun r -> 
   eval_relation r
   |> Seq.map ~f:(fun tup ->
       CrossTuple (List.map ~f:(fun v -> Scalar v) tup))
@@ -947,10 +993,10 @@ let tf_push_project : Transform.t =
   name = "push-project";
   f = function
     | Project (fs, (Filter (p, q))) ->
-      let fs_post = Set.of_list (module Layout.Field) fs in
+      let fs_post = Set.of_list (module Field) fs in
       let fs_pre =
         Set.union fs_post
-          (Set.of_list (module Layout.Field) (Ralgebra.pred_fields p))
+          (Set.of_list (module Field) (Ralgebra.pred_fields p))
       in
       if Set.equal fs_post fs_pre then
         [ Filter (p, Project (Set.to_list fs_pre, q)) ]
@@ -960,9 +1006,9 @@ let tf_push_project : Transform.t =
     | Project (fs, (Concat qs)) ->
       [ Concat (List.map qs ~f:(fun q -> Project (fs, q))) ]
     | Project (fs, (EqJoin (f1, f2, q1, q2))) ->
-      let fs_post = Set.of_list (module Layout.Field) fs in
+      let fs_post = Set.of_list (module Field) fs in
       let fs_pre =
-        Set.of_list (module Layout.Field) fs
+        Set.of_list (module Field) fs
         |> (fun s -> Set.add s f1)
         |> (fun s -> Set.add s f2)
       in
@@ -977,8 +1023,8 @@ let tf_push_project : Transform.t =
     | Project (fs_post, Project (fs_pre, q)) ->
       let fs =
         Set.inter
-          (Set.of_list (module Layout.Field) fs_pre)
-          (Set.of_list (module Layout.Field) fs_post)
+          (Set.of_list (module Field) fs_pre)
+          (Set.of_list (module Field) fs_post)
         |> Set.to_list
       in
       [Project (fs, q)]
@@ -1037,12 +1083,57 @@ let search : Postgresql.connection -> Ralgebra.t -> Ralgebra.t Seq.t =
     in
     Set.to_sequence (search pool)
 
+let exec2 : ?verbose : bool -> ?params : string list -> Postgresql.connection -> string -> (string * string) list =
+  fun ?verbose ?params conn query ->
+    exec ?verbose ?params conn query
+    |> List.map ~f:(function
+        | [x; y] -> (x, y)
+        | _ -> failwith "Unexpected query results.")
+
+let relation_from_db : Postgresql.connection -> string -> Relation.t =
+  fun conn name ->
+    let card =
+      exec ~params:[name] conn "select count(*) from $0"
+      |> (fun ([ct_s]::_) -> int_of_string ct_s)
+    in
+    let fields =
+      exec2 ~params:[name] conn
+        "select column_name, data_type from information_schema.columns where table_name='$0'"
+      |> List.map ~f:(fun (field_name, dtype_s) ->
+          let distinct =
+            exec ~params:[name; field_name] conn "select count(*) from (select distinct $1 from $0) as t"
+            |> (fun ([ct_s]::_) -> int_of_string ct_s)
+          in
+          let dtype = match dtype_s with
+            | "character varying" ->
+              let [min_bits; max_bits] =
+                exec ~params:[field_name; name] conn
+                  "select min(l), max(l) from (select bit_length($0) as l from $1) as t"
+                |> (fun (t::_) -> List.map ~f:int_of_string t)
+              in
+              DString { distinct; min_bits; max_bits }
+            | "integer" ->
+              let [min_val; max_val] =
+                exec ~params:[field_name; name] conn "select min($0), max($0) from $1"
+                |> (fun (t::_) -> List.map ~f:int_of_string t)
+              in
+              DInt { distinct; min_val; max_val }
+            | "timestamp without time zone" -> DTimestamp { distinct }
+            | "interval" -> DInterval { distinct }
+            | "boolean" -> DBool { distinct }
+            | s -> failwith (sprintf "Unknown dtype %s" s)
+          in
+          Field.({ name = field_name; dtype }))
+    in
+    { name; fields; card }
+
+
 let tests =
   let open OUnit2 in
   let partition_tests =
-    let f1 = Layout.Field.({ name = "f1"; dtype = DInt { min_val = 0; max_val = 10; distinct = 100; }}) in
-    let f2 = Layout.Field.({ name = "f2"; dtype = DInt { min_val = 0; max_val = 10; distinct = 100; }}) in
-    let r = Layout.({ name = "r"; fields = [f1; f2]; card = 100; }) in
+    let f1 = Field.({ name = "f1"; dtype = DInt { min_val = 0; max_val = 10; distinct = 100; }}) in
+    let f2 = Field.({ name = "f2"; dtype = DInt { min_val = 0; max_val = 10; distinct = 100; }}) in
+    let r = Relation.({ name = "r"; fields = [f1; f2]; card = 100; }) in
     let assert_equal ~ctxt x y =
       assert_equal ~ctxt ~cmp:(fun a b -> compare_layout a b = 0) x y
     in

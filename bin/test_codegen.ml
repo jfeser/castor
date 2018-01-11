@@ -4,7 +4,6 @@ open Base.Printf
 open Stdio
 open Postgresql
 open Dblayout
-open Layout
 open Locality
 open Collections
 open Serialize
