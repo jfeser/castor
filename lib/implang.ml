@@ -556,19 +556,18 @@ module IRGen = struct
       | Type.BoolT ->
         let b = create ["start", int_t] (TupleT [int_t]) in
         let start = build_arg 0 b in
-        build_yield (Tuple [islice start]) b;
+        build_yield (Tuple [islice (start + int hsize)]) b;
         build_func b
       | Type.IntT ->
         let b = create ["start", int_t] (TupleT [int_t]) in
         let start = build_arg 0 b in
-        build_yield (Tuple [islice start]) b;
+        build_yield (Tuple [islice (start + int hsize)]) b;
         build_func b
       | Type.StringT ->
         let b = create ["start", int_t] (TupleT [slice_t]) in
         let start = build_arg 0 b in
-        let len = build_var "len" int_t b in
-        build_assign (islice (start - int isize)) len b;
-        build_yield (Tuple [slice start len]) b;
+        let len = build_defn "len" int_t (islice (start + int isize)) b in
+        build_yield (Tuple [slice (start + int hsize) len]) b;
         build_func b
 
     let scan_crosstuple scan ts =
@@ -577,7 +576,7 @@ module IRGen = struct
       let rec loops b col_start vars = function
         | [] -> build_yield (Tuple (List.rev vars)) b
         | (func, len)::rest ->
-          build_iter func [col_start + int hsize] b;
+          build_iter func [col_start] b;
           let var = build_fresh_var "x" (find_func func).ret_type b in
           build_loop (int len) (fun b ->
               build_step var func b;
@@ -594,9 +593,10 @@ module IRGen = struct
       in
       let b = create ["start", int_t] ret_type in
       let start = build_arg 0 b in
-      loops b start [] funcs;
+      loops b (start + int hsize) [] funcs;
       build_func b
 
+    (* FIXME: This whole function needs rewriting. *)
     let scan_ziptuple scan Type.({ len; elems = ts}) =
       let funcs = List.map ts ~f:scan in
       let open Infix in
