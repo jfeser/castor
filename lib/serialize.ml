@@ -2,7 +2,6 @@ open Base
 open Printf
 
 open Collections
-open Locality
 
 let bsize = 8 (* boolean size *)
 let isize = 8 (* integer size *)
@@ -41,7 +40,7 @@ let align : int -> bytes -> bytes = fun align b ->
 
 let econcat = Bytes.concat Bytes.empty
 
-let rec serialize : Locality.layout -> bytes = function
+let rec serialize : Layout.t -> bytes = function
   | Scalar { rel; field; idx; value } -> begin match value with
       | `Bool true -> bytes_of_int 1
       | `Bool false -> bytes_of_int 0
@@ -57,7 +56,7 @@ let rec serialize : Locality.layout -> bytes = function
   | ZipTuple ls
   | UnorderedList ls
   | OrderedList { elems = ls } as l ->
-    let count = ntuples l in
+    let count = Layout.ntuples l in
     let body = List.map ls ~f:serialize |> econcat in
     let len = Bytes.length body in
     econcat [bytes_of_int count; bytes_of_int len; body]
