@@ -3,21 +3,16 @@ open Base
 open Collections
 
 type p = BoolT | IntT | StringT [@@deriving compare, sexp]
+type ziptuple = { len : int } [@@deriving compare, sexp]
 type t =
   | ScalarT of p
   | CrossTupleT of (t * int) list
-  | ZipTupleT of ziptuple
-  | OrderedListT of ordered_list
+  | ZipTupleT of t list * ziptuple
+  | OrderedListT of t * Layout.ordered_list
   | UnorderedListT of t
-  | TableT of p * t
+  | TableT of p * t * Layout.table
   | EmptyT
-and ziptuple = { len : int; elems : t list }
-and ordered_list = {
-  field : Db.Field.t;
-  order : [`Asc | `Desc];
-  elems : t;
-  lookup : Layout.range;
-} [@@deriving compare, sexp]
+[@@deriving compare, sexp]
 
 exception UnifyError
 
@@ -34,23 +29,20 @@ let rec unify_exn : t -> t -> t = fun t1 t2 ->
       | Ok ts -> CrossTupleT ts
       | Unequal_lengths -> raise UnifyError
     end
-  | (ZipTupleT { len = l1; elems = e1 },
-     ZipTupleT { len = l2; elems = e2 }) when l1 = l2 -> begin
+  | ZipTupleT (e1, z1), ZipTupleT (e2, z2) when compare_ziptuple z1 z2 = 0 ->
+    begin
       match List.map2 e1 e2 ~f:unify_exn with
-      | Ok ts -> ZipTupleT { len = l1; elems = ts }
+      | Ok ts -> ZipTupleT (ts, z1)
       | Unequal_lengths -> raise UnifyError
     end
-  | UnorderedListT et1, UnorderedListT et2 ->
-    UnorderedListT (unify_exn et1 et2)
-  | OrderedListT ({ field = f1; order = o1; lookup = r1; elems = e1 } as l1),
-    OrderedListT ({ field = f2; order = o2; lookup = r2; elems = e2 } as l2)
-    when Db.Field.(f1 = f2) &&
-         Polymorphic_compare.(o1 = o2) &&
-         Layout.compare_range r1 r2 = 0 ->
-    OrderedListT { l1 with elems = unify_exn e1 e2 }
-  | (TableT (pt1, et1), TableT (pt2, et2)) when compare_p pt1 pt2 = 0 ->
-    TableT (pt1, unify_exn et1 et2)
-  | (EmptyT, t) | (t, EmptyT) -> t
+  | UnorderedListT et1, UnorderedListT et2 -> UnorderedListT (unify_exn et1 et2)
+  | OrderedListT (e1, l1), OrderedListT (e2, l2)
+    when Layout.compare_ordered_list l1 l2 = 0 ->
+    OrderedListT (unify_exn e1 e2, l1)
+  | (TableT (pt1, et1, t1), TableT (pt2, et2, t2))
+    when compare_p pt1 pt2 = 0 && Layout.compare_table t1 t2 = 0 ->
+    TableT (pt1, unify_exn et1 et2, t1)
+  | EmptyT, EmptyT -> EmptyT
   | _ -> raise UnifyError
 
 let rec of_layout_exn : Layout.t -> t = function
@@ -68,7 +60,7 @@ let rec of_layout_exn : Layout.t -> t = function
   | ZipTuple ls ->
     let elems = List.map ls ~f:of_layout_exn in
     begin match List.map ls ~f:Layout.ntuples |> List.all_equal with
-      | Some len -> ZipTupleT { len; elems }
+      | Some len -> ZipTupleT (elems, { len; })
       | None -> raise UnifyError
     end
   | UnorderedList ls ->
@@ -77,13 +69,13 @@ let rec of_layout_exn : Layout.t -> t = function
       |> List.fold_left ~f:unify_exn ~init:EmptyT
     in
     UnorderedListT elem_t
-  | OrderedList { field; order; elems; lookup } ->
+  | OrderedList (elems, l) ->
     let elem_t =
       List.map elems ~f:of_layout_exn
       |> List.fold_left ~f:unify_exn ~init:EmptyT
     in
-    OrderedListT { field; order; elems = elem_t; lookup }
-  | Table { field = { dtype }; elems } ->
+    OrderedListT (elem_t, l)
+  | Table (elems, ({ field = { dtype }; } as t')) ->
     let pt = match dtype with
       | DInt _ -> IntT
       | DBool _ -> BoolT
@@ -95,5 +87,24 @@ let rec of_layout_exn : Layout.t -> t = function
       |> List.map ~f:of_layout_exn
       |> List.fold_left ~f:unify_exn ~init:EmptyT
     in
-    TableT (pt, t)
+    TableT (pt, t, t')
   | Empty -> EmptyT
+
+(* let rec params : t -> Set.M(String).t = function
+ *   | ScalarT _ | EmptyT -> Set.empty (module String)
+ *   | CrossTupleT ts ->
+ *     List.map ts ~f:(fun (t, _) -> params t) |> Set.union_list (module String)
+ *   | ZipTupleT { elems } ->
+ *     List.map elems ~f:params |> Set.union_list (module String)
+ *   | UnorderedListT t -> params t
+ *   | OrderedListT { field; order; elems; lookup = (v1, v2) } ->
+ *     let s1 = match v1 with
+ *       | Some k -> Layout.PredCtx.Key.params k
+ *       | None -> Set.empty (module String)
+ *     in
+ *     let s2 = match v2 with
+ *       | Some k -> Layout.PredCtx.Key.params k
+ *       | None -> Set.empty (module String)
+ *     in
+ *     Set.union s1 s2
+ *   | TableT (_, _) *)

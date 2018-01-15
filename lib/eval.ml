@@ -73,9 +73,9 @@ let rec eval_layout : PredCtx.t -> t -> Tuple.t Seq.t =
       |> Seq.zip_many
       |> Seq.map ~f:Tuple.merge_many
     | UnorderedList ls
-    | OrderedList { elems = ls } ->
+    | OrderedList (ls, _) ->
       Seq.concat_map ~f:(eval_layout ctx) (Seq.of_list ls)
-    | Table { lookup = k; field = f; elems = ls } ->
+    | Table (ls, { lookup = k; field = f }) ->
       begin match Map.find ctx k with
         | Some v ->
           begin match Map.find ls (ValueMap.Elem.of_primvalue v) with

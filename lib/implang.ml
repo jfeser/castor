@@ -453,6 +453,7 @@ module IRGen = struct
   type ir_module = {
     iters : (string * func) list;
     funcs : (string * func) list;
+    params : string list;
   }
 
   exception IRGenError of Error.t [@@deriving sexp]
@@ -550,15 +551,15 @@ module IRGen = struct
 
     let len start =
       let open Infix in
+      let open Type in
       function
-      | Type.ScalarT Type.BoolT -> int isize
-      | Type.ScalarT Type.IntT -> int isize
-      | Type.ScalarT Type.StringT -> islice start
-      | Type.EmptyT -> int 0
-      | Type.CrossTupleT _
-      | Type.ZipTupleT _
-      | Type.ListT _ -> islice (start + int isize)
-      | Type.TableT (_,_) -> failwith "Unsupported."
+      | ScalarT BoolT -> int isize
+      | ScalarT IntT -> int isize
+      | ScalarT StringT -> islice start
+      | EmptyT -> int 0
+      | CrossTupleT _ | ZipTupleT _ | UnorderedListT _ | OrderedListT _ ->
+        islice (start + int isize)
+      | TableT (_,_,_) -> failwith "Unsupported."
 
     let len start =
       let open Infix in
@@ -567,8 +568,9 @@ module IRGen = struct
       | ScalarT BoolT | ScalarT IntT -> int isize
       | ScalarT StringT -> islice start
       | EmptyT -> int 0
-      | CrossTupleT _ | ZipTupleT _ | ListT _ -> islice (start + int isize)
-      | TableT (_,_) -> failwith "Unsupported."
+      | CrossTupleT _ | ZipTupleT _ | UnorderedListT _ | OrderedListT _ ->
+        islice (start + int isize)
+      | TableT (_,_,_) -> failwith "Unsupported."
 
     let count start =
       let open Infix in
@@ -576,8 +578,9 @@ module IRGen = struct
       function
       | ScalarT BoolT | ScalarT IntT | ScalarT StringT -> int 1
       | EmptyT -> int 0
-      | CrossTupleT _ | ZipTupleT _ | ListT _ -> islice start
-      | TableT (_,_) -> failwith "Unsupported."
+      | CrossTupleT _ | ZipTupleT _ | UnorderedListT _ | OrderedListT _ ->
+        islice start
+      | TableT (_,_,_) -> failwith "Unsupported."
 
     let hsize =
       let open Infix in
@@ -585,8 +588,9 @@ module IRGen = struct
       function
       | ScalarT BoolT | ScalarT IntT | EmptyT -> int 0
       | ScalarT StringT -> int isize
-      | CrossTupleT _ | ZipTupleT _ | ListT _ -> int (2 * isize)
-      | TableT (_,_) -> failwith "Unsupported."
+      | CrossTupleT _ | ZipTupleT _ | OrderedListT _ | UnorderedListT _ ->
+        int (2 * isize)
+      | TableT (_,_,_) -> failwith "Unsupported."
 
     let scan_empty = create ["start", int_t] VoidT |> build_func
 
@@ -637,7 +641,7 @@ module IRGen = struct
       build_func b
 
     (* FIXME: This whole function needs rewriting. *)
-    let scan_ziptuple scan Type.({ len; elems = ts}) =
+    let scan_ziptuple scan ts Type.({ len; }) =
       let funcs = List.map ts ~f:scan in
       let open Infix in
       let inits, inits_t =
@@ -669,14 +673,14 @@ module IRGen = struct
         locals = assigns_t @ inits_t;
       }
 
-    let scan_list scan t =
+    let scan_unordered_list scan t =
       let open Infix in
       let func = scan t in
       let ret_type = (find_func func).ret_type in
       let b = create ["start", int_t] ret_type in
       let start = build_arg 0 b in
       let pcount = islice start in
-      let cstart = build_defn "cstart" int_t (start + hsize (ListT t)) b in
+      let cstart = build_defn "cstart" int_t (start + hsize (UnorderedListT t)) b in
       build_loop pcount (fun b ->
           let ccount = count cstart t in
           let clen = len cstart t in
@@ -688,15 +692,18 @@ module IRGen = struct
           build_assign (cstart + clen + hsize t) cstart b) b;
       build_func b
 
+    let scan_ordered_list scan t _ = failwith ""
+
     let rec scan : Type.t -> string = fun t ->
       let name = Fresh.name fresh "f%d" in
       let func = match t with
         | Type.EmptyT -> scan_empty
         | Type.ScalarT x -> scan_scalar x
         | Type.CrossTupleT x -> scan_crosstuple scan x
-        | Type.ZipTupleT x -> scan_ziptuple scan x
-        | Type.ListT x -> scan_list scan x
-        | Type.TableT (_,_) -> failwith "Unsupported."
+        | Type.ZipTupleT (x, m) -> scan_ziptuple scan x m
+        | Type.UnorderedListT x -> scan_unordered_list scan x
+        | Type.OrderedListT (x, m) -> scan_ordered_list scan x m
+        | Type.TableT (_,_,_) -> failwith "Unsupported."
       in
       add_func name func; name
 
@@ -716,7 +723,9 @@ module IRGen = struct
     let rec gen_layout : Type.t -> ir_module = fun t ->
       scan t |> ignore;
       let name, _ = List.hd_exn !funcs in
-      { iters = List.rev !funcs; funcs = ["printer", printer name] }
+      { iters = List.rev !funcs;
+        funcs = ["printer", printer name];
+        params = Type.params t }
 
     (* let gen_ralgebra : Locality.Ralgebra.t -> ir_module = function
      *   | Scan l -> scan_layout (Type.of_layout_exn l)

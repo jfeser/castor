@@ -55,7 +55,7 @@ let rec serialize : Layout.t -> bytes = function
   | CrossTuple ls
   | ZipTuple ls
   | UnorderedList ls
-  | OrderedList { elems = ls } as l ->
+  | OrderedList (ls, _) as l ->
     let count = Layout.ntuples l in
     let body = List.map ls ~f:serialize |> econcat in
     let len = Bytes.length body in
