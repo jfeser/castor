@@ -3,12 +3,15 @@ open Base.Polymorphic_compare
 open Base.Printf
 open Stdio
 open Postgresql
+
 open Dblayout
-open Locality
+open Eval
+open Layout
 open Collections
 open Serialize
 open Ralgebra
 open Implang
+open Db
 
 module Printexc = Caml.Printexc
 
@@ -28,8 +31,8 @@ let main () =
   let conn = new connection ~dbname:"sam_analytics_small" () in
   Ctx.global.conn <- Some (conn);
   Ctx.global.testctx <- Some (PredCtx.of_vars ["xv", `Int 10; "yv", `Int 10]);
-  let taxi = relation_from_db conn "taxi" in
-  let l = row_layout taxi in
+  let taxi = Relation.from_db conn "taxi" in
+  let l = Transform.row_layout taxi in
   let t = Type.of_layout_exn l in
 
   let module IGen = IRGen.Make () in

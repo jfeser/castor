@@ -22,13 +22,13 @@ exception EvalError of Error.t
 
 let rec eval_pred : PredCtx.t -> Ralgebra.pred -> primvalue =
   fun ctx -> function
-    | Var n ->
-      begin match Map.find ctx (PredCtx.Key.Var n) with
+    | Var (n, _) ->
+      begin match PredCtx.find_var ctx n with
         | Some v -> v
         | None -> failwith "Unbound variable."
       end
     | Field f ->
-      begin match Map.find ctx (PredCtx.Key.Field f) with
+      begin match PredCtx.find_field ctx f with
         | Some v -> v
         | None -> failwith "Unbound variable."
       end

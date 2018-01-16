@@ -1,6 +1,7 @@
 open Base
 open Printf
 open Collections
+open Type
 
 module Format = Caml.Format
 
@@ -36,12 +37,13 @@ and expr =
   | Var of string
   | Tuple of expr list
   | Slice of expr * int
+  | Index of expr * int
   | Binop of { op : op; arg1 : expr; arg2 : expr }
   | Unop of { op : op; arg : expr }
 
 and stmt =
   | Print of type_ * expr
-  | Loop of { count : expr; body : prog }
+  | Loop of { cond : expr; body : prog }
   | If of { cond : expr; tcase : prog; fcase : prog }
   | Iter of { var : string; func : string; args : expr list }
   | Step of { var : string; iter : string }
@@ -107,8 +109,9 @@ and pp_expr : Format.formatter -> expr -> unit =
     | Int x -> pp_int fmt x
     | Bool x -> pp_bool fmt x
     | Var v -> fprintf fmt "%s" v
-    | Tuple t -> fprintf fmt "(%a)" (pp_tuple pp_expr) t
+    | Tuple t -> fprintf fmt "(@[<hov>%a@])" (pp_tuple pp_expr) t
     | Slice (ptr, len) -> fprintf fmt "buf[%a :@ %d]" pp_expr ptr len
+    | Index (tuple, idx) -> fprintf fmt "%a[%d]" pp_expr tuple idx
     | Binop { op; arg1; arg2 } ->
       fprintf fmt "%a %s@ %a" pp_expr arg1 (op_to_string op) pp_expr arg2
     | Unop { op; arg } -> fprintf fmt "%s@ %a" (op_to_string op) pp_expr arg
@@ -116,15 +119,15 @@ and pp_expr : Format.formatter -> expr -> unit =
 and pp_stmt : Format.formatter -> stmt -> unit =
   let open Format in
   fun fmt -> function
-    | Loop { count; body } ->
-      fprintf fmt "@[<v 4>loop (%a) {@,%a@]@,}" pp_expr count pp_prog body
+    | Loop { cond; body } ->
+      fprintf fmt "@[<v 4>loop (@[<hov>%a@]) {@,%a@]@,}" pp_expr cond pp_prog body
     | If { cond; tcase; fcase } ->
       fprintf fmt "@[<v 4>if (@[<hov>%a@]) {@,%a@]@,}@[<v 4> else {@,%a@]@,}"
         pp_expr cond pp_prog tcase pp_prog fcase
     | Step { var; iter } ->
       fprintf fmt "@[<hov>%s =@ next(%s);@]" var iter
     | Iter { var; func; args } ->
-      fprintf fmt "@[<hov>init %s(%a);@]" func (pp_tuple pp_expr) args
+      fprintf fmt "@[<hov>init %s(@[<hov>%a@]);@]" func (pp_tuple pp_expr) args
     | Assign { lhs; rhs } -> fprintf fmt "@[<hov>%s =@ %a;@]" lhs pp_expr rhs
     | Yield e -> fprintf fmt "@[<hov>yield@ %a;@]" pp_expr e
     | Print (t, e) -> fprintf fmt "@[<hov>print(%a,@ %a);@]" pp_type t pp_expr e
@@ -133,24 +136,28 @@ and pp_prog : Format.formatter -> prog -> unit =
   let open Format in
   fun fmt -> function
     | [] -> Format.fprintf fmt ""
+    | [x] -> Format.fprintf fmt "%a" pp_stmt x
     | x::xs -> Format.fprintf fmt "%a@,%a" pp_stmt x pp_prog xs
 
 and pp_func : Format.formatter -> func -> unit = fun fmt { args; body } ->
   Format.fprintf fmt "@[<v 4>fun %a ->@,%a@]@," pp_args args pp_prog body
 
 module Infix = struct
+  let tru = Bool true
+  let fls = Bool false
+  let int x = Int x
   let (:=) = fun x y -> Assign { lhs = x; rhs = y }
   let iter x y z = Iter { var = x; func = y; args = z }
   let (+=) = fun x y -> Step { var = x; iter = y }
   let (+) = fun x y -> Binop { op = Add; arg1 = x; arg2 = y }
   let (-) = fun x y -> Binop { op = Sub; arg1 = x; arg2 = y }
   let (<) = fun x y -> Binop { op = Lt; arg1 = x; arg2 = y }
+  let (>) = fun x y -> y < x
+  let (<=) = fun x y -> x - int 1 < y
+  let (>=) = fun x y -> y <= x
   let (&&) = fun x y -> Binop { op = And; arg1 = x; arg2 = y }
   let (not) = fun x -> Unop { op = Not; arg = x }
-  let tru = Bool true
-  let fls = Bool false
-  let int x = Int x
-  let loop c b = Loop { count = c; body = b }
+  let loop c b = Loop { cond = c; body = b }
   let call v f a = Iter { var = v; func = f; args = a }
   let islice x = Slice (x, Serialize.isize)
   let slice x y = Tuple [x; y]
@@ -210,6 +217,12 @@ let rec eval_expr : state -> expr -> value =
                   (p, l) [%sexp_of:int*int])
       in
       VBytes b
+    | Index (t, i) ->
+      begin match eval_expr s t with
+        | VTuple vs -> List.nth_exn vs i
+        | v -> fail (Error.create
+                       "Runtime error: Expected a tuple." v [%sexp_of:value])
+      end
     | Binop { op; arg1 = x1; arg2 = x2 } ->
       begin match op with
         | Add -> VInt (int x1 + int x2)
@@ -231,11 +244,9 @@ and eval_stmt : state -> prog -> value option * prog * state =
         s with ctx = Map.set s.ctx ~key:lhs ~data:(eval_expr s rhs)
       } in
       eval_stmt s' xs
-    | Loop { count; body } :: xs ->
-      let ct = eval_expr s count |> to_int_exn in
-      if ct > 1 then
-        eval_stmt s (body @ Infix.loop (Int (ct - 1)) body :: xs)
-      else if ct > 0 then eval_stmt s (body @ xs)
+    | Loop { cond; body } :: xs ->
+      if eval_expr s cond |> to_bool_exn then
+        eval_stmt s (body @ Infix.loop cond body :: xs)
       else eval_stmt s xs
     | Step { var; iter } :: xs ->
       begin match lookup s iter with
@@ -339,7 +350,7 @@ let pcify : Fresh.t -> prog -> pcprog = fun fresh ->
     header; body; is_yield_var; yield_val_var; footer = [] }
   in
   let rec pcify_prog = function
-    | Loop { count; body } :: xs ->
+    | Loop { cond; body } :: xs ->
       let pbody = pcify_prog body in
       let pxs = pcify_prog xs in
       let ct_enabled = Fresh.name fresh "e%d" in
@@ -350,17 +361,19 @@ let pcify : Fresh.t -> prog -> pcprog = fun fresh ->
           ct := int 0;
           ct_enabled := tru;
         ]) in
-      let body = Infix.([
-          ite (Var ct_enabled && not (is_yield)) [
-            ct := count;
-            ct_enabled := fls;
-          ] [
-            ite (Var ctr < Var ct)
-              (pbody.body @ [ctr := Var ctr + int 1] @ pbody.header)
-              pxs.body
-          ]
-        ])
-      in
+      (* FIXME: Update for while loops. *)
+      (* let body = Infix.([
+       *     ite (Var ct_enabled && not (is_yield)) [
+       *       ct := count;
+       *       ct_enabled := fls;
+       *     ] [
+       *       ite (Var ctr < Var ct)
+       *         (pbody.body @ [ctr := Var ctr + int 1] @ pbody.header)
+       *         pxs.body
+       *     ]
+       *   ])
+       * in *)
+      failwith "Unimplemented."
       create ~header ~body ()
     | If { cond; tcase; fcase } :: xs ->
       let tprog = pcify_prog tcase in
@@ -441,6 +454,10 @@ let rec infer_type : type_ Hashtbl.M(String).t -> expr -> type_ =
         | _ -> fail (Error.create "Type error." (op, t) [%sexp_of:op * type_])
       end
     | Slice (_, len) -> TupleT [BytesT isize; BytesT isize]
+    | Index (tup, idx) -> begin match infer_type ctx tup with
+        | TupleT ts -> List.nth_exn ts idx
+        | t -> fail (Error.create "Expected a tuple." t [%sexp_of:type_])
+      end
 
 module IRGen = struct
   type func_builder = {
@@ -453,7 +470,7 @@ module IRGen = struct
   type ir_module = {
     iters : (string * func) list;
     funcs : (string * func) list;
-    params : string list;
+    params : TypedName.t list;
   }
 
   exception IRGenError of Error.t [@@deriving sexp]
@@ -505,16 +522,6 @@ module IRGen = struct
       let var = build_var v t b in
       build_assign e var b; var
 
-  let build_loop : expr -> (func_builder -> unit) -> func_builder -> unit =
-    fun c f b ->
-      (* Be careful when modifying. There's something subtle about this
-         mutation. *)
-      let parent_body = !(b.body) in
-      let loop_body = ref [] in
-      f { b with body = loop_body };
-      let final_body = Loop { count = c; body = List.rev !loop_body }::parent_body in
-      b.body := final_body
-
   let build_print : expr -> func_builder -> unit = fun e b ->
     let t = infer_type b.locals e in
     b.body := (Print (t, e))::!(b.body)
@@ -526,16 +533,25 @@ module IRGen = struct
   module Make () = struct
     let fresh = Fresh.create ()
     let funcs = ref []
+    (* let params = ref [] *)
     let mfuncs = Hashtbl.create (module String) ()
     let add_func : string -> func -> unit = fun n f ->
       funcs := (n, f)::!funcs;
       Hashtbl.set ~key:n ~data:f mfuncs
     let find_func n = Hashtbl.find_exn mfuncs n
 
+    (* let param : string -> expr =
+     *   fun n -> List.find_exn ~f:(fun (n', _) -> String.equal n n') !params *)
+
     let build_fresh_var : string -> type_ -> func_builder -> expr =
       fun n t b ->
         let n = n ^ (Fresh.name fresh "%d") in
         build_var n t b
+
+    let build_fresh_defn : string -> type_ -> expr -> func_builder -> expr =
+      fun v t e b ->
+        let var = build_fresh_var v t b in
+        build_assign e var b; var
 
     let build_iter : string -> expr list -> func_builder -> unit =
       fun f a b ->
@@ -547,15 +563,37 @@ module IRGen = struct
         assert (Hashtbl.mem mfuncs iter);
         b.body := Step { var = name_of_var var; iter }::!(b.body)
 
+    let build_loop : expr -> (func_builder -> unit) -> func_builder -> unit =
+      fun c f b ->
+        (* Be careful when modifying. There's something subtle about this
+           mutation. *)
+        let parent_body = !(b.body) in
+        let b' = { b with body = ref [] } in
+        f b';
+        let final_body = Loop {
+            cond = c;
+            body = List.rev !(b'.body);
+          }::parent_body
+        in
+        b.body := final_body
+
+    let build_count_loop : expr -> (func_builder -> unit) -> func_builder -> unit =
+      fun c f b ->
+        let count = build_fresh_defn "count" int_t c b in
+        build_loop Infix.(count > int 0) (fun b ->
+            f b;
+            build_assign Infix.(count - int 1) count b
+          ) b
+
     open Serialize
 
     let len start =
       let open Infix in
       let open Type in
       function
-      | ScalarT BoolT -> int isize
-      | ScalarT IntT -> int isize
-      | ScalarT StringT -> islice start
+      | ScalarT (BoolT, _) -> int isize
+      | ScalarT (IntT, _) -> int isize
+      | ScalarT (StringT, _) -> islice start
       | EmptyT -> int 0
       | CrossTupleT _ | ZipTupleT _ | UnorderedListT _ | OrderedListT _ ->
         islice (start + int isize)
@@ -565,8 +603,8 @@ module IRGen = struct
       let open Infix in
       let open Type in
       function
-      | ScalarT BoolT | ScalarT IntT -> int isize
-      | ScalarT StringT -> islice start
+      | ScalarT (BoolT, _) | ScalarT (IntT, _) -> int isize
+      | ScalarT (StringT, _) -> islice start
       | EmptyT -> int 0
       | CrossTupleT _ | ZipTupleT _ | UnorderedListT _ | OrderedListT _ ->
         islice (start + int isize)
@@ -576,7 +614,7 @@ module IRGen = struct
       let open Infix in
       let open Type in
       function
-      | ScalarT BoolT | ScalarT IntT | ScalarT StringT -> int 1
+      | ScalarT (BoolT, _) | ScalarT (IntT, _) | ScalarT (StringT, _) -> int 1
       | EmptyT -> int 0
       | CrossTupleT _ | ZipTupleT _ | UnorderedListT _ | OrderedListT _ ->
         islice start
@@ -586,8 +624,8 @@ module IRGen = struct
       let open Infix in
       let open Type in
       function
-      | ScalarT BoolT | ScalarT IntT | EmptyT -> int 0
-      | ScalarT StringT -> int isize
+      | ScalarT (BoolT, _) | ScalarT (IntT, _) | EmptyT -> int 0
+      | ScalarT (StringT, _) -> int isize
       | CrossTupleT _ | ZipTupleT _ | OrderedListT _ | UnorderedListT _ ->
         int (2 * isize)
       | TableT (_,_,_) -> failwith "Unsupported."
@@ -596,33 +634,40 @@ module IRGen = struct
 
     let scan_scalar =
       let open Infix in
+      let open Type.PrimType in
       function
-      | Type.BoolT ->
-        let b = create ["start", int_t] int_t in
+      | BoolT ->
+        let b = create ["start", int_t] (TupleT [int_t]) in
         let start = build_arg 0 b in
-        build_yield (islice start) b;
+        build_yield (Tuple [islice start]) b;
         build_func b
-      | Type.IntT ->
-        let b = create ["start", int_t] int_t in
+      | IntT ->
+        let b = create ["start", int_t] (TupleT [int_t]) in
         let start = build_arg 0 b in
-        build_yield (islice start) b;
+        build_yield (Tuple [islice start]) b;
         build_func b
-      | Type.StringT ->
-        let b = create ["start", int_t] slice_t in
+      | StringT ->
+        let b = create ["start", int_t] (TupleT [slice_t]) in
         let start = build_arg 0 b in
         let len = islice start in
-        build_yield (slice (start + int isize) len) b;
+        build_yield (Tuple [slice (start + int isize) len]) b;
         build_func b
 
     let scan_crosstuple scan ts =
       let open Infix in
 
       let rec loops b col_start vars = function
-        | [] -> build_yield (Tuple (List.rev vars)) b
+        | [] ->
+          let tup =
+            List.map2_exn ts (List.rev vars) ~f:(fun (t, _) v ->
+                List.init (Type.width t) ~f:(fun i -> Index (v, i)))
+            |> List.concat
+          in
+          build_yield (Tuple tup) b
         | (func, type_, count)::rest ->
           build_iter func [col_start] b;
           let var = build_fresh_var "x" (find_func func).ret_type b in
-          build_loop (int count) (fun b ->
+          build_count_loop (int count) (fun b ->
               build_step var func b;
               let next_start =
                 col_start + (len col_start type_) + (hsize type_)
@@ -633,7 +678,10 @@ module IRGen = struct
 
       let funcs = List.map ts ~f:(fun (t, l) -> (scan t, t, l)) in
       let ret_type = TupleT (List.map funcs ~f:(fun (func, _, _) ->
-          (find_func func).ret_type))
+          match (find_func func).ret_type with
+          | TupleT ts -> ts
+          | t -> [t])
+                             |> List.concat)
       in
       let b = create ["start", int_t] ret_type in
       let start = build_arg 0 b in
@@ -681,24 +729,80 @@ module IRGen = struct
       let start = build_arg 0 b in
       let pcount = islice start in
       let cstart = build_defn "cstart" int_t (start + hsize (UnorderedListT t)) b in
-      build_loop pcount (fun b ->
+      build_count_loop pcount (fun b ->
           let ccount = count cstart t in
           let clen = len cstart t in
           build_iter func [cstart] b;
-          build_loop ccount (fun b ->
+          build_count_loop ccount (fun b ->
               let x = build_var "x" (find_func func).ret_type b in
               build_step x func b;
               build_yield x b) b;
           build_assign (cstart + clen + hsize t) cstart b) b;
       build_func b
 
-    let scan_ordered_list scan t _ = failwith ""
+    let scan_ordered_list scan t Layout.({ field; order; lookup = lower, upper }) =
+      let func = scan (UnorderedListT t) in
+      let idx =
+        Layout.Schema.field_idx_exn (Type.to_schema (UnorderedListT t)) field
+      in
+      let ret_type = (find_func func).ret_type in
+      let b = create ["start", int_t] ret_type in
+      let start = build_arg 0 b in
+      let pcount = Infix.(islice start) in
+
+      build_iter func [start] b;
+      let tup = build_var "tup" ret_type b in
+      build_step tup func b;
+
+      (* Build a skip loop if there is a lower bound. *)
+      begin match order, lower, upper with
+        | `Asc, Some (Var (v, _)), _ ->
+          let cond = Infix.(pcount > int 0 && Index (tup, idx) < Var v) in
+          build_loop cond (fun b ->
+              build_step tup func b;
+              build_assign Infix.(pcount - int 1) pcount b;
+            ) b
+        | `Desc, _, Some (Var (v, _)) ->
+          let cond = Infix.(pcount > int 0 && Index (tup, idx) > Var v) in
+          build_loop cond (fun b ->
+              build_step tup func b;
+              build_assign Infix.(pcount - int 1) pcount b;
+            ) b
+        | _ -> ()
+      end;
+
+      (* Build the read loop. *)
+      begin match order, lower, upper with
+        | `Asc, _, Some (Var (v, _)) ->
+          let cond = Infix.(pcount > int 0 && Index (tup, idx) <= Var v) in
+          build_loop cond (fun b ->
+              build_yield tup b;
+              build_step tup func b;
+              build_assign Infix.(pcount - int 1) pcount b;
+            ) b
+        | `Desc, Some (Var (v, _)), _ ->
+          let cond = Infix.(pcount > int 0 && Index (tup, idx) >= Var v) in
+          build_loop cond (fun b ->
+              build_yield tup b;
+              build_step tup func b;
+              build_assign Infix.(pcount - int 1) pcount b;
+            ) b
+        | `Asc, _, None | `Desc, None, _ ->
+          let cond = Infix.(pcount > int 0) in
+          build_loop cond (fun b ->
+              build_yield tup b;
+              build_step tup func b;
+              build_assign Infix.(pcount - int 1) pcount b;
+            ) b
+        | _ -> failwith "Unexpected parameters."
+      end;
+      build_func b
 
     let rec scan : Type.t -> string = fun t ->
       let name = Fresh.name fresh "f%d" in
       let func = match t with
         | Type.EmptyT -> scan_empty
-        | Type.ScalarT x -> scan_scalar x
+        | Type.ScalarT (x, _) -> scan_scalar x
         | Type.CrossTupleT x -> scan_crosstuple scan x
         | Type.ZipTupleT (x, m) -> scan_ziptuple scan x m
         | Type.UnorderedListT x -> scan_unordered_list scan x
@@ -713,7 +817,7 @@ module IRGen = struct
       let start = int 0 in
       let ntuples = build_defn "ntuples" int_t (islice start) b in
       build_iter func [start] b;
-      build_loop ntuples (fun b ->
+      build_count_loop ntuples (fun b ->
           let x = build_var "x" (find_func func).ret_type b in
           build_step x func b;
           build_print x b)
@@ -725,7 +829,7 @@ module IRGen = struct
       let name, _ = List.hd_exn !funcs in
       { iters = List.rev !funcs;
         funcs = ["printer", printer name];
-        params = Type.params t }
+        params = Type.params t |> Set.to_list; }
 
     (* let gen_ralgebra : Locality.Ralgebra.t -> ir_module = function
      *   | Scan l -> scan_layout (Type.of_layout_exn l)
@@ -854,6 +958,21 @@ module Codegen = struct
             (pointer_type (integer_type ctx size_bits)) "" builder
         in
         build_load ptr "slicetmp" builder
+      | Index (tup, idx) ->
+        let lltup = codegen_expr tup in
+
+        (* Check that the argument really is a struct and that the index is
+           valid. *)
+        let typ = type_of lltup in
+        begin match classify_type typ with
+          | Struct -> if idx >= Array.length (struct_element_types typ) then
+              Logs.err (fun m -> m "Tuple index out of bounds %s %d."
+                           (string_of_llvalue lltup) idx)
+          | _ -> Logs.err (fun m -> m "Expected a tuple but got %s."
+                              (string_of_llvalue lltup))
+        end;
+
+        build_extractvalue lltup idx "elemtmp" builder
       | Binop { op; arg1; arg2 } ->
         let v1 = codegen_expr arg1 in
         let v2 = codegen_expr arg2 in
@@ -881,37 +1000,25 @@ module Codegen = struct
             build_store v ptr builder |> ignore);
         build_load struct_ "tupletmp" builder
 
-    let codegen_loop codegen_prog count body =
+    let codegen_loop codegen_prog cond body =
       (* Create all loop blocks. *)
       let start_bb = insertion_block builder in
       let llfunc = block_parent start_bb in
       let loop_bb = append_block ctx "loop" llfunc in
       let end_bb = append_block ctx "loopend" llfunc in
 
-      (* In loop header, set count variable and conditionally branch to loop
-         body. *)
+      (* In loop header, check condition and branch to loop body. *)
       position_at_end start_bb builder;
-      let init_count = codegen_expr count in
-      let count = null_fresh_global int_type (mangle "count") module_ in
-      build_store init_count count builder |> ignore;
-      let cond =
-        build_icmp Icmp.Sgt init_count (const_int int_type 0) "loopcond" builder
-      in
-      build_cond_br cond loop_bb end_bb builder |> ignore;
+      let llcond = codegen_expr cond in
+      build_cond_br llcond loop_bb end_bb builder |> ignore;
 
       (* Generate the loop body. *)
       position_at_end loop_bb builder;
       codegen_prog body;
 
-      (* At the end of the loop body, load the loop counter, decrement, store,
-         and branch. *)
-      let var = build_load count "count" builder in
-      let var' = build_sub var (const_int int_type 1) "count" builder in
-      build_store var' count builder |> ignore;
-      let cond =
-        build_icmp Icmp.Sgt var' (const_int int_type 0) "loopcond" builder
-      in
-      build_cond_br cond loop_bb end_bb builder |> ignore;
+      (* At the end of the loop body, check condition and branch. *)
+      let llcond = codegen_expr cond in
+      build_cond_br llcond loop_bb end_bb builder |> ignore;
       position_at_end end_bb builder
 
     let codegen_if codegen_prog cond tcase fcase =
@@ -1022,7 +1129,7 @@ module Codegen = struct
 
     let rec codegen_stmt : stmt -> unit =
       function
-      | Loop { count; body } -> codegen_loop codegen_prog count body
+      | Loop { cond; body } -> codegen_loop codegen_prog cond body
       | If { cond; tcase; fcase } -> codegen_if codegen_prog cond tcase fcase
       | Step { var; iter } -> codegen_step var iter
       | Iter { var; func; args; } -> codegen_iter var func args

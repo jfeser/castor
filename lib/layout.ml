@@ -2,6 +2,7 @@ open Base
 open Base.Printf
 open Collections
 open Db
+open Type0
 
 exception TransformError of Error.t
 
@@ -60,7 +61,7 @@ module PredCtx = struct
     module T = struct
       type t =
         | Field of Field.t
-        | Var of string
+        | Var of TypedName.NameOnly.t
         | Dummy
       [@@deriving compare, sexp]
     end
@@ -69,12 +70,18 @@ module PredCtx = struct
 
     let dummy : t = Dummy
 
-    let params : t -> Set.M(String).t = function
-      | Var n -> Set.singleton (module String) n
-      | Field _ | Dummy -> Set.empty (module String)
+    let params : t -> Set.M(TypedName).t = function
+      | Var v -> Set.singleton (module TypedName) v
+      | Field _ | Dummy -> Set.empty (module TypedName)
   end
 
   type t = primvalue Map.M(Key).t [@@deriving compare, sexp]
+
+  let find_var : t -> string -> primvalue option = fun m x ->
+    Map.find m (Var (x, BoolT))
+
+  let find_field : t -> Field.t -> primvalue option = fun m x ->
+    Map.find m (Field x)
 
   let of_tuple : Tuple.t -> t = fun t ->
     List.fold_left t ~init:(Map.empty (module Key)) ~f:(fun m v ->
@@ -82,7 +89,8 @@ module PredCtx = struct
 
   let of_vars : (string * primvalue) list -> t = fun l ->
     List.fold_left l ~init:(Map.empty (module Key)) ~f:(fun m (k, v) ->
-        Map.set m ~key:(Var k) ~data:v)
+        Map.set m ~key:(Var (k, PrimType.of_primvalue v))
+          ~data:v)
 end
 
 module ValueMap = struct
@@ -177,6 +185,12 @@ module Schema = struct
       |> Set.length
     in
     tot > utot
+
+  let field_idx : t -> Field.t -> int option = fun s f ->
+    List.find_mapi s ~f:(fun i f' -> if Field.equal f f' then Some i else None)
+
+  let field_idx_exn : t -> Field.t -> int = fun s f ->
+    Option.value_exn (field_idx s f)
 end
 
 let rec to_string : t -> string = function

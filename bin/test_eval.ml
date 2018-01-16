@@ -3,7 +3,6 @@ open Base.Polymorphic_compare
 open Base.Printf
 open Postgresql
 open Dblayout
-open Layout
 open Locality
 open Collections
 open Serialize

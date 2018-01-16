@@ -1,6 +1,7 @@
 open Base
 open Printf
 open Db
+open Type0
 
 module T = struct
   type op =
@@ -14,7 +15,7 @@ module T = struct
   [@@deriving compare, sexp]
 
   type pred =
-    | Var of string
+    | Var of TypedName.t
     | Field of Field.t
     | Binop of (op * pred * pred)
     | Varop of (op * pred list)
@@ -48,7 +49,7 @@ let op_to_string : op -> string = function
   | Or -> "Or"
 
 let rec pred_to_string : pred -> string = function
-  | Var v -> v
+  | Var v -> TypedName.to_string v
   | Field f -> f.name
   | Binop (op, p1, p2) ->
     let os = op_to_string op in
