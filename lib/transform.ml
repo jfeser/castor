@@ -18,7 +18,7 @@ let run_checked : t -> Ralgebra.t -> Ralgebra.t list = fun t r ->
     List.filter rs ~f:(fun r' ->
         let eval_to_set r =
           eval (Ctx.testctx ()) r
-          |> Seq.fold ~init:(Set.empty (module Layout.Tuple)) ~f:Set.add
+          |> Seq.fold ~init:(Set.empty (module Tuple)) ~f:Set.add
         in
         let s1 = eval_to_set r in
         let s2 = eval_to_set r' in

@@ -124,7 +124,7 @@ let rec width : t -> int = function
   | TableT (_, t, _) -> width t + 1
   | EmptyT -> 0
 
-let rec to_schema : t -> Layout.Schema.t = function
+let rec to_schema : t -> Db.Schema.t = function
   | EmptyT -> []
   | ScalarT (_, m) -> [m.field]
   | CrossTupleT ts -> List.concat_map ~f:(fun (t, _) -> to_schema t) ts

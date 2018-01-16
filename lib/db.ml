@@ -1,4 +1,5 @@
 open Base
+open Collections
 
 let exec : ?verbose : bool -> ?params : string list -> Postgresql.connection ->
   string -> string list list =
@@ -103,4 +104,79 @@ module Relation = struct
             Field.({ name = field_name; dtype }))
       in
       { name; fields; card }
+end
+
+type primvalue =
+  [`Int of int | `String of string | `Bool of bool | `Unknown of string]
+[@@deriving compare, sexp]
+
+module Value = struct
+  module T = struct
+    type t = {
+      rel : Relation.t;
+      field : Field.t;
+      idx : int;
+      value : primvalue;
+    } [@@deriving compare, sexp]
+  end
+  include T
+  include Comparator.Make(T)
+end
+
+module Tuple = struct
+  module T = struct
+    type t = Value.t list [@@deriving compare, sexp]
+  end
+  include T
+  include Comparable.Make(T)
+
+  module ValueF = struct
+    module T = struct
+      type t = Value.t
+      let compare v1 v2 = Field.compare v1.Value.field v2.Value.field
+      let sexp_of_t = Value.sexp_of_t
+    end
+    include T
+    include Comparable.Make(T)
+  end
+
+  let field : t -> Field.t -> Value.t option = fun t f ->
+    List.find t ~f:(fun v -> Field.(f = v.field))
+
+  let field_exn : t -> Field.t -> Value.t = fun t f ->
+    Option.value_exn
+      (List.find t ~f:(fun v -> Field.(f = v.field)))
+
+  let merge : t -> t -> t = fun t1 t2 ->
+    List.append t1 t2
+    |> List.remove_duplicates (module ValueF)
+
+  let merge_many : t list -> t = fun ts -> 
+    List.concat ts
+    |> List.remove_duplicates (module ValueF)
+end
+
+module Schema = struct
+  type t = Field.t list [@@deriving compare, sexp]
+
+  let of_tuple : Tuple.t -> t = List.map ~f:(fun v -> v.Value.field)
+  let of_relation : Relation.t -> t = fun r -> r.fields
+
+  let has_field : t -> Field.t -> bool = List.mem ~equal:Field.(=)
+
+  let overlaps : t list -> bool = fun schemas ->
+    let schemas = List.map schemas ~f:(Set.of_list (module Field)) in
+    let tot = List.sum (module Int) schemas ~f:Set.length in
+    let utot =
+      schemas
+      |> Set.union_list (module Field)
+      |> Set.length
+    in
+    tot > utot
+
+  let field_idx : t -> Field.t -> int option = fun s f ->
+    List.find_mapi s ~f:(fun i f' -> if Field.equal f f' then Some i else None)
+
+  let field_idx_exn : t -> Field.t -> int = fun s f ->
+    Option.value_exn (field_idx s f)
 end

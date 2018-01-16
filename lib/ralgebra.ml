@@ -78,3 +78,12 @@ let rec layouts : t -> Layout.t list = function
   | Scan l -> [l]
   | Concat rs -> List.map rs ~f:layouts |> List.concat
   | Relation _ -> []
+
+let rec to_schema : t -> Schema.t = function
+  | Project (fs, r) ->
+    to_schema r |> List.filter ~f:(List.mem fs ~equal:Field.(=))
+  | Filter (_, r) -> to_schema r
+  | EqJoin (_, _, r1, r2) -> to_schema r1 @ to_schema r2
+  | Scan l -> Layout.to_schema_exn l
+  | Concat rs -> List.concat_map rs ~f:to_schema
+  | Relation r -> Schema.of_relation r

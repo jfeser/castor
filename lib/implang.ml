@@ -591,18 +591,6 @@ module IRGen = struct
       let open Infix in
       let open Type in
       function
-      | ScalarT (BoolT, _) -> int isize
-      | ScalarT (IntT, _) -> int isize
-      | ScalarT (StringT, _) -> islice start
-      | EmptyT -> int 0
-      | CrossTupleT _ | ZipTupleT _ | UnorderedListT _ | OrderedListT _ ->
-        islice (start + int isize)
-      | TableT (_,_,_) -> failwith "Unsupported."
-
-    let len start =
-      let open Infix in
-      let open Type in
-      function
       | ScalarT (BoolT, _) | ScalarT (IntT, _) -> int isize
       | ScalarT (StringT, _) -> islice start
       | EmptyT -> int 0
@@ -633,29 +621,26 @@ module IRGen = struct
     let scan_empty = create ["start", int_t] VoidT |> build_func
 
     let scan_scalar =
-      let open Infix in
       let open Type.PrimType in
       function
       | BoolT ->
         let b = create ["start", int_t] (TupleT [int_t]) in
         let start = build_arg 0 b in
-        build_yield (Tuple [islice start]) b;
+        build_yield (Tuple [Infix.(islice start)]) b;
         build_func b
       | IntT ->
         let b = create ["start", int_t] (TupleT [int_t]) in
         let start = build_arg 0 b in
-        build_yield (Tuple [islice start]) b;
+        build_yield (Tuple [Infix.(islice start)]) b;
         build_func b
       | StringT ->
         let b = create ["start", int_t] (TupleT [slice_t]) in
         let start = build_arg 0 b in
-        let len = islice start in
-        build_yield (Tuple [slice (start + int isize) len]) b;
+        let len = Infix.(islice start) in
+        build_yield (Tuple [Infix.(slice (start + int isize) len)]) b;
         build_func b
 
     let scan_crosstuple scan ts =
-      let open Infix in
-
       let rec loops b col_start vars = function
         | [] ->
           let tup =
@@ -667,10 +652,10 @@ module IRGen = struct
         | (func, type_, count)::rest ->
           build_iter func [col_start] b;
           let var = build_fresh_var "x" (find_func func).ret_type b in
-          build_count_loop (int count) (fun b ->
+          build_count_loop Infix.(int count) (fun b ->
               build_step var func b;
               let next_start =
-                col_start + (len col_start type_) + (hsize type_)
+                Infix.(col_start + (len col_start type_) + (hsize type_))
               in
               loops b next_start (var::vars) rest
             ) b;
@@ -685,7 +670,7 @@ module IRGen = struct
       in
       let b = create ["start", int_t] ret_type in
       let start = build_arg 0 b in
-      loops b (start + hsize (CrossTupleT ts)) [] funcs;
+      loops b Infix.(start + hsize (CrossTupleT ts)) [] funcs;
       build_func b
 
     (* FIXME: This whole function needs rewriting. *)
@@ -722,13 +707,14 @@ module IRGen = struct
       }
 
     let scan_unordered_list scan t =
-      let open Infix in
       let func = scan t in
       let ret_type = (find_func func).ret_type in
       let b = create ["start", int_t] ret_type in
       let start = build_arg 0 b in
-      let pcount = islice start in
-      let cstart = build_defn "cstart" int_t (start + hsize (UnorderedListT t)) b in
+      let pcount = Infix.(islice start) in
+      let cstart =
+        build_defn "cstart" int_t Infix.(start + hsize (UnorderedListT t)) b
+      in
       build_count_loop pcount (fun b ->
           let ccount = count cstart t in
           let clen = len cstart t in
@@ -737,13 +723,13 @@ module IRGen = struct
               let x = build_var "x" (find_func func).ret_type b in
               build_step x func b;
               build_yield x b) b;
-          build_assign (cstart + clen + hsize t) cstart b) b;
+          build_assign Infix.(cstart + clen + hsize t) cstart b) b;
       build_func b
 
     let scan_ordered_list scan t Layout.({ field; order; lookup = lower, upper }) =
       let func = scan (UnorderedListT t) in
       let idx =
-        Layout.Schema.field_idx_exn (Type.to_schema (UnorderedListT t)) field
+        Db.Schema.field_idx_exn (Type.to_schema (UnorderedListT t)) field
       in
       let ret_type = (find_func func).ret_type in
       let b = create ["start", int_t] ret_type in
@@ -831,13 +817,18 @@ module IRGen = struct
         funcs = ["printer", printer name];
         params = Type.params t |> Set.to_list; }
 
-    (* let gen_ralgebra : Locality.Ralgebra.t -> ir_module = function
-     *   | Scan l -> scan_layout (Type.of_layout_exn l)
-     *   | Project (_,_)
-     *   | Filter (_,_)
-     *   | EqJoin (_,_,_,_)
-     *   | Concat _
-     *   | Relation _ -> failwith "Expected a layout." *)
+    let project gen fields r =
+      let schema = Ralgebra.to_schema r in
+      let idxs = List.map fields ~f:(Db.Schema.field_idx_exn schema) in
+      let 
+
+    let rec gen_ralgebra : Ralgebra.t -> string = function
+      | Scan l -> scan (Type.of_layout_exn l)
+      | Project (x, r) -> project gen_ralgebra x r
+      | Filter (x, r) -> filter gen_ralgebra x r
+      | EqJoin (f1, f2, r1, r2) -> eq_join gen_ralgebra f1 f2 r1 r2
+      | Concat rs -> concat gen_ralgebra rs
+      | Relation x -> failwith "Bare relation found."
   end
 end
 

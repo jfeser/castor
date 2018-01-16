@@ -6,56 +6,6 @@ open Type0
 
 exception TransformError of Error.t
 
-type primvalue =
-  [`Int of int | `String of string | `Bool of bool | `Unknown of string]
-[@@deriving compare, sexp]
-
-module Value = struct
-  module T = struct
-    type t = {
-      rel : Relation.t;
-      field : Field.t;
-      idx : int;
-      value : primvalue;
-    } [@@deriving compare, sexp]
-  end
-  include T
-  include Comparator.Make(T)
-end
-
-module Tuple = struct
-  module T = struct
-    type t = Value.t list [@@deriving compare, sexp]
-  end
-  include T
-  include Comparable.Make(T)
-
-  module ValueF = struct
-    module T = struct
-      type t = Value.t
-      let compare v1 v2 = Field.compare v1.Value.field v2.Value.field
-      let sexp_of_t = Value.sexp_of_t
-    end
-    include T
-    include Comparable.Make(T)
-  end
-
-  let field : t -> Field.t -> Value.t option = fun t f ->
-    List.find t ~f:(fun v -> Field.(f = v.field))
-
-  let field_exn : t -> Field.t -> Value.t = fun t f ->
-    Option.value_exn
-      (List.find t ~f:(fun v -> Field.(f = v.field)))
-
-  let merge : t -> t -> t = fun t1 t2 ->
-    List.append t1 t2
-    |> List.remove_duplicates (module ValueF)
-
-  let merge_many : t list -> t = fun ts -> 
-    List.concat ts
-    |> List.remove_duplicates (module ValueF)
-end
-
 module PredCtx = struct
   module Key = struct
     module T = struct
@@ -138,61 +88,6 @@ type t =
   | Empty
 [@@deriving compare, sexp]
 
-module Schema = struct
-  type schema = Field.t list [@@deriving compare, sexp]
-
-  let rec of_layout_exn : t -> schema =
-    function
-    | Empty -> []
-    | Scalar v -> [v.field]
-    | ZipTuple ls ->
-      List.concat_map ls ~f:of_layout_exn
-      |> List.dedup ~compare:Field.compare
-    | CrossTuple ls ->
-      List.map ls ~f:of_layout_exn
-      |> List.fold_left1_exn ~f:(fun s s' ->
-          let s = List.merge ~cmp:Field.compare s s' in
-          let has_dups =
-            List.find_consecutive_duplicate s ~equal:Field.(=)
-            |> Option.is_some
-          in
-          if has_dups then
-            raise (TransformError
-                     (Error.of_string "Cannot cross streams with the same field."));
-          s)
-    | UnorderedList ls | OrderedList (ls, _) ->
-      List.map ls ~f:of_layout_exn |> List.all_equal_exn
-    | Table (m, { field = f }) ->
-      let v_schema =
-        Map.data m |> List.map ~f:of_layout_exn |> List.all_equal_exn
-      in
-      if not (List.mem ~equal:Field.(=) v_schema f) then
-        raise (TransformError (Error.of_string "Table values must contain the table key."));
-      List.merge ~cmp:Field.compare [f] v_schema
-
-  type t = schema [@@deriving compare, sexp]
-
-  let of_tuple : Tuple.t -> t = List.map ~f:(fun v -> v.Value.field)
-
-  let has_field : t -> Field.t -> bool = List.mem ~equal:Field.(=)
-
-  let overlaps : t list -> bool = fun schemas ->
-    let schemas = List.map schemas ~f:(Set.of_list (module Field)) in
-    let tot = List.sum (module Int) schemas ~f:Set.length in
-    let utot =
-      schemas
-      |> Set.union_list (module Field)
-      |> Set.length
-    in
-    tot > utot
-
-  let field_idx : t -> Field.t -> int option = fun s f ->
-    List.find_mapi s ~f:(fun i f' -> if Field.equal f f' then Some i else None)
-
-  let field_idx_exn : t -> Field.t -> int = fun s f ->
-    Option.value_exn (field_idx s f)
-end
-
 let rec to_string : t -> string = function
   | Scalar _ -> "s"
   | ZipTuple ls ->
@@ -213,6 +108,33 @@ let rec to_string : t -> string = function
     |> String.concat ~sep:", "
     |> sprintf "{%s}"
   | Empty -> "[]"
+
+let rec to_schema_exn : t -> Schema.t = function
+  | Empty -> []
+  | Scalar v -> [v.field]
+  | ZipTuple ls ->
+    List.concat_map ls ~f:to_schema_exn
+    |> List.dedup ~compare:Field.compare
+  | CrossTuple ls ->
+    List.map ls ~f:to_schema_exn
+    |> List.fold_left1_exn ~f:(fun s s' ->
+        let s = List.merge ~cmp:Field.compare s s' in
+        let has_dups =
+          List.find_consecutive_duplicate s ~equal:Field.(=)
+          |> Option.is_some
+        in
+        if has_dups then
+          Error.(of_string "Cannot cross streams with the same field." |> raise);
+        s)
+  | UnorderedList ls | OrderedList (ls, _) ->
+    List.map ls ~f:to_schema_exn |> List.all_equal_exn
+  | Table (m, { field = f }) ->
+    let v_schema =
+      Map.data m |> List.map ~f:to_schema_exn |> List.all_equal_exn
+    in
+    if not (List.mem ~equal:Field.(=) v_schema f) then
+      Error.(of_string "Table values must contain the table key." |> raise);
+    List.merge ~cmp:Field.compare [f] v_schema
 
 let rec partition : PredCtx.Key.t -> Field.t -> t -> t =
   let p_scalar k f v =
@@ -243,7 +165,7 @@ in
   let p_ziptuple k f ls =
     let all_have_f =
       List.for_all ls ~f:(fun l ->
-          List.mem ~equal:Field.(=) (Schema.of_layout_exn l) f)
+          List.mem ~equal:Field.(=) (to_schema_exn l) f)
     in
     if all_have_f then
       List.map ls ~f:(partition k f)
@@ -326,7 +248,7 @@ in
   in
 
   fun k f l ->
-    if Schema.has_field (Schema.of_layout_exn l) f then
+    if Schema.has_field (to_schema_exn l) f then
       match l with
       | Empty -> Empty
       | Scalar x -> p_scalar k f x
@@ -377,7 +299,7 @@ let rec order : range -> Field.t -> [`Asc | `Desc] -> t -> t = fun k f o l ->
     | `Asc -> Value.compare
     | `Desc -> fun k1 k2 -> Value.compare k2 k1
   in
-  if List.exists (Schema.of_layout_exn l) ~f:(Field.(=) f) then
+  if List.exists (to_schema_exn l) ~f:(Field.(=) f) then
     match partition PredCtx.Key.dummy f l with
     | Table (m, _) ->
       Map.to_alist m
