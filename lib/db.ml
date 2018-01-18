@@ -104,6 +104,9 @@ module Relation = struct
             Field.({ name = field_name; dtype }))
       in
       { name; fields; card }
+
+  let field_exn : t -> string -> Field.t = fun r n -> 
+    List.find_exn r.fields ~f:(fun f -> String.(f.name = n))
 end
 
 type primvalue =

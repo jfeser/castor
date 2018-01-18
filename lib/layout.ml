@@ -136,6 +136,20 @@ let rec to_schema_exn : t -> Schema.t = function
       Error.(of_string "Table values must contain the table key." |> raise);
     List.merge ~cmp:Field.compare [f] v_schema
 
+let rec params : t -> Set.M(TypedName).t =
+  let empty = Set.empty (module TypedName) in
+  let union_list = Set.union_list (module TypedName) in
+  let kparams = PredCtx.Key.params in
+  let lparams ls = List.map ~f:params ls in
+  function
+  | Empty | Scalar _ -> empty
+  | CrossTuple ls | ZipTuple ls | UnorderedList ls -> lparams ls |> union_list
+  | OrderedList (ls, { lookup = (k1, k2) }) ->
+    let p1 = Option.value_map ~f:kparams k1 ~default:empty in
+    let p2 = Option.value_map ~f:kparams k2 ~default:empty in
+    union_list (p1::p2::(lparams ls))
+  | Table (m, {lookup = k}) -> union_list (kparams k::(lparams (Map.data m)))
+
 let rec partition : PredCtx.Key.t -> Field.t -> t -> t =
   let p_scalar k f v =
     if Field.(f = v.Value.field) then

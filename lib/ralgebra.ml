@@ -87,3 +87,21 @@ let rec to_schema : t -> Schema.t = function
   | Scan l -> Layout.to_schema_exn l
   | Concat rs -> List.concat_map rs ~f:to_schema
   | Relation r -> Schema.of_relation r
+
+let rec params : t -> Set.M(TypedName).t =
+  let empty = Set.empty (module TypedName) in
+  let union_list = Set.union_list (module TypedName) in
+  function
+  | Project (_, _) | Relation _ -> empty
+  | Scan l -> Layout.params l
+  | Filter (p, r) ->
+    let rec pred_params = function
+      | Field _ -> empty
+      | Var v -> Set.singleton (module TypedName) v
+      | Binop (_, p1, p2) -> Set.union (pred_params p1) (pred_params p2)
+      | Varop (_, ps) -> List.map ~f:pred_params ps |> union_list
+    in
+    Set.union (pred_params p) (params r)
+  | EqJoin (_, _, r1, r2) -> Set.union (params r1) (params r2)
+  | Concat rs -> List.map ~f:params rs |> union_list 
+  

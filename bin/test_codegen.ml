@@ -32,11 +32,12 @@ let main () =
   Ctx.global.conn <- Some (conn);
   Ctx.global.testctx <- Some (PredCtx.of_vars ["xv", `Int 10; "yv", `Int 10]);
   let taxi = Relation.from_db conn "taxi" in
-  let l = Transform.row_layout taxi in
-  let t = Type.of_layout_exn l in
+  let layout = Transform.row_layout taxi in
+
+  let l = Ralgebra.(Filter (Binop (Gt, Field (Relation.field_exn taxi "xpos"), Var ("xv", IntT)), Scan layout)) in
 
   let module IGen = IRGen.Make () in
-  let ir_module = IGen.gen_layout t in
+  let ir_module = IGen.irgen l in
 
   let module_ = Llvm.create_module (Llvm.global_context ()) "scanner" in
   let module CGen = Codegen.Make(struct
@@ -46,7 +47,7 @@ let main () =
       let builder = builder ctx
     end) ()
   in
-  let buf = serialize l in
+  let buf = serialize layout in
   CGen.codegen buf ir_module;
 
   Out_channel.with_file buf_file ~f:(fun ch -> Out_channel.output_bytes ch buf);
