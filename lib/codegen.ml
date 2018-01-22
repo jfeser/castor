@@ -571,6 +571,24 @@ module Make (Ctx: CTX) () = struct
     build_store bufp buf builder |> ignore;
     build_ret params builder |> ignore
 
+  let codegen_param_setters : (string * lltype) list -> unit = fun params ->
+    List.iter params ~f:(fun (n, t) ->
+        let func_t =
+          function_type (void_type ctx) [|pointer_type !(params_struct_t); t|]
+        in
+        let llfunc = declare_function (sprintf "set_%s" n) func_t module_ in
+        let fctx = object
+          val values = Hashtbl.of_alist_exn (module String) [
+              "params", Local (param llfunc 0);
+            ]
+          method values = values
+        end in
+        let bb = append_block ctx "entry" llfunc in
+        position_at_end bb builder;
+        build_store (param llfunc 1) (get_val fctx n) builder |> ignore;
+        build_ret_void builder |> ignore
+      )
+
   module ParamStructBuilder = struct
     type t = { mutable vars : lltype list }
 
@@ -618,14 +636,18 @@ module Make (Ctx: CTX) () = struct
       in
       SB.build_global sb "buf" buf_t |> ignore;
 
-      (* Generate global constants for parameters. *)
-      List.iter params ~f:(fun (n, t) ->
-          let lltype = match t with
+      let typed_params = List.map params ~f:(fun (n, t) ->
+        let lltype = match t with
             | BoolT -> codegen_type bool_t
             | IntT -> codegen_type int_t
             | StringT -> pointer_type (i8_type ctx)
-          in
-          SB.build_global sb n lltype |> ignore);
+        in
+        (n, lltype))
+      in
+
+      (* Generate global constants for parameters. *)
+      List.iter typed_params ~f:(fun (n, t) ->
+          SB.build_global sb n t |> ignore);
 
       (* Generate code for the iterators *)
       let ictxs = List.mapi ir_iters
@@ -675,6 +697,7 @@ module Make (Ctx: CTX) () = struct
       List.iter ir_funcs ~f:(fun (n, f) -> codegen_func n f);
 
       codegen_create ();
+      codegen_param_setters typed_params;
 
       assert_valid_module module_;
       Logs.info (fun m -> m "Codegen completed.")

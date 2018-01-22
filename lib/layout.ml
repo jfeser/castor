@@ -112,20 +112,8 @@ let rec to_string : t -> string = function
 let rec to_schema_exn : t -> Schema.t = function
   | Empty -> []
   | Scalar v -> [v.field]
-  | ZipTuple ls ->
-    List.concat_map ls ~f:to_schema_exn
-    |> List.dedup ~compare:Field.compare
-  | CrossTuple ls ->
-    List.map ls ~f:to_schema_exn
-    |> List.fold_left1_exn ~f:(fun s s' ->
-        let s = List.merge ~cmp:Field.compare s s' in
-        let has_dups =
-          List.find_consecutive_duplicate s ~equal:Field.(=)
-          |> Option.is_some
-        in
-        if has_dups then
-          Error.(of_string "Cannot cross streams with the same field." |> raise);
-        s)
+  | ZipTuple ls
+  | CrossTuple ls -> List.concat_map ls ~f:to_schema_exn
   | UnorderedList ls | OrderedList (ls, _) ->
     List.map ls ~f:to_schema_exn |> List.all_equal_exn
   | Table (m, { field = f }) ->

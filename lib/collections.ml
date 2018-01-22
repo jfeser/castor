@@ -46,7 +46,7 @@ module List = struct
       | [] -> []
       | x::xs -> ccd equal x 1 [] xs |> List.rev
 
-  let remove_duplicates : ('a, 'cmp) Set.comparator -> 'a t -> 'a t =
+  let dedup : ('a, 'cmp) Set.comparator -> 'a t -> 'a t =
     fun m l ->
       let _, l' =
         List.fold_left l ~init:(Set.empty m, []) ~f:(fun (s, xs) x ->

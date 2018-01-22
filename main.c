@@ -6,6 +6,7 @@
 
 extern void* create(long*);
 extern void printer(void*);
+extern void set_xv(void*, long);
 
 int main(int argc, char **argv) {
   int fd, len;
@@ -35,6 +36,8 @@ int main(int argc, char **argv) {
   }
 
   void *params = create(mapped_buf);
+
+  set_xv(params, 10);
 
   printf("Printing query results:\n");
   printer(params);

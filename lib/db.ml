@@ -151,12 +151,10 @@ module Tuple = struct
       (List.find t ~f:(fun v -> Field.(f = v.field)))
 
   let merge : t -> t -> t = fun t1 t2 ->
-    List.append t1 t2
-    |> List.remove_duplicates (module ValueF)
+    List.append t1 t2 |> List.dedup (module ValueF)
 
-  let merge_many : t list -> t = fun ts -> 
-    List.concat ts
-    |> List.remove_duplicates (module ValueF)
+  let merge_many : t list -> t = fun ts ->
+    List.concat ts |> List.dedup (module ValueF)
 end
 
 module Schema = struct

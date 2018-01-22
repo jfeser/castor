@@ -820,13 +820,13 @@ module IRGen = struct
       let open Infix in
       let b = create [] VoidT in
       let start = int 0 in
-      let ntuples = build_defn "ntuples" int_t (islice start) b in
       build_iter func [start] b;
-      build_count_loop ntuples (fun b ->
-          let x = build_var "x" (find_func func).ret_type b in
+      let x = build_var "x" (find_func func).ret_type b in
+      build_step x func b;
+      build_loop (not (Done func)) (fun b ->
+          build_print x b;
           build_step x func b;
-          build_print x b)
-        b;
+        ) b;
       build_func b
 
     let rec gen_layout : Type.t -> ir_module = fun t ->
@@ -866,6 +866,8 @@ module IRGen = struct
     let filter gen pred r =
       let func = gen r in
       let schema = Ralgebra.to_schema r in
+      Logs.debug (fun m ->
+          m "Filter on schema %a." Sexp.pp_hum ([%sexp_of:Db.Schema.t] schema));
 
       let ret_t = (find_func func).ret_type in
 
