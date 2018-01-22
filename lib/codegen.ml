@@ -253,55 +253,61 @@ module Make (Ctx: CTX) () = struct
       build_load struct_ "tupletmp" builder
 
   let codegen_loop fctx codegen_prog cond body =
-    (* Create all loop blocks. *)
     let start_bb = insertion_block builder in
     let llfunc = block_parent start_bb in
-    let loop_bb = append_block ctx "loop" llfunc in
+
+    (* Create all loop blocks. *)
+    let cond_bb = append_block ctx "loopcond" llfunc in
+    let body_bb = append_block ctx "loopbody" llfunc in
     let end_bb = append_block ctx "loopend" llfunc in
 
-    (* In loop header, check condition and branch to loop body. *)
+    (* Create branch to head block. *)
     position_at_end start_bb builder;
+    build_br cond_bb builder |> ignore;
+
+    (* In loop header, check condition and branch to loop body. *)
+    position_at_end cond_bb builder;
     let llcond = codegen_expr fctx cond in
-    build_cond_br llcond loop_bb end_bb builder |> ignore;
+    build_cond_br llcond body_bb end_bb builder |> ignore;
 
     (* Generate the loop body. *)
-    position_at_end loop_bb builder;
+    position_at_end body_bb builder;
     codegen_prog fctx body;
+    build_br cond_bb builder |> ignore;
 
     (* At the end of the loop body, check condition and branch. *)
-    let llcond = codegen_expr fctx cond in
-    build_cond_br llcond loop_bb end_bb builder |> ignore;
     position_at_end end_bb builder
 
   let codegen_if fctx codegen_prog cond tcase fcase =
-    let llcond = codegen_expr fctx cond in
-
     let start_bb = insertion_block builder in
     let llfunc = block_parent start_bb in
 
-    (* Create then block. *)
+    (* Create all if blocks. *)
+    let if_bb = append_block ctx "if" llfunc in
     let then_bb = append_block ctx "then" llfunc in
+    let else_bb = append_block ctx "else" llfunc in
+    let merge_bb = append_block ctx "ifend" llfunc in
+
+    (* Build branch to head block. *)
+    position_at_end start_bb builder;
+    build_br if_bb builder |> ignore;
+
+    (* Generate conditional in head block. *)
+    position_at_end if_bb builder;
+    let llcond = codegen_expr fctx cond in
+    build_cond_br llcond then_bb else_bb builder |> ignore;
+
+    (* Create then block. *)
     position_at_end then_bb builder;
     codegen_prog fctx tcase;
-    let then_bb = insertion_block builder in
+    build_br merge_bb builder |> ignore;
 
     (* Create else block. *)
-    let else_bb = append_block ctx "else" llfunc in
     position_at_end else_bb builder;
     codegen_prog fctx fcase;
-    let else_bb = insertion_block builder in
-
-    (* Create merge block. *)
-    let merge_bb = append_block ctx "ifcont" llfunc in
-    position_at_end merge_bb builder;
-
-    (* Insert branches. *)
-    position_at_end start_bb builder;
-    build_cond_br llcond then_bb else_bb builder |> ignore;
-    position_at_end then_bb builder;
     build_br merge_bb builder |> ignore;
-    position_at_end else_bb builder;
-    build_br merge_bb builder |> ignore;
+
+    (* End with builder in merge block. *)
     position_at_end merge_bb builder
 
   let codegen_step fctx var iter =
