@@ -24,42 +24,95 @@ let sexp_of_lltype : lltype -> Sexp.t =
 module Make (Ctx: CTX) () = struct
   open Ctx
 
+  (* Variables are either stored in the parameter struct or stored locally on
+     the stack. *)
+  type var =
+    | Param of int
+    | Local of llvalue
+  [@@deriving sexp_of]
+
+  module SymbolTable = struct
+    type t = var Hashtbl.M(String).t list [@@deriving sexp_of]
+
+    let lookup ?params maps key =
+      let params = match params, maps with
+        | Some p, _ -> p
+        | None, m::_ -> begin match Hashtbl.find m "params" with
+            | Some (Local v) -> v
+            | Some (Param _) ->
+              Error.create "Params mistagged." m
+                [%sexp_of:var Hashtbl.M(String).t] |> Error.raise
+            | None -> Error.create "Params not found." (Hashtbl.keys m)
+                        [%sexp_of:string list] |> Error.raise
+          end
+        | None, [] -> Error.of_string "Empty namespace." |> Error.raise
+      in
+      let lookup_single m k = Option.map (Hashtbl.find m k) ~f:(function
+          | Local x -> x
+          | Param idx -> build_struct_gep params idx k builder)
+      in
+      let rec lookup_chain ms k = match ms with
+        | [] -> assert false
+        | [m] -> begin match lookup_single m k with
+            | Some v -> v
+            | None -> Error.create "Unknown variable."
+                        (k, List.map ~f:Hashtbl.keys maps)
+                        [%sexp_of:string * string list list] |> Error.raise
+          end
+        | m::ms -> begin match lookup_single m k with
+            | Some v -> v
+            | None -> lookup_chain ms k
+          end
+      in
+      lookup_chain maps key
+  end
+
   let iters = Hashtbl.create (module String) ()
   let funcs = Hashtbl.create (module String) ()
   let globals = Hashtbl.create (module String) ()
-
-  let buf = ref None
+  let params_struct_t = ref (void_type ctx)
 
   let init_name n = (n ^ "$init")
   let step_name n = (n ^ "$step")
-  let get_val ctx n =
+
+  let get_val ?params ctx n =
+    let params =
+      match params with
+      | Some p -> p
+      | None -> begin
+          match Hashtbl.find ctx#values "params" with
+          | Some (Local x) -> x
+          | Some (Param _) ->
+            Error.create "Params mistagged." ctx#values
+              [%sexp_of:var Hashtbl.M(String).t] |> Error.raise
+          | None ->
+            Error.create "Params not found." (Hashtbl.keys ctx#values)
+              [%sexp_of:string list] |> Error.raise
+        end
+    in
     match Hashtbl.find ctx#values n with
-    | Some v -> v
+    | Some (Param idx) -> build_struct_gep params idx n builder
+    | Some (Local v) -> v
     | None ->
-      begin match Hashtbl.find globals n with
-        | Some v -> v
-        | None ->
-          fail (Error.create "Unknown variable."
-                  (n, Hashtbl.keys ctx#values, Hashtbl.keys globals)
-                  [%sexp_of:string * string list * string list])
-      end
+      let error = Error.create "Unknown variable."
+          (n, Hashtbl.keys ctx#values, Hashtbl.keys globals)
+          [%sexp_of:string * string list * string list]
+      in
+      match Option.value_exn ~error (Hashtbl.find globals n) with
+      | Param idx -> build_struct_gep params idx n builder
+      | Local v -> v
 
   let get_func n =
-    match Hashtbl.find funcs n with
-    | Some v -> v
-    | None ->
-      fail (Error.create "Unknown function." (n, Hashtbl.keys funcs)
-              [%sexp_of:string * string list])
+    let error = Error.create "Unknown function." (n, Hashtbl.keys funcs)
+        [%sexp_of:string * string list]
+    in
+    Option.value_exn ~error (Hashtbl.find funcs n)
 
   let get_iter n =
-    match Hashtbl.find iters n with
-    | Some v -> v
-    | None ->
-      fail (Error.create "Unknown iterator." (n, Hashtbl.keys iters)
-              [%sexp_of:string * string list])
-
-  let set_buf x = buf := Some x
-  let get_buf () = Option.value_exn !buf
+    let error = Error.create "Unknown iterator." (n, Hashtbl.keys iters)
+        [%sexp_of:string * string list]
+    in
+    Option.value_exn ~error (Hashtbl.find iters n)
 
   let null_fresh_global : lltype -> string -> llmodule -> llvalue =
     fun t n m ->
@@ -85,6 +138,25 @@ module Make (Ctx: CTX) () = struct
       let entry_term = Option.value_exn (block_terminator entry_bb) in
       builder_before ctx entry_term |> build_alloca t n
 
+  (** Build a call that passes the parameter struct. *)
+  let build_param_call : _ -> llvalue -> llvalue array -> string -> llbuilder -> llvalue = fun fctx func args name b ->
+    let params = get_val fctx "params" in
+    build_call func (Array.append [|params|] args) name b
+
+  let build_struct_gep : llvalue -> int -> string -> llbuilder -> llvalue =
+    fun v i n b ->
+      let open Polymorphic_compare in
+      let ptr_t = type_of v in
+      assert TypeKind.(classify_type ptr_t = Pointer);
+      let struct_t = element_type ptr_t in
+      assert TypeKind.(classify_type struct_t = Struct);
+      let elems_t = struct_element_types struct_t in
+      if not (i >= 0 && i < Array.length elems_t) then begin
+        Logs.err (fun m ->
+            m "Struct index %d out of bounds %d." i (Array.length elems_t));
+      end;
+      build_struct_gep v i n b
+
   let rec codegen_type : type_ -> lltype = function
     | BytesT x -> integer_type ctx (x * 8)
     | TupleT ts ->
@@ -104,20 +176,20 @@ module Make (Ctx: CTX) () = struct
     | Bool false -> const_int bool_type 0
     | Done iter ->
       let ctx' = get_iter iter in
-      let v = get_val ctx' "done" in
+      let v = get_val ~params:(get_val fctx "params") ctx' "done" in
       build_load v "done" builder
     | Var n ->
       let v = get_val fctx n in
       Logs.debug (fun m -> m "Loading %s of type %s. %s"
                      (string_of_llvalue v) (type_of v |> string_of_lltype)
-                     (Sexp.to_string_hum ([%sexp_of:llvalue Hashtbl.M(String).t]
-                                            fctx#values)));
+                     (Sexp.to_string_hum ([%sexp_of:string list]
+                                            (Hashtbl.keys fctx#values))));
       build_load v n builder
     | Slice (byte_idx, size_bytes) ->
       let size_bits = Serialize.isize * size_bytes in
       let byte_idx = codegen_expr fctx byte_idx in
       let int_idx = build_sdiv byte_idx (const_int (i64_type ctx) Serialize.isize) "intidx" builder in
-      let buf = build_load (get_buf ()) "buf" builder in
+      let buf = build_load (get_val fctx "buf") "buf" builder in
 
       (* Note that the first index is for the pointer. The second indexes into
          the array. *)
@@ -234,7 +306,7 @@ module Make (Ctx: CTX) () = struct
 
   let codegen_step fctx var iter =
     let step_func = (Hashtbl.find_exn iters iter)#step in
-    let val_ = build_call step_func [||] "steptmp" builder in
+    let val_ = build_param_call fctx step_func [||] "steptmp" builder in
     let var = get_val fctx var in
     build_store val_ var builder |> ignore
 
@@ -245,7 +317,7 @@ module Make (Ctx: CTX) () = struct
       fail (Error.of_string "Wrong number of arguments.")
     else
       let llargs = List.map args ~f:(codegen_expr fctx) |> Array.of_list in
-      build_call init_func llargs "" builder |> ignore
+      build_param_call fctx init_func llargs "" builder |> ignore
 
   let codegen_assign fctx lhs rhs =
     let val_ = codegen_expr fctx rhs in
@@ -265,7 +337,8 @@ module Make (Ctx: CTX) () = struct
 
     (* Add indirect branch and set new target. *)
     add_destination fctx#indirect_br end_bb;
-    build_store (block_address llfunc end_bb) fctx#br_addr builder |> ignore;
+    build_store (block_address llfunc end_bb) (get_val fctx "br_addr") builder
+    |> ignore;
     let llret = codegen_expr fctx ret in
     build_ret llret builder |> ignore;
 
@@ -308,8 +381,8 @@ module Make (Ctx: CTX) () = struct
     in
     gen val_ type_
 
-  let rec codegen_iter : string -> func -> unit =
-    let rec codegen_stmt : _ -> stmt -> unit = fun fctx -> 
+  let rec codegen_iter : _ -> unit =
+    let rec codegen_stmt : _ -> stmt -> unit = fun fctx ->
       function
       | Loop { cond; body } -> codegen_loop fctx codegen_prog cond body
       | If { cond; tcase; fcase } ->
@@ -324,111 +397,81 @@ module Make (Ctx: CTX) () = struct
       List.iter ~f:(codegen_stmt fctx) p
     in
 
-    fun name ({ args; body; ret_type; locals } as func) ->
-      Logs.debug (fun m -> m "Codegen for func %s started." name);
-      Logs.debug (fun m -> m "%a" pp_func func);
-      Logs.debug (fun m -> m "%s" ([%sexp_of:func] func |> Sexp.to_string_hum));
-
-      (* Check that function is not already defined. *)
-      if Hashtbl.mem iters name || Hashtbl.mem funcs name then
-        fail (Error.of_string "Function already defined.");
-
-      (* Create function context. *)
-      let ictx =
-        let null_ptr = const_null (pointer_type (void_type ctx)) in
-        object
-          val mutable init = null_ptr
-          val mutable step = null_ptr
-          val mutable indirect_br = null_ptr
-          val mutable br_addr = null_ptr
-          val values = Hashtbl.create (module String) ()
-
-          method name = name
-          method func = func
-          method values = values
-
-          method init = init
-          method step = step
-          method indirect_br = indirect_br
-          method br_addr = br_addr
-
-          method set_init x = init <- x
-          method set_step x = step <- x
-          method set_indirect_br x = indirect_br <- x
-          method set_br_addr x = br_addr <- x
-        end
-      in
-      Hashtbl.set iters ~key:name ~data:ictx;
-
-      let done_var = null_fresh_global (i1_type ctx) "done" module_ in
-      Hashtbl.set ictx#values ~key:"done" ~data:done_var;
-
-      (* Create storage space for local variables & iterator args. *)
-      List.iter locals ~f:(fun (n, t) ->
-          let lltype = codegen_type t in
-          let var = null_fresh_global lltype n module_ in
-          Hashtbl.set ictx#values ~key:n ~data:var);
+    fun ictx ->
+      Logs.debug (fun m -> m "Codegen for func %s started." ictx#name);
+      Logs.debug (fun m -> m "%a" pp_func ictx#func);
+      Logs.debug (fun m -> m "%s" ([%sexp_of:func] ictx#func |> Sexp.to_string_hum));
 
       (* Create initialization function. *)
       let init_func_t =
         let args_t =
-          List.map args ~f:(fun (_, t) -> codegen_type t) |> Array.of_list
+          (pointer_type !params_struct_t ::
+           List.map ictx#func.args ~f:(fun (_, t) -> codegen_type t))
+          |> Array.of_list
         in
         function_type (void_type ctx) args_t
       in
-      let init_func = declare_function (init_name name) init_func_t module_ in
-      let init_bb = append_block ctx "entry" init_func in
+      ictx#set_init
+        (declare_function (init_name ictx#name) init_func_t module_);
+      let init_params = param ictx#init 0 in
+      Hashtbl.set ictx#values ~key:"params" ~data:(Local init_params);
+      let init_bb = append_block ctx "entry" ictx#init in
       position_at_end init_bb builder;
-      List.iteri args ~f:(fun i (n, t) ->
+      List.iteri ictx#func.args ~f:(fun i (n, t) ->
           let var = get_val ictx n in
-          Hashtbl.set ictx#values ~key:n ~data:var;
-          build_store (param init_func i) var builder |> ignore);
-      build_store (const_int (i1_type ctx) 0) done_var builder |> ignore;
+          build_store (param ictx#init (i + 1)) var builder |> ignore);
+
+      build_store (const_int (i1_type ctx) 0) (get_val ictx "done") builder
+      |> ignore;
 
       (* Create step function. *)
-      let ret_t = codegen_type ret_type in
-      let step_func_t = function_type ret_t [||] in
-      let step_func = declare_function (step_name name) step_func_t module_ in
-      let bb = append_block ctx "entry" step_func in
+      let ret_t = codegen_type ictx#func.ret_type in
+      let step_func_t =
+        function_type ret_t [|pointer_type !params_struct_t|]
+      in
+      ictx#set_step
+        (declare_function (step_name ictx#name) step_func_t module_);
+      let step_params = Local (param ictx#step 0) in
+      Hashtbl.set ictx#values ~key:"params" ~data:step_params;
+      let bb = append_block ctx "entry" ictx#step in
       position_at_end bb builder;
 
       (* Create indirect branch. *)
-      let br_addr_ptr =
-        let t = pointer_type (i8_type ctx) in
-        null_fresh_global t "braddr" module_
-      in
-      let br_addr = build_load br_addr_ptr "tmpaddr" builder in
-      let br = build_indirect_br br_addr (yield_count func) builder in
-      ictx#set_br_addr br_addr_ptr;
+      let br_addr = build_load (get_val ictx "br_addr") "tmpaddr" builder in
+      let br = build_indirect_br br_addr (yield_count ictx#func) builder in
       ictx#set_indirect_br br;
-      let end_bb = append_block ctx "postentry" step_func in
+      let end_bb = append_block ctx "postentry" ictx#step in
       add_destination br end_bb;
-      position_at_end init_bb builder;
 
       (* Add initial branch target to init function. *)
-      build_store (block_address step_func end_bb) br_addr_ptr builder |> ignore;
+      position_at_end init_bb builder;
+      build_store (block_address ictx#step end_bb) (get_val ~params:init_params ictx "br_addr")
+        builder |> ignore;
       build_ret_void builder |> ignore;
 
       (* Codegen the rest of the function body. *)
       position_at_end end_bb builder;
-      codegen_prog ictx body;
-      build_store (const_int (i1_type ctx) 1) done_var builder |> ignore;
+      codegen_prog ictx ictx#func.body;
+      build_store (const_int (i1_type ctx) 1) (get_val ictx "done") builder
+      |> ignore;
       build_ret (const_null ret_t) builder |> ignore;
 
-      Logs.debug (fun m -> m "%s" (string_of_llvalue init_func));
-      assert_valid_function init_func;
-      ictx#set_init init_func;
+      (* Check init function. *)
+      Logs.debug (fun m -> m "Checking function.");
+      Logs.debug (fun m -> m "%s" (string_of_llvalue ictx#init));
+      assert_valid_function ictx#init;
 
-      Logs.debug (fun m -> m "%s" (string_of_llvalue step_func));
+      (* Check step function. *)
+      Logs.debug (fun m -> m "%s" (string_of_llvalue ictx#step));
       Logs.debug (fun m -> m "%s"
                      (Sexp.to_string_hum
-                        ([%sexp_of:llvalue Hashtbl.M(String).t] ictx#values)));
-      assert_valid_function step_func;
-      ictx#set_step step_func;
-      Logs.info (fun m -> m "Codegen for func %s completed." name)
+                        ([%sexp_of:string list] (Hashtbl.keys ictx#values))));
+      assert_valid_function ictx#step;
+
+      Logs.info (fun m -> m "Codegen for func %s completed." ictx#name)
 
   let codegen_func : string -> func -> unit =
-    let rec codegen_stmt : _ -> stmt -> unit = fun fctx -> 
+    let rec codegen_stmt : _ -> stmt -> unit = fun fctx ->
       function
       | Loop { cond; body } -> codegen_loop fctx codegen_prog cond body
       | If { cond; tcase; fcase } ->
@@ -459,10 +502,10 @@ module Make (Ctx: CTX) () = struct
           val mutable llfunc = null_ptr
           val values = Hashtbl.create (module String) ()
 
-          method name = name
-          method func = func
-          method values = values
-          method llfunc = llfunc
+          method name : string = name
+          method func : func = func
+          method values : var Hashtbl.M(String).t = values
+          method llfunc : llvalue = llfunc
 
           method set_llfunc x = llfunc <- x
         end
@@ -472,7 +515,8 @@ module Make (Ctx: CTX) () = struct
       (* Create function. *)
       let func_t =
         let args_t =
-          List.map args ~f:(fun (_, t) -> codegen_type t) |> Array.of_list
+          (pointer_type !params_struct_t ::
+           List.map args ~f:(fun (_, t) -> codegen_type t)) |> Array.of_list
         in
         function_type (codegen_type ret_type) args_t
       in
@@ -484,11 +528,12 @@ module Make (Ctx: CTX) () = struct
       List.iter locals ~f:(fun (n, t) ->
           let lltype = codegen_type t in
           let var = build_alloca lltype n builder in
-          Hashtbl.set fctx#values ~key:n ~data:var);
+          Hashtbl.set fctx#values ~key:n ~data:(Local var));
 
       (* Put arguments into symbol table. *)
+      Hashtbl.set fctx#values ~key:"params" ~data:(Local (param func 0));
       List.iteri args ~f:(fun i (n, t) ->
-          Hashtbl.set fctx#values ~key:n ~data:(param func i));
+          Hashtbl.set fctx#values ~key:n ~data:(Local (param func (i + 1))));
 
       codegen_prog fctx body;
       build_ret_void builder |> ignore;
@@ -497,39 +542,189 @@ module Make (Ctx: CTX) () = struct
       assert_valid_function func;
       Logs.debug (fun m -> m "Codegen for func %s completed." name)
 
+  let codegen_create : unit -> unit = fun () ->
+    let func_t = function_type (pointer_type !params_struct_t)
+        [|pointer_type int_type|]
+    in
+    let llfunc = declare_function "create" func_t module_ in
+    let bb = append_block ctx "entry" llfunc in
+    let ctx = object
+      val values = Hashtbl.of_alist_exn (module String) [
+          "bufp", Local (param llfunc 0);
+        ]
+      method values = values
+    end in
+    position_at_end bb builder;
+    let params = build_malloc !params_struct_t "paramstmp" builder in
+    Hashtbl.set ctx#values ~key:"params" ~data:(Local params);
+    let buf = get_val ctx "buf" in
+    let bufp = get_val ctx "bufp" in
+    let bufp =
+      build_bitcast bufp (type_of buf |> element_type) "tmpbufp" builder
+    in
+    build_store bufp buf builder |> ignore;
+    build_ret params builder |> ignore
+
+  module ParamStructBuilder = struct
+    type t = { mutable vars : lltype list }
+
+    let create : unit -> t = fun () -> { vars = [] }
+
+    let build_global : t -> string -> lltype -> unit =
+      fun b n t ->
+        let idx = List.length b.vars in
+        b.vars <- t::b.vars;
+        match Hashtbl.add globals ~key:n ~data:(Param idx) with
+        | `Duplicate ->
+          fail (Error.of_string "Global variable already defined.")
+        | `Ok -> ()
+
+    let build_local : t -> _ -> string -> lltype -> unit =
+      fun b ictx n t ->
+        let idx = List.length b.vars in
+        b.vars <- t::b.vars;
+        match Hashtbl.add ictx#values ~key:n ~data:(Param idx) with
+        | `Duplicate ->
+          fail (Error.of_string "Local variable already defined.")
+        | `Ok -> ()
+
+    let build_param_struct : t -> string -> lltype = fun b n ->
+      let t = named_struct_type ctx n in
+      assert (List.length b.vars > 0);
+      struct_set_body t (List.rev b.vars |> Array.of_list) false;
+      Logs.debug (fun m -> m "Creating params struct %s." (string_of_lltype t));
+      assert (not (is_opaque t));
+      t
+  end
+
   let codegen : bytes -> IRGen.ir_module -> unit =
-    fun buf { iters; funcs; params } ->
+    fun buf { iters = ir_iters; funcs = ir_funcs; params } ->
       Logs.info (fun m -> m "Codegen started.");
 
       set_data_layout "e-m:o-i64:64-f80:128-n8:16:32:64-S128" module_;
 
+      let module SB = ParamStructBuilder in
+      let sb = SB.create () in
+
       (* Generate global constant for buffer. *)
-      let buf_t = pointer_type (array_type int_type
-                                  (Bytes.length buf / Serialize.isize))
+      let buf_t =
+        pointer_type (array_type int_type (Bytes.length buf / Serialize.isize))
       in
-      let buf = define_global "buf" (const_null buf_t)  module_ in
-      set_buf buf;
+      SB.build_global sb "buf" buf_t |> ignore;
 
-      (* Use locals to generate iterator struct. *)
-
-      (* Generate globals for parameters. *)
+      (* Generate global constants for parameters. *)
       List.iter params ~f:(fun (n, t) ->
           let lltype = match t with
             | BoolT -> codegen_type bool_t
             | IntT -> codegen_type int_t
             | StringT -> pointer_type (i8_type ctx)
           in
-          let var = null_fresh_global lltype n module_ in
-          Hashtbl.set globals ~key:n ~data:var);
+          SB.build_global sb n lltype |> ignore);
 
-        (* Generate code for the iterators *)
-        List.iter iters ~f:(fun (n, f) -> codegen_iter n f);
+      (* Generate code for the iterators *)
+      let ictxs = List.mapi ir_iters
+          ~f:(fun i (name, ({ args; body; ret_type; locals } as func)) ->
+              (* Create function context. *)
+              let ictx =
+                let null_ptr = const_null (pointer_type (void_type ctx)) in
+                object
+                  val mutable init = null_ptr
+                  val mutable step = null_ptr
+                  val mutable indirect_br = null_ptr
+                  val values = Hashtbl.create (module String) ()
 
-        (* Generate code for functions. *)
-        List.iter funcs ~f:(fun (n, f) -> codegen_func n f);
+                  method name : string = name
+                  method func : func = func
+                  method values : var Hashtbl.M(String).t = values
 
-        assert_valid_module module_;
-        Logs.info (fun m -> m "Codegen completed.")
+                  method init : llvalue = init
+                  method step : llvalue = step
+                  method indirect_br : llvalue = indirect_br
+
+                  method set_init x = init <- x
+                  method set_step x = step <- x
+                  method set_indirect_br x = indirect_br <- x
+                end
+              in
+              Hashtbl.set iters ~key:name ~data:ictx;
+
+              (* Create iterator done flag. *)
+              SB.build_local sb ictx "done" (i1_type ctx);
+
+              (* Create branch address storage. *)
+              SB.build_local sb ictx "br_addr" (pointer_type (i8_type ctx));
+
+              (* Create storage space for local variables & iterator args. *)
+              List.iter locals ~f:(fun (n, t) ->
+                  let lltype = codegen_type t in
+                  SB.build_local sb ictx n lltype);
+              ictx)
+      in
+
+      params_struct_t := SB.build_param_struct sb "params";
+
+      List.iter ictxs ~f:codegen_iter;
+
+      (* Generate code for functions. *)
+      List.iter ir_funcs ~f:(fun (n, f) -> codegen_func n f);
+
+      codegen_create ();
+
+      assert_valid_module module_;
+      Logs.info (fun m -> m "Codegen completed.")
+
+  let write_header : Stdio.Out_channel.t -> unit = fun ch ->
+    let open Format in
+    let rec pp_struct_elements fmt ts = Array.iteri ts ~f:(fun i t ->
+        fprintf fmt "@[<h>%a@ x%d;@]@," pp_type t i)
+    and pp_type fmt t = match classify_type t with
+      | Struct -> fprintf fmt "@[<hv 4>struct {@,%a}@]"
+                    pp_struct_elements (struct_element_types t)
+      | Void -> fprintf fmt "void"
+      | Integer -> begin match integer_bitwidth t with
+          | 1 -> fprintf fmt "bool"
+          | 8 -> fprintf fmt "char"
+          | 16 -> fprintf fmt "short"
+          | 32 -> fprintf fmt "int"
+          | 64 -> fprintf fmt "long"
+          | x -> Error.(create "Unknown bitwidth" x [%sexp_of:int] |> raise)
+        end
+      | Pointer ->
+        let elem_t = element_type t in
+        let elem_t = match classify_type elem_t with
+          | Array -> element_type elem_t
+          | _ -> elem_t
+        in
+        fprintf fmt "%a *" pp_type elem_t
+      | _ -> Error.(create "Unknown type." t [%sexp_of:lltype] |> raise)
+    and pp_params fmt ts = Array.iteri ts ~f:(fun i t ->
+        if i = 0 then fprintf fmt "params*" else fprintf fmt "%a" pp_type t;
+        if i < Array.length ts - 1 then fprintf fmt ",")
+    and pp_value_decl fmt v =
+      let t = type_of v in
+      let n = value_name v in
+      let ignore_val () = Logs.debug (fun m ->
+          m "Ignoring global %s." (string_of_lltype t))
+      in
+      match classify_type t with
+      | Pointer ->
+        let elem_t = element_type t in
+        begin match classify_type elem_t with
+          | Function ->
+            let t = elem_t in
+            fprintf fmt "%a %s(%a);@," pp_type (return_type t) n pp_params (param_types t)
+          | _ -> ignore_val ()
+        end
+      | Function -> fprintf fmt "%a %s(%a);@," pp_type (return_type t) n pp_params (param_types t)
+      | _ -> ignore_val ()
+    and pp_typedef fmt (n, t) =
+      fprintf fmt "typedef %a %s;@," pp_type t n
+    in
+
+    let fmt = Format.formatter_of_out_channel ch in
+    pp_typedef fmt ("params", !params_struct_t);
+    iter_functions (pp_value_decl fmt) module_;
+    pp_print_flush fmt ()
 
   (* let optimize : unit -> unit = fun () ->
    *   let engine = Execution_engine.create module_ in

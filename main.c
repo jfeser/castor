@@ -1,10 +1,11 @@
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 
-extern long* buf;
-extern void printer();
+extern void* create(long*);
+extern void printer(void*);
 
 int main(int argc, char **argv) {
   int fd, len;
@@ -32,10 +33,12 @@ int main(int argc, char **argv) {
     perror("Mapping db file failed");
     return 1;
   }
-  buf = mapped_buf;
+
+  void *params = create(mapped_buf);
 
   printf("Printing query results:\n");
-  printer();
+  printer(params);
   printf("Printing completed.");
+  free(params);
   return 0;
 }

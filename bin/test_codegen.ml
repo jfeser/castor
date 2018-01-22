@@ -49,9 +49,11 @@ let main () =
   in
   let buf = serialize layout in
   CGen.codegen buf ir_module;
+  Out_channel.with_file "scanner.h" ~f:CGen.write_header;
 
   Out_channel.with_file buf_file ~f:(fun ch -> Out_channel.output_bytes ch buf);
   Llvm.print_module ir_file module_;
+
 
   Caml.Sys.command (sprintf "llc -O0 -filetype=obj \"%s\"" ir_file) |> ignore;
   Caml.Sys.command (sprintf "clang -g -O0 scanner.o main.c -o scanner.exe") |> ignore

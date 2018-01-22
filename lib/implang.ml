@@ -729,7 +729,7 @@ module IRGen = struct
       let ret_type = (find_func func).ret_type in
       let b = create ["start", int_t] ret_type in
       let start = build_arg 0 b in
-      let pcount = Infix.(islice start) in
+      let pcount = build_defn "pcount" int_t Infix.(islice start) b in
       let cstart =
         build_defn "cstart" int_t Infix.(start + hsize (UnorderedListT t)) b
       in
@@ -741,7 +741,8 @@ module IRGen = struct
               let x = build_var "x" (find_func func).ret_type b in
               build_step x func b;
               build_yield x b) b;
-          build_assign Infix.(cstart + clen + hsize t) cstart b) b;
+          build_assign Infix.(cstart + clen + hsize t) cstart b;
+          build_assign Infix.(pcount - int 1) pcount b) b;
       build_func b
 
     let scan_ordered_list scan t Layout.({ field; order; lookup = lower, upper }) =
