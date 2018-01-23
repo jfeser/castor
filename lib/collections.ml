@@ -89,6 +89,8 @@ module Bytes = struct
     | _ -> failwith "Bad sexp."
 
   let sexp_of_t : t -> Sexp.t = fun x -> Atom (to_string x)
+
+  let econcat = concat empty
 end
 
 module T2 = struct

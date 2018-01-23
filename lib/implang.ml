@@ -142,7 +142,7 @@ and pp_prog : Format.formatter -> prog -> unit =
     | x::xs -> Format.fprintf fmt "%a@,%a" pp_stmt x pp_prog xs
 
 and pp_func : Format.formatter -> func -> unit = fun fmt { args; body } ->
-  Format.fprintf fmt "@[<v 4>fun %a ->@,%a@]@," pp_args args pp_prog body
+  Format.fprintf fmt "@[<v 4>fun (%a) {@,%a@]@,}" pp_args args pp_prog body
 
 module Infix = struct
   let tru = Bool true
@@ -483,6 +483,7 @@ module IRGen = struct
     iters : (string * func) list;
     funcs : (string * func) list;
     params : TypedName.t list;
+    buffer : Bytes.t;
   }
 
   exception IRGenError of Error.t [@@deriving sexp]
@@ -546,6 +547,8 @@ module IRGen = struct
   module Make () = struct
     let fresh = Fresh.create ()
     let funcs = ref []
+    let buffers = ref []
+
     (* let params = ref [] *)
     let mfuncs = Hashtbl.create (module String) ()
     let add_func : string -> func -> unit = fun n f ->
@@ -733,6 +736,7 @@ module IRGen = struct
       let cstart =
         build_defn "cstart" int_t Infix.(start + hsize (UnorderedListT t)) b
       in
+      (* FIXME: Should account for children where the length isn't known. *)
       build_loop Infix.(pcount > int 0) (fun b ->
           let ccount = count cstart t in
           let clen = len cstart t in
@@ -803,32 +807,54 @@ module IRGen = struct
       end;
       build_func b
 
-    let rec scan : Type.t -> string = fun t ->
-      let name = match t with
-        | EmptyT -> Fresh.name fresh "e%d"
-        | ScalarT _ -> Fresh.name fresh "s%d"
-        | CrossTupleT _ -> Fresh.name fresh "ct%d"
-        | ZipTupleT _ -> Fresh.name fresh "zt%d"
-        | UnorderedListT _ -> Fresh.name fresh "ul%d"
-        | OrderedListT _ -> Fresh.name fresh "ol%d"
-        | TableT _ -> Fresh.name fresh "t%d"
+    let scan_wrapper scan start t =
+      let func = scan t in
+      let ret_type = (find_func func).ret_type in
+      let b = create [] ret_type in
+      let tup = build_var "tup" ret_type b in
+      build_iter func [Infix.(int start)] b;
+      build_step tup func b;
+      build_loop Infix.(not (Done func)) (fun b ->
+          build_yield tup b;
+          build_step tup func b;
+        ) b;
+      build_func b
+
+    let scan : Layout.t -> func = fun l ->
+      let type_ = Type.of_layout_exn l in
+      let buf = Serialize.serialize l in
+      let start = List.map !buffers ~f:Bytes.length
+                  |> List.sum (module Int) ~f:(fun x -> x)
       in
-      let func = match t with
-        | EmptyT -> scan_empty
-        | ScalarT (x, _) -> scan_scalar x
-        | CrossTupleT x -> scan_crosstuple scan x
-        | ZipTupleT (x, m) -> scan_ziptuple scan x m
-        | UnorderedListT x -> scan_unordered_list scan x
-        | OrderedListT (x, m) -> scan_ordered_list scan x m
-        | TableT (_,_,_) -> failwith "Unsupported."
+      buffers := buf :: !buffers;
+
+      let rec scan t =
+        let name = match t with
+          | EmptyT -> Fresh.name fresh "e%d"
+          | ScalarT _ -> Fresh.name fresh "s%d"
+          | CrossTupleT _ -> Fresh.name fresh "ct%d"
+          | ZipTupleT _ -> Fresh.name fresh "zt%d"
+          | UnorderedListT _ -> Fresh.name fresh "ul%d"
+          | OrderedListT _ -> Fresh.name fresh "ol%d"
+          | TableT _ -> Fresh.name fresh "t%d"
+        in
+        let func = match t with
+          | EmptyT -> scan_empty
+          | ScalarT (x, _) -> scan_scalar x
+          | CrossTupleT x -> scan_crosstuple scan x
+          | ZipTupleT (x, m) -> scan_ziptuple scan x m
+          | UnorderedListT x -> scan_unordered_list scan x
+          | OrderedListT (x, m) -> scan_ordered_list scan x m
+          | TableT (_,_,_) -> failwith "Unsupported."
+        in
+        add_func name func; name
       in
-      add_func name func; name
+      scan_wrapper scan start type_
 
     let printer : string -> func = fun func ->
       let open Infix in
       let b = create [] VoidT in
-      let start = int 0 in
-      build_iter func [start] b;
+      build_iter func [] b;
       let x = build_var "x" (find_func func).ret_type b in
       build_step x func b;
       build_loop (not (Done func)) (fun b ->
@@ -836,13 +862,6 @@ module IRGen = struct
           build_step x func b;
         ) b;
       build_func b
-
-    let rec gen_layout : Type.t -> ir_module = fun t ->
-      scan t |> ignore;
-      let name, _ = List.hd_exn !funcs in
-      { iters = List.rev !funcs;
-        funcs = ["printer", printer name];
-        params = Type.params t |> Set.to_list; }
 
     let project gen fields r =
       let func = gen r in
@@ -858,9 +877,8 @@ module IRGen = struct
           fail (Error.create "Expected a TupleT." t [%sexp_of:type_])
       in
 
-      let b = create ["start", int_t] ret_t in
-      let start = build_arg 0 b in
-      build_iter func [start] b;
+      let b = create [] ret_t in
+      build_iter func [] b;
 
       let in_tup = build_var "tup" child_ret_t b in
       let out_tup = Tuple (List.map idxs ~f:(fun i -> Index (in_tup, i))) in
@@ -879,9 +897,8 @@ module IRGen = struct
 
       let ret_t = (find_func func).ret_type in
 
-      let b = create ["start", int_t] ret_t in
-      let start = build_arg 0 b in
-      build_iter func [start] b;
+      let b = create [] ret_t in
+      build_iter func [] b;
 
       let tup = build_var "tup" ret_t b in
 
@@ -928,11 +945,10 @@ module IRGen = struct
         |> List.all_equal_exn
       in
 
-      let b = create ["start", int_t] ret_t in
-      let start = build_arg 0 b in
+      let b = create [] ret_t in
       let tup = build_var "tup" ret_t b in
       List.iter funcs ~f:(fun func ->
-          build_iter func [start] b;
+          build_iter func [] b;
           build_loop Infix.(not (Done func)) (fun b ->
               build_yield tup b;
               build_step tup func b;
@@ -949,26 +965,24 @@ module IRGen = struct
         | Concat _ -> Fresh.name fresh "concat%d"
         | Relation _ -> Fresh.name fresh "relation%d"
       in
-      match r with
-      | Scan l -> scan (Type.of_layout_exn l)
-      | Project (x, r) ->
-        let func = project gen_ralgebra x r in
-        add_func name func; name
-      | Filter (x, r) ->
-        let func = filter gen_ralgebra x r in
-        add_func name func; name
-      | EqJoin (f1, f2, r1, r2) -> failwith "unimplemented"
+      let func = match r with
+        | Scan l -> scan l
+        | Project (x, r) -> project gen_ralgebra x r
+        | Filter (x, r) -> filter gen_ralgebra x r
+        | EqJoin (f1, f2, r1, r2) -> failwith "unimplemented"
         (* let func = eq_join gen_ralgebra f1 f2 r1 r2 in
          * add_func name func; name *)
-      | Concat rs ->
-        let func = concat gen_ralgebra rs in
-        add_func name func; name
-      | Relation x -> failwith "Bare relation found."
+        | Concat rs -> concat gen_ralgebra rs
+        | Relation x -> failwith "Bare relation found."
+      in
+      add_func name func; name
 
     let irgen : Ralgebra.t -> ir_module = fun r ->
       let name = gen_ralgebra r in
       { iters = List.rev !funcs;
         funcs = ["printer", printer name];
-        params = Ralgebra.params r |> Set.to_list; }
+        params = Ralgebra.params r |> Set.to_list;
+        buffer = List.rev !buffers |> Bytes.econcat;
+      }
   end
 end

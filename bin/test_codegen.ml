@@ -50,11 +50,10 @@ let main () =
       let builder = builder ctx
     end) ()
   in
-  let buf = serialize layout in
-  CGen.codegen buf ir_module;
+  CGen.codegen ir_module.buffer ir_module;
   Out_channel.with_file "scanner.h" ~f:CGen.write_header;
 
-  Out_channel.with_file buf_file ~f:(fun ch -> Out_channel.output_bytes ch buf);
+  Out_channel.with_file buf_file ~f:(fun ch -> Out_channel.output_bytes ch ir_module.buffer);
   Llvm.print_module ir_file module_;
 
 

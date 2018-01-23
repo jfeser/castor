@@ -38,8 +38,6 @@ let align : int -> bytes -> bytes = fun align b ->
     let padding = align - slop in
     Bytes.cat b (Bytes.make padding '\x00')
 
-let econcat = Bytes.concat Bytes.empty
-
 let rec serialize : Layout.t -> bytes = function
   | Scalar { rel; field; idx; value } -> begin match value with
       | `Bool true -> bytes_of_int 1
@@ -50,16 +48,16 @@ let rec serialize : Layout.t -> bytes = function
         let unpadded_body = Bytes.of_string x in
         let body = unpadded_body |> align bsize in
         let len = Bytes.length body in
-        econcat [bytes_of_int len; body]
+        Bytes.econcat [bytes_of_int len; body]
     end
   | CrossTuple ls
   | ZipTuple ls
   | UnorderedList ls
   | OrderedList (ls, _) as l ->
     let count = Layout.ntuples l in
-    let body = List.map ls ~f:serialize |> econcat in
+    let body = List.map ls ~f:serialize |> Bytes.econcat in
     let len = Bytes.length body in
-    econcat [bytes_of_int count; bytes_of_int len; body]
+    Bytes.econcat [bytes_of_int count; bytes_of_int len; body]
   | Table _ -> failwith "Unsupported"
   | Empty -> Bytes.empty
 
