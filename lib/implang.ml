@@ -804,15 +804,23 @@ module IRGen = struct
       build_func b
 
     let rec scan : Type.t -> string = fun t ->
-      let name = Fresh.name fresh "f%d" in
+      let name = match t with
+        | EmptyT -> Fresh.name fresh "e%d"
+        | ScalarT _ -> Fresh.name fresh "s%d"
+        | CrossTupleT _ -> Fresh.name fresh "ct%d"
+        | ZipTupleT _ -> Fresh.name fresh "zt%d"
+        | UnorderedListT _ -> Fresh.name fresh "ul%d"
+        | OrderedListT _ -> Fresh.name fresh "ol%d"
+        | TableT _ -> Fresh.name fresh "t%d"
+      in
       let func = match t with
-        | Type.EmptyT -> scan_empty
-        | Type.ScalarT (x, _) -> scan_scalar x
-        | Type.CrossTupleT x -> scan_crosstuple scan x
-        | Type.ZipTupleT (x, m) -> scan_ziptuple scan x m
-        | Type.UnorderedListT x -> scan_unordered_list scan x
-        | Type.OrderedListT (x, m) -> scan_ordered_list scan x m
-        | Type.TableT (_,_,_) -> failwith "Unsupported."
+        | EmptyT -> scan_empty
+        | ScalarT (x, _) -> scan_scalar x
+        | CrossTupleT x -> scan_crosstuple scan x
+        | ZipTupleT (x, m) -> scan_ziptuple scan x m
+        | UnorderedListT x -> scan_unordered_list scan x
+        | OrderedListT (x, m) -> scan_ordered_list scan x m
+        | TableT (_,_,_) -> failwith "Unsupported."
       in
       add_func name func; name
 
@@ -933,7 +941,14 @@ module IRGen = struct
       build_func b
 
     let rec gen_ralgebra : Ralgebra.t -> string = fun r -> 
-      let name = Fresh.name fresh "f%d" in
+      let name = match r with
+        | Project _ -> Fresh.name fresh "project%d"
+        | Filter _ -> Fresh.name fresh "filter%d"
+        | EqJoin _ -> Fresh.name fresh "eqjoin%d"
+        | Scan _ -> Fresh.name fresh "scan%d"
+        | Concat _ -> Fresh.name fresh "concat%d"
+        | Relation _ -> Fresh.name fresh "relation%d"
+      in
       match r with
       | Scan l -> scan (Type.of_layout_exn l)
       | Project (x, r) ->
