@@ -37,7 +37,7 @@ let main () =
   Logs.debug (fun m -> m "Relation schema %a." Sexp.pp_hum ([%sexp_of:Schema.t] (Schema.of_relation taxi)));
   Logs.debug (fun m -> m "Layout schema %a." Sexp.pp_hum ([%sexp_of:Schema.t] (Layout.to_schema_exn layout)));
 
-  let l = Ralgebra.(Filter (Binop (Gt, Field (Relation.field_exn taxi "xpos"), Var ("xv", IntT)), Scan layout)) in
+  let l = Ralgebra0.(Filter (Binop (Gt, Field (Relation.field_exn taxi "xpos"), Var ("xv", IntT)), Scan layout)) in
 
   let module IGen = IRGen.Make () in
   let ir_module = IGen.irgen l in

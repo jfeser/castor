@@ -4,34 +4,48 @@ open Db
 open Type0
 
 module T = struct
-  type op =
-    | Eq
-    | Lt
-    | Le
-    | Gt
-    | Ge
-    | And
-    | Or
-  [@@deriving compare, sexp]
-
-  type pred =
-    | Var of TypedName.t
-    | Field of Field.t
-    | Binop of (op * pred * pred)
-    | Varop of (op * pred list)
-  [@@deriving compare, sexp]
-
-  type t =
-    | Project of Field.t list * t
-    | Filter of pred * t
-    | EqJoin of Field.t * Field.t * t * t
-    | Scan of Layout.t
-    | Concat of t list
-    | Relation of Relation.t
-  [@@deriving compare, sexp]
+  type op = Ralgebra0.op [@@deriving compare, sexp]
+  type pred = Field.t Ralgebra0.pred [@@deriving compare, sexp]
+  type t = (Field.t, Relation.t) Ralgebra0.t [@@deriving compare, sexp]
 end
 include T
 include Comparable.Make(T)
+
+let rec relations : ('f, 'r) Ralgebra0.t -> 'r list = function
+  | Project (_, r)
+  | Filter (_, r) -> relations r
+  | EqJoin (_, _, r1, r2) -> relations r1 @ relations r2
+  | Scan _ -> []
+  | Concat rs -> List.concat_map rs ~f:relations
+  | Relation r -> [r]
+
+let resolve : Postgresql.connection -> (string * string, string) Ralgebra0.t
+  -> t = fun conn ralgebra ->
+  let rels =
+    relations ralgebra
+    |> List.dedup_and_sort
+    |> List.map ~f:(fun r -> (r, Relation.from_db conn r))
+    |> Map.of_alist_exn (module String)
+  in
+  let open Ralgebra0 in
+  let resolve_relation = Map.find_exn rels in
+  let resolve_field (r, f) = Relation.field_exn (resolve_relation r) f in
+  let rec resolve_pred = function
+    | Var _ as p -> p
+    | Field f -> Field (resolve_field f)
+    | Binop (op, p1, p2) -> Binop (op, resolve_pred p1, resolve_pred p2)
+    | Varop (op, ps) -> Varop (op, List.map ps ~f:resolve_pred)
+  in
+  let rec resolve = function
+    | Project (fs, r) -> Project (List.map ~f:resolve_field fs, resolve r)
+    | Filter (p, r) -> Filter (resolve_pred p, resolve r)
+    | Concat rs -> Concat (List.map rs ~f:resolve)
+    | Relation r -> Relation (resolve_relation r)
+    | Scan _ as r -> r
+    | EqJoin (f1, f2, r1, r2) ->
+      EqJoin (resolve_field f1, resolve_field f2, resolve r1, resolve r2)
+  in
+  resolve ralgebra
 
 let rec pred_fields : pred -> Field.t list = function
   | Var _ -> []
@@ -71,6 +85,15 @@ let rec to_string : t -> string =
     List.map rs ~f:to_string |> String.concat ~sep:", " |> sprintf "Concat(%s)"
   | Relation r -> r.name
 
+let of_string_exn : Postgresql.connection -> string -> t = fun conn s ->
+  let lexbuf = Lexing.from_string s in
+  try
+    Ralgebra_parser.ralgebra_eof Ralgebra_lexer.token lexbuf |> resolve conn
+  with
+  | e -> Error.(tag_arg (of_exn e) "Parse error."
+                  (s, lexbuf.lex_curr_p.pos_cnum) [%sexp_of:string * int]
+                |> raise)
+
 let rec layouts : t -> Layout.t list = function
   | Project (_, r)
   | Filter (_, r) -> layouts r
@@ -95,6 +118,7 @@ let rec params : t -> Set.M(TypedName).t =
   | Project (_, _) | Relation _ -> empty
   | Scan l -> Layout.params l
   | Filter (p, r) ->
+    let open Ralgebra0 in
     let rec pred_params = function
       | Field _ -> empty
       | Var v -> Set.singleton (module TypedName) v
@@ -103,5 +127,5 @@ let rec params : t -> Set.M(TypedName).t =
     in
     Set.union (pred_params p) (params r)
   | EqJoin (_, _, r1, r2) -> Set.union (params r1) (params r2)
-  | Concat rs -> List.map ~f:params rs |> union_list 
-  
+  | Concat rs -> List.map ~f:params rs |> union_list
+

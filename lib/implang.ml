@@ -878,7 +878,7 @@ module IRGen = struct
       let tup = build_var "tup" ret_t b in
 
       let rec gen_pred =
-        let module R = Ralgebra in
+        let module R = Ralgebra0 in
         function
         | R.Var (n, t) -> Var n
         | R.Field f -> Index (tup, Db.Schema.field_idx_exn schema f)

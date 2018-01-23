@@ -111,7 +111,7 @@ let eval_relation : Relation.t -> Tuple.t Seq.t =
 
 let eval : PredCtx.t -> Ralgebra.t -> Tuple.t Seq.t =
   fun ctx r ->
-    let open Ralgebra in
+    let open Ralgebra0 in
     let rec eval = function
       | Scan l -> eval_layout ctx l
       | Project (fs, r) ->

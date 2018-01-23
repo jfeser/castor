@@ -104,7 +104,7 @@ let tf_or_filter : t = {
   name = "or-filter";
   f = function
     | Filter (Varop (Or, ps), q) ->
-      [ Concat (List.map ps ~f:(fun p -> Ralgebra.Filter (p, q))) ]
+      [ Concat (List.map ps ~f:(fun p -> Ralgebra0.Filter (p, q))) ]
     | _ -> []
 }
 
@@ -157,7 +157,7 @@ let tf_push_project : t =
         [ Project (Set.to_list fs_post,
                    Filter (p, Project (Set.to_list fs_pre, q))) ]
     | Project (fs, (Concat qs)) ->
-      [ Concat (List.map qs ~f:(fun q -> Project (fs, q))) ]
+      [ Concat (List.map qs ~f:(fun q -> Ralgebra0.Project (fs, q))) ]
     | Project (fs, (EqJoin (f1, f2, q1, q2))) ->
       let fs_post = Set.of_list (module Field) fs in
       let fs_pre =
@@ -205,17 +205,17 @@ let transform : Postgresql.connection -> Ralgebra.t -> Ralgebra.t list =
       let rs' = match r with
         | Scan _ | Relation _ -> []
         | Project (fs, r') ->
-          List.map (transform r') ~f:(fun r' -> Project (fs, r'))
+          List.map (transform r') ~f:(fun r' -> Ralgebra0.Project (fs, r'))
         | Filter (ps, r') ->
-          List.map (transform r') ~f:(fun r' -> Filter (ps, r'))
+          List.map (transform r') ~f:(fun r' -> Ralgebra0.Filter (ps, r'))
         | EqJoin (f1, f2, r1, r2) ->
-          List.map (transform r1) ~f:(fun r1 -> EqJoin (f1, f2, r1, r2))
-          @ List.map (transform r2) ~f:(fun r2 -> EqJoin (f1, f2, r1, r2))
+          List.map (transform r1) ~f:(fun r1 -> Ralgebra0.EqJoin (f1, f2, r1, r2))
+          @ List.map (transform r2) ~f:(fun r2 -> Ralgebra0.EqJoin (f1, f2, r1, r2))
         | Concat rs ->
           List.map rs ~f:transform
           |> List.transpose
           |> (fun x -> Option.value_exn x)
-          |> List.map ~f:(fun rs -> Concat rs)
+          |> List.map ~f:(fun rs -> Ralgebra0.Concat rs)
       in
       rs @ rs'
     in

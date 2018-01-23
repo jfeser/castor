@@ -1,9 +1,9 @@
 (jbuild_version 1)
 
 (menhir
- ((modules (parser))))
+ ((modules (parser ralgebra_parser))))
 
-(ocamllex (lexer))
+(ocamllex (lexer ralgebra_lexer))
 
 (library
  ((name dblayout)
