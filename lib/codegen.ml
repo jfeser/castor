@@ -67,6 +67,41 @@ module Make (Ctx: CTX) () = struct
       lookup_chain maps key
   end
 
+  let null_ptr = const_null (pointer_type (void_type ctx))
+
+  class func_ctx name func = object
+    val values = Hashtbl.create (module String) ()
+
+    method values : var Hashtbl.M(String).t = values
+    method name : string = name
+    method func : func = func
+  end
+
+  class ictx name func = object
+    inherit func_ctx name func
+
+    val mutable init = null_ptr
+    val mutable step = null_ptr
+    val mutable indirect_br = null_ptr
+
+    method init : llvalue = init
+    method step : llvalue = step
+    method indirect_br : llvalue = indirect_br
+    method set_init x = init <- x
+    method set_step x = step <- x
+    method set_indirect_br x = indirect_br <- x
+  end
+
+  class fctx name func = object
+    inherit func_ctx name func
+
+    val mutable llfunc = null_ptr
+
+    method values : var Hashtbl.M(String).t = values
+    method llfunc : llvalue = llfunc
+    method set_llfunc x = llfunc <- x
+  end
+
   let iters = Hashtbl.create (module String) ()
   let funcs = Hashtbl.create (module String) ()
   let globals = Hashtbl.create (module String) ()
@@ -431,6 +466,7 @@ module Make (Ctx: CTX) () = struct
         AttrIndex.Function;
       add_function_attr ictx#init (create_string_attr ctx "alwaysinline" "")
         AttrIndex.Function;
+
       let init_params = param ictx#init 0 in
       Hashtbl.set ictx#values ~key:"params" ~data:(Local init_params);
       let init_bb = append_block ctx "entry" ictx#init in
@@ -459,6 +495,7 @@ module Make (Ctx: CTX) () = struct
         AttrIndex.Function;
       add_function_attr ictx#step (create_string_attr ctx "alwaysinline" "")
         AttrIndex.Function;
+
       let step_params = Local (param ictx#step 0) in
       Hashtbl.set ictx#values ~key:"params" ~data:step_params;
       let bb = append_block ctx "entry" ictx#step in
@@ -524,21 +561,7 @@ module Make (Ctx: CTX) () = struct
       if Hashtbl.(mem iters name || mem funcs name) then
         fail (Error.of_string "Function already defined.");
 
-      let fctx =
-        let null_ptr = const_null (pointer_type (void_type ctx)) in
-        object
-          val mutable llfunc = null_ptr
-          val values = Hashtbl.create (module String) ()
-
-          method name : string = name
-          method func : func = func
-          method values : var Hashtbl.M(String).t = values
-          method llfunc : llvalue = llfunc
-
-          method set_llfunc x = llfunc <- x
-        end
-      in
-      Hashtbl.set funcs ~key:name ~data:fctx;
+      let fctx = new fctx name func in
 
       (* Create function. *)
       let func_t =
@@ -548,9 +571,11 @@ module Make (Ctx: CTX) () = struct
         in
         function_type (codegen_type ret_type) args_t
       in
-      let func = declare_function name func_t module_ in
-      let bb = append_block ctx "entry" func in
+      fctx#set_llfunc (declare_function name func_t module_);
+      let bb = append_block ctx "entry" fctx#llfunc in
       position_at_end bb builder;
+
+      Hashtbl.set funcs ~key:name ~data:fctx#llfunc;
 
       (* Create storage space for local variables & iterator args. *)
       List.iter locals ~f:(fun (n, t) ->
@@ -559,15 +584,16 @@ module Make (Ctx: CTX) () = struct
           Hashtbl.set fctx#values ~key:n ~data:(Local var));
 
       (* Put arguments into symbol table. *)
-      Hashtbl.set fctx#values ~key:"params" ~data:(Local (param func 0));
+      Hashtbl.set fctx#values ~key:"params" ~data:(Local (param fctx#llfunc 0));
       List.iteri args ~f:(fun i (n, t) ->
-          Hashtbl.set fctx#values ~key:n ~data:(Local (param func (i + 1))));
+          Hashtbl.set fctx#values ~key:n
+            ~data:(Local (param fctx#llfunc (i + 1))));
 
       codegen_prog fctx body;
       build_ret_void builder |> ignore;
 
-      Logs.debug (fun m -> m "%s" (string_of_llvalue func));
-      assert_valid_function func;
+      Logs.debug (fun m -> m "%s" (string_of_llvalue fctx#llfunc));
+      assert_valid_function fctx#llfunc;
       Logs.debug (fun m -> m "Codegen for func %s completed." name)
 
   let codegen_create : unit -> unit = fun () ->
@@ -595,16 +621,24 @@ module Make (Ctx: CTX) () = struct
 
   let codegen_param_setters : (string * lltype) list -> unit = fun params ->
     List.iter params ~f:(fun (n, t) ->
-        let func_t =
-          function_type (void_type ctx) [|pointer_type !(params_struct_t); t|]
+        let name = sprintf "set_%s" n in
+        let llfunc =
+          let func_t =
+            function_type (void_type ctx) [|pointer_type !(params_struct_t); t|]
+          in
+          declare_function name func_t module_
         in
-        let llfunc = declare_function (sprintf "set_%s" n) func_t module_ in
+
         let fctx = object
           val values = Hashtbl.of_alist_exn (module String) [
               "params", Local (param llfunc 0);
             ]
           method values = values
+          method llfunc = llfunc
         end in
+
+        Hashtbl.set funcs ~key:name ~data:fctx#llfunc;
+
         let bb = append_block ctx "entry" llfunc in
         position_at_end bb builder;
         build_store (param llfunc 1) (get_val fctx n) builder |> ignore;
@@ -675,27 +709,7 @@ module Make (Ctx: CTX) () = struct
       let ictxs = List.mapi ir_iters
           ~f:(fun i (name, ({ args; body; ret_type; locals } as func)) ->
               (* Create function context. *)
-              let ictx =
-                let null_ptr = const_null (pointer_type (void_type ctx)) in
-                object
-                  val mutable init = null_ptr
-                  val mutable step = null_ptr
-                  val mutable indirect_br = null_ptr
-                  val values = Hashtbl.create (module String) ()
-
-                  method name : string = name
-                  method func : func = func
-                  method values : var Hashtbl.M(String).t = values
-
-                  method init : llvalue = init
-                  method step : llvalue = step
-                  method indirect_br : llvalue = indirect_br
-
-                  method set_init x = init <- x
-                  method set_step x = step <- x
-                  method set_indirect_br x = indirect_br <- x
-                end
-              in
+              let ictx = new ictx name func in
               Hashtbl.set iters ~key:name ~data:ictx;
 
               (* Create iterator done flag. *)
@@ -755,7 +769,7 @@ module Make (Ctx: CTX) () = struct
       let t = type_of v in
       let n = value_name v in
       let ignore_val () = Logs.debug (fun m ->
-          m "Ignoring global %s." (string_of_lltype t))
+          m "Ignoring global %s." (string_of_llvalue v))
       in
       match classify_type t with
       | Pointer ->
@@ -773,8 +787,9 @@ module Make (Ctx: CTX) () = struct
     in
 
     let fmt = Format.formatter_of_out_channel ch in
-    pp_typedef fmt ("params", !params_struct_t);
-    iter_functions (pp_value_decl fmt) module_;
+    fprintf fmt "typedef void params;";
+    Hashtbl.data funcs |> List.iter ~f:(fun llfunc ->
+        pp_value_decl fmt llfunc);
     pp_print_flush fmt ()
 
   (* let optimize : unit -> unit = fun () ->
