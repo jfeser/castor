@@ -419,6 +419,18 @@ module Make (Ctx: CTX) () = struct
       in
       ictx#set_init
         (declare_function (init_name ictx#name) init_func_t module_);
+
+      (* Set init function attributes. *)
+      add_function_attr ictx#init (create_string_attr ctx "writeonly" "")
+        AttrIndex.Function;
+      add_function_attr ictx#init (create_string_attr ctx "argmemonly" "")
+        AttrIndex.Function;
+      add_function_attr ictx#init (create_string_attr ctx "nounwind" "")
+        AttrIndex.Function;
+      add_function_attr ictx#init (create_string_attr ctx "norecurse" "")
+        AttrIndex.Function;
+      add_function_attr ictx#init (create_string_attr ctx "alwaysinline" "")
+        AttrIndex.Function;
       let init_params = param ictx#init 0 in
       Hashtbl.set ictx#values ~key:"params" ~data:(Local init_params);
       let init_bb = append_block ctx "entry" ictx#init in
@@ -437,6 +449,16 @@ module Make (Ctx: CTX) () = struct
       in
       ictx#set_step
         (declare_function (step_name ictx#name) step_func_t module_);
+
+      (* Set step function attributes. *)
+      add_function_attr ictx#step (create_string_attr ctx "argmemonly" "")
+        AttrIndex.Function;
+      add_function_attr ictx#step (create_string_attr ctx "nounwind" "")
+        AttrIndex.Function;
+      add_function_attr ictx#step (create_string_attr ctx "norecurse" "")
+        AttrIndex.Function;
+      add_function_attr ictx#step (create_string_attr ctx "alwaysinline" "")
+        AttrIndex.Function;
       let step_params = Local (param ictx#step 0) in
       Hashtbl.set ictx#values ~key:"params" ~data:step_params;
       let bb = append_block ctx "entry" ictx#step in
@@ -451,8 +473,8 @@ module Make (Ctx: CTX) () = struct
 
       (* Add initial branch target to init function. *)
       position_at_end init_bb builder;
-      build_store (block_address ictx#step end_bb) (get_val ~params:init_params ictx "br_addr")
-        builder |> ignore;
+      build_store (block_address ictx#step end_bb)
+        (get_val ~params:init_params ictx "br_addr") builder |> ignore;
       build_ret_void builder |> ignore;
 
       (* Codegen the rest of the function body. *)
