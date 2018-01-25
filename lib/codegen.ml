@@ -197,7 +197,7 @@ module Make (Ctx: CTX) () = struct
     | TupleT ts ->
       struct_type ctx (List.map ts ~f:codegen_type |> Array.of_list)
     | VoidT -> void_type ctx
-    | t -> fail (Error.create "Bad argument type." t [%sexp_of:type_])
+    | t -> Error.(create "Bad argument type." t [%sexp_of:type_] |> raise)
 
   let byte_type = integer_type ctx 8
   let int_type = codegen_type (BytesT Serialize.isize)

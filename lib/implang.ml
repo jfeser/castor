@@ -608,6 +608,7 @@ module IRGen = struct
 
     open Serialize
 
+    (** The length of a layout in bytes (excluding the header). *)
     let len start =
       let open Infix in
       let open Type in
@@ -629,6 +630,7 @@ module IRGen = struct
         islice start
       | TableT (_,_,_) -> failwith "Unsupported."
 
+    (** The length of a layout header in bytes. *)
     let hsize =
       let open Infix in
       let open Type in
@@ -694,38 +696,39 @@ module IRGen = struct
       loops b Infix.(start + hsize (CrossTupleT ts)) [] funcs;
       build_func b
 
-    (* FIXME: This whole function needs rewriting. *)
-    let scan_ziptuple scan ts Type.({ len; }) =
+    let scan_ziptuple scan ts (Type.({ len = count }) as t) =
       let funcs = List.map ts ~f:scan in
-      let open Infix in
-      let inits, inits_t =
-        List.mapi funcs ~f:(fun i f ->
-            let var = sprintf "f%d" i in
-            (* FIXME: Should use correct start position. *)
-            let stmt = iter var f [] in
-            let typ = IterT (find_func f).ret_type in
-            (stmt, (var, typ)))
-        |> List.unzip
+      let ret_type =
+        List.map funcs ~f:(fun func -> match (find_func func).ret_type with
+            | TupleT ts -> ts
+            | t -> [t])
+        |> List.concat
+        |> fun x -> TupleT x
       in
-      let assigns, assigns_t =
-        List.mapi funcs ~f:(fun i f ->
-            let var = sprintf "x%d" i in
-            let stmt = var += sprintf "f%d" i in
-            let typ = (find_func f).ret_type in
-            (stmt, (var, typ)))
-        |> List.unzip
-      in
-      let yield = Yield (Tuple (List.init (List.length funcs) ~f:(fun i ->
-          Var (sprintf "x%d" i))))
-      in
-      let yield_t = TupleT (List.map assigns_t ~f:(fun (_, t) -> t)) in
-      let body = inits @ [loop (int len) (assigns @ [yield])] in
-      {
-        args = ["start", int_t];
-        body;
-        ret_type = yield_t;
-        locals = assigns_t @ inits_t;
-      }
+      let b = create ["start", int_t] ret_type in
+      let start = build_arg 0 b in
+
+      (* Build iterator initializers using the computed start positions. *)
+      List.zip_exn funcs ts
+      |> List.fold_left ~init:Infix.(start + hsize (ZipTupleT (ts, t)))
+        ~f:(fun start (f, t) ->
+            build_iter f [start] b;
+            Infix.(start + hsize t + len start t)) |> ignore;
+
+      build_count_loop Infix.(int count) (fun b ->
+          let child_tuples = List.map funcs ~f:(fun f ->
+              build_fresh_var "t" (find_func f).ret_type b)
+          in
+          List.iter2_exn funcs child_tuples ~f:(fun f t ->
+              build_step t f b);
+          let tup = List.map2_exn ts child_tuples ~f:(fun in_t child_tup ->
+              List.init (Type.width in_t) ~f:(fun i -> Index (child_tup, i)))
+                    |> List.concat
+                    |> fun l -> Tuple l
+          in
+          build_yield tup b
+        ) b;
+      build_func b
 
     let scan_unordered_list scan t =
       let func = scan t in
@@ -987,7 +990,7 @@ module IRGen = struct
         (* let func = eq_join gen_ralgebra f1 f2 r1 r2 in
          * add_func name func; name *)
         | Concat rs -> concat gen_ralgebra rs
-        | Relation x -> scan (Transform.row_layout x)
+        | Relation x -> scan (Transform.col_layout x)
       in
       add_func name func; name
 
