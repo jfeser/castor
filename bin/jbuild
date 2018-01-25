@@ -1,7 +1,7 @@
 (jbuild_version 1)
 
 (executables
- ((names (test_layout test_locality test_eval test_pcify test_codegen))
-  (libraries (base postgresql dblayout))
-  (preprocess (pps (ppx_sexp_conv ppx_compare ppx_driver.runner -no-check)))
+ ((names (test_layout test_locality test_eval test_pcify test_codegen perf))
+  (libraries (core postgresql dblayout fmt fmt.cli fmt.tty cmdliner logs logs.fmt logs.cli))
+  (preprocess (pps (ppx_sexp_conv ppx_compare ppx_let ppx_driver.runner -no-check)))
   (flags (:standard -g -bin-annot))))

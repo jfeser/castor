@@ -863,6 +863,20 @@ module IRGen = struct
         ) b;
       build_func b
 
+    let counter : string -> func = fun func ->
+      let open Infix in
+      let b = create [] VoidT in
+      build_iter func [] b;
+      let c = build_defn "c" int_t Infix.(int 0) b in
+      let x = build_var "x" (find_func func).ret_type b in
+      build_step x func b;
+      build_loop (not (Done func)) (fun b ->
+          build_assign Infix.(c + int 1) c b;
+          build_step x func b;
+        ) b;
+      build_print c b;
+      build_func b
+
     let project gen fields r =
       let func = gen r in
 
@@ -973,14 +987,14 @@ module IRGen = struct
         (* let func = eq_join gen_ralgebra f1 f2 r1 r2 in
          * add_func name func; name *)
         | Concat rs -> concat gen_ralgebra rs
-        | Relation x -> failwith "Bare relation found."
+        | Relation x -> scan (Transform.row_layout x)
       in
       add_func name func; name
 
     let irgen : Ralgebra.t -> ir_module = fun r ->
       let name = gen_ralgebra r in
       { iters = List.rev !funcs;
-        funcs = ["printer", printer name];
+        funcs = ["printer", printer name; "counter", counter name];
         params = Ralgebra.params r |> Set.to_list;
         buffer = List.rev !buffers |> Bytes.econcat;
       }

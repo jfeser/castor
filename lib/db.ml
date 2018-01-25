@@ -11,7 +11,7 @@ let exec : ?verbose : bool -> ?params : string list -> Postgresql.connection ->
             String.substr_replace_all
               ~pattern:(Printf.sprintf "$%d" i) ~with_:v q)
     in
-    if verbose then Stdio.print_endline query;
+    Logs.debug (fun m -> m "Executing query: %s" query);
     let r = conn#exec query in
     match r#status with
     | Postgresql.Fatal_error -> failwith r#error

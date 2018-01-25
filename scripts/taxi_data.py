@@ -3,12 +3,13 @@
 import psycopg2
 import datetime
 import random
+from tqdm import tqdm
 
 GRID_WIDTH = 100
 AVG_TRACE_LEN = 30
 TRACE_RES = datetime.timedelta(minutes=1)
 TRACE_START = datetime.datetime.today()
-NUM_TRACES = 100
+NUM_TRACES = 10000
 
 DB_NAME = 'sam_analytics_small'
 
@@ -32,7 +33,7 @@ if __name__ == '__main__':
     with conn.cursor() as c:
         c.execute('drop table if exists taxi')
         c.execute('create table taxi (id int, xpos int, ypos int, time timestamp)')
-        for trace_id in range(NUM_TRACES):
+        for trace_id in tqdm(range(NUM_TRACES)):
             trace = taxi_trace(trace_id)
             for t in trace:
                 c.execute('INSERT INTO taxi VALUES (%s, %s, %s, %s)', t)

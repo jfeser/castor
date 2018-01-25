@@ -119,3 +119,11 @@ module Fresh = struct
         Hash_set.add x.names n; n
       end
 end
+
+module String = struct
+  include String
+
+  let template : t -> t list -> t = fun s x ->
+    List.foldi x ~init:s ~f:(fun i s v ->
+        substr_replace_all s ~pattern:(Printf.sprintf "/*$%d*/" i) ~with_:v)
+end

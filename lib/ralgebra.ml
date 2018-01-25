@@ -85,14 +85,11 @@ let rec to_string : t -> string =
     List.map rs ~f:to_string |> String.concat ~sep:", " |> sprintf "Concat(%s)"
   | Relation r -> r.name
 
-let of_string_exn : Postgresql.connection -> string -> t = fun conn s ->
+let of_string_exn : string -> (string * string, string) Ralgebra0.t = fun s ->
   let lexbuf = Lexing.from_string s in
-  try
-    Ralgebra_parser.ralgebra_eof Ralgebra_lexer.token lexbuf |> resolve conn
-  with
-  | e -> Error.(tag_arg (of_exn e) "Parse error."
-                  (s, lexbuf.lex_curr_p.pos_cnum) [%sexp_of:string * int]
-                |> raise)
+  try Ralgebra_parser.ralgebra_eof Ralgebra_lexer.token lexbuf with e ->
+    Error.(tag_arg (of_exn e) "Parse error." (s, lexbuf.lex_curr_p.pos_cnum)
+             [%sexp_of:string * int] |> raise)
 
 let rec layouts : t -> Layout.t list = function
   | Project (_, r)
