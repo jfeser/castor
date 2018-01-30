@@ -64,18 +64,18 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
       let body =
         List.map2_exn ts ls ~f:(fun (t, _) l -> serialize t l) |> concat
       in
-      let len = length body in
+      let len = byte_length body in
       concat [of_int ~width:64 count; of_int ~width:64 len; body]
     | ZipTupleT (ts, _), (ZipTuple ls as l) ->
       let count = Layout.ntuples l in
       let body = List.map2_exn ts ls ~f:serialize |> concat in
-      let len = length body in
+      let len = byte_length body in
       concat [of_int ~width:64 count; of_int ~width:64 len; body]
     | OrderedListT (t, _), (OrderedList (ls, _) as l)
     | UnorderedListT t, (UnorderedList ls as l) ->
       let count = Layout.ntuples l in
       let body = List.map ls ~f:(serialize t) |> concat in
-      let len = length body in
+      let len = byte_length body in
       concat [of_int ~width:64 count; of_int ~width:64 len; body]
     | _, Table _ -> failwith "Unsupported"
     | _, Empty -> empty
