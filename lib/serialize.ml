@@ -49,7 +49,7 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
   fun type_ layout ->
     match type_, layout with
     | IntT { bitwidth }, Scalar { rel; field; idx; value = `Int x } ->
-      of_int ~width:bitwidth x
+      of_int ~width:64 x
     | ScalarT _, Scalar { rel; field; idx; value } -> begin match value with
         | `Bool x -> of_bytes (bytes_of_bool x)
         | `Unknown x
