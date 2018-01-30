@@ -70,7 +70,8 @@ let main : params:(string * string) list -> db:string -> ralgebra:_ -> verbose:b
     let calibrator = Time_stamp_counter.Calibrator.create () in
     Time_stamp_counter.Calibrator.calibrate ~t:calibrator ();
     let start = Time_stamp_counter.now () in
-    Caml.Sys.command ("./scanner.exe db.buf") |> ignore;
+    if Caml.Sys.command ("./scanner.exe db.buf") > 0 then
+      Logs.err (fun m -> m "Scanner failed.");
     let stop = Time_stamp_counter.now () in
     let runtime =
       Time_ns.(diff (Time_stamp_counter.to_time_ns ~calibrator stop)
