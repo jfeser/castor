@@ -7,9 +7,15 @@ let bsize = 8 (* boolean size *)
 let isize = 8 (* integer size *)
 let hsize = 2 * isize (* block header size *)
 
-let bytes_of_int : int -> bytes = fun x ->
-  let buf = Bytes.make isize '\x00' in
-  for i = 0 to isize - 1 do
+(** Serialize an integer. Little endian. Width is the number of bits to use,
+   must be a multiple of the byte size. *)
+let bytes_of_int : width:int -> int -> bytes = fun ~width x ->
+  if width % 8 <> 0 then
+    Error.(create "Not a multiple of 8." width [%sexp_of:int] |> raise);
+
+  let nbytes = width / 8 in
+  let buf = Bytes.make nbytes '\x00' in
+  for i = 0 to nbytes - 1 do
     Bytes.set buf i ((x lsr (i * 8)) land 0xFF |> Caml.char_of_int)
   done;
   buf
@@ -23,8 +29,8 @@ let int_of_bytes_exn : bytes -> int = fun x ->
   !r
 
 let bytes_of_bool : bool -> bytes = function
-  | true -> bytes_of_int 1
-  | false -> bytes_of_int 0
+  | true -> bytes_of_int ~width:64 1
+  | false -> bytes_of_int ~width:64 0
 
 let bool_of_bytes_exn : bytes -> bool = fun b ->
   match int_of_bytes_exn b with
@@ -38,28 +44,43 @@ let align : int -> bytes -> bytes = fun align b ->
     let padding = align - slop in
     Bytes.cat b (Bytes.make padding '\x00')
 
-let rec serialize : Layout.t -> bytes = function
-  | Scalar { rel; field; idx; value } -> begin match value with
-      | `Bool true -> bytes_of_int 1
-      | `Bool false -> bytes_of_int 0
-      | `Int x -> bytes_of_int x
-      | `Unknown x
-      | `String x ->
-        let unpadded_body = Bytes.of_string x in
-        let body = unpadded_body |> align bsize in
-        let len = Bytes.length body in
-        Bytes.econcat [bytes_of_int len; body]
-    end
-  | CrossTuple ls
-  | ZipTuple ls
-  | UnorderedList ls
-  | OrderedList (ls, _) as l ->
-    let count = Layout.ntuples l in
-    let body = List.map ls ~f:serialize |> Bytes.econcat in
-    let len = Bytes.length body in
-    Bytes.econcat [bytes_of_int count; bytes_of_int len; body]
-  | Table _ -> failwith "Unsupported"
-  | Empty -> Bytes.empty
+let rec serialize : Type.t -> Layout.t -> Bitstring.t =
+  let open Bitstring in
+  fun type_ layout ->
+    match type_, layout with
+    | IntT { bitwidth }, Scalar { rel; field; idx; value = `Int x } ->
+      of_int ~width:bitwidth x
+    | ScalarT _, Scalar { rel; field; idx; value } -> begin match value with
+        | `Bool x -> of_bytes (bytes_of_bool x)
+        | `Unknown x
+        | `String x ->
+          let unpadded_body = Bytes.of_string x in
+          let body = unpadded_body |> align bsize in
+          let len = Bytes.length body in
+          Bytes.econcat [bytes_of_int ~width:64 len; body] |> of_bytes
+      end
+    | CrossTupleT ts, (CrossTuple ls as l) ->
+      let count = Layout.ntuples l in
+      let body =
+        List.map2_exn ts ls ~f:(fun (t, _) l -> serialize t l) |> concat
+      in
+      let len = length body in
+      concat [of_int ~width:64 count; of_int ~width:64 len; body]
+    | ZipTupleT (ts, _), (ZipTuple ls as l) ->
+      let count = Layout.ntuples l in
+      let body = List.map2_exn ts ls ~f:serialize |> concat in
+      let len = length body in
+      concat [of_int ~width:64 count; of_int ~width:64 len; body]
+    | OrderedListT (t, _), (OrderedList (ls, _) as l)
+    | UnorderedListT t, (UnorderedList ls as l) ->
+      let count = Layout.ntuples l in
+      let body = List.map ls ~f:(serialize t) |> concat in
+      let len = length body in
+      concat [of_int ~width:64 count; of_int ~width:64 len; body]
+    | _, Table _ -> failwith "Unsupported"
+    | _, Empty -> empty
+    | t, l -> Error.(create "Unexpected layout type." (t, l)
+                       [%sexp_of:Type.t * Layout.t] |> raise)
 
 let tests =
   let open OUnit2 in
@@ -67,7 +88,7 @@ let tests =
   "serialize" >::: [
     "to-byte" >:: (fun ctxt ->
         let x = 0xABCDEF01 in
-        assert_equal ~ctxt x (bytes_of_int x |> int_of_bytes_exn));
+        assert_equal ~ctxt x (bytes_of_int ~width:64 x |> int_of_bytes_exn));
     "from-byte" >:: (fun ctxt ->
         let b = Bytes.of_string "\031\012\000\000" in
         let x = 3103 in

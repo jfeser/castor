@@ -234,7 +234,11 @@ module Make (Ctx: CTX) () = struct
       let ptr = build_pointercast ptr
           (pointer_type (integer_type ctx size_bits)) "" builder
       in
-      build_load ptr "slicetmp" builder
+      let slice = build_load ptr "" builder in
+
+      (* Convert the slice to a 64 bit int. *)
+      build_intcast slice (i64_type ctx) "" builder
+
     | Index (tup, idx) ->
       let lltup = codegen_expr fctx tup in
 
@@ -418,7 +422,7 @@ module Make (Ctx: CTX) () = struct
             call_printf " " []);
         call_printf ")\n" [];
       | VoidT -> build_call printf [| const_stringz ctx "()" |] |> ignore
-      | BytesT _ | IterT _ -> fail (Error.of_string "Unexpected type.")
+      | BytesT _ -> fail (Error.of_string "Unexpected type.")
     in
     gen val_ type_
 
@@ -677,7 +681,7 @@ module Make (Ctx: CTX) () = struct
       t
   end
 
-  let codegen : bytes -> IRGen.ir_module -> unit =
+  let codegen : Bitstring.t -> IRGen.ir_module -> unit =
     fun buf { iters = ir_iters; funcs = ir_funcs; params } ->
       Logs.info (fun m -> m "Codegen started.");
 
@@ -688,7 +692,7 @@ module Make (Ctx: CTX) () = struct
 
       (* Generate global constant for buffer. *)
       let buf_t =
-        pointer_type (array_type int_type (Bytes.length buf / Serialize.isize))
+        pointer_type (array_type int_type (Bitstring.int_length buf))
       in
       SB.build_global sb "buf" buf_t |> ignore;
 

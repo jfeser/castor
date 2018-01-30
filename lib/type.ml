@@ -5,7 +5,9 @@ include Type0
 
 type ziptuple = { len : int } [@@deriving compare, sexp]
 type scalar = { field : Db.Field.t } [@@deriving compare, sexp]
+type int_ = { bitwidth : int } [@@deriving compare, sexp]
 type t =
+  | IntT of int_
   | ScalarT of PrimType.t * scalar
   | CrossTupleT of (t * int) list
   | ZipTupleT of t list * ziptuple
@@ -27,6 +29,8 @@ let rec unify_exn : t -> t -> t = fun t1 t2 ->
   match t1, t2 with
   | (ScalarT (pt1, m1), ScalarT (pt2, m2))
     when [%compare.equal:PrimType.t * scalar] (pt1, m1) (pt2, m2) -> t1
+  | (IntT { bitwidth = b1 }, IntT { bitwidth = b2 }) ->
+    IntT { bitwidth = Int.max b1 b2 }
   | (CrossTupleT e1s, CrossTupleT e2s) -> begin
       let m_es = List.map2 e1s e2s ~f:(fun (e1, l1) (e2, l2) ->
           if l1 <> l2 then fail "Columns have different lengths." else
@@ -61,8 +65,13 @@ let rec of_layout_exn : Layout.t -> t =
     raise (TypeError err)
   in
   function
-  | Scalar { rel; field; idx; value } ->
-    ScalarT (PrimType.of_primvalue value, { field })
+  | Scalar { rel; field; idx; value } -> begin match value with
+      | `Bool _ | `Unknown _ | `String _ ->
+        ScalarT (PrimType.of_primvalue value, { field })
+      | `Int x when x = 0 -> IntT { bitwidth = 1 }
+      | `Int x when x < 0 -> IntT { bitwidth = Int.floor_log2 (-x) + 1 }
+      | `Int x -> IntT { bitwidth = Int.floor_log2 x + 1 }
+    end
   | CrossTuple ls ->
     let ts = List.map ls ~f:(fun l -> (of_layout_exn l, Layout.ntuples l)) in
     CrossTupleT ts
@@ -104,7 +113,7 @@ let rec params : t -> Set.M(TypedName).t =
   in
   let union_list = Set.union_list (module TypedName) in
   function
-  | ScalarT _ | EmptyT -> Set.empty (module TypedName)
+  | ScalarT _ | EmptyT | IntT _ -> Set.empty (module TypedName)
   | CrossTupleT ts -> List.map ts ~f:(fun (t, _) -> params t) |> union_list
   | ZipTupleT (ts, _) -> List.map ts ~f:params |> union_list
   | UnorderedListT t -> params t
@@ -114,7 +123,7 @@ let rec params : t -> Set.M(TypedName).t =
     Set.union (Layout.PredCtx.Key.params k) (params t)
 
 let rec width : t -> int = function
-  | ScalarT _ -> 1
+  | ScalarT _ | IntT _ -> 1
   | CrossTupleT ts ->
     List.map ts ~f:(fun (t, _) -> width t)
     |> List.sum (module Int) ~f:(fun x -> x)

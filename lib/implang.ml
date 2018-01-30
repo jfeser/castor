@@ -12,7 +12,6 @@ let fail : Error.t -> 'a = fun e -> raise (EvalError e)
 type type_ =
   | BytesT of int
   | TupleT of type_ list
-  | IterT of type_
   | VoidT
 [@@deriving compare, sexp]
 
@@ -80,7 +79,6 @@ let rec pp_type : Format.formatter -> type_ -> unit =
   | BytesT x -> fprintf fmt "Bytes[%d]" x
   | TupleT ts -> fprintf fmt "Tuple[%a]" (pp_tuple pp_type) ts
   | VoidT -> fprintf fmt "Void"
-  | _ -> fail (Error.of_string "Unexpected type.")
 
 let pp_bytes fmt x = Format.fprintf fmt "%S" (Bytes.to_string x)
 let pp_int fmt = Format.fprintf fmt "%d"
@@ -105,6 +103,8 @@ and pp_expr : Format.formatter -> expr -> unit =
     | Lt -> "<"
     | And -> "&&"
     | Not -> "not"
+    | Eq -> "="
+    | Or -> "||"
   in
   fun fmt -> function
     | Int x -> pp_int fmt x
@@ -483,7 +483,7 @@ module IRGen = struct
     iters : (string * func) list;
     funcs : (string * func) list;
     params : TypedName.t list;
-    buffer : Bytes.t;
+    buffer : Bitstring.t;
   }
 
   exception IRGenError of Error.t [@@deriving sexp]
@@ -613,7 +613,8 @@ module IRGen = struct
       let open Infix in
       let open Type in
       function
-      | ScalarT (BoolT, _) | ScalarT (IntT, _) -> int isize
+      | IntT { bitwidth } -> int bitwidth
+      | ScalarT (BoolT, _) -> int isize
       | ScalarT (StringT, _) -> islice start
       | EmptyT -> int 0
       | CrossTupleT _ | ZipTupleT _ | UnorderedListT _ | OrderedListT _ ->
@@ -624,7 +625,7 @@ module IRGen = struct
       let open Infix in
       let open Type in
       function
-      | ScalarT (BoolT, _) | ScalarT (IntT, _) | ScalarT (StringT, _) -> int 1
+      | IntT _ | ScalarT (BoolT, _) | ScalarT (StringT, _) -> int 1
       | EmptyT -> int 0
       | CrossTupleT _ | ZipTupleT _ | UnorderedListT _ | OrderedListT _ ->
         islice start
@@ -635,13 +636,39 @@ module IRGen = struct
       let open Infix in
       let open Type in
       function
-      | ScalarT (BoolT, _) | ScalarT (IntT, _) | EmptyT -> int 0
+      | IntT _ | ScalarT (BoolT, _) | EmptyT -> int 0
       | ScalarT (StringT, _) -> int isize
       | CrossTupleT _ | ZipTupleT _ | OrderedListT _ | UnorderedListT _ ->
         int (2 * isize)
       | TableT (_,_,_) -> failwith "Unsupported."
 
     let scan_empty = create ["start", int_t] VoidT |> build_func
+
+    let scan_int { bitwidth } =
+      let b = create ["start", int_t] (TupleT [int_t]) in
+      let start = build_arg 0 b in
+      build_yield (Tuple [Slice (start, bitwidth / 8 + 1)]) b;
+      build_func b
+
+    let scan_scalar =
+      let open Type.PrimType in
+      function
+      | BoolT ->
+        let b = create ["start", int_t] (TupleT [int_t]) in
+        let start = build_arg 0 b in
+        build_yield (Tuple [Infix.(islice start)]) b;
+        build_func b
+      | IntT ->
+        let b = create ["start", int_t] (TupleT [int_t]) in
+        let start = build_arg 0 b in
+        build_yield (Tuple [Infix.(islice start)]) b;
+        build_func b
+      | StringT ->
+        let b = create ["start", int_t] (TupleT [slice_t]) in
+        let start = build_arg 0 b in
+        let len = Infix.(islice start) in
+        build_yield (Tuple [Infix.(slice (start + int isize) len)]) b;
+        build_func b
 
     let scan_scalar =
       let open Type.PrimType in
@@ -825,14 +852,15 @@ module IRGen = struct
 
     let scan : Layout.t -> func = fun l ->
       let type_ = Type.of_layout_exn l in
-      let buf = Serialize.serialize l in
-      let start = List.map !buffers ~f:Bytes.length
+      let buf = Serialize.serialize type_ l in
+      let start = List.map !buffers ~f:Bitstring.length
                   |> List.sum (module Int) ~f:(fun x -> x)
       in
       buffers := buf :: !buffers;
 
       let rec scan t =
         let name = match t with
+          | IntT _ -> Fresh.name fresh "i%d"
           | EmptyT -> Fresh.name fresh "e%d"
           | ScalarT _ -> Fresh.name fresh "s%d"
           | CrossTupleT _ -> Fresh.name fresh "ct%d"
@@ -842,6 +870,7 @@ module IRGen = struct
           | TableT _ -> Fresh.name fresh "t%d"
         in
         let func = match t with
+          | IntT m -> scan_int m
           | EmptyT -> scan_empty
           | ScalarT (x, _) -> scan_scalar x
           | CrossTupleT x -> scan_crosstuple scan x
@@ -890,7 +919,7 @@ module IRGen = struct
       let ret_t = match child_ret_t with
         | TupleT ts ->
           TupleT (List.filteri ts ~f:(fun i _ -> List.mem idxs i ~equal:(=)))
-        | IterT _ | VoidT | BytesT _ as t ->
+        | VoidT | BytesT _ as t ->
           fail (Error.create "Expected a TupleT." t [%sexp_of:type_])
       in
 
@@ -999,7 +1028,7 @@ module IRGen = struct
       { iters = List.rev !funcs;
         funcs = ["printer", printer name; "counter", counter name];
         params = Ralgebra.params r |> Set.to_list;
-        buffer = List.rev !buffers |> Bytes.econcat;
+        buffer = List.rev !buffers |> Bitstring.concat;
       }
   end
 end

@@ -5,10 +5,11 @@ open Postgresql
 open Dblayout
 open Collections
 
-let main : params:(string * string) list -> db:string -> ralgebra:_ -> unit =
-  fun ~params ~db ~ralgebra ->
+let main : params:(string * string) list -> db:string -> ralgebra:_ -> verbose:bool -> unit =
+  fun ~params ~db ~ralgebra ~verbose ->
     Logs.set_reporter (Logs.format_reporter ());
-    Logs.set_level (Some Logs.Info);
+    if verbose then Logs.set_level (Some Logs.Debug)
+    else Logs.set_level (Some Logs.Info);
 
     let conn = new connection ~dbname:db () in
     Eval.Ctx.global.conn <- Some (conn);
@@ -18,7 +19,6 @@ let main : params:(string * string) list -> db:string -> ralgebra:_ -> unit =
                   |> Layout.PredCtx.of_vars
     in
     Eval.Ctx.global.testctx <- Some (predctx);
-
 
     let ralgebra = Ralgebra.resolve conn ralgebra in
     let module IGen = Implang.IRGen.Make () in
@@ -42,7 +42,8 @@ let main : params:(string * string) list -> db:string -> ralgebra:_ -> unit =
     Out_channel.with_file "scanner.h" ~f:CGen.write_header;
 
     Out_channel.with_file "db.buf" ~f:(fun ch ->
-        Out_channel.output_bytes ch ir_module.buffer);
+        let w = Bitstring.Writer.with_channel ch in
+        Bitstring.Writer.write w ir_module.buffer);
 
     (* Generate and dump main.c *)
     let params_str = List.map params ~f:(fun (n, v) ->
@@ -86,6 +87,7 @@ let () =
   Command.basic ~summary:"Benchmark tool." [%map_open
     let db = flag "db" (required string) ~doc:"DB the database to connect to"
     and params = flag "param" ~aliases:["p"] (listed kv) ~doc:"query parameters (passed as key:value)"
+    and verbose = flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
     and ralgebra = anon ("ralgebra" %: ralgebra)
-    in fun () -> main ~db ~ralgebra ~params
+    in fun () -> main ~db ~ralgebra ~params ~verbose
   ] |> Command.run

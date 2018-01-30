@@ -15,8 +15,8 @@ open OUnit2
  *       ("", `Quick, f)) *)
 
 let suite = "tests" >::: [
-    Dblayout.Locality.tests;
     Dblayout.Serialize.tests;
+    Dblayout.Bitstring.tests;
   ] 
 
 let () = run_test_tt_main suite

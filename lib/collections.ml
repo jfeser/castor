@@ -127,3 +127,15 @@ module String = struct
     List.foldi x ~init:s ~f:(fun i s v ->
         substr_replace_all s ~pattern:(Printf.sprintf "/*$%d*/" i) ~with_:v)
 end
+
+module Buffer = struct
+  include Buffer
+
+  let equal : t -> t -> bool = fun x y -> String.equal (contents x) (contents y)
+
+  let to_string : t -> string = fun x ->
+    List.init (Buffer.length x) ~f:(Buffer.nth x)
+    |> List.map ~f:Char.escaped
+    |> String.concat
+end
+
