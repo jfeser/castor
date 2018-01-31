@@ -222,16 +222,4 @@ let transform : Postgresql.connection -> Ralgebra.t -> Ralgebra.t list =
     transform r
 
 let search : Postgresql.connection -> Ralgebra.t -> Ralgebra.t Seq.t =
-  fun conn r ->
-    let pool = Set.singleton (module Ralgebra) r in
-    let rec search pool =
-      Stdio.printf "Pool size: %d\n" (Set.length pool);
-      let pool' =
-        Set.to_list pool
-        |> List.concat_map ~f:(transform conn)
-        |> Set.of_list (module Ralgebra)
-        |> Set.union pool
-      in
-      if Set.equal pool' pool then pool' else search pool'
-    in
-    Set.to_sequence (search pool)
+  fun conn r -> Seq.bfs r (fun r -> transform conn r |> Seq.of_list)

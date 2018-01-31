@@ -79,6 +79,25 @@ module Seq = struct
           let row, seqs' = List.unzip x in
           Some (row, seqs')
         | None -> None)
+
+  let bfs : 'a -> ('a -> 'a t) -> 'a t = fun seed step ->
+    let module Q = Linked_queue in
+    unfold_step ~init:(step seed, Q.create ()) ~f:(fun (seq, q) ->
+        match next seq with
+        | Some (x, seq') -> Q.enqueue q x; Yield (x, (seq', q))
+        | None -> begin match Q.dequeue q with
+            | Some x -> Skip (step x, q)
+            | None -> Done
+          end)
+
+  let dfs : 'a -> ('a -> 'a t) -> 'a t = fun seed step ->
+    unfold_step ~init:(step seed, []) ~f:(fun (seq, xs) ->
+        match next seq with
+        | Some (x, seq') -> Yield (x, (seq', x::xs))
+        | None -> begin match xs with
+            | x::xs' -> Skip (step x, xs')
+            | [] -> Done
+          end)
 end
 
 module Bytes = struct

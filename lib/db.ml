@@ -38,14 +38,14 @@ type dtype =
   | DTimestamp of { distinct : int }
   | DInterval of { distinct : int }
   | DBool of { distinct : int }
-[@@deriving compare, sexp]
+[@@deriving compare, hash, sexp]
 
 module Field = struct
   module T = struct
     type t = {
       name: string;
       dtype : dtype;
-    } [@@deriving compare, sexp]
+    } [@@deriving compare, hash, sexp]
   end
   include T
   include Comparable.Make(T)
@@ -58,7 +58,7 @@ module Relation = struct
     name : string;
     fields : Field.t list;
     card : int;
-  } [@@deriving compare, sexp]
+  } [@@deriving compare, hash, sexp]
 
   let dummy = { name = ""; fields = []; card = 0; }
 
@@ -111,7 +111,7 @@ end
 
 type primvalue =
   [`Int of int | `String of string | `Bool of bool | `Unknown of string]
-[@@deriving compare, sexp]
+[@@deriving compare, hash, sexp]
 
 module Value = struct
   module T = struct
@@ -120,7 +120,7 @@ module Value = struct
       field : Field.t;
       idx : int;
       value : primvalue;
-    } [@@deriving compare, sexp]
+    } [@@deriving compare, hash, sexp]
   end
   include T
   include Comparator.Make(T)

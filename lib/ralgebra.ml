@@ -88,8 +88,10 @@ let rec to_string : t -> string =
 let of_string_exn : string -> (string * string, string) Ralgebra0.t = fun s ->
   let lexbuf = Lexing.from_string s in
   try Ralgebra_parser.ralgebra_eof Ralgebra_lexer.token lexbuf with e ->
-    Error.(tag_arg (of_exn e) "Parse error." (s, lexbuf.lex_curr_p.pos_cnum)
-             [%sexp_of:string * int] |> raise)
+    let cnum = lexbuf.lex_curr_p.pos_cnum in
+    let tok = Lexing.lexeme lexbuf in
+    Error.(tag_arg (of_exn e) "Parse error." (s, cnum, tok)
+             [%sexp_of:string * int * string] |> raise)
 
 let rec layouts : t -> Layout.t list = function
   | Project (_, r)
@@ -126,3 +128,16 @@ let rec params : t -> Set.M(TypedName).t =
   | EqJoin (_, _, r1, r2) -> Set.union (params r1) (params r2)
   | Concat rs -> List.map ~f:params rs |> union_list
 
+let tests =
+  let open OUnit2 in
+  let parse_test s = s >:: fun _ ->
+      try of_string_exn s |> ignore
+      with e -> assert_failure (Exn.to_string e)
+  in
+  "ralgebra" >::: [
+    "of_string" >::: [
+      parse_test "Filter(taxi.xpos > xv:int, taxi)";
+      parse_test "Filter(taxi.xpos > xv:int && taxi.xpos > xv:int, taxi)";
+      parse_test "Filter(taxi.xpos > xv:int && taxi.ypos > yv:int, taxi)";
+    ]
+  ]

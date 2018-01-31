@@ -1,5 +1,7 @@
 %{
     open Ralgebra0
+
+    let error err = Base.Error.(of_string err |> raise)
 %}
 
 %token <string> ID
@@ -27,13 +29,13 @@
 
 %start <(string * string, string) Ralgebra0.t> ralgebra_eof
 
-%nonassoc EQ
-%nonassoc LT
-%nonassoc LE
-%nonassoc GT
-%nonassoc GE
-%left AND
 %left OR
+%left AND
+%nonassoc GE
+%nonassoc GT
+%nonassoc LE
+%nonassoc LT
+%nonassoc EQ
 %%
 
 ralgebra_eof:
@@ -56,6 +58,7 @@ primtype:
 
 pred:
 | x = ID; COLON; t = primtype { Var (x, t) }
+| ID; COLON; error { error "Expected a type." }
 | f = field; { Field f }
 | p1 = pred; EQ; p2 = pred { Binop (Eq, p1, p2) }
 | p1 = pred; LT; p2 = pred { Binop (Lt, p1, p2) }
@@ -64,3 +67,4 @@ pred:
 | p1 = pred; GE; p2 = pred { Binop (Ge, p1, p2) }
 | p1 = pred; AND; p2 = pred { Varop (And, [p1; p2]) }
 | p1 = pred; OR; p2 = pred { Varop (Or, [p1; p2]) }
+| pred; error { error "Expected an operator." }

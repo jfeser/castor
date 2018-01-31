@@ -1019,7 +1019,7 @@ module IRGen = struct
         (* let func = eq_join gen_ralgebra f1 f2 r1 r2 in
          * add_func name func; name *)
         | Concat rs -> concat gen_ralgebra rs
-        | Relation x -> scan (Transform.col_layout x)
+        | Relation x -> scan (Transform.row_layout x)
       in
       add_func name func; name
 

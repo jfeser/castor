@@ -77,7 +77,9 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
       let body = List.map ls ~f:(serialize t) |> concat in
       let len = byte_length body in
       concat [of_int ~width:64 count; of_int ~width:64 len; body]
-    | _, Table _ -> failwith "Unsupported"
+    | TableT (_, _, _), Table (m, _) ->
+      let keyset = Map.keys m in
+      failwith "Unsupported"
     | _, Empty -> empty
     | t, l -> Error.(create "Unexpected layout type." (t, l)
                        [%sexp_of:Type.t * Layout.t] |> raise)
