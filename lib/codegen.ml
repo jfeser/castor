@@ -6,9 +6,6 @@ open Llvm_analysis
 open Llvm_target
 module Execution_engine = Llvm_executionengine
 
-exception CodegenError of Error.t [@@deriving sexp]
-let fail : Error.t -> 'a = fun e -> raise (CodegenError e)
-
 module type CTX = sig
   val ctx : llcontext
   val module_ : llmodule
