@@ -22,12 +22,12 @@ let main : params:(string * string) list -> db:string -> ralgebra:_ -> verbose:b
     Eval.Ctx.global.testctx <- Some (predctx);
 
     let ralgebra = Ralgebra.resolve conn ralgebra in
-    let module IGen = Implang.IRGen.Make () in
 
     Transform.search conn ralgebra
     |> Seq.iter ~f:(fun ralgebra ->
         Logs.info (fun m -> m "Benchmarking %s." (Ralgebra.to_string ralgebra));
 
+        let module IGen = Implang.IRGen.Make () in
         let ir_module = IGen.irgen ralgebra in
         let llctx = Llvm.create_context () in
         let module_ = Llvm.create_module llctx "scanner" in
@@ -70,8 +70,9 @@ let main : params:(string * string) list -> db:string -> ralgebra:_ -> verbose:b
               Out_channel.(with_file "main.c" ~f:(fun ch -> output_string ch out)) in
             ()));
 
-        Caml.Sys.command ("llc -O2 -filetype=obj scanner.ll") |> ignore;
-        Caml.Sys.command ("clang -g -O0 scanner.o main.c -o scanner.exe") |> ignore;
+        Caml.Sys.command ("llc -O3 -filetype=obj scanner.ll") |> ignore;
+        Caml.Sys.command ("clang -g -O3 scanner.o main.c -o scanner.exe") |> ignore;
+        Llvm.dispose_module module_;
         Llvm.dispose_context llctx;
 
         (* Calibrate CPU counter. *)
@@ -86,7 +87,9 @@ let main : params:(string * string) list -> db:string -> ralgebra:_ -> verbose:b
                      (Time_stamp_counter.to_time_ns ~calibrator start)
                    |> Span.to_short_string)
         in
-        Logs.info (fun m -> m "Total time: %s" runtime))
+        Logs.info (fun m -> m "Total time: %s" runtime);
+
+        Unix.chdir "..")
 
 let () =
   let kv = Command.Arg_type.create (fun s -> String.lsplit2_exn ~on:':' s) in
