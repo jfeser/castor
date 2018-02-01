@@ -1,7 +1,6 @@
 open Base
 open Printf
 open Collections
-open Type
 
 module Format = Caml.Format
 
@@ -482,7 +481,7 @@ module IRGen = struct
   type ir_module = {
     iters : (string * func) list;
     funcs : (string * func) list;
-    params : TypedName.t list;
+    params : Type.TypedName.t list;
     buffer : Bitstring.t;
   }
 
@@ -644,7 +643,7 @@ module IRGen = struct
 
     let scan_empty = create ["start", int_t] VoidT |> build_func
 
-    let scan_int { bitwidth } =
+    let scan_int Type.({ bitwidth }) =
       let b = create ["start", int_t] (TupleT [int_t]) in
       let start = build_arg 0 b in
       build_yield (Tuple [Slice (start, bitwidth / 8 + 1)]) b;
@@ -753,7 +752,7 @@ module IRGen = struct
       build_func b
 
     let scan_ordered_list scan t Layout.({ field; order; lookup = lower, upper }) =
-      let func = scan (UnorderedListT t) in
+      let func = scan (Type.UnorderedListT t) in
       let idx =
         Db.Schema.field_idx_exn (Type.to_schema (UnorderedListT t)) field
       in
@@ -832,6 +831,7 @@ module IRGen = struct
       buffers := buf :: !buffers;
 
       let rec scan t =
+        let open Type in
         let name = match t with
           | EmptyT -> Fresh.name fresh "e%d"
           | IntT _ -> Fresh.name fresh "i%d"

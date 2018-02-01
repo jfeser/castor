@@ -3,22 +3,26 @@ open Collections
 
 include Type0
 
-type ziptuple = { len : int } [@@deriving compare, sexp]
-type scalar = { field : Db.Field.t } [@@deriving compare, sexp]
-type int_ = { bitwidth : int; field : Db.Field.t } [@@deriving compare, sexp]
-type bool_ = { field : Db.Field.t } [@@deriving compare, sexp]
-type string_ = { length : int; field : Db.Field.t } [@@deriving compare, sexp]
-type t =
-  | IntT of int_
-  | BoolT of bool_
-  | StringT of string_
-  | CrossTupleT of (t * int) list
-  | ZipTupleT of t list * ziptuple
-  | OrderedListT of t * Layout.ordered_list
-  | UnorderedListT of t
-  | TableT of PrimType.t * t * Layout.table
-  | EmptyT
-[@@deriving compare, sexp]
+module T = struct
+  type ziptuple = { len : int } [@@deriving compare, sexp]
+  type scalar = { field : Db.Field.t } [@@deriving compare, sexp]
+  type int_ = { bitwidth : int; field : Db.Field.t } [@@deriving compare, sexp]
+  type bool_ = { field : Db.Field.t } [@@deriving compare, sexp]
+  type string_ = { length : int; field : Db.Field.t } [@@deriving compare, sexp]
+  type t =
+    | IntT of int_
+    | BoolT of bool_
+    | StringT of string_
+    | CrossTupleT of (t * int) list
+    | ZipTupleT of t list * ziptuple
+    | OrderedListT of t * Layout.ordered_list
+    | UnorderedListT of t
+    | TableT of t * t * Layout.table
+    | EmptyT
+  [@@deriving compare, sexp]
+end
+include T
+include Comparable.Make(T)
 
 exception TypeError of Error.t [@@deriving sexp]
 
@@ -38,7 +42,7 @@ let rec unify_exn : t -> t -> t = fun t1 t2 ->
     when Db.Field.equal f1 f2 -> StringT { length = Int.max b1 b2; field = f1 }
   | (CrossTupleT e1s, CrossTupleT e2s) -> begin
       let m_es = List.map2 e1s e2s ~f:(fun (e1, l1) (e2, l2) ->
-          if l1 <> l2 then fail "Columns have different lengths." else
+          if Int.(l1 <> l2) then fail "Columns have different lengths." else
             let e = unify_exn e1 e2 in
             (e, l1))
       in
@@ -57,10 +61,11 @@ let rec unify_exn : t -> t -> t = fun t1 t2 ->
   | OrderedListT (e1, l1), OrderedListT (e2, l2)
     when [%compare.equal:Layout.ordered_list] l1 l2 ->
     OrderedListT (unify_exn e1 e2, l1)
-  | (TableT (pt1, et1, t1), TableT (pt2, et2, t2))
-    when [%compare.equal:PrimType.t] pt1 pt2
-      && Layout.compare_table t1 t2 = 0 ->
-    TableT (pt1, unify_exn et1 et2, t1)
+  | (TableT (kt1, vt1, t1), TableT (kt2, vt2, t2))
+    when [%compare.equal:Layout.table] t1 t2 ->
+    let kt = unify_exn kt1 kt2 in
+    let vt = unify_exn vt1 vt2 in
+    TableT (kt, vt, t1)
   | EmptyT, t | t, EmptyT -> t
   | _ -> fail "Unexpected types."
 
@@ -69,14 +74,15 @@ let rec of_layout_exn : Layout.t -> t =
     let err = Error.of_string (Printf.sprintf "Type inference failed: %s" m) in
     raise (TypeError err)
   in
+  let of_primvalue_exn : Db.Field.t -> Db.primvalue -> t = fun field -> function
+    | `Unknown s | `String s -> StringT { length = String.length s; field }
+    | `Bool _ -> BoolT { field }
+    | `Int x when Int.(x = 0) -> IntT { bitwidth = 1; field }
+    | `Int x when Int.(x < 0) -> IntT { bitwidth = Int.floor_log2 (-x) + 1; field }
+    | `Int x -> IntT { bitwidth = Int.floor_log2 x + 1; field }
+  in
   function
-  | Scalar { rel; field; idx; value } -> begin match value with
-      | `Unknown s | `String s -> StringT { length = String.length s; field }
-      | `Bool _ -> BoolT { field }
-      | `Int x when x = 0 -> IntT { bitwidth = 1; field }
-      | `Int x when x < 0 -> IntT { bitwidth = Int.floor_log2 (-x) + 1; field }
-      | `Int x -> IntT { bitwidth = Int.floor_log2 x + 1; field }
-    end
+  | Scalar { field; value } -> of_primvalue_exn field value
   | CrossTuple ls ->
     let ts = List.map ls ~f:(fun l -> (of_layout_exn l, Layout.ntuples l)) in
     CrossTupleT ts
@@ -96,19 +102,16 @@ let rec of_layout_exn : Layout.t -> t =
                  |> List.fold_left ~f:unify_exn ~init:EmptyT
     in
     OrderedListT (elem_t, l)
-  | Table (elems, ({ field = { dtype }; } as t')) ->
-    let pt =
-      let open PrimType in
-      match dtype with
-      | DInt _ -> IntT
-      | DBool _ -> BoolT
-      | DString _ -> StringT
-      | _ -> fail "Unexpected data type."
+  | Table (elems, tbl) ->
+    let kt = Map.keys elems
+             |> List.map ~f:(fun Db.Value.({ field; value }) ->
+                 of_primvalue_exn field value)
+             |> List.fold_left ~f:unify_exn ~init:EmptyT
     in
-    let t = Map.data elems |> List.map ~f:of_layout_exn
-            |> List.fold_left ~f:unify_exn ~init:EmptyT
+    let vt = Map.data elems |> List.map ~f:of_layout_exn
+             |> List.fold_left ~f:unify_exn ~init:EmptyT
     in
-    TableT (pt, t, t')
+    TableT (kt, vt, tbl)
   | Empty -> EmptyT
 
 let rec params : t -> Set.M(TypedName).t =
