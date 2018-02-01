@@ -48,17 +48,14 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
   let open Bitstring in
   fun type_ layout ->
     match type_, layout with
-    | IntT { bitwidth }, Scalar { rel; field; idx; value = `Int x } ->
-      of_int ~width:64 x
-    | ScalarT _, Scalar { rel; field; idx; value } -> begin match value with
-        | `Bool x -> of_bytes (bytes_of_bool x)
-        | `Unknown x
-        | `String x ->
-          let unpadded_body = Bytes.of_string x in
-          let body = unpadded_body |> align bsize in
-          let len = Bytes.length body in
-          Bytes.econcat [bytes_of_int ~width:64 len; body] |> of_bytes
-      end
+    | IntT { bitwidth }, Scalar { value = `Int x } -> of_int ~width:64 x
+    | BoolT _, Scalar { value = `Bool x } -> of_bytes (bytes_of_bool x)
+    | StringT _,
+      (Scalar { value = `String x } | Scalar { value = `Unknown x }) ->
+      let unpadded_body = Bytes.of_string x in
+      let body = unpadded_body |> align bsize in
+      let len = Bytes.length body in
+      Bytes.econcat [bytes_of_int ~width:64 len; body] |> of_bytes
     | CrossTupleT ts, (CrossTuple ls as l) ->
       let count = Layout.ntuples l in
       let body =
@@ -77,8 +74,9 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
       let body = List.map ls ~f:(serialize t) |> concat in
       let len = byte_length body in
       concat [of_int ~width:64 count; of_int ~width:64 len; body]
-    | TableT (_, _, _), Table (m, _) ->
-      let keyset = Map.keys m in
+    | TableT (elem_t, _, _), Table (m, _) ->
+      (* let serialized_keys = Map.keys m |> List.map ~f;(fun )
+       * let keyset = Map.keys m |> Cmph.KeySet.of_list in *)
       failwith "Unsupported"
     | _, Empty -> empty
     | t, l -> Error.(create "Unexpected layout type." (t, l)

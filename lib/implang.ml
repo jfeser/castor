@@ -614,8 +614,8 @@ module IRGen = struct
       let open Type in
       function
       | IntT { bitwidth } -> int bitwidth
-      | ScalarT (BoolT, _) -> int isize
-      | ScalarT (StringT, _) -> islice start
+      | BoolT _ -> int isize
+      | StringT _ -> islice start
       | EmptyT -> int 0
       | CrossTupleT _ | ZipTupleT _ | UnorderedListT _ | OrderedListT _ ->
         islice (start + int isize)
@@ -625,7 +625,7 @@ module IRGen = struct
       let open Infix in
       let open Type in
       function
-      | IntT _ | ScalarT (BoolT, _) | ScalarT (StringT, _) -> int 1
+      | IntT _ | BoolT _ | StringT _ -> int 1
       | EmptyT -> int 0
       | CrossTupleT _ | ZipTupleT _ | UnorderedListT _ | OrderedListT _ ->
         islice start
@@ -636,8 +636,8 @@ module IRGen = struct
       let open Infix in
       let open Type in
       function
-      | IntT _ | ScalarT (BoolT, _) | EmptyT -> int 0
-      | ScalarT (StringT, _) -> int isize
+      | IntT _ | BoolT _ | EmptyT -> int 0
+      | StringT _ -> int isize
       | CrossTupleT _ | ZipTupleT _ | OrderedListT _ | UnorderedListT _ ->
         int (2 * isize)
       | TableT (_,_,_) -> failwith "Unsupported."
@@ -650,45 +650,18 @@ module IRGen = struct
       build_yield (Tuple [Slice (start, bitwidth / 8 + 1)]) b;
       build_func b
 
-    let scan_scalar =
-      let open Type.PrimType in
-      function
-      | BoolT ->
-        let b = create ["start", int_t] (TupleT [int_t]) in
-        let start = build_arg 0 b in
-        build_yield (Tuple [Infix.(islice start)]) b;
-        build_func b
-      | IntT ->
-        let b = create ["start", int_t] (TupleT [int_t]) in
-        let start = build_arg 0 b in
-        build_yield (Tuple [Infix.(islice start)]) b;
-        build_func b
-      | StringT ->
-        let b = create ["start", int_t] (TupleT [slice_t]) in
-        let start = build_arg 0 b in
-        let len = Infix.(islice start) in
-        build_yield (Tuple [Infix.(slice (start + int isize) len)]) b;
-        build_func b
+    let scan_bool _ =
+      let b = create ["start", int_t] (TupleT [int_t]) in
+      let start = build_arg 0 b in
+      build_yield (Tuple [Infix.(islice start)]) b;
+      build_func b
 
-    let scan_scalar =
-      let open Type.PrimType in
-      function
-      | BoolT ->
-        let b = create ["start", int_t] (TupleT [int_t]) in
-        let start = build_arg 0 b in
-        build_yield (Tuple [Infix.(islice start)]) b;
-        build_func b
-      | IntT ->
-        let b = create ["start", int_t] (TupleT [int_t]) in
-        let start = build_arg 0 b in
-        build_yield (Tuple [Infix.(islice start)]) b;
-        build_func b
-      | StringT ->
-        let b = create ["start", int_t] (TupleT [slice_t]) in
-        let start = build_arg 0 b in
-        let len = Infix.(islice start) in
-        build_yield (Tuple [Infix.(slice (start + int isize) len)]) b;
-        build_func b
+    let scan_string _ =
+      let b = create ["start", int_t] (TupleT [slice_t]) in
+      let start = build_arg 0 b in
+      let len = Infix.(islice start) in
+      build_yield (Tuple [Infix.(slice (start + int isize) len)]) b;
+      build_func b
 
     let scan_crosstuple scan ts =
       let rec loops b col_start vars = function
@@ -860,9 +833,10 @@ module IRGen = struct
 
       let rec scan t =
         let name = match t with
-          | IntT _ -> Fresh.name fresh "i%d"
           | EmptyT -> Fresh.name fresh "e%d"
-          | ScalarT _ -> Fresh.name fresh "s%d"
+          | IntT _ -> Fresh.name fresh "i%d"
+          | BoolT _ -> Fresh.name fresh "b%d"
+          | StringT _ -> Fresh.name fresh "s%d"
           | CrossTupleT _ -> Fresh.name fresh "ct%d"
           | ZipTupleT _ -> Fresh.name fresh "zt%d"
           | UnorderedListT _ -> Fresh.name fresh "ul%d"
@@ -871,8 +845,9 @@ module IRGen = struct
         in
         let func = match t with
           | IntT m -> scan_int m
+          | BoolT m -> scan_bool m
+          | StringT m -> scan_string m
           | EmptyT -> scan_empty
-          | ScalarT (x, _) -> scan_scalar x
           | CrossTupleT x -> scan_crosstuple scan x
           | ZipTupleT (x, m) -> scan_ziptuple scan x m
           | UnorderedListT x -> scan_unordered_list scan x

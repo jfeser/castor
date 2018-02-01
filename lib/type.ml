@@ -5,10 +5,13 @@ include Type0
 
 type ziptuple = { len : int } [@@deriving compare, sexp]
 type scalar = { field : Db.Field.t } [@@deriving compare, sexp]
-type int_ = { bitwidth : int } [@@deriving compare, sexp]
+type int_ = { bitwidth : int; field : Db.Field.t } [@@deriving compare, sexp]
+type bool_ = { field : Db.Field.t } [@@deriving compare, sexp]
+type string_ = { length : int; field : Db.Field.t } [@@deriving compare, sexp]
 type t =
   | IntT of int_
-  | ScalarT of PrimType.t * scalar
+  | BoolT of bool_
+  | StringT of string_
   | CrossTupleT of (t * int) list
   | ZipTupleT of t list * ziptuple
   | OrderedListT of t * Layout.ordered_list
@@ -27,10 +30,12 @@ let rec unify_exn : t -> t -> t = fun t1 t2 ->
     raise (TypeError err)
   in
   match t1, t2 with
-  | (ScalarT (pt1, m1), ScalarT (pt2, m2))
-    when [%compare.equal:PrimType.t * scalar] (pt1, m1) (pt2, m2) -> t1
-  | (IntT { bitwidth = b1 }, IntT { bitwidth = b2 }) ->
-    IntT { bitwidth = Int.max b1 b2 }
+  | (IntT { bitwidth = b1; field = f1 }, IntT { bitwidth = b2; field = f2 })
+    when Db.Field.equal f1 f2 -> IntT { bitwidth = Int.max b1 b2; field = f1 }
+  | (BoolT { field = f1 }, BoolT { field = f2 })
+    when Db.Field.equal f1 f2 -> BoolT { field = f1 }
+  | (StringT { length = b1; field = f1 }, StringT { length = b2; field = f2 })
+    when Db.Field.equal f1 f2 -> StringT { length = Int.max b1 b2; field = f1 }
   | (CrossTupleT e1s, CrossTupleT e2s) -> begin
       let m_es = List.map2 e1s e2s ~f:(fun (e1, l1) (e2, l2) ->
           if l1 <> l2 then fail "Columns have different lengths." else
@@ -66,11 +71,11 @@ let rec of_layout_exn : Layout.t -> t =
   in
   function
   | Scalar { rel; field; idx; value } -> begin match value with
-      | `Bool _ | `Unknown _ | `String _ ->
-        ScalarT (PrimType.of_primvalue value, { field })
-      | `Int x when x = 0 -> IntT { bitwidth = 1 }
-      | `Int x when x < 0 -> IntT { bitwidth = Int.floor_log2 (-x) + 1 }
-      | `Int x -> IntT { bitwidth = Int.floor_log2 x + 1 }
+      | `Unknown s | `String s -> StringT { length = String.length s; field }
+      | `Bool _ -> BoolT { field }
+      | `Int x when x = 0 -> IntT { bitwidth = 1; field }
+      | `Int x when x < 0 -> IntT { bitwidth = Int.floor_log2 (-x) + 1; field }
+      | `Int x -> IntT { bitwidth = Int.floor_log2 x + 1; field }
     end
   | CrossTuple ls ->
     let ts = List.map ls ~f:(fun l -> (of_layout_exn l, Layout.ntuples l)) in
@@ -113,7 +118,7 @@ let rec params : t -> Set.M(TypedName).t =
   in
   let union_list = Set.union_list (module TypedName) in
   function
-  | ScalarT _ | EmptyT | IntT _ -> Set.empty (module TypedName)
+  | EmptyT | IntT _ | BoolT _ | StringT _ -> Set.empty (module TypedName)
   | CrossTupleT ts -> List.map ts ~f:(fun (t, _) -> params t) |> union_list
   | ZipTupleT (ts, _) -> List.map ts ~f:params |> union_list
   | UnorderedListT t -> params t
@@ -123,7 +128,7 @@ let rec params : t -> Set.M(TypedName).t =
     Set.union (Layout.PredCtx.Key.params k) (params t)
 
 let rec width : t -> int = function
-  | ScalarT _ | IntT _ -> 1
+  | IntT _ | BoolT _ | StringT _ -> 1
   | CrossTupleT ts ->
     List.map ts ~f:(fun (t, _) -> width t)
     |> List.sum (module Int) ~f:(fun x -> x)
@@ -135,7 +140,9 @@ let rec width : t -> int = function
 
 let rec to_schema : t -> Db.Schema.t = function
   | EmptyT -> []
-  | ScalarT (_, m) -> [m.field]
+  | IntT m -> [m.field]
+  | BoolT m -> [m.field]
+  | StringT m -> [m.field]
   | CrossTupleT ts -> List.concat_map ~f:(fun (t, _) -> to_schema t) ts
   | ZipTupleT (ts, _) -> List.concat_map ~f:to_schema ts
   | OrderedListT (t, _) | UnorderedListT t -> to_schema t
