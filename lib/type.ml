@@ -74,15 +74,12 @@ let rec of_layout_exn : Layout.t -> t =
     let err = Error.of_string (Printf.sprintf "Type inference failed: %s" m) in
     raise (TypeError err)
   in
-  let of_primvalue_exn : Db.Field.t -> Db.primvalue -> t = fun field -> function
-    | `Unknown s | `String s -> StringT { length = String.length s; field }
-    | `Bool _ -> BoolT { field }
-    | `Int x when Int.(x = 0) -> IntT { bitwidth = 1; field }
-    | `Int x when Int.(x < 0) -> IntT { bitwidth = Int.floor_log2 (-x) + 1; field }
-    | `Int x -> IntT { bitwidth = Int.floor_log2 x + 1; field }
-  in
   function
-  | Scalar { field; value } -> of_primvalue_exn field value
+  | Int (x, { field }) when Int.(x = 0) -> IntT { bitwidth = 1; field }
+  | Int (x, { field }) when Int.(x < 0) -> IntT { bitwidth = Int.floor_log2 (-x) + 1; field }
+  | Int (x, { field }) -> IntT { bitwidth = Int.floor_log2 x + 1; field }
+  | Bool (x, { field }) -> BoolT { field }
+  | String (x, {field}) -> StringT { length = String.length x; field }
   | CrossTuple ls ->
     let ts = List.map ls ~f:(fun l -> (of_layout_exn l, Layout.ntuples l)) in
     CrossTupleT ts
@@ -104,8 +101,7 @@ let rec of_layout_exn : Layout.t -> t =
     OrderedListT (elem_t, l)
   | Table (elems, tbl) ->
     let kt = Map.keys elems
-             |> List.map ~f:(fun Db.Value.({ field; value }) ->
-                 of_primvalue_exn field value)
+             |> List.map ~f:(fun v -> Layout.of_value v |> of_layout_exn)
              |> List.fold_left ~f:unify_exn ~init:EmptyT
     in
     let vt = Map.data elems |> List.map ~f:of_layout_exn

@@ -48,10 +48,9 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
   let open Bitstring in
   fun type_ layout ->
     match type_, layout with
-    | IntT { bitwidth }, Scalar { value = `Int x } -> of_int ~width:64 x
-    | BoolT _, Scalar { value = `Bool x } -> of_bytes (bytes_of_bool x)
-    | StringT _,
-      (Scalar { value = `String x } | Scalar { value = `Unknown x }) ->
+    | IntT { bitwidth }, Int (x, _) -> of_int ~width:64 x
+    | BoolT _, Bool (x, _) -> of_bytes (bytes_of_bool x)
+    | StringT _, String (x, _) ->
       let unpadded_body = Bytes.of_string x in
       let body = unpadded_body |> align bsize in
       let len = Bytes.length body in
@@ -74,10 +73,51 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
       let body = List.map ls ~f:(serialize t) |> concat in
       let len = byte_length body in
       concat [of_int ~width:64 count; of_int ~width:64 len; body]
-    | TableT (elem_t, _, _), Table (m, _) ->
-      (* let serialized_keys = Map.keys m |> List.map ~f;(fun )
-       * let keyset = Map.keys m |> Cmph.KeySet.of_list in *)
-      failwith "Unsupported"
+    | TableT (key_t, value_t, _), Table (m, _) ->
+      let keys = Map.keys m
+        |> List.map ~f:(fun k -> k, serialize key_t (Layout.of_value k))
+      in
+      let hash = Cmph.(List.map keys ~f:(fun (_, b) -> to_string b)
+                       |> KeySet.of_list
+                       |> Config.create ~algo:`Chd |> Hash.of_config)
+      in
+      let keys =
+        List.map keys ~f:(fun (k, b) ->
+            let h = Cmph.Hash.hash hash (to_string b) in
+            (k, b, h))
+        |> List.sort ~cmp:(fun (_, _, h1) (_, _, h2) -> Int.compare h1 h2)
+      in
+      let hash_body = Cmph.Hash.to_packed hash |> of_string in
+      let hash_len = byte_length hash_body in
+      let offset = hash_len + isize in
+
+      let table_size =
+        List.fold_left keys ~f:(fun m (_, _, h) -> Int.max m h) ~init:0
+        |> fun m -> m + 1
+      in
+      let hash_table = Array.create ~len:table_size (-1) in
+
+      let offset = offset + table_size * isize in
+      let values = empty in
+      let offset, values = List.fold_left keys ~init:(offset, values)
+          ~f:(fun (offset, values) (k, b, h) ->
+              let v = Map.find_exn m k in
+              let vb = serialize value_t v in
+              hash_table.(h) <- offset;
+              let values = values @ vb in
+              let offset = offset + byte_length vb in
+              (offset, values))
+      in
+
+      let hash_table_b =
+        Array.map hash_table ~f:(of_int ~width:64) |> Array.to_list |> concat
+      in
+
+      let body =
+        concat [of_int ~width:64 hash_len; hash_body; hash_table_b; values]
+      in
+      let body_len = of_int ~width:64 (byte_length body) in
+      concat [body_len; body]
     | _, Empty -> empty
     | t, l -> Error.(create "Unexpected layout type." (t, l)
                        [%sexp_of:Type.t * Layout.t] |> raise)

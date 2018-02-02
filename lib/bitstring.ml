@@ -21,8 +21,11 @@ let of_int : width:int -> int -> t = fun ~width x ->
 let of_bytes : bytes -> t = fun x ->
   [{ str = Bytes.to_string x; len = 8 * Bytes.length x }]
 
+let of_string : string -> t = fun str -> [{ str; len = String.length str * 8 }]
+
 let concat = List.concat
 let empty = []
+let append = List.append
 
 let length : t -> int =
   let rec length acc = function
@@ -95,6 +98,13 @@ module Writer = struct
   let flush : t -> unit = fun t ->
     if t.len > 0 then t.out (Char.of_int_exn t.buf)
 end
+
+let to_string : t -> string = fun s ->
+  let b = Buffer.create (byte_length s) in
+  let w = Writer.with_buffer b in
+  Writer.write w s;
+  Writer.flush w;
+  Buffer.to_string b
 
 let tests =
   let open OUnit2 in

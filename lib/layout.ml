@@ -78,8 +78,16 @@ type table = {
   lookup : PredCtx.Key.t;
 } [@@deriving compare, sexp]
 
+type scalar = {
+  rel : Relation.t;
+  field : Field.t;
+  idx : int;
+} [@@deriving compare, sexp]
+
 type t =
-  | Scalar of Value.t
+  | Int of int * scalar
+  | Bool of bool * scalar
+  | String of string * scalar
   | CrossTuple of t list
   | ZipTuple of t list
   | UnorderedList of t list
@@ -88,8 +96,25 @@ type t =
   | Empty
 [@@deriving compare, sexp]
 
+let to_value : t -> Value.t = function
+  | Int (x, m) -> { field = m.field; rel = m.rel; idx = m.idx; value = `Int x }
+  | Bool (x, m) ->
+    { field = m.field; rel = m.rel; idx = m.idx; value = `Bool x }
+  | String (x, m) ->
+    { field = m.field; rel = m.rel; idx = m.idx; value = `String x }
+  | x -> Error.create "Cannot be converted to value." x [%sexp_of:t]
+         |> Error.raise
+
+let of_value : Value.t -> t = fun { field; rel; idx; value } -> match value with
+  | `Int x -> Int (x, { field; rel; idx })
+  | `Bool x -> Bool (x, { field; rel; idx })
+  | `String x -> String (x, { field; rel; idx })
+  | `Unknown x -> String (x, { field; rel; idx })
+
 let rec to_string : t -> string = function
-  | Scalar _ -> "s"
+  | Int _ -> "i"
+  | Bool _ -> "b"
+  | String _ -> "s"
   | ZipTuple ls ->
     List.map ls ~f:to_string |> String.concat ~sep:", " |> sprintf "z(%s)"
   | CrossTuple ls ->
@@ -111,15 +136,13 @@ let rec to_string : t -> string = function
 
 let rec to_schema_exn : t -> Schema.t = function
   | Empty -> []
-  | Scalar v -> [v.field]
+  | Int (_, m) | Bool (_, m) | String (_, m) -> [m.field]
   | ZipTuple ls
   | CrossTuple ls -> List.concat_map ls ~f:to_schema_exn
   | UnorderedList ls | OrderedList (ls, _) ->
     List.map ls ~f:to_schema_exn |> List.all_equal_exn
   | Table (m, { field = f }) ->
-    let v_schema =
-      Map.data m |> List.map ~f:to_schema_exn |> List.all_equal_exn
-    in
+    let v_schema = Map.data m |> List.map ~f:to_schema_exn |> List.all_equal_exn in
     if not (List.mem ~equal:Field.(=) v_schema f) then
       Error.(of_string "Table values must contain the table key." |> raise);
     List.merge ~cmp:Field.compare [f] v_schema
@@ -130,7 +153,7 @@ let rec params : t -> Set.M(TypedName).t =
   let kparams = PredCtx.Key.params in
   let lparams ls = List.map ~f:params ls in
   function
-  | Empty | Scalar _ -> empty
+  | Empty | Int _ | Bool _ | String _ -> empty
   | CrossTuple ls | ZipTuple ls | UnorderedList ls -> lparams ls |> union_list
   | OrderedList (ls, { lookup = (k1, k2) }) ->
     let p1 = Option.value_map ~f:kparams k1 ~default:empty in
@@ -139,11 +162,28 @@ let rec params : t -> Set.M(TypedName).t =
   | Table (m, {lookup = k}) -> union_list (kparams k::(lparams (Map.data m)))
 
 let rec partition : PredCtx.Key.t -> Field.t -> t -> t =
-  let p_scalar k f v =
-    if Field.(f = v.Value.field) then
-      Table (Map.singleton (module ValueMap.Elem) v (Scalar v),
+  let p_int k f x m =
+    let v = Int (x, m) in
+    if Field.(f = m.field) then
+      Table (Map.singleton (module ValueMap.Elem) (to_value v) v,
              {field = f; lookup = k})
-    else Scalar v
+    else v
+  in
+
+  let p_bool k f x m =
+    let v = Bool (x, m) in
+    if Field.(f = m.field) then
+      Table (Map.singleton (module ValueMap.Elem) (to_value v) v,
+             {field = f; lookup = k})
+    else v
+  in
+
+  let p_string k f x m =
+    let v = String (x, m) in
+    if Field.(f = m.field) then
+      Table (Map.singleton (module ValueMap.Elem) (to_value v) v,
+             {field = f; lookup = k})
+    else v
   in
 
   let p_crosstuple k f ls =
@@ -207,8 +247,7 @@ in
     match tbls with
     | [] -> failwith "Expected a table."
     | ts ->
-      let merged_ts =
-        List.fold_left ts ~init:(Map.empty (module ValueMap.Elem))
+      let merged_ts = List.fold_left ts ~init:(Map.empty (module ValueMap.Elem))
           ~f:(fun m -> function
               | i, Table (m', _) ->
                 Map.merge m' m ~f:(fun ~key -> function
@@ -231,9 +270,8 @@ in
       ~f:(fun ~key ~data m_outer ->
           match data with
           | Table (m_inner, _) ->
-            Map.merge
-              (Map.map m_inner ~f:(fun v ->
-                   Map.singleton (module ValueMap.Elem) key v))
+            Map.merge (Map.map m_inner ~f:(fun v ->
+                Map.singleton (module ValueMap.Elem) key v))
               m_outer
               ~f:(fun ~key -> function
                   | `Both (l, ls) ->
@@ -253,7 +291,9 @@ in
     if Schema.has_field (to_schema_exn l) f then
       match l with
       | Empty -> Empty
-      | Scalar x -> p_scalar k f x
+      | Int (x, m) -> p_int k f x m
+      | Bool (x, m) -> p_bool k f x m
+      | String (x, m) -> p_string k f x m
       | Table (_, { field = f' }) when Field.(=) f f' -> l
       | Table (ls, t) -> p_table k f ls t
       | CrossTuple x -> p_crosstuple k f x
@@ -264,7 +304,7 @@ in
 
 let rec ntuples : t -> int = function
   | Empty -> 0
-  | Scalar _ -> 1
+  | Int _ | Bool _ | String _ -> 1
   | CrossTuple ls -> List.fold_left ls ~init:1 ~f:(fun p l -> p * ntuples l)
   | ZipTuple ls -> List.map ls ~f:ntuples |> List.all_equal_exn
   | UnorderedList ls | OrderedList (ls, _) ->
@@ -272,7 +312,7 @@ let rec ntuples : t -> int = function
   | Table (m, _) -> Map.data m |> List.map ~f:ntuples |> List.all_equal_exn
 
 let flatten : t -> t = function
-  | Scalar _ | Table _ | Empty as l -> l
+  | Int _ | Bool _ | String _ | Table _ | Empty as l -> l
   | CrossTuple ls ->
     List.concat_map ls ~f:(function
         | CrossTuple ls' -> ls'
@@ -298,15 +338,15 @@ let flatten : t -> t = function
 
 let rec order : range -> Field.t -> [`Asc | `Desc] -> t -> t = fun k f o l ->
   let cmp = match o with
-    | `Asc -> Value.compare
-    | `Desc -> fun k1 k2 -> Value.compare k2 k1
+    | `Asc -> ValueMap.Elem.compare
+    | `Desc -> fun k1 k2 -> ValueMap.Elem.compare k2 k1
   in
   if List.exists (to_schema_exn l) ~f:(Field.(=) f) then
     match partition PredCtx.Key.dummy f l with
     | Table (m, _) ->
       Map.to_alist m
       |> List.sort ~cmp:(fun (k1, _) (k2, _) -> cmp k1 k2)
-      |> List.map ~f:(fun (k, v) -> CrossTuple [Scalar k; v])
+      |> List.map ~f:(fun (k, v) -> CrossTuple [of_value k; v])
       |> fun ls -> OrderedList (ls, { field = f; order = o; lookup = k })
     | _ -> raise (TransformError (Error.of_string "Expected a table."))
   else l
@@ -314,8 +354,8 @@ let rec order : range -> Field.t -> [`Asc | `Desc] -> t -> t = fun k f o l ->
 let merge : range -> Field.t -> [`Asc | `Desc] -> t -> t -> t =
   fun k f o l1 l2 ->
     let cmp = match o with
-      | `Asc -> Value.compare
-      | `Desc -> fun k1 k2 -> Value.compare k2 k1
+    | `Asc -> ValueMap.Elem.compare
+    | `Desc -> fun k1 k2 -> ValueMap.Elem.compare k2 k1
     in
     match partition PredCtx.Key.dummy f l1, partition PredCtx.Key.dummy f l2 with
     | Table (m1, _), Table (m2, _) ->
@@ -324,14 +364,15 @@ let merge : range -> Field.t -> [`Asc | `Desc] -> t -> t -> t =
           | `Left l | `Right l -> Some l)
       |> Map.to_alist
       |> List.sort ~cmp:(fun (k1, _) (k2, _) -> cmp k1 k2)
-      |> List.map ~f:(fun (k, v) -> CrossTuple [Scalar k; v])
+      |> List.map ~f:(fun (k, v) -> CrossTuple [of_value k; v])
       |> fun ls -> OrderedList (ls, { field = f; order = o; lookup = k })
     | _ -> raise (TransformError (Error.of_string "Expected a table."))
 
 let project : Field.t list -> t -> t = fun fs l ->
   let f_in = List.mem ~equal:Field.equal fs in
   let rec project = function
-    | Scalar v -> if f_in v.field then Scalar v else Empty
+    | Int (_, m) | Bool (_, m) | String (_, m) as v ->
+      if f_in m.field then v else Empty
     | CrossTuple ls -> CrossTuple (List.map ls ~f:project)
     | ZipTuple ls ->
       let ls' =
@@ -360,9 +401,8 @@ let tests =
     in
     "partition" >::: [
       ("scalar" >:: fun ctxt ->
-          let inp_v = Value.({ rel = r; field = f1; idx = 0; value = `Int 0 }) in
-          let inp = Scalar inp_v in
-          let out = Table (Map.singleton (module ValueMap.Elem) inp_v inp,
+          let inp = Int (0, { rel = r; field = f1; idx = 0 }) in
+          let out = Table (Map.singleton (module ValueMap.Elem) (to_value inp) inp,
                            { lookup = PredCtx.Key.dummy; field = f1 })
           in
           assert_equal ~ctxt out (partition PredCtx.Key.dummy f1 inp));

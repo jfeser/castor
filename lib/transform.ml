@@ -13,23 +13,26 @@ let run : t -> Ralgebra.t -> Ralgebra.t list = fun t r ->
 
 let run_checked : t -> Ralgebra.t -> Ralgebra.t list = fun t r ->
   try
+    Logs.info (fun m -> m "Running %s on %s." t.name (Ralgebra.to_string r));
     let rs = t.f r in
-    (* Stdio.printf "INFO: Running %s. Got %d new exprs:\n%s\n" t.name (List.length rs) (ralgebra_to_string r); *)
-    List.filter rs ~f:(fun r' ->
+    List.iter rs ~f:(fun r' ->
+        Logs.info (fun m -> m "New candidate %s." (Ralgebra.to_string r'));
+
         let eval_to_set r =
           eval (Ctx.testctx ()) r
           |> Seq.fold ~init:(Set.empty (module Tuple)) ~f:Set.add
         in
         let s1 = eval_to_set r in
         let s2 = eval_to_set r' in
-        if Set.equal s1 s2 then true else begin
-          Stdio.printf "ERROR: Transform %s not equivalent.\n%s => %s\n"
-            t.name (Ralgebra.to_string r) (Ralgebra.to_string r');
-          Stdio.printf "New relation has %d records, old has %d.\n" (Set.length s2) (Set.length s1);
-          false
-        end)
+        if not (Set.equal s1 s2) then
+          Logs.warn (fun m -> m "Transform %s not equivalent." t.name);
+          Logs.debug (fun m -> m "%s => %s" (Ralgebra.to_string r)
+                         (Ralgebra.to_string r'));
+          Logs.debug (fun m -> m "New relation has %d records, old has %d."
+                         (Set.length s2) (Set.length s1)));
+    rs
   with Layout.TransformError e ->
-    Stdio.printf "WARN: Transform %s failed: %s.\n" t.name (Error.to_string_hum e);
+    Logs.warn (fun m -> m "Transform %s failed: %s." t.name (Error.to_string_hum e));
     []
 
 let col_layout : Relation.t -> Layout.t = fun r ->
@@ -38,14 +41,13 @@ let col_layout : Relation.t -> Layout.t = fun r ->
   List.transpose stream
   |> (fun v -> Option.value_exn v)
   |> List.map ~f:(fun col ->
-      UnorderedList (List.map col ~f:(fun v -> Scalar v)))
+      UnorderedList (List.map col ~f:(fun v -> of_value v)))
   |> (fun cols -> ZipTuple cols)
 
 let row_layout : Relation.t -> Layout.t = fun r ->
   let open Layout in
   eval_relation r
-  |> Seq.map ~f:(fun tup ->
-      CrossTuple (List.map ~f:(fun v -> Scalar v) tup))
+  |> Seq.map ~f:(fun tup -> CrossTuple (List.map ~f:(fun v -> of_value v) tup))
   |> Seq.to_list
   |> fun l -> UnorderedList l
 
