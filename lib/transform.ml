@@ -35,6 +35,26 @@ let run_checked : t -> Ralgebra.t -> Ralgebra.t list = fun t r ->
     Logs.warn (fun m -> m "Transform %s failed: %s." t.name (Error.to_string_hum e));
     []
 
+let rec run_everywhere : t -> Ralgebra.t -> Ralgebra.t list = fun t r ->
+  let open Ralgebra in
+  let rs = run_checked t r in
+  let rs' = match r with
+    | Scan _ | Relation _ -> []
+    | Project (fs, r') ->
+      List.map (run_everywhere t r') ~f:(fun r' -> Ralgebra0.Project (fs, r'))
+    | Filter (ps, r') ->
+      List.map (run_everywhere t r') ~f:(fun r' -> Ralgebra0.Filter (ps, r'))
+    | EqJoin (f1, f2, r1, r2) ->
+      List.map (run_everywhere t r1) ~f:(fun r1 -> Ralgebra0.EqJoin (f1, f2, r1, r2))
+      @ List.map (run_everywhere t r2) ~f:(fun r2 -> Ralgebra0.EqJoin (f1, f2, r1, r2))
+    | Concat rs ->
+      List.map rs ~f:(run_everywhere t)
+      |> List.transpose
+      |> (fun x -> Option.value_exn x)
+      |> List.map ~f:(fun rs -> Ralgebra0.Concat rs)
+  in
+  rs @ rs'
+
 let col_layout : Relation.t -> Layout.t = fun r ->
   let open Layout in
   let stream = eval_relation r |> Seq.to_list in
@@ -186,42 +206,34 @@ let tf_push_project : t =
     | _ -> []
 }
 
-let transform : Postgresql.connection -> Ralgebra.t -> Ralgebra.t list =
-  let open Ralgebra in
-  let tfs = [
-    tf_eq_filter;
-    tf_cmp_filter;
-    tf_and_filter;
-    tf_or_filter;
-    tf_eqjoin;
-    tf_concat;
-    tf_row_layout;
-    tf_col_layout;
-    tf_flatten;
-    tf_empty_project;
-    tf_push_project;
-  ] in
-  fun conn r ->
-    let rec transform r =
-      let rs = List.concat_map tfs ~f:(fun tf -> run_checked tf r) in
-      let rs' = match r with
-        | Scan _ | Relation _ -> []
-        | Project (fs, r') ->
-          List.map (transform r') ~f:(fun r' -> Ralgebra0.Project (fs, r'))
-        | Filter (ps, r') ->
-          List.map (transform r') ~f:(fun r' -> Ralgebra0.Filter (ps, r'))
-        | EqJoin (f1, f2, r1, r2) ->
-          List.map (transform r1) ~f:(fun r1 -> Ralgebra0.EqJoin (f1, f2, r1, r2))
-          @ List.map (transform r2) ~f:(fun r2 -> Ralgebra0.EqJoin (f1, f2, r1, r2))
-        | Concat rs ->
-          List.map rs ~f:transform
-          |> List.transpose
-          |> (fun x -> Option.value_exn x)
-          |> List.map ~f:(fun rs -> Ralgebra0.Concat rs)
-      in
-      rs @ rs'
-    in
-    transform r
+let transforms = [
+  tf_eq_filter;
+  tf_cmp_filter;
+  tf_and_filter;
+  tf_or_filter;
+  tf_eqjoin;
+  tf_concat;
+  tf_row_layout;
+  tf_col_layout;
+  tf_flatten;
+  tf_empty_project;
+  tf_push_project;
+]
+
+let of_name : string -> t Or_error.t = fun n ->
+  match List.find transforms ~f:(fun { name } -> String.(name = n)) with
+  | Some x -> Ok x
+  | None -> Or_error.error "Transform not found." n [%sexp_of:string]
+
+let of_name_exn : string -> t = fun n -> Or_error.ok_exn (of_name n)
 
 let search : Postgresql.connection -> Ralgebra.t -> Ralgebra.t Seq.t =
-  fun conn r -> Seq.bfs r (fun r -> transform conn r |> Seq.of_list)
+  fun conn r -> Seq.bfs r (fun r ->
+      Seq.map (Seq.of_list transforms) ~f:(fun tf ->
+          run_everywhere tf r |> Seq.of_list)
+      |> Seq.concat)
+
+let run_chain : t list -> Ralgebra.t -> Ralgebra.t Seq.t = fun tfs r ->
+  List.fold_left tfs ~init:[r]
+    ~f:(fun rs t -> List.concat_map ~f:(run_everywhere t) rs)
+  |> Seq.of_list

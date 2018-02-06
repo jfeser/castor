@@ -55,24 +55,34 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
       let body = unpadded_body |> align bsize in
       let len = Bytes.length body in
       Bytes.econcat [bytes_of_int ~width:64 len; body] |> of_bytes
-    | CrossTupleT ts, (CrossTuple ls as l) ->
-      let count = Layout.ntuples l in
-      let body =
-        List.map2_exn ts ls ~f:(fun (t, _) l -> serialize t l) |> concat
-      in
+    | CrossTupleT (ts, { count }), (CrossTuple ls as l) ->
+      let body = List.map2_exn ts ls ~f:(fun t l -> serialize t l) |> concat in
       let len = byte_length body in
-      concat [of_int ~width:64 count; of_int ~width:64 len; body]
-    | ZipTupleT (ts, _), (ZipTuple ls as l) ->
-      let count = Layout.ntuples l in
+      begin match count with
+        | Count _ | Unknown -> concat [of_int ~width:64 len; body]
+        | Countable ->
+          let ct = Layout.ntuples_exn l in
+          concat [of_int ~width:64 ct; of_int ~width:64 len; body]
+      end
+    | ZipTupleT (ts, { count }), (ZipTuple ls as l) ->
       let body = List.map2_exn ts ls ~f:serialize |> concat in
       let len = byte_length body in
-      concat [of_int ~width:64 count; of_int ~width:64 len; body]
-    | OrderedListT (t, _), (OrderedList (ls, _) as l)
-    | UnorderedListT t, (UnorderedList ls as l) ->
-      let count = Layout.ntuples l in
+      begin match count with
+        | Count _ | Unknown -> concat [of_int ~width:64 len; body]
+        | Countable ->
+          let ct = Layout.ntuples_exn l in
+          concat [of_int ~width:64 ct; of_int ~width:64 len; body]
+      end
+    | OrderedListT (t, { count }), (OrderedList (ls, _) as l)
+    | UnorderedListT (t, { count }), (UnorderedList ls as l) ->
       let body = List.map ls ~f:(serialize t) |> concat in
       let len = byte_length body in
-      concat [of_int ~width:64 count; of_int ~width:64 len; body]
+      begin match count with
+        | Count _ | Unknown -> concat [of_int ~width:64 len; body]
+        | Countable ->
+          let ct = Layout.ntuples_exn l in
+          concat [of_int ~width:64 ct; of_int ~width:64 len; body]
+      end
     | TableT (key_t, value_t, _), Table (m, _) ->
       let keys = Map.keys m
         |> List.map ~f:(fun k -> k, serialize key_t (Layout.of_value k))

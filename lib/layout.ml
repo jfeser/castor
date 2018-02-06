@@ -64,13 +64,19 @@ module ValueMap = struct
   type 'a t = 'a Map.M(Elem).t [@@deriving compare, sexp]
 end
 
-type range =
-  (PredCtx.Key.t option * PredCtx.Key.t option) [@@deriving compare, sexp]
+module Range = struct
+  module T = struct
+    type t = PredCtx.Key.t option * PredCtx.Key.t option
+    [@@deriving compare, sexp]
+  end
+  include T
+  include Comparable.Make(T)
+end
 
 type ordered_list = {
   field : Field.t;
   order : [`Asc | `Desc];
-  lookup : range;
+  lookup : Range.t;
 } [@@deriving compare, sexp]
 
 type table = {
@@ -302,14 +308,17 @@ in
       | OrderedList (ls, t) -> p_orderedlist k f ls t
     else l
 
-let rec ntuples : t -> int = function
+let rec ntuples_exn : t -> int = function
   | Empty -> 0
   | Int _ | Bool _ | String _ -> 1
-  | CrossTuple ls -> List.fold_left ls ~init:1 ~f:(fun p l -> p * ntuples l)
-  | ZipTuple ls -> List.map ls ~f:ntuples |> List.all_equal_exn
+  | CrossTuple ls -> List.fold_left ls ~init:1 ~f:(fun p l -> p * ntuples_exn l)
+  | ZipTuple ls -> List.map ls ~f:ntuples_exn |> List.all_equal_exn
   | UnorderedList ls | OrderedList (ls, _) ->
-    List.fold_left ls ~init:0 ~f:(fun p l -> p + ntuples l)
-  | Table (m, _) -> Map.data m |> List.map ~f:ntuples |> List.all_equal_exn
+    List.fold_left ls ~init:0 ~f:(fun p l -> p + ntuples_exn l)
+  | Table (m, _) -> Map.data m |> List.map ~f:ntuples_exn |> List.all_equal_exn
+
+let ntuples : t -> int Or_error.t = fun l ->
+  Or_error.try_with (fun () -> ntuples_exn l)
 
 let flatten : t -> t = function
   | Int _ | Bool _ | String _ | Table _ | Empty as l -> l
@@ -336,7 +345,7 @@ let flatten : t -> t = function
         | l -> [l])
     |> fun x -> UnorderedList x
 
-let rec order : range -> Field.t -> [`Asc | `Desc] -> t -> t = fun k f o l ->
+let rec order : Range.t -> Field.t -> [`Asc | `Desc] -> t -> t = fun k f o l ->
   let cmp = match o with
     | `Asc -> ValueMap.Elem.compare
     | `Desc -> fun k1 k2 -> ValueMap.Elem.compare k2 k1
@@ -351,7 +360,7 @@ let rec order : range -> Field.t -> [`Asc | `Desc] -> t -> t = fun k f o l ->
     | _ -> raise (TransformError (Error.of_string "Expected a table."))
   else l
 
-let merge : range -> Field.t -> [`Asc | `Desc] -> t -> t -> t =
+let merge : Range.t -> Field.t -> [`Asc | `Desc] -> t -> t -> t =
   fun k f o l1 l2 ->
     let cmp = match o with
     | `Asc -> ValueMap.Elem.compare
@@ -376,7 +385,7 @@ let project : Field.t list -> t -> t = fun fs l ->
     | CrossTuple ls -> CrossTuple (List.map ls ~f:project)
     | ZipTuple ls ->
       let ls' =
-        List.map ls ~f:project |> List.filter ~f:(fun l -> ntuples l > 0)
+        List.map ls ~f:project |> List.filter ~f:(fun l -> ntuples_exn l > 0)
       in
       ZipTuple ls'
     | UnorderedList ls -> UnorderedList (List.map ls ~f:project)

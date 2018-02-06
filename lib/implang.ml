@@ -14,7 +14,7 @@ type type_ =
   | VoidT
 [@@deriving compare, sexp]
 
-type op = Add | Sub | Lt | Eq | And | Or | Not [@@deriving compare, sexp]
+type op = Add | Sub | Lt | Eq | And | Or | Not | Hash [@@deriving compare, sexp]
 type value =
   | VCont of { state : state; body : prog }
   | VFunc of func
@@ -104,6 +104,7 @@ and pp_expr : Format.formatter -> expr -> unit =
     | Not -> "not"
     | Eq -> "="
     | Or -> "||"
+    | Hash -> "hash"
   in
   fun fmt -> function
     | Int x -> pp_int fmt x
@@ -112,6 +113,8 @@ and pp_expr : Format.formatter -> expr -> unit =
     | Tuple t -> fprintf fmt "(@[<hov>%a@])" (pp_tuple pp_expr) t
     | Slice (ptr, len) -> fprintf fmt "buf[%a :@ %d]" pp_expr ptr len
     | Index (tuple, idx) -> fprintf fmt "%a[%d]" pp_expr tuple idx
+    | Binop { op = Hash; arg1; arg2 } ->
+      fprintf fmt "hash(%a, %a)" pp_expr arg1 pp_expr arg2
     | Binop { op; arg1; arg2 } ->
       fprintf fmt "%a %s@ %a" pp_expr arg1 (op_to_string op) pp_expr arg2
     | Unop { op; arg } -> fprintf fmt "%s@ %a" (op_to_string op) pp_expr arg
@@ -160,6 +163,7 @@ module Infix = struct
   let (&&) = fun x y -> Binop { op = And; arg1 = x; arg2 = y }
   let (||) = fun x y -> Binop { op = Or; arg1 = x; arg2 = y }
   let (not) = fun x -> Unop { op = Not; arg = x }
+  let hash x y = Binop { op = Hash; arg1 = x; arg2 = y }
   let loop c b = Loop { cond = c; body = b }
   let call v f a = Iter { var = v; func = f; args = a }
   let islice x = Slice (x, Serialize.isize)
@@ -477,6 +481,7 @@ module IRGen = struct
     locals : type_ Hashtbl.M(String).t;
     body : prog ref;
   }
+  type stmt_builder = func_builder -> unit
 
   type ir_module = {
     iters : (string * func) list;
@@ -521,7 +526,7 @@ module IRGen = struct
     | Some (n, _) -> Var n
     | None -> fail (Error.of_string "Not an argument index.")
 
-  let build_yield : expr -> func_builder -> unit = fun e b ->
+  let build_yield : expr -> stmt_builder = fun e b ->
     b.body := (Yield e)::!(b.body)
 
   let build_func : func_builder -> func = fun { args; ret; locals; body } ->
@@ -531,7 +536,7 @@ module IRGen = struct
       body = List.rev !body;
     }
 
-  let build_assign : expr -> expr -> func_builder -> unit = fun e v b ->
+  let build_assign : expr -> expr -> stmt_builder = fun e v b ->
     b.body := Assign { lhs = name_of_var v; rhs = e }::!(b.body)
 
   let build_defn : string -> type_ -> expr -> func_builder -> expr =
@@ -539,7 +544,7 @@ module IRGen = struct
       let var = build_var v t b in
       build_assign e var b; var
 
-  let build_print : expr -> func_builder -> unit = fun e b ->
+  let build_print : expr -> stmt_builder = fun e b ->
     let t = infer_type b.locals e in
     b.body := (Print (t, e))::!(b.body)
 
@@ -568,33 +573,51 @@ module IRGen = struct
         let var = build_fresh_var v t b in
         build_assign e var b; var
 
-    let build_iter : string -> expr list -> func_builder -> unit =
-      fun f a b ->
+    let build_iter : string -> expr list -> stmt_builder = fun f a b ->
         assert (Hashtbl.mem mfuncs f);
         b.body := Iter { func = f; args = a; var = "" }::!(b.body)
 
-    let build_step : expr -> string -> func_builder -> unit =
-      fun var iter b ->
+    let build_step : expr -> string -> stmt_builder = fun var iter b ->
         assert (Hashtbl.mem mfuncs iter);
         b.body := Step { var = name_of_var var; iter }::!(b.body)
 
-    let build_loop : expr -> (func_builder -> unit) -> func_builder -> unit =
-      fun c f b ->
+    let build_loop : expr -> stmt_builder -> stmt_builder = fun c f b ->
         let child_b = new_scope b in
         f child_b;
         b.body := Loop { cond = c; body = List.rev !(child_b.body); }::!(b.body)
 
-    let build_count_loop : expr -> (func_builder -> unit) -> func_builder ->
-      unit =
-      fun c f b ->
+    let build_count_loop : expr -> stmt_builder -> stmt_builder = fun c f b ->
         let count = build_fresh_defn "count" int_t c b in
         build_loop Infix.(count > int 0) (fun b ->
             f b;
             build_assign Infix.(count - int 1) count b
           ) b
 
-    let build_if : cond:expr -> then_:(func_builder -> unit) ->
-      else_:(func_builder -> unit) -> func_builder -> unit =
+    let build_foreach : Type.t -> expr -> string -> (expr -> stmt_builder)
+      -> stmt_builder =
+      fun type_ start iter_ body b ->
+        let tup = build_fresh_var "tup" (find_func iter_).ret_type b in
+        build_iter iter_ [start] b;
+        match Type.count type_ with
+        | Count x ->
+          build_count_loop Infix.(int x) (fun b ->
+              build_step tup iter_ b;
+              body tup b;
+            ) b
+        | Countable ->
+          build_count_loop Infix.(islice start) (fun b ->
+              build_step tup iter_ b;
+              body tup b;
+            ) b
+        | Unknown ->
+          build_step tup iter_ b;
+          body tup b;
+          build_loop Infix.(not (Done iter_)) (fun b ->
+              body tup b;
+              build_step tup iter_ b) b
+
+    let build_if : cond:expr -> then_:stmt_builder -> else_:stmt_builder
+      -> stmt_builder =
       fun ~cond ~then_ ~else_ b ->
         let b_then = new_scope b in
         let b_else = new_scope b in
@@ -604,6 +627,15 @@ module IRGen = struct
                        fcase = List.rev !(b_else.body) }
         in
         b.body := ite::!(b.body)
+
+    let build_tuple_append : type_ -> type_ -> expr -> expr -> expr =
+      fun t1 t2 e1 e2 ->
+        let elems len e = List.init len ~f:(fun i -> Index (e, i)) in
+        match t1, t2 with
+        | TupleT x1, TupleT x2 ->
+          Tuple (elems (List.length x1) e1 @ elems (List.length x2) e2)
+        | _ -> Error.create "Expected tuples." (t1, t2) [%sexp_of:type_ * type_]
+               |> Error.raise
 
     open Serialize
 
@@ -616,19 +648,21 @@ module IRGen = struct
       | BoolT _ -> int isize
       | StringT _ -> islice start
       | EmptyT -> int 0
-      | CrossTupleT _ | ZipTupleT _ | UnorderedListT _ | OrderedListT _ ->
-        islice (start + int isize)
-      | TableT (_,_,_) -> failwith "Unsupported."
+      | CrossTupleT _ | ZipTupleT _ | UnorderedListT _ | OrderedListT _
+      | TableT _ -> islice (start + int isize)
 
     let count start =
       let open Infix in
       let open Type in
       function
-      | IntT _ | BoolT _ | StringT _ -> int 1
-      | EmptyT -> int 0
-      | CrossTupleT _ | ZipTupleT _ | UnorderedListT _ | OrderedListT _ ->
-        islice start
-      | TableT (_,_,_) -> failwith "Unsupported."
+      | IntT _ | BoolT _ | StringT _ -> Some (int 1)
+      | EmptyT -> Some (int 0)
+      | CrossTupleT (_, { count = Count x })
+      | ZipTupleT (_, { count = Count x })
+      | UnorderedListT (_, { count = Count x })
+      | OrderedListT (_, { count = Count x })
+      | TableT (_, _, { count = Count x }) -> Some (int x)
+      | _ -> None
 
     (** The length of a layout header in bytes. *)
     let hsize =
@@ -639,7 +673,7 @@ module IRGen = struct
       | StringT _ -> int isize
       | CrossTupleT _ | ZipTupleT _ | OrderedListT _ | UnorderedListT _ ->
         int (2 * isize)
-      | TableT (_,_,_) -> failwith "Unsupported."
+      | TableT (_,_,_) -> int isize
 
     let scan_empty = create ["start", int_t] VoidT |> build_func
 
@@ -662,62 +696,61 @@ module IRGen = struct
       build_yield (Tuple [Infix.(slice (start + int isize) len)]) b;
       build_func b
 
-    let scan_crosstuple scan ts =
+    let scan_crosstuple scan ts m =
       let rec loops b col_start vars = function
         | [] ->
           let tup =
-            List.map2_exn ts (List.rev vars) ~f:(fun (t, _) v ->
+            List.map2_exn ts (List.rev vars) ~f:(fun t v ->
                 List.init (Type.width t) ~f:(fun i -> Index (v, i)))
             |> List.concat
           in
           build_yield (Tuple tup) b
-        | (func, type_, count)::rest ->
-          build_iter func [col_start] b;
-          let var = build_fresh_var "x" (find_func func).ret_type b in
-          build_count_loop Infix.(int count) (fun b ->
-              build_step var func b;
-              let next_start =
+
+        | (func, type_)::rest ->
+          build_foreach type_ col_start func (fun var b ->
+              let col_start =
                 Infix.(col_start + (len col_start type_) + (hsize type_))
               in
-              loops b next_start (var::vars) rest
-            ) b;
+              loops b col_start (var::vars) rest) b;
       in
 
-      let funcs = List.map ts ~f:(fun (t, l) -> (scan t, t, l)) in
-      let ret_type = TupleT (List.map funcs ~f:(fun (func, _, _) ->
+      let funcs = List.map ts ~f:(fun t -> (scan t, t)) in
+      let ret_type = TupleT (List.map funcs ~f:(fun (func, _) ->
           match (find_func func).ret_type with
           | TupleT ts -> ts
           | t -> [t])
                              |> List.concat)
       in
       let b = create ["start", int_t] ret_type in
-      let start = build_arg 0 b in
-      loops b Infix.(start + hsize (CrossTupleT ts)) [] funcs;
+      let start = Infix.(build_arg 0 b + hsize (CrossTupleT (ts, m))) in
+      loops b start [] funcs;
       build_func b
 
-    let scan_ziptuple scan ts (Type.({ len = count }) as t) =
-      let funcs = List.map ts ~f:scan in
-      let ret_type =
-        List.map funcs ~f:(fun func -> match (find_func func).ret_type with
-            | TupleT ts -> ts
-            | t -> [t])
-        |> List.concat
-        |> fun x -> TupleT x
-      in
-      let b = create ["start", int_t] ret_type in
-      let start = build_arg 0 b in
+    let scan_ziptuple : _ -> _ -> Type.ziptuple -> _ =
+      fun scan ts Type.({ count } as t) ->
+        let funcs = List.map ts ~f:scan in
+        let ret_type =
+          List.map funcs ~f:(fun func -> match (find_func func).ret_type with
+              | TupleT ts -> ts
+              | t -> [t])
+          |> List.concat
+          |> fun x -> TupleT x
+        in
+        let b = create ["start", int_t] ret_type in
+        let start = build_arg 0 b in
 
-      (* Build iterator initializers using the computed start positions. *)
-      List.zip_exn funcs ts
-      |> List.fold_left ~init:Infix.(start + hsize (ZipTupleT (ts, t)))
-        ~f:(fun start (f, t) ->
-            build_iter f [start] b;
-            Infix.(start + hsize t + len start t)) |> ignore;
+        (* Build iterator initializers using the computed start positions. *)
+        List.zip_exn funcs ts
+        |> List.fold_left ~init:Infix.(start + hsize (ZipTupleT (ts, t)))
+          ~f:(fun start (f, t) ->
+              build_iter f [start] b;
+              Infix.(start + hsize t + len start t)) |> ignore;
 
-      build_count_loop Infix.(int count) (fun b ->
-          let child_tuples = List.map funcs ~f:(fun f ->
-              build_fresh_var "t" (find_func f).ret_type b)
-          in
+        let child_tuples = List.map funcs ~f:(fun f ->
+            build_fresh_var "t" (find_func f).ret_type b)
+        in
+
+        let build_body b =
           List.iter2_exn funcs child_tuples ~f:(fun f t ->
               build_step t f b);
           let tup = List.map2_exn ts child_tuples ~f:(fun in_t child_tup ->
@@ -726,35 +759,41 @@ module IRGen = struct
                     |> fun l -> Tuple l
           in
           build_yield tup b
-        ) b;
-      build_func b
+        in
 
-    let scan_unordered_list scan t =
-      let func = scan t in
-      let ret_type = (find_func func).ret_type in
-      let b = create ["start", int_t] ret_type in
-      let start = build_arg 0 b in
-      let pcount = build_defn "pcount" int_t Infix.(islice start) b in
-      let cstart =
-        build_defn "cstart" int_t Infix.(start + hsize (UnorderedListT t)) b
-      in
-      (* FIXME: Should account for children where the length isn't known. *)
-      build_loop Infix.(pcount > int 0) (fun b ->
-          let ccount = count cstart t in
-          let clen = len cstart t in
-          build_iter func [cstart] b;
-          build_count_loop ccount (fun b ->
-              let x = build_var "x" (find_func func).ret_type b in
-              build_step x func b;
-              build_yield x b) b;
-          build_assign Infix.(cstart + clen + hsize t) cstart b;
-          build_assign Infix.(pcount - int 1) pcount b) b;
-      build_func b
+        begin match count with
+          | Count x -> build_count_loop Infix.(int x) build_body b
+          | Countable | Unknown ->
+            build_body b;
+            let not_done = List.fold_left funcs ~init:(Bool true) ~f:(fun acc f ->
+                Infix.(acc && not (Done f)))
+            in
+            build_loop not_done build_body b
+        end;
+        build_func b
 
-    let scan_ordered_list scan t Layout.({ field; order; lookup = lower, upper }) =
-      let func = scan (Type.UnorderedListT t) in
+    let scan_unordered_list : _ -> _ -> Type.unordered_list -> _ =
+      fun scan t ({ count } as m) ->
+        let func = scan t in
+        let ret_type = (find_func func).ret_type in
+        let b = create ["start", int_t] ret_type in
+        let start = build_arg 0 b in
+        let pcount = build_defn "pcount" int_t Infix.(islice start) b in
+        let cstart =
+          build_defn "cstart" int_t Infix.(start + hsize (UnorderedListT (t, m))) b
+        in
+        build_loop Infix.(pcount > int 0) (fun b ->
+            let clen = len cstart t in
+            build_foreach t cstart func build_yield b;
+            build_assign Infix.(cstart + clen + hsize t) cstart b;
+            build_assign Infix.(pcount - int 1) pcount b) b;
+        build_func b
+
+    let scan_ordered_list scan t
+        Type.({ field; order; lookup = lower, upper; count }) =
+      let func = scan (Type.UnorderedListT (t, { count })) in
       let idx =
-        Db.Schema.field_idx_exn (Type.to_schema (UnorderedListT t)) field
+        Db.Schema.field_idx_exn (Type.to_schema (UnorderedListT (t, { count }))) field
       in
       let ret_type = (find_func func).ret_type in
       let b = create ["start", int_t] ret_type in
@@ -809,6 +848,47 @@ module IRGen = struct
       end;
       build_func b
 
+    let scan_table : _ -> _ -> _ -> Type.table -> _ =
+      fun scan kt vt { count; field; lookup } ->
+        let key_iter = scan kt in
+        let value_iter = scan vt in
+        let key_type = (find_func key_iter).ret_type in
+        let value_type = (find_func value_iter).ret_type in
+
+        let ret_type =
+          match (find_func key_iter).ret_type, (find_func value_iter).ret_type with
+          | (TupleT t1, TupleT t2) -> TupleT (t1 @ t2)
+          | ts -> Error.create "Unexpected types." ts [%sexp_of:type_ * type_]
+                  |> Error.raise
+        in
+
+        let b = create ["start", int_t] ret_type in
+
+        let start = build_arg 0 b in
+        let hash_len = Infix.(islice (start + int isize)) in
+        let hash_data_start = Infix.(start + int (isize * 2)) in
+        let mapping_start = Infix.(hash_data_start + hash_len) in
+        let lookup_expr = match lookup with
+          | Var (n, _) -> Var n
+          | _ -> Error.create "Unexpected parameters." lookup
+                   [%sexp_of:Layout.PredCtx.Key.t] |> Error.raise
+        in
+        let hash_key = Infix.(hash hash_data_start lookup_expr) in
+        let key_start =
+          Infix.(mapping_start + islice (mapping_start + hash_key))
+        in
+        build_iter key_iter [key_start] b;
+        let key = build_fresh_var "key" key_type b in
+        build_step key key_iter b;
+
+        let value_start = Infix.(key_start + len key_start kt) in
+        build_if ~cond:Infix.(Index(key, 0) = lookup_expr)
+          ~then_:(build_foreach vt value_start value_iter (fun value b ->
+              build_yield (build_tuple_append key_type value_type key value) b))
+          ~else_:(fun b -> ()) b;
+
+        build_func b
+
     let scan_wrapper scan start t =
       let func = scan t in
       let ret_type = (find_func func).ret_type in
@@ -848,11 +928,11 @@ module IRGen = struct
           | BoolT m -> scan_bool m
           | StringT m -> scan_string m
           | EmptyT -> scan_empty
-          | CrossTupleT x -> scan_crosstuple scan x
+          | CrossTupleT (x, m) -> scan_crosstuple scan x m
           | ZipTupleT (x, m) -> scan_ziptuple scan x m
-          | UnorderedListT x -> scan_unordered_list scan x
+          | UnorderedListT (x, m) -> scan_unordered_list scan x m
           | OrderedListT (x, m) -> scan_ordered_list scan x m
-          | TableT (_,_,_) -> failwith "Unsupported."
+          | TableT (kt, vt, m) -> scan_table scan kt vt m
         in
         add_func name func; name
       in

@@ -18,6 +18,31 @@ let sexp_of_llvalue : llvalue -> Sexp.t =
 let sexp_of_lltype : lltype -> Sexp.t =
   fun v -> Sexp.Atom (string_of_lltype v)
 
+module TypeKind = struct
+  include TypeKind
+
+  let sexp_of_t : t -> Sexp.t = fun k ->
+    let str = match k with
+      | Void -> "Void"
+      | Half -> "Half"
+      | Float -> "Float"
+      | Double -> "Double"
+      | X86fp80 -> "X86fp80"
+      | Fp128 -> "Fp128"
+      | Ppc_fp128 -> "Ppc_fp128"
+      | Label -> "Label"
+      | Integer -> "Integer"
+      | Function -> "Function"
+      | Struct -> "Struct"
+      | Array -> "Array"
+      | Pointer -> "Pointer"
+      | Vector -> "Vector"
+      | Metadata -> "Metadata"
+      | X86_mmx -> "X86_mmx"
+    in
+    Sexp.Atom str
+end
+
 module Make (Ctx: CTX) () = struct
   open Ctx
 
@@ -264,18 +289,46 @@ module Make (Ctx: CTX) () = struct
           begin match k1, k2 with
             | (Integer, Integer) -> build_icmp Icmp.Eq v1 v2 "eqtmp" builder
             | (Struct, Struct) -> failwith "unimplemented"
-            | _ -> fail (Error.of_string "Unexpected equality.")
+            | _ -> fail (Error.create "Unexpected equality." (k1, k2) [%sexp_of:TypeKind.t * TypeKind.t])
           end
         | Lt -> build_icmp Icmp.Slt v1 v2 "lttmp" builder
         | And -> build_and v1 v2 "andtmp" builder
         | Or -> build_or v1 v2 "ortmp" builder
+        | Hash ->
+          (* See cmph.h. cmph_uint32 cmph_search_packed(void *packed_mphf, const
+             char *key, cmph_uint32 keylen); *)
+          let cmph_search_packed =
+            declare_function "cmph_search_packed"
+              (function_type (i32_type ctx)
+                 [|pointer_type (i8_type ctx); pointer_type (i8_type ctx);
+                   i32_type ctx|])
+              module_
+          in
+          let key_ptr = build_alloca (type_of v2) "" builder in
+          build_store v2 key_ptr builder |> ignore;
+          let key_ptr_cast = build_pointercast key_ptr
+              (pointer_type (i8_type ctx)) "" builder
+          in
+          let key_size =
+            build_intcast (size_of (type_of v2)) (i32_type ctx) "" builder
+          in
+          let buf_ptr = get_val fctx "buf" in
+          let buf_ptr_as_int = build_ptrtoint buf_ptr (i64_type ctx) "" builder in
+          let hash_ptr_as_int = build_add buf_ptr_as_int v1 "" builder in
+          let hash_ptr = build_inttoptr hash_ptr_as_int
+              (pointer_type (i8_type ctx)) "" builder
+          in
+          let hash_val = build_call cmph_search_packed
+              [|hash_ptr; key_ptr_cast; key_size|] "" builder
+          in
+          build_intcast hash_val (i64_type ctx) "" builder
         | Not -> fail (Error.of_string "Not a binary operator.")
       end
     | Unop { op; arg } ->
       let v = codegen_expr fctx arg in
       begin match op with
         | Not -> build_not v "nottmp" builder
-        | Add | Sub| Lt | And | Or | Eq ->
+        | Add | Sub| Lt | And | Or | Eq | Hash ->
           fail (Error.of_string "Not a unary operator.")
       end
     | Tuple es ->
@@ -442,7 +495,6 @@ module Make (Ctx: CTX) () = struct
     fun ictx ->
       Logs.debug (fun m -> m "Codegen for func %s started." ictx#name);
       Logs.debug (fun m -> m "%a" pp_func ictx#func);
-      Logs.debug (fun m -> m "%s" ([%sexp_of:func] ictx#func |> Sexp.to_string_hum));
 
       (* Create initialization function. *)
       let init_func_t =
