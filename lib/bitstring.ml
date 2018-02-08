@@ -2,12 +2,19 @@ open Base
 open Stdio
 open Collections
 
+module Format = Caml.Format
+
 type piece = {
   str : string;
   len : int;
 } [@@deriving sexp, compare]
 
-type t = piece list [@@deriving sexp, compare]
+(* type t = piece list [@@deriving sexp, compare] *)
+
+type t =
+  | Label of string * t
+  | Piece of piece
+  | PList of t list
 
 (** Serialize an integer. Little endian. Width is the number of bits to use. *)
 let of_int : width:int -> int -> t = fun ~width x ->
@@ -16,21 +23,26 @@ let of_int : width:int -> int -> t = fun ~width x ->
   for i = 0 to nbytes - 1 do
     Bytes.set buf i ((x lsr (i * 8)) land 0xFF |> Caml.char_of_int)
   done;
-  [{ str = Bytes.to_string buf; len = width }]
+  Piece { str = Bytes.to_string buf; len = width }
 
 let of_bytes : bytes -> t = fun x ->
-  [{ str = Bytes.to_string x; len = 8 * Bytes.length x }]
+  Piece { str = Bytes.to_string x; len = 8 * Bytes.length x }
 
-let of_string : string -> t = fun str -> [{ str; len = String.length str * 8 }]
+let of_string : string -> t = fun str ->
+  Piece { str; len = String.length str * 8 }
 
-let concat = List.concat
-let empty = []
-let append = List.append
+let label : string -> t -> t = fun l x -> Label (l, x)
+
+let concat xs = PList xs
+let empty = PList []
+let append x y = PList [x; y]
 
 let length : t -> int =
   let rec length acc = function
-    | [] -> acc
-    | { len }::xs -> length (len + acc) xs
+    | Label (_, x) -> length acc x
+    | Piece { len } -> acc + len
+    | PList [] -> acc
+    | PList (x::xs) -> length acc x + length acc (PList xs)
   in
   length 0
 
@@ -41,6 +53,24 @@ let byte_length : t -> int = fun x ->
 let int_length : t -> int = fun x ->
   let l = length x in
   (l / 64) + (if l % 64 > 0 then 1 else 0)
+
+let rec flatten : t -> piece list = function
+  | Label (_, x) -> flatten x
+  | Piece x -> [x]
+  | PList xs -> List.concat_map xs ~f:flatten
+
+let pp : Format.formatter -> t -> unit = fun fmt ->
+  let open Format in
+  let rec pp prefix offset =
+    function
+    | Label (lbl, x) ->
+      let blen = byte_length x in
+      fprintf fmt "%s+ %s [%x (%d bytes)]\n" prefix lbl offset blen;
+      pp (prefix ^ "| ") offset x
+    | Piece { str; len } -> offset + len
+    | PList xs -> List.fold_left xs ~init:offset ~f:(pp prefix)
+  in
+  fun x -> pp "" 0 x |> ignore
 
 module Writer = struct
   type bitstring = t
@@ -84,8 +114,9 @@ module Writer = struct
       write_char t (String.get x i)
     done
 
+
   let write : t -> bitstring -> unit = fun t x ->
-    List.iter x ~f:(fun { str; len } ->
+    flatten x |> List.iter ~f:(fun { str; len } ->
         if len >= 8 then begin
           write_string t (String.sub str 0 (len / 8))
         end;
@@ -111,8 +142,8 @@ let tests =
 
   "bitstring" >::: [
     "length" >::: [
-      "" >:: (fun ctxt -> assert_equal ~ctxt 0 (length []));
-      "" >:: (fun ctxt -> assert_equal ~ctxt 1 (length [{ len = 1; str = "\x80"}]));
+      "" >:: (fun ctxt -> assert_equal ~ctxt 0 (length empty));
+      "" >:: (fun ctxt -> assert_equal ~ctxt 1 (length (Piece { len = 1; str = "\x80"})));
     ];
     "writer" >::: [
       "flush" >:: (fun ctxt ->
@@ -164,8 +195,8 @@ let tests =
           Buffer.add_string buf1 "\x88";
           let buf2 = Buffer.create 1 in
           let w = Writer.with_buffer buf2 in
-          let bs = [
-            { len = 8; str = "\x88" };
+          let bs = PList [
+            Piece { len = 8; str = "\x88" };
           ] in
           Writer.write w bs;
           Writer.flush w;
@@ -176,8 +207,8 @@ let tests =
           Buffer.add_string buf1 "\xfe";
           let buf2 = Buffer.create 1 in
           let w = Writer.with_buffer buf2 in
-          let bs = [
-            { len = 7; str = "\xff" };
+          let bs = PList [
+            Piece { len = 7; str = "\xff" };
           ] in
           Writer.write w bs;
           Writer.flush w;
@@ -188,11 +219,11 @@ let tests =
           Buffer.add_string buf1 "\xbf\xc0";
           let buf2 = Buffer.create 1 in
           let w = Writer.with_buffer buf2 in
-          let bs = [
-            { len = 1; str = "\x80" };
-            { len = 3; str = "\x60" };
-            { len = 5; str = "\xf8" };
-            { len = 7; str = "\x80" };
+          let bs = PList [
+            Piece { len = 1; str = "\x80" };
+            Piece { len = 3; str = "\x60" };
+            Piece { len = 5; str = "\xf8" };
+            Piece { len = 7; str = "\x80" };
           ] in
           Writer.write w bs;
           Writer.flush w;

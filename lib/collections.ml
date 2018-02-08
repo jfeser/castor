@@ -53,6 +53,10 @@ module List = struct
             if Set.mem s x then (s, xs) else (Set.add s x, x::xs))
       in
       List.rev l'
+
+  let repeat : 'a -> int -> 'a list = fun x n ->
+    let rec repeat xs n = if n = 0 then xs else repeat (x::xs) (n - 1) in
+    repeat [] n
 end
 
 module Map = struct
@@ -145,6 +149,8 @@ module String = struct
   let template : t -> t list -> t = fun s x ->
     List.foldi x ~init:s ~f:(fun i s v ->
         substr_replace_all s ~pattern:(Printf.sprintf "/*$%d*/" i) ~with_:v)
+
+  let duplicate : t -> int -> t = fun s n -> concat (List.repeat s n)
 end
 
 module Buffer = struct

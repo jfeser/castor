@@ -56,32 +56,43 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
       let len = Bytes.length body in
       Bytes.econcat [bytes_of_int ~width:64 len; body] |> of_bytes
     | CrossTupleT (ts, { count }), (CrossTuple ls as l) ->
-      let body = List.map2_exn ts ls ~f:(fun t l -> serialize t l) |> concat in
+      let body =
+        List.map2_exn ts ls ~f:(fun t l -> serialize t l) |> concat
+        |> label "CrossTuple body"
+      in
       let len = byte_length body in
+      let len_str = of_int ~width:64 len |> label "CrossTuple len" in
       begin match count with
-        | Count _ | Unknown -> concat [of_int ~width:64 len; body]
+        | Count _ | Unknown -> concat [len_str; body]
         | Countable ->
           let ct = Layout.ntuples_exn l in
-          concat [of_int ~width:64 ct; of_int ~width:64 len; body]
-      end
+          let ct_str = of_int ~width:64 ct |> label "CrossTuple count" in
+          concat [ct_str; len_str; body]
+      end |> label "CrossTuple"
     | ZipTupleT (ts, { count }), (ZipTuple ls as l) ->
-      let body = List.map2_exn ts ls ~f:serialize |> concat in
+      let body =
+        List.map2_exn ts ls ~f:serialize |> concat |> label "ZipTuple body"
+      in
       let len = byte_length body in
+      let len_str = of_int ~width:64 len |> label "ZipTuple len" in
       begin match count with
-        | Count _ | Unknown -> concat [of_int ~width:64 len; body]
+        | Count _ | Unknown -> concat [len_str; body]
         | Countable ->
           let ct = Layout.ntuples_exn l in
-          concat [of_int ~width:64 ct; of_int ~width:64 len; body]
+          let ct_str = of_int ~width:64 ct |> label "CrossTuple count" in
+          concat [ct_str; len_str; body]
       end
     | OrderedListT (t, { count }), (OrderedList (ls, _) as l)
     | UnorderedListT (t, { count }), (UnorderedList ls as l) ->
-      let body = List.map ls ~f:(serialize t) |> concat in
+      let body = List.map ls ~f:(serialize t) |> concat |> label "List body" in
       let len = byte_length body in
+      let len_str = of_int ~width:64 len |> label "List len" in
       begin match count with
-        | Count _ | Unknown -> concat [of_int ~width:64 len; body]
+        | Count _ | Unknown -> concat [len_str; body]
         | Countable ->
           let ct = Layout.ntuples_exn l in
-          concat [of_int ~width:64 ct; of_int ~width:64 len; body]
+          let ct_str = of_int ~width:64 ct |> label "List count" in
+          concat [ct_str; len_str; body]
       end
     | TableT (key_t, value_t, _), Table (m, _) ->
       let keys = Map.keys m
@@ -114,7 +125,7 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
               let v = Map.find_exn m k in
               let vb = serialize value_t v in
               hash_table.(h) <- offset;
-              let values = values @ vb in
+              let values = append values vb in
               let offset = offset + byte_length vb in
               (offset, values))
       in
@@ -124,10 +135,17 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
       in
 
       let body =
-        concat [of_int ~width:64 hash_len; hash_body; hash_table_b; values]
+        concat [
+          of_int ~width:64 hash_len |> label "Cmph data len";
+          hash_body |> label "Cmph data";
+          hash_table_b |> label "Table mapping";
+          values |> label "Table values";
+        ]
       in
-      let body_len = of_int ~width:64 (byte_length body) in
-      concat [body_len; body]
+      concat [
+        of_int ~width:64 (byte_length body) |> label "Table len";
+        body;
+      ]
     | _, Empty -> empty
     | t, l -> Error.(create "Unexpected layout type." (t, l)
                        [%sexp_of:Type.t * Layout.t] |> raise)
