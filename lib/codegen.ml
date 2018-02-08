@@ -304,24 +304,28 @@ module Make (Ctx: CTX) () = struct
                    i32_type ctx|])
               module_
           in
-          let key_ptr = build_alloca (type_of v2) "" builder in
+          let key_ptr = build_alloca (type_of v2) "key_ptr" builder in
           build_store v2 key_ptr builder |> ignore;
           let key_ptr_cast = build_pointercast key_ptr
-              (pointer_type (i8_type ctx)) "" builder
+              (pointer_type (i8_type ctx)) "key_ptr_cast" builder
           in
           let key_size =
-            build_intcast (size_of (type_of v2)) (i32_type ctx) "" builder
+            build_intcast (size_of (type_of v2)) (i32_type ctx) "key_size" builder
           in
-          let buf_ptr = get_val fctx "buf" in
-          let buf_ptr_as_int = build_ptrtoint buf_ptr (i64_type ctx) "" builder in
-          let hash_ptr_as_int = build_add buf_ptr_as_int v1 "" builder in
+          let buf_ptr = build_load (get_val fctx "buf") "buf_ptr" builder in
+          let buf_ptr_as_int =
+            build_ptrtoint buf_ptr (i64_type ctx) "buf_ptr_int" builder
+          in
+          let hash_ptr_as_int =
+            build_add buf_ptr_as_int v1 "hash_ptr_int" builder
+          in
           let hash_ptr = build_inttoptr hash_ptr_as_int
-              (pointer_type (i8_type ctx)) "" builder
+              (pointer_type (i8_type ctx)) "hash_ptr" builder
           in
           let hash_val = build_call cmph_search_packed
-              [|hash_ptr; key_ptr_cast; key_size|] "" builder
+              [|hash_ptr; key_ptr_cast; key_size|] "hash_val" builder
           in
-          build_intcast hash_val (i64_type ctx) "" builder
+          build_intcast hash_val (i64_type ctx) "hash_val_cast" builder
         | Not -> fail (Error.of_string "Not a binary operator.")
       end
     | Unop { op; arg } ->
