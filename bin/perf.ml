@@ -5,6 +5,12 @@ open Postgresql
 open Dblayout
 open Collections
 
+let in_dir : string -> f:(unit -> 'a) -> 'a = fun dir ~f ->
+  let cur_dir = Unix.getcwd () in
+  Unix.chdir dir;
+  let ret = try f () with e -> Unix.chdir cur_dir; raise e in
+  Unix.chdir cur_dir; ret
+
 let benchmark params ralgebra =
   Logs.info (fun m -> m "Benchmarking %s." (Ralgebra.to_string ralgebra));
 
@@ -20,10 +26,6 @@ let benchmark params ralgebra =
     end) ()
   in
 
-  let tmpdir = Unix.mkdtemp "perf" in
-  Logs.info (fun m -> m "Generating files in %s." tmpdir);
-  Unix.chdir tmpdir;
-
   (* Dump IR. *)
   CGen.codegen ir_module.buffer ir_module;
   Llvm.print_module "scanner.ll" module_;
@@ -32,6 +34,9 @@ let benchmark params ralgebra =
   Out_channel.with_file "db.buf" ~f:(fun ch ->
       let w = Bitstring.Writer.with_channel ch in
       Bitstring.Writer.write w ir_module.buffer);
+  Out_channel.with_file "db.txt" ~f:(fun ch ->
+      let fmt = Format.formatter_of_out_channel ch in
+      Bitstring.pp fmt ir_module.buffer);
 
   (* Generate and dump main.c *)
   let params_str = List.map params ~f:(fun (n, v) ->
@@ -51,8 +56,8 @@ let benchmark params ralgebra =
         Out_channel.(with_file "main.c" ~f:(fun ch -> output_string ch out)) in
       ()));
 
-  Caml.Sys.command ("llc -O3 -filetype=obj scanner.ll") |> ignore;
-  Caml.Sys.command ("clang -g -O3 -lcmph scanner.o main.c -o scanner.exe") |> ignore;
+  Caml.Sys.command ("llc -O0 -filetype=obj scanner.ll") |> ignore;
+  Caml.Sys.command ("clang -g -O0 -lcmph scanner.o main.c -o scanner.exe") |> ignore;
   Llvm.dispose_module module_;
   Llvm.dispose_context llctx;
 
@@ -68,31 +73,38 @@ let benchmark params ralgebra =
                (Time_stamp_counter.to_time_ns ~calibrator start)
              |> Span.to_short_string)
   in
-  Logs.info (fun m -> m "Total time: %s" runtime);
+  Logs.info (fun m -> m "Total time: %s" runtime)
 
-  Unix.chdir ".."
+  let main : params:(string * string) list -> db:string -> ralgebra:_ ->
+    verbose:bool -> quiet:bool -> transforms:Transform.t list option ->
+    dir:string option -> unit =
+    fun ~params ~db ~ralgebra ~verbose ~quiet ~transforms ~dir ->
+      Logs.set_reporter (Logs.format_reporter ());
+      if verbose then Logs.set_level (Some Logs.Debug)
+      else if quiet then Logs.set_level (Some Logs.Error)
+      else Logs.set_level (Some Logs.Info);
 
-let main : params:(string * string) list -> db:string -> ralgebra:_ ->
-  verbose:bool -> quiet:bool -> transforms:Transform.t list option -> unit =
-  fun ~params ~db ~ralgebra ~verbose ~quiet ~transforms ->
-    Logs.set_reporter (Logs.format_reporter ());
-    if verbose then Logs.set_level (Some Logs.Debug)
-    else if quiet then Logs.set_level (Some Logs.Error)
-    else Logs.set_level (Some Logs.Info);
+      let conn = new connection ~dbname:db () in
+      Eval.Ctx.global.conn <- Some (conn);
 
-    let conn = new connection ~dbname:db () in
-    Eval.Ctx.global.conn <- Some (conn);
+      let predctx = List.map params ~f:(fun (n, v) ->
+          (n, [%of_sexp:Db.primvalue] (Sexp.of_string v)))
+                    |> Layout.PredCtx.of_vars
+      in
+      Eval.Ctx.global.testctx <- Some (predctx);
 
-    let predctx = List.map params ~f:(fun (n, v) ->
-        (n, [%of_sexp:Db.primvalue] (Sexp.of_string v)))
-                  |> Layout.PredCtx.of_vars
-    in
-    Eval.Ctx.global.testctx <- Some (predctx);
+      let ralgebra = Ralgebra.resolve conn ralgebra in
+      let candidates = match transforms with
+        | Some tfs -> Transform.run_chain tfs ralgebra
+        | None -> Transform.search conn ralgebra
+      in
+      let dir = match dir with
+        | Some x -> x
+        | None -> Filename.temp_dir "perf" ""
+      in
+      Logs.info (fun m -> m "Generating files in %s." dir);
 
-    let ralgebra = Ralgebra.resolve conn ralgebra in
-    match transforms with
-    | Some tfs -> Transform.run_chain tfs ralgebra |> Seq.iter ~f:(benchmark params)
-    | None -> Transform.search conn ralgebra |> Seq.iter ~f:(benchmark params)
+      in_dir dir ~f:(fun () -> Seq.iter candidates ~f:(benchmark params))
 
 let () =
   let open Command in
@@ -107,6 +119,7 @@ let () =
     and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
     and transforms = flag "transform" ~aliases:["t"]
         (optional (Arg_type.comma_separated transform)) ~doc:"transforms to run"
+    and dir = flag "dir" ~aliases:["d"] (optional file) ~doc:"where to write intermediate files"
     and ralgebra = anon ("ralgebra" %: ralgebra)
-    in fun () -> main ~db ~ralgebra ~params ~verbose ~quiet ~transforms
+    in fun () -> main ~db ~ralgebra ~params ~verbose ~quiet ~transforms ~dir
   ] |> run
