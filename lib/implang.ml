@@ -14,7 +14,7 @@ type type_ =
   | VoidT
 [@@deriving compare, sexp]
 
-type op = Add | Sub | Lt | Eq | And | Or | Not | Hash [@@deriving compare, sexp]
+type op = Add | Sub | Lt | Eq | And | Or | Not | Hash | Mul [@@deriving compare, sexp]
 type value =
   | VCont of { state : state; body : prog }
   | VFunc of func
@@ -99,6 +99,7 @@ and pp_expr : Format.formatter -> expr -> unit =
   let op_to_string = function
     | Add -> "+"
     | Sub -> "-"
+    | Mul -> "*"
     | Lt -> "<"
     | And -> "&&"
     | Not -> "not"
@@ -155,6 +156,7 @@ module Infix = struct
   let (+=) = fun x y -> Step { var = x; iter = y }
   let (+) = fun x y -> Binop { op = Add; arg1 = x; arg2 = y }
   let (-) = fun x y -> Binop { op = Sub; arg1 = x; arg2 = y }
+  let ( * ) = fun x y -> Binop { op = Mul; arg1 = x; arg2 = y }
   let (<) = fun x y -> Binop { op = Lt; arg1 = x; arg2 = y }
   let (>) = fun x y -> y < x
   let (<=) = fun x y -> x - int 1 < y
@@ -458,6 +460,7 @@ let rec infer_type : type_ Hashtbl.M(String).t -> expr -> type_ =
       begin match op, t1, t2 with
         | (Add | Sub | And), BytesT x, BytesT y when x = y -> BytesT x
         | Lt, BytesT x, BytesT y when x = y -> BytesT bsize
+        | Hash, _, _ -> BytesT isize
         | _ -> fail (Error.create "Type error."
                        (op, t1, t2) [%sexp_of:op * type_ * type_])
       end
@@ -544,8 +547,11 @@ module IRGen = struct
       let var = build_var v t b in
       build_assign e var b; var
 
-  let build_print : expr -> stmt_builder = fun e b ->
-    let t = infer_type b.locals e in
+  let build_print : ?type_:type_ -> expr -> stmt_builder = fun ?type_ e b ->
+    let t = match type_ with
+      | Some t -> t
+      | None -> infer_type b.locals e
+    in
     b.body := (Print (t, e))::!(b.body)
 
   module Make () = struct
@@ -666,14 +672,13 @@ module IRGen = struct
 
     (** The length of a layout header in bytes. *)
     let hsize =
-      let open Infix in
       let open Type in
       function
-      | IntT _ | BoolT _ | EmptyT -> int 0
-      | StringT _ -> int isize
+      | IntT _ | BoolT _ | EmptyT -> Infix.(int 0)
+      | StringT _ -> Infix.(int isize)
       | CrossTupleT _ | ZipTupleT _ | OrderedListT _ | UnorderedListT _ ->
-        int (2 * isize)
-      | TableT (_,_,_) -> int isize
+        Infix.int (2 * isize)
+      | TableT (_,_,_) -> Infix.(int isize)
 
     let scan_empty = create ["start", int_t] VoidT |> build_func
 
@@ -866,7 +871,10 @@ module IRGen = struct
 
         let start = build_arg 0 b in
         let hash_len = Infix.(islice (start + int isize)) in
-        let hash_data_start = Infix.(start + int (isize * 2)) in
+        let hash_data_start =
+          let header_size = 2 * isize in
+          Infix.(start + int header_size)
+        in
         let mapping_start = Infix.(hash_data_start + hash_len) in
         let lookup_expr = match lookup with
           | Var (n, _) -> Var n
@@ -875,11 +883,12 @@ module IRGen = struct
         in
         let hash_key = Infix.(hash hash_data_start lookup_expr) in
         let key_start =
-          Infix.(mapping_start + islice (mapping_start + hash_key))
+          Infix.(mapping_start + islice (mapping_start + hash_key * int isize))
         in
         build_iter key_iter [key_start] b;
         let key = build_fresh_var "key" key_type b in
         build_step key key_iter b;
+        build_print key b;
 
         let value_start = Infix.(key_start + len key_start kt) in
         build_if ~cond:Infix.(Index(key, 0) = lookup_expr)

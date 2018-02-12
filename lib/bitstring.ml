@@ -65,7 +65,7 @@ let pp : Format.formatter -> t -> unit = fun fmt ->
     function
     | Label (lbl, x) ->
       let blen = byte_length x in
-      fprintf fmt "%s+ %s [%x (%d bytes)]\n" prefix lbl offset blen;
+      fprintf fmt "%s+ %s [%db %dB (%d bytes)]\n" prefix lbl offset (offset / 8) blen;
       pp (prefix ^ "| ") offset x
     | Piece { str; len } -> offset + len
     | PList xs -> List.fold_left xs ~init:offset ~f:(pp prefix)

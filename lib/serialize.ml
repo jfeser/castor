@@ -1,4 +1,5 @@
 open Base
+open Stdio
 open Printf
 
 open Collections
@@ -100,33 +101,37 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
       in
       let hash = Cmph.(List.map keys ~f:(fun (_, b) -> to_string b)
                        |> KeySet.of_list
-                       |> Config.create ~algo:`Chd |> Hash.of_config)
+                       |> Config.create ~seed:0 ~algo:`Chd |> Hash.of_config)
       in
       let keys =
         List.map keys ~f:(fun (k, b) ->
             let h = Cmph.Hash.hash hash (to_string b) in
             (k, b, h))
-        |> List.sort ~cmp:(fun (_, _, h1) (_, _, h2) -> Int.compare h1 h2)
       in
-      let hash_body = Cmph.Hash.to_packed hash |> of_string in
-      let hash_len = byte_length hash_body in
-      let offset = hash_len + isize in
+      Out_channel.with_file "hashes.txt" ~f:(fun ch ->
+          List.iter keys ~f:(fun (k, v, h) ->
+              Out_channel.fprintf ch "%s -> %d\n" (Bitstring.to_string v) h));
+      let hash_body = Cmph.Hash.to_packed hash |> Bytes.of_string |> align isize in
+      let hash_body_b = of_bytes hash_body in
+      let hash_len = byte_length hash_body_b in
 
       let table_size =
         List.fold_left keys ~f:(fun m (_, _, h) -> Int.max m h) ~init:0
         |> fun m -> m + 1
       in
-      let hash_table = Array.create ~len:table_size (-1) in
+      let hash_table = Array.create ~len:table_size (0xDEADBEEF) in
 
-      let offset = offset + table_size * isize in
       let values = empty in
+      let offset = isize * table_size in
       let offset, values = List.fold_left keys ~init:(offset, values)
           ~f:(fun (offset, values) (k, b, h) ->
               let v = Map.find_exn m k in
               let vb = serialize value_t v in
               hash_table.(h) <- offset;
-              let values = append values vb in
-              let offset = offset + byte_length vb in
+              let values = concat
+                  [values; b |> label "Table key"; vb |> label "Table value"]
+              in
+              let offset = offset + byte_length b + byte_length vb in
               (offset, values))
       in
 
@@ -137,7 +142,7 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
       let body =
         concat [
           of_int ~width:64 hash_len |> label "Cmph data len";
-          hash_body |> label "Cmph data";
+          hash_body_b |> label "Cmph data";
           hash_table_b |> label "Table mapping";
           values |> label "Table values";
         ]
