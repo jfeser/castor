@@ -15,5 +15,5 @@ depends: [
   "fmt"
   "cmdliner"
   "logs"
-  "llvm"
+  "llvm" {>= 5.0.0}
 ]
