@@ -654,7 +654,9 @@ module IRGen = struct
       | BoolT _ -> int isize
       | StringT _ -> islice start
       | EmptyT -> int 0
-      | CrossTupleT _ | ZipTupleT _ | UnorderedListT _ | OrderedListT _
+      | CrossTupleT (_, { count = Count _ }) -> islice start
+      | CrossTupleT (_, { count = _ }) -> islice (start + int isize)
+      | ZipTupleT _ | UnorderedListT _ | OrderedListT _
       | TableT _ -> islice (start + int isize)
 
     let count start =
@@ -676,7 +678,9 @@ module IRGen = struct
       function
       | IntT _ | BoolT _ | EmptyT -> Infix.(int 0)
       | StringT _ -> Infix.(int isize)
-      | CrossTupleT _ | ZipTupleT _ | OrderedListT _ | UnorderedListT _ ->
+      | CrossTupleT (_, { count = Count _ }) -> Infix.(int isize)
+      | CrossTupleT _ -> Infix.int (2 * isize)
+      | ZipTupleT _ | OrderedListT _ | UnorderedListT _ ->
         Infix.int (2 * isize)
       | TableT (_,_,_) -> Infix.(int isize)
 
