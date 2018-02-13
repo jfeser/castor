@@ -650,7 +650,7 @@ module IRGen = struct
       let open Infix in
       let open Type in
       function
-      | IntT { bitwidth } -> int bitwidth
+      | IntT { bitwidth } -> int isize
       | BoolT _ -> int isize
       | StringT _ -> islice start
       | EmptyT -> int 0
