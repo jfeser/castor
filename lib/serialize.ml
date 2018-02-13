@@ -49,13 +49,13 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
   let open Bitstring in
   fun type_ layout ->
     match type_, layout with
-    | IntT { bitwidth }, Int (x, _) -> of_int ~width:64 x
-    | BoolT _, Bool (x, _) -> of_bytes (bytes_of_bool x)
+    | IntT { bitwidth }, Int (x, _) -> of_int ~width:64 x |> label "Int"
+    | BoolT _, Bool (x, _) -> of_bytes (bytes_of_bool x) |> label "Bool"
     | StringT _, String (x, _) ->
       let unpadded_body = Bytes.of_string x in
-      let body = unpadded_body |> align bsize in
-      let len = Bytes.length body in
-      Bytes.econcat [bytes_of_int ~width:64 len; body] |> of_bytes
+      let body = unpadded_body |> align bsize |> of_bytes in
+      let len = Bytes.length unpadded_body |> bytes_of_int ~width:64 |> of_bytes in
+      concat [len |> label "String len"; body |> label "String body"]
     | CrossTupleT (ts, { count }), (CrossTuple ls as l) ->
       let body =
         List.map2_exn ts ls ~f:(fun t l -> serialize t l) |> concat
