@@ -19,6 +19,9 @@ let sexp_of_llvalue : llvalue -> Sexp.t =
 let sexp_of_lltype : lltype -> Sexp.t =
   fun v -> Sexp.Atom (string_of_lltype v)
 
+let sexp_of_llbasicblock : llbasicblock -> Sexp.t =
+  fun v -> [%sexp_of:llvalue] (value_of_block v)
+
 module TypeKind = struct
   include TypeKind
 
@@ -105,14 +108,17 @@ module Make (Ctx: CTX) () = struct
 
     val mutable init = null_ptr
     val mutable step = null_ptr
-    val mutable indirect_br = null_ptr
+    val mutable switch = null_ptr
+    val mutable switch_index = 0
 
     method init : llvalue = init
     method step : llvalue = step
-    method indirect_br : llvalue = indirect_br
+    method switch : llvalue = switch
+    method switch_index : int = switch_index
     method set_init x = init <- x
     method set_step x = step <- x
-    method set_indirect_br x = indirect_br <- x
+    method set_switch x = switch <- x
+    method incr_switch_index () = switch_index <- switch_index + 1
   end
 
   class fctx name func = object
@@ -193,8 +199,11 @@ module Make (Ctx: CTX) () = struct
   let build_entry_alloca : lltype -> string -> llbuilder -> llvalue =
     fun t n b ->
       let entry_bb = insertion_block b |> block_parent |> entry_block in
-      let entry_term = Option.value_exn (block_terminator entry_bb) in
-      builder_before ctx entry_term |> build_alloca t n
+      let builder = match block_terminator entry_bb with
+        | Some term -> builder_before ctx term
+        | None -> builder_at_end ctx entry_bb
+      in
+      build_alloca t n builder
 
   (** Build a call that passes the parameter struct. *)
   let build_param_call : _ -> llvalue -> llvalue array -> string -> llbuilder -> llvalue = fun fctx func args name b ->
@@ -469,9 +478,10 @@ module Make (Ctx: CTX) () = struct
     let end_bb = append_block ctx "yieldend" llfunc in
 
     (* Add indirect branch and set new target. *)
-    add_destination fctx#indirect_br end_bb;
-    build_store (block_address llfunc end_bb) (get_val fctx "br_addr") builder
-    |> ignore;
+    add_case fctx#switch (const_int (i8_type ctx) fctx#switch_index) end_bb;
+    build_store (const_int (i8_type ctx) fctx#switch_index)
+      (get_val fctx "yield_index") builder |> ignore;
+    fctx#incr_switch_index ();
     let llret = codegen_expr fctx ret in
     build_ret llret builder |> ignore;
 
@@ -554,8 +564,19 @@ module Make (Ctx: CTX) () = struct
           let var = get_val ictx n in
           build_store (param ictx#init (i + 1)) var builder |> ignore);
 
+      (* Set done to false. *)
       build_store (const_int (i1_type ctx) 0) (get_val ictx "done") builder
       |> ignore;
+
+      (* Set yield_index to 0. *)
+      build_store (const_int (i8_type ctx) ictx#switch_index)
+        (get_val ictx "yield_index") builder |> ignore;
+      build_ret_void builder |> ignore;
+
+      (* Check init function. *)
+      Logs.debug (fun m -> m "Checking function.");
+      Logs.debug (fun m -> m "%s" (string_of_llvalue ictx#init));
+      assert_valid_function ictx#init;
 
       (* Create step function. *)
       let ret_t = codegen_type ictx#func.ret_type in
@@ -580,30 +601,28 @@ module Make (Ctx: CTX) () = struct
       let bb = append_block ctx "entry" ictx#step in
       position_at_end bb builder;
 
-      (* Create indirect branch. *)
-      let br_addr = build_load (get_val ictx "br_addr") "tmpaddr" builder in
-      let br = build_indirect_br br_addr (yield_count ictx#func) builder in
-      ictx#set_indirect_br br;
-      let end_bb = append_block ctx "postentry" ictx#step in
-      add_destination br end_bb;
+      (* Create top level switch. *)
+      let yield_index = build_load (get_val ictx "yield_index") "yield_index" builder in
 
-      (* Add initial branch target to init function. *)
-      position_at_end init_bb builder;
-      build_store (block_address ictx#step end_bb)
-        (get_val ~params:init_params ictx "br_addr") builder |> ignore;
-      build_ret_void builder |> ignore;
+      let default_bb = append_block ctx "default" ictx#step in
+      position_at_end default_bb builder;
+      debug_printf "Error: entered default switch case.\n" [];
+      build_unreachable builder |> ignore;
+
+      position_at_end bb builder;
+
+      ictx#set_switch
+        (build_switch yield_index default_bb (yield_count ictx#func + 1) builder);
+      let bb = append_block ctx "postentry" ictx#step in
+      add_case ictx#switch (const_int (i8_type ctx) ictx#switch_index) bb;
+      ictx#incr_switch_index ();
+      position_at_end bb builder;
 
       (* Codegen the rest of the function body. *)
-      position_at_end end_bb builder;
       codegen_prog ictx ictx#func.body;
       build_store (const_int (i1_type ctx) 1) (get_val ictx "done") builder
       |> ignore;
       build_ret (const_null ret_t) builder |> ignore;
-
-      (* Check init function. *)
-      Logs.debug (fun m -> m "Checking function.");
-      Logs.debug (fun m -> m "%s" (string_of_llvalue ictx#init));
-      assert_valid_function ictx#init;
 
       (* Check step function. *)
       Logs.debug (fun m -> m "%s" (string_of_llvalue ictx#step));
@@ -794,8 +813,8 @@ module Make (Ctx: CTX) () = struct
               (* Create iterator done flag. *)
               SB.build_local sb ictx "done" (i1_type ctx);
 
-              (* Create branch address storage. *)
-              SB.build_local sb ictx "br_addr" (pointer_type (i8_type ctx));
+              (* Create storage for iterator entry point index. *)
+              SB.build_local sb ictx "yield_index" (i8_type ctx);
 
               (* Create storage space for local variables & iterator args. *)
               List.iter locals ~f:(fun (n, t) ->
