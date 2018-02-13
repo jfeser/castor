@@ -57,7 +57,10 @@ let benchmark debug params ralgebra =
         Out_channel.(with_file "main.c" ~f:(fun ch -> output_string ch out)) in
       ()));
 
-  Caml.Sys.command ("llc -O0 -filetype=obj scanner.ll") |> ignore;
+  if debug then
+    Caml.Sys.command ("llc -O0 -filetype=obj scanner.ll") |> ignore
+  else
+    Caml.Sys.command ("opt -filetype=obj -always-inline scanner.ll") |> ignore;
   Caml.Sys.command ("clang -g -O0 -lcmph scanner.o main.c -o scanner.exe") |> ignore;
   Llvm.dispose_module module_;
   Llvm.dispose_context llctx;
@@ -118,7 +121,7 @@ let () =
     and params = flag "param" ~aliases:["p"] (listed kv) ~doc:"query parameters (passed as key:value)"
     and verbose = flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
     and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
-    and debug = flag "debug" ~aliases:["g"] no_arg ~doc:"enable debug printing in query"
+    and debug = flag "debug" ~aliases:["g"] no_arg ~doc:"enable debug mode"
     and transforms = flag "transform" ~aliases:["t"]
         (optional (Arg_type.comma_separated transform)) ~doc:"transforms to run"
     and dir = flag "dir" ~aliases:["d"] (optional file) ~doc:"where to write intermediate files"
