@@ -1,0 +1,19 @@
+opam-version: "1.2"
+name: "fastdb"
+version: "~unknown"
+maintainer: "Jack Feser <feser@csail.mit.edu>"
+authors: "Jack Feser <feser@csail.mit.edu>"
+dev-repo: "https://github.com/jfeser/fastdb"
+build: [["jbuilder" "build" "-p" name "-j" jobs]]
+depends: [
+  "ocamlfind" {build}
+  "ounit"
+  "base"
+  "core"
+  "stdio"
+  "postgresql"
+  "fmt"
+  "cmdliner"
+  "logs"
+  "llvm"
+]
