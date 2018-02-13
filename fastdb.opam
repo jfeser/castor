@@ -1,12 +1,14 @@
-opam-version: "1.2"
+opam-version: "2.0"
 name: "fastdb"
 version: "~unknown"
 maintainer: "Jack Feser <feser@csail.mit.edu>"
 authors: "Jack Feser <feser@csail.mit.edu>"
-dev-repo: "https://github.com/jfeser/fastdb"
+dev-repo: "git+https://github.com/jfeser/fastdb.git"
+homepage: "https://github.com/jfeser/fastdb"
+bug-reports: "https://github.com/jfeser/fastdb/issues"
 build: [["jbuilder" "build" "-p" name "-j" jobs]]
 depends: [
-  "ocamlfind" {build}
+  "jbuilder" {build}
   "ounit"
   "base"
   "core"
@@ -15,5 +17,8 @@ depends: [
   "fmt"
   "cmdliner"
   "logs"
-  "llvm" {>= 5.0.0}
+  "llvm" {>= "5.0.0"}
+  "menhir"
+  "ppx_compare"
+  "ppx_sexp_conv"
 ]
