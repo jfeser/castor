@@ -10,6 +10,7 @@ module type CTX = sig
   val ctx : llcontext
   val module_ : llmodule
   val builder : llbuilder
+  val debug : bool
 end
 
 let sexp_of_llvalue : llvalue -> Sexp.t =
@@ -229,6 +230,9 @@ module Make (Ctx: CTX) () = struct
     let fmt_args = Array.append [| fmt_str_ptr; |] (Array.of_list args) in
     build_call printf fmt_args "" builder |> ignore
 
+  let debug_printf fmt args =
+    if debug then call_printf fmt args
+
   let rec codegen_type : type_ -> lltype = function
     | BytesT x -> integer_type ctx (x * 8)
     | TupleT ts ->
@@ -270,14 +274,14 @@ module Make (Ctx: CTX) () = struct
       let ptr = build_pointercast ptr
           (pointer_type (integer_type ctx size_bits)) "" builder
       in
-      call_printf "Slice ptr: %p\n" [ptr];
-      call_printf "Slice offset: %d\n" [byte_idx];
+      debug_printf "Slice ptr: %p\n" [ptr];
+      debug_printf "Slice offset: %d\n" [byte_idx];
       let slice = build_load ptr "" builder in
 
       (* Convert the slice to a 64 bit int. *)
       let slice = build_intcast slice (i64_type ctx) "" builder in
 
-      call_printf "Slice value: %d\n" [slice];
+      debug_printf "Slice value: %d\n" [slice];
       slice
 
     | Index (tup, idx) ->
@@ -324,11 +328,11 @@ module Make (Ctx: CTX) () = struct
                    i32_type ctx|])
               module_
           in
-          call_printf "Hash data offset: %d\n" [v1];
+          debug_printf "Hash data offset: %d\n" [v1];
           let key_ptr = build_entry_alloca (type_of v2) "key_ptr" builder in
           build_store v2 key_ptr builder |> ignore;
-          call_printf "Key val: %d\n" [v2];
-          call_printf "Key val: %d\n" [build_load key_ptr "" builder];
+          debug_printf "Key val: %d\n" [v2];
+          debug_printf "Key val: %d\n" [build_load key_ptr "" builder];
 
           let key_ptr_cast = build_pointercast key_ptr
               (pointer_type (i8_type ctx)) "key_ptr_cast" builder
@@ -336,9 +340,9 @@ module Make (Ctx: CTX) () = struct
           let key_size =
             build_intcast (size_of (type_of v2)) (i32_type ctx) "key_size" builder
           in
-          call_printf "Key size: %d\n" [key_size];
+          debug_printf "Key size: %d\n" [key_size];
           let buf_ptr = build_load (get_val fctx "buf") "buf_ptr" builder in
-          call_printf "Buf ptr: %p\n" [buf_ptr];
+          debug_printf "Buf ptr: %p\n" [buf_ptr];
           let buf_ptr_as_int =
             build_ptrtoint buf_ptr (i64_type ctx) "buf_ptr_int" builder
           in
@@ -348,11 +352,11 @@ module Make (Ctx: CTX) () = struct
           let hash_ptr = build_inttoptr hash_ptr_as_int
               (pointer_type (i8_type ctx)) "hash_ptr" builder
           in
-          call_printf "Hash ptr: %p\n" [hash_ptr];
+          debug_printf "Hash ptr: %p\n" [hash_ptr];
           let hash_val = build_call cmph_search_packed
               [|hash_ptr; key_ptr_cast; key_size|] "hash_val" builder
           in
-          call_printf "Hash val: %d\n" [hash_val];
+          debug_printf "Hash val: %d\n" [hash_val];
           build_intcast hash_val (i64_type ctx) "hash_val_cast" builder
         | Not -> fail (Error.of_string "Not a binary operator.")
       end
@@ -433,7 +437,7 @@ module Make (Ctx: CTX) () = struct
 
   let codegen_step fctx var iter =
     let step_func = (Hashtbl.find_exn iters iter)#step in
-    call_printf (sprintf "Calling step %s.\n" iter) [];
+    debug_printf (sprintf "Calling step %s.\n" iter) [];
     let val_ = build_param_call fctx step_func [||] "steptmp" builder in
     let var = get_val fctx var in
     build_store val_ var builder |> ignore
@@ -445,7 +449,7 @@ module Make (Ctx: CTX) () = struct
       fail (Error.of_string "Wrong number of arguments.")
     else
       let llargs = List.map args ~f:(codegen_expr fctx) in
-      call_printf (sprintf "Calling init %s(%s).\n" func (List.init (List.length args) (fun _ -> "%d") |> String.concat ~sep:", ")) llargs;
+      debug_printf (sprintf "Calling init %s(%s).\n" func (List.init (List.length args) (fun _ -> "%d") |> String.concat ~sep:", ")) llargs;
       build_param_call fctx init_func (Array.of_list llargs) "" builder |> ignore
 
   let codegen_assign fctx lhs rhs =

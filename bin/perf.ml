@@ -11,7 +11,7 @@ let in_dir : string -> f:(unit -> 'a) -> 'a = fun dir ~f ->
   let ret = try f () with e -> Unix.chdir cur_dir; raise e in
   Unix.chdir cur_dir; ret
 
-let benchmark params ralgebra =
+let benchmark debug params ralgebra =
   Logs.info (fun m -> m "Benchmarking %s." (Ralgebra.to_string ralgebra));
 
   let module IGen = Implang.IRGen.Make () in
@@ -20,6 +20,7 @@ let benchmark params ralgebra =
   let module_ = Llvm.create_module llctx "scanner" in
   let module CGen = Codegen.Make(struct
       open Llvm
+      let debug = debug
       let ctx = llctx
       let module_ = module_
       let builder = builder ctx
@@ -77,8 +78,8 @@ let benchmark params ralgebra =
 
   let main : params:(string * string) list -> db:string -> ralgebra:_ ->
     verbose:bool -> quiet:bool -> transforms:Transform.t list option ->
-    dir:string option -> unit =
-    fun ~params ~db ~ralgebra ~verbose ~quiet ~transforms ~dir ->
+    dir:string option -> debug:bool -> unit =
+    fun ~params ~db ~ralgebra ~verbose ~quiet ~transforms ~dir ~debug ->
       Logs.set_reporter (Logs.format_reporter ());
       if verbose then Logs.set_level (Some Logs.Debug)
       else if quiet then Logs.set_level (Some Logs.Error)
@@ -104,7 +105,7 @@ let benchmark params ralgebra =
       in
       Logs.info (fun m -> m "Generating files in %s." dir);
 
-      in_dir dir ~f:(fun () -> Seq.iter candidates ~f:(benchmark params))
+      in_dir dir ~f:(fun () -> Seq.iter candidates ~f:(benchmark debug params))
 
 let () =
   let open Command in
@@ -117,9 +118,10 @@ let () =
     and params = flag "param" ~aliases:["p"] (listed kv) ~doc:"query parameters (passed as key:value)"
     and verbose = flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
     and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
+    and debug = flag "debug" ~aliases:["g"] no_arg ~doc:"enable debug printing in query"
     and transforms = flag "transform" ~aliases:["t"]
         (optional (Arg_type.comma_separated transform)) ~doc:"transforms to run"
     and dir = flag "dir" ~aliases:["d"] (optional file) ~doc:"where to write intermediate files"
     and ralgebra = anon ("ralgebra" %: ralgebra)
-    in fun () -> main ~db ~ralgebra ~params ~verbose ~quiet ~transforms ~dir
+    in fun () -> main ~db ~ralgebra ~params ~verbose ~quiet ~transforms ~dir ~debug
   ] |> run
