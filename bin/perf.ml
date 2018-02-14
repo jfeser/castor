@@ -58,10 +58,11 @@ let benchmark debug params ralgebra =
       ()));
 
   if debug then
-    Caml.Sys.command ("llc -O0 -filetype=obj scanner.ll") |> ignore
-  else
-    Caml.Sys.command ("opt -filetype=obj -always-inline scanner.ll") |> ignore;
-  Caml.Sys.command ("clang -g -O0 -lcmph scanner.o main.c -o scanner.exe") |> ignore;
+    Caml.Sys.command ("/usr/local/opt/llvm/bin/clang -g -O0 -lcmph scanner.ll main.c -o scanner.exe") |> ignore
+  else begin
+    Caml.Sys.command ("/usr/local/opt/llvm/bin/opt -S -pass-remarks-output=remarks.yaml -inline scanner.ll > scanner-opt.ll") |> ignore;
+    Caml.Sys.command ("/usr/local/opt/llvm/bin/clang -g -O0 -lcmph scanner-opt.ll main.c -o scanner.exe") |> ignore
+  end;
   Llvm.dispose_module module_;
   Llvm.dispose_context llctx;
 
