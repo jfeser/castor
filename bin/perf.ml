@@ -60,7 +60,7 @@ let benchmark debug params ralgebra =
   if debug then
     Caml.Sys.command ("/usr/local/opt/llvm/bin/clang -g -O0 -lcmph scanner.ll main.c -o scanner.exe") |> ignore
   else begin
-    Caml.Sys.command ("/usr/local/opt/llvm/bin/opt -S -pass-remarks-output=remarks.yaml -inline scanner.ll > scanner-opt.ll") |> ignore;
+    Caml.Sys.command ("/usr/local/opt/llvm/bin/opt -S -pass-remarks-output=remarks.yaml -mergereturn -always-inline scanner.ll > scanner-opt.ll") |> ignore;
     Caml.Sys.command ("/usr/local/opt/llvm/bin/clang -g -O0 -lcmph scanner-opt.ll main.c -o scanner.exe") |> ignore
   end;
   Llvm.dispose_module module_;
