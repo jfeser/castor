@@ -544,15 +544,15 @@ module Make (Ctx: CTX) () = struct
         (declare_function (init_name ictx#name) init_func_t module_);
 
       (* Set init function attributes. *)
-      add_function_attr ictx#init (create_string_attr ctx "writeonly" "")
+      add_function_attr ictx#init (create_enum_attr ctx "writeonly" 0L)
         AttrIndex.Function;
-      add_function_attr ictx#init (create_string_attr ctx "argmemonly" "")
+      add_function_attr ictx#init (create_enum_attr ctx "argmemonly" 0L)
         AttrIndex.Function;
-      add_function_attr ictx#init (create_string_attr ctx "nounwind" "")
+      add_function_attr ictx#init (create_enum_attr ctx "nounwind" 0L)
         AttrIndex.Function;
-      add_function_attr ictx#init (create_string_attr ctx "norecurse" "")
+      add_function_attr ictx#init (create_enum_attr ctx "norecurse" 0L)
         AttrIndex.Function;
-      add_function_attr ictx#init (create_string_attr ctx "alwaysinline" "")
+      add_function_attr ictx#init (create_enum_attr ctx "alwaysinline" 0L)
         AttrIndex.Function;
 
       let init_params = param ictx#init 0 in
@@ -587,13 +587,13 @@ module Make (Ctx: CTX) () = struct
         (declare_function (step_name ictx#name) step_func_t module_);
 
       (* Set step function attributes. *)
-      add_function_attr ictx#step (create_string_attr ctx "argmemonly" "")
+      add_function_attr ictx#step (create_enum_attr ctx "argmemonly" 0L)
         AttrIndex.Function;
-      add_function_attr ictx#step (create_string_attr ctx "nounwind" "")
+      add_function_attr ictx#step (create_enum_attr ctx "nounwind" 0L)
         AttrIndex.Function;
-      add_function_attr ictx#step (create_string_attr ctx "norecurse" "")
+      add_function_attr ictx#step (create_enum_attr ctx "norecurse" 0L)
         AttrIndex.Function;
-      add_function_attr ictx#step (create_string_attr ctx "alwaysinline" "")
+      add_function_attr ictx#step (create_enum_attr ctx "alwaysinline" 0L)
         AttrIndex.Function;
 
       let step_params = Local (param ictx#step 0) in
