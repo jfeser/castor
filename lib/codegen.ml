@@ -543,6 +543,9 @@ module Make (Ctx: CTX) () = struct
       ictx#set_init
         (declare_function (init_name ictx#name) init_func_t module_);
 
+      (* Set as an internal function. *)
+      set_linkage Linkage.Internal ictx#init;
+
       (* Set init function attributes. *)
       add_function_attr ictx#init (create_enum_attr ctx "writeonly" 0L)
         AttrIndex.Function;
@@ -585,6 +588,9 @@ module Make (Ctx: CTX) () = struct
       in
       ictx#set_step
         (declare_function (step_name ictx#name) step_func_t module_);
+
+      (* Set as an internal function. *)
+      set_linkage Linkage.Internal ictx#step;
 
       (* Set step function attributes. *)
       add_function_attr ictx#step (create_enum_attr ctx "argmemonly" 0L)
