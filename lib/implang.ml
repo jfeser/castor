@@ -48,6 +48,7 @@ and stmt =
   | Step of { var : string; iter : string }
   | Assign of { lhs : string; rhs : expr }
   | Yield of expr
+  | Return of expr
 
 and prog = stmt list
 
@@ -135,6 +136,7 @@ and pp_stmt : Format.formatter -> stmt -> unit =
       fprintf fmt "@[<hov>init %s(@[<hov>%a@]);@]" func (pp_tuple pp_expr) args
     | Assign { lhs; rhs } -> fprintf fmt "@[<hov>%s =@ %a;@]" lhs pp_expr rhs
     | Yield e -> fprintf fmt "@[<hov>yield@ %a;@]" pp_expr e
+    | Return e -> fprintf fmt "@[<hov>return@ %a;@]" pp_expr e
     | Print (t, e) -> fprintf fmt "@[<hov>print(%a,@ %a);@]" pp_type t pp_expr e
 
 and pp_prog : Format.formatter -> prog -> unit =
@@ -554,6 +556,9 @@ module IRGen = struct
     in
     b.body := (Print (t, e))::!(b.body)
 
+  let build_return : expr -> stmt_builder = fun e b ->
+    b.body := (Return e)::!(b.body)
+
   module Make () = struct
     let fresh = Fresh.create ()
     let funcs = ref []
@@ -970,7 +975,7 @@ module IRGen = struct
 
     let counter : string -> func = fun func ->
       let open Infix in
-      let b = create [] VoidT in
+      let b = create [] (BytesT isize) in
       build_iter func [] b;
       let c = build_defn "c" int_t Infix.(int 0) b in
       let x = build_var "x" (find_func func).ret_type b in
@@ -979,7 +984,7 @@ module IRGen = struct
           build_assign Infix.(c + int 1) c b;
           build_step x func b;
         ) b;
-      build_print c b;
+      build_return c b;
       build_func b
 
     let project gen fields r =

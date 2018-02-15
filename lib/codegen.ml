@@ -511,6 +511,10 @@ module Make (Ctx: CTX) () = struct
     let fmt, args = gen val_ type_ in
     call_printf (fmt ^ "\n") args
 
+  let codegen_return fctx expr =
+    let val_ = codegen_expr fctx expr in
+    build_ret val_ builder |> ignore
+
   let rec codegen_iter : _ -> unit =
     let rec codegen_stmt : _ -> stmt -> unit = fun fctx ->
       function
@@ -522,6 +526,7 @@ module Make (Ctx: CTX) () = struct
       | Assign { lhs; rhs } -> codegen_assign fctx lhs rhs
       | Yield ret -> codegen_yield fctx ret
       | Print (type_, expr) -> codegen_print fctx type_ expr
+      | Return _ -> Error.(of_string "Iterator cannot return." |> raise)
 
     and codegen_prog : _ -> prog -> unit = fun fctx p ->
       List.iter ~f:(codegen_stmt fctx) p
@@ -649,6 +654,7 @@ module Make (Ctx: CTX) () = struct
       | Iter { var; func; args; } -> codegen_init fctx var func args
       | Assign { lhs; rhs } -> codegen_assign fctx lhs rhs
       | Print (type_, expr) -> codegen_print fctx type_ expr
+      | Return expr -> codegen_return fctx expr
       | Yield _ ->
         fail (Error.of_string "Yields not allowed in function declarations.")
 
@@ -694,7 +700,9 @@ module Make (Ctx: CTX) () = struct
             ~data:(Local (param fctx#llfunc (i + 1))));
 
       codegen_prog fctx body;
-      build_ret_void builder |> ignore;
+      match block_terminator (insertion_block builder) with
+      | Some _ -> ()
+      | None -> build_ret_void builder |> ignore;
 
       Logs.debug (fun m -> m "%s" (string_of_llvalue fctx#llfunc));
       assert_valid_function fctx#llfunc;
