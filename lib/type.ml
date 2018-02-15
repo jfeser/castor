@@ -16,10 +16,21 @@ module AbsCount = struct
     | Countable, _ | _, Countable -> Countable
 end
 
+module AbsLen = struct
+  type t =
+    | Len of int
+    | Variable
+  [@@deriving compare, sexp]
+
+  let unify : t -> t -> t = fun x y -> match x, y with
+    | Len x, Len y when x = y -> Len x
+    | Len _, Len _ | Variable, _ | _, Variable -> Variable
+end
+
 module T = struct
   type int_ = { bitwidth : int; field : Db.Field.t } [@@deriving compare, sexp]
   type bool_ = { field : Db.Field.t } [@@deriving compare, sexp]
-  type string_ = { length : int; field : Db.Field.t } [@@deriving compare, sexp]
+  type string_ = { nchars : AbsLen.t; field : Db.Field.t } [@@deriving compare, sexp]
   type ziptuple = { count : AbsCount.t } [@@deriving compare, sexp]
   type crosstuple = { count : AbsCount.t } [@@deriving compare, sexp]
   type ordered_list = {
@@ -67,9 +78,9 @@ let rec unify_exn : t -> t -> t = fun t1 t2 ->
     IntT { bitwidth = Int.max b1 b2; field = f1 }
   | (BoolT { field = f1 }, BoolT { field = f2 }) when Db.Field.equal f1 f2 ->
     BoolT { field = f1 }
-  | (StringT { length = b1; field = f1 }, StringT { length = b2; field = f2 })
+  | (StringT { nchars = b1; field = f1 }, StringT { nchars = b2; field = f2 })
     when Db.Field.equal f1 f2 ->
-    StringT { length = Int.max b1 b2; field = f1 }
+    StringT { nchars = AbsLen.unify b1 b2; field = f1 }
   | CrossTupleT (e1s, { count = c1 }), CrossTupleT (e2s, { count = c2 }) ->
       let elem_ts = match List.map2 e1s e2s ~f:unify_exn with
         | Ok ts -> ts
@@ -115,7 +126,7 @@ let rec of_layout_exn : Layout.t -> t =
       IntT { bitwidth = Int.floor_log2 (-x) + 1; field }
     | Int (x, { field }) -> IntT { bitwidth = Int.floor_log2 x + 1; field }
     | Bool (x, { field }) -> BoolT { field }
-    | String (x, {field}) -> StringT { length = String.length x; field }
+    | String (x, {field}) -> StringT { nchars = Len (String.length x); field }
     | CrossTuple ls ->
       let ts = List.map ls ~f:of_layout_exn in
       CrossTupleT (ts, { count })

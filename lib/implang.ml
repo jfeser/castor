@@ -652,7 +652,9 @@ module IRGen = struct
       function
       | IntT { bitwidth } -> int isize
       | BoolT _ -> int isize
-      | StringT _ -> islice start
+      | StringT { nchars = Variable } -> islice start
+      | StringT { nchars = Len x } ->
+        int (Int.round ~dir:`Up ~to_multiple_of:isize x)
       | EmptyT -> int 0
       | CrossTupleT (_, { count = Count _ }) -> islice start
       | CrossTupleT (_, { count = _ }) -> islice (start + int isize)
@@ -698,11 +700,14 @@ module IRGen = struct
       build_yield (Tuple [Infix.(islice start)]) b;
       build_func b
 
-    let scan_string _ =
+    let scan_string t =
       let b = create ["start", int_t] (TupleT [slice_t]) in
       let start = build_arg 0 b in
-      let len = Infix.(islice start) in
-      build_yield (Tuple [Infix.(slice (start + int isize) len)]) b;
+      let nchars = match t with
+        | { Type.nchars = Variable } -> Infix.(islice start)
+        | { Type.nchars = Len x } -> Infix.int x
+      in
+      build_yield (Tuple [Infix.(slice (start + hsize (StringT t)) nchars)]) b;
       build_func b
 
     let scan_crosstuple scan ts m =

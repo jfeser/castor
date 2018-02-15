@@ -51,11 +51,15 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
     match type_, layout with
     | IntT { bitwidth }, Int (x, _) -> of_int ~width:64 x |> label "Int"
     | BoolT _, Bool (x, _) -> of_bytes (bytes_of_bool x) |> label "Bool"
-    | StringT _, String (x, _) ->
+    | StringT { nchars = Variable }, String (x, _) ->
       let unpadded_body = Bytes.of_string x in
-      let body = unpadded_body |> align bsize |> of_bytes in
+      let body = unpadded_body |> align isize |> of_bytes in
       let len = Bytes.length unpadded_body |> bytes_of_int ~width:64 |> of_bytes in
       concat [len |> label "String len"; body |> label "String body"]
+    | StringT { nchars = Len _ }, String (x, _) ->
+      let unpadded_body = Bytes.of_string x in
+      let body = unpadded_body |> align isize |> of_bytes in
+      concat [body |> label "String body"]
     | CrossTupleT (ts, { count }), (CrossTuple ls as l) ->
       let body =
         List.map2_exn ts ls ~f:(fun t l -> serialize t l) |> concat
