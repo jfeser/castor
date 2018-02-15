@@ -12,10 +12,6 @@
 
 #define USAGE "Usage: perf.exe [-pc] DB_FILE\n"
 
-extern void* create(long*);
-extern void counter(void*);
-extern void printer(void*);
-
 int main(int argc, char **argv) {
   int fd, len, print_flag = 0, count_flag = 0, c;
   char *fn = NULL;

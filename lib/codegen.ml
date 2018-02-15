@@ -899,9 +899,12 @@ module Make (Ctx: CTX) () = struct
     in
 
     let fmt = Format.formatter_of_out_channel ch in
-    fprintf fmt "typedef void params;";
+    pp_open_vbox fmt 0;
+    fprintf fmt "typedef void params;@,";
+    fprintf fmt "params* create(void *);@,";
     Hashtbl.data funcs |> List.iter ~f:(fun llfunc ->
         pp_value_decl fmt llfunc);
+    pp_close_box fmt ();
     pp_print_flush fmt ()
 
   (* let optimize : unit -> unit = fun () ->
