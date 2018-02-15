@@ -11,19 +11,23 @@
 /*$0*/
 
 #define USAGE "Usage: perf.exe [-pc] DB_FILE\n"
+#define DEFAULT_ITERS 100000
 
 int main(int argc, char **argv) {
-  int fd, len, print_flag = 0, count_flag = 0, c;
+  int fd, len, print_flag = 0, count_flag = 0, iters = DEFAULT_ITERS, c;
   char *fn = NULL;
   struct stat stat;
 
-  while ((c = getopt(argc, argv, "pc")) != -1) {
+  while ((c = getopt(argc, argv, "pci:")) != -1) {
     switch (c) {
     case 'p':
       print_flag = 1;
       break;
     case 'c':
       count_flag = 1;
+      break;
+    case 'i':
+      iters = atoi(optarg);
       break;
     case '?':
       fprintf(stderr, USAGE);
@@ -71,17 +75,21 @@ int main(int argc, char **argv) {
   /*$1*/
 
   clock_t start = clock();
-  if (count_flag) {
-    counter(params);
-    printf("\n");
-  } else if (print_flag) {
-    printer(params);
-  } else {
-    abort();
+  int count = -1;
+  for (int i = 0; i < iters; i++) {
+    if (count_flag) {
+      count = counter(params);
+    } else if (print_flag) {
+      printer(params);
+    } else {
+      abort();
+    }
   }
   clock_t stop = clock();
   int msec = (stop - start) * 1000 / CLOCKS_PER_SEC;
+  printf("%d\n", count);
   printf("Query time: %dms\n", msec);
+  printf("Time per query: %fms\n", (float)msec / iters);
 
   free(params);
   return 0;
