@@ -373,7 +373,7 @@ module Make (Ctx: CTX) () = struct
       let v = codegen_expr fctx arg in
       begin match op with
         | Not -> build_not v "nottmp" builder
-        | Add | Sub| Lt | And | Or | Eq | Hash ->
+        | Add | Sub| Lt | And | Or | Eq | Hash | Mul ->
           fail (Error.of_string "Not a unary operator.")
       end
     | Tuple es ->
