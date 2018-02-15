@@ -902,7 +902,6 @@ module IRGen = struct
         build_iter key_iter [key_start] b;
         let key = build_fresh_var "key" key_type b in
         build_step key key_iter b;
-        build_print key b;
 
         let value_start = Infix.(key_start + len key_start kt) in
         build_if ~cond:Infix.(Index(key, 0) = lookup_expr)
