@@ -11,7 +11,8 @@ let in_dir : string -> f:(unit -> 'a) -> 'a = fun dir ~f ->
   let ret = try f () with e -> Unix.chdir cur_dir; raise e in
   Unix.chdir cur_dir; ret
 
-let benchmark debug params ralgebra =
+let benchmark : debug:bool -> params:(string * string) list -> gprof:bool -> Ralgebra.t -> unit =
+fun ~debug ~params ~gprof ralgebra ->
   Logs.info (fun m -> m "Benchmarking %s." (Ralgebra.to_string ralgebra));
 
   let module IGen = Implang.IRGen.Make () in
@@ -50,18 +51,32 @@ let benchmark debug params ralgebra =
       in
       sprintf "set_%s(params, %s);" n val_str) |> String.concat ~sep:"\n"
   in
-  In_channel.(with_file "/Users/jack/work/fastdb/bin/templates/perf.c" ~f:(fun ch ->
+  In_channel.(with_file "../bin/templates/perf.c" ~f:(fun ch ->
       let out = String.template (input_all ch)
           [ "#include \"scanner.h\""; params_str ] in
       let () =
         Out_channel.(with_file "main.c" ~f:(fun ch -> output_string ch out)) in
       ()));
 
+  let command_exn : string list -> unit = function
+    | [] -> Error.of_string "Empty command" |> Error.raise
+    | args ->
+      let cmd = String.concat args ~sep:" " in
+      let ret = Sys.command cmd in
+      if ret = 0 then () else
+        Error.create "Non-zero exit code" ret [%sexp_of:int] |> Error.raise
+  in
+
+  let clang = "/usr/bin/clang-5.0" in
+  let opt = "/usr/bin/opt-5.0" in
+  let cflags = ["-lcmph"] in
+  let cflags = (if debug then ["-g"; "-O0"] else []) @ cflags in
+  let cflags = (if gprof then ["-pg"] else []) @ cflags in
   if debug then
-    Caml.Sys.command ("/usr/local/opt/llvm/bin/clang -g -O0 -lcmph scanner.ll main.c -o scanner.exe") |> ignore
+    command_exn (clang :: cflags @ ["scanner.ll"; "main.c"; "-o"; "scanner.exe"])
   else begin
-    Caml.Sys.command ("/usr/local/opt/llvm/bin/opt -S -pass-remarks-output=remarks.yaml -mergereturn -always-inline scanner.ll > scanner-opt.ll") |> ignore;
-    Caml.Sys.command ("/usr/local/opt/llvm/bin/clang -g -O0 -lcmph scanner-opt.ll main.c -o scanner.exe") |> ignore
+    command_exn (opt :: ["-S -pass-remarks-output=remarks.yaml -mergereturn -always-inline scanner.ll > scanner-opt.ll"]);
+    command_exn (clang :: cflags @ ["scanner-opt.ll"; "main.c"; "-o"; "scanner.exe"])
   end;
   Llvm.dispose_module module_;
   Llvm.dispose_context llctx;
@@ -82,8 +97,8 @@ let benchmark debug params ralgebra =
 
   let main : params:(string * string) list -> db:string -> ralgebra:_ ->
     verbose:bool -> quiet:bool -> transforms:Transform.t list option ->
-    dir:string option -> debug:bool -> unit =
-    fun ~params ~db ~ralgebra ~verbose ~quiet ~transforms ~dir ~debug ->
+    dir:string option -> debug:bool -> gprof:bool -> unit =
+    fun ~params ~db ~ralgebra ~verbose ~quiet ~transforms ~dir ~debug ~gprof ->
       Logs.set_reporter (Logs.format_reporter ());
       if verbose then Logs.set_level (Some Logs.Debug)
       else if quiet then Logs.set_level (Some Logs.Error)
@@ -109,7 +124,7 @@ let benchmark debug params ralgebra =
       in
       Logs.info (fun m -> m "Generating files in %s." dir);
 
-      in_dir dir ~f:(fun () -> Seq.iter candidates ~f:(benchmark debug params))
+      in_dir dir ~f:(fun () -> Seq.iter candidates ~f:(benchmark ~debug ~params ~gprof))
 
 let () =
   let open Command in
@@ -123,9 +138,10 @@ let () =
     and verbose = flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
     and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
     and debug = flag "debug" ~aliases:["g"] no_arg ~doc:"enable debug mode"
+    and gprof = flag "prof" ~aliases:["pg"] no_arg ~doc:"enable profiling"
     and transforms = flag "transform" ~aliases:["t"]
         (optional (Arg_type.comma_separated transform)) ~doc:"transforms to run"
     and dir = flag "dir" ~aliases:["d"] (optional file) ~doc:"where to write intermediate files"
     and ralgebra = anon ("ralgebra" %: ralgebra)
-    in fun () -> main ~db ~ralgebra ~params ~verbose ~quiet ~transforms ~dir ~debug
+    in fun () -> main ~db ~ralgebra ~params ~verbose ~quiet ~transforms ~dir ~debug ~gprof
   ] |> run
