@@ -161,7 +161,7 @@ let tf_flatten : t = {
 let tf_empty_project : t = {
   name = "empty";
   f = function
-    | Project ([], q) -> [q]
+    | Project ([], q) -> [Scan (Empty)]
     | _ -> []
 }
 

@@ -114,8 +114,9 @@ let rec params : t -> Set.M(TypedName).t =
   let empty = Set.empty (module TypedName) in
   let union_list = Set.union_list (module TypedName) in
   function
-  | Project (_, _) | Relation _ -> empty
+  | Relation _ -> empty
   | Scan l -> Layout.params l
+  | Project (_, r) -> params r
   | Filter (p, r) ->
     let open Ralgebra0 in
     let rec pred_params = function

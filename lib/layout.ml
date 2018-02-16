@@ -322,11 +322,13 @@ let ntuples : t -> int Or_error.t = fun l ->
 
 let flatten : t -> t = function
   | Int _ | Bool _ | String _ | Table _ | Empty as l -> l
+  | CrossTuple [l] -> l
   | CrossTuple ls ->
     List.concat_map ls ~f:(function
         | CrossTuple ls' -> ls'
         | l -> [l])
     |> fun x -> CrossTuple x
+  | ZipTuple [l] -> l
   | ZipTuple ls ->
     List.concat_map ls ~f:(function
         | ZipTuple ls' -> ls'
@@ -382,7 +384,8 @@ let project : Field.t list -> t -> t = fun fs l ->
   let rec project = function
     | Int (_, m) | Bool (_, m) | String (_, m) as v ->
       if f_in m.field then v else Empty
-    | CrossTuple ls -> CrossTuple (List.map ls ~f:project)
+    | CrossTuple ls ->
+      CrossTuple (List.map ls ~f:project |> List.filter ~f:(fun l -> ntuples_exn l > 0))
     | ZipTuple ls ->
       let ls' =
         List.map ls ~f:project |> List.filter ~f:(fun l -> ntuples_exn l > 0)
