@@ -1,5 +1,10 @@
 (jbuild_version 1)
 
+(rule
+ ((targets (config.ml))
+  (deps    (../config))
+  (action  (copy ${<} ${@}))))
+
 (executables
  ((names (test_layout test_locality test_eval test_pcify test_codegen perf))
   (libraries (core postgresql dblayout fmt fmt.cli fmt.tty cmdliner logs logs.fmt logs.cli))

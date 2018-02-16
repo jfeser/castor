@@ -1,0 +1,17 @@
+(* -*- tuareg -*- *)
+
+(* Default configuration, copy this file to "config" and edit it to change the
+   build configuration. *)
+
+(* Project root directory *)
+let project_root = failwith "Edit config file!"
+
+(* LLVM root directory *)
+let llvm_root = failwith "Edit config file!"
+
+(* Uncomment to use LLVM installed through Homebrew. *)
+(* let llvm_root = "/usr/local/opt/llvm" *)
+
+(* Uncomment to use LLVM 5.0 installed on Ubuntu. *)
+(* let llvm_root = "/usr/lib/llvm-5.0" *)
+
