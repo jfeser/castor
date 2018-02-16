@@ -51,7 +51,9 @@ fun ~debug ~params ~gprof ralgebra ->
       in
       sprintf "set_%s(params, %s);" n val_str) |> String.concat ~sep:"\n"
   in
-  In_channel.(with_file "../bin/templates/perf.c" ~f:(fun ch ->
+
+  let perf_template = Config.project_root ^ "/bin/templates/perf.c" in
+  In_channel.(with_file perf_template ~f:(fun ch ->
       let out = String.template (input_all ch)
           [ "#include \"scanner.h\""; params_str ] in
       let () =
@@ -67,8 +69,10 @@ fun ~debug ~params ~gprof ralgebra ->
         Error.create "Non-zero exit code" ret [%sexp_of:int] |> Error.raise
   in
 
-  let clang = "/usr/bin/clang-5.0" in
-  let opt = "/usr/bin/opt-5.0" in
+  Logs.debug (fun m -> m "LLVM root: %s" Config.llvm_root);
+
+  let clang = Config.llvm_root ^ "/bin/clang" in
+  let opt = Config.llvm_root ^ "/bin/opt" in
   let cflags = ["-lcmph"] in
   let cflags = (if debug then ["-g"; "-O0"] else []) @ cflags in
   let cflags = (if gprof then ["-pg"] else []) @ cflags in
