@@ -15,6 +15,8 @@
 %token STRING
 %token LPAREN
 %token RPAREN
+%token LSBRAC
+%token RSBRAC
 %token COLON
 %token DOT
 %token COMMA
@@ -41,12 +43,22 @@
 ralgebra_eof:
 | x = ralgebra; EOF { x }
 
+operator: | PROJECT | FILTER | EQJOIN | CONCAT { () }
+
+list(X):
+| error { error "Expected a '['." }
+| LSBRAC; l = separated_list(COMMA, X); RSBRAC { l }
+| LSBRAC; separated_list(COMMA, X); error { error "Expected a ']'." }
+
 ralgebra:
-| PROJECT; LPAREN; fields = separated_list(COMMA, field); COMMA; r = ralgebra; RPAREN { Project (fields, r) }
+| PROJECT; LPAREN; fields = list(field); COMMA; r = ralgebra; RPAREN { Project (fields, r) }
+| PROJECT; LPAREN; error { error "Expected a list of fields." }
+| PROJECT; LPAREN; list(field); error { error "Expected a ','." }
 | FILTER; LPAREN; pred = pred; COMMA; r = ralgebra; RPAREN { Filter (pred, r) }
 | EQJOIN; LPAREN; f1 = field; COMMA; f2 = field; COMMA; r1 = ralgebra; COMMA; r2 = ralgebra; RPAREN { EqJoin(f1, f2, r1, r2) }
 | CONCAT; LPAREN; rs = separated_list(COMMA, ralgebra); RPAREN { Concat rs }
 | r = ID { Relation r }
+| operator; error { error "Expected a '('." }
 
 field:
 | r = ID; DOT; f = ID; { (r, f) }
