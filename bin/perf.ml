@@ -69,8 +69,6 @@ fun ~debug ~params ~gprof ralgebra ->
         Error.create "Non-zero exit code" ret [%sexp_of:int] |> Error.raise
   in
 
-  Logs.debug (fun m -> m "LLVM root: %s" Config.llvm_root);
-
   let clang = Config.llvm_root ^ "/bin/clang" in
   let opt = Config.llvm_root ^ "/bin/opt" in
   let cflags = ["-lcmph"] in
@@ -85,19 +83,9 @@ fun ~debug ~params ~gprof ralgebra ->
   Llvm.dispose_module module_;
   Llvm.dispose_context llctx;
 
-  (* Calibrate CPU counter. *)
-  let calibrator = Time_stamp_counter.Calibrator.create () in
-  Time_stamp_counter.Calibrator.calibrate ~t:calibrator ();
-  let start = Time_stamp_counter.now () in
+  (* Collect runtime information. *)
   if Caml.Sys.command ("./scanner.exe -c db.buf") > 0 then
-    Logs.err (fun m -> m "Scanner failed.");
-  let stop = Time_stamp_counter.now () in
-  let runtime =
-    Time_ns.(diff (Time_stamp_counter.to_time_ns ~calibrator stop)
-               (Time_stamp_counter.to_time_ns ~calibrator start)
-             |> Span.to_short_string)
-  in
-  Logs.info (fun m -> m "Total time: %s" runtime)
+    Logs.err (fun m -> m "Scanner failed.")
 
   let main : params:(string * string) list -> db:string -> ralgebra:_ ->
     verbose:bool -> quiet:bool -> transforms:Transform.t list option ->
@@ -128,7 +116,9 @@ fun ~debug ~params ~gprof ralgebra ->
       in
       Logs.info (fun m -> m "Generating files in %s." dir);
 
-      in_dir dir ~f:(fun () -> Seq.iter candidates ~f:(benchmark ~debug ~params ~gprof))
+      in_dir dir ~f:(fun () -> Seq.iter candidates ~f:(benchmark ~debug ~params ~gprof));
+
+      if Logs.err_count () > 0 then exit 1 else exit 0
 
 let () =
   let open Command in
@@ -147,5 +137,6 @@ let () =
         (optional (Arg_type.comma_separated transform)) ~doc:"transforms to run"
     and dir = flag "dir" ~aliases:["d"] (optional file) ~doc:"where to write intermediate files"
     and ralgebra = anon ("ralgebra" %: ralgebra)
-    in fun () -> main ~db ~ralgebra ~params ~verbose ~quiet ~transforms ~dir ~debug ~gprof
+    in fun () ->
+      main ~db ~ralgebra ~params ~verbose ~quiet ~transforms ~dir ~debug ~gprof
   ] |> run
