@@ -21,6 +21,8 @@ rule token = parse
   | "string"   { STRING }
   | "("        { LPAREN }
   | ")"        { RPAREN }
+  | "["        { LSBRAC }
+  | "]"        { RSBRAC }
   | ":"        { COLON }
   | "."        { DOT }
   | ","        { COMMA }
