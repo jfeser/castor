@@ -677,6 +677,7 @@ module IRGen = struct
       | UnorderedListT (_, { count = Count x })
       | OrderedListT (_, { count = Count x })
       | TableT (_, _, { count = Count x }) -> Some (int x)
+      | UnorderedListT (_, { count = Countable }) -> Some (islice start)
       | _ -> None
 
     (** The length of a layout header in bytes. *)
@@ -685,9 +686,11 @@ module IRGen = struct
       function
       | IntT _ | BoolT _ | EmptyT -> Infix.(int 0)
       | StringT _ -> Infix.(int isize)
-      | CrossTupleT (_, { count = Count _ }) -> Infix.(int isize)
-      | CrossTupleT _ -> Infix.int (2 * isize)
-      | ZipTupleT _ | OrderedListT _ | UnorderedListT _ ->
+      | CrossTupleT (_, { count = Count _ })
+      | UnorderedListT (_, { count = Count _ })
+      | OrderedListT (_, { count = Count _ })
+      | ZipTupleT (_, { count = Count _ }) -> Infix.(int isize)
+      | CrossTupleT _ | ZipTupleT _ | OrderedListT _ | UnorderedListT _ ->
         Infix.int (2 * isize)
       | TableT (_,_,_) -> Infix.(int isize)
 
@@ -792,12 +795,14 @@ module IRGen = struct
         build_func b
 
     let scan_unordered_list : _ -> _ -> Type.unordered_list -> _ =
-      fun scan t ({ count } as m) ->
+      fun scan t m ->
         let func = scan t in
         let ret_type = (find_func func).ret_type in
         let b = create ["start", int_t] ret_type in
         let start = build_arg 0 b in
-        let pcount = build_defn "pcount" int_t Infix.(islice start) b in
+        let pcount = build_defn "pcount" int_t
+            (Option.value_exn (count start (UnorderedListT (t, m)))) b
+        in
         let cstart =
           build_defn "cstart" int_t Infix.(start + hsize (UnorderedListT (t, m))) b
         in
