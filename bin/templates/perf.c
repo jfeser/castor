@@ -88,8 +88,7 @@ int main(int argc, char **argv) {
   clock_t stop = clock();
   int msec = (stop - start) * 1000 / CLOCKS_PER_SEC;
   printf("%d\n", count);
-  printf("Query time: %dms\n", msec);
-  printf("Time per query: %fms\n", (float)msec / iters);
+  printf("Queries per second: %f\n", ((float)iters / msec) * 1000);
 
   free(params);
   return 0;
