@@ -133,8 +133,11 @@ let tf_or_filter : t = {
 let tf_eqjoin : t = {
   name = "eqjoin";
   f = function
-    | EqJoin (f1, f2, Scan l1, Scan l2) ->
-      [ Filter (Binop (Eq, Field f1, Field f2), Scan (CrossTuple [l1; l2])); ]
+    | EqJoin (f1, f2, Scan l1, Scan l2) -> [
+        Filter (Binop (Eq, Field f1, Field f2), Scan (CrossTuple [l1; l2]));
+        Scan (Layout.eq_join f1 f2 l1 l2);
+        Scan (Layout.eq_join f2 f1 l2 l1);
+      ]
     | _ -> []
 }
 

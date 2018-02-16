@@ -399,6 +399,17 @@ let project : Field.t list -> t -> t = fun fs l ->
   in
   project l
 
+let eq_join : Field.t -> Field.t -> t -> t -> t = fun f1 f2 l1 l2 ->
+  match partition PredCtx.Key.Dummy f1 l1,
+        partition PredCtx.Key.Dummy f1 l1 with
+  | Table (m1, _), Table (m2, _) ->
+    Map.merge m1 m2 ~f:(fun ~key -> function
+        | `Both (l1, l2) -> Some (CrossTuple [of_value key; l1; l2])
+        | `Left _ | `Right _ -> None)
+    |> Map.data
+    |> fun x -> UnorderedList x
+  | _ -> raise (TransformError (Error.of_string "Expected a table."))
+
 let tests =
   let open OUnit2 in
   let partition_tests =
