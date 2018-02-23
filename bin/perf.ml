@@ -91,7 +91,6 @@ fun ~debug ~params ~gprof ralgebra ->
     verbose:bool -> quiet:bool -> transforms:Transform.t list option ->
     dir:string option -> debug:bool -> gprof:bool -> unit =
     fun ~params ~db ~ralgebra ~verbose ~quiet ~transforms ~dir ~debug ~gprof ->
-      Logs.set_reporter (Logs.format_reporter ());
       if verbose then Logs.set_level (Some Logs.Debug)
       else if quiet then Logs.set_level (Some Logs.Error)
       else Logs.set_level (Some Logs.Info);
@@ -121,6 +120,9 @@ fun ~debug ~params ~gprof ralgebra ->
       if Logs.err_count () > 0 then exit 1 else exit 0
 
 let () =
+  (* Set early so we get logs from command parsing code. *)
+  Logs.set_reporter (Logs.format_reporter ());
+
   let open Command in
   let kv = Arg_type.create (fun s -> String.lsplit2_exn ~on:':' s) in
   let ralgebra = Arg_type.create Ralgebra.of_string_exn in
