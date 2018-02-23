@@ -166,3 +166,12 @@ module Buffer = struct
   let to_string : t -> string = contents
 end
 
+module Random = struct
+  include Random
+
+  let choice : 'a list -> 'a = fun l ->
+    let len = List.length l in
+    if len = 0 then Error.(of_string "Empty list." |> raise) else
+      let idx = int len in
+      List.nth_exn l idx
+end
