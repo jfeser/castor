@@ -416,8 +416,8 @@ let eq_join : Field.t -> Field.t -> t -> t -> t = fun f1 f2 l1 l2 ->
 let tests =
   let open OUnit2 in
   let partition_tests =
-    let f1 = Field.({ name = "f1"; dtype = DInt { min_val = 0; max_val = 10; distinct = 100; }}) in
-    let f2 = Field.({ name = "f2"; dtype = DInt { min_val = 0; max_val = 10; distinct = 100; }}) in
+    let f1 = Field.({ name = "f1"; dtype = DInt }) in
+    let f2 = Field.({ name = "f2"; dtype = DInt }) in
     let r = Relation.({ name = "r"; fields = [f1; f2]; card = 100; }) in
     let assert_equal ~ctxt x y =
       assert_equal ~ctxt ~cmp:(fun a b -> compare a b = 0) x y

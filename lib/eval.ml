@@ -95,16 +95,15 @@ let eval_relation : Relation.t -> Tuple.t Seq.t =
         List.map2_exn vs r.fields ~f:(fun v f ->
             let pval =
               match f.Field.dtype with
-              | DInt _ -> `Int (Int.of_string v)
-              | DString _ -> `String v
-              | DBool _ ->
+              | DInt -> `Int (Int.of_string v)
+              | DString -> `String v
+              | DBool ->
                 begin match v with
                   | "t" -> `Bool true
                   | "f" -> `Bool false
                   | _ -> failwith "Unknown boolean value."
                 end
-              | DTimestamp _
-              | DInterval _ -> `Unknown v
+              | _ -> `Unknown v
             in
             let value = Value.({ rel = r; field = f; idx = i; value = pval }) in
             value))
