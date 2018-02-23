@@ -15,6 +15,9 @@ type op =
 type 'f pred =
   | Var of TypedName.t
   | Field of 'f
+  | Int of int
+  | Bool of bool
+  | String of string
   | Binop of (op * 'f pred * 'f pred)
   | Varop of (op * 'f pred list)
 [@@deriving compare, sexp]

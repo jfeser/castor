@@ -31,7 +31,7 @@ let resolve : Postgresql.connection -> (string * string, string) Ralgebra0.t
   let resolve_relation = Map.find_exn rels in
   let resolve_field (r, f) = Relation.field_exn (resolve_relation r) f in
   let rec resolve_pred = function
-    | Var _ as p -> p
+    | Var _ | Int _ | Bool _ | String _ as p -> p
     | Field f -> Field (resolve_field f)
     | Binop (op, p1, p2) -> Binop (op, resolve_pred p1, resolve_pred p2)
     | Varop (op, ps) -> Varop (op, List.map ps ~f:resolve_pred)
@@ -64,6 +64,9 @@ let op_to_string : op -> string = function
 
 let rec pred_to_string : pred -> string = function
   | Var v -> TypedName.to_string v
+  | Int x -> Int.to_string x
+  | Bool x -> Bool.to_string x
+  | String x -> String.escaped x
   | Field f -> f.name
   | Binop (op, p1, p2) ->
     let os = op_to_string op in

@@ -22,6 +22,9 @@ exception EvalError of Error.t
 
 let rec eval_pred : PredCtx.t -> Ralgebra.pred -> primvalue =
   fun ctx -> function
+    | Int x -> `Int x
+    | String x -> `String x
+    | Bool x -> `Bool x
     | Var (n, _) ->
       begin match PredCtx.find_var ctx n with
         | Some v -> v
