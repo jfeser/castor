@@ -13,7 +13,8 @@ include Comparable.Make(T)
 
 let rec relations : ('f, 'r) Ralgebra0.t -> 'r list = function
   | Project (_, r)
-  | Filter (_, r) -> relations r
+  | Filter (_, r)
+  | Count r -> relations r
   | EqJoin (_, _, r1, r2) -> relations r1 @ relations r2
   | Scan _ -> []
   | Concat rs -> List.concat_map rs ~f:relations
@@ -42,13 +43,14 @@ let resolve : Postgresql.connection -> (string * string, string) Ralgebra0.t
     | Concat rs -> Concat (List.map rs ~f:resolve)
     | Relation r -> Relation (resolve_relation r)
     | Scan _ as r -> r
+    | Count r -> Count (resolve r)
     | EqJoin (f1, f2, r1, r2) ->
       EqJoin (resolve_field f1, resolve_field f2, resolve r1, resolve r2)
   in
   resolve ralgebra
 
 let rec pred_fields : pred -> Field.t list = function
-  | Var _ -> []
+  | Var _ | Int _ | Bool _ | String _ -> []
   | Field f -> [f]
   | Binop (_, p1, p2) -> (pred_fields p1) @ (pred_fields p2)
   | Varop (_, ps) -> List.concat_map ps ~f:pred_fields
@@ -80,6 +82,7 @@ let rec pred_to_string : pred -> string = function
 let rec to_string : t -> string =
   function
   | Project (fs, r) -> sprintf "Project(%s)" (to_string r)
+  | Count r -> sprintf "Count(%s)" (to_string r)
   | Filter (p, r) -> sprintf "Filter(%s, %s)" (pred_to_string p) (to_string r)
   | EqJoin (f1, f2, r1, r2) ->
     sprintf "EqJoin(%s, %s)" (to_string r1) (to_string r2)
@@ -90,15 +93,15 @@ let rec to_string : t -> string =
 
 let of_string_exn : string -> (string * string, string) Ralgebra0.t = fun s ->
   let lexbuf = Lexing.from_string s in
-  try Ralgebra_parser.ralgebra_eof Ralgebra_lexer.token lexbuf with e ->
-    let cnum = lexbuf.lex_curr_p.pos_cnum in
-    let tok = Lexing.lexeme lexbuf in
-    Error.(tag_arg (of_exn e) "Parse error." (s, cnum, tok)
-             [%sexp_of:string * int * string] |> raise)
+  try Ralgebra_parser.ralgebra_eof Ralgebra_lexer.token lexbuf with
+  | Ralgebra0.ParseError (msg, line, col) as e ->
+    Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col);
+    raise e
 
 let rec layouts : t -> Layout.t list = function
   | Project (_, r)
-  | Filter (_, r) -> layouts r
+  | Filter (_, r)
+  | Count r -> layouts r
   | EqJoin (_,_, r1, r2) -> layouts r1 @ layouts r2
   | Scan l -> [l]
   | Concat rs -> List.map rs ~f:layouts |> List.concat
@@ -107,6 +110,7 @@ let rec layouts : t -> Layout.t list = function
 let rec to_schema : t -> Schema.t = function
   | Project (fs, r) ->
     to_schema r |> List.filter ~f:(List.mem fs ~equal:Field.(=))
+  | Count _ -> [Field.{ name = "count"; dtype = DInt }]
   | Filter (_, r) -> to_schema r
   | EqJoin (_, _, r1, r2) -> to_schema r1 @ to_schema r2
   | Scan l -> Layout.to_schema_exn l

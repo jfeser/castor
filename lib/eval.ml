@@ -116,6 +116,9 @@ let eval : PredCtx.t -> Ralgebra.t -> Tuple.t Seq.t =
     let open Ralgebra0 in
     let rec eval = function
       | Scan l -> eval_layout ctx l
+      | Count r ->
+        let ct = eval r |> Seq.length in
+        Seq.singleton (Value.)
       | Project (fs, r) ->
         eval r
         |> Seq.map ~f:(fun t ->

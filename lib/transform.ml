@@ -40,6 +40,8 @@ let rec run_everywhere : t -> Ralgebra.t -> Ralgebra.t list = fun t r ->
   let rs = run_checked t r in
   let rs' = match r with
     | Scan _ | Relation _ -> []
+    | Count r' ->
+      List.map (run_everywhere t r') ~f:(fun r' -> Ralgebra0.Count r')
     | Project (fs, r') ->
       List.map (run_everywhere t r') ~f:(fun r' -> Ralgebra0.Project (fs, r'))
     | Filter (ps, r') ->
