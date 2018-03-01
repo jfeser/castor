@@ -65,7 +65,8 @@ let rec eval_pred : PredCtx.t -> Ralgebra.pred -> primvalue =
 
 let rec eval_layout : PredCtx.t -> t -> Tuple.t Seq.t =
   fun ctx -> function
-    | Int _ | Bool _ | String _ as l -> Seq.singleton [Layout.to_value l]
+    | Int _ | Bool _ | String _ | Null _ as l ->
+      Seq.singleton [Layout.to_value l]
     | CrossTuple ls ->
       List.fold_left ls ~init:(Seq.singleton []) ~f:(fun ts l ->
           Seq.cartesian_product ts (eval_layout ctx l)
@@ -96,17 +97,17 @@ let eval_relation : Relation.t -> Tuple.t Seq.t =
     |> Seq.of_list
     |> Seq.mapi ~f:(fun i vs ->
         List.map2_exn vs r.fields ~f:(fun v f ->
-            let pval =
-              match f.Field.dtype with
-              | DInt -> `Int (Int.of_string v)
-              | DString -> `String v
-              | DBool ->
-                begin match v with
-                  | "t" -> `Bool true
-                  | "f" -> `Bool false
-                  | _ -> failwith "Unknown boolean value."
-                end
-              | _ -> `Unknown v
+            let pval = if String.(v = "") then `Null else
+                match f.Field.dtype with
+                | DInt -> `Int (Int.of_string v)
+                | DString -> `String v
+                | DBool ->
+                  begin match v with
+                    | "t" -> `Bool true
+                    | "f" -> `Bool false
+                    | _ -> failwith "Unknown boolean value."
+                  end
+                | _ -> `Unknown v
             in
             let value = Value.({ rel = r; field = f; idx = i; value = pval }) in
             value))
@@ -117,8 +118,10 @@ let eval : PredCtx.t -> Ralgebra.t -> Tuple.t Seq.t =
     let rec eval = function
       | Scan l -> eval_layout ctx l
       | Count r ->
-        let ct = eval r |> Seq.length in
-        Seq.singleton (Value.)
+        let ct = Seq.length (eval r) in
+        Seq.singleton [Value.({
+            value = `Int ct; rel = Relation.dummy; field = Field.dummy; idx = 0
+          })]
       | Project (fs, r) ->
         eval r
         |> Seq.map ~f:(fun t ->

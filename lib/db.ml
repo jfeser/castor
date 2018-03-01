@@ -97,7 +97,7 @@ module Relation = struct
 end
 
 type primvalue =
-  [`Int of int | `String of string | `Bool of bool | `Unknown of string]
+  [`Int of int | `String of string | `Bool of bool | `Unknown of string | `Null]
 [@@deriving compare, hash, sexp]
 
 module Value = struct

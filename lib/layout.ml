@@ -94,6 +94,7 @@ type t =
   | Int of int * scalar
   | Bool of bool * scalar
   | String of string * scalar
+  | Null of scalar
   | CrossTuple of t list
   | ZipTuple of t list
   | UnorderedList of t list
@@ -108,6 +109,8 @@ let to_value : t -> Value.t = function
     { field = m.field; rel = m.rel; idx = m.idx; value = `Bool x }
   | String (x, m) ->
     { field = m.field; rel = m.rel; idx = m.idx; value = `String x }
+  | Null m ->
+    { field = m.field; rel = m.rel; idx = m.idx; value = `Null }
   | x -> Error.create "Cannot be converted to value." x [%sexp_of:t]
          |> Error.raise
 
@@ -116,11 +119,13 @@ let of_value : Value.t -> t = fun { field; rel; idx; value } -> match value with
   | `Bool x -> Bool (x, { field; rel; idx })
   | `String x -> String (x, { field; rel; idx })
   | `Unknown x -> String (x, { field; rel; idx })
+  | `Null -> Null { field; rel; idx }
 
 let rec to_string : t -> string = function
   | Int _ -> "i"
   | Bool _ -> "b"
   | String _ -> "s"
+  | Null _ -> "n"
   | ZipTuple ls ->
     List.map ls ~f:to_string |> String.concat ~sep:", " |> sprintf "z(%s)"
   | CrossTuple ls ->
@@ -142,7 +147,7 @@ let rec to_string : t -> string = function
 
 let rec to_schema_exn : t -> Schema.t = function
   | Empty -> []
-  | Int (_, m) | Bool (_, m) | String (_, m) -> [m.field]
+  | Int (_, m) | Bool (_, m) | String (_, m) | Null m -> [m.field]
   | ZipTuple ls
   | CrossTuple ls -> List.concat_map ls ~f:to_schema_exn
   | UnorderedList ls | OrderedList (ls, _) ->
@@ -159,7 +164,7 @@ let rec params : t -> Set.M(TypedName).t =
   let kparams = PredCtx.Key.params in
   let lparams ls = List.map ~f:params ls in
   function
-  | Empty | Int _ | Bool _ | String _ -> empty
+  | Empty | Int _ | Bool _ | String _ | Null _ -> empty
   | CrossTuple ls | ZipTuple ls | UnorderedList ls -> lparams ls |> union_list
   | OrderedList (ls, { lookup = (k1, k2) }) ->
     let p1 = Option.value_map ~f:kparams k1 ~default:empty in
@@ -297,6 +302,7 @@ in
     if Schema.has_field (to_schema_exn l) f then
       match l with
       | Empty -> Empty
+      | Null _ -> Empty
       | Int (x, m) -> p_int k f x m
       | Bool (x, m) -> p_bool k f x m
       | String (x, m) -> p_string k f x m
@@ -310,7 +316,7 @@ in
 
 let rec ntuples_exn : t -> int = function
   | Empty -> 0
-  | Int _ | Bool _ | String _ -> 1
+  | Int _ | Bool _ | String _ | Null _ -> 1
   | CrossTuple ls -> List.fold_left ls ~init:1 ~f:(fun p l -> p * ntuples_exn l)
   | ZipTuple ls -> List.map ls ~f:ntuples_exn |> List.all_equal_exn
   | UnorderedList ls | OrderedList (ls, _) ->
@@ -321,7 +327,7 @@ let ntuples : t -> int Or_error.t = fun l ->
   Or_error.try_with (fun () -> ntuples_exn l)
 
 let flatten : t -> t = function
-  | Int _ | Bool _ | String _ | Table _ | Empty as l -> l
+  | Null _ | Int _ | Bool _ | String _ | Table _ | Empty as l -> l
   | CrossTuple [l] -> l
   | CrossTuple ls ->
     List.concat_map ls ~f:(function
@@ -382,7 +388,7 @@ let merge : Range.t -> Field.t -> [`Asc | `Desc] -> t -> t -> t =
 let project : Field.t list -> t -> t = fun fs l ->
   let f_in = List.mem ~equal:Field.equal fs in
   let rec project = function
-    | Int (_, m) | Bool (_, m) | String (_, m) as v ->
+    | Int (_, m) | Bool (_, m) | String (_, m) | Null m as v ->
       if f_in m.field then v else Empty
     | CrossTuple ls ->
       CrossTuple (List.map ls ~f:project |> List.filter ~f:(fun l -> ntuples_exn l > 0))
