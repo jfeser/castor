@@ -730,7 +730,7 @@ module IRGen = struct
       build_func b
 
     let scan_crosstuple scan ts m =
-      let rec loops b col_start vars = function
+      let rec loops b start col_offset vars = function
         | [] ->
           let tup =
             List.map2_exn ts (List.rev vars) ~f:(fun t v ->
@@ -740,11 +740,12 @@ module IRGen = struct
           build_yield (Tuple tup) b
 
         | (func, type_)::rest ->
+          let col_start = Infix.(start + col_offset) in
           build_foreach type_ col_start func (fun var b ->
-              let col_start =
-                Infix.(col_start + (len col_start type_) + (hsize type_))
+              let col_offset =
+                Infix.(col_offset + len col_start type_ + hsize type_)
               in
-              loops b col_start (var::vars) rest) b;
+              loops b start col_offset (var::vars) rest) b;
       in
 
       let funcs = List.map ts ~f:(fun t -> (scan t, t)) in
@@ -756,7 +757,7 @@ module IRGen = struct
       in
       let b = create ["start", int_t] ret_type in
       let start = Infix.(build_arg 0 b + hsize (CrossTupleT (ts, m))) in
-      loops b start [] funcs;
+      loops b start Infix.(int 0) [] funcs;
       build_func b
 
     let scan_ziptuple : _ -> _ -> Type.ziptuple -> _ =
@@ -1090,11 +1091,67 @@ module IRGen = struct
       let tup = build_var "tup" ret_t b in
       List.iter funcs ~f:(fun func ->
           build_iter func [] b;
+          build_step tup func b;
           build_loop Infix.(not (Done func)) (fun b ->
               build_yield tup b;
               build_step tup func b;
             ) b;
         );
+      build_func b
+
+    let count gen r =
+      let func = gen r in
+      let ret_t = int_t in
+
+      let b = create [] ret_t in
+      let ct = build_defn "ct" int_t Infix.(int 0) b in
+      let tup = build_var "tup" ret_t b in
+      build_iter func [] b;
+      build_step tup func b;
+      build_loop Infix.(not (Done func)) (fun b ->
+          build_assign Infix.(ct + int 1) ct b;
+        ) b;
+      build_yield (Tuple [ct]) b;
+      build_func b
+
+    let eq_join gen f1 f2 r1 r2 =
+      let func1 = gen r1 in
+      let func2 = gen r2 in
+
+      let s1 = Ralgebra.to_schema r1 in
+      let s2 = Ralgebra.to_schema r2 in
+      let i1 = Db.Schema.field_idx_exn s1 f1 in
+      let i2 = Db.Schema.field_idx_exn s2 f2 in
+
+      let ret_t1 = (find_func func1).ret_type in
+      let ret_t2 = (find_func func2).ret_type in
+      let ret_t, w1, w2 = match ret_t1, ret_t2 with
+        | TupleT t1, TupleT t2 ->
+          TupleT (t1 @ t2), List.length t1, List.length t2
+        | _ -> fail (Error.create "Expected a TupleT." (ret_t1, ret_t2) [%sexp_of:type_ * type_])
+      in
+
+      let b = create [] ret_t in
+      let t1 = build_var "t1" ret_t1 b in
+      let t2 = build_var "t2" ret_t2 b in
+      build_iter func1 [] b;
+      build_step t1 func1 b;
+      build_loop Infix.(not (Done func1)) (fun b ->
+          build_iter func2 [] b;
+          build_step t2 func2 b;
+          build_loop Infix.(not (Done func1)) (fun b ->
+              build_if ~cond:Infix.(Index (t1, i1) = Index (t2, i2))
+                ~then_:(fun b ->
+                  let ret =
+                    Tuple (List.init w1 ~f:(fun i -> Index (t1, i)) @
+                           List.init w2 ~f:(fun i -> Index (t2, i)))
+                  in
+                  build_yield ret b
+                  ) ~else_:(fun b -> ()) b;
+              build_step t2 func2 b;
+            ) b;
+          build_step t1 func1 b;
+        ) b;
       build_func b
 
     let rec gen_ralgebra : Ralgebra.t -> string = fun r -> 
@@ -1105,15 +1162,15 @@ module IRGen = struct
         | Scan _ -> Fresh.name fresh "scan%d"
         | Concat _ -> Fresh.name fresh "concat%d"
         | Relation _ -> Fresh.name fresh "relation%d"
+        | Count _ -> Fresh.name fresh "count%d"
       in
       let func = match r with
         | Scan l -> scan l
         | Project (x, r) -> project gen_ralgebra x r
         | Filter (x, r) -> filter gen_ralgebra x r
-        | EqJoin (f1, f2, r1, r2) -> failwith "unimplemented"
-        (* let func = eq_join gen_ralgebra f1 f2 r1 r2 in
-         * add_func name func; name *)
+        | EqJoin (f1, f2, r1, r2) -> eq_join gen_ralgebra f1 f2 r1 r2
         | Concat rs -> concat gen_ralgebra rs
+        | Count r -> count gen_ralgebra r
         | Relation x -> scan (Transform.row_layout x)
       in
       add_func name func; name
