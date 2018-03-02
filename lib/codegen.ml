@@ -264,7 +264,7 @@ module Make (Ctx: CTX) () = struct
   let rec codegen_type : type_ -> lltype = function
     | IntT -> integer_type ctx 64
     | BoolT -> integer_type ctx 8
-    | StringT -> codegen_type (TupleT [IntT; IntT])
+    | StringT -> struct_type ctx [|pointer_type (i8_type ctx); i64_type ctx|]
     | TupleT ts ->
       struct_type ctx (List.map ts ~f:codegen_type |> Array.of_list)
     | VoidT -> void_type ctx
@@ -276,8 +276,8 @@ module Make (Ctx: CTX) () = struct
   let zero = const_int (i64_type ctx) 0
 
   let scmp =
-    let func =
-      declare_function "scmp" (function_type bool_type [|str_type; str_type|]) module_
+    let func = declare_function "scmp"
+        (function_type bool_type [|str_type; str_type|]) module_
     in
     let bb = append_block ctx "entry" func in
     let eq_bb = append_block ctx "eq" func in
@@ -293,14 +293,15 @@ module Make (Ctx: CTX) () = struct
     |> ignore;
     position_at_end eq_bb builder;
     let ret = build_call strncmp [|p1; p2; l1|] "" builder in
-    build_ret (build_intcast ret int_type "" builder) builder |> ignore;
+    let ret = build_icmp Icmp.Eq ret (const_int (i32_type ctx) 0) "" builder in
+    let ret = build_intcast ret bool_type "" builder in
+    build_ret ret builder |> ignore;
     position_at_end neq_bb builder;
-    build_ret (const_int int_type 0) builder |> ignore;
+    build_ret (const_int bool_type 0) builder |> ignore;
+    assert_valid_function func;
     func
 
-  let rec codegen_expr : _ -> expr -> llvalue = fun fctx e ->
-    Logs.debug (fun m -> m "Codegen for %a" pp_expr e);
-    match e with
+  let rec codegen_expr : _ -> expr -> llvalue = fun fctx -> function
     | Int x -> const_int int_type x
     | Bool true -> const_int bool_type 1
     | Bool false -> const_int bool_type 0
@@ -317,10 +318,6 @@ module Make (Ctx: CTX) () = struct
       build_load v "done" builder
     | Var n ->
       let v = get_val fctx n in
-      Logs.debug (fun m -> m "Loading %s of type %s. %s"
-                     (string_of_llvalue v) (type_of v |> string_of_lltype)
-                     (Sexp.to_string_hum ([%sexp_of:string list]
-                                            (Hashtbl.keys fctx#values))));
       build_load v n builder
     | Slice (byte_idx, size_bytes) ->
       let size_bits = Serialize.isize * size_bytes in
