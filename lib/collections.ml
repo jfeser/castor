@@ -175,3 +175,16 @@ module Random = struct
       let idx = int len in
       List.nth_exn l idx
 end
+
+module Hashcons = struct
+  include Hashcons
+
+  let compare_hash_consed : ('a -> 'a -> int) -> 'a hash_consed -> 'a hash_consed -> int =
+    fun _ { tag = t1 } { tag = t2 } -> Int.compare t1 t2
+
+  let hash_consed_of_sexp : (Sexp.t -> 'a) -> Sexp.t -> 'a hash_consed =
+    fun of_sexp x -> failwith "Unimplemented."
+
+  let sexp_of_hash_consed : ('a -> Sexp.t) -> 'a hash_consed -> Sexp.t =
+    fun to_sexp { node } -> to_sexp node
+end

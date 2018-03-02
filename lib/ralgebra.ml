@@ -123,11 +123,11 @@ let rec params : t -> Set.M(TypedName).t =
   function
   | Relation _ -> empty
   | Scan l -> Layout.params l
-  | Project (_, r) -> params r
+  | Project (_, r) | Count r -> params r
   | Filter (p, r) ->
     let open Ralgebra0 in
     let rec pred_params = function
-      | Field _ -> empty
+      | Field _ | Int _ | Bool _ | String _ -> empty
       | Var v -> Set.singleton (module TypedName) v
       | Binop (_, p1, p2) -> Set.union (pred_params p1) (pred_params p2)
       | Varop (_, ps) -> List.map ~f:pred_params ps |> union_list

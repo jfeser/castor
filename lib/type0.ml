@@ -1,7 +1,7 @@
 open Base
 
 module PrimType = struct
-  type t = BoolT | IntT | StringT [@@deriving compare, sexp]
+  type t = BoolT | IntT | StringT [@@deriving compare, sexp, hash]
 
   let of_primvalue = function
     | `Int _ -> IntT
@@ -18,7 +18,7 @@ end
 
 module TypedName = struct
   module T = struct
-    type t = string * PrimType.t [@@deriving compare, sexp]
+    type t = string * PrimType.t [@@deriving compare, sexp, hash]
   end
   include T
   include Comparator.Make(T)
@@ -28,7 +28,7 @@ module TypedName = struct
 
   module NameOnly = struct
     module T = struct
-      type t = T.t [@@deriving sexp]
+      type t = T.t [@@deriving sexp, hash]
       let compare (n1, _) (n2, _) = [%compare:string] n1 n2
     end
     include T

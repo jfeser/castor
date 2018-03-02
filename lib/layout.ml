@@ -1,8 +1,11 @@
 open Base
 open Base.Printf
+
 open Collections
+open Hashcons
 open Db
 open Type0
+
 
 exception TransformError of Error.t
 
@@ -13,7 +16,7 @@ module PredCtx = struct
         | Field of Field.t
         | Var of TypedName.NameOnly.t
         | Dummy
-      [@@deriving compare, sexp]
+      [@@deriving compare, sexp, hash]
     end
     include T
     include Comparable.Make(T)
@@ -50,7 +53,7 @@ module ValueMap = struct
       field : Field.t;
       idx : int;
       value : primvalue;
-    } [@@deriving sexp]
+    } [@@deriving sexp, hash]
 
     let compare v1 v2 = compare_primvalue v1.value v2.value
   end
@@ -61,13 +64,13 @@ module ValueMap = struct
     let of_primvalue : primvalue -> t = fun p ->
       { value = p; rel = Relation.dummy; field = Field.dummy; idx = 0 }
   end
-  type 'a t = 'a Map.M(Elem).t [@@deriving compare, sexp]
+  type 'a t = 'a Map.M(Elem).t [@@deriving compare, sexp, hash]
 end
 
 module Range = struct
   module T = struct
     type t = PredCtx.Key.t option * PredCtx.Key.t option
-    [@@deriving compare, sexp]
+    [@@deriving compare, sexp, hash]
   end
   include T
   include Comparable.Make(T)
@@ -77,20 +80,21 @@ type ordered_list = {
   field : Field.t;
   order : [`Asc | `Desc];
   lookup : Range.t;
-} [@@deriving compare, sexp]
+} [@@deriving compare, sexp, hash]
 
 type table = {
   field : Field.t;
   lookup : PredCtx.Key.t;
-} [@@deriving compare, sexp]
+} [@@deriving compare, sexp, hash]
 
 type scalar = {
   rel : Relation.t;
   field : Field.t;
   idx : int;
-} [@@deriving compare, sexp]
+} [@@deriving compare, sexp, hash]
 
-type t =
+type t = node hash_consed
+and node =
   | Int of int * scalar
   | Bool of bool * scalar
   | String of string * scalar
@@ -103,7 +107,62 @@ type t =
   | Empty
 [@@deriving compare, sexp]
 
-let to_value : t -> Value.t = function
+let hash : t -> int = fun { hkey } -> hkey
+let hash_fold_t state x = Hash.fold_int state (hash x)
+
+let hash_node : node -> int = fun l -> 
+  let state = ref (Hash.alloc ()) in
+  begin match l with
+    | Int (x, m) ->
+      state := Hash.fold_int !state x;
+      state := hash_fold_scalar !state m
+    | Bool (x, m) ->
+      state := Bool.hash_fold_t !state x;
+      state := hash_fold_scalar !state m
+    | String (x, m) ->
+      state := String.hash_fold_t !state x;
+      state := hash_fold_scalar !state m
+    | Null m ->
+      state := hash_fold_scalar !state m
+    | CrossTuple xs ->
+      state := Hash.fold_int !state 0;
+      state := List.hash_fold_t hash_fold_t !state xs
+    | ZipTuple xs ->
+      state := Hash.fold_int !state 1;
+      state := List.hash_fold_t hash_fold_t !state xs
+    | UnorderedList xs ->
+      state := Hash.fold_int !state 2;
+      state := List.hash_fold_t hash_fold_t !state xs
+    | OrderedList (xs, m) ->
+      state := List.hash_fold_t hash_fold_t !state xs;
+      state := hash_fold_ordered_list !state m
+    | Table (xs, m) ->
+      state := ValueMap.hash_fold_t hash_fold_t !state xs;
+      state := hash_fold_table !state m
+    | Empty -> state := Hash.fold_int !state 0
+  end;
+  Hash.get_hash_value !state
+
+module HashT = Hashcons.Make(struct
+    type t = node
+    let hash = hash_node
+    let equal x y = compare_node x y = 0
+  end)
+
+let ht = HashT.create 256
+
+let int x m = HashT.hashcons ht (Int (x, m))
+let bool x m = HashT.hashcons ht (Bool (x, m))
+let string x m = HashT.hashcons ht (String (x, m))
+let null m = HashT.hashcons ht (Null m)
+let cross_tuple x = HashT.hashcons ht (CrossTuple x)
+let zip_tuple x = HashT.hashcons ht (ZipTuple x)
+let unordered_list x = HashT.hashcons ht (UnorderedList x)
+let ordered_list x m = HashT.hashcons ht (OrderedList (x, m))
+let table x m = HashT.hashcons ht (Table (x, m))
+let empty = HashT.hashcons ht Empty
+
+let to_value : t -> Value.t = fun l -> match l.node with
   | Int (x, m) -> { field = m.field; rel = m.rel; idx = m.idx; value = `Int x }
   | Bool (x, m) ->
     { field = m.field; rel = m.rel; idx = m.idx; value = `Bool x }
@@ -111,17 +170,17 @@ let to_value : t -> Value.t = function
     { field = m.field; rel = m.rel; idx = m.idx; value = `String x }
   | Null m ->
     { field = m.field; rel = m.rel; idx = m.idx; value = `Null }
-  | x -> Error.create "Cannot be converted to value." x [%sexp_of:t]
+  | x -> Error.create "Cannot be converted to value." x [%sexp_of:node]
          |> Error.raise
 
 let of_value : Value.t -> t = fun { field; rel; idx; value } -> match value with
-  | `Int x -> Int (x, { field; rel; idx })
-  | `Bool x -> Bool (x, { field; rel; idx })
-  | `String x -> String (x, { field; rel; idx })
-  | `Unknown x -> String (x, { field; rel; idx })
-  | `Null -> Null { field; rel; idx }
+  | `Int x -> int x { field; rel; idx }
+  | `Bool x -> bool x { field; rel; idx }
+  | `String x -> string x { field; rel; idx }
+  | `Unknown x -> string x { field; rel; idx }
+  | `Null -> null { field; rel; idx }
 
-let rec to_string : t -> string = function
+let rec to_string : t -> string = fun l -> match l.node with
   | Int _ -> "i"
   | Bool _ -> "b"
   | String _ -> "s"
@@ -145,7 +204,7 @@ let rec to_string : t -> string = function
     |> sprintf "{%s}"
   | Empty -> "[]"
 
-let rec to_schema_exn : t -> Schema.t = function
+let rec to_schema_exn : t -> Schema.t = fun l -> match l.node with
   | Empty -> []
   | Int (_, m) | Bool (_, m) | String (_, m) | Null m -> [m.field]
   | ZipTuple ls
@@ -163,55 +222,56 @@ let rec params : t -> Set.M(TypedName).t =
   let union_list = Set.union_list (module TypedName) in
   let kparams = PredCtx.Key.params in
   let lparams ls = List.map ~f:params ls in
-  function
-  | Empty | Int _ | Bool _ | String _ | Null _ -> empty
-  | CrossTuple ls | ZipTuple ls | UnorderedList ls -> lparams ls |> union_list
-  | OrderedList (ls, { lookup = (k1, k2) }) ->
-    let p1 = Option.value_map ~f:kparams k1 ~default:empty in
-    let p2 = Option.value_map ~f:kparams k2 ~default:empty in
-    union_list (p1::p2::(lparams ls))
-  | Table (m, {lookup = k}) -> union_list (kparams k::(lparams (Map.data m)))
+  fun l -> match l.node with
+    | Empty | Int _ | Bool _ | String _ | Null _ -> empty
+    | CrossTuple ls | ZipTuple ls | UnorderedList ls -> lparams ls |> union_list
+    | OrderedList (ls, { lookup = (k1, k2) }) ->
+      let p1 = Option.value_map ~f:kparams k1 ~default:empty in
+      let p2 = Option.value_map ~f:kparams k2 ~default:empty in
+      union_list (p1::p2::(lparams ls))
+    | Table (m, {lookup = k}) -> union_list (kparams k::(lparams (Map.data m)))
 
 let rec partition : PredCtx.Key.t -> Field.t -> t -> t =
   let p_int k f x m =
-    let v = Int (x, m) in
+    let v = int x m in
     if Field.(f = m.field) then
-      Table (Map.singleton (module ValueMap.Elem) (to_value v) v,
-             {field = f; lookup = k})
+      table (Map.singleton (module ValueMap.Elem) (to_value v) v)
+        {field = f; lookup = k}
     else v
   in
 
   let p_bool k f x m =
-    let v = Bool (x, m) in
+    let v = bool x m in
     if Field.(f = m.field) then
-      Table (Map.singleton (module ValueMap.Elem) (to_value v) v,
-             {field = f; lookup = k})
+      table (Map.singleton (module ValueMap.Elem) (to_value v) v)
+        {field = f; lookup = k}
     else v
   in
 
   let p_string k f x m =
-    let v = String (x, m) in
+    let v = string x m in
     if Field.(f = m.field) then
-      Table (Map.singleton (module ValueMap.Elem) (to_value v) v,
-             {field = f; lookup = k})
+      table (Map.singleton (module ValueMap.Elem) (to_value v) v)
+        {field = f; lookup = k}
     else v
   in
 
   let p_crosstuple k f ls =
     let tbls, others =
       List.mapi ls ~f:(fun i l -> (i, partition k f l))
-      |> List.partition_tf ~f:(function (_, Table _) -> true | _ -> false)
+      |> List.partition_tf ~f:(fun (_, l) -> match l.node with
+            Table _ -> true | _ -> false)
     in
     match tbls with
-    | [] -> CrossTuple (List.map others ~f:(fun (_, l) -> l))
-    | [(i, Table (m, {field = f}))] ->
+    | [] -> cross_tuple (List.map others ~f:(fun (_, l) -> l))
+    | [(i, {node = Table (m, {field = f})})] ->
       let elems =
         Map.map m ~f:(fun l ->
             List.fmerge ~cmp:Int.compare [(i, l)] others
             |> List.map ~f:snd
-            |> fun x -> CrossTuple x)
+            |> fun x -> cross_tuple x)
       in
-      Table (elems, {field = f; lookup = k})
+      table elems {field = f; lookup = k}
 | _ -> raise (TransformError (Error.of_string "Bad schema."))
 in
 
@@ -223,44 +283,45 @@ in
     if all_have_f then
       List.map ls ~f:(partition k f)
       |> List.fold_left ~init:(Map.empty (module ValueMap.Elem))
-        ~f:(fun m -> function
+        ~f:(fun m l -> match l.node with
             | Table (m', {field = f'}) when Field.(=) f f' ->
               Map.merge m' m ~f:(fun ~key -> function
                   | `Both (l, ls) -> Some (l::ls)
                   | `Left l -> Some [l]
                   | `Right ls -> Some ls)
-            | l -> Map.map m ~f:(fun ls -> l::ls))
-      |> Map.map ~f:(fun ls -> ZipTuple ls)
-      |> fun m -> Table (m, {field = f; lookup = k})
+            | _ -> Map.map m ~f:(fun ls -> l::ls))
+      |> Map.map ~f:(fun ls -> zip_tuple ls)
+      |> fun m -> table m {field = f; lookup = k}
     else raise (TransformError (Error.of_string "Must have partition field in all positions."))
   in
 
   let p_unorderedlist k f ls =
     List.map ls ~f:(partition k f)
     |> List.fold_left ~init:(Map.empty (module ValueMap.Elem))
-      ~f:(fun m -> function
+      ~f:(fun m l -> match l.node with
           | Table (m', {field = f'}) when Field.(=) f f' ->
             Map.merge m' m ~f:(fun ~key -> function
                 | `Both (l, ls) -> Some (l::ls)
                 | `Left l -> Some [l]
                 | `Right ls -> Some ls)
-          | l -> Map.map m ~f:(fun ls -> l::ls))
-    |> Map.map ~f:(fun ls -> UnorderedList (List.rev ls))
-    |> fun m -> Table (m, {field = f; lookup = k})
+          | _ -> Map.map m ~f:(fun ls -> l::ls))
+    |> Map.map ~f:(fun ls -> unordered_list (List.rev ls))
+    |> fun m -> table m {field = f; lookup = k}
   in
 
-  let p_orderedlist k f ls ordered_list =
+  let p_orderedlist k f ls ol =
     let tbls, others =
       ls
       |> List.mapi ~f:(fun i l -> (i, partition k f l))
-      |> List.partition_tf ~f:(function (_, Table _) -> true | _ -> false)
+      |> List.partition_tf ~f:(fun (_, l) -> match l.node with
+            Table _ -> true | _ -> false)
     in
     match tbls with
     | [] -> failwith "Expected a table."
     | ts ->
       let merged_ts = List.fold_left ts ~init:(Map.empty (module ValueMap.Elem))
-          ~f:(fun m -> function
-              | i, Table (m', _) ->
+          ~f:(fun m -> fun (i, l) -> match l.node with
+              | Table (m', _) ->
                 Map.merge m' m ~f:(fun ~key -> function
                     | `Left l -> Some [i, l]
                     | `Right ls -> Some ls
@@ -271,15 +332,15 @@ in
       Map.map merged_ts ~f:(fun ls ->
           List.fmerge Int.compare others ls
           |> List.map ~f:snd
-          |> fun x -> OrderedList (x, ordered_list))
-      |> fun m -> Table (m, { field = f; lookup = k })
+          |> fun x -> ordered_list x ol)
+      |> fun m -> table m { field = f; lookup = k }
   in
 
-  let p_table k f ls (table: table) =
+  let p_table k f ls (tbl: table) =
     Map.map ls ~f:(fun l -> partition k f l)
     |> Map.fold ~init:(Map.empty (module ValueMap.Elem))
       ~f:(fun ~key ~data m_outer ->
-          match data with
+          match data.node with
           | Table (m_inner, _) ->
             Map.merge (Map.map m_inner ~f:(fun v ->
                 Map.singleton (module ValueMap.Elem) key v))
@@ -293,16 +354,16 @@ in
                   | `Left l -> Some (Map.map l ~f:(fun x -> [x]))
                   | `Right ls -> Some ls)
           | _ -> failwith "BUG: Map rhs must have same schema.")
-    |> Map.map ~f:(fun m -> Map.map m ~f:(fun ls -> UnorderedList ls))
-    |> Map.map ~f:(fun m -> Table (m, table))
-    |> fun m -> Table (m, { field = f; lookup = k })
+    |> Map.map ~f:(fun m -> Map.map m ~f:(fun ls -> unordered_list ls))
+    |> Map.map ~f:(fun m -> table m tbl)
+    |> fun m -> table m { field = f; lookup = k }
   in
 
   fun k f l ->
     if Schema.has_field (to_schema_exn l) f then
-      match l with
-      | Empty -> Empty
-      | Null _ -> Empty
+      match l.node with
+      | Empty -> empty
+      | Null _ -> empty
       | Int (x, m) -> p_int k f x m
       | Bool (x, m) -> p_bool k f x m
       | String (x, m) -> p_string k f x m
@@ -314,7 +375,7 @@ in
       | OrderedList (ls, t) -> p_orderedlist k f ls t
     else l
 
-let rec ntuples_exn : t -> int = function
+let rec ntuples_exn : t -> int = fun l -> match l.node with
   | Empty -> 0
   | Int _ | Bool _ | String _ | Null _ -> 1
   | CrossTuple ls -> List.fold_left ls ~init:1 ~f:(fun p l -> p * ntuples_exn l)
@@ -326,32 +387,32 @@ let rec ntuples_exn : t -> int = function
 let ntuples : t -> int Or_error.t = fun l ->
   Or_error.try_with (fun () -> ntuples_exn l)
 
-let flatten : t -> t = function
-  | Null _ | Int _ | Bool _ | String _ | Table _ | Empty as l -> l
+let flatten : t -> t = fun l -> match l.node with
+  | Null _ | Int _ | Bool _ | String _ | Table _ | Empty -> l
   | CrossTuple [l] -> l
   | CrossTuple ls ->
-    List.concat_map ls ~f:(function
+    List.concat_map ls ~f:(fun l -> match l.node with
         | CrossTuple ls' -> ls'
-        | l -> [l])
-    |> fun x -> CrossTuple x
+        | _ -> [l])
+    |> fun x -> cross_tuple x
   | ZipTuple [l] -> l
   | ZipTuple ls ->
-    List.concat_map ls ~f:(function
+    List.concat_map ls ~f:(fun l -> match l.node with
         | ZipTuple ls' -> ls'
-        | l -> [l])
-    |> fun x -> ZipTuple x
+        | _ -> [l])
+    |> fun x -> zip_tuple x
   | UnorderedList ls ->
-    List.concat_map ls ~f:(function
+    List.concat_map ls ~f:(fun l -> match l.node with
         | UnorderedList ls' -> ls'
-        | l -> [l])
-    |> fun x -> UnorderedList x
+        | _ -> [l])
+    |> fun x -> unordered_list x
   | OrderedList (ls, { field = f; order = ord; }) ->
-    List.concat_map ls ~f:(function
-        | OrderedList (ls', { field = f'; order = ord' }) as l ->
+    List.concat_map ls ~f:(fun l -> match l.node with
+        | OrderedList (ls', { field = f'; order = ord' }) ->
           if Base.Polymorphic_compare.equal (f, ord) (f', ord')
           then ls' else [l]
-        | l -> [l])
-    |> fun x -> UnorderedList x
+        | _ -> [l])
+    |> fun x -> unordered_list x
 
 let rec order : Range.t -> Field.t -> [`Asc | `Desc] -> t -> t = fun k f o l ->
   let cmp = match o with
@@ -359,12 +420,12 @@ let rec order : Range.t -> Field.t -> [`Asc | `Desc] -> t -> t = fun k f o l ->
     | `Desc -> fun k1 k2 -> ValueMap.Elem.compare k2 k1
   in
   if List.exists (to_schema_exn l) ~f:(Field.(=) f) then
-    match partition PredCtx.Key.dummy f l with
+    match (partition PredCtx.Key.dummy f l).node with
     | Table (m, _) ->
       Map.to_alist m
       |> List.sort ~cmp:(fun (k1, _) (k2, _) -> cmp k1 k2)
-      |> List.map ~f:(fun (k, v) -> CrossTuple [of_value k; v])
-      |> fun ls -> OrderedList (ls, { field = f; order = o; lookup = k })
+      |> List.map ~f:(fun (k, v) -> cross_tuple [of_value k; v])
+      |> fun ls -> ordered_list ls { field = f; order = o; lookup = k }
     | _ -> raise (TransformError (Error.of_string "Expected a table."))
   else l
 
@@ -374,49 +435,50 @@ let merge : Range.t -> Field.t -> [`Asc | `Desc] -> t -> t -> t =
     | `Asc -> ValueMap.Elem.compare
     | `Desc -> fun k1 k2 -> ValueMap.Elem.compare k2 k1
     in
-    match partition PredCtx.Key.dummy f l1, partition PredCtx.Key.dummy f l2 with
+    match (partition PredCtx.Key.dummy f l1).node,
+          (partition PredCtx.Key.dummy f l2).node with
     | Table (m1, _), Table (m2, _) ->
       Map.merge m1 m2 ~f:(fun ~key -> function
-          | `Both (l1, l2) -> Some (UnorderedList ([l1; l2]))
+          | `Both (l1, l2) -> Some (unordered_list ([l1; l2]))
           | `Left l | `Right l -> Some l)
       |> Map.to_alist
       |> List.sort ~cmp:(fun (k1, _) (k2, _) -> cmp k1 k2)
-      |> List.map ~f:(fun (k, v) -> CrossTuple [of_value k; v])
-      |> fun ls -> OrderedList (ls, { field = f; order = o; lookup = k })
+      |> List.map ~f:(fun (k, v) -> cross_tuple [of_value k; v])
+      |> fun ls -> ordered_list ls { field = f; order = o; lookup = k }
     | _ -> raise (TransformError (Error.of_string "Expected a table."))
 
 let project : Field.t list -> t -> t = fun fs l ->
   let f_in = List.mem ~equal:Field.equal fs in
-  let rec project = function
-    | Int (_, m) | Bool (_, m) | String (_, m) | Null m as v ->
-      if f_in m.field then v else Empty
+  let rec project = fun l -> match l.node with
+    | Int (_, m) | Bool (_, m) | String (_, m) | Null m ->
+      if f_in m.field then l else empty
     | CrossTuple ls ->
-      CrossTuple (List.map ls ~f:project |> List.filter ~f:(fun l -> ntuples_exn l > 0))
+      cross_tuple (List.map ls ~f:project |> List.filter ~f:(fun l -> ntuples_exn l > 0))
     | ZipTuple ls ->
       let ls' =
         List.map ls ~f:project |> List.filter ~f:(fun l -> ntuples_exn l > 0)
       in
-      ZipTuple ls'
-    | UnorderedList ls -> UnorderedList (List.map ls ~f:project)
+      zip_tuple ls'
+    | UnorderedList ls -> unordered_list (List.map ls ~f:project)
     | OrderedList (ls, ({ field = f } as x)) ->
       let ls' = List.map ls ~f:project in
-      if f_in f then OrderedList (ls', x) else UnorderedList ls'
+      if f_in f then ordered_list ls' x else unordered_list ls'
     | Table (ls, ({ field = f; } as x)) ->
       let ls' = Map.map ls ~f:project in
-      if f_in f then Table (ls', x) else UnorderedList (Map.data ls')
-    | Empty -> Empty
+      if f_in f then table ls' x else unordered_list (Map.data ls')
+    | Empty -> empty
   in
   project l
 
 let eq_join : Field.t -> Field.t -> t -> t -> t = fun f1 f2 l1 l2 ->
-  match partition PredCtx.Key.Dummy f1 l1,
-        partition PredCtx.Key.Dummy f1 l1 with
+  match (partition PredCtx.Key.Dummy f1 l1).node,
+        (partition PredCtx.Key.Dummy f1 l1).node with
   | Table (m1, _), Table (m2, _) ->
     Map.merge m1 m2 ~f:(fun ~key -> function
-        | `Both (l1, l2) -> Some (CrossTuple [of_value key; l1; l2])
+        | `Both (l1, l2) -> Some (cross_tuple [of_value key; l1; l2])
         | `Left _ | `Right _ -> None)
     |> Map.data
-    |> fun x -> UnorderedList x
+    |> fun x -> unordered_list x
   | _ -> raise (TransformError (Error.of_string "Expected a table."))
 
 let tests =
@@ -430,9 +492,9 @@ let tests =
     in
     "partition" >::: [
       ("scalar" >:: fun ctxt ->
-          let inp = Int (0, { rel = r; field = f1; idx = 0 }) in
-          let out = Table (Map.singleton (module ValueMap.Elem) (to_value inp) inp,
-                           { lookup = PredCtx.Key.dummy; field = f1 })
+          let inp = int 0 { rel = r; field = f1; idx = 0 } in
+          let out = table (Map.singleton (module ValueMap.Elem) (to_value inp) inp)
+              { lookup = PredCtx.Key.dummy; field = f1 }
           in
           assert_equal ~ctxt out (partition PredCtx.Key.dummy f1 inp));
     ]

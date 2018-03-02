@@ -120,13 +120,14 @@ let rec of_layout_exn : Layout.t -> t =
       | Ok c -> AbsCount.Count c
       | _ -> Unknown
     in
-    match l with
+    match l.node with
     | Int (x, { field }) when Int.(x = 0) -> IntT { bitwidth = 1; field }
     | Int (x, { field }) when Int.(x < 0) ->
       IntT { bitwidth = Int.floor_log2 (-x) + 1; field }
     | Int (x, { field }) -> IntT { bitwidth = Int.floor_log2 x + 1; field }
     | Bool (x, { field }) -> BoolT { field }
     | String (x, {field}) -> StringT { nchars = Len (String.length x); field }
+    | Null _ -> EmptyT
     | CrossTuple ls ->
       let ts = List.map ls ~f:of_layout_exn in
       CrossTupleT (ts, { count })

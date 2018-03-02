@@ -2,6 +2,7 @@ open Base
 open Collections
 open Db
 open Eval
+open Layout
 
 type t = {
   name : string;
@@ -63,15 +64,15 @@ let col_layout : Relation.t -> Layout.t = fun r ->
   List.transpose stream
   |> (fun v -> Option.value_exn v)
   |> List.map ~f:(fun col ->
-      UnorderedList (List.map col ~f:(fun v -> of_value v)))
-  |> (fun cols -> ZipTuple cols)
+      unordered_list (List.map col ~f:(fun v -> of_value v)))
+  |> zip_tuple
 
 let row_layout : Relation.t -> Layout.t = fun r ->
   let open Layout in
   eval_relation r
-  |> Seq.map ~f:(fun tup -> CrossTuple (List.map ~f:(fun v -> of_value v) tup))
+  |> Seq.map ~f:(fun tup -> cross_tuple (List.map ~f:(fun v -> of_value v) tup))
   |> Seq.to_list
-  |> fun l -> UnorderedList l
+  |> unordered_list
 
 let tf_col_layout : t = {
   name = "col-layout";
@@ -136,7 +137,7 @@ let tf_eqjoin : t = {
   name = "eqjoin";
   f = function
     | EqJoin (f1, f2, Scan l1, Scan l2) -> [
-        Filter (Binop (Eq, Field f1, Field f2), Scan (CrossTuple [l1; l2]));
+        Filter (Binop (Eq, Field f1, Field f2), Scan (cross_tuple [l1; l2]));
         Scan (Layout.eq_join f1 f2 l1 l2);
         Scan (Layout.eq_join f2 f1 l2 l1);
       ]
@@ -148,7 +149,7 @@ let tf_concat : t = {
   f = function
     | Concat qs ->
       if List.for_all qs ~f:(function Scan _ -> true | _ -> false) then
-        [Scan (UnorderedList (List.map qs ~f:(fun (Scan l) -> l)))]
+        [Scan (unordered_list (List.map qs ~f:(fun (Scan l) -> l)))]
       else []
     | _ -> []
 }
@@ -163,7 +164,7 @@ let tf_flatten : t = {
 let tf_empty_project : t = {
   name = "empty";
   f = function
-    | Project ([], q) -> [Scan (Empty)]
+    | Project ([], q) -> [Scan empty]
     | _ -> []
 }
 

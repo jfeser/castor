@@ -64,9 +64,8 @@ let rec eval_pred : PredCtx.t -> Ralgebra.pred -> primvalue =
       end
 
 let rec eval_layout : PredCtx.t -> t -> Tuple.t Seq.t =
-  fun ctx -> function
-    | Int _ | Bool _ | String _ | Null _ as l ->
-      Seq.singleton [Layout.to_value l]
+  fun ctx l -> match l.node with
+    | Int _ | Bool _ | String _ | Null _ -> Seq.singleton [Layout.to_value l]
     | CrossTuple ls ->
       List.fold_left ls ~init:(Seq.singleton []) ~f:(fun ts l ->
           Seq.cartesian_product ts (eval_layout ctx l)

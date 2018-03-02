@@ -48,7 +48,7 @@ let align : int -> bytes -> bytes = fun align b ->
 let rec serialize : Type.t -> Layout.t -> Bitstring.t =
   let open Bitstring in
   fun type_ layout ->
-    match type_, layout with
+    match type_, layout.node with
     | IntT { bitwidth }, Int (x, _) -> of_int ~width:64 x |> label "Int"
     | BoolT _, Bool (x, _) -> of_bytes (bytes_of_bool x) |> label "Bool"
     | StringT { nchars = Variable }, String (x, _) ->
@@ -60,7 +60,7 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
       let unpadded_body = Bytes.of_string x in
       let body = unpadded_body |> align isize |> of_bytes in
       concat [body |> label "String body"]
-    | CrossTupleT (ts, { count }), (CrossTuple ls as l) ->
+    | CrossTupleT (ts, { count }), CrossTuple ls ->
       let body =
         List.map2_exn ts ls ~f:(fun t l -> serialize t l) |> concat
         |> label "CrossTuple body"
@@ -70,11 +70,11 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
       begin match count with
         | Count _ | Unknown -> concat [len_str; body]
         | Countable ->
-          let ct = Layout.ntuples_exn l in
+          let ct = Layout.ntuples_exn layout in
           let ct_str = of_int ~width:64 ct |> label "CrossTuple count" in
           concat [ct_str; len_str; body]
       end |> label "CrossTuple"
-    | ZipTupleT (ts, { count }), (ZipTuple ls as l) ->
+    | ZipTupleT (ts, { count }), ZipTuple ls ->
       let body =
         List.map2_exn ts ls ~f:serialize |> concat |> label "ZipTuple body"
       in
@@ -83,19 +83,19 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
       begin match count with
         | Count _ | Unknown -> concat [len_str; body]
         | Countable ->
-          let ct = Layout.ntuples_exn l in
+          let ct = Layout.ntuples_exn layout in
           let ct_str = of_int ~width:64 ct |> label "CrossTuple count" in
           concat [ct_str; len_str; body]
       end
-    | OrderedListT (t, { count }), (OrderedList (ls, _) as l)
-    | UnorderedListT (t, { count }), (UnorderedList ls as l) ->
+    | OrderedListT (t, { count }), OrderedList (ls, _)
+    | UnorderedListT (t, { count }), UnorderedList ls ->
       let body = List.map ls ~f:(serialize t) |> concat |> label "List body" in
       let len = byte_length body in
       let len_str = of_int ~width:64 len |> label "List len" in
       begin match count with
         | Count _ | Unknown -> concat [len_str; body]
         | Countable ->
-          let ct = Layout.ntuples_exn l in
+          let ct = Layout.ntuples_exn layout in
           let ct_str = of_int ~width:64 ct |> label "List count" in
           concat [ct_str; len_str; body]
       end
@@ -156,7 +156,7 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
         body;
       ]
     | _, Empty -> empty
-    | t, l -> Error.(create "Unexpected layout type." (t, l)
+    | t, _ -> Error.(create "Unexpected layout type." (t, layout)
                        [%sexp_of:Type.t * Layout.t] |> raise)
 
 let tests =
