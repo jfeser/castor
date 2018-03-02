@@ -97,34 +97,45 @@ module Writer = struct
       t.buf <- 0;
       t.len <- 0;
     end
+  let write_bit t x =
+    Exn.reraise_uncaught "write_bit" (fun () -> write_bit t x)
 
   let write_char : t -> char -> unit = fun t x ->
     let x = Char.to_int x in
     for i = 7 downto 0 do
       write_bit t ((x lsr i) land 1)
     done
+  let write_char t x =
+    Exn.reraise_uncaught "write_char" (fun () -> write_char t x)
 
   let write_bytes : t -> bytes -> unit = fun t x ->
     for i = 0 to Bytes.length x - 1 do
       write_char t (Bytes.get x i)
     done
+  let write_bytes t x =
+    Exn.reraise_uncaught "write_bytes" (fun () -> write_bytes t x)
 
   let write_string : t -> string -> unit = fun t x ->
     for i = 0 to String.length x - 1 do
       write_char t (String.get x i)
     done
-
+  let write_string t x =
+    Exn.reraise_uncaught "write_string" (fun () -> write_string t x)
 
   let write : t -> bitstring -> unit = fun t x ->
     flatten x |> List.iter ~f:(fun { str; len } ->
-        if len >= 8 then begin
-          write_string t (String.sub str 0 (len / 8))
-        end;
-        let c = str.[String.length str - 1] |> Char.to_int in
-        for i = 0 to len % 8 - 1 do
-          let b = ((c lsr (7 - i)) land 1) in
-          write_bit t b
-        done)
+        if len > 0 then begin
+          if len >= 8 then begin
+            write_string t (String.sub str 0 (len / 8))
+          end;
+          let c = str.[String.length str - 1] |> Char.to_int in
+          for i = 0 to len % 8 - 1 do
+            let b = ((c lsr (7 - i)) land 1) in
+            write_bit t b
+          done
+        end)
+  let write t x =
+    Exn.reraise_uncaught "write" (fun () -> write t x)
 
   let flush : t -> unit = fun t ->
     if t.len > 0 then t.out (Char.of_int_exn t.buf)
@@ -228,6 +239,21 @@ let tests =
           Writer.write w bs;
           Writer.flush w;
           assert_equal ~ctxt ~printer:Buffer.to_string ~cmp:Buffer.equal buf1 buf2
+        );
+      "write_4" >:: (fun ctxt ->
+          let buf1 = Buffer.create 1 in
+          Buffer.add_string buf1 "\xde\xad";
+          let buf2 = Buffer.create 1 in
+          let w = Writer.with_buffer buf2 in
+          let bs = PList [
+            Piece { len = 8; str = "\xde" };
+            Piece { len = 0; str = "\x00" };
+            Piece { len = 8; str = "\xad" };
+          ] in
+          Writer.write w bs;
+          Writer.flush w;
+          assert_equal ~ctxt ~printer:Buffer.to_string ~cmp:Buffer.equal buf1 buf2
         )
+
     ]
   ]
