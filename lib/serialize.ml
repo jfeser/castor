@@ -50,16 +50,30 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
   fun type_ layout ->
     match type_, layout.node with
     | IntT { bitwidth }, Int (x, _) -> of_int ~width:64 x |> label "Int"
+    | IntT { bitwidth }, Null _ ->
+      Logs.warn (fun m -> m "Serializing NULL as 0.");
+      of_int ~width:64 0 |> label "Null"
     | BoolT _, Bool (x, _) -> of_bytes (bytes_of_bool x) |> label "Bool"
     | StringT { nchars = Variable }, String (x, _) ->
       let unpadded_body = Bytes.of_string x in
       let body = unpadded_body |> align isize |> of_bytes in
       let len = Bytes.length unpadded_body |> bytes_of_int ~width:64 |> of_bytes in
       concat [len |> label "String len"; body |> label "String body"]
+    | StringT { nchars = Variable }, Null _ ->
+      Logs.warn (fun m -> m "Serializing NULL as empty string.");
+      let unpadded_body = Bytes.of_string "" in
+      let body = unpadded_body |> align isize |> of_bytes in
+      let len = Bytes.length unpadded_body |> bytes_of_int ~width:64 |> of_bytes in
+      concat [len |> label "NULL String len"; body |> label "NULL String body"]
     | StringT { nchars = Len _ }, String (x, _) ->
       let unpadded_body = Bytes.of_string x in
       let body = unpadded_body |> align isize |> of_bytes in
       concat [body |> label "String body"]
+    | StringT { nchars = Len x }, Null _ ->
+      Logs.warn (fun m -> m "Serializing NULL as null string.");
+      let unpadded_body = Bytes.init x (fun _ -> '\x00') in
+      let body = unpadded_body |> align isize |> of_bytes in
+      concat [body |> label "NULL String body"]
     | CrossTupleT (ts, { count }), CrossTuple ls ->
       let body =
         List.map2_exn ts ls ~f:(fun t l -> serialize t l) |> concat
