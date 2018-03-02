@@ -210,6 +210,19 @@ module Make (Ctx: CTX) () = struct
     let params = get_val fctx "params" in
     build_call func (Array.append [|params|] args) name b
 
+  let build_direct_struct_gep : llvalue -> int -> string -> llbuilder -> llvalue =
+    fun v i n b ->
+      let open Polymorphic_compare in
+      let struct_t = type_of v in
+      assert TypeKind.(classify_type struct_t = Struct);
+      let elems_t = struct_element_types struct_t in
+      if not (i >= 0 && i < Array.length elems_t) then begin
+        Logs.err (fun m ->
+            m "Struct index %d out of bounds %d." i (Array.length elems_t));
+        assert false;
+      end;
+      build_gep v [|const_int (i64_type ctx) i|] n b
+
   let build_struct_gep : llvalue -> int -> string -> llbuilder -> llvalue =
     fun v i n b ->
       let open Polymorphic_compare in
@@ -221,6 +234,7 @@ module Make (Ctx: CTX) () = struct
       if not (i >= 0 && i < Array.length elems_t) then begin
         Logs.err (fun m ->
             m "Struct index %d out of bounds %d." i (Array.length elems_t));
+        assert false;
       end;
       build_struct_gep v i n b
 
@@ -228,6 +242,11 @@ module Make (Ctx: CTX) () = struct
     declare_function "printf"
       (var_arg_function_type (i32_type ctx) [|pointer_type (i8_type ctx)|])
       module_
+  let strncmp =
+    declare_function "strncmp"
+      (function_type (i32_type ctx) [|
+          pointer_type (i8_type ctx); pointer_type (i8_type ctx); i64_type ctx;
+        |]) module_
 
   let call_printf fmt args =
     let fmt_str =
@@ -243,14 +262,41 @@ module Make (Ctx: CTX) () = struct
     if debug then call_printf fmt args
 
   let rec codegen_type : type_ -> lltype = function
-    | BytesT x -> integer_type ctx (x * 8)
+    | IntT -> integer_type ctx 64
+    | BoolT -> integer_type ctx 8
+    | StringT -> codegen_type (TupleT [IntT; IntT])
     | TupleT ts ->
       struct_type ctx (List.map ts ~f:codegen_type |> Array.of_list)
     | VoidT -> void_type ctx
 
   let byte_type = integer_type ctx 8
-  let int_type = codegen_type (BytesT Serialize.isize)
-  let bool_type = codegen_type (BytesT Serialize.bsize)
+  let int_type = codegen_type IntT
+  let str_type = codegen_type StringT
+  let bool_type = codegen_type BoolT
+  let zero = const_int (i64_type ctx) 0
+
+  let scmp =
+    let func =
+      declare_function "scmp" (function_type bool_type [|str_type; str_type|]) module_
+    in
+    let bb = append_block ctx "entry" func in
+    let eq_bb = append_block ctx "eq" func in
+    let neq_bb = append_block ctx "neq" func in
+    position_at_end bb builder;
+    let s1 = param func 0 in
+    let s2 = param func 1 in
+    let p1 = build_extractvalue s1 0 "p1" builder in
+    let p2 = build_extractvalue s2 0 "p2" builder in
+    let l1 = build_extractvalue s1 1 "l1" builder in
+    let l2 = build_extractvalue s2 1 "l2" builder in
+    build_cond_br (build_icmp Icmp.Eq l1 l2 "" builder) eq_bb neq_bb builder
+    |> ignore;
+    position_at_end eq_bb builder;
+    let ret = build_call strncmp [|p1; p2; l1|] "" builder in
+    build_ret (build_intcast ret int_type "" builder) builder |> ignore;
+    position_at_end neq_bb builder;
+    build_ret (const_int int_type 0) builder |> ignore;
+    func
 
   let rec codegen_expr : _ -> expr -> llvalue = fun fctx e ->
     Logs.debug (fun m -> m "Codegen for %a" pp_expr e);
@@ -258,6 +304,13 @@ module Make (Ctx: CTX) () = struct
     | Int x -> const_int int_type x
     | Bool true -> const_int bool_type 1
     | Bool false -> const_int bool_type 0
+    | String x ->
+      let ptr = build_global_stringptr x "" builder in
+      let len = const_int int_type (String.length x) in
+      let struct_ = build_entry_alloca str_type "str" builder in
+      build_store ptr (build_struct_gep struct_ 0 "" builder) builder |> ignore;
+      build_store len (build_struct_gep struct_ 1 "" builder) builder |> ignore;
+      build_load struct_ "strptr" builder
     | Done iter ->
       let ctx' = get_iter iter in
       let v = get_val ~params:(get_val fctx "params") ctx' "done" in
@@ -277,9 +330,7 @@ module Make (Ctx: CTX) () = struct
 
       (* Note that the first index is for the pointer. The second indexes into
          the array. *)
-      let ptr = build_in_bounds_gep buf
-          [| const_int (i64_type ctx) 0; int_idx |] "" builder
-      in
+      let ptr = build_in_bounds_gep buf [| zero; int_idx |] "" builder in
       let ptr = build_pointercast ptr
           (pointer_type (integer_type ctx size_bits)) "" builder
       in
@@ -316,13 +367,12 @@ module Make (Ctx: CTX) () = struct
         | Sub -> build_sub v1 v2 "subtmp" builder
         | Mul -> build_mul v1 v2 "multmp" builder
         | Eq ->
-          let t1, t2 = type_of v1, type_of v2 in
-          let k1, k2 = classify_type t1, classify_type t2 in
-          let open TypeKind in
-          begin match k1, k2 with
-            | (Integer, Integer) -> build_icmp Icmp.Eq v1 v2 "eqtmp" builder
-            | (Struct, Struct) -> failwith "unimplemented"
-            | _ -> fail (Error.create "Unexpected equality." (k1, k2) [%sexp_of:TypeKind.t * TypeKind.t])
+          let t1 = infer_type (Hashtbl.of_alist_exn (module String) fctx#func.locals) arg1 in
+          let t2 = infer_type (Hashtbl.of_alist_exn (module String) fctx#func.locals) arg1 in
+          begin match t1, t2 with
+            | IntT, IntT -> build_icmp Icmp.Eq v1 v2 "eqtmp" builder
+            | StringT, StringT -> build_call scmp [|v1; v2|] "eqtmp" builder
+            | _ -> fail (Error.create "Unexpected equality." (t1, t2) [%sexp_of:type_ * type_])
           end
         | Lt -> build_icmp Icmp.Slt v1 v2 "lttmp" builder
         | And -> build_and v1 v2 "andtmp" builder
@@ -494,10 +544,17 @@ module Make (Ctx: CTX) () = struct
 
   let codegen_print fctx type_ expr =
     Logs.debug (fun m -> m "Codegen for %a." pp_stmt (Print (type_, expr)));
+    let true_str = define_global "true_str" (const_stringz ctx "true") module_ in
+    let false_str = define_global "false_str" (const_stringz ctx "false") module_ in
     let val_ = codegen_expr fctx expr in
 
     let rec gen val_ = function
-      | BytesT x when x = 8 -> "%d", [val_]
+      | IntT -> "%d", [val_]
+      | BoolT -> "%s", [build_select val_ true_str false_str "" builder]
+      | StringT -> "%.*s", [
+          build_extractvalue val_ 1 "" builder;
+          build_extractvalue val_ 0 "" builder;
+        ]
       | TupleT ts ->
         let elem_fmts, elem_args = List.mapi ts ~f:(fun i t ->
             gen (build_extractvalue val_ i "" builder) t)
@@ -505,7 +562,6 @@ module Make (Ctx: CTX) () = struct
         in
         "(" ^ String.concat ~sep:", " elem_fmts ^ ")", List.concat elem_args
       | VoidT -> "()", []
-      | BytesT _ -> fail (Error.of_string "Unexpected type.")
     in
 
     let fmt, args = gen val_ type_ in
