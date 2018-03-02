@@ -615,29 +615,6 @@ module IRGen = struct
             build_assign Infix.(count - int 1) count b
           ) b
 
-    let build_foreach : Type.t -> expr -> string -> (expr -> stmt_builder)
-      -> stmt_builder =
-      fun type_ start iter_ body b ->
-        let tup = build_fresh_var "tup" (find_func iter_).ret_type b in
-        build_iter iter_ [start] b;
-        match Type.count type_ with
-        | Count x ->
-          build_count_loop Infix.(int x) (fun b ->
-              build_step tup iter_ b;
-              body tup b;
-            ) b
-        | Countable ->
-          build_count_loop Infix.(islice start) (fun b ->
-              build_step tup iter_ b;
-              body tup b;
-            ) b
-        | Unknown ->
-          build_step tup iter_ b;
-          body tup b;
-          build_loop Infix.(not (Done iter_)) (fun b ->
-              body tup b;
-              build_step tup iter_ b) b
-
     let build_if : cond:expr -> then_:stmt_builder -> else_:stmt_builder
       -> stmt_builder =
       fun ~cond ~then_ ~else_ b ->
@@ -649,6 +626,43 @@ module IRGen = struct
                        fcase = List.rev !(b_else.body) }
         in
         b.body := ite::!(b.body)
+
+    let build_foreach : Type.t -> expr -> string -> (expr -> stmt_builder)
+      -> stmt_builder =
+      fun type_ start iter_ body b ->
+        let tup = build_fresh_var "tup" (find_func iter_).ret_type b in
+        build_iter iter_ [start] b;
+        match Type.count type_ with
+        | Count 0 -> ()
+        | Count 1 ->
+          build_step tup iter_ b;
+          body tup b
+        | Count x ->
+          build_count_loop Infix.(int x) (fun b ->
+              build_step tup iter_ b;
+              body tup b;
+            ) b
+        | Countable ->
+          build_count_loop Infix.(islice start) (fun b ->
+              build_step tup iter_ b;
+              body tup b;
+            ) b
+        | Unknown ->
+          build_loop Infix.(not (Done iter_)) (fun b ->
+              build_step tup iter_ b;
+              build_if ~cond:Infix.(not (Done iter_))
+                ~then_:(fun b -> body tup b) ~else_:(fun _ -> ()) b
+            ) b
+
+    let build_foreach_no_start : string -> (expr -> stmt_builder) -> stmt_builder =
+      fun iter_ body b ->
+        let tup = build_fresh_var "tup" (find_func iter_).ret_type b in
+        build_iter iter_ [] b;
+        build_loop Infix.(not (Done iter_)) (fun b ->
+            build_step tup iter_ b;
+            build_if ~cond:Infix.(not (Done iter_))
+              ~then_:(fun b -> body tup b) ~else_:(fun _ -> ()) b
+          ) b
 
     let build_tuple_append : type_ -> type_ -> expr -> expr -> expr =
       fun t1 t2 e1 e2 ->
@@ -932,10 +946,7 @@ module IRGen = struct
       let func = scan t in
       let ret_type = (find_func func).ret_type in
       let b = create [] ret_type in
-      let tup = build_var "tup" ret_type b in
-      build_iter func [Infix.(int start)] b;
-      build_step tup func b;
-      build_loop Infix.(not (Done func)) (fun b ->
+      build_foreach t Infix.(int start) func (fun tup b ->
           build_yield tup b;
           build_step tup func b;
         ) b;
@@ -980,25 +991,17 @@ module IRGen = struct
     let printer : string -> func = fun func ->
       let open Infix in
       let b = create [] VoidT in
-      build_iter func [] b;
-      let x = build_var "x" (find_func func).ret_type b in
-      build_step x func b;
-      build_loop (not (Done func)) (fun b ->
+      build_foreach_no_start func (fun x b ->
           build_print x b;
-          build_step x func b;
         ) b;
       build_func b
 
     let counter : string -> func = fun func ->
       let open Infix in
       let b = create [] IntT in
-      build_iter func [] b;
       let c = build_defn "c" int_t Infix.(int 0) b in
-      let x = build_var "x" (find_func func).ret_type b in
-      build_step x func b;
-      build_loop (not (Done func)) (fun b ->
+      build_foreach_no_start func (fun _ b ->
           build_assign Infix.(c + int 1) c b;
-          build_step x func b;
         ) b;
       build_return c b;
       build_func b
@@ -1017,14 +1020,9 @@ module IRGen = struct
       in
 
       let b = create [] ret_t in
-      build_iter func [] b;
-
-      let in_tup = build_var "tup" child_ret_t b in
-      let out_tup = Tuple (List.map idxs ~f:(fun i -> Index (in_tup, i))) in
-      build_step in_tup func b;
-      build_loop Infix.(not (Done func)) (fun b ->
+      build_foreach_no_start func (fun in_tup b ->
+          let out_tup = Tuple (List.map idxs ~f:(fun i -> Index (in_tup, i))) in
           build_yield out_tup b;
-          build_step in_tup func b;
         ) b;
       build_func b
 
@@ -1037,46 +1035,39 @@ module IRGen = struct
       let ret_t = (find_func func).ret_type in
 
       let b = create [] ret_t in
-      build_iter func [] b;
-
-      let tup = build_var "tup" ret_t b in
-
-      let rec gen_pred =
-        let module R = Ralgebra0 in
-        function
-        | R.Int x -> Int x
-        | R.String x -> String x
-        | R.Bool x -> Bool x
-        | R.Var (n, t) -> Var n
-        | R.Field f -> Index (tup, Db.Schema.field_idx_exn schema f)
-        | R.Binop (op, arg1, arg2) ->
-          let e1 = gen_pred arg1 in
-          let e2 = gen_pred arg2 in
-          begin match op with
-            | R.Eq -> Infix.(e1 = e2)
-            | R.Lt -> Infix.(e1 < e2)
-            | R.Le -> Infix.(e1 <= e2)
-            | R.Gt -> Infix.(e1 > e2)
-            | R.Ge -> Infix.(e1 >= e2)
-            | R.And | R.Or ->
-              fail (Error.create "Not a binary operator." op [%sexp_of:R.op])
-          end
-        | R.Varop (op, args) ->
-          let eargs = List.map ~f:gen_pred args in
-          begin match op with
-            | R.And -> List.fold_left1_exn ~f:Infix.(&&) eargs
-            | R.Or -> List.fold_left1_exn ~f:Infix.(||) eargs
-            | R.Eq | R.Lt | R.Le | R.Gt | R.Ge ->
-              fail (Error.create "Not a vararg operator." op [%sexp_of:R.op])
-          end
-      in
-
-      build_step tup func b;
-      build_loop Infix.(not (Done func)) (fun b ->
+      build_foreach_no_start func (fun tup b ->
+          let rec gen_pred =
+            let module R = Ralgebra0 in
+            function
+            | R.Int x -> Int x
+            | R.String x -> String x
+            | R.Bool x -> Bool x
+            | R.Var (n, t) -> Var n
+            | R.Field f -> Index (tup, Db.Schema.field_idx_exn schema f)
+            | R.Binop (op, arg1, arg2) ->
+              let e1 = gen_pred arg1 in
+              let e2 = gen_pred arg2 in
+              begin match op with
+                | R.Eq -> Infix.(e1 = e2)
+                | R.Lt -> Infix.(e1 < e2)
+                | R.Le -> Infix.(e1 <= e2)
+                | R.Gt -> Infix.(e1 > e2)
+                | R.Ge -> Infix.(e1 >= e2)
+                | R.And | R.Or ->
+                  fail (Error.create "Not a binary operator." op [%sexp_of:R.op])
+              end
+            | R.Varop (op, args) ->
+              let eargs = List.map ~f:gen_pred args in
+              begin match op with
+                | R.And -> List.fold_left1_exn ~f:Infix.(&&) eargs
+                | R.Or -> List.fold_left1_exn ~f:Infix.(||) eargs
+                | R.Eq | R.Lt | R.Le | R.Gt | R.Ge ->
+                  fail (Error.create "Not a vararg operator." op [%sexp_of:R.op])
+              end
+          in
           build_if ~cond:(gen_pred pred)
             ~then_:(fun b -> build_yield tup b)
             ~else_:(fun _ -> ()) b;
-          build_step tup func b;
         ) b;
       build_func b
 
@@ -1088,27 +1079,20 @@ module IRGen = struct
       in
 
       let b = create [] ret_t in
-      let tup = build_var "tup" ret_t b in
       List.iter funcs ~f:(fun func ->
-          build_iter func [] b;
-          build_step tup func b;
-          build_loop Infix.(not (Done func)) (fun b ->
+          build_foreach_no_start func (fun tup b ->
               build_yield tup b;
-              build_step tup func b;
             ) b;
         );
       build_func b
 
     let count gen r =
       let func = gen r in
-      let ret_t = int_t in
+      let ret_t = TupleT [int_t] in
 
       let b = create [] ret_t in
       let ct = build_defn "ct" int_t Infix.(int 0) b in
-      let tup = build_var "tup" ret_t b in
-      build_iter func [] b;
-      build_step tup func b;
-      build_loop Infix.(not (Done func)) (fun b ->
+      build_foreach_no_start func (fun _ b ->
           build_assign Infix.(ct + int 1) ct b;
         ) b;
       build_yield (Tuple [ct]) b;
@@ -1128,18 +1112,13 @@ module IRGen = struct
       let ret_t, w1, w2 = match ret_t1, ret_t2 with
         | TupleT t1, TupleT t2 ->
           TupleT (t1 @ t2), List.length t1, List.length t2
-        | _ -> fail (Error.create "Expected a TupleT." (ret_t1, ret_t2) [%sexp_of:type_ * type_])
+        | _ -> fail (Error.create "Expected a TupleT." (ret_t1, ret_t2)
+                       [%sexp_of:type_ * type_])
       in
 
       let b = create [] ret_t in
-      let t1 = build_var "t1" ret_t1 b in
-      let t2 = build_var "t2" ret_t2 b in
-      build_iter func1 [] b;
-      build_step t1 func1 b;
-      build_loop Infix.(not (Done func1)) (fun b ->
-          build_iter func2 [] b;
-          build_step t2 func2 b;
-          build_loop Infix.(not (Done func1)) (fun b ->
+      build_foreach_no_start func1 (fun t1 b ->
+          build_foreach_no_start func2 (fun t2 b ->
               build_if ~cond:Infix.(Index (t1, i1) = Index (t2, i2))
                 ~then_:(fun b ->
                   let ret =
@@ -1148,9 +1127,7 @@ module IRGen = struct
                   in
                   build_yield ret b
                   ) ~else_:(fun b -> ()) b;
-              build_step t2 func2 b;
             ) b;
-          build_step t1 func1 b;
         ) b;
       build_func b
 
