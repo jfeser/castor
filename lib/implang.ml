@@ -4,17 +4,18 @@ open Collections
 
 module Format = Caml.Format
 
-exception EvalError of Error.t [@@deriving sexp]
-
-let fail : Error.t -> 'a = fun e -> raise (EvalError e)
+let fail : Error.t -> 'a = Error.raise
 
 type type_ =
-  | BytesT of int
+  | IntT
+  | StringT
+  | BoolT
   | TupleT of type_ list
   | VoidT
 [@@deriving compare, sexp]
 
-type op = Add | Sub | Lt | Eq | And | Or | Not | Hash | Mul [@@deriving compare, sexp]
+type op = Add | Sub | Lt | Eq | And | Or | Not | Hash | Mul
+[@@deriving compare, sexp]
 type value =
   | VCont of { state : state; body : prog }
   | VFunc of func
@@ -32,6 +33,7 @@ and state = {
 and expr =
   | Int of int
   | Bool of bool
+  | String of string
   | Var of string
   | Tuple of expr list
   | Slice of expr * int
@@ -56,7 +58,7 @@ and func = {
   args : (string * type_) list;
   body : prog;
   ret_type : type_;
-  locals : (string * type_) list
+  locals : (string * type_) list;
 } [@@deriving compare, sexp]
 
 let rec pp_args fmt =
@@ -76,7 +78,9 @@ let rec pp_tuple pp_v fmt =
 let rec pp_type : Format.formatter -> type_ -> unit =
   let open Format in
   fun fmt -> function
-  | BytesT x -> fprintf fmt "Bytes[%d]" x
+  | IntT -> fprintf fmt "Int"
+  | StringT -> fprintf fmt "String"
+  | BoolT -> fprintf fmt "Bool"
   | TupleT ts -> fprintf fmt "Tuple[%a]" (pp_tuple pp_type) ts
   | VoidT -> fprintf fmt "Void"
 
@@ -111,6 +115,7 @@ and pp_expr : Format.formatter -> expr -> unit =
   fun fmt -> function
     | Int x -> pp_int fmt x
     | Bool x -> pp_bool fmt x
+    | String x -> fprintf fmt "\"%s\"" (String.escaped x)
     | Var v -> fprintf fmt "%s" v
     | Tuple t -> fprintf fmt "(@[<hov>%a@])" (pp_tuple pp_expr) t
     | Slice (ptr, len) -> fprintf fmt "buf[%a :@ %d]" pp_expr ptr len
@@ -156,7 +161,10 @@ module Infix = struct
   let (:=) = fun x y -> Assign { lhs = x; rhs = y }
   let iter x y z = Iter { var = x; func = y; args = z }
   let (+=) = fun x y -> Step { var = x; iter = y }
-  let (+) = fun x y -> Binop { op = Add; arg1 = x; arg2 = y }
+  let (+) = fun x y ->
+    match x, y with
+    | Int a, Int b -> Int (a + b)
+    | _ -> Binop { op = Add; arg1 = x; arg2 = y }
   let (-) = fun x y -> Binop { op = Sub; arg1 = x; arg2 = y }
   let ( * ) = fun x y -> Binop { op = Mul; arg1 = x; arg2 = y }
   let (<) = fun x y -> Binop { op = Lt; arg1 = x; arg2 = y }
@@ -177,8 +185,8 @@ module Infix = struct
     { args; ret_type; locals; body }
 end
 
-let int_t = BytesT Serialize.isize
-let bool_t = BytesT Serialize.bsize
+let int_t = IntT
+let bool_t = BoolT
 let slice_t = TupleT [int_t; int_t]
 
 let fresh_name : unit -> string =
@@ -452,32 +460,35 @@ let pcify : Fresh.t -> prog -> pcprog = fun fresh ->
 let rec infer_type : type_ Hashtbl.M(String).t -> expr -> type_ =
   let open Serialize in
   fun ctx -> function
-    | Int _ -> BytesT isize
-    | Bool _ -> BytesT bsize
+    | Int _ -> IntT
+    | Bool _ -> BoolT
+    | String _ -> StringT
     | Var x -> Hashtbl.find_exn ctx x
     | Tuple xs -> TupleT (List.map xs ~f:(infer_type ctx))
     | Binop { op; arg1; arg2 } ->
       let t1 = infer_type ctx arg1 in
       let t2 = infer_type ctx arg2 in
       begin match op, t1, t2 with
-        | (Add | Sub | And), BytesT x, BytesT y when x = y -> BytesT x
-        | Lt, BytesT x, BytesT y when x = y -> BytesT bsize
-        | Hash, _, _ -> BytesT isize
+        | (Add | Sub | Mul), IntT, IntT -> IntT
+        | Lt, IntT, IntT -> BoolT
+        | (And | Or), BoolT, BoolT -> BoolT
+        | Hash, IntT, _ -> IntT
+        | Eq, _, _ when compare_type_ t1 t2 = 0 -> BoolT
         | _ -> fail (Error.create "Type error."
                        (op, t1, t2) [%sexp_of:op * type_ * type_])
       end
     | Unop { op; arg } ->
       let t = infer_type ctx arg in
       begin match op, t with
-        | (Not, BytesT x) -> BytesT x
+        | (Not, BoolT) -> BoolT
         | _ -> fail (Error.create "Type error." (op, t) [%sexp_of:op * type_])
       end
-    | Slice (_, len) -> TupleT [BytesT isize; BytesT isize]
+    | Slice (_, len) -> slice_t
     | Index (tup, idx) -> begin match infer_type ctx tup with
         | TupleT ts -> List.nth_exn ts idx
         | t -> fail (Error.create "Expected a tuple." t [%sexp_of:type_])
       end
-    | Done _ -> BytesT bsize
+    | Done _ -> BoolT
 
 module IRGen = struct
   type func_builder = {
@@ -979,7 +990,7 @@ module IRGen = struct
 
     let counter : string -> func = fun func ->
       let open Infix in
-      let b = create [] (BytesT isize) in
+      let b = create [] IntT in
       build_iter func [] b;
       let c = build_defn "c" int_t Infix.(int 0) b in
       let x = build_var "x" (find_func func).ret_type b in
@@ -1001,8 +1012,7 @@ module IRGen = struct
       let ret_t = match child_ret_t with
         | TupleT ts ->
           TupleT (List.filteri ts ~f:(fun i _ -> List.mem idxs i ~equal:(=)))
-        | VoidT | BytesT _ as t ->
-          fail (Error.create "Expected a TupleT." t [%sexp_of:type_])
+        | t -> fail (Error.create "Expected a TupleT." t [%sexp_of:type_])
       in
 
       let b = create [] ret_t in
@@ -1033,6 +1043,9 @@ module IRGen = struct
       let rec gen_pred =
         let module R = Ralgebra0 in
         function
+        | R.Int x -> Int x
+        | R.String x -> String x
+        | R.Bool x -> Bool x
         | R.Var (n, t) -> Var n
         | R.Field f -> Index (tup, Db.Schema.field_idx_exn schema f)
         | R.Binop (op, arg1, arg2) ->
