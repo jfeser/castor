@@ -9,7 +9,7 @@ bug-reports: "https://github.com/jfeser/fastdb/issues"
 build: [["jbuilder" "build" "-p" name "-j" jobs]]
 depends: [
   "jbuilder" {build}
-  "ounit"
+  "ounit" {test}
   "base"
   "core"
   "stdio"
