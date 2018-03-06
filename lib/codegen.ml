@@ -1,17 +1,10 @@
 open Base
 open Printf
-open Implang
+
 open Llvm
 open Llvm_analysis
 open Llvm_target
 module Execution_engine = Llvm_executionengine
-
-module type CTX = sig
-  val ctx : llcontext
-  val module_ : llmodule
-  val builder : llbuilder
-  val debug : bool
-end
 
 let sexp_of_llvalue : llvalue -> Sexp.t =
   fun v -> Sexp.Atom (string_of_llvalue v)
@@ -47,8 +40,21 @@ module TypeKind = struct
     Sexp.Atom str
 end
 
-module Make (Ctx: CTX) () = struct
-  open Ctx
+module Config = struct
+  module type S = sig
+    include Implang.Config.S
+
+    val ctx : llcontext
+    val module_ : llmodule
+    val builder : llbuilder
+    val debug : bool
+  end
+end
+
+module Make (Config: Config.S) () = struct
+  open Config
+  module Implang = Implang.Make(Config)
+  open Implang
 
   (* Variables are either stored in the parameter struct or stored locally on
      the stack. *)

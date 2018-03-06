@@ -11,27 +11,29 @@ let in_dir : string -> f:(unit -> 'a) -> 'a = fun dir ~f ->
   let ret = try f () with e -> Unix.chdir cur_dir; raise e in
   Unix.chdir cur_dir; ret
 
-let benchmark : debug:bool -> params:(string * string) list -> gprof:bool -> Ralgebra.t -> unit =
-fun ~debug ~params ~gprof ralgebra ->
+let benchmark : debug:bool -> params:(string * string) list -> gprof:bool -> _ -> Ralgebra.t -> unit =
+fun ~debug ~params ~gprof (module IConfig : Implang.Config.S) ralgebra ->
   Logs.info (fun m -> m "Benchmarking %s." (Ralgebra.to_string ralgebra));
 
-  let module IGen = Implang.IRGen.Make () in
-  let ir_module = IGen.irgen ralgebra in
-  let llctx = Llvm.create_context () in
-  let module_ = Llvm.create_module llctx "scanner" in
-  let module CGen = Codegen.Make(struct
-      open Llvm
-      let debug = debug
-      let ctx = llctx
-      let module_ = module_
-      let builder = builder ctx
-    end) ()
-  in
+  let module CConfig = struct
+    include IConfig
+
+    let debug = debug
+    let ctx = Llvm.create_context ()
+    let module_ = Llvm.create_module ctx "scanner"
+    let builder = Llvm.builder ctx
+  end in
+
+  let module Implang = Implang.Make(CConfig) in
+  let module Codegen = Codegen.Make(CConfig) () in
+  let module IRGen = Implang.IRGen.Make () in
+
+  let ir_module = IRGen.irgen ralgebra in
 
   (* Dump IR. *)
-  CGen.codegen ir_module.buffer ir_module;
-  Llvm.print_module "scanner.ll" module_;
-  Out_channel.with_file "scanner.h" ~f:CGen.write_header;
+  Codegen.codegen ir_module.buffer ir_module;
+  Llvm.print_module "scanner.ll" CConfig.module_;
+  Out_channel.with_file "scanner.h" ~f:Codegen.write_header;
 
   Out_channel.with_file "db.buf" ~f:(fun ch ->
       let w = Bitstring.Writer.with_channel ch in
@@ -80,44 +82,54 @@ fun ~debug ~params ~gprof ralgebra ->
     command_exn (opt :: ["-S -pass-remarks-output=remarks.yaml -mergereturn -always-inline scanner.ll > scanner-opt.ll"]);
     command_exn (clang :: cflags @ ["scanner-opt.ll"; "main.c"; "-o"; "scanner.exe"])
   end;
-  Llvm.dispose_module module_;
-  Llvm.dispose_context llctx;
+  Llvm.dispose_module CConfig.module_;
+  Llvm.dispose_context CConfig.ctx;
 
   (* Collect runtime information. *)
   if Caml.Sys.command ("./scanner.exe -c db.buf") > 0 then
     Logs.err (fun m -> m "Scanner failed.")
 
-  let main : params:(string * string) list -> db:string -> ralgebra:_ ->
-    verbose:bool -> quiet:bool -> transforms:Transform.t list option ->
-    dir:string option -> debug:bool -> gprof:bool -> unit =
-    fun ~params ~db ~ralgebra ~verbose ~quiet ~transforms ~dir ~debug ~gprof ->
-      if verbose then Logs.set_level (Some Logs.Debug)
-      else if quiet then Logs.set_level (Some Logs.Error)
-      else Logs.set_level (Some Logs.Info);
+let main :
+  ?transforms:string list ->
+  ?dir:string ->
+  ?sample:int ->
+  debug:bool ->
+  gprof:bool ->
+  params:(string * string) list ->
+  db:string ->
+  ralgebra:_ ->
+  verbose:bool ->
+  quiet:bool ->
+  unit =
+  fun ?transforms ?dir ?sample ~debug ~gprof ~params ~db ~ralgebra ~verbose ~quiet ->
+    if verbose then Logs.set_level (Some Logs.Debug)
+    else if quiet then Logs.set_level (Some Logs.Error)
+    else Logs.set_level (Some Logs.Info);
 
-      let conn = new connection ~dbname:db () in
-      Eval.Ctx.global.conn <- Some (conn);
-
-      let predctx = List.map params ~f:(fun (n, v) ->
+    let module Config = struct
+      let conn = new connection ~dbname:db ()
+      let testctx = List.map params ~f:(fun (n, v) ->
           (n, [%of_sexp:Db.primvalue] (Sexp.of_string v)))
                     |> Layout.PredCtx.of_vars
-      in
-      Eval.Ctx.global.testctx <- Some (predctx);
+      let sample = sample
+    end in
 
-      let ralgebra = Ralgebra.resolve conn ralgebra in
-      let candidates = match transforms with
-        | Some tfs -> Transform.run_chain tfs ralgebra
-        | None -> Transform.search conn ralgebra
-      in
-      let dir = match dir with
-        | Some x -> x
-        | None -> Filename.temp_dir "perf" ""
-      in
-      Logs.info (fun m -> m "Generating files in %s." dir);
+    let module Transform = Transform.Make(Config) in
+    let ralgebra = Ralgebra.resolve Config.conn ralgebra in
+    let candidates = match transforms with
+      | Some tfs ->
+        Transform.run_chain (List.map ~f:Transform.of_name_exn tfs) ralgebra
+      | None -> Transform.search ralgebra
+    in
+    let dir = match dir with
+      | Some x -> x
+      | None -> Filename.temp_dir "perf" ""
+    in
+    Logs.info (fun m -> m "Generating files in %s." dir);
 
-      in_dir dir ~f:(fun () -> Seq.iter candidates ~f:(benchmark ~debug ~params ~gprof));
+    in_dir dir ~f:(fun () -> Seq.iter candidates ~f:(benchmark ~debug ~params ~gprof (module Config)));
 
-      if Logs.err_count () > 0 then exit 1 else exit 0
+    if Logs.err_count () > 0 then exit 1 else exit 0
 
 let () =
   (* Set early so we get logs from command parsing code. *)
@@ -126,7 +138,6 @@ let () =
   let open Command in
   let kv = Arg_type.create (fun s -> String.lsplit2_exn ~on:':' s) in
   let ralgebra = Arg_type.create Ralgebra.of_string_exn in
-  let transform = Arg_type.create Transform.of_name_exn in
   let open Let_syntax in
   basic ~summary:"Benchmark tool." [%map_open
     let db = flag "db" (required string) ~doc:"DB the database to connect to"
@@ -136,9 +147,10 @@ let () =
     and debug = flag "debug" ~aliases:["g"] no_arg ~doc:"enable debug mode"
     and gprof = flag "prof" ~aliases:["pg"] no_arg ~doc:"enable profiling"
     and transforms = flag "transform" ~aliases:["t"]
-        (optional (Arg_type.comma_separated transform)) ~doc:"transforms to run"
+        (optional (Arg_type.comma_separated string)) ~doc:"transforms to run"
     and dir = flag "dir" ~aliases:["d"] (optional file) ~doc:"where to write intermediate files"
+    and sample = flag "sample" ~aliases:["s"] (optional int) ~doc:"the number of rows to sample from large tables"
     and ralgebra = anon ("ralgebra" %: ralgebra)
     in fun () ->
-      main ~db ~ralgebra ~params ~verbose ~quiet ~transforms ~dir ~debug ~gprof
+      main ~db ~ralgebra ~params ~verbose ~quiet ?transforms ?dir ~debug ~gprof ?sample
   ] |> run
