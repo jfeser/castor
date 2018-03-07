@@ -698,8 +698,8 @@ module Make (Config : Config.S) = struct
         | StringT { nchars = Len x } ->
           int (Int.round ~dir:`Up ~to_multiple_of:isize x)
         | EmptyT -> int 0
-        | CrossTupleT (_, { count = Count _ }) -> islice start
-        | CrossTupleT (_, { count = _ }) -> islice (start + int isize)
+        | CrossTupleT (_, { count = (Count _ | Unknown) }) -> islice start
+        | CrossTupleT (_, { count = Countable }) -> islice (start + int isize)
         | ZipTupleT _ | UnorderedListT _ | OrderedListT _
         | TableT _ -> islice (start + int isize)
 
@@ -722,7 +722,8 @@ module Make (Config : Config.S) = struct
         let open Type in
         function
         | IntT _ | BoolT _ | EmptyT -> Infix.(int 0)
-        | StringT _ -> Infix.(int isize)
+        | StringT { nchars = Len _ } -> Infix.(int 0)
+        | StringT { nchars = Variable } -> Infix.(int isize)
         | CrossTupleT (_, { count = Count _ })
         | UnorderedListT (_, { count = Count _ })
         | OrderedListT (_, { count = Count _ })
@@ -752,7 +753,7 @@ module Make (Config : Config.S) = struct
           | { Type.nchars = Variable } -> Infix.(islice start)
           | { Type.nchars = Len x } -> Infix.int x
         in
-        build_yield (Tuple [Infix.(slice (start + hsize (StringT t)) nchars)]) b;
+        build_yield (Tuple [Tuple [Infix.(start + hsize (StringT t)); nchars]]) b;
         build_func b
 
       let scan_crosstuple scan ts m =
@@ -967,10 +968,11 @@ module Make (Config : Config.S) = struct
       let scan : Layout.t -> func = fun l ->
         let type_ = Type.of_layout_exn l in
         let buf = Serialize.serialize type_ l in
-        let start = List.map !buffers ~f:Bitstring.length
+        let start = List.map !buffers ~f:Bitstring.byte_length
                     |> List.sum (module Int) ~f:(fun x -> x)
         in
-        buffers := buf :: !buffers;
+        Logs.debug (fun m -> m "Start: %d" start);
+        buffers := !buffers @ [buf];
 
         let rec scan t =
           let open Type in
@@ -1166,10 +1168,11 @@ module Make (Config : Config.S) = struct
 
       let irgen : Ralgebra.t -> ir_module = fun r ->
         let name = gen_ralgebra r in
+        Logs.debug (fun m -> m "%d buffers" (List.length !buffers));
         { iters = List.rev !funcs;
           funcs = ["printer", printer name; "counter", counter name];
           params = Ralgebra.params r |> Set.to_list;
-          buffer = List.rev !buffers |> Bitstring.concat;
+          buffer = Bitstring.concat !buffers;
         }
     end
   end
