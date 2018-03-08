@@ -1144,7 +1144,7 @@ module Make (Config : Config.S) = struct
           ) b;
         build_func b
 
-      let rec gen_ralgebra : Ralgebra.t -> string = fun r -> 
+      let rec gen_ralgebra : Ralgebra.t -> string = fun r ->
         let name = match r with
           | Project _ -> Fresh.name fresh "project%d"
           | Filter _ -> Fresh.name fresh "filter%d"
@@ -1173,6 +1173,15 @@ module Make (Config : Config.S) = struct
           params = Ralgebra.params r |> Set.to_list;
           buffer = Bitstring.concat !buffers;
         }
+
+      let pp : Format.formatter -> ir_module -> unit =
+        let open Format in
+        fun fmt { funcs; iters } ->
+          pp_open_vbox fmt 0;
+          List.iter (iters @ funcs) ~f:(fun (n, f) ->
+              fprintf fmt "%s = %a@;" n pp_func f);
+          pp_close_box fmt ();
+          pp_print_flush fmt ()
     end
   end
 end

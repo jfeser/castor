@@ -31,10 +31,15 @@ fun ~debug ~params ~gprof (module IConfig : Implang.Config.S) ralgebra ->
   let ir_module = IRGen.irgen ralgebra in
 
   (* Dump IR. *)
+  Out_channel.with_file "scanner.ir" ~f:(fun ch ->
+      IRGen.pp (Format.formatter_of_out_channel ch) ir_module);
+
+  (* Codegen *)
   Codegen.codegen ir_module.buffer ir_module;
   Llvm.print_module "scanner.ll" CConfig.module_;
   Out_channel.with_file "scanner.h" ~f:Codegen.write_header;
 
+  (* Serialize. *)
   Out_channel.with_file "db.buf" ~f:(fun ch ->
       let w = Bitstring.Writer.with_channel ch in
       Bitstring.Writer.write w ir_module.buffer);
@@ -42,7 +47,7 @@ fun ~debug ~params ~gprof (module IConfig : Implang.Config.S) ralgebra ->
       let fmt = Format.formatter_of_out_channel ch in
       Bitstring.pp fmt ir_module.buffer);
 
-  (* Generate and dump main.c *)
+  (* Compile and link *)
   let params_str = List.map params ~f:(fun (n, v) ->
       let val_str =
         match [%of_sexp:Db.primvalue] (Sexp.of_string v) with
@@ -127,7 +132,11 @@ let main :
     in
     Logs.info (fun m -> m "Generating files in %s." dir);
 
-    in_dir dir ~f:(fun () -> Seq.iter candidates ~f:(benchmark ~debug ~params ~gprof (module Config)));
+    in_dir dir ~f:(fun () ->
+        match Seq.next candidates with
+        | Some (x, _) -> benchmark ~debug ~params ~gprof (module Config) x
+        | _ -> failwith ""
+      );
 
     if Logs.err_count () > 0 then exit 1 else exit 0
 
