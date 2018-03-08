@@ -11,7 +11,7 @@
 /*$0*/
 
 #define USAGE "Usage: perf.exe [-pc] DB_FILE\n"
-#define DEFAULT_ITERS 100000
+#define DEFAULT_ITERS 1
 
 int main(int argc, char **argv) {
   int fd, len, print_flag = 0, count_flag = 0, iters = DEFAULT_ITERS, c;
