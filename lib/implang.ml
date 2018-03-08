@@ -961,7 +961,6 @@ module Make (Config : Config.S) = struct
         let b = create [] ret_type in
         build_foreach t Infix.(int start) func (fun tup b ->
             build_yield tup b;
-            build_step tup func b;
           ) b;
         build_func b
 
