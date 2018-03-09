@@ -10,11 +10,10 @@
 
 /*$0*/
 
-#define USAGE "Usage: perf.exe [-pc] DB_FILE\n"
-#define DEFAULT_ITERS 1
+#define USAGE "Usage: perf.exe (-p|c|i) DB_FILE\n"
 
 int main(int argc, char **argv) {
-  int fd, len, print_flag = 0, count_flag = 0, iters = DEFAULT_ITERS, c;
+  int fd, len, print_flag = 0, count_flag = 0, iters = 0, c;
   char *fn = NULL;
   struct stat stat;
 
@@ -28,6 +27,9 @@ int main(int argc, char **argv) {
       break;
     case 'i':
       iters = atoi(optarg);
+      if (iters <= 0) {
+        fprintf(stderr, "Argument to -i must be greater than 0.");
+      }
       break;
     case '?':
       fprintf(stderr, USAGE);
@@ -46,11 +48,6 @@ int main(int argc, char **argv) {
     return 1;
   }
   fn = argv[optind];
-
-  if ((count_flag && print_flag) || (!count_flag && !print_flag)) {
-    fprintf(stderr, "Exactly one of -p or -c must be specified.");
-    return 1;
-  }
 
   if ((fd = open(fn, O_RDONLY)) < 0) {
     perror("Opening db file failed");
@@ -74,21 +71,19 @@ int main(int argc, char **argv) {
 
   /*$1*/
 
-  clock_t start = clock();
-  int count = -1;
-  for (int i = 0; i < iters; i++) {
-    if (count_flag) {
-      count = counter(params);
-    } else if (print_flag) {
-      printer(params);
-    } else {
-      abort();
+  if (iters > 0) {
+    clock_t start = clock();
+    for (int i = 0; i < iters; i++) {
+      counter(params);
     }
+    clock_t stop = clock();
+    int msec = (stop - start) * 1000 / CLOCKS_PER_SEC;
+    printf("%f\n", ((float)iters / msec) * 1000);
+  } else if (count_flag) {
+    printf("%ld\n", counter(params));
+  } else if (print_flag) {
+    printer(params);
   }
-  clock_t stop = clock();
-  int msec = (stop - start) * 1000 / CLOCKS_PER_SEC;
-  printf("%d\n", count);
-  printf("Queries per second: %f\n", ((float)iters / msec) * 1000);
 
   free(params);
   return 0;

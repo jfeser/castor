@@ -13,7 +13,7 @@ let in_dir : string -> f:(unit -> 'a) -> 'a = fun dir ~f ->
   let ret = try f () with e -> Unix.chdir cur_dir; raise e in
   Unix.chdir cur_dir; ret
 
-let run_candidate : debug:bool -> params:(string * Db.primvalue) list -> gprof:bool -> (module Implang.Config.S) -> Ralgebra.t -> unit =
+let run_candidate : debug:bool -> params:(string * Db.primvalue) list -> gprof:bool -> (module Implang.Config.S) -> Ralgebra.t -> _ =
 fun ~debug ~params ~gprof (module IConfig : Implang.Config.S) ralgebra ->
   Logs.info (fun m -> m "Benchmarking %s." (Ralgebra.to_string ralgebra));
 
@@ -92,8 +92,18 @@ fun ~debug ~params ~gprof (module IConfig : Implang.Config.S) ralgebra ->
   Llvm.dispose_context CConfig.ctx;
 
   (* Collect runtime information. *)
-  if Caml.Sys.command ("./scanner.exe -c db.buf") > 0 then
-    Logs.err (fun m -> m "Scanner failed.")
+  Caml.Sys.command "sh -c \"./scanner.exe -p db.buf > output.csv\"" |> ignore;
+  let runs_per_sec =
+    Unix.open_process_in "./scanner.exe -i 1000 db.buf" |> In_channel.input_all
+    |> String.strip |> Float.of_string
+  in
+  let db_size = (Unix.stat "db.buf").st_size in
+  let exe_size = (Unix.stat "scanner.exe").st_size in
+
+  let failed = Caml.Sys.command ("./scanner.exe -c db.buf") > 0 in
+  if failed then Logs.err (fun m -> m "Scanner failed.");
+
+  (runs_per_sec, db_size, exe_size, failed)
 
 let benchmark : ?sample:int -> debug:bool -> db:string -> Bench.t -> unit =
   fun ?sample ~debug ~db { name; sql; query; params } ->
@@ -124,6 +134,11 @@ let benchmark : ?sample:int -> debug:bool -> db:string -> Bench.t -> unit =
       | None -> ()
     end;
 
+    (* Create sqlite for results. *)
+    let db = Sqlite3.db_open "results.sqlite" in
+    Sqlite3.exec db "create table results (runtime numeric, dbsize numeric, exesize numeric, dir text, failed integer)" |> ignore;
+    let insert_stmt = Sqlite3.prepare db "insert into results values (?,?,?,?,?)" in
+
     let candidates = Transform.search ralgebra in
 
     Unix.mkdir name;
@@ -141,13 +156,25 @@ let benchmark : ?sample:int -> debug:bool -> db:string -> Bench.t -> unit =
         |> Sexp.save_hum "params.sexp";
 
         Seq.iter candidates ~f:(fun x ->
-            in_dir (Filename.temp_dir ~in_dir:"." "run" "") ~f:(fun () ->
+            let dir = Filename.temp_dir ~in_dir:"." "run" "" in
+            in_dir dir ~f:(fun () ->
                 (* Dump the candidate expression. *)
                 Out_channel.with_file "ralgebra" ~f:(fun ch ->
                     Out_channel.output_string ch (Ralgebra.to_string x));
 
-                run_candidate ~debug ~params:test_params ~gprof:false (module Config)
-                  x)));
+                let (runtime, dbsize, exesize, failed) =
+                  run_candidate ~debug ~params:test_params ~gprof:false
+                    (module Config) x
+                in
+
+                let open Sqlite3 in
+                bind insert_stmt 1 (FLOAT runtime) |> ignore;
+                bind insert_stmt 2 (INT dbsize) |> ignore;
+                bind insert_stmt 3 (INT exesize) |> ignore;
+                bind insert_stmt 4 (TEXT dir) |> ignore;
+                bind insert_stmt 5 (INT (if failed then 1L else 0L)) |> ignore;
+                step insert_stmt |> ignore
+              )));
     if Logs.err_count () > 0 then exit 1 else exit 0
 
 let main :
@@ -191,7 +218,7 @@ let main :
 
     in_dir dir ~f:(fun () ->
         match Seq.next candidates with
-        | Some (x, _) -> run_candidate ~debug ~params ~gprof (module Config) x
+        | Some (x, _) -> run_candidate ~debug ~params ~gprof (module Config) x |> ignore
         | _ -> failwith ""
       );
 

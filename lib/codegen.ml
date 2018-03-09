@@ -554,7 +554,7 @@ module Make (Config: Config.S) () = struct
     let rec gen val_ = function
       | IntT -> "%d", [val_]
       | BoolT -> "%s", [build_select val_ true_str false_str "" builder]
-      | StringT -> "%.*s", [
+      | StringT -> "\"%.*s\"", [
           build_extractvalue val_ 1 "" builder;
           build_extractvalue val_ 0 "" builder;
         ]
@@ -563,7 +563,7 @@ module Make (Config: Config.S) () = struct
             gen (build_extractvalue val_ i "" builder) t)
                                    |> List.unzip
         in
-        "(" ^ String.concat ~sep:", " elem_fmts ^ ")", List.concat elem_args
+        String.concat ~sep:"," elem_fmts, List.concat elem_args
       | VoidT -> "()", []
     in
 
