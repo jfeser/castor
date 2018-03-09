@@ -94,7 +94,7 @@ fun ~debug ~params ~gprof (module IConfig : Implang.Config.S) ralgebra ->
   (* Collect runtime information. *)
   Caml.Sys.command "sh -c \"./scanner.exe -p db.buf > output.csv\"" |> ignore;
   let runs_per_sec =
-    Unix.open_process_in "./scanner.exe -i 1000 db.buf" |> In_channel.input_all
+    Unix.open_process_in "./scanner.exe -t 10 db.buf" |> In_channel.input_all
     |> String.strip |> Float.of_string
   in
   let db_size = (Unix.stat "db.buf").st_size in

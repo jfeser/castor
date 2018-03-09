@@ -10,14 +10,14 @@
 
 /*$0*/
 
-#define USAGE "Usage: perf.exe (-p|c|i) DB_FILE\n"
+#define USAGE "Usage: perf.exe (-p|c|t) DB_FILE\n"
 
 int main(int argc, char **argv) {
-  int fd, len, print_flag = 0, count_flag = 0, iters = 0, c;
+  int fd, len, print_flag = 0, count_flag = 0, run_time = 0, c;
   char *fn = NULL;
   struct stat stat;
 
-  while ((c = getopt(argc, argv, "pci:")) != -1) {
+  while ((c = getopt(argc, argv, "pct:")) != -1) {
     switch (c) {
     case 'p':
       print_flag = 1;
@@ -25,10 +25,10 @@ int main(int argc, char **argv) {
     case 'c':
       count_flag = 1;
       break;
-    case 'i':
-      iters = atoi(optarg);
-      if (iters <= 0) {
-        fprintf(stderr, "Argument to -i must be greater than 0.");
+    case 't':
+      run_time = atoi(optarg);
+      if (run_time <= 0) {
+        fprintf(stderr, "Argument to -t must be greater than 0.");
       }
       break;
     case '?':
@@ -71,14 +71,25 @@ int main(int argc, char **argv) {
 
   /*$1*/
 
-  if (iters > 0) {
+  if (run_time > 0) {
+    /* Run once to figure out the number of runs needed. */
     clock_t start = clock();
-    for (int i = 0; i < iters; i++) {
+    counter(params);
+    clock_t stop = clock();
+    int runs = (run_time * CLOCKS_PER_SEC) / (stop - start);
+
+    if (runs <= 0) {
+      int msec = (stop - start) * 1000 / CLOCKS_PER_SEC;
+      printf("%f\n", (1.0 / msec) * 1000);
+    }
+
+    start = clock();
+    for (int i = 0; i < runs; i++) {
       counter(params);
     }
-    clock_t stop = clock();
+    stop = clock();
     int msec = (stop - start) * 1000 / CLOCKS_PER_SEC;
-    printf("%f\n", ((float)iters / msec) * 1000);
+    printf("%f\n", ((float)runs / msec) * 1000);
   } else if (count_flag) {
     printf("%ld\n", counter(params));
   } else if (print_flag) {
