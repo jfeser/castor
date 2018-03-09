@@ -100,10 +100,15 @@ fun ~debug ~params ~gprof (module IConfig : Implang.Config.S) ralgebra ->
   let db_size = (Unix.stat "db.buf").st_size in
   let exe_size = (Unix.stat "scanner.exe").st_size in
 
-  let failed = Caml.Sys.command ("./scanner.exe -c db.buf") > 0 in
-  if failed then Logs.err (fun m -> m "Scanner failed.");
+  let scanner_crashed = Caml.Sys.command "./scanner.exe -c db.buf" > 0 in
+  if scanner_crashed then Logs.err (fun m -> m "Scanner crashed.");
 
-  (runs_per_sec, db_size, exe_size, failed)
+  let outputs_differ =
+    Caml.Sys.command "bash -c 'diff -q <(sort ../golden.csv) <(sort output.csv)'" > 0
+  in
+  if outputs_differ then Logs.err (fun m -> m "Outputs differ.");
+
+  (runs_per_sec, db_size, exe_size, scanner_crashed || outputs_differ)
 
 let benchmark : ?sample:int -> debug:bool -> db:string -> Bench.t -> unit =
   fun ?sample ~debug ~db { name; sql; query; params } ->
