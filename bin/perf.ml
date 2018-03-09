@@ -91,27 +91,30 @@ fun ~debug ~params ~gprof (module IConfig : Implang.Config.S) ralgebra ->
   Llvm.dispose_module CConfig.module_;
   Llvm.dispose_context CConfig.ctx;
 
-  (* Collect runtime information. *)
-  Caml.Sys.command "sh -c \"./scanner.exe -p db.buf > output.csv\"" |> ignore;
-  let runs_per_sec =
-    Unix.open_process_in "./scanner.exe -t 10 db.buf" |> In_channel.input_all
-    |> String.strip |> Float.of_string
-  in
-  let db_size = (Unix.stat "db.buf").st_size in
-  let exe_size = (Unix.stat "scanner.exe").st_size in
+  (* Collect runtime information. Most of this requires parsing the query
+     output, so it doesn't work when debug info is turned on. *)
+  if not debug then begin
+    Caml.Sys.command "sh -c \"./scanner.exe -p db.buf > output.csv\"" |> ignore;
+    let runs_per_sec =
+      Unix.open_process_in "./scanner.exe -t 10 db.buf" |> In_channel.input_all
+      |> String.strip |> Float.of_string
+    in
+    let db_size = (Unix.stat "db.buf").st_size in
+    let exe_size = (Unix.stat "scanner.exe").st_size in
 
-  let scanner_crashed = Caml.Sys.command "./scanner.exe -c db.buf" > 0 in
-  if scanner_crashed then Logs.err (fun m -> m "Scanner crashed.");
+    let scanner_crashed = Caml.Sys.command "./scanner.exe -c db.buf" > 0 in
+    if scanner_crashed then Logs.err (fun m -> m "Scanner crashed.");
 
-  let outputs_differ =
-    Caml.Sys.command "bash -c 'diff -q <(sort ../golden.csv) <(sort output.csv)'" > 0
-  in
-  if outputs_differ then Logs.err (fun m -> m "Outputs differ.");
+    let outputs_differ =
+      Caml.Sys.command "bash -c 'diff -q <(sort ../golden.csv) <(sort output.csv)'" > 0
+    in
+    if outputs_differ then Logs.err (fun m -> m "Outputs differ.");
 
-  (runs_per_sec, db_size, exe_size, scanner_crashed || outputs_differ)
+    (runs_per_sec, db_size, exe_size, scanner_crashed || outputs_differ)
+  end else (0.0, 0L, 0L, false)
 
-let benchmark : ?sample:int -> debug:bool -> db:string -> Bench.t -> unit =
-  fun ?sample ~debug ~db { name; sql; query; params } ->
+let benchmark : ?sample:int -> db:string -> Bench.t -> unit =
+  fun ?sample ~db { name; sql; query; params } ->
     (* FIXME: Use the first parameter value for test params. Should use multiple
        choices and average. *)
     let test_params = List.map params ~f:(fun (pname, values) ->
@@ -148,6 +151,11 @@ let benchmark : ?sample:int -> debug:bool -> db:string -> Bench.t -> unit =
 
     Unix.mkdir name;
     in_dir name ~f:(fun () ->
+        (* Redirect logs to file. *)
+        let log_ch = Out_channel.create "bench.log" in
+        let fmt = Format.formatter_of_out_channel log_ch in
+        Logs.set_reporter (Logs.format_reporter ~app:fmt ~dst:fmt ());
+
         (* Run the sql to generate a golden output. *)
         let golden_fn = sprintf "%s/golden.csv" (Sys.getcwd ()) in
         let params =
@@ -168,7 +176,7 @@ let benchmark : ?sample:int -> debug:bool -> db:string -> Bench.t -> unit =
                     Out_channel.output_string ch (Ralgebra.to_string x));
 
                 let (runtime, dbsize, exesize, failed) =
-                  run_candidate ~debug ~params:test_params ~gprof:false
+                  run_candidate ~params:test_params ~gprof:false ~debug:false
                     (module Config) x
                 in
 
@@ -178,8 +186,13 @@ let benchmark : ?sample:int -> debug:bool -> db:string -> Bench.t -> unit =
                 bind insert_stmt 3 (INT exesize) |> ignore;
                 bind insert_stmt 4 (TEXT dir) |> ignore;
                 bind insert_stmt 5 (INT (if failed then 1L else 0L)) |> ignore;
-                step insert_stmt |> ignore
-              )));
+                step insert_stmt |> ignore;
+
+                (* Remember to flush logs file. *)
+                Out_channel.flush log_ch
+              ));
+        Out_channel.close log_ch
+      );
     if Logs.err_count () > 0 then exit 1 else exit 0
 
 let main :
@@ -267,7 +280,6 @@ let () =
       let db = flag "db" (required string) ~doc:"DB the database to connect to"
       and verbose = flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
       and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
-      and debug = flag "debug" ~aliases:["g"] no_arg ~doc:"enable debug mode"
       and sample = flag "sample" ~aliases:["s"] (optional int) ~doc:"the number of rows to sample from large tables"
       and bench = anon ("bench" %: bench)
       in fun () ->
@@ -275,6 +287,6 @@ let () =
         else if quiet then Logs.set_level (Some Logs.Error)
         else Logs.set_level (Some Logs.Info);
 
-        benchmark ?sample ~db ~debug bench
+        benchmark ?sample ~db bench
     ];
   ] |> run
