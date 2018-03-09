@@ -2,6 +2,8 @@ open Core
 open Stdio
 open Printf
 open Postgresql
+open Sexplib
+
 open Dblayout
 open Collections
 
@@ -11,7 +13,7 @@ let in_dir : string -> f:(unit -> 'a) -> 'a = fun dir ~f ->
   let ret = try f () with e -> Unix.chdir cur_dir; raise e in
   Unix.chdir cur_dir; ret
 
-let benchmark : debug:bool -> params:(string * string) list -> gprof:bool -> _ -> Ralgebra.t -> unit =
+let run_candidate : debug:bool -> params:(string * Db.primvalue) list -> gprof:bool -> (module Implang.Config.S) -> Ralgebra.t -> unit =
 fun ~debug ~params ~gprof (module IConfig : Implang.Config.S) ralgebra ->
   Logs.info (fun m -> m "Benchmarking %s." (Ralgebra.to_string ralgebra));
 
@@ -49,8 +51,7 @@ fun ~debug ~params ~gprof (module IConfig : Implang.Config.S) ralgebra ->
 
   (* Compile and link *)
   let params_str = List.map params ~f:(fun (n, v) ->
-      let val_str =
-        match [%of_sexp:Db.primvalue] (Sexp.of_string v) with
+      let val_str = match v with
         | `Int x -> sprintf "%d" x
         | `Bool true -> "true"
         | `Bool false -> "false"
@@ -94,28 +95,75 @@ fun ~debug ~params ~gprof (module IConfig : Implang.Config.S) ralgebra ->
   if Caml.Sys.command ("./scanner.exe -c db.buf") > 0 then
     Logs.err (fun m -> m "Scanner failed.")
 
+let benchmark : ?sample:int -> debug:bool -> db:string -> Bench.t -> unit =
+  fun ?sample ~debug ~db { name; sql; query; params } ->
+    (* FIXME: Use the first parameter value for test params. Should use multiple
+       choices and average. *)
+    let test_params = List.map params ~f:(fun (pname, values) ->
+        match values with
+        | [] -> Error.create "Empty parameter list." (name, pname)
+                  [%sexp_of:string * string] |> Error.raise
+        | v::_ -> (pname, v))
+    in
+
+    let module Config = struct
+      let conn = new connection ~dbname:db ()
+      let testctx = Layout.PredCtx.of_vars test_params
+    end in
+
+    let module Transform = Transform.Make(Config) in
+
+    let ralgebra = Ralgebra.of_string_exn query |> Ralgebra.resolve Config.conn in
+
+    (* If we need to sample, generate sample tables and swap them in the
+       expression. *)
+    begin match sample with
+      | Some s ->
+          Ralgebra.relations ralgebra
+          |> List.iter ~f:(Db.Relation.sample Config.conn s);
+      | None -> ()
+    end;
+
+    let candidates = Transform.search ralgebra in
+
+    Unix.mkdir name;
+    in_dir name ~f:(fun () ->
+        (* Run the sql to generate a golden output. *)
+        let golden_fn = sprintf "%s/golden.csv" (Sys.getcwd ()) in
+        let params =
+          List.map test_params ~f:(fun (_, v) -> Db.primvalue_to_sql v)
+        in
+        Db.exec ~params Config.conn
+          (sprintf "copy (%s) to '%s' delimiter ','" sql golden_fn) |> ignore;
+
+        (* Dump the parameters used for testing. *)
+        [%sexp_of:(string * Db.primvalue) list] test_params
+        |> Sexp.save_hum "params.sexp";
+
+        Seq.iter candidates ~f:(fun x ->
+            in_dir (Filename.temp_dir ~in_dir:"." "run" "") ~f:(fun () ->
+                (* Dump the candidate expression. *)
+                Out_channel.with_file "ralgebra" ~f:(fun ch ->
+                    Out_channel.output_string ch (Ralgebra.to_string x));
+
+                run_candidate ~debug ~params:test_params ~gprof:false (module Config)
+                  x)));
+    if Logs.err_count () > 0 then exit 1 else exit 0
+
 let main :
   ?transforms:string list ->
   ?dir:string ->
   ?sample:int ->
   debug:bool ->
   gprof:bool ->
-  params:(string * string) list ->
+  params:(string * Db.primvalue) list ->
   db:string ->
   ralgebra:_ ->
-  verbose:bool ->
-  quiet:bool ->
   unit =
-  fun ?transforms ?dir ?sample ~debug ~gprof ~params ~db ~ralgebra ~verbose ~quiet ->
-    if verbose then Logs.set_level (Some Logs.Debug)
-    else if quiet then Logs.set_level (Some Logs.Error)
-    else Logs.set_level (Some Logs.Info);
-
+  fun ?transforms ?dir ?sample ~debug ~gprof ~params ~db ~ralgebra ->
     let module Config = struct
       let conn = new connection ~dbname:db ()
-      let testctx = List.map params ~f:(fun (n, v) ->
-          (n, [%of_sexp:Db.primvalue] (Sexp.of_string v)))
-                    |> Layout.PredCtx.of_vars
+      let testctx = Layout.PredCtx.of_vars params
     end in
 
     let module Transform = Transform.Make(Config) in
@@ -123,14 +171,12 @@ let main :
 
     (* If we need to sample, generate sample tables and swap them in the
        expression. *)
-    let ralgebra = match sample with
+    begin match sample with
       | Some s ->
-        Ralgebra.relations ralgebra
-        |> List.map ~f:(fun r -> r, Db.Relation.sample Config.conn s r)
-        |> List.fold_left ~init:ralgebra ~f:(fun ra (r1, r2) ->
-            Ralgebra.replace_relation r1 r2 ra)
-      | None -> ralgebra
-    in
+          Ralgebra.relations ralgebra
+          |> List.iter ~f:(Db.Relation.sample Config.conn s);
+      | None -> ()
+    end;
 
     let candidates = match transforms with
       | Some tfs ->
@@ -145,7 +191,7 @@ let main :
 
     in_dir dir ~f:(fun () ->
         match Seq.next candidates with
-        | Some (x, _) -> benchmark ~debug ~params ~gprof (module Config) x
+        | Some (x, _) -> run_candidate ~debug ~params ~gprof (module Config) x
         | _ -> failwith ""
       );
 
@@ -156,21 +202,47 @@ let () =
   Logs.set_reporter (Logs.format_reporter ());
 
   let open Command in
-  let kv = Arg_type.create (fun s -> String.lsplit2_exn ~on:':' s) in
   let ralgebra = Arg_type.create Ralgebra.of_string_exn in
+  let bench = Arg_type.create (fun s -> Sexp.load_sexp s |> [%of_sexp:Bench.t]) in
+  let param = Arg_type.create (fun s ->
+      let k, v = String.lsplit2_exn ~on:':' s in
+      let v = Sexp.of_string v |> [%of_sexp:Db.primvalue] in
+      (k, v))
+  in
   let open Let_syntax in
-  basic ~summary:"Benchmark tool." [%map_open
-    let db = flag "db" (required string) ~doc:"DB the database to connect to"
-    and params = flag "param" ~aliases:["p"] (listed kv) ~doc:"query parameters (passed as key:value)"
-    and verbose = flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
-    and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
-    and debug = flag "debug" ~aliases:["g"] no_arg ~doc:"enable debug mode"
-    and gprof = flag "prof" ~aliases:["pg"] no_arg ~doc:"enable profiling"
-    and transforms = flag "transform" ~aliases:["t"]
-        (optional (Arg_type.comma_separated string)) ~doc:"transforms to run"
-    and dir = flag "dir" ~aliases:["d"] (optional file) ~doc:"where to write intermediate files"
-    and sample = flag "sample" ~aliases:["s"] (optional int) ~doc:"the number of rows to sample from large tables"
-    and ralgebra = anon ("ralgebra" %: ralgebra)
-    in fun () ->
-      main ~db ~ralgebra ~params ~verbose ~quiet ?transforms ?dir ~debug ~gprof ?sample
+  group ~summary:"Benchmark tool." [
+    "manual", basic ~summary:"Run compiler manually." [%map_open
+      let db = flag "db" (required string) ~doc:"DB the database to connect to"
+      and params = flag "param" ~aliases:["p"] (listed param) ~doc:"query parameters (passed as key:value)"
+      and verbose = flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
+      and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
+      and debug = flag "debug" ~aliases:["g"] no_arg ~doc:"enable debug mode"
+      and gprof = flag "prof" ~aliases:["pg"] no_arg ~doc:"enable profiling"
+      and transforms = flag "transform" ~aliases:["t"]
+          (optional (Arg_type.comma_separated string)) ~doc:"transforms to run"
+      and dir = flag "dir" ~aliases:["d"] (optional file) ~doc:"where to write intermediate files"
+      and sample = flag "sample" ~aliases:["s"] (optional int) ~doc:"the number of rows to sample from large tables"
+      and ralgebra = anon ("ralgebra" %: ralgebra)
+      in fun () ->
+        if verbose then Logs.set_level (Some Logs.Debug)
+        else if quiet then Logs.set_level (Some Logs.Error)
+        else Logs.set_level (Some Logs.Info);
+
+        main ~db ~ralgebra ~params ?transforms ?dir ~debug ~gprof ?sample
+    ];
+
+    "bench", basic ~summary:"Run a benchmark file." [%map_open
+      let db = flag "db" (required string) ~doc:"DB the database to connect to"
+      and verbose = flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
+      and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
+      and debug = flag "debug" ~aliases:["g"] no_arg ~doc:"enable debug mode"
+      and sample = flag "sample" ~aliases:["s"] (optional int) ~doc:"the number of rows to sample from large tables"
+      and bench = anon ("bench" %: bench)
+      in fun () ->
+        if verbose then Logs.set_level (Some Logs.Debug)
+        else if quiet then Logs.set_level (Some Logs.Error)
+        else Logs.set_level (Some Logs.Info);
+
+        benchmark ?sample ~db ~debug bench
+    ];
   ] |> run

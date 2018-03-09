@@ -90,7 +90,7 @@ module Make (Config : Config.S) = struct
     exec ~verbose:false conn query ~params:[r.name]
     |> Seq.of_list
     |> Seq.mapi ~f:(fun i vs ->
-        List.map2_exn vs r.fields ~f:(fun v f ->
+        let m_values = List.map2 vs r.fields ~f:(fun v f ->
             let pval = if String.(v = "") then `Null else
                 match f.Field.dtype with
                 | DInt -> `Int (Int.of_string v)
@@ -104,7 +104,14 @@ module Make (Config : Config.S) = struct
                 | _ -> `Unknown v
             in
             let value = Value.({ rel = r; field = f; idx = i; value = pval }) in
-            value))
+            value)
+        in
+        match m_values with
+        | Ok v -> v
+        | Unequal_lengths ->
+          Error.create "Unexpected tuple width."
+            (r, List.length r.fields, List.length vs)
+            [%sexp_of:Relation.t * int * int] |> Error.raise)
 
   let eval : PredCtx.t -> Ralgebra.t -> Tuple.t Seq.t =
     fun ctx r ->

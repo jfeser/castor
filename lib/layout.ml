@@ -486,7 +486,7 @@ let tests =
   let partition_tests =
     let f1 = Field.({ name = "f1"; dtype = DInt }) in
     let f2 = Field.({ name = "f2"; dtype = DInt }) in
-    let r = Relation.({ name = "r"; fields = [f1; f2]; card = 100; }) in
+    let r = Relation.({ name = "r"; fields = [f1; f2]; }) in
     let assert_equal ~ctxt x y =
       assert_equal ~ctxt ~cmp:(fun a b -> compare a b = 0) x y
     in

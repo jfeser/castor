@@ -61,21 +61,15 @@ module Relation = struct
     type t = {
       name : string;
       fields : Field.t list;
-      card : int;
     } [@@deriving compare, hash, sexp]
   end
   include T
   include Comparable.Make(T)
 
-  let dummy = { name = ""; fields = []; card = 0; }
+  let dummy = { name = ""; fields = []; }
 
   let from_db : Postgresql.connection -> string -> t =
     fun conn name ->
-      let card =
-        exec1 ~params:[name] conn "select count(*) from $0"
-        |> List.hd_exn
-        |> fun ct_s -> Int.of_string ct_s
-      in
       let fields =
         exec2 ~params:[name] conn
           "select column_name, data_type from information_schema.columns where table_name='$0'"
@@ -94,17 +88,15 @@ module Relation = struct
             in
             Field.({ name = field_name; dtype }))
       in
-      { name; fields; card }
+      { name; fields }
 
-  let sample : ?seed:int -> Postgresql.connection -> int -> t -> t =
+  let sample : ?seed:int -> Postgresql.connection -> int -> t -> unit =
     fun ?(seed = 0) conn size r ->
       exec conn ~params:[Int.to_string seed] "set seed to $0" |> ignore;
       let query = {|
-        create temp table if not exists $0 as (select * from $1 order by random() limit $2)
+        create temp table if not exists $0 as (select * from $0 order by random() limit $1)
       |} in
-      let new_name = r.name ^ "_sample" in
-      exec conn ~params:[new_name; r.name; Int.to_string size] query |> ignore;
-      from_db conn new_name
+      exec conn ~params:[r.name; Int.to_string size] query |> ignore
 
   let field_exn : t -> string -> Field.t = fun r n -> 
     List.find_exn r.fields ~f:(fun f -> String.(f.name = n))
@@ -113,6 +105,11 @@ end
 type primvalue =
   [`Int of int | `String of string | `Bool of bool | `Unknown of string | `Null]
 [@@deriving compare, hash, sexp]
+
+let primvalue_to_sql : primvalue -> string = function
+  | `Int x -> Int.to_string x
+  | `String x -> String.escaped x
+  | _ -> failwith "unimplemented"
 
 module Value = struct
   module T = struct
