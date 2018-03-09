@@ -85,30 +85,26 @@ module Make (Config : Config.S) = struct
         end
       | Empty -> Seq.empty
 
-  let eval_relation : ?sample:int -> Relation.t -> Tuple.t Seq.t =
-    fun ?sample r ->
-      let query = match sample with
-        | Some s -> sprintf "select * from $0 order by random() limit %d" s
-        | None -> "select * from $0"
-      in
-      exec ~verbose:false conn query ~params:[r.name]
-      |> Seq.of_list
-      |> Seq.mapi ~f:(fun i vs ->
-          List.map2_exn vs r.fields ~f:(fun v f ->
-              let pval = if String.(v = "") then `Null else
-                  match f.Field.dtype with
-                  | DInt -> `Int (Int.of_string v)
-                  | DString -> `String v
-                  | DBool ->
-                    begin match v with
-                      | "t" -> `Bool true
-                      | "f" -> `Bool false
-                      | _ -> failwith "Unknown boolean value."
-                    end
-                  | _ -> `Unknown v
-              in
-              let value = Value.({ rel = r; field = f; idx = i; value = pval }) in
-              value))
+  let eval_relation : Relation.t -> Tuple.t Seq.t = fun r ->
+    let query = "select * from $0" in
+    exec ~verbose:false conn query ~params:[r.name]
+    |> Seq.of_list
+    |> Seq.mapi ~f:(fun i vs ->
+        List.map2_exn vs r.fields ~f:(fun v f ->
+            let pval = if String.(v = "") then `Null else
+                match f.Field.dtype with
+                | DInt -> `Int (Int.of_string v)
+                | DString -> `String v
+                | DBool ->
+                  begin match v with
+                    | "t" -> `Bool true
+                    | "f" -> `Bool false
+                    | _ -> failwith "Unknown boolean value."
+                  end
+                | _ -> `Unknown v
+            in
+            let value = Value.({ rel = r; field = f; idx = i; value = pval }) in
+            value))
 
   let eval : PredCtx.t -> Ralgebra.t -> Tuple.t Seq.t =
     fun ctx r ->

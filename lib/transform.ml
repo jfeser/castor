@@ -13,7 +13,6 @@ module Config = struct
   module type S = sig
     include Eval.Config.S
 
-    val sample : int option
     val testctx : PredCtx.t
   end
 end
@@ -73,7 +72,7 @@ module Make (Config : Config.S) = struct
 
   let col_layout : Relation.t -> Layout.t = fun r ->
     let open Layout in
-    let stream = eval_relation ?sample r |> Seq.to_list in
+    let stream = eval_relation r |> Seq.to_list in
     List.transpose stream
     |> (fun v -> Option.value_exn v)
     |> List.map ~f:(fun col ->
@@ -82,7 +81,7 @@ module Make (Config : Config.S) = struct
 
   let row_layout : Relation.t -> Layout.t = fun r ->
     let open Layout in
-    eval_relation ?sample r
+    eval_relation r
     |> Seq.map ~f:(fun tup -> cross_tuple (List.map ~f:(fun v -> of_value v) tup))
     |> Seq.to_list
     |> unordered_list

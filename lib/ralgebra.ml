@@ -136,6 +136,33 @@ let rec params : t -> Set.M(TypedName).t =
   | EqJoin (_, _, r1, r2) -> Set.union (params r1) (params r2)
   | Concat rs -> List.map ~f:params rs |> union_list
 
+let replace_relation : Relation.t -> Relation.t -> t -> t = fun r1 r2 ->
+  let open Ralgebra0 in
+  let rec rep = function
+    | Project (x, r) -> Project (x, rep r)
+    | Filter (x, r) -> Filter (x, rep r)
+    | EqJoin (x, y, r, r') -> EqJoin (x, y, rep r, rep r')
+    | Scan _ as x -> x
+    | Concat rs -> Concat (List.map ~f:rep rs)
+    | Relation r as x -> if Relation.(r = r1) then Relation r2 else x
+    | Count r -> Count (rep r)
+  in
+  rep
+
+let rec relations : t -> Relation.t list =
+  let rec rels =
+    let open Ralgebra0 in
+    function
+    | Scan _ -> []
+    | Project (_, r)
+    | Filter (_, r)
+    | Count r -> rels r
+    | EqJoin (_, _, r, r') -> rels r @ rels r'
+    | Concat rs -> List.concat_map ~f:rels rs
+    | Relation r -> [r]
+  in
+  fun r -> rels r |> List.dedup_and_sort ~compare:Relation.compare
+
 let tests =
   let open OUnit2 in
   let parse_test s = s >:: fun _ ->

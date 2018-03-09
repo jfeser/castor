@@ -57,11 +57,15 @@ module Field = struct
 end
 
 module Relation = struct
-  type t = {
-    name : string;
-    fields : Field.t list;
-    card : int;
-  } [@@deriving compare, hash, sexp]
+  module T = struct
+    type t = {
+      name : string;
+      fields : Field.t list;
+      card : int;
+    } [@@deriving compare, hash, sexp]
+  end
+  include T
+  include Comparable.Make(T)
 
   let dummy = { name = ""; fields = []; card = 0; }
 
@@ -91,6 +95,16 @@ module Relation = struct
             Field.({ name = field_name; dtype }))
       in
       { name; fields; card }
+
+  let sample : ?seed:int -> Postgresql.connection -> int -> t -> t =
+    fun ?(seed = 0) conn size r ->
+      exec conn ~params:[Int.to_string seed] "set seed to $0" |> ignore;
+      let query = {|
+        create temp table if not exists $0 as (select * from $1 order by random() limit $2)
+      |} in
+      let new_name = r.name ^ "_sample" in
+      exec conn ~params:[new_name; r.name; Int.to_string size] query |> ignore;
+      from_db conn new_name
 
   let field_exn : t -> string -> Field.t = fun r n -> 
     List.find_exn r.fields ~f:(fun f -> String.(f.name = n))

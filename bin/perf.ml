@@ -116,11 +116,22 @@ let main :
       let testctx = List.map params ~f:(fun (n, v) ->
           (n, [%of_sexp:Db.primvalue] (Sexp.of_string v)))
                     |> Layout.PredCtx.of_vars
-      let sample = sample
     end in
 
     let module Transform = Transform.Make(Config) in
     let ralgebra = Ralgebra.resolve Config.conn ralgebra in
+
+    (* If we need to sample, generate sample tables and swap them in the
+       expression. *)
+    let ralgebra = match sample with
+      | Some s ->
+        Ralgebra.relations ralgebra
+        |> List.map ~f:(fun r -> r, Db.Relation.sample Config.conn s r)
+        |> List.fold_left ~init:ralgebra ~f:(fun ra (r1, r2) ->
+            Ralgebra.replace_relation r1 r2 ra)
+      | None -> ralgebra
+    in
+
     let candidates = match transforms with
       | Some tfs ->
         Transform.run_chain (List.map ~f:Transform.of_name_exn tfs) ralgebra
