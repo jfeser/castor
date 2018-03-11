@@ -801,11 +801,10 @@ module Make (Config : Config.S) = struct
           let start = build_arg 0 b in
 
           (* Build iterator initializers using the computed start positions. *)
-          List.zip_exn funcs ts
-          |> List.fold_left ~init:Infix.(start + hsize (ZipTupleT (ts, t)))
-            ~f:(fun start (f, t) ->
-                build_iter f [start] b;
-                Infix.(start + hsize t + len start t)) |> ignore;
+          build_assign Infix.(start + hsize (ZipTupleT (ts, t))) start b;
+          List.iter2_exn funcs ts ~f:(fun f t ->
+              build_iter f [start] b;
+              build_assign Infix.(start + hsize t + len start t) start b);
 
           let child_tuples = List.map funcs ~f:(fun f ->
               build_fresh_var "t" (find_func f).ret_type b)
