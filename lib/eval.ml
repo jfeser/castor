@@ -124,30 +124,25 @@ module Make (Config : Config.S) = struct
               value = `Int ct; rel = Relation.dummy; field = Field.dummy; idx = 0
             })]
         | Project (fs, r) ->
-          eval r
-          |> Seq.map ~f:(fun t ->
+          eval r |> Seq.map ~f:(fun t ->
               List.filter t ~f:(fun v ->
                   List.mem ~equal:Field.(=) fs v.Value.field))
         | Filter (p, r) ->
-          eval r
-          |> Seq.filter ~f:(fun t ->
+          eval r |> Seq.filter ~f:(fun t ->
               let ctx = Map.merge_right ctx (PredCtx.of_tuple t) in
               match eval_pred ctx p with
               | `Bool x -> x
               | _ -> failwith "Expected a boolean.")
         | EqJoin (f1, f2, r1, r2) ->
-          let m =
-            eval r1
-            |> Seq.fold ~init:(Map.empty (module Value)) ~f:(fun m t ->
-                let v = Tuple.field_exn t f1 in
-                Map.add_multi m ~key:v ~data:t)
-          in
-          eval r2
-          |> Seq.concat_map ~f:(fun t ->
+          let tbl = Hashtbl.create (module Value) () in
+          eval r1 |> Seq.iter ~f:(fun t ->
+              let v = Tuple.field_exn t f1 in
+              Hashtbl.add_multi tbl ~key:v ~data:t);
+          eval r2 |> Seq.concat_map ~f:(fun t ->
               let v = Tuple.field_exn t f2 in
-              Option.value ~default:[] (Map.find m v)
-              |> Seq.of_list)
-
+              match Hashtbl.find tbl v with
+              | Some ts -> List.map ts ~f:(fun t' -> t @ t') |> Seq.of_list
+              | None -> Seq.empty)
         | Concat rs -> Seq.of_list rs |> Seq.concat_map ~f:eval
         | Relation r -> eval_relation r
       in
