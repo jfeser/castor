@@ -23,12 +23,14 @@ module Make (Config : Config.S) = struct
       | Var (n, _) ->
         begin match PredCtx.find_var ctx n with
           | Some v -> v
-          | None -> failwith "Unbound variable."
+          | None -> Error.create "Unbound variable." (n, ctx) [%sexp_of:string * PredCtx.t]
+                    |> Error.raise
         end
       | Field f ->
         begin match PredCtx.find_field ctx f with
           | Some v -> v
-          | None -> failwith "Unbound variable."
+          | None -> Error.create "Unbound variable." (f, ctx) [%sexp_of:Field.t * PredCtx.t]
+                    |> Error.raise
         end
       | Binop (op, p1, p2) ->
         let v1 = eval_pred ctx p1 in
