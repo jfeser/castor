@@ -68,7 +68,7 @@ module Make (Config : Config.S) = struct
         |> (fun x -> Option.value_exn x)
         |> List.map ~f:(fun rs -> Ralgebra0.Concat rs)
     in
-    rs @ rs'
+    rs @ rs' |> List.map ~f:Ralgebra.flatten
 
   let col_layout : Relation.t -> Layout.t = fun r ->
     let open Layout in
