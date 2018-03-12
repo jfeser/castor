@@ -117,6 +117,27 @@ let rec to_schema : t -> Schema.t = function
   | Concat rs -> List.concat_map rs ~f:to_schema
   | Relation r -> Schema.of_relation r
 
+let rec flatten : t -> t =
+  function
+  | Filter (_, r) | Project (_, r) as x -> begin match flatten r with
+      | Scan { node = Empty } -> Scan Layout.empty
+      | _ -> x
+    end
+  | Count r as x -> begin match flatten r with
+      | Scan { node = Empty } ->
+        Scan Layout.(int 0 { rel = Relation.dummy; field = Field.dummy; idx = (-1) })
+      | _ -> x
+    end
+  | EqJoin (_, _, r1, r2) as x -> begin match flatten r1, flatten r2 with
+      | Scan { node = Empty }, _ | _, Scan { node = Empty } -> Scan Layout.empty
+      | _ -> x
+    end
+  | Concat rs -> Concat (List.filter_map rs ~f:(fun r -> match flatten r with
+      | Scan { node = Empty } -> None
+      | r' -> Some r' ))
+  | Scan l -> Scan (Layout.flatten l)
+  | Relation _ as x -> x
+
 let rec params : t -> Set.M(TypedName).t =
   let empty = Set.empty (module TypedName) in
   let union_list = Set.union_list (module TypedName) in

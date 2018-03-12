@@ -387,32 +387,62 @@ let rec ntuples_exn : t -> int = fun l -> match l.node with
 let ntuples : t -> int Or_error.t = fun l ->
   Or_error.try_with (fun () -> ntuples_exn l)
 
-let flatten : t -> t = fun l -> match l.node with
-  | Null _ | Int _ | Bool _ | String _ | Table _ | Empty -> l
-  | CrossTuple [l] -> l
+let rec flatten : t -> t = fun l -> match l.node with
+  | Null _ | Int _ | Bool _ | String _ | Empty -> l
+  | Table (m, x) ->
+    let m' = Map.map m ~f:flatten in
+    if Map.for_all m' ~f:(fun v -> compare v empty = 0)
+    then empty else table m' x
   | CrossTuple ls ->
-    List.concat_map ls ~f:(fun l -> match l.node with
-        | CrossTuple ls' -> ls'
-        | _ -> [l])
-    |> fun x -> cross_tuple x
-  | ZipTuple [l] -> l
+    let ls = List.map ls ~f:flatten in
+    if List.exists ls ~f:(fun v -> compare v empty = 0) then empty else
+      let ls = List.concat_map ls ~f:(fun l -> match l.node with
+          | CrossTuple ls' -> ls'
+          | _ -> [l])
+      in
+      begin match ls with
+      | [] -> empty
+      | [l] -> l
+      | ls -> cross_tuple ls
+      end
   | ZipTuple ls ->
-    List.concat_map ls ~f:(fun l -> match l.node with
-        | ZipTuple ls' -> ls'
-        | _ -> [l])
-    |> fun x -> zip_tuple x
+    let ls = List.map ls ~f:flatten in
+    if List.exists ls ~f:(fun v -> compare v empty = 0) then empty else
+      let ls = List.concat_map ls ~f:(fun l -> match l.node with
+          | ZipTuple ls' -> ls'
+          | _ -> [l])
+      in
+      begin match ls with
+      | [] -> empty
+      | [l] -> l
+      | ls -> zip_tuple ls
+      end
   | UnorderedList ls ->
-    List.concat_map ls ~f:(fun l -> match l.node with
-        | UnorderedList ls' -> ls'
-        | _ -> [l])
-    |> fun x -> unordered_list x
-  | OrderedList (ls, { field = f; order = ord; }) ->
-    List.concat_map ls ~f:(fun l -> match l.node with
-        | OrderedList (ls', { field = f'; order = ord' }) ->
-          if Base.Polymorphic_compare.equal (f, ord) (f', ord')
-          then ls' else [l]
-        | _ -> [l])
-    |> fun x -> unordered_list x
+    let ls =
+      List.map ls ~f:flatten
+      |> List.filter ~f:(fun v -> compare v empty <> 0)
+      |> List.concat_map ~f:(fun l -> match l.node with
+          | UnorderedList ls' | OrderedList (ls', _) -> ls'
+          | _ -> [l])
+    in
+    begin match ls with
+      | [] -> empty
+      | [l] -> l
+      | ls -> unordered_list ls
+    end
+  | OrderedList (ls, x) ->
+    let ls =
+      List.map ls ~f:flatten
+      |> List.filter ~f:(fun v -> compare v empty <> 0)
+      |> List.concat_map ~f:(fun l -> match l.node with
+          | UnorderedList ls' | OrderedList (ls', _) -> ls'
+          | _ -> [l])
+    in
+    begin match ls with
+      | [] -> empty
+      | [l] -> l
+      | ls -> ordered_list ls x
+    end
 
 let rec order : Range.t -> Field.t -> [`Asc | `Desc] -> t -> t = fun k f o l ->
   let cmp = match o with
