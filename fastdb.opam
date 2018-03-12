@@ -21,4 +21,6 @@ depends: [
   "menhir"
   "ppx_compare"
   "ppx_sexp_conv"
+  "hashcons"
+  "sqlite3"
 ]
