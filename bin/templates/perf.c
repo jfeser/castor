@@ -78,9 +78,10 @@ int main(int argc, char **argv) {
     clock_t stop = clock();
     int runs = (run_time * CLOCKS_PER_SEC) / (stop - start);
 
-    if (runs <= 0) {
+    if (runs <= 1) {
       int msec = (stop - start) * 1000 / CLOCKS_PER_SEC;
       printf("%f\n", (1.0 / msec) * 1000);
+      return 0;
     }
 
     start = clock();
