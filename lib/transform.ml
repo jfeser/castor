@@ -89,7 +89,7 @@ module Make (Config : Config.S) = struct
   let tf_eval : t = {
     name = "eval";
     f = fun r ->
-      if (Ralgebra.params r |> Set.length) > 0 then
+      if (Ralgebra.params r |> Set.length) = 0 then
         let layout =
           Eval.eval (Map.empty (module PredCtx.Key)) r
           |> Seq.map ~f:(fun tup -> cross_tuple (List.map ~f:(fun v -> of_value v) tup))
