@@ -1,4 +1,5 @@
 open Base
+open Printf
 open Collections
 
 let subst_params : string list -> string -> string = fun params query ->
@@ -7,9 +8,9 @@ let subst_params : string list -> string -> string = fun params query ->
   | _ -> List.foldi params ~init:query ~f:(fun i q v ->
       String.substr_replace_all ~pattern:(Printf.sprintf "$%d" i) ~with_:v q)
 
-let exec_psql : ?params : string list -> string -> int =
-  fun ?(params=[]) query ->
-    let query = subst_params params query in
+let exec_psql : ?params : string list -> db:string -> string -> int =
+  fun ?(params=[]) ~db query ->
+    let query = sprintf "psql -d %s -c \"%s\"" db (subst_params params query) in
     Logs.debug (fun m -> m "Executing query: %s" query);
     Caml.Sys.command query
 
