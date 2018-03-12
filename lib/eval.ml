@@ -134,7 +134,16 @@ module Make (Config : Config.S) = struct
               | `Bool x -> x
               | _ -> failwith "Expected a boolean.")
         | EqJoin (f1, f2, r1, r2) ->
-          let tbl = Hashtbl.create (module Value) () in
+          let module V = struct
+            type t = Value.t = {
+              rel : Relation.t; [@compare.ignore]
+              field : Field.t; [@compare.ignore]
+              idx : int; [@compare.ignore]
+              value : primvalue;
+            } [@@deriving compare, hash, sexp]
+          end in
+
+          let tbl = Hashtbl.create (module V) () in
           eval r1 |> Seq.iter ~f:(fun t ->
               let v = Tuple.field_exn t f1 in
               Hashtbl.add_multi tbl ~key:v ~data:t);
