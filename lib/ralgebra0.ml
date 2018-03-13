@@ -12,7 +12,7 @@ type op =
   | Ge
   | And
   | Or
-[@@deriving compare, sexp, bin_io]
+[@@deriving compare, sexp, bin_io, hash]
 
 type 'f pred =
   | Var of TypedName.t
@@ -22,7 +22,7 @@ type 'f pred =
   | String of string
   | Binop of (op * 'f pred * 'f pred)
   | Varop of (op * 'f pred list)
-[@@deriving compare, sexp, bin_io]
+[@@deriving compare, sexp, bin_io, hash]
 
 type ('f, 'r, 'l) t =
   | Project of 'f list * ('f, 'r, 'l) t
@@ -32,4 +32,4 @@ type ('f, 'r, 'l) t =
   | Concat of ('f, 'r, 'l) t list
   | Relation of 'r
   | Count of ('f, 'r, 'l) t
-[@@deriving compare, sexp, bin_io]
+[@@deriving compare, sexp, bin_io, hash]

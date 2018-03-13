@@ -13,7 +13,7 @@ include Comparable.Make(T)
 
 module Binable = struct
   type ralgebra = t
-  type t = (Field.t, Relation.t, Layout.Binable.t) Ralgebra0.t [@@deriving bin_io]
+  type t = (Field.t, Relation.t, Layout.Binable.t) Ralgebra0.t [@@deriving bin_io, hash]
 
   let rec of_ralgebra : ralgebra -> t = function
     | Project (fs, r) -> Project (fs, of_ralgebra r)
