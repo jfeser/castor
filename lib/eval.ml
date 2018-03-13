@@ -38,11 +38,14 @@ module Make (Config : Config.S) = struct
         begin match op, v1, v2 with
           | Eq, `Bool x1, `Bool x2 -> Polymorphic_compare.(`Bool (x1 = x2))
           | Eq, `Int x1, `Int x2 -> Polymorphic_compare.(`Bool (x1 = x2))
+          | Eq, `Null, `Int _ | Eq, `Int _, `Null -> `Bool false
           | Lt, `Int x1, `Int x2 -> `Bool (x1 < x2)
           | Le, `Int x1, `Int x2 -> `Bool (x1 <= x2)
           | Gt, `Int x1, `Int x2 -> `Bool (x1 > x2)
           | Ge, `Int x1, `Int x2 -> `Bool (x1 >= x2)
-          | _ -> failwith "Unexpected argument types."
+          | _ -> Error.create "Unexpected argument types." (op, v1, v2)
+                   [%sexp_of:Ralgebra.op * primvalue * primvalue]
+                 |> Error.raise
         end
       | Varop (op, ps) ->
         let vs = List.map ps ~f:(eval_pred ctx) in
@@ -57,7 +60,8 @@ module Make (Config : Config.S) = struct
                 | `Bool x -> x
                 | _ -> failwith "Unexpected argument type.")
             |> fun x -> `Bool x
-          | _ -> failwith "Unexpected argument types."
+          | _ -> Error.create "Unexpected argument types." (op, vs)
+                   [%sexp_of:Ralgebra.op * primvalue list] |> Error.raise
         end
 
   let rec eval_layout : PredCtx.t -> t -> Tuple.t Seq.t =
