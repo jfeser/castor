@@ -13,20 +13,17 @@ let in_dir : string -> f:(unit -> 'a) -> 'a = fun dir ~f ->
   let ret = try f () with e -> Unix.chdir cur_dir; raise e in
   Unix.chdir cur_dir; ret
 
-let run_candidate : debug:bool -> params:(string * Db.primvalue) list -> gprof:bool -> (module Implang.Config.S) -> Ralgebra.t -> _ =
-fun ~debug ~params ~gprof (module IConfig : Implang.Config.S) ralgebra ->
+let run_candidate : debug:bool -> params:(string * Db.primvalue) list -> gprof:bool -> Ralgebra.t -> _ =
+fun ~debug ~params ~gprof ralgebra ->
   Logs.info (fun m -> m "Benchmarking %s." (Ralgebra.to_string ralgebra));
 
   let module CConfig = struct
-    include IConfig
-
     let debug = debug
     let ctx = Llvm.create_context ()
     let module_ = Llvm.create_module ctx "scanner"
     let builder = Llvm.builder ctx
   end in
 
-  let module Implang = Implang.Make(CConfig) in
   let module Codegen = Codegen.Make(CConfig) () in
   let module IRGen = Implang.IRGen.Make () in
 
@@ -180,8 +177,7 @@ let benchmark : ?sample:int -> db:string -> Bench.t -> unit =
                     Out_channel.output_string ch (Ralgebra.to_string x));
 
                 let (runtime, dbsize, exesize, failed) =
-                  run_candidate ~params:test_params ~gprof:false ~debug:false
-                    (module Config) x
+                  run_candidate ~params:test_params ~gprof:false ~debug:false x
                 in
 
                 let open Sqlite3 in
@@ -240,7 +236,7 @@ let main :
 
     in_dir dir ~f:(fun () ->
         match Seq.next candidates with
-        | Some (x, _) -> run_candidate ~debug ~params ~gprof (module Config) x |> ignore
+        | Some (x, _) -> run_candidate ~debug ~params ~gprof x |> ignore
         | _ -> failwith ""
       );
 

@@ -42,8 +42,6 @@ end
 
 module Config = struct
   module type S = sig
-    include Implang.Config.S
-
     val ctx : llcontext
     val module_ : llmodule
     val builder : llbuilder
@@ -53,7 +51,6 @@ end
 
 module Make (Config: Config.S) () = struct
   open Config
-  module Implang = Implang.Make(Config)
   open Implang
 
   (* Variables are either stored in the parameter struct or stored locally on
