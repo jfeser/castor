@@ -6,12 +6,35 @@ open Type0
 module T = struct
   type op = Ralgebra0.op [@@deriving compare, sexp]
   type pred = Field.t Ralgebra0.pred [@@deriving compare, sexp]
-  type t = (Field.t, Relation.t) Ralgebra0.t [@@deriving compare, sexp]
+  type t = (Field.t, Relation.t, Layout.t) Ralgebra0.t [@@deriving compare, sexp]
 end
 include T
 include Comparable.Make(T)
 
-let rec relations : ('f, 'r) Ralgebra0.t -> 'r list = function
+module Binable = struct
+  type ralgebra = t
+  type t = (Field.t, Relation.t, Layout.Binable.t) Ralgebra0.t [@@deriving bin_io]
+
+  let rec of_ralgebra : ralgebra -> t = function
+    | Project (fs, r) -> Project (fs, of_ralgebra r)
+    | Filter (p, r) -> Filter (p, of_ralgebra r)
+    | Concat rs -> Concat (List.map rs ~f:of_ralgebra)
+    | Relation r -> Relation r
+    | Scan l -> Scan (Layout.Binable.of_layout l)
+    | Count r -> Count (of_ralgebra r)
+    | EqJoin (f1, f2, r1, r2) -> EqJoin (f1, f2, of_ralgebra r1, of_ralgebra r2)
+
+  let rec to_ralgebra : t -> ralgebra = function
+    | Project (fs, r) -> Project (fs, to_ralgebra r)
+    | Filter (p, r) -> Filter (p, to_ralgebra r)
+    | Concat rs -> Concat (List.map rs ~f:to_ralgebra)
+    | Relation r -> Relation r
+    | Scan l -> Scan (Layout.Binable.to_layout l)
+    | Count r -> Count (to_ralgebra r)
+    | EqJoin (f1, f2, r1, r2) -> EqJoin (f1, f2, to_ralgebra r1, to_ralgebra r2)
+end
+
+let rec relations : ('f, 'r, 'l) Ralgebra0.t -> 'r list = function
   | Project (_, r)
   | Filter (_, r)
   | Count r -> relations r
@@ -20,7 +43,7 @@ let rec relations : ('f, 'r) Ralgebra0.t -> 'r list = function
   | Concat rs -> List.concat_map rs ~f:relations
   | Relation r -> [r]
 
-let resolve : Postgresql.connection -> (string * string, string) Ralgebra0.t
+let resolve : Postgresql.connection -> (string * string, string, Layout.t) Ralgebra0.t
   -> t = fun conn ralgebra ->
   let rels =
     relations ralgebra
@@ -91,7 +114,7 @@ let rec to_string : t -> string =
     List.map rs ~f:to_string |> String.concat ~sep:", " |> sprintf "Concat(%s)"
   | Relation r -> r.name
 
-let of_string_exn : string -> (string * string, string) Ralgebra0.t = fun s ->
+let of_string_exn : string -> (string * string, string, 'l) Ralgebra0.t = fun s ->
   let lexbuf = Lexing.from_string s in
   try Ralgebra_parser.ralgebra_eof Ralgebra_lexer.token lexbuf with
   | Ralgebra0.ParseError (msg, line, col) as e ->

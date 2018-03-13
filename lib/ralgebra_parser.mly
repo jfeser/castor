@@ -35,7 +35,7 @@
 %token OR
 %token EOF
 
-%start <(string * string, string) Ralgebra0.t> ralgebra_eof
+%start <(string * string, string, Layout.t) Ralgebra0.t> ralgebra_eof
 
 %left OR
 %left AND

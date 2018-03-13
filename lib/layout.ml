@@ -1,11 +1,12 @@
 open Base
 open Base.Printf
 
+open Bin_prot.Std
+
 open Collections
 open Hashcons
 open Db
 open Type0
-
 
 exception TransformError of Error.t
 
@@ -16,7 +17,7 @@ module PredCtx = struct
         | Field of Field.t
         | Var of TypedName.NameOnly.t
         | Dummy
-      [@@deriving compare, sexp, hash]
+      [@@deriving compare, sexp, hash, bin_io]
     end
     include T
     include Comparable.Make(T)
@@ -47,19 +48,19 @@ module PredCtx = struct
 end
 
 module ValueMap = struct
-  module Elem0 = struct
-    type t = Value.t = {
-      rel : Relation.t;
-      field : Field.t;
-      idx : int;
-      value : primvalue;
-    } [@@deriving sexp, hash]
-
-    let compare v1 v2 = compare_primvalue v1.value v2.value
-  end
   module Elem = struct
-    include Elem0
-    include Comparator.Make(Elem0)
+    module T = struct
+      module Pervasives = Caml.Pervasives
+
+      type t = Value.t = {
+        rel : Relation.t; [@compare.ignore]
+          field : Field.t; [@compare.ignore]
+          idx : int; [@compare.ignore]
+          value : primvalue;
+      } [@@deriving compare, sexp, hash, bin_io]
+    end
+    include T
+    include Comparable.Make(T)
 
     let of_primvalue : primvalue -> t = fun p ->
       { value = p; rel = Relation.dummy; field = Field.dummy; idx = 0 }
@@ -68,30 +69,33 @@ module ValueMap = struct
 end
 
 module Range = struct
+  module Pervasives = Caml.Pervasives
   module T = struct
     type t = PredCtx.Key.t option * PredCtx.Key.t option
-    [@@deriving compare, sexp, hash]
+    [@@deriving compare, sexp, hash, bin_io]
   end
   include T
   include Comparable.Make(T)
 end
 
+module Pervasives = Caml.Pervasives
+
 type ordered_list = {
   field : Field.t;
   order : [`Asc | `Desc];
   lookup : Range.t;
-} [@@deriving compare, sexp, hash]
+} [@@deriving compare, sexp, hash, bin_io]
 
 type table = {
   field : Field.t;
   lookup : PredCtx.Key.t;
-} [@@deriving compare, sexp, hash]
+} [@@deriving compare, sexp, hash, bin_io]
 
 type scalar = {
   rel : Relation.t;
   field : Field.t;
   idx : int;
-} [@@deriving compare, sexp, hash]
+} [@@deriving compare, sexp, hash, bin_io]
 
 type t = node hash_consed
 and node =
@@ -161,6 +165,49 @@ let unordered_list x = HashT.hashcons ht (UnorderedList x)
 let ordered_list x m = HashT.hashcons ht (OrderedList (x, m))
 let table x m = HashT.hashcons ht (Table (x, m))
 let empty = HashT.hashcons ht Empty
+
+module Binable = struct
+  type layout = t
+
+  type t =
+    | Int of int * scalar
+    | Bool of bool * scalar
+    | String of string * scalar
+    | Null of scalar
+    | CrossTuple of t list
+    | ZipTuple of t list
+    | UnorderedList of t list
+    | OrderedList of t list * ordered_list
+    | Table of (Value.t * t) list * table
+    | Empty
+  [@@deriving bin_io]
+
+  let rec of_layout : layout -> t = fun l -> match l.node with
+    | Int (v, x) -> Int (v, x)
+    | Bool (v, x) -> Bool (v, x)
+    | String (v, x) -> String (v, x)
+    | Null x -> Null x
+    | CrossTuple v -> CrossTuple (List.map ~f:of_layout v)
+    | ZipTuple v -> ZipTuple (List.map ~f:of_layout v)
+    | UnorderedList v -> UnorderedList (List.map ~f:of_layout v)
+    | OrderedList (v, x) -> OrderedList (List.map ~f:of_layout v, x)
+    | Table (v, x) -> Table (Map.map ~f:of_layout v |> Map.to_alist, x)
+    | Empty -> Empty
+
+  let rec to_layout : t -> layout = function
+    | Int (v, x) -> int v x
+    | Bool (v, x) -> bool v x
+    | String (v, x) -> string v x
+    | Null x -> null x
+    | CrossTuple v -> cross_tuple (List.map ~f:to_layout v)
+    | ZipTuple v -> zip_tuple (List.map ~f:to_layout v)
+    | UnorderedList v -> unordered_list (List.map ~f:to_layout v)
+    | OrderedList (v, x) -> ordered_list (List.map ~f:to_layout v) x
+    | Table (v, x) ->
+      table (List.map ~f:(fun (k, v) -> (k, to_layout v)) v
+             |> Map.of_alist_exn (module ValueMap.Elem)) x
+    | Empty -> empty
+end
 
 let to_value : t -> Value.t = fun l -> match l.node with
   | Int (x, m) -> { field = m.field; rel = m.rel; idx = m.idx; value = `Int x }

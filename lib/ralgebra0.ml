@@ -1,4 +1,4 @@
-open Base
+open Core
 open Db
 open Type0
 
@@ -12,7 +12,7 @@ type op =
   | Ge
   | And
   | Or
-[@@deriving compare, sexp]
+[@@deriving compare, sexp, bin_io]
 
 type 'f pred =
   | Var of TypedName.t
@@ -22,14 +22,14 @@ type 'f pred =
   | String of string
   | Binop of (op * 'f pred * 'f pred)
   | Varop of (op * 'f pred list)
-[@@deriving compare, sexp]
+[@@deriving compare, sexp, bin_io]
 
-type ('f, 'r) t =
-  | Project of 'f list * ('f, 'r) t
-  | Filter of 'f pred * ('f, 'r) t
-  | EqJoin of 'f * 'f * ('f, 'r) t * ('f, 'r) t
-  | Scan of Layout.t
-  | Concat of ('f, 'r) t list
+type ('f, 'r, 'l) t =
+  | Project of 'f list * ('f, 'r, 'l) t
+  | Filter of 'f pred * ('f, 'r, 'l) t
+  | EqJoin of 'f * 'f * ('f, 'r, 'l) t * ('f, 'r, 'l) t
+  | Scan of 'l
+  | Concat of ('f, 'r, 'l) t list
   | Relation of 'r
-  | Count of ('f, 'r) t
-[@@deriving compare, sexp]
+  | Count of ('f, 'r, 'l) t
+[@@deriving compare, sexp, bin_io]

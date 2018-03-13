@@ -1,4 +1,8 @@
 open Base
+
+module Pervasives = Caml.Pervasives
+open Bin_prot.Std
+
 open Collections
 
 let subst_params : string list -> string -> string = fun params query ->
@@ -47,14 +51,14 @@ type dtype =
   | DDate
   | DInterval
   | DBool
-[@@deriving compare, hash, sexp]
+[@@deriving compare, hash, sexp, bin_io]
 
 module Field = struct
   module T = struct
     type t = {
       name: string;
       dtype : dtype;
-    } [@@deriving compare, hash, sexp]
+    } [@@deriving compare, hash, sexp, bin_io]
   end
   include T
   include Comparable.Make(T)
@@ -67,7 +71,7 @@ module Relation = struct
     type t = {
       name : string;
       fields : Field.t list;
-    } [@@deriving compare, hash, sexp]
+    } [@@deriving compare, hash, sexp, bin_io]
   end
   include T
   include Comparable.Make(T)
@@ -110,7 +114,7 @@ end
 
 type primvalue =
   [`Int of int | `String of string | `Bool of bool | `Unknown of string | `Null]
-[@@deriving compare, hash, sexp]
+[@@deriving compare, hash, sexp, bin_io]
 
 let primvalue_to_sql : primvalue -> string = function
   | `Int x -> Int.to_string x
@@ -124,7 +128,7 @@ module Value = struct
       field : Field.t;
       idx : int;
       value : primvalue;
-    } [@@deriving compare, hash, sexp]
+    } [@@deriving compare, hash, sexp, bin_io]
   end
   include T
   include Comparator.Make(T)

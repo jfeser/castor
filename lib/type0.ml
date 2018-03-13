@@ -1,7 +1,10 @@
 open Base
 
+open Bin_prot.Std
+module Pervasives = Caml.Pervasives
+
 module PrimType = struct
-  type t = BoolT | IntT | StringT [@@deriving compare, sexp, hash]
+  type t = BoolT | IntT | StringT [@@deriving compare, sexp, hash, bin_io]
 
   let of_primvalue = function
     | `Int _ -> IntT
@@ -18,7 +21,7 @@ end
 
 module TypedName = struct
   module T = struct
-    type t = string * PrimType.t [@@deriving compare, sexp, hash]
+    type t = string * PrimType.t [@@deriving compare, sexp, hash, bin_io]
   end
   include T
   include Comparator.Make(T)
@@ -28,7 +31,7 @@ module TypedName = struct
 
   module NameOnly = struct
     module T = struct
-      type t = T.t [@@deriving sexp, hash]
+      type t = T.t [@@deriving sexp, hash, bin_io]
       let compare (n1, _) (n2, _) = [%compare:string] n1 n2
     end
     include T
