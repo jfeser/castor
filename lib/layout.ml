@@ -180,7 +180,7 @@ module Binable = struct
     | OrderedList of t list * ordered_list
     | Table of (Value.t * t) list * table
     | Empty
-  [@@deriving bin_io]
+  [@@deriving bin_io, hash]
 
   let rec of_layout : layout -> t = fun l -> match l.node with
     | Int (v, x) -> Int (v, x)
@@ -549,13 +549,31 @@ let project : Field.t list -> t -> t = fun fs l ->
 
 let eq_join : Field.t -> Field.t -> t -> t -> t = fun f1 f2 l1 l2 ->
   match (partition PredCtx.Key.Dummy f1 l1).node,
-        (partition PredCtx.Key.Dummy f1 l1).node with
+        (partition PredCtx.Key.Dummy f2 l2).node with
   | Table (m1, _), Table (m2, _) ->
     Map.merge m1 m2 ~f:(fun ~key -> function
         | `Both (l1, l2) -> Some (cross_tuple [of_value key; l1; l2])
         | `Left _ | `Right _ -> None)
     |> Map.data
     |> fun x -> unordered_list x
+  | _ -> raise (TransformError (Error.of_string "Expected a table."))
+
+let accum : [`Gt | `Lt | `Ge | `Le] -> t -> t = fun dir l ->
+  match l.node with
+  | Table (m, x) ->
+    let kv = match dir with
+      | `Gt | `Ge -> Map.to_alist ~key_order:`Decreasing m
+      | `Lt | `Le -> Map.to_alist ~key_order:`Increasing m
+    in
+    let (m, _) = List.fold_left kv ~init:(Map.empty (module ValueMap.Elem), [])
+        ~f:(fun (m, vs) (k, v) ->
+            let v' = match dir with
+              | `Gt | `Lt -> vs
+              | `Ge | `Le -> v::vs
+            in
+            Map.set m ~key:k ~data:(unordered_list v'), v::vs)
+    in
+    table m x
   | _ -> raise (TransformError (Error.of_string "Expected a table."))
 
 let tests =
