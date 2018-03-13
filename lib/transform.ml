@@ -176,7 +176,9 @@ module Make (Config : Config.S) = struct
     f = function
       | Concat qs ->
         if List.for_all qs ~f:(function Scan _ -> true | _ -> false) then
-          [Scan (unordered_list (List.map qs ~f:(fun (Scan l) -> l)))]
+          [Scan (unordered_list (List.map qs ~f:(function
+               | (Scan l) -> l
+               | _ -> failwith "")))]
         else []
       | _ -> []
   }
@@ -278,7 +280,6 @@ module Make (Config : Config.S) = struct
     tf_intro_project;
     tf_push_project;
     tf_push_filter;
-
   ]
 
   let of_name : string -> t Or_error.t = fun n ->
@@ -289,10 +290,12 @@ module Make (Config : Config.S) = struct
   let of_name_exn : string -> t = fun n -> Or_error.ok_exn (of_name n)
 
   let search : Ralgebra.t -> Ralgebra.t Seq.t =
-    fun r -> Seq.bfs r (fun r ->
-        Seq.map (Seq.of_list transforms) ~f:(fun tf ->
+    fun r ->
+      Seq.bfs r (fun r ->
+          Seq.map (Seq.of_list transforms) ~f:(fun tf ->
             run_everywhere tf r |> Seq.of_list)
-        |> Seq.concat)
+          |> Seq.concat)
+      |> Seq.filter ~f:(fun r -> List.length (Ralgebra.relations r) = 0)
 
   let run_chain : t list -> Ralgebra.t -> Ralgebra.t Seq.t = fun tfs r ->
     List.fold_left tfs ~init:[r]

@@ -7,6 +7,7 @@ let main = fun ~debug ~gprof ~params fn ->
   let fd = Unix.openfile ~mode:[O_RDWR; O_CREAT] fn in
   let size = (Unix.Native_file.stat fn).st_size in
   let buf = Bigstring.create size in
+  Bigstring.really_read fd buf;
   let ralgebra, _ =
     Bigstring.read_bin_prot buf Ralgebra.Binable.bin_reader_t
     |> Or_error.ok_exn
