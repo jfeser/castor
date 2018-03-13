@@ -27,22 +27,20 @@ module Make (Config : Config.S) = struct
 
   let run_checked : t -> Ralgebra.t -> Ralgebra.t list = fun t r ->
     try
-      Logs.info (fun m -> m "Running %s on %s." t.name (Ralgebra.to_string r));
-      let rs = t.f r in
-      List.iter rs ~f:(fun r' ->
-          Logs.info (fun m -> m "New candidate %s." (Ralgebra.to_string r'));
+      let rs = t.f r |> List.filter ~f:(fun r' -> Ralgebra.(r' <> r)) in
+      let len = List.length rs in
+      if len > 0 then
+        Logs.info (fun m -> m "%d new candidates from running %s." len t.name);
 
+      List.iter rs ~f:(fun r' ->
           let eval_to_set r =
-            eval testctx r |> Seq.fold ~init:(Set.empty (module Tuple)) ~f:Set.add
+            eval testctx r
+            |> Seq.fold ~init:(Set.empty (module Tuple)) ~f:Set.add
           in
           let s1 = eval_to_set r in
           let s2 = eval_to_set r' in
           if not (Set.equal s1 s2) then
-            Logs.warn (fun m -> m "Transform %s not equivalent." t.name);
-          Logs.debug (fun m -> m "%s => %s" (Ralgebra.to_string r)
-                         (Ralgebra.to_string r'));
-          Logs.debug (fun m -> m "New relation has %d records, old has %d."
-                         (Set.length s2) (Set.length s1)));
+            Logs.warn (fun m -> m "Transform %s not equivalent. New relation has %d records, old has %d." t.name (Set.length s2) (Set.length s1)));
       rs
     with Layout.TransformError e ->
       Logs.warn (fun m -> m "Transform %s failed: %s." t.name (Error.to_string_hum e));
@@ -96,7 +94,8 @@ module Make (Config : Config.S) = struct
           |> Seq.to_list
           |> unordered_list
         in
-        [Scan layout]
+        let r' = Ralgebra0.Scan layout in
+        [r']
       else []
   }
 
@@ -127,17 +126,20 @@ module Make (Config : Config.S) = struct
     name = "cmp-filter";
     f = function
       | Filter (Binop (Gt, Field f, Var v), Scan l)
+      | Filter (Binop (Lt, Var v, Field f), Scan l) ->
+        [Scan (Layout.partition (Var v) f l |> Layout.accum `Lt)]
+
       | Filter (Binop (Gt, Var v, Field f), Scan l)
+      | Filter (Binop (Lt, Field f, Var v), Scan l) ->
+        [Scan (Layout.partition (Var v) f l |> Layout.accum `Gt)]
+
       | Filter (Binop (Ge, Field f, Var v), Scan l)
-      | Filter (Binop (Ge, Var v, Field f), Scan l)
-      | Filter (Binop (Lt, Field f, Var v), Scan l)
-      | Filter (Binop (Lt, Var v, Field f), Scan l)
-      | Filter (Binop (Le, Field f, Var v), Scan l)
       | Filter (Binop (Le, Var v, Field f), Scan l) ->
-        [
-          Scan (Layout.order (None, None) f `Asc l);
-          Scan (Layout.order (None, None) f `Desc l);
-        ]
+        [Scan (Layout.partition (Var v) f l |> Layout.accum `Le)]
+
+      | Filter (Binop (Ge, Var v, Field f), Scan l)
+      | Filter (Binop (Le, Field f, Var v), Scan l) ->
+        [Scan (Layout.partition (Var v) f l |> Layout.accum `Ge)]
       | _ -> []
   }
 
@@ -165,7 +167,6 @@ module Make (Config : Config.S) = struct
       | EqJoin (f1, f2, Scan l1, Scan l2) -> [
           Filter (Binop (Eq, Field f1, Field f2), Scan (cross_tuple [l1; l2]));
           Scan (Layout.eq_join f1 f2 l1 l2);
-          Scan (Layout.eq_join f2 f1 l2 l1);
         ]
       | _ -> []
   }
@@ -187,15 +188,8 @@ module Make (Config : Config.S) = struct
       | _ -> []
   }
 
-  let tf_empty_project : t = {
-    name = "empty";
-    f = function
-      | Project ([], q) -> [Scan empty]
-      | _ -> []
-  }
-
   let tf_push_project : t =
-    let open Ralgebra in 
+    let open Ralgebra in
     {
       name = "push-project";
       f = function
@@ -238,6 +232,39 @@ module Make (Config : Config.S) = struct
         | _ -> []
     }
 
+  let tf_push_filter : t =
+    let open Ralgebra0 in
+    {
+      name = "push-filter";
+      f = function
+        | Filter (p, r) -> begin match r with
+            | Filter (p', r) -> [Filter (p', Filter (p, r))]
+            | EqJoin (f1, f2, r1, r2) -> [
+                EqJoin (f1, f2, Filter (p, r1), r2);
+                EqJoin (f1, f2, r1, Filter (p, r2));
+                EqJoin (f1, f2, Filter (p, r1), Filter (p, r2));
+              ]
+            | Concat rs -> [
+                Concat (List.map rs ~f:(fun r -> Filter (p, r)))
+              ]
+            | Project _
+            | Scan _
+            | Relation _
+            | Count _ -> []
+          end
+        | _ -> []
+    }
+
+  let tf_intro_project : t =
+    let open Ralgebra0 in
+    {
+      name = "intro-project";
+      f = function
+        | Count r -> [Count (Project ([], r))]
+        | _ -> []
+    }
+
+
   let transforms = [
     tf_eval;
     tf_eq_filter;
@@ -248,9 +275,10 @@ module Make (Config : Config.S) = struct
     tf_concat;
     tf_row_layout;
     tf_col_layout;
-    tf_flatten;
-    tf_empty_project;
+    tf_intro_project;
     tf_push_project;
+    tf_push_filter;
+
   ]
 
   let of_name : string -> t Or_error.t = fun n ->
