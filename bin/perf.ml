@@ -56,6 +56,7 @@ fun ~debug ~params ~gprof (module IConfig : Implang.Config.S) ralgebra ->
         | `Bool true -> "true"
         | `Bool false -> "false"
         | `String x -> sprintf "\"%s\"" x
+        | _ -> Error.of_string "Unexpected param type." |> Error.raise
       in
       sprintf "set_%s(params, %s);" n val_str) |> String.concat ~sep:"\n"
   in
@@ -96,8 +97,10 @@ fun ~debug ~params ~gprof (module IConfig : Implang.Config.S) ralgebra ->
   if not debug then begin
     Caml.Sys.command "sh -c \"./scanner.exe -p db.buf > output.csv\"" |> ignore;
     let runs_per_sec =
-      Unix.open_process_in "./scanner.exe -t 10 db.buf" |> In_channel.input_all
-      |> String.strip |> Float.of_string
+      try
+        Unix.open_process_in "./scanner.exe -t 10 db.buf" |> In_channel.input_all
+        |> String.strip |> Float.of_string
+      with _ -> 0.0
     in
     let db_size = (Unix.stat "db.buf").st_size in
     let exe_size = (Unix.stat "scanner.exe").st_size in
@@ -143,9 +146,9 @@ let benchmark : ?sample:int -> db:string -> Bench.t -> unit =
     end;
 
     (* Create sqlite for results. *)
-    let db = Sqlite3.db_open "results.sqlite" in
-    Sqlite3.exec db "create table results (runtime numeric, dbsize numeric, exesize numeric, dir text, failed integer)" |> ignore;
-    let insert_stmt = Sqlite3.prepare db "insert into results values (?,?,?,?,?)" in
+    let result_db = Sqlite3.db_open "results.sqlite" in
+    Sqlite3.exec result_db "create table results (runtime numeric, dbsize numeric, exesize numeric, dir text, failed integer)" |> ignore;
+    let insert_stmt = Sqlite3.prepare result_db "insert into results values (?,?,?,?,?)" in
 
     let candidates = Transform.search ralgebra in
 
@@ -157,12 +160,13 @@ let benchmark : ?sample:int -> db:string -> Bench.t -> unit =
         Logs.set_reporter (Logs.format_reporter ~app:fmt ~dst:fmt ());
 
         (* Run the sql to generate a golden output. *)
-        let golden_fn = sprintf "%s/golden.csv" (Sys.getcwd ()) in
         let params =
           List.map test_params ~f:(fun (_, v) -> Db.primvalue_to_sql v)
         in
         Db.exec ~params Config.conn
-          (sprintf "copy (%s) to '%s' delimiter ','" sql golden_fn) |> ignore;
+          (sprintf "copy (%s) to '/tmp/golden.csv' delimiter ','" sql) |> ignore;
+        Caml.Sys.command (sprintf "cp /tmp/golden.csv %s/golden.csv"
+                            (Sys.getcwd ())) |> ignore;
 
         (* Dump the parameters used for testing. *)
         [%sexp_of:(string * Db.primvalue) list] test_params
