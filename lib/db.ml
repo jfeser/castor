@@ -189,4 +189,5 @@ module Schema = struct
 
   let field_idx_exn : t -> Field.t -> int = fun s f ->
     Option.value_exn (field_idx s f)
+      ~error:(Error.create "Field not in schema." (f, s) [%sexp_of:Field.t * t])
 end

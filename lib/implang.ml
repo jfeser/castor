@@ -1017,7 +1017,11 @@ module IRGen = struct
       let func = gen r in
 
       let schema = Ralgebra.to_schema r in
-      let idxs = List.map fields ~f:(Db.Schema.field_idx_exn schema) in
+      let idxs = List.filter_map fields ~f:(fun f ->
+          match Db.Schema.field_idx schema f with
+          | Some idx -> Some idx
+          | None -> Logs.warn (fun m -> m "Field %s not present. Can't be projected." f.name); None)
+      in
 
       let child_ret_t = (find_func func).ret_type in
       let ret_t = match child_ret_t with
