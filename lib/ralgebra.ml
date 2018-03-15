@@ -104,12 +104,15 @@ let rec pred_to_string : pred -> string = function
 
 let rec to_string : t -> string =
   function
-  | Project (fs, r) -> sprintf "Project(%s)" (to_string r)
+  | Project (fs, r) ->
+    sprintf "Project([%s], %s)"
+      (List.map fs ~f:(fun f -> f.name) |> String.concat ~sep:", ") (to_string r)
   | Count r -> sprintf "Count(%s)" (to_string r)
   | Filter (p, r) -> sprintf "Filter(%s, %s)" (pred_to_string p) (to_string r)
   | EqJoin (f1, f2, r1, r2) ->
-    sprintf "EqJoin(%s, %s)" (to_string r1) (to_string r2)
-  | Scan l -> sprintf "Scan(%s)" (Layout.to_string l)
+    sprintf "EqJoin(%s, %s, %s, %s)" f1.name f2.name (to_string r1) (to_string r2)
+  | Scan l -> sprintf "Scan(%s)"
+                (Type.of_layout_exn l |> [%sexp_of:Type.t] |> Sexp.to_string_hum)
   | Concat rs ->
     List.map rs ~f:to_string |> String.concat ~sep:", " |> sprintf "Concat(%s)"
   | Relation r -> r.name
