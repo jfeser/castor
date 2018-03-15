@@ -688,10 +688,15 @@ module IRGen = struct
       | StringT { nchars = Len x } ->
         int (Int.round ~dir:`Up ~to_multiple_of:isize x)
       | EmptyT -> int 0
-      | CrossTupleT (_, { count = (Count _ | Unknown) }) -> islice start
-      | CrossTupleT (_, { count = Countable }) -> islice (start + int isize)
-      | ZipTupleT _ | UnorderedListT _ | OrderedListT _
-      | TableT _ -> islice (start + int isize)
+      | CrossTupleT (_, { count = (Count _ | Unknown) })
+      | UnorderedListT (_, { count = (Count _ | Unknown) })
+      | ZipTupleT (_, { count = (Count _ | Unknown) })
+      | OrderedListT (_, { count = (Count _ | Unknown) })
+      | TableT _ -> islice start
+      | CrossTupleT (_, { count = Countable })
+      | ZipTupleT (_, { count = Countable })
+      | UnorderedListT (_, { count = Countable })
+      | OrderedListT (_, { count = Countable }) -> islice (start + int isize)
 
     let count start =
       let open Infix in
