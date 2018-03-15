@@ -16,6 +16,10 @@ let main = fun ~debug ~gprof ~params fn ->
 
   let ralgebra = Ralgebra.Binable.to_ralgebra ralgebra in
 
+  (* Dump type. *)
+  Out_channel.with_file "ralgebra" ~f:(fun ch ->
+    Ralgebra.to_string ralgebra |> Out_channel.output_string ch);
+
   let module CConfig = struct
     let debug = debug
     let ctx = Llvm.create_context ()
