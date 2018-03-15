@@ -4,7 +4,7 @@ open Dblayout
 open Collections
 
 let main = fun ~debug ~gprof ~params fn ->
-  let fd = Unix.openfile ~mode:[O_RDWR; O_CREAT] fn in
+  let fd = Unix.openfile ~mode:[O_RDWR] fn in
   let size = (Unix.Native_file.stat fn).st_size in
   let buf = Bigstring.create size in
   Bigstring.really_read fd buf;
