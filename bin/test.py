@@ -37,11 +37,16 @@ def main(compile_args, out_dir, result_db, fn):
     except subprocess.CalledProcessError:
         compile_failed = True
 
-    conn = sqlite3.connect(result_db, timeout=10)
-    c = conn.cursor()
-    c.execute('create table if not exists results (name text, runs_per_sec numeric, db_size numeric, exe_size numeric, compile_failed integer, scanner_failed integer)')
-    c.execute('insert into results values (?, ?, ?, ?, ?, ?)', (name, runtime, db_size, exe_size, compile_failed, scanner_failed))
-    conn.commit()
+    while True:
+        try:
+            conn = sqlite3.connect(result_db, timeout=10)
+            c = conn.cursor()
+            c.execute('create table if not exists results (name text, runs_per_sec numeric, db_size numeric, exe_size numeric, compile_failed integer, scanner_failed integer)')
+            c.execute('insert into results values (?, ?, ?, ?, ?, ?)', (name, runtime, db_size, exe_size, compile_failed, scanner_failed))
+            conn.commit()
+            return
+        except sqlite3.OperationalError:
+            pass
 
 if __name__ == '__main__':
     if len(sys.argv) != 5:
