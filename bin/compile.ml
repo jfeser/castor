@@ -86,31 +86,7 @@ let main = fun ~debug ~gprof ~params fn ->
     command_exn (clang :: cflags @ ["scanner-opt.ll"; "main.c"; "-o"; "scanner.exe"])
   end;
   Llvm.dispose_module CConfig.module_;
-  Llvm.dispose_context CConfig.ctx;
-
-  (* Collect runtime information. Most of this requires parsing the query
-     output, so it doesn't work when debug info is turned on. *)
-  if not debug then begin
-    Caml.Sys.command "sh -c \"./scanner.exe -p db.buf > output.csv\"" |> ignore;
-    let runs_per_sec =
-      try
-        Unix.open_process_in "./scanner.exe -t 10 db.buf" |> In_channel.input_all
-        |> String.strip |> Float.of_string
-      with _ -> 0.0
-    in
-    let db_size = (Unix.stat "db.buf").st_size in
-    let exe_size = (Unix.stat "scanner.exe").st_size in
-
-    let scanner_crashed = Caml.Sys.command "./scanner.exe -c db.buf" > 0 in
-    if scanner_crashed then Logs.err (fun m -> m "Scanner crashed.");
-
-    let outputs_differ =
-      Caml.Sys.command "bash -c 'diff -q <(sort ../golden.csv) <(sort output.csv)'" > 0
-    in
-    if outputs_differ then Logs.err (fun m -> m "Outputs differ.");
-
-    (runs_per_sec, db_size, exe_size, scanner_crashed || outputs_differ)
-  end else (0.0, 0L, 0L, false)
+  Llvm.dispose_context CConfig.ctx
 
 let () =
   (* Set early so we get logs from command parsing code. *)
@@ -137,5 +113,5 @@ let () =
       else if quiet then Logs.set_level (Some Logs.Error)
       else Logs.set_level (Some Logs.Info);
 
-      main ~debug ~gprof ~params query |> ignore
+      main ~debug ~gprof ~params query
   ] |> run
