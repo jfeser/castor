@@ -9,9 +9,61 @@ open Collections
 
 let in_dir : string -> f:(unit -> 'a) -> 'a = fun dir ~f ->
   let cur_dir = Unix.getcwd () in
+  if Sys.file_exists dir = `No then Unix.mkdir dir;
   Unix.chdir dir;
   let ret = try f () with e -> Unix.chdir cur_dir; raise e in
   Unix.chdir cur_dir; ret
+
+let finally : f:(unit -> 'a) -> (unit -> unit) -> 'a = fun ~f g ->
+  try let ret = f () in g (); ret with e -> g (); raise e
+
+let serialize : Ralgebra.t -> bool = fun cand ->
+  let open Unix in
+
+  let cand = Ralgebra.Binable.of_ralgebra cand in
+  let name = sprintf "%d.bin" (Ralgebra.Binable.hash cand) in
+  let fn = sprintf "frontier/%s" name in
+
+  (* If the candidate exists on the frontier or in the collected set, don't add
+     it.*)
+  if Sys.file_exists fn = `Yes || Sys.file_exists name = `Yes then false else
+    let size =
+      Ralgebra.Binable.bin_size_t cand + Bin_prot.Utils.size_header_length
+    in
+    try
+      let fd = openfile ~mode:[O_RDWR; O_CREAT; O_EXCL] fn in
+      finally (fun () -> close fd) ~f:(fun () ->
+          if flock fd Flock_command.lock_exclusive then begin
+            finally (fun () ->
+                if not (flock fd Flock_command.unlock) then
+                  Logs.warn (fun m -> m "Failed to release file lock on %s." fn))
+              ~f:(fun () ->
+                  let buf = Bigstring.create size in
+                  Bigstring.write_bin_prot buf Ralgebra.Binable.bin_writer_t cand |> ignore;
+                  Bigstring.really_write fd buf;
+                  link ~target:fn ~link_name:name ()); true
+          end else false)
+    with Unix_error _ -> false
+
+let deserialize : string -> f:(Ralgebra.t -> 'a) -> 'a option = fun fn ~f ->
+  let open Unix in
+  try
+    let fd = openfile ~mode:[O_RDWR] fn in
+    finally (fun () -> close fd) ~f:(fun () ->
+        if Unix.flock fd Unix.Flock_command.lock_exclusive then
+          finally (fun () ->
+              if not (Unix.flock fd Unix.Flock_command.unlock) then
+                Logs.warn (fun m -> m "Failed to release file lock on %s." fn))
+            ~f:(fun () ->
+                let size = (Native_file.stat fn).st_size in
+                let buf = Bigstring.create size in
+                Bigstring.really_read fd buf;
+                let r, _ = Bigstring.read_bin_prot buf Ralgebra.Binable.bin_reader_t
+                           |> Or_error.ok_exn
+                in
+                Some (Ralgebra.Binable.to_ralgebra r |> f))
+        else None)
+  with Unix_error _ -> None
 
 let main : ?sample:int -> db:string -> Bench.t -> string -> unit =
   fun ?sample ~db { name; sql; query; params } dir ->
@@ -28,38 +80,44 @@ let main : ?sample:int -> db:string -> Bench.t -> string -> unit =
       let conn = new connection ~dbname:db ()
       let testctx = Layout.PredCtx.of_vars test_params
     end in
-
     let module Transform = Transform.Make(Config) in
     let ralgebra =
       Ralgebra.of_string_exn query |> Ralgebra.resolve Config.conn
     in
 
-            (* If we need to sample, generate sample tables and swap them in the
+    (* If we need to sample, generate sample tables and swap them in the
        expression. *)
     begin match sample with
       | Some s ->
-          Ralgebra.relations ralgebra
-          |> List.iter ~f:(Db.Relation.sample Config.conn s);
+        Ralgebra.relations ralgebra
+        |> List.iter ~f:(Db.Relation.sample Config.conn s);
       | None -> ()
     end;
 
+    let rec search : unit -> unit = fun () ->
+      (* Grab a candidate from the frontier. *)
+      let dir_entries = Sys.readdir "frontier" in
+      if Array.length dir_entries = 0 then () else
+        let name = dir_entries.(Random.int (Array.length dir_entries)) in
+        let fn = (sprintf "frontier/%s" name) in
+        deserialize fn ~f:(fun r ->
+            Logs.info (fun m -> m "Transforming candidate %s." name);
 
-    let candidates = Transform.search ralgebra in
+            (* Move candidate out of frontier. *)
+            Unix.unlink fn;
 
-    in_dir dir ~f:(fun () -> Seq.iter candidates ~f:(fun cand ->
-        let cand = Ralgebra.Binable.of_ralgebra cand in
-        let hash = Ralgebra.Binable.hash cand in
-        let fn = sprintf "%d.bin" hash in
-        if Sys.file_exists fn = `No then
-          let fd = Unix.openfile ~mode:[O_RDWR; O_CREAT] fn in
-          let size =
-            Ralgebra.Binable.bin_size_t cand + Bin_prot.Utils.size_header_length
-          in
-          let buf = Bigstring.create size in
-          Bigstring.write_bin_prot buf Ralgebra.Binable.bin_writer_t cand |> ignore;
-          Bigstring.really_write fd buf;
-          Unix.close fd;
-      ))
+            (* Generate children of candidate and write to frontier. *)
+            List.iter Transform.transforms ~f:(fun t ->
+                List.iter (Transform.run_everywhere t r) ~f:(fun r' ->
+                    serialize r' |> ignore))
+          ) |> ignore;
+        search ()
+    in
+
+    in_dir dir ~f:(fun () -> 
+        if Sys.file_exists "frontier" = `No then Unix.mkdir "frontier";
+        serialize ralgebra |> ignore;
+        search ())
 
 let () =
   (* Set early so we get logs from command parsing code. *)
