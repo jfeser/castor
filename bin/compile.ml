@@ -50,7 +50,10 @@ let main = fun ~debug ~gprof ~params fn ->
       Bitstring.pp fmt ir_module.buffer);
 
   (* Compile and link *)
-  let params_str = List.map params ~f:(fun (n, v) ->
+  let params_str =
+    List.filter params ~f:(fun (n, _) ->
+        List.exists ir_module.params ~f:(fun (n', _) -> String.(n = n')))
+    |> List.map ~f:(fun (n, v) ->
       let val_str = match v with
         | `Int x -> sprintf "%d" x
         | `Bool true -> "true"
