@@ -17,10 +17,27 @@ let in_dir : string -> f:(unit -> 'a) -> 'a = fun dir ~f ->
 let finally : f:(unit -> 'a) -> (unit -> unit) -> 'a = fun ~f g ->
   try let ret = f () in g (); ret with e -> g (); raise e
 
-let serialize : Ralgebra.t -> bool = fun cand ->
+  let validate : Ralgebra.t -> bool = fun r ->
+    (* Check that there are no relation references. *)
+    let has_refs = List.length (Ralgebra.relations r) > 0 in
+
+    if has_refs then
+      Logs.info (fun m -> m "Discarding candidate: still has relation references.");
+
+    (* Check that all the layouts type check. *)
+    let types_check = List.for_all (Ralgebra.layouts r) ~f:(fun l ->
+        try Type.of_layout_exn l |> ignore; true with Type.TypeError _ -> false)
+    in
+
+    if not types_check then
+      Logs.info (fun m -> m "Discarding candidate: some layouts don't type check.");
+
+    not has_refs && types_check
+
+let serialize : Ralgebra.t -> bool = fun r ->
   let open Unix in
 
-  let cand = Ralgebra.Binable.of_ralgebra cand in
+  let cand = Ralgebra.Binable.of_ralgebra r in
   let name = sprintf "%d.bin" (Ralgebra.Binable.hash cand) in
   let fn = sprintf "frontier/%s" name in
 
@@ -41,7 +58,8 @@ let serialize : Ralgebra.t -> bool = fun cand ->
                   let buf = Bigstring.create size in
                   Bigstring.write_bin_prot buf Ralgebra.Binable.bin_writer_t cand |> ignore;
                   Bigstring.really_write fd buf;
-                  link ~target:fn ~link_name:name ()); true
+
+                  if validate r then link ~target:fn ~link_name:name ()); true
           end else false)
     with Unix_error _ -> false
 

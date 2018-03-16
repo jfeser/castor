@@ -197,18 +197,32 @@ let replace_relation : Relation.t -> Relation.t -> t -> t = fun r1 r2 ->
   rep
 
 let rec relations : t -> Relation.t list =
-  let rec rels =
+  let rec f =
     let open Ralgebra0 in
     function
     | Scan _ -> []
     | Project (_, r)
     | Filter (_, r)
-    | Count r -> rels r
-    | EqJoin (_, _, r, r') -> rels r @ rels r'
-    | Concat rs -> List.concat_map ~f:rels rs
+    | Count r -> f r
+    | EqJoin (_, _, r, r') -> f r @ f r'
+    | Concat rs -> List.concat_map ~f:f rs
     | Relation r -> [r]
   in
-  fun r -> rels r |> List.dedup_and_sort ~compare:Relation.compare
+  fun r -> f r |> List.dedup_and_sort ~compare:Relation.compare
+
+let rec layouts : t -> Layout.t list =
+  let rec f =
+    let open Ralgebra0 in
+    function
+    | Scan l -> [l]
+    | Project (_, r)
+    | Filter (_, r)
+    | Count r -> f r
+    | EqJoin (_, _, r, r') -> f r @ f r'
+    | Concat rs -> List.concat_map ~f:f rs
+    | Relation _ -> []
+  in
+  fun r -> f r
 
 let tests =
   let open OUnit2 in
