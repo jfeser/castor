@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -14,6 +15,8 @@ def main(compile_args, out_dir, result_db, fn):
         os.mkdir(out_dir)
     name = os.path.splitext(os.path.basename(fn))[0]
     working_dir = out_dir + '/' + name
+    if os.path.exists(working_dir):
+        shutil.rmtree(working_dir)
     os.mkdir(working_dir)
     os.chdir(working_dir)
 
