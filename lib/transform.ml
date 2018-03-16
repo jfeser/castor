@@ -153,14 +153,6 @@ module Make (Config : Config.S) = struct
       | _ -> []
   }
 
-  let tf_or_filter : t = {
-    name = "or-filter";
-    f = function
-      | Filter (Varop (Or, ps), q) ->
-        [ Concat (List.map ps ~f:(fun p -> Ralgebra0.Filter (p, q))) ]
-      | _ -> []
-  }
-
   let tf_eqjoin : t = {
     name = "eqjoin";
     f = function
@@ -168,18 +160,6 @@ module Make (Config : Config.S) = struct
           Filter (Binop (Eq, Field f1, Field f2), Scan (cross_tuple [l1; l2]));
           Scan (Layout.eq_join f1 f2 l1 l2);
         ]
-      | _ -> []
-  }
-
-  let tf_concat : t = {
-    name = "concat";
-    f = function
-      | Concat qs ->
-        if List.for_all qs ~f:(function Scan _ -> true | _ -> false) then
-          [Scan (unordered_list (List.map qs ~f:(function
-               | (Scan l) -> l
-               | _ -> failwith "")))]
-        else []
       | _ -> []
   }
 
@@ -266,15 +246,12 @@ module Make (Config : Config.S) = struct
         | _ -> []
     }
 
-
   let transforms = [
     tf_eval;
     tf_eq_filter;
     tf_cmp_filter;
     tf_and_filter;
-    tf_or_filter;
     tf_eqjoin;
-    tf_concat;
     tf_row_layout;
     tf_col_layout;
     tf_intro_project;
