@@ -43,6 +43,8 @@ module Make (Config : Config.S) = struct
           | Le, `Int x1, `Int x2 -> `Bool (x1 <= x2)
           | Gt, `Int x1, `Int x2 -> `Bool (x1 > x2)
           | Ge, `Int x1, `Int x2 -> `Bool (x1 >= x2)
+          | And, `Bool x1, `Bool x2 -> `Bool (x1 && x2)
+          | Or, `Bool x1, `Bool x2 -> `Bool (x1 || x2)
           | _ -> Error.create "Unexpected argument types." (op, v1, v2)
                    [%sexp_of:Ralgebra.op * primvalue * primvalue]
                  |> Error.raise

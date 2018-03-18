@@ -1,6 +1,7 @@
 open Core
 open Dblayout
 open Postgresql
+open Collections
 
 type transform = (string * int option)
 
@@ -36,7 +37,7 @@ let main : ?sample:int -> ?transforms:transform list -> ?output:string -> db:str
     let candidates = List.fold_left transforms ~init:[ralgebra] ~f:(fun rs (t, i) ->
         let tf = Transform.of_name t |> Or_error.ok_exn in
         let rs' = List.concat_map rs ~f:(fun r ->
-            let r' = Transform.run_everywhere tf r in
+            let r' = Transform.(run_checked (compose required tf) r) in
             match i with
             | Some idx -> [List.nth_exn r' idx]
             | None -> r')

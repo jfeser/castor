@@ -4,6 +4,7 @@ open Dblayout
 open Collections
 
 let main = fun ~debug ~gprof ~params fn ->
+  Logs.debug (fun m -> m "Loading ralgebra from %s." fn);
   let fd = Unix.openfile ~mode:[O_RDWR] fn in
   let size = (Unix.Native_file.stat fn).st_size in
   let buf = Bigstring.create size in
@@ -13,6 +14,7 @@ let main = fun ~debug ~gprof ~params fn ->
     |> Or_error.ok_exn
   in
   Unix.close fd;
+  Logs.debug (fun m -> m "Loading complete.");
 
   let ralgebra = Ralgebra.Binable.to_ralgebra ralgebra in
 
@@ -30,13 +32,16 @@ let main = fun ~debug ~gprof ~params fn ->
   let module Codegen = Codegen.Make(CConfig) () in
   let module IRGen = Implang.IRGen.Make () in
 
+  Logs.debug (fun m -> m "Generating IR.");
   let ir_module = IRGen.irgen ralgebra in
+  Logs.debug (fun m -> m "Generating IR complete.");
 
   (* Dump IR. *)
   Out_channel.with_file "scanner.ir" ~f:(fun ch ->
       IRGen.pp (Format.formatter_of_out_channel ch) ir_module);
 
   (* Codegen *)
+  Logs.debug (fun m -> m "Codegen.");
   Codegen.codegen ir_module.buffer ir_module;
   Llvm.print_module "scanner.ll" CConfig.module_;
   Out_channel.with_file "scanner.h" ~f:Codegen.write_header;

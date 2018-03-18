@@ -117,6 +117,7 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
       let keys = Map.keys m
         |> List.map ~f:(fun k -> k, serialize key_t (Layout.of_value k))
       in
+      Logs.debug (fun m -> m "Generating hash for %d keys." (List.length keys));
       let hash = Cmph.(List.map keys ~f:(fun (_, b) -> to_string b)
                        |> KeySet.of_fixed_width
                        |> Config.create ~seed:0 ~algo:`Chd |> Hash.of_config)

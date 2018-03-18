@@ -224,6 +224,69 @@ let rec layouts : t -> Layout.t list =
   in
   fun r -> f r
 
+let intro_project : t -> t = fun r ->
+  let open Ralgebra0 in
+  let rec f fields = function
+    | Scan l -> Scan (Layout.project (Set.to_list fields) l)
+    | Project (fs, r) ->
+      let fields = Set.of_list (module Field) fs in
+      Project (fs, f fields r)
+    | Filter (p, r) ->
+      let fields =
+        Set.union fields (Set.of_list (module Field) (pred_fields p))
+      in
+      Filter (p, f fields r)
+    | Count r -> Count (f (Set.empty (module Field)) r)
+    | EqJoin (f1, f2, r1, r2) ->
+      EqJoin (f1, f2, f (Set.add fields f1) r1, f (Set.add fields f2) r2)
+    | Concat rs -> Concat (List.map rs ~f:(f fields))
+    | Relation _ as r -> r
+  in
+  f (Set.of_list (module Field) (to_schema r)) r
+
+let hoist_filter : t -> t = fun r ->
+  let open Ralgebra0 in
+  let rec f = function
+    | Scan _ | Relation _ as r -> r
+    | Count r -> Count (f r)
+    | EqJoin (f1, f2, r1, r2) ->
+      begin match f r1, f r2 with
+        | Filter (p1, r1), Filter (p2, r2) ->
+          Filter (Binop (And, p1, p2), EqJoin(f1, f2, r1, r2))
+        | Filter (p, r1), r2 -> Filter (p, EqJoin(f1, f2, r1, r2))
+        | r1, Filter (p, r2) -> Filter (p, EqJoin(f1, f2, r1, r2))
+        | r1, r2 -> EqJoin(f1, f2, r1, r2)
+      end
+    | Project (fs, r) ->
+      begin match f r with
+        | Filter (p, r) ->
+          let fs = Set.union
+              (Set.of_list (module Field) (pred_fields p))
+              (Set.of_list (module Field) (fs))
+                   |> Set.to_list
+          in
+          Filter (p, Project (fs, r))
+        | r -> Project (fs, r)
+      end
+    | Filter (p, r) ->
+      begin match f r with
+        | Filter (p', r) -> Filter (Binop (And, p, p'), r)
+        | r -> Filter (p, r)
+      end
+    | Concat rs ->
+      let ps, rs = List.map rs ~f:(fun r -> match f r with
+          | Filter (p, r) -> (Some p, r)
+          | r -> (None, r))
+                   |> List.unzip
+      in
+      match List.filter_map ps ~f:(fun x -> x) with
+      | [] -> Concat rs
+      | p::ps ->
+        let pred = List.fold_left ~init:p ps ~f:(fun p p' -> Binop (And, p, p')) in
+        Filter (pred, Concat rs)
+  in
+  f r
+
 let tests =
   let open OUnit2 in
   let parse_test s = s >:: fun _ ->

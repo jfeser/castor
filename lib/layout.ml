@@ -260,8 +260,6 @@ let rec to_schema_exn : t -> Schema.t = fun l -> match l.node with
     List.map ls ~f:to_schema_exn |> List.all_equal_exn
   | Table (m, { field = f }) ->
     let v_schema = Map.data m |> List.map ~f:to_schema_exn |> List.all_equal_exn in
-    if not (List.mem ~equal:Field.(=) v_schema f) then
-      Error.(of_string "Table values must contain the table key." |> raise);
     List.merge ~cmp:Field.compare [f] v_schema
 
 let rec params : t -> Set.M(TypedName).t =
@@ -448,7 +446,6 @@ let rec flatten : t -> t = fun l -> match l.node with
           | _ -> [l])
       in
       begin match ls with
-      | [] -> empty
       | [l] -> l
       | ls -> cross_tuple ls
       end
@@ -460,7 +457,6 @@ let rec flatten : t -> t = fun l -> match l.node with
           | _ -> [l])
       in
       begin match ls with
-      | [] -> empty
       | [l] -> l
       | ls -> zip_tuple ls
       end
@@ -539,10 +535,10 @@ let project : Field.t list -> t -> t = fun fs l ->
     | UnorderedList ls -> unordered_list (List.map ls ~f:project)
     | OrderedList (ls, ({ field = f } as x)) ->
       let ls' = List.map ls ~f:project in
-      if f_in f then ordered_list ls' x else unordered_list ls'
+      ordered_list ls' x
     | Table (ls, ({ field = f; } as x)) ->
       let ls' = Map.map ls ~f:project in
-      if f_in f then table ls' x else unordered_list (Map.data ls')
+      table ls' x
     | Empty -> empty
   in
   project l
@@ -575,6 +571,18 @@ let accum : [`Gt | `Lt | `Ge | `Le] -> t -> t = fun dir l ->
     in
     table m x
   | _ -> raise (TransformError (Error.of_string "Expected a table."))
+
+(* let count : t -> t = fun { node } -> match node with
+ *   | Int (_, _)
+ *   | Bool (_, _)
+ *   | String (_, _)
+ *   | Null _ -> int 1 ??
+ *   | CrossTuple ls -> 
+ *   | ZipTuple _
+ *   | UnorderedList _
+ *   | OrderedList (_, _)
+ *   | Table (_, _)
+ *   | Empty -> int 0 ?? *)
 
 let tests =
   let open OUnit2 in
