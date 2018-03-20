@@ -213,28 +213,10 @@ module Make (Config : Config.S) = struct
     f = fun r -> [Ralgebra.intro_project r];
   }
 
-  let tf_push_filter : t =
-    let open Ralgebra0 in
-    {
-      name = "push-filter";
-      f = function
-        | Filter (p, r) -> begin match r with
-            | Filter (p', r) -> [Filter (p', Filter (p, r))]
-            | EqJoin (f1, f2, r1, r2) -> [
-                EqJoin (f1, f2, Filter (p, r1), r2);
-                EqJoin (f1, f2, r1, Filter (p, r2));
-                EqJoin (f1, f2, Filter (p, r1), Filter (p, r2));
-              ]
-            | Concat rs -> [
-                Concat (List.map rs ~f:(fun r -> Filter (p, r)))
-              ]
-            | Project _
-            | Scan _
-            | Relation _
-            | Count _ -> []
-          end
-        | _ -> []
-    } |> run_everywhere
+  let tf_push_filter : t = {
+    name = "push-filter";
+    f = fun r -> [Ralgebra.push_filter r];
+  }
 
   let transforms = [
     tf_eq_filter;

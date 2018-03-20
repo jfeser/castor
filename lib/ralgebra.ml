@@ -246,6 +246,32 @@ let intro_project : t -> t = fun r ->
   in
   f (Set.of_list (module Field) (to_schema r)) r
 
+let push_filter : t -> t =
+  let open Ralgebra0 in
+  let rec f = function
+    | Filter (p, EqJoin (f1, f2, r1, r2)) ->
+      let fields = Set.of_list (module Field) (pred_fields p) in
+      let r1, pushed_r1 =
+        if Set.is_subset fields ~of_:(Set.of_list (module Field) (to_schema r1)) then
+          f (Filter (p, r1)), true else f r1, false
+      in
+      let r2, pushed_r2 =
+        if Set.is_subset fields ~of_:(Set.of_list (module Field) (to_schema r2)) then
+          f (Filter (p, r2)), true else f r2, false
+      in
+      if pushed_r1 || pushed_r2 then EqJoin (f1, f2, r1, r2) else
+        Filter (p, EqJoin (f1, f2, r1, r2))
+    | Filter (p, Project (fs, r)) -> Project (fs, f (Filter (p, r)))
+    | Filter (p, Concat rs) -> Concat (List.map rs ~f:(fun r -> f (Filter (p, r))))
+    | Filter (p, r) -> Filter (p, f r)
+    | Count r -> Count (f r)
+    | Project (fs, r) -> Project (fs, f r)
+    | EqJoin (f1, f2, r1, r2) -> EqJoin (f1, f2, f r1, f r2)
+    | Concat rs -> Concat (List.map rs ~f)
+    | Scan _ | Relation _ as r -> r
+  in
+  f
+
 let hoist_filter : t -> t = fun r ->
   let open Ralgebra0 in
   let rec f = function
