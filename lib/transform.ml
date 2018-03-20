@@ -103,7 +103,7 @@ module Make (Config : Config.S) = struct
   let id : t = { name = "id"; f = fun r -> [r] }
 
   let compose : t -> t -> t = fun { name = n1; f = f1 } { name = n2; f = f2 } ->
-    { name = sprintf "%s %s" n1 n2; f = fun r -> List.concat_map ~f:f1 (f2 r) }
+    { name = sprintf "%s,%s" n2 n1; f = fun r -> List.concat_map ~f:f1 (f2 r) }
 
   let compose_many : t list -> t = List.fold_left ~init:id ~f:compose
 
