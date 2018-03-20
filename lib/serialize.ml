@@ -49,6 +49,7 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
   let open Bitstring in
   fun type_ layout ->
     match type_, layout.node with
+    | NullT _, Null _ -> empty
     | IntT { bitwidth }, Int (x, _) -> of_int ~width:64 x |> label "Int"
     | IntT { bitwidth }, Null _ ->
       Logs.warn (fun m -> m "Serializing NULL as 0.");

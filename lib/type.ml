@@ -28,9 +28,10 @@ module AbsLen = struct
 end
 
 module T = struct
-  type int_ = { bitwidth : int; field : Db.Field.t } [@@deriving compare, sexp]
-  type bool_ = { field : Db.Field.t } [@@deriving compare, sexp]
-  type string_ = { nchars : AbsLen.t; field : Db.Field.t } [@@deriving compare, sexp]
+  type null = { field : Db.Field.t } [@@deriving compare, sexp]
+  type int_ = { bitwidth : int; nullable : bool; field : Db.Field.t } [@@deriving compare, sexp]
+  type bool_ = { nullable : bool; field : Db.Field.t } [@@deriving compare, sexp]
+  type string_ = { nchars : AbsLen.t; nullable : bool; field : Db.Field.t } [@@deriving compare, sexp]
   type ziptuple = { count : AbsCount.t } [@@deriving compare, sexp]
   type crosstuple = { count : AbsCount.t } [@@deriving compare, sexp]
   type ordered_list = {
@@ -44,6 +45,7 @@ module T = struct
     lookup : Layout.PredCtx.Key.t;
   } [@@deriving compare, sexp]
   type t =
+    | NullT of null
     | IntT of int_
     | BoolT of bool_
     | StringT of string_
@@ -73,14 +75,20 @@ let rec unify_exn : t -> t -> t = fun t1 t2 ->
     raise (TypeError err)
   in
   match t1, t2 with
-  | (IntT { bitwidth = b1; field = f1 }, IntT { bitwidth = b2; field = f2 })
+  | (IntT { bitwidth = b1; field = f1; nullable = n1 },
+     IntT { bitwidth = b2; field = f2; nullable = n2 })
     when Db.Field.equal f1 f2 ->
-    IntT { bitwidth = Int.max b1 b2; field = f1 }
-  | (BoolT { field = f1 }, BoolT { field = f2 }) when Db.Field.equal f1 f2 ->
-    BoolT { field = f1 }
-  | (StringT { nchars = b1; field = f1 }, StringT { nchars = b2; field = f2 })
+    IntT { bitwidth = Int.max b1 b2; field = f1; nullable = n1 || n2 }
+  | (IntT x), NullT _ | NullT _, (IntT x) -> IntT ({x with nullable = true})
+  | (BoolT { field = f1; nullable = n1 },
+     BoolT { field = f2; nullable = n2 }) when Db.Field.equal f1 f2 ->
+    BoolT { field = f1; nullable = n1 || n2 }
+  | (BoolT x), NullT _ | NullT _, (BoolT x) -> BoolT ({x with nullable = true})
+  | (StringT { nchars = b1; nullable = n1; field = f1 },
+     StringT { nchars = b2; nullable = n2; field = f2 })
     when Db.Field.equal f1 f2 ->
-    StringT { nchars = AbsLen.unify b1 b2; field = f1 }
+    StringT { nchars = AbsLen.unify b1 b2; field = f1; nullable = n1 || n2 }
+  | (StringT x), NullT _ | NullT _, (StringT x) -> StringT ({x with nullable = true})
   | CrossTupleT (e1s, { count = c1 }), CrossTupleT (e2s, { count = c2 }) ->
       let elem_ts = match List.map2 e1s e2s ~f:unify_exn with
         | Ok ts -> ts
@@ -121,13 +129,16 @@ let rec of_layout_exn : Layout.t -> t =
       | _ -> Unknown
     in
     match l.node with
-    | Int (x, {node = { field }}) when Int.(x = 0) -> IntT { bitwidth = 1; field }
+    | Int (x, {node = { field }}) when Int.(x = 0) ->
+      IntT { bitwidth = 1; nullable = false; field }
     | Int (x, {node = { field }}) when Int.(x < 0) ->
-      IntT { bitwidth = Int.floor_log2 (-x) + 1; field }
-    | Int (x, {node = { field }}) -> IntT { bitwidth = Int.floor_log2 x + 1; field }
-    | Bool (x, {node = { field }}) -> BoolT { field }
-    | String (x, {node = { field }}) -> StringT { nchars = Len (String.length x); field }
-    | Null _ -> EmptyT
+      IntT { bitwidth = Int.floor_log2 (-x) + 1; nullable = false; field }
+    | Int (x, {node = { field }}) ->
+      IntT { bitwidth = Int.floor_log2 x + 1; nullable = false; field }
+    | Bool (x, {node = { field }}) -> BoolT { nullable = false; field }
+    | String (x, {node = { field }}) ->
+      StringT { nchars = Len (String.length x); nullable = false; field }
+    | Null { node = { field } } -> NullT { field }
     | CrossTuple ls ->
       let ts = List.map ls ~f:of_layout_exn in
       CrossTupleT (ts, { count })
@@ -165,7 +176,7 @@ let rec params : t -> Set.M(TypedName).t =
   in
   let union_list = Set.union_list (module TypedName) in
   function
-  | EmptyT | IntT _ | BoolT _ | StringT _ -> Set.empty (module TypedName)
+  | EmptyT | NullT _ | IntT _ | BoolT _ | StringT _ -> Set.empty (module TypedName)
   | CrossTupleT (ts, _) | ZipTupleT (ts, _) -> List.map ts ~f:params |> union_list
   | UnorderedListT (t, _) -> params t
   | OrderedListT (t, { field; lookup = (v1, v2) }) ->
@@ -174,7 +185,7 @@ let rec params : t -> Set.M(TypedName).t =
     Set.union (Layout.PredCtx.Key.params k) (params t)
 
 let rec width : t -> int = function
-  | IntT _ | BoolT _ | StringT _ -> 1
+  | NullT _ | IntT _ | BoolT _ | StringT _ -> 1
   | CrossTupleT (ts, _) | ZipTupleT (ts, _) ->
     List.map ts ~f:width |> List.sum (module Int) ~f:(fun x -> x)
   | OrderedListT (t, _) | UnorderedListT (t, _) -> width t
@@ -183,13 +194,14 @@ let rec width : t -> int = function
 
 let count : t -> AbsCount.t = function
   | EmptyT -> Count 0
-  | IntT _ | BoolT _ | StringT _ -> Count 1
+  | NullT _ | IntT _ | BoolT _ | StringT _ -> Count 1
   | CrossTupleT (_, { count }) | ZipTupleT (_, { count })
   | OrderedListT (_, { count }) | UnorderedListT (_, { count })
   | TableT (_, _, { count }) -> count
 
 let rec to_schema : t -> Db.Schema.t = function
   | EmptyT -> []
+  | NullT m -> [m.field]
   | IntT m -> [m.field]
   | BoolT m -> [m.field]
   | StringT m -> [m.field]
