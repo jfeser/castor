@@ -151,7 +151,7 @@ let rec flatten : t -> t =
     end
   | Count r as x -> begin match flatten r with
       | Scan { node = Empty } ->
-        Scan Layout.(int 0 { rel = Relation.dummy; field = Field.dummy; idx = (-1) })
+        Scan Layout.(int 0 (scalar Relation.dummy Field.dummy))
       | _ -> x
     end
   | EqJoin (_, _, r1, r2) as x -> begin match flatten r1, flatten r2 with

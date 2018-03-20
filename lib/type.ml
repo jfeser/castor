@@ -121,12 +121,12 @@ let rec of_layout_exn : Layout.t -> t =
       | _ -> Unknown
     in
     match l.node with
-    | Int (x, { field }) when Int.(x = 0) -> IntT { bitwidth = 1; field }
-    | Int (x, { field }) when Int.(x < 0) ->
+    | Int (x, {node = { field }}) when Int.(x = 0) -> IntT { bitwidth = 1; field }
+    | Int (x, {node = { field }}) when Int.(x < 0) ->
       IntT { bitwidth = Int.floor_log2 (-x) + 1; field }
-    | Int (x, { field }) -> IntT { bitwidth = Int.floor_log2 x + 1; field }
-    | Bool (x, { field }) -> BoolT { field }
-    | String (x, {field}) -> StringT { nchars = Len (String.length x); field }
+    | Int (x, {node = { field }}) -> IntT { bitwidth = Int.floor_log2 x + 1; field }
+    | Bool (x, {node = { field }}) -> BoolT { field }
+    | String (x, {node = { field }}) -> StringT { nchars = Len (String.length x); field }
     | Null _ -> EmptyT
     | CrossTuple ls ->
       let ts = List.map ls ~f:of_layout_exn in

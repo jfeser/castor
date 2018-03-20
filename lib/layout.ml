@@ -91,11 +91,31 @@ type table = {
   lookup : PredCtx.Key.t;
 } [@@deriving compare, sexp, hash, bin_io]
 
-type scalar = {
+type scalar_node = {
   rel : Relation.t;
   field : Field.t;
-  idx : int;
 } [@@deriving compare, sexp, hash, bin_io]
+type scalar = scalar_node hash_consed
+
+module ScalarHashT = Hashcons.Make(struct
+    type t = scalar_node
+    let hash = hash_scalar_node
+    let equal x y = compare_scalar_node x y = 0
+  end)
+let scalar_table = ScalarHashT.create 10
+
+let scalar rel field = ScalarHashT.hashcons scalar_table { rel; field }
+let compare_scalar : scalar -> scalar -> int = fun s1 s2 ->
+  compare s1.tag s2.tag
+let scalar_of_sexp : Sexp.t -> scalar = fun s ->
+  let n = [%of_sexp:scalar_node] s in
+  scalar n.rel n.field
+let sexp_of_scalar : scalar -> Sexp.t = fun s ->
+  [%sexp_of:scalar_node] s.node
+let hash_scalar { hkey } = hkey
+let hash_fold_scalar state x = Hash.fold_int state (hash_scalar x)
+let bin_shape_scalar = bin_shape_scalar_node
+let bin_size_scalar = bin_size_scalar_node
 
 type t = node hash_consed
 and node =
@@ -170,10 +190,10 @@ module Binable = struct
   type layout = t
 
   type t =
-    | Int of int * scalar
-    | Bool of bool * scalar
-    | String of string * scalar
-    | Null of scalar
+    | Int of int * scalar_node
+    | Bool of bool * scalar_node
+    | String of string * scalar_node
+    | Null of scalar_node
     | CrossTuple of t list
     | ZipTuple of t list
     | UnorderedList of t list
@@ -183,10 +203,10 @@ module Binable = struct
   [@@deriving bin_io, hash]
 
   let rec of_layout : layout -> t = fun l -> match l.node with
-    | Int (v, x) -> Int (v, x)
-    | Bool (v, x) -> Bool (v, x)
-    | String (v, x) -> String (v, x)
-    | Null x -> Null x
+    | Int (v, x) -> Int (v, x.node)
+    | Bool (v, x) -> Bool (v, x.node)
+    | String (v, x) -> String (v, x.node)
+    | Null x -> Null x.node
     | CrossTuple v -> CrossTuple (List.map ~f:of_layout v)
     | ZipTuple v -> ZipTuple (List.map ~f:of_layout v)
     | UnorderedList v -> UnorderedList (List.map ~f:of_layout v)
@@ -195,10 +215,10 @@ module Binable = struct
     | Empty -> Empty
 
   let rec to_layout : t -> layout = function
-    | Int (v, x) -> int v x
-    | Bool (v, x) -> bool v x
-    | String (v, x) -> string v x
-    | Null x -> null x
+    | Int (v, x) -> int v (scalar x.rel x.field)
+    | Bool (v, x) -> bool v (scalar x.rel x.field)
+    | String (v, x) -> string v (scalar x.rel x.field)
+    | Null x -> null (scalar x.rel x.field)
     | CrossTuple v -> cross_tuple (List.map ~f:to_layout v)
     | ZipTuple v -> zip_tuple (List.map ~f:to_layout v)
     | UnorderedList v -> unordered_list (List.map ~f:to_layout v)
@@ -210,22 +230,21 @@ module Binable = struct
 end
 
 let to_value : t -> Value.t = fun l -> match l.node with
-  | Int (x, m) -> { field = m.field; rel = m.rel; idx = m.idx; value = `Int x }
-  | Bool (x, m) ->
-    { field = m.field; rel = m.rel; idx = m.idx; value = `Bool x }
-  | String (x, m) ->
-    { field = m.field; rel = m.rel; idx = m.idx; value = `String x }
-  | Null m ->
-    { field = m.field; rel = m.rel; idx = m.idx; value = `Null }
+  | Int (x, m) -> { field = m.node.field; rel = m.node.rel; idx = 0; value = `Int x }
+  | Bool (x, m) -> { field = m.node.field; rel = m.node.rel; idx = 0; value = `Bool x }
+  | String (x, m) -> { field = m.node.field; rel = m.node.rel; idx = 0; value = `String x }
+  | Null m -> { field = m.node.field; rel = m.node.rel; idx = 0; value = `Null }
   | x -> Error.create "Cannot be converted to value." x [%sexp_of:node]
          |> Error.raise
 
-let of_value : Value.t -> t = fun { field; rel; idx; value } -> match value with
-  | `Int x -> int x { field; rel; idx }
-  | `Bool x -> bool x { field; rel; idx }
-  | `String x -> string x { field; rel; idx }
-  | `Unknown x -> string x { field; rel; idx }
-  | `Null -> null { field; rel; idx }
+let of_value : Value.t -> t = fun { field; rel; idx; value } ->
+  let s = scalar rel field in
+  match value with
+  | `Int x -> int x s
+  | `Bool x -> bool x s
+  | `String x -> string x s
+  | `Unknown x -> string x s
+  | `Null -> null s
 
 let rec to_string : t -> string = fun l -> match l.node with
   | Int _ -> "i"
@@ -253,7 +272,7 @@ let rec to_string : t -> string = fun l -> match l.node with
 
 let rec to_schema_exn : t -> Schema.t = fun l -> match l.node with
   | Empty -> []
-  | Int (_, m) | Bool (_, m) | String (_, m) | Null m -> [m.field]
+  | Int (_, m) | Bool (_, m) | String (_, m) | Null m -> [m.node.field]
   | ZipTuple ls
   | CrossTuple ls -> List.concat_map ls ~f:to_schema_exn
   | UnorderedList ls | OrderedList (ls, _) ->
@@ -279,7 +298,7 @@ let rec params : t -> Set.M(TypedName).t =
 let rec partition : PredCtx.Key.t -> Field.t -> t -> t =
   let p_int k f x m =
     let v = int x m in
-    if Field.(f = m.field) then
+    if Field.(f = m.node.field) then
       table (Map.singleton (module ValueMap.Elem) (to_value v) v)
         {field = f; lookup = k}
     else v
@@ -287,7 +306,7 @@ let rec partition : PredCtx.Key.t -> Field.t -> t -> t =
 
   let p_bool k f x m =
     let v = bool x m in
-    if Field.(f = m.field) then
+    if Field.(f = m.node.field) then
       table (Map.singleton (module ValueMap.Elem) (to_value v) v)
         {field = f; lookup = k}
     else v
@@ -295,7 +314,7 @@ let rec partition : PredCtx.Key.t -> Field.t -> t -> t =
 
   let p_string k f x m =
     let v = string x m in
-    if Field.(f = m.field) then
+    if Field.(f = m.node.field) then
       table (Map.singleton (module ValueMap.Elem) (to_value v) v)
         {field = f; lookup = k}
     else v
@@ -524,14 +543,11 @@ let project : Field.t list -> t -> t = fun fs l ->
   let f_in = List.mem ~equal:Field.equal fs in
   let rec project = fun l -> match l.node with
     | Int (_, m) | Bool (_, m) | String (_, m) | Null m ->
-      if f_in m.field then l else empty
+      if f_in m.node.field then l else empty
     | CrossTuple ls ->
-      cross_tuple (List.map ls ~f:project |> List.filter ~f:(fun l -> ntuples_exn l > 0))
+      cross_tuple (List.map ls ~f:project |> List.filter ~f:(fun l -> compare l empty <> 0))
     | ZipTuple ls ->
-      let ls' =
-        List.map ls ~f:project |> List.filter ~f:(fun l -> ntuples_exn l > 0)
-      in
-      zip_tuple ls'
+      zip_tuple (List.map ls ~f:project |> List.filter ~f:(fun l -> compare l empty <> 0))
     | UnorderedList ls -> unordered_list (List.map ls ~f:project)
     | OrderedList (ls, ({ field = f } as x)) ->
       let ls' = List.map ls ~f:project in
@@ -595,7 +611,7 @@ let tests =
     in
     "partition" >::: [
       ("scalar" >:: fun ctxt ->
-          let inp = int 0 { rel = r; field = f1; idx = 0 } in
+          let inp = int 0 (scalar r f1) in
           let out = table (Map.singleton (module ValueMap.Elem) (to_value inp) inp)
               { lookup = PredCtx.Key.dummy; field = f1 }
           in
