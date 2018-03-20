@@ -78,6 +78,14 @@ let rec pred_fields : pred -> Field.t list = function
   | Binop (_, p1, p2) -> (pred_fields p1) @ (pred_fields p2)
   | Varop (_, ps) -> List.concat_map ps ~f:pred_fields
 
+let rec pred_params : pred -> Set.M(TypedName).t = function
+  | Field _ | Int _ | Bool _ | String _ -> Set.empty (module TypedName)
+  | Var v -> Set.singleton (module TypedName) v
+  | Binop (_, p1, p2) -> Set.union (pred_params p1) (pred_params p2)
+  | Varop (_, ps) ->
+    List.map ~f:pred_params ps
+    |> List.fold_left ~init:(Set.empty (module TypedName)) ~f:Set.union
+
 let op_to_string : op -> string = function
   | Eq -> "="
   | Lt -> "<"
@@ -173,12 +181,6 @@ let rec params : t -> Set.M(TypedName).t =
   | Project (_, r) | Count r -> params r
   | Filter (p, r) ->
     let open Ralgebra0 in
-    let rec pred_params = function
-      | Field _ | Int _ | Bool _ | String _ -> empty
-      | Var v -> Set.singleton (module TypedName) v
-      | Binop (_, p1, p2) -> Set.union (pred_params p1) (pred_params p2)
-      | Varop (_, ps) -> List.map ~f:pred_params ps |> union_list
-    in
     Set.union (pred_params p) (params r)
   | EqJoin (_, _, r1, r2) -> Set.union (params r1) (params r2)
   | Concat rs -> List.map ~f:params rs |> union_list

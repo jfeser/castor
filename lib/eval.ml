@@ -123,47 +123,97 @@ module Make (Config : Config.S) = struct
             (r, List.length r.fields, List.length vs)
             [%sexp_of:Relation.t * int * int] |> raise)
 
-  let eval : PredCtx.t -> Ralgebra.t -> Tuple.t Seq.t =
-    fun ctx r ->
-      let open Ralgebra0 in
-      let rec eval = function
-        | Scan l -> eval_layout ctx l
-        | Count r ->
-          let ct = Seq.length (eval r) in
-          Seq.singleton [Value.({
-              value = `Int ct; rel = Relation.dummy; field = Field.dummy; idx = 0
-            })]
-        | Project (fs, r) ->
-          eval r |> Seq.map ~f:(fun t ->
-              List.filter t ~f:(fun v ->
-                  List.mem ~equal:Field.(=) fs v.Value.field))
-        | Filter (p, r) ->
-          eval r |> Seq.filter ~f:(fun t ->
-              let ctx = Map.merge_right ctx (PredCtx.of_tuple t) in
-              match eval_pred ctx p with
-              | `Bool x -> x
-              | _ -> failwith "Expected a boolean.")
-        | EqJoin (f1, f2, r1, r2) ->
-          let module V = struct
-            type t = Value.t = {
-              rel : Relation.t; [@compare.ignore]
-              field : Field.t; [@compare.ignore]
-              idx : int; [@compare.ignore]
-              value : primvalue;
-            } [@@deriving compare, hash, sexp]
-          end in
+  let eval_count seq =
+    let ct = Seq.length seq in
+    Seq.singleton [Value.({
+        value = `Int ct; rel = Relation.dummy; field = Field.dummy; idx = 0
+      })]
 
-          let tbl = Hashtbl.create (module V) () in
-          eval r1 |> Seq.iter ~f:(fun t ->
-              let v = Tuple.field_exn t f1 in
-              Hashtbl.add_multi tbl ~key:v ~data:t);
-          eval r2 |> Seq.concat_map ~f:(fun t ->
-              let v = Tuple.field_exn t f2 in
-              match Hashtbl.find tbl v with
-              | Some ts -> List.map ts ~f:(fun t' -> t @ t') |> Seq.of_list
-              | None -> Seq.empty)
-        | Concat rs -> Seq.of_list rs |> Seq.concat_map ~f:eval
-        | Relation r -> eval_relation r
-      in
-      eval r
+  let eval_project fs seq =
+    Seq.map seq ~f:(fun t ->
+        List.filter t ~f:(fun v ->
+            List.mem ~equal:Field.(=) fs v.Value.field))
+
+  let eval_filter ctx p seq =
+    Seq.filter seq ~f:(fun t ->
+        let ctx = Map.merge_right ctx (PredCtx.of_tuple t) in
+        match eval_pred ctx p with
+        | `Bool x -> x
+        | _ -> failwith "Expected a boolean.")
+
+  let eval_eqjoin f1 f2 s1 s2 = 
+    let module V = struct
+      type t = Value.t = {
+        rel : Relation.t; [@compare.ignore]
+          field : Field.t; [@compare.ignore]
+          idx : int; [@compare.ignore]
+          value : primvalue;
+      } [@@deriving compare, hash, sexp]
+    end in
+
+    let tbl = Hashtbl.create (module V) () in
+    Seq.iter s1 ~f:(fun t ->
+        let v = Tuple.field_exn t f1 in
+        Hashtbl.add_multi tbl ~key:v ~data:t);
+    Seq.concat_map s2 ~f:(fun t ->
+        let v = Tuple.field_exn t f2 in
+        match Hashtbl.find tbl v with
+        | Some ts -> List.map ts ~f:(fun t' -> t @ t') |> Seq.of_list
+        | None -> Seq.empty)
+
+  let eval_concat ss = Seq.of_list ss |> Seq.concat
+
+  let eval : PredCtx.t -> Ralgebra.t -> Tuple.t Seq.t = fun ctx r ->
+    let open Ralgebra0 in
+    let rec eval = function
+      | Scan l -> eval_layout ctx l
+      | Count r -> eval_count (eval r)
+      | Project (fs, r) -> eval_project fs (eval r)
+      | Filter (p, r) -> eval_filter ctx p (eval r)
+      | EqJoin (f1, f2, r1, r2) -> eval_eqjoin f1 f2 (eval r1) (eval r2)
+      | Concat rs -> eval_concat (List.map ~f:eval rs)
+      | Relation r -> eval_relation r
+    in
+    eval r
+
+  let eval_partial : Ralgebra.t -> Ralgebra.t =
+    let open Ralgebra0 in
+    let row_layout s =
+      Seq.map s ~f:(fun tup -> cross_tuple (List.map ~f:(fun v -> of_value v) tup))
+      |> Seq.to_list
+      |> unordered_list
+      |> fun l -> Scan l
+    in
+    let rec f = function
+      | Project (fs, r) -> begin match f r with
+          | `Seq s -> `Seq (eval_project fs s)
+          | `Ralgebra r -> `Ralgebra (Project (fs, r))
+        end
+      | Filter (p, r) -> begin match f r with
+          | `Seq s -> if Set.length (Ralgebra.pred_params p) = 0 then
+              `Seq (eval_filter (Map.empty (module PredCtx.Key)) p s)
+            else `Ralgebra (Filter (p, row_layout s))
+          | `Ralgebra r -> `Ralgebra (Filter (p, r))
+        end
+      | EqJoin (f1, f2, r1, r2) -> begin match f r1, f r2 with
+          | `Seq s1, `Seq s2 -> `Seq (eval_eqjoin f1 f2 s1 s2)
+          | `Seq s1, `Ralgebra r2 -> `Ralgebra (EqJoin (f1, f2, row_layout s1, r2))
+          | `Ralgebra r1, `Seq s2 -> `Ralgebra (EqJoin (f1, f2, r1, row_layout s2))
+          | `Ralgebra r1, `Ralgebra r2 -> `Ralgebra (EqJoin (f1, f2, r1, r2))
+        end
+      | Concat rs ->
+        let ss = List.map rs ~f in
+        `Ralgebra (Concat (List.map ss ~f:(function
+            | `Seq s -> row_layout s
+            | `Ralgebra r -> r)))
+      | Count r -> begin match f r with
+          | `Seq s -> `Seq (eval_count s)
+          | `Ralgebra r -> `Ralgebra (Count r)
+        end
+      | Relation r -> `Seq (eval_relation r)
+      | Scan _ as r -> `Ralgebra r
+    in
+    fun r -> match f r with
+      | `Seq s -> row_layout s
+      | `Ralgebra r -> r
 end
