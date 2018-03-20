@@ -1,12 +1,31 @@
 (jbuild_version 1)
 
+(install
+ ((section bin)
+  (files (compile.exe search.exe transform.exe))))
+
 (rule
  ((targets (config.ml))
   (deps    (../config))
   (action  (copy ${<} ${@}))))
 
-(executables
- ((names (test_layout test_locality test_eval test_pcify test_codegen perf search compile transform))
-  (libraries (core postgresql dblayout fmt fmt.cli fmt.tty cmdliner logs logs.fmt logs.cli sexplib sqlite3))
-  (preprocess (pps (ppx_sexp_conv ppx_compare ppx_let ppx_driver.runner -no-check)))
-  (flags (:standard -g -bin-annot))))
+(executable
+ ((name search)
+  (libraries (core postgresql dblayout))
+  (flags (:standard -g -bin-annot))
+  (preprocess (pps (ppx_sexp_conv ppx_let ppx_driver.runner -no-check)))
+  (modules search)))
+
+(executable
+ ((name compile)
+  (libraries (core dblayout))
+  (flags (:standard -g -bin-annot))
+  (preprocess (pps (ppx_sexp_conv ppx_let ppx_driver.runner -no-check)))
+  (modules (compile config))))
+
+(executable
+ ((name transform)
+  (libraries (core postgresql dblayout logs))
+  (flags (:standard -g -bin-annot))
+  (preprocess (pps (ppx_sexp_conv ppx_let ppx_driver.runner -no-check)))
+  (modules transform)))
