@@ -39,10 +39,10 @@ let append x y = PList [x; y]
 
 let length : t -> int =
   let rec length acc = function
-    | Label (_, x) -> length acc x
+    | Label (_, x) -> (length [@tailcall]) acc x
     | Piece { len } -> acc + len
     | PList [] -> acc
-    | PList (x::xs) -> length acc x + length acc (PList xs)
+    | PList (x::xs) -> (length [@tailcall]) (length acc x) (PList xs)
   in
   length 0
 
