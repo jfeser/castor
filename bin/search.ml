@@ -34,55 +34,6 @@ let finally : f:(unit -> 'a) -> (unit -> unit) -> 'a = fun ~f g ->
 
     not has_refs && types_check
 
-let serialize : Ralgebra.t -> bool = fun r ->
-  let open Unix in
-
-  let cand = Ralgebra.Binable.of_ralgebra r in
-  let name = sprintf "%d.bin" (Ralgebra.Binable.hash cand) in
-  let fn = sprintf "frontier/%s" name in
-
-  (* If the candidate exists on the frontier or in the collected set, don't add
-     it.*)
-  if Sys.file_exists fn = `Yes || Sys.file_exists name = `Yes then false else
-    let size =
-      Ralgebra.Binable.bin_size_t cand + Bin_prot.Utils.size_header_length
-    in
-    try
-      let fd = openfile ~mode:[O_RDWR; O_CREAT; O_EXCL] fn in
-      finally (fun () -> close fd) ~f:(fun () ->
-          if flock fd Flock_command.lock_exclusive then begin
-            finally (fun () ->
-                if not (flock fd Flock_command.unlock) then
-                  Logs.warn (fun m -> m "Failed to release file lock on %s." fn))
-              ~f:(fun () ->
-                  let buf = Bigstring.create size in
-                  Bigstring.write_bin_prot buf Ralgebra.Binable.bin_writer_t cand |> ignore;
-                  Bigstring.really_write fd buf;
-
-                  if validate r then link ~target:fn ~link_name:name ()); true
-          end else false)
-    with Unix_error _ -> false
-
-let deserialize : string -> f:(Ralgebra.t -> 'a) -> 'a option = fun fn ~f ->
-  let open Unix in
-  try
-    let fd = openfile ~mode:[O_RDWR] fn in
-    finally (fun () -> close fd) ~f:(fun () ->
-        if Unix.flock fd Unix.Flock_command.lock_exclusive then
-          finally (fun () ->
-              if not (Unix.flock fd Unix.Flock_command.unlock) then
-                Logs.warn (fun m -> m "Failed to release file lock on %s." fn))
-            ~f:(fun () ->
-                let size = (Native_file.stat fn).st_size in
-                let buf = Bigstring.create size in
-                Bigstring.really_read fd buf;
-                let r, _ = Bigstring.read_bin_prot buf Ralgebra.Binable.bin_reader_t
-                           |> Or_error.ok_exn
-                in
-                Some (Ralgebra.Binable.to_ralgebra r |> f))
-        else None)
-  with Unix_error _ -> None
-
 let main : ?sample:int -> db:string -> Bench.t -> string -> unit =
   fun ?sample ~db { name; sql; query; params } dir ->
     (* FIXME: Use the first parameter value for test params. Should use multiple
@@ -99,19 +50,61 @@ let main : ?sample:int -> db:string -> Bench.t -> string -> unit =
       let testctx = Layout.PredCtx.of_vars test_params
       let check_transforms = false
     end in
+
     let module Transform = Transform.Make(Config) in
-    let ralgebra =
-      Ralgebra.of_string_exn query |> Ralgebra.resolve Config.conn
+    let module Candidate = Candidate.Make(Config) in
+
+    let serialize : Candidate.t -> bool = fun c ->
+      let open Unix in
+
+      let r = c.ralgebra in
+      let c = Candidate.Binable.of_candidate c in
+      let name = sprintf "%d.bin" (Ralgebra.Binable.hash c.ralgebra) in
+      let fn = sprintf "frontier/%s" name in
+
+      (* If the candidate exists on the frontier or in the collected set, don't add
+         it.*)
+      if Sys.file_exists fn = `Yes || Sys.file_exists name = `Yes then false else
+        let size =
+          Candidate.Binable.bin_size_t c + Bin_prot.Utils.size_header_length
+        in
+        try
+          let fd = openfile ~mode:[O_RDWR; O_CREAT; O_EXCL] fn in
+          finally (fun () -> close fd) ~f:(fun () ->
+              if flock fd Flock_command.lock_exclusive then begin
+                finally (fun () ->
+                    if not (flock fd Flock_command.unlock) then
+                      Logs.warn (fun m -> m "Failed to release file lock on %s." fn))
+                  ~f:(fun () ->
+                      let buf = Bigstring.create size in
+                      Bigstring.write_bin_prot buf Candidate.Binable.bin_writer_t c |> ignore;
+                      Bigstring.really_write fd buf;
+
+                      if validate r then link ~target:fn ~link_name:name ()); true
+              end else false)
+        with Unix_error _ -> false
     in
 
-    (* If we need to sample, generate sample tables and swap them in the
-       expression. *)
-    begin match sample with
-      | Some s ->
-        Ralgebra.relations ralgebra
-        |> List.iter ~f:(Db.Relation.sample Config.conn s);
-      | None -> ()
-    end;
+    let deserialize : string -> f:(Candidate.t -> 'a) -> 'a option = fun fn ~f ->
+      let open Unix in
+      try
+        let fd = openfile ~mode:[O_RDWR] fn in
+        finally (fun () -> close fd) ~f:(fun () ->
+            if Unix.flock fd Unix.Flock_command.lock_exclusive then
+              finally (fun () ->
+                  if not (Unix.flock fd Unix.Flock_command.unlock) then
+                    Logs.warn (fun m -> m "Failed to release file lock on %s." fn))
+                ~f:(fun () ->
+                    let size = (Native_file.stat fn).st_size in
+                    let buf = Bigstring.create size in
+                    Bigstring.really_read fd buf;
+                    let r, _ = Bigstring.read_bin_prot buf Candidate.Binable.bin_reader_t
+                               |> Or_error.ok_exn
+                    in
+                    Some (Candidate.Binable.to_candidate r |> f))
+            else None)
+      with Unix_error _ -> None
+    in
 
     let rec search : unit -> unit = fun () ->
       (* Grab a candidate from the frontier. *)
@@ -127,15 +120,30 @@ let main : ?sample:int -> db:string -> Bench.t -> string -> unit =
 
             (* Generate children of candidate and write to frontier. *)
             List.iter Transform.transforms ~f:(fun t ->
-                List.iter (Transform.(run (compose required t) r)) ~f:(fun r' ->
+                let tf = Transform.(compose required t) in
+                List.iter (Candidate.run tf r) ~f:(fun r' ->
                     serialize r' |> ignore))
           ) |> ignore;
         search ()
     in
 
+    let cand = Candidate.({
+      ralgebra = Ralgebra.of_string_exn query |> Ralgebra.resolve Config.conn;
+      transforms = [];
+    }) in
+
+    (* If we need to sample, generate sample tables and swap them in the
+       expression. *)
+    begin match sample with
+      | Some s ->
+        Ralgebra.relations cand.ralgebra
+        |> List.iter ~f:(Db.Relation.sample Config.conn s);
+      | None -> ()
+    end;
+
     in_dir dir ~f:(fun () -> 
         if Sys.file_exists "frontier" = `No then Unix.mkdir "frontier";
-        serialize ralgebra |> ignore;
+        serialize cand |> ignore;
         search ())
 
 let () =

@@ -6,11 +6,6 @@ open Db
 open Eval
 open Layout
 
-type t = {
-  name : string;
-  f : Ralgebra.t -> Ralgebra.t list;
-}
-
 module Config = struct
   module type S = sig
     include Eval.Config.S
@@ -24,6 +19,11 @@ module Make (Config : Config.S) = struct
   module Eval = Eval.Make(Config)
   open Eval
   open Config
+
+  type t = {
+    name : string;
+    f : Ralgebra.t -> Ralgebra.t list;
+  }
 
   let col_layout : Relation.t -> Layout.t = fun r ->
     let open Layout in

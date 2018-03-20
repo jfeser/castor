@@ -9,8 +9,8 @@ let main = fun ~debug ~gprof ~params fn ->
   let size = (Unix.Native_file.stat fn).st_size in
   let buf = Bigstring.create size in
   Bigstring.really_read fd buf;
-  let ralgebra, _ =
-    Bigstring.read_bin_prot buf Ralgebra.Binable.bin_reader_t
+  let Candidate.Binable.({ ralgebra; transforms }), _ =
+    Bigstring.read_bin_prot buf Candidate.Binable.bin_reader_t
     |> Or_error.ok_exn
   in
   Unix.close fd;
@@ -21,6 +21,12 @@ let main = fun ~debug ~gprof ~params fn ->
   (* Dump type. *)
   Out_channel.with_file "ralgebra" ~f:(fun ch ->
     Ralgebra.to_string ralgebra |> Out_channel.output_string ch);
+
+  (* Dump transforms. *)
+  Out_channel.with_file "transforms" ~f:(fun ch ->
+      List.map transforms ~f:(fun (tf, i) -> sprintf "%s:%d" tf i)
+      |> String.concat ~sep:","
+      |> Out_channel.output_string ch);
 
   let module CConfig = struct
     let debug = debug
