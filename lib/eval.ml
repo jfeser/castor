@@ -6,6 +6,8 @@ open Layout
 
 exception EvalError of Error.t
 
+let raise e = raise (EvalError e)
+
 module Config = struct
   module type S = sig
     val conn : Postgresql.connection
@@ -23,14 +25,14 @@ module Make (Config : Config.S) = struct
       | Var (n, _) ->
         begin match PredCtx.find_var ctx n with
           | Some v -> v
-          | None -> Error.create "Unbound variable." (n, ctx) [%sexp_of:string * PredCtx.t]
-                    |> Error.raise
+          | None -> Error.create "Unbound variable." (n, ctx)
+                      [%sexp_of:string * PredCtx.t] |> raise
         end
       | Field f ->
         begin match PredCtx.find_field ctx f with
           | Some v -> v
-          | None -> Error.create "Unbound variable." (f, ctx) [%sexp_of:Field.t * PredCtx.t]
-                    |> Error.raise
+          | None -> Error.create "Unbound variable." (f, ctx)
+                      [%sexp_of:Field.t * PredCtx.t] |> raise
         end
       | Binop (op, p1, p2) ->
         let v1 = eval_pred ctx p1 in
@@ -47,7 +49,7 @@ module Make (Config : Config.S) = struct
           | Or, `Bool x1, `Bool x2 -> `Bool (x1 || x2)
           | _ -> Error.create "Unexpected argument types." (op, v1, v2)
                    [%sexp_of:Ralgebra.op * primvalue * primvalue]
-                 |> Error.raise
+                 |> raise
         end
       | Varop (op, ps) ->
         let vs = List.map ps ~f:(eval_pred ctx) in
@@ -63,7 +65,7 @@ module Make (Config : Config.S) = struct
                 | _ -> failwith "Unexpected argument type.")
             |> fun x -> `Bool x
           | _ -> Error.create "Unexpected argument types." (op, vs)
-                   [%sexp_of:Ralgebra.op * primvalue list] |> Error.raise
+                   [%sexp_of:Ralgebra.op * primvalue list] |> raise
         end
 
   let rec eval_layout : PredCtx.t -> t -> Tuple.t Seq.t =
@@ -88,8 +90,8 @@ module Make (Config : Config.S) = struct
               | Some l -> eval_layout ctx l
               | None -> Seq.empty
             end
-          | None -> raise (EvalError (Error.create "Missing key." (k, ctx)
-                                        [%sexp_of:(PredCtx.Key.t * PredCtx.t)]))
+          | None -> Error.create "Missing key." (k, ctx)
+                      [%sexp_of:(PredCtx.Key.t * PredCtx.t)] |> raise
         end
       | Empty -> Seq.empty
 
@@ -119,7 +121,7 @@ module Make (Config : Config.S) = struct
         | Unequal_lengths ->
           Error.create "Unexpected tuple width."
             (r, List.length r.fields, List.length vs)
-            [%sexp_of:Relation.t * int * int] |> Error.raise)
+            [%sexp_of:Relation.t * int * int] |> raise)
 
   let eval : PredCtx.t -> Ralgebra.t -> Tuple.t Seq.t =
     fun ctx r ->
