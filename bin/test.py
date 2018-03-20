@@ -8,16 +8,22 @@ import sys
 
 COMPILE = '/scratch/jack/_build/default/fastdb/bin/compile.exe'
 
+def mkdir(path):
+    if not os.path.exists(path):
+        try:
+            os.mkdir(path)
+        except FileExistsError:
+            pass
+
 def main(compile_args, out_dir, result_db, fn):
     result_db = os.getcwd() + '/' + result_db
     fn = os.getcwd() + '/' + fn
-    if not os.path.exists(out_dir):
-        os.mkdir(out_dir)
+    mkdir(out_dir)
     name = os.path.splitext(os.path.basename(fn))[0]
     working_dir = out_dir + '/' + name
     if os.path.exists(working_dir):
         shutil.rmtree(working_dir)
-    os.mkdir(working_dir)
+    mkdir(working_dir)
     os.chdir(working_dir)
 
     compile_failed = False
