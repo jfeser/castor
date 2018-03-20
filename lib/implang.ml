@@ -1064,8 +1064,8 @@ module IRGen = struct
                 | R.Le -> Infix.(e1 <= e2)
                 | R.Gt -> Infix.(e1 > e2)
                 | R.Ge -> Infix.(e1 >= e2)
-                | R.And | R.Or ->
-                  fail (Error.create "Not a binary operator." op [%sexp_of:R.op])
+                | R.And -> Infix.(e1 && e2)
+                | R.Or -> Infix.(e1 || e2)
               end
             | R.Varop (op, args) ->
               let eargs = List.map ~f:gen_pred args in
