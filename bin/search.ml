@@ -97,6 +97,7 @@ let main : ?sample:int -> db:string -> Bench.t -> string -> unit =
     let module Config = struct
       let conn = new connection ~dbname:db ()
       let testctx = Layout.PredCtx.of_vars test_params
+      let check_transforms = false
     end in
     let module Transform = Transform.Make(Config) in
     let ralgebra =
@@ -126,7 +127,7 @@ let main : ?sample:int -> db:string -> Bench.t -> string -> unit =
 
             (* Generate children of candidate and write to frontier. *)
             List.iter Transform.transforms ~f:(fun t ->
-                List.iter (Transform.run_everywhere t r) ~f:(fun r' ->
+                List.iter (Transform.(run (compose required t) r)) ~f:(fun r' ->
                     serialize r' |> ignore))
           ) |> ignore;
         search ()

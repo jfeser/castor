@@ -15,6 +15,7 @@ module Config = struct
   module type S = sig
     include Eval.Config.S
 
+    val check_transforms : bool
     val testctx : PredCtx.t
   end
 end
@@ -62,17 +63,21 @@ module Make (Config : Config.S) = struct
     in
     { name; f }
 
-  let run : t -> Ralgebra.t -> Ralgebra.t list = fun t r ->
-    try t.f r with Layout.TransformError _ -> []
-
-  let run_checked : t -> Ralgebra.t -> Ralgebra.t list = fun t r ->
+  let run_unchecked : t -> Ralgebra.t -> Ralgebra.t list = fun t r ->
     try
       let rs = t.f r |> List.filter ~f:(fun r' -> Ralgebra.(r' <> r)) in
       let len = List.length rs in
       if len > 0 then
         Logs.info (fun m -> m "%d new candidates from running %s." len t.name);
+      rs
+    with Layout.TransformError e ->
+      Logs.warn (fun m -> m "Transform %s failed: %s." t.name (Error.to_string_hum e));
+      []
 
-      List.iter rs ~f:(fun r' ->
+  let run_checked : t -> Ralgebra.t -> Ralgebra.t list = fun t r ->
+    let rs = run_unchecked t r in
+    List.iter rs ~f:(fun r' ->
+        try
           let eval_to_set r =
             eval testctx r
             |> Seq.fold ~init:(Set.empty (module Tuple)) ~f:Set.add
@@ -80,15 +85,19 @@ module Make (Config : Config.S) = struct
           let s1 = eval_to_set r in
           let s2 = eval_to_set r' in
           if not (Set.equal s1 s2) then
-            Logs.warn (fun m -> m "Transform %s not equivalent. New relation has %d records, old has %d." t.name (Set.length s2) (Set.length s1)));
-      rs
-    with Layout.TransformError e ->
-      Logs.warn (fun m -> m "Transform %s failed: %s." t.name (Error.to_string_hum e));
-      []
+            Logs.warn (fun m -> m "Transform %s not equivalent. New relation has %d records, old has %d."
+                          t.name (Set.length s2) (Set.length s1))
+        with EvalError e ->
+          Logs.warn (fun m -> m "Error when running eval transform. %s %s"
+                        (Ralgebra.to_string r) (Error.to_string_hum e)));
+    rs
+
+  let run : t -> Ralgebra.t -> Ralgebra.t list =
+    if Config.check_transforms then run_unchecked else run_unchecked
 
   let run_chain : t list -> Ralgebra.t -> Ralgebra.t Seq.t = fun tfs r ->
     List.fold_left tfs ~init:[r]
-      ~f:(fun rs t -> List.concat_map ~f:(run_checked t) rs)
+      ~f:(fun rs t -> List.concat_map ~f:(run t) rs)
     |> Seq.of_list
 
   let id : t = { name = "id"; f = fun r -> [r] }
@@ -102,16 +111,26 @@ module Make (Config : Config.S) = struct
     name = "eval";
     f = fun r ->
       if (Ralgebra.params r |> Set.length) = 0 then
-        let layout =
-          Eval.eval (Map.empty (module PredCtx.Key)) r
-          |> Seq.map ~f:(fun tup -> cross_tuple (List.map ~f:(fun v -> of_value v) tup))
-          |> Seq.to_list
-          |> unordered_list
-        in
-        let r' = Ralgebra0.Scan layout in
-        [r']
+        try
+          let layout =
+            Eval.eval (Map.empty (module PredCtx.Key)) r
+            |> Seq.map ~f:(fun tup -> cross_tuple (List.map ~f:(fun v -> of_value v) tup))
+            |> Seq.to_list
+            |> unordered_list
+          in
+          let r' = Ralgebra0.Scan layout in
+          [r']
+        with EvalError e ->
+          Logs.warn (fun m -> m "Error when running eval transform. %s %s"
+                        (Ralgebra.to_string r) (Error.to_string_hum e));
+          []
       else [r]
   } |> run_everywhere
+
+  let tf_eval_all : t = {
+    name = "eval-all";
+    f = fun r -> [Eval.eval_partial r];
+  }
 
   let tf_hoist_filter : t = {
     name = "hoist-filter";
@@ -227,6 +246,7 @@ module Make (Config : Config.S) = struct
     tf_push_filter;
     tf_hoist_filter;
     tf_eval;
+    tf_eval_all;
   ]
 
   let required = compose_many [
@@ -245,7 +265,7 @@ module Make (Config : Config.S) = struct
     fun r ->
       Seq.bfs r (fun r ->
           Seq.map (Seq.of_list transforms) ~f:(fun tf ->
-            run_checked tf r |> Seq.of_list)
+            run tf r |> Seq.of_list)
           |> Seq.concat)
       |> Seq.filter ~f:(fun r -> List.length (Ralgebra.relations r) = 0)
 end

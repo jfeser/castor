@@ -5,8 +5,8 @@ open Collections
 
 type transform = (string * int option)
 
-let main : ?sample:int -> ?transforms:transform list -> ?output:string -> db:string -> Bench.t -> unit =
-  fun ?sample ?(transforms = []) ?output ~db { name; params; sql; query } ->
+let main : ?debug:bool -> ?sample:int -> ?transforms:transform list -> ?output:string -> db:string -> Bench.t -> unit =
+  fun ?(debug = false) ?sample ?(transforms = []) ?output ~db { name; params; sql; query } ->
     (* FIXME: Use the first parameter value for test params. Should use multiple
        choices and average. *)
     let test_params = List.map params ~f:(fun (pname, values) ->
@@ -19,6 +19,7 @@ let main : ?sample:int -> ?transforms:transform list -> ?output:string -> db:str
     let module Config = struct
       let conn = new connection ~dbname:db ()
       let testctx = Layout.PredCtx.of_vars test_params
+      let check_transforms = debug
     end in
     let module Transform = Transform.Make(Config) in
     let ralgebra =
@@ -37,7 +38,7 @@ let main : ?sample:int -> ?transforms:transform list -> ?output:string -> db:str
     let candidates = List.fold_left transforms ~init:[ralgebra] ~f:(fun rs (t, i) ->
         let tf = Transform.of_name t |> Or_error.ok_exn in
         let rs' = List.concat_map rs ~f:(fun r ->
-            let r' = Transform.(run_checked (compose required tf) r) in
+            let r' = Transform.(run (compose required tf) r) in
             match i with
             | Some idx -> [List.nth_exn r' idx]
             | None -> r')
@@ -84,11 +85,12 @@ let () =
     and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
     and sample = flag "sample" ~aliases:["s"] (optional int) ~doc:"the number of rows to sample from large tables"
     and output = flag "output" ~aliases:["o"] (optional string) ~doc:"where to write the final expression"
+    and debug = flag "debug" ~aliases:["g"] no_arg ~doc:"turn on error checking for transforms"
     and bench = anon ("bench" %: bench)
     in fun () ->
       if verbose then Logs.set_level (Some Logs.Debug)
       else if quiet then Logs.set_level (Some Logs.Error)
       else Logs.set_level (Some Logs.Info);
 
-      main ?sample ?transforms ?output ~db bench
+      main ~debug ?sample ?transforms ?output ~db bench
   ] |> run
