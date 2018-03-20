@@ -34,8 +34,8 @@ let finally : f:(unit -> 'a) -> (unit -> unit) -> 'a = fun ~f g ->
 
     not has_refs && types_check
 
-let main : ?sample:int -> db:string -> Bench.t -> string -> unit =
-  fun ?sample ~db { name; sql; query; params } dir ->
+let main : ?num:int -> ?sample:int -> db:string -> Bench.t -> string -> unit =
+  fun ?num ?sample ~db { name; sql; query; params } dir ->
     (* FIXME: Use the first parameter value for test params. Should use multiple
        choices and average. *)
     let test_params = List.map params ~f:(fun (pname, values) ->
@@ -107,24 +107,29 @@ let main : ?sample:int -> db:string -> Bench.t -> string -> unit =
     in
 
     let rec search : unit -> unit = fun () ->
-      (* Grab a candidate from the frontier. *)
-      let dir_entries = Sys.readdir "frontier" in
-      if Array.length dir_entries = 0 then () else
-        let name = dir_entries.(Random.int (Array.length dir_entries)) in
-        let fn = (sprintf "frontier/%s" name) in
-        deserialize fn ~f:(fun r ->
-            Logs.info (fun m -> m "Transforming candidate %s." name);
+      let should_stop = match num with
+        | Some n -> Sys.readdir "." |> Array.length >= n
+        | None -> false
+      in
+      if should_stop then () else
+        (* Grab a candidate from the frontier. *)
+        let dir_entries = Sys.readdir "frontier" in
+        if Array.length dir_entries = 0 then () else
+          let name = dir_entries.(Random.int (Array.length dir_entries)) in
+          let fn = (sprintf "frontier/%s" name) in
+          deserialize fn ~f:(fun r ->
+              Logs.info (fun m -> m "Transforming candidate %s." name);
 
-            (* Move candidate out of frontier. *)
-            Unix.unlink fn;
+              (* Move candidate out of frontier. *)
+              Unix.unlink fn;
 
-            (* Generate children of candidate and write to frontier. *)
-            List.iter Transform.transforms ~f:(fun t ->
-                let tf = Transform.(compose required t) in
-                List.iter (Candidate.run tf r) ~f:(fun r' ->
-                    serialize r' |> ignore))
-          ) |> ignore;
-        search ()
+              (* Generate children of candidate and write to frontier. *)
+              List.iter Transform.transforms ~f:(fun t ->
+                  let tf = Transform.(compose required t) in
+                  List.iter (Candidate.run tf r) ~f:(fun r' ->
+                      serialize r' |> ignore))
+            ) |> ignore;
+          search ()
     in
 
     let cand = Candidate.({
@@ -158,6 +163,7 @@ let () =
     and verbose = flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
     and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
     and sample = flag "sample" ~aliases:["s"] (optional int) ~doc:"the number of rows to sample from large tables"
+    and num = flag "num" ~aliases:["n"] (optional int) ~doc:"the number of candidates to enumerate"
     and bench = anon ("bench" %: bench)
     and dir = anon ("dir" %: file)
     in fun () ->
