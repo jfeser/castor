@@ -3,6 +3,8 @@ open Printf
 open Db
 open Type0
 
+open Ralgebra0
+
 module T = struct
   type op = Ralgebra0.op [@@deriving compare, sexp]
   type pred = Field.t Ralgebra0.pred [@@deriving compare, sexp]
@@ -42,6 +44,16 @@ let rec relations : ('f, 'r, 'l) Ralgebra0.t -> 'r list = function
   | Scan _ -> []
   | Concat rs -> List.concat_map rs ~f:relations
   | Relation r -> [r]
+
+let predicates : ('f, 'r, 'l) Ralgebra0.t -> 'f Ralgebra0.pred list = 
+  let rec f = function
+    | Scan _ | Relation _ -> []
+    | Project (_, r) | Count r -> f r
+    | EqJoin (_, _, r1, r2) -> f r1 @ f r2
+    | Concat rs -> List.concat_map rs ~f
+    | Filter (p, r) -> p::(f r)
+  in
+  f
 
 let resolve : Postgresql.connection -> (string * string, string, Layout.t) Ralgebra0.t
   -> t = fun conn ralgebra ->
@@ -85,6 +97,24 @@ let rec pred_params : pred -> Set.M(TypedName).t = function
   | Varop (_, ps) ->
     List.map ~f:pred_params ps
     |> List.fold_left ~init:(Set.empty (module TypedName)) ~f:Set.union
+
+(** Collect predicates which apply to the leaf relations and must be satisfied. *)
+let required_predicates : t -> pred list Map.M(Relation).t = fun r ->
+  let preds = predicates r in
+  let rels = relations r |> List.map ~f:(fun r ->
+      r, Set.of_list (module Field) r.Relation.fields)
+  in
+  List.concat_map preds ~f:(function
+      | Binop (And, p1, p2) -> [p1; p2]
+      | Varop (And, ps) -> ps
+      | p -> [p])
+  |> List.filter ~f:(fun p -> Int.(Set.length (pred_params p) = 0))
+  |> List.filter_map ~f:(fun p ->
+      let fs = pred_fields p |> Set.of_list (module Field) in
+      match List.find rels ~f:(fun (_, fs') -> Set.is_subset fs ~of_:fs') with
+      | Some (r, _) -> Some (r, p)
+      | None -> None)
+  |> Map.of_alist_multi (module Relation)
 
 let op_to_string : op -> string = function
   | Eq -> "="
