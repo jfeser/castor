@@ -98,6 +98,25 @@ let rec pred_params : pred -> Set.M(TypedName).t = function
     List.map ~f:pred_params ps
     |> List.fold_left ~init:(Set.empty (module TypedName)) ~f:Set.union
 
+let rec primvalue_to_pred : primvalue -> pred = function
+  | `Bool x -> Bool x
+  | `String x -> String x
+  | `Int x -> Int x
+  | `Unknown _
+  | `Null as v -> Error.create "Unsupported" v [%sexp_of:primvalue] |> Error.raise
+
+let pred_subst : primvalue Map.M(String).t -> pred -> pred = fun ctx p ->
+  let rec f = function
+    | Field _ | Int _ | Bool _ | String _ as p -> p
+    | Var (n, _) as p -> begin match Map.find ctx n with
+        | Some v -> primvalue_to_pred v
+        | None -> p
+      end
+    | Binop (op, p1, p2) -> Binop (op, f p1, f p2)
+    | Varop (op, ps) -> Varop (op, List.map ~f ps)
+  in
+  f p
+
 (** Collect predicates which apply to the leaf relations and must be satisfied. *)
 let required_predicates : t -> pred list Map.M(Relation).t = fun r ->
   let preds = predicates r in
@@ -122,8 +141,23 @@ let op_to_string : op -> string = function
   | Le -> "<="
   | Gt -> ">"
   | Ge -> ">="
-  | And -> "And"
-  | Or -> "Or"
+  | And -> "and"
+  | Or -> "or"
+
+let rec pred_to_sql_exn : pred -> string = function
+  | Var _ as p -> Error.create "Unsupported." p [%sexp_of:pred] |> Error.raise
+  | Field f -> f.name
+  | Int x -> Int.to_string x
+  | Bool x -> Bool.to_string x
+  | String x -> String.escaped x
+  | Binop (op, p1, p2) ->
+    let s1 = pred_to_sql_exn p1 in
+    let s2 = pred_to_sql_exn p2 in
+    let s_op = op_to_string op in
+    sprintf "(%s) %s (%s)" s1 s_op s2
+  | Varop (op, ps) ->
+    List.map ~f:(fun p -> sprintf "(%s)" (pred_to_sql_exn p)) ps
+    |> String.concat ~sep:(op_to_string op)
 
 let rec pred_to_string : pred -> string = function
   | Var v -> TypedName.to_string v

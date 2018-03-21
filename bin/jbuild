@@ -2,7 +2,7 @@
 
 (install
  ((section bin)
-  (files (compile.exe search.exe transform.exe))))
+  (files (compile.exe search.exe transform.exe sample.exe))))
 
 (rule
  ((targets (config.ml))
@@ -29,3 +29,10 @@
   (flags (:standard -g -bin-annot))
   (preprocess (pps (ppx_sexp_conv ppx_let ppx_driver.runner -no-check)))
   (modules transform)))
+
+(executable
+ ((name sample)
+  (libraries (core postgresql dblayout logs))
+  (flags (:standard -g -bin-annot))
+  (preprocess (pps (ppx_sexp_conv ppx_let ppx_driver.runner -no-check)))
+  (modules sample)))
