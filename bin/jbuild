@@ -11,14 +11,14 @@
 
 (executable
  ((name search)
-  (libraries (core postgresql dblayout))
+  (libraries (core async postgresql dblayout))
   (flags (:standard -g -bin-annot))
   (preprocess (pps (ppx_sexp_conv ppx_let ppx_driver.runner -no-check)))
   (modules search)))
 
 (executable
  ((name compile)
-  (libraries (core dblayout))
+  (libraries (core async dblayout))
   (flags (:standard -g -bin-annot))
   (preprocess (pps (ppx_sexp_conv ppx_let ppx_driver.runner -no-check)))
   (modules (compile config))))

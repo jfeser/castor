@@ -1,5 +1,5 @@
 open Core
-open Stdio
+open Async
 open Printf
 open Postgresql
 open Sexplib
@@ -7,34 +7,36 @@ open Sexplib
 open Dblayout
 open Collections
 
-let in_dir : string -> f:(unit -> 'a) -> 'a = fun dir ~f ->
-  let cur_dir = Unix.getcwd () in
-  if Sys.file_exists dir = `No then Unix.mkdir dir;
-  Unix.chdir dir;
-  let ret = try f () with e -> Unix.chdir cur_dir; raise e in
-  Unix.chdir cur_dir; ret
+let ensure_dir : string -> unit Deferred.t = fun dir -> 
+  match%bind Sys.file_exists dir with
+  | `No -> try_with (fun () -> Unix.mkdir dir) |> Deferred.ignore
+  | _ -> return ()
 
-let finally : f:(unit -> 'a) -> (unit -> unit) -> 'a = fun ~f g ->
-  try let ret = f () in g (); ret with e -> g (); raise e
+let in_dir : string -> f:(unit -> 'a Deferred.t) -> 'a Deferred.t = fun dir ~f ->
+  let%bind cur_dir = Unix.getcwd () in
+  ensure_dir dir >>= fun () -> Unix.chdir dir >>= fun () ->
+  match%bind try_with f with
+  | Ok x -> Unix.chdir cur_dir >>| fun () -> x
+  | Error e -> Unix.chdir cur_dir >>| fun () -> raise e
 
-  let validate : Ralgebra.t -> bool = fun r ->
-    (* Check that there are no relation references. *)
-    let has_refs = List.length (Ralgebra.relations r) > 0 in
+let validate : Ralgebra.t -> bool = fun r ->
+  (* Check that there are no relation references. *)
+  let has_refs = List.length (Ralgebra.relations r) > 0 in
 
-    if has_refs then
-      Logs.info (fun m -> m "Discarding candidate: still has relation references.");
+  if has_refs then
+    Logs.info (fun m -> m "Discarding candidate: still has relation references.");
 
-    (* Check that all the layouts type check. *)
-    let types_check = List.for_all (Ralgebra.layouts r) ~f:(fun l ->
-        try Type.of_layout_exn l |> ignore; true with Type.TypeError _ -> false)
-    in
+  (* Check that all the layouts type check. *)
+  let types_check = List.for_all (Ralgebra.layouts r) ~f:(fun l ->
+      try Type.of_layout_exn l |> ignore; true with Type.TypeError _ -> false)
+  in
 
-    if not types_check then
-      Logs.info (fun m -> m "Discarding candidate: some layouts don't type check.");
+  if not types_check then
+    Logs.info (fun m -> m "Discarding candidate: some layouts don't type check.");
 
-    not has_refs && types_check
+  not has_refs && types_check
 
-let main : ?num:int -> ?sample:int -> db:string -> Bench.t -> string -> unit =
+let main : ?num:int -> ?sample:int -> db:string -> Bench.t -> string -> unit Deferred.t =
   fun ?num ?sample ~db { name; sql; query; params } dir ->
     (* FIXME: Use the first parameter value for test params. Should use multiple
        choices and average. *)
@@ -54,7 +56,7 @@ let main : ?num:int -> ?sample:int -> db:string -> Bench.t -> string -> unit =
     let module Transform = Transform.Make(Config) in
     let module Candidate = Candidate.Make(Config) in
 
-    let serialize : Candidate.t -> bool = fun c ->
+    let serialize : Candidate.t -> unit Deferred.t = fun c ->
       let open Unix in
 
       let r = c.ralgebra in
@@ -64,72 +66,59 @@ let main : ?num:int -> ?sample:int -> db:string -> Bench.t -> string -> unit =
 
       (* If the candidate exists on the frontier or in the collected set, don't add
          it.*)
-      if Sys.file_exists fn = `Yes || Sys.file_exists name = `Yes then false else
-        let size =
-          Candidate.Binable.bin_size_t c + Bin_prot.Utils.size_header_length
-        in
-        try
-          let fd = openfile ~mode:[O_RDWR; O_CREAT; O_EXCL] fn in
-          finally (fun () -> close fd) ~f:(fun () ->
-              if flock fd Flock_command.lock_exclusive then begin
-                finally (fun () ->
-                    if not (flock fd Flock_command.unlock) then
-                      Logs.warn (fun m -> m "Failed to release file lock on %s." fn))
-                  ~f:(fun () ->
-                      let buf = Bigstring.create size in
-                      Bigstring.write_bin_prot buf Candidate.Binable.bin_writer_t c |> ignore;
-                      Bigstring.really_write fd buf;
-
-                      if validate r then link ~target:fn ~link_name:name ()); true
-              end else false)
-        with Unix_error _ -> false
+      match%bind Sys.file_exists fn with
+      | `Yes | `Unknown -> return ()
+      | `No -> begin match%bind Sys.file_exists name with
+          | `Yes | `Unknown -> return ()
+          | `No -> begin match%bind Sys.file_exists (sprintf "dead/%s" name) with
+              | `Yes | `Unknown -> return ()
+              | `No ->
+                let%bind () = Writer.with_file fn ~f:(fun w ->
+                Writer.write_bin_prot w Candidate.Binable.bin_writer_t c |> return)
+            in
+            if validate r then link ~target:fn ~link_name:name () else return ()
+            end
+        end
     in
 
-    let deserialize : string -> f:(Candidate.t -> 'a) -> 'a option = fun fn ~f ->
+    let deserialize : string -> f:(Candidate.t -> 'a Deferred.t) -> 'a Deferred.t = fun fn ~f ->
       let open Unix in
-      try
-        let fd = openfile ~mode:[O_RDWR] fn in
-        finally (fun () -> close fd) ~f:(fun () ->
-            if Unix.flock fd Unix.Flock_command.lock_exclusive then
-              finally (fun () ->
-                  if not (Unix.flock fd Unix.Flock_command.unlock) then
-                    Logs.warn (fun m -> m "Failed to release file lock on %s." fn))
-                ~f:(fun () ->
-                    let size = (Native_file.stat fn).st_size in
-                    let buf = Bigstring.create size in
-                    Bigstring.really_read fd buf;
-                    let r, _ = Bigstring.read_bin_prot buf Candidate.Binable.bin_reader_t
-                               |> Or_error.ok_exn
-                    in
-                    Some (Candidate.Binable.to_candidate r |> f))
-            else None)
-      with Unix_error _ -> None
+      with_file ~exclusive:`Write fn ~mode:[`Rdwr] ~f:(fun fd ->
+          let reader = Reader.create fd in
+          try_with (fun () -> Reader.read_bin_prot reader Candidate.Binable.bin_reader_t) >>= function
+          | Ok (`Ok x) -> f (Candidate.Binable.to_candidate x)
+          | Ok `Eof -> Logs.err (fun m -> m "Reading candidate failed: %s" fn); return ()
+          | Error e -> Logs.err (fun m -> m "Reading candidate failed: %s %s" fn (Exn.to_string e)); return ())
     in
 
-    let rec search : unit -> unit = fun () ->
-      let should_stop = match num with
-        | Some n -> Sys.readdir "." |> Array.length >= n
-        | None -> false
+    let search : unit -> _ = fun () ->
+      let%bind should_stop = match num with
+        | Some n ->
+          let%map dir = Sys.readdir "." in
+          Array.length dir >= n
+        | None -> return false
       in
-      if should_stop then () else
+      if should_stop then return (`Finished ()) else
         (* Grab a candidate from the frontier. *)
-        let dir_entries = Sys.readdir "frontier" in
-        if Array.length dir_entries = 0 then () else
+        let%bind dir_entries = Sys.readdir "frontier" in
+        if Array.length dir_entries = 0 then return (`Finished ()) else
           let name = dir_entries.(Random.int (Array.length dir_entries)) in
           let fn = (sprintf "frontier/%s" name) in
-          deserialize fn ~f:(fun r ->
+          let%bind () = deserialize fn ~f:(fun r ->
               Logs.info (fun m -> m "Transforming candidate %s." name);
 
               (* Move candidate out of frontier. *)
-              Unix.unlink fn;
+              try_with (fun () -> Unix.link ~force:true ~target:fn ~link_name:(sprintf "dead/%s" name) ())
+                ~rest:`Log |> ignore;
+              try_with (fun () -> Unix.unlink fn) ~rest:`Log |> ignore;
 
               (* Generate children of candidate and write to frontier. *)
-              List.iter Transform.transforms ~f:(fun t ->
+              Deferred.List.iter Transform.transforms ~f:(fun t ->
                   let tf = Transform.(compose required t) in
-                  List.iter (Candidate.run tf r) ~f:(fun r' ->
-                      serialize r' |> ignore))
-            ) |> ignore;
-          search ()
+                  Deferred.List.iter (Candidate.run tf r) ~f:(fun r' ->
+                      serialize r')))
+          in
+          return (`Repeat ())
     in
 
     let cand = Candidate.({
@@ -146,10 +135,12 @@ let main : ?num:int -> ?sample:int -> db:string -> Bench.t -> string -> unit =
       | None -> ()
     end;
 
-    in_dir dir ~f:(fun () -> 
-        if Sys.file_exists "frontier" = `No then Unix.mkdir "frontier";
-        serialize cand |> ignore;
-        search ())
+    ensure_dir dir >>= fun () ->
+    in_dir dir ~f:(fun () ->
+        let%bind () = ensure_dir "frontier" in
+        let%bind () = ensure_dir "dead" in
+        let%bind _ = serialize cand in
+        Deferred.repeat_until_finished () search)
 
 let () =
   (* Set early so we get logs from command parsing code. *)
@@ -158,7 +149,7 @@ let () =
   let open Command in
   let bench = Arg_type.create (fun s -> Sexp.load_sexp s |> [%of_sexp:Bench.t]) in
   let open Let_syntax in
-  basic ~summary:"Generate candidates from a benchmark file." [%map_open
+  async ~summary:"Generate candidates from a benchmark file." [%map_open
     let db = flag "db" (required string) ~doc:"the database to connect to"
     and verbose = flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
     and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
