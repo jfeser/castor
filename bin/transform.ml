@@ -5,8 +5,8 @@ open Collections
 
 type transform = (string * int option)
 
-let main : ?debug:bool -> ?sample:int -> ?transforms:transform list -> ?output:string -> db:string -> Bench.t -> unit =
-  fun ?(debug = false) ?sample ?(transforms = []) ?output ~db { name; params; sql; query } ->
+let main : ?no_default:bool -> ?debug:bool -> ?sample:int -> ?transforms:transform list -> ?output:string -> db:string -> Bench.t -> unit =
+  fun ?(no_default = false) ?(debug = false) ?sample ?(transforms = []) ?output ~db { name; params; sql; query } ->
     (* FIXME: Use the first parameter value for test params. Should use multiple
        choices and average. *)
     let test_params = List.map params ~f:(fun (pname, values) ->
@@ -37,8 +37,9 @@ let main : ?debug:bool -> ?sample:int -> ?transforms:transform list -> ?output:s
 
     let candidates = List.fold_left transforms ~init:[ralgebra] ~f:(fun rs (t, i) ->
         let tf = Transform.of_name t |> Or_error.ok_exn in
+        let full_tf = if no_default then tf else Transform.(compose required tf) in
         let rs' = List.concat_map rs ~f:(fun r ->
-            let r' = Transform.(run (compose required tf) r) in
+            let r' = Transform.(run full_tf r) in
             match i with
             | Some idx -> [List.nth_exn r' idx]
             | None -> r')
@@ -83,8 +84,9 @@ let () =
         (optional (Arg_type.comma_separated transform)) ~doc:"transforms to run"
     and verbose = flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
     and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
-    and sample = flag "sample" ~aliases:["s"] (optional int) ~doc:"the number of rows to sample from large tables"
-    and output = flag "output" ~aliases:["o"] (optional string) ~doc:"where to write the final expression"
+    and no_default = flag "no-default" ~aliases:["nd"] no_arg ~doc:"disable default transformations"
+    and sample = flag "sample" ~aliases:["s"] (optional int) ~doc:"N the number of rows to sample from large tables"
+    and output = flag "output" ~aliases:["o"] (optional string) ~doc:"FILE where to write the final expression"
     and debug = flag "debug" ~aliases:["g"] no_arg ~doc:"turn on error checking for transforms"
     and bench = anon ("bench" %: bench)
     in fun () ->
@@ -92,5 +94,5 @@ let () =
       else if quiet then Logs.set_level (Some Logs.Error)
       else Logs.set_level (Some Logs.Info);
 
-      main ~debug ?sample ?transforms ?output ~db bench
+      main ~debug ?sample ?transforms ?output ~no_default ~db bench
   ] |> run
