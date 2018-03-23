@@ -75,6 +75,8 @@ let rec unify_exn : t -> t -> t = fun t1 t2 ->
     raise (TypeError err)
   in
   match t1, t2 with
+  | NullT { field = f1 }, NullT { field = f2 } when Db.Field.equal f1 f2 ->
+    NullT { field = f1 }
   | (IntT { bitwidth = b1; field = f1; nullable = n1 },
      IntT { bitwidth = b2; field = f2; nullable = n2 })
     when Db.Field.equal f1 f2 ->
