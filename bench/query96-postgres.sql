@@ -8,7 +8,7 @@
 -- create temp table store as (select * from store order by random() limit 500000);
 
 -- Run with no view and no indexes.
-select count(*) from store_sales, household_demographics, time_dim, store
+explain analyze select count(*) from store_sales, household_demographics, time_dim, store
 where ss_sold_time_sk = time_dim.t_time_sk
 and ss_hdemo_sk = household_demographics.hd_demo_sk
 and ss_store_sk = s_store_sk
@@ -17,6 +17,9 @@ and time_dim.t_minute >= 30
 and household_demographics.hd_dep_count = 0
 -- and store.s_store_name = 'ese'
 order by count(*);
+
+create index on time_dim (t_hour);
+create index on household_demographics (hd_dep_count);
 
 explain analyze select count(*) from store_sales, household_demographics, time_dim, store
 where ss_sold_time_sk = time_dim.t_time_sk
