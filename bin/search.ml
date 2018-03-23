@@ -23,21 +23,15 @@ let validate : Ralgebra.t -> bool = fun r ->
   (* Check that there are no relation references. *)
   let has_refs = List.length (Ralgebra.relations r) > 0 in
 
-  if has_refs then
-    Logs.info (fun m -> m "Discarding candidate: still has relation references.");
-
   (* Check that all the layouts type check. *)
   let types_check = List.for_all (Ralgebra.layouts r) ~f:(fun l ->
       try Type.of_layout_exn l |> ignore; true with Type.TypeError _ -> false)
   in
 
-  if not types_check then
-    Logs.info (fun m -> m "Discarding candidate: some layouts don't type check.");
-
   not has_refs && types_check
 
-let main : ?num:int -> ?sample:int -> db:string -> Bench.t -> string -> unit Deferred.t =
-  fun ?num ?sample ~db { name; sql; query; params } dir ->
+let main : ?num:int -> ?sample:int -> queue:string -> db:string -> Bench.t -> string -> unit Deferred.t =
+  fun ?num ?sample ~queue ~db { name; sql; query; params } dir ->
     (* FIXME: Use the first parameter value for test params. Should use multiple
        choices and average. *)
     let test_params = List.map params ~f:(fun (pname, values) ->
@@ -45,6 +39,110 @@ let main : ?num:int -> ?sample:int -> db:string -> Bench.t -> string -> unit Def
         | [] -> Error.create "Empty parameter list." (name, pname)
                   [%sexp_of:string * string] |> Error.raise
         | v::_ -> (pname, v))
+    in
+
+    (* Create search queue. *)
+    let qconn = new connection ~dbname:"benchmarks" () in
+    let () = try
+      Db.exec qconn ~params:[name]
+        "create table if not exists $0 (like template including all)" |> ignore
+      with _ -> ()
+    in
+
+    let serialize : Candidate.t -> unit Or_error.t Deferred.t = fun cand ->
+      let open Deferred.Or_error in
+      let open Let_syntax in
+      let open Candidate.Binable in
+      let cand_bin = of_candidate cand in
+
+      (* Update the search queue. *)
+      let is_valid = validate cand.ralgebra |> Bool.to_string in
+      let hash = Ralgebra.Binable.hash cand_bin.ralgebra |> Int.to_string in
+      let size = bin_size_t cand_bin |> Int.to_string in
+      let tf_string = Candidate.transforms_to_string cand.transforms in
+
+      Logs.debug (fun m -> m "Serializing %s." hash);
+      Logs.info (fun m -> m "'%s'" tf_string);
+
+      let%bind do_write =
+        let params = [queue; hash; size; is_valid; tf_string] in
+        let ret = qconn#exec
+            (Db.subst_params params
+               "insert into $0 (hash,program_size,valid,search_state,search_transforms) values ($1,$2,$3,'searching','$4')")
+        in
+        match ret#status with
+        | Command_ok -> return true
+        | Fatal_error ->
+          begin try match ret#error_code with
+            | UNIQUE_VIOLATION -> return false
+            | e ->
+              let e = Error_code.to_string e in
+              fail (Error.create "Postgres error" e [%sexp_of:string])
+            with Failure _ -> return true
+          end
+        | e ->
+          let e = result_status e in
+          fail (Error.create "Postgres error" e [%sexp_of:string])
+
+      in
+
+      if do_write then
+        Logs.debug (fun m -> m "Won the race to write %s." hash)
+      else
+        Logs.debug (fun m -> m "Lost the race to write %s." hash);
+
+      (* Write out the candidate. *)
+      let fn = sprintf "%s.bin" hash in
+      let%map () = if do_write then Writer.with_file fn ~f:(fun w ->
+          Writer.write_bin_prot w bin_writer_t cand_bin |> return)
+        else return ()
+      in
+
+      (* Unlock the candidate in the search queue. *)
+      if do_write then
+        Db.exec qconn ~params:[queue; hash]
+          "update $0 set search_state = 'unsearched' where hash = $1"
+        |> Pervasives.ignore
+    in
+
+    let deserialize : string -> Candidate.t Or_error.t Deferred.t = fun hash ->
+      let open Candidate.Binable in
+      let fn = sprintf "%s.bin" hash in
+      let%bind reader = Reader.open_file fn in
+      try_with (fun () ->
+          match%map Reader.read_bin_prot reader bin_reader_t with
+          | `Ok r -> Result.Ok (to_candidate r)
+          | `Eof -> Result.Error (Error.create "EOF when reading." fn [%sexp_of:string]))
+        >>| Result.map_error ~f:(fun e -> Error.(of_exn e |> tag ~tag:fn))
+        >>| Result.join
+    in
+
+    let with_candidate : (string -> unit Or_error.t Deferred.t) -> unit Deferred.t = fun f ->
+      (* Grab a candidate from the frontier. *)
+      Db.exec qconn "begin" |> ignore;
+      let hash = Db.exec1 qconn ~params:[queue]
+          "select hash from $0 where search_state = 'unsearched' order by search_time asc limit 1"
+      in
+      match hash with
+      | [] -> Db.exec qconn "end" |> ignore; Clock.after (Time.Span.of_int_sec 3)
+      | [hash] ->
+        Db.exec qconn ~params:[queue; hash]
+          "update $0 set search_state = 'searching' where hash = $1; end" |> ignore;
+        let%map result = f hash in
+        Db.exec qconn ~params:[queue; hash; Bool.to_string (Or_error.is_error result)]
+          "update $0 set (search_state, search_failed) = ('searched', $2) where hash = $1"
+        |> ignore
+      | r -> Error.create "Unexpected db results." r [%sexp_of:string list] |> Error.raise
+    in
+
+    let is_done : unit -> bool = fun () ->
+      match num with
+      | Some n ->
+        begin match Db.exec1 qconn ~params:[queue] "select count(*) from $0 where valid" with
+          | [ct] -> Int.of_string ct >= n
+          | _ -> false
+        end
+      | None -> false
     in
 
     let module Config = struct
@@ -56,75 +154,26 @@ let main : ?num:int -> ?sample:int -> db:string -> Bench.t -> string -> unit Def
     let module Transform = Transform.Make(Config) in
     let module Candidate = Candidate.Make(Config) in
 
-    let serialize : Candidate.t -> unit Deferred.t = fun c ->
-      let open Unix in
-
-      let r = c.ralgebra in
-      let c = Candidate.Binable.of_candidate c in
-      let name = sprintf "%d.bin" (Ralgebra.Binable.hash c.ralgebra) in
-      let fn = sprintf "frontier/%s" name in
-
-      (* If the candidate exists on the frontier or in the collected set, don't add
-         it.*)
-      match%bind Sys.file_exists fn with
-      | `Yes | `Unknown -> return ()
-      | `No -> begin match%bind Sys.file_exists name with
-          | `Yes | `Unknown -> return ()
-          | `No -> begin match%bind Sys.file_exists (sprintf "dead/%s" name) with
-              | `Yes | `Unknown -> return ()
-              | `No ->
-                let%bind () = Writer.with_file fn ~f:(fun w ->
-                Writer.write_bin_prot w Candidate.Binable.bin_writer_t c |> return)
-            in
-            if validate r then link ~target:fn ~link_name:name () else return ()
-            end
-        end
-    in
-
-    let deserialize : string -> f:(Candidate.t -> 'a Deferred.t) -> 'a Deferred.t = fun fn ~f ->
-      let open Unix in
-      with_file ~exclusive:`Write fn ~mode:[`Rdwr] ~f:(fun fd ->
-          let reader = Reader.create fd in
-          try_with (fun () -> Reader.read_bin_prot reader Candidate.Binable.bin_reader_t) >>= function
-          | Ok (`Ok x) -> f (Candidate.Binable.to_candidate x)
-          | Ok `Eof -> Logs.err (fun m -> m "Reading candidate failed: %s" fn); return ()
-          | Error e -> Logs.err (fun m -> m "Reading candidate failed: %s %s" fn (Exn.to_string e)); return ())
-    in
-
     let search : unit -> _ = fun () ->
-      let%bind should_stop = match num with
-        | Some n ->
-          let%map dir = Sys.readdir "." in
-          Array.length dir >= n
-        | None -> return false
+      (* Grab a candidate from the frontier. *)
+      let%map () = with_candidate (fun hash ->
+          let module List = Deferred.List in
+          let open Deferred.Or_error in
+          deserialize hash >>= fun r ->
+          Logs.info (fun m -> m "Transforming candidate %s." hash);
+
+          (* Generate children of candidate and write to frontier. *)
+          List.iter Transform.transforms ~f:(fun t ->
+              let tf = {Transform.(compose required t) with name = t.name} in
+              List.iter (Candidate.run tf r) ~f:serialize))
       in
-      if should_stop then return (`Finished ()) else
-        (* Grab a candidate from the frontier. *)
-        let%bind dir_entries = Sys.readdir "frontier" in
-        if Array.length dir_entries = 0 then return (`Finished ()) else
-          let name = dir_entries.(Random.int (Array.length dir_entries)) in
-          let fn = (sprintf "frontier/%s" name) in
-          let%bind () = deserialize fn ~f:(fun r ->
-              Logs.info (fun m -> m "Transforming candidate %s." name);
-
-              (* Move candidate out of frontier. *)
-              try_with (fun () -> Unix.link ~force:true ~target:fn ~link_name:(sprintf "dead/%s" name) ())
-                ~rest:`Log |> ignore;
-              try_with (fun () -> Unix.unlink fn) ~rest:`Log |> ignore;
-
-              (* Generate children of candidate and write to frontier. *)
-              Deferred.List.iter Transform.transforms ~f:(fun t ->
-                  let tf = Transform.(compose required t) in
-                  Deferred.List.iter (Candidate.run tf r) ~f:(fun r' ->
-                      serialize r')))
-          in
-          return (`Repeat ())
+      if is_done () then `Finished () else `Repeat ()
     in
 
     let cand = Candidate.({
-      ralgebra = Ralgebra.of_string_exn query |> Ralgebra.resolve Config.conn;
-      transforms = [];
-    }) in
+        ralgebra = Ralgebra.of_string_exn query |> Ralgebra.resolve Config.conn;
+        transforms = [];
+      }) in
 
     (* If we need to sample, generate sample tables and swap them in the
        expression. *)
@@ -137,9 +186,11 @@ let main : ?num:int -> ?sample:int -> db:string -> Bench.t -> string -> unit Def
 
     ensure_dir dir >>= fun () ->
     in_dir dir ~f:(fun () ->
-        let%bind () = ensure_dir "frontier" in
-        let%bind () = ensure_dir "dead" in
-        let%bind _ = serialize cand in
+        let%bind ret = serialize cand in
+        begin match ret with
+          | Ok () -> ()
+          | Error e -> Logs.err (fun m -> m "%s" (Error.to_string_hum e))
+        end;
         Deferred.repeat_until_finished () search)
 
 let () =
@@ -150,11 +201,12 @@ let () =
   let bench = Arg_type.create (fun s -> Sexp.load_sexp s |> [%of_sexp:Bench.t]) in
   let open Let_syntax in
   async ~summary:"Generate candidates from a benchmark file." [%map_open
-    let db = flag "db" (required string) ~doc:"the database to connect to"
+    let db = flag "d" (required string) ~doc:"DB the database to connect to"
+    and queue = flag "b" (required string) ~doc:"TABLE the name of the benchmark table"
     and verbose = flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
     and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
-    and sample = flag "sample" ~aliases:["s"] (optional int) ~doc:"the number of rows to sample from large tables"
-    and num = flag "num" ~aliases:["n"] (optional int) ~doc:"the number of candidates to enumerate"
+    and sample = flag "sample" ~aliases:["s"] (optional int) ~doc:"N the number of rows to sample from large tables"
+    and num = flag "num" ~aliases:["n"] (optional int) ~doc:"N the number of candidates to enumerate"
     and bench = anon ("bench" %: bench)
     and dir = anon ("dir" %: file)
     in fun () ->
@@ -162,5 +214,5 @@ let () =
       else if quiet then Logs.set_level (Some Logs.Error)
       else Logs.set_level (Some Logs.Info);
 
-      main ?sample ~db bench dir
+      main ?sample ~db ~queue bench dir
   ] |> run

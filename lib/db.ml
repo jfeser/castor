@@ -43,6 +43,12 @@ let exec2 : ?verbose : bool -> ?params : string list -> Postgresql.connection ->
         | [x; y] -> (x, y)
         | _ -> failwith "Unexpected query results.")
 
+let exec1_first : ?verbose : bool -> ?params : string list -> Postgresql.connection -> string -> string =
+  fun ?verbose ?params conn query ->
+    match exec ?verbose ?params conn query with
+    | [[x]] -> x
+    | r -> Error.create "Unexpected query results." r [%sexp_of:string list list] |> Error.raise
+
 type dtype =
   | DInt
   | DRational

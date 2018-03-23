@@ -1,4 +1,5 @@
 open Base
+open Printf
 open Bin_prot.Std
 
 module T = struct
@@ -6,6 +7,10 @@ module T = struct
     ralgebra : Ralgebra.t;
     transforms : (string * int) list;
   }
+
+  let transforms_to_string : _ -> string = fun tfs ->
+    List.map tfs ~f:(fun (tf, i) -> sprintf "%s:%d" tf i)
+    |> String.concat ~sep:","
 
   module Binable = struct
     module Pervasives = Caml.Pervasives
