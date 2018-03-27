@@ -19,7 +19,7 @@ module List = struct
     | x::xs -> fold_left ~init:x ~f:f xs
 
   let fmerge : cmp:('a -> 'a -> int) -> ('a * 'b) list -> ('a * 'b) list -> ('a * 'b) list =
-    fun ~cmp l1 l2 -> List.merge ~cmp:(fun (x1, _) (x2, _) -> cmp x1 x2) l1 l2
+    fun ~cmp l1 l2 -> List.merge ~compare:(fun (x1, _) (x2, _) -> cmp x1 x2) l1 l2
 
   let scanl1 : 'a t -> f:('a -> 'a -> 'a) -> 'a t =
     let rec scanl1' accv accl f = function
@@ -132,7 +132,7 @@ module Fresh = struct
     fun ?names () ->
       match names with
       | Some x -> { ctr = 0; names = x }
-      | None -> { ctr = 0; names = Hash_set.create (module String) () }
+      | None -> { ctr = 0; names = Hash_set.create (module String) }
 
   let rec name : t -> (int -> 'a, unit, string) format -> 'a =
     fun x fmt ->

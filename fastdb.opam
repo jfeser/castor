@@ -10,9 +10,10 @@ build: [["jbuilder" "build" "-p" name "-j" jobs]]
 depends: [
   "jbuilder" {build}
   "ounit" {test}
-  "base"
-  "core"
-  "stdio"
+  "async" {>= "0.11.0"}
+  "base" {>= "0.11.0"}
+  "core" {>= "0.11.0"}
+  "stdio" {>= "0.11.0"}
   "postgresql"
   "fmt"
   "cmdliner"

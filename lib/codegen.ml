@@ -99,7 +99,7 @@ module Make (Config: Config.S) () = struct
   let null_ptr = const_null (pointer_type (void_type ctx))
 
   class func_ctx name func = object
-    val values = Hashtbl.create (module String) ()
+    val values = Hashtbl.create (module String)
 
     method values : var Hashtbl.M(String).t = values
     method name : string = name
@@ -134,9 +134,9 @@ module Make (Config: Config.S) () = struct
     method set_llfunc x = llfunc <- x
   end
 
-  let iters = Hashtbl.create (module String) ()
-  let funcs = Hashtbl.create (module String) ()
-  let globals = Hashtbl.create (module String) ()
+  let iters = Hashtbl.create (module String)
+  let funcs = Hashtbl.create (module String)
+  let globals = Hashtbl.create (module String)
   let params_struct_t = ref (void_type ctx)
 
   let init_name n = (n ^ "$init")

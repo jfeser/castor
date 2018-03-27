@@ -279,7 +279,7 @@ let rec to_schema_exn : t -> Schema.t = fun l -> match l.node with
     List.map ls ~f:to_schema_exn |> List.all_equal_exn
   | Table (m, { field = f }) ->
     let v_schema = Map.data m |> List.map ~f:to_schema_exn |> List.all_equal_exn in
-    List.merge ~cmp:Field.compare [f] v_schema
+    List.merge ~compare:Field.compare [f] v_schema
 
 let rec params : t -> Set.M(TypedName).t =
   let empty = Set.empty (module TypedName) in
@@ -515,7 +515,7 @@ let rec order : Range.t -> Field.t -> [`Asc | `Desc] -> t -> t = fun k f o l ->
     match (partition PredCtx.Key.dummy f l).node with
     | Table (m, _) ->
       Map.to_alist m
-      |> List.sort ~cmp:(fun (k1, _) (k2, _) -> cmp k1 k2)
+      |> List.sort ~compare:(fun (k1, _) (k2, _) -> cmp k1 k2)
       |> List.map ~f:(fun (k, v) -> cross_tuple [of_value k; v])
       |> fun ls -> ordered_list ls { field = f; order = o; lookup = k }
     | _ -> raise (TransformError (Error.of_string "Expected a table."))
@@ -534,7 +534,7 @@ let merge : Range.t -> Field.t -> [`Asc | `Desc] -> t -> t -> t =
           | `Both (l1, l2) -> Some (unordered_list ([l1; l2]))
           | `Left l | `Right l -> Some l)
       |> Map.to_alist
-      |> List.sort ~cmp:(fun (k1, _) (k2, _) -> cmp k1 k2)
+      |> List.sort ~compare:(fun (k1, _) (k2, _) -> cmp k1 k2)
       |> List.map ~f:(fun (k, v) -> cross_tuple [of_value k; v])
       |> fun ls -> ordered_list ls { field = f; order = o; lookup = k }
     | _ -> raise (TransformError (Error.of_string "Expected a table."))

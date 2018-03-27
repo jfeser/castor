@@ -151,7 +151,7 @@ module Make (Config : Config.S) = struct
       } [@@deriving compare, hash, sexp]
     end in
 
-    let tbl = Hashtbl.create (module V) () in
+    let tbl = Hashtbl.create (module V) in
     Seq.iter s1 ~f:(fun t ->
         let v = Tuple.field_exn t f1 in
         Hashtbl.add_multi tbl ~key:v ~data:t);

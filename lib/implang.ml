@@ -577,7 +577,7 @@ module IRGen = struct
     let buffers = ref []
 
     (* let params = ref [] *)
-    let mfuncs = Hashtbl.create (module String) ()
+    let mfuncs = Hashtbl.create (module String)
     let add_func : string -> func -> unit = fun n f ->
       funcs := (n, f)::!funcs;
       Hashtbl.set ~key:n ~data:f mfuncs

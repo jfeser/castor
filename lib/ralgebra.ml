@@ -59,7 +59,6 @@ let resolve : Postgresql.connection -> (string * string, string, Layout.t) Ralge
   -> t = fun conn ralgebra ->
   let rels =
     relations ralgebra
-    |> List.dedup_and_sort
     |> List.map ~f:(fun r -> (r, Relation.from_db conn r))
     |> Map.of_alist_exn (module String)
   in
