@@ -24,6 +24,11 @@ rule token = parse
   | "EqJoin"   { EQJOIN }
   | "Concat"   { CONCAT }
   | "Count"    { COUNT }
+  | "Agg"      { AGG }
+  | "Min"      { MIN }
+  | "Max"      { MAX }
+  | "Avg"      { AVG }
+  | "Sum"      { SUM }
   | "int"      { INT_TYPE }
   | "bool"     { BOOL_TYPE }
   | "string"   { STRING_TYPE }

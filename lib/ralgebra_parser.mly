@@ -16,6 +16,11 @@
 %token EQJOIN
 %token CONCAT
 %token COUNT
+%token AGG
+%token MIN
+%token MAX
+%token AVG
+%token SUM
 %token INT_TYPE
 %token BOOL_TYPE
 %token STRING_TYPE
@@ -63,6 +68,7 @@ ralgebra:
 | PROJECT; LPAREN; error { error "Expected a list of fields." $startpos }
 | PROJECT; LPAREN; bracket_list(field); error { error "Expected a ','." $startpos }
 | COUNT; r = parens(ralgebra); { Count r }
+| AGG; LPAREN; a = bracket_list(agg_expr); COMMA; k = bracket_list(field); COMMA; r = ralgebra; RPAREN { Agg (a, k, r) }
 | FILTER; LPAREN; pred = pred; COMMA; r = ralgebra; RPAREN { Filter (pred, r) }
 | EQJOIN; LPAREN; f1 = field; COMMA; f2 = field; COMMA; r1 = ralgebra; COMMA; r2 = ralgebra; RPAREN { EqJoin(f1, f2, r1, r2) }
 | CONCAT; rs = parens(separated_list(COMMA, ralgebra)); { Concat rs }
@@ -94,3 +100,10 @@ pred:
 | p1 = pred; AND; p2 = pred { Varop (And, [p1; p2]) }
 | p1 = pred; OR; p2 = pred { Varop (Or, [p1; p2]) }
 | pred; error { error "Expected an operator." $startpos }
+
+agg_expr:
+| COUNT { Count }
+| MIN; f = parens(field) { Min f }
+| MAX; f = parens(field) { Max f }
+| AVG; f = parens(field) { Avg f }
+| f = parens(field) { Key f }
