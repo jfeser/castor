@@ -44,6 +44,11 @@ module T = struct
     field : Db.Field.t;
     lookup : Layout.PredCtx.Key.t;
   } [@@deriving compare, sexp]
+  type grouping = {
+    count : AbsCount.t;
+    key : Db.Field.t list;
+    output : Db.Field.t Ralgebra0.agg list;
+  } [@@deriving compare, sexp]
   type t =
     | NullT of null
     | IntT of int_
@@ -54,6 +59,7 @@ module T = struct
     | OrderedListT of t * ordered_list
     | UnorderedListT of t * unordered_list
     | TableT of t * t * table
+    | GroupingT of t * t * grouping
     | EmptyT
   [@@deriving compare, sexp]
 end
@@ -118,6 +124,9 @@ let rec unify_exn : t -> t -> t = fun t1 t2 ->
     let vt = unify_exn vt1 vt2 in
     TableT (kt, vt, { field = f1; lookup = l1; count = AbsCount.unify c1 c2 })
   | EmptyT, t | t, EmptyT -> t
+  | GroupingT (kt1, vt1, m1), GroupingT (kt2, vt2, m2)
+    when Polymorphic_compare.(m1 = m2) ->
+    GroupingT (unify_exn kt1 kt2, unify_exn vt1 vt2, m1)
   | _ -> fail "Unexpected types."
 
 let rec of_layout_exn : Layout.t -> t =
@@ -125,6 +134,8 @@ let rec of_layout_exn : Layout.t -> t =
     let err = Error.of_string (Printf.sprintf "Type inference failed: %s" m) in
     raise (TypeError err)
   in
+  let of_many ls = List.map ls ~f:of_layout_exn in
+  let unify_many ls = of_many ls |> List.fold_left ~f:unify_exn ~init:EmptyT in
   fun l ->
     let count = match Layout.ntuples l with
       | Ok c -> AbsCount.Count c
@@ -141,35 +152,23 @@ let rec of_layout_exn : Layout.t -> t =
     | String (x, {node = { field }}) ->
       StringT { nchars = Len (String.length x); nullable = false; field }
     | Null { node = { field } } -> NullT { field }
-    | CrossTuple ls ->
-      let ts = List.map ls ~f:of_layout_exn in
-      CrossTupleT (ts, { count })
+    | CrossTuple ls -> CrossTupleT (of_many ls, { count })
     | ZipTuple ls ->
-      let elems = List.map ls ~f:of_layout_exn in
       begin match List.map ls ~f:Layout.ntuples |> List.all_equal with
-        | Some len -> ZipTupleT (elems, { count })
+        | Some len -> ZipTupleT (of_many ls, { count })
         | None -> fail "Columns have different lengths."
       end
-    | UnorderedList ls ->
-      let elem_t =
-        List.map ls ~f:of_layout_exn |> List.fold_left ~f:unify_exn ~init:EmptyT
-      in
-      UnorderedListT (elem_t, { count })
+    | UnorderedList ls -> UnorderedListT (unify_many ls, { count })
     | OrderedList (ls, { field; order; lookup }) ->
-      let elem_t =
-        List.map ls ~f:of_layout_exn |> List.fold_left ~f:unify_exn ~init:EmptyT
-      in
-      OrderedListT (elem_t, { field; order; lookup; count })
+      OrderedListT (unify_many ls, { field; order; lookup; count })
     | Table (elems, { field; lookup }) ->
-      let kt = Map.keys elems
-               |> List.map ~f:(fun v -> Layout.of_value v |> of_layout_exn)
-               |> List.fold_left ~f:unify_exn ~init:EmptyT
-      in
-      let vt = Map.data elems |> List.map ~f:of_layout_exn
-               |> List.fold_left ~f:unify_exn ~init:EmptyT
-      in
+      let kt = Map.keys elems |> List.map ~f:Layout.of_value |> unify_many in
+      let vt = Map.data elems |> unify_many in
       TableT (kt, vt, { field; lookup; count })
     | Empty -> EmptyT
+    | Grouping (elems, { key; output }) ->
+      let keys, values = List.unzip elems in
+      GroupingT (unify_many keys, unify_many values, { key; output; count })
 
 let rec params : t -> Set.M(TypedName).t =
   let params_of_key_option = function
@@ -192,6 +191,7 @@ let rec width : t -> int = function
     List.map ts ~f:width |> List.sum (module Int) ~f:(fun x -> x)
   | OrderedListT (t, _) | UnorderedListT (t, _) -> width t
   | TableT (_, t, _) -> width t + 1
+  | GroupingT (_, _, { output }) -> List.length output
   | EmptyT -> 0
 
 let count : t -> AbsCount.t = function

@@ -171,6 +171,20 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
         of_int ~width:64 (byte_length body) |> label "Table len";
         body;
       ]
+    | (GroupingT (kt, vt, { count; key; output }), Grouping (ls, _)) ->
+      let body = List.map ls ~f:(fun (k, v) ->
+          concat [serialize kt k; serialize vt v])
+                 |> concat |> label "Grouping body"
+      in
+      let len = byte_length body in
+      let len_str = of_int ~width:64 len |> label "Grouping len" in
+      begin match count with
+        | Count _ | Unknown -> concat [len_str; body]
+        | Countable ->
+          let ct = Layout.ntuples_exn layout in
+          let ct_str = of_int ~width:64 ct |> label "Grouping count" in
+          concat [ct_str; len_str; body]
+      end
     | _, Empty -> empty
     | t, _ -> Error.(create "Unexpected layout type." (t, layout)
                        [%sexp_of:Type.t * Layout.t] |> raise)

@@ -187,7 +187,19 @@ end
 
 let int_t = IntT
 let bool_t = BoolT
-let slice_t = TupleT [int_t; int_t]
+let string_t = StringT
+let tuple_t ts = TupleT ts
+let slice_t = tuple_t [int_t; int_t]
+
+let type_of_dtype : Db.dtype -> type_ = function
+  | DInt -> int_t
+  | DTimestamp
+  | DDate
+  | DInterval
+  | DRational
+  | DFloat
+  | DString -> string_t
+  | DBool -> bool_t
 
 let fresh_name : unit -> string =
   let ctr = ref 0 in
@@ -689,6 +701,7 @@ module IRGen = struct
         int (Int.round ~dir:`Up ~to_multiple_of:isize x)
       | EmptyT -> int 0
       | CrossTupleT (_, { count = (Count _ | Unknown) })
+      | GroupingT (_, _, { count = (Count _ | Unknown) })
       | UnorderedListT (_, { count = (Count _ | Unknown) })
       | ZipTupleT (_, { count = (Count _ | Unknown) })
       | OrderedListT (_, { count = (Count _ | Unknown) })
@@ -696,6 +709,7 @@ module IRGen = struct
       | CrossTupleT (_, { count = Countable })
       | ZipTupleT (_, { count = Countable })
       | UnorderedListT (_, { count = Countable })
+      | GroupingT (_, _, { count = Countable })
       | OrderedListT (_, { count = Countable }) -> islice (start + int isize)
 
     let count start =
@@ -708,7 +722,9 @@ module IRGen = struct
       | ZipTupleT (_, { count = Count x })
       | UnorderedListT (_, { count = Count x })
       | OrderedListT (_, { count = Count x })
+      | GroupingT (_, _, { count = Count x })
       | TableT (_, _, { count = Count x }) -> Some (int x)
+      | GroupingT (_, _, { count = Countable })
       | UnorderedListT (_, { count = Countable }) -> Some (islice start)
       | _ -> None
 
@@ -722,8 +738,9 @@ module IRGen = struct
       | CrossTupleT (_, { count = Count _ })
       | UnorderedListT (_, { count = Count _ })
       | OrderedListT (_, { count = Count _ })
+      | GroupingT (_, _, { count = Count _ })
       | ZipTupleT (_, { count = Count _ }) -> Infix.(int isize)
-      | CrossTupleT _ | ZipTupleT _ | OrderedListT _ | UnorderedListT _ ->
+      | CrossTupleT _ | ZipTupleT _ | OrderedListT _ | UnorderedListT _ | GroupingT _ ->
         Infix.int (2 * isize)
       | TableT (_,_,_) -> Infix.(int isize)
 
@@ -790,7 +807,7 @@ module IRGen = struct
               | TupleT ts -> ts
               | t -> [t])
           |> List.concat
-          |> fun x -> TupleT x
+          |> tuple_t
         in
         let b = create ["start", int_t] ret_type in
         let start = build_arg 0 b in
@@ -949,6 +966,79 @@ module IRGen = struct
 
         build_func b
 
+    let scan_grouping scan kt vt Type.({ output } as m) =
+      let t = Type.(GroupingT (kt, vt, m)) in
+      let key_iter = scan kt in
+      let value_iter = scan vt in
+      let key_type = (find_func key_iter).ret_type in
+      let value_schema = Type.to_schema vt in
+      let key_schema = Type.to_schema kt in
+      let ret_type = List.map output ~f:(function
+          | Count | Sum _ -> int_t
+          | Key f | Min f | Max f -> type_of_dtype f.dtype
+          | Avg _ -> Error.of_string "Unsupported." |> Error.raise)
+                     |> tuple_t
+      in
+
+      let build_agg start b =
+        let value_start = Infix.(start + len start kt + hsize kt) in
+        let outputs = List.map output ~f:(function
+            | Sum f ->
+              let idx = Option.value_exn (Db.Schema.field_idx value_schema f) in
+              build_iter value_iter [value_start] b;
+              let sum = build_fresh_defn "sum" int_t Infix.(int 0) b in
+              build_foreach vt value_start value_iter (fun tup b ->
+                  build_assign Infix.(sum + Index (tup, idx)) sum b) b;
+              sum
+            | Min f ->
+              let idx = Option.value_exn (Db.Schema.field_idx value_schema f) in
+              build_iter value_iter [value_start] b;
+              let min = build_fresh_defn "min" int_t Infix.(int 0) b in
+              build_foreach vt value_start value_iter (fun tup b ->
+                  build_if ~cond:Infix.(Index (tup, idx) < min) ~then_:(fun b ->
+                      build_assign Infix.(Index (tup, idx)) min b)
+                    ~else_:(fun _ -> ()) b) b;
+              min
+            | Max f ->
+              let idx = Option.value_exn (Db.Schema.field_idx value_schema f) in
+              build_iter value_iter [value_start] b;
+              let max = build_fresh_defn "max" int_t Infix.(int 0) b in
+              build_foreach vt value_start value_iter (fun tup b ->
+                  build_if ~cond:Infix.(Index (tup, idx) > max) ~then_:(fun b ->
+                      build_assign Infix.(Index (tup, idx)) max b)
+                    ~else_:(fun _ -> ()) b) b;
+              max
+            | Key f ->
+              let idx = Option.value_exn (Db.Schema.field_idx key_schema f) in
+              build_iter key_iter [start] b;
+              let tup = build_fresh_var "tup" key_type b in
+              build_step tup key_iter b;
+              Infix.(Index (tup, idx))
+            | Count -> begin match count value_start vt with
+                | Some ct -> ct
+                | None ->
+                  build_iter value_iter [value_start] b;
+                  let ct = build_fresh_defn "ct" int_t Infix.(int 0) b in
+                  build_foreach vt value_start value_iter (fun tup b ->
+                      build_assign Infix.(ct + int 1) ct b) b;
+                  ct
+              end
+            | Avg _ -> Error.of_string "Unsupported" |> Error.raise)
+        in
+        Tuple outputs
+      in
+
+      let b = create ["start", int_t] ret_type in
+      let start = build_arg 0 b in
+      let pcount = build_defn "count" int_t (Option.value_exn (count start t)) b in
+      let cstart = build_defn "cstart" int_t Infix.(start + hsize t) b in
+      build_loop Infix.(pcount > int 0) (fun b ->
+          build_yield (build_agg cstart b) b;
+          let clen = len cstart t in
+          build_assign Infix.(cstart + clen + hsize t) cstart b;
+          build_assign Infix.(pcount - int 1) pcount b) b;
+      build_func b
+
     let scan_wrapper scan start t =
       let func = scan t in
       let ret_type = (find_func func).ret_type in
@@ -979,6 +1069,7 @@ module IRGen = struct
           | UnorderedListT _ -> Fresh.name fresh "ul%d"
           | OrderedListT _ -> Fresh.name fresh "ol%d"
           | TableT _ -> Fresh.name fresh "t%d"
+          | GroupingT _ -> Fresh.name fresh "g%d"
         in
         let func = match t with
           | IntT m -> scan_int m
@@ -990,6 +1081,7 @@ module IRGen = struct
           | UnorderedListT (x, m) -> scan_unordered_list scan x m
           | OrderedListT (x, m) -> scan_ordered_list scan x m
           | TableT (kt, vt, m) -> scan_table scan kt vt m
+          | GroupingT (kt, vt, m) -> scan_grouping scan kt vt m
         in
         add_func name func; name
       in
@@ -1143,24 +1235,17 @@ module IRGen = struct
       build_func b
 
     let rec gen_ralgebra : Ralgebra.t -> string = fun r ->
-      let name = match r with
-        | Project _ -> Fresh.name fresh "project%d"
-        | Filter _ -> Fresh.name fresh "filter%d"
-        | EqJoin _ -> Fresh.name fresh "eqjoin%d"
-        | Scan _ -> Fresh.name fresh "scan%d"
-        | Concat _ -> Fresh.name fresh "concat%d"
-        | Relation _ -> Fresh.name fresh "relation%d"
-        | Count _ -> Fresh.name fresh "count%d"
-      in
-      let func = match r with
-        | Scan l -> scan l
-        | Project (x, r) -> project gen_ralgebra x r
-        | Filter (x, r) -> filter gen_ralgebra x r
-        | EqJoin (f1, f2, r1, r2) -> eq_join gen_ralgebra f1 f2 r1 r2
-        | Concat rs -> concat gen_ralgebra rs
-        | Count r -> count gen_ralgebra r
-        | Relation x ->
-          Error.of_string "Relations not allowed." |> Error.raise
+      let name, func = match r with
+        | Scan l -> Fresh.name fresh "scan%d", scan l
+        | Project (x, r) ->
+          Fresh.name fresh "project%d", project gen_ralgebra x r
+        | Filter (x, r) -> Fresh.name fresh "filter%d", filter gen_ralgebra x r
+        | EqJoin (f1, f2, r1, r2) ->
+          Fresh.name fresh "eqjoin%d", eq_join gen_ralgebra f1 f2 r1 r2
+        | Concat rs -> Fresh.name fresh "concat%d", concat gen_ralgebra rs
+        | Count r -> Fresh.name fresh "count%d", count gen_ralgebra r
+        | r -> Error.create "Unsupported at runtime." r [%sexp_of:Ralgebra.t]
+               |> Error.raise
       in
       add_func name func; name
 

@@ -91,6 +91,11 @@ type table = {
   lookup : PredCtx.Key.t;
 } [@@deriving compare, sexp, hash, bin_io]
 
+type grouping = {
+  key : Field.t list;
+  output : Field.t Ralgebra0.agg list;
+} [@@deriving compare, sexp, hash, bin_io]
+
 type scalar_node = {
   rel : Relation.t;
   field : Field.t;
@@ -128,44 +133,9 @@ and node =
   | UnorderedList of t list
   | OrderedList of t list * ordered_list
   | Table of t ValueMap.t * table
+  | Grouping of (t * t) list * grouping
   | Empty
-[@@deriving compare, sexp]
-
-let hash : t -> int = fun { hkey } -> hkey
-let hash_fold_t state x = Hash.fold_int state (hash x)
-
-let hash_node : node -> int = fun l -> 
-  let state = ref (Hash.alloc ()) in
-  begin match l with
-    | Int (x, m) ->
-      state := Hash.fold_int !state x;
-      state := hash_fold_scalar !state m
-    | Bool (x, m) ->
-      state := Bool.hash_fold_t !state x;
-      state := hash_fold_scalar !state m
-    | String (x, m) ->
-      state := String.hash_fold_t !state x;
-      state := hash_fold_scalar !state m
-    | Null m ->
-      state := hash_fold_scalar !state m
-    | CrossTuple xs ->
-      state := Hash.fold_int !state 0;
-      state := List.hash_fold_t hash_fold_t !state xs
-    | ZipTuple xs ->
-      state := Hash.fold_int !state 1;
-      state := List.hash_fold_t hash_fold_t !state xs
-    | UnorderedList xs ->
-      state := Hash.fold_int !state 2;
-      state := List.hash_fold_t hash_fold_t !state xs
-    | OrderedList (xs, m) ->
-      state := List.hash_fold_t hash_fold_t !state xs;
-      state := hash_fold_ordered_list !state m
-    | Table (xs, m) ->
-      state := ValueMap.hash_fold_t hash_fold_t !state xs;
-      state := hash_fold_table !state m
-    | Empty -> state := Hash.fold_int !state 0
-  end;
-  Hash.get_hash_value !state
+[@@deriving compare, sexp, hash]
 
 module HashT = Hashcons.Make(struct
     type t = node
@@ -184,6 +154,7 @@ let zip_tuple x = HashT.hashcons ht (ZipTuple x)
 let unordered_list x = HashT.hashcons ht (UnorderedList x)
 let ordered_list x m = HashT.hashcons ht (OrderedList (x, m))
 let table x m = HashT.hashcons ht (Table (x, m))
+let grouping x m = HashT.hashcons ht (Grouping (x, m))
 let empty = HashT.hashcons ht Empty
 
 module Binable = struct
@@ -199,6 +170,7 @@ module Binable = struct
     | UnorderedList of t list
     | OrderedList of t list * ordered_list
     | Table of (Value.t * t) list * table
+    | Grouping of (t * t) list * grouping
     | Empty
   [@@deriving bin_io, hash]
 
@@ -212,6 +184,8 @@ module Binable = struct
     | UnorderedList v -> UnorderedList (List.map ~f:of_layout v)
     | OrderedList (v, x) -> OrderedList (List.map ~f:of_layout v, x)
     | Table (v, x) -> Table (Map.map ~f:of_layout v |> Map.to_alist, x)
+    | Grouping (v, x) ->
+      Grouping (List.map ~f:(fun (k, v) -> of_layout k, of_layout v) v, x)
     | Empty -> Empty
 
   let rec to_layout : t -> layout = function
@@ -226,6 +200,8 @@ module Binable = struct
     | Table (v, x) ->
       table (List.map ~f:(fun (k, v) -> (k, to_layout v)) v
              |> Map.of_alist_exn (module ValueMap.Elem)) x
+    | Grouping (v, x) ->
+      grouping (List.map v ~f:(fun (k, v) -> to_layout k, to_layout v)) x
     | Empty -> empty
 end
 
@@ -246,29 +222,29 @@ let of_value : Value.t -> t = fun { field; rel; idx; value } ->
   | `Unknown x -> string x s
   | `Null -> null s
 
-let rec to_string : t -> string = fun l -> match l.node with
-  | Int _ -> "i"
-  | Bool _ -> "b"
-  | String _ -> "s"
-  | Null _ -> "n"
-  | ZipTuple ls ->
-    List.map ls ~f:to_string |> String.concat ~sep:", " |> sprintf "z(%s)"
-  | CrossTuple ls ->
-    List.map ls ~f:to_string |> String.concat ~sep:", " |> sprintf "c(%s)"
-  | UnorderedList ls | OrderedList (ls, _) ->
-    List.map ls ~f:to_string
-    |> List.count_consecutive_duplicates ~equal:String.equal
-    |> List.map ~f:(fun (s, c) -> sprintf "%s x %d" s c)
-    |> String.concat ~sep:", "
-    |> sprintf "[%s]"
-  | Table (m, _) ->
-    Map.to_alist m
-    |> List.map ~f:(fun (k, v) -> sprintf "k -> %s"  (to_string v))
-    |> List.count_consecutive_duplicates ~equal:String.equal
-    |> List.map ~f:(fun (s, c) -> sprintf "%s x %d" s c)
-    |> String.concat ~sep:", "
-    |> sprintf "{%s}"
-  | Empty -> "[]"
+(* let rec to_string : t -> string = fun l -> match l.node with
+ *   | Int _ -> "i"
+ *   | Bool _ -> "b"
+ *   | String _ -> "s"
+ *   | Null _ -> "n"
+ *   | ZipTuple ls ->
+ *     List.map ls ~f:to_string |> String.concat ~sep:", " |> sprintf "z(%s)"
+ *   | CrossTuple ls ->
+ *     List.map ls ~f:to_string |> String.concat ~sep:", " |> sprintf "c(%s)"
+ *   | UnorderedList ls | OrderedList (ls, _) ->
+ *     List.map ls ~f:to_string
+ *     |> List.count_consecutive_duplicates ~equal:String.equal
+ *     |> List.map ~f:(fun (s, c) -> sprintf "%s x %d" s c)
+ *     |> String.concat ~sep:", "
+ *     |> sprintf "[%s]"
+ *   | Table (m, _) ->
+ *     Map.to_alist m
+ *     |> List.map ~f:(fun (k, v) -> sprintf "k -> %s"  (to_string v))
+ *     |> List.count_consecutive_duplicates ~equal:String.equal
+ *     |> List.map ~f:(fun (s, c) -> sprintf "%s x %d" s c)
+ *     |> String.concat ~sep:", "
+ *     |> sprintf "{%s}"
+ *   | Empty -> "[]" *)
 
 let rec to_schema_exn : t -> Schema.t = fun l -> match l.node with
   | Empty -> []
@@ -278,7 +254,9 @@ let rec to_schema_exn : t -> Schema.t = fun l -> match l.node with
   | UnorderedList ls | OrderedList (ls, _) ->
     List.map ls ~f:to_schema_exn |> List.all_equal_exn
   | Table (m, { field = f }) ->
-    let v_schema = Map.data m |> List.map ~f:to_schema_exn |> List.all_equal_exn in
+    let v_schema =
+      Map.data m |> List.map ~f:to_schema_exn |> List.all_equal_exn
+    in
     List.merge ~compare:Field.compare [f] v_schema
 
 let rec params : t -> Set.M(TypedName).t =
@@ -447,6 +425,7 @@ let rec ntuples_exn : t -> int = fun l -> match l.node with
   | UnorderedList ls | OrderedList (ls, _) ->
     List.fold_left ls ~init:0 ~f:(fun p l -> p + ntuples_exn l)
   | Table (m, _) -> Map.data m |> List.map ~f:ntuples_exn |> List.all_equal_exn
+  | Grouping (xs, _) -> List.length xs
 
 let ntuples : t -> int Or_error.t = fun l ->
   Or_error.try_with (fun () -> ntuples_exn l)

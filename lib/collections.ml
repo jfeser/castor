@@ -187,4 +187,7 @@ module Hashcons = struct
 
   let sexp_of_hash_consed : ('a -> Sexp.t) -> 'a hash_consed -> Sexp.t =
     fun to_sexp { node } -> to_sexp node
+
+  let hash_fold_hash_consed : _ -> Hash.state -> 'a hash_consed -> Hash.state = fun _ s { hkey } -> Int.hash_fold_t s hkey
+  let hash_hash_consed : 'a hash_consed -> int = fun { hkey } -> hkey
 end
