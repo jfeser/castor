@@ -58,6 +58,7 @@ module Make (Config : Config.S) = struct
           |> List.transpose
           |> (fun x -> Option.value_exn x)
           |> List.map ~f:(fun rs -> Concat rs)
+        | Agg (x, y, r') -> List.map (f r') (fun r' -> Agg (x, y, r'))
       in
       rs @ rs'
     in

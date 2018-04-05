@@ -25,6 +25,7 @@ module Binable = struct
     | Scan l -> Scan (Layout.Binable.of_layout l)
     | Count r -> Count (of_ralgebra r)
     | EqJoin (f1, f2, r1, r2) -> EqJoin (f1, f2, of_ralgebra r1, of_ralgebra r2)
+    | Agg (x, y, r) -> Agg (x, y, of_ralgebra r)
 
   let rec to_ralgebra : t -> ralgebra = function
     | Project (fs, r) -> Project (fs, to_ralgebra r)
@@ -34,12 +35,14 @@ module Binable = struct
     | Scan l -> Scan (Layout.Binable.to_layout l)
     | Count r -> Count (to_ralgebra r)
     | EqJoin (f1, f2, r1, r2) -> EqJoin (f1, f2, to_ralgebra r1, to_ralgebra r2)
+    | Agg (x, y, r) -> Agg (x, y, to_ralgebra r)
 end
 
 let rec relations : ('f, 'r, 'l) Ralgebra0.t -> 'r list = function
   | Project (_, r)
   | Filter (_, r)
-  | Count r -> relations r
+  | Count r
+  | Agg (_, _, r) -> relations r
   | EqJoin (_, _, r1, r2) -> relations r1 @ relations r2
   | Scan _ -> []
   | Concat rs -> List.concat_map rs ~f:relations
@@ -48,7 +51,7 @@ let rec relations : ('f, 'r, 'l) Ralgebra0.t -> 'r list = function
 let predicates : ('f, 'r, 'l) Ralgebra0.t -> 'f Ralgebra0.pred list = 
   let rec f = function
     | Scan _ | Relation _ -> []
-    | Project (_, r) | Count r -> f r
+    | Project (_, r) | Count r | Agg (_, _, r) -> f r
     | EqJoin (_, _, r1, r2) -> f r1 @ f r2
     | Concat rs -> List.concat_map rs ~f
     | Filter (p, r) -> p::(f r)
@@ -71,6 +74,14 @@ let resolve : Postgresql.connection -> (string * string, string, Layout.t) Ralge
     | Binop (op, p1, p2) -> Binop (op, resolve_pred p1, resolve_pred p2)
     | Varop (op, ps) -> Varop (op, List.map ps ~f:resolve_pred)
   in
+  let resolve_agg : _ agg -> Field.t agg = function
+    | Count as x -> x
+    | Min f -> Min (resolve_field f)
+    | Max f -> Max (resolve_field f)
+    | Sum f -> Sum (resolve_field f)
+    | Avg f -> Avg (resolve_field f)
+    | Key f -> Key (resolve_field f)
+  in
   let rec resolve = function
     | Project (fs, r) -> Project (List.map ~f:resolve_field fs, resolve r)
     | Filter (p, r) -> Filter (resolve_pred p, resolve r)
@@ -80,6 +91,8 @@ let resolve : Postgresql.connection -> (string * string, string, Layout.t) Ralge
     | Count r -> Count (resolve r)
     | EqJoin (f1, f2, r1, r2) ->
       EqJoin (resolve_field f1, resolve_field f2, resolve r1, resolve r2)
+    | Agg (out, key, r) ->
+      Agg (List.map out ~f:resolve_agg, List.map key ~f:resolve_field, resolve r)
   in
   resolve ralgebra
 
@@ -173,8 +186,15 @@ let rec pred_to_string : pred -> string = function
     let ss = List.map ps ~f:pred_to_string |> String.concat ~sep:", " in
     sprintf "%s(%s)" (op_to_string op) ss
 
-let rec to_string : t -> string =
-  function
+let agg_to_string : Field.t agg -> string = function
+  | Count -> "Count(*)"
+  | Min f -> sprintf "Min(%s)" (Field.to_string f)
+  | Max f -> sprintf "Max(%s)" (Field.to_string f)
+  | Sum f -> sprintf "Sum(%s)" (Field.to_string f)
+  | Avg f -> sprintf "Avg(%s)" (Field.to_string f)
+  | Key f -> Field.to_string f
+
+let rec to_string : t -> string = function
   | Project (fs, r) ->
     sprintf "Project([%s], %s)"
       (List.map fs ~f:(fun f -> f.name) |> String.concat ~sep:", ") (to_string r)
@@ -186,6 +206,10 @@ let rec to_string : t -> string =
                 (Type.of_layout_exn l |> [%sexp_of:Type.t] |> Sexp.to_string_hum)
   | Concat rs ->
     List.map rs ~f:to_string |> String.concat ~sep:", " |> sprintf "Concat(%s)"
+  | Agg (out, key, r) ->
+    let out_str = List.map out ~f:agg_to_string |> String.concat ~sep:", " in
+    let key_str = List.map key ~f:Field.to_string |> String.concat ~sep:", " in
+    sprintf "Agg([%s], [%s], %s)" out_str key_str (to_string r)
   | Relation r -> r.name
 
 let of_string_exn : string -> (string * string, string, 'l) Ralgebra0.t = fun s ->
@@ -198,6 +222,7 @@ let of_string_exn : string -> (string * string, string, 'l) Ralgebra0.t = fun s 
 let rec layouts : t -> Layout.t list = function
   | Project (_, r)
   | Filter (_, r)
+  | Agg (_, _, r)
   | Count r -> layouts r
   | EqJoin (_,_, r1, r2) -> layouts r1 @ layouts r2
   | Scan l -> [l]

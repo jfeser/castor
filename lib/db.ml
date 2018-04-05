@@ -71,6 +71,8 @@ module Field = struct
   include Comparable.Make(T)
 
   let dummy = { name = ""; dtype = DBool }
+
+  let to_string : t -> string = fun f -> f.name
 end
 
 module Relation = struct
@@ -139,6 +141,13 @@ module Value = struct
   end
   include T
   include Comparator.Make(T)
+
+  let of_int_exn : int -> t = fun x ->
+    { rel = Relation.dummy; field = Field.dummy; idx = (-1); value = `Int x }
+
+  let to_int_exn : t -> int = function
+    | { value = `Int x } -> x
+    | v -> Error.create "Expected an int." v [%sexp_of:t] |> Error.raise
 end
 
 module Tuple = struct

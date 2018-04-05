@@ -68,6 +68,23 @@ module Make (Config : Config.S) = struct
                    [%sexp_of:Ralgebra.op * primvalue list] |> raise
         end
 
+  let eval_aggregate : Tuple.t -> Field.t Ralgebra0.agg list -> Tuple.t Seq.t -> Tuple.t =
+    fun key agg group ->
+      List.map agg ~f:(function
+          | Count -> Seq.length group |> Value.of_int_exn
+          | Min f -> Seq.fold group ~init:Int.max_value ~f:(fun m t ->
+              Int.min m (Tuple.field_exn t f |> Value.to_int_exn))
+                     |> Value.of_int_exn
+          | Max f -> Seq.fold group ~init:Int.min_value ~f:(fun m t ->
+              Int.max m (Tuple.field_exn t f |> Value.to_int_exn))
+                     |> Value.of_int_exn
+          | Sum f -> Seq.fold group ~init:0 ~f:(fun m t ->
+              m + (Tuple.field_exn t f |> Value.to_int_exn))
+                     |> Value.of_int_exn
+          | Key f -> Tuple.field_exn key f
+          | Avg f -> failwith "Unsupported.")
+
+
   let rec eval_layout : PredCtx.t -> t -> Tuple.t Seq.t =
     fun ctx l -> match l.node with
       | Int _ | Bool _ | String _ | Null _ -> Seq.singleton [Layout.to_value l]
@@ -93,6 +110,11 @@ module Make (Config : Config.S) = struct
           | None -> Error.create "Missing key." (k, ctx)
                       [%sexp_of:(PredCtx.Key.t * PredCtx.t)] |> raise
         end
+      | Grouping (ls, { key; output }) ->
+        Seq.of_list ls
+        |> Seq.map ~f:(fun (kl, vl) ->
+            let kt = Option.value_exn (eval_layout ctx kl |> Seq.hd) in
+            eval_aggregate kt output (eval_layout ctx vl))
       | Empty -> Seq.empty
 
   let eval_relation : Relation.t -> Tuple.t Seq.t = fun r ->
@@ -141,16 +163,16 @@ module Make (Config : Config.S) = struct
         | `Bool x -> x
         | _ -> failwith "Expected a boolean.")
 
-  let eval_eqjoin f1 f2 s1 s2 = 
-    let module V = struct
-      type t = Value.t = {
-        rel : Relation.t; [@compare.ignore]
-          field : Field.t; [@compare.ignore]
-          idx : int; [@compare.ignore]
-          value : primvalue;
-      } [@@deriving compare, hash, sexp]
-    end in
+  module V = struct
+    type t = Value.t = {
+      rel : Relation.t; [@compare.ignore]
+        field : Field.t; [@compare.ignore]
+        idx : int; [@compare.ignore]
+        value : primvalue;
+    } [@@deriving compare, hash, sexp]
+  end
 
+  let eval_eqjoin f1 f2 s1 s2 =
     let tbl = Hashtbl.create (module V) in
     Seq.iter s1 ~f:(fun t ->
         let v = Tuple.field_exn t f1 in
@@ -163,6 +185,33 @@ module Make (Config : Config.S) = struct
 
   let eval_concat ss = Seq.of_list ss |> Seq.concat
 
+  let eval_agg output_spec key_fields s =
+    let module K = struct
+      type t = V.t list [@@deriving compare, hash, sexp]
+    end in
+    let tbl = Hashtbl.create (module K) in
+    Seq.iter s ~f:(fun t ->
+        let key = List.map key_fields ~f:(Tuple.field_exn t) in
+        Hashtbl.add_multi tbl ~key ~data:t);
+    Hashtbl.mapi tbl ~f:(fun ~key ~data ->
+        let open Ralgebra0 in
+        List.map (output_spec : Field.t agg list) ~f:(function
+            | Count -> List.length data |> Value.of_int_exn
+            | Min f -> List.fold_left data ~init:Int.max_value ~f:(fun m t ->
+                Int.min m (Tuple.field_exn t f |> Value.to_int_exn))
+                       |> Value.of_int_exn
+            | Max f -> List.fold_left data ~init:Int.min_value ~f:(fun m t ->
+                Int.max m (Tuple.field_exn t f |> Value.to_int_exn))
+                       |> Value.of_int_exn
+            | Sum f -> List.fold_left data ~init:0 ~f:(fun m t ->
+                m + (Tuple.field_exn t f |> Value.to_int_exn))
+                       |> Value.of_int_exn
+            | Key f -> Tuple.field_exn key f
+            | Avg f -> failwith "Unsupported."))
+    |> Hashtbl.to_alist
+    |> Seq.of_list
+    |> Seq.map ~f:(fun (k, v) -> v)
+
   let eval : PredCtx.t -> Ralgebra.t -> Tuple.t Seq.t = fun ctx r ->
     let open Ralgebra0 in
     let rec eval = function
@@ -173,6 +222,7 @@ module Make (Config : Config.S) = struct
       | EqJoin (f1, f2, r1, r2) -> eval_eqjoin f1 f2 (eval r1) (eval r2)
       | Concat rs -> eval_concat (List.map ~f:eval rs)
       | Relation r -> eval_relation r
+      | Agg (output, key, r) -> eval_agg output key (eval r)
     in
     eval r
 
@@ -188,6 +238,10 @@ module Make (Config : Config.S) = struct
       | Project (fs, r) -> begin match f r with
           | `Seq s -> `Seq (eval_project fs s)
           | `Ralgebra r -> `Ralgebra (Project (fs, r))
+        end
+      | Agg (o, k, r) -> begin match f r with
+          | `Seq s -> `Seq (eval_agg o k s)
+          | `Ralgebra r -> `Ralgebra (Agg (o, k, r))
         end
       | Filter (p, r) -> begin match f r with
           | `Seq s -> if Set.length (Ralgebra.pred_params p) = 0 then

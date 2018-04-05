@@ -246,6 +246,15 @@ let of_value : Value.t -> t = fun { field; rel; idx; value } ->
  *     |> sprintf "{%s}"
  *   | Empty -> "[]" *)
 
+let grouping_to_schema : Field.t Ralgebra0.agg list -> Schema.t = fun output ->
+  List.map output ~f:(function
+      | Count -> Field.({ name = "count"; dtype = DInt })
+      | Key f -> f
+      | Sum f -> Field.({ name = sprintf "sum(%s)" f.name; dtype = DInt })
+      | Avg f -> Field.({ name = sprintf "avg(%s)" f.name; dtype = DInt })
+      | Min f -> Field.({ name = sprintf "min(%s)" f.name; dtype = DInt })
+      | Max f -> Field.({ name = sprintf "max(%s)" f.name; dtype = DInt }))
+
 let rec to_schema_exn : t -> Schema.t = fun l -> match l.node with
   | Empty -> []
   | Int (_, m) | Bool (_, m) | String (_, m) | Null m -> [m.node.field]
@@ -258,6 +267,7 @@ let rec to_schema_exn : t -> Schema.t = fun l -> match l.node with
       Map.data m |> List.map ~f:to_schema_exn |> List.all_equal_exn
     in
     List.merge ~compare:Field.compare [f] v_schema
+  | Grouping (_, { output }) -> grouping_to_schema output
 
 let rec params : t -> Set.M(TypedName).t =
   let empty = Set.empty (module TypedName) in
@@ -271,6 +281,11 @@ let rec params : t -> Set.M(TypedName).t =
       let p1 = Option.value_map ~f:kparams k1 ~default:empty in
       let p2 = Option.value_map ~f:kparams k2 ~default:empty in
       union_list (p1::p2::(lparams ls))
+    | Grouping (ls, _) ->
+      let pk, pv = List.map ls ~f:(fun (k, v) -> params k, params v)
+                   |> List.unzip
+      in
+      union_list (pk @ pv)
     | Table (m, {lookup = k}) -> union_list (kparams k::(lparams (Map.data m)))
 
 let rec partition : PredCtx.Key.t -> Field.t -> t -> t =
@@ -401,6 +416,24 @@ in
     |> fun m -> table m { field = f; lookup = k }
   in
 
+  let p_grouping k f ls m =
+    let contents =
+      List.map ls ~f:(fun (k, v) -> cross_tuple [k; v])
+      |> unordered_list
+    in
+    match (partition k f contents).node with
+    | Table (ls, m') ->
+      Map.map ls ~f:(fun x -> match x.node with
+          | UnorderedList y ->
+            List.map y ~f:(fun z -> match z.node with
+                | CrossTuple [k; v] -> k, v
+                | _ -> failwith "")
+            |> fun ls -> grouping ls m
+          | _ -> failwith "")
+      |> fun ls -> table ls m'
+    | _ -> failwith ""
+  in
+
   fun k f l ->
     if Schema.has_field (to_schema_exn l) f then
       match l.node with
@@ -415,6 +448,7 @@ in
       | ZipTuple x -> p_ziptuple k f x
       | UnorderedList x -> p_unorderedlist k f x
       | OrderedList (ls, t) -> p_orderedlist k f ls t
+      | Grouping (ls, m) -> p_grouping k f ls m
     else l
 
 let rec ntuples_exn : t -> int = fun l -> match l.node with
@@ -484,6 +518,12 @@ let rec flatten : t -> t = fun l -> match l.node with
       | [l] -> l
       | ls -> ordered_list ls x
     end
+  | Grouping (ls, m) ->
+    let ls = List.map ls ~f:(fun (k, v) -> flatten k, flatten v) in
+    begin match ls with
+      | [] -> empty
+      | ls -> grouping ls m
+    end
 
 let rec order : Range.t -> Field.t -> [`Asc | `Desc] -> t -> t = fun k f o l ->
   let cmp = match o with
@@ -520,7 +560,8 @@ let merge : Range.t -> Field.t -> [`Asc | `Desc] -> t -> t -> t =
 
 let project : Field.t list -> t -> t = fun fs l ->
   let f_in = List.mem ~equal:Field.equal fs in
-  let rec project = fun l -> match l.node with
+  let rec project l = match l.node with
+    | Grouping _ | Empty -> l
     | Int (_, m) | Bool (_, m) | String (_, m) | Null m ->
       if f_in m.node.field then l else empty
     | CrossTuple ls ->
@@ -534,7 +575,6 @@ let project : Field.t list -> t -> t = fun fs l ->
     | Table (ls, ({ field = f; } as x)) ->
       let ls' = Map.map ls ~f:project in
       table ls' x
-    | Empty -> empty
   in
   project l
 

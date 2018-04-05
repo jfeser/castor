@@ -46,7 +46,7 @@ rule token = parse
   | "="        { EQ }
   | "&&"       { AND }
   | "||"       { OR }
-  | int as x   { INT (int_of_string x) }
+  | int as x   { INT (Int.of_string x) }
   | "true"     { BOOL true }
   | "false"    { BOOL false }
   | "false"    { BOOL false }

@@ -106,4 +106,5 @@ agg_expr:
 | MIN; f = parens(field) { Min f }
 | MAX; f = parens(field) { Max f }
 | AVG; f = parens(field) { Avg f }
-| f = parens(field) { Key f }
+| SUM; f = parens(field) { Sum f }
+| f = field { Key f }

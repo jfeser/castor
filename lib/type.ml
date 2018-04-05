@@ -184,6 +184,7 @@ let rec params : t -> Set.M(TypedName).t =
     union_list [params_of_key_option v1; params_of_key_option v2; params t]
   | TableT (_, t, { field; lookup = k }) ->
     Set.union (Layout.PredCtx.Key.params k) (params t)
+  | GroupingT (kt, vt, _) -> Set.union (params kt) (params vt)
 
 let rec width : t -> int = function
   | NullT _ | IntT _ | BoolT _ | StringT _ -> 1
@@ -200,6 +201,7 @@ let count : t -> AbsCount.t = function
   | CrossTupleT (_, { count }) | ZipTupleT (_, { count })
   | OrderedListT (_, { count }) | UnorderedListT (_, { count })
   | TableT (_, _, { count }) -> count
+  | GroupingT (_, _, m) -> m.count
 
 let rec to_schema : t -> Db.Schema.t = function
   | EmptyT -> []
@@ -210,3 +212,4 @@ let rec to_schema : t -> Db.Schema.t = function
   | CrossTupleT (ts, _) | ZipTupleT (ts, _) -> List.concat_map ~f:to_schema ts
   | OrderedListT (t, _) | UnorderedListT (t, _) -> to_schema t
   | TableT (_, t, m) -> m.field :: to_schema t
+  | GroupingT (_, _, m) -> Layout.grouping_to_schema m.output
