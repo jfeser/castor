@@ -22,24 +22,28 @@ let main : ?no_default:bool -> ?debug:bool -> ?sample:int -> ?transforms:transfo
       let check_transforms = debug
     end in
     let module Transform = Transform.Make(Config) in
-    let ralgebra =
-      Ralgebra.of_string_exn query |> Ralgebra.resolve Config.conn
+    let module Candidate = Candidate.Make(Config) in
+
+    let cand = Candidate.({
+        ralgebra = Ralgebra.of_string_exn query |> Ralgebra.resolve Config.conn;
+        transforms = [];
+      })
     in
 
     (* If we need to sample, generate sample tables and swap them in the
        expression. *)
     begin match sample with
       | Some s ->
-        Ralgebra.relations ralgebra
+        Ralgebra.relations cand.ralgebra
         |> List.iter ~f:(Db.Relation.sample Config.conn s);
       | None -> ()
     end;
 
-    let candidates = List.fold_left transforms ~init:[ralgebra] ~f:(fun rs (t, i) ->
+    let candidates = List.fold_left transforms ~init:[cand] ~f:(fun rs (t, i) ->
         let tf = Transform.of_name t |> Or_error.ok_exn in
         let full_tf = if no_default then tf else Transform.(compose required tf) in
         let rs' = List.concat_map rs ~f:(fun r ->
-            let r' = Transform.(run full_tf r) in
+            let r' = Candidate.run full_tf r in
             match i with
             | Some idx -> [List.nth_exn r' idx]
             | None -> r')
@@ -47,17 +51,17 @@ let main : ?no_default:bool -> ?debug:bool -> ?sample:int -> ?transforms:transfo
         rs')
     in
 
-    List.iteri candidates ~f:(fun i r ->
+    List.iteri candidates ~f:(fun i { ralgebra = r } ->
         printf "Candidate #%d:\n%s\n\n" i (Ralgebra.to_string r));
 
     match output, candidates with
     | Some f, [r] ->
-      let cand = Ralgebra.Binable.of_ralgebra r in
+      let cand = Candidate.Binable.of_candidate r in
       let size =
-        Ralgebra.Binable.bin_size_t cand + Bin_prot.Utils.size_header_length
+        Candidate.Binable.bin_size_t cand + Bin_prot.Utils.size_header_length
       in
       let buf = Bigstring.create size in
-      Bigstring.write_bin_prot buf Ralgebra.Binable.bin_writer_t cand |> ignore;
+      Bigstring.write_bin_prot buf Candidate.Binable.bin_writer_t cand |> ignore;
       let fd = Unix.openfile ~mode:[O_RDWR; O_CREAT] f in
       Bigstring.really_write fd buf;
       Unix.close fd
