@@ -1034,8 +1034,9 @@ module IRGen = struct
       let cstart = build_defn "cstart" int_t Infix.(start + hsize t) b in
       build_loop Infix.(pcount > int 0) (fun b ->
           build_yield (build_agg cstart b) b;
-          let clen = len cstart t in
-          build_assign Infix.(cstart + clen + hsize t) cstart b;
+          let klen = Infix.(len cstart kt + hsize kt) in
+          let vlen = Infix.(len (cstart + klen) vt + hsize vt) in
+          build_assign Infix.(cstart + klen + vlen) cstart b;
           build_assign Infix.(pcount - int 1) pcount b) b;
       build_func b
 
