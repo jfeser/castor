@@ -607,6 +607,19 @@ let accum : [`Gt | `Lt | `Ge | `Le] -> t -> t = fun dir l ->
     table m x
   | _ -> raise (TransformError (Error.of_string "Expected a table."))
 
+let group_by : Field.t Ralgebra0.agg list -> Field.t list -> t -> t =
+  fun out key l ->
+    let kv =
+      List.fold_left key ~init:[([], l)] ~f:(fun ls f ->
+          List.concat_map ls ~f:(fun (ks, l) ->
+              match (partition Dummy f l).node with
+              | Table (xs, _) ->
+                Map.to_alist xs |> List.map ~f:(fun (k, v) -> k::ks, v)
+              | _ -> Error.of_string "Expected a table." |> Error.raise))
+      |> List.map ~f:(fun (ks, v) -> cross_tuple (List.map ks ~f:of_value), v)
+    in
+    grouping kv { key; output = out }
+
 (* let count : t -> t = fun { node } -> match node with
  *   | Int (_, _)
  *   | Bool (_, _)

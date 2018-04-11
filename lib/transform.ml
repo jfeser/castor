@@ -152,6 +152,13 @@ module Make (Config : Config.S) = struct
       | _ -> []
   } |> run_everywhere
 
+  let tf_group_by : t = {
+    name = "group-by";
+    f = function
+      | Agg (out, key, Scan l) -> [Scan (Layout.group_by out key l)]
+      | _ -> []
+  } |> run_everywhere
+
   let tf_eq_filter : t = {
     name = "eq-filter";
     f = function
@@ -230,6 +237,7 @@ module Make (Config : Config.S) = struct
     tf_hoist_filter;
     tf_eval;
     tf_eval_all;
+    tf_group_by;
   ]
 
   let required = compose_many [
