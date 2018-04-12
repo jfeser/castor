@@ -261,10 +261,10 @@ let rec to_schema_exn : t -> Schema.t = fun l -> match l.node with
   | ZipTuple ls
   | CrossTuple ls -> List.concat_map ls ~f:to_schema_exn
   | UnorderedList ls | OrderedList (ls, _) ->
-    List.map ls ~f:to_schema_exn |> List.all_equal_exn
+    List.map ls ~f:to_schema_exn |> List.all_equal_exn ~sexp_of_t:[%sexp_of:Field.t list]
   | Table (m, { field = f }) ->
     let v_schema =
-      Map.data m |> List.map ~f:to_schema_exn |> List.all_equal_exn
+      Map.data m |> List.map ~f:to_schema_exn |> List.all_equal_exn ~sexp_of_t:[%sexp_of:Field.t list]
     in
     List.merge ~compare:Field.compare [f] v_schema
   | Grouping (_, { output }) -> grouping_to_schema output
@@ -455,10 +455,10 @@ let rec ntuples_exn : t -> int = fun l -> match l.node with
   | Empty -> 0
   | Int _ | Bool _ | String _ | Null _ -> 1
   | CrossTuple ls -> List.fold_left ls ~init:1 ~f:(fun p l -> p * ntuples_exn l)
-  | ZipTuple ls -> List.map ls ~f:ntuples_exn |> List.all_equal_exn
+  | ZipTuple ls -> List.map ls ~f:ntuples_exn |> List.all_equal_exn ~sexp_of_t:[%sexp_of:int]
   | UnorderedList ls | OrderedList (ls, _) ->
     List.fold_left ls ~init:0 ~f:(fun p l -> p + ntuples_exn l)
-  | Table (m, _) -> Map.data m |> List.map ~f:ntuples_exn |> List.all_equal_exn
+  | Table (m, _) -> Map.data m |> List.map ~f:ntuples_exn |> List.all_equal_exn ~sexp_of_t:[%sexp_of:int]
   | Grouping (xs, _) -> List.length xs
 
 let ntuples : t -> int Or_error.t = fun l ->

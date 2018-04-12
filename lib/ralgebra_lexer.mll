@@ -45,7 +45,11 @@ rule token = parse
   | ">"        { GT }
   | "="        { EQ }
   | "&&"       { AND }
-  | "||"       { OR }
+  | "+"        { ADD }
+  | "-"        { SUB }
+  | "*"        { MUL }
+  | "/"        { DIV }
+  | "%"        { MOD }
   | int as x   { INT (Int.of_string x) }
   | "true"     { BOOL true }
   | "false"    { BOOL false }

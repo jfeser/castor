@@ -12,6 +12,11 @@ type op =
   | Ge
   | And
   | Or
+  | Add
+  | Sub
+  | Mul
+  | Div
+  | Mod
 [@@deriving compare, sexp, bin_io, hash]
 
 type 'f pred =

@@ -14,7 +14,7 @@ type type_ =
   | VoidT
 [@@deriving compare, sexp]
 
-type op = Add | Sub | Lt | Eq | And | Or | Not | Hash | Mul
+type op = Add | Sub | Mul | Div | Mod | Lt | Eq | And | Or | Not | Hash
 [@@deriving compare, sexp]
 type value =
   | VCont of { state : state; body : prog }
@@ -105,6 +105,8 @@ and pp_expr : Format.formatter -> expr -> unit =
     | Add -> "+"
     | Sub -> "-"
     | Mul -> "*"
+    | Div -> "/"
+    | Mod -> "%"
     | Lt -> "<"
     | And -> "&&"
     | Not -> "not"
@@ -167,6 +169,8 @@ module Infix = struct
     | _ -> Binop { op = Add; arg1 = x; arg2 = y }
   let (-) = fun x y -> Binop { op = Sub; arg1 = x; arg2 = y }
   let ( * ) = fun x y -> Binop { op = Mul; arg1 = x; arg2 = y }
+  let (/) = fun x y -> Binop { op = Div; arg1 = x; arg2 = y }
+  let (%) = fun x y -> Binop { op = Mod; arg1 = x; arg2 = y }
   let (<) = fun x y -> Binop { op = Lt; arg1 = x; arg2 = y }
   let (>) = fun x y -> y < x
   let (<=) = fun x y -> x - int 1 < y
@@ -1159,13 +1163,18 @@ module IRGen = struct
                 | R.Ge -> Infix.(e1 >= e2)
                 | R.And -> Infix.(e1 && e2)
                 | R.Or -> Infix.(e1 || e2)
+                | R.Add -> Infix.(e1 + e2)
+                | R.Sub -> Infix.(e1 - e2)
+                | R.Mul -> Infix.(e1 * e2)
+                | R.Div -> Infix.(e1 / e2)
+                | R.Mod -> Infix.(e1 % e2)
               end
             | R.Varop (op, args) ->
               let eargs = List.map ~f:gen_pred args in
               begin match op with
                 | R.And -> List.fold_left1_exn ~f:Infix.(&&) eargs
                 | R.Or -> List.fold_left1_exn ~f:Infix.(||) eargs
-                | R.Eq | R.Lt | R.Le | R.Gt | R.Ge ->
+                | R.Eq | R.Lt | R.Le | R.Gt | R.Ge | R.Add|R.Sub|R.Mul|R.Div|R.Mod ->
                   fail (Error.create "Not a vararg operator." op [%sexp_of:R.op])
               end
           in
@@ -1179,7 +1188,7 @@ module IRGen = struct
       let funcs = List.map rs ~f:gen in
       let ret_t =
         List.map funcs ~f:(fun f -> (find_func f).ret_type)
-        |> List.all_equal_exn
+        |> List.all_equal_exn ~sexp_of_t:[%sexp_of:type_]
       in
 
       let b = create [] ret_t in

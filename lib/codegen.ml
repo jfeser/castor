@@ -366,6 +366,8 @@ module Make (Config: Config.S) () = struct
         | Add -> build_add v1 v2 "addtmp" builder
         | Sub -> build_sub v1 v2 "subtmp" builder
         | Mul -> build_mul v1 v2 "multmp" builder
+        | Div -> build_sdiv v1 v2 "divtmp" builder
+        | Mod -> build_srem v1 v2 "modtmp" builder
         | Eq ->
           let t1 = infer_type (Hashtbl.of_alist_exn (module String) fctx#func.locals) arg1 in
           let t2 = infer_type (Hashtbl.of_alist_exn (module String) fctx#func.locals) arg1 in
@@ -423,7 +425,7 @@ module Make (Config: Config.S) () = struct
       let v = codegen_expr fctx arg in
       begin match op with
         | Not -> build_not v "nottmp" builder
-        | Add | Sub| Lt | And | Or | Eq | Hash | Mul ->
+        | Add | Sub| Lt | And | Or | Eq | Hash | Mul | Div | Mod ->
           fail (Error.of_string "Not a unary operator.")
       end
     | Tuple es ->
