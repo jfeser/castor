@@ -8,11 +8,10 @@ let main = fun ~debug ~gprof ~params fn ->
   let fd = Unix.openfile ~mode:[O_RDWR] fn in
   let size = (Unix.Native_file.stat fn).st_size in
   let buf = Bigstring.map_file ~shared:false fd size in
-  let ralgebra, _ = Bigstring.read_bin_prot buf Ralgebra.Binable.bin_reader_t |> Or_error.ok_exn in
-  (* let Candidate.Binable.({ ralgebra; transforms }), _ = 
-   *   Bigstring.read_bin_prot buf Candidate.Binable.bin_reader_t
-   *   |> Or_error.ok_exn
-   * in *)
+  let Candidate.Binable.({ ralgebra; transforms }), _ = 
+    Bigstring.read_bin_prot buf Candidate.Binable.bin_reader_t
+    |> Or_error.ok_exn
+  in
   Unix.close fd;
   Logs.debug (fun m -> m "Loading complete.");
 
