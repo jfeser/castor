@@ -38,13 +38,19 @@ module Make (Config : Config.S) = struct
         let v1 = eval_pred ctx p1 in
         let v2 = eval_pred ctx p2 in
         begin match op, v1, v2 with
-          | Eq, `Bool x1, `Bool x2 -> Polymorphic_compare.(`Bool (x1 = x2))
-          | Eq, `Int x1, `Int x2 -> Polymorphic_compare.(`Bool (x1 = x2))
-          | Eq, `Null, `Int _ | Eq, `Int _, `Null -> `Bool false
+          | Eq, `Null, _ | Eq, _, `Null -> `Bool false
+          | Eq, `Bool x1, `Bool x2 -> `Bool (Bool.(x1 = x2))
+          | Eq, `Int x1, `Int x2 -> `Bool (Int.(x1 = x2))
+          | Eq, `String x1, `String x2 -> `Bool (String.(x1 = x2))
           | Lt, `Int x1, `Int x2 -> `Bool (x1 < x2)
           | Le, `Int x1, `Int x2 -> `Bool (x1 <= x2)
           | Gt, `Int x1, `Int x2 -> `Bool (x1 > x2)
           | Ge, `Int x1, `Int x2 -> `Bool (x1 >= x2)
+          | Add, `Int x1, `Int x2 -> `Int (x1 + x2)
+          | Sub, `Int x1, `Int x2 -> `Int (x1 - x2)
+          | Mul, `Int x1, `Int x2 -> `Int (x1 * x2)
+          | Div, `Int x1, `Int x2 -> `Int (x1 / x2)
+          | Mod, `Int x1, `Int x2 -> `Int (x1 % x2)
           | And, `Bool x1, `Bool x2 -> `Bool (x1 && x2)
           | Or, `Bool x1, `Bool x2 -> `Bool (x1 || x2)
           | _ -> Error.create "Unexpected argument types." (op, v1, v2)

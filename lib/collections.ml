@@ -4,18 +4,18 @@ open Base.Polymorphic_compare
 module List = struct
   include List
 
-  let all_equal_exn =
+  let all_equal =
     fun (type t) ?(sexp_of_t = fun _ -> [%sexp_of:string] "unknown") (l: t list) ->
       match l with
-      | [] -> Error.of_string "Empty list." |> Error.raise
+      | [] -> Or_error.error_string "Empty list."
       | (x::xs) ->
         begin match List.find xs ~f:(fun x' -> x' <> x') with
-          | Some x' -> Error.create "Unequal elements." (x, x') [%sexp_of:(t * t)] |> Error.raise
-          | None -> x
+          | Some x' -> Or_error.error "Unequal elements." (x, x') [%sexp_of:(t * t)]
+          | None -> Or_error.return x
         end
 
-  let all_equal : 'a list -> 'a option = fun l ->
-    try Some (all_equal_exn l) with _ -> None
+  let all_equal_exn : 'a list -> 'a = fun l ->
+    Or_error.ok_exn (all_equal l)
 
   let fold_left1_exn : 'a t -> f:('b -> 'a -> 'b) -> 'b =
     fun l ~f -> match l with

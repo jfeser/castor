@@ -1,6 +1,6 @@
 ((name query84)
  (params (
-          (store ((String Midway)))
+          (city ((String Midway)))
           (income ((Int 45000)))
           ))
    (sql "

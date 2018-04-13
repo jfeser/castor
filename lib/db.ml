@@ -182,7 +182,22 @@ module Tuple = struct
 end
 
 module Schema = struct
-  type t = Field.t list [@@deriving compare, sexp]
+  module T = struct
+    type t = Field.t list [@@deriving sexp]
+
+    (** Schemas are compared as bags. *)
+    let compare : t -> t -> int = fun s1 s2 ->
+      [%compare:Field.t list]
+        (List.sort ~compare:[%compare:Field.t] s1)
+        (List.sort ~compare:[%compare:Field.t] s2)
+  end
+  include T
+  include Comparable.Make(T)
+
+  let to_string : t -> string = fun s ->
+    List.map s ~f:(fun f -> f.name)
+    |> String.concat ~sep:", "
+    |> sprintf "[%s]"
 
   let of_tuple : Tuple.t -> t = List.map ~f:(fun v -> v.Value.field)
   let of_relation : Relation.t -> t = fun r -> r.fields
@@ -197,7 +212,7 @@ module Schema = struct
       |> Set.union_list (module Field)
       |> Set.length
     in
-    tot > utot
+    Int.(tot > utot)
 
   let field_idx : t -> Field.t -> int option = fun s f ->
     List.find_mapi s ~f:(fun i f' -> if Field.equal f f' then Some i else None)

@@ -7,12 +7,12 @@ let main = fun ~debug ~gprof ~params fn ->
   Logs.debug (fun m -> m "Loading ralgebra from %s." fn);
   let fd = Unix.openfile ~mode:[O_RDWR] fn in
   let size = (Unix.Native_file.stat fn).st_size in
-  let buf = Bigstring.create size in
-  Bigstring.really_read fd buf;
-  let Candidate.Binable.({ ralgebra; transforms }), _ =
-    Bigstring.read_bin_prot buf Candidate.Binable.bin_reader_t
-    |> Or_error.ok_exn
-  in
+  let buf = Bigstring.map_file ~shared:false fd size in
+  let ralgebra, _ = Bigstring.read_bin_prot buf Ralgebra.Binable.bin_reader_t |> Or_error.ok_exn in
+  (* let Candidate.Binable.({ ralgebra; transforms }), _ = 
+   *   Bigstring.read_bin_prot buf Candidate.Binable.bin_reader_t
+   *   |> Or_error.ok_exn
+   * in *)
   Unix.close fd;
   Logs.debug (fun m -> m "Loading complete.");
 
@@ -23,10 +23,10 @@ let main = fun ~debug ~gprof ~params fn ->
     Ralgebra.to_string ralgebra |> Out_channel.output_string ch);
 
   (* Dump transforms. *)
-  Out_channel.with_file "transforms" ~f:(fun ch ->
-      List.map transforms ~f:(fun (tf, i) -> sprintf "%s:%d" tf i)
-      |> String.concat ~sep:","
-      |> Out_channel.output_string ch);
+  (* Out_channel.with_file "transforms" ~f:(fun ch ->
+   *     List.map transforms ~f:(fun (tf, i) -> sprintf "%s:%d" tf i)
+   *     |> String.concat ~sep:","
+   *     |> Out_channel.output_string ch); *)
 
   let module CConfig = struct
     let debug = debug

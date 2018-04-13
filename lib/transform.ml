@@ -76,25 +76,51 @@ module Make (Config : Config.S) = struct
       []
 
   let run_checked : t -> Ralgebra.t -> Ralgebra.t list = fun t r ->
+    let s = Ralgebra.to_schema r in
     let rs = run_unchecked t r in
-    List.iter rs ~f:(fun r' ->
-        try
-          let eval_to_set r =
-            eval testctx r
-            |> Seq.fold ~init:(Set.empty (module Tuple)) ~f:Set.add
-          in
-          let s1 = eval_to_set r in
-          let s2 = eval_to_set r' in
-          if not (Set.equal s1 s2) then
-            Logs.warn (fun m -> m "Transform %s not equivalent. New relation has %d records, old has %d."
-                          t.name (Set.length s2) (Set.length s1))
-        with EvalError e ->
-          Logs.warn (fun m -> m "Error when running eval transform. %s %s"
-                        (Ralgebra.to_string r) (Error.to_string_hum e)));
-    rs
+
+    let check_schema r' =
+      let s' = Ralgebra.to_schema r' in
+      match s, s' with
+      | Ok s, Ok s' ->
+        let ss = Set.of_list (module Field) s in
+        let ss' = Set.of_list (module Field) s' in
+        if Set.is_subset ss ~of_:ss' then true else begin
+          Logs.warn (fun m -> m "Transform %s not equivalent. Schemas differ: %s %s"
+                        t.name (Schema.to_string s) (Schema.to_string s'));
+          false
+        end
+      | _, Error e ->
+        Logs.warn (fun m -> m "Transform %s error. Bad schema %s" t.name (Error.to_string_hum e));
+        false
+      | Error _, _ -> failwith "BUG: Transforming bad candidate."
+    in
+
+    let check_eval r' =
+      try
+        let eval_to_set r =
+          eval testctx r |> Seq.fold ~init:(Set.empty (module Tuple)) ~f:Set.add
+        in
+        let s1 = eval_to_set r in
+        let s2 = eval_to_set r' in
+        if (Set.equal s1 s2) then true else begin
+          Logs.warn (fun m -> m "Transform %s not equivalent. New relation has %d records, old has %d."
+                        t.name (Set.length s2) (Set.length s1));
+          false
+        end
+      with EvalError e -> begin
+        Logs.warn (fun m -> m "Error when running eval transform. %s %s"
+                      (Ralgebra.to_string r) (Error.to_string_hum e));
+        false
+      end
+    in
+
+    let checks = [check_schema; check_eval] in
+
+    List.filter rs ~f:(fun r' -> List.for_all checks ~f:(fun c -> c r'))
 
   let run : t -> Ralgebra.t -> Ralgebra.t list =
-    if Config.check_transforms then run_unchecked else run_unchecked
+    if Config.check_transforms then run_checked else run_unchecked
 
   let run_chain : t list -> Ralgebra.t -> Ralgebra.t Seq.t = fun tfs r ->
     List.fold_left tfs ~init:[r]

@@ -1113,7 +1113,7 @@ module IRGen = struct
     let project gen fields r =
       let func = gen r in
 
-      let schema = Ralgebra.to_schema r in
+      let schema = Ralgebra.to_schema r |> Or_error.ok_exn in
       let idxs = List.filter_map fields ~f:(fun f ->
           match Db.Schema.field_idx schema f with
           | Some idx -> Some idx
@@ -1136,7 +1136,7 @@ module IRGen = struct
 
     let filter gen pred r =
       let func = gen r in
-      let schema = Ralgebra.to_schema r in
+      let schema = Ralgebra.to_schema r |> Or_error.ok_exn in
       Logs.debug (fun m ->
           m "Filter on schema %a." Sexp.pp_hum ([%sexp_of:Db.Schema.t] schema));
 
@@ -1188,7 +1188,8 @@ module IRGen = struct
       let funcs = List.map rs ~f:gen in
       let ret_t =
         List.map funcs ~f:(fun f -> (find_func f).ret_type)
-        |> List.all_equal_exn ~sexp_of_t:[%sexp_of:type_]
+        |> List.all_equal ~sexp_of_t:[%sexp_of:type_]
+        |> Or_error.ok_exn
       in
 
       let b = create [] ret_t in
@@ -1215,8 +1216,8 @@ module IRGen = struct
       let func1 = gen r1 in
       let func2 = gen r2 in
 
-      let s1 = Ralgebra.to_schema r1 in
-      let s2 = Ralgebra.to_schema r2 in
+      let s1 = Ralgebra.to_schema r1 |> Or_error.ok_exn in
+      let s2 = Ralgebra.to_schema r2 |> Or_error.ok_exn in
       let i1 = Db.Schema.field_idx_exn s1 f1 in
       let i2 = Db.Schema.field_idx_exn s2 f2 in
 

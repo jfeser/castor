@@ -234,20 +234,23 @@ let rec layouts : t -> Layout.t list = function
   | Concat rs -> List.map rs ~f:layouts |> List.concat
   | Relation _ -> []
 
-let rec to_schema : t -> Schema.t = function
+let rec to_schema_exn : t -> Schema.t = function
   | Project (fs, r) ->
-    to_schema r |> List.filter ~f:(List.mem fs ~equal:Field.(=))
+    to_schema_exn r |> List.filter ~f:(List.mem fs ~equal:Field.(=))
   | Count _ -> [Field.{ name = "count"; dtype = DInt }]
-  | Filter (_, r) -> to_schema r
-  | EqJoin (_, _, r1, r2) -> to_schema r1 @ to_schema r2
+  | Filter (_, r) -> to_schema_exn r
+  | EqJoin (_, _, r1, r2) -> to_schema_exn r1 @ to_schema_exn r2
   | Scan l -> Layout.to_schema_exn l
-  | Concat rs -> List.concat_map rs ~f:to_schema
+  | Concat rs -> List.concat_map rs ~f:to_schema_exn
   | Relation r -> Schema.of_relation r
   | Agg (out, key, r) -> List.map out ~f:(function
       | Count -> Field.{ name = "count"; dtype = DInt }
       | Key f -> f
       | Sum _ | Min _ | Max _ as a -> Field.{ name = agg_to_string a; dtype = DInt }
       | Avg _ -> failwith "unsupported")
+
+let to_schema : t -> Schema.t Or_error.t = fun r ->
+  Or_error.try_with (fun () -> to_schema_exn r)
 
 let rec flatten : t -> t =
   function
@@ -348,7 +351,7 @@ let intro_project : t -> t = fun r ->
       Agg (out, key, f fields r)
     | Relation _ as r -> r
   in
-  f (Set.of_list (module Field) (to_schema r)) r
+  f (Set.of_list (module Field) (to_schema_exn r)) r
 
 let push_filter : t -> t =
   let open Ralgebra0 in
@@ -356,11 +359,11 @@ let push_filter : t -> t =
     | Filter (p, EqJoin (f1, f2, r1, r2)) ->
       let fields = Set.of_list (module Field) (pred_fields p) in
       let r1, pushed_r1 =
-        if Set.is_subset fields ~of_:(Set.of_list (module Field) (to_schema r1)) then
+        if Set.is_subset fields ~of_:(Set.of_list (module Field) (to_schema_exn r1)) then
           f (Filter (p, r1)), true else f r1, false
       in
       let r2, pushed_r2 =
-        if Set.is_subset fields ~of_:(Set.of_list (module Field) (to_schema r2)) then
+        if Set.is_subset fields ~of_:(Set.of_list (module Field) (to_schema_exn r2)) then
           f (Filter (p, r2)), true else f r2, false
       in
       if pushed_r1 || pushed_r2 then EqJoin (f1, f2, r1, r2) else

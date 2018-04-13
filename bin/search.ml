@@ -30,8 +30,8 @@ let validate : Ralgebra.t -> bool = fun r ->
 
   not has_refs && types_check
 
-let main : ?num:int -> ?sample:int -> ?max_time:int -> ?max_disk:int -> ?max_size:int -> queue:string -> db:string -> Bench.t -> string -> unit Deferred.t =
-  fun ?num ?sample ?max_time ?max_disk ?max_size ~queue ~db { name; sql; query; params } dir ->
+let main : ?num:int -> ?sample:int -> ?max_time:int -> ?max_disk:int -> ?max_size:int -> debug:bool -> queue:string -> db:string -> Bench.t -> string -> unit Deferred.t =
+  fun ?num ?sample ?max_time ?max_disk ?max_size ~debug ~queue ~db { name; sql; query; params } dir ->
     let start_time = Time.now () in
     let max_time = Option.map max_time ~f:Time.Span.of_int_sec in
 
@@ -175,7 +175,7 @@ let main : ?num:int -> ?sample:int -> ?max_time:int -> ?max_disk:int -> ?max_siz
     let module Config = struct
       let conn = new connection ~dbname:db ()
       let testctx = Layout.PredCtx.of_vars test_params
-      let check_transforms = false
+      let check_transforms = debug
     end in
 
     let module Transform = Transform.Make(Config) in
@@ -235,6 +235,7 @@ let () =
     and queue = flag "b" (required string) ~doc:"TABLE the name of the benchmark table"
     and verbose = flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
     and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
+    and debug = flag "debug" ~aliases:["g"] no_arg ~doc:"turn on debug mode"
     and sample = flag "sample" ~aliases:["s"] (optional int) ~doc:"N the number of rows to sample from large tables"
     and num = flag "num" ~aliases:["n"] (optional int) ~doc:"N the number of candidates to enumerate"
     and max_time = flag "max-time" ~aliases:["mt"] (optional int) ~doc:"SEC the maximum amount of time to use"
@@ -247,5 +248,5 @@ let () =
       else if quiet then Logs.set_level (Some Logs.Error)
       else Logs.set_level (Some Logs.Info);
 
-      main ?sample ?max_time ?max_disk ?max_size ~db ~queue bench dir
+      main ?sample ?max_time ?max_disk ?max_size ~debug ~db ~queue bench dir
   ] |> run
