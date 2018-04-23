@@ -645,22 +645,22 @@ module IRGen = struct
       fun type_ start iter_ body b ->
         let tup = build_fresh_var "tup" (find_func iter_).ret_type b in
         build_iter iter_ [start] b;
-        match Type.count type_ with
-        | Count 0 -> ()
-        | Count 1 ->
+        match Type.AbsCount.kind (Type.count type_) with
+        | `Count 0 -> ()
+        | `Count 1 ->
           build_step tup iter_ b;
           body tup b
-        | Count x ->
+        | `Count x ->
           build_count_loop Infix.(int x) (fun b ->
               build_step tup iter_ b;
               body tup b;
             ) b
-        | Countable ->
+        | `Countable ->
           build_count_loop Infix.(islice start) (fun b ->
               build_step tup iter_ b;
               body tup b;
             ) b
-        | Unknown ->
+        | `Unknown ->
           build_loop Infix.(not (Done iter_)) (fun b ->
               build_step tup iter_ b;
               build_if ~cond:Infix.(not (Done iter_))
@@ -693,63 +693,70 @@ module IRGen = struct
       let open Infix in
       let open Type in
       function
-      | IntT { bitwidth } -> int isize
+      | NullT _ -> int 0
+      | IntT _ -> int isize
       | BoolT _ -> int isize
-      | StringT { nchars = Variable } ->
-        Infix.((islice start + int 7) && (int (-8)))
-      | StringT { nchars = Len x } ->
-        int (Int.round ~dir:`Up ~to_multiple_of:isize x)
+      | StringT { nchars } -> begin match Type.AbsInt.concretize nchars with
+          | Some x -> int (Int.round ~dir:`Up ~to_multiple_of:isize x)
+          | None -> Infix.((islice start + int 7) && (int (-8)))
+        end
       | EmptyT -> int 0
-      | CrossTupleT (_, { count = (Count _ | Unknown) })
-      | GroupingT (_, _, { count = (Count _ | Unknown) })
-      | UnorderedListT (_, { count = (Count _ | Unknown) })
-      | ZipTupleT (_, { count = (Count _ | Unknown) })
-      | OrderedListT (_, { count = (Count _ | Unknown) })
       | TableT _ -> islice start
-      | CrossTupleT (_, { count = Countable })
-      | ZipTupleT (_, { count = Countable })
-      | UnorderedListT (_, { count = Countable })
-      | GroupingT (_, _, { count = Countable })
-      | OrderedListT (_, { count = Countable }) -> islice (start + int isize)
+      | CrossTupleT (_, { count })
+      | GroupingT (_, _, { count })
+      | UnorderedListT (_, { count })
+      | ZipTupleT (_, { count })
+      | OrderedListT (_, { count }) -> begin
+          match Type.AbsCount.kind count with
+          | `Count _ | `Unknown -> islice start
+          | `Countable -> islice (start + int isize)
+         end
 
     let count start =
       let open Infix in
       let open Type in
       function
+      | EmptyT | NullT _ -> Some (int 0)
       | IntT _ | BoolT _ | StringT _ -> Some (int 1)
-      | EmptyT -> Some (int 0)
-      | CrossTupleT (_, { count = Count x })
-      | ZipTupleT (_, { count = Count x })
-      | UnorderedListT (_, { count = Count x })
-      | OrderedListT (_, { count = Count x })
-      | GroupingT (_, _, { count = Count x })
-      | TableT (_, _, { count = Count x }) -> Some (int x)
-      | GroupingT (_, _, { count = Countable })
-      | UnorderedListT (_, { count = Countable }) -> Some (islice start)
-      | _ -> None
+      | TableT (_, _, { count })
+      | CrossTupleT (_, { count })
+      | GroupingT (_, _, { count })
+      | UnorderedListT (_, { count })
+      | ZipTupleT (_, { count })
+      | OrderedListT (_, { count }) -> begin
+          match Type.AbsCount.kind count with
+          | `Count x -> Some (int x)
+          | `Unknown -> None
+          | `Countable -> Some (islice start)
+        end
 
     (** The length of a layout header in bytes. *)
     let hsize =
       let open Type in
       function
-      | IntT _ | BoolT _ | EmptyT -> Infix.(int 0)
-      | StringT { nchars = Len _ } -> Infix.(int 0)
-      | StringT { nchars = Variable } -> Infix.(int isize)
-      | CrossTupleT (_, { count = Count _ })
-      | UnorderedListT (_, { count = Count _ })
-      | OrderedListT (_, { count = Count _ })
-      | GroupingT (_, _, { count = Count _ })
-      | ZipTupleT (_, { count = Count _ }) -> Infix.(int isize)
-      | CrossTupleT _ | ZipTupleT _ | OrderedListT _ | UnorderedListT _ | GroupingT _ ->
-        Infix.int (2 * isize)
+      | NullT _ | IntT _ | BoolT _ | EmptyT -> Infix.(int 0)
+      | StringT { nchars } -> begin match Type.AbsInt.concretize nchars with
+          | Some _ -> Infix.(int 0)
+          | None -> Infix.(int isize)
+        end
       | TableT (_,_,_) -> Infix.(int isize)
+      | CrossTupleT (_, { count })
+      | GroupingT (_, _, { count })
+      | UnorderedListT (_, { count })
+      | ZipTupleT (_, { count })
+      | OrderedListT (_, { count }) -> begin
+          match Type.AbsCount.kind count with
+          | `Count x -> Infix.(int isize)
+          | `Unknown | `Countable -> Infix.int (2 * isize)
+        end
 
     let scan_empty = create ["start", int_t] VoidT |> build_func
+    let scan_null _ = create ["start", int_t] VoidT |> build_func
 
-    let scan_int Type.({ bitwidth }) =
+    let scan_int _ =
       let b = create ["start", int_t] (TupleT [int_t]) in
       let start = build_arg 0 b in
-      build_yield (Tuple [Slice (start, bitwidth / 8 + 1)]) b;
+      build_yield (Tuple [Slice (start, 64 / 8 + 1)]) b;
       build_func b
 
     let scan_bool _ =
@@ -758,12 +765,12 @@ module IRGen = struct
       build_yield (Tuple [Infix.(islice start)]) b;
       build_func b
 
-    let scan_string t =
+    let scan_string Type.({ nchars } as t) =
       let b = create ["start", int_t] (TupleT [slice_t]) in
       let start = build_arg 0 b in
-      let nchars = match t with
-        | { Type.nchars = Variable } -> Infix.(islice start)
-        | { Type.nchars = Len x } -> Infix.int x
+      let nchars = match Type.AbsInt.concretize nchars with
+        | None -> Infix.(islice start)
+        | Some x -> Infix.int x
       in
       build_yield (Tuple [Tuple [Infix.(start + hsize (StringT t)); nchars]]) b;
       build_func b
@@ -833,9 +840,9 @@ module IRGen = struct
           build_yield tup b
         in
 
-        begin match count with
-          | Count x -> build_count_loop Infix.(int x) build_body b
-          | Countable | Unknown ->
+        begin match Type.AbsCount.kind count with
+          | `Count x -> build_count_loop Infix.(int x) build_body b
+          | `Countable | `Unknown ->
             build_body b;
             let not_done = List.fold_left funcs ~init:(Bool true) ~f:(fun acc f ->
                 Infix.(acc && not (Done f)))
@@ -1071,12 +1078,14 @@ module IRGen = struct
           | OrderedListT _ -> Fresh.name fresh "ol%d"
           | TableT _ -> Fresh.name fresh "t%d"
           | GroupingT _ -> Fresh.name fresh "g%d"
+          | NullT _ -> Fresh.name fresh "n%d"
         in
         let func = match t with
           | IntT m -> scan_int m
           | BoolT m -> scan_bool m
           | StringT m -> scan_string m
           | EmptyT -> scan_empty
+          | NullT m -> scan_null m
           | CrossTupleT (x, m) -> scan_crosstuple scan x m
           | ZipTupleT (x, m) -> scan_ziptuple scan x m
           | UnorderedListT (x, m) -> scan_unordered_list scan x m

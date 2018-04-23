@@ -1,37 +1,50 @@
 open Base
 open Collections
+open Db
 
 include Type0
 
-module AbsCount = struct
-  type t =
-    | Countable
-    | Count of int
-    | Unknown
-  [@@deriving compare, sexp]
+exception TypeError of Error.t [@@deriving sexp]
 
-  let unify : t -> t -> t = fun x y -> match x, y with
-    | Unknown, _ | _, Unknown -> Unknown
-    | Count a, Count b -> if a = b then Count a else Countable
-    | Countable, _ | _, Countable -> Countable
+module AbsInt = struct
+  type t = (int * int) [@@deriving compare, sexp]
+
+  let unify : t -> t -> t = fun (l1, h1) (l2, h2) ->
+    (Int.min l1 l2, Int.max h1 h2)
+
+  let abstract : int -> t = fun x -> (x, x)
+
+  let concretize : t -> int option = fun (l, h) ->
+    if l = h then Some l else None
 end
 
-module AbsLen = struct
-  type t =
-    | Len of int
-    | Variable
-  [@@deriving compare, sexp]
+module AbsCount = struct
+  type t = AbsInt.t option [@@deriving compare, sexp]
 
-  let unify : t -> t -> t = fun x y -> match x, y with
-    | Len x, Len y when x = y -> Len x
-    | Len _, Len _ | Variable, _ | _, Variable -> Variable
+  let abstract : int -> t = fun x -> Some (AbsInt.abstract x)
+
+  let concretize : t -> int option =
+    Option.bind ~f:AbsInt.concretize
+
+  let kind : t -> [`Count of int | `Countable | `Unknown] = function
+    | Some x -> begin match AbsInt.concretize x with
+        | Some x -> `Count x
+        | None -> `Countable
+      end
+    | None -> `Unknown
+
+  let unify : t -> t -> t = fun x y ->
+    let module Let_syntax = Option in
+    let%bind x = x in
+    let%map y = y in
+    AbsInt.unify x y
 end
 
 module T = struct
   type null = { field : Db.Field.t } [@@deriving compare, sexp]
-  type int_ = { bitwidth : int; nullable : bool; field : Db.Field.t } [@@deriving compare, sexp]
+  type int_ = { range : AbsInt.t; nullable : bool; field : Db.Field.t } [@@deriving compare, sexp]
   type bool_ = { nullable : bool; field : Db.Field.t } [@@deriving compare, sexp]
-  type string_ = { nchars : AbsLen.t; nullable : bool; field : Db.Field.t } [@@deriving compare, sexp]
+  type string_ = { nchars : AbsInt.t; nullable : bool; field : Db.Field.t } [@@deriving compare, sexp]
   type ziptuple = { count : AbsCount.t } [@@deriving compare, sexp]
   type crosstuple = { count : AbsCount.t } [@@deriving compare, sexp]
   type ordered_list = {
@@ -66,8 +79,6 @@ end
 include T
 include Comparable.Make(T)
 
-exception TypeError of Error.t [@@deriving sexp]
-
 let bind2 : f:('a -> 'b -> 'c option) -> 'a option -> 'b option -> 'c option =
   fun ~f x y -> match x, y with
     | Some a, Some b -> f a b
@@ -83,10 +94,10 @@ let rec unify_exn : t -> t -> t = fun t1 t2 ->
   match t1, t2 with
   | NullT { field = f1 }, NullT { field = f2 } when Db.Field.equal f1 f2 ->
     NullT { field = f1 }
-  | (IntT { bitwidth = b1; field = f1; nullable = n1 },
-     IntT { bitwidth = b2; field = f2; nullable = n2 })
+  | (IntT { range = b1; field = f1; nullable = n1 },
+     IntT { range = b2; field = f2; nullable = n2 })
     when Db.Field.equal f1 f2 ->
-    IntT { bitwidth = Int.max b1 b2; field = f1; nullable = n1 || n2 }
+    IntT { range = AbsInt.unify b1 b2; field = f1; nullable = n1 || n2 }
   | (IntT x), NullT _ | NullT _, (IntT x) -> IntT ({x with nullable = true})
   | (BoolT { field = f1; nullable = n1 },
      BoolT { field = f2; nullable = n2 }) when Db.Field.equal f1 f2 ->
@@ -95,7 +106,7 @@ let rec unify_exn : t -> t -> t = fun t1 t2 ->
   | (StringT { nchars = b1; nullable = n1; field = f1 },
      StringT { nchars = b2; nullable = n2; field = f2 })
     when Db.Field.equal f1 f2 ->
-    StringT { nchars = AbsLen.unify b1 b2; field = f1; nullable = n1 || n2 }
+    StringT { nchars = AbsInt.unify b1 b2; field = f1; nullable = n1 || n2 }
   | (StringT x), NullT _ | NullT _, (StringT x) -> StringT ({x with nullable = true})
   | CrossTupleT (e1s, { count = c1 }), CrossTupleT (e2s, { count = c2 }) ->
       let elem_ts = match List.map2 e1s e2s ~f:unify_exn with
@@ -138,19 +149,15 @@ let rec of_layout_exn : Layout.t -> t =
   let unify_many ls = of_many ls |> List.fold_left ~f:unify_exn ~init:EmptyT in
   fun l ->
     let count = match Layout.ntuples l with
-      | Ok c -> AbsCount.Count c
-      | _ -> Unknown
+      | Ok c -> AbsCount.abstract c
+      | _ -> None
     in
     match l.node with
-    | Int (x, {node = { field }}) when Int.(x = 0) ->
-      IntT { bitwidth = 1; nullable = false; field }
-    | Int (x, {node = { field }}) when Int.(x < 0) ->
-      IntT { bitwidth = Int.floor_log2 (-x) + 1; nullable = false; field }
     | Int (x, {node = { field }}) ->
-      IntT { bitwidth = Int.floor_log2 x + 1; nullable = false; field }
+      IntT { range = AbsInt.abstract x; nullable = false; field }
     | Bool (x, {node = { field }}) -> BoolT { nullable = false; field }
     | String (x, {node = { field }}) ->
-      StringT { nchars = Len (String.length x); nullable = false; field }
+      StringT { nchars = AbsInt.abstract (String.length x); nullable = false; field }
     | Null { node = { field } } -> NullT { field }
     | CrossTuple ls -> CrossTupleT (of_many ls, { count })
     | ZipTuple ls ->
@@ -196,8 +203,8 @@ let rec width : t -> int = function
   | EmptyT -> 0
 
 let count : t -> AbsCount.t = function
-  | EmptyT -> Count 0
-  | NullT _ | IntT _ | BoolT _ | StringT _ -> Count 1
+  | EmptyT -> AbsCount.abstract 0
+  | NullT _ | IntT _ | BoolT _ | StringT _ -> AbsCount.abstract 1
   | CrossTupleT (_, { count }) | ZipTupleT (_, { count })
   | OrderedListT (_, { count }) | UnorderedListT (_, { count })
   | TableT (_, _, { count }) -> count

@@ -50,31 +50,27 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
   fun type_ layout ->
     match type_, layout.node with
     | NullT _, Null _ -> empty
-    | IntT { bitwidth }, Int (x, _) -> of_int ~width:64 x |> label "Int"
-    | IntT { bitwidth }, Null _ ->
-      Logs.warn (fun m -> m "Serializing NULL as 0.");
-      of_int ~width:64 0 |> label "Null"
-    | BoolT _, Bool (x, _) -> of_bytes (bytes_of_bool x) |> label "Bool"
-    | StringT { nchars = Variable }, String (x, _) ->
+    | IntT _, Int (x, _) -> of_int ~width:64 x |> label "Int"
+    | IntT { range = (_, max); nullable = true }, Null _ ->
+      of_int ~width:64 (max + 1) |> label "Int (null)"
+    | BoolT _, Bool (true, _) -> of_int ~width:64 1 |> label "Bool"
+    | BoolT _, Bool (false, _) -> of_int ~width:64 0 |> label "Bool"
+    | BoolT _, Null _ -> of_int ~width:64 2 |> label "Bool (null)"
+    | StringT { nchars }, String (x, _) ->
       let unpadded_body = Bytes.of_string x in
       let body = unpadded_body |> align isize |> of_bytes in
-      let len = Bytes.length unpadded_body |> bytes_of_int ~width:64 |> of_bytes in
+      let len = match Type.AbsInt.concretize nchars with
+        | Some len -> empty
+        | None ->
+          Bytes.length unpadded_body |> bytes_of_int ~width:64 |> of_bytes
+      in
       concat [len |> label "String len"; body |> label "String body"]
-    | StringT { nchars = Variable }, Null _ ->
-      Logs.warn (fun m -> m "Serializing NULL as empty string.");
-      let unpadded_body = Bytes.of_string "" in
-      let body = unpadded_body |> align isize |> of_bytes in
-      let len = Bytes.length unpadded_body |> bytes_of_int ~width:64 |> of_bytes in
-      concat [len |> label "NULL String len"; body |> label "NULL String body"]
-    | StringT { nchars = Len _ }, String (x, _) ->
-      let unpadded_body = Bytes.of_string x in
-      let body = unpadded_body |> align isize |> of_bytes in
-      concat [body |> label "String body"]
-    | StringT { nchars = Len x }, Null _ ->
-      Logs.warn (fun m -> m "Serializing NULL as null string.");
-      let unpadded_body = Bytes.init x (fun _ -> '\x00') in
-      let body = unpadded_body |> align isize |> of_bytes in
-      concat [body |> label "NULL String body"]
+    | StringT { nchars = (min, _) }, Null _ ->
+      let len_flag = of_int ~width:64 (min - 1) in
+      concat [len_flag |> label "String len (null)"]
+    | t, Null _ ->
+      Error.(create "Only scalar types can be nullable." t [%sexp_of:Type.t]
+             |> raise)
     | CrossTupleT (ts, { count }), CrossTuple ls ->
       let body =
         List.map2_exn ts ls ~f:(fun t l -> serialize t l) |> concat
@@ -82,9 +78,9 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
       in
       let len = byte_length body in
       let len_str = of_int ~width:64 len |> label "CrossTuple len" in
-      begin match count with
-        | Count _ | Unknown -> concat [len_str; body]
-        | Countable ->
+      begin match Type.AbsCount.kind count with
+        | `Count _ | `Unknown -> concat [len_str; body]
+        | `Countable ->
           let ct = Layout.ntuples_exn layout in
           let ct_str = of_int ~width:64 ct |> label "CrossTuple count" in
           concat [ct_str; len_str; body]
@@ -95,9 +91,9 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
       in
       let len = byte_length body in
       let len_str = of_int ~width:64 len |> label "ZipTuple len" in
-      begin match count with
-        | Count _ | Unknown -> concat [len_str; body]
-        | Countable ->
+      begin match Type.AbsCount.kind count with
+        | `Count _ | `Unknown -> concat [len_str; body]
+        | `Countable ->
           let ct = Layout.ntuples_exn layout in
           let ct_str = of_int ~width:64 ct |> label "CrossTuple count" in
           concat [ct_str; len_str; body]
@@ -107,9 +103,9 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
       let body = List.map ls ~f:(serialize t) |> concat |> label "List body" in
       let len = byte_length body in
       let len_str = of_int ~width:64 len |> label "List len" in
-      begin match count with
-        | Count _ | Unknown -> concat [len_str; body]
-        | Countable ->
+      begin match Type.AbsCount.kind count with
+        | `Count _ | `Unknown -> concat [len_str; body]
+        | `Countable ->
           let ct = Layout.ntuples_exn layout in
           let ct_str = of_int ~width:64 ct |> label "List count" in
           concat [ct_str; len_str; body]
@@ -178,9 +174,9 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
       in
       let len = byte_length body in
       let len_str = of_int ~width:64 len |> label "Grouping len" in
-      begin match count with
-        | Count _ | Unknown -> concat [len_str; body]
-        | Countable ->
+      begin match Type.AbsCount.kind count with
+        | `Count _ | `Unknown -> concat [len_str; body]
+        | `Countable ->
           let ct = Layout.ntuples_exn layout in
           let ct_str = of_int ~width:64 ct |> label "Grouping count" in
           concat [ct_str; len_str; body]

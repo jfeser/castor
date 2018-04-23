@@ -17,13 +17,15 @@ type t =
   | PList of t list
 
 (** Serialize an integer. Little endian. Width is the number of bits to use. *)
-let of_int : width:int -> int -> t = fun ~width x ->
-  let nbytes = (width / 8) + 1 in
-  let buf = Bytes.make nbytes '\x00' in
-  for i = 0 to nbytes - 1 do
-    Bytes.set buf i ((x lsr (i * 8)) land 0xFF |> Caml.char_of_int)
-  done;
-  Piece { str = Bytes.to_string buf; len = width }
+let of_int : ?null:bool -> width:int -> int -> t =
+  fun ?(null=false) ~width x ->
+    assert (0 <= width && width <= 64 && (not null || width <= 63));
+    let nbytes = (width / 8) + 1 in
+    let buf = Bytes.make nbytes '\x00' in
+    for i = 0 to nbytes - 1 do
+      Bytes.set buf i ((x lsr (i * 8)) land 0xFF |> Caml.char_of_int)
+    done;
+    Piece { str = Bytes.to_string buf; len = width }
 
 let of_bytes : bytes -> t = fun x ->
   Piece { str = Bytes.to_string x; len = 8 * Bytes.length x }
