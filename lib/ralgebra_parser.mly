@@ -38,17 +38,20 @@
 %token GE
 %token AND
 %token OR
+%token ADD
+%token SUB
+%token MUL
+%token DIV
+%token MOD
 %token EOF
 
 %start <(string * string, string, Layout.t) Ralgebra0.t> ralgebra_eof
 
 %left OR
 %left AND
-%nonassoc GE
-%nonassoc GT
-%nonassoc LE
-%nonassoc LT
-%nonassoc EQ
+%nonassoc GE GT LE LT EQ
+%left ADD SUB
+%left MUL DIV MOD
 %%
 
 ralgebra_eof:
@@ -97,6 +100,11 @@ pred:
 | p1 = pred; LE; p2 = pred { Binop (Le, p1, p2) }
 | p1 = pred; GT; p2 = pred { Binop (Gt, p1, p2) }
 | p1 = pred; GE; p2 = pred { Binop (Ge, p1, p2) }
+| p1 = pred; ADD; p2 = pred { Binop (Add, p1, p2) }
+| p1 = pred; SUB; p2 = pred { Binop (Sub, p1, p2) }
+| p1 = pred; MUL; p2 = pred { Binop (Mul, p1, p2) }
+| p1 = pred; DIV; p2 = pred { Binop (Div, p1, p2) }
+| p1 = pred; MOD; p2 = pred { Binop (Mod, p1, p2) }
 | p1 = pred; AND; p2 = pred { Varop (And, [p1; p2]) }
 | p1 = pred; OR; p2 = pred { Varop (Or, [p1; p2]) }
 | pred; error { error "Expected an operator." $startpos }

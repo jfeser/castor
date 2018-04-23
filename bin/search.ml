@@ -30,8 +30,11 @@ let validate : Ralgebra.t -> bool = fun r ->
 
   not has_refs && types_check
 
-let main : ?num:int -> ?sample:int -> queue:string -> db:string -> Bench.t -> string -> unit Deferred.t =
-  fun ?num ?sample ~queue ~db { name; sql; query; params } dir ->
+let main : ?num:int -> ?sample:int -> ?max_time:int -> ?max_disk:int -> ?max_size:int -> debug:bool -> queue:string -> db:string -> Bench.t -> string -> unit Deferred.t =
+  fun ?num ?sample ?max_time ?max_disk ?max_size ~debug ~queue ~db { name; sql; query; params } dir ->
+    let start_time = Time.now () in
+    let max_time = Option.map max_time ~f:Time.Span.of_int_sec in
+
     (* FIXME: Use the first parameter value for test params. Should use multiple
        choices and average. *)
     let test_params = List.map params ~f:(fun (pname, values) ->
@@ -83,7 +86,6 @@ let main : ?num:int -> ?sample:int -> queue:string -> db:string -> Bench.t -> st
         | e ->
           let e = result_status e in
           fail (Error.create "Postgres error" e [%sexp_of:string])
-
       in
 
       if do_write then
@@ -110,7 +112,8 @@ let main : ?num:int -> ?sample:int -> queue:string -> db:string -> Bench.t -> st
       let fn = sprintf "%s.bin" hash in
       let%bind reader = Reader.open_file fn in
       try_with (fun () ->
-          match%map Reader.read_bin_prot reader bin_reader_t with
+          let max_len = max_size in
+          match%map Reader.read_bin_prot ?max_len reader bin_reader_t with
           | `Ok r -> Result.Ok (to_candidate r)
           | `Eof -> Result.Error (Error.create "EOF when reading." fn [%sexp_of:string]))
         >>| Result.map_error ~f:(fun e -> Error.(of_exn e |> tag ~tag:fn))
@@ -135,20 +138,44 @@ let main : ?num:int -> ?sample:int -> queue:string -> db:string -> Bench.t -> st
       | r -> Error.create "Unexpected db results." r [%sexp_of:string list] |> Error.raise
     in
 
-    let is_done : unit -> bool = fun () ->
-      match num with
-      | Some n ->
-        begin match Db.exec1 qconn ~params:[queue] "select count(*) from $0 where valid" with
-          | [ct] -> Int.of_string ct >= n
-          | _ -> false
-        end
-      | None -> false
+    let is_done : unit -> string option = fun () ->
+      let check_count () = match num with
+        | Some n ->
+          begin match Db.exec1 qconn ~params:[queue] "select count(*) from $0 where valid" with
+            | [ct] -> Int.of_string ct >= n
+            | _ -> false
+          end
+        | None -> false
+      in
+
+      let check_disk () = match max_disk with
+        | Some b ->
+          begin match Db.exec1 qconn ~params:[queue] "select sum(program_size) from $0" with
+            | [sz] -> Int.of_string sz >= b
+            | _ -> false
+          end
+        | _ -> false
+      in
+
+      let check_time () = match max_time with
+        | Some t -> Time.Span.((Time.diff (Time.now ()) start_time) >= t)
+        | _ -> false
+      in
+
+      (* Check number of candidates enumerated. *)
+      let checks = [
+        check_count, "Number of candidates";
+        check_disk, "Disk use";
+        check_time, "Runtime";
+      ] in
+
+      List.find_map checks ~f:(fun (check, msg) -> if check () then Some msg else None)
     in
 
     let module Config = struct
       let conn = new connection ~dbname:db ()
       let testctx = Layout.PredCtx.of_vars test_params
-      let check_transforms = false
+      let check_transforms = debug
     end in
 
     let module Transform = Transform.Make(Config) in
@@ -167,7 +194,9 @@ let main : ?num:int -> ?sample:int -> queue:string -> db:string -> Bench.t -> st
               let tf = {Transform.(compose required t) with name = t.name} in
               List.iter (Candidate.run tf r) ~f:serialize))
       in
-      if is_done () then `Finished () else `Repeat ()
+      match is_done () with
+      | Some msg -> `Finished msg
+      | None -> `Repeat ()
     in
 
     let cand = Candidate.({
@@ -191,7 +220,8 @@ let main : ?num:int -> ?sample:int -> queue:string -> db:string -> Bench.t -> st
           | Ok () -> ()
           | Error e -> Logs.err (fun m -> m "%s" (Error.to_string_hum e))
         end;
-        Deferred.repeat_until_finished () search)
+        let%map msg = Deferred.repeat_until_finished () search in
+        Logs.info (fun m -> m "Terminated: %s" msg))
 
 let () =
   (* Set early so we get logs from command parsing code. *)
@@ -205,8 +235,12 @@ let () =
     and queue = flag "b" (required string) ~doc:"TABLE the name of the benchmark table"
     and verbose = flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
     and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
+    and debug = flag "debug" ~aliases:["g"] no_arg ~doc:"turn on debug mode"
     and sample = flag "sample" ~aliases:["s"] (optional int) ~doc:"N the number of rows to sample from large tables"
     and num = flag "num" ~aliases:["n"] (optional int) ~doc:"N the number of candidates to enumerate"
+    and max_time = flag "max-time" ~aliases:["mt"] (optional int) ~doc:"SEC the maximum amount of time to use"
+    and max_disk = flag "max-disk" ~aliases:["md"] (optional int) ~doc:"BYTES the maximum amount of disk space to use"
+    and max_size = flag "max-size" ~aliases:["ms"] (optional int) ~doc:"BYTES the maximum candidate size (serialized)"
     and bench = anon ("bench" %: bench)
     and dir = anon ("dir" %: file)
     in fun () ->
@@ -214,5 +248,5 @@ let () =
       else if quiet then Logs.set_level (Some Logs.Error)
       else Logs.set_level (Some Logs.Info);
 
-      main ?sample ~db ~queue bench dir
+      main ?sample ?max_time ?max_disk ?max_size ~debug ~db ~queue bench dir
   ] |> run

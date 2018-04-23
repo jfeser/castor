@@ -14,7 +14,7 @@ type type_ =
   | VoidT
 [@@deriving compare, sexp]
 
-type op = Add | Sub | Lt | Eq | And | Or | Not | Hash | Mul
+type op = Add | Sub | Mul | Div | Mod | Lt | Eq | And | Or | Not | Hash
 [@@deriving compare, sexp]
 type value =
   | VCont of { state : state; body : prog }
@@ -108,6 +108,8 @@ and pp_expr : Format.formatter -> expr -> unit =
     | Add -> "+"
     | Sub -> "-"
     | Mul -> "*"
+    | Div -> "/"
+    | Mod -> "%"
     | Lt -> "<"
     | And -> "&&"
     | Not -> "not"
@@ -170,6 +172,8 @@ module Infix = struct
     | _ -> Binop { op = Add; arg1 = x; arg2 = y }
   let (-) = fun x y -> Binop { op = Sub; arg1 = x; arg2 = y }
   let ( * ) = fun x y -> Binop { op = Mul; arg1 = x; arg2 = y }
+  let (/) = fun x y -> Binop { op = Div; arg1 = x; arg2 = y }
+  let (%) = fun x y -> Binop { op = Mod; arg1 = x; arg2 = y }
   let (<) = fun x y -> Binop { op = Lt; arg1 = x; arg2 = y }
   let (>) = fun x y -> y < x
   let (<=) = fun x y -> x - int 1 < y
@@ -929,7 +933,7 @@ module IRGen = struct
     let project gen fields r =
       let func = gen r in
 
-      let schema = Ralgebra.to_schema r in
+      let schema = Ralgebra.to_schema r |> Or_error.ok_exn in
       let idxs = List.filter_map fields ~f:(fun f ->
           match Db.Schema.field_idx schema f with
           | Some idx -> Some idx
@@ -952,7 +956,7 @@ module IRGen = struct
 
     let filter gen pred r =
       let func = gen r in
-      let schema = Ralgebra.to_schema r in
+      let schema = Ralgebra.to_schema r |> Or_error.ok_exn in
       Logs.debug (fun m ->
           m "Filter on schema %a." Sexp.pp_hum ([%sexp_of:Db.Schema.t] schema));
 
@@ -979,13 +983,18 @@ module IRGen = struct
                 | R.Ge -> Infix.(e1 >= e2)
                 | R.And -> Infix.(e1 && e2)
                 | R.Or -> Infix.(e1 || e2)
+                | R.Add -> Infix.(e1 + e2)
+                | R.Sub -> Infix.(e1 - e2)
+                | R.Mul -> Infix.(e1 * e2)
+                | R.Div -> Infix.(e1 / e2)
+                | R.Mod -> Infix.(e1 % e2)
               end
             | R.Varop (op, args) ->
               let eargs = List.map ~f:gen_pred args in
               begin match op with
                 | R.And -> List.fold_left1_exn ~f:Infix.(&&) eargs
                 | R.Or -> List.fold_left1_exn ~f:Infix.(||) eargs
-                | R.Eq | R.Lt | R.Le | R.Gt | R.Ge ->
+                | R.Eq | R.Lt | R.Le | R.Gt | R.Ge | R.Add|R.Sub|R.Mul|R.Div|R.Mod ->
                   fail (Error.create "Not a vararg operator." op [%sexp_of:R.op])
               end
           in
@@ -999,7 +1008,8 @@ module IRGen = struct
       let funcs = List.map rs ~f:gen in
       let ret_t =
         List.map funcs ~f:(fun f -> (find_func f).ret_type)
-        |> List.all_equal_exn
+        |> List.all_equal ~sexp_of_t:[%sexp_of:type_]
+        |> Or_error.ok_exn
       in
 
       let b = create [] ret_t in
@@ -1026,8 +1036,8 @@ module IRGen = struct
       let func1 = gen r1 in
       let func2 = gen r2 in
 
-      let s1 = Ralgebra.to_schema r1 in
-      let s2 = Ralgebra.to_schema r2 in
+      let s1 = Ralgebra.to_schema r1 |> Or_error.ok_exn in
+      let s2 = Ralgebra.to_schema r2 |> Or_error.ok_exn in
       let i1 = Db.Schema.field_idx_exn s1 f1 in
       let i2 = Db.Schema.field_idx_exn s2 f2 in
 

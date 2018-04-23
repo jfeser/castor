@@ -155,6 +155,11 @@ let op_to_string : op -> string = function
   | Ge -> ">="
   | And -> "and"
   | Or -> "or"
+  | Add -> "+"
+  | Sub -> "-"
+  | Mul -> "*"
+  | Div -> "/"
+  | Mod -> "%"
 
 let rec pred_to_sql_exn : pred -> string = function
   | Var _ as p -> Error.create "Unsupported." p [%sexp_of:pred] |> Error.raise
@@ -229,19 +234,27 @@ let rec layouts : t -> Layout.t list = function
   | Concat rs -> List.map rs ~f:layouts |> List.concat
   | Relation _ -> []
 
-let rec to_schema : t -> Schema.t = function
+let rec to_schema_exn : t -> Schema.t = function
   | Project (fs, r) ->
-    to_schema r |> List.filter ~f:(List.mem fs ~equal:Field.(=))
+    to_schema_exn r |> List.filter ~f:(List.mem fs ~equal:Field.(=))
   | Count _ -> [Field.{ name = "count"; dtype = DInt }]
-  | Filter (_, r) -> to_schema r
-  | EqJoin (_, _, r1, r2) -> to_schema r1 @ to_schema r2
+  | Filter (_, r) -> to_schema_exn r
+  | EqJoin (_, _, r1, r2) -> to_schema_exn r1 @ to_schema_exn r2
   | Scan l -> Layout.to_schema_exn l
-  | Concat rs -> List.concat_map rs ~f:to_schema
+  | Concat rs -> List.concat_map rs ~f:to_schema_exn
   | Relation r -> Schema.of_relation r
+  | Agg (out, key, r) -> List.map out ~f:(function
+      | Count -> Field.{ name = "count"; dtype = DInt }
+      | Key f -> f
+      | Sum _ | Min _ | Max _ as a -> Field.{ name = agg_to_string a; dtype = DInt }
+      | Avg _ -> failwith "unsupported")
+
+let to_schema : t -> Schema.t Or_error.t = fun r ->
+  Or_error.try_with (fun () -> to_schema_exn r)
 
 let rec flatten : t -> t =
   function
-  | Filter (_, r) | Project (_, r) as x -> begin match flatten r with
+  | Filter (_, r) | Project (_, r) | Agg (_, _, r) as x -> begin match flatten r with
       | Scan { node = Empty } -> Scan Layout.empty
       | _ -> x
     end
@@ -266,7 +279,7 @@ let rec params : t -> Set.M(TypedName).t =
   function
   | Relation _ -> empty
   | Scan l -> Layout.params l
-  | Project (_, r) | Count r -> params r
+  | Project (_, r) | Count r | Agg (_, _, r) -> params r
   | Filter (p, r) ->
     let open Ralgebra0 in
     Set.union (pred_params p) (params r)
@@ -278,6 +291,7 @@ let replace_relation : Relation.t -> Relation.t -> t -> t = fun r1 r2 ->
   let rec rep = function
     | Project (x, r) -> Project (x, rep r)
     | Filter (x, r) -> Filter (x, rep r)
+    | Agg (x, y, r) -> Agg (x, y, rep r)
     | EqJoin (x, y, r, r') -> EqJoin (x, y, rep r, rep r')
     | Scan _ as x -> x
     | Concat rs -> Concat (List.map ~f:rep rs)
@@ -291,9 +305,7 @@ let rec relations : t -> Relation.t list =
     let open Ralgebra0 in
     function
     | Scan _ -> []
-    | Project (_, r)
-    | Filter (_, r)
-    | Count r -> f r
+    | Project (_, r) | Filter (_, r) | Count r | Agg (_, _, r) -> f r
     | EqJoin (_, _, r, r') -> f r @ f r'
     | Concat rs -> List.concat_map ~f:f rs
     | Relation r -> [r]
@@ -305,9 +317,7 @@ let rec layouts : t -> Layout.t list =
     let open Ralgebra0 in
     function
     | Scan l -> [l]
-    | Project (_, r)
-    | Filter (_, r)
-    | Count r -> f r
+    | Project (_, r) | Filter (_, r) | Count r | Agg (_, _, r) -> f r
     | EqJoin (_, _, r, r') -> f r @ f r'
     | Concat rs -> List.concat_map ~f:f rs
     | Relation _ -> []
@@ -330,9 +340,18 @@ let intro_project : t -> t = fun r ->
     | EqJoin (f1, f2, r1, r2) ->
       EqJoin (f1, f2, f (Set.add fields f1) r1, f (Set.add fields f2) r2)
     | Concat rs -> Concat (List.map rs ~f:(f fields))
+    | Agg (out, key, r) ->
+      let fields =
+        List.filter_map out ~f:(function
+          | Count | Key _ -> None
+          | Sum f | Avg f| Min f| Max f -> Some f)
+        @ key |> Set.of_list (module Field)
+        |> Set.union fields
+      in
+      Agg (out, key, f fields r)
     | Relation _ as r -> r
   in
-  f (Set.of_list (module Field) (to_schema r)) r
+  f (Set.of_list (module Field) (to_schema_exn r)) r
 
 let push_filter : t -> t =
   let open Ralgebra0 in
@@ -340,11 +359,11 @@ let push_filter : t -> t =
     | Filter (p, EqJoin (f1, f2, r1, r2)) ->
       let fields = Set.of_list (module Field) (pred_fields p) in
       let r1, pushed_r1 =
-        if Set.is_subset fields ~of_:(Set.of_list (module Field) (to_schema r1)) then
+        if Set.is_subset fields ~of_:(Set.of_list (module Field) (to_schema_exn r1)) then
           f (Filter (p, r1)), true else f r1, false
       in
       let r2, pushed_r2 =
-        if Set.is_subset fields ~of_:(Set.of_list (module Field) (to_schema r2)) then
+        if Set.is_subset fields ~of_:(Set.of_list (module Field) (to_schema_exn r2)) then
           f (Filter (p, r2)), true else f r2, false
       in
       if pushed_r1 || pushed_r2 then EqJoin (f1, f2, r1, r2) else
@@ -356,6 +375,7 @@ let push_filter : t -> t =
     | Project (fs, r) -> Project (fs, f r)
     | EqJoin (f1, f2, r1, r2) -> EqJoin (f1, f2, f r1, f r2)
     | Concat rs -> Concat (List.map rs ~f)
+    | Agg (x, y, r) -> Agg (x, y, f r)
     | Scan _ | Relation _ as r -> r
   in
   f
@@ -388,6 +408,17 @@ let hoist_filter : t -> t = fun r ->
       begin match f r with
         | Filter (p', r) -> Filter (Binop (And, p, p'), r)
         | r -> Filter (p, r)
+      end
+    | Agg (out, key, r) -> begin match f r with
+        | Filter (p, r') as r ->
+          let out_fields =
+            List.filter_map out ~f:(function Key f -> Some f | _ -> None)
+            |> Set.of_list (module Field)
+          in
+          if Set.is_subset (pred_fields p |> Set.of_list (module Field)) ~of_:out_fields then
+            Filter (p, Agg (out, key, r'))
+          else Agg (out, key, r)
+        | r -> Agg (out, key, r)
       end
     | Concat rs ->
       let ps, rs = List.map rs ~f:(fun r -> match f r with

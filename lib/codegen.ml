@@ -439,6 +439,8 @@ module Make (Config: Config.S) () = struct
         | Add -> build_add x1 x2 "addtmp" builder
         | Sub -> build_sub x1 x2 "subtmp" builder
         | Mul -> build_mul x1 x2 "multmp" builder
+        | Div -> build_sdiv v1 v2 "divtmp" builder
+        | Mod -> build_srem v1 v2 "modtmp" builder
         | Eq -> begin match t1, t2 with
             | IntT _, IntT _ | BoolT _, BoolT _ ->
               build_icmp Icmp.Eq x1 x2 "eqtmp" builder
@@ -471,7 +473,7 @@ module Make (Config: Config.S) () = struct
       let x = if is_nullable t then build_extractvalue v 0 "" builder else v in
       let x_out = match op with
         | Not -> build_not x "nottmp" builder
-        | Add | Sub| Lt | And | Or | Eq | Hash | Mul ->
+        | Add | Sub| Lt | And | Or | Eq | Hash | Mul | Div | Mod ->
           fail (Error.of_string "Not a unary operator.")
       in
       let ret_t = infer_type tctx (Unop { op; arg }) in

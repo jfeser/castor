@@ -162,8 +162,8 @@ let rec of_layout_exn : Layout.t -> t =
     | CrossTuple ls -> CrossTupleT (of_many ls, { count })
     | ZipTuple ls ->
       begin match List.map ls ~f:Layout.ntuples |> List.all_equal with
-        | Some len -> ZipTupleT (of_many ls, { count })
-        | None -> fail "Columns have different lengths."
+        | Ok len -> ZipTupleT (of_many ls, { count })
+        | Error _ -> fail "Columns have different lengths."
       end
     | UnorderedList ls -> UnorderedListT (unify_many ls, { count })
     | OrderedList (ls, { field; order; lookup }) ->

@@ -1,8 +1,9 @@
-((name query96)
- (params
-  ((store ())
-   (income ())))
- (sql "
+((name query84)
+ (params (
+          (city ((String Midway)))
+          (income ((Int 45000)))
+          ))
+   (sql "
  select c_customer_id, c_last_name, c_first_name
  from customer
      ,customer_address
@@ -21,7 +22,7 @@
  order by c_customer_id
  limit 100;
 ")
- (query "
+   (query "
 EqJoin(customer.c_current_hdemo_sk, household_demographics.hd_demo_sk,
 EqJoin(customer.c_current_cdemo_sk, customer_demographics.cd_demo_sk,
 EqJoin(customer.c_current_addr_sk, customer_address.ca_address_sk,
@@ -31,4 +32,4 @@ store_returns, customer_demographics)),
 EqJoin(income_band.ib_income_band_sk, household_demographics.hd_income_band_sk,
 Filter(income_band.ib_lower_bound >= income:int && income_band.ib_upper_bound <= income:int + 50000, income_band), household_demographics))
 ")
- )
+   )
