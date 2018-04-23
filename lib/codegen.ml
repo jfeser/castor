@@ -328,25 +328,21 @@ module Make (Config: Config.S) () = struct
       |> ignore;
       build_load struct_ "" builder
 
-  let rec codegen_expr : _ -> expr -> llvalue = fun fctx -> function
-    | Int x -> const_int int_type x
-    | Bool true -> const_int bool_type 1
-    | Bool false -> const_int bool_type 0
-    | String x ->
-      let ptr = build_global_stringptr x "" builder in
-      let len = const_int int_type (String.length x) in
-      let struct_ = build_entry_alloca str_type "str" builder in
-      build_store ptr (build_struct_gep struct_ 0 "" builder) builder |> ignore;
-      build_store len (build_struct_gep struct_ 1 "" builder) builder |> ignore;
-      build_load struct_ "strptr" builder
-    | Done iter ->
-      let ctx' = get_iter iter in
-      let v = get_val ~params:(get_val fctx "params") ctx' "done" in
-      build_load v "done" builder
-    | Var n ->
-      let v = get_val fctx n in
-      build_load v n builder
-    | Slice (byte_idx, size_bytes) ->
+  let codegen_string : string -> llvalue = fun x ->
+    let ptr = build_global_stringptr x "" builder in
+    let len = const_int int_type (String.length x) in
+    let struct_ = build_entry_alloca str_type "str" builder in
+    build_store ptr (build_struct_gep struct_ 0 "" builder) builder |> ignore;
+    build_store len (build_struct_gep struct_ 1 "" builder) builder |> ignore;
+    build_load struct_ "strptr" builder
+
+  let codegen_done : _ -> string -> llvalue = fun fctx iter ->
+    let ctx' = get_iter iter in
+    let v = get_val ~params:(get_val fctx "params") ctx' "done" in
+    build_load v "done" builder
+
+  let codegen_slice : (_ -> expr -> llvalue) -> _ -> expr -> int -> llvalue =
+    fun codegen_expr fctx byte_idx size_bytes ->
       let size_bits = Serialize.isize * size_bytes in
       let byte_idx = codegen_expr fctx byte_idx in
       let int_idx = build_sdiv byte_idx (const_int (i64_type ctx) Serialize.isize) "intidx" builder in
@@ -368,8 +364,9 @@ module Make (Config: Config.S) () = struct
       debug_printf "Slice value: %d\n" [slice];
       slice
 
-    | Index (tup, idx) ->
-      let lltup = codegen_expr fctx tup in
+  let codegen_index : (expr -> llvalue) -> expr -> int -> llvalue =
+    fun codegen_expr tup idx ->
+      let lltup = codegen_expr tup in
 
       (* Check that the argument really is a struct and that the index is
          valid. *)
@@ -383,7 +380,50 @@ module Make (Config: Config.S) () = struct
       end;
 
       build_extractvalue lltup idx "elemtmp" builder
-    | Binop { op; arg1; arg2 } as expr ->
+
+  let codegen_hash : _ -> llvalue -> llvalue -> llvalue = fun fctx x1 x2 ->
+    (* See cmph.h. cmph_uint32 cmph_search_packed(void *packed_mphf, const
+       char *key, cmph_uint32 keylen); *)
+    let cmph_search_packed =
+      declare_function "cmph_search_packed"
+        (function_type (i32_type ctx)
+           [|pointer_type (i8_type ctx); pointer_type (i8_type ctx);
+             i32_type ctx|])
+        module_
+    in
+    debug_printf "Hash data offset: %d\n" [x1];
+    let key_ptr = build_entry_alloca (type_of x2) "key_ptr" builder in
+    build_store x2 key_ptr builder |> ignore;
+    debug_printf "Key val: %d\n" [x2];
+    debug_printf "Key val: %d\n" [build_load key_ptr "" builder];
+
+    let key_ptr_cast = build_pointercast key_ptr
+        (pointer_type (i8_type ctx)) "key_ptr_cast" builder
+    in
+    let key_size =
+      build_intcast (size_of (type_of x2)) (i32_type ctx) "key_size" builder
+    in
+    debug_printf "Key size: %d\n" [key_size];
+    let buf_ptr = build_load (get_val fctx "buf") "buf_ptr" builder in
+    debug_printf "Buf ptr: %p\n" [buf_ptr];
+    let buf_ptr_as_int =
+      build_ptrtoint buf_ptr (i64_type ctx) "buf_ptr_int" builder
+    in
+    let hash_ptr_as_int =
+      build_add buf_ptr_as_int x1 "hash_ptr_int" builder
+    in
+    let hash_ptr = build_inttoptr hash_ptr_as_int
+        (pointer_type (i8_type ctx)) "hash_ptr" builder
+    in
+    debug_printf "Hash ptr: %p\n" [hash_ptr];
+    let hash_val = build_call cmph_search_packed
+        [|hash_ptr; key_ptr_cast; key_size|] "hash_val" builder
+    in
+    debug_printf "Hash val: %d\n" [hash_val];
+    build_intcast hash_val (i64_type ctx) "hash_val_cast" builder
+
+  let codegen_binop : (_ -> expr -> llvalue) -> _ -> op -> expr -> expr -> llvalue =
+    fun codegen_expr fctx op arg1 arg2 ->
       let v1 = codegen_expr fctx arg1 in
       let v2 = codegen_expr fctx arg2 in
       let tctx = Hashtbl.of_alist_exn (module String) fctx#func.locals in
@@ -399,8 +439,7 @@ module Make (Config: Config.S) () = struct
         | Add -> build_add x1 x2 "addtmp" builder
         | Sub -> build_sub x1 x2 "subtmp" builder
         | Mul -> build_mul x1 x2 "multmp" builder
-        | Eq ->
-          begin match t1, t2 with
+        | Eq -> begin match t1, t2 with
             | IntT _, IntT _ | BoolT _, BoolT _ ->
               build_icmp Icmp.Eq x1 x2 "eqtmp" builder
             | StringT _, StringT _ ->
@@ -411,50 +450,11 @@ module Make (Config: Config.S) () = struct
         | Lt -> build_icmp Icmp.Slt x1 x2 "lttmp" builder
         | And -> build_and x1 x2 "andtmp" builder
         | Or -> build_or x1 x2 "ortmp" builder
-        | Hash ->
-          (* See cmph.h. cmph_uint32 cmph_search_packed(void *packed_mphf, const
-             char *key, cmph_uint32 keylen); *)
-          let cmph_search_packed =
-            declare_function "cmph_search_packed"
-              (function_type (i32_type ctx)
-                 [|pointer_type (i8_type ctx); pointer_type (i8_type ctx);
-                   i32_type ctx|])
-              module_
-          in
-          debug_printf "Hash data offset: %d\n" [x1];
-          let key_ptr = build_entry_alloca (type_of x2) "key_ptr" builder in
-          build_store x2 key_ptr builder |> ignore;
-          debug_printf "Key val: %d\n" [x2];
-          debug_printf "Key val: %d\n" [build_load key_ptr "" builder];
-
-          let key_ptr_cast = build_pointercast key_ptr
-              (pointer_type (i8_type ctx)) "key_ptr_cast" builder
-          in
-          let key_size =
-            build_intcast (size_of (type_of x2)) (i32_type ctx) "key_size" builder
-          in
-          debug_printf "Key size: %d\n" [key_size];
-          let buf_ptr = build_load (get_val fctx "buf") "buf_ptr" builder in
-          debug_printf "Buf ptr: %p\n" [buf_ptr];
-          let buf_ptr_as_int =
-            build_ptrtoint buf_ptr (i64_type ctx) "buf_ptr_int" builder
-          in
-          let hash_ptr_as_int =
-            build_add buf_ptr_as_int x1 "hash_ptr_int" builder
-          in
-          let hash_ptr = build_inttoptr hash_ptr_as_int
-              (pointer_type (i8_type ctx)) "hash_ptr" builder
-          in
-          debug_printf "Hash ptr: %p\n" [hash_ptr];
-          let hash_val = build_call cmph_search_packed
-              [|hash_ptr; key_ptr_cast; key_size|] "hash_val" builder
-          in
-          debug_printf "Hash val: %d\n" [hash_val];
-          build_intcast hash_val (i64_type ctx) "hash_val_cast" builder
+        | Hash -> codegen_hash fctx x1 x2
         | Not -> fail (Error.of_string "Not a binary operator.")
       in
 
-      let ret_t = infer_type tctx expr in
+      let ret_t = infer_type tctx (Binop { op; arg1; arg2 }) in
       if is_nullable ret_t then
         let null_out =
           build_or (build_extractvalue v1 1 "" builder)
@@ -463,7 +463,8 @@ module Make (Config: Config.S) () = struct
         pack_null ret_t ~data:x_out ~null:null_out
       else x_out
 
-    | Unop { op; arg } as expr ->
+  let codegen_unop : (_ -> expr -> llvalue) -> _ -> op -> expr -> llvalue =
+    fun codegen_expr fctx op arg ->
       let v = codegen_expr fctx arg in
       let tctx = Hashtbl.of_alist_exn (module String) fctx#func.locals in
       let t = infer_type tctx arg in
@@ -473,14 +474,15 @@ module Make (Config: Config.S) () = struct
         | Add | Sub| Lt | And | Or | Eq | Hash | Mul ->
           fail (Error.of_string "Not a unary operator.")
       in
-      let ret_t = infer_type tctx expr in
+      let ret_t = infer_type tctx (Unop { op; arg }) in
       if is_nullable ret_t then
         let null_out = build_extractvalue v 1 "" builder in
         pack_null ret_t ~data:x_out ~null:null_out
       else x_out
 
-    | Tuple es ->
-      let vs = List.map es ~f:(codegen_expr fctx) in
+  let codegen_tuple : (expr -> llvalue) -> expr list -> llvalue =
+    fun codegen_expr es ->
+      let vs = List.map es ~f:codegen_expr in
       let ts = List.map vs ~f:type_of |> Array.of_list in
       let struct_t = struct_type ctx ts in
       let struct_ = build_entry_alloca struct_t "tupleptrtmp" builder in
@@ -488,6 +490,22 @@ module Make (Config: Config.S) () = struct
           let ptr = build_struct_gep struct_ i "ptrtmp" builder in
           build_store v ptr builder |> ignore);
       build_load struct_ "tupletmp" builder
+
+  let rec codegen_expr : _ -> expr -> llvalue = fun fctx -> function
+    | Int x -> const_int int_type x
+    | Bool true -> const_int bool_type 1
+    | Bool false -> const_int bool_type 0
+    | Var n ->
+      let v = get_val fctx n in
+      build_load v n builder
+    | String x -> codegen_string x
+    | Done iter -> codegen_done fctx iter
+    | Slice (byte_idx, size_bytes) ->
+      codegen_slice codegen_expr fctx byte_idx size_bytes
+    | Index (tup, idx) -> codegen_index (codegen_expr fctx) tup idx
+    | Binop { op; arg1; arg2 } -> codegen_binop codegen_expr fctx op arg1 arg2
+    | Unop { op; arg } -> codegen_unop codegen_expr fctx op arg
+    | Tuple es -> codegen_tuple (codegen_expr fctx) es
 
   let codegen_loop fctx codegen_prog cond body =
     let start_bb = insertion_block builder in
