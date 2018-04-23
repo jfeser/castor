@@ -7,9 +7,9 @@ module Format = Caml.Format
 let fail : Error.t -> 'a = Error.raise
 
 type type_ =
-  | IntT
-  | StringT
-  | BoolT
+  | IntT of { nullable: bool }
+  | StringT of { nullable: bool }
+  | BoolT of { nullable: bool }
   | TupleT of type_ list
   | VoidT
 [@@deriving compare, sexp]
@@ -78,9 +78,12 @@ let rec pp_tuple pp_v fmt =
 let rec pp_type : Format.formatter -> type_ -> unit =
   let open Format in
   fun fmt -> function
-    | IntT -> fprintf fmt "Int"
-    | StringT -> fprintf fmt "String"
-    | BoolT -> fprintf fmt "Bool"
+    | IntT { nullable = true } -> fprintf fmt "Int"
+    | IntT { nullable = false } -> fprintf fmt "Int[nonnull]"
+    | StringT { nullable = true } -> fprintf fmt "String"
+    | StringT { nullable = false } -> fprintf fmt "String[nonnull]"
+    | BoolT { nullable = true } -> fprintf fmt "Bool"
+    | BoolT { nullable = false } -> fprintf fmt "Bool[nonnull]"
     | TupleT ts -> fprintf fmt "Tuple[%a]" (pp_tuple pp_type) ts
     | VoidT -> fprintf fmt "Void"
 
@@ -185,11 +188,13 @@ module Infix = struct
     { args; ret_type; locals; body }
 end
 
-let int_t = IntT
-let bool_t = BoolT
-let string_t = StringT
-let tuple_t ts = TupleT ts
-let slice_t = tuple_t [int_t; int_t]
+let int_t = IntT { nullable = false }
+
+let is_nullable = function
+  | IntT { nullable = n }
+  | BoolT { nullable = n }
+  | StringT { nullable = n } -> n
+  | TupleT _ | VoidT -> false
 
 let type_of_dtype : Db.dtype -> type_ = function
   | DInt -> int_t
@@ -198,8 +203,8 @@ let type_of_dtype : Db.dtype -> type_ = function
   | DInterval
   | DRational
   | DFloat
-  | DString -> string_t
-  | DBool -> bool_t
+  | DString -> (StringT { nullable = false })
+  | DBool -> (BoolT { nullable = false })
 
 let fresh_name : unit -> string =
   let ctr = ref 0 in
@@ -234,274 +239,56 @@ let to_bool_exn : value -> bool = function
   | v -> fail (Error.create "Type error: can't convert to bool."
                  v [%sexp_of:value])
 
-let rec eval_expr : state -> expr -> value =
-  fun s ->
-    let int x = eval_expr s x |> to_int_exn in
-    let bool x = eval_expr s x |> to_bool_exn in
-    function
-    | Int x -> VInt x
-    | Bool x -> VBool x
-    | Var v -> lookup s v
-    | Tuple t -> VTuple (List.map t ~f:(eval_expr s))
-    | Slice (p, l) ->
-      let p = eval_expr s p |> to_int_exn in
-      let b =
-        try Bytes.sub s.buf p l
-        with Invalid_argument _ ->
-          fail (Error.create "Runtime error: Bad slice."
-                  (p, l) [%sexp_of:int*int])
-      in
-      VBytes b
-    | Index (t, i) ->
-      begin match eval_expr s t with
-        | VTuple vs -> List.nth_exn vs i
-        | v -> fail (Error.create
-                       "Runtime error: Expected a tuple." v [%sexp_of:value])
-      end
-    | Binop { op; arg1 = x1; arg2 = x2 } ->
-      begin match op with
-        | Add -> VInt (int x1 + int x2)
-        | Sub -> VInt (int x1 - int x2)
-        | Eq -> VBool Polymorphic_compare.(x1 = x2)
-        | Lt -> VBool (int x1 < int x2)
-        | And -> VBool (bool x1 && bool x2)
-        | Or -> VBool (bool x1 || bool x2)
-        | Not -> failwith "Not a binary operator."
-      end
-    | Unop { op; arg = x } ->
-      begin match op with
-        | Not -> VBool (not (bool x))
-        | Add | Sub | Lt | And | Or | Eq -> failwith "Not a unary operator."
-      end
-    | Done func -> failwith "unimplemented"
-
-and eval_stmt : state -> prog -> value option * prog * state =
-  fun s -> function
-    | Assign { lhs; rhs } :: xs ->
-      let s' = {
-        s with ctx = Map.set s.ctx ~key:lhs ~data:(eval_expr s rhs)
-      } in
-      eval_stmt s' xs
-    | Loop { cond; body } :: xs ->
-      if eval_expr s cond |> to_bool_exn then
-        eval_stmt s (body @ Infix.loop cond body :: xs)
-      else eval_stmt s xs
-    | Step { var; iter } :: xs ->
-      begin match lookup s iter with
-        | VCont { body; state } ->
-          let (mvalue, body', state') = eval_stmt state body in
-          begin match mvalue with
-            | Some value ->
-              let cont = VCont { state = state'; body = body' } in
-              let ctx' =
-                Map.set s.ctx ~key:iter ~data:cont
-                |> Map.set ~key:var ~data:value
-              in
-              let s' = { s with ctx = ctx' } in
-              eval_stmt s' xs
-            | None ->
-              fail (Error.create "Runtime error: advancing stopped iterator."
-                      (iter, body) [%sexp_of:string * prog])
-          end
-        | _ -> failwith "Type error."
-      end
-    | If { cond; tcase; fcase } :: xs ->
-      if (eval_expr s cond |> to_bool_exn)
-      then eval_stmt s (tcase @ xs)
-      else eval_stmt s (fcase @ xs)
-    | Yield e :: xs -> Some (eval_expr s e), xs, s
-    | [] -> None, [], s
-    | Print (_, e) :: xs ->
-      Stdio.printf "Output: %s\n"
-        (Sexp.to_string_hum ([%sexp_of:value] (eval_expr s e)));
-      eval_stmt s xs
-    | Iter { var; func; args } :: xs ->
-      let vargs = List.map args ~f:(eval_expr s) in
-      let vfunc = match lookup s func with
-        | VFunc f -> VCont {
-            state = {
-              s with ctx =
-                       List.map ~f:(fun (v, _) -> v) f.args
-                       |> (fun fargs -> List.zip_exn fargs vargs)
-                       |> Map.of_alist_exn (module String);
-            };
-            body = f.body;
-          }
-        | v -> fail (Error.create "Type error: expected a function." v [%sexp_of:value])
-      in
-      let s' = { s with ctx = Map.set s.ctx ~key:var ~data:vfunc } in
-      eval_stmt s' xs
-
-let eval_with_state : Bytes.t -> prog -> (value * state) Seq.t = fun buf stmt ->
-  Seq.unfold_step
-    ~init:(stmt, { buf; ctx = Map.empty (module String) })
-    ~f:(function
-        | ([], _) -> Done
-        | (stmt, state) ->
-          let mvalue, stmt', state' = eval_stmt state stmt in
-          match mvalue with
-          | Some value -> Yield ((value, state'), (stmt', state'))
-          | None -> Skip (stmt', state'))
-
-let eval : Bytes.t -> prog -> value Seq.t = fun buf stmt ->
-  eval_with_state buf stmt |> Seq.map ~f:(fun (v, _) -> v)
-
-let run : Bytes.t -> prog -> unit = fun buf prog ->
-  eval_with_state buf prog |> Seq.iter ~f:(fun (v, s) ->
-      Caml.print_endline (Sexp.to_string_hum ([%sexp_of:value] v));
-      Caml.print_endline (Sexp.to_string_hum
-                            ([%sexp_of:value Map.M(String).t] s.ctx)))
-
-let equiv : Bytes.t -> prog -> prog -> bool = fun buf p1 p2 ->
-  let module Value = struct
-    type t = value
-    include Comparator.Make(struct
-        type t = value
-        let compare = compare_value
-        let sexp_of_t = [%sexp_of:value]
-      end)
-  end
-  in
-  let es1 = Or_error.try_with (fun () ->
-      eval buf p1 |> Seq.fold ~init:(Set.empty (module Value)) ~f:Set.add)
-  in
-  let es2 = Or_error.try_with (fun () ->
-      eval buf p2 |> Seq.fold ~init:(Set.empty (module Value)) ~f:Set.add)
-  in
-  match es1, es2 with
-  | Ok s1, Ok s2 -> Set.equal s1 s2
-  | Error _, Error _ -> true
-  | _ -> false
-
-type pcprog = {
-  header : prog;
-  body : prog;
-  footer : prog;
-  is_yield_var : string;
-  yield_val_var : string;
-}
-let pcify : Fresh.t -> prog -> pcprog = fun fresh ->
-  let is_yield_var = Fresh.name fresh "y%d" in
-  let yield_val_var = Fresh.name fresh "v%d" in
-  let is_yield = Var is_yield_var in
-  let create ?(header=[]) ?(body=[]) () = {
-    header; body; is_yield_var; yield_val_var; footer = [] }
-  in
-  let rec pcify_prog = function
-    | Loop { cond; body } :: xs ->
-      let pbody = pcify_prog body in
-      let pxs = pcify_prog xs in
-      let ct_enabled = Fresh.name fresh "e%d" in
-      let ct = Fresh.name fresh "ct%d" in
-      let ctr = Fresh.name fresh "c%d" in
-      let header = Infix.(pxs.header @ pbody.header @ [
-          ctr := int 0;
-          ct := int 0;
-          ct_enabled := tru;
-        ]) in
-      (* FIXME: Update for while loops. *)
-      (* let body = Infix.([
-       *     ite (Var ct_enabled && not (is_yield)) [
-       *       ct := count;
-       *       ct_enabled := fls;
-       *     ] [
-       *       ite (Var ctr < Var ct)
-       *         (pbody.body @ [ctr := Var ctr + int 1] @ pbody.header)
-       *         pxs.body
-       *     ]
-       *   ])
-       * in *)
-      failwith "Unimplemented."
-        create ~header ~body ()
-    | If { cond; tcase; fcase } :: xs ->
-      let tprog = pcify_prog tcase in
-      let fprog = pcify_prog fcase in
-      let pxs = pcify_prog xs in
-      let tf_enabled = Fresh.name fresh "e%d" in
-      let tf = Fresh.name fresh "tf%d" in
-      let header = Infix.(pxs.header @ tprog.header @ fprog.header @ [
-          tf := tru;
-          tf_enabled := tru;
-        ]) in
-      let body = Infix.([
-          ite (Var tf_enabled && not (is_yield))
-            [ tf := cond; tf_enabled := fls; ]
-            ([ ite (Var tf) tprog.body fprog.body ] @ pxs.body)
-        ])
-      in
-      create ~header ~body ()
-    | Yield e :: xs ->
-      let pxs = pcify_prog xs in
-      let enabled = Fresh.name fresh "e%d" in
-      let header = Infix.(pxs.header @ [ enabled := tru; ]) in
-      let body = [
-        Infix.(ite (Var enabled && not (is_yield)) ([
-            enabled := fls;
-            is_yield_var := tru;
-            yield_val_var := e;
-          ]) pxs.body)
-      ] in
-      create ~header ~body ()
-    | (Step _ as s) :: xs
-    | (Iter _ as s) :: xs
-    | (Print _ as s) :: xs
-    | (Assign _ as s) :: xs ->
-      let pxs = pcify_prog xs in
-      let enabled = Fresh.name fresh "e%d" in
-      let header = Infix.(pxs.header @ [ enabled := tru; ]) in
-      let body = [
-        Infix.(ite (Var enabled && not (is_yield)) ([
-            enabled := fls;
-            s
-          ]) pxs.body)
-      ]
-      in
-      create ~header ~body ()
-    | [] -> create ()
-  in
-  fun prog ->
-    let pprog = pcify_prog prog in
-    {
-      pprog with
-      header = Infix.([
-          is_yield_var := fls;
-          yield_val_var := int 0;
-        ]) @ pprog.header;
-    }
+let rec unify_type : type_ -> type_ -> type_ = fun t1 t2 ->
+  match t1, t2 with
+  | IntT { nullable = n1 }, IntT { nullable = n2 } ->
+    IntT { nullable = n1 || n2 }
+  | BoolT { nullable = n1 }, BoolT { nullable = n2 } ->
+    BoolT { nullable = n1 || n2 }
+  | StringT { nullable = n1 }, StringT { nullable = n2 } ->
+    StringT { nullable = n1 || n2 }
+  | TupleT t1, TupleT t2 -> TupleT (List.map2_exn t1 t2 ~f:unify_type)
+  | VoidT, VoidT -> VoidT
+  | _, _ -> Error.create "Nonunifiable." (t1, t2) [%sexp_of:type_ * type_]
+            |> Error.raise
 
 let rec infer_type : type_ Hashtbl.M(String).t -> expr -> type_ =
   let open Serialize in
   fun ctx -> function
-    | Int _ -> IntT
-    | Bool _ -> BoolT
-    | String _ -> StringT
+    | Int _ -> IntT { nullable = false }
+    | Bool _ -> BoolT { nullable = false }
+    | String _ -> StringT { nullable = false }
     | Var x -> Hashtbl.find_exn ctx x
     | Tuple xs -> TupleT (List.map xs ~f:(infer_type ctx))
     | Binop { op; arg1; arg2 } ->
       let t1 = infer_type ctx arg1 in
       let t2 = infer_type ctx arg2 in
       begin match op, t1, t2 with
-        | (Add | Sub | Mul), IntT, IntT -> IntT
-        | Lt, IntT, IntT -> BoolT
-        | (And | Or), BoolT, BoolT -> BoolT
-        | (And | Or), IntT, IntT -> IntT
-        | Hash, IntT, _ -> IntT
-        | Eq, _, _ when compare_type_ t1 t2 = 0 -> BoolT
+        | (Add | Sub | Mul), IntT _ , IntT _
+        | (And | Or), BoolT _, BoolT _
+        | (And | Or), IntT _, IntT _ -> unify_type t1 t2
+        | Lt, IntT { nullable = n1 }, IntT { nullable = n2 } ->
+          BoolT { nullable = n1 || n2 }
+        | Hash, IntT { nullable = false }, _ -> IntT { nullable = false }
+        | Eq, IntT { nullable = n1 }, IntT { nullable = n2 }
+        | Eq, BoolT { nullable = n1 }, BoolT { nullable = n2 }
+        | Eq, StringT { nullable = n1 }, StringT { nullable = n2 }  ->
+          BoolT { nullable = n1 || n2 }
         | _ -> fail (Error.create "Type error."
                        (op, t1, t2) [%sexp_of:op * type_ * type_])
       end
     | Unop { op; arg } ->
       let t = infer_type ctx arg in
       begin match op, t with
-        | (Not, BoolT) -> BoolT
+        | (Not, BoolT { nullable } ) -> BoolT { nullable }
         | _ -> fail (Error.create "Type error." (op, t) [%sexp_of:op * type_])
       end
-    | Slice (_, len) -> slice_t
+    | Slice (_, len) -> IntT { nullable = false }
     | Index (tup, idx) -> begin match infer_type ctx tup with
         | TupleT ts -> List.nth_exn ts idx
         | t -> fail (Error.create "Expected a tuple." t [%sexp_of:type_])
       end
-    | Done _ -> BoolT
+    | Done _ -> BoolT { nullable = false }
 
 module IRGen = struct
   type func_builder = {
@@ -576,7 +363,7 @@ module IRGen = struct
   let build_print : ?type_:type_ -> expr -> stmt_builder = fun ?type_ e b ->
     let t = match type_ with
       | Some t -> t
-      | None -> infer_type b.locals e
+      | None -> infer_type b.locals e 
     in
     b.body := (Print (t, e))::!(b.body)
 
@@ -753,26 +540,39 @@ module IRGen = struct
     let scan_empty = create ["start", int_t] VoidT |> build_func
     let scan_null _ = create ["start", int_t] VoidT |> build_func
 
-    let scan_int _ =
-      let b = create ["start", int_t] (TupleT [int_t]) in
+    let scan_int Type.({ range = (l, h); nullable }) =
+      let b = create ["start", int_t] (TupleT [IntT { nullable }]) in
       let start = build_arg 0 b in
-      build_yield (Tuple [Slice (start, 64 / 8 + 1)]) b;
+      let ival = Infix.islice start in
+      if nullable then
+        let null_val = h + 1 in
+        build_yield (Tuple [Tuple [ival; Infix.(ival = int null_val)]]) b;
+      else build_yield (Tuple [ival]) b;
       build_func b
 
-    let scan_bool _ =
-      let b = create ["start", int_t] (TupleT [int_t]) in
+    let scan_bool : Type.bool_ -> _ = fun Type.({ nullable }) ->
+      let b = create ["start", int_t] (TupleT [BoolT { nullable }]) in
       let start = build_arg 0 b in
-      build_yield (Tuple [Infix.(islice start)]) b;
+      let ival = Infix.(islice start) in
+      if nullable then
+        let null_val = 2 in
+        build_yield (Tuple [Tuple [ival; Infix.(ival = int null_val)]]) b;
+      else build_yield (Tuple [ival]) b;
       build_func b
 
-    let scan_string Type.({ nchars } as t) =
-      let b = create ["start", int_t] (TupleT [slice_t]) in
+    let scan_string Type.({ nchars = (l, _) as nchars; nullable } as t) =
+      let b = create ["start", int_t] (TupleT [StringT { nullable }]) in
       let start = build_arg 0 b in
       let nchars = match Type.AbsInt.concretize nchars with
         | None -> Infix.(islice start)
         | Some x -> Infix.int x
       in
-      build_yield (Tuple [Tuple [Infix.(start + hsize (StringT t)); nchars]]) b;
+      let ret_val = Tuple [Infix.(start + hsize (StringT t)); nchars] in
+      if nullable then
+        let null_val = l - 1 in
+        build_yield (Tuple [Tuple [ret_val; Infix.(nchars = int null_val)]]) b;
+      else
+        build_yield (Tuple [ret_val]) b;
       build_func b
 
     let scan_crosstuple scan ts m =
@@ -814,7 +614,7 @@ module IRGen = struct
               | TupleT ts -> ts
               | t -> [t])
           |> List.concat
-          |> tuple_t
+          |> fun x -> TupleT x
         in
         let b = create ["start", int_t] ret_type in
         let start = build_arg 0 b in
@@ -981,10 +781,10 @@ module IRGen = struct
       let value_schema = Type.to_schema vt in
       let key_schema = Type.to_schema kt in
       let ret_type = List.map output ~f:(function
-          | Count | Sum _ -> int_t
+          | Count | Sum _ -> IntT { nullable = false }
           | Key f | Min f | Max f -> type_of_dtype f.dtype
           | Avg _ -> Error.of_string "Unsupported." |> Error.raise)
-                     |> tuple_t
+                     |> fun x -> TupleT x
       in
 
       let build_agg start b =
@@ -993,14 +793,18 @@ module IRGen = struct
             | Sum f ->
               let idx = Option.value_exn (Db.Schema.field_idx value_schema f) in
               build_iter value_iter [value_start] b;
-              let sum = build_fresh_defn "sum" int_t Infix.(int 0) b in
+              let sum = build_fresh_defn "sum" int_t
+                  Infix.(int 0) b
+              in
               build_foreach vt value_start value_iter (fun tup b ->
                   build_assign Infix.(sum + Index (tup, idx)) sum b) b;
               sum
             | Min f ->
               let idx = Option.value_exn (Db.Schema.field_idx value_schema f) in
               build_iter value_iter [value_start] b;
-              let min = build_fresh_defn "min" int_t Infix.(int 0) b in
+              let min = build_fresh_defn "min" int_t
+                  Infix.(int 0) b
+              in
               build_foreach vt value_start value_iter (fun tup b ->
                   build_if ~cond:Infix.(Index (tup, idx) < min) ~then_:(fun b ->
                       build_assign Infix.(Index (tup, idx)) min b)
@@ -1009,7 +813,9 @@ module IRGen = struct
             | Max f ->
               let idx = Option.value_exn (Db.Schema.field_idx value_schema f) in
               build_iter value_iter [value_start] b;
-              let max = build_fresh_defn "max" int_t Infix.(int 0) b in
+              let max = build_fresh_defn "max" int_t
+                  Infix.(int 0) b
+              in
               build_foreach vt value_start value_iter (fun tup b ->
                   build_if ~cond:Infix.(Index (tup, idx) > max) ~then_:(fun b ->
                       build_assign Infix.(Index (tup, idx)) max b)
@@ -1025,7 +831,9 @@ module IRGen = struct
                 | Some ct -> ct
                 | None ->
                   build_iter value_iter [value_start] b;
-                  let ct = build_fresh_defn "ct" int_t Infix.(int 0) b in
+                  let ct = build_fresh_defn "ct" int_t
+                      Infix.(int 0) b
+                  in
                   build_foreach vt value_start value_iter (fun tup b ->
                       build_assign Infix.(ct + int 1) ct b) b;
                   ct
@@ -1037,7 +845,9 @@ module IRGen = struct
 
       let b = create ["start", int_t] ret_type in
       let start = build_arg 0 b in
-      let pcount = build_defn "count" int_t (Option.value_exn (count start t)) b in
+      let pcount = build_defn "count" int_t
+          (Option.value_exn (count start t)) b
+      in
       let cstart = build_defn "cstart" int_t Infix.(start + hsize t) b in
       build_loop Infix.(pcount > int 0) (fun b ->
           build_yield (build_agg cstart b) b;
@@ -1100,14 +910,15 @@ module IRGen = struct
     let printer : string -> func = fun func ->
       let open Infix in
       let b = create [] VoidT in
+      let ret_type = (find_func func).ret_type in
       build_foreach_no_start func (fun x b ->
-          build_print x b;
+          build_print ~type_:ret_type x b;
         ) b;
       build_func b
 
     let counter : string -> func = fun func ->
       let open Infix in
-      let b = create [] IntT in
+      let b = create [] (IntT {nullable=false}) in
       let c = build_defn "c" int_t Infix.(int 0) b in
       build_foreach_no_start func (fun _ b ->
           build_assign Infix.(c + int 1) c b;

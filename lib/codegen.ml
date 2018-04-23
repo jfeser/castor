@@ -251,10 +251,7 @@ module Make (Config: Config.S) () = struct
           pointer_type (i8_type ctx); pointer_type (i8_type ctx); i64_type ctx;
         |]) module_
 
-  let call_printf fmt args =
-    let fmt_str =
-      define_fresh_global (const_stringz ctx fmt) "fmt" module_
-    in
+  let call_printf fmt_str args =
     let fmt_str_ptr =
       build_bitcast fmt_str (pointer_type (i8_type ctx)) "" builder
     in
@@ -262,20 +259,30 @@ module Make (Config: Config.S) () = struct
     build_call printf fmt_args "" builder |> ignore
 
   let debug_printf fmt args =
-    if debug then call_printf fmt args
+    let fmt_str =
+      define_fresh_global (const_stringz ctx fmt) "fmt" module_
+    in
+    if debug then call_printf fmt_str args
 
   let rec codegen_type : type_ -> lltype = function
-    | IntT -> integer_type ctx 64
-    | BoolT -> integer_type ctx 8
-    | StringT -> struct_type ctx [|pointer_type (i8_type ctx); i64_type ctx|]
+    | IntT { nullable = false } -> i64_type ctx
+    | IntT { nullable = true } ->
+      struct_type ctx [|codegen_type (IntT { nullable = false }); i1_type ctx|]
+    | BoolT { nullable = false } -> i1_type ctx
+    | BoolT { nullable = true } ->
+      struct_type ctx [|codegen_type (BoolT { nullable = false }); i1_type ctx|]
+    | StringT { nullable = false } ->
+      struct_type ctx [|pointer_type (i8_type ctx); i64_type ctx|]
+    | StringT { nullable = true } ->
+      struct_type ctx [|codegen_type (StringT { nullable = false }); i1_type ctx|]
     | TupleT ts ->
       struct_type ctx (List.map ts ~f:codegen_type |> Array.of_list)
     | VoidT -> void_type ctx
 
   let byte_type = integer_type ctx 8
-  let int_type = codegen_type IntT
-  let str_type = codegen_type StringT
-  let bool_type = codegen_type BoolT
+  let int_type = codegen_type (IntT { nullable = false})
+  let str_type = codegen_type (StringT { nullable = false})
+  let bool_type = codegen_type (BoolT { nullable = false})
   let zero = const_int (i64_type ctx) 0
 
   let scmp =
@@ -303,6 +310,23 @@ module Make (Config: Config.S) () = struct
     build_ret (const_int bool_type 0) builder |> ignore;
     assert_valid_function func;
     func
+
+  type llnvalue = { data : llvalue; null : llvalue }
+
+  let unpack_null : llvalue -> llnvalue = fun v -> {
+      data = build_extractvalue v 0 "" builder;
+      null = build_extractvalue v 1 "" builder;
+    }
+
+  let pack_null : type_ -> data:llvalue -> null:llvalue -> llvalue =
+    fun type_ ~data ~null ->
+      let struct_t = codegen_type type_ in
+      let struct_ = build_entry_alloca struct_t "" builder in
+      build_store data (build_struct_gep struct_ 0 "" builder) builder
+      |> ignore;
+      build_store null (build_struct_gep struct_ 1 "" builder) builder
+      |> ignore;
+      build_load struct_ "" builder
 
   let rec codegen_expr : _ -> expr -> llvalue = fun fctx -> function
     | Int x -> const_int int_type x
@@ -359,24 +383,34 @@ module Make (Config: Config.S) () = struct
       end;
 
       build_extractvalue lltup idx "elemtmp" builder
-    | Binop { op; arg1; arg2 } ->
+    | Binop { op; arg1; arg2 } as expr ->
       let v1 = codegen_expr fctx arg1 in
       let v2 = codegen_expr fctx arg2 in
-      begin match op with
-        | Add -> build_add v1 v2 "addtmp" builder
-        | Sub -> build_sub v1 v2 "subtmp" builder
-        | Mul -> build_mul v1 v2 "multmp" builder
+      let tctx = Hashtbl.of_alist_exn (module String) fctx#func.locals in
+      let t1 = infer_type tctx arg1 in
+      let t2 = infer_type tctx arg2 in
+      let x1 =
+        if is_nullable t1 then build_extractvalue v1 0 "" builder else v1
+      in
+      let x2 =
+        if is_nullable t2 then build_extractvalue v2 0 "" builder else v2
+      in
+      let x_out = match op with
+        | Add -> build_add x1 x2 "addtmp" builder
+        | Sub -> build_sub x1 x2 "subtmp" builder
+        | Mul -> build_mul x1 x2 "multmp" builder
         | Eq ->
-          let t1 = infer_type (Hashtbl.of_alist_exn (module String) fctx#func.locals) arg1 in
-          let t2 = infer_type (Hashtbl.of_alist_exn (module String) fctx#func.locals) arg1 in
           begin match t1, t2 with
-            | IntT, IntT -> build_icmp Icmp.Eq v1 v2 "eqtmp" builder
-            | StringT, StringT -> build_call scmp [|v1; v2|] "eqtmp" builder
-            | _ -> fail (Error.create "Unexpected equality." (t1, t2) [%sexp_of:type_ * type_])
+            | IntT _, IntT _ | BoolT _, BoolT _ ->
+              build_icmp Icmp.Eq x1 x2 "eqtmp" builder
+            | StringT _, StringT _ ->
+              build_call scmp [|x1; x2|] "eqtmp" builder
+            | _ -> fail (Error.create "Unexpected equality." (t1, t2)
+                           [%sexp_of:type_ * type_])
           end
-        | Lt -> build_icmp Icmp.Slt v1 v2 "lttmp" builder
-        | And -> build_and v1 v2 "andtmp" builder
-        | Or -> build_or v1 v2 "ortmp" builder
+        | Lt -> build_icmp Icmp.Slt x1 x2 "lttmp" builder
+        | And -> build_and x1 x2 "andtmp" builder
+        | Or -> build_or x1 x2 "ortmp" builder
         | Hash ->
           (* See cmph.h. cmph_uint32 cmph_search_packed(void *packed_mphf, const
              char *key, cmph_uint32 keylen); *)
@@ -387,17 +421,17 @@ module Make (Config: Config.S) () = struct
                    i32_type ctx|])
               module_
           in
-          debug_printf "Hash data offset: %d\n" [v1];
-          let key_ptr = build_entry_alloca (type_of v2) "key_ptr" builder in
-          build_store v2 key_ptr builder |> ignore;
-          debug_printf "Key val: %d\n" [v2];
+          debug_printf "Hash data offset: %d\n" [x1];
+          let key_ptr = build_entry_alloca (type_of x2) "key_ptr" builder in
+          build_store x2 key_ptr builder |> ignore;
+          debug_printf "Key val: %d\n" [x2];
           debug_printf "Key val: %d\n" [build_load key_ptr "" builder];
 
           let key_ptr_cast = build_pointercast key_ptr
               (pointer_type (i8_type ctx)) "key_ptr_cast" builder
           in
           let key_size =
-            build_intcast (size_of (type_of v2)) (i32_type ctx) "key_size" builder
+            build_intcast (size_of (type_of x2)) (i32_type ctx) "key_size" builder
           in
           debug_printf "Key size: %d\n" [key_size];
           let buf_ptr = build_load (get_val fctx "buf") "buf_ptr" builder in
@@ -406,7 +440,7 @@ module Make (Config: Config.S) () = struct
             build_ptrtoint buf_ptr (i64_type ctx) "buf_ptr_int" builder
           in
           let hash_ptr_as_int =
-            build_add buf_ptr_as_int v1 "hash_ptr_int" builder
+            build_add buf_ptr_as_int x1 "hash_ptr_int" builder
           in
           let hash_ptr = build_inttoptr hash_ptr_as_int
               (pointer_type (i8_type ctx)) "hash_ptr" builder
@@ -418,14 +452,33 @@ module Make (Config: Config.S) () = struct
           debug_printf "Hash val: %d\n" [hash_val];
           build_intcast hash_val (i64_type ctx) "hash_val_cast" builder
         | Not -> fail (Error.of_string "Not a binary operator.")
-      end
-    | Unop { op; arg } ->
+      in
+
+      let ret_t = infer_type tctx expr in
+      if is_nullable ret_t then
+        let null_out =
+          build_or (build_extractvalue v1 1 "" builder)
+            (build_extractvalue v2 1 "" builder) "" builder
+        in
+        pack_null ret_t ~data:x_out ~null:null_out
+      else x_out
+
+    | Unop { op; arg } as expr ->
       let v = codegen_expr fctx arg in
-      begin match op with
-        | Not -> build_not v "nottmp" builder
+      let tctx = Hashtbl.of_alist_exn (module String) fctx#func.locals in
+      let t = infer_type tctx arg in
+      let x = if is_nullable t then build_extractvalue v 0 "" builder else v in
+      let x_out = match op with
+        | Not -> build_not x "nottmp" builder
         | Add | Sub| Lt | And | Or | Eq | Hash | Mul ->
           fail (Error.of_string "Not a unary operator.")
-      end
+      in
+      let ret_t = infer_type tctx expr in
+      if is_nullable ret_t then
+        let null_out = build_extractvalue v 1 "" builder in
+        pack_null ret_t ~data:x_out ~null:null_out
+      else x_out
+
     | Tuple es ->
       let vs = List.map es ~f:(codegen_expr fctx) in
       let ts = List.map vs ~f:type_of |> Array.of_list in
@@ -544,28 +597,65 @@ module Make (Config: Config.S) () = struct
 
   let codegen_print fctx type_ expr =
     Logs.debug (fun m -> m "Codegen for %a." pp_stmt (Print (type_, expr)));
-    let true_str = define_global "true_str" (const_stringz ctx "true") module_ in
-    let false_str = define_global "false_str" (const_stringz ctx "false") module_ in
+    let true_str =
+      define_global "true_str" (const_stringz ctx "true") module_
+    in
+    let false_str =
+      define_global "false_str" (const_stringz ctx "false") module_
+    in
+    let null_str =
+      define_global "null_str" (const_stringz ctx "null") module_
+    in
+    let void_str = define_global "void_str" (const_stringz ctx "()") module_ in
+    let comma_str = define_global "comma_str" (const_stringz ctx ",") module_ in
+    let newline_str =
+      define_global "newline_str" (const_stringz ctx "\n") module_
+    in
+    let int_fmt = define_global "int_fmt" (const_stringz ctx "%d") module_ in
+    let str_fmt =
+      define_global "str_fmt" (const_stringz ctx "\"%.*s\"") module_
+    in
+
     let val_ = codegen_expr fctx expr in
 
     let rec gen val_ = function
-      | IntT -> "%d", [val_]
-      | BoolT -> "%s", [build_select val_ true_str false_str "" builder]
-      | StringT -> "\"%.*s\"", [
+      | IntT { nullable = false } -> call_printf int_fmt [val_]
+      | IntT { nullable = true } ->
+        let { data; null } = unpack_null val_ in
+        let fmt = build_select null null_str int_fmt "" builder in
+        call_printf fmt [data]
+      | BoolT { nullable = false } ->
+        let fmt = build_select val_ true_str false_str "" builder in
+        call_printf fmt []
+      | BoolT { nullable = true } ->
+        let { data; null } = unpack_null val_ in
+        let fmt =
+          build_select null null_str
+            (build_select val_ true_str false_str "" builder)
+            "" builder
+        in
+        call_printf fmt []
+      | StringT { nullable = false } ->
+        call_printf str_fmt [
+          build_extractvalue val_ 1 "" builder;
+          build_extractvalue val_ 0 "" builder;
+        ]
+      | StringT { nullable = true } ->
+        let { data; null } = unpack_null val_ in
+        let fmt = build_select null null_str str_fmt "" builder in
+        call_printf fmt [
           build_extractvalue val_ 1 "" builder;
           build_extractvalue val_ 0 "" builder;
         ]
       | TupleT ts ->
-        let elem_fmts, elem_args = List.mapi ts ~f:(fun i t ->
-            gen (build_extractvalue val_ i "" builder) t)
-                                   |> List.unzip
-        in
-        String.concat ~sep:"," elem_fmts, List.concat elem_args
-      | VoidT -> "()", []
+        List.iteri ts ~f:(fun i t ->
+            gen (build_extractvalue val_ i "" builder) t;
+            call_printf comma_str [])
+      | VoidT -> call_printf void_str []
     in
 
-    let fmt, args = gen val_ type_ in
-    call_printf (fmt ^ "\n") args
+    gen val_ type_;
+    call_printf newline_str []
 
   let codegen_return fctx expr =
     let val_ = codegen_expr fctx expr in
@@ -862,8 +952,8 @@ module Make (Config: Config.S) () = struct
 
       let typed_params = List.map params ~f:(fun (n, t) ->
         let lltype = match t with
-            | BoolT -> codegen_type bool_t
-            | IntT -> codegen_type int_t
+            | BoolT -> codegen_type (BoolT { nullable = false })
+            | IntT -> codegen_type (IntT { nullable = false })
             | StringT -> pointer_type (i8_type ctx)
         in
         (n, lltype))
