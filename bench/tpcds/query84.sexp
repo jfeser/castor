@@ -23,6 +23,7 @@
  limit 100;
 ")
    (query "
+Project([customer.c_customer_id, customer.c_last_name, customer.c_first_name],
 EqJoin(customer.c_current_hdemo_sk, household_demographics.hd_demo_sk,
 EqJoin(customer.c_current_cdemo_sk, customer_demographics.cd_demo_sk,
 EqJoin(customer.c_current_addr_sk, customer_address.ca_address_sk,
@@ -30,6 +31,6 @@ customer, Filter(customer_address.ca_city = city:string, customer_address)),
 EqJoin(store_returns.sr_cdemo_sk, customer_demographics.cd_demo_sk,
 store_returns, customer_demographics)),
 EqJoin(income_band.ib_income_band_sk, household_demographics.hd_income_band_sk,
-Filter(income_band.ib_lower_bound >= income:int && income_band.ib_upper_bound <= income:int + 50000, income_band), household_demographics))
+Filter(income_band.ib_lower_bound >= income:int && income_band.ib_upper_bound <= income:int + 50000, income_band), household_demographics)))
 ")
    )
