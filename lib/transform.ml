@@ -267,13 +267,18 @@ module Make (Config : Config.S) = struct
     tf_group_by;
   ]
 
-  let required = compose_many [
+  let required_transforms = [
     tf_flatten;
     tf_project;
   ]
 
+  let required = compose_many required_transforms
+
   let of_name : string -> t Or_error.t = fun n ->
-    match List.find transforms ~f:(fun { name } -> String.(name = n)) with
+    let m_tf = List.find (transforms @ required_transforms) ~f:(fun { name } ->
+        String.(name = n))
+    in
+    match m_tf with
     | Some x -> Ok x
     | None -> Or_error.error "Transform not found." n [%sexp_of:string]
 
