@@ -48,7 +48,7 @@ let main : ?no_default:bool -> ?debug:bool -> ?sample:int -> ?transforms:transfo
             | Some idx -> [List.nth_exn r' idx]
             | None -> r')
         in
-        rs')
+        Lazy.force (Lazy.all rs'))
     in
 
     List.iteri candidates ~f:(fun i { ralgebra = r } ->

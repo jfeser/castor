@@ -39,8 +39,10 @@ module Make (Config : Config.S) = struct
 
   include T
 
-  let run : Transform.t -> t -> t list =
+  let run : Transform.t -> t -> t Lazy.t list =
     fun tf { ralgebra = r; transforms = tfs } ->
       Transform.run tf r
-      |> List.mapi ~f:(fun i r' -> { ralgebra = r'; transforms = tfs @ [tf.name, i]})
+      |> List.mapi ~f:(fun i r' ->
+          Lazy.map r' ~f:(fun r' ->
+            { ralgebra = r'; transforms = tfs @ [tf.name, i]}))
 end

@@ -192,7 +192,7 @@ let main : ?num:int -> ?sample:int -> ?max_time:int -> ?max_disk:int -> ?max_siz
           (* Generate children of candidate and write to frontier. *)
           List.iter Transform.transforms ~f:(fun t ->
               let tf = {Transform.(compose required t) with name = t.name} in
-              List.iter (Candidate.run tf r) ~f:serialize))
+              List.iter (Candidate.run tf r) ~f:(fun r -> serialize (Lazy.force r))))
       in
       match is_done () with
       | Some msg -> `Finished msg
