@@ -72,7 +72,8 @@ module Make (Config : Config.S) = struct
         Logs.info (fun m -> m "%d new candidates from running %s." len t.name);
       rs
     with Layout.TransformError e ->
-      Logs.warn (fun m -> m "Transform %s failed: %s." t.name (Error.to_string_hum e));
+      Logs.warn (fun m -> m "Transform %s failed: %s" t.name
+                    (Error.to_string_mach e));
       []
 
   let run_checked : t -> Ralgebra.t -> Ralgebra.t list = fun t r ->
