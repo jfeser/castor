@@ -132,7 +132,13 @@ let main : ?num:int -> ?sample:int -> ?max_time:int -> ?max_disk:int -> ?max_siz
         Db.exec qconn ~params:[queue; hash]
           "update $0 set search_state = 'searching' where hash = $1; end" |> ignore;
         let%map result = f hash in
-        Db.exec qconn ~params:[queue; hash; Bool.to_string (Or_error.is_error result)]
+        let failed = match result with
+          | Ok () -> false
+          | Error e ->
+            Logs.warn (fun m -> m "Searching candidate failed: %s" (Error.to_string_hum e));
+            true
+        in
+        Db.exec qconn ~params:[queue; hash; Bool.to_string failed]
           "update $0 set (search_state, search_failed) = ('searched', $2) where hash = $1"
         |> ignore
       | r -> Error.create "Unexpected db results." r [%sexp_of:string list] |> Error.raise
