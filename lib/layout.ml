@@ -157,10 +157,7 @@ module Binable = struct
   type layout = t
 
   type binable_schema =
-    | NullS of scalar_node
-    | IntS of scalar_node
-    | BoolS of scalar_node
-    | StringS of scalar_node
+    | ScalarS of scalar_node
     | CrossTupleS of binable_schema list
     | ZipTupleS of binable_schema list
     | OrderedListS of binable_schema
@@ -191,10 +188,7 @@ module Binable = struct
 
   let binable_schema_of_layout : layout -> binable_schema = fun l ->
     let rec f : layout -> binable_schema = fun l -> match l.node with
-      | Int (_, x) -> IntS x.node
-      | Bool (_, x) -> BoolS x.node
-      | String (_, x) -> StringS x.node
-      | Null x -> NullS x.node
+      | Int (_, x) | Bool (_, x) | String (_, x) | Null x -> ScalarS x.node
       | CrossTuple ls -> CrossTupleS (List.map ls ~f)
       | ZipTuple ls -> ZipTupleS (List.map ls ~f)
       | UnorderedList ls -> UnorderedListS (List.map ls ~f |> List.all_equal_exn)
@@ -238,10 +232,10 @@ module Binable = struct
 
   let rec to_layout : t -> layout = fun { layout; schema } ->
     let rec f l s = match l, s with
-      | Int x, IntS m -> int x (scalar_of_node m)
-      | Bool x, BoolS m -> bool x (scalar_of_node m)
-      | String x, StringS m -> string x (scalar_of_node m)
-      | Null, NullS m -> null (scalar_of_node m)
+      | Int x, ScalarS m -> int x (scalar_of_node m)
+      | Bool x, ScalarS m -> bool x (scalar_of_node m)
+      | String x, ScalarS m -> string x (scalar_of_node m)
+      | Null, ScalarS m -> null (scalar_of_node m)
       | CrossTuple xs, CrossTupleS ss -> cross_tuple (List.map2_exn xs ss ~f)
       | ZipTuple xs, ZipTupleS ss -> zip_tuple (List.map2_exn xs ss ~f)
       | UnorderedList xs, UnorderedListS s ->
@@ -396,8 +390,8 @@ let rec partition : PredCtx.Key.t -> Field.t -> t -> t =
             |> fun x -> cross_tuple x)
       in
       table elems {field = f; lookup = k}
-| _ -> raise (TransformError (Error.of_string "Bad schema."))
-in
+    | _ -> raise (TransformError (Error.of_string "Bad schema."))
+  in
 
   let p_ziptuple k f ls =
     let all_have_f =
