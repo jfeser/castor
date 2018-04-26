@@ -141,7 +141,7 @@ module Make (Config : Config.S) = struct
                   end
                 | _ -> `Unknown v
             in
-            let value = Value.({ rel = r; field = f; idx = i; value = pval }) in
+            let value = Value.({ rel = r; field = f; value = pval }) in
             value)
         in
         match m_values with
@@ -153,9 +153,9 @@ module Make (Config : Config.S) = struct
 
   let eval_count seq =
     let ct = Seq.length seq in
-    Seq.singleton [Value.({
-        value = `Int ct; rel = Relation.dummy; field = Field.dummy; idx = 0
-      })]
+    Seq.singleton [
+      Value.({ value = `Int ct; rel = Relation.dummy; field = Field.dummy; })
+    ]
 
   let eval_project fs seq =
     Seq.map seq ~f:(fun t ->
@@ -173,7 +173,6 @@ module Make (Config : Config.S) = struct
     type t = Value.t = {
       rel : Relation.t; [@compare.ignore]
         field : Field.t; [@compare.ignore]
-        idx : int; [@compare.ignore]
         value : primvalue;
     } [@@deriving compare, hash, sexp]
   end

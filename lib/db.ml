@@ -135,7 +135,6 @@ module Value = struct
     type t = {
       rel : Relation.t;
       field : Field.t;
-      idx : int;
       value : primvalue;
     } [@@deriving compare, hash, sexp, bin_io]
   end
@@ -143,7 +142,7 @@ module Value = struct
   include Comparator.Make(T)
 
   let of_int_exn : int -> t = fun x ->
-    { rel = Relation.dummy; field = Field.dummy; idx = (-1); value = `Int x }
+    { rel = Relation.dummy; field = Field.dummy; value = `Int x }
 
   let to_int_exn : t -> int = function
     | { value = `Int x } -> x

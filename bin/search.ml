@@ -72,7 +72,7 @@ let main : ?num:int -> ?sample:int -> ?max_time:int -> ?max_disk:int -> ?max_siz
         let query = (Db.subst_params params
                        "insert into $0 (hash,program_size,valid,search_state,search_transforms) values ($1,$2,$3,'searching','$4')")
         in
-        Logs.info (fun m -> "Inserting candidate: %s" query);
+        Logs.info (fun m -> m "Inserting candidate: %s" query);
         let ret = qconn#exec query in
         match ret#status with
         | Command_ok -> return true

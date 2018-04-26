@@ -1,5 +1,6 @@
 open Base
 open Base.Printf
+module Pervasives = Caml.Pervasives
 
 open Bin_prot.Std
 
@@ -50,12 +51,9 @@ end
 module ValueMap = struct
   module Elem = struct
     module T = struct
-      module Pervasives = Caml.Pervasives
-
       type t = Value.t = {
         rel : Relation.t; [@compare.ignore]
           field : Field.t; [@compare.ignore]
-          idx : int; [@compare.ignore]
           value : primvalue;
       } [@@deriving compare, sexp, hash, bin_io]
     end
@@ -63,13 +61,12 @@ module ValueMap = struct
     include Comparable.Make(T)
 
     let of_primvalue : primvalue -> t = fun p ->
-      { value = p; rel = Relation.dummy; field = Field.dummy; idx = 0 }
+      { value = p; rel = Relation.dummy; field = Field.dummy }
   end
   type 'a t = 'a Map.M(Elem).t [@@deriving compare, sexp, hash]
 end
 
 module Range = struct
-  module Pervasives = Caml.Pervasives
   module T = struct
     type t = PredCtx.Key.t option * PredCtx.Key.t option
     [@@deriving compare, sexp, hash, bin_io]
@@ -77,8 +74,6 @@ module Range = struct
   include T
   include Comparable.Make(T)
 end
-
-module Pervasives = Caml.Pervasives
 
 type ordered_list = {
   field : Field.t;
@@ -110,6 +105,7 @@ module ScalarHashT = Hashcons.Make(struct
 let scalar_table = ScalarHashT.create 10
 
 let scalar rel field = ScalarHashT.hashcons scalar_table { rel; field }
+let scalar_of_node = ScalarHashT.hashcons scalar_table
 let compare_scalar : scalar -> scalar -> int = fun s1 s2 ->
   compare s1.tag s2.tag
 let scalar_of_sexp : Sexp.t -> scalar = fun s ->
@@ -160,60 +156,120 @@ let empty = HashT.hashcons ht Empty
 module Binable = struct
   type layout = t
 
-  type t =
-    | Int of int * scalar_node
-    | Bool of bool * scalar_node
-    | String of string * scalar_node
-    | Null of scalar_node
-    | CrossTuple of t list
-    | ZipTuple of t list
-    | UnorderedList of t list
-    | OrderedList of t list * ordered_list
-    | Table of (Value.t * t) list * table
-    | Grouping of (t * t) list * grouping
+  type binable_schema =
+    | NullS of scalar_node
+    | IntS of scalar_node
+    | BoolS of scalar_node
+    | StringS of scalar_node
+    | CrossTupleS of binable_schema list
+    | ZipTupleS of binable_schema list
+    | OrderedListS of binable_schema
+    | UnorderedListS of binable_schema
+    | TableS of scalar_node * binable_schema
+    | GroupingS of binable_schema * binable_schema
+    | EmptyS
+  [@@deriving sexp, bin_io, hash]
+
+  type binable_layout =
+    | Int of int
+    | Bool of bool
+    | String of string
+    | Null
+    | CrossTuple of binable_layout list
+    | ZipTuple of binable_layout list
+    | UnorderedList of binable_layout list
+    | OrderedList of binable_layout list * ordered_list
+    | Table of (primvalue * binable_layout) list * table
+    | Grouping of (binable_layout * binable_layout) list * grouping
     | Empty
-  [@@deriving bin_io, hash]
+  [@@deriving sexp, bin_io, hash]
 
-  let rec of_layout : layout -> t = fun l -> match l.node with
-    | Int (v, x) -> Int (v, x.node)
-    | Bool (v, x) -> Bool (v, x.node)
-    | String (v, x) -> String (v, x.node)
-    | Null x -> Null x.node
-    | CrossTuple v -> CrossTuple (List.map ~f:of_layout v)
-    | ZipTuple v -> ZipTuple (List.map ~f:of_layout v)
-    | UnorderedList v -> UnorderedList (List.map ~f:of_layout v)
-    | OrderedList (v, x) -> OrderedList (List.map ~f:of_layout v, x)
-    | Table (v, x) -> Table (Map.map ~f:of_layout v |> Map.to_alist, x)
-    | Grouping (v, x) ->
-      Grouping (List.map ~f:(fun (k, v) -> of_layout k, of_layout v) v, x)
-    | Empty -> Empty
+  type t = {
+    layout : binable_layout;
+    schema : binable_schema;
+  } [@@deriving sexp, bin_io, hash]
 
-  let rec to_layout : t -> layout = function
-    | Int (v, x) -> int v (scalar x.rel x.field)
-    | Bool (v, x) -> bool v (scalar x.rel x.field)
-    | String (v, x) -> string v (scalar x.rel x.field)
-    | Null x -> null (scalar x.rel x.field)
-    | CrossTuple v -> cross_tuple (List.map ~f:to_layout v)
-    | ZipTuple v -> zip_tuple (List.map ~f:to_layout v)
-    | UnorderedList v -> unordered_list (List.map ~f:to_layout v)
-    | OrderedList (v, x) -> ordered_list (List.map ~f:to_layout v) x
-    | Table (v, x) ->
-      table (List.map ~f:(fun (k, v) -> (k, to_layout v)) v
-             |> Map.of_alist_exn (module ValueMap.Elem)) x
-    | Grouping (v, x) ->
-      grouping (List.map v ~f:(fun (k, v) -> to_layout k, to_layout v)) x
-    | Empty -> empty
+  let binable_schema_of_layout : layout -> binable_schema = fun l ->
+    let rec f : layout -> binable_schema = fun l -> match l.node with
+      | Int (_, x) -> IntS x.node
+      | Bool (_, x) -> BoolS x.node
+      | String (_, x) -> StringS x.node
+      | Null x -> NullS x.node
+      | CrossTuple ls -> CrossTupleS (List.map ls ~f)
+      | ZipTuple ls -> ZipTupleS (List.map ls ~f)
+      | UnorderedList ls -> UnorderedListS (List.map ls ~f |> List.all_equal_exn)
+      | OrderedList (ls, _) -> OrderedListS (List.map ls ~f |> List.all_equal_exn)
+      | Table (ls, _) ->
+        let (k, v) = Map.to_alist ls
+                     |> List.map ~f:(fun (k, v) ->
+                         ({ rel = k.ValueMap.Elem.rel; field = k.field }, f v))
+                     |> List.all_equal_exn
+        in
+        TableS (k, v)
+      | Grouping (ls, _) ->
+        let (x1, x2) = List.map ls ~f:(fun (x1, x2) -> (f x1, f x2))
+                       |> List.all_equal_exn in
+        GroupingS (x1, x2)
+      | Empty -> EmptyS
+    in
+    f l
+
+  let binable_layout_of_layout : layout -> binable_layout = fun l ->
+    let rec of_layout : layout -> binable_layout =
+      fun l -> match l.node with
+        | Int (v, _) -> Int v
+        | Bool (v, _) -> Bool v
+        | String (v, _) -> String v
+        | Null _ -> Null
+        | CrossTuple v -> CrossTuple (List.map ~f:of_layout v)
+        | ZipTuple v -> ZipTuple (List.map ~f:of_layout v)
+        | UnorderedList v -> UnorderedList (List.map ~f:of_layout v)
+        | OrderedList (v, x) -> OrderedList (List.map ~f:of_layout v, x)
+        | Table (v, x) -> Table (Map.to_alist v |> List.map ~f:(fun (k, v) ->
+            k.Value.value, of_layout v), x)
+        | Grouping (v, x) ->
+          Grouping (List.map ~f:(fun (k, v) -> of_layout k, of_layout v) v, x)
+        | Empty -> Empty
+    in
+    of_layout l
+
+  let of_layout : layout -> t = fun l ->
+    { layout = binable_layout_of_layout l; schema = binable_schema_of_layout l }
+
+  let rec to_layout : t -> layout = fun { layout; schema } ->
+    let rec f l s = match l, s with
+      | Int x, IntS m -> int x (scalar_of_node m)
+      | Bool x, BoolS m -> bool x (scalar_of_node m)
+      | String x, StringS m -> string x (scalar_of_node m)
+      | Null, NullS m -> null (scalar_of_node m)
+      | CrossTuple xs, CrossTupleS ss -> cross_tuple (List.map2_exn xs ss ~f)
+      | ZipTuple xs, ZipTupleS ss -> zip_tuple (List.map2_exn xs ss ~f)
+      | UnorderedList xs, UnorderedListS s ->
+        unordered_list (List.map xs ~f:(fun l -> f l s))
+      | OrderedList (xs, m), OrderedListS s ->
+        ordered_list (List.map xs ~f:(fun l -> f l s)) m
+      | Table (xs, m), TableS (scalar, s) ->
+        table (List.map ~f:(fun (k, v) ->
+            (Value.({ rel = scalar.rel; field = scalar.field; value = k }), f v s)) xs
+               |> Map.of_alist_exn (module ValueMap.Elem)) m
+      | Grouping (xs, m), GroupingS (s1, s2) ->
+        grouping (List.map xs ~f:(fun (x1, x2) -> (f x1 s1, f x2 s2))) m
+      | Empty, EmptyS -> empty
+      | _ -> Error.create "Mismatched layout & schema." (l, s)
+               [%sexp_of:binable_layout * binable_schema] |> Error.raise
+    in
+    f layout schema
 end
 
 let to_value : t -> Value.t = fun l -> match l.node with
-  | Int (x, m) -> { field = m.node.field; rel = m.node.rel; idx = 0; value = `Int x }
-  | Bool (x, m) -> { field = m.node.field; rel = m.node.rel; idx = 0; value = `Bool x }
-  | String (x, m) -> { field = m.node.field; rel = m.node.rel; idx = 0; value = `String x }
-  | Null m -> { field = m.node.field; rel = m.node.rel; idx = 0; value = `Null }
+  | Int (x, m) -> { field = m.node.field; rel = m.node.rel; value = `Int x }
+  | Bool (x, m) -> { field = m.node.field; rel = m.node.rel; value = `Bool x }
+  | String (x, m) -> { field = m.node.field; rel = m.node.rel; value = `String x }
+  | Null m -> { field = m.node.field; rel = m.node.rel; value = `Null }
   | x -> Error.create "Cannot be converted to value." x [%sexp_of:node]
          |> Error.raise
 
-let of_value : Value.t -> t = fun { field; rel; idx; value } ->
+let of_value : Value.t -> t = fun { field; rel; value } ->
   let s = scalar rel field in
   match value with
   | `Int x -> int x s
