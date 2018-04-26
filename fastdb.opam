@@ -9,19 +9,23 @@ bug-reports: "https://github.com/jfeser/fastdb/issues"
 build: [["jbuilder" "build" "-p" name "-j" jobs]]
 depends: [
   "jbuilder" {build}
-  "ounit" {test}
+  "menhir" {build}
+  
+  "oUnit"
+
   "async" {>= "0.11.0"}
   "base" {>= "0.11.0"}
   "core" {>= "0.11.0"}
   "stdio" {>= "0.11.0"}
   "postgresql"
-  "fmt"
-  "cmdliner"
   "logs"
   "llvm" {>= "5.0.0"}
-  "menhir"
+  "hashcons"
+
+  "ppx_driver"
   "ppx_compare"
   "ppx_sexp_conv"
-  "hashcons"
-  "sqlite3"
+  "ppx_hash"
+  "ppx_bin_prot"
+  "ppx_let"
 ]
