@@ -69,10 +69,11 @@ let main : ?num:int -> ?sample:int -> ?max_time:int -> ?max_disk:int -> ?max_siz
 
       let%bind do_write =
         let params = [queue; hash; size; is_valid; tf_string] in
-        let ret = qconn#exec
-            (Db.subst_params params
-               "insert into $0 (hash,program_size,valid,search_state,search_transforms) values ($1,$2,$3,'searching','$4')")
+        let query = (Db.subst_params params
+                       "insert into $0 (hash,program_size,valid,search_state,search_transforms) values ($1,$2,$3,'searching','$4')")
         in
+        Logs.info (fun m -> "Inserting candidate: %s" query);
+        let ret = qconn#exec query in
         match ret#status with
         | Command_ok -> return true
         | Fatal_error ->
