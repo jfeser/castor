@@ -432,6 +432,7 @@ let hoist_filter : t -> t = fun r ->
 
 let rec row_layout_all : Postgresql.connection -> t -> t = fun conn -> 
   let eval_relation : Relation.t -> Layout.t = fun r ->
+    Logs.info (fun m -> m "Loading relation %s." r.name);
     let query = "select * from $0" in
     exec ~verbose:false conn query ~params:[r.name]
     |> List.mapi ~f:(fun i vs ->
