@@ -182,6 +182,11 @@ module Make (Config : Config.S) = struct
       | _ -> []
   } |> run_everywhere
 
+  let tf_row_layout_all : t = {
+    name = "row-layout-all";
+    f = fun r -> [lazy (Ralgebra.row_layout_all Config.conn r)]
+  }
+
   let tf_group_by : t = {
     name = "group-by";
     f = function
@@ -235,10 +240,9 @@ module Make (Config : Config.S) = struct
   let tf_eqjoin : t = {
     name = "eqjoin";
     f = function
-      | EqJoin (f1, f2, Scan l1, Scan l2) -> [
-          lazy (Filter (Binop (Eq, Field f1, Field f2), Scan (cross_tuple [l1; l2])));
-          lazy (Scan (Layout.eq_join f1 f2 l1 l2));
-        ]
+      | EqJoin (f1, f2, Scan l1, Scan l2) ->
+        Layout.eq_join f1 f2 l1 l2
+        |> List.map ~f:(fun l -> Lazy.map l ~f:(fun l -> Ralgebra0.Scan l))
       | _ -> []
   } |> run_everywhere
 
@@ -262,8 +266,8 @@ module Make (Config : Config.S) = struct
     tf_cmp_filter;
     tf_and_filter;
     tf_eqjoin;
-    tf_row_layout;
-    tf_col_layout;
+    (* tf_row_layout;
+     * tf_col_layout; *)
     tf_push_filter;
     tf_hoist_filter;
     tf_eval;
@@ -272,6 +276,7 @@ module Make (Config : Config.S) = struct
   ]
 
   let required_transforms = [
+    tf_row_layout_all;
     tf_flatten;
     tf_project;
   ]

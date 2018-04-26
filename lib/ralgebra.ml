@@ -38,25 +38,19 @@ module Binable = struct
     | Agg (x, y, r) -> Agg (x, y, to_ralgebra r)
 end
 
-let rec relations : ('f, 'r, 'l) Ralgebra0.t -> 'r list = function
-  | Project (_, r)
-  | Filter (_, r)
-  | Count r
-  | Agg (_, _, r) -> relations r
-  | EqJoin (_, _, r1, r2) -> relations r1 @ relations r2
-  | Scan _ -> []
-  | Concat rs -> List.concat_map rs ~f:relations
-  | Relation r -> [r]
+let rec relations : ('f, 'r, 'l) Ralgebra0.t -> 'r list = fun r ->
+  let f = object
+    inherit ['f, 'r, 'l, 'r list] Ralgebra0.fold as super
+    method relation rs r = r::rs
+  end in
+  f#run r []
 
-let predicates : ('f, 'r, 'l) Ralgebra0.t -> 'f Ralgebra0.pred list = 
-  let rec f = function
-    | Scan _ | Relation _ -> []
-    | Project (_, r) | Count r | Agg (_, _, r) -> f r
-    | EqJoin (_, _, r1, r2) -> f r1 @ f r2
-    | Concat rs -> List.concat_map rs ~f
-    | Filter (p, r) -> p::(f r)
-  in
-  f
+let predicates : ('f, 'r, 'l) Ralgebra0.t -> 'f Ralgebra0.pred list = fun r ->
+  let f = object
+    inherit ['f, 'r, 'l, 'f Ralgebra0.pred list] Ralgebra0.fold as super
+    method filter ps p = p::ps
+  end in
+  f#run r []
 
 let resolve : Postgresql.connection -> (string * string, string, Layout.t) Ralgebra0.t
   -> t = fun conn ralgebra ->
@@ -82,17 +76,19 @@ let resolve : Postgresql.connection -> (string * string, string, Layout.t) Ralge
     | Avg f -> Avg (resolve_field f)
     | Key f -> Key (resolve_field f)
   in
-  let rec resolve = function
-    | Project (fs, r) -> Project (List.map ~f:resolve_field fs, resolve r)
-    | Filter (p, r) -> Filter (resolve_pred p, resolve r)
-    | Concat rs -> Concat (List.map rs ~f:resolve)
-    | Relation r -> Relation (resolve_relation r)
-    | Scan _ as r -> r
-    | Count r -> Count (resolve r)
-    | EqJoin (f1, f2, r1, r2) ->
-      EqJoin (resolve_field f1, resolve_field f2, resolve r1, resolve r2)
-    | Agg (out, key, r) ->
-      Agg (List.map out ~f:resolve_agg, List.map key ~f:resolve_field, resolve r)
+  let rec resolve =
+    let f = object
+      inherit [string * string, string, Layout.t, Field.t, Relation.t, Layout.t]
+          Ralgebra0.map as super
+      method scan l = l
+      method relation = resolve_relation
+      method project fs = List.map ~f:resolve_field fs
+      method filter p = resolve_pred p
+      method eq_join f1 f2 = (resolve_field f1, resolve_field f2)
+      method agg out key = (List.map out ~f:resolve_agg,
+                            List.map key ~f:resolve_field)
+    end in
+    f#run
   in
   resolve ralgebra
 
@@ -433,6 +429,47 @@ let hoist_filter : t -> t = fun r ->
         Filter (pred, Concat rs)
   in
   f r
+
+let rec row_layout_all : Postgresql.connection -> t -> t = fun conn -> 
+  let eval_relation : Relation.t -> Layout.t = fun r ->
+    let query = "select * from $0" in
+    exec ~verbose:false conn query ~params:[r.name]
+    |> List.mapi ~f:(fun i vs ->
+        let m_values = List.map2 vs r.fields ~f:(fun v f ->
+            let scalar = Layout.scalar r f in
+            if String.(v = "") then Layout.null scalar else
+                match f.Field.dtype with
+                | DInt -> Layout.int (Int.of_string v) scalar
+                | DString -> Layout.string v scalar
+                | DBool -> begin match v with
+                    | "t" -> Layout.bool true scalar
+                    | "f" -> Layout.bool false scalar
+                    | _ -> failwith "Unknown boolean value."
+                  end
+                | _ -> Layout.string v scalar)
+        in
+        match m_values with
+        | Ok v -> Layout.cross_tuple v
+        | Unequal_lengths ->
+          let err = Error.create "Unexpected tuple width."
+              (r, List.length r.fields, List.length vs)
+              [%sexp_of:Relation.t * int * int]
+          in
+          raise (Layout.TransformError err))
+    |> Layout.unordered_list
+  in
+
+  let rec f = function
+  | Relation r -> Scan (eval_relation r)
+  | Project (x, r) -> Project (x, f r)
+  | Filter (x, r) -> Filter (x, f r)
+  | EqJoin (x1, x2, r1, r2) -> EqJoin (x1, x2, f r1, f r2)
+  | Scan _ as r -> r
+  | Concat rs -> Concat (List.map rs ~f)
+  | Count r -> Count (f r)
+  | Agg (x1, x2, r) -> Agg (x1, x2, f r)
+  in
+  f
 
 let tests =
   let open OUnit2 in

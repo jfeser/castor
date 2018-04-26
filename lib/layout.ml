@@ -598,16 +598,29 @@ let project : Field.t list -> t -> t = fun fs l ->
   in
   project l
 
-let eq_join : Field.t -> Field.t -> t -> t -> t = fun f1 f2 l1 l2 ->
-  match (partition PredCtx.Key.Dummy f1 l1).node,
-        (partition PredCtx.Key.Dummy f2 l2).node with
-  | Table (m1, _), Table (m2, _) ->
-    Map.merge m1 m2 ~f:(fun ~key -> function
-        | `Both (l1, l2) -> Some (cross_tuple [of_value key; l1; l2])
-        | `Left _ | `Right _ -> None)
-    |> Map.data
-    |> fun x -> unordered_list x
-  | _ -> raise (TransformError (Error.of_string "Expected a table."))
+let eq_join : Field.t -> Field.t -> t -> t -> t Lazy.t list = fun f1 f2 l1 l2 ->
+  let Table (t1, m1) = (partition PredCtx.Key.Dummy f1 l1).node in
+  let Table (t2, m2) = (partition PredCtx.Key.Dummy f2 l2).node in
+  [
+    (* Crosstuples grouping on join keys *)
+    lazy begin
+      Map.merge t1 t2 ~f:(fun ~key -> function
+          | `Both (l1, l2) -> Some (cross_tuple [of_value key; l1; l2])
+          | `Left _ | `Right _ -> None)
+      |> Map.data
+      |> fun x -> unordered_list x
+    end;
+
+    (* Materialized hash join on lhs *)
+    lazy begin
+      cross_tuple [l1; table t2 {m2 with lookup = PredCtx.Key.Field f1}]
+    end;
+
+    (* Materialized hash join on rhs *)
+    lazy begin
+      cross_tuple [l2; table t1 {m1 with lookup = PredCtx.Key.Field f2}]
+    end;
+  ]
 
 let accum : [`Gt | `Lt | `Ge | `Le] -> t -> t = fun dir l ->
   match l.node with
