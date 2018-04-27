@@ -127,15 +127,19 @@ let main : ?num:int -> ?sample:int -> ?max_time:int -> ?max_disk:int -> ?max_siz
 
     let with_candidate : (string -> unit Or_error.t Deferred.t) -> unit Deferred.t = fun f ->
       (* Grab a candidate from the frontier. *)
-      Db.exec qconn "begin" |> ignore;
-      let hash = Db.exec1 qconn ~params:[queue]
-          "select hash from $0 where search_state = 'unsearched' order by search_time asc limit 1"
+      let hash = Db.exec1 qconn ~params:[queue] {|
+begin;
+lock table $0 in exclusive mode;
+update $0 set search_state='searching' where
+hash in (select hash from $0 where status='unsearched'
+         order by search_time asc limit 1)
+returning hash;
+commit;
+|}
       in
       match hash with
-      | [] -> Db.exec qconn "end" |> ignore; Clock.after (Time.Span.of_int_sec 3)
+      | [] -> Clock.after (Time.Span.of_int_sec 3)
       | [hash] ->
-        Db.exec qconn ~params:[queue; hash]
-          "update $0 set search_state = 'searching' where hash = $1; end" |> ignore;
         let%map result = f hash in
         let failed = match result with
           | Ok () -> false
