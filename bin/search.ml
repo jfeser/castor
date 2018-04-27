@@ -64,8 +64,7 @@ let main : ?num:int -> ?sample:int -> ?max_time:int -> ?max_disk:int -> ?max_siz
       let size = bin_size_t cand_bin |> Int.to_string in
       let tf_string = Candidate.transforms_to_string cand.transforms in
 
-      Logs.debug (fun m -> m "Serializing %s." hash);
-      Logs.info (fun m -> m "'%s'" tf_string);
+      Logs.debug (fun m -> m "Started writing %s." hash);
 
       let%bind do_write =
         let params = [queue; hash; size; is_valid; tf_string] in
@@ -97,7 +96,10 @@ let main : ?num:int -> ?sample:int -> ?max_time:int -> ?max_disk:int -> ?max_siz
       (* Write out the candidate. *)
       let fn = sprintf "%s.bin" hash in
       let%map () = if do_write then Writer.with_file fn ~f:(fun w ->
-          Writer.write_bin_prot w bin_writer_t cand_bin |> return)
+          Writer.write_bin_prot w bin_writer_t cand_bin;
+          Deferred.(Writer.flushed w >>| fun () ->
+                    Logs.info (fun m -> m "Done writing %s." hash);
+                    Result.Ok ()))
         else return ()
       in
 
@@ -110,6 +112,7 @@ let main : ?num:int -> ?sample:int -> ?max_time:int -> ?max_disk:int -> ?max_siz
 
     let deserialize : string -> Candidate.t Or_error.t Deferred.t = fun hash ->
       let open Candidate.Binable in
+      Logs.info (fun m -> m "Loading candidate %s." hash);
       let fn = sprintf "%s.bin" hash in
       let%bind reader = Reader.open_file fn in
       try_with (fun () ->
@@ -119,6 +122,7 @@ let main : ?num:int -> ?sample:int -> ?max_time:int -> ?max_disk:int -> ?max_siz
           | `Eof -> Result.Error (Error.create "EOF when reading." fn [%sexp_of:string]))
         >>| Result.map_error ~f:(fun e -> Error.(of_exn e |> tag ~tag:fn))
         >>| Result.join
+        >>| fun e -> Logs.info (fun m -> m "Done loading candidate %s." hash); e
     in
 
     let with_candidate : (string -> unit Or_error.t Deferred.t) -> unit Deferred.t = fun f ->
@@ -199,7 +203,15 @@ let main : ?num:int -> ?sample:int -> ?max_time:int -> ?max_disk:int -> ?max_siz
           (* Generate children of candidate and write to frontier. *)
           List.iter Transform.transforms ~f:(fun t ->
               let tf = {Transform.(compose required t) with name = t.name} in
-              List.iter (Candidate.run tf r) ~f:(fun r -> serialize (Lazy.force r))))
+              List.iter (Candidate.run tf r) ~f:(fun r ->
+                  let cand = Lazy.force r in
+                  let name = sprintf "child %s of %s"
+                      (Candidate.transforms_to_string cand.transforms) hash
+                  in
+                  Gc.add_finalizer_last_exn cand (fun () ->
+                      Logs.info (fun m -> m "Deallocated %s" name));
+                  Logs.info (fun m -> m "Generated %s" name);
+                  serialize (Lazy.force r))))
       in
       match is_done () with
       | Some msg -> `Finished msg
