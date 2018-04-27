@@ -201,9 +201,9 @@ let main : ?num:int -> ?sample:int -> ?max_time:int -> ?max_disk:int -> ?max_siz
           Logs.info (fun m -> m "Transforming candidate %s." hash);
 
           (* Generate children of candidate and write to frontier. *)
-          List.iter Transform.transforms ~f:(fun t ->
+          List.iter ~how:`Sequential Transform.transforms ~f:(fun t ->
               let tf = {Transform.(compose required t) with name = t.name} in
-              List.iter (Candidate.run tf r) ~f:(fun r ->
+              List.iter ~how:`Sequential (Candidate.run tf r) ~f:(fun r ->
                   let cand = Lazy.force r in
                   let name = sprintf "child %s of %s"
                       (Candidate.transforms_to_string cand.transforms) hash
@@ -211,7 +211,9 @@ let main : ?num:int -> ?sample:int -> ?max_time:int -> ?max_disk:int -> ?max_siz
                   Gc.add_finalizer_last_exn cand (fun () ->
                       Logs.info (fun m -> m "Deallocated %s" name));
                   Logs.info (fun m -> m "Generated %s" name);
-                  serialize (Lazy.force r))))
+                  serialize cand >>| fun () ->
+                  Logs.info (fun m -> m "Compacting the heap.");
+                  Gc.compact ())))
       in
       match is_done () with
       | Some msg -> `Finished msg
