@@ -22,8 +22,7 @@ mkdir -p ${1}/logs
 echo "Forking ${num_jobs} workers..."
 for i in $(seq ${num_jobs}); do
     echo "Starting worker ${i}."
-    jbuilder exec fastdb/bin/search.exe -- -b ${1} -d tpcds1 -max-disk ${max_disk} -max-size ${max_size} -max-time ${max_time} ${2} ${1} &> ${1}/worker_${i}.log &
-    sleep 3
+    jbuilder exec fastdb/bin/search.exe -- -b ${1} -d tpcds1 -max-disk ${max_disk} -max-size ${max_size} -max-time ${max_time} -v ${2} ${1} &> ${1}/worker_${i}.log ${i} &
 done
 wait
 

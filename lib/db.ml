@@ -18,15 +18,33 @@ let exec_psql : ?params : string list -> db:string -> string -> int =
     Logs.debug (fun m -> m "Executing query: %s" query);
     Caml.Sys.command query
 
-let exec : ?verbose : bool -> ?params : string list -> Postgresql.connection ->
-  string -> string list list =
-  fun ?(verbose=true) ?(params=[]) conn query ->
+let rec exec : ?max_retries : int -> ?verbose : bool -> ?params : string list -> Postgresql.connection -> string -> string list list =
+  fun ?(max_retries=0) ?(verbose=true) ?(params=[]) conn query ->
     let query = subst_params params query in
     Logs.debug (fun m -> m "Executing query: %s" query);
     let r = conn#exec query in
     match r#status with
-    | Postgresql.Fatal_error -> failwith r#error
-    | _ -> r#get_all_lst
+    | Fatal_error ->
+      Error.create "Postgres fatal error." (r#error, query) [%sexp_of:string * string]
+      |> Error.raise
+    | Nonfatal_error -> begin match r#error_code with
+        | SERIALIZATION_FAILURE
+        | DEADLOCK_DETECTED ->
+          (* See:
+             https://www.postgresql.org/message-id/1368066680.60649.YahooMailNeo%40web162902.mail.bf1.yahoo.com
+          *)
+          if max_retries > 0 then
+            exec ~max_retries:(max_retries - 1) ~verbose conn query
+          else
+            Error.create "Transaction failed." query [%sexp_of:string] |> Error.raise
+        | e ->
+          Logs.warn (fun m -> m "Postgres error (nonfatal): %s"
+                        (Postgresql.Error_code.to_string e)); []
+      end
+    | Tuples_ok -> r#get_all_lst
+    | Single_tuple -> Logs.debug (fun m -> m "Returning single tuple."); r#get_all_lst
+    | Bad_response -> Error.create "Bad response." query [%sexp_of:string] |> Error.raise
+    | s -> Logs.debug (fun m -> m "Returning nothing: %s" (Postgresql.result_status s)); []
 
 let exec1 : ?verbose : bool -> ?params : string list -> Postgresql.connection ->
   string -> string list =
