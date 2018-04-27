@@ -30,8 +30,8 @@ let validate : Ralgebra.t -> bool = fun r ->
 
   not has_refs && types_check
 
-let main : ?num:int -> ?sample:int -> ?max_time:int -> ?max_disk:int -> ?max_size:int -> debug:bool -> queue:string -> db:string -> Bench.t -> string -> unit Deferred.t =
-  fun ?num ?sample ?max_time ?max_disk ?max_size ~debug ~queue ~db { name; sql; query; params } dir ->
+let main : ?num:int -> ?sample:int -> ?max_time:int -> ?max_disk:int -> ?max_size:int -> debug:bool -> queue:string -> db:string -> Bench.t -> string -> int -> unit Deferred.t =
+  fun ?num ?sample ?max_time ?max_disk ?max_size ~debug ~queue ~db { name; sql; query; params } dir id ->
     let start_time = Time.now () in
     let max_time = Option.map max_time ~f:Time.Span.of_int_sec in
 
@@ -44,13 +44,12 @@ let main : ?num:int -> ?sample:int -> ?max_time:int -> ?max_disk:int -> ?max_siz
         | v::_ -> (pname, v))
     in
 
-    (* Create search queue. *)
     let qconn = new connection ~dbname:"benchmarks" () in
-    let () = try
+
+    (* Create search queue. *)
+    if id = 1 then
       Db.exec qconn ~params:[name]
-        "create table if not exists $0 (like template including all)" |> ignore
-      with _ -> ()
-    in
+        "create table if not exists $0 (like template including all)" |> ignore;
 
     let serialize : Candidate.t -> unit Or_error.t Deferred.t = fun cand ->
       let open Deferred.Or_error in
@@ -240,7 +239,7 @@ commit;
 
     ensure_dir dir >>= fun () ->
     in_dir dir ~f:(fun () ->
-        let%bind ret = serialize cand in
+        let%bind ret = if id = 1 then serialize cand else return (Result.Ok ()) in
         begin match ret with
           | Ok () -> ()
           | Error e -> Logs.err (fun m -> m "%s" (Error.to_string_hum e))
@@ -268,10 +267,11 @@ let () =
     and max_size = flag "max-size" ~aliases:["ms"] (optional int) ~doc:"BYTES the maximum candidate size (serialized)"
     and bench = anon ("bench" %: bench)
     and dir = anon ("dir" %: file)
+    and id = anon ("id" %: int)
     in fun () ->
       if verbose then Logs.set_level (Some Logs.Debug)
       else if quiet then Logs.set_level (Some Logs.Error)
       else Logs.set_level (Some Logs.Info);
 
-      main ?sample ?max_time ?max_disk ?max_size ~debug ~db ~queue bench dir
+      main ?sample ?max_time ?max_disk ?max_size ~debug ~db ~queue bench dir id
   ] |> run
