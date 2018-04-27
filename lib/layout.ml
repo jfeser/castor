@@ -248,7 +248,7 @@ module Binable = struct
                |> Map.of_alist_exn (module ValueMap.Elem)) m
       | Grouping (xs, m), GroupingS (s1, s2) ->
         grouping (List.map xs ~f:(fun (x1, x2) -> (f x1 s1, f x2 s2))) m
-      | Empty, EmptyS -> empty
+      | Empty, EmptyS | Empty, ScalarS _ -> empty
       | _ -> Error.create "Mismatched layout & schema." (l, s)
                [%sexp_of:binable_layout * binable_schema] |> Error.raise
     in

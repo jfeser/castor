@@ -2,12 +2,19 @@
 
 (install
  ((section bin)
-  (files (compile.exe search.exe transform.exe sample.exe))))
+  (files (compile.exe search.exe transform.exe sample.exe inspect.exe))))
 
 (rule
  ((targets (config.ml))
   (deps    (../config))
   (action  (copy ${<} ${@}))))
+
+(executable
+ ((name inspect)
+  (libraries (core async dblayout))
+  (flags (:standard -g -bin-annot))
+  (preprocess (pps (ppx_sexp_conv ppx_let ppx_driver.runner -no-check)))
+  (modules (inspect util))))
 
 (executable
  ((name search)
