@@ -131,7 +131,7 @@ let main : ?num:int -> ?sample:int -> ?max_time:int -> ?max_disk:int -> ?max_siz
 begin;
 lock table $0 in exclusive mode;
 update $0 set search_state='searching' where
-hash in (select hash from $0 where status='unsearched'
+hash in (select hash from $0 where search_state='unsearched'
          order by search_time asc limit 1)
 returning hash;
 commit;
