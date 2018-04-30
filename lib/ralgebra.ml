@@ -129,7 +129,7 @@ let pred_subst : primvalue Map.M(String).t -> pred -> pred = fun ctx p ->
 let required_predicates : t -> pred list Map.M(Relation).t = fun r ->
   let preds = predicates r in
   let rels = relations r |> List.map ~f:(fun r ->
-      r, Set.of_list (module Field) r.Relation.fields)
+      r, Set.of_list (module Field) r.fields)
   in
   List.concat_map preds ~f:(function
       | Binop (And, p1, p2) -> [p1; p2]
@@ -233,16 +233,16 @@ let rec layouts : t -> Layout.t list = function
 let rec to_schema_exn : t -> Schema.t = function
   | Project (fs, r) ->
     to_schema_exn r |> List.filter ~f:(List.mem fs ~equal:Field.(=))
-  | Count _ -> [Field.{ name = "count"; dtype = DInt }]
+  | Count _ -> [Field.{ name = "count"; dtype = DInt; relation = Relation.dummy }]
   | Filter (_, r) -> to_schema_exn r
   | EqJoin (_, _, r1, r2) -> to_schema_exn r1 @ to_schema_exn r2
   | Scan l -> Layout.to_schema_exn l
   | Concat rs -> List.concat_map rs ~f:to_schema_exn
   | Relation r -> Schema.of_relation r
   | Agg (out, key, r) -> List.map out ~f:(function
-      | Count -> Field.{ name = "count"; dtype = DInt }
+      | Count -> Field.{ name = "count"; dtype = DInt; relation = Relation.dummy }
       | Key f -> f
-      | Sum _ | Min _ | Max _ as a -> Field.{ name = agg_to_string a; dtype = DInt }
+      | Sum _ | Min _ | Max _ as a -> Field.{ name = agg_to_string a; dtype = DInt; relation = Relation.dummy }
       | Avg _ -> failwith "unsupported")
 
 let to_schema : t -> Schema.t Or_error.t = fun r ->
@@ -439,7 +439,7 @@ let rec row_layout_all : Postgresql.connection -> t -> t = fun conn ->
         let m_values = List.map2 vs r.fields ~f:(fun v f ->
             let scalar = Layout.scalar r f in
             if String.(v = "") then Layout.null scalar else
-                match f.Field.dtype with
+                match f.dtype with
                 | DInt -> Layout.int (Int.of_string v) scalar
                 | DString -> Layout.string v scalar
                 | DBool -> begin match v with

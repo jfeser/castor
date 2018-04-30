@@ -130,7 +130,7 @@ module Make (Config : Config.S) = struct
     |> Seq.mapi ~f:(fun i vs ->
         let m_values = List.map2 vs r.fields ~f:(fun v f ->
             let pval = if String.(v = "") then `Null else
-                match f.Field.dtype with
+                match f.dtype with
                 | DInt -> `Int (Int.of_string v)
                 | DString -> `String v
                 | DBool ->

@@ -78,27 +78,19 @@ type dtype =
   | DBool
 [@@deriving compare, hash, sexp, bin_io]
 
-module Field = struct
-  module T = struct
-    type t = {
-      name: string;
-      dtype : dtype;
-    } [@@deriving compare, hash, sexp, bin_io]
-  end
-  include T
-  include Comparable.Make(T)
-
-  let dummy = { name = ""; dtype = DBool }
-
-  let to_string : t -> string = fun f -> f.name
-end
+type field_t = {
+  name : string;
+  dtype : dtype;
+  relation : relation_t;
+}
+and relation_t = {
+  name : string;
+  fields : field_t list;
+} [@@deriving compare, hash, sexp, bin_io]
 
 module Relation = struct
   module T = struct
-    type t = {
-      name : string;
-      fields : Field.t list;
-    } [@@deriving compare, hash, sexp, bin_io]
+    type t = relation_t [@@deriving compare, hash, sexp, bin_io]
   end
   include T
   include Comparable.Make(T)
@@ -107,6 +99,7 @@ module Relation = struct
 
   let from_db : Postgresql.connection -> string -> t =
     fun conn name ->
+      let rel = { name; fields = [] } in
       let fields =
         exec2 ~params:[name] conn
           "select column_name, data_type from information_schema.columns where table_name='$0'"
@@ -123,8 +116,10 @@ module Relation = struct
               | "boolean" -> DBool
               | s -> failwith (Printf.sprintf "Unknown dtype %s" s)
             in
-            Field.({ name = field_name; dtype }))
+            { name = field_name; dtype; relation = rel })
       in
+      (* TODO: Remove this. *)
+      Obj.set_field (Obj.repr rel) 2 (Obj.repr fields);
       { name; fields }
 
   let sample : ?seed:int -> Postgresql.connection -> int -> t -> unit =
@@ -135,8 +130,20 @@ module Relation = struct
       |} in
       exec conn ~params:[r.name; Int.to_string size] query |> ignore
 
-  let field_exn : t -> string -> Field.t = fun r n -> 
+  let field_exn : t -> string -> field_t = fun r n -> 
     List.find_exn r.fields ~f:(fun f -> String.(f.name = n))
+end
+
+module Field = struct
+  module T = struct
+    type t = field_t [@@deriving compare, hash, sexp, bin_io]
+  end
+  include T
+  include Comparable.Make(T)
+
+  let dummy = { name = ""; dtype = DBool; relation = Relation.dummy }
+
+  let to_string : t -> string = fun f -> f.name
 end
 
 type primvalue =
@@ -165,6 +172,9 @@ module Value = struct
   let to_int_exn : t -> int = function
     | { value = `Int x } -> x
     | v -> Error.create "Expected an int." v [%sexp_of:t] |> Error.raise
+
+  let to_sql : t -> string = fun { rel; field; value } ->
+    primvalue_to_sql value
 end
 
 module Tuple = struct

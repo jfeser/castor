@@ -298,12 +298,12 @@ let of_value : Value.t -> t = fun { field; rel; value } ->
 
 let grouping_to_schema : Field.t Ralgebra0.agg list -> Schema.t = fun output ->
   List.map output ~f:(function
-      | Count -> Field.({ name = "count"; dtype = DInt })
+      | Count -> Field.({ name = "count"; dtype = DInt; relation = Relation.dummy })
       | Key f -> f
-      | Sum f -> Field.({ name = sprintf "sum(%s)" f.name; dtype = DInt })
-      | Avg f -> Field.({ name = sprintf "avg(%s)" f.name; dtype = DInt })
-      | Min f -> Field.({ name = sprintf "min(%s)" f.name; dtype = DInt })
-      | Max f -> Field.({ name = sprintf "max(%s)" f.name; dtype = DInt }))
+      | Sum f -> Field.({ name = sprintf "sum(%s)" f.name; dtype = DInt; relation = Relation.dummy })
+      | Avg f -> Field.({ name = sprintf "avg(%s)" f.name; dtype = DInt; relation = Relation.dummy })
+      | Min f -> Field.({ name = sprintf "min(%s)" f.name; dtype = DInt; relation = Relation.dummy })
+      | Max f -> Field.({ name = sprintf "max(%s)" f.name; dtype = DInt; relation = Relation.dummy }))
 
   let ok_exn = function
     | Ok x -> x
@@ -718,8 +718,8 @@ let group_by : Field.t Ralgebra0.agg list -> Field.t list -> t -> t =
 let tests =
   let open OUnit2 in
   let partition_tests =
-    let f1 = Field.({ name = "f1"; dtype = DInt }) in
-    let f2 = Field.({ name = "f2"; dtype = DInt }) in
+    let f1 = Field.({ name = "f1"; dtype = DInt; relation = Relation.dummy }) in
+    let f2 = Field.({ name = "f2"; dtype = DInt; relation = Relation.dummy }) in
     let r = Relation.({ name = "r"; fields = [f1; f2]; }) in
     let assert_equal ~ctxt x y =
       assert_equal ~ctxt ~cmp:(fun a b -> compare a b = 0) x y
