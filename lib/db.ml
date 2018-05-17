@@ -119,8 +119,8 @@ module Relation = struct
             { name = field_name; dtype; relation = rel })
       in
       (* TODO: Remove this. *)
-      Obj.set_field (Obj.repr rel) 2 (Obj.repr fields);
-      { name; fields }
+      Obj.set_field (Obj.repr rel) 1 (Obj.repr fields);
+      rel
 
   let sample : ?seed:int -> Postgresql.connection -> int -> t -> unit =
     fun ?(seed = 0) conn size r ->
@@ -130,8 +130,11 @@ module Relation = struct
       |} in
       exec conn ~params:[r.name; Int.to_string size] query |> ignore
 
-  let field_exn : t -> string -> field_t = fun r n -> 
+  let field_exn : t -> string -> field_t = fun r n ->
     List.find_exn r.fields ~f:(fun f -> String.(f.name = n))
+
+  (* For testing only! *)
+  let of_name : string -> t = fun n -> { dummy with name = n }
 end
 
 module Field = struct
@@ -144,6 +147,9 @@ module Field = struct
   let dummy = { name = ""; dtype = DBool; relation = Relation.dummy }
 
   let to_string : t -> string = fun f -> f.name
+
+  (* For testing only! *)
+  let of_name : string -> t = fun n -> { dummy with name = n }
 end
 
 type primvalue =

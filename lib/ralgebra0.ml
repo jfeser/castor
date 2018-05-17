@@ -49,6 +49,25 @@ type ('f, 'r, 'l) t =
   | Agg of 'f agg list * 'f list * ('f, 'r, 'l) t
 [@@deriving compare, sexp, bin_io, hash]
 
+class virtual ['f1, 'f2] pred_map = object (self)
+  method var : TypedName.t -> TypedName.t = fun x -> x
+  method virtual field : 'f1 -> 'f2
+  method int : int -> int = fun x -> x
+  method bool : bool -> bool = fun x -> x
+  method string : string -> string = fun x -> x
+  method binop : op -> op = fun x -> x
+  method varop : op -> op = fun x -> x
+
+  method run : 'f1 pred -> 'f2 pred = function
+    | Var v -> Var (self#var v)
+    | Field f -> Field (self#field f)
+    | Int x -> Int (self#int x)
+    | Bool x -> Bool (self#bool x)
+    | String x -> String (self#string x)
+    | Binop (op, p1, p2) -> Binop (self#binop op, self#run p1, self#run p2)
+    | Varop (op, ps) -> Varop (self#varop op, List.map ps ~f:self#run)
+end
+
 class virtual ['f1, 'r1, 'l1, 'f2, 'r2, 'l2] map = object (self)
   method virtual project : 'f1 list -> 'f2 list
   method virtual filter : 'f1 pred -> 'f2 pred
