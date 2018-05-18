@@ -18,6 +18,15 @@ let exec_psql : ?params : string list -> db:string -> string -> int =
     Logs.debug (fun m -> m "Executing query: %s" query);
     Caml.Sys.command query
 
+(** Process postgres errors for queries which do not need to retry. *)
+let process_errors r = match (r#status : Postgresql.result_status) with
+  | Fatal_error | Nonfatal_error ->
+    let err = r#error in
+    let msg = sprintf "Postgres error: %s" err in
+    Logs.err (fun m -> m "%s" msg);
+    Error.of_string msg |> Error.raise
+  | _ -> r
+
 let rec exec : ?max_retries : int -> ?verbose : bool -> ?params : string list -> Postgresql.connection -> string -> string list list =
   fun ?(max_retries=0) ?(verbose=true) ?(params=[]) conn query ->
     let query = subst_params params query in
@@ -254,3 +263,69 @@ module Schema = struct
     Option.value_exn (field_idx s f)
       ~error:(Error.create "Field not in schema." (f, s) [%sexp_of:Field.t * t])
 end
+
+let result_to_tuples : Postgresql.result -> Tuple.t Seq.t = fun r ->
+  Seq.range 0 r#ntuples ~stop:`exclusive
+  |> Seq.unfold_with ~init:() ~f:(fun () tup_i -> 
+      let tup = List.init r#nfields ~f:(fun field_i ->
+          let value = r#getvalue tup_i field_i in
+          let type_ = r#ftype field_i in
+          let primval = match type_ with
+            | BOOL ->
+              begin match value with
+                | "t" -> `Bool true
+                | "f" -> `Bool false
+                | _ -> failwith "Unknown boolean value."
+              end
+            | NAME
+            | INT8 | INT2 | INT4 | NUMERIC -> `Int (Int.of_string value)
+            | CHAR | TEXT | VARCHAR -> `String value
+            | FLOAT4 | FLOAT8
+            |BYTEA
+            |INT2VECTOR
+            |REGPROC|OID|TID
+            |XID|CID|OIDVECTOR|JSON
+            |POINT|LSEG|PATH|BOX
+            |POLYGON|LINE
+            |ABSTIME|RELTIME|TINTERVAL
+            |UNKNOWN|CIRCLE|CASH|MACADDR
+            |INET|CIDR|ACLITEM|BPCHAR
+            |DATE|TIME|TIMESTAMP
+            |TIMESTAMPTZ|INTERVAL|TIMETZ|BIT
+            |VARBIT|REFCURSOR
+            |REGPROCEDURE|REGOPER|REGOPERATOR
+            |REGCLASS|REGTYPE|RECORD|CSTRING
+            |ANY|ANYARRAY|VOID|TRIGGER
+            |LANGUAGE_HANDLER|INTERNAL|OPAQUE
+            |ANYELEMENT|JSONB -> `Unknown value
+          in
+        Value.({ value = primval; field = Field.dummy; rel = Relation.dummy }))
+      in
+      Yield (tup, ()))
+
+let exec_cursor :
+  ?batch_size : int
+  -> ?verbose : bool
+  -> ?params : string list
+  -> Postgresql.connection -> string -> (Tuple.t Seq.t -> 'a) -> 'a =
+  fun ?(batch_size=1000) ?(verbose=true) ?(params=[]) conn query process ->
+    let query = subst_params params query in
+    Logs.debug (fun m -> m "Executing cursor query: %s" query);
+
+    conn#exec "begin;" |> process_errors |> ignore;
+    conn#exec (sprintf "declare cur cursor for %s;" query) |> process_errors |> ignore;
+
+    let fetch_query = sprintf "fetch %d from cur;" batch_size in
+    let tuples = Seq.unfold ~init:`Not_done ~f:(function
+        | `Done -> None
+        | `Not_done ->
+          let r = conn#exec fetch_query |> process_errors in
+          let tups = result_to_tuples r in
+          let state = if r#ntuples < batch_size then `Done else `Not_done in
+          Some (tups, state)) |> Seq.concat
+    in
+    let ret = try process tuples with e ->
+      conn#exec "end;" |> process_errors |> ignore; raise e
+    in
+    conn#exec "end;" |> process_errors |> ignore;
+    ret
