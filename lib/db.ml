@@ -181,6 +181,8 @@ module Value = struct
   include T
   include Comparator.Make(T)
 
+  let of_primvalue v = { value = v; rel = Relation.dummy; field = Field.dummy }
+
   let of_int_exn : int -> t = fun x ->
     { rel = Relation.dummy; field = Field.dummy; value = `Int x }
 
@@ -264,7 +266,7 @@ module Schema = struct
       ~error:(Error.create "Field not in schema." (f, s) [%sexp_of:Field.t * t])
 end
 
-let result_to_tuples : Postgresql.result -> Tuple.t Seq.t = fun r ->
+let result_to_tuples : Postgresql.result -> primvalue Map.M(String).t Seq.t = fun r ->
   Seq.range 0 r#ntuples ~stop:`exclusive
   |> Seq.unfold_with ~init:() ~f:(fun () tup_i -> 
       let tup = List.init r#nfields ~f:(fun field_i ->
@@ -299,23 +301,26 @@ let result_to_tuples : Postgresql.result -> Tuple.t Seq.t = fun r ->
             |LANGUAGE_HANDLER|INTERNAL|OPAQUE
             |ANYELEMENT|JSONB -> `Unknown value
           in
-        Value.({ value = primval; field = Field.dummy; rel = Relation.dummy }))
+          (r#fname field_i, primval))
+                |> Map.of_alist_exn (module String)
       in
       Yield (tup, ()))
 
+let fresh = let x = ref 0 in fun () -> incr x; !x 
 let exec_cursor :
-  ?batch_size : int
+  'a. ?batch_size : int
   -> ?verbose : bool
   -> ?params : string list
-  -> Postgresql.connection -> string -> (Tuple.t Seq.t -> 'a) -> 'a =
+  -> Postgresql.connection -> string -> (primvalue Map.M(String).t Seq.t -> 'a) -> 'a =
   fun ?(batch_size=1000) ?(verbose=true) ?(params=[]) conn query process ->
     let query = subst_params params query in
     Logs.debug (fun m -> m "Executing cursor query: %s" query);
 
     conn#exec "begin;" |> process_errors |> ignore;
-    conn#exec (sprintf "declare cur cursor for %s;" query) |> process_errors |> ignore;
+    let cur_num = fresh () in
+    conn#exec (sprintf "declare cur%d cursor for %s;" cur_num query) |> process_errors |> ignore;
 
-    let fetch_query = sprintf "fetch %d from cur;" batch_size in
+    let fetch_query = sprintf "fetch %d from cur%d;" batch_size cur_num in
     let tuples = Seq.unfold ~init:`Not_done ~f:(function
         | `Done -> None
         | `Not_done ->
@@ -325,7 +330,7 @@ let exec_cursor :
           Some (tups, state)) |> Seq.concat
     in
     let ret = try process tuples with e ->
-      conn#exec "end;" |> process_errors |> ignore; raise e
+      conn#exec "end;" |> process_errors |> ignore; Exn.reraise e "exec_cursor"
     in
     conn#exec "end;" |> process_errors |> ignore;
     ret
