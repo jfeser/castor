@@ -12,12 +12,20 @@ module Config = struct
   module type S = sig
     val conn : Postgresql.connection
   end
+
+  module type S_relation = sig
+    type relation [@@deriving sexp, compare]
+    val eval_relation : relation -> Tuple.t Seq.t
+  end
 end
 
-module Make (Config : Config.S) = struct
-  open Config
+module Make_relation (Config : Config.S_relation) = struct
+  include Config
 
-  let rec eval_pred : PredCtx.t -> Ralgebra.pred -> primvalue =
+  type pred = Field.t Ralgebra0.pred
+  type ralgebra = (Field.t, relation, Layout.t) Ralgebra0.t
+
+  let rec eval_pred : PredCtx.t -> pred -> primvalue =
     fun ctx -> function
       | Int x -> `Int x
       | String x -> `String x
@@ -91,7 +99,7 @@ module Make (Config : Config.S) = struct
           | Avg f -> failwith "Unsupported.")
 
 
-  let rec eval_layout : PredCtx.t -> t -> Tuple.t Seq.t =
+  let rec eval_layout : PredCtx.t -> Layout.t -> Tuple.t Seq.t =
     fun ctx l -> match l.node with
       | Int _ | Bool _ | String _ | Null _ -> Seq.singleton [Layout.to_value l]
       | CrossTuple ls ->
@@ -123,34 +131,6 @@ module Make (Config : Config.S) = struct
             eval_aggregate kt output (eval_layout ctx vl))
       | Empty -> Seq.empty
 
-  let eval_relation : Relation.t -> Tuple.t Seq.t = fun r ->
-    let query = "select * from $0" in
-    exec ~verbose:false conn query ~params:[r.name]
-    |> Seq.of_list
-    |> Seq.mapi ~f:(fun i vs ->
-        let m_values = List.map2 vs r.fields ~f:(fun v f ->
-            let pval = if String.(v = "") then `Null else
-                match f.dtype with
-                | DInt -> `Int (Int.of_string v)
-                | DString -> `String v
-                | DBool ->
-                  begin match v with
-                    | "t" -> `Bool true
-                    | "f" -> `Bool false
-                    | _ -> failwith "Unknown boolean value."
-                  end
-                | _ -> `Unknown v
-            in
-            let value = Value.({ rel = r; field = f; value = pval }) in
-            value)
-        in
-        match m_values with
-        | Ok v -> v
-        | Unequal_lengths ->
-          Error.create "Unexpected tuple width."
-            (r, List.length r.fields, List.length vs)
-            [%sexp_of:Relation.t * int * int] |> raise)
-
   let eval_count seq =
     let ct = Seq.length seq in
     Seq.singleton [
@@ -170,21 +150,24 @@ module Make (Config : Config.S) = struct
         | _ -> failwith "Expected a boolean.")
 
   module V = struct
-    type t = Value.t = {
-      rel : Relation.t; [@compare.ignore]
-        field : Field.t; [@compare.ignore]
-        value : primvalue;
+    type t = {
+      field : Field.t;
+      value : primvalue;
     } [@@deriving compare, hash, sexp]
+
+    let of_value (v: Value.t) = { field = v.field; value = v.value }
+    let to_value v : Value.t =
+      { field = v.field; value = v.value; rel = Relation.dummy }
   end
 
   let eval_eqjoin f1 f2 s1 s2 =
     let tbl = Hashtbl.create (module V) in
     Seq.iter s1 ~f:(fun t ->
         let v = Tuple.field_exn t f1 in
-        Hashtbl.add_multi tbl ~key:v ~data:t);
+        Hashtbl.add_multi tbl ~key:(V.of_value v) ~data:t);
     Seq.concat_map s2 ~f:(fun t ->
         let v = Tuple.field_exn t f2 in
-        match Hashtbl.find tbl v with
+        match Hashtbl.find tbl (V.of_value v) with
         | Some ts -> List.map ts ~f:(fun t' -> t @ t') |> Seq.of_list
         | None -> Seq.empty)
 
@@ -196,7 +179,9 @@ module Make (Config : Config.S) = struct
     end in
     let tbl = Hashtbl.create (module K) in
     Seq.iter s ~f:(fun t ->
-        let key = List.map key_fields ~f:(Tuple.field_exn t) in
+        let key = List.map key_fields ~f:(fun f ->
+            Tuple.field_exn t f |> V.of_value)
+        in
         Hashtbl.add_multi tbl ~key ~data:t);
     Hashtbl.mapi tbl ~f:(fun ~key ~data ->
         let open Ralgebra0 in
@@ -211,13 +196,16 @@ module Make (Config : Config.S) = struct
             | Sum f -> List.fold_left data ~init:0 ~f:(fun m t ->
                 m + (Tuple.field_exn t f |> Value.to_int_exn))
                        |> Value.of_int_exn
-            | Key f -> Tuple.field_exn key f
+            | Key f ->
+              Option.value_exn
+                (List.find key ~f:(fun v -> Field.(f = v.field)))
+              |> V.to_value
             | Avg f -> failwith "Unsupported."))
     |> Hashtbl.to_alist
     |> Seq.of_list
     |> Seq.map ~f:(fun (k, v) -> v)
 
-  let eval : PredCtx.t -> Ralgebra.t -> Tuple.t Seq.t = fun ctx r ->
+  let eval : PredCtx.t -> ralgebra -> Tuple.t Seq.t = fun ctx r ->
     let open Ralgebra0 in
     let rec eval = function
       | Scan l -> eval_layout ctx l
@@ -231,7 +219,7 @@ module Make (Config : Config.S) = struct
     in
     eval r
 
-  let eval_partial : Ralgebra.t -> Ralgebra.t =
+  let eval_partial : ralgebra -> ralgebra =
     let open Ralgebra0 in
     let row_layout s =
       Seq.map s ~f:(fun tup -> cross_tuple (List.map ~f:(fun v -> of_value v) tup))
@@ -275,4 +263,38 @@ module Make (Config : Config.S) = struct
     fun r -> match f r with
       | `Seq s -> row_layout s
       | `Ralgebra r -> r
+end
+
+module Make (Config : Config.S) = struct
+  include Make_relation(struct
+      type relation = Relation.t [@@deriving compare, sexp]
+
+      let eval_relation : relation -> Tuple.t Seq.t = fun r ->
+        let query = "select * from $0" in
+        exec ~verbose:false Config.conn query ~params:[r.name]
+        |> Seq.of_list
+        |> Seq.mapi ~f:(fun i vs ->
+            let m_values = List.map2 vs r.fields ~f:(fun v f ->
+                let pval = if String.(v = "") then `Null else
+                    match f.dtype with
+                    | DInt -> `Int (Int.of_string v)
+                    | DString -> `String v
+                    | DBool ->
+                      begin match v with
+                        | "t" -> `Bool true
+                        | "f" -> `Bool false
+                        | _ -> failwith "Unknown boolean value."
+                      end
+                    | _ -> `Unknown v
+                in
+                let value = Value.({ rel = r; field = f; value = pval }) in
+                value)
+            in
+            match m_values with
+            | Ok v -> v
+            | Unequal_lengths ->
+              Error.create "Unexpected tuple width."
+                (r, List.length r.fields, List.length vs)
+                [%sexp_of:Relation.t * int * int] |> raise)
+    end)
 end

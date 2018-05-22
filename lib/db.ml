@@ -148,7 +148,11 @@ end
 
 module Field = struct
   module T = struct
-    type t = field_t [@@deriving compare, hash, sexp, bin_io]
+    type t = field_t = {
+      name : string;
+      dtype : dtype; [@compare.ignore]
+      relation : Relation.t; [@compare.ignore]
+    } [@@deriving compare, hash, sexp, bin_io]
   end
   include T
   include Comparable.Make(T)
@@ -196,7 +200,7 @@ end
 
 module Tuple = struct
   module T = struct
-    type t = Value.t list [@@deriving compare, sexp]
+    type t = Value.t list [@@deriving compare, sexp, hash]
   end
   include T
   include Comparable.Make(T)
