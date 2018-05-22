@@ -563,5 +563,144 @@ module Test = struct
     let part_layout = M.partition ~part:(Field f) ~lookup:(Field f) layout in
     [%sexp_of:t] part_layout |> print_s;
     let mat_layout = M.materialize part_layout in
-    [%sexp_of:Layout.t] mat_layout |> print_s
+    [%sexp_of:Layout.t] mat_layout |> print_s;
+    [%expect {|
+      (AHashIdx
+        (Dedup (
+          Select
+          ((
+            Field (
+              (name  f)
+              (dtype DInt)
+              (relation ((name r1) (fields ()))))))
+          (Scan ((name r1) (fields ())))))
+        (x0 (
+          AList
+          (Filter
+            (Binop (
+              Eq
+              (Field (
+                (name  f)
+                (dtype DInt)
+                (relation ((name r1) (fields ())))))
+              (Field (
+                (name  x0.f)
+                (dtype DInt)
+                (relation ((name r1) (fields ())))))))
+            (Scan ((name r1) (fields ()))))
+          (x (
+            ATuple
+            ((AScalar (
+               Field (
+                 (name  x.f)
+                 (dtype DInt)
+                 (relation ((name r1) (fields ()))))))
+             (AScalar (
+               Field (
+                 (name  x.g)
+                 (dtype DInt)
+                 (relation ((name r1) (fields ())))))))
+            Cross))))
+        ((
+          lookup (
+            Field (
+              (name  f)
+              (dtype DInt)
+              (relation ((name r1) (fields ()))))))))
+      (Table
+        ((((rel ((name "") (fields ())))
+           (field (
+             (name  "")
+             (dtype DBool)
+             (relation ((name "") (fields ())))))
+           (value (Int 1)))
+          (UnorderedList (
+            (CrossTuple (
+              (Int 1 (
+                (rel ((name "") (fields ())))
+                (field (
+                  (name  "")
+                  (dtype DBool)
+                  (relation ((name "") (fields ())))))))
+              (Int 2 (
+                (rel ((name "") (fields ())))
+                (field (
+                  (name  "")
+                  (dtype DBool)
+                  (relation ((name "") (fields ())))))))))
+            (CrossTuple (
+              (Int 1 (
+                (rel ((name "") (fields ())))
+                (field (
+                  (name  "")
+                  (dtype DBool)
+                  (relation ((name "") (fields ())))))))
+              (Int 3 (
+                (rel ((name "") (fields ())))
+                (field (
+                  (name  "")
+                  (dtype DBool)
+                  (relation ((name "") (fields ()))))))))))))
+         (((rel ((name "") (fields ())))
+           (field (
+             (name  "")
+             (dtype DBool)
+             (relation ((name "") (fields ())))))
+           (value (Int 2)))
+          (UnorderedList (
+            (CrossTuple (
+              (Int 2 (
+                (rel ((name "") (fields ())))
+                (field (
+                  (name  "")
+                  (dtype DBool)
+                  (relation ((name "") (fields ())))))))
+              (Int 1 (
+                (rel ((name "") (fields ())))
+                (field (
+                  (name  "")
+                  (dtype DBool)
+                  (relation ((name "") (fields ())))))))))
+            (CrossTuple (
+              (Int 2 (
+                (rel ((name "") (fields ())))
+                (field (
+                  (name  "")
+                  (dtype DBool)
+                  (relation ((name "") (fields ())))))))
+              (Int 2 (
+                (rel ((name "") (fields ())))
+                (field (
+                  (name  "")
+                  (dtype DBool)
+                  (relation ((name "") (fields ()))))))))))))
+         (((rel ((name "") (fields ())))
+           (field (
+             (name  "")
+             (dtype DBool)
+             (relation ((name "") (fields ())))))
+           (value (Int 3)))
+          (UnorderedList ((
+            CrossTuple (
+              (Int 3 (
+                (rel ((name "") (fields ())))
+                (field (
+                  (name  "")
+                  (dtype DBool)
+                  (relation ((name "") (fields ())))))))
+              (Int 4 (
+                (rel ((name "") (fields ())))
+                (field (
+                  (name  "")
+                  (dtype DBool)
+                  (relation ((name "") (fields ())))))))))))))
+        ((field (
+           (name  fixme)
+           (dtype DBool)
+           (relation ((name "") (fields ())))))
+         (lookup (
+           Field (
+             (name  fixme)
+             (dtype DBool)
+             (relation ((name "") (fields ())))))))) |}]
 end
