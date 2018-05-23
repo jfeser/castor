@@ -150,9 +150,7 @@ let%expect_test "subst" =
          (Int 2))
         (Scan ((name r) (fields ()))))) |}]
 
-type lambda = string * t
-
-and hash_idx = {
+type hash_idx = {
   lookup : Field.t pred;
 }
 
@@ -166,10 +164,10 @@ and tuple = Cross | Zip
 and t =
   | AEmpty
   | AScalar of Field.t pred
-  | AList of (Field.t, Relation.t) ralgebra * lambda
+  | AList of (Field.t, Relation.t) ralgebra * string * t
   | ATuple of t list * tuple
-  | AHashIdx of (Field.t, Relation.t) ralgebra * lambda * hash_idx
-  | AOrderedIdx of (Field.t, Relation.t) ralgebra * lambda * ordered_idx
+  | AHashIdx of (Field.t, Relation.t) ralgebra * string * t * hash_idx
+  | AOrderedIdx of (Field.t, Relation.t) ralgebra * string * t * ordered_idx
 [@@deriving visitors { variety = "fold" },
             visitors { variety = "endo" },
             sexp]
@@ -320,7 +318,7 @@ module Config = struct
   end
 
   module type S = sig
-    val eval : PredCtx.t -> (Field.t, Relation.t) ralgebra -> (primvalue Map.M(String).t Seq.t -> 'a) -> 'a
+    val eval : PredCtx.t -> (Field.t, Relation.t) ralgebra -> primvalue Map.M(String).t Seq.t
   end
 end
 
@@ -367,57 +365,115 @@ module Make (Config : Config.S) () = struct
         end in
         subst#visit_t () l
       in
-      AHashIdx (domain, (name, layout), { lookup })
+      AHashIdx (domain, name, layout, { lookup })
 
-  let rec materialize : ?ctx:PredCtx.t -> t -> Layout.t =
-    fun ?(ctx = Map.empty (module PredCtx.Key)) -> function
-      | AEmpty -> empty
-      | AScalar e ->
-        Layout.of_value {
+  class virtual ['self] material_fold = object (self : 'self)
+    method virtual build_AList : _
+    method virtual build_ATuple : _
+    method virtual build_AHashIdx : _
+    method virtual build_AOrderedIdx : _
+    method virtual build_AEmpty : _
+    method virtual build_AScalar : _
+
+    method visit_AList = fun ctx q n l ->
+      let ls =
+        eval ctx q |> Seq.map ~f:(fun t ->
+            let ctx =
+              Map.fold t ~init:ctx ~f:(fun ~key ~data ctx ->
+                  let field = Field.of_name (sprintf "%s.%s" n key) in
+                  Map.set ctx ~key:(Field field) ~data)
+            in
+            self#visit_t ctx l)
+      in
+      self#build_AList ls
+
+    method visit_ATuple ctx ls kind =
+      self#build_ATuple (List.map ~f:(self#visit_t ctx) ls) kind
+
+    method visit_AHashIdx ctx q n l h =
+      let kv =
+        eval ctx q |> Seq.map ~f:(fun k ->
+            let [(name, key)] = Map.to_alist k in
+            let field = Field.of_name (sprintf "%s.%s" n name) in
+            let ctx = Map.set ctx ~key:(Field field) ~data:key in
+            let value = self#visit_t ctx l in
+            (Value.of_primvalue key, value))
+      in
+      self#build_AHashIdx kv h
+
+    method visit_AEmpty ctx = self#build_AEmpty
+
+    method visit_AScalar ctx e =
+      let l = Layout.of_value {
           value = eval_pred ctx e; rel = Relation.dummy; field = Field.dummy
-        }
-      | AList (q, (n, l)) ->
-        eval ctx q (fun tups ->
-            Seq.map tups ~f:(fun t ->
-                let ctx =
-                  Map.fold t ~init:ctx ~f:(fun ~key ~data ctx ->
-                      let field = Field.of_name (sprintf "%s.%s" n key) in
-                      Map.set ctx ~key:(Field field) ~data)
-                in
-                materialize ~ctx l)
-            |> Seq.to_list)
-        |> unordered_list
-      | ATuple (ls, Zip) -> zip_tuple (List.map ~f:(materialize ~ctx) ls)
-      | ATuple (ls, Cross) -> cross_tuple (List.map ~f:(materialize ~ctx) ls)
-      | AHashIdx (q, (n, l), h) ->
-        let out = ref (Map.empty (module ValueMap.Elem)) in
-        eval ctx q (fun keys ->
-            Seq.iter keys ~f:(fun k ->
-                let [(name, key)] = Map.to_alist k in
-                let field = Field.of_name (sprintf "%s.%s" n name) in
-                let ctx = Map.set ctx ~key:(Field field) ~data:key in
-                let value = materialize ~ctx l in
-                out := Map.set !out ~key:(Value.of_primvalue key) ~data:value
-              ));
-        table !out { field = Field.of_name "fixme"; lookup = PredCtx.Key.Field (Field.of_name "fixme") }
-      | AOrderedIdx (q, (n, l), o) -> failwith ""
-      (* let out = ref [] in
-       * Db.exec_cursor conn (ralgebra_to_sql (subst ctx q)) (fun keys ->
-       *     Seq.iter keys ~f:(fun k ->
-       *         let [(name, key)] = Map.to_alist k in
-       *         let field = Field.of_name (sprintf "%s.%s" n name) in
-       *         let ctx = Map.set ctx ~key:(Field field) ~data:key in
-       *         let value = materialize ctx l in
-       *         out := cross_tuple [of_value (Value.of_primvalue key); value] :: !out
-       *       ));
-       * ordered_list !out { field = Field.dummy; order = `Asc; lookup = } *)
+        } in
+      self#build_AScalar l
+
+    method visit_AOrderedIdx ctx q n l o = failwith ""
+
+    method visit_t ctx = function
+      | AEmpty -> self#visit_AEmpty ctx
+      | AScalar e -> self#visit_AScalar ctx e
+      | AList (r, n, a) -> self#visit_AList ctx r n a
+      | ATuple (a, k) -> self#visit_ATuple ctx a k
+      | AHashIdx (r, n, a, t) -> self#visit_AHashIdx ctx r n a t
+      | AOrderedIdx (_, _, _, _) -> failwith ""
+  end
+
+  let materialize : ?ctx:PredCtx.t -> t -> Layout.t =
+    fun ?(ctx = Map.empty (module PredCtx.Key)) l ->
+      let f = object
+        inherit [_] material_fold as super
+
+        method build_AList ls = Seq.to_list ls |> unordered_list
+        method build_ATuple ls kind =
+          match kind with
+          | Zip -> zip_tuple ls
+          | Cross -> cross_tuple ls
+        method build_AHashIdx kv h =
+          let m = Seq.to_list kv |> Map.of_alist_exn (module ValueMap.Elem) in
+          table m { field = Field.of_name "fixme";
+                    lookup = PredCtx.Key.Field (Field.of_name "fixme") }
+        method build_AEmpty = empty
+        method build_AScalar l = l
+        method build_AOrderedIdx ls o = failwith ""
+      end in
+      f#visit_t ctx l
+
+  let to_type : ?ctx:PredCtx.t -> t -> Type.t =
+    fun ?(ctx = Map.empty (module PredCtx.Key)) l ->
+      let open Type in
+      let f = object
+        inherit [_] material_fold as super
+
+        method build_AEmpty = EmptyT
+        method build_AScalar l = of_layout_exn l
+        method build_AList ls =
+          let (t, c) = Seq.fold ls ~init:(EmptyT, AbsCount.zero) ~f:(fun (t, c) t' ->
+              (unify_exn t t', AbsCount.(c + count t')))
+          in
+          UnorderedListT (t, { count = c })
+        method build_ATuple ls kind =
+          let counts = List.map ls ~f:count in
+          match kind with
+          | Zip -> ZipTupleT (ls, { count = List.fold_left1_exn ~f:AbsCount.unify counts })
+          | Cross -> CrossTupleT (ls, { count = List.fold_left1_exn ~f:AbsCount.( * ) counts })
+        method build_AHashIdx kv h =
+          let kt, vt = Seq.fold kv ~init:(EmptyT, EmptyT) ~f:(fun (kt, vt1) (kv, vt2) ->
+              (unify_exn kt (Layout.of_value kv |> of_layout_exn),
+               unify_exn vt1 vt2)) in
+          TableT (kt, vt, { count = None; field = Field.of_name "fixme";
+                            lookup = PredCtx.Key.Field (Field.of_name "fixme") })
+        method build_AOrderedIdx ls o = failwith ""
+      end in
+      f#visit_t ctx l
 end
 
 module Make_db (Config_db : Config.S_db) () = struct
   module Config = struct
-    let eval ctx query process =
+    let eval ctx query =
       let sql = ralgebra_to_sql (subst ctx query) in
-      Db.exec_cursor Config_db.conn sql process
+      Db.exec_cursor Config_db.conn sql
   end
   include Make (Config) ()
 end
@@ -425,7 +481,7 @@ end
 module Test = struct
   let%expect_test "mat-col" =
     let conn = new Postgresql.connection ~dbname:"tpcds1" () in
-    let layout = AList (Filter (Binop (Eq, (Field (Field.of_name "sm_carrier")), String "GERMA"), Scan (Relation.of_name "ship_mode")), ("t", AScalar (Field (Field.of_name "t.sm_carrier"))))
+    let layout = AList (Filter (Binop (Eq, (Field (Field.of_name "sm_carrier")), String "GERMA"), Scan (Relation.of_name "ship_mode")), "t", AScalar (Field (Field.of_name "t.sm_carrier")))
     in
     let module M = Make_db(struct let conn = conn end) () in
     M.materialize layout |> [%sexp_of:Layout.t] |> print_s;
@@ -442,17 +498,15 @@ module Test = struct
     let conn = new Postgresql.connection ~dbname:"tpcds1" () in
     let layout = AHashIdx (
         Dedup (Select ([Field (Field.of_name "sm_type")], (Filter ((Binop (Eq, Field (Field.of_name "sm_type"), String "LIBRARY")), Scan (Relation.of_name "ship_mode"))))),
-        ("t", AList (
+        "t", AList (
             Filter (Binop (Eq, Field (Field.of_name "t.sm_type"),
                            Field (Field.of_name "sm_type")),
                     Scan (Relation.of_name "ship_mode")),
-            ("t", AScalar (Field (Field.of_name "t.sm_code"))))), { lookup = Null })
+            "t", AScalar (Field (Field.of_name "t.sm_code"))), { lookup = Null })
     in
     let module M = Make_db(struct let conn = conn end) () in
     M.materialize layout |> [%sexp_of:Layout.t] |> print_s;
     [%expect {|
-    WARNING:  there is already a transaction in progress
-    WARNING:  there is no transaction in progress
     (Table
       ((
         ((rel ((name "") (fields ())))
@@ -512,7 +566,7 @@ module Test = struct
       Seq.iter seq ~f:(Hash_set.add set);
       Hash_set.to_list set |> Seq.of_list
 
-    let eval_select ctx out seq = 
+    let eval_select ctx out seq =
       Seq.map seq ~f:(fun t ->
           let ctx = Map.merge_right ctx (PredCtx.of_tuple t) in
           List.map out ~f:(function
@@ -545,23 +599,21 @@ module Test = struct
     rel, List.map fs ~f:(fun f : Field.t -> { name = f; relation = rel; dtype = DInt })
 
   module M = Make(struct
-      let eval ctx query process =
-        let results =
-          Eval.eval ctx query
-          |> Seq.map ~f:(fun (t: Tuple.t) ->
-              List.map t ~f:(fun (v: Value.t) -> v.field.name, v.value)
-              |> Map.of_alist_exn (module String))
-        in
-        process results
+      let eval ctx query =
+        Eval.eval ctx query
+        |> Seq.map ~f:(fun (t: Tuple.t) ->
+            List.map t ~f:(fun (v: Value.t) -> v.field.name, v.value)
+            |> Map.of_alist_exn (module String))
     end) ()
 
   let r1, [f; g] = create "r1" ["f"; "g"] [[1;2]; [1;3]; [2;1]; [2;2]; [3;4]]
 
   let%expect_test "part-list" =
-    let layout = AList (Scan r1, ("x", ATuple ([AScalar (Field { f with name = "x.f" }); AScalar (Field { f with name = "x.g" })], Cross)))
+    let layout = AList (Scan r1, "x", ATuple ([AScalar (Field { f with name = "x.f" }); AScalar (Field { f with name = "x.g" })], Cross))
     in
     let part_layout = M.partition ~part:(Field f) ~lookup:(Field f) layout in
     [%sexp_of:t] part_layout |> print_s;
+    [%sexp_of:Type.t] (M.to_type part_layout) |> print_s;
     let mat_layout = M.materialize part_layout in
     [%sexp_of:Layout.t] mat_layout |> print_s;
     [%expect {|
@@ -574,8 +626,8 @@ module Test = struct
               (dtype DInt)
               (relation ((name r1) (fields ()))))))
           (Scan ((name r1) (fields ())))))
-        (x0 (
-          AList
+        x0
+        (AList
           (Filter
             (Binop (
               Eq
@@ -588,8 +640,8 @@ module Test = struct
                 (dtype DInt)
                 (relation ((name r1) (fields ())))))))
             (Scan ((name r1) (fields ()))))
-          (x (
-            ATuple
+          x
+          (ATuple
             ((AScalar (
                Field (
                  (name  x.f)
@@ -600,13 +652,49 @@ module Test = struct
                  (name  x.g)
                  (dtype DInt)
                  (relation ((name r1) (fields ())))))))
-            Cross))))
+            Cross))
         ((
           lookup (
             Field (
               (name  f)
               (dtype DInt)
               (relation ((name r1) (fields ()))))))))
+      (TableT
+        (IntT (
+          (range (1 3))
+          (nullable false)
+          (field (
+            (name  "")
+            (dtype DBool)
+            (relation ((name "") (fields ())))))))
+        (UnorderedListT
+          (CrossTupleT
+            ((IntT (
+               (range (1 3))
+               (nullable false)
+               (field (
+                 (name  "")
+                 (dtype DBool)
+                 (relation ((name "") (fields ())))))))
+             (IntT (
+               (range (1 4))
+               (nullable false)
+               (field (
+                 (name  "")
+                 (dtype DBool)
+                 (relation ((name "") (fields ()))))))))
+            ((count ((1 1)))))
+          ((count ((1 2)))))
+        ((count ())
+         (field (
+           (name  fixme)
+           (dtype DBool)
+           (relation ((name "") (fields ())))))
+         (lookup (
+           Field (
+             (name  fixme)
+             (dtype DBool)
+             (relation ((name "") (fields ()))))))))
       (Table
         ((((rel ((name "") (fields ())))
            (field (

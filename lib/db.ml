@@ -310,31 +310,40 @@ let result_to_tuples : Postgresql.result -> primvalue Map.M(String).t Seq.t = fu
       in
       Yield (tup, ()))
 
-let fresh = let x = ref 0 in fun () -> incr x; !x 
 let exec_cursor :
   'a. ?batch_size : int
   -> ?verbose : bool
   -> ?params : string list
-  -> Postgresql.connection -> string -> (primvalue Map.M(String).t Seq.t -> 'a) -> 'a =
-  fun ?(batch_size=1000) ?(verbose=true) ?(params=[]) conn query process ->
+  -> Postgresql.connection -> string -> primvalue Map.M(String).t Seq.t =
+  let fresh = Fresh.create () in
+  fun ?(batch_size=1000) ?(verbose=true) ?(params=[]) conn query ->
+    let open Stdio in
     let query = subst_params params query in
     Logs.debug (fun m -> m "Executing cursor query: %s" query);
 
-    conn#exec "begin;" |> process_errors |> ignore;
-    let cur_num = fresh () in
-    conn#exec (sprintf "declare cur%d cursor for %s;" cur_num query) |> process_errors |> ignore;
+    let cur = Fresh.name fresh "cur%d" in
+    let declare_query = sprintf "declare %s cursor with hold for %s;" cur query in
+    let fetch_query = sprintf "fetch %d from %s;" batch_size cur in
+    let close_query = sprintf "close %s;" cur in
 
-    let fetch_query = sprintf "fetch %d from cur%d;" batch_size cur_num in
-    let tuples = Seq.unfold ~init:`Not_done ~f:(function
-        | `Done -> None
-        | `Not_done ->
+    conn#exec declare_query |> process_errors |> ignore;
+    let db_idx = ref 1 in
+    let seq = Seq.unfold_step ~init:(`Not_done 1) ~f:(function
+        | `Done -> Done
+        | `Not_done idx when idx <> !db_idx ->
+          let move_query = sprintf "move %s absolute %d;" cur idx in
+          conn#exec move_query |> process_errors |> ignore;
+          db_idx := idx; Skip (`Not_done idx)
+        | `Not_done idx ->
           let r = conn#exec fetch_query |> process_errors in
           let tups = result_to_tuples r in
-          let state = if r#ntuples < batch_size then `Done else `Not_done in
-          Some (tups, state)) |> Seq.concat
+          db_idx := !db_idx + r#ntuples;
+          let idx = idx + r#ntuples in
+          let state = if r#ntuples < batch_size then `Done else `Not_done idx in
+          Yield (tups, state)) |> Seq.concat
     in
-    let ret = try process tuples with e ->
-      conn#exec "end;" |> process_errors |> ignore; Exn.reraise e "exec_cursor"
-    in
-    conn#exec "end;" |> process_errors |> ignore;
-    ret
+    Caml.Gc.finalise (fun _ ->
+        printf "Deallocating cursor!\n";
+        conn#exec close_query |> process_errors |> ignore)
+      seq;
+    seq
