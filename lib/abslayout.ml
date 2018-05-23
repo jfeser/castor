@@ -425,6 +425,7 @@ module Make (Config : Config.S) () = struct
       let f = object
         inherit [_] material_fold as super
 
+        method build_AEmpty = empty
         method build_AList ls = Seq.to_list ls |> unordered_list
         method build_ATuple ls kind =
           match kind with
@@ -434,16 +435,15 @@ module Make (Config : Config.S) () = struct
           let m = Seq.to_list kv |> Map.of_alist_exn (module ValueMap.Elem) in
           table m { field = Field.of_name "fixme";
                     lookup = PredCtx.Key.Field (Field.of_name "fixme") }
-        method build_AEmpty = empty
         method build_AScalar l = l
         method build_AOrderedIdx ls o = failwith ""
       end in
       f#visit_t ctx l
 
-  let to_type : ?ctx:PredCtx.t -> t -> Type.t =
-    fun ?(ctx = Map.empty (module PredCtx.Key)) l ->
-      let open Type in
-      let f = object
+  module TF = struct
+    open Type
+    class ['self] type_fold =
+      object (self : 'self)
         inherit [_] material_fold as super
 
         method build_AEmpty = EmptyT
@@ -465,8 +465,223 @@ module Make (Config : Config.S) () = struct
           TableT (kt, vt, { count = None; field = Field.of_name "fixme";
                             lookup = PredCtx.Key.Field (Field.of_name "fixme") })
         method build_AOrderedIdx ls o = failwith ""
-      end in
-      f#visit_t ctx l
+      end
+
+    class ['self] count_fold =
+      object (self : 'self)
+        inherit [_] material_fold as super
+
+        method build_AEmpty = AbsCount.zero
+        method build_AScalar _ = AbsCount.abstract 1
+        method build_AList ls = Seq.fold ls ~init:AbsCount.zero ~f:AbsCount.(+)
+        method build_ATuple ls = function
+          | Zip -> List.fold_left1_exn ls ~f:AbsCount.unify
+          | Cross -> List.fold_left ls ~init:(AbsCount.abstract 1) ~f:AbsCount.( * )
+        method build_AHashIdx kv _ =
+          Seq.map kv ~f:(fun (_, c) -> c)
+          |> Seq.fold1_exn ~f:AbsCount.unify
+        method build_AOrderedIdx ls o = failwith ""
+      end
+
+  end
+  include TF
+
+  let to_type : ?ctx:PredCtx.t -> t -> Type.t =
+    fun ?(ctx = Map.empty (module PredCtx.Key)) l -> (new type_fold)#visit_t ctx l
+
+  module S = struct
+    open Bitstring
+    open Serialize
+    open Type
+
+    class virtual ['self] typed_counted_material_fold =
+      let counter = new count_fold in
+      object (self : 'self)
+      method virtual build_AList : _
+      method virtual build_ATuple : _
+      method virtual build_AHashIdx : _
+      method virtual build_AOrderedIdx : _
+      method virtual build_AEmpty : _
+      method virtual build_AScalar : _
+
+      method visit_AList = fun ctx type_ q n elem_layout ->
+        match type_ with
+        | UnorderedListT (elem_t, _) ->
+          let elems, counts =
+            eval ctx q
+            |> Seq.map ~f:(fun t ->
+                let ctx =
+                  Map.fold t ~init:ctx ~f:(fun ~key ~data ctx ->
+                      let field = Field.of_name (sprintf "%s.%s" n key) in
+                      Map.set ctx ~key:(Field field) ~data)
+                in
+                self#visit_t ctx elem_t elem_layout)
+            |> Seq.unzip
+          in
+          let count = counter#build_AList counts in
+          (self#build_AList type_ count elems, count)
+        | t -> Error.(create "Unexpected layout type." t [%sexp_of:Type.t] |> raise)
+
+      method visit_ATuple ctx type_ elem_layouts kind =
+        match type_ with
+        | CrossTupleT (elem_ts, _) | ZipTupleT (elem_ts, _) ->
+          let elems, counts =
+            List.map2_exn ~f:(fun t l -> self#visit_t ctx t l) elem_ts elem_layouts
+            |> List.unzip
+          in
+          let count = counter#build_ATuple counts kind in
+          (self#build_ATuple type_ count elems kind, count)
+        | t -> Error.(create "Unexpected layout type." t [%sexp_of:Type.t] |> raise)
+
+      method visit_AHashIdx ctx type_ q n l h =
+        match type_ with
+        | TableT (_, t, _) ->
+          let kv_elems, kv_counts =
+            eval ctx q |> Seq.map ~f:(fun k ->
+                let [(name, key)] = Map.to_alist k in
+                let field = Field.of_name (sprintf "%s.%s" n name) in
+                let ctx = Map.set ctx ~key:(Field field) ~data:key in
+                let value = self#visit_t ctx t l in
+                (Value.of_primvalue key, value))
+            |> Seq.map ~f:(fun (k, (v, c)) -> ((k, v), (k, c)))
+            |> Seq.unzip
+          in
+          let count = counter#build_AHashIdx kv_counts h in
+          (self#build_AHashIdx type_ count kv_elems h, count)
+        | t -> Error.(create "Unexpected layout type." t [%sexp_of:Type.t] |> raise)
+
+      method visit_AEmpty ctx type_ =
+        let count = counter#build_AEmpty in
+        (self#build_AEmpty type_ count, count)
+
+      method visit_AScalar ctx type_ e =
+        let l = Layout.of_value {
+            value = eval_pred ctx e; rel = Relation.dummy; field = Field.dummy
+          } in
+        let count = counter#build_AScalar l in
+        (self#build_AScalar type_ count l, count)
+
+      method visit_AOrderedIdx ctx type_ q n l o = failwith ""
+
+      method visit_t ctx type_ = function
+        | AEmpty -> self#visit_AEmpty ctx type_
+        | AScalar e -> self#visit_AScalar ctx type_ e
+        | AList (r, n, a) -> self#visit_AList ctx type_ r n a
+        | ATuple (a, k) -> self#visit_ATuple ctx type_ a k
+        | AHashIdx (r, n, a, t) -> self#visit_AHashIdx ctx type_ r n a t
+        | AOrderedIdx (_, _, _, _) -> failwith ""
+    end
+
+    class ['self] serialize_fold =
+      let counter = new count_fold in
+      object (self : 'self)
+        inherit [_] typed_counted_material_fold as super
+
+        method build_AEmpty type_ _ = empty
+
+        method build_AScalar type_ _ l =
+          match l.node with
+          | Null s -> serialize_null type_ l s
+          | Int (x, s) -> serialize_int type_ l x s
+          | Bool (x, s) -> serialize_bool type_ l x s
+          | String (x, s) -> serialize_string type_ l x s
+
+        method build_ATuple type_ count ls kind =
+          match type_ with
+          | CrossTupleT (ts, { count }) | ZipTupleT (ts, { count }) ->
+            let body = ls |> concat |> label "Tuple body" in
+            let len = byte_length body in
+            let len_str = of_int ~width:64 len |> label "Tuple len" in
+            begin match AbsCount.concretize count with
+              | None -> concat [len_str; body]
+              | Some ct ->
+                let ct_str = of_int ~width:64 ct |> label "Tuple count" in
+                concat [ct_str; len_str; body]
+            end |> label "Tuple"
+          | t -> Error.(create "Unexpected layout type." t [%sexp_of:Type.t] |> raise)
+
+        method build_AList type_ count ls =
+          match type_ with
+          | OrderedListT (t, { count }) | UnorderedListT (t, { count }) ->
+            let body = Seq.to_list ls |> concat |> label "List body" in
+            let len = byte_length body in
+            let len_str = of_int ~width:64 len |> label "List len" in
+            begin match AbsCount.concretize count with
+              | None -> concat [len_str; body]
+              | Some ct ->
+                let ct_str = of_int ~width:64 ct |> label "List count" in
+                concat [ct_str; len_str; body]
+            end
+          | t -> Error.(create "Unexpected layout type." t [%sexp_of:Type.t] |> raise)
+
+        method build_AHashIdx type_ _ kv h =
+          match type_ with
+          | TableT (key_t, value_t, _) ->
+            let keys =
+              Seq.map kv ~f:(fun (k, v) -> k, serialize key_t (Layout.of_value k), v)
+              |> Seq.to_list
+            in
+            Logs.debug (fun m -> m "Generating hash for %d keys." (List.length keys));
+            let hash = Cmph.(List.map keys ~f:(fun (_, b, _) -> to_string b)
+                             |> KeySet.of_fixed_width
+                             |> Config.create ~seed:0 ~algo:`Chd |> Hash.of_config)
+            in
+            let keys =
+              List.map keys ~f:(fun (k, b, v) ->
+                  let h = Cmph.Hash.hash hash (to_string b) in
+                  (k, b, h, v))
+            in
+            Out_channel.with_file "hashes.txt" ~f:(fun ch ->
+                List.iter keys ~f:(fun (k, b, h, v) ->
+                    Out_channel.fprintf ch "%s -> %d\n" (Bitstring.to_string b) h));
+            let hash_body = Cmph.Hash.to_packed hash |> Bytes.of_string |> align isize in
+            let hash_body_b = of_bytes hash_body in
+            let hash_len = byte_length hash_body_b in
+
+            let table_size =
+              List.fold_left keys ~f:(fun m (_, _, h, _) -> Int.max m h) ~init:0
+              |> fun m -> m + 1
+            in
+            let hash_table = Array.create ~len:table_size (0xDEADBEEF) in
+
+            let values = empty in
+            let offset = isize * table_size in
+            let offset, values = List.fold_left keys ~init:(offset, values)
+                ~f:(fun (offset, values) (k, b, h, vb) ->
+                    hash_table.(h) <- offset;
+                    let values = concat
+                        [values; b |> label "Table key"; vb |> label "Table value"]
+                    in
+                    let offset = offset + byte_length b + byte_length vb in
+                    (offset, values))
+            in
+
+            let hash_table_b =
+              Array.map hash_table ~f:(of_int ~width:64) |> Array.to_list |> concat
+            in
+
+            let body =
+              concat [
+                of_int ~width:64 hash_len |> label "Cmph data len";
+                hash_body_b |> label "Cmph data";
+                hash_table_b |> label "Table mapping";
+                values |> label "Table values";
+              ]
+            in
+            concat [
+              of_int ~width:64 (byte_length body) |> label "Table len";
+              body;
+            ]
+          | t -> Error.(create "Unexpected layout type." t [%sexp_of:Type.t] |> raise)
+
+        method build_AOrderedIdx = failwith ""
+      end
+  end
+  include S
+
+  let serialize : ?ctx:PredCtx.t -> Type.t -> t -> Bitstring.t =
+    fun ?(ctx = Map.empty (module PredCtx.Key)) t l ->
+      let (s, _) = (new serialize_fold)#visit_t ctx t l in s
 end
 
 module Make_db (Config_db : Config.S_db) () = struct

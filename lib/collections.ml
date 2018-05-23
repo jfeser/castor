@@ -88,6 +88,11 @@ module Seq = struct
           Some (row, seqs')
         | None -> None)
 
+  let fold1_exn : 'a t -> f:('a -> 'a -> 'a) -> 'a = fun s ~f ->
+    match next s with
+    | Some (x, s') -> fold ~init:x ~f s'
+    | None -> Error.of_string "Empty sequence." |> Error.raise
+
   let bfs : 'a -> ('a -> 'a t) -> 'a t = fun seed step ->
     let module Q = Linked_queue in
     unfold_step ~init:(step seed, Q.create ()) ~f:(fun (seq, q) ->
@@ -106,6 +111,20 @@ module Seq = struct
             | x::xs' -> Skip (step x, xs')
             | [] -> Done
           end)
+
+  let all_equal =
+    fun (type a) ?(sexp_of_t = fun _ -> [%sexp_of:string] "unknown") (l: a t) ->
+      let s = fold l ~init:`Empty ~f:(fun s v ->
+          match s with
+          | `Empty -> `Equal v
+          | `Equal v' -> if v = v' then s else `Unequal (v, v')
+          | `Unequal _ -> s)
+      in
+      match s with
+      | `Empty -> Or_error.error_string "Empty list."
+      | `Equal x -> Or_error.return x
+      | `Unequal (x, x') -> Or_error.error "Unequal elements." (x, x')
+                              [%sexp_of:(t * t)]
 end
 
 module Bytes = struct
