@@ -373,7 +373,7 @@ module IRGen = struct
   let build_print : ?type_:type_ -> expr -> stmt_builder = fun ?type_ e b ->
     let t = match type_ with
       | Some t -> t
-      | None -> infer_type b.locals e 
+      | None -> infer_type b.locals e
     in
     b.body := (Print (t, e))::!(b.body)
 
@@ -502,15 +502,11 @@ module IRGen = struct
         end
       | EmptyT -> int 0
       | TableT _ -> islice start
-      | CrossTupleT (_, { count })
+      | ZipTupleT (_, { count })
+      | CrossTupleT (_, { count }) -> islice start
       | GroupingT (_, _, { count })
       | UnorderedListT (_, { count })
-      | ZipTupleT (_, { count })
-      | OrderedListT (_, { count }) -> begin
-          match Type.AbsCount.kind count with
-          | `Count _ | `Unknown -> islice start
-          | `Countable -> islice (start + int isize)
-         end
+      | OrderedListT (_, { count }) -> islice (start + int isize)
 
     let count start =
       let open Infix in
@@ -520,15 +516,10 @@ module IRGen = struct
       | IntT _ | BoolT _ | StringT _ -> Some (int 1)
       | TableT (_, _, { count })
       | CrossTupleT (_, { count })
+      | ZipTupleT (_, { count }) -> None
       | GroupingT (_, _, { count })
       | UnorderedListT (_, { count })
-      | ZipTupleT (_, { count })
-      | OrderedListT (_, { count }) -> begin
-          match Type.AbsCount.kind count with
-          | `Count x -> Some (int x)
-          | `Unknown -> None
-          | `Countable -> Some (islice start)
-        end
+      | OrderedListT (_, { count }) -> Some (islice start)
 
     (** The length of a layout header in bytes. *)
     let hsize =
@@ -541,14 +532,10 @@ module IRGen = struct
         end
       | TableT (_,_,_) -> Infix.(int isize)
       | CrossTupleT (_, { count })
+      | ZipTupleT (_, { count }) -> Infix.(int isize)
       | GroupingT (_, _, { count })
       | UnorderedListT (_, { count })
-      | ZipTupleT (_, { count })
-      | OrderedListT (_, { count }) -> begin
-          match Type.AbsCount.kind count with
-          | `Count x -> Infix.(int isize)
-          | `Unknown | `Countable -> Infix.int (2 * isize)
-        end
+      | OrderedListT (_, { count }) -> Infix.int (2 * isize)
 
     let scan_empty = create ["start", int_t] VoidT |> build_func
     let scan_null _ = create ["start", int_t] VoidT |> build_func
@@ -973,14 +960,14 @@ module IRGen = struct
         ) b;
       build_func b
 
-    let gen_pred tup schema =
+    let gen_pred tup field_idx =
       let module R = Ralgebra0 in
       let rec gen_pred = function
         | R.Int x -> Int x
         | R.String x -> String x
         | R.Bool x -> Bool x
         | R.Var (n, t) -> Var n
-        | R.Field f -> Index (tup, Db.Schema.field_idx_exn schema f)
+        | R.Field f -> Index (tup, field_idx f)
         | R.Binop (op, arg1, arg2) ->
           let e1 = gen_pred arg1 in
           let e2 = gen_pred arg2 in
@@ -1009,16 +996,12 @@ module IRGen = struct
       in
       gen_pred
 
-    let filter gen schema pred r =
+    let filter gen field_idx pred r =
       let func = gen r in
-      Logs.debug (fun m ->
-          m "Filter on schema %a." Sexp.pp_hum ([%sexp_of:Db.Schema.t] schema));
-
       let ret_t = (find_func func).ret_type in
-
       let b = create [] ret_t in
       build_foreach_no_start func (fun tup b ->
-          build_if ~cond:(gen_pred tup schema pred)
+          build_if ~cond:(gen_pred tup field_idx pred)
             ~then_:(fun b -> build_yield tup b)
             ~else_:(fun _ -> ()) b;
         ) b;
@@ -1052,12 +1035,12 @@ module IRGen = struct
       build_yield (Tuple [ct]) b;
       build_func b
 
-    let eq_join gen s1 s2 f1 f2 r1 r2 =
+    let eq_join gen field_idx1 field_idx2 f1 f2 r1 r2 =
       let func1 = gen r1 in
       let func2 = gen r2 in
 
-      let i1 = Db.Schema.field_idx_exn s1 f1 in
-      let i2 = Db.Schema.field_idx_exn s2 f2 in
+      let i1 = field_idx1 f1 in
+      let i2 = field_idx2 f2 in
 
       let ret_t1 = (find_func func1).ret_type in
       let ret_t2 = (find_func func2).ret_type in
@@ -1092,11 +1075,11 @@ module IRGen = struct
         | Project (x, r) ->
           Fresh.name fresh "project%d", project gen_ralgebra x r
         | Filter (x, r) ->
-          let schema = Ralgebra.to_schema r |> Or_error.ok_exn in
+          let schema = Ralgebra.to_schema r |> Or_error.ok_exn |> Db.Schema.field_idx_exn in
           Fresh.name fresh "filter%d", filter gen_ralgebra schema x r
         | EqJoin (f1, f2, r1, r2) ->
-          let s1 = Ralgebra.to_schema r1 |> Or_error.ok_exn in
-          let s2 = Ralgebra.to_schema r2 |> Or_error.ok_exn in
+          let s1 = Ralgebra.to_schema r1 |> Or_error.ok_exn |> Db.Schema.field_idx_exn in
+          let s2 = Ralgebra.to_schema r2 |> Or_error.ok_exn |> Db.Schema.field_idx_exn in
           Fresh.name fresh "eqjoin%d", eq_join gen_ralgebra s1 s2 f1 f2 r1 r2
         | Concat rs -> Fresh.name fresh "concat%d", concat gen_ralgebra rs
         | Count r -> Fresh.name fresh "count%d", count gen_ralgebra r
@@ -1106,19 +1089,25 @@ module IRGen = struct
       add_func name func; name
 
     let rec gen_abslayout : Abslayout.t -> string = fun r ->
+      let field_idx_exn s (f: Db.Field.t) =
+        Option.value_exn (List.findi s ~f:(fun i (n, _) -> String.(n = f.name)))
+        |> fun (i, _) -> i
+      in
       let name, func = match r with
         | Scan l ->
           let type_ = Abslayout.to_type l in
           let buf = Abslayout.serialize type_ l in
+          Logs.debug (fun m -> m "Generating scanner for type: %s"
+                         (Sexp.to_string_hum ([%sexp_of:Type.t] type_)));
           Fresh.name fresh "scan%d", scan type_ buf
         (* | Select (x, r) ->
          *   Fresh.name fresh "select%d", select gen_abslayout x r *)
         | Filter (x, r) ->
-          let schema = Abslayout.to_schema_exn r in
+          let schema = Abslayout.to_schema_exn r |> field_idx_exn in
           Fresh.name fresh "filter%d", filter gen_abslayout schema x r
         | EqJoin (f1, f2, r1, r2) ->
-          let s1 = Abslayout.to_schema_exn r1 in
-          let s2 = Abslayout.to_schema_exn r2 in
+          let s1 = Abslayout.to_schema_exn r1 |> field_idx_exn in
+          let s2 = Abslayout.to_schema_exn r2 |> field_idx_exn in
           Fresh.name fresh "eqjoin%d", eq_join gen_abslayout s1 s2 f1 f2 r1 r2
         | r -> Error.create "Unsupported at runtime." r [%sexp_of:Abslayout.t]
                |> Error.raise

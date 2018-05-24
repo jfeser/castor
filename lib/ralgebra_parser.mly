@@ -1,4 +1,5 @@
 %{
+    open Printf
     module R = Ralgebra0
     module A = Abslayout0
 
@@ -109,6 +110,7 @@ abs_ralgebra(X):
 
 field:
 | r = ID; DOT; f = ID; { (r, f) }
+| q = ID; DOT; r = ID; DOT; f = ID; { (r, sprintf "%s.%s" q f) }
 | error { error "Expected a field." $startpos }
 
 primtype:
@@ -157,6 +159,6 @@ layout:
 | AEMPTY { AEmpty }
 | ASCALAR; e = parens(pred) { A.AScalar e }
 | ALIST; LPAREN; r = abs_ralgebra(ID); COMMA; lam = lambda(layout); RPAREN { A.AList (r, fst lam, snd lam) }
-| ATUPLE; LPAREN; ls = separated_list(COMMA, layout); COMMA; k = kind; RPAREN { A.ATuple (ls, k) }
+| ATUPLE; LPAREN; ls = bracket_list(layout); COMMA; k = kind; RPAREN { A.ATuple (ls, k) }
 | AHASHIDX; LPAREN; r = abs_ralgebra(ID); COMMA; lam = lambda(layout); COMMA; e = pred RPAREN { A.(AHashIdx (r, fst lam, snd lam, { lookup = e })) }
 | AORDEREDIDX; LPAREN; r = abs_ralgebra(ID); COMMA; lam = lambda(layout); COMMA; e1 = pred; COMMA; e2 = pred; COMMA; e3 = pred; COMMA { A.(AOrderedIdx (r, fst lam, snd lam, { lookup_low = e1; lookup_high = e2; order = e3 })) }

@@ -64,8 +64,11 @@ module No_config = struct
     -> (string * string, (string * string, string) Abslayout0.layout) ralgebra
     -> (Field.t, (Field.t, Relation.t) Abslayout0.layout) ralgebra =
     fun conn r ->
-      let resolve_relation = Hashtbl.find_exn in
-      let resolve_field = Relation.field_exn in
+      let resolve_relation ctx r = match Hashtbl.find ctx r with
+        | Some r' -> r'
+        | None -> Error.create "Relation not found." r [%sexp_of:string] |> Error.raise
+      in
+      let resolve_field _ = Field.of_name in
       let inner_resolver = object
         inherit [_] ralgebra_map as super
         method visit_'l = resolve_relation
@@ -621,26 +624,19 @@ module Make (Config : Config.S) () = struct
             let body = ls |> concat |> label "Tuple body" in
             let len = byte_length body in
             let len_str = of_int ~width:64 len |> label "Tuple len" in
-            begin match AbsCount.concretize count with
-              | None -> concat [len_str; body]
-              | Some ct ->
-                let ct_str = of_int ~width:64 ct |> label "Tuple count" in
-                concat [ct_str; len_str; body]
-            end |> label "Tuple"
+            concat [len_str; body] |> label "Tuple"
           | t -> Error.(create "Unexpected layout type." t [%sexp_of:Type.t] |> raise)
 
         method build_AList type_ count ls =
           match type_ with
           | OrderedListT (t, { count }) | UnorderedListT (t, { count }) ->
-            let body = Seq.to_list ls |> concat |> label "List body" in
+            let elems = Seq.to_list ls in
+            let count = List.length elems in
+            let body = elems |> concat |> label "List body" in
             let len = byte_length body in
             let len_str = of_int ~width:64 len |> label "List len" in
-            begin match AbsCount.concretize count with
-              | None -> concat [len_str; body]
-              | Some ct ->
-                let ct_str = of_int ~width:64 ct |> label "List count" in
-                concat [ct_str; len_str; body]
-            end
+            let ct_str = of_int ~width:64 count |> label "List count" in
+            concat [ct_str; len_str; body] |> label "List"
           | t -> Error.(create "Unexpected layout type." t [%sexp_of:Type.t] |> raise)
 
         method build_AHashIdx type_ _ kv h =
@@ -712,39 +708,50 @@ module Make (Config : Config.S) () = struct
     fun ?(ctx = Map.empty (module PredCtx.Key)) t l ->
       let (s, _) = (new serialize_fold)#visit_t ctx t l in s
 
-  (* let rec pred_to_schema_exn : ?ctx:PredCtx.t -> Field.t pred -> (string * Type.PrimType.t) = fun ?(ctx = Map.empty (module PredCtx.Key)) -> function
-   *   | Var (n, t) -> (n, t)
-   *   | Field f -> f.name, Type.PrimType.of_dtype f.dtype
-   *   | Int _ -> "", IntT
-   *   | Bool _ -> "", BoolT
-   *   | String _ -> "", StringT
-   *   | Null -> failwith ""
-   *   | Binop _ -> failwith ""
-   *   | Varop _ -> failwith ""
-   * 
-   * let rec layout_to_schema_exn : ?ctx:PredCtx.t -> (Field.t, Relation.t) layout -> (string * Type.PrimType.t) list =
-   *   fun ?(ctx = Map.empty (module PredCtx.Key)) -> function
-   *     | AEmpty -> []
-   *     | AScalar _
-   *     | AList (_, _, _)
-   *     | ATuple (_, _)
-   *     | AHashIdx (_, _, _, _)
-   *     | AOrderedIdx (_, _, _, _) *)
+  type schema = (string * Type.PrimType.t) list
 
-  let rec to_schema_exn : ?ctx:PredCtx.t -> t -> _ list =
-    fun ?ctx _ -> []
-    (* fun ?(ctx = Map.empty (module PredCtx.Key)) -> function
-     *   | Select (exprs, r) -> List.map ~f:(pred_to_schema_exn ~ctx) exprs
-     *   | Filter (_, r) -> to_schema_exn ~ctx r
-     *   | EqJoin (_, _, r1, r2) -> to_schema_exn ~ctx r1 @ to_schema_exn ~ctx r2
-     *   | Scan l -> layout_to_schema_exn ~ctx l
-     *   | Agg (out, key, r) -> List.map out ~f:(function
-     *       | Count -> "count", IntT
-     *       | Key f -> f.name, of_dtype f.dtype
-     *       | Sum _ -> "sum", IntT
-     *       | Min _ -> "min", IntT
-     *       | Max _ -> "max", IntT
-     *       | Avg _ -> failwith "unsupported") *)
+  let rec pred_to_schema_exn : Field.t pred -> (string * Type.PrimType.t) =
+    function
+    | Var (n, t) -> (n, t)
+    | Field f -> f.name, Type.PrimType.of_dtype f.dtype
+    | Int _ -> "", IntT
+    | Bool _ -> "", BoolT
+    | String _ -> "", StringT
+    | Null -> failwith ""
+    | Binop (op, _, _) | Varop (op, _) -> begin match op with
+        | Eq | Lt | Le | Gt | Ge | And | Or -> "", BoolT
+        | Add | Sub | Mul | Div | Mod -> "", IntT
+      end
+
+  let ralgebra_to_schema_exn : ('a -> schema) -> (Field.t, 'a) ralgebra -> schema =
+    fun layout_to_schema_exn ->
+      let rec ralgebra_to_schema_exn = function
+        | Select (exprs, r) -> List.map exprs ~f:(pred_to_schema_exn)
+        | Filter (_, r) | Dedup r -> ralgebra_to_schema_exn r
+        | EqJoin (_, _, r1, r2) ->
+          ralgebra_to_schema_exn r1 @ ralgebra_to_schema_exn r2
+        | Scan r -> layout_to_schema_exn r
+        | Agg (out, _, _) ->
+          List.map out ~f:(function
+              | Count -> "count", Type.PrimType.IntT
+              | Key (f: Field.t) -> f.name, Type.PrimType.of_dtype f.dtype
+              | Sum _ | Min _ | Max _ as a ->
+                Ralgebra.agg_to_string a, Type.PrimType.IntT
+              | Avg _ -> failwith "unsupported")
+      in
+      ralgebra_to_schema_exn
+
+  let rec layout_to_schema_exn : (Field.t, Relation.t) layout -> (string * Type.PrimType.t) list =
+    function
+    | AEmpty -> []
+    | AScalar p -> [pred_to_schema_exn p]
+    | AHashIdx (_, _, l, _)
+    | AOrderedIdx (_, _, l, _)
+    | AList (_, _, l) -> layout_to_schema_exn l
+    | ATuple (ls, _) -> List.concat_map ~f:layout_to_schema_exn ls
+
+  let to_schema_exn : t -> _ list = fun r ->
+    ralgebra_to_schema_exn layout_to_schema_exn r
 end
 
 module Make_db (Config_db : Config.S_db) () = struct

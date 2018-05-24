@@ -140,7 +140,11 @@ module Relation = struct
       exec conn ~params:[r.name; Int.to_string size] query |> ignore
 
   let field_exn : t -> string -> field_t = fun r n ->
-    List.find_exn r.fields ~f:(fun f -> String.(f.name = n))
+    match List.find r.fields ~f:(fun f -> String.(f.name = n)) with
+    | Some f -> f
+    | None ->
+      Error.create "Field not found." (n, r.name) [%sexp_of:string * string]
+      |> Error.raise
 
   (* For testing only! *)
   let of_name : string -> t = fun n -> { dummy with name = n }
@@ -331,7 +335,7 @@ let exec_cursor :
     let seq = Seq.unfold_step ~init:(`Not_done 1) ~f:(function
         | `Done -> Done
         | `Not_done idx when idx <> !db_idx ->
-          let move_query = sprintf "move %s absolute %d;" cur idx in
+          let move_query = sprintf "move absolute %d %s;" idx cur in
           conn#exec move_query |> process_errors |> ignore;
           db_idx := idx; Skip (`Not_done idx)
         | `Not_done idx ->
@@ -342,8 +346,8 @@ let exec_cursor :
           let state = if r#ntuples < batch_size then `Done else `Not_done idx in
           Yield (tups, state)) |> Seq.concat
     in
-    Caml.Gc.finalise (fun _ ->
-        printf "Deallocating cursor!\n";
-        conn#exec close_query |> process_errors |> ignore)
-      seq;
+    (* Caml.Gc.finalise (fun _ ->
+     *     printf "Deallocating cursor!\n";
+     *     conn#exec close_query |> process_errors |> ignore)
+     *   seq; *)
     seq

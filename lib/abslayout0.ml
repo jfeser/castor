@@ -1,6 +1,8 @@
 open Base
 module Pervasives = Caml.Pervasives
 
+type 'n quant = (string option * 'n)
+
 type 'f pred = 'f Ralgebra0.pred =
   | Var of (Type0.TypedName.t [@opaque])
   | Field of 'f
