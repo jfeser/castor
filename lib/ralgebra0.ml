@@ -25,6 +25,7 @@ type 'f pred =
   | Int of int
   | Bool of bool
   | String of string
+  | Null
   | Binop of (op * 'f pred * 'f pred)
   | Varop of (op * 'f pred list)
 [@@deriving compare, sexp, bin_io, hash]

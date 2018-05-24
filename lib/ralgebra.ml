@@ -63,7 +63,7 @@ let resolve : Postgresql.connection -> (string * string, string, Layout.t) Ralge
   let resolve_relation = Map.find_exn rels in
   let resolve_field (r, f) = Relation.field_exn (resolve_relation r) f in
   let rec resolve_pred = function
-    | Var _ | Int _ | Bool _ | String _ as p -> p
+    | Var _ | Int _ | Bool _ | String _ | Null as p -> p
     | Field f -> Field (resolve_field f)
     | Binop (op, p1, p2) -> Binop (op, resolve_pred p1, resolve_pred p2)
     | Varop (op, ps) -> Varop (op, List.map ps ~f:resolve_pred)

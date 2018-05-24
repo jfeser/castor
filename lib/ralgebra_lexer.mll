@@ -20,10 +20,20 @@ rule token = parse
   | '\n'       { Lexing.new_line lexbuf; token lexbuf }
   | white      { token lexbuf }
   | "Project"  { PROJECT }
+  | "Select"   { SELECT }
+  | "Dedup"    { DEDUP }
   | "Filter"   { FILTER }
   | "EqJoin"   { EQJOIN }
   | "Concat"   { CONCAT }
   | "Count"    { COUNT }
+  | "Zip"      { ZIP }
+  | "Cross"    { CROSS }
+  | "AEmpty"   { AEMPTY }
+  | "ATuple"   { ATUPLE }
+  | "AList"    { ALIST }
+  | "AOrderedIdx" { AORDEREDIDX }
+  | "AHashIdx" { AHASHIDX }
+  | "AScalar"  { ASCALAR }
   | "Agg"      { AGG }
   | "Min"      { MIN }
   | "Max"      { MAX }
@@ -39,6 +49,7 @@ rule token = parse
   | ":"        { COLON }
   | "."        { DOT }
   | ","        { COMMA }
+  | "->"       { RARROW }
   | "<="       { LE }
   | ">="       { GE }
   | "<"        { LT }

@@ -294,6 +294,12 @@ let rec infer_type : type_ Hashtbl.M(String).t -> expr -> type_ =
       end
     | Done _ -> BoolT { nullable = false }
 
+module Config = struct
+  module type S = sig
+    include Abslayout.Config.S_db
+  end
+end
+
 module IRGen = struct
   type func_builder = {
     args : (string * type_) list;
@@ -374,7 +380,10 @@ module IRGen = struct
   let build_return : expr -> stmt_builder = fun e b ->
     b.body := (Return e)::!(b.body)
 
-  module Make () = struct
+  module Make (Config : Config.S) () = struct
+    module Abslayout = Abslayout.Make_db(Config) ()
+    open Config
+
     let fresh = Fresh.create ()
     let funcs = ref []
     let buffers = ref []
@@ -870,9 +879,19 @@ module IRGen = struct
         ) b;
       build_func b
 
-    let scan : Layout.t -> func = fun l ->
-      let type_ = Type.of_layout_exn l in
-      let buf = Serialize.serialize type_ l in
+    (* let abs_scan : _ -> func = fun l ->
+     *   let type_ = Abslayout.to_type l in
+     *   let buf = Abslayout.serialize type_ l in
+     *   let start = List.map !buffers ~f:Bitstring.byte_length
+     *               |> List.sum (module Int) ~f:(fun x -> x)
+     *   in
+     *   Logs.debug (fun m -> m "Start: %d" start);
+     *   buffers := !buffers @ [buf]; *)
+
+
+    let scan : Type.t -> Bitstring.t -> func = fun type_ buf ->
+      (* let type_ = Type.of_layout_exn l in
+       * let buf = Serialize.serialize type_ l in *)
       let start = List.map !buffers ~f:Bitstring.byte_length
                   |> List.sum (module Int) ~f:(fun x -> x)
       in
@@ -954,9 +973,44 @@ module IRGen = struct
         ) b;
       build_func b
 
-    let filter gen pred r =
+    let gen_pred tup schema =
+      let module R = Ralgebra0 in
+      let rec gen_pred = function
+        | R.Int x -> Int x
+        | R.String x -> String x
+        | R.Bool x -> Bool x
+        | R.Var (n, t) -> Var n
+        | R.Field f -> Index (tup, Db.Schema.field_idx_exn schema f)
+        | R.Binop (op, arg1, arg2) ->
+          let e1 = gen_pred arg1 in
+          let e2 = gen_pred arg2 in
+          begin match op with
+            | R.Eq -> Infix.(e1 = e2)
+            | R.Lt -> Infix.(e1 < e2)
+            | R.Le -> Infix.(e1 <= e2)
+            | R.Gt -> Infix.(e1 > e2)
+            | R.Ge -> Infix.(e1 >= e2)
+            | R.And -> Infix.(e1 && e2)
+            | R.Or -> Infix.(e1 || e2)
+            | R.Add -> Infix.(e1 + e2)
+            | R.Sub -> Infix.(e1 - e2)
+            | R.Mul -> Infix.(e1 * e2)
+            | R.Div -> Infix.(e1 / e2)
+            | R.Mod -> Infix.(e1 % e2)
+          end
+        | R.Varop (op, args) ->
+          let eargs = List.map ~f:gen_pred args in
+          begin match op with
+            | R.And -> List.fold_left1_exn ~f:Infix.(&&) eargs
+            | R.Or -> List.fold_left1_exn ~f:Infix.(||) eargs
+            | R.Eq | R.Lt | R.Le | R.Gt | R.Ge | R.Add|R.Sub|R.Mul|R.Div|R.Mod ->
+              fail (Error.create "Not a vararg operator." op [%sexp_of:R.op])
+          end
+      in
+      gen_pred
+
+    let filter gen schema pred r =
       let func = gen r in
-      let schema = Ralgebra.to_schema r |> Or_error.ok_exn in
       Logs.debug (fun m ->
           m "Filter on schema %a." Sexp.pp_hum ([%sexp_of:Db.Schema.t] schema));
 
@@ -964,41 +1018,7 @@ module IRGen = struct
 
       let b = create [] ret_t in
       build_foreach_no_start func (fun tup b ->
-          let rec gen_pred =
-            let module R = Ralgebra0 in
-            function
-            | R.Int x -> Int x
-            | R.String x -> String x
-            | R.Bool x -> Bool x
-            | R.Var (n, t) -> Var n
-            | R.Field f -> Index (tup, Db.Schema.field_idx_exn schema f)
-            | R.Binop (op, arg1, arg2) ->
-              let e1 = gen_pred arg1 in
-              let e2 = gen_pred arg2 in
-              begin match op with
-                | R.Eq -> Infix.(e1 = e2)
-                | R.Lt -> Infix.(e1 < e2)
-                | R.Le -> Infix.(e1 <= e2)
-                | R.Gt -> Infix.(e1 > e2)
-                | R.Ge -> Infix.(e1 >= e2)
-                | R.And -> Infix.(e1 && e2)
-                | R.Or -> Infix.(e1 || e2)
-                | R.Add -> Infix.(e1 + e2)
-                | R.Sub -> Infix.(e1 - e2)
-                | R.Mul -> Infix.(e1 * e2)
-                | R.Div -> Infix.(e1 / e2)
-                | R.Mod -> Infix.(e1 % e2)
-              end
-            | R.Varop (op, args) ->
-              let eargs = List.map ~f:gen_pred args in
-              begin match op with
-                | R.And -> List.fold_left1_exn ~f:Infix.(&&) eargs
-                | R.Or -> List.fold_left1_exn ~f:Infix.(||) eargs
-                | R.Eq | R.Lt | R.Le | R.Gt | R.Ge | R.Add|R.Sub|R.Mul|R.Div|R.Mod ->
-                  fail (Error.create "Not a vararg operator." op [%sexp_of:R.op])
-              end
-          in
-          build_if ~cond:(gen_pred pred)
+          build_if ~cond:(gen_pred tup schema pred)
             ~then_:(fun b -> build_yield tup b)
             ~else_:(fun _ -> ()) b;
         ) b;
@@ -1032,12 +1052,10 @@ module IRGen = struct
       build_yield (Tuple [ct]) b;
       build_func b
 
-    let eq_join gen f1 f2 r1 r2 =
+    let eq_join gen s1 s2 f1 f2 r1 r2 =
       let func1 = gen r1 in
       let func2 = gen r2 in
 
-      let s1 = Ralgebra.to_schema r1 |> Or_error.ok_exn in
-      let s2 = Ralgebra.to_schema r2 |> Or_error.ok_exn in
       let i1 = Db.Schema.field_idx_exn s1 f1 in
       let i2 = Db.Schema.field_idx_exn s2 f2 in
 
@@ -1067,15 +1085,42 @@ module IRGen = struct
 
     let rec gen_ralgebra : Ralgebra.t -> string = fun r ->
       let name, func = match r with
-        | Scan l -> Fresh.name fresh "scan%d", scan l
+        | Scan l ->
+          let type_ = Type.of_layout_exn l in
+          let buf = Serialize.serialize type_ l in
+          Fresh.name fresh "scan%d", scan type_ buf
         | Project (x, r) ->
           Fresh.name fresh "project%d", project gen_ralgebra x r
-        | Filter (x, r) -> Fresh.name fresh "filter%d", filter gen_ralgebra x r
+        | Filter (x, r) ->
+          let schema = Ralgebra.to_schema r |> Or_error.ok_exn in
+          Fresh.name fresh "filter%d", filter gen_ralgebra schema x r
         | EqJoin (f1, f2, r1, r2) ->
-          Fresh.name fresh "eqjoin%d", eq_join gen_ralgebra f1 f2 r1 r2
+          let s1 = Ralgebra.to_schema r1 |> Or_error.ok_exn in
+          let s2 = Ralgebra.to_schema r2 |> Or_error.ok_exn in
+          Fresh.name fresh "eqjoin%d", eq_join gen_ralgebra s1 s2 f1 f2 r1 r2
         | Concat rs -> Fresh.name fresh "concat%d", concat gen_ralgebra rs
         | Count r -> Fresh.name fresh "count%d", count gen_ralgebra r
         | r -> Error.create "Unsupported at runtime." r [%sexp_of:Ralgebra.t]
+               |> Error.raise
+      in
+      add_func name func; name
+
+    let rec gen_abslayout : Abslayout.t -> string = fun r ->
+      let name, func = match r with
+        | Scan l ->
+          let type_ = Abslayout.to_type l in
+          let buf = Abslayout.serialize type_ l in
+          Fresh.name fresh "scan%d", scan type_ buf
+        (* | Select (x, r) ->
+         *   Fresh.name fresh "select%d", select gen_abslayout x r *)
+        | Filter (x, r) ->
+          let schema = Abslayout.to_schema_exn r in
+          Fresh.name fresh "filter%d", filter gen_abslayout schema x r
+        | EqJoin (f1, f2, r1, r2) ->
+          let s1 = Abslayout.to_schema_exn r1 in
+          let s2 = Abslayout.to_schema_exn r2 in
+          Fresh.name fresh "eqjoin%d", eq_join gen_abslayout s1 s2 f1 f2 r1 r2
+        | r -> Error.create "Unsupported at runtime." r [%sexp_of:Abslayout.t]
                |> Error.raise
       in
       add_func name func; name
@@ -1086,6 +1131,15 @@ module IRGen = struct
       { iters = List.rev !funcs;
         funcs = ["printer", printer name; "counter", counter name];
         params = Ralgebra.params r |> Set.to_list;
+        buffer = Bitstring.concat !buffers;
+      }
+
+    let irgen_abstract : Abslayout.t -> ir_module = fun r ->
+      let name = gen_abslayout r in
+      Logs.debug (fun m -> m "%d buffers" (List.length !buffers));
+      { iters = List.rev !funcs;
+        funcs = ["printer", printer name; "counter", counter name];
+        params = Abslayout.params r |> Set.to_list;
         buffer = Bitstring.concat !buffers;
       }
 

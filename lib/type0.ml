@@ -17,6 +17,12 @@ module PrimType = struct
     | BoolT -> "bool"
     | IntT -> "int"
     | StringT -> "string"
+
+  let of_dtype = function
+    | Db.DInt -> IntT
+    | Db.DString -> StringT
+    | Db.DBool -> BoolT
+    | _ -> failwith ""
 end
 
 module TypedName = struct

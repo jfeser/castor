@@ -1,45 +1,55 @@
 open Core
-
+open Postgresql
 open Dblayout
 open Collections
 
-let main = fun ~debug ~gprof ~params fn ->
-  Logs.debug (fun m -> m "Loading ralgebra from %s." fn);
-  let fd = Unix.openfile ~mode:[O_RDWR] fn in
-  let size = (Unix.Native_file.stat fn).st_size in
-  let buf = Bigstring.map_file ~shared:false fd size in
-  let Candidate.Binable.({ ralgebra; transforms }), _ = 
-    Bigstring.read_bin_prot buf Candidate.Binable.bin_reader_t
-    |> Or_error.ok_exn
-  in
-  Unix.close fd;
-  Logs.debug (fun m -> m "Loading complete.");
-
-  let ralgebra = Ralgebra.Binable.to_ralgebra ralgebra in
-
-  (* Dump type. *)
-  Out_channel.with_file "ralgebra" ~f:(fun ch ->
-    Ralgebra.to_string ralgebra |> Out_channel.output_string ch);
-
-  (* Dump transforms. *)
-  (* Out_channel.with_file "transforms" ~f:(fun ch ->
-   *     List.map transforms ~f:(fun (tf, i) -> sprintf "%s:%d" tf i)
-   *     |> String.concat ~sep:","
-   *     |> Out_channel.output_string ch); *)
-
+let main = fun ~debug ~gprof ~params ~abs_layout ~db fn ->
   let module CConfig = struct
+    let conn = new connection ~dbname:db ()
     let debug = debug
     let ctx = Llvm.create_context ()
     let module_ = Llvm.create_module ctx "scanner"
     let builder = Llvm.builder ctx
   end in
-
   let module Codegen = Codegen.Make(CConfig) () in
-  let module IRGen = Implang.IRGen.Make () in
+  let module IRGen = Implang.IRGen.Make(CConfig) () in
 
-  Logs.debug (fun m -> m "Generating IR.");
-  let ir_module = IRGen.irgen ralgebra in
-  Logs.debug (fun m -> m "Generating IR complete.");
+  let ir_module =
+    if abs_layout then begin
+      Logs.debug (fun m -> m "Loading ralgebra from %s." fn);
+      let ralgebra =
+        In_channel.with_file fn ~f:Abslayout.of_channel_exn
+        |> Abslayout.resolve CConfig.conn
+      in
+
+      Logs.debug (fun m -> m "Generating IR.");
+      let ir_module = IRGen.irgen_abstract ralgebra in
+      Logs.debug (fun m -> m "Generating IR complete.");
+      ir_module
+    end else begin
+      Logs.debug (fun m -> m "Loading ralgebra from %s." fn);
+      let fd = Unix.openfile ~mode:[O_RDWR] fn in
+      let size = (Unix.Native_file.stat fn).st_size in
+      let buf = Bigstring.map_file ~shared:false fd size in
+      let Candidate.Binable.({ ralgebra; transforms }), _ = 
+        Bigstring.read_bin_prot buf Candidate.Binable.bin_reader_t
+        |> Or_error.ok_exn
+      in
+      Unix.close fd;
+      Logs.debug (fun m -> m "Loading complete.");
+
+      let ralgebra = Ralgebra.Binable.to_ralgebra ralgebra in
+
+      (* Dump type. *)
+      Out_channel.with_file "ralgebra" ~f:(fun ch ->
+          Ralgebra.to_string ralgebra |> Out_channel.output_string ch);
+
+      Logs.debug (fun m -> m "Generating IR.");
+      let ir_module = IRGen.irgen ralgebra in
+      Logs.debug (fun m -> m "Generating IR complete.");
+      ir_module
+    end
+  in
 
   (* Dump IR. *)
   Out_channel.with_file "scanner.ir" ~f:(fun ch ->
@@ -120,9 +130,11 @@ let () =
 
   basic ~summary:"Compile a query." [%map_open
     let verbose = flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
+    and db = flag "db" (required string) ~doc:"the database to connect to"
     and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
     and debug = flag "debug" ~aliases:["g"] no_arg ~doc:"enable debug mode"
     and gprof = flag "prof" ~aliases:["pg"] no_arg ~doc:"enable profiling"
+    and abs_layout = flag "abs" ~aliases:["a"] no_arg ~doc:"parse an abstract query"
     and params = flag "param" ~aliases:["p"] (listed param) ~doc:"query parameters (passed as key:value)"
     and query = anon ("query" %: file)
     in fun () ->
@@ -130,5 +142,5 @@ let () =
       else if quiet then Logs.set_level (Some Logs.Error)
       else Logs.set_level (Some Logs.Info);
 
-      main ~debug ~gprof ~params query
+      main ~debug ~gprof ~params ~abs_layout ~db query
   ] |> run

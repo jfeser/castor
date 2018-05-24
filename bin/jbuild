@@ -36,10 +36,3 @@
   (flags (:standard -g -bin-annot))
   (preprocess (pps (ppx_sexp_conv ppx_let ppx_driver.runner -no-check)))
   (modules transform)))
-
-(executable
- ((name sample)
-  (libraries (core postgresql dblayout logs))
-  (flags (:standard -g -bin-annot))
-  (preprocess (pps (ppx_sexp_conv ppx_let ppx_driver.runner -no-check)))
-  (modules sample)))
