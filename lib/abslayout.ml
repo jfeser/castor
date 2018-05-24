@@ -520,7 +520,13 @@ module Make (Config : Config.S) () = struct
   include TF
 
   let to_type : ?ctx:PredCtx.t -> (Field.t, Relation.t) layout -> Type.t =
-    fun ?(ctx = Map.empty (module PredCtx.Key)) l -> (new type_fold)#visit_t ctx l
+    fun ?(ctx = Map.empty (module PredCtx.Key)) l ->
+      Logs.debug (fun m -> m "Computing type of abstract layout: %s"
+                     (Sexp.to_string_hum ([%sexp_of:(Field.t, Relation.t) layout] l)));
+      let type_ = (new type_fold)#visit_t ctx l in
+      Logs.debug (fun m -> m "The type is: %s"
+                     (Sexp.to_string_hum ([%sexp_of:Type.t] type_)));
+      type_
 
   module S = struct
     open Bitstring
@@ -618,18 +624,18 @@ module Make (Config : Config.S) () = struct
           | Bool (x, s) -> serialize_bool type_ l x s
           | String (x, s) -> serialize_string type_ l x s
 
-        method build_ATuple type_ count ls kind =
+        method build_ATuple type_ _ ls kind =
           match type_ with
-          | CrossTupleT (ts, { count }) | ZipTupleT (ts, { count }) ->
+          | CrossTupleT (ts, _) | ZipTupleT (ts, _) ->
             let body = ls |> concat |> label "Tuple body" in
             let len = byte_length body in
             let len_str = of_int ~width:64 len |> label "Tuple len" in
             concat [len_str; body] |> label "Tuple"
           | t -> Error.(create "Unexpected layout type." t [%sexp_of:Type.t] |> raise)
 
-        method build_AList type_ count ls =
+        method build_AList type_ _ ls =
           match type_ with
-          | OrderedListT (t, { count }) | UnorderedListT (t, { count }) ->
+          | OrderedListT (t, _) | UnorderedListT (t, _) ->
             let elems = Seq.to_list ls in
             let count = List.length elems in
             let body = elems |> concat |> label "List body" in
@@ -706,6 +712,8 @@ module Make (Config : Config.S) () = struct
 
   let serialize : ?ctx:PredCtx.t -> Type.t -> (Field.t, Relation.t) layout -> Bitstring.t =
     fun ?(ctx = Map.empty (module PredCtx.Key)) t l ->
+      Logs.debug (fun m -> m "Serializing abstract layout: %s"
+                     (Sexp.to_string_hum ([%sexp_of:(Field.t, Relation.t) layout] l)));
       let (s, _) = (new serialize_fold)#visit_t ctx t l in s
 
   type schema = (string * Type.PrimType.t) list

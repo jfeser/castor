@@ -617,24 +617,21 @@ module Make (Config: Config.S) () = struct
 
   let codegen_print fctx type_ expr =
     Logs.debug (fun m -> m "Codegen for %a." pp_stmt (Print (type_, expr)));
-    let true_str =
-      define_global "true_str" (const_stringz ctx "true") module_
+    let define_global_str name value =
+      build_bitcast
+        (define_global name (const_stringz ctx value) module_)
+        (pointer_type (i8_type ctx))
+        "" builder
     in
-    let false_str =
-      define_global "false_str" (const_stringz ctx "false") module_
-    in
-    let null_str =
-      define_global "null_str" (const_stringz ctx "null") module_
-    in
-    let void_str = define_global "void_str" (const_stringz ctx "()") module_ in
-    let comma_str = define_global "comma_str" (const_stringz ctx ",") module_ in
-    let newline_str =
-      define_global "newline_str" (const_stringz ctx "\n") module_
-    in
-    let int_fmt = define_global "int_fmt" (const_stringz ctx "%d") module_ in
-    let str_fmt =
-      define_global "str_fmt" (const_stringz ctx "\"%.*s\"") module_
-    in
+
+    let true_str = define_global_str "true_str" "true" in
+    let false_str = define_global_str "false_str" "false" in
+    let null_str = define_global_str "null_str" "null" in
+    let void_str = define_global_str "void_str" "()" in
+    let comma_str = define_global_str "comma_str" "," in
+    let newline_str = define_global_str "newline_str" "\n" in
+    let int_fmt = define_global_str "int_fmt" "%d" in
+    let str_fmt = define_global_str "str_fmt" "\"%.*s\"" in
 
     let val_ = codegen_expr fctx expr in
 

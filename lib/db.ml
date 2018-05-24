@@ -90,7 +90,7 @@ type dtype =
 type field_t = {
   name : string;
   dtype : dtype;
-  relation : relation_t;
+  relation : relation_t; 
 }
 and relation_t = {
   name : string;
@@ -100,6 +100,8 @@ and relation_t = {
 module Relation = struct
   module T = struct
     type t = relation_t [@@deriving compare, hash, sexp, bin_io]
+
+    let sexp_of_t ({ name }: relation_t) = [%sexp_of:string] name
   end
   include T
   include Comparable.Make(T)
@@ -287,11 +289,12 @@ let result_to_tuples : Postgresql.result -> primvalue Map.M(String).t Seq.t = fu
                 | "f" -> `Bool false
                 | _ -> failwith "Unknown boolean value."
               end
-            | NAME
-            | INT8 | INT2 | INT4 | NUMERIC -> `Int (Int.of_string value)
+            | INT8 | INT2 | INT4 ->
+              if String.(value = "") then `Null else `Int (Int.of_string value)
             | CHAR | TEXT | VARCHAR -> `String value
             | FLOAT4 | FLOAT8
-            |BYTEA
+            | NAME
+            |NUMERIC|BYTEA
             |INT2VECTOR
             |REGPROC|OID|TID
             |XID|CID|OIDVECTOR|JSON
