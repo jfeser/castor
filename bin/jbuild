@@ -2,7 +2,7 @@
 
 (install
  ((section bin)
-  (files (compile.exe search.exe transform.exe sample.exe inspect.exe))))
+  (files (compile.exe search.exe transform.exe inspect.exe))))
 
 (rule
  ((targets (config.ml))
