@@ -24,6 +24,7 @@ rule token = parse
   | "Dedup"    { DEDUP }
   | "Filter"   { FILTER }
   | "EqJoin"   { EQJOIN }
+  | "Join"     { JOIN }
   | "Concat"   { CONCAT }
   | "Count"    { COUNT }
   | "Zip"      { ZIP }
@@ -42,6 +43,7 @@ rule token = parse
   | "int"      { INT_TYPE }
   | "bool"     { BOOL_TYPE }
   | "string"   { STRING_TYPE }
+  | "as"       { AS }
   | "("        { LPAREN }
   | ")"        { RPAREN }
   | "["        { LSBRAC }

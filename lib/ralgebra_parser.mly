@@ -16,6 +16,8 @@
 %token <bool> BOOL
 %token <string> STR
 
+%token AS
+%token JOIN
 %token PROJECT
 %token SELECT
 %token DEDUP
@@ -103,7 +105,7 @@ abs_ralgebra(X):
 | SELECT; LPAREN; exprs = bracket_list(pred); COMMA; r = abs_ralgebra(X); RPAREN { A.Select (exprs, r) }
 | AGG; LPAREN; a = bracket_list(agg_expr); COMMA; k = bracket_list(field); COMMA; r = abs_ralgebra(X); RPAREN { A.Agg (a, k, r) }
 | FILTER; LPAREN; pred = pred; COMMA; r = abs_ralgebra(X); RPAREN { A.Filter (pred, r) }
-| EQJOIN; LPAREN; f1 = field; COMMA; f2 = field; COMMA; r1 = abs_ralgebra(X); COMMA; r2 = abs_ralgebra(X); RPAREN { A.EqJoin(f1, f2, r1, r2) }
+| JOIN; LPAREN; p = pred; COMMA; r1 = abs_ralgebra(X); AS; n1 = ID; COMMA; r2 = abs_ralgebra(X); AS; n2 = ID; RPAREN { A.Join({pred = p; r1_name = n1; r1; r2_name = n2; r2}) }
 | DEDUP; LPAREN; r = abs_ralgebra(X); RPAREN { A.Dedup r }
 | r = X { A.Scan r }
 | error { error "Expected an operator or relation." $startpos }

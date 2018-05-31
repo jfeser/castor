@@ -24,7 +24,13 @@ and 'f agg = 'f Ralgebra0.agg =
 and ('f, 'l) ralgebra =
   | Select of 'f pred list * ('f, 'l) ralgebra
   | Filter of 'f pred * ('f, 'l) ralgebra
-  | EqJoin of 'f * 'f * ('f, 'l) ralgebra * ('f, 'l) ralgebra
+  | Join of {
+      pred : 'f pred;
+      r1_name : string;
+      r1 : ('f, 'l) ralgebra;
+      r2_name : string;
+      r2 : ('f, 'l) ralgebra
+    }
   | Scan of 'l
   | Agg of 'f agg list * 'f list * ('f, 'l) ralgebra
   | Dedup of ('f, 'l) ralgebra

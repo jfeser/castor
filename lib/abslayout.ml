@@ -92,7 +92,8 @@ module No_config = struct
       let ctx =
         relations r
         |> List.map ~f:(fun r -> (r, Relation.from_db conn r))
-        |> Hashtbl.of_alist_exn (module String)
+        |> Hashtbl.of_alist_multi (module String)
+        |> Hashtbl.map ~f:(function | x::_ -> x | _ -> assert false)
       in
       resolver#visit_ralgebra ctx r
 
@@ -262,6 +263,24 @@ module No_config = struct
       end in
       f#visit_pred ()
     in
+    let subst_table_prefix subs =
+      let f = object
+        inherit [_] ralgebra_map as super
+        method visit_Field _ (f : Field.t) =
+          match String.split f.name ~on:'.' with
+          | [name] -> Field name
+          | [tname; fname] ->
+            let (_, tbl) = List.find_exn subs ~f:(fun (tname', tbl) ->
+                String.(tname = tname'))
+            in
+            Field (sprintf "t%d.\"%s\"" tbl f.name)
+          | _ -> failwith "Expected a quantified name."
+        method visit_'l = failwith "Unused"
+        method visit_'f = failwith "Unused"
+        method visit_agg = failwith "Unused"
+      end in
+      f#visit_pred ()
+    in
     let rec f = function
       | Select ([], r) ->
         let table = fresh () in
@@ -279,11 +298,12 @@ module No_config = struct
         let pred = subst_table table pred in
         sprintf "select * from (%s) as t%d where %s" (f r) table
           (pred_to_sql pred)
-      | EqJoin (f1, f2, r1, r2) ->
+      | Join { pred = p; r1_name; r1; r2_name; r2 } ->
         let t1 = fresh () in
         let t2 = fresh () in
-        sprintf "select * from (%s) as t%d, (%s) as t%d where t%d.\"%s\" = t%d.\"%s\""
-          (f r1) t1 (f r2) t2 t1 f1.name t2 f2.name
+        let pred = subst_table_prefix [r1_name, t1; r2_name, t2] p in
+        sprintf "select * from (%s) as t%d, (%s) as t%d where %s"
+          (f r1) t1 (f r2) t2 (pred_to_sql pred)
       | Agg (aggs, key, r) ->
         let table = fresh () in
         let aggs = List.map aggs ~f:(function
@@ -323,8 +343,11 @@ module No_config = struct
     [%expect {| select * from (select * from r) as t1 where (t1."f") = (t1."g") |}]
 
   let%expect_test "eqjoin" =
-    let r = EqJoin (Field.of_name "f", Field.of_name "g",
-                    Scan (Relation.of_name "r"), Scan (Relation.of_name "s")) in
+    let r = Join ({ pred = Binop (Eq, Field (Field.of_name "r.f"), Field (Field.of_name "s.g"));
+                    r1_name = "r"; r1 = Scan (Relation.of_name "r");
+                    r2_name = "s"; r2 = Scan (Relation.of_name "s")
+                  })
+    in
     print_endline (ralgebra_to_sql r);
     [%expect {| select * from (select * from r) as t1, (select * from s) as t2 where t1."f" = t2."g" |}]
 
@@ -736,7 +759,7 @@ module Make (Config : Config.S) () = struct
       let rec ralgebra_to_schema_exn = function
         | Select (exprs, r) -> List.map exprs ~f:(pred_to_schema_exn)
         | Filter (_, r) | Dedup r -> ralgebra_to_schema_exn r
-        | EqJoin (_, _, r1, r2) ->
+        | Join {r1; r2} ->
           ralgebra_to_schema_exn r1 @ ralgebra_to_schema_exn r2
         | Scan r -> layout_to_schema_exn r
         | Agg (out, _, _) ->
@@ -847,6 +870,21 @@ module Test = struct
         let eval_relation r = Hashtbl.find_exn rels r.name |> Seq.of_list
       end)
 
+    let eval_join ctx p r1_name r2_name r1 r2 =
+      match p with
+      | Binop (Eq, Field f1, Field f2) -> eval_eqjoin f1 f2 r1 r2
+      | p ->
+        Seq.concat_map r1 ~f:(fun t1 ->
+            Seq.filter r2 ~f:(fun t2 -> 
+                let ctx =
+                  ctx
+                  |> Map.merge_right (PredCtx.of_tuple t1)
+                  |> Map.merge_right (PredCtx.of_tuple t2)
+                in
+                match eval_pred ctx p with
+                | `Bool x -> x
+                | _ -> failwith "Expected a boolean."))
+
     let eval_filter ctx p seq =
       Seq.filter seq ~f:(fun t ->
           let ctx = Map.merge_right ctx (PredCtx.of_tuple t) in
@@ -872,7 +910,8 @@ module Test = struct
       let rec eval = function
         | Scan r -> eval_relation r
         | Filter (p, r) -> eval_filter ctx p (eval r)
-        | EqJoin (f1, f2, r1, r2) -> eval_eqjoin f1 f2 (eval r1) (eval r2)
+        | Join {pred = p; r1_name; r1; r2_name; r2} ->
+          eval_join ctx p r1_name r2_name (eval r1) (eval r2)
         | Agg (output, key, r) -> eval_agg output key (eval r)
         | Dedup r -> eval_dedup (eval r)
         | Select (out, r) -> eval_select ctx out (eval r)
@@ -899,7 +938,9 @@ module Test = struct
             |> Map.of_alist_exn (module String))
     end) ()
 
+  [@@@ warning "-8"]
   let r1, [f; g] = create "r1" ["f"; "g"] [[1;2]; [1;3]; [2;1]; [2;2]; [3;4]]
+  [@@@ warning "+8"]
 
   let%expect_test "part-list" =
     let layout = AList (Scan r1, "x", ATuple ([AScalar (Field { f with name = "x.f" }); AScalar (Field { f with name = "x.g" })], Cross))

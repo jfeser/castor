@@ -1105,7 +1105,7 @@ module IRGen = struct
         | Filter (x, r) ->
           let schema = Abslayout.to_schema_exn r |> field_idx_exn in
           Fresh.name fresh "filter%d", filter gen_abslayout schema x r
-        | EqJoin (f1, f2, r1, r2) ->
+        | Join {pred = Binop (Eq, Field f1, Field f2); r1; r2} ->
           let s1 = Abslayout.to_schema_exn r1 |> field_idx_exn in
           let s2 = Abslayout.to_schema_exn r2 |> field_idx_exn in
           Fresh.name fresh "eqjoin%d", eq_join gen_abslayout s1 s2 f1 f2 r1 r2
