@@ -200,7 +200,7 @@ module No_config = struct
       (Select
         ((Int 1)
          (Int 2))
-        (Scan ((name r) (fields ()))))) |}]
+        (Scan r))) |}]
 
   let pred_relations : Field.t pred -> Relation.t list = fun p ->
     let rels = ref [] in
@@ -781,11 +781,11 @@ module Test = struct
     [%expect {|
     (UnorderedList ((
       String "GERMA               " (
-        (rel ((name "") (fields ())))
+        (rel "")
         (field (
-          (name  "")
-          (dtype DBool)
-          (relation ((name "") (fields ()))))))))) |}]
+          (name     "")
+          (dtype    DBool)
+          (relation ""))))))) |}]
 
   let%expect_test "mat-hidx" =
     let conn = new Postgresql.connection ~dbname:"tpcds1" () in
@@ -802,40 +802,40 @@ module Test = struct
     [%expect {|
     (Table
       ((
-        ((rel ((name "") (fields ())))
+        ((rel "")
          (field (
-           (name  "")
-           (dtype DBool)
-           (relation ((name "") (fields ())))))
+           (name     "")
+           (dtype    DBool)
+           (relation "")))
          (value (Unknown "LIBRARY                       ")))
         (UnorderedList (
           (String "AIR       " (
-            (rel ((name "") (fields ())))
+            (rel "")
             (field (
-              (name  "")
-              (dtype DBool)
-              (relation ((name "") (fields ())))))))
+              (name     "")
+              (dtype    DBool)
+              (relation "")))))
           (String "SURFACE   " (
-            (rel ((name "") (fields ())))
+            (rel "")
             (field (
-              (name  "")
-              (dtype DBool)
-              (relation ((name "") (fields ())))))))
+              (name     "")
+              (dtype    DBool)
+              (relation "")))))
           (String "SEA       " (
-            (rel ((name "") (fields ())))
+            (rel "")
             (field (
-              (name  "")
-              (dtype DBool)
-              (relation ((name "") (fields ())))))))))))
+              (name     "")
+              (dtype    DBool)
+              (relation "")))))))))
       ((field (
-         (name  fixme)
-         (dtype DBool)
-         (relation ((name "") (fields ())))))
+         (name     fixme)
+         (dtype    DBool)
+         (relation "")))
        (lookup (
          Field (
-           (name  fixme)
-           (dtype DBool)
-           (relation ((name "") (fields ())))))))) |}]
+           (name     fixme)
+           (dtype    DBool)
+           (relation "")))))) |}]
 
   let rels = Hashtbl.create (module String)
 
@@ -915,173 +915,173 @@ module Test = struct
           Select
           ((
             Field (
-              (name  f)
-              (dtype DInt)
-              (relation ((name r1) (fields ()))))))
-          (Scan ((name r1) (fields ())))))
+              (name     f)
+              (dtype    DInt)
+              (relation r1))))
+          (Scan r1)))
         x0
         (AList
           (Filter
             (Binop (
               Eq
               (Field (
-                (name  f)
-                (dtype DInt)
-                (relation ((name r1) (fields ())))))
+                (name     f)
+                (dtype    DInt)
+                (relation r1)))
               (Field (
-                (name  x0.f)
-                (dtype DInt)
-                (relation ((name r1) (fields ())))))))
-            (Scan ((name r1) (fields ()))))
+                (name     x0.f)
+                (dtype    DInt)
+                (relation r1)))))
+            (Scan r1))
           x
           (ATuple
             ((AScalar (
                Field (
-                 (name  x.f)
-                 (dtype DInt)
-                 (relation ((name r1) (fields ()))))))
+                 (name     x.f)
+                 (dtype    DInt)
+                 (relation r1))))
              (AScalar (
                Field (
-                 (name  x.g)
-                 (dtype DInt)
-                 (relation ((name r1) (fields ())))))))
+                 (name     x.g)
+                 (dtype    DInt)
+                 (relation r1)))))
             Cross))
         ((
           lookup (
             Field (
-              (name  f)
-              (dtype DInt)
-              (relation ((name r1) (fields ()))))))))
+              (name     f)
+              (dtype    DInt)
+              (relation r1))))))
       (TableT
         (IntT (
           (range (1 3))
           (nullable false)
           (field (
-            (name  "")
-            (dtype DBool)
-            (relation ((name "") (fields ())))))))
+            (name     "")
+            (dtype    DBool)
+            (relation "")))))
         (UnorderedListT
           (CrossTupleT
             ((IntT (
                (range (1 3))
                (nullable false)
                (field (
-                 (name  "")
-                 (dtype DBool)
-                 (relation ((name "") (fields ())))))))
+                 (name     "")
+                 (dtype    DBool)
+                 (relation "")))))
              (IntT (
                (range (1 4))
                (nullable false)
                (field (
-                 (name  "")
-                 (dtype DBool)
-                 (relation ((name "") (fields ()))))))))
+                 (name     "")
+                 (dtype    DBool)
+                 (relation ""))))))
             ((count ((1 1)))))
           ((count ((1 2)))))
         ((count ())
          (field (
-           (name  fixme)
-           (dtype DBool)
-           (relation ((name "") (fields ())))))
+           (name     fixme)
+           (dtype    DBool)
+           (relation "")))
          (lookup (
            Field (
-             (name  fixme)
-             (dtype DBool)
-             (relation ((name "") (fields ()))))))))
+             (name     fixme)
+             (dtype    DBool)
+             (relation ""))))))
       (Table
-        ((((rel ((name "") (fields ())))
+        ((((rel "")
            (field (
-             (name  "")
-             (dtype DBool)
-             (relation ((name "") (fields ())))))
+             (name     "")
+             (dtype    DBool)
+             (relation "")))
            (value (Int 1)))
           (UnorderedList (
             (CrossTuple (
               (Int 1 (
-                (rel ((name "") (fields ())))
+                (rel "")
                 (field (
-                  (name  "")
-                  (dtype DBool)
-                  (relation ((name "") (fields ())))))))
+                  (name     "")
+                  (dtype    DBool)
+                  (relation "")))))
               (Int 2 (
-                (rel ((name "") (fields ())))
+                (rel "")
                 (field (
-                  (name  "")
-                  (dtype DBool)
-                  (relation ((name "") (fields ())))))))))
+                  (name     "")
+                  (dtype    DBool)
+                  (relation "")))))))
             (CrossTuple (
               (Int 1 (
-                (rel ((name "") (fields ())))
+                (rel "")
                 (field (
-                  (name  "")
-                  (dtype DBool)
-                  (relation ((name "") (fields ())))))))
+                  (name     "")
+                  (dtype    DBool)
+                  (relation "")))))
               (Int 3 (
-                (rel ((name "") (fields ())))
+                (rel "")
                 (field (
-                  (name  "")
-                  (dtype DBool)
-                  (relation ((name "") (fields ()))))))))))))
-         (((rel ((name "") (fields ())))
+                  (name     "")
+                  (dtype    DBool)
+                  (relation ""))))))))))
+         (((rel "")
            (field (
-             (name  "")
-             (dtype DBool)
-             (relation ((name "") (fields ())))))
+             (name     "")
+             (dtype    DBool)
+             (relation "")))
            (value (Int 2)))
           (UnorderedList (
             (CrossTuple (
               (Int 2 (
-                (rel ((name "") (fields ())))
+                (rel "")
                 (field (
-                  (name  "")
-                  (dtype DBool)
-                  (relation ((name "") (fields ())))))))
+                  (name     "")
+                  (dtype    DBool)
+                  (relation "")))))
               (Int 1 (
-                (rel ((name "") (fields ())))
+                (rel "")
                 (field (
-                  (name  "")
-                  (dtype DBool)
-                  (relation ((name "") (fields ())))))))))
+                  (name     "")
+                  (dtype    DBool)
+                  (relation "")))))))
             (CrossTuple (
               (Int 2 (
-                (rel ((name "") (fields ())))
+                (rel "")
                 (field (
-                  (name  "")
-                  (dtype DBool)
-                  (relation ((name "") (fields ())))))))
+                  (name     "")
+                  (dtype    DBool)
+                  (relation "")))))
               (Int 2 (
-                (rel ((name "") (fields ())))
+                (rel "")
                 (field (
-                  (name  "")
-                  (dtype DBool)
-                  (relation ((name "") (fields ()))))))))))))
-         (((rel ((name "") (fields ())))
+                  (name     "")
+                  (dtype    DBool)
+                  (relation ""))))))))))
+         (((rel "")
            (field (
-             (name  "")
-             (dtype DBool)
-             (relation ((name "") (fields ())))))
+             (name     "")
+             (dtype    DBool)
+             (relation "")))
            (value (Int 3)))
           (UnorderedList ((
             CrossTuple (
               (Int 3 (
-                (rel ((name "") (fields ())))
+                (rel "")
                 (field (
-                  (name  "")
-                  (dtype DBool)
-                  (relation ((name "") (fields ())))))))
+                  (name     "")
+                  (dtype    DBool)
+                  (relation "")))))
               (Int 4 (
-                (rel ((name "") (fields ())))
+                (rel "")
                 (field (
-                  (name  "")
-                  (dtype DBool)
-                  (relation ((name "") (fields ())))))))))))))
+                  (name     "")
+                  (dtype    DBool)
+                  (relation "")))))))))))
         ((field (
-           (name  fixme)
-           (dtype DBool)
-           (relation ((name "") (fields ())))))
+           (name     fixme)
+           (dtype    DBool)
+           (relation "")))
          (lookup (
            Field (
-             (name  fixme)
-             (dtype DBool)
-             (relation ((name "") (fields ())))))))) |}]
+             (name     fixme)
+             (dtype    DBool)
+             (relation "")))))) |}]
 end
