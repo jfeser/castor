@@ -3,9 +3,9 @@ open Postgresql
 open Dblayout
 open Collections
 
-let main = fun ~debug ~gprof ~params ~abs_layout ~db fn ->
+let main = fun ~debug ~gprof ~params ~abs_layout ~db ~port fn ->
   let module CConfig = struct
-    let conn = new connection ~dbname:db ()
+    let conn = new connection ~dbname:db ?port ()
     let debug = debug
     let ctx = Llvm.create_context ()
     let module_ = Llvm.create_module ctx "scanner"
@@ -131,6 +131,7 @@ let () =
   basic ~summary:"Compile a query." [%map_open
     let verbose = flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
     and db = flag "db" (required string) ~doc:"the database to connect to"
+    and port = flag "port" (optional string) ~doc:"the port to connect to"
     and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
     and debug = flag "debug" ~aliases:["g"] no_arg ~doc:"enable debug mode"
     and gprof = flag "prof" ~aliases:["pg"] no_arg ~doc:"enable profiling"
@@ -142,5 +143,5 @@ let () =
       else if quiet then Logs.set_level (Some Logs.Error)
       else Logs.set_level (Some Logs.Info);
 
-      main ~debug ~gprof ~params ~abs_layout ~db query
+      main ~debug ~gprof ~params ~abs_layout ~db ~port query
   ] |> run
