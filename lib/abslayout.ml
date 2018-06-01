@@ -58,7 +58,7 @@ module No_config = struct
             type_ = Some (Type.PrimType.of_primvalue v.value)
           } in
           Map.set m ~key:n ~data:v.value)
-    
+
     (* let of_vars : (string * primvalue) list -> t = fun l ->
      *   List.fold_left l ~init:(Map.empty (module Key)) ~f:(fun m (k, v) ->
      *       Map.set m ~key:(Var (k, PrimType.of_primvalue v))
@@ -440,9 +440,10 @@ module Make (Config : Config.S) () = struct
         let subst = object
           inherit [_] ralgebra_endo as super
           method visit_Name _ _ n =
-            if String.(rel = n.name) then
+            match n.relation with
+            | Some r when String.(rel = r) ->
               Name { n with relation = Some name }
-            else Name n
+            | _ -> Name n
           method visit_'f _ x = x
           method visit_'l _ x = x
           method visit_agg _ x = x
@@ -915,267 +916,297 @@ module Test = struct
            (dtype    DBool)
            (relation "")))))) |}]
 
-  (* let rels = Hashtbl.create (module String) *)
+  let rels = Hashtbl.create (module String)
 
-  (* module Eval = struct
-   *   let eval_pred0 = eval_pred
-   * 
-   *   include Eval.Make_relation(struct
-   *       type relation = string [@@deriving compare, sexp]
-   *       let eval_relation r = Hashtbl.find_exn rels r |> Seq.of_list
-   *     end)
-   * 
-   *   let eval_join ctx p r1_name r2_name r1 r2 =
-   *     match p with
-   *     | Binop (Eq, Name f1, Name f2) -> eval_eqjoin f1 f2 r1 r2
-   *     | p ->
-   *       Seq.concat_map r1 ~f:(fun t1 ->
-   *           Seq.filter r2 ~f:(fun t2 ->
-   *               let ctx =
-   *                 ctx
-   *                 |> Map.merge_right (Ctx.of_tuple t1)
-   *                 |> Map.merge_right (Ctx.of_tuple t2)
-   *               in
-   *               match eval_pred ctx p with
-   *               | `Bool x -> x
-   *               | _ -> failwith "Expected a boolean."))
-   * 
-   *   let eval_filter ctx p seq =
-   *     Seq.filter seq ~f:(fun t ->
-   *         let ctx = Map.merge_right ctx (Ctx.of_tuple t) in
-   *         match eval_pred0 ctx p with
-   *         | `Bool x -> x
-   *         | _ -> failwith "Expected a boolean.")
-   * 
-   *   let eval_dedup seq =
-   *     let set = Hash_set.create (module Tuple) in
-   *     Seq.iter seq ~f:(Hash_set.add set);
-   *     Hash_set.to_list set |> Seq.of_list
-   * 
-   *   let eval_select ctx out seq =
-   *     Seq.map seq ~f:(fun t ->
-   *         let ctx = Map.merge_right ctx (Ctx.of_tuple t) in
-   *         List.map out ~f:(function
-   *             | Name f -> let pv = Map.find_exn ctx f in
-   *               Value.({ value = pv; field = ; rel = Relation.dummy })
-   *             | e -> eval_pred0 ctx e |> Value.of_primvalue))
-   * 
-   *   let eval : Ctx.t -> (Field.t, Relation.t) ralgebra -> Tuple.t Seq.t = fun ctx r ->
-   *     let rec eval = function
-   *       | Scan r -> eval_relation r
-   *       | Filter (p, r) -> eval_filter ctx p (eval r)
-   *       | Join {pred = p; r1_name; r1; r2_name; r2} ->
-   *         eval_join ctx p r1_name r2_name (eval r1) (eval r2)
-   *       | Agg (output, key, r) -> eval_agg output key (eval r)
-   *       | Dedup r -> eval_dedup (eval r)
-   *       | Select (out, r) -> eval_select ctx out (eval r)
-   *     in
-   *     eval r
-   * end
-   * 
-   * let create : string -> string list -> int list list -> string * name list = fun name fs xs ->
-   *   let data =
-   *     List.map xs ~f:(fun data ->
-   *         List.map2_exn fs data ~f:(fun name value : Value.t ->
-   *             { field = Field.of_name name; value = `Int value;
-   *               rel = Relation.dummy }))
-   *   in
-   *   Hashtbl.set rels ~key:name ~data;
-   *   name, List.map fs ~f:(fun f -> { name = f; relation = Some name; type_ = Some IntT })
-   * 
-   * module M = Make(struct
-   *     let eval ctx query =
-   *       Eval.eval ctx query
-   *       |> Seq.map ~f:(fun (t: Tuple.t) ->
-   *           List.map t ~f:(fun (v: Value.t) -> v.field.name, v.value)
-   *           |> Map.of_alist_exn (module String))
-   *   end) ()
-   * 
-   * [@@@ warning "-8"]
-   * let r1, [f; g] = create "r1" ["f"; "g"] [[1;2]; [1;3]; [2;1]; [2;2]; [3;4]]
-   * [@@@ warning "+8"]
-   * 
-   * let%expect_test "part-list" =
-   *   let layout = AList (Scan r1, "x", ATuple ([AScalar (Name { f with name = "x.f" }); AScalar (Name { f with name = "x.g" })], Cross))
-   *   in
-   *   let part_layout = M.partition ~part:(Name f) ~lookup:(Name f) layout in
-   *   [%sexp_of:(name, string) layout] part_layout |> print_s;
-   *   [%sexp_of:Type.t] (M.to_type part_layout) |> print_s;
-   *   let mat_layout = M.materialize part_layout in
-   *   [%sexp_of:Layout.t] mat_layout |> print_s;
-   *   [%expect {|
-   *     (AHashIdx
-   *       (Dedup (
-   *         Select
-   *         ((
-   *           Field (
-   *             (name     f)
-   *             (dtype    DInt)
-   *             (relation r1))))
-   *         (Scan r1)))
-   *       x0
-   *       (AList
-   *         (Filter
-   *           (Binop (
-   *             Eq
-   *             (Field (
-   *               (name     f)
-   *               (dtype    DInt)
-   *               (relation r1)))
-   *             (Field (
-   *               (name     x0.f)
-   *               (dtype    DInt)
-   *               (relation r1)))))
-   *           (Scan r1))
-   *         x
-   *         (ATuple
-   *           ((AScalar (
-   *              Field (
-   *                (name     x.f)
-   *                (dtype    DInt)
-   *                (relation r1))))
-   *            (AScalar (
-   *              Field (
-   *                (name     x.g)
-   *                (dtype    DInt)
-   *                (relation r1)))))
-   *           Cross))
-   *       ((
-   *         lookup (
-   *           Field (
-   *             (name     f)
-   *             (dtype    DInt)
-   *             (relation r1))))))
-   *     (TableT
-   *       (IntT (
-   *         (range (1 3))
-   *         (nullable false)
-   *         (field (
-   *           (name     "")
-   *           (dtype    DBool)
-   *           (relation "")))))
-   *       (UnorderedListT
-   *         (CrossTupleT
-   *           ((IntT (
-   *              (range (1 3))
-   *              (nullable false)
-   *              (field (
-   *                (name     "")
-   *                (dtype    DBool)
-   *                (relation "")))))
-   *            (IntT (
-   *              (range (1 4))
-   *              (nullable false)
-   *              (field (
-   *                (name     "")
-   *                (dtype    DBool)
-   *                (relation ""))))))
-   *           ((count ((1 1)))))
-   *         ((count ((1 2)))))
-   *       ((count ())
-   *        (field (
-   *          (name     fixme)
-   *          (dtype    DBool)
-   *          (relation "")))
-   *        (lookup (
-   *          Field (
-   *            (name     fixme)
-   *            (dtype    DBool)
-   *            (relation ""))))))
-   *     (Table
-   *       ((((rel "")
-   *          (field (
-   *            (name     "")
-   *            (dtype    DBool)
-   *            (relation "")))
-   *          (value (Int 1)))
-   *         (UnorderedList (
-   *           (CrossTuple (
-   *             (Int 1 (
-   *               (rel "")
-   *               (field (
-   *                 (name     "")
-   *                 (dtype    DBool)
-   *                 (relation "")))))
-   *             (Int 2 (
-   *               (rel "")
-   *               (field (
-   *                 (name     "")
-   *                 (dtype    DBool)
-   *                 (relation "")))))))
-   *           (CrossTuple (
-   *             (Int 1 (
-   *               (rel "")
-   *               (field (
-   *                 (name     "")
-   *                 (dtype    DBool)
-   *                 (relation "")))))
-   *             (Int 3 (
-   *               (rel "")
-   *               (field (
-   *                 (name     "")
-   *                 (dtype    DBool)
-   *                 (relation ""))))))))))
-   *        (((rel "")
-   *          (field (
-   *            (name     "")
-   *            (dtype    DBool)
-   *            (relation "")))
-   *          (value (Int 2)))
-   *         (UnorderedList (
-   *           (CrossTuple (
-   *             (Int 2 (
-   *               (rel "")
-   *               (field (
-   *                 (name     "")
-   *                 (dtype    DBool)
-   *                 (relation "")))))
-   *             (Int 1 (
-   *               (rel "")
-   *               (field (
-   *                 (name     "")
-   *                 (dtype    DBool)
-   *                 (relation "")))))))
-   *           (CrossTuple (
-   *             (Int 2 (
-   *               (rel "")
-   *               (field (
-   *                 (name     "")
-   *                 (dtype    DBool)
-   *                 (relation "")))))
-   *             (Int 2 (
-   *               (rel "")
-   *               (field (
-   *                 (name     "")
-   *                 (dtype    DBool)
-   *                 (relation ""))))))))))
-   *        (((rel "")
-   *          (field (
-   *            (name     "")
-   *            (dtype    DBool)
-   *            (relation "")))
-   *          (value (Int 3)))
-   *         (UnorderedList ((
-   *           CrossTuple (
-   *             (Int 3 (
-   *               (rel "")
-   *               (field (
-   *                 (name     "")
-   *                 (dtype    DBool)
-   *                 (relation "")))))
-   *             (Int 4 (
-   *               (rel "")
-   *               (field (
-   *                 (name     "")
-   *                 (dtype    DBool)
-   *                 (relation "")))))))))))
-   *       ((field (
-   *          (name     fixme)
-   *          (dtype    DBool)
-   *          (relation "")))
-   *        (lookup (
-   *          Field (
-   *            (name     fixme)
-   *            (dtype    DBool)
-   *            (relation "")))))) |}] *)
+  module Eval = struct
+    include Eval.Make_relation(struct
+        type relation = string [@@deriving compare, sexp]
+        let eval_relation r =
+          Hashtbl.find_exn rels r |> Seq.of_list
+          |> Seq.map ~f:(fun t ->
+              List.map t ~f:(fun (n, v) -> {
+                    rel = Relation.of_name r;
+                    field = Field.of_name n;
+                    Value.value = v
+                  }))
+      end)
+
+    let rec eval_pred : Ctx.t -> name pred -> primvalue =
+      fun ctx -> function
+        | Null -> `Null
+        | Int x -> `Int x
+        | String x -> `String x
+        | Bool x -> `Bool x
+        | Name n ->
+          begin match Map.find ctx n with
+            | Some v -> v
+            | None -> Error.create "Unbound variable." (n, ctx)
+                        [%sexp_of:name * Ctx.t] |> Error.raise
+          end
+        | Binop (op, p1, p2) ->
+          let v1 = eval_pred ctx p1 in
+          let v2 = eval_pred ctx p2 in
+          begin match op, v1, v2 with
+            | Eq, `Null, _ | Eq, _, `Null -> `Bool false
+            | Eq, `Bool x1, `Bool x2 -> `Bool (Bool.(x1 = x2))
+            | Eq, `Int x1, `Int x2 -> `Bool (Int.(x1 = x2))
+            | Eq, `String x1, `String x2 -> `Bool (String.(x1 = x2))
+            | Lt, `Int x1, `Int x2 -> `Bool (x1 < x2)
+            | Le, `Int x1, `Int x2 -> `Bool (x1 <= x2)
+            | Gt, `Int x1, `Int x2 -> `Bool (x1 > x2)
+            | Ge, `Int x1, `Int x2 -> `Bool (x1 >= x2)
+            | Add, `Int x1, `Int x2 -> `Int (x1 + x2)
+            | Sub, `Int x1, `Int x2 -> `Int (x1 - x2)
+            | Mul, `Int x1, `Int x2 -> `Int (x1 * x2)
+            | Div, `Int x1, `Int x2 -> `Int (x1 / x2)
+            | Mod, `Int x1, `Int x2 -> `Int (x1 % x2)
+            | And, `Bool x1, `Bool x2 -> `Bool (x1 && x2)
+            | Or, `Bool x1, `Bool x2 -> `Bool (x1 || x2)
+            | _ -> Error.create "Unexpected argument types." (op, v1, v2)
+                     [%sexp_of:Ralgebra.op * primvalue * primvalue]
+                   |> Error.raise
+          end
+        | Varop (op, ps) ->
+          let vs = List.map ps ~f:(eval_pred ctx) in
+          begin match op with
+            | And ->
+              List.for_all vs ~f:(function
+                  | `Bool x -> x
+                  | _ -> failwith "Unexpected argument type.")
+              |> fun x -> `Bool x
+            | Or ->
+              List.exists vs ~f:(function
+                  | `Bool x -> x
+                  | _ -> failwith "Unexpected argument type.")
+              |> fun x -> `Bool x
+            | _ -> Error.create "Unexpected argument types." (op, vs)
+                     [%sexp_of:Ralgebra.op * primvalue list] |> Error.raise
+          end
+
+    let eval_join ctx p r1_name r2_name r1 r2 =
+      Seq.concat_map r1 ~f:(fun t1 ->
+          Seq.filter r2 ~f:(fun t2 ->
+              let ctx =
+                ctx
+                |> Map.merge_right (Ctx.of_tuple t1)
+                |> Map.merge_right (Ctx.of_tuple t2)
+              in
+              match eval_pred ctx p with
+              | `Bool x -> x
+              | _ -> failwith "Expected a boolean."))
+
+    let eval_filter ctx p seq =
+      Seq.filter seq ~f:(fun t ->
+          let ctx = Map.merge_right ctx (Ctx.of_tuple t) in
+          match eval_pred ctx p with
+          | `Bool x -> x
+          | _ -> failwith "Expected a boolean.")
+
+    let eval_dedup seq =
+      let set = Hash_set.create (module Tuple) in
+      Seq.iter seq ~f:(Hash_set.add set);
+      Hash_set.to_list set |> Seq.of_list
+
+    let eval_select ctx out seq =
+      Seq.map seq ~f:(fun t ->
+          let ctx = Map.merge_right ctx (Ctx.of_tuple t) in
+          List.map out ~f:(fun e ->
+              let v = eval_pred ctx e |> Value.of_primvalue in
+              match e with
+              | Name n -> { v with field = Field.of_name n.name }
+              | e -> v))
+
+    let eval : Ctx.t -> (name, string) ralgebra -> Tuple.t Seq.t = fun ctx r ->
+      let rec eval = function
+        | Scan r -> eval_relation r
+        | Filter (p, r) -> eval_filter ctx p (eval r)
+        | Join {pred = p; r1_name; r1; r2_name; r2} ->
+          eval_join ctx p r1_name r2_name (eval r1) (eval r2)
+        | Dedup r -> eval_dedup (eval r)
+        | Select (out, r) -> eval_select ctx out (eval r)
+        | Agg _ -> failwith ""
+      in
+      eval r
+  end
+
+  let create : string -> string list -> int list list -> string * name list = fun name fs xs ->
+    let data =
+      List.map xs ~f:(fun data ->
+          List.map2_exn fs data ~f:(fun fname value ->
+              (fname, `Int value)))
+    in
+    Hashtbl.set rels ~key:name ~data;
+    name, List.map fs ~f:(fun f -> { name = f; relation = Some name; type_ = Some IntT })
+
+  module M = Make(struct
+      let eval ctx query =
+        Eval.eval ctx query
+        |> Seq.map ~f:(fun (t: Tuple.t) ->
+            List.map t ~f:(fun (v: Value.t) -> v.field.name, v.value)
+            |> Map.of_alist_exn (module String))
+    end) ()
+
+  [@@@ warning "-8"]
+  let r1, [f; g] = create "r1" ["f"; "g"] [[1;2]; [1;3]; [2;1]; [2;2]; [3;4]]
+  [@@@ warning "+8"]
+
+  let%expect_test "part-list" =
+    let layout = AList (Scan r1, "x", ATuple ([AScalar (nn "x" "f"); AScalar (nn "x" "g")], Cross))
+    in
+    let part_layout = M.partition ~part:(Name f) ~lookup:(Name f) layout in
+    [%sexp_of:(name, string) layout] part_layout |> print_s;
+    [%expect {|
+      (AHashIdx
+        (Dedup (Select ((Name ((relation (r1)) (name f) (type_ (IntT))))) (Scan r1)))
+        x0
+        (AList
+          (Filter
+            (Binop (
+              Eq
+              (Name ((relation (r1)) (name f) (type_ (IntT))))
+              (Name ((relation (x0)) (name f) (type_ (IntT))))))
+            (Scan r1))
+          x
+          (ATuple
+            ((AScalar (Name ((relation (x)) (name f) (type_ ()))))
+             (AScalar (Name ((relation (x)) (name g) (type_ ())))))
+            Cross))
+        ((lookup (Name ((relation (r1)) (name f) (type_ (IntT))))))) |}];
+    [%sexp_of:Type.t] (M.to_type part_layout) |> print_s;
+    [%expect {|
+      (TableT
+        (IntT (
+          (range (1 3))
+          (nullable false)
+          (field (
+            (name     "")
+            (dtype    DBool)
+            (relation "")))))
+        (UnorderedListT
+          (CrossTupleT
+            ((IntT (
+               (range (1 3))
+               (nullable false)
+               (field (
+                 (name     "")
+                 (dtype    DBool)
+                 (relation "")))))
+             (IntT (
+               (range (1 4))
+               (nullable false)
+               (field (
+                 (name     "")
+                 (dtype    DBool)
+                 (relation ""))))))
+            ((count ((1 1)))))
+          ((count ((1 2)))))
+        ((count ())
+         (field (
+           (name     fixme)
+           (dtype    DBool)
+           (relation "")))
+         (lookup (
+           Field (
+             (name     fixme)
+             (dtype    DBool)
+             (relation "")))))) |}];
+    let mat_layout = M.materialize part_layout in
+    [%sexp_of:Layout.t] mat_layout |> print_s;
+    [%expect {|
+      (Table
+        ((((rel "")
+           (field (
+             (name     "")
+             (dtype    DBool)
+             (relation "")))
+           (value (Int 1)))
+          (UnorderedList (
+            (CrossTuple (
+              (Int 1 (
+                (rel "")
+                (field (
+                  (name     "")
+                  (dtype    DBool)
+                  (relation "")))))
+              (Int 2 (
+                (rel "")
+                (field (
+                  (name     "")
+                  (dtype    DBool)
+                  (relation "")))))))
+            (CrossTuple (
+              (Int 1 (
+                (rel "")
+                (field (
+                  (name     "")
+                  (dtype    DBool)
+                  (relation "")))))
+              (Int 3 (
+                (rel "")
+                (field (
+                  (name     "")
+                  (dtype    DBool)
+                  (relation ""))))))))))
+         (((rel "")
+           (field (
+             (name     "")
+             (dtype    DBool)
+             (relation "")))
+           (value (Int 2)))
+          (UnorderedList (
+            (CrossTuple (
+              (Int 2 (
+                (rel "")
+                (field (
+                  (name     "")
+                  (dtype    DBool)
+                  (relation "")))))
+              (Int 1 (
+                (rel "")
+                (field (
+                  (name     "")
+                  (dtype    DBool)
+                  (relation "")))))))
+            (CrossTuple (
+              (Int 2 (
+                (rel "")
+                (field (
+                  (name     "")
+                  (dtype    DBool)
+                  (relation "")))))
+              (Int 2 (
+                (rel "")
+                (field (
+                  (name     "")
+                  (dtype    DBool)
+                  (relation ""))))))))))
+         (((rel "")
+           (field (
+             (name     "")
+             (dtype    DBool)
+             (relation "")))
+           (value (Int 3)))
+          (UnorderedList ((
+            CrossTuple (
+              (Int 3 (
+                (rel "")
+                (field (
+                  (name     "")
+                  (dtype    DBool)
+                  (relation "")))))
+              (Int 4 (
+                (rel "")
+                (field (
+                  (name     "")
+                  (dtype    DBool)
+                  (relation "")))))))))))
+        ((field (
+           (name     fixme)
+           (dtype    DBool)
+           (relation "")))
+         (lookup (
+           Field (
+             (name     fixme)
+             (dtype    DBool)
+             (relation "")))))) |}]
 end
