@@ -64,7 +64,8 @@
 %token AORDEREDIDX
 
 %start <(string * string, string, Layout.t) Ralgebra0.t> ralgebra_eof
-%start <(string * string, (string * string, string) Abslayout0.layout) Abslayout0.ralgebra> abs_ralgebra_eof
+%start <(Abslayout0.name, (Abslayout0.name, string) Abslayout0.layout) Abslayout0.ralgebra> abs_ralgebra_eof
+%start <Abslayout0.name> name_eof
 
 %left OR
 %left AND
@@ -79,6 +80,8 @@ ralgebra_eof:
 abs_ralgebra_eof:
 | x = abs_ralgebra(layout); EOF { x }
 
+name_eof:
+| x = name; EOF { x }
 
 bracket_list(X):
 | error { error "Expected a '['." $startpos }
@@ -102,10 +105,10 @@ ralgebra:
 | error { error "Expected an operator or relation." $startpos }
 
 abs_ralgebra(X):
-| SELECT; LPAREN; exprs = bracket_list(pred); COMMA; r = abs_ralgebra(X); RPAREN { A.Select (exprs, r) }
-| AGG; LPAREN; a = bracket_list(agg_expr); COMMA; k = bracket_list(field); COMMA; r = abs_ralgebra(X); RPAREN { A.Agg (a, k, r) }
-| FILTER; LPAREN; pred = pred; COMMA; r = abs_ralgebra(X); RPAREN { A.Filter (pred, r) }
-| JOIN; LPAREN; p = pred; COMMA; r1 = abs_ralgebra(X); AS; n1 = ID; COMMA; r2 = abs_ralgebra(X); AS; n2 = ID; RPAREN { A.Join({pred = p; r1_name = n1; r1; r2_name = n2; r2}) }
+| SELECT; LPAREN; exprs = bracket_list(abs_pred); COMMA; r = abs_ralgebra(X); RPAREN { A.Select (exprs, r) }
+| AGG; LPAREN; a = bracket_list(abs_agg_expr); COMMA; k = bracket_list(name); COMMA; r = abs_ralgebra(X); RPAREN { A.Agg (a, k, r) }
+| FILTER; LPAREN; pred = abs_pred; COMMA; r = abs_ralgebra(X); RPAREN { A.Filter (pred, r) }
+| JOIN; LPAREN; p = abs_pred; COMMA; r1 = abs_ralgebra(X); AS; n1 = ID; COMMA; r2 = abs_ralgebra(X); AS; n2 = ID; RPAREN { A.Join({pred = p; r1_name = n1; r1; r2_name = n2; r2}) }
 | DEDUP; LPAREN; r = abs_ralgebra(X); RPAREN { A.Dedup r }
 | r = X { A.Scan r }
 | error { error "Expected an operator or relation." $startpos }
@@ -115,6 +118,12 @@ field:
 | q = ID; DOT; r = ID; DOT; f = ID; { (r, sprintf "%s.%s" q f) }
 | error { error "Expected a field." $startpos }
 
+name:
+| r = ID; DOT; f = ID; { A.({ relation = Some r; name = f; type_ = None }) }
+| r = ID; DOT; f = ID; COLON; t = primtype { A.({ relation = Some r; name = f; type_ = Some t }) }
+| f = ID; { A.({ relation = None; name = f; type_ = None }) }
+| f = ID; COLON; t = primtype { A.({ relation = None; name = f; type_ = Some t }) }
+
 primtype:
 | INT_TYPE { IntT }
 | BOOL_TYPE { BoolT }
@@ -122,7 +131,7 @@ primtype:
 | error { error "Expected a type." $startpos }
 
 pred:
-| x = ID; COLON; t = primtype { Var (x, t) }
+| x = ID; COLON; t = primtype { R.Var (x, t) }
 | ID; COLON; error { error "Expected a type." $startpos }
 | f = field; { R.Field f }
 | x = INT { R.Int x }
@@ -142,6 +151,24 @@ pred:
 | p1 = pred; OR; p2 = pred { R.Varop (R.Or, [p1; p2]) }
 | pred; error { error "Expected an operator." $startpos }
 
+abs_pred:
+| n = name { A.Name n }
+| x = INT { A.Int x }
+| x = BOOL { A.Bool x }
+| x = STR { A.String x }
+| p1 = abs_pred; EQ; p2 = abs_pred { A.Binop (R.Eq, p1, p2) }
+| p1 = abs_pred; LT; p2 = abs_pred { A.Binop (R.Lt, p1, p2) }
+| p1 = abs_pred; LE; p2 = abs_pred { A.Binop (R.Le, p1, p2) }
+| p1 = abs_pred; GT; p2 = abs_pred { A.Binop (R.Gt, p1, p2) }
+| p1 = abs_pred; GE; p2 = abs_pred { A.Binop (R.Ge, p1, p2) }
+| p1 = abs_pred; ADD; p2 = abs_pred { A.Binop (R.Add, p1, p2) }
+| p1 = abs_pred; SUB; p2 = abs_pred { A.Binop (R.Sub, p1, p2) }
+| p1 = abs_pred; MUL; p2 = abs_pred { A.Binop (R.Mul, p1, p2) }
+| p1 = abs_pred; DIV; p2 = abs_pred { A.Binop (R.Div, p1, p2) }
+| p1 = abs_pred; MOD; p2 = abs_pred { A.Binop (R.Mod, p1, p2) }
+| p1 = abs_pred; AND; p2 = abs_pred { A.Varop (R.And, [p1; p2]) }
+| p1 = abs_pred; OR; p2 = abs_pred { A.Varop (R.Or, [p1; p2]) }
+
 agg_expr:
 | COUNT { R.Count }
 | MIN; f = parens(field) { R.Min f }
@@ -149,6 +176,14 @@ agg_expr:
 | AVG; f = parens(field) { R.Avg f }
 | SUM; f = parens(field) { R.Sum f }
 | f = field { R.Key f }
+
+abs_agg_expr:
+| COUNT { A.Count }
+| MIN; f = parens(name) { A.Min f }
+| MAX; f = parens(name) { A.Max f }
+| AVG; f = parens(name) { A.Avg f }
+| SUM; f = parens(name) { A.Sum f }
+| f = name { A.Key f }
 
 lambda(X):
 | n = ID; RARROW; x = X { (n, x) }
@@ -159,8 +194,8 @@ kind:
 
 layout:
 | AEMPTY { AEmpty }
-| ASCALAR; e = parens(pred) { A.AScalar e }
+| ASCALAR; e = parens(abs_pred) { A.AScalar e }
 | ALIST; LPAREN; r = abs_ralgebra(ID); COMMA; lam = lambda(layout); RPAREN { A.AList (r, fst lam, snd lam) }
 | ATUPLE; LPAREN; ls = bracket_list(layout); COMMA; k = kind; RPAREN { A.ATuple (ls, k) }
-| AHASHIDX; LPAREN; r = abs_ralgebra(ID); COMMA; lam = lambda(layout); COMMA; e = pred RPAREN { A.(AHashIdx (r, fst lam, snd lam, { lookup = e })) }
-| AORDEREDIDX; LPAREN; r = abs_ralgebra(ID); COMMA; lam = lambda(layout); COMMA; e1 = pred; COMMA; e2 = pred; COMMA; e3 = pred; COMMA { A.(AOrderedIdx (r, fst lam, snd lam, { lookup_low = e1; lookup_high = e2; order = e3 })) }
+| AHASHIDX; LPAREN; r = abs_ralgebra(ID); COMMA; lam = lambda(layout); COMMA; e = abs_pred RPAREN { A.(AHashIdx (r, fst lam, snd lam, { lookup = e })) }
+| AORDEREDIDX; LPAREN; r = abs_ralgebra(ID); COMMA; lam = lambda(layout); COMMA; e1 = abs_pred; COMMA; e2 = abs_pred; COMMA; e3 = abs_pred; COMMA { A.(AOrderedIdx (r, fst lam, snd lam, { lookup_low = e1; lookup_high = e2; order = e3 })) }

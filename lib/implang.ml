@@ -996,7 +996,43 @@ module IRGen = struct
       in
       gen_pred
 
-    let filter gen field_idx pred r =
+    let abs_gen_pred tup field_idx =
+      let module A = Abslayout in
+      let module R = Ralgebra0 in
+      let rec gen_pred = function
+        | A.Int x -> Int x
+        | A.String x -> String x
+        | A.Bool x -> Bool x
+        | A.Name n -> (try Index (tup, field_idx n) with _ -> Var n.A.name)
+        | A.Binop (op, arg1, arg2) ->
+          let e1 = gen_pred arg1 in
+          let e2 = gen_pred arg2 in
+          begin match op with
+            | R.Eq -> Infix.(e1 = e2)
+            | R.Lt -> Infix.(e1 < e2)
+            | R.Le -> Infix.(e1 <= e2)
+            | R.Gt -> Infix.(e1 > e2)
+            | R.Ge -> Infix.(e1 >= e2)
+            | R.And -> Infix.(e1 && e2)
+            | R.Or -> Infix.(e1 || e2)
+            | R.Add -> Infix.(e1 + e2)
+            | R.Sub -> Infix.(e1 - e2)
+            | R.Mul -> Infix.(e1 * e2)
+            | R.Div -> Infix.(e1 / e2)
+            | R.Mod -> Infix.(e1 % e2)
+          end
+        | A.Varop (op, args) ->
+          let eargs = List.map ~f:gen_pred args in
+          begin match op with
+            | R.And -> List.fold_left1_exn ~f:Infix.(&&) eargs
+            | R.Or -> List.fold_left1_exn ~f:Infix.(||) eargs
+            | R.Eq | R.Lt | R.Le | R.Gt | R.Ge | R.Add|R.Sub|R.Mul|R.Div|R.Mod ->
+              fail (Error.create "Not a vararg operator." op [%sexp_of:R.op])
+          end
+      in
+      gen_pred
+
+    let filter gen gen_pred field_idx pred r =
       let func = gen r in
       let ret_t = (find_func func).ret_type in
       let b = create [] ret_t in
@@ -1076,7 +1112,7 @@ module IRGen = struct
           Fresh.name fresh "project%d", project gen_ralgebra x r
         | Filter (x, r) ->
           let schema = Ralgebra.to_schema r |> Or_error.ok_exn |> Db.Schema.field_idx_exn in
-          Fresh.name fresh "filter%d", filter gen_ralgebra schema x r
+          Fresh.name fresh "filter%d", filter gen_ralgebra gen_pred schema x r
         | EqJoin (f1, f2, r1, r2) ->
           let s1 = Ralgebra.to_schema r1 |> Or_error.ok_exn |> Db.Schema.field_idx_exn in
           let s2 = Ralgebra.to_schema r2 |> Or_error.ok_exn |> Db.Schema.field_idx_exn in
@@ -1089,8 +1125,8 @@ module IRGen = struct
       add_func name func; name
 
     let rec gen_abslayout : Abslayout.t -> string = fun r ->
-      let field_idx_exn s (f: Db.Field.t) =
-        Option.value_exn (List.findi s ~f:(fun i (n, _) -> String.(n = f.name)))
+      let field_idx_exn s f =
+        Option.value_exn (List.findi s ~f:(fun i (n, _) -> String.(n = f.Abslayout.name)))
         |> fun (i, _) -> i
       in
       let name, func = match r with
@@ -1104,8 +1140,8 @@ module IRGen = struct
          *   Fresh.name fresh "select%d", select gen_abslayout x r *)
         | Filter (x, r) ->
           let schema = Abslayout.to_schema_exn r |> field_idx_exn in
-          Fresh.name fresh "filter%d", filter gen_abslayout schema x r
-        | Join {pred = Binop (Eq, Field f1, Field f2); r1; r2} ->
+          Fresh.name fresh "filter%d", filter gen_abslayout abs_gen_pred schema x r
+        | Join {pred = Binop (Eq, Name f1, Name f2); r1; r2} ->
           let s1 = Abslayout.to_schema_exn r1 |> field_idx_exn in
           let s2 = Abslayout.to_schema_exn r2 |> field_idx_exn in
           Fresh.name fresh "eqjoin%d", eq_join gen_abslayout s1 s2 f1 f2 r1 r2

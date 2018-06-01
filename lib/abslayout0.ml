@@ -1,11 +1,14 @@
 open Base
 module Pervasives = Caml.Pervasives
 
-type 'n quant = (string option * 'n)
+type name = {
+  relation : string option;
+  name : string;
+  type_ : (Type.PrimType.t [@opaque]) option;
+}
 
-type 'f pred = 'f Ralgebra0.pred =
-  | Var of (Type0.TypedName.t [@opaque])
-  | Field of 'f
+and 'f pred =
+  | Name of 'f
   | Int of int
   | Bool of bool
   | String of string
@@ -64,4 +67,4 @@ and ('f, 'r) layout =
             visitors { variety = "reduce" },
             sexp]
 
-type t = (Db.Field.t, (Db.Field.t, Db.Relation.t) layout) ralgebra [@@deriving sexp]
+type t = (name, (name, string) layout) ralgebra [@@deriving sexp]
