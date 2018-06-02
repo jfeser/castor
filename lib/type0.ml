@@ -22,7 +22,8 @@ module PrimType = struct
     | Db.DInt -> IntT
     | Db.DString -> StringT
     | Db.DBool -> BoolT
-    | _ -> failwith ""
+    | Db.DRational -> StringT
+    | t -> Error.create "Unexpected dtype." t [%sexp_of:Db.dtype] |> Error.raise
 end
 
 module TypedName = struct

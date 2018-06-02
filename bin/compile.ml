@@ -18,8 +18,14 @@ let main = fun ~debug ~gprof ~params ~abs_layout ~db ~port fn ->
     if abs_layout then begin
       Logs.debug (fun m -> m "Loading ralgebra from %s." fn);
       let ralgebra =
+        let params_ctx =
+          List.map params ~f:(fun (name, v) ->
+              let t = Type.PrimType.of_primvalue v in
+              Abslayout.({ relation = None; name; type_ = Some t }))
+          |> Set.of_list (module Abslayout.Name)
+        in
         In_channel.with_file fn ~f:Abslayout.of_channel_exn
-        |> Abslayout.resolve CConfig.conn
+        |> Abslayout.resolve CConfig.conn ~ctx:params_ctx
       in
 
       Logs.debug (fun m -> m "Generating IR.");
@@ -74,14 +80,14 @@ let main = fun ~debug ~gprof ~params ~abs_layout ~db ~port fn ->
     List.filter params ~f:(fun (n, _) ->
         List.exists ir_module.params ~f:(fun (n', _) -> String.(n = n')))
     |> List.map ~f:(fun (n, v) ->
-      let val_str = match v with
-        | `Int x -> sprintf "%d" x
-        | `Bool true -> "true"
-        | `Bool false -> "false"
-        | `String x -> sprintf "\"%s\"" x
-        | _ -> Error.of_string "Unexpected param type." |> Error.raise
-      in
-      sprintf "set_%s(params, %s);" n val_str) |> String.concat ~sep:"\n"
+        let val_str = match v with
+          | `Int x -> sprintf "%d" x
+          | `Bool true -> "true"
+          | `Bool false -> "false"
+          | `String x -> sprintf "\"%s\"" x
+          | _ -> Error.of_string "Unexpected param type." |> Error.raise
+        in
+        sprintf "set_%s(params, %s);" n val_str) |> String.concat ~sep:"\n"
   in
 
   let perf_template = Config.project_root ^ "/bin/templates/perf.c" in

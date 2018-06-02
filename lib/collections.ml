@@ -61,6 +61,13 @@ module List = struct
   let repeat : 'a -> int -> 'a list = fun x n ->
     let rec repeat xs n = if n = 0 then xs else repeat (x::xs) (n - 1) in
     repeat [] n
+
+  let rec unzip3 : ('a * 'b * 'c) list -> 'a list * 'b list * 'c list =
+    function
+    | (x, y, z)::l ->
+      let xs, ys, zs = unzip3 l in
+      (x::xs, y::ys, z::zs)
+    | [] -> ([], [], [])
 end
 
 module Map = struct

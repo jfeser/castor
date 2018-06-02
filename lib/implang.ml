@@ -1043,6 +1043,15 @@ module IRGen = struct
         ) b;
       build_func b
 
+    let select gen gen_pred field_idx exprs r =
+      let func = gen r in
+      let ret_t = (find_func func).ret_type in
+      let b = create [] ret_t in
+      build_foreach_no_start func (fun tup b ->
+          build_yield (Tuple (List.map exprs ~f:(gen_pred tup field_idx))) b;
+        ) b;
+      build_func b
+
     let concat gen rs =
       let funcs = List.map rs ~f:gen in
       let ret_t =
@@ -1102,6 +1111,33 @@ module IRGen = struct
         ) b;
       build_func b
 
+    let nl_join gen gen_pred field_idx pred r1 r2 =
+      let func1 = gen r1 in
+      let func2 = gen r2 in
+
+      let ret_t1 = (find_func func1).ret_type in
+      let ret_t2 = (find_func func2).ret_type in
+      let ret_t, w1, w2 = match ret_t1, ret_t2 with
+        | TupleT t1, TupleT t2 ->
+          TupleT (t1 @ t2), List.length t1, List.length t2
+        | _ -> fail (Error.create "Expected a TupleT." (ret_t1, ret_t2)
+                       [%sexp_of:type_ * type_])
+      in
+
+      let b = create [] ret_t in
+      build_foreach_no_start func1 (fun t1 b ->
+          build_foreach_no_start func2 (fun t2 b ->
+              let tup =
+                Tuple (List.init w1 ~f:(fun i -> Index (t1, i)) @
+                       List.init w2 ~f:(fun i -> Index (t2, i)))
+              in
+              build_if ~cond:Infix.(gen_pred tup field_idx pred)
+                ~then_:(fun b -> build_yield tup b)
+                ~else_:(fun b -> ()) b;
+            ) b;
+        ) b;
+      build_func b
+
     let rec gen_ralgebra : Ralgebra.t -> string = fun r ->
       let name, func = match r with
         | Scan l ->
@@ -1136,15 +1172,19 @@ module IRGen = struct
           Logs.debug (fun m -> m "Generating scanner for type: %s"
                          (Sexp.to_string_hum ([%sexp_of:Type.t] type_)));
           Fresh.name fresh "scan%d", scan type_ buf
-        (* | Select (x, r) ->
-         *   Fresh.name fresh "select%d", select gen_abslayout x r *)
+        | Select (x, r) ->
+          let schema = Abslayout.to_schema_exn r |> field_idx_exn in
+          Fresh.name fresh "select%d", select gen_abslayout abs_gen_pred schema x r
         | Filter (x, r) ->
           let schema = Abslayout.to_schema_exn r |> field_idx_exn in
           Fresh.name fresh "filter%d", filter gen_abslayout abs_gen_pred schema x r
-        | Join {pred = Binop (Eq, Name f1, Name f2); r1; r2} ->
-          let s1 = Abslayout.to_schema_exn r1 |> field_idx_exn in
-          let s2 = Abslayout.to_schema_exn r2 |> field_idx_exn in
-          Fresh.name fresh "eqjoin%d", eq_join gen_abslayout s1 s2 f1 f2 r1 r2
+        | Join {pred; r1; r2} ->
+          let schema =
+            (Abslayout.to_schema_exn r1)@(Abslayout.to_schema_exn r2)
+            |> field_idx_exn
+          in
+          Fresh.name fresh "join%d",
+          nl_join gen_abslayout abs_gen_pred schema pred r1 r2
         | r -> Error.create "Unsupported at runtime." r [%sexp_of:Abslayout.t]
                |> Error.raise
       in

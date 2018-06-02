@@ -117,41 +117,171 @@ module No_config = struct
 
   let resolve :
     Postgresql.connection
-    -> (string * string, (string * string, string) Abslayout0.layout) ralgebra
-    -> (Field.t, (Field.t, Relation.t) Abslayout0.layout) ralgebra =
-    fun conn r ->
-      let resolve_relation ctx r = match Hashtbl.find ctx r with
-        | Some r' -> r'
-        | None -> Error.create "Relation not found." r [%sexp_of:string] |> Error.raise
+    -> ctx:Set.M(Name).t
+    -> (name, (name, string) Abslayout0.layout) ralgebra
+    -> (name, (name, string) Abslayout0.layout) ralgebra =
+    fun conn ~ctx r ->
+      let param_ctx = ctx in
+
+      let resolve_relation r_name =
+        let r = Relation.from_db conn r_name in
+        let ctx =
+          List.map r.fields ~f:(fun f -> {
+                relation = Some r.name;
+                name = f.name;
+                type_ = Some (Type.PrimType.of_dtype f.Db.dtype)
+              })
+          |> Set.of_list (module Name)
+          |> Set.union param_ctx
+        in
+        Logs.debug (fun m -> m "Relation %s: %s" r_name ([%sexp_of:Set.M(Name).t] ctx |> Sexp.to_string_hum));
+        Logs.debug (fun m -> m "%s" ([%sexp_of:Field.t list] r.fields |> Sexp.to_string_hum));
+        r_name, ctx
       in
-      let resolve_field _ = Field.of_name in
-      let inner_resolver = object
-        inherit [_] ralgebra_map as super
-        method visit_'l = resolve_relation
-        method visit_'f ctx (r, f) =
-          resolve_field (resolve_relation ctx r) f
-      end in
-      let layout_resolver = object
-        inherit [_] map as super
-        method visit_'f ctx (r, f) =
-          resolve_field (resolve_relation ctx r) f
-        method visit_'r = resolve_relation
-        method visit_ralgebra _ _ = inner_resolver#visit_ralgebra
-        method visit_pred _ = inner_resolver#visit_pred
-      end in
-      let resolver = object
-        inherit [_] ralgebra_map as super
-        method visit_'l = layout_resolver#visit_layout
-        method visit_'f ctx (r, f) =
-          resolve_field (resolve_relation ctx r) f
-      end in
-      let ctx =
-        relations r
-        |> List.map ~f:(fun r -> (r, Relation.from_db conn r))
-        |> Hashtbl.of_alist_multi (module String)
-        |> Hashtbl.map ~f:(function | x::_ -> x | _ -> assert false)
+
+      let rename name = Set.map (module Name) ~f:(fun n ->
+          { n with relation = Option.map n.relation ~f:(fun _ -> name) })
       in
-      resolver#visit_ralgebra ctx r
+
+      let ralgebra_resolver = object
+          inherit [_] ralgebra_map as super
+          method visit_'f ctx n =
+            match Set.find ctx ~f:(fun n' -> Name.(n = n')) with
+            | Some n -> n
+            | None -> Error.create "Could not resolve." (n, ctx)
+                        [%sexp_of:name * Set.M(Name).t] |> Error.raise
+          method visit_'l _ _ = failwith ""
+        end in
+      let resolve_agg ctx = ralgebra_resolver#visit_agg ctx in
+      let resolve_pred ctx = ralgebra_resolver#visit_pred ctx in
+
+      let rec resolve_ralgebra_inner ctx = function
+        | Select (preds, r) ->
+          let r, ctx = resolve_ralgebra_inner ctx r in
+          let preds = List.map preds ~f:(resolve_pred ctx) in
+          let ctx =
+            List.filter_map preds ~f:(function Name n -> Some n | _ -> None)
+            |> Set.of_list (module Name)
+          in
+          Select (preds, r), ctx
+        | Filter (pred, r) ->
+          let r, ctx = resolve_ralgebra_inner ctx r in
+          let pred = resolve_pred ctx pred in
+          Filter (pred, r), ctx
+        | Join ({ pred; r1_name; r1; r2_name; r2 } as join) ->
+          let r1, ctx1 = resolve_ralgebra_inner ctx r1 in
+          let r2, ctx2 = resolve_ralgebra_inner ctx1 r2 in
+          let ctx = Set.union (rename r1_name ctx1) (rename r2_name ctx2) in
+          let pred = resolve_pred ctx pred in
+          Join { join with pred; r1; r2 }, ctx
+        | Scan l ->
+          let l, ctx = resolve_relation l in
+          Scan l, ctx
+        | Agg (aggs, key, r) ->
+          let r, ctx = resolve_ralgebra_inner ctx r in
+          let aggs = List.map ~f:(resolve_agg ctx) aggs in
+          let key = List.map key ~f:(fun n ->
+              Option.value_exn (Set.find ctx ~f:(fun n' -> Name.(n = n'))))
+          in
+          Agg (aggs, key, r), param_ctx
+        | Dedup r ->
+          let r, ctx = resolve_ralgebra_inner ctx r in
+          Dedup r, ctx
+      in
+
+      let rec resolve_layout runtime_ctx compile_ctx =
+        let resolve_r ctx = resolve_ralgebra_inner ctx in
+        function
+        | AEmpty -> AEmpty, Set.empty (module Name)
+        | AScalar p ->
+          let p = resolve_pred compile_ctx p in
+          let ctx = match p with
+            | Name n -> Set.singleton (module Name) n
+            | _ -> Set.empty (module Name)
+          in
+          AScalar p, ctx
+        | AList (r, n, l) ->
+          let r, compile_ctx = resolve_r compile_ctx r in
+          let compile_ctx = rename n compile_ctx in
+          let l, ctx = resolve_layout runtime_ctx compile_ctx l in
+          AList (r, n, l), ctx
+        | ATuple (ls, t) ->
+          let (ls, ctxs) =
+            List.map ls ~f:(resolve_layout runtime_ctx compile_ctx)
+            |> List.unzip
+          in
+          let ctx = Set.union_list (module Name) ctxs in
+          ATuple (ls, t), ctx
+        | AHashIdx (r, n, l, m) ->
+          let r, compile_ctx = resolve_r compile_ctx r in
+          let compile_ctx = rename n compile_ctx in
+          let l, ctx = resolve_layout runtime_ctx compile_ctx l in
+          let m = (object
+            inherit [_] map as super
+            method visit_'f _ _ = failwith ""
+            method visit_'r _ _ = failwith ""
+            method visit_ralgebra _ _ = failwith ""
+            method visit_pred _ = resolve_pred
+          end)#visit_hash_idx runtime_ctx m
+          in
+          AHashIdx (r, n, l, m), ctx
+        | AOrderedIdx (r, n, l, m) ->
+          let r, compile_ctx = resolve_r compile_ctx r in
+          let compile_ctx = rename n compile_ctx in
+          let l, ctx = resolve_layout runtime_ctx compile_ctx l in
+          let m = (object
+            inherit [_] map as super
+            method visit_'f _ _ = failwith ""
+            method visit_'r _ _ = failwith ""
+            method visit_ralgebra _ _ = failwith ""
+            method visit_pred _ = resolve_pred
+          end)#visit_ordered_idx runtime_ctx m
+          in
+          AOrderedIdx (r, n, l, m), ctx
+      in
+
+      let rec resolve_ralgebra ctx = function
+        | Select (preds, r) ->
+          let r, ctx = resolve_ralgebra ctx r in
+          let ctx = Set.union param_ctx ctx in
+          let preds = List.map preds ~f:(resolve_pred ctx) in
+          let ctx =
+            List.filter_map preds ~f:(function Name n -> Some n | _ -> None)
+            |> Set.of_list (module Name)
+          in
+          Select (preds, r), ctx
+        | Filter (pred, r) ->
+          let r, ctx = resolve_ralgebra ctx r in
+          let ctx = Set.union param_ctx ctx in
+          let pred = resolve_pred ctx pred in
+          Filter (pred, r), ctx
+        | Join ({ pred; r1_name; r1; r2_name; r2 } as join) ->
+          let r1, ctx1 = resolve_ralgebra ctx r1 in
+          let ctx1 = Set.union param_ctx ctx1 in
+          let r2, ctx2 = resolve_ralgebra ctx1 r2 in
+          let ctx2 = Set.union param_ctx ctx2 in
+          let ctx = Set.union (rename r1_name ctx1) (rename r2_name ctx2) in
+          let pred = resolve_pred ctx pred in
+          Join { join with pred; r1; r2 }, ctx
+        | Scan l ->
+          let l, ctx = resolve_layout ctx (Set.empty (module Name)) l in
+          let ctx = Set.union param_ctx ctx in
+          Scan l, ctx
+        | Agg (aggs, key, r) ->
+          let r, ctx = resolve_ralgebra ctx r in
+          let ctx = Set.union param_ctx ctx in
+          let aggs = List.map ~f:(resolve_agg ctx) aggs in
+          let key = List.map key ~f:(fun n ->
+              Option.value_exn (Set.find ctx ~f:(fun n' -> Name.(n = n'))))
+          in
+          Agg (aggs, key, r), param_ctx
+        | Dedup r ->
+          let r, ctx = resolve_ralgebra ctx r in
+          let ctx = Set.union param_ctx ctx in
+          Dedup r, ctx
+      in
+      let (r, _) = resolve_ralgebra param_ctx r in
+      r
 
   let pred_of_value : Db.primvalue -> 'a pred = function
     | `Bool x -> Bool x

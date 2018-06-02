@@ -90,7 +90,6 @@ type dtype =
 type field_t = {
   name : string;
   dtype : dtype;
-  relation : relation_t; 
 }
 and relation_t = {
   name : string;
@@ -127,11 +126,10 @@ module Relation = struct
               | "boolean" -> DBool
               | s -> failwith (Printf.sprintf "Unknown dtype %s" s)
             in
-            { name = field_name; dtype; relation = rel })
+            { name = field_name; dtype })
       in
       (* TODO: Remove this. *)
-      Obj.set_field (Obj.repr rel) 1 (Obj.repr fields);
-      rel
+      { rel with fields }
 
   let sample : ?seed:int -> Postgresql.connection -> int -> t -> unit =
     fun ?(seed = 0) conn size r ->
@@ -157,13 +155,12 @@ module Field = struct
     type t = field_t = {
       name : string;
       dtype : dtype; [@compare.ignore]
-      relation : Relation.t; [@compare.ignore]
     } [@@deriving compare, hash, sexp, bin_io]
   end
   include T
   include Comparable.Make(T)
 
-  let dummy = { name = ""; dtype = DBool; relation = Relation.dummy }
+  let dummy = { name = ""; dtype = DBool; }
 
   let to_string : t -> string = fun f -> f.name
 
