@@ -297,6 +297,7 @@ let rec infer_type : type_ Hashtbl.M(String).t -> expr -> type_ =
 module Config = struct
   module type S = sig
     include Abslayout.Config.S_db
+    val code_only : bool
   end
 end
 
@@ -1142,7 +1143,9 @@ module IRGen = struct
       let name, func = match r with
         | Scan l ->
           let type_ = Type.of_layout_exn l in
-          let buf = Serialize.serialize type_ l in
+          let buf =
+            if code_only then Bitstring.empty else Serialize.serialize type_ l
+          in
           Fresh.name fresh "scan%d", scan type_ buf
         | Project (x, r) ->
           Fresh.name fresh "project%d", project gen_ralgebra x r
@@ -1168,7 +1171,9 @@ module IRGen = struct
       let name, func = match r with
         | Scan l ->
           let type_ = Abslayout.to_type l in
-          let buf = Abslayout.serialize type_ l in
+          let buf =
+            if code_only then Bitstring.empty else Abslayout.serialize type_ l
+          in
           Logs.debug (fun m -> m "Generating scanner for type: %s"
                          (Sexp.to_string_hum ([%sexp_of:Type.t] type_)));
           Fresh.name fresh "scan%d", scan type_ buf

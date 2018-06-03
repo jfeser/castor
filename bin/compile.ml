@@ -3,13 +3,14 @@ open Postgresql
 open Dblayout
 open Collections
 
-let main = fun ~debug ~gprof ~params ~abs_layout ~db ~port fn ->
+let main = fun ~debug ~gprof ~params ~abs_layout ~db ~port ~code_only fn ->
   let module CConfig = struct
     let conn = new connection ~dbname:db ?port ()
     let debug = debug
     let ctx = Llvm.create_context ()
     let module_ = Llvm.create_module ctx "scanner"
     let builder = Llvm.builder ctx
+    let code_only = code_only
   end in
   let module Codegen = Codegen.Make(CConfig) () in
   let module IRGen = Implang.IRGen.Make(CConfig) () in
@@ -68,12 +69,14 @@ let main = fun ~debug ~gprof ~params ~abs_layout ~db ~port fn ->
   Out_channel.with_file "scanner.h" ~f:Codegen.write_header;
 
   (* Serialize. *)
-  Out_channel.with_file "db.buf" ~f:(fun ch ->
-      let w = Bitstring.Writer.with_channel ch in
-      Bitstring.Writer.write w ir_module.buffer);
-  Out_channel.with_file "db.txt" ~f:(fun ch ->
-      let fmt = Format.formatter_of_out_channel ch in
-      Bitstring.pp fmt ir_module.buffer);
+  if code_only then () else begin
+    Out_channel.with_file "db.buf" ~f:(fun ch ->
+        let w = Bitstring.Writer.with_channel ch in
+        Bitstring.Writer.write w ir_module.buffer);
+    Out_channel.with_file "db.txt" ~f:(fun ch ->
+        let fmt = Format.formatter_of_out_channel ch in
+        Bitstring.pp fmt ir_module.buffer)
+  end;
 
   (* Compile and link *)
   let params_str =
@@ -143,11 +146,12 @@ let () =
     and gprof = flag "prof" ~aliases:["pg"] no_arg ~doc:"enable profiling"
     and abs_layout = flag "abs" ~aliases:["a"] no_arg ~doc:"parse an abstract query"
     and params = flag "param" ~aliases:["p"] (listed param) ~doc:"query parameters (passed as key:value)"
+    and code_only = flag "code-only" no_arg ~doc:"only emit code"
     and query = anon ("query" %: file)
     in fun () ->
       if verbose then Logs.set_level (Some Logs.Debug)
       else if quiet then Logs.set_level (Some Logs.Error)
       else Logs.set_level (Some Logs.Info);
 
-      main ~debug ~gprof ~params ~abs_layout ~db ~port query
+      main ~debug ~gprof ~params ~abs_layout ~db ~port ~code_only query
   ] |> run
