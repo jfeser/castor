@@ -422,6 +422,17 @@ module Make (Config: Config.S) () = struct
     debug_printf "Hash val: %d\n" [hash_val];
     build_intcast hash_val (i64_type ctx) "hash_val_cast" builder
 
+  let codegen_load_str : _ -> llvalue -> llvalue -> llvalue =
+    fun fctx ptr len ->
+      let struct_t =
+        struct_type ctx [|pointer_type (i8_type ctx); i64_type ctx|]
+      in
+      let struct_ = build_entry_alloca struct_t "" builder in
+      let ptr = build_inttoptr ptr (pointer_type (i8_type ctx)) "" builder in
+      build_store ptr (build_struct_gep struct_ 0 "" builder) builder |> ignore;
+      build_store len (build_struct_gep struct_ 1 "" builder) builder |> ignore;
+      build_load struct_ "" builder
+
   let codegen_binop : (_ -> expr -> llvalue) -> _ -> op -> expr -> expr -> llvalue =
     fun codegen_expr fctx op arg1 arg2 ->
       let v1 = codegen_expr fctx arg1 in
@@ -453,6 +464,7 @@ module Make (Config: Config.S) () = struct
         | And -> build_and x1 x2 "andtmp" builder
         | Or -> build_or x1 x2 "ortmp" builder
         | Hash -> codegen_hash fctx x1 x2
+        | LoadStr -> codegen_load_str fctx x1 x2
         | Not -> fail (Error.of_string "Not a binary operator.")
       in
 
@@ -473,7 +485,7 @@ module Make (Config: Config.S) () = struct
       let x = if is_nullable t then build_extractvalue v 0 "" builder else v in
       let x_out = match op with
         | Not -> build_not x "nottmp" builder
-        | Add | Sub| Lt | And | Or | Eq | Hash | Mul | Div | Mod ->
+        | Add | Sub| Lt | And | Or | Eq | Hash | Mul | Div | Mod | LoadStr ->
           fail (Error.of_string "Not a unary operator.")
       in
       let ret_t = infer_type tctx (Unop { op; arg }) in

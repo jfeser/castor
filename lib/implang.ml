@@ -14,7 +14,7 @@ type type_ =
   | VoidT
 [@@deriving compare, sexp]
 
-type op = Add | Sub | Mul | Div | Mod | Lt | Eq | And | Or | Not | Hash
+type op = Add | Sub | Mul | Div | Mod | Lt | Eq | And | Or | Not | Hash | LoadStr
 [@@deriving compare, sexp]
 type value =
   | VCont of { state : state; body : prog }
@@ -116,6 +116,7 @@ and pp_expr : Format.formatter -> expr -> unit =
     | Eq -> "="
     | Or -> "||"
     | Hash -> "hash"
+    | LoadStr -> "load_str"
   in
   fun fmt -> function
     | Int x -> pp_int fmt x
@@ -127,6 +128,8 @@ and pp_expr : Format.formatter -> expr -> unit =
     | Index (tuple, idx) -> fprintf fmt "%a[%d]" pp_expr tuple idx
     | Binop { op = Hash; arg1; arg2 } ->
       fprintf fmt "hash(%a, %a)" pp_expr arg1 pp_expr arg2
+    | Binop { op = LoadStr; arg1; arg2 } ->
+      fprintf fmt "load_str(%a, %a)" pp_expr arg1 pp_expr arg2
     | Binop { op; arg1; arg2 } ->
       fprintf fmt "%a %s@ %a" pp_expr arg1 (op_to_string op) pp_expr arg2
     | Unop { op; arg } -> fprintf fmt "%s@ %a" (op_to_string op) pp_expr arg
@@ -278,6 +281,8 @@ let rec infer_type : type_ Hashtbl.M(String).t -> expr -> type_ =
         | Eq, BoolT { nullable = n1 }, BoolT { nullable = n2 }
         | Eq, StringT { nullable = n1 }, StringT { nullable = n2 }  ->
           BoolT { nullable = n1 || n2 }
+        | LoadStr, IntT { nullable = false }, IntT { nullable = false } ->
+          StringT { nullable = false }
         | _ -> fail (Error.create "Type error."
                        (op, t1, t2) [%sexp_of:op * type_ * type_])
       end
@@ -568,7 +573,11 @@ module IRGen = struct
         | None -> Infix.(islice start)
         | Some x -> Infix.int x
       in
-      let ret_val = Tuple [Infix.(start + hsize (StringT t)); nchars] in
+      let ret_val = Infix.(Binop({
+          op = LoadStr;
+          arg1 = (start + hsize (StringT t));
+          arg2 = nchars
+        })) in
       if nullable then
         let null_val = l - 1 in
         build_yield (Tuple [Tuple [ret_val; Infix.(nchars = int null_val)]]) b;
