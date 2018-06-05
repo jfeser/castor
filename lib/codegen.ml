@@ -98,16 +98,18 @@ module Make (Config: Config.S) () = struct
 
   let null_ptr = const_null (pointer_type (void_type ctx))
 
-  class func_ctx name func = object
+  class func_ctx name func params = object
     val values = Hashtbl.create (module String)
 
     method values : var Hashtbl.M(String).t = values
     method name : string = name
     method func : func = func
+    method tctx : type_ Hashtbl.M(String).t =
+      Hashtbl.of_alist_exn (module String) (func.locals @ params)
   end
 
-  class ictx name func = object
-    inherit func_ctx name func
+  class ictx name func params = object
+    inherit func_ctx name func params
 
     val mutable init = null_ptr
     val mutable step = null_ptr
@@ -124,8 +126,8 @@ module Make (Config: Config.S) () = struct
     method incr_switch_index () = switch_index <- switch_index + 1
   end
 
-  class fctx name func = object
-    inherit func_ctx name func
+  class fctx name func params = object
+    inherit func_ctx name func params
 
     val mutable llfunc = null_ptr
 
@@ -437,9 +439,8 @@ module Make (Config: Config.S) () = struct
     fun codegen_expr fctx op arg1 arg2 ->
       let v1 = codegen_expr fctx arg1 in
       let v2 = codegen_expr fctx arg2 in
-      let tctx = Hashtbl.of_alist_exn (module String) fctx#func.locals in
-      let t1 = infer_type tctx arg1 in
-      let t2 = infer_type tctx arg2 in
+      let t1 = infer_type fctx#tctx arg1 in
+      let t2 = infer_type fctx#tctx arg2 in
       let x1 =
         if is_nullable t1 then build_extractvalue v1 0 "" builder else v1
       in
@@ -468,7 +469,7 @@ module Make (Config: Config.S) () = struct
         | Not -> fail (Error.of_string "Not a binary operator.")
       in
 
-      let ret_t = infer_type tctx (Binop { op; arg1; arg2 }) in
+      let ret_t = infer_type fctx#tctx (Binop { op; arg1; arg2 }) in
       if is_nullable ret_t then
         let null_out =
           build_or (build_extractvalue v1 1 "" builder)
@@ -480,15 +481,14 @@ module Make (Config: Config.S) () = struct
   let codegen_unop : (_ -> expr -> llvalue) -> _ -> op -> expr -> llvalue =
     fun codegen_expr fctx op arg ->
       let v = codegen_expr fctx arg in
-      let tctx = Hashtbl.of_alist_exn (module String) fctx#func.locals in
-      let t = infer_type tctx arg in
+      let t = infer_type fctx#tctx arg in
       let x = if is_nullable t then build_extractvalue v 0 "" builder else v in
       let x_out = match op with
         | Not -> build_not x "nottmp" builder
         | Add | Sub| Lt | And | Or | Eq | Hash | Mul | Div | Mod | LoadStr ->
           fail (Error.of_string "Not a unary operator.")
       in
-      let ret_t = infer_type tctx (Unop { op; arg }) in
+      let ret_t = infer_type fctx#tctx (Unop { op; arg }) in
       if is_nullable ret_t then
         let null_out = build_extractvalue v 1 "" builder in
         pack_null ret_t ~data:x_out ~null:null_out
@@ -819,7 +819,7 @@ module Make (Config: Config.S) () = struct
 
       Logs.info (fun m -> m "Codegen for func %s completed." ictx#name)
 
-  let codegen_func : string -> func -> unit =
+  let codegen_func : _ -> unit =
     let rec codegen_stmt : _ -> stmt -> unit = fun fctx ->
       function
       | Loop { cond; body } -> codegen_loop fctx codegen_prog cond body
@@ -837,7 +837,10 @@ module Make (Config: Config.S) () = struct
       List.iter ~f:(codegen_stmt fctx) p
     in
 
-    fun name ({ args; body; ret_type; locals } as func) ->
+    fun fctx ->
+      let name = fctx#name in
+      let { args; locals; ret_type; body } as func = fctx#func in
+
       Logs.debug (fun m -> m "Codegen for func %s started." name);
       Logs.debug (fun m -> m "%a" pp_func func);
       Logs.debug (fun m -> m "%s" ([%sexp_of:func] func |> Sexp.to_string_hum));
@@ -845,8 +848,6 @@ module Make (Config: Config.S) () = struct
       (* Check that function is not already defined. *)
       if Hashtbl.(mem iters name || mem funcs name) then
         fail (Error.of_string "Function already defined.");
-
-      let fctx = new fctx name func in
 
       (* Create function. *)
       let func_t =
@@ -979,13 +980,8 @@ module Make (Config: Config.S) () = struct
       in
       SB.build_global sb "buf" buf_t |> ignore;
 
-      let typed_params = List.map params ~f:(fun (n, t) ->
-        let lltype = match t with
-            | BoolT -> codegen_type (BoolT { nullable = false })
-            | IntT -> codegen_type (IntT { nullable = false })
-            | StringT -> pointer_type (i8_type ctx)
-        in
-        (n, lltype))
+      let typed_params =
+        List.map params ~f:(fun (n, t) -> (n, codegen_type t))
       in
 
       (* Generate global constants for parameters. *)
@@ -993,10 +989,10 @@ module Make (Config: Config.S) () = struct
           SB.build_global sb n t |> ignore);
 
       (* Generate code for the iterators *)
-      let ictxs = List.mapi ir_iters
-          ~f:(fun i (name, ({ args; body; ret_type; locals } as func)) ->
+      let ictxs = List.map ir_iters
+          ~f:(fun (name, func) ->
               (* Create function context. *)
-              let ictx = new ictx name func in
+              let ictx = new ictx name func params in
               Hashtbl.set iters ~key:name ~data:ictx;
 
               (* Create iterator done flag. *)
@@ -1006,18 +1002,20 @@ module Make (Config: Config.S) () = struct
               SB.build_local sb ictx "yield_index" (i8_type ctx);
 
               (* Create storage space for local variables & iterator args. *)
-              List.iter locals ~f:(fun (n, t) ->
+              List.iter ictx#func.locals ~f:(fun (n, t) ->
                   let lltype = codegen_type t in
                   SB.build_local sb ictx n lltype);
               ictx)
       in
 
+      let fctxs = List.mapi ir_funcs ~f:(fun i (name, func) ->
+          new fctx name func params)
+      in
+
       params_struct_t := SB.build_param_struct sb "params";
 
       List.iter ictxs ~f:codegen_iter;
-
-      (* Generate code for functions. *)
-      List.iter ir_funcs ~f:(fun (n, f) -> codegen_func n f);
+      List.iter fctxs ~f:codegen_func;
 
       codegen_create ();
       codegen_param_setters typed_params;

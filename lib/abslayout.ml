@@ -38,6 +38,10 @@ module No_config = struct
         | Ralgebra0.ParseError (msg, line, col) as e ->
           Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col);
           raise e
+
+      let to_typed_name : t -> Type.TypedName.t = function
+        | { name; type_ = Some t } -> (name, t)
+        | { type_ = None } -> failwith "Missing type."
     end
     include T
     include Identifiable.Make(T)
@@ -107,9 +111,12 @@ module No_config = struct
     fun r ->
       let params = object (self)
         inherit [_] ralgebra_reduce as super
-        method zero = Set.empty (module Type0.TypedName)
+        method zero = Set.empty (module Type.TypedName)
         method plus = Set.union
-        method visit_Var () n = Set.singleton (module Type0.TypedName) n
+        method visit_Name () n =
+          if Option.is_none n.relation then
+            Set.singleton (module Type.TypedName) (Name.to_typed_name n)
+          else self#zero
         method visit_'l () l = self#zero
         method visit_'f _ _ = self#zero
       end in

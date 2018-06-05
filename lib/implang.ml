@@ -265,7 +265,11 @@ let rec infer_type : type_ Hashtbl.M(String).t -> expr -> type_ =
     | Int _ -> IntT { nullable = false }
     | Bool _ -> BoolT { nullable = false }
     | String _ -> StringT { nullable = false }
-    | Var x -> Hashtbl.find_exn ctx x
+    | Var x -> begin match Hashtbl.find ctx x with
+      | Some t -> t
+      | None -> Error.create "Type lookup failed." (x, ctx)
+                  [%sexp_of:string * type_ Hashtbl.M(String).t] |> Error.raise
+      end
     | Tuple xs -> TupleT (List.map xs ~f:(infer_type ctx))
     | Binop { op; arg1; arg2 } ->
       let t1 = infer_type ctx arg1 in
@@ -318,7 +322,7 @@ module IRGen = struct
   type ir_module = {
     iters : (string * func) list;
     funcs : (string * func) list;
-    params : Type.TypedName.t list;
+    params : (string * type_) list;
     buffer : Bitstring.t;
   }
 
@@ -1204,12 +1208,18 @@ module IRGen = struct
       in
       add_func name func; name
 
+    let of_primtype : Type.PrimType.t -> type_ = function
+      | BoolT -> BoolT { nullable = false }
+      | IntT -> IntT { nullable = false }
+      | StringT -> StringT { nullable = false }
+
     let irgen : Ralgebra.t -> ir_module = fun r ->
       let name = gen_ralgebra r in
       Logs.debug (fun m -> m "%d buffers" (List.length !buffers));
       { iters = List.rev !funcs;
         funcs = ["printer", printer name; "counter", counter name];
-        params = Ralgebra.params r |> Set.to_list;
+        params = Ralgebra.params r |> Set.to_list
+                 |> List.map ~f:(fun (n, t) -> (n, of_primtype t));
         buffer = Bitstring.concat !buffers;
       }
 
@@ -1218,7 +1228,8 @@ module IRGen = struct
       Logs.debug (fun m -> m "%d buffers" (List.length !buffers));
       { iters = List.rev !funcs;
         funcs = ["printer", printer name; "counter", counter name];
-        params = Abslayout.params r |> Set.to_list;
+        params = Abslayout.params r |> Set.to_list
+                 |> List.map ~f:(fun (n, t) -> (n, of_primtype t));
         buffer = Bitstring.concat !buffers;
       }
 
