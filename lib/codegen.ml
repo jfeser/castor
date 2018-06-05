@@ -1036,11 +1036,10 @@ module Make (Config: Config.S) () = struct
 
   let write_header : Stdio.Out_channel.t -> unit = fun ch ->
     let open Format in
-    let rec pp_struct_elements fmt ts = Array.iteri ts ~f:(fun i t ->
-        fprintf fmt "@[<h>%a@ x%d;@]@," pp_type t i)
-    and pp_type fmt t = match classify_type t with
-      | Struct -> fprintf fmt "@[<hv 4>struct {@,%a}@]"
-                    pp_struct_elements (struct_element_types t)
+    let rec pp_type fmt t = match classify_type t with
+      | Struct ->
+        Logs.warn (fun m -> m "Outputting structure type as string.");
+        fprintf fmt "string_t"
       | Void -> fprintf fmt "void"
       | Integer -> begin match integer_bitwidth t with
           | 1 -> fprintf fmt "bool"
@@ -1078,13 +1077,12 @@ module Make (Config: Config.S) () = struct
         end
       | Function -> fprintf fmt "%a %s(%a);@," pp_type (return_type t) n pp_params (param_types t)
       | _ -> ignore_val ()
-    and pp_typedef fmt (n, t) =
-      fprintf fmt "typedef %a %s;@," pp_type t n
     in
 
     let fmt = Format.formatter_of_out_channel ch in
     pp_open_vbox fmt 0;
     fprintf fmt "typedef void params;@,";
+    fprintf fmt "typedef struct { char *ptr; long len; } string_t;@,";
     fprintf fmt "params* create(void *);@,";
     Hashtbl.data funcs |> List.iter ~f:(fun llfunc ->
         pp_value_decl fmt llfunc);

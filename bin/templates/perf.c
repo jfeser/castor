@@ -4,13 +4,14 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include <string.h>
 
 #include <sys/mman.h>
 #include <sys/stat.h>
 
 /*$0*/
 
-#define USAGE "Usage: perf.exe (-p|c|t) DB_FILE\n"
+#define USAGE "Usage: perf.exe (-p|c|t) DB_FILE PARAM...\n"
 
 int main(int argc, char **argv) {
   int fd, len, print_flag = 0, count_flag = 0, run_time = 0, c;

@@ -3,6 +3,14 @@ open Postgresql
 open Dblayout
 open Collections
 
+let c_template : string -> (string * string) list -> string = fun fn args ->
+  let args_str =
+    List.map args ~f:(fun (n, x) -> sprintf "-D%s=%s" n x)
+    |> String.concat ~sep:" "
+  in
+  let cmd = sprintf "clang -E %s %s" args_str fn in
+  Unix.open_process_in cmd |> In_channel.input_all
+
 let main = fun ~debug ~gprof ~params ~abs_layout ~db ~port ~code_only fn ->
   let module CConfig = struct
     let conn = new connection ~dbname:db ?port ()
@@ -20,8 +28,7 @@ let main = fun ~debug ~gprof ~params ~abs_layout ~db ~port ~code_only fn ->
       Logs.debug (fun m -> m "Loading ralgebra from %s." fn);
       let ralgebra =
         let params_ctx =
-          List.map params ~f:(fun (name, v) ->
-              let t = Type.PrimType.of_primvalue v in
+          List.map params ~f:(fun (name, t) ->
               Abslayout.({ relation = None; name; type_ = Some t }))
           |> Set.of_list (module Abslayout.Name)
         in
@@ -79,27 +86,31 @@ let main = fun ~debug ~gprof ~params ~abs_layout ~db ~port ~code_only fn ->
   end;
 
   (* Compile and link *)
-  let params_str =
-    List.filter params ~f:(fun (n, _) ->
-        List.exists ir_module.params ~f:(fun (n', _) -> String.(n = n')))
-    |> List.map ~f:(fun (n, v) ->
-        let val_str = match v with
-          | `Int x -> sprintf "%d" x
-          | `Bool true -> "true"
-          | `Bool false -> "false"
-          | `String x -> sprintf "\"%s\"" x
-          | _ -> Error.of_string "Unexpected param type." |> Error.raise
+  let funcs, calls =
+    List.filter_mapi params ~f:(fun i (n, t) ->
+      if List.exists ir_module.params ~f:(fun (n', _) -> String.(n = n')) then
+        let open Type.PrimType in
+        let from_fn fn =
+          let template = Config.project_root ^ "/bin/templates/" ^ fn in
+          let func = c_template template [
+              "PARAM_NAME", n; "PARAM_IDX", Int.to_string i
+            ] in
+          let call = sprintf "set_%s(params, input_%s(argv, optind));" n n in
+          Some (func, call)
         in
-        sprintf "set_%s(params, %s);" n val_str) |> String.concat ~sep:"\n"
+        match t with
+        | IntT -> from_fn "load_int.c"
+        | BoolT -> from_fn "load_bool.c"
+        | StringT -> from_fn "load_string.c"
+      else None)
+    |> List.unzip
   in
-
+  let funcs_str = String.concat (["#include \"scanner.h\""] @ funcs) ~sep:"\n" in
+  let calls_str = String.concat calls ~sep:"\n" in
   let perf_template = Config.project_root ^ "/bin/templates/perf.c" in
-  In_channel.(with_file perf_template ~f:(fun ch ->
-      let out = String.template (input_all ch)
-          [ "#include \"scanner.h\""; params_str ] in
-      let () =
-        Out_channel.(with_file "main.c" ~f:(fun ch -> output_string ch out)) in
-      ()));
+  let perf_c = In_channel.(with_file perf_template ~f:(fun ch ->
+      String.template (input_all ch) [funcs_str; calls_str])) in
+  Out_channel.(with_file "main.c" ~f:(fun ch -> output_string ch perf_c));
 
   let command_exn : string list -> unit = function
     | [] -> Error.of_string "Empty command" |> Error.raise
@@ -133,7 +144,7 @@ let () =
 
   let param = Arg_type.create (fun s ->
       let k, v = String.lsplit2_exn ~on:':' s in
-      let v = Sexp.of_string v |> [%of_sexp:Db.primvalue] in
+      let v = Sexp.of_string v |> [%of_sexp:Type.PrimType.t] in
       (k, v))
   in
 
