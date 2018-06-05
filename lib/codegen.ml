@@ -252,9 +252,9 @@ module Make (Config: Config.S) () = struct
         | Struct -> if i >= Array.length (struct_element_types typ) then
             Error.create "Tuple index out of bounds." (v, i)
               [%sexp_of:llvalue * int] |> Error.raise
-        | _ ->
-          Error.create "Expected a tuple." (v, i)
-              [%sexp_of:llvalue * int] |> Error.raise
+        | k ->
+          Error.create "Expected a tuple." (v, k, i)
+              [%sexp_of:llvalue * TypeKind.t * int] |> Error.raise
       end;
       build_extractvalue v i n b
 
@@ -330,20 +330,25 @@ module Make (Config: Config.S) () = struct
 
   type llnvalue = { data : llvalue; null : llvalue }
 
-  let unpack_null : llvalue -> llnvalue = fun v -> {
+  let unpack_null : type_ -> llvalue -> llnvalue = fun t v ->
+    if is_nullable t then  {
       data = build_extractvalue v 0 "" builder;
       null = build_extractvalue v 1 "" builder;
+    } else {
+      data = v; null = const_int (i1_type ctx) 0;
     }
 
   let pack_null : type_ -> data:llvalue -> null:llvalue -> llvalue =
     fun type_ ~data ~null ->
-      let struct_t = codegen_type type_ in
-      let struct_ = build_entry_alloca struct_t "" builder in
-      build_store data (build_struct_gep struct_ 0 "" builder) builder
-      |> ignore;
-      build_store null (build_struct_gep struct_ 1 "" builder) builder
-      |> ignore;
-      build_load struct_ "" builder
+      if is_nullable type_ then
+        let struct_t = codegen_type type_ in
+        let struct_ = build_entry_alloca struct_t "" builder in
+        build_store data (build_struct_gep struct_ 0 "" builder) builder
+        |> ignore;
+        build_store null (build_struct_gep struct_ 1 "" builder) builder
+        |> ignore;
+        build_load struct_ "" builder
+      else data
 
   let codegen_string : string -> llvalue = fun x ->
     let ptr = build_global_stringptr x "" builder in
@@ -456,8 +461,8 @@ module Make (Config: Config.S) () = struct
       let v2 = codegen_expr fctx arg2 in
       let t1 = infer_type fctx#tctx arg1 in
       let t2 = infer_type fctx#tctx arg2 in
-      let x1 = if is_nullable t1 then (unpack_null v1).data else v1 in
-      let x2 = if is_nullable t2 then (unpack_null v2).data else v2 in
+      let { data = x1; null = n1 } = unpack_null t1 v1 in
+      let { data = x2; null = n2 } = unpack_null t2 v2 in
       let x_out = match op with
         | Add -> build_add x1 x2 "addtmp" builder
         | Sub -> build_sub x1 x2 "subtmp" builder
@@ -481,28 +486,21 @@ module Make (Config: Config.S) () = struct
       in
 
       let ret_t = infer_type fctx#tctx (Binop { op; arg1; arg2 }) in
-      if is_nullable ret_t then
-        let null_out =
-          build_or ((unpack_null v1).null) ((unpack_null v2).null) "" builder
-        in
-        pack_null ret_t ~data:x_out ~null:null_out
-      else x_out
+      let null_out = build_or n1 n2 "" builder in
+      pack_null ret_t ~data:x_out ~null:null_out
 
   let codegen_unop : (_ -> expr -> llvalue) -> _ -> op -> expr -> llvalue =
     fun codegen_expr fctx op arg ->
       let v = codegen_expr fctx arg in
       let t = infer_type fctx#tctx arg in
-      let x = if is_nullable t then (unpack_null v).data else v in
+      let { data = x; null = null_out } = unpack_null t v in
       let x_out = match op with
         | Not -> build_not x "nottmp" builder
         | Add | Sub| Lt | And | Or | Eq | Hash | Mul | Div | Mod | LoadStr ->
           fail (Error.of_string "Not a unary operator.")
       in
       let ret_t = infer_type fctx#tctx (Unop { op; arg }) in
-      if is_nullable ret_t then
-        let null_out = (unpack_null v).null in
-        pack_null ret_t ~data:x_out ~null:null_out
-      else x_out
+      pack_null ret_t ~data:x_out ~null:null_out
 
   let codegen_tuple : (expr -> llvalue) -> expr list -> llvalue =
     fun codegen_expr es ->
@@ -574,6 +572,9 @@ module Make (Config: Config.S) () = struct
     (* Generate conditional in head block. *)
     position_at_end if_bb builder;
     let llcond = codegen_expr fctx cond in
+    let cond_type = infer_type fctx#tctx cond in
+    let { data; null } = unpack_null cond_type llcond in
+    let llcond = build_and data (build_not null "" builder) "" builder in
     build_cond_br llcond then_bb else_bb builder |> ignore;
 
     (* Create then block. *)
@@ -659,15 +660,15 @@ module Make (Config: Config.S) () = struct
 
     let rec gen val_ = function
       | IntT { nullable = false } -> call_printf int_fmt [val_]
-      | IntT { nullable = true } ->
-        let { data; null } = unpack_null val_ in
+      | IntT { nullable = true } as t ->
+        let { data; null } = unpack_null t val_ in
         let fmt = build_select null null_str int_fmt "" builder in
         call_printf fmt [data]
       | BoolT { nullable = false } ->
         let fmt = build_select val_ true_str false_str "" builder in
         call_printf fmt []
-      | BoolT { nullable = true } ->
-        let { data; null } = unpack_null val_ in
+      | BoolT { nullable = true } as t ->
+        let { data; null } = unpack_null t val_ in
         let fmt =
           build_select null null_str
             (build_select val_ true_str false_str "" builder)
@@ -679,8 +680,8 @@ module Make (Config: Config.S) () = struct
           build_extractvalue val_ 1 "" builder;
           build_extractvalue val_ 0 "" builder;
         ]
-      | StringT { nullable = true } ->
-        let { data; null } = unpack_null val_ in
+      | StringT { nullable = true } as t ->
+        let { data; null } = unpack_null t val_ in
         let fmt = build_select null null_str str_fmt "" builder in
         call_printf fmt [
           build_extractvalue val_ 1 "" builder;
