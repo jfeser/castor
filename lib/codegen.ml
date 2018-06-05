@@ -243,6 +243,21 @@ module Make (Config: Config.S) () = struct
       end;
       build_struct_gep v i n b
 
+  let build_extractvalue : llvalue -> int -> string -> llbuilder -> llvalue =
+    fun v i n b ->
+      (* Check that the argument really is a struct and that the index is
+         valid. *)
+      let typ = type_of v in
+      begin match classify_type typ with
+        | Struct -> if i >= Array.length (struct_element_types typ) then
+            Error.create "Tuple index out of bounds." (v, i)
+              [%sexp_of:llvalue * int] |> Error.raise
+        | _ ->
+          Error.create "Expected a tuple." (v, i)
+              [%sexp_of:llvalue * int] |> Error.raise
+      end;
+      build_extractvalue v i n b
+
   let printf =
     declare_function "printf"
       (var_arg_function_type (i32_type ctx) [|pointer_type (i8_type ctx)|])
@@ -441,12 +456,8 @@ module Make (Config: Config.S) () = struct
       let v2 = codegen_expr fctx arg2 in
       let t1 = infer_type fctx#tctx arg1 in
       let t2 = infer_type fctx#tctx arg2 in
-      let x1 =
-        if is_nullable t1 then build_extractvalue v1 0 "" builder else v1
-      in
-      let x2 =
-        if is_nullable t2 then build_extractvalue v2 0 "" builder else v2
-      in
+      let x1 = if is_nullable t1 then (unpack_null v1).data else v1 in
+      let x2 = if is_nullable t2 then (unpack_null v2).data else v2 in
       let x_out = match op with
         | Add -> build_add x1 x2 "addtmp" builder
         | Sub -> build_sub x1 x2 "subtmp" builder
@@ -472,8 +483,7 @@ module Make (Config: Config.S) () = struct
       let ret_t = infer_type fctx#tctx (Binop { op; arg1; arg2 }) in
       if is_nullable ret_t then
         let null_out =
-          build_or (build_extractvalue v1 1 "" builder)
-            (build_extractvalue v2 1 "" builder) "" builder
+          build_or ((unpack_null v1).null) ((unpack_null v2).null) "" builder
         in
         pack_null ret_t ~data:x_out ~null:null_out
       else x_out
@@ -482,7 +492,7 @@ module Make (Config: Config.S) () = struct
     fun codegen_expr fctx op arg ->
       let v = codegen_expr fctx arg in
       let t = infer_type fctx#tctx arg in
-      let x = if is_nullable t then build_extractvalue v 0 "" builder else v in
+      let x = if is_nullable t then (unpack_null v).data else v in
       let x_out = match op with
         | Not -> build_not x "nottmp" builder
         | Add | Sub| Lt | And | Or | Eq | Hash | Mul | Div | Mod | LoadStr ->
@@ -490,7 +500,7 @@ module Make (Config: Config.S) () = struct
       in
       let ret_t = infer_type fctx#tctx (Unop { op; arg }) in
       if is_nullable ret_t then
-        let null_out = build_extractvalue v 1 "" builder in
+        let null_out = (unpack_null v).null in
         pack_null ret_t ~data:x_out ~null:null_out
       else x_out
 
