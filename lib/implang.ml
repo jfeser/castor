@@ -1058,13 +1058,18 @@ module IRGen = struct
       build_func b
 
     let select gen gen_pred field_idx exprs r =
+      (* TODO: Remove horrible hack. *)
       let func = gen r in
-      let ret_t = (find_func func).ret_type in
-      let b = create [] ret_t in
+      let out_expr = ref (Tuple []) in
+      let b = create [] (IntT { nullable = false }) in
       build_foreach_no_start func (fun tup b ->
-          build_yield (Tuple (List.map exprs ~f:(gen_pred tup field_idx))) b;
+          out_expr := Tuple (List.map exprs ~f:(gen_pred tup field_idx));
+          build_yield !out_expr b;
         ) b;
-      build_func b
+      let func = build_func b in
+      let tctx = Hashtbl.of_alist_exn (module String) func.locals in
+      let ret_t = infer_type tctx !out_expr in
+      { func with ret_type = ret_t }
 
     let concat gen rs =
       let funcs = List.map rs ~f:gen in
