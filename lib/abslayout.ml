@@ -1001,9 +1001,8 @@ module Test = struct
       String "GERMA               " (
         (rel "")
         (field (
-          (name     "")
-          (dtype    DBool)
-          (relation ""))))))) |}]
+          (name  "")
+          (dtype DBool))))))) |}]
 
   let%expect_test "mat-hidx" =
     let conn = new Postgresql.connection ~dbname:"tpcds1" () in
@@ -1020,38 +1019,32 @@ module Test = struct
       ((
         ((rel "")
          (field (
-           (name     "")
-           (dtype    DBool)
-           (relation "")))
+           (name  "")
+           (dtype DBool)))
          (value (Unknown "LIBRARY                       ")))
         (UnorderedList (
           (String "AIR       " (
             (rel "")
             (field (
-              (name     "")
-              (dtype    DBool)
-              (relation "")))))
+              (name  "")
+              (dtype DBool)))))
           (String "SURFACE   " (
             (rel "")
             (field (
-              (name     "")
-              (dtype    DBool)
-              (relation "")))))
+              (name  "")
+              (dtype DBool)))))
           (String "SEA       " (
             (rel "")
             (field (
-              (name     "")
-              (dtype    DBool)
-              (relation "")))))))))
+              (name  "")
+              (dtype DBool)))))))))
       ((field (
-         (name     fixme)
-         (dtype    DBool)
-         (relation "")))
+         (name  fixme)
+         (dtype DBool)))
        (lookup (
          Field (
-           (name     fixme)
-           (dtype    DBool)
-           (relation "")))))) |}]
+           (name  fixme)
+           (dtype DBool)))))) |}]
 
   let rels = Hashtbl.create (module String)
 
@@ -1216,134 +1209,114 @@ module Test = struct
           (range (1 3))
           (nullable false)
           (field (
-            (name     "")
-            (dtype    DBool)
-            (relation "")))))
+            (name  "")
+            (dtype DBool)))))
         (UnorderedListT
           (CrossTupleT
             ((IntT (
                (range (1 3))
                (nullable false)
                (field (
-                 (name     "")
-                 (dtype    DBool)
-                 (relation "")))))
+                 (name  "")
+                 (dtype DBool)))))
              (IntT (
                (range (1 4))
                (nullable false)
                (field (
-                 (name     "")
-                 (dtype    DBool)
-                 (relation ""))))))
+                 (name  "")
+                 (dtype DBool))))))
             ((count ((1 1)))))
           ((count ((1 2)))))
         ((count ())
          (field (
-           (name     fixme)
-           (dtype    DBool)
-           (relation "")))
+           (name  fixme)
+           (dtype DBool)))
          (lookup (
            Field (
-             (name     fixme)
-             (dtype    DBool)
-             (relation "")))))) |}];
+             (name  fixme)
+             (dtype DBool)))))) |}];
     let mat_layout = M.materialize part_layout in
     [%sexp_of:Layout.t] mat_layout |> print_s;
     [%expect {|
       (Table
         ((((rel "")
            (field (
-             (name     "")
-             (dtype    DBool)
-             (relation "")))
+             (name  "")
+             (dtype DBool)))
            (value (Int 1)))
           (UnorderedList (
             (CrossTuple (
               (Int 1 (
                 (rel "")
                 (field (
-                  (name     "")
-                  (dtype    DBool)
-                  (relation "")))))
+                  (name  "")
+                  (dtype DBool)))))
               (Int 2 (
                 (rel "")
                 (field (
-                  (name     "")
-                  (dtype    DBool)
-                  (relation "")))))))
+                  (name  "")
+                  (dtype DBool)))))))
             (CrossTuple (
               (Int 1 (
                 (rel "")
                 (field (
-                  (name     "")
-                  (dtype    DBool)
-                  (relation "")))))
+                  (name  "")
+                  (dtype DBool)))))
               (Int 3 (
                 (rel "")
                 (field (
-                  (name     "")
-                  (dtype    DBool)
-                  (relation ""))))))))))
+                  (name  "")
+                  (dtype DBool))))))))))
          (((rel "")
            (field (
-             (name     "")
-             (dtype    DBool)
-             (relation "")))
+             (name  "")
+             (dtype DBool)))
            (value (Int 2)))
           (UnorderedList (
             (CrossTuple (
               (Int 2 (
                 (rel "")
                 (field (
-                  (name     "")
-                  (dtype    DBool)
-                  (relation "")))))
+                  (name  "")
+                  (dtype DBool)))))
               (Int 1 (
                 (rel "")
                 (field (
-                  (name     "")
-                  (dtype    DBool)
-                  (relation "")))))))
+                  (name  "")
+                  (dtype DBool)))))))
             (CrossTuple (
               (Int 2 (
                 (rel "")
                 (field (
-                  (name     "")
-                  (dtype    DBool)
-                  (relation "")))))
+                  (name  "")
+                  (dtype DBool)))))
               (Int 2 (
                 (rel "")
                 (field (
-                  (name     "")
-                  (dtype    DBool)
-                  (relation ""))))))))))
+                  (name  "")
+                  (dtype DBool))))))))))
          (((rel "")
            (field (
-             (name     "")
-             (dtype    DBool)
-             (relation "")))
+             (name  "")
+             (dtype DBool)))
            (value (Int 3)))
           (UnorderedList ((
             CrossTuple (
               (Int 3 (
                 (rel "")
                 (field (
-                  (name     "")
-                  (dtype    DBool)
-                  (relation "")))))
+                  (name  "")
+                  (dtype DBool)))))
               (Int 4 (
                 (rel "")
                 (field (
-                  (name     "")
-                  (dtype    DBool)
-                  (relation "")))))))))))
+                  (name  "")
+                  (dtype DBool)))))))))))
         ((field (
-           (name     fixme)
-           (dtype    DBool)
-           (relation "")))
+           (name  fixme)
+           (dtype DBool)))
          (lookup (
            Field (
-             (name     fixme)
-             (dtype    DBool)
-             (relation "")))))) |}]
+             (name  fixme)
+             (dtype DBool)))))) |}]
 end
