@@ -74,26 +74,87 @@ let pp : Format.formatter -> t -> unit = fun fmt ->
   in
   fun x -> pp "" 0 x |> ignore
 
-module Writer = struct
-  type bitstring = t
+module ByteWriter = struct
   type t = {
-    mutable buf : int;
-    mutable len : int;
-    ch : Out_channel.t;
+    output_byte : char -> unit;
+    seek : int64 -> unit;
+    pos : unit -> int64;
+    flush : unit -> unit;
+    peek : unit -> char;
   }
 
-  let with_channel : Out_channel.t -> t = fun ch ->
-    { ch; buf = 0; len = 0 }
+  let of_file : string -> t = fun fn ->
+    let out_ch = Out_channel.create ~binary:true fn in
+    let in_ch = In_channel.create ~binary:true fn in
+
+    let output_byte = Out_channel.output_char out_ch in
+    let seek pos = Out_channel.seek out_ch pos; In_channel.seek in_ch pos in
+    let pos () = Out_channel.pos out_ch in
+    let flush () = Out_channel.flush out_ch in
+    let peek () =
+      In_channel.seek in_ch (pos ());
+      Option.value_exn (In_channel.input_char in_ch)
+    in
+    { output_byte; seek; pos; flush; peek; }
+
+  let of_buffer : Buffer.t -> t = fun out ->
+    let buf = ref (Bytes.create 1) in
+    let pos = ref 0 in
+    let len = ref 0 in
+
+    let output_byte c =
+      let buf_len = Bytes.length !buf in
+
+      assert (!pos <= buf_len);
+      assert (!pos <= !len);
+
+      if !pos < buf_len then
+        Bytes.set !buf !pos c
+      else begin
+        buf := Bytes.extend !buf 0 buf_len;
+        Bytes.set !buf !pos c;
+      end;
+      incr pos;
+      if !pos > !len then len := !pos
+    in
+
+    let seek pos' = pos := Int.of_int64_exn pos' in
+    let get_pos () = Int.to_int64 !pos in
+    let flush () =
+      Buffer.reset out;
+      Buffer.add_bytes out (Bytes.sub !buf 0 !len)
+    in
+    let peek () = Bytes.get !buf !pos in
+
+    { output_byte; seek; pos = get_pos; flush; peek }
+end
+
+module Writer = struct
+  type bitstring = t
+  type pos = (int * int64)
+  type t = {
+    mutable buf : int;
+    mutable pos : int;
+    writer : ByteWriter.t;
+  }
+
+  let with_file : string -> t = fun fn -> {
+      writer = ByteWriter.of_file fn; buf = 0; pos = 0;
+    }
+
+  let with_buffer : Buffer.t -> t = fun buf -> {
+      writer = ByteWriter.of_buffer buf; buf = 0; pos = 0;
+    }
 
   let write_bit : t -> int -> unit = fun t x ->
-    assert (t.len < 8);
+    assert (t.pos < 8);
     assert (x = 0 || x = 1);
-    t.buf <- t.buf lor (x lsl (8 - t.len - 1));
-    t.len <- t.len + 1;
-    if t.len = 8 then begin
-      Out_channel.output_char t.ch (Char.of_int_exn t.buf);
+    t.buf <- t.buf lor (x lsl (8 - t.pos - 1));
+    t.pos <- t.pos + 1;
+    if t.pos = 8 then begin
+      t.writer.output_byte (Char.of_int_exn t.buf);
       t.buf <- 0;
-      t.len <- 0;
+      t.pos <- 0;
     end
   let write_bit t x =
     Exn.reraise_uncaught "write_bit" (fun () -> write_bit t x)
@@ -136,7 +197,15 @@ module Writer = struct
     Exn.reraise_uncaught "write" (fun () -> write t x)
 
   let flush : t -> unit = fun t ->
-    if t.len > 0 then Out_channel.output_char t.ch (Char.of_int_exn t.buf)
+    if t.pos > 0 then t.writer.output_byte (Char.of_int_exn t.buf);
+    t.writer.flush ()
+
+  let pos : t -> pos = fun t -> (t.pos, t.writer.pos ())
+  let seek : t -> pos -> unit = fun t (bit_pos, byte_pos) ->
+    flush t;
+    t.writer.seek byte_pos;
+    t.buf <- Char.to_int (t.writer.peek ());
+    t.pos <- bit_pos
 end
 
 let to_string : t -> string = fun s ->
@@ -146,137 +215,114 @@ let to_string : t -> string = fun s ->
   Writer.flush w;
   Buffer.to_string b
 
-let%expect_test "write-bit1" =
-  (* let buf1 = Buffer.create 1 in
-   * Buffer.add_char buf1 '\x80';
-   * let buf2 = Buffer.create 1 in *)
-  let w = Writer.with_channel stdout in
-  Writer.write_bit w 1;
-  Writer.flush w
+let tests =
+  let open OUnit2 in
 
-let%expect_test "write-bit2" =
-  (* let buf1 = Buffer.create 1 in
-   * Buffer.add_char buf1 '\x88';
-   * let buf2 = Buffer.create 1 in *)
-  let w = Writer.with_channel stdout in
-  Writer.write_bit w 1;
-  Writer.write_bit w 0;
-  Writer.write_bit w 0;
-  Writer.write_bit w 0;
-  Writer.write_bit w 1;
-  Writer.write_bit w 0;
-  Writer.write_bit w 0;
-  Writer.write_bit w 0;
-  Writer.flush w
+  let printer b = Buffer.to_string b |> String.escaped in
 
+  "bitstring" >::: [
+    "length" >::: [
+      "" >:: (fun ctxt -> assert_equal ~ctxt 0 (length empty));
+      "" >:: (fun ctxt -> assert_equal ~ctxt 1 (length (Piece { len = 1; str = "\x80"})));
+    ];
+    "writer" >::: [
+      (* "flush" >:: (fun ctxt ->
+       *     let flushed = ref false in
+       *     let w = Writer.create (fun c ->
+       *         assert_equal ~ctxt ~printer:Char.escaped '\x80' c;
+       *         flushed := true) in
+       *     Writer.write_bit w 1;
+       *     Writer.flush w;
+       *     assert_equal ~ctxt true !flushed); *)
+      "write_bit" >:: (fun ctxt ->
+          let buf1 = Buffer.create 1 in
+          Buffer.add_char buf1 '\x80';
+          let buf2 = Buffer.create 1 in
+          let w = Writer.with_buffer buf2 in
+          Writer.write_bit w 1;
+          Writer.flush w;
+          assert_equal ~ctxt ~printer ~cmp:Buffer.equal buf1 buf2
+        );
+      "write_bit" >:: (fun ctxt ->
+          let buf1 = Buffer.create 1 in
+          Buffer.add_char buf1 '\x88';
+          let buf2 = Buffer.create 1 in
+          let w = Writer.with_buffer buf2 in
+          Writer.write_bit w 1;
+          Writer.write_bit w 0;
+          Writer.write_bit w 0;
+          Writer.write_bit w 0;
+          Writer.write_bit w 1;
+          Writer.write_bit w 0;
+          Writer.write_bit w 0;
+          Writer.write_bit w 0;
+          Writer.flush w;
+          assert_equal ~ctxt ~printer ~cmp:Buffer.equal buf1 buf2
+        );
+      "write_char" >:: (fun ctxt ->
+          let buf1 = Buffer.create 1 in
+          Buffer.add_string buf1 "\xbf\xc0";
+          let buf2 = Buffer.create 1 in
+          let w = Writer.with_buffer buf2 in
+          Writer.write_bit w 1;
+          Writer.write_bit w 0;
+          Writer.write_char w '\xff';
+          Writer.flush w;
+          assert_equal ~ctxt ~printer ~cmp:Buffer.equal buf1 buf2
+        );
+      "write_1" >:: (fun ctxt ->
+          let buf1 = Buffer.create 1 in
+          Buffer.add_string buf1 "\x88";
+          let buf2 = Buffer.create 1 in
+          let w = Writer.with_buffer buf2 in
+          let bs = PList [
+            Piece { len = 8; str = "\x88" };
+          ] in
+          Writer.write w bs;
+          Writer.flush w;
+          assert_equal ~ctxt ~printer ~cmp:Buffer.equal buf1 buf2
+        );
+      "write_2" >:: (fun ctxt ->
+          let buf1 = Buffer.create 1 in
+          Buffer.add_string buf1 "\xfe";
+          let buf2 = Buffer.create 1 in
+          let w = Writer.with_buffer buf2 in
+          let bs = PList [
+            Piece { len = 7; str = "\xff" };
+          ] in
+          Writer.write w bs;
+          Writer.flush w;
+          assert_equal ~ctxt ~printer ~cmp:Buffer.equal buf1 buf2
+        );
+      "write_3" >:: (fun ctxt ->
+          let buf1 = Buffer.create 1 in
+          Buffer.add_string buf1 "\xbf\xc0";
+          let buf2 = Buffer.create 1 in
+          let w = Writer.with_buffer buf2 in
+          let bs = PList [
+            Piece { len = 1; str = "\x80" };
+            Piece { len = 3; str = "\x60" };
+            Piece { len = 5; str = "\xf8" };
+            Piece { len = 7; str = "\x80" };
+          ] in
+          Writer.write w bs;
+          Writer.flush w;
+          assert_equal ~ctxt ~printer ~cmp:Buffer.equal buf1 buf2
+        );
+      "write_4" >:: (fun ctxt ->
+          let buf1 = Buffer.create 1 in
+          Buffer.add_string buf1 "\xde\xad";
+          let buf2 = Buffer.create 1 in
+          let w = Writer.with_buffer buf2 in
+          let bs = PList [
+            Piece { len = 8; str = "\xde" };
+            Piece { len = 0; str = "\x00" };
+            Piece { len = 8; str = "\xad" };
+          ] in
+          Writer.write w bs;
+          Writer.flush w;
+          assert_equal ~ctxt ~printer ~cmp:Buffer.equal buf1 buf2
+        )
 
-
-(* let tests =
- *   let open OUnit2 in
- * 
- *   "bitstring" >::: [
- *     "length" >::: [
- *       "" >:: (fun ctxt -> assert_equal ~ctxt 0 (length empty));
- *       "" >:: (fun ctxt -> assert_equal ~ctxt 1 (length (Piece { len = 1; str = "\x80"})));
- *     ];
- *     "writer" >::: [
- *       "flush" >:: (fun ctxt ->
- *           let flushed = ref false in
- *           let w = Writer.create (fun c ->
- *               assert_equal ~ctxt ~printer:Char.escaped '\x80' c;
- *               flushed := true) in
- *           Writer.write_bit w 1;
- *           Writer.flush w;
- *           assert_equal ~ctxt true !flushed);
- *       "write_bit" >:: (fun ctxt ->
- *           let buf1 = Buffer.create 1 in
- *           Buffer.add_char buf1 '\x80';
- *           let buf2 = Buffer.create 1 in
- *           let w = Writer.with_buffer buf2 in
- *           Writer.write_bit w 1;
- *           Writer.flush w;
- *           assert_equal ~ctxt ~printer:Buffer.to_string ~cmp:Buffer.equal buf1 buf2
- *         );
- *       "write_bit" >:: (fun ctxt ->
- *           let buf1 = Buffer.create 1 in
- *           Buffer.add_char buf1 '\x88';
- *           let buf2 = Buffer.create 1 in
- *           let w = Writer.with_buffer buf2 in
- *           Writer.write_bit w 1;
- *           Writer.write_bit w 0;
- *           Writer.write_bit w 0;
- *           Writer.write_bit w 0;
- *           Writer.write_bit w 1;
- *           Writer.write_bit w 0;
- *           Writer.write_bit w 0;
- *           Writer.write_bit w 0;
- *           Writer.flush w;
- *           assert_equal ~ctxt ~printer:Buffer.to_string ~cmp:Buffer.equal buf1 buf2
- *         );
- *       "write_char" >:: (fun ctxt ->
- *           let buf1 = Buffer.create 1 in
- *           Buffer.add_string buf1 "\xbf\xc0";
- *           let buf2 = Buffer.create 1 in
- *           let w = Writer.with_buffer buf2 in
- *           Writer.write_bit w 1;
- *           Writer.write_bit w 0;
- *           Writer.write_char w '\xff';
- *           Writer.flush w;
- *           assert_equal ~ctxt ~printer:Buffer.to_string ~cmp:Buffer.equal buf1 buf2
- *         );
- *       "write_1" >:: (fun ctxt ->
- *           let buf1 = Buffer.create 1 in
- *           Buffer.add_string buf1 "\x88";
- *           let buf2 = Buffer.create 1 in
- *           let w = Writer.with_buffer buf2 in
- *           let bs = PList [
- *             Piece { len = 8; str = "\x88" };
- *           ] in
- *           Writer.write w bs;
- *           Writer.flush w;
- *           assert_equal ~ctxt ~printer:Buffer.to_string ~cmp:Buffer.equal buf1 buf2
- *         );
- *       "write_2" >:: (fun ctxt ->
- *           let buf1 = Buffer.create 1 in
- *           Buffer.add_string buf1 "\xfe";
- *           let buf2 = Buffer.create 1 in
- *           let w = Writer.with_buffer buf2 in
- *           let bs = PList [
- *             Piece { len = 7; str = "\xff" };
- *           ] in
- *           Writer.write w bs;
- *           Writer.flush w;
- *           assert_equal ~ctxt ~printer:Buffer.to_string ~cmp:Buffer.equal buf1 buf2
- *         );
- *       "write_3" >:: (fun ctxt ->
- *           let buf1 = Buffer.create 1 in
- *           Buffer.add_string buf1 "\xbf\xc0";
- *           let buf2 = Buffer.create 1 in
- *           let w = Writer.with_buffer buf2 in
- *           let bs = PList [
- *             Piece { len = 1; str = "\x80" };
- *             Piece { len = 3; str = "\x60" };
- *             Piece { len = 5; str = "\xf8" };
- *             Piece { len = 7; str = "\x80" };
- *           ] in
- *           Writer.write w bs;
- *           Writer.flush w;
- *           assert_equal ~ctxt ~printer:Buffer.to_string ~cmp:Buffer.equal buf1 buf2
- *         );
- *       "write_4" >:: (fun ctxt ->
- *           let buf1 = Buffer.create 1 in
- *           Buffer.add_string buf1 "\xde\xad";
- *           let buf2 = Buffer.create 1 in
- *           let w = Writer.with_buffer buf2 in
- *           let bs = PList [
- *             Piece { len = 8; str = "\xde" };
- *             Piece { len = 0; str = "\x00" };
- *             Piece { len = 8; str = "\xad" };
- *           ] in
- *           Writer.write w bs;
- *           Writer.flush w;
- *           assert_equal ~ctxt ~printer:Buffer.to_string ~cmp:Buffer.equal buf1 buf2
- *         )
- * 
- *     ]
- *   ] *)
+    ]
+  ]
