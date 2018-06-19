@@ -153,7 +153,7 @@ module Writer = struct
 
     let (-) = fun (i1, b1) (i2, b2) -> (i1 - i2, Int64.(b1 - b2))
 
-    let to_bits (i, b) = Int64.(of_int i * of_int 8 + b)
+    let to_bits (i, b) = Int64.(of_int i + of_int 8 * b)
     let to_bytes_exn (i, b) = if i = 0 then b else failwith "Nonzero bit offset."
   end
 
@@ -352,7 +352,38 @@ let tests =
           Writer.write w bs;
           Writer.flush w;
           assert_equal ~ctxt ~printer ~cmp:Buffer.equal buf1 buf2
-        )
-
+        );
     ]
   ]
+
+let%expect_test "seek1" =
+  let fn = Filename.temp_file "test" "txt" in
+  let writer = Writer.with_file fn in
+  let pos = Writer.pos writer in
+  Writer.write_string writer "testing";
+  Writer.seek writer pos;
+  Writer.write_string writer "fish";
+  Writer.flush writer;
+  In_channel.with_file fn ~f:In_channel.input_all
+  |> print_endline;
+  [%expect {| fishing |}]
+
+let%expect_test "seek2" =
+  let fn = Filename.temp_file "test" "txt" in
+  let writer = Writer.with_file fn in
+  Writer.write_string writer "t";
+  let pos = Writer.pos writer in
+  Writer.write_string writer "esting";
+  Writer.flush writer;
+  In_channel.with_file fn ~f:In_channel.input_all |> print_endline;
+  Writer.seek writer pos;
+  Writer.write_string writer "a";
+  Writer.flush writer;
+  In_channel.with_file fn ~f:In_channel.input_all |> print_endline;
+  Writer.write_string writer "r";
+  Writer.flush writer;
+  In_channel.with_file fn ~f:In_channel.input_all |> print_endline;
+  [%expect {|
+    testing
+    tasting
+    tarting |}]
