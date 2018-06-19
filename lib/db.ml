@@ -6,6 +6,10 @@ open Bin_prot.Std
 
 open Collections
 
+let () = Printexc.register_printer (function
+    | Postgresql.Error e -> Some (Postgresql.string_of_error e)
+    | _ -> None)
+
 let subst_params : string list -> string -> string = fun params query ->
   match params with
   | [] -> query

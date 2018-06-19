@@ -19,6 +19,7 @@ let main = fun ~debug ~gprof ~params ~db ~port ~code_only fn ->
     let module_ = Llvm.create_module ctx "scanner"
     let builder = Llvm.builder ctx
     let code_only = code_only
+    let layout_map = true
   end in
   let module Codegen = Codegen.Make(CConfig) () in
   let module IRGen = Implang.IRGen.Make(CConfig) () in

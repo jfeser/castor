@@ -77,6 +77,7 @@ let pp : Format.formatter -> t -> unit = fun fmt ->
 module ByteWriter = struct
   type t = {
     output_byte : char -> unit;
+    output_bytes : bytes -> unit;
     seek : int64 -> unit;
     pos : unit -> int64;
     flush : unit -> unit;
@@ -89,18 +90,21 @@ module ByteWriter = struct
     let in_ch = In_channel.create ~binary:true fn in
 
     let output_byte = Out_channel.output_char out_ch in
+    let output_bytes = Out_channel.output_bytes out_ch in
     let seek pos = Out_channel.seek out_ch pos; In_channel.seek in_ch pos in
     let pos () = Out_channel.pos out_ch in
     let flush () = Out_channel.flush out_ch in
     let peek () =
       In_channel.seek in_ch (pos ());
-      Option.value_exn (In_channel.input_char in_ch)
+      match In_channel.input_char in_ch with
+      | Some c -> c
+      | None -> '\x00'
     in
     let close () =
       In_channel.close in_ch;
       Out_channel.close out_ch
     in
-    { output_byte; seek; pos; flush; peek; close }
+    { output_byte; output_bytes; seek; pos; flush; peek; close }
 
   let of_buffer : Buffer.t -> t = fun out ->
     let buf = ref (Bytes.create 1) in
@@ -123,6 +127,12 @@ module ByteWriter = struct
       if !pos > !len then len := !pos
     in
 
+    let output_bytes b =
+      for i = 0 to Bytes.length b - 1 do
+        output_byte (Bytes.get b i)
+      done
+    in
+
     let seek pos' = pos := Int.of_int64_exn pos' in
     let get_pos () = Int.to_int64 !pos in
     let flush () =
@@ -132,7 +142,7 @@ module ByteWriter = struct
     let peek () = Bytes.get !buf !pos in
     let close () = () in
 
-    { output_byte; seek; pos = get_pos; flush; peek; close }
+    { output_byte; output_bytes; seek; pos = get_pos; flush; peek; close }
 end
 
 module Writer = struct
@@ -143,6 +153,7 @@ module Writer = struct
 
     let (-) = fun (i1, b1) (i2, b2) -> (i1 - i2, Int64.(b1 - b2))
 
+    let to_bits (i, b) = Int64.(of_int i * of_int 8 + b)
     let to_bytes_exn (i, b) = if i = 0 then b else failwith "Nonzero bit offset."
   end
 
@@ -174,21 +185,24 @@ module Writer = struct
     Exn.reraise_uncaught "write_bit" (fun () -> write_bit t x)
 
   let write_char : t -> char -> unit = fun t x ->
-    let x = Char.to_int x in
-    for i = 7 downto 0 do
-      write_bit t ((x lsr i) land 1)
-    done
+    if t.pos = 0 then t.writer.output_byte x else
+      let x = Char.to_int x in
+      for i = 7 downto 0 do
+        write_bit t ((x lsr i) land 1)
+      done
   let write_char t x =
     Exn.reraise_uncaught "write_char" (fun () -> write_char t x)
 
   let write_bytes : t -> bytes -> unit = fun t x ->
-    for i = 0 to Bytes.length x - 1 do
-      write_char t (Bytes.get x i)
-    done
+    if t.pos = 0 then t.writer.output_bytes x else
+      for i = 0 to Bytes.length x - 1 do
+        write_char t (Bytes.get x i)
+      done
   let write_bytes t x =
     Exn.reraise_uncaught "write_bytes" (fun () -> write_bytes t x)
 
   let write_string : t -> string -> unit = fun t x ->
+    if t.pos = 0 then t.writer.output_bytes (Bytes.unsafe_of_string x) else
     for i = 0 to String.length x - 1 do
       write_char t (String.get x i)
     done

@@ -548,11 +548,17 @@ end
 include No_config
 
 module Config = struct
+  module type S_shared = sig
+    val layout_map : bool
+  end
+
   module type S_db = sig
+    include S_shared
     val conn : Postgresql.connection
   end
 
   module type S = sig
+    include S_shared
     val eval : Ctx.t -> (name, string) ralgebra -> primvalue Map.M(String).t Seq.t
   end
 end
@@ -744,134 +750,196 @@ module Make (Config : Config.S) () = struct
     open Serialize
     open Type
 
-    class ['self] serialize_fold writer = object (self : 'self)
-      method visit_AList = fun ctx type_ q n elem_layout ->
-        match type_ with
-        | UnorderedListT (elem_t, { count }) ->
-          (* Reserve space for list header. *)
-          let header_pos = Writer.pos writer in
-          Writer.write_bytes writer (Bytes.make 16 '\x00');
+    class ['self] serialize_fold log_ch writer =
+      let ctr = ref 0 in
+      let labels = ref [] in
+      let log_start lbl =
+        if Config.layout_map then begin
+          labels := (lbl, !ctr, Writer.pos writer) :: !labels;
+          Int.incr ctr
+        end
+      in
+      let log_end () = if Config.layout_map then begin
+          match !labels with
+          | (lbl, ctr, start_pos)::ls ->
+            labels := ls;
+            let prefix = String.make (List.length !labels) ' ' in
+            let end_ = Writer.Pos.to_bits (Writer.pos writer) in
+            let start = Writer.Pos.to_bits start_pos in
+            let byte_start = Int64.(start / of_int 8) in
+            let byte_len = Int64.((end_ - start) / of_int 8) in
+            let aligned = if Int64.(start % of_int 8 = of_int 0) then "=" else "~" in
+            let out = sprintf "%d %s+ %s [%Ldb %s%LdB (%Ld bytes)]\n"
+                ctr prefix lbl start aligned byte_start byte_len
+            in
+            Out_channel.output_string log_ch out
+          | [] -> Logs.warn (fun m -> m "Unexpected log_end.")
+        end
+      in
 
-          (* Serialize list body. *)
-          let count = ref 0 in
-          eval ctx q |> Seq.iter ~f:(fun t ->
-              let ctx = Map.fold t ~init:ctx ~f:(fun ~key ~data ctx -> 
-                  let field = { relation = Some n; name = key; type_ = None } in
-                  Map.set ctx ~key:field ~data)
-              in
-              Caml.incr count;
-              self#visit_t ctx elem_t elem_layout);
-          let end_pos = Writer.pos writer in
+      object (self : 'self)
+        method visit_AList ctx type_ q n elem_layout =
+          match type_ with
+          | UnorderedListT (elem_t, { count }) ->
+            (* Reserve space for list header. *)
+            let header_pos = Writer.pos writer in
 
-          (* Serialize list header. *)
-          Writer.seek writer header_pos;
-          let len = Writer.Pos.(header_pos - end_pos |> to_bytes_exn) |> Int64.to_int_exn in
-          Writer.write writer (of_int ~width:64 !count);
-          Writer.write writer (of_int ~width:64 len);
+            log_start "List count";
+            Writer.write_bytes writer (Bytes.make 8 '\x00');
+            log_end ();
 
-          Writer.seek writer end_pos
+            log_start "List len";
+            Writer.write_bytes writer (Bytes.make 8 '\x00');
+            log_end ();
 
-        | t -> Error.(create "Unexpected layout type." t [%sexp_of:Type.t] |> raise)
-
-      method visit_ATuple ctx type_ elem_layouts kind =
-        match type_ with
-        | CrossTupleT (elem_ts, _) | ZipTupleT (elem_ts, _) ->
-          (* Reserve space for header. *)
-          let header_pos = Writer.pos writer in
-          Writer.write_bytes writer (Bytes.make 8 '\x00');
-
-          (* Serialize body *)
-          List.iter2_exn ~f:(fun t l -> self#visit_t ctx t l) elem_ts elem_layouts;
-          let end_pos = Writer.pos writer in
-
-          (* Serialize header. *)
-          Writer.seek writer header_pos;
-          let len = Writer.Pos.(header_pos - end_pos |> to_bytes_exn) |> Int64.to_int_exn in
-          Writer.write writer (of_int ~width:64 len);
-          Writer.seek writer end_pos
-        | t -> Error.(create "Unexpected layout type." t [%sexp_of:Type.t] |> raise)
-
-      method visit_AHashIdx ctx type_ q n l h =
-        match type_ with
-        | TableT (key_t, value_t, _) ->
-          let key_name = ref "" in
-          let keys =
-            eval ctx q
-            |> Seq.map ~f:(fun k ->
-                let (name, key) = match Map.to_alist k with
-                  | [(name, key)] -> (name, key)
-                  | _ -> failwith "Unexpected key tuple shape."
+            (* Serialize list body. *)
+            log_start "List body";
+            let count = ref 0 in
+            eval ctx q |> Seq.iter ~f:(fun t ->
+                let ctx = Map.fold t ~init:ctx ~f:(fun ~key ~data ctx -> 
+                    let field = { relation = Some n; name = key; type_ = None } in
+                    Map.set ctx ~key:field ~data)
                 in
-                key_name := name;
-                key)
-            |> Seq.map ~f:(fun k -> k, serialize key_t (Layout.of_value (Value.of_primvalue k)))
-            |> Seq.to_list
+                Caml.incr count;
+                self#visit_t ctx elem_t elem_layout);
+            let end_pos = Writer.pos writer in
+            log_end ();
+
+            (* Serialize list header. *)
+            Writer.seek writer header_pos;
+            let len = Writer.Pos.(header_pos - end_pos |> to_bytes_exn) |> Int64.to_int_exn in
+            Writer.write writer (of_int ~width:64 !count);
+            Writer.write writer (of_int ~width:64 len);
+
+            Writer.seek writer end_pos
+
+          | t -> Error.(create "Unexpected layout type." t [%sexp_of:Type.t] |> raise)
+
+        method visit_ATuple ctx type_ elem_layouts kind =
+          match type_ with
+          | CrossTupleT (elem_ts, _) | ZipTupleT (elem_ts, _) ->
+            (* Reserve space for header. *)
+            let header_pos = Writer.pos writer in
+
+            log_start "Tuple len";
+            Writer.write_bytes writer (Bytes.make 8 '\x00');
+            log_end ();
+
+            (* Serialize body *)
+            log_start "Tuple body";
+            List.iter2_exn ~f:(fun t l -> self#visit_t ctx t l) elem_ts elem_layouts;
+            log_end ();
+
+            let end_pos = Writer.pos writer in
+
+            (* Serialize header. *)
+            Writer.seek writer header_pos;
+            let len = Writer.Pos.(header_pos - end_pos |> to_bytes_exn) |> Int64.to_int_exn in
+            Writer.write writer (of_int ~width:64 len);
+            Writer.seek writer end_pos
+          | t -> Error.(create "Unexpected layout type." t [%sexp_of:Type.t] |> raise)
+
+        method visit_AHashIdx ctx type_ q n l h =
+          match type_ with
+          | TableT (key_t, value_t, _) ->
+            let key_name = ref "" in
+            let keys =
+              eval ctx q
+              |> Seq.map ~f:(fun k ->
+                  let (name, key) = match Map.to_alist k with
+                    | [(name, key)] -> (name, key)
+                    | _ -> failwith "Unexpected key tuple shape."
+                  in
+                  key_name := name;
+                  key)
+              |> Seq.map ~f:(fun k -> k, serialize key_t (Layout.of_value (Value.of_primvalue k)))
+              |> Seq.to_list
+            in
+            Logs.debug (fun m -> m "Generating hash for %d keys." (List.length keys));
+            let hash = Cmph.(List.map keys ~f:(fun (_, b) -> to_string b)
+                             |> KeySet.of_fixed_width
+                             |> Config.create ~seed:0 ~algo:`Chd |> Hash.of_config)
+            in
+            let keys = List.map keys ~f:(fun (k, b) ->
+                (k, b, Cmph.Hash.hash hash (to_string b)))
+            in
+
+            let hash_body = Cmph.Hash.to_packed hash |> Bytes.of_string |> align isize in
+            let hash_len = Bytes.length hash_body in
+
+            let table_size =
+              List.fold_left keys ~f:(fun m (_, _, h) -> Int.max m h) ~init:0
+              |> fun m -> m + 1
+            in
+
+            let header_pos = Writer.pos writer in
+
+            log_start "Table len";
+            Writer.write_bytes writer (Bytes.make 8 '\x00');
+            log_end ();
+
+            log_start "Table hash len";
+            Writer.write_bytes writer (Bytes.make 8 '\x00');
+            log_end ();
+
+            log_start "Table hash";
+            Writer.write_bytes writer (Bytes.make hash_len '\x00');
+            log_end ();
+
+            log_start "Table key map";
+            Writer.write_bytes writer (Bytes.make (8 * table_size) '\x00');
+            log_end ();
+
+            let hash_table = Array.create ~len:table_size (0xDEADBEEF) in
+
+            log_start "Table values";
+            List.iter keys ~f:(fun (k, b, h) ->
+                let field = { relation = Some n; name = !key_name; type_ = None } in
+                let ctx = Map.set ctx ~key:field ~data:k in
+                Writer.write writer b;
+                self#visit_t ctx value_t l);
+            log_end ();
+
+            let end_pos = Writer.pos writer in
+
+            Writer.seek writer header_pos;
+            let len = Writer.Pos.(header_pos - end_pos |> to_bytes_exn) in
+            Writer.write writer (of_int ~width:64 (Int64.to_int_exn len));
+            Writer.write writer (of_int ~width:64 hash_len);
+            Writer.write_bytes writer hash_body;
+            Array.iter hash_table ~f:(fun x -> Writer.write writer (of_int ~width:64 x));
+
+            Writer.seek writer end_pos
+
+          | t -> Error.(create "Unexpected layout type." t [%sexp_of:Type.t] |> raise)
+
+        method visit_AEmpty _ _ = ()
+
+        method visit_AScalar ctx type_ e =
+          let l = Layout.of_value {
+              value = eval_pred ctx e; rel = Relation.dummy; field = Field.dummy
+            } in
+          let label, bstr = match l.node with
+            | Null s -> "Null", serialize_null type_ l s
+            | Int (x, s) -> "Int", serialize_int type_ l x s
+            | Bool (x, s) -> "Bool", serialize_bool type_ l x s
+            | String (x, s) -> "String", serialize_string type_ l x s
+            | _ -> failwith "Expected a scalar."
           in
-          Logs.debug (fun m -> m "Generating hash for %d keys." (List.length keys));
-          let hash = Cmph.(List.map keys ~f:(fun (_, b) -> to_string b)
-                           |> KeySet.of_fixed_width
-                           |> Config.create ~seed:0 ~algo:`Chd |> Hash.of_config)
-          in
-          let keys = List.map keys ~f:(fun (k, b) ->
-              (k, b, Cmph.Hash.hash hash (to_string b)))
-          in
+          log_start label;
+          Writer.write writer bstr;
+          log_end ();
 
-          let hash_body = Cmph.Hash.to_packed hash |> Bytes.of_string |> align isize in
-          let hash_len = Bytes.length hash_body in
+        method visit_AOrderedIdx ctx type_ q n l o = failwith ""
 
-          let table_size =
-            List.fold_left keys ~f:(fun m (_, _, h) -> Int.max m h) ~init:0
-            |> fun m -> m + 1
-          in
-
-          let header_len = 8 + 8 + hash_len + 8 * table_size in
-          let header_pos = Writer.pos writer in
-          Writer.write_bytes writer (Bytes.make header_len '\x00');
-
-          let hash_table = Array.create ~len:table_size (0xDEADBEEF) in
-          List.iter keys ~f:(fun (k, b, h) ->
-              let field = { relation = Some n; name = !key_name; type_ = None } in
-              let ctx = Map.set ctx ~key:field ~data:k in
-              Writer.write writer b;
-              self#visit_t ctx value_t l);
-          let end_pos = Writer.pos writer in
-
-          Writer.seek writer header_pos;
-          let len = Writer.Pos.(header_pos - end_pos |> to_bytes_exn) in
-          Writer.write writer (of_int ~width:64 (Int64.to_int_exn len));
-          Writer.write writer (of_int ~width:64 hash_len);
-          Writer.write_bytes writer hash_body;
-          Array.iter hash_table ~f:(fun x -> Writer.write writer (of_int ~width:64 x));
-
-          Writer.seek writer end_pos
-
-        | t -> Error.(create "Unexpected layout type." t [%sexp_of:Type.t] |> raise)
-
-      method visit_AEmpty _ _ = ()
-
-      method visit_AScalar ctx type_ e =
-        let l = Layout.of_value {
-            value = eval_pred ctx e; rel = Relation.dummy; field = Field.dummy
-          } in
-        let bstr = match l.node with
-          | Null s -> serialize_null type_ l s
-          | Int (x, s) -> serialize_int type_ l x s
-          | Bool (x, s) -> serialize_bool type_ l x s
-          | String (x, s) -> serialize_string type_ l x s
-          | _ -> failwith "Expected a scalar."
-        in
-        Writer.write writer bstr
-
-      method visit_AOrderedIdx ctx type_ q n l o = failwith ""
-
-      method visit_t ctx type_ = function
-        | AEmpty -> self#visit_AEmpty ctx type_
-        | AScalar e -> self#visit_AScalar ctx type_ e
-        | AList (r, n, a) -> self#visit_AList ctx type_ r n a
-        | ATuple (a, k) -> self#visit_ATuple ctx type_ a k
-        | AHashIdx (r, n, a, t) -> self#visit_AHashIdx ctx type_ r n a t
-        | AOrderedIdx (_, _, _, _) -> failwith ""
-    end
+        method visit_t ctx type_ = function
+          | AEmpty -> self#visit_AEmpty ctx type_
+          | AScalar e -> self#visit_AScalar ctx type_ e
+          | AList (r, n, a) -> self#visit_AList ctx type_ r n a
+          | ATuple (a, k) -> self#visit_ATuple ctx type_ a k
+          | AHashIdx (r, n, a, t) -> self#visit_AHashIdx ctx type_ r n a t
+          | AOrderedIdx (_, _, _, _) -> failwith ""
+      end
   end
   include S
 
@@ -881,7 +949,11 @@ module Make (Config : Config.S) () = struct
                      (Sexp.to_string_hum ([%sexp_of:(name, string) layout] l)));
       let open Bitstring in
       let begin_pos = Writer.pos writer in
-      (new serialize_fold writer)#visit_t ctx t l;
+
+      let fn = Caml.Filename.temp_file "buf" ".txt" in
+      if Config.layout_map then Logs.info (fun m -> m "Outputting layout map to %s." fn);
+      Out_channel.with_file fn ~f:(fun ch ->
+          (new serialize_fold ch writer)#visit_t ctx t l);
       let end_pos = Writer.pos writer in
       let len = Writer.Pos.(begin_pos - end_pos |> to_bytes_exn) |> Int64.to_int_exn in
       len
@@ -946,6 +1018,7 @@ module Make_db (Config_db : Config.S_db) () = struct
     let eval ctx query =
       let sql = ralgebra_to_sql (subst ctx query) in
       Db.exec_cursor Config_db.conn sql
+    let layout_map = Config_db.layout_map
   end
   include Make (Config) ()
 end
@@ -955,7 +1028,10 @@ module Test = struct
     let conn = new Postgresql.connection ~dbname:"tpcds1" () in
     let layout = AList (Filter (Binop (Eq, n "sm_carrier", String "GERMA"), Scan "ship_mode"), "t", AScalar (nn "t" "sm_carrier"))
     in
-    let module M = Make_db(struct let conn = conn end) () in
+    let module M = Make_db(struct
+        let conn = conn
+        let layout_map = false
+      end) () in
     M.materialize layout |> [%sexp_of:Layout.t] |> print_s;
     [%expect {|
     (UnorderedList ((
@@ -973,7 +1049,10 @@ module Test = struct
           Filter (Binop (Eq, nn "t" "sm_type", n "sm_type"), Scan "ship_mode"),
           "t", AScalar (nn "t" "sm_code")), { lookup = Null })
     in
-    let module M = Make_db(struct let conn = conn end) () in
+    let module M = Make_db(struct
+        let conn = conn
+        let layout_map = false 
+      end) () in
     M.materialize layout |> [%sexp_of:Layout.t] |> print_s;
     [%expect {|
     (Table
@@ -1130,6 +1209,7 @@ module Test = struct
     name, List.map fs ~f:(fun f -> { name = f; relation = Some name; type_ = Some IntT })
 
   module M = Make(struct
+      let layout_map = false
       let eval ctx query =
         Eval.eval ctx query
         |> Seq.map ~f:(fun (t: Tuple.t) ->
