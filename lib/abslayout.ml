@@ -806,8 +806,8 @@ module Make (Config : Config.S) () = struct
             log_end ();
 
             (* Serialize list header. *)
+            let len = Writer.Pos.(end_pos - header_pos |> to_bytes_exn) |> Int64.to_int_exn in
             Writer.seek writer header_pos;
-            let len = Writer.Pos.(header_pos - end_pos |> to_bytes_exn) |> Int64.to_int_exn in
             Writer.write writer (of_int ~width:64 !count);
             Writer.write writer (of_int ~width:64 len);
 
@@ -834,7 +834,7 @@ module Make (Config : Config.S) () = struct
 
             (* Serialize header. *)
             Writer.seek writer header_pos;
-            let len = Writer.Pos.(header_pos - end_pos |> to_bytes_exn) |> Int64.to_int_exn in
+            let len = Writer.Pos.(end_pos - header_pos |> to_bytes_exn) |> Int64.to_int_exn in
             Writer.write writer (of_int ~width:64 len);
             Writer.seek writer end_pos
           | t -> Error.(create "Unexpected layout type." t [%sexp_of:Type.t] |> raise)
@@ -903,7 +903,7 @@ module Make (Config : Config.S) () = struct
             let end_pos = Writer.pos writer in
 
             Writer.seek writer header_pos;
-            let len = Writer.Pos.(header_pos - end_pos |> to_bytes_exn) in
+            let len = Writer.Pos.(end_pos - header_pos |> to_bytes_exn) in
             Writer.write writer (of_int ~width:64 (Int64.to_int_exn len));
             Writer.write writer (of_int ~width:64 hash_len);
             Writer.write_bytes writer hash_body;
@@ -955,7 +955,7 @@ module Make (Config : Config.S) () = struct
       Out_channel.with_file fn ~f:(fun ch ->
           (new serialize_fold ch writer)#visit_t ctx t l);
       let end_pos = Writer.pos writer in
-      let len = Writer.Pos.(begin_pos - end_pos |> to_bytes_exn) |> Int64.to_int_exn in
+      let len = Writer.Pos.(end_pos - begin_pos |> to_bytes_exn) |> Int64.to_int_exn in
       len
 
   type schema = (string * Type.PrimType.t) list

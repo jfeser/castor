@@ -679,7 +679,7 @@ module IRGen = struct
         build_loop Infix.(pcount > int 0) (fun b ->
             let clen = len cstart t in
             build_foreach t cstart func build_yield b;
-            build_assign Infix.(cstart + clen + hsize t) cstart b;
+            build_assign Infix.(cstart + clen) cstart b;
             build_assign Infix.(pcount - int 1) pcount b) b;
         build_func b
 
@@ -890,6 +890,7 @@ module IRGen = struct
 
 
     let scan : Type.t -> int -> func = fun type_ start ->
+      assert (start >= 0);
       Logs.debug (fun m -> m "Start: %d" start);
 
       let rec scan t =

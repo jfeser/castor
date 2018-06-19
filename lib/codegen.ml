@@ -450,7 +450,12 @@ module Make (Config: Config.S) () = struct
         struct_type ctx [|pointer_type (i8_type ctx); i64_type ctx|]
       in
       let struct_ = build_entry_alloca struct_t "" builder in
-      let ptr = build_inttoptr ptr (pointer_type (i8_type ctx)) "" builder in
+      let int_idx = build_sdiv ptr (const_int (i64_type ctx) Serialize.isize) "intidx" builder in
+      let buf = build_load (get_val fctx "buf") "buf" builder in
+      (* Note that the first index is for the pointer. The second indexes into
+         the array. *)
+      let ptr = build_in_bounds_gep buf [| zero; int_idx |] "" builder in
+      let ptr = build_pointercast ptr (pointer_type (i8_type ctx)) "" builder in
       build_store ptr (build_struct_gep struct_ 0 "" builder) builder |> ignore;
       build_store len (build_struct_gep struct_ 1 "" builder) builder |> ignore;
       build_load struct_ "" builder
