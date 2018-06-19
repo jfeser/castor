@@ -976,8 +976,8 @@ module Make (Config: Config.S) () = struct
       t
   end
 
-  let codegen : Bitstring.t -> IRGen.ir_module -> unit =
-    fun buf { iters = ir_iters; funcs = ir_funcs; params } ->
+  let codegen : int -> IRGen.ir_module -> unit =
+    fun buf_len { iters = ir_iters; funcs = ir_funcs; params } ->
       Logs.info (fun m -> m "Codegen started.");
 
       set_data_layout "e-m:o-i64:64-f80:128-n8:16:32:64-S128" module_;
@@ -986,9 +986,7 @@ module Make (Config: Config.S) () = struct
       let sb = SB.create () in
 
       (* Generate global constant for buffer. *)
-      let buf_t =
-        pointer_type (array_type int_type (Bitstring.int_length buf))
-      in
+      let buf_t = pointer_type (array_type int_type (buf_len / 8)) in
       SB.build_global sb "buf" buf_t |> ignore;
 
       let typed_params =

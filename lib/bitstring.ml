@@ -81,6 +81,7 @@ module ByteWriter = struct
     pos : unit -> int64;
     flush : unit -> unit;
     peek : unit -> char;
+    close : unit -> unit;
   }
 
   let of_file : string -> t = fun fn ->
@@ -95,7 +96,11 @@ module ByteWriter = struct
       In_channel.seek in_ch (pos ());
       Option.value_exn (In_channel.input_char in_ch)
     in
-    { output_byte; seek; pos; flush; peek; }
+    let close () =
+      In_channel.close in_ch;
+      Out_channel.close out_ch
+    in
+    { output_byte; seek; pos; flush; peek; close }
 
   let of_buffer : Buffer.t -> t = fun out ->
     let buf = ref (Bytes.create 1) in
@@ -125,13 +130,22 @@ module ByteWriter = struct
       Buffer.add_bytes out (Bytes.sub !buf 0 !len)
     in
     let peek () = Bytes.get !buf !pos in
+    let close () = () in
 
-    { output_byte; seek; pos = get_pos; flush; peek }
+    { output_byte; seek; pos = get_pos; flush; peek; close }
 end
 
 module Writer = struct
   type bitstring = t
-  type pos = (int * int64)
+
+  module Pos = struct
+    type t = (int * int64)
+
+    let (-) = fun (i1, b1) (i2, b2) -> (i1 - i2, Int64.(b1 - b2))
+
+    let to_bytes_exn (i, b) = if i = 0 then b else failwith "Nonzero bit offset."
+  end
+
   type t = {
     mutable buf : int;
     mutable pos : int;
@@ -200,12 +214,14 @@ module Writer = struct
     if t.pos > 0 then t.writer.output_byte (Char.of_int_exn t.buf);
     t.writer.flush ()
 
-  let pos : t -> pos = fun t -> (t.pos, t.writer.pos ())
-  let seek : t -> pos -> unit = fun t (bit_pos, byte_pos) ->
+  let pos : t -> Pos.t = fun t -> (t.pos, t.writer.pos ())
+  let seek : t -> Pos.t -> unit = fun t (bit_pos, byte_pos) ->
     flush t;
     t.writer.seek byte_pos;
     t.buf <- Char.to_int (t.writer.peek ());
     t.pos <- bit_pos
+
+  let close : t -> unit = fun t -> t.writer.close ()
 end
 
 let to_string : t -> string = fun s ->

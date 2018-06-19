@@ -323,7 +323,7 @@ module IRGen = struct
     iters : (string * func) list;
     funcs : (string * func) list;
     params : (string * type_) list;
-    buffer : Bitstring.t;
+    buffer_len : int;
   }
 
   exception IRGenError of Error.t [@@deriving sexp]
@@ -396,7 +396,6 @@ module IRGen = struct
 
     let fresh = Fresh.create ()
     let funcs = ref []
-    let buffers = ref []
 
     (* let params = ref [] *)
     let mfuncs = Hashtbl.create (module String)
@@ -890,14 +889,8 @@ module IRGen = struct
      *   buffers := !buffers @ [buf]; *)
 
 
-    let scan : Type.t -> Bitstring.t -> func = fun type_ buf ->
-      (* let type_ = Type.of_layout_exn l in
-       * let buf = Serialize.serialize type_ l in *)
-      let start = List.map !buffers ~f:Bitstring.byte_length
-                  |> List.sum (module Int) ~f:(fun x -> x)
-      in
+    let scan : Type.t -> int -> func = fun type_ start ->
       Logs.debug (fun m -> m "Start: %d" start);
-      buffers := !buffers @ [buf];
 
       let rec scan t =
         let open Type in
@@ -1157,85 +1150,59 @@ module IRGen = struct
         ) b;
       build_func b
 
-    let rec gen_ralgebra : Ralgebra.t -> string = fun r ->
-      let name, func = match r with
-        | Scan l ->
-          let type_ = Type.of_layout_exn l in
-          let buf =
-            if code_only then Bitstring.empty else Serialize.serialize type_ l
-          in
-          Fresh.name fresh "scan%d", scan type_ buf
-        | Project (x, r) ->
-          Fresh.name fresh "project%d", project gen_ralgebra x r
-        | Filter (x, r) ->
-          let schema = Ralgebra.to_schema r |> Or_error.ok_exn |> Db.Schema.field_idx_exn in
-          Fresh.name fresh "filter%d", filter gen_ralgebra gen_pred schema x r
-        | EqJoin (f1, f2, r1, r2) ->
-          let s1 = Ralgebra.to_schema r1 |> Or_error.ok_exn |> Db.Schema.field_idx_exn in
-          let s2 = Ralgebra.to_schema r2 |> Or_error.ok_exn |> Db.Schema.field_idx_exn in
-          Fresh.name fresh "eqjoin%d", eq_join gen_ralgebra s1 s2 f1 f2 r1 r2
-        | Concat rs -> Fresh.name fresh "concat%d", concat gen_ralgebra rs
-        | Count r -> Fresh.name fresh "count%d", count gen_ralgebra r
-        | r -> Error.create "Unsupported at runtime." r [%sexp_of:Ralgebra.t]
-               |> Error.raise
-      in
-      add_func name func; name
-
-    let rec gen_abslayout : Abslayout.t -> string = fun r ->
+    let gen_abslayout : data_fn:string -> Abslayout.t -> string * int = fun ~data_fn r ->
       let field_idx_exn s f =
         Option.value_exn (List.findi s ~f:(fun i (n, _) -> String.(n = f.Abslayout.name)))
         |> fun (i, _) -> i
       in
-      let name, func = match r with
-        | Scan l ->
-          let type_ = Abslayout.to_type l in
-          let buf =
-            if code_only then Bitstring.empty else Abslayout.serialize type_ l
-          in
-          Logs.debug (fun m -> m "Generating scanner for type: %s"
-                         (Sexp.to_string_hum ([%sexp_of:Type.t] type_)));
-          Fresh.name fresh "scan%d", scan type_ buf
-        | Select (x, r) ->
-          let schema = Abslayout.to_schema_exn r |> field_idx_exn in
-          Fresh.name fresh "select%d", select gen_abslayout abs_gen_pred schema x r
-        | Filter (x, r) ->
-          let schema = Abslayout.to_schema_exn r |> field_idx_exn in
-          Fresh.name fresh "filter%d", filter gen_abslayout abs_gen_pred schema x r
-        | Join {pred; r1; r2} ->
-          let schema =
-            (Abslayout.to_schema_exn r1)@(Abslayout.to_schema_exn r2)
-            |> field_idx_exn
-          in
-          Fresh.name fresh "join%d",
-          nl_join gen_abslayout abs_gen_pred schema pred r1 r2
-        | r -> Error.create "Unsupported at runtime." r [%sexp_of:Abslayout.t]
-               |> Error.raise
+      let writer = Bitstring.Writer.with_file data_fn in
+      let start = ref 0 in
+      let rec gen_abslayout r =
+        let open Abslayout in
+        let name, func = match r with
+          | Scan l ->
+            let type_ = Abslayout.to_type l in
+            let len = if code_only then 0 else Abslayout.serialize writer type_ l in
+            let scan_start = !start in
+            start := !start + len;
+            Logs.debug (fun m -> m "Generating scanner for type: %s"
+                           (Sexp.to_string_hum ([%sexp_of:Type.t] type_)));
+            Fresh.name fresh "scan%d", scan type_ scan_start
+          | Select (x, r) ->
+            let schema = Abslayout.to_schema_exn r |> field_idx_exn in
+            Fresh.name fresh "select%d", select gen_abslayout abs_gen_pred schema x r
+          | Filter (x, r) ->
+            let schema = Abslayout.to_schema_exn r |> field_idx_exn in
+            Fresh.name fresh "filter%d", filter gen_abslayout abs_gen_pred schema x r
+          | Join {pred; r1; r2} ->
+            let schema =
+              (Abslayout.to_schema_exn r1)@(Abslayout.to_schema_exn r2)
+              |> field_idx_exn
+            in
+            Fresh.name fresh "join%d",
+            nl_join gen_abslayout abs_gen_pred schema pred r1 r2
+          | r -> Error.create "Unsupported at runtime." r [%sexp_of:Abslayout.t]
+                 |> Error.raise
+        in
+        add_func name func; name
       in
-      add_func name func; name
+      let entry_name = gen_abslayout r in
+      Bitstring.Writer.flush writer;
+      Bitstring.Writer.close writer;
+      entry_name, !start
 
     let of_primtype : Type.PrimType.t -> type_ = function
       | BoolT -> BoolT { nullable = false }
       | IntT -> IntT { nullable = false }
       | StringT -> StringT { nullable = false }
 
-    let irgen : Ralgebra.t -> ir_module = fun r ->
-      let name = gen_ralgebra r in
-      Logs.debug (fun m -> m "%d buffers" (List.length !buffers));
-      { iters = List.rev !funcs;
-        funcs = ["printer", printer name; "counter", counter name];
-        params = Ralgebra.params r |> Set.to_list
-                 |> List.map ~f:(fun (n, t) -> (n, of_primtype t));
-        buffer = Bitstring.concat !buffers;
-      }
-
-    let irgen_abstract : Abslayout.t -> ir_module = fun r ->
-      let name = gen_abslayout r in
-      Logs.debug (fun m -> m "%d buffers" (List.length !buffers));
+    let irgen_abstract : data_fn:string -> Abslayout.t -> ir_module = fun ~data_fn r ->
+      let name, len = gen_abslayout ~data_fn r in
       { iters = List.rev !funcs;
         funcs = ["printer", printer name; "counter", counter name];
         params = Abslayout.params r |> Set.to_list
                  |> List.map ~f:(fun (n, t) -> (n, of_primtype t));
-        buffer = Bitstring.concat !buffers;
+        buffer_len = len;
       }
 
     let pp : Format.formatter -> ir_module -> unit =

@@ -11,7 +11,7 @@ let c_template : string -> (string * string) list -> string = fun fn args ->
   let cmd = sprintf "clang -E %s %s" args_str fn in
   Unix.open_process_in cmd |> In_channel.input_all
 
-let main = fun ~debug ~gprof ~params ~abs_layout ~db ~port ~code_only fn ->
+let main = fun ~debug ~gprof ~params ~db ~port ~code_only fn ->
   let module CConfig = struct
     let conn = new connection ~dbname:db ?port ()
     let debug = debug
@@ -24,45 +24,21 @@ let main = fun ~debug ~gprof ~params ~abs_layout ~db ~port ~code_only fn ->
   let module IRGen = Implang.IRGen.Make(CConfig) () in
 
   let ir_module =
-    if abs_layout then begin
-      Logs.debug (fun m -> m "Loading ralgebra from %s." fn);
-      let ralgebra =
-        let params_ctx =
-          List.map params ~f:(fun (name, t) ->
-              Abslayout.({ relation = None; name; type_ = Some t }))
-          |> Set.of_list (module Abslayout.Name)
-        in
-        In_channel.with_file fn ~f:Abslayout.of_channel_exn
-        |> Abslayout.resolve CConfig.conn ~ctx:params_ctx
+    Logs.debug (fun m -> m "Loading ralgebra from %s." fn);
+    let ralgebra =
+      let params_ctx =
+        List.map params ~f:(fun (name, t) ->
+            Abslayout.({ relation = None; name; type_ = Some t }))
+        |> Set.of_list (module Abslayout.Name)
       in
+      In_channel.with_file fn ~f:Abslayout.of_channel_exn
+      |> Abslayout.resolve CConfig.conn ~ctx:params_ctx
+    in
 
-      Logs.debug (fun m -> m "Generating IR.");
-      let ir_module = IRGen.irgen_abstract ralgebra in
-      Logs.debug (fun m -> m "Generating IR complete.");
-      ir_module
-    end else begin
-      Logs.debug (fun m -> m "Loading ralgebra from %s." fn);
-      let fd = Unix.openfile ~mode:[O_RDWR] fn in
-      let size = (Unix.Native_file.stat fn).st_size in
-      let buf = Bigstring.map_file ~shared:false fd size in
-      let Candidate.Binable.({ ralgebra; transforms }), _ = 
-        Bigstring.read_bin_prot buf Candidate.Binable.bin_reader_t
-        |> Or_error.ok_exn
-      in
-      Unix.close fd;
-      Logs.debug (fun m -> m "Loading complete.");
-
-      let ralgebra = Ralgebra.Binable.to_ralgebra ralgebra in
-
-      (* Dump type. *)
-      Out_channel.with_file "ralgebra" ~f:(fun ch ->
-          Ralgebra.to_string ralgebra |> Out_channel.output_string ch);
-
-      Logs.debug (fun m -> m "Generating IR.");
-      let ir_module = IRGen.irgen ralgebra in
-      Logs.debug (fun m -> m "Generating IR complete.");
-      ir_module
-    end
+    Logs.debug (fun m -> m "Generating IR.");
+    let ir_module = IRGen.irgen_abstract ~data_fn:"db.buf" ralgebra in
+    Logs.debug (fun m -> m "Generating IR complete.");
+    ir_module
   in
 
   (* Dump IR. *)
@@ -71,19 +47,9 @@ let main = fun ~debug ~gprof ~params ~abs_layout ~db ~port ~code_only fn ->
 
   (* Codegen *)
   Logs.debug (fun m -> m "Codegen.");
-  Codegen.codegen ir_module.buffer ir_module;
+  Codegen.codegen ir_module.buffer_len ir_module;
   Llvm.print_module "scanner.ll" CConfig.module_;
   Out_channel.with_file "scanner.h" ~f:Codegen.write_header;
-
-  (* Serialize. *)
-  if code_only then () else begin
-    Out_channel.with_file "db.buf" ~f:(fun ch ->
-        let w = Bitstring.Writer.with_channel ch in
-        Bitstring.Writer.write w ir_module.buffer);
-    Out_channel.with_file "db.txt" ~f:(fun ch ->
-        let fmt = Format.formatter_of_out_channel ch in
-        Bitstring.pp fmt ir_module.buffer)
-  end;
 
   (* Compile and link *)
   let funcs, calls =
@@ -155,7 +121,6 @@ let () =
     and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
     and debug = flag "debug" ~aliases:["g"] no_arg ~doc:"enable debug mode"
     and gprof = flag "prof" ~aliases:["pg"] no_arg ~doc:"enable profiling"
-    and abs_layout = flag "abs" ~aliases:["a"] no_arg ~doc:"parse an abstract query"
     and params = flag "param" ~aliases:["p"] (listed param) ~doc:"query parameters (passed as key:value)"
     and code_only = flag "code-only" no_arg ~doc:"only emit code"
     and query = anon ("query" %: file)
@@ -164,5 +129,5 @@ let () =
       else if quiet then Logs.set_level (Some Logs.Error)
       else Logs.set_level (Some Logs.Info);
 
-      main ~debug ~gprof ~params ~abs_layout ~db ~port ~code_only query
+      main ~debug ~gprof ~params ~db ~port ~code_only query
   ] |> run
