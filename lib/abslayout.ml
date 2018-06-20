@@ -109,7 +109,7 @@ module No_config = struct
 
   let params : (_, (_, _) Abslayout0.layout) ralgebra -> Set.M(Type0.TypedName).t =
     fun r ->
-      let params = object (self)
+      let ralgebra_params = object (self)
         inherit [_] ralgebra_reduce as super
         method zero = Set.empty (module Type.TypedName)
         method plus = Set.union
@@ -117,10 +117,21 @@ module No_config = struct
           if Option.is_none n.relation then
             Set.singleton (module Type.TypedName) (Name.to_typed_name n)
           else self#zero
-        method visit_'l () l = self#zero
+        method visit_'l () l =
+          let ralgebra_params = self in
+          let layout_params = object (self)
+            inherit [_] reduce as super
+            method zero = Set.empty (module Type.TypedName)
+            method plus = Set.union
+            method visit_ralgebra _ _ _ _ = self#zero
+            method visit_pred _ _ r = ralgebra_params#visit_pred () r
+            method visit_'r _ _ = self#zero
+            method visit_'f _ _ = self#zero
+          end in
+          layout_params#visit_layout () l
         method visit_'f _ _ = self#zero
       end in
-      params#visit_ralgebra () r
+      ralgebra_params#visit_ralgebra () r
 
   let resolve :
     Postgresql.connection
@@ -691,12 +702,23 @@ module Make (Config : Config.S) () = struct
 
   module TF = struct
     open Type
+    let type_of_scalar_layout (l: Layout.t) =
+      match l.node with
+      | Int (x, {node = { field }}) ->
+        IntT { range = AbsInt.abstract x; nullable = false; field }
+      | Bool (x, {node = { field }}) -> BoolT { nullable = false; field }
+      | String (x, {node = { field }}) ->
+        StringT { nchars = AbsInt.abstract (String.length x); nullable = false; field }
+      | Null { node = { field } } -> NullT { field }
+      | _ -> failwith "Not a scalar."
+
     class ['self] type_fold =
       object (self : 'self)
         inherit [_] material_fold as super
 
         method build_AEmpty = EmptyT
-        method build_AScalar l = of_layout_exn l
+        method build_AScalar = type_of_scalar_layout
+
         method build_AList ls =
           let (t, c) = Seq.fold ls ~init:(EmptyT, AbsCount.zero) ~f:(fun (t, c) t' ->
               (unify_exn t t', AbsCount.(c + count t')))
@@ -709,10 +731,9 @@ module Make (Config : Config.S) () = struct
           | Cross -> CrossTupleT (ls, { count = List.fold_left1_exn ~f:AbsCount.( * ) counts })
         method build_AHashIdx kv h =
           let kt, vt = Seq.fold kv ~init:(EmptyT, EmptyT) ~f:(fun (kt, vt1) (kv, vt2) ->
-              (unify_exn kt (Layout.of_value kv |> of_layout_exn),
+              (unify_exn kt (Layout.of_value kv |> type_of_scalar_layout),
                unify_exn vt1 vt2)) in
-          TableT (kt, vt, { count = None; field = Field.of_name "fixme";
-                            lookup = PredCtx.Key.Field (Field.of_name "fixme") })
+          TableT (kt, vt, { count = None; field = Field.of_name "fixme"; lookup = h.lookup })
         method build_AOrderedIdx ls o = failwith ""
       end
 
@@ -851,29 +872,41 @@ module Make (Config : Config.S) () = struct
                   in
                   key_name := name;
                   key)
-              |> Seq.map ~f:(fun k -> k, serialize key_t (Layout.of_value (Value.of_primvalue k)))
               |> Seq.to_list
             in
             Logs.debug (fun m -> m "Generating hash for %d keys." (List.length keys));
-            let hash = Cmph.(List.map keys ~f:(fun (k, b) -> match k with
-                | `String s | `Unknown s -> s
-                | _ -> Bitstring.to_string b)
-                             |> KeySet.create
-                             |> Config.create ~seed:0 ~algo:`Chd
-                             |> Hash.of_config)
+
+            let keys = List.map keys ~f:(fun k ->
+                  let serialized =
+                    Value.of_primvalue k
+                    |> Layout.of_value
+                    |> serialize key_t
+                  in
+                  let hash_key = match k with
+                    | `String s | `Unknown s -> s
+                    | _ -> Bitstring.to_string serialized
+                  in
+                  (k, serialized, hash_key))
             in
-            let keys = List.map keys ~f:(fun (k, b) ->
-                (k, b, Cmph.Hash.hash hash (to_string b)))
+            let hash =
+              let open Cmph in
+              List.map keys ~f:(fun (_, _, x) -> x)
+              |> KeySet.create
+              |> Config.create ~seed:0 ~algo:`Chd
+              |> Hash.of_config
+            in
+            let keys = List.map keys ~f:(fun (k, b, x) ->
+                (k, b, x, Cmph.Hash.hash hash x))
             in
             Out_channel.with_file "hashes.txt" ~f:(fun ch ->
-                List.iter keys ~f:(fun (k, v, h) ->
-                    Out_channel.fprintf ch "%s -> %d\n" (Bitstring.to_string v) h));
+                List.iter keys ~f:(fun (k, b, x, h) ->
+                    Out_channel.fprintf ch "%s -> %d\n" x h));
 
             let hash_body = Cmph.Hash.to_packed hash |> Bytes.of_string |> align isize in
             let hash_len = Bytes.length hash_body in
 
             let table_size =
-              List.fold_left keys ~f:(fun m (_, _, h) -> Int.max m h) ~init:0
+              List.fold_left keys ~f:(fun m (_, _, _, h) -> Int.max m h) ~init:0
               |> fun m -> m + 1
             in
 
@@ -895,14 +928,21 @@ module Make (Config : Config.S) () = struct
             Writer.write_bytes writer (Bytes.make (8 * table_size) '\x00');
             log_end ();
 
-            let hash_table = Array.create ~len:table_size (0xDEADBEEF) in
+            let hash_table = Array.create ~len:table_size 0x0 in
 
             log_start "Table values";
-            List.iter keys ~f:(fun (k, b, h) ->
-                let field = { relation = Some n; name = !key_name; type_ = None } in
+            List.iter keys ~f:(fun (k, b, _, h) ->
+                let field =
+                  { relation = Some n; name = !key_name; type_ = None }
+                in
                 let ctx = Map.set ctx ~key:field ~data:k in
+                let value_pos = Writer.pos writer in
                 Writer.write writer b;
-                self#visit_t ctx value_t l);
+                self#visit_t ctx value_t l;
+                hash_table.(h) <- Writer.Pos.(
+                    value_pos |> to_bytes_exn |> Int64.to_int_exn
+                  )
+              );
             log_end ();
 
             let end_pos = Writer.pos writer in

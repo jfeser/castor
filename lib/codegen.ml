@@ -403,7 +403,7 @@ module Make (Config: Config.S) () = struct
 
       build_extractvalue lltup idx "elemtmp" builder
 
-  let codegen_hash : _ -> llvalue -> llvalue -> llvalue = fun fctx x1 x2 ->
+  let codegen_hash fctx hash_ptr key_ptr key_size =
     (* See cmph.h. cmph_uint32 cmph_search_packed(void *packed_mphf, const
        char *key, cmph_uint32 keylen); *)
     let cmph_search_packed =
@@ -413,18 +413,7 @@ module Make (Config: Config.S) () = struct
              i32_type ctx|])
         module_
     in
-    debug_printf "Hash data offset: %d\n" [x1];
-    let key_ptr = build_entry_alloca (type_of x2) "key_ptr" builder in
-    build_store x2 key_ptr builder |> ignore;
-    debug_printf "Key val: %d\n" [x2];
-    debug_printf "Key val: %d\n" [build_load key_ptr "" builder];
-
-    let key_ptr_cast = build_pointercast key_ptr
-        (pointer_type (i8_type ctx)) "key_ptr_cast" builder
-    in
-    let key_size =
-      build_intcast (size_of (type_of x2)) (i32_type ctx) "key_size" builder
-    in
+    debug_printf "Hash data offset: %d\n" [hash_ptr];
     debug_printf "Key size: %d\n" [key_size];
     let buf_ptr = build_load (get_val fctx "buf") "buf_ptr" builder in
     debug_printf "Buf ptr: %p\n" [buf_ptr];
@@ -432,17 +421,35 @@ module Make (Config: Config.S) () = struct
       build_ptrtoint buf_ptr (i64_type ctx) "buf_ptr_int" builder
     in
     let hash_ptr_as_int =
-      build_add buf_ptr_as_int x1 "hash_ptr_int" builder
+      build_add buf_ptr_as_int hash_ptr "hash_ptr_int" builder
     in
     let hash_ptr = build_inttoptr hash_ptr_as_int
         (pointer_type (i8_type ctx)) "hash_ptr" builder
     in
     debug_printf "Hash ptr: %p\n" [hash_ptr];
     let hash_val = build_call cmph_search_packed
-        [|hash_ptr; key_ptr_cast; key_size|] "hash_val" builder
+        [|hash_ptr; key_ptr; key_size|] "hash_val" builder
     in
     debug_printf "Hash val: %d\n" [hash_val];
     build_intcast hash_val (i64_type ctx) "hash_val_cast" builder
+
+  let codegen_int_hash fctx hash_ptr key =
+    let key_ptr = build_entry_alloca (type_of key) "key_ptr" builder in
+    build_store key key_ptr builder |> ignore;
+    debug_printf "Key val: %d\n" [key];
+    let key_ptr_cast = build_pointercast key_ptr
+        (pointer_type (i8_type ctx)) "key_ptr_cast" builder
+    in
+    let key_size =
+      build_intcast (size_of (type_of key)) (i32_type ctx) "key_size" builder
+    in
+    codegen_hash fctx hash_ptr key_ptr_cast key_size
+
+  let codegen_string_hash fctx hash_ptr key =
+    let key_ptr = build_extractvalue key 0 "key_ptr" builder in
+    let key_size = build_extractvalue key 1 "key_size" builder in
+    let key_size = build_intcast key_size (i32_type ctx) "key_size" builder in
+    codegen_hash fctx hash_ptr key_ptr key_size
 
   let codegen_load_str : _ -> llvalue -> llvalue -> llvalue =
     fun fctx ptr len ->
@@ -485,7 +492,11 @@ module Make (Config: Config.S) () = struct
         | Lt -> build_icmp Icmp.Slt x1 x2 "lttmp" builder
         | And -> build_and x1 x2 "andtmp" builder
         | Or -> build_or x1 x2 "ortmp" builder
-        | Hash -> codegen_hash fctx x1 x2
+        | Hash -> begin match t2 with
+            | StringT _ -> codegen_string_hash fctx x1 x2
+            | IntT _ | BoolT _ -> codegen_int_hash fctx x1 x2
+            | _ -> fail (Error.create "Unexpected hash." t2 [%sexp_of:type_])
+          end
         | LoadStr -> codegen_load_str fctx x1 x2
         | Not -> fail (Error.of_string "Not a binary operator.")
       in

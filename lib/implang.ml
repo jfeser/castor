@@ -497,6 +497,22 @@ module IRGen = struct
 
     open Serialize
 
+    (** The length of a layout header in bytes. *)
+    let hsize =
+      let open Type in
+      function
+      | NullT _ | IntT _ | BoolT _ | EmptyT -> Infix.(int 0)
+      | StringT { nchars } -> begin match Type.AbsInt.concretize nchars with
+          | Some _ -> Infix.(int 0)
+          | None -> Infix.(int isize)
+        end
+      | TableT (_,_,_) -> Infix.(int isize)
+      | CrossTupleT (_, { count })
+      | ZipTupleT (_, { count }) -> Infix.(int isize)
+      | GroupingT (_, _, { count })
+      | UnorderedListT (_, { count })
+      | OrderedListT (_, { count }) -> Infix.int (2 * isize)
+
     (** The length of a layout in bytes (excluding the header). *)
     let len start =
       let open Infix in
@@ -529,22 +545,6 @@ module IRGen = struct
       | GroupingT (_, _, { count })
       | UnorderedListT (_, { count })
       | OrderedListT (_, { count }) -> Some (islice start)
-
-    (** The length of a layout header in bytes. *)
-    let hsize =
-      let open Type in
-      function
-      | NullT _ | IntT _ | BoolT _ | EmptyT -> Infix.(int 0)
-      | StringT { nchars } -> begin match Type.AbsInt.concretize nchars with
-          | Some _ -> Infix.(int 0)
-          | None -> Infix.(int isize)
-        end
-      | TableT (_,_,_) -> Infix.(int isize)
-      | CrossTupleT (_, { count })
-      | ZipTupleT (_, { count }) -> Infix.(int isize)
-      | GroupingT (_, _, { count })
-      | UnorderedListT (_, { count })
-      | OrderedListT (_, { count }) -> Infix.int (2 * isize)
 
     let scan_empty = create ["start", int_t] VoidT |> build_func
     let scan_null _ = create ["start", int_t] VoidT |> build_func
@@ -742,6 +742,42 @@ module IRGen = struct
       end;
       build_func b
 
+    let abs_gen_pred tup field_idx =
+      let module A = Abslayout in
+      let module R = Ralgebra0 in
+      let rec gen_pred = function
+        | A.Int x -> Int x
+        | A.String x -> String x
+        | A.Bool x -> Bool x
+        | A.Name n -> (try Index (tup, field_idx n) with _ -> Var n.A.name)
+        | A.Binop (op, arg1, arg2) ->
+          let e1 = gen_pred arg1 in
+          let e2 = gen_pred arg2 in
+          begin match op with
+            | R.Eq -> Infix.(e1 = e2)
+            | R.Lt -> Infix.(e1 < e2)
+            | R.Le -> Infix.(e1 <= e2)
+            | R.Gt -> Infix.(e1 > e2)
+            | R.Ge -> Infix.(e1 >= e2)
+            | R.And -> Infix.(e1 && e2)
+            | R.Or -> Infix.(e1 || e2)
+            | R.Add -> Infix.(e1 + e2)
+            | R.Sub -> Infix.(e1 - e2)
+            | R.Mul -> Infix.(e1 * e2)
+            | R.Div -> Infix.(e1 / e2)
+            | R.Mod -> Infix.(e1 % e2)
+          end
+        | A.Varop (op, args) ->
+          let eargs = List.map ~f:gen_pred args in
+          begin match op with
+            | R.And -> List.fold_left1_exn ~f:Infix.(&&) eargs
+            | R.Or -> List.fold_left1_exn ~f:Infix.(||) eargs
+            | R.Eq | R.Lt | R.Le | R.Gt | R.Ge | R.Add|R.Sub|R.Mul|R.Div|R.Mod ->
+              fail (Error.create "Not a vararg operator." op [%sexp_of:R.op])
+          end
+      in
+      gen_pred
+
     let scan_table : _ -> _ -> _ -> Type.table -> _ =
       fun scan kt vt { count; field; lookup } ->
         let key_iter = scan kt in
@@ -766,23 +802,26 @@ module IRGen = struct
         in
         let mapping_start = Infix.(hash_data_start + hash_len) in
         let lookup_expr = match lookup with
-          | Var (n, _) -> Var n
+          | Name n -> Var n.name
           | _ -> Error.create "Unexpected parameters." lookup
-                   [%sexp_of:Layout.PredCtx.Key.t] |> Error.raise
+                   [%sexp_of:Abslayout0.name Abslayout0.pred] |> Error.raise
         in
+        (* Compute the index in the mapping table for this key. *)
         let hash_key = Infix.(hash hash_data_start lookup_expr) in
-        let key_start =
-          Infix.(mapping_start + islice (mapping_start + hash_key * int isize))
-        in
-        build_iter key_iter [key_start] b;
-        let key = build_fresh_var "key" key_type b in
-        build_step key key_iter b;
+        (* Get a pointer to the value. *)
+        let value_ptr = Infix.(islice (mapping_start + hash_key * int isize)) in
+        (* If the pointer is null, then the key is not present. *)
+        build_if ~cond:Infix.(value_ptr = int 0x0) ~then_:(fun _ -> ())
+          ~else_:(fun b ->
+              build_iter key_iter [value_ptr] b;
+              let key = build_fresh_var "key" key_type b in
+              build_step key key_iter b;
 
-        let value_start = Infix.(key_start + len key_start kt) in
-        build_if ~cond:Infix.(Index(key, 0) = lookup_expr)
-          ~then_:(build_foreach vt value_start value_iter (fun value b ->
-              build_yield (build_tuple_append key_type value_type key value) b))
-          ~else_:(fun b -> ()) b;
+              let value_start = Infix.(value_ptr + len value_ptr kt + hsize kt) in
+              build_if ~cond:Infix.(Index(key, 0) = lookup_expr)
+                ~then_:(build_foreach vt value_start value_iter (fun value b ->
+                    build_yield (build_tuple_append key_type value_type key value) b))
+                ~else_:(fun b -> ()) b) b;
 
         build_func b
 
@@ -994,42 +1033,6 @@ module IRGen = struct
             | R.Mod -> Infix.(e1 % e2)
           end
         | R.Varop (op, args) ->
-          let eargs = List.map ~f:gen_pred args in
-          begin match op with
-            | R.And -> List.fold_left1_exn ~f:Infix.(&&) eargs
-            | R.Or -> List.fold_left1_exn ~f:Infix.(||) eargs
-            | R.Eq | R.Lt | R.Le | R.Gt | R.Ge | R.Add|R.Sub|R.Mul|R.Div|R.Mod ->
-              fail (Error.create "Not a vararg operator." op [%sexp_of:R.op])
-          end
-      in
-      gen_pred
-
-    let abs_gen_pred tup field_idx =
-      let module A = Abslayout in
-      let module R = Ralgebra0 in
-      let rec gen_pred = function
-        | A.Int x -> Int x
-        | A.String x -> String x
-        | A.Bool x -> Bool x
-        | A.Name n -> (try Index (tup, field_idx n) with _ -> Var n.A.name)
-        | A.Binop (op, arg1, arg2) ->
-          let e1 = gen_pred arg1 in
-          let e2 = gen_pred arg2 in
-          begin match op with
-            | R.Eq -> Infix.(e1 = e2)
-            | R.Lt -> Infix.(e1 < e2)
-            | R.Le -> Infix.(e1 <= e2)
-            | R.Gt -> Infix.(e1 > e2)
-            | R.Ge -> Infix.(e1 >= e2)
-            | R.And -> Infix.(e1 && e2)
-            | R.Or -> Infix.(e1 || e2)
-            | R.Add -> Infix.(e1 + e2)
-            | R.Sub -> Infix.(e1 - e2)
-            | R.Mul -> Infix.(e1 * e2)
-            | R.Div -> Infix.(e1 / e2)
-            | R.Mod -> Infix.(e1 % e2)
-          end
-        | A.Varop (op, args) ->
           let eargs = List.map ~f:gen_pred args in
           begin match op with
             | R.And -> List.fold_left1_exn ~f:Infix.(&&) eargs

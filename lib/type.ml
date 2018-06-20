@@ -72,7 +72,7 @@ module T = struct
   type table = {
     count : AbsCount.t;
     field : Db.Field.t;
-    lookup : Layout.PredCtx.Key.t;
+    lookup : Abslayout0.name Abslayout0.pred;
   } [@@deriving compare, sexp]
   type grouping = {
     count : AbsCount.t;
@@ -147,7 +147,7 @@ let rec unify_exn : t -> t -> t = fun t1 t2 ->
                                      count = AbsCount.unify c1 c2 })
   | (TableT (kt1, vt1, { count = c1; field = f1; lookup = l1 }),
      TableT (kt2, vt2, { count = c2; field = f2; lookup = l2 }))
-    when Db.Field.(f1 = f2) && Layout.PredCtx.Key.(l1 = l2) ->
+    when Db.Field.(f1 = f2) && Polymorphic_compare.(l1 = l2) ->
     let kt = unify_exn kt1 kt2 in
     let vt = unify_exn vt1 vt2 in
     TableT (kt, vt, { field = f1; lookup = l1; count = AbsCount.unify c1 c2 })
@@ -156,77 +156,6 @@ let rec unify_exn : t -> t -> t = fun t1 t2 ->
     when Polymorphic_compare.(m1 = m2) ->
     GroupingT (unify_exn kt1 kt2, unify_exn vt1 vt2, m1)
   | _ -> fail "Unexpected types."
-
-(* module Of_layout = struct
- *   open Layout
- *   open Hashcons
- * 
- *   let of_int x {node = { field }} =
- *     IntT { range = AbsInt.abstract x; nullable = false; field }
- *   let of_bool x {node = { field }} = BoolT { nullable = false; field }
- *   let of_string x {node = { field }} =
- *     StringT { nchars = AbsInt.abstract (String.length x); nullable = false; field }
- *   let of_null { node = { field } } = NullT { field }
- *   let of_cross_tuple ts count ls = CrossTupleT (ts, { count })
- *   let of_zip_tuple ts count ls = ZipTupleT (ts, { count })
- *   let of_unordered_list ts count = UnorderedListT (ts, { count })
- *   let of_ordered_list ts count field order lookup =
- *     OrderedListT (ts, { field; order; lookup; count }) *)
-
-  let rec of_layout_exn : Layout.t -> t =
-    let fail m =
-      let err = Error.of_string (Printf.sprintf "Type inference failed: %s" m) in
-      raise (TypeError err)
-    in
-    let of_many ls = List.map ls ~f:of_layout_exn in
-    let unify_many ls = of_many ls |> List.fold_left ~f:unify_exn ~init:EmptyT in
-    fun l ->
-      let count = match Layout.ntuples l with
-        | Ok c -> AbsCount.abstract c
-        | _ -> None
-      in
-      match l.node with
-      | Int (x, {node = { field }}) ->
-        IntT { range = AbsInt.abstract x; nullable = false; field }
-      | Bool (x, {node = { field }}) -> BoolT { nullable = false; field }
-      | String (x, {node = { field }}) ->
-        StringT { nchars = AbsInt.abstract (String.length x); nullable = false; field }
-      | Null { node = { field } } -> NullT { field }
-      | CrossTuple ls -> CrossTupleT (of_many ls, { count })
-      | ZipTuple ls ->
-        begin match List.map ls ~f:Layout.ntuples |> List.all_equal with
-          | Ok len -> ZipTupleT (of_many ls, { count })
-          | Error _ -> fail "Columns have different lengths."
-        end
-      | UnorderedList ls -> UnorderedListT (unify_many ls, { count })
-      | OrderedList (ls, { field; order; lookup }) ->
-        OrderedListT (unify_many ls, { field; order; lookup; count })
-      | Table (elems, { field; lookup }) ->
-        let kt = Map.keys elems |> List.map ~f:Layout.of_value |> unify_many in
-        let vt = Map.data elems |> unify_many in
-        TableT (kt, vt, { field; lookup; count })
-      | Empty -> EmptyT
-      | Grouping (elems, { key; output }) ->
-        let keys, values = List.unzip elems in
-        GroupingT (unify_many keys, unify_many values, { key; output; count })
-(* end
- * include Of_layout *)
-
-let rec params : t -> Set.M(TypedName).t =
-  let params_of_key_option = function
-    | Some k -> Layout.PredCtx.Key.params k
-    | None -> Set.empty (module TypedName)
-  in
-  let union_list = Set.union_list (module TypedName) in
-  function
-  | EmptyT | NullT _ | IntT _ | BoolT _ | StringT _ -> Set.empty (module TypedName)
-  | CrossTupleT (ts, _) | ZipTupleT (ts, _) -> List.map ts ~f:params |> union_list
-  | UnorderedListT (t, _) -> params t
-  | OrderedListT (t, { field; lookup = (v1, v2) }) ->
-    union_list [params_of_key_option v1; params_of_key_option v2; params t]
-  | TableT (_, t, { field; lookup = k }) ->
-    Set.union (Layout.PredCtx.Key.params k) (params t)
-  | GroupingT (kt, vt, _) -> Set.union (params kt) (params vt)
 
 let rec width : t -> int = function
   | NullT _ | IntT _ | BoolT _ | StringT _ -> 1

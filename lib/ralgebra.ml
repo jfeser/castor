@@ -203,8 +203,7 @@ let rec to_string : t -> string = function
   | Filter (p, r) -> sprintf "Filter(%s, %s)" (pred_to_string p) (to_string r)
   | EqJoin (f1, f2, r1, r2) ->
     sprintf "EqJoin(%s, %s, %s, %s)" f1.name f2.name (to_string r1) (to_string r2)
-  | Scan l -> sprintf "Scan(%s)"
-                (Type.of_layout_exn l |> [%sexp_of:Type.t] |> Sexp.to_string_hum)
+  | Scan l -> sprintf "Scan(..)"
   | Concat rs ->
     List.map rs ~f:to_string |> String.concat ~sep:", " |> sprintf "Concat(%s)"
   | Agg (out, key, r) ->

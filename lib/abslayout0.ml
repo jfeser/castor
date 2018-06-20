@@ -4,7 +4,7 @@ module Pervasives = Caml.Pervasives
 type name = {
   relation : string option;
   name : string;
-  type_ : (Type.PrimType.t [@opaque]) option;
+  type_ : (Type0.PrimType.t [@opaque]) option;
 }
 
 and 'f pred =
@@ -41,7 +41,7 @@ and ('f, 'l) ralgebra =
             visitors { variety = "map"; name = "ralgebra_map" },
             visitors { variety = "iter"; name = "ralgebra_iter" },
             visitors { variety = "reduce"; name = "ralgebra_reduce" },
-            sexp]
+            compare, sexp]
 
 type 'f hash_idx = {
   lookup : 'f pred;

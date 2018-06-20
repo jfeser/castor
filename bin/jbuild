@@ -2,7 +2,7 @@
 
 (install
  ((section bin)
-  (files (compile.exe search.exe transform.exe inspect.exe))))
+  (files (compile.exe transform.exe inspect.exe))))
 
 (rule
  ((targets (config.ml))
@@ -16,12 +16,12 @@
   (preprocess (pps (ppx_sexp_conv ppx_let ppx_driver.runner -no-check)))
   (modules (inspect util))))
 
-(executable
- ((name search)
-  (libraries (core async postgresql dblayout))
-  (flags (:standard -g -bin-annot))
-  (preprocess (pps (ppx_sexp_conv ppx_let ppx_driver.runner -no-check)))
-  (modules search)))
+; (executable
+;  ((name search)
+;   (libraries (core async postgresql dblayout))
+;   (flags (:standard -g -bin-annot))
+;   (preprocess (pps (ppx_sexp_conv ppx_let ppx_driver.runner -no-check)))
+;   (modules search)))
 
 (executable
  ((name compile)
