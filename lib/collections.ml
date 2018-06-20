@@ -9,7 +9,7 @@ module List = struct
       match l with
       | [] -> Or_error.error_string "Empty list."
       | (x::xs) ->
-        begin match List.find xs ~f:(fun x' -> x' <> x') with
+        begin match List.find xs ~f:(fun x' -> x <> x') with
           | Some x' -> Or_error.error "Unequal elements." (x, x') [%sexp_of:(t * t)]
           | None -> Or_error.return x
         end

@@ -39,7 +39,7 @@ let bool_of_bytes_exn : bytes -> bool = fun b ->
   | 1 -> true
   | _ -> failwith "Unexpected byte sequence."
 
-let align : int -> bytes -> bytes = fun align b ->
+let align : ?pad:char -> int -> bytes -> bytes = fun ?(pad='\x00') align b ->
   let slop = Bytes.length b % align in
   if slop = 0 then b else
     let padding = align - slop in
@@ -129,9 +129,14 @@ let serialize_table serialize t _ m _ =
                |> List.map ~f:(fun k -> k, serialize key_t (Layout.of_value k))
     in
     Logs.debug (fun m -> m "Generating hash for %d keys." (List.length keys));
+
+    let key_length =
+      List.all_equal (List.map keys ~f:(fun (_, b) -> String.length (to_string b)))
+    in
     let hash = Cmph.(List.map keys ~f:(fun (_, b) -> to_string b)
-                     |> KeySet.of_fixed_width
-                     |> Config.create ~seed:0 ~algo:`Chd |> Hash.of_config)
+                     |> KeySet.create
+                     |> Config.create ~seed:0 ~algo:`Chd
+                     |> Hash.of_config)
     in
     let keys =
       List.map keys ~f:(fun (k, b) ->

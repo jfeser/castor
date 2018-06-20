@@ -141,12 +141,11 @@ module No_config = struct
           |> Set.of_list (module Name)
           |> Set.union param_ctx
         in
-        Logs.debug (fun m -> m "Relation %s: %s" r_name ([%sexp_of:Set.M(Name).t] ctx |> Sexp.to_string_hum));
-        Logs.debug (fun m -> m "%s" ([%sexp_of:Field.t list] r.fields |> Sexp.to_string_hum));
         r_name, ctx
       in
 
-      let rename name = Set.map (module Name) ~f:(fun n ->
+      let rename name s =
+        Set.map (module Name) s ~f:(fun n ->
           { n with relation = Option.map n.relation ~f:(fun _ -> name) })
       in
 
@@ -182,8 +181,8 @@ module No_config = struct
           let pred = resolve_pred ctx pred in
           Join { join with pred; r1; r2 }, ctx
         | Scan l ->
-          let l, ctx = resolve_relation l in
-          Scan l, ctx
+          let l, ctx' = resolve_relation l in
+          Scan l, Set.union ctx ctx'
         | Agg (aggs, key, r) ->
           let r, ctx = resolve_ralgebra_inner ctx r in
           let aggs = List.map ~f:(resolve_agg ctx) aggs in
@@ -856,13 +855,19 @@ module Make (Config : Config.S) () = struct
               |> Seq.to_list
             in
             Logs.debug (fun m -> m "Generating hash for %d keys." (List.length keys));
-            let hash = Cmph.(List.map keys ~f:(fun (_, b) -> to_string b)
-                             |> KeySet.of_fixed_width
-                             |> Config.create ~seed:0 ~algo:`Chd |> Hash.of_config)
+            let hash = Cmph.(List.map keys ~f:(fun (k, b) -> match k with
+                | `String s | `Unknown s -> s
+                | _ -> Bitstring.to_string b)
+                             |> KeySet.create
+                             |> Config.create ~seed:0 ~algo:`Chd
+                             |> Hash.of_config)
             in
             let keys = List.map keys ~f:(fun (k, b) ->
                 (k, b, Cmph.Hash.hash hash (to_string b)))
             in
+            Out_channel.with_file "hashes.txt" ~f:(fun ch ->
+                List.iter keys ~f:(fun (k, v, h) ->
+                    Out_channel.fprintf ch "%s -> %d\n" (Bitstring.to_string v) h));
 
             let hash_body = Cmph.Hash.to_packed hash |> Bytes.of_string |> align isize in
             let hash_len = Bytes.length hash_body in
