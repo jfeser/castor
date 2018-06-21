@@ -1003,19 +1003,21 @@ module Make (Config : Config.S) () = struct
       let len = Writer.Pos.(end_pos - begin_pos |> to_bytes_exn) |> Int64.to_int_exn in
       len
 
-  type schema = (string * Type.PrimType.t) list
+  type schema = name list
 
-  let rec pred_to_schema_exn : name pred -> (string * Type.PrimType.t) =
+  let unnamed t = { name = ""; relation = None; type_ = Some t }
+
+  let rec pred_to_schema_exn : name pred -> name =
     function
-    | Name { name; type_ = Some t } -> (name, t)
     | Name { type_ = None } -> failwith "Missing type."
-    | Int _ -> "", IntT
-    | Bool _ -> "", BoolT
-    | String _ -> "", StringT
+    | Name ({ type_ = Some _ } as n) -> n
+    | Int _ -> unnamed IntT
+    | Bool _ -> unnamed BoolT
+    | String _ -> unnamed StringT
     | Null -> failwith ""
     | Binop (op, _, _) | Varop (op, _) -> begin match op with
-        | Eq | Lt | Le | Gt | Ge | And | Or -> "", BoolT
-        | Add | Sub | Mul | Div | Mod -> "", IntT
+        | Eq | Lt | Le | Gt | Ge | And | Or -> unnamed BoolT
+        | Add | Sub | Mul | Div | Mod -> unnamed IntT
       end
 
   let agg_to_string : name agg -> string = function
@@ -1031,21 +1033,27 @@ module Make (Config : Config.S) () = struct
       let rec ralgebra_to_schema_exn = function
         | Select (exprs, r) -> List.map exprs ~f:(pred_to_schema_exn)
         | Filter (_, r) | Dedup r -> ralgebra_to_schema_exn r
-        | Join {r1; r2} ->
-          ralgebra_to_schema_exn r1 @ ralgebra_to_schema_exn r2
+        | Join {r1; r1_name; r2; r2_name} ->
+          let lhs =
+            ralgebra_to_schema_exn r1
+            |> List.map ~f:(fun n -> { n with relation = Some r1_name })
+          in
+          let rhs =
+            ralgebra_to_schema_exn r2
+            |> List.map ~f:(fun n -> { n with relation = Some r2_name })
+          in
+          lhs @ rhs
         | Scan r -> layout_to_schema_exn r
         | Agg (out, _, _) ->
           List.map out ~f:(function
-              | Count -> "count", Type.PrimType.IntT
-              | Key { name; type_ = Some t } -> name, t
-              | Key { type_ = None } -> failwith "Missing type."
-              | Sum _ | Min _ | Max _ as a ->
-                agg_to_string a, Type.PrimType.IntT
+              | Key n -> n
+              | Count | Sum _ | Min _ | Max _ as a ->
+                { name = agg_to_string a; type_ = Some IntT; relation = None }
               | Avg _ -> failwith "unsupported")
       in
       ralgebra_to_schema_exn
 
-  let rec layout_to_schema_exn : (name, string) layout -> (string * Type.PrimType.t) list =
+  let rec layout_to_schema_exn : (name, string) layout -> schema =
     function
     | AEmpty -> []
     | AScalar p -> [pred_to_schema_exn p]

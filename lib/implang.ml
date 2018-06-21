@@ -271,7 +271,7 @@ let rec infer_type : type_ Hashtbl.M(String).t -> expr -> type_ =
                   [%sexp_of:string * type_ Hashtbl.M(String).t] |> Error.raise
       end
     | Tuple xs -> TupleT (List.map xs ~f:(infer_type ctx))
-    | Binop { op; arg1; arg2 } ->
+    | Binop { op; arg1; arg2 } as e ->
       let t1 = infer_type ctx arg1 in
       let t2 = infer_type ctx arg2 in
       begin match op, t1, t2 with
@@ -288,7 +288,7 @@ let rec infer_type : type_ Hashtbl.M(String).t -> expr -> type_ =
         | LoadStr, IntT { nullable = false }, IntT { nullable = false } ->
           StringT { nullable = false }
         | _ -> fail (Error.create "Type error."
-                       (op, t1, t2) [%sexp_of:op * type_ * type_])
+                       (e, t1, t2, ctx) [%sexp_of:expr * type_ * type_ * type_ Hashtbl.M(String).t])
       end
     | Unop { op; arg } ->
       let t = infer_type ctx arg in
@@ -783,14 +783,7 @@ module IRGen = struct
         let key_iter = scan kt in
         let value_iter = scan vt in
         let key_type = (find_func key_iter).ret_type in
-        let value_type = (find_func value_iter).ret_type in
-
-        let ret_type =
-          match (find_func key_iter).ret_type, (find_func value_iter).ret_type with
-          | (TupleT t1, TupleT t2) -> TupleT (t1 @ t2)
-          | ts -> Error.create "Unexpected types." ts [%sexp_of:type_ * type_]
-                  |> Error.raise
-        in
+        let ret_type = (find_func value_iter).ret_type in
 
         let b = create ["start", int_t] ret_type in
 
@@ -820,7 +813,7 @@ module IRGen = struct
               let value_start = Infix.(value_ptr + len value_ptr kt + hsize kt) in
               build_if ~cond:Infix.(Index(key, 0) = lookup_expr)
                 ~then_:(build_foreach vt value_start value_iter (fun value b ->
-                    build_yield (build_tuple_append key_type value_type key value) b))
+                    build_yield value b))
                 ~else_:(fun b -> ()) b) b;
 
         build_func b
@@ -1007,42 +1000,6 @@ module IRGen = struct
         ) b;
       build_func b
 
-    let gen_pred tup field_idx =
-      let module R = Ralgebra0 in
-      let rec gen_pred = function
-        | R.Int x -> Int x
-        | R.String x -> String x
-        | R.Bool x -> Bool x
-        | R.Var (n, t) -> Var n
-        | R.Field f -> Index (tup, field_idx f)
-        | R.Binop (op, arg1, arg2) ->
-          let e1 = gen_pred arg1 in
-          let e2 = gen_pred arg2 in
-          begin match op with
-            | R.Eq -> Infix.(e1 = e2)
-            | R.Lt -> Infix.(e1 < e2)
-            | R.Le -> Infix.(e1 <= e2)
-            | R.Gt -> Infix.(e1 > e2)
-            | R.Ge -> Infix.(e1 >= e2)
-            | R.And -> Infix.(e1 && e2)
-            | R.Or -> Infix.(e1 || e2)
-            | R.Add -> Infix.(e1 + e2)
-            | R.Sub -> Infix.(e1 - e2)
-            | R.Mul -> Infix.(e1 * e2)
-            | R.Div -> Infix.(e1 / e2)
-            | R.Mod -> Infix.(e1 % e2)
-          end
-        | R.Varop (op, args) ->
-          let eargs = List.map ~f:gen_pred args in
-          begin match op with
-            | R.And -> List.fold_left1_exn ~f:Infix.(&&) eargs
-            | R.Or -> List.fold_left1_exn ~f:Infix.(||) eargs
-            | R.Eq | R.Lt | R.Le | R.Gt | R.Ge | R.Add|R.Sub|R.Mul|R.Div|R.Mod ->
-              fail (Error.create "Not a vararg operator." op [%sexp_of:R.op])
-          end
-      in
-      gen_pred
-
     let filter gen gen_pred field_idx pred r =
       let func = gen r in
       let ret_t = (find_func func).ret_type in
@@ -1096,37 +1053,6 @@ module IRGen = struct
       build_yield (Tuple [ct]) b;
       build_func b
 
-    let eq_join gen field_idx1 field_idx2 f1 f2 r1 r2 =
-      let func1 = gen r1 in
-      let func2 = gen r2 in
-
-      let i1 = field_idx1 f1 in
-      let i2 = field_idx2 f2 in
-
-      let ret_t1 = (find_func func1).ret_type in
-      let ret_t2 = (find_func func2).ret_type in
-      let ret_t, w1, w2 = match ret_t1, ret_t2 with
-        | TupleT t1, TupleT t2 ->
-          TupleT (t1 @ t2), List.length t1, List.length t2
-        | _ -> fail (Error.create "Expected a TupleT." (ret_t1, ret_t2)
-                       [%sexp_of:type_ * type_])
-      in
-
-      let b = create [] ret_t in
-      build_foreach_no_start func1 (fun t1 b ->
-          build_foreach_no_start func2 (fun t2 b ->
-              build_if ~cond:Infix.(Index (t1, i1) = Index (t2, i2))
-                ~then_:(fun b ->
-                    let ret =
-                      Tuple (List.init w1 ~f:(fun i -> Index (t1, i)) @
-                             List.init w2 ~f:(fun i -> Index (t2, i)))
-                    in
-                    build_yield ret b
-                  ) ~else_:(fun b -> ()) b;
-            ) b;
-        ) b;
-      build_func b
-
     let nl_join gen gen_pred field_idx pred r1 r2 =
       let func1 = gen r1 in
       let func2 = gen r2 in
@@ -1156,7 +1082,8 @@ module IRGen = struct
 
     let gen_abslayout : data_fn:string -> Abslayout.t -> string * int = fun ~data_fn r ->
       let field_idx_exn s f =
-        Option.value_exn (List.findi s ~f:(fun i (n, _) -> String.(n = f.Abslayout.name)))
+        Option.value_exn (List.findi s ~f:(fun i n ->
+            Abslayout.Name.(n = f)))
         |> fun (i, _) -> i
       in
       let writer = Bitstring.Writer.with_file data_fn in
@@ -1178,11 +1105,8 @@ module IRGen = struct
           | Filter (x, r) ->
             let schema = Abslayout.to_schema_exn r |> field_idx_exn in
             Fresh.name fresh "filter%d", filter gen_abslayout abs_gen_pred schema x r
-          | Join {pred; r1; r2} ->
-            let schema =
-              (Abslayout.to_schema_exn r1)@(Abslayout.to_schema_exn r2)
-              |> field_idx_exn
-            in
+          | Join {pred; r1_name; r1; r2_name; r2} as r ->
+            let schema = Abslayout.to_schema_exn r |> field_idx_exn in
             Fresh.name fresh "join%d",
             nl_join gen_abslayout abs_gen_pred schema pred r1 r2
           | r -> Error.create "Unsupported at runtime." r [%sexp_of:Abslayout.t]
