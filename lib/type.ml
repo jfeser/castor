@@ -24,6 +24,19 @@ module AbsInt = struct
   let abstract : int -> t = fun x -> (x, x)
 
   let concretize : t -> int option = fun (l, h) -> if l = h then Some l else None
+
+  let bitwidth : nullable:bool -> t -> int =
+   fun ~nullable (l, h) ->
+    let open Int in
+    (* Ensures we can store null values. *)
+    let h = if nullable then h + 1 else h in
+    Int.ceil_log2 h |> Int.round_up ~to_multiple_of:8
+
+  let bytewidth : nullable:bool -> t -> int =
+   fun ~nullable x ->
+    let open Int in
+    let bw = bitwidth ~nullable x in
+    if bw % 8 = 0 then bw / 8 else (bw / 8) + 1
 end
 
 module AbsCount = struct

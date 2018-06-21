@@ -524,12 +524,8 @@ module IRGen = struct
         match Type.AbsInt.concretize nchars with
         | Some _ -> Infix.(int 0)
         | None -> Infix.(int isize) )
-      | TableT (_, _, _) -> Infix.(int isize)
-      | CrossTupleT (_, {count}) | ZipTupleT (_, {count}) -> Infix.(int isize)
-      | GroupingT (_, _, {count})
-       |UnorderedListT (_, {count})
-       |OrderedListT (_, {count}) ->
-          Infix.int (2 * isize)
+      | CrossTupleT _ | ZipTupleT _ | GroupingT _ | TableT _ -> Infix.(int isize)
+      | UnorderedListT _ | OrderedListT _ -> Infix.int (2 * isize)
 
     (** The length of a layout in bytes (including the header). *)
     let len start =
@@ -537,8 +533,8 @@ module IRGen = struct
       let open Type in
       function
       | NullT _ -> int 0
-      | IntT _ -> int isize
-      | BoolT _ -> int isize
+      | IntT {range; nullable} -> int (Type.AbsInt.bytewidth ~nullable range)
+      | BoolT _ -> int 1
       | StringT {nchars} -> (
         match Type.AbsInt.concretize nchars with
         | Some x -> int (Int.round ~dir:`Up ~to_multiple_of:isize x)
@@ -568,10 +564,10 @@ module IRGen = struct
 
     let scan_null _ = create [("start", int_t)] VoidT |> build_func
 
-    let scan_int Type.({range= l, h; nullable}) =
+    let scan_int Type.({range= (l, h) as range; nullable}) =
       let b = create [("start", int_t)] (TupleT [IntT {nullable}]) in
       let start = build_arg 0 b in
-      let ival = Infix.islice start in
+      let ival = Slice (start, Type.AbsInt.bytewidth ~nullable range) in
       if nullable then
         let null_val = h + 1 in
         build_yield (Tuple [Tuple [ival; Infix.(ival = int null_val)]]) b
@@ -582,7 +578,7 @@ module IRGen = struct
      fun Type.({nullable}) ->
       let b = create [("start", int_t)] (TupleT [BoolT {nullable}]) in
       let start = build_arg 0 b in
-      let ival = Infix.(islice start) in
+      let ival = Slice (start, 1) in
       if nullable then
         let null_val = 2 in
         build_yield (Tuple [Tuple [ival; Infix.(ival = int null_val)]]) b

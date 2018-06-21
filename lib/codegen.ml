@@ -376,19 +376,17 @@ module Make (Config : Config.S) () = struct
    fun codegen_expr fctx byte_idx size_bytes ->
     let size_bits = Serialize.isize * size_bytes in
     let byte_idx = codegen_expr fctx byte_idx in
-    let int_idx =
-      build_sdiv byte_idx (const_int (i64_type ctx) Serialize.isize) "intidx" builder
+    let buf_ptr = build_load (get_val fctx "buf") "buf_ptr" builder in
+    let buf_ptr_as_int = build_ptrtoint buf_ptr (i64_type ctx) "buf_ptr_int" builder in
+    let slice_ptr_as_int = build_add buf_ptr_as_int byte_idx "slice_ptr_int" builder in
+    let slice_ptr =
+      build_inttoptr slice_ptr_as_int
+        (pointer_type (integer_type ctx size_bits))
+        "slice_ptr" builder
     in
-    let buf = build_load (get_val fctx "buf") "buf" builder in
-    (* Note that the first index is for the pointer. The second indexes into
-         the array. *)
-    let ptr = build_in_bounds_gep buf [|zero; int_idx|] "" builder in
-    let ptr =
-      build_pointercast ptr (pointer_type (integer_type ctx size_bits)) "" builder
-    in
-    debug_printf "Slice ptr: %p\n" [ptr] ;
+    debug_printf "Slice ptr: %p\n" [slice_ptr] ;
     debug_printf "Slice offset: %d\n" [byte_idx] ;
-    let slice = build_load ptr "" builder in
+    let slice = build_load slice_ptr "" builder in
     (* Convert the slice to a 64 bit int. *)
     let slice = build_intcast slice (i64_type ctx) "" builder in
     debug_printf "Slice value: %d\n" [slice] ;
@@ -452,18 +450,13 @@ module Make (Config : Config.S) () = struct
     let key_size = build_intcast key_size (i32_type ctx) "key_size" builder in
     codegen_hash fctx hash_ptr key_ptr key_size
 
-  let codegen_load_str : _ -> llvalue -> llvalue -> llvalue =
-   fun fctx ptr len ->
+  let codegen_load_str codegen_expr fctx ptr len =
     let struct_t = struct_type ctx [|pointer_type (i8_type ctx); i64_type ctx|] in
     let struct_ = build_entry_alloca struct_t "" builder in
-    let int_idx =
-      build_sdiv ptr (const_int (i64_type ctx) Serialize.isize) "intidx" builder
-    in
     let buf = build_load (get_val fctx "buf") "buf" builder in
-    (* Note that the first index is for the pointer. The second indexes into
-         the array. *)
-    let ptr = build_in_bounds_gep buf [|zero; int_idx|] "" builder in
-    let ptr = build_pointercast ptr (pointer_type (i8_type ctx)) "" builder in
+    let buf_ptr_as_int = build_ptrtoint buf (i64_type ctx) "buf_ptr_int" builder in
+    let ptr_as_int = build_add buf_ptr_as_int ptr "ptr_int" builder in
+    let ptr = build_inttoptr ptr_as_int (pointer_type (i8_type ctx)) "ptr" builder in
     build_store ptr (build_struct_gep struct_ 0 "" builder) builder |> ignore ;
     build_store len (build_struct_gep struct_ 1 "" builder) builder |> ignore ;
     build_load struct_ "" builder
@@ -498,7 +491,7 @@ module Make (Config : Config.S) () = struct
         | StringT _ -> codegen_string_hash fctx x1 x2
         | IntT _ | BoolT _ -> codegen_int_hash fctx x1 x2
         | _ -> fail (Error.create "Unexpected hash." t2 [%sexp_of : type_]) )
-      | LoadStr -> codegen_load_str fctx x1 x2
+      | LoadStr -> codegen_load_str codegen_expr fctx x1 x2
       | Not -> fail (Error.of_string "Not a binary operator.")
     in
     let ret_t = infer_type fctx#tctx (Binop {op; arg1; arg2}) in
