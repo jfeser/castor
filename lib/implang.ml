@@ -464,12 +464,7 @@ module IRGen = struct
               build_step tup iter_ b;
               body tup b;
             ) b
-        | `Countable ->
-          build_count_loop Infix.(islice start) (fun b ->
-              build_step tup iter_ b;
-              body tup b;
-            ) b
-        | `Unknown ->
+        | `Countable | `Unknown ->
           build_loop Infix.(not (Done iter_)) (fun b ->
               build_step tup iter_ b;
               build_if ~cond:Infix.(not (Done iter_))
