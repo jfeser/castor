@@ -1,11 +1,8 @@
 open Base
 module Pervasives = Caml.Pervasives
 
-type name = {
-  relation : string option;
-  name : string;
-  type_ : (Type0.PrimType.t [@opaque]) option;
-}
+type name =
+  {relation: string option; name: string; type_: (Type0.PrimType.t[@opaque]) option}
 
 and 'f pred =
   | Name of 'f
@@ -13,8 +10,8 @@ and 'f pred =
   | Bool of bool
   | String of string
   | Null
-  | Binop of ((Ralgebra0.op [@opaque]) * 'f pred * 'f pred)
-  | Varop of ((Ralgebra0.op [@opaque]) * 'f pred list)
+  | Binop of ((Ralgebra0.op[@opaque]) * 'f pred * 'f pred)
+  | Varop of ((Ralgebra0.op[@opaque]) * 'f pred list)
 
 and 'f agg = 'f Ralgebra0.agg =
   | Count
@@ -27,33 +24,29 @@ and 'f agg = 'f Ralgebra0.agg =
 and ('f, 'l) ralgebra =
   | Select of 'f pred list * ('f, 'l) ralgebra
   | Filter of 'f pred * ('f, 'l) ralgebra
-  | Join of {
-      pred : 'f pred;
-      r1_name : string;
-      r1 : ('f, 'l) ralgebra;
-      r2_name : string;
-      r2 : ('f, 'l) ralgebra
-    }
+  | Join of
+      { pred: 'f pred
+      ; r1_name: string
+      ; r1: ('f, 'l) ralgebra
+      ; r2_name: string
+      ; r2: ('f, 'l) ralgebra }
   | Scan of 'l
   | Agg of 'f agg list * 'f list * ('f, 'l) ralgebra
   | Dedup of ('f, 'l) ralgebra
-[@@deriving visitors { variety = "endo"; name = "ralgebra_endo" },
-            visitors { variety = "map"; name = "ralgebra_map" },
-            visitors { variety = "iter"; name = "ralgebra_iter" },
-            visitors { variety = "reduce"; name = "ralgebra_reduce" },
-            compare, sexp]
+[@@deriving
+  visitors {variety= "endo"; name= "ralgebra_endo"}
+  , visitors {variety= "map"; name= "ralgebra_map"}
+  , visitors {variety= "iter"; name= "ralgebra_iter"}
+  , visitors {variety= "reduce"; name= "ralgebra_reduce"}
+  , compare
+  , sexp]
 
-type 'f hash_idx = {
-  lookup : 'f pred;
-}
+type 'f hash_idx = {lookup: 'f pred}
 
-and 'f ordered_idx = {
-  lookup_low : 'f pred;
-  lookup_high : 'f pred;
-  order : 'f pred;
-}
+and 'f ordered_idx = {lookup_low: 'f pred; lookup_high: 'f pred; order: 'f pred}
 
 and tuple = Cross | Zip
+
 and ('f, 'r) layout =
   | AEmpty
   | AScalar of 'f pred
@@ -61,10 +54,11 @@ and ('f, 'r) layout =
   | ATuple of ('f, 'r) layout list * tuple
   | AHashIdx of ('f, 'r) ralgebra * string * ('f, 'r) layout * 'f hash_idx
   | AOrderedIdx of ('f, 'r) ralgebra * string * ('f, 'r) layout * 'f ordered_idx
-[@@deriving visitors { variety = "fold" },
-            visitors { variety = "endo" },
-            visitors { variety = "map" },
-            visitors { variety = "reduce" },
-            sexp]
+[@@deriving
+  visitors {variety= "fold"}
+  , visitors {variety= "endo"}
+  , visitors {variety= "map"}
+  , visitors {variety= "reduce"}
+  , sexp]
 
 type t = (name, (name, string) layout) ralgebra [@@deriving sexp]

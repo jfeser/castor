@@ -9,20 +9,21 @@ open Collections
 
 let () =
   let conn = new connection ~dbname:"sam_analytics_small" () in
-  Ctx.global.conn <- Some (conn);
-  Ctx.global.testctx <- Some (PredCtx.of_vars ["xv", `Int 10; "yv", `Int 10]);
+  Ctx.global.conn <- Some conn ;
+  Ctx.global.testctx <- Some (PredCtx.of_vars [("xv", `Int 10); ("yv", `Int 10)]) ;
   let taxi = relation_from_db conn "taxi" in
   let x = find_field_exn taxi "xpos" in
   let y = find_field_exn taxi "ypos" in
   let ralgebra =
-    Ralgebra.(Project ([x; y],
-                       Filter (Varop (And, [Binop (Eq, Field x, Var "xv");
-                                            Binop (Eq, Field y, Var "yv");]),
-                               Relation taxi)))
+    let open Ralgebra in
+    Project
+      ( [x; y]
+      , Filter
+          ( Varop (And, [Binop (Eq, Field x, Var "xv"); Binop (Eq, Field y, Var "yv")])
+          , Relation taxi ) )
   in
-
   Seq.iter (search conn ralgebra) ~f:(fun r ->
-      print_endline (ralgebra_to_string r);
+      print_endline (ralgebra_to_string r) ;
       let layouts = Ralgebra.layouts r in
       List.iter layouts ~f:(fun l ->
           let open Serialize in
@@ -30,19 +31,20 @@ let () =
             let b = serialize l in
             let t = Type.of_layout_exn l in
             let f = scan_layout t in
-            print_endline (Sexp.to_string_hum (Implang.sexp_of_func f));
-            Implang.eval b (Implang.Infix.(seq [
-                `S ("f" := call (Var "f") [int 0]);
-                `S (loop (int (ntuples l)) (seq [
-                    `S ("x" += "f");
-                    `Y (Implang.Var "x");
-                  ]))
-              ]))
+            print_endline (Sexp.to_string_hum (Implang.sexp_of_func f)) ;
+            Implang.eval b
+              Implang.Infix.(
+                seq
+                  [ `S ("f" := call (Var "f") [int 0])
+                  ; `S
+                      (loop
+                         (int (ntuples l))
+                         (seq [`S ("x" += "f"); `Y (Implang.Var "x")])) ])
             |> Seq.iter ~f:(fun v ->
-                print_endline (Sexp.to_string_hum (Implang.sexp_of_value v)))
-          with e -> Exn.to_string e |> print_endline))
+                   print_endline (Sexp.to_string_hum (Implang.sexp_of_value v)) )
+          with e -> Exn.to_string e |> print_endline ) )
 
-  (* let rec loop ct =
+(* let rec loop ct =
    *   if ct <= 0 then () else
    *     let (xmin, xmax, ymin, ymax) = (Random.int 99, Random.int 99, Random.int 99, Random.int 99) in
    *     Stdio.printf "Selecting from (%d, %d, %d, %d)\n" xmin xmax ymin ymax;
@@ -59,4 +61,3 @@ let () =
    *     loop (ct - 1)
    * in
    * loop 10 *)
-
