@@ -513,7 +513,7 @@ module IRGen = struct
       | UnorderedListT (_, { count })
       | OrderedListT (_, { count }) -> Infix.int (2 * isize)
 
-    (** The length of a layout in bytes (excluding the header). *)
+    (** The length of a layout in bytes (including the header). *)
     let len start =
       let open Infix in
       let open Type in
@@ -523,7 +523,7 @@ module IRGen = struct
       | BoolT _ -> int isize
       | StringT { nchars } -> begin match Type.AbsInt.concretize nchars with
           | Some x -> int (Int.round ~dir:`Up ~to_multiple_of:isize x)
-          | None -> Infix.((islice start + int 7) && (int (-8)))
+          | None -> Infix.(((islice start + int 7) && (int (-8))) + int isize)
         end
       | EmptyT -> int 0
       | TableT _ -> islice start
@@ -531,7 +531,7 @@ module IRGen = struct
       | CrossTupleT (_, { count }) -> islice start
       | GroupingT (_, _, { count })
       | UnorderedListT (_, { count })
-      | OrderedListT (_, { count }) -> islice (start + int isize)
+      | OrderedListT (_, { count }) -> islice start
 
     let count start =
       let open Infix in
@@ -602,7 +602,7 @@ module IRGen = struct
           let col_start = Infix.(start + col_offset) in
           build_foreach type_ col_start func (fun var b ->
               let col_offset = build_fresh_defn "offset" int_t
-                  Infix.(col_offset + len col_start type_ + hsize type_) b
+                  Infix.(col_offset + len col_start type_) b
               in
               loops b start col_offset (var::vars) rest) b;
       in
@@ -810,7 +810,7 @@ module IRGen = struct
               let key = build_fresh_var "key" key_type b in
               build_step key key_iter b;
 
-              let value_start = Infix.(value_ptr + len value_ptr kt + hsize kt) in
+              let value_start = Infix.(value_ptr + len value_ptr kt) in
               build_if ~cond:Infix.(Index(key, 0) = lookup_expr)
                 ~then_:(build_foreach vt value_start value_iter (fun value b ->
                     build_yield value b))
