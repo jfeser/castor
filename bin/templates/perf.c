@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
     }
     stop = clock();
     int msec = (stop - start) * 1000 / CLOCKS_PER_SEC;
-    printf("%f\n", ((float)runs / msec) * 1000);
+    printf("%fms (%f qps)\n", msec / (float)runs, ((float)runs / msec) * 1000);
   } else if (count_flag) {
     printf("%ld\n", counter(params));
   } else if (print_flag) {
