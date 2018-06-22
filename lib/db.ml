@@ -333,7 +333,6 @@ let exec_cursor:
   fun ?(batch_size= 1000) ?(verbose= true) ?(params= []) conn query ->
     let open Stdio in
     let query = subst_params params query in
-    Logs.debug (fun m -> m "Executing cursor query: %s" query) ;
     let cur = Fresh.name fresh "cur%d" in
     let declare_query = sprintf "declare %s cursor with hold for %s;" cur query in
     let fetch_query = sprintf "fetch %d from %s;" batch_size cur in
