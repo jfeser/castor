@@ -1,4 +1,4 @@
-       AList(log_small, t -> ATuple([AScalar (t.counter),
+       AList(log_bench, t -> ATuple([AScalar (t.counter),
                                              AScalar (t.event_type),
                                              AScalar (t.id),
                                              AScalar (t.stack_depth),
@@ -10,7 +10,7 @@
                                              AScalar (t.param0),
                                              AScalar (t.param1),
                                              AScalar (t.succ),
-                                             AList(Filter(t.counter < log_small.counter && log_small.counter < t.succ, log_small), s -> ATuple([
+                                             AList(Filter(t.counter < log_bench.counter && log_bench.counter < t.succ, log_bench), s -> ATuple([
                                              AScalar (s.counter),
                                              AScalar (s.event_type),
                                              AScalar (s.id),
