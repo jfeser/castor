@@ -219,6 +219,8 @@ let to_string : t -> string =
   let w = Writer.with_buffer b in
   Writer.write w s ; Writer.flush w ; Buffer.to_string b
 
+open Writer
+
 let tests =
   let open OUnit2 in
   let printer b = Buffer.to_string b |> String.escaped in
@@ -242,63 +244,63 @@ let tests =
                 let buf1 = Buffer.create 1 in
                 Buffer.add_char buf1 '\x80' ;
                 let buf2 = Buffer.create 1 in
-                let w = Writer.with_buffer buf2 in
-                Writer.write_bit w 1 ;
-                Writer.flush w ;
+                let w = with_buffer buf2 in
+                write_bit w 1 ;
+                flush w ;
                 assert_equal ~ctxt ~printer ~cmp:Buffer.equal buf1 buf2 )
               ; ( "write_bit"
                 >:: fun ctxt ->
                 let buf1 = Buffer.create 1 in
                 Buffer.add_char buf1 '\x88' ;
                 let buf2 = Buffer.create 1 in
-                let w = Writer.with_buffer buf2 in
-                Writer.write_bit w 1 ;
-                Writer.write_bit w 0 ;
-                Writer.write_bit w 0 ;
-                Writer.write_bit w 0 ;
-                Writer.write_bit w 1 ;
-                Writer.write_bit w 0 ;
-                Writer.write_bit w 0 ;
-                Writer.write_bit w 0 ;
-                Writer.flush w ;
+                let w = with_buffer buf2 in
+                write_bit w 1 ;
+                write_bit w 0 ;
+                write_bit w 0 ;
+                write_bit w 0 ;
+                write_bit w 1 ;
+                write_bit w 0 ;
+                write_bit w 0 ;
+                write_bit w 0 ;
+                flush w ;
                 assert_equal ~ctxt ~printer ~cmp:Buffer.equal buf1 buf2 )
               ; ( "write_char"
                 >:: fun ctxt ->
                 let buf1 = Buffer.create 1 in
                 Buffer.add_string buf1 "\xbf\xc0" ;
                 let buf2 = Buffer.create 1 in
-                let w = Writer.with_buffer buf2 in
-                Writer.write_bit w 1 ;
-                Writer.write_bit w 0 ;
-                Writer.write_char w '\xff' ;
-                Writer.flush w ;
+                let w = with_buffer buf2 in
+                write_bit w 1 ;
+                write_bit w 0 ;
+                write_char w '\xff' ;
+                flush w ;
                 assert_equal ~ctxt ~printer ~cmp:Buffer.equal buf1 buf2 )
               ; ( "write_1"
                 >:: fun ctxt ->
                 let buf1 = Buffer.create 1 in
                 Buffer.add_string buf1 "\x88" ;
                 let buf2 = Buffer.create 1 in
-                let w = Writer.with_buffer buf2 in
+                let w = with_buffer buf2 in
                 let bs = PList [Piece {len= 8; str= "\x88"}] in
-                Writer.write w bs ;
-                Writer.flush w ;
+                write w bs ;
+                flush w ;
                 assert_equal ~ctxt ~printer ~cmp:Buffer.equal buf1 buf2 )
               ; ( "write_2"
                 >:: fun ctxt ->
                 let buf1 = Buffer.create 1 in
                 Buffer.add_string buf1 "\xfe" ;
                 let buf2 = Buffer.create 1 in
-                let w = Writer.with_buffer buf2 in
+                let w = with_buffer buf2 in
                 let bs = PList [Piece {len= 7; str= "\xff"}] in
-                Writer.write w bs ;
-                Writer.flush w ;
+                write w bs ;
+                flush w ;
                 assert_equal ~ctxt ~printer ~cmp:Buffer.equal buf1 buf2 )
               ; ( "write_3"
                 >:: fun ctxt ->
                 let buf1 = Buffer.create 1 in
                 Buffer.add_string buf1 "\xbf\xc0" ;
                 let buf2 = Buffer.create 1 in
-                let w = Writer.with_buffer buf2 in
+                let w = with_buffer buf2 in
                 let bs =
                   PList
                     [ Piece {len= 1; str= "\x80"}
@@ -306,50 +308,50 @@ let tests =
                     ; Piece {len= 5; str= "\xf8"}
                     ; Piece {len= 7; str= "\x80"} ]
                 in
-                Writer.write w bs ;
-                Writer.flush w ;
+                write w bs ;
+                flush w ;
                 assert_equal ~ctxt ~printer ~cmp:Buffer.equal buf1 buf2 )
               ; ( "write_4"
                 >:: fun ctxt ->
                 let buf1 = Buffer.create 1 in
                 Buffer.add_string buf1 "\xde\xad" ;
                 let buf2 = Buffer.create 1 in
-                let w = Writer.with_buffer buf2 in
+                let w = with_buffer buf2 in
                 let bs =
                   PList
                     [ Piece {len= 8; str= "\xde"}
                     ; Piece {len= 0; str= "\x00"}
                     ; Piece {len= 8; str= "\xad"} ]
                 in
-                Writer.write w bs ;
-                Writer.flush w ;
+                write w bs ;
+                flush w ;
                 assert_equal ~ctxt ~printer ~cmp:Buffer.equal buf1 buf2 ) ] ]
 
 let%expect_test "seek1" =
   let fn = Filename.temp_file "test" "txt" in
-  let writer = Writer.with_file fn in
-  let pos = Writer.pos writer in
-  Writer.write_string writer "testing" ;
-  Writer.seek writer pos ;
-  Writer.write_string writer "fish" ;
-  Writer.flush writer ;
+  let writer = with_file fn in
+  let pos = pos writer in
+  write_string writer "testing" ;
+  seek writer pos ;
+  write_string writer "fish" ;
+  flush writer ;
   In_channel.with_file fn ~f:In_channel.input_all |> print_endline ;
   [%expect {| fishing |}]
 
 let%expect_test "seek2" =
   let fn = Filename.temp_file "test" "txt" in
-  let writer = Writer.with_file fn in
-  Writer.write_string writer "t" ;
-  let pos = Writer.pos writer in
-  Writer.write_string writer "esting" ;
-  Writer.flush writer ;
+  let writer = with_file fn in
+  write_string writer "t" ;
+  let pos = pos writer in
+  write_string writer "esting" ;
+  flush writer ;
   In_channel.with_file fn ~f:In_channel.input_all |> print_endline ;
-  Writer.seek writer pos ;
-  Writer.write_string writer "a" ;
-  Writer.flush writer ;
+  seek writer pos ;
+  write_string writer "a" ;
+  flush writer ;
   In_channel.with_file fn ~f:In_channel.input_all |> print_endline ;
-  Writer.write_string writer "r" ;
-  Writer.flush writer ;
+  write_string writer "r" ;
+  flush writer ;
   In_channel.with_file fn ~f:In_channel.input_all |> print_endline ;
   [%expect {|
     testing
