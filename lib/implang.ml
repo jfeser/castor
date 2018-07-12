@@ -216,6 +216,10 @@ module Infix = struct
   let ite c t f = If {cond= c; tcase= t; fcase= f}
 
   let fun_ args ret_type locals body = {args; ret_type; locals; body}
+
+  let index tup idx =
+    assert (Int.(idx >= 0)) ;
+    match tup with Tuple t -> List.nth_exn t idx | _ -> Index (tup, idx)
 end
 
 let int_t = IntT {nullable= false}
@@ -505,7 +509,7 @@ module IRGen = struct
 
     let build_tuple_append : type_ -> type_ -> expr -> expr -> expr =
      fun t1 t2 e1 e2 ->
-      let elems len e = List.init len ~f:(fun i -> Index (e, i)) in
+      let elems len e = List.init len ~f:(fun i -> Infix.(index e i)) in
       match (t1, t2) with
       | TupleT x1, TupleT x2 ->
           Tuple (elems (List.length x1) e1 @ elems (List.length x2) e2)
@@ -607,7 +611,7 @@ module IRGen = struct
         | [] ->
             let tup =
               List.map2_exn ts (List.rev vars) ~f:(fun t v ->
-                  List.init (Type.width t) ~f:(fun i -> Index (v, i)) )
+                  List.init (Type.width t) ~f:(fun i -> Infix.(index v i)) )
               |> List.concat
             in
             build_yield (Tuple tup) b
@@ -658,7 +662,7 @@ module IRGen = struct
         List.iter2_exn funcs child_tuples ~f:(fun f t -> build_step t f b) ;
         let tup =
           List.map2_exn ts child_tuples ~f:(fun in_t child_tup ->
-              List.init (Type.width in_t) ~f:(fun i -> Index (child_tup, i)) )
+              List.init (Type.width in_t) ~f:(fun i -> Infix.(index child_tup i)) )
           |> List.concat
           |> fun l -> Tuple l
         in
@@ -714,14 +718,14 @@ module IRGen = struct
       (* Build a skip loop if there is a lower bound. *)
       ( match (order, lower, upper) with
       | `Asc, Some (Var (v, _)), _ ->
-          let cond = Infix.(pcount > int 0 && Index (tup, idx) < Var v) in
+          let cond = Infix.(pcount > int 0 && index tup idx < Var v) in
           build_loop cond
             (fun b ->
               build_step tup func b ;
               build_assign Infix.(pcount - int 1) pcount b )
             b
       | `Desc, _, Some (Var (v, _)) ->
-          let cond = Infix.(pcount > int 0 && Index (tup, idx) > Var v) in
+          let cond = Infix.(pcount > int 0 && index tup idx > Var v) in
           build_loop cond
             (fun b ->
               build_step tup func b ;
@@ -731,7 +735,7 @@ module IRGen = struct
       (* Build the read loop. *)
       ( match (order, lower, upper) with
       | `Asc, _, Some (Var (v, _)) ->
-          let cond = Infix.(pcount > int 0 && Index (tup, idx) <= Var v) in
+          let cond = Infix.(pcount > int 0 && index tup idx <= Var v) in
           build_loop cond
             (fun b ->
               build_yield tup b ;
@@ -739,7 +743,7 @@ module IRGen = struct
               build_assign Infix.(pcount - int 1) pcount b )
             b
       | `Desc, Some (Var (v, _)), _ ->
-          let cond = Infix.(pcount > int 0 && Index (tup, idx) >= Var v) in
+          let cond = Infix.(pcount > int 0 && index tup idx >= Var v) in
           build_loop cond
             (fun b ->
               build_yield tup b ;
@@ -764,7 +768,7 @@ module IRGen = struct
         | A.Int x -> Int x
         | A.String x -> String x
         | A.Bool x -> Bool x
-        | A.Name n -> ( try Index (tup, field_idx n) with _ -> Var n.A.name )
+        | A.Name n -> ( try Infix.(index tup (field_idx n)) with _ -> Var n.A.name )
         | A.Binop (op, arg1, arg2) -> (
             let e1 = gen_pred arg1 in
             let e2 = gen_pred arg2 in
@@ -827,7 +831,7 @@ module IRGen = struct
           build_step key key_iter b ;
           let value_start = Infix.(value_ptr + len value_ptr kt) in
           build_if
-            ~cond:Infix.(Index (key, 0) = lookup_expr)
+            ~cond:Infix.(index key 0 = lookup_expr)
             ~then_:
               (build_foreach vt value_start value_iter (fun value b ->
                    build_yield value b ))
@@ -859,7 +863,7 @@ module IRGen = struct
                 build_iter value_iter [value_start] b ;
                 let sum = build_fresh_defn "sum" int_t Infix.(int 0) b in
                 build_foreach vt value_start value_iter
-                  (fun tup b -> build_assign Infix.(sum + Index (tup, idx)) sum b)
+                  (fun tup b -> build_assign Infix.(sum + index tup idx) sum b)
                   b ;
                 sum
             | Min f ->
@@ -869,8 +873,8 @@ module IRGen = struct
                 build_foreach vt value_start value_iter
                   (fun tup b ->
                     build_if
-                      ~cond:Infix.(Index (tup, idx) < min)
-                      ~then_:(fun b -> build_assign Infix.(Index (tup, idx)) min b)
+                      ~cond:Infix.(index tup idx < min)
+                      ~then_:(fun b -> build_assign Infix.(index tup idx) min b)
                       ~else_:(fun _ -> ())
                       b )
                   b ;
@@ -882,8 +886,8 @@ module IRGen = struct
                 build_foreach vt value_start value_iter
                   (fun tup b ->
                     build_if
-                      ~cond:Infix.(Index (tup, idx) > max)
-                      ~then_:(fun b -> build_assign Infix.(Index (tup, idx)) max b)
+                      ~cond:Infix.(index tup idx > max)
+                      ~then_:(fun b -> build_assign Infix.(index tup idx) max b)
                       ~else_:(fun _ -> ())
                       b )
                   b ;
@@ -893,7 +897,7 @@ module IRGen = struct
                 build_iter key_iter [start] b ;
                 let tup = build_fresh_var "tup" key_type b in
                 build_step tup key_iter b ;
-                Infix.(Index (tup, idx))
+                Infix.(index tup idx)
             | Count -> (
               match count value_start vt with
               | Some ct -> ct
@@ -1015,7 +1019,7 @@ module IRGen = struct
       let b = create [] ret_t in
       build_foreach_no_start func
         (fun in_tup b ->
-          let out_tup = Tuple (List.map idxs ~f:(fun i -> Index (in_tup, i))) in
+          let out_tup = Tuple (List.map idxs ~f:(fun i -> Infix.(index in_tup i))) in
           build_yield out_tup b )
         b ;
       build_func b
@@ -1089,8 +1093,8 @@ module IRGen = struct
             (fun t2 b ->
               let tup =
                 Tuple
-                  ( List.init w1 ~f:(fun i -> Index (t1, i))
-                  @ List.init w2 ~f:(fun i -> Index (t2, i)) )
+                  ( List.init w1 ~f:(fun i -> Infix.(index t1 i))
+                  @ List.init w2 ~f:(fun i -> Infix.(index t2 i)) )
               in
               build_if
                 ~cond:Infix.(gen_pred tup field_idx pred)

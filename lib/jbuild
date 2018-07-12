@@ -9,5 +9,5 @@
  ((name dblayout)
   (libraries (base core stdio postgresql oUnit llvm llvm.analysis logs cmph hashcons expect_test_helpers_kernel visitors.runtime))
   (inline_tests)
-  (preprocess (pps (ppx_sexp_conv ppx_compare ppx_hash ppx_bin_prot ppx_let ppx_expect visitors.ppx ppx_driver.runner -no-check)))
+  (preprocess (pps (ppx_sexp_conv ppx_compare ppx_hash ppx_bin_prot ppx_let ppx_expect visitors.ppx ppxlib.runner)))
 ))

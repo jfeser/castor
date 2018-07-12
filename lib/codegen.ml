@@ -56,8 +56,11 @@ module Make (Config : Config.S) () = struct
   open Implang
 
   (* Variables are either stored in the parameter struct or stored locally on
-     the stack. *)
-  type var = Param of int | Local of llvalue [@@deriving sexp_of]
+     the stack. Values that are stored in the parameter struct are also stored
+     locally, but they are stored back to the parameter struct whenever the
+     iterator returns to the caller. *)
+  type var = Param of {idx: int; alloca: llvalue option} | Local of llvalue
+  [@@deriving sexp_of]
 
   module SymbolTable = struct
     type t = var Hashtbl.M(String).t list [@@deriving sexp_of]
@@ -77,11 +80,14 @@ module Make (Config : Config.S) () = struct
               |> Error.raise )
         | None, [] -> Error.of_string "Empty namespace." |> Error.raise
       in
+      (* Look up a name in a scope. *)
       let lookup_single m k =
         Option.map (Hashtbl.find m k) ~f:(function
-          | Local x -> x
-          | Param idx -> build_struct_gep params idx k builder )
+          | Param {alloca= Some x} | Local x -> x
+          | Param {idx; alloca= None} -> build_struct_gep params idx k builder )
       in
+      (* Look up a name in a scope list. The first scope which contains the
+         name's value is returned. *)
       let rec lookup_chain ms k =
         match ms with
         | [] -> assert false
@@ -152,34 +158,7 @@ module Make (Config : Config.S) () = struct
 
   let step_name n = n ^ "$step"
 
-  let get_val ?params ctx n =
-    let params =
-      match params with
-      | Some p -> p
-      | None ->
-        match Hashtbl.find ctx#values "params" with
-        | Some (Local x) -> x
-        | Some (Param _) ->
-            Error.create "Params mistagged." ctx#values
-              [%sexp_of : var Hashtbl.M(String).t]
-            |> Error.raise
-        | None ->
-            Error.create "Params not found." (Hashtbl.keys ctx#values)
-              [%sexp_of : string list]
-            |> Error.raise
-    in
-    match Hashtbl.find ctx#values n with
-    | Some (Param idx) -> build_struct_gep params idx n builder
-    | Some (Local v) -> v
-    | None ->
-        let error =
-          Error.create "Unknown variable."
-            (n, Hashtbl.keys ctx#values, Hashtbl.keys globals)
-            [%sexp_of : string * string list * string list]
-        in
-        match Option.value_exn ~error (Hashtbl.find globals n) with
-        | Param idx -> build_struct_gep params idx n builder
-        | Local v -> v
+  let get_val ?params ctx = SymbolTable.lookup ?params [ctx#values; globals]
 
   let get_func n =
     let error =
@@ -197,20 +176,26 @@ module Make (Config : Config.S) () = struct
     in
     Option.value_exn ~error (Hashtbl.find iters n)
 
-  let null_fresh_global : lltype -> string -> llmodule -> llvalue =
-   fun t n m ->
+  let null_fresh_global : ?linkage:Linkage.t -> lltype -> string -> llmodule -> llvalue =
+   fun ?(linkage= Linkage.Internal) t n m ->
     let rec loop i =
       let n = if i = 0 then n else sprintf "%s.%d" n i in
       if Option.is_some (lookup_global n m) then loop (i + 1)
-      else define_global n (const_null t) m
+      else
+        let glob = define_global n (const_null t) m in
+        set_linkage linkage glob ; glob
     in
     loop 0
 
-  let define_fresh_global : llvalue -> string -> llmodule -> llvalue =
-   fun v n m ->
+  let define_fresh_global :
+      ?linkage:Linkage.t -> llvalue -> string -> llmodule -> llvalue =
+   fun ?(linkage= Linkage.Internal) v n m ->
     let rec loop i =
       let n = if i = 0 then n else sprintf "%s.%d" n i in
-      if Option.is_some (lookup_global n m) then loop (i + 1) else define_global n v m
+      if Option.is_some (lookup_global n m) then loop (i + 1)
+      else
+        let glob = define_global n v m in
+        set_linkage linkage glob ; glob
     in
     loop 0
 
@@ -366,11 +351,16 @@ module Make (Config : Config.S) () = struct
     build_store len (build_struct_gep struct_ 1 "" builder) builder |> ignore ;
     build_load struct_ "strptr" builder
 
-  let codegen_done : _ -> string -> llvalue =
-   fun fctx iter ->
+  (** Codegen a call to done(). This looks up the done variable belonging to
+       another iterator and returns it. *)
+  let codegen_done fctx iter =
     let ctx' = get_iter iter in
-    let v = get_val ~params:(get_val fctx "params") ctx' "done" in
-    build_load v "done" builder
+    match Hashtbl.find ctx'#values "done" with
+    | Some (Param {idx}) ->
+        let done_ptr = build_struct_gep (get_val fctx "params") idx "" builder in
+        build_load done_ptr "done" builder
+    | Some (Local _) | None ->
+        Error.of_string "Could not find 'done' value." |> Error.raise
 
   let codegen_slice : (_ -> expr -> llvalue) -> _ -> expr -> int -> llvalue =
    fun codegen_expr fctx byte_idx size_bytes ->
@@ -614,6 +604,16 @@ module Make (Config : Config.S) () = struct
     let var = get_val fctx lhs in
     build_store val_ var builder |> ignore
 
+  let store_params ctx func =
+    let params_ptr = param func 0 in
+    Hashtbl.iteri ctx#values ~f:(fun ~key:name ~data ->
+        match data with
+        | Local _ | Param {alloca= None} -> ()
+        | Param {idx; alloca= Some param_alloca} ->
+            let param_ptr = build_struct_gep params_ptr idx "" builder in
+            let param = build_load param_alloca "" builder in
+            build_store param param_ptr builder |> ignore )
+
   let codegen_yield fctx ret =
     let start_bb = insertion_block builder in
     let llfunc = block_parent start_bb in
@@ -629,6 +629,8 @@ module Make (Config : Config.S) () = struct
       (get_val fctx "yield_index") builder
     |> ignore ;
     fctx#incr_switch_index () ;
+    (* Store the params struct. *)
+    store_params fctx llfunc ;
     let llret = codegen_expr fctx ret in
     build_ret llret builder |> ignore ;
     (* Add unconditional branch from parent block. *)
@@ -640,10 +642,9 @@ module Make (Config : Config.S) () = struct
   let codegen_print fctx type_ expr =
     Logs.debug (fun m -> m "Codegen for %a." pp_stmt (Print (type_, expr))) ;
     let define_global_str name value =
-      build_bitcast
-        (define_global name (const_stringz ctx value) module_)
-        (pointer_type (i8_type ctx))
-        "" builder
+      let global = define_global name (const_stringz ctx value) module_ in
+      set_linkage Linkage.Internal global ;
+      build_bitcast global (pointer_type (i8_type ctx)) "" builder
     in
     let true_str = define_global_str "true_str" "true" in
     let false_str = define_global_str "false_str" "false" in
@@ -705,9 +706,26 @@ module Make (Config : Config.S) () = struct
     and codegen_prog : _ -> prog -> unit =
      fun fctx p -> List.iter ~f:(codegen_stmt fctx) p
     in
-    fun ictx ->
-      Logs.debug (fun m -> m "Codegen for func %s started." ictx#name) ;
-      Logs.debug (fun m -> m "%a" pp_func ictx#func) ;
+    let set_attributes func =
+      (* Set iterator function attributes. *)
+      add_function_attr func (create_enum_attr ctx "argmemonly" 0L) AttrIndex.Function ;
+      add_function_attr func (create_enum_attr ctx "nounwind" 0L) AttrIndex.Function ;
+      add_function_attr func (create_enum_attr ctx "norecurse" 0L) AttrIndex.Function ;
+      add_function_attr func (create_enum_attr ctx "alwaysinline" 0L) AttrIndex.Function ;
+      set_linkage Linkage.Internal func
+    in
+    let load_params ictx func =
+      let params_ptr = param func 0 in
+      Hashtbl.mapi_inplace ictx#values ~f:(fun ~key:name ~data ->
+          match data with
+          | Local _ | Param {alloca= Some _} -> data
+          | Param {idx; alloca= None} ->
+              let param = build_load (get_val ~params:params_ptr ictx name) "" builder in
+              let param_alloca = build_entry_alloca (type_of param) name builder in
+              build_store param param_alloca builder |> ignore ;
+              Param {idx; alloca= Some param_alloca} )
+    in
+    let build_init ictx =
       (* Create initialization function. *)
       let init_func_t =
         let args_t =
@@ -718,26 +736,10 @@ module Make (Config : Config.S) () = struct
         function_type (void_type ctx) args_t
       in
       ictx#set_init (declare_function (init_name ictx#name) init_func_t module_) ;
-      (* Set as an internal function. *)
-      set_linkage Linkage.Internal ictx#init ;
-      (* Set init function attributes. *)
-      add_function_attr ictx#init
-        (create_enum_attr ctx "writeonly" 0L)
-        AttrIndex.Function ;
-      add_function_attr ictx#init
-        (create_enum_attr ctx "argmemonly" 0L)
-        AttrIndex.Function ;
-      add_function_attr ictx#init (create_enum_attr ctx "nounwind" 0L) AttrIndex.Function ;
-      add_function_attr ictx#init
-        (create_enum_attr ctx "norecurse" 0L)
-        AttrIndex.Function ;
-      add_function_attr ictx#init
-        (create_enum_attr ctx "alwaysinline" 0L)
-        AttrIndex.Function ;
-      let init_params = param ictx#init 0 in
-      Hashtbl.set ictx#values ~key:"params" ~data:(Local init_params) ;
+      set_attributes ictx#init ;
       let init_bb = append_block ctx "entry" ictx#init in
       position_at_end init_bb builder ;
+      Hashtbl.set ictx#values ~key:"params" ~data:(Local (param ictx#init 0)) ;
       List.iteri ictx#func.args ~f:(fun i (n, t) ->
           let var = get_val ictx n in
           build_store (param ictx#init (i + 1)) var builder |> ignore ) ;
@@ -749,31 +751,21 @@ module Make (Config : Config.S) () = struct
         (get_val ictx "yield_index") builder
       |> ignore ;
       build_ret_void builder |> ignore ;
-      (* Check init function. *)
       Logs.debug (fun m -> m "Checking function.") ;
       Logs.debug (fun m -> m "%s" (string_of_llvalue ictx#init)) ;
-      assert_valid_function ictx#init ;
+      assert_valid_function ictx#init
+    in
+    let build_step ictx =
       (* Create step function. *)
       let ret_t = codegen_type ictx#func.ret_type in
       let step_func_t = function_type ret_t [|pointer_type !params_struct_t|] in
       ictx#set_step (declare_function (step_name ictx#name) step_func_t module_) ;
-      (* Set as an internal function. *)
-      set_linkage Linkage.Internal ictx#step ;
-      (* Set step function attributes. *)
-      add_function_attr ictx#step
-        (create_enum_attr ctx "argmemonly" 0L)
-        AttrIndex.Function ;
-      add_function_attr ictx#step (create_enum_attr ctx "nounwind" 0L) AttrIndex.Function ;
-      add_function_attr ictx#step
-        (create_enum_attr ctx "norecurse" 0L)
-        AttrIndex.Function ;
-      add_function_attr ictx#step
-        (create_enum_attr ctx "alwaysinline" 0L)
-        AttrIndex.Function ;
-      let step_params = Local (param ictx#step 0) in
-      Hashtbl.set ictx#values ~key:"params" ~data:step_params ;
+      set_attributes ictx#step ;
       let bb = append_block ctx "entry" ictx#step in
       position_at_end bb builder ;
+      (* Load params into local allocas. *)
+      Hashtbl.set ictx#values ~key:"params" ~data:(Local (param ictx#step 0)) ;
+      load_params ictx ictx#step ;
       (* Create top level switch. *)
       let yield_index = build_load (get_val ictx "yield_index") "yield_index" builder in
       let default_bb = append_block ctx "default" ictx#step in
@@ -790,13 +782,20 @@ module Make (Config : Config.S) () = struct
       (* Codegen the rest of the function body. *)
       codegen_prog ictx ictx#func.body ;
       build_store (const_int (i1_type ctx) 1) (get_val ictx "done") builder |> ignore ;
+      store_params ictx ictx#step ;
       build_ret (const_null ret_t) builder |> ignore ;
       (* Check step function. *)
       Logs.debug (fun m -> m "%s" (string_of_llvalue ictx#step)) ;
       Logs.debug (fun m ->
           m "%s"
             (Sexp.to_string_hum ([%sexp_of : string list] (Hashtbl.keys ictx#values))) ) ;
-      assert_valid_function ictx#step ;
+      assert_valid_function ictx#step
+    in
+    fun ictx ->
+      Logs.debug (fun m -> m "Codegen for func %s started." ictx#name) ;
+      Logs.debug (fun m -> m "%a" pp_func ictx#func) ;
+      build_init ictx ;
+      build_step ictx ;
       Logs.info (fun m -> m "Codegen for func %s completed." ictx#name)
 
   let codegen_func : _ -> unit =
@@ -904,21 +903,16 @@ module Make (Config : Config.S) () = struct
 
     let create : unit -> t = fun () -> {vars= []}
 
-    let build_global : t -> string -> lltype -> unit =
-     fun b n t ->
+    let build tbl b n t =
       let idx = List.length b.vars in
       b.vars <- t :: b.vars ;
-      match Hashtbl.add globals ~key:n ~data:(Param idx) with
-      | `Duplicate -> fail (Error.of_string "Global variable already defined.")
+      match Hashtbl.add tbl ~key:n ~data:(Param {idx; alloca= None}) with
+      | `Duplicate -> fail (Error.of_string "Variable already defined.")
       | `Ok -> ()
 
-    let build_local : t -> _ -> string -> lltype -> unit =
-     fun b ictx n t ->
-      let idx = List.length b.vars in
-      b.vars <- t :: b.vars ;
-      match Hashtbl.add ictx#values ~key:n ~data:(Param idx) with
-      | `Duplicate -> fail (Error.of_string "Local variable already defined.")
-      | `Ok -> ()
+    let build_global = build globals
+
+    let build_local b ictx = build ictx#values b
 
     let build_param_struct : t -> string -> lltype =
      fun b n ->

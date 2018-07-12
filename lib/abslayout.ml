@@ -933,11 +933,13 @@ module Make (Config : Config.S) () = struct
                     in
                     (k, serialized, hash_key) )
               in
+              Out_channel.with_file "keys.txt" ~f:(fun ch ->
+                  List.iter keys ~f:(fun (k, b, x) -> Out_channel.fprintf ch "%s\n" x) ) ;
               let hash =
                 let open Cmph in
                 List.map keys ~f:(fun (_, _, x) -> x)
                 |> KeySet.create
-                |> Config.create ~seed:0 ~algo:`Chd
+                |> Config.create ~verbose:true ~seed:0
                 |> Hash.of_config
               in
               let keys =
