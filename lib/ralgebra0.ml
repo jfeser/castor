@@ -1,5 +1,4 @@
 open Core
-open Db
 open Type0
 
 exception ParseError of string * int * int
@@ -50,6 +49,7 @@ class virtual ['f1, 'f2] pred_map =
       | String x -> String (self#string x)
       | Binop (op, p1, p2) -> Binop (self#binop op, self#run p1, self#run p2)
       | Varop (op, ps) -> Varop (self#varop op, List.map ps ~f:self#run)
+      | Null -> Null
   end
   
 

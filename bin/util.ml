@@ -1,5 +1,4 @@
 open Core
-open Bin_prot
 open Dblayout
 
 let deserialize_async : ?max_len:int -> string -> Candidate.t Or_error.t Async.Deferred.t =

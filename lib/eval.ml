@@ -1,5 +1,4 @@
 open Base
-open Printf
 open Collections
 open Db
 open Layout
@@ -29,6 +28,7 @@ module Make_relation (Config : Config.S_relation) = struct
 
   let rec eval_pred : PredCtx.t -> pred -> primvalue =
    fun ctx -> function
+    | Null -> `Null
     | Int x -> `Int x
     | String x -> `String x
     | Bool x -> `Bool x
@@ -102,7 +102,7 @@ module Make_relation (Config : Config.S_relation) = struct
               m + (Tuple.field_exn t f |> Value.to_int_exn) )
           |> Value.of_int_exn
       | Key f -> Tuple.field_exn key f
-      | Avg f -> failwith "Unsupported." )
+      | Avg _ -> failwith "Unsupported." )
 
   let rec eval_layout : PredCtx.t -> Layout.t -> Tuple.t Seq.t =
    fun ctx l ->
@@ -117,7 +117,7 @@ module Make_relation (Config : Config.S_relation) = struct
         List.map ls ~f:(eval_layout ctx) |> Seq.zip_many |> Seq.map ~f:Tuple.merge_many
     | UnorderedList ls | OrderedList (ls, _) ->
         Seq.concat_map ~f:(eval_layout ctx) (Seq.of_list ls)
-    | Table (ls, {lookup= k; field= f}) -> (
+    | Table (ls, {lookup= k; _}) -> (
       match Map.find ctx k with
       | Some v -> (
         match Map.find ls (ValueMap.Elem.of_primvalue v) with
@@ -126,7 +126,7 @@ module Make_relation (Config : Config.S_relation) = struct
       | None ->
           Error.create "Missing key." (k, ctx) [%sexp_of : PredCtx.Key.t * PredCtx.t]
           |> raise )
-    | Grouping (ls, {key; output}) ->
+    | Grouping (ls, {output; _}) ->
         Seq.of_list ls
         |> Seq.map ~f:(fun (kl, vl) ->
                let kt = Option.value_exn (eval_layout ctx kl |> Seq.hd) in
@@ -196,9 +196,9 @@ module Make_relation (Config : Config.S_relation) = struct
             | Key f ->
                 Option.value_exn (List.find key ~f:(fun v -> Field.(f = v.field)))
                 |> V.to_value
-            | Avg f -> failwith "Unsupported.") )
+            | Avg _ -> failwith "Unsupported.") )
     |> Hashtbl.to_alist |> Seq.of_list
-    |> Seq.map ~f:(fun (k, v) -> v)
+    |> Seq.map ~f:(fun (_, v) -> v)
 
   let eval : PredCtx.t -> ralgebra -> Tuple.t Seq.t =
    fun ctx r ->
@@ -266,9 +266,9 @@ module Make (Config : Config.S) = struct
     let eval_relation : relation -> Tuple.t Seq.t =
      fun r ->
       let query = "select * from $0" in
-      exec ~verbose:false Config.conn query ~params:[r.name]
+      exec ~verbose:false Config.conn query ~params:[r.rname]
       |> Seq.of_list
-      |> Seq.mapi ~f:(fun i vs ->
+      |> Seq.map ~f:(fun vs ->
              let m_values =
                List.map2 vs r.fields ~f:(fun v f ->
                    let pval =

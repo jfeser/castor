@@ -72,8 +72,8 @@ module Map = struct
 
   let merge_right : ('k, 'v, _) t -> ('k, 'v, _) t -> ('k, 'v, _) t =
    fun m1 m2 ->
-    merge m1 m2 ~f:(fun ~key -> function
-      | `Right x | `Left x -> Some x | `Both (x, y) -> Some y )
+    merge m1 m2 ~f:(fun ~key:_ -> function
+      | `Right x | `Left x -> Some x | `Both (_, y) -> Some y )
 end
 
 module Seq = struct
@@ -212,16 +212,16 @@ module Hashcons = struct
   include Hashcons
 
   let compare_hash_consed : ('a -> 'a -> int) -> 'a hash_consed -> 'a hash_consed -> int =
-   fun _ {tag= t1} {tag= t2} -> Int.compare t1 t2
+   fun _ {tag= t1; _} {tag= t2; _} -> Int.compare t1 t2
 
   let hash_consed_of_sexp : (Sexp.t -> 'a) -> Sexp.t -> 'a hash_consed =
-   fun of_sexp x -> failwith "Unimplemented."
+   fun _ _ -> failwith "Unimplemented."
 
   let sexp_of_hash_consed : ('a -> Sexp.t) -> 'a hash_consed -> Sexp.t =
-   fun to_sexp {node} -> to_sexp node
+   fun to_sexp {node; _} -> to_sexp node
 
   let hash_fold_hash_consed : _ -> Hash.state -> 'a hash_consed -> Hash.state =
-   fun _ s {hkey} -> Int.hash_fold_t s hkey
+   fun _ s {hkey; _} -> Int.hash_fold_t s hkey
 
-  let hash_hash_consed : 'a hash_consed -> int = fun {hkey} -> hkey
+  let hash_hash_consed : 'a hash_consed -> int = fun {hkey; _} -> hkey
 end

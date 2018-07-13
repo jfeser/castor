@@ -41,12 +41,12 @@ module Binable = struct
     | Agg (x, y, r) -> Agg (x, y, to_ralgebra r)
 end
 
-let rec relations : ('f, 'r, 'l) Ralgebra0.t -> 'r list =
+let relations : ('f, 'r, 'l) Ralgebra0.t -> 'r list =
  fun r ->
   let f =
     object
-      inherit ['f, 'r, 'l, 'r list] Ralgebra0.fold as super
-      method relation rs r = r :: rs
+      inherit ['f, 'r, 'l, 'r list] Ralgebra0.fold
+      method! relation rs r = r :: rs
     end
   in
   f#run r []
@@ -55,8 +55,8 @@ let predicates : ('f, 'r, 'l) Ralgebra0.t -> 'f Ralgebra0.pred list =
  fun r ->
   let f =
     object
-      inherit ['f, 'r, 'l, 'f Ralgebra0.pred list] Ralgebra0.fold as super
-      method filter ps p = p :: ps
+      inherit ['f, 'r, 'l, 'f Ralgebra0.pred list] Ralgebra0.fold
+      method! filter ps p = p :: ps
     end
   in
   f#run r []
@@ -86,11 +86,11 @@ let resolve :
     | Avg f -> Avg (resolve_field f)
     | Key f -> Key (resolve_field f)
   in
-  let rec resolve =
+  let resolve =
     let f =
       object
         inherit [string * string, string, Layout.t, Field.t, Relation.t, Layout.t] Ralgebra0.
-                                                                                   map as super
+                                                                                   map
         method scan l = l
         method relation = resolve_relation
         method project fs = List.map ~f:resolve_field fs
@@ -104,20 +104,20 @@ let resolve :
   resolve ralgebra
 
 let rec pred_fields : pred -> Field.t list = function
-  | Var _ | Int _ | Bool _ | String _ -> []
+  | Var _ | Int _ | Bool _ | String _ | Null -> []
   | Field f -> [f]
   | Binop (_, p1, p2) -> pred_fields p1 @ pred_fields p2
   | Varop (_, ps) -> List.concat_map ps ~f:pred_fields
 
 let rec pred_params : pred -> Set.M(TypedName).t = function
-  | Field _ | Int _ | Bool _ | String _ -> Set.empty (module TypedName)
+  | Field _ | Int _ | Bool _ | String _ | Null -> Set.empty (module TypedName)
   | Var v -> Set.singleton (module TypedName) v
   | Binop (_, p1, p2) -> Set.union (pred_params p1) (pred_params p2)
   | Varop (_, ps) ->
       List.map ~f:pred_params ps
       |> List.fold_left ~init:(Set.empty (module TypedName)) ~f:Set.union
 
-let rec primvalue_to_pred : primvalue -> pred = function
+let primvalue_to_pred : primvalue -> pred = function
   | `Bool x -> Bool x
   | `String x -> String x
   | `Int x -> Int x
@@ -127,7 +127,7 @@ let rec primvalue_to_pred : primvalue -> pred = function
 let pred_subst : primvalue Map.M(String).t -> pred -> pred =
  fun ctx p ->
   let rec f = function
-    | (Field _ | Int _ | Bool _ | String _) as p -> p
+    | (Field _ | Int _ | Bool _ | String _ | Null) as p -> p
     | Var (n, _) as p -> (
       match Map.find ctx n with Some v -> primvalue_to_pred v | None -> p )
     | Binop (op, p1, p2) -> Binop (op, f p1, f p2)
@@ -170,7 +170,8 @@ let op_to_string : op -> string = function
 
 let rec pred_to_sql_exn : pred -> string = function
   | Var _ as p -> Error.create "Unsupported." p [%sexp_of : pred] |> Error.raise
-  | Field f -> f.name
+  | Null -> "null"
+  | Field f -> f.fname
   | Int x -> Int.to_string x
   | Bool x -> Bool.to_string x
   | String x -> String.escaped x
@@ -185,10 +186,11 @@ let rec pred_to_sql_exn : pred -> string = function
 
 let rec pred_to_string : pred -> string = function
   | Var v -> TypedName.to_string v
+  | Null -> "null"
   | Int x -> Int.to_string x
   | Bool x -> Bool.to_string x
   | String x -> String.escaped x
-  | Field f -> f.name
+  | Field f -> f.fname
   | Binop (op, p1, p2) ->
       let os = op_to_string op in
       let s1 = pred_to_string p1 in
@@ -209,20 +211,20 @@ let agg_to_string : Field.t agg -> string = function
 let rec to_string : t -> string = function
   | Project (fs, r) ->
       sprintf "Project([%s], %s)"
-        (List.map fs ~f:(fun f -> f.name) |> String.concat ~sep:", ")
+        (List.map fs ~f:(fun f -> f.fname) |> String.concat ~sep:", ")
         (to_string r)
   | Count r -> sprintf "Count(%s)" (to_string r)
   | Filter (p, r) -> sprintf "Filter(%s, %s)" (pred_to_string p) (to_string r)
   | EqJoin (f1, f2, r1, r2) ->
-      sprintf "EqJoin(%s, %s, %s, %s)" f1.name f2.name (to_string r1) (to_string r2)
-  | Scan l -> sprintf "Scan(..)"
+      sprintf "EqJoin(%s, %s, %s, %s)" f1.fname f2.fname (to_string r1) (to_string r2)
+  | Scan _ -> sprintf "Scan(..)"
   | Concat rs ->
       List.map rs ~f:to_string |> String.concat ~sep:", " |> sprintf "Concat(%s)"
   | Agg (out, key, r) ->
       let out_str = List.map out ~f:agg_to_string |> String.concat ~sep:", " in
       let key_str = List.map key ~f:Field.to_string |> String.concat ~sep:", " in
       sprintf "Agg([%s], [%s], %s)" out_str key_str (to_string r)
-  | Relation r -> r.name
+  | Relation r -> r.rname
 
 let of_string_exn : string -> (string * string, string, 'l) Ralgebra0.t =
  fun s ->
@@ -232,26 +234,19 @@ let of_string_exn : string -> (string * string, string, 'l) Ralgebra0.t =
     Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
     raise e
 
-let rec layouts : t -> Layout.t list = function
-  | Project (_, r) | Filter (_, r) | Agg (_, _, r) | Count r -> layouts r
-  | EqJoin (_, _, r1, r2) -> layouts r1 @ layouts r2
-  | Scan l -> [l]
-  | Concat rs -> List.map rs ~f:layouts |> List.concat
-  | Relation _ -> []
-
 let rec to_schema_exn : t -> Schema.t = function
   | Project (fs, r) -> to_schema_exn r |> List.filter ~f:(List.mem fs ~equal:Field.( = ))
-  | Count _ -> [Field.{name= "count"; dtype= DInt}]
+  | Count _ -> [Field.{fname= "count"; dtype= DInt}]
   | Filter (_, r) -> to_schema_exn r
   | EqJoin (_, _, r1, r2) -> to_schema_exn r1 @ to_schema_exn r2
   | Scan l -> Layout.to_schema_exn l
   | Concat rs -> List.concat_map rs ~f:to_schema_exn
   | Relation r -> Schema.of_relation r
-  | Agg (out, key, r) ->
+  | Agg (out, _, _) ->
       List.map out ~f:(function
-        | Count -> Field.{name= "count"; dtype= DInt}
+        | Count -> Field.{fname= "count"; dtype= DInt}
         | Key f -> f
-        | (Sum _ | Min _ | Max _) as a -> Field.{name= agg_to_string a; dtype= DInt}
+        | (Sum _ | Min _ | Max _) as a -> Field.{fname= agg_to_string a; dtype= DInt}
         | Avg _ -> failwith "unsupported" )
 
 let to_schema : t -> Schema.t Or_error.t =
@@ -259,19 +254,19 @@ let to_schema : t -> Schema.t Or_error.t =
 
 let rec flatten : t -> t = function
   | (Filter (_, r) | Project (_, r) | Agg (_, _, r)) as x -> (
-    match flatten r with Scan {node= Empty} -> Scan Layout.empty | _ -> x )
+    match flatten r with Scan {node= Empty; _} -> Scan Layout.empty | _ -> x )
   | Count r as x -> (
     match flatten r with
-    | Scan {node= Empty} -> Scan Layout.(int 0 (scalar Relation.dummy Field.dummy))
+    | Scan {node= Empty; _} -> Scan Layout.(int 0 (scalar Relation.dummy Field.dummy))
     | _ -> x )
   | EqJoin (_, _, r1, r2) as x -> (
     match (flatten r1, flatten r2) with
-    | Scan {node= Empty}, _ | _, Scan {node= Empty} -> Scan Layout.empty
+    | Scan {node= Empty; _}, _ | _, Scan {node= Empty; _} -> Scan Layout.empty
     | _ -> x )
   | Concat rs ->
       Concat
         (List.filter_map rs ~f:(fun r ->
-             match flatten r with Scan {node= Empty} -> None | r' -> Some r' ))
+             match flatten r with Scan {node= Empty; _} -> None | r' -> Some r' ))
   | Scan l -> Scan (Layout.flatten l)
   | Relation _ as x -> x
 
@@ -282,7 +277,7 @@ let rec params : t -> Set.M(TypedName).t =
   | Relation _ -> empty
   | Scan l -> Layout.params l
   | Project (_, r) | Count r | Agg (_, _, r) -> params r
-  | Filter (p, r) -> Ralgebra0.(Set.union (pred_params p) (params r))
+  | Filter (p, r) -> Set.union (pred_params p) (params r)
   | EqJoin (_, _, r1, r2) -> Set.union (params r1) (params r2)
   | Concat rs -> List.map ~f:params rs |> union_list
 
@@ -301,7 +296,7 @@ let replace_relation : Relation.t -> Relation.t -> t -> t =
   in
   rep
 
-let rec relations : t -> Relation.t list =
+let relations : t -> Relation.t list =
   let rec f =
     let open Ralgebra0 in
     function
@@ -313,7 +308,7 @@ let rec relations : t -> Relation.t list =
   in
   fun r -> f r |> List.dedup_and_sort ~compare:Relation.compare
 
-let rec layouts : t -> Layout.t list =
+let layouts : t -> Layout.t list =
   let rec f =
     let open Ralgebra0 in
     function
@@ -436,14 +431,14 @@ let hoist_filter : t -> t =
   in
   f r
 
-let rec row_layout_all : Postgresql.connection -> t -> t =
+let row_layout_all : Postgresql.connection -> t -> t =
  fun conn ->
   let eval_relation : Relation.t -> Layout.t =
    fun r ->
-    Logs.info (fun m -> m "Loading relation %s." r.name) ;
+    Logs.info (fun m -> m "Loading relation %s." r.rname) ;
     let query = "select * from $0" in
-    exec ~verbose:false conn query ~params:[r.name]
-    |> List.mapi ~f:(fun i vs ->
+    exec ~verbose:false conn query ~params:[r.rname]
+    |> List.map ~f:(fun vs ->
            let m_values =
              List.map2 vs r.fields ~f:(fun v f ->
                  let scalar = Layout.scalar r f in

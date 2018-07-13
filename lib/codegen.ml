@@ -2,7 +2,6 @@ open Base
 open Printf
 open Llvm
 open Llvm_analysis
-open Llvm_target
 module Execution_engine = Llvm_executionengine
 
 let sexp_of_llvalue : llvalue -> Sexp.t = fun v -> Sexp.Atom (string_of_llvalue v)
@@ -83,7 +82,7 @@ module Make (Config : Config.S) () = struct
       (* Look up a name in a scope. *)
       let lookup_single m k =
         Option.map (Hashtbl.find m k) ~f:(function
-          | Param {alloca= Some x} | Local x -> x
+          | Param {alloca= Some x; _} | Local x -> x
           | Param {idx; alloca= None} -> build_struct_gep params idx k builder )
       in
       (* Look up a name in a scope list. The first scope which contains the
@@ -140,7 +139,7 @@ module Make (Config : Config.S) () = struct
     object
       inherit func_ctx name func params
       val mutable llfunc = null_ptr
-      method values  : var Hashtbl.M(String).t= values
+      method! values  : var Hashtbl.M(String).t= values
       method llfunc  : llvalue= llfunc
       method set_llfunc x = llfunc <- x
     end
@@ -287,7 +286,7 @@ module Make (Config : Config.S) () = struct
     | StringT {nullable= true} ->
         struct_type ctx [|codegen_type (StringT {nullable= false}); i1_type ctx|]
     | TupleT ts -> struct_type ctx (List.map ts ~f:codegen_type |> Array.of_list)
-    | VoidT -> void_type ctx
+    | VoidT | NullT -> void_type ctx
 
   let byte_type = integer_type ctx 8
 
@@ -356,7 +355,7 @@ module Make (Config : Config.S) () = struct
   let codegen_done fctx iter =
     let ctx' = get_iter iter in
     match Hashtbl.find ctx'#values "done" with
-    | Some (Param {idx}) ->
+    | Some (Param {idx; _}) ->
         let done_ptr = build_struct_gep (get_val fctx "params") idx "" builder in
         build_load done_ptr "done" builder
     | Some (Local _) | None ->
@@ -440,7 +439,7 @@ module Make (Config : Config.S) () = struct
     let key_size = build_intcast key_size (i32_type ctx) "key_size" builder in
     codegen_hash fctx hash_ptr key_ptr key_size
 
-  let codegen_load_str codegen_expr fctx ptr len =
+  let codegen_load_str fctx ptr len =
     let struct_t = struct_type ctx [|pointer_type (i8_type ctx); i64_type ctx|] in
     let struct_ = build_entry_alloca struct_t "" builder in
     let buf = build_load (get_val fctx "buf") "buf" builder in
@@ -481,7 +480,7 @@ module Make (Config : Config.S) () = struct
         | StringT _ -> codegen_string_hash fctx x1 x2
         | IntT _ | BoolT _ -> codegen_int_hash fctx x1 x2
         | _ -> fail (Error.create "Unexpected hash." t2 [%sexp_of : type_]) )
-      | LoadStr -> codegen_load_str codegen_expr fctx x1 x2
+      | LoadStr -> codegen_load_str fctx x1 x2
       | Not -> fail (Error.of_string "Not a binary operator.")
     in
     let ret_t = infer_type fctx#tctx (Binop {op; arg1; arg2}) in
@@ -515,6 +514,7 @@ module Make (Config : Config.S) () = struct
 
   let rec codegen_expr : _ -> expr -> llvalue =
    fun fctx -> function
+    | Null -> failwith "TODO: Pick a runtime null rep."
     | Int x -> const_int int_type x
     | Bool true -> const_int bool_type 1
     | Bool false -> const_int bool_type 0
@@ -586,16 +586,16 @@ module Make (Config : Config.S) () = struct
     let var = get_val fctx var in
     build_store val_ var builder |> ignore
 
-  let codegen_init fctx var func args =
+  let codegen_init fctx _ func args =
     let init_func = (Hashtbl.find_exn iters func)#init in
-    let {args= args_t} = (Hashtbl.find_exn iters func)#func in
+    let args_t = (Hashtbl.find_exn iters func)#func.args in
     if List.length args <> List.length args_t then
       fail (Error.of_string "Wrong number of arguments.")
     else
       let llargs = List.map args ~f:(codegen_expr fctx) in
       debug_printf
         (sprintf "Calling init %s(%s).\n" func
-           (List.init (List.length args) (fun _ -> "%d") |> String.concat ~sep:", "))
+           (List.init (List.length args) ~f:(fun _ -> "%d") |> String.concat ~sep:", "))
         llargs ;
       build_param_call fctx init_func (Array.of_list llargs) "" builder |> ignore
 
@@ -606,9 +606,9 @@ module Make (Config : Config.S) () = struct
 
   let store_params ctx func =
     let params_ptr = param func 0 in
-    Hashtbl.iteri ctx#values ~f:(fun ~key:name ~data ->
+    Hashtbl.iteri ctx#values ~f:(fun ~key:_ ~data ->
         match data with
-        | Local _ | Param {alloca= None} -> ()
+        | Local _ | Param {alloca= None; _} -> ()
         | Param {idx; alloca= Some param_alloca} ->
             let param_ptr = build_struct_gep params_ptr idx "" builder in
             let param = build_load param_alloca "" builder in
@@ -639,23 +639,32 @@ module Make (Config : Config.S) () = struct
     (* Add new bb*)
     position_at_end end_bb builder
 
+  let define_global_str name value =
+    let global = define_global name (const_stringz ctx value) module_ in
+    set_linkage Linkage.Internal global ;
+    build_bitcast global (pointer_type (i8_type ctx)) "" builder
+
+  let true_str = define_global_str "true_str" "true"
+
+  let false_str = define_global_str "false_str" "false"
+
+  let null_str = define_global_str "null_str" "null"
+
+  let void_str = define_global_str "void_str" "()"
+
+  let comma_str = define_global_str "comma_str" ","
+
+  let newline_str = define_global_str "newline_str" "\n"
+
+  let int_fmt = define_global_str "int_fmt" "%d"
+
+  let str_fmt = define_global_str "str_fmt" "\"%.*s\""
+
   let codegen_print fctx type_ expr =
     Logs.debug (fun m -> m "Codegen for %a." pp_stmt (Print (type_, expr))) ;
-    let define_global_str name value =
-      let global = define_global name (const_stringz ctx value) module_ in
-      set_linkage Linkage.Internal global ;
-      build_bitcast global (pointer_type (i8_type ctx)) "" builder
-    in
-    let true_str = define_global_str "true_str" "true" in
-    let false_str = define_global_str "false_str" "false" in
-    let null_str = define_global_str "null_str" "null" in
-    let void_str = define_global_str "void_str" "()" in
-    let comma_str = define_global_str "comma_str" "," in
-    let newline_str = define_global_str "newline_str" "\n" in
-    let int_fmt = define_global_str "int_fmt" "%d" in
-    let str_fmt = define_global_str "str_fmt" "\"%.*s\"" in
     let val_ = codegen_expr fctx expr in
     let rec gen val_ = function
+      | NullT -> call_printf null_str []
       | IntT {nullable= false} -> call_printf int_fmt [val_]
       | IntT {nullable= true} as t ->
           let {data; null} = unpack_null t val_ in
@@ -665,7 +674,7 @@ module Make (Config : Config.S) () = struct
           let fmt = build_select val_ true_str false_str "" builder in
           call_printf fmt []
       | BoolT {nullable= true} as t ->
-          let {data; null} = unpack_null t val_ in
+          let {null; _} = unpack_null t val_ in
           let fmt =
             build_select null null_str
               (build_select val_ true_str false_str "" builder)
@@ -676,7 +685,7 @@ module Make (Config : Config.S) () = struct
           call_printf str_fmt
             [build_extractvalue val_ 1 "" builder; build_extractvalue val_ 0 "" builder]
       | StringT {nullable= true} as t ->
-          let {data; null} = unpack_null t val_ in
+          let {null; _} = unpack_null t val_ in
           let fmt = build_select null null_str str_fmt "" builder in
           call_printf fmt
             [build_extractvalue val_ 1 "" builder; build_extractvalue val_ 0 "" builder]
@@ -692,7 +701,7 @@ module Make (Config : Config.S) () = struct
     let val_ = codegen_expr fctx expr in
     build_ret val_ builder |> ignore
 
-  let rec codegen_iter : _ -> unit =
+  let codegen_iter : _ -> unit =
     let rec codegen_stmt : _ -> stmt -> unit =
      fun fctx -> function
       | Loop {cond; body} -> codegen_loop fctx codegen_prog cond body
@@ -718,7 +727,7 @@ module Make (Config : Config.S) () = struct
       let params_ptr = param func 0 in
       Hashtbl.mapi_inplace ictx#values ~f:(fun ~key:name ~data ->
           match data with
-          | Local _ | Param {alloca= Some _} -> data
+          | Local _ | Param {alloca= Some _; _} -> data
           | Param {idx; alloca= None} ->
               let param = build_load (get_val ~params:params_ptr ictx name) "" builder in
               let param_alloca = build_entry_alloca (type_of param) name builder in
@@ -740,7 +749,7 @@ module Make (Config : Config.S) () = struct
       let init_bb = append_block ctx "entry" ictx#init in
       position_at_end init_bb builder ;
       Hashtbl.set ictx#values ~key:"params" ~data:(Local (param ictx#init 0)) ;
-      List.iteri ictx#func.args ~f:(fun i (n, t) ->
+      List.iteri ictx#func.args ~f:(fun i (n, _) ->
           let var = get_val ictx n in
           build_store (param ictx#init (i + 1)) var builder |> ignore ) ;
       (* Set done to false. *)
@@ -840,7 +849,7 @@ module Make (Config : Config.S) () = struct
           Hashtbl.set fctx#values ~key:n ~data:(Local var) ) ;
       (* Put arguments into symbol table. *)
       Hashtbl.set fctx#values ~key:"params" ~data:(Local (param fctx#llfunc 0)) ;
-      List.iteri args ~f:(fun i (n, t) ->
+      List.iteri args ~f:(fun i (n, _) ->
           Hashtbl.set fctx#values ~key:n ~data:(Local (param fctx#llfunc (i + 1))) ) ;
       codegen_prog fctx body ;
       match block_terminator (insertion_block builder) with
@@ -925,7 +934,7 @@ module Make (Config : Config.S) () = struct
   end
 
   let codegen : int -> IRGen.ir_module -> unit =
-   fun buf_len {iters= ir_iters; funcs= ir_funcs; params} ->
+   fun buf_len {iters= ir_iters; funcs= ir_funcs; params; _} ->
     Logs.info (fun m -> m "Codegen started.") ;
     set_data_layout "e-m:o-i64:64-f80:128-n8:16:32:64-S128" module_ ;
     let module SB = ParamStructBuilder in
@@ -952,9 +961,7 @@ module Make (Config : Config.S) () = struct
               SB.build_local sb ictx n lltype ) ;
           ictx )
     in
-    let fctxs =
-      List.mapi ir_funcs ~f:(fun i (name, func) -> new fctx name func params)
-    in
+    let fctxs = List.map ir_funcs ~f:(fun (name, func) -> new fctx name func params) in
     params_struct_t := SB.build_param_struct sb "params" ;
     List.iter ictxs ~f:codegen_iter ;
     List.iter fctxs ~f:codegen_func ;

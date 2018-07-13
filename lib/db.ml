@@ -5,7 +5,7 @@ open Bin_prot.Std
 open Collections
 
 let () =
-  Printexc.register_printer (function
+  Caml.Printexc.register_printer (function
     | Postgresql.Error e -> Some (Postgresql.string_of_error e)
     | _ -> None )
 
@@ -109,26 +109,26 @@ type dtype =
   | DBool
 [@@deriving compare, hash, sexp, bin_io]
 
-type field_t = {name: string; dtype: dtype}
+type field_t = {fname: string; dtype: dtype}
 
-and relation_t = {name: string; fields: field_t list}
+and relation_t = {rname: string; fields: field_t list}
 [@@deriving compare, hash, sexp, bin_io]
 
 module Relation = struct
   module T = struct
     type t = relation_t [@@deriving compare, hash, sexp, bin_io]
 
-    let sexp_of_t ({name}: relation_t) = [%sexp_of : string] name
+    let sexp_of_t {rname; _} = [%sexp_of : string] rname
   end
 
   include T
   include Comparable.Make (T)
 
-  let dummy = {name= ""; fields= []}
+  let dummy = {rname= ""; fields= []}
 
   let from_db : Postgresql.connection -> string -> t =
    fun conn name ->
-    let rel = {name; fields= []} in
+    let rel = {rname= name; fields= []} in
     let fields =
       exec2 ~params:[name] conn
         "select column_name, data_type from information_schema.columns where \
@@ -147,7 +147,7 @@ module Relation = struct
                | "boolean" -> DBool
                | s -> failwith (Printf.sprintf "Unknown dtype %s" s)
              in
-             {name= field_name; dtype} )
+             {fname= field_name; dtype} )
     in
     (* TODO: Remove this. *)
     {rel with fields}
@@ -160,35 +160,35 @@ module Relation = struct
         create temp table if not exists $0 as (select * from $0 order by random() limit $1)
       |}
     in
-    exec conn ~params:[r.name; Int.to_string size] query |> ignore
+    exec conn ~params:[r.rname; Int.to_string size] query |> ignore
 
   let field_exn : t -> string -> field_t =
    fun r n ->
-    match List.find r.fields ~f:(fun f -> String.(f.name = n)) with
+    match List.find r.fields ~f:(fun f -> String.(f.fname = n)) with
     | Some f -> f
     | None ->
-        Error.create "Field not found." (n, r.name) [%sexp_of : string * string]
+        Error.create "Field not found." (n, r.rname) [%sexp_of : string * string]
         |> Error.raise
 
   (* For testing only! *)
-  let of_name : string -> t = fun n -> {dummy with name= n}
+  let of_name : string -> t = fun n -> {dummy with rname= n}
 end
 
 module Field = struct
   module T = struct
-    type t = field_t = {name: string; dtype: dtype [@compare.ignore]}
+    type t = field_t = {fname: string; dtype: dtype [@compare.ignore]}
     [@@deriving compare, hash, sexp, bin_io]
   end
 
   include T
   include Comparable.Make (T)
 
-  let dummy = {name= ""; dtype= DBool}
+  let dummy = {fname= ""; dtype= DBool}
 
-  let to_string : t -> string = fun f -> f.name
+  let to_string : t -> string = fun f -> f.fname
 
   (* For testing only! *)
-  let of_name : string -> t = fun n -> {dummy with name= n}
+  let of_name : string -> t = fun n -> {dummy with fname= n}
 end
 
 type primvalue =
@@ -215,10 +215,10 @@ module Value = struct
    fun x -> {rel= Relation.dummy; field= Field.dummy; value= `Int x}
 
   let to_int_exn : t -> int = function
-    | {value= `Int x} -> x
+    | {value= `Int x; _} -> x
     | v -> Error.create "Expected an int." v [%sexp_of : t] |> Error.raise
 
-  let to_sql : t -> string = fun {rel; field; value} -> primvalue_to_sql value
+  let to_sql : t -> string = fun {value; _} -> primvalue_to_sql value
 end
 
 module Tuple = struct
@@ -269,7 +269,7 @@ module Schema = struct
   include Comparable.Make (T)
 
   let to_string : t -> string =
-   fun s -> List.map s ~f:(fun f -> f.name) |> String.concat ~sep:", " |> sprintf "[%s]"
+   fun s -> List.map s ~f:(fun f -> f.fname) |> String.concat ~sep:", " |> sprintf "[%s]"
 
   let of_tuple : Tuple.t -> t = List.map ~f:(fun v -> v.Value.field)
 
@@ -326,17 +326,19 @@ let result_to_tuples : Postgresql.result -> primvalue Map.M(String).t Seq.t =
          in
          Yield (tup, ()) )
 
-let exec_cursor:
-      'a.    ?batch_size:int -> ?verbose:bool -> ?params:string list
-      -> Postgresql.connection -> string -> primvalue Map.M(String).t Seq.t =
+let exec_cursor :
+       ?batch_size:int
+    -> ?params:string list
+    -> Postgresql.connection
+    -> string
+    -> primvalue Map.M(String).t Seq.t =
   let fresh = Fresh.create () in
-  fun ?(batch_size= 1000) ?(verbose= true) ?(params= []) conn query ->
-    let open Stdio in
+  fun ?(batch_size= 1000) ?(params= []) conn query ->
     let query = subst_params params query in
     let cur = Fresh.name fresh "cur%d" in
     let declare_query = sprintf "declare %s cursor with hold for %s;" cur query in
     let fetch_query = sprintf "fetch %d from %s;" batch_size cur in
-    let close_query = sprintf "close %s;" cur in
+    (* let close_query = sprintf "close %s;" cur in *)
     conn#exec declare_query |> process_errors |> ignore ;
     let db_idx = ref 1 in
     let seq =

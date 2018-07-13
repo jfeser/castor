@@ -3,7 +3,7 @@ open Bin_prot.Std
 module Pervasives = Caml.Pervasives
 
 module PrimType = struct
-  type t = BoolT | IntT | StringT [@@deriving compare, sexp, hash, bin_io]
+  type t = BoolT | IntT | StringT | NullT [@@deriving compare, sexp, hash, bin_io]
 
   let of_primvalue = function
     | `Int _ -> IntT
@@ -16,6 +16,7 @@ module PrimType = struct
     | BoolT -> "bool"
     | IntT -> "int"
     | StringT -> "string"
+    | NullT -> "null"
 
   let of_dtype = function
     | Db.DInt -> IntT

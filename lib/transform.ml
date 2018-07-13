@@ -38,7 +38,7 @@ module Make (Config : Config.S) = struct
     |> Seq.map ~f:(fun tup -> cross_tuple (List.map ~f:(fun v -> of_value v) tup))
     |> Seq.to_list |> unordered_list
 
-  let rec run_everywhere : t -> t =
+  let run_everywhere : t -> t =
    fun {name; f= f_inner} ->
     let open Ralgebra0 in
     let map_lazy ~f l = List.map l ~f:(Lazy.map ~f) in
@@ -265,7 +265,7 @@ module Make (Config : Config.S) = struct
   let of_name : string -> t Or_error.t =
    fun n ->
     let m_tf =
-      List.find (transforms @ required_transforms) ~f:(fun {name} -> String.(name = n))
+      List.find (transforms @ required_transforms) ~f:(fun {name; _} -> String.(name = n))
     in
     match m_tf with
     | Some x -> Ok x

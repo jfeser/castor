@@ -1,6 +1,5 @@
 open Base
 open Collections
-open Db
 include Type0
 
 exception TypeError of Error.t [@@deriving sexp]
@@ -26,7 +25,7 @@ module AbsInt = struct
   let concretize : t -> int option = fun (l, h) -> if l = h then Some l else None
 
   let bitwidth : nullable:bool -> t -> int =
-   fun ~nullable (l, h) ->
+   fun ~nullable (_, h) ->
     let open Int in
     (* Ensures we can store null values. *)
     let h = if nullable then h + 1 else h in
@@ -89,7 +88,9 @@ module T = struct
   type unordered_list = {count: AbsCount.t} [@@deriving compare, sexp]
 
   type table =
-    {count: AbsCount.t; field: Db.Field.t; lookup: Abslayout0.name Abslayout0.pred}
+    { count: AbsCount.t
+    ; field: Db.Field.t
+    ; lookup: PrimType.t option Abslayout0.name Abslayout0.pred }
   [@@deriving compare, sexp]
 
   type grouping =
@@ -180,7 +181,7 @@ let rec width : t -> int = function
       List.map ts ~f:width |> List.sum (module Int) ~f:(fun x -> x)
   | OrderedListT (t, _) | UnorderedListT (t, _) -> width t
   | TableT (_, t, _) -> width t + 1
-  | GroupingT (_, _, {output}) -> List.length output
+  | GroupingT (_, _, {output; _}) -> List.length output
   | EmptyT -> 0
 
 let count : t -> AbsCount.t = function
@@ -188,9 +189,9 @@ let count : t -> AbsCount.t = function
   | NullT _ | IntT _ | BoolT _ | StringT _ -> AbsCount.abstract 1
   | CrossTupleT (_, {count})
    |ZipTupleT (_, {count})
-   |OrderedListT (_, {count})
+   |OrderedListT (_, {count; _})
    |UnorderedListT (_, {count})
-   |TableT (_, _, {count}) ->
+   |TableT (_, _, {count; _}) ->
       count
   | GroupingT (_, _, m) -> m.count
 

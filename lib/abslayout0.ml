@@ -1,14 +1,18 @@
 open Base
 module Pervasives = Caml.Pervasives
 
-type name =
-  {relation: string option; name: string; type_: (Type0.PrimType.t[@opaque]) option}
+type 'a name = {relation: string option; name: string; type_: 'a [@compare.ignore]}
+[@@deriving compare, sexp, hash]
 
-and 'f pred =
+(* Visitors doesn't use the special method override syntax that warning 7 checks
+   for. *)
+[@@@warning "-7"]
+
+type 'f pred =
   | Name of 'f
-  | Int of int
-  | Bool of bool
-  | String of string
+  | Int of (int[@opaque])
+  | Bool of (bool[@opaque])
+  | String of (string[@opaque])
   | Null
   | Binop of ((Ralgebra0.op[@opaque]) * 'f pred * 'f pred)
   | Varop of ((Ralgebra0.op[@opaque]) * 'f pred list)
@@ -21,44 +25,39 @@ and 'f agg = 'f Ralgebra0.agg =
   | Min of 'f
   | Max of 'f
 
-and ('f, 'l) ralgebra =
-  | Select of 'f pred list * ('f, 'l) ralgebra
-  | Filter of 'f pred * ('f, 'l) ralgebra
-  | Join of
-      { pred: 'f pred
-      ; r1_name: string
-      ; r1: ('f, 'l) ralgebra
-      ; r2_name: string
-      ; r2: ('f, 'l) ralgebra }
-  | Scan of 'l
-  | Agg of 'f agg list * 'f list * ('f, 'l) ralgebra
-  | Dedup of ('f, 'l) ralgebra
-[@@deriving
-  visitors {variety= "endo"; name= "ralgebra_endo"}
-  , visitors {variety= "map"; name= "ralgebra_map"}
-  , visitors {variety= "iter"; name= "ralgebra_iter"}
-  , visitors {variety= "reduce"; name= "ralgebra_reduce"}
-  , compare
-  , sexp]
-
-type 'f hash_idx = {lookup: 'f pred}
+and 'f hash_idx = {lookup: 'f pred}
 
 and 'f ordered_idx = {lookup_low: 'f pred; lookup_high: 'f pred; order: 'f pred}
 
 and tuple = Cross | Zip
 
-and ('f, 'r) layout =
+and 'f ralgebra =
+  | Select of string * 'f pred list * 'f ralgebra
+  | Filter of string * 'f pred * 'f ralgebra
+  | Join of
+      { pred: 'f pred
+      ; r1_name: string
+      ; r1: 'f ralgebra
+      ; r2_name: string
+      ; r2: 'f ralgebra }
+  | Agg of string * 'f agg list * 'f list * 'f ralgebra
+  | Dedup of 'f ralgebra
+  | Scan of string
   | AEmpty
   | AScalar of 'f pred
-  | AList of ('f, 'r) ralgebra * string * ('f, 'r) layout
-  | ATuple of ('f, 'r) layout list * tuple
-  | AHashIdx of ('f, 'r) ralgebra * string * ('f, 'r) layout * 'f hash_idx
-  | AOrderedIdx of ('f, 'r) ralgebra * string * ('f, 'r) layout * 'f ordered_idx
+  | AList of 'f ralgebra * string * 'f ralgebra
+  | ATuple of 'f ralgebra list * tuple
+  | AHashIdx of 'f ralgebra * string * 'f ralgebra * 'f hash_idx
+  | AOrderedIdx of 'f ralgebra * string * 'f ralgebra * 'f ordered_idx
 [@@deriving
-  visitors {variety= "fold"}
-  , visitors {variety= "endo"}
+  visitors {variety= "endo"}
   , visitors {variety= "map"}
+  , visitors {variety= "iter"}
   , visitors {variety= "reduce"}
+  , visitors {variety= "fold"; ancestors= ["map"]}
+  , compare
   , sexp]
 
-type t = (name, (name, string) layout) ralgebra [@@deriving sexp]
+[@@@warning "+7"]
+
+type t = Type0.PrimType.t option name ralgebra

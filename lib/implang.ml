@@ -6,6 +6,7 @@ module Format = Caml.Format
 let fail : Error.t -> 'a = Error.raise
 
 type type_ =
+  | NullT
   | IntT of {nullable: bool}
   | StringT of {nullable: bool}
   | BoolT of {nullable: bool}
@@ -28,6 +29,7 @@ type value =
 and state = {ctx: value Map.M(String).t; buf: Bytes.t}
 
 and expr =
+  | Null
   | Int of int
   | Bool of bool
   | String of string
@@ -75,6 +77,7 @@ let rec pp_tuple pp_v fmt =
 let rec pp_type : Format.formatter -> type_ -> unit =
   let open Format in
   fun fmt -> function
+    | NullT -> fprintf fmt "Null"
     | IntT {nullable= true} -> fprintf fmt "Int"
     | IntT {nullable= false} -> fprintf fmt "Int[nonnull]"
     | StringT {nullable= true} -> fprintf fmt "String"
@@ -93,7 +96,7 @@ let pp_bool fmt = Format.fprintf fmt "%b"
 let rec pp_value : Format.formatter -> value -> unit =
   let open Format in
   fun fmt -> function
-    | VCont {state; body} -> fprintf fmt "<cont>"
+    | VCont _ -> fprintf fmt "<cont>"
     | VFunc f -> pp_func fmt f
     | VBytes b -> pp_bytes fmt b
     | VInt x -> pp_int fmt x
@@ -118,6 +121,7 @@ and pp_expr : Format.formatter -> expr -> unit =
     | LoadStr -> "load_str"
   in
   fun fmt -> function
+    | Null -> fprintf fmt "null"
     | Int x -> pp_int fmt x
     | Bool x -> pp_bool fmt x
     | String x -> fprintf fmt "\"%s\"" (String.escaped x)
@@ -143,7 +147,7 @@ and pp_stmt : Format.formatter -> stmt -> unit =
         fprintf fmt "@[<v 4>if (@[<hov>%a@]) {@,%a@]@,}@[<v 4> else {@,%a@]@,}" pp_expr
           cond pp_prog tcase pp_prog fcase
     | Step {var; iter} -> fprintf fmt "@[<hov>%s =@ next(%s);@]" var iter
-    | Iter {var; func; args} ->
+    | Iter {func; args; _} ->
         fprintf fmt "@[<hov>init %s(@[<hov>%a@]);@]" func (pp_tuple pp_expr) args
     | Assign {lhs; rhs} -> fprintf fmt "@[<hov>%s =@ %a;@]" lhs pp_expr rhs
     | Yield e -> fprintf fmt "@[<hov>yield@ %a;@]" pp_expr e
@@ -153,12 +157,12 @@ and pp_stmt : Format.formatter -> stmt -> unit =
 and pp_prog : Format.formatter -> prog -> unit =
   let open Format in
   fun fmt -> function
-    | [] -> Format.fprintf fmt ""
-    | [x] -> Format.fprintf fmt "%a" pp_stmt x
-    | x :: xs -> Format.fprintf fmt "%a@,%a" pp_stmt x pp_prog xs
+    | [] -> fprintf fmt ""
+    | [x] -> fprintf fmt "%a" pp_stmt x
+    | x :: xs -> fprintf fmt "%a@,%a" pp_stmt x pp_prog xs
 
 and pp_func : Format.formatter -> func -> unit =
- fun fmt {args; body} ->
+ fun fmt {args; body; _} ->
   Format.fprintf fmt "@[<v 4>fun (%a) {@,%a@]@,}" pp_args args pp_prog body
 
 module Infix = struct
@@ -225,6 +229,7 @@ end
 let int_t = IntT {nullable= false}
 
 let is_nullable = function
+  | NullT -> true
   | IntT {nullable= n} | BoolT {nullable= n} | StringT {nullable= n} -> n
   | TupleT _ | VoidT -> false
 
@@ -239,7 +244,7 @@ let fresh_name : unit -> string =
   fun () -> Caml.incr ctr ; sprintf "%dx" !ctr
 
 let yield_count : func -> int =
- fun {body} -> List.sum (module Int) body ~f:(function Yield _ -> 1 | _ -> 0)
+ fun {body; _} -> List.sum (module Int) body ~f:(function Yield _ -> 1 | _ -> 0)
 
 let lookup : state -> string -> value =
  fun s v ->
@@ -277,50 +282,50 @@ let rec unify_type : type_ -> type_ -> type_ =
       Error.create "Nonunifiable." (t1, t2) [%sexp_of : type_ * type_] |> Error.raise
 
 let rec infer_type : type_ Hashtbl.M(String).t -> expr -> type_ =
-  let open Serialize in
-  fun ctx -> function
-    | Int _ -> IntT {nullable= false}
-    | Bool _ -> BoolT {nullable= false}
-    | String _ -> StringT {nullable= false}
-    | Var x -> (
-      match Hashtbl.find ctx x with
-      | Some t -> t
-      | None ->
-          Error.create "Type lookup failed." (x, ctx)
-            [%sexp_of : string * type_ Hashtbl.M(String).t]
-          |> Error.raise )
-    | Tuple xs -> TupleT (List.map xs ~f:(infer_type ctx))
-    | Binop {op; arg1; arg2} as e -> (
-        let t1 = infer_type ctx arg1 in
-        let t2 = infer_type ctx arg2 in
-        match (op, t1, t2) with
-        | (Add | Sub | Mul), IntT _, IntT _
-         |(And | Or), BoolT _, BoolT _
-         |(And | Or), IntT _, IntT _ ->
-            unify_type t1 t2
-        | Lt, IntT {nullable= n1}, IntT {nullable= n2} -> BoolT {nullable= n1 || n2}
-        | Hash, IntT {nullable= false}, _ -> IntT {nullable= false}
-        | Eq, IntT {nullable= n1}, IntT {nullable= n2}
-         |Eq, BoolT {nullable= n1}, BoolT {nullable= n2}
-         |Eq, StringT {nullable= n1}, StringT {nullable= n2} ->
-            BoolT {nullable= n1 || n2}
-        | LoadStr, IntT {nullable= false}, IntT {nullable= false} ->
-            StringT {nullable= false}
-        | _ ->
-            fail
-              (Error.create "Type error." (e, t1, t2, ctx)
-                 [%sexp_of : expr * type_ * type_ * type_ Hashtbl.M(String).t]) )
-    | Unop {op; arg} -> (
-        let t = infer_type ctx arg in
-        match (op, t) with
-        | Not, BoolT {nullable} -> BoolT {nullable}
-        | _ -> fail (Error.create "Type error." (op, t) [%sexp_of : op * type_]) )
-    | Slice (_, len) -> IntT {nullable= false}
-    | Index (tup, idx) -> (
-      match infer_type ctx tup with
-      | TupleT ts -> List.nth_exn ts idx
-      | t -> fail (Error.create "Expected a tuple." t [%sexp_of : type_]) )
-    | Done _ -> BoolT {nullable= false}
+ fun ctx -> function
+  | Null -> NullT
+  | Int _ -> IntT {nullable= false}
+  | Bool _ -> BoolT {nullable= false}
+  | String _ -> StringT {nullable= false}
+  | Var x -> (
+    match Hashtbl.find ctx x with
+    | Some t -> t
+    | None ->
+        Error.create "Type lookup failed." (x, ctx)
+          [%sexp_of : string * type_ Hashtbl.M(String).t]
+        |> Error.raise )
+  | Tuple xs -> TupleT (List.map xs ~f:(infer_type ctx))
+  | Binop {op; arg1; arg2} as e -> (
+      let t1 = infer_type ctx arg1 in
+      let t2 = infer_type ctx arg2 in
+      match (op, t1, t2) with
+      | (Add | Sub | Mul), IntT _, IntT _
+       |(And | Or), BoolT _, BoolT _
+       |(And | Or), IntT _, IntT _ ->
+          unify_type t1 t2
+      | Lt, IntT {nullable= n1}, IntT {nullable= n2} -> BoolT {nullable= n1 || n2}
+      | Hash, IntT {nullable= false}, _ -> IntT {nullable= false}
+      | Eq, IntT {nullable= n1}, IntT {nullable= n2}
+       |Eq, BoolT {nullable= n1}, BoolT {nullable= n2}
+       |Eq, StringT {nullable= n1}, StringT {nullable= n2} ->
+          BoolT {nullable= n1 || n2}
+      | LoadStr, IntT {nullable= false}, IntT {nullable= false} ->
+          StringT {nullable= false}
+      | _ ->
+          fail
+            (Error.create "Type error." (e, t1, t2, ctx)
+               [%sexp_of : expr * type_ * type_ * type_ Hashtbl.M(String).t]) )
+  | Unop {op; arg} -> (
+      let t = infer_type ctx arg in
+      match (op, t) with
+      | Not, BoolT {nullable} -> BoolT {nullable}
+      | _ -> fail (Error.create "Type error." (op, t) [%sexp_of : op * type_]) )
+  | Slice (_, _) -> IntT {nullable= false}
+  | Index (tup, idx) -> (
+    match infer_type ctx tup with
+    | TupleT ts -> List.nth_exn ts idx
+    | t -> fail (Error.create "Expected a tuple." t [%sexp_of : type_]) )
+  | Done _ -> BoolT {nullable= false}
 
 module Config = struct
   module type S = sig
@@ -367,7 +372,7 @@ module IRGen = struct
   let new_scope : func_builder -> func_builder = fun b -> {b with body= ref []}
 
   let build_var : string -> type_ -> func_builder -> expr =
-   fun n t {locals} ->
+   fun n t {locals; _} ->
     if Hashtbl.mem locals n then
       fail (Error.create "Variable already defined." n [%sexp_of : string])
     else (
@@ -375,7 +380,7 @@ module IRGen = struct
       Var n )
 
   let build_arg : int -> func_builder -> expr =
-   fun i {args} ->
+   fun i {args; _} ->
     match List.nth args i with
     | Some (n, _) -> Var n
     | None -> fail (Error.of_string "Not an argument index.")
@@ -403,8 +408,6 @@ module IRGen = struct
 
   module Make (Config : Config.S) () = struct
     module Abslayout = Abslayout.Make_db (Config) ()
-
-    open Config
 
     let fresh = Fresh.create ()
 
@@ -524,7 +527,7 @@ module IRGen = struct
       let open Type in
       function
       | NullT _ | IntT _ | BoolT _ | EmptyT -> Infix.(int 0)
-      | StringT {nchars} -> (
+      | StringT {nchars; _} -> (
         match Type.AbsInt.concretize nchars with
         | Some _ -> Infix.(int 0)
         | None -> Infix.(int isize) )
@@ -537,18 +540,15 @@ module IRGen = struct
       let open Type in
       function
       | NullT _ -> int 0
-      | IntT {range; nullable} -> int (Type.AbsInt.bytewidth ~nullable range)
+      | IntT {range; nullable; _} -> int (Type.AbsInt.bytewidth ~nullable range)
       | BoolT _ -> int 1
-      | StringT {nchars} -> (
+      | StringT {nchars; _} -> (
         match Type.AbsInt.concretize nchars with
         | Some x -> int (Int.round ~dir:`Up ~to_multiple_of:isize x)
         | None -> Infix.(((islice start + int 7) && int (-8)) + int isize) )
       | EmptyT -> int 0
-      | TableT _ -> islice start
-      | ZipTupleT (_, {count}) | CrossTupleT (_, {count}) -> islice start
-      | GroupingT (_, _, {count})
-       |UnorderedListT (_, {count})
-       |OrderedListT (_, {count}) ->
+      | TableT _ | ZipTupleT _ | CrossTupleT _ | GroupingT _ | UnorderedListT _
+       |OrderedListT _ ->
           islice start
 
     let count start =
@@ -557,18 +557,14 @@ module IRGen = struct
       function
       | EmptyT | NullT _ -> Some (int 0)
       | IntT _ | BoolT _ | StringT _ -> Some (int 1)
-      | TableT (_, _, {count}) | CrossTupleT (_, {count}) | ZipTupleT (_, {count}) ->
-          None
-      | GroupingT (_, _, {count})
-       |UnorderedListT (_, {count})
-       |OrderedListT (_, {count}) ->
-          Some (islice start)
+      | TableT _ | CrossTupleT _ | ZipTupleT _ -> None
+      | GroupingT _ | UnorderedListT _ | OrderedListT _ -> Some (islice start)
 
     let scan_empty = create [("start", int_t)] VoidT |> build_func
 
     let scan_null _ = create [("start", int_t)] VoidT |> build_func
 
-    let scan_int Type.({range= (l, h) as range; nullable}) =
+    let scan_int Type.({range= (_, h) as range; nullable; _}) =
       let b = create [("start", int_t)] (TupleT [IntT {nullable}]) in
       let start = build_arg 0 b in
       let ival = Slice (start, Type.AbsInt.bytewidth ~nullable range) in
@@ -579,7 +575,7 @@ module IRGen = struct
       build_func b
 
     let scan_bool : Type.bool_ -> _ =
-     fun Type.({nullable}) ->
+     fun Type.({nullable; _}) ->
       let b = create [("start", int_t)] (TupleT [BoolT {nullable}]) in
       let start = build_arg 0 b in
       let ival = Slice (start, 1) in
@@ -589,7 +585,7 @@ module IRGen = struct
       else build_yield (Tuple [ival]) b ;
       build_func b
 
-    let scan_string Type.({nchars= (l, _) as nchars; nullable} as t) =
+    let scan_string Type.({nchars= (l, _) as nchars; nullable; _} as t) =
       let b = create [("start", int_t)] (TupleT [StringT {nullable}]) in
       let start = build_arg 0 b in
       let nchars =
@@ -765,6 +761,7 @@ module IRGen = struct
       let module A = Abslayout in
       let module R = Ralgebra0 in
       let rec gen_pred = function
+        | A.Null -> Null
         | A.Int x -> Int x
         | A.String x -> String x
         | A.Bool x -> Bool x
@@ -796,7 +793,7 @@ module IRGen = struct
       gen_pred
 
     let scan_table : _ -> _ -> _ -> Type.table -> _ =
-     fun scan kt vt {count; field; lookup} ->
+     fun scan kt vt {lookup; _} ->
       let key_iter = scan kt in
       let value_iter = scan vt in
       let key_type = (find_func key_iter).ret_type in
@@ -814,7 +811,7 @@ module IRGen = struct
         | Name n -> Var n.name
         | _ ->
             Error.create "Unexpected parameters." lookup
-              [%sexp_of : Abslayout0.name Abslayout0.pred]
+              [%sexp_of : Abslayout.Name.t Abslayout0.pred]
             |> Error.raise
       in
       (* Compute the index in the mapping table for this key. *)
@@ -835,12 +832,12 @@ module IRGen = struct
             ~then_:
               (build_foreach vt value_start value_iter (fun value b ->
                    build_yield value b ))
-            ~else_:(fun b -> ())
+            ~else_:(fun _ -> ())
             b )
         b ;
       build_func b
 
-    let scan_grouping scan kt vt Type.({output} as m) =
+    let scan_grouping scan kt vt Type.({output; _} as m) =
       let t = Type.(GroupingT (kt, vt, m)) in
       let key_iter = scan kt in
       let value_iter = scan vt in
@@ -905,7 +902,7 @@ module IRGen = struct
                   build_iter value_iter [value_start] b ;
                   let ct = build_fresh_defn "ct" int_t Infix.(int 0) b in
                   build_foreach vt value_start value_iter
-                    (fun tup b -> build_assign Infix.(ct + int 1) ct b)
+                    (fun _ b -> build_assign Infix.(ct + int 1) ct b)
                     b ;
                   ct )
             | Avg _ -> Error.of_string "Unsupported" |> Error.raise )
@@ -983,7 +980,6 @@ module IRGen = struct
 
     let printer : string -> func =
      fun func ->
-      let open Infix in
       let b = create [] VoidT in
       let ret_type = (find_func func).ret_type in
       build_foreach_no_start func (fun x b -> build_print ~type_:ret_type x b) b ;
@@ -994,7 +990,7 @@ module IRGen = struct
       let open Infix in
       let b = create [] (IntT {nullable= false}) in
       let c = build_defn "c" int_t Infix.(int 0) b in
-      build_foreach_no_start func (fun _ b -> build_assign Infix.(c + int 1) c b) b ;
+      build_foreach_no_start func (fun _ b -> build_assign (c + int 1) c b) b ;
       build_return c b ;
       build_func b
 
@@ -1006,7 +1002,7 @@ module IRGen = struct
             match Db.Schema.field_idx schema f with
             | Some idx -> Some idx
             | None ->
-                Logs.warn (fun m -> m "Field %s not present. Can't be projected." f.name) ;
+                Logs.warn (fun m -> m "Field %s not present. Can't be projected." f.fname) ;
                 None )
       in
       let child_ret_t = (find_func func).ret_type in
@@ -1096,62 +1092,62 @@ module IRGen = struct
                   ( List.init w1 ~f:(fun i -> Infix.(index t1 i))
                   @ List.init w2 ~f:(fun i -> Infix.(index t2 i)) )
               in
-              build_if
-                ~cond:Infix.(gen_pred tup field_idx pred)
+              build_if ~cond:(gen_pred tup field_idx pred)
                 ~then_:(fun b -> build_yield tup b)
-                ~else_:(fun b -> ())
+                ~else_:(fun _ -> ())
                 b )
             b )
         b ;
       build_func b
 
-    let gen_abslayout : data_fn:string -> Abslayout.t -> string * int =
-     fun ~data_fn r ->
-      let field_idx_exn s f =
-        Option.value_exn (List.findi s ~f:(fun i n -> Abslayout.Name.(n = f)))
-        |> fun (i, _) -> i
-      in
-      let writer = Bitstring.Writer.with_file data_fn in
-      let start = ref 0 in
-      let rec gen_abslayout r =
-        let open Abslayout in
-        let name, func =
-          match r with
-          | Scan l ->
-              let type_ = Abslayout.to_type l in
-              let len = if code_only then 0 else Abslayout.serialize writer type_ l in
-              let scan_start = !start in
-              start := !start + len ;
-              Logs.debug (fun m ->
-                  m "Generating scanner for type: %s"
-                    (Sexp.to_string_hum ([%sexp_of : Type.t] type_)) ) ;
-              (Fresh.name fresh "scan%d", scan type_ scan_start)
-          | Select (x, r) ->
-              let schema = Abslayout.to_schema_exn r |> field_idx_exn in
-              (Fresh.name fresh "select%d", select gen_abslayout abs_gen_pred schema x r)
-          | Filter (x, r) ->
-              let schema = Abslayout.to_schema_exn r |> field_idx_exn in
-              (Fresh.name fresh "filter%d", filter gen_abslayout abs_gen_pred schema x r)
-          | Join {pred; r1_name; r1; r2_name; r2} as r ->
-              let schema = Abslayout.to_schema_exn r |> field_idx_exn in
-              ( Fresh.name fresh "join%d"
-              , nl_join gen_abslayout abs_gen_pred schema pred r1 r2 )
-          | r ->
-              Error.create "Unsupported at runtime." r [%sexp_of : Abslayout.t]
-              |> Error.raise
-        in
-        add_func name func ; name
-      in
-      let entry_name = gen_abslayout r in
-      Bitstring.Writer.flush writer ; Bitstring.Writer.close writer ; (entry_name, !start)
+    let gen_abslayout : data_fn:string -> Abslayout.t -> string * int = failwith "FIXME"
+
+    (* fun ~data_fn r ->
+      *  let field_idx_exn s f =
+      *    Option.value_exn (List.findi s ~f:(fun i n -> Abslayout.Name.(n = f)))
+      *    |> fun (i, _) -> i
+      *  in
+      *  let writer = Bitstring.Writer.with_file data_fn in
+      *  let start = ref 0 in
+      *  let rec gen_abslayout r =
+      *    let open Abslayout in
+      *    let name, func =
+      *      match r with
+      *      | Scan l ->
+      *          let type_ = Abslayout.to_type l in
+      *          let len = if code_only then 0 else Abslayout.serialize writer type_ l in
+      *          let scan_start = !start in
+      *          start := !start + len ;
+      *          Logs.debug (fun m ->
+      *              m "Generating scanner for type: %s"
+      *                (Sexp.to_string_hum ([%sexp_of : Type.t] type_)) ) ;
+      *          (Fresh.name fresh "scan%d", scan type_ scan_start)
+      *      | Select (x, r) ->
+      *          let schema = Abslayout.to_schema_exn r |> field_idx_exn in
+      *          (Fresh.name fresh "select%d", select gen_abslayout abs_gen_pred schema x r)
+      *      | Filter (x, r) ->
+      *          let schema = Abslayout.to_schema_exn r |> field_idx_exn in
+      *          (Fresh.name fresh "filter%d", filter gen_abslayout abs_gen_pred schema x r)
+      *      | Join {pred; r1_name; r1; r2_name; r2} as r ->
+      *          let schema = Abslayout.to_schema_exn r |> field_idx_exn in
+      *          ( Fresh.name fresh "join%d"
+      *          , nl_join gen_abslayout abs_gen_pred schema pred r1 r2 )
+      *      | r ->
+      *          Error.create "Unsupported at runtime." r [%sexp_of : Abslayout.t]
+      *          |> Error.raise
+      *    in
+      *    add_func name func ; name
+      *  in
+      *  let entry_name = gen_abslayout r in
+      *  Bitstring.Writer.flush writer ; Bitstring.Writer.close writer ; (entry_name, !start) *)
 
     let of_primtype : Type.PrimType.t -> type_ = function
       | BoolT -> BoolT {nullable= false}
       | IntT -> IntT {nullable= false}
       | StringT -> StringT {nullable= false}
+      | NullT -> NullT
 
-    let irgen_abstract : data_fn:string -> Abslayout.t -> ir_module =
-     fun ~data_fn r ->
+    let irgen_abstract ~data_fn r =
       let name, len = gen_abslayout ~data_fn r in
       { iters= List.rev !funcs
       ; funcs= [("printer", printer name); ("counter", counter name)]
@@ -1162,7 +1158,7 @@ module IRGen = struct
 
     let pp : Format.formatter -> ir_module -> unit =
       let open Format in
-      fun fmt {funcs; iters} ->
+      fun fmt {funcs; iters; _} ->
         pp_open_vbox fmt 0 ;
         List.iter (iters @ funcs) ~f:(fun (n, f) -> fprintf fmt "%s = %a@;" n pp_func f) ;
         pp_close_box fmt () ;

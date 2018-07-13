@@ -1,11 +1,6 @@
 open Base
 module Seq = Sequence
 
-let array_to_string a ts =
-  let elems = Array.to_list a |> List.map ~f:ts in
-  let elems_str = String.concat elems ~sep:", " in
-  "[" ^ elems_str ^ "]"
-
 let m_partition : int -> int -> int Array.t Seq.t =
  fun n m ->
   (* if m <= 0 then failwiths "'m' must be greater than or equal to 1." m [%sexp_of:int]; *)
@@ -49,7 +44,7 @@ let m_partition_with_zeros : int -> int -> int Array.t Seq.t =
  fun n m ->
   if n = 0 then Array.create ~len:m 0 |> Seq.singleton
   else
-    Seq.init (m + 1) (fun m' ->
+    Seq.init (m + 1) ~f:(fun m' ->
         m_partition n m'
         |> Seq.map ~f:(fun p ->
                let p' = Array.create ~len:m 0 in

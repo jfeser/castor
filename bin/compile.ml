@@ -32,13 +32,8 @@ let main ~debug ~gprof ~params ~db ~port ~code_only fn =
   let ir_module =
     Logs.debug (fun m -> m "Loading ralgebra from %s." fn) ;
     let ralgebra =
-      let params_ctx =
-        List.map params ~f:(fun (name, t) ->
-            Abslayout.{relation= None; name; type_= Some t} )
-        |> Set.of_list (module Abslayout.Name)
-      in
       In_channel.with_file fn ~f:Abslayout.of_channel_exn
-      |> Abslayout.resolve CConfig.conn ~ctx:params_ctx
+      |> Abslayout.resolve CConfig.conn
     in
     Logs.debug (fun m -> m "Generating IR.") ;
     let ir_module = IRGen.irgen_abstract ~data_fn:"db.buf" ralgebra in
@@ -67,6 +62,7 @@ let main ~debug ~gprof ~params ~db ~port ~code_only fn =
             Some (func, call)
           in
           match t with
+          | NullT -> failwith "No null parameters."
           | IntT -> from_fn "load_int.c"
           | BoolT -> from_fn "load_bool.c"
           | StringT -> from_fn "load_string.c"

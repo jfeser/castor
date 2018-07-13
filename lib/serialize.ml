@@ -1,6 +1,4 @@
 open Base
-open Stdio
-open Printf
 open Collections
 
 let bsize = 8
@@ -48,7 +46,7 @@ let align : ?pad:char -> int -> bytes -> bytes =
   if slop = 0 then b
   else
     let padding = align - slop in
-    Bytes.cat b (Bytes.make padding '\x00')
+    Bytes.cat b (Bytes.make padding pad)
 
 open Type
 
@@ -56,11 +54,11 @@ let serialize_null t _ _ =
   let open Bitstring in
   match t with
   | NullT _ -> empty
-  | IntT {range= (_, max) as range; nullable= true} ->
+  | IntT {range= (_, max) as range; nullable= true; _} ->
       of_int ~width:(Type.AbsInt.bitwidth ~nullable:true range) (max + 1)
       |> label "Int (null)"
   | BoolT _ -> of_int ~width:8 2 |> label "Bool (null)"
-  | StringT {nchars= min, _} ->
+  | StringT {nchars= min, _; _} ->
       let len_flag = of_int ~width:64 (min - 1) in
       concat [len_flag |> label "String len (null)"]
   | t -> Error.(create "Unexpected layout type." t [%sexp_of : Type.t] |> raise)
@@ -68,7 +66,7 @@ let serialize_null t _ _ =
 let serialize_int t _ x _ =
   let open Bitstring in
   match t with
-  | IntT {range; nullable; field} ->
+  | IntT {range; nullable; _} ->
       of_int ~width:(Type.AbsInt.bitwidth ~nullable range) x |> label "Int"
   | t -> Error.(create "Unexpected layout type." t [%sexp_of : Type.t] |> raise)
 
@@ -82,12 +80,12 @@ let serialize_bool t _ x _ =
 let serialize_string t _ x _ =
   let open Bitstring in
   match t with
-  | StringT {nchars} ->
+  | StringT {nchars; _} ->
       let unpadded_body = Bytes.of_string x in
       let body = unpadded_body |> align isize |> of_bytes in
       let len =
         match Type.AbsInt.concretize nchars with
-        | Some len -> empty
+        | Some _ -> empty
         | None -> Bytes.length unpadded_body |> bytes_of_int ~width:64 |> of_bytes
       in
       concat [len |> label "String len"; body |> label "String body"]
@@ -96,7 +94,7 @@ let serialize_string t _ x _ =
 let serialize_grouping serialize t layout ls _ =
   let open Bitstring in
   match t with
-  | GroupingT (kt, vt, {count; key; output}) -> (
+  | GroupingT (kt, vt, {count; _}) -> (
       let body =
         List.map ls ~f:(fun (k, v) -> concat [serialize kt k; serialize vt v])
         |> concat |> label "Grouping body"
@@ -121,6 +119,7 @@ let rec serialize : Type.t -> Layout.t -> Bitstring.t =
     | String (x, s) -> serialize_string type_ layout x s
     | Grouping (ls, s) -> serialize_grouping serialize type_ layout ls s
     | Empty -> empty
+    | _ -> failwith "Unsupported"
 
 let tests =
   let open OUnit2 in

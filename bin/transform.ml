@@ -15,7 +15,7 @@ let main :
     -> Bench.t
     -> unit =
  fun ?(no_default= false) ?(debug= false) ?sample ?(transforms= []) ?output ~db
-     {name; params; sql; query} ->
+     {name; params; query; _} ->
   (* FIXME: Use the first parameter value for test params. Should use multiple
        choices and average. *)
   let test_params =
@@ -58,7 +58,7 @@ let main :
         in
         Lazy.force (Lazy.all rs') )
   in
-  List.iteri candidates ~f:(fun i {ralgebra= r} ->
+  List.iteri candidates ~f:(fun i {ralgebra= r; _} ->
       printf "Candidate #%d:\n%s\n\n" i (Ralgebra.to_string r) ) ;
   match (output, candidates) with
   | Some f, [r] ->

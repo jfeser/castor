@@ -36,7 +36,7 @@ let append x y = PList [x; y]
 let length : t -> int =
   let rec length acc = function
     | Label (_, x) -> (length [@tailcall]) acc x
-    | Piece {len} -> acc + len
+    | Piece {len; _} -> acc + len
     | PList [] -> acc
     | PList (x :: xs) -> (length [@tailcall]) (length acc x) (PList xs)
   in
@@ -65,7 +65,7 @@ let pp : Format.formatter -> t -> unit =
         let blen = byte_length x in
         fprintf fmt "%s+ %s [%db %dB (%d bytes)]\n" prefix lbl offset (offset / 8) blen ;
         pp (prefix ^ "| ") offset x
-    | Piece {str; len} -> offset + len
+    | Piece {len; _} -> offset + len
     | PList xs -> List.fold_left xs ~init:offset ~f:(pp prefix)
   in
   fun x -> pp "" 0 x |> ignore
@@ -109,7 +109,7 @@ module ByteWriter = struct
       else (
         buf := Bytes.extend !buf 0 buf_len ;
         Bytes.set !buf !pos c ) ;
-      incr pos ;
+      Int.incr pos ;
       if !pos > !len then len := !pos
     in
     let output_bytes b =
@@ -187,7 +187,7 @@ module Writer = struct
     flatten x
     |> List.iter ~f:(fun {str; len} ->
            if len > 0 then (
-             if len >= 8 then write_string t (String.sub str 0 (len / 8)) ;
+             if len >= 8 then write_string t (String.sub str ~pos:0 ~len:(len / 8)) ;
              let c = str.[String.length str - 1] |> Char.to_int in
              for i = 0 to (len % 8) - 1 do
                let b = (c lsr (7 - i)) land 1 in
@@ -328,7 +328,7 @@ let tests =
                 assert_equal ~ctxt ~printer ~cmp:Buffer.equal buf1 buf2 ) ] ]
 
 let%expect_test "seek1" =
-  let fn = Filename.temp_file "test" "txt" in
+  let fn = Caml.Filename.temp_file "test" "txt" in
   let writer = with_file fn in
   let pos = pos writer in
   write_string writer "testing" ;
@@ -339,7 +339,7 @@ let%expect_test "seek1" =
   [%expect {| fishing |}]
 
 let%expect_test "seek2" =
-  let fn = Filename.temp_file "test" "txt" in
+  let fn = Caml.Filename.temp_file "test" "txt" in
   let writer = with_file fn in
   write_string writer "t" ;
   let pos = pos writer in
