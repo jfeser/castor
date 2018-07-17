@@ -9,6 +9,28 @@ open Layout
 module No_config = struct
   include Abslayout0
 
+  let select a b c = {node= Select (a, b, c); meta= ()}
+
+  let filter a b c = {node= Filter (a, b, c); meta= ()}
+
+  let agg a b c d = {node= Agg (a, b, c, d); meta= ()}
+
+  let dedup a = {node= Dedup a; meta= ()}
+
+  let scan a = {node= Scan a; meta= ()}
+
+  let empty = {node= AEmpty; meta= ()}
+
+  let scalar a = {node= AScalar a; meta= ()}
+
+  let list a b c = {node= AList (a, b, c); meta= ()}
+
+  let tuple a b = {node= ATuple (a, b); meta= ()}
+
+  let hash_idx a b c d = {node= AHashIdx (a, b, c, d); meta= ()}
+
+  let ordered_idx a b c d = {node= AOrderedIdx (a, b, c, d); meta= ()}
+
   module Name = struct
     module T = struct
       type t = Type0.PrimType.t option name [@@deriving compare, hash, sexp]
@@ -72,6 +94,7 @@ module No_config = struct
         method plus = ( @ )
         method! visit_Scan _ r = [r]
         method visit_'f _ _ = self#zero
+        method visit_'m _ _ = self#zero
       end
     in
     ralgebra_relations#visit_ralgebra () r
@@ -87,6 +110,7 @@ module No_config = struct
             Set.singleton (module Type.TypedName) (Name.to_typed_name n)
           else self#zero
         method visit_'f _ _ = self#zero
+        method visit_'m _ _ = self#zero
       end
     in
     ralgebra_params#visit_ralgebra () r
@@ -121,10 +145,13 @@ module No_config = struct
               [%sexp_of : Name.t * Set.M(Name).t]
             |> Error.raise
     in
-    let ralgebra_resolver = object
-                              inherit [_] map
-                              method visit_'f = resolve_name
-                            end in
+    let ralgebra_resolver =
+      object
+        inherit [_] map
+        method visit_'f = resolve_name
+        method visit_'m _ x = x
+      end
+    in
     let empty_ctx = Set.empty (module Name) in
     let resolve_agg ctx = ralgebra_resolver#visit_agg ctx in
     let resolve_pred ctx = ralgebra_resolver#visit_pred ctx in
@@ -136,81 +163,87 @@ module No_config = struct
       List.filter_map aggs ~f:(function Key n -> Some n | _ -> None)
       |> Set.of_list (module Name)
     in
-    let rec resolve ctx = function
-      | Select (rel, preds, r) ->
-          let r, preds =
+    let rec resolve ctx {node; meta} =
+      let node', ctx' =
+        match node with
+        | Select (rel, preds, r) ->
+            let r, preds =
+              let r, ctx = resolve ctx r in
+              let pctx = rename rel ctx in
+              (r, List.map preds ~f:(resolve_pred pctx))
+            in
+            (Select (rel, preds, r), preds_to_names preds)
+        | Filter (rel, pred, r) ->
             let r, ctx = resolve ctx r in
-            let pctx = rename rel ctx in
-            (r, List.map preds ~f:(resolve_pred pctx))
-          in
-          (Select (rel, preds, r), preds_to_names preds)
-      | Filter (rel, pred, r) ->
-          let r, ctx = resolve ctx r in
-          let pred = resolve_pred (rename rel ctx) pred in
-          (Filter (rel, pred, r), ctx)
-      | Join ({pred; r1_name; r1; r2_name; r2} as join) ->
-          let r1, ctx1 = resolve ctx r1 in
-          let r2, ctx2 = resolve ctx1 r2 in
-          let ctx = Set.union (rename r1_name ctx1) (rename r2_name ctx2) in
-          let pred = resolve_pred ctx pred in
-          (Join {join with pred; r1; r2}, ctx)
-      | Scan l -> (Scan l, resolve_relation l)
-      | Agg (rel, aggs, key, r) ->
-          let r, aggs, key =
+            let pred = resolve_pred (rename rel ctx) pred in
+            (Filter (rel, pred, r), ctx)
+        | Join ({pred; r1_name; r1; r2_name; r2} as join) ->
+            let r1, ctx1 = resolve ctx r1 in
+            let r2, ctx2 = resolve ctx1 r2 in
+            let ctx = Set.union (rename r1_name ctx1) (rename r2_name ctx2) in
+            let pred = resolve_pred ctx pred in
+            (Join {join with pred; r1; r2}, ctx)
+        | Scan l -> (Scan l, resolve_relation l)
+        | Agg (rel, aggs, key, r) ->
+            let r, aggs, key =
+              let r, ctx = resolve ctx r in
+              let ctx = rename rel ctx in
+              let aggs = List.map ~f:(resolve_agg ctx) aggs in
+              let key = List.map key ~f:(ralgebra_resolver#visit_'f ctx) in
+              (r, aggs, key)
+            in
+            (Agg (rel, aggs, key, r), aggs_to_names aggs)
+        | Dedup r ->
             let r, ctx = resolve ctx r in
-            let ctx = rename rel ctx in
-            let aggs = List.map ~f:(resolve_agg ctx) aggs in
-            let key = List.map key ~f:(ralgebra_resolver#visit_'f ctx) in
-            (r, aggs, key)
-          in
-          (Agg (rel, aggs, key, r), aggs_to_names aggs)
-      | Dedup r ->
-          let r, ctx = resolve ctx r in
-          (Dedup r, ctx)
-      | AEmpty -> (AEmpty, empty_ctx)
-      | AScalar p ->
-          let p = resolve_pred ctx p in
-          let ctx =
-            match p with
-            | Name n -> Set.singleton (module Name) n
-            | _ -> Set.empty (module Name)
-          in
-          (AScalar p, ctx)
-      | AList (r, n, l) ->
-          let r, l, ctx =
+            (Dedup r, ctx)
+        | AEmpty -> (AEmpty, empty_ctx)
+        | AScalar p ->
+            let p = resolve_pred ctx p in
+            let ctx =
+              match p with
+              | Name n -> Set.singleton (module Name) n
+              | _ -> Set.empty (module Name)
+            in
+            (AScalar p, ctx)
+        | AList (r, n, l) ->
+            let r, l, ctx =
+              let r, ctx = resolve ctx r in
+              let l, ctx = resolve (rename n ctx) l in
+              (r, l, ctx)
+            in
+            (AList (r, n, l), ctx)
+        | ATuple (ls, t) ->
+            let ls, ctxs = List.map ls ~f:(resolve ctx) |> List.unzip in
+            let ctx = Set.union_list (module Name) ctxs in
+            (ATuple (ls, t), ctx)
+        | AHashIdx (r, n, l, m) ->
             let r, ctx = resolve ctx r in
             let l, ctx = resolve (rename n ctx) l in
-            (r, l, ctx)
-          in
-          (AList (r, n, l), ctx)
-      | ATuple (ls, t) ->
-          let ls, ctxs = List.map ls ~f:(resolve ctx) |> List.unzip in
-          let ctx = Set.union_list (module Name) ctxs in
-          (ATuple (ls, t), ctx)
-      | AHashIdx (r, n, l, m) ->
-          let r, ctx = resolve ctx r in
-          let l, ctx = resolve (rename n ctx) l in
-          let m =
-            (object
-               inherit [_] map
-               method visit_'f _ _ = failwith ""
-               method! visit_pred _ = resolve_pred ctx
-            end)
-              #visit_hash_idx () m
-          in
-          (AHashIdx (r, n, l, m), ctx)
-      | AOrderedIdx (r, n, l, m) ->
-          let r, ctx = resolve ctx r in
-          let l, ctx = resolve (rename n ctx) l in
-          let m =
-            (object
-               inherit [_] map
-               method visit_'f _ _ = failwith ""
-               method! visit_pred _ = resolve_pred ctx
-            end)
-              #visit_ordered_idx () m
-          in
-          (AOrderedIdx (r, n, l, m), ctx)
+            let m =
+              (object
+                 inherit [_] map
+                 method visit_'f _ _ = failwith ""
+                 method visit_'m _ _ = failwith ""
+                 method! visit_pred _ = resolve_pred ctx
+              end)
+                #visit_hash_idx () m
+            in
+            (AHashIdx (r, n, l, m), ctx)
+        | AOrderedIdx (r, n, l, m) ->
+            let r, ctx = resolve ctx r in
+            let l, ctx = resolve (rename n ctx) l in
+            let m =
+              (object
+                 inherit [_] map
+                 method visit_'f _ _ = failwith ""
+                 method visit_'m _ _ = failwith ""
+                 method! visit_pred _ = resolve_pred ctx
+              end)
+                #visit_ordered_idx () m
+            in
+            (AOrderedIdx (r, n, l, m), ctx)
+      in
+      ({node= node'; meta}, ctx')
     in
     let r, _ = resolve (Set.empty (module Name)) r in
     r
@@ -283,6 +316,7 @@ module No_config = struct
         method! visit_Name _ this v =
           match Map.find ctx v with Some x -> pred_of_value x | None -> this
         method visit_'f _ x = x
+        method visit_'m _ x = x
       end
     in
     v#visit_ralgebra ()
@@ -291,12 +325,9 @@ module No_config = struct
     let n = Name.of_string_exn in
     let f = n "r.f" in
     let g = n "r.g" in
-    let r = "r" in
     let ctx = Map.of_alist_exn (module Name) [(f, `Int 1); (g, `Int 2)] in
-    let r =
-      Filter (r, Binop (Eq, Name f, Name g), Select (r, [Name f; Name g], Scan r))
-    in
-    print_s ([%sexp_of : Name.t ralgebra] (subst ctx r)) ;
+    let r = "Filter(r -> r.f = r.g, Select(r -> [r.f; r.g], r))" |> of_string_exn in
+    print_s ([%sexp_of : (Name.t, unit) ralgebra] (subst ctx r)) ;
     [%expect
       {|
     (Filter r
@@ -318,6 +349,7 @@ module No_config = struct
           function
           | {relation= Some r; _} -> rels := r :: !rels | {relation= None; _} -> ()
         method visit_'f () _ = ()
+        method visit_'m () _ = ()
       end
     in
     f#visit_pred () p ; !rels
@@ -353,7 +385,8 @@ module No_config = struct
         | _ -> failwith "Unsupported op."
 
   let ralgebra_to_sql r =
-    let rec f = function
+    let rec f {node; _} =
+      match node with
       | Select (rel, [], r) -> sprintf "select top 0 from (%s) as %s" (f r) rel
       | Select (rel, fs, r) ->
           let fields = List.map fs ~f:pred_to_sql |> String.concat ~sep:"," in
@@ -390,47 +423,34 @@ module No_config = struct
   let nn r s = Name (n r s)
 
   let%expect_test "project-empty" =
-    let r = Select ("r", [], Scan "r") in
+    let r = of_string_exn "Select(r -> [], r)" in
     print_endline (ralgebra_to_sql r) ;
     [%expect {| select top 0 from (select * from r) as r |}]
 
   let%expect_test "project" =
-    let r = Select ("r", [nn "r" "r"], Scan "r") in
+    let r = of_string_exn "Select(r -> [r.r], r)" in
     print_endline (ralgebra_to_sql r) ;
     [%expect {| select r."r" from (select * from r) as r |}]
 
   let%expect_test "filter" =
-    let r = Filter ("r", Binop (Eq, nn "r" "f", nn "r" "g"), Scan "r") in
+    let r = of_string_exn "Filter(r -> r.f = r.g, r)" in
     print_endline (ralgebra_to_sql r) ;
     [%expect {| select * from (select * from r) as r where (r."f") = (r."g") |}]
 
   let%expect_test "eqjoin" =
-    let r =
-      Join
-        { pred= Binop (Eq, nn "r" "f", nn "s" "g")
-        ; r1_name= "r"
-        ; r1= Scan "r"
-        ; r2_name= "s"
-        ; r2= Scan "s" }
-    in
+    let r = of_string_exn "Join(r.f = s.g, r as r, s as s)" in
     print_endline (ralgebra_to_sql r) ;
     [%expect
       {| select * from (select * from r) as r, (select * from s) as s where (r."f") = (s."g") |}]
 
   let%expect_test "agg" =
-    let f = n "r" "f" in
-    let g = n "r" "g" in
-    let r = Agg ("r", [Sum g], [f; g], Scan "r") in
+    let r = of_string_exn "Agg(r -> [Sum(r.g)], [r.f, r.g], r)" in
     print_endline (ralgebra_to_sql r) ;
-    [%expect
-      {| select sum(r."g") from (select * from r) as r group by (r."f", r."g") |}]
+    [%expect {| select sum(r."g") from (select * from r) as r group by (r."f", r."g") |}]
 
   let%expect_test "agg" =
     let r =
-      Filter
-        ( "ship_mode"
-        , Binop (Eq, nn "ship_mode" "sm_carrier", String "GERMA")
-        , Scan "ship_mode" )
+      of_string_exn "Filter(ship_mode -> ship_mode.sm_carrier = \"GERMA\", ship_mode)"
     in
     print_endline (ralgebra_to_sql r) ;
     [%expect
@@ -453,7 +473,7 @@ module Config = struct
   module type S = sig
     include S_shared
 
-    val eval : Ctx.t -> Name.t ralgebra -> primvalue Map.M(String).t Seq.t
+    val eval : Ctx.t -> (Name.t, unit) ralgebra -> primvalue Map.M(String).t Seq.t
   end
 end
 
@@ -471,7 +491,7 @@ module Make (Config : Config.S) () = struct
           Error.create "Unexpected number of relations." rs [%sexp_of : string list]
           |> Error.raise
     in
-    let domain = Dedup (Select (rel, [p], Scan rel)) in
+    let domain = dedup (select rel [p] (scan rel)) in
     let name = Fresh.name fresh "x%d" in
     let pred =
       let subst =
@@ -482,6 +502,7 @@ module Make (Config : Config.S) () = struct
             | Some r when String.(rel = r) -> Name {n with relation= Some name}
             | _ -> Name n
           method visit_'f _ x = x
+          method visit_'m _ x = x
         end
       in
       subst#visit_pred () p
@@ -491,13 +512,16 @@ module Make (Config : Config.S) () = struct
         object
           inherit [_] endo
           method! visit_Scan () r rel' =
-            if String.(rel = rel') then Filter (rel, Binop (Eq, p, pred), r) else r
+            if String.(rel = rel') then
+              Filter (rel, Binop (Eq, p, pred), {node= r; meta= ()})
+            else r
           method visit_'f _ x = x
+          method visit_'m _ x = x
         end
       in
       subst#visit_ralgebra () l
     in
-    AHashIdx (domain, name, layout, {lookup})
+    hash_idx domain name layout {lookup}
 
   class virtual ['self] material_fold =
     object (self: 'self)
@@ -507,6 +531,9 @@ module Make (Config : Config.S) () = struct
       method virtual build_AOrderedIdx : _
       method virtual build_AEmpty : _
       method virtual build_AScalar : _
+      method virtual build_Select : _
+      method virtual build_Filter : _
+      method virtual build_Join : _
       method visit_AList ctx q n l =
         let ls =
           eval ctx q
@@ -543,15 +570,27 @@ module Make (Config : Config.S) () = struct
             {value= eval_pred ctx e; rel= Relation.dummy; field= Field.dummy}
         in
         self#build_AScalar l
-      method visit_AOrderedIdx _ _ _ _ _ = failwith ""
-      method visit_t ctx (r: Name.t ralgebra) =
-        match r with
+      method visit_AOrderedIdx _ _ _ _ _ = failwith "not implemented"
+      method visit_Select ctx _ exprs r' = self#build_Select exprs (self#visit_t ctx r')
+      method visit_Filter ctx _ _ r' = self#build_Filter (self#visit_t ctx r')
+      method visit_Join ctx pred r1_name r1 r2_name r2 =
+        self#build_Join ctx pred r1_name (self#visit_t ctx r1) r2_name
+          (self#visit_t ctx r2)
+      method visit_t ctx r =
+        match r.node with
         | AEmpty -> self#visit_AEmpty ctx
         | AScalar e -> self#visit_AScalar ctx e
         | AList (r, n, a) -> self#visit_AList ctx r n a
         | ATuple (a, k) -> self#visit_ATuple ctx a k
         | AHashIdx (r, n, a, t) -> self#visit_AHashIdx ctx r n a t
-        | AOrderedIdx (_, _, _, _) | _ -> failwith ""
+        | AOrderedIdx (r, n, a, t) -> self#visit_AOrderedIdx ctx r n a t
+        | Select (n, exprs, r') -> self#visit_Select ctx n exprs r'
+        | Filter (n, pred, r') -> self#visit_Filter ctx n pred r'
+        | Join {pred; r1_name; r1; r2_name; r2} ->
+            self#visit_Join ctx pred r1_name r1 r2_name r2
+        | Dedup _ | Agg _ | Scan _ ->
+            Error.create "Wrong context." r [%sexp_of : (Name.t, unit) ralgebra]
+            |> Error.raise
     end
     
 
@@ -559,7 +598,7 @@ module Make (Config : Config.S) () = struct
     let f =
       object
         inherit [_] material_fold
-        method build_AEmpty = empty
+        method build_AEmpty = Layout.empty
         method build_AList ls = Seq.to_list ls |> unordered_list
         method build_ATuple ls kind =
           match kind with Zip -> zip_tuple ls | Cross -> cross_tuple ls
@@ -570,6 +609,9 @@ module Make (Config : Config.S) () = struct
             ; lookup= PredCtx.Key.Field (Field.of_name "fixme") }
         method build_AScalar l = l
         method build_AOrderedIdx _ _ = failwith ""
+        method build_Select _ l = l
+        method build_Filter l = l
+        method build_Join _ _ _ _ _ _ = failwith ""
       end
     in
     f#visit_t ctx l
@@ -590,6 +632,9 @@ module Make (Config : Config.S) () = struct
     class ['self] type_fold =
       object (_: 'self)
         inherit [_] material_fold
+        method build_Select exprs t = FuncT ([t], List.length exprs)
+        method build_Filter t = FuncT ([t], width t)
+        method build_Join _ _ _ t1 _ t2 = FuncT ([t1; t2], width t1 + width t2)
         method build_AEmpty = EmptyT
         method build_AScalar = type_of_scalar_layout
         method build_AList ls =
@@ -614,22 +659,6 @@ module Make (Config : Config.S) () = struct
         method build_AOrderedIdx _ _ = failwith ""
       end
       
-
-    class ['self] count_fold =
-      object (_: 'self)
-        inherit [_] material_fold
-        method build_AEmpty = AbsCount.zero
-        method build_AScalar _ = AbsCount.abstract 1
-        method build_AList ls = Seq.fold ls ~init:AbsCount.zero ~f:AbsCount.( + )
-        method build_ATuple ls =
-          function
-          | Zip -> List.fold_left1_exn ls ~f:AbsCount.unify
-          | Cross -> List.fold_left ls ~init:(AbsCount.abstract 1) ~f:AbsCount.( * )
-        method build_AHashIdx kv _ =
-          Seq.map kv ~f:(fun (_, c) -> c) |> Seq.fold1_exn ~f:AbsCount.unify
-        method build_AOrderedIdx _ _ = failwith ""
-      end
-      
   end
 
   include TF
@@ -637,7 +666,7 @@ module Make (Config : Config.S) () = struct
   let to_type ?(ctx= Map.empty (module Name)) l =
     Logs.debug (fun m ->
         m "Computing type of abstract layout: %s"
-          (Sexp.to_string_hum ([%sexp_of : Name.t ralgebra] l)) ) ;
+          (Sexp.to_string_hum ([%sexp_of : (Name.t, unit) ralgebra] l)) ) ;
     let type_ = (new type_fold)#visit_t ctx l in
     Logs.debug (fun m ->
         m "The type is: %s" (Sexp.to_string_hum ([%sexp_of : Type.t] type_)) ) ;
@@ -831,8 +860,8 @@ module Make (Config : Config.S) () = struct
           in
           log_start label ; Writer.write writer bstr ; log_end ()
         method visit_AOrderedIdx _ _ _ _ _ _ = failwith ""
-        method visit_t ctx type_ =
-          function
+        method visit_t ctx type_ {node; _} =
+          match node with
           | AEmpty -> self#visit_AEmpty ctx type_
           | AScalar e -> self#visit_AScalar ctx type_ e
           | AList (r, n, a) -> self#visit_AList ctx type_ r n a
@@ -848,7 +877,7 @@ module Make (Config : Config.S) () = struct
   let serialize ?(ctx= Map.empty (module Name)) writer t l =
     Logs.debug (fun m ->
         m "Serializing abstract layout: %s"
-          (Sexp.to_string_hum ([%sexp_of : Name.t ralgebra] l)) ) ;
+          (Sexp.to_string_hum ([%sexp_of : (Name.t, unit) ralgebra] l)) ) ;
     let open Bitstring in
     let begin_pos = Writer.pos writer in
     let fn = Caml.Filename.temp_file "buf" ".txt" in
@@ -929,13 +958,9 @@ module Test = struct
   let%expect_test "mat-col" =
     let conn = new Postgresql.connection ~dbname:"tpcds1" () in
     let layout =
-      AList
-        ( Filter
-            ( "ship_mode"
-            , Binop (Eq, nn "ship_mode" "sm_carrier", String "GERMA")
-            , Scan "ship_mode" )
-        , "t"
-        , AScalar (nn "t" "sm_carrier") )
+      of_string_exn
+        "AList(Filter(ship_mode -> ship_mode.sm_carrier = \"GERMA\", ship_mode), t -> \
+         AScalar(t.sm_carrier))"
     in
     let module M =
       Make_db (struct
@@ -957,24 +982,10 @@ module Test = struct
   let%expect_test "mat-hidx" =
     let conn = new Postgresql.connection ~dbname:"tpcds1" () in
     let layout =
-      AHashIdx
-        ( Dedup
-            (Select
-               ( "ship_mode"
-               , [nn "ship_mode" "sm_type"]
-               , Filter
-                   ( "ship_mode"
-                   , Binop (Eq, nn "ship_mode" "sm_type", String "LIBRARY")
-                   , Scan "ship_mode" ) ))
-        , "t"
-        , AList
-            ( Filter
-                ( "ship_mode"
-                , Binop (Eq, nn "t" "sm_type", nn "ship_mode" "sm_type")
-                , Scan "ship_mode" )
-            , "t"
-            , AScalar (nn "t" "sm_code") )
-        , {lookup= Null} )
+      of_string_exn
+        "AHashIdx(Dedup(Select(ship_mode -> [ship_mode.sm_type], Filter(ship_mode -> \
+         ship_mode.sm_type = \"LIBRARY\", ship_mode))), t -> AList(Filter(ship_mode -> \
+         t.sm_type = ship_mode.sm_type, ship_mode), t -> AScalar(t.sm_code)), null)"
     in
     let module M =
       Make_db (struct
@@ -1113,7 +1124,8 @@ module Test = struct
               match e with Name n -> {v with field= Field.of_name n.name} | _ -> v ) )
 
     let eval ctx r =
-      let rec eval = function
+      let rec eval {node; _} =
+        match node with
         | Scan r -> eval_relation r
         | Filter (_, p, r) -> eval_filter ctx p (eval r)
         | Join {pred= p; r1_name; r1; r2_name; r2} ->
@@ -1155,10 +1167,10 @@ module Test = struct
 
   let%expect_test "part-list" =
     let layout =
-      AList (Scan r1, "x", ATuple ([AScalar (nn "x" "f"); AScalar (nn "x" "g")], Cross))
+      of_string_exn "AList(r1, x -> ATuple([AScalar(x.f), AScalar(x.g)], Cross))"
     in
     let part_layout = M.partition ~part:(Name f) ~lookup:(Name f) layout in
-    [%sexp_of : Name.t ralgebra] part_layout |> print_s ;
+    [%sexp_of : (Name.t, unit) ralgebra] part_layout |> print_s ;
     [%expect
       {|
       (AHashIdx

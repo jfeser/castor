@@ -31,24 +31,26 @@ and 'f ordered_idx = {lookup_low: 'f pred; lookup_high: 'f pred; order: 'f pred}
 
 and tuple = Cross | Zip
 
-and 'f ralgebra =
-  | Select of string * 'f pred list * 'f ralgebra
-  | Filter of string * 'f pred * 'f ralgebra
+and ('f, 'm) ralgebra = {node: ('f, 'm) node; meta: 'm}
+
+and ('f, 'm) node =
+  | Select of string * 'f pred list * ('f, 'm) ralgebra
+  | Filter of string * 'f pred * ('f, 'm) ralgebra
   | Join of
       { pred: 'f pred
       ; r1_name: string
-      ; r1: 'f ralgebra
+      ; r1: ('f, 'm) ralgebra
       ; r2_name: string
-      ; r2: 'f ralgebra }
-  | Agg of string * 'f agg list * 'f list * 'f ralgebra
-  | Dedup of 'f ralgebra
+      ; r2: ('f, 'm) ralgebra }
+  | Agg of string * 'f agg list * 'f list * ('f, 'm) ralgebra
+  | Dedup of ('f, 'm) ralgebra
   | Scan of string
   | AEmpty
   | AScalar of 'f pred
-  | AList of 'f ralgebra * string * 'f ralgebra
-  | ATuple of 'f ralgebra list * tuple
-  | AHashIdx of 'f ralgebra * string * 'f ralgebra * 'f hash_idx
-  | AOrderedIdx of 'f ralgebra * string * 'f ralgebra * 'f ordered_idx
+  | AList of ('f, 'm) ralgebra * string * ('f, 'm) ralgebra
+  | ATuple of ('f, 'm) ralgebra list * tuple
+  | AHashIdx of ('f, 'm) ralgebra * string * ('f, 'm) ralgebra * 'f hash_idx
+  | AOrderedIdx of ('f, 'm) ralgebra * string * ('f, 'm) ralgebra * 'f ordered_idx
 [@@deriving
   visitors {variety= "endo"}
   , visitors {variety= "map"}
@@ -60,4 +62,4 @@ and 'f ralgebra =
 
 [@@@warning "+7"]
 
-type t = Type0.PrimType.t option name ralgebra
+type 'm t = (Type0.PrimType.t option name, 'm) ralgebra

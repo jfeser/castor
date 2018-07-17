@@ -9,6 +9,7 @@
 
     let fst (x, _) = x
     let snd (_, x) = x
+    let node r = A.({ node = r; meta = () })
 %}
 
 %token <string> ID
@@ -64,7 +65,7 @@
 %token AORDEREDIDX
 
 %start <(string * string, string, Layout.t) Ralgebra0.t> ralgebra_eof
-%start <Type0.PrimType.t option Abslayout0.name Abslayout0.ralgebra> abs_ralgebra_eof
+%start <(Type0.PrimType.t option Abslayout0.name, unit) Abslayout0.ralgebra> abs_ralgebra_eof
 %start <Type0.PrimType.t option Abslayout0.name> name_eof
 
 %left OR
@@ -105,18 +106,18 @@ ralgebra:
 | error { error "Expected an operator or relation." $startpos }
 
 abs_ralgebra:
-| SELECT; LPAREN; lam = lambda(bracket_list(abs_pred)); COMMA; r = abs_ralgebra; RPAREN { A.Select (fst lam, snd lam, r) }
-| AGG; LPAREN; lam = lambda(bracket_list(abs_agg_expr)); COMMA; k = bracket_list(name); COMMA; r = abs_ralgebra; RPAREN { A.Agg (fst lam, snd lam, k, r) }
-| FILTER; LPAREN; lam = lambda(abs_pred); COMMA; r = abs_ralgebra; RPAREN { A.Filter (fst lam, snd lam, r) }
-| JOIN; LPAREN; p = abs_pred; COMMA; r1 = abs_ralgebra; AS; n1 = ID; COMMA; r2 = abs_ralgebra; AS; n2 = ID; RPAREN { A.Join({pred = p; r1_name = n1; r1; r2_name = n2; r2}) }
-| DEDUP; LPAREN; r = abs_ralgebra; RPAREN { A.Dedup r }
-| AEMPTY { AEmpty }
-| ASCALAR; e = parens(abs_pred) { A.AScalar e }
-| ALIST; LPAREN; r = abs_ralgebra; COMMA; lam = lambda(abs_ralgebra); RPAREN { A.AList (r, fst lam, snd lam) }
-| ATUPLE; LPAREN; ls = bracket_list(abs_ralgebra); COMMA; k = kind; RPAREN { A.ATuple (ls, k) }
-| AHASHIDX; LPAREN; r = abs_ralgebra; COMMA; lam = lambda(abs_ralgebra); COMMA; e = abs_pred RPAREN { A.(AHashIdx (r, fst lam, snd lam, { lookup = e })) }
-| AORDEREDIDX; LPAREN; r = abs_ralgebra; COMMA; lam = lambda(abs_ralgebra); COMMA; e1 = abs_pred; COMMA; e2 = abs_pred; COMMA; e3 = abs_pred; COMMA { A.(AOrderedIdx (r, fst lam, snd lam, { lookup_low = e1; lookup_high = e2; order = e3 })) }
-| name = ID { Scan name }
+| SELECT; LPAREN; lam = lambda(bracket_list(abs_pred)); COMMA; r = abs_ralgebra; RPAREN { A.Select (fst lam, snd lam, r) |> node }
+| AGG; LPAREN; lam = lambda(bracket_list(abs_agg_expr)); COMMA; k = bracket_list(name); COMMA; r = abs_ralgebra; RPAREN { A.Agg (fst lam, snd lam, k, r) |> node }
+| FILTER; LPAREN; lam = lambda(abs_pred); COMMA; r = abs_ralgebra; RPAREN { A.Filter (fst lam, snd lam, r) |> node }
+| JOIN; LPAREN; p = abs_pred; COMMA; r1 = abs_ralgebra; AS; n1 = ID; COMMA; r2 = abs_ralgebra; AS; n2 = ID; RPAREN { A.Join({pred = p; r1_name = n1; r1; r2_name = n2; r2}) |> node }
+| DEDUP; LPAREN; r = abs_ralgebra; RPAREN { A.Dedup r |> node }
+| AEMPTY { node AEmpty }
+| ASCALAR; e = parens(abs_pred) { A.AScalar e |> node }
+| ALIST; LPAREN; r = abs_ralgebra; COMMA; lam = lambda(abs_ralgebra); RPAREN { A.AList (r, fst lam, snd lam) |> node }
+| ATUPLE; LPAREN; ls = bracket_list(abs_ralgebra); COMMA; k = kind; RPAREN { A.ATuple (ls, k) |> node }
+| AHASHIDX; LPAREN; r = abs_ralgebra; COMMA; lam = lambda(abs_ralgebra); COMMA; e = abs_pred RPAREN { A.(AHashIdx (r, fst lam, snd lam, { lookup = e })) |> node }
+| AORDEREDIDX; LPAREN; r = abs_ralgebra; COMMA; lam = lambda(abs_ralgebra); COMMA; e1 = abs_pred; COMMA; e2 = abs_pred; COMMA; e3 = abs_pred; COMMA { A.(AOrderedIdx (r, fst lam, snd lam, { lookup_low = e1; lookup_high = e2; order = e3 })) |> node }
+| name = ID { A.Scan name |> node }
 | error { error "Expected an operator or relation." $startpos }
 
 field:
