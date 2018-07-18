@@ -194,6 +194,7 @@ abs_agg_expr:
 
 lambda(X):
 | n = ID; RARROW; x = X { (n, x) }
+| error { error "Expected a lambda." $startpos }
 
 kind:
 | ZIP; { A.Zip }

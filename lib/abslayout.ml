@@ -197,42 +197,45 @@ module No_config = struct
       List.filter_map aggs ~f:(function Key n -> Some n | _ -> None)
       |> Set.of_list (module Name)
     in
-    let rec resolve ctx {node; meta} =
+    let rec resolve outer_ctx {node; meta} =
       let node', ctx' =
         match node with
         | Select (rel, preds, r) ->
             let r, preds =
-              let r, ctx = resolve ctx r in
-              let pctx = rename rel ctx in
-              (r, List.map preds ~f:(resolve_pred pctx))
+              let r, inner_ctx = resolve outer_ctx r in
+              let inner_ctx = rename rel inner_ctx in
+              let ctx = Set.union outer_ctx inner_ctx in
+              (r, List.map preds ~f:(resolve_pred ctx))
             in
             (Select (rel, preds, r), preds_to_names preds)
         | Filter (rel, pred, r) ->
-            let r, ctx = resolve ctx r in
-            let pred = resolve_pred (rename rel ctx) pred in
-            (Filter (rel, pred, r), ctx)
-        | Join ({pred; r1_name; r1; r2_name; r2} as join) ->
-            let r1, ctx1 = resolve ctx r1 in
-            let r2, ctx2 = resolve ctx1 r2 in
-            let ctx = Set.union (rename r1_name ctx1) (rename r2_name ctx2) in
+            let r, inner_ctx = resolve outer_ctx r in
+            let inner_ctx = rename rel inner_ctx in
+            let ctx = Set.union outer_ctx inner_ctx in
             let pred = resolve_pred ctx pred in
-            (Join {join with pred; r1; r2}, ctx)
+            (Filter (rel, pred, r), inner_ctx)
+        | Join ({pred; r1_name; r1; r2_name; r2} as join) ->
+            let r1, inner_ctx1 = resolve outer_ctx r1 in
+            let r2, inner_ctx2 = resolve outer_ctx r2 in
+            let inner_ctx1 = rename r1_name inner_ctx1 in
+            let inner_ctx2 = rename r2_name inner_ctx2 in
+            let ctx = Set.union_list (module Name) [inner_ctx1; inner_ctx2; outer_ctx] in
+            let pred = resolve_pred ctx pred in
+            (Join {join with pred; r1; r2}, Set.union inner_ctx1 inner_ctx2)
         | Scan l -> (Scan l, resolve_relation l)
         | Agg (rel, aggs, key, r) ->
-            let r, aggs, key =
-              let r, ctx = resolve ctx r in
-              let ctx = rename rel ctx in
-              let aggs = List.map ~f:(resolve_agg ctx) aggs in
-              let key = List.map key ~f:(ralgebra_resolver#visit_'f ctx) in
-              (r, aggs, key)
-            in
+            let r, inner_ctx = resolve outer_ctx r in
+            let inner_ctx = rename rel inner_ctx in
+            let ctx = Set.union outer_ctx inner_ctx in
+            let aggs = List.map ~f:(resolve_agg ctx) aggs in
+            let key = List.map key ~f:(ralgebra_resolver#visit_'f ctx) in
             (Agg (rel, aggs, key, r), aggs_to_names aggs)
         | Dedup r ->
-            let r, ctx = resolve ctx r in
-            (Dedup r, ctx)
+            let r, inner_ctx = resolve outer_ctx r in
+            (Dedup r, inner_ctx)
         | AEmpty -> (AEmpty, empty_ctx)
         | AScalar p ->
-            let p = resolve_pred ctx p in
+            let p = resolve_pred outer_ctx p in
             let ctx =
               match p with
               | Name n -> Set.singleton (module Name) n
@@ -240,19 +243,20 @@ module No_config = struct
             in
             (AScalar p, ctx)
         | AList (r, n, l) ->
-            let r, l, ctx =
-              let r, ctx = resolve ctx r in
-              let l, ctx = resolve (rename n ctx) l in
-              (r, l, ctx)
-            in
+            let r, inner_ctx = resolve outer_ctx r in
+            let inner_ctx = rename n inner_ctx in
+            let ctx = Set.union inner_ctx outer_ctx in
+            let l, ctx = resolve ctx l in
             (AList (r, n, l), ctx)
         | ATuple (ls, t) ->
-            let ls, ctxs = List.map ls ~f:(resolve ctx) |> List.unzip in
+            let ls, ctxs = List.map ls ~f:(resolve outer_ctx) |> List.unzip in
             let ctx = Set.union_list (module Name) ctxs in
             (ATuple (ls, t), ctx)
         | AHashIdx (r, n, l, m) ->
-            let r, ctx = resolve ctx r in
-            let l, ctx = resolve (rename n ctx) l in
+            let r, inner_ctx = resolve outer_ctx r in
+            let inner_ctx = rename n inner_ctx in
+            let ctx = Set.union inner_ctx outer_ctx in
+            let l, ctx = resolve ctx l in
             let m =
               (object
                  inherit [_] map
@@ -264,8 +268,10 @@ module No_config = struct
             in
             (AHashIdx (r, n, l, m), ctx)
         | AOrderedIdx (r, n, l, m) ->
-            let r, ctx = resolve ctx r in
-            let l, ctx = resolve (rename n ctx) l in
+            let r, inner_ctx = resolve outer_ctx r in
+            let inner_ctx = rename n inner_ctx in
+            let ctx = Set.union outer_ctx inner_ctx in
+            let l, ctx = resolve ctx l in
             let m =
               (object
                  inherit [_] map

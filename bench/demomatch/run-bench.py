@@ -21,7 +21,7 @@ def rpath(p):
 
 DB = 'demomatch'
 PORT = 5433
-COMPILE_EXE = rpath('../../_build/default/bin/compile.exe')
+COMPILE_EXE = rpath('../../../_build/default/fastdb/bin/compile.exe')
 PRESENT_QUERIES = 10
 ABSENT_QUERIES = 10
 TABLE_SIZE = 20000
