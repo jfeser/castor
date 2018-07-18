@@ -43,6 +43,8 @@ module AbsCount = struct
 
   let zero : t = Some AbsInt.zero
 
+  let top = None
+
   let ( + ) : t -> t -> t =
    fun a b -> match (a, b) with Some x, Some y -> Some AbsInt.(x + y) | _ -> None
 
@@ -88,9 +90,7 @@ module T = struct
   type unordered_list = {count: AbsCount.t} [@@deriving compare, sexp]
 
   type table =
-    { count: AbsCount.t
-    ; field: Db.Field.t
-    ; lookup: PrimType.t option Abslayout0.name Abslayout0.pred }
+    {count: AbsCount.t; field: Db.Field.t; lookup: Abslayout0.name Abslayout0.pred}
   [@@deriving compare, sexp]
 
   type grouping =
@@ -108,6 +108,7 @@ module T = struct
     | UnorderedListT of t * unordered_list
     | TableT of t * t * table
     | GroupingT of t * t * grouping
+    | FuncT of t list * int
     | EmptyT
   [@@deriving compare, sexp]
 end
@@ -173,6 +174,8 @@ let rec unify_exn : t -> t -> t =
   | EmptyT, t | t, EmptyT -> t
   | GroupingT (kt1, vt1, m1), GroupingT (kt2, vt2, m2) when Polymorphic_compare.(m1 = m2) ->
       GroupingT (unify_exn kt1 kt2, unify_exn vt1 vt2, m1)
+  | FuncT (t, w), FuncT (t', w') when Int.(w = w') ->
+      FuncT (List.map2_exn ~f:unify_exn t t', w)
   | _ -> fail "Unexpected types."
 
 let rec width : t -> int = function
@@ -183,6 +186,7 @@ let rec width : t -> int = function
   | TableT (_, t, _) -> width t + 1
   | GroupingT (_, _, {output; _}) -> List.length output
   | EmptyT -> 0
+  | FuncT (_, w) -> w
 
 let count : t -> AbsCount.t = function
   | EmptyT -> AbsCount.abstract 0
@@ -194,14 +198,15 @@ let count : t -> AbsCount.t = function
    |TableT (_, _, {count; _}) ->
       count
   | GroupingT (_, _, m) -> m.count
+  | FuncT _ -> AbsCount.top
 
-let rec to_schema : t -> Db.Schema.t = function
-  | EmptyT -> []
-  | NullT m -> [m.field]
-  | IntT m -> [m.field]
-  | BoolT m -> [m.field]
-  | StringT m -> [m.field]
-  | CrossTupleT (ts, _) | ZipTupleT (ts, _) -> List.concat_map ~f:to_schema ts
-  | OrderedListT (t, _) | UnorderedListT (t, _) -> to_schema t
-  | TableT (_, t, m) -> m.field :: to_schema t
-  | GroupingT (_, _, m) -> Layout.grouping_to_schema m.output
+(* let rec to_schema : t -> Db.Schema.t = function
+ *   | EmptyT -> []
+ *   | NullT m -> [m.field]
+ *   | IntT m -> [m.field]
+ *   | BoolT m -> [m.field]
+ *   | StringT m -> [m.field]
+ *   | CrossTupleT (ts, _) | ZipTupleT (ts, _) -> List.concat_map ~f:to_schema ts
+ *   | OrderedListT (t, _) | UnorderedListT (t, _) -> to_schema t
+ *   | TableT (_, t, m) -> m.field :: to_schema t
+ *   | GroupingT (_, _, m) -> Layout.grouping_to_schema m.output *)

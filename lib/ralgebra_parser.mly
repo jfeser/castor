@@ -1,4 +1,5 @@
 %{
+    open Core
     open Printf
     module R = Ralgebra0
     module A = Abslayout0
@@ -9,7 +10,7 @@
 
     let fst (x, _) = x
     let snd (_, x) = x
-    let node r = A.({ node = r; meta = () })
+    let node r = A.({ node = r; meta = Univ_map.empty })
 %}
 
 %token <string> ID
@@ -65,8 +66,8 @@
 %token AORDEREDIDX
 
 %start <(string * string, string, Layout.t) Ralgebra0.t> ralgebra_eof
-%start <(Type0.PrimType.t option Abslayout0.name, unit) Abslayout0.ralgebra> abs_ralgebra_eof
-%start <Type0.PrimType.t option Abslayout0.name> name_eof
+%start <(Abslayout0.name, Core.Univ_map.t) Abslayout0.ralgebra> abs_ralgebra_eof
+%start <Abslayout0.name> name_eof
 
 %left OR
 %left AND

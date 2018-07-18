@@ -1,7 +1,10 @@
 open Base
 module Pervasives = Caml.Pervasives
 
-type 'a name = {relation: string option; name: string; type_: 'a [@compare.ignore]}
+type name =
+  { relation: string option
+  ; name: string
+  ; type_: Type0.PrimType.t option [@compare.ignore] }
 [@@deriving compare, sexp, hash]
 
 (* Visitors doesn't use the special method override syntax that warning 7 checks
@@ -62,4 +65,4 @@ and ('f, 'm) node =
 
 [@@@warning "+7"]
 
-type 'm t = (Type0.PrimType.t option name, 'm) ralgebra
+type 'm t = (name, 'm) ralgebra [@@deriving sexp]

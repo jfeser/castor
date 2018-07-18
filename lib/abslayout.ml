@@ -1,3 +1,4 @@
+open Core
 open Base
 open Stdio
 open Printf
@@ -9,31 +10,35 @@ open Layout
 module No_config = struct
   include Abslayout0
 
-  let select a b c = {node= Select (a, b, c); meta= ()}
+  let select a b c = {node= Select (a, b, c); meta= Univ_map.empty}
 
-  let filter a b c = {node= Filter (a, b, c); meta= ()}
+  let filter a b c = {node= Filter (a, b, c); meta= Univ_map.empty}
 
-  let agg a b c d = {node= Agg (a, b, c, d); meta= ()}
+  let agg a b c d = {node= Agg (a, b, c, d); meta= Univ_map.empty}
 
-  let dedup a = {node= Dedup a; meta= ()}
+  let dedup a = {node= Dedup a; meta= Univ_map.empty}
 
-  let scan a = {node= Scan a; meta= ()}
+  let scan a = {node= Scan a; meta= Univ_map.empty}
 
-  let empty = {node= AEmpty; meta= ()}
+  let empty = {node= AEmpty; meta= Univ_map.empty}
 
-  let scalar a = {node= AScalar a; meta= ()}
+  let scalar a = {node= AScalar a; meta= Univ_map.empty}
 
-  let list a b c = {node= AList (a, b, c); meta= ()}
+  let list a b c = {node= AList (a, b, c); meta= Univ_map.empty}
 
-  let tuple a b = {node= ATuple (a, b); meta= ()}
+  let tuple a b = {node= ATuple (a, b); meta= Univ_map.empty}
 
-  let hash_idx a b c d = {node= AHashIdx (a, b, c, d); meta= ()}
+  let hash_idx a b c d = {node= AHashIdx (a, b, c, d); meta= Univ_map.empty}
 
-  let ordered_idx a b c d = {node= AOrderedIdx (a, b, c, d); meta= ()}
+  let ordered_idx a b c d = {node= AOrderedIdx (a, b, c, d); meta= Univ_map.empty}
 
   module Name = struct
     module T = struct
-      type t = Type0.PrimType.t option name [@@deriving compare, hash, sexp]
+      type t = Abslayout0.name =
+        { relation: string option
+        ; name: string
+        ; type_: Type0.PrimType.t option [@compare.ignore] }
+      [@@deriving compare, hash, sexp]
     end
 
     include T
@@ -58,6 +63,35 @@ module No_config = struct
     let of_channel_exn ch = of_lexbuf_exn (Lexing.from_channel ch)
 
     let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
+
+    let of_field ?rel f =
+      {relation= rel; name= f.fname; type_= Some (Type.PrimType.of_dtype f.dtype)}
+  end
+
+  module Meta = struct
+    type pos = Pos of int64 | Many_pos [@@deriving sexp]
+
+    let schema = Univ_map.Key.create ~name:"schema" [%sexp_of : Name.t list]
+
+    let pos = Univ_map.Key.create ~name:"pos" [%sexp_of : pos]
+
+    let meta_mapper f =
+      object
+        inherit [_] map
+        method visit_'m () meta = f meta
+        method visit_'f () x = x
+      end
+
+    let map ~f r = (meta_mapper f)#visit_ralgebra () r
+
+    let to_mutable = map ~f:ref
+
+    let to_immutable = map ~f:( ! )
+
+    let change r key ~f =
+      (meta_mapper (fun m -> Univ_map.change m key ~f))#visit_ralgebra () r
+
+    let init ~init r = map ~f:(fun _ -> init) r
   end
 
   module Ctx = struct
@@ -326,8 +360,8 @@ module No_config = struct
     let f = n "r.f" in
     let g = n "r.g" in
     let ctx = Map.of_alist_exn (module Name) [(f, `Int 1); (g, `Int 2)] in
-    let r = "Filter(r -> r.f = r.g, Select(r -> [r.f; r.g], r))" |> of_string_exn in
-    print_s ([%sexp_of : (Name.t, unit) ralgebra] (subst ctx r)) ;
+    let r = "Filter(r -> r.f = r.g, Select(r -> [r.f, r.g], r))" |> of_string_exn in
+    print_s ([%sexp_of : (Name.t, Univ_map.t) ralgebra] (subst ctx r)) ;
     [%expect
       {|
     (Filter r
@@ -418,10 +452,6 @@ module No_config = struct
     in
     f r
 
-  let n r s = {relation= Some r; name= s; type_= None}
-
-  let nn r s = Name (n r s)
-
   let%expect_test "project-empty" =
     let r = of_string_exn "Select(r -> [], r)" in
     print_endline (ralgebra_to_sql r) ;
@@ -473,7 +503,7 @@ module Config = struct
   module type S = sig
     include S_shared
 
-    val eval : Ctx.t -> (Name.t, unit) ralgebra -> primvalue Map.M(String).t Seq.t
+    val eval : Ctx.t -> (Name.t, 'a) ralgebra -> primvalue Map.M(String).t Seq.t
   end
 end
 
@@ -513,7 +543,7 @@ module Make (Config : Config.S) () = struct
           inherit [_] endo
           method! visit_Scan () r rel' =
             if String.(rel = rel') then
-              Filter (rel, Binop (Eq, p, pred), {node= r; meta= ()})
+              Filter (rel, Binop (Eq, p, pred), {node= r; meta= Univ_map.empty})
             else r
           method visit_'f _ x = x
           method visit_'m _ x = x
@@ -589,7 +619,7 @@ module Make (Config : Config.S) () = struct
         | Join {pred; r1_name; r1; r2_name; r2} ->
             self#visit_Join ctx pred r1_name r1 r2_name r2
         | Dedup _ | Agg _ | Scan _ ->
-            Error.create "Wrong context." r [%sexp_of : (Name.t, unit) ralgebra]
+            Error.create "Wrong context." r [%sexp_of : (Name.t, Univ_map.t) ralgebra]
             |> Error.raise
     end
     
@@ -666,7 +696,7 @@ module Make (Config : Config.S) () = struct
   let to_type ?(ctx= Map.empty (module Name)) l =
     Logs.debug (fun m ->
         m "Computing type of abstract layout: %s"
-          (Sexp.to_string_hum ([%sexp_of : (Name.t, unit) ralgebra] l)) ) ;
+          (Sexp.to_string_hum ([%sexp_of : (Name.t, Univ_map.t) ralgebra] l)) ) ;
     let type_ = (new type_fold)#visit_t ctx l in
     Logs.debug (fun m ->
         m "The type is: %s" (Sexp.to_string_hum ([%sexp_of : Type.t] type_)) ) ;
@@ -860,7 +890,11 @@ module Make (Config : Config.S) () = struct
           in
           log_start label ; Writer.write writer bstr ; log_end ()
         method visit_AOrderedIdx _ _ _ _ _ _ = failwith ""
-        method visit_t ctx type_ {node; _} =
+        method visit_t ctx type_ {node; meta} =
+          meta :=
+            Univ_map.update !meta Meta.pos ~f:(function
+              | Some _ -> Many_pos
+              | None -> Pos (Writer.pos writer |> Writer.Pos.to_bytes_exn) ) ;
           match node with
           | AEmpty -> self#visit_AEmpty ctx type_
           | AScalar e -> self#visit_AScalar ctx type_ e
@@ -877,73 +911,39 @@ module Make (Config : Config.S) () = struct
   let serialize ?(ctx= Map.empty (module Name)) writer t l =
     Logs.debug (fun m ->
         m "Serializing abstract layout: %s"
-          (Sexp.to_string_hum ([%sexp_of : (Name.t, unit) ralgebra] l)) ) ;
+          (Sexp.to_string_hum ([%sexp_of : (Name.t, Univ_map.t) ralgebra] l)) ) ;
     let open Bitstring in
+    let l = Meta.to_mutable l in
     let begin_pos = Writer.pos writer in
     let fn = Caml.Filename.temp_file "buf" ".txt" in
     if Config.layout_map then Logs.info (fun m -> m "Outputting layout map to %s." fn) ;
     Out_channel.with_file fn ~f:(fun ch -> (new serialize_fold ch writer)#visit_t ctx t l) ;
     let end_pos = Writer.pos writer in
     let len = Writer.Pos.(end_pos - begin_pos |> to_bytes_exn) |> Int64.to_int_exn in
-    len
+    let l = Meta.to_immutable l in
+    (l, len)
 
-  (* type schema = Name.t list
-   * 
-   * let unnamed t = {name= ""; relation= None; type_= Some t}
-   * 
-   * let rec pred_to_schema_exn =
-   *   let open Type0.PrimType in
-   *   function
-   *   | Name {type_= None; _} -> failwith "Missing type."
-   *   | Name ({type_= Some _; _} as n) -> n
-   *   | Int _ -> unnamed IntT
-   *   | Bool _ -> unnamed BoolT
-   *   | String _ -> unnamed StringT
-   *   | Null -> failwith ""
-   *   | Binop (op, _, _) | Varop (op, _) ->
-   *     match op with
-   *     | Eq | Lt | Le | Gt | Ge | And | Or -> unnamed BoolT
-   *     | Add | Sub | Mul | Div | Mod -> unnamed IntT
-   * 
-   * let agg_to_string = function
-   *   | Count -> "Count(\*\)"
-   *   | Min f -> sprintf "Min(%s)" (Name.to_string f)
-   *   | Max f -> sprintf "Max(%s)" (Name.to_string f)
-   *   | Sum f -> sprintf "Sum(%s)" (Name.to_string f)
-   *   | Avg f -> sprintf "Avg(%s)" (Name.to_string f)
-   *   | Key f -> Name.to_string f
-   * 
-   * let rec to_schema_exn = function
-   *     | Select (_, exprs, r) -> List.map exprs ~f:pred_to_schema_exn
-   *     | Filter (_, _, r) | Dedup r -> to_schema_exn r
-   *     | Join {r1; r1_name; r2; r2_name} ->
-   *         let lhs =
-   *           ralgebra_to_schema_exn r1
-   *           |> List.map ~f:(fun n -> {n with relation= Some r1_name})
-   *         in
-   *         let rhs =
-   *           ralgebra_to_schema_exn r2
-   *           |> List.map ~f:(fun n -> {n with relation= Some r2_name})
-   *         in
-   *         lhs @ rhs
-   *     | Scan r -> layout_to_schema_exn r
-   *     | Agg (out, _, _) ->
-   *         List.map out ~f:(function
-   *           | Key n -> n
-   *           | (Count | Sum _ | Min _ | Max _) as a ->
-   *               {name= agg_to_string a; type_= Some IntT; relation= None}
-   *           | Avg _ -> failwith "unsupported" )
-   *     | AEmpty -> []
-   *     | AScalar p -> [pred_to_schema_exn p]
-   *     | AHashIdx (_, _, l, _) | AOrderedIdx (_, _, l, _) | AList (_, _, l) ->
-   *         layout_to_schema_exn l
-   *     | ATuple (ls, _) -> List.concat_map ~f:layout_to_schema_exn ls
-   *   in
-   *   ralgebra_to_schema_exn *)
+  let unnamed t = {name= ""; relation= None; type_= Some t}
+
+  let pred_to_schema_exn =
+    let open Type0.PrimType in
+    function
+    | Name {type_= None; _} -> failwith "Missing type."
+    | Name ({type_= Some _; _} as n) -> n
+    | Int _ -> unnamed IntT
+    | Bool _ -> unnamed BoolT
+    | String _ -> unnamed StringT
+    | Null -> failwith ""
+    | Binop (op, _, _) | Varop (op, _) ->
+      match op with
+      | Eq | Lt | Le | Gt | Ge | And | Or -> unnamed BoolT
+      | Add | Sub | Mul | Div | Mod -> unnamed IntT
 end
 
 module Make_db (Config_db : Config.S_db) () = struct
   module Config = struct
+    include Config_db
+
     let eval ctx query =
       let sql = ralgebra_to_sql (subst ctx query) in
       Db.exec_cursor Config_db.conn sql
@@ -952,6 +952,70 @@ module Make_db (Config_db : Config.S_db) () = struct
   end
 
   include Make (Config) ()
+
+  let rec annotate_schema r =
+    let node', schema =
+      match r.node with
+      | Select (n, x, r) ->
+          let r' = annotate_schema r in
+          let schema = List.map x ~f:pred_to_schema_exn in
+          (Select (n, x, r'), schema)
+      | Filter (n, x, r) ->
+          let r' = annotate_schema r in
+          let schema = Univ_map.find_exn r'.meta Meta.schema in
+          (Filter (n, x, r'), schema)
+      | Join ({r1_name; r1; r2_name; r2; _} as j) ->
+          let r1' = annotate_schema r1 in
+          let r2' = annotate_schema r2 in
+          let s1 = Univ_map.find_exn r1'.meta Meta.schema in
+          let s2 = Univ_map.find_exn r2'.meta Meta.schema in
+          let schema =
+            List.map s1 ~f:(fun n -> {n with relation= Some r1_name})
+            @ List.map s2 ~f:(fun n -> {n with relation= Some r2_name})
+          in
+          (Join {j with r1= r1'; r2= r2'}, schema)
+      | Dedup r as x ->
+          let r' = annotate_schema r in
+          (x, Univ_map.find_exn r'.meta Meta.schema)
+      | Scan table as x ->
+          let schema =
+            (Db.Relation.from_db Config.conn table).fields
+            |> List.map ~f:(fun f -> Name.of_field ~rel:table f)
+          in
+          (x, schema)
+      | Agg (_, _, _, _) -> failwith ""
+      | AEmpty as x -> (x, [])
+      | AScalar e as x ->
+          let schema = [pred_to_schema_exn e] in
+          (x, schema)
+      | AList (n, x, r) ->
+          let r' = annotate_schema r in
+          let schema = Univ_map.find_exn r'.meta Meta.schema in
+          (AList (n, x, r'), schema)
+      | ATuple (rs, t) ->
+          let rs' = List.map ~f:annotate_schema rs in
+          let schema =
+            List.concat_map ~f:(fun r' -> Univ_map.find_exn r'.meta Meta.schema) rs'
+          in
+          (ATuple (rs', t), schema)
+      | AHashIdx (kr, n, vr, x) ->
+          let kr' = annotate_schema kr in
+          let vr' = annotate_schema vr in
+          let schema =
+            Univ_map.find_exn kr'.meta Meta.schema
+            @ Univ_map.find_exn vr'.meta Meta.schema
+          in
+          (AHashIdx (kr', n, vr', x), schema)
+      | AOrderedIdx (kr, n, vr, x) ->
+          let kr' = annotate_schema kr in
+          let vr' = annotate_schema vr in
+          let schema =
+            Univ_map.find_exn kr'.meta Meta.schema
+            @ Univ_map.find_exn vr'.meta Meta.schema
+          in
+          (AOrderedIdx (kr', n, vr', x), schema)
+    in
+    {node= node'; meta= Univ_map.set r.meta Meta.schema schema}
 end
 
 module Test = struct
@@ -1161,7 +1225,7 @@ module Test = struct
 
   [@@@warning "-8"]
 
-  let r1, [f; g] = create "r1" ["f"; "g"] [[1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]]
+  let _, [f; _] = create "r1" ["f"; "g"] [[1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]]
 
   [@@@warning "+8"]
 
@@ -1170,7 +1234,7 @@ module Test = struct
       of_string_exn "AList(r1, x -> ATuple([AScalar(x.f), AScalar(x.g)], Cross))"
     in
     let part_layout = M.partition ~part:(Name f) ~lookup:(Name f) layout in
-    [%sexp_of : (Name.t, unit) ralgebra] part_layout |> print_s ;
+    [%sexp_of : (Name.t, Univ_map.t) ralgebra] part_layout |> print_s ;
     [%expect
       {|
       (AHashIdx

@@ -1,3 +1,4 @@
+open Core
 open Base
 open Printf
 open Collections
@@ -533,6 +534,7 @@ module IRGen = struct
         | None -> Infix.(int isize) )
       | CrossTupleT _ | ZipTupleT _ | GroupingT _ | TableT _ -> Infix.(int isize)
       | UnorderedListT _ | OrderedListT _ -> Infix.int (2 * isize)
+      | FuncT _ -> failwith "Not materialized."
 
     (** The length of a layout in bytes (including the header). *)
     let len start =
@@ -550,6 +552,7 @@ module IRGen = struct
       | TableT _ | ZipTupleT _ | CrossTupleT _ | GroupingT _ | UnorderedListT _
        |OrderedListT _ ->
           islice start
+      | FuncT _ -> failwith "Not materialized."
 
     let count start =
       let open Infix in
@@ -559,6 +562,7 @@ module IRGen = struct
       | IntT _ | BoolT _ | StringT _ -> Some (int 1)
       | TableT _ | CrossTupleT _ | ZipTupleT _ -> None
       | GroupingT _ | UnorderedListT _ | OrderedListT _ -> Some (islice start)
+      | FuncT _ -> failwith "Not materialized."
 
     let scan_empty = create [("start", int_t)] VoidT |> build_func
 
@@ -602,7 +606,7 @@ module IRGen = struct
       else build_yield (Tuple [ret_val]) b ;
       build_func b
 
-    let scan_crosstuple scan ts m =
+    let scan_crosstuple scan rs ts m =
       let rec loops b start col_offset vars = function
         | [] ->
             let tup =
@@ -623,7 +627,7 @@ module IRGen = struct
                 loops b start col_offset (var :: vars) rest )
               b
       in
-      let funcs = List.map ts ~f:(fun t -> (scan t, t)) in
+      let funcs = List.map2_exn rs ts ~f:(fun r t -> (scan r t, t)) in
       let ret_type =
         TupleT
           ( List.map funcs ~f:(fun (func, _) ->
@@ -635,9 +639,8 @@ module IRGen = struct
       loops b start Infix.(int 0) [] funcs ;
       build_func b
 
-    let scan_ziptuple : _ -> _ -> Type.ziptuple -> _ =
-     fun scan ts Type.({count} as t) ->
-      let funcs = List.map ts ~f:scan in
+    let scan_ziptuple scan rs ts (m: Type.ziptuple) =
+      let funcs = List.map2_exn rs ts ~f:scan in
       let ret_type =
         List.map funcs ~f:(fun func ->
             match (find_func func).ret_type with TupleT ts -> ts | t -> [t] )
@@ -647,7 +650,7 @@ module IRGen = struct
       let b = create [("start", int_t)] ret_type in
       let start = build_arg 0 b in
       (* Build iterator initializers using the computed start positions. *)
-      build_assign Infix.(start + hsize (ZipTupleT (ts, t))) start b ;
+      build_assign Infix.(start + hsize (ZipTupleT (ts, m))) start b ;
       List.iter2_exn funcs ts ~f:(fun f t ->
           build_iter f [start] b ;
           build_assign Infix.(start + hsize t + len start t) start b ) ;
@@ -664,7 +667,7 @@ module IRGen = struct
         in
         build_yield tup b
       in
-      ( match Type.AbsCount.kind count with
+      ( match Type.AbsCount.kind m.count with
       | `Count x -> build_count_loop Infix.(int x) build_body b
       | `Countable | `Unknown ->
           build_body b ;
@@ -675,9 +678,8 @@ module IRGen = struct
           build_loop not_done build_body b ) ;
       build_func b
 
-    let scan_unordered_list : _ -> _ -> Type.unordered_list -> _ =
-     fun scan t m ->
-      let func = scan t in
+    let scan_unordered_list scan r t m =
+      let func = scan r t in
       let ret_type = (find_func func).ret_type in
       let b = create [("start", int_t)] ret_type in
       let start = build_arg 0 b in
@@ -699,65 +701,65 @@ module IRGen = struct
         b ;
       build_func b
 
-    let scan_ordered_list scan t Type.({field; order; lookup= lower, upper; count}) =
-      let func = scan (Type.UnorderedListT (t, {count})) in
-      let idx =
-        Db.Schema.field_idx_exn (Type.to_schema (UnorderedListT (t, {count}))) field
-      in
-      let ret_type = (find_func func).ret_type in
-      let b = create [("start", int_t)] ret_type in
-      let start = build_arg 0 b in
-      let pcount = Infix.(islice start) in
-      build_iter func [start] b ;
-      let tup = build_var "tup" ret_type b in
-      build_step tup func b ;
-      (* Build a skip loop if there is a lower bound. *)
-      ( match (order, lower, upper) with
-      | `Asc, Some (Var (v, _)), _ ->
-          let cond = Infix.(pcount > int 0 && index tup idx < Var v) in
-          build_loop cond
-            (fun b ->
-              build_step tup func b ;
-              build_assign Infix.(pcount - int 1) pcount b )
-            b
-      | `Desc, _, Some (Var (v, _)) ->
-          let cond = Infix.(pcount > int 0 && index tup idx > Var v) in
-          build_loop cond
-            (fun b ->
-              build_step tup func b ;
-              build_assign Infix.(pcount - int 1) pcount b )
-            b
-      | _ -> () ) ;
-      (* Build the read loop. *)
-      ( match (order, lower, upper) with
-      | `Asc, _, Some (Var (v, _)) ->
-          let cond = Infix.(pcount > int 0 && index tup idx <= Var v) in
-          build_loop cond
-            (fun b ->
-              build_yield tup b ;
-              build_step tup func b ;
-              build_assign Infix.(pcount - int 1) pcount b )
-            b
-      | `Desc, Some (Var (v, _)), _ ->
-          let cond = Infix.(pcount > int 0 && index tup idx >= Var v) in
-          build_loop cond
-            (fun b ->
-              build_yield tup b ;
-              build_step tup func b ;
-              build_assign Infix.(pcount - int 1) pcount b )
-            b
-      | `Asc, _, None | `Desc, None, _ ->
-          let cond = Infix.(pcount > int 0) in
-          build_loop cond
-            (fun b ->
-              build_yield tup b ;
-              build_step tup func b ;
-              build_assign Infix.(pcount - int 1) pcount b )
-            b
-      | _ -> failwith "Unexpected parameters." ) ;
-      build_func b
+    (* let scan_ordered_list scan t Type.({field; order; lookup= lower, upper; count}) =
+     *   let func = scan (Type.UnorderedListT (t, {count})) in
+     *   let idx =
+     *     Db.Schema.field_idx_exn (Type.to_schema (UnorderedListT (t, {count}))) field
+     *   in
+     *   let ret_type = (find_func func).ret_type in
+     *   let b = create [("start", int_t)] ret_type in
+     *   let start = build_arg 0 b in
+     *   let pcount = Infix.(islice start) in
+     *   build_iter func [start] b ;
+     *   let tup = build_var "tup" ret_type b in
+     *   build_step tup func b ;
+     *   (\* Build a skip loop if there is a lower bound. *\)
+     *   ( match (order, lower, upper) with
+     *   | `Asc, Some (Var (v, _)), _ ->
+     *       let cond = Infix.(pcount > int 0 && index tup idx < Var v) in
+     *       build_loop cond
+     *         (fun b ->
+     *           build_step tup func b ;
+     *           build_assign Infix.(pcount - int 1) pcount b )
+     *         b
+     *   | `Desc, _, Some (Var (v, _)) ->
+     *       let cond = Infix.(pcount > int 0 && index tup idx > Var v) in
+     *       build_loop cond
+     *         (fun b ->
+     *           build_step tup func b ;
+     *           build_assign Infix.(pcount - int 1) pcount b )
+     *         b
+     *   | _ -> () ) ;
+     *   (\* Build the read loop. *\)
+     *   ( match (order, lower, upper) with
+     *   | `Asc, _, Some (Var (v, _)) ->
+     *       let cond = Infix.(pcount > int 0 && index tup idx <= Var v) in
+     *       build_loop cond
+     *         (fun b ->
+     *           build_yield tup b ;
+     *           build_step tup func b ;
+     *           build_assign Infix.(pcount - int 1) pcount b )
+     *         b
+     *   | `Desc, Some (Var (v, _)), _ ->
+     *       let cond = Infix.(pcount > int 0 && index tup idx >= Var v) in
+     *       build_loop cond
+     *         (fun b ->
+     *           build_yield tup b ;
+     *           build_step tup func b ;
+     *           build_assign Infix.(pcount - int 1) pcount b )
+     *         b
+     *   | `Asc, _, None | `Desc, None, _ ->
+     *       let cond = Infix.(pcount > int 0) in
+     *       build_loop cond
+     *         (fun b ->
+     *           build_yield tup b ;
+     *           build_step tup func b ;
+     *           build_assign Infix.(pcount - int 1) pcount b )
+     *         b
+     *   | _ -> failwith "Unexpected parameters." ) ;
+     *   build_func b *)
 
-    let abs_gen_pred tup field_idx =
+    let gen_pred tup schema =
       let module A = Abslayout in
       let module R = Ralgebra0 in
       let rec gen_pred = function
@@ -765,7 +767,10 @@ module IRGen = struct
         | A.Int x -> Int x
         | A.String x -> String x
         | A.Bool x -> Bool x
-        | A.Name n -> ( try Infix.(index tup (field_idx n)) with _ -> Var n.A.name )
+        | A.Name n -> (
+          match List.findi schema ~f:(fun _ n' -> A.Name.(n = n')) with
+          | Some (i, _) -> Infix.(index tup i)
+          | None -> Var n.A.Name.name )
         | A.Binop (op, arg1, arg2) -> (
             let e1 = gen_pred arg1 in
             let e2 = gen_pred arg2 in
@@ -792,10 +797,11 @@ module IRGen = struct
       in
       gen_pred
 
-    let scan_table : _ -> _ -> _ -> Type.table -> _ =
-     fun scan kt vt {lookup; _} ->
-      let key_iter = scan kt in
-      let value_iter = scan vt in
+    let scan_table scan rs kt vt (m: Type.table) =
+      (* Keys can only be scalars, so we don't need to pass in a layout for the
+         keys. *)
+      let key_iter = scan Abslayout.empty kt in
+      let value_iter = scan rs vt in
       let key_type = (find_func key_iter).ret_type in
       let ret_type = (find_func value_iter).ret_type in
       let b = create [("start", int_t)] ret_type in
@@ -807,11 +813,11 @@ module IRGen = struct
       in
       let mapping_start = Infix.(hash_data_start + hash_len) in
       let lookup_expr =
-        match lookup with
+        match m.Type.lookup with
         | Name n -> Var n.name
-        | _ ->
-            Error.create "Unexpected parameters." lookup
-              [%sexp_of : Abslayout.Name.t Abslayout0.pred]
+        | l ->
+            Error.create "Unexpected parameters." l
+              [%sexp_of : Abslayout0.name Abslayout0.pred]
             |> Error.raise
       in
       (* Compute the index in the mapping table for this key. *)
@@ -837,146 +843,92 @@ module IRGen = struct
         b ;
       build_func b
 
-    let scan_grouping scan kt vt Type.({output; _} as m) =
-      let t = Type.(GroupingT (kt, vt, m)) in
-      let key_iter = scan kt in
-      let value_iter = scan vt in
-      let key_type = (find_func key_iter).ret_type in
-      let value_schema = Type.to_schema vt in
-      let key_schema = Type.to_schema kt in
-      let ret_type =
-        List.map output ~f:(function
-          | Count | Sum _ -> IntT {nullable= false}
-          | Key f | Min f | Max f -> type_of_dtype f.dtype
-          | Avg _ -> Error.of_string "Unsupported." |> Error.raise )
-        |> fun x -> TupleT x
-      in
-      let build_agg start b =
-        let value_start = Infix.(start + len start kt + hsize kt) in
-        let outputs =
-          List.map output ~f:(function
-            | Sum f ->
-                let idx = Option.value_exn (Db.Schema.field_idx value_schema f) in
-                build_iter value_iter [value_start] b ;
-                let sum = build_fresh_defn "sum" int_t Infix.(int 0) b in
-                build_foreach vt value_start value_iter
-                  (fun tup b -> build_assign Infix.(sum + index tup idx) sum b)
-                  b ;
-                sum
-            | Min f ->
-                let idx = Option.value_exn (Db.Schema.field_idx value_schema f) in
-                build_iter value_iter [value_start] b ;
-                let min = build_fresh_defn "min" int_t Infix.(int 0) b in
-                build_foreach vt value_start value_iter
-                  (fun tup b ->
-                    build_if
-                      ~cond:Infix.(index tup idx < min)
-                      ~then_:(fun b -> build_assign Infix.(index tup idx) min b)
-                      ~else_:(fun _ -> ())
-                      b )
-                  b ;
-                min
-            | Max f ->
-                let idx = Option.value_exn (Db.Schema.field_idx value_schema f) in
-                build_iter value_iter [value_start] b ;
-                let max = build_fresh_defn "max" int_t Infix.(int 0) b in
-                build_foreach vt value_start value_iter
-                  (fun tup b ->
-                    build_if
-                      ~cond:Infix.(index tup idx > max)
-                      ~then_:(fun b -> build_assign Infix.(index tup idx) max b)
-                      ~else_:(fun _ -> ())
-                      b )
-                  b ;
-                max
-            | Key f ->
-                let idx = Option.value_exn (Db.Schema.field_idx key_schema f) in
-                build_iter key_iter [start] b ;
-                let tup = build_fresh_var "tup" key_type b in
-                build_step tup key_iter b ;
-                Infix.(index tup idx)
-            | Count -> (
-              match count value_start vt with
-              | Some ct -> ct
-              | None ->
-                  build_iter value_iter [value_start] b ;
-                  let ct = build_fresh_defn "ct" int_t Infix.(int 0) b in
-                  build_foreach vt value_start value_iter
-                    (fun _ b -> build_assign Infix.(ct + int 1) ct b)
-                    b ;
-                  ct )
-            | Avg _ -> Error.of_string "Unsupported" |> Error.raise )
-        in
-        Tuple outputs
-      in
-      let b = create [("start", int_t)] ret_type in
-      let start = build_arg 0 b in
-      let pcount = build_defn "count" int_t (Option.value_exn (count start t)) b in
-      let cstart = build_defn "cstart" int_t Infix.(start + hsize t) b in
-      build_loop
-        Infix.(pcount > int 0)
-        (fun b ->
-          build_yield (build_agg cstart b) b ;
-          let klen = Infix.(len cstart kt + hsize kt) in
-          let vlen = Infix.(len (cstart + klen) vt + hsize vt) in
-          build_assign Infix.(cstart + klen + vlen) cstart b ;
-          build_assign Infix.(pcount - int 1) pcount b )
-        b ;
-      build_func b
-
-    let scan_wrapper scan start t =
-      let func = scan t in
-      let ret_type = (find_func func).ret_type in
-      let b = create [] ret_type in
-      build_foreach t Infix.(int start) func (fun tup b -> build_yield tup b) b ;
-      build_func b
-
-    (* let abs_scan : _ -> func = fun l ->
-     *   let type_ = Abslayout.to_type l in
-     *   let buf = Abslayout.serialize type_ l in
-     *   let start = List.map !buffers ~f:Bitstring.byte_length
-     *               |> List.sum (module Int) ~f:(fun x -> x)
+    (* let scan_grouping scan kt vt Type.({output; _} as m) =
+     *   let t = Type.(GroupingT (kt, vt, m)) in
+     *   let key_iter = scan kt in
+     *   let value_iter = scan vt in
+     *   let key_type = (find_func key_iter).ret_type in
+     *   let value_schema = Type.to_schema vt in
+     *   let key_schema = Type.to_schema kt in
+     *   let ret_type =
+     *     List.map output ~f:(function
+     *       | Count | Sum _ -> IntT {nullable= false}
+     *       | Key f | Min f | Max f -> type_of_dtype f.dtype
+     *       | Avg _ -> Error.of_string "Unsupported." |> Error.raise )
+     *     |> fun x -> TupleT x
      *   in
-     *   Logs.debug (fun m -> m "Start: %d" start);
-     *   buffers := !buffers @ [buf]; *)
-
-    let scan : Type.t -> int -> func =
-     fun type_ start ->
-      assert (start >= 0) ;
-      Logs.debug (fun m -> m "Start: %d" start) ;
-      let rec scan t =
-        let open Type in
-        let name =
-          match t with
-          | EmptyT -> Fresh.name fresh "e%d"
-          | IntT _ -> Fresh.name fresh "i%d"
-          | BoolT _ -> Fresh.name fresh "b%d"
-          | StringT _ -> Fresh.name fresh "s%d"
-          | CrossTupleT _ -> Fresh.name fresh "ct%d"
-          | ZipTupleT _ -> Fresh.name fresh "zt%d"
-          | UnorderedListT _ -> Fresh.name fresh "ul%d"
-          | OrderedListT _ -> Fresh.name fresh "ol%d"
-          | TableT _ -> Fresh.name fresh "t%d"
-          | GroupingT _ -> Fresh.name fresh "g%d"
-          | NullT _ -> Fresh.name fresh "n%d"
-        in
-        let func =
-          match t with
-          | IntT m -> scan_int m
-          | BoolT m -> scan_bool m
-          | StringT m -> scan_string m
-          | EmptyT -> scan_empty
-          | NullT m -> scan_null m
-          | CrossTupleT (x, m) -> scan_crosstuple scan x m
-          | ZipTupleT (x, m) -> scan_ziptuple scan x m
-          | UnorderedListT (x, m) -> scan_unordered_list scan x m
-          | OrderedListT (x, m) -> scan_ordered_list scan x m
-          | TableT (kt, vt, m) -> scan_table scan kt vt m
-          | GroupingT (kt, vt, m) -> scan_grouping scan kt vt m
-        in
-        add_func name func ; name
-      in
-      scan_wrapper scan start type_
+     *   let build_agg start b =
+     *     let value_start = Infix.(start + len start kt + hsize kt) in
+     *     let outputs =
+     *       List.map output ~f:(function
+     *         | Sum f ->
+     *             let idx = Option.value_exn (Db.Schema.field_idx value_schema f) in
+     *             build_iter value_iter [value_start] b ;
+     *             let sum = build_fresh_defn "sum" int_t Infix.(int 0) b in
+     *             build_foreach vt value_start value_iter
+     *               (fun tup b -> build_assign Infix.(sum + index tup idx) sum b)
+     *               b ;
+     *             sum
+     *         | Min f ->
+     *             let idx = Option.value_exn (Db.Schema.field_idx value_schema f) in
+     *             build_iter value_iter [value_start] b ;
+     *             let min = build_fresh_defn "min" int_t Infix.(int 0) b in
+     *             build_foreach vt value_start value_iter
+     *               (fun tup b ->
+     *                 build_if
+     *                   ~cond:Infix.(index tup idx < min)
+     *                   ~then_:(fun b -> build_assign Infix.(index tup idx) min b)
+     *                   ~else_:(fun _ -> ())
+     *                   b )
+     *               b ;
+     *             min
+     *         | Max f ->
+     *             let idx = Option.value_exn (Db.Schema.field_idx value_schema f) in
+     *             build_iter value_iter [value_start] b ;
+     *             let max = build_fresh_defn "max" int_t Infix.(int 0) b in
+     *             build_foreach vt value_start value_iter
+     *               (fun tup b ->
+     *                 build_if
+     *                   ~cond:Infix.(index tup idx > max)
+     *                   ~then_:(fun b -> build_assign Infix.(index tup idx) max b)
+     *                   ~else_:(fun _ -> ())
+     *                   b )
+     *               b ;
+     *             max
+     *         | Key f ->
+     *             let idx = Option.value_exn (Db.Schema.field_idx key_schema f) in
+     *             build_iter key_iter [start] b ;
+     *             let tup = build_fresh_var "tup" key_type b in
+     *             build_step tup key_iter b ;
+     *             Infix.(index tup idx)
+     *         | Count -> (
+     *           match count value_start vt with
+     *           | Some ct -> ct
+     *           | None ->
+     *               build_iter value_iter [value_start] b ;
+     *               let ct = build_fresh_defn "ct" int_t Infix.(int 0) b in
+     *               build_foreach vt value_start value_iter
+     *                 (fun _ b -> build_assign Infix.(ct + int 1) ct b)
+     *                 b ;
+     *               ct )
+     *         | Avg _ -> Error.of_string "Unsupported" |> Error.raise )
+     *     in
+     *     Tuple outputs
+     *   in
+     *   let b = create [("start", int_t)] ret_type in
+     *   let start = build_arg 0 b in
+     *   let pcount = build_defn "count" int_t (Option.value_exn (count start t)) b in
+     *   let cstart = build_defn "cstart" int_t Infix.(start + hsize t) b in
+     *   build_loop
+     *     Infix.(pcount > int 0)
+     *     (fun b ->
+     *       build_yield (build_agg cstart b) b ;
+     *       let klen = Infix.(len cstart kt + hsize kt) in
+     *       let vlen = Infix.(len (cstart + klen) vt + hsize vt) in
+     *       build_assign Infix.(cstart + klen + vlen) cstart b ;
+     *       build_assign Infix.(pcount - int 1) pcount b )
+     *     b ;
+     *   build_func b *)
 
     let printer : string -> func =
      fun func ->
@@ -994,71 +946,36 @@ module IRGen = struct
       build_return c b ;
       build_func b
 
-    let project gen fields r =
-      let func = gen r in
-      let schema = Ralgebra.to_schema r |> Or_error.ok_exn in
-      let idxs =
-        List.filter_map fields ~f:(fun f ->
-            match Db.Schema.field_idx schema f with
-            | Some idx -> Some idx
-            | None ->
-                Logs.warn (fun m -> m "Field %s not present. Can't be projected." f.fname) ;
-                None )
-      in
-      let child_ret_t = (find_func func).ret_type in
-      let ret_t =
-        match child_ret_t with
-        | TupleT ts ->
-            TupleT (List.filteri ts ~f:(fun i _ -> List.mem idxs i ~equal:( = )))
-        | t -> fail (Error.create "Expected a TupleT." t [%sexp_of : type_])
-      in
-      let b = create [] ret_t in
-      build_foreach_no_start func
-        (fun in_tup b ->
-          let out_tup = Tuple (List.map idxs ~f:(fun i -> Infix.(index in_tup i))) in
-          build_yield out_tup b )
-        b ;
-      build_func b
-
-    let filter gen gen_pred field_idx pred r =
-      let func = gen r in
+    let scan_filter scan _ p r t =
+      let func = scan r t in
       let ret_t = (find_func func).ret_type in
       let b = create [] ret_t in
       build_foreach_no_start func
         (fun tup b ->
-          build_if ~cond:(gen_pred tup field_idx pred)
+          build_if
+            ~cond:
+              (gen_pred tup (Univ_map.find_exn r.Abslayout.meta Abslayout.Meta.schema) p)
             ~then_:(fun b -> build_yield tup b)
             ~else_:(fun _ -> ())
             b )
         b ;
       build_func b
 
-    let select gen gen_pred field_idx exprs r =
+    let scan_select scan _ x r t =
       (* TODO: Remove horrible hack. *)
-      let func = gen r in
+      let func = scan r t in
       let out_expr = ref (Tuple []) in
       let b = create [] (IntT {nullable= false}) in
+      let schema = Univ_map.find_exn r.Abslayout.meta Abslayout.Meta.schema in
       build_foreach_no_start func
         (fun tup b ->
-          out_expr := Tuple (List.map exprs ~f:(gen_pred tup field_idx)) ;
+          out_expr := Tuple (List.map x ~f:(gen_pred tup schema)) ;
           build_yield !out_expr b )
         b ;
       let func = build_func b in
       let tctx = Hashtbl.of_alist_exn (module String) func.locals in
       let ret_t = infer_type tctx !out_expr in
       {func with ret_type= ret_t}
-
-    let concat gen rs =
-      let funcs = List.map rs ~f:gen in
-      let ret_t =
-        List.map funcs ~f:(fun f -> (find_func f).ret_type)
-        |> List.all_equal ~sexp_of_t:[%sexp_of : type_]
-        |> Or_error.ok_exn
-      in
-      let b = create [] ret_t in
-      List.iter funcs ~f:(fun func ->
-          build_foreach_no_start func (fun tup b -> build_yield tup b) b ) ;
-      build_func b
 
     let count gen r =
       let func = gen r in
@@ -1100,46 +1017,38 @@ module IRGen = struct
         b ;
       build_func b
 
-    let gen_abslayout : data_fn:string -> Abslayout.t -> string * int = failwith "FIXME"
-
-    (* fun ~data_fn r ->
-      *  let field_idx_exn s f =
-      *    Option.value_exn (List.findi s ~f:(fun i n -> Abslayout.Name.(n = f)))
-      *    |> fun (i, _) -> i
-      *  in
-      *  let writer = Bitstring.Writer.with_file data_fn in
-      *  let start = ref 0 in
-      *  let rec gen_abslayout r =
-      *    let open Abslayout in
-      *    let name, func =
-      *      match r with
-      *      | Scan l ->
-      *          let type_ = Abslayout.to_type l in
-      *          let len = if code_only then 0 else Abslayout.serialize writer type_ l in
-      *          let scan_start = !start in
-      *          start := !start + len ;
-      *          Logs.debug (fun m ->
-      *              m "Generating scanner for type: %s"
-      *                (Sexp.to_string_hum ([%sexp_of : Type.t] type_)) ) ;
-      *          (Fresh.name fresh "scan%d", scan type_ scan_start)
-      *      | Select (x, r) ->
-      *          let schema = Abslayout.to_schema_exn r |> field_idx_exn in
-      *          (Fresh.name fresh "select%d", select gen_abslayout abs_gen_pred schema x r)
-      *      | Filter (x, r) ->
-      *          let schema = Abslayout.to_schema_exn r |> field_idx_exn in
-      *          (Fresh.name fresh "filter%d", filter gen_abslayout abs_gen_pred schema x r)
-      *      | Join {pred; r1_name; r1; r2_name; r2} as r ->
-      *          let schema = Abslayout.to_schema_exn r |> field_idx_exn in
-      *          ( Fresh.name fresh "join%d"
-      *          , nl_join gen_abslayout abs_gen_pred schema pred r1 r2 )
-      *      | r ->
-      *          Error.create "Unsupported at runtime." r [%sexp_of : Abslayout.t]
-      *          |> Error.raise
-      *    in
-      *    add_func name func ; name
-      *  in
-      *  let entry_name = gen_abslayout r in
-      *  Bitstring.Writer.flush writer ; Bitstring.Writer.close writer ; (entry_name, !start) *)
+    let gen_abslayout ~data_fn r =
+      let open Abslayout in
+      let type_ = to_type r in
+      let writer = Bitstring.Writer.with_file data_fn in
+      let r, len = serialize writer type_ r in
+      Bitstring.Writer.flush writer ;
+      Bitstring.Writer.close writer ;
+      let rec scan r t =
+        let name = "todo" in
+        let func =
+          match (r.node, t) with
+          | _, Type.IntT m -> scan_int m
+          | _, BoolT m -> scan_bool m
+          | _, StringT m -> scan_string m
+          | _, EmptyT -> scan_empty
+          | _, NullT m -> scan_null m
+          | ATuple (rs, Cross), CrossTupleT (ts, m) -> scan_crosstuple scan rs ts m
+          | ATuple (rs, Zip), ZipTupleT (ts, m) -> scan_ziptuple scan rs ts m
+          | AList (_, _, rs), UnorderedListT (ts, m) -> scan_unordered_list scan rs ts m
+          (* | _, OrderedListT (x, m) -> scan_ordered_list ?start scan x m *)
+          | AHashIdx (_, _, rs, _), TableT (kt, vt, m) ->
+              scan_table scan rs kt vt m
+          | Select (n, x, r), FuncT ([t], _) -> scan_select scan n x r t
+          | Filter (n, x, r), FuncT ([t], _) -> scan_filter scan n x r t
+          | _ ->
+              Error.create "Unsupported at runtime." r
+                [%sexp_of : Univ_map.t Abslayout.t]
+              |> Error.raise
+        in
+        add_func name func ; name
+      in
+      (scan r type_, len)
 
     let of_primtype : Type.PrimType.t -> type_ = function
       | BoolT -> BoolT {nullable= false}
