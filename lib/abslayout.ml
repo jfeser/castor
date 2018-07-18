@@ -364,15 +364,19 @@ module No_config = struct
     print_s ([%sexp_of : (Name.t, Univ_map.t) ralgebra] (subst ctx r)) ;
     [%expect
       {|
-    (Filter r
-      (Binop (
-        Eq
-        (Int 1)
-        (Int 2)))
-      (Select r
-        ((Int 1)
-         (Int 2))
-        (Scan r))) |}]
+    ((node (
+       Filter r
+       (Binop (
+         Eq
+         (Int 1)
+         (Int 2)))
+       ((node (
+          Select r
+          ((Int 1)
+           (Int 2))
+          ((node (Scan r)) (meta ()))))
+        (meta ()))))
+     (meta ())) |}]
 
   let pred_relations p =
     let rels = ref [] in
@@ -1237,23 +1241,39 @@ module Test = struct
     [%sexp_of : (Name.t, Univ_map.t) ralgebra] part_layout |> print_s ;
     [%expect
       {|
-      (AHashIdx
-        (Dedup (
-          Select r1 ((Name ((relation (r1)) (name f) (type_ (IntT))))) (Scan r1)))
-        x0
-        (AList
-          (Filter r1
-            (Binop (
-              Eq
-              (Name ((relation (r1)) (name f) (type_ (IntT))))
-              (Name ((relation (x0)) (name f) (type_ (IntT))))))
-            (Scan r1))
-          x
-          (ATuple
-            ((AScalar (Name ((relation (x)) (name f) (type_ ()))))
-             (AScalar (Name ((relation (x)) (name g) (type_ ())))))
-            Cross))
-        ((lookup (Name ((relation (r1)) (name f) (type_ (IntT))))))) |}] ;
+      ((node (
+         AHashIdx
+         ((node (
+            Dedup (
+              (node (
+                Select r1
+                ((Name ((relation (r1)) (name f) (type_ (IntT)))))
+                ((node (Scan r1)) (meta ()))))
+              (meta ()))))
+          (meta ()))
+         x0
+         ((node (
+            AList
+            ((node (
+               Filter r1
+               (Binop (
+                 Eq
+                 (Name ((relation (r1)) (name f) (type_ (IntT))))
+                 (Name ((relation (x0)) (name f) (type_ (IntT))))))
+               ((node (Scan r1)) (meta ()))))
+             (meta ()))
+            x
+            ((node (
+               ATuple
+               (((node (AScalar (Name ((relation (x)) (name f) (type_ ())))))
+                 (meta ()))
+                ((node (AScalar (Name ((relation (x)) (name g) (type_ ())))))
+                 (meta ())))
+               Cross))
+             (meta ()))))
+          (meta ()))
+         ((lookup (Name ((relation (r1)) (name f) (type_ (IntT))))))))
+       (meta ())) |}] ;
     [%sexp_of : Type.t] (M.to_type part_layout) |> print_s ;
     [%expect
       {|
