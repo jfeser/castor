@@ -482,20 +482,18 @@ module IRGen = struct
       in
       b.body := ite :: !(b.body)
 
-    let build_foreach :
-        Type.t -> expr -> string -> (expr -> stmt_builder) -> stmt_builder =
-     fun type_ start iter_ body b ->
+    let build_foreach ?type_ start iter_ body b =
       let tup = build_fresh_var "tup" (find_func iter_).ret_type b in
       build_iter iter_ [start] b ;
-      match Type.AbsCount.kind (Type.count type_) with
-      | `Count 0 -> ()
-      | `Count 1 -> build_step tup iter_ b ; body tup b
-      | `Count x ->
+      match Option.map type_ ~f:(fun t -> Type.AbsCount.kind (Type.count t)) with
+      | Some (`Count 0) -> ()
+      | Some (`Count 1) -> build_step tup iter_ b ; body tup b
+      | Some (`Count x) ->
           build_count_loop
             Infix.(int x)
             (fun b -> build_step tup iter_ b ; body tup b)
             b
-      | `Countable | `Unknown ->
+      | None | Some `Countable | Some `Unknown ->
           build_loop
             Infix.(not (Done iter_))
             (fun b ->
@@ -628,7 +626,7 @@ module IRGen = struct
             build_yield (Tuple tup) b
         | (func, type_) :: rest ->
             let col_start = Infix.(start + col_offset) in
-            build_foreach type_ col_start func
+            build_foreach ~type_ col_start func
               (fun var b ->
                 let col_offset =
                   build_fresh_defn "offset" int_t
@@ -706,7 +704,7 @@ module IRGen = struct
         Infix.(pcount > int 0)
         (fun b ->
           let clen = len cstart t in
-          build_foreach t cstart func build_yield b ;
+          build_foreach ~type_:t cstart func build_yield b ;
           build_assign Infix.(cstart + clen) cstart b ;
           build_assign Infix.(pcount - int 1) pcount b )
         b ;
@@ -848,7 +846,7 @@ module IRGen = struct
           build_if
             ~cond:Infix.(index key 0 = lookup_expr)
             ~then_:
-              (build_foreach vt value_start value_iter (fun value b ->
+              (build_foreach ~type_:vt value_start value_iter (fun value b ->
                    build_yield value b ))
             ~else_:(fun _ -> ())
             b )
@@ -1002,9 +1000,9 @@ module IRGen = struct
       build_yield (Tuple [ct]) b ;
       build_func b
 
-    let nl_join gen gen_pred field_idx pred r1 r2 =
-      let func1 = gen r1 in
-      let func2 = gen r2 in
+    let nl_join scan pred r1 t1 r2 t2 =
+      let func1 = scan r1 t1 in
+      let func2 = scan r2 t2 in
       let ret_t1 = (find_func func1).ret_type in
       let ret_t2 = (find_func func2).ret_type in
       let ret_t, w1, w2 =
@@ -1014,6 +1012,9 @@ module IRGen = struct
             fail
               (Error.create "Expected a TupleT." (ret_t1, ret_t2)
                  [%sexp_of : type_ * type_])
+      in
+      let schema =
+        Abslayout.(Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema))
       in
       let b = create [] ret_t in
       build_foreach_no_start func1
@@ -1025,14 +1026,25 @@ module IRGen = struct
                   ( List.init w1 ~f:(fun i -> Infix.(index t1 i))
                   @ List.init w2 ~f:(fun i -> Infix.(index t2 i)) )
               in
-              build_if
-                ~cond:(gen_pred tup field_idx pred)
+              build_if ~cond:(gen_pred tup schema pred)
                 ~then_:(fun b -> build_yield tup b)
                 ~else_:(fun _ -> ())
                 b )
             b )
         b ;
       build_func b
+
+    let start_wrapper scan r t meta =
+      match Univ_map.find_exn meta Abslayout.Meta.pos with
+      | Pos start ->
+          let func = scan r t in
+          let ret_t = (find_func func).ret_type in
+          let builder = create [("no_start", int_t)] ret_t in
+          build_foreach
+            Infix.(int (Int64.to_int_exn start))
+            func build_yield builder ;
+          build_func builder
+      | Many_pos -> scan r t
 
     let gen_abslayout ~data_fn r =
       let open Abslayout in
@@ -1041,10 +1053,9 @@ module IRGen = struct
       let r, len = serialize writer type_ r in
       Bitstring.Writer.flush writer ;
       Bitstring.Writer.close writer ;
-      let rec scan r t =
-        let name = "todo" in
-        let func =
-          match (r.node, t) with
+      let name r = Abslayout.name r ^ "_" ^ Fresh.name fresh "%d" in
+      let rec gen_func r t =
+        let func = match (r.node, t) with
           | _, Type.IntT m -> scan_int m
           | _, BoolT m -> scan_bool m
           | _, StringT m -> scan_string m
@@ -1052,19 +1063,25 @@ module IRGen = struct
           | _, NullT m -> scan_null m
           | ATuple (rs, Cross), CrossTupleT (ts, m) -> scan_crosstuple scan rs ts m
           | ATuple (rs, Zip), ZipTupleT (ts, m) -> scan_ziptuple scan rs ts m
-          | AList (_, rs), UnorderedListT (ts, m) ->
-              scan_unordered_list scan rs ts m
+          | AList (_, rs), UnorderedListT (ts, m) -> scan_unordered_list scan rs ts m
           (* | _, OrderedListT (x, m) -> scan_ordered_list ?start scan x m *)
           | AHashIdx (_, rs, _), TableT (kt, vt, m) ->
-              scan_table scan rs kt vt m
+            scan_table scan rs kt vt m
           | Select (x, r), FuncT ([t], _) -> scan_select scan x r t
           | Filter (x, r), FuncT ([t], _) -> scan_filter scan x r t
+          | Join {pred; r1; r2}, FuncT ([t1; t2], _) -> nl_join scan pred r1 t1 r2 t2
           | _ ->
-              Error.create "Unsupported at runtime." r
-                [%sexp_of : Univ_map.t Abslayout.t]
-              |> Error.raise
+            Error.create "Unsupported at runtime." r
+              [%sexp_of : Univ_map.t Abslayout.t]
+            |> Error.raise
         in
-        add_func name func ; name
+      and scan r t =
+        let n = name r in
+        match r.node with
+        | As (_, r) -> scan r t
+        | _ ->
+          add_func n (gen_func r t) ;
+          n
       in
       (scan r type_, len)
 

@@ -29,11 +29,13 @@ let main ~debug ~gprof ~params ~db ~port ~code_only fn =
   end in
   let module Codegen = Codegen.Make (CConfig) () in
   let module IRGen = Implang.IRGen.Make (CConfig) () in
+  let module Abslayout = Abslayout.Make_db (CConfig) () in
   let ir_module =
     Logs.debug (fun m -> m "Loading ralgebra from %s." fn) ;
     let ralgebra =
       In_channel.with_file fn ~f:Abslayout.of_channel_exn
       |> Abslayout.resolve CConfig.conn
+      |> Abslayout.annotate_schema
     in
     Logs.debug (fun m -> m "Generating IR.") ;
     let ir_module = IRGen.irgen_abstract ~data_fn:"db.buf" ralgebra in
@@ -116,8 +118,16 @@ let main ~debug ~gprof ~params ~db ~port ~code_only fn =
   Llvm.dispose_context CConfig.ctx
 
 let () =
-  (* Set early so we get logs from command parsing code. *)
-  Logs.set_reporter (Logs.format_reporter ()) ;
+  (* Turn on some llvm error handling. *)
+  Llvm.enable_pretty_stacktrace () ;
+  Llvm.install_fatal_error_handler (fun err ->
+      let ocaml_trace = Backtrace.get () in
+      print_endline (Backtrace.to_string ocaml_trace) ;
+      print_endline "" ;
+      print_endline err ) ;
+  Logs.set_reporter
+    (* Set early so we get logs from command parsing code. *)
+    (Logs.format_reporter ()) ;
   let open Command in
   let open Let_syntax in
   let param =

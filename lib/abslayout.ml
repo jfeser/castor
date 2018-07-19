@@ -33,6 +33,22 @@ module No_config = struct
 
   let as_ a b = {node= As (a, b); meta= Univ_map.empty}
 
+  let name r =
+    match r.node with
+    | Select _ -> "select"
+    | Filter _ -> "filter"
+    | Join _ -> "join"
+    | Agg _ -> "agg"
+    | Dedup _ -> "dedup"
+    | Scan _ -> "scan"
+    | AEmpty -> "empty"
+    | AScalar _ -> "scalar"
+    | AList _ -> "list"
+    | ATuple _ -> "tuple"
+    | AHashIdx _ -> "hash_idx"
+    | AOrderedIdx _ -> "ordered_idx"
+    | As _ -> "as"
+
   module Name = struct
     module T = struct
       type t = Abslayout0.name =
@@ -560,6 +576,7 @@ module Make (Config : Config.S) () = struct
       method virtual build_Select : _
       method virtual build_Filter : _
       method virtual build_Join : _
+      method visit_As ctx _ r = self#visit_t ctx r
       method visit_AList ctx q l =
         eval ctx q
         |> Seq.map ~f:(fun ctx' -> self#visit_t (Map.merge_right ctx ctx') l)
@@ -603,7 +620,8 @@ module Make (Config : Config.S) () = struct
         | Select (exprs, r') -> self#visit_Select ctx exprs r'
         | Filter (pred, r') -> self#visit_Filter ctx pred r'
         | Join {pred; r1; r2} -> self#visit_Join ctx pred r1 r2
-        | Dedup _ | Agg _ | Scan _ | As _ ->
+        | As (n, r) -> self#visit_As ctx n r
+        | Dedup _ | Agg _ | Scan _ ->
             Error.create "Wrong context." r
               [%sexp_of : (Name.t, Univ_map.t) ralgebra]
             |> Error.raise
@@ -885,7 +903,13 @@ module Make (Config : Config.S) () = struct
             | _ -> failwith "Expected a scalar."
           in
           log_start label ; Writer.write writer bstr ; log_end ()
-        method visit_AOrderedIdx _ _ _ _ _ _ = failwith ""
+        method visit_AOrderedIdx _ _ _ _ _ = failwith ""
+        method visit_func ctx type_ rs =
+          match type_ with
+          | FuncT (ts, _) -> List.iter2_exn ts rs ~f:(self#visit_t ctx)
+          | _ ->
+              Error.create "Expected a function type." type_ [%sexp_of : Type.t]
+              |> Error.raise
         method visit_t ctx type_ {node; meta} =
           meta :=
             Univ_map.update !meta Meta.pos ~f:(function
@@ -897,7 +921,15 @@ module Make (Config : Config.S) () = struct
           | AList (r, a) -> self#visit_AList ctx type_ r a
           | ATuple (a, k) -> self#visit_ATuple ctx type_ a k
           | AHashIdx (r, a, t) -> self#visit_AHashIdx ctx type_ r a t
-          | _ -> failwith ""
+          | AOrderedIdx (r, a, t) -> self#visit_AOrderedIdx ctx type_ r a t
+          | Select (_, r) | Filter (_, r) | Agg (_, _, r) | Dedup r ->
+              self#visit_func ctx type_ [r]
+          | As (_, r) -> self#visit_t ctx type_ r
+          | Join {r1; r2; _} -> self#visit_func ctx type_ [r1; r2]
+          | Scan _ ->
+              Error.create "Cannot serialize." node
+                [%sexp_of : (Name.t, Univ_map.t ref) node]
+              |> Error.raise
       end
       
   end
