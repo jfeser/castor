@@ -946,7 +946,7 @@ module IRGen = struct
       build_return c b ;
       build_func b
 
-    let scan_filter scan _ p r t =
+    let scan_filter scan p r t =
       let func = scan r t in
       let ret_t = (find_func func).ret_type in
       let b = create [] ret_t in
@@ -961,7 +961,7 @@ module IRGen = struct
         b ;
       build_func b
 
-    let scan_select scan _ x r t =
+    let scan_select scan x r t =
       (* TODO: Remove horrible hack. *)
       let func = scan r t in
       let out_expr = ref (Tuple []) in
@@ -1035,12 +1035,12 @@ module IRGen = struct
           | _, NullT m -> scan_null m
           | ATuple (rs, Cross), CrossTupleT (ts, m) -> scan_crosstuple scan rs ts m
           | ATuple (rs, Zip), ZipTupleT (ts, m) -> scan_ziptuple scan rs ts m
-          | AList (_, _, rs), UnorderedListT (ts, m) -> scan_unordered_list scan rs ts m
+          | AList (_, rs), UnorderedListT (ts, m) -> scan_unordered_list scan rs ts m
           (* | _, OrderedListT (x, m) -> scan_ordered_list ?start scan x m *)
-          | AHashIdx (_, _, rs, _), TableT (kt, vt, m) ->
+          | AHashIdx (_, rs, _), TableT (kt, vt, m) ->
               scan_table scan rs kt vt m
-          | Select (n, x, r), FuncT ([t], _) -> scan_select scan n x r t
-          | Filter (n, x, r), FuncT ([t], _) -> scan_filter scan n x r t
+          | Select (x, r), FuncT ([t], _) -> scan_select scan x r t
+          | Filter (x, r), FuncT ([t], _) -> scan_filter scan x r t
           | _ ->
               Error.create "Unsupported at runtime." r
                 [%sexp_of : Univ_map.t Abslayout.t]

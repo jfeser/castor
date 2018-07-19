@@ -10,11 +10,11 @@ open Layout
 module No_config = struct
   include Abslayout0
 
-  let select a b c = {node= Select (a, b, c); meta= Univ_map.empty}
+  let select a b = {node= Select (a, b); meta= Univ_map.empty}
 
-  let filter a b c = {node= Filter (a, b, c); meta= Univ_map.empty}
+  let filter a b = {node= Filter (a, b); meta= Univ_map.empty}
 
-  let agg a b c d = {node= Agg (a, b, c, d); meta= Univ_map.empty}
+  let agg a b c = {node= Agg (a, b, c); meta= Univ_map.empty}
 
   let dedup a = {node= Dedup a; meta= Univ_map.empty}
 
@@ -24,13 +24,15 @@ module No_config = struct
 
   let scalar a = {node= AScalar a; meta= Univ_map.empty}
 
-  let list a b c = {node= AList (a, b, c); meta= Univ_map.empty}
+  let list a b = {node= AList (a, b); meta= Univ_map.empty}
 
   let tuple a b = {node= ATuple (a, b); meta= Univ_map.empty}
 
-  let hash_idx a b c d = {node= AHashIdx (a, b, c, d); meta= Univ_map.empty}
+  let hash_idx a b c = {node= AHashIdx (a, b, c); meta= Univ_map.empty}
 
-  let ordered_idx a b c d = {node= AOrderedIdx (a, b, c, d); meta= Univ_map.empty}
+  let ordered_idx a b c = {node= AOrderedIdx (a, b, c); meta= Univ_map.empty}
+
+  let as_ a b = {node= As (a, b); meta= Univ_map.empty}
 
   module Name = struct
     module T = struct
@@ -43,6 +45,8 @@ module No_config = struct
 
     include T
     include Comparable.Make (T)
+
+    let create ?relation ?type_ name = {relation; name; type_}
 
     let type_exn {type_; _} =
       match type_ with Some t -> t | None -> failwith "missing type"
@@ -92,6 +96,15 @@ module No_config = struct
       (meta_mapper (fun m -> Univ_map.change m key ~f))#visit_ralgebra () r
 
     let init ~init r = map ~f:(fun _ -> init) r
+
+    let find_exn ralgebra key =
+      match Univ_map.find ralgebra.meta key with
+      | Some x -> x
+      | None ->
+          Error.create "Missing metadata."
+            (Univ_map.Key.name key, ralgebra)
+            [%sexp_of : string * Univ_map.t t]
+          |> Error.raise
   end
 
   module Ctx = struct
@@ -200,36 +213,31 @@ module No_config = struct
     let rec resolve outer_ctx {node; meta} =
       let node', ctx' =
         match node with
-        | Select (rel, preds, r) ->
+        | Select (preds, r) ->
             let r, preds =
               let r, inner_ctx = resolve outer_ctx r in
-              let inner_ctx = rename rel inner_ctx in
               let ctx = Set.union outer_ctx inner_ctx in
               (r, List.map preds ~f:(resolve_pred ctx))
             in
-            (Select (rel, preds, r), preds_to_names preds)
-        | Filter (rel, pred, r) ->
+            (Select (preds, r), preds_to_names preds)
+        | Filter (pred, r) ->
             let r, inner_ctx = resolve outer_ctx r in
-            let inner_ctx = rename rel inner_ctx in
             let ctx = Set.union outer_ctx inner_ctx in
             let pred = resolve_pred ctx pred in
-            (Filter (rel, pred, r), inner_ctx)
-        | Join ({pred; r1_name; r1; r2_name; r2} as join) ->
+            (Filter (pred, r), inner_ctx)
+        | Join {pred; r1; r2} ->
             let r1, inner_ctx1 = resolve outer_ctx r1 in
             let r2, inner_ctx2 = resolve outer_ctx r2 in
-            let inner_ctx1 = rename r1_name inner_ctx1 in
-            let inner_ctx2 = rename r2_name inner_ctx2 in
             let ctx = Set.union_list (module Name) [inner_ctx1; inner_ctx2; outer_ctx] in
             let pred = resolve_pred ctx pred in
-            (Join {join with pred; r1; r2}, Set.union inner_ctx1 inner_ctx2)
+            (Join {pred; r1; r2}, Set.union inner_ctx1 inner_ctx2)
         | Scan l -> (Scan l, resolve_relation l)
-        | Agg (rel, aggs, key, r) ->
+        | Agg (aggs, key, r) ->
             let r, inner_ctx = resolve outer_ctx r in
-            let inner_ctx = rename rel inner_ctx in
             let ctx = Set.union outer_ctx inner_ctx in
             let aggs = List.map ~f:(resolve_agg ctx) aggs in
             let key = List.map key ~f:(ralgebra_resolver#visit_'f ctx) in
-            (Agg (rel, aggs, key, r), aggs_to_names aggs)
+            (Agg (aggs, key, r), aggs_to_names aggs)
         | Dedup r ->
             let r, inner_ctx = resolve outer_ctx r in
             (Dedup r, inner_ctx)
@@ -242,19 +250,17 @@ module No_config = struct
               | _ -> Set.empty (module Name)
             in
             (AScalar p, ctx)
-        | AList (r, n, l) ->
+        | AList (r, l) ->
             let r, inner_ctx = resolve outer_ctx r in
-            let inner_ctx = rename n inner_ctx in
             let ctx = Set.union inner_ctx outer_ctx in
             let l, ctx = resolve ctx l in
-            (AList (r, n, l), ctx)
+            (AList (r, l), ctx)
         | ATuple (ls, t) ->
             let ls, ctxs = List.map ls ~f:(resolve outer_ctx) |> List.unzip in
             let ctx = Set.union_list (module Name) ctxs in
             (ATuple (ls, t), ctx)
-        | AHashIdx (r, n, l, m) ->
+        | AHashIdx (r, l, m) ->
             let r, inner_ctx = resolve outer_ctx r in
-            let inner_ctx = rename n inner_ctx in
             let ctx = Set.union inner_ctx outer_ctx in
             let l, ctx = resolve ctx l in
             let m =
@@ -266,10 +272,9 @@ module No_config = struct
               end)
                 #visit_hash_idx () m
             in
-            (AHashIdx (r, n, l, m), ctx)
-        | AOrderedIdx (r, n, l, m) ->
+            (AHashIdx (r, l, m), ctx)
+        | AOrderedIdx (r, l, m) ->
             let r, inner_ctx = resolve outer_ctx r in
-            let inner_ctx = rename n inner_ctx in
             let ctx = Set.union outer_ctx inner_ctx in
             let l, ctx = resolve ctx l in
             let m =
@@ -281,7 +286,11 @@ module No_config = struct
               end)
                 #visit_ordered_idx () m
             in
-            (AOrderedIdx (r, n, l, m), ctx)
+            (AOrderedIdx (r, l, m), ctx)
+        | As (n, r) ->
+            let r, ctx = resolve outer_ctx r in
+            let ctx = rename n ctx in
+            (As (n, r), ctx)
       in
       ({node= node'; meta}, ctx')
     in
@@ -366,18 +375,18 @@ module No_config = struct
     let f = n "r.f" in
     let g = n "r.g" in
     let ctx = Map.of_alist_exn (module Name) [(f, `Int 1); (g, `Int 2)] in
-    let r = "Filter(r -> r.f = r.g, Select(r -> [r.f, r.g], r))" |> of_string_exn in
+    let r = "Filter(r.f = r.g, Select([r.f, r.g], r))" |> of_string_exn in
     print_s ([%sexp_of : (Name.t, Univ_map.t) ralgebra] (subst ctx r)) ;
     [%expect
       {|
     ((node (
-       Filter r
+       Filter
        (Binop (
          Eq
          (Int 1)
          (Int 2)))
        ((node (
-          Select r
+          Select
           ((Int 1)
            (Int 2))
           ((node (Scan r)) (meta ()))))
@@ -428,20 +437,49 @@ module No_config = struct
         | Or -> String.concat ss ~sep:" or "
         | _ -> failwith "Unsupported op."
 
+  (** Return the set of relations which have fields in the tuple produced by
+     this expression. *)
+  let relation r =
+    let reducer =
+      object (self: 'self)
+        inherit [_] reduce
+        method zero = Set.empty (module String)
+        method plus = Set.union
+        method! visit_As _ n _ = Set.singleton (module String) n
+        method! visit_Scan _ n = Set.singleton (module String) n
+        method visit_'m _ _ = self#zero
+        method visit_'f _ _ = self#zero
+      end
+    in
+    reducer#visit_ralgebra () r
+
   let ralgebra_to_sql r =
     let rec f {node; _} =
+      let relation_name r =
+        let rs = relation r in
+        if Set.length rs > 1 then
+          Error.create
+            "More than one relation name. Use AS to give this expression a name." r
+            [%sexp_of : Univ_map.t t]
+          |> Error.raise
+        else Set.choose_exn rs
+      in
       match node with
-      | Select (rel, [], r) -> sprintf "select top 0 from (%s) as %s" (f r) rel
-      | Select (rel, fs, r) ->
+      | Select ([], r) -> sprintf "select top 0 from (%s) as %s" (f r) (relation_name r)
+      | Select (fs, r) ->
           let fields = List.map fs ~f:pred_to_sql |> String.concat ~sep:"," in
-          sprintf "select %s from (%s) as %s" fields (f r) rel
+          sprintf "select %s from (%s) as %s" fields (f r) (relation_name r)
       | Scan r -> sprintf "select * from %s" r
-      | Filter (rel, pred, r) ->
-          sprintf "select * from (%s) as %s where %s" (f r) rel (pred_to_sql pred)
-      | Join {pred; r1_name; r1; r2_name; r2} ->
+      | Filter (pred, r) ->
+          sprintf "select * from (%s) as %s where %s" (f r) (relation_name r)
+            (pred_to_sql pred)
+      | Join {pred; r1; r2} ->
+          let r1_name = relation_name r1 in
+          let r2_name = relation_name r2 in
           sprintf "select * from (%s) as %s, (%s) as %s where %s" (f r1) r1_name (f r2)
             r2_name (pred_to_sql pred)
-      | Agg (rel, aggs, key, r) ->
+      | Agg (aggs, key, r) ->
+          let rel = relation_name r in
           let aggs =
             List.map aggs ~f:(function
               | Count -> "count(*)"
@@ -458,22 +496,23 @@ module No_config = struct
           in
           sprintf "select %s from (%s) as %s group by (%s)" aggs (f r) rel key
       | Dedup r -> sprintf "select distinct * from (%s) as t" (f r)
+      | As (_, r) -> f r
       | _ -> Error.of_string "Only relational algebra constructs allowed." |> Error.raise
     in
     f r
 
   let%expect_test "project-empty" =
-    let r = of_string_exn "Select(r -> [], r)" in
+    let r = of_string_exn "Select([], r)" in
     print_endline (ralgebra_to_sql r) ;
     [%expect {| select top 0 from (select * from r) as r |}]
 
   let%expect_test "project" =
-    let r = of_string_exn "Select(r -> [r.r], r)" in
+    let r = of_string_exn "Select([r.r], r)" in
     print_endline (ralgebra_to_sql r) ;
     [%expect {| select r."r" from (select * from r) as r |}]
 
   let%expect_test "filter" =
-    let r = of_string_exn "Filter(r -> r.f = r.g, r)" in
+    let r = of_string_exn "Filter(r.f = r.g, r)" in
     print_endline (ralgebra_to_sql r) ;
     [%expect {| select * from (select * from r) as r where (r."f") = (r."g") |}]
 
@@ -484,14 +523,12 @@ module No_config = struct
       {| select * from (select * from r) as r, (select * from s) as s where (r."f") = (s."g") |}]
 
   let%expect_test "agg" =
-    let r = of_string_exn "Agg(r -> [Sum(r.g)], [r.f, r.g], r)" in
+    let r = of_string_exn "Agg([Sum(r.g)], [r.f, r.g], r)" in
     print_endline (ralgebra_to_sql r) ;
     [%expect {| select sum(r."g") from (select * from r) as r group by (r."f", r."g") |}]
 
   let%expect_test "agg" =
-    let r =
-      of_string_exn "Filter(ship_mode -> ship_mode.sm_carrier = \"GERMA\", ship_mode)"
-    in
+    let r = of_string_exn "Filter(ship_mode.sm_carrier = \"GERMA\", ship_mode)" in
     print_endline (ralgebra_to_sql r) ;
     [%expect
       {| select * from (select * from ship_mode) as ship_mode where (ship_mode."sm_carrier") = ('GERMA') |}]
@@ -513,7 +550,7 @@ module Config = struct
   module type S = sig
     include S_shared
 
-    val eval : Ctx.t -> (Name.t, 'a) ralgebra -> primvalue Map.M(String).t Seq.t
+    val eval : Ctx.t -> (Name.t, Univ_map.t) ralgebra -> Ctx.t Seq.t
   end
 end
 
@@ -531,8 +568,8 @@ module Make (Config : Config.S) () = struct
           Error.create "Unexpected number of relations." rs [%sexp_of : string list]
           |> Error.raise
     in
-    let domain = dedup (select rel [p] (scan rel)) in
     let name = Fresh.name fresh "x%d" in
+    let domain = as_ name (dedup (select [p] (scan rel))) in
     let pred =
       let subst =
         object
@@ -553,7 +590,7 @@ module Make (Config : Config.S) () = struct
           inherit [_] endo
           method! visit_Scan () r rel' =
             if String.(rel = rel') then
-              Filter (rel, Binop (Eq, p, pred), {node= r; meta= Univ_map.empty})
+              Filter (Binop (Eq, p, pred), {node= r; meta= Univ_map.empty})
             else r
           method visit_'f _ x = x
           method visit_'m _ x = x
@@ -561,7 +598,7 @@ module Make (Config : Config.S) () = struct
       in
       subst#visit_ralgebra () l
     in
-    hash_idx domain name layout {lookup}
+    hash_idx domain layout {lookup}
 
   class virtual ['self] material_fold =
     object (self: 'self)
@@ -574,32 +611,22 @@ module Make (Config : Config.S) () = struct
       method virtual build_Select : _
       method virtual build_Filter : _
       method virtual build_Join : _
-      method visit_AList ctx q n l =
-        let ls =
-          eval ctx q
-          |> Seq.map ~f:(fun t ->
-                 let ctx =
-                   Map.fold t ~init:ctx ~f:(fun ~key ~data ctx ->
-                       let field = {relation= Some n; name= key; type_= None} in
-                       Map.set ctx ~key:field ~data )
-                 in
-                 self#visit_t ctx l )
-        in
-        self#build_AList ls
+      method visit_AList ctx q l =
+        eval ctx q
+        |> Seq.map ~f:(fun ctx' -> self#visit_t (Map.merge_right ctx ctx') l)
+        |> self#build_AList
       method visit_ATuple ctx ls kind =
         self#build_ATuple (List.map ~f:(self#visit_t ctx) ls) kind
-      method visit_AHashIdx ctx q n l (h: Name.t hash_idx) =
+      method visit_AHashIdx ctx q l (h: Name.t hash_idx) =
         let kv =
           eval ctx q
-          |> Seq.map ~f:(fun k ->
-                 let name, key =
-                   match Map.to_alist k with
+          |> Seq.map ~f:(fun key_ctx ->
+                 let _, key =
+                   match Map.to_alist key_ctx with
                    | [(name, key)] -> (name, key)
                    | _ -> failwith "Unexpected key tuple shape."
                  in
-                 let field = {relation= Some n; name; type_= None} in
-                 let ctx = Map.set ctx ~key:field ~data:key in
-                 let value = self#visit_t ctx l in
+                 let value = self#visit_t (Map.merge_right ctx key_ctx) l in
                  (Value.of_primvalue key, value) )
         in
         self#build_AHashIdx kv h
@@ -610,25 +637,23 @@ module Make (Config : Config.S) () = struct
             {value= eval_pred ctx e; rel= Relation.dummy; field= Field.dummy}
         in
         self#build_AScalar l
-      method visit_AOrderedIdx _ _ _ _ _ = failwith "not implemented"
-      method visit_Select ctx _ exprs r' = self#build_Select exprs (self#visit_t ctx r')
-      method visit_Filter ctx _ _ r' = self#build_Filter (self#visit_t ctx r')
-      method visit_Join ctx pred r1_name r1 r2_name r2 =
-        self#build_Join ctx pred r1_name (self#visit_t ctx r1) r2_name
-          (self#visit_t ctx r2)
+      method visit_AOrderedIdx _ _ _ _ = failwith "not implemented"
+      method visit_Select ctx exprs r' = self#build_Select exprs (self#visit_t ctx r')
+      method visit_Filter ctx _ r' = self#build_Filter (self#visit_t ctx r')
+      method visit_Join ctx pred r1 r2 =
+        self#build_Join ctx pred (self#visit_t ctx r1) (self#visit_t ctx r2)
       method visit_t ctx r =
         match r.node with
         | AEmpty -> self#visit_AEmpty ctx
         | AScalar e -> self#visit_AScalar ctx e
-        | AList (r, n, a) -> self#visit_AList ctx r n a
+        | AList (r, a) -> self#visit_AList ctx r a
         | ATuple (a, k) -> self#visit_ATuple ctx a k
-        | AHashIdx (r, n, a, t) -> self#visit_AHashIdx ctx r n a t
-        | AOrderedIdx (r, n, a, t) -> self#visit_AOrderedIdx ctx r n a t
-        | Select (n, exprs, r') -> self#visit_Select ctx n exprs r'
-        | Filter (n, pred, r') -> self#visit_Filter ctx n pred r'
-        | Join {pred; r1_name; r1; r2_name; r2} ->
-            self#visit_Join ctx pred r1_name r1 r2_name r2
-        | Dedup _ | Agg _ | Scan _ ->
+        | AHashIdx (r, a, t) -> self#visit_AHashIdx ctx r a t
+        | AOrderedIdx (r, a, t) -> self#visit_AOrderedIdx ctx r a t
+        | Select (exprs, r') -> self#visit_Select ctx exprs r'
+        | Filter (pred, r') -> self#visit_Filter ctx pred r'
+        | Join {pred; r1; r2} -> self#visit_Join ctx pred r1 r2
+        | Dedup _ | Agg _ | Scan _ | As _ ->
             Error.create "Wrong context." r [%sexp_of : (Name.t, Univ_map.t) ralgebra]
             |> Error.raise
     end
@@ -651,7 +676,7 @@ module Make (Config : Config.S) () = struct
         method build_AOrderedIdx _ _ = failwith ""
         method build_Select _ l = l
         method build_Filter l = l
-        method build_Join _ _ _ _ _ _ = failwith ""
+        method build_Join _ _ _ _ = failwith ""
       end
     in
     f#visit_t ctx l
@@ -674,7 +699,7 @@ module Make (Config : Config.S) () = struct
         inherit [_] material_fold
         method build_Select exprs t = FuncT ([t], List.length exprs)
         method build_Filter t = FuncT ([t], width t)
-        method build_Join _ _ _ t1 _ t2 = FuncT ([t1; t2], width t1 + width t2)
+        method build_Join _ _ t1 t2 = FuncT ([t1; t2], width t1 + width t2)
         method build_AEmpty = EmptyT
         method build_AScalar = type_of_scalar_layout
         method build_AList ls =
@@ -744,7 +769,7 @@ module Make (Config : Config.S) () = struct
           | [] -> Logs.warn (fun m -> m "Unexpected log_end.")
       in
       object (self: 'self)
-        method visit_AList ctx type_ q n elem_layout =
+        method visit_AList ctx type_ q elem_layout =
           match type_ with
           | UnorderedListT (elem_t, _) ->
               (* Reserve space for list header. *)
@@ -758,15 +783,11 @@ module Make (Config : Config.S) () = struct
               (* Serialize list body. *)
               log_start "List body" ;
               let count = ref 0 in
+              let q = Meta.to_immutable q in
               eval ctx q
               |> Seq.iter ~f:(fun t ->
-                     let ctx =
-                       Map.fold t ~init:ctx ~f:(fun ~key ~data ctx ->
-                           let field = {relation= Some n; name= key; type_= None} in
-                           Map.set ctx ~key:field ~data )
-                     in
                      Caml.incr count ;
-                     self#visit_t ctx elem_t elem_layout ) ;
+                     self#visit_t (Map.merge_right ctx t) elem_t elem_layout ) ;
               let end_pos = Writer.pos writer in
               log_end () ;
               (* Serialize list header. *)
@@ -799,10 +820,11 @@ module Make (Config : Config.S) () = struct
               Writer.write writer (of_int ~width:64 len) ;
               Writer.seek writer end_pos
           | t -> Error.(create "Unexpected layout type." t [%sexp_of : Type.t] |> raise)
-        method visit_AHashIdx ctx type_ q n l _ =
+        method visit_AHashIdx ctx type_ q l _ =
           match type_ with
           | TableT (key_t, value_t, _) ->
-              let key_name = ref "" in
+              let key_name = ref (Name.of_string_exn "fixme") in
+              let q = Meta.to_immutable q in
               let keys =
                 eval ctx q
                 |> Seq.map ~f:(fun k ->
@@ -867,8 +889,7 @@ module Make (Config : Config.S) () = struct
               let hash_table = Array.create ~len:table_size 0x0 in
               log_start "Table values" ;
               List.iter keys ~f:(fun (k, b, _, h) ->
-                  let field = {relation= Some n; name= !key_name; type_= None} in
-                  let ctx = Map.set ctx ~key:field ~data:k in
+                  let ctx = Map.set ctx ~key:!key_name ~data:k in
                   let value_pos = Writer.pos writer in
                   Writer.write writer b ;
                   self#visit_t ctx value_t l ;
@@ -908,10 +929,10 @@ module Make (Config : Config.S) () = struct
           match node with
           | AEmpty -> self#visit_AEmpty ctx type_
           | AScalar e -> self#visit_AScalar ctx type_ e
-          | AList (r, n, a) -> self#visit_AList ctx type_ r n a
+          | AList (r, a) -> self#visit_AList ctx type_ r a
           | ATuple (a, k) -> self#visit_ATuple ctx type_ a k
-          | AHashIdx (r, n, a, t) -> self#visit_AHashIdx ctx type_ r n a t
-          | AOrderedIdx (_, _, _, _) | _ -> failwith ""
+          | AHashIdx (r, a, t) -> self#visit_AHashIdx ctx type_ r a t
+          | _ -> failwith ""
       end
       
   end
@@ -956,76 +977,54 @@ module Make_db (Config_db : Config.S_db) () = struct
 
     let eval ctx query =
       let sql = ralgebra_to_sql (subst ctx query) in
+      let schema = Meta.(find_exn query schema) in
       Db.exec_cursor Config_db.conn sql
+      |> Seq.map ~f:(fun t ->
+             List.map schema ~f:(fun n ->
+                 match Map.find t n.name with
+                 | Some v -> (n, v)
+                 | None ->
+                     Error.create "Mismatched tuple." (t, schema)
+                       [%sexp_of : Db.primvalue Map.M(String).t * Name.t list]
+                     |> Error.raise )
+             |> Map.of_alist_exn (module Name) )
 
     let layout_map = Config_db.layout_map
   end
 
   include Make (Config) ()
 
-  let rec annotate_schema r =
-    let node', schema =
-      match r.node with
-      | Select (n, x, r) ->
-          let r' = annotate_schema r in
-          let schema = List.map x ~f:pred_to_schema_exn in
-          (Select (n, x, r'), schema)
-      | Filter (n, x, r) ->
-          let r' = annotate_schema r in
-          let schema = Univ_map.find_exn r'.meta Meta.schema in
-          (Filter (n, x, r'), schema)
-      | Join ({r1_name; r1; r2_name; r2; _} as j) ->
-          let r1' = annotate_schema r1 in
-          let r2' = annotate_schema r2 in
-          let s1 = Univ_map.find_exn r1'.meta Meta.schema in
-          let s2 = Univ_map.find_exn r2'.meta Meta.schema in
+  (** Add a schema field to each metadata node. Variables must first be
+     annotated with type information. *)
+  let annotate_schema =
+    let mapper =
+      object (self: 'self)
+        inherit [_] map
+        method visit_'f _ x = x
+        method visit_'m _ x = x
+        method! visit_ralgebra () {node; meta} =
+          let node' = self#visit_node () node in
           let schema =
-            List.map s1 ~f:(fun n -> {n with relation= Some r1_name})
-            @ List.map s2 ~f:(fun n -> {n with relation= Some r2_name})
+            match node' with
+            | Select (x, _) -> List.map x ~f:pred_to_schema_exn
+            | Filter (_, r) | Dedup r | AList (_, r) -> Meta.(find_exn r schema)
+            | Join {r1; r2; _} | AOrderedIdx (r1, r2, _) | AHashIdx (r1, r2, _) ->
+                Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema)
+            | Agg (_, _, _) -> failwith ""
+            | AEmpty -> []
+            | AScalar e -> [pred_to_schema_exn e]
+            | ATuple (rs, _) -> List.concat_map ~f:(fun r -> Meta.(find_exn r schema)) rs
+            | As (n, r) ->
+                Meta.(find_exn r schema)
+                |> List.map ~f:(fun x -> {x with relation= Some n})
+            | Scan table ->
+                (Db.Relation.from_db Config.conn table).fields
+                |> List.map ~f:(fun f -> Name.of_field ~rel:table f)
           in
-          (Join {j with r1= r1'; r2= r2'}, schema)
-      | Dedup r as x ->
-          let r' = annotate_schema r in
-          (x, Univ_map.find_exn r'.meta Meta.schema)
-      | Scan table as x ->
-          let schema =
-            (Db.Relation.from_db Config.conn table).fields
-            |> List.map ~f:(fun f -> Name.of_field ~rel:table f)
-          in
-          (x, schema)
-      | Agg (_, _, _, _) -> failwith ""
-      | AEmpty as x -> (x, [])
-      | AScalar e as x ->
-          let schema = [pred_to_schema_exn e] in
-          (x, schema)
-      | AList (n, x, r) ->
-          let r' = annotate_schema r in
-          let schema = Univ_map.find_exn r'.meta Meta.schema in
-          (AList (n, x, r'), schema)
-      | ATuple (rs, t) ->
-          let rs' = List.map ~f:annotate_schema rs in
-          let schema =
-            List.concat_map ~f:(fun r' -> Univ_map.find_exn r'.meta Meta.schema) rs'
-          in
-          (ATuple (rs', t), schema)
-      | AHashIdx (kr, n, vr, x) ->
-          let kr' = annotate_schema kr in
-          let vr' = annotate_schema vr in
-          let schema =
-            Univ_map.find_exn kr'.meta Meta.schema
-            @ Univ_map.find_exn vr'.meta Meta.schema
-          in
-          (AHashIdx (kr', n, vr', x), schema)
-      | AOrderedIdx (kr, n, vr, x) ->
-          let kr' = annotate_schema kr in
-          let vr' = annotate_schema vr in
-          let schema =
-            Univ_map.find_exn kr'.meta Meta.schema
-            @ Univ_map.find_exn vr'.meta Meta.schema
-          in
-          (AOrderedIdx (kr', n, vr', x), schema)
+          {node= node'; meta= Univ_map.set meta Meta.schema schema}
+      end
     in
-    {node= node'; meta= Univ_map.set r.meta Meta.schema schema}
+    mapper#visit_ralgebra ()
 end
 
 module Test = struct
@@ -1033,8 +1032,8 @@ module Test = struct
     let conn = new Postgresql.connection ~dbname:"tpcds1" () in
     let layout =
       of_string_exn
-        "AList(Filter(ship_mode -> ship_mode.sm_carrier = \"GERMA\", ship_mode), t -> \
-         AScalar(t.sm_carrier))"
+        "AList(Filter(ship_mode.sm_carrier = \"GERMA\", ship_mode), \
+         AScalar(ship_mode.sm_carrier))"
     in
     let module M =
       Make_db (struct
@@ -1043,9 +1042,44 @@ module Test = struct
           let layout_map = false
         end)
         () in
+    let layout = resolve conn layout in
+    let layout = M.annotate_schema layout in
+    layout |> [%sexp_of : Univ_map.t t] |> print_s ;
     M.materialize layout |> [%sexp_of : Layout.t] |> print_s ;
     [%expect
       {|
+    ((node (
+       AList
+       ((node (
+          Filter
+          (Binop (
+            Eq
+            (Name ((relation (ship_mode)) (name sm_carrier) (type_ (StringT))))
+            (String GERMA)))
+          ((node (Scan ship_mode))
+           (meta ((
+             schema (
+               ((relation (ship_mode)) (name sm_ship_mode_sk) (type_ (IntT)))
+               ((relation (ship_mode)) (name sm_ship_mode_id) (type_ (StringT)))
+               ((relation (ship_mode)) (name sm_type)         (type_ (StringT)))
+               ((relation (ship_mode)) (name sm_code)         (type_ (StringT)))
+               ((relation (ship_mode)) (name sm_carrier)      (type_ (StringT)))
+               ((relation (ship_mode)) (name sm_contract)     (type_ (StringT))))))))))
+        (meta ((
+          schema (
+            ((relation (ship_mode)) (name sm_ship_mode_sk) (type_ (IntT)))
+            ((relation (ship_mode)) (name sm_ship_mode_id) (type_ (StringT)))
+            ((relation (ship_mode)) (name sm_type)         (type_ (StringT)))
+            ((relation (ship_mode)) (name sm_code)         (type_ (StringT)))
+            ((relation (ship_mode)) (name sm_carrier)      (type_ (StringT)))
+            ((relation (ship_mode)) (name sm_contract)     (type_ (StringT))))))))
+       ((node (
+          AScalar (
+            Name ((relation (ship_mode)) (name sm_carrier) (type_ (StringT))))))
+        (meta ((
+          schema (((relation (ship_mode)) (name sm_carrier) (type_ (StringT))))))))))
+     (meta ((
+       schema (((relation (ship_mode)) (name sm_carrier) (type_ (StringT))))))))
     (UnorderedList ((
       String "GERMA               " (
         (rel "")
@@ -1057,9 +1091,9 @@ module Test = struct
     let conn = new Postgresql.connection ~dbname:"tpcds1" () in
     let layout =
       of_string_exn
-        "AHashIdx(Dedup(Select(ship_mode -> [ship_mode.sm_type], Filter(ship_mode -> \
-         ship_mode.sm_type = \"LIBRARY\", ship_mode))), t -> AList(Filter(ship_mode -> \
-         t.sm_type = ship_mode.sm_type, ship_mode), t -> AScalar(t.sm_code)), null)"
+        "AHashIdx(Dedup(Select([ship_mode.sm_type], Filter(ship_mode.sm_type = \
+         \"LIBRARY\", ship_mode))) as t, AList(Filter(t.sm_type = ship_mode.sm_type, \
+         ship_mode) as t, AScalar(t.sm_code)), null)"
     in
     let module M =
       Make_db (struct
@@ -1068,9 +1102,96 @@ module Test = struct
           let layout_map = false
         end)
         () in
+    let layout = resolve conn layout in
+    let layout = M.annotate_schema layout in
+    layout |> [%sexp_of : Univ_map.t t] |> print_s ;
     M.materialize layout |> [%sexp_of : Layout.t] |> print_s ;
     [%expect
       {|
+    ((node (
+       AHashIdx
+       ((node (
+          As t (
+            (node (
+              Dedup (
+                (node (
+                  Select
+                  ((
+                    Name ((relation (ship_mode)) (name sm_type) (type_ (StringT)))))
+                  ((node (
+                     Filter
+                     (Binop (
+                       Eq
+                       (Name (
+                         (relation (ship_mode)) (name sm_type) (type_ (StringT))))
+                       (String LIBRARY)))
+                     ((node (Scan ship_mode))
+                      (meta ((
+                        schema (
+                          ((relation (ship_mode)) (name sm_ship_mode_sk) (type_ (IntT)))
+                          ((relation (ship_mode)) (name sm_ship_mode_id) (type_ (StringT)))
+                          ((relation (ship_mode)) (name sm_type)         (type_ (StringT)))
+                          ((relation (ship_mode)) (name sm_code)         (type_ (StringT)))
+                          ((relation (ship_mode)) (name sm_carrier)      (type_ (StringT)))
+                          ((relation (ship_mode)) (name sm_contract)     (type_ (StringT))))))))))
+                   (meta ((
+                     schema (
+                       ((relation (ship_mode)) (name sm_ship_mode_sk) (type_ (IntT)))
+                       ((relation (ship_mode)) (name sm_ship_mode_id) (type_ (StringT)))
+                       ((relation (ship_mode)) (name sm_type)         (type_ (StringT)))
+                       ((relation (ship_mode)) (name sm_code)         (type_ (StringT)))
+                       ((relation (ship_mode)) (name sm_carrier)      (type_ (StringT)))
+                       ((relation (ship_mode)) (name sm_contract)     (type_ (StringT))))))))))
+                (meta ((
+                  schema ((
+                    (relation (ship_mode)) (name sm_type) (type_ (StringT))))))))))
+            (meta ((
+              schema (((relation (ship_mode)) (name sm_type) (type_ (StringT))))))))))
+        (meta ((schema (((relation (t)) (name sm_type) (type_ (StringT))))))))
+       ((node (
+          AList
+          ((node (
+             As t (
+               (node (
+                 Filter
+                 (Binop (
+                   Eq
+                   (Name ((relation (t)) (name sm_type) (type_ (StringT))))
+                   (Name ((relation (ship_mode)) (name sm_type) (type_ (StringT))))))
+                 ((node (Scan ship_mode))
+                  (meta ((
+                    schema (
+                      ((relation (ship_mode)) (name sm_ship_mode_sk) (type_ (IntT)))
+                      ((relation (ship_mode)) (name sm_ship_mode_id) (type_ (StringT)))
+                      ((relation (ship_mode)) (name sm_type)         (type_ (StringT)))
+                      ((relation (ship_mode)) (name sm_code)         (type_ (StringT)))
+                      ((relation (ship_mode)) (name sm_carrier)      (type_ (StringT)))
+                      ((relation (ship_mode)) (name sm_contract)     (type_ (StringT))))))))))
+               (meta ((
+                 schema (
+                   ((relation (ship_mode)) (name sm_ship_mode_sk) (type_ (IntT)))
+                   ((relation (ship_mode)) (name sm_ship_mode_id) (type_ (StringT)))
+                   ((relation (ship_mode)) (name sm_type)         (type_ (StringT)))
+                   ((relation (ship_mode)) (name sm_code)         (type_ (StringT)))
+                   ((relation (ship_mode)) (name sm_carrier)      (type_ (StringT)))
+                   ((relation (ship_mode)) (name sm_contract)     (type_ (StringT))))))))))
+           (meta ((
+             schema (
+               ((relation (t)) (name sm_ship_mode_sk) (type_ (IntT)))
+               ((relation (t)) (name sm_ship_mode_id) (type_ (StringT)))
+               ((relation (t)) (name sm_type)         (type_ (StringT)))
+               ((relation (t)) (name sm_code)         (type_ (StringT)))
+               ((relation (t)) (name sm_carrier)      (type_ (StringT)))
+               ((relation (t)) (name sm_contract)     (type_ (StringT))))))))
+          ((node (
+             AScalar (Name ((relation (t)) (name sm_code) (type_ (StringT))))))
+           (meta ((schema (((relation (t)) (name sm_code) (type_ (StringT))))))))))
+        (meta ((schema (((relation (t)) (name sm_code) (type_ (StringT))))))))
+       ((lookup Null))))
+     (meta ((
+       schema (
+         ((relation (t)) (name sm_type) (type_ (StringT)))
+         ((relation (t)) (name sm_code) (type_ (StringT))))))))
     (Table
       ((
         ((rel "")
@@ -1167,7 +1288,7 @@ module Test = struct
                 [%sexp_of : Ralgebra.op * primvalue list]
               |> Error.raise
 
-    let eval_join ctx p _ _ r1 r2 =
+    let eval_join ctx p r1 r2 =
       Seq.concat_map r1 ~f:(fun t1 ->
           Seq.filter r2 ~f:(fun t2 ->
               let ctx =
@@ -1197,15 +1318,19 @@ module Test = struct
               let v = eval_pred ctx e |> Value.of_primvalue in
               match e with Name n -> {v with field= Field.of_name n.name} | _ -> v ) )
 
+    let eval_as n seq =
+      Seq.map seq ~f:(fun t ->
+          List.map t ~f:(fun v -> Value.{v with rel= Relation.of_name n}) )
+
     let eval ctx r =
       let rec eval {node; _} =
         match node with
         | Scan r -> eval_relation r
-        | Filter (_, p, r) -> eval_filter ctx p (eval r)
-        | Join {pred= p; r1_name; r1; r2_name; r2} ->
-            eval_join ctx p r1_name r2_name (eval r1) (eval r2)
+        | Filter (p, r) -> eval_filter ctx p (eval r)
+        | Join {pred= p; r1; r2} -> eval_join ctx p (eval r1) (eval r2)
         | Dedup r -> eval_dedup (eval r)
-        | Select (_, out, r) -> eval_select ctx out (eval r)
+        | Select (out, r) -> eval_select ctx out (eval r)
+        | As (n, r) -> eval_as n (eval r)
         | Agg _ | _ -> failwith ""
       in
       eval r
@@ -1228,8 +1353,9 @@ module Test = struct
         let eval ctx query =
           Eval.eval ctx query
           |> Seq.map ~f:(fun (t: Tuple.t) ->
-                 List.map t ~f:(fun (v: Value.t) -> (v.field.fname, v.value))
-                 |> Map.of_alist_exn (module String) )
+                 List.map t ~f:(fun (v: Value.t) ->
+                     (Name.create ~relation:v.rel.rname v.field.fname, v.value) )
+                 |> Map.of_alist_exn (module Name) )
       end)
       ()
 
@@ -1241,7 +1367,7 @@ module Test = struct
 
   let%expect_test "part-list" =
     let layout =
-      of_string_exn "AList(r1, x -> ATuple([AScalar(x.f), AScalar(x.g)], Cross))"
+      of_string_exn "AList(r1, ATuple([AScalar(r1.f), AScalar(r1.g)], Cross))"
     in
     let part_layout = M.partition ~part:(Name f) ~lookup:(Name f) layout in
     [%sexp_of : (Name.t, Univ_map.t) ralgebra] part_layout |> print_s ;
@@ -1250,30 +1376,31 @@ module Test = struct
       ((node (
          AHashIdx
          ((node (
-            Dedup (
+            As x0 (
               (node (
-                Select r1
-                ((Name ((relation (r1)) (name f) (type_ (IntT)))))
-                ((node (Scan r1)) (meta ()))))
+                Dedup (
+                  (node (
+                    Select
+                    ((Name ((relation (r1)) (name f) (type_ (IntT)))))
+                    ((node (Scan r1)) (meta ()))))
+                  (meta ()))))
               (meta ()))))
           (meta ()))
-         x0
          ((node (
             AList
             ((node (
-               Filter r1
+               Filter
                (Binop (
                  Eq
                  (Name ((relation (r1)) (name f) (type_ (IntT))))
                  (Name ((relation (x0)) (name f) (type_ (IntT))))))
                ((node (Scan r1)) (meta ()))))
              (meta ()))
-            x
             ((node (
                ATuple
-               (((node (AScalar (Name ((relation (x)) (name f) (type_ ())))))
+               (((node (AScalar (Name ((relation (r1)) (name f) (type_ ())))))
                  (meta ()))
-                ((node (AScalar (Name ((relation (x)) (name g) (type_ ())))))
+                ((node (AScalar (Name ((relation (r1)) (name g) (type_ ())))))
                  (meta ())))
                Cross))
              (meta ()))))

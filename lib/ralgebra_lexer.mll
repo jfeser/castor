@@ -7,6 +7,37 @@ let error lexbuf msg =
   let pos = Lexing.lexeme_start_p lexbuf in
   let col = pos.pos_cnum - pos.pos_bol in
   raise (ParseError (msg, pos.pos_lnum, col))
+
+let keyword_tbl = Hashtbl.of_alist_exn (module String) [
+"project", PROJECT;
+"select", SELECT;
+"dedup", DEDUP;
+"filter", FILTER;
+"eqjoin", EQJOIN;
+"join", JOIN;
+"concat", CONCAT;
+"count", COUNT;
+"zip", ZIP;
+"cross", CROSS;
+"aempty", AEMPTY;
+"atuple", ATUPLE;
+"alist", ALIST;
+"aorderedidx", AORDEREDIDX;
+"ahashidx", AHASHIDX;
+"ascalar", ASCALAR;
+"agg", AGG;
+"min", MIN;
+"max", MAX;
+"avg", AVG;
+"sum", SUM;
+"int", INT_TYPE;
+"bool", BOOL_TYPE;
+"string", STRING_TYPE;
+"as", AS;
+"null", NULL;
+"true", BOOL true;
+"false", BOOL false;
+  ]
 }
 
 let white = [' ' '\t' '\r']+
@@ -19,31 +50,6 @@ let str = '"'
 rule token = parse
   | '\n'       { Lexing.new_line lexbuf; token lexbuf }
   | white      { token lexbuf }
-  | "Project"  { PROJECT }
-  | "Select"   { SELECT }
-  | "Dedup"    { DEDUP }
-  | "Filter"   { FILTER }
-  | "EqJoin"   { EQJOIN }
-  | "Join"     { JOIN }
-  | "Concat"   { CONCAT }
-  | "Count"    { COUNT }
-  | "Zip"      { ZIP }
-  | "Cross"    { CROSS }
-  | "AEmpty"   { AEMPTY }
-  | "ATuple"   { ATUPLE }
-  | "AList"    { ALIST }
-  | "AOrderedIdx" { AORDEREDIDX }
-  | "AHashIdx" { AHASHIDX }
-  | "AScalar"  { ASCALAR }
-  | "Agg"      { AGG }
-  | "Min"      { MIN }
-  | "Max"      { MAX }
-  | "Avg"      { AVG }
-  | "Sum"      { SUM }
-  | "int"      { INT_TYPE }
-  | "bool"     { BOOL_TYPE }
-  | "string"   { STRING_TYPE }
-  | "as"       { AS }
   | "("        { LPAREN }
   | ")"        { RPAREN }
   | "["        { LSBRAC }
@@ -64,11 +70,12 @@ rule token = parse
   | "/"        { DIV }
   | "%"        { MOD }
   | int as x   { INT (Int.of_string x) }
-  | "true"     { BOOL true }
-  | "false"    { BOOL false }
-  | "false"    { BOOL false }
   | '"'        { STR (string (Buffer.create 10) lexbuf) }
-  | id as text { ID text }
+  | id as x    {
+      match Hashtbl.find keyword_tbl (String.lowercase x) with
+        | Some t -> t
+        | None -> ID x
+    }
   | eof        { EOF }
   | _          { error lexbuf "unexpected character" }
 and string buf = parse
