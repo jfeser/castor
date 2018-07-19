@@ -106,8 +106,6 @@ module Make (Config : Config.S) () = struct
       lookup_chain maps key
   end
 
-  let null_ptr = const_null (pointer_type (void_type ctx))
-
   class func_ctx name func params =
     object
       val values = Hashtbl.create (module String)
@@ -122,17 +120,17 @@ module Make (Config : Config.S) () = struct
   class ictx name func params =
     object
       inherit func_ctx name func params
-      val mutable init = null_ptr
-      val mutable step = null_ptr
-      val mutable switch = null_ptr
+      val mutable init = None
+      val mutable step = None
+      val mutable switch = None
       val mutable switch_index = 0
-      method init  : llvalue= init
-      method step  : llvalue= step
-      method switch  : llvalue= switch
+      method init  : llvalue= Option.value_exn init
+      method step  : llvalue= Option.value_exn step
+      method switch  : llvalue= Option.value_exn switch
       method switch_index  : int= switch_index
-      method set_init x = init <- x
-      method set_step x = step <- x
-      method set_switch x = switch <- x
+      method set_init x = init <- Some x
+      method set_step x = step <- Some x
+      method set_switch x = switch <- Some x
       method incr_switch_index () = switch_index <- switch_index + 1
     end
     
@@ -140,10 +138,10 @@ module Make (Config : Config.S) () = struct
   class fctx name func params =
     object
       inherit func_ctx name func params
-      val mutable llfunc = null_ptr
+      val mutable llfunc = None
       method! values  : var Hashtbl.M(String).t= values
-      method llfunc  : llvalue= llfunc
-      method set_llfunc x = llfunc <- x
+      method llfunc  : llvalue= Option.value_exn llfunc
+      method set_llfunc x = llfunc <- Some x
     end
     
 
