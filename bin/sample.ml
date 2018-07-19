@@ -3,7 +3,8 @@ open Postgresql
 open Dblayout
 open Db
 
-let main : ?seed:int -> db_in:string -> db_out:string -> sample:int -> Bench.t -> unit =
+let main :
+    ?seed:int -> db_in:string -> db_out:string -> sample:int -> Bench.t -> unit =
  fun ?(seed= 0) ~db_in ~db_out ~sample {name; params; query} ->
   (* FIXME: Use the first parameter value for test params. Should use multiple
        choices and average. *)
@@ -26,12 +27,13 @@ let main : ?seed:int -> db_in:string -> db_out:string -> sample:int -> Bench.t -
   let conn = new connection ~dbname:db_out () in
   exec conn ~params:[Int.to_string seed] "set seed to $0" |> ignore ;
   List.iter (Ralgebra.relations ralgebra) ~f:(fun r ->
-      exec conn ~params:[r.Relation.name] "alter table $0 rename to old_$0" |> ignore ;
+      exec conn ~params:[r.Relation.name] "alter table $0 rename to old_$0"
+      |> ignore ;
       ( match Map.find preds r with
       | Some p_sql ->
           exec conn ~params:[r.Relation.name; Int.to_string sample; p_sql]
-            "create table $0 as (select * from old_$0 where $2 order by random() limit \
-             $1)"
+            "create table $0 as (select * from old_$0 where $2 order by random() \
+             limit $1)"
           |> ignore
       | None ->
           exec conn ~params:[r.Relation.name; Int.to_string sample]

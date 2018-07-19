@@ -1,7 +1,8 @@
 open Core
 open Dblayout
 
-let deserialize_async : ?max_len:int -> string -> Candidate.t Or_error.t Async.Deferred.t =
+let deserialize_async :
+    ?max_len:int -> string -> Candidate.t Or_error.t Async.Deferred.t =
  fun ?max_len fn ->
   let open Async in
   let open Candidate.Binable in
@@ -9,7 +10,8 @@ let deserialize_async : ?max_len:int -> string -> Candidate.t Or_error.t Async.D
   try_with (fun () ->
       match%map Reader.read_bin_prot ?max_len reader bin_reader_t with
       | `Ok r -> Result.Ok (to_candidate r)
-      | `Eof -> Result.Error (Error.create "EOF when reading." fn [%sexp_of : string]) )
+      | `Eof ->
+          Result.Error (Error.create "EOF when reading." fn [%sexp_of : string]) )
   >>| Result.map_error ~f:(fun e -> Error.(of_exn e |> tag ~tag:fn))
   >>| Result.join
 

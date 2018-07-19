@@ -84,7 +84,10 @@ module T = struct
   type crosstuple = {count: AbsCount.t} [@@deriving compare, sexp]
 
   type ordered_list =
-    {field: Db.Field.t; order: [`Asc | `Desc]; lookup: Layout.Range.t; count: AbsCount.t}
+    { field: Db.Field.t
+    ; order: [`Asc | `Desc]
+    ; lookup: Layout.Range.t
+    ; count: AbsCount.t }
   [@@deriving compare, sexp]
 
   type unordered_list = {count: AbsCount.t} [@@deriving compare, sexp]
@@ -130,8 +133,10 @@ let rec unify_exn : t -> t -> t =
     raise (TypeError err)
   in
   match (t1, t2) with
-  | NullT {field= f1}, NullT {field= f2} when Db.Field.equal f1 f2 -> NullT {field= f1}
-  | IntT {range= b1; field= f1; nullable= n1}, IntT {range= b2; field= f2; nullable= n2}
+  | NullT {field= f1}, NullT {field= f2} when Db.Field.equal f1 f2 ->
+      NullT {field= f1}
+  | ( IntT {range= b1; field= f1; nullable= n1}
+    , IntT {range= b2; field= f2; nullable= n2} )
     when Db.Field.equal f1 f2 ->
       IntT {range= AbsInt.unify b1 b2; field= f1; nullable= n1 || n2}
   | IntT x, NullT _ | NullT _, IntT x -> IntT {x with nullable= true}
@@ -162,9 +167,12 @@ let rec unify_exn : t -> t -> t =
       UnorderedListT (unify_exn et1 et2, {count= AbsCount.unify c1 c2})
   | ( OrderedListT (e1, {field= f1; order= o1; lookup= l1; count= c1})
     , OrderedListT (e2, {field= f2; order= o2; lookup= l2; count= c2}) )
-    when Db.Field.(f1 = f2) && Polymorphic_compare.(o1 = o2) && Layout.Range.(l1 = l2) ->
+    when Db.Field.(f1 = f2)
+         && Polymorphic_compare.(o1 = o2)
+         && Layout.Range.(l1 = l2) ->
       OrderedListT
-        (unify_exn e1 e2, {field= f1; order= o1; lookup= l1; count= AbsCount.unify c1 c2})
+        ( unify_exn e1 e2
+        , {field= f1; order= o1; lookup= l1; count= AbsCount.unify c1 c2} )
   | ( TableT (kt1, vt1, {count= c1; field= f1; lookup= l1})
     , TableT (kt2, vt2, {count= c2; field= f2; lookup= l2}) )
     when Db.Field.(f1 = f2) && Polymorphic_compare.(l1 = l2) ->
@@ -172,7 +180,8 @@ let rec unify_exn : t -> t -> t =
       let vt = unify_exn vt1 vt2 in
       TableT (kt, vt, {field= f1; lookup= l1; count= AbsCount.unify c1 c2})
   | EmptyT, t | t, EmptyT -> t
-  | GroupingT (kt1, vt1, m1), GroupingT (kt2, vt2, m2) when Polymorphic_compare.(m1 = m2) ->
+  | GroupingT (kt1, vt1, m1), GroupingT (kt2, vt2, m2)
+    when Polymorphic_compare.(m1 = m2) ->
       GroupingT (unify_exn kt1 kt2, unify_exn vt1 vt2, m1)
   | FuncT (t, w), FuncT (t', w') when Int.(w = w') ->
       FuncT (List.map2_exn ~f:unify_exn t t', w)

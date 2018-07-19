@@ -138,7 +138,8 @@ let main :
         let max_len = max_size in
         match%map Reader.read_bin_prot ?max_len reader bin_reader_t with
         | `Ok r -> Result.Ok (to_candidate r)
-        | `Eof -> Result.Error (Error.create "EOF when reading." fn [%sexp_of : string])
+        | `Eof ->
+            Result.Error (Error.create "EOF when reading." fn [%sexp_of : string])
     )
     >>| Result.map_error ~f:(fun e -> Error.(of_exn e |> tag ~tag:fn))
     >>| Result.join
@@ -174,17 +175,21 @@ returning hash;
               true
         in
         Db.exec qconn ~params:[queue; hash; Bool.to_string failed]
-          "update $0 set (search_state, search_failed) = ('searched', $2) where hash = $1"
+          "update $0 set (search_state, search_failed) = ('searched', $2) where \
+           hash = $1"
         |> ignore
     | r ->
-        Error.create "Unexpected db results." r [%sexp_of : string list] |> Error.raise
+        Error.create "Unexpected db results." r [%sexp_of : string list]
+        |> Error.raise
   in
   let is_done : unit -> string option =
    fun () ->
     let check_count () =
       match num with
       | Some n -> (
-        match Db.exec1 qconn ~params:[queue] "select count(*) from $0 where valid" with
+        match
+          Db.exec1 qconn ~params:[queue] "select count(*) from $0 where valid"
+        with
         | [ct] -> Int.of_string ct >= n
         | _ -> false )
       | None -> false
@@ -258,7 +263,8 @@ returning hash;
        expression. *)
   ( match sample with
   | Some s ->
-      Ralgebra.relations cand.ralgebra |> List.iter ~f:(Db.Relation.sample Config.conn s)
+      Ralgebra.relations cand.ralgebra
+      |> List.iter ~f:(Db.Relation.sample Config.conn s)
   | None -> () ) ;
   ensure_dir dir
   >>= fun () ->
@@ -277,8 +283,10 @@ let () =
   let bench = Arg_type.create (fun s -> Sexp.load_sexp s |> [%of_sexp : Bench.t]) in
   let open Let_syntax in
   async ~summary:"Generate candidates from a benchmark file."
-    (let%map_open db = flag "d" (required string) ~doc:"DB the database to connect to"
-     and queue = flag "b" (required string) ~doc:"TABLE the name of the benchmark table"
+    (let%map_open db =
+       flag "d" (required string) ~doc:"DB the database to connect to"
+     and queue =
+       flag "b" (required string) ~doc:"TABLE the name of the benchmark table"
      and verbose = flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
      and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
      and debug = flag "debug" ~aliases:["g"] no_arg ~doc:"turn on debug mode"

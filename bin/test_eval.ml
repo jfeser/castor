@@ -41,6 +41,7 @@ let main () =
     Implang.Infix.
       [ "g" := call (Lambda f) [int 0]
       ; loop (int (ntuples l)) ["x" += "g"; Yield (Var "x")] ]
-  |> Seq.iter ~f:(fun v -> print_endline (Sexp.to_string_hum (Implang.sexp_of_value v)))
+  |> Seq.iter ~f:(fun v ->
+         print_endline (Sexp.to_string_hum (Implang.sexp_of_value v)) )
 
 let () = Exn.handle_uncaught ~exit:true main

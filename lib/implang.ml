@@ -145,8 +145,8 @@ and pp_stmt : Format.formatter -> stmt -> unit =
     | Loop {cond; body} ->
         fprintf fmt "@[<v 4>loop (@[<hov>%a@]) {@,%a@]@,}" pp_expr cond pp_prog body
     | If {cond; tcase; fcase} ->
-        fprintf fmt "@[<v 4>if (@[<hov>%a@]) {@,%a@]@,}@[<v 4> else {@,%a@]@,}" pp_expr
-          cond pp_prog tcase pp_prog fcase
+        fprintf fmt "@[<v 4>if (@[<hov>%a@]) {@,%a@]@,}@[<v 4> else {@,%a@]@,}"
+          pp_expr cond pp_prog tcase pp_prog fcase
     | Step {var; iter} -> fprintf fmt "@[<hov>%s =@ next(%s);@]" var iter
     | Iter {func; args; _} ->
         fprintf fmt "@[<hov>init %s(@[<hov>%a@]);@]" func (pp_tuple pp_expr) args
@@ -259,17 +259,22 @@ let lookup : state -> string -> value =
 let to_int_exn : value -> int = function
   | VBytes x -> (
     try Serialize.int_of_bytes_exn x with _ ->
-      fail (Error.create "Runtime error: can't convert to int." x [%sexp_of : Bytes.t]) )
+      fail
+        (Error.create "Runtime error: can't convert to int." x [%sexp_of : Bytes.t])
+    )
   | VInt x -> x
-  | v -> fail (Error.create "Type error: can't convert to int." v [%sexp_of : value])
+  | v ->
+      fail (Error.create "Type error: can't convert to int." v [%sexp_of : value])
 
 let to_bool_exn : value -> bool = function
   | VBytes x -> (
     try Serialize.bool_of_bytes_exn x with _ ->
-      fail (Error.create "Runtime error: can't convert to bool." x [%sexp_of : Bytes.t])
+      fail
+        (Error.create "Runtime error: can't convert to bool." x [%sexp_of : Bytes.t])
     )
   | VBool x -> x
-  | v -> fail (Error.create "Type error: can't convert to bool." v [%sexp_of : value])
+  | v ->
+      fail (Error.create "Type error: can't convert to bool." v [%sexp_of : value])
 
 let rec unify_type : type_ -> type_ -> type_ =
  fun t1 t2 ->
@@ -280,7 +285,8 @@ let rec unify_type : type_ -> type_ -> type_ =
   | TupleT t1, TupleT t2 -> TupleT (List.map2_exn t1 t2 ~f:unify_type)
   | VoidT, VoidT -> VoidT
   | _, _ ->
-      Error.create "Nonunifiable." (t1, t2) [%sexp_of : type_ * type_] |> Error.raise
+      Error.create "Nonunifiable." (t1, t2) [%sexp_of : type_ * type_]
+      |> Error.raise
 
 let rec infer_type : type_ Hashtbl.M(String).t -> expr -> type_ =
  fun ctx -> function
@@ -405,7 +411,8 @@ module IRGen = struct
     let t = match type_ with Some t -> t | None -> infer_type b.locals e in
     b.body := Print (t, e) :: !(b.body)
 
-  let build_return : expr -> stmt_builder = fun e b -> b.body := Return e :: !(b.body)
+  let build_return : expr -> stmt_builder =
+   fun e b -> b.body := Return e :: !(b.body)
 
   module Make (Config : Config.S) () = struct
     module Abslayout = Abslayout.Make_db (Config) ()
@@ -463,7 +470,8 @@ module IRGen = struct
           build_assign Infix.(count - int 1) count b )
         b
 
-    let build_if : cond:expr -> then_:stmt_builder -> else_:stmt_builder -> stmt_builder =
+    let build_if :
+        cond:expr -> then_:stmt_builder -> else_:stmt_builder -> stmt_builder =
      fun ~cond ~then_ ~else_ b ->
       let b_then = new_scope b in
       let b_else = new_scope b in
@@ -483,7 +491,10 @@ module IRGen = struct
       | `Count 0 -> ()
       | `Count 1 -> build_step tup iter_ b ; body tup b
       | `Count x ->
-          build_count_loop Infix.(int x) (fun b -> build_step tup iter_ b ; body tup b) b
+          build_count_loop
+            Infix.(int x)
+            (fun b -> build_step tup iter_ b ; body tup b)
+            b
       | `Countable | `Unknown ->
           build_loop
             Infix.(not (Done iter_))
@@ -792,7 +803,8 @@ module IRGen = struct
             match op with
             | R.And -> List.fold_left1_exn ~f:Infix.( && ) eargs
             | R.Or -> List.fold_left1_exn ~f:Infix.( || ) eargs
-            | R.Eq | R.Lt | R.Le | R.Gt | R.Ge | R.Add | R.Sub | R.Mul | R.Div | R.Mod ->
+            | R.Eq | R.Lt | R.Le | R.Gt | R.Ge | R.Add | R.Sub | R.Mul | R.Div
+             |R.Mod ->
                 fail (Error.create "Not a vararg operator." op [%sexp_of : R.op])
       in
       gen_pred
@@ -954,7 +966,9 @@ module IRGen = struct
         (fun tup b ->
           build_if
             ~cond:
-              (gen_pred tup (Univ_map.find_exn r.Abslayout.meta Abslayout.Meta.schema) p)
+              (gen_pred tup
+                 (Univ_map.find_exn r.Abslayout.meta Abslayout.Meta.schema)
+                 p)
             ~then_:(fun b -> build_yield tup b)
             ~else_:(fun _ -> ())
             b )
@@ -982,7 +996,9 @@ module IRGen = struct
       let ret_t = TupleT [int_t] in
       let b = create [] ret_t in
       let ct = build_defn "ct" int_t Infix.(int 0) b in
-      build_foreach_no_start func (fun _ b -> build_assign Infix.(ct + int 1) ct b) b ;
+      build_foreach_no_start func
+        (fun _ b -> build_assign Infix.(ct + int 1) ct b)
+        b ;
       build_yield (Tuple [ct]) b ;
       build_func b
 
@@ -1009,7 +1025,8 @@ module IRGen = struct
                   ( List.init w1 ~f:(fun i -> Infix.(index t1 i))
                   @ List.init w2 ~f:(fun i -> Infix.(index t2 i)) )
               in
-              build_if ~cond:(gen_pred tup field_idx pred)
+              build_if
+                ~cond:(gen_pred tup field_idx pred)
                 ~then_:(fun b -> build_yield tup b)
                 ~else_:(fun _ -> ())
                 b )
@@ -1035,7 +1052,8 @@ module IRGen = struct
           | _, NullT m -> scan_null m
           | ATuple (rs, Cross), CrossTupleT (ts, m) -> scan_crosstuple scan rs ts m
           | ATuple (rs, Zip), ZipTupleT (ts, m) -> scan_ziptuple scan rs ts m
-          | AList (_, rs), UnorderedListT (ts, m) -> scan_unordered_list scan rs ts m
+          | AList (_, rs), UnorderedListT (ts, m) ->
+              scan_unordered_list scan rs ts m
           (* | _, OrderedListT (x, m) -> scan_ordered_list ?start scan x m *)
           | AHashIdx (_, rs, _), TableT (kt, vt, m) ->
               scan_table scan rs kt vt m
@@ -1069,7 +1087,8 @@ module IRGen = struct
       let open Format in
       fun fmt {funcs; iters; _} ->
         pp_open_vbox fmt 0 ;
-        List.iter (iters @ funcs) ~f:(fun (n, f) -> fprintf fmt "%s = %a@;" n pp_func f) ;
+        List.iter (iters @ funcs) ~f:(fun (n, f) ->
+            fprintf fmt "%s = %a@;" n pp_func f ) ;
         pp_close_box fmt () ;
         pp_print_flush fmt ()
   end

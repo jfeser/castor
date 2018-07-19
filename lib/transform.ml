@@ -28,7 +28,8 @@ module Make (Config : Config.S) = struct
     let stream = eval_relation r |> Seq.to_list in
     List.transpose stream
     |> (fun v -> Option.value_exn v)
-    |> List.map ~f:(fun col -> unordered_list (List.map col ~f:(fun v -> of_value v)))
+    |> List.map ~f:(fun col ->
+           unordered_list (List.map col ~f:(fun v -> of_value v)) )
     |> zip_tuple
 
   let row_layout : Relation.t -> Layout.t =
@@ -56,7 +57,8 @@ module Make (Config : Config.S) = struct
         | Concat rs ->
             List.map rs ~f |> List.transpose
             |> (fun x -> Option.value_exn x)
-            |> List.map ~f:(fun rs -> Lazy.map (Lazy.all rs) ~f:(fun rs -> Concat rs))
+            |> List.map ~f:(fun rs -> Lazy.map (Lazy.all rs) ~f:(fun rs -> Concat rs)
+               )
         | Agg (x, y, r') -> map_lazy (f r') ~f:(fun r' -> Agg (x, y, r'))
       in
       rs @ rs'
@@ -72,7 +74,8 @@ module Make (Config : Config.S) = struct
         Logs.info (fun m -> m "%d new candidates from running %s." len t.name) ;
       rs
     with Layout.TransformError e ->
-      Logs.warn (fun m -> m "Transform %s failed: %s" t.name (Error.to_string_mach e)) ;
+      Logs.warn (fun m ->
+          m "Transform %s failed: %s" t.name (Error.to_string_mach e) ) ;
       []
 
   let run_checked : t -> Ralgebra.t -> Ralgebra.t Lazy.t list =
@@ -93,7 +96,8 @@ module Make (Config : Config.S) = struct
             false )
       | _, Error e ->
           Logs.warn (fun m ->
-              m "Transform %s error. Bad schema %s" t.name (Error.to_string_hum e) ) ;
+              m "Transform %s error. Bad schema %s" t.name (Error.to_string_hum e)
+          ) ;
           false
       | Error _, _ -> failwith "BUG: Transforming bad candidate."
     in
@@ -107,7 +111,9 @@ module Make (Config : Config.S) = struct
         if Set.equal s1 s2 then true
         else (
           Logs.warn (fun m ->
-              m "Transform %s not equivalent. New relation has %d records, old has %d."
+              m
+                "Transform %s not equivalent. New relation has %d records, old has \
+                 %d."
                 t.name (Set.length s2) (Set.length s1) ) ;
           false )
       with EvalError e ->
@@ -153,13 +159,14 @@ module Make (Config : Config.S) = struct
               [r']
             with EvalError e ->
               Logs.warn (fun m ->
-                  m "Error when running eval transform. %s %s" (Ralgebra.to_string r)
-                    (Error.to_string_hum e) ) ;
+                  m "Error when running eval transform. %s %s"
+                    (Ralgebra.to_string r) (Error.to_string_hum e) ) ;
               raise (Layout.TransformError e) )
           else [lazy r] ) }
     |> run_everywhere
 
-  let tf_eval_all : t = {name= "eval-all"; f= (fun r -> [lazy (Eval.eval_partial r)])}
+  let tf_eval_all : t =
+    {name= "eval-all"; f= (fun r -> [lazy (Eval.eval_partial r)])}
 
   let tf_hoist_filter : t =
     {name= "hoist-filter"; f= (fun r -> [lazy (Ralgebra.hoist_filter r)])}
@@ -175,14 +182,15 @@ module Make (Config : Config.S) = struct
     |> run_everywhere
 
   let tf_row_layout_all : t =
-    {name= "row-layout-all"; f= (fun r -> [lazy (Ralgebra.row_layout_all Config.conn r)])}
+    { name= "row-layout-all"
+    ; f= (fun r -> [lazy (Ralgebra.row_layout_all Config.conn r)]) }
 
   let tf_group_by : t =
     { name= "group-by"
     ; f=
         (function
-        | Agg (out, key, Scan l) -> [lazy (Scan (Layout.group_by out key l))] | _ -> [])
-    }
+        | Agg (out, key, Scan l) -> [lazy (Scan (Layout.group_by out key l))]
+        | _ -> []) }
     |> run_everywhere
 
   let tf_eq_filter : t =
@@ -240,7 +248,8 @@ module Make (Config : Config.S) = struct
 
   let tf_flatten : t = {name= "flatten"; f= (fun r -> [lazy (Ralgebra.flatten r)])}
 
-  let tf_project : t = {name= "project"; f= (fun r -> [lazy (Ralgebra.intro_project r)])}
+  let tf_project : t =
+    {name= "project"; f= (fun r -> [lazy (Ralgebra.intro_project r)])}
 
   let tf_push_filter : t =
     {name= "push-filter"; f= (fun r -> [lazy (Ralgebra.push_filter r)])}
@@ -265,7 +274,8 @@ module Make (Config : Config.S) = struct
   let of_name : string -> t Or_error.t =
    fun n ->
     let m_tf =
-      List.find (transforms @ required_transforms) ~f:(fun {name; _} -> String.(name = n))
+      List.find (transforms @ required_transforms) ~f:(fun {name; _} ->
+          String.(name = n) )
     in
     match m_tf with
     | Some x -> Ok x

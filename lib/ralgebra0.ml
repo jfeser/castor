@@ -91,7 +91,8 @@ class ['f, 'r, 'l, 'a] fold =
         match r with
         | Project (x, r) -> self#project (self#run r a) x
         | Filter (x, r) -> self#filter (self#run r a) x
-        | EqJoin (x1, x2, r1, r2) -> self#eq_join (self#run r2 (self#run r1 a)) x1 x2
+        | EqJoin (x1, x2, r1, r2) ->
+            self#eq_join (self#run r2 (self#run r1 a)) x1 x2
         | Scan x -> self#scan a x
         | Concat rs -> List.fold_left rs ~init:a ~f:(fun a r -> self#run r a)
         | Relation x -> self#relation a x

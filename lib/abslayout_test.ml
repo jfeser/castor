@@ -42,7 +42,8 @@ let%expect_test "eqjoin" =
 let%expect_test "agg" =
   let r = of_string_exn "Agg([Sum(r.g)], [r.f, r.g], r)" in
   print_endline (ralgebra_to_sql r) ;
-  [%expect {| select sum(r."g") from (select * from r) as r group by (r."f", r."g") |}]
+  [%expect
+    {| select sum(r."g") from (select * from r) as r group by (r."f", r."g") |}]
 
 let%expect_test "agg" =
   let r = of_string_exn "Filter(ship_mode.sm_carrier = \"GERMA\", ship_mode)" in
@@ -241,8 +242,8 @@ module Eval = struct
       Hashtbl.find_exn rels r |> Seq.of_list
       |> Seq.map ~f:(fun t ->
              List.map t ~f:(fun (n, v) ->
-                 Db.{rel= Relation.of_name r; field= Field.of_name n; Value.value= v} )
-         )
+                 Db.{rel= Relation.of_name r; field= Field.of_name n; Value.value= v}
+             ) )
   end)
 
   let rec eval_pred ctx = function
@@ -312,7 +313,9 @@ module Eval = struct
   let eval_filter ctx p seq =
     Seq.filter seq ~f:(fun t ->
         let ctx = Map.merge_right ctx (Ctx.of_tuple t) in
-        match eval_pred ctx p with `Bool x -> x | _ -> failwith "Expected a boolean." )
+        match eval_pred ctx p with
+        | `Bool x -> x
+        | _ -> failwith "Expected a boolean." )
 
   let eval_dedup seq =
     let set = Hash_set.create (module Db.Tuple) in
@@ -324,7 +327,9 @@ module Eval = struct
         let ctx = Map.merge_right ctx (Ctx.of_tuple t) in
         List.map out ~f:(fun e ->
             let v = eval_pred ctx e |> Db.Value.of_primvalue in
-            match e with Name n -> Db.{v with field= Field.of_name n.name} | _ -> v ) )
+            match e with
+            | Name n -> Db.{v with field= Field.of_name n.name}
+            | _ -> v ) )
 
   let eval_as n seq =
     Seq.map seq ~f:(fun t ->

@@ -89,7 +89,10 @@ let main ~debug ~gprof ~params ~db ~port ~code_only fn =
   let clang = Config.llvm_root ^ "/bin/clang" in
   let opt = Config.llvm_root ^ "/bin/opt" in
   let cflags =
-    ["-g"; "-lcmph"; "-fprofile-instr-generate=scanner-%m.profraw"; "-fcoverage-mapping"]
+    [ "-g"
+    ; "-lcmph"
+    ; "-fprofile-instr-generate=scanner-%m.profraw"
+    ; "-fcoverage-mapping" ]
   in
   let cflags = (if debug then ["-O0"] else []) @ cflags in
   let cflags = (if gprof then ["-pg"] else []) @ cflags in
@@ -98,15 +101,17 @@ let main ~debug ~gprof ~params ~db ~port ~code_only fn =
   else (
     command_exn
       [ opt
-      ; "-S -pass-remarks-output=remarks.yaml -globalopt -simplifycfg -dce -inline -dce \
-         -simplifycfg -sroa -instcombine -simplifycfg -sroa -instcombine \
+      ; "-S -pass-remarks-output=remarks.yaml -globalopt -simplifycfg -dce -inline \
+         -dce -simplifycfg -sroa -instcombine -simplifycfg -sroa -instcombine \
          -jump-threading -instcombine -reassociate -early-cse -mem2reg -loop-idiom \
          -loop-rotate -licm -loop-unswitch -loop-deletion -loop-unroll -sroa \
          -instcombine -gvn -memcpyopt -sccp -sink -instsimplify -instcombine \
-         -jump-threading -dse -simplifycfg -loop-idiom -loop-deletion -jump-threading \
-         -slp-vectorizer -load-store-vectorizer -adce -loop-vectorize -instcombine \
-         -simplifycfg -loop-load-elim scanner.ll > scanner-opt.ll" ] ;
-    command_exn ((clang :: cflags) @ ["scanner-opt.ll"; "main.c"; "-o"; "scanner.exe"]) ) ;
+         -jump-threading -dse -simplifycfg -loop-idiom -loop-deletion \
+         -jump-threading -slp-vectorizer -load-store-vectorizer -adce \
+         -loop-vectorize -instcombine -simplifycfg -loop-load-elim scanner.ll > \
+         scanner-opt.ll" ] ;
+    command_exn
+      ((clang :: cflags) @ ["scanner-opt.ll"; "main.c"; "-o"; "scanner.exe"]) ) ;
   Llvm.dispose_module CConfig.module_ ;
   Llvm.dispose_context CConfig.ctx
 

@@ -227,7 +227,9 @@ module No_config = struct
         | Join {pred; r1; r2} ->
             let r1, inner_ctx1 = resolve outer_ctx r1 in
             let r2, inner_ctx2 = resolve outer_ctx r2 in
-            let ctx = Set.union_list (module Name) [inner_ctx1; inner_ctx2; outer_ctx] in
+            let ctx =
+              Set.union_list (module Name) [inner_ctx1; inner_ctx2; outer_ctx]
+            in
             let pred = resolve_pred ctx pred in
             (Join {pred; r1; r2}, Set.union inner_ctx1 inner_ctx2)
         | Scan l -> (Scan l, resolve_relation l)
@@ -441,7 +443,8 @@ module No_config = struct
         else Set.choose_exn rs
       in
       match node with
-      | Select ([], r) -> sprintf "select top 0 from (%s) as %s" (f r) (relation_name r)
+      | Select ([], r) ->
+          sprintf "select top 0 from (%s) as %s" (f r) (relation_name r)
       | Select (fs, r) ->
           let fields = List.map fs ~f:pred_to_sql |> String.concat ~sep:"," in
           sprintf "select %s from (%s) as %s" fields (f r) (relation_name r)
@@ -452,8 +455,8 @@ module No_config = struct
       | Join {pred; r1; r2} ->
           let r1_name = relation_name r1 in
           let r2_name = relation_name r2 in
-          sprintf "select * from (%s) as %s, (%s) as %s where %s" (f r1) r1_name (f r2)
-            r2_name (pred_to_sql pred)
+          sprintf "select * from (%s) as %s, (%s) as %s where %s" (f r1) r1_name
+            (f r2) r2_name (pred_to_sql pred)
       | Agg (aggs, key, r) ->
           let rel = relation_name r in
           let aggs =
@@ -473,7 +476,9 @@ module No_config = struct
           sprintf "select %s from (%s) as %s group by (%s)" aggs (f r) rel key
       | Dedup r -> sprintf "select distinct * from (%s) as t" (f r)
       | As (_, r) -> f r
-      | _ -> Error.of_string "Only relational algebra constructs allowed." |> Error.raise
+      | _ ->
+          Error.of_string "Only relational algebra constructs allowed."
+          |> Error.raise
     in
     f r
 end
@@ -582,7 +587,8 @@ module Make (Config : Config.S) () = struct
         in
         self#build_AScalar l
       method visit_AOrderedIdx _ _ _ _ = failwith "not implemented"
-      method visit_Select ctx exprs r' = self#build_Select exprs (self#visit_t ctx r')
+      method visit_Select ctx exprs r' =
+        self#build_Select exprs (self#visit_t ctx r')
       method visit_Filter ctx _ r' = self#build_Filter (self#visit_t ctx r')
       method visit_Join ctx pred r1 r2 =
         self#build_Join ctx pred (self#visit_t ctx r1) (self#visit_t ctx r2)
@@ -598,7 +604,8 @@ module Make (Config : Config.S) () = struct
         | Filter (pred, r') -> self#visit_Filter ctx pred r'
         | Join {pred; r1; r2} -> self#visit_Join ctx pred r1 r2
         | Dedup _ | Agg _ | Scan _ | As _ ->
-            Error.create "Wrong context." r [%sexp_of : (Name.t, Univ_map.t) ralgebra]
+            Error.create "Wrong context." r
+              [%sexp_of : (Name.t, Univ_map.t) ralgebra]
             |> Error.raise
     end
     
@@ -655,7 +662,8 @@ module Make (Config : Config.S) () = struct
         method build_ATuple ls kind =
           let counts = List.map ls ~f:count in
           match kind with
-          | Zip -> ZipTupleT (ls, {count= List.fold_left1_exn ~f:AbsCount.unify counts})
+          | Zip ->
+              ZipTupleT (ls, {count= List.fold_left1_exn ~f:AbsCount.unify counts})
           | Cross ->
               CrossTupleT (ls, {count= List.fold_left1_exn ~f:AbsCount.( * ) counts})
         method build_AHashIdx kv h =
@@ -664,7 +672,8 @@ module Make (Config : Config.S) () = struct
                 ( unify_exn kt (Layout.of_value kv |> type_of_scalar_layout)
                 , unify_exn vt1 vt2 ) )
           in
-          TableT (kt, vt, {count= None; field= Field.of_name "fixme"; lookup= h.lookup})
+          TableT
+            (kt, vt, {count= None; field= Field.of_name "fixme"; lookup= h.lookup})
         method build_AOrderedIdx _ _ = failwith ""
       end
       
@@ -704,7 +713,9 @@ module Make (Config : Config.S) () = struct
               let start = Writer.Pos.to_bits start_pos in
               let byte_start = Int64.(start / of_int 8) in
               let byte_len = Int64.((end_ - start) / of_int 8) in
-              let aligned = if Int64.(start % of_int 8 = of_int 0) then "=" else "~" in
+              let aligned =
+                if Int64.(start % of_int 8 = of_int 0) then "=" else "~"
+              in
               let out =
                 sprintf "%d %s+ %s [%Ldb %s%LdB (%Ld bytes)]\n" ctr prefix lbl start
                   aligned byte_start byte_len
@@ -736,13 +747,15 @@ module Make (Config : Config.S) () = struct
               log_end () ;
               (* Serialize list header. *)
               let len =
-                Writer.Pos.(end_pos - header_pos |> to_bytes_exn) |> Int64.to_int_exn
+                Writer.Pos.(end_pos - header_pos |> to_bytes_exn)
+                |> Int64.to_int_exn
               in
               Writer.seek writer header_pos ;
               Writer.write writer (of_int ~width:64 !count) ;
               Writer.write writer (of_int ~width:64 len) ;
               Writer.seek writer end_pos
-          | t -> Error.(create "Unexpected layout type." t [%sexp_of : Type.t] |> raise)
+          | t ->
+              Error.(create "Unexpected layout type." t [%sexp_of : Type.t] |> raise)
         method visit_ATuple ctx type_ elem_layouts _ =
           match type_ with
           | CrossTupleT (elem_ts, _) | ZipTupleT (elem_ts, _) ->
@@ -753,17 +766,21 @@ module Make (Config : Config.S) () = struct
               log_end () ;
               (* Serialize body *)
               log_start "Tuple body" ;
-              List.iter2_exn ~f:(fun t l -> self#visit_t ctx t l) elem_ts elem_layouts ;
+              List.iter2_exn
+                ~f:(fun t l -> self#visit_t ctx t l)
+                elem_ts elem_layouts ;
               log_end () ;
               let end_pos = Writer.pos writer in
               (* Serialize header. *)
               Writer.seek writer header_pos ;
               let len =
-                Writer.Pos.(end_pos - header_pos |> to_bytes_exn) |> Int64.to_int_exn
+                Writer.Pos.(end_pos - header_pos |> to_bytes_exn)
+                |> Int64.to_int_exn
               in
               Writer.write writer (of_int ~width:64 len) ;
               Writer.seek writer end_pos
-          | t -> Error.(create "Unexpected layout type." t [%sexp_of : Type.t] |> raise)
+          | t ->
+              Error.(create "Unexpected layout type." t [%sexp_of : Type.t] |> raise)
         method visit_AHashIdx ctx type_ q l _ =
           match type_ with
           | TableT (key_t, value_t, _) ->
@@ -781,7 +798,8 @@ module Make (Config : Config.S) () = struct
                        key )
                 |> Seq.to_list
               in
-              Logs.debug (fun m -> m "Generating hash for %d keys." (List.length keys)) ;
+              Logs.debug (fun m ->
+                  m "Generating hash for %d keys." (List.length keys) ) ;
               let keys =
                 List.map keys ~f:(fun k ->
                     let serialized =
@@ -795,7 +813,8 @@ module Make (Config : Config.S) () = struct
                     (k, serialized, hash_key) )
               in
               Out_channel.with_file "keys.txt" ~f:(fun ch ->
-                  List.iter keys ~f:(fun (_, _, x) -> Out_channel.fprintf ch "%s\n" x) ) ;
+                  List.iter keys ~f:(fun (_, _, x) ->
+                      Out_channel.fprintf ch "%s\n" x ) ) ;
               let hash =
                 let open Cmph in
                 List.map keys ~f:(fun (_, _, x) -> x)
@@ -846,9 +865,11 @@ module Make (Config : Config.S) () = struct
               Writer.write writer (of_int ~width:64 (Int64.to_int_exn len)) ;
               Writer.write writer (of_int ~width:64 hash_len) ;
               Writer.write_bytes writer hash_body ;
-              Array.iter hash_table ~f:(fun x -> Writer.write writer (of_int ~width:64 x)) ;
+              Array.iter hash_table ~f:(fun x ->
+                  Writer.write writer (of_int ~width:64 x) ) ;
               Writer.seek writer end_pos
-          | t -> Error.(create "Unexpected layout type." t [%sexp_of : Type.t] |> raise)
+          | t ->
+              Error.(create "Unexpected layout type." t [%sexp_of : Type.t] |> raise)
         method visit_AEmpty _ _ = ()
         method visit_AScalar ctx type_ e =
           let l =
@@ -891,10 +912,14 @@ module Make (Config : Config.S) () = struct
     let l = Meta.to_mutable l in
     let begin_pos = Writer.pos writer in
     let fn = Caml.Filename.temp_file "buf" ".txt" in
-    if Config.layout_map then Logs.info (fun m -> m "Outputting layout map to %s." fn) ;
-    Out_channel.with_file fn ~f:(fun ch -> (new serialize_fold ch writer)#visit_t ctx t l) ;
+    if Config.layout_map then
+      Logs.info (fun m -> m "Outputting layout map to %s." fn) ;
+    Out_channel.with_file fn ~f:(fun ch ->
+        (new serialize_fold ch writer)#visit_t ctx t l ) ;
     let end_pos = Writer.pos writer in
-    let len = Writer.Pos.(end_pos - begin_pos |> to_bytes_exn) |> Int64.to_int_exn in
+    let len =
+      Writer.Pos.(end_pos - begin_pos |> to_bytes_exn) |> Int64.to_int_exn
+    in
     let l = Meta.to_immutable l in
     (l, len)
 
@@ -957,7 +982,8 @@ module Make_db (Config_db : Config.S_db) () = struct
             | Agg (_, _, _) -> failwith ""
             | AEmpty -> []
             | AScalar e -> [pred_to_schema_exn e]
-            | ATuple (rs, _) -> List.concat_map ~f:(fun r -> Meta.(find_exn r schema)) rs
+            | ATuple (rs, _) ->
+                List.concat_map ~f:(fun r -> Meta.(find_exn r schema)) rs
             | As (n, r) ->
                 Meta.(find_exn r schema)
                 |> List.map ~f:(fun x -> {x with relation= Some n})

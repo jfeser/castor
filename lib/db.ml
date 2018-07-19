@@ -46,7 +46,8 @@ let rec exec :
   let r = conn#exec query in
   match r#status with
   | Fatal_error ->
-      Error.create "Postgres fatal error." (r#error, query) [%sexp_of : string * string]
+      Error.create "Postgres fatal error." (r#error, query)
+        [%sexp_of : string * string]
       |> Error.raise
   | Nonfatal_error -> (
     match r#error_code with
@@ -54,8 +55,11 @@ let rec exec :
         (* See:
              https://www.postgresql.org/message-id/1368066680.60649.YahooMailNeo%40web162902.mail.bf1.yahoo.com
           *)
-        if max_retries > 0 then exec ~max_retries:(max_retries - 1) ~verbose conn query
-        else Error.create "Transaction failed." query [%sexp_of : string] |> Error.raise
+        if max_retries > 0 then
+          exec ~max_retries:(max_retries - 1) ~verbose conn query
+        else
+          Error.create "Transaction failed." query [%sexp_of : string]
+          |> Error.raise
     | e ->
         Logs.warn (fun m ->
             m "Postgres error (nonfatal): %s" (Postgresql.Error_code.to_string e) ) ;
@@ -64,7 +68,8 @@ let rec exec :
   | Single_tuple ->
       Logs.debug (fun m -> m "Returning single tuple.") ;
       r#get_all_lst
-  | Bad_response -> Error.create "Bad response." query [%sexp_of : string] |> Error.raise
+  | Bad_response ->
+      Error.create "Bad response." query [%sexp_of : string] |> Error.raise
   | s ->
       Logs.debug (fun m -> m "Returning nothing: %s" (Postgresql.result_status s)) ;
       []
@@ -87,10 +92,16 @@ let exec2 :
     -> (string * string) list =
  fun ?verbose ?params conn query ->
   exec ?verbose ?params conn query
-  |> List.map ~f:(function [x; y] -> (x, y) | _ -> failwith "Unexpected query results.")
+  |> List.map ~f:(function
+       | [x; y] -> (x, y)
+       | _ -> failwith "Unexpected query results." )
 
 let exec1_first :
-    ?verbose:bool -> ?params:string list -> Postgresql.connection -> string -> string =
+       ?verbose:bool
+    -> ?params:string list
+    -> Postgresql.connection
+    -> string
+    -> string =
  fun ?verbose ?params conn query ->
   match exec ?verbose ?params conn query with
   | [[x]] -> x
@@ -248,9 +259,11 @@ module Tuple = struct
   let field_exn : t -> Field.t -> Value.t =
    fun t f -> Option.value_exn (List.find t ~f:(fun v -> Field.(f = v.field)))
 
-  let merge : t -> t -> t = fun t1 t2 -> List.append t1 t2 |> List.dedup (module ValueF)
+  let merge : t -> t -> t =
+   fun t1 t2 -> List.append t1 t2 |> List.dedup (module ValueF)
 
-  let merge_many : t list -> t = fun ts -> List.concat ts |> List.dedup (module ValueF)
+  let merge_many : t list -> t =
+   fun ts -> List.concat ts |> List.dedup (module ValueF)
 end
 
 module Schema = struct
@@ -269,7 +282,8 @@ module Schema = struct
   include Comparable.Make (T)
 
   let to_string : t -> string =
-   fun s -> List.map s ~f:(fun f -> f.fname) |> String.concat ~sep:", " |> sprintf "[%s]"
+   fun s ->
+    List.map s ~f:(fun f -> f.fname) |> String.concat ~sep:", " |> sprintf "[%s]"
 
   let of_tuple : Tuple.t -> t = List.map ~f:(fun v -> v.Value.field)
 
@@ -285,7 +299,8 @@ module Schema = struct
     Int.(tot > utot)
 
   let field_idx : t -> Field.t -> int option =
-   fun s f -> List.find_mapi s ~f:(fun i f' -> if Field.equal f f' then Some i else None)
+   fun s f ->
+    List.find_mapi s ~f:(fun i f' -> if Field.equal f f' then Some i else None)
 
   let field_idx_exn : t -> Field.t -> int =
    fun s f ->
@@ -309,16 +324,18 @@ let result_to_tuples : Postgresql.result -> primvalue Map.M(String).t Seq.t =
                    | "f" -> `Bool false
                    | _ -> failwith "Unknown boolean value." )
                  | INT8 | INT2 | INT4 ->
-                     if String.(value = "") then `Null else `Int (Int.of_string value)
+                     if String.(value = "") then `Null
+                     else `Int (Int.of_string value)
                  | CHAR | TEXT | VARCHAR -> `String value
                  | FLOAT4 | FLOAT8 | NAME | NUMERIC | BYTEA | INT2VECTOR | REGPROC
-                  |OID | TID | XID | CID | OIDVECTOR | JSON | POINT | LSEG | PATH | BOX
-                  |POLYGON | LINE | ABSTIME | RELTIME | TINTERVAL | UNKNOWN | CIRCLE
-                  |CASH | MACADDR | INET | CIDR | ACLITEM | BPCHAR | DATE | TIME
-                  |TIMESTAMP | TIMESTAMPTZ | INTERVAL | TIMETZ | BIT | VARBIT
-                  |REFCURSOR | REGPROCEDURE | REGOPER | REGOPERATOR | REGCLASS
-                  |REGTYPE | RECORD | CSTRING | ANY | ANYARRAY | VOID | TRIGGER
-                  |LANGUAGE_HANDLER | INTERNAL | OPAQUE | ANYELEMENT | JSONB ->
+                  |OID | TID | XID | CID | OIDVECTOR | JSON | POINT | LSEG | PATH
+                  |BOX | POLYGON | LINE | ABSTIME | RELTIME | TINTERVAL | UNKNOWN
+                  |CIRCLE | CASH | MACADDR | INET | CIDR | ACLITEM | BPCHAR | DATE
+                  |TIME | TIMESTAMP | TIMESTAMPTZ | INTERVAL | TIMETZ | BIT
+                  |VARBIT | REFCURSOR | REGPROCEDURE | REGOPER | REGOPERATOR
+                  |REGCLASS | REGTYPE | RECORD | CSTRING | ANY | ANYARRAY | VOID
+                  |TRIGGER | LANGUAGE_HANDLER | INTERNAL | OPAQUE | ANYELEMENT
+                  |JSONB ->
                      `Unknown value
                in
                (r#fname field_i, primval) )

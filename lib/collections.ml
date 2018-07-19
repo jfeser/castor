@@ -4,7 +4,8 @@ open Base.Polymorphic_compare
 module List = struct
   include List
 
-  let all_equal (type t) ?(sexp_of_t= fun _ -> [%sexp_of : string] "unknown") (l: t list) =
+  let all_equal (type t) ?(sexp_of_t= fun _ -> [%sexp_of : string] "unknown")
+      (l: t list) =
     match l with
     | [] -> Or_error.error_string "Empty list."
     | x :: xs ->
@@ -37,14 +38,16 @@ module List = struct
       | [] -> failwith "Unexpected empty list."
       | x :: xs -> scanl1' x [x] f xs |> List.rev
 
-  let count_consecutive_duplicates : 'a t -> equal:('a -> 'a -> bool) -> ('a * int) t =
+  let count_consecutive_duplicates :
+      'a t -> equal:('a -> 'a -> bool) -> ('a * int) t =
     let rec ccd equal v c acc = function
       | [] -> (v, c) :: acc
       | x :: xs ->
           if equal x v then (ccd [@tailcall]) equal v (c + 1) acc xs
           else (ccd [@tailcall]) equal x 1 ((v, c) :: acc) xs
     in
-    fun l ~equal -> match l with [] -> [] | x :: xs -> ccd equal x 1 [] xs |> List.rev
+    fun l ~equal ->
+      match l with [] -> [] | x :: xs -> ccd equal x 1 [] xs |> List.rev
 
   let dedup : ('a, 'cmp) Set.comparator -> 'a t -> 'a t =
    fun m l ->
@@ -110,7 +113,8 @@ module Seq = struct
         | Some (x, seq') ->
             Q.enqueue q x ;
             Yield (x, (seq', q))
-        | None -> match Q.dequeue q with Some x -> Skip (step x, q) | None -> Done )
+        | None -> match Q.dequeue q with Some x -> Skip (step x, q) | None -> Done
+        )
 
   let dfs : 'a -> ('a -> 'a t) -> 'a t =
    fun seed step ->
@@ -121,7 +125,8 @@ module Seq = struct
         | Some (x, seq') -> Yield (x, (seq', x :: xs))
         | None -> match xs with x :: xs' -> Skip (step x, xs') | [] -> Done )
 
-  let all_equal (type a) ?(sexp_of_t= fun _ -> [%sexp_of : string] "unknown") (l: a t) =
+  let all_equal (type a) ?(sexp_of_t= fun _ -> [%sexp_of : string] "unknown")
+      (l: a t) =
     let s =
       fold l ~init:`Empty ~f:(fun s v ->
           match s with
@@ -132,7 +137,8 @@ module Seq = struct
     match s with
     | `Empty -> Or_error.error_string "Empty list."
     | `Equal x -> Or_error.return x
-    | `Unequal (x, x') -> Or_error.error "Unequal elements." (x, x') [%sexp_of : t * t]
+    | `Unequal (x, x') ->
+        Or_error.error "Unequal elements." (x, x') [%sexp_of : t * t]
 end
 
 module Bytes = struct
@@ -150,7 +156,8 @@ end
 module T2 = struct
   type ('a, 'b) t = 'a * 'b
 
-  let compare : ('a -> 'a -> int) -> ('b -> 'b -> int) -> ('a, 'b) t -> ('a, 'b) t -> int =
+  let compare :
+      ('a -> 'a -> int) -> ('b -> 'b -> int) -> ('a, 'b) t -> ('a, 'b) t -> int =
    fun c1 c2 (x1, y1) (x2, y2) ->
     let k1 = c1 x1 x2 in
     if k1 <> 0 then k1 else c2 y1 y2
@@ -211,7 +218,8 @@ end
 module Hashcons = struct
   include Hashcons
 
-  let compare_hash_consed : ('a -> 'a -> int) -> 'a hash_consed -> 'a hash_consed -> int =
+  let compare_hash_consed :
+      ('a -> 'a -> int) -> 'a hash_consed -> 'a hash_consed -> int =
    fun _ {tag= t1; _} {tag= t2; _} -> Int.compare t1 t2
 
   let hash_consed_of_sexp : (Sexp.t -> 'a) -> Sexp.t -> 'a hash_consed =

@@ -14,7 +14,11 @@ let in_dir : string -> f:(unit -> 'a) -> 'a =
   Unix.chdir cur_dir ; ret
 
 let run_candidate :
-    debug:bool -> params:(string * Db.primvalue) list -> gprof:bool -> Ralgebra.t -> _ =
+       debug:bool
+    -> params:(string * Db.primvalue) list
+    -> gprof:bool
+    -> Ralgebra.t
+    -> _ =
  fun ~debug ~params ~gprof ralgebra ->
   Logs.info (fun m -> m "Benchmarking %s." (Ralgebra.to_string ralgebra)) ;
   let module CConfig = struct
@@ -60,8 +64,12 @@ let run_candidate :
   let perf_template = Config.project_root ^ "/bin/templates/perf.c" in
   (let open In_channel in
   with_file perf_template ~f:(fun ch ->
-      let out = String.template (input_all ch) ["#include \"scanner.h\""; params_str] in
-      let () = Out_channel.(with_file "main.c" ~f:(fun ch -> output_string ch out)) in
+      let out =
+        String.template (input_all ch) ["#include \"scanner.h\""; params_str]
+      in
+      let () =
+        Out_channel.(with_file "main.c" ~f:(fun ch -> output_string ch out))
+      in
       () )) ;
   let command_exn : string list -> unit = function
     | [] -> Error.of_string "Empty command" |> Error.raise
@@ -81,9 +89,10 @@ let run_candidate :
   else (
     command_exn
       [ opt
-      ; "-S -pass-remarks-output=remarks.yaml -mergereturn -always-inline scanner.ll > \
-         scanner-opt.ll" ] ;
-    command_exn ((clang :: cflags) @ ["scanner-opt.ll"; "main.c"; "-o"; "scanner.exe"]) ) ;
+      ; "-S -pass-remarks-output=remarks.yaml -mergereturn -always-inline \
+         scanner.ll > scanner-opt.ll" ] ;
+    command_exn
+      ((clang :: cflags) @ ["scanner-opt.ll"; "main.c"; "-o"; "scanner.exe"]) ) ;
   Llvm.dispose_module CConfig.module_ ;
   Llvm.dispose_context CConfig.ctx ;
   (* Collect runtime information. Most of this requires parsing the query
@@ -101,7 +110,8 @@ let run_candidate :
     let scanner_crashed = Caml.Sys.command "./scanner.exe -c db.buf" > 0 in
     if scanner_crashed then Logs.err (fun m -> m "Scanner crashed.") ;
     let outputs_differ =
-      Caml.Sys.command "bash -c 'diff -q <(sort ../golden.csv) <(sort output.csv)'" > 0
+      Caml.Sys.command "bash -c 'diff -q <(sort ../golden.csv) <(sort output.csv)'"
+      > 0
     in
     if outputs_differ then Logs.err (fun m -> m "Outputs differ.") ;
     (runs_per_sec, db_size, exe_size, scanner_crashed || outputs_differ) )
@@ -136,10 +146,12 @@ let benchmark : ?sample:int -> db:string -> Bench.t -> unit =
   (* Create sqlite for results. *)
   let result_db = Sqlite3.db_open "results.sqlite" in
   Sqlite3.exec result_db
-    "create table results (runtime numeric, dbsize numeric, exesize numeric, dir text, \
-     failed integer)"
+    "create table results (runtime numeric, dbsize numeric, exesize numeric, dir \
+     text, failed integer)"
   |> ignore ;
-  let insert_stmt = Sqlite3.prepare result_db "insert into results values (?,?,?,?,?)" in
+  let insert_stmt =
+    Sqlite3.prepare result_db "insert into results values (?,?,?,?,?)"
+  in
   let candidates = Transform.search ralgebra in
   Unix.mkdir name ;
   in_dir name ~f:(fun () ->
@@ -204,7 +216,8 @@ let main :
   | None -> () ) ;
   let candidates =
     match transforms with
-    | Some tfs -> Transform.run_chain (List.map ~f:Transform.of_name_exn tfs) ralgebra
+    | Some tfs ->
+        Transform.run_chain (List.map ~f:Transform.of_name_exn tfs) ralgebra
     | None -> Transform.search ralgebra
   in
   let dir = match dir with Some x -> x | None -> Filename.temp_dir "perf" "" in
@@ -236,7 +249,8 @@ let () =
            and params =
              flag "param" ~aliases:["p"] (listed param)
                ~doc:"query parameters (passed as key:value)"
-           and verbose = flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
+           and verbose =
+             flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
            and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
            and debug = flag "debug" ~aliases:["g"] no_arg ~doc:"enable debug mode"
            and gprof = flag "prof" ~aliases:["pg"] no_arg ~doc:"enable profiling"
@@ -260,7 +274,8 @@ let () =
       , basic ~summary:"Run a benchmark file."
           (let%map_open db =
              flag "db" (required string) ~doc:"DB the database to connect to"
-           and verbose = flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
+           and verbose =
+             flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
            and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
            and sample =
              flag "sample" ~aliases:["s"] (optional int)

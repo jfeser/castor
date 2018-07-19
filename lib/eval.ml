@@ -85,7 +85,8 @@ module Make_relation (Config : Config.S_relation) = struct
               [%sexp_of : Ralgebra.op * primvalue list]
             |> raise
 
-  let eval_aggregate : Tuple.t -> Field.t Ralgebra0.agg list -> Tuple.t Seq.t -> Tuple.t =
+  let eval_aggregate :
+      Tuple.t -> Field.t Ralgebra0.agg list -> Tuple.t Seq.t -> Tuple.t =
    fun key agg group ->
     List.map agg ~f:(function
       | Count -> Seq.length group |> Value.of_int_exn
@@ -114,7 +115,8 @@ module Make_relation (Config : Config.S_relation) = struct
             |> Seq.map ~f:(fun (ts, v) -> List.rev v @ ts) )
         |> Seq.map ~f:List.rev
     | ZipTuple ls ->
-        List.map ls ~f:(eval_layout ctx) |> Seq.zip_many |> Seq.map ~f:Tuple.merge_many
+        List.map ls ~f:(eval_layout ctx)
+        |> Seq.zip_many |> Seq.map ~f:Tuple.merge_many
     | UnorderedList ls | OrderedList (ls, _) ->
         Seq.concat_map ~f:(eval_layout ctx) (Seq.of_list ls)
     | Table (ls, {lookup= k; _}) -> (
@@ -124,7 +126,8 @@ module Make_relation (Config : Config.S_relation) = struct
         | Some l -> eval_layout ctx l
         | None -> Seq.empty )
       | None ->
-          Error.create "Missing key." (k, ctx) [%sexp_of : PredCtx.Key.t * PredCtx.t]
+          Error.create "Missing key." (k, ctx)
+            [%sexp_of : PredCtx.Key.t * PredCtx.t]
           |> raise )
     | Grouping (ls, {output; _}) ->
         Seq.of_list ls
@@ -144,7 +147,9 @@ module Make_relation (Config : Config.S_relation) = struct
   let eval_filter ctx p seq =
     Seq.filter seq ~f:(fun t ->
         let ctx = Map.merge_right ctx (PredCtx.of_tuple t) in
-        match eval_pred ctx p with `Bool x -> x | _ -> failwith "Expected a boolean." )
+        match eval_pred ctx p with
+        | `Bool x -> x
+        | _ -> failwith "Expected a boolean." )
 
   module V = struct
     type t = {field: Field.t; value: primvalue} [@@deriving compare, hash, sexp]
@@ -173,7 +178,9 @@ module Make_relation (Config : Config.S_relation) = struct
     end in
     let tbl = Hashtbl.create (module K) in
     Seq.iter s ~f:(fun t ->
-        let key = List.map key_fields ~f:(fun f -> Tuple.field_exn t f |> V.of_value) in
+        let key =
+          List.map key_fields ~f:(fun f -> Tuple.field_exn t f |> V.of_value)
+        in
         Hashtbl.add_multi tbl ~key ~data:t ) ;
     Hashtbl.mapi tbl ~f:(fun ~key ~data ->
         let open Ralgebra0 in
@@ -248,7 +255,9 @@ module Make_relation (Config : Config.S_relation) = struct
           let ss = List.map rs ~f in
           `Ralgebra
             (Concat
-               (List.map ss ~f:(function `Seq s -> row_layout s | `Ralgebra r -> r)))
+               (List.map ss ~f:(function
+                 | `Seq s -> row_layout s
+                 | `Ralgebra r -> r )))
       | Count r -> (
         match f r with
         | `Seq s -> `Seq (eval_count s)

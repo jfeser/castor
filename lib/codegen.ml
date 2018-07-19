@@ -72,10 +72,12 @@ module Make (Config : Config.S) () = struct
           match Hashtbl.find m "params" with
           | Some (Local v) -> v
           | Some (Param _) ->
-              Error.create "Params mistagged." m [%sexp_of : var Hashtbl.M(String).t]
+              Error.create "Params mistagged." m
+                [%sexp_of : var Hashtbl.M(String).t]
               |> Error.raise
           | None ->
-              Error.create "Params not found." (Hashtbl.keys m) [%sexp_of : string list]
+              Error.create "Params not found." (Hashtbl.keys m)
+                [%sexp_of : string list]
               |> Error.raise )
         | None, [] -> Error.of_string "Empty namespace." |> Error.raise
       in
@@ -175,7 +177,8 @@ module Make (Config : Config.S) () = struct
     in
     Option.value_exn ~error (Hashtbl.find iters n)
 
-  let null_fresh_global : ?linkage:Linkage.t -> lltype -> string -> llmodule -> llvalue =
+  let null_fresh_global :
+      ?linkage:Linkage.t -> lltype -> string -> llmodule -> llvalue =
    fun ?(linkage= Linkage.Internal) t n m ->
     let rec loop i =
       let n = if i = 0 then n else sprintf "%s.%d" n i in
@@ -209,7 +212,8 @@ module Make (Config : Config.S) () = struct
     build_alloca t n builder
 
   (** Build a call that passes the parameter struct. *)
-  let build_param_call : _ -> llvalue -> llvalue array -> string -> llbuilder -> llvalue =
+  let build_param_call :
+      _ -> llvalue -> llvalue array -> string -> llbuilder -> llvalue =
    fun fctx func args name b ->
     let params = get_val fctx "params" in
     build_call func (Array.append [|params|] args) name b
@@ -221,7 +225,8 @@ module Make (Config : Config.S) () = struct
     assert (TypeKind.(classify_type struct_t = Struct)) ;
     let elems_t = struct_element_types struct_t in
     if not (i >= 0 && i < Array.length elems_t) then (
-      Logs.err (fun m -> m "Struct index %d out of bounds %d." i (Array.length elems_t)) ;
+      Logs.err (fun m ->
+          m "Struct index %d out of bounds %d." i (Array.length elems_t) ) ;
       assert false ) ;
     build_gep v [|const_int (i64_type ctx) i|] n b
 
@@ -234,7 +239,8 @@ module Make (Config : Config.S) () = struct
     assert (TypeKind.(classify_type struct_t = Struct)) ;
     let elems_t = struct_element_types struct_t in
     if not (i >= 0 && i < Array.length elems_t) then (
-      Logs.err (fun m -> m "Struct index %d out of bounds %d." i (Array.length elems_t)) ;
+      Logs.err (fun m ->
+          m "Struct index %d out of bounds %d." i (Array.length elems_t) ) ;
       assert false ) ;
     build_struct_gep v i n b
 
@@ -246,7 +252,8 @@ module Make (Config : Config.S) () = struct
     ( match classify_type typ with
     | Struct ->
         if i >= Array.length (struct_element_types typ) then
-          Error.create "Tuple index out of bounds." (v, i) [%sexp_of : llvalue * int]
+          Error.create "Tuple index out of bounds." (v, i)
+            [%sexp_of : llvalue * int]
           |> Error.raise
     | k ->
         Error.create "Expected a tuple." (v, k, i)
@@ -266,7 +273,9 @@ module Make (Config : Config.S) () = struct
       module_
 
   let call_printf fmt_str args =
-    let fmt_str_ptr = build_bitcast fmt_str (pointer_type (i8_type ctx)) "" builder in
+    let fmt_str_ptr =
+      build_bitcast fmt_str (pointer_type (i8_type ctx)) "" builder
+    in
     let fmt_args = Array.append [|fmt_str_ptr|] (Array.of_list args) in
     build_call printf fmt_args "" builder |> ignore
 
@@ -300,7 +309,9 @@ module Make (Config : Config.S) () = struct
 
   let scmp =
     let func =
-      declare_function "scmp" (function_type bool_type [|str_type; str_type|]) module_
+      declare_function "scmp"
+        (function_type bool_type [|str_type; str_type|])
+        module_
     in
     let bb = append_block ctx "entry" func in
     let eq_bb = append_block ctx "eq" func in
@@ -312,7 +323,8 @@ module Make (Config : Config.S) () = struct
     let p2 = build_extractvalue s2 0 "p2" builder in
     let l1 = build_extractvalue s1 1 "l1" builder in
     let l2 = build_extractvalue s2 1 "l2" builder in
-    build_cond_br (build_icmp Icmp.Eq l1 l2 "" builder) eq_bb neq_bb builder |> ignore ;
+    build_cond_br (build_icmp Icmp.Eq l1 l2 "" builder) eq_bb neq_bb builder
+    |> ignore ;
     position_at_end eq_bb builder ;
     let ret = build_call strncmp [|p1; p2; l1|] "" builder in
     let ret = build_icmp Icmp.Eq ret (const_int (i32_type ctx) 0) "" builder in
@@ -328,7 +340,8 @@ module Make (Config : Config.S) () = struct
   let unpack_null : type_ -> llvalue -> llnvalue =
    fun t v ->
     if is_nullable t then
-      {data= build_extractvalue v 0 "" builder; null= build_extractvalue v 1 "" builder}
+      { data= build_extractvalue v 0 "" builder
+      ; null= build_extractvalue v 1 "" builder }
     else {data= v; null= const_int (i1_type ctx) 0}
 
   let pack_null : type_ -> data:llvalue -> null:llvalue -> llvalue =
@@ -366,8 +379,12 @@ module Make (Config : Config.S) () = struct
     let size_bits = Serialize.isize * size_bytes in
     let byte_idx = codegen_expr fctx byte_idx in
     let buf_ptr = build_load (get_val fctx "buf") "buf_ptr" builder in
-    let buf_ptr_as_int = build_ptrtoint buf_ptr (i64_type ctx) "buf_ptr_int" builder in
-    let slice_ptr_as_int = build_add buf_ptr_as_int byte_idx "slice_ptr_int" builder in
+    let buf_ptr_as_int =
+      build_ptrtoint buf_ptr (i64_type ctx) "buf_ptr_int" builder
+    in
+    let slice_ptr_as_int =
+      build_add buf_ptr_as_int byte_idx "slice_ptr_int" builder
+    in
     let slice_ptr =
       build_inttoptr slice_ptr_as_int
         (pointer_type (integer_type ctx size_bits))
@@ -392,8 +409,9 @@ module Make (Config : Config.S) () = struct
         if idx >= Array.length (struct_element_types typ) then
           Logs.err (fun m ->
               m "Tuple index out of bounds %s %d." (string_of_llvalue lltup) idx )
-    | _ -> Logs.err (fun m -> m "Expected a tuple but got %s." (string_of_llvalue lltup))
-    ) ;
+    | _ ->
+        Logs.err (fun m ->
+            m "Expected a tuple but got %s." (string_of_llvalue lltup) ) ) ;
     build_extractvalue lltup idx "elemtmp" builder
 
   let codegen_hash fctx hash_ptr key_ptr key_size =
@@ -409,14 +427,20 @@ module Make (Config : Config.S) () = struct
     debug_printf "Key size: %d\n" [key_size] ;
     let buf_ptr = build_load (get_val fctx "buf") "buf_ptr" builder in
     debug_printf "Buf ptr: %p\n" [buf_ptr] ;
-    let buf_ptr_as_int = build_ptrtoint buf_ptr (i64_type ctx) "buf_ptr_int" builder in
-    let hash_ptr_as_int = build_add buf_ptr_as_int hash_ptr "hash_ptr_int" builder in
+    let buf_ptr_as_int =
+      build_ptrtoint buf_ptr (i64_type ctx) "buf_ptr_int" builder
+    in
+    let hash_ptr_as_int =
+      build_add buf_ptr_as_int hash_ptr "hash_ptr_int" builder
+    in
     let hash_ptr =
       build_inttoptr hash_ptr_as_int (pointer_type (i8_type ctx)) "hash_ptr" builder
     in
     debug_printf "Hash ptr: %p\n" [hash_ptr] ;
     let hash_val =
-      build_call cmph_search_packed [|hash_ptr; key_ptr; key_size|] "hash_val" builder
+      build_call cmph_search_packed
+        [|hash_ptr; key_ptr; key_size|]
+        "hash_val" builder
     in
     debug_printf "Hash val: %d\n" [hash_val] ;
     build_intcast hash_val (i64_type ctx) "hash_val_cast" builder
@@ -445,7 +469,9 @@ module Make (Config : Config.S) () = struct
     let buf = build_load (get_val fctx "buf") "buf" builder in
     let buf_ptr_as_int = build_ptrtoint buf (i64_type ctx) "buf_ptr_int" builder in
     let ptr_as_int = build_add buf_ptr_as_int ptr "ptr_int" builder in
-    let ptr = build_inttoptr ptr_as_int (pointer_type (i8_type ctx)) "ptr" builder in
+    let ptr =
+      build_inttoptr ptr_as_int (pointer_type (i8_type ctx)) "ptr" builder
+    in
     build_store ptr (build_struct_gep struct_ 0 "" builder) builder |> ignore ;
     build_store len (build_struct_gep struct_ 1 "" builder) builder |> ignore ;
     build_load struct_ "" builder
@@ -467,11 +493,13 @@ module Make (Config : Config.S) () = struct
       | Mod -> build_srem v1 v2 "modtmp" builder
       | Eq -> (
         match (t1, t2) with
-        | IntT _, IntT _ | BoolT _, BoolT _ -> build_icmp Icmp.Eq x1 x2 "eqtmp" builder
+        | IntT _, IntT _ | BoolT _, BoolT _ ->
+            build_icmp Icmp.Eq x1 x2 "eqtmp" builder
         | StringT _, StringT _ -> build_call scmp [|x1; x2|] "eqtmp" builder
         | _ ->
             fail
-              (Error.create "Unexpected equality." (t1, t2) [%sexp_of : type_ * type_]) )
+              (Error.create "Unexpected equality." (t1, t2)
+                 [%sexp_of : type_ * type_]) )
       | Lt -> build_icmp Icmp.Slt x1 x2 "lttmp" builder
       | And -> build_and x1 x2 "andtmp" builder
       | Or -> build_or x1 x2 "ortmp" builder
@@ -523,7 +551,8 @@ module Make (Config : Config.S) () = struct
         build_load v n builder
     | String x -> codegen_string x
     | Done iter -> codegen_done fctx iter
-    | Slice (byte_idx, size_bytes) -> codegen_slice codegen_expr fctx byte_idx size_bytes
+    | Slice (byte_idx, size_bytes) ->
+        codegen_slice codegen_expr fctx byte_idx size_bytes
     | Index (tup, idx) -> codegen_index (codegen_expr fctx) tup idx
     | Binop {op; arg1; arg2} -> codegen_binop codegen_expr fctx op arg1 arg2
     | Unop {op; arg} -> codegen_unop codegen_expr fctx op arg
@@ -595,7 +624,8 @@ module Make (Config : Config.S) () = struct
       let llargs = List.map args ~f:(codegen_expr fctx) in
       debug_printf
         (sprintf "Calling init %s(%s).\n" func
-           (List.init (List.length args) ~f:(fun _ -> "%d") |> String.concat ~sep:", "))
+           ( List.init (List.length args) ~f:(fun _ -> "%d")
+           |> String.concat ~sep:", " ))
         llargs ;
       build_param_call fctx init_func (Array.of_list llargs) "" builder |> ignore
 
@@ -683,12 +713,14 @@ module Make (Config : Config.S) () = struct
           call_printf fmt []
       | StringT {nullable= false} ->
           call_printf str_fmt
-            [build_extractvalue val_ 1 "" builder; build_extractvalue val_ 0 "" builder]
+            [ build_extractvalue val_ 1 "" builder
+            ; build_extractvalue val_ 0 "" builder ]
       | StringT {nullable= true} as t ->
           let {null; _} = unpack_null t val_ in
           let fmt = build_select null null_str str_fmt "" builder in
           call_printf fmt
-            [build_extractvalue val_ 1 "" builder; build_extractvalue val_ 0 "" builder]
+            [ build_extractvalue val_ 1 "" builder
+            ; build_extractvalue val_ 0 "" builder ]
       | TupleT ts ->
           List.iteri ts ~f:(fun i t ->
               gen (build_extractvalue val_ i "" builder) t ;
@@ -717,10 +749,16 @@ module Make (Config : Config.S) () = struct
     in
     let set_attributes func =
       (* Set iterator function attributes. *)
-      add_function_attr func (create_enum_attr ctx "argmemonly" 0L) AttrIndex.Function ;
+      add_function_attr func
+        (create_enum_attr ctx "argmemonly" 0L)
+        AttrIndex.Function ;
       add_function_attr func (create_enum_attr ctx "nounwind" 0L) AttrIndex.Function ;
-      add_function_attr func (create_enum_attr ctx "norecurse" 0L) AttrIndex.Function ;
-      add_function_attr func (create_enum_attr ctx "alwaysinline" 0L) AttrIndex.Function ;
+      add_function_attr func
+        (create_enum_attr ctx "norecurse" 0L)
+        AttrIndex.Function ;
+      add_function_attr func
+        (create_enum_attr ctx "alwaysinline" 0L)
+        AttrIndex.Function ;
       set_linkage Linkage.Internal func
     in
     let load_params ictx func =
@@ -729,7 +767,9 @@ module Make (Config : Config.S) () = struct
           match data with
           | Local _ | Param {alloca= Some _; _} -> data
           | Param {idx; alloca= None} ->
-              let param = build_load (get_val ~params:params_ptr ictx name) "" builder in
+              let param =
+                build_load (get_val ~params:params_ptr ictx name) "" builder
+              in
               let param_alloca = build_entry_alloca (type_of param) name builder in
               build_store param param_alloca builder |> ignore ;
               Param {idx; alloca= Some param_alloca} )
@@ -753,7 +793,8 @@ module Make (Config : Config.S) () = struct
           let var = get_val ictx n in
           build_store (param ictx#init (i + 1)) var builder |> ignore ) ;
       (* Set done to false. *)
-      build_store (const_int (i1_type ctx) 0) (get_val ictx "done") builder |> ignore ;
+      build_store (const_int (i1_type ctx) 0) (get_val ictx "done") builder
+      |> ignore ;
       (* Set yield_index to 0. *)
       build_store
         (const_int (i8_type ctx) ictx#switch_index)
@@ -776,7 +817,9 @@ module Make (Config : Config.S) () = struct
       Hashtbl.set ictx#values ~key:"params" ~data:(Local (param ictx#step 0)) ;
       load_params ictx ictx#step ;
       (* Create top level switch. *)
-      let yield_index = build_load (get_val ictx "yield_index") "yield_index" builder in
+      let yield_index =
+        build_load (get_val ictx "yield_index") "yield_index" builder
+      in
       let default_bb = append_block ctx "default" ictx#step in
       position_at_end default_bb builder ;
       debug_printf "Error: entered default switch case.\n" [] ;
@@ -790,14 +833,16 @@ module Make (Config : Config.S) () = struct
       position_at_end bb builder ;
       (* Codegen the rest of the function body. *)
       codegen_prog ictx ictx#func.body ;
-      build_store (const_int (i1_type ctx) 1) (get_val ictx "done") builder |> ignore ;
+      build_store (const_int (i1_type ctx) 1) (get_val ictx "done") builder
+      |> ignore ;
       store_params ictx ictx#step ;
       build_ret (const_null ret_t) builder |> ignore ;
       (* Check step function. *)
       Logs.debug (fun m -> m "%s" (string_of_llvalue ictx#step)) ;
       Logs.debug (fun m ->
           m "%s"
-            (Sexp.to_string_hum ([%sexp_of : string list] (Hashtbl.keys ictx#values))) ) ;
+            (Sexp.to_string_hum
+               ([%sexp_of : string list] (Hashtbl.keys ictx#values))) ) ;
       assert_valid_function ictx#step
     in
     fun ictx ->
@@ -817,7 +862,8 @@ module Make (Config : Config.S) () = struct
       | Assign {lhs; rhs} -> codegen_assign fctx lhs rhs
       | Print (type_, expr) -> codegen_print fctx type_ expr
       | Return expr -> codegen_return fctx expr
-      | Yield _ -> fail (Error.of_string "Yields not allowed in function declarations.")
+      | Yield _ ->
+          fail (Error.of_string "Yields not allowed in function declarations.")
     and codegen_prog : _ -> prog -> unit =
      fun fctx p -> List.iter ~f:(codegen_stmt fctx) p
     in
@@ -833,7 +879,8 @@ module Make (Config : Config.S) () = struct
       (* Create function. *)
       let func_t =
         let args_t =
-          pointer_type !params_struct_t :: List.map args ~f:(fun (_, t) -> codegen_type t)
+          pointer_type !params_struct_t
+          :: List.map args ~f:(fun (_, t) -> codegen_type t)
           |> Array.of_list
         in
         function_type (codegen_type ret_type) args_t
@@ -850,7 +897,8 @@ module Make (Config : Config.S) () = struct
       (* Put arguments into symbol table. *)
       Hashtbl.set fctx#values ~key:"params" ~data:(Local (param fctx#llfunc 0)) ;
       List.iteri args ~f:(fun i (n, _) ->
-          Hashtbl.set fctx#values ~key:n ~data:(Local (param fctx#llfunc (i + 1))) ) ;
+          Hashtbl.set fctx#values ~key:n ~data:(Local (param fctx#llfunc (i + 1)))
+      ) ;
       codegen_prog fctx body ;
       match block_terminator (insertion_block builder) with
       | Some _ -> ()
@@ -896,7 +944,9 @@ module Make (Config : Config.S) () = struct
         let fctx =
           object
             val values
-              = Hashtbl.of_alist_exn (module String) [("params", Local (param llfunc 0))]
+              = Hashtbl.of_alist_exn
+                  (module String)
+                  [("params", Local (param llfunc 0))]
             method values = values
             method llfunc = llfunc
           end
@@ -961,7 +1011,9 @@ module Make (Config : Config.S) () = struct
               SB.build_local sb ictx n lltype ) ;
           ictx )
     in
-    let fctxs = List.map ir_funcs ~f:(fun (name, func) -> new fctx name func params) in
+    let fctxs =
+      List.map ir_funcs ~f:(fun (name, func) -> new fctx name func params)
+    in
     params_struct_t := SB.build_param_struct sb "params" ;
     List.iter ictxs ~f:codegen_iter ;
     List.iter fctxs ~f:codegen_func ;
@@ -990,7 +1042,9 @@ module Make (Config : Config.S) () = struct
       | Pointer ->
           let elem_t = element_type t in
           let elem_t =
-            match classify_type elem_t with Array -> element_type elem_t | _ -> elem_t
+            match classify_type elem_t with
+            | Array -> element_type elem_t
+            | _ -> elem_t
           in
           fprintf fmt "%a *" pp_type elem_t
       | _ -> Error.(create "Unknown type." t [%sexp_of : lltype] |> raise)
@@ -1014,7 +1068,8 @@ module Make (Config : Config.S) () = struct
                 (param_types t)
           | _ -> ignore_val () )
       | Function ->
-          fprintf fmt "%a %s(%a);@," pp_type (return_type t) n pp_params (param_types t)
+          fprintf fmt "%a %s(%a);@," pp_type (return_type t) n pp_params
+            (param_types t)
       | _ -> ignore_val ()
     in
     let fmt = Format.formatter_of_out_channel ch in

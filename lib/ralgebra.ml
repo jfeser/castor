@@ -18,7 +18,8 @@ include Comparable.Make (T)
 module Binable = struct
   type ralgebra = t
 
-  type t = (Field.t, Relation.t, Layout.Binable.t) Ralgebra0.t [@@deriving bin_io, hash]
+  type t = (Field.t, Relation.t, Layout.Binable.t) Ralgebra0.t
+  [@@deriving bin_io, hash]
 
   let rec of_ralgebra : ralgebra -> t = function
     | Project (fs, r) -> Project (fs, of_ralgebra r)
@@ -96,7 +97,8 @@ let resolve :
         method project fs = List.map ~f:resolve_field fs
         method filter p = resolve_pred p
         method eq_join f1 f2 = (resolve_field f1, resolve_field f2)
-        method agg out key = (List.map out ~f:resolve_agg, List.map key ~f:resolve_field)
+        method agg out key =
+          (List.map out ~f:resolve_agg, List.map key ~f:resolve_field)
       end
     in
     f#run
@@ -216,7 +218,8 @@ let rec to_string : t -> string = function
   | Count r -> sprintf "Count(%s)" (to_string r)
   | Filter (p, r) -> sprintf "Filter(%s, %s)" (pred_to_string p) (to_string r)
   | EqJoin (f1, f2, r1, r2) ->
-      sprintf "EqJoin(%s, %s, %s, %s)" f1.fname f2.fname (to_string r1) (to_string r2)
+      sprintf "EqJoin(%s, %s, %s, %s)" f1.fname f2.fname (to_string r1)
+        (to_string r2)
   | Scan _ -> sprintf "Scan(..)"
   | Concat rs ->
       List.map rs ~f:to_string |> String.concat ~sep:", " |> sprintf "Concat(%s)"
@@ -235,7 +238,8 @@ let of_string_exn : string -> (string * string, string, 'l) Ralgebra0.t =
     raise e
 
 let rec to_schema_exn : t -> Schema.t = function
-  | Project (fs, r) -> to_schema_exn r |> List.filter ~f:(List.mem fs ~equal:Field.( = ))
+  | Project (fs, r) ->
+      to_schema_exn r |> List.filter ~f:(List.mem fs ~equal:Field.( = ))
   | Count _ -> [Field.{fname= "count"; dtype= DInt}]
   | Filter (_, r) -> to_schema_exn r
   | EqJoin (_, _, r1, r2) -> to_schema_exn r1 @ to_schema_exn r2
@@ -257,7 +261,8 @@ let rec flatten : t -> t = function
     match flatten r with Scan {node= Empty; _} -> Scan Layout.empty | _ -> x )
   | Count r as x -> (
     match flatten r with
-    | Scan {node= Empty; _} -> Scan Layout.(int 0 (scalar Relation.dummy Field.dummy))
+    | Scan {node= Empty; _} ->
+        Scan Layout.(int 0 (scalar Relation.dummy Field.dummy))
     | _ -> x )
   | EqJoin (_, _, r1, r2) as x -> (
     match (flatten r1, flatten r2) with
@@ -329,7 +334,9 @@ let intro_project : t -> t =
         let fields = Set.of_list (module Field) fs in
         Project (fs, f fields r)
     | Filter (p, r) ->
-        let fields = Set.union fields (Set.of_list (module Field) (pred_fields p)) in
+        let fields =
+          Set.union fields (Set.of_list (module Field) (pred_fields p))
+        in
         Filter (p, f fields r)
     | Count r -> Count (f (Set.empty (module Field)) r)
     | EqJoin (f1, f2, r1, r2) ->
@@ -355,12 +362,16 @@ let push_filter : t -> t =
     | Filter (p, EqJoin (f1, f2, r1, r2)) ->
         let fields = Set.of_list (module Field) (pred_fields p) in
         let r1, pushed_r1 =
-          if Set.is_subset fields ~of_:(Set.of_list (module Field) (to_schema_exn r1))
+          if
+            Set.is_subset fields
+              ~of_:(Set.of_list (module Field) (to_schema_exn r1))
           then (f (Filter (p, r1)), true)
           else (f r1, false)
         in
         let r2, pushed_r2 =
-          if Set.is_subset fields ~of_:(Set.of_list (module Field) (to_schema_exn r2))
+          if
+            Set.is_subset fields
+              ~of_:(Set.of_list (module Field) (to_schema_exn r2))
           then (f (Filter (p, r2)), true)
           else (f r2, false)
         in
@@ -413,7 +424,10 @@ let hoist_filter : t -> t =
             List.filter_map out ~f:(function Key f -> Some f | _ -> None)
             |> Set.of_list (module Field)
           in
-          if Set.is_subset (pred_fields p |> Set.of_list (module Field)) ~of_:out_fields
+          if
+            Set.is_subset
+              (pred_fields p |> Set.of_list (module Field))
+              ~of_:out_fields
           then Filter (p, Agg (out, key, r'))
           else Agg (out, key, r)
       | r -> Agg (out, key, r) )
@@ -426,7 +440,9 @@ let hoist_filter : t -> t =
         match List.filter_map ps ~f:(fun x -> x) with
         | [] -> Concat rs
         | p :: ps ->
-            let pred = List.fold_left ~init:p ps ~f:(fun p p' -> Binop (And, p, p')) in
+            let pred =
+              List.fold_left ~init:p ps ~f:(fun p p' -> Binop (And, p, p'))
+            in
             Filter (pred, Concat rs)
   in
   f r
@@ -488,4 +504,5 @@ let tests =
   >::: [ "of_string"
          >::: [ parse_test "Filter(taxi.xpos > xv:int, taxi)"
               ; parse_test "Filter(taxi.xpos > xv:int && taxi.xpos > xv:int, taxi)"
-              ; parse_test "Filter(taxi.xpos > xv:int && taxi.ypos > yv:int, taxi)" ] ]
+              ; parse_test "Filter(taxi.xpos > xv:int && taxi.ypos > yv:int, taxi)"
+              ] ]

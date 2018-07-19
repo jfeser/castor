@@ -45,7 +45,8 @@ let main :
        expression. *)
   ( match sample with
   | Some s ->
-      Ralgebra.relations cand.ralgebra |> List.iter ~f:(Db.Relation.sample Config.conn s)
+      Ralgebra.relations cand.ralgebra
+      |> List.iter ~f:(Db.Relation.sample Config.conn s)
   | None -> () ) ;
   let candidates =
     List.fold_left transforms ~init:[cand] ~f:(fun rs (t, i) ->
@@ -63,11 +64,14 @@ let main :
   match (output, candidates) with
   | Some f, [r] ->
       let cand = Candidate.Binable.of_candidate r in
-      let size = Candidate.Binable.bin_size_t cand + Bin_prot.Utils.size_header_length in
+      let size =
+        Candidate.Binable.bin_size_t cand + Bin_prot.Utils.size_header_length
+      in
       let buf = Bigstring.create size in
       Bigstring.write_bin_prot buf Candidate.Binable.bin_writer_t cand |> ignore ;
       let fd = Unix.openfile ~mode:[O_RDWR; O_CREAT] f in
-      Bigstring.really_write fd buf ; Unix.close fd
+      Bigstring.really_write fd buf ;
+      Unix.close fd
   | Some _, [] -> Error.of_string "No candidates to output." |> Error.raise
   | Some _, _ -> Error.of_string "More than one candidate to output." |> Error.raise
   | None, _ -> ()
@@ -83,7 +87,8 @@ let () =
         | [] -> Error.of_string "Unexpected empty string." |> Error.raise
         | [t] -> (t, None)
         | [t; i] -> (t, Some (Int.of_string i))
-        | _ -> Error.create "Malformed transform." s [%sexp_of : string] |> Error.raise
+        | _ ->
+            Error.create "Malformed transform." s [%sexp_of : string] |> Error.raise
     )
   in
   let open Let_syntax in
@@ -96,7 +101,8 @@ let () =
      and verbose = flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
      and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
      and no_default =
-       flag "no-default" ~aliases:["nd"] no_arg ~doc:"disable default transformations"
+       flag "no-default" ~aliases:["nd"] no_arg
+         ~doc:"disable default transformations"
      and sample =
        flag "sample" ~aliases:["s"] (optional int)
          ~doc:"N the number of rows to sample from large tables"
@@ -104,7 +110,8 @@ let () =
        flag "output" ~aliases:["o"] (optional string)
          ~doc:"FILE where to write the final expression"
      and debug =
-       flag "debug" ~aliases:["g"] no_arg ~doc:"turn on error checking for transforms"
+       flag "debug" ~aliases:["g"] no_arg
+         ~doc:"turn on error checking for transforms"
      and bench = anon ("bench" %: bench) in
      fun () ->
        if verbose then Logs.set_level (Some Logs.Debug)

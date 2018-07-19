@@ -40,7 +40,8 @@ let main () =
   let l =
     let open Ralgebra0 in
     Filter
-      (Binop (Gt, Field (Relation.field_exn taxi "xpos"), Var ("xv", IntT)), Scan layout)
+      ( Binop (Gt, Field (Relation.field_exn taxi "xpos"), Var ("xv", IntT))
+      , Scan layout )
   in
   let module IGen = IRGen.Make () in
   let ir_module = IGen.irgen l in
@@ -62,6 +63,7 @@ let main () =
   Out_channel.with_file "scanner.h" ~f:CGen.write_header ;
   Llvm.print_module ir_file module_ ;
   Caml.Sys.command (sprintf "llc -O0 -filetype=obj \"%s\"" ir_file) |> ignore ;
-  Caml.Sys.command (sprintf "clang -g -O0 scanner.o main.c -o scanner.exe") |> ignore
+  Caml.Sys.command (sprintf "clang -g -O0 scanner.o main.c -o scanner.exe")
+  |> ignore
 
 let () = Exn.handle_uncaught ~exit:true main

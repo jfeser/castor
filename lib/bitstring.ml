@@ -63,7 +63,8 @@ let pp : Format.formatter -> t -> unit =
   let rec pp prefix offset = function
     | Label (lbl, x) ->
         let blen = byte_length x in
-        fprintf fmt "%s+ %s [%db %dB (%d bytes)]\n" prefix lbl offset (offset / 8) blen ;
+        fprintf fmt "%s+ %s [%db %dB (%d bytes)]\n" prefix lbl offset (offset / 8)
+          blen ;
         pp (prefix ^ "| ") offset x
     | Piece {len; _} -> offset + len
     | PList xs -> List.fold_left xs ~init:offset ~f:(pp prefix)
@@ -141,7 +142,8 @@ module Writer = struct
 
   type t = {mutable buf: int; mutable pos: int; writer: ByteWriter.t}
 
-  let with_file : string -> t = fun fn -> {writer= ByteWriter.of_file fn; buf= 0; pos= 0}
+  let with_file : string -> t =
+   fun fn -> {writer= ByteWriter.of_file fn; buf= 0; pos= 0}
 
   let with_buffer : Buffer.t -> t =
    fun buf -> {writer= ByteWriter.of_buffer buf; buf= 0; pos= 0}
@@ -173,14 +175,16 @@ module Writer = struct
     if t.pos = 0 then t.writer.output_bytes x
     else for i = 0 to Bytes.length x - 1 do write_char t (Bytes.get x i) done
 
-  let write_bytes t x = Exn.reraise_uncaught "write_bytes" (fun () -> write_bytes t x)
+  let write_bytes t x =
+    Exn.reraise_uncaught "write_bytes" (fun () -> write_bytes t x)
 
   let write_string : t -> string -> unit =
    fun t x ->
     if t.pos = 0 then t.writer.output_bytes (Bytes.unsafe_of_string x)
     else for i = 0 to String.length x - 1 do write_char t x.[i] done
 
-  let write_string t x = Exn.reraise_uncaught "write_string" (fun () -> write_string t x)
+  let write_string t x =
+    Exn.reraise_uncaught "write_string" (fun () -> write_string t x)
 
   let write : t -> bitstring -> unit =
    fun t x ->

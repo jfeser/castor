@@ -28,9 +28,11 @@ module PredCtx = struct
 
   type t = primvalue Map.M(Key).t [@@deriving compare, sexp]
 
-  let find_var : t -> string -> primvalue option = fun m x -> Map.find m (Var (x, BoolT))
+  let find_var : t -> string -> primvalue option =
+   fun m x -> Map.find m (Var (x, BoolT))
 
-  let find_field : t -> Field.t -> primvalue option = fun m x -> Map.find m (Field x)
+  let find_field : t -> Field.t -> primvalue option =
+   fun m x -> Map.find m (Field x)
 
   let of_tuple : Tuple.t -> t =
    fun t ->
@@ -241,7 +243,8 @@ module Binable = struct
       | OrderedList (v, x) -> OrderedList (List.map ~f:of_layout v, x)
       | Table (v, x) ->
           Table
-            ( Map.to_alist v |> List.map ~f:(fun (k, v) -> (k.Value.value, of_layout v))
+            ( Map.to_alist v
+              |> List.map ~f:(fun (k, v) -> (k.Value.value, of_layout v))
             , x )
       | Grouping (v, x) ->
           Grouping (List.map ~f:(fun (k, v) -> (of_layout k, of_layout v)) v, x)
@@ -292,7 +295,9 @@ let to_value : t -> Value.t =
   | Bool (x, m) -> {field= m.node.field; rel= m.node.rel; value= `Bool x}
   | String (x, m) -> {field= m.node.field; rel= m.node.rel; value= `String x}
   | Null m -> {field= m.node.field; rel= m.node.rel; value= `Null}
-  | x -> Error.create "Cannot be converted to value." x [%sexp_of : node] |> Error.raise
+  | x ->
+      Error.create "Cannot be converted to value." x [%sexp_of : node]
+      |> Error.raise
 
 let of_value : Value.t -> t =
  fun {field; rel; value} ->
@@ -375,7 +380,9 @@ let rec params : t -> Set.M(TypedName).t =
         let p2 = Option.value_map ~f:kparams k2 ~default:empty in
         union_list (p1 :: p2 :: lparams ls)
     | Grouping (ls, _) ->
-        let pk, pv = List.map ls ~f:(fun (k, v) -> (params k, params v)) |> List.unzip in
+        let pk, pv =
+          List.map ls ~f:(fun (k, v) -> (params k, params v)) |> List.unzip
+        in
         union_list (pk @ pv)
     | Table (m, {lookup= k; _}) -> union_list (kparams k :: lparams (Map.data m))
 
@@ -383,19 +390,25 @@ let rec partition : PredCtx.Key.t -> Field.t -> t -> t =
   let p_int k f x m =
     let v = int x m in
     if Field.(f = m.node.field) then
-      table (Map.singleton (module ValueMap.Elem) (to_value v) v) {field= f; lookup= k}
+      table
+        (Map.singleton (module ValueMap.Elem) (to_value v) v)
+        {field= f; lookup= k}
     else v
   in
   let p_bool k f x m =
     let v = bool x m in
     if Field.(f = m.node.field) then
-      table (Map.singleton (module ValueMap.Elem) (to_value v) v) {field= f; lookup= k}
+      table
+        (Map.singleton (module ValueMap.Elem) (to_value v) v)
+        {field= f; lookup= k}
     else v
   in
   let p_string k f x m =
     let v = string x m in
     if Field.(f = m.node.field) then
-      table (Map.singleton (module ValueMap.Elem) (to_value v) v) {field= f; lookup= k}
+      table
+        (Map.singleton (module ValueMap.Elem) (to_value v) v)
+        {field= f; lookup= k}
     else v
   in
   let p_crosstuple k f ls =
@@ -436,7 +449,8 @@ let rec partition : PredCtx.Key.t -> Field.t -> t -> t =
       |> fun m -> table m {field= f; lookup= k}
     else
       raise
-        (TransformError (Error.of_string "Must have partition field in all positions."))
+        (TransformError
+           (Error.of_string "Must have partition field in all positions."))
   in
   let p_unorderedlist k f ls =
     List.map ls ~f:(partition k f)
@@ -472,7 +486,8 @@ let rec partition : PredCtx.Key.t -> Field.t -> t -> t =
                   Map.merge m' m ~f:(fun ~key:_ -> function
                     | `Left l -> Some [(i, l)]
                     | `Right ls -> Some ls
-                    | `Both (l, ls) -> Some (List.fmerge ~cmp:Int.compare [(i, l)] ls) )
+                    | `Both (l, ls) ->
+                        Some (List.fmerge ~cmp:Int.compare [(i, l)] ls) )
               | _ -> raise (TransformError (Error.of_string "Expected a table.")) )
         in
         Map.map merged_ts ~f:(fun ls ->
@@ -489,7 +504,8 @@ let rec partition : PredCtx.Key.t -> Field.t -> t -> t =
            match data.node with
            | Table (m_inner, _) ->
                Map.merge
-                 (Map.map m_inner ~f:(fun v -> Map.singleton (module ValueMap.Elem) key v))
+                 (Map.map m_inner ~f:(fun v ->
+                      Map.singleton (module ValueMap.Elem) key v ))
                  m_outer
                  ~f:(fun ~key:_ -> function
                    | `Both (l, ls) ->
@@ -498,22 +514,26 @@ let rec partition : PredCtx.Key.t -> Field.t -> t -> t =
                             | `Both (x, xs) -> Some (x :: xs)
                             | `Left x -> Some [x]
                             | `Right xs -> Some xs ))
-                   | `Left l -> Some (Map.map l ~f:(fun x -> [x])) | `Right ls -> Some ls
-                   )
+                   | `Left l -> Some (Map.map l ~f:(fun x -> [x]))
+                   | `Right ls -> Some ls )
            | _ -> failwith "BUG: Map rhs must have same schema." )
     |> Map.map ~f:(fun m -> Map.map m ~f:(fun ls -> unordered_list ls))
     |> Map.map ~f:(fun m -> table m tbl)
     |> fun m -> table m {field= f; lookup= k}
   in
   let p_grouping k f ls m =
-    let contents = List.map ls ~f:(fun (k, v) -> cross_tuple [k; v]) |> unordered_list in
+    let contents =
+      List.map ls ~f:(fun (k, v) -> cross_tuple [k; v]) |> unordered_list
+    in
     match (partition k f contents).node with
     | Table (ls, m') ->
         Map.map ls ~f:(fun x ->
             match x.node with
             | UnorderedList y ->
                 List.map y ~f:(fun z ->
-                    match z.node with CrossTuple [k; v] -> (k, v) | _ -> failwith "" )
+                    match z.node with
+                    | CrossTuple [k; v] -> (k, v)
+                    | _ -> failwith "" )
                 |> fun ls -> grouping ls m
             | _ -> failwith "" )
         |> fun ls -> table ls m'
@@ -556,7 +576,8 @@ let rec ntuples_exn : t -> int =
       |> ok_exn
   | Grouping (xs, _) -> List.length xs
 
-let ntuples : t -> int Or_error.t = fun l -> Or_error.try_with (fun () -> ntuples_exn l)
+let ntuples : t -> int Or_error.t =
+ fun l -> Or_error.try_with (fun () -> ntuples_exn l)
 
 let rec flatten : t -> t =
  fun l ->
@@ -632,12 +653,13 @@ let merge : Range.t -> Field.t -> [`Asc | `Desc] -> t -> t -> t =
     | `Desc -> fun k1 k2 -> ValueMap.Elem.compare k2 k1
   in
   match
-    ((partition PredCtx.Key.dummy f l1).node, (partition PredCtx.Key.dummy f l2).node)
+    ( (partition PredCtx.Key.dummy f l1).node
+    , (partition PredCtx.Key.dummy f l2).node )
   with
   | Table (m1, _), Table (m2, _) ->
       Map.merge m1 m2 ~f:(fun ~key:_ -> function
-        | `Both (l1, l2) -> Some (unordered_list [l1; l2]) | `Left l | `Right l -> Some l
-      )
+        | `Both (l1, l2) -> Some (unordered_list [l1; l2])
+        | `Left l | `Right l -> Some l )
       |> Map.to_alist
       |> List.sort ~compare:(fun (k1, _) (k2, _) -> cmp k1 k2)
       |> List.map ~f:(fun (k, v) -> cross_tuple [of_value k; v])
@@ -717,7 +739,8 @@ let group_by : Field.t Ralgebra0.agg list -> Field.t list -> t -> t =
     List.fold_left key ~init:[([], l)] ~f:(fun ls f ->
         List.concat_map ls ~f:(fun (ks, l) ->
             match (partition Dummy f l).node with
-            | Table (xs, _) -> Map.to_alist xs |> List.map ~f:(fun (k, v) -> (k :: ks, v))
+            | Table (xs, _) ->
+                Map.to_alist xs |> List.map ~f:(fun (k, v) -> (k :: ks, v))
             | _ -> Error.of_string "Expected a table." |> Error.raise ) )
     |> List.map ~f:(fun (ks, v) -> (cross_tuple (List.map ks ~f:of_value), v))
   in

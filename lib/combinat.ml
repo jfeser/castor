@@ -48,7 +48,8 @@ let m_partition_with_zeros : int -> int -> int Array.t Seq.t =
         m_partition n m'
         |> Seq.map ~f:(fun p ->
                let p' = Array.create ~len:m 0 in
-               Array.blito ~src:p ~dst:p' () ; p' ) )
+               Array.blito ~src:p ~dst:p' () ;
+               p' ) )
     |> Seq.concat
 
 let permutations : int Array.t -> int Array.t Seq.t =
