@@ -359,7 +359,7 @@ let create name fs xs =
   Hashtbl.set rels ~key:name ~data ;
   ( name
   , List.map fs ~f:(fun f ->
-        {name= f; relation= Some name; type_= Some Type0.PrimType.IntT} ) )
+        Name.{name= f; relation= Some name; type_= Some Type0.PrimType.IntT} ) )
 
 module M =
   Make (struct

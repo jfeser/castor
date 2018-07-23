@@ -415,7 +415,7 @@ module IRGen = struct
 
     let add_func (f: func) = funcs := f :: !funcs
 
-    open Serialize
+    let isize = Serialize.isize
 
     (** The length of a layout header in bytes. *)
     let hsize =
