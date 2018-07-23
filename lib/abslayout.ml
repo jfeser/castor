@@ -190,15 +190,22 @@ module No_config = struct
               [%sexp_of : Name.t * Set.M(Name).t]
             |> Error.raise
     in
-    let ralgebra_resolver =
-      object
-        inherit [_] map
-        method visit_name = resolve_name
-      end
-    in
     let empty_ctx = Set.empty (module Name) in
-    let resolve_agg ctx = ralgebra_resolver#visit_agg ctx in
-    let resolve_pred ctx = ralgebra_resolver#visit_pred ctx in
+    let resolve_agg ctx = function
+      | Count -> Count
+      | Key n -> Key (resolve_name ctx n)
+      | Sum n -> Sum (resolve_name ctx n)
+      | Avg n -> Avg (resolve_name ctx n)
+      | Min n -> Min (resolve_name ctx n)
+      | Max n -> Max (resolve_name ctx n)
+    in
+    let resolve_pred ctx =
+      (object
+         inherit [_] map
+         method! visit_Name ctx n = Name (resolve_name ctx n)
+      end)
+        #visit_pred ctx
+    in
     let preds_to_names preds =
       List.filter_map preds ~f:(function Name n -> Some n | _ -> None)
       |> Set.of_list (module Name)
@@ -480,7 +487,8 @@ module No_config = struct
   let pred_to_schema_exn =
     let open Type0.PrimType in
     function
-    | Name {type_= None; _} -> failwith "Missing type."
+    | Name ({type_= None; _} as n) ->
+        Error.create "Missing type." n [%sexp_of : Name.t] |> Error.raise
     | Name ({type_= Some _; _} as n) -> n
     | Int _ -> unnamed IntT
     | Bool _ -> unnamed BoolT
