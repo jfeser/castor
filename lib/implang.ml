@@ -682,26 +682,26 @@ module IRGen = struct
             let e1 = gen_pred arg1 in
             let e2 = gen_pred arg2 in
             match op with
-            | R.Eq -> Infix.(e1 = e2)
-            | R.Lt -> Infix.(e1 < e2)
-            | R.Le -> Infix.(e1 <= e2)
-            | R.Gt -> Infix.(e1 > e2)
-            | R.Ge -> Infix.(e1 >= e2)
-            | R.And -> Infix.(e1 && e2)
-            | R.Or -> Infix.(e1 || e2)
-            | R.Add -> Infix.(e1 + e2)
-            | R.Sub -> Infix.(e1 - e2)
-            | R.Mul -> Infix.(e1 * e2)
-            | R.Div -> Infix.(e1 / e2)
-            | R.Mod -> Infix.(e1 % e2) )
+            | A.Eq -> Infix.(e1 = e2)
+            | A.Lt -> Infix.(e1 < e2)
+            | A.Le -> Infix.(e1 <= e2)
+            | A.Gt -> Infix.(e1 > e2)
+            | A.Ge -> Infix.(e1 >= e2)
+            | A.And -> Infix.(e1 && e2)
+            | A.Or -> Infix.(e1 || e2)
+            | A.Add -> Infix.(e1 + e2)
+            | A.Sub -> Infix.(e1 - e2)
+            | A.Mul -> Infix.(e1 * e2)
+            | A.Div -> Infix.(e1 / e2)
+            | A.Mod -> Infix.(e1 % e2) )
         | A.Varop (op, args) ->
             let eargs = List.map ~f:gen_pred args in
             match op with
-            | R.And -> List.fold_left1_exn ~f:Infix.( && ) eargs
-            | R.Or -> List.fold_left1_exn ~f:Infix.( || ) eargs
-            | R.Eq | R.Lt | R.Le | R.Gt | R.Ge | R.Add | R.Sub | R.Mul | R.Div
-             |R.Mod ->
-                fail (Error.create "Not a vararg operator." op [%sexp_of : R.op])
+            | A.And -> List.fold_left1_exn ~f:Infix.( && ) eargs
+            | A.Or -> List.fold_left1_exn ~f:Infix.( || ) eargs
+            | A.Eq | A.Lt | A.Le | A.Gt | A.Ge | A.Add | A.Sub | A.Mul | A.Div
+             |A.Mod ->
+                fail (Error.create "Not a vararg operator." op [%sexp_of : A.op])
       in
       gen_pred
 

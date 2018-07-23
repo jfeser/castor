@@ -278,7 +278,7 @@ module Eval = struct
         | Or, `Bool x1, `Bool x2 -> `Bool (x1 || x2)
         | _ ->
             Error.create "Unexpected argument types." (op, v1, v2)
-              [%sexp_of : Ralgebra.op * Db.primvalue * Db.primvalue]
+              [%sexp_of : op * Db.primvalue * Db.primvalue]
             |> Error.raise )
     | Varop (op, ps) ->
         let vs = List.map ps ~f:(eval_pred ctx) in
@@ -295,7 +295,7 @@ module Eval = struct
             |> fun x -> `Bool x
         | _ ->
             Error.create "Unexpected argument types." (op, vs)
-              [%sexp_of : Ralgebra.op * Db.primvalue list]
+              [%sexp_of : op * Db.primvalue list]
             |> Error.raise
 
   let eval_join ctx p r1 r2 =

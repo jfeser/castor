@@ -15,14 +15,29 @@ module type S = sig
 
   type meta = Abslayout0.meta
 
+  type op = Abslayout0.op =
+    | Eq
+    | Lt
+    | Le
+    | Gt
+    | Ge
+    | And
+    | Or
+    | Add
+    | Sub
+    | Mul
+    | Div
+    | Mod
+  [@@deriving compare, sexp]
+
   type pred = Abslayout0.pred =
     | Name of Name.t
     | Int of (int[@opaque])
     | Bool of (bool[@opaque])
     | String of (string[@opaque])
     | Null
-    | Binop of ((Ralgebra0.op[@opaque]) * pred * pred)
-    | Varop of ((Ralgebra0.op[@opaque]) * pred list)
+    | Binop of ((op[@opaque]) * pred * pred)
+    | Varop of ((op[@opaque]) * pred list)
   [@@deriving sexp_of]
 
   type agg = Abslayout0.agg =

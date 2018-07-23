@@ -8,6 +8,9 @@ type name =
   ; type_: Type0.PrimType.t option [@compare.ignore] }
 [@@deriving compare, sexp, hash]
 
+type op = Eq | Lt | Le | Gt | Ge | And | Or | Add | Sub | Mul | Div | Mod
+[@@deriving compare, sexp]
+
 (* - Visitors doesn't use the special method override syntax that warning 7 checks
    for.
    - It uses the Pervasives module directly, which Base doesn't like. *)
@@ -21,8 +24,8 @@ type pred =
   | Bool of (bool[@opaque])
   | String of (string[@opaque])
   | Null
-  | Binop of ((Ralgebra0.op[@opaque]) * pred * pred)
-  | Varop of ((Ralgebra0.op[@opaque]) * pred list)
+  | Binop of ((op[@opaque]) * pred * pred)
+  | Varop of ((op[@opaque]) * pred list)
 
 and agg =
   | Count

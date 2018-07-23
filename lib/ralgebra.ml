@@ -230,12 +230,7 @@ let rec to_string : t -> string = function
   | Relation r -> r.rname
 
 let of_string_exn : string -> (string * string, string, 'l) Ralgebra0.t =
- fun s ->
-  let lexbuf = Lexing.from_string s in
-  try Ralgebra_parser.ralgebra_eof Ralgebra_lexer.token lexbuf
-  with Ralgebra0.ParseError (msg, line, col) as e ->
-    Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
-    raise e
+ fun _ -> failwith ""
 
 let rec to_schema_exn : t -> Schema.t = function
   | Project (fs, r) ->
@@ -493,16 +488,4 @@ let row_layout_all : Postgresql.connection -> t -> t =
   in
   f
 
-let tests =
-  let open OUnit2 in
-  let parse_test s =
-    s
-    >:: fun _ ->
-    try of_string_exn s |> ignore with e -> assert_failure (Exn.to_string e)
-  in
-  "ralgebra"
-  >::: [ "of_string"
-         >::: [ parse_test "Filter(taxi.xpos > xv:int, taxi)"
-              ; parse_test "Filter(taxi.xpos > xv:int && taxi.xpos > xv:int, taxi)"
-              ; parse_test "Filter(taxi.xpos > xv:int && taxi.ypos > yv:int, taxi)"
-              ] ]
+let tests = OUnit2.("ralgebra" >::: [])

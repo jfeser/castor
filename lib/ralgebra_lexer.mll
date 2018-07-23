@@ -1,21 +1,14 @@
 {
 open Base
-open Ralgebra0
 open Ralgebra_parser
+open Parser_utils
 
-let error lexbuf msg =
-  let pos = Lexing.lexeme_start_p lexbuf in
-  let col = pos.pos_cnum - pos.pos_bol in
-  raise (ParseError (msg, pos.pos_lnum, col))
 
 let keyword_tbl = Hashtbl.of_alist_exn (module String) [
-"project", PROJECT;
 "select", SELECT;
 "dedup", DEDUP;
 "filter", FILTER;
-"eqjoin", EQJOIN;
 "join", JOIN;
-"concat", CONCAT;
 "count", COUNT;
 "zip", ZIP;
 "cross", CROSS;
@@ -77,7 +70,7 @@ rule token = parse
         | None -> ID x
     }
   | eof        { EOF }
-  | _          { error lexbuf "unexpected character" }
+  | _          { lex_error lexbuf "unexpected character" }
 and string buf = parse
   | [^ '"' '\n' '\\']+ {
       Buffer.add_string buf (Lexing.lexeme lexbuf);
@@ -91,5 +84,5 @@ and string buf = parse
   | '\\' '"' { Buffer.add_char buf '"'; string buf lexbuf }
   | '\\' { Buffer.add_char buf '\\'; string buf lexbuf }
   | '"' { Buffer.contents buf }
-  | eof { error lexbuf "eof in string literal" }
-  | _ { error lexbuf "unexpected character" }
+  | eof { lex_error lexbuf "eof in string literal" }
+  | _ { lex_error lexbuf "unexpected character" }

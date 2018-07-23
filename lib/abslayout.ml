@@ -342,7 +342,7 @@ module No_config = struct
           | Or, `Bool x1, `Bool x2 -> `Bool (x1 || x2)
           | _ ->
               Error.create "Unexpected argument types." (op, v1, v2)
-                [%sexp_of : Ralgebra0.op * primvalue * primvalue]
+                [%sexp_of : op * primvalue * primvalue]
               |> raise )
       | Varop (op, ps) ->
           let vs = List.map ps ~f:(eval_pred ctx) in
@@ -359,7 +359,7 @@ module No_config = struct
               |> fun x -> `Bool x
           | _ ->
               Error.create "Unexpected argument types." (op, vs)
-                [%sexp_of : Ralgebra0.op * primvalue list]
+                [%sexp_of : op * primvalue list]
               |> raise
 
   let subst ctx =
