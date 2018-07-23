@@ -8,7 +8,7 @@
       let col = pos.Lexing.pos_cnum - pos.pos_bol in
       raise (R.ParseError (msg, pos.pos_lnum, col))
 
-    let node r = A.({ node = r; meta = Univ_map.empty })
+    let node r = A.({ node = r; meta = ref Univ_map.empty })
 %}
 
 %token <string> ID
@@ -65,7 +65,7 @@
 %token NULL
 
 %start <(string * string, string, Layout.t) Ralgebra0.t> ralgebra_eof
-%start <(Abslayout0.name, Core.Univ_map.t) Abslayout0.ralgebra> abs_ralgebra_eof
+%start <Abslayout0.t> abs_ralgebra_eof
 %start <Abslayout0.name> name_eof
 
 %left OR

@@ -92,13 +92,12 @@ module T = struct
 
   type unordered_list = {count: AbsCount.t} [@@deriving compare, sexp]
 
-  type table =
-    {count: AbsCount.t; field: Db.Field.t; lookup: Abslayout0.name Abslayout0.pred}
-  [@@deriving compare, sexp]
+  type table = {count: AbsCount.t; field: Db.Field.t; lookup: Abslayout0.pred}
+  [@@deriving compare, sexp_of]
 
   type grouping =
     {count: AbsCount.t; key: Db.Field.t list; output: Db.Field.t Ralgebra0.agg list}
-  [@@deriving compare, sexp]
+  [@@deriving compare, sexp_of]
 
   type t =
     | NullT of null
@@ -113,7 +112,7 @@ module T = struct
     | GroupingT of t * t * grouping
     | FuncT of t list * int
     | EmptyT
-  [@@deriving compare, sexp]
+  [@@deriving compare, sexp_of]
 end
 
 include T

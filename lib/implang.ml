@@ -725,8 +725,7 @@ module IRGen = struct
         match m.Type.lookup with
         | Name n -> Var n.name
         | l ->
-            Error.create "Unexpected parameters." l
-              [%sexp_of : Abslayout0.name Abslayout0.pred]
+            Error.create "Unexpected parameters." l [%sexp_of : Abslayout.pred]
             |> Error.raise
       in
       (* Compute the index in the mapping table for this key. *)
@@ -863,10 +862,7 @@ module IRGen = struct
       build_foreach_no_start ~fresh func
         (fun tup b ->
           build_if
-            ~cond:
-              (gen_pred tup
-                 (Univ_map.find_exn r.Abslayout.meta Abslayout.Meta.schema)
-                 p)
+            ~cond:(gen_pred tup Abslayout.Meta.(find_exn r schema) p)
             ~then_:(fun b -> build_yield tup b)
             ~else_:(fun _ -> ())
             b )
@@ -879,7 +875,7 @@ module IRGen = struct
       let func = scan r t in
       let out_expr = ref (Tuple []) in
       let b = create ~name ~args:[] ~ret:(IntT {nullable= false}) in
-      let schema = Univ_map.find_exn r.Abslayout.meta Abslayout.Meta.schema in
+      let schema = Abslayout.Meta.(find_exn r schema) in
       build_foreach_no_start ~fresh func
         (fun tup b ->
           out_expr := Tuple (List.map x ~f:(gen_pred tup schema)) ;
@@ -953,9 +949,7 @@ module IRGen = struct
           | Join {pred; r1; r2}, FuncT ([t1; t2], _) ->
               nl_join name scan pred r1 t1 r2 t2
           | _ ->
-              Error.create "Unsupported at runtime." r
-                [%sexp_of : Univ_map.t Abslayout.t]
-              |> Error.raise
+              Error.create "Unsupported at runtime." r [%sexp_of : t] |> Error.raise
         in
         (* Add a wrapper that calls the function with the correct start position
            if there is only one start position associated with the function. *)

@@ -1,4 +1,3 @@
-open Core
 open Base
 open Stdio
 open Printf
@@ -8,46 +7,6 @@ open Layout
 
 module No_config = struct
   include Abslayout0
-
-  let select a b = {node= Select (a, b); meta= Univ_map.empty}
-
-  let filter a b = {node= Filter (a, b); meta= Univ_map.empty}
-
-  let agg a b c = {node= Agg (a, b, c); meta= Univ_map.empty}
-
-  let dedup a = {node= Dedup a; meta= Univ_map.empty}
-
-  let scan a = {node= Scan a; meta= Univ_map.empty}
-
-  let empty = {node= AEmpty; meta= Univ_map.empty}
-
-  let scalar a = {node= AScalar a; meta= Univ_map.empty}
-
-  let list a b = {node= AList (a, b); meta= Univ_map.empty}
-
-  let tuple a b = {node= ATuple (a, b); meta= Univ_map.empty}
-
-  let hash_idx a b c = {node= AHashIdx (a, b, c); meta= Univ_map.empty}
-
-  let ordered_idx a b c = {node= AOrderedIdx (a, b, c); meta= Univ_map.empty}
-
-  let as_ a b = {node= As (a, b); meta= Univ_map.empty}
-
-  let name r =
-    match r.node with
-    | Select _ -> "select"
-    | Filter _ -> "filter"
-    | Join _ -> "join"
-    | Agg _ -> "agg"
-    | Dedup _ -> "dedup"
-    | Scan _ -> "scan"
-    | AEmpty -> "empty"
-    | AScalar _ -> "scalar"
-    | AList _ -> "list"
-    | ATuple _ -> "tuple"
-    | AHashIdx _ -> "hash_idx"
-    | AOrderedIdx _ -> "ordered_idx"
-    | As _ -> "as"
 
   module Name = struct
     module T = struct
@@ -86,39 +45,79 @@ module No_config = struct
   end
 
   module Meta = struct
+    open Core
+
+    type 'a key = 'a Univ_map.Key.t
+
     type pos = Pos of int64 | Many_pos [@@deriving sexp]
+
+    let empty () = ref Univ_map.empty
 
     let schema = Univ_map.Key.create ~name:"schema" [%sexp_of : Name.t list]
 
     let pos = Univ_map.Key.create ~name:"pos" [%sexp_of : pos]
 
-    let meta_mapper f =
-      object
-        inherit [_] map
-        method visit_'m () meta = f meta
-        method visit_'f () x = x
+    let meta_iter f =
+      object (self: 'self)
+        inherit [_] iter
+        method! visit_t () {node; meta} = self#visit_node () node ; f meta
       end
 
-    let map ~f r = (meta_mapper f)#visit_ralgebra () r
-
-    let to_mutable = map ~f:ref
-
-    let to_immutable = map ~f:( ! )
-
-    let change r key ~f =
-      (meta_mapper (fun m -> Univ_map.change m key ~f))#visit_ralgebra () r
-
-    let init ~init r = map ~f:(fun _ -> init) r
+    let change_inplace r key ~f =
+      (meta_iter (fun m -> m := Univ_map.change !m key ~f))#visit_t () r
 
     let find_exn ralgebra key =
-      match Univ_map.find ralgebra.meta key with
+      match Univ_map.find !(ralgebra.meta) key with
       | Some x -> x
       | None ->
           Error.create "Missing metadata."
             (Univ_map.Key.name key, ralgebra)
-            [%sexp_of : string * Univ_map.t t]
+            [%sexp_of : string * t]
           |> Error.raise
+
+    let set ralgebra k v =
+      {ralgebra with meta= ref (Univ_map.set !(ralgebra.meta) k v)}
   end
+
+  let select a b = {node= Select (a, b); meta= Meta.empty ()}
+
+  let filter a b = {node= Filter (a, b); meta= Meta.empty ()}
+
+  let agg a b c = {node= Agg (a, b, c); meta= Meta.empty ()}
+
+  let dedup a = {node= Dedup a; meta= Meta.empty ()}
+
+  let scan a = {node= Scan a; meta= Meta.empty ()}
+
+  let empty = {node= AEmpty; meta= Meta.empty ()}
+
+  let scalar a = {node= AScalar a; meta= Meta.empty ()}
+
+  let list a b = {node= AList (a, b); meta= Meta.empty ()}
+
+  let tuple a b = {node= ATuple (a, b); meta= Meta.empty ()}
+
+  let hash_idx a b c = {node= AHashIdx (a, b, c); meta= Meta.empty ()}
+
+  let ordered_idx a b c = {node= AOrderedIdx (a, b, c); meta= Meta.empty ()}
+
+  let as_ a b = {node= As (a, b); meta= Meta.empty ()}
+
+  let name r =
+    match r.node with
+    | Select _ -> "select"
+    | Filter _ -> "filter"
+    | Join _ -> "join"
+    | Agg _ -> "agg"
+    | Dedup _ -> "dedup"
+    | Scan _ -> "scan"
+    | AEmpty -> "empty"
+    | AScalar _ -> "scalar"
+    | AList _ -> "list"
+    | ATuple _ -> "tuple"
+    | AHashIdx _ -> "hash_idx"
+    | AOrderedIdx _ -> "ordered_idx"
+    | As _ -> "as"
 
   module Ctx = struct
     type t = primvalue Map.M(Name).t [@@deriving sexp]
@@ -156,11 +155,10 @@ module No_config = struct
           if Option.is_none n.relation then
             Set.singleton (module Type.TypedName) (Name.to_typed_name n)
           else self#zero
-        method visit_'f _ _ = self#zero
-        method visit_'m _ _ = self#zero
+        method visit_name _ _ = self#zero
       end
     in
-    ralgebra_params#visit_ralgebra () r
+    ralgebra_params#visit_t () r
 
   (** Annotate names in an algebra expression with types. *)
   let resolve conn r =
@@ -195,8 +193,7 @@ module No_config = struct
     let ralgebra_resolver =
       object
         inherit [_] map
-        method visit_'f = resolve_name
-        method visit_'m _ x = x
+        method visit_name = resolve_name
       end
     in
     let empty_ctx = Set.empty (module Name) in
@@ -238,7 +235,7 @@ module No_config = struct
             let r, inner_ctx = resolve outer_ctx r in
             let ctx = Set.union outer_ctx inner_ctx in
             let aggs = List.map ~f:(resolve_agg ctx) aggs in
-            let key = List.map key ~f:(ralgebra_resolver#visit_'f ctx) in
+            let key = List.map key ~f:(resolve_name ctx) in
             (Agg (aggs, key, r), aggs_to_names aggs)
         | Dedup r ->
             let r, inner_ctx = resolve outer_ctx r in
@@ -268,8 +265,7 @@ module No_config = struct
             let m =
               (object
                  inherit [_] map
-                 method visit_'f _ _ = failwith ""
-                 method visit_'m _ _ = failwith ""
+                 method visit_name _ _ = failwith ""
                  method! visit_pred _ = resolve_pred ctx
               end)
                 #visit_hash_idx () m
@@ -282,8 +278,7 @@ module No_config = struct
             let m =
               (object
                  inherit [_] map
-                 method visit_'f _ _ = failwith ""
-                 method visit_'m _ _ = failwith ""
+                 method visit_name _ _ = failwith ""
                  method! visit_pred _ = resolve_pred ctx
               end)
                 #visit_ordered_idx () m
@@ -299,7 +294,7 @@ module No_config = struct
     let r, _ = resolve (Set.empty (module Name)) r in
     r
 
-  let pred_of_value : Db.primvalue -> 'a pred = function
+  let pred_of_value = function
     | `Bool x -> Bool x
     | `String x -> String x
     | `Int x -> Int x
@@ -366,11 +361,10 @@ module No_config = struct
         inherit [_] endo
         method! visit_Name _ this v =
           match Map.find ctx v with Some x -> pred_of_value x | None -> this
-        method visit_'f _ x = x
-        method visit_'m _ x = x
+        method visit_name _ x = x
       end
     in
-    v#visit_ralgebra ()
+    v#visit_t ()
 
   let pred_relations p =
     let rels = ref [] in
@@ -380,7 +374,7 @@ module No_config = struct
         method! visit_Name () =
           function
           | {relation= Some r; _} -> rels := r :: !rels | {relation= None; _} -> ()
-        method visit_'f () _ = ()
+        method visit_name () _ = ()
         method visit_'m () _ = ()
       end
     in
@@ -420,17 +414,15 @@ module No_config = struct
      this expression. *)
   let relation r =
     let reducer =
-      object (self: 'self)
+      object
         inherit [_] reduce
         method zero = Set.empty (module String)
         method plus = Set.union
         method! visit_As _ n _ = Set.singleton (module String) n
         method! visit_Scan _ n = Set.singleton (module String) n
-        method visit_'m _ _ = self#zero
-        method visit_'f _ _ = self#zero
       end
     in
-    reducer#visit_ralgebra () r
+    reducer#visit_t () r
 
   let ralgebra_to_sql r =
     let rec f {node; _} =
@@ -439,7 +431,7 @@ module No_config = struct
         if Set.length rs > 1 then
           Error.create
             "More than one relation name. Use AS to give this expression a name." r
-            [%sexp_of : Univ_map.t t]
+            [%sexp_of : t]
           |> Error.raise
         else Set.choose_exn rs
       in
@@ -516,7 +508,7 @@ module Config = struct
   module type S = sig
     include S_shared
 
-    val eval : Ctx.t -> (Name.t, Univ_map.t) ralgebra -> Ctx.t Seq.t
+    val eval : Ctx.t -> t -> Ctx.t Seq.t
   end
 end
 
@@ -544,8 +536,6 @@ module Make (Config : Config.S) () = struct
             match n.relation with
             | Some r when String.(rel = r) -> Name {n with relation= Some name}
             | _ -> Name n
-          method visit_'f _ x = x
-          method visit_'m _ x = x
         end
       in
       subst#visit_pred () p
@@ -556,13 +546,11 @@ module Make (Config : Config.S) () = struct
           inherit [_] endo
           method! visit_Scan () r rel' =
             if String.(rel = rel') then
-              Filter (Binop (Eq, p, pred), {node= r; meta= Univ_map.empty})
+              Filter (Binop (Eq, p, pred), {node= r; meta= Meta.empty ()})
             else r
-          method visit_'f _ x = x
-          method visit_'m _ x = x
         end
       in
-      subst#visit_ralgebra () l
+      subst#visit_t () l
     in
     hash_idx domain layout {lookup}
 
@@ -584,7 +572,7 @@ module Make (Config : Config.S) () = struct
         |> self#build_AList
       method visit_ATuple ctx ls kind =
         self#build_ATuple (List.map ~f:(self#visit_t ctx) ls) kind
-      method visit_AHashIdx ctx q l (h: Name.t hash_idx) =
+      method visit_AHashIdx ctx q l (h: hash_idx) =
         let kv =
           eval ctx q
           |> Seq.map ~f:(fun key_ctx ->
@@ -623,9 +611,7 @@ module Make (Config : Config.S) () = struct
         | Join {pred; r1; r2} -> self#visit_Join ctx pred r1 r2
         | As (n, r) -> self#visit_As ctx n r
         | Dedup _ | Agg _ | Scan _ ->
-            Error.create "Wrong context." r
-              [%sexp_of : (Name.t, Univ_map.t) ralgebra]
-            |> Error.raise
+            Error.create "Wrong context." r [%sexp_of : t] |> Error.raise
     end
     
 
@@ -703,26 +689,24 @@ module Make (Config : Config.S) () = struct
   let to_type ?(ctx= Map.empty (module Name)) l =
     Logs.debug (fun m ->
         m "Computing type of abstract layout: %s"
-          (Sexp.to_string_hum ([%sexp_of : (Name.t, Univ_map.t) ralgebra] l)) ) ;
+          (Sexp.to_string_hum ([%sexp_of : t] l)) ) ;
     let type_ = (new type_fold)#visit_t ctx l in
     Logs.debug (fun m ->
         m "The type is: %s" (Sexp.to_string_hum ([%sexp_of : Type.t] type_)) ) ;
     type_
 
   module S = struct
-    open Bitstring
-    open Serialize
-    open Type
-
     class ['self] serialize_fold log_ch writer =
       let ctr = ref 0 in
       let labels = ref [] in
       let log_start lbl =
+        let open Bitstring in
         if Config.layout_map then (
           labels := (lbl, !ctr, Writer.pos writer) :: !labels ;
           Int.incr ctr )
       in
       let log_end () =
+        let open Bitstring in
         if Config.layout_map then
           match !labels with
           | (lbl, ctr, start_pos) :: ls ->
@@ -744,6 +728,8 @@ module Make (Config : Config.S) () = struct
       in
       object (self: 'self)
         method visit_AList ctx type_ q elem_layout =
+          let open Bitstring in
+          let open Type in
           match type_ with
           | UnorderedListT (elem_t, _) ->
               (* Reserve space for list header. *)
@@ -757,7 +743,6 @@ module Make (Config : Config.S) () = struct
               (* Serialize list body. *)
               log_start "List body" ;
               let count = ref 0 in
-              let q = Meta.to_immutable q in
               eval ctx q
               |> Seq.iter ~f:(fun t ->
                      Caml.incr count ;
@@ -776,6 +761,8 @@ module Make (Config : Config.S) () = struct
           | t ->
               Error.(create "Unexpected layout type." t [%sexp_of : Type.t] |> raise)
         method visit_ATuple ctx type_ elem_layouts _ =
+          let open Bitstring in
+          let open Type in
           match type_ with
           | CrossTupleT (elem_ts, _) | ZipTupleT (elem_ts, _) ->
               (* Reserve space for header. *)
@@ -801,10 +788,11 @@ module Make (Config : Config.S) () = struct
           | t ->
               Error.(create "Unexpected layout type." t [%sexp_of : Type.t] |> raise)
         method visit_AHashIdx ctx type_ q l _ =
+          let open Bitstring in
+          let open Type in
           match type_ with
           | TableT (key_t, value_t, _) ->
               let key_name = ref (Name.of_string_exn "fixme") in
-              let q = Meta.to_immutable q in
               let keys =
                 eval ctx q
                 |> Seq.map ~f:(fun k ->
@@ -822,7 +810,8 @@ module Make (Config : Config.S) () = struct
               let keys =
                 List.map keys ~f:(fun k ->
                     let serialized =
-                      Value.of_primvalue k |> Layout.of_value |> serialize key_t
+                      Value.of_primvalue k |> Layout.of_value
+                      |> Serialize.serialize key_t
                     in
                     let hash_key =
                       match k with
@@ -848,7 +837,8 @@ module Make (Config : Config.S) () = struct
                   List.iter keys ~f:(fun (_, _, x, h) ->
                       Out_channel.fprintf ch "%s -> %d\n" x h ) ) ;
               let hash_body =
-                Cmph.Hash.to_packed hash |> Bytes.of_string |> align isize
+                Cmph.Hash.to_packed hash |> Bytes.of_string
+                |> Serialize.(align isize)
               in
               let hash_len = Bytes.length hash_body in
               let table_size =
@@ -891,6 +881,7 @@ module Make (Config : Config.S) () = struct
               Error.(create "Unexpected layout type." t [%sexp_of : Type.t] |> raise)
         method visit_AEmpty _ _ = ()
         method visit_AScalar ctx type_ e =
+          let open Serialize in
           let l =
             Layout.of_value
               {value= eval_pred ctx e; rel= Relation.dummy; field= Field.dummy}
@@ -903,19 +894,22 @@ module Make (Config : Config.S) () = struct
             | String (x, s) -> ("String", serialize_string type_ l x s)
             | _ -> failwith "Expected a scalar."
           in
-          log_start label ; Writer.write writer bstr ; log_end ()
+          log_start label ;
+          Bitstring.Writer.write writer bstr ;
+          log_end ()
         method visit_AOrderedIdx _ _ _ _ _ = failwith ""
         method visit_func ctx type_ rs =
+          let open Type in
           match type_ with
           | FuncT (ts, _) -> List.iter2_exn ts rs ~f:(self#visit_t ctx)
           | _ ->
               Error.create "Expected a function type." type_ [%sexp_of : Type.t]
               |> Error.raise
-        method visit_t ctx type_ {node; meta} =
-          meta :=
-            Univ_map.update !meta Meta.pos ~f:(function
-              | Some _ -> Many_pos
-              | None -> Pos (Writer.pos writer |> Writer.Pos.to_bytes_exn) ) ;
+        method visit_t ctx type_ ({node; _} as r) =
+          let open Bitstring in
+          Meta.change_inplace r Meta.pos ~f:(function
+            | Some _ -> Some Many_pos
+            | None -> Some (Pos (Writer.pos writer |> Writer.Pos.to_bytes_exn)) ) ;
           match node with
           | AEmpty -> self#visit_AEmpty ctx type_
           | AScalar e -> self#visit_AScalar ctx type_ e
@@ -928,9 +922,7 @@ module Make (Config : Config.S) () = struct
           | As (_, r) -> self#visit_t ctx type_ r
           | Join {r1; r2; _} -> self#visit_func ctx type_ [r1; r2]
           | Scan _ ->
-              Error.create "Cannot serialize." node
-                [%sexp_of : (Name.t, Univ_map.t ref) node]
-              |> Error.raise
+              Error.create "Cannot serialize." r [%sexp_of : t] |> Error.raise
       end
       
   end
@@ -939,10 +931,9 @@ module Make (Config : Config.S) () = struct
 
   let serialize ?(ctx= Map.empty (module Name)) writer t l =
     Logs.debug (fun m ->
-        m "Serializing abstract layout: %s"
-          (Sexp.to_string_hum ([%sexp_of : (Name.t, Univ_map.t) ralgebra] l)) ) ;
+        m "Serializing abstract layout: %s" (Sexp.to_string_hum ([%sexp_of : t] l))
+    ) ;
     let open Bitstring in
-    let l = Meta.to_mutable l in
     let begin_pos = Writer.pos writer in
     let fn = Caml.Filename.temp_file "buf" ".txt" in
     if Config.layout_map then
@@ -953,7 +944,6 @@ module Make (Config : Config.S) () = struct
     let len =
       Writer.Pos.(end_pos - begin_pos |> to_bytes_exn) |> Int64.to_int_exn
     in
-    let l = Meta.to_immutable l in
     (l, len)
 end
 
@@ -984,9 +974,7 @@ module Make_db (Config_db : Config.S_db) () = struct
     let mapper =
       object (self: 'self)
         inherit [_] map
-        method visit_'f _ x = x
-        method visit_'m _ x = x
-        method! visit_ralgebra () {node; meta} =
+        method! visit_t () {node; meta} =
           let node' = self#visit_node () node in
           let schema =
             match node' with
@@ -1006,10 +994,10 @@ module Make_db (Config_db : Config.S_db) () = struct
                 (Db.Relation.from_db Config.conn table).fields
                 |> List.map ~f:(fun f -> Name.of_field ~rel:table f)
           in
-          {node= node'; meta= Univ_map.set meta Meta.schema schema}
+          Meta.set {node= node'; meta} Meta.schema schema
       end
     in
-    mapper#visit_ralgebra ()
+    mapper#visit_t ()
 
   include Make (Config) ()
 end
@@ -1017,144 +1005,101 @@ end
 module type No_config = sig
   module Name : sig
     type t = Abslayout0.name =
-      {relation: string option; name: string; type_: Type0.PrimType.t option}
+      {relation: string option; name: string; type_: Type.PrimType.t option}
     [@@deriving compare, sexp]
 
     include Comparable.S with type t := t
 
-    val create : ?relation:string -> ?type_:Type0.PrimType.t -> string -> t
+    val create : ?relation:string -> ?type_:Type.PrimType.t -> string -> t
 
     val of_string_exn : string -> t
   end
 
-  type 'f pred = 'f Abslayout0.pred =
-    | Name of 'f
-    | Int of int
-    | Bool of bool
-    | String of string
+  type meta = Abslayout0.meta
+
+  type pred = Abslayout0.pred =
+    | Name of Name.t
+    | Int of (int[@opaque])
+    | Bool of (bool[@opaque])
+    | String of (string[@opaque])
     | Null
-    | Binop of (Ralgebra0.op * 'f pred * 'f pred)
-    | Varop of (Ralgebra0.op * 'f pred list)
+    | Binop of ((Ralgebra0.op[@opaque]) * pred * pred)
+    | Varop of ((Ralgebra0.op[@opaque]) * pred list)
+  [@@deriving sexp_of]
 
-  and 'f agg = 'f Ralgebra0.agg =
+  type agg = Abslayout0.agg =
     | Count
-    | Key of 'f
-    | Sum of 'f
-    | Avg of 'f
-    | Min of 'f
-    | Max of 'f
+    | Key of Name.t
+    | Sum of Name.t
+    | Avg of Name.t
+    | Min of Name.t
+    | Max of Name.t
+  [@@deriving sexp_of]
 
-  and 'f hash_idx = 'f Abslayout0.hash_idx = {lookup: 'f pred}
+  type hash_idx = Abslayout0.hash_idx = {lookup: pred} [@@deriving sexp_of]
 
-  and 'f ordered_idx = 'f Abslayout0.ordered_idx =
-    {lookup_low: 'f pred; lookup_high: 'f pred; order: 'f pred}
+  type ordered_idx = Abslayout0.ordered_idx =
+    {lookup_low: pred; lookup_high: pred; order: pred}
+  [@@deriving sexp_of]
 
-  and tuple = Abslayout0.tuple = Cross | Zip
+  type tuple = Abslayout0.tuple = Cross | Zip [@@deriving sexp_of]
 
-  and ('f, 'm) ralgebra = ('f, 'm) Abslayout0.ralgebra =
-    {node: ('f, 'm) node; meta: 'm}
-
-  and ('f, 'm) node = ('f, 'm) Abslayout0.node =
-    | Select of 'f pred list * ('f, 'm) ralgebra
-    | Filter of 'f pred * ('f, 'm) ralgebra
-    | Join of {pred: 'f pred; r1: ('f, 'm) ralgebra; r2: ('f, 'm) ralgebra}
-    | Agg of 'f agg sexp_list * 'f sexp_list * ('f, 'm) ralgebra
-    | Dedup of ('f, 'm) ralgebra
+  type node = Abslayout0.node =
+    | Select of pred list * t
+    | Filter of pred * t
+    | Join of {pred: pred; r1: t; r2: t}
+    | Agg of agg list * Name.t list * t
+    | Dedup of t
     | Scan of string
     | AEmpty
-    | AScalar of 'f pred
-    | AList of ('f, 'm) ralgebra * ('f, 'm) ralgebra
-    | ATuple of ('f, 'm) ralgebra list * tuple
-    | AHashIdx of ('f, 'm) ralgebra * ('f, 'm) ralgebra * 'f hash_idx
-    | AOrderedIdx of ('f, 'm) ralgebra * ('f, 'm) ralgebra * 'f ordered_idx
-    | As of string * ('f, 'm) ralgebra
-  [@@deriving compare, sexp]
+    | AScalar of pred
+    | AList of t * t
+    | ATuple of t list * tuple
+    | AHashIdx of t * t * hash_idx
+    | AOrderedIdx of t * t * ordered_idx
+    | As of string * t
+  [@@deriving sexp_of]
 
-  type 'm t = (Name.t, 'm) ralgebra [@@deriving sexp]
+  and t = Abslayout0.t = {node: node; meta: meta} [@@deriving sexp_of]
 
-  val name : ('a, 'b) ralgebra -> string
+  val name : t -> string
 
-  val params :
-       (Name.t, 'a) ralgebra
-    -> (Type.TypedName.t, Type.TypedName.comparator_witness) Base.Set.t
+  val params : t -> (Type.TypedName.t, Type.TypedName.comparator_witness) Base.Set.t
 
-  val select :
-       'a pred Base.list
-    -> ('a, Core.Univ_map.t) ralgebra
-    -> ('a, Core.Univ_map.t) ralgebra
+  val select : pred Base.list -> t -> t
 
-  val filter :
-    'a pred -> ('a, Core.Univ_map.t) ralgebra -> ('a, Core.Univ_map.t) ralgebra
+  val filter : pred -> t -> t
 
-  val agg :
-       'a agg Base.list
-    -> 'a Base.list
-    -> ('a, Core.Univ_map.t) ralgebra
-    -> ('a, Core.Univ_map.t) ralgebra
+  val agg : agg Base.list -> Name.t Base.list -> t -> t
 
-  val dedup : ('a, Core.Univ_map.t) ralgebra -> ('a, Core.Univ_map.t) ralgebra
+  val dedup : t -> t
 
-  val scan : Base.string -> ('a, Core.Univ_map.t) ralgebra
+  val scan : Base.string -> t
 
-  val empty : ('a, Core.Univ_map.t) ralgebra
+  val empty : t
 
-  val scalar : 'a pred -> ('a, Core.Univ_map.t) ralgebra
+  val scalar : pred -> t
 
-  val list :
-       ('a, Core.Univ_map.t) ralgebra
-    -> ('a, Core.Univ_map.t) ralgebra
-    -> ('a, Core.Univ_map.t) ralgebra
+  val list : t -> t -> t
 
-  val tuple :
-       ('a, Core.Univ_map.t) ralgebra Base.list
-    -> tuple
-    -> ('a, Core.Univ_map.t) ralgebra
+  val tuple : t Base.list -> tuple -> t
 
-  val hash_idx :
-       ('a, Core.Univ_map.t) ralgebra
-    -> ('a, Core.Univ_map.t) ralgebra
-    -> 'a hash_idx
-    -> ('a, Core.Univ_map.t) ralgebra
+  val hash_idx : t -> t -> hash_idx -> t
 
-  val ordered_idx :
-       ('a, Core.Univ_map.t) ralgebra
-    -> ('a, Core.Univ_map.t) ralgebra
-    -> 'a ordered_idx
-    -> ('a, Core.Univ_map.t) ralgebra
+  val ordered_idx : t -> t -> ordered_idx -> t
 
-  val as_ :
-    Base.string -> ('a, Core.Univ_map.t) ralgebra -> ('a, Core.Univ_map.t) ralgebra
+  val as_ : Base.string -> t -> t
 
   module Meta : sig
+    type 'a key
+
     type pos = Pos of int64 | Many_pos
 
-    val schema : Name.t list Univ_map.Key.t
+    val schema : Name.t list key
 
-    val pos : pos Univ_map.Key.t
+    val pos : pos key
 
-    val map : f:('a -> 'b) -> ('c, 'a) ralgebra -> ('c, 'b) ralgebra
-
-    val to_mutable :
-         (Abslayout0.name, Core.Univ_map.t) ralgebra
-      -> (Abslayout0.name, Core.Univ_map.t Base.ref) ralgebra
-
-    val to_immutable :
-         (Abslayout0.name, Core.Univ_map.t Base.ref) ralgebra
-      -> (Abslayout0.name, Core.Univ_map.t) ralgebra
-
-    val change :
-         ('a, Core.Univ_map.t) ralgebra
-      -> 'b Core.Univ_map.Key.t
-      -> f:(   'b Core.Univ_map.data Core_kernel__.Import.option
-            -> 'b Core.Univ_map.data Core_kernel__.Import.option)
-      -> ('a, Core.Univ_map.t) ralgebra
-
-    val init : init:'a -> ('b, 'c) ralgebra -> ('b, 'a) ralgebra
-
-    val find_exn :
-         (Name.t, Core.Univ_map.t) ralgebra
-      -> 'a Core.Univ_map.Key.t
-      -> 'a Core.Univ_map.data
+    val find_exn : t -> 'a key -> 'a
   end
 
   module Ctx : sig
@@ -1163,42 +1108,25 @@ module type No_config = sig
     val of_tuple : Db.Tuple.t -> t
   end
 
-  val of_string_exn : string -> Core.Univ_map.t t
+  val of_string_exn : string -> t
 
-  val of_channel_exn : Stdio.In_channel.t -> Core.Univ_map.t t
+  val of_channel_exn : Stdio.In_channel.t -> t
 
-  val subst :
-    ('a, Db.primvalue, 'b) Base.Map.t -> ('a, 'c) ralgebra -> ('a, 'c) ralgebra
+  val subst : Ctx.t -> t -> t
 
-  val ralgebra_to_sql : (Name.t, Univ_map.t) ralgebra -> string
+  val ralgebra_to_sql : t -> string
 
-  val resolve :
-    Postgresql.connection -> (Name.t, 'a) ralgebra -> (Name.t, 'a) ralgebra
+  val resolve : Postgresql.connection -> t -> t
 end
 
 module type Needs_config = sig
   include No_config
 
-  val partition :
-       part:Name.t pred
-    -> lookup:Name.t pred
-    -> (Name.t, Univ_map.t) ralgebra
-    -> (Name.t, Univ_map.t) ralgebra
+  val partition : part:pred -> lookup:pred -> t -> t
 
-  val materialize :
-       ?ctx:(Name.t, Db.primvalue, Name.comparator_witness) Base.Map.t
-    -> (Name.t, Univ_map.t) ralgebra
-    -> Layout.t
+  val materialize : ?ctx:Ctx.t -> t -> Layout.t
 
-  val to_type :
-       ?ctx:(Name.t, Db.primvalue, Name.comparator_witness) Base.Map.t
-    -> (Name.t, Univ_map.t) ralgebra
-    -> Type.t
+  val to_type : ?ctx:Ctx.t -> t -> Type.t
 
-  val serialize :
-       ?ctx:(Name.t, Db.primvalue, Name.comparator_witness) Collections.Map.t
-    -> Bitstring.Writer.t
-    -> Type.t
-    -> (Abslayout0.name, Core.Univ_map.t) ralgebra
-    -> (Abslayout0.name, Core.Univ_map.t) ralgebra * int
+  val serialize : ?ctx:Ctx.t -> Bitstring.Writer.t -> Type.t -> t -> t * int
 end

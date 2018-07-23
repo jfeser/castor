@@ -10,7 +10,7 @@ let%expect_test "subst" =
   let g = n "r.g" in
   let ctx = Map.of_alist_exn (module Name) [(f, `Int 1); (g, `Int 2)] in
   let r = "Filter(r.f = r.g, Select([r.f, r.g], r))" |> of_string_exn in
-  print_s ([%sexp_of : (Name.t, Univ_map.t) ralgebra] (subst ctx r)) ;
+  print_s ([%sexp_of : t] (subst ctx r)) ;
   [%expect
     {|
     ((node
@@ -67,7 +67,7 @@ let%expect_test "mat-col" =
       () in
   let layout = resolve conn layout in
   let layout = M.annotate_schema layout in
-  layout |> [%sexp_of : Univ_map.t t] |> print_s ;
+  layout |> [%sexp_of : t] |> print_s ;
   M.materialize layout |> [%sexp_of : Layout.t] |> print_s ;
   [%expect
     {|
@@ -124,7 +124,7 @@ let%expect_test "mat-hidx" =
       () in
   let layout = resolve conn layout in
   let layout = M.annotate_schema layout in
-  layout |> [%sexp_of : Univ_map.t t] |> print_s ;
+  layout |> [%sexp_of : t] |> print_s ;
   M.materialize layout |> [%sexp_of : Layout.t] |> print_s ;
   [%expect
     {|
@@ -386,7 +386,7 @@ let%expect_test "part-list" =
     of_string_exn "AList(r1, ATuple([AScalar(r1.f), AScalar(r1.g)], Cross))"
   in
   let part_layout = M.partition ~part:(Name f) ~lookup:(Name f) layout in
-  [%sexp_of : (Name.t, Univ_map.t) ralgebra] part_layout |> print_s ;
+  [%sexp_of : t] part_layout |> print_s ;
   [%expect
     {|
       ((node

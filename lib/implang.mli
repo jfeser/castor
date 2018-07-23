@@ -90,10 +90,7 @@ module IRGen : sig
   exception IRGenError of Error.t
 
   module Make (Config : Config.S) () : sig
-    val irgen_abstract :
-         data_fn:string
-      -> (Abslayout.Name.t, Core.Univ_map.t) Abslayout0.ralgebra
-      -> ir_module
+    val irgen_abstract : data_fn:string -> Abslayout.t -> ir_module
 
     val pp : Formatter.t -> ir_module -> unit
   end
