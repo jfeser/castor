@@ -47,7 +47,7 @@ let main ~debug ~gprof ~params ~db ~port ~code_only fn =
       IRGen.pp (Format.formatter_of_out_channel ch) ir_module ) ;
   (* Codegen *)
   Logs.debug (fun m -> m "Codegen.") ;
-  Codegen.codegen ir_module.buffer_len ir_module ;
+  Codegen.codegen ir_module ;
   Llvm.print_module "scanner.ll" CConfig.module_ ;
   Out_channel.with_file "scanner.h" ~f:Codegen.write_header ;
   (* Compile and link *)

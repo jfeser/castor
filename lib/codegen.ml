@@ -10,9 +10,6 @@ let sexp_of_llvalue : llvalue -> Sexp.t = fun v -> Sexp.Atom (string_of_llvalue 
 
 let sexp_of_lltype : lltype -> Sexp.t = fun v -> Sexp.Atom (string_of_lltype v)
 
-let sexp_of_llbasicblock : llbasicblock -> Sexp.t =
- fun v -> [%sexp_of : llvalue] (value_of_block v)
-
 module TypeKind = struct
   include TypeKind
 
@@ -161,14 +158,6 @@ module Make (Config : Config.S) () = struct
 
   let get_val ?params ctx = SymbolTable.lookup ?params [ctx#values; globals]
 
-  let get_func n =
-    let error =
-      Error.create "Unknown function."
-        (n, Hashtbl.keys funcs)
-        [%sexp_of : string * string list]
-    in
-    Option.value_exn ~error (Hashtbl.find funcs n)
-
   let get_iter n =
     let error =
       Error.create "Unknown iterator."
@@ -176,18 +165,6 @@ module Make (Config : Config.S) () = struct
         [%sexp_of : string * string list]
     in
     Option.value_exn ~error (Hashtbl.find iters n)
-
-  let null_fresh_global :
-      ?linkage:Linkage.t -> lltype -> string -> llmodule -> llvalue =
-   fun ?(linkage= Linkage.Internal) t n m ->
-    let rec loop i =
-      let n = if i = 0 then n else sprintf "%s.%d" n i in
-      if Option.is_some (lookup_global n m) then loop (i + 1)
-      else
-        let glob = define_global n (const_null t) m in
-        set_linkage linkage glob ; glob
-    in
-    loop 0
 
   let define_fresh_global :
       ?linkage:Linkage.t -> llvalue -> string -> llmodule -> llvalue =
@@ -217,18 +194,6 @@ module Make (Config : Config.S) () = struct
    fun fctx func args name b ->
     let params = get_val fctx "params" in
     build_call func (Array.append [|params|] args) name b
-
-  let build_direct_struct_gep : llvalue -> int -> string -> llbuilder -> llvalue =
-   fun v i n b ->
-    let open Polymorphic_compare in
-    let struct_t = type_of v in
-    assert (TypeKind.(classify_type struct_t = Struct)) ;
-    let elems_t = struct_element_types struct_t in
-    if not (i >= 0 && i < Array.length elems_t) then (
-      Logs.err (fun m ->
-          m "Struct index %d out of bounds %d." i (Array.length elems_t) ) ;
-      assert false ) ;
-    build_gep v [|const_int (i64_type ctx) i|] n b
 
   let build_struct_gep : llvalue -> int -> string -> llbuilder -> llvalue =
    fun v i n b ->
@@ -297,15 +262,11 @@ module Make (Config : Config.S) () = struct
     | TupleT ts -> struct_type ctx (List.map ts ~f:codegen_type |> Array.of_list)
     | VoidT | NullT -> void_type ctx
 
-  let byte_type = integer_type ctx 8
-
   let int_type = codegen_type (IntT {nullable= false})
 
   let str_type = codegen_type (StringT {nullable= false})
 
   let bool_type = codegen_type (BoolT {nullable= false})
-
-  let zero = const_int (i64_type ctx) 0
 
   let scmp =
     let func =
@@ -983,14 +944,13 @@ module Make (Config : Config.S) () = struct
       t
   end
 
-  let codegen : int -> IRGen.ir_module -> unit =
-   fun buf_len {iters= ir_iters; funcs= ir_funcs; params; _} ->
+  let codegen Implang.IRGen.({iters= ir_iters; funcs= ir_funcs; params; buffer_len}) =
     Logs.info (fun m -> m "Codegen started.") ;
     set_data_layout "e-m:o-i64:64-f80:128-n8:16:32:64-S128" module_ ;
     let module SB = ParamStructBuilder in
     let sb = SB.create () in
     (* Generate global constant for buffer. *)
-    let buf_t = pointer_type (array_type int_type (buf_len / 8)) in
+    let buf_t = pointer_type (array_type int_type (buffer_len / 8)) in
     SB.build_global sb "buf" buf_t |> ignore ;
     let typed_params = List.map params ~f:(fun (n, t) -> (n, codegen_type t)) in
     (* Generate global constants for parameters. *)
