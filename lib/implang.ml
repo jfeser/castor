@@ -55,7 +55,8 @@ and stmt =
 and prog = stmt list
 
 and func =
-  { args: (string * type_) list
+  { name: string
+  ; args: (string * type_) list
   ; body: prog
   ; ret_type: type_
   ; locals: (string * type_) list }
@@ -163,8 +164,8 @@ and pp_prog : Format.formatter -> prog -> unit =
     | x :: xs -> fprintf fmt "%a@,%a" pp_stmt x pp_prog xs
 
 and pp_func : Format.formatter -> func -> unit =
- fun fmt {args; body; _} ->
-  Format.fprintf fmt "@[<v 4>fun (%a) {@,%a@]@,}" pp_args args pp_prog body
+ fun fmt {name; args; body; _} ->
+  Format.fprintf fmt "@[<v 4>fun %s (%a) {@,%a@]@,}" name pp_args args pp_prog body
 
 module Infix = struct
   let tru = Bool true
@@ -219,8 +220,6 @@ module Infix = struct
   let slice x y = Tuple [x; y]
 
   let ite c t f = If {cond= c; tcase= t; fcase= f}
-
-  let fun_ args ret_type locals body = {args; ret_type; locals; body}
 
   let index tup idx =
     assert (Int.(idx >= 0)) ;
@@ -334,6 +333,149 @@ let rec infer_type : type_ Hashtbl.M(String).t -> expr -> type_ =
     | t -> fail (Error.create "Expected a tuple." t [%sexp_of : type_]) )
   | Done _ -> BoolT {nullable= false}
 
+let name_of_var = function
+  | Var n -> n
+  | e -> fail (Error.create "Expected a variable." e [%sexp_of : expr])
+
+module Builder = struct
+  type func_b =
+    { name: string
+    ; args: (string * type_) list
+    ; ret: type_
+    ; locals: type_ Hashtbl.M(String).t
+    ; body: prog ref }
+
+  let create ?(args= []) ~name ~ret =
+    let locals =
+      match Hashtbl.of_alist (module String) args with
+      | `Ok l -> l
+      | `Duplicate_key _ -> fail (Error.of_string "Duplicate argument.")
+    in
+    {name; args; ret; locals; body= ref []}
+
+  (** Create a function builder with an empty body and a copy of the locals
+      table. *)
+  let new_scope b = {b with body= ref []}
+
+  let build_var n t {locals; _} =
+    if Hashtbl.mem locals n then
+      fail (Error.create "Variable already defined." n [%sexp_of : string])
+    else (
+      Hashtbl.set locals ~key:n ~data:t ;
+      Var n )
+
+  let build_arg i {args; _} =
+    match List.nth args i with
+    | Some (n, _) -> Var n
+    | None -> fail (Error.of_string "Not an argument index.")
+
+  let build_yield e b = b.body := Yield e :: !(b.body)
+
+  let build_func {name; args; ret; locals; body} =
+    { name
+    ; args
+    ; ret_type= ret
+    ; locals= Hashtbl.to_alist locals
+    ; body= List.rev !body }
+
+  let build_assign e v b =
+    b.body := Assign {lhs= name_of_var v; rhs= e} :: !(b.body)
+
+  let build_defn v t e b =
+    let var = build_var v t b in
+    build_assign e var b ; var
+
+  let build_print ?type_ e b =
+    let t = match type_ with Some t -> t | None -> infer_type b.locals e in
+    b.body := Print (t, e) :: !(b.body)
+
+  let build_return e b = b.body := Return e :: !(b.body)
+
+  let build_loop c f b =
+    let child_b = new_scope b in
+    f child_b ;
+    b.body := Loop {cond= c; body= List.rev !(child_b.body)} :: !(b.body)
+
+  let build_iter (f: func) a b =
+    b.body := Iter {func= f.name; args= a; var= ""} :: !(b.body)
+
+  let build_step var (iter: func) b =
+    b.body := Step {var= name_of_var var; iter= iter.name} :: !(b.body)
+
+  let build_if ~cond ~then_ ~else_ b =
+    let b_then = new_scope b in
+    let b_else = new_scope b in
+    then_ b_then ;
+    else_ b_else ;
+    let ite =
+      If {cond; tcase= List.rev !(b_then.body); fcase= List.rev !(b_else.body)}
+    in
+    b.body := ite :: !(b.body)
+
+  let build_tuple_append t1 t2 e1 e2 =
+    let elems len e = List.init len ~f:(fun i -> Infix.(index e i)) in
+    match (t1, t2) with
+    | TupleT x1, TupleT x2 ->
+        Tuple (elems (List.length x1) e1 @ elems (List.length x2) e2)
+    | _ ->
+        Error.create "Expected tuples." (t1, t2) [%sexp_of : type_ * type_]
+        |> Error.raise
+
+  let build_fresh_var ~fresh n t b =
+    let n = n ^ Fresh.name fresh "%d" in
+    build_var n t b
+
+  let build_fresh_defn ~fresh v t e b =
+    let var = build_fresh_var ~fresh v t b in
+    build_assign e var b ; var
+
+  let build_count_loop ~fresh c f b =
+    let count = build_fresh_defn ~fresh "count" int_t c b in
+    build_loop
+      Infix.(count > int 0)
+      (fun b ->
+        f b ;
+        build_assign Infix.(count - int 1) count b )
+      b
+
+  let build_foreach ?type_ ~fresh start iter_ body b =
+    let tup = build_fresh_var ~fresh "tup" iter_.ret_type b in
+    build_iter iter_ [start] b ;
+    match Option.map type_ ~f:(fun t -> Type.AbsCount.kind (Type.count t)) with
+    | Some (`Count 0) -> ()
+    | Some (`Count 1) -> build_step tup iter_ b ; body tup b
+    | Some (`Count x) ->
+        build_count_loop ~fresh
+          Infix.(int x)
+          (fun b -> build_step tup iter_ b ; body tup b)
+          b
+    | None | Some `Countable | Some `Unknown ->
+        build_loop
+          Infix.(not (Done iter_.name))
+          (fun b ->
+            build_step tup iter_ b ;
+            build_if
+              ~cond:Infix.(not (Done iter_.name))
+              ~then_:(fun b -> body tup b)
+              ~else_:(fun _ -> ())
+              b )
+          b
+
+  let build_foreach_no_start ~fresh iter_ body b =
+    let tup = build_fresh_var ~fresh "tup" iter_.ret_type b in
+    build_iter iter_ [] b ;
+    build_loop
+      Infix.(not (Done iter_.name))
+      (fun b ->
+        build_step tup iter_ b ;
+        build_if
+          ~cond:Infix.(not (Done iter_.name))
+          ~then_:(fun b -> body tup b)
+          ~else_:(fun _ -> ())
+          b )
+      b
+end
+
 module Config = struct
   module type S = sig
     include Abslayout.Config.S_db
@@ -343,76 +485,15 @@ module Config = struct
 end
 
 module IRGen = struct
-  type func_builder =
-    { args: (string * type_) list
-    ; ret: type_
-    ; locals: type_ Hashtbl.M(String).t
-    ; body: prog ref }
-
-  type stmt_builder = func_builder -> unit
-
   type ir_module =
-    { iters: (string * func) list
-    ; funcs: (string * func) list
+    { iters: func list
+    ; funcs: func list
     ; params: (string * type_) list
     ; buffer_len: int }
 
   exception IRGenError of Error.t [@@deriving sexp]
 
   let fail m = raise (IRGenError m)
-
-  let name_of_var = function
-    | Var n -> n
-    | e -> fail (Error.create "Expected a variable." e [%sexp_of : expr])
-
-  let create : (string * type_) list -> type_ -> func_builder =
-   fun args ret ->
-    let locals =
-      match Hashtbl.of_alist (module String) args with
-      | `Ok l -> l
-      | `Duplicate_key _ -> fail (Error.of_string "Duplicate argument.")
-    in
-    {args; ret; locals; body= ref []}
-
-  (** Create a function builder with an empty body and a copy of the locals
-      table. *)
-  let new_scope : func_builder -> func_builder = fun b -> {b with body= ref []}
-
-  let build_var : string -> type_ -> func_builder -> expr =
-   fun n t {locals; _} ->
-    if Hashtbl.mem locals n then
-      fail (Error.create "Variable already defined." n [%sexp_of : string])
-    else (
-      Hashtbl.set locals ~key:n ~data:t ;
-      Var n )
-
-  let build_arg : int -> func_builder -> expr =
-   fun i {args; _} ->
-    match List.nth args i with
-    | Some (n, _) -> Var n
-    | None -> fail (Error.of_string "Not an argument index.")
-
-  let build_yield : expr -> stmt_builder = fun e b -> b.body := Yield e :: !(b.body)
-
-  let build_func : func_builder -> func =
-   fun {args; ret; locals; body} ->
-    {args; ret_type= ret; locals= Hashtbl.to_alist locals; body= List.rev !body}
-
-  let build_assign : expr -> expr -> stmt_builder =
-   fun e v b -> b.body := Assign {lhs= name_of_var v; rhs= e} :: !(b.body)
-
-  let build_defn : string -> type_ -> expr -> func_builder -> expr =
-   fun v t e b ->
-    let var = build_var v t b in
-    build_assign e var b ; var
-
-  let build_print : ?type_:type_ -> expr -> stmt_builder =
-   fun ?type_ e b ->
-    let t = match type_ with Some t -> t | None -> infer_type b.locals e in
-    b.body := Print (t, e) :: !(b.body)
-
-  let build_return : expr -> stmt_builder =
-   fun e b -> b.body := Return e :: !(b.body)
 
   module Make (Config : Config.S) () = struct
     module Abslayout = Abslayout.Make_db (Config) ()
@@ -421,114 +502,7 @@ module IRGen = struct
 
     let funcs = ref []
 
-    (* let params = ref [] *)
-    let mfuncs = Hashtbl.create (module String)
-
-    let add_func : string -> func -> unit =
-     fun n f ->
-      funcs := (n, f) :: !funcs ;
-      Hashtbl.set ~key:n ~data:f mfuncs
-
-    let find_func n = Hashtbl.find_exn mfuncs n
-
-    (* let param : string -> expr =
-     *   fun n -> List.find_exn ~f:(fun (n', _) -> String.equal n n') !params *)
-
-    let build_fresh_var : string -> type_ -> func_builder -> expr =
-     fun n t b ->
-      let n = n ^ Fresh.name fresh "%d" in
-      build_var n t b
-
-    let build_fresh_defn : string -> type_ -> expr -> func_builder -> expr =
-     fun v t e b ->
-      let var = build_fresh_var v t b in
-      build_assign e var b ; var
-
-    let build_iter : string -> expr list -> stmt_builder =
-     fun f a b ->
-      assert (Hashtbl.mem mfuncs f) ;
-      b.body := Iter {func= f; args= a; var= ""} :: !(b.body)
-
-    let build_step : expr -> string -> stmt_builder =
-     fun var iter b ->
-      assert (Hashtbl.mem mfuncs iter) ;
-      b.body := Step {var= name_of_var var; iter} :: !(b.body)
-
-    let build_loop : expr -> stmt_builder -> stmt_builder =
-     fun c f b ->
-      let child_b = new_scope b in
-      f child_b ;
-      b.body := Loop {cond= c; body= List.rev !(child_b.body)} :: !(b.body)
-
-    let build_count_loop : expr -> stmt_builder -> stmt_builder =
-     fun c f b ->
-      let count = build_fresh_defn "count" int_t c b in
-      build_loop
-        Infix.(count > int 0)
-        (fun b ->
-          f b ;
-          build_assign Infix.(count - int 1) count b )
-        b
-
-    let build_if :
-        cond:expr -> then_:stmt_builder -> else_:stmt_builder -> stmt_builder =
-     fun ~cond ~then_ ~else_ b ->
-      let b_then = new_scope b in
-      let b_else = new_scope b in
-      then_ b_then ;
-      else_ b_else ;
-      let ite =
-        If {cond; tcase= List.rev !(b_then.body); fcase= List.rev !(b_else.body)}
-      in
-      b.body := ite :: !(b.body)
-
-    let build_foreach ?type_ start iter_ body b =
-      let tup = build_fresh_var "tup" (find_func iter_).ret_type b in
-      build_iter iter_ [start] b ;
-      match Option.map type_ ~f:(fun t -> Type.AbsCount.kind (Type.count t)) with
-      | Some (`Count 0) -> ()
-      | Some (`Count 1) -> build_step tup iter_ b ; body tup b
-      | Some (`Count x) ->
-          build_count_loop
-            Infix.(int x)
-            (fun b -> build_step tup iter_ b ; body tup b)
-            b
-      | None | Some `Countable | Some `Unknown ->
-          build_loop
-            Infix.(not (Done iter_))
-            (fun b ->
-              build_step tup iter_ b ;
-              build_if
-                ~cond:Infix.(not (Done iter_))
-                ~then_:(fun b -> body tup b)
-                ~else_:(fun _ -> ())
-                b )
-            b
-
-    let build_foreach_no_start : string -> (expr -> stmt_builder) -> stmt_builder =
-     fun iter_ body b ->
-      let tup = build_fresh_var "tup" (find_func iter_).ret_type b in
-      build_iter iter_ [] b ;
-      build_loop
-        Infix.(not (Done iter_))
-        (fun b ->
-          build_step tup iter_ b ;
-          build_if
-            ~cond:Infix.(not (Done iter_))
-            ~then_:(fun b -> body tup b)
-            ~else_:(fun _ -> ())
-            b )
-        b
-
-    let build_tuple_append : type_ -> type_ -> expr -> expr -> expr =
-     fun t1 t2 e1 e2 ->
-      let elems len e = List.init len ~f:(fun i -> Infix.(index e i)) in
-      match (t1, t2) with
-      | TupleT x1, TupleT x2 ->
-          Tuple (elems (List.length x1) e1 @ elems (List.length x2) e2)
-      | _ ->
-          Error.create "Expected tuples." (t1, t2) [%sexp_of : type_ * type_]
-          |> Error.raise
+    let add_func (f: func) = funcs := f :: !funcs
 
     open Serialize
 
@@ -573,12 +547,17 @@ module IRGen = struct
       | GroupingT _ | UnorderedListT _ | OrderedListT _ -> Some (islice start)
       | FuncT _ -> failwith "Not materialized."
 
-    let scan_empty = create [("start", int_t)] VoidT |> build_func
+    let scan_empty name =
+      Builder.(create ~name ~args:[("start", int_t)] ~ret:VoidT |> build_func)
 
-    let scan_null _ = create [("start", int_t)] VoidT |> build_func
+    let scan_null name =
+      Builder.(create ~name ~args:[("start", int_t)] ~ret:VoidT |> build_func)
 
-    let scan_int Type.({range= (_, h) as range; nullable; _}) =
-      let b = create [("start", int_t)] (TupleT [IntT {nullable}]) in
+    let scan_int name Type.({range= (_, h) as range; nullable; _}) =
+      let open Builder in
+      let b =
+        create ~name ~args:[("start", int_t)] ~ret:(TupleT [IntT {nullable}])
+      in
       let start = build_arg 0 b in
       let ival = Slice (start, Type.AbsInt.bytewidth ~nullable range) in
       if nullable then
@@ -587,19 +566,25 @@ module IRGen = struct
       else build_yield (Tuple [ival]) b ;
       build_func b
 
-    let scan_bool : Type.bool_ -> _ =
-     fun Type.({nullable; _}) ->
-      let b = create [("start", int_t)] (TupleT [BoolT {nullable}]) in
+    let scan_bool name (meta: Type.bool_) =
+      let open Builder in
+      let b =
+        create ~name ~args:[("start", int_t)]
+          ~ret:(TupleT [BoolT {nullable= meta.nullable}])
+      in
       let start = build_arg 0 b in
       let ival = Slice (start, 1) in
-      if nullable then
+      if meta.nullable then
         let null_val = 2 in
         build_yield (Tuple [Tuple [ival; Infix.(ival = int null_val)]]) b
       else build_yield (Tuple [ival]) b ;
       build_func b
 
-    let scan_string Type.({nchars= (l, _) as nchars; nullable; _} as t) =
-      let b = create [("start", int_t)] (TupleT [StringT {nullable}]) in
+    let scan_string name Type.({nchars= (l, _) as nchars; nullable; _} as t) =
+      let open Builder in
+      let b =
+        create ~name ~args:[("start", int_t)] ~ret:(TupleT [StringT {nullable}])
+      in
       let start = build_arg 0 b in
       let nchars =
         match Type.AbsInt.concretize nchars with
@@ -615,7 +600,8 @@ module IRGen = struct
       else build_yield (Tuple [ret_val]) b ;
       build_func b
 
-    let scan_crosstuple scan rs ts m =
+    let scan_crosstuple name scan rs ts m =
+      let open Builder in
       let rec loops b start col_offset vars = function
         | [] ->
             let tup =
@@ -626,10 +612,10 @@ module IRGen = struct
             build_yield (Tuple tup) b
         | (func, type_) :: rest ->
             let col_start = Infix.(start + col_offset) in
-            build_foreach ~type_ col_start func
+            build_foreach ~fresh ~type_ col_start func
               (fun var b ->
                 let col_offset =
-                  build_fresh_defn "offset" int_t
+                  build_fresh_defn ~fresh "offset" int_t
                     Infix.(col_offset + len col_start type_)
                     b
                 in
@@ -640,23 +626,24 @@ module IRGen = struct
       let ret_type =
         TupleT
           ( List.map funcs ~f:(fun (func, _) ->
-                match (find_func func).ret_type with TupleT ts -> ts | t -> [t] )
+                match func.ret_type with TupleT ts -> ts | t -> [t] )
           |> List.concat )
       in
-      let b = create [("start", int_t)] ret_type in
+      let b = create ~name ~args:[("start", int_t)] ~ret:ret_type in
       let start = Infix.(build_arg 0 b + hsize (CrossTupleT (ts, m))) in
       loops b start Infix.(int 0) [] funcs ;
       build_func b
 
-    let scan_ziptuple scan rs ts (m: Type.ziptuple) =
+    let scan_ziptuple name scan rs ts (m: Type.ziptuple) =
+      let open Builder in
       let funcs = List.map2_exn rs ts ~f:scan in
       let ret_type =
         List.map funcs ~f:(fun func ->
-            match (find_func func).ret_type with TupleT ts -> ts | t -> [t] )
+            match func.ret_type with TupleT ts -> ts | t -> [t] )
         |> List.concat
         |> fun x -> TupleT x
       in
-      let b = create [("start", int_t)] ret_type in
+      let b = create ~name ~args:[("start", int_t)] ~ret:ret_type in
       let start = build_arg 0 b in
       (* Build iterator initializers using the computed start positions. *)
       build_assign Infix.(start + hsize (ZipTupleT (ts, m))) start b ;
@@ -664,7 +651,7 @@ module IRGen = struct
           build_iter f [start] b ;
           build_assign Infix.(start + hsize t + len start t) start b ) ;
       let child_tuples =
-        List.map funcs ~f:(fun f -> build_fresh_var "t" (find_func f).ret_type b)
+        List.map funcs ~f:(fun f -> build_fresh_var ~fresh "t" f.ret_type b)
       in
       let build_body b =
         List.iter2_exn funcs child_tuples ~f:(fun f t -> build_step t f b) ;
@@ -677,20 +664,20 @@ module IRGen = struct
         build_yield tup b
       in
       ( match Type.AbsCount.kind m.count with
-      | `Count x -> build_count_loop Infix.(int x) build_body b
+      | `Count x -> build_count_loop ~fresh Infix.(int x) build_body b
       | `Countable | `Unknown ->
           build_body b ;
           let not_done =
             List.fold_left funcs ~init:(Bool true) ~f:(fun acc f ->
-                Infix.(acc && not (Done f)) )
+                Infix.(acc && not (Done f.name)) )
           in
           build_loop not_done build_body b ) ;
       build_func b
 
-    let scan_unordered_list scan r t m =
+    let scan_unordered_list name scan r t m =
+      let open Builder in
       let func = scan r t in
-      let ret_type = (find_func func).ret_type in
-      let b = create [("start", int_t)] ret_type in
+      let b = create ~name ~args:[("start", int_t)] ~ret:func.ret_type in
       let start = build_arg 0 b in
       let pcount =
         build_defn "pcount" int_t
@@ -704,7 +691,7 @@ module IRGen = struct
         Infix.(pcount > int 0)
         (fun b ->
           let clen = len cstart t in
-          build_foreach ~type_:t cstart func build_yield b ;
+          build_foreach ~fresh ~type_:t cstart func build_yield b ;
           build_assign Infix.(cstart + clen) cstart b ;
           build_assign Infix.(pcount - int 1) pcount b )
         b ;
@@ -807,14 +794,15 @@ module IRGen = struct
       in
       gen_pred
 
-    let scan_table scan rs kt vt (m: Type.table) =
+    let scan_table name scan rs kt vt (m: Type.table) =
+      let open Builder in
       (* Keys can only be scalars, so we don't need to pass in a layout for the
          keys. *)
       let key_iter = scan Abslayout.empty kt in
       let value_iter = scan rs vt in
-      let key_type = (find_func key_iter).ret_type in
-      let ret_type = (find_func value_iter).ret_type in
-      let b = create [("start", int_t)] ret_type in
+      let key_type = key_iter.ret_type in
+      let ret_type = value_iter.ret_type in
+      let b = create ~name ~args:[("start", int_t)] ~ret:ret_type in
       let start = build_arg 0 b in
       let hash_len = Infix.(islice (start + int isize)) in
       let hash_data_start =
@@ -840,13 +828,13 @@ module IRGen = struct
         ~then_:(fun _ -> ())
         ~else_:(fun b ->
           build_iter key_iter [value_ptr] b ;
-          let key = build_fresh_var "key" key_type b in
+          let key = build_fresh_var ~fresh "key" key_type b in
           build_step key key_iter b ;
           let value_start = Infix.(value_ptr + len value_ptr kt) in
           build_if
             ~cond:Infix.(index key 0 = lookup_expr)
             ~then_:
-              (build_foreach ~type_:vt value_start value_iter (fun value b ->
+              (build_foreach ~fresh ~type_:vt value_start value_iter (fun value b ->
                    build_yield value b ))
             ~else_:(fun _ -> ())
             b )
@@ -940,27 +928,28 @@ module IRGen = struct
      *     b ;
      *   build_func b *)
 
-    let printer : string -> func =
-     fun func ->
-      let b = create [] VoidT in
-      let ret_type = (find_func func).ret_type in
-      build_foreach_no_start func (fun x b -> build_print ~type_:ret_type x b) b ;
+    let printer name func =
+      let open Builder in
+      let b = create ~args:[] ~name ~ret:VoidT in
+      build_foreach_no_start ~fresh func
+        (fun x b -> build_print ~type_:func.ret_type x b)
+        b ;
       build_func b
 
-    let counter : string -> func =
-     fun func ->
+    let counter name func =
+      let open Builder in
       let open Infix in
-      let b = create [] (IntT {nullable= false}) in
+      let b = create ~name ~args:[] ~ret:(IntT {nullable= false}) in
       let c = build_defn "c" int_t Infix.(int 0) b in
-      build_foreach_no_start func (fun _ b -> build_assign (c + int 1) c b) b ;
+      build_foreach_no_start ~fresh func (fun _ b -> build_assign (c + int 1) c b) b ;
       build_return c b ;
       build_func b
 
-    let scan_filter scan p r t =
+    let scan_filter name scan p r t =
+      let open Builder in
       let func = scan r t in
-      let ret_t = (find_func func).ret_type in
-      let b = create [] ret_t in
-      build_foreach_no_start func
+      let b = create ~name ~args:[] ~ret:func.ret_type in
+      build_foreach_no_start ~fresh func
         (fun tup b ->
           build_if
             ~cond:
@@ -973,13 +962,14 @@ module IRGen = struct
         b ;
       build_func b
 
-    let scan_select scan x r t =
+    let scan_select name scan x r t =
+      let open Builder in
       (* TODO: Remove horrible hack. *)
       let func = scan r t in
       let out_expr = ref (Tuple []) in
-      let b = create [] (IntT {nullable= false}) in
+      let b = create ~name ~args:[] ~ret:(IntT {nullable= false}) in
       let schema = Univ_map.find_exn r.Abslayout.meta Abslayout.Meta.schema in
-      build_foreach_no_start func
+      build_foreach_no_start ~fresh func
         (fun tup b ->
           out_expr := Tuple (List.map x ~f:(gen_pred tup schema)) ;
           build_yield !out_expr b )
@@ -989,22 +979,24 @@ module IRGen = struct
       let ret_t = infer_type tctx !out_expr in
       {func with ret_type= ret_t}
 
-    let count gen r =
+    let count name gen r =
+      let open Builder in
       let func = gen r in
       let ret_t = TupleT [int_t] in
-      let b = create [] ret_t in
+      let b = create ~name ~args:[] ~ret:ret_t in
       let ct = build_defn "ct" int_t Infix.(int 0) b in
-      build_foreach_no_start func
+      build_foreach_no_start ~fresh func
         (fun _ b -> build_assign Infix.(ct + int 1) ct b)
         b ;
       build_yield (Tuple [ct]) b ;
       build_func b
 
-    let nl_join scan pred r1 t1 r2 t2 =
+    let nl_join name scan pred r1 t1 r2 t2 =
+      let open Builder in
       let func1 = scan r1 t1 in
       let func2 = scan r2 t2 in
-      let ret_t1 = (find_func func1).ret_type in
-      let ret_t2 = (find_func func2).ret_type in
+      let ret_t1 = func1.ret_type in
+      let ret_t2 = func2.ret_type in
       let ret_t, w1, w2 =
         match (ret_t1, ret_t2) with
         | TupleT t1, TupleT t2 -> (TupleT (t1 @ t2), List.length t1, List.length t2)
@@ -1016,10 +1008,10 @@ module IRGen = struct
       let schema =
         Abslayout.(Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema))
       in
-      let b = create [] ret_t in
-      build_foreach_no_start func1
+      let b = create ~name ~args:[] ~ret:ret_t in
+      build_foreach_no_start ~fresh func1
         (fun t1 b ->
-          build_foreach_no_start func2
+          build_foreach_no_start ~fresh func2
             (fun t2 b ->
               let tup =
                 Tuple
@@ -1034,13 +1026,14 @@ module IRGen = struct
         b ;
       build_func b
 
-    let start_wrapper scan r t meta =
+    let start_wrapper name scan r t meta =
+      let open Builder in
       match Univ_map.find_exn meta Abslayout.Meta.pos with
       | Pos start ->
           let func = scan r t in
-          let ret_t = (find_func func).ret_type in
-          let builder = create [("no_start", int_t)] ret_t in
-          build_foreach
+          let ret_t = func.ret_type in
+          let builder = create ~name ~args:[("no_start", int_t)] ~ret:ret_t in
+          build_foreach ~fresh
             Infix.(int (Int64.to_int_exn start))
             func build_yield builder ;
           build_func builder
@@ -1055,33 +1048,34 @@ module IRGen = struct
       Bitstring.Writer.close writer ;
       let name r = Abslayout.name r ^ "_" ^ Fresh.name fresh "%d" in
       let rec gen_func r t =
-        let func = match (r.node, t) with
-          | _, Type.IntT m -> scan_int m
-          | _, BoolT m -> scan_bool m
-          | _, StringT m -> scan_string m
-          | _, EmptyT -> scan_empty
-          | _, NullT m -> scan_null m
-          | ATuple (rs, Cross), CrossTupleT (ts, m) -> scan_crosstuple scan rs ts m
-          | ATuple (rs, Zip), ZipTupleT (ts, m) -> scan_ziptuple scan rs ts m
-          | AList (_, rs), UnorderedListT (ts, m) -> scan_unordered_list scan rs ts m
-          (* | _, OrderedListT (x, m) -> scan_ordered_list ?start scan x m *)
-          | AHashIdx (_, rs, _), TableT (kt, vt, m) ->
-            scan_table scan rs kt vt m
-          | Select (x, r), FuncT ([t], _) -> scan_select scan x r t
-          | Filter (x, r), FuncT ([t], _) -> scan_filter scan x r t
-          | Join {pred; r1; r2}, FuncT ([t1; t2], _) -> nl_join scan pred r1 t1 r2 t2
-          | _ ->
+        match (r.node, t) with
+        | _, Type.IntT m -> scan_int (name r) m
+        | _, BoolT m -> scan_bool (name r) m
+        | _, StringT m -> scan_string (name r) m
+        | _, EmptyT -> scan_empty (name r)
+        | _, NullT _ -> scan_null (name r)
+        | ATuple (rs, Cross), CrossTupleT (ts, m) ->
+            scan_crosstuple (name r) scan rs ts m
+        | ATuple (rs, Zip), ZipTupleT (ts, m) -> scan_ziptuple (name r) scan rs ts m
+        | AList (_, rs), UnorderedListT (ts, m) ->
+            scan_unordered_list (name r) scan rs ts m
+        (* | _, OrderedListT (x, m) -> scan_ordered_list ?start scan x m *)
+        | AHashIdx (_, rs, _), TableT (kt, vt, m) ->
+            scan_table (name r) scan rs kt vt m
+        | Select (x, r), FuncT ([t], _) -> scan_select (name r) scan x r t
+        | Filter (x, r), FuncT ([t], _) -> scan_filter (name r) scan x r t
+        | Join {pred; r1; r2}, FuncT ([t1; t2], _) ->
+            nl_join (name r) scan pred r1 t1 r2 t2
+        | _ ->
             Error.create "Unsupported at runtime." r
               [%sexp_of : Univ_map.t Abslayout.t]
             |> Error.raise
-        in
       and scan r t =
-        let n = name r in
         match r.node with
         | As (_, r) -> scan r t
         | _ ->
-          add_func n (gen_func r t) ;
-          n
+            let func = gen_func r t in
+            add_func func ; func
       in
       (scan r type_, len)
 
@@ -1094,7 +1088,7 @@ module IRGen = struct
     let irgen_abstract ~data_fn r =
       let name, len = gen_abslayout ~data_fn r in
       { iters= List.rev !funcs
-      ; funcs= [("printer", printer name); ("counter", counter name)]
+      ; funcs= [printer "printer" name; counter "counter" name]
       ; params=
           Abslayout.params r |> Set.to_list
           |> List.map ~f:(fun (n, t) -> (n, of_primtype t))
@@ -1104,8 +1098,7 @@ module IRGen = struct
       let open Format in
       fun fmt {funcs; iters; _} ->
         pp_open_vbox fmt 0 ;
-        List.iter (iters @ funcs) ~f:(fun (n, f) ->
-            fprintf fmt "%s = %a@;" n pp_func f ) ;
+        List.iter (iters @ funcs) ~f:(pp_func fmt) ;
         pp_close_box fmt () ;
         pp_print_flush fmt ()
   end
