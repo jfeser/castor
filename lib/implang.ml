@@ -1,6 +1,5 @@
 open Core
 open Base
-open Printf
 open Collections
 module Format = Caml.Format
 
@@ -18,18 +17,7 @@ type type_ =
 type op = Add | Sub | Mul | Div | Mod | Lt | Eq | And | Or | Not | Hash | LoadStr
 [@@deriving compare, sexp]
 
-type value =
-  | VCont of {state: state; body: prog}
-  | VFunc of func
-  | VBytes of Bytes.t
-  | VInt of int
-  | VBool of bool
-  | VTuple of value list
-  | VUnit
-
-and state = {ctx: value Map.M(String).t; buf: Bytes.t}
-
-and expr =
+type expr =
   | Null
   | Int of int
   | Bool of bool
@@ -95,18 +83,7 @@ let pp_int fmt = Format.fprintf fmt "%d"
 
 let pp_bool fmt = Format.fprintf fmt "%b"
 
-let rec pp_value : Format.formatter -> value -> unit =
-  let open Format in
-  fun fmt -> function
-    | VCont _ -> fprintf fmt "<cont>"
-    | VFunc f -> pp_func fmt f
-    | VBytes b -> pp_bytes fmt b
-    | VInt x -> pp_int fmt x
-    | VBool x -> pp_bool fmt x
-    | VTuple t -> fprintf fmt "(%a)" (pp_tuple pp_value) t
-    | VUnit -> fprintf fmt "()"
-
-and pp_expr : Format.formatter -> expr -> unit =
+let rec pp_expr : Format.formatter -> expr -> unit =
   let open Format in
   let op_to_string = function
     | Add -> "+"
@@ -168,17 +145,7 @@ and pp_func : Format.formatter -> func -> unit =
   Format.fprintf fmt "@[<v 4>fun %s (%a) {@,%a@]@,}" name pp_args args pp_prog body
 
 module Infix = struct
-  let tru = Bool true
-
-  let fls = Bool false
-
   let int x = Int x
-
-  let ( := ) x y = Assign {lhs= x; rhs= y}
-
-  let iter x y z = Iter {var= x; func= y; args= z}
-
-  let ( += ) x y = Step {var= x; iter= y}
 
   let ( + ) x y =
     match (x, y) with
@@ -211,15 +178,7 @@ module Infix = struct
 
   let hash x y = Binop {op= Hash; arg1= x; arg2= y}
 
-  let loop c b = Loop {cond= c; body= b}
-
-  let call v f a = Iter {var= v; func= f; args= a}
-
   let islice x = Slice (x, Serialize.isize)
-
-  let slice x y = Tuple [x; y]
-
-  let ite c t f = If {cond= c; tcase= t; fcase= f}
 
   let index tup idx =
     assert (Int.(idx >= 0)) ;
@@ -233,47 +192,8 @@ let is_nullable = function
   | IntT {nullable= n} | BoolT {nullable= n} | StringT {nullable= n} -> n
   | TupleT _ | VoidT -> false
 
-let type_of_dtype : Db.dtype -> type_ = function
-  | DInt -> int_t
-  | DTimestamp | DDate | DInterval | DRational | DFloat | DString ->
-      StringT {nullable= false}
-  | DBool -> BoolT {nullable= false}
-
-let fresh_name : unit -> string =
-  let ctr = ref 0 in
-  fun () -> Caml.incr ctr ; sprintf "%dx" !ctr
-
-let yield_count : func -> int =
- fun {body; _} -> List.sum (module Int) body ~f:(function Yield _ -> 1 | _ -> 0)
-
-let lookup : state -> string -> value =
- fun s v ->
-  match Map.find s.ctx v with
-  | Some x -> x
-  | None ->
-      fail
-        (Error.create "Unbound variable." (v, s.ctx)
-           [%sexp_of : string * value Map.M(String).t])
-
-let to_int_exn : value -> int = function
-  | VBytes x -> (
-    try Serialize.int_of_bytes_exn x with _ ->
-      fail
-        (Error.create "Runtime error: can't convert to int." x [%sexp_of : Bytes.t])
-    )
-  | VInt x -> x
-  | v ->
-      fail (Error.create "Type error: can't convert to int." v [%sexp_of : value])
-
-let to_bool_exn : value -> bool = function
-  | VBytes x -> (
-    try Serialize.bool_of_bytes_exn x with _ ->
-      fail
-        (Error.create "Runtime error: can't convert to bool." x [%sexp_of : Bytes.t])
-    )
-  | VBool x -> x
-  | v ->
-      fail (Error.create "Type error: can't convert to bool." v [%sexp_of : value])
+let yield_count {body; _} =
+  List.sum (module Int) body ~f:(function Yield _ -> 1 | _ -> 0)
 
 let rec unify_type : type_ -> type_ -> type_ =
  fun t1 t2 ->
@@ -411,15 +331,6 @@ module Builder = struct
       If {cond; tcase= List.rev !(b_then.body); fcase= List.rev !(b_else.body)}
     in
     b.body := ite :: !(b.body)
-
-  let build_tuple_append t1 t2 e1 e2 =
-    let elems len e = List.init len ~f:(fun i -> Infix.(index e i)) in
-    match (t1, t2) with
-    | TupleT x1, TupleT x2 ->
-        Tuple (elems (List.length x1) e1 @ elems (List.length x2) e2)
-    | _ ->
-        Error.create "Expected tuples." (t1, t2) [%sexp_of : type_ * type_]
-        |> Error.raise
 
   let build_fresh_var ~fresh n t b =
     let n = n ^ Fresh.name fresh "%d" in
@@ -979,18 +890,6 @@ module IRGen = struct
       let ret_t = infer_type tctx !out_expr in
       {func with ret_type= ret_t}
 
-    let count name gen r =
-      let open Builder in
-      let func = gen r in
-      let ret_t = TupleT [int_t] in
-      let b = create ~name ~args:[] ~ret:ret_t in
-      let ct = build_defn "ct" int_t Infix.(int 0) b in
-      build_foreach_no_start ~fresh func
-        (fun _ b -> build_assign Infix.(ct + int 1) ct b)
-        b ;
-      build_yield (Tuple [ct]) b ;
-      build_func b
-
     let nl_join name scan pred r1 t1 r2 t2 =
       let open Builder in
       let func1 = scan r1 t1 in
@@ -1026,19 +925,6 @@ module IRGen = struct
         b ;
       build_func b
 
-    let start_wrapper name scan r t meta =
-      let open Builder in
-      match Univ_map.find_exn meta Abslayout.Meta.pos with
-      | Pos start ->
-          let func = scan r t in
-          let ret_t = func.ret_type in
-          let builder = create ~name ~args:[("no_start", int_t)] ~ret:ret_t in
-          build_foreach ~fresh
-            Infix.(int (Int64.to_int_exn start))
-            func build_yield builder ;
-          build_func builder
-      | Many_pos -> scan r t
-
     let gen_abslayout ~data_fn r =
       let open Abslayout in
       let type_ = to_type r in
@@ -1046,30 +932,44 @@ module IRGen = struct
       let r, len = serialize writer type_ r in
       Bitstring.Writer.flush writer ;
       Bitstring.Writer.close writer ;
-      let name r = Abslayout.name r ^ "_" ^ Fresh.name fresh "%d" in
       let rec gen_func r t =
-        match (r.node, t) with
-        | _, Type.IntT m -> scan_int (name r) m
-        | _, BoolT m -> scan_bool (name r) m
-        | _, StringT m -> scan_string (name r) m
-        | _, EmptyT -> scan_empty (name r)
-        | _, NullT _ -> scan_null (name r)
-        | ATuple (rs, Cross), CrossTupleT (ts, m) ->
-            scan_crosstuple (name r) scan rs ts m
-        | ATuple (rs, Zip), ZipTupleT (ts, m) -> scan_ziptuple (name r) scan rs ts m
-        | AList (_, rs), UnorderedListT (ts, m) ->
-            scan_unordered_list (name r) scan rs ts m
-        (* | _, OrderedListT (x, m) -> scan_ordered_list ?start scan x m *)
-        | AHashIdx (_, rs, _), TableT (kt, vt, m) ->
-            scan_table (name r) scan rs kt vt m
-        | Select (x, r), FuncT ([t], _) -> scan_select (name r) scan x r t
-        | Filter (x, r), FuncT ([t], _) -> scan_filter (name r) scan x r t
-        | Join {pred; r1; r2}, FuncT ([t1; t2], _) ->
-            nl_join (name r) scan pred r1 t1 r2 t2
-        | _ ->
-            Error.create "Unsupported at runtime." r
-              [%sexp_of : Univ_map.t Abslayout.t]
-            |> Error.raise
+        let name = Abslayout.name r ^ "_" ^ Fresh.name fresh "%d" in
+        let func =
+          match (r.node, t) with
+          | _, Type.IntT m -> scan_int name m
+          | _, BoolT m -> scan_bool name m
+          | _, StringT m -> scan_string name m
+          | _, EmptyT -> scan_empty name
+          | _, NullT _ -> scan_null name
+          | ATuple (rs, Cross), CrossTupleT (ts, m) ->
+              scan_crosstuple name scan rs ts m
+          | ATuple (rs, Zip), ZipTupleT (ts, m) -> scan_ziptuple name scan rs ts m
+          | AList (_, rs), UnorderedListT (ts, m) ->
+              scan_unordered_list name scan rs ts m
+          | AHashIdx (_, rs, _), TableT (kt, vt, m) ->
+              scan_table name scan rs kt vt m
+          | Select (x, r), FuncT ([t], _) -> scan_select name scan x r t
+          | Filter (x, r), FuncT ([t], _) -> scan_filter name scan x r t
+          | Join {pred; r1; r2}, FuncT ([t1; t2], _) ->
+              nl_join name scan pred r1 t1 r2 t2
+          | _ ->
+              Error.create "Unsupported at runtime." r
+                [%sexp_of : Univ_map.t Abslayout.t]
+              |> Error.raise
+        in
+        (* Add a wrapper that calls the function with the correct start position
+           if there is only one start position associated with the function. *)
+        match Abslayout.Meta.(find_exn r pos) with
+        | Pos start ->
+            let open Builder in
+            let name = "wrap_" ^ name in
+            let ret_t = func.ret_type in
+            let builder = create ~name ~args:[("no_start", int_t)] ~ret:ret_t in
+            build_foreach ~fresh
+              Infix.(int (Int64.to_int_exn start))
+              func build_yield builder ;
+            build_func builder
+        | Many_pos -> func
       and scan r t =
         match r.node with
         | As (_, r) -> scan r t
@@ -1086,20 +986,19 @@ module IRGen = struct
       | NullT -> NullT
 
     let irgen_abstract ~data_fn r =
-      let name, len = gen_abslayout ~data_fn r in
+      let top_func, len = gen_abslayout ~data_fn r in
       { iters= List.rev !funcs
-      ; funcs= [printer "printer" name; counter "counter" name]
+      ; funcs= [printer "printer" top_func; counter "counter" top_func]
       ; params=
           Abslayout.params r |> Set.to_list
           |> List.map ~f:(fun (n, t) -> (n, of_primtype t))
       ; buffer_len= len }
 
-    let pp : Format.formatter -> ir_module -> unit =
+    let pp fmt {funcs; iters; _} =
       let open Format in
-      fun fmt {funcs; iters; _} ->
-        pp_open_vbox fmt 0 ;
-        List.iter (iters @ funcs) ~f:(pp_func fmt) ;
-        pp_close_box fmt () ;
-        pp_print_flush fmt ()
+      pp_open_vbox fmt 0 ;
+      List.iter (iters @ funcs) ~f:(pp_func fmt) ;
+      pp_close_box fmt () ;
+      pp_print_flush fmt ()
   end
 end

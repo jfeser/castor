@@ -4,6 +4,8 @@ open Llvm
 open Llvm_analysis
 module Execution_engine = Llvm_executionengine
 
+let fail = Error.raise
+
 let sexp_of_llvalue : llvalue -> Sexp.t = fun v -> Sexp.Atom (string_of_llvalue v)
 
 let sexp_of_lltype : lltype -> Sexp.t = fun v -> Sexp.Atom (string_of_lltype v)
@@ -106,20 +108,20 @@ module Make (Config : Config.S) () = struct
       lookup_chain maps key
   end
 
-  class func_ctx name func params =
+  class func_ctx func params =
     object
       val values = Hashtbl.create (module String)
       method values  : var Hashtbl.M(String).t= values
-      method name  : string= name
+      method name  : string= func.name
       method func  : func= func
       method tctx  : type_ Hashtbl.M(String).t=
         Hashtbl.of_alist_exn (module String) (func.locals @ params)
     end
     
 
-  class ictx name func params =
+  class ictx func params =
     object
-      inherit func_ctx name func params
+      inherit func_ctx func params
       val mutable init = None
       val mutable step = None
       val mutable switch = None
@@ -135,9 +137,9 @@ module Make (Config : Config.S) () = struct
     end
     
 
-  class fctx name func params =
+  class fctx func params =
     object
-      inherit func_ctx name func params
+      inherit func_ctx func params
       val mutable llfunc = None
       method! values  : var Hashtbl.M(String).t= values
       method llfunc  : llvalue= Option.value_exn llfunc
@@ -867,7 +869,7 @@ module Make (Config : Config.S) () = struct
     in
     fun fctx ->
       let name = fctx#name in
-      let ({args; locals; ret_type; body} as func) = fctx#func in
+      let ({args; locals; ret_type; body; _} as func) = fctx#func in
       Logs.debug (fun m -> m "Codegen for func %s started." name) ;
       Logs.debug (fun m -> m "%a" pp_func func) ;
       Logs.debug (fun m -> m "%s" ([%sexp_of : func] func |> Sexp.to_string_hum)) ;
@@ -995,10 +997,10 @@ module Make (Config : Config.S) () = struct
     List.iter typed_params ~f:(fun (n, t) -> SB.build_global sb n t |> ignore) ;
     (* Generate code for the iterators *)
     let ictxs =
-      List.map ir_iters ~f:(fun (name, func) ->
+      List.map ir_iters ~f:(fun func ->
           (* Create function context. *)
-          let ictx = new ictx name func params in
-          Hashtbl.set iters ~key:name ~data:ictx ;
+          let ictx = new ictx func params in
+          Hashtbl.set iters ~key:func.name ~data:ictx ;
           (* Create iterator done flag. *)
           SB.build_local sb ictx "done" (i1_type ctx) ;
           (* Create storage for iterator entry point index. *)
@@ -1009,9 +1011,7 @@ module Make (Config : Config.S) () = struct
               SB.build_local sb ictx n lltype ) ;
           ictx )
     in
-    let fctxs =
-      List.map ir_funcs ~f:(fun (name, func) -> new fctx name func params)
-    in
+    let fctxs = List.map ir_funcs ~f:(fun func -> new fctx func params) in
     params_struct_t := SB.build_param_struct sb "params" ;
     List.iter ictxs ~f:codegen_iter ;
     List.iter fctxs ~f:codegen_func ;
@@ -1022,7 +1022,7 @@ module Make (Config : Config.S) () = struct
 
   let write_header : Stdio.Out_channel.t -> unit =
    fun ch ->
-    let open Format in
+    let open Caml.Format in
     let rec pp_type fmt t =
       match classify_type t with
       | Struct ->
@@ -1070,7 +1070,7 @@ module Make (Config : Config.S) () = struct
             (param_types t)
       | _ -> ignore_val ()
     in
-    let fmt = Format.formatter_of_out_channel ch in
+    let fmt = Caml.Format.formatter_of_out_channel ch in
     pp_open_vbox fmt 0 ;
     fprintf fmt "typedef void params;@," ;
     fprintf fmt "typedef struct { char *ptr; long len; } string_t;@," ;
