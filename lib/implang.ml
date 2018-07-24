@@ -266,6 +266,7 @@ module Builder = struct
     ; body: prog ref }
 
   let create ?(args= []) ~name ~ret =
+    if List.length args < 1 then Logs.warn (fun m -> m "No start argument: %s" name) ;
     let locals =
       match Hashtbl.of_alist (module String) args with
       | `Ok l -> l
@@ -899,7 +900,7 @@ module IRGen = struct
       let schema =
         Abslayout.(Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema))
       in
-      let b = create ~name ~args:[] ~ret:ret_t in
+      let b = create ~name ~args:[("start", int_t)] ~ret:ret_t in
       build_foreach ~fresh
         Infix.(int 0)
         func1
@@ -955,6 +956,7 @@ module IRGen = struct
           | _ ->
               Error.create "Unsupported at runtime." r [%sexp_of : t] |> Error.raise
         in
+        add_func func ;
         (* Add a wrapper that calls the function with the correct start position
            if there is only one start position associated with the function. *)
         match Abslayout.Meta.(find_exn r pos) with
@@ -966,14 +968,11 @@ module IRGen = struct
             build_foreach ~fresh
               Infix.(int (Int64.to_int_exn start))
               func build_yield builder ;
-            build_func builder
+            let wrapper_func = build_func builder in
+            add_func wrapper_func ; wrapper_func
         | Many_pos -> func
       and scan r t =
-        match r.node with
-        | As (_, r) -> scan r t
-        | _ ->
-            let func = gen_func r t in
-            add_func func ; func
+        match r.node with As (_, r) -> scan r t | _ -> gen_func r t
       in
       (scan r type_, len)
 

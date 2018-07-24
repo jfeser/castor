@@ -577,10 +577,16 @@ module Make (Config : Config.S) () = struct
     build_store val_ var builder |> ignore
 
   let codegen_init fctx _ func args =
-    let init_func = (Hashtbl.find_exn iters func)#init in
-    let args_t = (Hashtbl.find_exn iters func)#func.args in
-    if List.length args <> List.length args_t then
-      Error.create "Wrong number of arguments." (func, args, args_t)
+    let iter_fctx =
+      match Hashtbl.find iters func with
+      | Some x -> x
+      | None ->
+          Error.create "Use of an undeclared iterator." func [%sexp_of : string]
+          |> Error.raise
+    in
+    if List.length args <> List.length iter_fctx#func.args then
+      Error.create "Wrong number of arguments."
+        (func, args, iter_fctx#func.args)
         [%sexp_of : string * expr list * (string * type_) list]
       |> fail
     else
@@ -590,7 +596,8 @@ module Make (Config : Config.S) () = struct
            ( List.init (List.length args) ~f:(fun _ -> "%d")
            |> String.concat ~sep:", " ))
         llargs ;
-      build_param_call fctx init_func (Array.of_list llargs) "" builder |> ignore
+      build_param_call fctx iter_fctx#init (Array.of_list llargs) "" builder
+      |> ignore
 
   let codegen_assign fctx lhs rhs =
     let val_ = codegen_expr fctx rhs in
