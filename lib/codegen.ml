@@ -580,7 +580,9 @@ module Make (Config : Config.S) () = struct
     let init_func = (Hashtbl.find_exn iters func)#init in
     let args_t = (Hashtbl.find_exn iters func)#func.args in
     if List.length args <> List.length args_t then
-      fail (Error.of_string "Wrong number of arguments.")
+      Error.create "Wrong number of arguments." (func, args, args_t)
+        [%sexp_of : string * expr list * (string * type_) list]
+      |> fail
     else
       let llargs = List.map args ~f:(codegen_expr fctx) in
       debug_printf

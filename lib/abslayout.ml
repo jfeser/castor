@@ -57,17 +57,12 @@ module No_config = struct
 
     let pos = Univ_map.Key.create ~name:"pos" [%sexp_of : pos]
 
-    let meta_iter f =
-      object (self: 'self)
-        inherit [_] iter
-        method! visit_t () {node; meta} = self#visit_node () node ; f meta
-      end
+    let update r key ~f = r.meta := Univ_map.update !(r.meta) key ~f
 
-    let change_inplace r key ~f =
-      (meta_iter (fun m -> m := Univ_map.change !m key ~f))#visit_t () r
+    let find ralgebra key = Univ_map.find !(ralgebra.meta) key
 
     let find_exn ralgebra key =
-      match Univ_map.find !(ralgebra.meta) key with
+      match find ralgebra key with
       | Some x -> x
       | None ->
           Error.create "Missing metadata."
@@ -915,9 +910,11 @@ module Make (Config : Config.S) () = struct
               |> Error.raise
         method visit_t ctx type_ ({node; _} as r) =
           let open Bitstring in
-          Meta.change_inplace r Meta.pos ~f:(function
-            | Some _ -> Some Many_pos
-            | None -> Some (Pos (Writer.pos writer |> Writer.Pos.to_bytes_exn)) ) ;
+          let pos = Writer.pos writer |> Writer.Pos.to_bytes_exn in
+          Meta.update r Meta.pos ~f:(function
+            | Some (Pos pos' as p) -> if Int64.(pos = pos') then p else Many_pos
+            | Some Many_pos -> Many_pos
+            | None -> Pos pos ) ;
           match node with
           | AEmpty -> self#visit_AEmpty ctx type_
           | AScalar e -> self#visit_AScalar ctx type_ e

@@ -125,9 +125,8 @@ let () =
       print_endline (Backtrace.to_string ocaml_trace) ;
       print_endline "" ;
       print_endline err ) ;
-  Logs.set_reporter
-    (* Set early so we get logs from command parsing code. *)
-    (Logs.format_reporter ()) ;
+  (* Set early so we get logs from command parsing code. *)
+  Logs.set_reporter (Logs.format_reporter ()) ;
   let open Command in
   let open Let_syntax in
   let param =

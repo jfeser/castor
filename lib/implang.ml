@@ -317,6 +317,8 @@ module Builder = struct
     b.body := Loop {cond= c; body= List.rev !(child_b.body)} :: !(b.body)
 
   let build_iter (f: func) a b =
+    if List.length a < 1 then
+      Logs.warn (fun m -> m "Missing start argument: %s" f.name) ;
     b.body := Iter {func= f.name; args= a; var= ""} :: !(b.body)
 
   let build_step var (iter: func) b =
@@ -371,20 +373,6 @@ module Builder = struct
               ~else_:(fun _ -> ())
               b )
           b
-
-  let build_foreach_no_start ~fresh iter_ body b =
-    let tup = build_fresh_var ~fresh "tup" iter_.ret_type b in
-    build_iter iter_ [] b ;
-    build_loop
-      Infix.(not (Done iter_.name))
-      (fun b ->
-        build_step tup iter_ b ;
-        build_if
-          ~cond:Infix.(not (Done iter_.name))
-          ~then_:(fun b -> body tup b)
-          ~else_:(fun _ -> ())
-          b )
-      b
 end
 
 module Config = struct
@@ -841,7 +829,9 @@ module IRGen = struct
     let printer name func =
       let open Builder in
       let b = create ~args:[] ~name ~ret:VoidT in
-      build_foreach_no_start ~fresh func
+      build_foreach ~fresh
+        Infix.(int 0)
+        func
         (fun x b -> build_print ~type_:func.ret_type x b)
         b ;
       build_func b
@@ -851,15 +841,20 @@ module IRGen = struct
       let open Infix in
       let b = create ~name ~args:[] ~ret:(IntT {nullable= false}) in
       let c = build_defn "c" int_t Infix.(int 0) b in
-      build_foreach_no_start ~fresh func (fun _ b -> build_assign (c + int 1) c b) b ;
+      build_foreach ~fresh
+        Infix.(int 0)
+        func
+        (fun _ b -> build_assign (c + int 1) c b)
+        b ;
       build_return c b ;
       build_func b
 
     let scan_filter name scan p r t =
       let open Builder in
       let func = scan r t in
-      let b = create ~name ~args:[] ~ret:func.ret_type in
-      build_foreach_no_start ~fresh func
+      let b = create ~name ~args:[("start", int_t)] ~ret:func.ret_type in
+      let start = build_arg 0 b in
+      build_foreach ~fresh start func
         (fun tup b ->
           build_if
             ~cond:(gen_pred tup Abslayout.Meta.(find_exn r schema) p)
@@ -874,9 +869,10 @@ module IRGen = struct
       (* TODO: Remove horrible hack. *)
       let func = scan r t in
       let out_expr = ref (Tuple []) in
-      let b = create ~name ~args:[] ~ret:(IntT {nullable= false}) in
+      let b = create ~name ~args:[("start", int_t)] ~ret:(IntT {nullable= false}) in
+      let start = build_arg 0 b in
       let schema = Abslayout.Meta.(find_exn r schema) in
-      build_foreach_no_start ~fresh func
+      build_foreach ~fresh start func
         (fun tup b ->
           out_expr := Tuple (List.map x ~f:(gen_pred tup schema)) ;
           build_yield !out_expr b )
@@ -904,9 +900,13 @@ module IRGen = struct
         Abslayout.(Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema))
       in
       let b = create ~name ~args:[] ~ret:ret_t in
-      build_foreach_no_start ~fresh func1
+      build_foreach ~fresh
+        Infix.(int 0)
+        func1
         (fun t1 b ->
-          build_foreach_no_start ~fresh func2
+          build_foreach ~fresh
+            Infix.(int 0)
+            func2
             (fun t2 b ->
               let tup =
                 Tuple
@@ -928,6 +928,10 @@ module IRGen = struct
       let r, len = serialize writer type_ r in
       Bitstring.Writer.flush writer ;
       Bitstring.Writer.close writer ;
+      Out_channel.with_file "scanner.sexp" ~f:(fun ch ->
+          Sexp.pp_hum
+            (Caml.Format.formatter_of_out_channel ch)
+            ([%sexp_of : Abslayout.t] r) ) ;
       let rec gen_func r t =
         let name = Abslayout.name r ^ "_" ^ Fresh.name fresh "%d" in
         let func =
