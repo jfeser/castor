@@ -84,18 +84,14 @@ let main ~debug ~gprof ~params ~db ~port ~code_only fn =
     | [] -> Error.of_string "Empty command" |> Error.raise
     | args ->
         let cmd = String.concat args ~sep:" " in
+        Logs.info (fun m -> m "%s" cmd) ;
         let ret = Sys.command cmd in
         if ret = 0 then ()
         else Error.create "Non-zero exit code" ret [%sexp_of : int] |> Error.raise
   in
   let clang = Config.llvm_root ^ "/bin/clang" in
   let opt = Config.llvm_root ^ "/bin/opt" in
-  let cflags =
-    [ "-g"
-    ; "-lcmph"
-    ; "-fprofile-instr-generate=scanner-%m.profraw"
-    ; "-fcoverage-mapping" ]
-  in
+  let cflags = ["-g"; "-lcmph"] in
   let cflags = (if debug then ["-O0"] else []) @ cflags in
   let cflags = (if gprof then ["-pg"] else []) @ cflags in
   if debug then
