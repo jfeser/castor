@@ -75,6 +75,8 @@ module type S = sig
 
   and t = Abslayout0.t = {node: node; meta: meta} [@@deriving sexp_of]
 
+  val pp : Formatter.t -> t -> unit
+
   val name : t -> string
 
   val params : t -> (Type.TypedName.t, Type.TypedName.comparator_witness) Base.Set.t

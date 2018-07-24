@@ -122,8 +122,8 @@ abs_pred:
 | p1 = abs_pred; MUL; p2 = abs_pred { A.Binop (A.Mul, p1, p2) }
 | p1 = abs_pred; DIV; p2 = abs_pred { A.Binop (A.Div, p1, p2) }
 | p1 = abs_pred; MOD; p2 = abs_pred { A.Binop (A.Mod, p1, p2) }
-| p1 = abs_pred; AND; p2 = abs_pred { A.Varop (A.And, [p1; p2]) }
-| p1 = abs_pred; OR; p2 = abs_pred { A.Varop (A.Or, [p1; p2]) }
+| p1 = abs_pred; AND; p2 = abs_pred { A.Binop (A.And, p1, p2) }
+| p1 = abs_pred; OR; p2 = abs_pred { A.Binop (A.Or, p1, p2) }
 
 abs_agg_expr:
 | COUNT { A.Count }

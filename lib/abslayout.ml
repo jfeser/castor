@@ -114,6 +114,88 @@ module No_config = struct
     | AOrderedIdx _ -> "ordered_idx"
     | As _ -> "as"
 
+  let pp_list pp fmt ls =
+    let open Caml.Format in
+    pp_open_hvbox fmt 4 ;
+    fprintf fmt "[" ;
+    let rec loop = function
+      | [] -> ()
+      | [x] -> fprintf fmt "%a@," pp x
+      | x :: xs -> fprintf fmt "%a,@ " pp x ; loop xs
+    in
+    loop ls ; close_box () ; fprintf fmt "]"
+
+  let op_to_str = function
+    | Eq -> "="
+    | Lt -> "<"
+    | Le -> "<="
+    | Gt -> ">"
+    | Ge -> ">="
+    | And -> "&&"
+    | Or -> "||"
+    | Add -> "+"
+    | Sub -> "-"
+    | Mul -> "*"
+    | Div -> "/"
+    | Mod -> "%"
+
+  let pp_name fmt =
+    let open Caml.Format in
+    function
+    | {relation= Some r; name; _} -> fprintf fmt "%s.%s" r name
+    | {relation= None; name; _} -> fprintf fmt "%s" name
+
+  let pp_kind fmt =
+    Caml.Format.(function Cross -> fprintf fmt "cross" | Zip -> fprintf fmt "zip")
+
+  let rec pp_pred fmt =
+    let open Caml.Format in
+    function
+    | Null -> fprintf fmt "null"
+    | Int x -> fprintf fmt "%d" x
+    | Bool x -> fprintf fmt "%B" x
+    | String x -> fprintf fmt "%S" x
+    | Name n -> pp_name fmt n
+    | Binop (op, p1, p2) ->
+        fprintf fmt "@[<h>%a@ %s@ %a@]" pp_pred p1 (op_to_str op) pp_pred p2
+    | Varop _ -> failwith ""
+
+  let pp_agg fmt =
+    let open Caml.Format in
+    function
+    | Count -> fprintf fmt "count"
+    | Key n -> pp_name fmt n
+    | Sum n -> fprintf fmt "sum(%a)" pp_name n
+    | Avg n -> fprintf fmt "avg(%a)" pp_name n
+    | Min n -> fprintf fmt "min(%a)" pp_name n
+    | Max n -> fprintf fmt "max(%a)" pp_name n
+
+  let rec pp fmt {node; _} =
+    let open Caml.Format in
+    match node with
+    | Select (ps, r) ->
+        fprintf fmt "@[<hov 4>select(%a,@,%a)@]" (pp_list pp_pred) ps pp r
+    | Filter (p, r) -> fprintf fmt "@[<hov 4>filter(%a,@ %a)@]" pp_pred p pp r
+    | Join {pred; r1; r2} ->
+        fprintf fmt "@[<hov 4>join(@,%a,@ %a,@ %a)@]" pp_pred pred pp r1 pp r2
+    | Agg (a, k, r) ->
+        fprintf fmt "@[<hov 4>agg(@,%a,@ %a,@ %a)@]" (pp_list pp_agg) a
+          (pp_list pp_name) k pp r
+    | Dedup r -> fprintf fmt "@[<hov 4>dedup(@,%a)@]" pp r
+    | Scan n -> fprintf fmt "%s" n
+    | AEmpty -> fprintf fmt "aempty"
+    | AScalar p -> fprintf fmt "@[<hov 4>ascalar(@,%a)@]" pp_pred p
+    | AList (r1, r2) -> fprintf fmt "@[<hov 4>alist(@,%a,@ %a)@]" pp r1 pp r2
+    | ATuple (rs, kind) ->
+        fprintf fmt "@[<hov 4>atuple(@,%a,@ %a)@]" (pp_list pp) rs pp_kind kind
+    | AHashIdx (r1, r2, {lookup}) ->
+        fprintf fmt "@[<hov 4>ahashidx(@,%a,@ %a,@ %a)@]" pp r1 pp r2 pp_pred lookup
+    (* |AOrderedIdx (_, _, _) ->
+      *    fprintf fmt "@[<h>%a@ %s@]" pp r n *)
+    | As (n, r) ->
+        fprintf fmt "@[<h>%a@ as@ %s@]" pp r n
+    | _ -> failwith "unsupported"
+
   module Ctx = struct
     type t = primvalue Map.M(Name).t [@@deriving sexp]
 
