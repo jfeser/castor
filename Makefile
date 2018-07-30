@@ -1,17 +1,20 @@
+BUILD_DIR=../_build/default/
+
 .PHONY : all
 all :
-	jbuilder build @install
+	dune build @install
 
 .PHONY : coverage
 coverage : clean
-	BISECT_ENABLE=YES jbuilder runtest
-	bisect-ppx-report -I ../_build/default/ -html _coverage/ \
-		`find . -name bisect*.out`
+	BISECT_ENABLE=YES dune runtest
+	bisect-ppx-report -I $(BUILD_DIR) -html _coverage/ \
+		`find $(BUILD_DIR)/fastdb -name bisect*.out`
+	open _coverage/index.html
 
 .PHONY : clean
 clean :
-	rm -f `find . -name 'bisect*.out'`
-	jbuilder clean
+	rm -f `find $(BUILD_DIR)/fastdb -name bisect*.out`
+	dune clean
 
 test :
-	jbuilder runtest
+	dune runtest
