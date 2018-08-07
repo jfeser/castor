@@ -27,3 +27,4 @@ setup.log
 *.install
 
 config
+_coverage/
