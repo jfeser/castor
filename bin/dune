@@ -1,0 +1,40 @@
+(install
+ (section bin)
+ (files compile.exe transform.exe inspect.exe pretty.exe))
+
+(rule
+ (targets config.ml)
+ (deps    ../config)
+ (action  (copy %{deps} %{targets})))
+
+(executable
+ (name inspect)
+ (libraries core async dblayout)
+ (flags (:standard -g -bin-annot))
+ (preprocess (pps ppx_sexp_conv ppx_let))
+ (modules inspect util))
+
+(executable
+ (name pretty)
+ (libraries core dblayout)
+ (flags (:standard -g -bin-annot))
+ (preprocess (pps ppx_sexp_conv ppx_let))
+ (modules pretty))
+
+(executable
+ (name compile)
+ (libraries core async dblayout)
+ (flags (:standard -g -bin-annot))
+ (preprocess (pps ppx_sexp_conv ppx_let))
+ (modules compile config))
+
+(executable
+ (name transform)
+ (libraries core postgresql dblayout logs)
+ (flags (:standard -g -bin-annot))
+ (preprocess (pps ppx_sexp_conv ppx_let))
+ (modules transform))
+
+; Local Variables:
+; mode: tuareg-dune
+; End:

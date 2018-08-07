@@ -1,0 +1,11 @@
+(rule
+ (mode fallback)
+ (targets config)
+ (deps    config.defaults)
+ (action  (copy %{deps} %{targets})))
+
+(ignored_subdirs (bench))
+
+; Local Variables:
+; mode: tuareg-dune
+; End:

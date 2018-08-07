@@ -1,7 +1,0 @@
-(jbuild_version 1)
-
-(rule
- ((mode fallback)
-  (targets (config))
-  (deps    (config.defaults))
-  (action  (copy ${<} ${@}))))

@@ -16,5 +16,6 @@ clean :
 	rm -f `find $(BUILD_DIR)/fastdb -name bisect*.out`
 	dune clean
 
+.PHONY : test
 test :
 	dune runtest
