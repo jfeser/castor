@@ -1,0 +1,33 @@
+select([lp.counter],
+        join(lp.counter < lc.counter && lc.counter < lp.succ,
+          filter(t.id = id_p,
+            atuple([alist(log_bench as t, ascalar(t.counter)),
+                    alist(log_bench as t, ascalar(t.event_type)),
+                    alist(log_bench as t, ascalar(t.id)),
+                    alist(log_bench as t, ascalar(t.stack_depth)),
+                    alist(log_bench as t, ascalar(t.receiver)),
+                    alist(log_bench as t, ascalar(t.value)),
+                    alist(log_bench as t, ascalar(t.thread)),
+                    alist(log_bench as t, ascalar(t.caller)),
+                    alist(log_bench as t, ascalar(t.line)),
+                    alist(log_bench as t, ascalar(t.param0)),
+                    alist(log_bench as t, ascalar(t.param1)),
+                    alist(log_bench as t, ascalar(t.succ))],
+                    zip))
+            as
+            lp, filter(t.id = id_c,
+                  atuple([alist(log_bench as t, ascalar(t.counter)),
+                          alist(log_bench as t, ascalar(t.event_type)),
+                          alist(log_bench as t, ascalar(t.id)),
+                          alist(log_bench as t, ascalar(t.stack_depth)),
+                          alist(log_bench as t, ascalar(t.receiver)),
+                          alist(log_bench as t, ascalar(t.value)),
+                          alist(log_bench as t, ascalar(t.thread)),
+                          alist(log_bench as t, ascalar(t.caller)),
+                          alist(log_bench as t, ascalar(t.line)),
+                          alist(log_bench as t, ascalar(t.param0)),
+                          alist(log_bench as t, ascalar(t.param1)),
+                          alist(log_bench as t, ascalar(t.succ))],
+                          zip))
+                  as
+                  lc))

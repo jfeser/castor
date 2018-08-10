@@ -1,0 +1,33 @@
+select([lp.counter],
+        join(lp.counter < lc.counter && lc.counter < lp.succ,
+          alist(log_bench as t,
+            atuple([filter(t.id = id_p, ascalar(t.id)),
+                    ascalar(t.counter),
+                    ascalar(t.event_type),
+                    ascalar(t.stack_depth),
+                    ascalar(t.receiver),
+                    ascalar(t.value),
+                    ascalar(t.thread),
+                    ascalar(t.caller),
+                    ascalar(t.line),
+                    ascalar(t.param0),
+                    ascalar(t.param1),
+                    ascalar(t.succ)],
+                    cross))
+            as
+            lp, alist(log_bench as t,
+                  atuple([filter(t.id = id_c, ascalar(t.id)),
+                          ascalar(t.counter),
+                          ascalar(t.event_type),
+                          ascalar(t.stack_depth),
+                          ascalar(t.receiver),
+                          ascalar(t.value),
+                          ascalar(t.thread),
+                          ascalar(t.caller),
+                          ascalar(t.line),
+                          ascalar(t.param0),
+                          ascalar(t.param1),
+                          ascalar(t.succ)],
+                          cross))
+                  as
+                  lc))
