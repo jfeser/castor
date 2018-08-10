@@ -131,5 +131,5 @@ module type S = sig
 
   val ralgebra_to_sql : t -> string
 
-  val resolve : Postgresql.connection -> t -> t
+  val resolve : ?params:Set.M(Name).t -> Postgresql.connection -> t -> t
 end

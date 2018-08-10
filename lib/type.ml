@@ -110,7 +110,7 @@ module T = struct
     | UnorderedListT of t * unordered_list
     | TableT of t * t * table
     | GroupingT of t * t * grouping
-    | FuncT of t list * int
+    | FuncT of t list * [`Child_sum | `Width of int]
     | EmptyT
   [@@deriving compare, sexp_of]
 end
@@ -182,8 +182,10 @@ let rec unify_exn : t -> t -> t =
   | GroupingT (kt1, vt1, m1), GroupingT (kt2, vt2, m2)
     when Polymorphic_compare.(m1 = m2) ->
       GroupingT (unify_exn kt1 kt2, unify_exn vt1 vt2, m1)
-  | FuncT (t, w), FuncT (t', w') when Int.(w = w') ->
-      FuncT (List.map2_exn ~f:unify_exn t t', w)
+  | FuncT (t, `Child_sum), FuncT (t', `Child_sum) ->
+      FuncT (List.map2_exn ~f:unify_exn t t', `Child_sum)
+  | FuncT (t, `Width w), FuncT (t', `Width w') when Int.(w = w') ->
+      FuncT (List.map2_exn ~f:unify_exn t t', `Width w)
   | _ -> fail "Unexpected types."
 
 let rec width : t -> int = function
@@ -194,7 +196,9 @@ let rec width : t -> int = function
   | TableT (_, t, _) -> width t + 1
   | GroupingT (_, _, {output; _}) -> List.length output
   | EmptyT -> 0
-  | FuncT (_, w) -> w
+  | FuncT (ts, `Child_sum) ->
+      List.map ts ~f:width |> List.sum (module Int) ~f:(fun x -> x)
+  | FuncT (_, `Width w) -> w
 
 let count : t -> AbsCount.t = function
   | EmptyT -> AbsCount.abstract 0

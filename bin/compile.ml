@@ -33,8 +33,12 @@ let main ~debug ~gprof ~params ~db ~port ~code_only fn =
   let ir_module =
     Logs.debug (fun m -> m "Loading ralgebra from %s." fn) ;
     let ralgebra =
+      let params =
+        List.map params ~f:(fun (n, t) -> Abslayout.Name.create ~type_:t n)
+        |> Set.of_list (module Abslayout.Name)
+      in
       In_channel.with_file fn ~f:Abslayout.of_channel_exn
-      |> Abslayout.resolve CConfig.conn
+      |> Abslayout.resolve ~params CConfig.conn
       |> Abslayout.annotate_schema
     in
     Logs.debug (fun m -> m "Generating IR.") ;

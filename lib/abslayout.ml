@@ -116,11 +116,11 @@ module No_config = struct
 
   let pp_list pp fmt ls =
     let open Caml.Format in
-    pp_open_hvbox fmt 4 ;
+    pp_open_hvbox fmt 1 ;
     fprintf fmt "[" ;
     let rec loop = function
       | [] -> ()
-      | [x] -> fprintf fmt "%a@," pp x
+      | [x] -> fprintf fmt "%a" pp x
       | x :: xs -> fprintf fmt "%a,@ " pp x ; loop xs
     in
     loop ls ; close_box () ; fprintf fmt "]"
@@ -174,22 +174,22 @@ module No_config = struct
     let open Caml.Format in
     match node with
     | Select (ps, r) ->
-        fprintf fmt "@[<hov 4>select(%a,@,%a)@]" (pp_list pp_pred) ps pp r
-    | Filter (p, r) -> fprintf fmt "@[<hov 4>filter(%a,@ %a)@]" pp_pred p pp r
+        fprintf fmt "@[<hv 2>select(%a,@ %a)@]" (pp_list pp_pred) ps pp r
+    | Filter (p, r) -> fprintf fmt "@[<hv 2>filter(%a,@ %a)@]" pp_pred p pp r
     | Join {pred; r1; r2} ->
-        fprintf fmt "@[<hov 4>join(@,%a,@ %a,@ %a)@]" pp_pred pred pp r1 pp r2
+        fprintf fmt "@[<hv 2>join(%a,@ %a,@ %a)@]" pp_pred pred pp r1 pp r2
     | Agg (a, k, r) ->
-        fprintf fmt "@[<hov 4>agg(@,%a,@ %a,@ %a)@]" (pp_list pp_agg) a
+        fprintf fmt "@[<hv 2>agg(%a,@ %a,@ %a)@]" (pp_list pp_agg) a
           (pp_list pp_name) k pp r
-    | Dedup r -> fprintf fmt "@[<hov 4>dedup(@,%a)@]" pp r
+    | Dedup r -> fprintf fmt "@[<hv 2>dedup(@,%a)@]" pp r
     | Scan n -> fprintf fmt "%s" n
     | AEmpty -> fprintf fmt "aempty"
-    | AScalar p -> fprintf fmt "@[<hov 4>ascalar(@,%a)@]" pp_pred p
-    | AList (r1, r2) -> fprintf fmt "@[<hov 4>alist(@,%a,@ %a)@]" pp r1 pp r2
+    | AScalar p -> fprintf fmt "@[<hv 2>ascalar(%a)@]" pp_pred p
+    | AList (r1, r2) -> fprintf fmt "@[<hv 2>alist(%a,@ %a)@]" pp r1 pp r2
     | ATuple (rs, kind) ->
-        fprintf fmt "@[<hov 4>atuple(@,%a,@ %a)@]" (pp_list pp) rs pp_kind kind
+        fprintf fmt "@[<hv 2>atuple(%a,@ %a)@]" (pp_list pp) rs pp_kind kind
     | AHashIdx (r1, r2, {lookup}) ->
-        fprintf fmt "@[<hov 4>ahashidx(@,%a,@ %a,@ %a)@]" pp r1 pp r2 pp_pred lookup
+        fprintf fmt "@[<hv 2>ahashidx(%a,@ %a,@ %a)@]" pp r1 pp r2 pp_pred lookup
     (* |AOrderedIdx (_, _, _) ->
       *    fprintf fmt "@[<h>%a@ %s@]" pp r n *)
     | As (n, r) ->
@@ -238,7 +238,7 @@ module No_config = struct
     ralgebra_params#visit_t () r
 
   (** Annotate names in an algebra expression with types. *)
-  let resolve conn r =
+  let resolve ?(params= Set.empty (module Name)) conn r =
     let resolve_relation r_name =
       let r = Relation.from_db conn r_name in
       List.map r.fields ~f:(fun f ->
@@ -258,7 +258,7 @@ module No_config = struct
       | Some _ -> n
       | None ->
         match
-          Set.find ctx ~f:(fun n' ->
+          Set.find (Set.union params ctx) ~f:(fun n' ->
               Polymorphic_compare.(n.name = n'.name && n.relation = n'.relation) )
         with
         | Some n -> n
@@ -738,9 +738,9 @@ module Make (Config : Config.S) () = struct
     class ['self] type_fold =
       object (_: 'self)
         inherit [_] material_fold
-        method build_Select exprs t = FuncT ([t], List.length exprs)
-        method build_Filter t = FuncT ([t], width t)
-        method build_Join _ _ t1 t2 = FuncT ([t1; t2], width t1 + width t2)
+        method build_Select exprs t = FuncT ([t], `Width (List.length exprs))
+        method build_Filter t = FuncT ([t], `Child_sum)
+        method build_Join _ _ t1 t2 = FuncT ([t1; t2], `Child_sum)
         method build_AEmpty = EmptyT
         method build_AScalar = type_of_scalar_layout
         method build_AList ls =

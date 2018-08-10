@@ -420,7 +420,7 @@ module IRGen = struct
       | FuncT _ -> failwith "Not materialized."
 
     (** The length of a layout in bytes (including the header). *)
-    let len start =
+    let rec len start =
       let open Infix in
       let open Type in
       function
@@ -435,7 +435,11 @@ module IRGen = struct
       | TableT _ | ZipTupleT _ | CrossTupleT _ | GroupingT _ | UnorderedListT _
        |OrderedListT _ ->
           islice start
-      | FuncT _ -> failwith "Not materialized."
+      | FuncT (ts, _) ->
+          let end_ptr =
+            List.fold_left ts ~init:start ~f:(fun start t -> start + len start t)
+          in
+          end_ptr - start
 
     let count start =
       let open Infix in
