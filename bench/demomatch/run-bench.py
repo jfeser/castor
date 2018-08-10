@@ -26,9 +26,13 @@ PRESENT_QUERIES = 10
 ABSENT_QUERIES = 10
 TABLE_SIZE = 20000
 BENCHMARKS = [
-    rpath('no-dedup-row-store.txt'),
-    rpath('no-dedup-rhs-hash.txt'),
     rpath('no-dedup-both-hash.txt'),
+    rpath('no-dedup-col-store.txt'),
+    rpath('no-dedup-nested-outer-hash.txt'),
+    rpath('no-dedup-nested.txt'),
+    rpath('no-dedup-rhs-hash.txt'),
+    rpath('no-dedup-row-store-push-filter.txt'),
+    rpath('no-dedup-row-store.txt'),
 ]
 
 def bench_dir(bench_file):
