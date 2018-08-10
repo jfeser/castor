@@ -28,3 +28,4 @@ setup.log
 
 config
 _coverage/
+bench/hyper.tar.gz
