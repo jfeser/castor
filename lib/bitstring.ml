@@ -31,8 +31,6 @@ let concat xs = PList xs
 
 let empty = PList []
 
-let append x y = PList [x; y]
-
 let length : t -> int =
   let rec length acc = function
     | Label (_, x) -> (length [@tailcall]) acc x
@@ -114,7 +112,9 @@ module ByteWriter = struct
       if !pos > !len then len := !pos
     in
     let output_bytes b =
-      for i = 0 to Bytes.length b - 1 do output_byte (Bytes.get b i) done
+      for i = 0 to Bytes.length b - 1 do
+        output_byte (Bytes.get b i)
+      done
     in
     let seek pos' = pos := Int.of_int64_exn pos' in
     let get_pos () = Int.to_int64 !pos in
@@ -166,14 +166,19 @@ module Writer = struct
     if t.pos = 0 then t.writer.output_byte x
     else
       let x = Char.to_int x in
-      for i = 7 downto 0 do write_bit t ((x lsr i) land 1) done
+      for i = 7 downto 0 do
+        write_bit t ((x lsr i) land 1)
+      done
 
   let write_char t x = Exn.reraise_uncaught "write_char" (fun () -> write_char t x)
 
   let write_bytes : t -> bytes -> unit =
    fun t x ->
     if t.pos = 0 then t.writer.output_bytes x
-    else for i = 0 to Bytes.length x - 1 do write_char t (Bytes.get x i) done
+    else
+      for i = 0 to Bytes.length x - 1 do
+        write_char t (Bytes.get x i)
+      done
 
   let write_bytes t x =
     Exn.reraise_uncaught "write_bytes" (fun () -> write_bytes t x)
@@ -181,7 +186,10 @@ module Writer = struct
   let write_string : t -> string -> unit =
    fun t x ->
     if t.pos = 0 then t.writer.output_bytes (Bytes.unsafe_of_string x)
-    else for i = 0 to String.length x - 1 do write_char t x.[i] done
+    else
+      for i = 0 to String.length x - 1 do
+        write_char t x.[i]
+      done
 
   let write_string t x =
     Exn.reraise_uncaught "write_string" (fun () -> write_string t x)

@@ -51,7 +51,7 @@ module type S = sig
 
   type hash_idx = Abslayout0.hash_idx = {lookup: pred} [@@deriving sexp_of]
 
-  and ordered_idx =
+  and ordered_idx = Abslayout0.ordered_idx =
     {lookup_low: pred option; lookup_high: pred option; order: [`Asc | `Desc]}
 
   type tuple = Abslayout0.tuple = Cross | Zip [@@deriving sexp_of]

@@ -82,8 +82,8 @@ module No_config = struct
 
   let dedup a = {node= Dedup a; meta= Meta.empty ()}
 
-  let order_by a b c =
-    {node= OrderBy {key= a; order= b; rel= c}; meta= Meta.empty ()}
+  (* let order_by a b c =
+   *   {node= OrderBy {key= a; order= b; rel= c}; meta= Meta.empty ()} *)
 
   let scan a = {node= Scan a; meta= Meta.empty ()}
 
@@ -376,6 +376,7 @@ module No_config = struct
             let r, ctx = resolve outer_ctx r in
             let ctx = rename n ctx in
             (As (n, r), ctx)
+        | OrderBy _ -> failwith ""
       in
       ({node= node'; meta}, ctx')
     in
@@ -984,34 +985,35 @@ module Make (Config : Config.S) () = struct
           log_start label ;
           Bitstring.Writer.write writer bstr ;
           log_end ()
-        method visit_AOrderedIdx ctx type_ key_l value_l meta =
-          (* Need to order the key stream. Use the key stream to construct an
-             ordering key. *)
-          let key_schema = Meta.(find_exn key_l schema) in
-          let order_key = List.map key_schema ~f:(fun n -> Name n) in
-          let ordered_key_l = order_by order_key meta.order key_l in
-
-          (* Write a dummy header. *)
-          let header_pos = Writer.pos writer in
-          log_start "Ordered idx len" ;
-          Writer.write_bytes writer (Bytes.make 8 '\x00') ;
-          log_end () ;
-          match type_ with
-          | Type.OrderedIdxT (key_t, value_t, _) ->
-              let keys = eval ctx ordered_key_l in
-              Seq.iter keys ~f:(fun kctx ->
-                  let key = match Map.to_alist kctx with
-                    | [(_, x)] -> x
-                    | _ -> failwith "Unexpected key."
-                  in
-                  let 
-                  (* Serialize key. *)
-                  self#visit_t kctx key_t key_l;
-                  (* Serialize value ptr. *)
-
-                  (* Serialize value. *)
-                )
-          | _ -> failwith "Unexpected type."
+        method visit_AOrderedIdx  (* ctx type_ key_l value_l meta *) _ _ _ _ _ =
+          failwith ""
+        (* (\* Need to order the key stream. Use the key stream to construct an
+           *    ordering key. *\)
+           * let key_schema = Meta.(find_exn key_l schema) in
+           * let order_key = List.map key_schema ~f:(fun n -> Name n) in
+           * let ordered_key_l = order_by order_key meta.order key_l in
+           * 
+           * (\* Write a dummy header. *\)
+           * let header_pos = Writer.pos writer in
+           * log_start "Ordered idx len" ;
+           * Writer.write_bytes writer (Bytes.make 8 '\x00') ;
+           * log_end () ;
+           * match type_ with
+           * | Type.OrderedIdxT (key_t, value_t, _) ->
+           *     let keys = eval ctx ordered_key_l in
+           *     Seq.iter keys ~f:(fun kctx ->
+           *         let key = match Map.to_alist kctx with
+           *           | [(_, x)] -> x
+           *           | _ -> failwith "Unexpected key."
+           *         in
+           *         let 
+           *         (\* Serialize key. *\)
+           *         self#visit_t kctx key_t key_l;
+           *         (\* Serialize value ptr. *\)
+           * 
+           *         (\* Serialize value. *\)
+           *       )
+           * | _ -> failwith "Unexpected type." *)
         method visit_func ctx type_ rs =
           let open Type in
           match type_ with
@@ -1037,7 +1039,7 @@ module Make (Config : Config.S) () = struct
            |Filter (_, r)
            |Agg (_, _, r)
            |Dedup r
-           |OrderBy {rel= r} ->
+           |OrderBy {rel= r; _} ->
               self#visit_func ctx type_ [r]
           | As (_, r) -> self#visit_t ctx type_ r
           | Join {r1; r2; _} -> self#visit_func ctx type_ [r1; r2]
@@ -1112,6 +1114,7 @@ module Make_db (Config_db : Config.S_db) () = struct
             | Scan table ->
                 (Db.Relation.from_db Config.conn table).fields
                 |> List.map ~f:(fun f -> Name.of_field ~rel:table f)
+            | OrderBy _ -> failwith ""
           in
           Meta.set {node= node'; meta} Meta.schema schema
       end
