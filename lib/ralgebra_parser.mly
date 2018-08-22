@@ -89,7 +89,7 @@ abs_ralgebra:
 | ALIST; LPAREN; r = abs_ralgebra; COMMA; x = abs_ralgebra RPAREN { A.AList (r, x) |> node }
 | ATUPLE; LPAREN; ls = bracket_list(abs_ralgebra); COMMA; k = kind; RPAREN { A.ATuple (ls, k) |> node }
 | AHASHIDX; LPAREN; r = abs_ralgebra; COMMA; x = abs_ralgebra; COMMA; e = abs_pred RPAREN { A.(AHashIdx (r, x,  { lookup = e })) |> node }
-| AORDEREDIDX; LPAREN; r = abs_ralgebra; COMMA; x = abs_ralgebra; COMMA; e1 = abs_pred; COMMA; e2 = abs_pred; COMMA; e3 = abs_pred; COMMA { A.(AOrderedIdx (r, x, { lookup_low = e1; lookup_high = e2; order = e3 })) |> node }
+(* | AORDEREDIDX; LPAREN; r = abs_ralgebra; COMMA; x = abs_ralgebra; COMMA; e1 = abs_pred; COMMA; e2 = abs_pred; COMMA; e3 = abs_pred; COMMA { A.(AOrderedIdx (r, x, { lookup_low = Some e1; lookup_high = Some e2; order = e3 })) |> node } *)
 | name = ID { A.Scan name |> node }
 | r = abs_ralgebra; AS; n = ID; { A.As (n, r) |> node }
 | error { error "Expected an operator or relation." $startpos }

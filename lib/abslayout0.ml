@@ -37,7 +37,10 @@ and agg =
 
 and hash_idx = {lookup: pred}
 
-and ordered_idx = {lookup_low: pred; lookup_high: pred; order: pred}
+and ordered_idx =
+  { lookup_low: pred option
+  ; lookup_high: pred option
+  ; order: ([`Asc | `Desc][@opaque]) }
 
 and tuple = Cross | Zip
 
@@ -48,6 +51,7 @@ and node =
   | Filter of pred * t
   | Join of {pred: pred; r1: t; r2: t}
   | Agg of agg list * (name[@opaque]) list * t
+  | OrderBy of {key: pred list; order: ([`Asc | `Desc][@opaque]); rel: t}
   | Dedup of t
   | Scan of string
   | AEmpty

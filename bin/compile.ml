@@ -1,6 +1,6 @@
 open Core
-open Postgresql
 open Dblayout
+open Postgresql
 open Collections
 
 let c_template : string -> (string * string) list -> string =

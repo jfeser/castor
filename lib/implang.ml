@@ -416,7 +416,7 @@ module IRGen = struct
         | Some _ -> Infix.(int 0)
         | None -> Infix.(int isize) )
       | CrossTupleT _ | ZipTupleT _ | GroupingT _ | TableT _ -> Infix.(int isize)
-      | UnorderedListT _ | OrderedListT _ -> Infix.int (2 * isize)
+      | UnorderedListT _ | OrderedIdxT _ -> Infix.int (2 * isize)
       | FuncT _ -> failwith "Not materialized."
 
     (** The length of a layout in bytes (including the header). *)
@@ -433,7 +433,7 @@ module IRGen = struct
         | None -> Infix.(((islice start + int 7) && int (-8)) + int isize) )
       | EmptyT -> int 0
       | TableT _ | ZipTupleT _ | CrossTupleT _ | GroupingT _ | UnorderedListT _
-       |OrderedListT _ ->
+       |OrderedIdxT _ ->
           islice start
       | FuncT (ts, _) ->
           let end_ptr =
@@ -447,8 +447,8 @@ module IRGen = struct
       function
       | EmptyT | NullT _ -> Some (int 0)
       | IntT _ | BoolT _ | StringT _ -> Some (int 1)
-      | TableT _ | CrossTupleT _ | ZipTupleT _ -> None
-      | GroupingT _ | UnorderedListT _ | OrderedListT _ -> Some (islice start)
+      | TableT _ | CrossTupleT _ | ZipTupleT _ | OrderedIdxT _ -> None
+      | GroupingT _ | UnorderedListT _ -> Some (islice start)
       | FuncT _ -> failwith "Not materialized."
 
     let scan_empty name =

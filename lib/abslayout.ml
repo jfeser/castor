@@ -82,6 +82,9 @@ module No_config = struct
 
   let dedup a = {node= Dedup a; meta= Meta.empty ()}
 
+  let order_by a b c =
+    {node= OrderBy {key= a; order= b; rel= c}; meta= Meta.empty ()}
+
   let scan a = {node= Scan a; meta= Meta.empty ()}
 
   let empty = {node= AEmpty; meta= Meta.empty ()}
@@ -105,6 +108,7 @@ module No_config = struct
     | Join _ -> "join"
     | Agg _ -> "agg"
     | Dedup _ -> "dedup"
+    | OrderBy _ -> "order_by"
     | Scan _ -> "scan"
     | AEmpty -> "empty"
     | AScalar _ -> "scalar"
@@ -695,10 +699,9 @@ module Make (Config : Config.S) () = struct
         | Filter (pred, r') -> self#visit_Filter ctx pred r'
         | Join {pred; r1; r2} -> self#visit_Join ctx pred r1 r2
         | As (n, r) -> self#visit_As ctx n r
-        | Dedup _ | Agg _ | Scan _ ->
+        | Dedup _ | Agg _ | Scan _ | OrderBy _ ->
             Error.create "Wrong context." r [%sexp_of : t] |> Error.raise
     end
-    
 
   let materialize ?(ctx= Map.empty (module Name)) l =
     let f =
@@ -766,7 +769,6 @@ module Make (Config : Config.S) () = struct
             (kt, vt, {count= None; field= Field.of_name "fixme"; lookup= h.lookup})
         method build_AOrderedIdx _ _ = failwith ""
       end
-      
   end
 
   include TF
@@ -982,7 +984,34 @@ module Make (Config : Config.S) () = struct
           log_start label ;
           Bitstring.Writer.write writer bstr ;
           log_end ()
-        method visit_AOrderedIdx _ _ _ _ _ = failwith ""
+        method visit_AOrderedIdx ctx type_ key_l value_l meta =
+          (* Need to order the key stream. Use the key stream to construct an
+             ordering key. *)
+          let key_schema = Meta.(find_exn key_l schema) in
+          let order_key = List.map key_schema ~f:(fun n -> Name n) in
+          let ordered_key_l = order_by order_key meta.order key_l in
+
+          (* Write a dummy header. *)
+          let header_pos = Writer.pos writer in
+          log_start "Ordered idx len" ;
+          Writer.write_bytes writer (Bytes.make 8 '\x00') ;
+          log_end () ;
+          match type_ with
+          | Type.OrderedIdxT (key_t, value_t, _) ->
+              let keys = eval ctx ordered_key_l in
+              Seq.iter keys ~f:(fun kctx ->
+                  let key = match Map.to_alist kctx with
+                    | [(_, x)] -> x
+                    | _ -> failwith "Unexpected key."
+                  in
+                  let 
+                  (* Serialize key. *)
+                  self#visit_t kctx key_t key_l;
+                  (* Serialize value ptr. *)
+
+                  (* Serialize value. *)
+                )
+          | _ -> failwith "Unexpected type."
         method visit_func ctx type_ rs =
           let open Type in
           match type_ with
@@ -1004,14 +1033,17 @@ module Make (Config : Config.S) () = struct
           | ATuple (a, k) -> self#visit_ATuple ctx type_ a k
           | AHashIdx (r, a, t) -> self#visit_AHashIdx ctx type_ r a t
           | AOrderedIdx (r, a, t) -> self#visit_AOrderedIdx ctx type_ r a t
-          | Select (_, r) | Filter (_, r) | Agg (_, _, r) | Dedup r ->
+          | Select (_, r)
+           |Filter (_, r)
+           |Agg (_, _, r)
+           |Dedup r
+           |OrderBy {rel= r} ->
               self#visit_func ctx type_ [r]
           | As (_, r) -> self#visit_t ctx type_ r
           | Join {r1; r2; _} -> self#visit_func ctx type_ [r1; r2]
           | Scan _ ->
               Error.create "Cannot serialize." r [%sexp_of : t] |> Error.raise
       end
-      
   end
 
   include S

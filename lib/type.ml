@@ -86,9 +86,9 @@ module T = struct
   type ordered_list =
     { field: Db.Field.t
     ; order: [`Asc | `Desc]
-    ; lookup: Layout.Range.t
+    ; lookup: Abslayout0.pred option * Abslayout0.pred option
     ; count: AbsCount.t }
-  [@@deriving compare, sexp]
+  [@@deriving compare, sexp_of]
 
   type unordered_list = {count: AbsCount.t} [@@deriving compare, sexp]
 
@@ -106,9 +106,9 @@ module T = struct
     | StringT of string_
     | CrossTupleT of t list * crosstuple
     | ZipTupleT of t list * ziptuple
-    | OrderedListT of t * ordered_list
     | UnorderedListT of t * unordered_list
     | TableT of t * t * table
+    | OrderedIdxT of t * t * ordered_list
     | GroupingT of t * t * grouping
     | FuncT of t list * [`Child_sum | `Width of int]
     | EmptyT
@@ -164,13 +164,11 @@ let rec unify_exn : t -> t -> t =
       ZipTupleT (elem_ts, {count= AbsCount.unify c1 c2})
   | UnorderedListT (et1, {count= c1}), UnorderedListT (et2, {count= c2}) ->
       UnorderedListT (unify_exn et1 et2, {count= AbsCount.unify c1 c2})
-  | ( OrderedListT (e1, {field= f1; order= o1; lookup= l1; count= c1})
-    , OrderedListT (e2, {field= f2; order= o2; lookup= l2; count= c2}) )
-    when Db.Field.(f1 = f2)
-         && Polymorphic_compare.(o1 = o2)
-         && Layout.Range.(l1 = l2) ->
-      OrderedListT
-        ( unify_exn e1 e2
+  | ( OrderedIdxT (k1, v1, {field= f1; order= o1; lookup= l1; count= c1})
+    , OrderedIdxT (k2, v2, {field= f2; order= o2; lookup= l2; count= c2}) )
+    when Db.Field.(f1 = f2) && Polymorphic_compare.(o1 = o2 && l1 = l2) ->
+      OrderedIdxT
+        ( unify_exn k1 k2, unify_exn v1 v2
         , {field= f1; order= o1; lookup= l1; count= AbsCount.unify c1 c2} )
   | ( TableT (kt1, vt1, {count= c1; field= f1; lookup= l1})
     , TableT (kt2, vt2, {count= c2; field= f2; lookup= l2}) )
@@ -192,8 +190,8 @@ let rec width : t -> int = function
   | NullT _ | IntT _ | BoolT _ | StringT _ -> 1
   | CrossTupleT (ts, _) | ZipTupleT (ts, _) ->
       List.map ts ~f:width |> List.sum (module Int) ~f:(fun x -> x)
-  | OrderedListT (t, _) | UnorderedListT (t, _) -> width t
-  | TableT (_, t, _) -> width t + 1
+  | UnorderedListT (t, _) -> width t
+  | TableT (kt, vt, _) | OrderedIdxT (kt, vt, _) -> width kt + width vt
   | GroupingT (_, _, {output; _}) -> List.length output
   | EmptyT -> 0
   | FuncT (ts, `Child_sum) ->
@@ -205,7 +203,7 @@ let count : t -> AbsCount.t = function
   | NullT _ | IntT _ | BoolT _ | StringT _ -> AbsCount.abstract 1
   | CrossTupleT (_, {count})
    |ZipTupleT (_, {count})
-   |OrderedListT (_, {count; _})
+   |OrderedIdxT (_, _, {count; _})
    |UnorderedListT (_, {count})
    |TableT (_, _, {count; _}) ->
       count

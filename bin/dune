@@ -9,7 +9,7 @@
 
 (executable
  (name inspect)
- (libraries core async dblayout)
+ (libraries core dblayout)
  (flags (:standard -g -bin-annot))
  (preprocess (pps ppx_sexp_conv ppx_let))
  (modules inspect util))
@@ -23,7 +23,7 @@
 
 (executable
  (name compile)
- (libraries core async dblayout)
+ (libraries core dblayout)
  (flags (:standard -g -bin-annot))
  (preprocess (pps ppx_sexp_conv ppx_let))
  (modules compile config))

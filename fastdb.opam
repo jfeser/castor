@@ -6,27 +6,27 @@ authors: "Jack Feser <feser@csail.mit.edu>"
 dev-repo: "git+https://github.com/jfeser/fastdb.git"
 homepage: "https://github.com/jfeser/fastdb"
 bug-reports: "https://github.com/jfeser/fastdb/issues"
-build: [["jbuilder" "build" "-p" name "-j" jobs]]
+build: [["dune" "build" "-p" name "-j" jobs]]
 depends: [
-  "jbuilder" {build}
+  "dune" {build & >= "1.1"}
   "menhir" {build}
-  
-  "oUnit" {test}
+
+  "oUnit" {test & >= "2"}
   "bisect_ppx" {test}
 
-  "async" {>= "0.11.0" & < "0.12.0"}
-  "base" {>= "0.11.0" & < "0.12.0"}
-  "core" {>= "0.11.0" & < "0.12.0"}
-  "stdio" {>= "0.11.0" & < "0.12.0"}
-  "postgresql" {>= "4.4.0" & < "4.5.0"}
-  "logs" {>= "0.6.0" & < "0.7.0"}
-  "llvm" {>= "6.0.0" & < "7.0.0"}
+  "base" {>= "v0.11" & < "v0.12"}
+  "core" {>= "v0.11" & < "v0.12"}
+  "stdio" {>= "v0.11" & < "v0.12"}
+  "postgresql" {>= "4.4" & < "4.5"}
+  "logs" {>= "0.6" & < "0.7"}
+  "llvm" {>= "6" & < "7"}
   "hashcons"
+  "cmph"
 
-  "ppx_driver"
-  "ppx_compare"
-  "ppx_sexp_conv"
-  "ppx_hash"
-  "ppx_bin_prot"
-  "ppx_let"
+  "ppx_compare" {>= "v0.11" & < "v0.12"}
+  "ppx_sexp_conv" {>= "v0.11" & < "v0.12"}
+  "ppx_hash" {>= "v0.11" & < "v0.12"}
+  "ppx_bin_prot" {>= "v0.11" & < "v0.12"}
+  "ppx_let" {>= "v0.11" & < "v0.12"}
+  "visitors"
 ]

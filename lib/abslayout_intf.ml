@@ -51,9 +51,8 @@ module type S = sig
 
   type hash_idx = Abslayout0.hash_idx = {lookup: pred} [@@deriving sexp_of]
 
-  type ordered_idx = Abslayout0.ordered_idx =
-    {lookup_low: pred; lookup_high: pred; order: pred}
-  [@@deriving sexp_of]
+  and ordered_idx =
+    {lookup_low: pred option; lookup_high: pred option; order: [`Asc | `Desc]}
 
   type tuple = Abslayout0.tuple = Cross | Zip [@@deriving sexp_of]
 
@@ -62,6 +61,7 @@ module type S = sig
     | Filter of pred * t
     | Join of {pred: pred; r1: t; r2: t}
     | Agg of agg list * Name.t list * t
+    | OrderBy of {key: pred list; order: [`Asc | `Desc]; rel: t}
     | Dedup of t
     | Scan of string
     | AEmpty
