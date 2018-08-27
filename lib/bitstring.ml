@@ -20,6 +20,19 @@ let of_int : ?null:bool -> width:int -> int -> t =
   done ;
   Piece {str= Bytes.to_string buf; len= width}
 
+let of_int64 : ?null:bool -> width:int -> int64 -> t =
+ fun ?(null= false) ~width x ->
+  assert (0 <= width && width <= 64 && (not null || width <= 63)) ;
+  let nbytes = (width / 8) + 1 in
+  let buf = Bytes.make nbytes '\x00' in
+  for i = 0 to nbytes - 1 do
+    let shift = i * 8 in
+    let mask = Int64.of_int 0xFF in
+    Bytes.set buf i
+      (Int64.((x lsr shift) land mask) |> Int64.to_int_exn |> Char.of_int_exn)
+  done ;
+  Piece {str= Bytes.to_string buf; len= width}
+
 let of_bytes : bytes -> t =
  fun x -> Piece {str= Bytes.to_string x; len= 8 * Bytes.length x}
 

@@ -104,12 +104,12 @@ module T = struct
     | IntT of int_
     | BoolT of bool_
     | StringT of string_
-    | CrossTupleT of t list * crosstuple
-    | ZipTupleT of t list * ziptuple
-    | UnorderedListT of t * unordered_list
-    | TableT of t * t * table
-    | OrderedIdxT of t * t * ordered_list
-    | GroupingT of t * t * grouping
+    | CrossTupleT of (t list * crosstuple)
+    | ZipTupleT of (t list * ziptuple)
+    | UnorderedListT of (t * unordered_list)
+    | TableT of (t * t * table)
+    | OrderedIdxT of (t * t * ordered_list)
+    | GroupingT of (t * t * grouping)
     | FuncT of t list * [`Child_sum | `Width of int]
     | EmptyT
   [@@deriving compare, sexp_of]
@@ -168,7 +168,8 @@ let rec unify_exn : t -> t -> t =
     , OrderedIdxT (k2, v2, {field= f2; order= o2; lookup= l2; count= c2}) )
     when Db.Field.(f1 = f2) && Polymorphic_compare.(o1 = o2 && l1 = l2) ->
       OrderedIdxT
-        ( unify_exn k1 k2, unify_exn v1 v2
+        ( unify_exn k1 k2
+        , unify_exn v1 v2
         , {field= f1; order= o1; lookup= l1; count= AbsCount.unify c1 c2} )
   | ( TableT (kt1, vt1, {count= c1; field= f1; lookup= l1})
     , TableT (kt2, vt2, {count= c2; field= f2; lookup= l2}) )

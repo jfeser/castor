@@ -1,6 +1,6 @@
 (install
  (section bin)
- (files compile.exe transform.exe pretty.exe))
+ (files compile.exe pretty.exe))
 
 (rule
  (targets config.ml)

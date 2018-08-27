@@ -4,6 +4,8 @@ type t
 
 val of_int : ?null:bool -> width:int -> int -> t
 
+val of_int64 : ?null:bool -> width:int -> int64 -> t
+
 val of_bytes : bytes -> t
 
 val of_string : string -> t

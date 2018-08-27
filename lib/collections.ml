@@ -233,3 +233,32 @@ module Hashcons = struct
 
   let hash_hash_consed : 'a hash_consed -> int = fun {hkey; _} -> hkey
 end
+
+module Tree = struct
+  module T = struct
+    type 'a t = Empty | Node of 'a * 'a t list [@@deriving sexp, compare]
+
+    type 'a elt = 'a
+
+    let fold t ~init ~f =
+      let rec fold accum = function
+        | Empty -> accum
+        | Node (value, children) ->
+            let accum = f accum value in
+            List.fold_left children ~init:accum ~f:fold
+      in
+      fold init t
+
+    let iter t ~f =
+      let rec iter = function
+        | Empty -> ()
+        | Node (v, c) -> f v ; List.iter c ~f:iter
+      in
+      iter t
+
+    let iter = `Custom iter
+  end
+
+  include T
+  include Container.Make (T)
+end

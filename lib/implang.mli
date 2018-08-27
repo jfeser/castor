@@ -72,10 +72,6 @@ val yield_count : func -> int
 
 module Config : sig
   module type S = sig
-    val layout_map : bool
-
-    val conn : Postgresql.connection
-
     val code_only : bool
   end
 end
@@ -89,7 +85,7 @@ module IRGen : sig
 
   exception IRGenError of Error.t
 
-  module Make (Config : Config.S) () : sig
+  module Make (Config : Config.S) (Eval : Eval.S) () : sig
     val irgen_abstract : data_fn:string -> Abslayout.t -> ir_module
 
     val pp : Formatter.t -> ir_module -> unit

@@ -24,12 +24,11 @@ let main ~debug ~gprof ~params ~db ~port ~code_only fn =
     let builder = Llvm.builder ctx
 
     let code_only = code_only
-
-    let layout_map = true
   end in
+  let module Eval = Eval.Make (CConfig) in
   let module Codegen = Codegen.Make (CConfig) () in
-  let module IRGen = Implang.IRGen.Make (CConfig) () in
-  let module Abslayout = Abslayout.Make_db (CConfig) () in
+  let module IRGen = Implang.IRGen.Make (CConfig) (Eval) () in
+  let module Abslayout_db = Abslayout_db.Make (Eval) in
   let ir_module =
     Logs.debug (fun m -> m "Loading ralgebra from %s." fn) ;
     let ralgebra =
@@ -39,7 +38,7 @@ let main ~debug ~gprof ~params ~db ~port ~code_only fn =
       in
       In_channel.with_file fn ~f:Abslayout.of_channel_exn
       |> Abslayout.resolve ~params CConfig.conn
-      |> Abslayout.annotate_schema
+      |> Abslayout_db.annotate_schema
     in
     Logs.debug (fun m -> m "Generating IR.") ;
     let ir_module = IRGen.irgen_abstract ~data_fn:"db.buf" ralgebra in

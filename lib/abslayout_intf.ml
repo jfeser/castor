@@ -68,10 +68,10 @@ module type S = sig
     | Scan of string
     | AEmpty
     | AScalar of pred
-    | AList of t * t
-    | ATuple of t list * tuple
-    | AHashIdx of t * t * hash_idx
-    | AOrderedIdx of t * t * ordered_idx
+    | AList of (t * t)
+    | ATuple of (t list * tuple)
+    | AHashIdx of (t * t * hash_idx)
+    | AOrderedIdx of (t * t * ordered_idx)
     | As of string * t
   [@@deriving sexp_of]
 

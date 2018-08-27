@@ -1,8 +1,8 @@
 open Base
-open Printf
+(* open Printf *)
 open Collections
 open Db
-open Eval
+(* open Eval *)
 open Layout
 
 module Config = struct
@@ -17,7 +17,8 @@ end
 
 module Make (Config : Config.S) (Eval : Eval.S) = struct
   open Eval
-  open Config
+
+  (* open Config *)
 
   type t = {name: string; f: Ralgebra.t -> Ralgebra.t Lazy.t list}
 
@@ -77,95 +78,95 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
           m "Transform %s failed: %s" t.name (Error.to_string_mach e) ) ;
       []
 
-  let run_checked : t -> Ralgebra.t -> Ralgebra.t Lazy.t list =
-   fun t r ->
-    let s = Ralgebra.to_schema r in
-    let rs = run_unchecked t r in
-    let check_schema r' =
-      let s' = Ralgebra.to_schema r' in
-      match (s, s') with
-      | Ok s, Ok s' ->
-          let ss = Set.of_list (module Field) s in
-          let ss' = Set.of_list (module Field) s' in
-          if Set.is_subset ss ~of_:ss' then true
-          else (
-            Logs.warn (fun m ->
-                m "Transform %s not equivalent. Schemas differ: %s %s" t.name
-                  (Schema.to_string s) (Schema.to_string s') ) ;
-            false )
-      | _, Error e ->
-          Logs.warn (fun m ->
-              m "Transform %s error. Bad schema %s" t.name (Error.to_string_hum e)
-          ) ;
-          false
-      | Error _, _ -> failwith "BUG: Transforming bad candidate."
-    in
-    let check_eval r' =
-      try
-        let eval_to_set r =
-          eval testctx r |> Seq.fold ~init:(Set.empty (module Tuple)) ~f:Set.add
-        in
-        let s1 = eval_to_set r in
-        let s2 = eval_to_set r' in
-        if Set.equal s1 s2 then true
-        else (
-          Logs.warn (fun m ->
-              m
-                "Transform %s not equivalent. New relation has %d records, old has \
-                 %d."
-                t.name (Set.length s2) (Set.length s1) ) ;
-          false )
-      with EvalError e ->
-        Logs.warn (fun m ->
-            m "Error when running eval transform. %s %s" (Ralgebra.to_string r)
-              (Error.to_string_hum e) ) ;
-        false
-    in
-    let checks = [check_schema; check_eval] in
-    List.map rs ~f:(fun r' ->
-        Lazy.map r' ~f:(fun r' ->
-            List.for_all checks ~f:(fun c -> c r') |> ignore ;
-            r' ) )
-
-  let run : t -> Ralgebra.t -> Ralgebra.t Lazy.t list =
-    if Config.check_transforms then run_checked else run_unchecked
-
-  let id : t = {name= "id"; f= (fun r -> [lazy r])}
-
-  let compose : t -> t -> t =
-   fun {name= n1; f= f1} {name= n2; f= f2} ->
-    { name= sprintf "%s,%s" n2 n1
-    ; f= (fun r -> List.concat_map ~f:(fun x -> f1 (Lazy.force x)) (f2 r)) }
-
-  let compose_many : t list -> t = List.fold_left ~init:id ~f:compose
-
-  let tf_eval : t =
-    { name= "eval"
-    ; f=
-        (fun r ->
-          if Ralgebra.params r |> Set.length = 0 then (
-            try
-              let r' =
-                lazy
-                  (let layout =
-                     Eval.eval (Map.empty (module PredCtx.Key)) r
-                     |> Seq.map ~f:(fun tup ->
-                            cross_tuple (List.map ~f:(fun v -> of_value v) tup) )
-                     |> Seq.to_list |> unordered_list
-                   in
-                   Ralgebra0.Scan layout)
-              in
-              [r']
-            with EvalError e ->
-              Logs.warn (fun m ->
-                  m "Error when running eval transform. %s %s"
-                    (Ralgebra.to_string r) (Error.to_string_hum e) ) ;
-              raise (Layout.TransformError e) )
-          else [lazy r] ) }
-    |> run_everywhere
-
-  let tf_eval_all : t =
-    {name= "eval-all"; f= (fun r -> [lazy (Eval.eval_partial r)])}
+  (* let run_checked : t -> Ralgebra.t -> Ralgebra.t Lazy.t list =
+   *  fun t r ->
+   *   let s = Ralgebra.to_schema r in
+   *   let rs = run_unchecked t r in
+   *   let check_schema r' =
+   *     let s' = Ralgebra.to_schema r' in
+   *     match (s, s') with
+   *     | Ok s, Ok s' ->
+   *         let ss = Set.of_list (module Field) s in
+   *         let ss' = Set.of_list (module Field) s' in
+   *         if Set.is_subset ss ~of_:ss' then true
+   *         else (
+   *           Logs.warn (fun m ->
+   *               m "Transform %s not equivalent. Schemas differ: %s %s" t.name
+   *                 (Schema.to_string s) (Schema.to_string s') ) ;
+   *           false )
+   *     | _, Error e ->
+   *         Logs.warn (fun m ->
+   *             m "Transform %s error. Bad schema %s" t.name (Error.to_string_hum e)
+   *         ) ;
+   *         false
+   *     | Error _, _ -> failwith "BUG: Transforming bad candidate."
+   *   in
+   *   let check_eval r' =
+   *     try
+   *       let eval_to_set r =
+   *         eval testctx r |> Seq.fold ~init:(Set.empty (module Tuple)) ~f:Set.add
+   *       in
+   *       let s1 = eval_to_set r in
+   *       let s2 = eval_to_set r' in
+   *       if Set.equal s1 s2 then true
+   *       else (
+   *         Logs.warn (fun m ->
+   *             m
+   *               "Transform %s not equivalent. New relation has %d records, old has \
+   *                %d."
+   *               t.name (Set.length s2) (Set.length s1) ) ;
+   *         false )
+   *     with EvalError e ->
+   *       Logs.warn (fun m ->
+   *           m "Error when running eval transform. %s %s" (Ralgebra.to_string r)
+   *             (Error.to_string_hum e) ) ;
+   *       false
+   *   in
+   *   let checks = [check_schema; check_eval] in
+   *   List.map rs ~f:(fun r' ->
+   *       Lazy.map r' ~f:(fun r' ->
+   *           List.for_all checks ~f:(fun c -> c r') |> ignore ;
+   *           r' ) )
+   * 
+   * let run : t -> Ralgebra.t -> Ralgebra.t Lazy.t list =
+   *   if Config.check_transforms then run_checked else run_unchecked
+   * 
+   * let id : t = {name= "id"; f= (fun r -> [lazy r])}
+   * 
+   * let compose : t -> t -> t =
+   *  fun {name= n1; f= f1} {name= n2; f= f2} ->
+   *   { name= sprintf "%s,%s" n2 n1
+   *   ; f= (fun r -> List.concat_map ~f:(fun x -> f1 (Lazy.force x)) (f2 r)) }
+   * 
+   * let compose_many : t list -> t = List.fold_left ~init:id ~f:compose
+   * 
+   * let tf_eval : t =
+   *   { name= "eval"
+   *   ; f=
+   *       (fun r ->
+   *         if Ralgebra.params r |> Set.length = 0 then (
+   *           try
+   *             let r' =
+   *               lazy
+   *                 (let layout =
+   *                    Eval.eval (Map.empty (module PredCtx.Key)) r
+   *                    |> Seq.map ~f:(fun tup ->
+   *                           cross_tuple (List.map ~f:(fun v -> of_value v) tup) )
+   *                    |> Seq.to_list |> unordered_list
+   *                  in
+   *                  Ralgebra0.Scan layout)
+   *             in
+   *             [r']
+   *           with EvalError e ->
+   *             Logs.warn (fun m ->
+   *                 m "Error when running eval transform. %s %s"
+   *                   (Ralgebra.to_string r) (Error.to_string_hum e) ) ;
+   *             raise (Layout.TransformError e) )
+   *         else [lazy r] ) }
+   *   |> run_everywhere
+   * 
+   * let tf_eval_all : t =
+   *   {name= "eval-all"; f= (fun r -> [lazy (Eval.eval_partial r)])} *)
 
   let tf_hoist_filter : t =
     {name= "hoist-filter"; f= (fun r -> [lazy (Ralgebra.hoist_filter r)])}
@@ -261,14 +262,13 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     ; (* tf_row_layout;
      * tf_col_layout; *)
       tf_push_filter
-    ; tf_hoist_filter
-    ; tf_eval
-    ; tf_eval_all
+    ; tf_hoist_filter (* ; tf_eval
+     * ; tf_eval_all *)
     ; tf_group_by ]
 
   let required_transforms = [tf_row_layout_all; tf_flatten; tf_project]
 
-  let required = compose_many required_transforms
+  (* let required = compose_many required_transforms *)
 
   let of_name : string -> t Or_error.t =
    fun n ->

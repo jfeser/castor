@@ -378,8 +378,6 @@ end
 
 module Config = struct
   module type S = sig
-    include Abslayout.Config.S_db
-
     val code_only : bool
   end
 end
@@ -395,8 +393,14 @@ module IRGen = struct
 
   let fail m = raise (IRGenError m)
 
-  module Make (Config : Config.S) () = struct
-    module Abslayout = Abslayout.Make_db (Config) ()
+  module Make (Config : Config.S) (Eval : Eval.S) () = struct
+    module Abslayout_db = Abslayout_db.Make (Eval)
+
+    module Serialize =
+      Serialize.Make (struct
+          let layout_map = false
+        end)
+        (Eval)
 
     let fresh = Fresh.create ()
 
@@ -928,9 +932,9 @@ module IRGen = struct
 
     let gen_abslayout ~data_fn r =
       let open Abslayout in
-      let type_ = to_type r in
+      let type_ = Abslayout_db.to_type r in
       let writer = Bitstring.Writer.with_file data_fn in
-      let r, len = serialize writer type_ r in
+      let r, len = Serialize.serialize writer type_ r in
       Bitstring.Writer.flush writer ;
       Bitstring.Writer.close writer ;
       Out_channel.with_file "scanner.sexp" ~f:(fun ch ->

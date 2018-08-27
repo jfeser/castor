@@ -61,7 +61,7 @@ let%expect_test "mat-col" =
   let module Eval = Eval.Make (struct
     let conn = conn
   end) in
-  let module M = Abslayout_db.Make (Eval) () in
+  let module M = Abslayout_db.Make (Eval) in
   let layout = resolve conn layout in
   let layout = M.annotate_schema layout in
   layout |> [%sexp_of : t] |> print_s ;
@@ -115,7 +115,7 @@ let%expect_test "mat-hidx" =
   let module Eval = Eval.Make (struct
     let conn = conn
   end) in
-  let module M = Abslayout_db.Make (Eval) () in
+  let module M = Abslayout_db.Make (Eval) in
   let layout = resolve conn layout in
   let layout = M.annotate_schema layout in
   layout |> [%sexp_of : t] |> print_s ;
@@ -243,7 +243,7 @@ module Eval = Eval.Make_mock (struct
   let rels = rels
 end)
 
-module M = Abslayout_db.Make (Eval) ()
+module M = Abslayout_db.Make (Eval)
 
 (* Make (struct
    *     let eval ctx query =
