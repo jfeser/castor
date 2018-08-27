@@ -8,6 +8,8 @@
 %token <bool> BOOL
 %token <string> STR
 %token <[`Asc | `Desc]> ORDER
+%token <Abslayout0.tuple> KIND
+%token <Type0.PrimType.t> PRIMTYPE
 
 %token AS
 %token JOIN
@@ -20,9 +22,6 @@
 %token MAX
 %token AVG
 %token SUM
-%token INT_TYPE
-%token BOOL_TYPE
-%token STRING_TYPE
 %token LPAREN
 %token RPAREN
 %token LSBRAC
@@ -44,8 +43,6 @@
 %token MOD
 %token EOF
 %token RARROW
-%token ZIP
-%token CROSS
 %token AEMPTY
 %token ASCALAR
 %token ATUPLE
@@ -99,8 +96,8 @@ abs_ralgebra:
 
 | JOIN; LPAREN;
   p = abs_pred; COMMA;
-  r1 = abs_ralgebra;
-  COMMA; r2 = abs_ralgebra;
+  r1 = abs_ralgebra; COMMA;
+  r2 = abs_ralgebra;
   RPAREN { A.Join({pred = p; r1; r2}) |> node }
 
 | DEDUP; LPAREN;
@@ -124,7 +121,7 @@ abs_ralgebra:
 
 | ATUPLE; LPAREN;
   ls = bracket_list(abs_ralgebra); COMMA;
-  k = kind;
+  k = KIND;
   RPAREN { A.ATuple (ls, k) |> node }
 
 | AHASHIDX; LPAREN;
@@ -150,15 +147,9 @@ abs_ralgebra:
 
 name:
 | r = ID; DOT; f = ID; { A.({ relation = Some r; name = f; type_ = None }) }
-| r = ID; DOT; f = ID; COLON; t = primtype { A.({ relation = Some r; name = f; type_ = Some t }) }
+| r = ID; DOT; f = ID; COLON; t = PRIMTYPE { A.({ relation = Some r; name = f; type_ = Some t }) }
 | f = ID; { A.({ relation = None; name = f; type_ = None }) }
-| f = ID; COLON; t = primtype { A.({ relation = None; name = f; type_ = Some t }) }
-
-primtype:
-| INT_TYPE { IntT }
-| BOOL_TYPE { BoolT }
-| STRING_TYPE { StringT }
-| error { error "Expected a type." $startpos }
+| f = ID; COLON; t = PRIMTYPE { A.({ relation = None; name = f; type_ = Some t }) }
 
 abs_pred:
 | n = name { A.Name n }
@@ -190,7 +181,3 @@ abs_agg_expr:
 lambda(X):
 | n = ID; RARROW; x = X { (n, x) }
 | error { error "Expected a lambda." $startpos }
-
-kind:
-| ZIP; { A.Zip }
-| CROSS; { A.Cross }

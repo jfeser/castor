@@ -10,8 +10,8 @@ let keyword_tbl = Hashtbl.of_alist_exn (module String) [
 "filter", FILTER;
 "join", JOIN;
 "count", COUNT;
-"zip", ZIP;
-"cross", CROSS;
+"zip", KIND Abslayout0.Zip;
+"cross", KIND Abslayout0.Cross;
 "aempty", AEMPTY;
 "atuple", ATUPLE;
 "alist", ALIST;
@@ -23,9 +23,9 @@ let keyword_tbl = Hashtbl.of_alist_exn (module String) [
 "max", MAX;
 "avg", AVG;
 "sum", SUM;
-"int", INT_TYPE;
-"bool", BOOL_TYPE;
-"string", STRING_TYPE;
+"int", PRIMTYPE (Type0.PrimType.IntT);
+"bool", PRIMTYPE (Type0.PrimType.BoolT);
+"string", PRIMTYPE (Type0.PrimType.StringT);
 "as", AS;
 "null", NULL;
 "true", BOOL true;
