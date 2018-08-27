@@ -81,19 +81,19 @@ module type S = sig
 
   val name : t -> string
 
-  val params : t -> (Type.TypedName.t, Type.TypedName.comparator_witness) Base.Set.t
+  val params : t -> (Type.TypedName.t, Type.TypedName.comparator_witness) Set.t
 
-  val select : pred Base.list -> t -> t
+  val select : pred list -> t -> t
 
   val filter : pred -> t -> t
 
-  val agg : agg Base.list -> Name.t Base.list -> t -> t
+  val agg : agg list -> Name.t list -> t -> t
 
   val dedup : t -> t
 
   val order_by : pred list -> [`Asc | `Desc] -> t -> t
 
-  val scan : Base.string -> t
+  val scan : string -> t
 
   val empty : t
 
@@ -101,13 +101,13 @@ module type S = sig
 
   val list : t -> t -> t
 
-  val tuple : t Base.list -> tuple -> t
+  val tuple : t list -> tuple -> t
 
   val hash_idx : t -> t -> hash_idx -> t
 
   val ordered_idx : t -> t -> ordered_idx -> t
 
-  val as_ : Base.string -> t -> t
+  val as_ : string -> t -> t
 
   module Meta : sig
     type 'a key
@@ -126,7 +126,7 @@ module type S = sig
   end
 
   module Ctx : sig
-    type t = Db.primvalue Base.Map.M(Name).t [@@deriving compare, hash, sexp]
+    type t = Db.primvalue Map.M(Name).t [@@deriving compare, hash, sexp]
 
     val of_tuple : Db.Tuple.t -> t
   end
