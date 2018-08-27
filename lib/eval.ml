@@ -167,6 +167,32 @@ module Make_mock (Config : Config.S_mock) : S = struct
         |> List.map ~f:(fun (n, v) -> (Name.{n with relation= Some rel_n}, v))
         |> Map.of_alist_exn (module Name) )
 
+  module Key = struct
+    module T = struct
+      type t = primvalue list [@@deriving compare, sexp]
+    end
+
+    include T
+    include Comparable.Make (T)
+  end
+
+  let eval_orderby ctx key order rel =
+    let map =
+      Seq.fold
+        ~init:(Map.empty (module Key))
+        ~f:(fun map t ->
+          let ctx = Map.merge_right ctx t in
+          let key_val = List.map key ~f:(eval_pred ctx) in
+          Map.add_multi map ~key:key_val ~data:t )
+        rel
+    in
+    let kv =
+      match order with
+      | `Asc -> Map.to_sequence ~order:`Increasing_key map
+      | `Desc -> Map.to_sequence ~order:`Decreasing_key map
+    in
+    Seq.concat_map kv ~f:(fun (_, v) -> Seq.of_list v)
+
   let eval ctx r =
     let rec eval {node; _} =
       match node with
@@ -181,7 +207,8 @@ module Make_mock (Config : Config.S_mock) : S = struct
       | Dedup r -> eval_dedup (eval r)
       | Select (out, r) -> eval_select ctx out (eval r)
       | As (n, r) -> eval_as n (eval r)
-      | Agg _ | _ -> failwith ""
+      | OrderBy {key; order; rel} -> eval_orderby ctx key order (eval rel)
+      | r -> Error.create "Unsupported." r [%sexp_of : node] |> Error.raise
     in
     eval r
 end

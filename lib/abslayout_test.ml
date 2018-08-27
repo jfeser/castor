@@ -62,7 +62,7 @@ let%expect_test "mat-col" =
     let conn = conn
   end) in
   let module M = Abslayout_db.Make (Eval) in
-  let layout = resolve conn layout in
+  let layout = M.resolve layout in
   let layout = M.annotate_schema layout in
   layout |> [%sexp_of : t] |> print_s ;
   M.materialize layout |> [%sexp_of : Layout.t] |> print_s ;
@@ -117,7 +117,7 @@ let%expect_test "mat-hidx" =
     let conn = conn
   end) in
   let module M = Abslayout_db.Make (Eval) in
-  let layout = resolve conn layout in
+  let layout = M.resolve layout in
   let layout = M.annotate_schema layout in
   layout |> [%sexp_of : t] |> print_s ;
   M.materialize layout |> [%sexp_of : Layout.t] |> print_s ;

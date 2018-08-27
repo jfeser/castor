@@ -1,3 +1,4 @@
+open Base
 open Abslayout
 
 module Make (Eval : Eval.S) : sig
@@ -8,4 +9,6 @@ module Make (Eval : Eval.S) : sig
   val to_type : ?ctx:Ctx.t -> t -> Type.t
 
   val annotate_schema : t -> t
+
+  val resolve : ?params:Set.M(Name).t -> t -> t
 end

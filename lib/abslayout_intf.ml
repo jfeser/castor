@@ -143,8 +143,6 @@ module type S = sig
 
   val ralgebra_to_sql : t -> string
 
-  val resolve : ?params:Set.M(Name).t -> Postgresql.connection -> t -> t
-
   val pred_to_schema_exn : pred -> Name.t
 
   val pred_to_name : pred -> Name.t option

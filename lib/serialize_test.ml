@@ -80,6 +80,7 @@ let%expect_test "ordered-idx" =
     of_string_exn
       "AOrderedIdx(OrderBy([r1.f], Dedup(Select([r1.f], r1)), desc) as k, \
        AScalar(k.f), null, null)"
+    |> M.resolve |> M.annotate_schema
   in
   let type_ = M.to_type layout in
   let buf = Buffer.create 1024 in
