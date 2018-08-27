@@ -51,6 +51,8 @@ module Writer : sig
 
   val write_string : t -> string -> unit
 
+  val write_file : ?buf_len:int -> t -> string -> unit
+
   val write : t -> bitstring -> unit
 
   val flush : t -> unit

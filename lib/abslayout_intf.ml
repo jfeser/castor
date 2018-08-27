@@ -11,6 +11,8 @@ module type S = sig
     val create : ?relation:string -> ?type_:Type.PrimType.t -> string -> t
 
     val of_string_exn : string -> t
+
+    val of_field : ?rel:string -> Db.Field.t -> t
   end
 
   type meta = Abslayout0.meta
@@ -89,6 +91,8 @@ module type S = sig
 
   val dedup : t -> t
 
+  val order_by : pred list -> [`Asc | `Desc] -> t -> t
+
   val scan : Base.string -> t
 
   val empty : t
@@ -115,6 +119,10 @@ module type S = sig
     val pos : pos key
 
     val find_exn : t -> 'a key -> 'a
+
+    val set : t -> 'a key -> 'a -> t
+
+    val update : t -> 'a key -> f:('a option -> 'a) -> unit
   end
 
   module Ctx : sig
@@ -122,6 +130,10 @@ module type S = sig
 
     val of_tuple : Db.Tuple.t -> t
   end
+
+  val eval_pred : Ctx.t -> pred -> Db.primvalue
+
+  val pred_relations : pred -> string list
 
   val of_string_exn : string -> t
 
@@ -132,4 +144,6 @@ module type S = sig
   val ralgebra_to_sql : t -> string
 
   val resolve : ?params:Set.M(Name).t -> Postgresql.connection -> t -> t
+
+  val pred_to_schema_exn : pred -> Name.t
 end

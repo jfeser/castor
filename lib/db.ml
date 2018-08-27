@@ -52,11 +52,12 @@ let rec exec :
   | Nonfatal_error -> (
     match r#error_code with
     | SERIALIZATION_FAILURE | DEADLOCK_DETECTED ->
-        (* See:
+        if
+          (* See:
              https://www.postgresql.org/message-id/1368066680.60649.YahooMailNeo%40web162902.mail.bf1.yahoo.com
           *)
-        if max_retries > 0 then
-          exec ~max_retries:(max_retries - 1) ~verbose conn query
+          max_retries > 0
+        then exec ~max_retries:(max_retries - 1) ~verbose conn query
         else
           Error.create "Transaction failed." query [%sexp_of : string]
           |> Error.raise
@@ -356,7 +357,8 @@ let exec_cursor :
     let declare_query = sprintf "declare %s cursor with hold for %s;" cur query in
     let fetch_query = sprintf "fetch %d from %s;" batch_size cur in
     (* let close_query = sprintf "close %s;" cur in *)
-    conn#exec declare_query |> process_errors |> ignore ;
+    conn#exec declare_query
+    |> process_errors |> ignore ;
     let db_idx = ref 1 in
     let seq =
       Seq.unfold_step ~init:(`Not_done 1) ~f:(function

@@ -223,6 +223,18 @@ module Writer = struct
     t.pos <- bit_pos
 
   let close : t -> unit = fun t -> t.writer.close ()
+
+  let write_file ?(buf_len= 1024) t fn =
+    let buf = Bytes.create buf_len in
+    In_channel.with_file fn ~f:(fun ch ->
+        let rec loop () =
+          let len = In_channel.input ch ~buf ~pos:0 ~len:buf_len in
+          if len > 0 then (
+            write_bytes t (Bytes.sub buf 0 len) ;
+            loop () )
+          else ()
+        in
+        loop () )
 end
 
 let to_string : t -> string =

@@ -15,8 +15,7 @@ module Config = struct
   end
 end
 
-module Make (Config : Config.S) = struct
-  module Eval = Eval.Make (Config)
+module Make (Config : Config.S) (Eval : Eval.S) = struct
   open Eval
   open Config
 
