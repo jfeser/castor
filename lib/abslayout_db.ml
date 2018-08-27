@@ -159,17 +159,20 @@ module Make (Eval : Eval.S) = struct
               ZipTupleT (ls, {count= List.fold_left1_exn ~f:AbsCount.unify counts})
           | Cross ->
               CrossTupleT (ls, {count= List.fold_left1_exn ~f:AbsCount.( * ) counts})
-        method build_AHashIdx kv h =
+        method build_AHashIdx kv _ =
           let kt, vt =
             Seq.fold kv ~init:(EmptyT, EmptyT) ~f:(fun (kt, vt1) (kv, vt2) ->
                 ( unify_exn kt (Layout.of_value kv |> type_of_scalar_layout)
                 , unify_exn vt1 vt2 ) )
           in
-          TableT
-            ( kt
-            , vt
-            , {count= None; field= Db.Field.of_name "fixme"; lookup= h.lookup} )
-        method build_AOrderedIdx _ _ = failwith ""
+          TableT (kt, vt, {count= None})
+        method build_AOrderedIdx kv _ =
+          let kt, vt =
+            Seq.fold kv ~init:(EmptyT, EmptyT) ~f:(fun (kt, vt1) (kv, vt2) ->
+                ( unify_exn kt (Layout.of_value kv |> type_of_scalar_layout)
+                , unify_exn vt1 vt2 ) )
+          in
+          OrderedIdxT (kt, vt, {count= None})
       end
   end
 

@@ -83,17 +83,11 @@ module T = struct
 
   type crosstuple = {count: AbsCount.t} [@@deriving compare, sexp]
 
-  type ordered_list =
-    { field: Db.Field.t
-    ; order: [`Asc | `Desc]
-    ; lookup: Abslayout0.pred option * Abslayout0.pred option
-    ; count: AbsCount.t }
-  [@@deriving compare, sexp_of]
+  type ordered_list = {count: AbsCount.t} [@@deriving compare, sexp_of]
 
   type unordered_list = {count: AbsCount.t} [@@deriving compare, sexp]
 
-  type table = {count: AbsCount.t; field: Db.Field.t; lookup: Abslayout0.pred}
-  [@@deriving compare, sexp_of]
+  type table = {count: AbsCount.t} [@@deriving compare, sexp_of]
 
   type grouping =
     {count: AbsCount.t; key: Db.Field.t list; output: Db.Field.t Ralgebra0.agg list}
@@ -164,19 +158,12 @@ let rec unify_exn : t -> t -> t =
       ZipTupleT (elem_ts, {count= AbsCount.unify c1 c2})
   | UnorderedListT (et1, {count= c1}), UnorderedListT (et2, {count= c2}) ->
       UnorderedListT (unify_exn et1 et2, {count= AbsCount.unify c1 c2})
-  | ( OrderedIdxT (k1, v1, {field= f1; order= o1; lookup= l1; count= c1})
-    , OrderedIdxT (k2, v2, {field= f2; order= o2; lookup= l2; count= c2}) )
-    when Db.Field.(f1 = f2) && Polymorphic_compare.(o1 = o2 && l1 = l2) ->
-      OrderedIdxT
-        ( unify_exn k1 k2
-        , unify_exn v1 v2
-        , {field= f1; order= o1; lookup= l1; count= AbsCount.unify c1 c2} )
-  | ( TableT (kt1, vt1, {count= c1; field= f1; lookup= l1})
-    , TableT (kt2, vt2, {count= c2; field= f2; lookup= l2}) )
-    when Db.Field.(f1 = f2) && Polymorphic_compare.(l1 = l2) ->
+  | OrderedIdxT (k1, v1, {count= c1}), OrderedIdxT (k2, v2, {count= c2}) ->
+      OrderedIdxT (unify_exn k1 k2, unify_exn v1 v2, {count= AbsCount.unify c1 c2})
+  | TableT (kt1, vt1, {count= c1}), TableT (kt2, vt2, {count= c2}) ->
       let kt = unify_exn kt1 kt2 in
       let vt = unify_exn vt1 vt2 in
-      TableT (kt, vt, {field= f1; lookup= l1; count= AbsCount.unify c1 c2})
+      TableT (kt, vt, {count= AbsCount.unify c1 c2})
   | EmptyT, t | t, EmptyT -> t
   | GroupingT (kt1, vt1, m1), GroupingT (kt2, vt2, m2)
     when Polymorphic_compare.(m1 = m2) ->

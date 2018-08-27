@@ -702,7 +702,7 @@ module IRGen = struct
       in
       gen_pred
 
-    let scan_table name scan rs kt vt (m: Type.table) =
+    let scan_table name scan rs kt vt m =
       let open Builder in
       (* Keys can only be scalars, so we don't need to pass in a layout for the
          keys. *)
@@ -719,7 +719,7 @@ module IRGen = struct
       in
       let mapping_start = Infix.(hash_data_start + hash_len) in
       let lookup_expr =
-        match m.Type.lookup with
+        match m.Abslayout.lookup with
         | Name n -> Var n.name
         | l ->
             Error.create "Unexpected parameters." l [%sexp_of : Abslayout.pred]
@@ -955,7 +955,7 @@ module IRGen = struct
           | ATuple (rs, Zip), ZipTupleT (ts, m) -> scan_ziptuple name scan rs ts m
           | AList (_, rs), UnorderedListT (ts, m) ->
               scan_unordered_list name scan rs ts m
-          | AHashIdx (_, rs, _), TableT (kt, vt, m) ->
+          | AHashIdx (_, rs, m), TableT (kt, vt, _) ->
               scan_table name scan rs kt vt m
           | Select (x, r), FuncT ([t], _) -> scan_select name scan x r t
           | Filter (x, r), FuncT ([t], _) -> scan_filter name scan x r t
