@@ -210,7 +210,8 @@ module Make (Eval : Eval.S) = struct
           let schema =
             match node' with
             | Select (x, _) -> List.map x ~f:pred_to_schema_exn
-            | Filter (_, r) | Dedup r | AList (_, r) -> Meta.(find_exn r schema)
+            | Filter (_, r) | Dedup r | AList (_, r) | OrderBy {rel= r; _} ->
+                Meta.(find_exn r schema)
             | Join {r1; r2; _} | AOrderedIdx (r1, r2, _) | AHashIdx (r1, r2, _) ->
                 Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema)
             | Agg (_, _, _) -> failwith ""
@@ -224,7 +225,6 @@ module Make (Eval : Eval.S) = struct
             | Scan table ->
                 (Eval.load_relation table).fields
                 |> List.map ~f:(fun f -> Name.of_field ~rel:table f)
-            | OrderBy _ -> failwith ""
           in
           Meta.set {node= node'; meta} Meta.schema schema
       end
@@ -366,7 +366,11 @@ module Make (Eval : Eval.S) = struct
             let r, ctx = resolve outer_ctx r in
             let ctx = rename n ctx in
             (As (n, r), ctx)
-        | OrderBy _ -> failwith ""
+        | OrderBy ({key; rel; _} as x) ->
+            let rel, inner_ctx = resolve outer_ctx rel in
+            let ctx = Set.union inner_ctx outer_ctx in
+            let key = List.map key ~f:(resolve_pred ctx) in
+            (OrderBy {x with key; rel}, ctx)
       in
       ({node= node'; meta}, ctx')
     in

@@ -302,8 +302,14 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     let keys = Eval.eval ctx ordered_key_l in
     Seq.iter keys ~f:(fun kctx ->
         let ksctx = {sctx with ctx= kctx} in
+        let key =
+          match Map.to_alist kctx with
+          | [(_, key)] -> key
+          | _ -> failwith "Unexpected key tuple shape."
+        in
         (* Serialize key. *)
-        serialize ksctx key_t key_l ;
+        Db.Value.of_primvalue key
+        |> Layout.of_value |> serialize_scalar key_t |> Writer.write writer ;
         (* Serialize value ptr. *)
         Writer.write writer
           ( Writer.pos temp_writer |> Writer.Pos.to_bytes_exn |> Int64.to_int_exn

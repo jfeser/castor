@@ -324,8 +324,7 @@ let%expect_test "part-list" =
               ((range (1 4)) (nullable false) (field ((fname "") (dtype DBool))))))
             ((count ((1 1))))))
           ((count ((1 2))))))
-        ((count ()) (field ((fname fixme) (dtype DBool)))
-         (lookup (Name ((relation (r1)) (name f) (type_ (IntT)))))))) |}] ;
+        ((count ())))) |}] ;
   let mat_layout = M.materialize part_layout in
   [%sexp_of : Layout.t] mat_layout |> print_s ;
   [%expect
