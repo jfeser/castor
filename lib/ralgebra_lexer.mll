@@ -30,6 +30,9 @@ let keyword_tbl = Hashtbl.of_alist_exn (module String) [
 "null", NULL;
 "true", BOOL true;
 "false", BOOL false;
+"asc", ORDER `Asc;
+"desc", ORDER `Desc;
+"orderby", ORDERBY;
   ]
 }
 

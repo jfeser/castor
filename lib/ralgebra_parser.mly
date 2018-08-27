@@ -7,6 +7,7 @@
 %token <int> INT
 %token <bool> BOOL
 %token <string> STR
+%token <[`Asc | `Desc]> ORDER
 
 %token AS
 %token JOIN
@@ -52,6 +53,7 @@
 %token AHASHIDX
 %token AORDEREDIDX
 %token NULL
+%token ORDERBY
 
 %start <Abslayout0.t> abs_ralgebra_eof
 %start <Abslayout0.name> name_eof
@@ -79,19 +81,71 @@ parens(X):
 | error { error "Expected parentheses." $startpos }
 
 abs_ralgebra:
-| SELECT; LPAREN; x = bracket_list(abs_pred); COMMA; r = abs_ralgebra; RPAREN { A.Select (x, r) |> node }
-| AGG; LPAREN; x = bracket_list(abs_agg_expr); COMMA; k = bracket_list(name); COMMA; r = abs_ralgebra; RPAREN { A.Agg (x, k, r) |> node }
-| FILTER; LPAREN; x = abs_pred; COMMA; r = abs_ralgebra; RPAREN { A.Filter (x, r) |> node }
-| JOIN; LPAREN; p = abs_pred; COMMA; r1 = abs_ralgebra; COMMA; r2 = abs_ralgebra; RPAREN { A.Join({pred = p; r1; r2}) |> node }
-| DEDUP; LPAREN; r = abs_ralgebra; RPAREN { A.Dedup r |> node }
+  | SELECT; LPAREN;
+  x = bracket_list(abs_pred); COMMA;
+  r = abs_ralgebra;
+  RPAREN { A.Select (x, r) |> node }
+
+| AGG; LPAREN;
+  x = bracket_list(abs_agg_expr); COMMA;
+  k = bracket_list(name); COMMA;
+  r = abs_ralgebra;
+  RPAREN { A.Agg (x, k, r) |> node }
+
+| FILTER; LPAREN;
+  x = abs_pred; COMMA;
+  r = abs_ralgebra;
+  RPAREN { A.Filter (x, r) |> node }
+
+| JOIN; LPAREN;
+  p = abs_pred; COMMA;
+  r1 = abs_ralgebra;
+  COMMA; r2 = abs_ralgebra;
+  RPAREN { A.Join({pred = p; r1; r2}) |> node }
+
+| DEDUP; LPAREN;
+  r = abs_ralgebra;
+  RPAREN { A.Dedup r |> node }
+
+| ORDERBY; LPAREN;
+  key = bracket_list(abs_pred); COMMA;
+  rel = abs_ralgebra; COMMA;
+  order = ORDER;
+  RPAREN { A.OrderBy { key; order; rel } |> node }
+
 | AEMPTY { node AEmpty }
-| ASCALAR; e = parens(abs_pred) { A.AScalar e |> node }
-| ALIST; LPAREN; r = abs_ralgebra; COMMA; x = abs_ralgebra RPAREN { A.AList (r, x) |> node }
-| ATUPLE; LPAREN; ls = bracket_list(abs_ralgebra); COMMA; k = kind; RPAREN { A.ATuple (ls, k) |> node }
-| AHASHIDX; LPAREN; r = abs_ralgebra; COMMA; x = abs_ralgebra; COMMA; e = abs_pred RPAREN { A.(AHashIdx (r, x,  { lookup = e })) |> node }
-(* | AORDEREDIDX; LPAREN; r = abs_ralgebra; COMMA; x = abs_ralgebra; COMMA; e1 = abs_pred; COMMA; e2 = abs_pred; COMMA; e3 = abs_pred; COMMA { A.(AOrderedIdx (r, x, { lookup_low = Some e1; lookup_high = Some e2; order = e3 })) |> node } *)
+
+  | ASCALAR; e = parens(abs_pred) { A.AScalar e |> node }
+
+| ALIST; LPAREN;
+  r = abs_ralgebra; COMMA;
+  x = abs_ralgebra;
+  RPAREN { A.AList (r, x) |> node }
+
+| ATUPLE; LPAREN;
+  ls = bracket_list(abs_ralgebra); COMMA;
+  k = kind;
+  RPAREN { A.ATuple (ls, k) |> node }
+
+| AHASHIDX; LPAREN;
+  r = abs_ralgebra; COMMA;
+  x = abs_ralgebra; COMMA;
+  e = abs_pred;
+  RPAREN { A.(AHashIdx (r, x,  { lookup = e })) |> node }
+
+| AORDEREDIDX; LPAREN;
+  r = abs_ralgebra; COMMA;
+  x = abs_ralgebra; COMMA;
+  e1 = abs_pred; COMMA;
+  e2 = abs_pred;
+  RPAREN { A.(AOrderedIdx (r, x, { lookup_low = Some e1;
+                                   lookup_high = Some e2;
+                                   order = `Asc })) |> node }
+
 | name = ID { A.Scan name |> node }
+
 | r = abs_ralgebra; AS; n = ID; { A.As (n, r) |> node }
+
 | error { error "Expected an operator or relation." $startpos }
 
 name:
