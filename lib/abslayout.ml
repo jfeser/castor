@@ -196,7 +196,7 @@ let rec pp fmt {node; _} =
   | _ -> failwith "unsupported"
 
 module Ctx = struct
-  type t = primvalue Map.M(Name).t [@@deriving sexp]
+  type t = primvalue Map.M(Name).t [@@deriving compare, hash, sexp]
 
   let of_tuple : Tuple.t -> t =
    fun t ->
@@ -574,3 +574,5 @@ let pred_to_schema_exn =
     match op with
     | Eq | Lt | Le | Gt | Ge | And | Or -> unnamed BoolT
     | Add | Sub | Mul | Div | Mod -> unnamed IntT
+
+let pred_to_name = function Name n -> Some n | _ -> None

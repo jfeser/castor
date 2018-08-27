@@ -137,46 +137,45 @@ module Make_mock (Config : Config.S_mock) : S = struct
   let eval_join ctx p r1 r2 =
     Seq.concat_map r1 ~f:(fun t1 ->
         Seq.filter r2 ~f:(fun t2 ->
-            let ctx =
-              ctx
-              |> Map.merge_right (Ctx.of_tuple t1)
-              |> Map.merge_right (Ctx.of_tuple t2)
-            in
+            let ctx = ctx |> Map.merge_right t1 |> Map.merge_right t2 in
             match eval_pred ctx p with
             | `Bool x -> x
             | _ -> failwith "Expected a boolean." ) )
 
   let eval_filter ctx p seq =
     Seq.filter seq ~f:(fun t ->
-        let ctx = Map.merge_right ctx (Ctx.of_tuple t) in
+        let ctx = Map.merge_right ctx t in
         match eval_pred ctx p with
         | `Bool x -> x
         | _ -> failwith "Expected a boolean." )
 
   let eval_dedup seq =
-    let set = Hash_set.create (module Db.Tuple) in
+    let set = Hash_set.create (module Ctx) in
     Seq.iter seq ~f:(Hash_set.add set) ;
     Hash_set.to_list set |> Seq.of_list
 
   let eval_select ctx out seq =
     Seq.map seq ~f:(fun t ->
-        let ctx = Map.merge_right ctx (Ctx.of_tuple t) in
-        List.map out ~f:(fun e ->
-            let v = eval_pred ctx e |> Db.Value.of_primvalue in
-            match e with
-            | Name n -> Db.{v with field= Field.of_name n.name}
-            | _ -> v ) )
+        let ctx = Map.merge_right ctx t in
+        List.filter_map out ~f:(fun e ->
+            Option.map (pred_to_name e) ~f:(fun n -> (n, eval_pred ctx e)) )
+        |> Map.of_alist_exn (module Name) )
 
-  let eval_as n seq =
+  let eval_as rel_n seq =
     Seq.map seq ~f:(fun t ->
-        List.map t ~f:(fun v ->
-            let open Db in
-            Value.{v with rel= Relation.of_name n} ) )
+        Map.to_alist t
+        |> List.map ~f:(fun (n, v) -> (Name.{n with relation= Some rel_n}, v))
+        |> Map.of_alist_exn (module Name) )
 
   let eval ctx r =
     let rec eval {node; _} =
       match node with
-      | Scan r -> eval_relation (load_relation r)
+      | Scan r ->
+          eval_relation (load_relation r)
+          |> Seq.map ~f:(fun t ->
+                 List.map t ~f:(fun Value.({rel; field; value}) ->
+                     (Name.create ~relation:rel.rname field.fname, value) )
+                 |> Map.of_alist_exn (module Name) )
       | Filter (p, r) -> eval_filter ctx p (eval r)
       | Join {pred= p; r1; r2} -> eval_join ctx p (eval r1) (eval r2)
       | Dedup r -> eval_dedup (eval r)
@@ -185,7 +184,4 @@ module Make_mock (Config : Config.S_mock) : S = struct
       | Agg _ | _ -> failwith ""
     in
     eval r
-    |> Seq.map ~f:(fun t ->
-           List.map t ~f:(fun v -> (Name.of_field v.Value.field, v.value))
-           |> Map.of_alist_exn (module Name) )
 end

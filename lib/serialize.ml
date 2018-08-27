@@ -427,7 +427,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     let len =
       Writer.Pos.(end_pos - begin_pos |> to_bytes_exn) |> Int64.to_int_exn
     in
-    (l, len)
+    Writer.flush writer ; (l, len)
 end
 
 let tests =

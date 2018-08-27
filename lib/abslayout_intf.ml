@@ -126,7 +126,7 @@ module type S = sig
   end
 
   module Ctx : sig
-    type t = Db.primvalue Base.Map.M(Name).t [@@deriving sexp]
+    type t = Db.primvalue Base.Map.M(Name).t [@@deriving compare, hash, sexp]
 
     val of_tuple : Db.Tuple.t -> t
   end
@@ -146,4 +146,6 @@ module type S = sig
   val resolve : ?params:Set.M(Name).t -> Postgresql.connection -> t -> t
 
   val pred_to_schema_exn : pred -> Name.t
+
+  val pred_to_name : pred -> Name.t option
 end

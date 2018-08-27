@@ -70,34 +70,35 @@ let%expect_test "mat-col" =
     {|
     ((node
       (AList
-       ((node
-         (Filter
-          (Binop
-           (Eq
-            (Name ((relation (ship_mode)) (name sm_carrier) (type_ (StringT))))
-            (String GERMA)))
-          ((node (Scan ship_mode))
-           (meta
-            ((schema
-              (((relation (ship_mode)) (name sm_ship_mode_sk) (type_ (IntT)))
-               ((relation (ship_mode)) (name sm_ship_mode_id) (type_ (StringT)))
-               ((relation (ship_mode)) (name sm_type) (type_ (StringT)))
-               ((relation (ship_mode)) (name sm_code) (type_ (StringT)))
-               ((relation (ship_mode)) (name sm_carrier) (type_ (StringT)))
-               ((relation (ship_mode)) (name sm_contract) (type_ (StringT))))))))))
-        (meta
-         ((schema
-           (((relation (ship_mode)) (name sm_ship_mode_sk) (type_ (IntT)))
-            ((relation (ship_mode)) (name sm_ship_mode_id) (type_ (StringT)))
-            ((relation (ship_mode)) (name sm_type) (type_ (StringT)))
-            ((relation (ship_mode)) (name sm_code) (type_ (StringT)))
-            ((relation (ship_mode)) (name sm_carrier) (type_ (StringT)))
-            ((relation (ship_mode)) (name sm_contract) (type_ (StringT))))))))
-       ((node
-         (AScalar
-          (Name ((relation (ship_mode)) (name sm_carrier) (type_ (StringT))))))
-        (meta
-         ((schema (((relation (ship_mode)) (name sm_carrier) (type_ (StringT))))))))))
+       (((node
+          (Filter
+           (Binop
+            (Eq
+             (Name ((relation (ship_mode)) (name sm_carrier) (type_ (StringT))))
+             (String GERMA)))
+           ((node (Scan ship_mode))
+            (meta
+             ((schema
+               (((relation (ship_mode)) (name sm_ship_mode_sk) (type_ (IntT)))
+                ((relation (ship_mode)) (name sm_ship_mode_id) (type_ (StringT)))
+                ((relation (ship_mode)) (name sm_type) (type_ (StringT)))
+                ((relation (ship_mode)) (name sm_code) (type_ (StringT)))
+                ((relation (ship_mode)) (name sm_carrier) (type_ (StringT)))
+                ((relation (ship_mode)) (name sm_contract) (type_ (StringT))))))))))
+         (meta
+          ((schema
+            (((relation (ship_mode)) (name sm_ship_mode_sk) (type_ (IntT)))
+             ((relation (ship_mode)) (name sm_ship_mode_id) (type_ (StringT)))
+             ((relation (ship_mode)) (name sm_type) (type_ (StringT)))
+             ((relation (ship_mode)) (name sm_code) (type_ (StringT)))
+             ((relation (ship_mode)) (name sm_carrier) (type_ (StringT)))
+             ((relation (ship_mode)) (name sm_contract) (type_ (StringT))))))))
+        ((node
+          (AScalar
+           (Name ((relation (ship_mode)) (name sm_carrier) (type_ (StringT))))))
+         (meta
+          ((schema
+            (((relation (ship_mode)) (name sm_carrier) (type_ (StringT)))))))))))
      (meta
       ((schema (((relation (ship_mode)) (name sm_carrier) (type_ (StringT))))))))
     (UnorderedList
@@ -124,94 +125,102 @@ let%expect_test "mat-hidx" =
     {|
     ((node
       (AHashIdx
-       ((node
-         (As t
-          ((node
-            (Dedup
-             ((node
-               (Select
-                ((Name ((relation (ship_mode)) (name sm_type) (type_ (StringT)))))
-                ((node
-                  (Filter
-                   (Binop
-                    (Eq
-                     (Name
-                      ((relation (ship_mode)) (name sm_type) (type_ (StringT))))
-                     (String LIBRARY)))
-                   ((node (Scan ship_mode))
-                    (meta
-                     ((schema
-                       (((relation (ship_mode)) (name sm_ship_mode_sk)
-                         (type_ (IntT)))
-                        ((relation (ship_mode)) (name sm_ship_mode_id)
-                         (type_ (StringT)))
-                        ((relation (ship_mode)) (name sm_type) (type_ (StringT)))
-                        ((relation (ship_mode)) (name sm_code) (type_ (StringT)))
-                        ((relation (ship_mode)) (name sm_carrier)
-                         (type_ (StringT)))
-                        ((relation (ship_mode)) (name sm_contract)
-                         (type_ (StringT))))))))))
-                 (meta
-                  ((schema
-                    (((relation (ship_mode)) (name sm_ship_mode_sk)
-                      (type_ (IntT)))
-                     ((relation (ship_mode)) (name sm_ship_mode_id)
-                      (type_ (StringT)))
-                     ((relation (ship_mode)) (name sm_type) (type_ (StringT)))
-                     ((relation (ship_mode)) (name sm_code) (type_ (StringT)))
-                     ((relation (ship_mode)) (name sm_carrier) (type_ (StringT)))
-                     ((relation (ship_mode)) (name sm_contract)
-                      (type_ (StringT))))))))))
-              (meta
-               ((schema
-                 (((relation (ship_mode)) (name sm_type) (type_ (StringT))))))))))
-           (meta
-            ((schema (((relation (ship_mode)) (name sm_type) (type_ (StringT))))))))))
-        (meta ((schema (((relation (t)) (name sm_type) (type_ (StringT))))))))
-       ((node
-         (AList
-          ((node
-            (As t
-             ((node
-               (Filter
-                (Binop
-                 (Eq (Name ((relation (t)) (name sm_type) (type_ (StringT))))
-                  (Name
-                   ((relation (ship_mode)) (name sm_type) (type_ (StringT))))))
-                ((node (Scan ship_mode))
-                 (meta
-                  ((schema
-                    (((relation (ship_mode)) (name sm_ship_mode_sk)
-                      (type_ (IntT)))
-                     ((relation (ship_mode)) (name sm_ship_mode_id)
-                      (type_ (StringT)))
-                     ((relation (ship_mode)) (name sm_type) (type_ (StringT)))
-                     ((relation (ship_mode)) (name sm_code) (type_ (StringT)))
-                     ((relation (ship_mode)) (name sm_carrier) (type_ (StringT)))
-                     ((relation (ship_mode)) (name sm_contract)
-                      (type_ (StringT))))))))))
-              (meta
-               ((schema
-                 (((relation (ship_mode)) (name sm_ship_mode_sk) (type_ (IntT)))
-                  ((relation (ship_mode)) (name sm_ship_mode_id)
-                   (type_ (StringT)))
-                  ((relation (ship_mode)) (name sm_type) (type_ (StringT)))
-                  ((relation (ship_mode)) (name sm_code) (type_ (StringT)))
-                  ((relation (ship_mode)) (name sm_carrier) (type_ (StringT)))
-                  ((relation (ship_mode)) (name sm_contract) (type_ (StringT))))))))))
-           (meta
-            ((schema
-              (((relation (t)) (name sm_ship_mode_sk) (type_ (IntT)))
-               ((relation (t)) (name sm_ship_mode_id) (type_ (StringT)))
-               ((relation (t)) (name sm_type) (type_ (StringT)))
-               ((relation (t)) (name sm_code) (type_ (StringT)))
-               ((relation (t)) (name sm_carrier) (type_ (StringT)))
-               ((relation (t)) (name sm_contract) (type_ (StringT))))))))
-          ((node
-            (AScalar (Name ((relation (t)) (name sm_code) (type_ (StringT))))))
-           (meta ((schema (((relation (t)) (name sm_code) (type_ (StringT))))))))))
-        (meta ((schema (((relation (t)) (name sm_code) (type_ (StringT))))))))
-       ((lookup Null))))
+       (((node
+          (As t
+           ((node
+             (Dedup
+              ((node
+                (Select
+                 ((Name
+                   ((relation (ship_mode)) (name sm_type) (type_ (StringT)))))
+                 ((node
+                   (Filter
+                    (Binop
+                     (Eq
+                      (Name
+                       ((relation (ship_mode)) (name sm_type) (type_ (StringT))))
+                      (String LIBRARY)))
+                    ((node (Scan ship_mode))
+                     (meta
+                      ((schema
+                        (((relation (ship_mode)) (name sm_ship_mode_sk)
+                          (type_ (IntT)))
+                         ((relation (ship_mode)) (name sm_ship_mode_id)
+                          (type_ (StringT)))
+                         ((relation (ship_mode)) (name sm_type)
+                          (type_ (StringT)))
+                         ((relation (ship_mode)) (name sm_code)
+                          (type_ (StringT)))
+                         ((relation (ship_mode)) (name sm_carrier)
+                          (type_ (StringT)))
+                         ((relation (ship_mode)) (name sm_contract)
+                          (type_ (StringT))))))))))
+                  (meta
+                   ((schema
+                     (((relation (ship_mode)) (name sm_ship_mode_sk)
+                       (type_ (IntT)))
+                      ((relation (ship_mode)) (name sm_ship_mode_id)
+                       (type_ (StringT)))
+                      ((relation (ship_mode)) (name sm_type) (type_ (StringT)))
+                      ((relation (ship_mode)) (name sm_code) (type_ (StringT)))
+                      ((relation (ship_mode)) (name sm_carrier)
+                       (type_ (StringT)))
+                      ((relation (ship_mode)) (name sm_contract)
+                       (type_ (StringT))))))))))
+               (meta
+                ((schema
+                  (((relation (ship_mode)) (name sm_type) (type_ (StringT))))))))))
+            (meta
+             ((schema
+               (((relation (ship_mode)) (name sm_type) (type_ (StringT))))))))))
+         (meta ((schema (((relation (t)) (name sm_type) (type_ (StringT))))))))
+        ((node
+          (AList
+           (((node
+              (As t
+               ((node
+                 (Filter
+                  (Binop
+                   (Eq (Name ((relation (t)) (name sm_type) (type_ (StringT))))
+                    (Name
+                     ((relation (ship_mode)) (name sm_type) (type_ (StringT))))))
+                  ((node (Scan ship_mode))
+                   (meta
+                    ((schema
+                      (((relation (ship_mode)) (name sm_ship_mode_sk)
+                        (type_ (IntT)))
+                       ((relation (ship_mode)) (name sm_ship_mode_id)
+                        (type_ (StringT)))
+                       ((relation (ship_mode)) (name sm_type) (type_ (StringT)))
+                       ((relation (ship_mode)) (name sm_code) (type_ (StringT)))
+                       ((relation (ship_mode)) (name sm_carrier)
+                        (type_ (StringT)))
+                       ((relation (ship_mode)) (name sm_contract)
+                        (type_ (StringT))))))))))
+                (meta
+                 ((schema
+                   (((relation (ship_mode)) (name sm_ship_mode_sk)
+                     (type_ (IntT)))
+                    ((relation (ship_mode)) (name sm_ship_mode_id)
+                     (type_ (StringT)))
+                    ((relation (ship_mode)) (name sm_type) (type_ (StringT)))
+                    ((relation (ship_mode)) (name sm_code) (type_ (StringT)))
+                    ((relation (ship_mode)) (name sm_carrier) (type_ (StringT)))
+                    ((relation (ship_mode)) (name sm_contract) (type_ (StringT))))))))))
+             (meta
+              ((schema
+                (((relation (t)) (name sm_ship_mode_sk) (type_ (IntT)))
+                 ((relation (t)) (name sm_ship_mode_id) (type_ (StringT)))
+                 ((relation (t)) (name sm_type) (type_ (StringT)))
+                 ((relation (t)) (name sm_code) (type_ (StringT)))
+                 ((relation (t)) (name sm_carrier) (type_ (StringT)))
+                 ((relation (t)) (name sm_contract) (type_ (StringT))))))))
+            ((node
+              (AScalar (Name ((relation (t)) (name sm_code) (type_ (StringT))))))
+             (meta
+              ((schema (((relation (t)) (name sm_code) (type_ (StringT)))))))))))
+         (meta ((schema (((relation (t)) (name sm_code) (type_ (StringT))))))))
+        ((lookup Null)))))
      (meta
       ((schema
         (((relation (t)) (name sm_type) (type_ (StringT)))
@@ -272,51 +281,51 @@ let%expect_test "part-list" =
     {|
       ((node
         (AHashIdx
-         ((node
-           (As x0
-            ((node
-              (Dedup
-               ((node
-                 (Select ((Name ((relation (r1)) (name f) (type_ (IntT)))))
-                  ((node (Scan r1)) (meta ()))))
-                (meta ()))))
-             (meta ()))))
-          (meta ()))
-         ((node
-           (AList
-            ((node
-              (Filter
-               (Binop
-                (Eq (Name ((relation (r1)) (name f) (type_ (IntT))))
-                 (Name ((relation (x0)) (name f) (type_ (IntT))))))
-               ((node (Scan r1)) (meta ()))))
-             (meta ()))
-            ((node
-              (ATuple
-               (((node (AScalar (Name ((relation (r1)) (name f) (type_ ())))))
-                 (meta ()))
-                ((node (AScalar (Name ((relation (r1)) (name g) (type_ ())))))
-                 (meta ())))
-               Cross))
-             (meta ()))))
-          (meta ()))
-         ((lookup (Name ((relation (r1)) (name f) (type_ (IntT))))))))
+         (((node
+            (As x0
+             ((node
+               (Dedup
+                ((node
+                  (Select ((Name ((relation (r1)) (name f) (type_ (IntT)))))
+                   ((node (Scan r1)) (meta ()))))
+                 (meta ()))))
+              (meta ()))))
+           (meta ()))
+          ((node
+            (AList
+             (((node
+                (Filter
+                 (Binop
+                  (Eq (Name ((relation (r1)) (name f) (type_ (IntT))))
+                   (Name ((relation (x0)) (name f) (type_ (IntT))))))
+                 ((node (Scan r1)) (meta ()))))
+               (meta ()))
+              ((node
+                (ATuple
+                 ((((node (AScalar (Name ((relation (r1)) (name f) (type_ ())))))
+                    (meta ()))
+                   ((node (AScalar (Name ((relation (r1)) (name g) (type_ ())))))
+                    (meta ())))
+                  Cross)))
+               (meta ())))))
+           (meta ()))
+          ((lookup (Name ((relation (r1)) (name f) (type_ (IntT)))))))))
        (meta ())) |}] ;
   [%sexp_of : Type.t] (M.to_type part_layout) |> print_s ;
   [%expect
     {|
       (TableT
-       (IntT ((range (1 3)) (nullable false) (field ((fname "") (dtype DBool)))))
-       (UnorderedListT
-        (CrossTupleT
-         ((IntT
-           ((range (1 3)) (nullable false) (field ((fname "") (dtype DBool)))))
-          (IntT
-           ((range (1 4)) (nullable false) (field ((fname "") (dtype DBool))))))
-         ((count ((1 1)))))
-        ((count ((1 2)))))
-       ((count ()) (field ((fname fixme) (dtype DBool)))
-        (lookup (Name ((relation (r1)) (name f) (type_ (IntT))))))) |}] ;
+       ((IntT ((range (1 3)) (nullable false) (field ((fname "") (dtype DBool)))))
+        (UnorderedListT
+         ((CrossTupleT
+           (((IntT
+              ((range (1 3)) (nullable false) (field ((fname "") (dtype DBool)))))
+             (IntT
+              ((range (1 4)) (nullable false) (field ((fname "") (dtype DBool))))))
+            ((count ((1 1))))))
+          ((count ((1 2))))))
+        ((count ()) (field ((fname fixme) (dtype DBool)))
+         (lookup (Name ((relation (r1)) (name f) (type_ (IntT)))))))) |}] ;
   let mat_layout = M.materialize part_layout in
   [%sexp_of : Layout.t] mat_layout |> print_s ;
   [%expect

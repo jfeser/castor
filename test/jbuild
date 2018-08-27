@@ -5,7 +5,7 @@
   (libraries (base oUnit dblayout))
   (preprocess (pps (ppx_sexp_conv ppx_compare ppx_driver.runner -no-check)))))
 
-(alias
- ((name runtest)
-  (deps (test.exe))
-  (action (run ${<}))))
+; (alias
+;  ((name runtest)
+;   (deps (test.exe))
+;   (action (run ${<}))))

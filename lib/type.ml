@@ -29,7 +29,7 @@ module AbsInt = struct
     let open Int in
     (* Ensures we can store null values. *)
     let h = if nullable then h + 1 else h in
-    Int.ceil_log2 h |> Int.round_up ~to_multiple_of:8
+    Int.max (Int.ceil_log2 h |> Int.round_up ~to_multiple_of:8) 8
 
   let bytewidth : nullable:bool -> t -> int =
    fun ~nullable x ->
