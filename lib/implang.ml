@@ -415,13 +415,13 @@ module IRGen = struct
     let hsize =
       let open Type in
       function
-      | NullT _ | IntT _ | BoolT _ | EmptyT -> Infix.(int 0)
+      | NullT | IntT _ | BoolT _ | EmptyT -> Infix.(int 0)
       | StringT {nchars; _} -> (
         match Type.AbsInt.concretize nchars with
         | Some _ -> Infix.(int 0)
         | None -> Infix.(int isize) )
-      | CrossTupleT _ | ZipTupleT _ | GroupingT _ | TableT _ -> Infix.(int isize)
-      | UnorderedListT _ | OrderedIdxT _ -> Infix.int (2 * isize)
+      | TupleT _ | HashIdxT _ -> Infix.(int isize)
+      | ListT _ | OrderedIdxT _ -> Infix.int (2 * isize)
       | FuncT _ -> failwith "Not materialized."
 
     (** The length of a layout in bytes (including the header). *)
@@ -429,17 +429,15 @@ module IRGen = struct
       let open Infix in
       let open Type in
       function
-      | NullT _ -> int 0
-      | IntT {range; nullable; _} -> int (Type.AbsInt.bytewidth ~nullable range)
+      | NullT -> int 0
+      | IntT {range; nullable; _} -> int (Type.AbsInt.byte_width ~nullable range)
       | BoolT _ -> int 1
       | StringT {nchars; _} -> (
         match Type.AbsInt.concretize nchars with
         | Some x -> int (Int.round ~dir:`Up ~to_multiple_of:isize x)
         | None -> Infix.(((islice start + int 7) && int (-8)) + int isize) )
       | EmptyT -> int 0
-      | TableT _ | ZipTupleT _ | CrossTupleT _ | GroupingT _ | UnorderedListT _
-       |OrderedIdxT _ ->
-          islice start
+      | HashIdxT _ | TupleT _ | ListT _ | OrderedIdxT _ -> islice start
       | FuncT (ts, _) ->
           let end_ptr =
             List.fold_left ts ~init:start ~f:(fun start t -> start + len start t)
@@ -450,10 +448,10 @@ module IRGen = struct
       let open Infix in
       let open Type in
       function
-      | EmptyT | NullT _ -> Some (int 0)
+      | EmptyT | NullT -> Some (int 0)
       | IntT _ | BoolT _ | StringT _ -> Some (int 1)
-      | TableT _ | CrossTupleT _ | ZipTupleT _ | OrderedIdxT _ -> None
-      | GroupingT _ | UnorderedListT _ -> Some (islice start)
+      | HashIdxT _ | TupleT _ | OrderedIdxT _ -> None
+      | ListT _ -> Some (islice start)
       | FuncT _ -> failwith "Not materialized."
 
     let scan_empty name =
@@ -468,7 +466,7 @@ module IRGen = struct
         create ~name ~args:[("start", int_t)] ~ret:(TupleT [IntT {nullable}])
       in
       let start = build_arg 0 b in
-      let ival = Slice (start, Type.AbsInt.bytewidth ~nullable range) in
+      let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
       if nullable then
         let null_val = h + 1 in
         build_yield (Tuple [Tuple [ival; Infix.(ival = int null_val)]]) b
@@ -539,11 +537,11 @@ module IRGen = struct
           |> List.concat )
       in
       let b = create ~name ~args:[("start", int_t)] ~ret:ret_type in
-      let start = Infix.(build_arg 0 b + hsize (CrossTupleT (ts, m))) in
+      let start = Infix.(build_arg 0 b + hsize (TupleT (ts, m))) in
       loops b start Infix.(int 0) [] funcs ;
       build_func b
 
-    let scan_ziptuple name scan rs ts (m: Type.ziptuple) =
+    let scan_ziptuple name scan rs ts (m: Type.tuple) =
       let open Builder in
       let funcs = List.map2_exn rs ts ~f:scan in
       let ret_type =
@@ -555,7 +553,7 @@ module IRGen = struct
       let b = create ~name ~args:[("start", int_t)] ~ret:ret_type in
       let start = build_arg 0 b in
       (* Build iterator initializers using the computed start positions. *)
-      build_assign Infix.(start + hsize (ZipTupleT (ts, m))) start b ;
+      build_assign Infix.(start + hsize (TupleT (ts, m))) start b ;
       List.iter2_exn funcs ts ~f:(fun f t ->
           build_iter f [start] b ;
           build_assign Infix.(start + hsize t + len start t) start b ) ;
@@ -589,12 +587,10 @@ module IRGen = struct
       let b = create ~name ~args:[("start", int_t)] ~ret:func.ret_type in
       let start = build_arg 0 b in
       let pcount =
-        build_defn "pcount" int_t
-          (Option.value_exn (count start (UnorderedListT (t, m))))
-          b
+        build_defn "pcount" int_t (Option.value_exn (count start (ListT (t, m)))) b
       in
       let cstart =
-        build_defn "cstart" int_t Infix.(start + hsize (UnorderedListT (t, m))) b
+        build_defn "cstart" int_t Infix.(start + hsize (ListT (t, m))) b
       in
       build_loop
         Infix.(pcount > int 0)
@@ -1018,13 +1014,11 @@ module IRGen = struct
           | _, BoolT m -> scan_bool name m
           | _, StringT m -> scan_string name m
           | _, EmptyT -> scan_empty name
-          | _, NullT _ -> scan_null name
-          | ATuple (rs, Cross), CrossTupleT (ts, m) ->
-              scan_crosstuple name scan rs ts m
-          | ATuple (rs, Zip), ZipTupleT (ts, m) -> scan_ziptuple name scan rs ts m
-          | AList (_, rs), UnorderedListT (ts, m) ->
-              scan_unordered_list name scan rs ts m
-          | AHashIdx (_, rs, m), TableT (kt, vt, _) ->
+          | _, NullT -> scan_null name
+          | ATuple (rs, Cross), TupleT (ts, m) -> scan_crosstuple name scan rs ts m
+          | ATuple (rs, Zip), TupleT (ts, m) -> scan_ziptuple name scan rs ts m
+          | AList (_, rs), ListT (ts, m) -> scan_unordered_list name scan rs ts m
+          | AHashIdx (_, rs, m), HashIdxT (kt, vt, _) ->
               scan_table name scan rs kt vt m
           | AOrderedIdx (_, rs, m), OrderedIdxT (kt, vt, _) ->
               scan_ordered_idx name scan rs kt vt m

@@ -61,9 +61,9 @@ module No_config = struct
   let serialize_null t _ _ =
     let open Bitstring in
     match t with
-    | NullT _ -> empty
+    | NullT -> empty
     | IntT {range= (_, max) as range; nullable= true; _} ->
-        of_int ~width:(Type.AbsInt.bitwidth ~nullable:true range) (max + 1)
+        of_int ~width:(Type.AbsInt.bit_width ~nullable:true range) (max + 1)
         |> label "Int (null)"
     | BoolT _ -> of_int ~width:8 2 |> label "Bool (null)"
     | StringT {nchars= min, _; _} ->
@@ -75,7 +75,7 @@ module No_config = struct
     let open Bitstring in
     match t with
     | IntT {range; nullable; _} ->
-        of_int ~width:(Type.AbsInt.bitwidth ~nullable range) x |> label "Int"
+        of_int ~width:(Type.AbsInt.bit_width ~nullable range) x |> label "Int"
     | t -> Error.(create "Unexpected layout type." t [%sexp_of : Type.t] |> raise)
 
   let serialize_bool t _ x _ =
@@ -97,24 +97,6 @@ module No_config = struct
           | None -> Bytes.length unpadded_body |> bytes_of_int ~width:64 |> of_bytes
         in
         concat [len |> label "String len"; body |> label "String body"]
-    | t -> Error.(create "Unexpected layout type." t [%sexp_of : Type.t] |> raise)
-
-  let serialize_grouping serialize t layout ls _ =
-    let open Bitstring in
-    match t with
-    | GroupingT (kt, vt, {count; _}) -> (
-        let body =
-          List.map ls ~f:(fun (k, v) -> concat [serialize kt k; serialize vt v])
-          |> concat |> label "Grouping body"
-        in
-        let len = byte_length body in
-        let len_str = of_int ~width:64 len |> label "Grouping len" in
-        match Type.AbsCount.kind count with
-        | `Count _ | `Unknown -> concat [len_str; body]
-        | `Countable ->
-            let ct = Layout.ntuples_exn layout in
-            let ct_str = of_int ~width:64 ct |> label "Grouping count" in
-            concat [ct_str; len_str; body] )
     | t -> Error.(create "Unexpected layout type." t [%sexp_of : Type.t] |> raise)
 
   let serialize_scalar : Type.t -> Layout.t -> Bitstring.t =
@@ -355,10 +337,9 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     match (type_, layout.node) with
     | _, AEmpty -> ()
     | t, AScalar e -> serialize_scalar sctx t e
-    | UnorderedListT t, AList l -> serialize_list serialize sctx t l
-    | ZipTupleT t, ATuple l -> serialize_tuple serialize sctx t l
-    | CrossTupleT t, ATuple l -> serialize_tuple serialize sctx t l
-    | TableT t, AHashIdx l -> serialize_hashidx serialize sctx t l
+    | ListT t, AList l -> serialize_list serialize sctx t l
+    | TupleT t, ATuple l -> serialize_tuple serialize sctx t l
+    | HashIdxT t, AHashIdx l -> serialize_hashidx serialize sctx t l
     | OrderedIdxT t, AOrderedIdx l -> serialize_orderedidx serialize sctx t l
     | ( FuncT ([t], _)
       , ( Select (_, r)

@@ -123,12 +123,11 @@ module Make (Eval : Eval.S) = struct
 
     let type_of_scalar_layout (l: Layout.t) =
       match l.node with
-      | Int (x, {node= {field; _}; _}) ->
-          IntT {range= AbsInt.abstract x; nullable= false; field}
-      | Bool (_, {node= {field; _}; _}) -> BoolT {nullable= false; field}
-      | String (x, {node= {field; _}; _}) ->
-          StringT {nchars= AbsInt.abstract (String.length x); nullable= false; field}
-      | Null {node= {field; _}; _} -> NullT {field}
+      | Int (x, _) -> IntT {range= AbsInt.abstract x; nullable= false}
+      | Bool _ -> BoolT {nullable= false}
+      | String (x, _) ->
+          StringT {nchars= AbsInt.abstract (String.length x); nullable= false}
+      | Null _ -> NullT
       | _ -> failwith "Not a scalar."
 
     class ['self] type_fold =
@@ -144,20 +143,19 @@ module Make (Eval : Eval.S) = struct
             Seq.fold ls ~init:(EmptyT, AbsCount.zero) ~f:(fun (t, c) t' ->
                 (unify_exn t t', AbsCount.(c + count t')) )
           in
-          UnorderedListT (t, {count= c})
+          ListT (t, {count= c})
         method build_ATuple ls kind =
           let counts = List.map ls ~f:count in
           match kind with
-          | Zip ->
-              ZipTupleT (ls, {count= List.fold_left1_exn ~f:AbsCount.unify counts})
+          | Zip -> TupleT (ls, {count= List.fold_left1_exn ~f:AbsCount.unify counts})
           | Cross ->
-              CrossTupleT (ls, {count= List.fold_left1_exn ~f:AbsCount.( * ) counts})
+              TupleT (ls, {count= List.fold_left1_exn ~f:AbsCount.( * ) counts})
         method build_AHashIdx kv _ =
           let kt, vt =
             Seq.fold kv ~init:(EmptyT, EmptyT) ~f:(fun (kt1, vt1) (kt2, vt2) ->
                 (unify_exn kt1 kt2, unify_exn vt1 vt2) )
           in
-          TableT (kt, vt, {count= None})
+          HashIdxT (kt, vt, {count= None})
         method build_AOrderedIdx kv _ =
           let kt, vt =
             Seq.fold kv ~init:(EmptyT, EmptyT) ~f:(fun (kt1, vt1) (kt2, vt2) ->
