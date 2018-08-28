@@ -187,7 +187,7 @@ let rec pp fmt {node; _} =
   | AList (r1, r2) -> fprintf fmt "@[<hv 2>alist(%a,@ %a)@]" pp r1 pp r2
   | ATuple (rs, kind) ->
       fprintf fmt "@[<hv 2>atuple(%a,@ %a)@]" (pp_list pp) rs pp_kind kind
-  | AHashIdx (r1, r2, {lookup}) ->
+  | AHashIdx (r1, r2, {lookup; _}) ->
       fprintf fmt "@[<hv 2>ahashidx(%a,@ %a,@ %a)@]" pp r1 pp r2 pp_pred lookup
   (* |AOrderedIdx (_, _, _) ->
       *    fprintf fmt "@[<h>%a@ %s@]" pp r n *)
@@ -434,3 +434,29 @@ let pred_to_schema_exn =
     | Add | Sub | Mul | Div | Mod -> unnamed IntT
 
 let pred_to_name = function Name n -> Some n | _ -> None
+
+let annotate_key_layouts =
+  let annotator =
+    object
+      inherit [_] endo
+      method! visit_t _ ({node; _} as l) =
+        match node with
+        | AHashIdx (x, y, ({hi_key_layout= None; _} as m)) ->
+            let schema = Meta.find_exn l Meta.schema in
+            let key_layout =
+              List.map schema ~f:(fun n -> scalar (Name n))
+              |> fun ls -> tuple ls Cross
+            in
+            {l with node= AHashIdx (x, y, {m with hi_key_layout= Some key_layout})}
+        | AOrderedIdx (x, y, ({oi_key_layout= None; _} as m)) ->
+            let schema = Meta.find_exn l Meta.schema in
+            let key_layout =
+              List.map schema ~f:(fun n -> scalar (Name n))
+              |> fun ls -> tuple ls Cross
+            in
+            { l with
+              node= AOrderedIdx (x, y, {m with oi_key_layout= Some key_layout}) }
+        | _ -> l
+    end
+  in
+  annotator#visit_t ()

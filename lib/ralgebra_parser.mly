@@ -128,7 +128,7 @@ abs_ralgebra:
   r = abs_ralgebra; COMMA;
   x = abs_ralgebra; COMMA;
   e = abs_pred;
-  RPAREN { A.(AHashIdx (r, x,  { lookup = e })) |> node }
+  RPAREN { A.(AHashIdx (r, x,  { lookup = e; hi_key_layout = None })) |> node }
 
 | AORDEREDIDX; LPAREN;
   r = abs_ralgebra; COMMA;
@@ -137,7 +137,8 @@ abs_ralgebra:
   e2 = abs_pred;
   RPAREN { A.(AOrderedIdx (r, x, { lookup_low = e1;
                                    lookup_high = e2;
-                                   order = `Asc })) |> node }
+                                   order = `Asc;
+                                   oi_key_layout = None })) |> node }
 
 | name = ID { A.Scan name |> node }
 

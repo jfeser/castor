@@ -199,11 +199,11 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     Writer.seek writer end_pos
 
   let serialize_hashidx serialize ({ctx; writer} as sctx) (key_t, value_t, _)
-      (key_l, value_l, _) =
+      (query, value_l, _) =
     let open Bitstring in
     let key_name = ref (Name.of_string_exn "fixme") in
     let keys =
-      Eval.eval ctx key_l
+      Eval.eval ctx query
       |> Seq.map ~f:(fun k ->
              let name, key =
                match Map.to_alist k with
@@ -281,15 +281,20 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     Writer.seek writer end_pos
 
   let serialize_orderedidx serialize ({ctx; writer} as sctx) (key_t, value_t, _)
-      (key_l, value_l, meta) =
+      (query, value_l, meta) =
     let open Bitstring in
+    let key_l =
+      Option.value_exn
+        ~error:(Error.create "Missing key layout." meta [%sexp_of : ordered_idx])
+        meta.oi_key_layout
+    in
     let temp_fn = Caml.Filename.temp_file "ordered-idx" "bin" in
     let temp_writer = Writer.with_file temp_fn in
     (* Need to order the key stream. Use the key stream to construct an
              ordering key. *)
-    let key_schema = Meta.(find_exn key_l schema) in
-    let order_key = List.map key_schema ~f:(fun n -> Name n) in
-    let ordered_key_l = order_by order_key meta.order key_l in
+    let query_schema = Meta.(find_exn query schema) in
+    let order_key = List.map query_schema ~f:(fun n -> Name n) in
+    let ordered_query = order_by order_key meta.order query in
     (* Write a dummy header. *)
     let len_pos = Writer.pos writer in
     log_start "Ordered idx len" ;
@@ -299,23 +304,17 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     log_start "Ordered idx index len" ;
     Writer.write_bytes writer (Bytes.make 8 '\x00') ;
     log_end () ;
-    let keys = Eval.eval ctx ordered_key_l in
-    Seq.iter keys ~f:(fun kctx ->
-        let ksctx = {sctx with ctx= kctx} in
-        let key =
-          match Map.to_alist kctx with
-          | [(_, key)] -> key
-          | _ -> failwith "Unexpected key tuple shape."
-        in
-        (* Serialize key. *)
-        Db.Value.of_primvalue key
-        |> Layout.of_value |> serialize_scalar key_t |> Writer.write writer ;
-        (* Serialize value ptr. *)
-        Writer.write writer
-          ( Writer.pos temp_writer |> Writer.Pos.to_bytes_exn |> Int64.to_int_exn
-          |> of_int ~width:64 ) ;
-        (* Serialize value. *)
-        serialize {ksctx with writer= temp_writer} value_t value_l ) ;
+    Eval.eval ctx ordered_query
+    |> Seq.iter ~f:(fun kctx ->
+           let ksctx = {sctx with ctx= kctx} in
+           (* Serialize key. *)
+           serialize ksctx key_t key_l ;
+           (* Serialize value ptr. *)
+           Writer.write writer
+             ( Writer.pos temp_writer |> Writer.Pos.to_bytes_exn |> Int64.to_int_exn
+             |> of_int ~width:64 ) ;
+           (* Serialize value. *)
+           serialize {ksctx with writer= temp_writer} value_t value_l ) ;
     let index_end_pos = Writer.pos writer in
     Writer.write_file writer temp_fn ;
     let end_pos = Writer.pos writer in

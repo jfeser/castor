@@ -40,7 +40,7 @@ let%expect_test "ordered-idx" =
     of_string_exn
       "AOrderedIdx(OrderBy([r1.f], Dedup(Select([r1.f], r1)), desc) as k, \
        AScalar(k.f), null, null)"
-    |> M.resolve |> M.annotate_schema
+    |> M.resolve |> M.annotate_schema |> annotate_key_layouts
   in
   [%sexp_of : t] layout |> print_s ;
   I.irgen_abstract ~data_fn:"/tmp/buf" layout

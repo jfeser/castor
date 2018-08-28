@@ -40,7 +40,7 @@ module Make (Eval : Eval.S) = struct
       in
       subst#visit_t () l
     in
-    hash_idx domain layout {lookup}
+    hash_idx domain layout {lookup; hi_key_layout= None}
 
   class virtual ['self] material_fold =
     object (self: 'self)
@@ -60,17 +60,19 @@ module Make (Eval : Eval.S) = struct
         |> self#build_AList
       method visit_ATuple ctx ls kind =
         self#build_ATuple (List.map ~f:(self#visit_t ctx) ls) kind
-      method visit_AHashIdx ctx q l (h: hash_idx) =
+      method visit_AHashIdx ctx q value_l (h: hash_idx) =
+        let key_l =
+          Option.value_exn
+            ~error:(Error.create "Missing key layout." h [%sexp_of : hash_idx])
+            h.hi_key_layout
+        in
         let kv =
           Eval.eval ctx q
           |> Seq.map ~f:(fun key_ctx ->
-                 let _, key =
-                   match Map.to_alist key_ctx with
-                   | [(name, key)] -> (name, key)
-                   | _ -> failwith "Unexpected key tuple shape."
-                 in
-                 let value = self#visit_t (Map.merge_right ctx key_ctx) l in
-                 (Db.Value.of_primvalue key, value) )
+                 let ctx' = Map.merge_right ctx key_ctx in
+                 let key = self#visit_t ctx' key_l in
+                 let value = self#visit_t ctx' value_l in
+                 (key, value) )
         in
         self#build_AHashIdx kv h
       method visit_AEmpty _ = self#build_AEmpty
@@ -80,17 +82,19 @@ module Make (Eval : Eval.S) = struct
             {value= eval_pred ctx e; rel= Db.Relation.dummy; field= Db.Field.dummy}
         in
         self#build_AScalar l
-      method visit_AOrderedIdx ctx q l h =
+      method visit_AOrderedIdx ctx q value_l (h: ordered_idx) =
+        let key_l =
+          Option.value_exn
+            ~error:(Error.create "Missing key layout." h [%sexp_of : ordered_idx])
+            h.oi_key_layout
+        in
         let kv =
           Eval.eval ctx q
           |> Seq.map ~f:(fun key_ctx ->
-                 let _, key =
-                   match Map.to_alist key_ctx with
-                   | [(name, key)] -> (name, key)
-                   | _ -> failwith "Unexpected key tuple shape."
-                 in
-                 let value = self#visit_t (Map.merge_right ctx key_ctx) l in
-                 (Db.Value.of_primvalue key, value) )
+                 let ctx' = Map.merge_right ctx key_ctx in
+                 let key = self#visit_t ctx' key_l in
+                 let value = self#visit_t ctx' value_l in
+                 (key, value) )
         in
         self#build_AOrderedIdx kv h
       method visit_Select ctx exprs r' =
@@ -113,29 +117,6 @@ module Make (Eval : Eval.S) = struct
         | Dedup _ | Agg _ | Scan _ | OrderBy _ ->
             Error.create "Wrong context." r [%sexp_of : t] |> Error.raise
     end
-
-  let materialize ?(ctx= Map.empty (module Name)) l =
-    let open Layout in
-    let f =
-      object
-        inherit [_] material_fold
-        method build_AEmpty = Layout.empty
-        method build_AList ls = Seq.to_list ls |> unordered_list
-        method build_ATuple ls kind =
-          match kind with Zip -> zip_tuple ls | Cross -> cross_tuple ls
-        method build_AHashIdx kv _ =
-          let m = Seq.to_list kv |> Map.of_alist_exn (module ValueMap.Elem) in
-          table m
-            { field= Db.Field.of_name "fixme"
-            ; lookup= PredCtx.Key.Field (Db.Field.of_name "fixme") }
-        method build_AScalar l = l
-        method build_AOrderedIdx _ _ = failwith ""
-        method build_Select _ l = l
-        method build_Filter l = l
-        method build_Join _ _ _ _ = failwith ""
-      end
-    in
-    f#visit_t ctx l
 
   module TF = struct
     open Type
@@ -173,16 +154,14 @@ module Make (Eval : Eval.S) = struct
               CrossTupleT (ls, {count= List.fold_left1_exn ~f:AbsCount.( * ) counts})
         method build_AHashIdx kv _ =
           let kt, vt =
-            Seq.fold kv ~init:(EmptyT, EmptyT) ~f:(fun (kt, vt1) (kv, vt2) ->
-                ( unify_exn kt (Layout.of_value kv |> type_of_scalar_layout)
-                , unify_exn vt1 vt2 ) )
+            Seq.fold kv ~init:(EmptyT, EmptyT) ~f:(fun (kt1, vt1) (kt2, vt2) ->
+                (unify_exn kt1 kt2, unify_exn vt1 vt2) )
           in
           TableT (kt, vt, {count= None})
         method build_AOrderedIdx kv _ =
           let kt, vt =
-            Seq.fold kv ~init:(EmptyT, EmptyT) ~f:(fun (kt, vt1) (kv, vt2) ->
-                ( unify_exn kt (Layout.of_value kv |> type_of_scalar_layout)
-                , unify_exn vt1 vt2 ) )
+            Seq.fold kv ~init:(EmptyT, EmptyT) ~f:(fun (kt1, vt1) (kt2, vt2) ->
+                (unify_exn kt1 kt2, unify_exn vt1 vt2) )
           in
           OrderedIdxT (kt, vt, {count= None})
       end

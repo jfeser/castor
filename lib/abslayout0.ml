@@ -35,10 +35,13 @@ and agg =
   | Min of (name[@opaque])
   | Max of (name[@opaque])
 
-and hash_idx = {lookup: pred}
+and hash_idx = {hi_key_layout: t option; lookup: pred}
 
 and ordered_idx =
-  {lookup_low: pred; lookup_high: pred; order: ([`Asc | `Desc][@opaque])}
+  { oi_key_layout: t option
+  ; lookup_low: pred
+  ; lookup_high: pred
+  ; order: ([`Asc | `Desc][@opaque]) }
 
 and tuple = Cross | Zip
 

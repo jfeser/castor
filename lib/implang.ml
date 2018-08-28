@@ -707,7 +707,7 @@ module IRGen = struct
       let open Builder in
       (* Keys can only be scalars, so we don't need to pass in a layout for the
          keys. *)
-      let key_iter = scan Abslayout.empty kt in
+      let key_iter = scan (Option.value_exn m.Abslayout.hi_key_layout) kt in
       let value_iter = scan rs vt in
       let key_type = key_iter.ret_type in
       let ret_type = value_iter.ret_type in
@@ -782,7 +782,7 @@ module IRGen = struct
       let open Builder in
       (* Keys can only be scalars, so we don't need to pass in a layout for the
          keys. *)
-      let key_iter = scan Abslayout.empty kt in
+      let key_iter = scan (Option.value_exn m.Abslayout.oi_key_layout) kt in
       let value_iter = scan rs vt in
       let key_type = key_iter.ret_type in
       let ret_type = value_iter.ret_type in
@@ -790,7 +790,7 @@ module IRGen = struct
       let start = build_arg 0 b in
       let index_len = Infix.(islice (start + int isize)) in
       let header_size = 2 * isize in
-      let key_len = failwith "" in
+      let key_len = len in
       let ptr_len = isize in
       let kp_len = key_len + ptr_len in
       let key_index i =

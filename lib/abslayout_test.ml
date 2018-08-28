@@ -65,7 +65,6 @@ let%expect_test "mat-col" =
   let layout = M.resolve layout in
   let layout = M.annotate_schema layout in
   layout |> [%sexp_of : t] |> print_s ;
-  M.materialize layout |> [%sexp_of : Layout.t] |> print_s ;
   [%expect
     {|
     ((node
@@ -120,7 +119,6 @@ let%expect_test "mat-hidx" =
   let layout = M.resolve layout in
   let layout = M.annotate_schema layout in
   layout |> [%sexp_of : t] |> print_s ;
-  M.materialize layout |> [%sexp_of : Layout.t] |> print_s ;
   [%expect
     {|
     ((node
@@ -274,6 +272,7 @@ let _, [f; _] = create "r1" ["f"; "g"] [[1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]]
 let%expect_test "part-list" =
   let layout =
     of_string_exn "AList(r1, ATuple([AScalar(r1.f), AScalar(r1.g)], Cross))"
+    |> M.resolve |> M.annotate_schema |> annotate_key_layouts
   in
   let part_layout = M.partition ~part:(Name f) ~lookup:(Name f) layout in
   [%sexp_of : t] part_layout |> print_s ;
@@ -325,8 +324,6 @@ let%expect_test "part-list" =
             ((count ((1 1))))))
           ((count ((1 2))))))
         ((count ())))) |}] ;
-  let mat_layout = M.materialize part_layout in
-  [%sexp_of : Layout.t] mat_layout |> print_s ;
   [%expect
     {|
       (Table

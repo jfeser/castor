@@ -36,7 +36,10 @@ let _, [f; _] = create "r1" ["f"; "g"] [[1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]]
 [@@@warning "+8"]
 
 let%expect_test "scalar-int" =
-  let layout = of_string_exn "AScalar(1)" in
+  let layout =
+    of_string_exn "AScalar(1)" |> M.resolve |> M.annotate_schema
+    |> annotate_key_layouts
+  in
   let type_ = M.to_type layout in
   let buf = Buffer.create 1024 in
   let _, len = S.serialize (Bitstring.Writer.with_buffer buf) type_ layout in
@@ -48,7 +51,10 @@ let%expect_test "scalar-int" =
      "\\001") |}]
 
 let%expect_test "scalar-bool" =
-  let layout = of_string_exn "AScalar(true)" in
+  let layout =
+    of_string_exn "AScalar(true)"
+    |> M.resolve |> M.annotate_schema |> annotate_key_layouts
+  in
   let type_ = M.to_type layout in
   let buf = Buffer.create 1024 in
   let _, len = S.serialize (Bitstring.Writer.with_buffer buf) type_ layout in
@@ -58,7 +64,10 @@ let%expect_test "scalar-bool" =
     {| ((BoolT ((nullable false) (field ((fname "") (dtype DBool))))) 1 "\\001") |}]
 
 let%expect_test "scalar-string" =
-  let layout = of_string_exn "AScalar(\"test\")" in
+  let layout =
+    of_string_exn "AScalar(\"test\")"
+    |> M.resolve |> M.annotate_schema |> annotate_key_layouts
+  in
   let type_ = M.to_type layout in
   let buf = Buffer.create 1024 in
   let _, len = S.serialize (Bitstring.Writer.with_buffer buf) type_ layout in
@@ -71,7 +80,10 @@ let%expect_test "scalar-string" =
      8 "test\\000\\000\\000\\000") |}]
 
 let%expect_test "tuple" =
-  let layout = of_string_exn "ATuple([AScalar(1), AScalar(\"test\")], Cross)" in
+  let layout =
+    of_string_exn "ATuple([AScalar(1), AScalar(\"test\")], Cross)"
+    |> M.resolve |> M.annotate_schema |> annotate_key_layouts
+  in
   let type_ = M.to_type layout in
   let buf = Buffer.create 1024 in
   let _, len = S.serialize (Bitstring.Writer.with_buffer buf) type_ layout in
@@ -90,6 +102,7 @@ let%expect_test "tuple" =
 let%expect_test "hash-idx" =
   let layout =
     of_string_exn "AHashIdx(Dedup(Select([r1.f], r1)) as k, AScalar(k.f), null)"
+    |> M.resolve |> M.annotate_schema |> annotate_key_layouts
   in
   let type_ = M.to_type layout in
   let buf = Buffer.create 1024 in
@@ -110,7 +123,7 @@ let%expect_test "ordered-idx" =
     of_string_exn
       "AOrderedIdx(OrderBy([r1.f], Dedup(Select([r1.f], r1)), desc) as k, \
        AScalar(k.f), null, null)"
-    |> M.resolve |> M.annotate_schema
+    |> M.resolve |> M.annotate_schema |> annotate_key_layouts
   in
   let type_ = M.to_type layout in
   [%sexp_of : Type.t] type_ |> print_s ;

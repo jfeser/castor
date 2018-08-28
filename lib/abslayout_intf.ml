@@ -51,10 +51,16 @@ module type S = sig
     | Max of Name.t
   [@@deriving sexp_of]
 
-  type hash_idx = Abslayout0.hash_idx = {lookup: pred} [@@deriving sexp_of]
+  type hash_idx = Abslayout0.hash_idx =
+    {hi_key_layout: Abslayout0.t option; lookup: pred}
+  [@@deriving sexp_of]
 
-  and ordered_idx = Abslayout0.ordered_idx =
-    {lookup_low: pred; lookup_high: pred; order: [`Asc | `Desc]}
+  type ordered_idx = Abslayout0.ordered_idx =
+    { oi_key_layout: Abslayout0.t option
+    ; lookup_low: pred
+    ; lookup_high: pred
+    ; order: [`Asc | `Desc] }
+  [@@deriving sexp_of]
 
   type tuple = Abslayout0.tuple = Cross | Zip [@@deriving sexp_of]
 
@@ -146,4 +152,6 @@ module type S = sig
   val pred_to_schema_exn : pred -> Name.t
 
   val pred_to_name : pred -> Name.t option
+
+  val annotate_key_layouts : t -> t
 end
