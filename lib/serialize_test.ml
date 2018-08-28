@@ -123,7 +123,8 @@ let%expect_test "ordered-idx" =
   let buf = Buffer.create 1024 in
   let _, len = S.serialize (Bitstring.Writer.with_buffer buf) type_ layout in
   let buf_str = Buffer.contents buf |> String.escaped in
-  [%sexp_of : int * string] (len, buf_str) |> print_s;
-  [%expect {|
+  [%sexp_of : int * string] (len, buf_str) |> print_s ;
+  [%expect
+    {|
     (43
      "+\\000\\000\\000\\000\\000\\000\\000#\\000\\000\\000\\000\\000\\000\\000\\001\\000\\000\\000\\000\\000\\000\\000\\000\\002\\001\\000\\000\\000\\000\\000\\000\\000\\003\\002\\000\\000\\000\\000\\000\\000\\000") |}]

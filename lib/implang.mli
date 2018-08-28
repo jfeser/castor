@@ -82,6 +82,7 @@ module IRGen : sig
     ; funcs: func list
     ; params: (string * type_) list
     ; buffer_len: int }
+  [@@deriving sexp]
 
   exception IRGenError of Error.t
 

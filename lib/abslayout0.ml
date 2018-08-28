@@ -38,9 +38,7 @@ and agg =
 and hash_idx = {lookup: pred}
 
 and ordered_idx =
-  { lookup_low: pred option
-  ; lookup_high: pred option
-  ; order: ([`Asc | `Desc][@opaque]) }
+  {lookup_low: pred; lookup_high: pred; order: ([`Asc | `Desc][@opaque])}
 
 and tuple = Cross | Zip
 

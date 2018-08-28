@@ -388,6 +388,7 @@ module IRGen = struct
     ; funcs: func list
     ; params: (string * type_) list
     ; buffer_len: int }
+  [@@deriving sexp]
 
   exception IRGenError of Error.t [@@deriving sexp]
 
@@ -748,6 +749,74 @@ module IRGen = struct
         b ;
       build_func b
 
+    let build_bin_search key_index ptr_index key_lt n low_target high_target
+        callback b =
+      let open Builder in
+      let low = build_fresh_defn ~fresh "low" int_t Infix.(int 0) b in
+      let high = build_fresh_defn ~fresh "high" int_t n b in
+      build_loop
+        Infix.(low < high)
+        (fun b ->
+          let mid =
+            build_fresh_defn ~fresh "mid" int_t Infix.((low + high) / int 2) b
+          in
+          let key = key_index mid in
+          build_if ~cond:(key_lt key low_target)
+            ~then_:(fun b -> build_assign Infix.(mid + int 1) low b)
+            ~else_:(fun b -> build_assign mid high b)
+            b )
+        b ;
+      build_if
+        ~cond:Infix.(low < n)
+        ~then_:(fun b ->
+          build_loop
+            (key_lt (key_index low) high_target)
+            (fun b ->
+              callback (ptr_index low) b ;
+              build_assign Infix.(low + int 1) low b )
+            b )
+        ~else_:(fun _ -> ())
+        b
+
+    let scan_ordered_idx name scan rs kt vt m =
+      let open Builder in
+      (* Keys can only be scalars, so we don't need to pass in a layout for the
+         keys. *)
+      let key_iter = scan Abslayout.empty kt in
+      let value_iter = scan rs vt in
+      let key_type = key_iter.ret_type in
+      let ret_type = value_iter.ret_type in
+      let b = create ~name ~args:[("start", int_t)] ~ret:ret_type in
+      let start = build_arg 0 b in
+      let index_len = Infix.(islice (start + int isize)) in
+      let header_size = 2 * isize in
+      let key_len = failwith "" in
+      let ptr_len = isize in
+      let kp_len = key_len + ptr_len in
+      let key_index i =
+        let key_start = Infix.(start + int header_size + (i * int kp_len)) in
+        build_iter key_iter [key_start] b ;
+        let key = build_fresh_var ~fresh "key" key_type b in
+        build_step key key_iter b ; key
+      in
+      let ptr_index i =
+        let ptr_start =
+          Infix.(start + int header_size + (i * int kp_len) + key_len)
+        in
+        Infix.(islice ptr_start)
+      in
+      let key_lt k1 k2 = Infix.(k1 < k2) in
+      let n = Infix.(index_len / int kp_len) in
+      build_bin_search key_index ptr_index key_lt n
+        (gen_pred Infix.(int 0) [] m.Abslayout.lookup_low)
+        (gen_pred Infix.(int 0) [] m.Abslayout.lookup_high)
+        (fun ptr b ->
+          build_foreach ~fresh ~type_:vt ptr value_iter
+            (fun value b -> build_yield value b)
+            b )
+        b ;
+      build_func b
+
     (* let scan_grouping scan kt vt Type.({output; _} as m) =
      *   let t = Type.(GroupingT (kt, vt, m)) in
      *   let key_iter = scan kt in
@@ -957,6 +1026,8 @@ module IRGen = struct
               scan_unordered_list name scan rs ts m
           | AHashIdx (_, rs, m), TableT (kt, vt, _) ->
               scan_table name scan rs kt vt m
+          | AOrderedIdx (_, rs, m), OrderedIdxT (kt, vt, _) ->
+              scan_ordered_idx name scan rs kt vt m
           | Select (x, r), FuncT ([t], _) -> scan_select name scan x r t
           | Filter (x, r), FuncT ([t], _) -> scan_filter name scan x r t
           | Join {pred; r1; r2}, FuncT ([t1; t2], _) ->
