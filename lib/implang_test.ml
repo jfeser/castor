@@ -1,7 +1,6 @@
 open Core
 open Base
 open Abslayout
-open Implang
 
 let rels = Hashtbl.create (module Db.Relation)
 
@@ -42,6 +41,67 @@ let%expect_test "ordered-idx" =
        AScalar(k.f), null, null)"
     |> M.resolve |> M.annotate_schema |> annotate_key_layouts
   in
-  [%sexp_of : t] layout |> print_s ;
-  I.irgen_abstract ~data_fn:"/tmp/buf" layout
-  |> [%sexp_of : IRGen.ir_module] |> print_s
+  I.irgen_abstract ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter;
+  [%expect {|
+    fun scalar_1 (start) {
+        yield (buf[start : 1]);
+    }fun scalar_2 (start) {
+         yield (buf[start : 1]);
+    }fun ordered_idx_0 (start) {
+         low3 = 0;
+         high4 = buf[start + 8 : 8] / 9;
+         init scalar_1(start + 16 + mid5 * 9);
+         key6 = next(scalar_1);
+         loop (low3 < high4) {
+             mid5 = low3 + high4 / 2;
+             if (key6 < null) {
+                 low3 = mid5 + 1;
+             } else {
+                  high4 = mid5;
+             }
+         }
+         init scalar_1(start + 16 + low3 * 9);
+         key7 = next(scalar_1);
+         if (low3 < buf[start + 8 : 8] / 9) {
+             loop (key7 < null) {
+                 init scalar_2(buf[start + 16 + low3 * 9 + 1 : 8]);
+                 tup8 = next(scalar_2);
+                 yield tup8;
+                 low3 = low3 + 1;
+             }
+         } else {
+
+         }
+    }fun wrap_ordered_idx_0 (no_start) {
+         init ordered_idx_0(0);
+         loop (not done(ordered_idx_0)) {
+             tup9 = next(ordered_idx_0);
+             if (not done(ordered_idx_0)) {
+                 yield tup9;
+             } else {
+
+             }
+         }
+    }fun printer () {
+         init wrap_ordered_idx_0(0);
+         loop (not done(wrap_ordered_idx_0)) {
+             tup11 = next(wrap_ordered_idx_0);
+             if (not done(wrap_ordered_idx_0)) {
+                 print(Tuple[Int[nonnull]], tup11);
+             } else {
+
+             }
+         }
+    }fun counter () {
+         c = 0;
+         init wrap_ordered_idx_0(0);
+         loop (not done(wrap_ordered_idx_0)) {
+             tup10 = next(wrap_ordered_idx_0);
+             if (not done(wrap_ordered_idx_0)) {
+                 c = c + 1;
+             } else {
+
+             }
+         }
+         return c;
+    } |}]

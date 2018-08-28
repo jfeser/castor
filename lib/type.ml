@@ -144,6 +144,8 @@ let rec unify_exn t1 t2 =
       FuncT (List.map2_exn ~f:unify_exn t t', `Width w)
   | _ -> fail "Unexpected types."
 
+(** Returns the width of the tuples produced by reading a layout with this type.
+   *)
 let rec width = function
   | NullT | IntT _ | BoolT _ | StringT _ -> 1
   | TupleT (ts, _) -> List.map ts ~f:width |> List.sum (module Int) ~f:(fun x -> x)

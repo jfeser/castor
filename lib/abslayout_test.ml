@@ -99,10 +99,7 @@ let%expect_test "mat-col" =
           ((schema
             (((relation (ship_mode)) (name sm_carrier) (type_ (StringT)))))))))))
      (meta
-      ((schema (((relation (ship_mode)) (name sm_carrier) (type_ (StringT))))))))
-    (UnorderedList
-     ((String "GERMA               "
-       ((rel "") (field ((fname "") (dtype DBool))))))) |}]
+      ((schema (((relation (ship_mode)) (name sm_carrier) (type_ (StringT)))))))) |}]
 
 let%expect_test "mat-hidx" =
   let conn = new Postgresql.connection ~dbname:"tpcds1" () in
@@ -218,20 +215,11 @@ let%expect_test "mat-hidx" =
              (meta
               ((schema (((relation (t)) (name sm_code) (type_ (StringT)))))))))))
          (meta ((schema (((relation (t)) (name sm_code) (type_ (StringT))))))))
-        ((lookup Null)))))
+        ((hi_key_layout ()) (lookup Null)))))
      (meta
       ((schema
         (((relation (t)) (name sm_type) (type_ (StringT)))
-         ((relation (t)) (name sm_code) (type_ (StringT))))))))
-    (Table
-     ((((rel "") (field ((fname "") (dtype DBool)))
-        (value (Unknown "LIBRARY                       ")))
-       (UnorderedList
-        ((String "AIR       " ((rel "") (field ((fname "") (dtype DBool)))))
-         (String "SURFACE   " ((rel "") (field ((fname "") (dtype DBool)))))
-         (String "SEA       " ((rel "") (field ((fname "") (dtype DBool)))))))))
-     ((field ((fname fixme) (dtype DBool)))
-      (lookup (Field ((fname fixme) (dtype DBool)))))) |}]
+         ((relation (t)) (name sm_code) (type_ (StringT)))))))) |}]
 
 let rels = Hashtbl.create (module Db.Relation)
 
@@ -269,84 +257,84 @@ let _, [f; _] = create "r1" ["f"; "g"] [[1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]]
 
 [@@@warning "+8"]
 
-let%expect_test "part-list" =
-  let layout =
-    of_string_exn "AList(r1, ATuple([AScalar(r1.f), AScalar(r1.g)], Cross))"
-    |> M.resolve |> M.annotate_schema |> annotate_key_layouts
-  in
-  let part_layout = M.partition ~part:(Name f) ~lookup:(Name f) layout in
-  [%sexp_of : t] part_layout |> print_s ;
-  [%expect
-    {|
-      ((node
-        (AHashIdx
-         (((node
-            (As x0
-             ((node
-               (Dedup
-                ((node
-                  (Select ((Name ((relation (r1)) (name f) (type_ (IntT)))))
-                   ((node (Scan r1)) (meta ()))))
-                 (meta ()))))
-              (meta ()))))
-           (meta ()))
-          ((node
-            (AList
-             (((node
-                (Filter
-                 (Binop
-                  (Eq (Name ((relation (r1)) (name f) (type_ (IntT))))
-                   (Name ((relation (x0)) (name f) (type_ (IntT))))))
-                 ((node (Scan r1)) (meta ()))))
-               (meta ()))
-              ((node
-                (ATuple
-                 ((((node (AScalar (Name ((relation (r1)) (name f) (type_ ())))))
-                    (meta ()))
-                   ((node (AScalar (Name ((relation (r1)) (name g) (type_ ())))))
-                    (meta ())))
-                  Cross)))
-               (meta ())))))
-           (meta ()))
-          ((lookup (Name ((relation (r1)) (name f) (type_ (IntT)))))))))
-       (meta ())) |}] ;
-  [%sexp_of : Type.t] (M.to_type part_layout) |> print_s ;
-  [%expect
-    {|
-      (TableT
-       ((IntT ((range (1 3)) (nullable false) (field ((fname "") (dtype DBool)))))
-        (UnorderedListT
-         ((CrossTupleT
-           (((IntT
-              ((range (1 3)) (nullable false) (field ((fname "") (dtype DBool)))))
-             (IntT
-              ((range (1 4)) (nullable false) (field ((fname "") (dtype DBool))))))
-            ((count ((1 1))))))
-          ((count ((1 2))))))
-        ((count ())))) |}] ;
-  [%expect
-    {|
-      (Table
-       ((((rel "") (field ((fname "") (dtype DBool))) (value (Int 1)))
-         (UnorderedList
-          ((CrossTuple
-            ((Int 1 ((rel "") (field ((fname "") (dtype DBool)))))
-             (Int 2 ((rel "") (field ((fname "") (dtype DBool)))))))
-           (CrossTuple
-            ((Int 1 ((rel "") (field ((fname "") (dtype DBool)))))
-             (Int 3 ((rel "") (field ((fname "") (dtype DBool))))))))))
-        (((rel "") (field ((fname "") (dtype DBool))) (value (Int 2)))
-         (UnorderedList
-          ((CrossTuple
-            ((Int 2 ((rel "") (field ((fname "") (dtype DBool)))))
-             (Int 1 ((rel "") (field ((fname "") (dtype DBool)))))))
-           (CrossTuple
-            ((Int 2 ((rel "") (field ((fname "") (dtype DBool)))))
-             (Int 2 ((rel "") (field ((fname "") (dtype DBool))))))))))
-        (((rel "") (field ((fname "") (dtype DBool))) (value (Int 3)))
-         (UnorderedList
-          ((CrossTuple
-            ((Int 3 ((rel "") (field ((fname "") (dtype DBool)))))
-             (Int 4 ((rel "") (field ((fname "") (dtype DBool)))))))))))
-       ((field ((fname fixme) (dtype DBool)))
-        (lookup (Field ((fname fixme) (dtype DBool)))))) |}]
+(* let%expect_test "part-list" =
+ *   let layout =
+ *     of_string_exn "AList(r1, ATuple([AScalar(r1.f), AScalar(r1.g)], Cross))"
+ *     |> M.resolve |> M.annotate_schema |> annotate_key_layouts
+ *   in
+ *   let part_layout = M.partition ~part:(Name f) ~lookup:(Name f) layout in
+ *   [%sexp_of : t] part_layout |> print_s ;
+ *   [%expect
+ *     {|
+ *       ((node
+ *         (AHashIdx
+ *          (((node
+ *             (As x0
+ *              ((node
+ *                (Dedup
+ *                 ((node
+ *                   (Select ((Name ((relation (r1)) (name f) (type_ (IntT)))))
+ *                    ((node (Scan r1)) (meta ()))))
+ *                  (meta ()))))
+ *               (meta ()))))
+ *            (meta ()))
+ *           ((node
+ *             (AList
+ *              (((node
+ *                 (Filter
+ *                  (Binop
+ *                   (Eq (Name ((relation (r1)) (name f) (type_ (IntT))))
+ *                    (Name ((relation (x0)) (name f) (type_ (IntT))))))
+ *                  ((node (Scan r1)) (meta ()))))
+ *                (meta ()))
+ *               ((node
+ *                 (ATuple
+ *                  ((((node (AScalar (Name ((relation (r1)) (name f) (type_ ())))))
+ *                     (meta ()))
+ *                    ((node (AScalar (Name ((relation (r1)) (name g) (type_ ())))))
+ *                     (meta ())))
+ *                   Cross)))
+ *                (meta ())))))
+ *            (meta ()))
+ *           ((lookup (Name ((relation (r1)) (name f) (type_ (IntT)))))))))
+ *        (meta ())) |}] ;
+ *   [%sexp_of : Type.t] (M.to_type part_layout) |> print_s ;
+ *   [%expect
+ *     {|
+ *       (TableT
+ *        ((IntT ((range (1 3)) (nullable false) (field ((fname "") (dtype DBool)))))
+ *         (UnorderedListT
+ *          ((CrossTupleT
+ *            (((IntT
+ *               ((range (1 3)) (nullable false) (field ((fname "") (dtype DBool)))))
+ *              (IntT
+ *               ((range (1 4)) (nullable false) (field ((fname "") (dtype DBool))))))
+ *             ((count ((1 1))))))
+ *           ((count ((1 2))))))
+ *         ((count ())))) |}] ;
+ *   [%expect
+ *     {|
+ *       (Table
+ *        ((((rel "") (field ((fname "") (dtype DBool))) (value (Int 1)))
+ *          (UnorderedList
+ *           ((CrossTuple
+ *             ((Int 1 ((rel "") (field ((fname "") (dtype DBool)))))
+ *              (Int 2 ((rel "") (field ((fname "") (dtype DBool)))))))
+ *            (CrossTuple
+ *             ((Int 1 ((rel "") (field ((fname "") (dtype DBool)))))
+ *              (Int 3 ((rel "") (field ((fname "") (dtype DBool))))))))))
+ *         (((rel "") (field ((fname "") (dtype DBool))) (value (Int 2)))
+ *          (UnorderedList
+ *           ((CrossTuple
+ *             ((Int 2 ((rel "") (field ((fname "") (dtype DBool)))))
+ *              (Int 1 ((rel "") (field ((fname "") (dtype DBool)))))))
+ *            (CrossTuple
+ *             ((Int 2 ((rel "") (field ((fname "") (dtype DBool)))))
+ *              (Int 2 ((rel "") (field ((fname "") (dtype DBool))))))))))
+ *         (((rel "") (field ((fname "") (dtype DBool))) (value (Int 3)))
+ *          (UnorderedList
+ *           ((CrossTuple
+ *             ((Int 3 ((rel "") (field ((fname "") (dtype DBool)))))
+ *              (Int 4 ((rel "") (field ((fname "") (dtype DBool)))))))))))
+ *        ((field ((fname fixme) (dtype DBool)))
+ *         (lookup (Field ((fname fixme) (dtype DBool)))))) |}] *)

@@ -786,23 +786,22 @@ module IRGen = struct
       let start = build_arg 0 b in
       let index_len = Infix.(islice (start + int isize)) in
       let header_size = 2 * isize in
-      let key_len = len in
-      let ptr_len = isize in
-      let kp_len = key_len + ptr_len in
+      let index_start = Infix.(start + int header_size) in
+      let key_len = len index_start kt in
+      let ptr_len = Infix.(int isize) in
+      let kp_len = Infix.(key_len + ptr_len) in
       let key_index i =
-        let key_start = Infix.(start + int header_size + (i * int kp_len)) in
+        let key_start = Infix.(start + int header_size + (i * kp_len)) in
         build_iter key_iter [key_start] b ;
         let key = build_fresh_var ~fresh "key" key_type b in
         build_step key key_iter b ; key
       in
       let ptr_index i =
-        let ptr_start =
-          Infix.(start + int header_size + (i * int kp_len) + key_len)
-        in
+        let ptr_start = Infix.(start + int header_size + (i * kp_len) + key_len) in
         Infix.(islice ptr_start)
       in
       let key_lt k1 k2 = Infix.(k1 < k2) in
-      let n = Infix.(index_len / int kp_len) in
+      let n = Infix.(index_len / kp_len) in
       build_bin_search key_index ptr_index key_lt n
         (gen_pred Infix.(int 0) [] m.Abslayout.lookup_low)
         (gen_pred Infix.(int 0) [] m.Abslayout.lookup_high)

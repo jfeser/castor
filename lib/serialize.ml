@@ -180,54 +180,61 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     Writer.write writer (of_int ~width:64 len) ;
     Writer.seek writer end_pos
 
+  type hash_key =
+    { kctx: Ctx.t
+    ; value: Db.primvalue
+    ; serialized: Bitstring.t
+    ; hash_key: string
+    ; hash_val: int }
+
   let serialize_hashidx serialize ({ctx; writer} as sctx) (key_t, value_t, _)
-      (query, value_l, _) =
+      (query, value_l, meta) =
     let open Bitstring in
-    let key_name = ref (Name.of_string_exn "fixme") in
-    let keys =
-      Eval.eval ctx query
-      |> Seq.map ~f:(fun k ->
-             let name, key =
-               match Map.to_alist k with
-               | [(name, key)] -> (name, key)
-               | _ -> failwith "Unexpected key tuple shape."
-             in
-             key_name := name ;
-             key )
-      |> Seq.to_list
+    let key_l =
+      Option.value_exn
+        ~error:(Error.create "Missing key layout." meta [%sexp_of : hash_idx])
+        meta.hi_key_layout
     in
+    let keys = Eval.eval ctx query |> Seq.to_list in
     Logs.debug (fun m -> m "Generating hash for %d keys." (List.length keys)) ;
     let keys =
-      List.map keys ~f:(fun k ->
+      List.map keys ~f:(fun kctx ->
+          let value =
+            match key_l.node with
+            | AScalar e -> Eval.eval_pred kctx e
+            | _ -> failwith "hash index can only have scalar keys rn"
+          in
           let serialized =
-            Db.Value.of_primvalue k |> Layout.of_value |> serialize_scalar key_t
+            value |> Db.Value.of_primvalue |> Layout.of_value
+            |> serialize_scalar key_t
           in
           let hash_key =
-            match k with
+            match value with
             | `String s | `Unknown s -> s
             | _ -> Bitstring.to_string serialized
           in
-          (k, serialized, hash_key) )
+          {kctx; value; serialized; hash_key; hash_val= -1} )
     in
     Out_channel.with_file "keys.txt" ~f:(fun ch ->
-        List.iter keys ~f:(fun (_, _, x) -> Out_channel.fprintf ch "%s\n" x) ) ;
+        List.iter keys ~f:(fun key -> Out_channel.fprintf ch "%s\n" key.hash_key) ) ;
     let hash =
       let open Cmph in
-      List.map keys ~f:(fun (_, _, x) -> x)
+      List.map keys ~f:(fun key -> key.hash_key)
       |> KeySet.create
       |> Config.create ~verbose:true ~seed:0
       |> Hash.of_config
     in
     let keys =
-      List.map keys ~f:(fun (k, b, x) -> (k, b, x, Cmph.Hash.hash hash x))
+      List.map keys ~f:(fun key ->
+          {key with hash_val= Cmph.Hash.hash hash key.hash_key} )
     in
     Out_channel.with_file "hashes.txt" ~f:(fun ch ->
-        List.iter keys ~f:(fun (_, _, x, h) ->
-            Out_channel.fprintf ch "%s -> %d\n" x h ) ) ;
+        List.iter keys ~f:(fun key ->
+            Out_channel.fprintf ch "%s -> %d\n" key.hash_key key.hash_val ) ) ;
     let hash_body = Cmph.Hash.to_packed hash |> Bytes.of_string |> align isize in
     let hash_len = Bytes.length hash_body in
     let table_size =
-      List.fold_left keys ~f:(fun m (_, _, _, h) -> Int.max m h) ~init:0
+      List.fold_left keys ~f:(fun m key -> Int.max m key.hash_val) ~init:0
       |> fun m -> m + 1
     in
     let header_pos = Writer.pos writer in
@@ -245,13 +252,13 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     log_end () ;
     let hash_table = Array.create ~len:table_size 0x0 in
     log_start "Table values" ;
-    List.iter keys ~f:(fun (k, b, _, h) ->
-        let ctx = Map.set ctx ~key:!key_name ~data:k in
+    List.iter keys ~f:(fun key ->
+        let ctx = Map.merge_right ctx key.kctx in
         let value_pos = Writer.pos writer in
-        Writer.write writer b ;
+        Writer.write writer key.serialized ;
         serialize {sctx with ctx} value_t value_l ;
-        hash_table.(h) <- Writer.Pos.(value_pos |> to_bytes_exn |> Int64.to_int_exn)
-    ) ;
+        hash_table.(key.hash_val)
+        <- Writer.Pos.(value_pos |> to_bytes_exn |> Int64.to_int_exn) ) ;
     log_end () ;
     let end_pos = Writer.pos writer in
     Writer.seek writer header_pos ;
@@ -288,7 +295,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     log_end () ;
     Eval.eval ctx ordered_query
     |> Seq.iter ~f:(fun kctx ->
-           let ksctx = {sctx with ctx= kctx} in
+           let ksctx = {sctx with ctx= Map.merge_right ctx kctx} in
            (* Serialize key. *)
            serialize ksctx key_t key_l ;
            (* Serialize value ptr. *)

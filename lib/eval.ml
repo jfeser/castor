@@ -8,6 +8,8 @@ module type S = sig
 
   val eval_relation : Relation.t -> Tuple.t Seq.t
 
+  val eval_pred : Ctx.t -> pred -> primvalue
+
   val eval : Ctx.t -> t -> Ctx.t Seq.t
 end
 
@@ -21,8 +23,62 @@ module Config = struct
   end
 end
 
+let rec eval_pred ctx = function
+  | Null -> `Null
+  | Int x -> `Int x
+  | String x -> `String x
+  | Bool x -> `Bool x
+  | Name n -> (
+    match Map.find ctx n with
+    | Some v -> v
+    | None ->
+        Error.create "Unbound variable." (n, ctx) [%sexp_of : Name.t * Ctx.t]
+        |> Error.raise )
+  | Binop (op, p1, p2) -> (
+      let v1 = eval_pred ctx p1 in
+      let v2 = eval_pred ctx p2 in
+      match (op, v1, v2) with
+      | Eq, `Null, _ | Eq, _, `Null -> `Bool false
+      | Eq, `Bool x1, `Bool x2 -> `Bool Bool.(x1 = x2)
+      | Eq, `Int x1, `Int x2 -> `Bool Int.(x1 = x2)
+      | Eq, `String x1, `String x2 -> `Bool String.(x1 = x2)
+      | Lt, `Int x1, `Int x2 -> `Bool (x1 < x2)
+      | Le, `Int x1, `Int x2 -> `Bool (x1 <= x2)
+      | Gt, `Int x1, `Int x2 -> `Bool (x1 > x2)
+      | Ge, `Int x1, `Int x2 -> `Bool (x1 >= x2)
+      | Add, `Int x1, `Int x2 -> `Int (x1 + x2)
+      | Sub, `Int x1, `Int x2 -> `Int (x1 - x2)
+      | Mul, `Int x1, `Int x2 -> `Int (x1 * x2)
+      | Div, `Int x1, `Int x2 -> `Int (x1 / x2)
+      | Mod, `Int x1, `Int x2 -> `Int (x1 % x2)
+      | And, `Bool x1, `Bool x2 -> `Bool (x1 && x2)
+      | Or, `Bool x1, `Bool x2 -> `Bool (x1 || x2)
+      | _ ->
+          Error.create "Unexpected argument types." (op, v1, v2)
+            [%sexp_of : op * Db.primvalue * Db.primvalue]
+          |> Error.raise )
+  | Varop (op, ps) ->
+      let vs = List.map ps ~f:(eval_pred ctx) in
+      match op with
+      | And ->
+          List.for_all vs ~f:(function
+            | `Bool x -> x
+            | _ -> failwith "Unexpected argument type." )
+          |> fun x -> `Bool x
+      | Or ->
+          List.exists vs ~f:(function
+            | `Bool x -> x
+            | _ -> failwith "Unexpected argument type." )
+          |> fun x -> `Bool x
+      | _ ->
+          Error.create "Unexpected argument types." (op, vs)
+            [%sexp_of : op * Db.primvalue list]
+          |> Error.raise
+
 module Make (Config : Config.S) : S = struct
   let load_relation = Relation.from_db Config.conn
+
+  let eval_pred = eval_pred
 
   let eval_relation r =
     let query = "select * from $0" in
@@ -73,6 +129,8 @@ end
 module Make_mock (Config : Config.S_mock) : S = struct
   open Config
 
+  let eval_pred = eval_pred
+
   let load_relation n =
     List.find_exn (Hashtbl.keys rels) ~f:(fun r -> String.(r.rname = n))
 
@@ -81,58 +139,6 @@ module Make_mock (Config : Config.S_mock) : S = struct
     |> Seq.map ~f:(fun t ->
            List.map t ~f:(fun (n, v) ->
                Db.{rel= r; field= Field.of_name n; Value.value= v} ) )
-
-  let rec eval_pred ctx = function
-    | Null -> `Null
-    | Int x -> `Int x
-    | String x -> `String x
-    | Bool x -> `Bool x
-    | Name n -> (
-      match Map.find ctx n with
-      | Some v -> v
-      | None ->
-          Error.create "Unbound variable." (n, ctx) [%sexp_of : Name.t * Ctx.t]
-          |> Error.raise )
-    | Binop (op, p1, p2) -> (
-        let v1 = eval_pred ctx p1 in
-        let v2 = eval_pred ctx p2 in
-        match (op, v1, v2) with
-        | Eq, `Null, _ | Eq, _, `Null -> `Bool false
-        | Eq, `Bool x1, `Bool x2 -> `Bool Bool.(x1 = x2)
-        | Eq, `Int x1, `Int x2 -> `Bool Int.(x1 = x2)
-        | Eq, `String x1, `String x2 -> `Bool String.(x1 = x2)
-        | Lt, `Int x1, `Int x2 -> `Bool (x1 < x2)
-        | Le, `Int x1, `Int x2 -> `Bool (x1 <= x2)
-        | Gt, `Int x1, `Int x2 -> `Bool (x1 > x2)
-        | Ge, `Int x1, `Int x2 -> `Bool (x1 >= x2)
-        | Add, `Int x1, `Int x2 -> `Int (x1 + x2)
-        | Sub, `Int x1, `Int x2 -> `Int (x1 - x2)
-        | Mul, `Int x1, `Int x2 -> `Int (x1 * x2)
-        | Div, `Int x1, `Int x2 -> `Int (x1 / x2)
-        | Mod, `Int x1, `Int x2 -> `Int (x1 % x2)
-        | And, `Bool x1, `Bool x2 -> `Bool (x1 && x2)
-        | Or, `Bool x1, `Bool x2 -> `Bool (x1 || x2)
-        | _ ->
-            Error.create "Unexpected argument types." (op, v1, v2)
-              [%sexp_of : op * Db.primvalue * Db.primvalue]
-            |> Error.raise )
-    | Varop (op, ps) ->
-        let vs = List.map ps ~f:(eval_pred ctx) in
-        match op with
-        | And ->
-            List.for_all vs ~f:(function
-              | `Bool x -> x
-              | _ -> failwith "Unexpected argument type." )
-            |> fun x -> `Bool x
-        | Or ->
-            List.exists vs ~f:(function
-              | `Bool x -> x
-              | _ -> failwith "Unexpected argument type." )
-            |> fun x -> `Bool x
-        | _ ->
-            Error.create "Unexpected argument types." (op, vs)
-              [%sexp_of : op * Db.primvalue list]
-            |> Error.raise
 
   let eval_join ctx p r1 r2 =
     Seq.concat_map r1 ~f:(fun t1 ->
