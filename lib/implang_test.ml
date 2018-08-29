@@ -4,19 +4,6 @@ open Abslayout
 
 let rels = Hashtbl.create (module Db.Relation)
 
-let create name fs xs =
-  let rel =
-    Db.{rname= name; fields= List.map fs ~f:(fun f -> {fname= f; dtype= DInt})}
-  in
-  let data =
-    List.map xs ~f:(fun data ->
-        List.map2_exn fs data ~f:(fun fname value -> (fname, `Int value)) )
-  in
-  Hashtbl.set rels ~key:rel ~data ;
-  ( name
-  , List.map fs ~f:(fun f ->
-        Name.{name= f; relation= Some name; type_= Some Type0.PrimType.IntT} ) )
-
 module Eval = Eval.Make_mock (struct
   let rels = rels
 end)
@@ -32,17 +19,21 @@ module I =
 
 [@@@warning "-8"]
 
-let _, [f; _] = create "r1" ["f"; "g"] [[1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]]
+let _, [f; _] =
+  Test_util.create rels "r1" ["f"; "g"] [[1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]]
+
+[@@@warning "+8"]
 
 let%expect_test "ordered-idx" =
   let layout =
     of_string_exn
       "AOrderedIdx(OrderBy([r1.f], Dedup(Select([r1.f], r1)), desc) as k, \
-       AScalar(k.f), null, null)"
+       AScalar(k.f), 1, 3)"
     |> M.resolve |> M.annotate_schema |> annotate_key_layouts
   in
-  I.irgen_abstract ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter;
-  [%expect {|
+  I.irgen_abstract ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter ;
+  [%expect
+    {|
     fun scalar_1 (start) {
         yield (buf[start : 1]);
     }fun scalar_2 (start) {
@@ -50,20 +41,20 @@ let%expect_test "ordered-idx" =
     }fun ordered_idx_0 (start) {
          low3 = 0;
          high4 = buf[start + 8 : 8] / 9;
-         init scalar_1(start + 16 + mid5 * 9);
-         key6 = next(scalar_1);
          loop (low3 < high4) {
              mid5 = low3 + high4 / 2;
-             if (key6 < null) {
+             init scalar_1(start + 16 + mid5 * 9);
+             key6 = next(scalar_1);
+             if (key6 < 1) {
                  low3 = mid5 + 1;
              } else {
                   high4 = mid5;
              }
          }
-         init scalar_1(start + 16 + low3 * 9);
-         key7 = next(scalar_1);
          if (low3 < buf[start + 8 : 8] / 9) {
-             loop (key7 < null) {
+             init scalar_1(start + 16 + low3 * 9);
+             key7 = next(scalar_1);
+             loop (key7 < 3) {
                  init scalar_2(buf[start + 16 + low3 * 9 + 1 : 8]);
                  tup8 = next(scalar_2);
                  yield tup8;

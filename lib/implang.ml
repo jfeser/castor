@@ -756,7 +756,7 @@ module IRGen = struct
           let mid =
             build_fresh_defn ~fresh "mid" int_t Infix.((low + high) / int 2) b
           in
-          let key = key_index mid in
+          let key = key_index mid b in
           build_if ~cond:(key_lt key low_target)
             ~then_:(fun b -> build_assign Infix.(mid + int 1) low b)
             ~else_:(fun b -> build_assign mid high b)
@@ -766,7 +766,7 @@ module IRGen = struct
         ~cond:Infix.(low < n)
         ~then_:(fun b ->
           build_loop
-            (key_lt (key_index low) high_target)
+            (key_lt (key_index low b) high_target)
             (fun b ->
               callback (ptr_index low) b ;
               build_assign Infix.(low + int 1) low b )
@@ -790,7 +790,7 @@ module IRGen = struct
       let key_len = len index_start kt in
       let ptr_len = Infix.(int isize) in
       let kp_len = Infix.(key_len + ptr_len) in
-      let key_index i =
+      let key_index i b =
         let key_start = Infix.(start + int header_size + (i * kp_len)) in
         build_iter key_iter [key_start] b ;
         let key = build_fresh_var ~fresh "key" key_type b in
