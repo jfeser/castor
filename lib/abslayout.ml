@@ -21,8 +21,6 @@ module Name = struct
   let type_exn {type_; _} =
     match type_ with Some t -> t | None -> failwith "missing type"
 
-  let to_typed_name ({name; _} as n) = (name, type_exn n)
-
   let to_sql {relation; name; _} =
     match relation with
     | Some r -> sprintf "%s.\"%s\"" r name
@@ -30,7 +28,7 @@ module Name = struct
 
   let of_lexbuf_exn lexbuf =
     try Ralgebra_parser.name_eof Ralgebra_lexer.token lexbuf
-    with Ralgebra0.ParseError (msg, line, col) as e ->
+    with Parser_utils.ParseError (msg, line, col) as e ->
       Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
       raise e
 
@@ -213,7 +211,7 @@ end
 
 let of_lexbuf_exn lexbuf =
   try Ralgebra_parser.abs_ralgebra_eof Ralgebra_lexer.token lexbuf
-  with Ralgebra0.ParseError (msg, line, col) as e ->
+  with Parser_utils.ParseError (msg, line, col) as e ->
     Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
     raise e
 
@@ -225,11 +223,10 @@ let params r =
   let ralgebra_params =
     object (self)
       inherit [_] reduce
-      method zero = Set.empty (module Type.TypedName)
+      method zero = Set.empty (module Name)
       method plus = Set.union
       method! visit_Name () n =
-        if Option.is_none n.relation then
-          Set.singleton (module Type.TypedName) (Name.to_typed_name n)
+        if Option.is_none n.relation then Set.singleton (module Name) n
         else self#zero
       method visit_name _ _ = self#zero
     end
@@ -424,14 +421,14 @@ let pred_to_schema_exn =
   | Name ({type_= None; _} as n) ->
       Error.create "Missing type." n [%sexp_of : Name.t] |> Error.raise
   | Name ({type_= Some _; _} as n) -> n
-  | Int _ -> unnamed IntT
-  | Bool _ -> unnamed BoolT
-  | String _ -> unnamed StringT
+  | Int _ -> unnamed (IntT {nullable= false})
+  | Bool _ -> unnamed (BoolT {nullable= false})
+  | String _ -> unnamed (StringT {nullable= false})
   | Null -> failwith ""
   | Binop (op, _, _) | Varop (op, _) ->
     match op with
-    | Eq | Lt | Le | Gt | Ge | And | Or -> unnamed BoolT
-    | Add | Sub | Mul | Div | Mod -> unnamed IntT
+    | Eq | Lt | Le | Gt | Ge | And | Or -> unnamed (BoolT {nullable= false})
+    | Add | Sub | Mul | Div | Mod -> unnamed (IntT {nullable= false})
 
 let pred_to_name = function Name n -> Some n | _ -> None
 

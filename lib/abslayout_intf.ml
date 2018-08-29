@@ -10,6 +10,8 @@ module type S = sig
 
     val create : ?relation:string -> ?type_:Type.PrimType.t -> string -> t
 
+    val type_exn : t -> Type.PrimType.t
+
     val of_string_exn : string -> t
 
     val of_field : ?rel:string -> Db.Field.t -> t
@@ -87,7 +89,7 @@ module type S = sig
 
   val name : t -> string
 
-  val params : t -> (Type.TypedName.t, Type.TypedName.comparator_witness) Set.t
+  val params : t -> Set.M(Name).t
 
   val select : pred list -> t -> t
 

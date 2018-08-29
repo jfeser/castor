@@ -1,50 +1,70 @@
 open Base
-open Bin_prot.Std
-module Pervasives = Caml.Pervasives
+module Format = Caml.Format
 
 module PrimType = struct
-  type t = BoolT | IntT | StringT | NullT [@@deriving compare, sexp, hash, bin_io]
+  type t =
+    | NullT
+    | IntT of {nullable: bool}
+    | StringT of {nullable: bool}
+    | BoolT of {nullable: bool}
+    | TupleT of t list
+    | VoidT
+  [@@deriving compare, hash, sexp]
 
   let of_primvalue = function
-    | `Int _ -> IntT
-    | `String _ -> StringT
-    | `Bool _ -> BoolT
-    | `Unknown _ -> StringT
+    | `Int _ -> IntT {nullable= true}
+    | `String _ -> StringT {nullable= true}
+    | `Bool _ -> BoolT {nullable= true}
+    | `Unknown _ -> StringT {nullable= true}
     | _ -> failwith "Unknown type."
 
   let to_string : t -> string = function
-    | BoolT -> "bool"
-    | IntT -> "int"
-    | StringT -> "string"
+    | BoolT _ -> "bool"
+    | IntT _ -> "int"
+    | StringT _ -> "string"
     | NullT -> "null"
+    | VoidT -> "void"
+    | TupleT _ -> "tuple"
 
   let of_dtype = function
-    | Db.DInt -> IntT
-    | Db.DString -> StringT
-    | Db.DBool -> BoolT
-    | Db.DRational -> StringT
+    | Db.DInt -> IntT {nullable= true}
+    | Db.DString -> StringT {nullable= true}
+    | Db.DBool -> BoolT {nullable= true}
+    | Db.DRational -> StringT {nullable= true}
     | t -> Error.create "Unexpected dtype." t [%sexp_of : Db.dtype] |> Error.raise
-end
 
-module TypedName = struct
-  module T = struct
-    type t = string * PrimType.t [@@deriving compare, sexp, hash, bin_io]
-  end
+  let rec pp_tuple pp_v fmt =
+    let open Format in
+    function
+    | [] -> fprintf fmt ""
+    | [x] -> fprintf fmt "%a" pp_v x
+    | x :: xs -> fprintf fmt "%a,@ %a" pp_v x (pp_tuple pp_v) xs
 
-  include T
-  include Comparator.Make (T)
+  let rec pp =
+    let open Format in
+    fun fmt -> function
+      | NullT -> fprintf fmt "Null"
+      | IntT {nullable= true} -> fprintf fmt "Int"
+      | IntT {nullable= false} -> fprintf fmt "Int[nonnull]"
+      | StringT {nullable= true} -> fprintf fmt "String"
+      | StringT {nullable= false} -> fprintf fmt "String[nonnull]"
+      | BoolT {nullable= true} -> fprintf fmt "Bool"
+      | BoolT {nullable= false} -> fprintf fmt "Bool[nonnull]"
+      | TupleT ts -> fprintf fmt "Tuple[%a]" (pp_tuple pp) ts
+      | VoidT -> fprintf fmt "Void"
 
-  let to_string : t -> string =
-   fun (n, t) -> Printf.sprintf "%s:%s" n (PrimType.to_string t)
+  let is_nullable = function
+    | NullT -> true
+    | IntT {nullable= n} | BoolT {nullable= n} | StringT {nullable= n} -> n
+    | TupleT _ | VoidT -> false
 
-  module NameOnly = struct
-    module T = struct
-      type t = T.t [@@deriving sexp, hash, bin_io]
-
-      let compare (n1, _) (n2, _) = [%compare : string] n1 n2
-    end
-
-    include T
-    include Comparator.Make (T)
-  end
+  let rec unify t1 t2 =
+    match (t1, t2) with
+    | IntT {nullable= n1}, IntT {nullable= n2} -> IntT {nullable= n1 || n2}
+    | BoolT {nullable= n1}, BoolT {nullable= n2} -> BoolT {nullable= n1 || n2}
+    | StringT {nullable= n1}, StringT {nullable= n2} -> StringT {nullable= n1 || n2}
+    | TupleT t1, TupleT t2 -> TupleT (List.map2_exn t1 t2 ~f:unify)
+    | VoidT, VoidT -> VoidT
+    | _, _ ->
+        Error.create "Nonunifiable." (t1, t2) [%sexp_of : t * t] |> Error.raise
 end

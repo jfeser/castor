@@ -76,12 +76,7 @@ module Make (Eval : Eval.S) = struct
         in
         self#build_AHashIdx kv h
       method visit_AEmpty _ = self#build_AEmpty
-      method visit_AScalar ctx e =
-        let l =
-          Layout.of_value
-            {value= eval_pred ctx e; rel= Db.Relation.dummy; field= Db.Field.dummy}
-        in
-        self#build_AScalar l
+      method visit_AScalar ctx e = self#build_AScalar (eval_pred ctx e)
       method visit_AOrderedIdx ctx q value_l (h: ordered_idx) =
         let key_l =
           Option.value_exn
@@ -121,15 +116,6 @@ module Make (Eval : Eval.S) = struct
   module TF = struct
     open Type
 
-    let type_of_scalar_layout (l: Layout.t) =
-      match l.node with
-      | Int (x, _) -> IntT {range= AbsInt.abstract x; nullable= false}
-      | Bool _ -> BoolT {nullable= false}
-      | String (x, _) ->
-          StringT {nchars= AbsInt.abstract (String.length x); nullable= false}
-      | Null _ -> NullT
-      | _ -> failwith "Not a scalar."
-
     class ['self] type_fold =
       object (_: 'self)
         inherit [_] material_fold
@@ -137,7 +123,13 @@ module Make (Eval : Eval.S) = struct
         method build_Filter t = FuncT ([t], `Child_sum)
         method build_Join _ _ t1 t2 = FuncT ([t1; t2], `Child_sum)
         method build_AEmpty = EmptyT
-        method build_AScalar = type_of_scalar_layout
+        method build_AScalar =
+          function
+          | `Int x -> IntT {range= AbsInt.abstract x; nullable= false}
+          | `Bool _ -> BoolT {nullable= false}
+          | `String x | `Unknown x ->
+              StringT {nchars= AbsInt.abstract (String.length x); nullable= false}
+          | `Null -> NullT
         method build_AList ls =
           let t, c =
             Seq.fold ls ~init:(EmptyT, AbsCount.zero) ~f:(fun (t, c) t' ->

@@ -108,13 +108,12 @@ module Make (Config : Config.S) () = struct
   class func_ctx func params =
     object
       val values = Hashtbl.create (module String)
-      method values  : var Hashtbl.M(String).t= values
-      method name  : string= func.name
-      method func  : func= func
-      method tctx  : type_ Hashtbl.M(String).t=
+      method values : var Hashtbl.M(String).t = values
+      method name : string = func.name
+      method func : func = func
+      method tctx : Type.PrimType.t Hashtbl.M(String).t =
         Hashtbl.of_alist_exn (module String) (func.locals @ params)
     end
-    
 
   class ictx func params =
     object
@@ -123,26 +122,24 @@ module Make (Config : Config.S) () = struct
       val mutable step = None
       val mutable switch = None
       val mutable switch_index = 0
-      method init  : llvalue= Option.value_exn init
-      method step  : llvalue= Option.value_exn step
-      method switch  : llvalue= Option.value_exn switch
-      method switch_index  : int= switch_index
+      method init : llvalue = Option.value_exn init
+      method step : llvalue = Option.value_exn step
+      method switch : llvalue = Option.value_exn switch
+      method switch_index : int = switch_index
       method set_init x = init <- Some x
       method set_step x = step <- Some x
       method set_switch x = switch <- Some x
       method incr_switch_index () = switch_index <- switch_index + 1
     end
-    
 
   class fctx func params =
     object
       inherit func_ctx func params
       val mutable llfunc = None
-      method! values  : var Hashtbl.M(String).t= values
-      method llfunc  : llvalue= Option.value_exn llfunc
+      method! values : var Hashtbl.M(String).t = values
+      method llfunc : llvalue = Option.value_exn llfunc
       method set_llfunc x = llfunc <- Some x
     end
-    
 
   let iters = Hashtbl.create (module String)
 
@@ -248,7 +245,9 @@ module Make (Config : Config.S) () = struct
     let fmt_str = define_fresh_global (const_stringz ctx fmt) "fmt" module_ in
     if debug then call_printf fmt_str args
 
-  let rec codegen_type : type_ -> lltype = function
+  let rec codegen_type =
+    let open Type.PrimType in
+    function
     | IntT {nullable= false} -> i64_type ctx
     | IntT {nullable= true} ->
         struct_type ctx [|codegen_type (IntT {nullable= false}); i1_type ctx|]
@@ -298,15 +297,15 @@ module Make (Config : Config.S) () = struct
 
   type llnvalue = {data: llvalue; null: llvalue}
 
-  let unpack_null : type_ -> llvalue -> llnvalue =
-   fun t v ->
+  let unpack_null t v =
+    let open Type.PrimType in
     if is_nullable t then
       { data= build_extractvalue v 0 "" builder
       ; null= build_extractvalue v 1 "" builder }
     else {data= v; null= const_int (i1_type ctx) 0}
 
-  let pack_null : type_ -> data:llvalue -> null:llvalue -> llvalue =
-   fun type_ ~data ~null ->
+  let pack_null type_ ~data ~null =
+    let open Type.PrimType in
     if is_nullable type_ then (
       let struct_t = codegen_type type_ in
       let struct_ = build_entry_alloca struct_t "" builder in
@@ -460,7 +459,7 @@ module Make (Config : Config.S) () = struct
         | _ ->
             fail
               (Error.create "Unexpected equality." (t1, t2)
-                 [%sexp_of : type_ * type_]) )
+                 [%sexp_of : Type.PrimType.t * Type.PrimType.t]) )
       | Lt -> build_icmp Icmp.Slt x1 x2 "lttmp" builder
       | And -> build_and x1 x2 "andtmp" builder
       | Or -> build_or x1 x2 "ortmp" builder
@@ -468,7 +467,8 @@ module Make (Config : Config.S) () = struct
         match t2 with
         | StringT _ -> codegen_string_hash fctx x1 x2
         | IntT _ | BoolT _ -> codegen_int_hash fctx x1 x2
-        | _ -> fail (Error.create "Unexpected hash." t2 [%sexp_of : type_]) )
+        | _ ->
+            fail (Error.create "Unexpected hash." t2 [%sexp_of : Type.PrimType.t]) )
       | LoadStr -> codegen_load_str fctx x1 x2
       | Not -> fail (Error.of_string "Not a binary operator.")
     in
@@ -587,7 +587,7 @@ module Make (Config : Config.S) () = struct
     if List.length args <> List.length iter_fctx#func.args then
       Error.create "Wrong number of arguments."
         (func, args, iter_fctx#func.args)
-        [%sexp_of : string * expr list * (string * type_) list]
+        [%sexp_of : string * expr list * (string * Type.PrimType.t) list]
       |> fail
     else
       let llargs = List.map args ~f:(codegen_expr fctx) in
@@ -661,6 +661,7 @@ module Make (Config : Config.S) () = struct
   let str_fmt = define_global_str "str_fmt" "\"%.*s\""
 
   let codegen_print fctx type_ expr =
+    let open Type.PrimType in
     Logs.debug (fun m -> m "Codegen for %a." pp_stmt (Print (type_, expr))) ;
     let val_ = codegen_expr fctx expr in
     let rec gen val_ = function
@@ -843,9 +844,10 @@ module Make (Config : Config.S) () = struct
       Logs.debug (fun m -> m "Codegen for func %s started." name) ;
       Logs.debug (fun m -> m "%a" pp_func func) ;
       Logs.debug (fun m -> m "%s" ([%sexp_of : func] func |> Sexp.to_string_hum)) ;
-      (* Check that function is not already defined. *)
-      if Hashtbl.(mem iters name || mem funcs name) then
-        fail (Error.of_string "Function already defined.") ;
+      if
+        (* Check that function is not already defined. *)
+        Hashtbl.(mem iters name || mem funcs name)
+      then fail (Error.of_string "Function already defined.") ;
       (* Create function. *)
       let func_t =
         let args_t =
@@ -901,13 +903,13 @@ module Make (Config : Config.S) () = struct
     build_store bufp buf builder |> ignore ;
     build_ret params builder |> ignore
 
-  let codegen_param_setters : (string * lltype) list -> unit =
-   fun params ->
+  let codegen_param_setters params =
     List.iter params ~f:(fun (n, t) ->
+        let lltype = codegen_type t in
         let name = sprintf "set_%s" n in
         let llfunc =
           let func_t =
-            function_type (void_type ctx) [|pointer_type !params_struct_t; t|]
+            function_type (void_type ctx) [|pointer_type !params_struct_t; lltype|]
           in
           declare_function name func_t module_
         in
@@ -953,7 +955,8 @@ module Make (Config : Config.S) () = struct
       t
   end
 
-  let codegen Implang.IRGen.({iters= ir_iters; funcs= ir_funcs; params; buffer_len}) =
+  let codegen Implang.IRGen.({iters= ir_iters; funcs= ir_funcs; params; buffer_len})
+      =
     Logs.info (fun m -> m "Codegen started.") ;
     set_data_layout "e-m:o-i64:64-f80:128-n8:16:32:64-S128" module_ ;
     let module SB = ParamStructBuilder in
@@ -961,14 +964,18 @@ module Make (Config : Config.S) () = struct
     (* Generate global constant for buffer. *)
     let buf_t = pointer_type (array_type int_type (buffer_len / 8)) in
     SB.build_global sb "buf" buf_t |> ignore ;
-    let typed_params = List.map params ~f:(fun (n, t) -> (n, codegen_type t)) in
+    let typed_params =
+      List.map params ~f:(fun n -> (n.name, Abslayout.Name.type_exn n))
+    in
     (* Generate global constants for parameters. *)
-    List.iter typed_params ~f:(fun (n, t) -> SB.build_global sb n t |> ignore) ;
+    List.iter typed_params ~f:(fun (n, t) ->
+        let lltype = codegen_type t in
+        SB.build_global sb n lltype |> ignore ) ;
     (* Generate code for the iterators *)
     let ictxs =
       List.map ir_iters ~f:(fun func ->
           (* Create function context. *)
-          let ictx = new ictx func params in
+          let ictx = new ictx func typed_params in
           Hashtbl.set iters ~key:func.name ~data:ictx ;
           (* Create iterator done flag. *)
           SB.build_local sb ictx "done" (i1_type ctx) ;
@@ -980,7 +987,7 @@ module Make (Config : Config.S) () = struct
               SB.build_local sb ictx n lltype ) ;
           ictx )
     in
-    let fctxs = List.map ir_funcs ~f:(fun func -> new fctx func params) in
+    let fctxs = List.map ir_funcs ~f:(fun func -> new fctx func typed_params) in
     params_struct_t := SB.build_param_struct sb "params" ;
     List.iter ictxs ~f:codegen_iter ;
     List.iter fctxs ~f:codegen_func ;

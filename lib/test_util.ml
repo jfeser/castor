@@ -12,4 +12,7 @@ let create rels name fs xs =
   Hashtbl.set rels ~key:rel ~data ;
   ( name
   , List.map fs ~f:(fun f ->
-        Name.{name= f; relation= Some name; type_= Some Type0.PrimType.IntT} ) )
+        let open Name in
+        { name= f
+        ; relation= Some name
+        ; type_= Some (Type0.PrimType.IntT {nullable= false}) } ) )

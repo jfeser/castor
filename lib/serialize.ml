@@ -58,7 +58,7 @@ module No_config = struct
 
   open Type
 
-  let serialize_null t _ _ =
+  let serialize_null t =
     let open Bitstring in
     match t with
     | NullT -> empty
@@ -71,21 +71,21 @@ module No_config = struct
         concat [len_flag |> label "String len (null)"]
     | t -> Error.(create "Unexpected layout type." t [%sexp_of : Type.t] |> raise)
 
-  let serialize_int t _ x _ =
+  let serialize_int t x =
     let open Bitstring in
     match t with
     | IntT {range; nullable; _} ->
         of_int ~width:(Type.AbsInt.bit_width ~nullable range) x |> label "Int"
     | t -> Error.(create "Unexpected layout type." t [%sexp_of : Type.t] |> raise)
 
-  let serialize_bool t _ x _ =
+  let serialize_bool t x =
     let open Bitstring in
     match (t, x) with
     | BoolT _, true -> of_int ~width:8 1 |> label "Bool"
     | BoolT _, false -> of_int ~width:8 0 |> label "Bool"
     | t, _ -> Error.(create "Unexpected layout type." t [%sexp_of : Type.t] |> raise)
 
-  let serialize_string t _ x _ =
+  let serialize_string t x =
     let open Bitstring in
     match t with
     | StringT {nchars; _} ->
@@ -99,16 +99,11 @@ module No_config = struct
         concat [len |> label "String len"; body |> label "String body"]
     | t -> Error.(create "Unexpected layout type." t [%sexp_of : Type.t] |> raise)
 
-  let serialize_scalar : Type.t -> Layout.t -> Bitstring.t =
-    let open Bitstring in
-    fun type_ layout ->
-      match layout.node with
-      | Null s -> serialize_null type_ layout s
-      | Int (x, s) -> serialize_int type_ layout x s
-      | Bool (x, s) -> serialize_bool type_ layout x s
-      | String (x, s) -> serialize_string type_ layout x s
-      | Empty -> empty
-      | _ -> failwith "Unsupported"
+  let serialize_value type_ = function
+    | `Null -> serialize_null type_
+    | `Int x -> serialize_int type_ x
+    | `Bool x -> serialize_bool type_ x
+    | `String x | `Unknown x -> serialize_string type_ x
 end
 
 include No_config
@@ -204,10 +199,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
             | AScalar e -> Eval.eval_pred kctx e
             | _ -> failwith "hash index can only have scalar keys rn"
           in
-          let serialized =
-            value |> Db.Value.of_primvalue |> Layout.of_value
-            |> serialize_scalar key_t
-          in
+          let serialized = serialize_value key_t value in
           let hash_key =
             match value with
             | `String s | `Unknown s -> s
@@ -315,22 +307,9 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     Writer.seek writer end_pos
 
   let serialize_scalar sctx type_ expr =
-    let l =
-      Layout.of_value
-        { value= eval_pred sctx.ctx expr
-        ; rel= Db.Relation.dummy
-        ; field= Db.Field.dummy }
-    in
-    let label, bstr =
-      match l.node with
-      | Null s -> ("Null", serialize_null type_ l s)
-      | Int (x, s) -> ("Int", serialize_int type_ l x s)
-      | Bool (x, s) -> ("Bool", serialize_bool type_ l x s)
-      | String (x, s) -> ("String", serialize_string type_ l x s)
-      | _ -> failwith "Expected a scalar."
-    in
-    log_start label ;
-    Bitstring.Writer.write sctx.writer bstr ;
+    log_start "Scalar" ;
+    eval_pred sctx.ctx expr |> serialize_value type_
+    |> Bitstring.Writer.write sctx.writer ;
     log_end ()
 
   let rec serialize ({writer; _} as sctx) type_ layout =

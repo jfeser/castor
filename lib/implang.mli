@@ -1,14 +1,5 @@
 open Base
 
-type type_ =
-  | NullT
-  | IntT of {nullable: bool}
-  | StringT of {nullable: bool}
-  | BoolT of {nullable: bool}
-  | TupleT of type_ list
-  | VoidT
-[@@deriving compare, sexp]
-
 type op = Add | Sub | Mul | Div | Mod | Lt | Eq | And | Or | Not | Hash | LoadStr
 
 type expr =
@@ -25,7 +16,7 @@ type expr =
   | Done of string
 
 and stmt =
-  | Print of type_ * expr
+  | Print of Type.PrimType.t * expr
   | Loop of {cond: expr; body: prog}
   | If of {cond: expr; tcase: prog; fcase: prog}
   | Iter of {var: string; func: string; args: expr list}
@@ -38,17 +29,15 @@ and prog = stmt list
 
 and func =
   { name: string
-  ; args: (string * type_) list
+  ; args: (string * Type.PrimType.t) list
   ; body: prog
-  ; ret_type: type_
-  ; locals: (string * type_) list }
+  ; ret_type: Type.PrimType.t
+  ; locals: (string * Type.PrimType.t) list }
 [@@deriving compare, sexp]
 
 val pp_args : Formatter.t -> (string * 'a) list -> unit
 
 val pp_tuple : (Formatter.t -> 'a -> unit) -> Formatter.t -> 'a list -> unit
-
-val pp_type : Formatter.t -> type_ -> unit
 
 val pp_bytes : Formatter.t -> bytes -> unit
 
@@ -64,9 +53,7 @@ val pp_prog : Formatter.t -> prog -> unit
 
 val pp_func : Formatter.t -> func -> unit
 
-val is_nullable : type_ -> bool
-
-val infer_type : type_ Hashtbl.M(String).t -> expr -> type_
+val infer_type : Type.PrimType.t Hashtbl.M(String).t -> expr -> Type.PrimType.t
 
 val yield_count : func -> int
 
@@ -80,7 +67,7 @@ module IRGen : sig
   type ir_module =
     { iters: func list
     ; funcs: func list
-    ; params: (string * type_) list
+    ; params: Abslayout.Name.t list
     ; buffer_len: int }
   [@@deriving sexp]
 

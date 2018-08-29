@@ -5,15 +5,6 @@ module Format = Caml.Format
 
 let fail : Error.t -> 'a = Error.raise
 
-type type_ =
-  | NullT
-  | IntT of {nullable: bool}
-  | StringT of {nullable: bool}
-  | BoolT of {nullable: bool}
-  | TupleT of type_ list
-  | VoidT
-[@@deriving compare, sexp]
-
 type op = Add | Sub | Mul | Div | Mod | Lt | Eq | And | Or | Not | Hash | LoadStr
 [@@deriving compare, sexp]
 
@@ -31,7 +22,7 @@ type expr =
   | Done of string
 
 and stmt =
-  | Print of type_ * expr
+  | Print of Type.PrimType.t * expr
   | Loop of {cond: expr; body: prog}
   | If of {cond: expr; tcase: prog; fcase: prog}
   | Iter of {var: string; func: string; args: expr list}
@@ -44,10 +35,10 @@ and prog = stmt list
 
 and func =
   { name: string
-  ; args: (string * type_) list
+  ; args: (string * Type.PrimType.t) list
   ; body: prog
-  ; ret_type: type_
-  ; locals: (string * type_) list }
+  ; ret_type: Type.PrimType.t
+  ; locals: (string * Type.PrimType.t) list }
 [@@deriving compare, sexp]
 
 let rec pp_args fmt =
@@ -63,19 +54,6 @@ let rec pp_tuple pp_v fmt =
   | [] -> fprintf fmt ""
   | [x] -> fprintf fmt "%a" pp_v x
   | x :: xs -> fprintf fmt "%a,@ %a" pp_v x (pp_tuple pp_v) xs
-
-let rec pp_type : Format.formatter -> type_ -> unit =
-  let open Format in
-  fun fmt -> function
-    | NullT -> fprintf fmt "Null"
-    | IntT {nullable= true} -> fprintf fmt "Int"
-    | IntT {nullable= false} -> fprintf fmt "Int[nonnull]"
-    | StringT {nullable= true} -> fprintf fmt "String"
-    | StringT {nullable= false} -> fprintf fmt "String[nonnull]"
-    | BoolT {nullable= true} -> fprintf fmt "Bool"
-    | BoolT {nullable= false} -> fprintf fmt "Bool[nonnull]"
-    | TupleT ts -> fprintf fmt "Tuple[%a]" (pp_tuple pp_type) ts
-    | VoidT -> fprintf fmt "Void"
 
 let pp_bytes fmt x = Format.fprintf fmt "%S" (Bytes.to_string x)
 
@@ -131,7 +109,8 @@ and pp_stmt : Format.formatter -> stmt -> unit =
     | Assign {lhs; rhs} -> fprintf fmt "@[<hov>%s =@ %a;@]" lhs pp_expr rhs
     | Yield e -> fprintf fmt "@[<hov>yield@ %a;@]" pp_expr e
     | Return e -> fprintf fmt "@[<hov>return@ %a;@]" pp_expr e
-    | Print (t, e) -> fprintf fmt "@[<hov>print(%a,@ %a);@]" pp_type t pp_expr e
+    | Print (t, e) ->
+        fprintf fmt "@[<hov>print(%a,@ %a);@]" Type.PrimType.pp t pp_expr e
 
 and pp_prog : Format.formatter -> prog -> unit =
   let open Format in
@@ -185,30 +164,14 @@ module Infix = struct
     match tup with Tuple t -> List.nth_exn t idx | _ -> Index (tup, idx)
 end
 
-let int_t = IntT {nullable= false}
-
-let is_nullable = function
-  | NullT -> true
-  | IntT {nullable= n} | BoolT {nullable= n} | StringT {nullable= n} -> n
-  | TupleT _ | VoidT -> false
+let int_t = Type.PrimType.IntT {nullable= false}
 
 let yield_count {body; _} =
   List.sum (module Int) body ~f:(function Yield _ -> 1 | _ -> 0)
 
-let rec unify_type : type_ -> type_ -> type_ =
- fun t1 t2 ->
-  match (t1, t2) with
-  | IntT {nullable= n1}, IntT {nullable= n2} -> IntT {nullable= n1 || n2}
-  | BoolT {nullable= n1}, BoolT {nullable= n2} -> BoolT {nullable= n1 || n2}
-  | StringT {nullable= n1}, StringT {nullable= n2} -> StringT {nullable= n1 || n2}
-  | TupleT t1, TupleT t2 -> TupleT (List.map2_exn t1 t2 ~f:unify_type)
-  | VoidT, VoidT -> VoidT
-  | _, _ ->
-      Error.create "Nonunifiable." (t1, t2) [%sexp_of : type_ * type_]
-      |> Error.raise
-
-let rec infer_type : type_ Hashtbl.M(String).t -> expr -> type_ =
- fun ctx -> function
+let rec infer_type ctx =
+  let open Type.PrimType in
+  function
   | Null -> NullT
   | Int _ -> IntT {nullable= false}
   | Bool _ -> BoolT {nullable= false}
@@ -218,7 +181,7 @@ let rec infer_type : type_ Hashtbl.M(String).t -> expr -> type_ =
     | Some t -> t
     | None ->
         Error.create "Type lookup failed." (x, ctx)
-          [%sexp_of : string * type_ Hashtbl.M(String).t]
+          [%sexp_of : string * t Hashtbl.M(String).t]
         |> Error.raise )
   | Tuple xs -> TupleT (List.map xs ~f:(infer_type ctx))
   | Binop {op; arg1; arg2} as e -> (
@@ -228,7 +191,7 @@ let rec infer_type : type_ Hashtbl.M(String).t -> expr -> type_ =
       | (Add | Sub | Mul), IntT _, IntT _
        |(And | Or), BoolT _, BoolT _
        |(And | Or), IntT _, IntT _ ->
-          unify_type t1 t2
+          unify t1 t2
       | Lt, IntT {nullable= n1}, IntT {nullable= n2} -> BoolT {nullable= n1 || n2}
       | Hash, IntT {nullable= false}, _ -> IntT {nullable= false}
       | Eq, IntT {nullable= n1}, IntT {nullable= n2}
@@ -240,17 +203,17 @@ let rec infer_type : type_ Hashtbl.M(String).t -> expr -> type_ =
       | _ ->
           fail
             (Error.create "Type error." (e, t1, t2, ctx)
-               [%sexp_of : expr * type_ * type_ * type_ Hashtbl.M(String).t]) )
+               [%sexp_of : expr * t * t * t Hashtbl.M(String).t]) )
   | Unop {op; arg} -> (
       let t = infer_type ctx arg in
       match (op, t) with
       | Not, BoolT {nullable} -> BoolT {nullable}
-      | _ -> fail (Error.create "Type error." (op, t) [%sexp_of : op * type_]) )
+      | _ -> fail (Error.create "Type error." (op, t) [%sexp_of : op * t]) )
   | Slice (_, _) -> IntT {nullable= false}
   | Index (tup, idx) -> (
     match infer_type ctx tup with
     | TupleT ts -> List.nth_exn ts idx
-    | t -> fail (Error.create "Expected a tuple." t [%sexp_of : type_]) )
+    | t -> fail (Error.create "Expected a tuple." t [%sexp_of : t]) )
   | Done _ -> BoolT {nullable= false}
 
 let name_of_var = function
@@ -260,9 +223,9 @@ let name_of_var = function
 module Builder = struct
   type func_b =
     { name: string
-    ; args: (string * type_) list
-    ; ret: type_
-    ; locals: type_ Hashtbl.M(String).t
+    ; args: (string * Type.PrimType.t) list
+    ; ret: Type.PrimType.t
+    ; locals: Type.PrimType.t Hashtbl.M(String).t
     ; body: prog ref }
 
   let create ?(args= []) ~name ~ret =
@@ -386,7 +349,7 @@ module IRGen = struct
   type ir_module =
     { iters: func list
     ; funcs: func list
-    ; params: (string * type_) list
+    ; params: Abslayout.Name.t list
     ; buffer_len: int }
   [@@deriving sexp]
 
@@ -531,7 +494,7 @@ module IRGen = struct
       in
       let funcs = List.map2_exn rs ts ~f:(fun r t -> (scan r t, t)) in
       let ret_type =
-        TupleT
+        Type.PrimType.TupleT
           ( List.map funcs ~f:(fun (func, _) ->
                 match func.ret_type with TupleT ts -> ts | t -> [t] )
           |> List.concat )
@@ -548,7 +511,7 @@ module IRGen = struct
         List.map funcs ~f:(fun func ->
             match func.ret_type with TupleT ts -> ts | t -> [t] )
         |> List.concat
-        |> fun x -> TupleT x
+        |> fun x -> Type.PrimType.TupleT x
       in
       let b = create ~name ~args:[("start", int_t)] ~ret:ret_type in
       let start = build_arg 0 b in
@@ -662,7 +625,6 @@ module IRGen = struct
 
     let gen_pred tup schema =
       let module A = Abslayout in
-      let module R = Ralgebra0 in
       let rec gen_pred = function
         | A.Null -> Null
         | A.Int x -> Int x
@@ -963,11 +925,12 @@ module IRGen = struct
       let ret_t2 = func2.ret_type in
       let ret_t, w1, w2 =
         match (ret_t1, ret_t2) with
-        | TupleT t1, TupleT t2 -> (TupleT (t1 @ t2), List.length t1, List.length t2)
+        | TupleT t1, TupleT t2 ->
+            (Type.PrimType.TupleT (t1 @ t2), List.length t1, List.length t2)
         | _ ->
             fail
               (Error.create "Expected a TupleT." (ret_t1, ret_t2)
-                 [%sexp_of : type_ * type_])
+                 [%sexp_of : Type.PrimType.t * Type.PrimType.t])
       in
       let schema =
         Abslayout.(Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema))
@@ -1048,19 +1011,12 @@ module IRGen = struct
       in
       (scan r type_, len)
 
-    let of_primtype : Type.PrimType.t -> type_ = function
-      | BoolT -> BoolT {nullable= false}
-      | IntT -> IntT {nullable= false}
-      | StringT -> StringT {nullable= false}
-      | NullT -> NullT
-
     let irgen_abstract ~data_fn r =
+      let params = Abslayout.params r |> Set.to_list in
       let top_func, len = gen_abslayout ~data_fn r in
       { iters= List.rev !funcs
       ; funcs= [printer "printer" top_func; counter "counter" top_func]
-      ; params=
-          Abslayout.params r |> Set.to_list
-          |> List.map ~f:(fun (n, t) -> (n, of_primtype t))
+      ; params
       ; buffer_len= len }
 
     let pp fmt {funcs; iters; _} =

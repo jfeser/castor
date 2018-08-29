@@ -4,19 +4,6 @@ open Abslayout
 
 let rels = Hashtbl.create (module Db.Relation)
 
-let create name fs xs =
-  let rel =
-    Db.{rname= name; fields= List.map fs ~f:(fun f -> {fname= f; dtype= DInt})}
-  in
-  let data =
-    List.map xs ~f:(fun data ->
-        List.map2_exn fs data ~f:(fun fname value -> (fname, `Int value)) )
-  in
-  Hashtbl.set rels ~key:rel ~data ;
-  ( name
-  , List.map fs ~f:(fun f ->
-        Name.{name= f; relation= Some name; type_= Some Type0.PrimType.IntT} ) )
-
 module Eval = Eval.Make_mock (struct
   let rels = rels
 end)
@@ -31,7 +18,8 @@ module S =
 
 [@@@warning "-8"]
 
-let _, [f; _] = create "r1" ["f"; "g"] [[1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]]
+let _, [f; _] =
+  Test_util.create rels "r1" ["f"; "g"] [[1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]]
 
 [@@@warning "+8"]
 
