@@ -25,7 +25,6 @@ type pred =
   | String of (string[@opaque])
   | Null
   | Binop of ((op[@opaque]) * pred * pred)
-  | Varop of ((op[@opaque]) * pred list)
   | As_pred of (pred * string)
 
 and agg =

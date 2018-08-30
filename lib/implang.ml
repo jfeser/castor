@@ -406,8 +406,6 @@ module IRGen = struct
 
   exception IRGenError of Error.t [@@deriving sexp]
 
-  let fail m = raise (IRGenError m)
-
   module Make (Config : Config.S) (Eval : Eval.S) () = struct
     module Abslayout_db = Abslayout_db.Make (Eval)
 
@@ -482,7 +480,7 @@ module IRGen = struct
               Error.create "Unbound variable." (n, ctx)
                 [%sexp_of : A.Name.t * Ctx.t]
               |> Error.raise )
-        | A.Binop (op, arg1, arg2) -> (
+        | A.Binop (op, arg1, arg2) ->
             let e1 = gen_pred arg1 in
             let e2 = gen_pred arg2 in
             match op with
@@ -497,15 +495,7 @@ module IRGen = struct
             | A.Sub -> Infix.(e1 - e2)
             | A.Mul -> Infix.(e1 * e2)
             | A.Div -> Infix.(e1 / e2)
-            | A.Mod -> Infix.(e1 % e2) )
-        | A.Varop (op, args) ->
-            let eargs = List.map ~f:gen_pred args in
-            match op with
-            | A.And -> List.fold_left1_exn ~f:Infix.( && ) eargs
-            | A.Or -> List.fold_left1_exn ~f:Infix.( || ) eargs
-            | A.Eq | A.Lt | A.Le | A.Gt | A.Ge | A.Add | A.Sub | A.Mul | A.Div
-             |A.Mod ->
-                fail (Error.create "Not a vararg operator." op [%sexp_of : A.op])
+            | A.Mod -> Infix.(e1 % e2)
       in
       gen_pred pred
 

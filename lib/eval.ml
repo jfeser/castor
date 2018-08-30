@@ -35,7 +35,7 @@ let rec eval_pred ctx = function
     | None ->
         Error.create "Unbound variable." (n, ctx) [%sexp_of : Name.t * Ctx.t]
         |> Error.raise )
-  | Binop (op, p1, p2) -> (
+  | Binop (op, p1, p2) ->
       let v1 = eval_pred ctx p1 in
       let v2 = eval_pred ctx p2 in
       match (op, v1, v2) with
@@ -57,23 +57,6 @@ let rec eval_pred ctx = function
       | _ ->
           Error.create "Unexpected argument types." (op, v1, v2)
             [%sexp_of : op * Db.primvalue * Db.primvalue]
-          |> Error.raise )
-  | Varop (op, ps) ->
-      let vs = List.map ps ~f:(eval_pred ctx) in
-      match op with
-      | And ->
-          List.for_all vs ~f:(function
-            | `Bool x -> x
-            | _ -> failwith "Unexpected argument type." )
-          |> fun x -> `Bool x
-      | Or ->
-          List.exists vs ~f:(function
-            | `Bool x -> x
-            | _ -> failwith "Unexpected argument type." )
-          |> fun x -> `Bool x
-      | _ ->
-          Error.create "Unexpected argument types." (op, vs)
-            [%sexp_of : op * Db.primvalue list]
           |> Error.raise
 
 module Make (Config : Config.S) : S = struct

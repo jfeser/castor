@@ -154,7 +154,6 @@ let rec pp_pred fmt =
   | Name n -> pp_name fmt n
   | Binop (op, p1, p2) ->
       fprintf fmt "@[<h>%a@ %s@ %a@]" pp_pred p1 (op_to_str op) pp_pred p2
-  | Varop _ -> failwith ""
 
 let pp_agg fmt =
   let open Caml.Format in
@@ -273,7 +272,7 @@ let rec pred_to_sql = function
   | Bool false -> "false"
   | String s -> sprintf "'%s'" s
   | Null -> "null"
-  | Binop (op, p1, p2) -> (
+  | Binop (op, p1, p2) ->
       let s1 = sprintf "(%s)" (pred_to_sql p1) in
       let s2 = sprintf "(%s)" (pred_to_sql p2) in
       match op with
@@ -288,13 +287,7 @@ let rec pred_to_sql = function
       | Sub -> sprintf "%s - %s" s1 s2
       | Mul -> sprintf "%s * %s" s1 s2
       | Div -> sprintf "%s / %s" s1 s2
-      | Mod -> sprintf "%s %% %s" s1 s2 )
-  | Varop (op, ps) ->
-      let ss = List.map ps ~f:(fun p -> sprintf "(%s)" (pred_to_sql p)) in
-      match op with
-      | And -> String.concat ss ~sep:" and "
-      | Or -> String.concat ss ~sep:" or "
-      | _ -> failwith "Unsupported op."
+      | Mod -> sprintf "%s %% %s" s1 s2
 
 (** Return the set of relations which have fields in the tuple produced by
      this expression. *)
@@ -375,7 +368,7 @@ let rec pred_to_schema_exn =
   | Bool _ -> unnamed (BoolT {nullable= false})
   | String _ -> unnamed (StringT {nullable= false})
   | Null -> failwith ""
-  | Binop (op, _, _) | Varop (op, _) ->
+  | Binop (op, _, _) ->
     match op with
     | Eq | Lt | Le | Gt | Ge | And | Or -> unnamed (BoolT {nullable= false})
     | Add | Sub | Mul | Div | Mod -> unnamed (IntT {nullable= false})
