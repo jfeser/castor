@@ -2,6 +2,7 @@ open Core
 open Base
 open Collections
 module Format = Caml.Format
+module A = Abslayout
 
 let fail : Error.t -> 'a = Error.raise
 
@@ -315,10 +316,10 @@ module Builder = struct
         build_assign Infix.(count - int 1) count b )
       b
 
-  let build_foreach ?type_ ~fresh start iter_ body b =
+  let build_foreach ?count ~fresh iter_ args body b =
     let tup = build_fresh_var ~fresh "tup" iter_.ret_type b in
-    build_iter iter_ [start] b ;
-    match Option.map type_ ~f:(fun t -> Type.AbsCount.kind (Type.count t)) with
+    build_iter iter_ args b ;
+    match Option.map count ~f:(fun c -> Type.AbsCount.kind c) with
     | Some (`Count 0) -> ()
     | Some (`Count 1) -> build_step tup iter_ b ; body tup b
     | Some (`Count x) ->
@@ -339,6 +340,53 @@ module Builder = struct
           b
 end
 
+module Ctx = struct
+  type var = Global of expr | Arg of int | Field of expr
+  [@@deriving compare, sexp]
+
+  type t = var Map.M(A.Name).t [@@deriving compare, sexp]
+
+  let var_to_expr v b =
+    match v with Global e | Field e -> e | Arg i -> Builder.build_arg i b
+
+  let of_schema schema tup =
+    List.mapi schema ~f:(fun i n -> (n, Field Infix.(index tup i)))
+    |> Map.of_alist_exn (module A.Name)
+
+  (* Create a context for a callee and a caller argument list. *)
+  let make_callee_context ctx b =
+    Map.fold ctx
+      ~init:(Map.empty (module A.Name), [])
+      ~f:(fun ~key ~data:var (cctx, args) ->
+        match var with
+        | Global _ -> (Map.set ~key ~data:var cctx, args)
+        | Arg _ | Field _ ->
+            (* Pass caller arguments and fields in as arguments to the callee. *)
+            let callee_var = Arg (List.length args) in
+            (Map.set ~key ~data:callee_var cctx, var_to_expr var b :: args) )
+
+  (* Create an argument list for a caller. *)
+  let make_caller_args ctx =
+    Map.to_alist ctx
+    |> List.filter_map ~f:(fun (n, v) ->
+           match v with
+           | Global _ -> None
+           | Arg i -> Some (n, i)
+           | Field _ ->
+               Error.create "Unexpected field in caller context." ctx [%sexp_of : t]
+               |> Error.raise )
+    |> List.sort ~compare:(fun (_, i1) (_, i2) -> Int.compare i1 i2)
+    |> List.map ~f:(fun (n, _) -> (A.Name.to_var n, A.Name.type_exn n))
+
+  let find ctx name builder =
+    Option.map (Map.find ctx name) ~f:(fun v -> var_to_expr v builder)
+
+  let find_exn ctx name builder = Option.value_exn (find ctx name builder)
+
+  let bind ctx name type_ expr =
+    Map.set ctx ~key:(A.Name.create ~type_ name) ~data:(Field expr)
+end
+
 module Config = struct
   module type S = sig
     val code_only : bool
@@ -347,10 +395,7 @@ end
 
 module IRGen = struct
   type ir_module =
-    { iters: func list
-    ; funcs: func list
-    ; params: Abslayout.Name.t list
-    ; buffer_len: int }
+    {iters: func list; funcs: func list; params: A.Name.t list; buffer_len: int}
   [@@deriving sexp]
 
   exception IRGenError of Error.t [@@deriving sexp]
@@ -417,6 +462,46 @@ module IRGen = struct
       | ListT _ -> Some (islice start)
       | FuncT _ -> failwith "Not materialized."
 
+    let gen_pred ~ctx pred b =
+      let rec gen_pred = function
+        | A.Null -> Null
+        | A.Int x -> Int x
+        | A.String x -> String x
+        | A.Bool x -> Bool x
+        | A.Name n -> (
+          match Ctx.find ctx n b with
+          | Some e -> e
+          | None ->
+              Error.create "Unbound variable." (n, ctx)
+                [%sexp_of : A.Name.t * Ctx.t]
+              |> Error.raise )
+        | A.Binop (op, arg1, arg2) -> (
+            let e1 = gen_pred arg1 in
+            let e2 = gen_pred arg2 in
+            match op with
+            | A.Eq -> Infix.(e1 = e2)
+            | A.Lt -> Infix.(e1 < e2)
+            | A.Le -> Infix.(e1 <= e2)
+            | A.Gt -> Infix.(e1 > e2)
+            | A.Ge -> Infix.(e1 >= e2)
+            | A.And -> Infix.(e1 && e2)
+            | A.Or -> Infix.(e1 || e2)
+            | A.Add -> Infix.(e1 + e2)
+            | A.Sub -> Infix.(e1 - e2)
+            | A.Mul -> Infix.(e1 * e2)
+            | A.Div -> Infix.(e1 / e2)
+            | A.Mod -> Infix.(e1 % e2) )
+        | A.Varop (op, args) ->
+            let eargs = List.map ~f:gen_pred args in
+            match op with
+            | A.And -> List.fold_left1_exn ~f:Infix.( && ) eargs
+            | A.Or -> List.fold_left1_exn ~f:Infix.( || ) eargs
+            | A.Eq | A.Lt | A.Le | A.Gt | A.Ge | A.Add | A.Sub | A.Mul | A.Div
+             |A.Mod ->
+                fail (Error.create "Not a vararg operator." op [%sexp_of : A.op])
+      in
+      gen_pred pred
+
     let scan_empty name =
       Builder.(create ~name ~args:[("start", int_t)] ~ret:VoidT |> build_func)
 
@@ -470,96 +555,151 @@ module IRGen = struct
       else build_yield (Tuple [ret_val]) b ;
       build_func b
 
-    let scan_crosstuple name scan rs ts m =
+    type scan_args =
+      { ctx: Ctx.t
+      ; name: string
+      ; scan: Ctx.t -> Abslayout.t -> Type.t -> func
+      ; layout: Abslayout.t
+      ; type_: Type.t }
+
+    [@@@warning "-8"]
+
+    let scan_crosstuple
+        A.({ ctx
+           ; scan
+           ; layout= {node= ATuple (child_layouts, Cross); _} as r
+           ; type_= TupleT (child_types, _) as type_; _ }) =
       let open Builder in
-      let rec loops b start col_offset vars = function
+      let rec make_loops ctx tuples children b =
+        match children with
         | [] ->
             let tup =
-              List.map2_exn ts (List.rev vars) ~f:(fun t v ->
-                  List.init (Type.width t) ~f:(fun i -> Infix.(index v i)) )
+              List.map2_exn child_types (List.rev tuples) ~f:(fun type_ tup ->
+                  List.init (Type.width type_) ~f:(fun i -> Infix.(index tup i)) )
               |> List.concat
             in
             build_yield (Tuple tup) b
-        | (func, type_) :: rest ->
-            let col_start = Infix.(start + col_offset) in
-            build_foreach ~fresh ~type_ col_start func
-              (fun var b ->
-                let col_offset =
-                  build_fresh_defn ~fresh "offset" int_t
-                    Infix.(col_offset + len col_start type_)
-                    b
+        | (layout, type_) :: rest ->
+            let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
+            let callee = scan callee_ctx layout type_ in
+            build_foreach ~fresh ~count:(Type.count type_) callee callee_args
+              (fun tup b ->
+                let caller_ctx =
+                  let next_start =
+                    let start = Ctx.find_exn ctx (A.Name.create "start") b in
+                    Infix.(start + len start type_)
+                  in
+                  let tuple_ctx =
+                    let schema = A.Meta.(find_exn layout schema) in
+                    Ctx.of_schema schema tup
+                  in
+                  Map.merge_right ctx tuple_ctx
+                  |> fun ctx -> Ctx.bind ctx "start" int_t next_start
                 in
-                loops b start col_offset (var :: vars) rest )
+                make_loops caller_ctx (tup :: tuples) rest b )
               b
       in
-      let funcs = List.map2_exn rs ts ~f:(fun r t -> (scan r t, t)) in
-      let ret_type =
-        Type.PrimType.TupleT
-          ( List.map funcs ~f:(fun (func, _) ->
-                match func.ret_type with TupleT ts -> ts | t -> [t] )
-          |> List.concat )
+      let b =
+        let name = A.name r ^ "_" ^ Fresh.name fresh "%d" in
+        let ret_type =
+          let schema = A.Meta.(find_exn r schema) in
+          Type.PrimType.TupleT (List.map schema ~f:A.Name.type_exn)
+        in
+        let args = Ctx.make_caller_args ctx in
+        create ~name ~args ~ret:ret_type
       in
-      let b = create ~name ~args:[("start", int_t)] ~ret:ret_type in
-      let start = Infix.(build_arg 0 b + hsize (TupleT (ts, m))) in
-      loops b start Infix.(int 0) [] funcs ;
+      let ctx =
+        let child_start =
+          let start = Ctx.find_exn ctx (A.Name.create "start") b in
+          Infix.(start + hsize type_)
+        in
+        Ctx.bind ctx "start" int_t child_start
+      in
+      make_loops ctx [] (List.zip_exn child_layouts child_types) b ;
       build_func b
 
-    let scan_ziptuple name scan rs ts (m: Type.tuple) =
+    let scan_ziptuple
+        A.({ ctx
+           ; name
+           ; scan
+           ; layout= {node= ATuple (child_layouts, Zip); _} as r
+           ; type_= TupleT (child_types, {count}) as type_ }) =
       let open Builder in
-      let funcs = List.map2_exn rs ts ~f:scan in
-      let ret_type =
-        List.map funcs ~f:(fun func ->
-            match func.ret_type with TupleT ts -> ts | t -> [t] )
-        |> List.concat
-        |> fun x -> Type.PrimType.TupleT x
+      let b =
+        let ret_type =
+          let schema = A.Meta.(find_exn r schema) in
+          Type.PrimType.TupleT (List.map schema ~f:A.Name.type_exn)
+        in
+        let args = Ctx.make_caller_args ctx in
+        create ~name ~args ~ret:ret_type
       in
-      let b = create ~name ~args:[("start", int_t)] ~ret:ret_type in
-      let start = build_arg 0 b in
+      let start = Ctx.find_exn ctx (A.Name.create "start") b in
+      let ctx = Ctx.bind ctx "start" int_t start in
+      let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
       (* Build iterator initializers using the computed start positions. *)
-      build_assign Infix.(start + hsize (TupleT (ts, m))) start b ;
-      List.iter2_exn funcs ts ~f:(fun f t ->
-          build_iter f [start] b ;
-          build_assign Infix.(start + hsize t + len start t) start b ) ;
+      build_assign Infix.(start + hsize type_) start b ;
+      let callee_funcs =
+        List.map2_exn child_layouts child_types ~f:(fun callee_layout callee_type ->
+            let callee = scan callee_ctx callee_layout callee_type in
+            build_iter callee callee_args b ;
+            build_assign Infix.(start + len start callee_type) start b ;
+            callee )
+      in
       let child_tuples =
-        List.map funcs ~f:(fun f -> build_fresh_var ~fresh "t" f.ret_type b)
+        List.map callee_funcs ~f:(fun f -> build_fresh_var ~fresh "t" f.ret_type b)
       in
       let build_body b =
-        List.iter2_exn funcs child_tuples ~f:(fun f t -> build_step t f b) ;
+        List.iter2_exn callee_funcs child_tuples ~f:(fun f t -> build_step t f b) ;
         let tup =
-          List.map2_exn ts child_tuples ~f:(fun in_t child_tup ->
+          List.map2_exn child_types child_tuples ~f:(fun in_t child_tup ->
               List.init (Type.width in_t) ~f:(fun i -> Infix.(index child_tup i)) )
           |> List.concat
           |> fun l -> Tuple l
         in
         build_yield tup b
       in
-      ( match Type.AbsCount.kind m.count with
+      ( match Type.AbsCount.kind count with
       | `Count x -> build_count_loop ~fresh Infix.(int x) build_body b
       | `Countable | `Unknown ->
           build_body b ;
           let not_done =
-            List.fold_left funcs ~init:(Bool true) ~f:(fun acc f ->
+            List.fold_left callee_funcs ~init:(Bool true) ~f:(fun acc f ->
                 Infix.(acc && not (Done f.name)) )
           in
           build_loop not_done build_body b ) ;
       build_func b
 
-    let scan_unordered_list name scan r t m =
+    let scan_unordered_list
+        A.({ ctx
+           ; name
+           ; scan
+           ; layout= {node= AList (_, child_layout); _} as r
+           ; type_= ListT (child_type, _) as type_ }) =
       let open Builder in
-      let func = scan r t in
-      let b = create ~name ~args:[("start", int_t)] ~ret:func.ret_type in
-      let start = build_arg 0 b in
-      let pcount =
-        build_defn "pcount" int_t (Option.value_exn (count start (ListT (t, m)))) b
+      let b =
+        let ret_type =
+          let schema = A.Meta.(find_exn r schema) in
+          Type.PrimType.TupleT (List.map schema ~f:A.Name.type_exn)
+        in
+        let args = Ctx.make_caller_args ctx in
+        create ~name ~args ~ret:ret_type
       in
-      let cstart =
-        build_defn "cstart" int_t Infix.(start + hsize (ListT (t, m))) b
+      let start = Ctx.find_exn ctx (A.Name.create "start") b in
+      let cstart = build_defn "cstart" int_t Infix.(start + hsize type_) b in
+      let callee_ctx, callee_args =
+        let ctx = Ctx.bind ctx "start" int_t cstart in
+        Ctx.make_callee_context ctx b
+      in
+      let func = scan callee_ctx child_layout child_type in
+      let pcount =
+        build_defn "pcount" int_t (Option.value_exn (count start type_)) b
       in
       build_loop
         Infix.(pcount > int 0)
         (fun b ->
-          let clen = len cstart t in
-          build_foreach ~fresh ~type_:t cstart func build_yield b ;
+          let clen = len cstart child_type in
+          build_foreach ~fresh ~count:(Type.count child_type) func callee_args
+            build_yield b ;
           build_assign Infix.(cstart + clen) cstart b ;
           build_assign Infix.(pcount - int 1) pcount b )
         b ;
@@ -623,67 +763,52 @@ module IRGen = struct
      *   | _ -> failwith "Unexpected parameters." ) ;
      *   build_func b *)
 
-    let gen_pred tup schema =
-      let module A = Abslayout in
-      let rec gen_pred = function
-        | A.Null -> Null
-        | A.Int x -> Int x
-        | A.String x -> String x
-        | A.Bool x -> Bool x
-        | A.Name n -> (
-          match List.findi schema ~f:(fun _ n' -> A.Name.(n = n')) with
-          | Some (i, _) -> Infix.(index tup i)
-          | None -> Var n.A.Name.name )
-        | A.Binop (op, arg1, arg2) -> (
-            let e1 = gen_pred arg1 in
-            let e2 = gen_pred arg2 in
-            match op with
-            | A.Eq -> Infix.(e1 = e2)
-            | A.Lt -> Infix.(e1 < e2)
-            | A.Le -> Infix.(e1 <= e2)
-            | A.Gt -> Infix.(e1 > e2)
-            | A.Ge -> Infix.(e1 >= e2)
-            | A.And -> Infix.(e1 && e2)
-            | A.Or -> Infix.(e1 || e2)
-            | A.Add -> Infix.(e1 + e2)
-            | A.Sub -> Infix.(e1 - e2)
-            | A.Mul -> Infix.(e1 * e2)
-            | A.Div -> Infix.(e1 / e2)
-            | A.Mod -> Infix.(e1 % e2) )
-        | A.Varop (op, args) ->
-            let eargs = List.map ~f:gen_pred args in
-            match op with
-            | A.And -> List.fold_left1_exn ~f:Infix.( && ) eargs
-            | A.Or -> List.fold_left1_exn ~f:Infix.( || ) eargs
-            | A.Eq | A.Lt | A.Le | A.Gt | A.Ge | A.Add | A.Sub | A.Mul | A.Div
-             |A.Mod ->
-                fail (Error.create "Not a vararg operator." op [%sexp_of : A.op])
-      in
-      gen_pred
-
-    let scan_table name scan rs kt vt m =
+    let scan_hash_idx
+        A.({ ctx
+           ; name
+           ; scan
+           ; layout=
+               { node=
+                   AHashIdx
+                     (_, value_layout, {lookup; hi_key_layout= Some key_layout}); _
+               } as r
+           ; type_= HashIdxT (key_type, value_type, _) }) =
       let open Builder in
       (* Keys can only be scalars, so we don't need to pass in a layout for the
          keys. *)
-      let key_iter = scan (Option.value_exn m.Abslayout.hi_key_layout) kt in
-      let value_iter = scan rs vt in
-      let key_type = key_iter.ret_type in
-      let ret_type = value_iter.ret_type in
-      let b = create ~name ~args:[("start", int_t)] ~ret:ret_type in
-      let start = build_arg 0 b in
+      let b =
+        let ret_type =
+          let schema = A.Meta.(find_exn r schema) in
+          Type.PrimType.TupleT (List.map schema ~f:A.Name.type_exn)
+        in
+        let args = Ctx.make_caller_args ctx in
+        create ~name ~args ~ret:ret_type
+      in
+      let start = Ctx.find_exn ctx (A.Name.create "start") b in
+      let kstart = build_var "kstart" int_t b in
+      let key_callee_ctx, key_callee_args =
+        let ctx = Ctx.bind ctx "start" int_t kstart in
+        Ctx.make_callee_context ctx b
+      in
+      let key_iter = scan key_callee_ctx key_layout key_type in
+      let key_tuple = build_var "key" key_iter.ret_type b in
+      let ctx =
+        let key_schema = A.Meta.(find_exn key_layout schema) in
+        Map.merge_right ctx (Ctx.of_schema key_schema key_tuple)
+      in
+      let vstart = build_var "vstart" int_t b in
+      let value_callee_ctx, value_callee_args =
+        let ctx = Ctx.bind ctx "start" int_t vstart in
+        Ctx.make_callee_context ctx b
+      in
+      let value_iter = scan value_callee_ctx value_layout value_type in
       let hash_len = Infix.(islice (start + int isize)) in
       let hash_data_start =
         let header_size = 2 * isize in
         Infix.(start + int header_size)
       in
       let mapping_start = Infix.(hash_data_start + hash_len) in
-      let lookup_expr =
-        match m.Abslayout.lookup with
-        | Name n -> Var n.name
-        | l ->
-            Error.create "Unexpected parameters." l [%sexp_of : Abslayout.pred]
-            |> Error.raise
-      in
+      let lookup_expr = gen_pred ~ctx lookup b in
       (* Compute the index in the mapping table for this key. *)
       let hash_key = Infix.(hash hash_data_start lookup_expr) in
       (* Get a pointer to the value. *)
@@ -693,87 +818,85 @@ module IRGen = struct
         ~cond:Infix.(value_ptr = int 0x0)
         ~then_:(fun _ -> ())
         ~else_:(fun b ->
-          build_iter key_iter [value_ptr] b ;
-          let key = build_fresh_var ~fresh "key" key_type b in
-          build_step key key_iter b ;
-          let value_start = Infix.(value_ptr + len value_ptr kt) in
+          build_assign value_ptr kstart b ;
+          build_iter key_iter key_callee_args b ;
+          build_step key_tuple key_iter b ;
+          build_assign Infix.(value_ptr + len value_ptr key_type) vstart b ;
           build_if
-            ~cond:Infix.(index key 0 = lookup_expr)
+            ~cond:Infix.(index key_tuple 0 = lookup_expr)
             ~then_:
-              (build_foreach ~fresh ~type_:vt value_start value_iter (fun value b ->
-                   build_yield value b ))
+              (build_foreach ~fresh ~count:(Type.count value_type) value_iter
+                 value_callee_args build_yield)
             ~else_:(fun _ -> ())
             b )
         b ;
       build_func b
 
-    let build_bin_search key_index ptr_index key_lt n low_target high_target
-        callback b =
-      let open Builder in
-      let low = build_fresh_defn ~fresh "low" int_t Infix.(int 0) b in
-      let high = build_fresh_defn ~fresh "high" int_t n b in
-      build_loop
-        Infix.(low < high)
-        (fun b ->
-          let mid =
-            build_fresh_defn ~fresh "mid" int_t Infix.((low + high) / int 2) b
-          in
-          let key = key_index mid b in
-          build_if ~cond:(key_lt key low_target)
-            ~then_:(fun b -> build_assign Infix.(mid + int 1) low b)
-            ~else_:(fun b -> build_assign mid high b)
-            b )
-        b ;
-      build_if
-        ~cond:Infix.(low < n)
-        ~then_:(fun b ->
-          build_loop
-            (key_lt (key_index low b) high_target)
-            (fun b ->
-              callback (ptr_index low) b ;
-              build_assign Infix.(low + int 1) low b )
-            b )
-        ~else_:(fun _ -> ())
-        b
+    [@@@warning "+8"]
 
-    let scan_ordered_idx name scan rs kt vt m =
-      let open Builder in
-      (* Keys can only be scalars, so we don't need to pass in a layout for the
-         keys. *)
-      let key_iter = scan (Option.value_exn m.Abslayout.oi_key_layout) kt in
-      let value_iter = scan rs vt in
-      let key_type = key_iter.ret_type in
-      let ret_type = value_iter.ret_type in
-      let b = create ~name ~args:[("start", int_t)] ~ret:ret_type in
-      let start = build_arg 0 b in
-      let index_len = Infix.(islice (start + int isize)) in
-      let header_size = 2 * isize in
-      let index_start = Infix.(start + int header_size) in
-      let key_len = len index_start kt in
-      let ptr_len = Infix.(int isize) in
-      let kp_len = Infix.(key_len + ptr_len) in
-      let key_index i b =
-        let key_start = Infix.(start + int header_size + (i * kp_len)) in
-        build_iter key_iter [key_start] b ;
-        let key = build_fresh_var ~fresh "key" key_type b in
-        build_step key key_iter b ; key
-      in
-      let ptr_index i =
-        let ptr_start = Infix.(start + int header_size + (i * kp_len) + key_len) in
-        Infix.(islice ptr_start)
-      in
-      let key_lt k1 k2 = Infix.(k1 < k2) in
-      let n = Infix.(index_len / kp_len) in
-      build_bin_search key_index ptr_index key_lt n
-        (gen_pred Infix.(int 0) [] m.Abslayout.lookup_low)
-        (gen_pred Infix.(int 0) [] m.Abslayout.lookup_high)
-        (fun ptr b ->
-          build_foreach ~fresh ~type_:vt ptr value_iter
-            (fun value b -> build_yield value b)
-            b )
-        b ;
-      build_func b
-
+    (* let build_bin_search key_index ptr_index key_lt n low_target high_target
+     *     callback b =
+     *   let open Builder in
+     *   let low = build_fresh_defn ~fresh "low" int_t Infix.(int 0) b in
+     *   let high = build_fresh_defn ~fresh "high" int_t n b in
+     *   build_loop
+     *     Infix.(low < high)
+     *     (fun b ->
+     *       let mid =
+     *         build_fresh_defn ~fresh "mid" int_t Infix.((low + high) / int 2) b
+     *       in
+     *       let key = key_index mid b in
+     *       build_if ~cond:(key_lt key low_target)
+     *         ~then_:(fun b -> build_assign Infix.(mid + int 1) low b)
+     *         ~else_:(fun b -> build_assign mid high b)
+     *         b )
+     *     b ;
+     *   build_if
+     *     ~cond:Infix.(low < n)
+     *     ~then_:(fun b ->
+     *       build_loop
+     *         (key_lt (key_index low b) high_target)
+     *         (fun b ->
+     *           callback (ptr_index low) b ;
+     *           build_assign Infix.(low + int 1) low b )
+     *         b )
+     *     ~else_:(fun _ -> ())
+     *     b *)
+    (* let scan_ordered_idx ~ctx name scan rs kt vt m =
+     *   let open Builder in
+     *   let key_iter = scan ~ctx (Option.value_exn m.A.oi_key_layout) kt in
+     *   let value_iter = scan rs vt in
+     *   let key_type = key_iter.ret_type in
+     *   let ret_type = value_iter.ret_type in
+     *   let b = create ~name ~args:[("start", int_t)] ~ret:ret_type in
+     *   let start = build_arg 0 b in
+     *   let index_len = Infix.(islice (start + int isize)) in
+     *   let header_size = 2 * isize in
+     *   let index_start = Infix.(start + int header_size) in
+     *   let key_len = len index_start kt in
+     *   let ptr_len = Infix.(int isize) in
+     *   let kp_len = Infix.(key_len + ptr_len) in
+     *   let key_index i b =
+     *     let key_start = Infix.(start + int header_size + (i * kp_len)) in
+     *     build_iter key_iter [key_start] b ;
+     *     let key = build_fresh_var ~fresh "key" key_type b in
+     *     build_step key key_iter b ; key
+     *   in
+     *   let ptr_index i =
+     *     let ptr_start = Infix.(start + int header_size + (i * kp_len) + key_len) in
+     *     Infix.(islice ptr_start)
+     *   in
+     *   let key_lt k1 k2 = Infix.(k1 < k2) in
+     *   let n = Infix.(index_len / kp_len) in
+     *   build_bin_search key_index ptr_index key_lt n
+     *     (gen_pred ~ctx m.A.lookup_low)
+     *     (gen_pred ~ctx m.A.lookup_high)
+     *     (fun ptr b ->
+     *       build_foreach ~fresh ~type_:vt ptr value_iter
+     *         (fun value b -> build_yield value b)
+     *         b )
+     *     b ;
+     *   build_func b *)
     (* let scan_grouping scan kt vt Type.({output; _} as m) =
      *   let t = Type.(GroupingT (kt, vt, m)) in
      *   let key_iter = scan kt in
@@ -864,9 +987,7 @@ module IRGen = struct
     let printer name func =
       let open Builder in
       let b = create ~args:[] ~name ~ret:VoidT in
-      build_foreach ~fresh
-        Infix.(int 0)
-        func
+      build_foreach ~fresh func []
         (fun x b -> build_print ~type_:func.ret_type x b)
         b ;
       build_func b
@@ -876,100 +997,100 @@ module IRGen = struct
       let open Infix in
       let b = create ~name ~args:[] ~ret:(IntT {nullable= false}) in
       let c = build_defn "c" int_t Infix.(int 0) b in
-      build_foreach ~fresh
-        Infix.(int 0)
-        func
-        (fun _ b -> build_assign (c + int 1) c b)
-        b ;
+      build_foreach ~fresh func [] (fun _ b -> build_assign (c + int 1) c b) b ;
       build_return c b ;
       build_func b
 
-    let scan_filter name scan p r t =
-      let open Builder in
-      let func = scan r t in
-      let b = create ~name ~args:[("start", int_t)] ~ret:func.ret_type in
-      let start = build_arg 0 b in
-      build_foreach ~fresh start func
-        (fun tup b ->
-          build_if
-            ~cond:(gen_pred tup Abslayout.Meta.(find_exn r schema) p)
-            ~then_:(fun b -> build_yield tup b)
-            ~else_:(fun _ -> ())
-            b )
-        b ;
-      build_func b
+    (* let scan_filter name scan p r t =
+     *   let open Builder in
+     *   let func = scan r t in
+     *   let b = create ~name ~args:[("start", int_t)] ~ret:func.ret_type in
+     *   let start = build_arg 0 b in
+     *   build_foreach ~fresh start func
+     *     (fun tup b ->
+     *       build_if ~cond:(gen_pred p)
+     *         ~then_:(fun b -> build_yield tup b)
+     *         ~else_:(fun _ -> ())
+     *         b )
+     *     b ;
+     *   build_func b
+     * 
+     * let scan_select name scan x r t =
+     *   let open Builder in
+     *   (\* TODO: Remove horrible hack. *\)
+     *   let func = scan r t in
+     *   let out_expr = ref (Tuple []) in
+     *   let b = create ~name ~args:[("start", int_t)] ~ret:(IntT {nullable= false}) in
+     *   let start = build_arg 0 b in
+     *   let schema = A.Meta.(find_exn r schema) in
+     *   build_foreach ~fresh start func
+     *     (fun tup b ->
+     *       out_expr := Tuple (List.map x ~f:gen_pred) ;
+     *       build_yield !out_expr b )
+     *     b ;
+     *   let func = build_func b in
+     *   let tctx = Hashtbl.of_alist_exn (module String) func.locals in
+     *   let ret_t = infer_type tctx !out_expr in
+     *   {func with ret_type= ret_t}
+     * 
+     * let nl_join name scan pred r1 t1 r2 t2 =
+     *   let open Builder in
+     *   let func1 = scan r1 t1 in
+     *   let func2 = scan r2 t2 in
+     *   let ret_t1 = func1.ret_type in
+     *   let ret_t2 = func2.ret_type in
+     *   let ret_t, w1, w2 =
+     *     match (ret_t1, ret_t2) with
+     *     | TupleT t1, TupleT t2 ->
+     *         (Type.PrimType.TupleT (t1 @ t2), List.length t1, List.length t2)
+     *     | _ ->
+     *         fail
+     *           (Error.create "Expected a TupleT." (ret_t1, ret_t2)
+     *              [%sexp_of : Type.PrimType.t * Type.PrimType.t])
+     *   in
+     *   let schema = A.(Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema)) in
+     *   let b = create ~name ~args:[("start", int_t)] ~ret:ret_t in
+     *   build_foreach ~fresh
+     *     Infix.(int 0)
+     *     func1
+     *     (fun t1 b ->
+     *       build_foreach ~fresh
+     *         Infix.(int 0)
+     *         func2
+     *         (fun t2 b ->
+     *           let tup =
+     *             Tuple
+     *               ( List.init w1 ~f:(fun i -> Infix.(index t1 i))
+     *               @ List.init w2 ~f:(fun i -> Infix.(index t2 i)) )
+     *           in
+     *           build_if ~cond:(gen_pred pred)
+     *             ~then_:(fun b -> build_yield tup b)
+     *             ~else_:(fun _ -> ())
+     *             b )
+     *         b )
+     *     b ;
+     *   build_func b *)
 
-    let scan_select name scan x r t =
-      let open Builder in
-      (* TODO: Remove horrible hack. *)
-      let func = scan r t in
-      let out_expr = ref (Tuple []) in
-      let b = create ~name ~args:[("start", int_t)] ~ret:(IntT {nullable= false}) in
-      let start = build_arg 0 b in
-      let schema = Abslayout.Meta.(find_exn r schema) in
-      build_foreach ~fresh start func
-        (fun tup b ->
-          out_expr := Tuple (List.map x ~f:(gen_pred tup schema)) ;
-          build_yield !out_expr b )
-        b ;
-      let func = build_func b in
-      let tctx = Hashtbl.of_alist_exn (module String) func.locals in
-      let ret_t = infer_type tctx !out_expr in
-      {func with ret_type= ret_t}
-
-    let nl_join name scan pred r1 t1 r2 t2 =
-      let open Builder in
-      let func1 = scan r1 t1 in
-      let func2 = scan r2 t2 in
-      let ret_t1 = func1.ret_type in
-      let ret_t2 = func2.ret_type in
-      let ret_t, w1, w2 =
-        match (ret_t1, ret_t2) with
-        | TupleT t1, TupleT t2 ->
-            (Type.PrimType.TupleT (t1 @ t2), List.length t1, List.length t2)
-        | _ ->
-            fail
-              (Error.create "Expected a TupleT." (ret_t1, ret_t2)
-                 [%sexp_of : Type.PrimType.t * Type.PrimType.t])
-      in
-      let schema =
-        Abslayout.(Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema))
-      in
-      let b = create ~name ~args:[("start", int_t)] ~ret:ret_t in
-      build_foreach ~fresh
-        Infix.(int 0)
-        func1
-        (fun t1 b ->
-          build_foreach ~fresh
-            Infix.(int 0)
-            func2
-            (fun t2 b ->
-              let tup =
-                Tuple
-                  ( List.init w1 ~f:(fun i -> Infix.(index t1 i))
-                  @ List.init w2 ~f:(fun i -> Infix.(index t2 i)) )
-              in
-              build_if ~cond:(gen_pred tup schema pred)
-                ~then_:(fun b -> build_yield tup b)
-                ~else_:(fun _ -> ())
-                b )
-            b )
-        b ;
-      build_func b
-
-    let gen_abslayout ~data_fn r =
-      let open Abslayout in
+    let gen_abslayout ~ctx ~data_fn r =
       let type_ = Abslayout_db.to_type r in
       let writer = Bitstring.Writer.with_file data_fn in
       let r, len = Serialize.serialize writer type_ r in
       Bitstring.Writer.flush writer ;
       Bitstring.Writer.close writer ;
       Out_channel.with_file "scanner.sexp" ~f:(fun ch ->
-          Sexp.pp_hum
-            (Caml.Format.formatter_of_out_channel ch)
-            ([%sexp_of : Abslayout.t] r) ) ;
-      let rec gen_func r t =
-        let name = Abslayout.name r ^ "_" ^ Fresh.name fresh "%d" in
+          Sexp.pp_hum (Caml.Format.formatter_of_out_channel ch) ([%sexp_of : A.t] r)
+      ) ;
+      let rec gen_func ctx r t =
+        let name = A.name r ^ "_" ^ Fresh.name fresh "%d" in
+        let ctx =
+          match A.Meta.(find_exn r pos) with
+          | Pos start ->
+              Map.set ctx
+                ~key:(A.Name.create ~type_:int_t "start")
+                ~data:Ctx.(Global Infix.(int (Int64.to_int_exn start)))
+          | Many_pos -> ctx
+        in
+        let scan_args = {ctx; name; layout= r; type_= t; scan} in
         let func =
           match (r.node, t) with
           | _, Type.IntT m -> scan_int name m
@@ -977,43 +1098,31 @@ module IRGen = struct
           | _, StringT m -> scan_string name m
           | _, EmptyT -> scan_empty name
           | _, NullT -> scan_null name
-          | ATuple (rs, Cross), TupleT (ts, m) -> scan_crosstuple name scan rs ts m
-          | ATuple (rs, Zip), TupleT (ts, m) -> scan_ziptuple name scan rs ts m
-          | AList (_, rs), ListT (ts, m) -> scan_unordered_list name scan rs ts m
-          | AHashIdx (_, rs, m), HashIdxT (kt, vt, _) ->
-              scan_table name scan rs kt vt m
-          | AOrderedIdx (_, rs, m), OrderedIdxT (kt, vt, _) ->
-              scan_ordered_idx name scan rs kt vt m
-          | Select (x, r), FuncT ([t], _) -> scan_select name scan x r t
-          | Filter (x, r), FuncT ([t], _) -> scan_filter name scan x r t
-          | Join {pred; r1; r2}, FuncT ([t1; t2], _) ->
-              nl_join name scan pred r1 t1 r2 t2
+          | ATuple (_, Cross), TupleT _ -> scan_crosstuple scan_args
+          | ATuple (_, Zip), TupleT _ -> scan_ziptuple scan_args
+          | AList _, ListT _ -> scan_unordered_list scan_args
+          | AHashIdx _, HashIdxT _ -> scan_hash_idx scan_args
+          (* | AOrderedIdx _, OrderedIdxT _ -> scan_ordered_idx scan_args
+           * | Select _, FuncT _ -> scan_select scan_args
+           * | Filter _, FuncT _ -> scan_filter scan_args
+           * | Join _, FuncT _ -> nl_join scan_args *)
           | _ ->
-              Error.create "Unsupported at runtime." r [%sexp_of : t] |> Error.raise
+              Error.create "Unsupported at runtime." r [%sexp_of : A.t]
+              |> Error.raise
         in
-        add_func func ;
-        (* Add a wrapper that calls the function with the correct start position
-           if there is only one start position associated with the function. *)
-        match Abslayout.Meta.(find_exn r pos) with
-        | Pos start ->
-            let open Builder in
-            let name = "wrap_" ^ name in
-            let ret_t = func.ret_type in
-            let builder = create ~name ~args:[("no_start", int_t)] ~ret:ret_t in
-            build_foreach ~fresh
-              Infix.(int (Int64.to_int_exn start))
-              func build_yield builder ;
-            let wrapper_func = build_func builder in
-            add_func wrapper_func ; wrapper_func
-        | Many_pos -> func
-      and scan r t =
-        match r.node with As (_, r) -> scan r t | _ -> gen_func r t
+        add_func func ; func
+      and scan ctx r t =
+        match r.node with As (_, r) -> scan ctx r t | _ -> gen_func ctx r t
       in
-      (scan r type_, len)
+      (scan ctx r type_, len)
 
     let irgen_abstract ~data_fn r =
-      let params = Abslayout.params r |> Set.to_list in
-      let top_func, len = gen_abslayout ~data_fn r in
+      let params = A.params r |> Set.to_list in
+      let ctx =
+        List.map params ~f:(fun n -> (n, Ctx.Global (Var n.name)))
+        |> Map.of_alist_exn (module A.Name)
+      in
+      let top_func, len = gen_abslayout ~ctx ~data_fn r in
       { iters= List.rev !funcs
       ; funcs= [printer "printer" top_func; counter "counter" top_func]
       ; params

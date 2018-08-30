@@ -301,10 +301,17 @@ module Make (Eval : Eval.S) = struct
             let ctx = Set.union inner_ctx outer_ctx in
             let l, ctx = resolve ctx l in
             (AList (r, l), ctx)
-        | ATuple (ls, t) ->
+        | ATuple (ls, (Zip as t)) ->
             let ls, ctxs = List.map ls ~f:(resolve outer_ctx) |> List.unzip in
             let ctx = Set.union_list (module Name) ctxs in
             (ATuple (ls, t), ctx)
+        | ATuple (ls, (Cross as t)) ->
+            let ls, ctx =
+              List.fold_left ls ~init:(ls, outer_ctx) ~f:(fun (ls, ctx) l ->
+                  let l, ctx' = resolve ctx l in
+                  (l :: ls, Set.union ctx ctx') )
+            in
+            (ATuple (List.rev ls, t), ctx)
         | AHashIdx (r, l, m) ->
             let r, inner_ctx = resolve outer_ctx r in
             let ctx = Set.union inner_ctx outer_ctx in

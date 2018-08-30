@@ -18,8 +18,13 @@ module Name = struct
 
   let create ?relation ?type_ name = {relation; name; type_}
 
-  let type_exn {type_; _} =
-    match type_ with Some t -> t | None -> failwith "missing type"
+  let type_exn ({type_; _} as n) =
+    match type_ with
+    | Some t -> t
+    | None -> Error.create "Missing type." n [%sexp_of : t] |> Error.raise
+
+  let to_var {relation; name; _} =
+    match relation with Some r -> sprintf "%s_%s" r name | None -> name
 
   let to_sql {relation; name; _} =
     match relation with
