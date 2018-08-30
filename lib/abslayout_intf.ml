@@ -130,6 +130,8 @@ module type S = sig
 
     val pos : pos key
 
+    val find : t -> 'a key -> 'a option
+
     val find_exn : t -> 'a key -> 'a
 
     val set : t -> 'a key -> 'a -> t

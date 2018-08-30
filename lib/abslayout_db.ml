@@ -307,15 +307,16 @@ module Make (Eval : Eval.S) = struct
             (ATuple (ls, t), ctx)
         | ATuple (ls, (Cross as t)) ->
             let ls, ctx =
-              List.fold_left ls ~init:(ls, outer_ctx) ~f:(fun (ls, ctx) l ->
-                  let l, ctx' = resolve ctx l in
+              List.fold_left ls
+                ~init:([], Set.empty (module Name))
+                ~f:(fun (ls, ctx) l ->
+                  let l, ctx' = resolve (Set.union outer_ctx ctx) l in
                   (l :: ls, Set.union ctx ctx') )
             in
             (ATuple (List.rev ls, t), ctx)
         | AHashIdx (r, l, m) ->
             let r, inner_ctx = resolve outer_ctx r in
             let ctx = Set.union inner_ctx outer_ctx in
-            let l, ctx = resolve ctx l in
             let m =
               (object
                  inherit [_] map
@@ -324,6 +325,7 @@ module Make (Eval : Eval.S) = struct
               end)
                 #visit_hash_idx () m
             in
+            let l, ctx = resolve ctx l in
             (AHashIdx (r, l, m), ctx)
         | AOrderedIdx (r, l, m) ->
             let r, inner_ctx = resolve outer_ctx r in

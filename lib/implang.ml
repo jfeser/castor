@@ -228,6 +228,7 @@ module Builder = struct
     ; ret: Type.PrimType.t
     ; locals: Type.PrimType.t Hashtbl.M(String).t
     ; body: prog ref }
+  [@@deriving sexp]
 
   let create ?(args= []) ~name ~ret =
     if List.length args < 1 then Logs.warn (fun m -> m "No start argument: %s" name) ;
@@ -249,10 +250,12 @@ module Builder = struct
       Hashtbl.set locals ~key:n ~data:t ;
       Var n )
 
-  let build_arg i {args; _} =
+  let build_arg i ({args; _} as b) =
     match List.nth args i with
     | Some (n, _) -> Var n
-    | None -> fail (Error.of_string "Not an argument index.")
+    | None ->
+        Error.create "Not an argument index." (i, b) [%sexp_of : int * func_b]
+        |> fail
 
   let build_yield e b = b.body := Yield e :: !(b.body)
 
@@ -359,7 +362,10 @@ module Ctx = struct
       ~init:(Map.empty (module A.Name), [])
       ~f:(fun ~key ~data:var (cctx, args) ->
         match var with
-        | Global _ -> (Map.set ~key ~data:var cctx, args)
+        | Global _ -> (
+          match Map.add ~key ~data:var cctx with
+          | `Duplicate -> (cctx, args)
+          | `Ok cctx -> (cctx, args) )
         | Arg _ | Field _ ->
             (* Pass caller arguments and fields in as arguments to the callee. *)
             let callee_var = Arg (List.length args) in
@@ -1083,12 +1089,14 @@ module IRGen = struct
       let rec gen_func ctx r t =
         let name = A.name r ^ "_" ^ Fresh.name fresh "%d" in
         let ctx =
-          match A.Meta.(find_exn r pos) with
-          | Pos start ->
-              Map.set ctx
-                ~key:(A.Name.create ~type_:int_t "start")
-                ~data:Ctx.(Global Infix.(int (Int64.to_int_exn start)))
-          | Many_pos -> ctx
+          match A.Meta.(find r pos) with
+          | Some (Pos start) ->
+              (* We don't want to bind over a start parameter that's already being
+               passed in. *)
+              Map.update ctx (A.Name.create ~type_:int_t "start") ~f:(function
+                | Some x -> x
+                | None -> Ctx.(Global Infix.(int (Int64.to_int_exn start))) )
+          | Some Many_pos | None -> ctx
         in
         let scan_args = {ctx; name; layout= r; type_= t; scan} in
         let func =

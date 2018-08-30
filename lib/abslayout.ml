@@ -439,28 +439,29 @@ let pred_to_name = function Name n -> Some n | _ -> None
 
 let annotate_key_layouts =
   let key_layout schema =
-    match List.map schema ~f:(fun n -> scalar (Name n)) with
-    | [] -> failwith "empty schema"
-    | [x] -> x
-    | xs -> tuple xs Cross
+    let layout =
+      match List.map schema ~f:(fun n -> scalar (Name n)) with
+      | [] -> failwith "empty schema"
+      | [x] -> x
+      | xs -> tuple xs Cross
+    in
+    Meta.set layout Meta.schema schema
   in
   let annotator =
     object
-      inherit [_] endo
-      method! visit_t _ ({node; _} as l) =
-        match node with
-        | AHashIdx (x, y, ({hi_key_layout= None; _} as m)) ->
+      inherit [_] map
+      method! visit_AHashIdx () ((x, y, ({hi_key_layout; _} as m)) as r) =
+        match hi_key_layout with
+        | Some _ -> AHashIdx r
+        | None ->
             let schema = Meta.find_exn x Meta.schema in
-            { l with
-              node= AHashIdx (x, y, {m with hi_key_layout= Some (key_layout schema)})
-            }
-        | AOrderedIdx (x, y, ({oi_key_layout= None; _} as m)) ->
+            AHashIdx (x, y, {m with hi_key_layout= Some (key_layout schema)})
+      method! visit_AOrderedIdx () ((x, y, ({oi_key_layout; _} as m)) as r) =
+        match oi_key_layout with
+        | Some _ -> AOrderedIdx r
+        | None ->
             let schema = Meta.find_exn x Meta.schema in
-            { l with
-              node=
-                AOrderedIdx (x, y, {m with oi_key_layout= Some (key_layout schema)})
-            }
-        | _ -> l
+            AOrderedIdx (x, y, {m with oi_key_layout= Some (key_layout schema)})
     end
   in
   annotator#visit_t ()
