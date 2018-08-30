@@ -474,6 +474,7 @@ module IRGen = struct
         | A.Int x -> Int x
         | A.String x -> String x
         | A.Bool x -> Bool x
+        | A.As_pred (x, _) -> gen_pred x
         | A.Name n -> (
           match Ctx.find ctx n b with
           | Some e -> e

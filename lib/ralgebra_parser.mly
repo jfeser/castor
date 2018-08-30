@@ -55,11 +55,12 @@
 %start <Abslayout0.t> abs_ralgebra_eof
 %start <Abslayout0.name> name_eof
 
-%left OR
-%left AND
-%nonassoc GE GT LE LT EQ
+%right OR
+%right AND
+%left GE GT LE LT EQ
 %left ADD SUB
 %left MUL DIV MOD
+%nonassoc AS
 %%
 
 abs_ralgebra_eof:
@@ -170,6 +171,7 @@ abs_pred:
 | p1 = abs_pred; MOD; p2 = abs_pred { A.Binop (A.Mod, p1, p2) }
 | p1 = abs_pred; AND; p2 = abs_pred { A.Binop (A.And, p1, p2) }
 | p1 = abs_pred; OR; p2 = abs_pred { A.Binop (A.Or, p1, p2) }
+| p = abs_pred; AS; id = ID { A.As_pred (p, id) }
 
 abs_agg_expr:
 | COUNT { A.Count }

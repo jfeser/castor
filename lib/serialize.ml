@@ -308,7 +308,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
 
   let serialize_scalar sctx type_ expr =
     log_start "Scalar" ;
-    eval_pred sctx.ctx expr |> serialize_value type_
+    Eval.eval_pred sctx.ctx expr |> serialize_value type_
     |> Bitstring.Writer.write sctx.writer ;
     log_end ()
 

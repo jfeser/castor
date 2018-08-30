@@ -146,6 +146,7 @@ let pp_kind fmt =
 let rec pp_pred fmt =
   let open Caml.Format in
   function
+  | As_pred (p, n) -> fprintf fmt "@[<h>%a@ as@ %s]" pp_pred p n
   | Null -> fprintf fmt "null"
   | Int x -> fprintf fmt "%d" x
   | Bool x -> fprintf fmt "%B" x
@@ -239,60 +240,6 @@ let pred_of_value = function
   | `Null -> Null
   | `Unknown x -> String x
 
-let rec eval_pred =
-  let raise = Error.raise in
-  fun ctx -> function
-    | Null -> `Null
-    | Int x -> `Int x
-    | String x -> `String x
-    | Bool x -> `Bool x
-    | Name n -> (
-      match Map.find ctx n with
-      | Some v -> v
-      | None ->
-          Error.create "Unbound variable." (n, ctx) [%sexp_of : Name.t * Ctx.t]
-          |> raise )
-    | Binop (op, p1, p2) -> (
-        let v1 = eval_pred ctx p1 in
-        let v2 = eval_pred ctx p2 in
-        match (op, v1, v2) with
-        | Eq, `Null, _ | Eq, _, `Null -> `Bool false
-        | Eq, `Bool x1, `Bool x2 -> `Bool Bool.(x1 = x2)
-        | Eq, `Int x1, `Int x2 -> `Bool Int.(x1 = x2)
-        | Eq, `String x1, `String x2 -> `Bool String.(x1 = x2)
-        | Lt, `Int x1, `Int x2 -> `Bool (x1 < x2)
-        | Le, `Int x1, `Int x2 -> `Bool (x1 <= x2)
-        | Gt, `Int x1, `Int x2 -> `Bool (x1 > x2)
-        | Ge, `Int x1, `Int x2 -> `Bool (x1 >= x2)
-        | Add, `Int x1, `Int x2 -> `Int (x1 + x2)
-        | Sub, `Int x1, `Int x2 -> `Int (x1 - x2)
-        | Mul, `Int x1, `Int x2 -> `Int (x1 * x2)
-        | Div, `Int x1, `Int x2 -> `Int (x1 / x2)
-        | Mod, `Int x1, `Int x2 -> `Int (x1 % x2)
-        | And, `Bool x1, `Bool x2 -> `Bool (x1 && x2)
-        | Or, `Bool x1, `Bool x2 -> `Bool (x1 || x2)
-        | _ ->
-            Error.create "Unexpected argument types." (op, v1, v2)
-              [%sexp_of : op * primvalue * primvalue]
-            |> raise )
-    | Varop (op, ps) ->
-        let vs = List.map ps ~f:(eval_pred ctx) in
-        match op with
-        | And ->
-            List.for_all vs ~f:(function
-              | `Bool x -> x
-              | _ -> failwith "Unexpected argument type." )
-            |> fun x -> `Bool x
-        | Or ->
-            List.exists vs ~f:(function
-              | `Bool x -> x
-              | _ -> failwith "Unexpected argument type." )
-            |> fun x -> `Bool x
-        | _ ->
-            Error.create "Unexpected argument types." (op, vs)
-              [%sexp_of : op * primvalue list]
-            |> raise
-
 let subst ctx =
   let v =
     object
@@ -319,6 +266,7 @@ let pred_relations p =
   f#visit_pred () p ; !rels
 
 let rec pred_to_sql = function
+  | As_pred (p, n) -> sprintf "%s as %s" (pred_to_sql p) n
   | Name n -> sprintf "%s" (Name.to_sql n)
   | Int x -> Int.to_string x
   | Bool true -> "true"
@@ -414,9 +362,12 @@ let ralgebra_to_sql r =
 
 let unnamed t = {name= ""; relation= None; type_= Some t}
 
-let pred_to_schema_exn =
+let rec pred_to_schema_exn =
   let open Type0.PrimType in
   function
+  | As_pred (p, n) ->
+      let schema = pred_to_schema_exn p in
+      {schema with relation= None; name= n}
   | Name ({type_= None; _} as n) ->
       Error.create "Missing type." n [%sexp_of : Name.t] |> Error.raise
   | Name ({type_= Some _; _} as n) -> n

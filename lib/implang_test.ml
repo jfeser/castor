@@ -288,7 +288,7 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
          return c;
     } |}]
 
-let%expect_test "example-1" =
+let%expect_test "example-2" =
   let module I =
     Implang.IRGen.Make (struct
         let code_only = true

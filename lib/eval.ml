@@ -24,6 +24,7 @@ module Config = struct
 end
 
 let rec eval_pred ctx = function
+  | As_pred (p, _) -> eval_pred ctx p
   | Null -> `Null
   | Int x -> `Int x
   | String x -> `String x

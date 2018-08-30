@@ -76,7 +76,7 @@ module Make (Eval : Eval.S) = struct
         in
         self#build_AHashIdx kv h
       method visit_AEmpty _ = self#build_AEmpty
-      method visit_AScalar ctx e = self#build_AScalar (eval_pred ctx e)
+      method visit_AScalar ctx e = self#build_AScalar (Eval.eval_pred ctx e)
       method visit_AOrderedIdx ctx q value_l (h: ordered_idx) =
         let key_l =
           Option.value_exn

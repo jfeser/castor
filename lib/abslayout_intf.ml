@@ -56,6 +56,7 @@ module type S = sig
     | Null
     | Binop of ((op[@opaque]) * pred * pred)
     | Varop of ((op[@opaque]) * pred list)
+    | As_pred of (pred * string)
   [@@deriving sexp_of]
 
   type agg = Abslayout0.agg =
@@ -155,8 +156,6 @@ module type S = sig
 
     val of_tuple : Db.Tuple.t -> t
   end
-
-  val eval_pred : Ctx.t -> pred -> Db.primvalue
 
   val pred_relations : pred -> string list
 
