@@ -10,13 +10,6 @@ end)
 
 module M = Abslayout_db.Make (Eval)
 
-module I =
-  Implang.IRGen.Make (struct
-      let code_only = true
-    end)
-    (Eval)
-    ()
-
 let _ =
   Test_util.create rels "r1" ["f"; "g"] [[1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]]
 
@@ -25,6 +18,12 @@ let _ =
     [[1; 4; 1]; [2; 3; 2]; [3; 4; 3]; [4; 6; 1]; [5; 6; 3]]
 
 let%expect_test "cross-tuple" =
+  let module I =
+    Implang.IRGen.Make (struct
+        let code_only = true
+      end)
+      (Eval)
+      () in
   let layout =
     of_string_exn "AList(r1, ATuple([AScalar(r1.f), AScalar(r1.g - r1.f)], cross))"
     |> M.resolve |> M.annotate_schema |> annotate_key_layouts
@@ -77,6 +76,12 @@ let%expect_test "cross-tuple" =
     } |}]
 
 let%expect_test "hash-idx" =
+  let module I =
+    Implang.IRGen.Make (struct
+        let code_only = true
+      end)
+      (Eval)
+      () in
   let layout =
     of_string_exn
       "ATuple([AList(r1, AScalar(r1.f)) as f, AHashIdx(dedup(select([r1.f], r1)) \
@@ -88,41 +93,21 @@ let%expect_test "hash-idx" =
     {|
     fun scalar_3 (start) {
         yield (buf[start : 1]);
-    }fun scalar_5 (start) {
-         yield (buf[start : 1]);
-    }fun tuple_2 (start) {
-         init scalar_3(start + 8);
-         tup4 = next(scalar_3);
-         init scalar_5(tup4[0], start + 8 + 1);
-         tup6 = next(scalar_5);
-         yield (tup4[0], tup6[0]);
-    }fun list_0 () {
-         cstart = 16;
-         pcount = buf[0 : 8];
-         loop (0 < pcount) {
-             init tuple_2(cstart);
-             tup7 = next(tuple_2);
-             yield tup7;
-             cstart = cstart + buf[cstart : 8];
-             pcount = pcount - 1;
-         }
-    }fun scalar_13 (start) {
-         yield (buf[start : 1]);
-    }fun list_12 (start) {
+    }fun list_2 (start) {
          cstart = start + 16;
          pcount = buf[start : 8];
          loop (0 < pcount) {
-             init scalar_13(cstart);
-             tup14 = next(scalar_13);
-             yield tup14;
+             init scalar_3(cstart);
+             tup4 = next(scalar_3);
+             yield tup4;
              cstart = cstart + 1;
              pcount = pcount - 1;
          }
-    }fun scalar_18 (start) {
+    }fun scalar_8 (start) {
          yield (buf[start : 1]);
-    }fun scalar_19 (start) {
+    }fun scalar_9 (start) {
          yield (buf[start : 1]);
-    }fun hash_idx_17 (start,
+    }fun hash_idx_7 (start,
          f_f) {
          if (buf[start + 16 + buf[start + 8 : 8] + hash(start + 16, f_f) * 8 :
              8] = 0) {
@@ -130,50 +115,50 @@ let%expect_test "hash-idx" =
          } else {
               kstart = buf[start + 16 + buf[start + 8 : 8] + hash(start +
               16, f_f) * 8 : 8];
-              init scalar_18(f_f, kstart);
-              key = next(scalar_18);
+              init scalar_8(f_f, kstart);
+              key = next(scalar_8);
               vstart = buf[start + 16 + buf[start + 8 : 8] + hash(start +
               16, f_f) * 8 : 8] + 1;
               if (key[0] = f_f) {
-                  init scalar_19(key[0], f_f, vstart);
-                  tup20 = next(scalar_19);
-                  yield tup20;
+                  init scalar_9(key[0], f_f, vstart);
+                  tup10 = next(scalar_9);
+                  yield tup10;
               } else {
 
               }
          }
-    }fun tuple_11 () {
-         init list_12(8);
-         count16 = 5;
-         loop (0 < count16) {
-             tup15 = next(list_12);
-             init hash_idx_17(tup15[0], 8 + buf[8 : 8]);
-             loop (not done(hash_idx_17)) {
-                 tup21 = next(hash_idx_17);
-                 if (not done(hash_idx_17)) {
-                     yield (tup15[0], tup21[0], tup21[1]);
+    }fun tuple_1 () {
+         init list_2(8);
+         count6 = 5;
+         loop (0 < count6) {
+             tup5 = next(list_2);
+             init hash_idx_7(tup5[0], 8 + buf[8 : 8]);
+             loop (not done(hash_idx_7)) {
+                 tup11 = next(hash_idx_7);
+                 if (not done(hash_idx_7)) {
+                     yield (tup5[0], tup11[0], tup11[1]);
                  } else {
 
                  }
              }
-             count16 = count16 - 1;
+             count6 = count6 - 1;
          }
     }fun printer () {
-         init tuple_11();
-         loop (not done(tuple_11)) {
-             tup23 = next(tuple_11);
-             if (not done(tuple_11)) {
-                 print(Tuple[Int, Int, Int[nonnull]], tup23);
+         init tuple_1();
+         loop (not done(tuple_1)) {
+             tup13 = next(tuple_1);
+             if (not done(tuple_1)) {
+                 print(Tuple[Int, Int, Int[nonnull]], tup13);
              } else {
 
              }
          }
     }fun counter () {
          c = 0;
-         init tuple_11();
-         loop (not done(tuple_11)) {
-             tup22 = next(tuple_11);
-             if (not done(tuple_11)) {
+         init tuple_1();
+         loop (not done(tuple_1)) {
+             tup12 = next(tuple_1);
+             if (not done(tuple_1)) {
                  c = c + 1;
              } else {
 
@@ -183,6 +168,12 @@ let%expect_test "hash-idx" =
     } |}]
 
 let%expect_test "example-1" =
+  let module I =
+    Implang.IRGen.Make (struct
+        let code_only = true
+      end)
+      (Eval)
+      () in
   let params =
     [ Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p"
     ; Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c" ]
@@ -197,6 +188,130 @@ atuple([ascalar(lp.id), ascalar(lp.counter),
 alist(filter(lp.counter < log.counter &&
 log.counter < lp.succ, log) as lc,
 atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
+|}
+    |> M.resolve ~params |> M.annotate_schema |> annotate_key_layouts
+  in
+  I.irgen_abstract ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter ;
+  [%expect
+    {|
+    fun scalar_4 (start) {
+        yield (buf[start : 1]);
+    }fun scalar_6 (start) {
+         yield (buf[start : 1]);
+    }fun scalar_11 (start) {
+         yield (buf[start : 1]);
+    }fun scalar_13 (start) {
+         yield (buf[start : 1]);
+    }fun tuple_10 (start,
+         lp_counter,
+         lp_id) {
+         init scalar_11(lp_id, lp_counter, start + 8);
+         tup12 = next(scalar_11);
+         init scalar_13(lp_id, lp_counter, tup12[0], start + 8 + 1);
+         tup14 = next(scalar_13);
+         yield (tup12[0], tup14[0]);
+    }fun list_8 (start,
+         lp_counter,
+         lp_id) {
+         cstart = start + 16;
+         pcount = buf[start : 8];
+         loop (0 < pcount) {
+             init tuple_10(lp_id, lp_counter, cstart);
+             tup15 = next(tuple_10);
+             yield tup15;
+             cstart = cstart + buf[cstart : 8];
+             pcount = pcount - 1;
+         }
+    }fun tuple_3 (start) {
+         init scalar_4(start + 8);
+         tup5 = next(scalar_4);
+         init scalar_6(tup5[0], start + 8 + 1);
+         tup7 = next(scalar_6);
+         init list_8(tup5[0], tup7[0], start + 8 + 1 + 1);
+         loop (not done(list_8)) {
+             tup16 = next(list_8);
+             if (not done(list_8)) {
+                 yield (tup5[0], tup7[0], tup16[0], tup16[1]);
+             } else {
+
+             }
+         }
+    }fun list_1 () {
+         cstart = 16;
+         pcount = buf[0 : 8];
+         loop (0 < pcount) {
+             init tuple_3(cstart);
+             loop (not done(tuple_3)) {
+                 tup17 = next(tuple_3);
+                 if (not done(tuple_3)) {
+                     yield tup17;
+                 } else {
+
+                 }
+             }
+             cstart = cstart + buf[cstart : 8];
+             pcount = pcount - 1;
+         }
+    }fun filter_0 () {
+         init list_1();
+         count19 = 6;
+         loop (0 < count19) {
+             tup18 = next(list_1);
+             if (tup18[2] = id_c && tup18[0] = id_p) {
+                 yield tup18;
+             } else {
+
+             }
+             count19 = count19 - 1;
+         }
+    }fun printer () {
+         init filter_0();
+         loop (not done(filter_0)) {
+             tup21 = next(filter_0);
+             if (not done(filter_0)) {
+                 print(Tuple[Int, Int, Int, Int], tup21);
+             } else {
+
+             }
+         }
+    }fun counter () {
+         c = 0;
+         init filter_0();
+         loop (not done(filter_0)) {
+             tup20 = next(filter_0);
+             if (not done(filter_0)) {
+                 c = c + 1;
+             } else {
+
+             }
+         }
+         return c;
+    } |}]
+
+let%expect_test "example-1" =
+  let module I =
+    Implang.IRGen.Make (struct
+        let code_only = true
+      end)
+      (Eval)
+      () in
+  let params =
+    [ Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p"
+    ; Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c" ]
+    |> Set.of_list (module Name.Compare_no_type)
+  in
+  let layout =
+    of_string_exn
+      {|
+ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k], 
+      join(true, log as lp, log as lc))),
+  alist(select([lp.counter, lc.counter], 
+    join(lp.counter < lc.counter && 
+         lc.counter < lp.succ, 
+      filter(log.id = lp_k, log) as lp, 
+      filter(log.id = lc_k, log) as lc)),
+    atuple([ascalar(lp.counter), ascalar(lc.counter)], cross)),
+  (id_p, id_c))
 |}
     |> M.resolve ~params |> M.annotate_schema |> annotate_key_layouts
   in

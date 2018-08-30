@@ -17,8 +17,18 @@ let%expect_test "subst" =
     {|
     ((node
       (Filter (Binop (Eq (Int 1) (Int 2)))
-       ((node (Select ((Int 1) (Int 2)) ((node (Scan r)) (meta ())))) (meta ()))))
-     (meta ())) |}]
+       ((node
+         (Select ((Int 1) (Int 2))
+          ((node (Scan r))
+           (meta
+            ((end_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 38)))
+             (start_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 37))))))))
+        (meta
+         ((end_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 39)))
+          (start_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 18))))))))
+     (meta
+      ((end_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 40)))
+       (start_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 0)))))) |}]
 
 let%expect_test "project-empty" =
   let r = of_string_exn "Select([], r)" in
@@ -81,7 +91,8 @@ let%expect_test "mat-col" =
              (String GERMA)))
            ((node (Scan ship_mode))
             (meta
-             ((schema
+             ((end_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 54)))
+              (schema
                (((relation (ship_mode)) (name sm_ship_mode_sk)
                  (type_ ((IntT (nullable true)))))
                 ((relation (ship_mode)) (name sm_ship_mode_id)
@@ -93,9 +104,11 @@ let%expect_test "mat-col" =
                 ((relation (ship_mode)) (name sm_carrier)
                  (type_ ((StringT (nullable true)))))
                 ((relation (ship_mode)) (name sm_contract)
-                 (type_ ((StringT (nullable true))))))))))))
+                 (type_ ((StringT (nullable true)))))))
+              (start_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 45))))))))
          (meta
-          ((schema
+          ((end_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 55)))
+           (schema
             (((relation (ship_mode)) (name sm_ship_mode_sk)
               (type_ ((IntT (nullable true)))))
              ((relation (ship_mode)) (name sm_ship_mode_id)
@@ -107,20 +120,25 @@ let%expect_test "mat-col" =
              ((relation (ship_mode)) (name sm_carrier)
               (type_ ((StringT (nullable true)))))
              ((relation (ship_mode)) (name sm_contract)
-              (type_ ((StringT (nullable true))))))))))
+              (type_ ((StringT (nullable true)))))))
+           (start_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 6))))))
         ((node
           (AScalar
            (Name
             ((relation (ship_mode)) (name sm_carrier)
              (type_ ((StringT (nullable true))))))))
          (meta
-          ((schema
+          ((end_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 86)))
+           (schema
             (((relation (ship_mode)) (name sm_carrier)
-              (type_ ((StringT (nullable true)))))))))))))
+              (type_ ((StringT (nullable true)))))))
+           (start_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 57)))))))))
      (meta
-      ((schema
+      ((end_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 87)))
+       (schema
         (((relation (ship_mode)) (name sm_carrier)
-          (type_ ((StringT (nullable true)))))))))) |}]
+          (type_ ((StringT (nullable true)))))))
+       (start_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 0)))))) |}]
 
 let%expect_test "mat-hidx" =
   let conn = new Postgresql.connection ~dbname:"tpcds1" () in
@@ -160,7 +178,9 @@ let%expect_test "mat-hidx" =
                       (String LIBRARY)))
                     ((node (Scan ship_mode))
                      (meta
-                      ((schema
+                      ((end_pos
+                        ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 90)))
+                       (schema
                         (((relation (ship_mode)) (name sm_ship_mode_sk)
                           (type_ ((IntT (nullable true)))))
                          ((relation (ship_mode)) (name sm_ship_mode_id)
@@ -172,9 +192,13 @@ let%expect_test "mat-hidx" =
                          ((relation (ship_mode)) (name sm_carrier)
                           (type_ ((StringT (nullable true)))))
                          ((relation (ship_mode)) (name sm_contract)
-                          (type_ ((StringT (nullable true))))))))))))
+                          (type_ ((StringT (nullable true)))))))
+                       (start_pos
+                        ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 81))))))))
                   (meta
-                   ((schema
+                   ((end_pos
+                     ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 91)))
+                    (schema
                      (((relation (ship_mode)) (name sm_ship_mode_sk)
                        (type_ ((IntT (nullable true)))))
                       ((relation (ship_mode)) (name sm_ship_mode_id)
@@ -186,18 +210,28 @@ let%expect_test "mat-hidx" =
                       ((relation (ship_mode)) (name sm_carrier)
                        (type_ ((StringT (nullable true)))))
                       ((relation (ship_mode)) (name sm_contract)
-                       (type_ ((StringT (nullable true))))))))))))
+                       (type_ ((StringT (nullable true)))))))
+                    (start_pos
+                     ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 43))))))))
                (meta
-                ((schema
+                ((end_pos
+                  ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 92)))
+                 (schema
                   (((relation (ship_mode)) (name sm_type)
-                    (type_ ((StringT (nullable true))))))))))))
+                    (type_ ((StringT (nullable true)))))))
+                 (start_pos
+                  ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 15))))))))
             (meta
-             ((schema
+             ((end_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 93)))
+              (schema
                (((relation (ship_mode)) (name sm_type)
-                 (type_ ((StringT (nullable true))))))))))))
+                 (type_ ((StringT (nullable true)))))))
+              (start_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 9))))))))
          (meta
-          ((schema
-            (((relation (t)) (name sm_type) (type_ ((StringT (nullable true))))))))))
+          ((end_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 98)))
+           (schema
+            (((relation (t)) (name sm_type) (type_ ((StringT (nullable true)))))))
+           (start_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 9))))))
         ((node
           (AList
            (((node
@@ -214,7 +248,9 @@ let%expect_test "mat-hidx" =
                       (type_ ((StringT (nullable true))))))))
                   ((node (Scan ship_mode))
                    (meta
-                    ((schema
+                    ((end_pos
+                      ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 153)))
+                     (schema
                       (((relation (ship_mode)) (name sm_ship_mode_sk)
                         (type_ ((IntT (nullable true)))))
                        ((relation (ship_mode)) (name sm_ship_mode_id)
@@ -226,9 +262,13 @@ let%expect_test "mat-hidx" =
                        ((relation (ship_mode)) (name sm_carrier)
                         (type_ ((StringT (nullable true)))))
                        ((relation (ship_mode)) (name sm_contract)
-                        (type_ ((StringT (nullable true))))))))))))
+                        (type_ ((StringT (nullable true)))))))
+                     (start_pos
+                      ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 144))))))))
                 (meta
-                 ((schema
+                 ((end_pos
+                   ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 154)))
+                  (schema
                    (((relation (ship_mode)) (name sm_ship_mode_sk)
                      (type_ ((IntT (nullable true)))))
                     ((relation (ship_mode)) (name sm_ship_mode_id)
@@ -240,9 +280,12 @@ let%expect_test "mat-hidx" =
                     ((relation (ship_mode)) (name sm_carrier)
                      (type_ ((StringT (nullable true)))))
                     ((relation (ship_mode)) (name sm_contract)
-                     (type_ ((StringT (nullable true))))))))))))
+                     (type_ ((StringT (nullable true)))))))
+                  (start_pos
+                   ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 106))))))))
              (meta
-              ((schema
+              ((end_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 159)))
+               (schema
                 (((relation (t)) (name sm_ship_mode_sk)
                   (type_ ((IntT (nullable true)))))
                  ((relation (t)) (name sm_ship_mode_id)
@@ -254,24 +297,33 @@ let%expect_test "mat-hidx" =
                  ((relation (t)) (name sm_carrier)
                   (type_ ((StringT (nullable true)))))
                  ((relation (t)) (name sm_contract)
-                  (type_ ((StringT (nullable true))))))))))
+                  (type_ ((StringT (nullable true)))))))
+               (start_pos
+                ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 106))))))
             ((node
               (AScalar
                (Name
                 ((relation (t)) (name sm_code)
                  (type_ ((StringT (nullable true))))))))
              (meta
-              ((schema
+              ((end_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 179)))
+               (schema
                 (((relation (t)) (name sm_code)
-                  (type_ ((StringT (nullable true)))))))))))))
+                  (type_ ((StringT (nullable true)))))))
+               (start_pos
+                ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 161)))))))))
          (meta
-          ((schema
-            (((relation (t)) (name sm_code) (type_ ((StringT (nullable true))))))))))
+          ((end_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 180)))
+           (schema
+            (((relation (t)) (name sm_code) (type_ ((StringT (nullable true)))))))
+           (start_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 100))))))
         ((hi_key_layout ()) (lookup Null)))))
      (meta
-      ((schema
+      ((end_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 187)))
+       (schema
         (((relation (t)) (name sm_type) (type_ ((StringT (nullable true)))))
-         ((relation (t)) (name sm_code) (type_ ((StringT (nullable true)))))))))) |}]
+         ((relation (t)) (name sm_code) (type_ ((StringT (nullable true)))))))
+       (start_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 0)))))) |}]
 
 let rels = Hashtbl.create (module Db.Relation)
 

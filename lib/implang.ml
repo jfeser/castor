@@ -780,8 +780,6 @@ module IRGen = struct
                } as r
            ; type_= HashIdxT (key_type, value_type, _) }) =
       let open Builder in
-      (* Keys can only be scalars, so we don't need to pass in a layout for the
-         keys. *)
       let b =
         let ret_type =
           let schema = A.Meta.(find_exn r schema) in
@@ -1007,21 +1005,39 @@ module IRGen = struct
       build_return c b ;
       build_func b
 
-    (* let scan_filter name scan p r t =
-     *   let open Builder in
-     *   let func = scan r t in
-     *   let b = create ~name ~args:[("start", int_t)] ~ret:func.ret_type in
-     *   let start = build_arg 0 b in
-     *   build_foreach ~fresh start func
-     *     (fun tup b ->
-     *       build_if ~cond:(gen_pred p)
-     *         ~then_:(fun b -> build_yield tup b)
-     *         ~else_:(fun _ -> ())
-     *         b )
-     *     b ;
-     *   build_func b
-     * 
-     * let scan_select name scan x r t =
+    let scan_filter args =
+      match args with
+      | A.({ ctx
+           ; name
+           ; scan
+           ; layout= {node= Filter (pred, child_layout); _} as r
+           ; type_= FuncT ([child_type], _) }) ->
+          let open Builder in
+          let b =
+            let ret_type =
+              let schema = A.Meta.(find_exn r schema) in
+              Type.PrimType.TupleT (List.map schema ~f:A.Name.type_exn)
+            in
+            let args = Ctx.make_caller_args ctx in
+            create ~name ~args ~ret:ret_type
+          in
+          let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
+          let func = scan callee_ctx child_layout child_type in
+          build_foreach ~fresh ~count:(Type.count child_type) func callee_args
+            (fun tup b ->
+              let ctx =
+                let child_schema = A.Meta.(find_exn child_layout schema) in
+                Map.merge_right ctx (Ctx.of_schema child_schema tup)
+              in
+              build_if ~cond:(gen_pred ~ctx pred b)
+                ~then_:(fun b -> build_yield tup b)
+                ~else_:(fun _ -> ())
+                b )
+            b ;
+          build_func b
+      | _ -> failwith "Unexpected args."
+
+    (* let scan_select name scan x r t =
      *   let open Builder in
      *   (\* TODO: Remove horrible hack. *\)
      *   let func = scan r t in
@@ -1111,9 +1127,10 @@ module IRGen = struct
           | AList _, ListT _ -> scan_unordered_list scan_args
           | AHashIdx _, HashIdxT _ -> scan_hash_idx scan_args
           (* | AOrderedIdx _, OrderedIdxT _ -> scan_ordered_idx scan_args
-           * | Select _, FuncT _ -> scan_select scan_args
-           * | Filter _, FuncT _ -> scan_filter scan_args
-           * | Join _, FuncT _ -> nl_join scan_args *)
+           * | Select _, FuncT _ -> scan_select scan_args *)
+          | Filter _, FuncT _ ->
+              scan_filter scan_args
+          (* | Join _, FuncT _ -> nl_join scan_args *)
           | _ ->
               Error.create "Unsupported at runtime." r [%sexp_of : A.t]
               |> Error.raise
