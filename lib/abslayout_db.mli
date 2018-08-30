@@ -8,5 +8,5 @@ module Make (Eval : Eval.S) : sig
 
   val annotate_schema : t -> t
 
-  val resolve : ?params:Set.M(Name).t -> t -> t
+  val resolve : ?params:Set.M(Name.Compare_no_type).t -> t -> t
 end

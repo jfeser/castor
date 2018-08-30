@@ -159,7 +159,7 @@ module Make (Eval : Eval.S) = struct
 
   include TF
 
-  let to_type ?(ctx= Map.empty (module Name)) l =
+  let to_type ?(ctx= Map.empty (module Name.Compare_no_type)) l =
     Logs.debug (fun m ->
         m "Computing type of abstract layout: %s"
           (Sexp.to_string_hum ([%sexp_of : t] l)) ) ;
@@ -201,36 +201,47 @@ module Make (Eval : Eval.S) = struct
     mapper#visit_t ()
 
   (** Annotate names in an algebra expression with types. *)
-  let resolve ?(params= Set.empty (module Name)) r =
+  let resolve ?(params= Set.empty (module Name.Compare_no_type)) r =
     let resolve_relation r_name =
       let r = Eval.load_relation r_name in
       List.map r.fields ~f:(fun f ->
           { relation= Some r.rname
           ; name= f.fname
           ; type_= Some (Type.PrimType.of_dtype f.Db.dtype) } )
-      |> Set.of_list (module Name)
+      |> Set.of_list (module Name.Compare_no_type)
     in
     let rename name s =
       Set.map
-        (module Name)
+        (module Name.Compare_no_type)
         s
         ~f:(fun n -> {n with relation= Option.map n.relation ~f:(fun _ -> name)})
     in
     let resolve_name ctx n =
-      match n.type_ with
-      | Some _ -> n
-      | None ->
-        match
-          Set.find (Set.union params ctx) ~f:(fun n' ->
-              Polymorphic_compare.(n.name = n'.name && n.relation = n'.relation) )
-        with
-        | Some n -> n
-        | None ->
-            Error.create "Could not resolve." (n, ctx)
-              [%sexp_of : Name.t * Set.M(Name).t]
-            |> Error.raise
+      let ctx = Set.union params ctx in
+      let could_not_resolve =
+        Error.create "Could not resolve." (n, ctx)
+          [%sexp_of : Name.t * Set.M(Name).t]
+      in
+      match (n.type_, n.relation) with
+      | Some _, Some _ -> n
+      | None, Some _ -> (
+        match Set.find ctx ~f:(fun n' -> Name.Compare_no_type.(n' = n)) with
+        | Some n' -> n'
+        | None -> Error.raise could_not_resolve )
+      | _, None ->
+          let matches =
+            Set.to_list ctx
+            |> List.filter ~f:(fun n' -> Name.Compare_name_only.(n = n'))
+          in
+          match matches with
+          | [] -> Error.raise could_not_resolve
+          | [n'] -> n'
+          | n' :: n'' :: _ ->
+              Error.create "Ambiguous name." (n, n', n'')
+                [%sexp_of : Name.t * Name.t * Name.t]
+              |> Error.raise
     in
-    let empty_ctx = Set.empty (module Name) in
+    let empty_ctx = Set.empty (module Name.Compare_no_type) in
     let resolve_agg ctx = function
       | Count -> Count
       | Key n -> Key (resolve_name ctx n)
@@ -248,11 +259,11 @@ module Make (Eval : Eval.S) = struct
     in
     let preds_to_names preds =
       List.filter_map preds ~f:(function Name n -> Some n | _ -> None)
-      |> Set.of_list (module Name)
+      |> Set.of_list (module Name.Compare_no_type)
     in
     let aggs_to_names aggs =
       List.filter_map aggs ~f:(function Key n -> Some n | _ -> None)
-      |> Set.of_list (module Name)
+      |> Set.of_list (module Name.Compare_no_type)
     in
     let rec resolve outer_ctx {node; meta} =
       let node', ctx' =
@@ -273,7 +284,9 @@ module Make (Eval : Eval.S) = struct
             let r1, inner_ctx1 = resolve outer_ctx r1 in
             let r2, inner_ctx2 = resolve outer_ctx r2 in
             let ctx =
-              Set.union_list (module Name) [inner_ctx1; inner_ctx2; outer_ctx]
+              Set.union_list
+                (module Name.Compare_no_type)
+                [inner_ctx1; inner_ctx2; outer_ctx]
             in
             let pred = resolve_pred ctx pred in
             (Join {pred; r1; r2}, Set.union inner_ctx1 inner_ctx2)
@@ -292,8 +305,8 @@ module Make (Eval : Eval.S) = struct
             let p = resolve_pred outer_ctx p in
             let ctx =
               match p with
-              | Name n -> Set.singleton (module Name) n
-              | _ -> Set.empty (module Name)
+              | Name n -> Set.singleton (module Name.Compare_no_type) n
+              | _ -> empty_ctx
             in
             (AScalar p, ctx)
         | AList (r, l) ->
@@ -303,13 +316,11 @@ module Make (Eval : Eval.S) = struct
             (AList (r, l), ctx)
         | ATuple (ls, (Zip as t)) ->
             let ls, ctxs = List.map ls ~f:(resolve outer_ctx) |> List.unzip in
-            let ctx = Set.union_list (module Name) ctxs in
+            let ctx = Set.union_list (module Name.Compare_no_type) ctxs in
             (ATuple (ls, t), ctx)
         | ATuple (ls, (Cross as t)) ->
             let ls, ctx =
-              List.fold_left ls
-                ~init:([], Set.empty (module Name))
-                ~f:(fun (ls, ctx) l ->
+              List.fold_left ls ~init:([], empty_ctx) ~f:(fun (ls, ctx) l ->
                   let l, ctx' = resolve (Set.union outer_ctx ctx) l in
                   (l :: ls, Set.union ctx ctx') )
             in
@@ -352,6 +363,6 @@ module Make (Eval : Eval.S) = struct
       in
       ({node= node'; meta}, ctx')
     in
-    let r, _ = resolve (Set.empty (module Name)) r in
+    let r, _ = resolve empty_ctx r in
     r
 end

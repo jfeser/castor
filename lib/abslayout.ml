@@ -7,14 +7,37 @@ include Abslayout0
 module Name = struct
   module T = struct
     type t = Abslayout0.name =
-      { relation: string option
-      ; name: string
-      ; type_: Type0.PrimType.t option [@compare.ignore] }
-    [@@deriving compare, hash, sexp]
+      {relation: string option; name: string; type_: Type0.PrimType.t option}
+    [@@deriving sexp]
+  end
+
+  module Compare_no_type = struct
+    module T = struct
+      type t = T.t =
+        { relation: string option
+        ; name: string
+        ; type_: Type0.PrimType.t option [@compare.ignore] }
+      [@@deriving compare, hash, sexp]
+    end
+
+    include T
+    include Comparable.Make (T)
+  end
+
+  module Compare_name_only = struct
+    module T = struct
+      type t = T.t =
+        { relation: string option [@compare.ignore]
+        ; name: string
+        ; type_: Type0.PrimType.t option [@compare.ignore] }
+      [@@deriving compare, hash, sexp]
+    end
+
+    include T
+    include Comparable.Make (T)
   end
 
   include T
-  include Comparable.Make (T)
 
   let create ?relation ?type_ name = {relation; name; type_}
 
@@ -41,36 +64,6 @@ module Name = struct
 
   let of_field ?rel f =
     {relation= rel; name= f.fname; type_= Some (Type.PrimType.of_dtype f.dtype)}
-end
-
-module Meta = struct
-  open Core
-
-  type 'a key = 'a Univ_map.Key.t
-
-  type pos = Pos of int64 | Many_pos [@@deriving sexp]
-
-  let empty () = ref Univ_map.empty
-
-  let schema = Univ_map.Key.create ~name:"schema" [%sexp_of : Name.t list]
-
-  let pos = Univ_map.Key.create ~name:"pos" [%sexp_of : pos]
-
-  let update r key ~f = r.meta := Univ_map.update !(r.meta) key ~f
-
-  let find ralgebra key = Univ_map.find !(ralgebra.meta) key
-
-  let find_exn ralgebra key =
-    match find ralgebra key with
-    | Some x -> x
-    | None ->
-        Error.create "Missing metadata."
-          (Univ_map.Key.name key, ralgebra)
-          [%sexp_of : string * t]
-        |> Error.raise
-
-  let set ralgebra k v =
-    {ralgebra with meta= ref (Univ_map.set !(ralgebra.meta) k v)}
 end
 
 let select a b = {node= Select (a, b); meta= Meta.empty ()}
@@ -199,12 +192,12 @@ let rec pp fmt {node; _} =
   | _ -> failwith "unsupported"
 
 module Ctx = struct
-  type t = primvalue Map.M(Name).t [@@deriving compare, hash, sexp]
+  type t = primvalue Map.M(Name.Compare_no_type).t [@@deriving compare, hash, sexp]
 
   let of_tuple : Tuple.t -> t =
    fun t ->
     List.fold_left t
-      ~init:(Map.empty (module Name))
+      ~init:(Map.empty (module Name.Compare_no_type))
       ~f:(fun m v ->
         let n =
           { relation= Some v.rel.rname
@@ -228,10 +221,11 @@ let params r =
   let ralgebra_params =
     object (self)
       inherit [_] reduce
-      method zero = Set.empty (module Name)
+      method zero = Set.empty (module Name.Compare_no_type)
       method plus = Set.union
       method! visit_Name () n =
-        if Option.is_none n.relation then Set.singleton (module Name) n
+        if Option.is_none n.relation then
+          Set.singleton (module Name.Compare_no_type) n
         else self#zero
       method visit_name _ _ = self#zero
     end

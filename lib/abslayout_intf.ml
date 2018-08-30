@@ -4,9 +4,19 @@ module type S = sig
   module Name : sig
     type t = Abslayout0.name =
       {relation: string option; name: string; type_: Type.PrimType.t option}
-    [@@deriving compare, sexp]
+    [@@deriving sexp]
 
-    include Comparable.S with type t := t
+    module Compare_no_type : sig
+      type t = Abslayout0.name [@@deriving compare, hash, sexp]
+
+      include Comparable.S with type t := t
+    end
+
+    module Compare_name_only : sig
+      type t = Abslayout0.name [@@deriving compare, hash, sexp]
+
+      include Comparable.S with type t := t
+    end
 
     val create : ?relation:string -> ?type_:Type.PrimType.t -> string -> t
 
@@ -93,7 +103,7 @@ module type S = sig
 
   val name : t -> string
 
-  val params : t -> Set.M(Name).t
+  val params : t -> Set.M(Name.Compare_no_type).t
 
   val select : pred list -> t -> t
 
@@ -140,7 +150,8 @@ module type S = sig
   end
 
   module Ctx : sig
-    type t = Db.primvalue Map.M(Name).t [@@deriving compare, hash, sexp]
+    type t = Db.primvalue Map.M(Name.Compare_no_type).t
+    [@@deriving compare, hash, sexp]
 
     val of_tuple : Db.Tuple.t -> t
   end

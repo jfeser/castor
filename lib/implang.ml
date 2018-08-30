@@ -347,20 +347,20 @@ module Ctx = struct
   type var = Global of expr | Arg of int | Field of expr
   [@@deriving compare, sexp]
 
-  type t = var Map.M(A.Name).t [@@deriving compare, sexp]
+  type t = var Map.M(A.Name.Compare_no_type).t [@@deriving compare, sexp]
+
+  let empty = Map.empty (module A.Name.Compare_no_type)
 
   let var_to_expr v b =
     match v with Global e | Field e -> e | Arg i -> Builder.build_arg i b
 
   let of_schema schema tup =
     List.mapi schema ~f:(fun i n -> (n, Field Infix.(index tup i)))
-    |> Map.of_alist_exn (module A.Name)
+    |> Map.of_alist_exn (module A.Name.Compare_no_type)
 
   (* Create a context for a callee and a caller argument list. *)
   let make_callee_context ctx b =
-    Map.fold ctx
-      ~init:(Map.empty (module A.Name), [])
-      ~f:(fun ~key ~data:var (cctx, args) ->
+    Map.fold ctx ~init:(empty, []) ~f:(fun ~key ~data:var (cctx, args) ->
         match var with
         | Global _ -> (
           match Map.add ~key ~data:var cctx with
@@ -1128,7 +1128,7 @@ module IRGen = struct
       let params = A.params r |> Set.to_list in
       let ctx =
         List.map params ~f:(fun n -> (n, Ctx.Global (Var n.name)))
-        |> Map.of_alist_exn (module A.Name)
+        |> Map.of_alist_exn (module A.Name.Compare_no_type)
       in
       let top_func, len = gen_abslayout ~ctx ~data_fn r in
       { iters= List.rev !funcs

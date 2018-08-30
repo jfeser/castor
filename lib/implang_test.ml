@@ -17,20 +17,21 @@ module I =
     (Eval)
     ()
 
-[@@@warning "-8"]
-
-let _, [f; _] =
+let _ =
   Test_util.create rels "r1" ["f"; "g"] [[1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]]
 
-[@@@warning "+8"]
+let _ =
+  Test_util.create rels "log" ["id"; "succ"; "counter"]
+    [[1; 4; 1]; [2; 3; 2]; [3; 4; 3]; [4; 6; 1]; [5; 6; 3]]
 
 let%expect_test "cross-tuple" =
   let layout =
     of_string_exn "AList(r1, ATuple([AScalar(r1.f), AScalar(r1.g - r1.f)], cross))"
     |> M.resolve |> M.annotate_schema |> annotate_key_layouts
   in
-  I.irgen_abstract ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter;
-  [%expect {|
+  I.irgen_abstract ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter ;
+  [%expect
+    {|
     fun scalar_3 (start) {
         yield (buf[start : 1]);
     }fun scalar_5 (start) {
@@ -82,10 +83,9 @@ let%expect_test "hash-idx" =
        as k, ascalar(k.f+1), f.f)], cross)"
     |> M.resolve |> M.annotate_schema |> annotate_key_layouts
   in
-  (* [%sexp_of : t] layout |> print_s *)
-  I.irgen_abstract ~data_fn:"/tmp/buf" layout
-  |> I.pp Caml.Format.std_formatter;
-  [%expect {|
+  I.irgen_abstract ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter ;
+  [%expect
+    {|
     fun scalar_3 (start) {
         yield (buf[start : 1]);
     }fun scalar_5 (start) {
@@ -181,6 +181,26 @@ let%expect_test "hash-idx" =
          }
          return c;
     } |}]
+
+let%expect_test "example-1" =
+  let params =
+    [ Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p"
+    ; Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c" ]
+    |> Set.of_list (module Name.Compare_no_type)
+  in
+  let layout =
+    of_string_exn
+      {|
+filter(lc.id = id_c && lp.id = id_p,
+alist(filter(succ > counter + 1, log) as lp,
+atuple([ascalar(lp.id), ascalar(lp.counter),
+alist(filter(lp.counter < log.counter &&
+log.counter < lp.succ, log) as lc,
+atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
+|}
+    |> M.resolve ~params |> M.annotate_schema |> annotate_key_layouts
+  in
+  I.irgen_abstract ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter
 
 (* let%expect_test "ordered-idx" =
  *   let layout =

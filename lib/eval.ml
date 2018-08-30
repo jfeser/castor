@@ -123,7 +123,7 @@ module Make (Config : Config.S) : S = struct
                    Error.create "Mismatched tuple." (t, schema)
                      [%sexp_of : Db.primvalue Map.M(String).t * Name.t list]
                    |> Error.raise )
-           |> Map.of_alist_exn (module Name) )
+           |> Map.of_alist_exn (module Name.Compare_no_type) )
 end
 
 module Make_mock (Config : Config.S_mock) : S = struct
@@ -165,13 +165,13 @@ module Make_mock (Config : Config.S_mock) : S = struct
         let ctx = Map.merge_right ctx t in
         List.filter_map out ~f:(fun e ->
             Option.map (pred_to_name e) ~f:(fun n -> (n, eval_pred ctx e)) )
-        |> Map.of_alist_exn (module Name) )
+        |> Map.of_alist_exn (module Name.Compare_no_type) )
 
   let eval_as rel_n seq =
     Seq.map seq ~f:(fun t ->
         Map.to_alist t
         |> List.map ~f:(fun (n, v) -> (Name.{n with relation= Some rel_n}, v))
-        |> Map.of_alist_exn (module Name) )
+        |> Map.of_alist_exn (module Name.Compare_no_type) )
 
   module Key = struct
     module T = struct
@@ -207,7 +207,7 @@ module Make_mock (Config : Config.S_mock) : S = struct
           |> Seq.map ~f:(fun t ->
                  List.map t ~f:(fun Value.({rel; field; value}) ->
                      (Name.create ~relation:rel.rname field.fname, value) )
-                 |> Map.of_alist_exn (module Name) )
+                 |> Map.of_alist_exn (module Name.Compare_no_type) )
       | Filter (p, r) -> eval_filter ctx p (eval r)
       | Join {pred= p; r1; r2} -> eval_join ctx p (eval r1) (eval r2)
       | Dedup r -> eval_dedup (eval r)

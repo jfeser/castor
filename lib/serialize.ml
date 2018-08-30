@@ -388,7 +388,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
    *     method visit_t (writer, ctx) type_ ({node; _} as r) =
    *   end *)
 
-  let serialize ?(ctx= Map.empty (module Name)) writer t l =
+  let serialize ?(ctx= Map.empty (module Name.Compare_no_type)) writer t l =
     Logs.debug (fun m ->
         m "Serializing abstract layout: %s" (Sexp.to_string_hum ([%sexp_of : t] l))
     ) ;

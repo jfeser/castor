@@ -81,54 +81,54 @@ abs_ralgebra:
   | SELECT; LPAREN;
   x = bracket_list(abs_pred); COMMA;
   r = abs_ralgebra;
-  RPAREN { A.Select (x, r) |> node }
+  RPAREN { A.Select (x, r) |> node $symbolstartpos $endpos }
 
 | AGG; LPAREN;
   x = bracket_list(abs_agg_expr); COMMA;
   k = bracket_list(name); COMMA;
   r = abs_ralgebra;
-  RPAREN { A.Agg (x, k, r) |> node }
+  RPAREN { A.Agg (x, k, r) |> node $symbolstartpos $endpos }
 
 | FILTER; LPAREN;
   x = abs_pred; COMMA;
   r = abs_ralgebra;
-  RPAREN { A.Filter (x, r) |> node }
+  RPAREN { A.Filter (x, r) |> node $symbolstartpos $endpos }
 
 | JOIN; LPAREN;
   p = abs_pred; COMMA;
   r1 = abs_ralgebra; COMMA;
   r2 = abs_ralgebra;
-  RPAREN { A.Join({pred = p; r1; r2}) |> node }
+  RPAREN { A.Join({pred = p; r1; r2}) |> node $symbolstartpos $endpos }
 
 | DEDUP; LPAREN;
   r = abs_ralgebra;
-  RPAREN { A.Dedup r |> node }
+  RPAREN { A.Dedup r |> node $symbolstartpos $endpos }
 
 | ORDERBY; LPAREN;
   key = bracket_list(abs_pred); COMMA;
   rel = abs_ralgebra; COMMA;
   order = ORDER;
-  RPAREN { A.OrderBy { key; order; rel } |> node }
+  RPAREN { A.OrderBy { key; order; rel } |> node $symbolstartpos $endpos }
 
-| AEMPTY { node AEmpty }
+| AEMPTY { node $symbolstartpos $endpos AEmpty }
 
-  | ASCALAR; e = parens(abs_pred) { A.AScalar e |> node }
+  | ASCALAR; e = parens(abs_pred) { A.AScalar e |> node $symbolstartpos $endpos }
 
 | ALIST; LPAREN;
   r = abs_ralgebra; COMMA;
   x = abs_ralgebra;
-  RPAREN { A.AList (r, x) |> node }
+  RPAREN { A.AList (r, x) |> node $symbolstartpos $endpos }
 
 | ATUPLE; LPAREN;
   ls = bracket_list(abs_ralgebra); COMMA;
   k = KIND;
-  RPAREN { A.ATuple (ls, k) |> node }
+  RPAREN { A.ATuple (ls, k) |> node $symbolstartpos $endpos }
 
 | AHASHIDX; LPAREN;
   r = abs_ralgebra; COMMA;
   x = abs_ralgebra; COMMA;
   e = abs_pred;
-  RPAREN { A.(AHashIdx (r, x,  { lookup = e; hi_key_layout = None })) |> node }
+  RPAREN { A.(AHashIdx (r, x,  { lookup = e; hi_key_layout = None })) |> node $symbolstartpos $endpos }
 
 | AORDEREDIDX; LPAREN;
   r = abs_ralgebra; COMMA;
@@ -138,11 +138,11 @@ abs_ralgebra:
   RPAREN { A.(AOrderedIdx (r, x, { lookup_low = e1;
                                    lookup_high = e2;
                                    order = `Asc;
-                                   oi_key_layout = None })) |> node }
+                                   oi_key_layout = None })) |> node $symbolstartpos $endpos }
 
-| name = ID { A.Scan name |> node }
+| name = ID { A.Scan name |> node $symbolstartpos $endpos }
 
-| r = abs_ralgebra; AS; n = ID; { A.As (n, r) |> node }
+| r = abs_ralgebra; AS; n = ID; { A.As (n, r) |> node $symbolstartpos $endpos }
 
 | error { error "Expected an operator or relation." $startpos }
 
