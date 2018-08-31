@@ -834,69 +834,107 @@ module IRGen = struct
 
     [@@@warning "+8"]
 
-    (* let build_bin_search key_index ptr_index key_lt n low_target high_target
-     *     callback b =
-     *   let open Builder in
-     *   let low = build_fresh_defn ~fresh "low" int_t Infix.(int 0) b in
-     *   let high = build_fresh_defn ~fresh "high" int_t n b in
-     *   build_loop
-     *     Infix.(low < high)
-     *     (fun b ->
-     *       let mid =
-     *         build_fresh_defn ~fresh "mid" int_t Infix.((low + high) / int 2) b
-     *       in
-     *       let key = key_index mid b in
-     *       build_if ~cond:(key_lt key low_target)
-     *         ~then_:(fun b -> build_assign Infix.(mid + int 1) low b)
-     *         ~else_:(fun b -> build_assign mid high b)
-     *         b )
-     *     b ;
-     *   build_if
-     *     ~cond:Infix.(low < n)
-     *     ~then_:(fun b ->
-     *       build_loop
-     *         (key_lt (key_index low b) high_target)
-     *         (fun b ->
-     *           callback (ptr_index low) b ;
-     *           build_assign Infix.(low + int 1) low b )
-     *         b )
-     *     ~else_:(fun _ -> ())
-     *     b *)
-    (* let scan_ordered_idx ~ctx name scan rs kt vt m =
-     *   let open Builder in
-     *   let key_iter = scan ~ctx (Option.value_exn m.A.oi_key_layout) kt in
-     *   let value_iter = scan rs vt in
-     *   let key_type = key_iter.ret_type in
-     *   let ret_type = value_iter.ret_type in
-     *   let b = create ~name ~args:[("start", int_t)] ~ret:ret_type in
-     *   let start = build_arg 0 b in
-     *   let index_len = Infix.(islice (start + int isize)) in
-     *   let header_size = 2 * isize in
-     *   let index_start = Infix.(start + int header_size) in
-     *   let key_len = len index_start kt in
-     *   let ptr_len = Infix.(int isize) in
-     *   let kp_len = Infix.(key_len + ptr_len) in
-     *   let key_index i b =
-     *     let key_start = Infix.(start + int header_size + (i * kp_len)) in
-     *     build_iter key_iter [key_start] b ;
-     *     let key = build_fresh_var ~fresh "key" key_type b in
-     *     build_step key key_iter b ; key
-     *   in
-     *   let ptr_index i =
-     *     let ptr_start = Infix.(start + int header_size + (i * kp_len) + key_len) in
-     *     Infix.(islice ptr_start)
-     *   in
-     *   let key_lt k1 k2 = Infix.(k1 < k2) in
-     *   let n = Infix.(index_len / kp_len) in
-     *   build_bin_search key_index ptr_index key_lt n
-     *     (gen_pred ~ctx m.A.lookup_low)
-     *     (gen_pred ~ctx m.A.lookup_high)
-     *     (fun ptr b ->
-     *       build_foreach ~fresh ~type_:vt ptr value_iter
-     *         (fun value b -> build_yield value b)
-     *         b )
-     *     b ;
-     *   build_func b *)
+    let build_bin_search key_index ptr_index key_lt n low_target high_target
+        callback b =
+      let open Builder in
+      let low = build_fresh_defn ~fresh "low" int_t Infix.(int 0) b in
+      let high = build_fresh_defn ~fresh "high" int_t n b in
+      build_loop
+        Infix.(low < high)
+        (fun b ->
+          let mid =
+            build_fresh_defn ~fresh "mid" int_t Infix.((low + high) / int 2) b
+          in
+          let key = key_index mid b in
+          build_if ~cond:(key_lt key low_target)
+            ~then_:(fun b -> build_assign Infix.(mid + int 1) low b)
+            ~else_:(fun b -> build_assign mid high b)
+            b )
+        b ;
+      build_if
+        ~cond:Infix.(low < n)
+        ~then_:(fun b ->
+          build_loop
+            (key_lt (key_index low b) high_target)
+            (fun b ->
+              callback (ptr_index low) b ;
+              build_assign Infix.(low + int 1) low b )
+            b )
+        ~else_:(fun _ -> ())
+        b
+
+    let scan_ordered_idx args =
+      match args with
+      | { ctx
+        ; name
+        ; scan
+        ; layout=
+            { node=
+                AOrderedIdx
+                  ( _
+                  , value_layout
+                  , {oi_key_layout= Some key_layout; lookup_low; lookup_high; _} ); _
+            } as r
+        ; type_= OrderedIdxT (key_type, value_type, _) } ->
+          let open Builder in
+          let b =
+            let ret_type =
+              let schema = A.Meta.(find_exn r schema) in
+              Type.PrimType.TupleT (List.map schema ~f:A.Name.type_exn)
+            in
+            let args = Ctx.make_caller_args ctx in
+            create ~name ~args ~ret:ret_type
+          in
+          let start = Ctx.find_exn ctx (A.Name.create "start") b in
+          let kstart = build_var "kstart" int_t b in
+          let key_callee_ctx, key_callee_args =
+            let ctx = Ctx.bind ctx "start" int_t kstart in
+            Ctx.make_callee_context ctx b
+          in
+          let key_iter = scan key_callee_ctx key_layout key_type in
+          let key_tuple = build_var "key" key_iter.ret_type b in
+          let ctx =
+            let key_schema = A.Meta.(find_exn key_layout schema) in
+            Map.merge_right ctx (Ctx.of_schema key_schema key_tuple)
+          in
+          let vstart = build_var "vstart" int_t b in
+          let value_callee_ctx, value_callee_args =
+            let ctx = Ctx.bind ctx "start" int_t vstart in
+            Ctx.make_callee_context ctx b
+          in
+          let value_iter = scan value_callee_ctx value_layout value_type in
+          let index_len = Infix.(islice (start + int isize)) in
+          let header_size = 2 * isize in
+          let index_start = Infix.(start + int header_size) in
+          let key_len = len index_start key_type in
+          let ptr_len = Infix.(int isize) in
+          let kp_len = Infix.(key_len + ptr_len) in
+          let key_index i b =
+            build_assign Infix.(start + int header_size + (i * kp_len)) kstart b ;
+            build_iter key_iter key_callee_args b ;
+            let key = build_fresh_var ~fresh "key" key_iter.ret_type b in
+            build_step key key_iter b ; key
+          in
+          let ptr_index i =
+            let ptr_start =
+              Infix.(start + int header_size + (i * kp_len) + key_len)
+            in
+            Infix.(islice ptr_start)
+          in
+          let key_lt k1 k2 = Infix.(k1 < k2) in
+          let n = Infix.(index_len / kp_len) in
+          build_bin_search key_index ptr_index key_lt n (gen_pred ~ctx lookup_low b)
+            (gen_pred ~ctx lookup_high b)
+            (fun ptr b ->
+              build_assign ptr vstart b ;
+              build_foreach ~fresh ~count:(Type.count value_type) value_iter
+                value_callee_args
+                (fun value b -> build_yield value b)
+                b )
+            b ;
+          build_func b
+      | _ -> failwith "Unexpected args."
+
     (* let scan_grouping scan kt vt Type.({output; _} as m) =
      *   let t = Type.(GroupingT (kt, vt, m)) in
      *   let key_iter = scan kt in
@@ -1134,9 +1172,8 @@ module IRGen = struct
           | ATuple (_, Zip), TupleT _ -> scan_ziptuple scan_args
           | AList _, ListT _ -> scan_unordered_list scan_args
           | AHashIdx _, HashIdxT _ -> scan_hash_idx scan_args
-          (* | AOrderedIdx _, OrderedIdxT _ -> scan_ordered_idx scan_args *)
-          | Select _, FuncT _ ->
-              scan_select scan_args
+          | AOrderedIdx _, OrderedIdxT _ -> scan_ordered_idx scan_args
+          | Select _, FuncT _ -> scan_select scan_args
           | Filter _, FuncT _ -> scan_filter scan_args
           (* | Join _, FuncT _ -> nl_join scan_args *)
           | _ ->
