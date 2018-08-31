@@ -499,65 +499,87 @@ module IRGen = struct
       in
       gen_pred pred
 
-    let scan_empty name =
-      Builder.(create ~name ~args:[("start", int_t)] ~ret:VoidT |> build_func)
-
-    let scan_null name =
-      Builder.(create ~name ~args:[("start", int_t)] ~ret:VoidT |> build_func)
-
-    let scan_int name Type.({range= (_, h) as range; nullable; _}) =
-      let open Builder in
-      let b =
-        create ~name ~args:[("start", int_t)] ~ret:(TupleT [IntT {nullable}])
-      in
-      let start = build_arg 0 b in
-      let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
-      if nullable then
-        let null_val = h + 1 in
-        build_yield (Tuple [Tuple [ival; Infix.(ival = int null_val)]]) b
-      else build_yield (Tuple [ival]) b ;
-      build_func b
-
-    let scan_bool name (meta: Type.bool_) =
-      let open Builder in
-      let b =
-        create ~name ~args:[("start", int_t)]
-          ~ret:(TupleT [BoolT {nullable= meta.nullable}])
-      in
-      let start = build_arg 0 b in
-      let ival = Slice (start, 1) in
-      if meta.nullable then
-        let null_val = 2 in
-        build_yield (Tuple [Tuple [ival; Infix.(ival = int null_val)]]) b
-      else build_yield (Tuple [ival]) b ;
-      build_func b
-
-    let scan_string name Type.({nchars= (l, _) as nchars; nullable; _} as t) =
-      let open Builder in
-      let b =
-        create ~name ~args:[("start", int_t)] ~ret:(TupleT [StringT {nullable}])
-      in
-      let start = build_arg 0 b in
-      let nchars =
-        match Type.AbsInt.concretize nchars with
-        | None -> Infix.(islice start)
-        | Some x -> Infix.int x
-      in
-      let ret_val =
-        Infix.(Binop {op= LoadStr; arg1= start + hsize (StringT t); arg2= nchars})
-      in
-      if nullable then
-        let null_val = l - 1 in
-        build_yield (Tuple [Tuple [ret_val; Infix.(nchars = int null_val)]]) b
-      else build_yield (Tuple [ret_val]) b ;
-      build_func b
-
     type scan_args =
       { ctx: Ctx.t
       ; name: string
       ; scan: Ctx.t -> Abslayout.t -> Type.t -> func
       ; layout: Abslayout.t
       ; type_: Type.t }
+
+    let scan_empty {ctx; name; _} =
+      let open Builder in
+      let b =
+        let args = Ctx.make_caller_args ctx in
+        create ~name ~args ~ret:Type.PrimType.VoidT
+      in
+      build_func b
+
+    let scan_null {ctx; name; _} =
+      let open Builder in
+      let b =
+        let args = Ctx.make_caller_args ctx in
+        create ~name ~args ~ret:Type.PrimType.NullT
+      in
+      build_yield Null b ; build_func b
+
+    let scan_int args =
+      match args with
+      | {ctx; name; type_= IntT {nullable; range= (_, h) as range}; _} ->
+          let open Builder in
+          let b =
+            let ret_type = Type.PrimType.TupleT [IntT {nullable}] in
+            let args = Ctx.make_caller_args ctx in
+            create ~name ~args ~ret:ret_type
+          in
+          let start = Ctx.find_exn ctx (A.Name.create "start") b in
+          let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
+          if nullable then
+            let null_val = h + 1 in
+            build_yield (Tuple [Tuple [ival; Infix.(ival = int null_val)]]) b
+          else build_yield (Tuple [ival]) b ;
+          build_func b
+      | _ -> failwith "Unexpected args."
+
+    let scan_bool args =
+      match args with
+      | {ctx; name; type_= BoolT meta; _} ->
+          let open Builder in
+          let b =
+            let args = Ctx.make_caller_args ctx in
+            create ~name ~args ~ret:(TupleT [BoolT {nullable= meta.nullable}])
+          in
+          let start = Ctx.find_exn ctx (A.Name.create "start") b in
+          let ival = Slice (start, 1) in
+          if meta.nullable then
+            let null_val = 2 in
+            build_yield (Tuple [Tuple [ival; Infix.(ival = int null_val)]]) b
+          else build_yield (Tuple [ival]) b ;
+          build_func b
+      | _ -> failwith "Unexpected args."
+
+    let scan_string args =
+      match args with
+      | {ctx; name; type_= StringT {nchars= (l, _) as nchars; nullable; _} as t; _} ->
+          let open Builder in
+          let b =
+            let args = Ctx.make_caller_args ctx in
+            create ~name ~args ~ret:(TupleT [StringT {nullable}])
+          in
+          let start = build_arg 0 b in
+          let nchars =
+            match Type.AbsInt.concretize nchars with
+            | None -> Infix.(islice start)
+            | Some x -> Infix.int x
+          in
+          let ret_val =
+            Infix.(Binop {op= LoadStr; arg1= start + hsize t; arg2= nchars})
+          in
+          if nullable then
+            let null_val = l - 1 in
+            build_yield (Tuple [Tuple [ret_val; Infix.(nchars = int null_val)]]) b
+          else build_yield (Tuple [ret_val]) b ;
+          build_func b
+      | _ -> failwith "Unexpected args."
 
     [@@@warning "-8"]
 
@@ -1067,11 +1089,11 @@ module IRGen = struct
         let scan_args = {ctx; name; layout= r; type_= t; scan} in
         let func =
           match (r.node, t) with
-          | _, Type.IntT m -> scan_int name m
-          | _, BoolT m -> scan_bool name m
-          | _, StringT m -> scan_string name m
-          | _, EmptyT -> scan_empty name
-          | _, NullT -> scan_null name
+          | _, Type.IntT _ -> scan_int scan_args
+          | _, BoolT _ -> scan_bool scan_args
+          | _, StringT _ -> scan_string scan_args
+          | _, EmptyT -> scan_empty scan_args
+          | _, NullT -> scan_null scan_args
           | ATuple (_, Cross), TupleT _ -> scan_crosstuple scan_args
           | ATuple (_, Zip), TupleT _ -> scan_ziptuple scan_args
           | AList _, ListT _ -> scan_unordered_list scan_args

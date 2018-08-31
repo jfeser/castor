@@ -178,14 +178,14 @@ module Make (Eval : Eval.S) = struct
           let node' = self#visit_node () node in
           let schema =
             match node' with
-            | Select (x, _) -> List.map x ~f:pred_to_schema_exn
+            | Select (x, _) -> List.map x ~f:pred_to_schema
             | Filter (_, r) | Dedup r | AList (_, r) | OrderBy {rel= r; _} ->
                 Meta.(find_exn r schema)
             | Join {r1; r2; _} | AOrderedIdx (r1, r2, _) | AHashIdx (r1, r2, _) ->
                 Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema)
             | Agg (_, _, _) -> failwith ""
             | AEmpty -> []
-            | AScalar e -> [pred_to_schema_exn e]
+            | AScalar e -> [pred_to_schema e]
             | ATuple (rs, _) ->
                 List.concat_map ~f:(fun r -> Meta.(find_exn r schema)) rs
             | As (n, r) ->
@@ -287,7 +287,7 @@ module Make (Eval : Eval.S) = struct
         #visit_pred ctx
     in
     let preds_to_names preds =
-      List.map preds ~f:pred_to_schema_exn
+      List.map preds ~f:pred_to_schema
       |> List.filter ~f:(fun n -> String.(n.name <> ""))
       |> Set.of_list (module Name.Compare_no_type)
     in

@@ -200,6 +200,8 @@ let rec pp fmt {node; _} =
 module Ctx = struct
   type t = primvalue Map.M(Name.Compare_no_type).t [@@deriving compare, hash, sexp]
 
+  let empty = Map.empty (module Name.Compare_no_type)
+
   let of_tuple : Tuple.t -> t =
    fun t ->
     List.fold_left t
@@ -361,15 +363,13 @@ let ralgebra_to_sql r =
 
 let unnamed t = {name= ""; relation= None; type_= Some t}
 
-let rec pred_to_schema_exn =
+let rec pred_to_schema =
   let open Type0.PrimType in
   function
   | As_pred (p, n) ->
-      let schema = pred_to_schema_exn p in
+      let schema = pred_to_schema p in
       {schema with relation= None; name= n}
-  | Name ({type_= None; _} as n) ->
-      Error.create "Missing type." n [%sexp_of : Name.t] |> Error.raise
-  | Name ({type_= Some _; _} as n) -> n
+  | Name n -> n
   | Int _ -> unnamed (IntT {nullable= false})
   | Bool _ -> unnamed (BoolT {nullable= false})
   | String _ -> unnamed (StringT {nullable= false})
@@ -380,5 +380,5 @@ let rec pred_to_schema_exn =
     | Add | Sub | Mul | Div | Mod -> unnamed (IntT {nullable= false})
 
 let pred_to_name pred =
-  let n = pred_to_schema_exn pred in
+  let n = pred_to_schema pred in
   if String.(n.name = "") then None else Some n
