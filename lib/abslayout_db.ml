@@ -306,10 +306,9 @@ module Make (Eval : Eval.S) = struct
             in
             (Select (preds, r), preds_to_names preds)
         | Filter (pred, r) ->
-            let r, inner_ctx = resolve outer_ctx r in
-            let ctx = Set.union outer_ctx inner_ctx in
-            let pred = resolve_pred ctx pred in
-            (Filter (pred, r), inner_ctx)
+            let r, value_ctx = resolve outer_ctx r in
+            let pred = resolve_pred (Set.union outer_ctx value_ctx) pred in
+            (Filter (pred, r), value_ctx)
         | Join {pred; r1; r2} ->
             let r1, inner_ctx1 = resolve outer_ctx r1 in
             let r2, inner_ctx2 = resolve outer_ctx r2 in
@@ -356,31 +355,29 @@ module Make (Eval : Eval.S) = struct
             in
             (ATuple (List.rev ls, t), ctx)
         | AHashIdx (r, l, m) ->
-            let r, inner_ctx = resolve outer_ctx r in
-            let ctx = Set.union inner_ctx outer_ctx in
+            let r, key_ctx = resolve outer_ctx r in
+            let l, value_ctx = resolve (Set.union outer_ctx key_ctx) l in
             let m =
               (object
                  inherit [_] map
                  method visit_name _ _ = failwith ""
-                 method! visit_pred _ = resolve_pred ctx
+                 method! visit_pred _ = resolve_pred outer_ctx
               end)
                 #visit_hash_idx () m
             in
-            let l, ctx = resolve ctx l in
-            (AHashIdx (r, l, m), ctx)
+            (AHashIdx (r, l, m), value_ctx)
         | AOrderedIdx (r, l, m) ->
-            let r, inner_ctx = resolve outer_ctx r in
-            let ctx = Set.union outer_ctx inner_ctx in
-            let l, ctx = resolve ctx l in
+            let r, key_ctx = resolve outer_ctx r in
+            let l, value_ctx = resolve (Set.union outer_ctx key_ctx) l in
             let m =
               (object
                  inherit [_] map
                  method visit_name _ _ = failwith ""
-                 method! visit_pred _ = resolve_pred ctx
+                 method! visit_pred _ = resolve_pred outer_ctx
               end)
                 #visit_ordered_idx () m
             in
-            (AOrderedIdx (r, l, m), ctx)
+            (AOrderedIdx (r, l, m), value_ctx)
         | As (n, r) ->
             let r, ctx = resolve outer_ctx r in
             let ctx = rename n ctx in

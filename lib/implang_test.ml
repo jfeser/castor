@@ -398,3 +398,34 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
          }
          return c;
     } |}]
+
+let%expect_test "example-3" =
+  let module I =
+    Implang.IRGen.Make (struct
+        let code_only = true
+      end)
+      (Eval)
+      () in
+  let params =
+    [ Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p"
+    ; Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c" ]
+    |> Set.of_list (module Name.Compare_no_type)
+  in
+  let layout =
+    of_string_exn
+      {|
+select([lp.counter, lc.counter],
+  atuple([ahashidx(select([id as k], log), 
+    alist(select([counter, succ], 
+        filter(k = id && counter > succ, log)), 
+      atuple([ascalar(counter), ascalar(succ)], cross)), 
+    id_p) as lp,
+  filter(lc.id = id_c,
+    aorderedidx(select([log.counter as k], log), 
+      alist(filter(log.counter = k, log),
+        atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
+      lp.counter, lp.succ) as lc)], cross))
+|}
+    |> M.resolve ~params |> M.annotate_schema |> M.annotate_key_layouts
+  in
+  I.irgen_abstract ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter
