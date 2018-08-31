@@ -702,64 +702,6 @@ module IRGen = struct
         b ;
       build_func b
 
-    (* let scan_ordered_list scan t Type.({field; order; lookup= lower, upper; count}) =
-     *   let func = scan (Type.UnorderedListT (t, {count})) in
-     *   let idx =
-     *     Db.Schema.field_idx_exn (Type.to_schema (UnorderedListT (t, {count}))) field
-     *   in
-     *   let ret_type = (find_func func).ret_type in
-     *   let b = create [("start", int_t)] ret_type in
-     *   let start = build_arg 0 b in
-     *   let pcount = Infix.(islice start) in
-     *   build_iter func [start] b ;
-     *   let tup = build_var "tup" ret_type b in
-     *   build_step tup func b ;
-     *   (\* Build a skip loop if there is a lower bound. *\)
-     *   ( match (order, lower, upper) with
-     *   | `Asc, Some (Var (v, _)), _ ->
-     *       let cond = Infix.(pcount > int 0 && index tup idx < Var v) in
-     *       build_loop cond
-     *         (fun b ->
-     *           build_step tup func b ;
-     *           build_assign Infix.(pcount - int 1) pcount b )
-     *         b
-     *   | `Desc, _, Some (Var (v, _)) ->
-     *       let cond = Infix.(pcount > int 0 && index tup idx > Var v) in
-     *       build_loop cond
-     *         (fun b ->
-     *           build_step tup func b ;
-     *           build_assign Infix.(pcount - int 1) pcount b )
-     *         b
-     *   | _ -> () ) ;
-     *   (\* Build the read loop. *\)
-     *   ( match (order, lower, upper) with
-     *   | `Asc, _, Some (Var (v, _)) ->
-     *       let cond = Infix.(pcount > int 0 && index tup idx <= Var v) in
-     *       build_loop cond
-     *         (fun b ->
-     *           build_yield tup b ;
-     *           build_step tup func b ;
-     *           build_assign Infix.(pcount - int 1) pcount b )
-     *         b
-     *   | `Desc, Some (Var (v, _)), _ ->
-     *       let cond = Infix.(pcount > int 0 && index tup idx >= Var v) in
-     *       build_loop cond
-     *         (fun b ->
-     *           build_yield tup b ;
-     *           build_step tup func b ;
-     *           build_assign Infix.(pcount - int 1) pcount b )
-     *         b
-     *   | `Asc, _, None | `Desc, None, _ ->
-     *       let cond = Infix.(pcount > int 0) in
-     *       build_loop cond
-     *         (fun b ->
-     *           build_yield tup b ;
-     *           build_step tup func b ;
-     *           build_assign Infix.(pcount - int 1) pcount b )
-     *         b
-     *   | _ -> failwith "Unexpected parameters." ) ;
-     *   build_func b *)
-
     let scan_hash_idx
         A.({ ctx
            ; name
@@ -1101,44 +1043,6 @@ module IRGen = struct
           build_func b
       | _ -> failwith "Unexpected args."
 
-    (* let nl_join name scan pred r1 t1 r2 t2 =
-     *   let open Builder in
-     *   let func1 = scan r1 t1 in
-     *   let func2 = scan r2 t2 in
-     *   let ret_t1 = func1.ret_type in
-     *   let ret_t2 = func2.ret_type in
-     *   let ret_t, w1, w2 =
-     *     match (ret_t1, ret_t2) with
-     *     | TupleT t1, TupleT t2 ->
-     *         (Type.PrimType.TupleT (t1 @ t2), List.length t1, List.length t2)
-     *     | _ ->
-     *         fail
-     *           (Error.create "Expected a TupleT." (ret_t1, ret_t2)
-     *              [%sexp_of : Type.PrimType.t * Type.PrimType.t])
-     *   in
-     *   let schema = A.(Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema)) in
-     *   let b = create ~name ~args:[("start", int_t)] ~ret:ret_t in
-     *   build_foreach ~fresh
-     *     Infix.(int 0)
-     *     func1
-     *     (fun t1 b ->
-     *       build_foreach ~fresh
-     *         Infix.(int 0)
-     *         func2
-     *         (fun t2 b ->
-     *           let tup =
-     *             Tuple
-     *               ( List.init w1 ~f:(fun i -> Infix.(index t1 i))
-     *               @ List.init w2 ~f:(fun i -> Infix.(index t2 i)) )
-     *           in
-     *           build_if ~cond:(gen_pred pred)
-     *             ~then_:(fun b -> build_yield tup b)
-     *             ~else_:(fun _ -> ())
-     *             b )
-     *         b )
-     *     b ;
-     *   build_func b *)
-
     let gen_abslayout ~ctx ~data_fn r =
       let type_ = Abslayout_db.to_type r in
       let writer = Bitstring.Writer.with_file data_fn in
@@ -1175,7 +1079,6 @@ module IRGen = struct
           | AOrderedIdx _, OrderedIdxT _ -> scan_ordered_idx scan_args
           | Select _, FuncT _ -> scan_select scan_args
           | Filter _, FuncT _ -> scan_filter scan_args
-          (* | Join _, FuncT _ -> nl_join scan_args *)
           | _ ->
               Error.create "Unsupported at runtime." r [%sexp_of : A.t]
               |> Error.raise
