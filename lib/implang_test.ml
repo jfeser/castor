@@ -428,4 +428,170 @@ select([lp.counter, lc.counter],
 |}
     |> M.resolve ~params |> M.annotate_schema |> M.annotate_key_layouts
   in
-  I.irgen_abstract ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter
+  I.irgen_abstract ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter;
+  [%expect {|
+    fun scalar_4 (start) {
+        yield (buf[start : 1]);
+    }fun tuple_6 (start) {
+
+    }fun list_5 (k,
+         start) {
+         cstart = start + 16;
+         pcount = buf[start : 8];
+         loop (0 < pcount) {
+             init tuple_6(cstart, k);
+             cstart = cstart + 0;
+             pcount = pcount - 1;
+         }
+    }fun hash_idx_3 (start) {
+         if (buf[start + 16 + buf[start + 8 : 8] + hash(start + 16, id_p) * 8 :
+             8] = 0) {
+
+         } else {
+              kstart = buf[start + 16 + buf[start + 8 : 8] + hash(start +
+              16, id_p) * 8 : 8];
+              init scalar_4(kstart);
+              key = next(scalar_4);
+              vstart = buf[start + 16 + buf[start + 8 : 8] + hash(start +
+              16, id_p) * 8 : 8] + 1;
+              if (key = (id_p)) {
+                  init list_5(vstart, key[0]);
+              } else {
+
+              }
+         }
+    }fun scalar_12 (start) {
+         yield (buf[start : 1]);
+    }fun scalar_16 (start) {
+         yield (buf[start : 1]);
+    }fun scalar_18 (start) {
+         yield (buf[start : 1]);
+    }fun tuple_15 (k,
+         start,
+         lp_counter,
+         lp_k,
+         lp_succ) {
+         init scalar_16(lp_succ, lp_k, lp_counter, start + 8, k);
+         tup17 = next(scalar_16);
+         init scalar_18(lp_succ, lp_k, lp_counter, tup17[0], start + 8 + 1, k);
+         tup19 = next(scalar_18);
+         yield (tup17[0], tup19[0]);
+    }fun list_13 (k,
+         start,
+         lp_counter,
+         lp_k,
+         lp_succ) {
+         cstart = start + 16;
+         pcount = buf[start : 8];
+         loop (0 < pcount) {
+             init tuple_15(lp_succ, lp_k, lp_counter, cstart, k);
+             tup20 = next(tuple_15);
+             yield tup20;
+             cstart = cstart + buf[cstart : 8];
+             pcount = pcount - 1;
+         }
+    }fun ordered_idx_11 (start,
+         lp_counter,
+         lp_k,
+         lp_succ) {
+         low21 = 0;
+         high22 = buf[start + 8 : 8] / 9;
+         loop (low21 < high22) {
+             mid23 = low21 + high22 / 2;
+             kstart = start + 16 + mid23 * 9;
+             init scalar_12(lp_succ, lp_k, lp_counter, kstart);
+             key24 = next(scalar_12);
+             if (key24 < lp_counter) {
+                 low21 = mid23 + 1;
+             } else {
+                  high22 = mid23;
+             }
+         }
+         if (low21 < buf[start + 8 : 8] / 9) {
+             kstart = start + 16 + low21 * 9;
+             init scalar_12(lp_succ, lp_k, lp_counter, kstart);
+             key25 = next(scalar_12);
+             loop (key25 < lp_succ) {
+                 vstart = buf[start + 16 + low21 * 9 + 1 : 8];
+                 init list_13(lp_succ, lp_k, lp_counter, vstart, key[0]);
+                 loop (not done(list_13)) {
+                     tup26 = next(list_13);
+                     if (not done(list_13)) {
+                         yield tup26;
+                     } else {
+
+                     }
+                 }
+                 low21 = low21 + 1;
+             }
+         } else {
+
+         }
+    }fun filter_10 (start,
+         lp_counter,
+         lp_k,
+         lp_succ) {
+         init ordered_idx_11(lp_succ, lp_k, lp_counter, start);
+         loop (not done(ordered_idx_11)) {
+             tup27 = next(ordered_idx_11);
+             if (not done(ordered_idx_11)) {
+                 if (tup27[1] = id_c) {
+                     yield tup27;
+                 } else {
+
+                 }
+             } else {
+
+             }
+         }
+    }fun tuple_2 () {
+         init hash_idx_3(8);
+         loop (not done(hash_idx_3)) {
+             tup9 = next(hash_idx_3);
+             if (not done(hash_idx_3)) {
+                 init filter_10(tup9[2], tup9[0], tup9[1], 8 + buf[8 : 8]);
+                 loop (not done(filter_10)) {
+                     tup28 = next(filter_10);
+                     if (not done(filter_10)) {
+                         yield (tup9[0], tup28[0], tup28[1], tup28[2]);
+                     } else {
+
+                     }
+                 }
+             } else {
+
+             }
+         }
+    }fun select_0 () {
+         init tuple_2();
+         loop (not done(tuple_2)) {
+             tup29 = next(tuple_2);
+             if (not done(tuple_2)) {
+                 yield (tup29[1], tup29[5]);
+             } else {
+
+             }
+         }
+    }fun printer () {
+         init select_0();
+         loop (not done(select_0)) {
+             tup31 = next(select_0);
+             if (not done(select_0)) {
+                 print(Tuple[Int, Int], tup31);
+             } else {
+
+             }
+         }
+    }fun counter () {
+         c = 0;
+         init select_0();
+         loop (not done(select_0)) {
+             tup30 = next(select_0);
+             if (not done(select_0)) {
+                 c = c + 1;
+             } else {
+
+             }
+         }
+         return c;
+    } |}]
