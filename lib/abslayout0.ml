@@ -35,7 +35,7 @@ and agg =
   | Min of (name[@opaque])
   | Max of (name[@opaque])
 
-and hash_idx = {hi_key_layout: t option; lookup: pred}
+and hash_idx = {hi_key_layout: t option; lookup: pred list}
 
 and ordered_idx =
   { oi_key_layout: t option

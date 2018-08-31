@@ -109,16 +109,17 @@ let name r =
   | AOrderedIdx _ -> "ordered_idx"
   | As _ -> "as"
 
-let pp_list pp fmt ls =
+let pp_list ?(bracket= ("[", "]")) pp fmt ls =
+  let openb, closeb = bracket in
   let open Caml.Format in
   pp_open_hvbox fmt 1 ;
-  fprintf fmt "[" ;
+  fprintf fmt "%s" openb ;
   let rec loop = function
     | [] -> ()
     | [x] -> fprintf fmt "%a" pp x
     | x :: xs -> fprintf fmt "%a,@ " pp x ; loop xs
   in
-  loop ls ; close_box () ; fprintf fmt "]"
+  loop ls ; close_box () ; fprintf fmt "%s" closeb
 
 let op_to_str = function
   | Eq -> "="
@@ -165,6 +166,11 @@ let pp_agg fmt =
   | Min n -> fprintf fmt "min(%a)" pp_name n
   | Max n -> fprintf fmt "max(%a)" pp_name n
 
+let pp_key fmt = function
+  | [] -> failwith "Unexpected empty key."
+  | [p] -> pp_pred fmt p
+  | ps -> pp_list ~bracket:("(", ")") pp_pred fmt ps
+
 let rec pp fmt {node; _} =
   let open Caml.Format in
   match node with
@@ -184,7 +190,7 @@ let rec pp fmt {node; _} =
   | ATuple (rs, kind) ->
       fprintf fmt "@[<hv 2>atuple(%a,@ %a)@]" (pp_list pp) rs pp_kind kind
   | AHashIdx (r1, r2, {lookup; _}) ->
-      fprintf fmt "@[<hv 2>ahashidx(%a,@ %a,@ %a)@]" pp r1 pp r2 pp_pred lookup
+      fprintf fmt "@[<hv 2>ahashidx(%a,@ %a,@ %a)@]" pp r1 pp r2 pp_key lookup
   (* |AOrderedIdx (_, _, _) ->
       *    fprintf fmt "@[<h>%a@ %s@]" pp r n *)
   | As (n, r) ->
@@ -367,39 +373,12 @@ let rec pred_to_schema_exn =
   | Int _ -> unnamed (IntT {nullable= false})
   | Bool _ -> unnamed (BoolT {nullable= false})
   | String _ -> unnamed (StringT {nullable= false})
-  | Null -> failwith ""
+  | Null -> unnamed NullT
   | Binop (op, _, _) ->
     match op with
     | Eq | Lt | Le | Gt | Ge | And | Or -> unnamed (BoolT {nullable= false})
     | Add | Sub | Mul | Div | Mod -> unnamed (IntT {nullable= false})
 
-let pred_to_name = function Name n -> Some n | _ -> None
-
-let annotate_key_layouts =
-  let key_layout schema =
-    let layout =
-      match List.map schema ~f:(fun n -> scalar (Name n)) with
-      | [] -> failwith "empty schema"
-      | [x] -> x
-      | xs -> tuple xs Cross
-    in
-    Meta.set layout Meta.schema schema
-  in
-  let annotator =
-    object
-      inherit [_] map
-      method! visit_AHashIdx () ((x, y, ({hi_key_layout; _} as m)) as r) =
-        match hi_key_layout with
-        | Some _ -> AHashIdx r
-        | None ->
-            let schema = Meta.find_exn x Meta.schema in
-            AHashIdx (x, y, {m with hi_key_layout= Some (key_layout schema)})
-      method! visit_AOrderedIdx () ((x, y, ({oi_key_layout; _} as m)) as r) =
-        match oi_key_layout with
-        | Some _ -> AOrderedIdx r
-        | None ->
-            let schema = Meta.find_exn x Meta.schema in
-            AOrderedIdx (x, y, {m with oi_key_layout= Some (key_layout schema)})
-    end
-  in
-  annotator#visit_t ()
+let pred_to_name pred =
+  let n = pred_to_schema_exn pred in
+  if String.(n.name = "") then None else Some n

@@ -26,7 +26,7 @@ let _, [f; _] =
 let%expect_test "scalar-int" =
   let layout =
     of_string_exn "AScalar(1)" |> M.resolve |> M.annotate_schema
-    |> annotate_key_layouts
+    |> M.annotate_key_layouts
   in
   let type_ = M.to_type layout in
   let buf = Buffer.create 1024 in
@@ -39,7 +39,7 @@ let%expect_test "scalar-int" =
 let%expect_test "scalar-bool" =
   let layout =
     of_string_exn "AScalar(true)"
-    |> M.resolve |> M.annotate_schema |> annotate_key_layouts
+    |> M.resolve |> M.annotate_schema |> M.annotate_key_layouts
   in
   let type_ = M.to_type layout in
   let buf = Buffer.create 1024 in
@@ -51,7 +51,7 @@ let%expect_test "scalar-bool" =
 let%expect_test "scalar-string" =
   let layout =
     of_string_exn "AScalar(\"test\")"
-    |> M.resolve |> M.annotate_schema |> annotate_key_layouts
+    |> M.resolve |> M.annotate_schema |> M.annotate_key_layouts
   in
   let type_ = M.to_type layout in
   let buf = Buffer.create 1024 in
@@ -65,7 +65,7 @@ let%expect_test "scalar-string" =
 let%expect_test "tuple" =
   let layout =
     of_string_exn "ATuple([AScalar(1), AScalar(\"test\")], Cross)"
-    |> M.resolve |> M.annotate_schema |> annotate_key_layouts
+    |> M.resolve |> M.annotate_schema |> M.annotate_key_layouts
   in
   let type_ = M.to_type layout in
   let buf = Buffer.create 1024 in
@@ -83,7 +83,7 @@ let%expect_test "tuple" =
 let%expect_test "hash-idx" =
   let layout =
     of_string_exn "AHashIdx(Dedup(Select([r1.f], r1)) as k, AScalar(k.f), null)"
-    |> M.resolve |> M.annotate_schema |> annotate_key_layouts
+    |> M.resolve |> M.annotate_schema |> M.annotate_key_layouts
   in
   let type_ = M.to_type layout in
   let buf = Buffer.create 1024 in
@@ -103,7 +103,7 @@ let%expect_test "ordered-idx" =
     of_string_exn
       "AOrderedIdx(OrderBy([r1.f], Dedup(Select([r1.f], r1)), desc) as k, \
        AScalar(k.f), null, null)"
-    |> M.resolve |> M.annotate_schema |> annotate_key_layouts
+    |> M.resolve |> M.annotate_schema |> M.annotate_key_layouts
   in
   let type_ = M.to_type layout in
   [%sexp_of : Type.t] type_ |> print_s ;

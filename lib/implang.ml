@@ -803,9 +803,14 @@ module IRGen = struct
         Infix.(start + int header_size)
       in
       let mapping_start = Infix.(hash_data_start + hash_len) in
-      let lookup_expr = gen_pred ~ctx lookup b in
+      let lookup_expr = List.map lookup ~f:(fun p -> gen_pred ~ctx p b) in
       (* Compute the index in the mapping table for this key. *)
-      let hash_key = Infix.(hash hash_data_start lookup_expr) in
+      let hash_key =
+        match lookup_expr with
+        | [] -> failwith "empty hash key"
+        | [x] -> Infix.(hash hash_data_start x)
+        | xs -> Infix.(hash hash_data_start (Tuple xs))
+      in
       (* Get a pointer to the value. *)
       let value_ptr = Infix.(islice (mapping_start + (hash_key * int isize))) in
       (* If the pointer is null, then the key is not present. *)
@@ -818,7 +823,7 @@ module IRGen = struct
           build_step key_tuple key_iter b ;
           build_assign Infix.(value_ptr + len value_ptr key_type) vstart b ;
           build_if
-            ~cond:Infix.(index key_tuple 0 = lookup_expr)
+            ~cond:Infix.(key_tuple = Tuple lookup_expr)
             ~then_:
               (build_foreach ~fresh ~count:(Type.count value_type) value_iter
                  value_callee_args build_yield)

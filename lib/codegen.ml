@@ -423,6 +423,15 @@ module Make (Config : Config.S) () = struct
     let key_size = build_intcast key_size (i32_type ctx) "key_size" builder in
     codegen_hash fctx hash_ptr key_ptr key_size
 
+  let codegen_tuple_hash fctx types hash_ptr key =
+    let open Type.PrimType in
+    List.iter types ~f:(function
+      | IntT _ -> ()
+      | t ->
+          Error.create "Not supported as part of a composite key." t [%sexp_of : t]
+          |> Error.raise ) ;
+    codegen_int_hash fctx hash_ptr key
+
   let codegen_load_str fctx ptr len =
     let struct_t = struct_type ctx [|pointer_type (i8_type ctx); i64_type ctx|] in
     let struct_ = build_entry_alloca struct_t "" builder in
@@ -464,11 +473,15 @@ module Make (Config : Config.S) () = struct
       | And -> build_and x1 x2 "andtmp" builder
       | Or -> build_or x1 x2 "ortmp" builder
       | Hash -> (
-        match t2 with
-        | StringT _ -> codegen_string_hash fctx x1 x2
-        | IntT _ | BoolT _ -> codegen_int_hash fctx x1 x2
-        | _ ->
-            fail (Error.create "Unexpected hash." t2 [%sexp_of : Type.PrimType.t]) )
+          if Type.PrimType.is_nullable t2 then
+            Error.create "Cannot hash nullable type." t2
+              [%sexp_of : Type.PrimType.t]
+            |> Error.raise ;
+          match t2 with
+          | StringT _ -> codegen_string_hash fctx x1 x2
+          | IntT _ | BoolT _ -> codegen_int_hash fctx x1 x2
+          | TupleT ts -> codegen_tuple_hash fctx ts x1 x2
+          | NullT | VoidT -> failwith "unhashable" )
       | LoadStr -> codegen_load_str fctx x1 x2
       | Not -> fail (Error.of_string "Not a binary operator.")
     in

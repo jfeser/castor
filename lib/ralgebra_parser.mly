@@ -78,6 +78,10 @@ parens(X):
 | LPAREN; x = X; RPAREN { x }
 | error { error "Expected parentheses." $startpos }
 
+key:
+  | p = abs_pred; { [p] }
+  | LPAREN; ps = separated_list(COMMA, abs_pred); RPAREN { ps }
+
 abs_ralgebra:
   | SELECT; LPAREN;
   x = bracket_list(abs_pred); COMMA;
@@ -128,7 +132,7 @@ abs_ralgebra:
 | AHASHIDX; LPAREN;
   r = abs_ralgebra; COMMA;
   x = abs_ralgebra; COMMA;
-  e = abs_pred;
+  e = key;
   RPAREN { A.(AHashIdx (r, x,  { lookup = e; hi_key_layout = None })) |> node $symbolstartpos $endpos }
 
 | AORDEREDIDX; LPAREN;

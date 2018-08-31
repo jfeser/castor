@@ -200,6 +200,35 @@ module Make (Eval : Eval.S) = struct
     in
     mapper#visit_t ()
 
+  let annotate_key_layouts =
+    let key_layout schema =
+      let layout =
+        match List.map schema ~f:(fun n -> scalar (Name n)) with
+        | [] -> failwith "empty schema"
+        | [x] -> x
+        | xs -> tuple xs Cross
+      in
+      annotate_schema layout
+    in
+    let annotator =
+      object
+        inherit [_] map
+        method! visit_AHashIdx () ((x, y, ({hi_key_layout; _} as m)) as r) =
+          match hi_key_layout with
+          | Some _ -> AHashIdx r
+          | None ->
+              let schema = Meta.find_exn x Meta.schema in
+              AHashIdx (x, y, {m with hi_key_layout= Some (key_layout schema)})
+        method! visit_AOrderedIdx () ((x, y, ({oi_key_layout; _} as m)) as r) =
+          match oi_key_layout with
+          | Some _ -> AOrderedIdx r
+          | None ->
+              let schema = Meta.find_exn x Meta.schema in
+              AOrderedIdx (x, y, {m with oi_key_layout= Some (key_layout schema)})
+      end
+    in
+    annotator#visit_t ()
+
   (** Annotate names in an algebra expression with types. *)
   let resolve ?(params= Set.empty (module Name.Compare_no_type)) r =
     let resolve_relation r_name =
@@ -258,7 +287,8 @@ module Make (Eval : Eval.S) = struct
         #visit_pred ctx
     in
     let preds_to_names preds =
-      List.filter_map preds ~f:(function Name n -> Some n | _ -> None)
+      List.map preds ~f:pred_to_schema_exn
+      |> List.filter ~f:(fun n -> String.(n.name <> ""))
       |> Set.of_list (module Name.Compare_no_type)
     in
     let aggs_to_names aggs =

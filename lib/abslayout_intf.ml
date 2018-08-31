@@ -68,7 +68,7 @@ module type S = sig
   [@@deriving sexp_of]
 
   type hash_idx = Abslayout0.hash_idx =
-    {hi_key_layout: Abslayout0.t option; lookup: pred}
+    {hi_key_layout: Abslayout0.t option; lookup: pred list}
   [@@deriving sexp_of]
 
   type ordered_idx = Abslayout0.ordered_idx =
@@ -169,6 +169,4 @@ module type S = sig
   val pred_to_schema_exn : pred -> Name.t
 
   val pred_to_name : pred -> Name.t option
-
-  val annotate_key_layouts : t -> t
 end

@@ -317,7 +317,7 @@ let%expect_test "mat-hidx" =
            (schema
             (((relation (t)) (name sm_code) (type_ ((StringT (nullable true)))))))
            (start_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 100))))))
-        ((hi_key_layout ()) (lookup Null)))))
+        ((hi_key_layout ()) (lookup (Null))))))
      (meta
       ((end_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 187)))
        (schema

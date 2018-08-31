@@ -126,10 +126,11 @@ module Make_mock (Config : Config.S_mock) : S = struct
 
   let eval_join ctx p r1 r2 =
     Seq.concat_map r1 ~f:(fun t1 ->
-        Seq.filter r2 ~f:(fun t2 ->
+        Seq.filter_map r2 ~f:(fun t2 ->
             let ctx = ctx |> Map.merge_right t1 |> Map.merge_right t2 in
             match eval_pred ctx p with
-            | `Bool x -> x
+            | `Bool true -> Some (Map.merge_right t1 t2)
+            | `Bool false -> None
             | _ -> failwith "Expected a boolean." ) )
 
   let eval_filter ctx p seq =

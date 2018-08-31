@@ -26,7 +26,7 @@ let%expect_test "cross-tuple" =
       () in
   let layout =
     of_string_exn "AList(r1, ATuple([AScalar(r1.f), AScalar(r1.g - r1.f)], cross))"
-    |> M.resolve |> M.annotate_schema |> annotate_key_layouts
+    |> M.resolve |> M.annotate_schema |> M.annotate_key_layouts
   in
   I.irgen_abstract ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter ;
   [%expect
@@ -86,7 +86,7 @@ let%expect_test "hash-idx" =
     of_string_exn
       "ATuple([AList(r1, AScalar(r1.f)) as f, AHashIdx(dedup(select([r1.f], r1)) \
        as k, ascalar(k.f+1), f.f)], cross)"
-    |> M.resolve |> M.annotate_schema |> annotate_key_layouts
+    |> M.resolve |> M.annotate_schema |> M.annotate_key_layouts
   in
   I.irgen_abstract ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter ;
   [%expect
@@ -119,7 +119,7 @@ let%expect_test "hash-idx" =
               key = next(scalar_8);
               vstart = buf[start + 16 + buf[start + 8 : 8] + hash(start +
               16, f_f) * 8 : 8] + 1;
-              if (key[0] = f_f) {
+              if (key = (f_f)) {
                   init scalar_9(key[0], f_f, vstart);
                   tup10 = next(scalar_9);
                   yield tup10;
@@ -189,7 +189,7 @@ alist(filter(lp.counter < log.counter &&
 log.counter < lp.succ, log) as lc,
 atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
 |}
-    |> M.resolve ~params |> M.annotate_schema |> annotate_key_layouts
+    |> M.resolve ~params |> M.annotate_schema |> M.annotate_key_layouts
   in
   I.irgen_abstract ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter ;
   [%expect
@@ -313,9 +313,90 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
     atuple([ascalar(lp.counter), ascalar(lc.counter)], cross)),
   (id_p, id_c))
 |}
-    |> M.resolve ~params |> M.annotate_schema |> annotate_key_layouts
+    |> M.resolve ~params |> M.annotate_schema |> M.annotate_key_layouts
   in
-  I.irgen_abstract ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter
+  I.irgen_abstract ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter;
+  [%expect {|
+    fun scalar_3 (start) {
+        yield (buf[start : 1]);
+    }fun scalar_5 (start) {
+         yield (buf[start : 1]);
+    }fun tuple_2 (start) {
+         init scalar_3(start + 8);
+         tup4 = next(scalar_3);
+         init scalar_5(start + 8 + 1, tup4[0]);
+         tup6 = next(scalar_5);
+         yield (tup4[0], tup6[0]);
+    }fun scalar_10 (start) {
+         yield (buf[start : 1]);
+    }fun scalar_12 (start) {
+         yield (buf[start : 1]);
+    }fun tuple_9 (lc_k,
+         lp_k,
+         start) {
+         init scalar_10(start + 8, lp_k, lc_k);
+         tup11 = next(scalar_10);
+         init scalar_12(tup11[0], start + 8 + 1, lp_k, lc_k);
+         tup13 = next(scalar_12);
+         yield (tup11[0], tup13[0]);
+    }fun list_7 (lc_k,
+         lp_k,
+         start) {
+         cstart = start + 16;
+         pcount = buf[start : 8];
+         loop (0 < pcount) {
+             init tuple_9(cstart, lp_k, lc_k);
+             tup14 = next(tuple_9);
+             yield tup14;
+             cstart = cstart + buf[cstart : 8];
+             pcount = pcount - 1;
+         }
+    }fun hash_idx_0 () {
+         if (buf[16 + buf[8 : 8] + hash(16, (id_p, id_c)) * 8 : 8] = 0) {
+
+         } else {
+              kstart = buf[16 + buf[8 : 8] + hash(16, (id_p, id_c)) * 8 : 8];
+              init tuple_2(kstart);
+              key = next(tuple_2);
+              vstart = buf[16 + buf[8 : 8] + hash(16, (id_p, id_c)) * 8 : 8] +
+              buf[buf[16 + buf[8 : 8] + hash(16, (id_p, id_c)) * 8 : 8] : 8];
+              if (key = (id_p, id_c)) {
+                  init list_7(vstart, key[0], key[1]);
+                  loop (not done(list_7)) {
+                      tup15 = next(list_7);
+                      if (not done(list_7)) {
+                          yield tup15;
+                      } else {
+
+                      }
+                  }
+              } else {
+
+              }
+         }
+    }fun printer () {
+         init hash_idx_0();
+         loop (not done(hash_idx_0)) {
+             tup17 = next(hash_idx_0);
+             if (not done(hash_idx_0)) {
+                 print(Tuple[Int, Int, Int, Int], tup17);
+             } else {
+
+             }
+         }
+    }fun counter () {
+         c = 0;
+         init hash_idx_0();
+         loop (not done(hash_idx_0)) {
+             tup16 = next(hash_idx_0);
+             if (not done(hash_idx_0)) {
+                 c = c + 1;
+             } else {
+
+             }
+         }
+         return c;
+    } |}]
 
 (* let%expect_test "ordered-idx" =
  *   let layout =

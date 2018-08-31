@@ -175,12 +175,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     Writer.write writer (of_int ~width:64 len) ;
     Writer.seek writer end_pos
 
-  type hash_key =
-    { kctx: Ctx.t
-    ; value: Db.primvalue
-    ; serialized: Bitstring.t
-    ; hash_key: string
-    ; hash_val: int }
+  type hash_key = {kctx: Ctx.t; hash_key: string; hash_val: int}
 
   let serialize_hashidx serialize ({ctx; writer} as sctx) (key_t, value_t, _)
       (query, value_l, meta) =
@@ -196,16 +191,23 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
       List.map keys ~f:(fun kctx ->
           let value =
             match key_l.node with
-            | AScalar e -> Eval.eval_pred kctx e
-            | _ -> failwith "hash index can only have scalar keys rn"
+            | AScalar e -> [Eval.eval_pred kctx e]
+            | ATuple (es, _) ->
+                List.map es ~f:(function
+                  | {node= AScalar e; _} -> Eval.eval_pred kctx e
+                  | _ -> failwith "no nested key structures." )
+            | _ -> failwith "no non-tuple key structures"
           in
-          let serialized = serialize_value key_t value in
           let hash_key =
             match value with
-            | `String s | `Unknown s -> s
-            | _ -> Bitstring.to_string serialized
+            | [`String s] | [`Unknown s] -> s
+            | vs ->
+                List.map vs ~f:(function
+                  | `Int x -> Bitstring.of_int ~width:64 x
+                  | _ -> failwith "no non-int tuple keys" )
+                |> Bitstring.concat |> Bitstring.to_string
           in
-          {kctx; value; serialized; hash_key; hash_val= -1} )
+          {kctx; hash_key; hash_val= -1} )
     in
     Out_channel.with_file "keys.txt" ~f:(fun ch ->
         List.iter keys ~f:(fun key -> Out_channel.fprintf ch "%s\n" key.hash_key) ) ;
@@ -247,7 +249,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     List.iter keys ~f:(fun key ->
         let ctx = Map.merge_right ctx key.kctx in
         let value_pos = Writer.pos writer in
-        Writer.write writer key.serialized ;
+        serialize {sctx with ctx} key_t key_l ;
         serialize {sctx with ctx} value_t value_l ;
         hash_table.(key.hash_val)
         <- Writer.Pos.(value_pos |> to_bytes_exn |> Int64.to_int_exn) ) ;
