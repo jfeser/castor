@@ -6,7 +6,7 @@ module Config : sig
   end
 end
 
-module Make (Config : Config.S) () : sig
+module Make (Config : Config.S) (IG : Implang.IRGen.S) () : sig
   val codegen : Implang.IRGen.ir_module -> Llvm.llmodule
 
   val write_header : Stdio.Out_channel.t -> unit
@@ -15,6 +15,6 @@ module Make (Config : Config.S) () : sig
        ?out_dir:string
     -> gprof:bool
     -> params:(string * Type.PrimType.t) list
-    -> Implang.IRGen.ir_module
-    -> unit
+    -> Abslayout.t
+    -> string * string
 end

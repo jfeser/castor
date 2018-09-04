@@ -73,9 +73,11 @@ module IRGen : sig
 
   exception IRGenError of Error.t
 
-  module Make (Config : Config.S) (Eval : Eval.S) () : sig
+  module type S = sig
     val irgen_abstract : data_fn:string -> Abslayout.t -> ir_module
 
     val pp : Formatter.t -> ir_module -> unit
   end
+
+  module Make (Config : Config.S) (Eval : Eval.S) () : S
 end

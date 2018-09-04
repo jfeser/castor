@@ -48,7 +48,7 @@ module Config = struct
   end
 end
 
-module Make (Config : Config.S) () = struct
+module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
   module I = Implang
   open Config
 
@@ -1085,7 +1085,7 @@ module Make (Config : Config.S) () = struct
         Logs.info (fun m -> m "%s" cmd) ;
         Unix.system cmd |> Unix.Exit_or_signal.or_error |> Or_error.ok_exn
 
-  let compile ?out_dir ~gprof ~params ir_module =
+  let compile ?out_dir ~gprof ~params layout =
     let out_dir =
       match out_dir with Some x -> x | None -> Filename.temp_dir "bin" ""
     in
@@ -1096,7 +1096,10 @@ module Make (Config : Config.S) () = struct
     let opt_module_fn = out_dir ^ "/scanner-opt.ll" in
     let remarks_fn = out_dir ^ "/remarks.yml" in
     let header_fn = out_dir ^ "/scanner.h" in
+    let data_fn = out_dir ^ "/data.bin" in
     let open Type.PrimType in
+    (* Generate IR module. *)
+    let ir_module = IG.irgen_abstract ~data_fn layout in
     (* Generate header. *)
     Out_channel.with_file header_fn ~f:write_header ;
     (* Generate main file. *)
@@ -1153,5 +1156,6 @@ module Make (Config : Config.S) () = struct
         ; module_fn
         ; ">"
         ; opt_module_fn ] ;
-      command_exn ([clang] @ cflags @ [opt_module_fn; main_fn; "-o"; exe_fn]) )
+      command_exn ([clang] @ cflags @ [opt_module_fn; main_fn; "-o"; exe_fn]) ) ;
+    (exe_fn, data_fn)
 end
