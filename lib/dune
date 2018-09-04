@@ -1,3 +1,8 @@
+(rule
+ (targets config.ml)
+ (deps    ../config)
+ (action  (copy %{deps} %{targets})))
+
 (menhir
  (modules ralgebra_parser))
 

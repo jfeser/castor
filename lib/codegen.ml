@@ -1,5 +1,8 @@
 open Base
+open Core
+open Stdio
 open Printf
+open Collections
 open Llvm
 open Llvm_analysis
 module Execution_engine = Llvm_executionengine
@@ -37,21 +40,23 @@ module TypeKind = struct
     Sexp.Atom str
 end
 
+module Project_config = Config
+
 module Config = struct
   module type S = sig
-    val ctx : llcontext
-
-    val module_ : llmodule
-
-    val builder : llbuilder
-
     val debug : bool
   end
 end
 
 module Make (Config : Config.S) () = struct
+  module I = Implang
   open Config
-  open Implang
+
+  let ctx = Llvm.create_context ()
+
+  let module_ = Llvm.create_module ctx "scanner"
+
+  let builder = Llvm.builder ctx
 
   (* Variables are either stored in the parameter struct or stored locally on
      the stack. Values that are stored in the parameter struct are also stored
@@ -61,7 +66,7 @@ module Make (Config : Config.S) () = struct
   [@@deriving sexp_of]
 
   module SymbolTable = struct
-    type t = var Hashtbl.M(String).t list [@@deriving sexp_of]
+    type t = var Base.Hashtbl.M(String).t list [@@deriving sexp_of]
 
     let lookup ?params maps key =
       let params =
@@ -72,7 +77,7 @@ module Make (Config : Config.S) () = struct
           | Some (Local v) -> v
           | Some (Param _) ->
               Error.create "Params mistagged." m
-                [%sexp_of : var Hashtbl.M(String).t]
+                [%sexp_of : var Base.Hashtbl.M(String).t]
               |> Error.raise
           | None ->
               Error.create "Params not found." (Hashtbl.keys m)
@@ -109,8 +114,8 @@ module Make (Config : Config.S) () = struct
     object
       val values = Hashtbl.create (module String)
       method values : var Hashtbl.M(String).t = values
-      method name : string = func.name
-      method func : func = func
+      method name : string = func.I.name
+      method func : I.func = func
       method tctx : Type.PrimType.t Hashtbl.M(String).t =
         Hashtbl.of_alist_exn (module String) (func.locals @ params)
     end
@@ -334,8 +339,7 @@ module Make (Config : Config.S) () = struct
     | Some (Local _) | None ->
         Error.of_string "Could not find 'done' value." |> Error.raise
 
-  let codegen_slice : (_ -> expr -> llvalue) -> _ -> expr -> int -> llvalue =
-   fun codegen_expr fctx byte_idx size_bytes ->
+  let codegen_slice codegen_expr fctx byte_idx size_bytes =
     let size_bits = Serialize.isize * size_bytes in
     let byte_idx = codegen_expr fctx byte_idx in
     let buf_ptr = build_load (get_val fctx "buf") "buf_ptr" builder in
@@ -358,8 +362,7 @@ module Make (Config : Config.S) () = struct
     debug_printf "Slice value: %d\n" [slice] ;
     slice
 
-  let codegen_index : (expr -> llvalue) -> expr -> int -> llvalue =
-   fun codegen_expr tup idx ->
+  let codegen_index codegen_expr tup idx =
     let lltup = codegen_expr tup in
     (* Check that the argument really is a struct and that the index is
          valid. *)
@@ -445,17 +448,16 @@ module Make (Config : Config.S) () = struct
     build_store len (build_struct_gep struct_ 1 "" builder) builder |> ignore ;
     build_load struct_ "" builder
 
-  let codegen_binop : (_ -> expr -> llvalue) -> _ -> op -> expr -> expr -> llvalue =
-   fun codegen_expr fctx op arg1 arg2 ->
+  let codegen_binop codegen_expr fctx op arg1 arg2 =
     let v1 = codegen_expr fctx arg1 in
     let v2 = codegen_expr fctx arg2 in
-    let t1 = infer_type fctx#tctx arg1 in
-    let t2 = infer_type fctx#tctx arg2 in
+    let t1 = I.infer_type fctx#tctx arg1 in
+    let t2 = I.infer_type fctx#tctx arg2 in
     let {data= x1; null= n1} = unpack_null t1 v1 in
     let {data= x2; null= n2} = unpack_null t2 v2 in
     let x_out =
       match op with
-      | Add -> build_add x1 x2 "addtmp" builder
+      | I.Add -> build_add x1 x2 "addtmp" builder
       | Sub -> build_sub x1 x2 "subtmp" builder
       | Mul -> build_mul x1 x2 "multmp" builder
       | Div -> build_sdiv v1 v2 "divtmp" builder
@@ -485,26 +487,24 @@ module Make (Config : Config.S) () = struct
       | LoadStr -> codegen_load_str fctx x1 x2
       | Not -> fail (Error.of_string "Not a binary operator.")
     in
-    let ret_t = infer_type fctx#tctx (Binop {op; arg1; arg2}) in
+    let ret_t = I.infer_type fctx#tctx (Binop {op; arg1; arg2}) in
     let null_out = build_or n1 n2 "" builder in
     pack_null ret_t ~data:x_out ~null:null_out
 
-  let codegen_unop : (_ -> expr -> llvalue) -> _ -> op -> expr -> llvalue =
-   fun codegen_expr fctx op arg ->
+  let codegen_unop codegen_expr fctx op arg =
     let v = codegen_expr fctx arg in
-    let t = infer_type fctx#tctx arg in
+    let t = I.infer_type fctx#tctx arg in
     let {data= x; null= null_out} = unpack_null t v in
     let x_out =
       match op with
-      | Not -> build_not x "nottmp" builder
+      | I.Not -> build_not x "nottmp" builder
       | Add | Sub | Lt | And | Or | Eq | Hash | Mul | Div | Mod | LoadStr ->
           fail (Error.of_string "Not a unary operator.")
     in
-    let ret_t = infer_type fctx#tctx (Unop {op; arg}) in
+    let ret_t = I.infer_type fctx#tctx (Unop {op; arg}) in
     pack_null ret_t ~data:x_out ~null:null_out
 
-  let codegen_tuple : (expr -> llvalue) -> expr list -> llvalue =
-   fun codegen_expr es ->
+  let codegen_tuple codegen_expr es =
     let vs = List.map es ~f:codegen_expr in
     let ts = List.map vs ~f:type_of |> Array.of_list in
     let struct_t = struct_type ctx ts in
@@ -514,9 +514,8 @@ module Make (Config : Config.S) () = struct
         build_store v ptr builder |> ignore ) ;
     build_load struct_ "tupletmp" builder
 
-  let rec codegen_expr : _ -> expr -> llvalue =
-   fun fctx -> function
-    | Null -> failwith "TODO: Pick a runtime null rep."
+  let rec codegen_expr fctx = function
+    | I.Null -> failwith "TODO: Pick a runtime null rep."
     | Int x -> const_int int_type x
     | Bool true -> const_int bool_type 1
     | Bool false -> const_int bool_type 0
@@ -567,7 +566,7 @@ module Make (Config : Config.S) () = struct
     (* Generate conditional in head block. *)
     position_at_end if_bb builder ;
     let llcond = codegen_expr fctx cond in
-    let cond_type = infer_type fctx#tctx cond in
+    let cond_type = I.infer_type fctx#tctx cond in
     let {data; null} = unpack_null cond_type llcond in
     let llcond = build_and data (build_not null "" builder) "" builder in
     build_cond_br llcond then_bb else_bb builder |> ignore ;
@@ -597,10 +596,10 @@ module Make (Config : Config.S) () = struct
           Error.create "Use of an undeclared iterator." func [%sexp_of : string]
           |> Error.raise
     in
-    if List.length args <> List.length iter_fctx#func.args then
+    if List.length args <> List.length iter_fctx#func.I.args then
       Error.create "Wrong number of arguments."
         (func, args, iter_fctx#func.args)
-        [%sexp_of : string * expr list * (string * Type.PrimType.t) list]
+        [%sexp_of : string * I.expr list * (string * Type.PrimType.t) list]
       |> fail
     else
       let llargs = List.map args ~f:(codegen_expr fctx) in
@@ -675,7 +674,7 @@ module Make (Config : Config.S) () = struct
 
   let codegen_print fctx type_ expr =
     let open Type.PrimType in
-    Logs.debug (fun m -> m "Codegen for %a." pp_stmt (Print (type_, expr))) ;
+    Logs.debug (fun m -> m "Codegen for %a." I.pp_stmt (Print (type_, expr))) ;
     let val_ = codegen_expr fctx expr in
     let rec gen val_ = function
       | NullT -> call_printf null_str []
@@ -718,9 +717,8 @@ module Make (Config : Config.S) () = struct
     build_ret val_ builder |> ignore
 
   let codegen_iter : _ -> unit =
-    let rec codegen_stmt : _ -> stmt -> unit =
-     fun fctx -> function
-      | Loop {cond; body} -> codegen_loop fctx codegen_prog cond body
+    let rec codegen_stmt fctx = function
+      | I.Loop {cond; body} -> codegen_loop fctx codegen_prog cond body
       | If {cond; tcase; fcase} -> codegen_if fctx codegen_prog cond tcase fcase
       | Step {var; iter} -> codegen_step fctx var iter
       | Iter {var; func; args} -> codegen_init fctx var func args
@@ -728,9 +726,7 @@ module Make (Config : Config.S) () = struct
       | Yield ret -> codegen_yield fctx ret
       | Print (type_, expr) -> codegen_print fctx type_ expr
       | Return _ -> Error.(of_string "Iterator cannot return." |> raise)
-    and codegen_prog : _ -> prog -> unit =
-     fun fctx p -> List.iter ~f:(codegen_stmt fctx) p
-    in
+    and codegen_prog fctx p = List.iter ~f:(codegen_stmt fctx) p in
     let set_attributes func =
       (* Set iterator function attributes. *)
       add_function_attr func
@@ -763,7 +759,7 @@ module Make (Config : Config.S) () = struct
       let init_func_t =
         let args_t =
           pointer_type !params_struct_t
-          :: List.map ictx#func.args ~f:(fun (_, t) -> codegen_type t)
+          :: List.map ictx#func.I.args ~f:(fun (_, t) -> codegen_type t)
           |> Array.of_list
         in
         function_type (void_type ctx) args_t
@@ -791,7 +787,7 @@ module Make (Config : Config.S) () = struct
     in
     let build_step ictx =
       (* Create step function. *)
-      let ret_t = codegen_type ictx#func.ret_type in
+      let ret_t = codegen_type ictx#func.I.ret_type in
       let step_func_t = function_type ret_t [|pointer_type !params_struct_t|] in
       ictx#set_step (declare_function (step_name ictx#name) step_func_t module_) ;
       set_attributes ictx#step ;
@@ -810,7 +806,7 @@ module Make (Config : Config.S) () = struct
       build_unreachable builder |> ignore ;
       position_at_end bb builder ;
       ictx#set_switch
-        (build_switch yield_index default_bb (yield_count ictx#func + 1) builder) ;
+        (build_switch yield_index default_bb (I.yield_count ictx#func + 1) builder) ;
       let bb = append_block ctx "postentry" ictx#step in
       add_case ictx#switch (const_int (i8_type ctx) ictx#switch_index) bb ;
       ictx#incr_switch_index () ;
@@ -831,15 +827,14 @@ module Make (Config : Config.S) () = struct
     in
     fun ictx ->
       Logs.debug (fun m -> m "Codegen for func %s started." ictx#name) ;
-      Logs.debug (fun m -> m "%a" pp_func ictx#func) ;
+      Logs.debug (fun m -> m "%a" I.pp_func ictx#func) ;
       build_init ictx ;
       build_step ictx ;
       Logs.info (fun m -> m "Codegen for func %s completed." ictx#name)
 
-  let codegen_func : _ -> unit =
-    let rec codegen_stmt : _ -> stmt -> unit =
-     fun fctx -> function
-      | Loop {cond; body} -> codegen_loop fctx codegen_prog cond body
+  let codegen_func =
+    let rec codegen_stmt fctx = function
+      | I.Loop {cond; body} -> codegen_loop fctx codegen_prog cond body
       | If {cond; tcase; fcase} -> codegen_if fctx codegen_prog cond tcase fcase
       | Step {var; iter} -> codegen_step fctx var iter
       | Iter {var; func; args} -> codegen_init fctx var func args
@@ -848,15 +843,13 @@ module Make (Config : Config.S) () = struct
       | Return expr -> codegen_return fctx expr
       | Yield _ ->
           fail (Error.of_string "Yields not allowed in function declarations.")
-    and codegen_prog : _ -> prog -> unit =
-     fun fctx p -> List.iter ~f:(codegen_stmt fctx) p
-    in
+    and codegen_prog fctx p = List.iter ~f:(codegen_stmt fctx) p in
     fun fctx ->
       let name = fctx#name in
-      let ({args; locals; ret_type; body; _} as func) = fctx#func in
+      let (I.({args; locals; ret_type; body; _}) as func) = fctx#func in
       Logs.debug (fun m -> m "Codegen for func %s started." name) ;
-      Logs.debug (fun m -> m "%a" pp_func func) ;
-      Logs.debug (fun m -> m "%s" ([%sexp_of : func] func |> Sexp.to_string_hum)) ;
+      Logs.debug (fun m -> m "%a" I.pp_func func) ;
+      Logs.debug (fun m -> m "%s" ([%sexp_of : I.func] func |> Sexp.to_string_hum)) ;
       if
         (* Check that function is not already defined. *)
         Hashtbl.(mem iters name || mem funcs name)
@@ -968,8 +961,7 @@ module Make (Config : Config.S) () = struct
       t
   end
 
-  let codegen Implang.IRGen.({iters= ir_iters; funcs= ir_funcs; params; buffer_len})
-      =
+  let codegen I.IRGen.({iters= ir_iters; funcs= ir_funcs; params; buffer_len}) =
     Logs.info (fun m -> m "Codegen started.") ;
     set_data_layout "e-m:o-i64:64-f80:128-n8:16:32:64-S128" module_ ;
     let module SB = ParamStructBuilder in
@@ -1007,7 +999,8 @@ module Make (Config : Config.S) () = struct
     codegen_create () ;
     codegen_param_setters typed_params ;
     assert_valid_module module_ ;
-    Logs.info (fun m -> m "Codegen completed.")
+    Logs.info (fun m -> m "Codegen completed.") ;
+    module_
 
   let write_header : Stdio.Out_channel.t -> unit =
    fun ch ->
@@ -1068,10 +1061,97 @@ module Make (Config : Config.S) () = struct
     pp_close_box fmt () ;
     pp_print_flush fmt ()
 
-  (* let optimize : unit -> unit = fun () ->
-   *   let engine = Execution_engine.create module_ in
-   *   let pm = PassManager.create_function module_ in
-   *   Execution_engine
-   *   (\* DataLayout.add_to_pass_manager pm (Execution_engine.target_data engine); *\)
-   *   () *)
+  let c_template : string -> (string * string) list -> string =
+   fun fn args ->
+    let args_str =
+      List.map args ~f:(fun (n, x) -> sprintf "-D%s=%s" n x)
+      |> String.concat ~sep:" "
+    in
+    let cmd = sprintf "clang -E %s %s" args_str fn in
+    Unix.open_process_in cmd |> In_channel.input_all
+
+  let from_fn fn n i =
+    let template = Project_config.project_root ^ "/bin/templates/" ^ fn in
+    let func =
+      c_template template [("PARAM_NAME", n); ("PARAM_IDX", Int.to_string i)]
+    in
+    let call = sprintf "set_%s(params, input_%s(argv, optind));" n n in
+    (func, call)
+
+  let command_exn : string list -> unit = function
+    | [] -> Error.of_string "Empty command" |> Error.raise
+    | args ->
+        let cmd = String.concat args ~sep:" " in
+        Logs.info (fun m -> m "%s" cmd) ;
+        Unix.system cmd |> Unix.Exit_or_signal.or_error |> Or_error.ok_exn
+
+  let compile ?out_dir ~gprof ~params ir_module =
+    let out_dir =
+      match out_dir with Some x -> x | None -> Filename.temp_dir "bin" ""
+    in
+    if Sys.is_directory out_dir = `No then Unix.mkdir out_dir ;
+    let main_fn = out_dir ^ "/main.c" in
+    let module_fn = out_dir ^ "/scanner.ll" in
+    let exe_fn = out_dir ^ "/scanner.exe" in
+    let opt_module_fn = out_dir ^ "/scanner-opt.ll" in
+    let remarks_fn = out_dir ^ "/remarks.yml" in
+    let header_fn = out_dir ^ "/scanner.h" in
+    let open Type.PrimType in
+    (* Generate header. *)
+    Out_channel.with_file header_fn ~f:write_header ;
+    (* Generate main file. *)
+    let () =
+      let funcs, calls =
+        List.filter params ~f:(fun (n, _) ->
+            List.exists ir_module.I.IRGen.params ~f:(fun n' -> String.(n = n'.name))
+        )
+        |> List.mapi ~f:(fun i (n, t) ->
+               match t with
+               | NullT -> failwith "No null parameters."
+               | IntT _ -> from_fn "load_int.c" n i
+               | BoolT _ -> from_fn "load_bool.c" n i
+               | StringT _ -> from_fn "load_string.c" n i
+               | VoidT | TupleT _ -> failwith "Unsupported parameter type." )
+        |> List.unzip
+      in
+      let header_str = sprintf "#include \"%s\"" header_fn in
+      let funcs_str = String.concat (header_str :: funcs) ~sep:"\n" in
+      let calls_str = String.concat calls ~sep:"\n" in
+      let perf_template = Project_config.project_root ^ "/bin/templates/perf.c" in
+      let perf_c =
+        let open In_channel in
+        with_file perf_template ~f:(fun ch ->
+            String.template (input_all ch) [funcs_str; calls_str] )
+      in
+      Out_channel.(with_file main_fn ~f:(fun ch -> output_string ch perf_c))
+    in
+    (* Generate scanner module. *)
+    let () =
+      let module_ = codegen ir_module in
+      Llvm.print_module module_fn module_
+    in
+    let clang = Project_config.llvm_root ^ "/bin/clang" in
+    let opt = Project_config.llvm_root ^ "/bin/opt" in
+    let cflags = ["-g"; "-lcmph"] in
+    let cflags =
+      (if gprof then ["-pg"] else []) @ (if debug then ["-O0"] else []) @ cflags
+    in
+    if debug then command_exn ([clang] @ cflags @ [module_fn; main_fn; "-o"; exe_fn])
+    else (
+      command_exn
+        [ opt
+        ; "-S"
+        ; sprintf "-pass-remarks-output=%s" remarks_fn
+        ; "-globalopt -simplifycfg -dce -inline -dce -simplifycfg -sroa \
+           -instcombine -simplifycfg -sroa -instcombine -jump-threading \
+           -instcombine -reassociate -early-cse -mem2reg -loop-idiom -loop-rotate \
+           -licm -loop-unswitch -loop-deletion -loop-unroll -sroa -instcombine \
+           -gvn -memcpyopt -sccp -sink -instsimplify -instcombine -jump-threading \
+           -dse -simplifycfg -loop-idiom -loop-deletion -jump-threading \
+           -slp-vectorizer -load-store-vectorizer -adce -loop-vectorize \
+           -instcombine -simplifycfg -loop-load-elim"
+        ; module_fn
+        ; ">"
+        ; opt_module_fn ] ;
+      command_exn ([clang] @ cflags @ [opt_module_fn; main_fn; "-o"; exe_fn]) )
 end
