@@ -30,11 +30,9 @@ module Writer : sig
   type bitstring = t
 
   module Pos : sig
-    type t
+    type t [@@deriving sexp]
 
-    val ( - ) : t -> t -> t
-
-    val to_bits : t -> int64
+    val ( - ) : t -> t -> int64
 
     val to_bytes_exn : t -> int64
   end
@@ -60,6 +58,8 @@ module Writer : sig
   val flush : t -> unit
 
   val pos : t -> Pos.t
+
+  val id : t -> Core.Uuid.t
 
   val seek : t -> Pos.t -> unit
 

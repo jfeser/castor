@@ -18,12 +18,20 @@ let _ =
     [[1; 4; 1]; [2; 3; 2]; [3; 4; 3]; [4; 6; 1]; [5; 6; 3]]
 
 let%expect_test "cross-tuple" =
+  let module S =
+    Serialize.Make (struct
+        let layout_map_channel = None
+      end)
+      (Eval)
+  in
   let module I =
     Implang.IRGen.Make (struct
         let code_only = true
       end)
       (Eval)
-      () in
+      (S)
+      ()
+  in
   let layout =
     of_string_exn "AList(r1, ATuple([AScalar(r1.f), AScalar(r1.g - r1.f)], cross))"
     |> M.resolve |> M.annotate_schema |> M.annotate_key_layouts
@@ -57,7 +65,7 @@ let%expect_test "cross-tuple" =
          loop (not done(list_0)) {
              tup9 = next(list_0);
              if (not done(list_0)) {
-                 print(Tuple[Int, Int[nonnull]], tup9);
+                 print(Tuple[Int[nonnull], Int[nonnull]], tup9);
              } else {
 
              }
@@ -77,12 +85,20 @@ let%expect_test "cross-tuple" =
     } |}]
 
 let%expect_test "hash-idx" =
+  let module S =
+    Serialize.Make (struct
+        let layout_map_channel = None
+      end)
+      (Eval)
+  in
   let module I =
     Implang.IRGen.Make (struct
         let code_only = true
       end)
       (Eval)
-      () in
+      (S)
+      ()
+  in
   let layout =
     of_string_exn
       "ATuple([AList(r1, AScalar(r1.f)) as f, AHashIdx(dedup(select([r1.f], r1)) \
@@ -152,7 +168,7 @@ let%expect_test "hash-idx" =
          loop (not done(tuple_1)) {
              tup13 = next(tuple_1);
              if (not done(tuple_1)) {
-                 print(Tuple[Int, Int, Int[nonnull]], tup13);
+                 print(Tuple[Int[nonnull], Int[nonnull], Int[nonnull]], tup13);
              } else {
 
              }
@@ -172,12 +188,20 @@ let%expect_test "hash-idx" =
     } |}]
 
 let%expect_test "example-1" =
+  let module S =
+    Serialize.Make (struct
+        let layout_map_channel = None
+      end)
+      (Eval)
+  in
   let module I =
     Implang.IRGen.Make (struct
         let code_only = true
       end)
       (Eval)
-      () in
+      (S)
+      ()
+  in
   let params =
     [ Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p"
     ; Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c" ]
@@ -279,7 +303,8 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
          loop (not done(filter_0)) {
              tup21 = next(filter_0);
              if (not done(filter_0)) {
-                 print(Tuple[Int, Int, Int, Int], tup21);
+                 print(Tuple[Int[nonnull], Int[nonnull], Int[nonnull],
+                 Int[nonnull]], tup21);
              } else {
 
              }
@@ -299,12 +324,20 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
     } |}]
 
 let%expect_test "example-2" =
+  let module S =
+    Serialize.Make (struct
+        let layout_map_channel = None
+      end)
+      (Eval)
+  in
   let module I =
     Implang.IRGen.Make (struct
         let code_only = true
       end)
       (Eval)
-      () in
+      (S)
+      ()
+  in
   let params =
     [ Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p"
     ; Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c" ]
@@ -396,7 +429,8 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
          loop (not done(hash_idx_0)) {
              tup17 = next(hash_idx_0);
              if (not done(hash_idx_0)) {
-                 print(Tuple[Int, Int, Int, Int], tup17);
+                 print(Tuple[Int[nonnull], Int[nonnull], Int[nonnull],
+                 Int[nonnull]], tup17);
              } else {
 
              }
@@ -416,12 +450,20 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
     } |}]
 
 let%expect_test "example-3" =
+  let module S =
+    Serialize.Make (struct
+        let layout_map_channel = None
+      end)
+      (Eval)
+  in
   let module I =
     Implang.IRGen.Make (struct
         let code_only = true
       end)
       (Eval)
-      () in
+      (S)
+      ()
+  in
   let params =
     [ Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p"
     ; Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c" ]
@@ -477,7 +519,7 @@ select([lp.counter, lc.counter],
     }fun hash_idx_3 (start) {
          if (buf[start + 16 + buf[start + 8 : 8] + hash(start + 16, id_p) * 8 :
              8] = 0) {
-
+  
          } else {
               kstart = buf[start + 16 + buf[start + 8 : 8] + hash(start +
               16, id_p) * 8 : 8];
@@ -490,7 +532,7 @@ select([lp.counter, lc.counter],
                   tup13 = next(list_5);
                   yield tup13;
               } else {
-
+  
               }
          }
     }fun scalar_17 (start,
@@ -546,7 +588,7 @@ select([lp.counter, lc.counter],
              kstart = start + 16 + mid28 * 9;
              init scalar_17(lp_succ, lp_k, lp_counter, kstart);
              key29 = next(scalar_17);
-             if (key29 < lp_counter) {
+             if (key29[0] < lp_counter || key29[0] = lp_counter && false) {
                  low26 = mid28 + 1;
              } else {
                   high27 = mid28;
@@ -556,7 +598,7 @@ select([lp.counter, lc.counter],
              kstart = start + 16 + low26 * 9;
              init scalar_17(lp_succ, lp_k, lp_counter, kstart);
              key30 = next(scalar_17);
-             loop (key30 < lp_succ) {
+             loop (key30[0] < lp_succ || key30[0] = lp_succ && false) {
                  vstart = buf[start + 16 + low26 * 9 + 1 : 8];
                  init list_18(lp_succ, lp_k, lp_counter, vstart, key[0]);
                  loop (not done(list_18)) {
@@ -564,13 +606,13 @@ select([lp.counter, lc.counter],
                      if (not done(list_18)) {
                          yield tup31;
                      } else {
-
+  
                      }
                  }
                  low26 = low26 + 1;
              }
          } else {
-
+  
          }
     }fun filter_15 (start,
          lp_counter,
@@ -583,10 +625,10 @@ select([lp.counter, lc.counter],
                  if (tup32[1] = id_c) {
                      yield tup32;
                  } else {
-
+  
                  }
              } else {
-
+  
              }
          }
     }fun tuple_2 () {
@@ -602,11 +644,11 @@ select([lp.counter, lc.counter],
                          (tup14[0], tup14[1], tup14[2], tup33[0], tup33[1],
                           tup33[2]);
                      } else {
-
+  
                      }
                  }
              } else {
-
+  
              }
          }
     }fun select_0 () {
@@ -616,7 +658,7 @@ select([lp.counter, lc.counter],
              if (not done(tuple_2)) {
                  yield (tup34[1], tup34[5]);
              } else {
-
+  
              }
          }
     }fun printer () {
@@ -624,9 +666,9 @@ select([lp.counter, lc.counter],
          loop (not done(select_0)) {
              tup36 = next(select_0);
              if (not done(select_0)) {
-                 print(Tuple[Int, Int], tup36);
+                 print(Tuple[Int[nonnull], Int[nonnull]], tup36);
              } else {
-
+  
              }
          }
     }fun counter () {
@@ -637,7 +679,7 @@ select([lp.counter, lc.counter],
              if (not done(select_0)) {
                  c = c + 1;
              } else {
-
+  
              }
          }
          return c;

@@ -79,5 +79,5 @@ module IRGen : sig
     val pp : Formatter.t -> ir_module -> unit
   end
 
-  module Make (Config : Config.S) (Eval : Eval.S) () : S
+  module Make (Config : Config.S) (Eval : Eval.S) (Serialize : Serialize.S) () : S
 end

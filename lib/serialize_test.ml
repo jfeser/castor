@@ -12,7 +12,7 @@ module M = Abslayout_db.Make (Eval)
 
 module S =
   Serialize.Make (struct
-      let layout_map = false
+      let layout_map_channel = None
     end)
     (Eval)
 
@@ -32,7 +32,7 @@ let%expect_test "scalar-int" =
   let buf = Buffer.create 1024 in
   let _, len = S.serialize (Bitstring.Writer.with_buffer buf) type_ layout in
   let buf_str = Buffer.contents buf |> String.escaped in
-  [%sexp_of : Type.t * int * string] (type_, len, buf_str) |> print_s ;
+  [%sexp_of: Type.t * int * string] (type_, len, buf_str) |> print_s ;
   [%expect {|
     ((IntT ((range (1 1)) (nullable false))) 1 "\\001") |}]
 
@@ -45,7 +45,7 @@ let%expect_test "scalar-bool" =
   let buf = Buffer.create 1024 in
   let _, len = S.serialize (Bitstring.Writer.with_buffer buf) type_ layout in
   let buf_str = Buffer.contents buf |> String.escaped in
-  [%sexp_of : Type.t * int * string] (type_, len, buf_str) |> print_s ;
+  [%sexp_of: Type.t * int * string] (type_, len, buf_str) |> print_s ;
   [%expect {| ((BoolT ((nullable false))) 1 "\\001") |}]
 
 let%expect_test "scalar-string" =
@@ -57,7 +57,7 @@ let%expect_test "scalar-string" =
   let buf = Buffer.create 1024 in
   let _, len = S.serialize (Bitstring.Writer.with_buffer buf) type_ layout in
   let buf_str = Buffer.contents buf |> String.escaped in
-  [%sexp_of : Type.t * int * string] (type_, len, buf_str) |> print_s ;
+  [%sexp_of: Type.t * int * string] (type_, len, buf_str) |> print_s ;
   [%expect
     {|
     ((StringT ((nchars (4 4)) (nullable false))) 8 "test\\000\\000\\000\\000") |}]
@@ -71,7 +71,7 @@ let%expect_test "tuple" =
   let buf = Buffer.create 1024 in
   let _, len = S.serialize (Bitstring.Writer.with_buffer buf) type_ layout in
   let buf_str = Buffer.contents buf |> String.escaped in
-  [%sexp_of : Type.t * int * string] (type_, len, buf_str) |> print_s ;
+  [%sexp_of: Type.t * int * string] (type_, len, buf_str) |> print_s ;
   [%expect
     {|
     ((TupleT
@@ -89,7 +89,7 @@ let%expect_test "hash-idx" =
   let buf = Buffer.create 1024 in
   let _, len = S.serialize (Bitstring.Writer.with_buffer buf) type_ layout in
   let buf_str = Buffer.contents buf |> String.escaped in
-  [%sexp_of : Type.t * int * int] (type_, len, String.length buf_str) |> print_s ;
+  [%sexp_of: Type.t * int * int] (type_, len, String.length buf_str) |> print_s ;
   [%expect
     {|
     ((HashIdxT
@@ -105,7 +105,7 @@ let%expect_test "ordered-idx" =
     |> M.resolve |> M.annotate_schema |> M.annotate_key_layouts
   in
   let type_ = M.to_type layout in
-  [%sexp_of : Type.t] type_ |> print_s ;
+  [%sexp_of: Type.t] type_ |> print_s ;
   [%expect
     {|
     (OrderedIdxT
@@ -114,7 +114,7 @@ let%expect_test "ordered-idx" =
   let buf = Buffer.create 1024 in
   let _, len = S.serialize (Bitstring.Writer.with_buffer buf) type_ layout in
   let buf_str = Buffer.contents buf |> String.escaped in
-  [%sexp_of : int * string] (len, buf_str) |> print_s ;
+  [%sexp_of: int * string] (len, buf_str) |> print_s ;
   [%expect
     {|
     (43

@@ -7,6 +7,15 @@ open Llvm
 open Llvm_analysis
 module Execution_engine = Llvm_executionengine
 
+(* Turn on some llvm error handling. *)
+let () =
+  Llvm.enable_pretty_stacktrace () ;
+  Llvm.install_fatal_error_handler (fun err ->
+      let ocaml_trace = Backtrace.get () in
+      print_endline (Backtrace.to_string ocaml_trace) ;
+      print_endline "" ;
+      print_endline err )
+
 let fail = Error.raise
 
 let sexp_of_llvalue : llvalue -> Sexp.t = fun v -> Sexp.Atom (string_of_llvalue v)
@@ -77,11 +86,11 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
           | Some (Local v) -> v
           | Some (Param _) ->
               Error.create "Params mistagged." m
-                [%sexp_of : var Base.Hashtbl.M(String).t]
+                [%sexp_of: var Base.Hashtbl.M(String).t]
               |> Error.raise
           | None ->
               Error.create "Params not found." (Hashtbl.keys m)
-                [%sexp_of : string list]
+                [%sexp_of: string list]
               |> Error.raise )
         | None, [] -> Error.of_string "Empty namespace." |> Error.raise
       in
@@ -102,10 +111,10 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
           | None ->
               Error.create "Unknown variable."
                 (k, List.map ~f:Hashtbl.keys maps)
-                [%sexp_of : string * string list list]
+                [%sexp_of: string * string list list]
               |> Error.raise )
-        | m :: ms ->
-          match lookup_single m k with Some v -> v | None -> lookup_chain ms k
+        | m :: ms -> (
+          match lookup_single m k with Some v -> v | None -> lookup_chain ms k )
       in
       lookup_chain maps key
   end
@@ -113,9 +122,13 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
   class func_ctx func params =
     object
       val values = Hashtbl.create (module String)
+
       method values : var Hashtbl.M(String).t = values
+
       method name : string = func.I.name
+
       method func : I.func = func
+
       method tctx : Type.PrimType.t Hashtbl.M(String).t =
         Hashtbl.of_alist_exn (module String) (func.locals @ params)
     end
@@ -123,26 +136,42 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
   class ictx func params =
     object
       inherit func_ctx func params
+
       val mutable init = None
+
       val mutable step = None
+
       val mutable switch = None
+
       val mutable switch_index = 0
+
       method init : llvalue = Option.value_exn init
+
       method step : llvalue = Option.value_exn step
+
       method switch : llvalue = Option.value_exn switch
+
       method switch_index : int = switch_index
+
       method set_init x = init <- Some x
+
       method set_step x = step <- Some x
+
       method set_switch x = switch <- Some x
+
       method incr_switch_index () = switch_index <- switch_index + 1
     end
 
   class fctx func params =
     object
       inherit func_ctx func params
+
       val mutable llfunc = None
+
       method! values : var Hashtbl.M(String).t = values
+
       method llfunc : llvalue = Option.value_exn llfunc
+
       method set_llfunc x = llfunc <- Some x
     end
 
@@ -164,13 +193,13 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
     let error =
       Error.create "Unknown iterator."
         (n, Hashtbl.keys iters)
-        [%sexp_of : string * string list]
+        [%sexp_of: string * string list]
     in
     Option.value_exn ~error (Hashtbl.find iters n)
 
   let define_fresh_global :
       ?linkage:Linkage.t -> llvalue -> string -> llmodule -> llvalue =
-   fun ?(linkage= Linkage.Internal) v n m ->
+   fun ?(linkage = Linkage.Internal) v n m ->
     let rec loop i =
       let n = if i = 0 then n else sprintf "%s.%d" n i in
       if Option.is_some (lookup_global n m) then loop (i + 1)
@@ -219,12 +248,11 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
     ( match classify_type typ with
     | Struct ->
         if i >= Array.length (struct_element_types typ) then
-          Error.create "Tuple index out of bounds." (v, i)
-            [%sexp_of : llvalue * int]
+          Error.create "Tuple index out of bounds." (v, i) [%sexp_of: llvalue * int]
           |> Error.raise
     | k ->
         Error.create "Expected a tuple." (v, k, i)
-          [%sexp_of : llvalue * TypeKind.t * int]
+          [%sexp_of: llvalue * TypeKind.t * int]
         |> Error.raise ) ;
     build_extractvalue v i n b
 
@@ -431,7 +459,7 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
     List.iter types ~f:(function
       | IntT _ -> ()
       | t ->
-          Error.create "Not supported as part of a composite key." t [%sexp_of : t]
+          Error.create "Not supported as part of a composite key." t [%sexp_of: t]
           |> Error.raise ) ;
     codegen_int_hash fctx hash_ptr key
 
@@ -470,14 +498,13 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
         | _ ->
             fail
               (Error.create "Unexpected equality." (t1, t2)
-                 [%sexp_of : Type.PrimType.t * Type.PrimType.t]) )
+                 [%sexp_of: Type.PrimType.t * Type.PrimType.t]) )
       | Lt -> build_icmp Icmp.Slt x1 x2 "lttmp" builder
       | And -> build_and x1 x2 "andtmp" builder
       | Or -> build_or x1 x2 "ortmp" builder
       | Hash -> (
           if Type.PrimType.is_nullable t2 then
-            Error.create "Cannot hash nullable type." t2
-              [%sexp_of : Type.PrimType.t]
+            Error.create "Cannot hash nullable type." t2 [%sexp_of: Type.PrimType.t]
             |> Error.raise ;
           match t2 with
           | StringT _ -> codegen_string_hash fctx x1 x2
@@ -593,13 +620,13 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
       match Hashtbl.find iters func with
       | Some x -> x
       | None ->
-          Error.create "Use of an undeclared iterator." func [%sexp_of : string]
+          Error.create "Use of an undeclared iterator." func [%sexp_of: string]
           |> Error.raise
     in
     if List.length args <> List.length iter_fctx#func.I.args then
       Error.create "Wrong number of arguments."
         (func, args, iter_fctx#func.args)
-        [%sexp_of : string * I.expr list * (string * Type.PrimType.t) list]
+        [%sexp_of: string * I.expr list * (string * Type.PrimType.t) list]
       |> fail
     else
       let llargs = List.map args ~f:(codegen_expr fctx) in
@@ -821,8 +848,8 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
       Logs.debug (fun m -> m "%s" (string_of_llvalue ictx#step)) ;
       Logs.debug (fun m ->
           m "%s"
-            (Sexp.to_string_hum
-               ([%sexp_of : string list] (Hashtbl.keys ictx#values))) ) ;
+            (Sexp.to_string_hum ([%sexp_of: string list] (Hashtbl.keys ictx#values)))
+      ) ;
       assert_valid_function ictx#step
     in
     fun ictx ->
@@ -849,7 +876,7 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
       let (I.({args; locals; ret_type; body; _}) as func) = fctx#func in
       Logs.debug (fun m -> m "Codegen for func %s started." name) ;
       Logs.debug (fun m -> m "%a" I.pp_func func) ;
-      Logs.debug (fun m -> m "%s" ([%sexp_of : I.func] func |> Sexp.to_string_hum)) ;
+      Logs.debug (fun m -> m "%s" ([%sexp_of: I.func] func |> Sexp.to_string_hum)) ;
       if
         (* Check that function is not already defined. *)
         Hashtbl.(mem iters name || mem funcs name)
@@ -895,8 +922,9 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
     let bb = append_block ctx "entry" llfunc in
     let ctx =
       object
-        val values
-          = Hashtbl.of_alist_exn (module String) [("bufp", Local (param llfunc 0))]
+        val values =
+          Hashtbl.of_alist_exn (module String) [("bufp", Local (param llfunc 0))]
+
         method values = values
       end
     in
@@ -921,11 +949,13 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
         in
         let fctx =
           object
-            val values
-              = Hashtbl.of_alist_exn
-                  (module String)
-                  [("params", Local (param llfunc 0))]
+            val values =
+              Hashtbl.of_alist_exn
+                (module String)
+                [("params", Local (param llfunc 0))]
+
             method values = values
+
             method llfunc = llfunc
           end
         in
@@ -1018,7 +1048,7 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
         | 16 -> fprintf fmt "short"
         | 32 -> fprintf fmt "int"
         | 64 -> fprintf fmt "long"
-        | x -> Error.(create "Unknown bitwidth" x [%sexp_of : int] |> raise) )
+        | x -> Error.(create "Unknown bitwidth" x [%sexp_of: int] |> raise) )
       | Pointer ->
           let elem_t = element_type t in
           let elem_t =
@@ -1027,7 +1057,7 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
             | _ -> elem_t
           in
           fprintf fmt "%a *" pp_type elem_t
-      | _ -> Error.(create "Unknown type." t [%sexp_of : lltype] |> raise)
+      | _ -> Error.(create "Unknown type." t [%sexp_of: lltype] |> raise)
     and pp_params fmt ts =
       Array.iteri ts ~f:(fun i t ->
           if i = 0 then fprintf fmt "params*" else fprintf fmt "%a" pp_type t ;

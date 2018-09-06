@@ -11,8 +11,8 @@ type t = Label of string * t | Piece of piece | PList of t list
 
 (** Serialize an integer. Little endian. Width is the number of bits to use. *)
 let of_int : ?null:bool -> width:int -> int -> t =
- fun ?(null= false) ~width x ->
-  assert (0 <= width && width <= 64 && (not null || width <= 63)) ;
+ fun ?(null = false) ~width x ->
+  assert (0 <= width && width <= 64 && ((not null) || width <= 63)) ;
   let nbytes = (width / 8) + 1 in
   let buf = Bytes.make nbytes '\x00' in
   for i = 0 to nbytes - 1 do
@@ -21,8 +21,8 @@ let of_int : ?null:bool -> width:int -> int -> t =
   Piece {str= Bytes.to_string buf; len= width}
 
 let of_int64 : ?null:bool -> width:int -> int64 -> t =
- fun ?(null= false) ~width x ->
-  assert (0 <= width && width <= 64 && (not null || width <= 63)) ;
+ fun ?(null = false) ~width x ->
+  assert (0 <= width && width <= 64 && ((not null) || width <= 63)) ;
   let nbytes = (width / 8) + 1 in
   let buf = Bytes.make nbytes '\x00' in
   for i = 0 to nbytes - 1 do
@@ -144,22 +144,28 @@ module Writer = struct
   type bitstring = t
 
   module Pos = struct
-    type t = int * int64
+    type t = {bit_pos: int; byte_pos: int64} [@@deriving sexp]
 
-    let ( - ) (i1, b1) (i2, b2) = (i1 - i2, Int64.(b1 - b2))
+    let create bit_pos byte_pos =
+      assert (bit_pos >= 0 && bit_pos < 8 && Int64.(byte_pos >= 0L)) ;
+      {bit_pos; byte_pos}
 
-    let to_bits (i, b) = Int64.(of_int i + (of_int 8 * b))
+    let ( - ) p1 p2 =
+      assert (p1.bit_pos = 0 && p2.bit_pos = 0) ;
+      Int64.(p1.byte_pos - p2.byte_pos)
 
-    let to_bytes_exn (i, b) = if i = 0 then b else failwith "Nonzero bit offset."
+    let to_bytes_exn {byte_pos; bit_pos} =
+      if bit_pos = 0 then byte_pos else failwith "Nonzero bit offset."
   end
 
-  type t = {mutable buf: int; mutable pos: int; writer: ByteWriter.t}
+  type t =
+    {mutable buf: int; mutable pos: int; writer: ByteWriter.t; id: Core.Uuid.t}
 
-  let with_file : string -> t =
-   fun fn -> {writer= ByteWriter.of_file fn; buf= 0; pos= 0}
+  let with_bytewriter w = {writer= w; buf= 0; pos= 0; id= Core.Uuid.create ()}
 
-  let with_buffer : Buffer.t -> t =
-   fun buf -> {writer= ByteWriter.of_buffer buf; buf= 0; pos= 0}
+  let with_file fn = with_bytewriter (ByteWriter.of_file fn)
+
+  let with_buffer buf = with_bytewriter (ByteWriter.of_buffer buf)
 
   let write_bit : t -> int -> unit =
    fun t x ->
@@ -226,10 +232,11 @@ module Writer = struct
     if t.pos > 0 then t.writer.output_byte (Char.of_int_exn t.buf) ;
     t.writer.flush ()
 
-  let pos : t -> Pos.t = fun t -> (t.pos, t.writer.pos ())
+  let pos : t -> Pos.t = fun t -> Pos.create t.pos (t.writer.pos ())
 
-  let seek : t -> Pos.t -> unit =
-   fun t (bit_pos, byte_pos) ->
+  let id t = t.id
+
+  let seek t Pos.({bit_pos; byte_pos}) =
     flush t ;
     t.writer.seek byte_pos ;
     t.buf <- Char.to_int (t.writer.peek ()) ;
@@ -237,7 +244,7 @@ module Writer = struct
 
   let close : t -> unit = fun t -> t.writer.close ()
 
-  let write_file ?(buf_len= 1024) t fn =
+  let write_file ?(buf_len = 1024) t fn =
     let buf = Bytes.create buf_len in
     In_channel.with_file fn ~f:(fun ch ->
         let rec loop () =

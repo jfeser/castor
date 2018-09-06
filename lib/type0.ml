@@ -12,10 +12,10 @@ module PrimType = struct
   [@@deriving compare, hash, sexp]
 
   let of_primvalue = function
-    | `Int _ -> IntT {nullable= true}
-    | `String _ -> StringT {nullable= true}
-    | `Bool _ -> BoolT {nullable= true}
-    | `Unknown _ -> StringT {nullable= true}
+    | `Int _ -> IntT {nullable= false}
+    | `String _ -> StringT {nullable= false}
+    | `Bool _ -> BoolT {nullable= false}
+    | `Unknown _ -> StringT {nullable= false}
     | _ -> failwith "Unknown type."
 
   let to_string : t -> string = function
@@ -27,11 +27,11 @@ module PrimType = struct
     | TupleT _ -> "tuple"
 
   let of_dtype = function
-    | Db.DInt -> IntT {nullable= true}
-    | Db.DString -> StringT {nullable= true}
-    | Db.DBool -> BoolT {nullable= true}
-    | Db.DRational -> StringT {nullable= true}
-    | t -> Error.create "Unexpected dtype." t [%sexp_of : Db.dtype] |> Error.raise
+    | Db.DInt -> IntT {nullable= false}
+    | Db.DString -> StringT {nullable= false}
+    | Db.DBool -> BoolT {nullable= false}
+    | Db.DRational -> StringT {nullable= false}
+    | t -> Error.create "Unexpected dtype." t [%sexp_of: Db.dtype] |> Error.raise
 
   let rec pp_tuple pp_v fmt =
     let open Format in
@@ -65,6 +65,10 @@ module PrimType = struct
     | StringT {nullable= n1}, StringT {nullable= n2} -> StringT {nullable= n1 || n2}
     | TupleT t1, TupleT t2 -> TupleT (List.map2_exn t1 t2 ~f:unify)
     | VoidT, VoidT -> VoidT
-    | _, _ ->
-        Error.create "Nonunifiable." (t1, t2) [%sexp_of : t * t] |> Error.raise
+    | _, _ -> Error.create "Nonunifiable." (t1, t2) [%sexp_of: t * t] |> Error.raise
+
+  let rec width = function
+    | NullT | IntT _ | BoolT _ | StringT _ -> 1
+    | TupleT ts -> List.map ts ~f:width |> List.sum (module Int) ~f:(fun x -> x)
+    | VoidT -> 0
 end
