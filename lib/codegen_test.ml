@@ -65,7 +65,8 @@ let%expect_test "ordered-idx" =
   let out_dir = Filename.temp_dir "bin" "" in
   let exe_fn, data_fn = C.compile ~out_dir ~gprof:false ~params:[] layout in
   In_channel.input_all (In_channel.create layout_file) |> print_endline ;
-  [%expect {|
+  [%expect
+    {|
     0:8 Ordered idx len (=66)
     8:8 Ordered idx index len (=45)
     16:1 Scalar (=(Int 0))
@@ -92,3 +93,33 @@ let%expect_test "ordered-idx" =
   [%expect {|
     1,1,
     2,2, |}]
+
+let%expect_test "hash-idx" =
+  let layout_file = Filename.temp_file "layout" "txt" in
+  let (module S), (module I), (module C) = make_modules layout_file in
+  let layout =
+    of_string_exn "AHashIdx(Dedup(Select([r1.f], r1)) as k, AScalar(k.f), 3)"
+    |> M.resolve |> M.annotate_schema |> M.annotate_key_layouts
+  in
+  let out_dir = Filename.temp_dir "bin" "" in
+  let exe_fn, data_fn = C.compile ~out_dir ~gprof:false ~params:[] layout in
+  In_channel.input_all (In_channel.create layout_file) |> print_endline ;
+  [%expect {|
+    0:8 Table len
+    8:8 Table len
+    16:104 Table hash
+    120:40 Table key map
+    160:1 Scalar (=(Int 3))
+    160:10 Table values
+    161:1 Scalar (=(Int 3))
+    162:1 Scalar (=(Int 0))
+    163:1 Scalar (=(Int 0))
+    164:1 Scalar (=(Int 4))
+    165:1 Scalar (=(Int 4))
+    166:1 Scalar (=(Int 1))
+    167:1 Scalar (=(Int 1))
+    168:1 Scalar (=(Int 2))
+    169:1 Scalar (=(Int 2))
+|}] ;
+  Unix.system (sprintf "%s -p %s" exe_fn data_fn) |> ignore ;
+  [%expect {| 3,3, |}]

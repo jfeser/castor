@@ -221,32 +221,72 @@ let name_of_var = function
   | Var n -> n
   | e -> fail (Error.create "Expected a variable." e [%sexp_of: expr])
 
+module Ctx0 = struct
+  type var = Global of expr | Arg of int | Field of expr
+  [@@deriving compare, sexp]
+
+  type t = var Map.M(A.Name.Compare_no_type).t [@@deriving compare, sexp]
+
+  let empty = Map.empty (module A.Name.Compare_no_type)
+
+  let of_schema schema tup =
+    List.mapi schema ~f:(fun i n -> (n, Field Infix.(index tup i)))
+    |> Map.of_alist_exn (module A.Name.Compare_no_type)
+
+  (* Create an argument list for a caller. *)
+  let make_caller_args ctx =
+    Map.to_alist ~key_order:`Decreasing ctx
+    |> List.filter_map ~f:(fun (n, v) ->
+           match v with
+           | Global _ -> None
+           | Arg i -> Some (n, i)
+           | Field _ ->
+               Error.create "Unexpected field in caller context." ctx [%sexp_of: t]
+               |> Error.raise )
+    |> List.sort ~compare:(fun (_, i1) (_, i2) -> Int.compare i1 i2)
+    |> List.map ~f:(fun (n, _) -> (A.Name.to_var n, A.Name.type_exn n))
+
+  let bind ctx name type_ expr =
+    Map.set ctx ~key:(A.Name.create ~type_ name) ~data:(Field expr)
+end
+
 module Builder = struct
   type func_b =
     { name: string
     ; args: (string * Type.PrimType.t) list
     ; ret: Type.PrimType.t
     ; locals: Type.PrimType.t Hashtbl.M(String).t
+    ; type_ctx: Type.PrimType.t Hashtbl.M(String).t
     ; body: prog ref }
   [@@deriving sexp]
 
-  let create ?(args = []) ~name ~ret =
+  let create ~ctx ~name ~ret =
+    let args = Ctx0.make_caller_args ctx in
+    let type_ctx =
+      Map.to_alist ctx
+      |> List.filter_map ~f:(function
+           | n, Ctx0.Global _ -> Some (A.Name.to_var n, A.Name.type_exn n)
+           | _ -> None )
+      |> Hashtbl.of_alist_exn (module String)
+    in
+    List.iter args ~f:(fun (n, t) -> Hashtbl.set type_ctx ~key:n ~data:t) ;
     let locals =
       match Hashtbl.of_alist (module String) args with
       | `Ok l -> l
       | `Duplicate_key _ -> fail (Error.of_string "Duplicate argument.")
     in
-    {name; args; ret; locals; body= ref []}
+    {name; args; ret; locals; body= ref []; type_ctx}
 
   (** Create a function builder with an empty body and a copy of the locals
       table. *)
   let new_scope b = {b with body= ref []}
 
-  let build_var n t {locals; _} =
+  let build_var n t {locals; type_ctx; _} =
     if Hashtbl.mem locals n then
       fail (Error.create "Variable already defined." n [%sexp_of: string])
     else (
       Hashtbl.set locals ~key:n ~data:t ;
+      Hashtbl.set type_ctx ~key:n ~data:t ;
       Var n )
 
   let build_arg i ({args; _} as b) =
@@ -258,7 +298,7 @@ module Builder = struct
 
   let build_yield e b = b.body := Yield e :: !(b.body)
 
-  let build_func {name; args; ret; locals; body} =
+  let build_func {name; args; ret; locals; body; _} =
     { name
     ; args
     ; ret_type= ret
@@ -273,7 +313,7 @@ module Builder = struct
     build_assign e var b ; var
 
   let build_print e b =
-    let t = infer_type b.locals e in
+    let t = infer_type b.type_ctx e in
     b.body := Print (t, e) :: !(b.body)
 
   let build_return e b = b.body := Return e :: !(b.body)
@@ -304,7 +344,7 @@ module Builder = struct
     build_var n t b
 
   let build_fresh_defn ~fresh v e b =
-    let var = build_fresh_var ~fresh v (infer_type b.locals e) b in
+    let var = build_fresh_var ~fresh v (infer_type b.type_ctx e) b in
     build_assign e var b ; var
 
   let build_count_loop ~fresh c f b =
@@ -339,12 +379,16 @@ module Builder = struct
               b )
           b
 
-  let build_eq x y b =
-    let t1 = infer_type b.locals x in
-    let t2 = infer_type b.locals y in
+  let rec build_eq x y b =
+    let t1 = infer_type b.type_ctx x in
+    let t2 = infer_type b.type_ctx y in
     let open Type.PrimType in
     match (t1, t2) with
     | IntT {nullable= false}, IntT {nullable= false} -> Infix.(x = y)
+    | TupleT ts1, TupleT ts2 when List.length ts1 = List.length ts2 ->
+        List.init (List.length ts1) ~f:(fun i ->
+            build_eq Infix.(index x i) Infix.(index y i) b )
+        |> List.fold_left ~init:(Bool true) ~f:Infix.( && )
     | _ ->
         Error.create "Incomparable types." (t1, t2) [%sexp_of: t * t] |> Error.raise
 
@@ -356,8 +400,8 @@ module Builder = struct
           build_lt (index x i) (index y i) b
           || (build_eq (index x i) (index y i) b && tuple_lt Int.(i + 1) l))
     in
-    let t1 = infer_type b.locals x in
-    let t2 = infer_type b.locals y in
+    let t1 = infer_type b.type_ctx x in
+    let t2 = infer_type b.type_ctx y in
     let open Type.PrimType in
     match (t1, t2) with
     | IntT {nullable= false}, IntT {nullable= false} -> Infix.(x < y)
@@ -368,7 +412,7 @@ module Builder = struct
 
   let build_concat vs b =
     List.concat_map vs ~f:(fun v ->
-        match infer_type b.locals v with
+        match infer_type b.type_ctx v with
         | TupleT ts -> List.length ts |> List.init ~f:(fun i -> Infix.index v i)
         | t ->
             Error.create "Not a tuple." (v, t) [%sexp_of: expr * Type.PrimType.t]
@@ -381,19 +425,10 @@ module Builder = struct
 end
 
 module Ctx = struct
-  type var = Global of expr | Arg of int | Field of expr
-  [@@deriving compare, sexp]
-
-  type t = var Map.M(A.Name.Compare_no_type).t [@@deriving compare, sexp]
-
-  let empty = Map.empty (module A.Name.Compare_no_type)
+  include Ctx0
 
   let var_to_expr v b =
     match v with Global e | Field e -> e | Arg i -> Builder.build_arg i b
-
-  let of_schema schema tup =
-    List.mapi schema ~f:(fun i n -> (n, Field Infix.(index tup i)))
-    |> Map.of_alist_exn (module A.Name.Compare_no_type)
 
   (* Create a context for a callee and a caller argument list. *)
   let make_callee_context ctx b =
@@ -409,26 +444,10 @@ module Ctx = struct
                let callee_var = Arg (List.length args) in
                (Map.set ~key ~data:callee_var cctx, args @ [var_to_expr var b]) )
 
-  (* Create an argument list for a caller. *)
-  let make_caller_args ctx =
-    Map.to_alist ~key_order:`Decreasing ctx
-    |> List.filter_map ~f:(fun (n, v) ->
-           match v with
-           | Global _ -> None
-           | Arg i -> Some (n, i)
-           | Field _ ->
-               Error.create "Unexpected field in caller context." ctx [%sexp_of: t]
-               |> Error.raise )
-    |> List.sort ~compare:(fun (_, i1) (_, i2) -> Int.compare i1 i2)
-    |> List.map ~f:(fun (n, _) -> (A.Name.to_var n, A.Name.type_exn n))
-
   let find ctx name builder =
     Option.map (Map.find ctx name) ~f:(fun v -> var_to_expr v builder)
 
   let find_exn ctx name builder = Option.value_exn (find ctx name builder)
-
-  let bind ctx name type_ expr =
-    Map.set ctx ~key:(A.Name.create ~type_ name) ~data:(Field expr)
 end
 
 module Config = struct
@@ -546,18 +565,12 @@ module IRGen = struct
 
     let scan_empty {ctx; name; _} =
       let open Builder in
-      let b =
-        let args = Ctx.make_caller_args ctx in
-        create ~name ~args ~ret:Type.PrimType.VoidT
-      in
+      let b = create ~ctx ~name ~ret:Type.PrimType.VoidT in
       build_func b
 
     let scan_null {ctx; name; _} =
       let open Builder in
-      let b =
-        let args = Ctx.make_caller_args ctx in
-        create ~name ~args ~ret:Type.PrimType.NullT
-      in
+      let b = create ~ctx ~name ~ret:Type.PrimType.NullT in
       build_yield Null b ; build_func b
 
     let scan_int args =
@@ -566,8 +579,7 @@ module IRGen = struct
           let open Builder in
           let b =
             let ret_type = Type.PrimType.TupleT [IntT {nullable}] in
-            let args = Ctx.make_caller_args ctx in
-            create ~name ~args ~ret:ret_type
+            create ~ctx ~name ~ret:ret_type
           in
           let start = Ctx.find_exn ctx (A.Name.create "start") b in
           let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
@@ -583,8 +595,7 @@ module IRGen = struct
       | {ctx; name; type_= BoolT meta; _} ->
           let open Builder in
           let b =
-            let args = Ctx.make_caller_args ctx in
-            create ~name ~args ~ret:(TupleT [BoolT {nullable= meta.nullable}])
+            create ~ctx ~name ~ret:(TupleT [BoolT {nullable= meta.nullable}])
           in
           let start = Ctx.find_exn ctx (A.Name.create "start") b in
           let ival = Slice (start, 1) in
@@ -600,10 +611,7 @@ module IRGen = struct
       | {ctx; name; type_= StringT {nchars= (l, _) as nchars; nullable; _} as t; _}
         ->
           let open Builder in
-          let b =
-            let args = Ctx.make_caller_args ctx in
-            create ~name ~args ~ret:(TupleT [StringT {nullable}])
-          in
+          let b = create ~ctx ~name ~ret:(TupleT [StringT {nullable}]) in
           let start = build_arg 0 b in
           let nchars =
             match Type.AbsInt.concretize nchars with
@@ -663,8 +671,7 @@ module IRGen = struct
           let schema = A.Meta.(find_exn r schema) in
           Type.PrimType.TupleT (List.map schema ~f:A.Name.type_exn)
         in
-        let args = Ctx.make_caller_args ctx in
-        create ~name ~args ~ret:ret_type
+        create ~ctx ~name ~ret:ret_type
       in
       let ctx =
         let child_start =
@@ -688,8 +695,7 @@ module IRGen = struct
           let schema = A.Meta.(find_exn r schema) in
           Type.PrimType.TupleT (List.map schema ~f:A.Name.type_exn)
         in
-        let args = Ctx.make_caller_args ctx in
-        create ~name ~args ~ret:ret_type
+        create ~ctx ~name ~ret:ret_type
       in
       let start = Ctx.find_exn ctx (A.Name.create "start") b in
       let ctx = Ctx.bind ctx "start" int_t start in
@@ -739,8 +745,7 @@ module IRGen = struct
           let schema = A.Meta.(find_exn r schema) in
           Type.PrimType.TupleT (List.map schema ~f:A.Name.type_exn)
         in
-        let args = Ctx.make_caller_args ctx in
-        create ~name ~args ~ret:ret_type
+        create ~ctx ~name ~ret:ret_type
       in
       let start = Ctx.find_exn ctx (A.Name.create "start") b in
       let cstart = build_defn "cstart" int_t Infix.(start + hsize type_) b in
@@ -779,8 +784,7 @@ module IRGen = struct
           let schema = A.Meta.(find_exn r schema) in
           Type.PrimType.TupleT (List.map schema ~f:A.Name.type_exn)
         in
-        let args = Ctx.make_caller_args ctx in
-        create ~name ~args ~ret:ret_type
+        create ~ctx ~name ~ret:ret_type
       in
       let start = Ctx.find_exn ctx (A.Name.create "start") b in
       let kstart = build_var "kstart" int_t b in
@@ -826,10 +830,11 @@ module IRGen = struct
           build_step key_tuple key_iter b ;
           build_assign Infix.(value_ptr + len value_ptr key_type) vstart b ;
           build_if
-            ~cond:Infix.(key_tuple = Tuple lookup_expr)
+            ~cond:(build_eq key_tuple (Tuple lookup_expr) b)
             ~then_:
               (build_foreach ~fresh ~count:(Type.count value_type) value_iter
-                 value_callee_args build_yield)
+                 value_callee_args (fun value_tup b ->
+                   build_yield (build_concat [key_tuple; value_tup] b) b ))
             ~else_:(fun _ -> ())
             b )
         b ;
@@ -885,8 +890,7 @@ module IRGen = struct
               let schema = A.Meta.(find_exn r schema) in
               Type.PrimType.TupleT (List.map schema ~f:A.Name.type_exn)
             in
-            let args = Ctx.make_caller_args ctx in
-            create ~name ~args ~ret:ret_type
+            create ~ctx ~name ~ret:ret_type
           in
           let start = Ctx.find_exn ctx (A.Name.create "start") b in
           let kstart = build_var "kstart" int_t b in
@@ -1022,16 +1026,16 @@ module IRGen = struct
      *     b ;
      *   build_func b *)
 
-    let printer name func =
+    let printer ctx name func =
       let open Builder in
-      let b = create ~args:[] ~name ~ret:VoidT in
+      let b = create ~ctx ~name ~ret:VoidT in
       build_foreach ~fresh func [] (fun x b -> build_print x b) b ;
       build_func b
 
-    let counter name func =
+    let counter ctx name func =
       let open Builder in
       let open Infix in
-      let b = create ~name ~args:[] ~ret:(IntT {nullable= false}) in
+      let b = create ~name ~ctx ~ret:(IntT {nullable= false}) in
       let c = build_defn "c" int_t Infix.(int 0) b in
       build_foreach ~fresh func [] (fun _ b -> build_assign (c + int 1) c b) b ;
       build_return c b ;
@@ -1050,8 +1054,7 @@ module IRGen = struct
               let schema = A.Meta.(find_exn r schema) in
               Type.PrimType.TupleT (List.map schema ~f:A.Name.type_exn)
             in
-            let args = Ctx.make_caller_args ctx in
-            create ~name ~args ~ret:ret_type
+            create ~ctx ~name ~ret:ret_type
           in
           let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
           let func = scan callee_ctx child_layout child_type in
@@ -1082,8 +1085,7 @@ module IRGen = struct
               let schema = A.Meta.(find_exn layout schema) in
               Type.PrimType.TupleT (List.map schema ~f:A.Name.type_exn)
             in
-            let args = Ctx.make_caller_args ctx in
-            create ~name ~args ~ret:ret_type
+            create ~ctx ~name ~ret:ret_type
           in
           let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
           let func = scan callee_ctx child_layout child_type in
@@ -1153,7 +1155,7 @@ module IRGen = struct
       in
       let top_func, len = gen_abslayout ~ctx ~data_fn r in
       { iters= List.rev !funcs
-      ; funcs= [printer "printer" top_func; counter "counter" top_func]
+      ; funcs= [printer ctx "printer" top_func; counter ctx "counter" top_func]
       ; params
       ; buffer_len= len }
 
