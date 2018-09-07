@@ -401,3 +401,21 @@ let%expect_test "seek2" =
     testing
     tasting
     tarting |}]
+
+let%expect_test "write_file" =
+  let fn1 = Core.Filename.temp_file "test1" "txt" in
+  let fn2 = Core.Filename.temp_file "test2" "txt" in
+  let w1 = with_file fn1 in
+  let w2 = with_file fn2 in
+  write_string w1 "testing" ;
+  [%sexp_of: Pos.t] (pos w1) |> Core.print_s ;
+  write_string w2 "more testing" ;
+  [%sexp_of: Pos.t] (pos w2) |> Core.print_s ;
+  flush w2 ;
+  write_file w1 fn2 ;
+  [%sexp_of: Pos.t] (pos w1) |> Core.print_s ;
+  [%expect
+    {|
+    ((bit_pos 0) (byte_pos 7))
+    ((bit_pos 0) (byte_pos 12))
+    ((bit_pos 0) (byte_pos 19)) |}]

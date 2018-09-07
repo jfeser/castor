@@ -7,6 +7,8 @@ open Llvm
 open Llvm_analysis
 module Execution_engine = Llvm_executionengine
 
+module type S = Codegen_intf.S
+
 (* Turn on some llvm error handling. *)
 let () =
   Llvm.enable_pretty_stacktrace () ;
@@ -368,7 +370,7 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
         Error.of_string "Could not find 'done' value." |> Error.raise
 
   let codegen_slice codegen_expr fctx byte_idx size_bytes =
-    let size_bits = Serialize.isize * size_bytes in
+    let size_bits = 8 * size_bytes in
     let byte_idx = codegen_expr fctx byte_idx in
     let buf_ptr = build_load (get_val fctx "buf") "buf_ptr" builder in
     let buf_ptr_as_int =
@@ -1108,13 +1110,6 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
     let call = sprintf "set_%s(params, input_%s(argv, optind));" n n in
     (func, call)
 
-  let command_exn : string list -> unit = function
-    | [] -> Error.of_string "Empty command" |> Error.raise
-    | args ->
-        let cmd = String.concat args ~sep:" " in
-        Logs.info (fun m -> m "%s" cmd) ;
-        Unix.system cmd |> Unix.Exit_or_signal.or_error |> Or_error.ok_exn
-
   let compile ?out_dir ~gprof ~params layout =
     let out_dir =
       match out_dir with Some x -> x | None -> Filename.temp_dir "bin" ""
@@ -1169,9 +1164,11 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
     let cflags =
       (if gprof then ["-pg"] else []) @ (if debug then ["-O0"] else []) @ cflags
     in
-    if debug then command_exn ([clang] @ cflags @ [module_fn; main_fn; "-o"; exe_fn])
+    if debug then
+      Util.command_exn ~quiet:()
+        ([clang] @ cflags @ [module_fn; main_fn; "-o"; exe_fn])
     else (
-      command_exn
+      Util.command_exn ~quiet:()
         [ opt
         ; "-S"
         ; sprintf "-pass-remarks-output=%s" remarks_fn
@@ -1185,7 +1182,9 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
            -instcombine -simplifycfg -loop-load-elim"
         ; module_fn
         ; ">"
-        ; opt_module_fn ] ;
-      command_exn ([clang] @ cflags @ [opt_module_fn; main_fn; "-o"; exe_fn]) ) ;
+        ; opt_module_fn
+        ; "2>/dev/null" ] ;
+      Util.command_exn ~quiet:()
+        ([clang] @ cflags @ [opt_module_fn; main_fn; "-o"; exe_fn; "2>/dev/null"]) ) ;
     (exe_fn, data_fn)
 end

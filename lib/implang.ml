@@ -397,20 +397,21 @@ module Ctx = struct
 
   (* Create a context for a callee and a caller argument list. *)
   let make_callee_context ctx b =
-    Map.fold ctx ~init:(empty, []) ~f:(fun ~key ~data:var (cctx, args) ->
-        match var with
-        | Global _ -> (
-          match Map.add ~key ~data:var cctx with
-          | `Duplicate -> (cctx, args)
-          | `Ok cctx -> (cctx, args) )
-        | Arg _ | Field _ ->
-            (* Pass caller arguments and fields in as arguments to the callee. *)
-            let callee_var = Arg (List.length args) in
-            (Map.set ~key ~data:callee_var cctx, var_to_expr var b :: args) )
+    Map.to_alist ~key_order:`Decreasing ctx
+    |> List.fold ~init:(empty, []) ~f:(fun (cctx, args) (key, var) ->
+           match var with
+           | Global _ -> (
+             match Map.add ~key ~data:var cctx with
+             | `Duplicate -> (cctx, args)
+             | `Ok cctx -> (cctx, args) )
+           | Arg _ | Field _ ->
+               (* Pass caller arguments and fields in as arguments to the callee. *)
+               let callee_var = Arg (List.length args) in
+               (Map.set ~key ~data:callee_var cctx, args @ [var_to_expr var b]) )
 
   (* Create an argument list for a caller. *)
   let make_caller_args ctx =
-    Map.to_alist ctx
+    Map.to_alist ~key_order:`Decreasing ctx
     |> List.filter_map ~f:(fun (n, v) ->
            match v with
            | Global _ -> None
@@ -922,9 +923,10 @@ module IRGen = struct
             (gen_pred ~ctx lookup_high b)
             (fun key idx b ->
               build_assign
-                Infix.(islice (start + int header_size + (idx * kp_len) + key_len))
+                Infix.(
+                  islice (start + int header_size + (idx * kp_len) + key_len)
+                  + index_start + index_len)
                 vstart b ;
-              build_print vstart b ;
               build_foreach ~fresh ~count:(Type.count value_type) value_iter
                 value_callee_args
                 (fun value b -> build_yield (build_concat [key; value] b) b)

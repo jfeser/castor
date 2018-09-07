@@ -178,7 +178,8 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
       |> List.sort ~compare:(fun m1 m2 ->
              [%compare: int64 * int64] (m1.pos, m1.len) (m2.pos, m2.len) )
       |> List.iter ~f:(fun m ->
-             Out_channel.fprintf out_ch "%Ld:%Ld %s\n" m.pos m.len m.msg )
+             Out_channel.fprintf out_ch "%Ld:%Ld %s\n" m.pos m.len m.msg ) ;
+      Out_channel.flush out_ch
   end
 
   let serialize_list serialize ({ctx; writer; _} as sctx) (elem_t, _)
@@ -317,16 +318,16 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     in
     let temp_fn = Caml.Filename.temp_file "ordered-idx" "bin" in
     let temp_writer = with_file temp_fn in
-    (* Need to order the key stream. Use the key stream to construct an
-             ordering key. *)
+    (* Need to order the key stream. Use the key stream to construct an ordering
+       key. *)
     let query_schema = Meta.(find_exn query schema) in
     let order_key = List.map query_schema ~f:(fun n -> Name n) in
     let ordered_query = order_by order_key meta.order query in
     (* Write a dummy header. *)
     let len_pos = pos writer in
     write_bytes writer (Bytes.make 8 '\x00') ;
-    let index_len_pos = pos writer in
     write_bytes writer (Bytes.make 8 '\x00') ;
+    let index_start_pos = pos writer in
     Eval.eval ctx ordered_query
     |> Seq.iter ~f:(fun kctx ->
            let ksctx = {sctx with ctx= Map.merge_right ctx kctx} in
@@ -346,11 +347,12 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
           { pos= pos writer |> Pos.to_bytes_exn
           ; parent_id= id writer
           ; id= id temp_writer }) ;
+    flush temp_writer ;
     write_file writer temp_fn ;
     let end_pos = pos writer in
     seek writer len_pos ;
     let len = Pos.(end_pos - len_pos) in
-    let index_len = Pos.(index_end_pos - index_len_pos) in
+    let index_len = Pos.(index_end_pos - index_start_pos) in
     Log.with_msg sctx (sprintf "Ordered idx len (=%Ld)" len) (fun () ->
         write writer (of_int64 ~width:64 len) ) ;
     Log.with_msg sctx (sprintf "Ordered idx index len (=%Ld)" index_len) (fun () ->

@@ -41,8 +41,8 @@ let%expect_test "cross-tuple" =
     {|
     fun scalar_3 (start) {
         yield (buf[start : 1]);
-    }fun scalar_5 (start,
-         r1_f) {
+    }fun scalar_5 (r1_f,
+         start) {
          yield (buf[start : 1]);
     }fun tuple_2 (start) {
          init scalar_3(start + 8);
@@ -120,15 +120,15 @@ let%expect_test "hash-idx" =
              cstart = cstart + 1;
              pcount = pcount - 1;
          }
-    }fun scalar_8 (start,
-         f_f) {
+    }fun scalar_8 (f_f,
+         start) {
          yield (buf[start : 1]);
-    }fun scalar_9 (start,
+    }fun scalar_9 (k_f,
          f_f,
-         k_f) {
+         start) {
          yield (buf[start : 1]);
-    }fun hash_idx_7 (start,
-         f_f) {
+    }fun hash_idx_7 (f_f,
+         start) {
          if (buf[start + 16 + buf[start + 8 : 8] + hash(start + 16, f_f) * 8 :
              8] = 0) {
 
@@ -224,29 +224,29 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
     {|
     fun scalar_4 (start) {
         yield (buf[start : 1]);
-    }fun scalar_6 (start,
-         lp_id) {
+    }fun scalar_6 (lp_id,
+         start) {
          yield (buf[start : 1]);
-    }fun scalar_11 (start,
+    }fun scalar_11 (lp_id,
          lp_counter,
-         lp_id) {
+         start) {
          yield (buf[start : 1]);
-    }fun scalar_13 (start,
+    }fun scalar_13 (lp_id,
+         lp_counter,
          lc_id,
-         lp_counter,
-         lp_id) {
+         start) {
          yield (buf[start : 1]);
-    }fun tuple_10 (start,
+    }fun tuple_10 (lp_id,
          lp_counter,
-         lp_id) {
+         start) {
          init scalar_11(lp_id, lp_counter, start + 8);
          tup12 = next(scalar_11);
          init scalar_13(lp_id, lp_counter, tup12[0], start + 8 + 1);
          tup14 = next(scalar_13);
          yield (tup12[0], tup14[0]);
-    }fun list_8 (start,
+    }fun list_8 (lp_id,
          lp_counter,
-         lp_id) {
+         start) {
          cstart = start + 16;
          pcount = buf[start : 8];
          loop (0 < pcount) {
@@ -363,8 +363,8 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
     {|
     fun scalar_3 (start) {
         yield (buf[start : 1]);
-    }fun scalar_5 (lp_k,
-         start) {
+    }fun scalar_5 (start,
+         lp_k) {
          yield (buf[start : 1]);
     }fun tuple_2 (start) {
          init scalar_3(start + 8);
@@ -372,26 +372,26 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
          init scalar_5(start + 8 + 1, tup4[0]);
          tup6 = next(scalar_5);
          yield (tup4[0], tup6[0]);
-    }fun scalar_10 (lc_k,
+    }fun scalar_10 (start,
          lp_k,
-         start) {
+         lc_k) {
          yield (buf[start : 1]);
-    }fun scalar_12 (lc_k,
-         lp_k,
+    }fun scalar_12 (lp_counter,
          start,
-         lp_counter) {
-         yield (buf[start : 1]);
-    }fun tuple_9 (lc_k,
          lp_k,
-         start) {
+         lc_k) {
+         yield (buf[start : 1]);
+    }fun tuple_9 (start,
+         lp_k,
+         lc_k) {
          init scalar_10(start + 8, lp_k, lc_k);
          tup11 = next(scalar_10);
          init scalar_12(tup11[0], start + 8 + 1, lp_k, lc_k);
          tup13 = next(scalar_12);
          yield (tup11[0], tup13[0]);
-    }fun list_7 (lc_k,
+    }fun list_7 (start,
          lp_k,
-         start) {
+         lc_k) {
          cstart = start + 16;
          pcount = buf[start : 8];
          loop (0 < pcount) {
@@ -491,22 +491,22 @@ select([lp.counter, lc.counter],
     {|
     fun scalar_4 (start) {
         yield (buf[start : 1]);
-    }fun scalar_8 (k,
-         start) {
+    }fun scalar_8 (start,
+         k) {
          yield (buf[start : 1]);
-    }fun scalar_10 (k,
+    }fun scalar_10 (log_counter,
          start,
-         log_counter) {
+         k) {
          yield (buf[start : 1]);
-    }fun tuple_7 (k,
-         start) {
+    }fun tuple_7 (start,
+         k) {
          init scalar_8(start + 8, k);
          tup9 = next(scalar_8);
          init scalar_10(tup9[0], start + 8 + 1, k);
          tup11 = next(scalar_10);
          yield (tup9[0], tup11[0]);
-    }fun list_5 (k,
-         start) {
+    }fun list_5 (start,
+         k) {
          cstart = start + 16;
          pcount = buf[start : 8];
          loop (0 < pcount) {
@@ -535,39 +535,39 @@ select([lp.counter, lc.counter],
   
               }
          }
-    }fun scalar_17 (start,
-         lp_counter,
+    }fun scalar_17 (lp_succ,
          lp_k,
-         lp_succ) {
-         yield (buf[start : 1]);
-    }fun scalar_21 (k,
-         start,
          lp_counter,
-         lp_k,
-         lp_succ) {
+         start) {
          yield (buf[start : 1]);
-    }fun scalar_23 (k,
+    }fun scalar_21 (lp_succ,
+         lp_k,
+         lp_counter,
          start,
+         k) {
+         yield (buf[start : 1]);
+    }fun scalar_23 (lp_succ,
+         lp_k,
+         lp_counter,
          log_id,
-         lp_counter,
-         lp_k,
-         lp_succ) {
-         yield (buf[start : 1]);
-    }fun tuple_20 (k,
          start,
-         lp_counter,
+         k) {
+         yield (buf[start : 1]);
+    }fun tuple_20 (lp_succ,
          lp_k,
-         lp_succ) {
+         lp_counter,
+         start,
+         k) {
          init scalar_21(lp_succ, lp_k, lp_counter, start + 8, k);
          tup22 = next(scalar_21);
          init scalar_23(lp_succ, lp_k, lp_counter, tup22[0], start + 8 + 1, k);
          tup24 = next(scalar_23);
          yield (tup22[0], tup24[0]);
-    }fun list_18 (k,
-         start,
-         lp_counter,
+    }fun list_18 (lp_succ,
          lp_k,
-         lp_succ) {
+         lp_counter,
+         start,
+         k) {
          cstart = start + 16;
          pcount = buf[start : 8];
          loop (0 < pcount) {
@@ -577,10 +577,10 @@ select([lp.counter, lc.counter],
              cstart = cstart + buf[cstart : 8];
              pcount = pcount - 1;
          }
-    }fun ordered_idx_16 (start,
-         lp_counter,
+    }fun ordered_idx_16 (lp_succ,
          lp_k,
-         lp_succ) {
+         lp_counter,
+         start) {
          low26 = 0;
          high27 = buf[start + 8 : 8] / 9;
          loop (low26 < high27) {
@@ -588,7 +588,7 @@ select([lp.counter, lc.counter],
              kstart = start + 16 + mid28 * 9;
              init scalar_17(lp_succ, lp_k, lp_counter, kstart);
              key29 = next(scalar_17);
-             if (key29[0] < lp_counter || key29[0] = lp_counter && false) {
+             if (key29[0] < lp_counter) {
                  low26 = mid28 + 1;
              } else {
                   high27 = mid28;
@@ -598,37 +598,44 @@ select([lp.counter, lc.counter],
              kstart = start + 16 + low26 * 9;
              init scalar_17(lp_succ, lp_k, lp_counter, kstart);
              key30 = next(scalar_17);
-             loop (key30[0] < lp_succ || key30[0] = lp_succ && false) {
-                 vstart = buf[start + 16 + low26 * 9 + 1 : 8];
+             key31 = key30;
+             loop (key31[0] < lp_succ && low26 < buf[start + 8 : 8] / 9) {
+                 vstart = buf[start + 16 + low26 * 9 + 1 : 8] + start + 16 +
+                 buf[start + 8 : 8];
+                 print(Int[nonnull], vstart);
                  init list_18(lp_succ, lp_k, lp_counter, vstart, key[0]);
                  loop (not done(list_18)) {
-                     tup31 = next(list_18);
+                     tup32 = next(list_18);
                      if (not done(list_18)) {
-                         yield tup31;
+                         yield (key31[0], tup32[0], tup32[1]);
                      } else {
-  
+
                      }
                  }
                  low26 = low26 + 1;
+                 kstart = start + 16 + low26 * 9;
+                 init scalar_17(lp_succ, lp_k, lp_counter, kstart);
+                 key33 = next(scalar_17);
+                 key31 = key33;
              }
          } else {
-  
+
          }
-    }fun filter_15 (start,
-         lp_counter,
+    }fun filter_15 (lp_succ,
          lp_k,
-         lp_succ) {
+         lp_counter,
+         start) {
          init ordered_idx_16(lp_succ, lp_k, lp_counter, start);
          loop (not done(ordered_idx_16)) {
-             tup32 = next(ordered_idx_16);
+             tup34 = next(ordered_idx_16);
              if (not done(ordered_idx_16)) {
-                 if (tup32[1] = id_c) {
-                     yield tup32;
+                 if (tup34[1] = id_c) {
+                     yield tup34;
                  } else {
-  
+
                  }
              } else {
-  
+
              }
          }
     }fun tuple_2 () {
@@ -638,48 +645,48 @@ select([lp.counter, lc.counter],
              if (not done(hash_idx_3)) {
                  init filter_15(tup14[2], tup14[0], tup14[1], 8 + buf[8 : 8]);
                  loop (not done(filter_15)) {
-                     tup33 = next(filter_15);
+                     tup35 = next(filter_15);
                      if (not done(filter_15)) {
                          yield
-                         (tup14[0], tup14[1], tup14[2], tup33[0], tup33[1],
-                          tup33[2]);
+                         (tup14[0], tup14[1], tup14[2], tup35[0], tup35[1],
+                          tup35[2]);
                      } else {
-  
+
                      }
                  }
              } else {
-  
+
              }
          }
     }fun select_0 () {
          init tuple_2();
          loop (not done(tuple_2)) {
-             tup34 = next(tuple_2);
+             tup36 = next(tuple_2);
              if (not done(tuple_2)) {
-                 yield (tup34[1], tup34[5]);
+                 yield (tup36[1], tup36[5]);
              } else {
-  
+
              }
          }
     }fun printer () {
          init select_0();
          loop (not done(select_0)) {
-             tup36 = next(select_0);
+             tup38 = next(select_0);
              if (not done(select_0)) {
-                 print(Tuple[Int[nonnull], Int[nonnull]], tup36);
+                 print(Tuple[Int[nonnull], Int[nonnull]], tup38);
              } else {
-  
+
              }
          }
     }fun counter () {
          c = 0;
          init select_0();
          loop (not done(select_0)) {
-             tup35 = next(select_0);
+             tup37 = next(select_0);
              if (not done(select_0)) {
                  c = c + 1;
              } else {
-  
+
              }
          }
          return c;
