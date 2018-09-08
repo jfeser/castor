@@ -74,7 +74,8 @@ module IRGen : sig
   exception IRGenError of Error.t
 
   module type S = sig
-    val irgen_abstract : data_fn:string -> Abslayout.t -> ir_module
+    val irgen :
+      params:Abslayout.Name.t list -> data_fn:string -> Abslayout.t -> ir_module
 
     val pp : Formatter.t -> ir_module -> unit
   end

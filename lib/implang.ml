@@ -464,7 +464,8 @@ module IRGen = struct
   exception IRGenError of Error.t [@@deriving sexp]
 
   module type S = sig
-    val irgen_abstract : data_fn:string -> Abslayout.t -> ir_module
+    val irgen :
+      params:Abslayout.Name.t list -> data_fn:string -> Abslayout.t -> ir_module
 
     val pp : Formatter.t -> ir_module -> unit
   end
@@ -1147,10 +1148,9 @@ module IRGen = struct
       in
       (scan ctx r type_, len)
 
-    let irgen_abstract ~data_fn r =
-      let params = A.params r |> Set.to_list in
+    let irgen ~params ~data_fn r =
       let ctx =
-        List.map params ~f:(fun n -> (n, Ctx.Global (Var n.name)))
+        List.map params ~f:(fun n -> (n, Ctx.Global (Var n.A.Name.name)))
         |> Map.of_alist_exn (module A.Name.Compare_no_type)
       in
       let top_func, len = gen_abslayout ~ctx ~data_fn r in

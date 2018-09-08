@@ -125,14 +125,25 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
     object
       val values = Hashtbl.create (module String)
 
+      val tctx =
+        let kv = func.I.locals @ params in
+        match Hashtbl.of_alist (module String) kv with
+        | `Ok x -> x
+        | `Duplicate_key k ->
+            Error.create "Duplicate key." (k, func.I.locals, params)
+              [%sexp_of:
+                string
+                * (string * Type.PrimType.t) list
+                * (string * Type.PrimType.t) list]
+            |> Error.raise
+
       method values : var Hashtbl.M(String).t = values
 
       method name : string = func.I.name
 
       method func : I.func = func
 
-      method tctx : Type.PrimType.t Hashtbl.M(String).t =
-        Hashtbl.of_alist_exn (module String) (func.locals @ params)
+      method tctx : Type.PrimType.t Hashtbl.M(String).t = tctx
     end
 
   class ictx func params =
@@ -1124,21 +1135,22 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
     let data_fn = out_dir ^ "/data.bin" in
     let open Type.PrimType in
     (* Generate IR module. *)
-    let ir_module = IG.irgen_abstract ~data_fn layout in
+    let ir_module = IG.irgen ~params ~data_fn layout in
     (* Generate header. *)
     Out_channel.with_file header_fn ~f:write_header ;
     (* Generate main file. *)
     let () =
+      let module Name = Abslayout.Name in
       let funcs, calls =
-        List.filter params ~f:(fun (n, _) ->
-            List.exists ir_module.I.IRGen.params ~f:(fun n' -> String.(n = n'.name))
-        )
-        |> List.mapi ~f:(fun i (n, t) ->
-               match t with
+        List.filter params ~f:(fun n ->
+            List.exists ir_module.I.IRGen.params ~f:(fun n' ->
+                Name.Compare_no_type.(n = n') ) )
+        |> List.mapi ~f:(fun i n ->
+               match Name.type_exn n with
                | NullT -> failwith "No null parameters."
-               | IntT _ -> from_fn "load_int.c" n i
-               | BoolT _ -> from_fn "load_bool.c" n i
-               | StringT _ -> from_fn "load_string.c" n i
+               | IntT _ -> from_fn "load_int.c" n.name i
+               | BoolT _ -> from_fn "load_bool.c" n.name i
+               | StringT _ -> from_fn "load_string.c" n.name i
                | VoidT | TupleT _ -> failwith "Unsupported parameter type." )
         |> List.unzip
       in

@@ -17,7 +17,7 @@ let _ =
   Test_util.create rels "log" ["id"; "succ"; "counter"]
     [[1; 4; 1]; [2; 3; 2]; [3; 4; 3]; [4; 6; 1]; [5; 6; 3]]
 
-let%expect_test "cross-tuple" =
+let run_test ?(params = []) layout_str =
   let module S =
     Serialize.Make (struct
         let layout_map_channel = None
@@ -32,11 +32,15 @@ let%expect_test "cross-tuple" =
       (S)
       ()
   in
+  let sparams = Set.of_list (module Name.Compare_no_type) params in
   let layout =
-    of_string_exn "AList(r1, ATuple([AScalar(r1.f), AScalar(r1.g - r1.f)], cross))"
-    |> M.resolve |> M.annotate_schema |> M.annotate_key_layouts
+    of_string_exn layout_str |> M.resolve ~params:sparams |> M.annotate_schema
+    |> M.annotate_key_layouts
   in
-  I.irgen_abstract ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter ;
+  I.irgen ~params ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter
+
+let%expect_test "cross-tuple" =
+  run_test "AList(r1, ATuple([AScalar(r1.f), AScalar(r1.g - r1.f)], cross))" ;
   [%expect
     {|
     fun scalar_3 (start) {
@@ -85,27 +89,9 @@ let%expect_test "cross-tuple" =
     } |}]
 
 let%expect_test "hash-idx" =
-  let module S =
-    Serialize.Make (struct
-        let layout_map_channel = None
-      end)
-      (Eval)
-  in
-  let module I =
-    Implang.IRGen.Make (struct
-        let code_only = true
-      end)
-      (Eval)
-      (S)
-      ()
-  in
-  let layout =
-    of_string_exn
-      "ATuple([AList(r1, AScalar(r1.f)) as f, AHashIdx(dedup(select([r1.f], r1)) \
-       as k, ascalar(k.f+1), f.f)], cross)"
-    |> M.resolve |> M.annotate_schema |> M.annotate_key_layouts
-  in
-  I.irgen_abstract ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter ;
+  run_test
+    "ATuple([AList(r1, AScalar(r1.f)) as f, AHashIdx(dedup(select([r1.f], r1)) as \
+     k, ascalar(k.f+1), f.f)], cross)" ;
   [%expect
     {|
     fun scalar_3 (start) {
@@ -187,39 +173,20 @@ let%expect_test "hash-idx" =
          return c;
     } |}]
 
+let example_params =
+  [ Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p"
+  ; Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c" ]
+
 let%expect_test "example-1" =
-  let module S =
-    Serialize.Make (struct
-        let layout_map_channel = None
-      end)
-      (Eval)
-  in
-  let module I =
-    Implang.IRGen.Make (struct
-        let code_only = true
-      end)
-      (Eval)
-      (S)
-      ()
-  in
-  let params =
-    [ Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p"
-    ; Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c" ]
-    |> Set.of_list (module Name.Compare_no_type)
-  in
-  let layout =
-    of_string_exn
-      {|
+  run_test ~params:example_params
+    {|
 filter(lc.id = id_c && lp.id = id_p,
 alist(filter(succ > counter + 1, log) as lp,
 atuple([ascalar(lp.id), ascalar(lp.counter),
 alist(filter(lp.counter < log.counter &&
 log.counter < lp.succ, log) as lc,
 atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
-|}
-    |> M.resolve ~params |> M.annotate_schema |> M.annotate_key_layouts
-  in
-  I.irgen_abstract ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter ;
+|} ;
   [%expect
     {|
     fun scalar_4 (start) {
@@ -324,28 +291,8 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
     } |}]
 
 let%expect_test "example-2" =
-  let module S =
-    Serialize.Make (struct
-        let layout_map_channel = None
-      end)
-      (Eval)
-  in
-  let module I =
-    Implang.IRGen.Make (struct
-        let code_only = true
-      end)
-      (Eval)
-      (S)
-      ()
-  in
-  let params =
-    [ Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p"
-    ; Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c" ]
-    |> Set.of_list (module Name.Compare_no_type)
-  in
-  let layout =
-    of_string_exn
-      {|
+  run_test ~params:example_params
+    {|
 ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k], 
       join(true, log as lp, log as lc))),
   alist(select([lp.counter, lc.counter], 
@@ -355,10 +302,7 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
       filter(log.id = lc_k, log) as lc)),
     atuple([ascalar(lp.counter), ascalar(lc.counter)], cross)),
   (id_p, id_c))
-|}
-    |> M.resolve ~params |> M.annotate_schema |> M.annotate_key_layouts
-  in
-  I.irgen_abstract ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter ;
+|} ;
   [%expect
     {|
     fun scalar_3 (start) {
@@ -450,28 +394,8 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
     } |}]
 
 let%expect_test "example-3" =
-  let module S =
-    Serialize.Make (struct
-        let layout_map_channel = None
-      end)
-      (Eval)
-  in
-  let module I =
-    Implang.IRGen.Make (struct
-        let code_only = true
-      end)
-      (Eval)
-      (S)
-      ()
-  in
-  let params =
-    [ Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p"
-    ; Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c" ]
-    |> Set.of_list (module Name.Compare_no_type)
-  in
-  let layout =
-    of_string_exn
-      {|
+  run_test ~params:example_params
+    {|
 select([lp.counter, lc.counter],
   atuple([ahashidx(select([id as k], log), 
     alist(select([counter, succ], 
@@ -483,10 +407,7 @@ select([lp.counter, lc.counter],
       alist(filter(log.counter = k, log),
         atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
       lp.counter, lp.succ) as lc)], cross))
-|}
-    |> M.resolve ~params |> M.annotate_schema |> M.annotate_key_layouts
-  in
-  I.irgen_abstract ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter ;
+|} ;
   [%expect
     {|
     fun scalar_4 (start) {
