@@ -498,9 +498,8 @@ module IRGen = struct
     (** The length of a layout in bytes (including the header). *)
     let rec len start =
       let open Infix in
-      let open Type in
       function
-      | NullT -> int 0
+      | Type.NullT -> int 0
       | IntT {range; nullable; _} -> int (Type.AbsInt.byte_width ~nullable range)
       | BoolT _ -> int 1
       | StringT {nchars; _} -> (

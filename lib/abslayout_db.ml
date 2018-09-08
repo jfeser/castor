@@ -12,7 +12,7 @@ module Make (Eval : Eval.S) = struct
       match pred_relations p with
       | [r] -> r
       | rs ->
-          Error.create "Unexpected number of relations." rs [%sexp_of : string list]
+          Error.create "Unexpected number of relations." rs [%sexp_of: string list]
           |> Error.raise
     in
     let name = Fresh.name fresh "x%d" in
@@ -21,6 +21,7 @@ module Make (Eval : Eval.S) = struct
       let subst =
         object
           inherit [_] endo
+
           method! visit_Name _ _ n =
             match n.relation with
             | Some r when String.(rel = r) -> Name {n with relation= Some name}
@@ -33,6 +34,7 @@ module Make (Eval : Eval.S) = struct
       let subst =
         object
           inherit [_] endo
+
           method! visit_Scan () r rel' =
             if String.(rel = rel') then Filter (Binop (Eq, p, pred), scan rel)
             else r
@@ -43,27 +45,39 @@ module Make (Eval : Eval.S) = struct
     hash_idx domain layout {lookup; hi_key_layout= None}
 
   class virtual ['self] material_fold =
-    object (self: 'self)
+    object (self : 'self)
       method virtual build_AList : _
+
       method virtual build_ATuple : _
+
       method virtual build_AHashIdx : _
+
       method virtual build_AOrderedIdx : _
+
       method virtual build_AEmpty : _
+
       method virtual build_AScalar : _
+
       method virtual build_Select : _
+
       method virtual build_Filter : _
+
       method virtual build_Join : _
+
       method visit_As ctx _ r = self#visit_t ctx r
+
       method visit_AList ctx q l =
         Eval.eval ctx q
         |> Seq.map ~f:(fun ctx' -> self#visit_t (Map.merge_right ctx ctx') l)
         |> self#build_AList
+
       method visit_ATuple ctx ls kind =
         self#build_ATuple (List.map ~f:(self#visit_t ctx) ls) kind
-      method visit_AHashIdx ctx q value_l (h: hash_idx) =
+
+      method visit_AHashIdx ctx q value_l (h : hash_idx) =
         let key_l =
           Option.value_exn
-            ~error:(Error.create "Missing key layout." h [%sexp_of : hash_idx])
+            ~error:(Error.create "Missing key layout." h [%sexp_of: hash_idx])
             h.hi_key_layout
         in
         let kv =
@@ -75,12 +89,15 @@ module Make (Eval : Eval.S) = struct
                  (key, value) )
         in
         self#build_AHashIdx kv h
+
       method visit_AEmpty _ = self#build_AEmpty
+
       method visit_AScalar ctx e = self#build_AScalar (Eval.eval_pred ctx e)
-      method visit_AOrderedIdx ctx q value_l (h: ordered_idx) =
+
+      method visit_AOrderedIdx ctx q value_l (h : ordered_idx) =
         let key_l =
           Option.value_exn
-            ~error:(Error.create "Missing key layout." h [%sexp_of : ordered_idx])
+            ~error:(Error.create "Missing key layout." h [%sexp_of: ordered_idx])
             h.oi_key_layout
         in
         let kv =
@@ -92,11 +109,15 @@ module Make (Eval : Eval.S) = struct
                  (key, value) )
         in
         self#build_AOrderedIdx kv h
+
       method visit_Select ctx exprs r' =
         self#build_Select exprs (self#visit_t ctx r')
+
       method visit_Filter ctx _ r' = self#build_Filter (self#visit_t ctx r')
+
       method visit_Join ctx pred r1 r2 =
         self#build_Join ctx pred (self#visit_t ctx r1) (self#visit_t ctx r2)
+
       method visit_t ctx r =
         match r.node with
         | AEmpty -> self#visit_AEmpty ctx
@@ -110,19 +131,24 @@ module Make (Eval : Eval.S) = struct
         | Join {pred; r1; r2} -> self#visit_Join ctx pred r1 r2
         | As (n, r) -> self#visit_As ctx n r
         | Dedup _ | Agg _ | Scan _ | OrderBy _ ->
-            Error.create "Wrong context." r [%sexp_of : t] |> Error.raise
+            Error.create "Wrong context." r [%sexp_of: t] |> Error.raise
     end
 
   module TF = struct
     open Type
 
     class ['self] type_fold =
-      object (_: 'self)
+      object (_ : 'self)
         inherit [_] material_fold
+
         method build_Select exprs t = FuncT ([t], `Width (List.length exprs))
+
         method build_Filter t = FuncT ([t], `Child_sum)
+
         method build_Join _ _ t1 t2 = FuncT ([t1; t2], `Child_sum)
+
         method build_AEmpty = EmptyT
+
         method build_AScalar =
           function
           | `Int x -> IntT {range= AbsInt.abstract x; nullable= false}
@@ -130,24 +156,28 @@ module Make (Eval : Eval.S) = struct
           | `String x | `Unknown x ->
               StringT {nchars= AbsInt.abstract (String.length x); nullable= false}
           | `Null -> NullT
+
         method build_AList ls =
           let t, c =
-            Seq.fold ls ~init:(EmptyT, AbsCount.zero) ~f:(fun (t, c) t' ->
-                (unify_exn t t', AbsCount.(c + count t')) )
+            Seq.fold ls ~init:(EmptyT, AbsInt.zero) ~f:(fun (t, c) t' ->
+                (unify_exn t t', AbsInt.(c + abstract 1)) )
           in
           ListT (t, {count= c})
+
         method build_ATuple ls kind =
           let counts = List.map ls ~f:count in
           match kind with
           | Zip -> TupleT (ls, {count= List.fold_left1_exn ~f:AbsCount.unify counts})
           | Cross ->
               TupleT (ls, {count= List.fold_left1_exn ~f:AbsCount.( * ) counts})
+
         method build_AHashIdx kv _ =
           let kt, vt =
             Seq.fold kv ~init:(EmptyT, EmptyT) ~f:(fun (kt1, vt1) (kt2, vt2) ->
                 (unify_exn kt1 kt2, unify_exn vt1 vt2) )
           in
           HashIdxT (kt, vt, {count= None})
+
         method build_AOrderedIdx kv _ =
           let kt, vt =
             Seq.fold kv ~init:(EmptyT, EmptyT) ~f:(fun (kt1, vt1) (kt2, vt2) ->
@@ -159,21 +189,22 @@ module Make (Eval : Eval.S) = struct
 
   include TF
 
-  let to_type ?(ctx= Map.empty (module Name.Compare_no_type)) l =
+  let to_type ?(ctx = Map.empty (module Name.Compare_no_type)) l =
     Logs.debug (fun m ->
         m "Computing type of abstract layout: %s"
-          (Sexp.to_string_hum ([%sexp_of : t] l)) ) ;
+          (Sexp.to_string_hum ([%sexp_of: t] l)) ) ;
     let type_ = (new type_fold)#visit_t ctx l in
     Logs.debug (fun m ->
-        m "The type is: %s" (Sexp.to_string_hum ([%sexp_of : Type.t] type_)) ) ;
+        m "The type is: %s" (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ) ;
     type_
 
   (** Add a schema field to each metadata node. Variables must first be
      annotated with type information. *)
   let annotate_schema =
     let mapper =
-      object (self: 'self)
+      object (self : 'self)
         inherit [_] map
+
         method! visit_t () {node; meta} =
           let node' = self#visit_node () node in
           let schema =
@@ -213,12 +244,14 @@ module Make (Eval : Eval.S) = struct
     let annotator =
       object
         inherit [_] map
+
         method! visit_AHashIdx () ((x, y, ({hi_key_layout; _} as m)) as r) =
           match hi_key_layout with
           | Some _ -> AHashIdx r
           | None ->
               let schema = Meta.find_exn x Meta.schema in
               AHashIdx (x, y, {m with hi_key_layout= Some (key_layout schema)})
+
         method! visit_AOrderedIdx () ((x, y, ({oi_key_layout; _} as m)) as r) =
           match oi_key_layout with
           | Some _ -> AOrderedIdx r
@@ -230,7 +263,7 @@ module Make (Eval : Eval.S) = struct
     annotator#visit_t ()
 
   (** Annotate names in an algebra expression with types. *)
-  let resolve ?(params= Set.empty (module Name.Compare_no_type)) r =
+  let resolve ?(params = Set.empty (module Name.Compare_no_type)) r =
     let resolve_relation r_name =
       let r = Eval.load_relation r_name in
       List.map r.fields ~f:(fun f ->
@@ -249,7 +282,7 @@ module Make (Eval : Eval.S) = struct
       let ctx = Set.union params ctx in
       let could_not_resolve =
         Error.create "Could not resolve." (n, ctx)
-          [%sexp_of : Name.t * Set.M(Name).t]
+          [%sexp_of: Name.t * Set.M(Name).t]
       in
       match (n.type_, n.relation) with
       | Some _, Some _ -> n
@@ -257,7 +290,7 @@ module Make (Eval : Eval.S) = struct
         match Set.find ctx ~f:(fun n' -> Name.Compare_no_type.(n' = n)) with
         | Some n' -> n'
         | None -> Error.raise could_not_resolve )
-      | _, None ->
+      | _, None -> (
           let matches =
             Set.to_list ctx
             |> List.filter ~f:(fun n' -> Name.Compare_name_only.(n = n'))
@@ -267,8 +300,8 @@ module Make (Eval : Eval.S) = struct
           | [n'] -> n'
           | n' :: n'' :: _ ->
               Error.create "Ambiguous name." (n, n', n'')
-                [%sexp_of : Name.t * Name.t * Name.t]
-              |> Error.raise
+                [%sexp_of: Name.t * Name.t * Name.t]
+              |> Error.raise )
     in
     let empty_ctx = Set.empty (module Name.Compare_no_type) in
     let resolve_agg ctx = function
@@ -282,6 +315,7 @@ module Make (Eval : Eval.S) = struct
     let resolve_pred ctx =
       (object
          inherit [_] map
+
          method! visit_Name ctx n = Name (resolve_name ctx n)
       end)
         #visit_pred ctx
@@ -360,7 +394,9 @@ module Make (Eval : Eval.S) = struct
             let m =
               (object
                  inherit [_] map
+
                  method visit_name _ _ = failwith ""
+
                  method! visit_pred _ = resolve_pred outer_ctx
               end)
                 #visit_hash_idx () m
@@ -372,7 +408,9 @@ module Make (Eval : Eval.S) = struct
             let m =
               (object
                  inherit [_] map
+
                  method visit_name _ _ = failwith ""
+
                  method! visit_pred _ = resolve_pred outer_ctx
               end)
                 #visit_ordered_idx () m

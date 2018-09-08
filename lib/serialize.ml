@@ -100,13 +100,16 @@ module No_config = struct
   let serialize_string t x =
     let open Bitstring in
     match t with
-    | StringT {nchars; _} ->
+    | StringT {nchars; nullable} ->
         let unpadded_body = Bytes.of_string x in
         let body = unpadded_body |> align isize |> of_bytes in
         let len =
           match Type.AbsInt.concretize nchars with
           | Some _ -> empty
-          | None -> Bytes.length unpadded_body |> bytes_of_int ~width:64 |> of_bytes
+          | None ->
+              Bytes.length unpadded_body
+              |> bytes_of_int ~width:(Type.AbsInt.bit_width ~nullable nchars)
+              |> of_bytes
         in
         concat [len |> label "String len"; body |> label "String body"]
     | t -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
@@ -182,15 +185,19 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
       Out_channel.flush out_ch
   end
 
-  let serialize_list serialize ({ctx; writer; _} as sctx) (elem_t, _)
-      (elem_query, elem_layout) =
+  let serialize_list serialize ({ctx; writer; _} as sctx)
+      ((elem_t, ({count} : Type.list_)) as t) (elem_query, elem_layout) =
     let open Bitstring in
     (* Reserve space for list header. *)
     let header_pos = Writer.pos writer in
     Log.with_msg sctx "List count" (fun () ->
-        Writer.write_bytes writer (Bytes.make 8 '\x00') ) ;
+        Writer.write_bytes writer
+          (Bytes.make (Type.AbsInt.byte_width ~nullable:false count) '\x00') ) ;
     Log.with_msg sctx "List len" (fun () ->
-        Writer.write_bytes writer (Bytes.make 8 '\x00') ) ;
+        Writer.write_bytes writer
+          (Bytes.make
+             (Type.AbsInt.byte_width ~nullable:false (Type.len (ListT t)))
+             '\x00') ) ;
     (* Serialize list body. *)
     let count = ref 0 in
     Log.with_msg sctx "List body" (fun () ->
@@ -207,13 +214,16 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     Writer.write writer (of_int ~width:64 len) ;
     Writer.seek writer end_pos
 
-  let serialize_tuple serialize ({writer; _} as sctx) (elem_ts, _) (elem_layouts, _)
-      =
+  let serialize_tuple serialize ({writer; _} as sctx) ((elem_ts, _) as t)
+      (elem_layouts, _) =
     let open Bitstring in
     (* Reserve space for header. *)
     let header_pos = Writer.pos writer in
     Log.with_msg sctx "Tuple len" (fun () ->
-        Writer.write_bytes writer (Bytes.make 8 '\x00') ) ;
+        Writer.write_bytes writer
+          (Bytes.make
+             (Type.AbsInt.byte_width ~nullable:false (Type.len (TupleT t)))
+             '\x00') ) ;
     (* Serialize body *)
     Log.with_msg sctx "Tuple body" (fun () ->
         List.iter2_exn ~f:(fun t l -> serialize sctx t l) elem_ts elem_layouts ) ;

@@ -195,14 +195,14 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
     0:8 List count
     8:8 List len
     16:8 Tuple len
-    16:138 List body
+    16:82 List body
     24:1 Scalar (=(Int 1))
-    24:48 Tuple body
+    24:38 Tuple body
     25:1 Scalar (=(Int 1))
     26:8 List count
     34:8 List len
     42:8 Tuple len
-    42:30 List body
+    42:20 List body
     50:1 Scalar (=(Int 2))
     50:2 Tuple body
     51:1 Scalar (=(Int 2))
@@ -211,35 +211,18 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
     60:2 Tuple body
     61:1 Scalar (=(Int 3))
     62:8 Tuple len
-    70:1 Scalar (=(Int 5))
-    70:2 Tuple body
-    71:1 Scalar (=(Int 3))
-    72:8 Tuple len
-    80:1 Scalar (=(Int 4))
-    80:48 Tuple body
-    81:1 Scalar (=(Int 1))
-    82:8 List count
-    90:8 List len
-    98:8 Tuple len
-    98:30 List body
-    106:1 Scalar (=(Int 2))
-    106:2 Tuple body
-    107:1 Scalar (=(Int 2))
-    108:8 Tuple len
-    116:1 Scalar (=(Int 3))
-    116:2 Tuple body
-    117:1 Scalar (=(Int 3))
-    118:8 Tuple len
-    126:1 Scalar (=(Int 5))
-    126:2 Tuple body
-    127:1 Scalar (=(Int 3))
-    128:8 Tuple len
-    136:1 Scalar (=(Int 5))
-    136:18 Tuple body
-    137:1 Scalar (=(Int 3))
-    138:8 List count
-    146:8 List len
-    154:0 List body |}]
+    70:1 Scalar (=(Int 1))
+    70:28 Tuple body
+    71:1 Scalar (=(Int 4))
+    72:8 List count
+    80:8 List len
+    88:8 Tuple len
+    88:10 List body
+    96:1 Scalar (=(Int 3))
+    96:2 Tuple body
+    97:1 Scalar (=(Int 5))
+
+    1,2, |}]
 
 let%expect_test "example-2" =
   run_test ~params:example_params
@@ -259,207 +242,85 @@ select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as 
     0:8 Table len
     8:8 Table len
     16:112 Table hash
-    128:200 Table key map
-    328:8 Tuple len
-    328:710 Table values
-    336:1 Scalar (=(Int 3))
-    336:2 Tuple body
-    337:1 Scalar (=(Int 4))
-    338:8 List count
-    346:8 List len
-    354:0 List body
-    354:8 Tuple len
-    362:1 Scalar (=(Int 4))
-    362:2 Tuple body
-    363:1 Scalar (=(Int 3))
-    364:8 List count
-    372:8 List len
-    380:8 Tuple len
-    380:10 List body
-    388:1 Scalar (=(Int 1))
-    388:2 Tuple body
-    389:1 Scalar (=(Int 3))
-    390:8 Tuple len
-    398:1 Scalar (=(Int 3))
-    398:2 Tuple body
-    399:1 Scalar (=(Int 5))
-    400:8 List count
-    408:8 List len
-    416:0 List body
-    416:8 Tuple len
-    424:1 Scalar (=(Int 4))
-    424:2 Tuple body
-    425:1 Scalar (=(Int 2))
-    426:8 List count
-    434:8 List len
-    442:8 Tuple len
-    442:10 List body
-    450:1 Scalar (=(Int 1))
-    450:2 Tuple body
-    451:1 Scalar (=(Int 2))
-    452:8 Tuple len
-    460:1 Scalar (=(Int 2))
-    460:2 Tuple body
-    461:1 Scalar (=(Int 5))
-    462:8 List count
-    470:8 List len
-    478:0 List body
-    478:8 Tuple len
-    486:1 Scalar (=(Int 4))
-    486:2 Tuple body
-    487:1 Scalar (=(Int 1))
-    488:8 List count
-    496:8 List len
-    504:0 List body
-    504:8 Tuple len
-    512:1 Scalar (=(Int 2))
-    512:2 Tuple body
-    513:1 Scalar (=(Int 1))
-    514:8 List count
-    522:8 List len
-    530:0 List body
-    530:8 Tuple len
-    538:1 Scalar (=(Int 2))
-    538:2 Tuple body
-    539:1 Scalar (=(Int 4))
-    540:8 List count
-    548:8 List len
-    556:0 List body
-    556:8 Tuple len
-    564:1 Scalar (=(Int 5))
-    564:2 Tuple body
-    565:1 Scalar (=(Int 4))
-    566:8 List count
-    574:8 List len
-    582:0 List body
-    582:8 Tuple len
-    590:1 Scalar (=(Int 3))
-    590:2 Tuple body
-    591:1 Scalar (=(Int 1))
-    592:8 List count
-    600:8 List len
-    608:0 List body
-    608:8 Tuple len
-    616:1 Scalar (=(Int 1))
-    616:2 Tuple body
-    617:1 Scalar (=(Int 2))
-    618:8 List count
-    626:8 List len
-    634:8 Tuple len
-    634:10 List body
-    642:1 Scalar (=(Int 1))
-    642:2 Tuple body
-    643:1 Scalar (=(Int 2))
-    644:8 Tuple len
-    652:1 Scalar (=(Int 4))
-    652:2 Tuple body
-    653:1 Scalar (=(Int 5))
-    654:8 List count
-    662:8 List len
-    670:8 Tuple len
-    670:10 List body
-    678:1 Scalar (=(Int 1))
-    678:2 Tuple body
-    679:1 Scalar (=(Int 3))
-    680:8 Tuple len
-    688:1 Scalar (=(Int 4))
-    688:2 Tuple body
-    689:1 Scalar (=(Int 4))
-    690:8 List count
-    698:8 List len
-    706:0 List body
-    706:8 Tuple len
-    714:1 Scalar (=(Int 2))
-    714:2 Tuple body
-    715:1 Scalar (=(Int 3))
-    716:8 List count
-    724:8 List len
-    732:0 List body
-    732:8 Tuple len
-    740:1 Scalar (=(Int 5))
-    740:2 Tuple body
-    741:1 Scalar (=(Int 2))
-    742:8 List count
-    750:8 List len
-    758:0 List body
-    758:8 Tuple len
-    766:1 Scalar (=(Int 3))
-    766:2 Tuple body
-    767:1 Scalar (=(Int 3))
-    768:8 List count
-    776:8 List len
-    784:0 List body
-    784:8 Tuple len
-    792:1 Scalar (=(Int 1))
-    792:2 Tuple body
-    793:1 Scalar (=(Int 1))
-    794:8 List count
-    802:8 List len
-    810:0 List body
-    810:8 Tuple len
-    818:1 Scalar (=(Int 1))
-    818:2 Tuple body
-    819:1 Scalar (=(Int 4))
-    820:8 List count
-    828:8 List len
-    836:0 List body
-    836:8 Tuple len
-    844:1 Scalar (=(Int 5))
-    844:2 Tuple body
-    845:1 Scalar (=(Int 1))
-    846:8 List count
-    854:8 List len
-    862:0 List body
-    862:8 Tuple len
-    870:1 Scalar (=(Int 5))
-    870:2 Tuple body
-    871:1 Scalar (=(Int 3))
-    872:8 List count
-    880:8 List len
-    888:0 List body
-    888:8 Tuple len
-    896:1 Scalar (=(Int 1))
-    896:2 Tuple body
-    897:1 Scalar (=(Int 5))
-    898:8 List count
-    906:8 List len
-    914:8 Tuple len
-    914:10 List body
-    922:1 Scalar (=(Int 1))
-    922:2 Tuple body
-    923:1 Scalar (=(Int 3))
-    924:8 Tuple len
-    932:1 Scalar (=(Int 5))
-    932:2 Tuple body
-    933:1 Scalar (=(Int 5))
-    934:8 List count
-    942:8 List len
-    950:0 List body
-    950:8 Tuple len
-    958:1 Scalar (=(Int 1))
-    958:2 Tuple body
-    959:1 Scalar (=(Int 3))
-    960:8 List count
-    968:8 List len
-    976:8 Tuple len
-    976:10 List body
-    984:1 Scalar (=(Int 1))
-    984:2 Tuple body
-    985:1 Scalar (=(Int 3))
-    986:8 Tuple len
-    994:1 Scalar (=(Int 3))
-    994:2 Tuple body
-    995:1 Scalar (=(Int 2))
-    996:8 List count
-    1004:8 List len
-    1012:0 List body
-    1012:8 Tuple len
-    1020:1 Scalar (=(Int 2))
-    1020:2 Tuple body
-    1021:1 Scalar (=(Int 2))
-    1022:8 List count
-    1030:8 List len
-    1038:0 List body |}]
+    128:72 Table key map
+    200:8 Tuple len
+    200:264 Table values
+    208:1 Scalar (=(Int 2))
+    208:2 Tuple body
+    209:1 Scalar (=(Int 1))
+    210:8 List count
+    218:8 List len
+    226:0 List body
+    226:8 Tuple len
+    234:1 Scalar (=(Int 3))
+    234:2 Tuple body
+    235:1 Scalar (=(Int 1))
+    236:8 List count
+    244:8 List len
+    252:0 List body
+    252:8 Tuple len
+    260:1 Scalar (=(Int 1))
+    260:2 Tuple body
+    261:1 Scalar (=(Int 2))
+    262:8 List count
+    270:8 List len
+    278:8 Tuple len
+    278:10 List body
+    286:1 Scalar (=(Int 1))
+    286:2 Tuple body
+    287:1 Scalar (=(Int 2))
+    288:8 Tuple len
+    296:1 Scalar (=(Int 2))
+    296:2 Tuple body
+    297:1 Scalar (=(Int 3))
+    298:8 List count
+    306:8 List len
+    314:0 List body
+    314:8 Tuple len
+    322:1 Scalar (=(Int 3))
+    322:2 Tuple body
+    323:1 Scalar (=(Int 3))
+    324:8 List count
+    332:8 List len
+    340:0 List body
+    340:8 Tuple len
+    348:1 Scalar (=(Int 1))
+    348:2 Tuple body
+    349:1 Scalar (=(Int 1))
+    350:8 List count
+    358:8 List len
+    366:0 List body
+    366:8 Tuple len
+    374:1 Scalar (=(Int 1))
+    374:2 Tuple body
+    375:1 Scalar (=(Int 3))
+    376:8 List count
+    384:8 List len
+    392:8 Tuple len
+    392:20 List body
+    400:1 Scalar (=(Int 1))
+    400:2 Tuple body
+    401:1 Scalar (=(Int 3))
+    402:8 Tuple len
+    410:1 Scalar (=(Int 4))
+    410:2 Tuple body
+    411:1 Scalar (=(Int 5))
+    412:8 Tuple len
+    420:1 Scalar (=(Int 3))
+    420:2 Tuple body
+    421:1 Scalar (=(Int 2))
+    422:8 List count
+    430:8 List len
+    438:0 List body
+    438:8 Tuple len
+    446:1 Scalar (=(Int 2))
+    446:2 Tuple body
+    447:1 Scalar (=(Int 2))
+    448:8 List count
+    456:8 List len
+    464:0 List body
+
+    1,2, |}]
 
 let%expect_test "example-3" =
   run_test ~params:example_params
@@ -480,116 +341,94 @@ select([lp.counter, lc.counter],
     {|
     0:8 Tuple len
     8:8 Table len
-    8:526 Tuple body
+    8:436 Tuple body
     16:8 Table len
     24:104 Table hash
-    128:40 Table key map
-    168:1 Scalar (=(Int 1))
-    168:135 Table values
-    169:8 List count
-    177:8 List len
-    185:8 Tuple len
-    185:10 List body
-    193:1 Scalar (=(Int 1))
-    193:2 Tuple body
-    194:1 Scalar (=(Int 4))
-    195:1 Scalar (=(Int 2))
-    196:8 List count
-    204:8 List len
-    212:8 Tuple len
-    212:10 List body
-    220:1 Scalar (=(Int 2))
-    220:2 Tuple body
-    221:1 Scalar (=(Int 3))
-    222:1 Scalar (=(Int 3))
-    223:8 List count
-    231:8 List len
-    239:8 Tuple len
-    239:10 List body
-    247:1 Scalar (=(Int 3))
-    247:2 Tuple body
-    248:1 Scalar (=(Int 4))
-    249:1 Scalar (=(Int 4))
-    250:8 List count
-    258:8 List len
-    266:8 Tuple len
-    266:10 List body
-    274:1 Scalar (=(Int 1))
-    274:2 Tuple body
-    275:1 Scalar (=(Int 6))
-    276:1 Scalar (=(Int 5))
-    277:8 List count
-    285:8 List len
-    293:8 Tuple len
-    293:10 List body
-    301:1 Scalar (=(Int 3))
-    301:2 Tuple body
-    302:1 Scalar (=(Int 6))
-    303:8 Ordered idx len (=231)
-    311:8 Ordered idx index len (=45)
-    319:1 Scalar (=(Int 1))
-    319:1 Ordered idx key
-    320:8 Ordered idx value ptr (=0)
-    328:1 Scalar (=(Int 1))
-    328:1 Ordered idx key
-    329:8 Ordered idx value ptr (=36)
-    337:1 Scalar (=(Int 2))
-    337:1 Ordered idx key
-    338:8 Ordered idx value ptr (=72)
-    346:1 Scalar (=(Int 3))
-    346:1 Ordered idx key
-    347:8 Ordered idx value ptr (=98)
-    355:1 Scalar (=(Int 3))
-    355:1 Ordered idx key
-    356:8 Ordered idx value ptr (=134)
-    364:8 List count
-    372:8 List len
-    380:8 Tuple len
-    380:20 List body
-    388:1 Scalar (=(Int 1))
-    388:2 Tuple body
-    389:1 Scalar (=(Int 1))
-    390:8 Tuple len
-    398:1 Scalar (=(Int 4))
-    398:2 Tuple body
-    399:1 Scalar (=(Int 1))
-    400:8 List count
-    408:8 List len
-    416:8 Tuple len
-    416:20 List body
-    424:1 Scalar (=(Int 1))
-    424:2 Tuple body
-    425:1 Scalar (=(Int 1))
-    426:8 Tuple len
-    434:1 Scalar (=(Int 4))
-    434:2 Tuple body
-    435:1 Scalar (=(Int 1))
-    436:8 List count
-    444:8 List len
-    452:8 Tuple len
-    452:10 List body
-    460:1 Scalar (=(Int 2))
-    460:2 Tuple body
-    461:1 Scalar (=(Int 2))
-    462:8 List count
-    470:8 List len
-    478:8 Tuple len
-    478:20 List body
-    486:1 Scalar (=(Int 3))
-    486:2 Tuple body
-    487:1 Scalar (=(Int 3))
-    488:8 Tuple len
-    496:1 Scalar (=(Int 5))
-    496:2 Tuple body
-    497:1 Scalar (=(Int 3))
-    498:8 List count
-    506:8 List len
-    514:8 Tuple len
-    514:20 List body
-    522:1 Scalar (=(Int 3))
-    522:2 Tuple body
-    523:1 Scalar (=(Int 3))
-    524:8 Tuple len
-    532:1 Scalar (=(Int 5))
-    532:2 Tuple body
-    533:1 Scalar (=(Int 3)) |}]
+    128:24 Table key map
+    152:1 Scalar (=(Int 1))
+    152:101 Table values
+    153:8 List count
+    161:8 List len
+    169:8 Tuple len
+    169:20 List body
+    177:1 Scalar (=(Int 1))
+    177:2 Tuple body
+    178:1 Scalar (=(Int 4))
+    179:8 Tuple len
+    187:1 Scalar (=(Int 4))
+    187:2 Tuple body
+    188:1 Scalar (=(Int 6))
+    189:1 Scalar (=(Int 2))
+    190:8 List count
+    198:8 List len
+    206:8 Tuple len
+    206:10 List body
+    214:1 Scalar (=(Int 2))
+    214:2 Tuple body
+    215:1 Scalar (=(Int 3))
+    216:1 Scalar (=(Int 3))
+    217:8 List count
+    225:8 List len
+    233:8 Tuple len
+    233:20 List body
+    241:1 Scalar (=(Int 3))
+    241:2 Tuple body
+    242:1 Scalar (=(Int 4))
+    243:8 Tuple len
+    251:1 Scalar (=(Int 5))
+    251:2 Tuple body
+    252:1 Scalar (=(Int 6))
+    253:8 Ordered idx len (=191)
+    261:8 Ordered idx index len (=45)
+    269:1 Scalar (=(Int 1))
+    269:1 Ordered idx key
+    270:8 Ordered idx value ptr (=0)
+    278:1 Scalar (=(Int 2))
+    278:1 Ordered idx key
+    279:8 Ordered idx value ptr (=26)
+    287:1 Scalar (=(Int 3))
+    287:1 Ordered idx key
+    288:8 Ordered idx value ptr (=52)
+    296:1 Scalar (=(Int 4))
+    296:1 Ordered idx key
+    297:8 Ordered idx value ptr (=78)
+    305:1 Scalar (=(Int 5))
+    305:1 Ordered idx key
+    306:8 Ordered idx value ptr (=104)
+    314:8 List count
+    322:8 List len
+    330:8 Tuple len
+    330:10 List body
+    338:1 Scalar (=(Int 1))
+    338:2 Tuple body
+    339:1 Scalar (=(Int 1))
+    340:8 List count
+    348:8 List len
+    356:8 Tuple len
+    356:10 List body
+    364:1 Scalar (=(Int 2))
+    364:2 Tuple body
+    365:1 Scalar (=(Int 2))
+    366:8 List count
+    374:8 List len
+    382:8 Tuple len
+    382:10 List body
+    390:1 Scalar (=(Int 3))
+    390:2 Tuple body
+    391:1 Scalar (=(Int 3))
+    392:8 List count
+    400:8 List len
+    408:8 Tuple len
+    408:10 List body
+    416:1 Scalar (=(Int 1))
+    416:2 Tuple body
+    417:1 Scalar (=(Int 4))
+    418:8 List count
+    426:8 List len
+    434:8 Tuple len
+    434:10 List body
+    442:1 Scalar (=(Int 3))
+    442:2 Tuple body
+    443:1 Scalar (=(Int 5))
+
+    1,2, |}]

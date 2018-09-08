@@ -11,6 +11,8 @@ module AbsInt = struct
 
   let ( + ) : t -> t -> t = fun (l1, h1) (l2, h2) -> (l1 + l2, h1 + h2)
 
+  let ( - ) (l1, h1) (l2, h2) = (l1 - h2, l2 - h1)
+
   let ( * ) : t -> t -> t =
    fun (l1, h1) (l2, h2) ->
     let min_many = List.fold_left1_exn ~f:Int.min in
@@ -29,7 +31,8 @@ module AbsInt = struct
     let open Int in
     (* Ensures we can store null values. *)
     let h = if nullable then h + 1 else h in
-    Int.max (Int.ceil_log2 h |> Int.round_up ~to_multiple_of:8) 8
+    if h = 0 then 1
+    else Int.max (Int.ceil_log2 h |> Int.round_up ~to_multiple_of:8) 8
 
   let byte_width : nullable:bool -> t -> int =
    fun ~nullable x ->
@@ -75,7 +78,7 @@ module T = struct
 
   type string_ = {nchars: AbsInt.t; nullable: bool} [@@deriving compare, sexp]
 
-  type list_ = {count: AbsCount.t} [@@deriving compare, sexp]
+  type list_ = {count: AbsInt.t} [@@deriving compare, sexp]
 
   type tuple = {count: AbsCount.t} [@@deriving compare, sexp]
 
@@ -108,7 +111,7 @@ let rec unify_exn t1 t2 =
     let err =
       Error.create
         (Printf.sprintf "Unification failed: %s" m)
-        (t1, t2) [%sexp_of : t * t]
+        (t1, t2) [%sexp_of: t * t]
     in
     raise (TypeError err)
   in
@@ -130,7 +133,7 @@ let rec unify_exn t1 t2 =
       in
       TupleT (elem_ts, {count= AbsCount.unify c1 c2})
   | ListT (et1, {count= c1}), ListT (et2, {count= c2}) ->
-      ListT (unify_exn et1 et2, {count= AbsCount.unify c1 c2})
+      ListT (unify_exn et1 et2, {count= AbsInt.unify c1 c2})
   | OrderedIdxT (k1, v1, {count= c1}), OrderedIdxT (k2, v2, {count= c2}) ->
       OrderedIdxT (unify_exn k1 k2, unify_exn v1 v2, {count= AbsCount.unify c1 c2})
   | HashIdxT (kt1, vt1, {count= c1}), HashIdxT (kt2, vt2, {count= c2}) ->
@@ -161,10 +164,32 @@ let count : t -> AbsCount.t = function
   | NullT | IntT _ | BoolT _ | StringT _ -> AbsCount.abstract 1
   | TupleT (_, {count})
    |OrderedIdxT (_, _, {count; _})
-   |ListT (_, {count})
    |HashIdxT (_, _, {count; _}) ->
       count
+  | ListT (_, {count}) -> Some count
   | FuncT _ -> AbsCount.top
+
+let rec len =
+  let open AbsInt in
+  function
+  | EmptyT -> zero
+  | NullT -> failwith "Unexpected type."
+  | IntT x -> byte_width ~nullable:x.nullable x.range |> abstract
+  | BoolT _ -> abstract 1
+  | StringT x ->
+      let header_len = byte_width ~nullable:false x.nchars |> abstract in
+      header_len + x.nchars
+  | TupleT (ts, _) ->
+      let body_len = List.sum (module AbsInt) ts ~f:len in
+      let header_len = byte_width ~nullable:false body_len |> abstract in
+      body_len + header_len
+  | ListT (t, x) ->
+      let count_len = byte_width ~nullable:false x.count |> abstract in
+      let body_len = x.count * len t in
+      let len_len = byte_width ~nullable:false body_len |> abstract in
+      count_len + len_len + body_len
+  | T.HashIdxT _ | T.OrderedIdxT (_, _, _) -> abstract 100000
+  | FuncT (ts, _) -> List.sum (module AbsInt) ts ~f:len
 
 (* let rec to_schema : t -> Db.Schema.t = function
  *   | EmptyT -> []
