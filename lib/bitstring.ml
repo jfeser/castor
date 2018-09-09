@@ -10,28 +10,22 @@ type piece = {str: string; len: int} [@@deriving sexp, compare]
 type t = Label of string * t | Piece of piece | PList of t list
 
 (** Serialize an integer. Little endian. Width is the number of bits to use. *)
-let of_int : ?null:bool -> width:int -> int -> t =
- fun ?(null = false) ~width x ->
-  assert (0 <= width && width <= 64 && ((not null) || width <= 63)) ;
-  let nbytes = (width / 8) + 1 in
-  let buf = Bytes.make nbytes '\x00' in
-  for i = 0 to nbytes - 1 do
+let of_int ~byte_width x =
+  let buf = Bytes.make byte_width '\x00' in
+  for i = 0 to byte_width - 1 do
     Bytes.set buf i ((x lsr (i * 8)) land 0xFF |> Caml.char_of_int)
   done ;
-  Piece {str= Bytes.to_string buf; len= width}
+  Bytes.to_string buf
 
-let of_int64 : ?null:bool -> width:int -> int64 -> t =
- fun ?(null = false) ~width x ->
-  assert (0 <= width && width <= 64 && ((not null) || width <= 63)) ;
-  let nbytes = (width / 8) + 1 in
-  let buf = Bytes.make nbytes '\x00' in
-  for i = 0 to nbytes - 1 do
+let of_int64 ~byte_width x =
+  let buf = Bytes.make byte_width '\x00' in
+  for i = 0 to byte_width - 1 do
     let shift = i * 8 in
     let mask = Int64.of_int 0xFF in
     Bytes.set buf i
       (Int64.((x lsr shift) land mask) |> Int64.to_int_exn |> Char.of_int_exn)
   done ;
-  Piece {str= Bytes.to_string buf; len= width}
+  Bytes.to_string buf
 
 let of_bytes : bytes -> t =
  fun x -> Piece {str= Bytes.to_string x; len= 8 * Bytes.length x}
@@ -129,7 +123,12 @@ module ByteWriter = struct
         output_byte (Bytes.get b i)
       done
     in
-    let seek pos' = pos := Int.of_int64_exn pos' in
+    let seek pos' =
+      let pos' = Int.of_int64_exn pos' in
+      let buf_len = Bytes.length !buf in
+      if pos' >= buf_len then buf := Bytes.extend !buf 0 buf_len ;
+      pos := pos'
+    in
     let get_pos () = Int.to_int64 !pos in
     let flush () =
       Buffer.reset out ;

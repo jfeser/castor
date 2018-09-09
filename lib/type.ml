@@ -26,19 +26,10 @@ module AbsInt = struct
 
   let concretize : t -> int option = fun (l, h) -> if l = h then Some l else None
 
-  let bit_width : nullable:bool -> t -> int =
-   fun ~nullable (_, h) ->
+  let byte_width ~nullable (_, h) =
     let open Int in
-    (* Ensures we can store null values. *)
     let h = if nullable then h + 1 else h in
-    if h = 0 then 1
-    else Int.max (Int.ceil_log2 h |> Int.round_up ~to_multiple_of:8) 8
-
-  let byte_width : nullable:bool -> t -> int =
-   fun ~nullable x ->
-    let open Int in
-    let bw = bit_width ~nullable x in
-    if bw % 8 = 0 then bw / 8 else (bw / 8) + 1
+    if h = 0 then 1 else Int.max (Int.ceil_log2 h / 8) 1
 end
 
 module AbsCount = struct
@@ -188,7 +179,7 @@ let rec len =
       let body_len = x.count * len t in
       let len_len = byte_width ~nullable:false body_len |> abstract in
       count_len + len_len + body_len
-  | T.HashIdxT _ | T.OrderedIdxT (_, _, _) -> abstract 100000
+  | T.HashIdxT _ | T.OrderedIdxT (_, _, _) -> (0, 100000)
   | FuncT (ts, _) -> List.sum (module AbsInt) ts ~f:len
 
 (* let rec to_schema : t -> Db.Schema.t = function

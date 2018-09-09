@@ -60,58 +60,54 @@ module No_config = struct
     | 1 -> true
     | _ -> failwith "Unexpected byte sequence."
 
-  let align : ?pad:char -> int -> bytes -> bytes =
-   fun ?(pad = '\x00') align b ->
+  let align ?(pad = '\x00') align b =
     let slop = Bytes.length b % align in
-    if slop = 0 then b
+    if slop = 0 then Bytes.to_string b
     else
       let padding = align - slop in
-      Bytes.cat b (Bytes.make padding pad)
+      Bytes.cat b (Bytes.make padding pad) |> Bytes.to_string
 
   open Type
 
   let serialize_null t =
     let open Bitstring in
+    let hdr = Header.make_header t in
     match t with
-    | NullT -> empty
-    | IntT {range= (_, max) as range; nullable= true; _} ->
-        of_int ~width:(Type.AbsInt.bit_width ~nullable:true range) (max + 1)
-        |> label "Int (null)"
-    | BoolT _ -> of_int ~width:8 2 |> label "Bool (null)"
+    | NullT -> ""
+    | IntT {range= _, max; nullable= true; _} ->
+        of_int ~byte_width:(Header.size_exn hdr "value") (max + 1)
+    | BoolT _ -> of_int ~byte_width:(Header.size_exn hdr "value") 2
     | StringT {nchars= min, _; _} ->
-        let len_flag = of_int ~width:64 (min - 1) in
-        concat [len_flag |> label "String len (null)"]
+        of_int ~byte_width:(Header.size_exn hdr "len") (min - 1)
     | t -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
 
   let serialize_int t x =
     let open Bitstring in
+    let hdr = Header.make_header t in
     match t with
-    | IntT {range; nullable; _} ->
-        of_int ~width:(Type.AbsInt.bit_width ~nullable range) x |> label "Int"
+    | IntT _ -> of_int ~byte_width:(Header.size_exn hdr "value") x
     | t -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
 
   let serialize_bool t x =
     let open Bitstring in
+    let hdr = Header.make_header t in
     match (t, x) with
-    | BoolT _, true -> of_int ~width:8 1 |> label "Bool"
-    | BoolT _, false -> of_int ~width:8 0 |> label "Bool"
+    | BoolT _, true -> of_int ~byte_width:(Header.size_exn hdr "value") 1
+    | BoolT _, false -> of_int ~byte_width:(Header.size_exn hdr "value") 0
     | t, _ -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
 
   let serialize_string t x =
     let open Bitstring in
+    let hdr = Header.make_header t in
     match t with
-    | StringT {nchars; nullable} ->
+    | StringT _ ->
         let unpadded_body = Bytes.of_string x in
-        let body = unpadded_body |> align isize |> of_bytes in
+        let body = unpadded_body |> align isize in
         let len =
-          match Type.AbsInt.concretize nchars with
-          | Some _ -> empty
-          | None ->
-              Bytes.length unpadded_body
-              |> bytes_of_int ~width:(Type.AbsInt.bit_width ~nullable nchars)
-              |> of_bytes
+          of_int ~byte_width:(Header.size_exn hdr "len")
+            (Bytes.length unpadded_body)
         in
-        concat [len |> label "String len"; body |> label "String body"]
+        String.concat ~sep:"" [len; body]
     | t -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
 
   let serialize_value type_ = function
@@ -185,19 +181,17 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
       Out_channel.flush out_ch
   end
 
-  let serialize_list serialize ({ctx; writer; _} as sctx)
-      ((elem_t, ({count} : Type.list_)) as t) (elem_query, elem_layout) =
+  let serialize_list serialize ({ctx; writer; _} as sctx) ((elem_t, _) as t)
+      (elem_query, elem_layout) =
     let open Bitstring in
     (* Reserve space for list header. *)
+    let hdr = Header.make_header (ListT t) in
     let header_pos = Writer.pos writer in
     Log.with_msg sctx "List count" (fun () ->
-        Writer.write_bytes writer
-          (Bytes.make (Type.AbsInt.byte_width ~nullable:false count) '\x00') ) ;
+        Writer.write_bytes writer (Bytes.make (Header.size_exn hdr "count") '\x00')
+    ) ;
     Log.with_msg sctx "List len" (fun () ->
-        Writer.write_bytes writer
-          (Bytes.make
-             (Type.AbsInt.byte_width ~nullable:false (Type.len (ListT t)))
-             '\x00') ) ;
+        Writer.write_bytes writer (Bytes.make (Header.size_exn hdr "len") '\x00') ) ;
     (* Serialize list body. *)
     let count = ref 0 in
     Log.with_msg sctx "List body" (fun () ->
@@ -210,20 +204,19 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     (* Serialize list header. *)
     let len = Writer.Pos.(end_pos - header_pos) |> Int64.to_int_exn in
     Writer.seek writer header_pos ;
-    Writer.write writer (of_int ~width:64 !count) ;
-    Writer.write writer (of_int ~width:64 len) ;
+    Writer.write_string writer
+      (of_int ~byte_width:(Header.size_exn hdr "count") !count) ;
+    Writer.write_string writer (of_int ~byte_width:(Header.size_exn hdr "len") len) ;
     Writer.seek writer end_pos
 
   let serialize_tuple serialize ({writer; _} as sctx) ((elem_ts, _) as t)
       (elem_layouts, _) =
     let open Bitstring in
     (* Reserve space for header. *)
+    let hdr = Header.make_header (TupleT t) in
     let header_pos = Writer.pos writer in
     Log.with_msg sctx "Tuple len" (fun () ->
-        Writer.write_bytes writer
-          (Bytes.make
-             (Type.AbsInt.byte_width ~nullable:false (Type.len (TupleT t)))
-             '\x00') ) ;
+        Writer.write_bytes writer (Bytes.make (Header.size_exn hdr "len") '\x00') ) ;
     (* Serialize body *)
     Log.with_msg sctx "Tuple body" (fun () ->
         List.iter2_exn ~f:(fun t l -> serialize sctx t l) elem_ts elem_layouts ) ;
@@ -231,13 +224,13 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     (* Serialize header. *)
     Writer.seek writer header_pos ;
     let len = Writer.Pos.(end_pos - header_pos) |> Int64.to_int_exn in
-    Writer.write writer (of_int ~width:64 len) ;
+    Writer.write_string writer (of_int ~byte_width:(Header.size_exn hdr "len") len) ;
     Writer.seek writer end_pos
 
   type hash_key = {kctx: Ctx.t; hash_key: string; hash_val: int}
 
-  let serialize_hashidx serialize ({ctx; writer; _} as sctx) (key_t, value_t, _)
-      (query, value_l, meta) =
+  let serialize_hashidx serialize ({ctx; writer; _} as sctx)
+      ((key_t, value_t, _) as t) (query, value_l, meta) =
     let open Bitstring in
     let key_l =
       Option.value_exn
@@ -262,9 +255,9 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
             | [`String s] | [`Unknown s] -> s
             | vs ->
                 List.map vs ~f:(function
-                  | `Int x -> Bitstring.of_int ~width:64 x
+                  | `Int x -> Bitstring.of_int ~byte_width:8 x
                   | _ -> failwith "no non-int tuple keys" )
-                |> Bitstring.concat |> Bitstring.to_string
+                |> String.concat ~sep:""
           in
           {kctx; hash_key; hash_val= -1} )
     in
@@ -285,16 +278,18 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
         List.iter keys ~f:(fun key ->
             Out_channel.fprintf ch "%s -> %d\n" key.hash_key key.hash_val ) ) ;
     let hash_body = Cmph.Hash.to_packed hash |> Bytes.of_string |> align isize in
-    let hash_len = Bytes.length hash_body in
+    let hash_len = String.length hash_body in
     let table_size =
       List.fold_left keys ~f:(fun m key -> Int.max m key.hash_val) ~init:0
       |> fun m -> m + 1
     in
+    let hdr = Header.make_header (HashIdxT t) in
     let header_pos = Writer.pos writer in
     Log.with_msg sctx "Table len" (fun () ->
-        Writer.write_bytes writer (Bytes.make 8 '\x00') ) ;
-    Log.with_msg sctx "Table len" (fun () ->
-        Writer.write_bytes writer (Bytes.make 8 '\x00') ) ;
+        Writer.write_bytes writer (Bytes.make (Header.size_exn hdr "len") '\x00') ) ;
+    Log.with_msg sctx "Table hash len" (fun () ->
+        Writer.write_bytes writer
+          (Bytes.make (Header.size_exn hdr "hash_len") '\x00') ) ;
     Log.with_msg sctx "Table hash" (fun () ->
         Writer.write_bytes writer (Bytes.make hash_len '\x00') ) ;
     Log.with_msg sctx "Table key map" (fun () ->
@@ -311,16 +306,20 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     let end_pos = Writer.pos writer in
     Writer.seek writer header_pos ;
     let len = Writer.Pos.(end_pos - header_pos) in
-    Writer.write writer (of_int ~width:64 (Int64.to_int_exn len)) ;
-    Writer.write writer (of_int ~width:64 hash_len) ;
-    Writer.write_bytes writer hash_body ;
-    Array.iter hash_table ~f:(fun x -> Writer.write writer (of_int ~width:64 x)) ;
+    Writer.write_string writer
+      (of_int ~byte_width:(Header.size_exn hdr "len") (Int64.to_int_exn len)) ;
+    Writer.write_string writer
+      (of_int ~byte_width:(Header.size_exn hdr "len") hash_len) ;
+    Writer.write_string writer hash_body ;
+    Array.iter hash_table ~f:(fun x ->
+        Writer.write_string writer (of_int ~byte_width:8 x) ) ;
     Writer.seek writer end_pos
 
-  let serialize_orderedidx serialize ({ctx; writer; _} as sctx) (key_t, value_t, _)
-      (query, value_l, meta) =
+  let serialize_orderedidx serialize ({ctx; writer; _} as sctx)
+      ((key_t, value_t, _) as t) (query, value_l, meta) =
     let open Bitstring in
     let open Writer in
+    let hdr = Header.make_header (OrderedIdxT t) in
     let key_l =
       Option.value_exn
         ~error:(Error.create "Missing key layout." meta [%sexp_of: ordered_idx])
@@ -335,8 +334,8 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     let ordered_query = order_by order_key meta.order query in
     (* Write a dummy header. *)
     let len_pos = pos writer in
-    write_bytes writer (Bytes.make 8 '\x00') ;
-    write_bytes writer (Bytes.make 8 '\x00') ;
+    write_bytes writer (Bytes.make (Header.size_exn hdr "len") '\x00') ;
+    write_bytes writer (Bytes.make (Header.size_exn hdr "idx_len") '\x00') ;
     let index_start_pos = pos writer in
     Eval.eval ctx ordered_query
     |> Seq.iter ~f:(fun kctx ->
@@ -347,7 +346,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
            (* Serialize value ptr. *)
            let ptr = pos temp_writer |> Pos.to_bytes_exn |> Int64.to_int_exn in
            Log.with_msg sctx (sprintf "Ordered idx value ptr (=%d)" ptr) (fun () ->
-               write writer (ptr |> of_int ~width:64) ) ;
+               write_string writer (ptr |> of_int ~byte_width:8) ) ;
            (* Serialize value. *)
            serialize {ksctx with writer= temp_writer} value_t value_l ) ;
     let index_end_pos = pos writer in
@@ -364,9 +363,11 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     let len = Pos.(end_pos - len_pos) in
     let index_len = Pos.(index_end_pos - index_start_pos) in
     Log.with_msg sctx (sprintf "Ordered idx len (=%Ld)" len) (fun () ->
-        write writer (of_int64 ~width:64 len) ) ;
+        write_string writer (of_int64 ~byte_width:(Header.size_exn hdr "len") len)
+    ) ;
     Log.with_msg sctx (sprintf "Ordered idx index len (=%Ld)" index_len) (fun () ->
-        write writer (of_int64 ~width:64 index_len) ) ;
+        write_string writer
+          (of_int64 ~byte_width:(Header.size_exn hdr "idx_len") index_len) ) ;
     seek writer end_pos
 
   let serialize_scalar sctx type_ expr =
@@ -375,7 +376,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
       (sprintf "Scalar (=%s)" ([%sexp_of: Db.primvalue] value |> Sexp.to_string_hum))
       (fun () ->
         Eval.eval_pred sctx.ctx expr |> serialize_value type_
-        |> Bitstring.Writer.write sctx.writer )
+        |> Bitstring.Writer.write_string sctx.writer )
 
   let rec serialize ({writer; _} as sctx) type_ layout =
     let open Bitstring in
@@ -405,53 +406,6 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     | t, r ->
         Error.create "Cannot serialize." (t, r) [%sexp_of: Type.t * node]
         |> Error.raise
-
-  (* class ['self] serialize_fold log_ch writer =
-   *   let ctr = ref 0 in
-   *   let labels = ref [] in
-   *   let log_start lbl =
-   *     let open Bitstring in
-   *     if Config.layout_map then (
-   *       labels := (lbl, !ctr, Writer.pos writer) :: !labels ;
-   *       Int.incr ctr )
-   *   in
-   *   let log_end () =
-   *     let open Bitstring in
-   *     if Config.layout_map then
-   *       match !labels with
-   *       | (lbl, ctr, start_pos) :: ls ->
-   *           labels := ls ;
-   *           let prefix = String.make (List.length !labels) ' ' in
-   *           let end_ = Writer.Pos.to_bits (Writer.pos writer) in
-   *           let start = Writer.Pos.to_bits start_pos in
-   *           let byte_start = Int64.(start / of_int 8) in
-   *           let byte_len = Int64.((end_ - start) / of_int 8) in
-   *           let aligned =
-   *             if Int64.(start % of_int 8 = of_int 0) then "=" else "~"
-   *           in
-   *           let out =
-   *             sprintf "%d %s+ %s [%Ldb %s%LdB (%Ld bytes)]\n" ctr prefix lbl start
-   *               aligned byte_start byte_len
-   *           in
-   *           Out_channel.output_string log_ch out
-   *       | [] -> Logs.warn (fun m -> m "Unexpected log_end.")
-   *   in
-   *   object (self: 'self)
-   *     method visit_AList ctx type_ q elem_layout =
-   *     method visit_ATuple ctx type_ elem_layouts _ =
-   *     method visit_AHashIdx ctx type_ q l _ =
-   *     method visit_AEmpty _ _ = ()
-   *     method visit_AScalar ctx type_ e =
-   *     method visit_AOrderedIdx ctx type_ key_l value_l meta =
-   *     method visit_func ctx type_ rs =
-   *       let open Type in
-   *       match type_ with
-   *       | FuncT (ts, _) -> List.iter2_exn ts rs ~f:(self#visit_t ctx)
-   *       | _ ->
-   *           Error.create "Expected a function type." type_ [%sexp_of : Type.t]
-   *           |> Error.raise
-   *     method visit_t (writer, ctx) type_ ({node; _} as r) =
-   *   end *)
 
   let serialize ?(ctx = Map.empty (module Name.Compare_no_type)) writer t l =
     Logs.debug (fun m ->
@@ -492,7 +446,5 @@ let tests =
          >:: fun ctxt ->
          let b = Bytes.of_string "\001\002\003" in
          let b' = align 8 b in
-         assert_equal ~ctxt ~printer:Caml.string_of_int 8 (Bytes.length b') ;
-         assert_equal ~ctxt ~printer:Bytes.to_string
-           (Bytes.of_string "\001\002\003\000\000\000\000\000")
-           b' ) ]
+         assert_equal ~ctxt ~printer:Caml.string_of_int 8 (String.length b') ;
+         assert_equal ~ctxt "\001\002\003\000\000\000\000\000" b' ) ]

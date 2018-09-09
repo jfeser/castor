@@ -2,9 +2,9 @@ open Base
 
 type t
 
-val of_int : ?null:bool -> width:int -> int -> t
+val of_int : byte_width:int -> int -> string
 
-val of_int64 : ?null:bool -> width:int -> int64 -> t
+val of_int64 : byte_width:int -> int64 -> string
 
 val of_bytes : bytes -> t
 

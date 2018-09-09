@@ -1,5 +1,5 @@
 module type S = sig
-  val codegen : Implang.IRGen.ir_module -> Llvm.llmodule
+  val codegen : Irgen.ir_module -> Llvm.llmodule
 
   val write_header : Stdio.Out_channel.t -> unit
 

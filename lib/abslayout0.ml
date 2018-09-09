@@ -86,13 +86,13 @@ module Meta = struct
 
   let empty () = ref Univ_map.empty
 
-  let schema = Univ_map.Key.create ~name:"schema" [%sexp_of : name list]
+  let schema = Univ_map.Key.create ~name:"schema" [%sexp_of: name list]
 
-  let pos = Univ_map.Key.create ~name:"pos" [%sexp_of : pos]
+  let pos = Univ_map.Key.create ~name:"pos" [%sexp_of: pos]
 
-  let start_pos = Univ_map.Key.create ~name:"start_pos" [%sexp_of : lexpos]
+  let start_pos = Univ_map.Key.create ~name:"start_pos" [%sexp_of: lexpos]
 
-  let end_pos = Univ_map.Key.create ~name:"end_pos" [%sexp_of : lexpos]
+  let end_pos = Univ_map.Key.create ~name:"end_pos" [%sexp_of: lexpos]
 
   let update r key ~f = r.meta := Univ_map.update !(r.meta) key ~f
 
@@ -104,7 +104,7 @@ module Meta = struct
     | None ->
         Error.create "Missing metadata."
           (Univ_map.Key.name key, ralgebra)
-          [%sexp_of : string * t]
+          [%sexp_of: string * t]
         |> Error.raise
 
   let set ralgebra k v =

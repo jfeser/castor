@@ -59,7 +59,7 @@ module Config = struct
   end
 end
 
-module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
+module Make (Config : Config.S) (IG : Irgen.S) () = struct
   module I = Implang
   open Config
 
@@ -1004,7 +1004,7 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
       t
   end
 
-  let codegen I.IRGen.({iters= ir_iters; funcs= ir_funcs; params; buffer_len}) =
+  let codegen Irgen.({iters= ir_iters; funcs= ir_funcs; params; buffer_len}) =
     Logs.info (fun m -> m "Codegen started.") ;
     set_data_layout "e-m:o-i64:64-f80:128-n8:16:32:64-S128" module_ ;
     let module SB = ParamStructBuilder in
@@ -1143,7 +1143,7 @@ module Make (Config : Config.S) (IG : Implang.IRGen.S) () = struct
       let module Name = Abslayout.Name in
       let funcs, calls =
         List.filter params ~f:(fun n ->
-            List.exists ir_module.I.IRGen.params ~f:(fun n' ->
+            List.exists ir_module.Irgen.params ~f:(fun n' ->
                 Name.Compare_no_type.(n = n') ) )
         |> List.mapi ~f:(fun i n ->
                match Name.type_exn n with

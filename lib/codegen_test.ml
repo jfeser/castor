@@ -29,7 +29,7 @@ let make_modules layout_file =
       (Eval)
   in
   let module I =
-    Implang.IRGen.Make (struct
+    Irgen.Make (struct
         let code_only = false
       end)
       (Eval)
@@ -43,7 +43,7 @@ let make_modules layout_file =
       (I)
       ()
   in
-  ((module S : Serialize.S), (module I : Implang.IRGen.S), (module C : Codegen.S))
+  ((module S : Serialize.S), (module I : Irgen.S), (module C : Codegen.S))
 
 let run_in_fork thunk =
   match Unix.fork () with
@@ -81,7 +81,8 @@ let run_test ?(params = []) layout_str =
     in
     sprintf "%s -p %s %s" exe_fn data_fn params_str
   in
-  Unix.system cmd |> ignore
+  let ret = Unix.system cmd in
+  print_endline (Unix.Exit_or_signal.to_string_hum ret)
 
 let%expect_test "ordered-idx" =
   run_test
@@ -89,92 +90,93 @@ let%expect_test "ordered-idx" =
      AList(Filter(r1.f = k.f, r1), ascalar(r1.g)), 1, 3)" ;
   [%expect
     {|
-    0:8 Ordered idx len (=148)
-    8:8 Ordered idx index len (=45)
-    16:1 Scalar (=(Int 0))
-    16:1 Ordered idx key
-    17:8 Ordered idx value ptr (=0)
-    25:1 Scalar (=(Int 1))
-    25:1 Ordered idx key
-    26:8 Ordered idx value ptr (=17)
-    34:1 Scalar (=(Int 2))
-    34:1 Ordered idx key
-    35:8 Ordered idx value ptr (=35)
-    43:1 Scalar (=(Int 3))
-    43:1 Ordered idx key
-    44:8 Ordered idx value ptr (=53)
-    52:1 Scalar (=(Int 4))
-    52:1 Ordered idx key
-    53:8 Ordered idx value ptr (=70)
-    61:8 List count
-    69:8 List len
-    77:1 Scalar (=(Int 5))
-    77:1 List body
-    78:8 List count
-    86:8 List len
-    94:1 Scalar (=(Int 2))
-    94:2 List body
-    95:1 Scalar (=(Int 3))
-    96:8 List count
-    104:8 List len
-    112:1 Scalar (=(Int 1))
-    112:2 List body
-    113:1 Scalar (=(Int 2))
-    114:8 List count
-    122:8 List len
-    130:1 Scalar (=(Int 4))
-    130:1 List body
-    131:8 List count
-    139:8 List len
-    147:1 Scalar (=(Int 6))
-    147:1 List body
+    0:2 Ordered idx len (=67)
+    2:8 Ordered idx index len (=45)
+    10:1 Scalar (=(Int 0))
+    10:1 Ordered idx key
+    11:8 Ordered idx value ptr (=0)
+    19:1 Scalar (=(Int 1))
+    19:1 Ordered idx key
+    20:8 Ordered idx value ptr (=2)
+    28:1 Scalar (=(Int 2))
+    28:1 Ordered idx key
+    29:8 Ordered idx value ptr (=5)
+    37:1 Scalar (=(Int 3))
+    37:1 Ordered idx key
+    38:8 Ordered idx value ptr (=8)
+    46:1 Scalar (=(Int 4))
+    46:1 Ordered idx key
+    47:8 Ordered idx value ptr (=10)
+    55:1 List count
+    56:0 List len
+    56:1 Scalar (=(Int 5))
+    56:1 List body
+    57:1 List count
+    58:0 List len
+    58:1 Scalar (=(Int 2))
+    58:2 List body
+    59:1 Scalar (=(Int 3))
+    60:1 List count
+    61:0 List len
+    61:1 Scalar (=(Int 1))
+    61:2 List body
+    62:1 Scalar (=(Int 2))
+    63:1 List count
+    64:0 List len
+    64:1 Scalar (=(Int 4))
+    64:1 List body
+    65:1 List count
+    66:0 List len
+    66:1 Scalar (=(Int 6))
+    66:1 List body
 
     1,2,
     1,3,
     2,1,
-    2,2, |}]
+    2,2,
+    exited normally |}]
 
 let%expect_test "hash-idx" =
   run_test
     "AHashIdx(Dedup(Select([r1.f], r1)) as k, AList(Filter(r1.f = k.f, r1), \
-     ascalar(r1.g)), 2)" ;
-  [%expect
-    {|
+     ascalar(r1.g)), 2)";
+  [%expect {|
     0:8 Table len
-    8:8 Table len
+    8:8 Table hash len
     16:104 Table hash
     120:40 Table key map
     160:1 Scalar (=(Int 3))
-    160:92 Table values
-    161:8 List count
-    169:8 List len
-    177:1 Scalar (=(Int 4))
-    177:1 List body
-    178:1 Scalar (=(Int 0))
-    179:8 List count
-    187:8 List len
-    195:1 Scalar (=(Int 5))
-    195:1 List body
-    196:1 Scalar (=(Int 4))
-    197:8 List count
-    205:8 List len
-    213:1 Scalar (=(Int 6))
-    213:1 List body
-    214:1 Scalar (=(Int 1))
-    215:8 List count
-    223:8 List len
-    231:1 Scalar (=(Int 2))
-    231:2 List body
-    232:1 Scalar (=(Int 3))
-    233:1 Scalar (=(Int 2))
-    234:8 List count
-    242:8 List len
-    250:1 Scalar (=(Int 1))
-    250:2 List body
-    251:1 Scalar (=(Int 2))
+    160:17 Table values
+    161:1 List count
+    162:0 List len
+    162:1 Scalar (=(Int 4))
+    162:1 List body
+    163:1 Scalar (=(Int 0))
+    164:1 List count
+    165:0 List len
+    165:1 Scalar (=(Int 5))
+    165:1 List body
+    166:1 Scalar (=(Int 4))
+    167:1 List count
+    168:0 List len
+    168:1 Scalar (=(Int 6))
+    168:1 List body
+    169:1 Scalar (=(Int 1))
+    170:1 List count
+    171:0 List len
+    171:1 Scalar (=(Int 2))
+    171:2 List body
+    172:1 Scalar (=(Int 3))
+    173:1 Scalar (=(Int 2))
+    174:1 List count
+    175:0 List len
+    175:1 Scalar (=(Int 1))
+    175:2 List body
+    176:1 Scalar (=(Int 2))
 
     2,1,
-    2,2, |}]
+    2,2,
+    exited normally |}]
 
 let example_params =
   [ (Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p", `Int 1)
@@ -192,37 +194,38 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
 |} ;
   [%expect
     {|
-    0:8 List count
-    8:8 List len
-    16:8 Tuple len
-    16:82 List body
-    24:1 Scalar (=(Int 1))
-    24:38 Tuple body
-    25:1 Scalar (=(Int 1))
-    26:8 List count
-    34:8 List len
-    42:8 Tuple len
-    42:20 List body
-    50:1 Scalar (=(Int 2))
-    50:2 Tuple body
-    51:1 Scalar (=(Int 2))
-    52:8 Tuple len
-    60:1 Scalar (=(Int 3))
-    60:2 Tuple body
-    61:1 Scalar (=(Int 3))
-    62:8 Tuple len
-    70:1 Scalar (=(Int 1))
-    70:28 Tuple body
-    71:1 Scalar (=(Int 4))
-    72:8 List count
-    80:8 List len
-    88:8 Tuple len
-    88:10 List body
-    96:1 Scalar (=(Int 3))
-    96:2 Tuple body
-    97:1 Scalar (=(Int 5))
+    0:0 List count
+    0:0 List len
+    0:0 Tuple len
+    0:1 Scalar (=(Int 1))
+    0:7 Tuple body
+    0:12 List body
+    1:1 Scalar (=(Int 1))
+    2:1 List count
+    3:0 List len
+    3:0 Tuple len
+    3:1 Scalar (=(Int 2))
+    3:2 Tuple body
+    3:4 List body
+    4:1 Scalar (=(Int 2))
+    5:0 Tuple len
+    5:1 Scalar (=(Int 3))
+    5:2 Tuple body
+    6:1 Scalar (=(Int 3))
+    7:0 Tuple len
+    7:1 Scalar (=(Int 1))
+    7:5 Tuple body
+    8:1 Scalar (=(Int 4))
+    9:1 List count
+    10:0 List len
+    10:0 Tuple len
+    10:1 Scalar (=(Int 3))
+    10:2 Tuple body
+    10:2 List body
+    11:1 Scalar (=(Int 5))
 
-    1,2, |}]
+    1,2,
+    exited normally |}]
 
 let%expect_test "example-2" =
   run_test ~params:example_params
@@ -236,91 +239,91 @@ select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as 
       filter(log.id = lc_k, log) as lc)),
     atuple([ascalar(lp.counter), ascalar(lc.counter)], cross)),
   (id_p, id_c)))
-|} ;
-  [%expect
-    {|
+|};
+  [%expect {|
     0:8 Table len
-    8:8 Table len
+    8:8 Table hash len
     16:112 Table hash
     128:72 Table key map
-    200:8 Tuple len
-    200:264 Table values
-    208:1 Scalar (=(Int 2))
-    208:2 Tuple body
+    200:0 Tuple len
+    200:1 Scalar (=(Int 2))
+    200:2 Tuple body
+    200:33 Table values
+    201:1 Scalar (=(Int 1))
+    202:1 List count
+    203:0 List len
+    203:0 List body
+    203:0 Tuple len
+    203:1 Scalar (=(Int 3))
+    203:2 Tuple body
+    204:1 Scalar (=(Int 1))
+    205:1 List count
+    206:0 List len
+    206:0 List body
+    206:0 Tuple len
+    206:1 Scalar (=(Int 1))
+    206:2 Tuple body
+    207:1 Scalar (=(Int 2))
+    208:1 List count
+    209:0 List len
+    209:0 Tuple len
     209:1 Scalar (=(Int 1))
-    210:8 List count
-    218:8 List len
-    226:0 List body
-    226:8 Tuple len
-    234:1 Scalar (=(Int 3))
-    234:2 Tuple body
-    235:1 Scalar (=(Int 1))
-    236:8 List count
-    244:8 List len
-    252:0 List body
-    252:8 Tuple len
-    260:1 Scalar (=(Int 1))
-    260:2 Tuple body
-    261:1 Scalar (=(Int 2))
-    262:8 List count
-    270:8 List len
-    278:8 Tuple len
-    278:10 List body
-    286:1 Scalar (=(Int 1))
-    286:2 Tuple body
-    287:1 Scalar (=(Int 2))
-    288:8 Tuple len
-    296:1 Scalar (=(Int 2))
-    296:2 Tuple body
-    297:1 Scalar (=(Int 3))
-    298:8 List count
-    306:8 List len
-    314:0 List body
-    314:8 Tuple len
-    322:1 Scalar (=(Int 3))
-    322:2 Tuple body
-    323:1 Scalar (=(Int 3))
-    324:8 List count
-    332:8 List len
-    340:0 List body
-    340:8 Tuple len
-    348:1 Scalar (=(Int 1))
-    348:2 Tuple body
-    349:1 Scalar (=(Int 1))
-    350:8 List count
-    358:8 List len
-    366:0 List body
-    366:8 Tuple len
-    374:1 Scalar (=(Int 1))
-    374:2 Tuple body
-    375:1 Scalar (=(Int 3))
-    376:8 List count
-    384:8 List len
-    392:8 Tuple len
-    392:20 List body
-    400:1 Scalar (=(Int 1))
-    400:2 Tuple body
-    401:1 Scalar (=(Int 3))
-    402:8 Tuple len
-    410:1 Scalar (=(Int 4))
-    410:2 Tuple body
-    411:1 Scalar (=(Int 5))
-    412:8 Tuple len
-    420:1 Scalar (=(Int 3))
-    420:2 Tuple body
-    421:1 Scalar (=(Int 2))
-    422:8 List count
-    430:8 List len
-    438:0 List body
-    438:8 Tuple len
-    446:1 Scalar (=(Int 2))
-    446:2 Tuple body
-    447:1 Scalar (=(Int 2))
-    448:8 List count
-    456:8 List len
-    464:0 List body
+    209:2 Tuple body
+    209:2 List body
+    210:1 Scalar (=(Int 2))
+    211:0 Tuple len
+    211:1 Scalar (=(Int 2))
+    211:2 Tuple body
+    212:1 Scalar (=(Int 3))
+    213:1 List count
+    214:0 List len
+    214:0 List body
+    214:0 Tuple len
+    214:1 Scalar (=(Int 3))
+    214:2 Tuple body
+    215:1 Scalar (=(Int 3))
+    216:1 List count
+    217:0 List len
+    217:0 List body
+    217:0 Tuple len
+    217:1 Scalar (=(Int 1))
+    217:2 Tuple body
+    218:1 Scalar (=(Int 1))
+    219:1 List count
+    220:0 List len
+    220:0 List body
+    220:0 Tuple len
+    220:1 Scalar (=(Int 1))
+    220:2 Tuple body
+    221:1 Scalar (=(Int 3))
+    222:1 List count
+    223:0 List len
+    223:0 Tuple len
+    223:1 Scalar (=(Int 1))
+    223:2 Tuple body
+    223:4 List body
+    224:1 Scalar (=(Int 3))
+    225:0 Tuple len
+    225:1 Scalar (=(Int 4))
+    225:2 Tuple body
+    226:1 Scalar (=(Int 5))
+    227:0 Tuple len
+    227:1 Scalar (=(Int 3))
+    227:2 Tuple body
+    228:1 Scalar (=(Int 2))
+    229:1 List count
+    230:0 List len
+    230:0 List body
+    230:0 Tuple len
+    230:1 Scalar (=(Int 2))
+    230:2 Tuple body
+    231:1 Scalar (=(Int 2))
+    232:1 List count
+    233:0 List len
+    233:0 List body
 
-    1,2, |}]
+    2,2,
+    exited normally |}]
 
 let%expect_test "example-3" =
   run_test ~params:example_params
@@ -336,99 +339,99 @@ select([lp.counter, lc.counter],
       alist(filter(log.counter = k, log),
         atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
       lp.counter, lp.succ) as lc)], cross))
-|} ;
-  [%expect
-    {|
-    0:8 Tuple len
-    8:8 Table len
-    8:436 Tuple body
-    16:8 Table len
-    24:104 Table hash
-    128:24 Table key map
-    152:1 Scalar (=(Int 1))
-    152:101 Table values
-    153:8 List count
-    161:8 List len
-    169:8 Tuple len
-    169:20 List body
-    177:1 Scalar (=(Int 1))
-    177:2 Tuple body
-    178:1 Scalar (=(Int 4))
-    179:8 Tuple len
-    187:1 Scalar (=(Int 4))
-    187:2 Tuple body
-    188:1 Scalar (=(Int 6))
-    189:1 Scalar (=(Int 2))
-    190:8 List count
-    198:8 List len
-    206:8 Tuple len
-    206:10 List body
-    214:1 Scalar (=(Int 2))
-    214:2 Tuple body
-    215:1 Scalar (=(Int 3))
-    216:1 Scalar (=(Int 3))
-    217:8 List count
-    225:8 List len
-    233:8 Tuple len
-    233:20 List body
-    241:1 Scalar (=(Int 3))
-    241:2 Tuple body
-    242:1 Scalar (=(Int 4))
-    243:8 Tuple len
-    251:1 Scalar (=(Int 5))
-    251:2 Tuple body
-    252:1 Scalar (=(Int 6))
-    253:8 Ordered idx len (=191)
-    261:8 Ordered idx index len (=45)
-    269:1 Scalar (=(Int 1))
-    269:1 Ordered idx key
-    270:8 Ordered idx value ptr (=0)
-    278:1 Scalar (=(Int 2))
-    278:1 Ordered idx key
-    279:8 Ordered idx value ptr (=26)
-    287:1 Scalar (=(Int 3))
-    287:1 Ordered idx key
-    288:8 Ordered idx value ptr (=52)
-    296:1 Scalar (=(Int 4))
-    296:1 Ordered idx key
-    297:8 Ordered idx value ptr (=78)
-    305:1 Scalar (=(Int 5))
-    305:1 Ordered idx key
-    306:8 Ordered idx value ptr (=104)
-    314:8 List count
-    322:8 List len
-    330:8 Tuple len
-    330:10 List body
-    338:1 Scalar (=(Int 1))
-    338:2 Tuple body
-    339:1 Scalar (=(Int 1))
-    340:8 List count
-    348:8 List len
-    356:8 Tuple len
-    356:10 List body
-    364:1 Scalar (=(Int 2))
-    364:2 Tuple body
-    365:1 Scalar (=(Int 2))
-    366:8 List count
-    374:8 List len
-    382:8 Tuple len
-    382:10 List body
-    390:1 Scalar (=(Int 3))
-    390:2 Tuple body
-    391:1 Scalar (=(Int 3))
-    392:8 List count
-    400:8 List len
-    408:8 Tuple len
-    408:10 List body
-    416:1 Scalar (=(Int 1))
-    416:2 Tuple body
-    417:1 Scalar (=(Int 4))
-    418:8 List count
-    426:8 List len
-    434:8 Tuple len
-    434:10 List body
-    442:1 Scalar (=(Int 3))
-    442:2 Tuple body
-    443:1 Scalar (=(Int 5))
+|};
+  [%expect {|
+    0:2 Tuple len
+    2:8 Table len
+    2:225 Tuple body
+    10:8 Table hash len
+    18:104 Table hash
+    122:24 Table key map
+    146:1 Scalar (=(Int 1))
+    146:16 Table values
+    147:1 List count
+    148:0 List len
+    148:0 Tuple len
+    148:1 Scalar (=(Int 1))
+    148:2 Tuple body
+    148:4 List body
+    149:1 Scalar (=(Int 4))
+    150:0 Tuple len
+    150:1 Scalar (=(Int 4))
+    150:2 Tuple body
+    151:1 Scalar (=(Int 6))
+    152:1 Scalar (=(Int 2))
+    153:1 List count
+    154:0 List len
+    154:0 Tuple len
+    154:1 Scalar (=(Int 2))
+    154:2 Tuple body
+    154:2 List body
+    155:1 Scalar (=(Int 3))
+    156:1 Scalar (=(Int 3))
+    157:1 List count
+    158:0 List len
+    158:0 Tuple len
+    158:1 Scalar (=(Int 3))
+    158:2 Tuple body
+    158:4 List body
+    159:1 Scalar (=(Int 4))
+    160:0 Tuple len
+    160:1 Scalar (=(Int 5))
+    160:2 Tuple body
+    161:1 Scalar (=(Int 6))
+    162:2 Ordered idx len (=65)
+    164:8 Ordered idx index len (=45)
+    172:1 Scalar (=(Int 1))
+    172:1 Ordered idx key
+    173:8 Ordered idx value ptr (=0)
+    181:1 Scalar (=(Int 2))
+    181:1 Ordered idx key
+    182:8 Ordered idx value ptr (=2)
+    190:1 Scalar (=(Int 3))
+    190:1 Ordered idx key
+    191:8 Ordered idx value ptr (=4)
+    199:1 Scalar (=(Int 4))
+    199:1 Ordered idx key
+    200:8 Ordered idx value ptr (=6)
+    208:1 Scalar (=(Int 5))
+    208:1 Ordered idx key
+    209:8 Ordered idx value ptr (=8)
+    217:0 List count
+    217:0 List len
+    217:0 Tuple len
+    217:1 Scalar (=(Int 1))
+    217:2 Tuple body
+    217:2 List body
+    218:1 Scalar (=(Int 1))
+    219:0 List count
+    219:0 List len
+    219:0 Tuple len
+    219:1 Scalar (=(Int 2))
+    219:2 Tuple body
+    219:2 List body
+    220:1 Scalar (=(Int 2))
+    221:0 List count
+    221:0 List len
+    221:0 Tuple len
+    221:1 Scalar (=(Int 3))
+    221:2 Tuple body
+    221:2 List body
+    222:1 Scalar (=(Int 3))
+    223:0 List count
+    223:0 List len
+    223:0 Tuple len
+    223:1 Scalar (=(Int 1))
+    223:2 Tuple body
+    223:2 List body
+    224:1 Scalar (=(Int 4))
+    225:0 List count
+    225:0 List len
+    225:0 Tuple len
+    225:1 Scalar (=(Int 3))
+    225:2 Tuple body
+    225:2 List body
+    226:1 Scalar (=(Int 5))
 
-    1,2, |}]
+    1,2,
+    exited normally |}]
