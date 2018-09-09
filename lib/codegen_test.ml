@@ -139,8 +139,9 @@ let%expect_test "ordered-idx" =
 let%expect_test "hash-idx" =
   run_test
     "AHashIdx(Dedup(Select([r1.f], r1)) as k, AList(Filter(r1.f = k.f, r1), \
-     ascalar(r1.g)), 2)";
-  [%expect {|
+     ascalar(r1.g)), 2)" ;
+  [%expect
+    {|
     0:8 Table len
     8:8 Table hash len
     16:104 Table hash
@@ -177,6 +178,11 @@ let%expect_test "hash-idx" =
     2,1,
     2,2,
     exited normally |}]
+
+let%expect_test "zip-tuple" =
+  run_test
+    "atuple([alist(select([r1.f], orderby([r1.f], r1, desc)), ascalar(r1.f)),\n             \
+     alist(select([r1.g], orderby([r1.f], r1, desc)), ascalar(r1.g))], zip)"
 
 let example_params =
   [ (Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p", `Int 1)
@@ -239,8 +245,9 @@ select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as 
       filter(log.id = lc_k, log) as lc)),
     atuple([ascalar(lp.counter), ascalar(lc.counter)], cross)),
   (id_p, id_c)))
-|};
-  [%expect {|
+|} ;
+  [%expect
+    {|
     0:8 Table len
     8:8 Table hash len
     16:112 Table hash
@@ -339,8 +346,9 @@ select([lp.counter, lc.counter],
       alist(filter(log.counter = k, log),
         atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
       lp.counter, lp.succ) as lc)], cross))
-|};
-  [%expect {|
+|} ;
+  [%expect
+    {|
     0:2 Tuple len
     2:8 Table len
     2:225 Tuple body
