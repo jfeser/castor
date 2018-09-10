@@ -40,8 +40,6 @@ struct
 
   let add_func (f : func) = funcs := f :: !funcs
 
-  let isize = Serialize.isize
-
   let gen_pred ~ctx pred b =
     let rec gen_pred = function
       | A.Null -> Null
@@ -76,7 +74,11 @@ struct
 
   let len start type_ =
     let hdr = Header.make_header type_ in
-    Header.make_access hdr "len" start
+    match type_ with
+    | StringT _ ->
+        Infix.(
+          int (Header.size_exn hdr "nchars") + Header.make_access hdr "nchars" start)
+    | _ -> Header.make_access hdr "len" start
 
   let scan_empty {ctx; name; _} =
     let open Builder in
@@ -97,8 +99,8 @@ struct
           create ~ctx ~name ~ret:ret_type
         in
         let start = Ctx.find_exn ctx (A.Name.create "start") b in
-        build_print (Tuple [String "int"; start]) b ;
         let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
+        build_print (Tuple [String "int start"; start; ival]) b ;
         if nullable then
           let null_val = h + 1 in
           build_yield (Tuple [Tuple [ival; Infix.(ival = int null_val)]]) b
@@ -127,8 +129,9 @@ struct
         let hdr = Header.make_header t in
         let b = create ~ctx ~name ~ret:(TupleT [StringT {nullable}]) in
         let start = Ctx.find_exn ctx (A.Name.create "start") b in
+        build_print (Tuple [String "string"; start]) b ;
         let value_ptr = Header.make_position hdr "value" start in
-        let nchars = Header.make_access hdr "len" start in
+        let nchars = Header.make_access hdr "nchars" start in
         let ret_val = Binop {op= LoadStr; arg1= value_ptr; arg2= nchars} in
         if nullable then
           let null_val = l - 1 in
@@ -145,34 +148,24 @@ struct
          ; layout= {node= ATuple (child_layouts, Cross); _} as r
          ; type_= TupleT (child_types, _) as t; _ }) =
     let open Builder in
-    let rec make_loops ctx tuples children b =
-      match children with
-      | [] ->
-          let tup =
-            List.map2_exn child_types (List.rev tuples) ~f:(fun type_ tup ->
-                List.init (Type.width type_) ~f:(fun i -> Infix.(index tup i)) )
-            |> List.concat
-          in
-          build_yield (Tuple tup) b
-      | (layout, type_) :: rest ->
-          let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
-          let callee = scan callee_ctx layout type_ in
-          build_foreach ~fresh ~count:(Type.count type_) callee callee_args
+    let rec make_loops ctx tuples clayouts ctypes cstarts b =
+      match (clayouts, ctypes, cstarts) with
+      | [], [], [] ->
+          let tup = build_concat (List.rev tuples) b in
+          build_yield tup b
+      | clayout :: clayouts, ctype :: ctypes, cstart :: cstarts ->
+          let ctx = Ctx.bind ctx "start" int_t cstart in
+          let child_ctx, child_args = Ctx.make_callee_context ctx b in
+          let child_iter = scan child_ctx clayout ctype in
+          build_foreach ~fresh ~count:(Type.count ctype) child_iter child_args
             (fun tup b ->
-              let caller_ctx =
-                let next_start =
-                  let start = Ctx.find_exn ctx (A.Name.create "start") b in
-                  let hdr = Header.make_header type_ in
-                  Infix.(start + Header.make_access hdr "len" start)
-                in
+              let next_ctx =
                 let tuple_ctx =
-                  let schema = A.Meta.(find_exn layout schema) in
-                  Ctx.of_schema schema tup
+                  Ctx.of_schema A.Meta.(find_exn clayout schema) tup
                 in
                 Map.merge_right ctx tuple_ctx
-                |> fun ctx -> Ctx.bind ctx "start" int_t next_start
               in
-              make_loops caller_ctx (tup :: tuples) rest b )
+              make_loops next_ctx (tup :: tuples) clayouts ctypes cstarts b )
             b
     in
     let b =
@@ -186,11 +179,18 @@ struct
     let hdr = Header.make_header t in
     let start = Ctx.find_exn ctx (A.Name.create "start") b in
     build_print (Tuple [String "tuple start"; start]) b ;
-    let ctx =
-      let child_start = Header.make_position hdr "value" start in
-      Ctx.bind ctx "start" int_t child_start
+    let child_starts =
+      let _, ret =
+        List.fold_left child_types
+          ~init:(Header.make_position hdr "value" start, [])
+          ~f:(fun (cstart, ret) ctype ->
+            let cstart = build_fresh_defn ~fresh "cstart" cstart b in
+            let next_cstart = Infix.(cstart + len cstart ctype) in
+            (next_cstart, cstart :: ret) )
+      in
+      List.rev ret
     in
-    make_loops ctx [] (List.zip_exn child_layouts child_types) b ;
+    make_loops ctx [] child_layouts child_types child_starts b ;
     build_func b
 
   let scan_ziptuple
@@ -334,7 +334,7 @@ struct
       | xs -> Infix.(hash hash_data_start (Tuple xs))
     in
     (* Get a pointer to the value. *)
-    let value_ptr = Infix.(Slice (mapping_start + (hash_key * int isize), 8)) in
+    let value_ptr = Infix.(Slice (mapping_start + (hash_key * int 8), 8)) in
     (* If the pointer is null, then the key is not present. *)
     build_if
       ~cond:Infix.(value_ptr = int 0x0)
@@ -429,7 +429,7 @@ struct
         let index_len = Header.make_access hdr "idx_len" start in
         let index_start = Header.make_position hdr "idx" start in
         let key_len = len index_start key_type in
-        let ptr_len = Infix.(int isize) in
+        let ptr_len = Infix.(int 8) in
         let kp_len = Infix.(key_len + ptr_len) in
         let key_index i b =
           build_assign Infix.(index_start + (i * kp_len)) kstart b ;

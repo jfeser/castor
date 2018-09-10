@@ -26,10 +26,14 @@ module AbsInt = struct
 
   let concretize : t -> int option = fun (l, h) -> if l = h then Some l else None
 
-  let byte_width ~nullable (_, h) =
+  let byte_width ~nullable (l, h) =
     let open Int in
-    let h = if nullable then h + 1 else h in
-    if h = 0 then 1 else Int.max (Int.ceil_log2 h / 8) 1
+    let maxval = Int.max (Int.abs l) (Int.abs h) in
+    let maxval = if nullable then maxval + 1 else maxval in
+    if maxval = 0 then 1
+    else
+      let bit_width = Float.log (Float.of_int maxval) /. Float.log 2.0 in
+      Int.max (bit_width /. 8.0 |> Float.iround_exn ~dir:`Up) 1
 end
 
 module AbsCount = struct

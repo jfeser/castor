@@ -18,12 +18,14 @@ open Implang
 let field_exn fields name =
   List.find_exn fields ~f:(fun f -> String.(f.Field.name = name))
 
-let size_exn hdr name =
-  let field = field_exn hdr name in
-  match field.Field.size with
+let size_to_int_exn = function
   | `Fixed x -> x
   | `Empty _ -> 0
   | _ -> failwith "No fixed size."
+
+let size_exn hdr name =
+  let field = field_exn hdr name in
+  size_to_int_exn field.Field.size
 
 let round_up value align =
   assert (Int.is_pow2 align) ;
@@ -78,7 +80,7 @@ let rec make_header t =
       ; Field.{name= "count"; size= `Empty 1; align= 1}
       ; Field.{name= "value"; size= `Fixed 1; align= 1} ]
   | StringT {nchars; _} ->
-      [ Field.{name= "len"; size= make_size nchars; align= 1}
+      [ Field.{name= "nchars"; size= make_size nchars; align= 1}
       ; Field.{name= "count"; size= `Empty 1; align= 1}
       ; Field.{name= "value"; size= `DescribedBy "len"; align= 1} ]
   | EmptyT ->

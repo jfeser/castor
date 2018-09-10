@@ -13,9 +13,6 @@ end
 module type S = Serialize_intf.S
 
 module Make (Config : Config.S) (Eval : Eval.S) = struct
-  (* boolean size *)
-  let isize = 8
-
   type serialize_ctx =
     {writer: Bitstring.Writer.t; ctx: Ctx.t; log_ch: Out_channel.t}
 
@@ -277,15 +274,15 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
           of_int ~byte_width:(Header.size_exn hdr "len") (min - 1)
       | t -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
     in
-    Writer.write_string sctx.writer str
+    Log.with_msg sctx "Null" (fun () -> Writer.write_string sctx.writer str)
 
   let serialize_int sctx t x =
     let open Bitstring in
     let hdr = Header.make_header t in
     match t with
     | IntT _ ->
-        of_int ~byte_width:(Header.size_exn hdr "value") x
-        |> Writer.write_string sctx.writer
+        let sval = of_int ~byte_width:(Header.size_exn hdr "value") x in
+        Writer.write_string sctx.writer sval
     | t -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
 
   let serialize_bool sctx t x =
@@ -307,7 +304,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     | StringT _ ->
         let len = String.length body in
         Log.with_msg sctx (sprintf "String length (=%d)" len) (fun () ->
-            of_int ~byte_width:(Header.size_exn hdr "len") len
+            of_int ~byte_width:(Header.size_exn hdr "nchars") len
             |> Writer.write_string sctx.writer ) ;
         Log.with_msg sctx "String body" (fun () ->
             Writer.write_string sctx.writer body )
