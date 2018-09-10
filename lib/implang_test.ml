@@ -502,10 +502,10 @@ select([lp.counter, lc.counter],
          lp_counter,
          start) {
          low26 = 0;
-         high27 = buf[start + 8 : 8] / 9;
+         high27 = buf[start + 2 : 8] / 9;
          loop (low26 < high27) {
              mid28 = low26 + high27 / 2;
-             kstart = start + 16 + mid28 * 9;
+             kstart = start + 2 + 8 + mid28 * 9;
              init scalar_17(lp_succ, lp_k, lp_counter, kstart);
              key29 = next(scalar_17);
              if (key29[0] < lp_counter) {
@@ -514,14 +514,13 @@ select([lp.counter, lc.counter],
                   high27 = mid28;
              }
          }
-         if (low26 < buf[start + 8 : 8] / 9) {
-             kstart = start + 16 + low26 * 9;
+         if (low26 < buf[start + 2 : 8] / 9) {
+             kstart = start + 2 + 8 + low26 * 9;
              init scalar_17(lp_succ, lp_k, lp_counter, kstart);
              key30 = next(scalar_17);
              key31 = key30;
-             loop (key31[0] < lp_succ && low26 < buf[start + 8 : 8] / 9) {
-                 vstart = buf[start + 16 + low26 * 9 + 1 : 8] + start + 16 +
-                 buf[start + 8 : 8];
+             loop (key31[0] < lp_succ && low26 < buf[start + 2 : 8] / 9) {
+                 vstart = buf[start + 2 + 8 + low26 * 9 + 1 : 8];
                  init list_18(lp_succ, lp_k, lp_counter, vstart, key[0]);
                  loop (not done(list_18)) {
                      tup32 = next(list_18);
@@ -532,7 +531,7 @@ select([lp.counter, lc.counter],
                      }
                  }
                  low26 = low26 + 1;
-                 kstart = start + 16 + low26 * 9;
+                 kstart = start + 2 + 8 + low26 * 9;
                  init scalar_17(lp_succ, lp_k, lp_counter, kstart);
                  key33 = next(scalar_17);
                  key31 = key33;
