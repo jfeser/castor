@@ -15,7 +15,8 @@ type t = Field.t list
 
 open Implang
 
-let field_exn hdr name = List.find_exn hdr ~f:(fun f -> String.(f.Field.name = name))
+let field_exn fields name =
+  List.find_exn fields ~f:(fun f -> String.(f.Field.name = name))
 
 let size_exn hdr name =
   let field = field_exn hdr name in
@@ -24,11 +25,17 @@ let size_exn hdr name =
   | `Empty _ -> 0
   | _ -> failwith "No fixed size."
 
+let round_up value align =
+  assert (Int.is_pow2 align) ;
+  Infix.((value + int Int.(align - 1)) && int Int.(-align))
+
 let rec _make_position hdr name start =
   match hdr with
   | _, _, [] -> failwith "Field not found."
-  | prev_hdr, ptr, (Field.({name= n; size; _}) as f) :: next_hdr -> (
-      if String.(n = name) then ptr
+  | prev_hdr, ptr, (Field.({name= n; size; align}) as f) :: next_hdr -> (
+      if String.(n = name) then
+        (* always round field pointers to the correct alignment *)
+        round_up ptr align
       else
         match size with
         | `Fixed x ->
@@ -87,9 +94,9 @@ let rec make_header t =
       ; Field.{name= "len"; size= make_size (Type.len t); align= 1}
       ; Field.{name= "value"; size= `Variable; align= 1} ]
   | HashIdxT _ ->
-      [ Field.{name= "len"; size= `Fixed 8 (* make_size (Type.len t) *); align= 1}
+      [ Field.{name= "len"; size= make_size (Type.len t); align= 1}
       ; Field.{name= "hash_len"; size= `Fixed 8; align= 1}
-      ; Field.{name= "hash_data"; size= `DescribedBy "hash_len"; align= 4}
+      ; Field.{name= "hash_data"; size= `DescribedBy "hash_len"; align= 1}
       ; Field.{name= "hash_map"; size= `Variable; align= 1} ]
   | OrderedIdxT _ ->
       [ Field.{name= "len"; size= make_size (Type.len t); align= 1}

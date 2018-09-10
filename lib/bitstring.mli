@@ -64,6 +64,8 @@ module Writer : sig
   val seek : t -> Pos.t -> unit
 
   val close : t -> unit
+
+  val pad_to_alignment : t -> int -> unit
 end
 
 val to_string : t -> string

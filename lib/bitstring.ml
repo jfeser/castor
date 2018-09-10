@@ -254,6 +254,13 @@ module Writer = struct
           else ()
         in
         loop () )
+
+  let pad_to_alignment t align =
+    let unaligned_pos = pos t |> Pos.to_bytes_exn |> Int64.to_int_exn in
+    let aligned_pos = Int.round_up unaligned_pos ~to_multiple_of:align in
+    let num_pad_bytes = aligned_pos - unaligned_pos in
+    let pad_bytes = Bytes.make num_pad_bytes '\x00' in
+    write_bytes t pad_bytes
 end
 
 let to_string : t -> string =

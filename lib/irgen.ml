@@ -441,9 +441,7 @@ struct
           (gen_pred ~ctx lookup_high b)
           (fun key idx b ->
             build_assign
-              Infix.(
-                Slice (index_start + (idx * kp_len) + key_len, 8)
-                + Header.make_position hdr "data" start)
+              Infix.(Slice (index_start + (idx * kp_len) + key_len, 8))
               vstart b ;
             build_foreach ~fresh ~count:(Type.count value_type) value_iter
               value_callee_args

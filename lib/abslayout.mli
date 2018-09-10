@@ -139,6 +139,8 @@ module Meta : sig
 
   val pos : pos key
 
+  val align : int key
+
   val find : t -> 'a key -> 'a option
 
   val find_exn : t -> 'a key -> 'a
@@ -170,3 +172,5 @@ val ralgebra_to_sql : t -> string
 val pred_to_schema : pred -> Name.t
 
 val pred_to_name : pred -> Name.t option
+
+val annotate_align : t -> unit

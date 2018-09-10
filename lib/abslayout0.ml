@@ -94,6 +94,8 @@ module Meta = struct
 
   let end_pos = Univ_map.Key.create ~name:"end_pos" [%sexp_of: lexpos]
 
+  let align = Univ_map.Key.create ~name:"align" [%sexp_of: int]
+
   let update r key ~f = r.meta := Univ_map.update !(r.meta) key ~f
 
   let find ralgebra key = Univ_map.find !(ralgebra.meta) key
@@ -109,4 +111,6 @@ module Meta = struct
 
   let set ralgebra k v =
     {ralgebra with meta= ref (Univ_map.set !(ralgebra.meta) k v)}
+
+  let set_m {meta; _} k v = meta := Univ_map.set !meta k v
 end

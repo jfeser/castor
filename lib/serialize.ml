@@ -277,7 +277,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     Out_channel.with_file "hashes.txt" ~f:(fun ch ->
         List.iter keys ~f:(fun key ->
             Out_channel.fprintf ch "%s -> %d\n" key.hash_key key.hash_val ) ) ;
-    let hash_body = Cmph.Hash.to_packed hash |> Bytes.of_string |> align isize in
+    let hash_body = Cmph.Hash.to_packed hash in
     let hash_len = String.length hash_body in
     let table_size =
       List.fold_left keys ~f:(fun m key -> Int.max m key.hash_val) ~init:0
@@ -290,6 +290,8 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     Log.with_msg sctx "Table hash len" (fun () ->
         Writer.write_bytes writer
           (Bytes.make (Header.size_exn hdr "hash_len") '\x00') ) ;
+    (* Log.with_msg sctx "Table hash (align)" (fun () ->
+     *     Writer.pad_to_alignment writer 8 ) ; *)
     Log.with_msg sctx "Table hash" (fun () ->
         Writer.write_bytes writer (Bytes.make hash_len '\x00') ) ;
     Log.with_msg sctx "Table key map" (fun () ->
@@ -309,7 +311,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     Writer.write_string writer
       (of_int ~byte_width:(Header.size_exn hdr "len") (Int64.to_int_exn len)) ;
     Writer.write_string writer
-      (of_int ~byte_width:(Header.size_exn hdr "len") hash_len) ;
+      (of_int ~byte_width:(Header.size_exn hdr "hash_len") hash_len) ;
     Writer.write_string writer hash_body ;
     Array.iter hash_table ~f:(fun x ->
         Writer.write_string writer (of_int ~byte_width:8 x) ) ;
@@ -325,8 +327,6 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
         ~error:(Error.create "Missing key layout." meta [%sexp_of: ordered_idx])
         meta.oi_key_layout
     in
-    let temp_fn = Caml.Filename.temp_file "ordered-idx" "bin" in
-    let temp_writer = with_file temp_fn in
     (* Need to order the key stream. Use the key stream to construct an ordering
        key. *)
     let query_schema = Meta.(find_exn query schema) in
@@ -337,27 +337,35 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     write_bytes writer (Bytes.make (Header.size_exn hdr "len") '\x00') ;
     write_bytes writer (Bytes.make (Header.size_exn hdr "idx_len") '\x00') ;
     let index_start_pos = pos writer in
+    (* Make a first pass to get the keys and value pointers set up. *)
     Eval.eval ctx ordered_query
     |> Seq.iter ~f:(fun kctx ->
            let ksctx = {sctx with ctx= Map.merge_right ctx kctx} in
            (* Serialize key. *)
            Log.with_msg sctx "Ordered idx key" (fun () ->
                serialize ksctx key_t key_l ) ;
+           (* Save space for value pointer. *)
+           write_bytes writer (Bytes.make 8 '\x00') ) ;
+    let index_end_pos = pos writer in
+    (* Pass over again to get values in the right places. *)
+    let index_pos = ref index_start_pos in
+    let value_pos = ref (pos writer) in
+    Eval.eval ctx ordered_query
+    |> Seq.iter ~f:(fun kctx ->
+           seek writer !index_pos ;
+           let ksctx = {sctx with ctx= Map.merge_right ctx kctx} in
+           (* Serialize key. *)
+           Log.with_msg sctx "Ordered idx key" (fun () ->
+               serialize ksctx key_t key_l ) ;
            (* Serialize value ptr. *)
-           let ptr = pos temp_writer |> Pos.to_bytes_exn |> Int64.to_int_exn in
+           let ptr = !value_pos |> Pos.to_bytes_exn |> Int64.to_int_exn in
            Log.with_msg sctx (sprintf "Ordered idx value ptr (=%d)" ptr) (fun () ->
                write_string writer (ptr |> of_int ~byte_width:8) ) ;
+           index_pos := pos writer ;
+           seek writer !value_pos ;
            (* Serialize value. *)
-           serialize {ksctx with writer= temp_writer} value_t value_l ) ;
-    let index_end_pos = pos writer in
-    Log.write_msg sctx
-      Log.(
-        Insert
-          { pos= pos writer |> Pos.to_bytes_exn
-          ; parent_id= id writer
-          ; id= id temp_writer }) ;
-    flush temp_writer ;
-    write_file writer temp_fn ;
+           serialize ksctx value_t value_l ;
+           value_pos := pos writer ) ;
     let end_pos = pos writer in
     seek writer len_pos ;
     let len = Pos.(end_pos - len_pos) in
@@ -381,11 +389,13 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
   let rec serialize ({writer; _} as sctx) type_ layout =
     let open Bitstring in
     let open Type in
+    (* Update position metadata in layout. *)
     let pos = Writer.pos writer |> Writer.Pos.to_bytes_exn in
     Meta.update layout Meta.pos ~f:(function
       | Some (Pos pos' as p) -> if Int64.(pos = pos') then p else Many_pos
       | Some Many_pos -> Many_pos
       | None -> Pos pos ) ;
+    (* Serialize layout. *)
     match (type_, layout.node) with
     | _, AEmpty -> ()
     | t, AScalar e -> serialize_scalar sctx t e

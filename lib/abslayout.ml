@@ -44,7 +44,7 @@ module Name = struct
   let type_exn ({type_; _} as n) =
     match type_ with
     | Some t -> t
-    | None -> Error.create "Missing type." n [%sexp_of : t] |> Error.raise
+    | None -> Error.create "Missing type." n [%sexp_of: t] |> Error.raise
 
   let to_var {relation; name; _} =
     match relation with Some r -> sprintf "%s_%s" r name | None -> name
@@ -109,7 +109,7 @@ let name r =
   | AOrderedIdx _ -> "ordered_idx"
   | As _ -> "as"
 
-let pp_list ?(bracket= ("[", "]")) pp fmt ls =
+let pp_list ?(bracket = ("[", "]")) pp fmt ls =
   let openb, closeb = bracket in
   let open Caml.Format in
   pp_open_hvbox fmt 1 ;
@@ -193,8 +193,7 @@ let rec pp fmt {node; _} =
       fprintf fmt "@[<hv 2>ahashidx(%a,@ %a,@ %a)@]" pp r1 pp r2 pp_key lookup
   (* |AOrderedIdx (_, _, _) ->
       *    fprintf fmt "@[<h>%a@ %s@]" pp r n *)
-  | As (n, r) ->
-      fprintf fmt "@[<h>%a@ as@ %s@]" pp r n
+  | As (n, r) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp r n
   | _ -> failwith "unsupported"
 
 module Ctx = struct
@@ -229,12 +228,16 @@ let params r =
   let ralgebra_params =
     object (self)
       inherit [_] reduce
+
       method zero = Set.empty (module Name.Compare_no_type)
+
       method plus = Set.union
+
       method! visit_Name () n =
         if Option.is_none n.relation then
           Set.singleton (module Name.Compare_no_type) n
         else self#zero
+
       method visit_name _ _ = self#zero
     end
   in
@@ -251,8 +254,10 @@ let subst ctx =
   let v =
     object
       inherit [_] endo
+
       method! visit_Name _ this v =
         match Map.find ctx v with Some x -> pred_of_value x | None -> this
+
       method visit_name _ x = x
     end
   in
@@ -263,10 +268,13 @@ let pred_relations p =
   let f =
     object
       inherit [_] iter
+
       method! visit_Name () =
         function
         | {relation= Some r; _} -> rels := r :: !rels | {relation= None; _} -> ()
+
       method visit_name () _ = ()
+
       method visit_'m () _ = ()
     end
   in
@@ -280,7 +288,7 @@ let rec pred_to_sql = function
   | Bool false -> "false"
   | String s -> sprintf "'%s'" s
   | Null -> "null"
-  | Binop (op, p1, p2) ->
+  | Binop (op, p1, p2) -> (
       let s1 = sprintf "(%s)" (pred_to_sql p1) in
       let s2 = sprintf "(%s)" (pred_to_sql p2) in
       match op with
@@ -295,7 +303,7 @@ let rec pred_to_sql = function
       | Sub -> sprintf "%s - %s" s1 s2
       | Mul -> sprintf "%s * %s" s1 s2
       | Div -> sprintf "%s / %s" s1 s2
-      | Mod -> sprintf "%s %% %s" s1 s2
+      | Mod -> sprintf "%s %% %s" s1 s2 )
 
 (** Return the set of relations which have fields in the tuple produced by
      this expression. *)
@@ -303,9 +311,13 @@ let relation r =
   let reducer =
     object
       inherit [_] reduce
+
       method zero = Set.empty (module String)
+
       method plus = Set.union
+
       method! visit_As _ n _ = Set.singleton (module String) n
+
       method! visit_Scan _ n = Set.singleton (module String) n
     end
   in
@@ -318,7 +330,7 @@ let ralgebra_to_sql r =
       if Set.length rs > 1 then
         Error.create
           "More than one relation name. Use AS to give this expression a name." r
-          [%sexp_of : t]
+          [%sexp_of: t]
         |> Error.raise
       else Set.choose_exn rs
     in
@@ -374,11 +386,35 @@ let rec pred_to_schema =
   | Bool _ -> unnamed (BoolT {nullable= false})
   | String _ -> unnamed (StringT {nullable= false})
   | Null -> unnamed NullT
-  | Binop (op, _, _) ->
+  | Binop (op, _, _) -> (
     match op with
     | Eq | Lt | Le | Gt | Ge | And | Or -> unnamed (BoolT {nullable= false})
-    | Add | Sub | Mul | Div | Mod -> unnamed (IntT {nullable= false})
+    | Add | Sub | Mul | Div | Mod -> unnamed (IntT {nullable= false}) )
 
 let pred_to_name pred =
   let n = pred_to_schema pred in
   if String.(n.name = "") then None else Some n
+
+let rec annotate_align r =
+  match r.node with
+  | Scan _ | AEmpty | AScalar _ -> Meta.(set_m r align 1)
+  | As (_, r')
+   |Select (_, r')
+   |Filter (_, r')
+   |AList (_, r')
+   |AOrderedIdx (_, r', _)
+   |OrderBy {rel= r'; _}
+   |Dedup r' ->
+      annotate_align r' ;
+      Meta.(set_m r align Meta.(find_exn r' align))
+  | Join _ | Agg (_, _, _) -> failwith ""
+  | ATuple (rs, _) ->
+      List.iter rs ~f:annotate_align ;
+      let align =
+        List.map rs ~f:(fun r' -> Meta.(find_exn r' align))
+        |> List.fold_left ~init:1 ~f:Int.max
+      in
+      Meta.set_m r Meta.align align
+  | AHashIdx (_, r', _) ->
+      annotate_align r' ;
+      Meta.(set_m r align (Int.max Meta.(find_exn r' align) 4))
