@@ -24,7 +24,7 @@ PORT = 5433
 COMPILE_EXE = rpath('../../../_build/default/fastdb/bin/compile.exe')
 PRESENT_QUERIES = 10
 ABSENT_QUERIES = 10
-TABLE_SIZE = 20000
+TABLE_SIZE = 10
 BENCHMARKS = [
     rpath('example1.txt'),
 ]
@@ -57,8 +57,8 @@ for bench in BENCHMARKS:
             '-o', benchd,
             '-db', 'demomatch',
             '-port', '5433',
-            '-p', 'id_p:StringT',
-            '-p', 'id_c:StringT',
+            '-p', 'id_p:string',
+            '-p', 'id_c:string',
             bench
         ]
         cmd_str = shlex.quote(' '.join(cmd))

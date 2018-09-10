@@ -68,6 +68,8 @@ end
 
 let select a b = {node= Select (a, b); meta= Meta.empty ()}
 
+let join a b c = {node= Join {pred= a; r1= b; r2= c}; meta= Meta.empty ()}
+
 let filter a b = {node= Filter (a, b); meta= Meta.empty ()}
 
 let agg a b c = {node= Agg (a, b, c); meta= Meta.empty ()}

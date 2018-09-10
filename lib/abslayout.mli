@@ -106,6 +106,8 @@ val params : t -> Set.M(Name.Compare_no_type).t
 
 val select : pred list -> t -> t
 
+val join : pred -> t -> t -> t
+
 val filter : pred -> t -> t
 
 val agg : agg list -> Name.t list -> t -> t
