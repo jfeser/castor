@@ -15,8 +15,7 @@ module PrimType = struct
     | `Int _ -> IntT {nullable= false}
     | `String _ -> StringT {nullable= false}
     | `Bool _ -> BoolT {nullable= false}
-    | `Unknown _ -> StringT {nullable= false}
-    | _ -> failwith "Unknown type."
+    | `Null -> NullT
 
   let to_string : t -> string = function
     | BoolT _ -> "bool"

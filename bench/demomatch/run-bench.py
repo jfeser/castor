@@ -24,7 +24,7 @@ PORT = 5433
 COMPILE_EXE = rpath('../../../_build/default/fastdb/bin/compile.exe')
 PRESENT_QUERIES = 10
 ABSENT_QUERIES = 10
-TABLE_SIZE = 10
+TABLE_SIZE = 2000
 BENCHMARKS = [
     rpath('example1.txt'),
 ]
@@ -64,7 +64,6 @@ for bench in BENCHMARKS:
         cmd_str = shlex.quote(' '.join(cmd))
         log.debug('Building %s in %s.', cmd_str, os.getcwd())
         run(cmd, stdout=b_log, stderr=b_log)
-    os.chdir('..')
     log.info('Done building %s.', bench)
 
 # Run benchmarks
@@ -75,8 +74,9 @@ present_ids = c.fetchall()
 for (lp_id, lc_id) in present_ids:
     ts = []
 
-    log.debug('Running Postgres query.')
-    c.execute("explain (format json, analyze) select lp.counter from log_bench as lp, log_bench as lc where lp.counter < lc.counter and lc.counter < lp.succ and lp.id = '%s' and lc.id = '%s'" % (lp_id, lc_id))
+    query = "explain (format json, analyze) select lp.counter from log_bench as lp, log_bench as lc where lp.counter < lc.counter and lc.counter < lp.succ and lp.id = '%s' and lc.id = '%s'" % (lp_id, lc_id)
+    log.debug('Running Postgres query: %s', query)
+    c.execute(query)
     pg_time = c.fetchall()[0][0][0]['Execution Time']
     ts.append(pg_time)
     log.info('Done running Postgres query.')

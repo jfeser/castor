@@ -2,6 +2,7 @@ open Base
 open Stdio
 open Printf
 open Collections
+open Abslayout
 
 module Config = struct
   module type S = sig
@@ -9,126 +10,11 @@ module Config = struct
   end
 end
 
-module type S = sig
-  val isize : int
-
-  val serialize :
-       ?ctx:Abslayout.Ctx.t
-    -> Bitstring.Writer.t
-    -> Type.t
-    -> Abslayout.t
-    -> Abslayout.t * int
-end
-
-module No_config = struct
-  let bsize = 8
-
-  (* boolean size *)
-  let isize = 8
-
-  (* integer size *)
-  let hsize = 2 * isize
-
-  (* block header size *)
-
-  (** Serialize an integer. Little endian. Width is the number of bits to use,
-   must be a multiple of the byte size. *)
-  let bytes_of_int : width:int -> int -> bytes =
-   fun ~width x ->
-    ( if width % 8 <> 0 then
-      Error.(create "Not a multiple of 8." width [%sexp_of: int] |> raise) ) ;
-    let nbytes = width / 8 in
-    let buf = Bytes.make nbytes '\x00' in
-    for i = 0 to nbytes - 1 do
-      Bytes.set buf i ((x lsr (i * 8)) land 0xFF |> Caml.char_of_int)
-    done ;
-    buf
-
-  let int_of_bytes_exn : bytes -> int =
-   fun x ->
-    if Bytes.length x > isize then failwith "Unexpected byte sequence" ;
-    let r = ref 0 in
-    for i = 0 to Bytes.length x - 1 do
-      r := !r + ((Bytes.get x i |> Caml.int_of_char) lsl (i * 8))
-    done ;
-    !r
-
-  let bool_of_bytes_exn : bytes -> bool =
-   fun b ->
-    match int_of_bytes_exn b with
-    | 0 -> false
-    | 1 -> true
-    | _ -> failwith "Unexpected byte sequence."
-
-  let align ?(pad = '\x00') align b =
-    let slop = Bytes.length b % align in
-    if slop = 0 then Bytes.to_string b
-    else
-      let padding = align - slop in
-      Bytes.cat b (Bytes.make padding pad) |> Bytes.to_string
-
-  open Type
-
-  let serialize_null t =
-    let open Bitstring in
-    let hdr = Header.make_header t in
-    match t with
-    | NullT -> ""
-    | IntT {range= _, max; nullable= true; _} ->
-        of_int ~byte_width:(Header.size_exn hdr "value") (max + 1)
-    | BoolT _ -> of_int ~byte_width:(Header.size_exn hdr "value") 2
-    | StringT {nchars= min, _; _} ->
-        of_int ~byte_width:(Header.size_exn hdr "len") (min - 1)
-    | t -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
-
-  let serialize_int t x =
-    let open Bitstring in
-    let hdr = Header.make_header t in
-    match t with
-    | IntT _ -> of_int ~byte_width:(Header.size_exn hdr "value") x
-    | t -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
-
-  let serialize_bool t x =
-    let open Bitstring in
-    let hdr = Header.make_header t in
-    match (t, x) with
-    | BoolT _, true -> of_int ~byte_width:(Header.size_exn hdr "value") 1
-    | BoolT _, false -> of_int ~byte_width:(Header.size_exn hdr "value") 0
-    | t, _ -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
-
-  let serialize_string t x =
-    let open Bitstring in
-    let hdr = Header.make_header t in
-    match t with
-    | StringT _ ->
-        let unpadded_body = Bytes.of_string x in
-        let body = unpadded_body |> align isize in
-        let len =
-          of_int ~byte_width:(Header.size_exn hdr "len")
-            (Bytes.length unpadded_body)
-        in
-        String.concat ~sep:"" [len; body]
-    | t -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
-
-  let serialize_value type_ = function
-    | `Null -> serialize_null type_
-    | `Int x -> serialize_int type_ x
-    | `Bool x -> serialize_bool type_ x
-    | `String x | `Unknown x -> serialize_string type_ x
-end
-
-include No_config
+module type S = Serialize_intf.S
 
 module Make (Config : Config.S) (Eval : Eval.S) = struct
-  include No_config
-
-  module Abslayout = struct
-    include Abslayout
-    module A = Abslayout_db.Make (Eval)
-    include A
-  end
-
-  open Abslayout
+  (* boolean size *)
+  let isize = 8
 
   type serialize_ctx =
     {writer: Bitstring.Writer.t; ctx: Ctx.t; log_ch: Out_channel.t}
@@ -252,7 +138,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
           in
           let hash_key =
             match value with
-            | [`String s] | [`Unknown s] -> s
+            | [`String s] -> s
             | vs ->
                 List.map vs ~f:(function
                   | `Int x -> Bitstring.of_int ~byte_width:8 x
@@ -378,13 +264,65 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
           (of_int64 ~byte_width:(Header.size_exn hdr "idx_len") index_len) ) ;
     seek writer end_pos
 
+  let serialize_null sctx t =
+    let open Bitstring in
+    let hdr = Header.make_header t in
+    let str =
+      match t with
+      | NullT -> ""
+      | IntT {range= _, max; nullable= true; _} ->
+          of_int ~byte_width:(Header.size_exn hdr "value") (max + 1)
+      | BoolT _ -> of_int ~byte_width:(Header.size_exn hdr "value") 2
+      | StringT {nchars= min, _; _} ->
+          of_int ~byte_width:(Header.size_exn hdr "len") (min - 1)
+      | t -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
+    in
+    Writer.write_string sctx.writer str
+
+  let serialize_int sctx t x =
+    let open Bitstring in
+    let hdr = Header.make_header t in
+    match t with
+    | IntT _ ->
+        of_int ~byte_width:(Header.size_exn hdr "value") x
+        |> Writer.write_string sctx.writer
+    | t -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
+
+  let serialize_bool sctx t x =
+    let open Bitstring in
+    let hdr = Header.make_header t in
+    let str =
+      match (t, x) with
+      | BoolT _, true -> of_int ~byte_width:(Header.size_exn hdr "value") 1
+      | BoolT _, false -> of_int ~byte_width:(Header.size_exn hdr "value") 0
+      | t, _ ->
+          Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
+    in
+    Writer.write_string sctx.writer str
+
+  let serialize_string sctx t body =
+    let open Bitstring in
+    let hdr = Header.make_header t in
+    match t with
+    | StringT _ ->
+        let len = String.length body in
+        Log.with_msg sctx (sprintf "String length (=%d)" len) (fun () ->
+            of_int ~byte_width:(Header.size_exn hdr "len") len
+            |> Writer.write_string sctx.writer ) ;
+        Log.with_msg sctx "String body" (fun () ->
+            Writer.write_string sctx.writer body )
+    | t -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
+
   let serialize_scalar sctx type_ expr =
     let value = Eval.eval_pred sctx.ctx expr in
     Log.with_msg sctx
       (sprintf "Scalar (=%s)" ([%sexp_of: Db.primvalue] value |> Sexp.to_string_hum))
       (fun () ->
-        Eval.eval_pred sctx.ctx expr |> serialize_value type_
-        |> Bitstring.Writer.write_string sctx.writer )
+        match Eval.eval_pred sctx.ctx expr with
+        | `Null -> serialize_null sctx type_
+        | `Int x -> serialize_int sctx type_ x
+        | `Bool x -> serialize_bool sctx type_ x
+        | `String x -> serialize_string sctx type_ x )
 
   let rec serialize ({writer; _} as sctx) type_ layout =
     let open Bitstring in
@@ -438,23 +376,3 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     | None -> () ) ;
     (l, len)
 end
-
-let tests =
-  let open OUnit2 in
-  let open No_config in
-  "serialize"
-  >::: [ ( "to-byte"
-         >:: fun ctxt ->
-         let x = 0xABCDEF01 in
-         assert_equal ~ctxt x (bytes_of_int ~width:64 x |> int_of_bytes_exn) )
-       ; ( "from-byte"
-         >:: fun ctxt ->
-         let b = Bytes.of_string "\031\012\000\000" in
-         let x = 3103 in
-         assert_equal ~ctxt ~printer:Caml.string_of_int x (int_of_bytes_exn b) )
-       ; ( "align"
-         >:: fun ctxt ->
-         let b = Bytes.of_string "\001\002\003" in
-         let b' = align 8 b in
-         assert_equal ~ctxt ~printer:Caml.string_of_int 8 (String.length b') ;
-         assert_equal ~ctxt "\001\002\003\000\000\000\000\000" b' ) ]

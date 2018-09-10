@@ -18,7 +18,7 @@ let subst_params : string list -> string -> string =
           String.substr_replace_all ~pattern:(Printf.sprintf "$%d" i) ~with_:v q )
 
 let exec_psql : ?params:string list -> db:string -> string -> int =
- fun ?(params= []) ~db query ->
+ fun ?(params = []) ~db query ->
   let query = sprintf "psql -d %s -c \"%s\"" db (subst_params params query) in
   Logs.debug (fun m -> m "Executing query: %s" query) ;
   Caml.Sys.command query
@@ -40,14 +40,14 @@ let rec exec :
     -> Postgresql.connection
     -> string
     -> string list list =
- fun ?(max_retries= 0) ?(verbose= true) ?(params= []) conn query ->
+ fun ?(max_retries = 0) ?(verbose = true) ?(params = []) conn query ->
   let query = subst_params params query in
   Logs.debug (fun m -> m "Executing query: %s" query) ;
   let r = conn#exec query in
   match r#status with
   | Fatal_error ->
       Error.create "Postgres fatal error." (r#error, query)
-        [%sexp_of : string * string]
+        [%sexp_of: string * string]
       |> Error.raise
   | Nonfatal_error -> (
     match r#error_code with
@@ -59,8 +59,7 @@ let rec exec :
           max_retries > 0
         then exec ~max_retries:(max_retries - 1) ~verbose conn query
         else
-          Error.create "Transaction failed." query [%sexp_of : string]
-          |> Error.raise
+          Error.create "Transaction failed." query [%sexp_of: string] |> Error.raise
     | e ->
         Logs.warn (fun m ->
             m "Postgres error (nonfatal): %s" (Postgresql.Error_code.to_string e) ) ;
@@ -70,7 +69,7 @@ let rec exec :
       Logs.debug (fun m -> m "Returning single tuple.") ;
       r#get_all_lst
   | Bad_response ->
-      Error.create "Bad response." query [%sexp_of : string] |> Error.raise
+      Error.create "Bad response." query [%sexp_of: string] |> Error.raise
   | s ->
       Logs.debug (fun m -> m "Returning nothing: %s" (Postgresql.result_status s)) ;
       []
@@ -107,7 +106,7 @@ let exec1_first :
   match exec ?verbose ?params conn query with
   | [[x]] -> x
   | r ->
-      Error.create "Unexpected query results." r [%sexp_of : string list list]
+      Error.create "Unexpected query results." r [%sexp_of: string list list]
       |> Error.raise
 
 type dtype =
@@ -130,7 +129,7 @@ module Relation = struct
   module T = struct
     type t = relation_t [@@deriving compare, hash, sexp, bin_io]
 
-    let sexp_of_t {rname; _} = [%sexp_of : string] rname
+    let sexp_of_t {rname; _} = [%sexp_of: string] rname
   end
 
   include T
@@ -165,7 +164,7 @@ module Relation = struct
     {rel with fields}
 
   let sample : ?seed:int -> Postgresql.connection -> int -> t -> unit =
-   fun ?(seed= 0) conn size r ->
+   fun ?(seed = 0) conn size r ->
     exec conn ~params:[Int.to_string seed] "set seed to $0" |> ignore ;
     let query =
       {|
@@ -179,7 +178,7 @@ module Relation = struct
     match List.find r.fields ~f:(fun f -> String.(f.fname = n)) with
     | Some f -> f
     | None ->
-        Error.create "Field not found." (n, r.rname) [%sexp_of : string * string]
+        Error.create "Field not found." (n, r.rname) [%sexp_of: string * string]
         |> Error.raise
 
   (* For testing only! *)
@@ -203,8 +202,7 @@ module Field = struct
   let of_name : string -> t = fun n -> {dummy with fname= n}
 end
 
-type primvalue =
-  [`Int of int | `String of string | `Bool of bool | `Unknown of string | `Null]
+type primvalue = [`Int of int | `String of string | `Bool of bool | `Null]
 [@@deriving compare, hash, sexp, bin_io]
 
 let primvalue_to_sql : primvalue -> string = function
@@ -228,7 +226,7 @@ module Value = struct
 
   let to_int_exn : t -> int = function
     | {value= `Int x; _} -> x
-    | v -> Error.create "Expected an int." v [%sexp_of : t] |> Error.raise
+    | v -> Error.create "Expected an int." v [%sexp_of: t] |> Error.raise
 
   let to_sql : t -> string = fun {value; _} -> primvalue_to_sql value
 end
@@ -274,9 +272,9 @@ module Schema = struct
     (** Schemas are compared as bags. *)
     let compare : t -> t -> int =
      fun s1 s2 ->
-      [%compare : Field.t list]
-        (List.sort ~compare:[%compare : Field.t] s1)
-        (List.sort ~compare:[%compare : Field.t] s2)
+      [%compare: Field.t list]
+        (List.sort ~compare:[%compare: Field.t] s1)
+        (List.sort ~compare:[%compare: Field.t] s2)
   end
 
   include T
@@ -306,7 +304,7 @@ module Schema = struct
   let field_idx_exn : t -> Field.t -> int =
    fun s f ->
     Option.value_exn (field_idx s f)
-      ~error:(Error.create "Field not in schema." (f, s) [%sexp_of : Field.t * t])
+      ~error:(Error.create "Field not in schema." (f, s) [%sexp_of: Field.t * t])
 end
 
 let result_to_tuples : Postgresql.result -> primvalue Map.M(String).t Seq.t =
@@ -337,7 +335,8 @@ let result_to_tuples : Postgresql.result -> primvalue Map.M(String).t Seq.t =
                   |REGCLASS | REGTYPE | RECORD | CSTRING | ANY | ANYARRAY | VOID
                   |TRIGGER | LANGUAGE_HANDLER | INTERNAL | OPAQUE | ANYELEMENT
                   |JSONB ->
-                     `Unknown value
+                     (* Store unknown values as strings. *)
+                     `String value
                in
                (r#fname field_i, primval) )
            |> Map.of_alist_exn (module String)
@@ -351,14 +350,14 @@ let exec_cursor :
     -> string
     -> primvalue Map.M(String).t Seq.t =
   let fresh = Fresh.create () in
-  fun ?(batch_size= 1000) ?(params= []) conn query ->
+  fun ?(batch_size = 1000) ?(params = []) conn query ->
+    Logs.debug (fun m -> m "Running %s." query) ;
     let query = subst_params params query in
     let cur = Fresh.name fresh "cur%d" in
     let declare_query = sprintf "declare %s cursor with hold for %s;" cur query in
     let fetch_query = sprintf "fetch %d from %s;" batch_size cur in
     (* let close_query = sprintf "close %s;" cur in *)
-    conn#exec declare_query
-    |> process_errors |> ignore ;
+    conn#exec declare_query |> process_errors |> ignore ;
     let db_idx = ref 1 in
     let seq =
       Seq.unfold_step ~init:(`Not_done 1) ~f:(function

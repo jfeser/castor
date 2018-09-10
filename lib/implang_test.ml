@@ -4,11 +4,11 @@ open Abslayout
 
 let rels = Hashtbl.create (module Db.Relation)
 
-module Eval = Eval.Make_mock (struct
+module E = Eval.Make_mock (struct
   let rels = rels
 end)
 
-module M = Abslayout_db.Make (Eval)
+module M = Abslayout_db.Make (E)
 
 let _ =
   Test_util.create rels "r1" ["f"; "g"] [[1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]]
@@ -22,13 +22,39 @@ let run_test ?(params = []) layout_str =
     Serialize.Make (struct
         let layout_map_channel = None
       end)
-      (Eval)
+      (E)
   in
   let module I =
     Irgen.Make (struct
         let code_only = true
       end)
-      (Eval)
+      (E)
+      (S)
+      ()
+  in
+  let sparams = Set.of_list (module Name.Compare_no_type) params in
+  let layout =
+    of_string_exn layout_str |> M.resolve ~params:sparams |> M.annotate_schema
+    |> M.annotate_key_layouts
+  in
+  I.irgen ~params ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter
+
+let run_test_db ?(params = []) layout_str =
+  let module E = Eval.Make (struct
+    let conn = new Postgresql.connection ~dbname:"demomatch" ~port:"5433" ()
+  end) in
+  let module M = Abslayout_db.Make (E) in
+  let module S =
+    Serialize.Make (struct
+        let layout_map_channel = None
+      end)
+      (E)
+  in
+  let module I =
+    Irgen.Make (struct
+        let code_only = true
+      end)
+      (E)
       (S)
       ()
   in
@@ -177,6 +203,10 @@ let example_params =
   [ Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p"
   ; Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c" ]
 
+let example_db_params =
+  [ Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_p"
+  ; Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_c" ]
+
 let%expect_test "example-1" =
   run_test ~params:example_params
     {|
@@ -289,6 +319,17 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
          }
          return c;
     } |}]
+
+let%expect_test "example-1-db" =
+  run_test_db ~params:example_db_params
+    {|
+filter(lc.id = id_c && lp.id = id_p,
+alist(filter(succ > counter + 1, log_bench) as lp,
+atuple([ascalar(lp.id), ascalar(lp.counter),
+alist(filter(lp.counter < log_bench.counter &&
+log_bench.counter < lp.succ, log_bench) as lc,
+atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
+|}
 
 let%expect_test "example-2" =
   run_test ~params:example_params

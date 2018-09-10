@@ -53,6 +53,37 @@ end
 
 module Project_config = Config
 
+let build_struct_gep v i n b =
+  let open Polymorphic_compare in
+  let ptr_t = type_of v in
+  if not TypeKind.(classify_type ptr_t = Pointer) then
+    Error.create "Not a pointer." v [%sexp_of: llvalue] |> Error.raise ;
+  let struct_t = element_type ptr_t in
+  if not TypeKind.(classify_type struct_t = Struct) then
+    Error.create "Not a pointer to a struct." v [%sexp_of: llvalue] |> Error.raise ;
+  let elems_t = struct_element_types struct_t in
+  if Array.exists elems_t ~f:(fun t -> TypeKind.(classify_type t = Void)) then
+    Error.of_string "Struct contains void type." |> Error.raise ;
+  if i < 0 || i >= Array.length elems_t then
+    Error.createf "Struct index %d out of bounds %d." i (Array.length elems_t)
+    |> Error.raise ;
+  build_struct_gep v i n b
+
+let build_extractvalue v i n b =
+  (* Check that the argument really is a struct and that the index is
+         valid. *)
+  let typ = type_of v in
+  ( match classify_type typ with
+  | Struct ->
+      if i >= Array.length (struct_element_types typ) then
+        Error.create "Tuple index out of bounds." (v, i) [%sexp_of: llvalue * int]
+        |> Error.raise
+  | k ->
+      Error.create "Expected a tuple." (v, k, i)
+        [%sexp_of: llvalue * TypeKind.t * int]
+      |> Error.raise ) ;
+  build_extractvalue v i n b
+
 module Config = struct
   module type S = sig
     val debug : bool
@@ -238,36 +269,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
    fun fctx func args name b ->
     let params = get_val fctx "params" in
     build_call func (Array.append [|params|] args) name b
-
-  let build_struct_gep : llvalue -> int -> string -> llbuilder -> llvalue =
-   fun v i n b ->
-    let open Polymorphic_compare in
-    let ptr_t = type_of v in
-    assert (TypeKind.(classify_type ptr_t = Pointer)) ;
-    let struct_t = element_type ptr_t in
-    assert (TypeKind.(classify_type struct_t = Struct)) ;
-    let elems_t = struct_element_types struct_t in
-    if not (i >= 0 && i < Array.length elems_t) then (
-      Logs.err (fun m ->
-          m "Struct index %d out of bounds %d." i (Array.length elems_t) ) ;
-      assert false ) ;
-    build_struct_gep v i n b
-
-  let build_extractvalue : llvalue -> int -> string -> llbuilder -> llvalue =
-   fun v i n b ->
-    (* Check that the argument really is a struct and that the index is
-         valid. *)
-    let typ = type_of v in
-    ( match classify_type typ with
-    | Struct ->
-        if i >= Array.length (struct_element_types typ) then
-          Error.create "Tuple index out of bounds." (v, i) [%sexp_of: llvalue * int]
-          |> Error.raise
-    | k ->
-        Error.create "Expected a tuple." (v, k, i)
-          [%sexp_of: llvalue * TypeKind.t * int]
-        |> Error.raise ) ;
-    build_extractvalue v i n b
 
   let printf =
     declare_function "printf"
@@ -498,7 +499,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let {data= x2; null= n2} = unpack_null t2 v2 in
     let x_out =
       match op with
-      | I.Add -> build_add x1 x2 "addtmp" builder
+      | I.Add ->
+          (* [%sexp_of: llvalue * llvalue] (x1, x2) |> print_s ; *)
+          build_add x1 x2 "addtmp" builder
       | Sub -> build_sub x1 x2 "subtmp" builder
       | Mul -> build_mul x1 x2 "multmp" builder
       | Div -> build_sdiv v1 v2 "divtmp" builder

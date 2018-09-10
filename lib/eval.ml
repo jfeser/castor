@@ -33,9 +33,9 @@ let rec eval_pred ctx = function
     match Map.find ctx n with
     | Some v -> v
     | None ->
-        Error.create "Unbound variable." (n, ctx) [%sexp_of : Name.t * Ctx.t]
+        Error.create "Unbound variable." (n, ctx) [%sexp_of: Name.t * Ctx.t]
         |> Error.raise )
-  | Binop (op, p1, p2) ->
+  | Binop (op, p1, p2) -> (
       let v1 = eval_pred ctx p1 in
       let v2 = eval_pred ctx p2 in
       match (op, v1, v2) with
@@ -56,8 +56,8 @@ let rec eval_pred ctx = function
       | Or, `Bool x1, `Bool x2 -> `Bool (x1 || x2)
       | _ ->
           Error.create "Unexpected argument types." (op, v1, v2)
-            [%sexp_of : op * Db.primvalue * Db.primvalue]
-          |> Error.raise
+            [%sexp_of: op * Db.primvalue * Db.primvalue]
+          |> Error.raise )
 
 module Make (Config : Config.S) : S = struct
   let load_relation = Relation.from_db Config.conn
@@ -82,7 +82,7 @@ module Make (Config : Config.S) : S = struct
                        | "t" -> `Bool true
                        | "f" -> `Bool false
                        | _ -> failwith "Unknown boolean value." )
-                     | _ -> `Unknown v
+                     | _ -> `String v
                  in
                  let value = Value.{rel= r; field= f; value= pval} in
                  value )
@@ -92,7 +92,7 @@ module Make (Config : Config.S) : S = struct
            | Unequal_lengths ->
                Error.create "Unexpected tuple width."
                  (r, List.length r.fields, List.length vs)
-                 [%sexp_of : Relation.t * int * int]
+                 [%sexp_of: Relation.t * int * int]
                |> Error.raise )
 
   let eval ctx query =
@@ -105,7 +105,7 @@ module Make (Config : Config.S) : S = struct
                | Some v -> (n, v)
                | None ->
                    Error.create "Mismatched tuple." (t, schema)
-                     [%sexp_of : Db.primvalue Map.M(String).t * Name.t list]
+                     [%sexp_of: Db.primvalue Map.M(String).t * Name.t list]
                    |> Error.raise )
            |> Map.of_alist_exn (module Name.Compare_no_type) )
 end
@@ -199,7 +199,7 @@ module Make_mock (Config : Config.S_mock) : S = struct
       | Select (out, r) -> eval_select ctx out (eval r)
       | As (n, r) -> eval_as n (eval r)
       | OrderBy {key; order; rel} -> eval_orderby ctx key order (eval rel)
-      | r -> Error.create "Unsupported." r [%sexp_of : node] |> Error.raise
+      | r -> Error.create "Unsupported." r [%sexp_of: node] |> Error.raise
     in
     eval r
 end

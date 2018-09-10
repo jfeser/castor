@@ -27,7 +27,8 @@ let size_exn hdr name =
 
 let round_up value align =
   assert (Int.is_pow2 align) ;
-  Infix.((value + int Int.(align - 1)) && int Int.(-align))
+  if align = 1 then value
+  else Infix.((value + int Int.(align - 1)) && int Int.(-align))
 
 let rec _make_position hdr name start =
   match hdr with

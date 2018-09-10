@@ -39,26 +39,34 @@ let run_test layout_str =
   In_channel.input_all (In_channel.create layout_file) |> Stdio.print_endline ;
   [%sexp_of: Type.t * int * string] (type_, len, buf_str) |> print_s
 
-let%expect_test "scalar-int" = run_test "AScalar(1)";
-  [%expect {|
+let%expect_test "scalar-int" =
+  run_test "AScalar(1)" ;
+  [%expect
+    {|
     0:1 Scalar (=(Int 1))
 
     ((IntT ((range (1 1)) (nullable false))) 1 "\\001") |}]
 
-let%expect_test "scalar-bool" = run_test "AScalar(true)";
-  [%expect {|
+let%expect_test "scalar-bool" =
+  run_test "AScalar(true)" ;
+  [%expect
+    {|
     0:1 Scalar (=(Bool true))
 
     ((BoolT ((nullable false))) 1 "\\001") |}]
 
-let%expect_test "scalar-string" = run_test "AScalar(\"test\")";
-  [%expect {|
+let%expect_test "scalar-string" =
+  run_test "AScalar(\"test\")" ;
+  [%expect
+    {|
     0:8 Scalar (=(String test))
 
     ((StringT ((nchars (4 4)) (nullable false))) 8 "test\\000\\000\\000\\000") |}]
 
-let%expect_test "tuple" = run_test "ATuple([AScalar(1), AScalar(\"test\")], Cross)";
-  [%expect {|
+let%expect_test "tuple" =
+  run_test "ATuple([AScalar(1), AScalar(\"test\")], Cross)" ;
+  [%expect
+    {|
     0:0 Tuple len
     0:1 Scalar (=(Int 1))
     0:9 Tuple body
@@ -71,8 +79,9 @@ let%expect_test "tuple" = run_test "ATuple([AScalar(1), AScalar(\"test\")], Cros
      9 "\\001test\\000\\000\\000\\000") |}]
 
 let%expect_test "hash-idx" =
-  run_test "AHashIdx(Dedup(Select([r1.f], r1)) as k, AScalar(k.f), null)";
-  [%expect {|
+  run_test "AHashIdx(Dedup(Select([r1.f], r1)) as k, AScalar(k.f), null)" ;
+  [%expect
+    {|
     0:2 Table len
     2:8 Table hash len
     10:104 Table hash
@@ -94,8 +103,9 @@ let%expect_test "hash-idx" =
 let%expect_test "ordered-idx" =
   run_test
     "AOrderedIdx(OrderBy([r1.f], Dedup(Select([r1.f], r1)), desc) as k, \
-     AScalar(k.f), null, null)";
-  [%expect {|
+     AScalar(k.f), null, null)" ;
+  [%expect
+    {|
     0:2 Ordered idx len (=40)
     2:8 Ordered idx index len (=27)
     10:1 Scalar (=(Int 1))
@@ -122,3 +132,22 @@ let%expect_test "ordered-idx" =
        (IntT ((range (1 3)) (nullable false))) ((count ()))))
      40
      "(\\000\\027\\000\\000\\000\\000\\000\\000\\000\\001%\\000\\000\\000\\000\\000\\000\\000\\002&\\000\\000\\000\\000\\000\\000\\000\\003'\\000\\000\\000\\000\\000\\000\\000\\001\\002\\003") |}]
+
+(* let tests =
+ *   let open OUnit2 in
+ *   "serialize"
+ *   >::: [ ( "to-byte"
+ *          >:: fun ctxt ->
+ *          let x = 0xABCDEF01 in
+ *          assert_equal ~ctxt x (bytes_of_int ~width:64 x |> int_of_bytes_exn) )
+ *        ; ( "from-byte"
+ *          >:: fun ctxt ->
+ *          let b = Bytes.of_string "\031\012\000\000" in
+ *          let x = 3103 in
+ *          assert_equal ~ctxt ~printer:Caml.string_of_int x (int_of_bytes_exn b) )
+ *        ; ( "align"
+ *          >:: fun ctxt ->
+ *          let b = Bytes.of_string "\001\002\003" in
+ *          let b' = align 8 b in
+ *          assert_equal ~ctxt ~printer:Caml.string_of_int 8 (String.length b') ;
+ *          assert_equal ~ctxt "\001\002\003\000\000\000\000\000" b' ) ] *)

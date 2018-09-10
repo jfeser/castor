@@ -1,6 +1,8 @@
 open Base
 open Collections
 
+module type S = Abslayout_db_intf.S
+
 module Make (Eval : Eval.S) = struct
   open Abslayout0
   open Abslayout
@@ -153,7 +155,7 @@ module Make (Eval : Eval.S) = struct
           function
           | `Int x -> IntT {range= AbsInt.abstract x; nullable= false}
           | `Bool _ -> BoolT {nullable= false}
-          | `String x | `Unknown x ->
+          | `String x ->
               StringT {nchars= AbsInt.abstract (String.length x); nullable= false}
           | `Null -> NullT
 

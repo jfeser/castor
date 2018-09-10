@@ -80,7 +80,7 @@ struct
 
   let scan_empty {ctx; name; _} =
     let open Builder in
-    let b = create ~ctx ~name ~ret:Type.PrimType.VoidT in
+    let b = create ~ctx ~name ~ret:(Type.PrimType.TupleT []) in
     build_func b
 
   let scan_null {ctx; name; _} =
@@ -97,6 +97,7 @@ struct
           create ~ctx ~name ~ret:ret_type
         in
         let start = Ctx.find_exn ctx (A.Name.create "start") b in
+        build_print (Tuple [String "int"; start]) b ;
         let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
         if nullable then
           let null_val = h + 1 in
@@ -125,7 +126,7 @@ struct
         let open Builder in
         let hdr = Header.make_header t in
         let b = create ~ctx ~name ~ret:(TupleT [StringT {nullable}]) in
-        let start = build_arg 0 b in
+        let start = Ctx.find_exn ctx (A.Name.create "start") b in
         let value_ptr = Header.make_position hdr "value" start in
         let nchars = Header.make_access hdr "len" start in
         let ret_val = Binop {op= LoadStr; arg1= value_ptr; arg2= nchars} in
@@ -183,11 +184,10 @@ struct
       create ~ctx ~name ~ret:ret_type
     in
     let hdr = Header.make_header t in
+    let start = Ctx.find_exn ctx (A.Name.create "start") b in
+    build_print (Tuple [String "tuple start"; start]) b ;
     let ctx =
-      let child_start =
-        let start = Ctx.find_exn ctx (A.Name.create "start") b in
-        Header.make_position hdr "value" start
-      in
+      let child_start = Header.make_position hdr "value" start in
       Ctx.bind ctx "start" int_t child_start
     in
     make_loops ctx [] (List.zip_exn child_layouts child_types) b ;
@@ -261,6 +261,7 @@ struct
     in
     let hdr = Header.make_header t in
     let start = Ctx.find_exn ctx (A.Name.create "start") b in
+    build_print (Tuple [String "list start"; start]) b ;
     let cstart =
       build_defn "cstart" int_t (Header.make_position hdr "value" start) b
     in
@@ -576,7 +577,9 @@ struct
               let child_schema = A.Meta.(find_exn child_layout schema) in
               Map.merge_right ctx (Ctx.of_schema child_schema tup)
             in
-            build_if ~cond:(gen_pred ~ctx pred b)
+            let cond = gen_pred ~ctx pred b in
+            build_print (Tuple [tup; cond]) b ;
+            build_if ~cond
               ~then_:(fun b -> build_yield tup b)
               ~else_:(fun _ -> ())
               b )
