@@ -26,13 +26,7 @@ PRESENT_QUERIES = 10
 ABSENT_QUERIES = 10
 TABLE_SIZE = 20000
 BENCHMARKS = [
-    rpath('no-dedup-both-hash.txt'),
-    rpath('no-dedup-col-store.txt'),
-    rpath('no-dedup-nested-outer-hash.txt'),
-    rpath('no-dedup-nested.txt'),
-    rpath('no-dedup-rhs-hash.txt'),
-    rpath('no-dedup-row-store-push-filter.txt'),
-    rpath('no-dedup-row-store.txt'),
+    rpath('example1.txt'),
 ]
 
 def bench_dir(bench_file):
@@ -49,13 +43,24 @@ conn.commit()
 log.info('Generating benchmark table done.')
 
 for bench in BENCHMARKS:
+    # Make benchmark dir.
     benchd = bench_dir(bench)
     if os.path.isdir(benchd):
         shutil.rmtree(benchd)
     os.mkdir(benchd)
-    os.chdir(benchd)
-    with open('build.log', 'w') as b_log:
-        cmd = [COMPILE_EXE, '-v', '-db', 'demomatch', '-port', '5433', '-p', 'id_p:StringT', '-p', 'id_c:StringT', '-pg', bench]
+
+    # Build, saving the log.
+    with open(benchd + '/build.log', 'w') as b_log:
+        cmd = [
+            COMPILE_EXE,
+            '-v',
+            '-o', benchd,
+            '-db', 'demomatch',
+            '-port', '5433',
+            '-p', 'id_p:StringT',
+            '-p', 'id_c:StringT',
+            bench
+        ]
         cmd_str = shlex.quote(' '.join(cmd))
         log.debug('Building %s in %s.', cmd_str, os.getcwd())
         run(cmd, stdout=b_log, stderr=b_log)
