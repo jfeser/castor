@@ -16,7 +16,7 @@ module AbsInt = struct
   let ( * ) : t -> t -> t =
    fun (l1, h1) (l2, h2) ->
     let min_many = List.fold_left1_exn ~f:Int.min in
-    let max_many = List.fold_left1_exn ~f:Int.min in
+    let max_many = List.fold_left1_exn ~f:Int.max in
     let xs = [l1 * l2; l1 * h2; l2 * h1; h2 * h1] in
     (min_many xs, max_many xs)
 
@@ -32,8 +32,8 @@ module AbsInt = struct
     let maxval = if nullable then maxval + 1 else maxval in
     if maxval = 0 then 1
     else
-      let bit_width = Float.log (Float.of_int maxval) /. Float.log 2.0 in
-      Int.max (bit_width /. 8.0 |> Float.iround_exn ~dir:`Up) 1
+      let bit_width = Float.((log (of_int maxval) /. log 2.0) + 1.0) in
+      bit_width /. 8.0 |> Float.iround_exn ~dir:`Up
 end
 
 module AbsCount = struct
