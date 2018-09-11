@@ -59,46 +59,54 @@ let%expect_test "scalar-string" =
   run_test "AScalar(\"test\")" ;
   [%expect
     {|
-    0:8 Scalar (=(String test))
+    0:0 String length (=4)
+    0:4 String body
+    0:4 Scalar (=(String test))
 
-    ((StringT ((nchars (4 4)) (nullable false))) 8 "test\\000\\000\\000\\000") |}]
+    ((StringT ((nchars (4 4)) (nullable false))) 4 test) |}]
 
 let%expect_test "tuple" =
   run_test "ATuple([AScalar(1), AScalar(\"test\")], Cross)" ;
   [%expect
     {|
-    0:0 Tuple len
+    0:0 Tuple len (=5)
     0:1 Scalar (=(Int 1))
-    0:9 Tuple body
-    1:8 Scalar (=(String test))
+    0:5 Tuple body
+    1:0 String length (=4)
+    1:4 String body
+    1:4 Scalar (=(String test))
 
     ((TupleT
       (((IntT ((range (1 1)) (nullable false)))
         (StringT ((nchars (4 4)) (nullable false))))
        ((count ((1 1))))))
-     9 "\\001test\\000\\000\\000\\000") |}]
+     5 "\\001test") |}]
 
 let%expect_test "hash-idx" =
   run_test "AHashIdx(Dedup(Select([r1.f], r1)) as k, AScalar(k.f), null)" ;
   [%expect
     {|
-    0:2 Table len
-    2:8 Table hash len
-    10:104 Table hash
-    114:24 Table key map
-    138:1 Scalar (=(Int 3))
-    138:6 Table values
-    139:1 Scalar (=(Int 3))
-    140:1 Scalar (=(Int 1))
-    141:1 Scalar (=(Int 1))
-    142:1 Scalar (=(Int 2))
-    143:1 Scalar (=(Int 2))
+    0:3 Table len
+    3:8 Table hash len
+    11:104 Table hash
+    115:8 Table map len
+    123:8 Map entry (0 => 151)
+    123:24 Table key map
+    131:8 Map entry (1 => 147)
+    139:8 Map entry (2 => 149)
+    147:1 Scalar (=(Int 3))
+    147:6 Table values
+    148:1 Scalar (=(Int 3))
+    149:1 Scalar (=(Int 1))
+    150:1 Scalar (=(Int 1))
+    151:1 Scalar (=(Int 2))
+    152:1 Scalar (=(Int 2))
 
     ((HashIdxT
       ((IntT ((range (1 3)) (nullable false)))
        (IntT ((range (1 3)) (nullable false))) ((count ()))))
-     144
-     "\\144\\000h\\000\\000\\000\\000\\000\\000\\000\\b\\000\\000\\000$\\000\\000\\000\\t\\000\\000\\000\\b\\000\\000\\000\\001\\000\\000\\000\\016\\000\\000\\000\\004\\000\\000\\000\\b\\000\\000\\000J\\002\\000\\000\\001\\000\\000\\000\\169\\000\\000\\0008\\000\\000\\000\\007\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\011\\000\\000\\000\\001\\000\\000\\000\\001\\000\\000\\000\\001\\000\\000\\000\\000\\000\\000\\000\\016\\000\\000\\000\\001\\000\\000\\000\\000\\000\\000\\000\\001\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\142\\000\\000\\000\\000\\000\\000\\000\\138\\000\\000\\000\\000\\000\\000\\000\\140\\000\\000\\000\\000\\000\\000\\000\\003\\003\\001\\001\\002\\002") |}]
+     153
+     "\\153\\000\\000h\\000\\000\\000\\000\\000\\000\\000\\b\\000\\000\\000$\\000\\000\\000\\t\\000\\000\\000\\b\\000\\000\\000\\001\\000\\000\\000\\016\\000\\000\\000\\004\\000\\000\\000\\b\\000\\000\\000J\\002\\000\\000\\001\\000\\000\\000\\169\\000\\000\\0008\\000\\000\\000\\007\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\011\\000\\000\\000\\001\\000\\000\\000\\001\\000\\000\\000\\001\\000\\000\\000\\000\\000\\000\\000\\016\\000\\000\\000\\001\\000\\000\\000\\000\\000\\000\\000\\001\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\024\\000\\000\\000\\000\\000\\000\\000\\151\\000\\000\\000\\000\\000\\000\\000\\147\\000\\000\\000\\000\\000\\000\\000\\149\\000\\000\\000\\000\\000\\000\\000\\003\\003\\001\\001\\002\\002") |}]
 
 let%expect_test "ordered-idx" =
   run_test
@@ -106,32 +114,32 @@ let%expect_test "ordered-idx" =
      AScalar(k.f), null, null)" ;
   [%expect
     {|
-    0:2 Ordered idx len (=40)
-    2:8 Ordered idx index len (=27)
-    10:1 Scalar (=(Int 1))
-    10:1 Ordered idx key
-    10:1 Scalar (=(Int 1))
-    10:1 Ordered idx key
-    11:8 Ordered idx value ptr (=37)
-    19:1 Scalar (=(Int 2))
-    19:1 Ordered idx key
-    19:1 Scalar (=(Int 2))
-    19:1 Ordered idx key
-    20:8 Ordered idx value ptr (=38)
-    28:1 Scalar (=(Int 3))
-    28:1 Ordered idx key
-    28:1 Scalar (=(Int 3))
-    28:1 Ordered idx key
-    29:8 Ordered idx value ptr (=39)
-    37:1 Scalar (=(Int 1))
-    38:1 Scalar (=(Int 2))
-    39:1 Scalar (=(Int 3))
+    0:3 Ordered idx len (=41)
+    3:8 Ordered idx index len (=27)
+    11:1 Scalar (=(Int 1))
+    11:1 Ordered idx key
+    11:1 Scalar (=(Int 1))
+    11:1 Ordered idx key
+    12:8 Ordered idx value ptr (=38)
+    20:1 Scalar (=(Int 2))
+    20:1 Ordered idx key
+    20:1 Scalar (=(Int 2))
+    20:1 Ordered idx key
+    21:8 Ordered idx value ptr (=39)
+    29:1 Scalar (=(Int 3))
+    29:1 Ordered idx key
+    29:1 Scalar (=(Int 3))
+    29:1 Ordered idx key
+    30:8 Ordered idx value ptr (=40)
+    38:1 Scalar (=(Int 1))
+    39:1 Scalar (=(Int 2))
+    40:1 Scalar (=(Int 3))
 
     ((OrderedIdxT
       ((IntT ((range (1 3)) (nullable false)))
        (IntT ((range (1 3)) (nullable false))) ((count ()))))
-     40
-     "(\\000\\027\\000\\000\\000\\000\\000\\000\\000\\001%\\000\\000\\000\\000\\000\\000\\000\\002&\\000\\000\\000\\000\\000\\000\\000\\003'\\000\\000\\000\\000\\000\\000\\000\\001\\002\\003") |}]
+     41
+     ")\\000\\000\\027\\000\\000\\000\\000\\000\\000\\000\\001&\\000\\000\\000\\000\\000\\000\\000\\002'\\000\\000\\000\\000\\000\\000\\000\\003(\\000\\000\\000\\000\\000\\000\\000\\001\\002\\003") |}]
 
 (* let tests =
  *   let open OUnit2 in

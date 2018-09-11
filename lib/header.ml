@@ -35,10 +35,8 @@ let round_up value align =
 let rec _make_position hdr name start =
   match hdr with
   | _, _, [] -> failwith "Field not found."
-  | prev_hdr, ptr, (Field.({name= n; size; align}) as f) :: next_hdr -> (
-      if String.(n = name) then
-        (* always round field pointers to the correct alignment *)
-        round_up ptr align
+  | prev_hdr, ptr, (Field.({name= n; size; _}) as f) :: next_hdr -> (
+      if String.(n = name) then ptr
       else
         match size with
         | `Fixed x ->
@@ -56,12 +54,16 @@ and make_position hdr name start = _make_position ([], start, hdr) name start
 
 and make_access hdr name start =
   let field = field_exn hdr name in
-  match field.size with
-  | `Fixed y ->
-      let position = make_position hdr name start in
-      Slice (position, y)
-  | `DescribedBy _ | `Variable -> failwith "Cannot slice arbitrarily sized fields."
-  | `Empty x -> Infix.(int x)
+  let ret =
+    match field.size with
+    | `Fixed y ->
+        let position = make_position hdr name start in
+        Slice (position, y)
+    | `DescribedBy _ | `Variable ->
+        failwith "Cannot slice arbitrarily sized fields."
+    | `Empty x -> Infix.(int x)
+  in
+  ret
 
 let rec make_header t =
   let make_size range =
@@ -100,7 +102,8 @@ let rec make_header t =
       [ Field.{name= "len"; size= make_size (Type.len t); align= 1}
       ; Field.{name= "hash_len"; size= `Fixed 8; align= 1}
       ; Field.{name= "hash_data"; size= `DescribedBy "hash_len"; align= 1}
-      ; Field.{name= "hash_map"; size= `Variable; align= 1} ]
+      ; Field.{name= "hash_map_len"; size= `Fixed 8; align= 1}
+      ; Field.{name= "hash_map"; size= `DescribedBy "hash_map_len"; align= 1} ]
   | OrderedIdxT _ ->
       [ Field.{name= "len"; size= make_size (Type.len t); align= 1}
       ; Field.{name= "idx_len"; size= `Fixed 8; align= 1}

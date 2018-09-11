@@ -70,11 +70,8 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     (* Reserve space for list header. *)
     let hdr = Header.make_header (ListT t) in
     let header_pos = Writer.pos writer in
-    Log.with_msg sctx "List count" (fun () ->
-        Writer.write_bytes writer (Bytes.make (Header.size_exn hdr "count") '\x00')
-    ) ;
-    Log.with_msg sctx "List len" (fun () ->
-        Writer.write_bytes writer (Bytes.make (Header.size_exn hdr "len") '\x00') ) ;
+    Writer.write_bytes writer (Bytes.make (Header.size_exn hdr "count") '\x00') ;
+    Writer.write_bytes writer (Bytes.make (Header.size_exn hdr "len") '\x00') ;
     (* Serialize list body. *)
     let count = ref 0 in
     Log.with_msg sctx "List body" (fun () ->
@@ -87,9 +84,12 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     (* Serialize list header. *)
     let len = Writer.Pos.(end_pos - header_pos) |> Int64.to_int_exn in
     Writer.seek writer header_pos ;
-    Writer.write_string writer
-      (of_int ~byte_width:(Header.size_exn hdr "count") !count) ;
-    Writer.write_string writer (of_int ~byte_width:(Header.size_exn hdr "len") len) ;
+    Log.with_msg sctx (sprintf "List count (=%d)" !count) (fun () ->
+        Writer.write_string writer
+          (of_int ~byte_width:(Header.size_exn hdr "count") !count) ) ;
+    Log.with_msg sctx (sprintf "List len (=%d)" len) (fun () ->
+        Writer.write_string writer
+          (of_int ~byte_width:(Header.size_exn hdr "len") len) ) ;
     Writer.seek writer end_pos
 
   let serialize_tuple serialize ({writer; _} as sctx) ((elem_ts, _) as t)
@@ -98,8 +98,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     (* Reserve space for header. *)
     let hdr = Header.make_header (TupleT t) in
     let header_pos = Writer.pos writer in
-    Log.with_msg sctx "Tuple len" (fun () ->
-        Writer.write_bytes writer (Bytes.make (Header.size_exn hdr "len") '\x00') ) ;
+    Writer.write_bytes writer (Bytes.make (Header.size_exn hdr "len") '\x00') ;
     (* Serialize body *)
     Log.with_msg sctx "Tuple body" (fun () ->
         List.iter2_exn ~f:(fun t l -> serialize sctx t l) elem_ts elem_layouts ) ;
@@ -107,7 +106,9 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     (* Serialize header. *)
     Writer.seek writer header_pos ;
     let len = Writer.Pos.(end_pos - header_pos) |> Int64.to_int_exn in
-    Writer.write_string writer (of_int ~byte_width:(Header.size_exn hdr "len") len) ;
+    Log.with_msg sctx (sprintf "Tuple len (=%d)" len) (fun () ->
+        Writer.write_string writer
+          (of_int ~byte_width:(Header.size_exn hdr "len") len) ) ;
     Writer.seek writer end_pos
 
   type hash_key = {kctx: Ctx.t; hash_key: string; hash_val: int}
@@ -177,6 +178,9 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
      *     Writer.pad_to_alignment writer 8 ) ; *)
     Log.with_msg sctx "Table hash" (fun () ->
         Writer.write_bytes writer (Bytes.make hash_len '\x00') ) ;
+    Log.with_msg sctx "Table map len" (fun () ->
+        Writer.write_bytes writer
+          (Bytes.make (Header.size_exn hdr "hash_map_len") '\x00') ) ;
     Log.with_msg sctx "Table key map" (fun () ->
         Writer.write_bytes writer (Bytes.make (8 * table_size) '\x00') ) ;
     let hash_table = Array.create ~len:table_size 0x0 in
@@ -196,8 +200,11 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     Writer.write_string writer
       (of_int ~byte_width:(Header.size_exn hdr "hash_len") hash_len) ;
     Writer.write_string writer hash_body ;
-    Array.iter hash_table ~f:(fun x ->
-        Writer.write_string writer (of_int ~byte_width:8 x) ) ;
+    Writer.write_string writer
+      (of_int ~byte_width:(Header.size_exn hdr "hash_map_len") (8 * table_size)) ;
+    Array.iteri hash_table ~f:(fun i x ->
+        Log.with_msg sctx (sprintf "Map entry (%d => %d)" i x) (fun () ->
+            Writer.write_string writer (of_int ~byte_width:8 x) ) ) ;
     Writer.seek writer end_pos
 
   let serialize_orderedidx serialize ({ctx; writer; _} as sctx)

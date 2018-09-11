@@ -100,7 +100,6 @@ struct
         in
         let start = Ctx.find_exn ctx (A.Name.create "start") b in
         let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
-        build_print (Tuple [String "int start"; start; ival]) b ;
         if nullable then
           let null_val = h + 1 in
           build_yield (Tuple [Tuple [ival; Infix.(ival = int null_val)]]) b
@@ -129,7 +128,6 @@ struct
         let hdr = Header.make_header t in
         let b = create ~ctx ~name ~ret:(TupleT [StringT {nullable}]) in
         let start = Ctx.find_exn ctx (A.Name.create "start") b in
-        build_print (Tuple [String "string"; start]) b ;
         let value_ptr = Header.make_position hdr "value" start in
         let nchars = Header.make_access hdr "nchars" start in
         let ret_val = Binop {op= LoadStr; arg1= value_ptr; arg2= nchars} in
@@ -146,7 +144,8 @@ struct
       A.({ ctx
          ; scan
          ; layout= {node= ATuple (child_layouts, Cross); _} as r
-         ; type_= TupleT (child_types, _) as t; _ }) =
+         ; type_= TupleT (child_types, _) as t
+         ; name }) =
     let open Builder in
     let rec make_loops ctx tuples clayouts ctypes cstarts b =
       match (clayouts, ctypes, cstarts) with
@@ -169,7 +168,6 @@ struct
             b
     in
     let b =
-      let name = A.name r ^ "_" ^ Fresh.name fresh "%d" in
       let ret_type =
         let schema = A.Meta.(find_exn r schema) in
         Type.PrimType.TupleT (List.map schema ~f:A.Name.type_exn)
@@ -178,7 +176,6 @@ struct
     in
     let hdr = Header.make_header t in
     let start = Ctx.find_exn ctx (A.Name.create "start") b in
-    build_print (Tuple [String "tuple start"; start]) b ;
     let child_starts =
       let _, ret =
         List.fold_left child_types
@@ -261,7 +258,6 @@ struct
     in
     let hdr = Header.make_header t in
     let start = Ctx.find_exn ctx (A.Name.create "start") b in
-    build_print (Tuple [String "list start"; start]) b ;
     let cstart =
       build_defn "cstart" int_t (Header.make_position hdr "value" start) b
     in
@@ -325,6 +321,7 @@ struct
     let value_iter = scan value_callee_ctx value_layout value_type in
     let hash_data_start = Header.make_position hdr "hash_data" start in
     let mapping_start = Header.make_position hdr "hash_map" start in
+    let mapping_len = Header.make_position hdr "hash_map_len" start in
     let lookup_expr = List.map lookup ~f:(fun p -> gen_pred ~ctx p b) in
     (* Compute the index in the mapping table for this key. *)
     let hash_key =
@@ -333,11 +330,13 @@ struct
       | [x] -> Infix.(hash hash_data_start x)
       | xs -> Infix.(hash hash_data_start (Tuple xs))
     in
+    let hash_key = Infix.(hash_key * int 8) in
     (* Get a pointer to the value. *)
-    let value_ptr = Infix.(Slice (mapping_start + (hash_key * int 8), 8)) in
+    let value_ptr = Infix.(Slice (mapping_start + hash_key, 8)) in
     (* If the pointer is null, then the key is not present. *)
     build_if
-      ~cond:Infix.(value_ptr = int 0x0)
+      ~cond:
+        Infix.(hash_key < int 0 || hash_key >= mapping_len || value_ptr = int 0x0)
       ~then_:(fun _ -> ())
       ~else_:(fun b ->
         build_assign value_ptr kstart b ;
@@ -578,7 +577,6 @@ struct
               Map.merge_right ctx (Ctx.of_schema child_schema tup)
             in
             let cond = gen_pred ~ctx pred b in
-            build_print (Tuple [tup; cond]) b ;
             build_if ~cond
               ~then_:(fun b -> build_yield tup b)
               ~else_:(fun _ -> ())

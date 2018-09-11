@@ -166,22 +166,24 @@ let count : t -> AbsCount.t = function
 
 let rec len =
   let open AbsInt in
+  let header_len field_len =
+    match concretize field_len with
+    | Some _ -> abstract 0
+    | None -> byte_width ~nullable:false field_len |> abstract
+  in
   function
   | EmptyT -> zero
   | NullT -> failwith "Unexpected type."
   | IntT x -> byte_width ~nullable:x.nullable x.range |> abstract
   | BoolT _ -> abstract 1
-  | StringT x ->
-      let header_len = byte_width ~nullable:false x.nchars |> abstract in
-      header_len + x.nchars
+  | StringT x -> header_len x.nchars + x.nchars
   | TupleT (ts, _) ->
       let body_len = List.sum (module AbsInt) ts ~f:len in
-      let header_len = byte_width ~nullable:false body_len |> abstract in
-      body_len + header_len
+      body_len + header_len body_len
   | ListT (t, x) ->
-      let count_len = byte_width ~nullable:false x.count |> abstract in
+      let count_len = header_len x.count in
       let body_len = x.count * len t in
-      let len_len = byte_width ~nullable:false body_len |> abstract in
+      let len_len = header_len body_len in
       count_len + len_len + body_len
   | T.HashIdxT _ | T.OrderedIdxT (_, _, _) -> (0, 100000)
   | FuncT (ts, _) -> List.sum (module AbsInt) ts ~f:len
