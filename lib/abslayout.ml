@@ -66,7 +66,9 @@ module Name = struct
     {relation= rel; name= f.fname; type_= Some (Type.PrimType.of_dtype f.dtype)}
 end
 
-let select a b = {node= Select (a, b); meta= Meta.empty ()}
+let select a b =
+  if List.is_empty a then Error.of_string "Empty selection list." |> Error.raise ;
+  {node= Select (a, b); meta= Meta.empty ()}
 
 let join a b c = {node= Join {pred= a; r1= b; r2= c}; meta= Meta.empty ()}
 
@@ -258,12 +260,25 @@ let subst ctx =
       inherit [_] endo
 
       method! visit_Name _ this v =
-        match Map.find ctx v with Some x -> pred_of_value x | None -> this
+        match Map.find ctx v with Some x -> x | None -> this
 
       method visit_name _ x = x
     end
   in
   v#visit_t ()
+
+let subst_pred ctx =
+  let v =
+    object
+      inherit [_] endo
+
+      method! visit_Name _ this v =
+        match Map.find ctx v with Some x -> x | None -> this
+
+      method visit_name _ x = x
+    end
+  in
+  v#visit_pred ()
 
 let pred_relations p =
   let rels = ref [] in
@@ -309,71 +324,6 @@ let rec pred_to_sql = function
 
 (** Return the set of relations which have fields in the tuple produced by
      this expression. *)
-let relation r =
-  let reducer =
-    object
-      inherit [_] reduce
-
-      method zero = Set.empty (module String)
-
-      method plus = Set.union
-
-      method! visit_As _ n _ = Set.singleton (module String) n
-
-      method! visit_Scan _ n = Set.singleton (module String) n
-    end
-  in
-  reducer#visit_t () r
-
-let ralgebra_to_sql r =
-  let rec f {node; _} =
-    let relation_name r =
-      let rs = relation r in
-      if Set.length rs > 1 then
-        Error.create
-          "More than one relation name. Use AS to give this expression a name." r
-          [%sexp_of: t]
-        |> Error.raise
-      else Set.choose_exn rs
-    in
-    match node with
-    | Select ([], r) ->
-        sprintf "select top 0 from (%s) as %s" (f r) (relation_name r)
-    | Select (fs, r) ->
-        let fields = List.map fs ~f:pred_to_sql |> String.concat ~sep:"," in
-        sprintf "select %s from (%s) as %s" fields (f r) (relation_name r)
-    | Scan r -> sprintf "select * from %s" r
-    | Filter (pred, r) ->
-        sprintf "select * from (%s) as %s where %s" (f r) (relation_name r)
-          (pred_to_sql pred)
-    | Join {pred; r1; r2} ->
-        let r1_name = relation_name r1 in
-        let r2_name = relation_name r2 in
-        sprintf "select * from (%s) as %s, (%s) as %s where %s" (f r1) r1_name
-          (f r2) r2_name (pred_to_sql pred)
-    | Agg (aggs, key, r) ->
-        let rel = relation_name r in
-        let aggs =
-          List.map aggs ~f:(function
-            | Count -> "count(*)"
-            | Key f -> sprintf "%s.\"%s\"" rel f.name
-            | Sum f -> sprintf "sum(%s.\"%s\")" rel f.name
-            | Avg f -> sprintf "avg(%s.\"%s\")" rel f.name
-            | Min f -> sprintf "min(%s.\"%s\")" rel f.name
-            | Max f -> sprintf "max(%s.\"%s\")" rel f.name )
-          |> String.concat ~sep:", "
-        in
-        let key =
-          List.map key ~f:(fun f -> sprintf "%s.\"%s\"" rel f.name)
-          |> String.concat ~sep:", "
-        in
-        sprintf "select %s from (%s) as %s group by (%s)" aggs (f r) rel key
-    | Dedup r -> sprintf "select distinct * from (%s) as t" (f r)
-    | As (_, r) -> f r
-    | _ ->
-        Error.of_string "Only relational algebra constructs allowed." |> Error.raise
-  in
-  f r
 
 let unnamed t = {name= ""; relation= None; type_= Some t}
 
@@ -392,6 +342,141 @@ let rec pred_to_schema =
     match op with
     | Eq | Lt | Le | Gt | Ge | And | Or -> unnamed (BoolT {nullable= false})
     | Add | Sub | Mul | Div | Mod -> unnamed (IntT {nullable= false}) )
+
+type query = {schema: Name.t list; sql: [`Subquery of string | `Scan of string]}
+
+let ralgebra_to_sql r =
+  let fresh = Fresh.create () in
+  let rec f ({node; _} as r) =
+    (* let relation_name r =
+     *   let rs = relation r in
+     *   if Set.length rs > 1 then
+     *     Error.create
+     *       "More than one relation name. Use AS to give this expression a name."
+     *       (r, rs) [%sexp_of: t * Set.M(String).t]
+     *     |> Error.raise
+     *   else Set.choose_exn rs
+     * in *)
+    match node with
+    | Scan tbl -> {sql= `Scan tbl; schema= Meta.(find_exn r schema)}
+    | Select ([], _) -> failwith "No empty selects."
+    | Select (fs, r) -> (
+      match f r with
+      | {sql= `Subquery q; schema} ->
+          let alias = Fresh.name fresh "t%d" in
+          let fields =
+            let ctx =
+              List.zip_exn
+                Meta.(find_exn r schema)
+                (List.map schema ~f:(fun n -> Name.create ~relation:alias n.name))
+              |> List.map ~f:(fun (n, n') -> (n, Name n'))
+              |> Map.of_alist_exn (module Name.Compare_no_type)
+            in
+            List.map fs ~f:(subst_pred ctx)
+          in
+          let fields_str =
+            fields |> List.map ~f:pred_to_sql |> String.concat ~sep:", "
+          in
+          let new_schema = List.map fields ~f:pred_to_schema in
+          let new_query = sprintf "select %s from (%s) as %s" fields_str q alias in
+          {sql= `Subquery new_query; schema= new_schema}
+      | {sql= `Scan tbl; _} ->
+          let fields_str =
+            fs |> List.map ~f:pred_to_sql |> String.concat ~sep:", "
+          in
+          let new_schema = List.map fs ~f:pred_to_schema in
+          { sql= `Subquery (sprintf "select %s from %s" fields_str tbl)
+          ; schema= new_schema } )
+    | Filter (pred, r) -> (
+      match f r with
+      | {sql= `Subquery q; schema} ->
+          let alias = Fresh.name fresh "t%d" in
+          let new_schema =
+            List.map schema ~f:(fun n -> Name.create ~relation:alias n.name)
+          in
+          let pred =
+            let ctx =
+              List.zip_exn Meta.(find_exn r schema) new_schema
+              |> List.map ~f:(fun (n, n') -> (n, Name n'))
+              |> Map.of_alist_exn (module Name.Compare_no_type)
+            in
+            subst_pred ctx pred |> pred_to_sql
+          in
+          let new_query =
+            sprintf "select * from (%s) as %s where %s" q alias pred
+          in
+          {sql= `Subquery new_query; schema= new_schema}
+      | {sql= `Scan tbl; _} as q ->
+          let pred = pred_to_sql pred in
+          {q with sql= `Subquery (sprintf "select * from %s where %s" tbl pred)} )
+    | Join {pred; r1; r2} -> (
+      match (f r1, f r2) with {sql= sql1; schema= s1}, {sql= sql2; schema= s2} ->
+        let q1 =
+          match sql1 with `Subquery q -> sprintf "(%s)" q | `Scan tbl -> tbl
+        in
+        let q2 =
+          match sql2 with `Subquery q -> sprintf "(%s)" q | `Scan tbl -> tbl
+        in
+        let a1 = Fresh.name fresh "t%d" in
+        let a2 = Fresh.name fresh "t%d" in
+        let new_s1 = List.map s1 ~f:(fun n -> Name.create ~relation:a1 n.name) in
+        let new_s2 = List.map s2 ~f:(fun n -> Name.create ~relation:a2 n.name) in
+        let new_schema = new_s1 @ new_s2 in
+        let join_schema = Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema) in
+        if List.length new_schema <> List.length join_schema then
+          Error.create "Bug: schema mismatch" (new_schema, join_schema)
+            [%sexp_of: Name.t list * Name.t list]
+          |> Error.raise ;
+        let pred =
+          let ctx =
+            List.zip_exn
+              (Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema))
+              (new_s1 @ new_s2)
+            |> List.map ~f:(fun (n, n') -> (n, Name n'))
+            |> Map.of_alist_exn (module Name.Compare_no_type)
+          in
+          subst_pred ctx pred |> pred_to_sql
+        in
+        let new_query =
+          sprintf "select * from %s as %s, %s as %s where %s" q1 a1 q2 a2 pred
+        in
+        {sql= `Subquery new_query; schema= new_schema} )
+    (* | Agg (aggs, key, r) ->
+     *     let rel = relation_name r in
+     *     let aggs =
+     *       List.map aggs ~f:(function
+     *         | Count -> "count(\*\)"
+     *         | Key f -> sprintf "%s.\"%s\"" rel f.name
+     *         | Sum f -> sprintf "sum(%s.\"%s\")" rel f.name
+     *         | Avg f -> sprintf "avg(%s.\"%s\")" rel f.name
+     *         | Min f -> sprintf "min(%s.\"%s\")" rel f.name
+     *         | Max f -> sprintf "max(%s.\"%s\")" rel f.name )
+     *       |> String.concat ~sep:", "
+     *     in
+     *     let key =
+     *       List.map key ~f:(fun f -> sprintf "%s.\"%s\"" rel f.name)
+     *       |> String.concat ~sep:", "
+     *     in
+     *     sprintf "select %s from (%s) as %s group by (%s)" aggs (f r) rel key *)
+    | Dedup r -> (
+      match f r with
+      | {sql= `Subquery q; schema} ->
+          let alias = Fresh.name fresh "t%d" in
+          let new_schema =
+            List.map schema ~f:(fun n -> Name.create ~relation:alias (Name.to_var n))
+          in
+          let new_query = sprintf "select distinct * from (%s) as %s" q alias in
+          {sql= `Subquery new_query; schema= new_schema}
+      | {sql= `Scan tbl; _} ->
+          { sql= `Subquery (sprintf "select distinct * from %s" tbl)
+          ; schema= Meta.(find_exn r schema) } )
+    | As (_, r) -> f r
+    | _ ->
+        Error.of_string "Only relational algebra constructs allowed." |> Error.raise
+  in
+  match (f r).sql with
+  | `Scan tbl -> sprintf "select * from %s" tbl
+  | `Subquery q -> q
 
 let pred_to_name pred =
   let n = pred_to_schema pred in

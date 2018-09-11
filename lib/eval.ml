@@ -96,7 +96,7 @@ module Make (Config : Config.S) : S = struct
                |> Error.raise )
 
   let eval ctx query =
-    let sql = ralgebra_to_sql (subst ctx query) in
+    let sql = ralgebra_to_sql (subst (Map.map ctx ~f:pred_of_value) query) in
     let schema = Meta.(find_exn query schema) in
     Db.exec_cursor Config.conn sql
     |> Seq.map ~f:(fun t ->

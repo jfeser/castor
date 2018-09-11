@@ -26,7 +26,7 @@ let main ~debug ~gprof ~params ~db ~port ~code_only ?out_dir fn =
   let ralgebra =
     let params = Set.of_list (module Abslayout.Name.Compare_no_type) params in
     In_channel.with_file fn ~f:Abslayout.of_channel_exn
-    |> A.resolve ~params |> A.annotate_schema
+    |> A.resolve ~params |> A.annotate_schema |> A.annotate_key_layouts
   in
   C.compile ~gprof ~params ?out_dir ralgebra |> ignore
 

@@ -265,48 +265,6 @@ module Tuple = struct
    fun ts -> List.concat ts |> List.dedup (module ValueF)
 end
 
-module Schema = struct
-  module T = struct
-    type t = Field.t list [@@deriving sexp]
-
-    (** Schemas are compared as bags. *)
-    let compare : t -> t -> int =
-     fun s1 s2 ->
-      [%compare: Field.t list]
-        (List.sort ~compare:[%compare: Field.t] s1)
-        (List.sort ~compare:[%compare: Field.t] s2)
-  end
-
-  include T
-  include Comparable.Make (T)
-
-  let to_string : t -> string =
-   fun s ->
-    List.map s ~f:(fun f -> f.fname) |> String.concat ~sep:", " |> sprintf "[%s]"
-
-  let of_tuple : Tuple.t -> t = List.map ~f:(fun v -> v.Value.field)
-
-  let of_relation : Relation.t -> t = fun r -> r.fields
-
-  let has_field : t -> Field.t -> bool = List.mem ~equal:Field.( = )
-
-  let overlaps : t list -> bool =
-   fun schemas ->
-    let schemas = List.map schemas ~f:(Set.of_list (module Field)) in
-    let tot = List.sum (module Int) schemas ~f:Set.length in
-    let utot = schemas |> Set.union_list (module Field) |> Set.length in
-    Int.(tot > utot)
-
-  let field_idx : t -> Field.t -> int option =
-   fun s f ->
-    List.find_mapi s ~f:(fun i f' -> if Field.equal f f' then Some i else None)
-
-  let field_idx_exn : t -> Field.t -> int =
-   fun s f ->
-    Option.value_exn (field_idx s f)
-      ~error:(Error.create "Field not in schema." (f, s) [%sexp_of: Field.t * t])
-end
-
 let result_to_tuples : Postgresql.result -> primvalue Map.M(String).t Seq.t =
  fun r ->
   Seq.range 0 r#ntuples ~stop:`exclusive

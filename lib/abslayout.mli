@@ -1,4 +1,5 @@
 open Base
+open Collections
 
 module Name : sig
   type t = Abslayout0.name =
@@ -167,7 +168,9 @@ val of_string_exn : string -> t
 
 val of_channel_exn : Stdio.In_channel.t -> t
 
-val subst : Ctx.t -> t -> t
+val subst : pred Map.M(Name.Compare_no_type).t -> t -> t
+
+val subst_pred : pred Map.M(Name.Compare_no_type).t -> pred -> pred
 
 val ralgebra_to_sql : t -> string
 
@@ -176,3 +179,5 @@ val pred_to_schema : pred -> Name.t
 val pred_to_name : pred -> Name.t option
 
 val annotate_align : t -> unit
+
+val pred_of_value : Db.primvalue -> pred

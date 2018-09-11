@@ -1,0 +1,14 @@
+select([lp_counter, lc_counter], ahashidx(
+  dedup(select([lp_id as lp_k, lc_id as lc_k], 
+    join(true,
+      select([id as lp_id], log_bench),
+      select([id as lc_id], log_bench)))),
+  alist(select([lp_counter, lc_counter], 
+    join(lp_counter < lc_counter && 
+         lc_counter < lp_succ, 
+      select([counter as lp_counter, succ as lp_succ],
+        filter(log_bench.id = lp_k, log_bench)), 
+      select([counter as lc_counter],
+        filter(log_bench.id = lc_k, log_bench)))),
+    atuple([ascalar(lp_counter), ascalar(lc_counter)], cross)),
+  (id_p, id_c)))

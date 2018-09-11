@@ -149,9 +149,9 @@ let example_params =
 
 let example_db_params =
   [ ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_p"
-    , `String "-4166314026312088784" )
+    , `String "-1451410871729396224" )
   ; ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_c"
-    , `String "8966526077494068012" ) ]
+    , `String "8557539814359574196" ) ]
 
 let%expect_test "example-1" =
   run_test ~params:example_params ~print_layout:false
@@ -167,18 +167,18 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
     1,2,
     exited normally |}]
 
-let%expect_test "example-1-db" =
-  run_test ~params:example_db_params ~modules:make_modules_db ~print_layout:false
-    {|
-select([lp.counter, lc.counter], filter(lc.id = id_c && lp.id = id_p,
-alist(filter(succ > counter + 1, log_bench) as lp,
-atuple([ascalar(lp.id), ascalar(lp.counter),
-alist(filter(lp.counter < log_bench.counter &&
-log_bench.counter < lp.succ, log_bench) as lc,
-atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
-|} ;
-  [%expect {|
-    exited normally |}]
+(* let%expect_test "example-1-db" =
+ *   run_test ~params:example_db_params ~modules:make_modules_db ~print_layout:false
+ *     {|
+ * select([lp.counter, lc.counter], filter(lc.id = id_c && lp.id = id_p,
+ * alist(filter(succ > counter + 1, log_bench) as lp,
+ * atuple([ascalar(lp.id), ascalar(lp.counter),
+ * alist(filter(lp.counter < log_bench.counter &&
+ * log_bench.counter < lp.succ, log_bench) as lc,
+ * atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
+ * |} ;
+ *   [%expect {|
+ *     exited normally |}] *)
 
 let%expect_test "example-2" =
   run_test ~params:example_params ~print_layout:false
@@ -192,7 +192,7 @@ select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as 
       filter(log.id = lc_k, log) as lc)),
     atuple([ascalar(lp.counter), ascalar(lc.counter)], cross)),
   (id_p, id_c)))
-|};
+|} ;
   [%expect {|
     1,2,
     exited normally |}]

@@ -24,9 +24,10 @@ PORT = 5433
 COMPILE_EXE = rpath('../../../_build/default/fastdb/bin/compile.exe')
 PRESENT_QUERIES = 10
 ABSENT_QUERIES = 10
-TABLE_SIZE = 2000
+TABLE_SIZE = 1000
 BENCHMARKS = [
     rpath('example1.txt'),
+    rpath('example2.txt'),
 ]
 
 def bench_dir(bench_file):
@@ -63,7 +64,7 @@ for bench in BENCHMARKS:
         ]
         cmd_str = shlex.quote(' '.join(cmd))
         log.debug('Building %s in %s.', cmd_str, os.getcwd())
-        run(cmd, stdout=b_log, stderr=b_log)
+        run(cmd, stdout=b_log, stderr=b_log, check=True)
     log.info('Done building %s.', bench)
 
 # Run benchmarks
@@ -84,7 +85,7 @@ for (lp_id, lc_id) in present_ids:
     for bench_num, bench in enumerate(BENCHMARKS):
         benchd = bench_dir(bench)
         os.chdir(benchd)
-        cmd = ['./scanner.exe', '-t', '1', 'db.buf', str(lp_id), str(lc_id)]
+        cmd = ['./scanner.exe', '-t', '1', 'data.bin', str(lp_id), str(lc_id)]
         cmd_str = shlex.quote(' '.join(cmd))
 
         try:
