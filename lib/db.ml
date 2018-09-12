@@ -312,7 +312,9 @@ let exec_cursor :
     Logs.debug (fun m -> m "Running %s." query) ;
     let query = subst_params params query in
     let cur = Fresh.name fresh "cur%d" in
-    let declare_query = sprintf "declare %s cursor with hold for %s;" cur query in
+    let declare_query =
+      sprintf "declare %s scroll cursor with hold for %s;" cur query
+    in
     let fetch_query = sprintf "fetch %d from %s;" batch_size cur in
     (* let close_query = sprintf "close %s;" cur in *)
     conn#exec declare_query |> process_errors |> ignore ;
@@ -321,6 +323,7 @@ let exec_cursor :
       Seq.unfold_step ~init:(`Not_done 1) ~f:(function
         | `Done -> Done
         | `Not_done idx when idx <> !db_idx ->
+            Stdio.printf "moving cursor from %d to %d\n" !db_idx idx ;
             let move_query = sprintf "move absolute %d %s;" idx cur in
             conn#exec move_query |> process_errors |> ignore ;
             db_idx := idx ;

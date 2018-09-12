@@ -3,15 +3,7 @@ open Collections
 open Abslayout
 open Db
 
-module type S = sig
-  val load_relation : string -> Relation.t
-
-  val eval_relation : Relation.t -> Tuple.t Seq.t
-
-  val eval_pred : Ctx.t -> pred -> primvalue
-
-  val eval : Ctx.t -> t -> Ctx.t Seq.t
-end
+module type S = Eval_intf.S
 
 module Config = struct
   module type S = sig
@@ -95,19 +87,56 @@ module Make (Config : Config.S) : S = struct
                  [%sexp_of: Relation.t * int * int]
                |> Error.raise )
 
-  let eval ctx query =
-    let sql = ralgebra_to_sql (subst (Map.map ctx ~f:pred_of_value) query) in
-    let schema = Meta.(find_exn query schema) in
+  let eval_with_schema schema sql =
     Db.exec_cursor Config.conn sql
     |> Seq.map ~f:(fun t ->
            List.map schema ~f:(fun n ->
-               match Map.find t n.name with
+               match Map.find t n.Name.name with
                | Some v -> (n, v)
                | None ->
                    Error.create "Mismatched tuple." (t, schema)
                      [%sexp_of: Db.primvalue Map.M(String).t * Name.t list]
                    |> Error.raise )
            |> Map.of_alist_exn (module Name.Compare_no_type) )
+
+  let eval ctx query =
+    let sql = Sql.ralgebra_to_sql (subst (Map.map ctx ~f:pred_of_value) query) in
+    let schema = Meta.(find_exn query schema) in
+    eval_with_schema schema sql
+
+  (** Evaluates query2 for each tuple produced by query1. Should be faster than
+     evaluating query2 in a loop over the results of query1. *)
+  let eval_foreach_flat ctx query1 query2 =
+    let ctx = Map.map ctx ~f:pred_of_value in
+    let query1 = subst ctx query1 in
+    let query2 = subst ctx query2 in
+    let sql = Sql.ralgebra_foreach query1 query2 in
+    let schema = Meta.(find_exn query1 schema) @ Meta.(find_exn query2 schema) in
+    eval_with_schema schema sql
+
+  let eval_foreach ctx query1 query2 =
+    let extract_tup s t =
+      List.map s ~f:(fun n -> (n, Map.find_exn t n))
+      |> Map.of_alist_exn (module Name.Compare_no_type)
+    in
+    let outer_schema = Meta.(find_exn query1 schema) in
+    let inner_schema = Meta.(find_exn query2 schema) in
+    let inner_tuples outer_t tuples =
+      Seq.take_while tuples ~f:(fun t ->
+          [%compare.equal: Ctx.t] (extract_tup outer_schema t) outer_t )
+      |> Seq.map ~f:(extract_tup inner_schema)
+    in
+    let tuples = eval_foreach_flat ctx query1 query2 |> Seq.memoize in
+    match Seq.hd tuples with
+    | None -> Seq.empty
+    | Some t ->
+        Seq.unfold_step ~init:(tuples, t) ~f:(function tuples, outer_t ->
+            ( match Seq.next tuples with
+            | Some (t, ts) ->
+                let outer_t' = extract_tup outer_schema t in
+                if [%compare.equal: Ctx.t] outer_t outer_t' then Skip (ts, outer_t)
+                else Yield ((outer_t', inner_tuples outer_t' tuples), (ts, outer_t'))
+            | None -> Done ) )
 end
 
 module Make_mock (Config : Config.S_mock) : S = struct
@@ -202,4 +231,7 @@ module Make_mock (Config : Config.S_mock) : S = struct
       | r -> Error.create "Unsupported." r [%sexp_of: node] |> Error.raise
     in
     eval r
+
+  let eval_foreach ctx r1 r2 =
+    eval ctx r1 |> Seq.map ~f:(fun ctx -> (ctx, eval ctx r2))
 end

@@ -330,122 +330,122 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
          return c;
     } |}]
 
-let%expect_test "example-1-db" =
-  run_test_db ~params:example_db_params
-    {|
-filter(lc.id = id_c && lp.id = id_p,
-alist(filter(succ > counter + 1, log_bench) as lp,
-atuple([ascalar(lp.id), ascalar(lp.counter),
-alist(filter(lp.counter < log_bench.counter &&
-log_bench.counter < lp.succ, log_bench) as lc,
-atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
-|};
-  [%expect {|
-    fun scalar_6 (start) {
-        yield (load_str(start + 1, buf[start : 1]));
-    }fun scalar_8 (lp_id,
-         start) {
-         yield (buf[start : 3]);
-    }fun scalar_14 (lp_id,
-         lp_counter,
-         start) {
-         yield (load_str(start + 1, buf[start : 1]));
-    }fun scalar_16 (lp_id,
-         lp_counter,
-         lc_id,
-         start) {
-         yield (buf[start : 3]);
-    }fun tuple_11 (lp_id,
-         lp_counter,
-         start) {
-         cstart12 = start + 1;
-         cstart13 = cstart12 + 1 + buf[cstart12 : 1];
-         init scalar_14(lp_id, lp_counter, cstart12);
-         tup15 = next(scalar_14);
-         init scalar_16(lp_id, lp_counter, tup15[0], cstart13);
-         tup17 = next(scalar_16);
-         yield (tup15[0], tup17[0]);
-    }fun list_10 (lp_id,
-         lp_counter,
-         start) {
-         cstart = start + 1 + 1;
-         pcount = buf[start : 1];
-         loop (0 < pcount) {
-             init tuple_11(lp_id, lp_counter, cstart);
-             tup18 = next(tuple_11);
-             yield tup18;
-             cstart = cstart + buf[cstart : 1];
-             pcount = pcount - 1;
-         }
-    }fun tuple_2 (start) {
-         cstart3 = start + 2;
-         cstart4 = cstart3 + 1 + buf[cstart3 : 1];
-         cstart5 = cstart4 + 3;
-         init scalar_6(cstart3);
-         tup7 = next(scalar_6);
-         init scalar_8(tup7[0], cstart4);
-         tup9 = next(scalar_8);
-         init list_10(tup7[0], tup9[0], cstart5);
-         loop (not done(list_10)) {
-             tup19 = next(list_10);
-             if (not done(list_10)) {
-                 yield (tup7[0], tup9[0], tup19[0], tup19[1]);
-             } else {
-
-             }
-         }
-    }fun list_1 () {
-         cstart = 3;
-         pcount = 404;
-         loop (0 < pcount) {
-             init tuple_2(cstart);
-             loop (not done(tuple_2)) {
-                 tup20 = next(tuple_2);
-                 if (not done(tuple_2)) {
-                     yield tup20;
-                 } else {
-
-                 }
-             }
-             cstart = cstart + buf[cstart : 2];
-             pcount = pcount - 1;
-         }
-    }fun filter_0 () {
-         init list_1();
-         count22 = 404;
-         loop (0 < count22) {
-             tup21 = next(list_1);
-             if (tup21[2] = id_c && tup21[0] = id_p) {
-                 yield tup21;
-             } else {
-
-             }
-             count22 = count22 - 1;
-         }
-    }fun printer () {
-         init filter_0();
-         loop (not done(filter_0)) {
-             tup24 = next(filter_0);
-             if (not done(filter_0)) {
-                 print(Tuple[String[nonnull], Int[nonnull], String[nonnull],
-                 Int[nonnull]], tup24);
-             } else {
-
-             }
-         }
-    }fun counter () {
-         c = 0;
-         init filter_0();
-         loop (not done(filter_0)) {
-             tup23 = next(filter_0);
-             if (not done(filter_0)) {
-                 c = c + 1;
-             } else {
-
-             }
-         }
-         return c;
-    } |}]
+(* let%expect_test "example-1-db" =
+ *   run_test_db ~params:example_db_params
+ *     {|
+ * filter(lc.id = id_c && lp.id = id_p,
+ * alist(filter(succ > counter + 1, log_bench) as lp,
+ * atuple([ascalar(lp.id), ascalar(lp.counter),
+ * alist(filter(lp.counter < log_bench.counter &&
+ * log_bench.counter < lp.succ, log_bench) as lc,
+ * atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
+ * |};
+ *   [%expect {|
+ *     fun scalar_6 (start) {
+ *         yield (load_str(start + 1, buf[start : 1]));
+ *     }fun scalar_8 (lp_id,
+ *          start) {
+ *          yield (buf[start : 3]);
+ *     }fun scalar_14 (lp_id,
+ *          lp_counter,
+ *          start) {
+ *          yield (load_str(start + 1, buf[start : 1]));
+ *     }fun scalar_16 (lp_id,
+ *          lp_counter,
+ *          lc_id,
+ *          start) {
+ *          yield (buf[start : 3]);
+ *     }fun tuple_11 (lp_id,
+ *          lp_counter,
+ *          start) {
+ *          cstart12 = start + 1;
+ *          cstart13 = cstart12 + 1 + buf[cstart12 : 1];
+ *          init scalar_14(lp_id, lp_counter, cstart12);
+ *          tup15 = next(scalar_14);
+ *          init scalar_16(lp_id, lp_counter, tup15[0], cstart13);
+ *          tup17 = next(scalar_16);
+ *          yield (tup15[0], tup17[0]);
+ *     }fun list_10 (lp_id,
+ *          lp_counter,
+ *          start) {
+ *          cstart = start + 1 + 1;
+ *          pcount = buf[start : 1];
+ *          loop (0 < pcount) {
+ *              init tuple_11(lp_id, lp_counter, cstart);
+ *              tup18 = next(tuple_11);
+ *              yield tup18;
+ *              cstart = cstart + buf[cstart : 1];
+ *              pcount = pcount - 1;
+ *          }
+ *     }fun tuple_2 (start) {
+ *          cstart3 = start + 2;
+ *          cstart4 = cstart3 + 1 + buf[cstart3 : 1];
+ *          cstart5 = cstart4 + 3;
+ *          init scalar_6(cstart3);
+ *          tup7 = next(scalar_6);
+ *          init scalar_8(tup7[0], cstart4);
+ *          tup9 = next(scalar_8);
+ *          init list_10(tup7[0], tup9[0], cstart5);
+ *          loop (not done(list_10)) {
+ *              tup19 = next(list_10);
+ *              if (not done(list_10)) {
+ *                  yield (tup7[0], tup9[0], tup19[0], tup19[1]);
+ *              } else {
+ * 
+ *              }
+ *          }
+ *     }fun list_1 () {
+ *          cstart = 3;
+ *          pcount = 404;
+ *          loop (0 < pcount) {
+ *              init tuple_2(cstart);
+ *              loop (not done(tuple_2)) {
+ *                  tup20 = next(tuple_2);
+ *                  if (not done(tuple_2)) {
+ *                      yield tup20;
+ *                  } else {
+ * 
+ *                  }
+ *              }
+ *              cstart = cstart + buf[cstart : 2];
+ *              pcount = pcount - 1;
+ *          }
+ *     }fun filter_0 () {
+ *          init list_1();
+ *          count22 = 404;
+ *          loop (0 < count22) {
+ *              tup21 = next(list_1);
+ *              if (tup21[2] = id_c && tup21[0] = id_p) {
+ *                  yield tup21;
+ *              } else {
+ * 
+ *              }
+ *              count22 = count22 - 1;
+ *          }
+ *     }fun printer () {
+ *          init filter_0();
+ *          loop (not done(filter_0)) {
+ *              tup24 = next(filter_0);
+ *              if (not done(filter_0)) {
+ *                  print(Tuple[String[nonnull], Int[nonnull], String[nonnull],
+ *                  Int[nonnull]], tup24);
+ *              } else {
+ * 
+ *              }
+ *          }
+ *     }fun counter () {
+ *          c = 0;
+ *          init filter_0();
+ *          loop (not done(filter_0)) {
+ *              tup23 = next(filter_0);
+ *              if (not done(filter_0)) {
+ *                  c = c + 1;
+ *              } else {
+ * 
+ *              }
+ *          }
+ *          return c;
+ *     } |}] *)
 
 let%expect_test "example-2" =
   run_test ~params:example_params

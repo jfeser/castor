@@ -4,11 +4,6 @@
  (deps    config.defaults)
  (action  (copy %{deps} %{targets})))
 
-(alias
- (name bench)
- (deps @install)
- (action ((run bench/demomatch/run-bench.py))))
-
 (ignored_subdirs (bench))
 
 ; Local Variables:

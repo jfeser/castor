@@ -172,8 +172,6 @@ val subst : pred Map.M(Name.Compare_no_type).t -> t -> t
 
 val subst_pred : pred Map.M(Name.Compare_no_type).t -> pred -> pred
 
-val ralgebra_to_sql : t -> string
-
 val pred_to_schema : pred -> Name.t
 
 val pred_to_name : pred -> Name.t option

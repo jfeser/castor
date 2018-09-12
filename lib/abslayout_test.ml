@@ -1,6 +1,5 @@
 open Core
 open Base
-open Stdio
 open Collections
 open Abslayout
 
@@ -55,21 +54,6 @@ let%expect_test "subst" =
  *   let r = of_string_exn "Select([], r)" in
  *   print_endline (ralgebra_to_sql ~fresh r) ;
  *   [%expect {| select top 0 from (select * from r) as r |}] *)
-
-let%expect_test "project" =
-  let r = of_string_exn "Select([r.r], r)" |> M.annotate_schema in
-  print_endline (ralgebra_to_sql r) ;
-  [%expect {| select r."r" from r |}]
-
-let%expect_test "filter" =
-  let r = of_string_exn "Filter(r.f = r.g, r)" |> M.annotate_schema in
-  print_endline (ralgebra_to_sql r) ;
-  [%expect {| select * from r where (r."f") = (r."g") |}]
-
-let%expect_test "eqjoin" =
-  let r = of_string_exn "Join(r.f = s.g, r as r, s as s)" |> M.annotate_schema in
-  print_endline (ralgebra_to_sql r) ;
-  [%expect {| select * from r as t0, s as t1 where (t0."f") = (t1."g") |}]
 
 (* let%expect_test "agg" =
  *   let fresh = Fresh.create () in
