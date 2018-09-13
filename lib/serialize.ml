@@ -169,7 +169,6 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
               (ctx, {sctx with ctx= `Eval ctx}, {sctx with ctx= `Eval ctx}) )
           |> Seq.to_list
     in
-    Logs.debug (fun m -> m "Generating hash for %d keys." (List.length keys)) ;
     let keys =
       List.map keys ~f:(fun (ctx, kctx, vctx) ->
           let value =
@@ -191,16 +190,19 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
                   | `Bool false -> Bitstring.of_int 1 ~byte_width:1
                   | `String s -> s
                   | _ -> failwith "no null keys" )
-                |> String.concat ~sep:""
+                |> String.concat ~sep:"|"
           in
           {kctx; vctx; hash_key; hash_val= -1} )
+      |> List.dedup_and_sort ~compare:(fun h1 h2 ->
+             [%compare: string] h1.hash_key h2.hash_key )
     in
+    Logs.debug (fun m -> m "Generating hash for %d keys." (List.length keys)) ;
     Out_channel.with_file "keys.txt" ~f:(fun ch ->
         List.iter keys ~f:(fun key -> Out_channel.fprintf ch "%s\n" key.hash_key) ) ;
     let hash =
       let open Cmph in
       List.map keys ~f:(fun key -> key.hash_key)
-      |> KeySet.create
+      |> KeySet.of_nlstrings
       |> Config.create ~verbose:true ~seed:0
       |> Hash.of_config
     in

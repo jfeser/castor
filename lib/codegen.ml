@@ -495,42 +495,63 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
               build_add str_size size "" builder
           | BoolT _ -> build_add (size_of bool_type) size "" builder )
     in
+    let key_size =
+      build_add key_size
+        (const_int (i64_type ctx) (List.length types - 1))
+        "" builder
+    in
     let key_ptr = build_array_alloca (i8_type ctx) key_size "" builder in
     let key_offset = build_ptrtoint key_ptr (i64_type ctx) "" builder in
-    List.foldi ~init:key_offset types ~f:(fun idx key_offset ->
+    List.foldi ~init:key_offset types ~f:(fun idx key_offset type_ ->
         let open Type.PrimType in
-        function
-        | IntT _ ->
-            let key_ptr =
-              build_inttoptr key_offset (pointer_type int_type) "" builder
-            in
-            let v = build_extractvalue key idx "" builder in
-            build_store v key_ptr builder |> ignore ;
-            let key_ptr = build_ptrtoint key_ptr (i64_type ctx) "" builder in
-            build_add key_ptr (size_of int_type) "" builder
-        | BoolT _ ->
-            let key_ptr =
-              build_inttoptr key_offset (pointer_type bool_type) "" builder
-            in
-            let v = build_extractvalue key idx "" builder in
-            build_store v key_ptr builder |> ignore ;
-            let key_ptr = build_ptrtoint key_ptr (i64_type ctx) "" builder in
-            build_add key_ptr (size_of bool_type) "" builder
-        | StringT _ ->
-            [%sexp_of: llvalue] key_ptr |> print_s ;
+        let key_offset =
+          match type_ with
+          | IntT _ ->
+              let key_ptr =
+                build_inttoptr key_offset (pointer_type int_type) "" builder
+              in
+              let v = build_extractvalue key idx "" builder in
+              build_store v key_ptr builder |> ignore ;
+              let key_ptr = build_ptrtoint key_ptr (i64_type ctx) "" builder in
+              build_add key_ptr (size_of int_type) "" builder
+          | BoolT _ ->
+              let key_ptr =
+                build_inttoptr key_offset (pointer_type bool_type) "" builder
+              in
+              let v = build_extractvalue key idx "" builder in
+              build_store v key_ptr builder |> ignore ;
+              let key_ptr = build_ptrtoint key_ptr (i64_type ctx) "" builder in
+              build_add key_ptr (size_of bool_type) "" builder
+          | StringT _ ->
+              [%sexp_of: llvalue] key_ptr |> print_s ;
+              let key_ptr =
+                build_inttoptr key_offset (pointer_type (i8_type ctx)) "" builder
+              in
+              let str_struct = build_extractvalue key idx "" builder in
+              let str_ptr = build_extractvalue str_struct 0 "" builder in
+              let str_size = build_extractvalue str_struct 1 "" builder in
+              build_call strncpy [|key_ptr; str_ptr; str_size|] "" builder |> ignore ;
+              let key_ptr = build_ptrtoint key_ptr (i64_type ctx) "" builder in
+              build_add key_ptr str_size "" builder
+          | (NullT | VoidT | TupleT _) as t ->
+              Error.create "Not supported as part of a composite key." t
+                [%sexp_of: t]
+              |> Error.raise
+        in
+        let key_offset =
+          if idx < List.length types - 1 then (
             let key_ptr =
               build_inttoptr key_offset (pointer_type (i8_type ctx)) "" builder
             in
-            let str_struct = build_extractvalue key idx "" builder in
-            let str_ptr = build_extractvalue str_struct 0 "" builder in
-            let str_size = build_extractvalue str_struct 1 "" builder in
-            build_call strncpy [|key_ptr; str_ptr; str_size|] "" builder |> ignore ;
-            let key_ptr = build_ptrtoint key_ptr (i64_type ctx) "" builder in
-            build_add key_ptr str_size "" builder
-        | (NullT | VoidT | TupleT _) as t ->
-            Error.create "Not supported as part of a composite key." t [%sexp_of: t]
-            |> Error.raise )
+            build_store (const_int (i8_type ctx) (Char.to_int '|')) key_ptr builder
+            |> ignore ;
+            let key_offset = build_ptrtoint key_ptr (i64_type ctx) "" builder in
+            build_add key_offset (size_of (i8_type ctx)) "" builder )
+          else key_offset
+        in
+        key_offset )
     |> ignore ;
+    debug_printf "Hash key %.*s\n" [key_size; key_ptr] ;
     let hash = codegen_hash fctx hash_ptr key_ptr key_size in
     hash
 

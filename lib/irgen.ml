@@ -321,7 +321,7 @@ struct
     let value_iter = scan value_callee_ctx value_layout value_type in
     let hash_data_start = Header.make_position hdr "hash_data" start in
     let mapping_start = Header.make_position hdr "hash_map" start in
-    let mapping_len = Header.make_position hdr "hash_map_len" start in
+    let mapping_len = Header.make_access hdr "hash_map_len" start in
     let lookup_expr = List.map lookup ~f:(fun p -> gen_pred ~ctx p b) in
     (* Compute the index in the mapping table for this key. *)
     let hash_key =
