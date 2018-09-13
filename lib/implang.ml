@@ -383,6 +383,9 @@ module Builder = struct
     let open Type.PrimType in
     match (t1, t2) with
     | IntT {nullable= false}, IntT {nullable= false} -> Infix.(x = y)
+    | StringT {nullable= false}, StringT {nullable= false} -> Infix.(x = y)
+    | BoolT {nullable= false}, BoolT {nullable= false} ->
+        Infix.((x && y) || ((not x) && not y))
     | TupleT ts1, TupleT ts2 when List.length ts1 = List.length ts2 ->
         List.init (List.length ts1) ~f:(fun i ->
             build_eq Infix.(index x i) Infix.(index y i) b )

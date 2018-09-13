@@ -187,7 +187,10 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
             | vs ->
                 List.map vs ~f:(function
                   | `Int x -> Bitstring.of_int ~byte_width:8 x
-                  | _ -> failwith "no non-int tuple keys" )
+                  | `Bool true -> Bitstring.of_int 1 ~byte_width:1
+                  | `Bool false -> Bitstring.of_int 1 ~byte_width:1
+                  | `String s -> s
+                  | _ -> failwith "no null keys" )
                 |> String.concat ~sep:""
           in
           {kctx; vctx; hash_key; hash_val= -1} )
