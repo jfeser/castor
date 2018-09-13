@@ -1,8 +1,8 @@
 select([lp_counter, lc_counter], ahashidx(
-  dedup(select([lp_id as lp_k, lc_id as lc_k], 
+  select([lp_id as lp_k, lc_id as lc_k], 
     join(true,
-      select([id as lp_id], log_bench),
-      select([id as lc_id], log_bench)))),
+      dedup(select([id as lp_id], log_bench)),
+      dedup(select([id as lc_id], log_bench)))),
   alist(select([lp_counter, lc_counter], 
     join(lp_counter < lc_counter && 
          lc_counter < lp_succ, 

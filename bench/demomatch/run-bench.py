@@ -24,7 +24,7 @@ PORT = 5433
 COMPILE_EXE = rpath('../../../_build/default/fastdb/bin/compile.exe')
 PRESENT_QUERIES = 10
 ABSENT_QUERIES = 10
-TABLE_SIZE = 1000
+TABLE_SIZE = 100000
 BENCHMARKS = [
     rpath('example1.txt'),
     rpath('example2.txt'),
@@ -39,7 +39,16 @@ conn = psycopg2.connect(f"dbname='{DB}' port='{PORT}'")
 log.debug(f'Generating benchmark table ({TABLE_SIZE} rows).')
 c = conn.cursor()
 c.execute('drop table if exists log_bench')
+c.execute('drop index if exists idx_id')
+c.execute('drop index if exists idx_counter')
+c.execute('drop index if exists idx_succ')
 c.execute(f'create table log_bench as (select * from log order by random() limit {TABLE_SIZE})')
+log.debug(f'Generating benchmark id index.')
+c.execute(f'create index idx_id on log_bench (id)')
+log.debug(f'Generating benchmark counter index.')
+c.execute(f'create index idx_counter on log_bench (counter)')
+log.debug(f'Generating benchmark succ index.')
+c.execute(f'create index idx_succ on log_bench (succ)')
 conn.commit()
 log.info('Generating benchmark table done.')
 
