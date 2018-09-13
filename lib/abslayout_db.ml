@@ -68,10 +68,26 @@ module Make (Eval : Eval.S) = struct
 
       method visit_As ctx _ r = self#visit_t ctx r
 
-      method visit_AList ctx q l =
-        Eval.eval ctx q
-        |> Seq.map ~f:(fun ctx' -> self#visit_t (Map.merge_right ctx ctx') l)
-        |> self#build_AList
+      method visit_AList ctx q value_l =
+        match value_l with
+        | {node= ATuple ([l1; l2; {node= AList (q_l, l_l); _}], kind); _} ->
+            Eval.eval_foreach ctx q q_l
+            |> Seq.map ~f:(fun (key_ctx, value_ctxs) ->
+                   let ls1 = self#visit_t key_ctx l1 in
+                   let ls2 = self#visit_t key_ctx l2 in
+                   let ls3 =
+                     value_ctxs
+                     |> Seq.map ~f:(fun ctx' ->
+                            self#visit_t (Map.merge_right ctx ctx') l_l )
+                     |> self#build_AList
+                   in
+                   self#build_ATuple [ls1; ls2; ls3] kind )
+            |> self#build_AList
+        | _ ->
+            Eval.eval ctx q
+            |> Seq.map ~f:(fun ctx' ->
+                   self#visit_t (Map.merge_right ctx ctx') value_l )
+            |> self#build_AList
 
       method visit_ATuple ctx ls kind =
         self#build_ATuple (List.map ~f:(self#visit_t ctx) ls) kind
