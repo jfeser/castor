@@ -82,15 +82,33 @@ module Make (Eval : Eval.S) = struct
             ~error:(Error.create "Missing key layout." h [%sexp_of: hash_idx])
             h.hi_key_layout
         in
-        let kv =
-          Eval.eval ctx q
-          |> Seq.map ~f:(fun key_ctx ->
-                 let ctx' = Map.merge_right ctx key_ctx in
-                 let key = self#visit_t ctx' key_l in
-                 let value = self#visit_t ctx' value_l in
-                 (key, value) )
-        in
-        self#build_AHashIdx kv h
+        match value_l with
+        | {node= AList (q_l, l_l); _} ->
+            let kv =
+              Eval.eval_foreach ctx q q_l
+              |> Seq.map ~f:(fun (key_ctx, value_ctxs) ->
+                     let key =
+                       let ctx' = Map.merge_right ctx key_ctx in
+                       self#visit_t ctx' key_l
+                     in
+                     let value =
+                       Seq.map value_ctxs ~f:(fun ctx' ->
+                           self#visit_t (Map.merge_right ctx ctx') l_l )
+                       |> self#build_AList
+                     in
+                     (key, value) )
+            in
+            self#build_AHashIdx kv h
+        | _ ->
+            let kv =
+              Eval.eval ctx q
+              |> Seq.map ~f:(fun key_ctx ->
+                     let ctx' = Map.merge_right ctx key_ctx in
+                     let key = self#visit_t ctx' key_l in
+                     let value = self#visit_t ctx' value_l in
+                     (key, value) )
+            in
+            self#build_AHashIdx kv h
 
       method visit_AEmpty _ = self#build_AEmpty
 

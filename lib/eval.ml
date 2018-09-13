@@ -102,7 +102,7 @@ module Make (Config : Config.S) : S = struct
   let eval ctx query =
     let sql = Sql.ralgebra_to_sql (subst (Map.map ctx ~f:pred_of_value) query) in
     let schema = Meta.(find_exn query schema) in
-    eval_with_schema schema sql
+    eval_with_schema schema sql |> Seq.map ~f:(Map.merge_right ctx)
 
   (** Evaluates query2 for each tuple produced by query1. Should be faster than
      evaluating query2 in a loop over the results of query1. *)
@@ -230,7 +230,7 @@ module Make_mock (Config : Config.S_mock) : S = struct
       | OrderBy {key; order; rel} -> eval_orderby ctx key order (eval rel)
       | r -> Error.create "Unsupported." r [%sexp_of: node] |> Error.raise
     in
-    eval r
+    eval r |> Seq.map ~f:(Map.merge_right ctx)
 
   let eval_foreach ctx r1 r2 =
     eval ctx r1 |> Seq.map ~f:(fun ctx -> (ctx, eval ctx r2))

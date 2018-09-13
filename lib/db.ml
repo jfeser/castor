@@ -24,13 +24,14 @@ let exec_psql : ?params:string list -> db:string -> string -> int =
   Caml.Sys.command query
 
 (** Process postgres errors for queries which do not need to retry. *)
-let process_errors r =
+let process_errors query r =
   match (r#status : Postgresql.result_status) with
   | Fatal_error | Nonfatal_error ->
       let err = r#error in
       let msg = sprintf "Postgres error: %s" err in
       Logs.err (fun m -> m "%s" msg) ;
-      Error.of_string msg |> Error.raise
+      Error.of_string msg
+      |> fun e -> Error.tag_arg e "query" query [%sexp_of: string] |> Error.raise
   | _ -> r
 
 let rec exec :
@@ -301,6 +302,9 @@ let result_to_tuples : Postgresql.result -> primvalue Map.M(String).t Seq.t =
          in
          Yield (tup, ()) )
 
+let exec_and_raise (conn : Postgresql.connection) query =
+  conn#exec query |> process_errors query
+
 let exec_cursor :
        ?batch_size:int
     -> ?params:string list
@@ -317,7 +321,7 @@ let exec_cursor :
     in
     let fetch_query = sprintf "fetch %d from %s;" batch_size cur in
     (* let close_query = sprintf "close %s;" cur in *)
-    conn#exec declare_query |> process_errors |> ignore ;
+    exec_and_raise conn declare_query |> ignore ;
     let db_idx = ref 1 in
     let seq =
       Seq.unfold_step ~init:(`Not_done 1) ~f:(function
@@ -325,11 +329,11 @@ let exec_cursor :
         | `Not_done idx when idx <> !db_idx ->
             Stdio.printf "moving cursor from %d to %d\n" !db_idx idx ;
             let move_query = sprintf "move absolute %d %s;" idx cur in
-            conn#exec move_query |> process_errors |> ignore ;
+            exec_and_raise conn move_query |> ignore ;
             db_idx := idx ;
             Skip (`Not_done idx)
         | `Not_done idx ->
-            let r = conn#exec fetch_query |> process_errors in
+            let r = exec_and_raise conn fetch_query in
             let tups = result_to_tuples r in
             db_idx := !db_idx + r#ntuples ;
             let idx = idx + r#ntuples in
