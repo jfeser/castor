@@ -144,6 +144,8 @@ module Meta : sig
 
   val align : int key
 
+  val use_foreach : bool key
+
   val find : t -> 'a key -> 'a option
 
   val find_exn : t -> 'a key -> 'a
@@ -179,3 +181,7 @@ val pred_to_name : pred -> Name.t option
 val annotate_align : t -> unit
 
 val pred_of_value : Db.primvalue -> pred
+
+val annotate_foreach : t -> unit
+
+val next_inner_loop : t -> (t * t) option

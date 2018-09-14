@@ -96,6 +96,8 @@ module Meta = struct
 
   let align = Univ_map.Key.create ~name:"align" [%sexp_of: int]
 
+  let use_foreach = Univ_map.Key.create ~name:"use_foreach" [%sexp_of: bool]
+
   let update r key ~f = r.meta := Univ_map.update !(r.meta) key ~f
 
   let find ralgebra key = Univ_map.find !(ralgebra.meta) key

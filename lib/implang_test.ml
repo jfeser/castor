@@ -37,6 +37,7 @@ let run_test ?(params = []) layout_str =
     of_string_exn layout_str |> M.resolve ~params:sparams |> M.annotate_schema
     |> M.annotate_key_layouts
   in
+  annotate_foreach layout ;
   I.irgen ~params ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter
 
 let run_test_db ?(params = []) layout_str =
@@ -63,6 +64,7 @@ let run_test_db ?(params = []) layout_str =
     of_string_exn layout_str |> M.resolve ~params:sparams |> M.annotate_schema
     |> M.annotate_key_layouts
   in
+  annotate_foreach layout ;
   I.irgen ~params ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter
 
 let%expect_test "cross-tuple" =

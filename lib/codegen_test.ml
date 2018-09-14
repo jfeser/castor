@@ -108,6 +108,7 @@ let run_test ?(params = []) ?(modules = make_modules) ?(print_layout = true)
     of_string_exn layout_str |> M.resolve ~params |> M.annotate_schema
     |> M.annotate_key_layouts
   in
+  annotate_foreach layout ;
   let out_dir = Filename.temp_dir "bin" "" in
   let exe_fn, data_fn =
     let params = List.map ~f:Tuple.T2.get1 params in
@@ -236,6 +237,25 @@ select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as 
       filter(log_str.id = lc_k, log_str) as lc)),
     atuple([ascalar(lp.counter), ascalar(lc.counter)], cross)),
   (id_p, id_c)))
+|} ;
+  [%expect {|
+    1,2,
+    exited normally |}]
+
+let%expect_test "example-3" =
+  run_test ~params:example_params ~print_layout:false
+    {|
+select([lp.counter, lc.counter],
+  atuple([ahashidx(dedup(select([id as k], log)), 
+    alist(select([counter, succ], 
+        filter(k = id && counter < succ, log)), 
+      atuple([ascalar(counter), ascalar(succ)], cross)), 
+    id_p) as lp,
+  filter(lc.id = id_c,
+    aorderedidx(select([log.counter as k], log), 
+      alist(filter(log.counter = k, log),
+        atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
+      lp.counter, lp.succ) as lc)], cross))
 |} ;
   [%expect {|
     1,2,

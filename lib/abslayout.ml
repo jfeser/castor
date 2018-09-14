@@ -345,3 +345,37 @@ let rec annotate_align r =
   | AHashIdx (_, r', _) ->
       annotate_align r' ;
       Meta.(set_m r align (Int.max Meta.(find_exn r' align) 4))
+
+let rec next_inner_loop r =
+  match r.node with
+  | AList (q, _) | AHashIdx (q, _, _) -> Some (r, q)
+  | AOrderedIdx _ -> None
+  | Select (_, r') | Filter (_, r') -> next_inner_loop r'
+  | ATuple (rs, _) -> List.find_map rs ~f:next_inner_loop
+  | Join _ | Agg _ | OrderBy _ | Dedup _ | Scan _ | AEmpty | AScalar _ | As _ ->
+      None
+
+(** This pass marks layouts which have a data query, contain an unmarked layout
+   with a data query, and are as deep in the layout tree as possible. These are
+   probably good candidates for using the foreach loop. *)
+let rec annotate_foreach r =
+  match r.node with
+  | AList (_, r') | AHashIdx (_, r', _) ->
+      annotate_foreach r' ;
+      let v =
+        match next_inner_loop r' with
+        | Some (r', _) -> not Meta.(find_exn r' use_foreach)
+        | None -> false
+      in
+      Meta.(set_m r use_foreach v)
+  | AOrderedIdx _ -> ()
+  | Select (_, r')
+   |Filter (_, r')
+   |OrderBy {rel= r'; _}
+   |Dedup r'
+   |As (_, r')
+   |Agg (_, _, r') ->
+      annotate_foreach r'
+  | Join {r1; r2; _} -> annotate_foreach r1 ; annotate_foreach r2
+  | Scan _ | AEmpty | AScalar _ -> ()
+  | ATuple (rs, _) -> List.iter rs ~f:annotate_foreach

@@ -32,6 +32,7 @@ let run_test layout_str =
     of_string_exn layout_str |> M.resolve |> M.annotate_schema
     |> M.annotate_key_layouts
   in
+  annotate_foreach layout ;
   let type_ = M.to_type layout in
   let buf = Buffer.create 1024 in
   let _, len = S.serialize (Bitstring.Writer.with_buffer buf) type_ layout in
@@ -117,17 +118,14 @@ let%expect_test "ordered-idx" =
     0:3 Ordered idx len (=41)
     3:8 Ordered idx index len (=27)
     11:1 Scalar (=(Int 1))
-    11:1 Ordered idx key
     11:1 Scalar (=(Int 1))
     11:1 Ordered idx key
     12:8 Ordered idx value ptr (=38)
     20:1 Scalar (=(Int 2))
-    20:1 Ordered idx key
     20:1 Scalar (=(Int 2))
     20:1 Ordered idx key
     21:8 Ordered idx value ptr (=39)
     29:1 Scalar (=(Int 3))
-    29:1 Ordered idx key
     29:1 Scalar (=(Int 3))
     29:1 Ordered idx key
     30:8 Ordered idx value ptr (=40)
@@ -140,6 +138,58 @@ let%expect_test "ordered-idx" =
        (IntT ((range (1 3)) (nullable false))) ((count ()))))
      41
      ")\\000\\000\\027\\000\\000\\000\\000\\000\\000\\000\\001&\\000\\000\\000\\000\\000\\000\\000\\002'\\000\\000\\000\\000\\000\\000\\000\\003(\\000\\000\\000\\000\\000\\000\\000\\001\\002\\003") |}]
+
+let%expect_test "list-list" = run_test "AList(r1, AList(r1, AScalar(r1.f)))";
+  [%expect {|
+    0:25 List body
+    0:5 List body
+    0:1 Scalar (=(Int 1))
+    0:0 List count (=5)
+    0:0 List len (=5)
+    0:0 List count (=5)
+    0:0 List len (=25)
+    1:1 Scalar (=(Int 1))
+    2:1 Scalar (=(Int 2))
+    3:1 Scalar (=(Int 2))
+    4:1 Scalar (=(Int 3))
+    5:5 List body
+    5:1 Scalar (=(Int 1))
+    5:0 List count (=5)
+    5:0 List len (=5)
+    6:1 Scalar (=(Int 1))
+    7:1 Scalar (=(Int 2))
+    8:1 Scalar (=(Int 2))
+    9:1 Scalar (=(Int 3))
+    10:5 List body
+    10:1 Scalar (=(Int 1))
+    10:0 List count (=5)
+    10:0 List len (=5)
+    11:1 Scalar (=(Int 1))
+    12:1 Scalar (=(Int 2))
+    13:1 Scalar (=(Int 2))
+    14:1 Scalar (=(Int 3))
+    15:5 List body
+    15:1 Scalar (=(Int 1))
+    15:0 List count (=5)
+    15:0 List len (=5)
+    16:1 Scalar (=(Int 1))
+    17:1 Scalar (=(Int 2))
+    18:1 Scalar (=(Int 2))
+    19:1 Scalar (=(Int 3))
+    20:5 List body
+    20:1 Scalar (=(Int 1))
+    20:0 List count (=5)
+    20:0 List len (=5)
+    21:1 Scalar (=(Int 1))
+    22:1 Scalar (=(Int 2))
+    23:1 Scalar (=(Int 2))
+    24:1 Scalar (=(Int 3))
+
+    ((ListT
+      ((ListT ((IntT ((range (1 3)) (nullable false))) ((count (5 5)))))
+       ((count (5 5)))))
+     25
+     "\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003") |}]
 
 (* let tests =
  *   let open OUnit2 in

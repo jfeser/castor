@@ -13,14 +13,17 @@ end
 module type S = Serialize_intf.S
 
 module Make (Config : Config.S) (Eval : Eval.S) = struct
+  type eval_ctx =
+    [ `Eval of Ctx.t
+    | `Consume_outer of (Ctx.t * Ctx.t Seq.t) Seq.t sexp_opaque
+    | `Consume_inner of Ctx.t * Ctx.t Seq.t sexp_opaque ]
+  [@@deriving sexp]
+
   type serialize_ctx =
     { writer: Bitstring.Writer.t sexp_opaque
     ; log_ch: Out_channel.t sexp_opaque
     ; serialize: serialize_ctx -> Type.t -> t -> unit
-    ; ctx:
-        [ `Eval of Ctx.t
-        | `Consume_outer of (Ctx.t * Ctx.t Seq.t) Seq.t sexp_opaque
-        | `Consume_inner of Ctx.t Seq.t sexp_opaque ] }
+    ; ctx: eval_ctx }
   [@@deriving sexp]
 
   module Log = struct
@@ -65,7 +68,9 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
         | Entry m -> Some {m with pos= Int64.(m.pos + offset m.id)}
         | Insert _ -> None )
       |> List.sort ~compare:(fun m1 m2 ->
-             [%compare: int64 * int64] (m1.pos, m1.len) (m2.pos, m2.len) )
+             [%compare: int64 * int64]
+               (m1.pos, Int64.(-m1.len))
+               (m2.pos, Int64.(-m2.len)) )
       |> List.iter ~f:(fun m ->
              Out_channel.fprintf out_ch "%Ld:%Ld %s\n" m.pos m.len m.msg ) ;
       Out_channel.flush out_ch
@@ -74,12 +79,6 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
   open Bitstring
   open Writer
   open Header
-
-  (* let contents_query = function
-   *   | AList (q, _) | AHashIdx (q, _, _) | AOrderedIdx (q, _, _) -> Some q
-   *   | Select _ | Filter _ | Join _ | Agg _ | OrderBy _ | Dedup _ | Scan _ | AEmpty
-   *    |AScalar _ | ATuple _ | As _ ->
-   *       None *)
 
   let serialize_list sctx t l =
     let elem_t, _ = t in
@@ -95,17 +94,16 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
         match sctx.ctx with
         | `Eval ctx ->
             Eval.eval ctx elem_query
-            |> Seq.map ~f:(Map.merge_right ctx)
             |> Seq.iter ~f:(fun ctx ->
                    Caml.incr count ;
                    sctx.serialize {sctx with ctx= `Eval ctx} elem_t elem_layout )
         | `Consume_outer ctxs ->
-            Seq.iter ctxs ~f:(fun (_, child_ctxs) ->
+            Seq.iter ctxs ~f:(fun ctx ->
                 Caml.incr count ;
                 sctx.serialize
-                  {sctx with ctx= `Consume_inner child_ctxs}
+                  {sctx with ctx= `Consume_inner ctx}
                   elem_t elem_layout )
-        | `Consume_inner ctxs ->
+        | `Consume_inner (_, ctxs) ->
             Seq.iter ctxs ~f:(fun ctx ->
                 Caml.incr count ;
                 sctx.serialize {sctx with ctx= `Eval ctx} elem_t elem_layout ) ) ;
@@ -129,8 +127,28 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     write_bytes sctx.writer (Bytes.make (size_exn hdr "len") '\x00') ;
     (* Serialize body *)
     Log.with_msg sctx "Tuple body" (fun () ->
-        List.iter2_exn ~f:(fun t l -> sctx.serialize sctx t l) elem_ts elem_layouts
-    ) ;
+        match sctx.ctx with
+        | `Eval _ ->
+            List.iter2_exn
+              ~f:(fun t l -> sctx.serialize sctx t l)
+              elem_ts elem_layouts
+        | `Consume_outer _ -> failwith "Cannot consume."
+        | `Consume_inner _ as ctx ->
+            (* If the tuple is in the inner loop of a foreach we pass the inner
+             loop sequence to the first layout that can consume it. Other
+             layouts that can consume are expected to perform evaluation. *)
+            List.fold2_exn elem_ts elem_layouts ~init:ctx ~f:(fun ctx t l ->
+                match (ctx, next_inner_loop l) with
+                | `Consume_inner (ctx', _), Some _ ->
+                    sctx.serialize {sctx with ctx= (ctx :> eval_ctx)} t l ;
+                    `Eval ctx'
+                | `Consume_inner (ctx', _), None ->
+                    sctx.serialize {sctx with ctx= `Eval ctx'} t l ;
+                    ctx
+                | `Eval _, _ ->
+                    sctx.serialize {sctx with ctx= (ctx :> eval_ctx)} t l ;
+                    ctx )
+            |> ignore ) ;
     let end_pos = pos sctx.writer in
     (* Serialize header. *)
     seek sctx.writer header_pos ;
@@ -154,7 +172,6 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
       match sctx.ctx with
       | `Eval ctx ->
           Eval.eval ctx key_query
-          |> Seq.map ~f:(Map.merge_right ctx)
           |> Seq.map ~f:(fun ctx ->
                  (ctx, {sctx with ctx= `Eval ctx}, {sctx with ctx= `Eval ctx}) )
           |> Seq.to_list
@@ -162,9 +179,9 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
           Seq.map ctxs ~f:(fun (ctx, child_ctxs) ->
               ( ctx
               , {sctx with ctx= `Eval ctx}
-              , {sctx with ctx= `Consume_inner child_ctxs} ) )
+              , {sctx with ctx= `Consume_inner (ctx, child_ctxs)} ) )
           |> Seq.to_list
-      | `Consume_inner ctxs ->
+      | `Consume_inner (_, ctxs) ->
           Seq.map ctxs ~f:(fun ctx ->
               (ctx, {sctx with ctx= `Eval ctx}, {sctx with ctx= `Eval ctx}) )
           |> Seq.to_list
@@ -202,7 +219,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     let hash =
       let open Cmph in
       List.map keys ~f:(fun key -> key.hash_key)
-      |> KeySet.of_nlstrings
+      |> KeySet.create
       |> Config.create ~verbose:true ~seed:0
       |> Hash.of_config
     in
@@ -276,27 +293,28 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
           let order_key = List.map query_schema ~f:(fun n -> Name n) in
           let ordered_query = order_by order_key meta.order key_query in
           Eval.eval ctx ordered_query
-          |> Seq.map ~f:(Map.merge_right ctx)
-          |> Seq.map ~f:(fun ctx -> (ctx, {sctx with ctx= `Eval ctx}))
+          |> Seq.map ~f:(fun ctx ->
+                 ({sctx with ctx= `Eval ctx}, {sctx with ctx= `Eval ctx}) )
       | `Consume_outer ctxs ->
           Seq.map ctxs ~f:(fun (ctx, child_ctxs) ->
-              (ctx, {sctx with ctx= `Consume_inner child_ctxs}) )
-      | `Consume_inner ctxs ->
-          Seq.map ctxs ~f:(fun ctx -> (ctx, {sctx with ctx= `Eval ctx}))
+              ( {sctx with ctx= `Eval ctx}
+              , {sctx with ctx= `Consume_inner (ctx, child_ctxs)} ) )
+      | `Consume_inner (ctx, ctxs) ->
+          Seq.map ctxs ~f:(fun ctx' ->
+              ({sctx with ctx= `Eval ctx}, {sctx with ctx= `Eval ctx'}) )
     in
     (* Make a first pass to get the keys and value pointers set up. *)
     contexts
-    |> Seq.iter ~f:(fun (_, kctx) ->
+    |> Seq.iter ~f:(fun (kctx, _) ->
            (* Serialize key. *)
-           Log.with_msg sctx "Ordered idx key" (fun () ->
-               sctx.serialize kctx key_t key_l ) ;
+           sctx.serialize kctx key_t key_l ;
            (* Save space for value pointer. *)
            write_bytes sctx.writer (Bytes.make 8 '\x00') ) ;
     let index_end_pos = pos sctx.writer in
     (* Pass over again to get values in the right places. *)
     let index_pos = ref index_start_pos in
     let value_pos = ref (pos sctx.writer) in
-    Seq.iter contexts ~f:(fun (_, kctx) ->
+    Seq.iter contexts ~f:(fun (kctx, vctx) ->
         seek sctx.writer !index_pos ;
         (* Serialize key. *)
         Log.with_msg sctx "Ordered idx key" (fun () ->
@@ -308,7 +326,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
         index_pos := pos sctx.writer ;
         seek sctx.writer !value_pos ;
         (* Serialize value. *)
-        sctx.serialize kctx value_t value_l ;
+        sctx.serialize vctx value_t value_l ;
         value_pos := pos sctx.writer ) ;
     let end_pos = pos sctx.writer in
     seek sctx.writer len_pos ;
@@ -397,15 +415,24 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     match (type_, layout.node, sctx.ctx) with
     | _, AEmpty, _ -> ()
     | t, AScalar e, _ -> serialize_scalar sctx t e
+    | ListT t, AList ((q, l') as l), `Eval ctx
+      when Meta.(find layout use_foreach |> Option.value ~default:false) -> (
+      match next_inner_loop l' with
+      | Some (_, q') ->
+          let sctx = {sctx with ctx= `Consume_outer (Eval.eval_foreach ctx q q')} in
+          serialize_list sctx t l
+      | None -> serialize_list sctx t l )
     | ListT t, AList l, _ -> serialize_list sctx t l
-    | ( HashIdxT t
-      , AHashIdx ((h_query, {node= AList (l_query, _); _}, _) as l)
-      , `Eval ctx ) ->
-        let tups = Eval.eval_foreach ctx h_query l_query in
-        serialize_hashidx {sctx with ctx= `Consume_outer tups} t l
+    | HashIdxT t, AHashIdx ((q, l', _) as l), `Eval ctx
+      when Meta.(find layout use_foreach |> Option.value ~default:false) -> (
+      match next_inner_loop l' with
+      | Some (_, q') ->
+          let sctx = {sctx with ctx= `Consume_outer (Eval.eval_foreach ctx q q')} in
+          serialize_hashidx sctx t l
+      | None -> serialize_hashidx sctx t l )
     | HashIdxT t, AHashIdx l, _ -> serialize_hashidx sctx t l
-    | TupleT t, ATuple l, _ -> serialize_tuple sctx t l
     | OrderedIdxT t, AOrderedIdx l, _ -> serialize_orderedidx sctx t l
+    | TupleT t, ATuple l, _ -> serialize_tuple sctx t l
     | ( FuncT ([t], _)
       , ( Select (_, r)
         | Filter (_, r)
