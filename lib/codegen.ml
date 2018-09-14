@@ -523,7 +523,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
               let key_ptr = build_ptrtoint key_ptr (i64_type ctx) "" builder in
               build_add key_ptr (size_of bool_type) "" builder
           | StringT _ ->
-              [%sexp_of: llvalue] key_ptr |> print_s ;
               let key_ptr =
                 build_inttoptr key_offset (pointer_type (i8_type ctx)) "" builder
               in

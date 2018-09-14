@@ -391,7 +391,9 @@ module Builder = struct
             build_eq Infix.(index x i) Infix.(index y i) b )
         |> List.fold_left ~init:(Bool true) ~f:Infix.( && )
     | _ ->
-        Error.create "Incomparable types." (t1, t2) [%sexp_of: t * t] |> Error.raise
+        Error.create "Incomparable types." (x, y, t1, t2)
+          [%sexp_of: expr * expr * t * t]
+        |> Error.raise
 
   let rec build_lt x y b =
     let rec tuple_lt i l =

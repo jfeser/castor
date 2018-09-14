@@ -3,9 +3,7 @@ open Abslayout
 
 let rels = Hashtbl.create (module Db.Relation)
 
-[@@@warning "-8"]
-
-let _, [f; _] =
+let _ =
   Test_util.create rels "r1" ["f"; "g"]
     [[0; 5]; [1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]; [4; 6]]
 
@@ -13,7 +11,16 @@ let _ =
   Test_util.create rels "log" ["counter"; "succ"; "id"]
     [[1; 4; 1]; [2; 3; 2]; [3; 4; 3]; [4; 6; 1]; [5; 6; 3]]
 
-[@@@warning "+8"]
+let _ =
+  Test_util.create_val rels "log_str"
+    [ ("counter", Type.PrimType.IntT {nullable= false})
+    ; ("succ", Type.PrimType.IntT {nullable= false})
+    ; ("id", Type.PrimType.StringT {nullable= false}) ]
+    [ [`Int 1; `Int 4; `String "foo"]
+    ; [`Int 2; `Int 3; `String "fizzbuzz"]
+    ; [`Int 3; `Int 4; `String "bar"]
+    ; [`Int 4; `Int 6; `String "foo"]
+    ; [`Int 5; `Int 6; `String "bar"] ]
 
 let make_modules layout_file =
   let module E = Eval.Make_mock (struct
@@ -147,6 +154,12 @@ let example_params =
   [ (Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p", `Int 1)
   ; (Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c", `Int 2) ]
 
+let example_str_params =
+  [ ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_p"
+    , `String "foo" )
+  ; ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_c"
+    , `String "fizzbuzz" ) ]
+
 let example_db_params =
   [ ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_p"
     , `String "-1451410871729396224" )
@@ -161,6 +174,20 @@ alist(filter(succ > counter + 1, log) as lp,
 atuple([ascalar(lp.id), ascalar(lp.counter),
 alist(filter(lp.counter < log.counter &&
 log.counter < lp.succ, log) as lc,
+atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
+|} ;
+  [%expect {|
+    1,2,
+    exited normally |}]
+
+let%expect_test "example-1-str" =
+  run_test ~params:example_str_params ~print_layout:false
+    {|
+select([lp.counter, lc.counter], filter(lc.id = id_c && lp.id = id_p,
+alist(filter(succ > counter + 1, log_str) as lp,
+atuple([ascalar(lp.id), ascalar(lp.counter),
+alist(filter(lp.counter < log_str.counter &&
+log_str.counter < lp.succ, log_str) as lc,
 atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
 |} ;
   [%expect {|
@@ -197,19 +224,36 @@ select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as 
     1,2,
     exited normally |}]
 
-let%expect_test "example-3" =
-  run_test ~params:example_params ~print_layout:false
+let%expect_test "example-2-str" =
+  run_test ~params:example_str_params ~print_layout:false
+    {|
+select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k], 
+      join(true, log_str as lp, log_str as lc))),
+  alist(select([lp.counter, lc.counter], 
+    join(lp.counter < lc.counter && 
+         lc.counter < lp.succ, 
+      filter(log_str.id = lp_k, log_str) as lp, 
+      filter(log_str.id = lc_k, log_str) as lc)),
+    atuple([ascalar(lp.counter), ascalar(lc.counter)], cross)),
+  (id_p, id_c)))
+|} ;
+  [%expect {|
+    1,2,
+    exited normally |}]
+
+let%expect_test "example-3-str" =
+  run_test ~params:example_str_params ~print_layout:false
     {|
 select([lp.counter, lc.counter],
-  atuple([ahashidx(dedup(select([id as k], log)), 
+  atuple([ahashidx(dedup(select([id as k], log_str)), 
     alist(select([counter, succ], 
-        filter(k = id && counter < succ, log)), 
+        filter(k = id && counter < succ, log_str)), 
       atuple([ascalar(counter), ascalar(succ)], cross)), 
     id_p) as lp,
   filter(lc.id = id_c,
-    aorderedidx(select([log.counter as k], log), 
-      alist(filter(log.counter = k, log),
-        atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
+    aorderedidx(select([log_str.counter as k], log_str), 
+      alist(filter(log_str.counter = k, log_str),
+        atuple([ascalar(log_str.id), ascalar(log_str.counter)], cross)), 
       lp.counter, lp.succ) as lc)], cross))
 |} ;
   [%expect {|
