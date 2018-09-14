@@ -416,7 +416,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     | _, AEmpty, _ -> ()
     | t, AScalar e, _ -> serialize_scalar sctx t e
     | ListT t, AList ((q, l') as l), `Eval ctx
-      when Meta.(find layout use_foreach |> Option.value ~default:false) -> (
+      when Meta.(find layout use_foreach |> Option.value ~default:true) -> (
       match next_inner_loop l' with
       | Some (_, q') ->
           let sctx = {sctx with ctx= `Consume_outer (Eval.eval_foreach ctx q q')} in
@@ -424,7 +424,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
       | None -> serialize_list sctx t l )
     | ListT t, AList l, _ -> serialize_list sctx t l
     | HashIdxT t, AHashIdx ((q, l', _) as l), `Eval ctx
-      when Meta.(find layout use_foreach |> Option.value ~default:false) -> (
+      when Meta.(find layout use_foreach |> Option.value ~default:true) -> (
       match next_inner_loop l' with
       | Some (_, q') ->
           let sctx = {sctx with ctx= `Consume_outer (Eval.eval_foreach ctx q q')} in

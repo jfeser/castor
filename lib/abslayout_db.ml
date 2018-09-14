@@ -46,6 +46,12 @@ module Make (Eval : Eval.S) = struct
     in
     hash_idx domain layout {lookup; hi_key_layout= None}
 
+  type eval_ctx =
+    [ `Eval of Ctx.t
+    | `Consume_outer of (Ctx.t * Ctx.t Seq.t) Seq.t sexp_opaque
+    | `Consume_inner of Ctx.t * Ctx.t Seq.t sexp_opaque ]
+  [@@deriving sexp]
+
   class virtual ['self] material_fold =
     object (self : 'self)
       method virtual build_AList : _
@@ -68,29 +74,37 @@ module Make (Eval : Eval.S) = struct
 
       method visit_As ctx _ r = self#visit_t ctx r
 
-      method visit_AList ctx q value_l =
-        match value_l with
-        | {node= ATuple ([l1; l2; {node= AList (q_l, l_l); _}], kind); _} ->
-            Eval.eval_foreach ctx q q_l
-            |> Seq.map ~f:(fun (key_ctx, value_ctxs) ->
-                   let ls1 = self#visit_t key_ctx l1 in
-                   let ls2 = self#visit_t key_ctx l2 in
-                   let ls3 =
-                     value_ctxs
-                     |> Seq.map ~f:(fun ctx' ->
-                            self#visit_t (Map.merge_right ctx ctx') l_l )
-                     |> self#build_AList
-                   in
-                   self#build_ATuple [ls1; ls2; ls3] kind )
-            |> self#build_AList
-        | _ ->
-            Eval.eval ctx q
-            |> Seq.map ~f:(fun ctx' ->
-                   self#visit_t (Map.merge_right ctx ctx') value_l )
-            |> self#build_AList
+      method visit_AList ctx elem_query elem_layout =
+        ( match ctx with
+        | `Eval ctx ->
+            Eval.eval ctx elem_query
+            |> Seq.map ~f:(fun ctx -> self#visit_t (`Eval ctx) elem_layout)
+        | `Consume_outer ctxs ->
+            Seq.map ctxs ~f:(fun ctx ->
+                self#visit_t (`Consume_inner ctx) elem_layout )
+        | `Consume_inner (_, ctxs) ->
+            Seq.map ctxs ~f:(fun ctx -> self#visit_t (`Eval ctx) elem_layout) )
+        |> self#build_AList
 
       method visit_ATuple ctx ls kind =
-        self#build_ATuple (List.map ~f:(self#visit_t ctx) ls) kind
+        ( match ctx with
+        | `Eval _ -> List.map ls ~f:(fun l -> self#visit_t ctx l)
+        | `Consume_outer _ -> failwith "Cannot consume."
+        | `Consume_inner _ as ctx ->
+            (* If the tuple is in the inner loop of a foreach we pass the inner
+             loop sequence to the first layout that can consume it. Other
+             layouts that can consume are expected to perform evaluation. *)
+            let _, ret =
+              List.fold_right ls ~init:(ctx, []) ~f:(fun l (ctx, ret) ->
+                  match (ctx, next_inner_loop l) with
+                  | `Consume_inner (ctx', _), Some _ ->
+                      (`Eval ctx', self#visit_t (ctx :> eval_ctx) l :: ret)
+                  | `Consume_inner (ctx', _), None ->
+                      (ctx, self#visit_t (`Eval ctx') l :: ret)
+                  | `Eval _, _ -> (ctx, self#visit_t (ctx :> eval_ctx) l :: ret) )
+            in
+            ret )
+        |> fun ts -> self#build_ATuple ts kind
 
       method visit_AHashIdx ctx q value_l (h : hash_idx) =
         let key_l =
@@ -98,53 +112,50 @@ module Make (Eval : Eval.S) = struct
             ~error:(Error.create "Missing key layout." h [%sexp_of: hash_idx])
             h.hi_key_layout
         in
-        match value_l with
-        | {node= AList (q_l, l_l); _} ->
-            let kv =
-              Eval.eval_foreach ctx q q_l
-              |> Seq.map ~f:(fun (key_ctx, value_ctxs) ->
-                     let key =
-                       let ctx' = Map.merge_right ctx key_ctx in
-                       self#visit_t ctx' key_l
-                     in
-                     let value =
-                       Seq.map value_ctxs ~f:(fun ctx' ->
-                           self#visit_t (Map.merge_right ctx ctx') l_l )
-                       |> self#build_AList
-                     in
-                     (key, value) )
+        let contexts =
+          match ctx with
+          | `Eval ctx ->
+              Eval.eval ctx q |> Seq.map ~f:(fun ctx -> (`Eval ctx, `Eval ctx))
+          | `Consume_outer ctxs ->
+              Seq.map ctxs ~f:(fun (ctx, child_ctxs) ->
+                  (`Eval ctx, `Consume_inner (ctx, child_ctxs)) )
+          | `Consume_inner (_, ctxs) ->
+              Seq.map ctxs ~f:(fun ctx -> (`Eval ctx, `Eval ctx))
+        in
+        let kv =
+          Seq.map contexts ~f:(fun (kctx, vctx) ->
+              let key = self#visit_t kctx key_l in
+              let value = self#visit_t vctx value_l in
+              (key, value) )
+        in
+        self#build_AHashIdx kv h
+
+      method visit_AEmpty _ = self#build_AEmpty
+
+      method visit_AScalar ctx e =
+        match ctx with
+        | `Eval ctx -> self#build_AScalar (Eval.eval_pred ctx e)
+        | _ -> failwith "Cannot consume."
+
+      method visit_AOrderedIdx ctx q value_l (h : ordered_idx) =
+        match ctx with
+        | `Eval ctx ->
+            let key_l =
+              Option.value_exn
+                ~error:
+                  (Error.create "Missing key layout." h [%sexp_of: ordered_idx])
+                h.oi_key_layout
             in
-            self#build_AHashIdx kv h
-        | _ ->
             let kv =
               Eval.eval ctx q
               |> Seq.map ~f:(fun key_ctx ->
                      let ctx' = Map.merge_right ctx key_ctx in
-                     let key = self#visit_t ctx' key_l in
-                     let value = self#visit_t ctx' value_l in
+                     let key = self#visit_t (`Eval ctx') key_l in
+                     let value = self#visit_t (`Eval ctx') value_l in
                      (key, value) )
             in
-            self#build_AHashIdx kv h
-
-      method visit_AEmpty _ = self#build_AEmpty
-
-      method visit_AScalar ctx e = self#build_AScalar (Eval.eval_pred ctx e)
-
-      method visit_AOrderedIdx ctx q value_l (h : ordered_idx) =
-        let key_l =
-          Option.value_exn
-            ~error:(Error.create "Missing key layout." h [%sexp_of: ordered_idx])
-            h.oi_key_layout
-        in
-        let kv =
-          Eval.eval ctx q
-          |> Seq.map ~f:(fun key_ctx ->
-                 let ctx' = Map.merge_right ctx key_ctx in
-                 let key = self#visit_t ctx' key_l in
-                 let value = self#visit_t ctx' value_l in
-                 (key, value) )
-        in
-        self#build_AOrderedIdx kv h
+            self#build_AOrderedIdx kv h
+        | _ -> failwith "Cannot consume."
 
       method visit_Select ctx exprs r' =
         self#build_Select exprs (self#visit_t ctx r')
@@ -155,18 +166,32 @@ module Make (Eval : Eval.S) = struct
         self#build_Join ctx pred (self#visit_t ctx r1) (self#visit_t ctx r2)
 
       method visit_t ctx r =
-        match r.node with
-        | AEmpty -> self#visit_AEmpty ctx
-        | AScalar e -> self#visit_AScalar ctx e
-        | AList (r, a) -> self#visit_AList ctx r a
-        | ATuple (a, k) -> self#visit_ATuple ctx a k
-        | AHashIdx (r, a, t) -> self#visit_AHashIdx ctx r a t
-        | AOrderedIdx (r, a, t) -> self#visit_AOrderedIdx ctx r a t
-        | Select (exprs, r') -> self#visit_Select ctx exprs r'
-        | Filter (pred, r') -> self#visit_Filter ctx pred r'
-        | Join {pred; r1; r2} -> self#visit_Join ctx pred r1 r2
-        | As (n, r) -> self#visit_As ctx n r
-        | Dedup _ | Agg _ | Scan _ | OrderBy _ ->
+        match (r.node, ctx) with
+        | AEmpty, _ -> self#visit_AEmpty ctx
+        | AScalar e, _ -> self#visit_AScalar ctx e
+        | AList (q, r'), `Eval ctx
+          when Meta.(find r use_foreach |> Option.value ~default:true) -> (
+          match next_inner_loop r' with
+          | Some (_, q') ->
+              let ctx = `Consume_outer (Eval.eval_foreach ctx q q') in
+              self#visit_AList ctx q r'
+          | None -> self#visit_AList (`Eval ctx) q r' )
+        | AList (q, r'), _ -> self#visit_AList ctx q r'
+        | AHashIdx (q, r', x), `Eval ctx
+          when Meta.(find r use_foreach |> Option.value ~default:true) -> (
+          match next_inner_loop r' with
+          | Some (_, q') ->
+              let ctx' = `Consume_outer (Eval.eval_foreach ctx q q') in
+              self#visit_AHashIdx ctx' q r' x
+          | None -> self#visit_AHashIdx (`Eval ctx) q r' x )
+        | AHashIdx (r, a, t), _ -> self#visit_AHashIdx ctx r a t
+        | ATuple (a, k), _ -> self#visit_ATuple ctx a k
+        | AOrderedIdx (r, a, t), _ -> self#visit_AOrderedIdx ctx r a t
+        | Select (exprs, r'), _ -> self#visit_Select ctx exprs r'
+        | Filter (pred, r'), _ -> self#visit_Filter ctx pred r'
+        | Join {pred; r1; r2}, _ -> self#visit_Join ctx pred r1 r2
+        | As (n, r), _ -> self#visit_As ctx n r
+        | (Dedup _ | Agg _ | Scan _ | OrderBy _), _ ->
             Error.create "Wrong context." r [%sexp_of: t] |> Error.raise
     end
 
@@ -229,7 +254,7 @@ module Make (Eval : Eval.S) = struct
     Logs.debug (fun m ->
         m "Computing type of abstract layout: %s"
           (Sexp.to_string_hum ([%sexp_of: t] l)) ) ;
-    let type_ = (new type_fold)#visit_t ctx l in
+    let type_ = (new type_fold)#visit_t (`Eval ctx) l in
     Logs.debug (fun m ->
         m "The type is: %s" (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ) ;
     type_
