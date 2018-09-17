@@ -70,7 +70,6 @@ name_eof:
 | x = name; EOF { x }
 
 bracket_list(X):
-| error { error "Expected a '['." $startpos }
 | LSBRAC; l = separated_list(COMMA, X); RSBRAC { l }
 | LSBRAC; separated_list(COMMA, X); error { error "Expected a ']'." $startpos }
 
@@ -175,7 +174,7 @@ abs_pred:
 | p1 = abs_pred; MOD; p2 = abs_pred { A.Binop (A.Mod, p1, p2) }
 | p1 = abs_pred; AND; p2 = abs_pred { A.Binop (A.And, p1, p2) }
 | p1 = abs_pred; OR; p2 = abs_pred { A.Binop (A.Or, p1, p2) }
-| COUNT { A.Count }
+| COUNT; LPAREN; RPAREN; { A.Count }
 | MIN; f = parens(name) { A.Min f }
 | MAX; f = parens(name) { A.Max f }
 | AVG; f = parens(name) { A.Avg f }

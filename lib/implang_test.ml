@@ -67,6 +67,70 @@ let run_test_db ?(params = []) layout_str =
   annotate_foreach layout ;
   I.irgen ~params ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter
 
+let%expect_test "sum" =
+  run_test
+    "Select([sum(r1.f), count()], AList(r1, ATuple([AScalar(r1.f), AScalar(r1.g - \
+     r1.f)], cross)))";
+  [%expect {|
+    fun scalar_5 (start) {
+        yield (buf[start : 1]);
+    }fun scalar_7 (r1_f,
+         start) {
+         yield (buf[start : 1]);
+    }fun tuple_2 (start) {
+         cstart3 = start;
+         cstart4 = cstart3 + 1;
+         init scalar_5(cstart3);
+         tup6 = next(scalar_5);
+         init scalar_7(tup6[0], cstart4);
+         tup8 = next(scalar_7);
+         yield (tup6[0], tup8[0]);
+    }fun list_1 () {
+         cstart = 0;
+         pcount = 5;
+         loop (0 < pcount) {
+             init tuple_2(cstart);
+             tup9 = next(tuple_2);
+             yield tup9;
+             cstart = cstart + 2;
+             pcount = pcount - 1;
+         }
+    }fun select_0 () {
+         sum10 = 0;
+         count11 = 0;
+         init list_1();
+         count13 = 5;
+         loop (0 < count13) {
+             tup12 = next(list_1);
+             sum10 = sum10 + tup12[0];
+             count11 = count11 + 1;
+             count13 = count13 - 1;
+         }
+         yield (sum10, count11);
+    }fun printer () {
+         init select_0();
+         loop (not done(select_0)) {
+             tup15 = next(select_0);
+             if (not done(select_0)) {
+                 print(Tuple[Int[nonnull], Int[nonnull]], tup15);
+             } else {
+
+             }
+         }
+    }fun counter () {
+         c = 0;
+         init select_0();
+         loop (not done(select_0)) {
+             tup14 = next(select_0);
+             if (not done(select_0)) {
+                 c = c + 1;
+             } else {
+
+             }
+         }
+         return c;
+    } |}]
+
 let%expect_test "cross-tuple" =
   run_test "AList(r1, ATuple([AScalar(r1.f), AScalar(r1.g - r1.f)], cross))" ;
   [%expect
