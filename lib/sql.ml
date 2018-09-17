@@ -27,6 +27,11 @@ let rec pred_to_sql = function
       | Mul -> sprintf "%s * %s" s1 s2
       | Div -> sprintf "%s / %s" s1 s2
       | Mod -> sprintf "%s %% %s" s1 s2 )
+  | Count -> "count(*)"
+  | Sum n -> sprintf "sum(%s)" (Name.to_sql n)
+  | Avg n -> sprintf "avg(%s)" (Name.to_sql n)
+  | Min n -> sprintf "min(%s)" (Name.to_sql n)
+  | Max n -> sprintf "max(%s)" (Name.to_sql n)
 
 type query = {schema: Name.t list; sql: [`Subquery of string | `Scan of string]}
 

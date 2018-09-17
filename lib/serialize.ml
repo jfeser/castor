@@ -436,7 +436,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     | ( FuncT ([t], _)
       , ( Select (_, r)
         | Filter (_, r)
-        | Agg (_, _, r)
+        | GroupBy (_, _, r)
         | Dedup r
         | OrderBy {rel= r; _} )
       , _ )

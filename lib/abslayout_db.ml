@@ -191,7 +191,7 @@ module Make (Eval : Eval.S) = struct
         | Filter (pred, r'), _ -> self#visit_Filter ctx pred r'
         | Join {pred; r1; r2}, _ -> self#visit_Join ctx pred r1 r2
         | As (n, r), _ -> self#visit_As ctx n r
-        | (Dedup _ | Agg _ | Scan _ | OrderBy _), _ ->
+        | (Dedup _ | GroupBy _ | Scan _ | OrderBy _), _ ->
             Error.create "Wrong context." r [%sexp_of: t] |> Error.raise
     end
 
@@ -275,7 +275,7 @@ module Make (Eval : Eval.S) = struct
                 Meta.(find_exn r schema)
             | Join {r1; r2; _} | AOrderedIdx (r1, r2, _) | AHashIdx (r1, r2, _) ->
                 Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema)
-            | Agg (_, _, _) -> failwith ""
+            | GroupBy (_, _, _) -> failwith ""
             | AEmpty -> []
             | AScalar e -> [pred_to_schema e]
             | ATuple (rs, _) ->
@@ -365,14 +365,6 @@ module Make (Eval : Eval.S) = struct
               |> Error.raise )
     in
     let empty_ctx = Set.empty (module Name.Compare_no_type) in
-    let resolve_agg ctx = function
-      | Count -> Count
-      | Key n -> Key (resolve_name ctx n)
-      | Sum n -> Sum (resolve_name ctx n)
-      | Avg n -> Avg (resolve_name ctx n)
-      | Min n -> Min (resolve_name ctx n)
-      | Max n -> Max (resolve_name ctx n)
-    in
     let resolve_pred ctx =
       (object
          inherit [_] map
@@ -384,10 +376,6 @@ module Make (Eval : Eval.S) = struct
     let preds_to_names preds =
       List.map preds ~f:pred_to_schema
       |> List.filter ~f:(fun n -> String.(n.name <> ""))
-      |> Set.of_list (module Name.Compare_no_type)
-    in
-    let aggs_to_names aggs =
-      List.filter_map aggs ~f:(function Key n -> Some n | _ -> None)
       |> Set.of_list (module Name.Compare_no_type)
     in
     let rec resolve outer_ctx {node; meta} =
@@ -415,12 +403,12 @@ module Make (Eval : Eval.S) = struct
             let pred = resolve_pred ctx pred in
             (Join {pred; r1; r2}, Set.union inner_ctx1 inner_ctx2)
         | Scan l -> (Scan l, resolve_relation l)
-        | Agg (aggs, key, r) ->
+        | GroupBy (aggs, key, r) ->
             let r, inner_ctx = resolve outer_ctx r in
             let ctx = Set.union outer_ctx inner_ctx in
-            let aggs = List.map ~f:(resolve_agg ctx) aggs in
+            let aggs = List.map ~f:(resolve_pred ctx) aggs in
             let key = List.map key ~f:(resolve_name ctx) in
-            (Agg (aggs, key, r), aggs_to_names aggs)
+            (GroupBy (aggs, key, r), preds_to_names aggs)
         | Dedup r ->
             let r, inner_ctx = resolve outer_ctx r in
             (Dedup r, inner_ctx)

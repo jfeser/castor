@@ -74,7 +74,7 @@ let join a b c = {node= Join {pred= a; r1= b; r2= c}; meta= Meta.empty ()}
 
 let filter a b = {node= Filter (a, b); meta= Meta.empty ()}
 
-let agg a b c = {node= Agg (a, b, c); meta= Meta.empty ()}
+let group_by a b c = {node= GroupBy (a, b, c); meta= Meta.empty ()}
 
 let dedup a = {node= Dedup a; meta= Meta.empty ()}
 
@@ -101,7 +101,7 @@ let name r =
   | Select _ -> "select"
   | Filter _ -> "filter"
   | Join _ -> "join"
-  | Agg _ -> "agg"
+  | GroupBy _ -> "group_by"
   | Dedup _ -> "dedup"
   | OrderBy _ -> "order_by"
   | Scan _ -> "scan"
@@ -159,12 +159,7 @@ let rec pp_pred fmt =
   | Name n -> pp_name fmt n
   | Binop (op, p1, p2) ->
       fprintf fmt "@[<h>%a@ %s@ %a@]" pp_pred p1 (op_to_str op) pp_pred p2
-
-let pp_agg fmt =
-  let open Caml.Format in
-  function
   | Count -> fprintf fmt "count"
-  | Key n -> pp_name fmt n
   | Sum n -> fprintf fmt "sum(%a)" pp_name n
   | Avg n -> fprintf fmt "avg(%a)" pp_name n
   | Min n -> fprintf fmt "min(%a)" pp_name n
@@ -183,9 +178,9 @@ let rec pp fmt {node; _} =
   | Filter (p, r) -> fprintf fmt "@[<hv 2>filter(%a,@ %a)@]" pp_pred p pp r
   | Join {pred; r1; r2} ->
       fprintf fmt "@[<hv 2>join(%a,@ %a,@ %a)@]" pp_pred pred pp r1 pp r2
-  | Agg (a, k, r) ->
-      fprintf fmt "@[<hv 2>agg(%a,@ %a,@ %a)@]" (pp_list pp_agg) a (pp_list pp_name)
-        k pp r
+  | GroupBy (a, k, r) ->
+      fprintf fmt "@[<hv 2>agg(%a,@ %a,@ %a)@]" (pp_list pp_pred) a
+        (pp_list pp_name) k pp r
   | Dedup r -> fprintf fmt "@[<hv 2>dedup(@,%a)@]" pp r
   | Scan n -> fprintf fmt "%s" n
   | AEmpty -> fprintf fmt "aempty"
@@ -317,6 +312,7 @@ let rec pred_to_schema =
     match op with
     | Eq | Lt | Le | Gt | Ge | And | Or -> unnamed (BoolT {nullable= false})
     | Add | Sub | Mul | Div | Mod -> unnamed (IntT {nullable= false}) )
+  | Count | Sum _ | Avg _ | Min _ | Max _ -> unnamed (IntT {nullable= false})
 
 let pred_to_name pred =
   let n = pred_to_schema pred in
@@ -334,7 +330,7 @@ let rec annotate_align r =
    |Dedup r' ->
       annotate_align r' ;
       Meta.(set_m r align Meta.(find_exn r' align))
-  | Join _ | Agg (_, _, _) -> failwith ""
+  | Join _ | GroupBy (_, _, _) -> failwith ""
   | ATuple (rs, _) ->
       List.iter rs ~f:annotate_align ;
       let align =
@@ -352,7 +348,7 @@ let rec next_inner_loop r =
   | AOrderedIdx _ -> None
   | Select (_, r') | Filter (_, r') -> next_inner_loop r'
   | ATuple (rs, _) -> List.find_map rs ~f:next_inner_loop
-  | Join _ | Agg _ | OrderBy _ | Dedup _ | Scan _ | AEmpty | AScalar _ | As _ ->
+  | Join _ | GroupBy _ | OrderBy _ | Dedup _ | Scan _ | AEmpty | AScalar _ | As _ ->
       None
 
 (** This pass marks layouts which have a data query, contain an unmarked layout
@@ -374,8 +370,17 @@ let rec annotate_foreach r =
    |OrderBy {rel= r'; _}
    |Dedup r'
    |As (_, r')
-   |Agg (_, _, r') ->
+   |GroupBy (_, _, r') ->
       annotate_foreach r'
   | Join {r1; r2; _} -> annotate_foreach r1 ; annotate_foreach r2
   | Scan _ | AEmpty | AScalar _ -> ()
   | ATuple (rs, _) -> List.iter rs ~f:annotate_foreach
+
+let rec pred_kind = function
+  | As_pred (x', _) -> (
+    match pred_kind x' with `Scalar -> `Scalar | `Agg -> `Agg )
+  | Name _ | Int _ | Bool _ | String _ | Null | Binop _ -> `Scalar
+  | Sum _ | Avg _ | Min _ | Max _ | Count -> `Agg
+
+let select_kind l =
+  List.map l ~f:pred_kind |> List.all_equal ~sexp_of_t:[%sexp_of: [`Scalar | `Agg]]

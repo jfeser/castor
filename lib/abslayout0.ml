@@ -26,10 +26,7 @@ type pred =
   | Null
   | Binop of ((op[@opaque]) * pred * pred)
   | As_pred of (pred * string)
-
-and agg =
   | Count
-  | Key of (name[@opaque])
   | Sum of (name[@opaque])
   | Avg of (name[@opaque])
   | Min of (name[@opaque])
@@ -51,7 +48,7 @@ and node =
   | Select of pred list * t
   | Filter of pred * t
   | Join of {pred: pred; r1: t; r2: t}
-  | Agg of agg list * (name[@opaque]) list * t
+  | GroupBy of pred list * (name[@opaque]) list * t
   | OrderBy of {key: pred list; order: ([`Asc | `Desc][@opaque]); rel: t}
   | Dedup of t
   | Scan of string

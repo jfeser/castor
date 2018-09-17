@@ -50,17 +50,13 @@ type op = Abslayout0.op =
 
 type pred = Abslayout0.pred =
   | Name of Name.t
-  | Int of (int[@opaque])
-  | Bool of (bool[@opaque])
-  | String of (string[@opaque])
+  | Int of int
+  | Bool of bool
+  | String of string
   | Null
-  | Binop of ((op[@opaque]) * pred * pred)
+  | Binop of (op * pred * pred)
   | As_pred of (pred * string)
-[@@deriving sexp_of]
-
-type agg = Abslayout0.agg =
   | Count
-  | Key of Name.t
   | Sum of Name.t
   | Avg of Name.t
   | Min of Name.t
@@ -84,7 +80,7 @@ type node = Abslayout0.node =
   | Select of pred list * t
   | Filter of pred * t
   | Join of {pred: pred; r1: t; r2: t}
-  | Agg of agg list * Name.t list * t
+  | GroupBy of pred list * Name.t list * t
   | OrderBy of {key: pred list; order: [`Asc | `Desc]; rel: t}
   | Dedup of t
   | Scan of string
@@ -111,7 +107,7 @@ val join : pred -> t -> t -> t
 
 val filter : pred -> t -> t
 
-val agg : agg list -> Name.t list -> t -> t
+val group_by : pred list -> Name.t list -> t -> t
 
 val dedup : t -> t
 
@@ -185,3 +181,5 @@ val pred_of_value : Db.primvalue -> pred
 val annotate_foreach : t -> unit
 
 val next_inner_loop : t -> (t * t) option
+
+val select_kind : pred list -> [`Agg | `Scalar] Or_error.t

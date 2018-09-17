@@ -15,18 +15,25 @@ module Config = struct
   end
 end
 
+let lookup ctx n =
+  match Map.find ctx n with
+  | Some v -> v
+  | None ->
+      Error.create "Unbound variable." (n, ctx) [%sexp_of: Name.t * Ctx.t]
+      |> Error.raise
+
+let lookup_int ctx n =
+  match lookup ctx n with
+  | `Int x -> x
+  | v -> Error.create "Unexpected value." v [%sexp_of: Db.primvalue] |> Error.raise
+
 let rec eval_pred ctx = function
   | As_pred (p, _) -> eval_pred ctx p
   | Null -> `Null
   | Int x -> `Int x
   | String x -> `String x
   | Bool x -> `Bool x
-  | Name n -> (
-    match Map.find ctx n with
-    | Some v -> v
-    | None ->
-        Error.create "Unbound variable." (n, ctx) [%sexp_of: Name.t * Ctx.t]
-        |> Error.raise )
+  | Name n -> lookup ctx n
   | Binop (op, p1, p2) -> (
       let v1 = eval_pred ctx p1 in
       let v2 = eval_pred ctx p2 in
@@ -50,6 +57,7 @@ let rec eval_pred ctx = function
           Error.create "Unexpected argument types." (op, v1, v2)
             [%sexp_of: op * Db.primvalue * Db.primvalue]
           |> Error.raise )
+  | Count | Avg _ | Max _ | Min _ | Sum _ -> failwith "Unexpected aggregate."
 
 module Make (Config : Config.S) : S = struct
   let load_relation = Relation.from_db Config.conn
@@ -174,11 +182,41 @@ module Make_mock (Config : Config.S_mock) : S = struct
     Seq.iter seq ~f:(Hash_set.add set) ;
     Hash_set.to_list set |> Seq.of_list
 
-  let eval_select ctx out seq =
-    Seq.map seq ~f:(fun t ->
-        let ctx = Map.merge_right ctx t in
-        List.filter_map out ~f:(fun e ->
-            Option.map (pred_to_name e) ~f:(fun n -> (n, eval_pred ctx e)) )
+  let agg_init = function
+    | Count | Sum _ -> `Int 0
+    | Avg _ -> `Avg (0, 0)
+    | Min _ -> `Int Int.max_value
+    | Max _ -> `Int Int.min_value
+    | _ -> failwith "Not an aggregate."
+
+  let agg_step ctx expr acc =
+    match (expr, acc) with
+    | Count, `Int x -> `Int (x + 1)
+    | Sum n, `Int x -> `Int (x + lookup_int ctx n)
+    | Avg n, `Avg (num, den) -> `Avg (num + lookup_int ctx n, den + 1)
+    | Min n, `Int x -> `Int (Int.min x (lookup_int ctx n))
+    | Max n, `Int x -> `Int (Int.max x (lookup_int ctx n))
+    | _ -> failwith "Not an aggregate."
+
+  let agg_extract = function `Int x -> `Int x | `Avg (n, d) -> `Int (n / d)
+
+  let eval_select ctx args seq =
+    let result =
+      match select_kind args |> Or_error.ok_exn with
+      | `Scalar ->
+          Seq.map seq ~f:(fun t ->
+              let ctx = Map.merge_right ctx t in
+              List.map args ~f:(eval_pred ctx) )
+      | `Agg ->
+          Seq.fold seq ~init:(List.map args ~f:agg_init) ~f:(fun aggs t ->
+              let ctx = Map.merge_right ctx t in
+              List.map2_exn args aggs ~f:(agg_step ctx) )
+          |> List.map ~f:agg_extract |> Seq.singleton
+    in
+    Seq.map result ~f:(fun rs ->
+        List.zip_exn args rs
+        |> List.filter_map ~f:(fun (e, v) ->
+               Option.map (pred_to_name e) ~f:(fun n -> (n, v)) )
         |> Map.of_alist_exn (module Name.Compare_no_type) )
 
   let eval_as rel_n seq =

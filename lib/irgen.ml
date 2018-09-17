@@ -69,6 +69,8 @@ struct
           | A.Mul -> Infix.(e1 * e2)
           | A.Div -> Infix.(e1 / e2)
           | A.Mod -> Infix.(e1 % e2) )
+      | A.Count | A.Min _ | A.Max _ | A.Sum _ | A.Avg _ ->
+          failwith "Not a scalar predicate."
     in
     gen_pred pred
 
@@ -451,93 +453,6 @@ struct
         build_func b
     | _ -> failwith "Unexpected args."
 
-  (* let scan_grouping scan kt vt Type.({output; _} as m) =
-     *   let t = Type.(GroupingT (kt, vt, m)) in
-     *   let key_iter = scan kt in
-     *   let value_iter = scan vt in
-     *   let key_type = (find_func key_iter).ret_type in
-     *   let value_schema = Type.to_schema vt in
-     *   let key_schema = Type.to_schema kt in
-     *   let ret_type =
-     *     List.map output ~f:(function
-     *       | Count | Sum _ -> IntT {nullable= false}
-     *       | Key f | Min f | Max f -> type_of_dtype f.dtype
-     *       | Avg _ -> Error.of_string "Unsupported." |> Error.raise )
-     *     |> fun x -> TupleT x
-     *   in
-     *   let build_agg start b =
-     *     let value_start = Infix.(start + len start kt + hsize kt) in
-     *     let outputs =
-     *       List.map output ~f:(function
-     *         | Sum f ->
-     *             let idx = Option.value_exn (Db.Schema.field_idx value_schema f) in
-     *             build_iter value_iter [value_start] b ;
-     *             let sum = build_fresh_defn "sum" int_t Infix.(int 0) b in
-     *             build_foreach vt value_start value_iter
-     *               (fun tup b -> build_assign Infix.(sum + index tup idx) sum b)
-     *               b ;
-     *             sum
-     *         | Min f ->
-     *             let idx = Option.value_exn (Db.Schema.field_idx value_schema f) in
-     *             build_iter value_iter [value_start] b ;
-     *             let min = build_fresh_defn "min" int_t Infix.(int 0) b in
-     *             build_foreach vt value_start value_iter
-     *               (fun tup b ->
-     *                 build_if
-     *                   ~cond:Infix.(index tup idx < min)
-     *                   ~then_:(fun b -> build_assign Infix.(index tup idx) min b)
-     *                   ~else_:(fun _ -> ())
-     *                   b )
-     *               b ;
-     *             min
-     *         | Max f ->
-     *             let idx = Option.value_exn (Db.Schema.field_idx value_schema f) in
-     *             build_iter value_iter [value_start] b ;
-     *             let max = build_fresh_defn "max" int_t Infix.(int 0) b in
-     *             build_foreach vt value_start value_iter
-     *               (fun tup b ->
-     *                 build_if
-     *                   ~cond:Infix.(index tup idx > max)
-     *                   ~then_:(fun b -> build_assign Infix.(index tup idx) max b)
-     *                   ~else_:(fun _ -> ())
-     *                   b )
-     *               b ;
-     *             max
-     *         | Key f ->
-     *             let idx = Option.value_exn (Db.Schema.field_idx key_schema f) in
-     *             build_iter key_iter [start] b ;
-     *             let tup = build_fresh_var "tup" key_type b in
-     *             build_step tup key_iter b ;
-     *             Infix.(index tup idx)
-     *         | Count -> (
-     *           match count value_start vt with
-     *           | Some ct -> ct
-     *           | None ->
-     *               build_iter value_iter [value_start] b ;
-     *               let ct = build_fresh_defn "ct" int_t Infix.(int 0) b in
-     *               build_foreach vt value_start value_iter
-     *                 (fun _ b -> build_assign Infix.(ct + int 1) ct b)
-     *                 b ;
-     *               ct )
-     *         | Avg _ -> Error.of_string "Unsupported" |> Error.raise )
-     *     in
-     *     Tuple outputs
-     *   in
-     *   let b = create [("start", int_t)] ret_type in
-     *   let start = build_arg 0 b in
-     *   let pcount = build_defn "count" int_t (Option.value_exn (count start t)) b in
-     *   let cstart = build_defn "cstart" int_t Infix.(start + hsize t) b in
-     *   build_loop
-     *     Infix.(pcount > int 0)
-     *     (fun b ->
-     *       build_yield (build_agg cstart b) b ;
-     *       let klen = Infix.(len cstart kt + hsize kt) in
-     *       let vlen = Infix.(len (cstart + klen) vt + hsize vt) in
-     *       build_assign Infix.(cstart + klen + vlen) cstart b ;
-     *       build_assign Infix.(pcount - int 1) pcount b )
-     *     b ;
-     *   build_func b *)
-
   let printer ctx name func =
     let open Builder in
     let b = create ~ctx ~name ~ret:VoidT in
@@ -585,12 +500,52 @@ struct
         build_func b
     | _ -> failwith "Unexpected args."
 
+  let agg_init b =
+    let open Builder in
+    function
+    | A.Count -> `Int (build_fresh_defn ~fresh "count" Infix.(int 0) b)
+    | A.Sum _ -> `Int (build_fresh_defn ~fresh "sum" Infix.(int 0) b)
+    | A.Min _ -> `Int (build_fresh_defn ~fresh "min" Infix.(int Int.max_value) b)
+    | A.Max _ -> `Int (build_fresh_defn ~fresh "max" Infix.(int Int.min_value) b)
+    | A.Avg _ ->
+        `Avg
+          ( build_fresh_defn ~fresh "avg_num" Infix.(int 0) b
+          , build_fresh_defn ~fresh "avg_dem" Infix.(int 0) b )
+    | _ -> failwith "Not an aggregate."
+
+  let agg_step ctx b agg acc =
+    let open Builder in
+    match (agg, acc) with
+    | A.Count, `Int x -> build_assign Infix.(x + int 1) x b
+    | A.Sum f, `Int x -> build_assign Infix.(x + Ctx.find_exn ctx f b) x b
+    | A.Min f, `Int x ->
+        let v = Ctx.find_exn ctx f b in
+        build_if
+          ~cond:Infix.(v < x)
+          ~then_:(fun b -> build_assign v x b)
+          ~else_:(fun _ -> ())
+          b
+    | A.Max f, `Int x ->
+        let v = Ctx.find_exn ctx f b in
+        build_if
+          ~cond:Infix.(v > x)
+          ~then_:(fun b -> build_assign v x b)
+          ~else_:(fun _ -> ())
+          b
+    | A.Avg f, `Avg (n, d) ->
+        let v = Ctx.find_exn ctx f b in
+        build_assign Infix.(n + v) n b ;
+        build_assign Infix.(d + int 1) d b
+    | _ -> failwith "Not an aggregate."
+
+  let agg_extract = function `Int x -> x | `Avg (n, d) -> Infix.(n / d)
+
   let scan_select args =
     match args with
     | { ctx
       ; name
       ; scan
-      ; layout= {node= Select (preds, child_layout); _} as layout
+      ; layout= {node= Select (args, child_layout); _} as layout
       ; type_= FuncT ([child_type], _); _ } ->
         let open Builder in
         let b =
@@ -602,15 +557,29 @@ struct
         in
         let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
         let func = scan callee_ctx child_layout child_type in
-        build_foreach ~fresh ~count:(Type.count child_type) func callee_args
-          (fun tup b ->
-            let ctx =
-              let child_schema = A.Meta.(find_exn child_layout schema) in
-              Map.merge_right ctx (Ctx.of_schema child_schema tup)
-            in
-            build_yield (Tuple (List.map preds ~f:(fun p -> gen_pred ~ctx p b))) b
-            )
-          b ;
+        ( match A.select_kind args |> Or_error.ok_exn with
+        | `Scalar ->
+            build_foreach ~fresh ~count:(Type.count child_type) func callee_args
+              (fun tup b ->
+                let ctx =
+                  let child_schema = A.Meta.(find_exn child_layout schema) in
+                  Map.merge_right ctx (Ctx.of_schema child_schema tup)
+                in
+                let output = List.map args ~f:(fun p -> gen_pred ~ctx p b) in
+                build_yield (Tuple output) b )
+              b
+        | `Agg ->
+            (* Holds the state for each aggregate. *)
+            let agg_temps = List.map args ~f:(agg_init b) in
+            build_foreach ~fresh ~count:(Type.count child_type) func callee_args
+              (fun tup b ->
+                let ctx =
+                  let child_schema = A.Meta.(find_exn child_layout schema) in
+                  Map.merge_right ctx (Ctx.of_schema child_schema tup)
+                in
+                List.iter2_exn args agg_temps ~f:(agg_step ctx b) )
+              b ;
+            build_yield (Tuple (List.map ~f:agg_extract agg_temps)) b ) ;
         build_func b
     | _ -> failwith "Unexpected args."
 

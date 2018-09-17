@@ -17,7 +17,7 @@
 %token DEDUP
 %token FILTER
 %token COUNT
-%token AGG
+%token GROUPBY
 %token MIN
 %token MAX
 %token AVG
@@ -88,11 +88,11 @@ abs_ralgebra:
   r = abs_ralgebra;
   RPAREN { A.Select (x, r) |> node $symbolstartpos $endpos }
 
-| AGG; LPAREN;
-  x = bracket_list(abs_agg_expr); COMMA;
+| GROUPBY; LPAREN;
+  x = bracket_list(abs_pred); COMMA;
   k = bracket_list(name); COMMA;
   r = abs_ralgebra;
-  RPAREN { A.Agg (x, k, r) |> node $symbolstartpos $endpos }
+  RPAREN { A.GroupBy (x, k, r) |> node $symbolstartpos $endpos }
 
 | FILTER; LPAREN;
   x = abs_pred; COMMA;
@@ -175,15 +175,12 @@ abs_pred:
 | p1 = abs_pred; MOD; p2 = abs_pred { A.Binop (A.Mod, p1, p2) }
 | p1 = abs_pred; AND; p2 = abs_pred { A.Binop (A.And, p1, p2) }
 | p1 = abs_pred; OR; p2 = abs_pred { A.Binop (A.Or, p1, p2) }
-| p = abs_pred; AS; id = ID { A.As_pred (p, id) }
-
-abs_agg_expr:
 | COUNT { A.Count }
 | MIN; f = parens(name) { A.Min f }
 | MAX; f = parens(name) { A.Max f }
 | AVG; f = parens(name) { A.Avg f }
 | SUM; f = parens(name) { A.Sum f }
-| f = name { A.Key f }
+| p = abs_pred; AS; id = ID { A.As_pred (p, id) }
 
 lambda(X):
 | n = ID; RARROW; x = X { (n, x) }

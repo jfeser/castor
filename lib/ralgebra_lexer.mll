@@ -18,7 +18,7 @@ let keyword_tbl = Hashtbl.of_alist_exn (module String) [
 "aorderedidx", AORDEREDIDX;
 "ahashidx", AHASHIDX;
 "ascalar", ASCALAR;
-"agg", AGG;
+"groupby", GROUPBY;
 "min", MIN;
 "max", MAX;
 "avg", AVG;
