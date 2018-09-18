@@ -141,7 +141,7 @@ let ralgebra_foreach q1 q2 =
   let q2_fields = List.map s2 ~f:Name.to_sql in
   let fields_str = String.concat ~sep:", " (q1_fields @ q2_fields) in
   let q1_fields_str =
-    List.init (List.length q1_fields) ~f:(fun i -> sprintf "%d" i)
+    List.init (List.length q1_fields) ~f:(fun i -> sprintf "%d" (i + 1))
     |> String.concat ~sep:", "
   in
   sprintf "select %s from %s, lateral %s order by (%s)" fields_str sql1 sql2
