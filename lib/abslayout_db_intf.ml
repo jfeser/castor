@@ -8,6 +8,8 @@ module type S = sig
 
   val annotate_schema : t -> t
 
+  val to_schema : t -> Name.t list
+
   val annotate_key_layouts : t -> t
 
   val resolve : ?params:Set.M(Name.Compare_no_type).t -> t -> t

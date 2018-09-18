@@ -60,6 +60,7 @@ rule token = parse
   | ">"        { GT }
   | "="        { EQ }
   | "&&"       { AND }
+  | "||"       { OR }
   | "+"        { ADD }
   | "-"        { SUB }
   | "*"        { MUL }
@@ -67,6 +68,7 @@ rule token = parse
   | "%"        { MOD }
   | int as x   { INT (Int.of_string x) }
   | '"'        { STR (string (Buffer.create 10) lexbuf) }
+  | '#'        { comment lexbuf }
   | id as x    {
       match Hashtbl.find keyword_tbl (String.lowercase x) with
         | Some t -> t
@@ -74,6 +76,9 @@ rule token = parse
     }
   | eof        { EOF }
   | _          { lex_error lexbuf "unexpected character" }
+and comment = parse
+  | '\n' { Lexing.new_line lexbuf; token lexbuf }
+  | _ { comment lexbuf }
 and string buf = parse
   | [^ '"' '\n' '\\']+ {
       Buffer.add_string buf (Lexing.lexeme lexbuf);

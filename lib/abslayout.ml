@@ -3,6 +3,7 @@ open Printf
 open Collections
 open Db
 include Abslayout0
+module Format = Caml.Format
 
 module Name = struct
   module T = struct
@@ -115,7 +116,7 @@ let name r =
 
 let pp_list ?(bracket = ("[", "]")) pp fmt ls =
   let openb, closeb = bracket in
-  let open Caml.Format in
+  let open Format in
   pp_open_hvbox fmt 1 ;
   fprintf fmt "%s" openb ;
   let rec loop = function
@@ -140,16 +141,16 @@ let op_to_str = function
   | Mod -> "%"
 
 let pp_name fmt =
-  let open Caml.Format in
+  let open Format in
   function
   | {relation= Some r; name; _} -> fprintf fmt "%s.%s" r name
   | {relation= None; name; _} -> fprintf fmt "%s" name
 
 let pp_kind fmt =
-  Caml.Format.(function Cross -> fprintf fmt "cross" | Zip -> fprintf fmt "zip")
+  Format.(function Cross -> fprintf fmt "cross" | Zip -> fprintf fmt "zip")
 
 let rec pp_pred fmt =
-  let open Caml.Format in
+  let open Format in
   function
   | As_pred (p, n) -> fprintf fmt "@[<h>%a@ as@ %s]" pp_pred p n
   | Null -> fprintf fmt "null"
@@ -159,7 +160,7 @@ let rec pp_pred fmt =
   | Name n -> pp_name fmt n
   | Binop (op, p1, p2) ->
       fprintf fmt "@[<h>%a@ %s@ %a@]" pp_pred p1 (op_to_str op) pp_pred p2
-  | Count -> fprintf fmt "count"
+  | Count -> fprintf fmt "count()"
   | Sum n -> fprintf fmt "sum(%a)" pp_name n
   | Avg n -> fprintf fmt "avg(%a)" pp_name n
   | Min n -> fprintf fmt "min(%a)" pp_name n
@@ -170,6 +171,10 @@ let pp_key fmt = function
   | [p] -> pp_pred fmt p
   | ps -> pp_list ~bracket:("(", ")") pp_pred fmt ps
 
+let pp_order fmt =
+  let open Format in
+  function `Asc -> fprintf fmt "asc" | `Desc -> fprintf fmt "desc"
+
 let rec pp fmt {node; _} =
   let open Caml.Format in
   match node with
@@ -179,8 +184,11 @@ let rec pp fmt {node; _} =
   | Join {pred; r1; r2} ->
       fprintf fmt "@[<hv 2>join(%a,@ %a,@ %a)@]" pp_pred pred pp r1 pp r2
   | GroupBy (a, k, r) ->
-      fprintf fmt "@[<hv 2>agg(%a,@ %a,@ %a)@]" (pp_list pp_pred) a
+      fprintf fmt "@[<hv 2>groupby(%a,@ %a,@ %a)@]" (pp_list pp_pred) a
         (pp_list pp_name) k pp r
+  | OrderBy {key; order; rel} ->
+      fprintf fmt "@[<hv 2>orderby(%a,@ %a,@ %a)@]" (pp_list pp_pred) key pp rel
+        pp_order order
   | Dedup r -> fprintf fmt "@[<hv 2>dedup(@,%a)@]" pp r
   | Scan n -> fprintf fmt "%s" n
   | AEmpty -> fprintf fmt "aempty"
@@ -190,10 +198,10 @@ let rec pp fmt {node; _} =
       fprintf fmt "@[<hv 2>atuple(%a,@ %a)@]" (pp_list pp) rs pp_kind kind
   | AHashIdx (r1, r2, {lookup; _}) ->
       fprintf fmt "@[<hv 2>ahashidx(%a,@ %a,@ %a)@]" pp r1 pp r2 pp_key lookup
-  (* |AOrderedIdx (_, _, _) ->
-      *    fprintf fmt "@[<h>%a@ %s@]" pp r n *)
+  | AOrderedIdx (r1, r2, {lookup_low; lookup_high; _}) ->
+      fprintf fmt "@[<hv 2>aorderedidx(%a,@ %a,@ %a,@ %a)@]" pp r1 pp r2 pp_pred
+        lookup_low pp_pred lookup_high
   | As (n, r) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp r n
-  | _ -> failwith "unsupported"
 
 module Ctx = struct
   type t = primvalue Map.M(Name.Compare_no_type).t [@@deriving compare, hash, sexp]

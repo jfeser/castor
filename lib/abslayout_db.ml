@@ -292,6 +292,10 @@ module Make (Eval : Eval.S) = struct
     in
     mapper#visit_t ()
 
+  let to_schema r =
+    let r' = annotate_schema r in
+    Meta.(find_exn r' schema)
+
   let annotate_key_layouts =
     let key_layout schema =
       let layout =
