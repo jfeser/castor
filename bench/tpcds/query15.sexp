@@ -19,3 +19,14 @@
 ;; group by ca_zip
 ;; order by ca_zip
 ;; [_LIMITC];
+
+orderby([ca_zip],
+  groupby([ca_zip, sum(ca_sales_price)], [ca_zip],
+    join(cs_bill_customer_sk = c_customer_sk,
+      join(cs_sold_date_sk = d_date_sk,
+          catalog_sales,
+          filter(d_qoy=param1 && d_year=param0, date_dim)),
+      join(c_current_addr_sk = ca_address_sk,
+        customer,
+        filter(TODO, customer_address)))),
+  asc)
