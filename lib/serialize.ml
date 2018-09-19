@@ -431,6 +431,13 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
           serialize_hashidx sctx t l
       | None -> serialize_hashidx sctx t l )
     | HashIdxT t, AHashIdx l, _ -> serialize_hashidx sctx t l
+    | OrderedIdxT t, AOrderedIdx ((q, l', _) as l), `Eval ctx
+      when Meta.(find layout use_foreach |> Option.value ~default:true) -> (
+      match next_inner_loop l' with
+      | Some (_, q') ->
+          let sctx = {sctx with ctx= `Consume_outer (Eval.eval_foreach ctx q q')} in
+          serialize_orderedidx sctx t l
+      | None -> serialize_orderedidx sctx t l )
     | OrderedIdxT t, AOrderedIdx l, _ -> serialize_orderedidx sctx t l
     | TupleT t, ATuple l, _ -> serialize_tuple sctx t l
     | ( FuncT ([t], _)
@@ -449,9 +456,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
         |> Error.raise
 
   let serialize ?(ctx = Map.empty (module Name.Compare_no_type)) writer t l =
-    Logs.debug (fun m ->
-        m "Serializing abstract layout: %s" (Sexp.to_string_hum ([%sexp_of: t] l))
-    ) ;
+    Logs.info (fun m -> m "Serializing abstract layout.") ;
     let begin_pos = pos writer in
     let log_tmp_file =
       if Option.is_some Config.layout_map_channel then

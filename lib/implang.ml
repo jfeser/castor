@@ -451,4 +451,7 @@ module Ctx = struct
     Option.map (Map.find ctx name) ~f:(fun v -> var_to_expr v builder)
 
   let find_exn ctx name builder = Option.value_exn (find ctx name builder)
+
+  let bind_ctx outer inner =
+    Map.fold inner ~init:outer ~f:(fun ~key ~data -> Map.set ~key ~data)
 end

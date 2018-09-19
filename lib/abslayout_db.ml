@@ -106,12 +106,14 @@ module Make (Eval : Eval.S) = struct
             ret )
         |> fun ts -> self#build_ATuple ts kind
 
-      method visit_AHashIdx ctx q value_l (h : hash_idx) =
-        let key_l =
-          Option.value_exn
-            ~error:(Error.create "Missing key layout." h [%sexp_of: hash_idx])
-            h.hi_key_layout
-        in
+      method visit_AEmpty _ = self#build_AEmpty
+
+      method visit_AScalar ctx e =
+        match ctx with
+        | `Eval ctx -> self#build_AScalar (Eval.eval_pred ctx e)
+        | _ -> failwith "Cannot consume."
+
+      method visit_Index ctx q key_l value_l =
         let contexts =
           match ctx with
           | `Eval ctx ->
@@ -122,40 +124,26 @@ module Make (Eval : Eval.S) = struct
           | `Consume_inner (_, ctxs) ->
               Seq.map ctxs ~f:(fun ctx -> (`Eval ctx, `Eval ctx))
         in
-        let kv =
-          Seq.map contexts ~f:(fun (kctx, vctx) ->
-              let key = self#visit_t kctx key_l in
-              let value = self#visit_t vctx value_l in
-              (key, value) )
+        Seq.map contexts ~f:(fun (kctx, vctx) ->
+            let key = self#visit_t kctx key_l in
+            let value = self#visit_t vctx value_l in
+            (key, value) )
+
+      method visit_AHashIdx ctx q value_l (h : hash_idx) =
+        let key_l =
+          Option.value_exn
+            ~error:(Error.create "Missing key layout." h [%sexp_of: hash_idx])
+            h.hi_key_layout
         in
-        self#build_AHashIdx kv h
-
-      method visit_AEmpty _ = self#build_AEmpty
-
-      method visit_AScalar ctx e =
-        match ctx with
-        | `Eval ctx -> self#build_AScalar (Eval.eval_pred ctx e)
-        | _ -> failwith "Cannot consume."
+        self#build_AHashIdx (self#visit_Index ctx q key_l value_l) h
 
       method visit_AOrderedIdx ctx q value_l (h : ordered_idx) =
-        match ctx with
-        | `Eval ctx ->
-            let key_l =
-              Option.value_exn
-                ~error:
-                  (Error.create "Missing key layout." h [%sexp_of: ordered_idx])
-                h.oi_key_layout
-            in
-            let kv =
-              Eval.eval ctx q
-              |> Seq.map ~f:(fun key_ctx ->
-                     let ctx' = Map.merge_right ctx key_ctx in
-                     let key = self#visit_t (`Eval ctx') key_l in
-                     let value = self#visit_t (`Eval ctx') value_l in
-                     (key, value) )
-            in
-            self#build_AOrderedIdx kv h
-        | _ -> failwith "Cannot consume."
+        let key_l =
+          Option.value_exn
+            ~error:(Error.create "Missing key layout." h [%sexp_of: ordered_idx])
+            h.oi_key_layout
+        in
+        self#build_AOrderedIdx (self#visit_Index ctx q key_l value_l) h
 
       method visit_Select ctx exprs r' =
         self#build_Select exprs (self#visit_t ctx r')
@@ -185,8 +173,15 @@ module Make (Eval : Eval.S) = struct
               self#visit_AHashIdx ctx' q r' x
           | None -> self#visit_AHashIdx (`Eval ctx) q r' x )
         | AHashIdx (r, a, t), _ -> self#visit_AHashIdx ctx r a t
-        | ATuple (a, k), _ -> self#visit_ATuple ctx a k
+        | AOrderedIdx (q, r', x), `Eval ctx
+          when Meta.(find r use_foreach |> Option.value ~default:true) -> (
+          match next_inner_loop r' with
+          | Some (_, q') ->
+              let ctx' = `Consume_outer (Eval.eval_foreach ctx q q') in
+              self#visit_AOrderedIdx ctx' q r' x
+          | None -> self#visit_AOrderedIdx (`Eval ctx) q r' x )
         | AOrderedIdx (r, a, t), _ -> self#visit_AOrderedIdx ctx r a t
+        | ATuple (a, k), _ -> self#visit_ATuple ctx a k
         | Select (exprs, r'), _ -> self#visit_Select ctx exprs r'
         | Filter (pred, r'), _ -> self#visit_Filter ctx pred r'
         | Join {pred; r1; r2}, _ -> self#visit_Join ctx pred r1 r2
@@ -251,9 +246,7 @@ module Make (Eval : Eval.S) = struct
   include TF
 
   let to_type ?(ctx = Map.empty (module Name.Compare_no_type)) l =
-    Logs.debug (fun m ->
-        m "Computing type of abstract layout: %s"
-          (Sexp.to_string_hum ([%sexp_of: t] l)) ) ;
+    Logs.info (fun m -> m "Computing type of abstract layout.") ;
     let type_ = (new type_fold)#visit_t (`Eval ctx) l in
     Logs.debug (fun m ->
         m "The type is: %s" (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ) ;

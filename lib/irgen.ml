@@ -164,7 +164,7 @@ struct
                 let tuple_ctx =
                   Ctx.of_schema A.Meta.(find_exn clayout schema) tup
                 in
-                Map.merge_right ctx tuple_ctx
+                Ctx.bind_ctx ctx tuple_ctx
               in
               make_loops next_ctx (tup :: tuples) clayouts ctypes cstarts b )
             b
@@ -313,7 +313,7 @@ struct
     let key_tuple = build_var "key" key_iter.ret_type b in
     let ctx =
       let key_schema = A.Meta.(find_exn key_layout schema) in
-      Map.merge_right ctx (Ctx.of_schema key_schema key_tuple)
+      Ctx.bind_ctx ctx (Ctx.of_schema key_schema key_tuple)
     in
     let vstart = build_var "vstart" int_t b in
     let value_callee_ctx, value_callee_args =
@@ -419,7 +419,7 @@ struct
         let key_tuple = build_var "key" key_iter.ret_type b in
         let ctx =
           let key_schema = A.Meta.(find_exn key_layout schema) in
-          Map.merge_right ctx (Ctx.of_schema key_schema key_tuple)
+          Ctx.bind_ctx ctx (Ctx.of_schema key_schema key_tuple)
         in
         let vstart = build_var "vstart" int_t b in
         let value_callee_ctx, value_callee_args =
@@ -445,6 +445,7 @@ struct
             build_assign
               Infix.(Slice (index_start + (idx * kp_len) + key_len, 8))
               vstart b ;
+            build_assign key key_tuple b ;
             build_foreach ~fresh ~count:(Type.count value_type) value_iter
               value_callee_args
               (fun value b -> build_yield (build_concat [key; value] b) b)
@@ -489,7 +490,7 @@ struct
           (fun tup b ->
             let ctx =
               let child_schema = A.Meta.(find_exn child_layout schema) in
-              Map.merge_right ctx (Ctx.of_schema child_schema tup)
+              Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
             in
             let cond = gen_pred ~ctx pred b in
             build_if ~cond
@@ -563,7 +564,7 @@ struct
               (fun tup b ->
                 let ctx =
                   let child_schema = A.Meta.(find_exn child_layout schema) in
-                  Map.merge_right ctx (Ctx.of_schema child_schema tup)
+                  Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
                 in
                 let output = List.map args ~f:(fun p -> gen_pred ~ctx p b) in
                 build_yield (Tuple output) b )
@@ -575,7 +576,7 @@ struct
               (fun tup b ->
                 let ctx =
                   let child_schema = A.Meta.(find_exn child_layout schema) in
-                  Map.merge_right ctx (Ctx.of_schema child_schema tup)
+                  Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
                 in
                 List.iter2_exn args agg_temps ~f:(agg_step ctx b) )
               b ;
@@ -586,7 +587,9 @@ struct
   let gen_abslayout ~ctx ~data_fn r =
     let type_ = Abslayout_db.to_type r in
     let writer = Bitstring.Writer.with_file data_fn in
-    let r, len = Serialize.serialize writer type_ r in
+    let r, len =
+      if Config.code_only then (r, 0) else Serialize.serialize writer type_ r
+    in
     Bitstring.Writer.flush writer ;
     Bitstring.Writer.close writer ;
     Out_channel.with_file "scanner.sexp" ~f:(fun ch ->
@@ -594,14 +597,20 @@ struct
     let rec gen_func ctx r t =
       let name = A.name r ^ "_" ^ Fresh.name fresh "%d" in
       let ctx =
-        match A.Meta.(find r pos) with
-        | Some (Pos start) ->
-            (* We don't want to bind over a start parameter that's already being
+        let start_name = A.Name.create ~type_:int_t "start" in
+        if Config.code_only then
+          Map.update ctx start_name ~f:(function
+            | Some x -> x
+            | None -> Ctx.(Global Infix.(int 0)) )
+        else
+          match A.Meta.(find r pos) with
+          | Some (Pos start) ->
+              (* We don't want to bind over a start parameter that's already being
                passed in. *)
-            Map.update ctx (A.Name.create ~type_:int_t "start") ~f:(function
-              | Some x -> x
-              | None -> Ctx.(Global Infix.(int (Int64.to_int_exn start))) )
-        | Some Many_pos | None -> ctx
+              Map.update ctx start_name ~f:(function
+                | Some x -> x
+                | None -> Ctx.(Global Infix.(int (Int64.to_int_exn start))) )
+          | Some Many_pos | None -> ctx
       in
       let scan_args = {ctx; name; layout= r; type_= t; scan} in
       let func =

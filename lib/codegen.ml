@@ -25,30 +25,24 @@ let sexp_of_llvalue : llvalue -> Sexp.t = fun v -> Sexp.Atom (string_of_llvalue 
 let sexp_of_lltype : lltype -> Sexp.t = fun v -> Sexp.Atom (string_of_lltype v)
 
 module TypeKind = struct
-  include TypeKind
-
-  let sexp_of_t : t -> Sexp.t =
-   fun k ->
-    let str =
-      match k with
-      | Void -> "Void"
-      | Half -> "Half"
-      | Float -> "Float"
-      | Double -> "Double"
-      | X86fp80 -> "X86fp80"
-      | Fp128 -> "Fp128"
-      | Ppc_fp128 -> "Ppc_fp128"
-      | Label -> "Label"
-      | Integer -> "Integer"
-      | Function -> "Function"
-      | Struct -> "Struct"
-      | Array -> "Array"
-      | Pointer -> "Pointer"
-      | Vector -> "Vector"
-      | Metadata -> "Metadata"
-      | X86_mmx -> "X86_mmx"
-    in
-    Sexp.Atom str
+  type t = TypeKind.t =
+    | Void
+    | Half
+    | Float
+    | Double
+    | X86fp80
+    | Fp128
+    | Ppc_fp128
+    | Label
+    | Integer
+    | Function
+    | Struct
+    | Array
+    | Pointer
+    | Vector
+    | Metadata
+    | X86_mmx
+  [@@deriving compare, sexp]
 end
 
 module Project_config = Config
@@ -264,11 +258,31 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     build_alloca t n builder
 
   (** Build a call that passes the parameter struct. *)
-  let build_param_call :
-      _ -> llvalue -> llvalue array -> string -> llbuilder -> llvalue =
-   fun fctx func args name b ->
+  let build_param_call fctx func args name b =
     let params = get_val fctx "params" in
-    build_call func (Array.append [|params|] args) name b
+    let args = Array.append [|params|] args in
+    let func_ptr_t = type_of func in
+    if
+      not ([%compare.equal: TypeKind.t] (classify_type func_ptr_t) TypeKind.Pointer)
+    then
+      Error.create "Not a function pointer type." (name, func_ptr_t)
+        [%sexp_of: string * lltype]
+      |> Error.raise ;
+    let func_t = element_type func_ptr_t in
+    if
+      not ([%compare.equal: TypeKind.t] (classify_type func_ptr_t) TypeKind.Pointer)
+    then
+      Error.create "Not a function pointer type." (name, func_ptr_t)
+        [%sexp_of: string * lltype]
+      |> Error.raise ;
+    let args_types = Array.map args ~f:(fun a -> type_of a |> string_of_lltype) in
+    let expected_types = param_types func_t |> Array.map ~f:string_of_lltype in
+    if not ([%compare.equal: string array] args_types expected_types) then
+      Error.create "Mismatched argument types."
+        (func, args_types, expected_types)
+        [%sexp_of: llvalue * string array * string array]
+      |> Error.raise ;
+    build_call func args name b
 
   let printf =
     declare_function "printf"
@@ -716,20 +730,12 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
           Error.create "Use of an undeclared iterator." func [%sexp_of: string]
           |> Error.raise
     in
-    if List.length args <> List.length iter_fctx#func.I.args then
-      Error.create "Wrong number of arguments."
-        (func, args, iter_fctx#func.args)
-        [%sexp_of: string * I.expr list * (string * Type.PrimType.t) list]
-      |> fail
-    else
-      let llargs = List.map args ~f:(codegen_expr fctx) in
-      debug_printf
-        (sprintf "Calling init %s(%s).\n" func
-           ( List.init (List.length args) ~f:(fun _ -> "%d")
-           |> String.concat ~sep:", " ))
-        llargs ;
-      build_param_call fctx iter_fctx#init (Array.of_list llargs) "" builder
-      |> ignore
+    let llargs = List.map args ~f:(codegen_expr fctx) in
+    debug_printf
+      (sprintf "Calling init %s(%s).\n" func
+         (List.init (List.length args) ~f:(fun _ -> "%d") |> String.concat ~sep:", "))
+      llargs ;
+    build_param_call fctx iter_fctx#init (Array.of_list llargs) "" builder |> ignore
 
   let codegen_assign fctx lhs rhs =
     let val_ = codegen_expr fctx rhs in
@@ -875,6 +881,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
               Param {idx; alloca= Some param_alloca} )
     in
     let build_init ictx =
+      Logs.debug (fun m -> m "Building init function %s." ictx#name) ;
       (* Create initialization function. *)
       let init_func_t =
         let args_t =
@@ -901,11 +908,10 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         (get_val ictx "yield_index") builder
       |> ignore ;
       build_ret_void builder |> ignore ;
-      Logs.debug (fun m -> m "Checking function.") ;
-      Logs.debug (fun m -> m "%s" (string_of_llvalue ictx#init)) ;
       assert_valid_function ictx#init
     in
     let build_step ictx =
+      Logs.debug (fun m -> m "Building step function %s." ictx#name) ;
       (* Create step function. *)
       let ret_t = codegen_type ictx#func.I.ret_type in
       let step_func_t = function_type ret_t [|pointer_type !params_struct_t|] in
@@ -938,11 +944,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       store_params ictx ictx#step ;
       build_ret (const_null ret_t) builder |> ignore ;
       (* Check step function. *)
-      Logs.debug (fun m -> m "%s" (string_of_llvalue ictx#step)) ;
-      Logs.debug (fun m ->
-          m "%s"
-            (Sexp.to_string_hum ([%sexp_of: string list] (Hashtbl.keys ictx#values)))
-      ) ;
       assert_valid_function ictx#step
     in
     fun ictx ->
@@ -969,7 +970,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       let (I.({args; locals; ret_type; body; _}) as func) = fctx#func in
       Logs.debug (fun m -> m "Codegen for func %s started." name) ;
       Logs.debug (fun m -> m "%a" I.pp_func func) ;
-      Logs.debug (fun m -> m "%s" ([%sexp_of: I.func] func |> Sexp.to_string_hum)) ;
       if
         (* Check that function is not already defined. *)
         Hashtbl.(mem iters name || mem funcs name)
@@ -1002,7 +1002,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | Some _ -> ()
       | None ->
           build_ret_void builder |> ignore ;
-          Logs.debug (fun m -> m "%s" (string_of_llvalue fctx#llfunc)) ;
           assert_valid_function fctx#llfunc ;
           Logs.debug (fun m -> m "Codegen for func %s completed." name)
 

@@ -117,7 +117,24 @@ let ralgebra_to_sql_helper ~fresh r =
         let query = sprintf "select distinct * from %s" sql in
         {sql= `Subquery query; schema}
     | As (_, r) -> f r
-    | _ ->
+    | OrderBy {key; order; rel= r} ->
+        let sql, schema = to_subquery fresh (f r) in
+        let ctx =
+          List.zip_exn Meta.(find_exn r schema) schema
+          |> List.map ~f:(fun (n, n') -> (n, Name n'))
+          |> Map.of_alist_exn (module Name.Compare_no_type)
+        in
+        let sql_order = match order with `Asc -> "asc" | `Desc -> "desc" in
+        let sql_key =
+          List.map key ~f:(fun p -> subst_pred ctx p |> pred_to_sql)
+          |> String.concat ~sep:", "
+        in
+        let new_query =
+          sprintf "select * from %s order by (%s) %s" sql sql_key sql_order
+        in
+        {sql= `Subquery new_query; schema}
+    | GroupBy (_, _, _) -> Error.of_string "Unsupported." |> Error.raise
+    | AEmpty | AScalar _ | AList _ | ATuple _ | AHashIdx _ | AOrderedIdx _ ->
         Error.of_string "Only relational algebra constructs allowed." |> Error.raise
   in
   f r

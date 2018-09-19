@@ -123,18 +123,23 @@ let run_test ?(params = []) ?(modules = make_modules) ?(print_layout = true)
     in
     sprintf "%s -p %s %s" exe_fn data_fn params_str
   in
-  let ret = Unix.system cmd in
-  print_endline (Unix.Exit_or_signal.to_string_hum ret)
+  let cmd_ch = Unix.open_process_in cmd in
+  let cmd_output = In_channel.input_all cmd_ch in
+  let ret = Unix.close_process_in cmd_ch in
+  print_endline cmd_output ;
+  print_endline (Unix.Exit_or_signal.to_string_hum ret) ;
+  Out_channel.flush stdout
 
 let%expect_test "ordered-idx" =
   run_test ~print_layout:false
-    "AOrderedIdx(OrderBy([r1.f], Dedup(Select([r1.f], r1)), desc) as k, \
+    "AOrderedIdx(OrderBy([r1.f], Dedup(Select([r1.f], r1)), asc) as k, \
      AList(Filter(r1.f = k.f, r1), ascalar(r1.g)), 1, 3)" ;
   [%expect {|
     1,2,
     1,3,
     2,1,
     2,2,
+
     exited normally |}]
 
 let%expect_test "hash-idx" =
@@ -144,6 +149,7 @@ let%expect_test "hash-idx" =
   [%expect {|
     2,1,
     2,2,
+
     exited normally |}]
 
 (* let%expect_test "zip-tuple" =
@@ -179,6 +185,7 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
 |} ;
   [%expect {|
     1,2,
+
     exited normally |}]
 
 let%expect_test "example-1-str" =
@@ -193,6 +200,7 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
 |} ;
   [%expect {|
     1,2,
+
     exited normally |}]
 
 (* let%expect_test "example-1-db" =
@@ -223,6 +231,7 @@ select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as 
 |} ;
   [%expect {|
     1,2,
+
     exited normally |}]
 
 let%expect_test "example-2-str" =
@@ -240,6 +249,7 @@ select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as 
 |} ;
   [%expect {|
     1,2,
+
     exited normally |}]
 
 let%expect_test "example-3" =
@@ -259,6 +269,7 @@ select([lp.counter, lc.counter],
 |} ;
   [%expect {|
     1,2,
+
     exited normally |}]
 
 let%expect_test "example-3-str" =
@@ -278,4 +289,5 @@ select([lp.counter, lc.counter],
 |} ;
   [%expect {|
     1,2,
+
     exited normally |}]

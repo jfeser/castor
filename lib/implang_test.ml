@@ -209,17 +209,17 @@ let%expect_test "hash-idx" =
          yield (buf[start : 1]);
     }fun hash_idx_8 (f_f,
          start) {
-         if (hash(start + 3 + 8, f_f) * 8 < 0 || buf[start + 3 + 8 + buf[start +
-             3 : 8] : 8] - 1 < hash(start + 3 + 8, f_f) * 8 || buf[start + 3 +
-             8 + buf[start + 3 : 8] + 8 + hash(start + 3 + 8, f_f) * 8 : 8] = 0) {
+         if (hash(start + 4 + 8, f_f) * 8 < 0 || buf[start + 4 + 8 + buf[start +
+             4 : 8] : 8] - 1 < hash(start + 4 + 8, f_f) * 8 || buf[start + 4 +
+             8 + buf[start + 4 : 8] + 8 + hash(start + 4 + 8, f_f) * 8 : 8] = 0) {
 
          } else {
-              kstart = buf[start + 3 + 8 + buf[start + 3 : 8] + 8 + hash(start +
-              3 + 8, f_f) * 8 : 8];
+              kstart = buf[start + 4 + 8 + buf[start + 4 : 8] + 8 + hash(start +
+              4 + 8, f_f) * 8 : 8];
               init scalar_9(f_f, kstart);
               key = next(scalar_9);
-              vstart = buf[start + 3 + 8 + buf[start + 3 : 8] + 8 + hash(start +
-              3 + 8, f_f) * 8 : 8] + 1;
+              vstart = buf[start + 4 + 8 + buf[start + 4 : 8] + 8 + hash(start +
+              4 + 8, f_f) * 8 : 8] + 1;
               if (true && key[0] = f_f) {
                   init scalar_10(key[0], f_f, vstart);
                   tup11 = next(scalar_10);
@@ -229,7 +229,7 @@ let%expect_test "hash-idx" =
               }
          }
     }fun tuple_0 () {
-         cstart1 = 3;
+         cstart1 = 4;
          cstart2 = cstart1 + 5;
          init list_3(cstart1);
          count7 = 5;
@@ -573,15 +573,15 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
              pcount = pcount - 1;
          }
     }fun hash_idx_0 () {
-         if (hash(11, (id_p, id_c)) * 8 < 0 || buf[11 + buf[3 : 8] : 8] - 1 <
-             hash(11, (id_p, id_c)) * 8 || buf[11 + buf[3 : 8] + 8 +
-             hash(11, (id_p, id_c)) * 8 : 8] = 0) {
+         if (hash(12, (id_p, id_c)) * 8 < 0 || buf[12 + buf[4 : 8] : 8] - 1 <
+             hash(12, (id_p, id_c)) * 8 || buf[12 + buf[4 : 8] + 8 +
+             hash(12, (id_p, id_c)) * 8 : 8] = 0) {
 
          } else {
-              kstart = buf[11 + buf[3 : 8] + 8 + hash(11, (id_p, id_c)) * 8 : 8];
+              kstart = buf[12 + buf[4 : 8] + 8 + hash(12, (id_p, id_c)) * 8 : 8];
               init tuple_1(kstart);
               key = next(tuple_1);
-              vstart = buf[11 + buf[3 : 8] + 8 + hash(11, (id_p, id_c)) * 8 :
+              vstart = buf[12 + buf[4 : 8] + 8 + hash(12, (id_p, id_c)) * 8 :
               8] + 2;
               if (true && key[0] = id_p && key[1] = id_c) {
                   init list_8(vstart, key[0], key[1]);
@@ -775,17 +775,17 @@ select([lp.counter, lc.counter],
              pcount = pcount - 1;
          }
     }fun hash_idx_4 (start) {
-         if (hash(start + 3 + 8, id_p) * 8 < 0 || buf[start + 3 + 8 + buf[start +
-             3 : 8] : 8] - 1 < hash(start + 3 + 8, id_p) * 8 || buf[start + 3 +
-             8 + buf[start + 3 : 8] + 8 + hash(start + 3 + 8, id_p) * 8 : 8] = 0) {
+         if (hash(start + 4 + 8, id_p) * 8 < 0 || buf[start + 4 + 8 + buf[start +
+             4 : 8] : 8] - 1 < hash(start + 4 + 8, id_p) * 8 || buf[start + 4 +
+             8 + buf[start + 4 : 8] + 8 + hash(start + 4 + 8, id_p) * 8 : 8] = 0) {
 
          } else {
-              kstart = buf[start + 3 + 8 + buf[start + 3 : 8] + 8 + hash(start +
-              3 + 8, id_p) * 8 : 8];
+              kstart = buf[start + 4 + 8 + buf[start + 4 : 8] + 8 + hash(start +
+              4 + 8, id_p) * 8 : 8];
               init scalar_5(kstart);
               key = next(scalar_5);
-              vstart = buf[start + 3 + 8 + buf[start + 3 : 8] + 8 + hash(start +
-              3 + 8, id_p) * 8 : 8] + 1;
+              vstart = buf[start + 4 + 8 + buf[start + 4 : 8] + 8 + hash(start +
+              4 + 8, id_p) * 8 : 8] + 1;
               if (true && key[0] = id_p) {
                   init list_6(vstart, key[0]);
                   tup15 = next(list_6);
@@ -843,10 +843,10 @@ select([lp.counter, lc.counter],
          lp_counter,
          start) {
          low29 = 0;
-         high30 = buf[start + 3 : 8] / 9;
+         high30 = buf[start + 4 : 8] / 9;
          loop (low29 < high30) {
              mid31 = low29 + high30 / 2;
-             kstart = start + 3 + 8 + mid31 * 9;
+             kstart = start + 4 + 8 + mid31 * 9;
              init scalar_19(lp_succ, lp_k, lp_counter, kstart);
              key32 = next(scalar_19);
              if (key32[0] < lp_counter) {
@@ -855,13 +855,13 @@ select([lp.counter, lc.counter],
                   high30 = mid31;
              }
          }
-         if (low29 < buf[start + 3 : 8] / 9) {
-             kstart = start + 3 + 8 + low29 * 9;
+         if (low29 < buf[start + 4 : 8] / 9) {
+             kstart = start + 4 + 8 + low29 * 9;
              init scalar_19(lp_succ, lp_k, lp_counter, kstart);
              key33 = next(scalar_19);
              key34 = key33;
-             loop (key34[0] < lp_succ && low29 < buf[start + 3 : 8] / 9) {
-                 vstart = buf[start + 3 + 8 + low29 * 9 + 1 : 8];
+             loop (key34[0] < lp_succ && low29 < buf[start + 4 : 8] / 9) {
+                 vstart = buf[start + 4 + 8 + low29 * 9 + 1 : 8];
                  init list_20(lp_succ, lp_k, lp_counter, vstart, key[0]);
                  loop (not done(list_20)) {
                      tup35 = next(list_20);
@@ -872,7 +872,7 @@ select([lp.counter, lc.counter],
                      }
                  }
                  low29 = low29 + 1;
-                 kstart = start + 3 + 8 + low29 * 9;
+                 kstart = start + 4 + 8 + low29 * 9;
                  init scalar_19(lp_succ, lp_k, lp_counter, kstart);
                  key36 = next(scalar_19);
                  key34 = key36;
@@ -898,8 +898,8 @@ select([lp.counter, lc.counter],
              }
          }
     }fun tuple_1 () {
-         cstart2 = 3;
-         cstart3 = cstart2 + buf[cstart2 : 3];
+         cstart2 = 4;
+         cstart3 = cstart2 + buf[cstart2 : 4];
          init hash_idx_4(cstart2);
          loop (not done(hash_idx_4)) {
              tup16 = next(hash_idx_4);

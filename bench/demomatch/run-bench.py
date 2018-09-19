@@ -24,10 +24,11 @@ PORT = 5433
 COMPILE_EXE = rpath('../../../_build/default/fastdb/bin/compile.exe')
 PRESENT_QUERIES = 10
 ABSENT_QUERIES = 10
-TABLE_SIZE = 100000
+TABLE_SIZE = 10000000
 BENCHMARKS = [
     rpath('example1.txt'),
     rpath('example2.txt'),
+    rpath('example3.txt'),
 ]
 
 def bench_dir(bench_file):

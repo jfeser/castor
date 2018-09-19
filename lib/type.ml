@@ -185,7 +185,7 @@ let rec len =
       let body_len = x.count * len t in
       let len_len = header_len body_len in
       count_len + len_len + body_len
-  | T.HashIdxT _ | T.OrderedIdxT (_, _, _) -> (0, 100000)
+  | T.HashIdxT _ | T.OrderedIdxT (_, _, _) -> (0, 100000000)
   | FuncT (ts, _) -> List.sum (module AbsInt) ts ~f:len
 
 (* let rec to_schema : t -> Db.Schema.t = function
