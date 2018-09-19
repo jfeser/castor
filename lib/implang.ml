@@ -21,6 +21,7 @@ type expr =
   | Binop of {op: op; arg1: expr; arg2: expr}
   | Unop of {op: op; arg: expr}
   | Done of string
+  | Ternary of expr * expr * expr
 
 and stmt =
   | Print of Type.PrimType.t * expr
@@ -95,6 +96,8 @@ let rec pp_expr : Format.formatter -> expr -> unit =
         fprintf fmt "%a %s@ %a" pp_expr arg1 (op_to_string op) pp_expr arg2
     | Unop {op; arg} -> fprintf fmt "%s@ %a" (op_to_string op) pp_expr arg
     | Done func -> fprintf fmt "done(%s)" func
+    | Ternary (e1, e2, e3) ->
+        fprintf fmt "%a ? %a : %a" pp_expr e1 pp_expr e2 pp_expr e3
 
 and pp_stmt : Format.formatter -> stmt -> unit =
   let open Format in
@@ -170,6 +173,13 @@ let rec infer_type ctx =
     | TupleT ts -> List.nth_exn ts idx
     | t -> fail (Error.create "Expected a tuple." t [%sexp_of: t]) )
   | Done _ -> BoolT {nullable= false}
+  | Ternary (e1, e2, e3) -> (
+    match infer_type ctx e1 with
+    | BoolT {nullable= false} ->
+        let t1 = infer_type ctx e2 in
+        let t2 = infer_type ctx e3 in
+        unify t1 t2
+    | _ -> failwith "Unexpected conditional type." )
 
 module Infix = struct
   let int x = Int x

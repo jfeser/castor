@@ -51,6 +51,9 @@
 %token AORDEREDIDX
 %token NULL
 %token ORDERBY
+%token IF
+%token THEN
+%token ELSE
 
 %start <Abslayout0.t> abs_ralgebra_eof
 %start <Abslayout0.name> name_eof
@@ -180,6 +183,7 @@ abs_pred:
 | AVG; f = parens(abs_pred) { A.Avg f }
 | SUM; f = parens(abs_pred) { A.Sum f }
 | p = abs_pred; AS; id = ID { A.As_pred (p, id) }
+| IF; p1 = abs_pred; THEN; p2 = abs_pred; ELSE; p3 = abs_pred { A.If (p1, p2, p3) }
 
 lambda(X):
 | n = ID; RARROW; x = X { (n, x) }

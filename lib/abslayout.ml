@@ -12,6 +12,17 @@ module Name = struct
     [@@deriving sexp]
   end
 
+  module Compare = struct
+    module T = struct
+      type t = T.t =
+        {relation: string option; name: string; type_: Type0.PrimType.t option}
+      [@@deriving compare, hash, sexp]
+    end
+
+    include T
+    include Comparable.Make (T)
+  end
+
   module Compare_no_type = struct
     module T = struct
       type t = T.t =
@@ -165,6 +176,8 @@ let rec pp_pred fmt =
   | Avg n -> fprintf fmt "avg(%a)" pp_pred n
   | Min n -> fprintf fmt "min(%a)" pp_pred n
   | Max n -> fprintf fmt "max(%a)" pp_pred n
+  | If (p1, p2, p3) ->
+      fprintf fmt "if %a then %a else %a" pp_pred p1 pp_pred p2 pp_pred p3
 
 let pp_key fmt = function
   | [] -> failwith "Unexpected empty key."
@@ -321,6 +334,13 @@ let rec pred_to_schema =
     | Eq | Lt | Le | Gt | Ge | And | Or -> unnamed (BoolT {nullable= false})
     | Add | Sub | Mul | Div | Mod -> unnamed (IntT {nullable= false}) )
   | Count | Sum _ | Avg _ | Min _ | Max _ -> unnamed (IntT {nullable= false})
+  | If (_, p1, p2) ->
+      let s1 = pred_to_schema p1 in
+      let s2 = pred_to_schema p2 in
+      if not ([%compare.equal: Name.Compare.t] s1 s2) then
+        Error.create "Mismatched sides of if." (s1, s2) [%sexp_of: Name.t * Name.t]
+        |> Error.raise ;
+      s1
 
 let pred_to_name pred =
   let n = pred_to_schema pred in
@@ -387,7 +407,7 @@ let rec annotate_foreach r =
 let rec pred_kind = function
   | As_pred (x', _) -> (
     match pred_kind x' with `Scalar -> `Scalar | `Agg -> `Agg )
-  | Name _ | Int _ | Bool _ | String _ | Null | Binop _ -> `Scalar
+  | Name _ | Int _ | Bool _ | String _ | Null | Binop _ | If _ -> `Scalar
   | Sum _ | Avg _ | Min _ | Max _ | Count -> `Agg
 
 let select_kind l =

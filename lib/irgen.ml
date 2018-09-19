@@ -71,6 +71,7 @@ struct
           | A.Mod -> Infix.(e1 % e2) )
       | A.Count | A.Min _ | A.Max _ | A.Sum _ | A.Avg _ ->
           failwith "Not a scalar predicate."
+      | A.If (p1, p2, p3) -> Ternary (gen_pred p1, gen_pred p2, gen_pred p3)
     in
     gen_pred pred
 

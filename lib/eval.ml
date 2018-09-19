@@ -22,6 +22,10 @@ let lookup ctx n =
       Error.create "Unbound variable." (n, ctx) [%sexp_of: Name.t * Ctx.t]
       |> Error.raise
 
+let to_int = function `Int x -> x | _ -> failwith "Not an int."
+
+let to_bool = function `Bool x -> x | _ -> failwith "Not a bool."
+
 let rec eval_pred ctx = function
   | As_pred (p, _) -> eval_pred ctx p
   | Null -> `Null
@@ -52,9 +56,10 @@ let rec eval_pred ctx = function
           Error.create "Unexpected argument types." (op, v1, v2)
             [%sexp_of: op * Db.primvalue * Db.primvalue]
           |> Error.raise )
+  | If (p1, p2, p3) ->
+      let v1 = eval_pred ctx p1 |> to_bool in
+      if v1 then eval_pred ctx p2 else eval_pred ctx p3
   | Count | Avg _ | Max _ | Min _ | Sum _ -> failwith "Unexpected aggregate."
-
-let to_int = function `Int x -> x | _ -> failwith "Not an int."
 
 module Make (Config : Config.S) : S = struct
   let load_relation = Relation.from_db Config.conn

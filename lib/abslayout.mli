@@ -61,6 +61,7 @@ type pred = Abslayout0.pred =
   | Avg of pred
   | Min of pred
   | Max of pred
+  | If of pred * pred * pred
 [@@deriving sexp_of]
 
 type hash_idx = Abslayout0.hash_idx =

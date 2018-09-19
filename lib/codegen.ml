@@ -648,6 +648,12 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         build_store v ptr builder |> ignore ) ;
     build_load struct_ "tupletmp" builder
 
+  let codegen_ternary codegen_expr e1 e2 e3 =
+    let v1 = codegen_expr e1 in
+    let v2 = codegen_expr e2 in
+    let v3 = codegen_expr e3 in
+    build_select v1 v2 v3 "" builder
+
   let rec codegen_expr fctx = function
     | I.Null -> failwith "TODO: Pick a runtime null rep."
     | Int x -> const_int int_type x
@@ -664,6 +670,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     | Binop {op; arg1; arg2} -> codegen_binop codegen_expr fctx op arg1 arg2
     | Unop {op; arg} -> codegen_unop codegen_expr fctx op arg
     | Tuple es -> codegen_tuple (codegen_expr fctx) es
+    | Ternary (e1, e2, e3) -> codegen_ternary (codegen_expr fctx) e1 e2 e3
 
   let codegen_loop fctx codegen_prog cond body =
     let start_bb = insertion_block builder in

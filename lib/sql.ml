@@ -32,6 +32,9 @@ let rec pred_to_sql = function
   | Avg n -> sprintf "avg(%s)" (pred_to_sql n)
   | Min n -> sprintf "min(%s)" (pred_to_sql n)
   | Max n -> sprintf "max(%s)" (pred_to_sql n)
+  | If (p1, p2, p3) ->
+      sprintf "case when %s then %s else %s end" (pred_to_sql p1) (pred_to_sql p2)
+        (pred_to_sql p3)
 
 type query = {schema: Name.t list; sql: [`Subquery of string | `Scan of string]}
 

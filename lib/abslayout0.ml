@@ -31,6 +31,7 @@ type pred =
   | Avg of pred
   | Min of pred
   | Max of pred
+  | If of pred * pred * pred
 
 and hash_idx = {hi_key_layout: t option; lookup: pred list}
 
