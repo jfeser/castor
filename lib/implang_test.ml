@@ -862,6 +862,7 @@ select([lp.counter, lc.counter],
              key34 = key33;
              loop (key34[0] < lp_succ && low29 < buf[start + 4 : 8] / 9) {
                  vstart = buf[start + 4 + 8 + low29 * 9 + 1 : 8];
+                 key = key34;
                  init list_20(lp_succ, lp_k, lp_counter, vstart, key[0]);
                  loop (not done(list_20)) {
                      tup35 = next(list_20);

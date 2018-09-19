@@ -57,10 +57,10 @@ type pred = Abslayout0.pred =
   | Binop of (op * pred * pred)
   | As_pred of (pred * string)
   | Count
-  | Sum of Name.t
-  | Avg of Name.t
-  | Min of Name.t
-  | Max of Name.t
+  | Sum of pred
+  | Avg of pred
+  | Min of pred
+  | Max of pred
 [@@deriving sexp_of]
 
 type hash_idx = Abslayout0.hash_idx =

@@ -27,10 +27,10 @@ type pred =
   | Binop of ((op[@opaque]) * pred * pred)
   | As_pred of (pred * string)
   | Count
-  | Sum of (name[@opaque])
-  | Avg of (name[@opaque])
-  | Min of (name[@opaque])
-  | Max of (name[@opaque])
+  | Sum of pred
+  | Avg of pred
+  | Min of pred
+  | Max of pred
 
 and hash_idx = {hi_key_layout: t option; lookup: pred list}
 

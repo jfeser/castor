@@ -161,10 +161,10 @@ let rec pp_pred fmt =
   | Binop (op, p1, p2) ->
       fprintf fmt "@[<h>%a@ %s@ %a@]" pp_pred p1 (op_to_str op) pp_pred p2
   | Count -> fprintf fmt "count()"
-  | Sum n -> fprintf fmt "sum(%a)" pp_name n
-  | Avg n -> fprintf fmt "avg(%a)" pp_name n
-  | Min n -> fprintf fmt "min(%a)" pp_name n
-  | Max n -> fprintf fmt "max(%a)" pp_name n
+  | Sum n -> fprintf fmt "sum(%a)" pp_pred n
+  | Avg n -> fprintf fmt "avg(%a)" pp_pred n
+  | Min n -> fprintf fmt "min(%a)" pp_pred n
+  | Max n -> fprintf fmt "max(%a)" pp_pred n
 
 let pp_key fmt = function
   | [] -> failwith "Unexpected empty key."

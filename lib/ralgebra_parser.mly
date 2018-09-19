@@ -175,10 +175,10 @@ abs_pred:
 | p1 = abs_pred; AND; p2 = abs_pred { A.Binop (A.And, p1, p2) }
 | p1 = abs_pred; OR; p2 = abs_pred { A.Binop (A.Or, p1, p2) }
 | COUNT; LPAREN; RPAREN; { A.Count }
-| MIN; f = parens(name) { A.Min f }
-| MAX; f = parens(name) { A.Max f }
-| AVG; f = parens(name) { A.Avg f }
-| SUM; f = parens(name) { A.Sum f }
+| MIN; f = parens(abs_pred) { A.Min f }
+| MAX; f = parens(abs_pred) { A.Max f }
+| AVG; f = parens(abs_pred) { A.Avg f }
+| SUM; f = parens(abs_pred) { A.Sum f }
 | p = abs_pred; AS; id = ID { A.As_pred (p, id) }
 
 lambda(X):

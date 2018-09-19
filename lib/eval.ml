@@ -22,11 +22,6 @@ let lookup ctx n =
       Error.create "Unbound variable." (n, ctx) [%sexp_of: Name.t * Ctx.t]
       |> Error.raise
 
-let lookup_int ctx n =
-  match lookup ctx n with
-  | `Int x -> x
-  | v -> Error.create "Unexpected value." v [%sexp_of: Db.primvalue] |> Error.raise
-
 let rec eval_pred ctx = function
   | As_pred (p, _) -> eval_pred ctx p
   | Null -> `Null
@@ -58,6 +53,8 @@ let rec eval_pred ctx = function
             [%sexp_of: op * Db.primvalue * Db.primvalue]
           |> Error.raise )
   | Count | Avg _ | Max _ | Min _ | Sum _ -> failwith "Unexpected aggregate."
+
+let to_int = function `Int x -> x | _ -> failwith "Not an int."
 
 module Make (Config : Config.S) : S = struct
   let load_relation = Relation.from_db Config.conn
@@ -192,10 +189,10 @@ module Make_mock (Config : Config.S_mock) : S = struct
   let agg_step ctx expr acc =
     match (expr, acc) with
     | Count, `Int x -> `Int (x + 1)
-    | Sum n, `Int x -> `Int (x + lookup_int ctx n)
-    | Avg n, `Avg (num, den) -> `Avg (num + lookup_int ctx n, den + 1)
-    | Min n, `Int x -> `Int (Int.min x (lookup_int ctx n))
-    | Max n, `Int x -> `Int (Int.max x (lookup_int ctx n))
+    | Sum n, `Int x -> `Int (x + (eval_pred ctx n |> to_int))
+    | Avg n, `Avg (num, den) -> `Avg (num + (eval_pred ctx n |> to_int), den + 1)
+    | Min n, `Int x -> `Int (Int.min x (eval_pred ctx n |> to_int))
+    | Max n, `Int x -> `Int (Int.max x (eval_pred ctx n |> to_int))
     | _ -> failwith "Not an aggregate."
 
   let agg_extract = function `Int x -> `Int x | `Avg (n, d) -> `Int (n / d)
