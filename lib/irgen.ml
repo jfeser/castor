@@ -522,18 +522,10 @@ struct
     | A.Sum f, `Int x -> build_assign Infix.(x + gen_pred ~ctx f b) x b
     | A.Min f, `Int x ->
         let v = gen_pred ~ctx f b in
-        build_if
-          ~cond:Infix.(v < x)
-          ~then_:(fun b -> build_assign v x b)
-          ~else_:(fun _ -> ())
-          b
+        build_assign (Ternary (Infix.(v < x), v, x)) x b
     | A.Max f, `Int x ->
         let v = gen_pred ~ctx f b in
-        build_if
-          ~cond:Infix.(v > x)
-          ~then_:(fun b -> build_assign v x b)
-          ~else_:(fun _ -> ())
-          b
+        build_assign (Ternary (Infix.(v > x), v, x)) x b
     | A.Avg f, `Avg (n, d) ->
         let v = gen_pred ~ctx f b in
         build_assign Infix.(n + v) n b ;
