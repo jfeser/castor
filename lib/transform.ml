@@ -8,6 +8,8 @@ module Config = struct
     include Eval.Config.S
 
     val check_transforms : bool
+
+    val params : Set.M(A.Name.Compare_no_type).t
   end
 end
 
@@ -87,12 +89,14 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
 
   let compose_many = List.fold_left ~init:id ~f:compose
 
+  let no_params r = Set.is_empty (Set.inter (A.names r) Config.params)
+
   let tf_row_store =
     let open A in
     { name= "row-store"
     ; f=
         (fun r ->
-          if Set.is_empty (A.params r) then
+          if no_params r then
             let s = M.to_schema r in
             let scalars = List.map s ~f:(fun n -> scalar (Name n)) in
             [list r (tuple scalars Cross)]
@@ -104,7 +108,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     { name= "elim-groupby"
     ; f=
         (function
-        | {node= GroupBy (ps, key, r); _} as rr when Set.is_empty (params rr) ->
+        | {node= GroupBy (ps, key, r); _} as rr when no_params rr ->
             let key_name = Fresh.name fresh "k%d" in
             let key_preds = List.map key ~f:(fun n -> Name n) in
             let filter_pred =
@@ -124,8 +128,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     { name= "elim-groupby-filter"
     ; f=
         (function
-        | {node= GroupBy (ps, key, {node= Filter (p, r); _}); _}
-          when Set.is_empty (params r) ->
+        | {node= GroupBy (ps, key, {node= Filter (p, r); _}); _} when no_params r ->
             let key_name = Fresh.name fresh "k%d" in
             let key_preds = List.map key ~f:(fun n -> Name n) in
             let filter_pred =

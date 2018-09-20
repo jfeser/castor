@@ -244,24 +244,38 @@ let of_channel_exn ch = of_lexbuf_exn (Lexing.from_channel ch)
 
 let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
 
-let params r =
-  let ralgebra_params =
-    object (self)
+(* let params r =
+ *   let ralgebra_params =
+ *     object (self)
+ *       inherit [_] reduce
+ * 
+ *       method zero = Set.empty (module Name.Compare_no_type)
+ * 
+ *       method plus = Set.union
+ * 
+ *       method! visit_Name () n =
+ *         if Option.is_none n.relation then
+ *           Set.singleton (module Name.Compare_no_type) n
+ *         else self#zero
+ * 
+ *       method visit_name _ _ = self#zero
+ *     end
+ *   in
+ *   ralgebra_params#visit_t () r *)
+
+let names r =
+  let visitor =
+    object
       inherit [_] reduce
 
       method zero = Set.empty (module Name.Compare_no_type)
 
       method plus = Set.union
 
-      method! visit_Name () n =
-        if Option.is_none n.relation then
-          Set.singleton (module Name.Compare_no_type) n
-        else self#zero
-
-      method visit_name _ _ = self#zero
+      method! visit_Name () n = Set.singleton (module Name.Compare_no_type) n
     end
   in
-  ralgebra_params#visit_t () r
+  visitor#visit_t () r
 
 let pred_of_value = function
   | `Bool x -> Bool x
@@ -412,3 +426,16 @@ let rec pred_kind = function
 
 let select_kind l =
   List.map l ~f:pred_kind |> List.all_equal ~sexp_of_t:[%sexp_of: [`Scalar | `Agg]]
+
+let rec is_serializeable {node; _} =
+  match node with
+  | AEmpty | AScalar _ -> true
+  | Join _ | GroupBy (_, _, _) | OrderBy _ | Dedup _ | Scan _ -> false
+  | Select (_, r)
+   |As (_, r)
+   |AHashIdx (_, r, _)
+   |AOrderedIdx (_, r, _)
+   |AList (_, r)
+   |Filter (_, r) ->
+      is_serializeable r
+  | ATuple (rs, _) -> List.for_all rs ~f:is_serializeable

@@ -35,19 +35,6 @@ let () =
   Logs.set_reporter (Logs.format_reporter ()) ;
   let open Command in
   let open Let_syntax in
-  let param =
-    Arg_type.create (fun s ->
-        let k, v = String.lsplit2_exn ~on:':' s in
-        let v =
-          let open Type.PrimType in
-          match v with
-          | "string" -> StringT {nullable= false}
-          | "int" -> IntT {nullable= false}
-          | "bool" -> BoolT {nullable= false}
-          | _ -> failwith "Unexpected type name."
-        in
-        (k, v) )
-  in
   basic ~summary:"Compile a query."
     (let%map_open verbose =
        flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
@@ -60,7 +47,7 @@ let () =
        flag "output" ~aliases:["o"] (optional string)
          ~doc:"directory to write compiler output in"
      and params =
-       flag "param" ~aliases:["p"] (listed param)
+       flag "param" ~aliases:["p"] (listed Util.param)
          ~doc:"query parameters (passed as key:value)"
      and code_only = flag "code-only" no_arg ~doc:"only emit code"
      and query = anon ("query" %: file) in

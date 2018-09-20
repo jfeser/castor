@@ -1,0 +1,12 @@
+orderby([revenue], groupby([n_name,
+	sum(l_extendedprice * (1 - l_discount)) as revenue],
+  [n_name],
+  join(l_orderkey = o_orderkey && c_custkey = o_custkey,
+  join(c_nationkey = s_nationkey,
+  join(s_nationkey = n_nationkey,
+  join(n_regionkey = r_regionkey,
+  filter(r_name = param0, region),
+  nation),
+  supplier),
+  customer),
+  filter(o_orderdate >= param1 && o_orderdate < param2, orders))), desc)

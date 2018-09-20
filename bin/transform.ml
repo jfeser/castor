@@ -2,10 +2,11 @@ open Core
 open Dblayout
 open Postgresql
 open Collections
+module A = Abslayout
 
 type transform = string * int option
 
-let main ?(debug = false) ?sample:_ ?(transforms = []) ~db query_str =
+let main ?(debug = false) ?sample:_ ?(transforms = []) ~db ~params query_str =
   (* (\* FIXME: Use the first parameter value for test params. Should use multiple
    *      choices and average. *\)
    * let test_params =
@@ -19,6 +20,10 @@ let main ?(debug = false) ?sample:_ ?(transforms = []) ~db query_str =
    * in *)
   let module Config = struct
     let conn = new connection ~dbname:db ()
+
+    let params =
+      List.map params ~f:(fun (n, t) -> A.Name.create ~type_:t n)
+      |> Set.of_list (module Abslayout.Name.Compare_no_type)
 
     (* let testctx = Layout.PredCtx.of_vars test_params *)
 
@@ -43,7 +48,7 @@ let main ?(debug = false) ?sample:_ ?(transforms = []) ~db query_str =
             match i with Some idx -> [List.nth_exn r' idx] | None -> r' ) )
   in
   List.iteri candidates ~f:(fun i r ->
-      Format.eprintf "Candidate #%d:\n" i ;
+      Format.eprintf "Candidate #%d (serializable=%b):\n" i (A.is_serializeable r) ;
       Format.eprintf "%a\n" Abslayout.pp r ;
       Format.(pp_print_newline err_formatter ()) ) ;
   match candidates with
@@ -82,11 +87,14 @@ let () =
      and debug =
        flag "debug" ~aliases:["g"] no_arg
          ~doc:"turn on error checking for transforms"
+     and params =
+       flag "param" ~aliases:["p"] (listed Util.param)
+         ~doc:"query parameters (passed as key:value)"
      and ch = anon (maybe_with_default In_channel.stdin ("query" %: channel)) in
      fun () ->
        if verbose then Logs.set_level (Some Logs.Debug)
        else if quiet then Logs.set_level (Some Logs.Error)
        else Logs.set_level (Some Logs.Info) ;
        let query = In_channel.input_all ch in
-       main ~debug ?sample ?transforms ~db query)
+       main ~debug ?sample ?transforms ~db ~params query)
   |> run

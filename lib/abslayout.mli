@@ -100,7 +100,8 @@ val pp : Formatter.t -> t -> unit
 
 val name : t -> string
 
-val params : t -> Set.M(Name.Compare_no_type).t
+val names : t -> Set.M(Name.Compare_no_type).t
+(** The set of names in a `t`. *)
 
 val select : pred list -> t -> t
 
@@ -184,3 +185,5 @@ val annotate_foreach : t -> unit
 val next_inner_loop : t -> (t * t) option
 
 val select_kind : pred list -> [`Agg | `Scalar] Or_error.t
+
+val is_serializeable : t -> bool
