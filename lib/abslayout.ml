@@ -163,7 +163,7 @@ let pp_kind fmt =
 let rec pp_pred fmt =
   let open Format in
   function
-  | As_pred (p, n) -> fprintf fmt "@[<h>%a@ as@ %s]" pp_pred p n
+  | As_pred (p, n) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp_pred p n
   | Null -> fprintf fmt "null"
   | Int x -> fprintf fmt "%d" x
   | Bool x -> fprintf fmt "%B" x

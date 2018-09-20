@@ -87,12 +87,24 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
 
   let compose_many = List.fold_left ~init:id ~f:compose
 
+  let tf_row_store =
+    let open A in
+    { name= "row-store"
+    ; f=
+        (fun r ->
+          if Set.is_empty (A.params r) then
+            let s = M.to_schema r in
+            let scalars = List.map s ~f:(fun n -> scalar (Name n)) in
+            [list r (tuple scalars Cross)]
+          else [] ) }
+    |> run_everywhere
+
   let tf_elim_groupby =
     let open A in
     { name= "elim-groupby"
     ; f=
         (function
-        | {node= GroupBy (ps, key, r); _} ->
+        | {node= GroupBy (ps, key, r); _} as rr when Set.is_empty (params rr) ->
             let key_name = Fresh.name fresh "k%d" in
             let key_preds = List.map key ~f:(fun n -> Name n) in
             let filter_pred =
@@ -101,10 +113,30 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
               |> List.fold_left ~init:(Bool true) ~f:(fun acc p ->
                      Binop (And, acc, p) )
             in
-            [ select ps
-                (list
-                   (as_ key_name (dedup (select key_preds r)))
-                   (filter filter_pred r)) ]
+            [ list
+                (as_ key_name (dedup (select key_preds r)))
+                (select ps (filter filter_pred r)) ]
+        | _ -> []) }
+    |> run_everywhere
+
+  let tf_elim_groupby_filter =
+    let open A in
+    { name= "elim-groupby-filter"
+    ; f=
+        (function
+        | {node= GroupBy (ps, key, {node= Filter (p, r); _}); _}
+          when Set.is_empty (params r) ->
+            let key_name = Fresh.name fresh "k%d" in
+            let key_preds = List.map key ~f:(fun n -> Name n) in
+            let filter_pred =
+              List.map key ~f:(fun n ->
+                  Binop (Eq, Name n, Name {n with relation= Some key_name}) )
+              |> List.fold_left ~init:(Bool true) ~f:(fun acc p ->
+                     Binop (And, acc, p) )
+            in
+            [ list
+                (as_ key_name (dedup (select key_preds r)))
+                (select ps (filter p (filter filter_pred r))) ]
         | _ -> []) }
     |> run_everywhere
 
@@ -138,7 +170,12 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | _ -> []) }
     |> run_everywhere
 
-  let transforms = [tf_elim_groupby; tf_push_orderby; tf_hoist_filter]
+  let transforms =
+    [ tf_elim_groupby
+    ; tf_elim_groupby_filter
+    ; tf_push_orderby
+    ; tf_hoist_filter
+    ; tf_row_store ]
 
   let of_name : string -> t Or_error.t =
    fun n ->

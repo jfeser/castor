@@ -165,6 +165,7 @@ abs_pred:
 | x = BOOL { A.Bool x }
 | x = STR { A.String x }
 | NULL { A.Null }
+  | LPAREN; p = abs_pred; RPAREN { p }
 | p1 = abs_pred; EQ; p2 = abs_pred { A.Binop (A.Eq, p1, p2) }
 | p1 = abs_pred; LT; p2 = abs_pred { A.Binop (A.Lt, p1, p2) }
 | p1 = abs_pred; LE; p2 = abs_pred { A.Binop (A.Le, p1, p2) }

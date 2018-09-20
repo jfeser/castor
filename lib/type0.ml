@@ -29,8 +29,11 @@ module PrimType = struct
     | Db.DInt -> IntT {nullable= false}
     | Db.DString -> StringT {nullable= false}
     | Db.DBool -> BoolT {nullable= false}
-    | Db.DRational -> StringT {nullable= false}
-    | t -> Error.create "Unexpected dtype." t [%sexp_of: Db.dtype] |> Error.raise
+    | t ->
+        Logs.warn (fun m ->
+            m "Passing unknown type as string: %a" Sexp.pp_hum
+              ([%sexp_of: Db.dtype] t) ) ;
+        StringT {nullable= false}
 
   let rec pp_tuple pp_v fmt =
     let open Format in
