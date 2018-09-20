@@ -7,7 +7,7 @@ let create rels name fs xs =
   in
   let data =
     List.map xs ~f:(fun data ->
-        List.map2_exn fs data ~f:(fun fname value -> (fname, `Int value)) )
+        List.map2_exn fs data ~f:(fun fname value -> (fname, Value.Int value)) )
   in
   Hashtbl.set rels ~key:rel ~data ;
   ( name

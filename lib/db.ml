@@ -214,13 +214,12 @@ let result_to_tuples r =
                  match type_ with
                  | Postgresql.BOOL -> (
                    match value with
-                   | "t" -> `Bool true
-                   | "f" -> `Bool false
+                   | "t" -> Value.Bool true
+                   | "f" -> Bool false
                    | _ -> failwith "Unknown boolean value." )
                  | INT8 | INT2 | INT4 ->
-                     if String.(value = "") then `Null
-                     else `Int (Int.of_string value)
-                 | CHAR | TEXT | VARCHAR -> `String value
+                     if String.(value = "") then Null else Int (Int.of_string value)
+                 | CHAR | TEXT | VARCHAR -> String value
                  | FLOAT4 | FLOAT8 | NAME | NUMERIC | BYTEA | INT2VECTOR | REGPROC
                   |OID | TID | XID | CID | OIDVECTOR | JSON | POINT | LSEG | PATH
                   |BOX | POLYGON | LINE | ABSTIME | RELTIME | TINTERVAL | UNKNOWN
@@ -231,7 +230,7 @@ let result_to_tuples r =
                   |TRIGGER | LANGUAGE_HANDLER | INTERNAL | OPAQUE | ANYELEMENT
                   |JSONB ->
                      (* Store unknown values as strings. *)
-                     `String value
+                     String value
                in
                (r#fname field_i, primval) )
            |> Map.of_alist_exn (module String)

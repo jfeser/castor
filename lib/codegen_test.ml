@@ -16,11 +16,11 @@ let _ =
     [ ("counter", Type.PrimType.IntT {nullable= false})
     ; ("succ", Type.PrimType.IntT {nullable= false})
     ; ("id", Type.PrimType.StringT {nullable= false}) ]
-    [ [`Int 1; `Int 4; `String "foo"]
-    ; [`Int 2; `Int 3; `String "fizzbuzz"]
-    ; [`Int 3; `Int 4; `String "bar"]
-    ; [`Int 4; `Int 6; `String "foo"]
-    ; [`Int 5; `Int 6; `String "bar"] ]
+    [ [Int 1; Int 4; String "foo"]
+    ; [Int 2; Int 3; String "fizzbuzz"]
+    ; [Int 3; Int 4; String "bar"]
+    ; [Int 4; Int 6; String "foo"]
+    ; [Int 5; Int 6; String "bar"] ]
 
 let make_modules layout_file =
   let module E = Eval.Make_mock (struct

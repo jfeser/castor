@@ -22,36 +22,36 @@ let lookup ctx n =
       Error.create "Unbound variable." (n, ctx) [%sexp_of: Name.t * Ctx.t]
       |> Error.raise
 
-let to_int = function `Int x -> x | _ -> failwith "Not an int."
+let to_int = function Value.Int x -> x | _ -> failwith "Not an int."
 
-let to_bool = function `Bool x -> x | _ -> failwith "Not a bool."
+let to_bool = function Value.Bool x -> x | _ -> failwith "Not a bool."
 
 let rec eval_pred ctx = function
   | As_pred (p, _) -> eval_pred ctx p
-  | Null -> `Null
-  | Int x -> `Int x
-  | String x -> `String x
-  | Bool x -> `Bool x
+  | Null -> Value.Null
+  | Int x -> Int x
+  | String x -> String x
+  | Bool x -> Bool x
   | Name n -> lookup ctx n
   | Binop (op, p1, p2) -> (
       let v1 = eval_pred ctx p1 in
       let v2 = eval_pred ctx p2 in
       match (op, v1, v2) with
-      | Eq, `Null, _ | Eq, _, `Null -> `Bool false
-      | Eq, `Bool x1, `Bool x2 -> `Bool Bool.(x1 = x2)
-      | Eq, `Int x1, `Int x2 -> `Bool Int.(x1 = x2)
-      | Eq, `String x1, `String x2 -> `Bool String.(x1 = x2)
-      | Lt, `Int x1, `Int x2 -> `Bool (x1 < x2)
-      | Le, `Int x1, `Int x2 -> `Bool (x1 <= x2)
-      | Gt, `Int x1, `Int x2 -> `Bool (x1 > x2)
-      | Ge, `Int x1, `Int x2 -> `Bool (x1 >= x2)
-      | Add, `Int x1, `Int x2 -> `Int (x1 + x2)
-      | Sub, `Int x1, `Int x2 -> `Int (x1 - x2)
-      | Mul, `Int x1, `Int x2 -> `Int (x1 * x2)
-      | Div, `Int x1, `Int x2 -> `Int (x1 / x2)
-      | Mod, `Int x1, `Int x2 -> `Int (x1 % x2)
-      | And, `Bool x1, `Bool x2 -> `Bool (x1 && x2)
-      | Or, `Bool x1, `Bool x2 -> `Bool (x1 || x2)
+      | Eq, Null, _ | Eq, _, Null -> Bool false
+      | Eq, Bool x1, Bool x2 -> Bool Bool.(x1 = x2)
+      | Eq, Int x1, Int x2 -> Bool Int.(x1 = x2)
+      | Eq, String x1, String x2 -> Bool String.(x1 = x2)
+      | Lt, Int x1, Int x2 -> Bool (x1 < x2)
+      | Le, Int x1, Int x2 -> Bool (x1 <= x2)
+      | Gt, Int x1, Int x2 -> Bool (x1 > x2)
+      | Ge, Int x1, Int x2 -> Bool (x1 >= x2)
+      | Add, Int x1, Int x2 -> Int (x1 + x2)
+      | Sub, Int x1, Int x2 -> Int (x1 - x2)
+      | Mul, Int x1, Int x2 -> Int (x1 * x2)
+      | Div, Int x1, Int x2 -> Int (x1 / x2)
+      | Mod, Int x1, Int x2 -> Int (x1 % x2)
+      | And, Bool x1, Bool x2 -> Bool (x1 && x2)
+      | Or, Bool x1, Bool x2 -> Bool (x1 || x2)
       | _ ->
           Error.create "Unexpected argument types." (op, v1, v2)
             [%sexp_of: op * Value.t * Value.t]
@@ -75,17 +75,17 @@ module Make (Config : Config.S) : S = struct
              List.map2 vs r.fields ~f:(fun v f ->
                  let name = Name.create ~relation:r.rname f.fname in
                  let value =
-                   if String.(v = "") then `Null
+                   if String.(v = "") then Value.Null
                    else
                      match f.dtype with
-                     | DInt -> `Int (Int.of_string v)
-                     | DString -> `String v
+                     | DInt -> Int (Int.of_string v)
+                     | DString -> String v
                      | DBool -> (
                        match v with
-                       | "t" -> `Bool true
-                       | "f" -> `Bool false
+                       | "t" -> Bool true
+                       | "f" -> Bool false
                        | _ -> failwith "Unknown boolean value." )
-                     | _ -> `String v
+                     | _ -> String v
                  in
                  (name, value) )
            in
@@ -167,15 +167,15 @@ module Make_mock (Config : Config.S_mock) : S = struct
         Seq.filter_map r2 ~f:(fun t2 ->
             let ctx = ctx |> Map.merge_right t1 |> Map.merge_right t2 in
             match eval_pred ctx p with
-            | `Bool true -> Some (Map.merge_right t1 t2)
-            | `Bool false -> None
+            | Bool true -> Some (Map.merge_right t1 t2)
+            | Bool false -> None
             | _ -> failwith "Expected a boolean." ) )
 
   let eval_filter ctx p seq =
     Seq.filter seq ~f:(fun t ->
         let ctx = Map.merge_right ctx t in
         match eval_pred ctx p with
-        | `Bool x -> x
+        | Bool x -> x
         | _ -> failwith "Expected a boolean." )
 
   let eval_dedup seq =
@@ -199,7 +199,7 @@ module Make_mock (Config : Config.S_mock) : S = struct
     | Max n, `Int x -> `Int (Int.max x (eval_pred ctx n |> to_int))
     | _ -> failwith "Not an aggregate."
 
-  let agg_extract = function `Int x -> `Int x | `Avg (n, d) -> `Int (n / d)
+  let agg_extract = function `Int x -> Value.Int x | `Avg (n, d) -> Int (n / d)
 
   let eval_select ctx args seq =
     let result =

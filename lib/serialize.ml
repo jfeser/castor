@@ -199,13 +199,13 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
           in
           let hash_key =
             match value with
-            | [`String s] -> s
+            | [String s] -> s
             | vs ->
                 List.map vs ~f:(function
-                  | `Int x -> Bitstring.of_int ~byte_width:8 x
-                  | `Bool true -> Bitstring.of_int 1 ~byte_width:1
-                  | `Bool false -> Bitstring.of_int 1 ~byte_width:1
-                  | `String s -> s
+                  | Int x -> Bitstring.of_int ~byte_width:8 x
+                  | Bool true -> Bitstring.of_int 1 ~byte_width:1
+                  | Bool false -> Bitstring.of_int 1 ~byte_width:1
+                  | String s -> s
                   | _ -> failwith "no null keys" )
                 |> String.concat ~sep:"|"
           in
@@ -397,10 +397,10 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
       (sprintf "Scalar (=%s)" ([%sexp_of: Value.t] value |> Sexp.to_string_hum))
       (fun () ->
         match value with
-        | `Null -> serialize_null sctx type_
-        | `Int x -> serialize_int sctx type_ x
-        | `Bool x -> serialize_bool sctx type_ x
-        | `String x -> serialize_string sctx type_ x )
+        | Null -> serialize_null sctx type_
+        | Int x -> serialize_int sctx type_ x
+        | Bool x -> serialize_bool sctx type_ x
+        | String x -> serialize_string sctx type_ x )
 
   let rec serialize sctx type_ layout =
     let open Type in

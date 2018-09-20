@@ -266,11 +266,10 @@ let names r =
   visitor#visit_t () r
 
 let pred_of_value = function
-  | `Bool x -> Bool x
-  | `String x -> String x
-  | `Int x -> Int x
-  | `Null -> Null
-  | `Unknown x -> String x
+  | Value.Bool x -> Bool x
+  | String x -> String x
+  | Int x -> Int x
+  | Null -> Null
 
 let subst ctx =
   let v =

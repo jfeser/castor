@@ -207,11 +207,11 @@ module Make (Eval : Eval.S) = struct
 
         method build_AScalar =
           function
-          | `Int x -> IntT {range= AbsInt.abstract x; nullable= false}
-          | `Bool _ -> BoolT {nullable= false}
-          | `String x ->
+          | Int x -> IntT {range= AbsInt.abstract x; nullable= false}
+          | Bool _ -> BoolT {nullable= false}
+          | String x ->
               StringT {nchars= AbsInt.abstract (String.length x); nullable= false}
-          | `Null -> NullT
+          | Null -> NullT
 
         method build_AList ls =
           let t, c =
