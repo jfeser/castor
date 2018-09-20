@@ -9,7 +9,7 @@ module Config : sig
   end
 
   module type S_mock = sig
-    val rels : (string * primvalue) list list Hashtbl.M(Relation).t
+    val rels : (string * Value.t) list list Hashtbl.M(Relation).t
   end
 end
 

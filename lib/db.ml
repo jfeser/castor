@@ -203,71 +203,7 @@ module Field = struct
   let of_name : string -> t = fun n -> {dummy with fname= n}
 end
 
-type primvalue = [`Int of int | `String of string | `Bool of bool | `Null]
-[@@deriving compare, hash, sexp, bin_io]
-
-let primvalue_to_sql : primvalue -> string = function
-  | `Int x -> Int.to_string x
-  | `String x -> String.escaped x
-  | _ -> failwith "unimplemented"
-
-module Value = struct
-  module T = struct
-    type t = {rel: Relation.t; field: Field.t; value: primvalue}
-    [@@deriving compare, hash, sexp, bin_io]
-  end
-
-  include T
-  include Comparator.Make (T)
-
-  let of_primvalue v = {value= v; rel= Relation.dummy; field= Field.dummy}
-
-  let of_int_exn : int -> t =
-   fun x -> {rel= Relation.dummy; field= Field.dummy; value= `Int x}
-
-  let to_int_exn : t -> int = function
-    | {value= `Int x; _} -> x
-    | v -> Error.create "Expected an int." v [%sexp_of: t] |> Error.raise
-
-  let to_sql : t -> string = fun {value; _} -> primvalue_to_sql value
-end
-
-module Tuple = struct
-  module T = struct
-    type t = Value.t list [@@deriving compare, sexp, hash]
-  end
-
-  include T
-  include Comparable.Make (T)
-
-  module ValueF = struct
-    module T = struct
-      type t = Value.t
-
-      let compare v1 v2 = Field.compare v1.Value.field v2.Value.field
-
-      let sexp_of_t = Value.sexp_of_t
-    end
-
-    include T
-    include Comparable.Make (T)
-  end
-
-  let field : t -> Field.t -> Value.t option =
-   fun t f -> List.find t ~f:(fun v -> Field.(f = v.field))
-
-  let field_exn : t -> Field.t -> Value.t =
-   fun t f -> Option.value_exn (List.find t ~f:(fun v -> Field.(f = v.field)))
-
-  let merge : t -> t -> t =
-   fun t1 t2 -> List.append t1 t2 |> List.dedup (module ValueF)
-
-  let merge_many : t list -> t =
-   fun ts -> List.concat ts |> List.dedup (module ValueF)
-end
-
-let result_to_tuples : Postgresql.result -> primvalue Map.M(String).t Seq.t =
- fun r ->
+let result_to_tuples r =
   Seq.range 0 r#ntuples ~stop:`exclusive
   |> Seq.unfold_with ~init:() ~f:(fun () tup_i ->
          let tup =
@@ -276,7 +212,7 @@ let result_to_tuples : Postgresql.result -> primvalue Map.M(String).t Seq.t =
                let type_ = r#ftype field_i in
                let primval =
                  match type_ with
-                 | BOOL -> (
+                 | Postgresql.BOOL -> (
                    match value with
                    | "t" -> `Bool true
                    | "f" -> `Bool false
@@ -305,12 +241,7 @@ let result_to_tuples : Postgresql.result -> primvalue Map.M(String).t Seq.t =
 let exec_and_raise (conn : Postgresql.connection) query =
   conn#exec query |> process_errors query
 
-let exec_cursor :
-       ?batch_size:int
-    -> ?params:string list
-    -> Postgresql.connection
-    -> string
-    -> primvalue Map.M(String).t Seq.t =
+let exec_cursor =
   let fresh = Fresh.create () in
   fun ?(batch_size = 1000) ?(params = []) conn query ->
     Logs.debug (fun m -> m "Running %s." query) ;

@@ -118,8 +118,7 @@ let run_test ?(params = []) ?(modules = make_modules) ?(print_layout = true)
     In_channel.input_all (In_channel.create layout_file) |> print_endline ;
   let cmd =
     let params_str =
-      List.map params ~f:(fun (_, v) -> Db.primvalue_to_sql v)
-      |> String.concat ~sep:" "
+      List.map params ~f:(fun (_, v) -> Value.to_sql v) |> String.concat ~sep:" "
     in
     sprintf "%s -p %s %s" exe_fn data_fn params_str
   in

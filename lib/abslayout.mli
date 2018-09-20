@@ -154,12 +154,9 @@ module Meta : sig
 end
 
 module Ctx : sig
-  type t = Db.primvalue Map.M(Name.Compare_no_type).t
-  [@@deriving compare, hash, sexp]
+  type t = Value.t Map.M(Name.Compare_no_type).t [@@deriving compare, hash, sexp]
 
   val empty : t
-
-  val of_tuple : Db.Tuple.t -> t
 end
 
 val pred_relations : pred -> string list
@@ -178,7 +175,7 @@ val pred_to_name : pred -> Name.t option
 
 val annotate_align : t -> unit
 
-val pred_of_value : Db.primvalue -> pred
+val pred_of_value : Value.t -> pred
 
 val annotate_foreach : t -> unit
 

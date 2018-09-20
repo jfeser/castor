@@ -217,21 +217,9 @@ let rec pp fmt {node; _} =
   | As (n, r) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp r n
 
 module Ctx = struct
-  type t = primvalue Map.M(Name.Compare_no_type).t [@@deriving compare, hash, sexp]
+  type t = Value.t Map.M(Name.Compare_no_type).t [@@deriving compare, hash, sexp]
 
   let empty = Map.empty (module Name.Compare_no_type)
-
-  let of_tuple : Tuple.t -> t =
-   fun t ->
-    List.fold_left t
-      ~init:(Map.empty (module Name.Compare_no_type))
-      ~f:(fun m v ->
-        let n =
-          { relation= Some v.rel.rname
-          ; name= v.field.fname
-          ; type_= Some (Type.PrimType.of_primvalue v.value) }
-        in
-        Map.set m ~key:n ~data:v.value )
 end
 
 let of_lexbuf_exn lexbuf =

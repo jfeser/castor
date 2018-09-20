@@ -394,7 +394,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
     in
     let value = Eval.eval_pred ctx expr in
     Log.with_msg sctx
-      (sprintf "Scalar (=%s)" ([%sexp_of: Db.primvalue] value |> Sexp.to_string_hum))
+      (sprintf "Scalar (=%s)" ([%sexp_of: Value.t] value |> Sexp.to_string_hum))
       (fun () ->
         match value with
         | `Null -> serialize_null sctx type_

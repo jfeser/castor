@@ -11,7 +11,7 @@ module Config = struct
   end
 
   module type S_mock = sig
-    val rels : (string * primvalue) list list Hashtbl.M(Relation).t
+    val rels : (string * Value.t) list list Hashtbl.M(Relation).t
   end
 end
 
@@ -54,7 +54,7 @@ let rec eval_pred ctx = function
       | Or, `Bool x1, `Bool x2 -> `Bool (x1 || x2)
       | _ ->
           Error.create "Unexpected argument types." (op, v1, v2)
-            [%sexp_of: op * Db.primvalue * Db.primvalue]
+            [%sexp_of: op * Value.t * Value.t]
           |> Error.raise )
   | If (p1, p2, p3) ->
       let v1 = eval_pred ctx p1 |> to_bool in
@@ -73,7 +73,8 @@ module Make (Config : Config.S) : S = struct
     |> Seq.map ~f:(fun vs ->
            let m_values =
              List.map2 vs r.fields ~f:(fun v f ->
-                 let pval =
+                 let name = Name.create ~relation:r.rname f.fname in
+                 let value =
                    if String.(v = "") then `Null
                    else
                      match f.dtype with
@@ -86,8 +87,7 @@ module Make (Config : Config.S) : S = struct
                        | _ -> failwith "Unknown boolean value." )
                      | _ -> `String v
                  in
-                 let value = Value.{rel= r; field= f; value= pval} in
-                 value )
+                 (name, value) )
            in
            match m_values with
            | Ok v -> v
@@ -105,7 +105,7 @@ module Make (Config : Config.S) : S = struct
                | Some v -> (n, v)
                | None ->
                    Error.create "Mismatched tuple." (t, schema)
-                     [%sexp_of: Db.primvalue Map.M(String).t * Name.t list]
+                     [%sexp_of: Value.t Map.M(String).t * Name.t list]
                    |> Error.raise )
            |> Map.of_alist_exn (module Name.Compare_no_type) )
 
@@ -160,8 +160,7 @@ module Make_mock (Config : Config.S_mock) : S = struct
   let eval_relation r =
     Hashtbl.find_exn rels r |> Seq.of_list
     |> Seq.map ~f:(fun t ->
-           List.map t ~f:(fun (n, v) ->
-               Db.{rel= r; field= Field.of_name n; Value.value= v} ) )
+           List.map t ~f:(fun (n, v) -> (Name.create ~relation:r.rname n, v)) )
 
   let eval_join ctx p r1 r2 =
     Seq.concat_map r1 ~f:(fun t1 ->
@@ -229,7 +228,7 @@ module Make_mock (Config : Config.S_mock) : S = struct
 
   module Key = struct
     module T = struct
-      type t = primvalue list [@@deriving compare, sexp]
+      type t = Value.t list [@@deriving compare, sexp]
     end
 
     include T
@@ -258,10 +257,7 @@ module Make_mock (Config : Config.S_mock) : S = struct
       match node with
       | Scan r ->
           eval_relation (load_relation r)
-          |> Seq.map ~f:(fun t ->
-                 List.map t ~f:(fun Value.({rel; field; value}) ->
-                     (Name.create ~relation:rel.rname field.fname, value) )
-                 |> Map.of_alist_exn (module Name.Compare_no_type) )
+          |> Seq.map ~f:(Map.of_alist_exn (module Name.Compare_no_type))
       | Filter (p, r) -> eval_filter ctx p (eval r)
       | Join {pred= p; r1; r2} -> eval_join ctx p (eval r1) (eval r2)
       | Dedup r -> eval_dedup (eval r)
