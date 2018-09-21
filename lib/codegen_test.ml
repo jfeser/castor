@@ -157,20 +157,20 @@ let%expect_test "hash-idx" =
  *      alist(select([r1.g], orderby([r1.f], r1, desc)), ascalar(r1.g))], zip)" *)
 
 let example_params =
-  [ (Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p", `Int 1)
-  ; (Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c", `Int 2) ]
+  [ (Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p", Value.Int 1)
+  ; (Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c", Int 2) ]
 
 let example_str_params =
   [ ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_p"
-    , `String "foo" )
+    , Value.String "foo" )
   ; ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_c"
-    , `String "fizzbuzz" ) ]
+    , String "fizzbuzz" ) ]
 
 let example_db_params =
   [ ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_p"
-    , `String "-1451410871729396224" )
+    , Value.String "-1451410871729396224" )
   ; ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_c"
-    , `String "8557539814359574196" ) ]
+    , String "8557539814359574196" ) ]
 
 let%expect_test "example-1" =
   run_test ~params:example_params ~print_layout:false

@@ -220,17 +220,28 @@ let result_to_tuples r =
                  | INT8 | INT2 | INT4 ->
                      if String.(value = "") then Null else Int (Int.of_string value)
                  | CHAR | TEXT | VARCHAR -> String value
-                 | FLOAT4 | FLOAT8 | NAME | NUMERIC | BYTEA | INT2VECTOR | REGPROC
-                  |OID | TID | XID | CID | OIDVECTOR | JSON | POINT | LSEG | PATH
-                  |BOX | POLYGON | LINE | ABSTIME | RELTIME | TINTERVAL | UNKNOWN
-                  |CIRCLE | CASH | MACADDR | INET | CIDR | ACLITEM | BPCHAR | DATE
-                  |TIME | TIMESTAMP | TIMESTAMPTZ | INTERVAL | TIMETZ | BIT
-                  |VARBIT | REFCURSOR | REGPROCEDURE | REGOPER | REGOPERATOR
-                  |REGCLASS | REGTYPE | RECORD | CSTRING | ANY | ANYARRAY | VOID
-                  |TRIGGER | LANGUAGE_HANDLER | INTERNAL | OPAQUE | ANYELEMENT
-                  |JSONB ->
+                 | FLOAT4 | FLOAT8 | NUMERIC -> Fixed (Fixed_point.of_string value)
+                 (* Time & date types *)
+                 | DATE | TIME | TIMESTAMP | TIMESTAMPTZ | INTERVAL | TIMETZ
+                  |ABSTIME | RELTIME
+                  |TINTERVAL
+                 (* Geometric types. *)
+                  |POINT | LSEG | PATH | BOX | POLYGON | LINE
+                  |CIRCLE
+                 (* Network types *)
+                  |MACADDR | INET
+                  |CIDR
+                 (* Other types*)
+                  |NAME | BYTEA | INT2VECTOR | JSON | CASH | ACLITEM | BPCHAR
+                  |BIT | VARBIT | JSONB ->
                      (* Store unknown values as strings. *)
                      String value
+                 | OID | OIDVECTOR | TID | XID | CID | REFCURSOR | REGPROC
+                  |REGPROCEDURE | REGOPER | REGOPERATOR | REGCLASS | REGTYPE ->
+                     failwith "Postgres internal type."
+                 | ANY | ANYARRAY | VOID | CSTRING | INTERNAL | LANGUAGE_HANDLER
+                  |RECORD | TRIGGER | OPAQUE | ANYELEMENT | UNKNOWN ->
+                     failwith "Pseudo type."
                in
                (r#fname field_i, primval) )
            |> Map.of_alist_exn (module String)

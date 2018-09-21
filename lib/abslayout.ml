@@ -166,6 +166,7 @@ let rec pp_pred fmt =
   | As_pred (p, n) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp_pred p n
   | Null -> fprintf fmt "null"
   | Int x -> fprintf fmt "%d" x
+  | Fixed x -> fprintf fmt "%s" (Fixed_point.to_string x)
   | Bool x -> fprintf fmt "%B" x
   | String x -> fprintf fmt "%S" x
   | Name n -> pp_name fmt n
@@ -217,7 +218,12 @@ let rec pp fmt {node; _} =
   | As (n, r) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp r n
 
 module Ctx = struct
-  type t = Value.t Map.M(Name.Compare_no_type).t [@@deriving compare, hash, sexp]
+  module T = struct
+    type t = Value.t Map.M(Name.Compare_no_type).t [@@deriving compare, sexp]
+  end
+
+  include T
+  include Comparable.Make (T)
 
   let empty = Map.empty (module Name.Compare_no_type)
 end
@@ -270,6 +276,7 @@ let pred_of_value = function
   | String x -> String x
   | Int x -> Int x
   | Null -> Null
+  | Fixed x -> Fixed x
 
 let subst ctx =
   let v =
@@ -327,6 +334,7 @@ let rec pred_to_schema =
       {schema with relation= None; name= n}
   | Name n -> n
   | Int _ -> unnamed (IntT {nullable= false})
+  | Fixed _ -> unnamed (FixedT {nullable= false})
   | Bool _ -> unnamed (BoolT {nullable= false})
   | String _ -> unnamed (StringT {nullable= false})
   | Null -> unnamed NullT
@@ -408,7 +416,7 @@ let rec annotate_foreach r =
 let rec pred_kind = function
   | As_pred (x', _) -> (
     match pred_kind x' with `Scalar -> `Scalar | `Agg -> `Agg )
-  | Name _ | Int _ | Bool _ | String _ | Null | Binop _ | If _ -> `Scalar
+  | Name _ | Int _ | Fixed _ | Bool _ | String _ | Null | Binop _ | If _ -> `Scalar
   | Sum _ | Avg _ | Min _ | Max _ | Count -> `Agg
 
 let select_kind l =

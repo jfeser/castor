@@ -5,11 +5,20 @@ module PrimType = struct
   type t =
     | NullT
     | IntT of {nullable: bool}
+    | FixedT of {nullable: bool}
     | StringT of {nullable: bool}
     | BoolT of {nullable: bool}
     | TupleT of t list
     | VoidT
   [@@deriving compare, hash, sexp]
+
+  let int_t = IntT {nullable= false}
+
+  let fixed_t = FixedT {nullable= false}
+
+  let string_t = StringT {nullable= false}
+
+  let bool_t = BoolT {nullable= false}
 
   let of_primvalue = function
     | `Int _ -> IntT {nullable= false}
@@ -20,6 +29,7 @@ module PrimType = struct
   let to_string : t -> string = function
     | BoolT _ -> "bool"
     | IntT _ -> "int"
+    | FixedT _ -> "fixed"
     | StringT _ -> "string"
     | NullT -> "null"
     | VoidT -> "void"
@@ -54,10 +64,16 @@ module PrimType = struct
       | BoolT {nullable= false} -> fprintf fmt "Bool[nonnull]"
       | TupleT ts -> fprintf fmt "Tuple[%a]" (pp_tuple pp) ts
       | VoidT -> fprintf fmt "Void"
+      | FixedT {nullable= true} -> fprintf fmt "Fixed"
+      | FixedT {nullable= false} -> fprintf fmt "Fixed[nonnull]"
 
   let is_nullable = function
     | NullT -> true
-    | IntT {nullable= n} | BoolT {nullable= n} | StringT {nullable= n} -> n
+    | IntT {nullable= n}
+     |BoolT {nullable= n}
+     |StringT {nullable= n}
+     |FixedT {nullable= n} ->
+        n
     | TupleT _ | VoidT -> false
 
   let rec unify t1 t2 =
@@ -70,7 +86,7 @@ module PrimType = struct
     | _, _ -> Error.create "Nonunifiable." (t1, t2) [%sexp_of: t * t] |> Error.raise
 
   let rec width = function
-    | NullT | IntT _ | BoolT _ | StringT _ -> 1
+    | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ -> 1
     | TupleT ts -> List.map ts ~f:width |> List.sum (module Int) ~f:(fun x -> x)
     | VoidT -> 0
 end

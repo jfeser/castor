@@ -43,7 +43,8 @@ let white = [' ' '\t' '\r']+
 let alpha = ['a'-'z' 'A'-'Z']
 let digit = ['0'-'9']
 let id = (alpha | '_') (alpha | digit | '_')*
-let int = '-'? digit+
+let int = digit+
+let fixed = digit+ ('.' digit+)?
 let str = '"'
 
 rule token = parse
@@ -70,6 +71,7 @@ rule token = parse
   | "/"        { DIV }
   | "%"        { MOD }
   | int as x   { INT (Int.of_string x) }
+  | fixed as x { FIXED (Fixed_point.of_string x) }
   | '"'        { STR (string (Buffer.create 10) lexbuf) }
   | '#'        { comment lexbuf }
   | id as x    {

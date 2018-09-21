@@ -81,9 +81,13 @@ module T = struct
 
   type ordered_idx = {count: AbsCount.t} [@@deriving compare, sexp_of]
 
+  type fixed = {range: AbsInt.t; scale: int; nullable: bool}
+  [@@deriving compare, sexp]
+
   type t =
     | NullT
     | IntT of int_
+    | FixedT of fixed
     | BoolT of bool_
     | StringT of string_
     | TupleT of (t list * tuple)
@@ -114,7 +118,11 @@ let rec unify_exn t1 t2 =
   | NullT, NullT -> NullT
   | IntT {range= b1; nullable= n1}, IntT {range= b2; nullable= n2} ->
       IntT {range= AbsInt.unify b1 b2; nullable= n1 || n2}
+  | ( FixedT {range= b1; scale= s1; nullable= n1}
+    , FixedT {range= b2; scale= s2; nullable= n2} ) ->
+      FixedT {range= AbsInt.unify b1 b2; nullable= n1 || n2; scale= Int.max s1 s2}
   | IntT x, NullT | NullT, IntT x -> IntT {x with nullable= true}
+  | FixedT x, NullT | NullT, FixedT x -> FixedT {x with nullable= true}
   | BoolT {nullable= n1}, BoolT {nullable= n2} -> BoolT {nullable= n1 || n2}
   | BoolT _, NullT | NullT, BoolT _ -> BoolT {nullable= true}
   | StringT {nchars= b1; nullable= n1}, StringT {nchars= b2; nullable= n2} ->
@@ -145,7 +153,7 @@ let rec unify_exn t1 t2 =
 (** Returns the width of the tuples produced by reading a layout with this type.
    *)
 let rec width = function
-  | NullT | IntT _ | BoolT _ | StringT _ -> 1
+  | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ -> 1
   | TupleT (ts, _) -> List.map ts ~f:width |> List.sum (module Int) ~f:(fun x -> x)
   | ListT (t, _) -> width t
   | HashIdxT (kt, vt, _) | OrderedIdxT (kt, vt, _) -> width kt + width vt
@@ -156,7 +164,7 @@ let rec width = function
 
 let count : t -> AbsCount.t = function
   | EmptyT -> AbsCount.abstract 0
-  | NullT | IntT _ | BoolT _ | StringT _ -> AbsCount.abstract 1
+  | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ -> AbsCount.abstract 1
   | TupleT (_, {count})
    |OrderedIdxT (_, _, {count; _})
    |HashIdxT (_, _, {count; _}) ->
@@ -175,6 +183,7 @@ let rec len =
   | EmptyT -> zero
   | NullT -> failwith "Unexpected type."
   | IntT x -> byte_width ~nullable:x.nullable x.range |> abstract
+  | FixedT x -> byte_width ~nullable:x.nullable x.range |> abstract
   | BoolT _ -> abstract 1
   | StringT x -> header_len x.nchars + x.nchars
   | TupleT (ts, _) ->

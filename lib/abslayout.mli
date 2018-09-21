@@ -51,6 +51,7 @@ type op = Abslayout0.op =
 type pred = Abslayout0.pred =
   | Name of Name.t
   | Int of int
+  | Fixed of Fixed_point.t
   | Bool of bool
   | String of string
   | Null
@@ -154,7 +155,9 @@ module Meta : sig
 end
 
 module Ctx : sig
-  type t = Value.t Map.M(Name.Compare_no_type).t [@@deriving compare, hash, sexp]
+  type t = Value.t Map.M(Name.Compare_no_type).t [@@deriving compare, sexp]
+
+  include Comparable.S with type t := t
 
   val empty : t
 end

@@ -313,21 +313,19 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let fmt_str = define_fresh_global (const_stringz ctx fmt) "fmt" module_ in
     if debug then call_printf fmt_str args
 
-  let rec codegen_type =
+  let rec codegen_type t =
     let open Type.PrimType in
-    function
-    | IntT {nullable= false} -> i64_type ctx
-    | IntT {nullable= true} ->
-        struct_type ctx [|codegen_type (IntT {nullable= false}); i1_type ctx|]
-    | BoolT {nullable= false} -> i1_type ctx
-    | BoolT {nullable= true} ->
-        struct_type ctx [|codegen_type (BoolT {nullable= false}); i1_type ctx|]
-    | StringT {nullable= false} ->
-        struct_type ctx [|pointer_type (i8_type ctx); i64_type ctx|]
-    | StringT {nullable= true} ->
-        struct_type ctx [|codegen_type (StringT {nullable= false}); i1_type ctx|]
-    | TupleT ts -> struct_type ctx (List.map ts ~f:codegen_type |> Array.of_list)
-    | VoidT | NullT -> void_type ctx
+    let type_ =
+      match t with
+      | IntT _ -> i64_type ctx
+      | BoolT _ -> i1_type ctx
+      | StringT _ -> struct_type ctx [|pointer_type (i8_type ctx); i64_type ctx|]
+      | TupleT ts -> struct_type ctx (List.map ts ~f:codegen_type |> Array.of_list)
+      | VoidT | NullT -> void_type ctx
+      | FixedT _ ->
+          codegen_type (TupleT [IntT {nullable= false}; IntT {nullable= false}])
+    in
+    if is_nullable t then struct_type ctx [|type_; i1_type ctx|] else type_
 
   let int_type = codegen_type (IntT {nullable= false})
 
@@ -502,6 +500,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
                 [%sexp_of: t]
               |> Error.raise
           | IntT _ -> build_add (size_of int_type) size "" builder
+          | FixedT _ ->
+              let size = build_add (size_of int_type) size "" builder in
+              build_add (size_of int_type) size "" builder
           | StringT _ ->
               let str_struct = build_extractvalue key idx "" builder in
               let str_size = build_extractvalue str_struct 1 "" builder in
@@ -546,7 +547,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
               build_call strncpy [|key_ptr; str_ptr; str_size|] "" builder |> ignore ;
               let key_ptr = build_ptrtoint key_ptr (i64_type ctx) "" builder in
               build_add key_ptr str_size "" builder
-          | (NullT | VoidT | TupleT _) as t ->
+          | (NullT | VoidT | TupleT _ | FixedT _) as t ->
               Error.create "Not supported as part of a composite key." t
                 [%sexp_of: t]
               |> Error.raise
@@ -617,7 +618,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
           | StringT _ -> codegen_string_hash fctx x1 x2
           | IntT _ | BoolT _ -> codegen_int_hash fctx x1 x2
           | TupleT ts -> codegen_tuple_hash fctx ts x1 x2
-          | NullT | VoidT -> failwith "unhashable" )
+          | NullT | VoidT | FixedT _ -> failwith "unhashable" )
       | LoadStr -> codegen_load_str fctx x1 x2
       | Not -> fail (Error.of_string "Not a binary operator.")
     in
@@ -657,6 +658,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
   let rec codegen_expr fctx = function
     | I.Null -> failwith "TODO: Pick a runtime null rep."
     | Int x -> const_int int_type x
+    | Fixed x -> codegen_expr fctx (Tuple [Int x.value; Int x.scale])
     | Bool true -> const_int bool_type 1
     | Bool false -> const_int bool_type 0
     | Var n ->
@@ -842,6 +844,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
               gen (build_extractvalue val_ i "" builder) t ;
               call_printf comma_str [] )
       | VoidT -> call_printf void_str []
+      | FixedT _ -> failwith "Cannot print."
     in
     gen val_ type_ ; call_printf newline_str []
 
@@ -1232,12 +1235,16 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
             List.exists ir_module.Irgen.params ~f:(fun n' ->
                 Name.Compare_no_type.(n = n') ) )
         |> List.mapi ~f:(fun i n ->
-               match Name.type_exn n with
-               | NullT -> failwith "No null parameters."
-               | IntT _ -> from_fn "load_int.c" n.name i
-               | BoolT _ -> from_fn "load_bool.c" n.name i
-               | StringT _ -> from_fn "load_string.c" n.name i
-               | VoidT | TupleT _ -> failwith "Unsupported parameter type." )
+               let loader_fn =
+                 match Name.type_exn n with
+                 | NullT -> failwith "No null parameters."
+                 | IntT _ -> "load_int.c"
+                 | BoolT _ -> "load_bool.c"
+                 | StringT _ -> "load_string.c"
+                 | FixedT _ -> "load_fixed.c"
+                 | VoidT | TupleT _ -> failwith "Unsupported parameter type."
+               in
+               (from_fn loader_fn) n.name i )
         |> List.unzip
       in
       let header_str = sprintf "#include \"%s\"" header_fn in

@@ -12,6 +12,7 @@ type op = Add | Sub | Mul | Div | Mod | Lt | Eq | And | Or | Not | Hash | LoadSt
 type expr =
   | Null
   | Int of int
+  | Fixed of Fixed_point.t
   | Bool of bool
   | String of string
   | Var of string
@@ -57,10 +58,6 @@ let rec pp_tuple pp_v fmt =
   | [x] -> fprintf fmt "%a" pp_v x
   | x :: xs -> fprintf fmt "%a,@ %a" pp_v x (pp_tuple pp_v) xs
 
-let pp_bytes fmt x = Format.fprintf fmt "%S" (Bytes.to_string x)
-
-let pp_int fmt = Format.fprintf fmt "%d"
-
 let pp_bool fmt = Format.fprintf fmt "%b"
 
 let rec pp_expr : Format.formatter -> expr -> unit =
@@ -81,7 +78,8 @@ let rec pp_expr : Format.formatter -> expr -> unit =
   in
   fun fmt -> function
     | Null -> fprintf fmt "null"
-    | Int x -> pp_int fmt x
+    | Int x -> Int.pp fmt x
+    | Fixed x -> Fixed_point.pp fmt x
     | Bool x -> pp_bool fmt x
     | String x -> fprintf fmt "\"%s\"" (String.escaped x)
     | Var v -> fprintf fmt "%s" v
@@ -132,6 +130,7 @@ let rec infer_type ctx =
   function
   | Null -> NullT
   | Int _ -> IntT {nullable= false}
+  | Fixed _ -> FixedT {nullable= false}
   | Bool _ -> BoolT {nullable= false}
   | String _ -> StringT {nullable= false}
   | Var x -> (
@@ -220,8 +219,6 @@ module Infix = struct
     match tup with Tuple t -> List.nth_exn t idx | _ -> Index (tup, idx)
 end
 
-let int_t = Type.PrimType.IntT {nullable= false}
-
 let yield_count {body; _} =
   List.sum (module Int) body ~f:(function Yield _ -> 1 | _ -> 0)
 
@@ -229,12 +226,11 @@ let name_of_var = function
   | Var n -> n
   | e -> fail (Error.create "Expected a variable." e [%sexp_of: expr])
 
+type _var = Global of expr | Arg of int | Field of expr [@@deriving compare, sexp]
+
+type _ctx = _var Map.M(A.Name.Compare_no_type).t [@@deriving compare, sexp]
+
 module Ctx0 = struct
-  type var = Global of expr | Arg of int | Field of expr
-  [@@deriving compare, sexp]
-
-  type t = var Map.M(A.Name.Compare_no_type).t [@@deriving compare, sexp]
-
   let empty = Map.empty (module A.Name.Compare_no_type)
 
   let of_schema schema tup =
@@ -249,7 +245,8 @@ module Ctx0 = struct
            | Global _ -> None
            | Arg i -> Some (n, i)
            | Field _ ->
-               Error.create "Unexpected field in caller context." ctx [%sexp_of: t]
+               Error.create "Unexpected field in caller context." ctx
+                 [%sexp_of: _ctx]
                |> Error.raise )
     |> List.sort ~compare:(fun (_, i1) (_, i2) -> Int.compare i1 i2)
     |> List.map ~f:(fun (n, _) -> (A.Name.to_var n, A.Name.type_exn n))
@@ -259,7 +256,7 @@ module Ctx0 = struct
 end
 
 module Builder = struct
-  type func_b =
+  type t =
     { name: string
     ; args: (string * Type.PrimType.t) list
     ; ret: Type.PrimType.t
@@ -273,7 +270,7 @@ module Builder = struct
     let type_ctx =
       Map.to_alist ctx
       |> List.filter_map ~f:(function
-           | n, Ctx0.Global _ -> Some (A.Name.to_var n, A.Name.type_exn n)
+           | n, Global _ -> Some (A.Name.to_var n, A.Name.type_exn n)
            | _ -> None )
       |> Hashtbl.of_alist_exn (module String)
     in
@@ -301,8 +298,7 @@ module Builder = struct
     match List.nth args i with
     | Some (n, _) -> Var n
     | None ->
-        Error.create "Not an argument index." (i, b) [%sexp_of: int * func_b]
-        |> fail
+        Error.create "Not an argument index." (i, b) [%sexp_of: int * t] |> fail
 
   let build_yield e b = b.body := Yield e :: !(b.body)
 
@@ -387,6 +383,11 @@ module Builder = struct
               b )
           b
 
+  let type_err msg x y t1 t2 =
+    Error.create msg (x, y, t1, t2)
+      [%sexp_of: expr * expr * Type.PrimType.t * Type.PrimType.t]
+    |> Error.raise
+
   let rec build_eq x y b =
     let t1 = infer_type b.type_ctx x in
     let t2 = infer_type b.type_ctx y in
@@ -423,6 +424,96 @@ module Builder = struct
     | _ ->
         Error.create "Incomparable types." (t1, t2) [%sexp_of: t * t] |> Error.raise
 
+  let build_le x y b = Infix.(build_lt x y b || build_eq x y b)
+
+  let build_gt x y b = Infix.((not (build_lt x y b)) && not (build_eq x y b))
+
+  let build_ge x y b = Infix.(not (build_lt x y b))
+
+  let build_convert_pair x y =
+    let build_convert x s' =
+      let v = Infix.(index x 0) in
+      let s = Infix.(index x 1) in
+      Tuple [Infix.(v * (s' / s)); s']
+    in
+    let s1 = Infix.(index x 1) in
+    let s2 = Infix.(index y 1) in
+    let z =
+      Ternary
+        ( Infix.(s1 = s2)
+        , Tuple [x; y]
+        , Ternary
+            ( Infix.(s1 < s2)
+            , Tuple [build_convert x s2; y]
+            , Tuple [x; build_convert y s1] ) )
+    in
+    Infix.(index z 0, index z 1)
+
+  let build_numeric f x y b =
+    let t1 = infer_type b.type_ctx x in
+    let t2 = infer_type b.type_ctx y in
+    let open Type.PrimType in
+    match (t1, t2) with
+    | IntT {nullable= false}, IntT {nullable= false} -> f (`Int (x, y))
+    | FixedT {nullable= false}, FixedT {nullable= false} -> f (`Fixed (x, y))
+    | IntT _, FixedT _ | FixedT _, IntT _ -> type_err "Mismatched types." x y t1 t2
+    | IntT {nullable= true}, _
+     |_, IntT {nullable= true}
+     |FixedT {nullable= true}, _
+     |_, FixedT {nullable= true} ->
+        type_err "Nullable types." x y t1 t2
+    | NullT, _
+     |StringT _, _
+     |BoolT _, _
+     |TupleT _, _
+     |VoidT, _
+     |_, NullT
+     |_, StringT _
+     |_, BoolT _
+     |_, TupleT _
+     |_, VoidT ->
+        type_err "Nonnumeric types." x y t1 t2
+
+  let build_add =
+    build_numeric (function
+      | `Int (x, y) -> Infix.(x + y)
+      | `Fixed (x, y) ->
+          let x, y = build_convert_pair x y in
+          let v1 = Infix.(index x 0) in
+          let s = Infix.(index x 1) in
+          let v2 = Infix.(index y 0) in
+          Tuple [Infix.(v1 + v2); s] )
+
+  let build_sub =
+    build_numeric (function
+      | `Int (x, y) -> Infix.(x - y)
+      | `Fixed (x, y) ->
+          let x, y = build_convert_pair x y in
+          let v1 = Infix.(index x 0) in
+          let s = Infix.(index x 1) in
+          let v2 = Infix.(index y 0) in
+          Tuple [Infix.(v1 - v2); s] )
+
+  let build_mul =
+    build_numeric (function
+      | `Int (x, y) -> Infix.(x * y)
+      | `Fixed (x, y) ->
+          let v1 = Infix.(index x 0) in
+          let s1 = Infix.(index x 1) in
+          let v2 = Infix.(index y 0) in
+          let s2 = Infix.(index y 1) in
+          Tuple [Infix.(v1 * v2); Infix.(s1 * s2)] )
+
+  let build_div =
+    build_numeric (function
+      | `Int (x, y) -> Infix.(x / y)
+      | `Fixed (x, y) ->
+          let v1 = Infix.(index x 0) in
+          let s1 = Infix.(index x 1) in
+          let v2 = Infix.(index y 0) in
+          let s2 = Infix.(index y 1) in
+          Tuple [Infix.(v1 / v2); Infix.(s1 * s2)] )
+
   let build_concat vs b =
     List.concat_map vs ~f:(fun v ->
         match infer_type b.type_ctx v with
@@ -439,6 +530,11 @@ end
 
 module Ctx = struct
   include Ctx0
+
+  type var = _var = Global of expr | Arg of int | Field of expr
+  [@@deriving compare, sexp]
+
+  type t = _ctx [@@deriving compare, sexp]
 
   let var_to_expr v b =
     match v with Global e | Field e -> e | Arg i -> Builder.build_arg i b
@@ -457,7 +553,7 @@ module Ctx = struct
                let callee_var = Arg (List.length args) in
                (Map.set ~key ~data:callee_var cctx, args @ [var_to_expr var b]) )
 
-  let find ctx name builder =
+  let find (ctx : t) name builder =
     Option.map (Map.find ctx name) ~f:(fun v -> var_to_expr v builder)
 
   let find_exn ctx name builder = Option.value_exn (find ctx name builder)

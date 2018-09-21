@@ -30,6 +30,7 @@ let rec eval_pred ctx = function
   | As_pred (p, _) -> eval_pred ctx p
   | Null -> Value.Null
   | Int x -> Int x
+  | Fixed x -> Fixed x
   | String x -> String x
   | Bool x -> Bool x
   | Name n -> lookup ctx n
@@ -41,6 +42,7 @@ let rec eval_pred ctx = function
       | Eq, Bool x1, Bool x2 -> Bool Bool.(x1 = x2)
       | Eq, Int x1, Int x2 -> Bool Int.(x1 = x2)
       | Eq, String x1, String x2 -> Bool String.(x1 = x2)
+      | Eq, Fixed x1, Fixed x2 -> Bool Fixed_point.(x1 = x2)
       | Lt, Int x1, Int x2 -> Bool (x1 < x2)
       | Le, Int x1, Int x2 -> Bool (x1 <= x2)
       | Gt, Int x1, Int x2 -> Bool (x1 > x2)
@@ -50,6 +52,13 @@ let rec eval_pred ctx = function
       | Mul, Int x1, Int x2 -> Int (x1 * x2)
       | Div, Int x1, Int x2 -> Int (x1 / x2)
       | Mod, Int x1, Int x2 -> Int (x1 % x2)
+      | Lt, Fixed x1, Fixed x2 -> Bool Fixed_point.(x1 < x2)
+      | Le, Fixed x1, Fixed x2 -> Bool Fixed_point.(x1 <= x2)
+      | Gt, Fixed x1, Fixed x2 -> Bool Fixed_point.(x1 > x2)
+      | Ge, Fixed x1, Fixed x2 -> Bool Fixed_point.(x1 >= x2)
+      | Add, Fixed x1, Fixed x2 -> Fixed Fixed_point.(x1 + x2)
+      | Sub, Fixed x1, Fixed x2 -> Fixed Fixed_point.(x1 - x2)
+      | Mul, Fixed x1, Fixed x2 -> Fixed Fixed_point.(x1 * x2)
       | And, Bool x1, Bool x2 -> Bool (x1 && x2)
       | Or, Bool x1, Bool x2 -> Bool (x1 || x2)
       | _ ->
@@ -179,9 +188,7 @@ module Make_mock (Config : Config.S_mock) : S = struct
         | _ -> failwith "Expected a boolean." )
 
   let eval_dedup seq =
-    let set = Hash_set.create (module Ctx) in
-    Seq.iter seq ~f:(Hash_set.add set) ;
-    Hash_set.to_list set |> Seq.of_list
+    Seq.fold ~init:(Set.empty (module Ctx)) seq ~f:Set.add |> Set.to_sequence
 
   let agg_init = function
     | Count | Sum _ -> `Int 0

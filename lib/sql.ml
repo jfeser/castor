@@ -7,6 +7,7 @@ let rec pred_to_sql = function
   | As_pred (p, n) -> sprintf "%s as %s" (pred_to_sql p) n
   | Name n -> sprintf "%s" (Name.to_sql n)
   | Int x -> Int.to_string x
+  | Fixed x -> Fixed_point.to_string x
   | Bool true -> "true"
   | Bool false -> "false"
   | String s -> sprintf "'%s'" s

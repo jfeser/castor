@@ -212,6 +212,9 @@ module Make (Eval : Eval.S) = struct
           | String x ->
               StringT {nchars= AbsInt.abstract (String.length x); nullable= false}
           | Null -> NullT
+          | Fixed x ->
+              FixedT
+                {range= AbsInt.abstract x.value; scale= x.scale; nullable= false}
 
         method build_AList ls =
           let t, c =

@@ -21,6 +21,7 @@ module Pervasives = Caml.Pervasives
 type pred =
   | Name of (name[@opaque])
   | Int of (int[@opaque])
+  | Fixed of (Fixed_point.t[@opaque])
   | Bool of (bool[@opaque])
   | String of (string[@opaque])
   | Null

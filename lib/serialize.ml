@@ -355,11 +355,13 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
 
   let serialize_int sctx t x =
     let hdr = make_header t in
-    match t with
-    | IntT _ ->
-        let sval = of_int ~byte_width:(size_exn hdr "value") x in
-        write_string sctx.writer sval
-    | t -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
+    let sval = of_int ~byte_width:(size_exn hdr "value") x in
+    write_string sctx.writer sval
+
+  let serialize_fixed sctx t x =
+    let hdr = make_header t in
+    let sval = of_int ~byte_width:(size_exn hdr "value") x.Fixed_point.value in
+    write_string sctx.writer sval
 
   let serialize_bool sctx t x =
     let hdr = make_header t in
@@ -399,6 +401,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
         match value with
         | Null -> serialize_null sctx type_
         | Int x -> serialize_int sctx type_ x
+        | Fixed x -> serialize_fixed sctx type_ x
         | Bool x -> serialize_bool sctx type_ x
         | String x -> serialize_string sctx type_ x )
 

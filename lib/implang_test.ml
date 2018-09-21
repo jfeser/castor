@@ -70,8 +70,9 @@ let run_test_db ?(params = []) layout_str =
 let%expect_test "sum" =
   run_test
     "Select([sum(r1.f), count()], AList(r1, ATuple([AScalar(r1.f), AScalar(r1.g - \
-     r1.f)], cross)))";
-  [%expect {|
+     r1.f)], cross)))" ;
+  [%expect
+    {|
     fun scalar_5 (start) {
         yield (buf[start : 1]);
     }fun scalar_7 (r1_f,

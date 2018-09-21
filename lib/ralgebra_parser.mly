@@ -5,6 +5,7 @@
 
 %token <string> ID
 %token <int> INT
+%token <Fixed_point.t> FIXED
 %token <bool> BOOL
 %token <string> STR
 %token <[`Asc | `Desc]> ORDER
@@ -162,10 +163,13 @@ name:
 abs_pred:
 | n = name { A.Name n }
 | x = INT { A.Int x }
+| SUB; x = INT { A.Int (-x) }
+| x = FIXED { A.Fixed x }
+| SUB; x = FIXED { A.Fixed (Fixed_point.(-x)) }
 | x = BOOL { A.Bool x }
 | x = STR { A.String x }
 | NULL { A.Null }
-  | LPAREN; p = abs_pred; RPAREN { p }
+| LPAREN; p = abs_pred; RPAREN { p }
 | p1 = abs_pred; EQ; p2 = abs_pred { A.Binop (A.Eq, p1, p2) }
 | p1 = abs_pred; LT; p2 = abs_pred { A.Binop (A.Lt, p1, p2) }
 | p1 = abs_pred; LE; p2 = abs_pred { A.Binop (A.Le, p1, p2) }

@@ -45,6 +45,7 @@ struct
       | A.Null -> Null
       | A.Int x -> Int x
       | A.String x -> String x
+      | A.Fixed x -> Fixed x
       | A.Bool x -> Bool x
       | A.As_pred (x, _) -> gen_pred x
       | A.Name n -> (
@@ -110,6 +111,28 @@ struct
         build_func b
     | _ -> failwith "Unexpected args."
 
+  let scan_fixed args =
+    match args with
+    | {ctx; name; type_= FixedT {nullable; range= (_, h) as range; scale}; _} ->
+        let open Builder in
+        let b =
+          let ret_type = Type.PrimType.TupleT [FixedT {nullable}] in
+          create ~ctx ~name ~ret:ret_type
+        in
+        let start = Ctx.find_exn ctx (A.Name.create "start") b in
+        let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
+        let sval = Infix.(int scale) in
+        let ret = Tuple [ival; sval] in
+        let ret =
+          if nullable then
+            let null_val = h + 1 in
+            Tuple [ret; Infix.(ival = int null_val)]
+          else ret
+        in
+        build_yield (Tuple [ret]) b ;
+        build_func b
+    | _ -> failwith "Unexpected args."
+
   let scan_bool args =
     match args with
     | {ctx; name; type_= BoolT meta; _} ->
@@ -156,7 +179,7 @@ struct
           let tup = build_concat (List.rev tuples) b in
           build_yield tup b
       | clayout :: clayouts, ctype :: ctypes, cstart :: cstarts ->
-          let ctx = Ctx.bind ctx "start" int_t cstart in
+          let ctx = Ctx.bind ctx "start" Type.PrimType.int_t cstart in
           let child_ctx, child_args = Ctx.make_callee_context ctx b in
           let child_iter = scan child_ctx clayout ctype in
           build_foreach ~fresh ~count:(Type.count ctype) child_iter child_args
@@ -209,7 +232,7 @@ struct
     in
     let hdr = Header.make_header t in
     let start = Ctx.find_exn ctx (A.Name.create "start") b in
-    let ctx = Ctx.bind ctx "start" int_t start in
+    let ctx = Ctx.bind ctx "start" Type.PrimType.int_t start in
     let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
     (* Build iterator initializers using the computed start positions. *)
     build_assign (Header.make_position hdr "value" start) start b ;
@@ -245,6 +268,9 @@ struct
         build_loop not_done build_body b ) ;
     build_func b
 
+  let scan_tuple (A.({layout= {node= ATuple (_, kind); _}; _}) as args) =
+    match kind with Cross -> scan_crosstuple args | Zip -> scan_ziptuple args
+
   let scan_unordered_list
       A.({ ctx
          ; name
@@ -262,15 +288,19 @@ struct
     let hdr = Header.make_header t in
     let start = Ctx.find_exn ctx (A.Name.create "start") b in
     let cstart =
-      build_defn "cstart" int_t (Header.make_position hdr "value" start) b
+      build_defn "cstart" Type.PrimType.int_t
+        (Header.make_position hdr "value" start)
+        b
     in
     let callee_ctx, callee_args =
-      let ctx = Ctx.bind ctx "start" int_t cstart in
+      let ctx = Ctx.bind ctx "start" Type.PrimType.int_t cstart in
       Ctx.make_callee_context ctx b
     in
     let func = scan callee_ctx child_layout child_type in
     let pcount =
-      build_defn "pcount" int_t (Header.make_access hdr "count" start) b
+      build_defn "pcount" Type.PrimType.int_t
+        (Header.make_access hdr "count" start)
+        b
     in
     build_loop
       Infix.(pcount > int 0)
@@ -305,9 +335,9 @@ struct
     in
     let hdr = Header.make_header t in
     let start = Ctx.find_exn ctx (A.Name.create "start") b in
-    let kstart = build_var "kstart" int_t b in
+    let kstart = build_var "kstart" Type.PrimType.int_t b in
     let key_callee_ctx, key_callee_args =
-      let ctx = Ctx.bind ctx "start" int_t kstart in
+      let ctx = Ctx.bind ctx "start" Type.PrimType.int_t kstart in
       Ctx.make_callee_context ctx b
     in
     let key_iter = scan key_callee_ctx key_layout key_type in
@@ -316,9 +346,9 @@ struct
       let key_schema = A.Meta.(find_exn key_layout schema) in
       Ctx.bind_ctx ctx (Ctx.of_schema key_schema key_tuple)
     in
-    let vstart = build_var "vstart" int_t b in
+    let vstart = build_var "vstart" Type.PrimType.int_t b in
     let value_callee_ctx, value_callee_args =
-      let ctx = Ctx.bind ctx "start" int_t vstart in
+      let ctx = Ctx.bind ctx "start" Type.PrimType.int_t vstart in
       Ctx.make_callee_context ctx b
     in
     let value_iter = scan value_callee_ctx value_layout value_type in
@@ -411,9 +441,9 @@ struct
           create ~ctx ~name ~ret:ret_type
         in
         let start = Ctx.find_exn ctx (A.Name.create "start") b in
-        let kstart = build_var "kstart" int_t b in
+        let kstart = build_var "kstart" Type.PrimType.int_t b in
         let key_callee_ctx, key_callee_args =
-          let ctx = Ctx.bind ctx "start" int_t kstart in
+          let ctx = Ctx.bind ctx "start" Type.PrimType.int_t kstart in
           Ctx.make_callee_context ctx b
         in
         let key_iter = scan key_callee_ctx key_layout key_type in
@@ -422,9 +452,9 @@ struct
           let key_schema = A.Meta.(find_exn key_layout schema) in
           Ctx.bind_ctx ctx (Ctx.of_schema key_schema key_tuple)
         in
-        let vstart = build_var "vstart" int_t b in
+        let vstart = build_var "vstart" Type.PrimType.int_t b in
         let value_callee_ctx, value_callee_args =
-          let ctx = Ctx.bind ctx "start" int_t vstart in
+          let ctx = Ctx.bind ctx "start" Type.PrimType.int_t vstart in
           Ctx.make_callee_context ctx b
         in
         let value_iter = scan value_callee_ctx value_layout value_type in
@@ -465,7 +495,7 @@ struct
     let open Builder in
     let open Infix in
     let b = create ~name ~ctx ~ret:(IntT {nullable= false}) in
-    let c = build_defn "c" int_t Infix.(int 0) b in
+    let c = build_defn "c" Type.PrimType.int_t Infix.(int 0) b in
     build_foreach ~fresh func [] (fun _ b -> build_assign (c + int 1) c b) b ;
     build_return c b ;
     build_func b
@@ -590,7 +620,7 @@ struct
     let rec gen_func ctx r t =
       let name = A.name r ^ "_" ^ Fresh.name fresh "%d" in
       let ctx =
-        let start_name = A.Name.create ~type_:int_t "start" in
+        let start_name = A.Name.create ~type_:Type.PrimType.int_t "start" in
         if Config.code_only then
           Map.update ctx start_name ~f:(function
             | Some x -> x
@@ -607,21 +637,26 @@ struct
       in
       let scan_args = {ctx; name; layout= r; type_= t; scan} in
       let func =
-        match (r.node, t) with
-        | _, Type.IntT _ -> scan_int scan_args
-        | _, BoolT _ -> scan_bool scan_args
-        | _, StringT _ -> scan_string scan_args
-        | _, EmptyT -> scan_empty scan_args
-        | _, NullT -> scan_null scan_args
-        | ATuple (_, Cross), TupleT _ -> scan_crosstuple scan_args
-        | ATuple (_, Zip), TupleT _ -> scan_ziptuple scan_args
-        | AList _, ListT _ -> scan_unordered_list scan_args
-        | AHashIdx _, HashIdxT _ -> scan_hash_idx scan_args
-        | AOrderedIdx _, OrderedIdxT _ -> scan_ordered_idx scan_args
-        | Select _, FuncT _ -> scan_select scan_args
-        | Filter _, FuncT _ -> scan_filter scan_args
-        | _ ->
-            Error.create "Unsupported at runtime." r [%sexp_of: A.t] |> Error.raise
+        match t with
+        | Type.IntT _ -> scan_int scan_args
+        | FixedT _ -> scan_fixed scan_args
+        | BoolT _ -> scan_bool scan_args
+        | StringT _ -> scan_string scan_args
+        | EmptyT -> scan_empty scan_args
+        | NullT -> scan_null scan_args
+        | TupleT _ -> scan_tuple scan_args
+        | ListT _ -> scan_unordered_list scan_args
+        | HashIdxT _ -> scan_hash_idx scan_args
+        | OrderedIdxT _ -> scan_ordered_idx scan_args
+        | FuncT _ -> (
+          match r.node with
+          | Select _ -> scan_select scan_args
+          | Filter _ -> scan_filter scan_args
+          | Join _ | GroupBy (_, _, _) | OrderBy _ | Dedup _ | Scan _ | As (_, _) ->
+              Error.create "Unsupported at runtime." r [%sexp_of: A.t]
+              |> Error.raise
+          | AEmpty | AScalar _ | AList _ | ATuple _ | AHashIdx _ | AOrderedIdx _ ->
+              Error.create "Not functions." r [%sexp_of: A.t] |> Error.raise )
       in
       add_func func ; func
     and scan ctx r t =
@@ -641,7 +676,7 @@ struct
     ; buffer_len= len }
 
   let pp fmt {funcs; iters; _} =
-    let open Format in
+    let open Caml.Format in
     pp_open_vbox fmt 0 ;
     List.iter (iters @ funcs) ~f:(pp_func fmt) ;
     pp_close_box fmt () ;

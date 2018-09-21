@@ -77,6 +77,12 @@ let rec make_header t =
       [ Field.{name= "len"; size= `Empty len; align= 1}
       ; Field.{name= "count"; size= `Empty 1; align= 1}
       ; Field.{name= "value"; size= `Fixed len; align= 1} ]
+  | FixedT {range; scale; nullable} ->
+      let len = Type.AbsInt.byte_width ~nullable range in
+      [ Field.{name= "len"; size= `Empty len; align= 1}
+      ; Field.{name= "scale"; size= `Empty scale; align= 1}
+      ; Field.{name= "count"; size= `Empty 1; align= 1}
+      ; Field.{name= "value"; size= `Fixed len; align= 1} ]
   | BoolT _ ->
       [ Field.{name= "len"; size= `Empty 1; align= 1}
       ; Field.{name= "count"; size= `Empty 1; align= 1}
@@ -110,4 +116,4 @@ let rec make_header t =
       ; Field.{name= "idx"; size= `DescribedBy "idx_len"; align= 1}
       ; Field.{name= "data"; size= `Variable; align= 1} ]
   | FuncT ([t], _) -> make_header t
-  | _ -> failwith "No header."
+  | FuncT _ -> failwith "No header."
