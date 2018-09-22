@@ -74,7 +74,7 @@ module Name = struct
 
   let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
 
-  let of_field ?rel f = {relation= rel; name= f.fname; type_= Some f.type_}
+  let of_field ?rel f = {relation= rel; name= f.Field.fname; type_= Some f.type_}
 end
 
 let select a b =

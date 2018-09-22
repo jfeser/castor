@@ -16,12 +16,6 @@ let subst_params : string list -> string -> string =
       List.foldi params ~init:query ~f:(fun i q v ->
           String.substr_replace_all ~pattern:(Printf.sprintf "$%d" i) ~with_:v q )
 
-let exec_psql : ?params:string list -> db:string -> string -> int =
- fun ?(params = []) ~db query ->
-  let query = sprintf "psql -d %s -c \"%s\"" db (subst_params params query) in
-  Logs.debug (fun m -> m "Executing query: %s" query) ;
-  Caml.Sys.command query
-
 (** Process postgres errors for queries which do not need to retry. *)
 let process_errors query r =
   match (r#status : Postgresql.result_status) with
@@ -74,28 +68,11 @@ let rec exec :
       Logs.debug (fun m -> m "Returning nothing: %s" (Postgresql.result_status s)) ;
       []
 
-let exec1 ?verbose ?params conn query =
-  exec ?verbose ?params conn query
-  |> List.map ~f:(function [x] -> x | _ -> failwith "Unexpected query results.")
-
-let exec2 ?verbose ?params conn query =
-  exec ?verbose ?params conn query
-  |> List.map ~f:(function
-       | [x; y] -> (x, y)
-       | _ -> failwith "Unexpected query results." )
-
 let exec3 ?verbose ?params conn query =
   exec ?verbose ?params conn query
   |> List.map ~f:(function
        | [x; y; z] -> (x, y, z)
        | _ -> failwith "Unexpected query results." )
-
-let exec1_first ?verbose ?params conn query =
-  match exec ?verbose ?params conn query with
-  | [[x]] -> x
-  | r ->
-      Error.create "Unexpected query results." r [%sexp_of: string list list]
-      |> Error.raise
 
 type field_t = {fname: string; type_: Type.PrimType.t}
 
@@ -103,16 +80,10 @@ and relation_t = {rname: string; fields: field_t list}
 [@@deriving compare, hash, sexp]
 
 module Relation = struct
-  module T = struct
-    type t = relation_t [@@deriving compare, hash, sexp]
+  type t = relation_t = {rname: string; fields: field_t list}
+  [@@deriving compare, hash, sexp]
 
-    let sexp_of_t {rname; _} = [%sexp_of: string] rname
-  end
-
-  include T
-  include Comparable.Make (T)
-
-  let dummy = {rname= ""; fields= []}
+  let sexp_of_t {rname; _} = [%sexp_of: string] rname
 
   let from_db conn name =
     let rel = {rname= name; fields= []} in
@@ -138,44 +109,11 @@ module Relation = struct
     in
     (* TODO: Remove this. *)
     {rel with fields}
-
-  let sample : ?seed:int -> Postgresql.connection -> int -> t -> unit =
-   fun ?(seed = 0) conn size r ->
-    exec conn ~params:[Int.to_string seed] "set seed to $0" |> ignore ;
-    let query =
-      {|
-        create temp table if not exists $0 as (select * from $0 order by random() limit $1)
-      |}
-    in
-    exec conn ~params:[r.rname; Int.to_string size] query |> ignore
-
-  let field_exn : t -> string -> field_t =
-   fun r n ->
-    match List.find r.fields ~f:(fun f -> String.(f.fname = n)) with
-    | Some f -> f
-    | None ->
-        Error.create "Field not found." (n, r.rname) [%sexp_of: string * string]
-        |> Error.raise
-
-  (* For testing only! *)
-  let of_name : string -> t = fun n -> {dummy with rname= n}
 end
 
 module Field = struct
-  module T = struct
-    type t = field_t = {fname: string; type_: Type.PrimType.t [@compare.ignore]}
-    [@@deriving compare, hash, sexp]
-  end
-
-  include T
-  include Comparable.Make (T)
-
-  let dummy = {fname= ""; type_= BoolT {nullable= false}}
-
-  let to_string : t -> string = fun f -> f.fname
-
-  (* For testing only! *)
-  let of_name : string -> t = fun n -> {dummy with fname= n}
+  type t = field_t = {fname: string; type_: Type.PrimType.t [@compare.ignore]}
+  [@@deriving compare, hash, sexp]
 end
 
 let result_to_tuples r =

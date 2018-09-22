@@ -3,10 +3,11 @@ open Abslayout
 
 let create rels name fs xs =
   let rel =
-    Db.
+    Db.Relation.
       { rname= name
-      ; fields= List.map fs ~f:(fun f -> {fname= f; type_= IntT {nullable= false}})
-      }
+      ; fields=
+          List.map fs ~f:(fun f -> {Db.Field.fname= f; type_= IntT {nullable= false}}
+          ) }
   in
   let data =
     List.map xs ~f:(fun data ->
@@ -22,7 +23,9 @@ let create rels name fs xs =
 
 let create_val rels name fs xs =
   let rel =
-    Db.{rname= name; fields= List.map fs ~f:(fun (f, t) -> {fname= f; type_= t})}
+    Db.Relation.
+      { rname= name
+      ; fields= List.map fs ~f:(fun (f, t) -> Db.Field.{fname= f; type_= t}) }
   in
   let data =
     List.map xs ~f:(fun data ->

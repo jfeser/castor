@@ -77,7 +77,7 @@ module Make (Config : Config.S) : S = struct
 
   let eval_relation r =
     let query = "select * from $0" in
-    exec ~verbose:false Config.conn query ~params:[r.rname]
+    exec ~verbose:false Config.conn query ~params:[r.Relation.rname]
     |> Seq.of_list
     |> Seq.map ~f:(fun vs ->
            let m_values =
