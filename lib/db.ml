@@ -1,7 +1,6 @@
 open Base
 open Printf
 module Pervasives = Caml.Pervasives
-open Bin_prot.Std
 open Collections
 
 let () =
@@ -75,60 +74,37 @@ let rec exec :
       Logs.debug (fun m -> m "Returning nothing: %s" (Postgresql.result_status s)) ;
       []
 
-let exec1 :
-       ?verbose:bool
-    -> ?params:string list
-    -> Postgresql.connection
-    -> string
-    -> string list =
- fun ?verbose ?params conn query ->
+let exec1 ?verbose ?params conn query =
   exec ?verbose ?params conn query
   |> List.map ~f:(function [x] -> x | _ -> failwith "Unexpected query results.")
 
-let exec2 :
-       ?verbose:bool
-    -> ?params:string list
-    -> Postgresql.connection
-    -> string
-    -> (string * string) list =
- fun ?verbose ?params conn query ->
+let exec2 ?verbose ?params conn query =
   exec ?verbose ?params conn query
   |> List.map ~f:(function
        | [x; y] -> (x, y)
        | _ -> failwith "Unexpected query results." )
 
-let exec1_first :
-       ?verbose:bool
-    -> ?params:string list
-    -> Postgresql.connection
-    -> string
-    -> string =
- fun ?verbose ?params conn query ->
+let exec3 ?verbose ?params conn query =
+  exec ?verbose ?params conn query
+  |> List.map ~f:(function
+       | [x; y; z] -> (x, y, z)
+       | _ -> failwith "Unexpected query results." )
+
+let exec1_first ?verbose ?params conn query =
   match exec ?verbose ?params conn query with
   | [[x]] -> x
   | r ->
       Error.create "Unexpected query results." r [%sexp_of: string list list]
       |> Error.raise
 
-type dtype =
-  | DInt
-  | DRational
-  | DFloat
-  | DString
-  | DTimestamp
-  | DDate
-  | DInterval
-  | DBool
-[@@deriving compare, hash, sexp, bin_io]
-
-type field_t = {fname: string; dtype: dtype}
+type field_t = {fname: string; type_: Type.PrimType.t}
 
 and relation_t = {rname: string; fields: field_t list}
-[@@deriving compare, hash, sexp, bin_io]
+[@@deriving compare, hash, sexp]
 
 module Relation = struct
   module T = struct
-    type t = relation_t [@@deriving compare, hash, sexp, bin_io]
+    type t = relation_t [@@deriving compare, hash, sexp]
 
     let sexp_of_t {rname; _} = [%sexp_of: string] rname
   end
@@ -138,28 +114,27 @@ module Relation = struct
 
   let dummy = {rname= ""; fields= []}
 
-  let from_db : Postgresql.connection -> string -> t =
-   fun conn name ->
+  let from_db conn name =
     let rel = {rname= name; fields= []} in
     let fields =
-      exec2 ~params:[name] conn
-        "select column_name, data_type from information_schema.columns where \
-         table_name='$0'"
-      |> List.map ~f:(fun (field_name, dtype_s) ->
-             let dtype =
-               match dtype_s with
-               | "character" | "character varying" | "varchar" | "text" -> DString
-               | "integer" | "smallint" | "bigint" -> DInt
-               | "numeric" -> DRational
-               | "real" -> DFloat
-               | "double" -> DFloat
-               | "timestamp without time zone" -> DTimestamp
-               | "date" -> DDate
-               | "interval" -> DInterval
-               | "boolean" -> DBool
+      exec3 ~params:[name] conn
+        "select column_name, data_type, is_nullable from \
+         information_schema.columns where table_name='$0'"
+      |> List.map ~f:(fun (name, type_str, nullable_str) ->
+             let open Type.PrimType in
+             let nullable = String.(nullable_str = "YES") in
+             let type_ =
+               match type_str with
+               | "character" | "character varying" | "varchar" | "text" ->
+                   StringT {nullable}
+               | "integer" | "smallint" | "bigint" -> IntT {nullable}
+               | "boolean" -> BoolT {nullable}
+               | "numeric" | "real" | "double" -> FixedT {nullable}
+               | "timestamp without time zone" | "date" | "interval" ->
+                   StringT {nullable}
                | s -> failwith (Printf.sprintf "Unknown dtype %s" s)
              in
-             {fname= field_name; dtype} )
+             {fname= name; type_} )
     in
     (* TODO: Remove this. *)
     {rel with fields}
@@ -188,14 +163,14 @@ end
 
 module Field = struct
   module T = struct
-    type t = field_t = {fname: string; dtype: dtype [@compare.ignore]}
-    [@@deriving compare, hash, sexp, bin_io]
+    type t = field_t = {fname: string; type_: Type.PrimType.t [@compare.ignore]}
+    [@@deriving compare, hash, sexp]
   end
 
   include T
   include Comparable.Make (T)
 
-  let dummy = {fname= ""; dtype= DBool}
+  let dummy = {fname= ""; type_= BoolT {nullable= false}}
 
   let to_string : t -> string = fun f -> f.fname
 

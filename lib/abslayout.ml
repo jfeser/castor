@@ -74,8 +74,7 @@ module Name = struct
 
   let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
 
-  let of_field ?rel f =
-    {relation= rel; name= f.fname; type_= Some (Type.PrimType.of_dtype f.dtype)}
+  let of_field ?rel f = {relation= rel; name= f.fname; type_= Some f.type_}
 end
 
 let select a b =
@@ -324,10 +323,9 @@ let pred_relations p =
 (** Return the set of relations which have fields in the tuple produced by
      this expression. *)
 
-let unnamed t = {name= ""; relation= None; type_= Some t}
-
 let rec pred_to_schema =
-  let open Type0.PrimType in
+  let open Type.PrimType in
+  let unnamed t = {name= ""; relation= None; type_= Some t} in
   function
   | As_pred (p, n) ->
       let schema = pred_to_schema p in
@@ -338,11 +336,16 @@ let rec pred_to_schema =
   | Bool _ -> unnamed (BoolT {nullable= false})
   | String _ -> unnamed (StringT {nullable= false})
   | Null -> unnamed NullT
-  | Binop (op, _, _) -> (
+  | Binop (op, p1, p2) -> (
     match op with
     | Eq | Lt | Le | Gt | Ge | And | Or -> unnamed (BoolT {nullable= false})
-    | Add | Sub | Mul | Div | Mod -> unnamed (IntT {nullable= false}) )
-  | Count | Sum _ | Avg _ | Min _ | Max _ -> unnamed (IntT {nullable= false})
+    | Add | Sub | Mul | Div | Mod ->
+        let s1 = pred_to_schema p1 in
+        let s2 = pred_to_schema p2 in
+        unnamed (unify (Name.type_exn s1) (Name.type_exn s2)) )
+  | Count -> unnamed (IntT {nullable= false})
+  | Avg _ -> unnamed (FixedT {nullable= false})
+  | Sum p | Min p | Max p -> pred_to_schema p
   | If (_, p1, p2) ->
       let s1 = pred_to_schema p1 in
       let s2 = pred_to_schema p2 in

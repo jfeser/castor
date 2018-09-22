@@ -35,16 +35,6 @@ module PrimType = struct
     | VoidT -> "void"
     | TupleT _ -> "tuple"
 
-  let of_dtype = function
-    | Db.DInt -> IntT {nullable= false}
-    | Db.DString -> StringT {nullable= false}
-    | Db.DBool -> BoolT {nullable= false}
-    | t ->
-        Logs.warn (fun m ->
-            m "Passing unknown type as string: %a" Sexp.pp_hum
-              ([%sexp_of: Db.dtype] t) ) ;
-        StringT {nullable= false}
-
   let rec pp_tuple pp_v fmt =
     let open Format in
     function

@@ -328,9 +328,7 @@ module Make (Eval : Eval.S) = struct
     let resolve_relation r_name =
       let r = Eval.load_relation r_name in
       List.map r.fields ~f:(fun f ->
-          { relation= Some r.rname
-          ; name= f.fname
-          ; type_= Some (Type.PrimType.of_dtype f.Db.dtype) } )
+          {relation= Some r.rname; name= f.fname; type_= Some f.type_} )
       |> Set.of_list (module Name.Compare_no_type)
     in
     let rename name s =

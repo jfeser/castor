@@ -86,15 +86,17 @@ module Make (Config : Config.S) : S = struct
                  let value =
                    if String.(v = "") then Value.Null
                    else
-                     match f.dtype with
-                     | DInt -> Int (Int.of_string v)
-                     | DString -> String v
-                     | DBool -> (
+                     match f.type_ with
+                     | IntT _ -> Int (Int.of_string v)
+                     | StringT _ -> String v
+                     | BoolT _ -> (
                        match v with
                        | "t" -> Bool true
                        | "f" -> Bool false
                        | _ -> failwith "Unknown boolean value." )
-                     | _ -> String v
+                     | FixedT _ -> Fixed (Fixed_point.of_string v)
+                     | NullT | VoidT | TupleT _ ->
+                         failwith "Not possible column types."
                  in
                  (name, value) )
            in
