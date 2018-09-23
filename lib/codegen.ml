@@ -313,25 +313,39 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let fmt_str = define_fresh_global (const_stringz ctx fmt) "fmt" module_ in
     if debug then call_printf fmt_str args
 
+  let int_type = i64_type ctx
+
+  let str_type = struct_type ctx [|pointer_type (i8_type ctx); i64_type ctx|]
+
+  let bool_type = i1_type ctx
+
   let rec codegen_type t =
     let open Type.PrimType in
-    let type_ =
-      match t with
-      | IntT _ -> i64_type ctx
-      | BoolT _ -> i1_type ctx
-      | StringT _ -> struct_type ctx [|pointer_type (i8_type ctx); i64_type ctx|]
-      | TupleT ts -> struct_type ctx (List.map ts ~f:codegen_type |> Array.of_list)
-      | VoidT | NullT -> void_type ctx
-      | FixedT _ ->
-          codegen_type (TupleT [IntT {nullable= false}; IntT {nullable= false}])
-    in
-    if is_nullable t then struct_type ctx [|type_; i1_type ctx|] else type_
+    (* let type_ = *)
+    match t with
+    | IntT _ -> int_type
+    | BoolT _ -> bool_type
+    | StringT _ -> str_type
+    | TupleT ts -> struct_type ctx (List.map ts ~f:codegen_type |> Array.of_list)
+    | VoidT | NullT -> void_type ctx
+    | FixedT _ ->
+        codegen_type (TupleT [IntT {nullable= false}; IntT {nullable= false}])
 
-  let int_type = codegen_type (IntT {nullable= false})
-
-  let str_type = codegen_type (StringT {nullable= false})
-
-  let bool_type = codegen_type (BoolT {nullable= false})
+  (* in
+     * struct_type ctx [|type_; i1_type ctx|] *)
+  
+  (* type llnvalue = {data: llvalue; null: llvalue}
+   * 
+   * let unpack_null v =
+   *   { data= build_extractvalue v 0 "" builder
+   *   ; null= build_extractvalue v 1 "" builder }
+   * 
+   * let pack_null ~data ~null =
+   *   let struct_t = struct_type ctx [|type_of data; i1_type ctx|] in
+   *   let struct_ = build_entry_alloca struct_t "" builder in
+   *   build_store data (build_struct_gep struct_ 0 "" builder) builder |> ignore ;
+   *   build_store null (build_struct_gep struct_ 1 "" builder) builder |> ignore ;
+   *   build_load struct_ "" builder *)
 
   let scmp =
     let func =
@@ -360,25 +374,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     build_ret (const_int bool_type 0) builder |> ignore ;
     assert_valid_function func ;
     func
-
-  type llnvalue = {data: llvalue; null: llvalue}
-
-  let unpack_null t v =
-    let open Type.PrimType in
-    if is_nullable t then
-      { data= build_extractvalue v 0 "" builder
-      ; null= build_extractvalue v 1 "" builder }
-    else {data= v; null= const_int (i1_type ctx) 0}
-
-  let pack_null type_ ~data ~null =
-    let open Type.PrimType in
-    if is_nullable type_ then (
-      let struct_t = codegen_type type_ in
-      let struct_ = build_entry_alloca struct_t "" builder in
-      build_store data (build_struct_gep struct_ 0 "" builder) builder |> ignore ;
-      build_store null (build_struct_gep struct_ 1 "" builder) builder |> ignore ;
-      build_load struct_ "" builder )
-    else data
 
   let codegen_string : string -> llvalue =
    fun x ->
@@ -583,12 +578,10 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     build_load struct_ "" builder
 
   let codegen_binop codegen_expr fctx op arg1 arg2 =
-    let v1 = codegen_expr fctx arg1 in
-    let v2 = codegen_expr fctx arg2 in
-    let t1 = I.infer_type fctx#tctx arg1 in
-    let t2 = I.infer_type fctx#tctx arg2 in
-    let {data= x1; null= n1} = unpack_null t1 v1 in
-    let {data= x2; null= n2} = unpack_null t2 v2 in
+    let x1 = codegen_expr fctx arg1 in
+    let x2 = codegen_expr fctx arg2 in
+    (* let {data= x1; null= n1} = unpack_null v1 in
+     * let {data= x2; null= n2} = unpack_null v2 in *)
     let x_out =
       match op with
       | I.Add ->
@@ -596,48 +589,35 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
           build_add x1 x2 "addtmp" builder
       | Sub -> build_sub x1 x2 "subtmp" builder
       | Mul -> build_mul x1 x2 "multmp" builder
-      | Div -> build_sdiv v1 v2 "divtmp" builder
-      | Mod -> build_srem v1 v2 "modtmp" builder
-      | Eq -> (
-        match (t1, t2) with
-        | IntT _, IntT _ | BoolT _, BoolT _ ->
-            build_icmp Icmp.Eq x1 x2 "eqtmp" builder
-        | StringT _, StringT _ -> build_call scmp [|x1; x2|] "eqtmp" builder
-        | _ ->
-            fail
-              (Error.create "Unexpected equality." (t1, t2)
-                 [%sexp_of: Type.PrimType.t * Type.PrimType.t]) )
+      | Div -> build_sdiv x1 x2 "divtmp" builder
+      | Mod -> build_srem x1 x2 "modtmp" builder
+      | IntEq -> build_icmp Icmp.Eq x1 x2 "eqtmp" builder
+      | StrEq -> build_call scmp [|x1; x2|] "eqtmp" builder
       | Lt -> build_icmp Icmp.Slt x1 x2 "lttmp" builder
       | And -> build_and x1 x2 "andtmp" builder
       | Or -> build_or x1 x2 "ortmp" builder
-      | Hash -> (
-          if Type.PrimType.is_nullable t2 then
-            Error.create "Cannot hash nullable type." t2 [%sexp_of: Type.PrimType.t]
-            |> Error.raise ;
-          match t2 with
-          | StringT _ -> codegen_string_hash fctx x1 x2
-          | IntT _ | BoolT _ -> codegen_int_hash fctx x1 x2
-          | TupleT ts -> codegen_tuple_hash fctx ts x1 x2
-          | NullT | VoidT | FixedT _ -> failwith "unhashable" )
+      | IntHash -> codegen_int_hash fctx x1 x2
+      | StrHash -> codegen_string_hash fctx x1 x2
       | LoadStr -> codegen_load_str fctx x1 x2
       | Not -> fail (Error.of_string "Not a binary operator.")
     in
-    let ret_t = I.infer_type fctx#tctx (Binop {op; arg1; arg2}) in
-    let null_out = build_or n1 n2 "" builder in
-    pack_null ret_t ~data:x_out ~null:null_out
+    x_out
+
+  (* let null_out = build_or n1 n2 "" builder in
+     * pack_null ~data:x_out ~null:null_out *)
 
   let codegen_unop codegen_expr fctx op arg =
-    let v = codegen_expr fctx arg in
-    let t = I.infer_type fctx#tctx arg in
-    let {data= x; null= null_out} = unpack_null t v in
-    let x_out =
-      match op with
-      | I.Not -> build_not x "nottmp" builder
-      | Add | Sub | Lt | And | Or | Eq | Hash | Mul | Div | Mod | LoadStr ->
-          fail (Error.of_string "Not a unary operator.")
-    in
-    let ret_t = I.infer_type fctx#tctx (Unop {op; arg}) in
-    pack_null ret_t ~data:x_out ~null:null_out
+    let x = codegen_expr fctx arg in
+    (* let {data= x; null= null_out} = unpack_null v in *)
+    (* let x_out = *)
+    match op with
+    | I.Not -> build_not x "nottmp" builder
+    | Add | Sub | Lt | And | Or | IntEq | StrEq | IntHash | StrHash | Mul | Div
+     |Mod | LoadStr ->
+        fail (Error.of_string "Not a unary operator.")
+
+  (* in
+     * pack_null ~data:x_out ~null:null_out *)
 
   let codegen_tuple codegen_expr es =
     let vs = List.map es ~f:codegen_expr in
@@ -673,6 +653,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     | Unop {op; arg} -> codegen_unop codegen_expr fctx op arg
     | Tuple es -> codegen_tuple (codegen_expr fctx) es
     | Ternary (e1, e2, e3) -> codegen_ternary (codegen_expr fctx) e1 e2 e3
+    | TupleHash (ts, e1, e2) ->
+        codegen_tuple_hash fctx ts (codegen_expr fctx e1) (codegen_expr fctx e2)
 
   let codegen_loop fctx codegen_prog cond body =
     let start_bb = insertion_block builder in
@@ -709,9 +691,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     (* Generate conditional in head block. *)
     position_at_end if_bb builder ;
     let llcond = codegen_expr fctx cond in
-    let cond_type = I.infer_type fctx#tctx cond in
-    let {data; null} = unpack_null cond_type llcond in
-    let llcond = build_and data (build_not null "" builder) "" builder in
+    (* let {data; null} = unpack_null llcond in *)
+    (* let llcond = build_and data (build_not null "" builder) "" builder in *)
     build_cond_br llcond then_bb else_bb builder |> ignore ;
     (* Create then block. *)
     position_at_end then_bb builder ;
@@ -807,6 +788,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
   let str_fmt = define_global_str "str_fmt" "\"%.*s\""
 
+  let float_fmt = define_global_str "float_fmt" "%f"
+
   let codegen_print fctx type_ expr =
     let open Type.PrimType in
     Logs.debug (fun m -> m "Codegen for %a." I.pp_stmt (Print (type_, expr))) ;
@@ -814,37 +797,50 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let rec gen val_ = function
       | NullT -> call_printf null_str []
       | IntT {nullable= false} -> call_printf int_fmt [val_]
-      | IntT {nullable= true} as t ->
-          let {data; null} = unpack_null t val_ in
-          let fmt = build_select null null_str int_fmt "" builder in
-          call_printf fmt [data]
+      (* | IntT {nullable= true} ->
+       *     let {data; null} = unpack_null val_ in
+       *     let fmt = build_select null null_str int_fmt "" builder in
+       *     call_printf fmt [data] *)
       | BoolT {nullable= false} ->
           let fmt = build_select val_ true_str false_str "" builder in
           call_printf fmt []
-      | BoolT {nullable= true} as t ->
-          let {null; _} = unpack_null t val_ in
-          let fmt =
-            build_select null null_str
-              (build_select val_ true_str false_str "" builder)
-              "" builder
-          in
-          call_printf fmt []
+      (* | BoolT {nullable= true} ->
+       *     let {null; _} = unpack_null val_ in
+       *     let fmt =
+       *       build_select null null_str
+       *         (build_select val_ true_str false_str "" builder)
+       *         "" builder
+       *     in
+       *     call_printf fmt [] *)
       | StringT {nullable= false} ->
           call_printf str_fmt
             [ build_extractvalue val_ 1 "" builder
             ; build_extractvalue val_ 0 "" builder ]
-      | StringT {nullable= true} as t ->
-          let {null; _} = unpack_null t val_ in
-          let fmt = build_select null null_str str_fmt "" builder in
-          call_printf fmt
-            [ build_extractvalue val_ 1 "" builder
-            ; build_extractvalue val_ 0 "" builder ]
+      (* | StringT {nullable= true} ->
+       *     let {null; _} = unpack_null val_ in
+       *     let fmt = build_select null null_str str_fmt "" builder in
+       *     call_printf fmt
+       *       [ build_extractvalue val_ 1 "" builder
+       *       ; build_extractvalue val_ 0 "" builder ] *)
       | TupleT ts ->
           List.iteri ts ~f:(fun i t ->
               gen (build_extractvalue val_ i "" builder) t ;
               call_printf comma_str [] )
       | VoidT -> call_printf void_str []
-      | FixedT _ -> failwith "Cannot print."
+      | FixedT _ ->
+          let num =
+            build_sitofp
+              (build_extractvalue val_ 0 "" builder)
+              (double_type ctx) "" builder
+          in
+          let dem =
+            build_sitofp
+              (build_extractvalue val_ 1 "" builder)
+              (double_type ctx) "" builder
+          in
+          let val_ = build_fdiv num dem "" builder in
+          call_printf float_fmt [val_]
+      | _ -> failwith "Cannot print."
     in
     gen val_ type_ ; call_printf newline_str []
 
@@ -923,7 +919,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let build_step ictx =
       Logs.debug (fun m -> m "Building step function %s." ictx#name) ;
       (* Create step function. *)
+      [%sexp_of: Implang.func] ictx#func |> print_s ;
       let ret_t = codegen_type ictx#func.I.ret_type in
+      [%sexp_of: lltype] ret_t |> print_s ;
       let step_func_t = function_type ret_t [|pointer_type !params_struct_t|] in
       ictx#set_step (declare_function (step_name ictx#name) step_func_t module_) ;
       set_attributes ictx#step ;
@@ -953,6 +951,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       |> ignore ;
       store_params ictx ictx#step ;
       build_ret (const_null ret_t) builder |> ignore ;
+      [%sexp_of: llvalue] ictx#step |> print_s ;
       (* Check step function. *)
       assert_valid_function ictx#step
     in

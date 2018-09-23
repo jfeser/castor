@@ -41,6 +41,7 @@ struct
   let add_func (f : func) = funcs := f :: !funcs
 
   let gen_pred ~ctx pred b =
+    let open Builder in
     let rec gen_pred = function
       | A.Null -> Null
       | A.Int x -> Int x
@@ -58,17 +59,17 @@ struct
           let e1 = gen_pred arg1 in
           let e2 = gen_pred arg2 in
           match op with
-          | A.Eq -> Infix.(e1 = e2)
-          | A.Lt -> Infix.(e1 < e2)
-          | A.Le -> Infix.(e1 <= e2)
-          | A.Gt -> Infix.(e1 > e2)
-          | A.Ge -> Infix.(e1 >= e2)
+          | A.Eq -> build_eq e1 e2 b
+          | A.Lt -> build_lt e1 e2 b
+          | A.Le -> build_le e1 e2 b
+          | A.Gt -> build_gt e1 e2 b
+          | A.Ge -> build_ge e1 e2 b
           | A.And -> Infix.(e1 && e2)
           | A.Or -> Infix.(e1 || e2)
-          | A.Add -> Infix.(e1 + e2)
-          | A.Sub -> Infix.(e1 - e2)
-          | A.Mul -> Infix.(e1 * e2)
-          | A.Div -> Infix.(e1 / e2)
+          | A.Add -> build_add e1 e2 b
+          | A.Sub -> build_sub e1 e2 b
+          | A.Mul -> build_mul e1 e2 b
+          | A.Div -> build_div e1 e2 b
           | A.Mod -> Infix.(e1 % e2) )
       | A.Count | A.Min _ | A.Max _ | A.Sum _ | A.Avg _ ->
           failwith "Not a scalar predicate."
@@ -104,10 +105,13 @@ struct
         in
         let start = Ctx.find_exn ctx (A.Name.create "start") b in
         let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
-        if nullable then
-          let null_val = h + 1 in
-          build_yield (Tuple [Tuple [ival; Infix.(ival = int null_val)]]) b
-        else build_yield (Tuple [ival]) b ;
+        let _nval =
+          if nullable then
+            let null_val = h + 1 in
+            Infix.(build_eq ival (int null_val) b)
+          else Bool false
+        in
+        build_yield (Tuple [ival]) b ;
         build_func b
     | _ -> failwith "Unexpected args."
 
@@ -122,14 +126,14 @@ struct
         let start = Ctx.find_exn ctx (A.Name.create "start") b in
         let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
         let sval = Infix.(int scale) in
-        let ret = Tuple [ival; sval] in
-        let ret =
+        let xval = build_fixed ival sval b in
+        let _nval =
           if nullable then
             let null_val = h + 1 in
-            Tuple [ret; Infix.(ival = int null_val)]
-          else ret
+            Infix.(build_eq ival (int null_val) b)
+          else Bool true
         in
-        build_yield (Tuple [ret]) b ;
+        build_yield (Tuple [xval]) b ;
         build_func b
     | _ -> failwith "Unexpected args."
 
@@ -140,10 +144,13 @@ struct
         let b = create ~ctx ~name ~ret:(TupleT [BoolT {nullable= meta.nullable}]) in
         let start = Ctx.find_exn ctx (A.Name.create "start") b in
         let ival = Slice (start, 1) in
-        if meta.nullable then
-          let null_val = 2 in
-          build_yield (Tuple [Tuple [ival; Infix.(ival = int null_val)]]) b
-        else build_yield (Tuple [ival]) b ;
+        let _nval =
+          if meta.nullable then
+            let null_val = 2 in
+            Infix.(build_eq ival (int null_val) b)
+          else Bool true
+        in
+        build_yield (Tuple [ival]) b ;
         build_func b
     | _ -> failwith "Unexpected args."
 
@@ -156,11 +163,14 @@ struct
         let start = Ctx.find_exn ctx (A.Name.create "start") b in
         let value_ptr = Header.make_position hdr "value" start in
         let nchars = Header.make_access hdr "nchars" start in
-        let ret_val = Binop {op= LoadStr; arg1= value_ptr; arg2= nchars} in
-        if nullable then
-          let null_val = l - 1 in
-          build_yield (Tuple [Tuple [ret_val; Infix.(nchars = int null_val)]]) b
-        else build_yield (Tuple [ret_val]) b ;
+        let xval = Binop {op= LoadStr; arg1= value_ptr; arg2= nchars} in
+        let _nval =
+          if nullable then
+            let null_val = l - 1 in
+            Infix.(build_eq nchars (int null_val) b)
+          else Bool true
+        in
+        build_yield (Tuple [xval]) b ;
         build_func b
     | _ -> failwith "Unexpected args."
 
@@ -182,7 +192,7 @@ struct
           let ctx = Ctx.bind ctx "start" Type.PrimType.int_t cstart in
           let child_ctx, child_args = Ctx.make_callee_context ctx b in
           let child_iter = scan child_ctx clayout ctype in
-          build_foreach ~fresh ~count:(Type.count ctype) child_iter child_args
+          build_foreach ~count:(Type.count ctype) child_iter child_args
             (fun tup b ->
               let next_ctx =
                 let tuple_ctx =
@@ -207,7 +217,7 @@ struct
         List.fold_left child_types
           ~init:(Header.make_position hdr "value" start, [])
           ~f:(fun (cstart, ret) ctype ->
-            let cstart = build_fresh_defn ~fresh "cstart" cstart b in
+            let cstart = build_fresh_defn "cstart" cstart b in
             let next_cstart = Infix.(cstart + len cstart ctype) in
             (next_cstart, cstart :: ret) )
       in
@@ -245,7 +255,7 @@ struct
           callee )
     in
     let child_tuples =
-      List.map callee_funcs ~f:(fun f -> build_fresh_var ~fresh "t" f.ret_type b)
+      List.map callee_funcs ~f:(fun f -> build_fresh_var "t" f.ret_type b)
     in
     let build_body b =
       List.iter2_exn callee_funcs child_tuples ~f:(fun f t -> build_step t f b) ;
@@ -258,7 +268,7 @@ struct
       build_yield tup b
     in
     ( match Type.AbsCount.kind count with
-    | `Count x -> build_count_loop ~fresh Infix.(int x) build_body b
+    | `Count x -> build_count_loop Infix.(int x) build_body b
     | `Countable | `Unknown ->
         build_body b ;
         let not_done =
@@ -309,8 +319,7 @@ struct
           let child_hdr = Header.make_header child_type in
           Header.make_access child_hdr "len" cstart
         in
-        build_foreach ~fresh ~count:(Type.count child_type) func callee_args
-          build_yield b ;
+        build_foreach ~count:(Type.count child_type) func callee_args build_yield b ;
         build_assign Infix.(cstart + clen) cstart b ;
         build_assign Infix.(pcount - int 1) pcount b )
       b ;
@@ -360,8 +369,8 @@ struct
     let hash_key =
       match lookup_expr with
       | [] -> failwith "empty hash key"
-      | [x] -> Infix.(hash hash_data_start x)
-      | xs -> Infix.(hash hash_data_start (Tuple xs))
+      | [x] -> build_hash hash_data_start x b
+      | xs -> build_hash hash_data_start (Tuple xs) b
     in
     let hash_key = Infix.(hash_key * int 8) in
     (* Get a pointer to the value. *)
@@ -369,7 +378,10 @@ struct
     (* If the pointer is null, then the key is not present. *)
     build_if
       ~cond:
-        Infix.(hash_key < int 0 || hash_key >= mapping_len || value_ptr = int 0x0)
+        Infix.(
+          hash_key < int 0
+          || hash_key >= mapping_len
+          || build_eq value_ptr (int 0x0) b)
       ~then_:(fun _ -> ())
       ~else_:(fun b ->
         build_assign value_ptr kstart b ;
@@ -379,7 +391,7 @@ struct
         build_if
           ~cond:(build_eq key_tuple (Tuple lookup_expr) b)
           ~then_:
-            (build_foreach ~fresh ~count:(Type.count value_type) value_iter
+            (build_foreach ~count:(Type.count value_type) value_iter
                value_callee_args (fun value_tup b ->
                  build_yield (build_concat [key_tuple; value_tup] b) b ))
           ~else_:(fun _ -> ())
@@ -391,12 +403,12 @@ struct
 
   let build_bin_search build_key n low_target high_target callback b =
     let open Builder in
-    let low = build_fresh_defn ~fresh "low" Infix.(int 0) b in
-    let high = build_fresh_defn ~fresh "high" n b in
+    let low = build_fresh_defn "low" Infix.(int 0) b in
+    let high = build_fresh_defn "high" n b in
     build_loop
       Infix.(low < high)
       (fun b ->
-        let mid = build_fresh_defn ~fresh "mid" Infix.((low + high) / int 2) b in
+        let mid = build_fresh_defn "mid" Infix.((low + high) / int 2) b in
         let key = build_key mid b in
         build_if
           ~cond:(build_lt key (Tuple [low_target]) b)
@@ -407,7 +419,7 @@ struct
     build_if
       ~cond:Infix.(low < n)
       ~then_:(fun b ->
-        let key = build_fresh_defn ~fresh "key" (build_key low b) b in
+        let key = build_fresh_defn "key" (build_key low b) b in
         build_loop
           Infix.(build_lt key (Tuple [high_target]) b && low < n)
           (fun b ->
@@ -466,7 +478,7 @@ struct
         let key_index i b =
           build_assign Infix.(index_start + (i * kp_len)) kstart b ;
           build_iter key_iter key_callee_args b ;
-          let key = build_fresh_var ~fresh "key" key_iter.ret_type b in
+          let key = build_fresh_var "key" key_iter.ret_type b in
           build_step key key_iter b ; key
         in
         let n = Infix.(index_len / kp_len) in
@@ -477,7 +489,7 @@ struct
               Infix.(Slice (index_start + (idx * kp_len) + key_len, 8))
               vstart b ;
             build_assign key key_tuple b ;
-            build_foreach ~fresh ~count:(Type.count value_type) value_iter
+            build_foreach ~count:(Type.count value_type) value_iter
               value_callee_args
               (fun value b -> build_yield (build_concat [key; value] b) b)
               b )
@@ -488,7 +500,7 @@ struct
   let printer ctx name func =
     let open Builder in
     let b = create ~ctx ~name ~ret:VoidT in
-    build_foreach ~fresh func [] (fun x b -> build_print x b) b ;
+    build_foreach func [] (fun x b -> build_print x b) b ;
     build_func b
 
   let counter ctx name func =
@@ -496,7 +508,7 @@ struct
     let open Infix in
     let b = create ~name ~ctx ~ret:(IntT {nullable= false}) in
     let c = build_defn "c" Type.PrimType.int_t Infix.(int 0) b in
-    build_foreach ~fresh func [] (fun _ b -> build_assign (c + int 1) c b) b ;
+    build_foreach func [] (fun _ b -> build_assign (c + int 1) c b) b ;
     build_return c b ;
     build_func b
 
@@ -517,7 +529,7 @@ struct
         in
         let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
         let func = scan callee_ctx child_layout child_type in
-        build_foreach ~fresh ~count:(Type.count child_type) func callee_args
+        build_foreach ~count:(Type.count child_type) func callee_args
           (fun tup b ->
             let ctx =
               let child_schema = A.Meta.(find_exn child_layout schema) in
@@ -532,37 +544,45 @@ struct
         build_func b
     | _ -> failwith "Unexpected args."
 
-  let agg_init b =
+  let agg_init t p b =
+    let open Builder in
+    match p with
+    | A.Count ->
+        `Count (build_fresh_defn "count" (const_int Type.PrimType.int_t 0) b)
+    | A.Sum f -> `Sum (f, build_fresh_defn "sum" (const_int t 0) b)
+    | A.Min f -> `Min (f, build_fresh_defn "min" (const_int t Int.max_value) b)
+    | A.Max f -> `Max (f, build_fresh_defn "max" (const_int t Int.min_value) b)
+    | A.Avg f ->
+        `Avg
+          ( f
+          , build_fresh_defn "avg_num" (const_int t 0) b
+          , build_fresh_defn "avg_dem" (const_int Type.PrimType.int_t 0) b )
+    | p -> `Passthru p
+
+  let agg_step ctx b acc =
+    let open Builder in
+    let one = const_int Type.PrimType.int_t 1 in
+    match acc with
+    | `Count x -> build_assign (build_add x one b) x b
+    | `Sum (f, x) -> build_assign (build_add x (gen_pred ~ctx f b) b) x b
+    | `Min (f, x) ->
+        let v = gen_pred ~ctx f b in
+        build_assign (Ternary (build_lt v x b, v, x)) x b
+    | `Max (f, x) ->
+        let v = gen_pred ~ctx f b in
+        build_assign (Ternary (build_lt v x b, v, x)) x b
+    | `Avg (f, n, d) ->
+        let v = gen_pred ~ctx f b in
+        build_assign (build_add n v b) n b ;
+        build_assign (build_add d one b) d b
+    | `Passthru _ -> ()
+
+  let agg_extract ctx b =
     let open Builder in
     function
-    | A.Count -> `Int (build_fresh_defn ~fresh "count" Infix.(int 0) b)
-    | A.Sum _ -> `Int (build_fresh_defn ~fresh "sum" Infix.(int 0) b)
-    | A.Min _ -> `Int (build_fresh_defn ~fresh "min" Infix.(int Int.max_value) b)
-    | A.Max _ -> `Int (build_fresh_defn ~fresh "max" Infix.(int Int.min_value) b)
-    | A.Avg _ ->
-        `Avg
-          ( build_fresh_defn ~fresh "avg_num" Infix.(int 0) b
-          , build_fresh_defn ~fresh "avg_dem" Infix.(int 0) b )
-    | _ -> failwith "Not an aggregate."
-
-  let agg_step ctx b agg acc =
-    let open Builder in
-    match (agg, acc) with
-    | A.Count, `Int x -> build_assign Infix.(x + int 1) x b
-    | A.Sum f, `Int x -> build_assign Infix.(x + gen_pred ~ctx f b) x b
-    | A.Min f, `Int x ->
-        let v = gen_pred ~ctx f b in
-        build_assign (Ternary (Infix.(v < x), v, x)) x b
-    | A.Max f, `Int x ->
-        let v = gen_pred ~ctx f b in
-        build_assign (Ternary (Infix.(v > x), v, x)) x b
-    | A.Avg f, `Avg (n, d) ->
-        let v = gen_pred ~ctx f b in
-        build_assign Infix.(n + v) n b ;
-        build_assign Infix.(d + int 1) d b
-    | _ -> failwith "Not an aggregate."
-
-  let agg_extract = function `Int x -> x | `Avg (n, d) -> Infix.(n / d)
+    | `Count x | `Sum (_, x) | `Min (_, x) | `Max (_, x) -> x
+    | `Avg (_, n, d) -> build_div n d b
+    | `Passthru p -> gen_pred ~ctx p b
 
   let scan_select args =
     match args with
@@ -572,9 +592,9 @@ struct
       ; layout= {node= Select (args, child_layout); _} as layout
       ; type_= FuncT ([child_type], _); _ } ->
         let open Builder in
+        let schema = A.Meta.(find_exn layout schema) in
         let b =
           let ret_type =
-            let schema = A.Meta.(find_exn layout schema) in
             Type.PrimType.TupleT (List.map schema ~f:A.Name.type_exn)
           in
           create ~ctx ~name ~ret:ret_type
@@ -583,7 +603,7 @@ struct
         let func = scan callee_ctx child_layout child_type in
         ( match A.select_kind args |> Or_error.ok_exn with
         | `Scalar ->
-            build_foreach ~fresh ~count:(Type.count child_type) func callee_args
+            build_foreach ~count:(Type.count child_type) func callee_args
               (fun tup b ->
                 let ctx =
                   let child_schema = A.Meta.(find_exn child_layout schema) in
@@ -593,17 +613,20 @@ struct
                 build_yield (Tuple output) b )
               b
         | `Agg ->
+            let args =
+              List.map2_exn args schema ~f:(fun a n -> (a, A.Name.type_exn n))
+            in
             (* Holds the state for each aggregate. *)
-            let agg_temps = List.map args ~f:(agg_init b) in
-            build_foreach ~fresh ~count:(Type.count child_type) func callee_args
+            let agg_temps = List.map args ~f:(fun (p, t) -> agg_init t p b) in
+            build_foreach ~count:(Type.count child_type) func callee_args
               (fun tup b ->
                 let ctx =
                   let child_schema = A.Meta.(find_exn child_layout schema) in
                   Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
                 in
-                List.iter2_exn args agg_temps ~f:(agg_step ctx b) )
+                List.iter agg_temps ~f:(agg_step ctx b) )
               b ;
-            build_yield (Tuple (List.map ~f:agg_extract agg_temps)) b ) ;
+            build_yield (Tuple (List.map ~f:(agg_extract ctx b) agg_temps)) b ) ;
         build_func b
     | _ -> failwith "Unexpected args."
 

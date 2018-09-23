@@ -25,6 +25,8 @@ let rec pow10 x = if x = 1 then 0 else 1 + pow10 (x / 10)
 include T
 include Comparable.Make (T)
 
+let of_int x = {value= x; scale= 1}
+
 let of_string s =
   match String.lsplit2 s ~on:'.' with
   | Some (lhs, rhs) ->

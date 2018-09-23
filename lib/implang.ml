@@ -6,8 +6,22 @@ module A = Abslayout
 
 let fail : Error.t -> 'a = Error.raise
 
-type op = Add | Sub | Mul | Div | Mod | Lt | Eq | And | Or | Not | Hash | LoadStr
-[@@deriving compare, sexp]
+type op =
+  | Add
+  | Sub
+  | Mul
+  | Div
+  | Mod
+  | Lt
+  | IntEq
+  | StrEq
+  | And
+  | Or
+  | Not
+  | IntHash
+  | StrHash
+  | LoadStr
+[@@deriving compare, hash, sexp]
 
 type expr =
   | Null
@@ -23,6 +37,7 @@ type expr =
   | Unop of {op: op; arg: expr}
   | Done of string
   | Ternary of expr * expr * expr
+  | TupleHash of Type.PrimType.t list * expr * expr
 
 and stmt =
   | Print of Type.PrimType.t * expr
@@ -42,7 +57,7 @@ and func =
   ; body: prog
   ; ret_type: Type.PrimType.t
   ; locals: (string * Type.PrimType.t) list }
-[@@deriving compare, sexp]
+[@@deriving compare, hash, sexp]
 
 let rec pp_args fmt =
   let open Format in
@@ -71,9 +86,9 @@ let rec pp_expr : Format.formatter -> expr -> unit =
     | Lt -> "<"
     | And -> "&&"
     | Not -> "not"
-    | Eq -> "="
+    | IntEq | StrEq -> "="
     | Or -> "||"
-    | Hash -> "hash"
+    | IntHash | StrHash -> "hash"
     | LoadStr -> "load_str"
   in
   fun fmt -> function
@@ -86,7 +101,7 @@ let rec pp_expr : Format.formatter -> expr -> unit =
     | Tuple t -> fprintf fmt "(@[<hov>%a@])" (pp_tuple pp_expr) t
     | Slice (ptr, len) -> fprintf fmt "buf[%a :@ %d]" pp_expr ptr len
     | Index (tuple, idx) -> fprintf fmt "%a[%d]" pp_expr tuple idx
-    | Binop {op= Hash; arg1; arg2} ->
+    | Binop {op= IntHash | StrHash; arg1; arg2} ->
         fprintf fmt "hash(%a, %a)" pp_expr arg1 pp_expr arg2
     | Binop {op= LoadStr; arg1; arg2} ->
         fprintf fmt "load_str(%a, %a)" pp_expr arg1 pp_expr arg2
@@ -96,6 +111,7 @@ let rec pp_expr : Format.formatter -> expr -> unit =
     | Done func -> fprintf fmt "done(%s)" func
     | Ternary (e1, e2, e3) ->
         fprintf fmt "%a ? %a : %a" pp_expr e1 pp_expr e2 pp_expr e3
+    | TupleHash _ -> fprintf fmt "<tuplehash>"
 
 and pp_stmt : Format.formatter -> stmt -> unit =
   let open Format in
@@ -125,61 +141,6 @@ and pp_func : Format.formatter -> func -> unit =
  fun fmt {name; args; body; _} ->
   Format.fprintf fmt "@[<v 4>fun %s (%a) {@,%a@]@,}" name pp_args args pp_prog body
 
-let rec infer_type ctx =
-  let open Type.PrimType in
-  function
-  | Null -> NullT
-  | Int _ -> IntT {nullable= false}
-  | Fixed _ -> FixedT {nullable= false}
-  | Bool _ -> BoolT {nullable= false}
-  | String _ -> StringT {nullable= false}
-  | Var x -> (
-    match Hashtbl.find ctx x with
-    | Some t -> t
-    | None ->
-        Error.create "Type lookup failed." (x, ctx)
-          [%sexp_of: string * t Hashtbl.M(String).t]
-        |> Error.raise )
-  | Tuple xs -> TupleT (List.map xs ~f:(infer_type ctx))
-  | Binop {op; arg1; arg2} as e -> (
-      let t1 = infer_type ctx arg1 in
-      let t2 = infer_type ctx arg2 in
-      match (op, t1, t2) with
-      | (Add | Sub | Mul | Div), IntT _, IntT _
-       |(And | Or), BoolT _, BoolT _
-       |(And | Or), IntT _, IntT _ ->
-          unify t1 t2
-      | Lt, IntT {nullable= n1}, IntT {nullable= n2} -> BoolT {nullable= n1 || n2}
-      | Hash, IntT {nullable= false}, _ -> IntT {nullable= false}
-      | Eq, IntT {nullable= n1}, IntT {nullable= n2}
-       |Eq, BoolT {nullable= n1}, BoolT {nullable= n2}
-       |Eq, StringT {nullable= n1}, StringT {nullable= n2} ->
-          BoolT {nullable= n1 || n2}
-      | LoadStr, IntT {nullable= false}, IntT {nullable= false} ->
-          StringT {nullable= false}
-      | _ ->
-          fail
-            (Error.create "Type error." (e, t1, t2, ctx)
-               [%sexp_of: expr * t * t * t Hashtbl.M(String).t]) )
-  | Unop {op; arg} -> (
-      let t = infer_type ctx arg in
-      match (op, t) with
-      | Not, BoolT {nullable} -> BoolT {nullable}
-      | _ -> fail (Error.create "Type error." (op, t) [%sexp_of: op * t]) )
-  | Slice (_, _) -> IntT {nullable= false}
-  | Index (tup, idx) -> (
-    match infer_type ctx tup with
-    | TupleT ts -> List.nth_exn ts idx
-    | t -> fail (Error.create "Expected a tuple." t [%sexp_of: t]) )
-  | Done _ -> BoolT {nullable= false}
-  | Ternary (e1, e2, e3) -> (
-    match infer_type ctx e1 with
-    | BoolT {nullable= false} ->
-        let t1 = infer_type ctx e2 in
-        let t2 = infer_type ctx e3 in
-        unify t1 t2
-    | _ -> failwith "Unexpected conditional type." )
-
 module Infix = struct
   let int x = Int x
 
@@ -204,15 +165,11 @@ module Infix = struct
 
   let ( >= ) x y = y <= x
 
-  let ( = ) x y = Binop {op= Eq; arg1= x; arg2= y}
-
   let ( && ) x y = Binop {op= And; arg1= x; arg2= y}
 
   let ( || ) x y = Binop {op= Or; arg1= x; arg2= y}
 
   let not x = Unop {op= Not; arg= x}
-
-  let hash x y = Binop {op= Hash; arg1= x; arg2= y}
 
   let index tup idx =
     assert (Int.(idx >= 0)) ;
@@ -262,8 +219,64 @@ module Builder = struct
     ; ret: Type.PrimType.t
     ; locals: Type.PrimType.t Hashtbl.M(String).t
     ; type_ctx: Type.PrimType.t Hashtbl.M(String).t
-    ; body: prog ref }
+    ; body: prog ref
+    ; fresh: Fresh.t sexp_opaque }
   [@@deriving sexp]
+
+  let rec infer_type ctx e =
+    let open Type.PrimType in
+    match e with
+    | Null -> NullT
+    | Int _ -> IntT {nullable= false}
+    | Fixed _ -> FixedT {nullable= false}
+    | Bool _ -> BoolT {nullable= false}
+    | String _ -> StringT {nullable= false}
+    | Var x -> (
+      match Hashtbl.find ctx x with
+      | Some t -> t
+      | None ->
+          Error.create "Type lookup failed." (x, ctx)
+            [%sexp_of: string * t Hashtbl.M(String).t]
+          |> Error.raise )
+    | Tuple xs -> TupleT (List.map xs ~f:(infer_type ctx))
+    | Binop {op; arg1; arg2} as e -> (
+        let t1 = infer_type ctx arg1 in
+        let t2 = infer_type ctx arg2 in
+        match (op, t1, t2) with
+        | (Add | Sub | Mul | Div), IntT _, IntT _
+         |(And | Or), BoolT _, BoolT _
+         |(And | Or), IntT _, IntT _ ->
+            unify t1 t2
+        | Lt, IntT {nullable= n1}, IntT {nullable= n2} -> BoolT {nullable= n1 || n2}
+        | (IntHash | StrHash), _, _ -> IntT {nullable= false}
+        | IntEq, IntT {nullable= n1}, IntT {nullable= n2}
+         |StrEq, StringT {nullable= n1}, StringT {nullable= n2} ->
+            BoolT {nullable= n1 || n2}
+        | LoadStr, IntT {nullable= false}, IntT {nullable= false} ->
+            StringT {nullable= false}
+        | _ ->
+            fail
+              (Error.create "Type error." (e, t1, t2, ctx)
+                 [%sexp_of: expr * t * t * t Hashtbl.M(String).t]) )
+    | Unop {op; arg} -> (
+        let t = infer_type ctx arg in
+        match (op, t) with
+        | Not, BoolT {nullable} -> BoolT {nullable}
+        | _ -> fail (Error.create "Type error." (op, t) [%sexp_of: op * t]) )
+    | Slice (_, _) -> IntT {nullable= false}
+    | Index (tup, idx) -> (
+      match infer_type ctx tup with
+      | TupleT ts -> List.nth_exn ts idx
+      | t -> fail (Error.create "Expected a tuple." t [%sexp_of: t]) )
+    | Done _ -> BoolT {nullable= false}
+    | Ternary (e1, e2, e3) -> (
+      match infer_type ctx e1 with
+      | BoolT {nullable= false} ->
+          let t1 = infer_type ctx e2 in
+          let t2 = infer_type ctx e3 in
+          unify t1 t2
+      | _ -> failwith "Unexpected conditional type." )
+    | TupleHash _ -> IntT {nullable= false}
 
   let create ~ctx ~name ~ret =
     let args = Ctx0.make_caller_args ctx in
@@ -280,7 +293,7 @@ module Builder = struct
       | `Ok l -> l
       | `Duplicate_key _ -> fail (Error.of_string "Duplicate argument.")
     in
-    {name; args; ret; locals; body= ref []; type_ctx}
+    {name; args; ret; locals; body= ref []; type_ctx; fresh= Fresh.create ()}
 
   (** Create a function builder with an empty body and a copy of the locals
       table. *)
@@ -289,10 +302,11 @@ module Builder = struct
   let build_var n t {locals; type_ctx; _} =
     if Hashtbl.mem locals n then
       fail (Error.create "Variable already defined." n [%sexp_of: string])
-    else (
+    else
+      let v = Var n in
       Hashtbl.set locals ~key:n ~data:t ;
       Hashtbl.set type_ctx ~key:n ~data:t ;
-      Var n )
+      v
 
   let build_arg i ({args; _} as b) =
     match List.nth args i with
@@ -343,16 +357,16 @@ module Builder = struct
     in
     b.body := ite :: !(b.body)
 
-  let build_fresh_var ~fresh n t b =
-    let n = n ^ Fresh.name fresh "%d" in
+  let build_fresh_var n t b =
+    let n = n ^ Fresh.name b.fresh "%d" in
     build_var n t b
 
-  let build_fresh_defn ~fresh v e b =
-    let var = build_fresh_var ~fresh v (infer_type b.type_ctx e) b in
+  let build_fresh_defn v e b =
+    let var = build_fresh_var v (infer_type b.type_ctx e) b in
     build_assign e var b ; var
 
-  let build_count_loop ~fresh c f b =
-    let count = build_fresh_defn ~fresh "count" c b in
+  let build_count_loop c f b =
+    let count = build_fresh_defn "count" c b in
     build_loop
       Infix.(count > int 0)
       (fun b ->
@@ -360,14 +374,14 @@ module Builder = struct
         build_assign Infix.(count - int 1) count b )
       b
 
-  let build_foreach ?count ~fresh iter_ args body b =
-    let tup = build_fresh_var ~fresh "tup" iter_.ret_type b in
+  let build_foreach ?count iter_ args body b =
+    let tup = build_fresh_var "tup" iter_.ret_type b in
     build_iter iter_ args b ;
     match Option.map count ~f:(fun c -> Type.AbsCount.kind c) with
     | Some (`Count 0) -> ()
     | Some (`Count 1) -> build_step tup iter_ b ; body tup b
     | Some (`Count x) ->
-        build_count_loop ~fresh
+        build_count_loop
           Infix.(int x)
           (fun b -> build_step tup iter_ b ; body tup b)
           b
@@ -388,23 +402,69 @@ module Builder = struct
       [%sexp_of: expr * expr * Type.PrimType.t * Type.PrimType.t]
     |> Error.raise
 
+  let build_fixed x y b =
+    let ret = build_fresh_var "f" (FixedT {nullable= false}) b in
+    build_assign (Tuple [x; y]) ret b ;
+    ret
+
+  let build_convert_pair x y b =
+    let build_convert x s' =
+      let v = Infix.(index x 0) in
+      let s = Infix.(index x 1) in
+      build_fixed Infix.(v * (s' / s)) s' b
+    in
+    let s1 = Infix.(index x 1) in
+    let s2 = Infix.(index y 1) in
+    let z =
+      Ternary
+        ( Binop {op= IntEq; arg1= s1; arg2= s2}
+        , Tuple [x; y]
+        , Ternary
+            ( Infix.(s1 < s2)
+            , Tuple [build_convert x s2; y]
+            , Tuple [x; build_convert y s1] ) )
+    in
+    Infix.(index z 0, index z 1)
+
   let rec build_eq x y b =
     let t1 = infer_type b.type_ctx x in
     let t2 = infer_type b.type_ctx y in
     let open Type.PrimType in
     match (t1, t2) with
-    | IntT {nullable= false}, IntT {nullable= false} -> Infix.(x = y)
-    | StringT {nullable= false}, StringT {nullable= false} -> Infix.(x = y)
+    | IntT {nullable= false}, IntT {nullable= false} ->
+        Binop {op= IntEq; arg1= x; arg2= y}
+    | StringT {nullable= false}, StringT {nullable= false} ->
+        Binop {op= StrEq; arg1= x; arg2= y}
     | BoolT {nullable= false}, BoolT {nullable= false} ->
         Infix.((x && y) || ((not x) && not y))
     | TupleT ts1, TupleT ts2 when List.length ts1 = List.length ts2 ->
         List.init (List.length ts1) ~f:(fun i ->
             build_eq Infix.(index x i) Infix.(index y i) b )
         |> List.fold_left ~init:(Bool true) ~f:Infix.( && )
+    | FixedT {nullable= false}, FixedT {nullable= false} ->
+        let x, y = build_convert_pair x y b in
+        let v1 = Infix.(index x 0) in
+        let v2 = Infix.(index y 0) in
+        Binop {op= IntEq; arg1= v1; arg2= v2}
+    | IntT {nullable= false}, FixedT {nullable= false} ->
+        build_eq (build_fixed x (Int 1) b) y b
+    | FixedT {nullable= false}, IntT {nullable= false} ->
+        build_eq x (build_fixed y (Int 1) b) b
     | _ ->
         Error.create "Incomparable types." (x, y, t1, t2)
           [%sexp_of: expr * expr * t * t]
         |> Error.raise
+
+  let build_hash x y b =
+    let t = infer_type b.type_ctx y in
+    let open Type.PrimType in
+    match t with
+    | IntT {nullable= false} | BoolT {nullable= false} ->
+        Binop {op= IntHash; arg1= x; arg2= y}
+    | StringT {nullable= false} -> Binop {op= StrHash; arg1= x; arg2= y}
+    | TupleT ts -> TupleHash (ts, x, y)
+    | _ ->
+        Error.create "Unhashable type." (y, t) [%sexp_of: expr * t] |> Error.raise
 
   let rec build_lt x y b =
     let rec tuple_lt i l =
@@ -419,10 +479,21 @@ module Builder = struct
     let open Type.PrimType in
     match (t1, t2) with
     | IntT {nullable= false}, IntT {nullable= false} -> Infix.(x < y)
+    | FixedT {nullable= false}, FixedT {nullable= false} ->
+        let x, y = build_convert_pair x y b in
+        let v1 = Infix.(index x 0) in
+        let v2 = Infix.(index y 0) in
+        Infix.(v1 < v2)
+    | IntT {nullable= false}, FixedT {nullable= false} ->
+        build_lt (build_fixed x (Int 1) b) y b
+    | FixedT {nullable= false}, IntT {nullable= false} ->
+        build_lt x (build_fixed y (Int 1) b) b
     | TupleT ts1, TupleT ts2 when List.length ts1 = List.length ts2 ->
         tuple_lt 0 (List.length ts1)
     | _ ->
-        Error.create "Incomparable types." (t1, t2) [%sexp_of: t * t] |> Error.raise
+        Error.create "Incomparable types." (x, y, t1, t2, b.type_ctx)
+          [%sexp_of: expr * expr * t * t * t Hashtbl.M(String).t]
+        |> Error.raise
 
   let build_le x y b = Infix.(build_lt x y b || build_eq x y b)
 
@@ -430,32 +501,35 @@ module Builder = struct
 
   let build_ge x y b = Infix.(not (build_lt x y b))
 
-  let build_convert_pair x y =
-    let build_convert x s' =
-      let v = Infix.(index x 0) in
-      let s = Infix.(index x 1) in
-      Tuple [Infix.(v * (s' / s)); s']
+  let build_numeric0 f t x =
+    let type_err msg t =
+      Error.create msg t [%sexp_of: Type.PrimType.t] |> Error.raise
     in
-    let s1 = Infix.(index x 1) in
-    let s2 = Infix.(index y 1) in
-    let z =
-      Ternary
-        ( Infix.(s1 = s2)
-        , Tuple [x; y]
-        , Ternary
-            ( Infix.(s1 < s2)
-            , Tuple [build_convert x s2; y]
-            , Tuple [x; build_convert y s1] ) )
-    in
-    Infix.(index z 0, index z 1)
+    let open Type.PrimType in
+    match t with
+    | IntT {nullable= false} -> f (`Int x)
+    | FixedT {nullable= false} -> f (`Fixed x)
+    | IntT {nullable= true} | FixedT {nullable= true} ->
+        type_err "Nullable types." t
+    | NullT | StringT _ | BoolT _ | TupleT _ | VoidT ->
+        type_err "Nonnumeric types." t
 
-  let build_numeric f x y b =
+  let const_int =
+    build_numeric0 (function
+      | `Int x -> Infix.(int x)
+      | `Fixed x -> Fixed (Fixed_point.of_int x) )
+
+  let build_numeric2 f x y b =
     let t1 = infer_type b.type_ctx x in
     let t2 = infer_type b.type_ctx y in
     let open Type.PrimType in
     match (t1, t2) with
-    | IntT {nullable= false}, IntT {nullable= false} -> f (`Int (x, y))
-    | FixedT {nullable= false}, FixedT {nullable= false} -> f (`Fixed (x, y))
+    | IntT {nullable= false}, IntT {nullable= false} -> f b (`Int (x, y))
+    | FixedT {nullable= false}, FixedT {nullable= false} -> f b (`Fixed (x, y))
+    | IntT {nullable= false}, FixedT {nullable= false} ->
+        build_lt (build_fixed x (Int 1) b) y b
+    | FixedT {nullable= false}, IntT {nullable= false} ->
+        build_lt x (build_fixed y (Int 1) b) b
     | IntT _, FixedT _ | FixedT _, IntT _ -> type_err "Mismatched types." x y t1 t2
     | IntT {nullable= true}, _
      |_, IntT {nullable= true}
@@ -475,44 +549,44 @@ module Builder = struct
         type_err "Nonnumeric types." x y t1 t2
 
   let build_add =
-    build_numeric (function
+    build_numeric2 (fun b -> function
       | `Int (x, y) -> Infix.(x + y)
       | `Fixed (x, y) ->
-          let x, y = build_convert_pair x y in
+          let x, y = build_convert_pair x y b in
           let v1 = Infix.(index x 0) in
           let s = Infix.(index x 1) in
           let v2 = Infix.(index y 0) in
-          Tuple [Infix.(v1 + v2); s] )
+          build_fixed Infix.(v1 + v2) s b )
 
   let build_sub =
-    build_numeric (function
+    build_numeric2 (fun b -> function
       | `Int (x, y) -> Infix.(x - y)
       | `Fixed (x, y) ->
-          let x, y = build_convert_pair x y in
+          let x, y = build_convert_pair x y b in
           let v1 = Infix.(index x 0) in
           let s = Infix.(index x 1) in
           let v2 = Infix.(index y 0) in
-          Tuple [Infix.(v1 - v2); s] )
+          build_fixed Infix.(v1 - v2) s b )
 
   let build_mul =
-    build_numeric (function
+    build_numeric2 (fun b -> function
       | `Int (x, y) -> Infix.(x * y)
       | `Fixed (x, y) ->
           let v1 = Infix.(index x 0) in
           let s1 = Infix.(index x 1) in
           let v2 = Infix.(index y 0) in
           let s2 = Infix.(index y 1) in
-          Tuple [Infix.(v1 * v2); Infix.(s1 * s2)] )
+          build_fixed Infix.(v1 * v2) Infix.(s1 * s2) b )
 
   let build_div =
-    build_numeric (function
+    build_numeric2 (fun b -> function
       | `Int (x, y) -> Infix.(x / y)
       | `Fixed (x, y) ->
           let v1 = Infix.(index x 0) in
           let s1 = Infix.(index x 1) in
           let v2 = Infix.(index y 0) in
           let s2 = Infix.(index y 1) in
-          Tuple [Infix.(v1 / v2); Infix.(s1 * s2)] )
+          build_fixed Infix.(v1 / v2) Infix.(s1 * s2) b )
 
   let build_concat vs b =
     List.concat_map vs ~f:(fun v ->

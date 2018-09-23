@@ -1,7 +1,21 @@
 open Base
 open Collections
 
-type op = Add | Sub | Mul | Div | Mod | Lt | Eq | And | Or | Not | Hash | LoadStr
+type op =
+  | Add
+  | Sub
+  | Mul
+  | Div
+  | Mod
+  | Lt
+  | IntEq
+  | StrEq
+  | And
+  | Or
+  | Not
+  | IntHash
+  | StrHash
+  | LoadStr
 [@@deriving compare, sexp]
 
 type expr =
@@ -18,6 +32,7 @@ type expr =
   | Unop of {op: op; arg: expr}
   | Done of string
   | Ternary of expr * expr * expr
+  | TupleHash of Type.PrimType.t list * expr * expr
 
 and stmt =
   | Print of Type.PrimType.t * expr
@@ -42,9 +57,6 @@ and func =
 val pp_stmt : Formatter.t -> stmt -> unit
 
 val pp_func : Formatter.t -> func -> unit
-
-val infer_type :
-  (string, Type0.PrimType.t) Base.Hashtbl.t -> expr -> Type0.PrimType.t
 
 val yield_count : func -> int
 
@@ -71,15 +83,11 @@ module Infix : sig
 
   val ( >= ) : expr -> expr -> expr
 
-  val ( = ) : expr -> expr -> expr
-
   val ( && ) : expr -> expr -> expr
 
   val ( || ) : expr -> expr -> expr
 
   val not : expr -> expr
-
-  val hash : expr -> expr -> expr
 
   val index : expr -> int -> expr
 end
@@ -90,6 +98,8 @@ type _ctx = _var Map.M(Abslayout.Name.Compare_no_type).t
 
 module Builder : sig
   type t
+
+  val infer_type : Type.PrimType.t Hashtbl.M(String).t -> expr -> Type.PrimType.t
 
   val create : ctx:_ctx -> name:string -> ret:Type.PrimType.t -> t
 
@@ -119,20 +129,14 @@ module Builder : sig
 
   val build_if : cond:expr -> then_:(t -> unit) -> else_:(t -> unit) -> t -> unit
 
-  val build_fresh_var : fresh:Fresh.t -> string -> Type.PrimType.t -> t -> expr
+  val build_fresh_var : string -> Type.PrimType.t -> t -> expr
 
-  val build_fresh_defn : fresh:Fresh.t -> string -> expr -> t -> expr
+  val build_fresh_defn : string -> expr -> t -> expr
 
-  val build_count_loop : fresh:Fresh.t -> expr -> (t -> unit) -> t -> unit
+  val build_count_loop : expr -> (t -> unit) -> t -> unit
 
   val build_foreach :
-       ?count:Type.AbsCount.t
-    -> fresh:Fresh.t
-    -> func
-    -> expr list
-    -> (expr -> t -> unit)
-    -> t
-    -> unit
+    ?count:Type.AbsCount.t -> func -> expr list -> (expr -> t -> unit) -> t -> unit
 
   val build_eq : expr -> expr -> t -> expr
 
@@ -155,6 +159,12 @@ module Builder : sig
   val build_concat : expr list -> t -> expr
 
   val build_printstr : string -> t -> unit
+
+  val build_hash : expr -> expr -> t -> expr
+
+  val build_fixed : expr -> expr -> t -> expr
+
+  val const_int : Type.PrimType.t -> int -> expr
 end
 
 module Ctx : sig
