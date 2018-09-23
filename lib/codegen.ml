@@ -319,6 +319,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
   let bool_type = i1_type ctx
 
+  let float_type = double_type ctx
+
   let rec codegen_type t =
     let open Type.PrimType in
     (* let type_ = *)
@@ -328,9 +330,10 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     | StringT _ -> str_type
     | TupleT ts -> struct_type ctx (List.map ts ~f:codegen_type |> Array.of_list)
     | VoidT | NullT -> void_type ctx
-    | FixedT _ ->
-        codegen_type (TupleT [IntT {nullable= false}; IntT {nullable= false}])
+    | FixedT _ -> float_type
 
+  (* codegen_type (TupleT [IntT {nullable= false}; IntT {nullable= false}]) *)
+  
   (* in
      * struct_type ctx [|type_; i1_type ctx|] *)
   
@@ -584,22 +587,25 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
      * let {data= x2; null= n2} = unpack_null v2 in *)
     let x_out =
       match op with
-      | I.Add ->
-          (* [%sexp_of: llvalue * llvalue] (x1, x2) |> print_s ; *)
-          build_add x1 x2 "addtmp" builder
-      | Sub -> build_sub x1 x2 "subtmp" builder
-      | Mul -> build_mul x1 x2 "multmp" builder
-      | Div -> build_sdiv x1 x2 "divtmp" builder
+      | I.IntAdd -> build_add x1 x2 "addtmp" builder
+      | IntSub -> build_sub x1 x2 "subtmp" builder
+      | IntMul -> build_mul x1 x2 "multmp" builder
+      | IntDiv -> build_sdiv x1 x2 "divtmp" builder
+      | FlAdd -> build_fadd x1 x2 "addtmp" builder
+      | FlSub -> build_fsub x1 x2 "subtmp" builder
+      | FlMul -> build_fmul x1 x2 "multmp" builder
+      | FlDiv -> build_fdiv x1 x2 "divtmp" builder
       | Mod -> build_srem x1 x2 "modtmp" builder
       | IntEq -> build_icmp Icmp.Eq x1 x2 "eqtmp" builder
       | StrEq -> build_call scmp [|x1; x2|] "eqtmp" builder
-      | Lt -> build_icmp Icmp.Slt x1 x2 "lttmp" builder
+      | IntLt -> build_icmp Icmp.Slt x1 x2 "lttmp" builder
+      | FlLt -> build_fcmp Fcmp.Olt x1 x2 "lttmp" builder
       | And -> build_and x1 x2 "andtmp" builder
       | Or -> build_or x1 x2 "ortmp" builder
       | IntHash -> codegen_int_hash fctx x1 x2
       | StrHash -> codegen_string_hash fctx x1 x2
       | LoadStr -> codegen_load_str fctx x1 x2
-      | Not -> fail (Error.of_string "Not a binary operator.")
+      | Not | Int2Fl -> fail (Error.of_string "Not a binary operator.")
     in
     x_out
 
@@ -612,8 +618,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     (* let x_out = *)
     match op with
     | I.Not -> build_not x "nottmp" builder
-    | Add | Sub | Lt | And | Or | IntEq | StrEq | IntHash | StrHash | Mul | Div
-     |Mod | LoadStr ->
+    | Int2Fl -> build_sitofp x float_type "" builder
+    | IntAdd | IntSub | IntLt | And | Or | IntEq | StrEq | IntHash | StrHash
+     |IntMul | IntDiv | Mod | LoadStr | FlAdd | FlSub | FlMul | FlDiv | FlLt ->
         fail (Error.of_string "Not a unary operator.")
 
   (* in
@@ -638,7 +645,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
   let rec codegen_expr fctx = function
     | I.Null -> failwith "TODO: Pick a runtime null rep."
     | Int x -> const_int int_type x
-    | Fixed x -> codegen_expr fctx (Tuple [Int x.value; Int x.scale])
+    | Fixed x -> const_float float_type Float.(of_int x.value / of_int x.scale)
     | Bool true -> const_int bool_type 1
     | Bool false -> const_int bool_type 0
     | Var n ->
@@ -797,49 +804,19 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let rec gen val_ = function
       | NullT -> call_printf null_str []
       | IntT {nullable= false} -> call_printf int_fmt [val_]
-      (* | IntT {nullable= true} ->
-       *     let {data; null} = unpack_null val_ in
-       *     let fmt = build_select null null_str int_fmt "" builder in
-       *     call_printf fmt [data] *)
       | BoolT {nullable= false} ->
           let fmt = build_select val_ true_str false_str "" builder in
           call_printf fmt []
-      (* | BoolT {nullable= true} ->
-       *     let {null; _} = unpack_null val_ in
-       *     let fmt =
-       *       build_select null null_str
-       *         (build_select val_ true_str false_str "" builder)
-       *         "" builder
-       *     in
-       *     call_printf fmt [] *)
       | StringT {nullable= false} ->
           call_printf str_fmt
             [ build_extractvalue val_ 1 "" builder
             ; build_extractvalue val_ 0 "" builder ]
-      (* | StringT {nullable= true} ->
-       *     let {null; _} = unpack_null val_ in
-       *     let fmt = build_select null null_str str_fmt "" builder in
-       *     call_printf fmt
-       *       [ build_extractvalue val_ 1 "" builder
-       *       ; build_extractvalue val_ 0 "" builder ] *)
       | TupleT ts ->
           List.iteri ts ~f:(fun i t ->
               gen (build_extractvalue val_ i "" builder) t ;
               call_printf comma_str [] )
       | VoidT -> call_printf void_str []
-      | FixedT _ ->
-          let num =
-            build_sitofp
-              (build_extractvalue val_ 0 "" builder)
-              (double_type ctx) "" builder
-          in
-          let dem =
-            build_sitofp
-              (build_extractvalue val_ 1 "" builder)
-              (double_type ctx) "" builder
-          in
-          let val_ = build_fdiv num dem "" builder in
-          call_printf float_fmt [val_]
+      | FixedT _ -> call_printf float_fmt [val_]
       | _ -> failwith "Cannot print."
     in
     gen val_ type_ ; call_printf newline_str []
@@ -919,9 +896,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let build_step ictx =
       Logs.debug (fun m -> m "Building step function %s." ictx#name) ;
       (* Create step function. *)
-      [%sexp_of: Implang.func] ictx#func |> print_s ;
       let ret_t = codegen_type ictx#func.I.ret_type in
-      [%sexp_of: lltype] ret_t |> print_s ;
       let step_func_t = function_type ret_t [|pointer_type !params_struct_t|] in
       ictx#set_step (declare_function (step_name ictx#name) step_func_t module_) ;
       set_attributes ictx#step ;
@@ -951,7 +926,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       |> ignore ;
       store_params ictx ictx#step ;
       build_ret (const_null ret_t) builder |> ignore ;
-      [%sexp_of: llvalue] ictx#step |> print_s ;
       (* Check step function. *)
       assert_valid_function ictx#step
     in

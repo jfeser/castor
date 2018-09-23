@@ -2,12 +2,18 @@ open Base
 open Collections
 
 type op =
-  | Add
-  | Sub
-  | Mul
-  | Div
+  | Int2Fl
+  | IntAdd
+  | IntSub
+  | IntMul
+  | IntDiv
   | Mod
-  | Lt
+  | FlAdd
+  | FlSub
+  | FlMul
+  | FlDiv
+  | IntLt
+  | FlLt
   | IntEq
   | StrEq
   | And
@@ -61,6 +67,8 @@ val pp_func : Formatter.t -> func -> unit
 val yield_count : func -> int
 
 val name_of_var : expr -> string
+
+val int2fl : expr -> expr
 
 module Infix : sig
   val int : int -> expr
@@ -161,8 +169,6 @@ module Builder : sig
   val build_printstr : string -> t -> unit
 
   val build_hash : expr -> expr -> t -> expr
-
-  val build_fixed : expr -> expr -> t -> expr
 
   val const_int : Type.PrimType.t -> int -> expr
 end

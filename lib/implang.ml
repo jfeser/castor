@@ -7,12 +7,18 @@ module A = Abslayout
 let fail : Error.t -> 'a = Error.raise
 
 type op =
-  | Add
-  | Sub
-  | Mul
-  | Div
+  | Int2Fl
+  | IntAdd
+  | IntSub
+  | IntMul
+  | IntDiv
   | Mod
-  | Lt
+  | FlAdd
+  | FlSub
+  | FlMul
+  | FlDiv
+  | IntLt
+  | FlLt
   | IntEq
   | StrEq
   | And
@@ -78,18 +84,19 @@ let pp_bool fmt = Format.fprintf fmt "%b"
 let rec pp_expr : Format.formatter -> expr -> unit =
   let open Format in
   let op_to_string = function
-    | Add -> "+"
-    | Sub -> "-"
-    | Mul -> "*"
-    | Div -> "/"
+    | IntAdd | FlAdd -> "+"
+    | IntSub | FlSub -> "-"
+    | IntMul | FlMul -> "*"
+    | IntDiv | FlDiv -> "/"
     | Mod -> "%"
-    | Lt -> "<"
+    | IntLt | FlLt -> "<"
     | And -> "&&"
     | Not -> "not"
     | IntEq | StrEq -> "="
     | Or -> "||"
     | IntHash | StrHash -> "hash"
     | LoadStr -> "load_str"
+    | Int2Fl -> "int2fl"
   in
   fun fmt -> function
     | Null -> fprintf fmt "null"
@@ -147,17 +154,17 @@ module Infix = struct
   let ( + ) x y =
     match (x, y) with
     | Int a, Int b -> Int (a + b)
-    | _ -> Binop {op= Add; arg1= x; arg2= y}
+    | _ -> Binop {op= IntAdd; arg1= x; arg2= y}
 
-  let ( - ) x y = Binop {op= Sub; arg1= x; arg2= y}
+  let ( - ) x y = Binop {op= IntSub; arg1= x; arg2= y}
 
-  let ( * ) x y = Binop {op= Mul; arg1= x; arg2= y}
+  let ( * ) x y = Binop {op= IntMul; arg1= x; arg2= y}
 
-  let ( / ) x y = Binop {op= Div; arg1= x; arg2= y}
+  let ( / ) x y = Binop {op= IntDiv; arg1= x; arg2= y}
 
   let ( % ) x y = Binop {op= Mod; arg1= x; arg2= y}
 
-  let ( < ) x y = Binop {op= Lt; arg1= x; arg2= y}
+  let ( < ) x y = Binop {op= IntLt; arg1= x; arg2= y}
 
   let ( > ) x y = y < x
 
@@ -212,6 +219,8 @@ module Ctx0 = struct
     Map.set ctx ~key:(A.Name.create ~type_ name) ~data:(Field expr)
 end
 
+let int2fl x = Unop {op= Int2Fl; arg= x}
+
 module Builder = struct
   type t =
     { name: string
@@ -243,11 +252,13 @@ module Builder = struct
         let t1 = infer_type ctx arg1 in
         let t2 = infer_type ctx arg2 in
         match (op, t1, t2) with
-        | (Add | Sub | Mul | Div), IntT _, IntT _
-         |(And | Or), BoolT _, BoolT _
-         |(And | Or), IntT _, IntT _ ->
-            unify t1 t2
-        | Lt, IntT {nullable= n1}, IntT {nullable= n2} -> BoolT {nullable= n1 || n2}
+        | (IntAdd | IntSub | IntMul | IntDiv), IntT _, IntT _ ->
+            IntT {nullable= false}
+        | (FlAdd | FlSub | FlMul | FlDiv), _, _ -> FixedT {nullable= false}
+        | (And | Or), BoolT _, BoolT _ | (And | Or), IntT _, IntT _ -> unify t1 t2
+        | IntLt, IntT {nullable= n1}, IntT {nullable= n2} ->
+            BoolT {nullable= n1 || n2}
+        | FlLt, _, _ -> BoolT {nullable= false}
         | (IntHash | StrHash), _, _ -> IntT {nullable= false}
         | IntEq, IntT {nullable= n1}, IntT {nullable= n2}
          |StrEq, StringT {nullable= n1}, StringT {nullable= n2} ->
@@ -262,6 +273,7 @@ module Builder = struct
         let t = infer_type ctx arg in
         match (op, t) with
         | Not, BoolT {nullable} -> BoolT {nullable}
+        | Int2Fl, IntT _ -> FixedT {nullable= false}
         | _ -> fail (Error.create "Type error." (op, t) [%sexp_of: op * t]) )
     | Slice (_, _) -> IntT {nullable= false}
     | Index (tup, idx) -> (
@@ -402,29 +414,29 @@ module Builder = struct
       [%sexp_of: expr * expr * Type.PrimType.t * Type.PrimType.t]
     |> Error.raise
 
-  let build_fixed x y b =
-    let ret = build_fresh_var "f" (FixedT {nullable= false}) b in
-    build_assign (Tuple [x; y]) ret b ;
-    ret
-
-  let build_convert_pair x y b =
-    let build_convert x s' =
-      let v = Infix.(index x 0) in
-      let s = Infix.(index x 1) in
-      build_fixed Infix.(v * (s' / s)) s' b
-    in
-    let s1 = Infix.(index x 1) in
-    let s2 = Infix.(index y 1) in
-    let z =
-      Ternary
-        ( Binop {op= IntEq; arg1= s1; arg2= s2}
-        , Tuple [x; y]
-        , Ternary
-            ( Infix.(s1 < s2)
-            , Tuple [build_convert x s2; y]
-            , Tuple [x; build_convert y s1] ) )
-    in
-    Infix.(index z 0, index z 1)
+  (* let build_fixed x y b =
+   *   let ret = build_fresh_var "f" (FixedT {nullable= false}) b in
+   *   build_assign (Tuple [x; y]) ret b ;
+   *   ret
+   * 
+   * let build_convert_pair x y b =
+   *   let build_convert x s' =
+   *     let v = Infix.(index x 0) in
+   *     let s = Infix.(index x 1) in
+   *     build_fixed Infix.(v * (s' / s)) s' b
+   *   in
+   *   let s1 = Infix.(index x 1) in
+   *   let s2 = Infix.(index y 1) in
+   *   let z =
+   *     Ternary
+   *       ( Binop {op= IntEq; arg1= s1; arg2= s2}
+   *       , Tuple [x; y]
+   *       , Ternary
+   *           ( Infix.(s1 < s2)
+   *           , Tuple [build_convert x s2; y]
+   *           , Tuple [x; build_convert y s1] ) )
+   *   in
+   *   Infix.(index z 0, index z 1) *)
 
   let rec build_eq x y b =
     let t1 = infer_type b.type_ctx x in
@@ -441,15 +453,11 @@ module Builder = struct
         List.init (List.length ts1) ~f:(fun i ->
             build_eq Infix.(index x i) Infix.(index y i) b )
         |> List.fold_left ~init:(Bool true) ~f:Infix.( && )
-    | FixedT {nullable= false}, FixedT {nullable= false} ->
-        let x, y = build_convert_pair x y b in
-        let v1 = Infix.(index x 0) in
-        let v2 = Infix.(index y 0) in
-        Binop {op= IntEq; arg1= v1; arg2= v2}
-    | IntT {nullable= false}, FixedT {nullable= false} ->
-        build_eq (build_fixed x (Int 1) b) y b
-    | FixedT {nullable= false}, IntT {nullable= false} ->
-        build_eq x (build_fixed y (Int 1) b) b
+    (* | FixedT {nullable= false}, FixedT {nullable= false} ->
+     *     Binop {op= FlEq; arg1= x; arg2= y}
+     * | IntT {nullable= false}, FixedT {nullable= false} -> build_eq (int2fl x) y b
+     * | FixedT {nullable= false}, IntT {nullable= false} ->
+     *     build_eq x (int2fl y (Int 1) b) b *)
     | _ ->
         Error.create "Incomparable types." (x, y, t1, t2)
           [%sexp_of: expr * expr * t * t]
@@ -478,16 +486,12 @@ module Builder = struct
     let t2 = infer_type b.type_ctx y in
     let open Type.PrimType in
     match (t1, t2) with
-    | IntT {nullable= false}, IntT {nullable= false} -> Infix.(x < y)
+    | IntT {nullable= false}, IntT {nullable= false} ->
+        Binop {op= IntLt; arg1= x; arg2= y}
     | FixedT {nullable= false}, FixedT {nullable= false} ->
-        let x, y = build_convert_pair x y b in
-        let v1 = Infix.(index x 0) in
-        let v2 = Infix.(index y 0) in
-        Infix.(v1 < v2)
-    | IntT {nullable= false}, FixedT {nullable= false} ->
-        build_lt (build_fixed x (Int 1) b) y b
-    | FixedT {nullable= false}, IntT {nullable= false} ->
-        build_lt x (build_fixed y (Int 1) b) b
+        Binop {op= FlLt; arg1= x; arg2= y}
+    | IntT {nullable= false}, FixedT {nullable= false} -> build_lt (int2fl x) y b
+    | FixedT {nullable= false}, IntT {nullable= false} -> build_lt x (int2fl y) b
     | TupleT ts1, TupleT ts2 when List.length ts1 = List.length ts2 ->
         tuple_lt 0 (List.length ts1)
     | _ ->
@@ -524,12 +528,10 @@ module Builder = struct
     let t2 = infer_type b.type_ctx y in
     let open Type.PrimType in
     match (t1, t2) with
-    | IntT {nullable= false}, IntT {nullable= false} -> f b (`Int (x, y))
-    | FixedT {nullable= false}, FixedT {nullable= false} -> f b (`Fixed (x, y))
-    | IntT {nullable= false}, FixedT {nullable= false} ->
-        build_lt (build_fixed x (Int 1) b) y b
-    | FixedT {nullable= false}, IntT {nullable= false} ->
-        build_lt x (build_fixed y (Int 1) b) b
+    | IntT {nullable= false}, IntT {nullable= false} -> f (`Int (x, y))
+    | FixedT {nullable= false}, FixedT {nullable= false} -> f (`Fixed (x, y))
+    | IntT {nullable= false}, FixedT {nullable= false} -> f (`Fixed (int2fl x, y))
+    | FixedT {nullable= false}, IntT {nullable= false} -> f (`Fixed (x, int2fl y))
     | IntT _, FixedT _ | FixedT _, IntT _ -> type_err "Mismatched types." x y t1 t2
     | IntT {nullable= true}, _
      |_, IntT {nullable= true}
@@ -549,44 +551,24 @@ module Builder = struct
         type_err "Nonnumeric types." x y t1 t2
 
   let build_add =
-    build_numeric2 (fun b -> function
+    build_numeric2 (function
       | `Int (x, y) -> Infix.(x + y)
-      | `Fixed (x, y) ->
-          let x, y = build_convert_pair x y b in
-          let v1 = Infix.(index x 0) in
-          let s = Infix.(index x 1) in
-          let v2 = Infix.(index y 0) in
-          build_fixed Infix.(v1 + v2) s b )
+      | `Fixed (x, y) -> Binop {op= FlAdd; arg1= x; arg2= y} )
 
   let build_sub =
-    build_numeric2 (fun b -> function
+    build_numeric2 (function
       | `Int (x, y) -> Infix.(x - y)
-      | `Fixed (x, y) ->
-          let x, y = build_convert_pair x y b in
-          let v1 = Infix.(index x 0) in
-          let s = Infix.(index x 1) in
-          let v2 = Infix.(index y 0) in
-          build_fixed Infix.(v1 - v2) s b )
+      | `Fixed (x, y) -> Binop {op= FlSub; arg1= x; arg2= y} )
 
   let build_mul =
-    build_numeric2 (fun b -> function
+    build_numeric2 (function
       | `Int (x, y) -> Infix.(x * y)
-      | `Fixed (x, y) ->
-          let v1 = Infix.(index x 0) in
-          let s1 = Infix.(index x 1) in
-          let v2 = Infix.(index y 0) in
-          let s2 = Infix.(index y 1) in
-          build_fixed Infix.(v1 * v2) Infix.(s1 * s2) b )
+      | `Fixed (x, y) -> Binop {op= FlMul; arg1= x; arg2= y} )
 
   let build_div =
-    build_numeric2 (fun b -> function
+    build_numeric2 (function
       | `Int (x, y) -> Infix.(x / y)
-      | `Fixed (x, y) ->
-          let v1 = Infix.(index x 0) in
-          let s1 = Infix.(index x 1) in
-          let v2 = Infix.(index y 0) in
-          let s2 = Infix.(index y 1) in
-          build_fixed Infix.(v1 / v2) Infix.(s1 * s2) b )
+      | `Fixed (x, y) -> Binop {op= FlDiv; arg1= x; arg2= y} )
 
   let build_concat vs b =
     List.concat_map vs ~f:(fun v ->

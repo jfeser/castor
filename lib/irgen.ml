@@ -126,7 +126,7 @@ struct
         let start = Ctx.find_exn ctx (A.Name.create "start") b in
         let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
         let sval = Infix.(int scale) in
-        let xval = build_fixed ival sval b in
+        let xval = build_div (int2fl ival) (int2fl sval) b in
         let _nval =
           if nullable then
             let null_val = h + 1 in
@@ -570,7 +570,7 @@ struct
         build_assign (Ternary (build_lt v x b, v, x)) x b
     | `Max (f, x) ->
         let v = gen_pred ~ctx f b in
-        build_assign (Ternary (build_lt v x b, v, x)) x b
+        build_assign (Ternary (build_lt v x b, x, v)) x b
     | `Avg (f, n, d) ->
         let v = gen_pred ~ctx f b in
         build_assign (build_add n v b) n b ;
