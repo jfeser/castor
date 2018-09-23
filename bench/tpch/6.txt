@@ -1,0 +1,3 @@
+select([sum(l_extendedprice * l_discount) as revenue],
+filter(l_shipdate >= param0 && l_shipdate < param1 && l_discount > param2 - 0.01 && l_discount < param2 + 0.01 && l_quantity < param3, lineitem))
+
