@@ -98,11 +98,11 @@ module Relation = struct
                match type_str with
                | "character" | "character varying" | "varchar" | "text" ->
                    StringT {nullable}
-               | "integer" | "smallint" | "bigint" -> IntT {nullable}
+               | "date" | "interval" | "integer" | "smallint" | "bigint" ->
+                   IntT {nullable}
                | "boolean" -> BoolT {nullable}
                | "numeric" | "real" | "double" -> FixedT {nullable}
-               | "timestamp without time zone" | "date" | "interval" ->
-                   StringT {nullable}
+               | "timestamp without time zone" -> StringT {nullable}
                | s -> failwith (Printf.sprintf "Unknown dtype %s" s)
              in
              {fname= name; type_} )
@@ -134,9 +134,10 @@ let result_to_tuples r =
                      if String.(value = "") then Null else Int (Int.of_string value)
                  | CHAR | TEXT | VARCHAR -> String value
                  | FLOAT4 | FLOAT8 | NUMERIC -> Fixed (Fixed_point.of_string value)
+                 | DATE -> Int (Date.of_string value |> Date.to_int)
                  (* Time & date types *)
-                 | DATE | TIME | TIMESTAMP | TIMESTAMPTZ | INTERVAL | TIMETZ
-                  |ABSTIME | RELTIME
+                 | TIME | TIMESTAMP | TIMESTAMPTZ | INTERVAL | TIMETZ | ABSTIME
+                  |RELTIME
                   |TINTERVAL
                  (* Geometric types. *)
                   |POINT | LSEG | PATH | BOX | POLYGON | LINE

@@ -52,6 +52,8 @@ type pred = Abslayout0.pred =
   | Name of Name.t
   | Int of int
   | Fixed of Fixed_point.t
+  | Date of (Core.Date.t[@opaque])
+  | Interval of ((int * [`Days | `Months | `Years])[@opaque])
   | Bool of bool
   | String of string
   | Null

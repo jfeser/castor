@@ -31,6 +31,10 @@ let rec eval_pred ctx = function
   | Null -> Value.Null
   | Int x -> Int x
   | Fixed x -> Fixed x
+  | Date x -> Int (Date.to_int x)
+  | Interval (x, `Years) -> Int Int.(365 * x)
+  | Interval (x, `Months) -> Int Int.(30 * x)
+  | Interval (x, `Days) -> Int x
   | String x -> String x
   | Bool x -> Bool x
   | Name n -> lookup ctx n

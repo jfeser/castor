@@ -1,17 +1,27 @@
 open Base
 open Base.Polymorphic_compare
 
+module Date = struct
+  include Core.Date
+
+  (** Convert a date into the number of days since the Unix epoch. *)
+  let to_int x = diff x unix_epoch
+
+  (** Convert days since the epoch into a date. *)
+  let of_int x = add_days unix_epoch x
+end
+
 module List = struct
   include List
 
-  let all_equal (type t) ?(sexp_of_t= fun _ -> [%sexp_of : string] "unknown")
-      (l: t list) =
+  let all_equal (type t) ?(sexp_of_t = fun _ -> [%sexp_of: string] "unknown")
+      (l : t list) =
     match l with
     | [] -> Or_error.error_string "Empty list."
-    | x :: xs ->
+    | x :: xs -> (
       match List.find xs ~f:(fun x' -> x <> x') with
-      | Some x' -> Or_error.error "Unequal elements." (x, x') [%sexp_of : t * t]
-      | None -> Or_error.return x
+      | Some x' -> Or_error.error "Unequal elements." (x, x') [%sexp_of: t * t]
+      | None -> Or_error.return x )
 
   let all_equal_exn : 'a list -> 'a = fun l -> Or_error.ok_exn (all_equal l)
 
@@ -113,8 +123,8 @@ module Seq = struct
         | Some (x, seq') ->
             Q.enqueue q x ;
             Yield (x, (seq', q))
-        | None -> match Q.dequeue q with Some x -> Skip (step x, q) | None -> Done
-        )
+        | None -> (
+          match Q.dequeue q with Some x -> Skip (step x, q) | None -> Done ) )
 
   let dfs : 'a -> ('a -> 'a t) -> 'a t =
    fun seed step ->
@@ -123,10 +133,10 @@ module Seq = struct
       ~f:(fun (seq, xs) ->
         match next seq with
         | Some (x, seq') -> Yield (x, (seq', x :: xs))
-        | None -> match xs with x :: xs' -> Skip (step x, xs') | [] -> Done )
+        | None -> ( match xs with x :: xs' -> Skip (step x, xs') | [] -> Done ) )
 
-  let all_equal (type a) ?(sexp_of_t= fun _ -> [%sexp_of : string] "unknown")
-      (l: a t) =
+  let all_equal (type a) ?(sexp_of_t = fun _ -> [%sexp_of: string] "unknown")
+      (l : a t) =
     let s =
       fold l ~init:`Empty ~f:(fun s v ->
           match s with
@@ -138,7 +148,7 @@ module Seq = struct
     | `Empty -> Or_error.error_string "Empty list."
     | `Equal x -> Or_error.return x
     | `Unequal (x, x') ->
-        Or_error.error "Unequal elements." (x, x') [%sexp_of : t * t]
+        Or_error.error "Unequal elements." (x, x') [%sexp_of: t * t]
 end
 
 module Bytes = struct

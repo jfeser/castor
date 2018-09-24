@@ -166,6 +166,10 @@ let rec pp_pred fmt =
   | Null -> fprintf fmt "null"
   | Int x -> fprintf fmt "%d" x
   | Fixed x -> fprintf fmt "%s" (Fixed_point.to_string x)
+  | Date x -> fprintf fmt "date(\"%s\")" (Date.to_string x)
+  | Interval (x, `Years) -> fprintf fmt "year(%d)" x
+  | Interval (x, `Months) -> fprintf fmt "month(%d)" x
+  | Interval (x, `Days) -> fprintf fmt "day(%d)" x
   | Bool x -> fprintf fmt "%B" x
   | String x -> fprintf fmt "%S" x
   | Name n -> pp_name fmt n
@@ -331,7 +335,7 @@ let rec pred_to_schema =
       let schema = pred_to_schema p in
       {schema with relation= None; name= n}
   | Name n -> n
-  | Int _ -> unnamed (IntT {nullable= false})
+  | Int _ | Date _ | Interval _ -> unnamed (IntT {nullable= false})
   | Fixed _ -> unnamed (FixedT {nullable= false})
   | Bool _ -> unnamed (BoolT {nullable= false})
   | String _ -> unnamed (StringT {nullable= false})
@@ -419,7 +423,9 @@ let rec annotate_foreach r =
 let rec pred_kind = function
   | As_pred (x', _) -> (
     match pred_kind x' with `Scalar -> `Scalar | `Agg -> `Agg )
-  | Name _ | Int _ | Fixed _ | Bool _ | String _ | Null | Binop _ | If _ -> `Scalar
+  | Name _ | Int _ | Date _ | Interval _ | Fixed _ | Bool _ | String _ | Null
+   |Binop _ | If _ ->
+      `Scalar
   | Sum _ | Avg _ | Min _ | Max _ | Count -> `Agg
 
 let select_kind l =

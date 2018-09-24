@@ -22,6 +22,8 @@ type pred =
   | Name of (name[@opaque])
   | Int of (int[@opaque])
   | Fixed of (Fixed_point.t[@opaque])
+  | Date of (Core.Date.t[@opaque])
+  | Interval of ((int * [`Days | `Months | `Years])[@opaque])
   | Bool of (bool[@opaque])
   | String of (string[@opaque])
   | Null

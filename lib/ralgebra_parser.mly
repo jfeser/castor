@@ -11,6 +11,7 @@
 %token <[`Asc | `Desc]> ORDER
 %token <Abslayout0.tuple> KIND
 %token <Type0.PrimType.t> PRIMTYPE
+%token <Core.Date.t> DATE
 
 %token AS
 %token JOIN
@@ -55,6 +56,10 @@
 %token IF
 %token THEN
 %token ELSE
+%token MONTH
+%token DAY
+%token YEAR
+%token DATEKW
 
 %start <Abslayout0.t> abs_ralgebra_eof
 %start <Abslayout0.name> name_eof
@@ -163,6 +168,10 @@ name:
 abs_pred:
 | n = name { A.Name n }
 | x = INT { A.Int x }
+| DATEKW; x = parens(DATE); { A.Date x }
+| DAY; x = parens(INT); { A.Interval (x, `Days) }
+| MONTH; x = parens(INT); { A.Interval (x, `Months) }
+| YEAR; x = parens(INT); { A.Interval (x, `Years) }
 | SUB; x = INT { A.Int (-x) }
 | x = FIXED { A.Fixed x }
 | SUB; x = FIXED { A.Fixed (Fixed_point.(-x)) }

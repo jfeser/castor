@@ -8,6 +8,10 @@ let rec pred_to_sql = function
   | Name n -> sprintf "%s" (Name.to_sql n)
   | Int x -> Int.to_string x
   | Fixed x -> Fixed_point.to_string x
+  | Date x -> Core.Date.to_string x
+  | Interval (x, `Years) -> sprintf "interval '%d year'" x
+  | Interval (x, `Months) -> sprintf "interval '%d month'" x
+  | Interval (x, `Days) -> sprintf "interval '%d day'" x
   | Bool true -> "true"
   | Bool false -> "false"
   | String s -> sprintf "'%s'" s

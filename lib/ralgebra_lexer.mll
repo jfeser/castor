@@ -36,6 +36,10 @@ let keyword_tbl = Hashtbl.of_alist_exn (module String) [
 "if", IF;
 "then", THEN;
 "else", ELSE;
+"month", MONTH;
+"day", DAY;
+"year", YEAR;
+"date", DATEKW;
   ]
 }
 
@@ -46,6 +50,7 @@ let id = (alpha | '_') (alpha | digit | '_')*
 let int = digit+
 let fixed = digit+ ('.' digit+)?
 let str = '"'
+let date = '"' ((digit digit digit digit)) '-' ((digit digit)) '-' ((digit digit)) '"'
 
 rule token = parse
   | '\n'       { Lexing.new_line lexbuf; token lexbuf }
@@ -72,6 +77,7 @@ rule token = parse
   | "%"        { MOD }
   | int as x   { INT (Int.of_string x) }
   | fixed as x { FIXED (Fixed_point.of_string x) }
+  | date as x  { DATE (Core.Date.of_string x) }
   | '"'        { STR (string (Buffer.create 10) lexbuf) }
   | '#'        { comment lexbuf }
   | id as x    {
