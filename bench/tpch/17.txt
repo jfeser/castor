@@ -1,0 +1,8 @@
+select([sum(l_extendedprice) / 7. as avg_yearly],
+  filter(l_quantity < l_avgquantity,
+    join(true,
+      select([0.2 * avg(l_quantity) as l_avgquantity],
+        filter(l_partkey = p_partkey, lineitem)),
+      join(p_partkey = l_partkey,
+        lineitem,
+        filter(p_brand = param0 && p_container = param1, part)))))

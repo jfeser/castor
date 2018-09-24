@@ -1,0 +1,16 @@
+groupby([l_shipmode,
+	sum(if 
+		o_orderpriority = '1-URGENT'
+			|| o_orderpriority = '2-HIGH'
+			then 1
+		else 0
+	) as high_line_count,
+	sum(if 
+		!(o_orderpriority = '1-URGENT')
+			&& (o_orderpriority = '2-HIGH')
+			then 1
+		else 0
+	) as low_line_count],
+  [l_shipmode],
+  join(o_orderkey = l_orderkey,
+  orders, lineitem))

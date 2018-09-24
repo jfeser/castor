@@ -1,0 +1,8 @@
+groupby([ps_partkey,
+	sum(ps_supplycost * ps_availqty) as value],
+  [ps_partkey],
+  join(ps_suppkey = s_suppkey,
+  join(s_nationkey = n_nationkey,
+  supplier,
+  nation),
+  partsupp))
