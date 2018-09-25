@@ -1,0 +1,11 @@
+select([lp_counter, lc.counter],
+  atuple([ahashidx(dedup(select([id as k], log_bench)), 
+    alist(select([counter as lp_counter, succ as lp_succ], 
+        filter(k = id && counter < succ, log_bench)), 
+      atuple([ascalar(lp_counter), ascalar(lp_succ)], cross)), 
+    id_p),
+  filter(lc.id = id_c,
+    aorderedidx(select([log_bench.counter as k], log_bench), 
+      alist(filter(log_bench.counter = k, log_bench),
+        atuple([ascalar(log_bench.id), ascalar(log_bench.counter)], cross)), 
+      lp_counter, lp_succ) as lc)], cross))
