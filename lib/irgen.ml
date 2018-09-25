@@ -48,9 +48,12 @@ struct
       | A.String x -> String x
       | A.Fixed x -> Fixed x
       | Date x -> Int (Date.to_int x)
-      | Interval (x, `Years) -> Int Int.(365 * x)
-      | Interval (x, `Months) -> Int Int.(30 * x)
-      | Interval (x, `Days) -> Int x
+      | Unop (op, p) -> (
+          let x = gen_pred p in
+          match op with
+          | A.Year -> Infix.(int 365 * x)
+          | A.Month -> Infix.(int 30 * x)
+          | A.Day -> x )
       | A.Bool x -> Bool x
       | A.As_pred (x, _) -> gen_pred x
       | A.Name n -> (

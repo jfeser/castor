@@ -32,9 +32,12 @@ let rec eval_pred ctx = function
   | Int x -> Int x
   | Fixed x -> Fixed x
   | Date x -> Int (Date.to_int x)
-  | Interval (x, `Years) -> Int Int.(365 * x)
-  | Interval (x, `Months) -> Int Int.(30 * x)
-  | Interval (x, `Days) -> Int x
+  | Unop (op, p) -> (
+      let x = eval_pred ctx p in
+      match op with
+      | Year -> Int (365 * to_int x)
+      | Month -> Int (30 * to_int x)
+      | Day -> x )
   | String x -> String x
   | Bool x -> Bool x
   | Name n -> lookup ctx n
@@ -67,7 +70,7 @@ let rec eval_pred ctx = function
       | Or, Bool x1, Bool x2 -> Bool (x1 || x2)
       | _ ->
           Error.create "Unexpected argument types." (op, v1, v2)
-            [%sexp_of: op * Value.t * Value.t]
+            [%sexp_of: binop * Value.t * Value.t]
           |> Error.raise )
   | If (p1, p2, p3) ->
       let v1 = eval_pred ctx p1 |> to_bool in

@@ -8,8 +8,10 @@ type name =
   ; type_: Type0.PrimType.t option [@compare.ignore] }
 [@@deriving compare, sexp, hash]
 
-type op = Eq | Lt | Le | Gt | Ge | And | Or | Add | Sub | Mul | Div | Mod
+type binop = Eq | Lt | Le | Gt | Ge | And | Or | Add | Sub | Mul | Div | Mod
 [@@deriving compare, sexp]
+
+type unop = Day | Month | Year [@@deriving compare, sexp]
 
 (* - Visitors doesn't use the special method override syntax that warning 7 checks
    for.
@@ -23,11 +25,11 @@ type pred =
   | Int of (int[@opaque])
   | Fixed of (Fixed_point.t[@opaque])
   | Date of (Core.Date.t[@opaque])
-  | Interval of ((int * [`Days | `Months | `Years])[@opaque])
   | Bool of (bool[@opaque])
   | String of (string[@opaque])
   | Null
-  | Binop of ((op[@opaque]) * pred * pred)
+  | Unop of ((unop[@opaque]) * pred)
+  | Binop of ((binop[@opaque]) * pred * pred)
   | As_pred of (pred * string)
   | Count
   | Sum of pred

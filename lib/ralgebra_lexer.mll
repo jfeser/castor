@@ -50,7 +50,7 @@ let id = (alpha | '_') (alpha | digit | '_')*
 let int = digit+
 let fixed = digit+ ('.' digit+)?
 let str = '"'
-let date = '"' ((digit digit digit digit)) '-' ((digit digit)) '-' ((digit digit)) '"'
+let date = '"' (((digit digit digit digit)) '-' ((digit digit)) '-' ((digit digit)) as x) '"'
 
 rule token = parse
   | '\n'       { Lexing.new_line lexbuf; token lexbuf }
@@ -62,7 +62,6 @@ rule token = parse
   | ":"        { COLON }
   | "."        { DOT }
   | ","        { COMMA }
-  | "->"       { RARROW }
   | "<="       { LE }
   | ">="       { GE }
   | "<"        { LT }
@@ -77,7 +76,7 @@ rule token = parse
   | "%"        { MOD }
   | int as x   { INT (Int.of_string x) }
   | fixed as x { FIXED (Fixed_point.of_string x) }
-  | date as x  { DATE (Core.Date.of_string x) }
+  | date       { DATE (Core.Date.of_string x) }
   | '"'        { STR (string (Buffer.create 10) lexbuf) }
   | '#'        { comment lexbuf }
   | id as x    {

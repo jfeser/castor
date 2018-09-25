@@ -33,7 +33,7 @@ end
 
 type meta = Abslayout0.meta
 
-type op = Abslayout0.op =
+type binop = Abslayout0.binop =
   | Eq
   | Lt
   | Le
@@ -48,16 +48,18 @@ type op = Abslayout0.op =
   | Mod
 [@@deriving compare, sexp]
 
+type unop = Abslayout0.unop = Day | Month | Year [@@deriving compare, sexp]
+
 type pred = Abslayout0.pred =
   | Name of Name.t
   | Int of int
   | Fixed of Fixed_point.t
   | Date of (Core.Date.t[@opaque])
-  | Interval of ((int * [`Days | `Months | `Years])[@opaque])
   | Bool of bool
   | String of string
   | Null
-  | Binop of (op * pred * pred)
+  | Unop of (unop * pred)
+  | Binop of (binop * pred * pred)
   | As_pred of (pred * string)
   | Count
   | Sum of pred

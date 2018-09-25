@@ -11,7 +11,7 @@ orderby([supp_nation, cust_nation, l_year],
             join(c_custkey = o_orderkey,
               join(c_nationkey = n2.n_nationkey, nation as n2, customer),
               orders),
-            filter(l_shipdate > "1995-01-01" && l_shipdate < "1996-12-31",
+            filter(l_shipdate > date("1995-01-01") && l_shipdate < date("1996-12-31"),
               lineitem)),
           join(s_nationkey = n1.n_nationkey, nation as n1, supplier)))) as shipping),
   asc)

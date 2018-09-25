@@ -150,6 +150,8 @@ let op_to_str = function
   | Div -> "/"
   | Mod -> "%"
 
+let unop_to_str = function Day -> "day" | Month -> "month" | Year -> "year"
+
 let pp_name fmt =
   let open Format in
   function
@@ -167,14 +169,12 @@ let rec pp_pred fmt =
   | Int x -> fprintf fmt "%d" x
   | Fixed x -> fprintf fmt "%s" (Fixed_point.to_string x)
   | Date x -> fprintf fmt "date(\"%s\")" (Date.to_string x)
-  | Interval (x, `Years) -> fprintf fmt "year(%d)" x
-  | Interval (x, `Months) -> fprintf fmt "month(%d)" x
-  | Interval (x, `Days) -> fprintf fmt "day(%d)" x
+  | Unop (op, x) -> fprintf fmt "%s(%a)" (unop_to_str op) pp_pred x
   | Bool x -> fprintf fmt "%B" x
   | String x -> fprintf fmt "%S" x
   | Name n -> pp_name fmt n
   | Binop (op, p1, p2) ->
-      fprintf fmt "@[<h>%a@ %s@ %a@]" pp_pred p1 (op_to_str op) pp_pred p2
+      fprintf fmt "@[<h>(%a)@ %s@ (%a)@]" pp_pred p1 (op_to_str op) pp_pred p2
   | Count -> fprintf fmt "count()"
   | Sum n -> fprintf fmt "sum(%a)" pp_pred n
   | Avg n -> fprintf fmt "avg(%a)" pp_pred n
@@ -232,7 +232,7 @@ module Ctx = struct
 end
 
 let of_lexbuf_exn lexbuf =
-  try Ralgebra_parser.abs_ralgebra_eof Ralgebra_lexer.token lexbuf
+  try Ralgebra_parser.ralgebra_eof Ralgebra_lexer.token lexbuf
   with Parser_utils.ParseError (msg, line, col) as e ->
     Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
     raise e
@@ -335,7 +335,8 @@ let rec pred_to_schema =
       let schema = pred_to_schema p in
       {schema with relation= None; name= n}
   | Name n -> n
-  | Int _ | Date _ | Interval _ -> unnamed (IntT {nullable= false})
+  | Int _ | Date _ | Unop ((Year | Month | Day), _) ->
+      unnamed (IntT {nullable= false})
   | Fixed _ -> unnamed (FixedT {nullable= false})
   | Bool _ -> unnamed (BoolT {nullable= false})
   | String _ -> unnamed (StringT {nullable= false})
@@ -423,7 +424,7 @@ let rec annotate_foreach r =
 let rec pred_kind = function
   | As_pred (x', _) -> (
     match pred_kind x' with `Scalar -> `Scalar | `Agg -> `Agg )
-  | Name _ | Int _ | Date _ | Interval _ | Fixed _ | Bool _ | String _ | Null
+  | Name _ | Int _ | Date _ | Unop _ | Fixed _ | Bool _ | String _ | Null
    |Binop _ | If _ ->
       `Scalar
   | Sum _ | Avg _ | Min _ | Max _ | Count -> `Agg

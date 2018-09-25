@@ -9,13 +9,16 @@ let rec pred_to_sql = function
   | Int x -> Int.to_string x
   | Fixed x -> Fixed_point.to_string x
   | Date x -> Core.Date.to_string x
-  | Interval (x, `Years) -> sprintf "interval '%d year'" x
-  | Interval (x, `Months) -> sprintf "interval '%d month'" x
-  | Interval (x, `Days) -> sprintf "interval '%d day'" x
   | Bool true -> "true"
   | Bool false -> "false"
   | String s -> sprintf "'%s'" s
   | Null -> "null"
+  | Unop (op, p) -> (
+      let s = sprintf "(%s)" (pred_to_sql p) in
+      match op with
+      | Year -> sprintf "interval '%s year'" s
+      | Month -> sprintf "interval '%s month'" s
+      | Day -> sprintf "interval '%s day'" s )
   | Binop (op, p1, p2) -> (
       let s1 = sprintf "(%s)" (pred_to_sql p1) in
       let s2 = sprintf "(%s)" (pred_to_sql p2) in

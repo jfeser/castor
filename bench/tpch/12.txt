@@ -1,16 +1,16 @@
-groupby([l_shipmode,
+orderby([l_shipmode], groupby([l_shipmode,
 	sum(if 
-		o_orderpriority = '1-URGENT'
-			|| o_orderpriority = '2-HIGH'
+		o_orderpriority = "1-URGENT"
+			|| o_orderpriority = "2-HIGH"
 			then 1
 		else 0
 	) as high_line_count,
 	sum(if 
-		!(o_orderpriority = '1-URGENT')
-			&& (o_orderpriority = '2-HIGH')
+		!(o_orderpriority = "1-URGENT")
+			&& (o_orderpriority = "2-HIGH")
 			then 1
 		else 0
 	) as low_line_count],
   [l_shipmode],
   join(o_orderkey = l_orderkey,
-  orders, lineitem))
+  orders, filter((l_shipmode = param0 || l_shipmode = param1) && l_commitdate < l_receiptdate && l_shipdate < l_commitdate && l_receiptdate >= param2 && l_receiptdate < param2 + year(1), lineitem))))
