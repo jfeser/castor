@@ -1,38 +1,6 @@
 open Base
 open Collections
 
-module Name : sig
-  type t = Abslayout0.name =
-    {relation: string option; name: string; type_: Type.PrimType.t option}
-  [@@deriving sexp]
-
-  module Compare_no_type : sig
-    type t = Abslayout0.name [@@deriving compare, hash, sexp]
-
-    include Comparable.S with type t := t
-  end
-
-  module Compare_name_only : sig
-    type t = Abslayout0.name [@@deriving compare, hash, sexp]
-
-    include Comparable.S with type t := t
-  end
-
-  val create : ?relation:string -> ?type_:Type.PrimType.t -> string -> t
-
-  val type_exn : t -> Type.PrimType.t
-
-  val to_sql : t -> string
-
-  val to_var : t -> string
-
-  val of_string_exn : string -> t
-
-  val of_field : ?rel:string -> Db.Field.t -> t
-end
-
-type meta = Abslayout0.meta
-
 type binop = Abslayout0.binop =
   | Eq
   | Lt
@@ -99,7 +67,7 @@ type node = Abslayout0.node =
   | As of string * t
 [@@deriving sexp_of]
 
-and t = Abslayout0.t = {node: node; meta: meta} [@@deriving sexp_of]
+and t = Abslayout0.t = {node: node; meta: Meta.t} [@@deriving sexp_of]
 
 val pp : Formatter.t -> t -> unit
 
@@ -136,28 +104,6 @@ val ordered_idx : t -> t -> ordered_idx -> t
 
 val as_ : string -> t -> t
 
-module Meta : sig
-  type 'a key
-
-  type pos = Pos of int64 | Many_pos
-
-  val schema : Name.t list key
-
-  val pos : pos key
-
-  val align : int key
-
-  val use_foreach : bool key
-
-  val find : t -> 'a key -> 'a option
-
-  val find_exn : t -> 'a key -> 'a
-
-  val set : t -> 'a key -> 'a -> t
-
-  val update : t -> 'a key -> f:('a option -> 'a) -> unit
-end
-
 module Ctx : sig
   type t = Value.t Map.M(Name.Compare_no_type).t [@@deriving compare, sexp]
 
@@ -191,3 +137,7 @@ val next_inner_loop : t -> (t * t) option
 val select_kind : pred list -> [`Agg | `Scalar] Or_error.t
 
 val is_serializeable : t -> bool
+
+val annotate_needed : t -> unit
+
+val project : t -> t

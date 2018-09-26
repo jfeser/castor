@@ -1074,9 +1074,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     (* Generate global constant for buffer. *)
     let buf_t = pointer_type (array_type int_type (buffer_len / 8)) in
     SB.build_global sb "buf" buf_t |> ignore ;
-    let typed_params =
-      List.map params ~f:(fun n -> (n.name, Abslayout.Name.type_exn n))
-    in
+    let typed_params = List.map params ~f:(fun n -> (n.name, Name.type_exn n)) in
     (* Generate global constants for parameters. *)
     List.iter typed_params ~f:(fun (n, t) ->
         let lltype = codegen_type t in
@@ -1202,7 +1200,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     Out_channel.with_file header_fn ~f:write_header ;
     (* Generate main file. *)
     let () =
-      let module Name = Abslayout.Name in
       let funcs, calls =
         List.filter params ~f:(fun n ->
             List.exists ir_module.Irgen.params ~f:(fun n' ->

@@ -8,17 +8,13 @@ module Config : sig
 end
 
 type ir_module =
-  { iters: func list
-  ; funcs: func list
-  ; params: Abslayout.Name.t list
-  ; buffer_len: int }
+  {iters: func list; funcs: func list; params: Name.t list; buffer_len: int}
 [@@deriving sexp]
 
 exception IRGenError of Error.t
 
 module type S = sig
-  val irgen :
-    params:Abslayout.Name.t list -> data_fn:string -> Abslayout.t -> ir_module
+  val irgen : params:Name.t list -> data_fn:string -> Abslayout.t -> ir_module
 
   val pp : Formatter.t -> ir_module -> unit
 end

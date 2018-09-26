@@ -9,7 +9,7 @@ module Config = struct
 
     val check_transforms : bool
 
-    val params : Set.M(A.Name.Compare_no_type).t
+    val params : Set.M(Name.Compare_no_type).t
   end
 end
 
@@ -62,16 +62,16 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
   let run_checked t r =
     let rs = run_unchecked t r in
     let check_schema r' =
-      let s = M.to_schema r |> Set.of_list (module A.Name.Compare_no_type) in
-      let s' = M.to_schema r' |> Set.of_list (module A.Name.Compare_no_type) in
+      let s = M.to_schema r |> Set.of_list (module Name.Compare_no_type) in
+      let s' = M.to_schema r' |> Set.of_list (module Name.Compare_no_type) in
       let schemas_ok = Set.is_subset s ~of_:s' in
       if not schemas_ok then
         Logs.warn (fun m ->
             m "Transform %s not equivalent. Schemas differ: %a %a" t.name
               Sexp.pp_hum
-              ([%sexp_of: Set.M(A.Name).t] s)
+              ([%sexp_of: Set.M(Name).t] s)
               Sexp.pp_hum
-              ([%sexp_of: Set.M(A.Name).t] s') ) ;
+              ([%sexp_of: Set.M(Name).t] s') ) ;
       schemas_ok
     in
     let checks = [check_schema] in
@@ -164,6 +164,10 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         (function
         | {node= OrderBy {key; rel= {node= Filter (p, r); _}; order}; _} ->
             [filter p (order_by key order r)]
+        | {node= GroupBy (ps, key, {node= Filter (p, r); _}); _} ->
+            [filter p (group_by ps key r)]
+        | {node= Filter (p, {node= Filter (p', r); _}); _} ->
+            [filter p' (filter p r)]
         | {node= Select (ps, {node= Filter (p, r); _}); _} ->
             [filter p (select ps r)]
         | {node= Join {pred; r1= {node= Filter (p, r); _}; r2}; _} ->
@@ -173,12 +177,33 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | _ -> []) }
     |> run_everywhere
 
+  let tf_push_filter =
+    let open A in
+    { name= "push-filter"
+    ; f=
+        (function
+        | {node= Filter (p, {node= Filter (p', r); _}); _} ->
+            [filter p' (filter p r)]
+        | {node= Filter (p, {node= AList (r, r'); _}); _} -> [list (filter p r) r']
+        | _ -> []) }
+    |> run_everywhere
+
+  let tf_project =
+    let open A in
+    { name= "project"
+    ; f=
+        (fun r ->
+          let r = M.annotate_schema r in
+          annotate_needed r ; [project r] ) }
+
   let transforms =
     [ tf_elim_groupby
     ; tf_elim_groupby_filter
     ; tf_push_orderby
     ; tf_hoist_filter
-    ; tf_row_store ]
+    ; tf_push_filter
+    ; tf_row_store
+    ; tf_project ]
 
   let of_name : string -> t Or_error.t =
    fun n ->

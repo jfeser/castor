@@ -18,13 +18,11 @@ let main ~debug ~gprof ~params ~db ~port ~code_only ?out_dir ch =
   let module I = Irgen.Make (CConfig) (E) (S) () in
   let module C = Codegen.Make (CConfig) (I) () in
   let module A = Abslayout_db.Make (E) in
-  let params =
-    List.map params ~f:(fun (n, t) -> Abslayout.Name.create ~type_:t n)
-  in
+  let params = List.map params ~f:(fun (n, t) -> Name.create ~type_:t n) in
   (* Codegen *)
   Logs.debug (fun m -> m "Codegen.") ;
   let ralgebra =
-    let params = Set.of_list (module Abslayout.Name.Compare_no_type) params in
+    let params = Set.of_list (module Name.Compare_no_type) params in
     Abslayout.of_channel_exn ch |> A.resolve ~params |> A.annotate_schema
     |> A.annotate_key_layouts
   in

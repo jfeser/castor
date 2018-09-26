@@ -5,7 +5,7 @@ open Implang
 module A = Abslayout
 
 type ir_module =
-  {iters: func list; funcs: func list; params: A.Name.t list; buffer_len: int}
+  {iters: func list; funcs: func list; params: Name.t list; buffer_len: int}
 [@@deriving sexp]
 
 type scan_args =
@@ -24,8 +24,7 @@ module Config = struct
 end
 
 module type S = sig
-  val irgen :
-    params:Abslayout.Name.t list -> data_fn:string -> Abslayout.t -> ir_module
+  val irgen : params:Name.t list -> data_fn:string -> Abslayout.t -> ir_module
 
   val pp : Formatter.t -> ir_module -> unit
 end
@@ -56,11 +55,11 @@ struct
           | A.Day -> x )
       | A.Bool x -> Bool x
       | A.As_pred (x, _) -> gen_pred x
-      | A.Name n -> (
+      | Name n -> (
         match Ctx.find ctx n b with
         | Some e -> e
         | None ->
-            Error.create "Unbound variable." (n, ctx) [%sexp_of: A.Name.t * Ctx.t]
+            Error.create "Unbound variable." (n, ctx) [%sexp_of: Name.t * Ctx.t]
             |> Error.raise )
       | A.Binop (op, arg1, arg2) -> (
           let e1 = gen_pred arg1 in
@@ -110,7 +109,7 @@ struct
           let ret_type = Type.PrimType.TupleT [IntT {nullable}] in
           create ~ctx ~name ~ret:ret_type
         in
-        let start = Ctx.find_exn ctx (A.Name.create "start") b in
+        let start = Ctx.find_exn ctx (Name.create "start") b in
         let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
         let _nval =
           if nullable then
@@ -130,7 +129,7 @@ struct
           let ret_type = Type.PrimType.TupleT [FixedT {nullable}] in
           create ~ctx ~name ~ret:ret_type
         in
-        let start = Ctx.find_exn ctx (A.Name.create "start") b in
+        let start = Ctx.find_exn ctx (Name.create "start") b in
         let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
         let sval = Infix.(int scale) in
         let xval = build_div (int2fl ival) (int2fl sval) b in
@@ -149,7 +148,7 @@ struct
     | {ctx; name; type_= BoolT meta; _} ->
         let open Builder in
         let b = create ~ctx ~name ~ret:(TupleT [BoolT {nullable= meta.nullable}]) in
-        let start = Ctx.find_exn ctx (A.Name.create "start") b in
+        let start = Ctx.find_exn ctx (Name.create "start") b in
         let ival = Slice (start, 1) in
         let _nval =
           if meta.nullable then
@@ -167,7 +166,7 @@ struct
         let open Builder in
         let hdr = Header.make_header t in
         let b = create ~ctx ~name ~ret:(TupleT [StringT {nullable}]) in
-        let start = Ctx.find_exn ctx (A.Name.create "start") b in
+        let start = Ctx.find_exn ctx (Name.create "start") b in
         let value_ptr = Header.make_position hdr "value" start in
         let nchars = Header.make_access hdr "nchars" start in
         let xval = Binop {op= LoadStr; arg1= value_ptr; arg2= nchars} in
@@ -202,9 +201,7 @@ struct
           build_foreach ~count:(Type.count ctype) child_iter child_args
             (fun tup b ->
               let next_ctx =
-                let tuple_ctx =
-                  Ctx.of_schema A.Meta.(find_exn clayout schema) tup
-                in
+                let tuple_ctx = Ctx.of_schema Meta.(find_exn clayout schema) tup in
                 Ctx.bind_ctx ctx tuple_ctx
               in
               make_loops next_ctx (tup :: tuples) clayouts ctypes cstarts b )
@@ -212,13 +209,13 @@ struct
     in
     let b =
       let ret_type =
-        let schema = A.Meta.(find_exn r schema) in
-        Type.PrimType.TupleT (List.map schema ~f:A.Name.type_exn)
+        let schema = Meta.(find_exn r schema) in
+        Type.PrimType.TupleT (List.map schema ~f:Name.type_exn)
       in
       create ~ctx ~name ~ret:ret_type
     in
     let hdr = Header.make_header t in
-    let start = Ctx.find_exn ctx (A.Name.create "start") b in
+    let start = Ctx.find_exn ctx (Name.create "start") b in
     let child_starts =
       let _, ret =
         List.fold_left child_types
@@ -242,13 +239,13 @@ struct
     let open Builder in
     let b =
       let ret_type =
-        let schema = A.Meta.(find_exn r schema) in
-        Type.PrimType.TupleT (List.map schema ~f:A.Name.type_exn)
+        let schema = Meta.(find_exn r schema) in
+        Type.PrimType.TupleT (List.map schema ~f:Name.type_exn)
       in
       create ~ctx ~name ~ret:ret_type
     in
     let hdr = Header.make_header t in
-    let start = Ctx.find_exn ctx (A.Name.create "start") b in
+    let start = Ctx.find_exn ctx (Name.create "start") b in
     let ctx = Ctx.bind ctx "start" Type.PrimType.int_t start in
     let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
     (* Build iterator initializers using the computed start positions. *)
@@ -297,13 +294,13 @@ struct
     let open Builder in
     let b =
       let ret_type =
-        let schema = A.Meta.(find_exn r schema) in
-        Type.PrimType.TupleT (List.map schema ~f:A.Name.type_exn)
+        let schema = Meta.(find_exn r schema) in
+        Type.PrimType.TupleT (List.map schema ~f:Name.type_exn)
       in
       create ~ctx ~name ~ret:ret_type
     in
     let hdr = Header.make_header t in
-    let start = Ctx.find_exn ctx (A.Name.create "start") b in
+    let start = Ctx.find_exn ctx (Name.create "start") b in
     let cstart =
       build_defn "cstart" Type.PrimType.int_t
         (Header.make_position hdr "value" start)
@@ -344,13 +341,13 @@ struct
     let open Builder in
     let b =
       let ret_type =
-        let schema = A.Meta.(find_exn r schema) in
-        Type.PrimType.TupleT (List.map schema ~f:A.Name.type_exn)
+        let schema = Meta.(find_exn r schema) in
+        Type.PrimType.TupleT (List.map schema ~f:Name.type_exn)
       in
       create ~ctx ~name ~ret:ret_type
     in
     let hdr = Header.make_header t in
-    let start = Ctx.find_exn ctx (A.Name.create "start") b in
+    let start = Ctx.find_exn ctx (Name.create "start") b in
     let kstart = build_var "kstart" Type.PrimType.int_t b in
     let key_callee_ctx, key_callee_args =
       let ctx = Ctx.bind ctx "start" Type.PrimType.int_t kstart in
@@ -359,7 +356,7 @@ struct
     let key_iter = scan key_callee_ctx key_layout key_type in
     let key_tuple = build_var "key" key_iter.ret_type b in
     let ctx =
-      let key_schema = A.Meta.(find_exn key_layout schema) in
+      let key_schema = Meta.(find_exn key_layout schema) in
       Ctx.bind_ctx ctx (Ctx.of_schema key_schema key_tuple)
     in
     let vstart = build_var "vstart" Type.PrimType.int_t b in
@@ -454,12 +451,12 @@ struct
         let hdr = Header.make_header t in
         let b =
           let ret_type =
-            let schema = A.Meta.(find_exn r schema) in
-            Type.PrimType.TupleT (List.map schema ~f:A.Name.type_exn)
+            let schema = Meta.(find_exn r schema) in
+            Type.PrimType.TupleT (List.map schema ~f:Name.type_exn)
           in
           create ~ctx ~name ~ret:ret_type
         in
-        let start = Ctx.find_exn ctx (A.Name.create "start") b in
+        let start = Ctx.find_exn ctx (Name.create "start") b in
         let kstart = build_var "kstart" Type.PrimType.int_t b in
         let key_callee_ctx, key_callee_args =
           let ctx = Ctx.bind ctx "start" Type.PrimType.int_t kstart in
@@ -468,7 +465,7 @@ struct
         let key_iter = scan key_callee_ctx key_layout key_type in
         let key_tuple = build_var "key" key_iter.ret_type b in
         let ctx =
-          let key_schema = A.Meta.(find_exn key_layout schema) in
+          let key_schema = Meta.(find_exn key_layout schema) in
           Ctx.bind_ctx ctx (Ctx.of_schema key_schema key_tuple)
         in
         let vstart = build_var "vstart" Type.PrimType.int_t b in
@@ -529,8 +526,8 @@ struct
         let open Builder in
         let b =
           let ret_type =
-            let schema = A.Meta.(find_exn r schema) in
-            Type.PrimType.TupleT (List.map schema ~f:A.Name.type_exn)
+            let schema = Meta.(find_exn r schema) in
+            Type.PrimType.TupleT (List.map schema ~f:Name.type_exn)
           in
           create ~ctx ~name ~ret:ret_type
         in
@@ -539,7 +536,7 @@ struct
         build_foreach ~count:(Type.count child_type) func callee_args
           (fun tup b ->
             let ctx =
-              let child_schema = A.Meta.(find_exn child_layout schema) in
+              let child_schema = Meta.(find_exn child_layout schema) in
               Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
             in
             let cond = gen_pred ~ctx pred b in
@@ -599,11 +596,9 @@ struct
       ; layout= {node= Select (args, child_layout); _} as layout
       ; type_= FuncT ([child_type], _); _ } ->
         let open Builder in
-        let schema = A.Meta.(find_exn layout schema) in
+        let schema = Meta.(find_exn layout schema) in
         let b =
-          let ret_type =
-            Type.PrimType.TupleT (List.map schema ~f:A.Name.type_exn)
-          in
+          let ret_type = Type.PrimType.TupleT (List.map schema ~f:Name.type_exn) in
           create ~ctx ~name ~ret:ret_type
         in
         let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
@@ -613,7 +608,7 @@ struct
             build_foreach ~count:(Type.count child_type) func callee_args
               (fun tup b ->
                 let ctx =
-                  let child_schema = A.Meta.(find_exn child_layout schema) in
+                  let child_schema = Meta.(find_exn child_layout schema) in
                   Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
                 in
                 let output = List.map args ~f:(fun p -> gen_pred ~ctx p b) in
@@ -621,14 +616,14 @@ struct
               b
         | `Agg ->
             let args =
-              List.map2_exn args schema ~f:(fun a n -> (a, A.Name.type_exn n))
+              List.map2_exn args schema ~f:(fun a n -> (a, Name.type_exn n))
             in
             (* Holds the state for each aggregate. *)
             let agg_temps = List.map args ~f:(fun (p, t) -> agg_init t p b) in
             build_foreach ~count:(Type.count child_type) func callee_args
               (fun tup b ->
                 let ctx =
-                  let child_schema = A.Meta.(find_exn child_layout schema) in
+                  let child_schema = Meta.(find_exn child_layout schema) in
                   Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
                 in
                 List.iter agg_temps ~f:(agg_step ctx b) )
@@ -650,13 +645,13 @@ struct
     let rec gen_func ctx r t =
       let name = A.name r ^ "_" ^ Fresh.name fresh "%d" in
       let ctx =
-        let start_name = A.Name.create ~type_:Type.PrimType.int_t "start" in
+        let start_name = Name.create ~type_:Type.PrimType.int_t "start" in
         if Config.code_only then
           Map.update ctx start_name ~f:(function
             | Some x -> x
             | None -> Ctx.(Global Infix.(int 0)) )
         else
-          match A.Meta.(find r pos) with
+          match Meta.(find r pos) with
           | Some (Pos start) ->
               (* We don't want to bind over a start parameter that's already being
                passed in. *)
@@ -696,8 +691,8 @@ struct
 
   let irgen ~params ~data_fn r =
     let ctx =
-      List.map params ~f:(fun n -> (n, Ctx.Global (Var n.A.Name.name)))
-      |> Map.of_alist_exn (module A.Name.Compare_no_type)
+      List.map params ~f:(fun n -> (n, Ctx.Global (Var n.Name.name)))
+      |> Map.of_alist_exn (module Name.Compare_no_type)
     in
     let top_func, len = gen_abslayout ~ctx ~data_fn r in
     { iters= List.rev !funcs

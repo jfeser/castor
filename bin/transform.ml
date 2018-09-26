@@ -19,8 +19,8 @@ let main ?(debug = false) ?sample:_ ?(transforms = []) ~db ~params query_str =
    *       | v :: _ -> (pname, v) )
    * in *)
   let params =
-    List.map params ~f:(fun (n, t) -> A.Name.create ~type_:t n)
-    |> Set.of_list (module Abslayout.Name.Compare_no_type)
+    List.map params ~f:(fun (n, t) -> Name.create ~type_:t n)
+    |> Set.of_list (module Name.Compare_no_type)
   in
   let module Config = struct
     let conn = new connection ~dbname:db ()

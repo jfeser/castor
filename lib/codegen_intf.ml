@@ -6,7 +6,7 @@ module type S = sig
   val compile :
        ?out_dir:string
     -> gprof:bool
-    -> params:Abslayout.Name.t list
+    -> params:Name.t list
     -> Abslayout.t
     -> string * string
 end

@@ -192,14 +192,14 @@ let name_of_var = function
 
 type _var = Global of expr | Arg of int | Field of expr [@@deriving compare, sexp]
 
-type _ctx = _var Map.M(A.Name.Compare_no_type).t [@@deriving compare, sexp]
+type _ctx = _var Map.M(Name.Compare_no_type).t [@@deriving compare, sexp]
 
 module Ctx0 = struct
-  let empty = Map.empty (module A.Name.Compare_no_type)
+  let empty = Map.empty (module Name.Compare_no_type)
 
   let of_schema schema tup =
     List.mapi schema ~f:(fun i n -> (n, Field Infix.(index tup i)))
-    |> Map.of_alist_exn (module A.Name.Compare_no_type)
+    |> Map.of_alist_exn (module Name.Compare_no_type)
 
   (* Create an argument list for a caller. *)
   let make_caller_args ctx =
@@ -213,10 +213,10 @@ module Ctx0 = struct
                  [%sexp_of: _ctx]
                |> Error.raise )
     |> List.sort ~compare:(fun (_, i1) (_, i2) -> Int.compare i1 i2)
-    |> List.map ~f:(fun (n, _) -> (A.Name.to_var n, A.Name.type_exn n))
+    |> List.map ~f:(fun (n, _) -> (Name.to_var n, Name.type_exn n))
 
   let bind ctx name type_ expr =
-    Map.set ctx ~key:(A.Name.create ~type_ name) ~data:(Field expr)
+    Map.set ctx ~key:(Name.create ~type_ name) ~data:(Field expr)
 end
 
 let int2fl x = Unop {op= Int2Fl; arg= x}
@@ -295,7 +295,7 @@ module Builder = struct
     let type_ctx =
       Map.to_alist ctx
       |> List.filter_map ~f:(function
-           | n, Global _ -> Some (A.Name.to_var n, A.Name.type_exn n)
+           | n, Global _ -> Some (Name.to_var n, Name.type_exn n)
            | _ -> None )
       |> Hashtbl.of_alist_exn (module String)
     in

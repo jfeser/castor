@@ -102,7 +102,7 @@ end
 
 type _var = Global of expr | Arg of int | Field of expr
 
-type _ctx = _var Map.M(Abslayout.Name.Compare_no_type).t
+type _ctx = _var Map.M(Name.Compare_no_type).t
 
 module Builder : sig
   type t
@@ -181,7 +181,7 @@ module Ctx : sig
 
   val empty : t
 
-  val of_schema : Abslayout.Name.t list -> expr -> t
+  val of_schema : Name.t list -> expr -> t
 
   val make_caller_args : t -> (string * Type0.PrimType.t) list
 
@@ -191,9 +191,9 @@ module Ctx : sig
 
   val make_callee_context : t -> Builder.t -> t * expr list
 
-  val find : t -> Abslayout.Name.t -> Builder.t -> expr option
+  val find : t -> Name.t -> Builder.t -> expr option
 
-  val find_exn : t -> Abslayout.Name.t -> Builder.t -> expr
+  val find_exn : t -> Name.t -> Builder.t -> expr
 
   val bind_ctx : t -> t -> t
 end

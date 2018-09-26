@@ -69,6 +69,10 @@ module PrimType = struct
   let rec unify t1 t2 =
     match (t1, t2) with
     | IntT {nullable= n1}, IntT {nullable= n2} -> IntT {nullable= n1 || n2}
+    | FixedT {nullable= n1}, FixedT {nullable= n2} -> FixedT {nullable= n1 || n2}
+    | FixedT {nullable= n1}, IntT {nullable= n2}
+     |IntT {nullable= n1}, FixedT {nullable= n2} ->
+        FixedT {nullable= n1 || n2}
     | BoolT {nullable= n1}, BoolT {nullable= n2} -> BoolT {nullable= n1 || n2}
     | StringT {nullable= n1}, StringT {nullable= n2} -> StringT {nullable= n1 || n2}
     | TupleT t1, TupleT t2 -> TupleT (List.map2_exn t1 t2 ~f:unify)

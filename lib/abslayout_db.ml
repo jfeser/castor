@@ -251,7 +251,7 @@ module Make (Eval : Eval.S) = struct
   let to_type ?(ctx = Map.empty (module Name.Compare_no_type)) l =
     Logs.info (fun m -> m "Computing type of abstract layout.") ;
     let type_ = (new type_fold)#visit_t (`Eval ctx) l in
-    Logs.debug (fun m ->
+    Logs.info (fun m ->
         m "The type is: %s" (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ) ;
     type_
 

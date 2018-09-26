@@ -1,81 +1,7 @@
 open Base
-open Printf
 open Collections
-open Db
 include Abslayout0
 module Format = Caml.Format
-
-module Name = struct
-  module T = struct
-    type t = Abslayout0.name =
-      {relation: string option; name: string; type_: Type0.PrimType.t option}
-    [@@deriving sexp]
-  end
-
-  module Compare = struct
-    module T = struct
-      type t = T.t =
-        {relation: string option; name: string; type_: Type0.PrimType.t option}
-      [@@deriving compare, hash, sexp]
-    end
-
-    include T
-    include Comparable.Make (T)
-  end
-
-  module Compare_no_type = struct
-    module T = struct
-      type t = T.t =
-        { relation: string option
-        ; name: string
-        ; type_: Type0.PrimType.t option [@compare.ignore] }
-      [@@deriving compare, hash, sexp]
-    end
-
-    include T
-    include Comparable.Make (T)
-  end
-
-  module Compare_name_only = struct
-    module T = struct
-      type t = T.t =
-        { relation: string option [@compare.ignore]
-        ; name: string
-        ; type_: Type0.PrimType.t option [@compare.ignore] }
-      [@@deriving compare, hash, sexp]
-    end
-
-    include T
-    include Comparable.Make (T)
-  end
-
-  include T
-
-  let create ?relation ?type_ name = {relation; name; type_}
-
-  let type_exn ({type_; _} as n) =
-    match type_ with
-    | Some t -> t
-    | None -> Error.create "Missing type." n [%sexp_of: t] |> Error.raise
-
-  let to_var {relation; name; _} =
-    match relation with Some r -> sprintf "%s_%s" r name | None -> name
-
-  let to_sql {relation; name; _} =
-    match relation with
-    | Some r -> sprintf "%s.\"%s\"" r name
-    | None -> sprintf "\"%s\"" name
-
-  let of_lexbuf_exn lexbuf =
-    try Ralgebra_parser.name_eof Ralgebra_lexer.token lexbuf
-    with Parser_utils.ParseError (msg, line, col) as e ->
-      Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
-      raise e
-
-  let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
-
-  let of_field ?rel f = {relation= rel; name= f.Field.fname; type_= Some f.type_}
-end
 
 let select a b =
   if List.is_empty a then Error.of_string "Empty selection list." |> Error.raise ;
@@ -260,19 +186,20 @@ let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
  *   in
  *   ralgebra_params#visit_t () r *)
 
-let names r =
-  let visitor =
-    object
-      inherit [_] reduce
+let names_visitor =
+  object
+    inherit [_] reduce
 
-      method zero = Set.empty (module Name.Compare_no_type)
+    method zero = Set.empty (module Name.Compare_no_type)
 
-      method plus = Set.union
+    method plus = Set.union
 
-      method! visit_Name () n = Set.singleton (module Name.Compare_no_type) n
-    end
-  in
-  visitor#visit_t () r
+    method! visit_Name () n = Set.singleton (module Name.Compare_no_type) n
+  end
+
+let names r = names_visitor#visit_t () r
+
+let pred_names r = names_visitor#visit_pred () r
 
 let pred_of_value = function
   | Value.Bool x -> Bool x
@@ -444,3 +371,80 @@ let rec is_serializeable {node; _} =
    |Filter (_, r) ->
       is_serializeable r
   | ATuple (rs, _) -> List.for_all rs ~f:is_serializeable
+
+let annotate_needed r =
+  let of_list = Set.of_list (module Name.Compare_no_type) in
+  let union_list = Set.union_list (module Name.Compare_no_type) in
+  let rec needed ctx r =
+    Meta.(set_m r needed ctx) ;
+    match r.node with
+    | Scan _ | AScalar _ | AEmpty -> ()
+    | Select (ps, r') ->
+        let ctx' = List.map ps ~f:pred_names |> union_list in
+        needed ctx' r'
+    | Filter (_, r') | Dedup r' -> needed ctx r'
+    | Join {pred; r1; r2} ->
+        let ctx' = Set.union (pred_names pred) ctx in
+        needed ctx' r1 ; needed ctx' r2
+    | GroupBy (ps, key, r') ->
+        let ctx' =
+          List.map ps ~f:pred_names |> union_list |> Set.union (of_list key)
+        in
+        needed ctx' r'
+    | OrderBy {key; rel; _} ->
+        let ctx' = Set.union ctx (List.map ~f:pred_names key |> union_list) in
+        needed ctx' rel
+    | AList (r', r'') | AHashIdx (r', r'', _) | AOrderedIdx (r', r'', _) ->
+        let ctx' = Set.union ctx (names r'') in
+        needed ctx' r' ; needed ctx r''
+    | ATuple (rs, Zip) -> List.iter rs ~f:(needed ctx)
+    | ATuple (rs, Cross) ->
+        List.fold_right rs ~init:ctx ~f:(fun r ctx ->
+            needed ctx r ;
+            let ctx = Set.union (names r) ctx in
+            ctx )
+        |> ignore
+    | As (n, r') ->
+        let rmap =
+          let schema = Meta.(find_exn r' schema) in
+          List.map schema ~f:(fun n' -> (Name.create ~relation:n n'.name, n'))
+          |> Map.of_alist_exn (module Name.Compare_no_type)
+        in
+        let ctx' =
+          Set.filter_map (module Name.Compare_no_type) ctx ~f:(Map.find rmap)
+        in
+        needed ctx' r'
+  in
+  needed (of_list Meta.(find_exn r schema)) r
+
+let project r =
+  let dummy = Set.empty (module Name.Compare_no_type) in
+  let project_visitor =
+    object (self : 'a)
+      inherit [_] map as super
+
+      method! visit_Select needed ps r =
+        let ps' =
+          List.filter ps ~f:(fun p ->
+              match pred_to_name p with None -> false | Some n -> Set.mem needed n
+          )
+        in
+        Select (ps', self#visit_t dummy r)
+
+      method! visit_ATuple needed (rs, k) =
+        let rs' =
+          List.filter rs ~f:(fun r ->
+              let s =
+                Meta.(find_exn r schema) |> Set.of_list (module Name.Compare_no_type)
+              in
+              not (Set.is_empty (Set.inter s needed)) )
+          |> List.map ~f:(self#visit_t dummy)
+        in
+        ATuple (rs', k)
+
+      method! visit_t _ r =
+        let needed = Meta.(find_exn r needed) in
+        super#visit_t needed r
+    end
+  in
+  project_visitor#visit_t dummy r
