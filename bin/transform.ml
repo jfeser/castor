@@ -18,12 +18,14 @@ let main ?(debug = false) ?sample:_ ?(transforms = []) ~db ~params query_str =
    *           |> Error.raise
    *       | v :: _ -> (pname, v) )
    * in *)
+  let params =
+    List.map params ~f:(fun (n, t) -> A.Name.create ~type_:t n)
+    |> Set.of_list (module Abslayout.Name.Compare_no_type)
+  in
   let module Config = struct
     let conn = new connection ~dbname:db ()
 
-    let params =
-      List.map params ~f:(fun (n, t) -> A.Name.create ~type_:t n)
-      |> Set.of_list (module Abslayout.Name.Compare_no_type)
+    let params = params
 
     (* let testctx = Layout.PredCtx.of_vars test_params *)
 
@@ -32,7 +34,7 @@ let main ?(debug = false) ?sample:_ ?(transforms = []) ~db ~params query_str =
   let module E = Eval.Make (Config) in
   let module M = Abslayout_db.Make (E) in
   let module Transform = Transform.Make (Config) (M) () in
-  let query = Abslayout.of_string_exn query_str in
+  let query = Abslayout.of_string_exn query_str |> M.resolve ~params in
   (* If we need to sample, generate sample tables and swap them in the
        expression. *)
   (* ( match sample with
@@ -70,7 +72,6 @@ let () =
             Error.create "Malformed transform." s [%sexp_of: string] |> Error.raise
     )
   in
-  let channel = Arg_type.create In_channel.create in
   let open Let_syntax in
   basic ~summary:"Explore transformations by hand."
     (let%map_open db =
@@ -90,7 +91,9 @@ let () =
      and params =
        flag "param" ~aliases:["p"] (listed Util.param)
          ~doc:"query parameters (passed as key:value)"
-     and ch = anon (maybe_with_default In_channel.stdin ("query" %: channel)) in
+     and ch =
+       anon (maybe_with_default In_channel.stdin ("query" %: Util.channel))
+     in
      fun () ->
        if verbose then Logs.set_level (Some Logs.Debug)
        else if quiet then Logs.set_level (Some Logs.Error)

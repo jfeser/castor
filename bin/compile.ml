@@ -3,7 +3,7 @@ open Dblayout
 open Postgresql
 open Collections
 
-let main ~debug ~gprof ~params ~db ~port ~code_only ?out_dir fn =
+let main ~debug ~gprof ~params ~db ~port ~code_only ?out_dir ch =
   let module CConfig = struct
     let conn = new connection ~dbname:db ?port ()
 
@@ -25,8 +25,8 @@ let main ~debug ~gprof ~params ~db ~port ~code_only ?out_dir fn =
   Logs.debug (fun m -> m "Codegen.") ;
   let ralgebra =
     let params = Set.of_list (module Abslayout.Name.Compare_no_type) params in
-    In_channel.with_file fn ~f:Abslayout.of_channel_exn
-    |> A.resolve ~params |> A.annotate_schema |> A.annotate_key_layouts
+    Abslayout.of_channel_exn ch |> A.resolve ~params |> A.annotate_schema
+    |> A.annotate_key_layouts
   in
   C.compile ~gprof ~params ?out_dir ralgebra |> ignore
 
@@ -50,10 +50,12 @@ let () =
        flag "param" ~aliases:["p"] (listed Util.param)
          ~doc:"query parameters (passed as key:value)"
      and code_only = flag "code-only" no_arg ~doc:"only emit code"
-     and query = anon ("query" %: file) in
+     and ch =
+       anon (maybe_with_default In_channel.stdin ("query" %: Util.channel))
+     in
      fun () ->
        if verbose then Logs.set_level (Some Logs.Debug)
        else if quiet then Logs.set_level (Some Logs.Error)
        else Logs.set_level (Some Logs.Info) ;
-       main ~debug ~gprof ~params ~db ~port ~code_only ?out_dir query)
+       main ~debug ~gprof ~params ~db ~port ~code_only ?out_dir ch)
   |> run

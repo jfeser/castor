@@ -21,6 +21,11 @@ let param =
         | "string" -> StringT {nullable= false}
         | "int" -> IntT {nullable= false}
         | "bool" -> BoolT {nullable= false}
+        | "date" -> IntT {nullable= false}
         | _ -> failwith "Unexpected type name."
       in
       (k, v) )
+
+let channel =
+  let open Command in
+  Arg_type.create In_channel.create
