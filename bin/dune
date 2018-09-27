@@ -28,6 +28,13 @@
  (preprocess (pps ppx_sexp_conv ppx_let))
  (modules transform))
 
+(executable
+ (name sample)
+ (libraries core postgresql dblayout logs)
+ (flags (:standard -g -bin-annot))
+ (preprocess (pps ppx_sexp_conv ppx_let))
+ (modules sample))
+
 ; Local Variables:
 ; mode: tuareg-dune
 ; End:

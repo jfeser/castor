@@ -68,11 +68,21 @@ let rec exec :
       Logs.debug (fun m -> m "Returning nothing: %s" (Postgresql.result_status s)) ;
       []
 
+let exec1 ?verbose ?params conn query =
+  exec ?verbose ?params conn query
+  |> List.map ~f:(function
+       | [x] -> x
+       | t ->
+           Error.create "Unexpected query results." t [%sexp_of: string list]
+           |> Error.raise )
+
 let exec3 ?verbose ?params conn query =
   exec ?verbose ?params conn query
   |> List.map ~f:(function
        | [x; y; z] -> (x, y, z)
-       | _ -> failwith "Unexpected query results." )
+       | t ->
+           Error.create "Unexpected query results." t [%sexp_of: string list]
+           |> Error.raise )
 
 type field_t = {fname: string; type_: Type.PrimType.t}
 
@@ -85,15 +95,23 @@ module Relation = struct
 
   let sexp_of_t {rname; _} = [%sexp_of: string] rname
 
-  let from_db conn name =
-    let rel = {rname= name; fields= []} in
+  let from_db conn rname =
+    let rel = {rname; fields= []} in
     let fields =
-      exec3 ~params:[name] conn
+      exec3 ~params:[rname] conn
         "select column_name, data_type, is_nullable from \
          information_schema.columns where table_name='$0'"
-      |> List.map ~f:(fun (name, type_str, nullable_str) ->
+      |> List.map ~f:(fun (fname, type_str, nullable_str) ->
              let open Type.PrimType in
-             let nullable = String.(nullable_str = "YES") in
+             let nullable =
+               if String.(nullable_str = "YES") then
+                 let nulls =
+                   exec1 ~params:[fname; rname] conn
+                     "select \"$0\" from \"$1\" where \"$0\" = null limit 1"
+                 in
+                 List.length nulls > 0
+               else false
+             in
              let type_ =
                match type_str with
                | "character" | "character varying" | "varchar" | "text" ->
@@ -105,10 +123,16 @@ module Relation = struct
                | "timestamp without time zone" -> StringT {nullable}
                | s -> failwith (Printf.sprintf "Unknown dtype %s" s)
              in
-             {fname= name; type_} )
+             {fname; type_} )
     in
-    (* TODO: Remove this. *)
     {rel with fields}
+
+  let all_from_db conn =
+    let names =
+      exec1 conn
+        "select tablename from pg_catalog.pg_tables where schemaname='public'"
+    in
+    List.map names ~f:(from_db conn)
 end
 
 module Field = struct

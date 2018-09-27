@@ -36,17 +36,17 @@ let () =
   basic ~summary:"Compile a query."
     (let%map_open verbose =
        flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
-     and db = flag "db" (required string) ~doc:"the database to connect to"
-     and port = flag "port" (optional string) ~doc:"the port to connect to"
+     and db = flag "db" (required string) ~doc:"DBNAME the database to connect to"
+     and port = flag "port" (optional string) ~doc:"PORT the port to connect to"
      and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
      and debug = flag "debug" ~aliases:["g"] no_arg ~doc:"enable debug mode"
      and gprof = flag "prof" ~aliases:["pg"] no_arg ~doc:"enable profiling"
      and out_dir =
        flag "output" ~aliases:["o"] (optional string)
-         ~doc:"directory to write compiler output in"
+         ~doc:"DIR directory to write compiler output in"
      and params =
        flag "param" ~aliases:["p"] (listed Util.param)
-         ~doc:"query parameters (passed as key:value)"
+         ~doc:"NAME:TYPE query parameters"
      and code_only = flag "code-only" no_arg ~doc:"only emit code"
      and ch =
        anon (maybe_with_default In_channel.stdin ("query" %: Util.channel))

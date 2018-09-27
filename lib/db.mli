@@ -23,4 +23,6 @@ module Relation : sig
   type t = {rname: string; fields: Field.t list} [@@deriving compare, hash, sexp]
 
   val from_db : Postgresql.connection -> string -> t
+
+  val all_from_db : Postgresql.connection -> t list
 end

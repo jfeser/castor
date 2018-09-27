@@ -48,6 +48,10 @@ module List = struct
       | [] -> failwith "Unexpected empty list."
       | x :: xs -> scanl1' x [x] f xs |> List.rev
 
+  let fold_left1 ~f = function
+    | [] -> failwith "Unexpected empty list."
+    | x :: xs -> List.fold_left ~init:x ~f xs
+
   let count_consecutive_duplicates :
       'a t -> equal:('a -> 'a -> bool) -> ('a * int) t =
     let rec ccd equal v c acc = function
