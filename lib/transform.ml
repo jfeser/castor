@@ -130,15 +130,19 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         (function
         | {node= GroupBy (ps, key, {node= Filter (p, r); _}); _} when no_params r ->
             let key_name = Fresh.name fresh "k%d" in
-            let key_preds = List.map key ~f:(fun n -> Name n) in
+            let new_key =
+              List.map key ~f:(fun n -> sprintf "%s_%s" key_name (Name.to_var n))
+            in
+            let select_list =
+              List.map2_exn key new_key ~f:(fun n n' -> As_pred (Name n, n'))
+            in
             let filter_pred =
-              List.map key ~f:(fun n ->
-                  Binop (Eq, Name n, Name {n with relation= Some key_name}) )
-              |> List.fold_left ~init:(Bool true) ~f:(fun acc p ->
-                     Binop (And, acc, p) )
+              List.map2_exn key new_key ~f:(fun n n' ->
+                  Binop (Eq, Name n, Name (Name.create n')) )
+              |> List.fold_left1 ~f:(fun acc p -> Binop (And, acc, p))
             in
             [ list
-                (as_ key_name (dedup (select key_preds r)))
+                (dedup (select select_list r))
                 (select ps (filter p (filter filter_pred r))) ]
         | _ -> []) }
     |> run_everywhere
