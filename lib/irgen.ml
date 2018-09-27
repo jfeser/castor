@@ -77,8 +77,8 @@ struct
           | A.Mul -> build_mul e1 e2 b
           | A.Div -> build_div e1 e2 b
           | A.Mod -> Infix.(e1 % e2) )
-      | A.Count | A.Min _ | A.Max _ | A.Sum _ | A.Avg _ ->
-          failwith "Not a scalar predicate."
+      | (A.Count | A.Min _ | A.Max _ | A.Sum _ | A.Avg _) as p ->
+          Error.create "Not a scalar predicate." p [%sexp_of: A.pred] |> Error.raise
       | A.If (p1, p2, p3) -> Ternary (gen_pred p1, gen_pred p2, gen_pred p3)
     in
     gen_pred pred
@@ -550,7 +550,7 @@ struct
 
   let agg_init t p b =
     let open Builder in
-    match p with
+    match A.pred_remove_as p with
     | A.Count ->
         `Count (build_fresh_defn "count" (const_int Type.PrimType.int_t 0) b)
     | A.Sum f -> `Sum (f, build_fresh_defn "sum" (const_int t 0) b)
@@ -586,7 +586,9 @@ struct
     function
     | `Count x | `Sum (_, x) | `Min (_, x) | `Max (_, x) -> x
     | `Avg (_, n, d) -> build_div n d b
-    | `Passthru p -> gen_pred ~ctx p b
+    | `Passthru p ->
+        [%sexp_of: A.pred * [`Agg | `Scalar]] (p, A.pred_kind p) |> print_s ;
+        gen_pred ~ctx p b
 
   let scan_select args =
     match args with
@@ -603,7 +605,7 @@ struct
         in
         let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
         let func = scan callee_ctx child_layout child_type in
-        ( match A.select_kind args |> Or_error.ok_exn with
+        ( match A.select_kind args with
         | `Scalar ->
             build_foreach ~count:(Type.count child_type) func callee_args
               (fun tup b ->
@@ -620,12 +622,14 @@ struct
             in
             (* Holds the state for each aggregate. *)
             let agg_temps = List.map args ~f:(fun (p, t) -> agg_init t p b) in
+            let tuple = build_fresh_var "tup" func.ret_type b in
+            let ctx =
+              let child_schema = Meta.(find_exn child_layout schema) in
+              Ctx.bind_ctx ctx (Ctx.of_schema child_schema tuple)
+            in
             build_foreach ~count:(Type.count child_type) func callee_args
               (fun tup b ->
-                let ctx =
-                  let child_schema = Meta.(find_exn child_layout schema) in
-                  Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
-                in
+                build_assign tup tuple b ;
                 List.iter agg_temps ~f:(agg_step ctx b) )
               b ;
             build_yield (Tuple (List.map ~f:(agg_extract ctx b) agg_temps)) b ) ;
@@ -640,8 +644,6 @@ struct
     in
     Bitstring.Writer.flush writer ;
     Bitstring.Writer.close writer ;
-    Out_channel.with_file "scanner.sexp" ~f:(fun ch ->
-        Sexp.pp_hum (Caml.Format.formatter_of_out_channel ch) ([%sexp_of: A.t] r) ) ;
     let rec gen_func ctx r t =
       let name = A.name r ^ "_" ^ Fresh.name fresh "%d" in
       let ctx =
@@ -683,7 +685,9 @@ struct
           | AEmpty | AScalar _ | AList _ | ATuple _ | AHashIdx _ | AOrderedIdx _ ->
               Error.create "Not functions." r [%sexp_of: A.t] |> Error.raise )
       in
-      add_func func ; func
+      Logs.debug (fun m -> m "%a" Sexp.pp_hum ([%sexp_of: func] func)) ;
+      add_func func ;
+      func
     and scan ctx r t =
       match r.node with As (_, r) -> scan ctx r t | _ -> gen_func ctx r t
     in

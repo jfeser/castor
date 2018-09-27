@@ -349,15 +349,14 @@ let rec annotate_foreach r =
   | ATuple (rs, _) -> List.iter rs ~f:annotate_foreach
 
 let rec pred_kind = function
-  | As_pred (x', _) -> (
-    match pred_kind x' with `Scalar -> `Scalar | `Agg -> `Agg )
+  | As_pred (x', _) -> pred_kind x'
   | Name _ | Int _ | Date _ | Unop _ | Fixed _ | Bool _ | String _ | Null
    |Binop _ | If _ ->
       `Scalar
   | Sum _ | Avg _ | Min _ | Max _ | Count -> `Agg
 
 let select_kind l =
-  List.map l ~f:pred_kind |> List.all_equal ~sexp_of_t:[%sexp_of: [`Scalar | `Agg]]
+  if List.exists l ~f:(fun p -> Poly.(pred_kind p = `Agg)) then `Agg else `Scalar
 
 let rec is_serializeable {node; _} =
   match node with
@@ -382,7 +381,10 @@ let annotate_needed r =
     | Select (ps, r') ->
         let ctx' = List.map ps ~f:pred_names |> union_list in
         needed ctx' r'
-    | Filter (_, r') | Dedup r' -> needed ctx r'
+    | Filter (p, r') ->
+        let ctx' = Set.union (pred_names p) ctx in
+        needed ctx' r'
+    | Dedup r' -> needed ctx r'
     | Join {pred; r1; r2} ->
         let ctx' = Set.union (pred_names pred) ctx in
         needed ctx' r1 ; needed ctx' r2
@@ -448,3 +450,13 @@ let project r =
     end
   in
   project_visitor#visit_t dummy r
+
+let pred_remove_as p =
+  let visitor =
+    object
+      inherit [_] map
+
+      method! visit_As_pred () (p, _) = p
+    end
+  in
+  visitor#visit_pred () p

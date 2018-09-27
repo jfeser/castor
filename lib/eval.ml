@@ -219,7 +219,7 @@ module Make_mock (Config : Config.S_mock) : S = struct
 
   let eval_select ctx args seq =
     let result =
-      match select_kind args |> Or_error.ok_exn with
+      match select_kind args with
       | `Scalar ->
           Seq.map seq ~f:(fun t ->
               let ctx = Map.merge_right ctx t in

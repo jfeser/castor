@@ -134,10 +134,14 @@ val annotate_foreach : t -> unit
 
 val next_inner_loop : t -> (t * t) option
 
-val select_kind : pred list -> [`Agg | `Scalar] Or_error.t
+val pred_kind : pred -> [`Agg | `Scalar]
+
+val select_kind : pred list -> [`Agg | `Scalar]
 
 val is_serializeable : t -> bool
 
 val annotate_needed : t -> unit
 
 val project : t -> t
+
+val pred_remove_as : pred -> pred
