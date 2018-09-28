@@ -50,7 +50,7 @@ let%expect_test "foreach-1" =
   let r2 = of_string_exn "select([r.g], filter(r.f = k, r))" |> M.annotate_schema in
   print_endline (ralgebra_foreach r1 r2) ;
   [%expect
-    {| select t1."k", t4."g" from (select r."f" as k from r) as t1, lateral (select t3."g" from (select * from r where (r."f") = ("k")) as t3) as t4 order by (1) |}]
+    {| select t1."k", t4."g" from (select r."f" as k from r) as t1, lateral (select t3."g" from (select * from r where (r."f") = ("k")) as t3) as t4 order by (t1."k") |}]
 
 let%expect_test "example2" =
   let (module E), (module A) = make_module_db () in
@@ -73,4 +73,4 @@ let%expect_test "example2" =
   in
   print_endline (ralgebra_foreach q1 q2) ;
   [%expect
-    {| select t6."lp_k", t6."lc_k", t14."lp_counter", t14."lc_counter" from (select distinct * from (select t4."lp_id" as lp_k, t4."lc_id" as lc_k from (select * from (select "id" as lp_id from log_bench) as t2, (select "id" as lc_id from log_bench) as t3 where true) as t4) as t5) as t6, lateral (select t13."lp_counter", t13."lc_counter" from (select * from (select "counter" as lp_counter, "succ" as lp_succ from (select * from log_bench where (log_bench."id") = ("lp_k")) as t8) as t11, (select "counter" as lc_counter from (select * from log_bench where (log_bench."id") = ("lc_k")) as t10) as t12 where ((t11."lp_counter") < (t12."lc_counter")) and ((t12."lc_counter") < (t11."lp_succ"))) as t13) as t14 order by (1, 2) |}]
+    {| select t6."lp_k", t6."lc_k", t14."lp_counter", t14."lc_counter" from (select distinct * from (select t4."lp_id" as lp_k, t4."lc_id" as lc_k from (select * from (select "id" as lp_id from log_bench) as t2, (select "id" as lc_id from log_bench) as t3 where true) as t4) as t5) as t6, lateral (select t13."lp_counter", t13."lc_counter" from (select * from (select "counter" as lp_counter, "succ" as lp_succ from (select * from log_bench where (log_bench."id") = ("lp_k")) as t8) as t11, (select "counter" as lc_counter from (select * from log_bench where (log_bench."id") = ("lc_k")) as t10) as t12 where ((t11."lp_counter") < (t12."lc_counter")) and ((t12."lc_counter") < (t11."lp_succ"))) as t13) as t14 order by (t6."lp_k", t6."lc_k") |}]

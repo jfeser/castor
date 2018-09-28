@@ -100,12 +100,13 @@ let%expect_test "sum" =
          sum0 = 0;
          count1 = 0;
          init list_1();
-         count3 = 5;
-         loop (0 < count3) {
-             tup2 = next(list_1);
+         count4 = 5;
+         loop (0 < count4) {
+             tup3 = next(list_1);
+             tup2 = tup3;
              sum0 = sum0 + tup2[0];
              count1 = count1 + 1;
-             count3 = count3 - 1;
+             count4 = count4 - 1;
          }
          yield (sum0, count1);
     }fun printer () {
