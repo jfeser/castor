@@ -32,6 +32,7 @@ let rec pred_to_sql = function
   | Unop (op, p) -> (
       let s = sprintf "(%s)" (pred_to_sql p) in
       match op with
+      | Not -> sprintf "not (%s)" s
       | Year -> sprintf "interval '%s year'" s
       | Month -> sprintf "interval '%s month'" s
       | Day -> sprintf "interval '%s day'" s )

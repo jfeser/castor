@@ -41,6 +41,7 @@ let keyword_tbl = Hashtbl.of_alist_exn (module String) [
 "year", YEAR;
 "date", DATEKW;
 "exists", EXISTS;
+"not", NOT;
   ]
 }
 

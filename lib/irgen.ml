@@ -50,6 +50,7 @@ struct
       | Unop (op, p) -> (
           let x = gen_pred p in
           match op with
+          | A.Not -> Infix.(not x)
           | A.Year -> Infix.(int 365 * x)
           | A.Month -> Infix.(int 30 * x)
           | A.Day -> x )

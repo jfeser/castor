@@ -16,7 +16,7 @@ type binop = Abslayout0.binop =
   | Mod
 [@@deriving compare, sexp]
 
-type unop = Abslayout0.unop = Day | Month | Year [@@deriving compare, sexp]
+type unop = Abslayout0.unop = Not | Day | Month | Year [@@deriving compare, sexp]
 
 type tuple = Abslayout0.tuple = Cross | Zip [@@deriving compare, sexp_of]
 

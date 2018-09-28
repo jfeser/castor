@@ -11,7 +11,7 @@ type name =
 type binop = Eq | Lt | Le | Gt | Ge | And | Or | Add | Sub | Mul | Div | Mod
 [@@deriving compare, sexp]
 
-type unop = Day | Month | Year [@@deriving compare, sexp]
+type unop = Not | Day | Month | Year [@@deriving compare, sexp]
 
 (* - Visitors doesn't use the special method override syntax that warning 7 checks
    for.

@@ -36,6 +36,7 @@ let eval_pred_shared eval ctx =
     | Unop (op, p) -> (
         let x = eval_pred ctx p in
         match op with
+        | Not -> Bool (not (to_bool x))
         | Year -> Int (365 * to_int x)
         | Month -> Int (30 * to_int x)
         | Day -> x )

@@ -16,7 +16,7 @@
 %token AS JOIN SELECT DEDUP FILTER COUNT GROUPBY MIN MAX AVG SUM LPAREN RPAREN
    LSBRAC RSBRAC COLON DOT COMMA EQ LT GT LE GE AND OR ADD SUB MUL DIV MOD EOF
    AEMPTY ASCALAR ATUPLE ALIST AHASHIDX AORDEREDIDX NULL ORDERBY IF THEN
-   ELSE MONTH DAY YEAR DATEKW EXISTS
+   ELSE MONTH DAY YEAR DATEKW EXISTS NOT
 
 %start <Abslayout0.t> ralgebra_eof
 %start <Abslayout0.name> name_eof
@@ -134,6 +134,7 @@ e0:
 | SUM; f = parens(expr) { A.Sum f }
 | COUNT; LPAREN; RPAREN; { A.Count }
 | EXISTS; r = parens(ralgebra); {A.Exists (r)}
+| NOT; x = e0 {A.Unop (Not, x)}
 | r = parens(ralgebra_subquery); {A.First (r)}
 | x = parens(expr) { x }
 

@@ -76,7 +76,11 @@ let op_to_str = function
   | Div -> "/"
   | Mod -> "%"
 
-let unop_to_str = function Day -> "day" | Month -> "month" | Year -> "year"
+let unop_to_str = function
+  | Not -> "not"
+  | Day -> "day"
+  | Month -> "month"
+  | Year -> "year"
 
 let pp_name fmt =
   let open Format in
@@ -267,16 +271,16 @@ let rec pred_to_schema =
   | Int _ | Date _ | Unop ((Year | Month | Day), _) | Count ->
       unnamed (IntT {nullable= false})
   | Fixed _ | Avg _ -> unnamed (FixedT {nullable= false})
-  | Bool _ | Exists _ -> unnamed (BoolT {nullable= false})
+  | Bool _ | Exists _
+   |Binop ((Eq | Lt | Le | Gt | Ge | And | Or), _, _)
+   |Unop (Not, _) ->
+      unnamed (BoolT {nullable= false})
   | String _ -> unnamed (StringT {nullable= false})
   | Null -> unnamed NullT
-  | Binop (op, p1, p2) -> (
-    match op with
-    | Eq | Lt | Le | Gt | Ge | And | Or -> unnamed (BoolT {nullable= false})
-    | Add | Sub | Mul | Div | Mod ->
-        let s1 = pred_to_schema p1 in
-        let s2 = pred_to_schema p2 in
-        unnamed (unify (Name.type_exn s1) (Name.type_exn s2)) )
+  | Binop ((Add | Sub | Mul | Div | Mod), p1, p2) ->
+      let s1 = pred_to_schema p1 in
+      let s2 = pred_to_schema p2 in
+      unnamed (unify (Name.type_exn s1) (Name.type_exn s2))
   | Sum p | Min p | Max p -> pred_to_schema p
   | If (_, p1, p2) ->
       let s1 = pred_to_schema p1 in
