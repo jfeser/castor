@@ -333,3 +333,13 @@ let%expect_test "mat-hidx" =
         (((relation (t)) (name sm_type) (type_ ((StringT (nullable true)))))
          ((relation (t)) (name sm_code) (type_ ((StringT (nullable true)))))))
        (start_pos ((pos_fname "") (pos_lnum 1) (pos_bol 0) (pos_cnum 0)))))) |}]
+
+let%expect_test "annotate-orders" =
+  let r =
+    "alist(select([r.f as k], orderby([r.f], dedup(r), asc)), select([r.f, r.g], \
+     filter(r.f = k, r)))" |> of_string_exn |> M.resolve
+  in
+  let r = M.annotate_schema r in
+  annotate_eq r ;
+  annotate_orders r ;
+  Meta.(find_exn r order) |> [%sexp_of: pred list] |> print_s

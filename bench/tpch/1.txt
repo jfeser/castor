@@ -27,7 +27,7 @@
 # 	l_linestatus;
 # :n -1
 
-# orderby([l_returnflag, l_linestatus],
+orderby([l_returnflag, l_linestatus],
   groupby([l_returnflag,
            l_linestatus,
            sum(l_quantity) as sum_qty,
@@ -40,4 +40,4 @@
            count() as count_order],
     [l_returnflag, l_linestatus],
     filter((l_shipdate) <= ((date("1998-12-01")) - (day(param0))), lineitem))
-    # ,asc)
+    ,asc)

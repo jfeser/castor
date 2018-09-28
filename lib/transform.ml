@@ -149,16 +149,91 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
 
   let tf_push_orderby =
     let open A in
+    let same_orders r1 r2 =
+      let r1 = M.annotate_schema r1 in
+      let r2 = M.annotate_schema r2 in
+      annotate_eq r1 ;
+      annotate_orders r1 ;
+      annotate_eq r2 ;
+      annotate_orders r2 ;
+      [%compare.equal: pred list] Meta.(find_exn r1 order) Meta.(find_exn r2 order)
+    in
+    let orderby_list key order r1 r2 =
+      let r1 = M.annotate_schema r1 in
+      let r2 = M.annotate_schema r2 in
+      annotate_eq r1 ;
+      annotate_eq r2 ;
+      let schema1 = Meta.(find_exn r1 schema) in
+      let open Core in
+      let eq_map =
+        Meta.(find_exn r2 eq)
+        |> List.fold_left
+             ~init:(Map.empty (module Name.Compare_no_type))
+             ~f:(fun m (n, n') ->
+               let s = Union_find.create n in
+               let s' = Union_find.create n' in
+               Union_find.union s s' ;
+               let m = Map.add_exn m ~key:n ~data:s in
+               let m = Map.add_exn m ~key:n' ~data:s' in
+               m )
+      in
+      let key_in_schema1 =
+        List.for_all key ~f:(function
+          | Name n ->
+              let s =
+                match Map.find eq_map n with
+                | Some s -> s
+                | None -> Union_find.create n
+              in
+              List.exists schema1 ~f:(fun n' ->
+                  let s' =
+                    match Map.find eq_map n' with
+                    | Some s -> s
+                    | None -> Union_find.create n'
+                  in
+                  Union_find.same_class s s' )
+          | _ -> false )
+      in
+      if key_in_schema1 then
+        let new_key =
+          List.map key ~f:(function
+            | Name n ->
+                let s =
+                  match Map.find eq_map n with
+                  | Some s -> s
+                  | None -> Union_find.create n
+                in
+                let n' =
+                  List.find_exn schema1 ~f:(fun n' ->
+                      let s' =
+                        match Map.find eq_map n' with
+                        | Some s -> s
+                        | None -> Union_find.create n'
+                      in
+                      Union_find.same_class s s' )
+                in
+                Name n'
+            | _ -> failwith "" )
+        in
+        [list (order_by new_key order r1) r2]
+      else []
+    in
     { name= "push-orderby"
     ; f=
-        (function
-        | {node= OrderBy {key; rel= {node= Select (ps, r); _}; order}; _} ->
-            [select ps (order_by key order r)]
-        | {node= OrderBy {key; rel= {node= Filter (ps, r); _}; order}; _} ->
-            [filter ps (order_by key order r)]
-        | {node= OrderBy {key; rel= {node= AList (r1, r2); _}; order}; _} ->
-            [list (order_by key order r1) (order_by key order r2)]
-        | _ -> []) }
+        (fun r ->
+          let rs =
+            match r with
+            | {node= OrderBy {key; rel= {node= Select (ps, r); _}; order}; _} ->
+                [select ps (order_by key order r)]
+            | {node= OrderBy {key; rel= {node= Filter (ps, r); _}; order}; _} ->
+                [filter ps (order_by key order r)]
+            | {node= OrderBy {key; rel= {node= AList (r1, r2); _}; order}; _} ->
+                (* If we order a lists keys then the keys will be ordered in the
+                   list. *)
+                orderby_list key order r1 r2
+            | _ -> []
+          in
+          List.filter rs ~f:(same_orders r) ) }
     |> run_everywhere
 
   let tf_hoist_filter =

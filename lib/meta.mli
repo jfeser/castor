@@ -26,6 +26,10 @@ val end_pos : lexpos key
 
 val needed : Set.M(Name.Compare_no_type).t key
 
+val eq : (Name.t * Name.t) list key
+
+val order : Abslayout0.pred list key
+
 val find : Abslayout0.t -> 'a key -> 'a option
 
 val find_exn : Abslayout0.t -> 'a key -> 'a
@@ -35,3 +39,13 @@ val set : Abslayout0.t -> 'a key -> 'a -> Abslayout0.t
 val set_m : Abslayout0.t -> 'a key -> 'a -> unit
 
 val update : Abslayout0.t -> 'a key -> f:('a option -> 'a) -> unit
+
+module Direct : sig
+  val find : t -> 'a key -> 'a option
+
+  val find_exn : t -> 'a key -> 'a
+
+  val set : t -> 'a key -> 'a -> t
+
+  val set_m : t -> 'a key -> 'a -> unit
+end

@@ -35,7 +35,7 @@ type pred = Abslayout0.pred =
   | Min of pred
   | Max of pred
   | If of pred * pred * pred
-[@@deriving sexp_of]
+[@@deriving compare, sexp_of]
 
 type hash_idx = Abslayout0.hash_idx =
   {hi_key_layout: Abslayout0.t option; lookup: pred list}
@@ -145,3 +145,7 @@ val annotate_needed : t -> unit
 val project : t -> t
 
 val pred_remove_as : pred -> pred
+
+val annotate_eq : t -> unit
+
+val annotate_orders : t -> unit

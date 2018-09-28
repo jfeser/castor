@@ -460,3 +460,142 @@ let pred_remove_as p =
     end
   in
   visitor#visit_pred () p
+
+let dedup_pairs =
+  List.dedup_and_sort
+    ~compare:[%compare: Name.Compare_no_type.t * Name.Compare_no_type.t]
+
+let pred_eqs p =
+  let visitor =
+    object (self : 'a)
+      inherit [_] reduce
+
+      method zero = []
+
+      method plus = ( @ )
+
+      method! visit_Binop () (op, p1, p2) =
+        match (op, p1, p2) with
+        | Eq, Name n1, Name n2 -> [(n1, n2)]
+        | And, p1, p2 -> self#plus (self#visit_pred () p1) (self#visit_pred () p2)
+        | _ -> self#zero
+    end
+  in
+  visitor#visit_pred () p |> dedup_pairs
+
+let annotate_eq r =
+  let visitor =
+    object
+      inherit [_] iter as super
+
+      method! visit_As m n r =
+        super#visit_As None n r ;
+        let m = Option.value_exn m in
+        let schema = Meta.(find_exn r schema) in
+        let eqs =
+          List.map schema ~f:(fun n' -> (n', Name.create ~relation:n n'.name))
+          |> dedup_pairs
+        in
+        Meta.Direct.set_m m Meta.eq eqs
+
+      method! visit_Filter m p r =
+        super#visit_Filter None p r ;
+        let m = Option.value_exn m in
+        let r_eqs = Meta.(find_exn r eq) in
+        let eqs = pred_eqs p @ r_eqs |> dedup_pairs in
+        Meta.Direct.set_m m Meta.eq eqs
+
+      method! visit_Select m ps r =
+        super#visit_Select None ps r ;
+        let m = Option.value_exn m in
+        let eqs =
+          Meta.(find_exn r eq)
+          |> List.filter_map ~f:(fun ((n, n') as eq) ->
+                 List.find_map ps
+                   ~f:
+                     (let open Name.Compare_no_type in
+                     function
+                     | Name n'' when n'' = n' || n'' = n -> Some eq
+                     | As_pred (Name n'', s) when n'' = n -> Some (Name.create s, n')
+                     | As_pred (Name n'', s) when n'' = n' -> Some (n, Name.create s)
+                     | _ -> None) )
+        in
+        Meta.Direct.set_m m Meta.eq eqs
+
+      method! visit_Join m p r1 r2 =
+        super#visit_Join None p r1 r2 ;
+        let m = Option.value_exn m in
+        let r1_eqs = Meta.(find_exn r1 eq) in
+        let r2_eqs = Meta.(find_exn r2 eq) in
+        let eqs = pred_eqs p @ r1_eqs @ r2_eqs |> dedup_pairs in
+        Meta.Direct.set_m m Meta.eq eqs
+
+      method! visit_AList m (r1, r2) =
+        super#visit_AList None (r1, r2) ;
+        let m = Option.value_exn m in
+        let r1_eqs = Meta.(find_exn r1 eq) in
+        let r2_eqs = Meta.(find_exn r2 eq) in
+        let eqs = r1_eqs @ r2_eqs |> dedup_pairs in
+        Meta.Direct.set_m m Meta.eq eqs
+
+      method! visit_t _ ({meta; _} as r) =
+        Meta.(set_m r eq []) ;
+        super#visit_t (Some meta) r
+    end
+  in
+  visitor#visit_t None r
+
+let annotate_orders r =
+  let rec annotate_orders r =
+    let order =
+      match r.node with
+      | Select (ps, r) ->
+          annotate_orders r
+          |> List.filter_map ~f:(fun p ->
+                 List.find_map ps ~f:(function
+                   | As_pred (p', n) when [%compare.equal: pred] p p' ->
+                       Some (Name (Name.create n))
+                   | p' when [%compare.equal: pred] p p' -> Some p'
+                   | _ -> None ) )
+      | Filter (_, r) | AHashIdx (_, r, _) -> annotate_orders r
+      | Join {r1; r2; _} ->
+          annotate_orders r1 |> ignore ;
+          annotate_orders r2 |> ignore ;
+          []
+      | GroupBy (_, _, r) | Dedup r ->
+          annotate_orders r |> ignore ;
+          []
+      | Scan _ | AEmpty -> []
+      | OrderBy {key; rel; _} ->
+          annotate_orders rel |> ignore ;
+          key
+      | AScalar e -> [e]
+      | AList (r, r') ->
+          let s' = Meta.(find_exn r' schema) in
+          let eq' = Meta.(find_exn r' eq) in
+          annotate_orders r' |> ignore ;
+          annotate_orders r
+          |> List.filter_map
+               ~f:
+                 (let open Name.Compare_no_type in
+                 function
+                 | Name n ->
+                     if List.mem ~equal:( = ) s' n then Some (Name n)
+                     else
+                       List.find_map eq' ~f:(fun (n', n'') ->
+                           if n = n' then Some (Name n'')
+                           else if n = n'' then Some (Name n')
+                           else None )
+                 | _ -> None)
+      | ATuple (rs, Cross) -> List.map ~f:annotate_orders rs |> List.concat
+      | ATuple (rs, Zip) ->
+          List.iter ~f:(fun r -> annotate_orders r |> ignore) rs ;
+          []
+      | AOrderedIdx (r, _, _) ->
+          Meta.(find_exn r schema) |> List.map ~f:(fun n -> Name n)
+      | As _ -> []
+    in
+    Meta.set_m r Meta.order order ;
+    order
+  in
+  annotate_orders r |> ignore
