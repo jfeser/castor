@@ -87,7 +87,16 @@ let pp_name fmt =
 let pp_kind fmt =
   Format.(function Cross -> fprintf fmt "cross" | Zip -> fprintf fmt "zip")
 
-let rec pp_pred fmt =
+let pp_order fmt =
+  let open Format in
+  function `Asc -> fprintf fmt "asc" | `Desc -> fprintf fmt "desc"
+
+let rec pp_key fmt = function
+  | [] -> failwith "Unexpected empty key."
+  | [p] -> pp_pred fmt p
+  | ps -> pp_list ~bracket:("(", ")") pp_pred fmt ps
+
+and pp_pred fmt =
   let open Format in
   function
   | As_pred (p, n) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp_pred p n
@@ -108,17 +117,10 @@ let rec pp_pred fmt =
   | Max n -> fprintf fmt "max(%a)" pp_pred n
   | If (p1, p2, p3) ->
       fprintf fmt "if %a then %a else %a" pp_pred p1 pp_pred p2 pp_pred p3
+  | First r -> fprintf fmt "(%a)" pp r
+  | Exists r -> fprintf fmt "exists(%a)" pp r
 
-let pp_key fmt = function
-  | [] -> failwith "Unexpected empty key."
-  | [p] -> pp_pred fmt p
-  | ps -> pp_list ~bracket:("(", ")") pp_pred fmt ps
-
-let pp_order fmt =
-  let open Format in
-  function `Asc -> fprintf fmt "asc" | `Desc -> fprintf fmt "desc"
-
-let rec pp fmt {node; _} =
+and pp fmt {node; _} =
   let open Caml.Format in
   match node with
   | Select (ps, r) ->
@@ -262,10 +264,10 @@ let rec pred_to_schema =
       let schema = pred_to_schema p in
       {schema with relation= None; name= n}
   | Name n -> n
-  | Int _ | Date _ | Unop ((Year | Month | Day), _) ->
+  | Int _ | Date _ | Unop ((Year | Month | Day), _) | Count ->
       unnamed (IntT {nullable= false})
-  | Fixed _ -> unnamed (FixedT {nullable= false})
-  | Bool _ -> unnamed (BoolT {nullable= false})
+  | Fixed _ | Avg _ -> unnamed (FixedT {nullable= false})
+  | Bool _ | Exists _ -> unnamed (BoolT {nullable= false})
   | String _ -> unnamed (StringT {nullable= false})
   | Null -> unnamed NullT
   | Binop (op, p1, p2) -> (
@@ -275,8 +277,6 @@ let rec pred_to_schema =
         let s1 = pred_to_schema p1 in
         let s2 = pred_to_schema p2 in
         unnamed (unify (Name.type_exn s1) (Name.type_exn s2)) )
-  | Count -> unnamed (IntT {nullable= false})
-  | Avg _ -> unnamed (FixedT {nullable= false})
   | Sum p | Min p | Max p -> pred_to_schema p
   | If (_, p1, p2) ->
       let s1 = pred_to_schema p1 in
@@ -285,6 +285,11 @@ let rec pred_to_schema =
         Error.create "Mismatched sides of if." (s1, s2) [%sexp_of: Name.t * Name.t]
         |> Error.raise ;
       s1
+  | First r -> (
+    match Meta.(find_exn r schema) with
+    | [n] -> n
+    | [] -> failwith "Unexpected empty schema."
+    | _ -> failwith "Too many fields." )
 
 let pred_to_name pred =
   let n = pred_to_schema pred in
@@ -351,7 +356,7 @@ let rec annotate_foreach r =
 let rec pred_kind = function
   | As_pred (x', _) -> pred_kind x'
   | Name _ | Int _ | Date _ | Unop _ | Fixed _ | Bool _ | String _ | Null
-   |Binop _ | If _ ->
+   |Binop _ | If _ | Exists _ | First _ ->
       `Scalar
   | Sum _ | Avg _ | Min _ | Max _ | Count -> `Agg
 

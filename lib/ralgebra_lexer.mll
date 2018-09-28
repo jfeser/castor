@@ -40,6 +40,7 @@ let keyword_tbl = Hashtbl.of_alist_exn (module String) [
 "day", DAY;
 "year", YEAR;
 "date", DATEKW;
+"exists", EXISTS;
   ]
 }
 

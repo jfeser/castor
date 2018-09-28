@@ -30,6 +30,8 @@ let eq = Univ_map.Key.create ~name:"eq" [%sexp_of: (Name.t * Name.t) list]
 
 let order = Univ_map.Key.create ~name:"order" [%sexp_of: pred list]
 
+let type_ = Univ_map.Key.create ~name:"type" [%sexp_of: Type.t]
+
 let needed : Set.M(Name.Compare_no_type).t key =
   Univ_map.Key.create ~name:"needed" [%sexp_of: Set.M(Name.Compare_no_type).t]
 

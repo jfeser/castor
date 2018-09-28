@@ -38,6 +38,7 @@ let run_test ?(params = []) layout_str =
     |> M.annotate_key_layouts
   in
   annotate_foreach layout ;
+  M.annotate_subquery_types layout ;
   I.irgen ~params ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter
 
 let run_test_db ?(params = []) layout_str =
@@ -65,6 +66,7 @@ let run_test_db ?(params = []) layout_str =
     |> M.annotate_key_layouts
   in
   annotate_foreach layout ;
+  M.annotate_subquery_types layout ;
   I.irgen ~params ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter
 
 let%expect_test "sum" =
@@ -935,6 +937,97 @@ select([lp.counter, lc.counter],
              tup0 = next(select_0);
              if (not done(select_0)) {
                  print(Tuple[Int[nonnull], Int[nonnull]], tup0);
+             } else {
+
+             }
+         }
+    }fun counter () {
+         c = 0;
+         init select_0();
+         loop (not done(select_0)) {
+             tup0 = next(select_0);
+             if (not done(select_0)) {
+                 c = c + 1;
+             } else {
+
+             }
+         }
+         return c;
+    } |}]
+
+let%expect_test "subquery-first" =
+  run_test ~params:example_params
+    {|
+    select([log.id], filter((select([min(l.counter)],
+ alist(log as l, ascalar(l.counter))))=log.id, alist(log, ascalar(log.id))))
+|};
+  [%expect {|
+    fun scalar_3 (start) {
+        yield (buf[start : 1]);
+    }fun list_2 () {
+         cstart = 0;
+         pcount = 5;
+         loop (0 < pcount) {
+             init scalar_3(cstart);
+             tup0 = next(scalar_3);
+             yield tup0;
+             cstart = cstart + 1;
+             pcount = pcount - 1;
+         }
+    }fun scalar_6 (log_id,
+         start) {
+         yield (buf[start : 1]);
+    }fun list_5 (log_id) {
+         cstart = 0;
+         pcount = 5;
+         loop (0 < pcount) {
+             init scalar_6(log_id, cstart);
+             tup0 = next(scalar_6);
+             yield tup0;
+             cstart = cstart + 1;
+             pcount = pcount - 1;
+         }
+    }fun select_4 (log_id) {
+         min0 = 4611686018427387903;
+         init list_5(log_id);
+         count3 = 5;
+         loop (0 < count3) {
+             tup2 = next(list_5);
+             tup1 = tup2;
+             min0 = tup1[0] < min0 ? tup1[0] : min0;
+             count3 = count3 - 1;
+         }
+         yield (min0);
+    }fun filter_1 () {
+         init list_2();
+         count1 = 5;
+         loop (0 < count1) {
+             tup0 = next(list_2);
+             init select_4(tup0[0]);
+             tup2 = next(select_4);
+             if (tup2[0] = tup0[0]) {
+                 yield tup0;
+             } else {
+
+             }
+             count1 = count1 - 1;
+         }
+    }fun select_0 () {
+         init filter_1();
+         loop (not done(filter_1)) {
+             tup0 = next(filter_1);
+             if (not done(filter_1)) {
+                 yield (tup0[0]);
+             } else {
+
+             }
+         }
+    }fun printer () {
+         init select_0();
+         loop (not done(select_0)) {
+             tup0 = next(select_0);
+             if (not done(select_0)) {
+                 print(Tuple[Int[nonnull]], tup0);
              } else {
 
              }

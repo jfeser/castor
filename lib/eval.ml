@@ -26,61 +26,70 @@ let to_int = function Value.Int x -> x | _ -> failwith "Not an int."
 
 let to_bool = function Value.Bool x -> x | _ -> failwith "Not a bool."
 
-let rec eval_pred ctx = function
-  | As_pred (p, _) -> eval_pred ctx p
-  | Null -> Value.Null
-  | Int x -> Int x
-  | Fixed x -> Fixed x
-  | Date x -> Int (Date.to_int x)
-  | Unop (op, p) -> (
-      let x = eval_pred ctx p in
-      match op with
-      | Year -> Int (365 * to_int x)
-      | Month -> Int (30 * to_int x)
-      | Day -> x )
-  | String x -> String x
-  | Bool x -> Bool x
-  | Name n -> lookup ctx n
-  | Binop (op, p1, p2) -> (
-      let v1 = eval_pred ctx p1 in
-      let v2 = eval_pred ctx p2 in
-      match (op, v1, v2) with
-      | Eq, Null, _ | Eq, _, Null -> Bool false
-      | Eq, Bool x1, Bool x2 -> Bool Bool.(x1 = x2)
-      | Eq, Int x1, Int x2 -> Bool Int.(x1 = x2)
-      | Eq, String x1, String x2 -> Bool String.(x1 = x2)
-      | Eq, Fixed x1, Fixed x2 -> Bool Fixed_point.(x1 = x2)
-      | Lt, Int x1, Int x2 -> Bool (x1 < x2)
-      | Le, Int x1, Int x2 -> Bool (x1 <= x2)
-      | Gt, Int x1, Int x2 -> Bool (x1 > x2)
-      | Ge, Int x1, Int x2 -> Bool (x1 >= x2)
-      | Add, Int x1, Int x2 -> Int (x1 + x2)
-      | Sub, Int x1, Int x2 -> Int (x1 - x2)
-      | Mul, Int x1, Int x2 -> Int (x1 * x2)
-      | Div, Int x1, Int x2 -> Int (x1 / x2)
-      | Mod, Int x1, Int x2 -> Int (x1 % x2)
-      | Lt, Fixed x1, Fixed x2 -> Bool Fixed_point.(x1 < x2)
-      | Le, Fixed x1, Fixed x2 -> Bool Fixed_point.(x1 <= x2)
-      | Gt, Fixed x1, Fixed x2 -> Bool Fixed_point.(x1 > x2)
-      | Ge, Fixed x1, Fixed x2 -> Bool Fixed_point.(x1 >= x2)
-      | Add, Fixed x1, Fixed x2 -> Fixed Fixed_point.(x1 + x2)
-      | Sub, Fixed x1, Fixed x2 -> Fixed Fixed_point.(x1 - x2)
-      | Mul, Fixed x1, Fixed x2 -> Fixed Fixed_point.(x1 * x2)
-      | And, Bool x1, Bool x2 -> Bool (x1 && x2)
-      | Or, Bool x1, Bool x2 -> Bool (x1 || x2)
-      | _ ->
-          Error.create "Unexpected argument types." (op, v1, v2)
-            [%sexp_of: binop * Value.t * Value.t]
-          |> Error.raise )
-  | If (p1, p2, p3) ->
-      let v1 = eval_pred ctx p1 |> to_bool in
-      if v1 then eval_pred ctx p2 else eval_pred ctx p3
-  | Count | Avg _ | Max _ | Min _ | Sum _ -> failwith "Unexpected aggregate."
+let eval_pred_shared eval ctx =
+  let rec eval_pred ctx = function
+    | As_pred (p, _) -> eval_pred ctx p
+    | Null -> Value.Null
+    | Int x -> Int x
+    | Fixed x -> Fixed x
+    | Date x -> Int (Date.to_int x)
+    | Unop (op, p) -> (
+        let x = eval_pred ctx p in
+        match op with
+        | Year -> Int (365 * to_int x)
+        | Month -> Int (30 * to_int x)
+        | Day -> x )
+    | String x -> String x
+    | Bool x -> Bool x
+    | Name n -> lookup ctx n
+    | Binop (op, p1, p2) -> (
+        let v1 = eval_pred ctx p1 in
+        let v2 = eval_pred ctx p2 in
+        match (op, v1, v2) with
+        | Eq, Null, _ | Eq, _, Null -> Bool false
+        | Eq, Bool x1, Bool x2 -> Bool Bool.(x1 = x2)
+        | Eq, Int x1, Int x2 -> Bool Int.(x1 = x2)
+        | Eq, String x1, String x2 -> Bool String.(x1 = x2)
+        | Eq, Fixed x1, Fixed x2 -> Bool Fixed_point.(x1 = x2)
+        | Lt, Int x1, Int x2 -> Bool (x1 < x2)
+        | Le, Int x1, Int x2 -> Bool (x1 <= x2)
+        | Gt, Int x1, Int x2 -> Bool (x1 > x2)
+        | Ge, Int x1, Int x2 -> Bool (x1 >= x2)
+        | Add, Int x1, Int x2 -> Int (x1 + x2)
+        | Sub, Int x1, Int x2 -> Int (x1 - x2)
+        | Mul, Int x1, Int x2 -> Int (x1 * x2)
+        | Div, Int x1, Int x2 -> Int (x1 / x2)
+        | Mod, Int x1, Int x2 -> Int (x1 % x2)
+        | Lt, Fixed x1, Fixed x2 -> Bool Fixed_point.(x1 < x2)
+        | Le, Fixed x1, Fixed x2 -> Bool Fixed_point.(x1 <= x2)
+        | Gt, Fixed x1, Fixed x2 -> Bool Fixed_point.(x1 > x2)
+        | Ge, Fixed x1, Fixed x2 -> Bool Fixed_point.(x1 >= x2)
+        | Add, Fixed x1, Fixed x2 -> Fixed Fixed_point.(x1 + x2)
+        | Sub, Fixed x1, Fixed x2 -> Fixed Fixed_point.(x1 - x2)
+        | Mul, Fixed x1, Fixed x2 -> Fixed Fixed_point.(x1 * x2)
+        | And, Bool x1, Bool x2 -> Bool (x1 && x2)
+        | Or, Bool x1, Bool x2 -> Bool (x1 || x2)
+        | _ ->
+            Error.create "Unexpected argument types." (op, v1, v2)
+              [%sexp_of: binop * Value.t * Value.t]
+            |> Error.raise )
+    | If (p1, p2, p3) ->
+        let v1 = eval_pred ctx p1 |> to_bool in
+        if v1 then eval_pred ctx p2 else eval_pred ctx p3
+    | Exists r -> Bool (eval ctx r |> Seq.is_empty |> not)
+    | First r -> (
+      match eval ctx r |> Seq.hd with
+      | Some tup -> (
+        match Map.to_alist tup with
+        | [(_, v)] -> v
+        | _ -> failwith "Expected a single valued tuple." )
+      | None -> failwith "Empty relation." )
+    | Count | Avg _ | Max _ | Min _ | Sum _ -> failwith "Unexpected aggregate."
+  in
+  eval_pred ctx
 
 module Make (Config : Config.S) : S = struct
   let load_relation = Relation.from_db Config.conn
-
-  let eval_pred = eval_pred
 
   let eval_relation r =
     let query = "select * from $0" in
@@ -127,7 +136,9 @@ module Make (Config : Config.S) : S = struct
                    |> Error.raise )
            |> Map.of_alist_exn (module Name.Compare_no_type) )
 
-  let eval ctx query =
+  let rec eval_pred ctx p = eval_pred_shared eval ctx p
+
+  and eval ctx query =
     let sql = Sql.ralgebra_to_sql (subst (Map.map ctx ~f:pred_of_value) query) in
     let schema = Meta.(find_exn query schema) in
     eval_with_schema schema sql |> Seq.map ~f:(Map.merge_right ctx)
@@ -170,8 +181,6 @@ end
 module Make_mock (Config : Config.S_mock) : S = struct
   open Config
 
-  let eval_pred = eval_pred
-
   let load_relation n =
     List.find_exn (Hashtbl.keys rels) ~f:(fun r -> String.(r.rname = n))
 
@@ -180,20 +189,20 @@ module Make_mock (Config : Config.S_mock) : S = struct
     |> Seq.map ~f:(fun t ->
            List.map t ~f:(fun (n, v) -> (Name.create ~relation:r.rname n, v)) )
 
-  let eval_join ctx p r1 r2 =
+  let eval_join eval_pred ctx p r1 r2 =
     Seq.concat_map r1 ~f:(fun t1 ->
         Seq.filter_map r2 ~f:(fun t2 ->
             let ctx = ctx |> Map.merge_right t1 |> Map.merge_right t2 in
             match eval_pred ctx p with
-            | Bool true -> Some (Map.merge_right t1 t2)
+            | Value.Bool true -> Some (Map.merge_right t1 t2)
             | Bool false -> None
             | _ -> failwith "Expected a boolean." ) )
 
-  let eval_filter ctx p seq =
+  let eval_filter eval_pred ctx p seq =
     Seq.filter seq ~f:(fun t ->
         let ctx = Map.merge_right ctx t in
         match eval_pred ctx p with
-        | Bool x -> x
+        | Value.Bool x -> x
         | _ -> failwith "Expected a boolean." )
 
   let eval_dedup seq =
@@ -206,7 +215,7 @@ module Make_mock (Config : Config.S_mock) : S = struct
     | Max _ -> `Int Int.min_value
     | _ -> failwith "Not an aggregate."
 
-  let agg_step ctx expr acc =
+  let agg_step eval_pred ctx expr acc =
     match (expr, acc) with
     | Count, `Int x -> `Int (x + 1)
     | Sum n, `Int x -> `Int (x + (eval_pred ctx n |> to_int))
@@ -217,7 +226,7 @@ module Make_mock (Config : Config.S_mock) : S = struct
 
   let agg_extract = function `Int x -> Value.Int x | `Avg (n, d) -> Int (n / d)
 
-  let eval_select ctx args seq =
+  let eval_select eval_pred ctx args seq =
     let result =
       match select_kind args with
       | `Scalar ->
@@ -227,7 +236,7 @@ module Make_mock (Config : Config.S_mock) : S = struct
       | `Agg ->
           Seq.fold seq ~init:(List.map args ~f:agg_init) ~f:(fun aggs t ->
               let ctx = Map.merge_right ctx t in
-              List.map2_exn args aggs ~f:(agg_step ctx) )
+              List.map2_exn args aggs ~f:(agg_step eval_pred ctx) )
           |> List.map ~f:agg_extract |> Seq.singleton
     in
     Seq.map result ~f:(fun rs ->
@@ -251,7 +260,7 @@ module Make_mock (Config : Config.S_mock) : S = struct
     include Comparable.Make (T)
   end
 
-  let eval_orderby ctx key order rel =
+  let eval_orderby eval_pred ctx key order rel =
     let map =
       Seq.fold
         ~init:(Map.empty (module Key))
@@ -268,18 +277,20 @@ module Make_mock (Config : Config.S_mock) : S = struct
     in
     Seq.concat_map kv ~f:(fun (_, v) -> Seq.of_list v)
 
-  let eval ctx r =
+  let rec eval_pred ctx p = eval_pred_shared eval ctx p
+
+  and eval ctx r =
     let rec eval {node; _} =
       match node with
       | Scan r ->
           eval_relation (load_relation r)
           |> Seq.map ~f:(Map.of_alist_exn (module Name.Compare_no_type))
-      | Filter (p, r) -> eval_filter ctx p (eval r)
-      | Join {pred= p; r1; r2} -> eval_join ctx p (eval r1) (eval r2)
+      | Filter (p, r) -> eval_filter eval_pred ctx p (eval r)
+      | Join {pred= p; r1; r2} -> eval_join eval_pred ctx p (eval r1) (eval r2)
       | Dedup r -> eval_dedup (eval r)
-      | Select (out, r) -> eval_select ctx out (eval r)
+      | Select (out, r) -> eval_select eval_pred ctx out (eval r)
       | As (n, r) -> eval_as n (eval r)
-      | OrderBy {key; order; rel} -> eval_orderby ctx key order (eval rel)
+      | OrderBy {key; order; rel} -> eval_orderby eval_pred ctx key order (eval rel)
       | r -> Error.create "Unsupported." r [%sexp_of: node] |> Error.raise
     in
     eval r |> Seq.map ~f:(Map.merge_right ctx)

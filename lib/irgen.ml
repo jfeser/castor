@@ -39,7 +39,7 @@ struct
 
   let add_func (f : func) = funcs := f :: !funcs
 
-  let gen_pred ~ctx pred b =
+  let gen_pred ~ctx ~scan pred b =
     let open Builder in
     let rec gen_pred = function
       | A.Null -> Null
@@ -80,6 +80,22 @@ struct
       | (A.Count | A.Min _ | A.Max _ | A.Sum _ | A.Avg _) as p ->
           Error.create "Not a scalar predicate." p [%sexp_of: A.pred] |> Error.raise
       | A.If (p1, p2, p3) -> Ternary (gen_pred p1, gen_pred p2, gen_pred p3)
+      | A.First callee_layout ->
+          let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
+          let callee_type = Meta.(find_exn callee_layout type_) in
+          let callee = scan callee_ctx callee_layout callee_type in
+          build_iter callee callee_args b ;
+          let tup = build_fresh_var "tup" callee.ret_type b in
+          build_step tup callee b ;
+          Infix.(index tup 0)
+      | A.Exists callee_layout ->
+          let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
+          let callee_type = Meta.(find_exn callee_layout type_) in
+          let callee = scan callee_ctx callee_layout callee_type in
+          build_iter callee callee_args b ;
+          let tup = build_fresh_var "tup" callee.ret_type b in
+          build_step tup callee b ;
+          Infix.(not (Done callee.name))
     in
     gen_pred pred
 
@@ -368,7 +384,7 @@ struct
     let hash_data_start = Header.make_position hdr "hash_data" start in
     let mapping_start = Header.make_position hdr "hash_map" start in
     let mapping_len = Header.make_access hdr "hash_map_len" start in
-    let lookup_expr = List.map lookup ~f:(fun p -> gen_pred ~ctx p b) in
+    let lookup_expr = List.map lookup ~f:(fun p -> gen_pred ~scan ~ctx p b) in
     (* Compute the index in the mapping table for this key. *)
     let hash_key =
       match lookup_expr with
@@ -486,8 +502,9 @@ struct
           build_step key key_iter b ; key
         in
         let n = Infix.(index_len / kp_len) in
-        build_bin_search key_index n (gen_pred ~ctx lookup_low b)
-          (gen_pred ~ctx lookup_high b)
+        build_bin_search key_index n
+          (gen_pred ~scan ~ctx lookup_low b)
+          (gen_pred ~scan ~ctx lookup_high b)
           (fun key idx b ->
             build_assign
               Infix.(Slice (index_start + (idx * kp_len) + key_len, 8))
@@ -539,7 +556,7 @@ struct
               let child_schema = Meta.(find_exn child_layout schema) in
               Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
             in
-            let cond = gen_pred ~ctx pred b in
+            let cond = gen_pred ~scan ~ctx pred b in
             build_if ~cond
               ~then_:(fun b -> build_yield tup b)
               ~else_:(fun _ -> ())
@@ -563,32 +580,32 @@ struct
           , build_fresh_defn "avg_dem" (const_int Type.PrimType.int_t 0) b )
     | p -> `Passthru p
 
-  let agg_step ctx b acc =
+  let agg_step scan ctx b acc =
     let open Builder in
     let one = const_int Type.PrimType.int_t 1 in
     match acc with
     | `Count x -> build_assign (build_add x one b) x b
-    | `Sum (f, x) -> build_assign (build_add x (gen_pred ~ctx f b) b) x b
+    | `Sum (f, x) -> build_assign (build_add x (gen_pred ~scan ~ctx f b) b) x b
     | `Min (f, x) ->
-        let v = gen_pred ~ctx f b in
+        let v = gen_pred ~scan ~ctx f b in
         build_assign (Ternary (build_lt v x b, v, x)) x b
     | `Max (f, x) ->
-        let v = gen_pred ~ctx f b in
+        let v = gen_pred ~scan ~ctx f b in
         build_assign (Ternary (build_lt v x b, x, v)) x b
     | `Avg (f, n, d) ->
-        let v = gen_pred ~ctx f b in
+        let v = gen_pred ~scan ~ctx f b in
         build_assign (build_add n v b) n b ;
         build_assign (build_add d one b) d b
     | `Passthru _ -> ()
 
-  let agg_extract ctx b =
+  let agg_extract scan ctx b =
     let open Builder in
     function
     | `Count x | `Sum (_, x) | `Min (_, x) | `Max (_, x) -> x
     | `Avg (_, n, d) -> build_div n d b
     | `Passthru p ->
         [%sexp_of: A.pred * [`Agg | `Scalar]] (p, A.pred_kind p) |> print_s ;
-        gen_pred ~ctx p b
+        gen_pred ~scan ~ctx p b
 
   let scan_select args =
     match args with
@@ -613,7 +630,7 @@ struct
                   let child_schema = Meta.(find_exn child_layout schema) in
                   Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
                 in
-                let output = List.map args ~f:(fun p -> gen_pred ~ctx p b) in
+                let output = List.map args ~f:(fun p -> gen_pred ~scan ~ctx p b) in
                 build_yield (Tuple output) b )
               b
         | `Agg ->
@@ -630,9 +647,10 @@ struct
             build_foreach ~count:(Type.count child_type) func callee_args
               (fun tup b ->
                 build_assign tup tuple b ;
-                List.iter agg_temps ~f:(agg_step ctx b) )
+                List.iter agg_temps ~f:(agg_step scan ctx b) )
               b ;
-            build_yield (Tuple (List.map ~f:(agg_extract ctx b) agg_temps)) b ) ;
+            build_yield (Tuple (List.map ~f:(agg_extract scan ctx b) agg_temps)) b
+        ) ;
         build_func b
     | _ -> failwith "Unexpected args."
 

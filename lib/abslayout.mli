@@ -18,11 +18,13 @@ type binop = Abslayout0.binop =
 
 type unop = Abslayout0.unop = Day | Month | Year [@@deriving compare, sexp]
 
+type tuple = Abslayout0.tuple = Cross | Zip [@@deriving compare, sexp_of]
+
 type pred = Abslayout0.pred =
   | Name of Name.t
   | Int of int
   | Fixed of Fixed_point.t
-  | Date of (Core.Date.t[@opaque])
+  | Date of Core.Date.t
   | Bool of bool
   | String of string
   | Null
@@ -35,22 +37,22 @@ type pred = Abslayout0.pred =
   | Min of pred
   | Max of pred
   | If of pred * pred * pred
+  | First of t
+  | Exists of t
 [@@deriving compare, sexp_of]
 
-type hash_idx = Abslayout0.hash_idx =
+and hash_idx = Abslayout0.hash_idx =
   {hi_key_layout: Abslayout0.t option; lookup: pred list}
 [@@deriving sexp_of]
 
-type ordered_idx = Abslayout0.ordered_idx =
+and ordered_idx = Abslayout0.ordered_idx =
   { oi_key_layout: Abslayout0.t option
   ; lookup_low: pred
   ; lookup_high: pred
   ; order: [`Asc | `Desc] }
 [@@deriving sexp_of]
 
-type tuple = Abslayout0.tuple = Cross | Zip [@@deriving sexp_of]
-
-type node = Abslayout0.node =
+and node = Abslayout0.node =
   | Select of pred list * t
   | Filter of pred * t
   | Join of {pred: pred; r1: t; r2: t}

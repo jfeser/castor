@@ -12,5 +12,7 @@ module type S = sig
 
   val annotate_key_layouts : t -> t
 
+  val annotate_subquery_types : t -> unit
+
   val resolve : ?params:Set.M(Name.Compare_no_type).t -> t -> t
 end

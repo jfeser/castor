@@ -16,7 +16,7 @@
 %token AS JOIN SELECT DEDUP FILTER COUNT GROUPBY MIN MAX AVG SUM LPAREN RPAREN
    LSBRAC RSBRAC COLON DOT COMMA EQ LT GT LE GE AND OR ADD SUB MUL DIV MOD EOF
    AEMPTY ASCALAR ATUPLE ALIST AHASHIDX AORDEREDIDX NULL ORDERBY IF THEN
-   ELSE MONTH DAY YEAR DATEKW
+   ELSE MONTH DAY YEAR DATEKW EXISTS
 
 %start <Abslayout0.t> ralgebra_eof
 %start <Abslayout0.name> name_eof
@@ -36,13 +36,17 @@ separated_nonunit_list(sep, X):
 
 parens(X):
 | LPAREN; x = X; RPAREN { x }
-| error { error "Expected parentheses." $startpos }
 
 key:
   | p = expr; { [p] }
   | LPAREN; ps = separated_nonunit_list(COMMA, expr); RPAREN { ps }
 
 ralgebra:
+  | r = ralgebra_subquery { r }
+  | name = ID { A.Scan name |> node $symbolstartpos $endpos }
+  | r = ralgebra; AS; n = ID; { A.As (n, r) |> node $symbolstartpos $endpos }
+
+ralgebra_subquery:
   | SELECT; LPAREN;
   x = bracket_list(expr); COMMA;
   r = ralgebra;
@@ -105,10 +109,6 @@ ralgebra:
                                    order = `Asc;
                                    oi_key_layout = None })) |> node $symbolstartpos $endpos }
 
-| name = ID { A.Scan name |> node $symbolstartpos $endpos }
-
-| r = ralgebra; AS; n = ID; { A.As (n, r) |> node $symbolstartpos $endpos }
-
 | error { error "Expected an operator or relation." $startpos }
 
 name:
@@ -133,6 +133,8 @@ e0:
 | AVG; f = parens(expr) { A.Avg f }
 | SUM; f = parens(expr) { A.Sum f }
 | COUNT; LPAREN; RPAREN; { A.Count }
+| EXISTS; r = parens(ralgebra); {A.Exists (r)}
+| r = parens(ralgebra_subquery); {A.First (r)}
 | x = parens(expr) { x }
 
 e1:

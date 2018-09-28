@@ -255,6 +255,22 @@ module Make (Eval : Eval.S) = struct
         m "The type is: %s" (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ) ;
     type_
 
+  let annotate_subquery_types =
+    let annotate_type r =
+      let type_ = to_type r in
+      Meta.(set_m r type_) type_
+    in
+    let visitor =
+      object
+        inherit [_] iter as super
+
+        method! visit_Exists () r = super#visit_Exists () r ; annotate_type r
+
+        method! visit_First () r = super#visit_First () r ; annotate_type r
+      end
+    in
+    visitor#visit_t ()
+
   (** Add a schema field to each metadata node. Variables must first be
      annotated with type information. *)
   let annotate_schema =
@@ -363,20 +379,29 @@ module Make (Eval : Eval.S) = struct
               |> Error.raise )
     in
     let empty_ctx = Set.empty (module Name.Compare_no_type) in
-    let resolve_pred ctx =
-      (object
-         inherit [_] map
-
-         method! visit_Name ctx n = Name (resolve_name ctx n)
-      end)
-        #visit_pred ctx
-    in
     let preds_to_names preds =
       List.map preds ~f:pred_to_schema
       |> List.filter ~f:(fun n -> String.(n.name <> ""))
       |> Set.of_list (module Name.Compare_no_type)
     in
-    let rec resolve outer_ctx {node; meta} =
+    let rec resolve_pred ctx =
+      let visitor =
+        object
+          inherit [_] map
+
+          method! visit_Name ctx n = Name (resolve_name ctx n)
+
+          method! visit_Exists ctx r =
+            let r', _ = resolve ctx r in
+            Exists r'
+
+          method! visit_First ctx r =
+            let r', _ = resolve ctx r in
+            First r'
+        end
+      in
+      visitor#visit_pred ctx
+    and resolve outer_ctx {node; meta} =
       let node', ctx' =
         match node with
         | Select (preds, r) ->

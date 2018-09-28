@@ -30,6 +30,8 @@ val eq : (Name.t * Name.t) list key
 
 val order : Abslayout0.pred list key
 
+val type_ : Type.t key
+
 val find : Abslayout0.t -> 'a key -> 'a option
 
 val find_exn : Abslayout0.t -> 'a key -> 'a

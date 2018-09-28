@@ -3,6 +3,22 @@ open Printf
 open Collections
 open Abslayout
 
+type query = {schema: Name.t list; sql: [`Subquery of string | `Scan of string]}
+
+let fresh = Fresh.create ()
+
+let to_subquery {sql; schema} =
+  let alias = Fresh.name fresh "t%d" in
+  match sql with
+  | `Subquery q ->
+      ( sprintf "(%s) as %s" q alias
+      , List.map schema ~f:(fun n -> {n with relation= Some alias}) )
+  | `Scan tbl -> (tbl, schema)
+
+let to_query = function
+  | `Scan tbl -> sprintf "select * from %s" tbl
+  | `Subquery q -> q
+
 let rec pred_to_sql = function
   | As_pred (p, n) -> sprintf "%s as %s" (pred_to_sql p) n
   | Name n -> sprintf "%s" (Name.to_sql n)
@@ -43,28 +59,20 @@ let rec pred_to_sql = function
   | If (p1, p2, p3) ->
       sprintf "case when %s then %s else %s end" (pred_to_sql p1) (pred_to_sql p2)
         (pred_to_sql p3)
+  | Exists r ->
+      let sql, _ = ralgebra_to_sql_helper r |> to_subquery in
+      sprintf "exists %s" sql
+  | First r ->
+      let sql, _ = ralgebra_to_sql_helper r |> to_subquery in
+      sql
 
-type query = {schema: Name.t list; sql: [`Subquery of string | `Scan of string]}
-
-let to_subquery fresh {sql; schema} =
-  let alias = Fresh.name fresh "t%d" in
-  match sql with
-  | `Subquery q ->
-      ( sprintf "(%s) as %s" q alias
-      , List.map schema ~f:(fun n -> {n with relation= Some alias}) )
-  | `Scan tbl -> (tbl, schema)
-
-let to_query = function
-  | `Scan tbl -> sprintf "select * from %s" tbl
-  | `Subquery q -> q
-
-let ralgebra_to_sql_helper ~fresh r =
+and ralgebra_to_sql_helper r =
   let rec f ({node; _} as r) =
     match node with
     | Scan tbl -> {sql= `Scan tbl; schema= Meta.(find_exn r schema)}
     | Select ([], _) -> failwith "No empty selects."
     | Select (fs, r) ->
-        let sql, schema = to_subquery fresh (f r) in
+        let sql, schema = to_subquery (f r) in
         let fields =
           let ctx =
             List.zip_exn Meta.(find_exn r schema) schema
@@ -80,7 +88,7 @@ let ralgebra_to_sql_helper ~fresh r =
         let new_query = sprintf "select %s from %s" fields_str sql in
         {sql= `Subquery new_query; schema= new_schema}
     | Filter (pred, r) ->
-        let sql, schema = to_subquery fresh (f r) in
+        let sql, schema = to_subquery (f r) in
         let pred =
           let ctx =
             List.zip_exn Meta.(find_exn r schema) schema
@@ -124,12 +132,12 @@ let ralgebra_to_sql_helper ~fresh r =
         in
         {sql= `Subquery new_query; schema= new_schema} )
     | Dedup r ->
-        let sql, schema = to_subquery fresh (f r) in
+        let sql, schema = to_subquery (f r) in
         let query = sprintf "select distinct * from %s" sql in
         {sql= `Subquery query; schema}
     | As (_, r) -> f r
     | OrderBy {key; order; rel= r} ->
-        let sql, schema = to_subquery fresh (f r) in
+        let sql, schema = to_subquery (f r) in
         let ctx =
           List.zip_exn Meta.(find_exn r schema) schema
           |> List.map ~f:(fun (n, n') -> (n, Name n'))
@@ -150,12 +158,10 @@ let ralgebra_to_sql_helper ~fresh r =
   in
   f r
 
-let ralgebra_to_sql r =
-  to_query (ralgebra_to_sql_helper ~fresh:(Fresh.create ()) r).sql
+let ralgebra_to_sql r = to_query (ralgebra_to_sql_helper r).sql
 
 let ralgebra_foreach q1 q2 =
-  let fresh = Fresh.create () in
-  let sql1, s1 = to_subquery fresh (ralgebra_to_sql_helper ~fresh q1) in
+  let sql1, s1 = to_subquery (ralgebra_to_sql_helper q1) in
   let q2 =
     let ctx =
       List.zip_exn s1 Meta.(find_exn q1 schema)
@@ -164,7 +170,7 @@ let ralgebra_foreach q1 q2 =
     in
     subst ctx q2
   in
-  let sql2, s2 = to_subquery fresh (ralgebra_to_sql_helper ~fresh q2) in
+  let sql2, s2 = to_subquery (ralgebra_to_sql_helper q2) in
   let q1_fields = List.map s1 ~f:Name.to_sql in
   let q2_fields = List.map s2 ~f:Name.to_sql in
   let fields_str = String.concat ~sep:", " (q1_fields @ q2_fields) in

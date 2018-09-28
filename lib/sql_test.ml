@@ -43,14 +43,14 @@ let%expect_test "filter" =
 let%expect_test "eqjoin" =
   let r = of_string_exn "Join(r.f = s.g, r as r, s as s)" |> M.annotate_schema in
   print_endline (ralgebra_to_sql r) ;
-  [%expect {| select * from r as t0, s as t1 where (t0."f") = (t1."g") |}]
+  [%expect {| select * from r as t2, s as t3 where (t2."f") = (t3."g") |}]
 
 let%expect_test "foreach-1" =
   let r1 = of_string_exn "select([r.f as k], r)" |> M.annotate_schema in
   let r2 = of_string_exn "select([r.g], filter(r.f = k, r))" |> M.annotate_schema in
   print_endline (ralgebra_foreach r1 r2) ;
   [%expect
-    {| select t1."k", t4."g" from (select r."f" as k from r) as t1, lateral (select t3."g" from (select * from r where (r."f") = ("k")) as t3) as t4 order by (t1."k") |}]
+    {| select t5."k", t8."g" from (select r."f" as k from r) as t5, lateral (select t7."g" from (select * from r where (r."f") = ("k")) as t7) as t8 order by (t5."k") |}]
 
 let%expect_test "example2" =
   let (module E), (module A) = make_module_db () in
@@ -73,4 +73,4 @@ let%expect_test "example2" =
   in
   print_endline (ralgebra_foreach q1 q2) ;
   [%expect
-    {| select t6."lp_k", t6."lc_k", t14."lp_counter", t14."lc_counter" from (select distinct * from (select t4."lp_id" as lp_k, t4."lc_id" as lc_k from (select * from (select "id" as lp_id from log_bench) as t2, (select "id" as lc_id from log_bench) as t3 where true) as t4) as t5) as t6, lateral (select t13."lp_counter", t13."lc_counter" from (select * from (select "counter" as lp_counter, "succ" as lp_succ from (select * from log_bench where (log_bench."id") = ("lp_k")) as t8) as t11, (select "counter" as lc_counter from (select * from log_bench where (log_bench."id") = ("lc_k")) as t10) as t12 where ((t11."lp_counter") < (t12."lc_counter")) and ((t12."lc_counter") < (t11."lp_succ"))) as t13) as t14 order by (t6."lp_k", t6."lc_k") |}]
+    {| select t15."lp_k", t15."lc_k", t23."lp_counter", t23."lc_counter" from (select distinct * from (select t13."lp_id" as lp_k, t13."lc_id" as lc_k from (select * from (select "id" as lp_id from log_bench) as t11, (select "id" as lc_id from log_bench) as t12 where true) as t13) as t14) as t15, lateral (select t22."lp_counter", t22."lc_counter" from (select * from (select "counter" as lp_counter, "succ" as lp_succ from (select * from log_bench where (log_bench."id") = ("lp_k")) as t17) as t20, (select "counter" as lc_counter from (select * from log_bench where (log_bench."id") = ("lc_k")) as t19) as t21 where ((t20."lp_counter") < (t21."lc_counter")) and ((t21."lc_counter") < (t20."lp_succ"))) as t22) as t23 order by (t15."lp_k", t15."lc_k") |}]

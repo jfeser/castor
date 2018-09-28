@@ -37,6 +37,8 @@ type pred =
   | Min of pred
   | Max of pred
   | If of pred * pred * pred
+  | First of t
+  | Exists of t
 
 and hash_idx = {hi_key_layout: t option; lookup: pred list}
 
