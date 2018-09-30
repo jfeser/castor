@@ -1,1 +1,1 @@
--p param0:int -db tpch bench/tpch/1.txt -t elim-groupby-filter,push-orderby,push-orderby,push-orderby,row-store:5
+-p param0:int -db tpch bench/tpch/1.txt -t elim-groupby-filter,row-store:4,project,push-filter:1,push-orderby
