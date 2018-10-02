@@ -1211,7 +1211,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
                  | IntT _ -> "load_int.c"
                  | BoolT _ -> "load_bool.c"
                  | StringT _ -> "load_string.c"
-                 | FixedT _ -> "load_fixed.c"
+                 | FixedT _ -> "load_float.c"
                  | VoidT | TupleT _ -> failwith "Unsupported parameter type."
                in
                (from_fn loader_fn) n.name i )
