@@ -287,7 +287,7 @@ module Make (Eval : Eval.S) = struct
                 Meta.(find_exn r schema)
             | Join {r1; r2; _} | AOrderedIdx (r1, r2, _) | AHashIdx (r1, r2, _) ->
                 Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema)
-            | GroupBy (_, _, _) -> failwith ""
+            | GroupBy (x, _, _) -> List.map x ~f:pred_to_schema
             | AEmpty -> []
             | AScalar e -> [pred_to_schema e]
             | ATuple (rs, _) ->
