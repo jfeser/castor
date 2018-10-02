@@ -22,6 +22,7 @@ let param =
         | "int" -> IntT {nullable= false}
         | "bool" -> BoolT {nullable= false}
         | "date" -> IntT {nullable= false}
+        | "float" -> FixedT {nullable= false}
         | _ -> failwith "Unexpected type name."
       in
       (k, v) )
