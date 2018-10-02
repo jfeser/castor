@@ -1,0 +1,67 @@
+# -- $ID$
+# -- TPC-H/TPC-R Suppliers Who Kept Orders Waiting Query (Q21)
+# -- Functional Query Definition
+# -- Approved February 1998
+# :x
+# :o
+# select
+# 	s_name,
+# 	count(*) as numwait
+# from
+# 	supplier,
+# 	lineitem l1,
+# 	orders,
+# 	nation
+# where
+# 	s_suppkey = l1.l_suppkey
+# 	and o_orderkey = l1.l_orderkey
+# 	and o_orderstatus = 'F'
+# 	and l1.l_receiptdate > l1.l_commitdate
+# 	and exists (
+# 		select
+# 			*
+# 		from
+# 			lineitem l2
+# 		where
+# 			l2.l_orderkey = l1.l_orderkey
+# 			and l2.l_suppkey <> l1.l_suppkey
+# 	)
+# 	and not exists (
+# 		select
+# 			*
+# 		from
+# 			lineitem l3
+# 		where
+# 			l3.l_orderkey = l1.l_orderkey
+# 			and l3.l_suppkey <> l1.l_suppkey
+# 			and l3.l_receiptdate > l3.l_commitdate
+# 	)
+# 	and s_nationkey = n_nationkey
+# 	and n_name = ':1'
+# group by
+# 	s_name
+# order by
+# 	numwait desc,
+# 	s_name;
+# :n 100
+
+orderby([numwait, s_name],
+  groupby([s_name, count() as numwait],
+    [s_name],
+    join((s_suppkey) = (l_suppkey),
+      join((o_orderkey) = (l_orderkey),
+        filter((o_orderstatus) = ("F"), orders),
+        filter(((l_receiptdate) > (l_commitdate)) && ((exists(filter(
+                                                                ((l_orderkey) = (l1_orderkey)) && ((l_suppkey) = (l1_suppkey)),
+                                                                lineitem))) && (not(exists(filter(
+                                                                    ((l_orderkey) = (l1_orderkey)) && (((l_suppkey) = (l1_suppkey)) && ((l_receiptdate) > (l1_commitdate))),
+                                                                    lineitem))))),
+          select([l_orderkey as l1_orderkey,
+                  l_suppkey as l1_suppkey,
+                  l_receiptdate as l1_receiptdate,
+                  l_commitdate as l1_commitdate],
+            lineitem))),
+      join((s_nationkey) = (n_nationkey),
+        filter((n_name) = (param1), nation),
+        supplier))),
+  desc)
