@@ -236,24 +236,43 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           List.filter rs ~f:(same_orders r) ) }
     |> run_everywhere
 
+  (** Check that a predicate is applied to a schema that has the right fields. *)
+  let predicate_is_valid p s =
+    let visitor =
+      object
+        inherit [_] Abslayout0.reduce
+
+        method zero = true
+
+        method plus = ( && )
+
+        method! visit_Name () n =
+          Option.is_none n.relation
+          || List.mem s n ~equal:[%compare.equal: Name.Compare_no_type.t]
+      end
+    in
+    visitor#visit_pred () p
+
   let tf_hoist_filter =
     let open A in
     { name= "hoist-filter"
     ; f=
-        (function
-        | {node= OrderBy {key; rel= {node= Filter (p, r); _}; order}; _} ->
-            [filter p (order_by key order r)]
-        | {node= GroupBy (ps, key, {node= Filter (p, r); _}); _} ->
-            [filter p (group_by ps key r)]
-        | {node= Filter (p, {node= Filter (p', r); _}); _} ->
-            [filter p' (filter p r)]
-        | {node= Select (ps, {node= Filter (p, r); _}); _} ->
-            [filter p (select ps r)]
-        | {node= Join {pred; r1= {node= Filter (p, r); _}; r2}; _} ->
-            [filter p (join pred r r2)]
-        | {node= Join {pred; r1; r2= {node= Filter (p, r); _}}; _} ->
-            [filter p (join pred r1 r)]
-        | _ -> []) }
+        (fun r ->
+          let ret =
+            match r.node with
+            | OrderBy {key; rel= {node= Filter (p, r); _}; order} ->
+                [(p, order_by key order r)]
+            | GroupBy (ps, key, {node= Filter (p, r); _}) -> [(p, group_by ps key r)]
+            | Filter (p, {node= Filter (p', r); _}) -> [(p', filter p r)]
+            | Select (ps, {node= Filter (p, r); _}) -> [(p, select ps r)]
+            | Join {pred; r1= {node= Filter (p, r); _}; r2} -> [(p, join pred r r2)]
+            | Join {pred; r1; r2= {node= Filter (p, r); _}} -> [(p, join pred r1 r)]
+            | _ -> []
+          in
+          List.filter_map ret ~f:(fun (p, r) ->
+              let r = M.annotate_schema r in
+              let schema = Meta.(find_exn r schema) in
+              if predicate_is_valid p schema then Some (filter p r) else None ) ) }
     |> run_everywhere
 
   let tf_push_filter =
@@ -264,6 +283,16 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | {node= Filter (p, {node= Filter (p', r); _}); _} ->
             [filter p' (filter p r)]
         | {node= Filter (p, {node= AList (r, r'); _}); _} -> [list (filter p r) r']
+        | _ -> []) }
+    |> run_everywhere
+
+  let tf_merge_filter =
+    let open A in
+    { name= "merge-filter"
+    ; f=
+        (function
+        | {node= Filter (p, {node= Filter (p', r); _}); _} ->
+            [filter (Binop (And, p, p')) r]
         | _ -> []) }
     |> run_everywhere
 
@@ -281,6 +310,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     ; tf_push_orderby
     ; tf_hoist_filter
     ; tf_push_filter
+    ; tf_merge_filter
     ; tf_row_store
     ; tf_project ]
 
