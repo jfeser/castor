@@ -65,13 +65,20 @@ let to_string {value; scale} =
     let prefix_digits = String.length vstr - pow10 scale in
     if Int.(prefix_digits > 0) then String.prefix vstr prefix_digits else "0"
   in
-  prefix ^ "." ^ String.suffix vstr (pow10 scale)
+  let suffix =
+    let suffix_digits = pow10 scale in
+    if Int.(suffix_digits > 0) then String.suffix vstr suffix_digits else "0"
+  in
+  prefix ^ "." ^ suffix
 
 let pp fmt x = Format.fprintf fmt "%s" (to_string x)
 
 let%expect_test "to-string" =
   to_string {value= 8723467; scale= 100} |> print_endline ;
   [%expect {| 87234.67 |}]
+
+let%expect_test "to-string" = to_string {value= 7; scale= 1} |> print_endline;
+  [%expect {| 7.0 |}]
 
 let%expect_test "convert" =
   let x1 = {value= 123; scale= 100} in
