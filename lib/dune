@@ -1,6 +1,6 @@
 (rule
  (targets config.ml)
- (deps    ../config)
+ (deps    ../config.ml)
  (action  (copy %{deps} %{targets})))
 
 (menhir

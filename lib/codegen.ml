@@ -1176,7 +1176,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     Unix.open_process_in cmd |> In_channel.input_all
 
   let from_fn fn n i =
-    let template = Project_config.project_root ^ "/etc/templates/" ^ fn in
+    let template = Project_config.project_root ^ "/etc/" ^ fn in
     let func =
       c_template template [("PARAM_NAME", n); ("PARAM_IDX", Int.to_string i)]
     in
@@ -1222,7 +1222,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       let header_str = sprintf "#include \"%s\"" header_fn in
       let funcs_str = String.concat (header_str :: funcs) ~sep:"\n" in
       let calls_str = String.concat calls ~sep:"\n" in
-      let perf_template = Project_config.project_root ^ "/etc/templates/perf.c" in
+      let perf_template = Project_config.project_root ^ "/etc/perf.c" in
       let perf_c =
         let open In_channel in
         with_file perf_template ~f:(fun ch ->

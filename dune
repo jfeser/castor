@@ -1,8 +1,14 @@
+(executable
+ (name discover)
+ (libraries core stdio)
+ (preprocess (pps ppx_let))
+ (modules discover))
+
 (rule
- (mode fallback)
- (targets config)
- (deps    config.defaults)
- (action  (copy %{deps} %{targets})))
+ (deps (file discover.exe))
+ (targets config.ml)
+ (action (with-stdout-to config.ml
+          (run ./discover.exe %{project_root} %{workspace_root}))))
 
 (ignored_subdirs (bench))
 

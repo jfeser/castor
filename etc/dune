@@ -1,0 +1,3 @@
+(install
+  (section etc)
+  (files load_bool.c load_float.c load_int.c load_string.c perf.c shared.h))
