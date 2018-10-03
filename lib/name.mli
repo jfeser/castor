@@ -30,6 +30,8 @@ val to_sql : t -> string
 
 val to_var : t -> string
 
+val pp : Formatter.t -> t -> unit
+
 val of_string_exn : string -> t
 
 val of_field : ?rel:string -> Db.Field.t -> t

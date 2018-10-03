@@ -62,6 +62,12 @@ let to_sql {relation; name; _} =
   | Some r -> sprintf "%s.\"%s\"" r name
   | None -> sprintf "\"%s\"" name
 
+let pp fmt =
+  let open Caml.Format in
+  function
+  | {relation= Some r; name; _} -> fprintf fmt "%s.%s" r name
+  | {relation= None; name; _} -> fprintf fmt "%s" name
+
 let of_lexbuf_exn lexbuf =
   try Ralgebra_parser.name_eof Ralgebra_lexer.token lexbuf
   with Parser_utils.ParseError (msg, line, col) as e ->

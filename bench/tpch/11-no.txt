@@ -33,7 +33,7 @@
 # 	value desc;
 # :n -1
 
-  filter((value) > ((select([(sum((ps_supplycost) * (ps_availqty))) * (param2)],
+  filter((value) > ((select([((sum((ps_supplycost) * (ps_availqty))) * (param2)) as v],
                        join((ps_suppkey) = (s_suppkey),
                          join((s_nationkey) = (n_nationkey),
                            supplier,

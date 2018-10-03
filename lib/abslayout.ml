@@ -113,7 +113,7 @@ and pp_pred fmt =
   | String x -> fprintf fmt "%S" x
   | Name n -> pp_name fmt n
   | Binop (op, p1, p2) ->
-      fprintf fmt "@[<h>(%a)@ %s@ (%a)@]" pp_pred p1 (op_to_str op) pp_pred p2
+      fprintf fmt "@[<hov>(%a@ %s@ %a)@]" pp_pred p1 (op_to_str op) pp_pred p2
   | Count -> fprintf fmt "count()"
   | Sum n -> fprintf fmt "sum(%a)" pp_pred n
   | Avg n -> fprintf fmt "avg(%a)" pp_pred n
@@ -122,7 +122,7 @@ and pp_pred fmt =
   | If (p1, p2, p3) ->
       fprintf fmt "if %a then %a else %a" pp_pred p1 pp_pred p2 pp_pred p3
   | First r -> fprintf fmt "(%a)" pp r
-  | Exists r -> fprintf fmt "exists(%a)" pp r
+  | Exists r -> fprintf fmt "@[<hv 2>exists(%a)@]" pp r
 
 and pp fmt {node; _} =
   let open Caml.Format in
@@ -367,30 +367,100 @@ let rec pred_kind = function
 let select_kind l =
   if List.exists l ~f:(fun p -> Poly.(pred_kind p = `Agg)) then `Agg else `Scalar
 
-let rec is_serializeable {node; _} =
-  match node with
-  | AEmpty | AScalar _ -> true
-  | Join _ | GroupBy (_, _, _) | OrderBy _ | Dedup _ | Scan _ -> false
-  | Select (_, r)
-   |As (_, r)
-   |AHashIdx (_, r, _)
-   |AOrderedIdx (_, r, _)
-   |AList (_, r)
-   |Filter (_, r) ->
-      is_serializeable r
-  | ATuple (rs, _) -> List.for_all rs ~f:is_serializeable
+let is_serializeable r =
+  let visitor =
+    object (self : 'a)
+      inherit [_] reduce
+
+      method zero = true
+
+      method plus = ( && )
+
+      method! visit_AEmpty _ = true
+
+      method! visit_AScalar _ _ = true
+
+      method! visit_Filter ns p r =
+        let sq_visitor =
+          object
+            inherit [_] reduce
+
+            method zero = true
+
+            method plus = ( && )
+
+            method! visit_Exists _ r = self#visit_t ns r
+
+            method! visit_First _ r = self#visit_t ns r
+          end
+        in
+        List.fold_left ~init:self#zero ~f:self#plus
+          [ Set.is_empty (Set.inter (pred_names p) ns)
+          ; self#visit_t ns r
+          ; sq_visitor#visit_pred ns p ]
+
+      method! visit_Select ns ps r =
+        self#plus
+          (List.for_all ps ~f:(fun p -> Set.is_empty (Set.inter (pred_names p) ns)))
+          (self#visit_t ns r)
+
+      method! visit_Join _ _ _ _ = false
+
+      method! visit_GroupBy _ _ _ _ = false
+
+      method! visit_OrderBy _ _ _ _ = false
+
+      method! visit_Dedup _ _ = false
+
+      method! visit_Scan _ _ = false
+
+      method! visit_As ns _ r = self#visit_t ns r
+
+      method visit_Collection ns r1 r2 =
+        let ns =
+          Set.union ns
+            (Meta.(find_exn r1 schema) |> Set.of_list (module Name.Compare_no_type))
+        in
+        self#visit_t ns r2
+
+      method! visit_AOrderedIdx ns (r1, r2, _) = self#visit_Collection ns r1 r2
+
+      method! visit_AHashIdx ns (r1, r2, _) = self#visit_Collection ns r1 r2
+
+      method! visit_AList ns (r1, r2) = self#visit_Collection ns r1 r2
+
+      method! visit_ATuple ns (rs, _) = List.for_all ~f:(self#visit_t ns) rs
+    end
+  in
+  visitor#visit_t (Set.empty (module Name.Compare_no_type)) r
 
 let annotate_needed r =
   let of_list = Set.of_list (module Name.Compare_no_type) in
   let union_list = Set.union_list (module Name.Compare_no_type) in
-  let rec needed ctx r =
+  let rec pred_needed ctx p =
+    let visitor =
+      object
+        inherit [_] iter
+
+        method! visit_Exists () r = needed ctx r
+
+        method! visit_First () r =
+          match Meta.(find_exn r schema) with
+          | n :: _ -> needed (Set.add ctx n) r
+          | [] -> failwith "Unexpected empty schema."
+      end
+    in
+    visitor#visit_pred () p
+  and needed ctx r =
     Meta.(set_m r needed ctx) ;
     match r.node with
     | Scan _ | AScalar _ | AEmpty -> ()
     | Select (ps, r') ->
+        List.iter ps ~f:(pred_needed ctx) ;
         let ctx' = List.map ps ~f:pred_names |> union_list in
         needed ctx' r'
     | Filter (p, r') ->
+        pred_needed ctx p ;
         let ctx' = Set.union (pred_names p) ctx in
         needed ctx' r'
     | Dedup r' -> needed ctx r'

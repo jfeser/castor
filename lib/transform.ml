@@ -18,8 +18,25 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
 
   let fresh = Fresh.create ()
 
-  let run_everywhere {name; f= f_inner} =
-    let rec f r =
+  let run_everywhere ?(stage = `Both) {name; f= f_inner} =
+    let cstage ls = match stage with `Both | `Compile -> ls | `Run -> [] in
+    let rstage ls = match stage with `Both | `Run -> ls | `Compile -> [] in
+    let rec p = function
+      | A.Exists r -> List.map ~f:(fun r -> A.Exists r) (f r)
+      | A.First r -> List.map ~f:(fun r -> A.First r) (f r)
+      | ( A.Name _ | A.Int _ | A.Fixed _ | A.Date _ | A.Bool _ | A.String _ | A.Null
+        | A.Count | A.Sum _ | A.Avg _ | A.Min _ | A.Max _ ) as pred ->
+          [pred]
+      | A.Binop (op, r1, r2) ->
+          List.map (p r1) ~f:(fun r1' -> A.Binop (op, r1', r2))
+          @ List.map (p r2) ~f:(fun r2' -> A.Binop (op, r1, r2'))
+      | A.If (r1, r2, r3) ->
+          List.map (p r1) ~f:(fun r1' -> A.If (r1', r2, r3))
+          @ List.map (p r2) ~f:(fun r2' -> A.If (r1, r2', r3))
+          @ List.map (p r3) ~f:(fun r3' -> A.If (r1, r2, r3'))
+      | A.Unop (op, r) -> List.map (p r) ~f:(fun r' -> A.Unop (op, r'))
+      | A.As_pred (r, n) -> List.map (p r) ~f:(fun r' -> A.As_pred (r', n))
+    and f r =
       let rs = f_inner r in
       let rs' =
         match r.node with
@@ -28,20 +45,22 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | As (n, r) -> List.map ~f:(A.as_ n) (f r)
         | OrderBy {key; order; rel} -> List.map (f rel) ~f:(A.order_by key order)
         | AList (r1, r2) ->
-            List.map (f r1) ~f:(fun r1 -> A.list r1 r2)
-            @ List.map (f r2) ~f:(fun r2 -> A.list r1 r2)
+            cstage (List.map (f r1) ~f:(fun r1 -> A.list r1 r2))
+            @ rstage (List.map (f r2) ~f:(fun r2 -> A.list r1 r2))
         | Select (fs, r') -> List.map (f r') ~f:(A.select fs)
-        | Filter (ps, r') -> List.map (f r') ~f:(A.filter ps)
+        | Filter (ps, r') ->
+            List.map (p ps) ~f:(fun ps' -> A.filter ps' r')
+            @ List.map (f r') ~f:(A.filter ps)
         | Join {r1; r2; pred} ->
             List.map (f r1) ~f:(fun r1 -> A.join pred r1 r2)
             @ List.map (f r2) ~f:(fun r2 -> A.join pred r1 r2)
         | GroupBy (x, y, r') -> List.map (f r') ~f:(A.group_by x y)
         | AHashIdx (r1, r2, m) ->
-            List.map (f r1) ~f:(fun r1 -> A.hash_idx r1 r2 m)
-            @ List.map (f r2) ~f:(fun r2 -> A.hash_idx r1 r2 m)
+            cstage (List.map (f r1) ~f:(fun r1 -> A.hash_idx r1 r2 m))
+            @ rstage (List.map (f r2) ~f:(fun r2 -> A.hash_idx r1 r2 m))
         | AOrderedIdx (r1, r2, m) ->
-            List.map (f r1) ~f:(fun r1 -> A.ordered_idx r1 r2 m)
-            @ List.map (f r2) ~f:(fun r2 -> A.ordered_idx r1 r2 m)
+            cstage (List.map (f r1) ~f:(fun r1 -> A.ordered_idx r1 r2 m))
+            @ rstage (List.map (f r2) ~f:(fun r2 -> A.ordered_idx r1 r2 m))
         | ATuple (rs, m) ->
             List.mapi rs ~f:(fun i r ->
                 List.map (f r) ~f:(fun r' ->
@@ -53,7 +72,11 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     {name; f}
 
   let run_unchecked t r =
-    let rs = t.f r in
+    let rs =
+      t.f r
+      |> List.dedup_and_sort ~compare:[%compare: Abslayout.t]
+      |> List.filter ~f:(fun r' -> not ([%compare.equal: Abslayout.t] r r'))
+    in
     let len = List.length rs in
     if len > 0 then
       Logs.info (fun m -> m "%d new candidates from running %s." len t.name) ;
@@ -101,7 +124,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
             let scalars = List.map s ~f:(fun n -> scalar (Name n)) in
             [list r (tuple scalars Cross)]
           else [] ) }
-    |> run_everywhere
+    |> run_everywhere ~stage:`Both
 
   let tf_elim_groupby =
     let open A in
@@ -147,77 +170,80 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | _ -> []) }
     |> run_everywhere
 
-  let tf_push_orderby =
+  let same_orders r1 r2 =
     let open A in
-    let same_orders r1 r2 =
-      let r1 = M.annotate_schema r1 in
-      let r2 = M.annotate_schema r2 in
-      annotate_eq r1 ;
-      annotate_orders r1 ;
-      annotate_eq r2 ;
-      annotate_orders r2 ;
-      [%compare.equal: pred list] Meta.(find_exn r1 order) Meta.(find_exn r2 order)
+    let r1 = M.annotate_schema r1 in
+    let r2 = M.annotate_schema r2 in
+    annotate_eq r1 ;
+    annotate_orders r1 ;
+    annotate_eq r2 ;
+    annotate_orders r2 ;
+    [%compare.equal: pred list] Meta.(find_exn r1 order) Meta.(find_exn r2 order)
+
+  let orderby_list key order r1 r2 =
+    let open A in
+    let r1 = M.annotate_schema r1 in
+    let r2 = M.annotate_schema r2 in
+    annotate_eq r1 ;
+    annotate_eq r2 ;
+    let schema1 = Meta.(find_exn r1 schema) in
+    let open Core in
+    let eqs = Meta.(find_exn r2 eq) in
+    let names =
+      List.concat_map eqs ~f:(fun (n, n') -> [n; n'])
+      @ List.filter_map ~f:pred_to_name key
+      @ schema1
     in
-    let orderby_list key order r1 r2 =
-      let r1 = M.annotate_schema r1 in
-      let r2 = M.annotate_schema r2 in
-      annotate_eq r1 ;
-      annotate_eq r2 ;
-      let schema1 = Meta.(find_exn r1 schema) in
-      let open Core in
-      let eq_map =
-        Meta.(find_exn r2 eq)
-        |> List.fold_left
-             ~init:(Map.empty (module Name.Compare_no_type))
-             ~f:(fun m (n, n') ->
-               let s = Union_find.create n in
-               let s' = Union_find.create n' in
-               Union_find.union s s' ;
-               let m = Map.add_exn m ~key:n ~data:s in
-               let m = Map.add_exn m ~key:n' ~data:s' in
-               m )
-      in
-      let key_in_schema1 =
-        List.for_all key ~f:(function
-          | Name n ->
-              let s =
-                match Map.find eq_map n with
-                | Some s -> s
-                | None -> Union_find.create n
-              in
-              List.exists schema1 ~f:(fun n' ->
-                  let s' =
-                    match Map.find eq_map n' with
-                    | Some s -> s
-                    | None -> Union_find.create n'
-                  in
-                  Union_find.same_class s s' )
-          | _ -> false )
-      in
-      if key_in_schema1 then
-        let new_key =
-          List.map key ~f:(function
-            | Name n ->
-                let s =
-                  match Map.find eq_map n with
-                  | Some s -> s
-                  | None -> Union_find.create n
-                in
+    (* Create map from names to sets of equal names. *)
+    let eq_map =
+      names
+      |> List.dedup_and_sort ~compare:[%compare: Name.Compare_no_type.t]
+      |> List.map ~f:(fun n -> (n, Union_find.create n))
+      |> Hashtbl.of_alist_exn (module Name.Compare_no_type)
+    in
+    (* Add known equalities. *)
+    List.iter eqs ~f:(fun (n, n') ->
+        let s = Hashtbl.find_exn eq_map n in
+        let s' = Hashtbl.find_exn eq_map n' in
+        Union_find.union s s' ) ;
+    let exception No_key in
+    try
+      let new_key =
+        List.map key ~f:(fun p ->
+            match pred_to_name p with
+            | Some n -> (
+                let s = Hashtbl.find_exn eq_map n in
+                (* Find an equivalent name in schema 1. *)
                 let n' =
-                  List.find_exn schema1 ~f:(fun n' ->
-                      let s' =
-                        match Map.find eq_map n' with
-                        | Some s -> s
-                        | None -> Union_find.create n'
-                      in
+                  List.find schema1 ~f:(fun n' ->
+                      let s' = Hashtbl.find_exn eq_map n' in
                       Union_find.same_class s s' )
                 in
-                Name n'
-            | _ -> failwith "" )
+                match n' with Some n' -> Name n' | None -> raise No_key )
+            | None -> raise No_key )
+      in
+      [list (order_by new_key order r1) r2]
+    with No_key -> []
+
+  let orderby_cross_tuple key order rs =
+    let open A in
+    let rs = List.map rs ~f:M.annotate_schema in
+    match rs with
+    | r :: rs ->
+        let schema = Meta.(find_exn r schema) in
+        let sschema = Set.of_list (module Name.Compare_no_type) schema in
+        let skey =
+          Set.of_list
+            (module Name.Compare_no_type)
+            (List.filter_map ~f:pred_to_name key)
         in
-        [list (order_by new_key order r1) r2]
-      else []
-    in
+        if Set.is_subset skey ~of_:sschema then
+          [tuple (order_by key order r :: rs) Cross]
+        else []
+    | _ -> []
+
+  let tf_push_orderby =
+    let open A in
     { name= "push-orderby"
     ; f=
         (fun r ->
@@ -231,6 +257,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
                 (* If we order a lists keys then the keys will be ordered in the
                    list. *)
                 orderby_list key order r1 r2
+            | {node= OrderBy {key; rel= {node= ATuple (rs, Cross); _}; order}; _} ->
+                orderby_cross_tuple key order rs
             | _ -> []
           in
           List.filter rs ~f:(same_orders r) ) }
@@ -246,9 +274,23 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
 
         method plus = ( && )
 
+        method! visit_Exists () _ =
+          (* TODO: Not correct. Account for parameters. *)
+          true
+
+        method! visit_First () _ =
+          (* TODO: Not correct. Account for parameters. *)
+          true
+
         method! visit_Name () n =
-          Option.is_none n.relation
-          || List.mem s n ~equal:[%compare.equal: Name.Compare_no_type.t]
+          let is_param = Option.is_none n.relation in
+          let in_schema =
+            List.mem s n ~equal:[%compare.equal: Name.Compare_no_type.t]
+          in
+          let is_valid = is_param || in_schema in
+          if not is_valid then
+            Logs.debug (fun m -> m "Predicate not valid. %a missing." Name.pp n) ;
+          is_valid
       end
     in
     visitor#visit_pred () p
@@ -272,7 +314,21 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           List.filter_map ret ~f:(fun (p, r) ->
               let r = M.annotate_schema r in
               let schema = Meta.(find_exn r schema) in
-              if predicate_is_valid p schema then Some (filter p r) else None ) ) }
+              if predicate_is_valid p schema then Some (filter p r)
+              else (
+                Logs.debug (fun m ->
+                    m "Cannot hoist: %a" Sexp.pp_hum
+                      ([%sexp_of: Name.t list] schema) ) ;
+                None ) ) ) }
+    |> run_everywhere
+
+  let tf_elim_join =
+    let open A in
+    { name= "elim-join"
+    ; f=
+        (function
+        | {node= Join {pred; r1; r2}; _} -> [filter pred (tuple [r1; r2] Cross)]
+        | _ -> []) }
     |> run_everywhere
 
   let tf_push_filter =
@@ -282,6 +338,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         (function
         | {node= Filter (p, {node= Filter (p', r); _}); _} ->
             [filter p' (filter p r)]
+        | {node= Filter (p, {node= Join {pred; r1; r2}; _}); _} ->
+            [join (Binop (And, p, pred)) r1 r2]
         | {node= Filter (p, {node= AList (r, r'); _}); _} -> [list (filter p r) r']
         | _ -> []) }
     |> run_everywhere
@@ -296,6 +354,15 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | _ -> []) }
     |> run_everywhere
 
+  let tf_split_filter =
+    let open A in
+    { name= "split-filter"
+    ; f=
+        (function
+        | {node= Filter (Binop (And, p, p'), r); _} -> [filter p (filter p' r)]
+        | _ -> []) }
+    |> run_everywhere
+
   let tf_project =
     let open A in
     { name= "project"
@@ -304,13 +371,25 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           let r = M.annotate_schema r in
           annotate_needed r ; [project r] ) }
 
+  let tf_hoist_join_pred =
+    let open A in
+    { name= "hoist-join-pred"
+    ; f=
+        (function
+        | {node= Join {pred; r1; r2}; _} -> [filter pred (join (Bool true) r1 r2)]
+        | _ -> []) }
+    |> run_everywhere
+
   let transforms =
-    [ tf_elim_groupby
+    [ tf_hoist_join_pred
+    ; tf_elim_groupby
     ; tf_elim_groupby_filter
     ; tf_push_orderby
     ; tf_hoist_filter
     ; tf_push_filter
     ; tf_merge_filter
+    ; tf_split_filter
+    ; tf_elim_join
     ; tf_row_store
     ; tf_project ]
 

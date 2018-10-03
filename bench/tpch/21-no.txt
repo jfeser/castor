@@ -45,23 +45,24 @@
 # 	s_name;
 # :n 100
 
-orderby([numwait, s_name],
-  groupby([s_name, count() as numwait],
-    [s_name],
-    join((s_suppkey) = (l_suppkey),
-      join((o_orderkey) = (l_orderkey),
-        filter((o_orderstatus) = ("F"), orders),
-        filter(((l_receiptdate) > (l_commitdate)) && ((exists(filter(
-                                                                ((l_orderkey) = (l1_orderkey)) && ((l_suppkey) = (l1_suppkey)),
-                                                                lineitem))) && (not(exists(filter(
-                                                                    ((l_orderkey) = (l1_orderkey)) && (((l_suppkey) = (l1_suppkey)) && ((l_receiptdate) > (l1_commitdate))),
-                                                                    lineitem))))),
-          select([l_orderkey as l1_orderkey,
-                  l_suppkey as l1_suppkey,
-                  l_receiptdate as l1_receiptdate,
-                  l_commitdate as l1_commitdate],
-            lineitem))),
-      join((s_nationkey) = (n_nationkey),
-        filter((n_name) = (param1), nation),
-        supplier))),
-  desc)
+groupby([s_name, count() as numwait],
+  [s_name],
+  join((s_suppkey = l1_suppkey),
+    join((o_orderkey = l1_orderkey),
+      filter((o_orderstatus = "F"), orders),
+      filter(((l1_receiptdate > l1_commitdate) &&
+             (exists(filter(((l_orderkey = l1_orderkey) &&
+                            (l_suppkey = l1_suppkey)),
+                       lineitem)) &&
+             not(exists(filter(((l_orderkey = l1_orderkey) &&
+                               ((l_suppkey = l1_suppkey) &&
+                               (l_receiptdate > l1_commitdate))),
+                          lineitem))))),
+        select([l_orderkey as l1_orderkey,
+                l_suppkey as l1_suppkey,
+                l_receiptdate as l1_receiptdate,
+                l_commitdate as l1_commitdate],
+          lineitem))),
+    join((s_nationkey = n_nationkey),
+      filter((n_name = param1), nation),
+      supplier)))

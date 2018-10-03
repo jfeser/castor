@@ -1,0 +1,1 @@
+-t hoist-filter:0,hoist-filter:0,hoist-filter:0,hoist-filter:0,hoist-filter:0,hoist-filter:0,merge-filter:0,merge-filter,elim-groupby-filter,row-store:7,project,row-store:18,row-store:37,project,push-filter:1

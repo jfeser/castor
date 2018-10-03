@@ -50,15 +50,23 @@ let main ?(debug = false) ?sample:_ ?(transforms = []) ~db ~params query_str =
             match i with Some idx -> [List.nth_exn r' idx] | None -> r' ) )
   in
   List.iteri candidates ~f:(fun i r ->
+      let r = M.annotate_schema r in
       Format.eprintf "Candidate #%d (serializable=%b):\n" i (A.is_serializeable r) ;
-      Format.eprintf "%a\n" Abslayout.pp r ;
-      Format.(pp_print_newline err_formatter ()) ) ;
+      Abslayout.pp Format.str_formatter r ;
+      Format.eprintf "%s\n\n" (Format.flush_str_formatter ()) ;
+      Out_channel.flush stderr ) ;
   match candidates with
   | [] -> Error.of_string "No candidates to output." |> Error.raise
   | [r] -> Format.printf "%a" Abslayout.pp r
   | _ :: _ -> Error.of_string "More than one candidate to output." |> Error.raise
 
+let config_format () =
+  Format.(pp_set_margin str_formatter) 80 ;
+  Format.(pp_set_margin std_formatter) 80 ;
+  Format.(pp_set_margin err_formatter) 80
+
 let () =
+  config_format () ;
   (* Set early so we get logs from command parsing code. *)
   Logs.set_reporter (Logs.format_reporter ()) ;
   let open Command in

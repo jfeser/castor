@@ -1,0 +1,1 @@
+-t elim-groupby-filter,row-store:1,project,row-store:7,project,push-orderby
