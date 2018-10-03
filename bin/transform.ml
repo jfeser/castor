@@ -107,5 +107,7 @@ let () =
        else if quiet then Logs.set_level (Some Logs.Error)
        else Logs.set_level (Some Logs.Info) ;
        let query = In_channel.input_all ch in
+       Logs.info (fun m ->
+           m "%s" (Sys.argv |> Array.to_list |> String.concat ~sep:" ") ) ;
        main ~debug ?sample ?transforms ~db ~params query)
   |> run

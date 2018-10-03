@@ -34,6 +34,7 @@ let () =
   Logs.set_reporter (Logs.format_reporter ()) ;
   let open Command in
   let open Let_syntax in
+  Logs.info (fun m -> m "%s" (Sys.argv |> Array.to_list |> String.concat ~sep:" ")) ;
   basic ~summary:"Compile a query."
     (let%map_open verbose =
        flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
@@ -56,5 +57,7 @@ let () =
        if verbose then Logs.set_level (Some Logs.Debug)
        else if quiet then Logs.set_level (Some Logs.Error)
        else Logs.set_level (Some Logs.Info) ;
+       Logs.info (fun m ->
+           m "%s" (Sys.argv |> Array.to_list |> String.concat ~sep:" ") ) ;
        main ~debug ~gprof ~params ~db ~port ~code_only ?out_dir ch)
   |> run
