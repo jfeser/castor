@@ -137,6 +137,10 @@ def gen_quantity():
     return gen_int(1, 50)
 
 
+def gen_perc():
+    return gen_discount()
+
+
 DB = "tpch_test"
 PORT = "5432"
 COMPILE_EXE = rpath("../../../_build/default/fastdb/bin/compile.exe")
@@ -182,7 +186,7 @@ BENCHMARKS = [
     {
         "query": rpath("11-no.txt"),
         "args": contents(rpath("11-no.args")),
-        "params": [("param1:string", gen_nation())],
+        "params": [("param1:string", gen_nation()), ("param2:float", gen_perc())],
     },
     {
         "query": rpath("12.txt"),
@@ -241,6 +245,11 @@ def bench_dir(bench):
     return os.path.splitext(bench["query"])[0]
 
 
+os.chdir(rpath("../../"))
+os.system("dune build @install")
+os.chdir(rpath("."))
+
+
 # Run benchmarks
 times = []
 for bench in BENCHMARKS:
@@ -274,9 +283,11 @@ for bench in BENCHMARKS:
     try:
         xform_log = benchd + "/xform.log"
         compile_log = benchd + "/compile.log"
-        code = os.system(
-            "%s 2> %s | %s &> %s" % (xform_cmd, xform_log, compile_cmd, compile_log)
-        )
+        query_file = benchd + "/query"
+        code = os.system("%s 2> %s > %s" % (xform_cmd, xform_log, query_file))
+        if code != 0:
+            raise Exception("Nonzero exit code %d" % code)
+        code = os.system("%s %s &> %s" % (compile_cmd, query_file, compile_log))
         if code != 0:
             raise Exception("Nonzero exit code %d" % code)
         log.info("Done building.", bench)
@@ -291,8 +302,11 @@ for bench in BENCHMARKS:
 
     time_cmd_parts = ["./scanner.exe", "-t", "1", "data.bin"] + params
     time_cmd = " ".join(time_cmd_parts)
+    log.debug(time_cmd)
+
+    cmd = ["./scanner.exe", "-p", "data.bin"] + params
+    cmd_str = shlex.quote(" ".join(cmd))
     try:
-        log.debug(time_cmd)
         proc = run(time_cmd_parts, capture_output=True, encoding="utf-8")
         time_str = proc.stdout.split(" ")[0][:-2]
         time = None
@@ -301,13 +315,7 @@ for bench in BENCHMARKS:
         except ValueError:
             log.error("Failed to read time: %s", time_str)
         times.append(time)
-    except:
-        log.exception("Running %s failed.", time_cmd)
-        times.append(None)
 
-    cmd = ["./scanner.exe", "-p", "data.bin"] + params
-    cmd_str = shlex.quote(" ".join(cmd))
-    try:
         log.debug("Running %s in %s.", cmd_str, os.getcwd())
         with open("results.csv", "w") as out:
             run(cmd, stdout=out)

@@ -78,18 +78,14 @@ int main(int argc, char **argv) {
     counter(params);
     clock_t stop = clock();
     int runs = (run_time * CLOCKS_PER_SEC) / (stop - start);
-
-    if (runs <= 1) {
-      int msec = (stop - start) * 1000 / CLOCKS_PER_SEC;
-      printf("%f\n", (1.0 / msec) * 1000);
-      return 0;
+    runs = runs > 0 ? runs : 1;
+    if (runs > 1) {
+      start = clock();
+      for (int i = 0; i < runs; i++) {
+        counter(params);
+      }
+      stop = clock();
     }
-
-    start = clock();
-    for (int i = 0; i < runs; i++) {
-      counter(params);
-    }
-    stop = clock();
     int msec = (stop - start) * 1000 / CLOCKS_PER_SEC;
     printf("%fms (%f qps)\n", msec / (float)runs, ((float)runs / msec) * 1000);
   } else if (count_flag) {
