@@ -30,3 +30,30 @@ let param =
 let channel =
   let open Command in
   Arg_type.create In_channel.create
+
+class ['s] list_monoid =
+  object
+    inherit ['s] VisitorsRuntime.monoid
+
+    method private zero = []
+
+    method private plus = ( @ )
+  end
+
+class ['s] conj_monoid =
+  object
+    inherit ['s] VisitorsRuntime.monoid
+
+    method private zero = true
+
+    method private plus = ( && )
+  end
+
+class ['s] disj_monoid =
+  object
+    inherit ['s] VisitorsRuntime.monoid
+
+    method private zero = false
+
+    method private plus = ( || )
+  end

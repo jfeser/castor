@@ -318,21 +318,13 @@ struct
     in
     let hdr = Header.make_header t in
     let start = Ctx.find_exn ctx (Name.create "start") b in
-    let cstart =
-      build_defn "cstart" Type.PrimType.int_t
-        (Header.make_position hdr "value" start)
-        b
-    in
+    let cstart = build_defn "cstart" (Header.make_position hdr "value" start) b in
     let callee_ctx, callee_args =
       let ctx = Ctx.bind ctx "start" Type.PrimType.int_t cstart in
       Ctx.make_callee_context ctx b
     in
     let func = scan callee_ctx child_layout child_type in
-    let pcount =
-      build_defn "pcount" Type.PrimType.int_t
-        (Header.make_access hdr "count" start)
-        b
-    in
+    let pcount = build_defn "pcount" (Header.make_access hdr "count" start) b in
     build_loop
       Infix.(pcount > int 0)
       (fun b ->
@@ -529,7 +521,7 @@ struct
     let open Builder in
     let open Infix in
     let b = create ~name ~ctx ~ret:(IntT {nullable= false}) in
-    let c = build_defn "c" Type.PrimType.int_t Infix.(int 0) b in
+    let c = build_defn "c" Infix.(int 0) b in
     build_foreach func [] (fun _ b -> build_assign (c + int 1) c b) b ;
     build_return c b ;
     build_func b
@@ -566,35 +558,65 @@ struct
         build_func b
     | _ -> failwith "Unexpected args."
 
-  let agg_init t p b =
+  let collect_aggs p =
+    let visitor =
+      object (self : 'a)
+        inherit [_] Abslayout0.mapreduce
+
+        inherit [_] Util.list_monoid
+
+        method private visit_Agg kind p =
+          let n = kind ^ Fresh.name fresh "%d" in
+          (A.Name (Name.create n), [(n, p)])
+
+        method! visit_Sum () p = self#visit_Agg "sum" (A.Sum p)
+
+        method! visit_Count () = self#visit_Agg "count" A.Count
+
+        method! visit_Min () p = self#visit_Agg "min" (A.Min p)
+
+        method! visit_Max () p = self#visit_Agg "max" (A.Max p)
+
+        method! visit_Avg () p = self#visit_Agg "avg" (A.Avg p)
+      end
+    in
+    visitor#visit_pred () p
+
+  let agg_init scan ctx p b =
     let open Builder in
     match A.pred_remove_as p with
     | A.Count ->
         `Count (build_fresh_defn "count" (const_int Type.PrimType.int_t 0) b)
-    | A.Sum f -> `Sum (f, build_fresh_defn "sum" (const_int t 0) b)
-    | A.Min f -> `Min (f, build_fresh_defn "min" (const_int t Int.max_value) b)
-    | A.Max f -> `Max (f, build_fresh_defn "max" (const_int t Int.min_value) b)
+    | A.Sum f ->
+        let f = gen_pred ~scan ~ctx f b in
+        let t = type_of f b in
+        `Sum (f, build_fresh_defn "sum" (const_int t 0) b)
+    | A.Min f ->
+        let f = gen_pred ~scan ~ctx f b in
+        let t = type_of f b in
+        `Min (f, build_fresh_defn "min" (const_int t Int.max_value) b)
+    | A.Max f ->
+        let f = gen_pred ~scan ~ctx f b in
+        let t = type_of f b in
+        `Max (f, build_fresh_defn "max" (const_int t Int.min_value) b)
     | A.Avg f ->
+        let f = gen_pred ~scan ~ctx f b in
+        let t = type_of f b in
         `Avg
           ( f
           , build_fresh_defn "avg_num" (const_int t 0) b
           , build_fresh_defn "avg_dem" (const_int Type.PrimType.int_t 0) b )
     | p -> `Passthru p
 
-  let agg_step scan ctx b acc =
+  let agg_step b acc =
     let open Builder in
     let one = const_int Type.PrimType.int_t 1 in
     match acc with
     | `Count x -> build_assign (build_add x one b) x b
-    | `Sum (f, x) -> build_assign (build_add x (gen_pred ~scan ~ctx f b) b) x b
-    | `Min (f, x) ->
-        let v = gen_pred ~scan ~ctx f b in
-        build_assign (Ternary (build_lt v x b, v, x)) x b
-    | `Max (f, x) ->
-        let v = gen_pred ~scan ~ctx f b in
-        build_assign (Ternary (build_lt v x b, x, v)) x b
-    | `Avg (f, n, d) ->
-        let v = gen_pred ~scan ~ctx f b in
+    | `Sum (f, x) -> build_assign (build_add x f b) x b
+    | `Min (v, x) -> build_assign (Ternary (build_lt v x b, v, x)) x b
+    | `Max (v, x) -> build_assign (Ternary (build_lt v x b, x, v)) x b
+    | `Avg (v, n, d) ->
         build_assign (build_add n v b) n b ;
         build_assign (build_add d one b) d b
     | `Passthru _ -> ()
@@ -635,23 +657,44 @@ struct
                 build_yield (Tuple output) b )
               b
         | `Agg ->
-            let args =
-              List.map2_exn args schema ~f:(fun a n -> (a, Name.type_exn n))
+            (* Extract all the aggregates from the arguments. *)
+            let scalar_preds, agg_preds =
+              List.map ~f:collect_aggs args |> List.unzip
             in
+            let agg_preds = List.concat agg_preds in
+            let agg_temps = ref [] in
+            let footer_ctx = ref Ctx.empty in
             (* Holds the state for each aggregate. *)
-            let agg_temps = List.map args ~f:(fun (p, t) -> agg_init t p b) in
-            let tuple = build_fresh_var "tup" func.ret_type b in
-            let ctx =
-              let child_schema = Meta.(find_exn child_layout schema) in
-              Ctx.bind_ctx ctx (Ctx.of_schema child_schema tuple)
-            in
-            build_foreach ~count:(Type.count child_type) func callee_args
-              (fun tup b ->
-                build_assign tup tuple b ;
-                List.iter agg_temps ~f:(agg_step scan ctx b) )
+            build_foreach ~count:(Type.count child_type)
+              ~header:(fun tup b ->
+                let ctx =
+                  let child_schema = Meta.(find_exn child_layout schema) in
+                  Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
+                in
+                agg_temps :=
+                  List.map agg_preds ~f:(fun (n, p) -> (n, agg_init scan ctx p b))
+                )
+              func callee_args
+              (fun _ b -> List.iter !agg_temps ~f:(fun (_, p) -> agg_step b p))
+              ~footer:(fun tup b ->
+                let ctx =
+                  let child_schema = Meta.(find_exn child_layout schema) in
+                  Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
+                in
+                let agg_temps =
+                  List.map !agg_temps ~f:(fun (n, p) -> (n, agg_extract scan ctx b p)
+                  )
+                in
+                footer_ctx :=
+                  List.fold_left agg_temps ~init:ctx ~f:(fun ctx (n, v) ->
+                      Ctx.bind ctx n (type_of v b) v ) )
               b ;
-            build_yield (Tuple (List.map ~f:(agg_extract scan ctx b) agg_temps)) b
-        ) ;
+            build_yield
+              (Tuple
+                 (List.map
+                    ~f:(fun p -> gen_pred ~ctx:!footer_ctx ~scan p b)
+                    scalar_preds))
+              b ) ;
         build_func b
     | _ -> failwith "Unexpected args."
 

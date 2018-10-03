@@ -357,12 +357,25 @@ let rec annotate_foreach r =
   | Scan _ | AEmpty | AScalar _ -> ()
   | ATuple (rs, _) -> List.iter rs ~f:annotate_foreach
 
-let rec pred_kind = function
-  | As_pred (x', _) -> pred_kind x'
-  | Name _ | Int _ | Date _ | Unop _ | Fixed _ | Bool _ | String _ | Null
-   |Binop _ | If _ | Exists _ | First _ ->
-      `Scalar
-  | Sum _ | Avg _ | Min _ | Max _ | Count -> `Agg
+let pred_kind p =
+  let visitor =
+    object
+      inherit [_] reduce
+
+      inherit [_] Util.disj_monoid
+
+      method! visit_Sum () _ = true
+
+      method! visit_Avg () _ = true
+
+      method! visit_Min () _ = true
+
+      method! visit_Max () _ = true
+
+      method! visit_Count () = true
+    end
+  in
+  if visitor#visit_pred () p then `Agg else `Scalar
 
 let select_kind l =
   if List.exists l ~f:(fun p -> Poly.(pred_kind p = `Agg)) then `Agg else `Scalar

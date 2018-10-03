@@ -69,6 +69,72 @@ let run_test_db ?(params = []) layout_str =
   M.annotate_subquery_types layout ;
   I.irgen ~params ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter
 
+let%expect_test "sum-complex" =
+  run_test
+    "Select([sum(r1.f) + 5, count() + sum(r1.f / 2)], AList(r1, \
+     ATuple([AScalar(r1.f), AScalar(r1.g - r1.f)], cross)))";
+  [%expect {|
+    fun scalar_3 (start) {
+        yield (buf[start : 1]);
+    }fun scalar_4 (r1_f,
+         start) {
+         yield (buf[start : 1]);
+    }fun tuple_2 (start) {
+         cstart0 = start;
+         cstart1 = cstart0 + 1;
+         init scalar_3(cstart0);
+         tup2 = next(scalar_3);
+         init scalar_4(tup2[0], cstart1);
+         tup3 = next(scalar_4);
+         yield (tup2[0], tup3[0]);
+    }fun list_1 () {
+         cstart = 0;
+         pcount = 5;
+         loop (0 < pcount) {
+             init tuple_2(cstart);
+             tup0 = next(tuple_2);
+             yield tup0;
+             cstart = cstart + 2;
+             pcount = pcount - 1;
+         }
+    }fun select_0 () {
+         init list_1();
+         sum1 = 0;
+         count2 = 0;
+         sum3 = 0;
+         count4 = 5;
+         loop (0 < count4) {
+             tup0 = next(list_1);
+             sum1 = sum1 + tup0[0];
+             count2 = count2 + 1;
+             sum3 = sum3 + tup0[0] / 2;
+             count4 = count4 - 1;
+         }
+         yield (sum1 + 5, count2 + sum3);
+    }fun printer () {
+         init select_0();
+         loop (not done(select_0)) {
+             tup0 = next(select_0);
+             if (not done(select_0)) {
+                 print(Tuple[Int[nonnull], Int[nonnull]], tup0);
+             } else {
+
+             }
+         }
+    }fun counter () {
+         c = 0;
+         init select_0();
+         loop (not done(select_0)) {
+             tup0 = next(select_0);
+             if (not done(select_0)) {
+                 c = c + 1;
+             } else {
+
+             }
+         }
+         return c;
+    } |}]
+
 let%expect_test "sum" =
   run_test
     "Select([sum(r1.f), count()], AList(r1, ATuple([AScalar(r1.f), AScalar(r1.g - \
@@ -99,18 +165,17 @@ let%expect_test "sum" =
              pcount = pcount - 1;
          }
     }fun select_0 () {
-         sum0 = 0;
-         count1 = 0;
          init list_1();
-         count4 = 5;
-         loop (0 < count4) {
-             tup3 = next(list_1);
-             tup2 = tup3;
-             sum0 = sum0 + tup2[0];
-             count1 = count1 + 1;
-             count4 = count4 - 1;
+         sum1 = 0;
+         count2 = 0;
+         count3 = 5;
+         loop (0 < count3) {
+             tup0 = next(list_1);
+             sum1 = sum1 + tup0[0];
+             count2 = count2 + 1;
+             count3 = count3 - 1;
          }
-         yield (sum0, count1);
+         yield (sum1, count2);
     }fun printer () {
          init select_0();
          loop (not done(select_0)) {
@@ -960,8 +1025,9 @@ let%expect_test "subquery-first" =
     {|
     select([log.id], filter((select([min(l.counter)],
  alist(log as l, ascalar(l.counter))))=log.id, alist(log, ascalar(log.id))))
-|};
-  [%expect {|
+|} ;
+  [%expect
+    {|
     fun scalar_3 (start) {
         yield (buf[start : 1]);
     }fun list_2 () {
@@ -988,16 +1054,15 @@ let%expect_test "subquery-first" =
              pcount = pcount - 1;
          }
     }fun select_4 (log_id) {
-         min0 = 4611686018427387903;
          init list_5(log_id);
-         count3 = 5;
-         loop (0 < count3) {
-             tup2 = next(list_5);
-             tup1 = tup2;
-             min0 = tup1[0] < min0 ? tup1[0] : min0;
-             count3 = count3 - 1;
+         min1 = 4611686018427387903;
+         count2 = 5;
+         loop (0 < count2) {
+             tup0 = next(list_5);
+             min1 = tup0[0] < min1 ? tup0[0] : min1;
+             count2 = count2 - 1;
          }
-         yield (min0);
+         yield (min1);
     }fun filter_1 () {
          init list_2();
          count1 = 5;

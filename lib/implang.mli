@@ -108,7 +108,7 @@ type _ctx = _var Map.M(Name.Compare_no_type).t
 module Builder : sig
   type t
 
-  val infer_type : Type.PrimType.t Hashtbl.M(String).t -> expr -> Type.PrimType.t
+  val type_of : expr -> t -> Type.PrimType.t
 
   val create : ctx:_ctx -> name:string -> ret:Type.PrimType.t -> t
 
@@ -124,7 +124,7 @@ module Builder : sig
 
   val build_assign : expr -> expr -> t -> unit
 
-  val build_defn : string -> Type.PrimType.t -> expr -> t -> expr
+  val build_defn : string -> expr -> t -> expr
 
   val build_print : expr -> t -> unit
 
@@ -145,7 +145,14 @@ module Builder : sig
   val build_count_loop : expr -> (t -> unit) -> t -> unit
 
   val build_foreach :
-    ?count:Type.AbsCount.t -> func -> expr list -> (expr -> t -> unit) -> t -> unit
+       ?count:Type.AbsCount.t
+    -> ?header:(expr -> t -> unit)
+    -> ?footer:(expr -> t -> unit)
+    -> func
+    -> expr list
+    -> (expr -> t -> unit)
+    -> t
+    -> unit
 
   val build_eq : expr -> expr -> t -> expr
 

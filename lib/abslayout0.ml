@@ -73,6 +73,7 @@ and node =
   , visitors {variety= "iter"}
   , visitors {variety= "reduce"}
   , visitors {variety= "fold"; ancestors= ["map"]}
+  , visitors {variety= "mapreduce"}
   , sexp_of
   , compare]
 
