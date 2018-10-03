@@ -8,6 +8,7 @@ import json
 import random
 import shlex
 from subprocess import run
+from datetime import date
 
 
 def rpath(p):
@@ -16,7 +17,7 @@ def rpath(p):
 
 def contents(fn):
     with open(fn, "r") as f:
-        return f.read()
+        return f.read().strip()
 
 
 def gen_int(low, high):
@@ -24,14 +25,20 @@ def gen_int(low, high):
 
 
 def gen_date(low, high):
-    ord_low = low.toordinal()
-    ord_high = high.toordinal()
-    o = random.randint(ord_low, ord_high)
-    return date.fromordinal
+    def gen():
+        ord_low = low.toordinal()
+        ord_high = high.toordinal()
+        o = random.randint(ord_low, ord_high)
+        d = date.fromordinal(o)
+        epoch = date(1970, 1, 1)
+        offset = d - epoch
+        return str(offset.days)
+
+    return gen
 
 
 def gen_tpch_date():
-    return gen_date(date.date(1992, 1, 1), date.date(1999, 1, 1))
+    return gen_date(date(1992, 1, 1), date(1999, 1, 1))
 
 
 def gen_choice(choices):
@@ -189,7 +196,7 @@ BENCHMARKS = [
     {
         "query": rpath("15.txt"),
         "args": contents(rpath("15.args")),
-        "params": [("param1:string", gen_tpch_date())],
+        "params": [("param1:date", gen_tpch_date())],
     },
     {
         "query": rpath("17.txt"),
@@ -201,18 +208,18 @@ BENCHMARKS = [
         "args": contents(rpath("18.args")),
         "params": [("param1:int", gen_quantity())],
     },
-    {
-        "query": rpath("19.txt"),
-        "args": contents(rpath("19.args")),
-        "params": [
-            ("param0:string", gen_brand()),
-            ("param1:string", gen_brand()),
-            ("param2:string", gen_brand()),
-            ("param3:string", gen_quantity()),
-            ("param4:string", gen_quantity()),
-            ("param5:string", gen_quantity()),
-        ],
-    },
+    # {
+    #     "query": rpath("19.txt"),
+    #     "args": contents(rpath("19.args")),
+    #     "params": [
+    #         ("param0:string", gen_brand()),
+    #         ("param1:string", gen_brand()),
+    #         ("param2:string", gen_brand()),
+    #         ("param3:string", gen_quantity()),
+    #         ("param4:string", gen_quantity()),
+    #         ("param5:string", gen_quantity()),
+    #     ],
+    # },
     {
         "query": rpath("21-no.txt"),
         "args": contents(rpath("21-no.args")),
@@ -287,7 +294,13 @@ for bench in BENCHMARKS:
     try:
         log.debug(time_cmd)
         proc = run(time_cmd_parts, capture_output=True, encoding="utf-8")
-        times.append(float(proc.stdout.split(" ")[0][:-2]))
+        time_str = proc.stdout.split(" ")[0][:-2]
+        time = None
+        try:
+            time = float(time_str)
+        except ValueError:
+            log.error("Failed to read time: %s", time_str)
+        times.append(time)
     except:
         log.exception("Running %s failed.", time_cmd)
         times.append(None)

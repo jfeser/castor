@@ -14,6 +14,7 @@ type op =
   | FlDiv
   | IntLt
   | FlLt
+  | FlEq
   | IntEq
   | StrEq
   | And

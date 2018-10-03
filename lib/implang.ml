@@ -19,6 +19,7 @@ type op =
   | FlDiv
   | IntLt
   | FlLt
+  | FlEq
   | IntEq
   | StrEq
   | And
@@ -92,7 +93,7 @@ let rec pp_expr : Format.formatter -> expr -> unit =
     | IntLt | FlLt -> "<"
     | And -> "&&"
     | Not -> "not"
-    | IntEq | StrEq -> "="
+    | IntEq | StrEq | FlEq -> "="
     | Or -> "||"
     | IntHash | StrHash -> "hash"
     | LoadStr -> "load_str"
@@ -261,7 +262,8 @@ module Builder = struct
         | FlLt, _, _ -> BoolT {nullable= false}
         | (IntHash | StrHash), _, _ -> IntT {nullable= false}
         | IntEq, IntT {nullable= n1}, IntT {nullable= n2}
-         |StrEq, StringT {nullable= n1}, StringT {nullable= n2} ->
+         |StrEq, StringT {nullable= n1}, StringT {nullable= n2}
+         |FlEq, FixedT {nullable= n1}, FixedT {nullable= n2} ->
             BoolT {nullable= n1 || n2}
         | LoadStr, IntT {nullable= false}, IntT {nullable= false} ->
             StringT {nullable= false}
@@ -453,11 +455,10 @@ module Builder = struct
         List.init (List.length ts1) ~f:(fun i ->
             build_eq Infix.(index x i) Infix.(index y i) b )
         |> List.fold_left ~init:(Bool true) ~f:Infix.( && )
-    (* | FixedT {nullable= false}, FixedT {nullable= false} ->
-     *     Binop {op= FlEq; arg1= x; arg2= y}
-     * | IntT {nullable= false}, FixedT {nullable= false} -> build_eq (int2fl x) y b
-     * | FixedT {nullable= false}, IntT {nullable= false} ->
-     *     build_eq x (int2fl y (Int 1) b) b *)
+    | FixedT {nullable= false}, FixedT {nullable= false} ->
+        Binop {op= FlEq; arg1= x; arg2= y}
+    | IntT {nullable= false}, FixedT {nullable= false} -> build_eq (int2fl x) y b
+    | FixedT {nullable= false}, IntT {nullable= false} -> build_eq x (int2fl y) b
     | _ ->
         Error.create "Incomparable types." (x, y, t1, t2)
           [%sexp_of: expr * expr * t * t]

@@ -600,6 +600,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | StrEq -> build_call scmp [|x1; x2|] "eqtmp" builder
       | IntLt -> build_icmp Icmp.Slt x1 x2 "lttmp" builder
       | FlLt -> build_fcmp Fcmp.Olt x1 x2 "lttmp" builder
+      | FlEq -> build_fcmp Fcmp.Oeq x1 x2 "eqtmp" builder
       | And -> build_and x1 x2 "andtmp" builder
       | Or -> build_or x1 x2 "ortmp" builder
       | IntHash -> codegen_int_hash fctx x1 x2
@@ -620,7 +621,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     | I.Not -> build_not x "nottmp" builder
     | Int2Fl -> build_sitofp x float_type "" builder
     | IntAdd | IntSub | IntLt | And | Or | IntEq | StrEq | IntHash | StrHash
-     |IntMul | IntDiv | Mod | LoadStr | FlAdd | FlSub | FlMul | FlDiv | FlLt ->
+     |IntMul | IntDiv | Mod | LoadStr | FlAdd | FlSub | FlMul | FlDiv | FlLt | FlEq
+      ->
         fail (Error.of_string "Not a unary operator.")
 
   (* in

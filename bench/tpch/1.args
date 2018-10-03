@@ -1,1 +1,1 @@
--t elim-groupby-filter,row-store:4,project,push-filter:1,push-orderby
+-t elim-groupby-filter,row-store:1,project,push-orderby

@@ -26,6 +26,7 @@ let main ~debug ~gprof ~params ~db ~port ~code_only ?out_dir ch =
     Abslayout.of_channel_exn ch |> A.resolve ~params |> A.annotate_schema
     |> A.annotate_key_layouts
   in
+  A.annotate_subquery_types ralgebra ;
   C.compile ~gprof ~params ?out_dir ralgebra |> ignore
 
 let () =
