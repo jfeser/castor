@@ -8,12 +8,12 @@ all :
 coverage : clean
 	BISECT_ENABLE=YES dune runtest
 	bisect-ppx-report -I $(BUILD_DIR) -html _coverage/ \
-		`find $(BUILD_DIR)/fastdb -name bisect*.out`
+		`find $(BUILD_DIR)/castor -name bisect*.out`
 	open _coverage/index.html
 
 .PHONY : clean
 clean :
-	rm -f `find $(BUILD_DIR)/fastdb -name bisect*.out`
+	rm -f `find $(BUILD_DIR)/castor -name bisect*.out`
 	dune clean
 
 .PHONY : test

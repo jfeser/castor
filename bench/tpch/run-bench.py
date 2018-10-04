@@ -143,8 +143,8 @@ def gen_perc():
 
 DB = "tpch_test"
 PORT = "5432"
-COMPILE_EXE = rpath("../../../_build/default/fastdb/bin/compile.exe")
-TRANSFORM_EXE = rpath("../../../_build/default/fastdb/bin/transform.exe")
+COMPILE_EXE = rpath("dune exec ../../../bin/compile.exe --")
+TRANSFORM_EXE = rpath("dune exec ../../../bin/transform.exe --")
 BENCHMARKS = [
     {
         "query": rpath("1.txt"),
