@@ -5,8 +5,13 @@ let main project_root workspace_root =
   let project_root = Filename.realpath project_root in
   let workspace_root = Filename.realpath workspace_root in
   let llvm_root =
-    Unix.open_process_in "llvm-config --obj-root"
-    |> In_channel.input_all |> String.strip |> Filename.realpath
+    let configs = ["llvm-config"; "llvm-config-6.0"] in
+    Option.value_exn ~message:"No LLVM root found."
+      (List.find_map configs ~f:(fun c ->
+      try
+        Some (Unix.open_process_in (sprintf "%s --obj-root" c)
+              |> In_channel.input_all |> String.strip |> Filename.realpath)
+      with Unix.Unix_error _ -> None))
   in
   printf
     {|

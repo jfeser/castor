@@ -11,8 +11,8 @@ depends: [
   "dune" {build & >= "1.1"}
   "menhir" {build}
 
-  "oUnit" {test & >= "2"}
-  "bisect_ppx" {test}
+  "bisect_ppx"
+  "ounit" {>= "2"}
 
   "base" {>= "v0.11" & < "v0.12"}
   "core" {>= "v0.11" & < "v0.12"}
@@ -20,6 +20,7 @@ depends: [
   "postgresql" {>= "4.4" & < "4.5"}
   "logs" {>= "0.6" & < "0.7"}
   "llvm" {>= "6" & < "7"}
+  "expect_test_helpers_kernel" {>= "v0.11" & < "v0.12"}
   "hashcons"
   "cmph"
 
