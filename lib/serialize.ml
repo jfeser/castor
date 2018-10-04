@@ -464,7 +464,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
         Error.create "Cannot serialize." (t, r) [%sexp_of: Type.t * node]
         |> Error.raise
 
-  let serialize ?(ctx = Map.empty (module Name.Compare_no_type)) writer t l =
+  let serialize writer t l =
     Logs.info (fun m -> m "Serializing abstract layout.") ;
     let begin_pos = pos writer in
     let log_tmp_file =
@@ -473,7 +473,33 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
       else "/dev/null"
     in
     let log_ch = Out_channel.create log_tmp_file in
-    serialize {writer; log_ch; serialize; ctx= `Eval ctx} t l ;
+    (* Serialize the main layout. *)
+    serialize
+      { writer
+      ; log_ch
+      ; serialize
+      ; ctx= `Eval (Map.empty (module Name.Compare_no_type)) }
+      t l ;
+    (* Serialize subquery layouts. *)
+    let subquery_visitor =
+      object (self : 'a)
+        inherit [_] Abslayout0.iter
+
+        method private visit_Subquery r =
+          let t = Meta.(find_exn r type_) in
+          serialize
+            { writer
+            ; log_ch
+            ; serialize
+            ; ctx= `Eval (Map.empty (module Name.Compare_no_type)) }
+            t r
+
+        method! visit_Exists () = self#visit_Subquery
+
+        method! visit_First () = self#visit_Subquery
+      end
+    in
+    subquery_visitor#visit_t () l ;
     let end_pos = pos writer in
     let len = Pos.(end_pos - begin_pos) |> Int64.to_int_exn in
     flush writer ;

@@ -82,6 +82,9 @@ struct
           Error.create "Not a scalar predicate." p [%sexp_of: A.pred] |> Error.raise
       | A.If (p1, p2, p3) -> Ternary (gen_pred p1, gen_pred p2, gen_pred p3)
       | A.First callee_layout ->
+          (* Don't use the passed in start value. Subquery layouts are not stored
+           inline. *)
+          let ctx = Map.remove ctx (Name.create "start") in
           let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
           let callee_type = Meta.(find_exn callee_layout type_) in
           let callee = scan callee_ctx callee_layout callee_type in
@@ -90,6 +93,7 @@ struct
           build_step tup callee b ;
           Infix.(index tup 0)
       | A.Exists callee_layout ->
+          let ctx = Map.remove ctx (Name.create "start") in
           let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
           let callee_type = Meta.(find_exn callee_layout type_) in
           let callee = scan callee_ctx callee_layout callee_type in
