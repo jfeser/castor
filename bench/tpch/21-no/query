@@ -1,0 +1,46 @@
+alist(dedup(
+        select([supplier.s_name as k0_supplier_s_name],
+          join((supplier.s_suppkey = l1_suppkey),
+            join((orders.o_orderkey = l1_orderkey),
+              orders,
+              select([lineitem.l_orderkey as l1_orderkey,
+                      lineitem.l_suppkey as l1_suppkey],
+                lineitem)),
+            join((supplier.s_nationkey = nation.n_nationkey), nation, supplier)))),
+  select([supplier.s_name, count() as numwait],
+    filter(((orders.o_orderstatus = "F") &&
+           (((l1_receiptdate > l1_commitdate) &&
+            (exists(filter(((lineitem.l_orderkey = l1_orderkey) &&
+                           (lineitem.l_suppkey = l1_suppkey)),
+                      alist(lineitem,
+                        atuple([ascalar(lineitem.l_orderkey),
+                                ascalar(lineitem.l_suppkey)],
+                          cross)))) &&
+            not(exists(filter(((lineitem.l_orderkey = l1_orderkey) &&
+                              ((lineitem.l_suppkey = l1_suppkey) &&
+                              (lineitem.l_receiptdate > l1_commitdate))),
+                         alist(lineitem,
+                           atuple([ascalar(lineitem.l_orderkey),
+                                   ascalar(lineitem.l_suppkey),
+                                   ascalar(lineitem.l_receiptdate)],
+                             cross))))))) && (nation.n_name = param1))),
+      alist(filter((supplier.s_name = k0_supplier_s_name),
+              join((supplier.s_suppkey = l1_suppkey),
+                join((orders.o_orderkey = l1_orderkey),
+                  orders,
+                  select([lineitem.l_orderkey as l1_orderkey,
+                          lineitem.l_suppkey as l1_suppkey,
+                          lineitem.l_receiptdate as l1_receiptdate,
+                          lineitem.l_commitdate as l1_commitdate],
+                    lineitem)),
+                join((supplier.s_nationkey = nation.n_nationkey),
+                  nation,
+                  supplier))),
+        atuple([ascalar(orders.o_orderstatus),
+                ascalar(l1_orderkey),
+                ascalar(l1_suppkey),
+                ascalar(l1_receiptdate),
+                ascalar(l1_commitdate),
+                ascalar(nation.n_name),
+                ascalar(supplier.s_name)],
+          cross)))))
