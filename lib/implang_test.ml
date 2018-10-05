@@ -27,6 +27,8 @@ let run_test ?(params = []) layout_str =
   let module I =
     Irgen.Make (struct
         let code_only = true
+
+        let debug = false
       end)
       (E)
       (S)
@@ -55,6 +57,8 @@ let run_test_db ?(params = []) layout_str =
   let module I =
     Irgen.Make (struct
         let code_only = true
+
+        let debug = false
       end)
       (E)
       (S)
@@ -72,8 +76,9 @@ let run_test_db ?(params = []) layout_str =
 let%expect_test "sum-complex" =
   run_test
     "Select([sum(r1.f) + 5, count() + sum(r1.f / 2)], AList(r1, \
-     ATuple([AScalar(r1.f), AScalar(r1.g - r1.f)], cross)))";
-  [%expect {|
+     ATuple([AScalar(r1.f), AScalar(r1.g - r1.f)], cross)))" ;
+  [%expect
+    {|
     fun scalar_3 (start) {
         yield (buf[start : 1]);
     }fun scalar_4 (r1_f,
@@ -98,19 +103,26 @@ let%expect_test "sum-complex" =
              pcount = pcount - 1;
          }
     }fun select_0 () {
+         found_tup1 = false;
          init list_1();
-         sum1 = 0;
-         count2 = 0;
          sum3 = 0;
-         count4 = 5;
-         loop (0 < count4) {
-             tup0 = next(list_1);
-             sum1 = sum1 + tup0[0];
-             count2 = count2 + 1;
-             sum3 = sum3 + tup0[0] / 2;
-             count4 = count4 - 1;
+         count4 = 0;
+         sum5 = 0;
+         count6 = 5;
+         loop (0 < count6) {
+             tup2 = next(list_1);
+             sum3 = sum3 + tup2[0];
+             count4 = count4 + 1;
+             sum5 = sum5 + tup2[0] / 2;
+             tup0 = tup2;
+             found_tup1 = true;
+             count6 = count6 - 1;
          }
-         yield (sum1 + 5, count2 + sum3);
+         if (found_tup1) {
+             yield (sum3 + 5, count4 + sum5);
+         } else {
+
+         }
     }fun printer () {
          init select_0();
          loop (not done(select_0)) {
@@ -165,17 +177,24 @@ let%expect_test "sum" =
              pcount = pcount - 1;
          }
     }fun select_0 () {
+         found_tup1 = false;
          init list_1();
-         sum1 = 0;
-         count2 = 0;
-         count3 = 5;
-         loop (0 < count3) {
-             tup0 = next(list_1);
-             sum1 = sum1 + tup0[0];
-             count2 = count2 + 1;
-             count3 = count3 - 1;
+         sum3 = 0;
+         count4 = 0;
+         count5 = 5;
+         loop (0 < count5) {
+             tup2 = next(list_1);
+             sum3 = sum3 + tup2[0];
+             count4 = count4 + 1;
+             tup0 = tup2;
+             found_tup1 = true;
+             count5 = count5 - 1;
          }
-         yield (sum1, count2);
+         if (found_tup1) {
+             yield (sum3, count4);
+         } else {
+
+         }
     }fun printer () {
          init select_0();
          loop (not done(select_0)) {
@@ -1054,15 +1073,22 @@ let%expect_test "subquery-first" =
              pcount = pcount - 1;
          }
     }fun select_4 (log_id) {
+         found_tup1 = false;
          init list_5(log_id);
-         min1 = 4611686018427387903;
-         count2 = 5;
-         loop (0 < count2) {
-             tup0 = next(list_5);
-             min1 = tup0[0] < min1 ? tup0[0] : min1;
-             count2 = count2 - 1;
+         min3 = 4611686018427387903;
+         count4 = 5;
+         loop (0 < count4) {
+             tup2 = next(list_5);
+             min3 = tup2[0] < min3 ? tup2[0] : min3;
+             tup0 = tup2;
+             found_tup1 = true;
+             count4 = count4 - 1;
          }
-         yield (min1);
+         if (found_tup1) {
+             yield (min3);
+         } else {
+
+         }
     }fun filter_1 () {
          init list_2();
          count1 = 5;

@@ -3,6 +3,8 @@ open Implang
 
 module Config : sig
   module type S = sig
+    val debug : bool
+
     val code_only : bool
   end
 end

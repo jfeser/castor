@@ -19,6 +19,8 @@ exception IRGenError of Error.t [@@deriving sexp]
 
 module Config = struct
   module type S = sig
+    val debug : bool
+
     val code_only : bool
   end
 end
@@ -38,6 +40,10 @@ struct
   let funcs = ref []
 
   let add_func (f : func) = funcs := f :: !funcs
+
+  let debug_print msg v b =
+    let open Builder in
+    if Config.debug then build_print (Tuple [String msg; v]) b
 
   let gen_pred ~ctx ~scan pred b =
     let open Builder in
@@ -138,6 +144,7 @@ struct
             Infix.(build_eq ival (int null_val) b)
           else Bool false
         in
+        debug_print "int" ival b ;
         build_yield (Tuple [ival]) b ;
         build_func b
     | _ -> failwith "Unexpected args."
@@ -160,6 +167,7 @@ struct
             Infix.(build_eq ival (int null_val) b)
           else Bool true
         in
+        debug_print "fixed" xval b ;
         build_yield (Tuple [xval]) b ;
         build_func b
     | _ -> failwith "Unexpected args."
@@ -177,6 +185,7 @@ struct
             Infix.(build_eq ival (int null_val) b)
           else Bool true
         in
+        debug_print "bool" ival b ;
         build_yield (Tuple [ival]) b ;
         build_func b
     | _ -> failwith "Unexpected args."
@@ -197,6 +206,7 @@ struct
             Infix.(build_eq nchars (int null_val) b)
           else Bool true
         in
+        debug_print "string" xval b ;
         build_yield (Tuple [xval]) b ;
         build_func b
     | _ -> failwith "Unexpected args."
@@ -555,7 +565,9 @@ struct
             in
             let cond = gen_pred ~scan ~ctx pred b in
             build_if ~cond
-              ~then_:(fun b -> build_yield tup b)
+              ~then_:(fun b ->
+                debug_print "filter selected" tup b ;
+                build_yield tup b )
               ~else_:(fun _ -> ())
               b )
           b ;
@@ -667,7 +679,8 @@ struct
             in
             let agg_preds = List.concat agg_preds in
             let agg_temps = ref [] in
-            let footer_ctx = ref Ctx.empty in
+            let last_tup = build_fresh_var "tup" func.ret_type b in
+            let found_tup = build_fresh_defn "found_tup" (Bool false) b in
             (* Holds the state for each aggregate. *)
             build_foreach ~count:(Type.count child_type)
               ~header:(fun tup b ->
@@ -679,25 +692,34 @@ struct
                   List.map agg_preds ~f:(fun (n, p) -> (n, agg_init scan ctx p b))
                 )
               func callee_args
-              (fun _ b -> List.iter !agg_temps ~f:(fun (_, p) -> agg_step b p))
-              ~footer:(fun tup b ->
+              (fun tup b ->
+                List.iter !agg_temps ~f:(fun (_, p) -> agg_step b p) ;
+                build_assign tup last_tup b ;
+                build_assign (Bool true) found_tup b )
+              b ;
+            build_if ~cond:found_tup
+              ~then_:(fun b ->
                 let ctx =
                   let child_schema = Meta.(find_exn child_layout schema) in
-                  Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
+                  Ctx.bind_ctx ctx (Ctx.of_schema child_schema last_tup)
                 in
                 let agg_temps =
                   List.map !agg_temps ~f:(fun (n, p) -> (n, agg_extract scan ctx b p)
                   )
                 in
-                footer_ctx :=
+                let footer_ctx =
                   List.fold_left agg_temps ~init:ctx ~f:(fun ctx (n, v) ->
-                      Ctx.bind ctx n (type_of v b) v ) )
-              b ;
-            build_yield
-              (Tuple
-                 (List.map
-                    ~f:(fun p -> gen_pred ~ctx:!footer_ctx ~scan p b)
-                    scalar_preds))
+                      Ctx.bind ctx n (type_of v b) v )
+                in
+                let output =
+                  Tuple
+                    (List.map
+                       ~f:(fun p -> gen_pred ~ctx:footer_ctx ~scan p b)
+                       scalar_preds)
+                in
+                debug_print "select produced" output b ;
+                build_yield output b )
+              ~else_:(fun _ -> ())
               b ) ;
         build_func b
     | _ -> failwith "Unexpected args."

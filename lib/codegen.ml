@@ -413,12 +413,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         (pointer_type (integer_type ctx size_bits))
         "slice_ptr" builder
     in
-    debug_printf "Slice ptr: %p\n" [slice_ptr] ;
-    debug_printf "Slice offset: %d\n" [byte_idx] ;
     let slice = build_load slice_ptr "" builder in
     (* Convert the slice to a 64 bit int. *)
     let slice = build_intcast slice (i64_type ctx) "" builder in
-    debug_printf "Slice value: %d\n" [slice] ;
     slice
 
   let codegen_index codegen_expr tup idx =
@@ -445,10 +442,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
            [|pointer_type (i8_type ctx); pointer_type (i8_type ctx); i32_type ctx|])
         module_
     in
-    debug_printf "Hash data offset: %d\n" [hash_ptr] ;
-    debug_printf "Key size: %d\n" [key_size] ;
     let buf_ptr = build_load (get_val fctx "buf") "buf_ptr" builder in
-    debug_printf "Buf ptr: %p\n" [buf_ptr] ;
     let buf_ptr_as_int =
       build_ptrtoint buf_ptr (i64_type ctx) "buf_ptr_int" builder
     in
@@ -458,20 +452,17 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let hash_ptr =
       build_inttoptr hash_ptr_as_int (pointer_type (i8_type ctx)) "hash_ptr" builder
     in
-    debug_printf "Hash ptr: %p\n" [hash_ptr] ;
     let key_ptr =
       build_pointercast key_ptr (pointer_type (i8_type ctx)) "" builder
     in
     let key_size = build_intcast key_size (i32_type ctx) "" builder in
     let args = [|hash_ptr; key_ptr; key_size|] in
     let hash_val = build_call cmph_search_packed args "hash_val" builder in
-    debug_printf "Hash val: %d\n" [hash_val] ;
     build_intcast hash_val (i64_type ctx) "hash_val_cast" builder
 
   let codegen_int_hash fctx hash_ptr key =
     let key_ptr = build_entry_alloca (type_of key) "key_ptr" builder in
     build_store key key_ptr builder |> ignore ;
-    debug_printf "Key val: %d\n" [key] ;
     let key_ptr_cast =
       build_pointercast key_ptr (pointer_type (i8_type ctx)) "key_ptr_cast" builder
     in
@@ -563,7 +554,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         in
         key_offset )
     |> ignore ;
-    debug_printf "Hash key %.*s\n" [key_size; key_ptr] ;
     let hash = codegen_hash fctx hash_ptr key_ptr key_size in
     hash
 
@@ -1189,6 +1179,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     in
     if Sys.is_directory out_dir = `No then Unix.mkdir out_dir ;
     let main_fn = out_dir ^ "/main.c" in
+    let ir_fn = out_dir ^ "/scanner.ir" in
     let module_fn = out_dir ^ "/scanner.ll" in
     let exe_fn = out_dir ^ "/scanner.exe" in
     let opt_module_fn = out_dir ^ "/scanner-opt.ll" in
@@ -1198,6 +1189,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let open Type.PrimType in
     (* Generate IR module. *)
     let ir_module = IG.irgen ~params ~data_fn layout in
+    Out_channel.with_file ir_fn ~f:(fun ch ->
+        let fmt = Caml.Format.formatter_of_out_channel ch in
+        IG.pp fmt ir_module ) ;
     (* Generate header. *)
     Out_channel.with_file header_fn ~f:write_header ;
     (* Generate main file. *)
@@ -1219,7 +1213,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
                (from_fn loader_fn) n.name i )
         |> List.unzip
       in
-      let header_str = sprintf "#include \"%s\"" header_fn in
+      let header_str = "#include \"scanner.h\"" in
       let funcs_str = String.concat (header_str :: funcs) ~sep:"\n" in
       let calls_str = String.concat calls ~sep:"\n" in
       let perf_template = Project_config.project_root ^ "/etc/perf.c" in

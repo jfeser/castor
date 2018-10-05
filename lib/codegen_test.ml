@@ -45,6 +45,8 @@ let make_modules ?layout_file () =
   let module I =
     Irgen.Make (struct
         let code_only = false
+
+        let debug = false
       end)
       (E)
       (S)
@@ -76,6 +78,8 @@ let make_modules_db ?layout_file () =
   let module I =
     Irgen.Make (struct
         let code_only = false
+
+        let debug = false
       end)
       (E)
       (S)
@@ -157,7 +161,7 @@ let%expect_test "agg" =
   [%expect {||}] ;
   run_test ~print_layout:false ~fork:false
     "select([avg(r2.a), count(), sum(r2.a), min(r2.a), max(r2.a)], alist(r2, \
-     ascalar(r2.a)))";
+     ascalar(r2.a)))" ;
   [%expect {|
     7.978000,5,39.890000,-0.420000,34.420000,
 

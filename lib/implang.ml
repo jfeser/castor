@@ -393,14 +393,16 @@ module Builder = struct
     let tup = build_fresh_var "tup" iter_.ret_type b in
     build_iter iter_ args b ;
     Option.iter header ~f:(fun f -> f tup b) ;
-    ( match Option.map count ~f:(fun c -> Type.AbsCount.kind c) with
-    | Some (`Count 0) -> ()
-    | Some (`Count 1) -> build_step tup iter_ b ; body tup b
+    let add_footer b = Option.iter footer ~f:(fun f -> f tup b) in
+    match Option.map count ~f:(fun c -> Type.AbsCount.kind c) with
+    | Some (`Count 0) -> add_footer b
+    | Some (`Count 1) -> build_step tup iter_ b ; body tup b ; add_footer b
     | Some (`Count x) ->
         build_count_loop
           Infix.(int x)
           (fun b -> build_step tup iter_ b ; body tup b)
-          b
+          b ;
+        add_footer b
     | None | Some `Countable | Some `Unknown ->
         build_loop
           Infix.(not (Done iter_.name))
@@ -409,10 +411,9 @@ module Builder = struct
             build_if
               ~cond:Infix.(not (Done iter_.name))
               ~then_:(fun b -> body tup b)
-              ~else_:(fun _ -> ())
+              ~else_:(fun b -> add_footer b)
               b )
-          b ) ;
-    Option.iter footer ~f:(fun f -> f tup b)
+          b
 
   let type_err msg x y t1 t2 =
     Error.create msg (x, y, t1, t2)
