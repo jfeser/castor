@@ -14,6 +14,9 @@ type binop = Abslayout0.binop =
   | Mul
   | Div
   | Mod
+  | Contains
+  | Starts_with
+  | Ends_with
 [@@deriving compare, sexp]
 
 type unop = Abslayout0.unop = Not | Day | Month | Year [@@deriving compare, sexp]
@@ -39,6 +42,7 @@ type pred = Abslayout0.pred =
   | If of pred * pred * pred
   | First of t
   | Exists of t
+  | Substring of t * t * t
 [@@deriving compare, sexp_of]
 
 and hash_idx = Abslayout0.hash_idx =

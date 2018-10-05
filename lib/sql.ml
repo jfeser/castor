@@ -51,7 +51,10 @@ let rec pred_to_sql = function
       | Sub -> sprintf "%s - %s" s1 s2
       | Mul -> sprintf "%s * %s" s1 s2
       | Div -> sprintf "%s / %s" s1 s2
-      | Mod -> sprintf "%s %% %s" s1 s2 )
+      | Mod -> sprintf "%s %% %s" s1 s2
+      | Contains -> sprintf "strpos(%s, %s) = 0" s1 s2
+      | Starts_with -> sprintf "strpos(%s, %s) = 1" s1 s2
+      | Ends_with -> sprintf "strpos(%s, %s) = 0" s1 s2 )
   | Count -> "count(*)"
   | Sum n -> sprintf "sum(%s)" (pred_to_sql n)
   | Avg n -> sprintf "avg(%s)" (pred_to_sql n)
@@ -66,6 +69,9 @@ let rec pred_to_sql = function
   | First r ->
       let sql, _ = ralgebra_to_sql_helper r |> to_subquery in
       sql
+  | Substring (p1, p2, p3) ->
+      sprintf "substring(%s from %s for %s)" (pred_to_sql p1) (pred_to_sql p2)
+        (pred_to_sql p3)
 
 and ralgebra_to_sql_helper r =
   let rec f ({node; _} as r) =

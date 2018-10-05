@@ -12,11 +12,12 @@
 %token <Abslayout0.tuple> KIND
 %token <Type0.PrimType.t> PRIMTYPE
 %token <Core.Date.t> DATE
-
+%token <Abslayout0.binop> EQ LT GT LE GE AND OR ADD SUB MUL DIV MOD
+%token <Abslayout0.unop> MONTH DAY YEAR NOT
 %token AS JOIN SELECT DEDUP FILTER COUNT GROUPBY MIN MAX AVG SUM LPAREN RPAREN
-   LSBRAC RSBRAC COLON DOT COMMA EQ LT GT LE GE AND OR ADD SUB MUL DIV MOD EOF
+   LSBRAC RSBRAC COLON DOT COMMA EOF
    AEMPTY ASCALAR ATUPLE ALIST AHASHIDX AORDEREDIDX NULL ORDERBY IF THEN
-   ELSE MONTH DAY YEAR DATEKW EXISTS NOT
+   ELSE DATEKW EXISTS SUBSTRING
 
 %start <Abslayout0.t> ralgebra_eof
 %start <Abslayout0.name> name_eof
@@ -117,6 +118,9 @@ name:
 | f = ID; { A.({ relation = None; name = f; type_ = None }) }
 | f = ID; COLON; t = PRIMTYPE { A.({ relation = None; name = f; type_ = Some t }) }
 
+e0_binop: x = CONTAINS | x = STARTSWITH | x = ENDSWITH { x }
+e0_unop: x = DAY | x = MONTH | x = YEAR { x }
+
 e0:
 | x = INT { A.Int x }
 | DATEKW; x = parens(DATE); { A.Date x }
@@ -125,16 +129,24 @@ e0:
 | x = STR { A.String x }
 | NULL { A.Null }
 | n = name { A.Name n }
-| DAY; x = parens(expr); { A.Unop (Day, x) }
-| MONTH; x = parens(expr); { A.Unop (Month, x) }
-| YEAR; x = parens(expr); { A.Unop (Year, x) }
+| op = e0_unop; x = parens(expr); { A.Unop (op, x) }
+| NOT; x = e0 {A.Unop (Not, x)}
 | MIN; f = parens(expr) { A.Min f }
 | MAX; f = parens(expr) { A.Max f }
 | AVG; f = parens(expr) { A.Avg f }
 | SUM; f = parens(expr) { A.Sum f }
 | COUNT; LPAREN; RPAREN; { A.Count }
 | EXISTS; r = parens(ralgebra); {A.Exists (r)}
-| NOT; x = e0 {A.Unop (Not, x)}
+| SUBSTRING; xs = parens(separated_nonempty_list(COMMA, expr)) {
+                      match xs with
+                      | [x1; x2; x3] -> A.Substring (x1, x2, x3)
+                      | _ -> error "Unexpected arguments." $startpos
+                    }
+| op = e0_binop; xs = parens(separated_nonempty_list(COMMA, expr)) {
+                          match xs with
+                          | [x1; x2] -> A.Binop (op, x1, x2)
+                          | _ -> error "Unexpected arguments." $startpos
+                        }
 | r = parens(ralgebra_subquery); {A.First (r)}
 | x = parens(expr) { x }
 
@@ -142,31 +154,30 @@ e1:
 | p = e0; AS; id = ID { A.As_pred (p, id) }
 | x = e0 { x }
 
+e2_op: x = MUL | x = DIV | x = MOD { x }
+
 e2:
-| p1 = e2; MUL; p2 = e1 { A.Binop (A.Mul, p1, p2) }
-| p1 = e2; DIV; p2 = e1 { A.Binop (A.Div, p1, p2) }
-| p1 = e2; MOD; p2 = e1 { A.Binop (A.Mod, p1, p2) }
+| p1 = e2; op = e2_op; p2 = e1 { A.Binop (op, p1, p2) }
 | x = e1 { x }
 
+e3_op: x = ADD | x = SUB { x }
+
 e3:
-| p1 = e3; ADD; p2 = e2 { A.Binop (A.Add, p1, p2) }
-| p1 = e3; SUB; p2 = e2 { A.Binop (A.Sub, p1, p2) }
+| p1 = e3; op = e3_op; p2 = e2 { A.Binop (op, p1, p2) }
 | x = e2 { x }
 
+e4_op: x = EQ | x = LT | x = LE | x = GT | x = GE { x }
+
 e4:
-| p1 = e4; EQ; p2 = e3 { A.Binop (A.Eq, p1, p2) }
-| p1 = e4; LT; p2 = e3 { A.Binop (A.Lt, p1, p2) }
-| p1 = e4; LE; p2 = e3 { A.Binop (A.Le, p1, p2) }
-| p1 = e4; GT; p2 = e3 { A.Binop (A.Gt, p1, p2) }
-| p1 = e4; GE; p2 = e3 { A.Binop (A.Ge, p1, p2) }
+| p1 = e4; op = e4_op; p2 = e3 { A.Binop (op, p1, p2) }
 | x = e3 { x }
 
 e5:
-| p1 = e4; AND; p2 = e5 { A.Binop (A.And, p1, p2) }
+| p1 = e4; op = AND; p2 = e5 { A.Binop (op, p1, p2) }
 | x = e4 { x }
 
 e6:
-| p1 = e5; OR; p2 = e6 { A.Binop (A.Or, p1, p2) }
+| p1 = e5; op = OR; p2 = e6 { A.Binop (op, p1, p2) }
 | x = e5 { x }
 
 e7:

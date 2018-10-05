@@ -8,7 +8,20 @@ type name =
   ; type_: Type0.PrimType.t option [@compare.ignore] }
 [@@deriving compare, sexp, hash]
 
-type binop = Eq | Lt | Le | Gt | Ge | And | Or | Add | Sub | Mul | Div | Mod
+type binop =
+  | Eq
+  | Lt
+  | Le
+  | Gt
+  | Ge
+  | And
+  | Or
+  | Add
+  | Sub
+  | Mul
+  | Div
+  | Mod
+  | Strpos
 [@@deriving compare, sexp]
 
 type unop = Not | Day | Month | Year [@@deriving compare, sexp]
@@ -39,6 +52,7 @@ type pred =
   | If of pred * pred * pred
   | First of t
   | Exists of t
+  | Substring of t * t * t
 
 and hash_idx = {hi_key_layout: t option; lookup: pred list}
 
