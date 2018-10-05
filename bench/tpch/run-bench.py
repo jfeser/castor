@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import csv
 import logging
 import psycopg2
 import os
@@ -144,6 +145,7 @@ def gen_perc():
 
 DB = "tpch_test"
 PORT = "5432"
+OUT_FILE = rpath('results.csv')
 COMPILE_EXE = rpath("../../../_build/default/castor/bin/compile.exe")
 TRANSFORM_EXE = rpath("../../../_build/default/castor/bin/transform.exe")
 BENCH_DIR = rpath('.')
@@ -237,8 +239,11 @@ os.chdir(rpath("../../"))
 os.system("dune build @install")
 os.chdir(rpath("."))
 
+csv_file = open(OUT_FILE, 'w')
+csv_writer = csv.writer(csv_file)
+csv_writer.writerow(['name', 'time'])
+
 # Run benchmarks
-times = []
 for bench in BENCHMARKS:
     query = rpath(bench['query'] + '.txt')
     args = contents(rpath(bench['query'] + '.args'))
@@ -286,7 +291,8 @@ for bench in BENCHMARKS:
         exit()
     except Exception:
         log.exception("Compile failed.")
-        times.append(None)
+        csv_writer.writerow([bench['query'], None])
+        csv_file.flush()
         continue
 
     # Run query and save results.
@@ -322,7 +328,8 @@ for bench in BENCHMARKS:
             time = float(time_str)
         except ValueError:
             log.error("Failed to read time: %s", time_str)
-        times.append(time)
+        csv_writer.writerow([bench['query'], time])
+        csv_file.flush()
 
         log.debug("Running %s in %s.", cmd_str, os.getcwd())
         with open("results.csv", "w") as out:
@@ -334,5 +341,4 @@ for bench in BENCHMARKS:
 
     os.chdir("..")
 
-log.debug(times)
 logging.shutdown()
