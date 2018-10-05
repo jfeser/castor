@@ -27,7 +27,10 @@ let list a b = {node= AList (a, b); meta= Meta.empty ()}
 
 let tuple a b = {node= ATuple (a, b); meta= Meta.empty ()}
 
-let hash_idx a b c = {node= AHashIdx (a, b, c); meta= Meta.empty ()}
+let hash_idx a b c =
+  {node= AHashIdx (a, b, {hi_key_layout= None; lookup= c}); meta= Meta.empty ()}
+
+let hash_idx' a b c = {node= AHashIdx (a, b, c); meta= Meta.empty ()}
 
 let ordered_idx a b c = {node= AOrderedIdx (a, b, c); meta= Meta.empty ()}
 

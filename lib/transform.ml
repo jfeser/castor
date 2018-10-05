@@ -56,8 +56,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
             @ List.map (f r2) ~f:(fun r2 -> A.join pred r1 r2)
         | GroupBy (x, y, r') -> List.map (f r') ~f:(A.group_by x y)
         | AHashIdx (r1, r2, m) ->
-            cstage (List.map (f r1) ~f:(fun r1 -> A.hash_idx r1 r2 m))
-            @ rstage (List.map (f r2) ~f:(fun r2 -> A.hash_idx r1 r2 m))
+            cstage (List.map (f r1) ~f:(fun r1 -> A.hash_idx' r1 r2 m))
+            @ rstage (List.map (f r2) ~f:(fun r2 -> A.hash_idx' r1 r2 m))
         | AOrderedIdx (r1, r2, m) ->
             cstage (List.map (f r1) ~f:(fun r1 -> A.ordered_idx r1 r2 m))
             @ rstage (List.map (f r2) ~f:(fun r2 -> A.ordered_idx r1 r2 m))
@@ -167,6 +167,21 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
             [ list
                 (dedup (select select_list r))
                 (select ps (filter p (filter filter_pred r))) ]
+        | _ -> []) }
+    |> run_everywhere
+
+  let tf_elim_eq_filter =
+    let open A in
+    { name= "elim-eq-filter"
+    ; f=
+        (function
+        | {node= Filter (Binop (Eq, p1, p2), r); _} ->
+            List.map [(p1, p2); (p2, p1)] ~f:(fun (p, p') ->
+                let k = Fresh.name fresh "k%d" in
+                let select_list = [As_pred (p, k)] in
+                let filter_pred = Binop (Eq, Name (Name.create k), p) in
+                hash_idx (dedup (select select_list r)) (filter filter_pred r) [p']
+            )
         | _ -> []) }
     |> run_everywhere
 
@@ -341,6 +356,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | {node= Filter (p, {node= Join {pred; r1; r2}; _}); _} ->
             [join (Binop (And, p, pred)) r1 r2]
         | {node= Filter (p, {node= AList (r, r'); _}); _} -> [list (filter p r) r']
+        | {node= Filter (p, {node= AHashIdx (r, r', m); _}); _} ->
+            [hash_idx' r (filter p r') m]
         | _ -> []) }
     |> run_everywhere
 
@@ -389,6 +406,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     ; tf_push_filter
     ; tf_merge_filter
     ; tf_split_filter
+    ; tf_elim_eq_filter
     ; tf_elim_join
     ; tf_row_store
     ; tf_project ]

@@ -44,7 +44,7 @@ module Make (Eval : Eval.S) = struct
       in
       subst#visit_t () l
     in
-    hash_idx domain layout {lookup; hi_key_layout= None}
+    hash_idx domain layout lookup
 
   type eval_ctx =
     [ `Eval of Ctx.t
