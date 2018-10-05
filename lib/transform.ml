@@ -185,6 +185,24 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | _ -> []) }
     |> run_everywhere
 
+  let tf_elim_cmp_filter =
+    let open A in
+    { name= "elim-cmp-filter"
+    ; f=
+        (function
+        | {node= Filter (Binop (And, Binop (Ge, p, lb), Binop (Lt, p', ub)), r); _}
+          when [%compare.equal: pred] p p' ->
+            let k = Fresh.name fresh "k%d" in
+            let select_list = [As_pred (p, k)] in
+            let filter_pred = Binop (Eq, Name (Name.create k), p) in
+            [ ordered_idx
+                (dedup (select select_list r))
+                (filter filter_pred r)
+                {oi_key_layout= None; lookup_low= lb; lookup_high= ub; order= `Desc}
+            ]
+        | _ -> []) }
+    |> run_everywhere
+
   let same_orders r1 r2 =
     let open A in
     let r1 = M.annotate_schema r1 in
@@ -407,6 +425,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     ; tf_merge_filter
     ; tf_split_filter
     ; tf_elim_eq_filter
+    ; tf_elim_cmp_filter
     ; tf_elim_join
     ; tf_row_store
     ; tf_project ]
