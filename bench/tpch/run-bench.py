@@ -10,9 +10,9 @@ import shlex
 from subprocess import run
 from datetime import date
 
-
+file_path = os.path.dirname(os.path.abspath(__file__))
 def rpath(p):
-    return os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), p))
+    return os.path.normpath(os.path.join(file_path, p))
 
 
 def contents(fn):
@@ -20,20 +20,21 @@ def contents(fn):
         return f.read().strip()
 
 
-def gen_int(low, high):
-    return lambda: str(random.randint(low, high))
+def gen_int (low, high):
+    return lambda _: str(random.randint(low, high))
 
 
 def gen_date(low, high):
-    def gen():
+    def gen(kind):
         ord_low = low.toordinal()
         ord_high = high.toordinal()
         o = random.randint(ord_low, ord_high)
         d = date.fromordinal(o)
+        if kind == 'sql':
+            return str(d)
         epoch = date(1970, 1, 1)
         offset = d - epoch
         return str(offset.days)
-
     return gen
 
 
@@ -42,7 +43,7 @@ def gen_tpch_date():
 
 
 def gen_choice(choices):
-    return lambda: str(random.choice(choices))
+    return lambda _: str(random.choice(choices))
 
 
 def gen_mktsegment():
@@ -143,35 +144,31 @@ def gen_perc():
 
 DB = "tpch_test"
 PORT = "5432"
-COMPILE_EXE = rpath("dune exec ../../../bin/compile.exe --")
-TRANSFORM_EXE = rpath("dune exec ../../../bin/transform.exe --")
+COMPILE_EXE = rpath("../../../_build/default/castor/bin/compile.exe")
+TRANSFORM_EXE = rpath("../../../_build/default/castor/bin/transform.exe")
+BENCH_DIR = rpath('.')
 BENCHMARKS = [
     {
-        "query": rpath("1.txt"),
-        "args": contents(rpath("1.args")),
+        "query": "1",
         "params": [("param0:int", gen_int(1, 180))],
     },
     {
-        "query": rpath("3-no.txt"),
-        "args": contents(rpath("3-no.args")),
+        "query": "3-no",
         "params": [
             ("param0:string", gen_mktsegment()),
             ("param1:date", gen_tpch_date()),
         ],
     },
     {
-        "query": rpath("4.txt"),
-        "args": contents(rpath("4.args")),
+        "query": "4",
         "params": [("param1:date", gen_tpch_date())],
     },
     {
-        "query": rpath("5-no.txt"),
-        "args": contents(rpath("5-no.args")),
+        "query": "5-no",
         "params": [("param0:string", gen_region()), ("param1:date", gen_tpch_date())],
     },
     {
-        "query": rpath("6.txt"),
-        "args": contents(rpath("6.args")),
+        "query": "6",
         "params": [
             ("param0:date", gen_tpch_date()),
             ("param1:float", gen_discount()),
@@ -179,18 +176,15 @@ BENCHMARKS = [
         ],
     },
     {
-        "query": rpath("10-no.txt"),
-        "args": contents(rpath("10-no.args")),
+        "query": "10-no",
         "params": [("param0:date", gen_tpch_date())],
     },
     {
-        "query": rpath("11-no.txt"),
-        "args": contents(rpath("11-no.args")),
+        "query": "11-no",
         "params": [("param1:string", gen_nation()), ("param2:float", gen_perc())],
     },
     {
-        "query": rpath("12.txt"),
-        "args": contents(rpath("12.args")),
+        "query": "12",
         "params": [
             ("param1:string", gen_shipmode()),
             ("param2:string", gen_shipmode()),
@@ -198,18 +192,15 @@ BENCHMARKS = [
         ],
     },
     {
-        "query": rpath("15.txt"),
-        "args": contents(rpath("15.args")),
+        "query": "15",
         "params": [("param1:date", gen_tpch_date())],
     },
     {
-        "query": rpath("17.txt"),
-        "args": contents(rpath("17.args")),
+        "query": "17",
         "params": [("param0:string", gen_brand()), ("param1:string", gen_container())],
     },
     {
-        "query": rpath("18.txt"),
-        "args": contents(rpath("18.args")),
+        "query": "18",
         "params": [("param1:int", gen_quantity())],
     },
     # {
@@ -225,8 +216,7 @@ BENCHMARKS = [
     #     ],
     # },
     {
-        "query": rpath("21-no.txt"),
-        "args": contents(rpath("21-no.args")),
+        "query": "21-no",
         "params": [("param1:string", gen_nation())],
     },
 ]
@@ -238,8 +228,6 @@ handler.setFormatter(formatter)
 log.addHandler(handler)
 log.setLevel(logging.DEBUG)
 
-random.seed(0)
-
 
 def bench_dir(bench):
     return os.path.splitext(bench["query"])[0]
@@ -249,10 +237,13 @@ os.chdir(rpath("../../"))
 os.system("dune build @install")
 os.chdir(rpath("."))
 
-
 # Run benchmarks
 times = []
 for bench in BENCHMARKS:
+    query = rpath(bench['query'] + '.txt')
+    args = contents(rpath(bench['query'] + '.args'))
+    sql = rpath(bench['query'] + '.sql')
+
     # Make benchmark dir.
     benchd = bench_dir(bench)
     if os.path.isdir(benchd):
@@ -261,7 +252,7 @@ for bench in BENCHMARKS:
 
     params = ["-p %s" % p[0] for p in bench["params"]]
     xform_cmd_parts = (
-        [TRANSFORM_EXE, "-v", "-db", DB] + params + [bench["args"], bench["query"]]
+        [TRANSFORM_EXE, "-v", "-db", DB] + params + [args, query]
     )
     xform_cmd = " ".join(xform_cmd_parts)
 
@@ -291,14 +282,31 @@ for bench in BENCHMARKS:
         if code != 0:
             raise Exception("Nonzero exit code %d" % code)
         log.info("Done building.", bench)
-    except:
+    except KeyboardInterrupt:
+        exit()
+    except Exception:
         log.exception("Compile failed.")
         times.append(None)
         continue
 
     # Run query and save results.
     os.chdir(benchd)
-    params = [p[1]() for p in bench["params"]]
+
+    random.seed(0)
+    params = [p[1]('castor') for p in bench["params"]]
+    random.seed(0)
+    sql_params = [p[1]('sql') for p in bench["params"]]
+
+    log.debug('Running SQL version of query.')
+    with open(sql, 'r') as f:
+        sql_query = f.read()
+    for i, param in enumerate(sql_params):
+        sql_query = sql_query.replace(':%d' % (i+1), param)
+    with open('sql', 'w') as f:
+        f.write(sql_query)
+    with open('golden.csv', 'w') as out:
+        run(['psql', '-d', DB, '-p', PORT, '-t', '-A', '-F', ',', '-f', 'sql'],
+            stdout=out)
 
     time_cmd_parts = ["./scanner.exe", "-t", "1", "data.bin"] + params
     time_cmd = " ".join(time_cmd_parts)
@@ -319,7 +327,9 @@ for bench in BENCHMARKS:
         log.debug("Running %s in %s.", cmd_str, os.getcwd())
         with open("results.csv", "w") as out:
             run(cmd, stdout=out)
-    except:
+    except KeyboardInterrupt:
+        exit()
+    except Exception:
         log.exception("Running %s failed.", cmd)
 
     os.chdir("..")
