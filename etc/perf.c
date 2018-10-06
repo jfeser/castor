@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
   len = stat.st_size;
 
   void *mapped_buf = NULL;
-  if ((mapped_buf = mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0)) ==
+  if (len > 0 && (mapped_buf = mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0)) ==
       MAP_FAILED) {
     perror("Mapping db file failed");
     return 1;
