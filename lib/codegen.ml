@@ -1152,6 +1152,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     fprintf fmt "typedef void params;@," ;
     fprintf fmt "typedef struct { char *ptr; long len; } string_t;@," ;
     fprintf fmt "params* create(void *);@," ;
+    fprintf fmt "long counter(params *);@," ;
+    fprintf fmt "void printer(params *);@," ;
     Hashtbl.data funcs |> List.iter ~f:(fun llfunc -> pp_value_decl fmt llfunc) ;
     pp_close_box fmt () ;
     pp_print_flush fmt ()
