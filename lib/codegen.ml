@@ -88,6 +88,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
   module I = Implang
   open Config
 
+    let clang = Project_config.llvm_root ^ "/bin/clang"
+    let opt = Project_config.llvm_root ^ "/bin/opt"
+
   let ctx = Llvm.create_context ()
 
   let module_ = Llvm.create_module ctx "scanner"
@@ -1164,8 +1167,11 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       List.map args ~f:(fun (n, x) -> sprintf "-D%s=%s" n x)
       |> String.concat ~sep:" "
     in
-    let cmd = sprintf "clang -E %s %s" args_str fn in
-    Unix.open_process_in cmd |> In_channel.input_all
+    let cmd = sprintf "%s -E %s %s" clang args_str fn in
+    Logs.debug (fun m -> m "%s" cmd);
+    let out = Unix.open_process_in cmd |> In_channel.input_all in
+    Logs.debug (fun m -> m "Template output: %s" out);
+    out
 
   let from_fn fn n i =
     let template = Project_config.project_root ^ "/etc/" ^ fn in
@@ -1198,11 +1204,13 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     Out_channel.with_file header_fn ~f:write_header ;
     (* Generate main file. *)
     let () =
+      Logs.debug (fun m -> m "Creating main file.");
       let funcs, calls =
         List.filter params ~f:(fun n ->
             List.exists ir_module.Irgen.params ~f:(fun n' ->
                 Name.Compare_no_type.(n = n') ) )
         |> List.mapi ~f:(fun i n ->
+            Logs.debug (fun m -> m "Creating loader for %a." Name.pp n);
                let loader_fn =
                  match Name.type_exn n with
                  | NullT -> failwith "No null parameters."
@@ -1231,8 +1239,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       let module_ = codegen ir_module in
       Llvm.print_module module_fn module_
     in
-    let clang = Project_config.llvm_root ^ "/bin/clang" in
-    let opt = Project_config.llvm_root ^ "/bin/opt" in
     let cflags = ["-g"; "-lcmph"] in
     let cflags =
       (if gprof then ["-pg"] else []) @ (if debug then ["-O0"] else []) @ cflags
