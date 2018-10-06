@@ -9,7 +9,7 @@ let main project_root workspace_root =
     Option.value_exn ~message:"No LLVM root found."
       (List.find_map configs ~f:(fun c ->
       try
-        Some (Unix.open_process_in (sprintf "%s --obj-root" c)
+        Some (Unix.open_process_in (sprintf "%s --prefix" c)
               |> In_channel.input_all |> String.strip |> Filename.realpath)
       with Unix.Unix_error _ -> None))
   in
