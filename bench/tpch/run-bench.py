@@ -8,7 +8,7 @@ import shutil
 import json
 import random
 import shlex
-from subprocess import run
+from subprocess import call, check_call, check_output
 from datetime import date
 
 file_path = os.path.dirname(os.path.abspath(__file__))
@@ -146,8 +146,8 @@ def gen_perc():
 DB = "tpch_test"
 PORT = "5432"
 OUT_FILE = rpath('results.csv')
-COMPILE_EXE = rpath("../../../_build/default/castor/bin/compile.exe")
-TRANSFORM_EXE = rpath("../../../_build/default/castor/bin/transform.exe")
+COMPILE_EXE = rpath("../../_build/default/bin/compile.exe")
+TRANSFORM_EXE = rpath("../../_build/default/bin/transform.exe")
 BENCH_DIR = rpath('.')
 BENCHMARKS = [
     {
@@ -283,7 +283,7 @@ for bench in BENCHMARKS:
         code = os.system("%s 2> %s > %s" % (xform_cmd, xform_log, query_file))
         if code != 0:
             raise Exception("Nonzero exit code %d" % code)
-        code = os.system("%s %s &> %s" % (compile_cmd, query_file, compile_log))
+        code = os.system("%s %s > %s 2>&1" % (compile_cmd, query_file, compile_log))
         if code != 0:
             raise Exception("Nonzero exit code %d" % code)
         log.info("Done building.", bench)
@@ -311,7 +311,7 @@ for bench in BENCHMARKS:
     with open('sql', 'w') as f:
         f.write(sql_query)
     with open('golden.csv', 'w') as out:
-        run(['psql', '-d', DB, '-p', PORT, '-t', '-A', '-F', ',', '-f', 'sql'],
+        call(['psql', '-d', DB, '-p', PORT, '-t', '-A', '-F', ',', '-f', 'sql'],
             stdout=out)
 
     time_cmd_parts = ["./scanner.exe", "-t", "1", "data.bin"] + params
@@ -321,8 +321,9 @@ for bench in BENCHMARKS:
     cmd = ["./scanner.exe", "-p", "data.bin"] + params
     cmd_str = shlex.quote(" ".join(cmd))
     try:
-        proc = run(time_cmd_parts, capture_output=True, encoding="utf-8")
-        time_str = proc.stdout.split(" ")[0][:-2]
+        boutput = check_output(time_cmd_parts)
+        output = boutput.decode('utf-8')
+        time_str = output.split(" ")[0][:-2]
         time = None
         try:
             time = float(time_str)
@@ -333,7 +334,7 @@ for bench in BENCHMARKS:
 
         log.debug("Running %s in %s.", cmd_str, os.getcwd())
         with open("results.csv", "w") as out:
-            run(cmd, stdout=out)
+            call(cmd, stdout=out)
     except KeyboardInterrupt:
         exit()
     except Exception:
