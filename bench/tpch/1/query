@@ -15,15 +15,22 @@ alist(orderby([k0_lineitem_l_returnflag, k0_lineitem_l_linestatus],
           avg(lineitem.l_extendedprice) as avg_price,
           avg(lineitem.l_discount) as avg_disc,
           count() as count_order],
-    filter((lineitem.l_shipdate <= (date("1998-12-01") - day(param0))),
-      alist(filter(((lineitem.l_returnflag = k0_lineitem_l_returnflag) &&
-                   (lineitem.l_linestatus = k0_lineitem_l_linestatus)),
-              lineitem),
+    aorderedidx(dedup(
+                  select([lineitem.l_shipdate as k1],
+                    filter(((lineitem.l_returnflag = k0_lineitem_l_returnflag)
+                           &&
+                           (lineitem.l_linestatus = k0_lineitem_l_linestatus)),
+                      lineitem))),
+      alist(filter((k1 = lineitem.l_shipdate),
+              filter(((lineitem.l_returnflag = k0_lineitem_l_returnflag) &&
+                     (lineitem.l_linestatus = k0_lineitem_l_linestatus)),
+                lineitem)),
         atuple([ascalar(lineitem.l_quantity),
                 ascalar(lineitem.l_extendedprice),
                 ascalar(lineitem.l_discount),
                 ascalar(lineitem.l_tax),
                 ascalar(lineitem.l_returnflag),
-                ascalar(lineitem.l_linestatus),
-                ascalar(lineitem.l_shipdate)],
-          cross)))))
+                ascalar(lineitem.l_linestatus)],
+          cross)),
+      (0 - 4611686018427387903),
+      (date("1998-12-01") - day(param0)))))
