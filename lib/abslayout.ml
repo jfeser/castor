@@ -108,7 +108,7 @@ and pp_pred fmt =
   function
   | As_pred (p, n) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp_pred p n
   | Null -> fprintf fmt "null"
-  | Int x -> fprintf fmt "%d" x
+  | Int x -> if x >= 0 then fprintf fmt "%d" x else fprintf fmt "(0 - %d)" (-x)
   | Fixed x -> fprintf fmt "%s" (Fixed_point.to_string x)
   | Date x -> fprintf fmt "date(\"%s\")" (Date.to_string x)
   | Unop (op, x) -> fprintf fmt "%s(%a)" (unop_to_str op) pp_pred x

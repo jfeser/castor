@@ -187,19 +187,24 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
 
   let tf_elim_cmp_filter =
     let open A in
+    let gen ?lb ?ub p r =
+      let lb = Option.value lb ~default:(Int (Int.min_value + 1)) in
+      let ub = Option.value ub ~default:(Int Int.max_value) in
+      let k = Fresh.name fresh "k%d" in
+      let select_list = [As_pred (p, k)] in
+      let filter_pred = Binop (Eq, Name (Name.create k), p) in
+      [ ordered_idx
+          (dedup (select select_list r))
+          (filter filter_pred r)
+          {oi_key_layout= None; lookup_low= lb; lookup_high= ub; order= `Desc} ]
+    in
     { name= "elim-cmp-filter"
     ; f=
         (function
         | {node= Filter (Binop (And, Binop (Ge, p, lb), Binop (Lt, p', ub)), r); _}
           when [%compare.equal: pred] p p' ->
-            let k = Fresh.name fresh "k%d" in
-            let select_list = [As_pred (p, k)] in
-            let filter_pred = Binop (Eq, Name (Name.create k), p) in
-            [ ordered_idx
-                (dedup (select select_list r))
-                (filter filter_pred r)
-                {oi_key_layout= None; lookup_low= lb; lookup_high= ub; order= `Desc}
-            ]
+            gen ~lb ~ub p r
+        | {node= Filter (Binop (Le, p, ub), r); _} -> gen ~ub p r
         | _ -> []) }
     |> run_everywhere
 
@@ -295,6 +300,19 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
             | _ -> []
           in
           List.filter rs ~f:(same_orders r) ) }
+    |> run_everywhere
+
+  let tf_push_select =
+    let open A in
+    { name= "push-select"
+    ; f=
+        (fun r ->
+          match r with
+          | {node= Select (ps, {node= AHashIdx (r, r', m); _}); _} ->
+              [hash_idx' r (select ps r') m]
+          (* | {node= Select (ps, {node= AOrderedIdx (r, r', m); _}); _} ->
+           *     [ordered_idx r (select ps r') m] *)
+          | _ -> [] ) }
     |> run_everywhere
 
   (** Check that a predicate is applied to a schema that has the right fields. *)
@@ -428,7 +446,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     ; tf_elim_cmp_filter
     ; tf_elim_join
     ; tf_row_store
-    ; tf_project ]
+    ; tf_project
+    ; tf_push_select ]
 
   let of_name : string -> t Or_error.t =
    fun n ->
