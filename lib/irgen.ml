@@ -5,8 +5,8 @@ open Implang
 module A = Abslayout
 
 type ir_module =
-  {iters: func list; funcs: func list; params: Name.t list; buffer_len: int}
-[@@deriving sexp]
+  {iters: func list; funcs: func list; params: Name.Compare.t list; buffer_len: int}
+[@@deriving compare, sexp]
 
 type scan_args =
   { ctx: Ctx.t
@@ -773,9 +773,7 @@ struct
           | AEmpty | AScalar _ | AList _ | ATuple _ | AHashIdx _ | AOrderedIdx _ ->
               Error.create "Not functions." r [%sexp_of: A.t] |> Error.raise )
       in
-      Logs.debug (fun m -> m "%a" Sexp.pp_hum ([%sexp_of: func] func)) ;
-      add_func func ;
-      func
+      add_func func ; func
     and scan ctx r t =
       match r.node with As (_, r) -> scan ctx r t | _ -> gen_func ctx r t
     in

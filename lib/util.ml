@@ -40,6 +40,15 @@ class ['s] list_monoid =
     method private plus = ( @ )
   end
 
+class ['s] set_monoid m =
+  object
+    inherit ['s] VisitorsRuntime.monoid
+
+    method private zero = Set.empty m
+
+    method private plus = Set.union
+  end
+
 class ['s] conj_monoid =
   object
     inherit ['s] VisitorsRuntime.monoid

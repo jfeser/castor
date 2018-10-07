@@ -88,8 +88,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
   module I = Implang
   open Config
 
-    let clang = Project_config.llvm_root ^ "/bin/clang"
-    let opt = Project_config.llvm_root ^ "/bin/opt"
+  let clang = Project_config.llvm_root ^ "/bin/clang"
+
+  let opt = Project_config.llvm_root ^ "/bin/opt"
 
   let ctx = Llvm.create_context ()
 
@@ -840,9 +841,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       add_function_attr func
         (create_enum_attr ctx "norecurse" 0L)
         AttrIndex.Function ;
-      add_function_attr func
-        (create_enum_attr ctx "alwaysinline" 0L)
-        AttrIndex.Function ;
       set_linkage Linkage.Internal func
     in
     let load_params ictx func =
@@ -1168,9 +1166,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       |> String.concat ~sep:" "
     in
     let cmd = sprintf "%s -E %s %s" clang args_str fn in
-    Logs.debug (fun m -> m "%s" cmd);
+    Logs.debug (fun m -> m "%s" cmd) ;
     let out = Unix.open_process_in cmd |> In_channel.input_all in
-    Logs.debug (fun m -> m "Template output: %s" out);
+    Logs.debug (fun m -> m "Template output: %s" out) ;
     out
 
   let from_fn fn n i =
@@ -1196,7 +1194,11 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let data_fn = out_dir ^ "/data.bin" in
     let open Type.PrimType in
     (* Generate IR module. *)
-    let ir_module = IG.irgen ~params ~data_fn layout in
+    let ir_module =
+      let unopt = IG.irgen ~params ~data_fn layout in
+      Logs.info (fun m -> m "Optimizing intermediate language.") ;
+      Implang_opt.opt unopt
+    in
     Out_channel.with_file ir_fn ~f:(fun ch ->
         let fmt = Caml.Format.formatter_of_out_channel ch in
         IG.pp fmt ir_module ) ;
@@ -1204,13 +1206,13 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     Out_channel.with_file header_fn ~f:write_header ;
     (* Generate main file. *)
     let () =
-      Logs.debug (fun m -> m "Creating main file.");
+      Logs.debug (fun m -> m "Creating main file.") ;
       let funcs, calls =
         List.filter params ~f:(fun n ->
             List.exists ir_module.Irgen.params ~f:(fun n' ->
                 Name.Compare_no_type.(n = n') ) )
         |> List.mapi ~f:(fun i n ->
-            Logs.debug (fun m -> m "Creating loader for %a." Name.pp n);
+               Logs.debug (fun m -> m "Creating loader for %a." Name.pp n) ;
                let loader_fn =
                  match Name.type_exn n with
                  | NullT -> failwith "No null parameters."
