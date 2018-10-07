@@ -120,12 +120,12 @@ struct
 
   let scan_empty {ctx; name; _} =
     let open Builder in
-    let b = create ~ctx ~name ~ret:(Type.PrimType.TupleT []) in
+    let b = create ~ctx ~name ~ret:(Type.PrimType.TupleT []) ~fresh in
     build_func b
 
   let scan_null {ctx; name; _} =
     let open Builder in
-    let b = create ~ctx ~name ~ret:Type.PrimType.NullT in
+    let b = create ~ctx ~name ~ret:Type.PrimType.NullT ~fresh in
     build_yield Null b ; build_func b
 
   let scan_int args =
@@ -134,7 +134,7 @@ struct
         let open Builder in
         let b =
           let ret_type = Type.PrimType.TupleT [IntT {nullable}] in
-          create ~ctx ~name ~ret:ret_type
+          create ~ctx ~name ~ret:ret_type ~fresh
         in
         let start = Ctx.find_exn ctx (Name.create "start") b in
         let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
@@ -155,7 +155,7 @@ struct
         let open Builder in
         let b =
           let ret_type = Type.PrimType.TupleT [FixedT {nullable}] in
-          create ~ctx ~name ~ret:ret_type
+          create ~ctx ~name ~ret:ret_type ~fresh
         in
         let start = Ctx.find_exn ctx (Name.create "start") b in
         let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
@@ -176,7 +176,9 @@ struct
     match args with
     | {ctx; name; type_= BoolT meta; _} ->
         let open Builder in
-        let b = create ~ctx ~name ~ret:(TupleT [BoolT {nullable= meta.nullable}]) in
+        let b =
+          create ~ctx ~name ~ret:(TupleT [BoolT {nullable= meta.nullable}]) ~fresh
+        in
         let start = Ctx.find_exn ctx (Name.create "start") b in
         let ival = Slice (start, 1) in
         let _nval =
@@ -195,7 +197,7 @@ struct
     | {ctx; name; type_= StringT {nchars= l, _; nullable; _} as t; _} ->
         let open Builder in
         let hdr = Header.make_header t in
-        let b = create ~ctx ~name ~ret:(TupleT [StringT {nullable}]) in
+        let b = create ~ctx ~name ~ret:(TupleT [StringT {nullable}]) ~fresh in
         let start = Ctx.find_exn ctx (Name.create "start") b in
         let value_ptr = Header.make_position hdr "value" start in
         let nchars = Header.make_access hdr "nchars" start in
@@ -229,7 +231,8 @@ struct
           let ctx = Ctx.bind ctx "start" Type.PrimType.int_t cstart in
           let child_ctx, child_args = Ctx.make_callee_context ctx b in
           let child_iter = scan child_ctx clayout ctype in
-          build_foreach ~count:(Type.count ctype) child_iter child_args
+          build_foreach ~persistent:true ~count:(Type.count ctype) child_iter
+            child_args
             (fun tup b ->
               let next_ctx =
                 let tuple_ctx = Ctx.of_schema Meta.(find_exn clayout schema) tup in
@@ -243,7 +246,7 @@ struct
         let schema = Meta.(find_exn r schema) in
         Type.PrimType.TupleT (List.map schema ~f:Name.type_exn)
       in
-      create ~ctx ~name ~ret:ret_type
+      create ~ctx ~name ~ret:ret_type ~fresh
     in
     let hdr = Header.make_header t in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -273,7 +276,7 @@ struct
         let schema = Meta.(find_exn r schema) in
         Type.PrimType.TupleT (List.map schema ~f:Name.type_exn)
       in
-      create ~ctx ~name ~ret:ret_type
+      create ~ctx ~name ~ret:ret_type ~fresh
     in
     let hdr = Header.make_header t in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -328,7 +331,7 @@ struct
         let schema = Meta.(find_exn r schema) in
         Type.PrimType.TupleT (List.map schema ~f:Name.type_exn)
       in
-      create ~ctx ~name ~ret:ret_type
+      create ~ctx ~name ~ret:ret_type ~fresh
     in
     let hdr = Header.make_header t in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -346,7 +349,8 @@ struct
           let child_hdr = Header.make_header child_type in
           Header.make_access child_hdr "len" cstart
         in
-        build_foreach ~count:(Type.count child_type) func callee_args build_yield b ;
+        build_foreach ~persistent:false ~count:(Type.count child_type) func
+          callee_args build_yield b ;
         build_assign Infix.(cstart + clen) cstart b ;
         build_assign Infix.(pcount - int 1) pcount b )
       b ;
@@ -367,7 +371,7 @@ struct
         let schema = Meta.(find_exn r schema) in
         Type.PrimType.TupleT (List.map schema ~f:Name.type_exn)
       in
-      create ~ctx ~name ~ret:ret_type
+      create ~ctx ~name ~ret:ret_type ~fresh
     in
     let hdr = Header.make_header t in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -418,8 +422,8 @@ struct
         build_if
           ~cond:(build_eq key_tuple (Tuple lookup_expr) b)
           ~then_:
-            (build_foreach ~count:(Type.count value_type) value_iter
-               value_callee_args (fun value_tup b ->
+            (build_foreach ~persistent:false ~count:(Type.count value_type)
+               value_iter value_callee_args (fun value_tup b ->
                  build_yield (build_concat [key_tuple; value_tup] b) b ))
           ~else_:(fun _ -> ())
           b )
@@ -477,7 +481,7 @@ struct
             let schema = Meta.(find_exn r schema) in
             Type.PrimType.TupleT (List.map schema ~f:Name.type_exn)
           in
-          create ~ctx ~name ~ret:ret_type
+          create ~ctx ~name ~ret:ret_type ~fresh
         in
         let start = Ctx.find_exn ctx (Name.create "start") b in
         let kstart = build_var "kstart" Type.PrimType.int_t b in
@@ -505,7 +509,7 @@ struct
         let key_index i b =
           build_assign Infix.(index_start + (i * kp_len)) kstart b ;
           build_iter key_iter key_callee_args b ;
-          let key = build_var "key" key_iter.ret_type b in
+          let key = build_var ~persistent:false "key" key_iter.ret_type b in
           build_step key key_iter b ; key
         in
         let n = Infix.(index_len / kp_len) in
@@ -517,8 +521,8 @@ struct
               Infix.(Slice (index_start + (idx * kp_len) + key_len, 8))
               vstart b ;
             build_assign key key_tuple b ;
-            build_foreach ~count:(Type.count value_type) value_iter
-              value_callee_args
+            build_foreach ~persistent:false ~count:(Type.count value_type)
+              value_iter value_callee_args
               (fun value b -> build_yield (build_concat [key; value] b) b)
               b )
           b ;
@@ -527,16 +531,18 @@ struct
 
   let printer ctx name func =
     let open Builder in
-    let b = create ~ctx ~name ~ret:VoidT in
-    build_foreach func [] (fun x b -> build_print x b) b ;
+    let b = create ~ctx ~name ~ret:VoidT ~fresh in
+    build_foreach ~persistent:false func [] (fun x b -> build_print x b) b ;
     build_func b
 
   let counter ctx name func =
     let open Builder in
     let open Infix in
-    let b = create ~name ~ctx ~ret:(IntT {nullable= false}) in
+    let b = create ~name ~ctx ~ret:(IntT {nullable= false}) ~fresh in
     let c = build_defn "c" Infix.(int 0) b in
-    build_foreach func [] (fun _ b -> build_assign (c + int 1) c b) b ;
+    build_foreach ~persistent:false func []
+      (fun _ b -> build_assign (c + int 1) c b)
+      b ;
     build_return c b ;
     build_func b
 
@@ -553,11 +559,12 @@ struct
             let schema = Meta.(find_exn r schema) in
             Type.PrimType.TupleT (List.map schema ~f:Name.type_exn)
           in
-          create ~ctx ~name ~ret:ret_type
+          create ~ctx ~name ~ret:ret_type ~fresh
         in
         let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
         let func = scan callee_ctx child_layout child_type in
-        build_foreach ~count:(Type.count child_type) func callee_args
+        build_foreach ~persistent:false ~count:(Type.count child_type) func
+          callee_args
           (fun tup b ->
             let ctx =
               let child_schema = Meta.(find_exn child_layout schema) in
@@ -660,13 +667,14 @@ struct
         let schema = Meta.(find_exn layout schema) in
         let b =
           let ret_type = Type.PrimType.TupleT (List.map schema ~f:Name.type_exn) in
-          create ~ctx ~name ~ret:ret_type
+          create ~ctx ~name ~ret:ret_type ~fresh
         in
         let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
         let func = scan callee_ctx child_layout child_type in
         ( match A.select_kind args with
         | `Scalar ->
-            build_foreach ~count:(Type.count child_type) func callee_args
+            build_foreach ~persistent:false ~count:(Type.count child_type) func
+              callee_args
               (fun tup b ->
                 let ctx =
                   let child_schema = Meta.(find_exn child_layout schema) in
@@ -687,7 +695,7 @@ struct
               build_defn ~persistent:false "found_tup" (Bool false) b
             in
             (* Holds the state for each aggregate. *)
-            build_foreach ~count:(Type.count child_type)
+            build_foreach ~persistent:false ~count:(Type.count child_type)
               ~header:(fun tup b ->
                 let ctx =
                   let child_schema = Meta.(find_exn child_layout schema) in

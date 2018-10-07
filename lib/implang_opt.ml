@@ -97,39 +97,52 @@ let subst_visitor ctx =
       match Map.find ctx n with Some e -> e | None -> var
   end
 
-let inline_visitor sl_iters =
-  object (self : 'a)
-    inherit [_] endo
+let inline sl_iters func =
+  let locals = ref func.locals in
+  let visitor =
+    object (self : 'a)
+      inherit [_] endo
 
-    method! visit_prog fname stmts =
-      let rec visit_stmts = function
-        | [] -> []
-        | [s] -> [self#visit_stmt fname s]
-        | Iter {func; args; _} :: Step {var; iter} :: ss
-          when [%compare.equal: string] func iter && Hashtbl.mem sl_iters iter ->
-            Logs.debug (fun m -> m "Inlining %s into %s." iter fname) ;
-            let func = Hashtbl.find_exn sl_iters iter in
-            (* Substitute arguments into the inlinee. *)
-            let ctx =
-              List.map2_exn func.args args ~f:(fun (n, _) v -> (n, v))
-              |> Map.of_alist_exn (module String)
-            in
-            let func' = (subst_visitor ctx)#visit_func () func in
-            (* Replace the yield with an assignment. *)
-            let yield_visitor =
-              object
-                inherit [_] endo
+      method! visit_prog () stmts =
+        let rec visit_stmts = function
+          | [] -> []
+          | [s] -> [self#visit_stmt () s]
+          | Iter {func= iter'; args; _} :: Step {var; iter} :: ss
+            when [%compare.equal: string] iter' iter && Hashtbl.mem sl_iters iter ->
+              Logs.debug (fun m -> m "Inlining %s into %s." iter func.name) ;
+              let func = Hashtbl.find_exn sl_iters iter in
+              (* Substitute arguments into the inlinee. *)
+              let ctx =
+                List.map2_exn func.args args ~f:(fun (n, _) v -> (n, v))
+                |> Map.of_alist_exn (module String)
+              in
+              let func' = (subst_visitor ctx)#visit_func () func in
+              (* Replace the yield with an assignment. *)
+              let yield_visitor =
+                object
+                  inherit [_] endo
 
-                method! visit_Yield () _ e = Assign {lhs= var; rhs= e}
-              end
-            in
-            let func'' = yield_visitor#visit_func () func' in
-            let body = func''.body in
-            body @ visit_stmts ss
-        | s :: ss -> self#visit_stmt fname s :: visit_stmts ss
-      in
-      visit_stmts stmts
-  end
+                  method! visit_Yield () _ e = Assign {lhs= var; rhs= e}
+                end
+              in
+              (* Add the locals (but not the arguments). None of these variables
+                 needs to be persistent. *)
+              locals :=
+                List.filter_map func.locals ~f:(fun l ->
+                    if List.exists func.args ~f:(fun (n, _) -> String.(n = l.lname))
+                    then None
+                    else Some {l with persistent= false} )
+                @ !locals ;
+              let func'' = yield_visitor#visit_func () func' in
+              let body = func''.body in
+              body @ visit_stmts ss
+          | s :: ss -> self#visit_stmt () s :: visit_stmts ss
+        in
+        visit_stmts stmts
+    end
+  in
+  let func' = visitor#visit_func () func in
+  {func' with locals= List.dedup_and_sort ~compare:[%compare: local] !locals}
 
 let inline_sl_iter m =
   let sl_iters = Hashtbl.create (module String) in
@@ -152,11 +165,30 @@ let inline_sl_iter m =
       let has_loop, yield_ct = visitor#visit_func () f in
       if (not has_loop) && yield_ct = 1 then
         Hashtbl.set sl_iters ~key:f.name ~data:f ) ;
-  let iters' =
-    List.map m.iters ~f:(fun f -> (inline_visitor sl_iters)#visit_func f.name f)
-  in
+  let iters' = List.map m.iters ~f:(inline sl_iters) in
   {m with iters= iters'}
 
 let inline_sl_iter = to_fixed_point inline_sl_iter
 
-let opt m = m |> prune_args |> prune_locals
+let calls f f' =
+  let visitor =
+    object
+      inherit [_] reduce
+
+      inherit [_] Util.disj_monoid
+
+      method! visit_Step () _ n = String.(f'.name = n)
+    end
+  in
+  visitor#visit_func () f
+
+let prune_funcs m =
+  let iters' =
+    List.filter m.Irgen.iters ~f:(fun f ->
+        List.exists (m.iters @ m.funcs) ~f:(fun f' -> calls f' f) )
+  in
+  {m with iters= iters'}
+
+let prune_funcs = to_fixed_point prune_funcs
+
+let opt m = m |> prune_args |> prune_locals |> inline_sl_iter |> prune_funcs

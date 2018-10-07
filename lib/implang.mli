@@ -115,7 +115,7 @@ module Builder : sig
 
   val type_of : expr -> t -> Type.PrimType.t
 
-  val create : ctx:_ctx -> name:string -> ret:Type.PrimType.t -> t
+  val create : ctx:_ctx -> name:string -> ret:Type.PrimType.t -> fresh:Fresh.t -> t
 
   val new_scope : t -> t
 
@@ -149,6 +149,7 @@ module Builder : sig
        ?count:Type.AbsCount.t
     -> ?header:(expr -> t -> unit)
     -> ?footer:(expr -> t -> unit)
+    -> ?persistent:bool
     -> func
     -> expr list
     -> (expr -> t -> unit)

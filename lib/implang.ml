@@ -246,7 +246,7 @@ module Builder = struct
       | _ -> failwith "Unexpected conditional type." )
     | TupleHash _ -> IntT {nullable= false}
 
-  let create ~ctx ~name ~ret =
+  let create ~ctx ~name ~ret ~fresh =
     let args = Ctx0.make_caller_args ctx in
     let type_ctx =
       Map.to_alist ctx
@@ -264,7 +264,7 @@ module Builder = struct
       | `Ok l -> l
       | `Duplicate_key _ -> fail (Error.of_string "Duplicate argument.")
     in
-    {name; args; ret; locals; body= ref []; type_ctx; fresh= Fresh.create ()}
+    {name; args; ret; locals; body= ref []; type_ctx; fresh}
 
   (** Create a function builder with an empty body and a copy of the locals
       table. *)
@@ -337,8 +337,8 @@ module Builder = struct
         build_assign Infix.(count - int 1) count b )
       b
 
-  let build_foreach ?count ?header ?footer iter_ args body b =
-    let tup = build_var ~persistent:false "tup" iter_.ret_type b in
+  let build_foreach ?count ?header ?footer ?persistent iter_ args body b =
+    let tup = build_var ?persistent "tup" iter_.ret_type b in
     build_iter iter_ args b ;
     Option.iter header ~f:(fun f -> f tup b) ;
     let add_footer b = Option.iter footer ~f:(fun f -> f tup b) in
