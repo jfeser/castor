@@ -3,68 +3,9 @@ open Base
 open Collections
 module Format = Caml.Format
 module A = Abslayout
+include Implang0
 
 let fail : Error.t -> 'a = Error.raise
-
-type op =
-  | Int2Fl
-  | IntAdd
-  | IntSub
-  | IntMul
-  | IntDiv
-  | Mod
-  | FlAdd
-  | FlSub
-  | FlMul
-  | FlDiv
-  | IntLt
-  | FlLt
-  | FlEq
-  | IntEq
-  | StrEq
-  | And
-  | Or
-  | Not
-  | IntHash
-  | StrHash
-  | LoadStr
-[@@deriving compare, hash, sexp]
-
-type expr =
-  | Null
-  | Int of int
-  | Fixed of Fixed_point.t
-  | Bool of bool
-  | String of string
-  | Var of string
-  | Tuple of expr list
-  | Slice of expr * int
-  | Index of expr * int
-  | Binop of {op: op; arg1: expr; arg2: expr}
-  | Unop of {op: op; arg: expr}
-  | Done of string
-  | Ternary of expr * expr * expr
-  | TupleHash of Type.PrimType.t list * expr * expr
-
-and stmt =
-  | Print of Type.PrimType.t * expr
-  | Loop of {cond: expr; body: prog}
-  | If of {cond: expr; tcase: prog; fcase: prog}
-  | Iter of {var: string; func: string; args: expr list}
-  | Step of {var: string; iter: string}
-  | Assign of {lhs: string; rhs: expr}
-  | Yield of expr
-  | Return of expr
-
-and prog = stmt list
-
-and func =
-  { name: string
-  ; args: (string * Type.PrimType.t) list
-  ; body: prog
-  ; ret_type: Type.PrimType.t
-  ; locals: (string * Type.PrimType.t) list }
-[@@deriving compare, hash, sexp]
 
 let rec pp_args fmt =
   let open Format in

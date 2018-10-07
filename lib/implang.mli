@@ -1,7 +1,7 @@
 open Base
 open Collections
 
-type op =
+type op = Implang0.op =
   | Int2Fl
   | IntAdd
   | IntSub
@@ -25,7 +25,7 @@ type op =
   | LoadStr
 [@@deriving compare, sexp]
 
-type expr =
+type expr = Implang0.expr =
   | Null
   | Int of int
   | Fixed of Fixed_point.t
@@ -41,7 +41,7 @@ type expr =
   | Ternary of expr * expr * expr
   | TupleHash of Type.PrimType.t list * expr * expr
 
-and stmt =
+and stmt = Implang0.stmt =
   | Print of Type.PrimType.t * expr
   | Loop of {cond: expr; body: prog}
   | If of {cond: expr; tcase: prog; fcase: prog}
@@ -53,7 +53,7 @@ and stmt =
 
 and prog = stmt list
 
-and func =
+and func = Implang0.func =
   { name: string
   ; args: (string * Type0.PrimType.t) list
   ; body: prog
