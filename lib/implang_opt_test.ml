@@ -42,8 +42,9 @@ alist(filter(lp.counter < log.counter &&
 log.counter < lp.succ, log) as lc,
 atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
 |}
-    prune_args;
-  [%expect {|
+    opt ;
+  [%expect
+    {|
     fun scalar_3 (start) {
         yield (buf[start : 1]);
     }fun scalar_4 (start) {
@@ -55,10 +56,8 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
     }fun tuple_6 (start) {
          cstart0 = start;
          cstart1 = cstart0 + 1;
-         init scalar_7(cstart0);
-         tup2 = next(scalar_7);
-         init scalar_8(cstart1);
-         tup3 = next(scalar_8);
+         tup2 = (buf[cstart0 : 1]);
+         tup3 = (buf[cstart1 : 1]);
          yield (tup2[0], tup3[0]);
     }fun list_5 (start) {
          cstart = start + 1 + 1;
@@ -74,10 +73,8 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
          cstart0 = start + 1;
          cstart1 = cstart0 + 1;
          cstart2 = cstart1 + 1;
-         init scalar_3(cstart0);
-         tup3 = next(scalar_3);
-         init scalar_4(cstart1);
-         tup4 = next(scalar_4);
+         tup3 = (buf[cstart0 : 1]);
+         tup4 = (buf[cstart1 : 1]);
          init list_5(cstart2);
          loop (not done(list_5)) {
              tup5 = next(list_5);

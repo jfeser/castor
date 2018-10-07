@@ -155,15 +155,15 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       val values = Hashtbl.create (module String)
 
       val tctx =
-        let kv = func.I.locals @ params in
+        let kv =
+          List.map func.I.locals ~f:(fun {lname; type_; _} -> (lname, type_))
+          @ params
+        in
         match Hashtbl.of_alist (module String) kv with
         | `Ok x -> x
         | `Duplicate_key k ->
             Error.create "Duplicate key." (k, func.I.locals, params)
-              [%sexp_of:
-                string
-                * (string * Type.PrimType.t) list
-                * (string * Type.PrimType.t) list]
+              [%sexp_of: string * I.local list * (string * Type.PrimType.t) list]
             |> Error.raise
 
       method values : var Hashtbl.M(String).t = values
@@ -898,6 +898,12 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       (* Load params into local allocas. *)
       Hashtbl.set ictx#values ~key:"params" ~data:(Local (param ictx#step 0)) ;
       load_params ictx ictx#step ;
+      (* Create local allocas for non-persistent variables. *)
+      List.iter ictx#func.locals ~f:(fun {lname; type_; persistent} ->
+          if not persistent then
+            let lltype = codegen_type type_ in
+            Hashtbl.set ictx#values ~key:lname
+              ~data:(Local (build_entry_alloca lltype lname builder)) ) ;
       (* Create top level switch. *)
       let yield_index =
         build_load (get_val ictx "yield_index") "yield_index" builder
@@ -964,7 +970,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       position_at_end bb builder ;
       Hashtbl.set funcs ~key:name ~data:fctx#llfunc ;
       (* Create storage space for local variables & iterator args. *)
-      List.iter locals ~f:(fun (n, t) ->
+      List.iter locals ~f:(fun {lname= n; type_= t; _} ->
           let lltype = codegen_type t in
           let var = build_alloca lltype n builder in
           Hashtbl.set fctx#values ~key:n ~data:(Local var) ) ;
@@ -1083,9 +1089,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
           (* Create storage for iterator entry point index. *)
           SB.build_local sb ictx "yield_index" (i8_type ctx) ;
           (* Create storage space for local variables & iterator args. *)
-          List.iter ictx#func.locals ~f:(fun (n, t) ->
+          List.iter ictx#func.locals ~f:(fun {lname= n; type_= t; persistent} ->
               let lltype = codegen_type t in
-              SB.build_local sb ictx n lltype ) ;
+              if persistent then SB.build_local sb ictx n lltype ) ;
           ictx )
     in
     let fctxs = List.map ir_funcs ~f:(fun func -> new fctx func typed_params) in

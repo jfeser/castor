@@ -95,7 +95,7 @@ struct
           let callee_type = Meta.(find_exn callee_layout type_) in
           let callee = scan callee_ctx callee_layout callee_type in
           build_iter callee callee_args b ;
-          let tup = build_fresh_var "tup" callee.ret_type b in
+          let tup = build_var "tup" callee.ret_type b in
           build_step tup callee b ;
           Infix.(index tup 0)
       | A.Exists callee_layout ->
@@ -104,7 +104,7 @@ struct
           let callee_type = Meta.(find_exn callee_layout type_) in
           let callee = scan callee_ctx callee_layout callee_type in
           build_iter callee callee_args b ;
-          let tup = build_fresh_var "tup" callee.ret_type b in
+          let tup = build_var "tup" callee.ret_type b in
           build_step tup callee b ;
           Infix.(not (Done callee.name))
     in
@@ -252,7 +252,7 @@ struct
         List.fold_left child_types
           ~init:(Header.make_position hdr "value" start, [])
           ~f:(fun (cstart, ret) ctype ->
-            let cstart = build_fresh_defn "cstart" cstart b in
+            let cstart = build_defn "cstart" cstart b in
             let next_cstart = Infix.(cstart + len cstart ctype) in
             (next_cstart, cstart :: ret) )
       in
@@ -290,7 +290,7 @@ struct
           callee )
     in
     let child_tuples =
-      List.map callee_funcs ~f:(fun f -> build_fresh_var "t" f.ret_type b)
+      List.map callee_funcs ~f:(fun f -> build_var "t" f.ret_type b)
     in
     let build_body b =
       List.iter2_exn callee_funcs child_tuples ~f:(fun f t -> build_step t f b) ;
@@ -430,12 +430,12 @@ struct
 
   let build_bin_search build_key n low_target high_target callback b =
     let open Builder in
-    let low = build_fresh_defn "low" Infix.(int 0) b in
-    let high = build_fresh_defn "high" n b in
+    let low = build_defn "low" Infix.(int 0) b in
+    let high = build_defn "high" n b in
     build_loop
       Infix.(low < high)
       (fun b ->
-        let mid = build_fresh_defn "mid" Infix.((low + high) / int 2) b in
+        let mid = build_defn "mid" Infix.((low + high) / int 2) b in
         let key = build_key mid b in
         build_if
           ~cond:(build_lt key (Tuple [low_target]) b)
@@ -446,7 +446,7 @@ struct
     build_if
       ~cond:Infix.(low < n)
       ~then_:(fun b ->
-        let key = build_fresh_defn "key" (build_key low b) b in
+        let key = build_defn "key" (build_key low b) b in
         build_loop
           Infix.(build_lt key (Tuple [high_target]) b && low < n)
           (fun b ->
@@ -505,7 +505,7 @@ struct
         let key_index i b =
           build_assign Infix.(index_start + (i * kp_len)) kstart b ;
           build_iter key_iter key_callee_args b ;
-          let key = build_fresh_var "key" key_iter.ret_type b in
+          let key = build_var "key" key_iter.ret_type b in
           build_step key key_iter b ; key
         in
         let n = Infix.(index_len / kp_len) in
@@ -602,26 +602,29 @@ struct
     let open Builder in
     match A.pred_remove_as p with
     | A.Count ->
-        `Count (build_fresh_defn "count" (const_int Type.PrimType.int_t 0) b)
+        `Count
+          (build_defn ~persistent:false "count" (const_int Type.PrimType.int_t 0) b)
     | A.Sum f ->
         let f = gen_pred ~scan ~ctx f b in
         let t = type_of f b in
-        `Sum (f, build_fresh_defn "sum" (const_int t 0) b)
+        `Sum (f, build_defn ~persistent:false "sum" (const_int t 0) b)
     | A.Min f ->
         let f = gen_pred ~scan ~ctx f b in
         let t = type_of f b in
-        `Min (f, build_fresh_defn "min" (const_int t Int.max_value) b)
+        `Min (f, build_defn ~persistent:false "min" (const_int t Int.max_value) b)
     | A.Max f ->
         let f = gen_pred ~scan ~ctx f b in
         let t = type_of f b in
-        `Max (f, build_fresh_defn "max" (const_int t Int.min_value) b)
+        `Max (f, build_defn ~persistent:false "max" (const_int t Int.min_value) b)
     | A.Avg f ->
         let f = gen_pred ~scan ~ctx f b in
         let t = type_of f b in
         `Avg
           ( f
-          , build_fresh_defn "avg_num" (const_int t 0) b
-          , build_fresh_defn "avg_dem" (const_int Type.PrimType.int_t 0) b )
+          , build_defn ~persistent:false "avg_num" (const_int t 0) b
+          , build_defn ~persistent:false "avg_dem"
+              (const_int Type.PrimType.int_t 0)
+              b )
     | p -> `Passthru p
 
   let agg_step b acc =
@@ -679,8 +682,10 @@ struct
             in
             let agg_preds = List.concat agg_preds in
             let agg_temps = ref [] in
-            let last_tup = build_fresh_var "tup" func.ret_type b in
-            let found_tup = build_fresh_defn "found_tup" (Bool false) b in
+            let last_tup = build_var ~persistent:false "tup" func.ret_type b in
+            let found_tup =
+              build_defn ~persistent:false "found_tup" (Bool false) b
+            in
             (* Holds the state for each aggregate. *)
             build_foreach ~count:(Type.count child_type)
               ~header:(fun tup b ->

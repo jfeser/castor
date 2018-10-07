@@ -40,8 +40,13 @@ type expr = Implang0.expr =
   | Done of string
   | Ternary of expr * expr * expr
   | TupleHash of Type.PrimType.t list * expr * expr
+[@@deriving compare, sexp]
 
-and stmt = Implang0.stmt =
+type local = Implang0.local =
+  {lname: string; type_: (Type.PrimType.t[@opaque]); persistent: bool}
+[@@deriving compare, sexp]
+
+type stmt = Implang0.stmt =
   | Print of Type.PrimType.t * expr
   | Loop of {cond: expr; body: prog}
   | If of {cond: expr; tcase: prog; fcase: prog}
@@ -51,14 +56,14 @@ and stmt = Implang0.stmt =
   | Yield of expr
   | Return of expr
 
-and prog = stmt list
+and prog = stmt list [@@deriving compare, sexp]
 
-and func = Implang0.func =
+type func = Implang0.func =
   { name: string
   ; args: (string * Type0.PrimType.t) list
   ; body: prog
   ; ret_type: Type0.PrimType.t
-  ; locals: (string * Type0.PrimType.t) list }
+  ; locals: local list }
 [@@deriving compare, sexp]
 
 val pp_stmt : Formatter.t -> stmt -> unit
@@ -114,8 +119,6 @@ module Builder : sig
 
   val new_scope : t -> t
 
-  val build_var : string -> Type.PrimType.t -> t -> expr
-
   val build_arg : int -> t -> expr
 
   val build_yield : expr -> t -> unit
@@ -123,8 +126,6 @@ module Builder : sig
   val build_func : t -> func
 
   val build_assign : expr -> expr -> t -> unit
-
-  val build_defn : string -> expr -> t -> expr
 
   val build_print : expr -> t -> unit
 
@@ -138,9 +139,9 @@ module Builder : sig
 
   val build_if : cond:expr -> then_:(t -> unit) -> else_:(t -> unit) -> t -> unit
 
-  val build_fresh_var : string -> Type.PrimType.t -> t -> expr
+  val build_var : ?persistent:bool -> string -> Type.PrimType.t -> t -> expr
 
-  val build_fresh_defn : string -> expr -> t -> expr
+  val build_defn : ?persistent:bool -> string -> expr -> t -> expr
 
   val build_count_loop : expr -> (t -> unit) -> t -> unit
 

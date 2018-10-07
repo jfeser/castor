@@ -86,9 +86,18 @@ and pp_prog : Format.formatter -> prog -> unit =
     | [x] -> fprintf fmt "%a" pp_stmt x
     | x :: xs -> fprintf fmt "%a@,%a" pp_stmt x pp_prog xs
 
-and pp_func : Format.formatter -> func -> unit =
- fun fmt {name; args; body; _} ->
-  Format.fprintf fmt "@[<v 4>fun %s (%a) {@,%a@]@,}" name pp_args args pp_prog body
+and pp_locals fmt locals =
+  let open Format in
+  fprintf fmt "@[<v>// Locals:@," ;
+  List.iter locals ~f:(fun {lname= n; type_= t; persistent= p} ->
+      fprintf fmt "// @[<h>%s : %a (persists=%b)@]@," n Type.PrimType.pp t p ) ;
+  fprintf fmt "@]"
+
+and pp_func fmt {name; args; body; locals; ret_type} =
+  let open Format in
+  pp_locals fmt locals ;
+  fprintf fmt "@[<v 4>fun %s (%a) : %a {@,%a@]@,}@," name pp_args args
+    Type.PrimType.pp ret_type pp_prog body
 
 module Infix = struct
   let int x = Int x
@@ -168,7 +177,10 @@ module Builder = struct
     { name: string
     ; args: (string * Type.PrimType.t) list
     ; ret: Type.PrimType.t
-    ; locals: Type.PrimType.t Hashtbl.M(String).t
+          (** The locals are variables that are scoped to the function. *)
+    ; locals: local Hashtbl.M(String).t
+          (** The type context is separate from the locals because it also includes
+       global variables. *)
     ; type_ctx: Type.PrimType.t Hashtbl.M(String).t
     ; body: prog ref
     ; fresh: Fresh.t sexp_opaque }
@@ -245,6 +257,9 @@ module Builder = struct
     in
     List.iter args ~f:(fun (n, t) -> Hashtbl.set type_ctx ~key:n ~data:t) ;
     let locals =
+      let args =
+        List.map args ~f:(fun (n, t) -> (n, {lname= n; type_= t; persistent= true}))
+      in
       match Hashtbl.of_alist (module String) args with
       | `Ok l -> l
       | `Duplicate_key _ -> fail (Error.of_string "Duplicate argument.")
@@ -255,12 +270,12 @@ module Builder = struct
       table. *)
   let new_scope b = {b with body= ref []}
 
-  let build_var n t {locals; type_ctx; _} =
+  let build_var ?(persistent = true) n t {locals; type_ctx; _} =
     if Hashtbl.mem locals n then
       fail (Error.create "Variable already defined." n [%sexp_of: string])
     else
       let v = Var n in
-      Hashtbl.set locals ~key:n ~data:t ;
+      Hashtbl.set locals ~key:n ~data:{lname= n; type_= t; persistent} ;
       Hashtbl.set type_ctx ~key:n ~data:t ;
       v
 
@@ -273,18 +288,10 @@ module Builder = struct
   let build_yield e b = b.body := Yield e :: !(b.body)
 
   let build_func {name; args; ret; locals; body; _} =
-    { name
-    ; args
-    ; ret_type= ret
-    ; locals= Hashtbl.to_alist locals
-    ; body= List.rev !body }
+    {name; args; ret_type= ret; locals= Hashtbl.data locals; body= List.rev !body}
 
   let build_assign e v b =
     b.body := Assign {lhs= name_of_var v; rhs= e} :: !(b.body)
-
-  let build_defn v e b =
-    let var = build_var v (type_of e b) b in
-    build_assign e var b ; var
 
   let build_print e b =
     let t = type_of e b in
@@ -313,16 +320,16 @@ module Builder = struct
     in
     b.body := ite :: !(b.body)
 
-  let build_fresh_var n t b =
+  let build_var ?persistent n t b =
     let n = n ^ Fresh.name b.fresh "%d" in
-    build_var n t b
+    build_var ?persistent n t b
 
-  let build_fresh_defn v e b =
-    let var = build_fresh_var v (type_of e b) b in
+  let build_defn ?persistent v e b =
+    let var = build_var ?persistent v (type_of e b) b in
     build_assign e var b ; var
 
   let build_count_loop c f b =
-    let count = build_fresh_defn "count" c b in
+    let count = build_defn "count" c b in
     build_loop
       Infix.(count > int 0)
       (fun b ->
@@ -331,7 +338,7 @@ module Builder = struct
       b
 
   let build_foreach ?count ?header ?footer iter_ args body b =
-    let tup = build_fresh_var "tup" iter_.ret_type b in
+    let tup = build_var ~persistent:false "tup" iter_.ret_type b in
     build_iter iter_ args b ;
     Option.iter header ~f:(fun f -> f tup b) ;
     let add_footer b = Option.iter footer ~f:(fun f -> f tup b) in

@@ -53,12 +53,14 @@ and stmt =
 
 and prog = stmt list
 
+and local = {lname: string; type_: (Type.PrimType.t[@opaque]); persistent: bool}
+
 and func =
   { name: string
   ; args: (string * (Type.PrimType.t[@opaque])) list
   ; body: prog
   ; ret_type: (Type.PrimType.t[@opaque])
-  ; locals: (string * (Type.PrimType.t[@opaque])) list }
+  ; locals: local list }
 [@@deriving
   compare
   , sexp
