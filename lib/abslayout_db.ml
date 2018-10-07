@@ -264,11 +264,9 @@ module Make (Eval : Eval.S) = struct
     in
     let visitor =
       object
-        inherit [_] iter as super
+        inherit runtime_subquery_visitor
 
-        method! visit_Exists () r = super#visit_Exists () r ; annotate_type r
-
-        method! visit_First () r = super#visit_First () r ; annotate_type r
+        method visit_Subquery r = annotate_type r
       end
     in
     visitor#visit_t ()

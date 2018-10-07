@@ -78,3 +78,21 @@ and node =
   , compare]
 
 [@@@warning "+7"]
+
+class virtual runtime_subquery_visitor =
+  object (self : 'a)
+    inherit [_] iter as super
+
+    method virtual visit_Subquery : t -> unit
+
+    (* Don't annotate subqueries that run at compile time. *)
+    method! visit_AList () (_, r) = super#visit_t () r
+
+    method! visit_AHashIdx () (_, r, _) = super#visit_t () r
+
+    method! visit_AOrderedIdx () (_, r, _) = super#visit_t () r
+
+    method! visit_Exists () r = super#visit_t () r ; self#visit_Subquery r
+
+    method! visit_First () r = super#visit_t () r ; self#visit_Subquery r
+  end
