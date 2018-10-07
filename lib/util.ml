@@ -31,6 +31,15 @@ let channel =
   let open Command in
   Arg_type.create In_channel.create
 
+class ['s] tuple2_monoid m1 m2 =
+  object
+    inherit ['s] VisitorsRuntime.monoid
+
+    method private zero = (m1#zero, m2#zero)
+
+    method private plus (x, y) (x', y') = (m1#plus x x', m2#plus y y')
+  end
+
 class ['s] list_monoid =
   object
     inherit ['s] VisitorsRuntime.monoid
