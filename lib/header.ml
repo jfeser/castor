@@ -9,6 +9,7 @@ module Field = struct
         | `Variable
         | `Empty of int ]
     ; align: int }
+  [@@deriving sexp]
 end
 
 type t = Field.t list
@@ -16,7 +17,11 @@ type t = Field.t list
 open Implang
 
 let field_exn fields name =
-  List.find_exn fields ~f:(fun f -> String.(f.Field.name = name))
+  Option.value_exn
+    (List.find fields ~f:(fun f -> String.(f.Field.name = name)))
+    ~error:
+      (Error.create "Missing field." (fields, name)
+         [%sexp_of: Field.t list * string])
 
 let size_to_int_exn = function
   | `Fixed x -> x

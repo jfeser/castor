@@ -68,6 +68,11 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  if (mlock(mapped_buf, len) != 0) {
+    perror("mlock() failed.");
+    return 1;
+  }
+
   void *params = create(mapped_buf);
 
   /*$1*/

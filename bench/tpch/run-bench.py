@@ -10,6 +10,7 @@ import random
 import shlex
 from subprocess import call, check_call, check_output
 from datetime import date
+import sys
 
 file_path = os.path.dirname(os.path.abspath(__file__))
 def rpath(p):
@@ -151,18 +152,18 @@ TRANSFORM_EXE = rpath("../../_build/default/bin/transform.exe")
 BENCH_DIR = rpath('.')
 BENCHMARKS = [
     {
-        "query": "1",
+        "query": ["1", '1-gold'],
         "params": [("param0:int", gen_int(1, 180))],
     },
     {
-        "query": "3-no",
+        "query": ["3-no", '3-gold'],
         "params": [
             ("param0:string", gen_mktsegment()),
             ("param1:date", gen_tpch_date()),
         ],
     },
     {
-        "query": "4",
+        "query": ['4', '4-gold'],
         "params": [("param1:date", gen_tpch_date())],
     },
     {
@@ -230,11 +231,6 @@ handler.setFormatter(formatter)
 log.addHandler(handler)
 log.setLevel(logging.DEBUG)
 
-
-def bench_dir(bench):
-    return os.path.splitext(bench["query"])[0]
-
-
 os.chdir(rpath("../../"))
 os.system("dune build @install")
 os.chdir(rpath("."))
@@ -243,21 +239,31 @@ csv_file = open(OUT_FILE, 'w')
 csv_writer = csv.writer(csv_file)
 csv_writer.writerow(['name', 'time'])
 
-# Run benchmarks
-for bench in BENCHMARKS:
-    query = rpath(bench['query'] + '.txt')
-    args = contents(rpath(bench['query'] + '.args'))
-    sql = rpath(bench['query'] + '.sql')
+def should_run(query_name):
+    return len(sys.argv) <= 1 or query_name in sys.argv
+
+def run_bench(query_name, params):
+    if not should_run(query_name):
+        log.debug('Skipping %s.', query_name)
+        return
+
+    query = rpath(query_name + '.txt')
+    args_file = rpath(query_name + '.args')
+    if os.path.isfile(args_file):
+        args = contents(args_file)
+    else:
+        args = ''
+    sql = rpath(query + '.sql')
 
     # Make benchmark dir.
-    benchd = bench_dir(bench)
+    benchd = os.path.splitext(query_name)[0]
     if os.path.isdir(benchd):
         shutil.rmtree(benchd)
     os.mkdir(benchd)
 
-    params = ["-p %s" % p[0] for p in bench["params"]]
+    param_types = ["-p %s" % p[0] for p in params]
     xform_cmd_parts = (
-        [TRANSFORM_EXE, "-v", "-db", DB] + params + [args, query]
+        [TRANSFORM_EXE, "-v", "-db", DB] + param_types + [args, query]
     )
     xform_cmd = " ".join(xform_cmd_parts)
 
@@ -270,7 +276,7 @@ for bench in BENCHMARKS:
         DB,
         "-port",
         PORT,
-    ] + params
+    ] + param_types
     compile_cmd = " ".join(compile_cmd_parts)
 
     # Build, saving the log.
@@ -286,39 +292,40 @@ for bench in BENCHMARKS:
         code = os.system("%s %s > %s 2>&1" % (compile_cmd, query_file, compile_log))
         if code != 0:
             raise Exception("Nonzero exit code %d" % code)
-        log.info("Done building.", bench)
+        log.info("Done building %s.", query_name)
     except KeyboardInterrupt:
         exit()
     except Exception:
         log.exception("Compile failed.")
-        csv_writer.writerow([bench['query'], None])
+        csv_writer.writerow([query_name, None])
         csv_file.flush()
-        continue
+        return
 
     # Run query and save results.
     os.chdir(benchd)
 
     random.seed(0)
-    params = [p[1]('castor') for p in bench["params"]]
+    castor_params = [p[1]('castor') for p in params]
     random.seed(0)
-    sql_params = [p[1]('sql') for p in bench["params"]]
+    sql_params = [p[1]('sql') for p in params]
 
     log.debug('Running SQL version of query.')
-    with open(sql, 'r') as f:
-        sql_query = f.read()
-    for i, param in enumerate(sql_params):
-        sql_query = sql_query.replace(':%d' % (i+1), param)
-    with open('sql', 'w') as f:
-        f.write(sql_query)
-    with open('golden.csv', 'w') as out:
-        call(['psql', '-d', DB, '-p', PORT, '-t', '-A', '-F', ',', '-f', 'sql'],
-            stdout=out)
+    if os.path.isfile(sql):
+        with open(sql, 'r') as f:
+            sql_query = f.read()
+        for i, param in enumerate(sql_params):
+            sql_query = sql_query.replace(':%d' % (i+1), param)
+        with open('sql', 'w') as f:
+            f.write(sql_query)
+        with open('golden.csv', 'w') as out:
+            call(['psql', '-d', DB, '-p', PORT, '-t', '-A', '-F', ',', '-f', 'sql'],
+                stdout=out)
 
-    time_cmd_parts = ["./scanner.exe", "-t", "1", "data.bin"] + params
+    time_cmd_parts = ["./scanner.exe", "-t", "1", "data.bin"] + castor_params
     time_cmd = " ".join(time_cmd_parts)
     log.debug(time_cmd)
 
-    cmd = ["./scanner.exe", "-p", "data.bin"] + params
+    cmd = ["./scanner.exe", "-p", "data.bin"] + castor_params
     cmd_str = shlex.quote(" ".join(cmd))
     try:
         boutput = check_output(time_cmd_parts)
@@ -329,7 +336,7 @@ for bench in BENCHMARKS:
             time = float(time_str)
         except ValueError:
             log.error("Failed to read time: %s", time_str)
-        csv_writer.writerow([bench['query'], time])
+        csv_writer.writerow([query_name, time])
         csv_file.flush()
 
         log.debug("Running %s in %s.", cmd_str, os.getcwd())
@@ -341,5 +348,14 @@ for bench in BENCHMARKS:
         log.exception("Running %s failed.", cmd)
 
     os.chdir("..")
+
+
+# Run benchmarks
+for bench in BENCHMARKS:
+    if type(bench['query']) == list:
+        for query in bench['query']:
+            run_bench(query, bench['params'])
+    else:
+        run_bench(bench['query'], bench['params'])
 
 logging.shutdown()

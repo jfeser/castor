@@ -110,13 +110,18 @@ struct
     in
     gen_pred pred
 
-  let len start type_ =
+  (** Generate an expression for the length of a value at `start` with type
+     `type_`. Compensates for restrictions in the Header api. *)
+  let rec len start type_ =
     let hdr = Header.make_header type_ in
     match type_ with
     | StringT _ ->
         Infix.(
           int (Header.size_exn hdr "nchars") + Header.make_access hdr "nchars" start)
-    | _ -> Header.make_access hdr "len" start
+    | FuncT ([t], _) -> len start t
+    | _ ->
+        Logs.debug (fun m -> m "len for %a" Sexp.pp_hum ([%sexp_of: Type.t] type_)) ;
+        Header.make_access hdr "len" start
 
   let scan_empty {ctx; name; _} =
     let open Builder in
@@ -288,8 +293,7 @@ struct
       List.map2_exn child_layouts child_types ~f:(fun callee_layout callee_type ->
           let callee = scan callee_ctx callee_layout callee_type in
           build_iter callee callee_args b ;
-          let hdr = Header.make_header callee_type in
-          build_assign Infix.(start + Header.make_access hdr "len" start) start b ;
+          build_assign Infix.(start + len start callee_type) start b ;
           callee )
     in
     let child_tuples =
@@ -345,10 +349,7 @@ struct
     build_loop
       Infix.(pcount > int 0)
       (fun b ->
-        let clen =
-          let child_hdr = Header.make_header child_type in
-          Header.make_access child_hdr "len" cstart
-        in
+        let clen = len cstart child_type in
         build_foreach ~persistent:false ~count:(Type.count child_type) func
           callee_args build_yield b ;
         build_assign Infix.(cstart + clen) cstart b ;
