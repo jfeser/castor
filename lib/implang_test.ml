@@ -415,11 +415,11 @@ let%expect_test "hash-idx" =
     }
     // Locals:
     // f_f : Int[nonnull] (persists=true)
-    // vstart14 : Int[nonnull] (persists=true)
-    // key13 : Tuple[Int[nonnull]] (persists=true)
+    // vstart14 : Int[nonnull] (persists=false)
+    // key13 : Tuple[Int[nonnull]] (persists=false)
     // start : Int[nonnull] (persists=true)
     // tup16 : Tuple[Int[nonnull]] (persists=false)
-    // kstart11 : Int[nonnull] (persists=true)
+    // kstart11 : Int[nonnull] (persists=false)
     fun hash_idx_10 (f_f,
         start) : Tuple[Int[nonnull],
         Int[nonnull]] {
@@ -919,9 +919,9 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
     }
     // Locals:
     // tup22 : Tuple[Int[nonnull], Int[nonnull]] (persists=false)
-    // kstart1 : Int[nonnull] (persists=true)
-    // key9 : Tuple[Int[nonnull], Int[nonnull]] (persists=true)
-    // vstart10 : Int[nonnull] (persists=true)
+    // kstart1 : Int[nonnull] (persists=false)
+    // key9 : Tuple[Int[nonnull], Int[nonnull]] (persists=false)
+    // vstart10 : Int[nonnull] (persists=false)
     fun hash_idx_0 () : Tuple[Int[nonnull],
         Int[nonnull],
         Int[nonnull],
@@ -1163,10 +1163,10 @@ select([lp.counter, lc.counter],
     }
     // Locals:
     // tup20 : Tuple[Int[nonnull], Int[nonnull]] (persists=false)
-    // kstart5 : Int[nonnull] (persists=true)
-    // vstart8 : Int[nonnull] (persists=true)
+    // kstart5 : Int[nonnull] (persists=false)
+    // vstart8 : Int[nonnull] (persists=false)
     // start : Int[nonnull] (persists=true)
-    // key7 : Tuple[Int[nonnull]] (persists=true)
+    // key7 : Tuple[Int[nonnull]] (persists=false)
     fun hash_idx_4 (start) : Tuple[Int[nonnull],
         Int[nonnull],
         Int[nonnull]] {

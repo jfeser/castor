@@ -375,18 +375,18 @@ struct
     in
     let hdr = Header.make_header t in
     let start = Ctx.find_exn ctx (Name.create "start") b in
-    let kstart = build_var "kstart" Type.PrimType.int_t b in
+    let kstart = build_var ~persistent:false "kstart" Type.PrimType.int_t b in
     let key_callee_ctx, key_callee_args =
       let ctx = Ctx.bind ctx "start" Type.PrimType.int_t kstart in
       Ctx.make_callee_context ctx b
     in
     let key_iter = scan key_callee_ctx key_layout key_type in
-    let key_tuple = build_var "key" key_iter.ret_type b in
+    let key_tuple = build_var ~persistent:false "key" key_iter.ret_type b in
     let ctx =
       let key_schema = Meta.(find_exn key_layout schema) in
       Ctx.bind_ctx ctx (Ctx.of_schema key_schema key_tuple)
     in
-    let vstart = build_var "vstart" Type.PrimType.int_t b in
+    let vstart = build_var ~persistent:false "vstart" Type.PrimType.int_t b in
     let value_callee_ctx, value_callee_args =
       let ctx = Ctx.bind ctx "start" Type.PrimType.int_t vstart in
       Ctx.make_callee_context ctx b
