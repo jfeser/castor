@@ -144,7 +144,7 @@ def gen_perc():
     return gen_discount()
 
 
-DB = "tpch_test"
+DB = "tpch"
 PORT = "5432"
 OUT_FILE = rpath('results.csv')
 COMPILE_EXE = rpath("../../_build/default/bin/compile.exe")
@@ -152,18 +152,18 @@ TRANSFORM_EXE = rpath("../../_build/default/bin/transform.exe")
 BENCH_DIR = rpath('.')
 BENCHMARKS = [
     {
-        "query": ["1", '1-gold'],
+        "query": ['1-gold'],
         "params": [("param0:int", gen_int(1, 180))],
     },
     {
-        "query": ["3-no", '3-gold'],
+        "query": ['3-gold'],
         "params": [
             ("param0:string", gen_mktsegment()),
             ("param1:date", gen_tpch_date()),
         ],
     },
     {
-        "query": ['4', '4-gold'],
+        "query": ['4-gold'],
         "params": [("param1:date", gen_tpch_date())],
     },
     {
