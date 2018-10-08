@@ -167,7 +167,7 @@ BENCHMARKS = [
         "params": [("param1:date", gen_tpch_date())],
     },
     {
-        "query": "5-no",
+        "query": ["5-no", '5-no-gold'],
         "params": [("param0:string", gen_region()), ("param1:date", gen_tpch_date())],
     },
     {
