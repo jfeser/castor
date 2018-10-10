@@ -15,9 +15,8 @@ let to_subquery {sql; schema} =
       , List.map schema ~f:(fun n -> {n with relation= Some alias}) )
   | `Scan tbl -> (tbl, schema)
 
-let to_query = function
-  | `Scan tbl -> sprintf "select * from %s" tbl
-  | `Subquery q -> q
+let to_query {sql; _} =
+  match sql with `Scan tbl -> sprintf "select * from %s" tbl | `Subquery q -> q
 
 let rec pred_to_sql = function
   | As_pred (p, n) -> sprintf "%s as %s" (pred_to_sql p) n
@@ -63,11 +62,11 @@ let rec pred_to_sql = function
       sprintf "case when %s then %s else %s end" (pred_to_sql p1) (pred_to_sql p2)
         (pred_to_sql p3)
   | Exists r ->
-      let sql, _ = ralgebra_to_sql_helper r |> to_subquery in
-      sprintf "exists %s" sql
+      let sql = ralgebra_to_sql_helper r |> to_query in
+      sprintf "exists (%s)" sql
   | First r ->
-      let sql, _ = ralgebra_to_sql_helper r |> to_subquery in
-      sql
+      let sql = ralgebra_to_sql_helper r |> to_query in
+      sprintf "(%s)" sql
   | Substring (p1, p2, p3) ->
       sprintf "substring(%s from %s for %s)" (pred_to_sql p1) (pred_to_sql p2)
         (pred_to_sql p3)
@@ -183,7 +182,7 @@ and ralgebra_to_sql_helper r =
   in
   f r
 
-let ralgebra_to_sql r = to_query (ralgebra_to_sql_helper r).sql
+let ralgebra_to_sql r = to_query (ralgebra_to_sql_helper r)
 
 let ralgebra_foreach q1 q2 =
   let sql1, s1 = to_subquery (ralgebra_to_sql_helper q1) in

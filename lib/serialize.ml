@@ -482,10 +482,10 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
       t l ;
     (* Serialize subquery layouts. *)
     let subquery_visitor =
-      object (self : 'a)
-        inherit [_] Abslayout0.iter
+      object
+        inherit Abslayout0.runtime_subquery_visitor
 
-        method private visit_Subquery r =
+        method visit_Subquery r =
           let t = Meta.(find_exn r type_) in
           serialize
             { writer
@@ -493,10 +493,6 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
             ; serialize
             ; ctx= `Eval (Map.empty (module Name.Compare_no_type)) }
             t r
-
-        method! visit_Exists () = self#visit_Subquery
-
-        method! visit_First () = self#visit_Subquery
       end
     in
     subquery_visitor#visit_t () l ;

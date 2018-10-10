@@ -88,6 +88,10 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
   module I = Implang
   open Config
 
+  let clang = Project_config.llvm_root ^ "/bin/clang"
+
+  let opt = Project_config.llvm_root ^ "/bin/opt"
+
   let ctx = Llvm.create_context ()
 
   let module_ = Llvm.create_module ctx "scanner"
@@ -151,15 +155,15 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       val values = Hashtbl.create (module String)
 
       val tctx =
-        let kv = func.I.locals @ params in
+        let kv =
+          List.map func.I.locals ~f:(fun {lname; type_; _} -> (lname, type_))
+          @ params
+        in
         match Hashtbl.of_alist (module String) kv with
         | `Ok x -> x
         | `Duplicate_key k ->
             Error.create "Duplicate key." (k, func.I.locals, params)
-              [%sexp_of:
-                string
-                * (string * Type.PrimType.t) list
-                * (string * Type.PrimType.t) list]
+              [%sexp_of: string * I.local list * (string * Type.PrimType.t) list]
             |> Error.raise
 
       method values : var Hashtbl.M(String).t = values
@@ -878,9 +882,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       add_function_attr func
         (create_enum_attr ctx "norecurse" 0L)
         AttrIndex.Function ;
-      add_function_attr func
-        (create_enum_attr ctx "alwaysinline" 0L)
-        AttrIndex.Function ;
       set_linkage Linkage.Internal func
     in
     let load_params ictx func =
@@ -938,6 +939,12 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       (* Load params into local allocas. *)
       Hashtbl.set ictx#values ~key:"params" ~data:(Local (param ictx#step 0)) ;
       load_params ictx ictx#step ;
+      (* Create local allocas for non-persistent variables. *)
+      List.iter ictx#func.locals ~f:(fun {lname; type_; persistent} ->
+          if not persistent then
+            let lltype = codegen_type type_ in
+            Hashtbl.set ictx#values ~key:lname
+              ~data:(Local (build_entry_alloca lltype lname builder)) ) ;
       (* Create top level switch. *)
       let yield_index =
         build_load (get_val ictx "yield_index") "yield_index" builder
@@ -1004,7 +1011,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       position_at_end bb builder ;
       Hashtbl.set funcs ~key:name ~data:fctx#llfunc ;
       (* Create storage space for local variables & iterator args. *)
-      List.iter locals ~f:(fun (n, t) ->
+      List.iter locals ~f:(fun {lname= n; type_= t; _} ->
           let lltype = codegen_type t in
           let var = build_alloca lltype n builder in
           Hashtbl.set fctx#values ~key:n ~data:(Local var) ) ;
@@ -1123,9 +1130,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
           (* Create storage for iterator entry point index. *)
           SB.build_local sb ictx "yield_index" (i8_type ctx) ;
           (* Create storage space for local variables & iterator args. *)
-          List.iter ictx#func.locals ~f:(fun (n, t) ->
+          List.iter ictx#func.locals ~f:(fun {lname= n; type_= t; persistent} ->
               let lltype = codegen_type t in
-              SB.build_local sb ictx n lltype ) ;
+              if persistent then SB.build_local sb ictx n lltype ) ;
           ictx )
     in
     let fctxs = List.map ir_funcs ~f:(fun func -> new fctx func typed_params) in
@@ -1193,6 +1200,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     fprintf fmt "typedef void params;@," ;
     fprintf fmt "typedef struct { char *ptr; long len; } string_t;@," ;
     fprintf fmt "params* create(void *);@," ;
+    fprintf fmt "long counter(params *);@," ;
+    fprintf fmt "void printer(params *);@," ;
     Hashtbl.data funcs |> List.iter ~f:(fun llfunc -> pp_value_decl fmt llfunc) ;
     pp_close_box fmt () ;
     pp_print_flush fmt ()
@@ -1203,8 +1212,11 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       List.map args ~f:(fun (n, x) -> sprintf "-D%s=%s" n x)
       |> String.concat ~sep:" "
     in
-    let cmd = sprintf "clang -E %s %s" args_str fn in
-    Unix.open_process_in cmd |> In_channel.input_all
+    let cmd = sprintf "%s -E %s %s" clang args_str fn in
+    Logs.debug (fun m -> m "%s" cmd) ;
+    let out = Unix.open_process_in cmd |> In_channel.input_all in
+    Logs.debug (fun m -> m "Template output: %s" out) ;
+    out
 
   let from_fn fn n i =
     let template = Project_config.project_root ^ "/etc/" ^ fn in
@@ -1230,7 +1242,11 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let data_fn = out_dir ^ "/data.bin" in
     let open Type.PrimType in
     (* Generate IR module. *)
-    let ir_module = IG.irgen ~params ~data_fn layout in
+    let ir_module =
+      let unopt = IG.irgen ~params ~data_fn layout in
+      Logs.info (fun m -> m "Optimizing intermediate language.") ;
+      Implang_opt.opt unopt
+    in
     Out_channel.with_file ir_fn ~f:(fun ch ->
         let fmt = Caml.Format.formatter_of_out_channel ch in
         IG.pp fmt ir_module ) ;
@@ -1238,11 +1254,13 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     Out_channel.with_file header_fn ~f:write_header ;
     (* Generate main file. *)
     let () =
+      Logs.debug (fun m -> m "Creating main file.") ;
       let funcs, calls =
         List.filter params ~f:(fun n ->
             List.exists ir_module.Irgen.params ~f:(fun n' ->
                 Name.Compare_no_type.(n = n') ) )
         |> List.mapi ~f:(fun i n ->
+               Logs.debug (fun m -> m "Creating loader for %a." Name.pp n) ;
                let loader_fn =
                  match Name.type_exn n with
                  | NullT -> failwith "No null parameters."
@@ -1271,8 +1289,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       let module_ = codegen ir_module in
       Llvm.print_module module_fn module_
     in
-    let clang = Project_config.llvm_root ^ "/bin/clang" in
-    let opt = Project_config.llvm_root ^ "/bin/opt" in
     let cflags = ["-g"; "-lcmph"] in
     let cflags =
       (if gprof then ["-pg"] else []) @ (if debug then ["-O0"] else []) @ cflags

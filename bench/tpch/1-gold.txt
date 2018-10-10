@@ -1,0 +1,47 @@
+alist(orderby([k0_lineitem_l_returnflag, k0_lineitem_l_linestatus],
+        dedup(
+          select([lineitem.l_returnflag as k0_lineitem_l_returnflag,
+                  lineitem.l_linestatus as k0_lineitem_l_linestatus],
+            lineitem)),
+        asc),
+  select([l_returnflag,
+          l_linestatus,
+          sum(sum_qty_i) as sum_qty,
+          sum(sum_base_price_i) as sum_base_price,
+          sum(sum_disc_price_i) as sum_disc_price,
+          sum(sum_charge_i) as sum_charge,
+          sum(sum_qty_i) / sum(count_order_i) as avg_qty,
+          sum(sum_base_price_i) / sum(count_order_i) as avg_price,
+          sum(sum_disc_i) / sum(count_order_i) as avg_disc,
+          sum(count_order_i) as count_order],
+    aorderedidx(dedup(
+                  select([lineitem.l_shipdate as k1],
+                    filter(((lineitem.l_returnflag = k0_lineitem_l_returnflag)
+                           &&
+                           (lineitem.l_linestatus = k0_lineitem_l_linestatus)),
+                      lineitem))),
+      alist(
+  select([min(lineitem.l_returnflag) as l_returnflag,
+          min(lineitem.l_linestatus) as l_linestatus,
+          sum(lineitem.l_quantity) as sum_qty_i,
+          sum(lineitem.l_extendedprice) as sum_base_price_i,
+          sum((lineitem.l_extendedprice * (1 - lineitem.l_discount))) as sum_disc_price_i,
+          sum(((lineitem.l_extendedprice * (1 - lineitem.l_discount)) *
+              (1 + lineitem.l_tax))) as sum_charge_i,
+          sum(lineitem.l_discount) as sum_disc_i,
+          count() as count_order_i],
+filter((k1 = lineitem.l_shipdate),
+              filter(((lineitem.l_returnflag = k0_lineitem_l_returnflag) &&
+                     (lineitem.l_linestatus = k0_lineitem_l_linestatus)),
+                lineitem))),
+        atuple([ascalar(sum_qty_i),
+                ascalar(sum_base_price_i),
+                ascalar(sum_disc_price_i),
+                ascalar(sum_charge_i),
+                ascalar(sum_disc_i),
+                ascalar(count_order_i),
+                ascalar(l_returnflag),
+                ascalar(l_linestatus)],
+          cross)),
+      (0 - 4611686018427387903),
+      (date("1998-12-01") - day(param0)))))

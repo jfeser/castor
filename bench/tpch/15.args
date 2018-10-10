@@ -1,1 +1,1 @@
--t push-orderby,hoist-join-pred,split-filter:0,push-filter:0,push-filter:0,elim-groupby-filter:0,elim-join,push-orderby,push-orderby,push-orderby,row-store:6,project,row-store:2,project,elim-groupby-filter,row-store:20,project
+-t push-orderby,hoist-join-pred,split-filter:0,push-filter:0,push-filter:0,elim-groupby-filter:0,elim-join,push-orderby,push-orderby,push-orderby,row-store:6,project,row-store:2,project,elim-groupby-filter,elim-cmp-filter:1,row-store:21,project

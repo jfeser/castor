@@ -1,0 +1,48 @@
+alist(dedup(
+        select([customer.c_custkey as k0_customer_c_custkey,
+                customer.c_name as k0_customer_c_name,
+                customer.c_acctbal as k0_customer_c_acctbal,
+                customer.c_phone as k0_customer_c_phone,
+                nation.n_name as k0_nation_n_name,
+                customer.c_address as k0_customer_c_address,
+                customer.c_comment as k0_customer_c_comment],
+          join((customer.c_custkey = orders.o_custkey),
+            join((customer.c_nationkey = nation.n_nationkey), customer, nation),
+            filter((lineitem.l_returnflag = "R"),
+              join((lineitem.l_orderkey = orders.o_orderkey), lineitem, orders))))),
+  select([customer.c_custkey,
+          customer.c_name,
+          sum(((lineitem.l_extendedprice * 1) - lineitem.l_discount)) as revenue,
+          customer.c_acctbal,
+          nation.n_name,
+          customer.c_address,
+          customer.c_phone,
+          customer.c_comment],
+    filter(((orders.o_orderdate >= param0) &&
+           (orders.o_orderdate < (param0 + month(3)))),
+      alist(filter((((((((customer.c_custkey = k0_customer_c_custkey) &&
+                        (customer.c_name = k0_customer_c_name)) &&
+                       (customer.c_acctbal = k0_customer_c_acctbal)) &&
+                      (customer.c_phone = k0_customer_c_phone)) &&
+                     (nation.n_name = k0_nation_n_name)) &&
+                    (customer.c_address = k0_customer_c_address)) &&
+                   (customer.c_comment = k0_customer_c_comment)),
+              join((customer.c_custkey = orders.o_custkey),
+                join((customer.c_nationkey = nation.n_nationkey),
+                  customer,
+                  nation),
+                filter((lineitem.l_returnflag = "R"),
+                  join((lineitem.l_orderkey = orders.o_orderkey),
+                    lineitem,
+                    orders)))),
+        atuple([ascalar(customer.c_custkey),
+                ascalar(customer.c_name),
+                ascalar(customer.c_address),
+                ascalar(customer.c_phone),
+                ascalar(customer.c_acctbal),
+                ascalar(customer.c_comment),
+                ascalar(nation.n_name),
+                ascalar(lineitem.l_extendedprice),
+                ascalar(lineitem.l_discount),
+                ascalar(orders.o_orderdate)],
+          cross)))))

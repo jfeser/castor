@@ -1,0 +1,12 @@
+select([sum((lineitem.l_extendedprice * lineitem.l_discount)) as revenue],
+  filter(((lineitem.l_shipdate >= param0) &&
+         ((lineitem.l_shipdate < (param0 + year(1))) &&
+         ((lineitem.l_discount > (param1 - 0.1)) &&
+         ((lineitem.l_discount < (param1 + 0.1)) &&
+         (lineitem.l_quantity < param2))))),
+    alist(lineitem,
+      atuple([ascalar(lineitem.l_quantity),
+              ascalar(lineitem.l_extendedprice),
+              ascalar(lineitem.l_discount),
+              ascalar(lineitem.l_shipdate)],
+        cross))))

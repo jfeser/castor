@@ -44,7 +44,7 @@ module Make (Eval : Eval.S) = struct
       in
       subst#visit_t () l
     in
-    hash_idx domain layout {lookup; hi_key_layout= None}
+    hash_idx domain layout lookup
 
   type eval_ctx =
     [ `Eval of Ctx.t
@@ -264,11 +264,9 @@ module Make (Eval : Eval.S) = struct
     in
     let visitor =
       object
-        inherit [_] iter as super
+        inherit runtime_subquery_visitor
 
-        method! visit_Exists () r = super#visit_Exists () r ; annotate_type r
-
-        method! visit_First () r = super#visit_First () r ; annotate_type r
+        method visit_Subquery r = annotate_type r
       end
     in
     visitor#visit_t ()
@@ -441,9 +439,9 @@ module Make (Eval : Eval.S) = struct
         | AScalar p ->
             let p = resolve_pred outer_ctx p in
             let ctx =
-              match p with
-              | Name n -> Set.singleton (module Name.Compare_no_type) n
-              | _ -> empty_ctx
+              match pred_to_name p with
+              | Some n -> Set.singleton (module Name.Compare_no_type) n
+              | None -> empty_ctx
             in
             (AScalar p, ctx)
         | AList (r, l) ->

@@ -27,7 +27,10 @@ let list a b = {node= AList (a, b); meta= Meta.empty ()}
 
 let tuple a b = {node= ATuple (a, b); meta= Meta.empty ()}
 
-let hash_idx a b c = {node= AHashIdx (a, b, c); meta= Meta.empty ()}
+let hash_idx a b c =
+  {node= AHashIdx (a, b, {hi_key_layout= None; lookup= c}); meta= Meta.empty ()}
+
+let hash_idx' a b c = {node= AHashIdx (a, b, c); meta= Meta.empty ()}
 
 let ordered_idx a b c = {node= AOrderedIdx (a, b, c); meta= Meta.empty ()}
 
@@ -107,7 +110,7 @@ and pp_pred fmt =
   function
   | As_pred (p, n) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp_pred p n
   | Null -> fprintf fmt "null"
-  | Int x -> fprintf fmt "%d" x
+  | Int x -> if x >= 0 then fprintf fmt "%d" x else fprintf fmt "(0 - %d)" (-x)
   | Fixed x -> fprintf fmt "%s" (Fixed_point.to_string x)
   | Date x -> fprintf fmt "date(\"%s\")" (Date.to_string x)
   | Unop (op, x) -> fprintf fmt "%s(%a)" (unop_to_str op) pp_pred x

@@ -1,0 +1,49 @@
+select([supplier.s_suppkey,
+        supplier.s_name,
+        supplier.s_address,
+        supplier.s_phone,
+        total_revenue],
+  filter((total_revenue =
+         (select([max(total_revenue)],
+            alist(dedup(
+                    select([lineitem.l_suppkey as k2_lineitem_l_suppkey],
+                      lineitem)),
+              select([sum((lineitem.l_extendedprice *
+                          (1 - lineitem.l_discount))) as total_revenue],
+                aorderedidx(dedup(
+                              select([lineitem.l_shipdate as k4],
+                                filter((lineitem.l_suppkey =
+                                       k2_lineitem_l_suppkey),
+                                  lineitem))),
+                  alist(filter((k4 = lineitem.l_shipdate),
+                          filter((lineitem.l_suppkey = k2_lineitem_l_suppkey),
+                            lineitem)),
+                    atuple([ascalar(lineitem.l_suppkey),
+                            ascalar(lineitem.l_extendedprice),
+                            ascalar(lineitem.l_discount)],
+                      cross)),
+                  param1,
+                  (param1 + month(3)))))))),
+    filter(((supplier.s_suppkey = supplier_no) && true),
+      atuple([alist(orderby([supplier.s_suppkey], supplier, desc),
+                atuple([ascalar(supplier.s_suppkey),
+                        ascalar(supplier.s_name),
+                        ascalar(supplier.s_address),
+                        ascalar(supplier.s_phone)],
+                  cross)),
+              alist(dedup(
+                      select([lineitem.l_suppkey as k0_lineitem_l_suppkey],
+                        lineitem)),
+                select([lineitem.l_suppkey as supplier_no,
+                        sum((lineitem.l_extendedprice *
+                            (1 - lineitem.l_discount))) as total_revenue],
+                  filter(((lineitem.l_shipdate >= param1) &&
+                         (lineitem.l_shipdate < (param1 + month(3)))),
+                    alist(filter((lineitem.l_suppkey = k0_lineitem_l_suppkey),
+                            lineitem),
+                      atuple([ascalar(lineitem.l_suppkey),
+                              ascalar(lineitem.l_extendedprice),
+                              ascalar(lineitem.l_discount),
+                              ascalar(lineitem.l_shipdate)],
+                        cross)))))],
+        cross))))

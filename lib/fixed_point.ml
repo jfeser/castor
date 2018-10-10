@@ -60,6 +60,10 @@ let%expect_test "of_string" =
   [%expect {| ((value -1456728) (scale 1000)) |}]
 
 let to_string {value; scale} =
+  let pad_suffix ~pad s n =
+    let l = String.length s in
+    if Int.(n <= l) then String.suffix s n else String.make (n - l) pad ^ s
+  in
   let vstr = Int.to_string value in
   let prefix =
     let prefix_digits = String.length vstr - pow10 scale in
@@ -67,7 +71,7 @@ let to_string {value; scale} =
   in
   let suffix =
     let suffix_digits = pow10 scale in
-    if Int.(suffix_digits > 0) then String.suffix vstr suffix_digits else "0"
+    if Int.(suffix_digits > 0) then pad_suffix ~pad:'0' vstr suffix_digits else "0"
   in
   prefix ^ "." ^ suffix
 
@@ -77,13 +81,21 @@ let%expect_test "to-string" =
   to_string {value= 8723467; scale= 100} |> print_endline ;
   [%expect {| 87234.67 |}]
 
-let%expect_test "to-string" = to_string {value= 7; scale= 1} |> print_endline;
+let%expect_test "to-string" =
+  to_string {value= 7; scale= 1} |> print_endline ;
   [%expect {| 7.0 |}]
 
 let%expect_test "convert" =
   let x1 = {value= 123; scale= 100} in
   convert x1 1000 |> [%sexp_of: t] |> print_s ;
   [%expect {| ((value 1230) (scale 1000)) |}]
+
+let%expect_test "roundtrip" =
+  let x = of_string "0.01" in
+  x |> [%sexp_of: t] |> print_s ;
+  [%expect {| ((value 1) (scale 100)) |}] ;
+  to_string x |> [%sexp_of: string] |> print_s ;
+  [%expect {| 0.01 |}]
 
 let ( + ) x1 x2 =
   let {value= v1; scale= s}, {value= v2; _} = convert_pair x1 x2 in

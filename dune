@@ -8,7 +8,14 @@
  (deps (file discover.exe))
  (targets config.ml)
  (action (with-stdout-to config.ml
-          (run ./discover.exe %{project_root} %{workspace_root}))))
+          (run ./discover.exe -kind ML %{project_root} %{workspace_root}))))
+
+(rule
+ (deps (file discover.exe))
+ (targets config)
+ (mode promote)
+ (action (with-stdout-to config
+          (run ./discover.exe -kind ENV %{project_root} %{workspace_root}))))
 
 (ignored_subdirs (bench))
 
