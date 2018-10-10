@@ -14,12 +14,11 @@ type binop = Abslayout0.binop =
   | Mul
   | Div
   | Mod
-  | Contains
-  | Starts_with
-  | Ends_with
+  | Strpos
 [@@deriving compare, sexp]
 
-type unop = Abslayout0.unop = Not | Day | Month | Year [@@deriving compare, sexp]
+type unop = Abslayout0.unop = Not | Day | Month | Year | Strlen
+[@@deriving compare, sexp]
 
 type tuple = Abslayout0.tuple = Cross | Zip [@@deriving compare, sexp_of]
 
@@ -42,7 +41,7 @@ type pred = Abslayout0.pred =
   | If of pred * pred * pred
   | First of t
   | Exists of t
-  | Substring of t * t * t
+  | Substring of pred * pred * pred
 [@@deriving compare, sexp_of]
 
 and hash_idx = Abslayout0.hash_idx =

@@ -24,7 +24,7 @@ type binop =
   | Strpos
 [@@deriving compare, sexp]
 
-type unop = Not | Day | Month | Year [@@deriving compare, sexp]
+type unop = Not | Day | Month | Year | Strlen [@@deriving compare, sexp]
 
 (* - Visitors doesn't use the special method override syntax that warning 7 checks
    for.
@@ -52,7 +52,7 @@ type pred =
   | If of pred * pred * pred
   | First of t
   | Exists of t
-  | Substring of t * t * t
+  | Substring of pred * pred * pred
 
 and hash_idx = {hi_key_layout: t option; lookup: pred list}
 

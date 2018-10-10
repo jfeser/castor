@@ -28,6 +28,8 @@ type op =
   | IntHash
   | StrHash
   | LoadStr
+  | StrLen
+  | StrPos
 [@@deriving compare, hash, sexp]
 
 type expr =
@@ -45,6 +47,7 @@ type expr =
   | Done of string
   | Ternary of expr * expr * expr
   | TupleHash of Type.PrimType.t list * expr * expr
+  | Substr of expr * expr * expr
 
 and stmt =
   | Print of Type.PrimType.t * expr
@@ -98,6 +101,8 @@ let rec pp_expr : Format.formatter -> expr -> unit =
     | IntHash | StrHash -> "hash"
     | LoadStr -> "load_str"
     | Int2Fl -> "int2fl"
+    | StrLen -> "strlen"
+    | StrPos -> "strpos"
   in
   fun fmt -> function
     | Null -> fprintf fmt "null"
@@ -120,6 +125,8 @@ let rec pp_expr : Format.formatter -> expr -> unit =
     | Ternary (e1, e2, e3) ->
         fprintf fmt "%a ? %a : %a" pp_expr e1 pp_expr e2 pp_expr e3
     | TupleHash _ -> fprintf fmt "<tuplehash>"
+    | Substr (p1, p2, p3) ->
+        fprintf fmt "[@<hov>substr(%a,@ %a,@ %a)@]" pp_expr p1 pp_expr p2 pp_expr p3
 
 and pp_stmt : Format.formatter -> stmt -> unit =
   let open Format in
@@ -268,6 +275,7 @@ module Builder = struct
             BoolT {nullable= n1 || n2}
         | LoadStr, IntT {nullable= false}, IntT {nullable= false} ->
             StringT {nullable= false}
+        | StrPos, StringT _, StringT _ -> IntT {nullable= false}
         | _ ->
             fail
               (Error.create "Type error." (e, t1, t2, ctx)
@@ -277,6 +285,7 @@ module Builder = struct
         match (op, t) with
         | Not, BoolT {nullable} -> BoolT {nullable}
         | Int2Fl, IntT _ -> FixedT {nullable= false}
+        | StrLen, StringT _ -> IntT {nullable= false}
         | _ -> fail (Error.create "Type error." (op, t) [%sexp_of: op * t]) )
     | Slice (_, _) -> IntT {nullable= false}
     | Index (tup, idx) -> (
@@ -292,6 +301,7 @@ module Builder = struct
           unify t1 t2
       | _ -> failwith "Unexpected conditional type." )
     | TupleHash _ -> IntT {nullable= false}
+    | Substr _ -> StringT {nullable= false}
 
   let create ~ctx ~name ~ret =
     let args = Ctx0.make_caller_args ctx in

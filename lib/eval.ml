@@ -22,14 +22,11 @@ let lookup ctx n =
       Error.create "Unbound variable." (n, ctx) [%sexp_of: Name.t * Ctx.t]
       |> Error.raise
 
-let to_int = function Value.Int x -> x | _ -> failwith "Not an int."
-
-let to_bool = function Value.Bool x -> x | _ -> failwith "Not a bool."
-
 let eval_pred_shared eval ctx =
+  let open Value in
   let rec eval_pred ctx = function
     | As_pred (p, _) -> eval_pred ctx p
-    | Null -> Value.Null
+    | Null -> Null
     | Int x -> Int x
     | Fixed x -> Fixed x
     | Date x -> Int (Date.to_int x)
@@ -39,7 +36,8 @@ let eval_pred_shared eval ctx =
         | Not -> Bool (not (to_bool x))
         | Year -> Int (365 * to_int x)
         | Month -> Int (30 * to_int x)
-        | Day -> x )
+        | Day -> x
+        | Strlen -> Int (String.length (to_string x)) )
     | String x -> String x
     | Bool x -> Bool x
     | Name n -> lookup ctx n
@@ -70,9 +68,13 @@ let eval_pred_shared eval ctx =
         | Mul, Fixed x1, Fixed x2 -> Fixed Fixed_point.(x1 * x2)
         | And, Bool x1, Bool x2 -> Bool (x1 && x2)
         | Or, Bool x1, Bool x2 -> Bool (x1 || x2)
+        | Strpos, String x1, String x2 -> (
+          match String.substr_index x1 ~pattern:x2 with
+          | Some pos -> Int (pos + 1)
+          | None -> Int 0 )
         | _ ->
             Error.create "Unexpected argument types." (op, v1, v2)
-              [%sexp_of: binop * Value.t * Value.t]
+              [%sexp_of: binop * t * t]
             |> Error.raise )
     | If (p1, p2, p3) ->
         let v1 = eval_pred ctx p1 |> to_bool in
@@ -85,6 +87,11 @@ let eval_pred_shared eval ctx =
         | [(_, v)] -> v
         | _ -> failwith "Expected a single valued tuple." )
       | None -> failwith "Empty relation." )
+    | Substring (p1, p2, p3) ->
+        let s = eval_pred ctx p1 in
+        let p = eval_pred ctx p2 in
+        let c = eval_pred ctx p3 in
+        String (String.sub (to_string s) ~pos:(to_int p - 1) ~len:(to_int c))
     | Count | Avg _ | Max _ | Min _ | Sum _ -> failwith "Unexpected aggregate."
   in
   eval_pred ctx
@@ -217,6 +224,7 @@ module Make_mock (Config : Config.S_mock) : S = struct
     | _ -> failwith "Not an aggregate."
 
   let agg_step eval_pred ctx expr acc =
+    let open Value in
     match (expr, acc) with
     | Count, `Int x -> `Int (x + 1)
     | Sum n, `Int x -> `Int (x + (eval_pred ctx n |> to_int))

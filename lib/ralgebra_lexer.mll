@@ -44,9 +44,8 @@ let keyword_tbl = Hashtbl.of_alist_exn (module String) [
 "exists", EXISTS;
 "not", NOT A.Not;
 "substring", SUBSTRING;
-"contains", CONTAINS A.Contains;
-"startswith", STARTSWITH A.Starts_with;
-"endswith", ENDSWITH A.Ends_with;
+"strpos", STRPOS A.Strpos;
+"strlen", STRLEN A.Strlen;
   ]
 }
 

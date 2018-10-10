@@ -59,7 +59,8 @@ struct
           | A.Not -> Infix.(not x)
           | A.Year -> Infix.(int 365 * x)
           | A.Month -> Infix.(int 30 * x)
-          | A.Day -> x )
+          | A.Day -> x
+          | A.Strlen -> Unop {op= StrLen; arg= x} )
       | A.Bool x -> Bool x
       | A.As_pred (x, _) -> gen_pred x
       | Name n -> (
@@ -83,7 +84,8 @@ struct
           | A.Sub -> build_sub e1 e2 b
           | A.Mul -> build_mul e1 e2 b
           | A.Div -> build_div e1 e2 b
-          | A.Mod -> Infix.(e1 % e2) )
+          | A.Mod -> Infix.(e1 % e2)
+          | A.Strpos -> Binop {op= StrPos; arg1= e1; arg2= e2} )
       | (A.Count | A.Min _ | A.Max _ | A.Sum _ | A.Avg _) as p ->
           Error.create "Not a scalar predicate." p [%sexp_of: A.pred] |> Error.raise
       | A.If (p1, p2, p3) -> Ternary (gen_pred p1, gen_pred p2, gen_pred p3)
@@ -107,6 +109,7 @@ struct
           let tup = build_fresh_var "tup" callee.ret_type b in
           build_step tup callee b ;
           Infix.(not (Done callee.name))
+      | A.Substring (e1, e2, e3) -> Substr (gen_pred e1, gen_pred e2, gen_pred e3)
     in
     gen_pred pred
 

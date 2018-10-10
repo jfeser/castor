@@ -75,12 +75,14 @@ let op_to_str = function
   | Mul -> "*"
   | Div -> "/"
   | Mod -> "%"
+  | _ -> failwith "Not an inline op."
 
 let unop_to_str = function
   | Not -> "not"
   | Day -> "day"
   | Month -> "month"
   | Year -> "year"
+  | Strlen -> "strlen"
 
 let pp_name fmt =
   let open Format in
@@ -112,6 +114,8 @@ and pp_pred fmt =
   | Bool x -> fprintf fmt "%B" x
   | String x -> fprintf fmt "%S" x
   | Name n -> pp_name fmt n
+  | Binop (Strpos, p1, p2) ->
+      fprintf fmt "@[<hov>strpos(%a,@ %a)@]" pp_pred p1 pp_pred p2
   | Binop (op, p1, p2) ->
       fprintf fmt "@[<hov>(%a@ %s@ %a)@]" pp_pred p1 (op_to_str op) pp_pred p2
   | Count -> fprintf fmt "count()"
@@ -123,6 +127,8 @@ and pp_pred fmt =
       fprintf fmt "if %a then %a else %a" pp_pred p1 pp_pred p2 pp_pred p3
   | First r -> fprintf fmt "(%a)" pp r
   | Exists r -> fprintf fmt "@[<hv 2>exists(%a)@]" pp r
+  | Substring (p1, p2, p3) ->
+      fprintf fmt "@[<hov>substr(%a,@ %a,@ %a)@]" pp_pred p1 pp_pred p2 pp_pred p3
 
 and pp fmt {node; _} =
   let open Caml.Format in
@@ -268,7 +274,7 @@ let rec pred_to_schema =
       let schema = pred_to_schema p in
       {schema with relation= None; name= n}
   | Name n -> n
-  | Int _ | Date _ | Unop ((Year | Month | Day), _) | Count ->
+  | Int _ | Date _ | Unop ((Year | Month | Day | Strlen), _) | Count ->
       unnamed (IntT {nullable= false})
   | Fixed _ | Avg _ -> unnamed (FixedT {nullable= false})
   | Bool _ | Exists _
@@ -281,6 +287,7 @@ let rec pred_to_schema =
       let s1 = pred_to_schema p1 in
       let s2 = pred_to_schema p2 in
       unnamed (unify (Name.type_exn s1) (Name.type_exn s2))
+  | Binop (Strpos, _, _) -> unnamed (IntT {nullable= false})
   | Sum p | Min p | Max p -> pred_to_schema p
   | If (_, p1, p2) ->
       let s1 = pred_to_schema p1 in
@@ -294,6 +301,7 @@ let rec pred_to_schema =
     | [n] -> n
     | [] -> failwith "Unexpected empty schema."
     | _ -> failwith "Too many fields." )
+  | Substring _ -> unnamed (StringT {nullable= false})
 
 let pred_to_name pred =
   let n = pred_to_schema pred in

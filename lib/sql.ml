@@ -35,7 +35,8 @@ let rec pred_to_sql = function
       | Not -> sprintf "not (%s)" s
       | Year -> sprintf "interval '%s year'" s
       | Month -> sprintf "interval '%s month'" s
-      | Day -> sprintf "interval '%s day'" s )
+      | Day -> sprintf "interval '%s day'" s
+      | Strlen -> sprintf "char_length(%s)" s )
   | Binop (op, p1, p2) -> (
       let s1 = sprintf "(%s)" (pred_to_sql p1) in
       let s2 = sprintf "(%s)" (pred_to_sql p2) in
@@ -52,9 +53,7 @@ let rec pred_to_sql = function
       | Mul -> sprintf "%s * %s" s1 s2
       | Div -> sprintf "%s / %s" s1 s2
       | Mod -> sprintf "%s %% %s" s1 s2
-      | Contains -> sprintf "strpos(%s, %s) = 0" s1 s2
-      | Starts_with -> sprintf "strpos(%s, %s) = 1" s1 s2
-      | Ends_with -> sprintf "strpos(%s, %s) = 0" s1 s2 )
+      | Strpos -> sprintf "strpos(%s, %s)" s1 s2 )
   | Count -> "count(*)"
   | Sum n -> sprintf "sum(%s)" (pred_to_sql n)
   | Avg n -> sprintf "avg(%s)" (pred_to_sql n)

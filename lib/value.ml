@@ -16,3 +16,5 @@ let to_sql = function
 let to_int = function Int x -> x | _ -> failwith "Not an int."
 
 let to_bool = function Bool x -> x | _ -> failwith "Not a bool."
+
+let to_string = function String x -> x | _ -> failwith "Not a string."

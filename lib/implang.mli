@@ -23,6 +23,8 @@ type op =
   | IntHash
   | StrHash
   | LoadStr
+  | StrLen
+  | StrPos
 [@@deriving compare, sexp]
 
 type expr =
@@ -40,6 +42,7 @@ type expr =
   | Done of string
   | Ternary of expr * expr * expr
   | TupleHash of Type.PrimType.t list * expr * expr
+  | Substr of expr * expr * expr
 
 and stmt =
   | Print of Type.PrimType.t * expr
