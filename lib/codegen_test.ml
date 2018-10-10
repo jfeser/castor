@@ -206,7 +206,7 @@ let%expect_test "strops" =
 select([strlen("test"), strpos("testing", "in")], ascalar(0))
 |} ;
   [%expect {|
-    1,2,
+    4,5,
 
     exited normally |}]
 
