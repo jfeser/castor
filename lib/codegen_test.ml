@@ -198,6 +198,16 @@ let example_db_params =
   ; ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_c"
     , String "8557539814359574196" ) ]
 
+let%expect_test "strops" =
+  run_test ~params:[] ~print_layout:false
+    {|
+select([strlen("test"), strpos("testing", "in"), substring("testing", 1, 4), substring("testing", 2, 3)], aempty)
+|} ;
+  [%expect {|
+    1,2,
+
+    exited normally |}]
+
 let%expect_test "example-1" =
   run_test ~params:example_params ~print_layout:false
     {|
