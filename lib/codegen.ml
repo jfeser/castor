@@ -308,7 +308,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
   let strpos =
     declare_function "strpos"
-      (function_type (i32_type ctx)
+      (function_type (i64_type ctx)
          [| pointer_type (i8_type ctx)
           ; i64_type ctx
           ; pointer_type (i8_type ctx)
