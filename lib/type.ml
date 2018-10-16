@@ -94,7 +94,7 @@ module T = struct
     | ListT of (t * list_)
     | HashIdxT of (t * t * hash_idx)
     | OrderedIdxT of (t * t * ordered_idx)
-    | FuncT of t list * [`Child_sum | `Width of int]
+    | FuncT of (t list * [`Child_sum | `Width of int])
     | EmptyT
   [@@deriving compare, sexp_of]
 end

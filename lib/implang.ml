@@ -298,6 +298,9 @@ module Builder = struct
     {name; args; ret_type= ret; locals= Hashtbl.data locals; body= List.rev !body}
 
   let build_assign e v b =
+    let lhs_t = type_of v b in
+    let rhs_t = type_of e b in
+    ignore (Type.PrimType.unify lhs_t rhs_t) ;
     b.body := Assign {lhs= name_of_var v; rhs= e} :: !(b.body)
 
   let build_print e b =

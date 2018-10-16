@@ -404,7 +404,7 @@ let is_serializeable r =
 
       method! visit_AScalar _ _ = true
 
-      method! visit_Filter ns p r =
+      method! visit_Filter ns (p, r) =
         let sq_visitor =
           object
             inherit [_] reduce
@@ -423,7 +423,7 @@ let is_serializeable r =
           ; self#visit_t ns r
           ; sq_visitor#visit_pred ns p ]
 
-      method! visit_Select ns ps r =
+      method! visit_Select ns (ps, r) =
         self#plus
           (List.for_all ps ~f:(fun p -> Set.is_empty (Set.inter (pred_names p) ns)))
           (self#visit_t ns r)
@@ -528,7 +528,7 @@ let project r =
     object (self : 'a)
       inherit [_] map as super
 
-      method! visit_Select needed ps r =
+      method! visit_Select needed (ps, r) =
         let ps' =
           List.filter ps ~f:(fun p ->
               match pred_to_name p with None -> false | Some n -> Set.mem needed n
@@ -601,15 +601,15 @@ let annotate_eq r =
         in
         Meta.Direct.set_m m Meta.eq eqs
 
-      method! visit_Filter m p r =
-        super#visit_Filter None p r ;
+      method! visit_Filter m (p, r) =
+        super#visit_Filter None (p, r) ;
         let m = Option.value_exn m in
         let r_eqs = Meta.(find_exn r eq) in
         let eqs = pred_eqs p @ r_eqs |> dedup_pairs in
         Meta.Direct.set_m m Meta.eq eqs
 
-      method! visit_Select m ps r =
-        super#visit_Select None ps r ;
+      method! visit_Select m (ps, r) =
+        super#visit_Select None (ps, r) ;
         let m = Option.value_exn m in
         let eqs =
           Meta.(find_exn r eq)

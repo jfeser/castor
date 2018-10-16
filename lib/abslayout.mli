@@ -56,8 +56,8 @@ and ordered_idx = Abslayout0.ordered_idx =
 [@@deriving sexp_of]
 
 and node = Abslayout0.node =
-  | Select of pred list * t
-  | Filter of pred * t
+  | Select of (pred list * t)
+  | Filter of (pred * t)
   | Join of {pred: pred; r1: t; r2: t}
   | GroupBy of pred list * Name.t list * t
   | OrderBy of {key: pred list; order: [`Asc | `Desc]; rel: t}

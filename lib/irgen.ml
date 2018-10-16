@@ -71,9 +71,13 @@ struct
     in
     ctx
 
-  let type_of_schema s = Type.PrimType.TupleT (List.map s ~f:Name.type_exn)
+  let types_of_schema s = List.map s ~f:Name.type_exn
+
+  let type_of_schema s = Type.PrimType.TupleT (types_of_schema s)
 
   let type_of_layout l = Meta.(find_exn l schema) |> type_of_schema
+
+  let types_of_layout l = Meta.(find_exn l schema) |> types_of_schema
 
   let list_of_tuple t b =
     match Builder.type_of t b with
@@ -109,6 +113,43 @@ struct
       ~else_:(fun _ -> ())
       b
 
+  let collect_aggs p =
+    let visitor =
+      object (self : 'a)
+        inherit [_] Abslayout0.mapreduce
+
+        inherit [_] Util.list_monoid
+
+        method private visit_Agg kind p =
+          let n = kind ^ Fresh.name fresh "%d" in
+          (A.Name (Name.create n), [(n, p)])
+
+        method! visit_Sum () p = self#visit_Agg "sum" (A.Sum p)
+
+        method! visit_Count () = self#visit_Agg "count" A.Count
+
+        method! visit_Min () p = self#visit_Agg "min" (A.Min p)
+
+        method! visit_Max () p = self#visit_Agg "max" (A.Max p)
+
+        method! visit_Avg () p = self#visit_Agg "avg" (A.Avg p)
+      end
+    in
+    visitor#visit_pred () p
+
+  let agg_step b acc =
+    let open Builder in
+    let one = const_int Type.PrimType.int_t 1 in
+    match acc with
+    | `Count x -> build_assign (build_add x one b) x b
+    | `Sum (f, x) -> build_assign (build_add x f b) x b
+    | `Min (v, x) -> build_assign (Ternary (build_lt v x b, v, x)) x b
+    | `Max (v, x) -> build_assign (Ternary (build_lt v x b, x, v)) x b
+    | `Avg (v, n, d) ->
+        build_assign (build_add n v b) n b ;
+        build_assign (build_add d one b) d b
+    | `Passthru _ -> ()
+
   let rec scan ctx b r t (cb : callback) =
     match r.Abslayout.node with
     | As (_, r) -> scan ctx b r t cb
@@ -127,18 +168,12 @@ struct
     | AList r', ListT t' -> scan_list ctx b r' t' cb
     | AHashIdx r', HashIdxT t' -> scan_hash_idx ctx b r' t' cb
     | AOrderedIdx r', OrderedIdxT t' -> scan_ordered_idx ctx b r' t' cb
-    | _ -> failwith ""
+    | Filter r', FuncT t' -> scan_filter ctx b r' t' cb
+    | Select r', FuncT t' -> scan_select ctx b r' t' cb
+    | (Join _ | GroupBy _ | OrderBy _ | Dedup _ | Scan _ | As _), _ ->
+        Error.create "Unsupported at runtime." r [%sexp_of: A.t] |> Error.raise
+    | _ -> Error.create "Not functions." r [%sexp_of: A.t] |> Error.raise
 
-  (* (
-           * match r.node with
-           * (\* | Select _ -> scan_select scan_args
-           *  * | Filter _ -> scan_filter scan_args *\)
-           *   | Select _ | Filter _ -> failwith ""
-           * | Join _ | GroupBy (_, _, _) | OrderBy _ | Dedup _ | Scan _ | As (_, _) ->
-           *     Error.create "Unsupported at runtime." r [%sexp_of: A.t]
-           *     |> Error.raise
-           * | AEmpty | AScalar _ | AList _ | ATuple _ | AHashIdx _ | AOrderedIdx _ ->
-           *     Error.create "Not functions." r [%sexp_of: A.t] |> Error.raise ) *)
   and gen_pred ctx pred b =
     let open Builder in
     let rec gen_pred = function
@@ -188,11 +223,8 @@ struct
            inline. *)
           let ctx = Map.remove ctx (Name.create "start") in
           let t = Meta.(find_exn r type_) in
-          let ret_var = build_var "first" (type_of_layout r) b in
-          scan ctx b r t (fun b tup ->
-              match tup with
-              | [] -> failwith "Unexpected empty tuple."
-              | e :: _ -> build_assign e ret_var b ) ;
+          let ret_var = build_var "first" (List.hd_exn (types_of_layout r)) b in
+          scan ctx b r t (fun b tup -> build_assign (List.hd_exn tup) ret_var b) ;
           ret_var
       | A.Exists r ->
           let ctx = Map.remove ctx (Name.create "start") in
@@ -472,196 +504,115 @@ struct
             cb b (list_of_tuple key_tuple b @ value_tup) ) )
       b
 
-  (* let scan_filter args =
-   *   match args with
-   *   | A.({ ctx
-   *        ; name
-   *        ; scan
-   *        ; layout= {node= Filter (pred, child_layout); _} as r
-   *        ; type_= FuncT ([child_type], _); _ }) ->
-   *       let open Builder in
-   *       let b =
-   *         let ret_type =
-   *           let schema = Meta.(find_exn r schema) in
-   *           Type.PrimType.TupleT (List.map schema ~f:Name.type_exn)
-   *         in
-   *         create ~ctx ~name ~ret:ret_type ~fresh
-   *       in
-   *       let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
-   *       let func = scan callee_ctx child_layout child_type in
-   *       build_foreach ~persistent:false ~count:(Type.count child_type) func
-   *         callee_args
-   *         (fun tup b ->
-   *           let ctx =
-   *             let child_schema = Meta.(find_exn child_layout schema) in
-   *             Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
-   *           in
-   *           let cond = gen_pred ~scan ~ctx pred b in
-   *           build_if ~cond
-   *             ~then_:(fun b ->
-   *               debug_print "filter selected" tup b ;
-   *               build_yield tup b )
-   *             ~else_:(fun _ -> ())
-   *             b )
-   *         b ;
-   *       build_func b
-   *   | _ -> failwith "Unexpected args."
-   * 
-   * let collect_aggs p =
-   *   let visitor =
-   *     object (self : 'a)
-   *       inherit [_] Abslayout0.mapreduce
-   * 
-   *       inherit [_] Util.list_monoid
-   * 
-   *       method private visit_Agg kind p =
-   *         let n = kind ^ Fresh.name fresh "%d" in
-   *         (A.Name (Name.create n), [(n, p)])
-   * 
-   *       method! visit_Sum () p = self#visit_Agg "sum" (A.Sum p)
-   * 
-   *       method! visit_Count () = self#visit_Agg "count" A.Count
-   * 
-   *       method! visit_Min () p = self#visit_Agg "min" (A.Min p)
-   * 
-   *       method! visit_Max () p = self#visit_Agg "max" (A.Max p)
-   * 
-   *       method! visit_Avg () p = self#visit_Agg "avg" (A.Avg p)
-   *     end
-   *   in
-   *   visitor#visit_pred () p
-   * 
-   * let agg_init scan ctx p b =
-   *   let open Builder in
-   *   match A.pred_remove_as p with
-   *   | A.Count ->
-   *       `Count
-   *         (build_defn ~persistent:false "count" (const_int Type.PrimType.int_t 0) b)
-   *   | A.Sum f ->
-   *       let f = gen_pred ~scan ~ctx f b in
-   *       let t = type_of f b in
-   *       `Sum (f, build_defn ~persistent:false "sum" (const_int t 0) b)
-   *   | A.Min f ->
-   *       let f = gen_pred ~scan ~ctx f b in
-   *       let t = type_of f b in
-   *       `Min (f, build_defn ~persistent:false "min" (const_int t Int.max_value) b)
-   *   | A.Max f ->
-   *       let f = gen_pred ~scan ~ctx f b in
-   *       let t = type_of f b in
-   *       `Max (f, build_defn ~persistent:false "max" (const_int t Int.min_value) b)
-   *   | A.Avg f ->
-   *       let f = gen_pred ~scan ~ctx f b in
-   *       let t = type_of f b in
-   *       `Avg
-   *         ( f
-   *         , build_defn ~persistent:false "avg_num" (const_int t 0) b
-   *         , build_defn ~persistent:false "avg_dem"
-   *             (const_int Type.PrimType.int_t 0)
-   *             b )
-   *   | p -> `Passthru p
-   * 
-   * let agg_step b acc =
-   *   let open Builder in
-   *   let one = const_int Type.PrimType.int_t 1 in
-   *   match acc with
-   *   | `Count x -> build_assign (build_add x one b) x b
-   *   | `Sum (f, x) -> build_assign (build_add x f b) x b
-   *   | `Min (v, x) -> build_assign (Ternary (build_lt v x b, v, x)) x b
-   *   | `Max (v, x) -> build_assign (Ternary (build_lt v x b, x, v)) x b
-   *   | `Avg (v, n, d) ->
-   *       build_assign (build_add n v b) n b ;
-   *       build_assign (build_add d one b) d b
-   *   | `Passthru _ -> ()
-   * 
-   * let agg_extract scan ctx b =
-   *   let open Builder in
-   *   function
-   *   | `Count x | `Sum (_, x) | `Min (_, x) | `Max (_, x) -> x
-   *   | `Avg (_, n, d) -> build_div n d b
-   *   | `Passthru p ->
-   *       [%sexp_of: A.pred * [`Agg | `Scalar]] (p, A.pred_kind p) |> print_s ;
-   *       gen_pred ~scan ~ctx p b
-   * 
-   * let scan_select args =
-   *   match args with
-   *   | { ctx
-   *     ; name
-   *     ; scan
-   *     ; layout= {node= Select (args, child_layout); _} as layout
-   *     ; type_= FuncT ([child_type], _); _ } ->
-   *       let open Builder in
-   *       let schema = Meta.(find_exn layout schema) in
-   *       let b =
-   *         let ret_type = Type.PrimType.TupleT (List.map schema ~f:Name.type_exn) in
-   *         create ~ctx ~name ~ret:ret_type ~fresh
-   *       in
-   *       let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
-   *       let func = scan callee_ctx child_layout child_type in
-   *       ( match A.select_kind args with
-   *       | `Scalar ->
-   *           build_foreach ~persistent:false ~count:(Type.count child_type) func
-   *             callee_args
-   *             (fun tup b ->
-   *               let ctx =
-   *                 let child_schema = Meta.(find_exn child_layout schema) in
-   *                 Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
-   *               in
-   *               let output = List.map args ~f:(fun p -> gen_pred ~scan ~ctx p b) in
-   *               build_yield (Tuple output) b )
-   *             b
-   *       | `Agg ->
-   *           (\* Extract all the aggregates from the arguments. *\)
-   *           let scalar_preds, agg_preds =
-   *             List.map ~f:collect_aggs args |> List.unzip
-   *           in
-   *           let agg_preds = List.concat agg_preds in
-   *           let agg_temps = ref [] in
-   *           let last_tup = build_var ~persistent:false "tup" func.ret_type b in
-   *           let found_tup =
-   *             build_defn ~persistent:false "found_tup" (Bool false) b
-   *           in
-   *           (\* Holds the state for each aggregate. *\)
-   *           build_foreach ~persistent:false ~count:(Type.count child_type)
-   *             ~header:(fun tup b ->
-   *               let ctx =
-   *                 let child_schema = Meta.(find_exn child_layout schema) in
-   *                 Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
-   *               in
-   *               agg_temps :=
-   *                 List.map agg_preds ~f:(fun (n, p) -> (n, agg_init scan ctx p b))
-   *               )
-   *             func callee_args
-   *             (fun tup b ->
-   *               List.iter !agg_temps ~f:(fun (_, p) -> agg_step b p) ;
-   *               build_assign tup last_tup b ;
-   *               build_assign (Bool true) found_tup b )
-   *             b ;
-   *           build_if ~cond:found_tup
-   *             ~then_:(fun b ->
-   *               let ctx =
-   *                 let child_schema = Meta.(find_exn child_layout schema) in
-   *                 Ctx.bind_ctx ctx (Ctx.of_schema child_schema last_tup)
-   *               in
-   *               let agg_temps =
-   *                 List.map !agg_temps ~f:(fun (n, p) -> (n, agg_extract scan ctx b p)
-   *                 )
-   *               in
-   *               let footer_ctx =
-   *                 List.fold_left agg_temps ~init:ctx ~f:(fun ctx (n, v) ->
-   *                     Ctx.bind ctx n (type_of v b) v )
-   *               in
-   *               let output =
-   *                 Tuple
-   *                   (List.map
-   *                      ~f:(fun p -> gen_pred ~ctx:footer_ctx ~scan p b)
-   *                      scalar_preds)
-   *               in
-   *               debug_print "select produced" output b ;
-   *               build_yield output b )
-   *             ~else_:(fun _ -> ())
-   *             b ) ;
-   *       build_func b
-   *   | _ -> failwith "Unexpected args." *)
+  and scan_filter ctx b r t cb =
+    let open Builder in
+    let pred, child_layout = r in
+    let child_type =
+      match t with [ct], _ -> ct | _ -> failwith "Unexpected type."
+    in
+    scan ctx b child_layout child_type (fun b tup ->
+        let ctx =
+          let child_schema = Meta.(find_exn child_layout schema) in
+          Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
+        in
+        let cond = gen_pred ctx pred b in
+        build_if ~cond
+          ~then_:(fun b ->
+            debug_print "filter selected" (Tuple tup) b ;
+            cb b tup )
+          ~else_:(fun _ -> ())
+          b )
+
+  and agg_init ctx p b =
+    let open Builder in
+    match A.pred_remove_as p with
+    | A.Count ->
+        `Count
+          (build_defn ~persistent:false "count" (const_int Type.PrimType.int_t 0) b)
+    | A.Sum f ->
+        let f = gen_pred ctx f b in
+        let t = type_of f b in
+        `Sum (f, build_defn ~persistent:false "sum" (const_int t 0) b)
+    | A.Min f ->
+        let f = gen_pred ctx f b in
+        let t = type_of f b in
+        `Min (f, build_defn ~persistent:false "min" (const_int t Int.max_value) b)
+    | A.Max f ->
+        let f = gen_pred ctx f b in
+        let t = type_of f b in
+        `Max (f, build_defn ~persistent:false "max" (const_int t Int.min_value) b)
+    | A.Avg f ->
+        let f = gen_pred ctx f b in
+        let t = type_of f b in
+        `Avg
+          ( f
+          , build_defn ~persistent:false "avg_num" (const_int t 0) b
+          , build_defn ~persistent:false "avg_dem"
+              (const_int Type.PrimType.int_t 0)
+              b )
+    | p -> `Passthru p
+
+  and agg_extract ctx b =
+    let open Builder in
+    function
+    | `Count x | `Sum (_, x) | `Min (_, x) | `Max (_, x) -> x
+    | `Avg (_, n, d) -> build_div n d b
+    | `Passthru p ->
+        [%sexp_of: A.pred * [`Agg | `Scalar]] (p, A.pred_kind p) |> print_s ;
+        gen_pred ctx p b
+
+  and scan_select ctx b r t cb =
+    let open Builder in
+    let args, child_layout = r in
+    let child_type =
+      match t with [ct], _ -> ct | _ -> failwith "Unexpected type."
+    in
+    match A.select_kind args with
+    | `Scalar ->
+        scan ctx b child_layout child_type (fun b tup ->
+            let ctx =
+              let child_schema = Meta.(find_exn child_layout schema) in
+              Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
+            in
+            cb b (List.map args ~f:(fun p -> gen_pred ctx p b)) )
+    | `Agg ->
+        (* Extract all the aggregates from the arguments. *)
+        let scalar_preds, agg_preds = List.map ~f:collect_aggs args |> List.unzip in
+        let agg_preds = List.concat agg_preds in
+        let last_tup =
+          build_var ~persistent:false "tup" (type_of_layout child_layout) b
+        in
+        let found_tup = build_defn ~persistent:false "found_tup" (Bool false) b in
+        let pred_ctx =
+          let child_schema = Meta.(find_exn child_layout schema) in
+          Ctx.bind_ctx ctx (Ctx.of_schema child_schema (list_of_tuple last_tup b))
+        in
+        (* Holds the state for each aggregate. *)
+        let agg_temps =
+          List.map agg_preds ~f:(fun (n, p) -> (n, agg_init pred_ctx p b))
+        in
+        (* Compute the aggregates. *)
+        scan ctx b child_layout child_type (fun b tup ->
+            build_assign (Tuple tup) last_tup b ;
+            List.iter agg_temps ~f:(fun (_, p) -> agg_step b p) ;
+            build_assign (Bool true) found_tup b ) ;
+        (* Extract and return aggregates. *)
+        build_if ~cond:found_tup
+          ~then_:(fun b ->
+            let agg_temps =
+              List.map agg_temps ~f:(fun (n, p) -> (n, agg_extract ctx b p))
+            in
+            let footer_ctx =
+              List.fold_left agg_temps ~init:ctx ~f:(fun ctx (n, v) ->
+                  Ctx.bind ctx n (type_of v b) v )
+            in
+            let output =
+              List.map ~f:(fun p -> gen_pred footer_ctx p b) scalar_preds
+            in
+            debug_print "select produced" (Tuple output) b ;
+            cb b output )
+          ~else_:(fun _ -> ())
+          b
 
   let printer ctx r t =
     let open Builder in

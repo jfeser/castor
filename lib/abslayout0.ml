@@ -67,8 +67,8 @@ and tuple = Cross | Zip
 and t = {node: node; meta: meta [@opaque] [@compare.ignore]}
 
 and node =
-  | Select of pred list * t
-  | Filter of pred * t
+  | Select of (pred list * t)
+  | Filter of (pred * t)
   | Join of {pred: pred; r1: t; r2: t}
   | GroupBy of pred list * (name[@opaque]) list * t
   | OrderBy of {key: pred list; order: ([`Asc | `Desc][@opaque]); rel: t}

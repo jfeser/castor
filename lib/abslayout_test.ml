@@ -35,8 +35,10 @@ let%expect_test "subst" =
   [%expect
     {|
     ((node
-      (Filter (Binop (Eq (Int 1) (Int 2)))
-       ((node (Select ((Int 1) (Int 2)) ((node (Scan r)) (meta ())))) (meta ()))))
+      (Filter
+       ((Binop (Eq (Int 1) (Int 2)))
+        ((node (Select (((Int 1) (Int 2)) ((node (Scan r)) (meta ())))))
+         (meta ())))))
      (meta ())) |}]
 
 (* let%expect_test "project-empty" =
@@ -82,27 +84,27 @@ let%expect_test "mat-col" =
       (AList
        (((node
           (Filter
-           (Binop
-            (Eq
-             (Name
-              ((relation (ship_mode)) (name sm_carrier)
-               (type_ ((StringT (nullable false))))))
-             (String GERMA)))
-           ((node (Scan ship_mode))
-            (meta
-             ((schema
-               (((relation (ship_mode)) (name sm_ship_mode_sk)
-                 (type_ ((IntT (nullable false)))))
-                ((relation (ship_mode)) (name sm_ship_mode_id)
-                 (type_ ((StringT (nullable false)))))
-                ((relation (ship_mode)) (name sm_type)
-                 (type_ ((StringT (nullable false)))))
-                ((relation (ship_mode)) (name sm_code)
-                 (type_ ((StringT (nullable false)))))
-                ((relation (ship_mode)) (name sm_carrier)
-                 (type_ ((StringT (nullable false)))))
-                ((relation (ship_mode)) (name sm_contract)
-                 (type_ ((StringT (nullable false))))))))))))
+           ((Binop
+             (Eq
+              (Name
+               ((relation (ship_mode)) (name sm_carrier)
+                (type_ ((StringT (nullable false))))))
+              (String GERMA)))
+            ((node (Scan ship_mode))
+             (meta
+              ((schema
+                (((relation (ship_mode)) (name sm_ship_mode_sk)
+                  (type_ ((IntT (nullable false)))))
+                 ((relation (ship_mode)) (name sm_ship_mode_id)
+                  (type_ ((StringT (nullable false)))))
+                 ((relation (ship_mode)) (name sm_type)
+                  (type_ ((StringT (nullable false)))))
+                 ((relation (ship_mode)) (name sm_code)
+                  (type_ ((StringT (nullable false)))))
+                 ((relation (ship_mode)) (name sm_carrier)
+                  (type_ ((StringT (nullable false)))))
+                 ((relation (ship_mode)) (name sm_contract)
+                  (type_ ((StringT (nullable false)))))))))))))
          (meta
           ((schema
             (((relation (ship_mode)) (name sm_ship_mode_sk)
@@ -156,46 +158,46 @@ let%expect_test "mat-hidx" =
              (Dedup
               ((node
                 (Select
-                 ((Name
-                   ((relation (ship_mode)) (name sm_type)
-                    (type_ ((StringT (nullable false)))))))
-                 ((node
-                   (Filter
-                    (Binop
-                     (Eq
-                      (Name
-                       ((relation (ship_mode)) (name sm_type)
-                        (type_ ((StringT (nullable false))))))
-                      (String LIBRARY)))
-                    ((node (Scan ship_mode))
-                     (meta
-                      ((schema
-                        (((relation (ship_mode)) (name sm_ship_mode_sk)
-                          (type_ ((IntT (nullable false)))))
-                         ((relation (ship_mode)) (name sm_ship_mode_id)
-                          (type_ ((StringT (nullable false)))))
+                 (((Name
+                    ((relation (ship_mode)) (name sm_type)
+                     (type_ ((StringT (nullable false)))))))
+                  ((node
+                    (Filter
+                     ((Binop
+                       (Eq
+                        (Name
                          ((relation (ship_mode)) (name sm_type)
-                          (type_ ((StringT (nullable false)))))
-                         ((relation (ship_mode)) (name sm_code)
-                          (type_ ((StringT (nullable false)))))
-                         ((relation (ship_mode)) (name sm_carrier)
-                          (type_ ((StringT (nullable false)))))
-                         ((relation (ship_mode)) (name sm_contract)
-                          (type_ ((StringT (nullable false))))))))))))
-                  (meta
-                   ((schema
-                     (((relation (ship_mode)) (name sm_ship_mode_sk)
-                       (type_ ((IntT (nullable false)))))
-                      ((relation (ship_mode)) (name sm_ship_mode_id)
-                       (type_ ((StringT (nullable false)))))
-                      ((relation (ship_mode)) (name sm_type)
-                       (type_ ((StringT (nullable false)))))
-                      ((relation (ship_mode)) (name sm_code)
-                       (type_ ((StringT (nullable false)))))
-                      ((relation (ship_mode)) (name sm_carrier)
-                       (type_ ((StringT (nullable false)))))
-                      ((relation (ship_mode)) (name sm_contract)
-                       (type_ ((StringT (nullable false))))))))))))
+                          (type_ ((StringT (nullable false))))))
+                        (String LIBRARY)))
+                      ((node (Scan ship_mode))
+                       (meta
+                        ((schema
+                          (((relation (ship_mode)) (name sm_ship_mode_sk)
+                            (type_ ((IntT (nullable false)))))
+                           ((relation (ship_mode)) (name sm_ship_mode_id)
+                            (type_ ((StringT (nullable false)))))
+                           ((relation (ship_mode)) (name sm_type)
+                            (type_ ((StringT (nullable false)))))
+                           ((relation (ship_mode)) (name sm_code)
+                            (type_ ((StringT (nullable false)))))
+                           ((relation (ship_mode)) (name sm_carrier)
+                            (type_ ((StringT (nullable false)))))
+                           ((relation (ship_mode)) (name sm_contract)
+                            (type_ ((StringT (nullable false)))))))))))))
+                   (meta
+                    ((schema
+                      (((relation (ship_mode)) (name sm_ship_mode_sk)
+                        (type_ ((IntT (nullable false)))))
+                       ((relation (ship_mode)) (name sm_ship_mode_id)
+                        (type_ ((StringT (nullable false)))))
+                       ((relation (ship_mode)) (name sm_type)
+                        (type_ ((StringT (nullable false)))))
+                       ((relation (ship_mode)) (name sm_code)
+                        (type_ ((StringT (nullable false)))))
+                       ((relation (ship_mode)) (name sm_carrier)
+                        (type_ ((StringT (nullable false)))))
+                       ((relation (ship_mode)) (name sm_contract)
+                        (type_ ((StringT (nullable false)))))))))))))
                (meta
                 ((schema
                   (((relation (ship_mode)) (name sm_type)
@@ -213,29 +215,29 @@ let%expect_test "mat-hidx" =
               (As t
                ((node
                  (Filter
-                  (Binop
-                   (Eq
-                    (Name
-                     ((relation (t)) (name sm_type)
-                      (type_ ((StringT (nullable false))))))
-                    (Name
-                     ((relation (ship_mode)) (name sm_type)
-                      (type_ ((StringT (nullable false))))))))
-                  ((node (Scan ship_mode))
-                   (meta
-                    ((schema
-                      (((relation (ship_mode)) (name sm_ship_mode_sk)
-                        (type_ ((IntT (nullable false)))))
-                       ((relation (ship_mode)) (name sm_ship_mode_id)
-                        (type_ ((StringT (nullable false)))))
-                       ((relation (ship_mode)) (name sm_type)
-                        (type_ ((StringT (nullable false)))))
-                       ((relation (ship_mode)) (name sm_code)
-                        (type_ ((StringT (nullable false)))))
-                       ((relation (ship_mode)) (name sm_carrier)
-                        (type_ ((StringT (nullable false)))))
-                       ((relation (ship_mode)) (name sm_contract)
-                        (type_ ((StringT (nullable false))))))))))))
+                  ((Binop
+                    (Eq
+                     (Name
+                      ((relation (t)) (name sm_type)
+                       (type_ ((StringT (nullable false))))))
+                     (Name
+                      ((relation (ship_mode)) (name sm_type)
+                       (type_ ((StringT (nullable false))))))))
+                   ((node (Scan ship_mode))
+                    (meta
+                     ((schema
+                       (((relation (ship_mode)) (name sm_ship_mode_sk)
+                         (type_ ((IntT (nullable false)))))
+                        ((relation (ship_mode)) (name sm_ship_mode_id)
+                         (type_ ((StringT (nullable false)))))
+                        ((relation (ship_mode)) (name sm_type)
+                         (type_ ((StringT (nullable false)))))
+                        ((relation (ship_mode)) (name sm_code)
+                         (type_ ((StringT (nullable false)))))
+                        ((relation (ship_mode)) (name sm_carrier)
+                         (type_ ((StringT (nullable false)))))
+                        ((relation (ship_mode)) (name sm_contract)
+                         (type_ ((StringT (nullable false)))))))))))))
                 (meta
                  ((schema
                    (((relation (ship_mode)) (name sm_ship_mode_sk)
