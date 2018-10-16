@@ -80,6 +80,35 @@ struct
     | TupleT ts -> List.mapi ts ~f:(fun i _ -> Infix.(index t i))
     | _ -> failwith "Expected a tuple type."
 
+  let build_bin_search build_key n low_target high_target callback b =
+    let open Builder in
+    let low = build_defn "low" Infix.(int 0) b in
+    let high = build_defn "high" n b in
+    build_loop
+      Infix.(low < high)
+      (fun b ->
+        let mid = build_defn "mid" Infix.((low + high) / int 2) b in
+        let key = build_key mid b in
+        build_if
+          ~cond:(build_lt key (Tuple [low_target]) b)
+          ~then_:(fun b -> build_assign Infix.(mid + int 1) low b)
+          ~else_:(fun b -> build_assign mid high b)
+          b )
+      b ;
+    build_if
+      ~cond:Infix.(low < n)
+      ~then_:(fun b ->
+        let key = build_defn "key" (build_key low b) b in
+        build_loop
+          Infix.(build_lt key (Tuple [high_target]) b && low < n)
+          (fun b ->
+            callback key low b ;
+            build_assign Infix.(low + int 1) low b ;
+            build_assign (build_key low b) key b )
+          b )
+      ~else_:(fun _ -> ())
+      b
+
   let rec scan ctx b r t (cb : callback) =
     match r.Abslayout.node with
     | As (_, r) -> scan ctx b r t cb
@@ -97,7 +126,7 @@ struct
     | ATuple r', TupleT t' -> scan_tuple ctx b r' t' cb
     | AList r', ListT t' -> scan_list ctx b r' t' cb
     | AHashIdx r', HashIdxT t' -> scan_hash_idx ctx b r' t' cb
-    (* | AOrderedIdx r', OrderedIdxT t' -> scan_ordered_idx ctx b r' t' cb *)
+    | AOrderedIdx r', OrderedIdxT t' -> scan_ordered_idx ctx b r' t' cb
     | _ -> failwith ""
 
   (* (
@@ -397,123 +426,53 @@ struct
           b )
       b
 
-  (* [@@@warning "+8"]
-   * 
-   * let build_bin_search build_key n low_target high_target callback b =
-   *   let open Builder in
-   *   let low = build_defn "low" Infix.(int 0) b in
-   *   let high = build_defn "high" n b in
-   *   build_loop
-   *     Infix.(low < high)
-   *     (fun b ->
-   *       let mid = build_defn "mid" Infix.((low + high) / int 2) b in
-   *       let key = build_key mid b in
-   *       build_if
-   *         ~cond:(build_lt key (Tuple [low_target]) b)
-   *         ~then_:(fun b -> build_assign Infix.(mid + int 1) low b)
-   *         ~else_:(fun b -> build_assign mid high b)
-   *         b )
-   *     b ;
-   *   build_if
-   *     ~cond:Infix.(low < n)
-   *     ~then_:(fun b ->
-   *       let key = build_defn "key" (build_key low b) b in
-   *       build_loop
-   *         Infix.(build_lt key (Tuple [high_target]) b && low < n)
-   *         (fun b ->
-   *           callback key low b ;
-   *           build_assign Infix.(low + int 1) low b ;
-   *           build_assign (build_key low b) key b )
-   *         b )
-   *     ~else_:(fun _ -> ())
-   *     b
-   * 
-   * let scan_ordered_idx args =
-   *   match args with
-   *   | { ctx
-   *     ; name
-   *     ; scan
-   *     ; layout=
-   *         { node=
-   *             AOrderedIdx
-   *               ( _
-   *               , value_layout
-   *               , {oi_key_layout= Some key_layout; lookup_low; lookup_high; _} ); _
-   *         } as r
-   *     ; type_= OrderedIdxT (key_type, value_type, _) as t; _ } ->
-   *       let open Builder in
-   *       let hdr = Header.make_header t in
-   *       let b =
-   *         let ret_type =
-   *           let schema = Meta.(find_exn r schema) in
-   *           Type.PrimType.TupleT (List.map schema ~f:Name.type_exn)
-   *         in
-   *         create ~ctx ~name ~ret:ret_type ~fresh
-   *       in
-   *       let start = Ctx.find_exn ctx (Name.create "start") b in
-   *       let kstart = build_var "kstart" Type.PrimType.int_t b in
-   *       let key_callee_ctx, key_callee_args =
-   *         let ctx = Ctx.bind ctx "start" Type.PrimType.int_t kstart in
-   *         Ctx.make_callee_context ctx b
-   *       in
-   *       let key_iter = scan key_callee_ctx key_layout key_type in
-   *       let key_tuple = build_var "key" key_iter.ret_type b in
-   *       let ctx =
-   *         let key_schema = Meta.(find_exn key_layout schema) in
-   *         Ctx.bind_ctx ctx (Ctx.of_schema key_schema key_tuple)
-   *       in
-   *       let vstart = build_var "vstart" Type.PrimType.int_t b in
-   *       let value_callee_ctx, value_callee_args =
-   *         let ctx = Ctx.bind ctx "start" Type.PrimType.int_t vstart in
-   *         Ctx.make_callee_context ctx b
-   *       in
-   *       let value_iter = scan value_callee_ctx value_layout value_type in
-   *       let index_len = Header.make_access hdr "idx_len" start in
-   *       let index_start = Header.make_position hdr "idx" start in
-   *       let key_len = len index_start key_type in
-   *       let ptr_len = Infix.(int 8) in
-   *       let kp_len = Infix.(key_len + ptr_len) in
-   *       let key_index i b =
-   *         build_assign Infix.(index_start + (i * kp_len)) kstart b ;
-   *         build_iter key_iter key_callee_args b ;
-   *         let key = build_var ~persistent:false "key" key_iter.ret_type b in
-   *         build_step key key_iter b ; key
-   *       in
-   *       let n = Infix.(index_len / kp_len) in
-   *       build_bin_search key_index n
-   *         (gen_pred ~scan ~ctx lookup_low b)
-   *         (gen_pred ~scan ~ctx lookup_high b)
-   *         (fun key idx b ->
-   *           build_assign
-   *             Infix.(Slice (index_start + (idx * kp_len) + key_len, 8))
-   *             vstart b ;
-   *           build_assign key key_tuple b ;
-   *           build_foreach ~persistent:false ~count:(Type.count value_type)
-   *             value_iter value_callee_args
-   *             (fun value b -> build_yield (build_concat [key; value] b) b)
-   *             b )
-   *         b ;
-   *       build_func b
-   *   | _ -> failwith "Unexpected args."
-   * 
-   * let printer ctx name func =
-   *   let open Builder in
-   *   let b = create ~ctx ~name ~ret:VoidT ~fresh in
-   *   build_foreach ~persistent:false func [] (fun x b -> build_print x b) b ;
-   *   build_func b
-   * 
-   * let counter ctx name func =
-   *   let open Builder in
-   *   let open Infix in
-   *   let b = create ~name ~ctx ~ret:(IntT {nullable= false}) ~fresh in
-   *   let c = build_defn "c" Infix.(int 0) b in
-   *   build_foreach ~persistent:false func []
-   *     (fun _ b -> build_assign (c + int 1) c b)
-   *     b ;
-   *   build_return c b ;
-   *   build_func b
-   * 
-   * let scan_filter args =
+  and scan_ordered_idx ctx b r t cb =
+    let open Builder in
+    let ( _
+        , value_layout
+        , Abslayout.({oi_key_layout= m_key_layout; lookup_low; lookup_high; _}) ) =
+      r
+    in
+    let key_type, value_type, _ = t in
+    let key_layout = Option.value_exn m_key_layout in
+    let hdr = Header.make_header (OrderedIdxT t) in
+    let start = Ctx.find_exn ctx (Name.create "start") b in
+    let kstart = build_var "kstart" Type.PrimType.int_t b in
+    let vstart = build_var "vstart" Type.PrimType.int_t b in
+    let key_tuple = build_var "key" (type_of_layout key_layout) b in
+    let key_ctx = Ctx.bind ctx "start" Type.PrimType.int_t kstart in
+    let value_ctx =
+      let key_schema = Meta.(find_exn key_layout schema) in
+      let ctx =
+        Ctx.bind_ctx ctx (Ctx.of_schema key_schema (list_of_tuple key_tuple b))
+      in
+      Ctx.bind ctx "start" Type.PrimType.int_t vstart
+    in
+    let index_len = Header.make_access hdr "idx_len" start in
+    let index_start = Header.make_position hdr "idx" start in
+    let key_len = len index_start key_type in
+    let ptr_len = Infix.(int 8) in
+    let kp_len = Infix.(key_len + ptr_len) in
+    let key_index i b =
+      build_assign Infix.(index_start + (i * kp_len)) kstart b ;
+      let key = build_var ~persistent:false "key" (type_of_layout key_layout) b in
+      scan key_ctx b key_layout key_type (fun b tup ->
+          build_assign (Tuple tup) key b ) ;
+      key
+    in
+    let n = Infix.(index_len / kp_len) in
+    build_bin_search key_index n (gen_pred ctx lookup_low b)
+      (gen_pred ctx lookup_high b)
+      (fun key idx b ->
+        build_assign
+          Infix.(Slice (index_start + (idx * kp_len) + key_len, 8))
+          vstart b ;
+        build_assign key key_tuple b ;
+        scan value_ctx b value_layout value_type (fun b value_tup ->
+            cb b (list_of_tuple key_tuple b @ value_tup) ) )
+      b
+
+  (* let scan_filter args =
    *   match args with
    *   | A.({ ctx
    *        ; name
