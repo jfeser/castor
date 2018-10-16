@@ -153,7 +153,7 @@ module Ctx0 = struct
   let empty = Map.empty (module Name.Compare_no_type)
 
   let of_schema schema tup =
-    List.mapi schema ~f:(fun i n -> (n, Field Infix.(index tup i)))
+    List.map2_exn schema tup ~f:(fun n e -> (n, Field e))
     |> Map.of_alist_exn (module Name.Compare_no_type)
 
   (* Create an argument list for a caller. *)
