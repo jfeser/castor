@@ -988,6 +988,17 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | Yield _ ->
           fail (Error.of_string "Yields not allowed in function declarations.")
     and codegen_prog fctx p = List.iter ~f:(codegen_stmt fctx) p in
+    let set_attributes func =
+      (* Set iterator function attributes. *)
+      add_function_attr func (create_enum_attr ctx "readonly" 0L) AttrIndex.Function ;
+      add_function_attr func
+        (create_enum_attr ctx "argmemonly" 0L)
+        AttrIndex.Function ;
+      add_function_attr func (create_enum_attr ctx "nounwind" 0L) AttrIndex.Function ;
+      add_function_attr func
+        (create_enum_attr ctx "norecurse" 0L)
+        AttrIndex.Function
+    in
     fun fctx ->
       let name = fctx#name in
       let (I.({args; locals; ret_type; body; _}) as func) = fctx#func in
@@ -1007,6 +1018,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         function_type (codegen_type ret_type) args_t
       in
       fctx#set_llfunc (declare_function name func_t module_) ;
+      set_attributes fctx#llfunc ;
       let bb = append_block ctx "entry" fctx#llfunc in
       position_at_end bb builder ;
       Hashtbl.set funcs ~key:name ~data:fctx#llfunc ;
