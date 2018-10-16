@@ -602,12 +602,12 @@ struct
             let agg_temps =
               List.map agg_temps ~f:(fun (n, p) -> (n, agg_extract ctx b p))
             in
-            let footer_ctx =
-              List.fold_left agg_temps ~init:ctx ~f:(fun ctx (n, v) ->
+            let output_ctx =
+              List.fold_left agg_temps ~init:pred_ctx ~f:(fun ctx (n, v) ->
                   Ctx.bind ctx n (type_of v b) v )
             in
             let output =
-              List.map ~f:(fun p -> gen_pred footer_ctx p b) scalar_preds
+              List.map ~f:(fun p -> gen_pred output_ctx p b) scalar_preds
             in
             debug_print "select produced" (Tuple output) b ;
             cb b output )
