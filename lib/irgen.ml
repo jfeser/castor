@@ -36,74 +36,6 @@ struct
     let open Builder in
     if Config.debug then build_print (Tuple [String msg; v]) b
 
-  (* let _gen_pred ~ctx ~scan pred b =
-   *   let open Builder in
-   *   let rec gen_pred = function
-   *     | A.Null -> Null
-   *     | A.Int x -> Int x
-   *     | A.String x -> String x
-   *     | A.Fixed x -> Fixed x
-   *     | Date x -> Int (Date.to_int x)
-   *     | Unop (op, p) -> (
-   *         let x = gen_pred p in
-   *         match op with
-   *         | A.Not -> Infix.(not x)
-   *         | A.Year -> Infix.(int 365 * x)
-   *         | A.Month -> Infix.(int 30 * x)
-   *         | A.Day -> x
-   *         | A.Strlen -> Unop {op= StrLen; arg= x} )
-   *     | A.Bool x -> Bool x
-   *     | A.As_pred (x, _) -> gen_pred x
-   *     | Name n -> (
-   *       match Ctx.find ctx n b with
-   *       | Some e -> e
-   *       | None ->
-   *           Error.create "Unbound variable." (n, ctx) [%sexp_of: Name.t * Ctx.t]
-   *           |> Error.raise )
-   *     | A.Binop (op, arg1, arg2) -> (
-   *         let e1 = gen_pred arg1 in
-   *         let e2 = gen_pred arg2 in
-   *         match op with
-   *         | A.Eq -> build_eq e1 e2 b
-   *         | A.Lt -> build_lt e1 e2 b
-   *         | A.Le -> build_le e1 e2 b
-   *         | A.Gt -> build_gt e1 e2 b
-   *         | A.Ge -> build_ge e1 e2 b
-   *         | A.And -> Infix.(e1 && e2)
-   *         | A.Or -> Infix.(e1 || e2)
-   *         | A.Add -> build_add e1 e2 b
-   *         | A.Sub -> build_sub e1 e2 b
-   *         | A.Mul -> build_mul e1 e2 b
-   *         | A.Div -> build_div e1 e2 b
-   *         | A.Mod -> Infix.(e1 % e2)
-   *         | A.Strpos -> Binop {op= StrPos; arg1= e1; arg2= e2} )
-   *     | (A.Count | A.Min _ | A.Max _ | A.Sum _ | A.Avg _) as p ->
-   *         Error.create "Not a scalar predicate." p [%sexp_of: A.pred] |> Error.raise
-   *     | A.If (p1, p2, p3) -> Ternary (gen_pred p1, gen_pred p2, gen_pred p3)
-   *     | A.First callee_layout ->
-   *         (\* Don't use the passed in start value. Subquery layouts are not stored
-   *          inline. *\)
-   *         let ctx = Map.remove ctx (Name.create "start") in
-   *         let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
-   *         let callee_type = Meta.(find_exn callee_layout type_) in
-   *         let callee = scan callee_ctx callee_layout callee_type in
-   *         build_iter callee callee_args b ;
-   *         let tup = build_var "tup" callee.ret_type b in
-   *         build_step tup callee b ;
-   *         Infix.(index tup 0)
-   *     | A.Exists callee_layout ->
-   *         let ctx = Map.remove ctx (Name.create "start") in
-   *         let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
-   *         let callee_type = Meta.(find_exn callee_layout type_) in
-   *         let callee = scan callee_ctx callee_layout callee_type in
-   *         build_iter callee callee_args b ;
-   *         let tup = build_var "tup" callee.ret_type b in
-   *         build_step tup callee b ;
-   *         Infix.(not (Done callee.name))
-   *     | A.Substring (e1, e2, e3) -> Substr (gen_pred e1, gen_pred e2, gen_pred e3)
-   *   in
-   *   gen_pred pred *)
-
   (** Generate an expression for the length of a value at `start` with type
      `type_`. Compensates for restrictions in the Header api. *)
   let rec len start type_ =
@@ -139,6 +71,15 @@ struct
     in
     ctx
 
+  let type_of_schema s = Type.PrimType.TupleT (List.map s ~f:Name.type_exn)
+
+  let type_of_layout l = Meta.(find_exn l schema) |> type_of_schema
+
+  let list_of_tuple t b =
+    match Builder.type_of t b with
+    | TupleT ts -> List.mapi ts ~f:(fun i _ -> Infix.(index t i))
+    | _ -> failwith "Expected a tuple type."
+
   let rec scan ctx b r t (cb : callback) =
     match r.Abslayout.node with
     | As (_, r) -> scan ctx b r t cb
@@ -154,10 +95,9 @@ struct
     | AEmpty, EmptyT -> scan_empty ctx b () () cb
     | AScalar r', NullT -> scan_null ctx b r' () cb
     | ATuple r', TupleT t' -> scan_tuple ctx b r' t' cb
-    | AList r', ListT t' ->
-        scan_list ctx b r' t' cb
-        (* | AHashIdx r', HashIdxT t' -> scan_hash_idx ctx b r' t' cb
-         * | AOrderedIdx r', OrderedIdxT t' -> scan_ordered_idx ctx b r' t' cb *)
+    | AList r', ListT t' -> scan_list ctx b r' t' cb
+    | AHashIdx r', HashIdxT t' -> scan_hash_idx ctx b r' t' cb
+    (* | AOrderedIdx r', OrderedIdxT t' -> scan_ordered_idx ctx b r' t' cb *)
     | _ -> failwith ""
 
   (* (
@@ -170,6 +110,71 @@ struct
            *     |> Error.raise
            * | AEmpty | AScalar _ | AList _ | ATuple _ | AHashIdx _ | AOrderedIdx _ ->
            *     Error.create "Not functions." r [%sexp_of: A.t] |> Error.raise ) *)
+  and gen_pred ctx pred b =
+    let open Builder in
+    let rec gen_pred = function
+      | A.Null -> Null
+      | A.Int x -> Int x
+      | A.String x -> String x
+      | A.Fixed x -> Fixed x
+      | Date x -> Int (Date.to_int x)
+      | Unop (op, p) -> (
+          let x = gen_pred p in
+          match op with
+          | A.Not -> Infix.(not x)
+          | A.Year -> Infix.(int 365 * x)
+          | A.Month -> Infix.(int 30 * x)
+          | A.Day -> x
+          | A.Strlen -> Unop {op= StrLen; arg= x} )
+      | A.Bool x -> Bool x
+      | A.As_pred (x, _) -> gen_pred x
+      | Name n -> (
+        match Ctx.find ctx n b with
+        | Some e -> e
+        | None ->
+            Error.create "Unbound variable." (n, ctx) [%sexp_of: Name.t * Ctx.t]
+            |> Error.raise )
+      | A.Binop (op, arg1, arg2) -> (
+          let e1 = gen_pred arg1 in
+          let e2 = gen_pred arg2 in
+          match op with
+          | A.Eq -> build_eq e1 e2 b
+          | A.Lt -> build_lt e1 e2 b
+          | A.Le -> build_le e1 e2 b
+          | A.Gt -> build_gt e1 e2 b
+          | A.Ge -> build_ge e1 e2 b
+          | A.And -> Infix.(e1 && e2)
+          | A.Or -> Infix.(e1 || e2)
+          | A.Add -> build_add e1 e2 b
+          | A.Sub -> build_sub e1 e2 b
+          | A.Mul -> build_mul e1 e2 b
+          | A.Div -> build_div e1 e2 b
+          | A.Mod -> Infix.(e1 % e2)
+          | A.Strpos -> Binop {op= StrPos; arg1= e1; arg2= e2} )
+      | (A.Count | A.Min _ | A.Max _ | A.Sum _ | A.Avg _) as p ->
+          Error.create "Not a scalar predicate." p [%sexp_of: A.pred] |> Error.raise
+      | A.If (p1, p2, p3) -> Ternary (gen_pred p1, gen_pred p2, gen_pred p3)
+      | A.First r ->
+          (* Don't use the passed in start value. Subquery layouts are not stored
+           inline. *)
+          let ctx = Map.remove ctx (Name.create "start") in
+          let t = Meta.(find_exn r type_) in
+          let ret_var = build_var "first" (type_of_layout r) b in
+          scan ctx b r t (fun b tup ->
+              match tup with
+              | [] -> failwith "Unexpected empty tuple."
+              | e :: _ -> build_assign e ret_var b ) ;
+          ret_var
+      | A.Exists r ->
+          let ctx = Map.remove ctx (Name.create "start") in
+          let t = Meta.(find_exn r type_) in
+          let ret_var = build_defn "exists" (Bool false) b in
+          scan ctx b r t (fun b _ -> build_assign (Bool true) ret_var b) ;
+          ret_var
+      | A.Substring (e1, e2, e3) -> Substr (gen_pred e1, gen_pred e2, gen_pred e3)
+    in
+    gen_pred pred
+
   and scan_empty _ _ _ _ _ = ()
 
   and scan_null _ b _ _ (cb : callback) = cb b [Null]
@@ -336,81 +341,63 @@ struct
         build_assign Infix.(pcount - int 1) pcount b )
       b
 
-  (* let scan_hash_idx
-   *     A.({ ctx
-   *        ; name
-   *        ; scan
-   *        ; layout=
-   *            { node=
-   *                AHashIdx (_, value_layout, {lookup; hi_key_layout= Some key_layout}); _
-   *            } as r
-   *        ; type_= HashIdxT (key_type, value_type, _) as t; _ }) =
-   *   let open Builder in
-   *   let b =
-   *     let ret_type =
-   *       let schema = Meta.(find_exn r schema) in
-   *       Type.PrimType.TupleT (List.map schema ~f:Name.type_exn)
-   *     in
-   *     create ~ctx ~name ~ret:ret_type ~fresh
-   *   in
-   *   let hdr = Header.make_header t in
-   *   let start = Ctx.find_exn ctx (Name.create "start") b in
-   *   let kstart = build_var ~persistent:false "kstart" Type.PrimType.int_t b in
-   *   let key_callee_ctx, key_callee_args =
-   *     let ctx = Ctx.bind ctx "start" Type.PrimType.int_t kstart in
-   *     Ctx.make_callee_context ctx b
-   *   in
-   *   let key_iter = scan key_callee_ctx key_layout key_type in
-   *   let key_tuple = build_var ~persistent:false "key" key_iter.ret_type b in
-   *   let ctx =
-   *     let key_schema = Meta.(find_exn key_layout schema) in
-   *     Ctx.bind_ctx ctx (Ctx.of_schema key_schema key_tuple)
-   *   in
-   *   let vstart = build_var ~persistent:false "vstart" Type.PrimType.int_t b in
-   *   let value_callee_ctx, value_callee_args =
-   *     let ctx = Ctx.bind ctx "start" Type.PrimType.int_t vstart in
-   *     Ctx.make_callee_context ctx b
-   *   in
-   *   let value_iter = scan value_callee_ctx value_layout value_type in
-   *   let hash_data_start = Header.make_position hdr "hash_data" start in
-   *   let mapping_start = Header.make_position hdr "hash_map" start in
-   *   let mapping_len = Header.make_access hdr "hash_map_len" start in
-   *   let lookup_expr = List.map lookup ~f:(fun p -> gen_pred ~scan ~ctx p b) in
-   *   (\* Compute the index in the mapping table for this key. *\)
-   *   let hash_key =
-   *     match lookup_expr with
-   *     | [] -> failwith "empty hash key"
-   *     | [x] -> build_hash hash_data_start x b
-   *     | xs -> build_hash hash_data_start (Tuple xs) b
-   *   in
-   *   let hash_key = Infix.(hash_key * int 8) in
-   *   (\* Get a pointer to the value. *\)
-   *   let value_ptr = Infix.(Slice (mapping_start + hash_key, 8)) in
-   *   (\* If the pointer is null, then the key is not present. *\)
-   *   build_if
-   *     ~cond:
-   *       Infix.(
-   *         hash_key < int 0
-   *         || hash_key >= mapping_len
-   *         || build_eq value_ptr (int 0x0) b)
-   *     ~then_:(fun _ -> ())
-   *     ~else_:(fun b ->
-   *       build_assign value_ptr kstart b ;
-   *       build_iter key_iter key_callee_args b ;
-   *       build_step key_tuple key_iter b ;
-   *       build_assign Infix.(value_ptr + len value_ptr key_type) vstart b ;
-   *       build_if
-   *         ~cond:(build_eq key_tuple (Tuple lookup_expr) b)
-   *         ~then_:
-   *           (build_foreach ~persistent:false ~count:(Type.count value_type)
-   *              value_iter value_callee_args (fun value_tup b ->
-   *                build_yield (build_concat [key_tuple; value_tup] b) b ))
-   *         ~else_:(fun _ -> ())
-   *         b )
-   *     b ;
-   *   build_func b
-   * 
-   * [@@@warning "+8"]
+  and scan_hash_idx ctx b r t cb =
+    let open Builder in
+    let _, value_layout, Abslayout.({lookup; hi_key_layout= m_key_layout}) = r in
+    let key_layout = Option.value_exn m_key_layout in
+    let key_type, value_type, _ = t in
+    let hdr = Header.make_header (HashIdxT t) in
+    let start = Ctx.find_exn ctx (Name.create "start") b in
+    let kstart = build_var ~persistent:false "kstart" Type.PrimType.int_t b in
+    let vstart = build_var ~persistent:false "vstart" Type.PrimType.int_t b in
+    let key_tuple =
+      build_var ~persistent:false "key" (type_of_layout key_layout) b
+    in
+    let key_ctx = Ctx.bind ctx "start" Type.PrimType.int_t kstart in
+    let value_ctx =
+      let key_schema = Meta.(find_exn key_layout schema) in
+      let ctx =
+        Ctx.bind_ctx ctx (Ctx.of_schema key_schema (list_of_tuple key_tuple b))
+      in
+      Ctx.bind ctx "start" Type.PrimType.int_t vstart
+    in
+    let hash_data_start = Header.make_position hdr "hash_data" start in
+    let mapping_start = Header.make_position hdr "hash_map" start in
+    let mapping_len = Header.make_access hdr "hash_map_len" start in
+    let lookup_expr = List.map lookup ~f:(fun p -> gen_pred ctx p b) in
+    (* Compute the index in the mapping table for this key. *)
+    let hash_key =
+      match lookup_expr with
+      | [] -> failwith "empty hash key"
+      | [x] -> build_hash hash_data_start x b
+      | xs -> build_hash hash_data_start (Tuple xs) b
+    in
+    let hash_key = Infix.(hash_key * int 8) in
+    (* Get a pointer to the value. *)
+    let value_ptr = Infix.(Slice (mapping_start + hash_key, 8)) in
+    (* If the pointer is null, then the key is not present. *)
+    build_if
+      ~cond:
+        Infix.(
+          hash_key < int 0
+          || hash_key >= mapping_len
+          || build_eq value_ptr (int 0x0) b)
+      ~then_:(fun _ -> ())
+      ~else_:(fun b ->
+        build_assign value_ptr kstart b ;
+        scan key_ctx b key_layout key_type (fun b tup ->
+            build_assign (Tuple tup) key_tuple b ) ;
+        build_assign Infix.(value_ptr + len value_ptr key_type) vstart b ;
+        build_if
+          ~cond:(build_eq key_tuple (Tuple lookup_expr) b)
+          ~then_:(fun b ->
+            scan value_ctx b value_layout value_type (fun b value_tup ->
+                cb b (list_of_tuple key_tuple b @ value_tup) ) )
+          ~else_:(fun _ -> ())
+          b )
+      b
+
+  (* [@@@warning "+8"]
    * 
    * let build_bin_search build_key n low_target high_target callback b =
    *   let open Builder in

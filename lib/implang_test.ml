@@ -366,137 +366,88 @@ let%expect_test "cross-tuple" =
         return c0;
     } |}]
 
-(* let%expect_test "hash-idx" =
- *   run_test
- *     "ATuple([AList(r1, AScalar(r1.f)) as f, AHashIdx(dedup(select([r1.f], r1)) as \
- *      k, ascalar(k.f+1), f.f)], cross)" ;
- *   [%expect
- *     {|
- *     // Locals:
- *     // start : Int[nonnull] (persists=true)
- *     fun scalar_5 (start) : Tuple[Int[nonnull]] {
- *         yield (buf[start : 1]);
- *     }
- *     // Locals:
- *     // tup7 : Tuple[Int[nonnull]] (persists=false)
- *     // start : Int[nonnull] (persists=true)
- *     // pcount6 : Int[nonnull] (persists=true)
- *     // cstart4 : Int[nonnull] (persists=true)
- *     fun list_3 (start) : Tuple[Int[nonnull]] {
- *         cstart4 = start;
- *         pcount6 = 5;
- *         loop (0 < pcount6) {
- *             init scalar_5(cstart4);
- *             tup7 = next(scalar_5);
- *             yield tup7;
- *             cstart4 = cstart4 + 1;
- *             pcount6 = pcount6 - 1;
- *         }
- *     }
- *     // Locals:
- *     // f_f : Int[nonnull] (persists=true)
- *     // start : Int[nonnull] (persists=true)
- *     fun scalar_12 (f_f,
- *         start) : Tuple[Int[nonnull]] {
- *         yield (buf[start : 1]);
- *     }
- *     // Locals:
- *     // f_f : Int[nonnull] (persists=true)
- *     // k_f : Int[nonnull] (persists=true)
- *     // start : Int[nonnull] (persists=true)
- *     fun scalar_15 (k_f,
- *         f_f,
- *         start) : Tuple[Int[nonnull]] {
- *         yield (buf[start : 1]);
- *     }
- *     // Locals:
- *     // f_f : Int[nonnull] (persists=true)
- *     // vstart14 : Int[nonnull] (persists=false)
- *     // key13 : Tuple[Int[nonnull]] (persists=false)
- *     // start : Int[nonnull] (persists=true)
- *     // tup16 : Tuple[Int[nonnull]] (persists=false)
- *     // kstart11 : Int[nonnull] (persists=false)
- *     fun hash_idx_10 (f_f,
- *         start) : Tuple[Int[nonnull],
- *         Int[nonnull]] {
- *         if (hash(start + 4 + 8, f_f) * 8 < 0 || buf[start + 4 + 8 + buf[start +
- *             4 : 8] : 8] - 1 < hash(start + 4 + 8, f_f) * 8 || buf[start + 4 + 8 +
- *             buf[start + 4 : 8] + 8 + hash(start + 4 + 8, f_f) * 8 : 8] = 0) {
- * 
- *         } else {
- *              kstart11 = buf[start + 4 + 8 + buf[start + 4 : 8] + 8 + hash(start +
- *              4 + 8, f_f) * 8 : 8];
- *              init scalar_12(f_f, kstart11);
- *              key13 = next(scalar_12);
- *              vstart14 = buf[start + 4 + 8 + buf[start + 4 : 8] + 8 + hash(start +
- *              4 + 8, f_f) * 8 : 8] + 1;
- *              if (true && key13[0] = f_f) {
- *                  init scalar_15(key13[0], f_f, vstart14);
- *                  tup16 = next(scalar_15);
- *                  yield (key13[0], tup16[0]);
- *              } else {
- * 
- *              }
- *         }
- *     }
- *     // Locals:
- *     // tup17 : Tuple[Int[nonnull], Int[nonnull]] (persists=true)
- *     // cstart2 : Int[nonnull] (persists=true)
- *     // cstart1 : Int[nonnull] (persists=true)
- *     // count9 : Int[nonnull] (persists=true)
- *     // tup8 : Tuple[Int[nonnull]] (persists=true)
- *     fun tuple_0 () : Tuple[Int[nonnull],
- *         Int[nonnull],
- *         Int[nonnull]] {
- *         cstart1 = 4;
- *         cstart2 = cstart1 + 5;
- *         init list_3(cstart1);
- *         count9 = 5;
- *         loop (0 < count9) {
- *             tup8 = next(list_3);
- *             init hash_idx_10(tup8[0], cstart2);
- *             loop (not done(hash_idx_10)) {
- *                 tup17 = next(hash_idx_10);
- *                 if (not done(hash_idx_10)) {
- *                     yield (tup8[0], tup17[0], tup17[1]);
- *                 } else {
- * 
- *                 }
- *             }
- *             count9 = count9 - 1;
- *         }
- *     }
- *     // Locals:
- *     // tup20 : Tuple[Int[nonnull], Int[nonnull], Int[nonnull]] (persists=false)
- *     fun printer () : Void {
- *         init tuple_0();
- *         loop (not done(tuple_0)) {
- *             tup20 = next(tuple_0);
- *             if (not done(tuple_0)) {
- *                 print(Tuple[Int[nonnull], Int[nonnull], Int[nonnull]], tup20);
- *             } else {
- * 
- *             }
- *         }
- *     }
- *     // Locals:
- *     // c18 : Int[nonnull] (persists=true)
- *     // tup19 : Tuple[Int[nonnull], Int[nonnull], Int[nonnull]] (persists=false)
- *     fun counter () : Int[nonnull] {
- *         c18 = 0;
- *         init tuple_0();
- *         loop (not done(tuple_0)) {
- *             tup19 = next(tuple_0);
- *             if (not done(tuple_0)) {
- *                 c18 = c18 + 1;
- *             } else {
- * 
- *             }
- *         }
- *         return c18;
- *     } |}]
- * 
- * let%expect_test "example-1" =
+let%expect_test "hash-idx" =
+  run_test
+    "ATuple([AList(r1, AScalar(r1.f)) as f, AHashIdx(dedup(select([r1.f], r1)) as \
+     k, ascalar(k.f+1), f.f)], cross)";
+  [%expect {|
+    // Locals:
+    // cstart8 : Int[nonnull] (persists=true)
+    // key14 : Tuple[Int[nonnull]] (persists=false)
+    // cstart9 : Int[nonnull] (persists=true)
+    // cstart10 : Int[nonnull] (persists=true)
+    // pcount11 : Int[nonnull] (persists=true)
+    // vstart13 : Int[nonnull] (persists=false)
+    // kstart12 : Int[nonnull] (persists=false)
+    fun printer () : Void {
+        cstart8 = 4;
+        cstart9 = cstart8 + 5;
+        cstart10 = cstart8;
+        pcount11 = 5;
+        loop (0 < pcount11) {
+            if (hash(cstart9 + 4 + 8, buf[cstart10 : 1]) * 8 < 0 || buf[cstart9 +
+                4 + 8 + buf[cstart9 + 4 : 8] : 8] - 1 < hash(cstart9 + 4 +
+                8, buf[cstart10 : 1]) * 8 || buf[cstart9 + 4 + 8 + buf[cstart9 +
+                4 : 8] + 8 + hash(cstart9 + 4 + 8, buf[cstart10 : 1]) * 8 : 8] =
+                0) {
+
+            } else {
+                 kstart12 = buf[cstart9 + 4 + 8 + buf[cstart9 + 4 : 8] + 8 +
+                 hash(cstart9 + 4 + 8, buf[cstart10 : 1]) * 8 : 8];
+                 key14 = (buf[kstart12 : 1]);
+                 vstart13 = buf[cstart9 + 4 + 8 + buf[cstart9 + 4 : 8] + 8 +
+                 hash(cstart9 + 4 + 8, buf[cstart10 : 1]) * 8 : 8] + 1;
+                 if (true && key14[0] = buf[cstart10 : 1]) {
+                     print(Tuple[Int[nonnull], Int[nonnull], Int[nonnull]],
+                     (key14[0], buf[vstart13 : 1], buf[cstart10 : 1]));
+                 } else {
+
+                 }
+            }
+            cstart10 = cstart10 + 1;
+            pcount11 = pcount11 - 1;
+        }
+    }
+    // Locals:
+    // pcount4 : Int[nonnull] (persists=true)
+    // cstart2 : Int[nonnull] (persists=true)
+    // cstart1 : Int[nonnull] (persists=true)
+    // c0 : Int[nonnull] (persists=true)
+    // kstart5 : Int[nonnull] (persists=false)
+    // cstart3 : Int[nonnull] (persists=true)
+    // vstart6 : Int[nonnull] (persists=false)
+    // key7 : Tuple[Int[nonnull]] (persists=false)
+    fun counter () : Int[nonnull] {
+        c0 = 0;
+        cstart1 = 4;
+        cstart2 = cstart1 + 5;
+        cstart3 = cstart1;
+        pcount4 = 5;
+        loop (0 < pcount4) {
+            if (hash(cstart2 + 4 + 8, buf[cstart3 : 1]) * 8 < 0 || buf[cstart2 +
+                4 + 8 + buf[cstart2 + 4 : 8] : 8] - 1 < hash(cstart2 + 4 +
+                8, buf[cstart3 : 1]) * 8 || buf[cstart2 + 4 + 8 + buf[cstart2 +
+                4 : 8] + 8 + hash(cstart2 + 4 + 8, buf[cstart3 : 1]) * 8 : 8] = 0) {
+
+            } else {
+                 kstart5 = buf[cstart2 + 4 + 8 + buf[cstart2 + 4 : 8] + 8 +
+                 hash(cstart2 + 4 + 8, buf[cstart3 : 1]) * 8 : 8];
+                 key7 = (buf[kstart5 : 1]);
+                 vstart6 = buf[cstart2 + 4 + 8 + buf[cstart2 + 4 : 8] + 8 +
+                 hash(cstart2 + 4 + 8, buf[cstart3 : 1]) * 8 : 8] + 1;
+                 if (true && key7[0] = buf[cstart3 : 1]) {
+                     c0 = c0 + 1;
+                 } else {
+
+                 }
+            }
+            cstart3 = cstart3 + 1;
+            pcount4 = pcount4 - 1;
+        }
+        return c0;
+    } |}]
+
+(* let%expect_test "example-1" =
  *   run_test ~params:example_params
  *     {|
  * filter(lc.id = id_c && lp.id = id_p,
