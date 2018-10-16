@@ -92,7 +92,7 @@ let example_db_params =
   [ Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_p"
   ; Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_c" ]
 
-let%expect_test "tuple-simple" =
+let%expect_test "tuple-simple-cross" =
   run_test "ATuple([AScalar(1), AScalar(2)], cross)" ;
   [%expect
     {|
@@ -114,6 +114,73 @@ let%expect_test "tuple-simple" =
         cstart1 = 0;
         cstart2 = cstart1 + 1;
         c0 = c0 + 1;
+        return c0;
+    } |}]
+
+let%expect_test "tuple-simple-zip" =
+  run_test "ATuple([AScalar(1), AScalar(2)], zip)";
+  [%expect {|
+    // Locals:
+    // start : Int[nonnull] (persists=true)
+    fun zt_9 (start) : Tuple[Int[nonnull]] {
+        yield (buf[start : 1]);
+    }
+    // Locals:
+    // start : Int[nonnull] (persists=true)
+    fun zt_8 (start) : Tuple[Int[nonnull]] {
+        yield (buf[start : 1]);
+    }
+    // Locals:
+    // start : Int[nonnull] (persists=true)
+    fun zt_3 (start) : Tuple[Int[nonnull]] {
+        yield (buf[start : 1]);
+    }
+    // Locals:
+    // start : Int[nonnull] (persists=true)
+    fun zt_2 (start) : Tuple[Int[nonnull]] {
+        yield (buf[start : 1]);
+    }
+    // Locals:
+    // tup11 : Tuple[Int[nonnull]] (persists=true)
+    // count12 : Int[nonnull] (persists=true)
+    // cstart7 : Int[nonnull] (persists=true)
+    // tup10 : Tuple[Int[nonnull]] (persists=true)
+    fun printer () : Void {
+        cstart7 = 0;
+        cstart7 = 0;
+        init zt_8(cstart7);
+        cstart7 = cstart7 + 1;
+        init zt_9(cstart7);
+        cstart7 = cstart7 + 1;
+        count12 = 1;
+        loop (0 < count12) {
+            tup10 = next(zt_8);
+            tup11 = next(zt_9);
+            print(Tuple[Int[nonnull], Int[nonnull]], (tup10[0], tup11[0]));
+            count12 = count12 - 1;
+        }
+    }
+    // Locals:
+    // tup4 : Tuple[Int[nonnull]] (persists=true)
+    // cstart1 : Int[nonnull] (persists=true)
+    // c0 : Int[nonnull] (persists=true)
+    // tup5 : Tuple[Int[nonnull]] (persists=true)
+    // count6 : Int[nonnull] (persists=true)
+    fun counter () : Int[nonnull] {
+        c0 = 0;
+        cstart1 = 0;
+        cstart1 = 0;
+        init zt_2(cstart1);
+        cstart1 = cstart1 + 1;
+        init zt_3(cstart1);
+        cstart1 = cstart1 + 1;
+        count6 = 1;
+        loop (0 < count6) {
+            tup4 = next(zt_2);
+            tup5 = next(zt_3);
+            c0 = c0 + 1;
+            count6 = count6 - 1;
+        }
         return c0;
     } |}]
 
@@ -1222,8 +1289,9 @@ select([lp.counter, lc.counter],
       alist(filter(log_str.counter = k, log_str),
         atuple([ascalar(log_str.id), ascalar(log_str.counter)], cross)), 
       lp.counter, lp.succ) as lc)], cross))
-|};
-  [%expect {|
+|} ;
+  [%expect
+    {|
     // Locals:
     // cstart29 : Int[nonnull] (persists=true)
     // cstart24 : Int[nonnull] (persists=true)

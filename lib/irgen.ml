@@ -32,6 +32,10 @@ struct
 
   let fresh = Fresh.create ()
 
+  let iters = ref []
+
+  let add_iter i = iters := i :: !iters
+
   let debug_print msg v b =
     let open Builder in
     if Config.debug then build_print (Tuple [String msg; v]) b
@@ -331,60 +335,63 @@ struct
     in
     make_loops ctx [] child_layouts child_types child_starts b
 
-  (* let scan_ziptuple
-   *     A.({ ctx
-   *        ; name
-   *        ; scan
-   *        ; layout= {node= ATuple (child_layouts, Zip); _} as r
-   *        ; type_= TupleT (child_types, {count}) as t; _ }) =
-   *   let open Builder in
-   *   let b =
-   *     let ret_type =
-   *       let schema = Meta.(find_exn r schema) in
-   *       Type.PrimType.TupleT (List.map schema ~f:Name.type_exn)
-   *     in
-   *     create ~ctx ~name ~ret:ret_type ~fresh
-   *   in
-   *   let hdr = Header.make_header t in
-   *   let start = Ctx.find_exn ctx (Name.create "start") b in
-   *   let ctx = Ctx.bind ctx "start" Type.PrimType.int_t start in
-   *   let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
-   *   (\* Build iterator initializers using the computed start positions. *\)
-   *   build_assign (Header.make_position hdr "value" start) start b ;
-   *   let callee_funcs =
-   *     List.map2_exn child_layouts child_types ~f:(fun callee_layout callee_type ->
-   *         let callee = scan callee_ctx callee_layout callee_type in
-   *         build_iter callee callee_args b ;
-   *         build_assign Infix.(start + len start callee_type) start b ;
-   *         callee )
-   *   in
-   *   let child_tuples =
-   *     List.map callee_funcs ~f:(fun f -> build_var "t" f.ret_type b)
-   *   in
-   *   let build_body b =
-   *     List.iter2_exn callee_funcs child_tuples ~f:(fun f t -> build_step t f b) ;
-   *     let tup =
-   *       List.map2_exn child_types child_tuples ~f:(fun in_t child_tup ->
-   *           List.init (Type.width in_t) ~f:(fun i -> Infix.(index child_tup i)) )
-   *       |> List.concat
-   *       |> fun l -> Tuple l
-   *     in
-   *     build_yield tup b
-   *   in
-   *   ( match Type.AbsCount.kind count with
-   *   | `Count x -> build_count_loop Infix.(int x) build_body b
-   *   | `Countable | `Unknown ->
-   *       build_body b ;
-   *       let not_done =
-   *         List.fold_left callee_funcs ~init:(Bool true) ~f:(fun acc f ->
-   *             Infix.(acc && not (Done f.name)) )
-   *       in
-   *       build_loop not_done build_body b ) ;
-   *   build_func b *)
+  and scan_ziptuple ctx b r t cb =
+    let open Builder in
+    let child_layouts, _ = r in
+    let child_types, meta = t in
+    let hdr = Header.make_header (TupleT t) in
+    let pstart = Ctx.find_exn ctx (Name.create "start") b in
+    let cstart = build_defn "cstart" pstart b in
+    let ctx = Ctx.bind ctx "start" Type.PrimType.int_t cstart in
+    let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
+    (* Build iterator initializers using the computed start positions. *)
+    build_assign (Header.make_position hdr "value" pstart) cstart b ;
+    let callee_funcs =
+      List.zip_exn child_layouts child_types
+      |> List.map ~f:(fun (callee_layout, callee_type) ->
+             (* Construct a pull based iterator for each column in the zip tuple.
+             This loop also initializes the iterator and computes the next start
+             position. *)
+             let b' =
+               create ~ctx:callee_ctx ~name:(Fresh.name fresh "zt_%d")
+                 ~ret:(type_of_layout callee_layout)
+                 ~fresh
+             in
+             scan callee_ctx b' callee_layout callee_type (fun b tup ->
+                 build_yield (Tuple tup) b ) ;
+             let iter = build_func b' in
+             add_iter iter ;
+             build_iter iter callee_args b ;
+             build_assign Infix.(cstart + len cstart callee_type) cstart b ;
+             iter )
+    in
+    let child_tuples =
+      List.map callee_funcs ~f:(fun f -> build_var "tup" f.ret_type b)
+    in
+    let build_body b =
+      List.iter2_exn callee_funcs child_tuples ~f:(fun f t -> build_step t f b) ;
+      let tup =
+        List.map2_exn child_types child_tuples ~f:(fun in_t child_tup ->
+            List.init (Type.width in_t) ~f:(fun i -> Infix.(index child_tup i)) )
+        |> List.concat
+        |> fun l -> Tuple l
+      in
+      cb b (list_of_tuple tup b)
+    in
+    match Type.AbsCount.kind meta.count with
+    | `Count x -> build_count_loop Infix.(int x) build_body b
+    | `Countable | `Unknown ->
+        build_body b ;
+        let not_done =
+          List.fold_left callee_funcs ~init:(Bool true) ~f:(fun acc f ->
+              Infix.(acc && not (Done f.name)) )
+        in
+        build_loop not_done build_body b
+
   and scan_tuple ctx b ((_, kind) as r) t (cb : callback) =
     match kind with
     | Abslayout.Cross -> scan_crosstuple ctx b r t cb
-    | Zip -> (* scan_ziptuple ctx b r t cb *) failwith ""
+    | Zip -> scan_ziptuple ctx b r t cb
 
   and scan_list ctx b (_, child_layout) ((child_type, _) as t) (cb : callback) =
     let open Builder in
@@ -641,7 +648,7 @@ struct
     in
     Bitstring.Writer.flush writer ;
     Bitstring.Writer.close writer ;
-    { iters= []
+    { iters= !iters
     ; funcs= [printer ctx r type_; counter ctx r type_]
     ; params
     ; buffer_len= len }
