@@ -313,7 +313,7 @@ struct
                 let tuple_ctx = Ctx.of_schema Meta.(find_exn clayout schema) tup in
                 Ctx.bind_ctx ctx tuple_ctx
               in
-              make_loops next_ctx (tup @ fields) clayouts ctypes cstarts b )
+              make_loops next_ctx (fields @ tup) clayouts ctypes cstarts b )
       | _ -> failwith ""
     in
     let hdr = Header.make_header (TupleT t) in
