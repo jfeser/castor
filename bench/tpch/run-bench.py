@@ -143,7 +143,7 @@ def gen_quantity():
 def gen_perc():
     return gen_discount()
 
-
+SQL_ONLY = False
 DB = "tpch"
 PORT = "5432"
 OUT_FILE = rpath('results.csv')
@@ -152,18 +152,18 @@ TRANSFORM_EXE = rpath("../../_build/default/bin/transform.exe")
 BENCH_DIR = rpath('.')
 BENCHMARKS = [
     {
-        "query": ['1-gold'],
+        "query": ['1', '1-gold'],
         "params": [("param0:int", gen_int(1, 180))],
     },
     {
-        "query": ['3-gold'],
+        "query": ['3', '3-gold'],
         "params": [
             ("param0:string", gen_mktsegment()),
             ("param1:date", gen_tpch_date()),
         ],
     },
     {
-        "query": ['4-gold'],
+        "query": ['4', '4-gold'],
         "params": [("param1:date", gen_tpch_date())],
     },
     {
@@ -253,7 +253,7 @@ def run_bench(query_name, params):
         args = contents(args_file)
     else:
         args = ''
-    sql = rpath(query + '.sql')
+    sql = rpath(query_name + '.sql')
 
     # Make benchmark dir.
     benchd = os.path.splitext(query_name)[0]
@@ -280,26 +280,27 @@ def run_bench(query_name, params):
     compile_cmd = " ".join(compile_cmd_parts)
 
     # Build, saving the log.
-    log.debug(xform_cmd)
-    log.debug(compile_cmd)
-    try:
-        xform_log = benchd + "/xform.log"
-        compile_log = benchd + "/compile.log"
-        query_file = benchd + "/query"
-        code = os.system("%s 2> %s > %s" % (xform_cmd, xform_log, query_file))
-        if code != 0:
-            raise Exception("Nonzero exit code %d" % code)
-        code = os.system("%s %s > %s 2>&1" % (compile_cmd, query_file, compile_log))
-        if code != 0:
-            raise Exception("Nonzero exit code %d" % code)
-        log.info("Done building %s.", query_name)
-    except KeyboardInterrupt:
-        exit()
-    except Exception:
-        log.exception("Compile failed.")
-        csv_writer.writerow([query_name, None])
-        csv_file.flush()
-        return
+    if not SQL_ONLY:
+        log.debug(xform_cmd)
+        log.debug(compile_cmd)
+        try:
+            xform_log = benchd + "/xform.log"
+            compile_log = benchd + "/compile.log"
+            query_file = benchd + "/query"
+            code = os.system("%s 2> %s > %s" % (xform_cmd, xform_log, query_file))
+            if code != 0:
+                raise Exception("Nonzero exit code %d" % code)
+            code = os.system("%s %s > %s 2>&1" % (compile_cmd, query_file, compile_log))
+            if code != 0:
+                raise Exception("Nonzero exit code %d" % code)
+            log.info("Done building %s.", query_name)
+        except KeyboardInterrupt:
+            exit()
+        except Exception:
+            log.exception("Compile failed.")
+            csv_writer.writerow([query_name, None])
+            csv_file.flush()
+            return
 
     # Run query and save results.
     os.chdir(benchd)
@@ -309,8 +310,8 @@ def run_bench(query_name, params):
     random.seed(0)
     sql_params = [p[1]('sql') for p in params]
 
-    log.debug('Running SQL version of query.')
     if os.path.isfile(sql):
+        log.debug('Running SQL version of query.')
         with open(sql, 'r') as f:
             sql_query = f.read()
         for i, param in enumerate(sql_params):
@@ -318,34 +319,38 @@ def run_bench(query_name, params):
         with open('sql', 'w') as f:
             f.write(sql_query)
         with open('golden.csv', 'w') as out:
-            call(['psql', '-d', DB, '-p', PORT, '-t', '-A', '-F', ',', '-f', 'sql'],
+            call(['psql', '-d', DB, '-p', PORT, '-t', '-A', '-F', ',', '-c', r'\timing',
+                  '-f', 'sql'],
                 stdout=out)
+    else:
+        log.debug('Skipping SQL query. %s not a file.', sql)
 
-    time_cmd_parts = ["./scanner.exe", "-t", "1", "data.bin"] + castor_params
-    time_cmd = " ".join(time_cmd_parts)
-    log.debug(time_cmd)
+    if not SQL_ONLY:
+        time_cmd_parts = ["./scanner.exe", "-t", "1", "data.bin"] + castor_params
+        time_cmd = " ".join(time_cmd_parts)
+        log.debug(time_cmd)
 
-    cmd = ["./scanner.exe", "-p", "data.bin"] + castor_params
-    cmd_str = shlex.quote(" ".join(cmd))
-    try:
-        boutput = check_output(time_cmd_parts)
-        output = boutput.decode('utf-8')
-        time_str = output.split(" ")[0][:-2]
-        time = None
+        cmd = ["./scanner.exe", "-p", "data.bin"] + castor_params
+        cmd_str = shlex.quote(" ".join(cmd))
         try:
-            time = float(time_str)
-        except ValueError:
-            log.error("Failed to read time: %s", time_str)
-        csv_writer.writerow([query_name, time])
-        csv_file.flush()
+            boutput = check_output(time_cmd_parts)
+            output = boutput.decode('utf-8')
+            time_str = output.split(" ")[0][:-2]
+            time = None
+            try:
+                time = float(time_str)
+            except ValueError:
+                log.error("Failed to read time: %s", time_str)
+            csv_writer.writerow([query_name, time])
+            csv_file.flush()
 
-        log.debug("Running %s in %s.", cmd_str, os.getcwd())
-        with open("results.csv", "w") as out:
-            call(cmd, stdout=out)
-    except KeyboardInterrupt:
-        exit()
-    except Exception:
-        log.exception("Running %s failed.", cmd)
+            log.debug("Running %s in %s.", cmd_str, os.getcwd())
+            with open("results.csv", "w") as out:
+                call(cmd, stdout=out)
+        except KeyboardInterrupt:
+            exit()
+        except Exception:
+            log.exception("Running %s failed.", cmd)
 
     os.chdir("..")
 
