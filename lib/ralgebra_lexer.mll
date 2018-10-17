@@ -3,6 +3,7 @@ open Base
 open Ralgebra_parser
 open Parser_utils
 
+module A = Abslayout0
 
 let keyword_tbl = Hashtbl.of_alist_exn (module String) [
 "select", SELECT;
@@ -10,8 +11,8 @@ let keyword_tbl = Hashtbl.of_alist_exn (module String) [
 "filter", FILTER;
 "join", JOIN;
 "count", COUNT;
-"zip", KIND Abslayout0.Zip;
-"cross", KIND Abslayout0.Cross;
+"zip", KIND A.Zip;
+"cross", KIND A.Cross;
 "aempty", AEMPTY;
 "atuple", ATUPLE;
 "alist", ALIST;
@@ -36,12 +37,15 @@ let keyword_tbl = Hashtbl.of_alist_exn (module String) [
 "if", IF;
 "then", THEN;
 "else", ELSE;
-"month", MONTH;
-"day", DAY;
-"year", YEAR;
+"month", MONTH A.Month;
+"day", DAY A.Day;
+"year", YEAR A.Year;
 "date", DATEKW;
 "exists", EXISTS;
-"not", NOT;
+"not", NOT A.Not;
+"substring", SUBSTRING;
+"strpos", STRPOS A.Strpos;
+"strlen", STRLEN A.Strlen;
   ]
 }
 
@@ -64,18 +68,18 @@ rule token = parse
   | ":"        { COLON }
   | "."        { DOT }
   | ","        { COMMA }
-  | "<="       { LE }
-  | ">="       { GE }
-  | "<"        { LT }
-  | ">"        { GT }
-  | "="        { EQ }
-  | "&&"       { AND }
-  | "||"       { OR }
-  | "+"        { ADD }
-  | "-"        { SUB }
-  | "*"        { MUL }
-  | "/"        { DIV }
-  | "%"        { MOD }
+  | "<="       { LE A.Le }
+  | ">="       { GE A.Ge }
+  | "<"        { LT A.Lt }
+  | ">"        { GT A.Gt }
+  | "="        { EQ A.Eq }
+  | "&&"       { AND A.And }
+  | "||"       { OR A.Or }
+  | "+"        { ADD A.Add }
+  | "-"        { SUB A.Sub }
+  | "*"        { MUL A.Mul }
+  | "/"        { DIV A.Div }
+  | "%"        { MOD A.Mod }
   | int as x   { INT (Int.of_string x) }
   | fixed as x { FIXED (Fixed_point.of_string x) }
   | date       { DATE (Core.Date.of_string x) }

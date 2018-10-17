@@ -78,12 +78,14 @@ let op_to_str = function
   | Mul -> "*"
   | Div -> "/"
   | Mod -> "%"
+  | _ -> failwith "Not an inline op."
 
 let unop_to_str = function
   | Not -> "not"
   | Day -> "day"
   | Month -> "month"
   | Year -> "year"
+  | Strlen -> "strlen"
 
 let pp_name fmt =
   let open Format in
@@ -115,6 +117,8 @@ and pp_pred fmt =
   | Bool x -> fprintf fmt "%B" x
   | String x -> fprintf fmt "%S" x
   | Name n -> pp_name fmt n
+  | Binop (Strpos, p1, p2) ->
+      fprintf fmt "@[<hov>strpos(%a,@ %a)@]" pp_pred p1 pp_pred p2
   | Binop (op, p1, p2) ->
       fprintf fmt "@[<hov>(%a@ %s@ %a)@]" pp_pred p1 (op_to_str op) pp_pred p2
   | Count -> fprintf fmt "count()"
@@ -126,6 +130,8 @@ and pp_pred fmt =
       fprintf fmt "if %a then %a else %a" pp_pred p1 pp_pred p2 pp_pred p3
   | First r -> fprintf fmt "(%a)" pp r
   | Exists r -> fprintf fmt "@[<hv 2>exists(%a)@]" pp r
+  | Substring (p1, p2, p3) ->
+      fprintf fmt "@[<hov>substr(%a,@ %a,@ %a)@]" pp_pred p1 pp_pred p2 pp_pred p3
 
 and pp fmt {node; _} =
   let open Caml.Format in
@@ -271,7 +277,7 @@ let rec pred_to_schema =
       let schema = pred_to_schema p in
       {schema with relation= None; name= n}
   | Name n -> n
-  | Int _ | Date _ | Unop ((Year | Month | Day), _) | Count ->
+  | Int _ | Date _ | Unop ((Year | Month | Day | Strlen), _) | Count ->
       unnamed (IntT {nullable= false})
   | Fixed _ | Avg _ -> unnamed (FixedT {nullable= false})
   | Bool _ | Exists _
@@ -284,6 +290,7 @@ let rec pred_to_schema =
       let s1 = pred_to_schema p1 in
       let s2 = pred_to_schema p2 in
       unnamed (unify (Name.type_exn s1) (Name.type_exn s2))
+  | Binop (Strpos, _, _) -> unnamed (IntT {nullable= false})
   | Sum p | Min p | Max p -> pred_to_schema p
   | If (_, p1, p2) ->
       let s1 = pred_to_schema p1 in
@@ -297,6 +304,7 @@ let rec pred_to_schema =
     | [n] -> n
     | [] -> failwith "Unexpected empty schema."
     | _ -> failwith "Too many fields." )
+  | Substring _ -> unnamed (StringT {nullable= false})
 
 let pred_to_name pred =
   let n = pred_to_schema pred in
@@ -396,7 +404,7 @@ let is_serializeable r =
 
       method! visit_AScalar _ _ = true
 
-      method! visit_Filter ns p r =
+      method! visit_Filter ns (p, r) =
         let sq_visitor =
           object
             inherit [_] reduce
@@ -415,7 +423,7 @@ let is_serializeable r =
           ; self#visit_t ns r
           ; sq_visitor#visit_pred ns p ]
 
-      method! visit_Select ns ps r =
+      method! visit_Select ns (ps, r) =
         self#plus
           (List.for_all ps ~f:(fun p -> Set.is_empty (Set.inter (pred_names p) ns)))
           (self#visit_t ns r)
@@ -520,7 +528,7 @@ let project r =
     object (self : 'a)
       inherit [_] map as super
 
-      method! visit_Select needed ps r =
+      method! visit_Select needed (ps, r) =
         let ps' =
           List.filter ps ~f:(fun p ->
               match pred_to_name p with None -> false | Some n -> Set.mem needed n
@@ -593,15 +601,15 @@ let annotate_eq r =
         in
         Meta.Direct.set_m m Meta.eq eqs
 
-      method! visit_Filter m p r =
-        super#visit_Filter None p r ;
+      method! visit_Filter m (p, r) =
+        super#visit_Filter None (p, r) ;
         let m = Option.value_exn m in
         let r_eqs = Meta.(find_exn r eq) in
         let eqs = pred_eqs p @ r_eqs |> dedup_pairs in
         Meta.Direct.set_m m Meta.eq eqs
 
-      method! visit_Select m ps r =
-        super#visit_Select None ps r ;
+      method! visit_Select m (ps, r) =
+        super#visit_Select None (ps, r) ;
         let m = Option.value_exn m in
         let eqs =
           Meta.(find_exn r eq)

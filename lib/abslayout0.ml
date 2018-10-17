@@ -8,10 +8,23 @@ type name =
   ; type_: Type0.PrimType.t option [@compare.ignore] }
 [@@deriving compare, sexp, hash]
 
-type binop = Eq | Lt | Le | Gt | Ge | And | Or | Add | Sub | Mul | Div | Mod
+type binop =
+  | Eq
+  | Lt
+  | Le
+  | Gt
+  | Ge
+  | And
+  | Or
+  | Add
+  | Sub
+  | Mul
+  | Div
+  | Mod
+  | Strpos
 [@@deriving compare, sexp]
 
-type unop = Not | Day | Month | Year [@@deriving compare, sexp]
+type unop = Not | Day | Month | Year | Strlen [@@deriving compare, sexp]
 
 (* - Visitors doesn't use the special method override syntax that warning 7 checks
    for.
@@ -39,6 +52,7 @@ type pred =
   | If of pred * pred * pred
   | First of t
   | Exists of t
+  | Substring of pred * pred * pred
 
 and hash_idx = {hi_key_layout: t option; lookup: pred list}
 
@@ -53,8 +67,8 @@ and tuple = Cross | Zip
 and t = {node: node; meta: meta [@opaque] [@compare.ignore]}
 
 and node =
-  | Select of pred list * t
-  | Filter of pred * t
+  | Select of (pred list * t)
+  | Filter of (pred * t)
   | Join of {pred: pred; r1: t; r2: t}
   | GroupBy of pred list * (name[@opaque]) list * t
   | OrderBy of {key: pred list; order: ([`Asc | `Desc][@opaque]); rel: t}

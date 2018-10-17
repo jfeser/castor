@@ -39,6 +39,8 @@ let rec pp_expr : Format.formatter -> expr -> unit =
     | IntHash | StrHash -> "hash"
     | LoadStr -> "load_str"
     | Int2Fl -> "int2fl"
+    | StrLen -> "strlen"
+    | StrPos -> "strpos"
   in
   fun fmt -> function
     | Null -> fprintf fmt "null"
@@ -61,6 +63,8 @@ let rec pp_expr : Format.formatter -> expr -> unit =
     | Ternary (e1, e2, e3) ->
         fprintf fmt "%a ? %a : %a" pp_expr e1 pp_expr e2 pp_expr e3
     | TupleHash _ -> fprintf fmt "<tuplehash>"
+    | Substr (p1, p2, p3) ->
+        fprintf fmt "[@<hov>substr(%a,@ %a,@ %a)@]" pp_expr p1 pp_expr p2 pp_expr p3
 
 and pp_stmt : Format.formatter -> stmt -> unit =
   let open Format in
@@ -149,7 +153,7 @@ module Ctx0 = struct
   let empty = Map.empty (module Name.Compare_no_type)
 
   let of_schema schema tup =
-    List.mapi schema ~f:(fun i n -> (n, Field Infix.(index tup i)))
+    List.map2_exn schema tup ~f:(fun n e -> (n, Field e))
     |> Map.of_alist_exn (module Name.Compare_no_type)
 
   (* Create an argument list for a caller. *)
@@ -221,6 +225,7 @@ module Builder = struct
             BoolT {nullable= n1 || n2}
         | LoadStr, IntT {nullable= false}, IntT {nullable= false} ->
             StringT {nullable= false}
+        | StrPos, StringT _, StringT _ -> IntT {nullable= false}
         | _ ->
             fail
               (Error.create "Type error." (e, t1, t2, ctx)
@@ -230,6 +235,7 @@ module Builder = struct
         match (op, t) with
         | Not, BoolT {nullable} -> BoolT {nullable}
         | Int2Fl, IntT _ -> FixedT {nullable= false}
+        | StrLen, StringT _ -> IntT {nullable= false}
         | _ -> fail (Error.create "Type error." (op, t) [%sexp_of: op * t]) )
     | Slice (_, _) -> IntT {nullable= false}
     | Index (tup, idx) -> (
@@ -245,6 +251,7 @@ module Builder = struct
           unify t1 t2
       | _ -> failwith "Unexpected conditional type." )
     | TupleHash _ -> IntT {nullable= false}
+    | Substr _ -> StringT {nullable= false}
 
   let create ~ctx ~name ~ret ~fresh =
     let args = Ctx0.make_caller_args ctx in
@@ -291,6 +298,9 @@ module Builder = struct
     {name; args; ret_type= ret; locals= Hashtbl.data locals; body= List.rev !body}
 
   let build_assign e v b =
+    let lhs_t = type_of v b in
+    let rhs_t = type_of e b in
+    ignore (Type.PrimType.unify lhs_t rhs_t) ;
     b.body := Assign {lhs= name_of_var v; rhs= e} :: !(b.body)
 
   let build_print e b =

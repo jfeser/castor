@@ -306,6 +306,15 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
          [|pointer_type (i8_type ctx); pointer_type (i8_type ctx); i64_type ctx|])
       module_
 
+  let strpos =
+    declare_function "strpos"
+      (function_type (i64_type ctx)
+         [| pointer_type (i8_type ctx)
+          ; i64_type ctx
+          ; pointer_type (i8_type ctx)
+          ; i64_type ctx |])
+      module_
+
   let call_printf fmt_str args =
     let fmt_str_ptr =
       build_bitcast fmt_str (pointer_type (i8_type ctx)) "" builder
@@ -353,6 +362,20 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
    *   build_store data (build_struct_gep struct_ 0 "" builder) builder |> ignore ;
    *   build_store null (build_struct_gep struct_ 1 "" builder) builder |> ignore ;
    *   build_load struct_ "" builder *)
+
+  module Llstring = struct
+    type t = {pos: llvalue; len: llvalue}
+
+    let unpack v =
+      { pos= build_extractvalue v 0 "pos" builder
+      ; len= build_extractvalue v 1 "len" builder }
+
+    let pack s =
+      let struct_ = build_entry_alloca str_type "str" builder in
+      build_store s.pos (build_struct_gep struct_ 0 "" builder) builder |> ignore ;
+      build_store s.len (build_struct_gep struct_ 1 "" builder) builder |> ignore ;
+      build_load struct_ "strptr" builder
+  end
 
   let scmp =
     let func =
@@ -574,6 +597,11 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     build_store len (build_struct_gep struct_ 1 "" builder) builder |> ignore ;
     build_load struct_ "" builder
 
+  let codegen_strpos _ x1 x2 =
+    let s1 = Llstring.unpack x1 in
+    let s2 = Llstring.unpack x2 in
+    build_call strpos [|s1.pos; s1.len; s2.pos; s2.len|] "" builder
+
   let codegen_binop codegen_expr fctx op arg1 arg2 =
     let x1 = codegen_expr fctx arg1 in
     let x2 = codegen_expr fctx arg2 in
@@ -600,7 +628,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | IntHash -> codegen_int_hash fctx x1 x2
       | StrHash -> codegen_string_hash fctx x1 x2
       | LoadStr -> codegen_load_str fctx x1 x2
-      | Not | Int2Fl -> fail (Error.of_string "Not a binary operator.")
+      | StrPos -> codegen_strpos fctx x1 x2
+      | StrLen | Not | Int2Fl -> fail (Error.of_string "Not a binary operator.")
     in
     x_out
 
@@ -614,9 +643,10 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     match op with
     | I.Not -> build_not x "nottmp" builder
     | Int2Fl -> build_sitofp x float_type "" builder
+    | StrLen -> (Llstring.unpack x).len
     | IntAdd | IntSub | IntLt | And | Or | IntEq | StrEq | IntHash | StrHash
-     |IntMul | IntDiv | Mod | LoadStr | FlAdd | FlSub | FlMul | FlDiv | FlLt | FlEq
-      ->
+     |IntMul | IntDiv | Mod | LoadStr | FlAdd | FlSub | FlMul | FlDiv | FlLt
+     |FlEq | StrPos ->
         fail (Error.of_string "Not a unary operator.")
 
   (* in
@@ -658,6 +688,17 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     | Ternary (e1, e2, e3) -> codegen_ternary (codegen_expr fctx) e1 e2 e3
     | TupleHash (ts, e1, e2) ->
         codegen_tuple_hash fctx ts (codegen_expr fctx e1) (codegen_expr fctx e2)
+    | Substr (e1, e2, e3) ->
+        let v1 = codegen_expr fctx e1 in
+        let v2 = codegen_expr fctx e2 in
+        let new_len = codegen_expr fctx e3 in
+        let s = Llstring.unpack v1 in
+        let new_pos =
+          build_add
+            (build_sub v2 (const_int int_type 1) "" builder)
+            s.pos "" builder
+        in
+        Llstring.pack {pos= new_pos; len= new_len}
 
   let codegen_loop fctx codegen_prog cond body =
     let start_bb = insertion_block builder in
@@ -947,6 +988,17 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | Yield _ ->
           fail (Error.of_string "Yields not allowed in function declarations.")
     and codegen_prog fctx p = List.iter ~f:(codegen_stmt fctx) p in
+    let set_attributes func =
+      (* Set iterator function attributes. *)
+      add_function_attr func (create_enum_attr ctx "readonly" 0L) AttrIndex.Function ;
+      add_function_attr func
+        (create_enum_attr ctx "argmemonly" 0L)
+        AttrIndex.Function ;
+      add_function_attr func (create_enum_attr ctx "nounwind" 0L) AttrIndex.Function ;
+      add_function_attr func
+        (create_enum_attr ctx "norecurse" 0L)
+        AttrIndex.Function
+    in
     fun fctx ->
       let name = fctx#name in
       let (I.({args; locals; ret_type; body; _}) as func) = fctx#func in
@@ -966,6 +1018,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         function_type (codegen_type ret_type) args_t
       in
       fctx#set_llfunc (declare_function name func_t module_) ;
+      set_attributes fctx#llfunc ;
       let bb = append_block ctx "entry" fctx#llfunc in
       position_at_end bb builder ;
       Hashtbl.set funcs ~key:name ~data:fctx#llfunc ;
@@ -1190,6 +1243,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       match out_dir with Some x -> x | None -> Filename.temp_dir "bin" ""
     in
     if Sys.is_directory out_dir = `No then Unix.mkdir out_dir ;
+    let stdlib_fn = Project_config.project_root ^ "/etc/stdlib.c" in
     let main_fn = out_dir ^ "/main.c" in
     let ir_fn = out_dir ^ "/scanner.ir" in
     let module_fn = out_dir ^ "/scanner.ll" in
@@ -1272,6 +1326,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         ; opt_module_fn
         ; "2>/dev/null" ] ;
       Util.command_exn ~quiet:()
-        ([clang] @ cflags @ [opt_module_fn; main_fn; "-o"; exe_fn; "2>/dev/null"]) ) ;
+        ( [clang] @ cflags
+        @ [opt_module_fn; stdlib_fn; main_fn; "-o"; exe_fn; "2>/dev/null"] ) ) ;
     (exe_fn, data_fn)
 end

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import configparser
 import csv
 import logging
 import psycopg2
@@ -144,11 +145,12 @@ def gen_perc():
     return gen_discount()
 
 SQL_ONLY = False
-DB = "tpch"
+CONFIG = configparser.ConfigParser()
+CONFIG.read(rpath('../../config'))
+COMPILE_EXE = CONFIG['default']['project_root'] + '/bin/compile.exe'
+TRANSFORM_EXE = CONFIG['default']['project_root'] + '/bin/transform.exe'
 PORT = "5432"
 OUT_FILE = rpath('results.csv')
-COMPILE_EXE = rpath("../../_build/default/bin/compile.exe")
-TRANSFORM_EXE = rpath("../../_build/default/bin/transform.exe")
 BENCH_DIR = rpath('.')
 BENCHMARKS = [
     {
@@ -171,7 +173,7 @@ BENCHMARKS = [
         "params": [("param0:string", gen_region()), ("param1:date", gen_tpch_date())],
     },
     {
-        "query": "6",
+        "query": ["6", '6-gold'],
         "params": [
             ("param0:date", gen_tpch_date()),
             ("param1:float", gen_discount()),
@@ -179,7 +181,7 @@ BENCHMARKS = [
         ],
     },
     {
-        "query": "10-no",
+        "query": ["10-no", '10-no-gold'],
         "params": [("param0:date", gen_tpch_date())],
     },
     {

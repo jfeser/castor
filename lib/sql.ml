@@ -34,7 +34,8 @@ let rec pred_to_sql = function
       | Not -> sprintf "not (%s)" s
       | Year -> sprintf "interval '%s year'" s
       | Month -> sprintf "interval '%s month'" s
-      | Day -> sprintf "interval '%s day'" s )
+      | Day -> sprintf "interval '%s day'" s
+      | Strlen -> sprintf "char_length(%s)" s )
   | Binop (op, p1, p2) -> (
       let s1 = sprintf "(%s)" (pred_to_sql p1) in
       let s2 = sprintf "(%s)" (pred_to_sql p2) in
@@ -50,7 +51,8 @@ let rec pred_to_sql = function
       | Sub -> sprintf "%s - %s" s1 s2
       | Mul -> sprintf "%s * %s" s1 s2
       | Div -> sprintf "%s / %s" s1 s2
-      | Mod -> sprintf "%s %% %s" s1 s2 )
+      | Mod -> sprintf "%s %% %s" s1 s2
+      | Strpos -> sprintf "strpos(%s, %s)" s1 s2 )
   | Count -> "count(*)"
   | Sum n -> sprintf "sum(%s)" (pred_to_sql n)
   | Avg n -> sprintf "avg(%s)" (pred_to_sql n)
@@ -65,6 +67,9 @@ let rec pred_to_sql = function
   | First r ->
       let sql = ralgebra_to_sql_helper r |> to_query in
       sprintf "(%s)" sql
+  | Substring (p1, p2, p3) ->
+      sprintf "substring(%s from %s for %s)" (pred_to_sql p1) (pred_to_sql p2)
+        (pred_to_sql p3)
 
 and ralgebra_to_sql_helper r =
   let rec f ({node; _} as r) =

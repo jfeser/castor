@@ -439,9 +439,9 @@ module Make (Eval : Eval.S) = struct
         | AScalar p ->
             let p = resolve_pred outer_ctx p in
             let ctx =
-              match p with
-              | Name n -> Set.singleton (module Name.Compare_no_type) n
-              | _ -> empty_ctx
+              match pred_to_name p with
+              | Some n -> Set.singleton (module Name.Compare_no_type) n
+              | None -> empty_ctx
             in
             (AScalar p, ctx)
         | AList (r, l) ->

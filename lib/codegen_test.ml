@@ -7,6 +7,8 @@ let _ =
   Test_util.create rels "r1" ["f"; "g"]
     [[0; 5]; [1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]; [4; 6]]
 
+let _ = Test_util.create rels "one" [] [[]]
+
 let _ =
   Test_util.create rels "log" ["counter"; "succ"; "id"]
     [[1; 4; 1]; [2; 3; 2]; [3; 4; 3]; [4; 6; 1]; [5; 6; 3]]
@@ -197,6 +199,16 @@ let example_db_params =
     , Value.String "-1451410871729396224" )
   ; ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_c"
     , String "8557539814359574196" ) ]
+
+let%expect_test "strops" =
+  run_test ~params:[] ~print_layout:false
+    {|
+select([strlen("test"), strpos("testing", "in")], ascalar(0))
+|} ;
+  [%expect {|
+    4,5,
+
+    exited normally |}]
 
 let%expect_test "example-1" =
   run_test ~params:example_params ~print_layout:false

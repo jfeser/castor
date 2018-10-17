@@ -23,6 +23,8 @@ type op = Implang0.op =
   | IntHash
   | StrHash
   | LoadStr
+  | StrLen
+  | StrPos
 [@@deriving compare, sexp]
 
 type expr = Implang0.expr =
@@ -40,6 +42,7 @@ type expr = Implang0.expr =
   | Done of string
   | Ternary of expr * expr * expr
   | TupleHash of Type.PrimType.t list * expr * expr
+  | Substr of expr * expr * expr
 [@@deriving compare, sexp]
 
 type local = Implang0.local =
@@ -191,7 +194,7 @@ module Ctx : sig
 
   val empty : t
 
-  val of_schema : Name.t list -> expr -> t
+  val of_schema : Name.t list -> expr list -> t
 
   val make_caller_args : t -> (string * Type0.PrimType.t) list
 

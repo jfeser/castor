@@ -1,0 +1,2 @@
+strpos(testing, 7, in, 2) = 5
+strpos(tested, 6, in, 2) = 0

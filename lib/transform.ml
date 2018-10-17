@@ -36,6 +36,10 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           @ List.map (p r3) ~f:(fun r3' -> A.If (r1, r2, r3'))
       | A.Unop (op, r) -> List.map (p r) ~f:(fun r' -> A.Unop (op, r'))
       | A.As_pred (r, n) -> List.map (p r) ~f:(fun r' -> A.As_pred (r', n))
+      | A.Substring (r1, r2, r3) ->
+          List.map (p r1) ~f:(fun r1' -> A.Substring (r1', r2, r3))
+          @ List.map (p r2) ~f:(fun r2' -> A.Substring (r1, r2', r3))
+          @ List.map (p r3) ~f:(fun r3' -> A.Substring (r1, r2, r3'))
     and f r =
       let rs = f_inner r in
       let rs' =
