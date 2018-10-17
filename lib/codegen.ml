@@ -1313,14 +1313,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         [ opt
         ; "-S"
         ; sprintf "-pass-remarks-output=%s" remarks_fn
-        ; "-globalopt -simplifycfg -dce -inline -dce -simplifycfg -sroa \
-           -instcombine -simplifycfg -sroa -instcombine -jump-threading \
-           -instcombine -reassociate -early-cse -mem2reg -loop-idiom -loop-rotate \
-           -licm -loop-unswitch -loop-deletion -loop-unroll -sroa -instcombine \
-           -gvn -memcpyopt -sccp -sink -instsimplify -instcombine -jump-threading \
-           -dse -simplifycfg -loop-idiom -loop-deletion -jump-threading \
-           -slp-vectorizer -load-store-vectorizer -adce -loop-vectorize \
-           -instcombine -simplifycfg -loop-load-elim"
+        ; "-O3"
         ; module_fn
         ; ">"
         ; opt_module_fn
