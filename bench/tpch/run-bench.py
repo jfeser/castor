@@ -144,6 +144,7 @@ def gen_quantity():
 def gen_perc():
     return gen_discount()
 
+DB = 'tpch'
 SQL_ONLY = False
 CONFIG = configparser.ConfigParser()
 CONFIG.read(rpath('../../config'))
