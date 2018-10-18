@@ -307,6 +307,58 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     |> run_everywhere
 
   let tf_push_select =
+    (* Generate aggregates for collections that act by concatenating their children. *)
+    let gen_concat_select_list outer_preds inner_rel =
+      let open Abslayout in
+      let visitor =
+        object (self : 'a)
+          inherit [_] Abslayout0.mapreduce
+
+          inherit [_] Util.list_monoid
+
+          method add_agg aggs a =
+            match
+              List.find aggs ~f:(fun (_, a') -> [%compare.equal: pred] a a')
+            with
+            | Some (n, _) -> (Name n, aggs)
+            | None ->
+                let n = Fresh.name fresh "agg%d" |> Name.create in
+                (Name n, (n, a) :: aggs)
+
+          method! visit_Sum aggs p =
+            let n, aggs' = self#add_agg aggs (Sum p) in
+            (Sum n, aggs')
+
+          method! visit_Count aggs =
+            let n, aggs' = self#add_agg aggs Count in
+            (Sum n, aggs')
+
+          method! visit_Min aggs p =
+            let n, aggs' = self#add_agg aggs (Min p) in
+            (Min n, aggs')
+
+          method! visit_Max aggs p =
+            let n, aggs' = self#add_agg aggs (Max p) in
+            (Max n, aggs')
+
+          method! visit_Avg aggs p =
+            let s, aggs' = self#add_agg aggs (Sum p) in
+            let c, aggs'' = self#add_agg aggs' Count in
+            (Binop (Div, Sum s, Sum c), aggs'')
+        end
+      in
+      let outer_aggs, inner_aggs =
+        List.fold_left outer_preds ~init:([], []) ~f:(fun (op, ip) p ->
+            let p', ip' = visitor#visit_pred ip p in
+            (op @ [p'], ip') )
+      in
+      let inner_aggs = List.map inner_aggs ~f:(fun (n, a) -> As_pred (a, n.name)) in
+      (* Don't want to project out anything that we might need later. *)
+      let inner_fields =
+        Meta.(find_exn inner_rel schema) |> List.map ~f:(fun n -> Name n)
+      in
+      (outer_aggs, inner_aggs @ inner_fields)
+    in
     let open A in
     { name= "push-select"
     ; f=
@@ -314,8 +366,12 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           match r with
           | {node= Select (ps, {node= AHashIdx (r, r', m); _}); _} ->
               [hash_idx' r (select ps r') m]
-          (* | {node= Select (ps, {node= AOrderedIdx (r, r', m); _}); _} ->
-           *     [ordered_idx r (select ps r') m] *)
+          | {node= Select (ps, {node= AOrderedIdx (r, r', m); _}); _} ->
+              let outer_aggs, inner_aggs = gen_concat_select_list ps r' in
+              [select outer_aggs (ordered_idx r (select inner_aggs r') m)]
+          | {node= Select (ps, {node= AList (r, r'); _}); _} ->
+              let outer_aggs, inner_aggs = gen_concat_select_list ps r' in
+              [select outer_aggs (list r (select inner_aggs r'))]
           | _ -> [] ) }
     |> run_everywhere
 

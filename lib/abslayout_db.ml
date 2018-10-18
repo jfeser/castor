@@ -361,11 +361,12 @@ module Make (Eval : Eval.S) = struct
       in
       match (n.type_, n.relation) with
       | Some _, Some _ -> n
+      | Some _, None -> n
       | None, Some _ -> (
         match Set.find ctx ~f:(fun n' -> Name.Compare_no_type.(n' = n)) with
         | Some n' -> n'
         | None -> Error.raise could_not_resolve )
-      | _, None -> (
+      | None, None -> (
           let matches =
             Set.to_list ctx
             |> List.filter ~f:(fun n' -> Name.Compare_name_only.(n = n'))
@@ -467,8 +468,6 @@ module Make (Eval : Eval.S) = struct
               (object
                  inherit [_] map
 
-                 method visit_name _ _ = failwith ""
-
                  method! visit_pred _ = resolve_pred outer_ctx
               end)
                 #visit_hash_idx () m
@@ -480,8 +479,6 @@ module Make (Eval : Eval.S) = struct
             let m =
               (object
                  inherit [_] map
-
-                 method visit_name _ _ = failwith ""
 
                  method! visit_pred _ = resolve_pred outer_ctx
               end)

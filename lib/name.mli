@@ -1,4 +1,5 @@
 open Base
+open Collections
 
 type t = Abslayout0.name =
   {relation: string option; name: string; type_: Type.PrimType.t option}
@@ -35,3 +36,5 @@ val pp : Formatter.t -> t -> unit
 val of_string_exn : string -> t
 
 val of_field : ?rel:string -> Db.Field.t -> t
+
+val fresh : Fresh.t -> (int -> string, unit, string) format -> t
