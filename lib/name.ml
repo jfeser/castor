@@ -55,6 +55,11 @@ let type_exn ({type_; _} as n) =
   | Some t -> t
   | None -> Error.create "Missing type." n [%sexp_of: t] |> Error.raise
 
+let rel_exn ({relation; _} as n) =
+  match relation with
+  | Some t -> t
+  | None -> Error.create "Missing relation." n [%sexp_of: t] |> Error.raise
+
 let to_var {relation; name; _} =
   match relation with Some r -> sprintf "%s_%s" r name | None -> name
 

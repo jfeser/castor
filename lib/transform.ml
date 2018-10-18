@@ -485,6 +485,103 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | _ -> []) }
     |> run_everywhere
 
+  let eq_preds r =
+    let visitor =
+      object
+        inherit [_] Abslayout0.reduce
+
+        inherit [_] Util.list_monoid
+
+        method! visit_Binop ps p =
+          let op, arg1, arg2 = p in
+          if [%compare.equal: A.binop] op Eq then (arg1, arg2) :: ps else ps
+      end
+    in
+    visitor#visit_t [] r
+
+  let replace_rel rel new_rel r =
+    let visitor =
+      object
+        inherit [_] Abslayout0.endo
+
+        method! visit_Scan () r' rel' =
+          if String.(rel = rel') then new_rel.A.node else r'
+      end
+    in
+    visitor#visit_t () r
+
+  let tf_partition args =
+    let open A in
+    let name =
+      match args with
+      | [n] -> Name.of_string_exn n
+      | _ -> failwith "Unexpected args."
+    in
+    let fresh_name =
+      Caml.Format.sprintf "%s_%s" (Name.to_var name) (Fresh.name fresh "%d")
+    in
+    let rel = Name.rel_exn name in
+    let filtered_rel =
+      filter (Binop (Eq, Name name, Name (Name.create fresh_name))) (scan rel)
+    in
+    { name= "partition"
+    ; f=
+        (fun r ->
+          [ list
+              (dedup (select [As_pred (Name name, fresh_name)] (scan rel)))
+              (replace_rel rel filtered_rel r) ] ) }
+    |> run_everywhere ~stage:`Run
+
+  let replace_pred r p1 p2 =
+    let visitor =
+      object
+        inherit [_] Abslayout0.endo as super
+
+        method! visit_pred () p =
+          let p = super#visit_pred () p in
+          if [%compare.equal: A.pred] p p1 then p2 else p
+      end
+    in
+    visitor#visit_t () r
+
+  let tf_partition_eq args =
+    let open A in
+    let name =
+      match args with
+      | [n] -> Name.of_string_exn n
+      | _ -> failwith "Unexpected args."
+    in
+    let fresh_name =
+      Caml.Format.sprintf "%s_%s" (Name.to_var name) (Fresh.name fresh "%d")
+    in
+    let rel = Name.rel_exn name in
+    let filtered_rel =
+      filter (Binop (Eq, Name name, Name (Name.create fresh_name))) (scan rel)
+    in
+    { name= "partition-eq"
+    ; f=
+        (fun r ->
+          let eqs = eq_preds r in
+          (* Any predicate that is compared for equality with the partition
+              field is a candidate for the hash table key. *)
+          let keys =
+            List.filter_map eqs ~f:(fun (p1, p2) ->
+                if [%compare.equal: pred] (Name name) p1 then Some p2
+                else if [%compare.equal: pred] (Name name) p2 then Some p1
+                else None )
+          in
+          List.map keys ~f:(fun k ->
+              (* The predicate that we chose as the key can be replaced by
+                 `fresh_name`. *)
+              hash_idx
+                (dedup (select [As_pred (Name name, fresh_name)] (scan rel)))
+                (replace_pred
+                   (replace_rel rel filtered_rel r)
+                   k
+                   (Name (Name.create fresh_name)))
+                [k] ) ) }
+    |> run_everywhere ~stage:`Run
+
   let transforms =
     [ ("hoist-join-pred", tf_hoist_join_pred)
     ; ("elim-groupby", tf_elim_groupby)
@@ -499,7 +596,9 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     ; ("elim-join", tf_elim_join)
     ; ("row-store", tf_row_store)
     ; ("project", tf_project)
-    ; ("push-select", tf_push_select) ]
+    ; ("push-select", tf_push_select)
+    ; ("partition", tf_partition)
+    ; ("partition-eq", tf_partition_eq) ]
 
   let of_string_exn s =
     let regex =

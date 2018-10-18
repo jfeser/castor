@@ -27,6 +27,8 @@ val create : ?relation:string -> ?type_:Type.PrimType.t -> string -> t
 
 val type_exn : t -> Type.PrimType.t
 
+val rel_exn : t -> string
+
 val to_sql : t -> string
 
 val to_var : t -> string
