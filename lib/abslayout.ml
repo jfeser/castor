@@ -94,7 +94,11 @@ let pp_name fmt =
   | {relation= None; name; _} -> fprintf fmt "%s" name
 
 let pp_kind fmt =
-  Format.(function Cross -> fprintf fmt "cross" | Zip -> fprintf fmt "zip")
+  Format.(
+    function
+    | Cross -> fprintf fmt "cross"
+    | Zip -> fprintf fmt "zip"
+    | Concat -> fprintf fmt "concat")
 
 let pp_order fmt =
   let open Format in
@@ -502,7 +506,7 @@ let annotate_needed r =
     | AList (r', r'') | AHashIdx (r', r'', _) | AOrderedIdx (r', r'', _) ->
         let ctx' = Set.union ctx (names r'') in
         needed ctx' r' ; needed ctx r''
-    | ATuple (rs, Zip) -> List.iter rs ~f:(needed ctx)
+    | ATuple (rs, (Zip | Concat)) -> List.iter rs ~f:(needed ctx)
     | ATuple (rs, Cross) ->
         List.fold_right rs ~init:ctx ~f:(fun r ctx ->
             needed ctx r ;
@@ -691,7 +695,7 @@ let annotate_orders r =
                            else None )
                  | _ -> None)
       | ATuple (rs, Cross) -> List.map ~f:annotate_orders rs |> List.concat
-      | ATuple (rs, Zip) ->
+      | ATuple (rs, (Zip | Concat)) ->
           List.iter ~f:(fun r -> annotate_orders r |> ignore) rs ;
           []
       | AOrderedIdx (r, _, _) ->

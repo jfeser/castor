@@ -20,7 +20,7 @@ type binop = Abslayout0.binop =
 type unop = Abslayout0.unop = Not | Day | Month | Year | Strlen
 [@@deriving compare, sexp]
 
-type tuple = Abslayout0.tuple = Cross | Zip [@@deriving compare, sexp_of]
+type tuple = Abslayout0.tuple = Cross | Zip | Concat [@@deriving compare, sexp_of]
 
 type pred = Abslayout0.pred =
   | Name of Name.t

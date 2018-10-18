@@ -392,6 +392,19 @@ struct
     match kind with
     | Abslayout.Cross -> scan_crosstuple ctx b r t cb
     | Zip -> scan_ziptuple ctx b r t cb
+    | Concat -> scan_concattuple ctx b r t cb
+
+  and scan_concattuple ctx b r t cb =
+    let open Builder in
+    let child_layouts, _ = r in
+    let child_types, _ = t in
+    let hdr = Header.make_header (TupleT t) in
+    let start = Ctx.find_exn ctx (Name.create "start") b in
+    let cstart = build_defn "cstart" (Header.make_position hdr "value" start) b in
+    let ctx = Ctx.bind ctx "start" Type.PrimType.int_t cstart in
+    List.iter2_exn child_layouts child_types ~f:(fun r' t' ->
+        scan ctx b r' t' cb ;
+        build_assign (build_add (Int 1) (len cstart t') b) cstart b )
 
   and scan_list ctx b (_, child_layout) ((child_type, _) as t) (cb : callback) =
     let open Builder in

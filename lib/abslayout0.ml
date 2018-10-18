@@ -62,7 +62,7 @@ and ordered_idx =
   ; lookup_high: pred
   ; order: ([`Asc | `Desc][@opaque]) }
 
-and tuple = Cross | Zip
+and tuple = Cross | Zip | Concat
 
 and t = {node: node; meta: meta [@opaque] [@compare.ignore]}
 

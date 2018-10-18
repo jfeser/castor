@@ -46,6 +46,7 @@ let keyword_tbl = Hashtbl.of_alist_exn (module String) [
 "substring", SUBSTRING;
 "strpos", STRPOS A.Strpos;
 "strlen", STRLEN A.Strlen;
+"concat", KIND A.Concat;
   ]
 }
 

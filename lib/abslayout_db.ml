@@ -227,6 +227,8 @@ module Make (Eval : Eval.S) = struct
           let counts = List.map ls ~f:count in
           match kind with
           | Zip -> TupleT (ls, {count= List.fold_left1_exn ~f:AbsCount.unify counts})
+          | Concat ->
+              TupleT (ls, {count= List.fold_left1_exn ~f:AbsCount.( + ) counts})
           | Cross ->
               TupleT (ls, {count= List.fold_left1_exn ~f:AbsCount.( * ) counts})
 
@@ -450,7 +452,7 @@ module Make (Eval : Eval.S) = struct
             let ctx = Set.union inner_ctx outer_ctx in
             let l, ctx = resolve ctx l in
             (AList (r, l), ctx)
-        | ATuple (ls, (Zip as t)) ->
+        | ATuple (ls, ((Zip | Concat) as t)) ->
             let ls, ctxs = List.map ls ~f:(resolve outer_ctx) |> List.unzip in
             let ctx = Set.union_list (module Name.Compare_no_type) ctxs in
             (ATuple (ls, t), ctx)
