@@ -108,17 +108,9 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
 
   let run = if Config.check_transforms then run_checked else run_unchecked
 
-  let id = {name= "id"; f= (fun r -> [r])}
-
-  let compose {name= n1; f= f1} {name= n2; f= f2} =
-    { name= sprintf "%s,%s" n2 n1
-    ; f= (fun r -> List.concat_map ~f:(fun x -> f1 x) (f2 r)) }
-
-  let compose_many = List.fold_left ~init:id ~f:compose
-
   let no_params r = Set.is_empty (Set.inter (A.names r) Config.params)
 
-  let tf_row_store =
+  let tf_row_store _ =
     let open A in
     { name= "row-store"
     ; f=
@@ -130,7 +122,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           else [] ) }
     |> run_everywhere ~stage:`Both
 
-  let tf_elim_groupby =
+  let tf_elim_groupby _ =
     let open A in
     { name= "elim-groupby"
     ; f=
@@ -150,7 +142,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | _ -> []) }
     |> run_everywhere
 
-  let tf_elim_groupby_filter =
+  let tf_elim_groupby_filter _ =
     let open A in
     { name= "elim-groupby-filter"
     ; f=
@@ -174,7 +166,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | _ -> []) }
     |> run_everywhere
 
-  let tf_elim_eq_filter =
+  let tf_elim_eq_filter _ =
     let open A in
     { name= "elim-eq-filter"
     ; f=
@@ -189,7 +181,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | _ -> []) }
     |> run_everywhere
 
-  let tf_elim_cmp_filter =
+  let tf_elim_cmp_filter _ =
     let open A in
     let gen ?lb ?ub p r =
       let lb = Option.value lb ~default:(Int (Int.min_value + 1)) in
@@ -284,7 +276,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         else []
     | _ -> []
 
-  let tf_push_orderby =
+  let tf_push_orderby _ =
     let open A in
     { name= "push-orderby"
     ; f=
@@ -306,7 +298,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           List.filter rs ~f:(same_orders r) ) }
     |> run_everywhere
 
-  let tf_push_select =
+  let tf_push_select _ =
     (* Generate aggregates for collections that act by concatenating their children. *)
     let gen_concat_select_list outer_preds inner_rel =
       let open Abslayout in
@@ -406,7 +398,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     in
     visitor#visit_pred () p
 
-  let tf_hoist_filter =
+  let tf_hoist_filter _ =
     let open A in
     { name= "hoist-filter"
     ; f=
@@ -433,16 +425,16 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
                 None ) ) ) }
     |> run_everywhere
 
-  let tf_elim_join =
+  let tf_elim_join _ =
     let open A in
     { name= "elim-join"
     ; f=
         (function
-        | {node= Join {pred; r1; r2}; _} -> [filter pred (tuple [r1; r2] Cross)]
+        | {node= Join {pred; r1; r2}; _} -> [tuple [r1; filter pred r2] Cross]
         | _ -> []) }
     |> run_everywhere
 
-  let tf_push_filter =
+  let tf_push_filter _ =
     let open A in
     { name= "push-filter"
     ; f=
@@ -457,7 +449,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | _ -> []) }
     |> run_everywhere
 
-  let tf_merge_filter =
+  let tf_merge_filter _ =
     let open A in
     { name= "merge-filter"
     ; f=
@@ -467,7 +459,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | _ -> []) }
     |> run_everywhere
 
-  let tf_split_filter =
+  let tf_split_filter _ =
     let open A in
     { name= "split-filter"
     ; f=
@@ -476,7 +468,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | _ -> []) }
     |> run_everywhere
 
-  let tf_project =
+  let tf_project _ =
     let open A in
     { name= "project"
     ; f=
@@ -484,7 +476,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           let r = M.annotate_schema r in
           annotate_needed r ; [project r] ) }
 
-  let tf_hoist_join_pred =
+  let tf_hoist_join_pred _ =
     let open A in
     { name= "hoist-join-pred"
     ; f=
@@ -494,27 +486,42 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     |> run_everywhere
 
   let transforms =
-    [ tf_hoist_join_pred
-    ; tf_elim_groupby
-    ; tf_elim_groupby_filter
-    ; tf_push_orderby
-    ; tf_hoist_filter
-    ; tf_push_filter
-    ; tf_merge_filter
-    ; tf_split_filter
-    ; tf_elim_eq_filter
-    ; tf_elim_cmp_filter
-    ; tf_elim_join
-    ; tf_row_store
-    ; tf_project
-    ; tf_push_select ]
+    [ ("hoist-join-pred", tf_hoist_join_pred)
+    ; ("elim-groupby", tf_elim_groupby)
+    ; ("elim-groupby-filter", tf_elim_groupby_filter)
+    ; ("push-orderby", tf_push_orderby)
+    ; ("hoist-filter", tf_hoist_filter)
+    ; ("push-filter", tf_push_filter)
+    ; ("merge-filter", tf_merge_filter)
+    ; ("split-filter", tf_split_filter)
+    ; ("elim-eq-filter", tf_elim_eq_filter)
+    ; ("elim-cmp-filter", tf_elim_cmp_filter)
+    ; ("elim-join", tf_elim_join)
+    ; ("row-store", tf_row_store)
+    ; ("project", tf_project)
+    ; ("push-select", tf_push_select) ]
 
-  let of_name : string -> t Or_error.t =
-   fun n ->
-    let m_tf = List.find transforms ~f:(fun {name; _} -> String.(name = n)) in
-    match m_tf with
-    | Some x -> Ok x
-    | None -> Or_error.error "Transform not found." n [%sexp_of: string]
-
-  let of_name_exn : string -> t = fun n -> Or_error.ok_exn (of_name n)
+  let of_string_exn s =
+    let regex =
+      Re2.create {|(?P<name>[a-z\-]+)(\((?P<arg>[^\)]+)\))?(:(?P<index>[0-9]+))?|}
+      |> Or_error.ok_exn
+    in
+    if not (Re2.matches regex s) then
+      Error.create "Unexpected transform." s [%sexp_of: string] |> Error.raise ;
+    let name = Re2.find_first_exn ~sub:(`Name "name") regex s in
+    let args =
+      match Re2.find_first ~sub:(`Name "arg") regex s with
+      | Ok x -> [x]
+      | Error _ -> []
+    in
+    let index =
+      match Re2.find_first ~sub:(`Name "index") regex s with
+      | Ok i -> Some (Int.of_string i)
+      | Error _ -> None
+    in
+    let _, tf_gen = List.find_exn transforms ~f:(fun (n, _) -> String.(name = n)) in
+    let tf = tf_gen args in
+    match index with
+    | Some i -> {tf with f= (fun r -> [List.nth_exn (run tf r) i])}
+    | None -> {tf with f= (fun r -> run tf r)}
 end
