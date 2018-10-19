@@ -387,6 +387,17 @@ module Make (Eval : Eval.S) = struct
       |> List.filter ~f:(fun n -> String.(n.name <> ""))
       |> Set.of_list (module Name.Compare_no_type)
     in
+    let union c1 c2 =
+      let shadow_set = Set.inter c1 c2 in
+      if Set.length shadow_set > 0 then
+        Error.create "Shadowing makes kittens cry." shadow_set
+          [%sexp_of: Set.M(Name.Compare_no_type).t]
+        |> Error.raise ;
+      Set.union c1 c2
+    in
+    let union_list =
+      List.fold_left ~init:(Set.empty (module Name.Compare_no_type)) ~f:union
+    in
     let rec resolve_pred ctx =
       let visitor =
         object
@@ -410,28 +421,24 @@ module Make (Eval : Eval.S) = struct
         | Select (preds, r) ->
             let r, preds =
               let r, inner_ctx = resolve outer_ctx r in
-              let ctx = Set.union outer_ctx inner_ctx in
+              let ctx = union outer_ctx inner_ctx in
               (r, List.map preds ~f:(resolve_pred ctx))
             in
             (Select (preds, r), preds_to_names preds)
         | Filter (pred, r) ->
             let r, value_ctx = resolve outer_ctx r in
-            let pred = resolve_pred (Set.union outer_ctx value_ctx) pred in
+            let pred = resolve_pred (union outer_ctx value_ctx) pred in
             (Filter (pred, r), value_ctx)
         | Join {pred; r1; r2} ->
             let r1, inner_ctx1 = resolve outer_ctx r1 in
             let r2, inner_ctx2 = resolve outer_ctx r2 in
-            let ctx =
-              Set.union_list
-                (module Name.Compare_no_type)
-                [inner_ctx1; inner_ctx2; outer_ctx]
-            in
+            let ctx = union_list [inner_ctx1; inner_ctx2; outer_ctx] in
             let pred = resolve_pred ctx pred in
-            (Join {pred; r1; r2}, Set.union inner_ctx1 inner_ctx2)
+            (Join {pred; r1; r2}, union inner_ctx1 inner_ctx2)
         | Scan l -> (Scan l, resolve_relation l)
         | GroupBy (aggs, key, r) ->
             let r, inner_ctx = resolve outer_ctx r in
-            let ctx = Set.union outer_ctx inner_ctx in
+            let ctx = union outer_ctx inner_ctx in
             let aggs = List.map ~f:(resolve_pred ctx) aggs in
             let key = List.map key ~f:(resolve_name ctx) in
             (GroupBy (aggs, key, r), preds_to_names aggs)
@@ -449,23 +456,23 @@ module Make (Eval : Eval.S) = struct
             (AScalar p, ctx)
         | AList (r, l) ->
             let r, inner_ctx = resolve outer_ctx r in
-            let ctx = Set.union inner_ctx outer_ctx in
+            let ctx = union inner_ctx outer_ctx in
             let l, ctx = resolve ctx l in
             (AList (r, l), ctx)
         | ATuple (ls, ((Zip | Concat) as t)) ->
             let ls, ctxs = List.map ls ~f:(resolve outer_ctx) |> List.unzip in
-            let ctx = Set.union_list (module Name.Compare_no_type) ctxs in
+            let ctx = union_list ctxs in
             (ATuple (ls, t), ctx)
         | ATuple (ls, (Cross as t)) ->
             let ls, ctx =
               List.fold_left ls ~init:([], empty_ctx) ~f:(fun (ls, ctx) l ->
-                  let l, ctx' = resolve (Set.union outer_ctx ctx) l in
-                  (l :: ls, Set.union ctx ctx') )
+                  let l, ctx' = resolve (union outer_ctx ctx) l in
+                  (l :: ls, union ctx ctx') )
             in
             (ATuple (List.rev ls, t), ctx)
         | AHashIdx (r, l, m) ->
             let r, key_ctx = resolve outer_ctx r in
-            let l, value_ctx = resolve (Set.union outer_ctx key_ctx) l in
+            let l, value_ctx = resolve (union outer_ctx key_ctx) l in
             let m =
               (object
                  inherit [_] map
@@ -477,7 +484,7 @@ module Make (Eval : Eval.S) = struct
             (AHashIdx (r, l, m), value_ctx)
         | AOrderedIdx (r, l, m) ->
             let r, key_ctx = resolve outer_ctx r in
-            let l, value_ctx = resolve (Set.union outer_ctx key_ctx) l in
+            let l, value_ctx = resolve (union outer_ctx key_ctx) l in
             let m =
               (object
                  inherit [_] map
@@ -493,7 +500,7 @@ module Make (Eval : Eval.S) = struct
             (As (n, r), ctx)
         | OrderBy ({key; rel; _} as x) ->
             let rel, inner_ctx = resolve outer_ctx rel in
-            let ctx = Set.union inner_ctx outer_ctx in
+            let ctx = union inner_ctx outer_ctx in
             let key = List.map key ~f:(resolve_pred ctx) in
             (OrderBy {x with key; rel}, ctx)
       in
