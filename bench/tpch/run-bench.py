@@ -150,6 +150,7 @@ def gen_str(s):
 def gen_fixed_date(d):
     return gen_date(d,d)
 
+DB = 'tpch'
 SQL_ONLY = False
 CONFIG = configparser.ConfigParser()
 CONFIG.read(rpath('../../config'))
