@@ -147,6 +147,9 @@ def gen_perc():
 def gen_str(s):
     return lambda _: s
 
+def gen_fixed_date(d):
+    return gen_date(d,d)
+
 SQL_ONLY = False
 CONFIG = configparser.ConfigParser()
 CONFIG.read(rpath('../../config'))
@@ -158,7 +161,7 @@ BENCH_DIR = rpath('.')
 BENCHMARKS = [
     {
         "query": ['1', '1-gold'],
-        "params": [("param0:int", gen_int(1, 180))],
+        "params": [("param0:int", gen_str('90'))],
     },
     {
         "query": ['2-gold'],
@@ -171,7 +174,7 @@ BENCHMARKS = [
     {
         "query": ['3', '3-gold'],
         "params": [
-            ("param0:string", gen_mktsegment()),
+            ("param0:string", gen_str('BUILDING')),
             ("param1:date", gen_tpch_date()),
         ],
     },
@@ -181,35 +184,75 @@ BENCHMARKS = [
     },
     {
         "query": ["5-no", '5-no-gold'],
-        "params": [("param0:string", gen_region()), ("param1:date", gen_tpch_date())],
+        "params": [
+            ("param0:string", gen_str('ASIA')),
+            ("param1:date", gen_tpch_date())
+        ],
     },
     {
         "query": ["6", '6-gold'],
         "params": [
             ("param0:date", gen_tpch_date()),
-            ("param1:float", gen_discount()),
-            ("param2:int", gen_quantity()),
+            ("param1:float", gen_str('0.06')),
+            ("param2:int", gen_str('24')),
+        ],
+    },
+    {
+        "query": [],
+        "params": [
+            ("param1:string", gen_str('FRANCE')),
+            ("param2:string", gen_str('GERMANY')),
+        ],
+    },
+    {
+        "query": [],
+        "params": [
+            ("param1:string", gen_str('BRAZIL')),
+            ("param2:string", gen_str('AMERICA')),
+            ("param3:string", gen_str('ECONOMY ANODIZED STEEL')),
+        ],
+    },
+    {
+        "query": [],
+        "params": [
+            ("param1:string", gen_str('green')),
         ],
     },
     {
         "query": ["10-no", '10-no-gold'],
-        "params": [("param0:date", gen_tpch_date())],
+        "params": [("param0:date", gen_fixed_date(date(1993, 10, 1)))],
     },
     {
         "query": "11-no",
-        "params": [("param1:string", gen_nation()), ("param2:float", gen_perc())],
+        "params": [
+            ("param1:string", gen_str('GERMANY')),
+            ("param2:float", gen_str('0.0001'))
+        ],
     },
     {
         "query": "12",
         "params": [
-            ("param1:string", gen_shipmode()),
-            ("param2:string", gen_shipmode()),
-            ("param3:date", gen_tpch_date()),
+            ("param1:string", gen_str('MAIL')),
+            ("param2:string", gen_str('SHIP')),
+            ("param3:date", gen_fixed_date(date(1994,1,1))),
         ],
     },
     {
-        "query": "15",
-        "params": [("param1:date", gen_tpch_date())],
+        "query": [],
+        "params": [
+            ("param1:string", gen_str('special')),
+            ("param2:string", gen_str('requests')),
+        ],
+    },
+    {
+        "query": [],
+        "params": [
+            ("param1:date", gen_fixed_date(date(1995,9,1))),
+        ],
+    },
+    {
+        "query": ['15-gold'],
+        "params": [("param1:date", gen_fixed_date(date(1996,1,1)))],
     },
     {
         "query": "17",
