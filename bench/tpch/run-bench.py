@@ -144,6 +144,9 @@ def gen_quantity():
 def gen_perc():
     return gen_discount()
 
+def gen_str(s):
+    return lambda _: s
+
 SQL_ONLY = False
 CONFIG = configparser.ConfigParser()
 CONFIG.read(rpath('../../config'))
@@ -156,6 +159,14 @@ BENCHMARKS = [
     {
         "query": ['1', '1-gold'],
         "params": [("param0:int", gen_int(1, 180))],
+    },
+    {
+        "query": ['2-gold'],
+        "params": [
+            ("param1:int", gen_str('15')),
+            ("param2:string", gen_str('BRASS')),
+            ("param3:string", gen_str('EUROPE'))
+        ],
     },
     {
         "query": ['3', '3-gold'],

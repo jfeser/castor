@@ -1,0 +1,1 @@
+-t hoist-filter:0,hoist-filter:0,hoist-filter:0,hoist-filter:2,hoist-filter:2,hoist-filter:2,partition-eq(region.r_name):11,push-orderby,split-out(supplier,supplier.s_suppkey):11,push-orderby,project,row-store:27,project,row-store:3,project

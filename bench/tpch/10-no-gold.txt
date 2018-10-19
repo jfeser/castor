@@ -1,0 +1,69 @@
+alist(dedup(
+        select([customer.c_custkey as k0_customer_c_custkey,
+                customer.c_name as k0_customer_c_name,
+                customer.c_acctbal as k0_customer_c_acctbal,
+                customer.c_phone as k0_customer_c_phone,
+                nation.n_name as k0_nation_n_name,
+                customer.c_address as k0_customer_c_address,
+                customer.c_comment as k0_customer_c_comment],
+          join((customer.c_custkey = orders.o_custkey),
+            join((customer.c_nationkey = nation.n_nationkey), customer, nation),
+            filter((lineitem.l_returnflag = "R"),
+              join((lineitem.l_orderkey = orders.o_orderkey), lineitem, orders))))),
+  atuple([ascalar(k0_customer_c_custkey),
+          ascalar(k0_customer_c_name),
+          ascalar(k0_customer_c_acctbal),
+          ascalar(k0_customer_c_phone),
+          ascalar(k0_nation_n_name),
+          ascalar(k0_customer_c_address),
+          ascalar(k0_customer_c_comment),
+          select([sum(i_revenue) as revenue],
+            aorderedidx(dedup(
+                          select([orders.o_orderdate as k0],
+                            filter((((((((customer.c_custkey =
+                                               k0_customer_c_custkey) &&
+                                              (customer.c_name =
+                                              k0_customer_c_name)) &&
+                                             (customer.c_acctbal =
+                                             k0_customer_c_acctbal)) &&
+                                            (customer.c_phone =
+                                            k0_customer_c_phone)) &&
+                                           (nation.n_name = k0_nation_n_name))
+                                          &&
+                                          (customer.c_address =
+                                          k0_customer_c_address)) &&
+                                         (customer.c_comment =
+                                         k0_customer_c_comment)),
+                                    join((customer.c_custkey =
+                                         orders.o_custkey),
+                                      join((customer.c_nationkey =
+                                           nation.n_nationkey),
+                                        customer,
+                                        nation),
+                                      filter((lineitem.l_returnflag = "R"),
+                                        join((lineitem.l_orderkey =
+                                             orders.o_orderkey),
+                                          lineitem,
+                                          orders)))))),
+                alist(
+                  select([sum(lineitem.l_extendedprice * (1 -
+                                  lineitem.l_discount)) as i_revenue],
+                    filter((((((((k0 = orders.o_orderdate && customer.c_custkey = k0_customer_c_custkey)
+                                  && (customer.c_name = k0_customer_c_name)) &&
+                                 (customer.c_acctbal = k0_customer_c_acctbal))
+                                && (customer.c_phone = k0_customer_c_phone)) &&
+                               (nation.n_name = k0_nation_n_name)) &&
+                              (customer.c_address = k0_customer_c_address)) &&
+                             (customer.c_comment = k0_customer_c_comment)),
+                        join((customer.c_custkey = orders.o_custkey),
+                          join((customer.c_nationkey = nation.n_nationkey),
+                            customer,
+                            nation),
+                          filter((lineitem.l_returnflag = "R"),
+                            join((lineitem.l_orderkey = orders.o_orderkey),
+                              lineitem,
+                              orders))))),
+                  atuple([ascalar(i_revenue)], cross)),
+              param0,
+              (param0 + month(3))))],
+    cross))
