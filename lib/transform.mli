@@ -14,5 +14,5 @@ module Make (Config : Config.S) (M : Abslayout_db_intf.S) () : sig
   type t = private {name: string; f: Abslayout.t -> Abslayout.t list}
   [@@deriving sexp]
 
-  val of_string_exn : string -> t
+  val of_string_exn : string -> t list
 end

@@ -120,7 +120,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
             let scalars = List.map s ~f:(fun n -> scalar (Name n)) in
             [list r (tuple scalars Cross)]
           else [] ) }
-    |> run_everywhere ~stage:`Both
+    |> run_everywhere ~stage:`Run
 
   let tf_elim_groupby _ =
     let open A in
@@ -582,6 +582,66 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
                 [k] ) ) }
     |> run_everywhere ~stage:`Run
 
+  let tf_split_out args =
+    let open A in
+    let rel, pk =
+      match args with
+      | [x; y] -> (x, Name.of_string_exn y)
+      | _ ->
+          Error.create "Unexpected args." args [%sexp_of: string list]
+          |> Error.raise
+    in
+    let rel_schema = M.to_schema (scan rel) in
+    let eq = [%compare.equal: Name.Compare_no_type.t] in
+    { name= "split-out"
+    ; f=
+        (fun r ->
+          let r = M.annotate_schema r in
+          let schema = Meta.(find_exn r schema) in
+          if List.mem schema pk ~equal:eq then
+            let pk_fresh =
+              sprintf "%s_%s" (Name.to_var pk) (Fresh.name fresh "%d")
+            in
+            let sel_list =
+              List.filter schema ~f:(fun n ->
+                  eq n pk || not (List.mem rel_schema n ~equal:eq) )
+              |> List.map ~f:(fun n -> Name n)
+            in
+            [ tuple
+                [ select sel_list r
+                ; hash_idx
+                    (dedup (select [As_pred (Name pk, pk_fresh)] (scan rel)))
+                    (filter
+                       (Binop (Eq, Name pk, Name (Name.create pk_fresh)))
+                       (scan rel))
+                    [Name pk] ]
+                Cross ]
+          else [] ) }
+    |> run_everywhere ~stage:`Run
+
+  let tf_partition_size args =
+    let open A in
+    let field =
+      match args with
+      | [x] -> Name.of_string_exn x
+      | _ -> failwith "Unexpected args."
+    in
+    { name= "partition-size"
+    ; f=
+        (fun r ->
+          [ tuple
+              (List.map
+                 [(2 ** 7) - 1; (2 ** 15) - 1; (2 ** 23) - 1; (2 ** 31) - 1]
+                 ~f:(fun max ->
+                   filter
+                     (Binop
+                        ( And
+                        , Binop (Lt, Name field, Int max)
+                        , Binop (Gt, Name field, Int (-max)) ))
+                     r ))
+              Concat ] ) }
+    |> run_everywhere ~stage:`Run
+
   let transforms =
     [ ("hoist-join-pred", tf_hoist_join_pred)
     ; ("elim-groupby", tf_elim_groupby)
@@ -598,29 +658,24 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     ; ("project", tf_project)
     ; ("push-select", tf_push_select)
     ; ("partition", tf_partition)
-    ; ("partition-eq", tf_partition_eq) ]
+    ; ("partition-eq", tf_partition_eq)
+    ; ("partition-size", tf_partition_size)
+    ; ("split-out", tf_split_out) ]
 
   let of_string_exn s =
-    let regex =
-      Re2.create {|(?P<name>[a-z\-]+)(\((?P<arg>[^\)]+)\))?(:(?P<index>[0-9]+))?|}
-      |> Or_error.ok_exn
+    let tf_strs =
+      try
+        Transform_parser.transforms_eof Transform_lexer.token (Lexing.from_string s)
+      with Parser_utils.ParseError (msg, line, col) as e ->
+        Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
+        raise e
     in
-    if not (Re2.matches regex s) then
-      Error.create "Unexpected transform." s [%sexp_of: string] |> Error.raise ;
-    let name = Re2.find_first_exn ~sub:(`Name "name") regex s in
-    let args =
-      match Re2.find_first ~sub:(`Name "arg") regex s with
-      | Ok x -> [x]
-      | Error _ -> []
-    in
-    let index =
-      match Re2.find_first ~sub:(`Name "index") regex s with
-      | Ok i -> Some (Int.of_string i)
-      | Error _ -> None
-    in
-    let _, tf_gen = List.find_exn transforms ~f:(fun (n, _) -> String.(name = n)) in
-    let tf = tf_gen args in
-    match index with
-    | Some i -> {tf with f= (fun r -> [List.nth_exn (run tf r) i])}
-    | None -> {tf with f= (fun r -> run tf r)}
+    List.map tf_strs ~f:(fun (name, args, index) ->
+        let _, tf_gen =
+          List.find_exn transforms ~f:(fun (n, _) -> String.(name = n))
+        in
+        let tf = tf_gen args in
+        match index with
+        | Some i -> {tf with f= (fun r -> [List.nth_exn (run tf r) i])}
+        | None -> {tf with f= (fun r -> run tf r)} )
 end

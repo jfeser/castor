@@ -4,7 +4,7 @@ open Postgresql
 open Collections
 module A = Abslayout
 
-let main ?(debug = false) ?sample:_ ?(transforms = []) ~db ~params query_str =
+let main ?(debug = false) ?sample:_ ?(transforms = "") ~db ~params query_str =
   let params =
     List.map params ~f:(fun (n, t) -> Name.create ~type_:t n)
     |> Set.of_list (module Name.Compare_no_type)
@@ -21,9 +21,9 @@ let main ?(debug = false) ?sample:_ ?(transforms = []) ~db ~params query_str =
   let module Transform = Transform.Make (Config) (M) () in
   let query = Abslayout.of_string_exn query_str |> M.resolve ~params in
   let candidates =
-    List.fold_left transforms ~init:[query] ~f:(fun rs t ->
-        let tf = Transform.of_string_exn t in
-        List.concat_map rs ~f:tf.f )
+    Transform.of_string_exn transforms
+    |> List.fold_left ~init:[query] ~f:(fun rs tf ->
+           List.concat_map rs ~f:tf.Transform.f )
   in
   List.iteri candidates ~f:(fun i r ->
       let r = M.annotate_schema r in
@@ -51,9 +51,7 @@ let () =
     (let%map_open db =
        flag "db" (required string) ~doc:"DB the database to connect to"
      and transforms =
-       flag "transform" ~aliases:["t"]
-         (optional (Arg_type.comma_separated string))
-         ~doc:"transforms to run"
+       flag "transform" ~aliases:["t"] (optional string) ~doc:"transforms to run"
      and verbose = flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
      and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
      and sample =

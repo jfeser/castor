@@ -8,6 +8,11 @@
 
 (ocamllex ralgebra_lexer)
 
+(menhir
+ (modules transform_parser))
+
+(ocamllex transform_lexer)
+
 (library
  (name dblayout)
  (libraries base core stdio re2 postgresql oUnit llvm llvm.analysis logs cmph hashcons expect_test_helpers_kernel visitors.runtime)
