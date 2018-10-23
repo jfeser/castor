@@ -157,6 +157,8 @@ let result_to_tuples r =
                  | INT8 | INT2 | INT4 ->
                      if String.(value = "") then Null else Int (Int.of_string value)
                  | CHAR | TEXT | VARCHAR -> String value
+                 (* Blank padded character strings *)
+                 | BPCHAR -> String (String.strip value)
                  | FLOAT4 | FLOAT8 | NUMERIC -> Fixed (Fixed_point.of_string value)
                  | DATE -> Int (Date.of_string value |> Date.to_int)
                  (* Time & date types *)
@@ -170,9 +172,10 @@ let result_to_tuples r =
                   |MACADDR | INET
                   |CIDR
                  (* Other types*)
-                  |NAME | BYTEA | INT2VECTOR | JSON | CASH | ACLITEM | BPCHAR
-                  |BIT | VARBIT | JSONB ->
+                  |NAME | BYTEA | INT2VECTOR | JSON | CASH | ACLITEM | BIT
+                  |VARBIT | JSONB ->
                      (* Store unknown values as strings. *)
+                     Logs.warn (fun m -> m "Unknown value: %s" value) ;
                      String value
                  | OID | OIDVECTOR | TID | XID | CID | REFCURSOR | REGPROC
                   |REGPROCEDURE | REGOPER | REGOPERATOR | REGCLASS | REGTYPE ->
