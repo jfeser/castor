@@ -356,6 +356,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     { name= "push-select"
     ; f=
         (fun r ->
+          let r = M.annotate_schema r in
           match r with
           | {node= Select (ps, {node= AHashIdx (r, r', m); _}); _} ->
               [hash_idx' r (select ps r') m]
