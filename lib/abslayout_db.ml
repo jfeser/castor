@@ -321,10 +321,12 @@ module Make (Eval : Eval.S) = struct
       annotate_schema layout
     in
     let annotator =
-      object
+      object (self : 'a)
         inherit [_] map
 
         method! visit_AHashIdx () ((x, y, ({hi_key_layout; _} as m)) as r) =
+          let x = self#visit_t () x in
+          let y = self#visit_t () y in
           match hi_key_layout with
           | Some _ -> AHashIdx r
           | None ->
@@ -332,6 +334,8 @@ module Make (Eval : Eval.S) = struct
               AHashIdx (x, y, {m with hi_key_layout= Some (key_layout schema)})
 
         method! visit_AOrderedIdx () ((x, y, ({oi_key_layout; _} as m)) as r) =
+          let x = self#visit_t () x in
+          let y = self#visit_t () y in
           match oi_key_layout with
           | Some _ -> AOrderedIdx r
           | None ->
