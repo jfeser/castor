@@ -49,9 +49,7 @@ struct
         Infix.(
           int (Header.size_exn hdr "nchars") + Header.make_access hdr "nchars" start)
     | FuncT ([t], _) -> len start t
-    | _ ->
-        Logs.debug (fun m -> m "len for %a" Sexp.pp_hum ([%sexp_of: Type.t] type_)) ;
-        Header.make_access hdr "len" start
+    | _ -> Header.make_access hdr "len" start
 
   (** Add layout start positions to contexts that don't contain them.
        Sometimes the start is passed in by the parent layout and sometimes it is
