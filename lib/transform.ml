@@ -104,6 +104,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     let checks = [check_schema] in
     List.map rs ~f:(fun r' ->
         List.for_all checks ~f:(fun c -> c r') |> ignore ;
+        A.validate r' ;
         r' )
 
   let run = if Config.check_transforms then run_checked else run_unchecked
@@ -474,7 +475,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     ; f=
         (fun r ->
           let r = M.annotate_schema r in
-          annotate_needed r ; [project r] ) }
+          [project r] ) }
 
   let tf_hoist_join_pred _ =
     let open A in
@@ -566,9 +567,10 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
               field is a candidate for the hash table key. *)
           let keys =
             List.filter_map eqs ~f:(fun (p1, p2) ->
-                if [%compare.equal: pred] (Name name) p1 then Some p2
-                else if [%compare.equal: pred] (Name name) p2 then Some p1
-                else None )
+                match (p1, p2) with
+                | Name n, _ when String.(n.name = name.name) -> Some p2
+                | _, Name n when String.(n.name = name.name) -> Some p1
+                | _ -> None )
           in
           List.map keys ~f:(fun k ->
               (* The predicate that we chose as the key can be replaced by
@@ -592,7 +594,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           |> Error.raise
     in
     let rel_schema = M.to_schema (scan rel) in
-    let eq = [%compare.equal: Name.Compare_no_type.t] in
+    let eq = [%compare.equal: Name.Compare_name_only.t] in
     { name= "split-out"
     ; f=
         (fun r ->
@@ -613,7 +615,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
                     (dedup (select [As_pred (Name pk, pk_fresh)] (scan rel)))
                     (filter
                        (Binop (Eq, Name pk, Name (Name.create pk_fresh)))
-                       (scan rel))
+                       (as_ (Option.value_exn pk.relation) (scan rel)))
                     [Name pk] ]
                 Cross ]
           else [] ) }

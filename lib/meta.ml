@@ -35,6 +35,9 @@ let type_ = Univ_map.Key.create ~name:"type" [%sexp_of: Type.t]
 let needed : Set.M(Name.Compare_no_type).t key =
   Univ_map.Key.create ~name:"needed" [%sexp_of: Set.M(Name.Compare_no_type).t]
 
+let free =
+  Univ_map.Key.create ~name:"free" [%sexp_of: Set.M(Name.Compare_no_type).t]
+
 let update r key ~f = r.meta := Univ_map.update !(r.meta) key ~f
 
 let find ralgebra key = Univ_map.find !(ralgebra.meta) key

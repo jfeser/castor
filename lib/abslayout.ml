@@ -206,14 +206,17 @@ let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
  *   ralgebra_params#visit_t () r *)
 
 let names_visitor =
-  object
-    inherit [_] reduce
+  object (self : 'a)
+    inherit [_] reduce as super
 
     method zero = Set.empty (module Name.Compare_no_type)
 
     method plus = Set.union
 
     method! visit_Name () n = Set.singleton (module Name.Compare_no_type) n
+
+    method! visit_pred () p =
+      match p with Exists _ | First _ -> self#zero | _ -> super#visit_pred () p
   end
 
 let names r = names_visitor#visit_t () r
@@ -462,35 +465,96 @@ let is_serializeable r =
   in
   visitor#visit_t (Set.empty (module Name.Compare_no_type)) r
 
-let annotate_needed r =
+(** Annotate all subexpressions with its set of free names. *)
+let annotate_free r =
+  let singleton = Set.singleton (module Name.Compare_no_type) in
+  let empty = Set.empty (module Name.Compare_no_type) in
   let of_list = Set.of_list (module Name.Compare_no_type) in
   let union_list = Set.union_list (module Name.Compare_no_type) in
-  let rec pred_needed ctx p =
+  let exposed r = of_list Meta.(find_exn r schema) in
+  let rec pred_free p =
     let visitor =
-      object
-        inherit [_] iter
+      object (self : 'a)
+        inherit [_] reduce as super
 
-        method! visit_Exists () r = needed ctx r
+        inherit [_] Util.set_monoid (module Name.Compare_no_type)
 
-        method! visit_First () r =
-          match Meta.(find_exn r schema) with
-          | n :: _ -> needed (Set.add ctx n) r
-          | [] -> failwith "Unexpected empty schema."
+        method visit_subquery r = free r
+
+        method! visit_Name () n = singleton n
+
+        method! visit_pred () p =
+          match p with
+          | Exists r -> self#visit_Exists () r
+          | First r -> self#visit_First () r
+          | _ -> super#visit_pred () p
       end
     in
     visitor#visit_pred () p
-  and needed ctx r =
+  and free r =
+    let free_set =
+      match r.node with
+      | Scan _ | AEmpty -> empty
+      | AScalar p -> pred_free p
+      | Select (ps, r') ->
+          Set.union (free r')
+            (Set.diff (List.map ps ~f:pred_free |> union_list) (exposed r'))
+      | Filter (p, r') -> Set.union (free r') (Set.diff (pred_free p) (exposed r'))
+      | Dedup r' -> free r'
+      | Join {pred; r1; r2} ->
+          union_list
+            [ free r1
+            ; free r2
+            ; Set.diff (pred_free pred) (Set.union (exposed r1) (exposed r2)) ]
+      | GroupBy (ps, key, r') ->
+          Set.union (free r')
+            (Set.diff
+               (Set.union (List.map ps ~f:pred_free |> union_list) (of_list key))
+               (exposed r'))
+      | OrderBy {key; rel; _} ->
+          Set.union (free rel)
+            (Set.diff (List.map key ~f:pred_free |> union_list) (exposed rel))
+      | AList (r', r'') -> Set.union (free r') (Set.diff (free r'') (exposed r'))
+      | AHashIdx (r', r'', {lookup; _}) ->
+          union_list
+            [ free r'
+            ; Set.diff (free r'') (exposed r')
+            ; List.map ~f:pred_free lookup |> union_list ]
+      | AOrderedIdx (r', r'', {lookup_low; lookup_high; _}) ->
+          union_list
+            [ free r'
+            ; Set.diff (free r'') (exposed r')
+            ; pred_free lookup_low
+            ; pred_free lookup_high ]
+      | ATuple (rs, (Zip | Concat)) -> List.map rs ~f:free |> union_list
+      | ATuple (rs, Cross) ->
+          let n, _ =
+            List.fold_left rs ~init:(empty, empty) ~f:(fun (n, e) r' ->
+                let e' = exposed r' in
+                let n' = Set.union n (Set.diff (free r') e) in
+                (n', e') )
+          in
+          n
+      | As (_, r') -> free r'
+    in
+    Meta.(set_m r free free_set) ;
+    free_set
+  in
+  free r |> ignore
+
+(** Annotate all subexpressions with the set of needed fields. A field is needed
+   if it is in the schema of the top level query or it is in the free variable
+   set of a query in scope. *)
+let annotate_needed r =
+  let singleton = Set.singleton (module Name.Compare_no_type) in
+  let of_list = Set.of_list (module Name.Compare_no_type) in
+  let union_list = Set.union_list (module Name.Compare_no_type) in
+  let rec needed ctx r =
     Meta.(set_m r needed ctx) ;
     match r.node with
     | Scan _ | AScalar _ | AEmpty -> ()
-    | Select (ps, r') ->
-        List.iter ps ~f:(pred_needed ctx) ;
-        let ctx' = List.map ps ~f:pred_names |> union_list in
-        needed ctx' r'
-    | Filter (p, r') ->
-        pred_needed ctx p ;
-        let ctx' = Set.union (pred_names p) ctx in
-        needed ctx' r'
+    | Select (ps, r') -> needed (List.map ps ~f:pred_names |> union_list) r'
+    | Filter (p, r') -> needed (Set.union ctx (pred_names p)) r'
     | Dedup r' -> needed ctx r'
     | Join {pred; r1; r2} ->
         let ctx' = Set.union (pred_names pred) ctx in
@@ -503,27 +567,46 @@ let annotate_needed r =
     | OrderBy {key; rel; _} ->
         let ctx' = Set.union ctx (List.map ~f:pred_names key |> union_list) in
         needed ctx' rel
-    | AList (r', r'') | AHashIdx (r', r'', _) | AOrderedIdx (r', r'', _) ->
-        let ctx' = Set.union ctx (names r'') in
-        needed ctx' r' ; needed ctx r''
-    | ATuple (rs, (Zip | Concat)) -> List.iter rs ~f:(needed ctx)
+    | AList (pr, cr) | AHashIdx (pr, cr, _) | AOrderedIdx (pr, cr, _) ->
+        needed Meta.(find_exn cr free) pr ;
+        needed ctx cr
+    | ATuple (rs, Zip) ->
+        List.iter rs ~f:(fun r ->
+            needed (Set.inter ctx (Meta.(find_exn r schema) |> of_list)) r )
+    | ATuple (rs, Concat) -> List.iter rs ~f:(needed ctx)
     | ATuple (rs, Cross) ->
         List.fold_right rs ~init:ctx ~f:(fun r ctx ->
             needed ctx r ;
-            let ctx = Set.union (names r) ctx in
+            let ctx = Set.union Meta.(find_exn r free) ctx in
             ctx )
         |> ignore
-    | As (n, r') ->
-        let rmap =
-          let schema = Meta.(find_exn r' schema) in
-          List.map schema ~f:(fun n' -> (Name.create ~relation:n n'.name, n'))
-          |> Map.of_alist_exn (module Name.Compare_no_type)
-        in
+    | As (rel_name, r') ->
         let ctx' =
-          Set.filter_map (module Name.Compare_no_type) ctx ~f:(Map.find rmap)
+          List.filter
+            Meta.(find_exn r' schema)
+            ~f:(fun n -> Set.mem ctx {n with relation= Some rel_name})
+          |> of_list
         in
         needed ctx' r'
   in
+  let subquery_needed_visitor =
+    object
+      inherit [_] iter
+
+      method! visit_First () r =
+        match Meta.(find_exn r schema) with
+        | n :: _ -> needed (singleton n) r
+        | [] -> failwith "Unexpected empty schema."
+
+      method! visit_Exists () r =
+        (* TODO: None of these fields are really needed. Use the first one
+             because it's simple. *)
+        match Meta.(find_exn r schema) with
+        | n :: _ -> needed (singleton n) r
+        | [] -> failwith "Unexpected empty schema."
+    end
+  in
+  subquery_needed_visitor#visit_t () r ;
   needed (of_list Meta.(find_exn r schema)) r
 
 let project r =
@@ -556,6 +639,8 @@ let project r =
         super#visit_t needed r
     end
   in
+  annotate_free r ;
+  annotate_needed r ;
   project_visitor#visit_t dummy r
 
 let pred_remove_as p =
@@ -706,3 +791,24 @@ let annotate_orders r =
     order
   in
   annotate_orders r |> ignore
+
+let exists_bare_relations r =
+  let visitor =
+    object (self : 'a)
+      inherit [_] reduce as super
+
+      inherit [_] Util.disj_monoid
+
+      method! visit_t () r =
+        match r.node with
+        | As (_, {node= Scan _; _}) -> self#zero
+        | As (_, r') -> self#visit_t () r'
+        | Scan _ -> true
+        | _ -> super#visit_t () r
+    end
+  in
+  visitor#visit_t () r
+
+let validate r =
+  if exists_bare_relations r then
+    Error.of_string "Program contains bare relation references." |> Error.raise

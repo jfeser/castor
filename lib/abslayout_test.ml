@@ -41,6 +41,98 @@ let%expect_test "subst" =
          (meta ())))))
      (meta ())) |}]
 
+let%expect_test "needed" =
+  let r =
+    "alist(r, atuple([ascalar(r.f as k1), ascalar((k1 + 1) as k2), ascalar(k2 + \
+     1)], cross))" |> of_string_exn |> M.resolve |> M.annotate_schema
+  in
+  annotate_free r ;
+  annotate_needed r ;
+  print_s ([%sexp_of: t] r) ;
+  [%expect
+    {|
+    ((node
+      (AList
+       (((node (Scan r))
+         (meta
+          ((free ())
+           (needed (((relation (r)) (name f) (type_ ((IntT (nullable false)))))))
+           (schema
+            (((relation (r)) (name f) (type_ ((IntT (nullable false)))))
+             ((relation (r)) (name g) (type_ ((IntT (nullable false))))))))))
+        ((node
+          (ATuple
+           ((((node
+               (AScalar
+                (As_pred
+                 ((Name
+                   ((relation (r)) (name f) (type_ ((IntT (nullable false))))))
+                  k1))))
+              (meta
+               ((free
+                 (((relation (r)) (name f) (type_ ((IntT (nullable false)))))))
+                (needed
+                 (((relation ()) (name "") (type_ ((IntT (nullable false)))))
+                  ((relation ()) (name k1) (type_ ((IntT (nullable false)))))
+                  ((relation ()) (name k2) (type_ ((IntT (nullable false)))))))
+                (schema
+                 (((relation ()) (name k1) (type_ ((IntT (nullable false))))))))))
+             ((node
+               (AScalar
+                (As_pred
+                 ((Binop
+                   (Add
+                    (Name
+                     ((relation ()) (name k1) (type_ ((IntT (nullable false))))))
+                    (Int 1)))
+                  k2))))
+              (meta
+               ((free
+                 (((relation ()) (name k1) (type_ ((IntT (nullable false)))))))
+                (needed
+                 (((relation ()) (name "") (type_ ((IntT (nullable false)))))
+                  ((relation ()) (name k1) (type_ ((IntT (nullable false)))))
+                  ((relation ()) (name k2) (type_ ((IntT (nullable false)))))))
+                (schema
+                 (((relation ()) (name k2) (type_ ((IntT (nullable false))))))))))
+             ((node
+               (AScalar
+                (Binop
+                 (Add
+                  (Name
+                   ((relation ()) (name k2) (type_ ((IntT (nullable false))))))
+                  (Int 1)))))
+              (meta
+               ((free
+                 (((relation ()) (name k2) (type_ ((IntT (nullable false)))))))
+                (needed
+                 (((relation ()) (name "") (type_ ((IntT (nullable false)))))
+                  ((relation ()) (name k1) (type_ ((IntT (nullable false)))))
+                  ((relation ()) (name k2) (type_ ((IntT (nullable false)))))))
+                (schema
+                 (((relation ()) (name "") (type_ ((IntT (nullable false)))))))))))
+            Cross)))
+         (meta
+          ((free (((relation (r)) (name f) (type_ ((IntT (nullable false)))))))
+           (needed
+            (((relation ()) (name "") (type_ ((IntT (nullable false)))))
+             ((relation ()) (name k1) (type_ ((IntT (nullable false)))))
+             ((relation ()) (name k2) (type_ ((IntT (nullable false)))))))
+           (schema
+            (((relation ()) (name k1) (type_ ((IntT (nullable false)))))
+             ((relation ()) (name k2) (type_ ((IntT (nullable false)))))
+             ((relation ()) (name "") (type_ ((IntT (nullable false)))))))))))))
+     (meta
+      ((free ())
+       (needed
+        (((relation ()) (name "") (type_ ((IntT (nullable false)))))
+         ((relation ()) (name k1) (type_ ((IntT (nullable false)))))
+         ((relation ()) (name k2) (type_ ((IntT (nullable false)))))))
+       (schema
+        (((relation ()) (name k1) (type_ ((IntT (nullable false)))))
+         ((relation ()) (name k2) (type_ ((IntT (nullable false)))))
+         ((relation ()) (name "") (type_ ((IntT (nullable false)))))))))) |}]
+
 (* let%expect_test "project-empty" =
  *   let fresh = Fresh.create () in
  *   let r = of_string_exn "Select([], r)" in
@@ -292,5 +384,6 @@ let%expect_test "annotate-orders" =
   let r = M.annotate_schema r in
   annotate_eq r ;
   annotate_orders r ;
-  Meta.(find_exn r order) |> [%sexp_of: pred list] |> print_s;
-  [%expect {| ((Name ((relation (r)) (name f) (type_ ((IntT (nullable false))))))) |}]
+  Meta.(find_exn r order) |> [%sexp_of: pred list] |> print_s ;
+  [%expect
+    {| ((Name ((relation (r)) (name f) (type_ ((IntT (nullable false))))))) |}]

@@ -26,6 +26,8 @@ val end_pos : lexpos key
 
 val needed : Set.M(Name.Compare_no_type).t key
 
+val free : Set.M(Name.Compare_no_type).t key
+
 val eq : (Name.t * Name.t) list key
 
 val order : Abslayout0.pred list key

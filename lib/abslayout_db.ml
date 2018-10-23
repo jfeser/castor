@@ -353,10 +353,9 @@ module Make (Eval : Eval.S) = struct
       Set.map
         (module Name.Compare_no_type)
         s
-        ~f:(fun n -> {n with relation= Option.map n.relation ~f:(fun _ -> name)})
+        ~f:(fun n -> {n with relation= Some name})
     in
     let resolve_name ctx n =
-      let ctx = Set.union params ctx in
       let could_not_resolve =
         Error.create "Could not resolve." (n, ctx)
           [%sexp_of: Name.t * Set.M(Name).t]
@@ -387,14 +386,7 @@ module Make (Eval : Eval.S) = struct
       |> List.filter ~f:(fun n -> String.(n.name <> ""))
       |> Set.of_list (module Name.Compare_no_type)
     in
-    let union c1 c2 =
-      let shadow_set = Set.inter c1 c2 in
-      if Set.length shadow_set > 0 then
-        Error.create "Shadowing makes kittens cry." shadow_set
-          [%sexp_of: Set.M(Name.Compare_no_type).t]
-        |> Error.raise ;
-      Set.union c1 c2
-    in
+    let union c1 c2 = Set.union c1 c2 in
     let union_list =
       List.fold_left ~init:(Set.empty (module Name.Compare_no_type)) ~f:union
     in
@@ -455,13 +447,20 @@ module Make (Eval : Eval.S) = struct
             in
             (AScalar p, ctx)
         | AList (r, l) ->
-            let r, inner_ctx = resolve outer_ctx r in
-            let ctx = union inner_ctx outer_ctx in
-            let l, ctx = resolve ctx l in
+            let r, outer_ctx' = resolve outer_ctx r in
+            let l, ctx = resolve (union outer_ctx' outer_ctx) l in
             (AList (r, l), ctx)
-        | ATuple (ls, ((Zip | Concat) as t)) ->
+        | ATuple (ls, (Zip as t)) ->
             let ls, ctxs = List.map ls ~f:(resolve outer_ctx) |> List.unzip in
             let ctx = union_list ctxs in
+            (ATuple (ls, t), ctx)
+        | ATuple (ls, (Concat as t)) ->
+            let ls, ctxs = List.map ls ~f:(resolve outer_ctx) |> List.unzip in
+            let ctx =
+              List.all_equal ~sexp_of_t:[%sexp_of: Set.M(Name.Compare_no_type).t]
+                ctxs
+              |> Or_error.ok_exn
+            in
             (ATuple (ls, t), ctx)
         | ATuple (ls, (Cross as t)) ->
             let ls, ctx =
@@ -500,12 +499,11 @@ module Make (Eval : Eval.S) = struct
             (As (n, r), ctx)
         | OrderBy ({key; rel; _} as x) ->
             let rel, inner_ctx = resolve outer_ctx rel in
-            let ctx = union inner_ctx outer_ctx in
-            let key = List.map key ~f:(resolve_pred ctx) in
-            (OrderBy {x with key; rel}, ctx)
+            let key = List.map key ~f:(resolve_pred inner_ctx) in
+            (OrderBy {x with key; rel}, inner_ctx)
       in
       ({node= node'; meta}, ctx')
     in
-    let r, _ = resolve empty_ctx r in
+    let r, _ = resolve params r in
     r
 end

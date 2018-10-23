@@ -147,6 +147,8 @@ val select_kind : pred list -> [`Agg | `Scalar]
 
 val is_serializeable : t -> bool
 
+val annotate_free : t -> unit
+
 val annotate_needed : t -> unit
 
 val project : t -> t
@@ -156,3 +158,5 @@ val pred_remove_as : pred -> pred
 val annotate_eq : t -> unit
 
 val annotate_orders : t -> unit
+
+val validate : t -> unit
