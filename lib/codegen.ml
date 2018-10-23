@@ -1307,7 +1307,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     in
     if debug then
       Util.command_exn ~quiet:()
-        ([clang] @ cflags @ [module_fn; main_fn; "-o"; exe_fn])
+        ([clang] @ cflags @ [module_fn; stdlib_fn; main_fn; "-o"; exe_fn])
     else (
       Util.command_exn ~quiet:()
         [ opt
