@@ -95,13 +95,13 @@ module Make (Eval : Eval.S) = struct
              loop sequence to the first layout that can consume it. Other
              layouts that can consume are expected to perform evaluation. *)
             let _, ret =
-              List.fold_right ls ~init:(ctx, []) ~f:(fun l (ctx, ret) ->
+              List.fold_left ls ~init:(ctx, []) ~f:(fun (ctx, ret) l ->
                   match (ctx, next_inner_loop l) with
                   | `Consume_inner (ctx', _), Some _ ->
-                      (`Eval ctx', self#visit_t (ctx :> eval_ctx) l :: ret)
+                      (`Eval ctx', ret @ [self#visit_t (ctx :> eval_ctx) l])
                   | `Consume_inner (ctx', _), None ->
-                      (ctx, self#visit_t (`Eval ctx') l :: ret)
-                  | `Eval _, _ -> (ctx, self#visit_t (ctx :> eval_ctx) l :: ret) )
+                      (ctx, ret @ [self#visit_t (`Eval ctx') l])
+                  | `Eval _, _ -> (ctx, ret @ [self#visit_t (ctx :> eval_ctx) l]) )
             in
             ret )
         |> fun ts -> self#build_ATuple ts kind
