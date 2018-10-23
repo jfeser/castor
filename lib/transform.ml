@@ -612,7 +612,10 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
             [ tuple
                 [ select sel_list r
                 ; hash_idx
-                    (dedup (select [As_pred (Name pk, pk_fresh)] (scan rel)))
+                    (dedup
+                       (select
+                          [As_pred (Name pk, pk_fresh)]
+                          (as_ (Option.value_exn pk.relation) (scan rel))))
                     (filter
                        (Binop (Eq, Name pk, Name (Name.create pk_fresh)))
                        (as_ (Option.value_exn pk.relation) (scan rel)))
