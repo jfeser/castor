@@ -1,2 +1,8 @@
 strpos(testing, 7, in, 2) = 5
 strpos(tested, 6, in, 2) = 0
+17 16
+endswith(STANDARD PLATED COPPER, 22, COPPER, 6) = 1
+15 14
+endswith(SMALL BRUSHED BRASS, 19, BRASS, 5) = 1
+0 13
+endswith(SMALL BRUSHED BRASS, 19, COPPER, 6) = 0

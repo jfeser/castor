@@ -78,6 +78,6 @@ orderby([s_acctbal, n_name, s_name, p_partkey],
           supplier as s1),
           partsupp as ps1),
       filter(((p_size = param1) &&
-             (strpos(p_type, param2) = (strlen(p_type) - strlen(param2)))),
+             (strpos(p_type, param2) = (strlen(p_type) - strlen(param2) + 1))),
         part as p1)))),
   desc)
