@@ -1,5 +1,15 @@
 #!/usr/bin/env python3
 
+'''Usage: run-bench.py [options] QUERY...
+
+Options:
+  -h --help   Show this screen.
+  -d DB       Database name to connect to [default: tpch].
+  -p PORT     Database server port [default: 5432].
+  --sql-only  Only run the SQL queries.
+'''
+
+from docopt import docopt
 import configparser
 import csv
 import logging
@@ -161,10 +171,12 @@ OUT_FILE = rpath('results.csv')
 BENCH_DIR = rpath('.')
 BENCHMARKS = [
     {
-        "query": ['1', '1-gold'],
+        "name": "1",
+        "query": ['1-gold'],
         "params": [("param0:int", gen_str('90'))],
     },
     {
+        "name": "2",
         "query": ['2-gold'],
         "params": [
             ("param1:int", gen_str('15')),
@@ -173,32 +185,37 @@ BENCHMARKS = [
         ],
     },
     {
-        "query": ['3', '3-gold'],
+        "name": "3",
+        "query": ['3-gold'],
         "params": [
             ("param0:string", gen_str('BUILDING')),
-            ("param1:date", gen_tpch_date()),
+            ("param1:date", gen_fixed_date(date(1995, 3, 15))),
         ],
     },
     {
-        "query": ['4', '4-gold'],
-        "params": [("param1:date", gen_tpch_date())],
+        "name": "4",
+        "query": ['4-gold'],
+        "params": [("param1:date", gen_fixed_date(date(1993, 7, 1)))],
     },
     {
-        "query": ["5-no", '5-no-gold'],
+        "name": "5-no",
+        "query": ['5-no-gold'],
         "params": [
             ("param0:string", gen_str('ASIA')),
-            ("param1:date", gen_tpch_date())
+            ("param1:date", gen_fixed_date(date(1994, 1, 1)))
         ],
     },
     {
-        "query": ["6", '6-gold'],
+        "name": "6",
+        "query": ['6-gold'],
         "params": [
-            ("param0:date", gen_tpch_date()),
+            ("param0:date", gen_fixed_date(date(1994, 1, 1))),
             ("param1:float", gen_str('0.06')),
             ("param2:int", gen_str('24')),
         ],
     },
     {
+        "name": "7",
         "query": [],
         "params": [
             ("param1:string", gen_str('FRANCE')),
@@ -206,6 +223,7 @@ BENCHMARKS = [
         ],
     },
     {
+        "name": "8",
         "query": [],
         "params": [
             ("param1:string", gen_str('BRAZIL')),
@@ -214,24 +232,28 @@ BENCHMARKS = [
         ],
     },
     {
+        "name": "9",
         "query": [],
         "params": [
             ("param1:string", gen_str('green')),
         ],
     },
     {
+        "name": "10",
         "query": ["10-no", '10-no-gold'],
         "params": [("param0:date", gen_fixed_date(date(1993, 10, 1)))],
     },
     {
-        "query": "11-no",
+        "name": "11-no",
+        "query": ["11-no"],
         "params": [
             ("param1:string", gen_str('GERMANY')),
             ("param2:float", gen_str('0.0001'))
         ],
     },
     {
-        "query": "12",
+        "name": "12",
+        "query": ["12"],
         "params": [
             ("param1:string", gen_str('MAIL')),
             ("param2:string", gen_str('SHIP')),
@@ -239,6 +261,7 @@ BENCHMARKS = [
         ],
     },
     {
+        "name": "13",
         "query": [],
         "params": [
             ("param1:string", gen_str('special')),
@@ -246,21 +269,25 @@ BENCHMARKS = [
         ],
     },
     {
+        "name": "14",
         "query": [],
         "params": [
             ("param1:date", gen_fixed_date(date(1995,9,1))),
         ],
     },
     {
+        "name": "15",
         "query": ['15-gold'],
         "params": [("param1:date", gen_fixed_date(date(1996,1,1)))],
     },
     {
-        "query": "17",
+        "name": "17",
+        "query": ["17"],
         "params": [("param0:string", gen_brand()), ("param1:string", gen_container())],
     },
     {
-        "query": "18",
+        "name": "18",
+        "query": ["18"],
         "params": [("param1:int", gen_quantity())],
     },
     # {
@@ -276,7 +303,8 @@ BENCHMARKS = [
     #     ],
     # },
     {
-        "query": "21-no",
+        "name": "21-no",
+        "query": ["21-no"],
         "params": [("param1:string", gen_nation())],
     },
 ]
@@ -299,18 +327,13 @@ csv_writer.writerow(['name', 'time'])
 def should_run(query_name):
     return len(sys.argv) <= 1 or query_name in sys.argv
 
-def run_bench(query_name, params):
+def run_bench(name, query_name, params):
     if not should_run(query_name):
         log.debug('Skipping %s.', query_name)
         return
 
     query = rpath(query_name + '.txt')
-    args_file = rpath(query_name + '.args')
-    if os.path.isfile(args_file):
-        args = contents(args_file)
-    else:
-        args = ''
-    sql = rpath(query_name + '.sql')
+    sql = rpath(name + '.sql')
 
     # Make benchmark dir.
     benchd = os.path.splitext(query_name)[0]
@@ -319,10 +342,6 @@ def run_bench(query_name, params):
     os.mkdir(benchd)
 
     param_types = ["-p %s" % p[0] for p in params]
-    xform_cmd_parts = (
-        [TRANSFORM_EXE, "-v", "-db", DB] + param_types + [args, query]
-    )
-    xform_cmd = " ".join(xform_cmd_parts)
 
     compile_cmd_parts = [
         COMPILE_EXE,
@@ -338,13 +357,11 @@ def run_bench(query_name, params):
 
     # Build, saving the log.
     if not SQL_ONLY:
-        log.debug(xform_cmd)
         log.debug(compile_cmd)
         try:
-            xform_log = benchd + "/xform.log"
             compile_log = benchd + "/compile.log"
             query_file = benchd + "/query"
-            code = os.system("%s 2> %s > %s" % (xform_cmd, xform_log, query_file))
+            code = os.system('cp %s %s' % (query, query_file))
             if code != 0:
                 raise Exception("Nonzero exit code %d" % code)
             code = os.system("%s %s > %s 2>&1" % (compile_cmd, query_file, compile_log))
@@ -411,13 +428,14 @@ def run_bench(query_name, params):
 
     os.chdir("..")
 
+args = docopt(__doc__)
+DB = args['-d']
+PORT = args['-p']
+SQL_ONLY = args['--sql-only']
 
 # Run benchmarks
 for bench in BENCHMARKS:
-    if type(bench['query']) == list:
-        for query in bench['query']:
-            run_bench(query, bench['params'])
-    else:
-        run_bench(bench['query'], bench['params'])
+    for query in bench['query']:
+        run_bench(bench['name'], query, bench['params'])
 
 logging.shutdown()
