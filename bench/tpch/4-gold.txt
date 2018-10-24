@@ -2,13 +2,26 @@ alist(orderby([k0_orders_o_orderpriority],
         dedup(
           select([orders.o_orderpriority as k0_orders_o_orderpriority], orders)),
         asc),
-  select([orders.o_orderpriority, count() as order_count],
-    filter(((orders.o_orderdate >= param1) &&
-           ((orders.o_orderdate < (param1 + month(3))))),
-      alist(filter((orders.o_orderpriority = k0_orders_o_orderpriority),
-            filter(exists(filter(l_orderkey=o_orderkey && l_commitdate < l_receiptdate, lineitem)),
-              orders)),
-        atuple([ascalar(orders.o_orderkey),
-                ascalar(orders.o_orderdate),
-                ascalar(orders.o_orderpriority)],
-          cross)))))
+  select([orders.o_orderpriority, sum(agg2) as order_count],
+    aorderedidx(dedup(
+                  select([orders.o_orderdate as k1],
+                    filter(exists(filter(((lineitem.l_orderkey =
+                                          orders.o_orderkey) &&
+                                         (lineitem.l_commitdate <
+                                         lineitem.l_receiptdate)),
+                                    lineitem)),
+                      filter((orders.o_orderpriority =
+                             k0_orders_o_orderpriority),
+                        orders)))),
+      alist(select([count() as agg2, orders.o_orderpriority],
+              filter((k1 = orders.o_orderdate),
+                filter(exists(filter(((lineitem.l_orderkey = orders.o_orderkey)
+                                     &&
+                                     (lineitem.l_commitdate <
+                                     lineitem.l_receiptdate)),
+                                lineitem)),
+                  filter((orders.o_orderpriority = k0_orders_o_orderpriority),
+                    orders)))),
+        atuple([ascalar(agg2), ascalar(orders.o_orderpriority)], cross)),
+      param1,
+      (param1 + month(3)))))
