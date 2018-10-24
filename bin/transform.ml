@@ -26,6 +26,7 @@ let main ?(debug = false) ?sample:_ ?(transforms = "") ~db ~params query_str =
            List.concat_map rs ~f:tf.Transform.f )
   in
   List.iteri candidates ~f:(fun i r ->
+      let r = M.resolve ~params r in
       let r = M.annotate_schema r in
       Format.eprintf "Candidate #%d (serializable=%b):\n" i (A.is_serializeable r) ;
       Abslayout.pp Format.str_formatter r ;

@@ -648,6 +648,28 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
               Concat ] ) }
     |> run_everywhere ~stage:`Run
 
+  let tf_hoist_pred_constant _ =
+    let open A in
+    let f r =
+      let r = M.annotate_schema r in
+      annotate_free r ;
+      let consts =
+        match r.node with
+        | Filter (p, r') -> pred_constants Meta.(find_exn r' schema) p
+        | Select (ps, r') ->
+            List.concat_map ps ~f:(pred_constants Meta.(find_exn r' schema))
+            |> List.dedup_and_sort ~compare:[%compare: pred]
+        | _ -> []
+      in
+      let fresh_id = Fresh.name fresh "const%d" in
+      let fresh_name = Name.create fresh_id in
+      List.map consts ~f:(fun p ->
+          tuple
+            [scalar (As_pred (p, fresh_id)); subst_single p (Name fresh_name) r]
+            Cross )
+    in
+    {name= "hoist-pred-const"; f} |> run_everywhere ~stage:`Run
+
   let transforms =
     [ ("hoist-join-pred", tf_hoist_join_pred)
     ; ("elim-groupby", tf_elim_groupby)
@@ -666,7 +688,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     ; ("partition", tf_partition)
     ; ("partition-eq", tf_partition_eq)
     ; ("partition-size", tf_partition_size)
-    ; ("split-out", tf_split_out) ]
+    ; ("split-out", tf_split_out)
+    ; ("hoist-pred-const", tf_hoist_pred_constant) ]
 
   let of_string_exn s =
     let tf_strs =

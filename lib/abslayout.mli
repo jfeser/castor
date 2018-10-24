@@ -129,6 +129,8 @@ val subst : pred Map.M(Name.Compare_no_type).t -> t -> t
 
 val subst_pred : pred Map.M(Name.Compare_no_type).t -> pred -> pred
 
+val subst_single : pred -> pred -> t -> t
+
 val pred_to_schema : pred -> Name.t
 
 val pred_to_name : pred -> Name.t option
@@ -160,3 +162,5 @@ val annotate_eq : t -> unit
 val annotate_orders : t -> unit
 
 val validate : t -> unit
+
+val pred_constants : Name.t list -> pred -> pred list

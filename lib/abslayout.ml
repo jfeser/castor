@@ -230,6 +230,16 @@ let pred_of_value = function
   | Null -> Null
   | Fixed x -> Fixed x
 
+let subst_visitor p_old p_new =
+  object
+    inherit [_] endo as super
+
+    method! visit_pred () p =
+      if [%compare.equal: pred] p p_old then p_new else super#visit_pred () p
+  end
+
+let subst_single p_old p_new = (subst_visitor p_old p_new)#visit_t ()
+
 let subst ctx =
   let v =
     object
@@ -485,8 +495,7 @@ let annotate_free r =
 
         method! visit_pred () p =
           match p with
-          | Exists r -> self#visit_Exists () r
-          | First r -> self#visit_First () r
+          | Exists r | First r -> self#visit_subquery r
           | _ -> super#visit_pred () p
       end
     in
@@ -812,3 +821,84 @@ let exists_bare_relations r =
 let validate r =
   if exists_bare_relations r then
     Error.of_string "Program contains bare relation references." |> Error.raise
+
+let pred_constants schema p =
+  let module M = struct
+    module T = struct
+      type t = pred [@@deriving compare, sexp_of]
+    end
+
+    include T
+    include Comparable.Make (T)
+  end in
+  let schema = Set.of_list (module Name.Compare_no_type) schema in
+  let empty = Set.empty (module M) in
+  let singleton = Set.singleton (module M) in
+  let visitor =
+    object
+      inherit [_] reduce as super
+
+      inherit [_] Util.set_monoid (module M)
+
+      method! visit_Name () n =
+        if Set.mem schema n then empty else singleton (Name n)
+
+      method! visit_Int () x = singleton (Int x)
+
+      method! visit_Fixed () x = singleton (Fixed x)
+
+      method! visit_Date () x = singleton (Date x)
+
+      method! visit_Bool () x = singleton (Bool x)
+
+      method! visit_String () x = singleton (String x)
+
+      method! visit_Null () = singleton Null
+
+      method! visit_As_pred () args =
+        let p, _ = args in
+        let ps = super#visit_As_pred () args in
+        if Set.mem ps p then Set.add ps (As_pred args) else ps
+
+      method! visit_Substring () p1 p2 p3 =
+        let ps = super#visit_Substring () p1 p2 p3 in
+        if Set.mem ps p1 && Set.mem ps p2 && Set.mem ps p3 then
+          Set.add ps (Substring (p1, p2, p3))
+        else ps
+
+      method! visit_First () r =
+        let free = Meta.(find_exn r free) in
+        if Set.is_empty (Set.inter free schema) then singleton (First r) else empty
+
+      method! visit_Exists () r =
+        let free = Meta.(find_exn r free) in
+        if Set.is_empty (Set.inter free schema) then singleton (Exists r) else empty
+
+      method! visit_If () p1 p2 p3 =
+        let ps = super#visit_If () p1 p2 p3 in
+        if Set.mem ps p1 && Set.mem ps p2 && Set.mem ps p3 then
+          Set.add ps (If (p1, p2, p3))
+        else ps
+
+      method! visit_Binop () args =
+        let ps = super#visit_Binop () args in
+        let _, p1, p2 = args in
+        if Set.mem ps p1 && Set.mem ps p2 then Set.add ps (Binop args) else ps
+
+      method! visit_Unop () args =
+        let ps = super#visit_Unop () args in
+        let _, p = args in
+        if Set.mem ps p then Set.add ps (Unop args) else ps
+    end
+  in
+  visitor#visit_pred () p |> Set.to_list
+
+(* let annotate_queries r =
+ *   let rec annotate ctx r =
+ *     match r.node with
+ *     | Select (_, r') | Filter (_, r') |GroupBy (_, _, r')|OrderBy {rel=r'; _}|Dedup r' |As (_, r') -> annotate ctx r'
+ *     | Join { r1; r2; _ } -> annotate ctx r1; annotate ctx r2
+ *     |Scan _|AEmpty -> ()
+ *     |AScalar _ -> Meta.(set_m )
+ *     |AList (_, _) |AHashIdx _ |AOrderedIdx _
+ *     |ATuple _ *)
