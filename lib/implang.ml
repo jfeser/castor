@@ -340,12 +340,13 @@ module Builder = struct
     build_assign e var b ; var
 
   let build_count_loop c f b =
+    let ctr = build_defn "i" (Int 0) b in
     let count = build_defn "count" c b in
     build_loop
-      Infix.(count > int 0)
+      Infix.(ctr < count)
       (fun b ->
         f b ;
-        build_assign Infix.(count - int 1) count b )
+        build_assign Infix.(ctr + int 1) ctr b )
       b
 
   let build_foreach ?count ?header ?footer ?persistent iter_ args body b =

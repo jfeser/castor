@@ -47,75 +47,83 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
     {|
     // Locals:
     // cstart18 : Int[nonnull] (persists=true)
-    // pcount16 : Int[nonnull] (persists=true)
+    // cstart21 : Int[nonnull] (persists=true)
+    // cstart16 : Int[nonnull] (persists=true)
     // cstart12 : Int[nonnull] (persists=true)
-    // pcount11 : Int[nonnull] (persists=true)
+    // cstart22 : Int[nonnull] (persists=true)
     // cstart17 : Int[nonnull] (persists=true)
+    // count14 : Int[nonnull] (persists=true)
     // cstart15 : Int[nonnull] (persists=true)
-    // cstart13 : Int[nonnull] (persists=true)
-    // cstart10 : Int[nonnull] (persists=true)
-    // cstart14 : Int[nonnull] (persists=true)
+    // count20 : Int[nonnull] (persists=true)
+    // i13 : Int[nonnull] (persists=true)
+    // i19 : Int[nonnull] (persists=true)
     fun printer () : Void {
-        cstart10 = 1;
-        pcount11 = 3;
-        loop (0 < pcount11) {
-            cstart12 = cstart10 + 1;
-            cstart13 = cstart12 + 1;
-            cstart14 = cstart13 + 1;
-            cstart15 = cstart14 + 1 + 1;
-            pcount16 = buf[cstart14 : 1];
-            loop (0 < pcount16) {
-                cstart17 = cstart15;
-                cstart18 = cstart17 + 1;
-                if (buf[cstart17 : 1] = id_c && buf[cstart12 : 1] = id_p) {
+        cstart12 = 1;
+        i13 = 0;
+        count14 = 3;
+        loop (i13 < count14) {
+            cstart15 = cstart12 + 1;
+            cstart16 = cstart15 + 1;
+            cstart17 = cstart16 + 1;
+            cstart18 = cstart17 + 1 + 1;
+            i19 = 0;
+            count20 = buf[cstart17 : 1];
+            loop (i19 < count20) {
+                cstart21 = cstart18;
+                cstart22 = cstart21 + 1;
+                if (buf[cstart21 : 1] = id_c && buf[cstart15 : 1] = id_p) {
                     print(Tuple[Int[nonnull], Int[nonnull], Int[nonnull],
                     Int[nonnull]],
-                    (buf[cstart12 : 1], buf[cstart13 : 1], buf[cstart17 : 1],
-                     buf[cstart18 : 1]));
+                    (buf[cstart15 : 1], buf[cstart16 : 1], buf[cstart21 : 1],
+                     buf[cstart22 : 1]));
                 } else {
 
                 }
-                cstart15 = cstart15 + 2;
-                pcount16 = pcount16 - 1;
+                cstart18 = cstart18 + 2;
+                i19 = i19 + 1;
             }
-            cstart10 = cstart10 + buf[cstart10 : 1];
-            pcount11 = pcount11 - 1;
+            cstart12 = cstart12 + buf[cstart12 : 1];
+            i13 = i13 + 1;
         }
     }
     // Locals:
-    // cstart9 : Int[nonnull] (persists=true)
-    // pcount7 : Int[nonnull] (persists=true)
-    // pcount2 : Int[nonnull] (persists=true)
-    // cstart8 : Int[nonnull] (persists=true)
+    // cstart7 : Int[nonnull] (persists=true)
+    // count9 : Int[nonnull] (persists=true)
+    // i2 : Int[nonnull] (persists=true)
+    // i8 : Int[nonnull] (persists=true)
+    // cstart11 : Int[nonnull] (persists=true)
     // cstart1 : Int[nonnull] (persists=true)
     // c0 : Int[nonnull] (persists=true)
     // cstart4 : Int[nonnull] (persists=true)
-    // cstart3 : Int[nonnull] (persists=true)
+    // count3 : Int[nonnull] (persists=true)
+    // cstart10 : Int[nonnull] (persists=true)
     // cstart6 : Int[nonnull] (persists=true)
     // cstart5 : Int[nonnull] (persists=true)
     fun counter () : Int[nonnull] {
         c0 = 0;
         cstart1 = 1;
-        pcount2 = 3;
-        loop (0 < pcount2) {
-            cstart3 = cstart1 + 1;
-            cstart4 = cstart3 + 1;
+        i2 = 0;
+        count3 = 3;
+        loop (i2 < count3) {
+            cstart4 = cstart1 + 1;
             cstart5 = cstart4 + 1;
-            cstart6 = cstart5 + 1 + 1;
-            pcount7 = buf[cstart5 : 1];
-            loop (0 < pcount7) {
-                cstart8 = cstart6;
-                cstart9 = cstart8 + 1;
-                if (buf[cstart8 : 1] = id_c && buf[cstart3 : 1] = id_p) {
+            cstart6 = cstart5 + 1;
+            cstart7 = cstart6 + 1 + 1;
+            i8 = 0;
+            count9 = buf[cstart6 : 1];
+            loop (i8 < count9) {
+                cstart10 = cstart7;
+                cstart11 = cstart10 + 1;
+                if (buf[cstart10 : 1] = id_c && buf[cstart4 : 1] = id_p) {
                     c0 = c0 + 1;
                 } else {
 
                 }
-                cstart6 = cstart6 + 2;
-                pcount7 = pcount7 - 1;
+                cstart7 = cstart7 + 2;
+                i8 = i8 + 1;
             }
             cstart1 = cstart1 + buf[cstart1 : 1];
-            pcount2 = pcount2 - 1;
+            i2 = i2 + 1;
         }
         return c0;
     } |}]

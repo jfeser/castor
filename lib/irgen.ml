@@ -412,14 +412,12 @@ struct
     let start = Ctx.find_exn ctx (Name.create "start") b in
     let cstart = build_defn "cstart" (Header.make_position hdr "value" start) b in
     let callee_ctx = Ctx.bind ctx "start" Type.PrimType.int_t cstart in
-    let pcount = build_defn "pcount" (Header.make_access hdr "count" start) b in
-    build_loop
-      Infix.(pcount > int 0)
+    build_count_loop
+      (Header.make_access hdr "count" start)
       (fun b ->
         let clen = len cstart child_type in
         scan callee_ctx b child_layout child_type cb ;
-        build_assign Infix.(cstart + clen) cstart b ;
-        build_assign Infix.(pcount - int 1) pcount b )
+        build_assign Infix.(cstart + clen) cstart b )
       b
 
   and scan_hash_idx ctx b r t cb =
