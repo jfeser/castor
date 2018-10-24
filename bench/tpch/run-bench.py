@@ -253,7 +253,7 @@ BENCHMARKS = [
     },
     {
         "name": "12",
-        "query": ["12"],
+        "query": ["12-gold"],
         "params": [
             ("param1:string", gen_str('MAIL')),
             ("param2:string", gen_str('SHIP')),

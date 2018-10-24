@@ -1,0 +1,1 @@
+-db tpch -p param1:string -p param2:string -p param3:date  bench/tpch/12.txt -t hoist-filter,elim-groupby-filter,push-orderby,split-filter,split-filter,split-filter,hoist-filter:2,hoist-filter:3,hoist-filter:4,elim-cmp-filter,push-select,project,row-store:7
