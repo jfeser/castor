@@ -164,7 +164,7 @@ struct
     | AScalar r', FixedT t' -> scan_fixed ctx b r' t' cb
     | AScalar r', BoolT t' -> scan_bool ctx b r' t' cb
     | AScalar r', StringT t' -> scan_string ctx b r' t' cb
-    | AEmpty, EmptyT -> scan_empty ctx b () () cb
+    | _, EmptyT -> scan_empty ctx b () () cb
     | AScalar r', NullT -> scan_null ctx b r' () cb
     | ATuple r', TupleT t' -> scan_tuple ctx b r' t' cb
     | AList r', ListT t' -> scan_list ctx b r' t' cb
@@ -174,7 +174,9 @@ struct
     | Select r', FuncT t' -> scan_select ctx b r' t' cb
     | (Join _ | GroupBy _ | OrderBy _ | Dedup _ | Scan _ | As _), _ ->
         Error.create "Unsupported at runtime." r [%sexp_of: A.t] |> Error.raise
-    | _ -> Error.create "Not functions." r [%sexp_of: A.t] |> Error.raise
+    | _ ->
+        Error.create "Mismatched type." (r, t) [%sexp_of: A.t * Type.t]
+        |> Error.raise
 
   and gen_pred ctx pred b =
     let open Builder in
