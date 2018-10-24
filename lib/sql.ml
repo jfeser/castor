@@ -53,11 +53,6 @@ let rec pred_to_sql = function
       | Div -> sprintf "%s / %s" s1 s2
       | Mod -> sprintf "%s %% %s" s1 s2
       | Strpos -> sprintf "strpos(%s, %s)" s1 s2 )
-  | Count -> "count(*)"
-  | Sum n -> sprintf "sum(%s)" (pred_to_sql n)
-  | Avg n -> sprintf "avg(%s)" (pred_to_sql n)
-  | Min n -> sprintf "min(%s)" (pred_to_sql n)
-  | Max n -> sprintf "max(%s)" (pred_to_sql n)
   | If (p1, p2, p3) ->
       sprintf "case when %s then %s else %s end" (pred_to_sql p1) (pred_to_sql p2)
         (pred_to_sql p3)
@@ -70,6 +65,19 @@ let rec pred_to_sql = function
   | Substring (p1, p2, p3) ->
       sprintf "substring(%s from %s for %s)" (pred_to_sql p1) (pred_to_sql p2)
         (pred_to_sql p3)
+  | p -> Error.create "Unexpected aggregate." p [%sexp_of: pred] |> Error.raise
+
+and agg_to_sql = function
+  | Count -> "count(*)"
+  | Sum n -> sprintf "sum(%s)" (pred_to_sql n)
+  | Avg n -> sprintf "avg(%s)" (pred_to_sql n)
+  | Min n -> sprintf "min(%s)" (pred_to_sql n)
+  | Max n -> sprintf "max(%s)" (pred_to_sql n)
+  | As_pred (p, n) -> sprintf "%s as %s" (agg_to_sql p) n
+  | p -> (
+    match pred_to_name p with
+    | Some n -> sprintf "min(%s) as %s" (pred_to_sql p) n.name
+    | None -> sprintf "null" )
 
 and ralgebra_to_sql_helper r =
   let rec f ({node; _} as r) =
@@ -87,7 +95,10 @@ and ralgebra_to_sql_helper r =
           List.map fs ~f:(subst_pred ctx)
         in
         let fields_str =
-          fields |> List.map ~f:pred_to_sql |> String.concat ~sep:", "
+          let field_to_sql =
+            match select_kind fs with `Agg -> agg_to_sql | `Scalar -> pred_to_sql
+          in
+          fields |> List.map ~f:field_to_sql |> String.concat ~sep:", "
         in
         let new_schema = List.map fields ~f:pred_to_schema in
         let new_query = sprintf "select %s from %s" fields_str sql in
