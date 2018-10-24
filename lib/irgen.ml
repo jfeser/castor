@@ -333,6 +333,7 @@ struct
       in
       List.rev ret
     in
+    debug_print "scanning crosstuple" (Int 0) b ;
     make_loops ctx [] child_layouts child_types child_starts b
 
   and scan_ziptuple ctx b r t cb =
@@ -412,6 +413,7 @@ struct
     let start = Ctx.find_exn ctx (Name.create "start") b in
     let cstart = build_defn "cstart" (Header.make_position hdr "value" start) b in
     let callee_ctx = Ctx.bind ctx "start" Type.PrimType.int_t cstart in
+    debug_print "scanning list" (Int 0) b ;
     build_count_loop
       (Header.make_access hdr "count" start)
       (fun b ->
@@ -451,9 +453,11 @@ struct
       | [x] -> build_hash hash_data_start x b
       | xs -> build_hash hash_data_start (Tuple xs) b
     in
+    debug_print "hashing key" (Tuple lookup_expr) b ;
     let hash_key = Infix.(hash_key * int 8) in
     (* Get a pointer to the value. *)
     let value_ptr = Infix.(Slice (mapping_start + hash_key, 8)) in
+    debug_print "value pointer is" value_ptr b ;
     (* If the pointer is null, then the key is not present. *)
     build_if
       ~cond:
@@ -461,8 +465,9 @@ struct
           hash_key < int 0
           || hash_key >= mapping_len
           || build_eq value_ptr (int 0x0) b)
-      ~then_:(fun _ -> ())
+      ~then_:(fun b -> debug_print "no values found" value_ptr b)
       ~else_:(fun b ->
+        debug_print "found values" value_ptr b ;
         build_assign value_ptr kstart b ;
         scan key_ctx b key_layout key_type (fun b tup ->
             build_assign (Tuple tup) key_tuple b ) ;
@@ -538,7 +543,7 @@ struct
           ~then_:(fun b ->
             debug_print "filter selected" (Tuple tup) b ;
             cb b tup )
-          ~else_:(fun _ -> ())
+          ~else_:(fun b -> debug_print "filter rejected" (Tuple tup) b)
           b )
 
   and agg_init ctx p b =
