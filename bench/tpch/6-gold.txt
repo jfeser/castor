@@ -1,6 +1,6 @@
 select([sum((lineitem.l_extendedprice * lineitem.l_discount)) as revenue],
-  filter(((lineitem.l_discount > (param1 - 0.01)) &&
-         ((lineitem.l_discount < (param1 + 0.01)) &&
+  filter(((lineitem.l_discount >= (param1 - 0.01)) &&
+         ((lineitem.l_discount <= (param1 + 0.01001)) &&
          (lineitem.l_quantity < param2))),
     aorderedidx(dedup(select([lineitem.l_shipdate as k0], lineitem)),
       alist(filter((k0 = lineitem.l_shipdate), lineitem),
