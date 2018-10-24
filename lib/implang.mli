@@ -14,6 +14,7 @@ type op = Implang0.op =
   | FlDiv
   | IntLt
   | FlLt
+  | FlLe
   | FlEq
   | IntEq
   | StrEq

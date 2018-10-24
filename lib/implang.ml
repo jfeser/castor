@@ -32,6 +32,7 @@ let rec pp_expr : Format.formatter -> expr -> unit =
     | IntDiv | FlDiv -> "/"
     | Mod -> "%"
     | IntLt | FlLt -> "<"
+    | FlLe -> "<="
     | And -> "&&"
     | Not -> "not"
     | IntEq | StrEq | FlEq -> "="
@@ -462,9 +463,32 @@ module Builder = struct
           [%sexp_of: expr * expr * t * t * t Hashtbl.M(String).t]
         |> Error.raise
 
-  let build_le x y b = Infix.(build_lt x y b || build_eq x y b)
+  let rec build_le x y b =
+    let rec tuple_le i l =
+      if i = l - 1 then Infix.(build_le (index x i) (index y i) b)
+      else
+        Infix.(
+          build_le (index x i) (index y i) b
+          || (build_eq (index x i) (index y i) b && tuple_le Int.(i + 1) l))
+    in
+    let t1 = type_of x b in
+    let t2 = type_of y b in
+    let open Type.PrimType in
+    match (t1, t2) with
+    | IntT {nullable= false}, IntT {nullable= false} ->
+        Infix.(build_lt x y b || build_eq x y b)
+    | FixedT {nullable= false}, FixedT {nullable= false} ->
+        Binop {op= FlLe; arg1= x; arg2= y}
+    | IntT {nullable= false}, FixedT {nullable= false} -> build_le (int2fl x) y b
+    | FixedT {nullable= false}, IntT {nullable= false} -> build_le x (int2fl y) b
+    | TupleT ts1, TupleT ts2 when List.length ts1 = List.length ts2 ->
+        tuple_le 0 (List.length ts1)
+    | _ ->
+        Error.create "Incomparable types." (x, y, t1, t2, b.type_ctx)
+          [%sexp_of: expr * expr * t * t * t Hashtbl.M(String).t]
+        |> Error.raise
 
-  let build_gt x y b = Infix.((not (build_lt x y b)) && not (build_eq x y b))
+  let build_gt x y b = Infix.(not (build_le x y b))
 
   let build_ge x y b = Infix.(not (build_lt x y b))
 
