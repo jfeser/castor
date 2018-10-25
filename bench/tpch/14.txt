@@ -21,8 +21,8 @@
 
 select([((100.0 *
          sum(if (strpos(p_type, "PROMO") = 0) then (l_extendedprice *
-                                                   (1 - l_discount)) else 0))
-        / sum((l_extendedprice * (1 - l_discount))) as promo_revenue)],
+                                                   (1 - l_discount)) else 0.0))
+        / sum((l_extendedprice * (1 - l_discount)))) as promo_revenue],
   join((l_partkey = p_partkey),
     filter(((l_shipdate >= param1) && (l_shipdate < (param1 + month(1)))),
       lineitem),
