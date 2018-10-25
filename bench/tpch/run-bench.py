@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-'''Usage: run-bench.py [options] QUERY...
+'''Usage: run-bench.py [options] [QUERY...]
 
 Options:
   -h --help   Show this screen.
@@ -19,7 +19,7 @@ import shutil
 import json
 import random
 import shlex
-from subprocess import call, check_call, check_output
+import subprocess
 from datetime import date
 import sys
 
@@ -270,7 +270,7 @@ BENCHMARKS = [
     },
     {
         "name": "14",
-        "query": [],
+        "query": ['14-gold'],
         "params": [
             ("param1:date", gen_fixed_date(date(1995,9,1))),
         ],
@@ -324,14 +324,19 @@ csv_file = open(OUT_FILE, 'w')
 csv_writer = csv.writer(csv_file)
 csv_writer.writerow(['name', 'time'])
 
-def should_run(query_name):
-    return len(sys.argv) <= 1 or query_name in sys.argv
+def call(cmd_args, *args, **kwargs):
+    log.debug(' '.join(cmd_args))
+    return subprocess.call(cmd_args, *args, **kwargs)
+
+def check_call(cmd_args, *args, **kwargs):
+    log.debug(' '.join(cmd_args))
+    return subprocess.check_call(cmd_args, *args, **kwargs)
+
+def check_output(cmd_args, *args, **kwargs):
+    log.debug(' '.join(cmd_args))
+    return subprocess.check_output(cmd_args, *args, **kwargs)
 
 def run_bench(name, query_name, params):
-    if not should_run(query_name):
-        log.debug('Skipping %s.', query_name)
-        return
-
     query = rpath(query_name + '.txt')
     sql = rpath(name + '.sql')
 
@@ -341,7 +346,9 @@ def run_bench(name, query_name, params):
         shutil.rmtree(benchd)
     os.mkdir(benchd)
 
-    param_types = ["-p %s" % p[0] for p in params]
+    param_types = []
+    for p in params:
+        param_types += ['-p', p[0]]
 
     compile_cmd_parts = [
         COMPILE_EXE,
@@ -353,23 +360,16 @@ def run_bench(name, query_name, params):
         "-port",
         PORT,
     ] + param_types
-    compile_cmd = " ".join(compile_cmd_parts)
 
     # Build, saving the log.
     if not SQL_ONLY:
-        log.debug(compile_cmd)
         try:
             compile_log = benchd + "/compile.log"
             query_file = benchd + "/query"
-            code = os.system('cp %s %s' % (query, query_file))
-            if code != 0:
-                raise Exception("Nonzero exit code %d" % code)
-            code = os.system("%s %s > %s 2>&1" % (compile_cmd, query_file, compile_log))
-            if code != 0:
-                raise Exception("Nonzero exit code %d" % code)
-            log.info("Done building %s.", query_name)
-        except KeyboardInterrupt:
-            exit()
+            check_call(['cp', query, query_file])
+            print(os.getcwd())
+            with open(compile_log, 'w') as cl:
+                check_call(compile_cmd_parts + [query_file], stdout=cl, stderr=cl)
         except Exception:
             log.exception("Compile failed.")
             csv_writer.writerow([query_name, None])
@@ -421,8 +421,6 @@ def run_bench(name, query_name, params):
             log.debug("Running %s in %s.", cmd_str, os.getcwd())
             with open("results.csv", "w") as out:
                 call(cmd, stdout=out)
-        except KeyboardInterrupt:
-            exit()
         except Exception:
             log.exception("Running %s failed.", cmd)
 
@@ -433,9 +431,13 @@ DB = args['-d']
 PORT = args['-p']
 SQL_ONLY = args['--sql-only']
 
+def should_run(query_name):
+    return len(args['QUERY']) == 0 or query_name in args['QUERY']
+
 # Run benchmarks
 for bench in BENCHMARKS:
     for query in bench['query']:
-        run_bench(bench['name'], query, bench['params'])
+        if should_run(query):
+            run_bench(bench['name'], query, bench['params'])
 
 logging.shutdown()
