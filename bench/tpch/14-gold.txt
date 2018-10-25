@@ -1,0 +1,14 @@
+select([((100.0 * sum(agg1)) / sum(agg2)) as promo_revenue],
+  aorderedidx(dedup(
+                select([lineitem.l_shipdate as k0],
+                  join((lineitem.l_partkey = part.p_partkey), lineitem, part))),
+    alist(select([sum(if (strpos(part.p_type, "PROMO") = 0) then (lineitem.l_extendedprice
+                                                                 *
+                                                                 (1 -
+                                                                 lineitem.l_discount)) else 0.0) as agg1,
+                  sum((lineitem.l_extendedprice * (1 - lineitem.l_discount))) as agg2],
+            filter((k0 = lineitem.l_shipdate),
+              join((lineitem.l_partkey = part.p_partkey), lineitem, part))),
+      atuple([ascalar(agg1), ascalar(agg2)], cross)),
+    param1,
+    (param1 + month(1))))

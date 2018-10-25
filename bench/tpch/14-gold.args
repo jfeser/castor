@@ -1,0 +1,1 @@
+-db tpch -p param1:date bench/tpch/14.txt -t hoist-filter,elim-cmp-filter,push-select,project,row-store:4
