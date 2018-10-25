@@ -1126,12 +1126,12 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let sb = SB.create () in
     (* Generate global constant for buffer. *)
     let buf_t = pointer_type (array_type int_type (buffer_len / 8)) in
-    SB.build_global sb "buf" buf_t |> ignore ;
+    SB.build_global sb "buf" buf_t ;
     let typed_params = List.map params ~f:(fun n -> (n.name, Name.type_exn n)) in
     (* Generate global constants for parameters. *)
     List.iter typed_params ~f:(fun (n, t) ->
         let lltype = codegen_type t in
-        SB.build_global sb n lltype |> ignore ) ;
+        SB.build_global sb n lltype ) ;
     (* Generate code for the iterators *)
     let ictxs =
       List.map ir_iters ~f:(fun func ->
