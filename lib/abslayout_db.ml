@@ -397,15 +397,15 @@ module Make (Eval : Eval.S) = struct
     let rec resolve_pred ctx =
       let visitor =
         object
-          inherit [_] map
+          inherit [_] endo
 
-          method! visit_Name ctx n = Name (resolve_name ctx n)
+          method! visit_Name ctx _ n = Name (resolve_name ctx n)
 
-          method! visit_Exists ctx r =
+          method! visit_Exists ctx _ r =
             let r', _ = resolve ctx r in
             Exists r'
 
-          method! visit_First ctx r =
+          method! visit_First ctx _ r =
             let r', _ = resolve ctx r in
             First r'
         end
