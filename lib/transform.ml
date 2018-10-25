@@ -475,6 +475,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     { name= "project"
     ; f=
         (fun r ->
+          let r = M.resolve ~params:Config.params r in
           let r = M.annotate_schema r in
           [project r] ) }
 
