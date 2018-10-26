@@ -13,6 +13,24 @@
 
 #define USAGE "Usage: perf.exe (-p|c|t) DB_FILE PARAM...\n"
 
+int suppress_stdout() {
+  fflush(stdout);
+
+  int ret = dup(1);
+  int nullfd = open("/dev/null", O_WRONLY);
+  // check nullfd for error omitted
+  dup2(nullfd, 1);
+  close(nullfd);
+
+  return ret;
+}
+
+void resume_stdout(int fd) {
+  fflush(stdout);
+  dup2(fd, 1);
+  close(fd);
+}
+
 int main(int argc, char **argv) {
   int fd, len, print_flag = 0, count_flag = 0, run_time = 0, c;
   char *fn = NULL;
@@ -78,20 +96,24 @@ int main(int argc, char **argv) {
   /*$1*/
 
   if (run_time > 0) {
+    int fd = suppress_stdout();
+
     /* Run once to figure out the number of runs needed. */
     clock_t start = clock();
-    counter(params);
+    printer(params);
     clock_t stop = clock();
     int runs = (run_time * CLOCKS_PER_SEC) / (stop - start);
     runs = runs > 0 ? runs : 1;
     if (runs > 1) {
       start = clock();
       for (int i = 0; i < runs; i++) {
-        counter(params);
+        printer(params);
       }
       stop = clock();
     }
     int msec = (stop - start) * 1000 / CLOCKS_PER_SEC;
+
+    resume_stdout(fd);
     printf("%fms (%f qps)\n", msec / (float)runs, ((float)runs / msec) * 1000);
   } else if (count_flag) {
     printf("%ld\n", counter(params));
