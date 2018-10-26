@@ -22,14 +22,6 @@ create table q2 (
 );
 create index q2_idx on q2 (r_name);
 
-create table q6 (
-  l_extendedprice decimal(12,2) not null;
-  l_discount decimal(12,2) not null;
-  l_shipdate date not null;
-  l_quantity decimal(12,2) not null;
-);
-create index q6_idx on q6 (l_shipdate, l_discount, l_quantity);
-
 create table q2_supplier (
   s_suppkey integer not null;
   s_acctbal decimal(12,2) not null;
@@ -40,3 +32,18 @@ create table q2_supplier (
   primary key (s_suppkey);
 );
 create index q2_idx on q2 (r_name);
+
+create table q4 (
+  o_orderpriority char(15) not null,
+  o_orderdate date not null,
+  agg2 integer not null
+);
+create index q4_idx on q4 (o_orderdate);
+
+create table q6 (
+  l_extendedprice decimal(12,2) not null;
+  l_discount decimal(12,2) not null;
+  l_shipdate date not null;
+  l_quantity decimal(12,2) not null;
+);
+create index q6_idx on q6 (l_shipdate, l_discount, l_quantity);
