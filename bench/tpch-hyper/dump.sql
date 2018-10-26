@@ -47,9 +47,8 @@ create temp view q2_supplier as (select
 	       s_name,
 	       s_address,
 	       s_phone,
-         s_comment,
-         from
-	           supplier);
+         s_comment
+         from supplier);
 \copy (select * from q2_supplier) to 'q2_supplier.tbl' delimiter '|';
 
 create temp view q3 as (
