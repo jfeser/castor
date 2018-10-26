@@ -1,1 +1,3 @@
 *.tbl
+*.dump
+*.log
