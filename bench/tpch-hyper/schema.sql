@@ -33,6 +33,16 @@ create table q2_supplier (
 );
 create index q2_idx on q2 (r_name);
 
+create table q3 (
+  l_orderkey integer not null,
+  o_orderdate date not null,
+  o_shippriority integer not null,
+  l_shipdate date not null,
+  c_mktsegment char(10) not null,
+  l_extendedprice decimal(12,2) not null,
+  l_discount decimal(12,2) not null
+);
+
 create table q4 (
   o_orderpriority char(15) not null,
   o_orderdate date not null,

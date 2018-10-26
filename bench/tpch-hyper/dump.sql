@@ -52,6 +52,15 @@ create temp view q2_supplier as (select
 	           supplier);
 \copy (select * from q2_supplier) to 'q2_supplier.tbl' delimiter '|';
 
+create temp view q3 as (
+  select
+    l_orderkey, o_orderdate, o_shippriority,
+    l_shipdate, c_mktsegment, l_extendedprice, l_discount
+    from lineitem, orders, customer
+   where c_custkey = o_custkey and l_orderkey = o_orderkey
+);
+\copy (select * from q3) to 'q3.tbl' delimiter '|';
+
 create temp view q4 as (
   select o_orderpriority, o_orderdate, count(*) as agg2
     from orders
