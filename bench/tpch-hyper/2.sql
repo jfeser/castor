@@ -8,10 +8,9 @@ select
 	s_phone,
 	s_comment
   from
-      q2,
-	  q2_supplier
+    q2, q2_supplier
  where
-  q2.s_suppkey = supplier.s_suppkey
+  q2.s_suppkey = q2_supplier.s_suppkey
 	and p_size = 15
 	and p_type like '%BRASS'
 	and r_name = 'EUROPE'
