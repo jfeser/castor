@@ -1304,7 +1304,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     in
     let cflags = ["-g"; "-lcmph"] in
     let cflags =
-      (if gprof then ["-pg"] else []) @ (if debug then ["-O0"] else []) @ cflags
+      (if gprof then ["-pg"] else [])
+      @ (if debug then ["-O0"] else ["-O3"])
+      @ cflags
     in
     if debug then
       Util.command_exn ~quiet:()
