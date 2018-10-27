@@ -5,8 +5,6 @@ module A = Abslayout
 
 module Config = struct
   module type S = sig
-    include Eval.Config.S
-
     val check_transforms : bool
 
     val params : Set.M(Name.Compare_no_type).t

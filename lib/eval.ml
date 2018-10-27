@@ -7,7 +7,7 @@ module type S = Eval_intf.S
 
 module Config = struct
   module type S = sig
-    val conn : Postgresql.connection
+    val conn : Db.t
   end
 
   module type S_mock = sig
@@ -101,8 +101,8 @@ module Make (Config : Config.S) : S = struct
 
   let eval_relation r =
     let query = "select * from $0" in
-    exec ~verbose:false Config.conn query ~params:[r.Relation.rname]
-    |> Seq.of_list
+    exec Config.conn query ~params:[r.Relation.rname]
+    |> result_to_strings |> Seq.of_list
     |> Seq.map ~f:(fun vs ->
            let m_values =
              List.map2 vs r.fields ~f:(fun v f ->

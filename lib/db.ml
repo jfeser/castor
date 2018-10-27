@@ -2,47 +2,33 @@ open Base
 open Printf
 module Pervasives = Caml.Pervasives
 open Collections
+module Psql = Postgresql
 
 let () =
   Caml.Printexc.register_printer (function
     | Postgresql.Error e -> Some (Postgresql.string_of_error e)
     | _ -> None )
 
-let subst_params : string list -> string -> string =
- fun params query ->
+type t = {db: string; port: string option; conn: Psql.connection}
+
+let create ?port db = {db; port; conn= new Psql.connection ~dbname:db ?port ()}
+
+let subst_params params query =
   match params with
   | [] -> query
   | _ ->
       List.foldi params ~init:query ~f:(fun i q v ->
           String.substr_replace_all ~pattern:(Printf.sprintf "$%d" i) ~with_:v q )
 
-(** Process postgres errors for queries which do not need to retry. *)
-let process_errors query r =
-  match (r#status : Postgresql.result_status) with
-  | Fatal_error | Nonfatal_error ->
-      let err = r#error in
-      let msg = sprintf "Postgres error: %s" err in
-      Logs.err (fun m -> m "%s" msg) ;
-      Error.of_string msg
-      |> fun e -> Error.tag_arg e "query" query [%sexp_of: string] |> Error.raise
-  | _ -> r
-
-let rec exec :
-       ?max_retries:int
-    -> ?verbose:bool
-    -> ?params:string list
-    -> Postgresql.connection
-    -> string
-    -> string list list =
- fun ?(max_retries = 0) ?(verbose = true) ?(params = []) conn query ->
+let rec exec ?(max_retries = 0) ?(params = []) db query =
   let query = subst_params params query in
-  Logs.debug (fun m -> m "Executing query: %s" query) ;
-  let r = conn#exec query in
+  Logs.debug (fun m -> m "Executing query (retries=%d): %s" max_retries query) ;
+  let r = (db.conn)#exec query in
+  let fail r =
+    Error.(
+      create "Postgres error." (r#error, query) [%sexp_of: string * string] |> raise)
+  in
   match r#status with
-  | Fatal_error ->
-      Error.create "Postgres fatal error." (r#error, query)
-        [%sexp_of: string * string]
-      |> Error.raise
   | Nonfatal_error -> (
     match r#error_code with
     | SERIALIZATION_FAILURE | DEADLOCK_DETECTED ->
@@ -51,33 +37,80 @@ let rec exec :
              https://www.postgresql.org/message-id/1368066680.60649.YahooMailNeo%40web162902.mail.bf1.yahoo.com
           *)
           max_retries > 0
-        then exec ~max_retries:(max_retries - 1) ~verbose conn query
-        else
-          Error.create "Transaction failed." query [%sexp_of: string] |> Error.raise
-    | e ->
-        Logs.warn (fun m ->
-            m "Postgres error (nonfatal): %s" (Postgresql.Error_code.to_string e) ) ;
-        [] )
-  | Tuples_ok -> r#get_all_lst
-  | Single_tuple ->
-      Logs.debug (fun m -> m "Returning single tuple.") ;
-      r#get_all_lst
-  | Bad_response ->
-      Error.create "Bad response." query [%sexp_of: string] |> Error.raise
-  | s ->
-      Logs.debug (fun m -> m "Returning nothing: %s" (Postgresql.result_status s)) ;
-      []
+        then exec ~max_retries:(max_retries - 1) db query
+        else fail r
+    | _ -> fail r )
+  | Single_tuple | Tuples_ok | Command_ok -> r
+  | _ -> fail r
 
-let exec1 ?verbose ?params conn query =
-  exec ?verbose ?params conn query
+let result_to_tuples (r : Psql.result) =
+  Seq.range 0 r#ntuples ~stop:`exclusive
+  |> Seq.unfold_with ~init:() ~f:(fun () tup_i ->
+         let tup =
+           List.init r#nfields ~f:(fun field_i ->
+               let value = r#getvalue tup_i field_i in
+               let type_ = r#ftype field_i in
+               let primval =
+                 match type_ with
+                 | Postgresql.BOOL -> (
+                   match value with
+                   | "t" -> Value.Bool true
+                   | "f" -> Bool false
+                   | _ -> failwith "Unknown boolean value." )
+                 | INT8 | INT2 | INT4 ->
+                     if String.(value = "") then Null else Int (Int.of_string value)
+                 | CHAR | TEXT | VARCHAR -> String value
+                 (* Blank padded character strings *)
+                 | BPCHAR -> String (String.strip value)
+                 | FLOAT4 | FLOAT8 | NUMERIC -> Fixed (Fixed_point.of_string value)
+                 | DATE -> Int (Date.of_string value |> Date.to_int)
+                 (* Time & date types *)
+                 | TIME | TIMESTAMP | TIMESTAMPTZ | INTERVAL | TIMETZ | ABSTIME
+                  |RELTIME
+                  |TINTERVAL
+                 (* Geometric types. *)
+                  |POINT | LSEG | PATH | BOX | POLYGON | LINE
+                  |CIRCLE
+                 (* Network types *)
+                  |MACADDR | INET
+                  |CIDR
+                 (* Other types*)
+                  |NAME | BYTEA | INT2VECTOR | JSON | CASH | ACLITEM | BIT
+                  |VARBIT | JSONB ->
+                     (* Store unknown values as strings. *)
+                     Logs.warn (fun m -> m "Unknown value: %s" value) ;
+                     String value
+                 | OID | OIDVECTOR | TID | XID | CID | REFCURSOR | REGPROC
+                  |REGPROCEDURE | REGOPER | REGOPERATOR | REGCLASS | REGTYPE ->
+                     failwith "Postgres internal type."
+                 | ANY | ANYARRAY | VOID | CSTRING | INTERNAL | LANGUAGE_HANDLER
+                  |RECORD | TRIGGER | OPAQUE | ANYELEMENT | UNKNOWN ->
+                     failwith "Pseudo type."
+               in
+               (r#fname field_i, primval) )
+           |> Map.of_alist_exn (module String)
+         in
+         Yield (tup, ()) )
+
+let result_to_strings (r : Psql.result) = r#get_all_lst
+
+let command_ok (r : Psql.result) =
+  match r#status with
+  | Psql.Command_ok -> ()
+  | _ ->
+      Error.(
+        create "Unexpected query response." r#error [%sexp_of: string] |> raise)
+
+let exec1 ?params conn query =
+  exec ?params conn query |> result_to_strings
   |> List.map ~f:(function
        | [x] -> x
        | t ->
            Error.create "Unexpected query results." t [%sexp_of: string list]
            |> Error.raise )
 
-let exec3 ?verbose ?params conn query =
-  exec ?verbose ?params conn query
+let exec3 ?params conn query =
+  exec ?params conn query |> result_to_strings
   |> List.map ~f:(function
        | [x; y; z] -> (x, y, z)
        | t ->
@@ -90,6 +123,8 @@ and relation_t = {rname: string; fields: field_t list}
 [@@deriving compare, hash, sexp]
 
 module Relation = struct
+  type db = t
+
   type t = relation_t = {rname: string; fields: field_t list}
   [@@deriving compare, hash, sexp]
 
@@ -140,82 +175,29 @@ module Field = struct
   [@@deriving compare, hash, sexp]
 end
 
-let result_to_tuples r =
-  Seq.range 0 r#ntuples ~stop:`exclusive
-  |> Seq.unfold_with ~init:() ~f:(fun () tup_i ->
-         let tup =
-           List.init r#nfields ~f:(fun field_i ->
-               let value = r#getvalue tup_i field_i in
-               let type_ = r#ftype field_i in
-               let primval =
-                 match type_ with
-                 | Postgresql.BOOL -> (
-                   match value with
-                   | "t" -> Value.Bool true
-                   | "f" -> Bool false
-                   | _ -> failwith "Unknown boolean value." )
-                 | INT8 | INT2 | INT4 ->
-                     if String.(value = "") then Null else Int (Int.of_string value)
-                 | CHAR | TEXT | VARCHAR -> String value
-                 (* Blank padded character strings *)
-                 | BPCHAR -> String (String.strip value)
-                 | FLOAT4 | FLOAT8 | NUMERIC -> Fixed (Fixed_point.of_string value)
-                 | DATE -> Int (Date.of_string value |> Date.to_int)
-                 (* Time & date types *)
-                 | TIME | TIMESTAMP | TIMESTAMPTZ | INTERVAL | TIMETZ | ABSTIME
-                  |RELTIME
-                  |TINTERVAL
-                 (* Geometric types. *)
-                  |POINT | LSEG | PATH | BOX | POLYGON | LINE
-                  |CIRCLE
-                 (* Network types *)
-                  |MACADDR | INET
-                  |CIDR
-                 (* Other types*)
-                  |NAME | BYTEA | INT2VECTOR | JSON | CASH | ACLITEM | BIT
-                  |VARBIT | JSONB ->
-                     (* Store unknown values as strings. *)
-                     Logs.warn (fun m -> m "Unknown value: %s" value) ;
-                     String value
-                 | OID | OIDVECTOR | TID | XID | CID | REFCURSOR | REGPROC
-                  |REGPROCEDURE | REGOPER | REGOPERATOR | REGCLASS | REGTYPE ->
-                     failwith "Postgres internal type."
-                 | ANY | ANYARRAY | VOID | CSTRING | INTERNAL | LANGUAGE_HANDLER
-                  |RECORD | TRIGGER | OPAQUE | ANYELEMENT | UNKNOWN ->
-                     failwith "Pseudo type."
-               in
-               (r#fname field_i, primval) )
-           |> Map.of_alist_exn (module String)
-         in
-         Yield (tup, ()) )
-
-let exec_and_raise (conn : Postgresql.connection) query =
-  conn#exec query |> process_errors query
-
 let exec_cursor =
   let fresh = Fresh.create () in
-  fun ?(batch_size = 1000) ?(params = []) conn query ->
+  fun ?(batch_size = 100) ?(params = []) db query ->
     Logs.debug (fun m -> m "Running %s." query) ;
+    let db = create ?port:db.port db.db in
     let query = subst_params params query in
     let cur = Fresh.name fresh "cur%d" in
     let declare_query =
-      sprintf "declare %s scroll cursor with hold for %s;" cur query
+      sprintf "begin transaction; declare %s cursor for %s;" cur query
     in
     let fetch_query = sprintf "fetch %d from %s;" batch_size cur in
-    (* let close_query = sprintf "close %s;" cur in *)
-    exec_and_raise conn declare_query |> ignore ;
+    exec db declare_query |> command_ok ;
     let db_idx = ref 1 in
     let seq =
       Seq.unfold_step ~init:(`Not_done 1) ~f:(function
-        | `Done -> Done
+        | `Done -> (db.conn)#finish ; Done
         | `Not_done idx when idx <> !db_idx ->
-            Stdio.printf "moving cursor from %d to %d\n" !db_idx idx ;
-            let move_query = sprintf "move absolute %d %s;" idx cur in
-            exec_and_raise conn move_query |> ignore ;
-            db_idx := idx ;
-            Skip (`Not_done idx)
+            Error.(
+              create "Out of sync with underlying cursor." (idx, !db_idx)
+                [%sexp_of: int * int]
+              |> raise)
         | `Not_done idx ->
-            let r = exec_and_raise conn fetch_query in
+            let r = exec db fetch_query in
             let tups = result_to_tuples r in
             db_idx := !db_idx + r#ntuples ;
             let idx = idx + r#ntuples in
@@ -223,8 +205,4 @@ let exec_cursor =
             Yield (tups, state) )
       |> Seq.concat
     in
-    (* Caml.Gc.finalise (fun _ ->
-     *     printf "Deallocating cursor!\n";
-     *     conn#exec close_query |> process_errors |> ignore)
-     *   seq; *)
     seq
