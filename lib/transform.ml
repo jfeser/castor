@@ -135,10 +135,9 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
               |> List.fold_left ~init:(Bool true) ~f:(fun acc p ->
                      Binop (And, acc, p) )
             in
-            let key_layouts = List.map key_preds ~f:scalar in
             [ list
                 (as_ key_name (dedup (select key_preds r)))
-                (select ps (tuple (key_layouts @ [filter filter_pred r]) Cross)) ]
+                (select ps (filter filter_pred r)) ]
         | _ -> []) }
     |> run_everywhere
 
@@ -152,13 +151,6 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
             let new_key =
               List.map key ~f:(fun n -> sprintf "%s_%s" key_name (Name.to_var n))
             in
-            let ps =
-              let ctx =
-                List.map2_exn key new_key ~f:(fun n n' -> (n, Name (Name.create n')))
-                |> Map.of_alist_exn (module Name.Compare_no_type)
-              in
-              List.map ps ~f:(subst_pred ctx)
-            in
             let select_list =
               List.map2_exn key new_key ~f:(fun n n' -> As_pred (Name n, n'))
             in
@@ -167,14 +159,9 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
                   Binop (Eq, Name n, Name (Name.create n')) )
               |> List.fold_left1 ~f:(fun acc p -> Binop (And, acc, p))
             in
-            let key_layouts =
-              List.map new_key ~f:(fun n -> scalar (Name (Name.create n)))
-            in
             [ list
                 (dedup (select select_list r))
-                (select ps
-                   (tuple (key_layouts @ [filter p (filter filter_pred r)]) Cross))
-            ]
+                (select ps (filter p (filter filter_pred r))) ]
         | _ -> []) }
     |> run_everywhere
 
@@ -252,10 +239,6 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         let s = Hashtbl.find_exn eq_map n in
         let s' = Hashtbl.find_exn eq_map n' in
         Union_find.union s s' ) ;
-    Logs.debug (fun m -> m "%a" Sexp.pp_hum ([%sexp_of: A.t * A.t] (r1, r2))) ;
-    Logs.debug (fun m ->
-        m "Known equalities %a" Sexp.pp_hum ([%sexp_of: (Name.t * Name.t) list] eqs)
-    ) ;
     let exception No_key in
     try
       let new_key =
