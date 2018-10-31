@@ -23,10 +23,16 @@ void endswith_test(char *s1, char* s2) {
          s1, l1, s2, l2, endswith(s1, l1, s2, l2));
 }
 
+void extract_test(long date) {
+  printf("extract(%ld, year=%ld, month=%ld, day=%ld)\n",
+         date, extract_year(date), extract_month(date), extract_day(date));
+}
+
 int main() {
   strpos_test("testing", "in");
   strpos_test("tested", "in");
   endswith_test("STANDARD PLATED COPPER", "COPPER");
   endswith_test("SMALL BRUSHED BRASS", "BRASS");
   endswith_test("SMALL BRUSHED BRASS", "COPPER");
+  extract_test(8980);
 }

@@ -6,3 +6,4 @@ endswith(STANDARD PLATED COPPER, 22, COPPER, 6) = 1
 endswith(SMALL BRUSHED BRASS, 19, BRASS, 5) = 1
 0 13
 endswith(SMALL BRUSHED BRASS, 19, COPPER, 6) = 0
+extract(8980, year=1994, month=8, day=3)
