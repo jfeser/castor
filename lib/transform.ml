@@ -373,7 +373,10 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           let r = M.annotate_schema r in
           match r with
           | {node= Select (ps, {node= AHashIdx (r, r', m); _}); _} ->
-              [hash_idx' r (select ps r') m]
+              let outer_preds =
+                List.filter_map ps ~f:pred_to_name |> List.map ~f:(fun n -> Name n)
+              in
+              [select outer_preds (hash_idx' r (select ps r') m)]
           | {node= Select (ps, {node= AOrderedIdx (r, r', m); _}); _} ->
               let outer_aggs, inner_aggs = gen_concat_select_list ps r' in
               [select outer_aggs (ordered_idx r (select inner_aggs r') m)]
