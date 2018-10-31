@@ -10,6 +10,8 @@ Options:
 '''
 
 from docopt import docopt
+import multiprocessing
+from concurrent.futures import ThreadPoolExecutor
 import configparser
 import csv
 import logging
@@ -454,9 +456,10 @@ def should_run(query_name):
     return len(args['QUERY']) == 0 or query_name in args['QUERY']
 
 # Run benchmarks
-for bench in BENCHMARKS:
-    for query in bench['query']:
-        if should_run(query):
-            run_bench(bench['name'], query, bench['params'])
+with ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as exe:
+    for bench in BENCHMARKS:
+        for query in bench['query']:
+            if should_run(query):
+                exe.submit(run_bench, bench['name'], query, bench['params'])
 
 logging.shutdown()
