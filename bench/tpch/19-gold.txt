@@ -1,0 +1,49 @@
+select([sum((lineitem.l_extendedprice * (1 - lineitem.l_discount))) as revenue],
+  filter((((part.p_partkey = lineitem.l_partkey) &&
+          ((part.p_brand = param0) &&
+          (((part.p_container = "SM CASE") ||
+           ((part.p_container = "SM BOX") ||
+           ((part.p_container = "SM PACK") || (part.p_container = "SM PKG"))))
+          &&
+          ((lineitem.l_quantity >= param3) &&
+          ((lineitem.l_quantity <= (param3 + 10)) &&
+          ((part.p_size >= 1) &&
+          ((part.p_size <= 5) &&
+          (((lineitem.l_shipmode = "AIR") || (lineitem.l_shipmode = "AIR REG"))
+          && (lineitem.l_shipinstruct = "DELIVER IN PERSON"))))))))) ||
+         (((part.p_partkey = lineitem.l_partkey) &&
+          ((part.p_brand = param1) &&
+          (((part.p_container = "MED BAG") ||
+           ((part.p_container = "MED BOX") ||
+           ((part.p_container = "MED PKG") || (part.p_container = "MED PACK"))))
+          &&
+          ((lineitem.l_quantity >= param4) &&
+          ((lineitem.l_quantity <= (param4 + 10)) &&
+          ((part.p_size >= 1) &&
+          ((part.p_size <= 10) &&
+          (((lineitem.l_shipmode = "AIR") || (lineitem.l_shipmode = "AIR REG"))
+          && (lineitem.l_shipinstruct = "DELIVER IN PERSON"))))))))) ||
+         ((part.p_partkey = lineitem.l_partkey) &&
+         ((part.p_brand = param2) &&
+         (((part.p_container = "LG CASE") ||
+          ((part.p_container = "LG BOX") ||
+          ((part.p_container = "LG PACK") || (part.p_container = "LG PKG"))))
+         &&
+         ((lineitem.l_quantity >= param5) &&
+         ((lineitem.l_quantity <= (param5 + 10)) &&
+         ((part.p_size >= 1) &&
+         ((part.p_size <= 15) &&
+         (((lineitem.l_shipmode = "AIR") || (lineitem.l_shipmode = "AIR REG"))
+         && (lineitem.l_shipinstruct = "DELIVER IN PERSON"))))))))))),
+    alist(join(true, lineitem, part),
+      atuple([ascalar(lineitem.l_partkey),
+              ascalar(lineitem.l_quantity),
+              ascalar(lineitem.l_extendedprice),
+              ascalar(lineitem.l_discount),
+              ascalar(lineitem.l_shipinstruct),
+              ascalar(lineitem.l_shipmode),
+              ascalar(part.p_partkey),
+              ascalar(part.p_brand),
+              ascalar(part.p_size),
+              ascalar(part.p_container)],
+        cross))))

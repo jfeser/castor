@@ -309,18 +309,18 @@ BENCHMARKS = [
         "query": ["18-gold"],
         "params": [("param1:int", gen_str('300'))],
     },
-    # {
-    #     "query": rpath("19.txt"),
-    #     "args": contents(rpath("19.args")),
-    #     "params": [
-    #         ("param0:string", gen_brand()),
-    #         ("param1:string", gen_brand()),
-    #         ("param2:string", gen_brand()),
-    #         ("param3:string", gen_quantity()),
-    #         ("param4:string", gen_quantity()),
-    #         ("param5:string", gen_quantity()),
-    #     ],
-    # },
+    {
+        "name": '19',
+        "query": ['19-gold'],
+        "params": [
+            ("param0:string", gen_str('Brand#12')),
+            ("param1:string", gen_str('Brand#23')),
+            ("param2:string", gen_str('Brand#34')),
+            ("param3:string", gen_str('1')),
+            ("param4:string", gen_str('10')),
+            ("param5:string", gen_str('20')),
+        ],
+    },
     {
         "name": "21-no",
         "query": ["21-no"],
