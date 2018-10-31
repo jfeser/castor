@@ -215,7 +215,11 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | {node= Filter (Binop (And, Binop (Ge, p, lb), Binop (Lt, p', ub)), r); _}
           when [%compare.equal: pred] p p' ->
             gen ~lb ~ub p r
-        | {node= Filter (Binop (Le, p, ub), r); _} -> gen ~ub p r
+        | {node= Filter (Binop (Le, p, p'), r); _}
+         |{node= Filter (Binop (Lt, p, p'), r); _}
+         |{node= Filter (Binop (Ge, p', p), r); _}
+         |{node= Filter (Binop (Gt, p', p), r); _} ->
+            gen ~ub:p' p r @ gen ~lb:p p' r
         | _ -> []) }
     |> run_everywhere
 
