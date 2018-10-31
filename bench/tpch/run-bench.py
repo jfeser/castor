@@ -281,6 +281,22 @@ BENCHMARKS = [
         "params": [("param1:date", gen_fixed_date(date(1996,1,1)))],
     },
     {
+        "name": "16",
+        "query": ['16-no-gold'],
+        "params": [
+            ("param1:string", gen_str('Brand#45')),
+            ("param2:string", gen_str('MEDIUM POLISHED')),
+            ("param3:int", gen_str('49')),
+            ("param4:int", gen_str('14')),
+            ("param5:int", gen_str('23')),
+            ("param6:int", gen_str('45')),
+            ("param7:int", gen_str('19')),
+            ("param8:int", gen_str('3')),
+            ("param9:int", gen_str('36')),
+            ("param10:int", gen_str('9')),
+        ],
+    },
+    {
         "name": "17",
         "query": ["17"],
         "params": [("param0:string", gen_brand()), ("param1:string", gen_container())],
