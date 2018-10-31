@@ -1,17 +1,20 @@
 open Base
 
+type t
+
+val create : ?port:string -> string -> t
+
 val exec :
-     ?max_retries:int
-  -> ?verbose:bool
-  -> ?params:string list
-  -> Postgresql.connection
-  -> string
-  -> string list list
+  ?max_retries:int -> ?params:string list -> t -> string -> Postgresql.result
+
+val result_to_tuples : Postgresql.result -> Value.t Map.M(String).t Sequence.t
+
+val result_to_strings : Postgresql.result -> string list list
 
 val exec_cursor :
      ?batch_size:int
   -> ?params:string list
-  -> Postgresql.connection
+  -> t
   -> string
   -> Value.t Map.M(String).t Sequence.t
 
@@ -20,9 +23,11 @@ module Field : sig
 end
 
 module Relation : sig
+  type db = t
+
   type t = {rname: string; fields: Field.t list} [@@deriving compare, hash, sexp]
 
-  val from_db : Postgresql.connection -> string -> t
+  val from_db : db -> string -> t
 
-  val all_from_db : Postgresql.connection -> t list
+  val all_from_db : db -> t list
 end

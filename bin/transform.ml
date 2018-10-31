@@ -1,6 +1,5 @@
 open Core
 open Dblayout
-open Postgresql
 open Collections
 module A = Abslayout
 
@@ -10,7 +9,7 @@ let main ?(debug = false) ?sample:_ ?(transforms = "") ~db ~params query_str =
     |> Set.of_list (module Name.Compare_no_type)
   in
   let module Config = struct
-    let conn = new connection ~dbname:db ()
+    let conn = Db.create db
 
     let params = params
 

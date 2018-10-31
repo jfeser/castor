@@ -125,8 +125,8 @@ and ralgebra_to_sql_helper r =
         in
         let a1 = Fresh.name fresh "t%d" in
         let a2 = Fresh.name fresh "t%d" in
-        let new_s1 = List.map s1 ~f:(fun n -> Name.create ~relation:a1 n.name) in
-        let new_s2 = List.map s2 ~f:(fun n -> Name.create ~relation:a2 n.name) in
+        let new_s1 = List.map s1 ~f:(fun n -> {n with relation= Some a1}) in
+        let new_s2 = List.map s2 ~f:(fun n -> {n with relation= Some a2}) in
         let new_schema = new_s1 @ new_s2 in
         let join_schema = Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema) in
         if List.length new_schema <> List.length join_schema then
@@ -180,7 +180,7 @@ and ralgebra_to_sql_helper r =
           |> String.concat ~sep:", "
         in
         let sql_preds =
-          List.map ps ~f:(fun p -> subst_pred ctx p |> pred_to_sql)
+          List.map ps ~f:(fun p -> subst_pred ctx p |> agg_to_sql)
           |> String.concat ~sep:", "
         in
         let new_query =

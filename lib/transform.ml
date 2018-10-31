@@ -5,8 +5,6 @@ module A = Abslayout
 
 module Config = struct
   module type S = sig
-    include Eval.Config.S
-
     val check_transforms : bool
 
     val params : Set.M(Name.Compare_no_type).t
@@ -172,13 +170,29 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     { name= "elim-eq-filter"
     ; f=
         (function
-        | {node= Filter (Binop (Eq, p1, p2), r); _} ->
-            List.map [(p1, p2); (p2, p1)] ~f:(fun (p, p') ->
-                let k = Fresh.name fresh "k%d" in
-                let select_list = [As_pred (p, k)] in
-                let filter_pred = Binop (Eq, Name (Name.create k), p) in
-                hash_idx (dedup (select select_list r)) (filter filter_pred r) [p']
-            )
+        | {node= Filter (p, r); _} ->
+            let eqs, rest =
+              conjuncts p
+              |> List.partition_map ~f:(function
+                   | Binop (Eq, p1, p2) -> `Fst (p1, Fresh.name fresh "k%d", p2)
+                   | p -> `Snd p )
+            in
+            if List.length eqs = 0 then []
+            else
+              let select_list = List.map eqs ~f:(fun (p, k, _) -> As_pred (p, k)) in
+              let inner_filter_pred =
+                List.map eqs ~f:(fun (p, k, _) -> Binop (Eq, Name (Name.create k), p)
+                )
+                |> and_
+              in
+              let key = List.map eqs ~f:(fun (_, _, p) -> p) in
+              let outer_filter r =
+                match rest with [] -> r | _ -> filter (and_ rest) r
+              in
+              [ outer_filter
+                  (hash_idx
+                     (dedup (select select_list r))
+                     (filter inner_filter_pred r) key) ]
         | _ -> []) }
     |> run_everywhere
 
@@ -201,7 +215,11 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | {node= Filter (Binop (And, Binop (Ge, p, lb), Binop (Lt, p', ub)), r); _}
           when [%compare.equal: pred] p p' ->
             gen ~lb ~ub p r
-        | {node= Filter (Binop (Le, p, ub), r); _} -> gen ~ub p r
+        | {node= Filter (Binop (Le, p, p'), r); _}
+         |{node= Filter (Binop (Lt, p, p'), r); _}
+         |{node= Filter (Binop (Ge, p', p), r); _}
+         |{node= Filter (Binop (Gt, p', p), r); _} ->
+            gen ~ub:p' p r @ gen ~lb:p p' r
         | _ -> []) }
     |> run_everywhere
 
@@ -359,7 +377,10 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           let r = M.annotate_schema r in
           match r with
           | {node= Select (ps, {node= AHashIdx (r, r', m); _}); _} ->
-              [hash_idx' r (select ps r') m]
+              let outer_preds =
+                List.filter_map ps ~f:pred_to_name |> List.map ~f:(fun n -> Name n)
+              in
+              [select outer_preds (hash_idx' r (select ps r') m)]
           | {node= Select (ps, {node= AOrderedIdx (r, r', m); _}); _} ->
               let outer_aggs, inner_aggs = gen_concat_select_list ps r' in
               [select outer_aggs (ordered_idx r (select inner_aggs r') m)]

@@ -56,7 +56,7 @@ let run_test ?(params = []) layout_str =
 
 let run_test_db ?(params = []) layout_str =
   let module E = Eval.Make (struct
-    let conn = new Postgresql.connection ~dbname:"demomatch" ~port:"5433" ()
+    let conn = Db.create "demomatch" ~port:"5433"
   end) in
   let module M = Abslayout_db.Make (E) in
   let module S =
@@ -118,8 +118,9 @@ let%expect_test "tuple-simple-cross" =
     } |}]
 
 let%expect_test "tuple-simple-zip" =
-  run_test "ATuple([AScalar(1), AScalar(2)], zip)";
-  [%expect {|
+  run_test "ATuple([AScalar(1), AScalar(2)], zip)" ;
+  [%expect
+    {|
     // Locals:
     // start : Int[nonnull] (persists=true)
     fun zt_10 (start) : Tuple[Int[nonnull]] {

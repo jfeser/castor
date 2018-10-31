@@ -2,8 +2,6 @@ open Base
 
 module Config : sig
   module type S = sig
-    val conn : Postgresql.connection
-
     val check_transforms : bool
 
     val params : Set.M(Name.Compare_no_type).t

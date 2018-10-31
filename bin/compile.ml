@@ -1,11 +1,10 @@
 open Core
 open Dblayout
-open Postgresql
 open Collections
 
 let main ~debug ~gprof ~params ~db ~port ~code_only ?out_dir ch =
   let module CConfig = struct
-    let conn = new connection ~dbname:db ?port ()
+    let conn = Db.create db ?port
 
     let debug = debug
 

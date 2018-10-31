@@ -111,6 +111,8 @@ val ordered_idx : t -> t -> ordered_idx -> t
 
 val as_ : string -> t -> t
 
+val and_ : pred list -> pred
+
 module Ctx : sig
   type t = Value.t Map.M(Name.Compare_no_type).t [@@deriving compare, sexp]
 
@@ -164,3 +166,5 @@ val annotate_orders : t -> unit
 val validate : t -> unit
 
 val pred_constants : Name.t list -> pred -> pred list
+
+val conjuncts : pred -> pred list

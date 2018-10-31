@@ -157,7 +157,7 @@ let%expect_test "needed" =
  *     {| select * from (select * from ship_mode) as ship_mode where (ship_mode."sm_carrier") = ('GERMA') |}] *)
 
 let%expect_test "mat-col" =
-  let conn = new Postgresql.connection ~dbname:"tpcds1" () in
+  let conn = Db.create "tpcds1" in
   let layout =
     of_string_exn
       "AList(Filter(ship_mode.sm_carrier = \"GERMA\", ship_mode), \
@@ -226,7 +226,7 @@ let%expect_test "mat-col" =
           (type_ ((StringT (nullable false)))))))))) |}]
 
 let%expect_test "mat-hidx" =
-  let conn = new Postgresql.connection ~dbname:"tpcds1" () in
+  let conn = Db.create "tpcds1" in
   let layout =
     of_string_exn
       "AHashIdx(Dedup(Select([ship_mode.sm_type], Filter(ship_mode.sm_type = \

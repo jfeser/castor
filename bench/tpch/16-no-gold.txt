@@ -1,0 +1,43 @@
+alist(dedup(
+        select([part.p_brand as k0_part_p_brand,
+                part.p_type as k0_part_p_type,
+                part.p_size as k0_part_p_size],
+          join((part.p_partkey = partsupp.ps_partkey),
+            part,
+            dedup(
+              filter(not(exists(filter(((partsupp.ps_suppkey =
+                                        supplier.s_suppkey) &&
+                                       ((strpos(supplier.s_comment, "Customer")
+                                        >= 1) &&
+                                       (strpos(supplier.s_comment,
+                                        "Complaints") >= 1))),
+                                  supplier))),
+                partsupp))))),
+  select([part.p_brand, part.p_type, part.p_size, count() as supplier_cnt],
+    filter((not((part.p_brand = param1)) &&
+           (not((strpos(part.p_type, param2) = 1)) &&
+           ((part.p_size = param3) ||
+           ((part.p_size = param4) ||
+           ((part.p_size = param5) ||
+           ((part.p_size = param6) ||
+           ((part.p_size = param7) ||
+           ((part.p_size = param8) ||
+           ((part.p_size = param9) || (part.p_size = param10)))))))))),
+      alist(filter((((part.p_brand = k0_part_p_brand) &&
+                    (part.p_type = k0_part_p_type)) &&
+                   (part.p_size = k0_part_p_size)),
+              join((part.p_partkey = partsupp.ps_partkey),
+                part,
+                dedup(
+                  filter(not(exists(filter(((partsupp.ps_suppkey =
+                                            supplier.s_suppkey) &&
+                                           ((strpos(supplier.s_comment,
+                                             "Customer") >= 1) &&
+                                           (strpos(supplier.s_comment,
+                                            "Complaints") >= 1))),
+                                      supplier))),
+                    partsupp)))),
+        atuple([ascalar(part.p_brand),
+                ascalar(part.p_type),
+                ascalar(part.p_size)],
+          cross)))))

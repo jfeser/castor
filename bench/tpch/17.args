@@ -1,1 +1,1 @@
--t hoist-filter,row-store:2,row-store:29,project
+-p param0:string -p param1:string -t hoist-filter,elim-eq-filter:1,elim-eq-filter:0,push-select,row-store:4,row-store:30

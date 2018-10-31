@@ -5,7 +5,7 @@ module type S = Eval_intf.S
 
 module Config : sig
   module type S = sig
-    val conn : Postgresql.connection
+    val conn : Db.t
   end
 
   module type S_mock = sig

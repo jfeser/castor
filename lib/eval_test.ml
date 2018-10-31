@@ -58,7 +58,7 @@ let%expect_test "eval-select" =
 
 let make_module_db () =
   let module E = Eval.Make (struct
-    let conn = new Postgresql.connection ~dbname:"demomatch" ~port:"5433" ()
+    let conn = Db.create ~port:"5433" "demomatch"
   end) in
   let module A = Abslayout_db.Make (E) in
   ((module E : Eval.S), (module A : Abslayout_db.S))
