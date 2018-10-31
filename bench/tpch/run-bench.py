@@ -298,8 +298,11 @@ BENCHMARKS = [
     },
     {
         "name": "17",
-        "query": ["17"],
-        "params": [("param0:string", gen_brand()), ("param1:string", gen_container())],
+        "query": ['17-gold'],
+        "params": [
+            ("param0:string", gen_str('Brand#23')),
+            ("param1:string", gen_str('MED BOX')),
+        ],
     },
     {
         "name": "18",
