@@ -24,7 +24,8 @@ type binop =
   | Strpos
 [@@deriving compare, sexp]
 
-type unop = Not | Day | Month | Year | Strlen [@@deriving compare, sexp]
+type unop = Not | Day | Month | Year | Strlen | ExtractY | ExtractM | ExtractD
+[@@deriving compare, sexp]
 
 (* - Visitors doesn't use the special method override syntax that warning 7 checks
    for.

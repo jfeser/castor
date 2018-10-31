@@ -17,7 +17,15 @@ type binop = Abslayout0.binop =
   | Strpos
 [@@deriving compare, sexp]
 
-type unop = Abslayout0.unop = Not | Day | Month | Year | Strlen
+type unop = Abslayout0.unop =
+  | Not
+  | Day
+  | Month
+  | Year
+  | Strlen
+  | ExtractY
+  | ExtractM
+  | ExtractD
 [@@deriving compare, sexp]
 
 type tuple = Abslayout0.tuple = Cross | Zip | Concat [@@deriving compare, sexp_of]

@@ -26,6 +26,9 @@ type op =
   | LoadStr
   | StrLen
   | StrPos
+  | ExtractY
+  | ExtractM
+  | ExtractD
 [@@deriving compare, sexp]
 
 type expr =

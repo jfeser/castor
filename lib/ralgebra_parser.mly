@@ -13,7 +13,7 @@
 %token <Type0.PrimType.t> PRIMTYPE
 %token <Core.Date.t> DATE
 %token <Abslayout0.binop> EQ LT GT LE GE AND OR ADD SUB MUL DIV MOD STRPOS
-%token <Abslayout0.unop> MONTH DAY YEAR NOT STRLEN
+%token <Abslayout0.unop> MONTH DAY YEAR NOT STRLEN EXTRACTY EXTRACTM EXTRACTD
 %token AS JOIN SELECT DEDUP FILTER COUNT GROUPBY MIN MAX AVG SUM LPAREN RPAREN
    LSBRAC RSBRAC COLON DOT COMMA EOF
    AEMPTY ASCALAR ATUPLE ALIST AHASHIDX AORDEREDIDX NULL ORDERBY IF THEN
@@ -119,7 +119,7 @@ name:
 | f = ID; COLON; t = PRIMTYPE { A.({ relation = None; name = f; type_ = Some t }) }
 
 e0_binop: x = STRPOS { x }
-e0_unop: x = DAY | x = MONTH | x = YEAR | x = STRLEN { x }
+e0_unop: x = DAY | x = MONTH | x = YEAR | x = STRLEN | x = EXTRACTY | x = EXTRACTM | x = EXTRACTD { x }
 
 e0:
 | x = INT { A.Int x }

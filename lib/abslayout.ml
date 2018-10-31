@@ -91,6 +91,9 @@ let unop_to_str = function
   | Month -> "month"
   | Year -> "year"
   | Strlen -> "strlen"
+  | ExtractY -> "to_year"
+  | ExtractM -> "to_mon"
+  | ExtractD -> "to_day"
 
 let pp_name fmt =
   let open Format in
@@ -299,7 +302,9 @@ let rec pred_to_schema =
       let schema = pred_to_schema p in
       {schema with relation= None; name= n}
   | Name n -> n
-  | Int _ | Date _ | Unop ((Year | Month | Day | Strlen), _) | Count ->
+  | Int _ | Date _
+   |Unop ((Year | Month | Day | Strlen | ExtractY | ExtractM | ExtractD), _)
+   |Count ->
       unnamed (IntT {nullable= false})
   | Fixed _ | Avg _ -> unnamed (FixedT {nullable= false})
   | Bool _ | Exists _

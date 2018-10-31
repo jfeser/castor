@@ -26,6 +26,9 @@ type op = Implang0.op =
   | LoadStr
   | StrLen
   | StrPos
+  | ExtractY
+  | ExtractM
+  | ExtractD
 [@@deriving compare, sexp]
 
 type expr = Implang0.expr =

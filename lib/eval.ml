@@ -1,3 +1,4 @@
+open Core
 open Base
 open Collections
 open Abslayout
@@ -32,12 +33,16 @@ let eval_pred_shared eval ctx =
     | Date x -> Int (Date.to_int x)
     | Unop (op, p) -> (
         let x = eval_pred ctx p in
+        let to_date d = Date.(add_days unix_epoch d) in
         match op with
         | Not -> Bool (not (to_bool x))
         | Year -> Int (365 * to_int x)
         | Month -> Int (30 * to_int x)
         | Day -> x
-        | Strlen -> Int (String.length (to_string x)) )
+        | Strlen -> Int (String.length (to_string x))
+        | ExtractY -> Int (Date.year (to_date (to_int x)))
+        | ExtractM -> Int (Month.to_int (Date.month (to_date (to_int x))))
+        | ExtractD -> Int (Date.day (to_date (to_int x))) )
     | String x -> String x
     | Bool x -> Bool x
     | Name n -> lookup ctx n

@@ -315,6 +315,21 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
           ; i64_type ctx |])
       module_
 
+  let extract_y =
+    declare_function "extract_year"
+      (function_type (i64_type ctx) [|i64_type ctx|])
+      module_
+
+  let extract_m =
+    declare_function "extract_month"
+      (function_type (i64_type ctx) [|i64_type ctx|])
+      module_
+
+  let extract_d =
+    declare_function "extract_day"
+      (function_type (i64_type ctx) [|i64_type ctx|])
+      module_
+
   let call_printf fmt_str args =
     let fmt_str_ptr =
       build_bitcast fmt_str (pointer_type (i8_type ctx)) "" builder
@@ -630,7 +645,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | StrHash -> codegen_string_hash fctx x1 x2
       | LoadStr -> codegen_load_str fctx x1 x2
       | StrPos -> codegen_strpos fctx x1 x2
-      | StrLen | Not | Int2Fl -> fail (Error.of_string "Not a binary operator.")
+      | StrLen | Not | Int2Fl | ExtractY | ExtractM | ExtractD ->
+          fail (Error.of_string "Not a binary operator.")
     in
     x_out
 
@@ -645,6 +661,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     | I.Not -> build_not x "nottmp" builder
     | Int2Fl -> build_sitofp x float_type "" builder
     | StrLen -> (Llstring.unpack x).len
+    | ExtractY -> build_call extract_y [|x|] "" builder
+    | ExtractM -> build_call extract_m [|x|] "" builder
+    | ExtractD -> build_call extract_d [|x|] "" builder
     | IntAdd | IntSub | IntLt | And | Or | IntEq | StrEq | IntHash | StrHash
      |IntMul | IntDiv | Mod | LoadStr | FlAdd | FlSub | FlMul | FlDiv | FlLt
      |FlLe | FlEq | StrPos ->

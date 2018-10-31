@@ -42,6 +42,9 @@ let rec pp_expr : Format.formatter -> expr -> unit =
     | Int2Fl -> "int2fl"
     | StrLen -> "strlen"
     | StrPos -> "strpos"
+    | ExtractY -> "to_year"
+    | ExtractM -> "to_mon"
+    | ExtractD -> "to_day"
   in
   fun fmt -> function
     | Null -> fprintf fmt "null"

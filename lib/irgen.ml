@@ -193,7 +193,10 @@ struct
           | A.Year -> Infix.(int 365 * x)
           | A.Month -> Infix.(int 30 * x)
           | A.Day -> x
-          | A.Strlen -> Unop {op= StrLen; arg= x} )
+          | A.Strlen -> Unop {op= StrLen; arg= x}
+          | A.ExtractY -> Unop {op= ExtractY; arg= x}
+          | A.ExtractM -> Unop {op= ExtractM; arg= x}
+          | A.ExtractD -> Unop {op= ExtractD; arg= x} )
       | A.Bool x -> Bool x
       | A.As_pred (x, _) -> gen_pred x
       | Name n -> (

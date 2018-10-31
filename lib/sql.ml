@@ -35,7 +35,10 @@ let rec pred_to_sql = function
       | Year -> sprintf "interval '%s year'" s
       | Month -> sprintf "interval '%s month'" s
       | Day -> sprintf "interval '%s day'" s
-      | Strlen -> sprintf "char_length(%s)" s )
+      | Strlen -> sprintf "char_length(%s)" s
+      | ExtractY -> sprintf "date_part('year', %s)" s
+      | ExtractM -> sprintf "date_part('month', %s)" s
+      | ExtractD -> sprintf "date_part('day', %s)" s )
   | Binop (op, p1, p2) -> (
       let s1 = sprintf "(%s)" (pred_to_sql p1) in
       let s2 = sprintf "(%s)" (pred_to_sql p2) in
