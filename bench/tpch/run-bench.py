@@ -24,6 +24,7 @@ import shlex
 import subprocess
 from datetime import date
 import sys
+import re
 
 file_path = os.path.dirname(os.path.abspath(__file__))
 def rpath(p):
@@ -383,19 +384,19 @@ def run_bench(name, query_name, params):
     ] + param_types
 
     # Build, saving the log.
-    if not SQL_ONLY:
-        try:
-            compile_log = benchd + "/compile.log"
-            query_file = benchd + "/query"
-            check_call(['cp', query, query_file])
-            print(os.getcwd())
-            with open(compile_log, 'w') as cl:
-                check_call(compile_cmd_parts + [query_file], stdout=cl, stderr=cl)
-        except Exception:
-            log.exception("Compile failed.")
-            csv_writer.writerow([query_name, None])
-            csv_file.flush()
-            return
+    # if not SQL_ONLY:
+    #     try:
+    #         compile_log = benchd + "/compile.log"
+    #         query_file = benchd + "/query"
+    #         check_call(['cp', query, query_file])
+    #         print(os.getcwd())
+    #         with open(compile_log, 'w') as cl:
+    #             check_call(compile_cmd_parts + [query_file], stdout=cl, stderr=cl)
+    #     except Exception:
+    #         log.exception("Compile failed.")
+    #         csv_writer.writerow([query_name, None])
+    #         csv_file.flush()
+    #         return
 
     # Run query and save results.
     os.chdir(benchd)
@@ -409,8 +410,9 @@ def run_bench(name, query_name, params):
         log.debug('Running SQL version of query.')
         with open(sql, 'r') as f:
             sql_query = f.read()
+            print(sql_query)
         for i, param in enumerate(sql_params):
-            sql_query = sql_query.replace(':%d' % (i+1), param)
+            sql_query = re.sub(':%d(?![0-9]+)' % (i+1), param, sql_query)
         with open('sql', 'w') as f:
             f.write(sql_query)
         with open('golden.csv', 'w') as out:
