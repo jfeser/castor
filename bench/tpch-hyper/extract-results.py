@@ -15,8 +15,8 @@ def main(args):
         match = regex.fullmatch(line)
         if match is not None:
             bench_name = match.groups()[0]
-            run_time = match.groups()[1]
-            print('%s,%s' % (bench_name, run_time))
+            run_time = int(match.groups()[1]) / 100
+            print('%s,%f' % (bench_name, run_time))
 
 
 if __name__ == '__main__':
