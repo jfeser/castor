@@ -43,3 +43,26 @@
 # 	o_year;
 # :n -1
 
+orderby([o_year],
+  groupby([o_year,
+           (sum(if (nation = param1) then volume else 0) / sum(volume)) as mkt_share],
+    [o_year],
+    select([to_year(o_orderdate) as o_year,
+            (l_extendedprice * (1 - l_discount)) as volume,
+            n2.n_name as nation],
+      join((p_partkey = l_partkey),
+        join((s_suppkey = l_suppkey),
+          join((l_orderkey = o_orderkey),
+            join((o_custkey = c_custkey),
+              join((c_nationkey = n1.nationkey),
+                join((n1.n_regionkey = r_regionkey),
+                  nation as n1,
+                  filter((r_name = param2), region)),
+                customer),
+              filter(((o_orderdate >= date("1995-01-01")) &&
+                     (o_orderdate <= date("1996-12-31"))),
+                orders)),
+            lineitem),
+          join((s_nationkey = n2.n_nationkey), nation as n2, supplier)),
+        filter((p_type = param3), part)))),
+  desc)

@@ -34,14 +34,18 @@
 # 	o_year desc;
 # :n -1
 
-orderby([nation,
-	o_year],groupby([
-nation,
-	o_year,
-	sum(amount) as sum_profit],
-  [nation,
-	o_year],
-  select([n_name as nation,
-			extract(year from o_orderdate) as o_year,
-			l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity as amount],
-      ), asc)
+orderby([nation, o_year],
+  groupby([nation, o_year, sum(amount) as sum_profit],
+    [nation, o_year],
+    select([n_name as nation,
+            to_year(o_orderdate) as o_year,
+            ((l_extendedprice * (1 - l_discount)) -
+            (ps_supplycost * l_quantity as amount))],
+      join((s_suppkey = l_suppkey),
+        join(((ps_suppkey = l_suppkey) && (ps_partkey = l_partkey)),
+          join((p_partkey = l_partkey),
+            filter((strpos(p_name, param1) > 0), part),
+            join((o_orderkey = l_orderkey), orders, lineitem)),
+          partsupp),
+        join((s_nationkey = n_nationkey), supplier, nation)))),
+  asc)
