@@ -9,7 +9,11 @@ let () =
     | Postgresql.Error e -> Some (Postgresql.string_of_error e)
     | _ -> None )
 
-type t = {db: string; port: string option; conn: Psql.connection}
+type t =
+  { db: string
+  ; port: string option
+  ; conn: Psql.connection sexp_opaque [@compare.ignore] }
+[@@deriving compare, sexp]
 
 let create ?port db = {db; port; conn= new Psql.connection ~dbname:db ?port ()}
 
@@ -161,6 +165,10 @@ module Relation = struct
              {fname; type_} )
     in
     {rel with fields}
+
+  let from_db' = Core.Memo.general (fun (conn, rname) -> from_db conn rname)
+
+  let from_db conn rname = from_db' (conn, rname)
 
   let all_from_db conn =
     let names =
