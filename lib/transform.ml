@@ -170,13 +170,29 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     { name= "elim-eq-filter"
     ; f=
         (function
-        | {node= Filter (Binop (Eq, p1, p2), r); _} ->
-            List.map [(p1, p2); (p2, p1)] ~f:(fun (p, p') ->
-                let k = Fresh.name fresh "k%d" in
-                let select_list = [As_pred (p, k)] in
-                let filter_pred = Binop (Eq, Name (Name.create k), p) in
-                hash_idx (dedup (select select_list r)) (filter filter_pred r) [p']
-            )
+        | {node= Filter (p, r); _} ->
+            let eqs, rest =
+              conjuncts p
+              |> List.partition_map ~f:(function
+                   | Binop (Eq, p1, p2) -> `Fst (p1, Fresh.name fresh "k%d", p2)
+                   | p -> `Snd p )
+            in
+            if List.length eqs = 0 then []
+            else
+              let select_list = List.map eqs ~f:(fun (p, k, _) -> As_pred (p, k)) in
+              let inner_filter_pred =
+                List.map eqs ~f:(fun (p, k, _) -> Binop (Eq, Name (Name.create k), p)
+                )
+                |> and_
+              in
+              let key = List.map eqs ~f:(fun (_, _, p) -> p) in
+              let outer_filter r =
+                match rest with [] -> r | _ -> filter (and_ rest) r
+              in
+              [ outer_filter
+                  (hash_idx
+                     (dedup (select select_list r))
+                     (filter inner_filter_pred r) key) ]
         | _ -> []) }
     |> run_everywhere
 

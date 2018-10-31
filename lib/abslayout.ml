@@ -36,6 +36,11 @@ let ordered_idx a b c = {node= AOrderedIdx (a, b, c); meta= Meta.empty ()}
 
 let as_ a b = {node= As (a, b); meta= Meta.empty ()}
 
+let rec and_ = function
+  | [] -> Bool true
+  | [x] -> x
+  | x :: xs -> Binop (And, x, and_ xs)
+
 let name r =
   match r.node with
   | Select _ -> "select"
@@ -892,6 +897,21 @@ let pred_constants schema p =
     end
   in
   visitor#visit_pred () p |> Set.to_list
+
+let conjuncts p =
+  let visitor =
+    object (self : 'a)
+      inherit [_] reduce
+
+      inherit [_] Util.list_monoid
+
+      method! visit_Binop () (op, p1, p2) =
+        match op with
+        | And -> self#plus (self#visit_pred () p1) (self#visit_pred () p2)
+        | _ -> [Binop (op, p1, p2)]
+    end
+  in
+  visitor#visit_pred () p
 
 (* let annotate_queries r =
  *   let rec annotate ctx r =
