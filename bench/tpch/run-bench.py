@@ -306,8 +306,8 @@ BENCHMARKS = [
     },
     {
         "name": "18",
-        "query": ["18"],
-        "params": [("param1:int", gen_quantity())],
+        "query": ["18-gold"],
+        "params": [("param1:int", gen_str('300'))],
     },
     # {
     #     "query": rpath("19.txt"),
