@@ -66,6 +66,20 @@ module AbsCount = struct
     AbsInt.unify x y
 end
 
+module AbsFixed = struct
+  type t = {range: AbsInt.t; scale: int} [@@deriving compare, sexp]
+
+  let of_fixed f = {range= AbsInt.abstract f.Fixed_point.value; scale= f.scale}
+
+  let rec unify f1 f2 =
+    if f1.scale = f2.scale then {f1 with range= AbsInt.unify f1.range f2.range}
+    else if f1.scale > f2.scale then unify f2 f1
+    else
+      let scale_factor = f2.scale / f1.scale in
+      let scaled_range = AbsInt.(f1.range * abstract scale_factor) in
+      {f2 with range= AbsInt.unify f2.range scaled_range}
+end
+
 module T = struct
   type int_ = {range: AbsInt.t; nullable: bool} [@@deriving compare, sexp]
 
@@ -81,8 +95,7 @@ module T = struct
 
   type ordered_idx = {count: AbsCount.t} [@@deriving compare, sexp_of]
 
-  type fixed = {range: AbsInt.t; scale: int; nullable: bool}
-  [@@deriving compare, sexp]
+  type fixed = {value: AbsFixed.t; nullable: bool} [@@deriving compare, sexp]
 
   type t =
     | NullT
@@ -118,9 +131,8 @@ let rec unify_exn t1 t2 =
   | NullT, NullT -> NullT
   | IntT {range= b1; nullable= n1}, IntT {range= b2; nullable= n2} ->
       IntT {range= AbsInt.unify b1 b2; nullable= n1 || n2}
-  | ( FixedT {range= b1; scale= s1; nullable= n1}
-    , FixedT {range= b2; scale= s2; nullable= n2} ) ->
-      FixedT {range= AbsInt.unify b1 b2; nullable= n1 || n2; scale= Int.max s1 s2}
+  | FixedT {value= v1; nullable= n1}, FixedT {value= v2; nullable= n2} ->
+      FixedT {value= AbsFixed.unify v1 v2; nullable= n1 || n2}
   | IntT x, NullT | NullT, IntT x -> IntT {x with nullable= true}
   | FixedT x, NullT | NullT, FixedT x -> FixedT {x with nullable= true}
   | BoolT {nullable= n1}, BoolT {nullable= n2} -> BoolT {nullable= n1 || n2}
@@ -183,7 +195,7 @@ let rec len =
   | EmptyT -> zero
   | NullT -> failwith "Unexpected type."
   | IntT x -> byte_width ~nullable:x.nullable x.range |> abstract
-  | FixedT x -> byte_width ~nullable:x.nullable x.range |> abstract
+  | FixedT x -> byte_width ~nullable:x.nullable x.value.range |> abstract
   | BoolT _ -> abstract 1
   | StringT x -> header_len x.nchars + x.nchars
   | TupleT (ts, _) ->

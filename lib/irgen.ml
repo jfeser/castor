@@ -261,7 +261,7 @@ struct
     debug_print "int" ival b ;
     cb b [ival]
 
-  and scan_fixed ctx b _ Type.({nullable; range= (_, h) as range; scale})
+  and scan_fixed ctx b _ Type.({nullable; value= {range= (_, h) as range; scale}})
       (cb : callback) =
     let open Builder in
     let start = Ctx.find_exn ctx (Name.create "start") b in

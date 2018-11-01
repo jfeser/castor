@@ -82,7 +82,7 @@ let rec make_header t =
       [ Field.{name= "len"; size= `Empty len; align= 1}
       ; Field.{name= "count"; size= `Empty 1; align= 1}
       ; Field.{name= "value"; size= `Fixed len; align= 1} ]
-  | FixedT {range; scale; nullable} ->
+  | FixedT {value= {range; scale}; nullable} ->
       let len = Type.AbsInt.byte_width ~nullable range in
       [ Field.{name= "len"; size= `Empty len; align= 1}
       ; Field.{name= "scale"; size= `Empty scale; align= 1}

@@ -360,7 +360,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
 
   let serialize_fixed sctx t x =
     match t with
-    | Type.FixedT {scale; _} ->
+    | Type.FixedT {value= {scale; _}; _} ->
         let hdr = make_header t in
         let sval =
           of_int ~byte_width:(size_exn hdr "value")
