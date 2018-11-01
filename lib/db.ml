@@ -185,8 +185,7 @@ end
 
 let exec_cursor =
   let fresh = Fresh.create () in
-  fun ?(batch_size = 100) ?(params = []) db query ->
-    Logs.debug (fun m -> m "Running %s." query) ;
+  fun ?(batch_size = 10000) ?(params = []) db query ->
     let db = create ?port:db.port db.db in
     let query = subst_params params query in
     let cur = Fresh.name fresh "cur%d" in
