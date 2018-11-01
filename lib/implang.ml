@@ -217,12 +217,14 @@ module Builder = struct
         match (op, t1, t2) with
         | (IntAdd | IntSub | IntMul | IntDiv), IntT _, IntT _ ->
             IntT {nullable= false}
-        | (FlAdd | FlSub | FlMul | FlDiv), _, _ -> FixedT {nullable= false}
+        | (FlAdd | FlSub | FlMul | FlDiv), FixedT _, FixedT _ ->
+            FixedT {nullable= false}
         | (And | Or), BoolT _, BoolT _ | (And | Or), IntT _, IntT _ -> unify t1 t2
         | IntLt, IntT {nullable= n1}, IntT {nullable= n2} ->
             BoolT {nullable= n1 || n2}
-        | FlLt, _, _ -> BoolT {nullable= false}
-        | (IntHash | StrHash), _, _ -> IntT {nullable= false}
+        | FlLt, FixedT _, FixedT _ -> BoolT {nullable= false}
+        | IntHash, IntT _, IntT _ | StrHash, IntT _, StringT _ ->
+            IntT {nullable= false}
         | IntEq, IntT {nullable= n1}, IntT {nullable= n2}
          |StrEq, StringT {nullable= n1}, StringT {nullable= n2}
          |FlEq, FixedT {nullable= n1}, FixedT {nullable= n2} ->
@@ -241,7 +243,14 @@ module Builder = struct
         | Int2Fl, IntT _ -> FixedT {nullable= false}
         | StrLen, StringT _ -> IntT {nullable= false}
         | _ -> fail (Error.create "Type error." (op, t) [%sexp_of: op * t]) )
-    | Slice (_, _) -> IntT {nullable= false}
+    | Slice (arg, _) -> (
+        let t = type_of arg b in
+        match t with
+        | IntT _ -> IntT {nullable= false}
+        | _ ->
+            fail
+              (Error.create "Type error." (e, t, ctx)
+                 [%sexp_of: expr * t * t Hashtbl.M(String).t]) )
     | Index (tup, idx) -> (
       match type_of tup b with
       | TupleT ts -> List.nth_exn ts idx
