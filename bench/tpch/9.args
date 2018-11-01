@@ -1,0 +1,1 @@
+-p param1:string -t hoist-filter,hoist-filter,hoist-filter,hoist-filter,elim-groupby-filter,push-orderby,row-store:12,project

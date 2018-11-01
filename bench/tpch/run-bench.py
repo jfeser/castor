@@ -227,7 +227,7 @@ BENCHMARKS = [
     },
     {
         "name": "8",
-        "query": [],
+        "query": ['8-gold'],
         "params": [
             ("param1:string", gen_str('BRAZIL')),
             ("param2:string", gen_str('AMERICA')),
@@ -236,7 +236,7 @@ BENCHMARKS = [
     },
     {
         "name": "9",
-        "query": [],
+        "query": ['9-gold'],
         "params": [
             ("param1:string", gen_str('green')),
         ],
@@ -384,19 +384,19 @@ def run_bench(name, query_name, params):
     ] + param_types
 
     # Build, saving the log.
-    # if not SQL_ONLY:
-    #     try:
-    #         compile_log = benchd + "/compile.log"
-    #         query_file = benchd + "/query"
-    #         check_call(['cp', query, query_file])
-    #         print(os.getcwd())
-    #         with open(compile_log, 'w') as cl:
-    #             check_call(compile_cmd_parts + [query_file], stdout=cl, stderr=cl)
-    #     except Exception:
-    #         log.exception("Compile failed.")
-    #         csv_writer.writerow([query_name, None])
-    #         csv_file.flush()
-    #         return
+    if not SQL_ONLY:
+        try:
+            compile_log = benchd + "/compile.log"
+            query_file = benchd + "/query"
+            check_call(['cp', query, query_file])
+            print(os.getcwd())
+            with open(compile_log, 'w') as cl:
+                check_call(compile_cmd_parts + [query_file], stdout=cl, stderr=cl)
+        except Exception:
+            log.exception("Compile failed.")
+            csv_writer.writerow([query_name, None])
+            csv_file.flush()
+            return
 
     # Run query and save results.
     os.chdir(benchd)
