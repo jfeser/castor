@@ -322,10 +322,8 @@ let rec pred_to_schema =
   | If (_, p1, p2) ->
       let s1 = pred_to_schema p1 in
       let s2 = pred_to_schema p2 in
-      if not ([%compare.equal: Name.Compare.t] s1 s2) then
-        Error.create "Mismatched sides of if." (s1, s2) [%sexp_of: Name.t * Name.t]
-        |> Error.raise ;
-      s1
+      Type.PrimType.unify (Name.type_exn s1) (Name.type_exn s2) |> ignore ;
+      unnamed (Name.type_exn s1)
   | First r -> (
     match Meta.(find_exn r schema) with
     | [n] -> n

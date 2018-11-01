@@ -159,6 +159,10 @@ val select_kind : pred list -> [`Agg | `Scalar]
 
 val is_serializeable : t -> bool
 
+val pred_free : pred -> Set.M(Name.Compare_no_type).t
+
+val free : t -> Set.M(Name.Compare_no_type).t
+
 val annotate_free : t -> unit
 
 val annotate_needed : t -> unit

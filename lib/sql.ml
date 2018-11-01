@@ -76,7 +76,8 @@ and agg_to_sql = function
   | Avg n -> sprintf "avg(%s)" (pred_to_sql n)
   | Min n -> sprintf "min(%s)" (pred_to_sql n)
   | Max n -> sprintf "max(%s)" (pred_to_sql n)
-  | As_pred (p, n) -> sprintf "%s as %s" (agg_to_sql p) n
+  | As_pred (((Count | Sum _ | Avg _ | Min _ | Max _) as p), n) ->
+      sprintf "%s as %s" (agg_to_sql p) n
   | p -> (
     match pred_to_name p with
     | Some n -> sprintf "min(%s) as %s" (pred_to_sql p) n.name

@@ -426,13 +426,25 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     { name= "hoist-filter"
     ; f=
         (fun r ->
+          let r = M.annotate_schema r in
           let ret =
             match r.node with
             | OrderBy {key; rel= {node= Filter (p, r); _}; order} ->
                 [(p, order_by key order r)]
             | GroupBy (ps, key, {node= Filter (p, r); _}) -> [(p, group_by ps key r)]
             | Filter (p, {node= Filter (p', r); _}) -> [(p', filter p r)]
-            | Select (ps, {node= Filter (p, r); _}) -> [(p, select ps r)]
+            | Select (ps, {node= Filter (p, r); _}) ->
+                (* These are the fields that are emitted by r, used in p and not
+                 exposed already by ps. *)
+                let needed_fields =
+                  let of_list = Set.of_list (module Name.Compare_no_type) in
+                  Set.diff
+                    (Set.inter (pred_free p) (of_list Meta.(find_exn r schema)))
+                    (of_list (List.filter_map ~f:pred_to_name ps))
+                  |> Set.to_list
+                  |> List.map ~f:(fun n -> Name n)
+                in
+                [(p, select (ps @ needed_fields) r)]
             | Join {pred; r1= {node= Filter (p, r); _}; r2} -> [(p, join pred r r2)]
             | Join {pred; r1; r2= {node= Filter (p, r); _}} -> [(p, join pred r1 r)]
             | _ -> []
