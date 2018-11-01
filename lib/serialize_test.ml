@@ -139,8 +139,10 @@ let%expect_test "ordered-idx" =
      42
      "*\\000\\000\\000\\027\\000\\000\\000\\000\\000\\000\\000\\001'\\000\\000\\000\\000\\000\\000\\000\\002(\\000\\000\\000\\000\\000\\000\\000\\003)\\000\\000\\000\\000\\000\\000\\000\\001\\002\\003") |}]
 
-let%expect_test "list-list" = run_test "AList(r1, AList(r1, AScalar(r1.f)))";
-  [%expect {|
+let%expect_test "list-list" =
+  run_test "AList(r1, AList(r1 as r, AScalar(r.f)))" ;
+  [%expect
+    {|
     0:25 List body
     0:5 List body
     0:1 Scalar (=(Int 1))

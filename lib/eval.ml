@@ -101,6 +101,28 @@ let eval_pred_shared eval ctx =
   in
   eval_pred ctx
 
+let eval_foreach eval_foreach_flat ctx query1 query2 =
+  let extract_tup s t =
+    List.map s ~f:(fun n -> (n, Map.find_exn t n))
+    |> Map.of_alist_exn (module Name.Compare_no_type)
+  in
+  let outer_schema = Meta.(find_exn query1 schema) in
+  let inner_tuples outer_t tuples =
+    Seq.take_while tuples ~f:(fun t ->
+        [%compare.equal: Ctx.t] (extract_tup outer_schema t) outer_t )
+  in
+  let tuples = eval_foreach_flat ctx query1 query2 |> Seq.memoize in
+  match Seq.hd tuples with
+  | None -> Seq.empty
+  | Some t ->
+      Seq.unfold_step ~init:(tuples, t) ~f:(function tuples, outer_t ->
+          ( match Seq.next tuples with
+          | Some (t, ts) ->
+              let outer_t' = extract_tup outer_schema t in
+              if [%compare.equal: Ctx.t] outer_t outer_t' then Skip (ts, outer_t)
+              else Yield ((outer_t', inner_tuples outer_t' tuples), (ts, outer_t'))
+          | None -> Done ) )
+
 module Make (Config : Config.S) : S = struct
   let load_relation = Relation.from_db Config.conn
 
@@ -160,35 +182,15 @@ module Make (Config : Config.S) : S = struct
      evaluating query2 in a loop over the results of query1. *)
   let eval_foreach_flat ctx query1 query2 =
     let ctx = Map.map ctx ~f:pred_of_value in
+    Logs.debug (fun m ->
+        m "%a" Sexp.pp_hum ([%sexp_of: pred Map.M(Name.Compare_no_type).t] ctx) ) ;
     let query1 = subst ctx query1 in
     let query2 = subst ctx query2 in
     let sql = Sql.ralgebra_foreach query1 query2 in
     let schema = Meta.(find_exn query1 schema) @ Meta.(find_exn query2 schema) in
     eval_with_schema schema sql
 
-  let eval_foreach ctx query1 query2 =
-    let extract_tup s t =
-      List.map s ~f:(fun n -> (n, Map.find_exn t n))
-      |> Map.of_alist_exn (module Name.Compare_no_type)
-    in
-    let outer_schema = Meta.(find_exn query1 schema) in
-    let inner_schema = Meta.(find_exn query2 schema) in
-    let inner_tuples outer_t tuples =
-      Seq.take_while tuples ~f:(fun t ->
-          [%compare.equal: Ctx.t] (extract_tup outer_schema t) outer_t )
-      |> Seq.map ~f:(extract_tup inner_schema)
-    in
-    let tuples = eval_foreach_flat ctx query1 query2 |> Seq.memoize in
-    match Seq.hd tuples with
-    | None -> Seq.empty
-    | Some t ->
-        Seq.unfold_step ~init:(tuples, t) ~f:(function tuples, outer_t ->
-            ( match Seq.next tuples with
-            | Some (t, ts) ->
-                let outer_t' = extract_tup outer_schema t in
-                if [%compare.equal: Ctx.t] outer_t outer_t' then Skip (ts, outer_t)
-                else Yield ((outer_t', inner_tuples outer_t' tuples), (ts, outer_t'))
-            | None -> Done ) )
+  let eval_foreach = eval_foreach eval_foreach_flat
 end
 
 module Make_mock (Config : Config.S_mock) : S = struct
@@ -309,6 +311,9 @@ module Make_mock (Config : Config.S_mock) : S = struct
     in
     eval r |> Seq.map ~f:(Map.merge_right ctx)
 
-  let eval_foreach ctx r1 r2 =
-    eval ctx r1 |> Seq.map ~f:(fun ctx -> (ctx, eval ctx r2))
+  let eval_foreach_flat ctx q1 q2 =
+    eval ctx q1
+    |> Seq.concat_map ~f:(fun ctx -> Seq.map (eval ctx q2) ~f:(Map.merge_right ctx))
+
+  let eval_foreach = eval_foreach eval_foreach_flat
 end

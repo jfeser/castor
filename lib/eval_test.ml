@@ -56,6 +56,37 @@ let%expect_test "eval-select" =
       (((relation (log)) (name id) (type_ ())) (Int 5))
       (((relation (log)) (name succ) (type_ ())) (Int 6)))) |}]
 
+let%expect_test "eval-foreach" =
+  let module M = Abslayout_db.Make (E) in
+  let q1 =
+    "select([id as i1, counter as c1], log)" |> of_string_exn |> M.resolve
+    |> M.annotate_schema
+  in
+  let q2 =
+    "select([log.id as i2, log.counter as c2], filter(log.succ = i1, log))"
+    |> of_string_exn |> M.annotate_schema
+  in
+  E.eval_foreach Ctx.empty q1 q2
+  |> Seq.map ~f:(fun (c, s) -> (c, Seq.to_list s))
+  |> Seq.to_list |> [%sexp_of: (Ctx.t * Ctx.t list) list] |> print_s;
+  [%expect {|
+    ((((((relation ()) (name c1) (type_ ((IntT (nullable false))))) (Int 3))
+       (((relation ()) (name i1) (type_ ((IntT (nullable false))))) (Int 3)))
+      (((((relation ()) (name c1) (type_ ((IntT (nullable false))))) (Int 3))
+        (((relation ()) (name c2) (type_ ())) (Int 2))
+        (((relation ()) (name i1) (type_ ((IntT (nullable false))))) (Int 3))
+        (((relation ()) (name i2) (type_ ())) (Int 2)))))
+     (((((relation ()) (name c1) (type_ ((IntT (nullable false))))) (Int 1))
+       (((relation ()) (name i1) (type_ ((IntT (nullable false))))) (Int 4)))
+      (((((relation ()) (name c1) (type_ ((IntT (nullable false))))) (Int 1))
+        (((relation ()) (name c2) (type_ ())) (Int 1))
+        (((relation ()) (name i1) (type_ ((IntT (nullable false))))) (Int 4))
+        (((relation ()) (name i2) (type_ ())) (Int 1)))
+       ((((relation ()) (name c1) (type_ ((IntT (nullable false))))) (Int 1))
+        (((relation ()) (name c2) (type_ ())) (Int 3))
+        (((relation ()) (name i1) (type_ ((IntT (nullable false))))) (Int 4))
+        (((relation ()) (name i2) (type_ ())) (Int 3)))))) |}]
+
 let make_module_db () =
   let module E = Eval.Make (struct
     let conn = Db.create ~port:"5433" "demomatch"

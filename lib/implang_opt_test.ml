@@ -58,16 +58,16 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
     // i13 : Int[nonnull] (persists=true)
     // i19 : Int[nonnull] (persists=true)
     fun printer () : Void {
-        cstart12 = 1;
+        cstart12 = 0;
         i13 = 0;
-        count14 = 3;
+        count14 = 2;
         loop (i13 < count14) {
-            cstart15 = cstart12 + 1;
+            cstart15 = cstart12;
             cstart16 = cstart15 + 1;
             cstart17 = cstart16 + 1;
-            cstart18 = cstart17 + 1 + 1;
+            cstart18 = cstart17;
             i19 = 0;
-            count20 = buf[cstart17 : 1];
+            count20 = 3;
             loop (i19 < count20) {
                 cstart21 = cstart18;
                 cstart22 = cstart21 + 1;
@@ -82,7 +82,7 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
                 cstart18 = cstart18 + 2;
                 i19 = i19 + 1;
             }
-            cstart12 = cstart12 + buf[cstart12 : 1];
+            cstart12 = cstart12 + 8;
             i13 = i13 + 1;
         }
     }
@@ -101,16 +101,16 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
     // cstart5 : Int[nonnull] (persists=true)
     fun counter () : Int[nonnull] {
         c0 = 0;
-        cstart1 = 1;
+        cstart1 = 0;
         i2 = 0;
-        count3 = 3;
+        count3 = 2;
         loop (i2 < count3) {
-            cstart4 = cstart1 + 1;
+            cstart4 = cstart1;
             cstart5 = cstart4 + 1;
             cstart6 = cstart5 + 1;
-            cstart7 = cstart6 + 1 + 1;
+            cstart7 = cstart6;
             i8 = 0;
-            count9 = buf[cstart6 : 1];
+            count9 = 3;
             loop (i8 < count9) {
                 cstart10 = cstart7;
                 cstart11 = cstart10 + 1;
@@ -122,7 +122,7 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
                 cstart7 = cstart7 + 2;
                 i8 = i8 + 1;
             }
-            cstart1 = cstart1 + buf[cstart1 : 1];
+            cstart1 = cstart1 + 8;
             i2 = i2 + 1;
         }
         return c0;
