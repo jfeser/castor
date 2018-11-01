@@ -68,17 +68,16 @@ let rec pred_to_sql = function
   | Substring (p1, p2, p3) ->
       sprintf "substring(%s from %s for %s)" (pred_to_sql p1) (pred_to_sql p2)
         (pred_to_sql p3)
-  | p -> Error.create "Unexpected aggregate." p [%sexp_of: pred] |> Error.raise
-
-and agg_to_sql = function
   | Count -> "count(*)"
   | Sum n -> sprintf "sum(%s)" (pred_to_sql n)
   | Avg n -> sprintf "avg(%s)" (pred_to_sql n)
   | Min n -> sprintf "min(%s)" (pred_to_sql n)
   | Max n -> sprintf "max(%s)" (pred_to_sql n)
-  | As_pred (((Count | Sum _ | Avg _ | Min _ | Max _) as p), n) ->
-      sprintf "%s as %s" (agg_to_sql p) n
-  | p -> (
+
+and agg_to_sql p =
+  match pred_kind p with
+  | `Agg -> pred_to_sql p
+  | `Scalar -> (
     match pred_to_name p with
     | Some n -> sprintf "min(%s) as %s" (pred_to_sql p) n.name
     | None -> sprintf "null" )
