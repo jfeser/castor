@@ -23,7 +23,7 @@ let rec pred_to_sql = function
   | Name n -> sprintf "%s" (Name.to_sql n)
   | Int x -> Int.to_string x
   | Fixed x -> Fixed_point.to_string x
-  | Date x -> Core.Date.to_string x
+  | Date x -> sprintf "date('%s')" (Core.Date.to_string x)
   | Bool true -> "true"
   | Bool false -> "false"
   | String s -> sprintf "'%s'" s
@@ -36,9 +36,9 @@ let rec pred_to_sql = function
       | Month -> sprintf "interval '%s month'" s
       | Day -> sprintf "interval '%s day'" s
       | Strlen -> sprintf "char_length(%s)" s
-      | ExtractY -> sprintf "date_part('year', %s)" s
-      | ExtractM -> sprintf "date_part('month', %s)" s
-      | ExtractD -> sprintf "date_part('day', %s)" s )
+      | ExtractY -> sprintf "cast(date_part('year', %s) as integer)" s
+      | ExtractM -> sprintf "cast(date_part('month', %s) as integer)" s
+      | ExtractD -> sprintf "cast(date_part('day', %s) as integer)" s )
   | Binop (op, p1, p2) -> (
       let s1 = sprintf "(%s)" (pred_to_sql p1) in
       let s2 = sprintf "(%s)" (pred_to_sql p2) in
