@@ -280,7 +280,7 @@ BENCHMARKS = [
     },
     {
         "name": "15",
-        "query": ['15-gold'],
+        "query": [],
         "params": [("param1:date", gen_fixed_date(date(1996,1,1)))],
     },
     {
@@ -326,7 +326,7 @@ BENCHMARKS = [
     },
     {
         "name": "21-no",
-        "query": ["21-no"],
+        "query": [],
         "params": [("param1:string", gen_nation())],
     },
 ]
