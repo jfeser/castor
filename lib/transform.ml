@@ -225,8 +225,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
 
   let same_orders r1 r2 =
     let open A in
-    let r1 = M.annotate_schema r1 in
-    let r2 = M.annotate_schema r2 in
+    M.annotate_schema r1 ;
+    M.annotate_schema r2 ;
     annotate_eq r1 ;
     annotate_orders r1 ;
     annotate_eq r2 ;
@@ -235,8 +235,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
 
   let orderby_list key order r1 r2 =
     let open A in
-    let r1 = M.annotate_schema r1 in
-    let r2 = M.annotate_schema r2 in
+    M.annotate_schema r1 ;
+    M.annotate_schema r2 ;
     annotate_eq r1 ;
     annotate_eq r2 ;
     let schema1 = Meta.(find_exn r1 schema) in
@@ -280,7 +280,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
 
   let orderby_cross_tuple key order rs =
     let open A in
-    let rs = List.map rs ~f:M.annotate_schema in
+    List.iter rs ~f:M.annotate_schema ;
     match rs with
     | r :: rs ->
         let schema = Meta.(find_exn r schema) in
@@ -374,7 +374,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     { name= "push-select"
     ; f=
         (fun r ->
-          let r = M.annotate_schema r in
+          M.annotate_schema r ;
           match r with
           | {node= Select (ps, {node= AHashIdx (r, r', m); _}); _} ->
               let outer_preds =
@@ -426,7 +426,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     { name= "hoist-filter"
     ; f=
         (fun r ->
-          let r = M.annotate_schema r in
+          M.annotate_schema r ;
           let ret =
             match r.node with
             | OrderBy {key; rel= {node= Filter (p, r); _}; order} ->
@@ -450,7 +450,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
             | _ -> []
           in
           List.filter_map ret ~f:(fun (p, r) ->
-              let r = M.annotate_schema r in
+              M.annotate_schema r ;
               let schema = Meta.(find_exn r schema) in
               if predicate_is_valid p schema then Some (filter p r)
               else (
@@ -509,8 +509,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     ; f=
         (fun r ->
           let r = M.resolve ~params:Config.params r in
-          let r = M.annotate_schema r in
-          [project r] ) }
+          M.annotate_schema r ; [project r] ) }
 
   let tf_hoist_join_pred _ =
     let open A in
@@ -633,7 +632,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     { name= "split-out"
     ; f=
         (fun r ->
-          let r = M.annotate_schema r in
+          M.annotate_schema r ;
           let schema = Meta.(find_exn r schema) in
           if List.mem schema pk ~equal:eq then
             let pk_fresh =
@@ -685,7 +684,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
   let tf_hoist_pred_constant _ =
     let open A in
     let f r =
-      let r = M.annotate_schema r in
+      M.annotate_schema r ;
       annotate_free r ;
       let consts =
         match r.node with
