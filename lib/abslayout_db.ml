@@ -597,11 +597,7 @@ module Make (Eval : Eval.S) = struct
             (ATuple (ls, t), ctx)
         | ATuple (ls, (Concat as t)) ->
             let ls, ctxs = List.map ls ~f:(resolve outer_ctx) |> List.unzip in
-            let ctx =
-              List.all_equal ~sexp_of_t:[%sexp_of: Set.M(Name.Compare_no_type).t]
-                ctxs
-              |> Or_error.ok_exn
-            in
+            let ctx = List.hd_exn ctxs in
             (ATuple (ls, t), ctx)
         | ATuple (ls, (Cross as t)) ->
             let ls, ctx =
