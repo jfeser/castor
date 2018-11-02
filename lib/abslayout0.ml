@@ -101,6 +101,8 @@ class virtual runtime_subquery_visitor =
     method virtual visit_Subquery : t -> unit
 
     (* Don't annotate subqueries that run at compile time. *)
+    method! visit_AScalar () _ = ()
+
     method! visit_AList () (_, r) = super#visit_t () r
 
     method! visit_AHashIdx () (_, r, _) = super#visit_t () r
