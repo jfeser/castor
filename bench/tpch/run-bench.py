@@ -220,7 +220,7 @@ BENCHMARKS = [
     },
     {
         "name": "7",
-        "query": [],
+        "query": ['7-gold'],
         "params": [
             ("param1:string", gen_str('FRANCE')),
             ("param2:string", gen_str('GERMANY')),

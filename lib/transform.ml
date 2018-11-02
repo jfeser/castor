@@ -571,6 +571,16 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | _ -> []) }
     |> run_everywhere
 
+  let tf_elim_disj_filter _ =
+    let open A in
+    { name= "elim-disj-filter"
+    ; f=
+        (function
+        | {node= Filter (Binop (Or, p, p'), r); _} ->
+            [tuple [filter p r; filter p' r] Concat]
+        | _ -> []) }
+    |> run_everywhere
+
   let tf_project _ =
     let open A in
     { name= "project"
@@ -781,6 +791,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     ; ("push-filter", tf_push_filter)
     ; ("merge-filter", tf_merge_filter)
     ; ("split-filter", tf_split_filter)
+    ; ("elim-disj-filter", tf_elim_disj_filter)
     ; ("elim-eq-filter", tf_elim_eq_filter)
     ; ("elim-cmp-filter", tf_elim_cmp_filter)
     ; ("elim-join", tf_elim_join)
