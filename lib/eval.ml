@@ -88,9 +88,19 @@ let eval_pred_shared eval ctx =
     | First r -> (
       match eval ctx r |> Seq.hd with
       | Some tup -> (
-        match Map.to_alist tup with
-        | [(_, v)] -> v
-        | _ -> failwith "Expected a single valued tuple." )
+          (* Remove fields that are also present in the context to compensate
+             for a bug elsewhere. *)
+          let tup_list =
+            Map.to_alist tup |> List.filter ~f:(fun (n, _) -> not (Map.mem ctx n))
+          in
+          match tup_list with
+          | [(_, v)] -> v
+          | _ ->
+              Error.create "Expected a single valued tuple." (tup, ctx)
+                [%sexp_of:
+                  Value.t Map.M(Name.Compare_no_type).t
+                  * Value.t Map.M(Name.Compare_no_type).t]
+              |> Error.raise )
       | None -> failwith "Empty relation." )
     | Substring (p1, p2, p3) ->
         let s = eval_pred ctx p1 in
