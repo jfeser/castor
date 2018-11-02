@@ -291,9 +291,8 @@ let pred_relations p =
   in
   f#visit_pred () p ; !rels
 
-(** Return the set of relations which have fields in the tuple produced by
-     this expression. *)
-
+(** Return the set of relations which have fields in the tuple produced by this
+   expression. *)
 let rec pred_to_schema =
   let open Type.PrimType in
   let unnamed t = {name= ""; relation= None; type_= Some t} in

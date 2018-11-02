@@ -120,9 +120,10 @@ let run_test ?(params = []) ?(modules = make_modules) ?(print_layout = true)
       List.map params ~f:(fun (n, _) -> n)
       |> Set.of_list (module Name.Compare_no_type)
     in
-    of_string_exn layout_str |> M.resolve ~params |> M.annotate_schema
-    |> M.annotate_key_layouts
+    of_string_exn layout_str |> M.resolve ~params
   in
+  M.annotate_schema layout ;
+  let layout = M.annotate_key_layouts layout in
   annotate_foreach layout ;
   let out_dir = Filename.temp_dir "bin" "" in
   let run_compiler () =

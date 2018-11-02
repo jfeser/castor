@@ -28,8 +28,8 @@ let main ~debug ~gprof ~params ~db ~port ~code_only ?out_dir ch =
   Logs.debug (fun m -> m "Codegen.") ;
   let ralgebra =
     let params = Set.of_list (module Name.Compare_no_type) params in
-    Abslayout.of_channel_exn ch |> A.resolve ~params |> A.annotate_schema
-    |> A.annotate_key_layouts
+    let r = Abslayout.of_channel_exn ch |> A.resolve ~params in
+    A.annotate_schema r ; A.annotate_key_layouts r
   in
   A.annotate_subquery_types ralgebra ;
   C.compile ~gprof ~params ?out_dir ralgebra |> ignore

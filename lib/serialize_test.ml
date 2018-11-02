@@ -28,10 +28,9 @@ let _, [f; _] =
 let run_test layout_str =
   let layout_file = Filename.temp_file "layout" "txt" in
   let (module S) = make_modules layout_file in
-  let layout =
-    of_string_exn layout_str |> M.resolve |> M.annotate_schema
-    |> M.annotate_key_layouts
-  in
+  let layout = of_string_exn layout_str |> M.resolve in
+  M.annotate_schema layout ;
+  let layout = M.annotate_key_layouts layout in
   annotate_foreach layout ;
   let type_ = M.to_type layout in
   let buf = Buffer.create 1024 in

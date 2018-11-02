@@ -6,7 +6,7 @@ module type S = sig
 
   val to_type : t -> Type.t
 
-  val annotate_schema : t -> t
+  val annotate_schema : t -> unit
 
   val to_schema : t -> Name.t list
 

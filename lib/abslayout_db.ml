@@ -271,25 +271,160 @@ module Make (Eval : Eval.S) = struct
     in
     visitor#visit_t ()
 
+  (* let schema_visitor =
+   *   let unnamed t = {name= ""; relation= None; type_= Some t} in
+   *   let int_t = unnamed (Type.PrimType.IntT {nullable= false}) in
+   *   let bool_t = unnamed (Type.PrimType.BoolT {nullable= false}) in
+   *   let fixed_t = unnamed (Type.PrimType.FixedT {nullable= false}) in
+   *   let string_t = unnamed (Type.PrimType.StringT {nullable= false}) in
+   *   let null_t = unnamed Type.PrimType.NullT in
+   *   let unify s1 s2 =
+   *     List.map2_exn s1 s2 ~f:(fun n1 n2 ->
+   *         assert (String.(n1.name = "") && String.(n2.name = "")) ;
+   *         unnamed (Type.PrimType.unify (Name.type_exn n1) (Name.type_exn n2)) )
+   *   in
+   *   object (self : 'a)
+   *     inherit [_] reduce as super
+   * 
+   *     inherit [_] Util.list_monoid
+   * 
+   *     method! zero = failwith "Missing case."
+   * 
+   *     method! visit_As_pred () (p, n) =
+   *       List.map (self#visit_pred () p) ~f:(fun s -> {s with relation= None; name= n}
+   *       )
+   * 
+   *     method! visit_Name () n = [n]
+   * 
+   *     method! visit_Int () _ = [int_t]
+   * 
+   *     method! visit_Fixed () _ = [fixed_t]
+   * 
+   *     method! visit_Bool () _ = [bool_t]
+   * 
+   *     method! visit_Date () _ = [int_t]
+   * 
+   *     method! visit_String () _ = [string_t]
+   * 
+   *     method! visit_Null () = [null_t]
+   * 
+   *     method! visit_Unop () (op, _) =
+   *       match op with
+   *       | Year | Month | Day | Strlen | ExtractY | ExtractM | ExtractD -> [int_t]
+   *       | Not -> [bool_t]
+   * 
+   *     method! visit_Binop () (op, p1, p2) =
+   *       let s1 = self#visit_pred () p1 in
+   *       let s2 = self#visit_pred () p2 in
+   *       match op with
+   *       | Add | Sub | Mul | Div | Mod -> unify s1 s2
+   *       | Strpos -> [int_t]
+   *       | Eq | Lt | Le | Gt | Ge | And | Or -> [bool_t]
+   * 
+   *     method! visit_Count () = [int_t]
+   * 
+   *     method! visit_Sum () p = self#visit_pred () p
+   * 
+   *     method! visit_Min () p = self#visit_pred () p
+   * 
+   *     method! visit_Max () p = self#visit_pred () p
+   * 
+   *     method! visit_Avg () _ = [fixed_t]
+   * 
+   *     method! visit_Exists () r = self#visit_t () r
+   * 
+   *     method! visit_Select () (ps, _) = List.concat_map ps ~f:(self#visit_pred ())
+   * 
+   *     method! visit_Filter () (_, r) = self#visit_t () r
+   * 
+   *     method! visit_Join () _ r1 r2 = self#visit_t () r1 @ self#visit_t () r2
+   * 
+   *     method! visit_GroupBy () ps _ _ = List.concat_map ps ~f:(self#visit_pred ())
+   * 
+   *     method! visit_OrderBy () _ _ r = self#visit_t () r
+   * 
+   *     method! visit_Dedup () r = self#visit_t () r
+   * 
+   *     method! visit_Scan () table =
+   *       (Eval.load_relation table).fields
+   *       |> List.map ~f:(fun f -> Name.of_field ~rel:table f)
+   * 
+   *     method! visit_AEmpty () = []
+   * 
+   *     method! visit_AScalar () p = self#visit_pred () p
+   * 
+   *     method! visit_AList () (_, r) = self#visit_t () r
+   * 
+   *     method! visit_ATuple () (rs, _) = List.concat_map rs ~f:(self#visit_t ())
+   * 
+   *     method! visit_AOrderedIdx () (r1, r2, _) =
+   *       self#visit_t () r1 @ self#visit_t () r2
+   * 
+   *     method! visit_AHashIdx () (r1, r2, _) =
+   *       self#visit_t () r1 @ self#visit_t () r2
+   * 
+   *     method! visit_As () n r =
+   *       List.map (self#visit_t () r) ~f:(fun x -> {x with relation= Some n})
+   *   end *)
+
+  let rec pred_to_schema =
+    let open Type.PrimType in
+    let unnamed t = {name= ""; relation= None; type_= Some t} in
+    function
+    | As_pred (p, n) ->
+        let schema = pred_to_schema p in
+        {schema with relation= None; name= n}
+    | Name n -> n
+    | Int _ | Date _
+     |Unop ((Year | Month | Day | Strlen | ExtractY | ExtractM | ExtractD), _)
+     |Count ->
+        unnamed (IntT {nullable= false})
+    | Fixed _ | Avg _ -> unnamed (FixedT {nullable= false})
+    | Bool _ | Exists _
+     |Binop ((Eq | Lt | Le | Gt | Ge | And | Or), _, _)
+     |Unop (Not, _) ->
+        unnamed (BoolT {nullable= false})
+    | String _ -> unnamed (StringT {nullable= false})
+    | Null -> unnamed NullT
+    | Binop ((Add | Sub | Mul | Div | Mod), p1, p2) ->
+        let s1 = pred_to_schema p1 in
+        let s2 = pred_to_schema p2 in
+        unnamed (unify (Name.type_exn s1) (Name.type_exn s2))
+    | Binop (Strpos, _, _) -> unnamed (IntT {nullable= false})
+    | Sum p | Min p | Max p -> pred_to_schema p
+    | If (_, p1, p2) ->
+        let s1 = pred_to_schema p1 in
+        let s2 = pred_to_schema p2 in
+        Type.PrimType.unify (Name.type_exn s1) (Name.type_exn s2) |> ignore ;
+        unnamed (Name.type_exn s1)
+    | First r -> (
+        annotate_schema r ;
+        match Meta.(find_exn r schema) with
+        | [n] -> n
+        | [] -> failwith "Unexpected empty schema."
+        | _ -> failwith "Too many fields." )
+    | Substring _ -> unnamed (StringT {nullable= false})
+
   (** Add a schema field to each metadata node. Variables must first be
      annotated with type information. *)
-  let annotate_schema =
+  and annotate_schema r =
     let mapper =
-      object (self : 'self)
-        inherit [_] map
+      object (self : 'a)
+        inherit [_] iter as super
 
-        method! visit_t () {node; meta} =
-          let node' = self#visit_node () node in
+        method! visit_t () r =
+          super#visit_t () r ;
           let schema =
-            match node' with
-            | Select (x, _) -> List.map x ~f:pred_to_schema
+            match r.node with
+            | Select (x, _) ->
+                List.map x ~f:(fun p -> self#visit_pred () p ; pred_to_schema p)
             | Filter (_, r) | Dedup r | AList (_, r) | OrderBy {rel= r; _} ->
                 Meta.(find_exn r schema)
             | Join {r1; r2; _} | AOrderedIdx (r1, r2, _) | AHashIdx (r1, r2, _) ->
                 Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema)
             | GroupBy (x, _, _) -> List.map x ~f:pred_to_schema
             | AEmpty -> []
-            | AScalar e -> [pred_to_schema e]
+            | AScalar e -> self#visit_pred () e ; [pred_to_schema e]
             | ATuple (rs, _) ->
                 List.concat_map ~f:(fun r -> Meta.(find_exn r schema)) rs
             | As (n, r) ->
@@ -299,14 +434,14 @@ module Make (Eval : Eval.S) = struct
                 (Eval.load_relation table).fields
                 |> List.map ~f:(fun f -> Name.of_field ~rel:table f)
           in
-          Meta.set {node= node'; meta} Meta.schema schema
+          Meta.set_m r Meta.schema schema
       end
     in
-    mapper#visit_t ()
+    mapper#visit_t () r
 
   let to_schema r =
-    let r' = annotate_schema r in
-    Meta.(find_exn r' schema)
+    annotate_schema r ;
+    Meta.(find_exn r schema)
 
   let annotate_key_layouts =
     let key_layout schema =
@@ -316,7 +451,7 @@ module Make (Eval : Eval.S) = struct
         | [x] -> x
         | xs -> tuple xs Cross
       in
-      annotate_schema layout
+      annotate_schema layout ; layout
     in
     let annotator =
       object (self : 'a)
@@ -387,6 +522,10 @@ module Make (Eval : Eval.S) = struct
       List.map preds ~f:pred_to_schema
       |> List.filter ~f:(fun n -> String.(n.name <> ""))
       |> Set.of_list (module Name.Compare_no_type)
+    in
+    let pred_to_name pred =
+      let n = pred_to_schema pred in
+      if String.(n.name = "") then None else Some n
     in
     let union c1 c2 = Set.union c1 c2 in
     let union_list =

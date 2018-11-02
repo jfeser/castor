@@ -44,8 +44,9 @@ let%expect_test "subst" =
 let%expect_test "needed" =
   let r =
     "alist(r, atuple([ascalar(r.f as k1), ascalar((k1 + 1) as k2), ascalar(k2 + \
-     1)], cross))" |> of_string_exn |> M.resolve |> M.annotate_schema
+     1)], cross))" |> of_string_exn |> M.resolve
   in
+  M.annotate_schema r ;
   annotate_free r ;
   annotate_needed r ;
   print_s ([%sexp_of: t] r) ;
@@ -168,7 +169,7 @@ let%expect_test "mat-col" =
   end) in
   let module M = Abslayout_db.Make (Eval) in
   let layout = M.resolve layout in
-  let layout = M.annotate_schema layout in
+  M.annotate_schema layout ;
   layout |> [%sexp_of: t] |> print_s ;
   [%expect
     {|
@@ -238,7 +239,7 @@ let%expect_test "mat-hidx" =
   end) in
   let module M = Abslayout_db.Make (Eval) in
   let layout = M.resolve layout in
-  let layout = M.annotate_schema layout in
+  M.annotate_schema layout ;
   layout |> [%sexp_of: t] |> print_s ;
   [%expect
     {|
@@ -381,9 +382,47 @@ let%expect_test "annotate-orders" =
     "alist(select([r.f as k], orderby([r.f], dedup(r), asc)), select([r.f, r.g], \
      filter(r.f = k, r)))" |> of_string_exn |> M.resolve
   in
-  let r = M.annotate_schema r in
+  M.annotate_schema r ;
   annotate_eq r ;
   annotate_orders r ;
   Meta.(find_exn r order) |> [%sexp_of: pred list] |> print_s ;
   [%expect
     {| ((Name ((relation (r)) (name f) (type_ ((IntT (nullable false))))))) |}]
+
+let%expect_test "annotate-schema" =
+  let r = "ascalar((select([min(r.f)], r)))" |> of_string_exn |> M.resolve in
+  M.annotate_schema r ;
+  [%sexp_of: t] r |> print_s;
+  [%expect {|
+    ((node
+      (AScalar
+       (First
+        ((node
+          (Select
+           (((Min
+              (Name ((relation (r)) (name f) (type_ ((IntT (nullable false))))))))
+            ((node (Scan r))
+             (meta
+              ((schema
+                (((relation (r)) (name f) (type_ ((IntT (nullable false)))))
+                 ((relation (r)) (name g) (type_ ((IntT (nullable false)))))))))))))
+         (meta
+          ((schema (((relation (r)) (name f) (type_ ((IntT (nullable false)))))))))))))
+     (meta
+      ((schema (((relation (r)) (name f) (type_ ((IntT (nullable false)))))))))) |}]
+
+let%expect_test "annotate-schema" =
+  let r = "select([min(r.f)], r)" |> of_string_exn |> M.resolve in
+  M.annotate_schema r ;
+  [%sexp_of: t] r |> print_s;
+  [%expect {|
+    ((node
+      (Select
+       (((Min (Name ((relation (r)) (name f) (type_ ((IntT (nullable false))))))))
+        ((node (Scan r))
+         (meta
+          ((schema
+            (((relation (r)) (name f) (type_ ((IntT (nullable false)))))
+             ((relation (r)) (name g) (type_ ((IntT (nullable false)))))))))))))
+     (meta
+      ((schema (((relation (r)) (name f) (type_ ((IntT (nullable false)))))))))) |}]

@@ -58,18 +58,18 @@ let%expect_test "eval-select" =
 
 let%expect_test "eval-foreach" =
   let module M = Abslayout_db.Make (E) in
-  let q1 =
-    "select([id as i1, counter as c1], log)" |> of_string_exn |> M.resolve
-    |> M.annotate_schema
-  in
+  let q1 = "select([id as i1, counter as c1], log)" |> of_string_exn |> M.resolve in
+  M.annotate_schema q1 ;
   let q2 =
     "select([log.id as i2, log.counter as c2], filter(log.succ = i1, log))"
-    |> of_string_exn |> M.annotate_schema
+    |> of_string_exn
   in
+  M.annotate_schema q2 ;
   E.eval_foreach Ctx.empty q1 q2
   |> Seq.map ~f:(fun (c, s) -> (c, Seq.to_list s))
-  |> Seq.to_list |> [%sexp_of: (Ctx.t * Ctx.t list) list] |> print_s;
-  [%expect {|
+  |> Seq.to_list |> [%sexp_of: (Ctx.t * Ctx.t list) list] |> print_s ;
+  [%expect
+    {|
     ((((((relation ()) (name c1) (type_ ((IntT (nullable false))))) (Int 3))
        (((relation ()) (name i1) (type_ ((IntT (nullable false))))) (Int 3)))
       (((((relation ()) (name c1) (type_ ((IntT (nullable false))))) (Int 3))

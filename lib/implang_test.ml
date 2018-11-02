@@ -46,10 +46,9 @@ let run_test ?(params = []) layout_str =
       ()
   in
   let sparams = Set.of_list (module Name.Compare_no_type) params in
-  let layout =
-    of_string_exn layout_str |> M.resolve ~params:sparams |> M.annotate_schema
-    |> M.annotate_key_layouts
-  in
+  let layout = of_string_exn layout_str |> M.resolve ~params:sparams in
+  M.annotate_schema layout ;
+  let layout = M.annotate_key_layouts layout in
   annotate_foreach layout ;
   M.annotate_subquery_types layout ;
   I.irgen ~params ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter
@@ -76,10 +75,9 @@ let run_test_db ?(params = []) layout_str =
       ()
   in
   let sparams = Set.of_list (module Name.Compare_no_type) params in
-  let layout =
-    of_string_exn layout_str |> M.resolve ~params:sparams |> M.annotate_schema
-    |> M.annotate_key_layouts
-  in
+  let layout = of_string_exn layout_str |> M.resolve ~params:sparams in
+  M.annotate_schema layout ;
+  let layout = M.annotate_key_layouts layout in
   annotate_foreach layout ;
   M.annotate_subquery_types layout ;
   I.irgen ~params ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter
