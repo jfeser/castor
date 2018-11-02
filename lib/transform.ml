@@ -165,6 +165,74 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | _ -> []) }
     |> run_everywhere
 
+  (** Groupby eliminator that works when the grouping key is all direct field
+     references. It computes the set of all possible keys, which is often
+     simpler than computing the true set of keys. *)
+  let tf_elim_groupby_approx _ =
+    let open A in
+    let wrap_rel r wrapper =
+      let visitor =
+        object
+          inherit [_] Abslayout0.endo
+
+          method! visit_Scan () old r' =
+            if String.(r = r') then wrapper (scan r') else old
+        end
+      in
+      visitor#visit_t ()
+    in
+    { name= "elim-groupby-approx"
+    ; f=
+        (fun r ->
+          let r = M.resolve r in
+          match r with
+          | {node= GroupBy (ps, key, r); _}
+            when List.for_all key ~f:(fun n -> Option.is_some n.relation) ->
+              (* Create an alias for each key. *)
+              let key_aliases =
+                List.fold_left key
+                  ~init:(Map.empty (module String))
+                  ~f:(fun m k ->
+                    let k' = k.name ^ Fresh.name fresh "k%d" in
+                    Map.add_exn m ~key:k.name ~data:k' )
+              in
+              (* First, group keys by their relation. *)
+              let key_groups =
+                List.fold_left key
+                  ~init:(Map.empty (module String))
+                  ~f:(fun m k ->
+                    Map.add_multi m ~key:(Option.value_exn k.relation) ~data:k )
+              in
+              (* Generate the relation of unique keys for each group. *)
+              let key_rels =
+                Map.mapi key_groups ~f:(fun ~key:rel ~data:ks ->
+                    dedup
+                      (select
+                         (List.map ks ~f:(fun n ->
+                              As_pred (Name n, Map.find_exn key_aliases n.name) ))
+                         (scan rel)) )
+                |> Map.data
+              in
+              (* Join the key relations. *)
+              let key_rel = List.fold_left1 key_rels ~f:(join (Bool true)) in
+              (* Wrap each reference to the original relation in a filter. *)
+              let r =
+                Map.fold key_groups ~init:r ~f:(fun ~key:rel ~data:ks ->
+                    let filter_pred =
+                      List.map ks ~f:(fun n ->
+                          Binop
+                            ( Eq
+                            , Name n
+                            , Name (Map.find_exn key_aliases n.name |> Name.create)
+                            ) )
+                      |> List.fold_left1 ~f:(fun p p' -> Binop (And, p, p'))
+                    in
+                    wrap_rel rel (fun r -> (filter filter_pred r).node) )
+              in
+              [list key_rel (select ps r)]
+          | _ -> [] ) }
+    |> run_everywhere
+
   let tf_elim_eq_filter _ =
     let open A in
     { name= "elim-eq-filter"
@@ -707,6 +775,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     [ ("hoist-join-pred", tf_hoist_join_pred)
     ; ("elim-groupby", tf_elim_groupby)
     ; ("elim-groupby-filter", tf_elim_groupby_filter)
+    ; ("elim-groupby-approx", tf_elim_groupby_approx)
     ; ("push-orderby", tf_push_orderby)
     ; ("hoist-filter", tf_hoist_filter)
     ; ("push-filter", tf_push_filter)
