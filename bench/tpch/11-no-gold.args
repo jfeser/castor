@@ -1,1 +1,0 @@
--db tpch -p param1:string -p param2:float  bench/tpch/11-no.txt -t "hoist-filter:0,hoist-filter:0,hoist-filter:0,hoist-filter:0,elim-groupby-filter,partition-eq(nation.n_name):5,hoist-pred-const:6"

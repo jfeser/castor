@@ -1,1 +1,1 @@
--t hoist-filter,hoist-filter:1,hoist-filter:1,hoist-filter:0,elim-groupby-filter,row-store:8,project
+-p param0:date -t hoist-filter,hoist-filter:1,hoist-filter:1,hoist-filter:0,elim-groupby-filter,row-store:8,project

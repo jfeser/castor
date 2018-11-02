@@ -17,8 +17,6 @@
  (action (with-stdout-to config
           (run ./discover.exe -kind ENV %{project_root} %{workspace_root}))))
 
-(ignored_subdirs (bench))
-
 ; Local Variables:
 ; mode: tuareg-dune
 ; End:

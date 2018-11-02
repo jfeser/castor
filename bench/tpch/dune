@@ -1,0 +1,6 @@
+(include dune.inc)
+
+(rule (with-stdout-to dune.inc.gen (run ./run-bench.py --gen-dune)))
+(alias
+ (name runtest)
+ (action (diff dune.inc dune.inc.gen)))

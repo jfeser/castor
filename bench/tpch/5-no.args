@@ -1,1 +1,1 @@
--t hoist-filter:0,hoist-filter:1,hoist-filter:1,hoist-filter:1,hoist-filter:1,hoist-filter:0,hoist-filter,merge-filter,elim-groupby-filter,row-store:10,push-filter:1,project
+-p param0:string -p param1:date -t "hoist-filter:0,hoist-filter:1,hoist-filter:1,hoist-filter:1,hoist-filter:1,hoist-filter:0,hoist-filter,merge-filter,elim-groupby-filter,split-filter,elim-cmp-filter,push-select,project,partition-eq(region.r_name):5,row-store:15"

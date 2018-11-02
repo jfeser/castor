@@ -7,6 +7,7 @@ Options:
   -d DB       Database name to connect to [default: tpch].
   -p PORT     Database server port [default: 5432].
   --sql-only  Only run the SQL queries.
+  --gen-dune  Generate dune file for checking args.
 '''
 
 from docopt import docopt
@@ -188,8 +189,8 @@ BENCHMARKS = [
         ],
     },
     {
-        "name": "3",
-        "query": ['3-gold'],
+        "name": "3-no",
+        "query": ['3-no-gold'],
         "params": [
             ("param0:string", gen_str('BUILDING')),
             ("param1:date", gen_fixed_date(date(1995, 3, 15))),
@@ -242,7 +243,7 @@ BENCHMARKS = [
         ],
     },
     {
-        "name": "10",
+        "name": "10-no",
         "query": ['10-no-gold'],
         "params": [("param0:date", gen_fixed_date(date(1993, 10, 1)))],
     },
@@ -284,7 +285,7 @@ BENCHMARKS = [
         "params": [("param1:date", gen_fixed_date(date(1996,1,1)))],
     },
     {
-        "name": "16",
+        "name": "16-no",
         "query": ['16-no-gold'],
         "params": [
             ("param1:string", gen_str('Brand#45')),
@@ -449,6 +450,23 @@ def run_bench(name, query_name, params):
 
     os.chdir("..")
 
+def gen_dune():
+    for bench in BENCHMARKS:
+        for query in bench['query']:
+            print('''
+(rule
+  (targets "{query}.gen")
+  (deps "{name}.args" "{name}.txt" ../../bin/transform.exe)
+  (action (with-stdout-to
+            "{query}.gen"
+            (system "../../bin/transform.exe -db tpch {name}.txt %{{read:{name}.args}}")))
+)
+(alias
+  (name runtest)
+  (action (diff "{query}.txt" "{query}.gen"))
+)
+            '''.format(name=bench['name'], query=query))
+
 args = docopt(__doc__)
 DB = args['-d']
 PORT = args['-p']
@@ -456,6 +474,10 @@ SQL_ONLY = args['--sql-only']
 
 def should_run(query_name):
     return len(args['QUERY']) == 0 or query_name in args['QUERY']
+
+if args['--gen-dune']:
+    gen_dune()
+    exit(0)
 
 # Run benchmarks
 with ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as exe:
