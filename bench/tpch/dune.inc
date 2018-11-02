@@ -78,6 +78,19 @@
             
 
 (rule
+  (targets "7-gold.gen")
+  (deps "7.args" "7.txt" ../../bin/transform.exe)
+  (action (with-stdout-to
+            "7-gold.gen"
+            (system "../../bin/transform.exe -db tpch 7.txt %{read:7.args}")))
+)
+(alias
+  (name runtest)
+  (action (diff "7-gold.txt" "7-gold.gen"))
+)
+            
+
+(rule
   (targets "8-gold.gen")
   (deps "8.args" "8.txt" ../../bin/transform.exe)
   (action (with-stdout-to
