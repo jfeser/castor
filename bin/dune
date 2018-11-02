@@ -9,28 +9,28 @@
 
 (executable
  (name pretty)
- (libraries core dblayout)
+ (libraries core castor)
  (flags (:standard -g -bin-annot))
  (preprocess (pps ppx_sexp_conv ppx_let))
  (modules pretty))
 
 (executable
  (name compile)
- (libraries core dblayout logs)
+ (libraries core castor logs)
  (flags (:standard -g -bin-annot))
  (preprocess (pps ppx_sexp_conv ppx_let))
  (modules compile config))
 
 (executable
  (name transform)
- (libraries core dblayout logs)
+ (libraries core castor logs)
  (flags (:standard -g -bin-annot))
  (preprocess (pps ppx_sexp_conv ppx_let))
  (modules transform))
 
 (executable
  (name sample)
- (libraries core postgresql dblayout logs)
+ (libraries core postgresql castor logs)
  (flags (:standard -g -bin-annot))
  (preprocess (pps ppx_sexp_conv ppx_let))
  (modules sample))

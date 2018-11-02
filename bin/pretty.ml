@@ -1,6 +1,6 @@
 open Core
 open Stdio
-open Dblayout
+open Castor
 
 let main ~in_place file =
   let open Format in
