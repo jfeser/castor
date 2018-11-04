@@ -8,45 +8,91 @@ ahashidx(dedup(select([region.r_name as region_r_name_0], region)),
           s1.s_phone,
           s1.s_comment],
     atuple([select([n1.n_name, s1.s_suppkey, p1.p_partkey, p1.p_mfgr],
-              filter(((p1.p_size = param1) &&
-                     (strpos(p1.p_type, param2) =
-                     (strlen(p1.p_type) - strlen(param2) + 1))),
-                alist(filter((ps1.ps_supplycost =
-                             (select([min(ps.ps_supplycost)],
-                                filter((r.r_name = region_r_name_0),
-                                  filter((ps.ps_partkey = p1.p_partkey),
-                                    join((s.s_suppkey = ps.ps_suppkey),
-                                      join((s.s_nationkey = n.n_nationkey),
-                                        join((n.n_regionkey = r.r_regionkey),
-                                          nation as n,
-                                          filter((region.r_name =
-                                                 region_r_name_0),
-                                            region) as r),
-                                        supplier as s),
-                                      partsupp as ps)))))),
-                        orderby([s1.s_acctbal,
-                                 n1.n_name,
-                                 s1.s_name,
-                                 p1.p_partkey],
-                          join((p1.p_partkey = ps1.ps_partkey),
-                            join((s1.s_suppkey = ps1.ps_suppkey),
-                              join((s1.s_nationkey = n1.n_nationkey),
-                                join((n1.n_regionkey = r1.r_regionkey),
-                                  nation as n1,
-                                  filter((r1.r_name = region_r_name_0),
-                                    filter((region.r_name = region_r_name_0),
-                                      region) as r1)),
-                                supplier as s1),
-                              partsupp as ps1),
-                            part as p1),
-                          desc)),
-                  atuple([ascalar(n1.n_name),
-                          ascalar(s1.s_suppkey),
-                          ascalar(p1.p_partkey),
-                          ascalar(p1.p_mfgr),
-                          ascalar(p1.p_type),
-                          ascalar(p1.p_size)],
-                    cross)))),
+              filter((p1.p_size = param1),
+                filter((if ((p10_p_type = 5) && (param2 = "STEEL")) then true else (if 
+                  ((p10_p_type = 4) && (param2 = "BRASS")) then true else (if 
+                  ((p10_p_type = 3) && (param2 = "NICKEL")) then true else (if 
+                  ((p10_p_type = 2) && (param2 = "COPPER")) then true else (if 
+                  ((p10_p_type = 1) && (param2 = "TIN")) then true else 
+                  (strpos(p1.p_type, param2) =
+                  ((strlen(p1.p_type) - strlen(param2)) + 1))))))),
+                  alist(select([(if (strpos(p1.p_type, "STEEL") =
+                                    ((strlen(p1.p_type) - strlen("STEEL")) + 1)) then 5 else (if (
+                                                                    strpos(p1.p_type,
+                                                                    "BRASS") =
+                                                                    (
+                                                                    (strlen(p1.p_type)
+                                                                    -
+                                                                    strlen("BRASS"))
+                                                                    + 1)) then 4 else (if (
+                                                                    strpos(p1.p_type,
+                                                                    "NICKEL") =
+                                                                    (
+                                                                    (strlen(p1.p_type)
+                                                                    -
+                                                                    strlen("NICKEL"))
+                                                                    + 1)) then 3 else (if (
+                                                                    strpos(p1.p_type,
+                                                                    "COPPER") =
+                                                                    (
+                                                                    (strlen(p1.p_type)
+                                                                    -
+                                                                    strlen("COPPER"))
+                                                                    + 1)) then 2 else (if (
+                                                                    strpos(p1.p_type,
+                                                                    "TIN") =
+                                                                    (
+                                                                    (strlen(p1.p_type)
+                                                                    -
+                                                                    strlen("TIN"))
+                                                                    + 1)) then 1 else 0))))) as p10_p_type,
+                                n1.n_name,
+                                s1.s_suppkey,
+                                p1.p_partkey,
+                                p1.p_mfgr,
+                                p1.p_type,
+                                p1.p_size],
+                          orderby([s1.s_acctbal,
+                                   n1.n_name,
+                                   s1.s_name,
+                                   p1.p_partkey],
+                            filter((r1.r_name = region_r_name_0),
+                              filter((ps1.ps_supplycost =
+                                     (select([min(ps.ps_supplycost)],
+                                        filter((ps.ps_partkey = p1.p_partkey),
+                                          join((s.s_suppkey = ps.ps_suppkey),
+                                            join((s.s_nationkey =
+                                                 n.n_nationkey),
+                                              join((n.n_regionkey =
+                                                   r.r_regionkey),
+                                                nation as n,
+                                                filter((r.r_name =
+                                                       region_r_name_0),
+                                                  filter((region.r_name =
+                                                         region_r_name_0),
+                                                    region) as r)),
+                                              supplier as s),
+                                            partsupp as ps))))),
+                                join((p1.p_partkey = ps1.ps_partkey),
+                                  join((s1.s_suppkey = ps1.ps_suppkey),
+                                    join((s1.s_nationkey = n1.n_nationkey),
+                                      join((n1.n_regionkey = r1.r_regionkey),
+                                        nation as n1,
+                                        filter((region.r_name =
+                                               region_r_name_0),
+                                          region) as r1),
+                                      supplier as s1),
+                                    partsupp as ps1),
+                                  part as p1))),
+                            desc)),
+                    atuple([ascalar(p10_p_type),
+                            ascalar(n1.n_name),
+                            ascalar(s1.s_suppkey),
+                            ascalar(p1.p_partkey),
+                            ascalar(p1.p_mfgr),
+                            ascalar(p1.p_type),
+                            ascalar(p1.p_size)],
+                      cross))))),
             ahashidx(dedup(
                        select([s1.s_suppkey as s1_s_suppkey_1], supplier as s1)),
               alist(filter((s1.s_suppkey = s1_s_suppkey_1), supplier as s1),
