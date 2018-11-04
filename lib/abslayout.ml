@@ -139,7 +139,7 @@ and pp_pred fmt =
   | Min n -> fprintf fmt "min(%a)" pp_pred n
   | Max n -> fprintf fmt "max(%a)" pp_pred n
   | If (p1, p2, p3) ->
-      fprintf fmt "if %a then %a else %a" pp_pred p1 pp_pred p2 pp_pred p3
+      fprintf fmt "(if %a then %a else %a)" pp_pred p1 pp_pred p2 pp_pred p3
   | First r -> fprintf fmt "(%a)" pp r
   | Exists r -> fprintf fmt "@[<hv 2>exists(%a)@]" pp r
   | Substring (p1, p2, p3) ->
