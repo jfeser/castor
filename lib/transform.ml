@@ -778,7 +778,10 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
             in
             let sel_list =
               List.filter schema ~f:(fun n ->
-                  eq n pk || not (List.mem rel_schema n ~equal:eq) )
+                  eq n pk
+                  || not
+                       (List.mem rel_schema n
+                          ~equal:[%compare.equal: Name.Compare_name_only.t]) )
               |> List.map ~f:(fun n -> Name n)
             in
             [ tuple
