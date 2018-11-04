@@ -7,7 +7,7 @@
             (system "../../bin/transform.exe -db tpch 1.txt %{read:1.args}")))
 )
 (alias
-  (name runtest)
+  (name runtftest)
   (action (diff "1-gold.txt" "1-gold.gen"))
 )
             
@@ -20,7 +20,7 @@
             (system "../../bin/transform.exe -db tpch 2.txt %{read:2.args}")))
 )
 (alias
-  (name runtest)
+  (name runtftest)
   (action (diff "2-gold.txt" "2-gold.gen"))
 )
             
@@ -33,7 +33,7 @@
             (system "../../bin/transform.exe -db tpch 3-no.txt %{read:3-no.args}")))
 )
 (alias
-  (name runtest)
+  (name runtftest)
   (action (diff "3-no-gold.txt" "3-no-gold.gen"))
 )
             
@@ -46,7 +46,7 @@
             (system "../../bin/transform.exe -db tpch 4.txt %{read:4.args}")))
 )
 (alias
-  (name runtest)
+  (name runtftest)
   (action (diff "4-gold.txt" "4-gold.gen"))
 )
             
@@ -59,7 +59,7 @@
             (system "../../bin/transform.exe -db tpch 5-no.txt %{read:5-no.args}")))
 )
 (alias
-  (name runtest)
+  (name runtftest)
   (action (diff "5-no-gold.txt" "5-no-gold.gen"))
 )
             
@@ -72,7 +72,7 @@
             (system "../../bin/transform.exe -db tpch 6.txt %{read:6.args}")))
 )
 (alias
-  (name runtest)
+  (name runtftest)
   (action (diff "6-gold.txt" "6-gold.gen"))
 )
             
@@ -85,7 +85,7 @@
             (system "../../bin/transform.exe -db tpch 7.txt %{read:7.args}")))
 )
 (alias
-  (name runtest)
+  (name runtftest)
   (action (diff "7-gold.txt" "7-gold.gen"))
 )
             
@@ -98,7 +98,7 @@
             (system "../../bin/transform.exe -db tpch 8.txt %{read:8.args}")))
 )
 (alias
-  (name runtest)
+  (name runtftest)
   (action (diff "8-gold.txt" "8-gold.gen"))
 )
             
@@ -111,7 +111,7 @@
             (system "../../bin/transform.exe -db tpch 9.txt %{read:9.args}")))
 )
 (alias
-  (name runtest)
+  (name runtftest)
   (action (diff "9-gold.txt" "9-gold.gen"))
 )
             
@@ -124,7 +124,7 @@
             (system "../../bin/transform.exe -db tpch 10-no.txt %{read:10-no.args}")))
 )
 (alias
-  (name runtest)
+  (name runtftest)
   (action (diff "10-no-gold.txt" "10-no-gold.gen"))
 )
             
@@ -137,7 +137,7 @@
             (system "../../bin/transform.exe -db tpch 11-no.txt %{read:11-no.args}")))
 )
 (alias
-  (name runtest)
+  (name runtftest)
   (action (diff "11-no-gold.txt" "11-no-gold.gen"))
 )
             
@@ -150,7 +150,7 @@
             (system "../../bin/transform.exe -db tpch 12.txt %{read:12.args}")))
 )
 (alias
-  (name runtest)
+  (name runtftest)
   (action (diff "12-gold.txt" "12-gold.gen"))
 )
             
@@ -163,7 +163,7 @@
             (system "../../bin/transform.exe -db tpch 14.txt %{read:14.args}")))
 )
 (alias
-  (name runtest)
+  (name runtftest)
   (action (diff "14-gold.txt" "14-gold.gen"))
 )
             
@@ -176,7 +176,7 @@
             (system "../../bin/transform.exe -db tpch 15.txt %{read:15.args}")))
 )
 (alias
-  (name runtest)
+  (name runtftest)
   (action (diff "15-gold.txt" "15-gold.gen"))
 )
             
@@ -189,7 +189,7 @@
             (system "../../bin/transform.exe -db tpch 16-no.txt %{read:16-no.args}")))
 )
 (alias
-  (name runtest)
+  (name runtftest)
   (action (diff "16-no-gold.txt" "16-no-gold.gen"))
 )
             
@@ -202,7 +202,7 @@
             (system "../../bin/transform.exe -db tpch 17.txt %{read:17.args}")))
 )
 (alias
-  (name runtest)
+  (name runtftest)
   (action (diff "17-gold.txt" "17-gold.gen"))
 )
             
@@ -215,7 +215,7 @@
             (system "../../bin/transform.exe -db tpch 18.txt %{read:18.args}")))
 )
 (alias
-  (name runtest)
+  (name runtftest)
   (action (diff "18-gold.txt" "18-gold.gen"))
 )
             
@@ -228,7 +228,7 @@
             (system "../../bin/transform.exe -db tpch 19.txt %{read:19.args}")))
 )
 (alias
-  (name runtest)
+  (name runtftest)
   (action (diff "19-gold.txt" "19-gold.gen"))
 )
             

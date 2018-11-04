@@ -462,7 +462,7 @@ def gen_dune():
             (system "../../bin/transform.exe -db tpch {name}.txt %{{read:{name}.args}}")))
 )
 (alias
-  (name runtest)
+  (name runtftest)
   (action (diff "{query}.txt" "{query}.gen"))
 )
             '''.format(name=bench['name'], query=query))
