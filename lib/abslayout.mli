@@ -133,6 +133,8 @@ val pred_relations : pred -> string list
 
 val of_string_exn : string -> t
 
+val pred_of_string_exn : string -> pred
+
 val of_channel_exn : Stdio.In_channel.t -> t
 
 val subst : pred Map.M(Name.Compare_no_type).t -> t -> t

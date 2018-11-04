@@ -264,6 +264,66 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | _ -> []) }
     |> run_everywhere
 
+  (** Given a restricted parameter range, precompute a filter that depends on a
+     single table field. If the parameter is outside the range, then run the
+     original filter. Otherwise, check the precomputed evidence. *)
+  let tf_precompute_filter args =
+    let open A in
+    let field, values =
+      match args with
+      | f :: vs -> (Name.of_string_exn f, List.map vs ~f:pred_of_string_exn)
+      | _ ->
+          Error.create "Unexpected argument list." args [%sexp_of: string list]
+          |> Error.raise
+    in
+    let exception Failed of Error.t in
+    let run_exn r =
+      M.annotate_schema r ;
+      match r.node with
+      | Filter (p, r') ->
+          let schema = Meta.(find_exn r' schema) in
+          let free_vars =
+            Set.diff (pred_free p)
+              (Set.of_list (module Name.Compare_no_type) schema)
+            |> Set.to_list
+          in
+          let free_var =
+            match free_vars with
+            | [v] -> v
+            | _ ->
+                let err =
+                  Error.of_string
+                    "Unexpected number of free variables in predicate."
+                in
+                raise (Failed err)
+          in
+          let encoder =
+            List.foldi values ~init:(Int 0) ~f:(fun i else_ v ->
+                let witness =
+                  subst_pred
+                    (Map.singleton (module Name.Compare_no_type) free_var v)
+                    p
+                in
+                If (witness, Int (i + 1), else_) )
+          in
+          let decoder x =
+            List.foldi values ~init:p ~f:(fun i else_ v ->
+                If
+                  ( Binop
+                      (And, Binop (Eq, x, Int (i + 1)), Binop (Eq, Name free_var, v))
+                  , Bool true
+                  , else_ ) )
+          in
+          let fresh_name = Fresh.name fresh "p%d_" ^ field.name in
+          let select_list =
+            As_pred (encoder, fresh_name) :: List.map schema ~f:(fun n -> Name n)
+          in
+          [filter (decoder (Name (Name.create fresh_name))) (select select_list r')]
+      | _ -> []
+    in
+    let f r = try run_exn r with Failed _ -> [] in
+    {name= "precompute-filter"; f} |> run_everywhere
+
   let tf_elim_cmp_filter _ =
     let open A in
     let gen ?lb ?ub p r =
@@ -706,7 +766,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           |> Error.raise
     in
     let rel_schema = M.to_schema (scan rel) in
-    let eq = [%compare.equal: Name.Compare_name_only.t] in
+    let eq = [%compare.equal: Name.Compare_no_type.t] in
     { name= "split-out"
     ; f=
         (fun r ->
@@ -802,7 +862,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     ; ("partition-eq", tf_partition_eq)
     ; ("partition-size", tf_partition_size)
     ; ("split-out", tf_split_out)
-    ; ("hoist-pred-const", tf_hoist_pred_constant) ]
+    ; ("hoist-pred-const", tf_hoist_pred_constant)
+    ; ("precompute-filter", tf_precompute_filter) ]
 
   let of_string_exn s =
     let tf_strs =

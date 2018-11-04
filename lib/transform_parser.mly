@@ -3,7 +3,6 @@
 %}
 
 %token <string> ID
-%token <int> INT
 %token LPAREN RPAREN COMMA COLON EOF
 
 %start <(string * string list * int option) list> transforms_eof
@@ -18,7 +17,10 @@ transforms:
 transform:
 | n = ID;
   a = delimited(LPAREN, separated_list(COMMA, ID), RPAREN)?;
-  i = preceded(COLON, INT)?
-        { (n, Base.Option.value ~default:[] a, i) }
+  i = preceded(COLON, ID)?
+        {
+          let open Base in
+          (n, Option.value ~default:[] a, Option.map ~f:Int.of_string i)
+        }
 | error { error "Expected a transform." $startpos }
 

@@ -194,6 +194,14 @@ let of_channel_exn ch = of_lexbuf_exn (Lexing.from_channel ch)
 
 let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
 
+let pred_of_lexbuf_exn lexbuf =
+  try Ralgebra_parser.expr_eof Ralgebra_lexer.token lexbuf
+  with Parser_utils.ParseError (msg, line, col) as e ->
+    Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
+    raise e
+
+let pred_of_string_exn s = pred_of_lexbuf_exn (Lexing.from_string s)
+
 (* let params r =
  *   let ralgebra_params =
  *     object (self)

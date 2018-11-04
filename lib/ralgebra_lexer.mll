@@ -1,5 +1,6 @@
 {
 open Base
+open Printf
 open Ralgebra_parser
 open Parser_utils
 
@@ -95,7 +96,9 @@ rule token = parse
         | None -> ID x
     }
   | eof        { EOF }
-  | _          { lex_error lexbuf "unexpected character" }
+  | _          { lex_error lexbuf (sprintf "unexpected character '%c'"
+                                     (Lexing.lexeme_char lexbuf
+                                        (Lexing.lexeme_start lexbuf)) ) }
 and comment = parse
   | '\n' { Lexing.new_line lexbuf; token lexbuf }
   | _ { comment lexbuf }
@@ -113,4 +116,6 @@ and string buf = parse
   | '\\' { Buffer.add_char buf '\\'; string buf lexbuf }
   | '"' { Buffer.contents buf }
   | eof { lex_error lexbuf "eof in string literal" }
-  | _ { lex_error lexbuf "unexpected character" }
+  | _ { lex_error lexbuf (sprintf "unexpected character '%c'"
+                                     (Lexing.lexeme_char lexbuf
+                                        (Lexing.lexeme_start lexbuf)) ) }

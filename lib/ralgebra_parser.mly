@@ -20,11 +20,15 @@
    ELSE DATEKW EXISTS SUBSTRING
 
 %start <Abslayout0.t> ralgebra_eof
+%start <Abslayout0.pred> expr_eof
 %start <Abslayout0.name> name_eof
 %%
 
 ralgebra_eof:
 | x = ralgebra; EOF { x }
+
+expr_eof:
+| x = expr; EOF { x }
 
 name_eof:
 | x = name; EOF { x }
