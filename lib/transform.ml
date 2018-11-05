@@ -306,19 +306,20 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
                 in
                 If (witness, Int (i + 1), else_) )
           in
-          let decoder x =
-            List.foldi values ~init:p ~f:(fun i else_ v ->
-                If
-                  ( Binop
-                      (And, Binop (Eq, x, Int (i + 1)), Binop (Eq, Name free_var, v))
-                  , Bool true
-                  , else_ ) )
+          let decoder =
+            List.foldi values ~init:(Int 0) ~f:(fun i else_ v ->
+                If (Binop (Eq, Name free_var, v), Int (i + 1), else_) )
           in
           let fresh_name = Fresh.name fresh "p%d_" ^ field.name in
           let select_list =
             As_pred (encoder, fresh_name) :: List.map schema ~f:(fun n -> Name n)
           in
-          [filter (decoder (Name (Name.create fresh_name))) (select select_list r')]
+          [ filter
+              (If
+                 ( Binop (Eq, decoder, Int 0)
+                 , p
+                 , Binop (Eq, decoder, Name (Name.create fresh_name)) ))
+              (select select_list r') ]
       | _ -> []
     in
     let f r = try run_exn r with Failed _ -> [] in

@@ -163,10 +163,10 @@ let%expect_test "ordered-idx" =
 let%expect_test "agg" =
   [%expect {||}] ;
   run_test ~print_layout:false ~fork:false
-    "select([avg(r2.a), count(), sum(r2.a), min(r2.a), max(r2.a)], alist(r2, \
-     ascalar(r2.a)))" ;
+    "select([1.0 + 2.0, avg(r2.a), count(), sum(r2.a), min(r2.a), max(r2.a)], \
+     alist(r2, ascalar(r2.a)))" ;
   [%expect {|
-    7.978000,5,39.890000,-0.420000,34.420000,
+    3.000000,7.978000,5,39.890000,-0.420000,34.420000,
 
     exited normally |}]
 

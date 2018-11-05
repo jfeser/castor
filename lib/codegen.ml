@@ -5,7 +5,7 @@ open Printf
 open Collections
 open Llvm
 open Llvm_analysis
-module Execution_engine = Llvm_executionengine
+open Llvm_target
 
 module type S = Codegen_intf.S
 
@@ -17,6 +17,8 @@ let () =
       print_endline (Backtrace.to_string ocaml_trace) ;
       print_endline "" ;
       print_endline err )
+
+let () = Llvm_all_backends.initialize ()
 
 let fail = Error.raise
 
@@ -88,13 +90,23 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
   module I = Implang
   open Config
 
+  let triple = Target.default_triple ()
+
+  let machine = TargetMachine.create ~triple Target.(by_triple triple)
+
+  let data_layout = TargetMachine.data_layout machine
+
   let clang = Project_config.llvm_root ^ "/bin/clang"
 
   let opt = Project_config.llvm_root ^ "/bin/opt"
 
   let ctx = Llvm.create_context ()
 
-  let module_ = Llvm.create_module ctx "scanner"
+  let module_ =
+    let m = Llvm.create_module ctx "scanner" in
+    set_data_layout (DataLayout.as_string data_layout) m ;
+    set_target_triple triple m ;
+    m
 
   let builder = Llvm.builder ctx
 
@@ -288,16 +300,49 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       |> Error.raise ;
     build_call func args name b
 
-  let printf =
-    declare_function "printf"
-      (var_arg_function_type (i32_type ctx) [|pointer_type (i8_type ctx)|])
+  let llvm_invariant_start =
+    declare_function "llvm.invariant.start.p0i8"
+      (function_type
+         (pointer_type (struct_type ctx [||]))
+         [|i64_type ctx; pointer_type (i8_type ctx)|])
       module_
 
+  (* See cmph.h. cmph_uint32 cmph_search_packed(void *packed_mphf, const
+       char *key, cmph_uint32 keylen); *)
+  let cmph_search_packed =
+    let func =
+      declare_function "cmph_search_packed"
+        (function_type (i32_type ctx)
+           [|pointer_type (i8_type ctx); pointer_type (i8_type ctx); i32_type ctx|])
+        module_
+    in
+    add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ;
+    add_function_attr func
+      (create_enum_attr ctx "speculatable" 0L)
+      AttrIndex.Function ;
+    func
+
+  let printf =
+    let func =
+      declare_function "printf"
+        (var_arg_function_type (i32_type ctx) [|pointer_type (i8_type ctx)|])
+        module_
+    in
+    (* add_function_attr func (create_enum_attr ctx "readonly" 0L) AttrIndex.Function ; *)
+    func
+
   let strncmp =
-    declare_function "strncmp"
-      (function_type (i32_type ctx)
-         [|pointer_type (i8_type ctx); pointer_type (i8_type ctx); i64_type ctx|])
-      module_
+    let func =
+      declare_function "strncmp"
+        (function_type (i32_type ctx)
+           [|pointer_type (i8_type ctx); pointer_type (i8_type ctx); i64_type ctx|])
+        module_
+    in
+    add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ;
+    add_function_attr func
+      (create_enum_attr ctx "speculatable" 0L)
+      AttrIndex.Function ;
+    func
 
   let strncpy =
     declare_function "strncpy"
@@ -307,13 +352,20 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       module_
 
   let strpos =
-    declare_function "strpos"
-      (function_type (i64_type ctx)
-         [| pointer_type (i8_type ctx)
-          ; i64_type ctx
-          ; pointer_type (i8_type ctx)
-          ; i64_type ctx |])
-      module_
+    let func =
+      declare_function "strpos"
+        (function_type (i64_type ctx)
+           [| pointer_type (i8_type ctx)
+            ; i64_type ctx
+            ; pointer_type (i8_type ctx)
+            ; i64_type ctx |])
+        module_
+    in
+    add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ;
+    add_function_attr func
+      (create_enum_attr ctx "speculatable" 0L)
+      AttrIndex.Function ;
+    func
 
   let extract_y =
     declare_function "extract_year"
@@ -329,6 +381,33 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     declare_function "extract_day"
       (function_type (i64_type ctx) [|i64_type ctx|])
       module_
+
+  let rec declare_invariant v =
+    let size t =
+      if type_is_sized t then
+        const_int (i64_type ctx)
+          (DataLayout.size_in_bits t data_layout |> Int64.to_int_exn)
+      else const_int (i64_type ctx) (-1)
+    in
+    let t = type_of v in
+    match classify_type t with
+    | Pointer ->
+        build_call llvm_invariant_start
+          [| size (element_type t)
+           ; build_pointercast v (pointer_type (i8_type ctx)) "" builder |]
+          "" builder
+        |> ignore ;
+        declare_invariant (build_load v "" builder) |> ignore
+    | Struct ->
+        struct_element_types t
+        |> Array.iteri ~f:(fun i _ ->
+               declare_invariant (build_extractvalue v i "" builder) )
+    | Void | Half | Float | Double | X86fp80 | Fp128 | Ppc_fp128 | Integer | X86_mmx
+      ->
+        ()
+    | Array -> ()
+    | Vector -> failwith "Unsupported."
+    | Label | Function | Metadata -> failwith "Unexpected."
 
   let call_printf fmt_str args =
     let fmt_str_ptr =
@@ -347,7 +426,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
   let bool_type = i1_type ctx
 
-  let float_type = double_type ctx
+  let fixed_type = double_type ctx
 
   let rec codegen_type t =
     let open Type.PrimType in
@@ -358,7 +437,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     | StringT _ -> str_type
     | TupleT ts -> struct_type ctx (List.map ts ~f:codegen_type |> Array.of_list)
     | VoidT | NullT -> void_type ctx
-    | FixedT _ -> float_type
+    | FixedT _ -> fixed_type
 
   (* codegen_type (TupleT [IntT {nullable= false}; IntT {nullable= false}]) *)
   
@@ -476,14 +555,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     build_extractvalue lltup idx "elemtmp" builder
 
   let codegen_hash fctx hash_ptr key_ptr key_size =
-    (* See cmph.h. cmph_uint32 cmph_search_packed(void *packed_mphf, const
-       char *key, cmph_uint32 keylen); *)
-    let cmph_search_packed =
-      declare_function "cmph_search_packed"
-        (function_type (i32_type ctx)
-           [|pointer_type (i8_type ctx); pointer_type (i8_type ctx); i32_type ctx|])
-        module_
-    in
     let buf_ptr = build_load (get_val fctx "buf") "buf_ptr" builder in
     let buf_ptr_as_int =
       build_ptrtoint buf_ptr (i64_type ctx) "buf_ptr_int" builder
@@ -624,9 +695,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
      * let {data= x2; null= n2} = unpack_null v2 in *)
     let x_out =
       match op with
-      | I.IntAdd -> build_add x1 x2 "addtmp" builder
-      | IntSub -> build_sub x1 x2 "subtmp" builder
-      | IntMul -> build_mul x1 x2 "multmp" builder
+      | I.IntAdd -> build_nsw_add x1 x2 "addtmp" builder
+      | IntSub -> build_nsw_sub x1 x2 "subtmp" builder
+      | IntMul -> build_nsw_mul x1 x2 "multmp" builder
       | IntDiv -> build_sdiv x1 x2 "divtmp" builder
       | FlAdd -> build_fadd x1 x2 "addtmp" builder
       | FlSub -> build_fsub x1 x2 "subtmp" builder
@@ -659,7 +730,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     (* let x_out = *)
     match op with
     | I.Not -> build_not x "nottmp" builder
-    | Int2Fl -> build_sitofp x float_type "" builder
+    | Int2Fl -> build_sitofp x fixed_type "" builder
     | StrLen -> (Llstring.unpack x).len
     | ExtractY -> build_call extract_y [|x|] "" builder
     | ExtractM -> build_call extract_m [|x|] "" builder
@@ -691,7 +762,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
   let rec codegen_expr fctx = function
     | I.Null -> failwith "TODO: Pick a runtime null rep."
     | Int x -> const_int int_type x
-    | Fixed x -> const_float float_type Float.(of_int x.value / of_int x.scale)
+    | Fixed x -> const_float fixed_type Float.(of_int x.value / of_int x.scale)
     | Bool true -> const_int bool_type 1
     | Bool false -> const_int bool_type 0
     | Var n ->
@@ -882,6 +953,30 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let val_ = codegen_expr fctx expr in
     build_ret val_ builder |> ignore
 
+  (** Create an alloca for each element of the params struct. *)
+  let load_params ictx func =
+    let params_ptr = param func 0 in
+    Hashtbl.mapi_inplace ictx#values ~f:(fun ~key:name ~data ->
+        match data with
+        | Local _ | Param {alloca= Some _; _} -> data
+        | Param {idx; alloca= None} ->
+            let param =
+              build_load (get_val ~params:params_ptr ictx name) "" builder
+            in
+            let param_type = type_of param in
+            let param_alloca = build_entry_alloca param_type name builder in
+            (* Parameters are immutable, so we ignore the return value of
+               llvm.invariant.start *)
+            build_call llvm_invariant_start
+              [| size_of param_type
+               ; build_pointercast param_alloca
+                   (pointer_type (i8_type ctx))
+                   "" builder |]
+              "" builder
+            |> ignore ;
+            build_store param param_alloca builder |> ignore ;
+            Param {idx; alloca= Some param_alloca} )
+
   let codegen_iter : _ -> unit =
     let rec codegen_stmt fctx = function
       | I.Loop {cond; body} -> codegen_loop fctx codegen_prog cond body
@@ -903,19 +998,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         (create_enum_attr ctx "norecurse" 0L)
         AttrIndex.Function ;
       set_linkage Linkage.Internal func
-    in
-    let load_params ictx func =
-      let params_ptr = param func 0 in
-      Hashtbl.mapi_inplace ictx#values ~f:(fun ~key:name ~data ->
-          match data with
-          | Local _ | Param {alloca= Some _; _} -> data
-          | Param {idx; alloca= None} ->
-              let param =
-                build_load (get_val ~params:params_ptr ictx name) "" builder
-              in
-              let param_alloca = build_entry_alloca (type_of param) name builder in
-              build_store param param_alloca builder |> ignore ;
-              Param {idx; alloca= Some param_alloca} )
     in
     let build_init ictx =
       Logs.debug (fun m -> m "Building init function %s." ictx#name) ;
@@ -1017,7 +1099,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       add_function_attr func (create_enum_attr ctx "nounwind" 0L) AttrIndex.Function ;
       add_function_attr func
         (create_enum_attr ctx "norecurse" 0L)
-        AttrIndex.Function
+        AttrIndex.Function ;
+      add_function_attr func (create_enum_attr ctx "noalias" 0L) (AttrIndex.Param 0)
     in
     fun fctx ->
       let name = fctx#name in
@@ -1048,10 +1131,11 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
           let var = build_alloca lltype n builder in
           Hashtbl.set fctx#values ~key:n ~data:(Local var) ) ;
       (* Put arguments into symbol table. *)
-      Hashtbl.set fctx#values ~key:"params" ~data:(Local (param fctx#llfunc 0)) ;
-      List.iteri args ~f:(fun i (n, _) ->
-          Hashtbl.set fctx#values ~key:n ~data:(Local (param fctx#llfunc (i + 1)))
-      ) ;
+      let param_ptr = param fctx#llfunc 0 in
+      Hashtbl.set fctx#values ~key:"params" ~data:(Local param_ptr) ;
+      (* Declare the parameters pointer (and all sub-pointers) invariant. *)
+      declare_invariant param_ptr ;
+      load_params fctx fctx#llfunc ;
       codegen_prog fctx body ;
       match block_terminator (insertion_block builder) with
       | Some _ -> ()
@@ -1140,7 +1224,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
   let codegen Irgen.({iters= ir_iters; funcs= ir_funcs; params; buffer_len}) =
     Logs.info (fun m -> m "Codegen started.") ;
-    set_data_layout "e-m:o-i64:64-f80:128-n8:16:32:64-S128" module_ ;
     let module SB = ParamStructBuilder in
     let sb = SB.create () in
     (* Generate global constant for buffer. *)
@@ -1335,7 +1418,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         [ opt
         ; "-S"
         ; sprintf "-pass-remarks-output=%s" remarks_fn
-        ; "-O3"
+        ; "-O3 -enable-unsafe-fp-math"
         ; module_fn
         ; ">"
         ; opt_module_fn

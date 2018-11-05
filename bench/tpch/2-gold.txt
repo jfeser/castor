@@ -9,13 +9,25 @@ ahashidx(dedup(select([region.r_name as region_r_name_0], region)),
           s1.s_comment],
     atuple([select([n1.n_name, s1.s_suppkey, p1.p_partkey, p1.p_mfgr],
               filter((p1.p_size = param1),
-                filter((if ((p10_p_type = 5) && (param2 = "STEEL")) then true else (if 
-                  ((p10_p_type = 4) && (param2 = "BRASS")) then true else (if 
-                  ((p10_p_type = 3) && (param2 = "NICKEL")) then true else (if 
-                  ((p10_p_type = 2) && (param2 = "COPPER")) then true else (if 
-                  ((p10_p_type = 1) && (param2 = "TIN")) then true else 
+                filter((if ((if (param2 = "STEEL") then 5 else (if (param2 =
+                                                                   "BRASS") then 4 else (if 
+                           (param2 = "NICKEL") then 3 else (if (param2 =
+                                                               "COPPER") then 2 else (if 
+                           (param2 = "TIN") then 1 else 0))))) = 0) then 
                   (strpos(p1.p_type, param2) =
-                  ((strlen(p1.p_type) - strlen(param2)) + 1))))))),
+                  ((strlen(p1.p_type) - strlen(param2)) + 1)) else ((if 
+                                                                   (param2 =
+                                                                   "STEEL") then 5 else (if 
+                                                                   (param2 =
+                                                                   "BRASS") then 4 else (if 
+                                                                   (param2 =
+                                                                   "NICKEL") then 3 else (if 
+                                                                   (param2 =
+                                                                   "COPPER") then 2 else (if 
+                                                                   (param2 =
+                                                                   "TIN") then 1 else 0)))))
+                                                                   =
+                                                                   p10_p_type)),
                   alist(select([(if (strpos(p1.p_type, "STEEL") =
                                     ((strlen(p1.p_type) - strlen("STEEL")) + 1)) then 5 else (if (
                                                                     strpos(p1.p_type,

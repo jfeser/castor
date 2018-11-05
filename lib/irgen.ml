@@ -180,14 +180,20 @@ struct
 
   and gen_pred ctx pred b =
     let open Builder in
-    let rec gen_pred = function
+    let type_of_pred p b =
+      let b' = new_scope b in
+      let ret = gen_pred ctx p b' in
+      type_of ret b'
+    in
+    let rec gen_pred p b =
+      match p with
       | A.Null -> Null
       | A.Int x -> Int x
       | A.String x -> String x
       | A.Fixed x -> Fixed x
       | Date x -> Int (Date.to_int x)
       | Unop (op, p) -> (
-          let x = gen_pred p in
+          let x = gen_pred p b in
           match op with
           | A.Not -> Infix.(not x)
           | A.Year -> Infix.(int 365 * x)
@@ -198,7 +204,7 @@ struct
           | A.ExtractM -> Unop {op= ExtractM; arg= x}
           | A.ExtractD -> Unop {op= ExtractD; arg= x} )
       | A.Bool x -> Bool x
-      | A.As_pred (x, _) -> gen_pred x
+      | A.As_pred (x, _) -> gen_pred x b
       | Name n -> (
         match Ctx.find ctx n b with
         | Some e -> e
@@ -206,8 +212,8 @@ struct
             Error.create "Unbound variable." (n, ctx) [%sexp_of: Name.t * Ctx.t]
             |> Error.raise )
       | A.Binop (op, arg1, arg2) -> (
-          let e1 = gen_pred arg1 in
-          let e2 = gen_pred arg2 in
+          let e1 = gen_pred arg1 b in
+          let e2 = gen_pred arg2 b in
           match op with
           | A.Eq -> build_eq e1 e2 b
           | A.Lt -> build_lt e1 e2 b
@@ -224,7 +230,18 @@ struct
           | A.Strpos -> Binop {op= StrPos; arg1= e1; arg2= e2} )
       | (A.Count | A.Min _ | A.Max _ | A.Sum _ | A.Avg _) as p ->
           Error.create "Not a scalar predicate." p [%sexp_of: A.pred] |> Error.raise
-      | A.If (p1, p2, p3) -> Ternary (gen_pred p1, gen_pred p2, gen_pred p3)
+      | A.If (p1, p2, p3) ->
+          let ret_var =
+            build_var "ret"
+              (Type.PrimType.unify (type_of_pred p2 b) (type_of_pred p3 b))
+              b
+          in
+          build_if ~cond:(gen_pred p1 b)
+            ~then_:(fun b -> build_assign (gen_pred p2 b) ret_var b)
+            ~else_:(fun b -> build_assign (gen_pred p3 b) ret_var b)
+            b ;
+          ret_var
+          (* Ternary (gen_pred p1 b, gen_pred p2 b, gen_pred p3 b) *)
       | A.First r ->
           (* Don't use the passed in start value. Subquery layouts are not stored
            inline. *)
@@ -239,9 +256,10 @@ struct
           let ret_var = build_defn "exists" (Bool false) b in
           scan ctx b r t (fun b _ -> build_assign (Bool true) ret_var b) ;
           ret_var
-      | A.Substring (e1, e2, e3) -> Substr (gen_pred e1, gen_pred e2, gen_pred e3)
+      | A.Substring (e1, e2, e3) ->
+          Substr (gen_pred e1 b, gen_pred e2 b, gen_pred e3 b)
     in
-    gen_pred pred
+    gen_pred pred b
 
   and scan_empty _ _ _ _ _ = ()
 
