@@ -263,14 +263,11 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     in
     loop 0
 
+  (** Insert an alloca into the start of the entry block. *)
   let build_entry_alloca : lltype -> string -> llbuilder -> llvalue =
    fun t n b ->
     let entry_bb = insertion_block b |> block_parent |> entry_block in
-    let builder =
-      match block_terminator entry_bb with
-      | Some term -> builder_before ctx term
-      | None -> builder_at_end ctx entry_bb
-    in
+    let builder = builder_at ctx (instr_begin entry_bb) in
     build_alloca t n builder
 
   (** Build a call that passes the parameter struct. *)
@@ -307,6 +304,16 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
          [|i64_type ctx; pointer_type (i8_type ctx)|])
       module_
 
+  let llvm_lifetime_start =
+    declare_function "llvm.lifetime.start.p0i8"
+      (function_type (void_type ctx) [|i64_type ctx; pointer_type (i8_type ctx)|])
+      module_
+
+  let llvm_lifetime_end =
+    declare_function "llvm.lifetime.end.p0i8"
+      (function_type (void_type ctx) [|i64_type ctx; pointer_type (i8_type ctx)|])
+      module_
+
   (* See cmph.h. cmph_uint32 cmph_search_packed(void *packed_mphf, const
        char *key, cmph_uint32 keylen); *)
   let cmph_search_packed =
@@ -316,7 +323,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
            [|pointer_type (i8_type ctx); pointer_type (i8_type ctx); i32_type ctx|])
         module_
     in
-    add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ;
+    (* add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ; *)
+    add_function_attr func (create_enum_attr ctx "readonly" 0L) AttrIndex.Function ;
     add_function_attr func
       (create_enum_attr ctx "speculatable" 0L)
       AttrIndex.Function ;
@@ -338,7 +346,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
            [|pointer_type (i8_type ctx); pointer_type (i8_type ctx); i64_type ctx|])
         module_
     in
-    add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ;
+    (* add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ; *)
+    add_function_attr func (create_enum_attr ctx "readonly" 0L) AttrIndex.Function ;
+    add_function_attr func (create_enum_attr ctx "argmemonly" 0L) AttrIndex.Function ;
     add_function_attr func
       (create_enum_attr ctx "speculatable" 0L)
       AttrIndex.Function ;
@@ -361,7 +371,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
             ; i64_type ctx |])
         module_
     in
-    add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ;
+    (* add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ; *)
     add_function_attr func
       (create_enum_attr ctx "speculatable" 0L)
       AttrIndex.Function ;
@@ -421,6 +431,10 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     if debug then call_printf fmt_str args
 
   let int_type = i64_type ctx
+
+  let int_size =
+    const_int (i64_type ctx)
+      (DataLayout.size_in_bits int_type data_layout |> Int64.to_int_exn)
 
   let str_type = struct_type ctx [|pointer_type (i8_type ctx); i64_type ctx|]
 
@@ -519,24 +533,22 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     | Some (Local _) | None ->
         Error.of_string "Could not find 'done' value." |> Error.raise
 
-  let codegen_slice codegen_expr fctx byte_idx size_bytes =
+  let codegen_slice codegen_expr fctx offset size_bytes =
     let size_bits = 8 * size_bytes in
-    let byte_idx = codegen_expr fctx byte_idx in
+    let offset = codegen_expr fctx offset in
     let buf_ptr = build_load (get_val fctx "buf") "buf_ptr" builder in
-    let buf_ptr_as_int =
-      build_ptrtoint buf_ptr (i64_type ctx) "buf_ptr_int" builder
+    let buf_ptr =
+      build_pointercast buf_ptr (pointer_type (i8_type ctx)) "buf_ptr_cast" builder
     in
-    let slice_ptr_as_int =
-      build_add buf_ptr_as_int byte_idx "slice_ptr_int" builder
-    in
+    let slice_ptr = build_in_bounds_gep buf_ptr [|offset|] "slice_ptr" builder in
     let slice_ptr =
-      build_inttoptr slice_ptr_as_int
+      build_pointercast slice_ptr
         (pointer_type (integer_type ctx size_bits))
-        "slice_ptr" builder
+        "slice_ptr_cast" builder
     in
-    let slice = build_load slice_ptr "" builder in
+    let slice = build_load slice_ptr "slice_val" builder in
     (* Convert the slice to a 64 bit int. *)
-    let slice = build_intcast slice (i64_type ctx) "" builder in
+    let slice = build_intcast slice (i64_type ctx) "int_val" builder in
     slice
 
   let codegen_index codegen_expr tup idx =
@@ -554,17 +566,12 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
             m "Expected a tuple but got %s." (string_of_llvalue lltup) ) ) ;
     build_extractvalue lltup idx "elemtmp" builder
 
-  let codegen_hash fctx hash_ptr key_ptr key_size =
+  let codegen_hash fctx hash_offset key_ptr key_size =
     let buf_ptr = build_load (get_val fctx "buf") "buf_ptr" builder in
-    let buf_ptr_as_int =
-      build_ptrtoint buf_ptr (i64_type ctx) "buf_ptr_int" builder
+    let buf_ptr =
+      build_pointercast buf_ptr (pointer_type (i8_type ctx)) "" builder
     in
-    let hash_ptr_as_int =
-      build_add buf_ptr_as_int hash_ptr "hash_ptr_int" builder
-    in
-    let hash_ptr =
-      build_inttoptr hash_ptr_as_int (pointer_type (i8_type ctx)) "hash_ptr" builder
-    in
+    let hash_ptr = build_in_bounds_gep buf_ptr [|hash_offset|] "" builder in
     let key_ptr =
       build_pointercast key_ptr (pointer_type (i8_type ctx)) "" builder
     in
@@ -575,14 +582,17 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
   let codegen_int_hash fctx hash_ptr key =
     let key_ptr = build_entry_alloca (type_of key) "key_ptr" builder in
-    build_store key key_ptr builder |> ignore ;
     let key_ptr_cast =
       build_pointercast key_ptr (pointer_type (i8_type ctx)) "key_ptr_cast" builder
     in
+    build_call llvm_lifetime_start [|int_size; key_ptr_cast|] "" builder |> ignore ;
+    build_store key key_ptr builder |> ignore ;
     let key_size =
       build_intcast (size_of (type_of key)) (i32_type ctx) "key_size" builder
     in
-    codegen_hash fctx hash_ptr key_ptr_cast key_size
+    let ret = codegen_hash fctx hash_ptr key_ptr_cast key_size in
+    build_call llvm_lifetime_end [|int_size; key_ptr_cast|] "" builder |> ignore ;
+    ret
 
   let codegen_string_hash fctx hash_ptr key =
     let key_ptr = build_extractvalue key 0 "key_ptr" builder in
@@ -670,14 +680,14 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let hash = codegen_hash fctx hash_ptr key_ptr key_size in
     hash
 
-  let codegen_load_str fctx ptr len =
+  let codegen_load_str fctx offset len =
     let struct_t = struct_type ctx [|pointer_type (i8_type ctx); i64_type ctx|] in
     let struct_ = build_entry_alloca struct_t "" builder in
-    let buf = build_load (get_val fctx "buf") "buf" builder in
-    let buf_ptr_as_int = build_ptrtoint buf (i64_type ctx) "buf_ptr_int" builder in
-    let ptr_as_int = build_add buf_ptr_as_int ptr "ptr_int" builder in
+    let buf = build_load (get_val fctx "buf") "buf_ptr" builder in
+    let buf = build_pointercast buf (pointer_type (i8_type ctx)) "" builder in
+    let ptr = build_in_bounds_gep buf [|offset|] "" builder in
     let ptr =
-      build_inttoptr ptr_as_int (pointer_type (i8_type ctx)) "ptr" builder
+      build_pointercast ptr (pointer_type (i8_type ctx)) "string_ptr" builder
     in
     build_store ptr (build_struct_gep struct_ 0 "" builder) builder |> ignore ;
     build_store len (build_struct_gep struct_ 1 "" builder) builder |> ignore ;
@@ -808,7 +818,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     (* Generate the loop body. *)
     position_at_end body_bb builder ;
     codegen_prog fctx body ;
-    build_br cond_bb builder |> ignore ;
+    let llcond = codegen_expr fctx cond in
+    build_cond_br llcond body_bb end_bb builder |> ignore ;
     (* At the end of the loop body, check condition and branch. *)
     position_at_end end_bb builder
 

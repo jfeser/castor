@@ -218,10 +218,15 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
         List.iter keys ~f:(fun key -> Out_channel.fprintf ch "%s\n" key.hash_key) ) ;
     let hash =
       let open Cmph in
-      List.map keys ~f:(fun key -> key.hash_key)
-      |> KeySet.create
-      |> Config.create ~verbose:true ~seed:0
-      |> Hash.of_config
+      let keyset = List.map keys ~f:(fun key -> key.hash_key) |> KeySet.create in
+      List.find_map_exn [Config.default_chd; `Bdz; `Bmz; `Chm; `Fch] ~f:(fun algo ->
+          try
+            Some (Config.create ~verbose:true ~seed:0 ~algo keyset |> Hash.of_config)
+          with Error _ as err ->
+            Logs.warn (fun m ->
+                m "Creating CMPH hash failed: %a" Sexp.pp_hum ([%sexp_of: exn] err)
+            ) ;
+            None )
     in
     let keys =
       List.map keys ~f:(fun key ->
