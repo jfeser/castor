@@ -610,6 +610,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | {node= Filter (p, {node= AList (r, r'); _}); _} -> [list (filter p r) r']
         | {node= Filter (p, {node= AHashIdx (r, r', m); _}); _} ->
             [hash_idx' r (filter p r') m]
+        | {node= Filter (p, {node= AOrderedIdx (r, r', m); _}); _} ->
+            [ordered_idx r (filter p r') m]
         | _ -> []) }
     |> run_everywhere
 

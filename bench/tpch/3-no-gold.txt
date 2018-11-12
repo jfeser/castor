@@ -1,24 +1,33 @@
-alist(dedup(
-        select([lineitem.l_orderkey as k0_lineitem_l_orderkey,
-                orders.o_orderdate as k0_orders_o_orderdate,
-                orders.o_shippriority as k0_orders_o_shippriority],
-          join((customer.c_custkey = orders.o_custkey),
-            join((lineitem.l_orderkey = orders.o_orderkey), orders, lineitem),
-            customer))),
-            filter ((k0_orders_o_orderdate < param1),
-  atuple([ascalar(k0_lineitem_l_orderkey), ascalar(k0_orders_o_orderdate), ascalar(k0_orders_o_shippriority),
-  select([sum((lineitem.l_extendedprice * (1 - lineitem.l_discount))) as revenue],
-      alist(filter((((lineitem.l_orderkey = k0_lineitem_l_orderkey) &&
-                    (orders.o_orderdate = k0_orders_o_orderdate)) &&
-                   (orders.o_shippriority = k0_orders_o_shippriority)),
-              join((customer.c_custkey = orders.o_custkey),
-                join((lineitem.l_orderkey = orders.o_orderkey),
-                  orders,
-                  lineitem),
-                customer)),
-        atuple([filter(lineitem.l_shipdate > param1, ascalar(lineitem.l_shipdate)),
-                filter(customer.c_mktsegment = param0, ascalar(customer.c_mktsegment)),
-                ascalar(lineitem.l_extendedprice),
-                ascalar(lineitem.l_discount)      
-                ],
-          cross)))], cross)))
+ahashidx(dedup(
+           select([customer.c_mktsegment as customer_c_mktsegment_0], customer)),
+  alist(dedup(
+          select([lineitem.l_orderkey as k1_lineitem_l_orderkey,
+                  orders.o_orderdate as k1_orders_o_orderdate,
+                  orders.o_shippriority as k1_orders_o_shippriority],
+            join((customer.c_custkey = orders.o_custkey),
+              join((lineitem.l_orderkey = orders.o_orderkey), orders, lineitem),
+              filter((customer.c_mktsegment = customer_c_mktsegment_0),
+                customer)))),
+    select([lineitem.l_orderkey,
+            sum((lineitem.l_extendedprice * (1 - lineitem.l_discount))) as revenue,
+            orders.o_orderdate,
+            orders.o_shippriority],
+      filter(((orders.o_orderdate < param1) && (lineitem.l_shipdate > param1)),
+        alist(filter((customer.c_mktsegment = customer_c_mktsegment_0),
+                filter((((lineitem.l_orderkey = k1_lineitem_l_orderkey) &&
+                        (orders.o_orderdate = k1_orders_o_orderdate)) &&
+                       (orders.o_shippriority = k1_orders_o_shippriority)),
+                  join((customer.c_custkey = orders.o_custkey),
+                    join((lineitem.l_orderkey = orders.o_orderkey),
+                      orders,
+                      lineitem),
+                    filter((customer.c_mktsegment = customer_c_mktsegment_0),
+                      customer)))),
+          atuple([ascalar(orders.o_orderdate),
+                  ascalar(orders.o_shippriority),
+                  ascalar(lineitem.l_orderkey),
+                  ascalar(lineitem.l_extendedprice),
+                  ascalar(lineitem.l_discount),
+                  ascalar(lineitem.l_shipdate)],
+            cross))))),
+  param0)

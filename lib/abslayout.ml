@@ -239,12 +239,7 @@ let names r = names_visitor#visit_t () r
 
 let pred_names r = names_visitor#visit_pred () r
 
-let pred_of_value = function
-  | Value.Bool x -> Bool x
-  | String x -> String x
-  | Int x -> Int x
-  | Null -> Null
-  | Fixed x -> Fixed x
+let pred_of_value = Value.to_pred
 
 let subst_visitor p_old p_new =
   object

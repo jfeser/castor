@@ -207,6 +207,9 @@ module Make (Eval : Eval.S) = struct
 
         method build_AScalar =
           function
+          | Date x ->
+              let x = Date.to_int x in
+              IntT {range= AbsInt.abstract x; nullable= false}
           | Int x -> IntT {range= AbsInt.abstract x; nullable= false}
           | Bool _ -> BoolT {nullable= false}
           | String x ->

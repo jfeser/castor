@@ -15,6 +15,7 @@ let make_modules layout_file =
         let layout_map_channel = Some (Out_channel.create layout_file)
       end)
       (Eval)
+      (M)
   in
   (module S : Serialize.S)
 

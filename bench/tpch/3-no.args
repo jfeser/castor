@@ -1,1 +1,1 @@
--p param0:string -p param1:date -t hoist-filter:0,hoist-filter,hoist-filter:0,hoist-filter:1,hoist-filter:1,hoist-filter:0,hoist-filter:0,merge-filter:0,merge-filter,elim-groupby-filter,row-store:4,project,push-filter:0
+-p param0:string -p param1:date -t "hoist-filter:0,hoist-filter,hoist-filter:0,hoist-filter:1,hoist-filter:1,hoist-filter:0,hoist-filter:0,merge-filter:0,merge-filter,elim-groupby-filter,split-filter:0,partition-eq(customer.c_mktsegment):2,push-filter:2,row-store:7,project"

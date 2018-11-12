@@ -19,10 +19,10 @@ let main ~debug ~gprof ~params ~db ~port ~code_only ?out_dir ch =
       else None
   end in
   let module E = Eval.Make (CConfig) in
-  let module S = Serialize.Make (CConfig) (E) in
+  let module A = Abslayout_db.Make (E) in
+  let module S = Serialize.Make (CConfig) (E) (A) in
   let module I = Irgen.Make (CConfig) (E) (S) () in
   let module C = Codegen.Make (CConfig) (I) () in
-  let module A = Abslayout_db.Make (E) in
   let params = List.map params ~f:(fun (n, t) -> Name.create ~type_:t n) in
   (* Codegen *)
   Logs.debug (fun m -> m "Codegen.") ;

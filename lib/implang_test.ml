@@ -34,6 +34,7 @@ let run_test ?(params = []) layout_str =
         let layout_map_channel = None
       end)
       (E)
+      (M)
   in
   let module I =
     Irgen.Make (struct
@@ -63,6 +64,7 @@ let run_test_db ?(params = []) layout_str =
         let layout_map_channel = None
       end)
       (E)
+      (M)
   in
   let module I =
     Irgen.Make (struct

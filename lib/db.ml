@@ -67,7 +67,7 @@ let result_to_tuples (r : Psql.result) =
                  (* Blank padded character strings *)
                  | BPCHAR -> String (String.strip value)
                  | FLOAT4 | FLOAT8 | NUMERIC -> Fixed (Fixed_point.of_string value)
-                 | DATE -> Int (Date.of_string value |> Date.to_int)
+                 | DATE -> Date (Date.of_string value)
                  (* Time & date types *)
                  | TIME | TIMESTAMP | TIMESTAMPTZ | INTERVAL | TIMETZ | ABSTIME
                   |RELTIME

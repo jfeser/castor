@@ -10,6 +10,7 @@ let run_test ?(params = []) layout_str opt_func =
         let layout_map_channel = None
       end)
       (E)
+      (M)
   in
   let module I =
     Irgen.Make (struct

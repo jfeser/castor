@@ -43,6 +43,7 @@ let make_modules ?layout_file () =
         let layout_map_channel = Option.map layout_file ~f:Out_channel.create
       end)
       (E)
+      (M)
   in
   let module I =
     Irgen.Make (struct
@@ -76,6 +77,7 @@ let make_modules_db ?layout_file () =
         let layout_map_channel = Option.map layout_file ~f:Out_channel.create
       end)
       (E)
+      (M)
   in
   let module I =
     Irgen.Make (struct
@@ -165,7 +167,8 @@ let%expect_test "agg" =
   run_test ~print_layout:false ~fork:false
     "select([1.0 + 2.0, avg(r2.a), count(), sum(r2.a), min(r2.a), max(r2.a)], \
      alist(r2, ascalar(r2.a)))" ;
-  [%expect {|
+  [%expect
+    {|
     3.000000,7.978000,5,39.890000,-0.420000,34.420000,
 
     exited normally |}]

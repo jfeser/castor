@@ -1,7 +1,9 @@
 open Base
+open Collections
 
 type t =
   | Int of int
+  | Date of Date.t
   | String of string
   | Bool of bool
   | Fixed of Fixed_point.t
@@ -27,3 +29,4 @@ let to_pred =
   | Bool x -> A.Bool x
   | Fixed x -> A.Fixed x
   | Null -> A.Null
+  | Date x -> A.Date x

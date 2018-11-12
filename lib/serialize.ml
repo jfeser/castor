@@ -12,7 +12,7 @@ end
 
 module type S = Serialize_intf.S
 
-module Make (Config : Config.S) (Eval : Eval.S) = struct
+module Make (Config : Config.S) (Eval : Eval.S) (M : Abslayout_db.S) = struct
   type eval_ctx =
     [ `Eval of Ctx.t
     | `Consume_outer of (Ctx.t * Ctx.t Seq.t) Seq.t sexp_opaque
@@ -297,29 +297,32 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
           let query_schema = Meta.(find_exn key_query schema) in
           let order_key = List.map query_schema ~f:(fun n -> Name n) in
           let ordered_query = order_by order_key meta.order key_query in
+          M.annotate_schema ordered_query ;
           Eval.eval ctx ordered_query
           |> Seq.map ~f:(fun ctx ->
                  ({sctx with ctx= `Eval ctx}, {sctx with ctx= `Eval ctx}) )
+          |> Seq.to_list
       | `Consume_outer ctxs ->
           Seq.map ctxs ~f:(fun (ctx, child_ctxs) ->
               ( {sctx with ctx= `Eval ctx}
               , {sctx with ctx= `Consume_inner (ctx, child_ctxs)} ) )
+          |> Seq.to_list
       | `Consume_inner (ctx, ctxs) ->
           Seq.map ctxs ~f:(fun ctx' ->
               ({sctx with ctx= `Eval ctx}, {sctx with ctx= `Eval ctx'}) )
+          |> Seq.to_list
     in
     (* Make a first pass to get the keys and value pointers set up. *)
-    contexts
-    |> Seq.iter ~f:(fun (kctx, _) ->
-           (* Serialize key. *)
-           sctx.serialize kctx key_t key_l ;
-           (* Save space for value pointer. *)
-           write_bytes sctx.writer (Bytes.make 8 '\x00') ) ;
+    List.iter contexts ~f:(fun (kctx, _) ->
+        (* Serialize key. *)
+        sctx.serialize kctx key_t key_l ;
+        (* Save space for value pointer. *)
+        write_bytes sctx.writer (Bytes.make 8 '\x00') ) ;
     let index_end_pos = pos sctx.writer in
     (* Pass over again to get values in the right places. *)
     let index_pos = ref index_start_pos in
     let value_pos = ref (pos sctx.writer) in
-    Seq.iter contexts ~f:(fun (kctx, vctx) ->
+    List.iter contexts ~f:(fun (kctx, vctx) ->
         seek sctx.writer !index_pos ;
         (* Serialize key. *)
         Log.with_msg sctx "Ordered idx key" (fun () ->
@@ -411,6 +414,7 @@ module Make (Config : Config.S) (Eval : Eval.S) = struct
       (fun () ->
         match value with
         | Null -> serialize_null sctx type_
+        | Date x -> serialize_int sctx type_ (Date.to_int x)
         | Int x -> serialize_int sctx type_ x
         | Fixed x -> serialize_fixed sctx type_ x
         | Bool x -> serialize_bool sctx type_ x
