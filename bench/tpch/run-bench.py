@@ -320,9 +320,9 @@ BENCHMARKS = [
             ("param0:string", gen_str('Brand#12')),
             ("param1:string", gen_str('Brand#23')),
             ("param2:string", gen_str('Brand#34')),
-            ("param3:string", gen_str('1')),
-            ("param4:string", gen_str('10')),
-            ("param5:string", gen_str('20')),
+            ("param3:float", gen_str('1.0')),
+            ("param4:float", gen_str('10.0')),
+            ("param5:float", gen_str('20.0')),
         ],
     },
     {
