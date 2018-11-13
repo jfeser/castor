@@ -86,8 +86,8 @@ let eval_pred_shared eval ctx =
         if v1 then eval_pred ctx p2 else eval_pred ctx p3
     | Exists r -> Bool (eval ctx r |> Seq.is_empty |> not)
     | First r -> (
-      match eval ctx r |> Seq.hd with
-      | Some tup -> (
+      match eval ctx r |> Seq.to_list with
+      | [tup] -> (
           (* Remove fields that are also present in the context to compensate
              for a bug elsewhere. *)
           let tup_list =
@@ -101,7 +101,8 @@ let eval_pred_shared eval ctx =
                   Value.t Map.M(Name.Compare_no_type).t
                   * Value.t Map.M(Name.Compare_no_type).t]
               |> Error.raise )
-      | None -> failwith "Empty relation." )
+      | [] -> failwith "Empty relation."
+      | _ -> failwith "Expected a one-element relation." )
     | Substring (p1, p2, p3) ->
         let s = eval_pred ctx p1 in
         let p = eval_pred ctx p2 in

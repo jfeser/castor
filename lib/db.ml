@@ -187,6 +187,7 @@ let exec_cursor =
   let fresh = Fresh.create () in
   fun ?(batch_size = 10000) ?(params = []) db query ->
     let db = create ?port:db.port db.db in
+    Caml.Gc.finalise (fun db -> try (db.conn)#finish with Failure _ -> ()) db ;
     let query = subst_params params query in
     let cur = Fresh.name fresh "cur%d" in
     let declare_query =
