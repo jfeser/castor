@@ -428,8 +428,10 @@ module Make (Eval : Eval.S) = struct
             | GroupBy (x, _, _) -> List.map x ~f:pred_to_schema
             | AEmpty -> []
             | AScalar e -> self#visit_pred () e ; [pred_to_schema e]
-            | ATuple (rs, _) ->
+            | ATuple (rs, (Cross | Zip)) ->
                 List.concat_map ~f:(fun r -> Meta.(find_exn r schema)) rs
+            | ATuple ([], Concat) -> []
+            | ATuple (r :: _, Concat) -> Meta.(find_exn r schema)
             | As (n, r) ->
                 Meta.(find_exn r schema)
                 |> List.map ~f:(fun x -> {x with relation= Some n})
