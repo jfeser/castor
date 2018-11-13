@@ -34,9 +34,22 @@ let main ~debug ~gprof ~params ~db ~port ~code_only ?out_dir ch =
   A.annotate_subquery_types ralgebra ;
   C.compile ~gprof ~params ?out_dir ralgebra |> ignore
 
+let reporter ppf =
+  let report _ level ~over k msgf =
+    let k _ = over () ; k () in
+    let with_time h _ k ppf fmt =
+      let time = Core.Time.now () in
+      Format.kfprintf k ppf
+        ("%a [%s] @[" ^^ fmt ^^ "@]@.")
+        Logs.pp_header (level, h) (Core.Time.to_string time)
+    in
+    msgf @@ fun ?header ?tags fmt -> with_time header tags k ppf fmt
+  in
+  {Logs.report}
+
 let () =
   (* Set early so we get logs from command parsing code. *)
-  Logs.set_reporter (Logs.format_reporter ()) ;
+  Logs.set_reporter (reporter Format.std_formatter) ;
   let open Command in
   let open Let_syntax in
   Logs.info (fun m -> m "%s" (Sys.argv |> Array.to_list |> String.concat ~sep:" ")) ;
