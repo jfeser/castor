@@ -6,7 +6,7 @@ import os
 import shutil
 import json
 import shlex
-from subprocess import run
+from subprocess import check_call, check_output
 
 log = logging.getLogger(name=__file__)
 handler = logging.StreamHandler()
@@ -74,7 +74,7 @@ for bench in BENCHMARKS:
         ]
         cmd_str = shlex.quote(' '.join(cmd))
         log.debug('Building %s in %s.', cmd_str, os.getcwd())
-        run(cmd, stdout=b_log, stderr=b_log, check=True)
+        check_call(cmd, stdout=b_log, stderr=b_log)
     log.info('Done building %s.', bench)
 
 # Run benchmarks
@@ -100,8 +100,8 @@ for (lp_id, lc_id) in present_ids:
 
         try:
             log.debug('Running %s in %s.', cmd_str, os.getcwd())
-            proc = run(cmd, capture_output=True, encoding='utf-8')
-            ts.append(float(proc.stdout.split(' ')[0][:-2]))
+            out = check_output(cmd, capture_output=True, encoding='utf-8')
+            ts.append(float(out.split(' ')[0][:-2]))
         except:
             log.exception('Running %s failed.', cmd)
             ts.append(None)
