@@ -183,7 +183,7 @@ and ralgebra_to_sql_helper r =
           |> String.concat ~sep:", "
         in
         let sql_preds =
-          List.map ps ~f:(fun p -> subst_pred ctx p |> agg_to_sql)
+          List.map ps ~f:(fun p -> subst_pred ctx p |> pred_to_sql)
           |> String.concat ~sep:", "
         in
         let new_query =
