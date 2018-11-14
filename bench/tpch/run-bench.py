@@ -480,7 +480,7 @@ if args['--gen-dune']:
     exit(0)
 
 # Run benchmarks
-with ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as exe:
+with ThreadPoolExecutor(max_workers=(multiprocessing.cpu_count()//2)) as exe:
     for bench in BENCHMARKS:
         for query in bench['query']:
             if should_run(query):
