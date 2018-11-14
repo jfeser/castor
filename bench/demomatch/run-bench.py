@@ -34,22 +34,22 @@ BENCHMARKS = [
 def bench_dir(bench_file):
     return os.path.splitext(bench_file)[0]
 
-conn = psycopg2.connect(f"dbname='{DB}' port='{PORT}'")
+conn = psycopg2.connect("dbname='{}' port='{}'".format(DB, PORT))
 
 # Generate benchmark table.
-log.debug(f'Generating benchmark table ({TABLE_SIZE} rows).')
+log.debug('Generating benchmark table ({} rows).'.format(TABLE_SIZE))
 c = conn.cursor()
 c.execute('drop table if exists log_bench')
 c.execute('drop index if exists idx_id')
 c.execute('drop index if exists idx_counter')
 c.execute('drop index if exists idx_succ')
-c.execute(f'create table log_bench as (select * from log order by random() limit {TABLE_SIZE})')
-log.debug(f'Generating benchmark id index.')
-c.execute(f'create index idx_id on log_bench (id)')
-log.debug(f'Generating benchmark counter index.')
-c.execute(f'create index idx_counter on log_bench (counter)')
-log.debug(f'Generating benchmark succ index.')
-c.execute(f'create index idx_succ on log_bench (succ)')
+c.execute('create table log_bench as (select * from log order by random() limit {})'.format(TABLE_SIZE))
+log.debug('Generating benchmark id index.')
+c.execute('create index idx_id on log_bench (id)')
+log.debug('Generating benchmark counter index.')
+c.execute('create index idx_counter on log_bench (counter)')
+log.debug('Generating benchmark succ index.')
+c.execute('create index idx_succ on log_bench (succ)')
 conn.commit()
 log.info('Generating benchmark table done.')
 
