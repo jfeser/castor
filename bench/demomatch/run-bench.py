@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import configparser
 import logging
 import psycopg2
 import os
@@ -20,8 +21,10 @@ def rpath(p):
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), p)
 
 DB = 'demomatch'
-PORT = 5433
-COMPILE_EXE = rpath('dune exec ../../../bin/compile.exe --')
+PORT = '5432'
+CONFIG = configparser.ConfigParser()
+CONFIG.read(rpath('../../config'))
+COMPILE_EXE = CONFIG['default']['project_root'] + '/bin/compile.exe'
 PRESENT_QUERIES = 10
 ABSENT_QUERIES = 10
 TABLE_SIZE = 10000000
@@ -43,7 +46,7 @@ c.execute('drop table if exists log_bench')
 c.execute('drop index if exists idx_id')
 c.execute('drop index if exists idx_counter')
 c.execute('drop index if exists idx_succ')
-c.execute('create table log_bench as (select * from log order by random() limit {})'.format(TABLE_SIZE))
+c.execute('create table log_bench as (select * from swing_components_progressbardemo.log order by random() limit {})'.format(TABLE_SIZE))
 log.debug('Generating benchmark id index.')
 c.execute('create index idx_id on log_bench (id)')
 log.debug('Generating benchmark counter index.')
@@ -66,8 +69,8 @@ for bench in BENCHMARKS:
             COMPILE_EXE,
             '-v',
             '-o', benchd,
-            '-db', 'demomatch',
-            '-port', '5433',
+            '-db', DB,
+            '-port', PORT,
             '-p', 'id_p:string',
             '-p', 'id_c:string',
             bench
