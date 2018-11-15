@@ -7,7 +7,7 @@ val create : ?port:string -> string -> t
 val exec :
   ?max_retries:int -> ?params:string list -> t -> string -> Postgresql.result
 
-val result_to_tuples : Postgresql.result -> Value.t Map.M(String).t Sequence.t
+val result_to_tuples : Postgresql.result -> string Map.M(String).t Sequence.t
 
 val result_to_strings : Postgresql.result -> string list list
 
@@ -16,7 +16,7 @@ val exec_cursor :
   -> ?params:string list
   -> t
   -> string
-  -> Value.t Map.M(String).t Sequence.t
+  -> string Map.M(String).t Sequence.t
 
 module Field : sig
   type t = {fname: string; type_: Type.PrimType.t} [@@deriving compare, sexp]
