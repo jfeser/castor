@@ -173,14 +173,19 @@ module Make (Config : Config.S) : S = struct
   let eval_with_schema schema sql =
     Db.exec_cursor Config.conn sql
     |> Seq.map ~f:(fun t ->
-           List.map schema ~f:(fun n ->
-               match Map.find t n.Name.name with
-               | Some v -> (n, v)
-               | None ->
-                   Error.create "Mismatched tuple." (t, schema)
-                     [%sexp_of: Value.t Map.M(String).t * Name.t list]
-                   |> Error.raise )
-           |> Map.of_alist_exn (module Name.Compare_no_type) )
+           match (Map.to_alist t, schema) with
+           (* TODO: Special case compensates for First(r) where r has a single
+           unnamed field. *)
+           | [(_, v)], [n] -> Map.singleton (module Name.Compare_no_type) n v
+           | _ ->
+               List.map schema ~f:(fun n ->
+                   match Map.find t n.Name.name with
+                   | Some v -> (n, v)
+                   | None ->
+                       Error.create "Mismatched tuple." (t, schema)
+                         [%sexp_of: Value.t Map.M(String).t * Name.t list]
+                       |> Error.raise )
+               |> Map.of_alist_exn (module Name.Compare_no_type) )
 
   let rec eval_pred ctx p = eval_pred_shared eval ctx p
 
