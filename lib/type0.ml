@@ -5,7 +5,6 @@ module PrimType = struct
   type t =
     | NullT
     | IntT of {nullable: bool}
-    | DateT of {nullable: bool}
     | FixedT of {nullable: bool}
     | StringT of {nullable: bool}
     | BoolT of {nullable: bool}
@@ -35,7 +34,6 @@ module PrimType = struct
     | NullT -> "null"
     | VoidT -> "void"
     | TupleT _ -> "tuple"
-    | DateT _ -> "date"
 
   let rec pp_tuple pp_v fmt =
     let open Format in
@@ -58,16 +56,13 @@ module PrimType = struct
       | VoidT -> fprintf fmt "Void"
       | FixedT {nullable= true} -> fprintf fmt "Fixed"
       | FixedT {nullable= false} -> fprintf fmt "Fixed[nonnull]"
-      | DateT {nullable= true} -> fprintf fmt "Date"
-      | DateT {nullable= false} -> fprintf fmt "Date[nonnull]"
 
   let is_nullable = function
     | NullT -> true
     | IntT {nullable= n}
      |BoolT {nullable= n}
      |StringT {nullable= n}
-     |FixedT {nullable= n}
-     |DateT {nullable= n} ->
+     |FixedT {nullable= n} ->
         n
     | TupleT _ | VoidT -> false
 
@@ -85,7 +80,7 @@ module PrimType = struct
     | _, _ -> Error.create "Nonunifiable." (t1, t2) [%sexp_of: t * t] |> Error.raise
 
   let rec width = function
-    | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ | DateT _ -> 1
+    | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ -> 1
     | TupleT ts -> List.map ts ~f:width |> List.sum (module Int) ~f:(fun x -> x)
     | VoidT -> 0
 end

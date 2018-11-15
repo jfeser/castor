@@ -387,6 +387,11 @@ module Builder = struct
               b )
           b
 
+  let type_err msg x y t1 t2 =
+    Error.create msg (x, y, t1, t2)
+      [%sexp_of: expr * expr * Type.PrimType.t * Type.PrimType.t]
+    |> Error.raise
+
   (* let build_fixed x y b =
    *   let ret = build_fresh_var "f" (FixedT {nullable= false}) b in
    *   build_assign (Tuple [x; y]) ret b ;
@@ -506,9 +511,9 @@ module Builder = struct
     in
     let open Type.PrimType in
     match t with
-    | IntT {nullable= false} | DateT {nullable= false} -> f (`Int x)
+    | IntT {nullable= false} -> f (`Int x)
     | FixedT {nullable= false} -> f (`Fixed x)
-    | IntT {nullable= true} | FixedT {nullable= true} | DateT {nullable= true} ->
+    | IntT {nullable= true} | FixedT {nullable= true} ->
         type_err "Nullable types." t
     | NullT | StringT _ | BoolT _ | TupleT _ | VoidT ->
         type_err "Nonnumeric types." t
@@ -521,11 +526,29 @@ module Builder = struct
   let build_numeric2 f x y b =
     let t1 = type_of x b in
     let t2 = type_of y b in
-    match (build_numeric0 (fun x -> x) t1 x, build_numeric0 (fun x -> x) t2 y) with
-    | `Int x, `Int y -> f (`Int (x, y))
-    | `Fixed x, `Int y -> f (`Fixed (x, int2fl y))
-    | `Int x, `Fixed y -> f (`Fixed (int2fl x, y))
-    | `Fixed _, `Fixed _ -> f (`Fixed (x, y))
+    let open Type.PrimType in
+    match (t1, t2) with
+    | IntT {nullable= false}, IntT {nullable= false} -> f (`Int (x, y))
+    | FixedT {nullable= false}, FixedT {nullable= false} -> f (`Fixed (x, y))
+    | IntT {nullable= false}, FixedT {nullable= false} -> f (`Fixed (int2fl x, y))
+    | FixedT {nullable= false}, IntT {nullable= false} -> f (`Fixed (x, int2fl y))
+    | IntT _, FixedT _ | FixedT _, IntT _ -> type_err "Mismatched types." x y t1 t2
+    | IntT {nullable= true}, _
+     |_, IntT {nullable= true}
+     |FixedT {nullable= true}, _
+     |_, FixedT {nullable= true} ->
+        type_err "Nullable types." x y t1 t2
+    | NullT, _
+     |StringT _, _
+     |BoolT _, _
+     |TupleT _, _
+     |VoidT, _
+     |_, NullT
+     |_, StringT _
+     |_, BoolT _
+     |_, TupleT _
+     |_, VoidT ->
+        type_err "Nonnumeric types." x y t1 t2
 
   let build_add =
     build_numeric2 (function

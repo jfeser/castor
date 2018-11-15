@@ -53,7 +53,45 @@ let result_to_tuples (r : Psql.result) =
          let tup =
            List.init r#nfields ~f:(fun field_i ->
                let value = r#getvalue tup_i field_i in
-               (r#fname field_i, value) )
+               let type_ = r#ftype field_i in
+               let primval =
+                 match type_ with
+                 | Postgresql.BOOL -> (
+                   match value with
+                   | "t" -> Value.Bool true
+                   | "f" -> Bool false
+                   | _ -> failwith "Unknown boolean value." )
+                 | INT8 | INT2 | INT4 ->
+                     if String.(value = "") then Null else Int (Int.of_string value)
+                 | CHAR | TEXT | VARCHAR -> String value
+                 (* Blank padded character strings *)
+                 | BPCHAR -> String (String.strip value)
+                 | FLOAT4 | FLOAT8 | NUMERIC -> Fixed (Fixed_point.of_string value)
+                 | DATE -> Date (Date.of_string value)
+                 (* Time & date types *)
+                 | TIME | TIMESTAMP | TIMESTAMPTZ | INTERVAL | TIMETZ | ABSTIME
+                  |RELTIME
+                  |TINTERVAL
+                 (* Geometric types. *)
+                  |POINT | LSEG | PATH | BOX | POLYGON | LINE
+                  |CIRCLE
+                 (* Network types *)
+                  |MACADDR | INET
+                  |CIDR
+                 (* Other types*)
+                  |NAME | BYTEA | INT2VECTOR | JSON | CASH | ACLITEM | BIT
+                  |VARBIT | JSONB ->
+                     (* Store unknown values as strings. *)
+                     Logs.warn (fun m -> m "Unknown value: %s" value) ;
+                     String value
+                 | OID | OIDVECTOR | TID | XID | CID | REFCURSOR | REGPROC
+                  |REGPROCEDURE | REGOPER | REGOPERATOR | REGCLASS | REGTYPE ->
+                     failwith "Postgres internal type."
+                 | ANY | ANYARRAY | VOID | CSTRING | INTERNAL | LANGUAGE_HANDLER
+                  |RECORD | TRIGGER | OPAQUE | ANYELEMENT | UNKNOWN ->
+                     failwith "Pseudo type."
+               in
+               (r#fname field_i, primval) )
            |> Map.of_alist_exn (module String)
          in
          Yield (tup, ()) )
@@ -105,10 +143,10 @@ module Relation = struct
       |> List.map ~f:(fun (fname, type_str, nullable_str) ->
              let open Type.PrimType in
              let nullable =
-               if String.(strip nullable_str = "YES") then
+               if String.(nullable_str = "YES") then
                  let nulls =
                    exec1 ~params:[fname; rname] conn
-                     "select \"$0\" from \"$1\" where \"$0\" is null limit 1"
+                     "select \"$0\" from \"$1\" where \"$0\" = null limit 1"
                  in
                  List.length nulls > 0
                else false
@@ -117,28 +155,10 @@ module Relation = struct
                match type_str with
                | "character" | "character varying" | "varchar" | "text" ->
                    StringT {nullable}
-               | "interval" | "integer" | "smallint" | "bigint" -> IntT {nullable}
-               | "date" -> DateT {nullable}
+               | "date" | "interval" | "integer" | "smallint" | "bigint" ->
+                   IntT {nullable}
                | "boolean" -> BoolT {nullable}
-               | "numeric" ->
-                   let min, max, max_scale =
-                     exec3 ~params:[fname; rname] conn
-                       "select min(\"$0\"), max(\"$0\"), max(scale(\"$0\")) from \
-                        \"$1\""
-                     |> List.hd_exn
-                   in
-                   let is_int = Int.of_string max_scale = 0 in
-                   let fits_in_an_int63 =
-                     try
-                       Int.of_string min |> ignore ;
-                       Int.of_string max |> ignore ;
-                       true
-                     with Failure _ -> false
-                   in
-                   if is_int then
-                     if fits_in_an_int63 then IntT {nullable} else StringT {nullable}
-                   else FixedT {nullable}
-               | "real" | "double" -> FixedT {nullable}
+               | "numeric" | "real" | "double" -> FixedT {nullable}
                | "timestamp without time zone" -> StringT {nullable}
                | s -> failwith (Printf.sprintf "Unknown dtype %s" s)
              in

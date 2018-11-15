@@ -446,7 +446,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let open Type.PrimType in
     (* let type_ = *)
     match t with
-    | IntT _ | DateT _ -> int_type
+    | IntT _ -> int_type
     | BoolT _ -> bool_type
     | StringT _ -> str_type
     | TupleT ts -> struct_type ctx (List.map ts ~f:codegen_type |> Array.of_list)
@@ -611,7 +611,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
               Error.create "Not supported as part of a composite key." t
                 [%sexp_of: t]
               |> Error.raise
-          | IntT _ | DateT _ -> build_add (size_of int_type) size "" builder
+          | IntT _ -> build_add (size_of int_type) size "" builder
           | FixedT _ ->
               let size = build_add (size_of int_type) size "" builder in
               build_add (size_of int_type) size "" builder
@@ -633,7 +633,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         let open Type.PrimType in
         let key_offset =
           match type_ with
-          | IntT _ | DateT _ ->
+          | IntT _ ->
               let key_ptr =
                 build_inttoptr key_offset (pointer_type int_type) "" builder
               in
@@ -1390,7 +1390,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
                let loader_fn =
                  match Name.type_exn n with
                  | NullT -> failwith "No null parameters."
-                 | IntT _ | DateT _ -> "load_int.c"
+                 | IntT _ -> "load_int.c"
                  | BoolT _ -> "load_bool.c"
                  | StringT _ -> "load_string.c"
                  | FixedT _ -> "load_float.c"

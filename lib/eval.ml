@@ -137,53 +137,49 @@ let eval_foreach eval_foreach_flat ctx query1 query2 =
 module Make (Config : Config.S) : S = struct
   let load_relation = Relation.from_db Config.conn
 
-  let parse_value type_ value =
-    let open Type.PrimType in
-    match type_ with
-    | BoolT {nullable} -> (
-      match value with
-      | "t" -> Ok (Value.Bool true)
-      | "f" -> Ok (Bool false)
-      | "" when nullable -> Ok Null
-      | _ -> Error (Error.create "Unknown boolean value." value [%sexp_of: string])
-      )
-    | IntT {nullable} ->
-        if String.(value = "") then
-          if nullable then Ok Null
-          else Error (Error.of_string "Unexpected null integer.")
-        else Ok (Int (Int.of_string value))
-    | StringT _ -> Ok (String value)
-    | FixedT {nullable} ->
-        if String.(value = "") then
-          if nullable then Ok Null
-          else Error (Error.of_string "Unexpected null fixed.")
-        else Ok (Fixed (Fixed_point.of_string value))
-    | DateT {nullable} ->
-        if String.(value = "") then
-          if nullable then Ok Null
-          else Error (Error.of_string "Unexpected null integer.")
-        else Ok (Date (Date.of_string value))
-    | NullT ->
-        if String.(value = "") then Ok Null
-        else Error (Error.create "Expected a null value." value [%sexp_of: string])
-    | VoidT | TupleT _ -> failwith "Not a value type."
+  let eval_relation r =
+    let query = "select * from $0" in
+    exec Config.conn query ~params:[r.Relation.rname]
+    |> result_to_strings |> Seq.of_list
+    |> Seq.map ~f:(fun vs ->
+           let m_values =
+             List.map2 vs r.fields ~f:(fun v f ->
+                 let name = Name.create ~relation:r.rname f.fname in
+                 let value =
+                   if String.(v = "") then Value.Null
+                   else
+                     match f.type_ with
+                     | IntT _ -> Int (Int.of_string v)
+                     | StringT _ -> String v
+                     | BoolT _ -> (
+                       match v with
+                       | "t" -> Bool true
+                       | "f" -> Bool false
+                       | _ -> failwith "Unknown boolean value." )
+                     | FixedT _ -> Fixed (Fixed_point.of_string v)
+                     | NullT | VoidT | TupleT _ ->
+                         failwith "Not possible column types."
+                 in
+                 (name, value) )
+           in
+           match m_values with
+           | Ok v -> v
+           | Unequal_lengths ->
+               Error.create "Unexpected tuple width."
+                 (r, List.length r.fields, List.length vs)
+                 [%sexp_of: Relation.t * int * int]
+               |> Error.raise )
 
   let eval_with_schema schema sql =
     Db.exec_cursor Config.conn sql
     |> Seq.map ~f:(fun t ->
            List.map schema ~f:(fun n ->
-               let v =
-                 match Map.find t n.Name.name with
-                 | Some v ->
-                     let v = parse_value (Name.type_exn n) v in
-                     Or_error.tag_arg v "Bad value." n [%sexp_of: Name.t]
-                 | None ->
-                     Error
-                       (Error.create "Mismatched tuple." (t, schema)
-                          [%sexp_of: string Map.M(String).t * Name.t list])
-               in
-               Or_error.map ~f:(fun v -> (n, v)) v )
-           |> Or_error.all |> Or_error.ok_exn
+               match Map.find t n.Name.name with
+               | Some v -> (n, v)
+               | None ->
+                   Error.create "Mismatched tuple." (t, schema)
+                     [%sexp_of: Value.t Map.M(String).t * Name.t list]
+                   |> Error.raise )
            |> Map.of_alist_exn (module Name.Compare_no_type) )
 
   let rec eval_pred ctx p = eval_pred_shared eval ctx p
