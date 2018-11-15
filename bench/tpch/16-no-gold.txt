@@ -8,7 +8,7 @@ filter((not((part.p_brand = param1)) &&
        ((part.p_size = param8) ||
        ((part.p_size = param9) || (part.p_size = param10)))))))))),
   alist(dedup(select([part.p_type as k1], part)),
-    atuple([ascalar(k1),
+    atuple([ascalar(k1 as p_type) as part,
             alist(groupby([part.p_brand, part.p_size, count() as supplier_cnt],
                     [part.p_brand, part.p_size],
                     join((part.p_partkey = partsupp.ps_partkey),

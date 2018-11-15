@@ -7,10 +7,10 @@ ahashidx(dedup(select([lineitem.l_shipdate as param1_0], lineitem)),
                   total_revenue],
             join(((supplier.s_suppkey = supplier_no) &&
                  (total_revenue =
-                 (select([max(total_revenue)],
+                 (select([max(total_revenue_i)],
                     groupby([lineitem.l_suppkey as supplier_no,
                              sum((lineitem.l_extendedprice *
-                                 (1 - lineitem.l_discount))) as total_revenue],
+                                 (1 - lineitem.l_discount))) as total_revenue_i],
                       [lineitem.l_suppkey],
                       filter(((lineitem.l_shipdate >= param1_0) &&
                              (lineitem.l_shipdate < (param1_0 + month(3)))),

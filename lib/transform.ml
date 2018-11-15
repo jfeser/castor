@@ -174,10 +174,13 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
                   if List.is_empty new_key then select new_ps new_r
                   else group_by new_ps new_key new_r
                 in
+                let key_scalar =
+                  let s = scalar (As_pred (Name (Name.create key_name), k.name)) in
+                  match k.relation with Some rel -> as_ rel s | None -> s
+                in
                 list
                   (dedup (select [As_pred (Name k, key_name)] (scan rel)))
-                  (tuple [scalar (Name (Name.create key_name)); new_group_by] Cross)
-            )
+                  (tuple [key_scalar; new_group_by] Cross) )
         | _ -> []) }
     |> run_everywhere
 
