@@ -457,12 +457,12 @@ def gen_dune():
 (rule
   (targets "{query}.gen")
   (deps "{name}.args" "{name}.txt" ../../bin/transform.exe)
-  (action (with-stdout-to
+  (action (ignore-stderr (with-stdout-to
             "{query}.gen"
-            (system "../../bin/transform.exe -db tpch {name}.txt %{{read:{name}.args}}")))
+            (system "../../bin/transform.exe -db tpch_test {name}.txt %{{read:{name}.args}}"))))
 )
 (alias
-  (name runtftest)
+  (name check_transforms)
   (action (diff "{query}.txt" "{query}.gen"))
 )
             '''.format(name=bench['name'], query=query))

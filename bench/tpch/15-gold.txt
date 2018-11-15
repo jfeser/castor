@@ -1,21 +1,33 @@
-ahashidx(
-  dedup(select([l_shipdate as d], lineitem)),
-  alist(
-    join(l_suppkey = s_suppkey,
-    join(rev = max_rev,
-             groupby([l_suppkey, sum(l_extendedprice * (1 - l_discount)) as rev],
-                     [l_suppkey],
-                     filter(l_shipdate >= d && l_shipdate < d + month(3),
-                            lineitem)),
-             select([max(rev) as max_rev],
-                    groupby([sum(l_extendedprice * (1 - l_discount)) as rev],
-                            [l_suppkey],
-                            filter(l_shipdate >= d && l_shipdate < d + month(3),
-                                   lineitem)))),
-         supplier),
-    atuple([ascalar(s_suppkey),
-            ascalar(s_name),
-            ascalar(s_address),
-            ascalar(s_phone),
-            ascalar(rev)], cross)
-), param1)
+ahashidx(dedup(select([lineitem.l_shipdate as param1_0], lineitem)),
+  alist(orderby([supplier.s_suppkey],
+          select([supplier.s_suppkey,
+                  supplier.s_name,
+                  supplier.s_address,
+                  supplier.s_phone,
+                  total_revenue],
+            join(((supplier.s_suppkey = supplier_no) &&
+                 (total_revenue =
+                 (select([max(total_revenue)],
+                    groupby([lineitem.l_suppkey as supplier_no,
+                             sum((lineitem.l_extendedprice *
+                                 (1 - lineitem.l_discount))) as total_revenue],
+                      [lineitem.l_suppkey],
+                      filter(((lineitem.l_shipdate >= param1_0) &&
+                             (lineitem.l_shipdate < (param1_0 + month(3)))),
+                        lineitem)))))),
+              supplier,
+              groupby([lineitem.l_suppkey as supplier_no,
+                       sum((lineitem.l_extendedprice *
+                           (1 - lineitem.l_discount))) as total_revenue],
+                [lineitem.l_suppkey],
+                filter(((lineitem.l_shipdate >= param1_0) &&
+                       (lineitem.l_shipdate < (param1_0 + month(3)))),
+                  lineitem)))),
+          desc),
+    atuple([ascalar(supplier.s_suppkey),
+            ascalar(supplier.s_name),
+            ascalar(supplier.s_address),
+            ascalar(supplier.s_phone),
+            ascalar(total_revenue)],
+      cross)),
+  param1)

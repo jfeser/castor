@@ -1,1 +1,1 @@
--p param0:date -t elim-groupby-filter,push-orderby,elim-cmp-filter,push-select,project,row-store:3
+-p param0:date -t elim-groupby-filter:0,push-orderby:0,elim-cmp-filter:0,push-select:0,project,row-store:4

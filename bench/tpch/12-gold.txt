@@ -15,10 +15,10 @@ alist(orderby([k0_lineitem_l_shipmode],
                             join((orders.o_orderkey = lineitem.l_orderkey),
                               orders,
                               lineitem)))))),
-        alist(select([sum(if (not((orders.o_orderpriority = "1-URGENT")) &&
-                             not((orders.o_orderpriority = "2-HIGH"))) then 1 else 0) as agg7,
-                      sum(if ((orders.o_orderpriority = "1-URGENT") ||
-                             (orders.o_orderpriority = "2-HIGH")) then 1 else 0) as agg6,
+        alist(select([sum((if (not((orders.o_orderpriority = "1-URGENT")) &&
+                              not((orders.o_orderpriority = "2-HIGH"))) then 1 else 0)) as agg7,
+                      sum((if ((orders.o_orderpriority = "1-URGENT") ||
+                              (orders.o_orderpriority = "2-HIGH")) then 1 else 0)) as agg6,
                       lineitem.l_shipmode],
                 filter((k1 = lineitem.l_receiptdate),
                   filter((lineitem.l_commitdate < lineitem.l_receiptdate),

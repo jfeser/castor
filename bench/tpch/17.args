@@ -1,1 +1,1 @@
--p param0:string -p param1:string -t hoist-filter,elim-eq-filter:1,elim-eq-filter:0,push-select,row-store:4,row-store:30
+-p param0:string -p param1:string -t hoist-filter:0,elim-eq-filter:1,push-select:0,elim-eq-filter:0,row-store:7,row-store:5,project

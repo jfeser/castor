@@ -1,1 +1,1 @@
--p param0:date -p param1:float -p param2:int -t "split-filter,split-filter,hoist-filter:1,hoist-filter:1,merge-filter:0,elim-cmp-filter,row-store:1,project"
+-p param0:date -p param1:float -p param2:int -t "split-filter,split-filter,hoist-filter:1,hoist-filter:1,merge-filter:0,split-filter:0,split-filter:0,hoist-filter:2,elim-cmp-filter:1,push-filter:1,elim-cmp-filter:0,merge-filter:1,row-store:2,project"

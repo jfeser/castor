@@ -109,6 +109,17 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
 
   let no_params r = Set.is_empty (Set.inter (A.names r) Config.params)
 
+  let replace_rel rel new_rel r =
+    let visitor =
+      object
+        inherit [_] Abslayout0.endo
+
+        method! visit_Scan () r' rel' =
+          if String.(rel = rel') then new_rel.A.node else r'
+      end
+    in
+    visitor#visit_t () r
+
   let tf_row_store _ =
     let open A in
     { name= "row-store"
@@ -138,6 +149,35 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
             [ list
                 (as_ key_name (dedup (select key_preds r)))
                 (select ps (filter filter_pred r)) ]
+        | _ -> []) }
+    |> run_everywhere
+
+  let tf_elim_groupby_partial _ =
+    let open A in
+    { name= "elim-groupby-partial"
+    ; f=
+        (function
+        | {node= GroupBy (ps, key, r); _} ->
+            List.map key ~f:(fun k ->
+                let key_name = Fresh.name fresh "k%d" in
+                let new_key =
+                  List.filter key ~f:(fun k' -> Name.Compare_no_type.(k <> k'))
+                in
+                let new_ps =
+                  List.filter ps ~f:(fun p ->
+                      not ([%compare.equal: pred] p (Name k)) )
+                in
+                let filter_pred = Binop (Eq, Name k, Name (Name.create key_name)) in
+                let rel = Name.rel_exn k in
+                let new_r = replace_rel rel (filter filter_pred (scan rel)) r in
+                let new_group_by =
+                  if List.is_empty new_key then select new_ps new_r
+                  else group_by new_ps new_key new_r
+                in
+                list
+                  (dedup (select [As_pred (Name k, key_name)] (scan rel)))
+                  (tuple [scalar (Name (Name.create key_name)); new_group_by] Cross)
+            )
         | _ -> []) }
     |> run_everywhere
 
@@ -325,32 +365,61 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     let f r = try run_exn r with Failed _ -> [] in
     {name= "precompute-filter"; f} |> run_everywhere
 
+  let gen_ordered_idx ?lb ?ub p r =
+    let open A in
+    let lb = Option.value lb ~default:(Int (Int.min_value + 1)) in
+    let ub = Option.value ub ~default:(Int Int.max_value) in
+    let k = Fresh.name fresh "k%d" in
+    let select_list = [As_pred (p, k)] in
+    let filter_pred = Binop (Eq, Name (Name.create k), p) in
+    [ ordered_idx
+        (dedup (select select_list r))
+        (filter filter_pred r)
+        {oi_key_layout= None; lookup_low= lb; lookup_high= ub; order= `Desc} ]
+
   let tf_elim_cmp_filter _ =
     let open A in
-    let gen ?lb ?ub p r =
-      let lb = Option.value lb ~default:(Int (Int.min_value + 1)) in
-      let ub = Option.value ub ~default:(Int Int.max_value) in
-      let k = Fresh.name fresh "k%d" in
-      let select_list = [As_pred (p, k)] in
-      let filter_pred = Binop (Eq, Name (Name.create k), p) in
-      [ ordered_idx
-          (dedup (select select_list r))
-          (filter filter_pred r)
-          {oi_key_layout= None; lookup_low= lb; lookup_high= ub; order= `Desc} ]
-    in
     { name= "elim-cmp-filter"
     ; f=
         (function
         | {node= Filter (Binop (And, Binop (Ge, p, lb), Binop (Lt, p', ub)), r); _}
           when [%compare.equal: pred] p p' ->
-            gen ~lb ~ub p r
+            gen_ordered_idx ~lb ~ub p r
         | {node= Filter (Binop (Le, p, p'), r); _}
          |{node= Filter (Binop (Lt, p, p'), r); _}
          |{node= Filter (Binop (Ge, p', p), r); _}
          |{node= Filter (Binop (Gt, p', p), r); _} ->
-            gen ~ub:p' p r @ gen ~lb:p p' r
+            gen_ordered_idx ~ub:p' p r @ gen_ordered_idx ~lb:p p' r
         | _ -> []) }
     |> run_everywhere
+
+  (* let tf_elim_cmp_filter_simple _ =
+   *   let open A in
+   *   { name= "elim-cmp-filter"
+   *   ; f=
+   *       (function
+   *       | { node=
+   *             Filter
+   *               (Binop (And, Binop (Ge, Name n1, lb), Binop (Lt, Name n2, ub)), r); _
+   *         } ->
+   *           if Name.Compare_no_type.(n1 = n2) then
+   *             let rel =
+   *               match (n1.relation, n2.relation) with
+   *               | Some r1, Some r2 -> if String.(r1 = r2) then Some r1 else None
+   *               | _ -> None
+   *             in
+   *             match rel with
+   *             | Some rel -> gen_ordered_idx ~lb ~ub (Name n1) (scan rel)
+   *             | None -> []
+   *           else []
+   *       | {node= Filter (Binop (Lt, p, Name), r); _}
+   *       | {node= Filter (Binop (Le, p, p'), r); _}
+   *        |{node= Filter (Binop (Lt, p, p'), r); _}
+   *        |{node= Filter (Binop (Ge, p', p), r); _}
+   *        |{node= Filter (Binop (Gt, p', p), r); _} ->
+   *           gen ~ub:p' p r @ gen ~lb:p p' r
+   *       | _ -> []) }
+   *   |> run_everywhere *)
 
   let same_orders r1 r2 =
     let open A in
@@ -519,6 +588,65 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           | _ -> [] ) }
     |> run_everywhere
 
+  let tf_split_select _ =
+    let open A in
+    let gen_select_list outer_preds inner_rel =
+      let open Abslayout in
+      let visitor =
+        object (self : 'a)
+          inherit [_] Abslayout0.mapreduce
+
+          inherit [_] Util.list_monoid
+
+          method add_agg aggs a =
+            match
+              List.find aggs ~f:(fun (_, a') -> [%compare.equal: pred] a a')
+            with
+            | Some (n, _) -> (Name n, aggs)
+            | None ->
+                let n = Fresh.name fresh "agg%d" |> Name.create in
+                (Name n, (n, a) :: aggs)
+
+          method! visit_Sum aggs p =
+            let n, aggs' = self#add_agg aggs p in
+            (Sum n, aggs')
+
+          method! visit_Min aggs p =
+            let n, aggs' = self#add_agg aggs p in
+            (Min n, aggs')
+
+          method! visit_Max aggs p =
+            let n, aggs' = self#add_agg aggs p in
+            (Max n, aggs')
+
+          method! visit_Avg aggs p =
+            let n, aggs' = self#add_agg aggs p in
+            (Avg n, aggs')
+        end
+      in
+      let outer_aggs, inner_aggs =
+        List.fold_left outer_preds ~init:([], []) ~f:(fun (op, ip) p ->
+            let p', ip' = visitor#visit_pred ip p in
+            (op @ [p'], ip') )
+      in
+      let inner_aggs = List.map inner_aggs ~f:(fun (n, a) -> As_pred (a, n.name)) in
+      (* Don't want to project out anything that we might need later. *)
+      let inner_fields =
+        Meta.(find_exn inner_rel schema) |> List.map ~f:(fun n -> Name n)
+      in
+      (outer_aggs, inner_aggs @ inner_fields)
+    in
+    { name= "split-select"
+    ; f=
+        (fun r ->
+          M.annotate_schema r ;
+          match r with
+          | {node= Select (ps, r'); _} ->
+              let outer_aggs, inner_aggs = gen_select_list ps r' in
+              [select outer_aggs (select inner_aggs r')]
+          | _ -> [] ) }
+    |> run_everywhere
+
   (** Check that a predicate is applied to a schema that has the right fields. *)
   let predicate_is_valid p s =
     let visitor =
@@ -607,7 +735,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
             [filter p' (filter p r)]
         | {node= Filter (p, {node= Join {pred; r1; r2}; _}); _} ->
             [join (Binop (And, p, pred)) r1 r2]
-        | {node= Filter (p, {node= AList (r, r'); _}); _} -> [list (filter p r) r']
+        | {node= Filter (p, {node= AList (r, r'); _}); _} ->
+            [list (filter p r) r'; list r (filter p r')]
         | {node= Filter (p, {node= AHashIdx (r, r', m); _}); _} ->
             [hash_idx' r (filter p r') m]
         | {node= Filter (p, {node= AOrderedIdx (r, r', m); _}); _} ->
@@ -675,17 +804,6 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     in
     visitor#visit_t [] r
 
-  let replace_rel rel new_rel r =
-    let visitor =
-      object
-        inherit [_] Abslayout0.endo
-
-        method! visit_Scan () r' rel' =
-          if String.(rel = rel') then new_rel.A.node else r'
-      end
-    in
-    visitor#visit_t () r
-
   let tf_partition args =
     let open A in
     let name =
@@ -706,6 +824,32 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           [ list
               (dedup (select [As_pred (Name name, fresh_name)] (scan rel)))
               (replace_rel rel filtered_rel r) ] ) }
+    |> run_everywhere ~stage:`Run
+
+  let tf_partition_domain args =
+    let open A in
+    let n_subst, n_domain =
+      match args with
+      | [n_subst; n_domain] ->
+          (Name.of_string_exn n_subst, Name.of_string_exn n_domain)
+      | _ -> failwith "Unexpected args."
+    in
+    let fresh_name =
+      Caml.Format.sprintf "%s_%s" (Name.to_var n_subst) (Fresh.name fresh "%d")
+    in
+    let rel = Name.rel_exn n_domain in
+    { name= "partition-domain"
+    ; f=
+        (fun r ->
+          [ hash_idx
+              (dedup (select [As_pred (Name n_domain, fresh_name)] (scan rel)))
+              (subst
+                 (Map.singleton
+                    (module Name.Compare_no_type)
+                    n_subst
+                    (Name (Name.create fresh_name)))
+                 r)
+              [Name n_subst] ] ) }
     |> run_everywhere ~stage:`Run
 
   let replace_pred r p1 p2 =
@@ -847,9 +991,34 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     in
     {name= "hoist-pred-const"; f} |> run_everywhere ~stage:`Run
 
+  let tf_hoist_param _ =
+    let open A in
+    let f r =
+      match r.node with
+      | AScalar
+          (As_pred
+            (First {node= Select ([As_pred (Binop (op, p1, p2), _)], r); _}, n)) ->
+          let fresh_id = Fresh.name fresh "const%d" in
+          [ select
+              [As_pred (Binop (op, Name (Name.create fresh_id), p2), n)]
+              (scalar (As_pred (First (select [p1] r), fresh_id))) ]
+      | _ -> []
+    in
+    {name= "hoist-param"; f} |> run_everywhere ~stage:`Run
+
+  (* let tf_to_cnf _ =
+   *   let to_boolean p = match p with
+   *     | Binop (And, p1, p2) ->
+   *     | Binop (Or, p1, p2) -> begin match to_boolean p1, to_boolean p2 with
+   *         | `Or p1s, `Or p2s -> `Or (p1s @ p2s)
+   *         | 
+   *     | Unop (Not, p) -> `Not p
+   *     | p -> `Atom p *)
+
   let transforms =
     [ ("hoist-join-pred", tf_hoist_join_pred)
     ; ("elim-groupby", tf_elim_groupby)
+    ; ("elim-groupby-partial", tf_elim_groupby_partial)
     ; ("elim-groupby-filter", tf_elim_groupby_filter)
     ; ("elim-groupby-approx", tf_elim_groupby_approx)
     ; ("push-orderby", tf_push_orderby)
@@ -860,15 +1029,19 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     ; ("elim-disj-filter", tf_elim_disj_filter)
     ; ("elim-eq-filter", tf_elim_eq_filter)
     ; ("elim-cmp-filter", tf_elim_cmp_filter)
+      (* ; ("elim-cmp-filter-simple", tf_elim_cmp_filter_simple) *)
     ; ("elim-join", tf_elim_join)
     ; ("row-store", tf_row_store)
     ; ("project", tf_project)
     ; ("push-select", tf_push_select)
+    ; ("split-select", tf_split_select)
     ; ("partition", tf_partition)
     ; ("partition-eq", tf_partition_eq)
     ; ("partition-size", tf_partition_size)
+    ; ("partition-domain", tf_partition_domain)
     ; ("split-out", tf_split_out)
     ; ("hoist-pred-const", tf_hoist_pred_constant)
+    ; ("hoist-param", tf_hoist_param)
     ; ("precompute-filter", tf_precompute_filter) ]
 
   let of_string_exn s =
