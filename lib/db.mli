@@ -24,8 +24,6 @@ val exec_cursor :
   -> string
   -> Value.t list Gen.t
 
-val load_value_exn : Type.PrimType.t -> string -> Value.t
-
 val check : t -> string -> unit Or_error.t
 
 module Field : sig

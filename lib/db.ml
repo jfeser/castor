@@ -101,10 +101,10 @@ module Relation = struct
       |> List.map ~f:(fun (fname, type_str, nullable_str) ->
              let open Type.PrimType in
              let nullable =
-               if String.(nullable_str = "YES") then
+               if String.(strip nullable_str = "YES") then
                  let nulls =
                    exec1 ~params:[fname; rname] conn
-                     "select \"$0\" from \"$1\" where \"$0\" = null limit 1"
+                     "select \"$0\" from \"$1\" where \"$0\" is null limit 1"
                  in
                  List.length nulls > 0
                else false
@@ -113,10 +113,28 @@ module Relation = struct
                match type_str with
                | "character" | "character varying" | "varchar" | "text" ->
                    StringT {nullable}
-               | "date" | "interval" | "integer" | "smallint" | "bigint" ->
-                   IntT {nullable}
+               | "interval" | "integer" | "smallint" | "bigint" -> IntT {nullable}
+               | "date" -> DateT {nullable}
                | "boolean" -> BoolT {nullable}
-               | "numeric" | "real" | "double" -> FixedT {nullable}
+               | "numeric" ->
+                   let min, max, max_scale =
+                     exec3 ~params:[fname; rname] conn
+                       "select min(\"$0\"), max(\"$0\"), max(scale(\"$0\")) from \
+                        \"$1\""
+                     |> List.hd_exn
+                   in
+                   let is_int = Int.of_string max_scale = 0 in
+                   let fits_in_an_int63 =
+                     try
+                       Int.of_string min |> ignore ;
+                       Int.of_string max |> ignore ;
+                       true
+                     with Failure _ -> false
+                   in
+                   if is_int then
+                     if fits_in_an_int63 then IntT {nullable} else StringT {nullable}
+                   else FixedT {nullable}
+               | "real" | "double" -> FixedT {nullable}
                | "timestamp without time zone" -> StringT {nullable}
                | s -> failwith (Printf.sprintf "Unknown dtype %s" s)
              in
@@ -141,17 +159,35 @@ module Field = struct
   [@@deriving compare, hash, sexp]
 end
 
-let load_value_exn type_ v =
+let load_value type_ value =
+  let open Type.PrimType in
   match type_ with
-  | Type.PrimType.IntT _ -> Value.Int (Int.of_string v)
-  | StringT _ -> String v
-  | BoolT _ -> (
-    match v with
-    | "t" -> Bool true
-    | "f" -> Bool false
-    | _ -> failwith "Unknown boolean value." )
-  | FixedT _ -> Fixed (Fixed_point.of_string v)
-  | NullT | VoidT | TupleT _ -> failwith "Not possible column types."
+  | BoolT {nullable} -> (
+    match value with
+    | "t" -> Ok (Value.Bool true)
+    | "f" -> Ok (Bool false)
+    | "" when nullable -> Ok Null
+    | _ -> Error (Error.create "Unknown boolean value." value [%sexp_of: string]) )
+  | IntT {nullable} ->
+      if String.(value = "") then
+        if nullable then Ok Null
+        else Error (Error.of_string "Unexpected null integer.")
+      else Ok (Int (Int.of_string value))
+  | StringT _ -> Ok (String value)
+  | FixedT {nullable} ->
+      if String.(value = "") then
+        if nullable then Ok Null
+        else Error (Error.of_string "Unexpected null fixed.")
+      else Ok (Fixed (Fixed_point.of_string value))
+  | DateT {nullable} ->
+      if String.(value = "") then
+        if nullable then Ok Null
+        else Error (Error.of_string "Unexpected null integer.")
+      else Ok (Date (Date.of_string value))
+  | NullT ->
+      if String.(value = "") then Ok Null
+      else Error (Error.create "Expected a null value." value [%sexp_of: string])
+  | VoidT | TupleT _ -> Error (Error.of_string "Not a value type.")
 
 let load_tuples_exn s r =
   ( if List.length s <> r#nfields then
@@ -159,7 +195,7 @@ let load_tuples_exn s r =
   Gen.init ~limit:r#ntuples (fun tidx ->
       List.mapi s ~f:(fun fidx type_ ->
           if r#getisnull tidx fidx then Value.Null
-          else load_value_exn type_ (r#getvalue tidx fidx) ) )
+          else Or_error.ok_exn (load_value type_ (r#getvalue tidx fidx)) ) )
 
 (* |> Gen.map ~f:(fun t ->
    *        Stdio.print_endline ([%sexp_of: Value.t list] t |> Sexp.to_string_hum) ;
