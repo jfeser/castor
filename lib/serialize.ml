@@ -218,28 +218,39 @@ module Make (Config : Config.S) (Eval : Eval.S) (M : Abslayout_db.S) = struct
              [%compare: string] h1.hash_key h2.hash_key )
     in
     Logs.debug (fun m -> m "Generating hash for %d keys." (List.length keys)) ;
-    Out_channel.with_file "keys.txt" ~f:(fun ch ->
-        List.iter keys ~f:(fun key -> Out_channel.fprintf ch "%s\n" key.hash_key) ) ;
-    let hash =
-      let open Cmph in
-      let keyset = List.map keys ~f:(fun key -> key.hash_key) |> KeySet.create in
-      List.find_map_exn [Config.default_chd; `Bdz; `Bmz; `Chm; `Fch] ~f:(fun algo ->
-          try
-            Some (Config.create ~verbose:true ~seed:0 ~algo keyset |> Hash.of_config)
-          with Error _ as err ->
-            Logs.warn (fun m ->
-                m "Creating CMPH hash failed: %a" Sexp.pp_hum ([%sexp_of: exn] err)
-            ) ;
-            None )
+    let keys, hash_body =
+      if List.length keys = 0 then (keys, "")
+      else (
+        Out_channel.with_file "keys.txt" ~f:(fun ch ->
+            List.iter keys ~f:(fun key -> Out_channel.fprintf ch "%s\n" key.hash_key)
+        ) ;
+        let hash =
+          let open Cmph in
+          let keyset =
+            List.map keys ~f:(fun key -> key.hash_key) |> KeySet.create
+          in
+          List.find_map_exn [Config.default_chd; `Bdz; `Bmz; `Chm; `Fch]
+            ~f:(fun algo ->
+              try
+                Some
+                  ( Config.create ~verbose:true ~seed:0 ~algo keyset
+                  |> Hash.of_config )
+              with Error _ as err ->
+                Logs.warn (fun m ->
+                    m "Creating CMPH hash failed: %a" Sexp.pp_hum
+                      ([%sexp_of: exn] err) ) ;
+                None )
+        in
+        let keys =
+          List.map keys ~f:(fun key ->
+              {key with hash_val= Cmph.Hash.hash hash key.hash_key} )
+        in
+        Out_channel.with_file "hashes.txt" ~f:(fun ch ->
+            List.iter keys ~f:(fun key ->
+                Out_channel.fprintf ch "%s -> %d\n" key.hash_key key.hash_val ) ) ;
+        let hash_body = Cmph.Hash.to_packed hash in
+        (keys, hash_body) )
     in
-    let keys =
-      List.map keys ~f:(fun key ->
-          {key with hash_val= Cmph.Hash.hash hash key.hash_key} )
-    in
-    Out_channel.with_file "hashes.txt" ~f:(fun ch ->
-        List.iter keys ~f:(fun key ->
-            Out_channel.fprintf ch "%s -> %d\n" key.hash_key key.hash_val ) ) ;
-    let hash_body = Cmph.Hash.to_packed hash in
     let hash_len = String.length hash_body in
     let table_size =
       List.fold_left keys ~f:(fun m key -> Int.max m key.hash_val) ~init:0
