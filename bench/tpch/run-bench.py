@@ -446,7 +446,7 @@ def run_bench(name, query_name, params):
             with open("results.csv", "w") as out:
                 call(cmd, stdout=out)
             with open('mem.json', 'w') as out:
-                call(['timeout_linux.exe', '--machine-readable', '--'] + time_cmd_parts,
+                call(['/usr/bin/time', '-v'] + time_cmd_parts,
                      stdout=out, stderr=out)
         except Exception:
             log.exception("Running %s failed.", cmd)
