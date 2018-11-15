@@ -6,7 +6,7 @@ ahashidx(dedup(select([nation.n_name as param1_1], nation)),
               select([n1_name,
                       n2_name,
                       to_year(lineitem.l_shipdate) as l_year,
-                      ((lineitem.l_extendedprice * 1) - lineitem.l_discount) as volume],
+                      (lineitem.l_extendedprice * (1 - lineitem.l_discount)) as volume],
                 filter((((n1_name = param0_0) && (n2_name = param1_1)) ||
                        ((n1_name = param1_1) && (n2_name = param0_0))),
                   join((supplier.s_suppkey = lineitem.l_suppkey),
