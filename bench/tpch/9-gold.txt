@@ -20,71 +20,25 @@ alist(orderby([k0_nation, k0_o_year],
                   nation))))),
         asc),
   select([nation, o_year, sum(amount) as sum_profit],
-    filter((if ((if (param1 = "yellow") then 12 else (if (param1 = "white") then 11 else (if 
-               (param1 = "red") then 10 else (if (param1 = "purple") then 9 else (if 
-               (param1 = "pink") then 8 else (if (param1 = "orange") then 7 else (if 
-               (param1 = "navy") then 6 else (if (param1 = "grey") then 5 else (if 
-               (param1 = "green") then 4 else (if (param1 = "brown") then 3 else (if 
-               (param1 = "blue") then 2 else (if (param1 = "black") then 1 else 0))))))))))))
-               = 0) then (strpos(part.p_name, param1) > 0) else ((if 
-                                                                (param1 =
-                                                                "yellow") then 12 else (if 
-                                                                (param1 =
-                                                                "white") then 11 else (if 
-                                                                (param1 =
-                                                                "red") then 10 else (if 
-                                                                (param1 =
-                                                                "purple") then 9 else (if 
-                                                                (param1 =
-                                                                "pink") then 8 else (if 
-                                                                (param1 =
-                                                                "orange") then 7 else (if 
-                                                                (param1 =
-                                                                "navy") then 6 else (if 
-                                                                (param1 =
-                                                                "grey") then 5 else (if 
-                                                                (param1 =
-                                                                "green") then 4 else (if 
-                                                                (param1 =
-                                                                "brown") then 3 else (if 
-                                                                (param1 =
-                                                                "blue") then 2 else (if 
-                                                                (param1 =
-                                                                "black") then 1 else 0))))))))))))
-                                                                = p1_p_name)),
-      alist(select([(if (strpos(part.p_name, "yellow") > 0) then 12 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "white") >
-                                                                    0) then 11 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "red") > 0) then 10 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "purple") >
-                                                                    0) then 9 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "pink") >
-                                                                    0) then 8 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "orange") >
-                                                                    0) then 7 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "navy") >
-                                                                    0) then 6 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "grey") >
-                                                                    0) then 5 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "green") >
-                                                                    0) then 4 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "brown") >
-                                                                    0) then 3 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "blue") >
-                                                                    0) then 2 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "black") >
-                                                                    0) then 1 else 0)))))))))))) as p1_p_name,
+    filter((if (param1 = "yellow") then wit1__11 else (if (param1 = "white") then wit1__10 else (if 
+      (param1 = "red") then wit1__9 else (if (param1 = "purple") then wit1__8 else (if 
+      (param1 = "pink") then wit1__7 else (if (param1 = "orange") then wit1__6 else (if 
+      (param1 = "navy") then wit1__5 else (if (param1 = "grey") then wit1__4 else (if 
+      (param1 = "green") then wit1__3 else (if (param1 = "brown") then wit1__2 else (if 
+      (param1 = "blue") then wit1__1 else (if (param1 = "black") then wit1__0 else 
+      (strpos(part.p_name, param1) > 0))))))))))))),
+      alist(select([(strpos(part.p_name, "black") > 0) as wit1__0,
+                    (strpos(part.p_name, "blue") > 0) as wit1__1,
+                    (strpos(part.p_name, "brown") > 0) as wit1__2,
+                    (strpos(part.p_name, "green") > 0) as wit1__3,
+                    (strpos(part.p_name, "grey") > 0) as wit1__4,
+                    (strpos(part.p_name, "navy") > 0) as wit1__5,
+                    (strpos(part.p_name, "orange") > 0) as wit1__6,
+                    (strpos(part.p_name, "pink") > 0) as wit1__7,
+                    (strpos(part.p_name, "purple") > 0) as wit1__8,
+                    (strpos(part.p_name, "red") > 0) as wit1__9,
+                    (strpos(part.p_name, "white") > 0) as wit1__10,
+                    (strpos(part.p_name, "yellow") > 0) as wit1__11,
                     nation,
                     o_year,
                     amount,
@@ -107,7 +61,18 @@ alist(orderby([k0_nation, k0_o_year],
                     join((supplier.s_nationkey = nation.n_nationkey),
                       supplier,
                       nation))))),
-        atuple([ascalar(p1_p_name),
+        atuple([ascalar(wit1__0),
+                ascalar(wit1__1),
+                ascalar(wit1__2),
+                ascalar(wit1__3),
+                ascalar(wit1__4),
+                ascalar(wit1__5),
+                ascalar(wit1__6),
+                ascalar(wit1__7),
+                ascalar(wit1__8),
+                ascalar(wit1__9),
+                ascalar(wit1__10),
+                ascalar(wit1__11),
                 ascalar(nation),
                 ascalar(o_year),
                 ascalar(amount),

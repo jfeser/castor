@@ -368,6 +368,53 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     let f r = try run_exn r with Failed _ -> [] in
     {name= "precompute-filter"; f} |> run_everywhere
 
+  let tf_precompute_filter_bv args =
+    let open A in
+    let values = List.map args ~f:pred_of_string_exn in
+    let exception Failed of Error.t in
+    let run_exn r =
+      M.annotate_schema r ;
+      match r.node with
+      | Filter (p, r') ->
+          let schema = Meta.(find_exn r' schema) in
+          let free_vars =
+            Set.diff (pred_free p)
+              (Set.of_list (module Name.Compare_no_type) schema)
+            |> Set.to_list
+          in
+          let free_var =
+            match free_vars with
+            | [v] -> v
+            | _ ->
+                let err =
+                  Error.of_string
+                    "Unexpected number of free variables in predicate."
+                in
+                raise (Failed err)
+          in
+          let witness_name = Fresh.name fresh "wit%d_" in
+          let witnesses =
+            List.mapi values ~f:(fun i v ->
+                As_pred
+                  ( subst_pred
+                      (Map.singleton (module Name.Compare_no_type) free_var v)
+                      p
+                  , sprintf "%s_%d" witness_name i ) )
+          in
+          let filter_pred =
+            List.foldi values ~init:p ~f:(fun i else_ v ->
+                If
+                  ( Binop (Eq, Name free_var, v)
+                  , Name (Name.create (sprintf "%s_%d" witness_name i))
+                  , else_ ) )
+          in
+          let select_list = witnesses @ List.map schema ~f:(fun n -> Name n) in
+          [filter filter_pred (select select_list r')]
+      | _ -> []
+    in
+    let f r = try run_exn r with Failed _ -> [] in
+    {name= "precompute-filter-bv"; f} |> run_everywhere
+
   let gen_ordered_idx ?lb ?ub p r =
     let open A in
     let lb = Option.value lb ~default:(Int (Int.min_value + 1)) in
@@ -1009,6 +1056,18 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     in
     {name= "hoist-param"; f} |> run_everywhere ~stage:`Run
 
+  let tf_approx_dedup _ =
+    let open A in
+    let f r =
+      match r.node with
+      | Dedup {node= Select ([As_pred (Name n, n')], _); _} -> (
+        match n.relation with
+        | Some r -> [dedup (select [As_pred (Name n, n')] (scan r))]
+        | None -> [] )
+      | _ -> []
+    in
+    {name= "approx-dedup"; f} |> run_everywhere ~stage:`Both
+
   (* let tf_to_cnf _ =
    *   let to_boolean p = match p with
    *     | Binop (And, p1, p2) ->
@@ -1045,7 +1104,9 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     ; ("split-out", tf_split_out)
     ; ("hoist-pred-const", tf_hoist_pred_constant)
     ; ("hoist-param", tf_hoist_param)
-    ; ("precompute-filter", tf_precompute_filter) ]
+    ; ("precompute-filter", tf_precompute_filter)
+    ; ("precompute-filter-bv", tf_precompute_filter_bv)
+    ; ("approx-dedup", tf_approx_dedup) ]
 
   let of_string_exn s =
     let tf_strs =
