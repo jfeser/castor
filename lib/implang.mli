@@ -24,6 +24,7 @@ type op = Implang0.op =
   | IntHash
   | StrHash
   | LoadStr
+  | LoadBool
   | StrLen
   | StrPos
   | ExtractY
@@ -133,6 +134,8 @@ module Builder : sig
   val build_func : t -> func
 
   val build_assign : expr -> expr -> t -> unit
+
+  val build_unchecked_assign : expr -> expr -> t -> unit
 
   val build_print : expr -> t -> unit
 

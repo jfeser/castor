@@ -39,6 +39,7 @@ let rec pp_expr : Format.formatter -> expr -> unit =
     | Or -> "||"
     | IntHash | StrHash -> "hash"
     | LoadStr -> "load_str"
+    | LoadBool -> "load_bool"
     | Int2Fl -> "int2fl"
     | StrLen -> "strlen"
     | StrPos -> "strpos"
@@ -242,6 +243,7 @@ module Builder = struct
         | Not, BoolT {nullable} -> BoolT {nullable}
         | Int2Fl, IntT _ -> FixedT {nullable= false}
         | StrLen, StringT _ -> IntT {nullable= false}
+        | LoadBool, IntT _ -> BoolT {nullable= false}
         | _ -> fail (Error.create "Type error." (op, t) [%sexp_of: op * t]) )
     | Slice (arg, _) -> (
         let t = type_of arg b in
@@ -314,6 +316,9 @@ module Builder = struct
     let lhs_t = type_of v b in
     let rhs_t = type_of e b in
     ignore (Type.PrimType.unify lhs_t rhs_t) ;
+    b.body := Assign {lhs= name_of_var v; rhs= e} :: !(b.body)
+
+  let build_unchecked_assign e v b =
     b.body := Assign {lhs= name_of_var v; rhs= e} :: !(b.body)
 
   let build_print e b =

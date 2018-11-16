@@ -551,6 +551,23 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let slice = build_intcast slice (i64_type ctx) "int_val" builder in
     slice
 
+  let codegen_load_bool fctx offset =
+    let size_bits = 8 in
+    let buf_ptr = build_load (get_val fctx "buf") "buf_ptr" builder in
+    let buf_ptr =
+      build_pointercast buf_ptr (pointer_type (i8_type ctx)) "buf_ptr_cast" builder
+    in
+    let slice_ptr = build_in_bounds_gep buf_ptr [|offset|] "slice_ptr" builder in
+    let slice_ptr =
+      build_pointercast slice_ptr
+        (pointer_type (integer_type ctx size_bits))
+        "slice_ptr_cast" builder
+    in
+    let slice = build_load slice_ptr "slice_val" builder in
+    (* Convert the slice to a 64 bit int. *)
+    let slice = build_trunc slice (i1_type ctx) "bool_val" builder in
+    slice
+
   let codegen_index codegen_expr tup idx =
     let lltup = codegen_expr tup in
     (* Check that the argument really is a struct and that the index is
@@ -726,7 +743,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | StrHash -> codegen_string_hash fctx x1 x2
       | LoadStr -> codegen_load_str fctx x1 x2
       | StrPos -> codegen_strpos fctx x1 x2
-      | StrLen | Not | Int2Fl | ExtractY | ExtractM | ExtractD ->
+      | StrLen | Not | Int2Fl | ExtractY | ExtractM | ExtractD | LoadBool ->
           fail (Error.of_string "Not a binary operator.")
     in
     x_out
@@ -745,6 +762,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     | ExtractY -> build_call extract_y [|x|] "" builder
     | ExtractM -> build_call extract_m [|x|] "" builder
     | ExtractD -> build_call extract_d [|x|] "" builder
+    | LoadBool -> codegen_load_bool fctx x
     | IntAdd | IntSub | IntLt | And | Or | IntEq | StrEq | IntHash | StrHash
      |IntMul | IntDiv | Mod | LoadStr | FlAdd | FlSub | FlMul | FlDiv | FlLt
      |FlLe | FlEq | StrPos ->

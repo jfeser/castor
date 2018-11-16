@@ -283,18 +283,9 @@ struct
     debug_print "fixed" xval b ;
     cb b [xval]
 
-  and scan_bool ctx b _ (meta : Type.bool_) (cb : callback) =
-    let open Builder in
+  and scan_bool ctx b _ _ (cb : callback) =
     let start = Ctx.find_exn ctx (Name.create "start") b in
-    let ival = Slice (start, 1) in
-    let _nval =
-      if meta.Type.nullable then
-        let null_val = 2 in
-        Infix.(build_eq ival (int null_val) b)
-      else Bool true
-    in
-    debug_print "bool" ival b ;
-    cb b [ival]
+    cb b [Unop {op= LoadBool; arg= start}]
 
   and scan_string ctx b _ (Type.({nchars= l, _; nullable; _}) as t) (cb : callback)
       =

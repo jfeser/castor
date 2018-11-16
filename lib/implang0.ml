@@ -24,6 +24,7 @@ type op =
   | IntHash
   | StrHash
   | LoadStr
+  | LoadBool
   | StrLen
   | StrPos
   | ExtractY
