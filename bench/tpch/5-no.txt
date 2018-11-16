@@ -32,7 +32,7 @@
 
   groupby([n_name, sum((l_extendedprice) * ((1) - (l_discount))) as revenue],
     [n_name],
-    join((l_orderkey) = (o_orderkey),
+    join((l_orderkey) = (o_orderkey) && l_suppkey = s_suppkey,
       join((c_custkey) = (o_custkey),
         join((c_nationkey) = (s_nationkey),
           join((s_nationkey) = (n_nationkey),
