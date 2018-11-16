@@ -139,19 +139,6 @@ struct
     in
     visitor#visit_pred () p
 
-  let agg_step b acc =
-    let open Builder in
-    let one = const_int Type.PrimType.int_t 1 in
-    match acc with
-    | `Count x -> build_assign (build_add x one b) x b
-    | `Sum (f, x) -> build_assign (build_add x f b) x b
-    | `Min (v, x) -> build_assign (Ternary (build_lt v x b, v, x)) x b
-    | `Max (v, x) -> build_assign (Ternary (build_lt v x b, x, v)) x b
-    | `Avg (v, n, d) ->
-        build_assign (build_add n v b) n b ;
-        build_assign (build_add d one b) d b
-    | `Passthru _ -> ()
-
   let rec scan ctx b r t (cb : callback) =
     match r.Abslayout.node with
     | As (_, r) -> scan ctx b r t cb
@@ -178,13 +165,14 @@ struct
         Error.create "Mismatched type." (r, t) [%sexp_of: A.t * Type.t]
         |> Error.raise
 
+  and type_of_pred ctx p b =
+    let open Builder in
+    let b' = new_scope b in
+    let ret = gen_pred ctx p b' in
+    type_of ret b'
+
   and gen_pred ctx pred b =
     let open Builder in
-    let type_of_pred p b =
-      let b' = new_scope b in
-      let ret = gen_pred ctx p b' in
-      type_of ret b'
-    in
     let rec gen_pred p b =
       match p with
       | A.Null -> Null
@@ -233,7 +221,7 @@ struct
       | A.If (p1, p2, p3) ->
           let ret_var =
             build_var "ret"
-              (Type.PrimType.unify (type_of_pred p2 b) (type_of_pred p3 b))
+              (Type.PrimType.unify (type_of_pred ctx p2 b) (type_of_pred ctx p3 b))
               b
           in
           build_if ~cond:(gen_pred p1 b)
@@ -574,20 +562,16 @@ struct
         `Count
           (build_defn ~persistent:false "count" (const_int Type.PrimType.int_t 0) b)
     | A.Sum f ->
-        let f = gen_pred ctx f b in
-        let t = type_of f b in
+        let t = type_of_pred ctx f b in
         `Sum (f, build_defn ~persistent:false "sum" (const_int t 0) b)
     | A.Min f ->
-        let f = gen_pred ctx f b in
-        let t = type_of f b in
+        let t = type_of_pred ctx f b in
         `Min (f, build_defn ~persistent:false "min" (const_int t Int.max_value) b)
     | A.Max f ->
-        let f = gen_pred ctx f b in
-        let t = type_of f b in
+        let t = type_of_pred ctx f b in
         `Max (f, build_defn ~persistent:false "max" (const_int t Int.min_value) b)
     | A.Avg f ->
-        let f = gen_pred ctx f b in
-        let t = type_of f b in
+        let t = type_of_pred ctx f b in
         `Avg
           ( f
           , build_defn ~persistent:false "avg_num" (const_int t 0) b
@@ -595,6 +579,24 @@ struct
               (const_int Type.PrimType.int_t 0)
               b )
     | p -> `Passthru p
+
+  and agg_step ctx b acc =
+    let open Builder in
+    let one = const_int Type.PrimType.int_t 1 in
+    match acc with
+    | `Count x -> build_assign (build_add x one b) x b
+    | `Sum (f, x) -> build_assign (build_add x (gen_pred ctx f b) b) x b
+    | `Min (f, x) ->
+        let v = gen_pred ctx f b in
+        build_assign (Ternary (build_lt v x b, v, x)) x b
+    | `Max (f, x) ->
+        let v = gen_pred ctx f b in
+        build_assign (Ternary (build_lt v x b, x, v)) x b
+    | `Avg (f, n, d) ->
+        let v = gen_pred ctx f b in
+        build_assign (build_add n v b) n b ;
+        build_assign (build_add d one b) d b
+    | `Passthru _ -> ()
 
   and agg_extract ctx b =
     let open Builder in
@@ -638,7 +640,7 @@ struct
         (* Compute the aggregates. *)
         scan ctx b child_layout child_type (fun b tup ->
             build_assign (Tuple tup) last_tup b ;
-            List.iter agg_temps ~f:(fun (_, p) -> agg_step b p) ;
+            List.iter agg_temps ~f:(fun (_, p) -> agg_step pred_ctx b p) ;
             build_assign (Bool true) found_tup b ) ;
         (* Extract and return aggregates. *)
         build_if ~cond:found_tup
