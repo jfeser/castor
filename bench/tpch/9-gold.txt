@@ -20,507 +20,71 @@ alist(orderby([k0_nation, k0_o_year],
                   nation))))),
         asc),
   select([nation, o_year, sum(amount) as sum_profit],
-    filter((if ((if (param1 = "yellow") then 92 else (if (param1 = "white") then 91 else (if 
-               (param1 = "wheat") then 90 else (if (param1 = "violet") then 89 else (if 
-               (param1 = "turquoise") then 88 else (if (param1 = "tomato") then 87 else (if 
-               (param1 = "thistle") then 86 else (if (param1 = "tan") then 85 else (if 
-               (param1 = "steel") then 84 else (if (param1 = "spring") then 83 else (if 
-               (param1 = "snow") then 82 else (if (param1 = "smoke") then 81 else (if 
-               (param1 = "slate") then 80 else (if (param1 = "sky") then 79 else (if 
-               (param1 = "sienna") then 78 else (if (param1 = "seashell") then 77 else (if 
-               (param1 = "sandy") then 76 else (if (param1 = "salmon") then 75 else (if 
-               (param1 = "saddle") then 74 else (if (param1 = "royal") then 73 else (if 
-               (param1 = "rosy") then 72 else (if (param1 = "rose") then 71 else (if 
-               (param1 = "red") then 70 else (if (param1 = "purple") then 69 else (if 
-               (param1 = "puff") then 68 else (if (param1 = "powder") then 67 else (if 
-               (param1 = "plum") then 66 else (if (param1 = "pink") then 65 else (if 
-               (param1 = "peru") then 64 else (if (param1 = "peach") then 63 else (if 
-               (param1 = "papaya") then 62 else (if (param1 = "pale") then 61 else (if 
-               (param1 = "orchid") then 60 else (if (param1 = "orange") then 59 else (if 
-               (param1 = "olive") then 58 else (if (param1 = "navy") then 57 else (if 
-               (param1 = "navajo") then 56 else (if (param1 = "moccasin") then 55 else (if 
-               (param1 = "misty") then 54 else (if (param1 = "mint") then 53 else (if 
-               (param1 = "midnight") then 52 else (if (param1 = "metallic") then 51 else (if 
-               (param1 = "medium") then 50 else (if (param1 = "maroon") then 49 else (if 
-               (param1 = "magenta") then 48 else (if (param1 = "linen") then 47 else (if 
-               (param1 = "lime") then 46 else (if (param1 = "light") then 45 else (if 
-               (param1 = "lemon") then 44 else (if (param1 = "lawn") then 43 else (if 
-               (param1 = "lavender") then 42 else (if (param1 = "lace") then 41 else (if 
-               (param1 = "khaki") then 40 else (if (param1 = "ivory") then 39 else (if 
-               (param1 = "indian") then 38 else (if (param1 = "hot") then 37 else (if 
-               (param1 = "honeydew") then 36 else (if (param1 = "grey") then 35 else (if 
-               (param1 = "green") then 34 else (if (param1 = "goldenrod") then 33 else (if 
-               (param1 = "ghost") then 32 else (if (param1 = "gainsboro") then 31 else (if 
-               (param1 = "frosted") then 30 else (if (param1 = "forest") then 29 else (if 
-               (param1 = "floral") then 28 else (if (param1 = "firebrick") then 27 else (if 
-               (param1 = "drab") then 26 else (if (param1 = "dodger") then 25 else (if 
-               (param1 = "dim") then 24 else (if (param1 = "deep") then 23 else (if 
-               (param1 = "dark") then 22 else (if (param1 = "cyan") then 21 else (if 
-               (param1 = "cream") then 20 else (if (param1 = "cornsilk") then 19 else (if 
-               (param1 = "cornflower") then 18 else (if (param1 = "coral") then 17 else (if 
-               (param1 = "chocolate") then 16 else (if (param1 = "chiffon") then 15 else (if 
-               (param1 = "chartreuse") then 14 else (if (param1 = "burnished") then 13 else (if 
-               (param1 = "burlywood") then 12 else (if (param1 = "brown") then 11 else (if 
-               (param1 = "blush") then 10 else (if (param1 = "blue") then 9 else (if 
-               (param1 = "blanched") then 8 else (if (param1 = "black") then 7 else (if 
-               (param1 = "bisque") then 6 else (if (param1 = "beige") then 5 else (if 
-               (param1 = "azure") then 4 else (if (param1 = "aquamarine") then 3 else (if 
-               (param1 = "antique") then 2 else (if (param1 = "almond") then 1 else 0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+    filter((if ((if (param1 = "yellow") then 12 else (if (param1 = "white") then 11 else (if 
+               (param1 = "red") then 10 else (if (param1 = "purple") then 9 else (if 
+               (param1 = "pink") then 8 else (if (param1 = "orange") then 7 else (if 
+               (param1 = "navy") then 6 else (if (param1 = "grey") then 5 else (if 
+               (param1 = "green") then 4 else (if (param1 = "brown") then 3 else (if 
+               (param1 = "blue") then 2 else (if (param1 = "black") then 1 else 0))))))))))))
                = 0) then (strpos(part.p_name, param1) > 0) else ((if 
                                                                 (param1 =
-                                                                "yellow") then 92 else (if 
+                                                                "yellow") then 12 else (if 
                                                                 (param1 =
-                                                                "white") then 91 else (if 
+                                                                "white") then 11 else (if 
                                                                 (param1 =
-                                                                "wheat") then 90 else (if 
+                                                                "red") then 10 else (if 
                                                                 (param1 =
-                                                                "violet") then 89 else (if 
+                                                                "purple") then 9 else (if 
                                                                 (param1 =
-                                                                "turquoise") then 88 else (if 
+                                                                "pink") then 8 else (if 
                                                                 (param1 =
-                                                                "tomato") then 87 else (if 
+                                                                "orange") then 7 else (if 
                                                                 (param1 =
-                                                                "thistle") then 86 else (if 
+                                                                "navy") then 6 else (if 
                                                                 (param1 =
-                                                                "tan") then 85 else (if 
+                                                                "grey") then 5 else (if 
                                                                 (param1 =
-                                                                "steel") then 84 else (if 
+                                                                "green") then 4 else (if 
                                                                 (param1 =
-                                                                "spring") then 83 else (if 
+                                                                "brown") then 3 else (if 
                                                                 (param1 =
-                                                                "snow") then 82 else (if 
+                                                                "blue") then 2 else (if 
                                                                 (param1 =
-                                                                "smoke") then 81 else (if 
-                                                                (param1 =
-                                                                "slate") then 80 else (if 
-                                                                (param1 =
-                                                                "sky") then 79 else (if 
-                                                                (param1 =
-                                                                "sienna") then 78 else (if 
-                                                                (param1 =
-                                                                "seashell") then 77 else (if 
-                                                                (param1 =
-                                                                "sandy") then 76 else (if 
-                                                                (param1 =
-                                                                "salmon") then 75 else (if 
-                                                                (param1 =
-                                                                "saddle") then 74 else (if 
-                                                                (param1 =
-                                                                "royal") then 73 else (if 
-                                                                (param1 =
-                                                                "rosy") then 72 else (if 
-                                                                (param1 =
-                                                                "rose") then 71 else (if 
-                                                                (param1 =
-                                                                "red") then 70 else (if 
-                                                                (param1 =
-                                                                "purple") then 69 else (if 
-                                                                (param1 =
-                                                                "puff") then 68 else (if 
-                                                                (param1 =
-                                                                "powder") then 67 else (if 
-                                                                (param1 =
-                                                                "plum") then 66 else (if 
-                                                                (param1 =
-                                                                "pink") then 65 else (if 
-                                                                (param1 =
-                                                                "peru") then 64 else (if 
-                                                                (param1 =
-                                                                "peach") then 63 else (if 
-                                                                (param1 =
-                                                                "papaya") then 62 else (if 
-                                                                (param1 =
-                                                                "pale") then 61 else (if 
-                                                                (param1 =
-                                                                "orchid") then 60 else (if 
-                                                                (param1 =
-                                                                "orange") then 59 else (if 
-                                                                (param1 =
-                                                                "olive") then 58 else (if 
-                                                                (param1 =
-                                                                "navy") then 57 else (if 
-                                                                (param1 =
-                                                                "navajo") then 56 else (if 
-                                                                (param1 =
-                                                                "moccasin") then 55 else (if 
-                                                                (param1 =
-                                                                "misty") then 54 else (if 
-                                                                (param1 =
-                                                                "mint") then 53 else (if 
-                                                                (param1 =
-                                                                "midnight") then 52 else (if 
-                                                                (param1 =
-                                                                "metallic") then 51 else (if 
-                                                                (param1 =
-                                                                "medium") then 50 else (if 
-                                                                (param1 =
-                                                                "maroon") then 49 else (if 
-                                                                (param1 =
-                                                                "magenta") then 48 else (if 
-                                                                (param1 =
-                                                                "linen") then 47 else (if 
-                                                                (param1 =
-                                                                "lime") then 46 else (if 
-                                                                (param1 =
-                                                                "light") then 45 else (if 
-                                                                (param1 =
-                                                                "lemon") then 44 else (if 
-                                                                (param1 =
-                                                                "lawn") then 43 else (if 
-                                                                (param1 =
-                                                                "lavender") then 42 else (if 
-                                                                (param1 =
-                                                                "lace") then 41 else (if 
-                                                                (param1 =
-                                                                "khaki") then 40 else (if 
-                                                                (param1 =
-                                                                "ivory") then 39 else (if 
-                                                                (param1 =
-                                                                "indian") then 38 else (if 
-                                                                (param1 =
-                                                                "hot") then 37 else (if 
-                                                                (param1 =
-                                                                "honeydew") then 36 else (if 
-                                                                (param1 =
-                                                                "grey") then 35 else (if 
-                                                                (param1 =
-                                                                "green") then 34 else (if 
-                                                                (param1 =
-                                                                "goldenrod") then 33 else (if 
-                                                                (param1 =
-                                                                "ghost") then 32 else (if 
-                                                                (param1 =
-                                                                "gainsboro") then 31 else (if 
-                                                                (param1 =
-                                                                "frosted") then 30 else (if 
-                                                                (param1 =
-                                                                "forest") then 29 else (if 
-                                                                (param1 =
-                                                                "floral") then 28 else (if 
-                                                                (param1 =
-                                                                "firebrick") then 27 else (if 
-                                                                (param1 =
-                                                                "drab") then 26 else (if 
-                                                                (param1 =
-                                                                "dodger") then 25 else (if 
-                                                                (param1 =
-                                                                "dim") then 24 else (if 
-                                                                (param1 =
-                                                                "deep") then 23 else (if 
-                                                                (param1 =
-                                                                "dark") then 22 else (if 
-                                                                (param1 =
-                                                                "cyan") then 21 else (if 
-                                                                (param1 =
-                                                                "cream") then 20 else (if 
-                                                                (param1 =
-                                                                "cornsilk") then 19 else (if 
-                                                                (param1 =
-                                                                "cornflower") then 18 else (if 
-                                                                (param1 =
-                                                                "coral") then 17 else (if 
-                                                                (param1 =
-                                                                "chocolate") then 16 else (if 
-                                                                (param1 =
-                                                                "chiffon") then 15 else (if 
-                                                                (param1 =
-                                                                "chartreuse") then 14 else (if 
-                                                                (param1 =
-                                                                "burnished") then 13 else (if 
-                                                                (param1 =
-                                                                "burlywood") then 12 else (if 
-                                                                (param1 =
-                                                                "brown") then 11 else (if 
-                                                                (param1 =
-                                                                "blush") then 10 else (if 
-                                                                (param1 =
-                                                                "blue") then 9 else (if 
-                                                                (param1 =
-                                                                "blanched") then 8 else (if 
-                                                                (param1 =
-                                                                "black") then 7 else (if 
-                                                                (param1 =
-                                                                "bisque") then 6 else (if 
-                                                                (param1 =
-                                                                "beige") then 5 else (if 
-                                                                (param1 =
-                                                                "azure") then 4 else (if 
-                                                                (param1 =
-                                                                "aquamarine") then 3 else (if 
-                                                                (param1 =
-                                                                "antique") then 2 else (if 
-                                                                (param1 =
-                                                                "almond") then 1 else 0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+                                                                "black") then 1 else 0))))))))))))
                                                                 = p1_p_name)),
-      alist(select([(if (strpos(part.p_name, "yellow") > 0) then 92 else (if (
+      alist(select([(if (strpos(part.p_name, "yellow") > 0) then 12 else (if (
                                                                     strpos(part.p_name,
                                                                     "white") >
-                                                                    0) then 91 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "wheat") >
-                                                                    0) then 90 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "violet") >
-                                                                    0) then 89 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "turquoise")
-                                                                    > 0) then 88 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "tomato") >
-                                                                    0) then 87 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "thistle")
-                                                                    > 0) then 86 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "tan") > 0) then 85 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "steel") >
-                                                                    0) then 84 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "spring") >
-                                                                    0) then 83 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "snow") >
-                                                                    0) then 82 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "smoke") >
-                                                                    0) then 81 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "slate") >
-                                                                    0) then 80 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "sky") > 0) then 79 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "sienna") >
-                                                                    0) then 78 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "seashell")
-                                                                    > 0) then 77 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "sandy") >
-                                                                    0) then 76 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "salmon") >
-                                                                    0) then 75 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "saddle") >
-                                                                    0) then 74 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "royal") >
-                                                                    0) then 73 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "rosy") >
-                                                                    0) then 72 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "rose") >
-                                                                    0) then 71 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "red") > 0) then 70 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "purple") >
-                                                                    0) then 69 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "puff") >
-                                                                    0) then 68 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "powder") >
-                                                                    0) then 67 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "plum") >
-                                                                    0) then 66 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "pink") >
-                                                                    0) then 65 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "peru") >
-                                                                    0) then 64 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "peach") >
-                                                                    0) then 63 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "papaya") >
-                                                                    0) then 62 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "pale") >
-                                                                    0) then 61 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "orchid") >
-                                                                    0) then 60 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "orange") >
-                                                                    0) then 59 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "olive") >
-                                                                    0) then 58 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "navy") >
-                                                                    0) then 57 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "navajo") >
-                                                                    0) then 56 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "moccasin")
-                                                                    > 0) then 55 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "misty") >
-                                                                    0) then 54 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "mint") >
-                                                                    0) then 53 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "midnight")
-                                                                    > 0) then 52 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "metallic")
-                                                                    > 0) then 51 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "medium") >
-                                                                    0) then 50 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "maroon") >
-                                                                    0) then 49 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "magenta")
-                                                                    > 0) then 48 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "linen") >
-                                                                    0) then 47 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "lime") >
-                                                                    0) then 46 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "light") >
-                                                                    0) then 45 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "lemon") >
-                                                                    0) then 44 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "lawn") >
-                                                                    0) then 43 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "lavender")
-                                                                    > 0) then 42 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "lace") >
-                                                                    0) then 41 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "khaki") >
-                                                                    0) then 40 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "ivory") >
-                                                                    0) then 39 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "indian") >
-                                                                    0) then 38 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "hot") > 0) then 37 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "honeydew")
-                                                                    > 0) then 36 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "grey") >
-                                                                    0) then 35 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "green") >
-                                                                    0) then 34 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "goldenrod")
-                                                                    > 0) then 33 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "ghost") >
-                                                                    0) then 32 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "gainsboro")
-                                                                    > 0) then 31 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "frosted")
-                                                                    > 0) then 30 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "forest") >
-                                                                    0) then 29 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "floral") >
-                                                                    0) then 28 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "firebrick")
-                                                                    > 0) then 27 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "drab") >
-                                                                    0) then 26 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "dodger") >
-                                                                    0) then 25 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "dim") > 0) then 24 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "deep") >
-                                                                    0) then 23 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "dark") >
-                                                                    0) then 22 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "cyan") >
-                                                                    0) then 21 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "cream") >
-                                                                    0) then 20 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "cornsilk")
-                                                                    > 0) then 19 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "cornflower")
-                                                                    > 0) then 18 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "coral") >
-                                                                    0) then 17 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "chocolate")
-                                                                    > 0) then 16 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "chiffon")
-                                                                    > 0) then 15 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "chartreuse")
-                                                                    > 0) then 14 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "burnished")
-                                                                    > 0) then 13 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "burlywood")
-                                                                    > 0) then 12 else (if (
-                                                                    strpos(part.p_name,
-                                                                    "brown") >
                                                                     0) then 11 else (if (
                                                                     strpos(part.p_name,
-                                                                    "blush") >
-                                                                    0) then 10 else (if (
+                                                                    "red") > 0) then 10 else (if (
                                                                     strpos(part.p_name,
-                                                                    "blue") >
+                                                                    "purple") >
                                                                     0) then 9 else (if (
                                                                     strpos(part.p_name,
-                                                                    "blanched")
-                                                                    > 0) then 8 else (if (
+                                                                    "pink") >
+                                                                    0) then 8 else (if (
                                                                     strpos(part.p_name,
-                                                                    "black") >
+                                                                    "orange") >
                                                                     0) then 7 else (if (
                                                                     strpos(part.p_name,
-                                                                    "bisque") >
+                                                                    "navy") >
                                                                     0) then 6 else (if (
                                                                     strpos(part.p_name,
-                                                                    "beige") >
+                                                                    "grey") >
                                                                     0) then 5 else (if (
                                                                     strpos(part.p_name,
-                                                                    "azure") >
+                                                                    "green") >
                                                                     0) then 4 else (if (
                                                                     strpos(part.p_name,
-                                                                    "aquamarine")
-                                                                    > 0) then 3 else (if (
+                                                                    "brown") >
+                                                                    0) then 3 else (if (
                                                                     strpos(part.p_name,
-                                                                    "antique")
-                                                                    > 0) then 2 else (if (
+                                                                    "blue") >
+                                                                    0) then 2 else (if (
                                                                     strpos(part.p_name,
-                                                                    "almond") >
-                                                                    0) then 1 else 0)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))) as p1_p_name,
+                                                                    "black") >
+                                                                    0) then 1 else 0)))))))))))) as p1_p_name,
                     nation,
                     o_year,
                     amount,
