@@ -622,7 +622,7 @@ module Make (Eval : Eval.S) = struct
               end)
                 #visit_hash_idx () m
             in
-            (AHashIdx (r, l, m), value_ctx)
+            (AHashIdx (r, l, m), union key_ctx value_ctx)
         | AOrderedIdx (r, l, m) ->
             let r, key_ctx = resolve outer_ctx r in
             let l, value_ctx = resolve (union outer_ctx key_ctx) l in
