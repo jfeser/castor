@@ -2,8 +2,6 @@ open Base
 open Abslayout
 
 module type S = sig
-  val partition : part:pred -> lookup:pred list -> t -> t
-
   val to_type : t -> Type.t
 
   val annotate_schema : t -> unit

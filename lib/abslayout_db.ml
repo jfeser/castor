@@ -7,45 +7,6 @@ module Make (Eval : Eval.S) = struct
   open Abslayout0
   open Abslayout
 
-  let fresh = Fresh.create ()
-
-  let partition ~part:p ~lookup l =
-    let rel =
-      match pred_relations p with
-      | [r] -> r
-      | rs ->
-          Error.create "Unexpected number of relations." rs [%sexp_of: string list]
-          |> Error.raise
-    in
-    let name = Fresh.name fresh "x%d" in
-    let domain = as_ name (dedup (select [p] (scan rel))) in
-    let pred =
-      let subst =
-        object
-          inherit [_] endo
-
-          method! visit_Name _ _ n =
-            match n.relation with
-            | Some r when String.(rel = r) -> Name {n with relation= Some name}
-            | _ -> Name n
-        end
-      in
-      subst#visit_pred () p
-    in
-    let layout =
-      let subst =
-        object
-          inherit [_] endo
-
-          method! visit_Scan () r rel' =
-            if String.(rel = rel') then Filter (Binop (Eq, p, pred), scan rel)
-            else r
-        end
-      in
-      subst#visit_t () l
-    in
-    hash_idx domain layout lookup
-
   type eval_ctx =
     [ `Eval of Ctx.t
     | `Consume_outer of (Ctx.t * Ctx.t Seq.t) Seq.t sexp_opaque
