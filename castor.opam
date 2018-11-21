@@ -20,7 +20,7 @@ depends: [
   "re2" {>= "v0.11" & < "v0.12"}
   "postgresql" {>= "4.4" & < "4.5"}
   "logs" {>= "0.6" & < "0.7"}
-  "llvm" {>= "6" & < "7"}
+  "llvm" {>= "6" & < "8"}
   "expect_test_helpers_kernel" {>= "v0.11" & < "v0.12"}
   "hashcons"
   "cmph"
