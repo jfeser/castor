@@ -3,6 +3,7 @@ open Printf
 module Pervasives = Caml.Pervasives
 open Collections
 module Psql = Postgresql
+module Stream = Caml.Stream
 
 let () =
   Caml.Printexc.register_printer (function
@@ -43,55 +44,6 @@ let rec exec ?(max_retries = 0) ?(params = []) db query =
     | _ -> fail r )
   | Single_tuple | Tuples_ok | Command_ok -> r
   | _ -> fail r
-
-let result_to_tuples (r : Psql.result) =
-  Seq.range 0 r#ntuples ~stop:`exclusive
-  |> Seq.unfold_with ~init:() ~f:(fun () tup_i ->
-         let tup =
-           List.init r#nfields ~f:(fun field_i ->
-               let value = r#getvalue tup_i field_i in
-               let type_ = r#ftype field_i in
-               let primval =
-                 match type_ with
-                 | Postgresql.BOOL -> (
-                   match value with
-                   | "t" -> Value.Bool true
-                   | "f" -> Bool false
-                   | _ -> failwith "Unknown boolean value." )
-                 | INT8 | INT2 | INT4 ->
-                     if String.(value = "") then Null else Int (Int.of_string value)
-                 | CHAR | TEXT | VARCHAR -> String value
-                 (* Blank padded character strings *)
-                 | BPCHAR -> String (String.strip value)
-                 | FLOAT4 | FLOAT8 | NUMERIC -> Fixed (Fixed_point.of_string value)
-                 | DATE -> Date (Date.of_string value)
-                 (* Time & date types *)
-                 | TIME | TIMESTAMP | TIMESTAMPTZ | INTERVAL | TIMETZ | ABSTIME
-                  |RELTIME
-                  |TINTERVAL
-                 (* Geometric types. *)
-                  |POINT | LSEG | PATH | BOX | POLYGON | LINE
-                  |CIRCLE
-                 (* Network types *)
-                  |MACADDR | INET
-                  |CIDR
-                 (* Other types*)
-                  |NAME | BYTEA | INT2VECTOR | JSON | CASH | ACLITEM | BIT
-                  |VARBIT | JSONB ->
-                     (* Store unknown values as strings. *)
-                     Logs.warn (fun m -> m "Unknown value: %s" value) ;
-                     String value
-                 | OID | OIDVECTOR | TID | XID | CID | REFCURSOR | REGPROC
-                  |REGPROCEDURE | REGOPER | REGOPERATOR | REGCLASS | REGTYPE ->
-                     failwith "Postgres internal type."
-                 | ANY | ANYARRAY | VOID | CSTRING | INTERNAL | LANGUAGE_HANDLER
-                  |RECORD | TRIGGER | OPAQUE | ANYELEMENT | UNKNOWN ->
-                     failwith "Pseudo type."
-               in
-               (r#fname field_i, primval) )
-           |> Map.of_alist_exn (module String)
-         in
-         Yield (tup, ()) )
 
 let result_to_strings (r : Psql.result) = r#get_all_lst
 
@@ -194,20 +146,52 @@ let exec_cursor =
     exec db declare_query |> command_ok ;
     let db_idx = ref 1 in
     let seq =
-      Seq.unfold_step ~init:(`Not_done 1) ~f:(function
-        | `Done -> (db.conn)#finish ; Done
-        | `Not_done idx when idx <> !db_idx ->
-            Error.(
-              create "Out of sync with underlying cursor." (idx, !db_idx)
-                [%sexp_of: int * int]
-              |> raise)
-        | `Not_done idx ->
-            let r = exec db fetch_query in
-            let tups = result_to_tuples r in
-            db_idx := !db_idx + r#ntuples ;
-            let idx = idx + r#ntuples in
-            let state = if r#ntuples < batch_size then `Done else `Not_done idx in
-            Yield (tups, state) )
-      |> Seq.concat
+      Gen.unfold
+        (function
+          | `Done -> (db.conn)#finish ; None
+          | `Not_done idx when idx <> !db_idx ->
+              Error.(
+                create "Out of sync with underlying cursor." (idx, !db_idx)
+                  [%sexp_of: int * int]
+                |> raise)
+          | `Not_done idx ->
+              let r = exec db fetch_query in
+              let tups = r#get_all_lst |> Gen.of_list in
+              db_idx := !db_idx + r#ntuples ;
+              let idx = idx + r#ntuples in
+              let state = if r#ntuples < batch_size then `Done else `Not_done idx in
+              Some (tups, state))
+        (`Not_done 1)
+      |> Gen.flatten
     in
     seq
+
+let load_value_exn type_ v =
+  if String.(v = "") then Value.Null
+  else
+    match type_ with
+    | Type.PrimType.IntT _ -> Int (Int.of_string v)
+    | StringT _ -> String v
+    | BoolT _ -> (
+      match v with
+      | "t" -> Bool true
+      | "f" -> Bool false
+      | _ -> failwith "Unknown boolean value." )
+    | FixedT _ -> Fixed (Fixed_point.of_string v)
+    | NullT | VoidT | TupleT _ -> failwith "Not possible column types."
+
+let load_tuple_exn s vs =
+  let m_values =
+    List.map2 vs s ~f:(fun v name ->
+        let value = load_value_exn (Name.type_exn name) v in
+        (name, value) )
+  in
+  match m_values with
+  | Ok v -> Map.of_alist_exn (module Name.Compare_no_type) v
+  | Unequal_lengths ->
+      Error.create "Unexpected tuple width."
+        (s, List.length s, List.length vs)
+        [%sexp_of: Name.t list * int * int]
+      |> Error.raise
+
+let to_tuples s = Gen.map ~f:(load_tuple_exn s)

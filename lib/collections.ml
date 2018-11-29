@@ -155,6 +155,53 @@ module Seq = struct
         Or_error.error "Unequal elements." (x, x') [%sexp_of: t * t]
 end
 
+module Gen = struct
+  include GenLabels
+
+  let of_sequence s = unfold Sequence.next s
+
+  let to_sequence g =
+    Sequence.unfold ~init:() ~f:(fun () ->
+        match get g with Some x -> Some (x, ()) | None -> None )
+
+  let sexp_of_t sexp_of g = Sequence.sexp_of_t sexp_of (to_sequence g)
+
+  let group_lazy eq g =
+    let g = ref g in
+    fun () ->
+      match Gen.get !g with
+      | None -> None
+      | Some x ->
+          let group_gen () =
+            match Gen.get !g with
+            | None -> None
+            | Some x' ->
+                if eq x x' then Some x'
+                else (
+                  g := Gen.append (Gen.singleton x') !g ;
+                  None )
+          in
+          Some (x, Gen.append (Gen.singleton x) group_gen)
+
+  let rec junk_all g = match Gen.next g with Some _ -> junk_all g | None -> ()
+
+  (** Ensure that `g1` is fully consumed before `g2` is used. *)
+  let use_before g1 g2 =
+    let g1_used = ref false in
+    let g1' () =
+      match Gen.next g1 with
+      | Some x -> Some x
+      | None ->
+          g1_used := true ;
+          None
+    in
+    let g2' () =
+      if !g1_used then Gen.next g2
+      else failwith "Failed to fully consume generator."
+    in
+    (g1', g2')
+end
+
 module Bytes = struct
   include Caml.Bytes
 
@@ -227,25 +274,6 @@ module Random = struct
     else
       let idx = int len in
       List.nth_exn l idx
-end
-
-module Hashcons = struct
-  include Hashcons
-
-  let compare_hash_consed :
-      ('a -> 'a -> int) -> 'a hash_consed -> 'a hash_consed -> int =
-   fun _ {tag= t1; _} {tag= t2; _} -> Int.compare t1 t2
-
-  let hash_consed_of_sexp : (Sexp.t -> 'a) -> Sexp.t -> 'a hash_consed =
-   fun _ _ -> failwith "Unimplemented."
-
-  let sexp_of_hash_consed : ('a -> Sexp.t) -> 'a hash_consed -> Sexp.t =
-   fun to_sexp {node; _} -> to_sexp node
-
-  let hash_fold_hash_consed : _ -> Hash.state -> 'a hash_consed -> Hash.state =
-   fun _ s {hkey; _} -> Int.hash_fold_t s hkey
-
-  let hash_hash_consed : 'a hash_consed -> int = fun {hkey; _} -> hkey
 end
 
 module Tree = struct

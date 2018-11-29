@@ -13,17 +13,10 @@ end
 module type S = Serialize_intf.S
 
 module Make (Config : Config.S) (Eval : Eval.S) (M : Abslayout_db.S) = struct
-  type eval_ctx =
-    [ `Eval of Ctx.t
-    | `Consume_outer of (Ctx.t * Ctx.t Seq.t) Seq.t sexp_opaque
-    | `Consume_inner of Ctx.t * Ctx.t Seq.t sexp_opaque ]
-  [@@deriving sexp]
-
   type serialize_ctx =
     { writer: Bitstring.Writer.t sexp_opaque
     ; log_ch: Out_channel.t sexp_opaque
-    ; serialize: serialize_ctx -> Type.t -> t -> unit
-    ; ctx: eval_ctx }
+    ; serialize: serialize_ctx -> Type.t -> t -> unit }
   [@@deriving sexp]
 
   module Log = struct
@@ -488,6 +481,24 @@ module Make (Config : Config.S) (Eval : Eval.S) (M : Abslayout_db.S) = struct
         Error.create "Cannot serialize." (t, r) [%sexp_of: Type.t * node]
         |> Error.raise
 
+  class serialize_fold =
+    object (self)
+      inherit [_, _] M.material_fold as super
+
+      method build_AEmpty _ _ = ()
+
+      method build_AScalar 
+
+      method! visit_t sctx ectx layout =
+        (* Update position metadata in layout. *)
+        let pos = pos sctx.writer |> Pos.to_bytes_exn in
+        Meta.update layout Meta.pos ~f:(function
+          | Some (Pos pos' as p) -> if Int64.(pos = pos') then p else Many_pos
+          | Some Many_pos -> Many_pos
+          | None -> Pos pos ) ;
+        super#visit_t sctx ectx layout
+    end
+
   let serialize writer t l =
     Logs.info (fun m -> m "Serializing abstract layout.") ;
     let begin_pos = pos writer in
@@ -498,12 +509,7 @@ module Make (Config : Config.S) (Eval : Eval.S) (M : Abslayout_db.S) = struct
     in
     let log_ch = Out_channel.create log_tmp_file in
     (* Serialize the main layout. *)
-    serialize
-      { writer
-      ; log_ch
-      ; serialize
-      ; ctx= `Eval (Map.empty (module Name.Compare_no_type)) }
-      t l ;
+    serialize {writer; log_ch; serialize} t l ;
     (* Serialize subquery layouts. *)
     let subquery_visitor =
       object
@@ -511,12 +517,7 @@ module Make (Config : Config.S) (Eval : Eval.S) (M : Abslayout_db.S) = struct
 
         method visit_Subquery r =
           let t = Meta.(find_exn r type_) in
-          serialize
-            { writer
-            ; log_ch
-            ; serialize
-            ; ctx= `Eval (Map.empty (module Name.Compare_no_type)) }
-            t r
+          serialize {writer; log_ch; serialize} t r
       end
     in
     subquery_visitor#visit_t () l ;

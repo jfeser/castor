@@ -13,4 +13,46 @@ module type S = sig
   val annotate_subquery_types : t -> unit
 
   val resolve : ?params:Set.M(Name.Compare_no_type).t -> t -> t
+
+  type eval_ctx =
+    [ `Concat of eval_ctx Gen.t
+    | `Empty
+    | `For of (eval_ctx * eval_ctx) Gen.t
+    | `Scalar of Value.t ]
+
+  class virtual ['ctx, 'a] material_fold :
+    object
+      method virtual build_AList :
+        'ctx -> Meta.t -> t * t -> (eval_ctx * eval_ctx) Gen.t -> 'a
+
+      method virtual build_ATuple :
+        'ctx -> Meta.t -> t list * tuple -> eval_ctx Gen.t -> 'a
+
+      method virtual build_AHashIdx :
+           'ctx
+        -> Meta.t
+        -> t * t * hash_idx
+        -> eval_ctx
+        -> (eval_ctx * eval_ctx) Gen.t
+        -> 'a
+
+      method virtual build_AOrderedIdx :
+           'ctx
+        -> Meta.t
+        -> t * t * ordered_idx
+        -> eval_ctx
+        -> (eval_ctx * eval_ctx) Gen.t
+        -> 'a
+
+      method virtual build_AEmpty : 'ctx -> Meta.t -> 'a
+
+      method virtual build_AScalar : 'ctx -> Meta.t -> pred -> Value.t -> 'a
+
+      method virtual build_Select :
+        'ctx -> Meta.t -> pred list * t -> eval_ctx -> 'a
+
+      method virtual build_Filter : 'ctx -> Meta.t -> pred * t -> eval_ctx -> 'a
+
+      method visit_t : 'ctx -> eval_ctx -> t -> 'a
+    end
 end

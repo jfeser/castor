@@ -1,6 +1,5 @@
 open Base
 open Printf
-open Db
 open Collections
 
 module T = struct
@@ -81,7 +80,5 @@ let of_lexbuf_exn lexbuf =
     raise e
 
 let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
-
-let of_field ?rel f = {relation= rel; name= f.Field.fname; type_= Some f.type_}
 
 let fresh f fmt = create (Fresh.name f fmt)

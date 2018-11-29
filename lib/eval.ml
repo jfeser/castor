@@ -84,9 +84,9 @@ let eval_pred_shared eval ctx =
     | If (p1, p2, p3) ->
         let v1 = eval_pred ctx p1 |> to_bool in
         if v1 then eval_pred ctx p2 else eval_pred ctx p3
-    | Exists r -> Bool (eval ctx r |> Seq.is_empty |> not)
+    | Exists r -> Bool (eval ctx r |> Gen.is_empty |> not)
     | First r -> (
-      match eval ctx r |> Seq.to_list with
+      match eval ctx r |> Gen.take 2 |> Gen.to_list with
       | [tup] -> (
           (* Remove fields that are also present in the context to compensate
              for a bug elsewhere. *)
@@ -112,36 +112,14 @@ let eval_pred_shared eval ctx =
   in
   eval_pred ctx
 
-let eval_foreach eval_foreach_flat ctx query1 query2 =
-  let extract_tup s t =
-    List.map s ~f:(fun n -> (n, Map.find_exn t n))
-    |> Map.of_alist_exn (module Name.Compare_no_type)
-  in
-  let outer_schema = Meta.(find_exn query1 schema) in
-  let inner_tuples outer_t tuples =
-    Seq.take_while tuples ~f:(fun t ->
-        [%compare.equal: Ctx.t] (extract_tup outer_schema t) outer_t )
-  in
-  let tuples = eval_foreach_flat ctx query1 query2 |> Seq.memoize in
-  match Seq.hd tuples with
-  | None -> Seq.empty
-  | Some t ->
-      Seq.unfold_step ~init:(tuples, t) ~f:(function tuples, outer_t ->
-          ( match Seq.next tuples with
-          | Some (t, ts) ->
-              let outer_t' = extract_tup outer_schema t in
-              if [%compare.equal: Ctx.t] outer_t outer_t' then Skip (ts, outer_t)
-              else Yield ((outer_t', inner_tuples outer_t' tuples), (ts, outer_t'))
-          | None -> Done ) )
-
-module Make (Config : Config.S) : S = struct
+module Make (Config : Config.S) = struct
   let load_relation = Relation.from_db Config.conn
 
   let eval_relation r =
     let query = "select * from $0" in
     exec Config.conn query ~params:[r.Relation.rname]
-    |> result_to_strings |> Seq.of_list
-    |> Seq.map ~f:(fun vs ->
+    |> result_to_strings |> Gen.of_list
+    |> Gen.map ~f:(fun vs ->
            let m_values =
              List.map2 vs r.fields ~f:(fun v f ->
                  let name = Name.create ~relation:r.rname f.fname in
@@ -172,18 +150,20 @@ module Make (Config : Config.S) : S = struct
 
   let eval_with_schema schema sql =
     Db.exec_cursor Config.conn sql
-    |> Seq.map ~f:(fun t ->
+    |> Db.to_tuples schema
+    |> Gen.map ~f:(fun t ->
            match (Map.to_alist t, schema) with
            (* TODO: Special case compensates for First(r) where r has a single
            unnamed field. *)
            | [(_, v)], [n] -> Map.singleton (module Name.Compare_no_type) n v
            | _ ->
                List.map schema ~f:(fun n ->
-                   match Map.find t n.Name.name with
+                   match Map.find t n with
                    | Some v -> (n, v)
                    | None ->
                        Error.create "Mismatched tuple." (t, schema)
-                         [%sexp_of: Value.t Map.M(String).t * Name.t list]
+                         [%sexp_of:
+                           Value.t Map.M(Name.Compare_no_type).t * Name.t list]
                        |> Error.raise )
                |> Map.of_alist_exn (module Name.Compare_no_type) )
 
@@ -192,37 +172,38 @@ module Make (Config : Config.S) : S = struct
   and eval ctx query =
     let sql = Sql.ralgebra_to_sql (subst (Map.map ctx ~f:pred_of_value) query) in
     let schema = Meta.(find_exn query schema) in
-    eval_with_schema schema sql |> Seq.map ~f:(Map.merge_right ctx)
+    eval_with_schema schema sql |> Gen.map ~f:(Map.merge_right ctx)
 
   (** Evaluates query2 for each tuple produced by query1. Should be faster than
      evaluating query2 in a loop over the results of query1. *)
-  let eval_foreach_flat ctx query1 query2 =
-    let ctx = Map.map ctx ~f:pred_of_value in
-    Logs.debug (fun m ->
-        m "%a" Sexp.pp_hum ([%sexp_of: pred Map.M(Name.Compare_no_type).t] ctx) ) ;
-    let query1 = subst ctx query1 in
-    let query2 = subst ctx query2 in
-    let sql = Sql.ralgebra_foreach query1 query2 in
-    let schema = Meta.(find_exn query1 schema) @ Meta.(find_exn query2 schema) in
-    eval_with_schema schema sql
 
-  let eval_foreach = eval_foreach eval_foreach_flat
+  (* let eval_foreach_flat ctx query1 query2 =
+   *   let ctx = Map.map ctx ~f:pred_of_value in
+   *   Logs.debug (fun m ->
+   *       m "%a" Sexp.pp_hum ([%sexp_of: pred Map.M(Name.Compare_no_type).t] ctx) ) ;
+   *   let query1 = subst ctx query1 in
+   *   let query2 = subst ctx query2 in
+   *   let sql = Sql.ralgebra_foreach query1 query2 in
+   *   let schema = Meta.(find_exn query1 schema) @ Meta.(find_exn query2 schema) in
+   *   eval_with_schema schema sql
+   * 
+   * let eval_foreach = eval_foreach eval_foreach_flat *)
 end
 
-module Make_mock (Config : Config.S_mock) : S = struct
+module Make_mock (Config : Config.S_mock) = struct
   open Config
 
   let load_relation n =
     List.find_exn (Hashtbl.keys rels) ~f:(fun r -> String.(r.rname = n))
 
   let eval_relation r =
-    Hashtbl.find_exn rels r |> Seq.of_list
-    |> Seq.map ~f:(fun t ->
+    Hashtbl.find_exn rels r |> Gen.of_list
+    |> Gen.map ~f:(fun t ->
            List.map t ~f:(fun (n, v) -> (Name.create ~relation:r.rname n, v)) )
 
   let eval_join eval_pred ctx p r1 r2 =
-    Seq.concat_map r1 ~f:(fun t1 ->
-        Seq.filter_map r2 ~f:(fun t2 ->
+    Gen.flat_map r1 ~f:(fun t1 ->
+        Gen.filter_map r2 ~f:(fun t2 ->
             let ctx = ctx |> Map.merge_right t1 |> Map.merge_right t2 in
             match eval_pred ctx p with
             | Value.Bool true -> Some (Map.merge_right t1 t2)
@@ -230,14 +211,15 @@ module Make_mock (Config : Config.S_mock) : S = struct
             | _ -> failwith "Expected a boolean." ) )
 
   let eval_filter eval_pred ctx p seq =
-    Seq.filter seq ~f:(fun t ->
+    Gen.filter seq ~f:(fun t ->
         let ctx = Map.merge_right ctx t in
         match eval_pred ctx p with
         | Value.Bool x -> x
         | _ -> failwith "Expected a boolean." )
 
   let eval_dedup seq =
-    Seq.fold ~init:(Set.empty (module Ctx)) seq ~f:Set.add |> Set.to_sequence
+    Gen.fold ~init:(Set.empty (module Ctx)) seq ~f:Set.add
+    |> Set.to_sequence |> Gen.of_sequence
 
   let agg_init = function
     | Count | Sum _ -> `Int 0
@@ -262,23 +244,23 @@ module Make_mock (Config : Config.S_mock) : S = struct
     let result =
       match select_kind args with
       | `Scalar ->
-          Seq.map seq ~f:(fun t ->
+          Gen.map seq ~f:(fun t ->
               let ctx = Map.merge_right ctx t in
               List.map args ~f:(eval_pred ctx) )
       | `Agg ->
-          Seq.fold seq ~init:(List.map args ~f:agg_init) ~f:(fun aggs t ->
+          Gen.fold seq ~init:(List.map args ~f:agg_init) ~f:(fun aggs t ->
               let ctx = Map.merge_right ctx t in
               List.map2_exn args aggs ~f:(agg_step eval_pred ctx) )
-          |> List.map ~f:agg_extract |> Seq.singleton
+          |> List.map ~f:agg_extract |> Gen.singleton
     in
-    Seq.map result ~f:(fun rs ->
+    Gen.map result ~f:(fun rs ->
         List.zip_exn args rs
         |> List.filter_map ~f:(fun (e, v) ->
                Option.map (pred_to_name e) ~f:(fun n -> (n, v)) )
         |> Map.of_alist_exn (module Name.Compare_no_type) )
 
   let eval_as rel_n seq =
-    Seq.map seq ~f:(fun t ->
+    Gen.map seq ~f:(fun t ->
         Map.to_alist t
         |> List.map ~f:(fun (n, v) -> (Name.{n with relation= Some rel_n}, v))
         |> Map.of_alist_exn (module Name.Compare_no_type) )
@@ -294,7 +276,7 @@ module Make_mock (Config : Config.S_mock) : S = struct
 
   let eval_orderby eval_pred ctx key order rel =
     let map =
-      Seq.fold
+      Gen.fold
         ~init:(Map.empty (module Key))
         ~f:(fun map t ->
           let ctx = Map.merge_right ctx t in
@@ -304,10 +286,10 @@ module Make_mock (Config : Config.S_mock) : S = struct
     in
     let kv =
       match order with
-      | `Asc -> Map.to_sequence ~order:`Increasing_key map
-      | `Desc -> Map.to_sequence ~order:`Decreasing_key map
+      | `Asc -> Map.to_sequence ~order:`Increasing_key map |> Gen.of_sequence
+      | `Desc -> Map.to_sequence ~order:`Decreasing_key map |> Gen.of_sequence
     in
-    Seq.concat_map kv ~f:(fun (_, v) -> Seq.of_list v)
+    Gen.flat_map kv ~f:(fun (_, v) -> Gen.of_list v)
 
   let rec eval_pred ctx p = eval_pred_shared eval ctx p
 
@@ -316,7 +298,7 @@ module Make_mock (Config : Config.S_mock) : S = struct
       match node with
       | Scan r ->
           eval_relation (load_relation r)
-          |> Seq.map ~f:(Map.of_alist_exn (module Name.Compare_no_type))
+          |> Gen.map ~f:(Map.of_alist_exn (module Name.Compare_no_type))
       | Filter (p, r) -> eval_filter eval_pred ctx p (eval r)
       | Join {pred= p; r1; r2} -> eval_join eval_pred ctx p (eval r1) (eval r2)
       | Dedup r -> eval_dedup (eval r)
@@ -325,11 +307,11 @@ module Make_mock (Config : Config.S_mock) : S = struct
       | OrderBy {key; order; rel} -> eval_orderby eval_pred ctx key order (eval rel)
       | r -> Error.create "Unsupported." r [%sexp_of: node] |> Error.raise
     in
-    eval r |> Seq.map ~f:(Map.merge_right ctx)
+    eval r |> Gen.map ~f:(Map.merge_right ctx)
 
-  let eval_foreach_flat ctx q1 q2 =
-    eval ctx q1
-    |> Seq.concat_map ~f:(fun ctx -> Seq.map (eval ctx q2) ~f:(Map.merge_right ctx))
-
-  let eval_foreach = eval_foreach eval_foreach_flat
+  (* let eval_foreach_flat ctx q1 q2 =
+   *   eval ctx q1
+   *   |> Gen.concat_map ~f:(fun ctx -> Gen.map (eval ctx q2) ~f:(Map.merge_right ctx))
+   * 
+   * let eval_foreach = eval_foreach eval_foreach_flat *)
 end
