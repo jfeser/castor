@@ -6,6 +6,42 @@ open Test_util
 
 let rels = Hashtbl.create (module Db.Relation)
 
+let create rels name fs xs =
+  let rel =
+    Db.Relation.
+      { rname= name
+      ; fields=
+          List.map fs ~f:(fun f -> {Db.Field.fname= f; type_= IntT {nullable= false}}
+          ) }
+  in
+  let data =
+    List.map xs ~f:(fun data ->
+        List.map2_exn fs data ~f:(fun fname value -> (fname, Value.Int value)) )
+  in
+  Hashtbl.set rels ~key:rel ~data ;
+  ( name
+  , List.map fs ~f:(fun f ->
+        let open Name in
+        { name= f
+        ; relation= Some name
+        ; type_= Some (Type0.PrimType.IntT {nullable= false}) } ) )
+
+let create_val rels name fs xs =
+  let rel =
+    Db.Relation.
+      { rname= name
+      ; fields= List.map fs ~f:(fun (f, t) -> Db.Field.{fname= f; type_= t}) }
+  in
+  let data =
+    List.map xs ~f:(fun data ->
+        List.map2_exn fs data ~f:(fun (fname, _) value -> (fname, value)) )
+  in
+  Hashtbl.set rels ~key:rel ~data ;
+  ( name
+  , List.map fs ~f:(fun (f, t) ->
+        let open Name in
+        {name= f; relation= Some name; type_= Some t} ) )
+
 let _ = create rels "r1" ["f"; "g"] [[1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]]
 
 let _ =
@@ -87,9 +123,28 @@ let%expect_test "eval-select" =
  *         (((relation ()) (name i1) (type_ ((IntT (nullable false))))) (Int 4))
  *         (((relation ()) (name i2) (type_ ())) (Int 3)))))) |}] *)
 
-let make_module_db () =
-  let module E = Eval.Make (struct
-    let conn = create_db "postgresql://localhost:5433/demomatch"
-  end) in
-  let module A = Abslayout_db.Make (E) in
-  ((module E : Eval.S), (module A : Abslayout_db.S))
+(* let%expect_test "eval-foreach" =
+ *   let (module E), (module A) = make_module_db () in
+ *   let q1 =
+ *     {|dedup(select([lp_id as lp_k, lc_id as lc_k], 
+ *     join(true,
+ *       select([id as lp_id], log_bench),
+ *              select([id as lc_id], log_bench))))|}
+ *     |> of_string_exn |> A.annotate_schema
+ *   in
+ *   let q2 =
+ *     {|select([lp_counter, lc_counter], 
+ *     join(lp_counter < lc_counter && 
+ *          lc_counter < lp_succ, 
+ *       select([counter as lp_counter, succ as lp_succ],
+ *         filter(log_bench.id = lp_k, log_bench)), 
+ *       select([counter as lc_counter],
+ *              filter(log_bench.id = lc_k, log_bench))))|}
+ *     |> of_string_exn |> A.annotate_schema
+ *   in
+ *   let summarize s =
+ *     let s = Seq.map ~f:(fun (t, ts) -> (t, Seq.take ts 5)) s in
+ *     Seq.take s 100
+ *   in
+ *   E.eval_foreach Ctx.empty q1 q2
+ *   |> summarize |> [%sexp_of: (Ctx.t * Ctx.t Seq.t) Seq.t] |> print_s *)

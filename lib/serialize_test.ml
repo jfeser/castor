@@ -1,30 +1,16 @@
 open Core
 open Abslayout
-
-let rels = Hashtbl.create (module Db.Relation)
-
-module Eval = Eval.Make_mock (struct
-  let rels = rels
-end)
-
-module M = Abslayout_db.Make (Eval)
+open Test_util
+module M = Abslayout_db.Make (Test_db)
 
 let make_modules layout_file =
   let module S =
     Serialize.Make (struct
         let layout_map_channel = Some (Out_channel.create layout_file)
       end)
-      (Eval)
       (M)
   in
   (module S : Serialize.S)
-
-[@@@warning "-8"]
-
-let _, [f; _] =
-  Test_util.create rels "r1" ["f"; "g"] [[1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]]
-
-[@@@warning "+8"]
 
 let run_test layout_str =
   let layout_file = Filename.temp_file "layout" "txt" in
@@ -35,7 +21,7 @@ let run_test layout_str =
   annotate_foreach layout ;
   let type_ = M.to_type layout in
   let buf = Buffer.create 1024 in
-  let _, len = S.serialize (Bitstring.Writer.with_buffer buf) type_ layout in
+  let _, len = S.serialize (Bitstring.Writer.with_buffer buf) layout in
   let buf_str = Buffer.contents buf |> String.escaped in
   In_channel.input_all (In_channel.create layout_file) |> Stdio.print_endline ;
   [%sexp_of: Type.t * int * string] (type_, len, buf_str) |> print_s

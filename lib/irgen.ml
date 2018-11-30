@@ -26,10 +26,12 @@ module type S = sig
   val pp : Formatter.t -> ir_module -> unit
 end
 
-module Make (Config : Config.S) (Eval : Eval.S) (Serialize : Serialize.S) () =
+module Make
+    (Config : Config.S)
+    (Abslayout_db : Abslayout_db.S)
+    (Serialize : Serialize.S)
+    () =
 struct
-  module Abslayout_db = Abslayout_db.Make (Eval)
-
   let fresh = Fresh.create ()
 
   let iters = ref []
@@ -674,7 +676,7 @@ struct
     let type_ = Abslayout_db.to_type r in
     let writer = Bitstring.Writer.with_file data_fn in
     let r, len =
-      if Config.code_only then (r, 0) else Serialize.serialize writer type_ r
+      if Config.code_only then (r, 0) else Serialize.serialize writer r
     in
     Bitstring.Writer.flush writer ;
     Bitstring.Writer.close writer ;

@@ -2,48 +2,12 @@ open Core
 open Abslayout
 open Test_util
 
-let rels = Hashtbl.create (module Db.Relation)
-
-let _ =
-  create rels "r1" ["f"; "g"]
-    [[0; 5]; [1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]; [4; 6]]
-
-let _ = create rels "one" [] [[]]
-
-let _ =
-  create rels "log" ["counter"; "succ"; "id"]
-    [[1; 4; 1]; [2; 3; 2]; [3; 4; 3]; [4; 6; 1]; [5; 6; 3]]
-
-let _ =
-  create_val rels "r2"
-    [("a", Type.PrimType.FixedT {nullable= false})]
-    [ [Fixed (Fixed_point.of_string "0.01")]
-    ; [Fixed (Fixed_point.of_string "5")]
-    ; [Fixed (Fixed_point.of_string "34.42")]
-    ; [Fixed (Fixed_point.of_string "0.88")]
-    ; [Fixed (Fixed_point.of_string "-0.42")] ]
-
-let _ =
-  create_val rels "log_str"
-    [ ("counter", Type.PrimType.IntT {nullable= false})
-    ; ("succ", Type.PrimType.IntT {nullable= false})
-    ; ("id", Type.PrimType.StringT {nullable= false}) ]
-    [ [Int 1; Int 4; String "foo"]
-    ; [Int 2; Int 3; String "fizzbuzz"]
-    ; [Int 3; Int 4; String "bar"]
-    ; [Int 4; Int 6; String "foo"]
-    ; [Int 5; Int 6; String "bar"] ]
-
 let make_modules ?layout_file () =
-  let module E = Eval.Make_mock (struct
-    let rels = rels
-  end) in
-  let module M = Abslayout_db.Make (E) in
+  let module M = Abslayout_db.Make (Test_db) in
   let module S =
     Serialize.Make (struct
         let layout_map_channel = Option.map layout_file ~f:Out_channel.create
       end)
-      (E)
       (M)
   in
   let module I =
@@ -52,7 +16,7 @@ let make_modules ?layout_file () =
 
         let debug = false
       end)
-      (E)
+      (M)
       (S)
       ()
   in
@@ -69,15 +33,13 @@ let make_modules ?layout_file () =
   , (module C : Codegen.S) )
 
 let make_modules_db ?layout_file () =
-  let module E = Eval.Make (struct
+  let module M = Abslayout_db.Make (struct
     let conn = create_db "postgresql://localhost:5433/demomatch"
   end) in
-  let module M = Abslayout_db.Make (E) in
   let module S =
     Serialize.Make (struct
         let layout_map_channel = Option.map layout_file ~f:Out_channel.create
       end)
-      (E)
       (M)
   in
   let module I =
@@ -86,7 +48,7 @@ let make_modules_db ?layout_file () =
 
         let debug = false
       end)
-      (E)
+      (M)
       (S)
       ()
   in

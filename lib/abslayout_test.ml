@@ -3,24 +3,7 @@ open Base
 open Collections
 open Abslayout
 open Test_util
-
-let rels = Hashtbl.create (module Db.Relation)
-
-let _ =
-  create rels "r" ["f"; "g"] [[0; 5]; [1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]; [4; 6]]
-
-let _ =
-  create rels "s" ["f"; "g"] [[0; 5]; [1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]; [4; 6]]
-
-let _ =
-  create rels "log" ["counter"; "succ"; "id"]
-    [[1; 4; 1]; [2; 3; 2]; [3; 4; 3]; [4; 6; 1]; [5; 6; 3]]
-
-module E = Eval.Make_mock (struct
-  let rels = rels
-end)
-
-module M = Abslayout_db.Make (E)
+module M = Abslayout_db.Make (Test_db)
 
 let%expect_test "subst" =
   let n = Name.of_string_exn in
@@ -140,10 +123,9 @@ let%expect_test "mat-col" =
       "AList(Filter(ship_mode.sm_carrier = \"GERMA\", ship_mode), \
        AScalar(ship_mode.sm_carrier))"
   in
-  let module Eval = Eval.Make (struct
+  let module M = Abslayout_db.Make (struct
     let conn = conn
   end) in
-  let module M = Abslayout_db.Make (Eval) in
   let layout = M.resolve layout in
   M.annotate_schema layout ;
   layout |> [%sexp_of: t] |> print_s ;
@@ -210,10 +192,9 @@ let%expect_test "mat-hidx" =
        \"LIBRARY\", ship_mode))) as t, AList(Filter(t.sm_type = ship_mode.sm_type, \
        ship_mode) as t, AScalar(t.sm_code)), null)"
   in
-  let module Eval = Eval.Make (struct
+  let module M = Abslayout_db.Make (struct
     let conn = conn
   end) in
-  let module M = Abslayout_db.Make (Eval) in
   let layout = M.resolve layout in
   M.annotate_schema layout ;
   layout |> [%sexp_of: t] |> print_s ;

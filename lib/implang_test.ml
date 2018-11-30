@@ -2,38 +2,13 @@ open Core
 open Base
 open Abslayout
 open Test_util
-
-let rels = Hashtbl.create (module Db.Relation)
-
-module E = Eval.Make_mock (struct
-  let rels = rels
-end)
-
-module M = Abslayout_db.Make (E)
-
-let _ = create rels "r1" ["f"; "g"] [[1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]]
-
-let _ =
-  create rels "log" ["id"; "succ"; "counter"]
-    [[1; 4; 1]; [2; 3; 2]; [3; 4; 3]; [4; 6; 1]; [5; 6; 3]]
-
-let _ =
-  create_val rels "log_str"
-    [ ("counter", Type.PrimType.IntT {nullable= false})
-    ; ("succ", Type.PrimType.IntT {nullable= false})
-    ; ("id", Type.PrimType.StringT {nullable= false}) ]
-    [ [Int 1; Int 4; String "foo"]
-    ; [Int 2; Int 3; String "fizzbuzz"]
-    ; [Int 3; Int 4; String "bar"]
-    ; [Int 4; Int 6; String "foo"]
-    ; [Int 5; Int 6; String "bar"] ]
+module M = Abslayout_db.Make (Test_db)
 
 let run_test ?(params = []) layout_str =
   let module S =
     Serialize.Make (struct
         let layout_map_channel = None
       end)
-      (E)
       (M)
   in
   let module I =
@@ -42,7 +17,7 @@ let run_test ?(params = []) layout_str =
 
         let debug = false
       end)
-      (E)
+      (M)
       (S)
       ()
   in
@@ -55,15 +30,13 @@ let run_test ?(params = []) layout_str =
   I.irgen ~params ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter
 
 let run_test_db ?(params = []) layout_str =
-  let module E = Eval.Make (struct
+  let module M = Abslayout_db.Make (struct
     let conn = create_db "postgresql://localhost:5433/demomatch"
   end) in
-  let module M = Abslayout_db.Make (E) in
   let module S =
     Serialize.Make (struct
         let layout_map_channel = None
       end)
-      (E)
       (M)
   in
   let module I =
@@ -72,7 +45,7 @@ let run_test_db ?(params = []) layout_str =
 
         let debug = false
       end)
-      (E)
+      (M)
       (S)
       ()
   in

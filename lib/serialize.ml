@@ -12,7 +12,7 @@ end
 
 module type S = Serialize_intf.S
 
-module Make (Config : Config.S) (Eval : Eval.S) (M : Abslayout_db.S) = struct
+module Make (Config : Config.S) (M : Abslayout_db.S) = struct
   type serialize_ctx =
     {writer: Bitstring.Writer.t sexp_opaque; log_ch: Out_channel.t sexp_opaque}
   [@@deriving sexp]
