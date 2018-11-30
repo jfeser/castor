@@ -6,5 +6,5 @@ module type S = sig
     val render : string -> Out_channel.t -> unit
   end
 
-  val serialize : Bitstring.Writer.t -> Type.t -> t -> t * int
+  val serialize : Bitstring.Writer.t -> t -> t * int
 end

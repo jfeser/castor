@@ -18,14 +18,15 @@ module Make (Config : Config.S) = struct
   type eval_ctx =
     [ `Concat of eval_ctx Gen.t
     | `Empty
-    | `For of (eval_ctx * eval_ctx) Gen.t
-    | `Scalar of Value.t ]
+    | `For of (Value.t list * eval_ctx) Gen.t
+    | `Scalar of Value.t
+    | `Query of Value.t list Gen.t ]
 
   let rec gen_query q =
     match q.node with
     | AList (q1, q2) -> `For (q1, gen_query q2)
     | AHashIdx (q1, q2, _) | AOrderedIdx (q1, q2, _) ->
-        `Concat [gen_query q1; `For (q1, gen_query q2)]
+        `Concat [`Query q1; `For (q1, gen_query q2)]
     | AEmpty -> `Empty
     | AScalar p -> `Scalar p
     | ATuple (ts, _) -> `Concat (List.map ts ~f:gen_query)
@@ -38,11 +39,12 @@ module Make (Config : Config.S) = struct
     | `Concat qs -> `Concat (List.map ~f:(subst ctx) qs)
     | `Scalar p -> `Scalar (subst_pred ctx p)
     | `Empty -> `Empty
+    | `Query q -> `Query (Abslayout.subst ctx q)
 
-  let rec junk_all = function
-    | `For cs -> Gen.iter cs ~f:(fun (c1, c2) -> junk_all c1 ; junk_all c2)
-    | `Concat cs -> Gen.iter cs ~f:junk_all
-    | `Empty | `Scalar _ -> ()
+  let to_ctx = function
+    | [] -> failwith "unexpected empty tuple"
+    | [v] -> `Scalar v
+    | vs -> `Concat (List.map vs ~f:(fun v -> `Scalar v) |> Gen.of_list)
 
   let rec query_to_sql q =
     match q with
@@ -87,6 +89,7 @@ module Make (Config : Config.S) = struct
     | `Scalar p ->
         { sql= `Subquery (sprintf "select %s as x" (Sql.pred_to_sql p))
         ; schema= [Name.create "x"] }
+    | `Query q -> Sql.of_ralgebra q
 
   let eval_query q =
     let sql = query_to_sql q |> Sql.to_query in
@@ -103,18 +106,11 @@ module Make (Config : Config.S) = struct
           `For
             ( Gen.group_lazy eq tups
             |> Gen.map ~f:(fun (t, ts) ->
-                   let ctx : eval_ctx =
-                     match (t, outer_schema) with
-                     | [], _ -> failwith "Unexpected empty key."
-                     | [v], [n] -> `Scalar (Db.load_value_exn (Name.type_exn n) v)
-                     | _ ->
-                         `Concat
-                           (Gen.of_list
-                              (List.map2_exn t outer_schema ~f:(fun x n ->
-                                   `Scalar (Db.load_value_exn (Name.type_exn n) x)
-                               )))
+                   let t =
+                     Db.load_tuple_exn outer_schema t
+                     |> List.map ~f:(fun (_, v) -> v)
                    in
-                   (ctx, eval ts q2) ) )
+                   (t, eval ts q2) ) )
       | `Concat qs ->
           let eq t1 t2 = String.(List.hd_exn t1 = List.hd_exn t2) in
           let streams = Gen.group_lazy eq tups |> Gen.map ~f:(fun (_, ts) -> ts) in
@@ -129,13 +125,19 @@ module Make (Config : Config.S) = struct
             `Scalar (Db.load_value_exn (Name.type_exn (pred_to_schema p)) x)
         | Some _ -> failwith "Unexpected tuple width."
         | None -> failwith "Expected a tuple." )
+      | `Query q ->
+          let schema = Meta.(find_exn q schema) in
+          `Query
+            (Gen.map tups ~f:(fun x ->
+                 let _, vs = Db.load_tuple_exn schema x |> List.unzip in
+                 vs ))
     in
     eval tups q
 
   class virtual ['ctx, 'a] material_fold =
     object (self)
       method virtual build_AList
-          : 'ctx -> Meta.t -> t * t -> (eval_ctx * eval_ctx) Gen.t -> 'a
+          : 'ctx -> Meta.t -> t * t -> (Value.t list * eval_ctx) Gen.t -> 'a
 
       method virtual build_ATuple : _
 
@@ -143,16 +145,16 @@ module Make (Config : Config.S) = struct
           :    'ctx
             -> Meta.t
             -> t * t * hash_idx
-            -> eval_ctx
-            -> (eval_ctx * eval_ctx) Gen.t
+            -> Value.t list Gen.t
+            -> (Value.t list * eval_ctx) Gen.t
             -> 'a
 
       method virtual build_AOrderedIdx
           :    'ctx
             -> Meta.t
             -> t * t * ordered_idx
-            -> eval_ctx
-            -> (eval_ctx * eval_ctx) Gen.t
+            -> Value.t list Gen.t
+            -> (Value.t list * eval_ctx) Gen.t
             -> 'a
 
       method virtual build_AEmpty : 'ctx -> Meta.t -> 'a
@@ -170,25 +172,23 @@ module Make (Config : Config.S) = struct
         | AScalar x, `Scalar v -> self#build_AScalar ctx r.meta x v
         | AList x, `For vs -> self#build_AList ctx r.meta x vs
         | AHashIdx x, `Concat vs ->
-            let key_ctx = Gen.get_exn vs in
-            let value_gen =
-              match Gen.get_exn vs with
-              | `For g -> g
+            let key_gen, value_gen =
+              match (Gen.get_exn vs, Gen.get_exn vs) with
+              | `Query g1, `For g2 -> (g1, g2)
               | _ ->
                   Error.create "Bug: Mismatched context." r [%sexp_of: t]
                   |> Error.raise
             in
-            self#build_AHashIdx ctx r.meta x key_ctx value_gen
+            self#build_AHashIdx ctx r.meta x key_gen value_gen
         | AOrderedIdx x, `Concat vs ->
-            let key_ctx = Gen.get_exn vs in
-            let value_gen =
-              match Gen.get_exn vs with
-              | `For g -> g
+            let key_gen, value_gen =
+              match (Gen.get_exn vs, Gen.get_exn vs) with
+              | `Query g1, `For g2 -> (g1, g2)
               | _ ->
                   Error.create "Bug: Mismatched context." r [%sexp_of: t]
                   |> Error.raise
             in
-            self#build_AOrderedIdx ctx r.meta x key_ctx value_gen
+            self#build_AOrderedIdx ctx r.meta x key_gen value_gen
         | ATuple x, `Concat vs -> self#build_ATuple ctx r.meta x vs
         | Select x, _ -> self#build_Select ctx r.meta x eval_ctx
         | Filter x, _ -> self#build_Filter ctx r.meta x eval_ctx
@@ -197,6 +197,8 @@ module Make (Config : Config.S) = struct
             Error.create "Bug: Mismatched context." r [%sexp_of: t] |> Error.raise
         | (Join _ | Dedup _ | OrderBy _ | Scan _ | GroupBy _ | As _), _ ->
             Error.create "Cannot materialize." r [%sexp_of: t] |> Error.raise
+
+      method run ctx r = self#visit_t ctx (eval_query (gen_query r)) r
     end
 
   module TF = struct
@@ -253,26 +255,26 @@ module Make (Config : Config.S) = struct
                 (elem_types, {count= List.fold_left1_exn ~f:AbsCount.( * ) counts})
 
         method build_AHashIdx () _ (_, value_query, {hi_key_layout= m_key_query; _})
-            key_ctx value_gen =
+            key_gen value_gen =
           let key_query = Option.value_exn m_key_query in
-          junk_all key_ctx ;
+          Gen.junk_all key_gen ;
           let kt, vt =
             Gen.fold value_gen ~init:(EmptyT, EmptyT)
-              ~f:(fun (kt, vt) (kctx, vctx) ->
-                let kt' = self#visit_t () kctx key_query in
+              ~f:(fun (kt, vt) (key, vctx) ->
+                let kt' = self#visit_t () (to_ctx key) key_query in
                 let vt' = self#visit_t () vctx value_query in
                 (unify_exn kt kt', unify_exn vt vt') )
           in
           HashIdxT (kt, vt, {count= None})
 
         method build_AOrderedIdx () _
-            (_, value_query, {oi_key_layout= m_key_query; _}) key_ctx value_gen =
+            (_, value_query, {oi_key_layout= m_key_query; _}) key_gen value_gen =
           let key_query = Option.value_exn m_key_query in
-          junk_all key_ctx ;
+          Gen.junk_all key_gen ;
           let kt, vt =
             Gen.fold value_gen ~init:(EmptyT, EmptyT)
-              ~f:(fun (kt, vt) (kctx, vctx) ->
-                let kt' = self#visit_t () kctx key_query in
+              ~f:(fun (kt, vt) (key, vctx) ->
+                let kt' = self#visit_t () (to_ctx key) key_query in
                 let vt' = self#visit_t () vctx value_query in
                 (unify_exn kt kt', unify_exn vt vt') )
           in
@@ -284,7 +286,7 @@ module Make (Config : Config.S) = struct
 
   let to_type l =
     Logs.info (fun m -> m "Computing type of abstract layout.") ;
-    let type_ = (new type_fold)#visit_t () (eval_query (gen_query l)) l in
+    let type_ = (new type_fold)#run () l in
     Logs.info (fun m ->
         m "The type is: %s" (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ) ;
     type_

@@ -17,13 +17,16 @@ module type S = sig
   type eval_ctx =
     [ `Concat of eval_ctx Gen.t
     | `Empty
-    | `For of (eval_ctx * eval_ctx) Gen.t
-    | `Scalar of Value.t ]
+    | `For of (Value.t list * eval_ctx) Gen.t
+    | `Scalar of Value.t
+    | `Query of Value.t list Gen.t ]
+
+  val to_ctx : Value.t list -> eval_ctx
 
   class virtual ['ctx, 'a] material_fold :
     object
       method virtual build_AList :
-        'ctx -> Meta.t -> t * t -> (eval_ctx * eval_ctx) Gen.t -> 'a
+        'ctx -> Meta.t -> t * t -> (Value.t list * eval_ctx) Gen.t -> 'a
 
       method virtual build_ATuple :
         'ctx -> Meta.t -> t list * tuple -> eval_ctx Gen.t -> 'a
@@ -32,16 +35,16 @@ module type S = sig
            'ctx
         -> Meta.t
         -> t * t * hash_idx
-        -> eval_ctx
-        -> (eval_ctx * eval_ctx) Gen.t
+        -> Value.t list Gen.t
+        -> (Value.t list * eval_ctx) Gen.t
         -> 'a
 
       method virtual build_AOrderedIdx :
            'ctx
         -> Meta.t
         -> t * t * ordered_idx
-        -> eval_ctx
-        -> (eval_ctx * eval_ctx) Gen.t
+        -> Value.t list Gen.t
+        -> (Value.t list * eval_ctx) Gen.t
         -> 'a
 
       method virtual build_AEmpty : 'ctx -> Meta.t -> 'a
@@ -54,5 +57,7 @@ module type S = sig
       method virtual build_Filter : 'ctx -> Meta.t -> pred * t -> eval_ctx -> 'a
 
       method visit_t : 'ctx -> eval_ctx -> t -> 'a
+
+      method run : 'ctx -> t -> 'a
     end
 end

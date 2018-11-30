@@ -181,17 +181,18 @@ let load_value_exn type_ v =
     | NullT | VoidT | TupleT _ -> failwith "Not possible column types."
 
 let load_tuple_exn s vs =
-  let m_values =
+  match
     List.map2 vs s ~f:(fun v name ->
         let value = load_value_exn (Name.type_exn name) v in
         (name, value) )
-  in
-  match m_values with
-  | Ok v -> Map.of_alist_exn (module Name.Compare_no_type) v
+  with
+  | Ok v -> v
   | Unequal_lengths ->
       Error.create "Unexpected tuple width."
         (s, List.length s, List.length vs)
         [%sexp_of: Name.t list * int * int]
       |> Error.raise
 
-let to_tuples s = Gen.map ~f:(load_tuple_exn s)
+let to_tuples s =
+  Gen.map ~f:(fun ts ->
+      load_tuple_exn s ts |> Map.of_alist_exn (module Name.Compare_no_type) )

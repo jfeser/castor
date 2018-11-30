@@ -91,9 +91,9 @@ module T = struct
 
   type tuple = {count: AbsCount.t} [@@deriving compare, sexp]
 
-  type hash_idx = {count: AbsCount.t} [@@deriving compare, sexp_of]
+  type hash_idx = {count: AbsCount.t} [@@deriving compare, sexp]
 
-  type ordered_idx = {count: AbsCount.t} [@@deriving compare, sexp_of]
+  type ordered_idx = {count: AbsCount.t} [@@deriving compare, sexp]
 
   type fixed = {value: AbsFixed.t; nullable: bool} [@@deriving compare, sexp]
 
@@ -109,7 +109,7 @@ module T = struct
     | OrderedIdxT of (t * t * ordered_idx)
     | FuncT of (t list * [`Child_sum | `Width of int])
     | EmptyT
-  [@@deriving compare, sexp_of]
+  [@@deriving compare, sexp]
 end
 
 include T

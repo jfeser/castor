@@ -15,8 +15,7 @@ val exec_cursor :
 
 val load_value_exn : Type.PrimType.t -> string -> Value.t
 
-val load_tuple_exn :
-  Name.t list -> string list -> Value.t Map.M(Name.Compare_no_type).t
+val load_tuple_exn : Name.t list -> string list -> (Name.t * Value.t) list
 
 val to_tuples :
   Name.t list -> string list Gen.t -> Value.t Map.M(Name.Compare_no_type).t Gen.t
