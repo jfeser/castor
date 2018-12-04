@@ -5,10 +5,16 @@ open Abslayout
 
 type t = {schema: Name.t list; sql: [`Subquery of string | `Scan of string]}
 
+(* type spj =
+ *   { select: pred list
+ *   ; distinct: bool
+ *   ; join: [`Subquery of spj | `Table of string]
+ *   ; order: pred list option } *)
+
 let fresh = Fresh.create ()
 
-let to_subquery {sql; schema} =
-  let alias = Fresh.name fresh "t%d" in
+let to_subquery ?alias {sql; schema} =
+  let alias = match alias with Some a -> a | None -> Fresh.name fresh "t%d" in
   match sql with
   | `Subquery q ->
       ( sprintf "(%s) as %s" q alias
@@ -154,7 +160,20 @@ and ralgebra_to_sql_helper r =
         let sql, schema = to_subquery (f r) in
         let query = sprintf "select distinct * from %s" sql in
         {sql= `Subquery query; schema}
-    | As (_, r) -> f r
+    | As (s, r) ->
+        let sql, schema = to_subquery (f r) in
+        let name_map =
+          List.map schema ~f:(fun n ->
+              (n, {n with relation= None; name= sprintf "%s-%s" s n.name}) )
+        in
+        let fields =
+          List.map name_map ~f:(fun (n, n') ->
+              sprintf "%s as %s" (Name.to_sql n) (Name.to_sql n') )
+          |> String.concat ~sep:", "
+        in
+        let schema' = List.map name_map ~f:(fun (_, n) -> n) in
+        let query = sprintf "select %s from %s" fields sql in
+        {sql= `Subquery query; schema= schema'}
     | OrderBy {key; order; rel= r} ->
         let sql, schema = to_subquery (f r) in
         let ctx =

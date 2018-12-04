@@ -193,9 +193,8 @@ let load_tuple_exn s vs =
   with
   | Ok v -> v
   | Unequal_lengths ->
-      Error.create "Unexpected tuple width."
-        (s, List.length s, List.length vs)
-        [%sexp_of: Name.t list * int * int]
+      Error.create "Unexpected tuple width." (s, vs)
+        [%sexp_of: Name.t list * string list]
       |> Error.raise
 
 let to_tuples s =

@@ -22,6 +22,46 @@ module Make (Config : Config.S) = struct
     | `Scalar of Value.t
     | `Query of Value.t list Gen.t ]
 
+  (* let elim_as r =
+   *   let subst_ctx = ref (Map.empty (module Name.Compare_no_type)) in
+   *   let visitor =
+   *     object
+   *       inherit [_] Abslayout0.map as super
+   * 
+   *       method! visit_t () r =
+   *         match r.node with
+   *         | As (s, r) ->
+   *             let meta = r.meta in
+   *             let schema = Meta.Direct.(find_exn meta Meta.schema) in
+   *             let name_map =
+   *               List.map schema ~f:(fun n ->
+   *                   (n, {n with relation= None; name= sprintf "%s_%s" s n.name}))
+   *             in
+   *             let schema' =
+   *               List.map schema ~f:(fun n ->
+   *                   let n' =
+   *                     {n with relation= None; name= sprintf "%s_%s" s n.name}
+   *                   in
+   *                   subst_ctx := Map.add_exn !subst_ctx ~key:n ~data:(Name n') ;
+   *                   n' )
+   *             in
+   *             let fields = List.map schema' ~f:(fun n -> As_pred Name n) in
+   *             let r' = select fields r in
+   *             Meta.(set_m r' schema schema') ;
+   *             r'
+   *         | _ -> super#visit_t () r
+   *     end
+   *   in
+   *   let r' = visitor#visit_t () r in
+   *   Abslayout.subst !subst_ctx r' *)
+
+  let rec width = function
+    | `Empty -> 0
+    | `For (q1, q2) -> List.length Meta.(find_exn q1 schema) + width q2
+    | `Scalar _ -> 1
+    | `Concat qs -> 1 + List.sum (module Int) qs ~f:width
+    | `Query q -> List.length Meta.(find_exn q schema)
+
   let rec gen_query q =
     match q.node with
     | AList (q1, q2) -> `For (q1, gen_query q2)
@@ -46,50 +86,72 @@ module Make (Config : Config.S) = struct
     | [v] -> `Scalar v
     | vs -> `Concat (List.map vs ~f:(fun v -> `Scalar v) |> Gen.of_list)
 
-  let rec query_to_sql q =
-    match q with
-    | `For (q1, q2) ->
-        let sql1, s1 = Sql.(to_subquery (of_ralgebra q1)) in
-        let q2 =
-          let ctx =
-            List.zip_exn s1 Meta.(find_exn q1 schema)
-            |> List.map ~f:(fun (n, n') -> (n, Name n'))
-            |> Map.of_alist_exn (module Name.Compare_no_type)
+  (* let rename =
+   *   let fresh = Fresh.create () in
+   *   let visitor =
+   *     object (self)
+   *       inherit [_] Abslayout0.mapreduce
+   *       inherit [_] Util.list_monoid
+   *       
+   *       method! visit_pred ctx p = subst_pred ctx p, self#zero
+   *       method! visit_Scan ctx rname =
+   *         let fields = List.map (Db.Relation.from_db conn rname) ~f:(fun f ->
+   *           )
+   *     end
+   *   in
+   *   visitor#visit_t (Map.empty (module Name.Compare_no_type)) *)
+
+  let query_to_sql q =
+    let fresh = Fresh.create () in
+    let rec query_to_sql q =
+      match q with
+      | `For (q1, q2) ->
+          let sql1, s1 = Sql.(to_subquery (of_ralgebra q1)) in
+          let q2 =
+            let ctx =
+              List.zip_exn Meta.(find_exn q1 schema) s1
+              |> List.map ~f:(fun (n, n') -> (n, Name n'))
+              |> Map.of_alist_exn (module Name.Compare_no_type)
+            in
+            subst ctx q2
           in
-          subst ctx q2
-        in
-        let sql2, s2 = query_to_sql q2 |> Sql.to_subquery in
-        let q1_fields = List.map s1 ~f:Name.to_sql in
-        let q2_fields = List.map s2 ~f:Name.to_sql in
-        let fields_str = String.concat ~sep:", " (q1_fields @ q2_fields) in
-        let q1_fields_str = String.concat q1_fields ~sep:", " in
-        { sql=
-            `Subquery
-              (sprintf "select %s from %s, lateral %s order by (%s)" fields_str sql1
-                 sql2 q1_fields_str)
-        ; schema= s1 @ s2 }
-    | `Concat qs ->
-        let queries = List.map qs ~f:query_to_sql in
-        let queries, schemas = List.map queries ~f:Sql.to_subquery |> List.unzip in
-        let queries =
-          List.mapi queries ~f:(fun i q ->
-              let select_list =
-                List.mapi schemas ~f:(fun j ns ->
-                    let names = List.map ns ~f:Name.to_sql in
-                    if i = j then names
-                    else List.map names ~f:(fun n -> sprintf "null as %s" n) )
-                |> List.concat |> String.concat ~sep:", "
-              in
-              sprintf "select %d, %s from (%s)" i select_list q )
-        in
-        let query = String.concat ~sep:" union all " queries in
-        let schema = List.concat schemas in
-        {sql= `Subquery query; schema}
-    | `Empty -> {sql= `Subquery "select limit 0"; schema= []}
-    | `Scalar p ->
-        { sql= `Subquery (sprintf "select %s as x" (Sql.pred_to_sql p))
-        ; schema= [Name.create "x"] }
-    | `Query q -> Sql.of_ralgebra q
+          let sql2, s2 = query_to_sql q2 |> Sql.to_subquery in
+          let q1_fields = List.map s1 ~f:Name.to_sql in
+          let q2_fields = List.map s2 ~f:Name.to_sql in
+          let fields_str = String.concat ~sep:", " (q1_fields @ q2_fields) in
+          let q1_fields_str = String.concat q1_fields ~sep:", " in
+          { sql=
+              `Subquery
+                (sprintf "select %s from %s, lateral %s order by (%s)" fields_str
+                   sql1 sql2 q1_fields_str)
+          ; schema= s1 @ s2 }
+      | `Concat qs ->
+          let queries = List.map qs ~f:query_to_sql in
+          let queries, schemas =
+            List.map queries ~f:Sql.to_subquery |> List.unzip
+          in
+          let queries =
+            List.mapi queries ~f:(fun i q ->
+                let select_list =
+                  List.mapi schemas ~f:(fun j ns ->
+                      let names = List.map ns ~f:Name.to_sql in
+                      if i = j then names
+                      else List.repeat "null" (List.length names) )
+                  |> List.concat |> String.concat ~sep:", "
+                in
+                sprintf "select %d, %s from %s" i select_list q )
+          in
+          let query = String.concat ~sep:" union all " queries in
+          let schema = List.concat schemas in
+          {sql= `Subquery query; schema}
+      | `Empty -> {sql= `Subquery "select limit 0"; schema= []}
+      | `Scalar p ->
+          let name = Fresh.name fresh "x%d" in
+          { sql= `Subquery (sprintf "select %s as %s" (Sql.pred_to_sql p) name)
+          ; schema= [Name.create name] }
+      | `Query q -> Sql.of_ralgebra q
+    in
+    query_to_sql q
 
   let eval_query q =
     let sql = query_to_sql q |> Sql.to_query in
@@ -103,17 +165,30 @@ module Make (Config : Config.S) = struct
               (extract_tup outer_schema t1)
               (extract_tup outer_schema t2)
           in
+          let outer_width = List.length outer_schema in
           `For
             ( Gen.group_lazy eq tups
             |> Gen.map ~f:(fun (t, ts) ->
                    let t =
-                     Db.load_tuple_exn outer_schema t
+                     Db.load_tuple_exn outer_schema (List.take t outer_width)
                      |> List.map ~f:(fun (_, v) -> v)
                    in
+                   let ts = Gen.map ts ~f:(fun t -> List.drop t outer_width) in
                    (t, eval ts q2) ) )
       | `Concat qs ->
           let eq t1 t2 = String.(List.hd_exn t1 = List.hd_exn t2) in
-          let streams = Gen.group_lazy eq tups |> Gen.map ~f:(fun (_, ts) -> ts) in
+          let widths = List.map qs ~f:width in
+          let streams =
+            Gen.group_lazy eq tups
+            |> Gen.mapi ~f:(fun gidx (_, ts) ->
+                   let drop_ct =
+                     List.sum (module Int) (List.take widths gidx) ~f:(fun x -> x)
+                   in
+                   let width = List.nth_exn widths gidx in
+                   Gen.map ts ~f:(fun t ->
+                       let t = List.drop t drop_ct in
+                       List.take t width ) )
+          in
           let streams = Gen.map2 streams (Gen.of_list qs) ~f:eval in
           `Concat streams
       | `Empty ->
@@ -122,8 +197,13 @@ module Make (Config : Config.S) = struct
       | `Scalar p -> (
         match Gen.next tups with
         | Some [x] ->
-            `Scalar (Db.load_value_exn (Name.type_exn (pred_to_schema p)) x)
-        | Some _ -> failwith "Unexpected tuple width."
+            let type_ = Name.type_exn (pred_to_schema p) in
+            `Scalar (Db.load_value_exn type_ x)
+        | Some t ->
+            Error.(
+              create "Scalar: unexpected tuple width." (p, t)
+                [%sexp_of: pred * string list]
+              |> raise)
         | None -> failwith "Expected a tuple." )
       | `Query q ->
           let schema = Meta.(find_exn q schema) in
