@@ -1,9 +1,174 @@
 open Core
 open Base
+open Stdio
 open Collections
 open Abslayout
 open Test_util
 module M = Abslayout_db.Make (Test_db)
+
+class print_fold =
+  object (self)
+    inherit [_, _] M.material_fold
+
+    method build_AList () _ (_, r) gen =
+      print_endline "List" ;
+      Gen.iter gen ~f:(fun (key, vctx) ->
+          printf "List key: %s\n"
+            ([%sexp_of: Value.t list] key |> Sexp.to_string_hum) ;
+          self#visit_t () vctx r )
+
+    method build_AHashIdx () _ (_, r, _) kgen vgen =
+      print_endline "HashIdx" ;
+      Gen.iter kgen ~f:(fun _ -> ()) ;
+      Gen.iter vgen ~f:(fun (key, vctx) ->
+          printf "HashIdx key: %s\n"
+            ([%sexp_of: Value.t list] key |> Sexp.to_string_hum) ;
+          self#visit_t () vctx r )
+
+    method build_AOrderedIdx () _ (_, r, _) kgen vgen =
+      print_endline "OrderedIdx" ;
+      Gen.iter kgen ~f:(fun _ -> ()) ;
+      Gen.iter vgen ~f:(fun (key, vctx) ->
+          printf "OrderedIdx key: %s\n"
+            ([%sexp_of: Value.t list] key |> Sexp.to_string_hum) ;
+          self#visit_t () vctx r )
+
+    method build_ATuple () _ (rs, _) ctxs =
+      print_endline "Tuple" ;
+      List.iter2_exn ctxs rs ~f:(self#visit_t ())
+
+    method build_AEmpty () _ = print_endline "Empty"
+
+    method build_AScalar () _ _ v =
+      printf "Scalar: %s\n"
+        ([%sexp_of: Value.t] (Lazy.force v) |> Sexp.to_string_hum)
+
+    method build_Select () _ (_, r) ctx = self#visit_t () ctx r
+
+    method build_Filter () _ (_, r) ctx = self#visit_t () ctx r
+  end
+
+let run_print_test ?params query =
+  let layout = of_string_exn query |> M.resolve ?params in
+  M.annotate_schema layout ;
+  try (new print_fold)#run () layout with
+  | Invalid_argument msg | Failure msg -> printf "Error: %s\n" msg
+
+let%expect_test "sum-complex" =
+  run_print_test
+    "Select([sum(r1.f) + 5, count() + sum(r1.f / 2)], AList(r1, \
+     ATuple([AScalar(r1.f), AScalar(r1.g - r1.f)], cross)))" ;
+  [%expect
+    {|
+    List
+    List key: ((Int 1) (Int 2))
+    Tuple
+    Scalar: (Int 1)
+    Scalar: (Int 1)
+    List key: ((Int 1) (Int 3))
+    Tuple
+    Scalar: (Int 1)
+    Scalar: (Int 2)
+    List key: ((Int 2) (Int 1))
+    Tuple
+    Scalar: (Int 2)
+    Scalar: (Int -1)
+    List key: ((Int 2) (Int 2))
+    Tuple
+    Scalar: (Int 2)
+    Scalar: (Int 0)
+    List key: ((Int 3) (Int 4))
+    Tuple
+    Scalar: (Int 3)
+    Scalar: (Int 1) |}]
+
+let example_params =
+  [ Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p"
+  ; Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c" ]
+  |> Set.of_list (module Name.Compare_no_type)
+
+let%expect_test "example-1" =
+  run_print_test ~params:example_params
+    {|
+filter(lc.id = id_c && lp.id = id_p,
+alist(filter(succ > counter + 1, log) as lp,
+atuple([ascalar(lp.id), ascalar(lp.counter),
+alist(filter(lp.counter < log.counter &&
+log.counter < lp.succ, log) as lc,
+atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
+|};
+  [%expect {|
+    List
+    List key: ((Int 1) (Int 4) (Int 1))
+    Tuple
+    Scalar: (Int 1)
+    Scalar: (Int 1)
+    List
+    List key: ((Int 2) (Int 3) (Int 2))
+    Tuple
+    Scalar: (Int 2)
+    Scalar: (Int 2)
+    List key: ((Int 3) (Int 4) (Int 3))
+    Tuple
+    Scalar: (Int 3)
+    Scalar: (Int 3)
+    List key: ((Int 4) (Int 6) (Int 1))
+    Tuple
+    Scalar: (Int 1)
+    Scalar: (Int 4)
+    List
+    List key: ((Int 5) (Int 6) (Int 3))
+    Tuple
+    Scalar: (Int 3)
+    Scalar: (Int 5) |}]
+
+let%expect_test "example-2" =
+  run_print_test ~params:example_params
+    {|
+ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k], 
+      join(true, log as lp, log as lc))),
+  alist(select([lp.counter, lc.counter], 
+    join(lp.counter < lc.counter && 
+         lc.counter < lp.succ, 
+      filter(log.id = lp_k, log) as lp, 
+      filter(log.id = lc_k, log) as lc)),
+    atuple([ascalar(lp.counter), ascalar(lc.counter)], cross)),
+  (id_p, id_c))
+|};
+  [%expect {|
+    HashIdx
+    HashIdx key: ((Int 1) (Int 2))
+    List
+    List key: ((Int 1) (Int 2))
+    Tuple
+    Scalar: (Int 1)
+    Scalar: (Int 2)
+    HashIdx key: ((Int 1) (Int 3))
+    List
+    List key: ((Int 1) (Int 3))
+    Tuple
+    Scalar: (Int 1)
+    Scalar: (Int 3)
+    List key: ((Int 4) (Int 5))
+    Tuple
+    Scalar: (Int 4)
+    Scalar: (Int 5) |}]
+
+(* let%expect_test "example-3" =
+ *   run_print_test ~params:example_params
+ *     {|
+ * select([lp.counter, lc.counter],
+ *   atuple([ahashidx(select([id as k], log), 
+ *     alist(select([counter, succ], 
+ *         filter(k = id && counter < succ, log)), 
+ *       atuple([ascalar(counter), ascalar(succ)], cross)), 
+ *     id_p) as lp,
+ *   filter(lc.id = id_c,
+ *     aorderedidx(select([log.counter as k], log), 
+ *       alist(filter(log.counter = k, log),
+ *         atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
+ *       lp.counter, lp.succ) as lc)], cross))
+ * |} *)
 
 let%expect_test "subst" =
   let n = Name.of_string_exn in

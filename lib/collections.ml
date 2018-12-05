@@ -168,20 +168,19 @@ module Gen = struct
 
   let group_lazy eq g =
     let g = ref g in
+    let put_back t = g := Gen.append (Gen.singleton t) !g in
+    let get () = Gen.get !g in
     fun () ->
-      match Gen.get !g with
+      match get () with
       | None -> None
       | Some x ->
+          put_back x ;
           let group_gen () =
-            match Gen.get !g with
+            match get () with
             | None -> None
-            | Some x' ->
-                if eq x x' then Some x'
-                else (
-                  g := Gen.append (Gen.singleton x') !g ;
-                  None )
+            | Some x' -> if eq x x' then Some x' else ( put_back x' ; None )
           in
-          Some (x, Gen.append (Gen.singleton x) group_gen)
+          Some (x, group_gen)
 
   let rec junk_all g = match Gen.next g with Some _ -> junk_all g | None -> ()
 

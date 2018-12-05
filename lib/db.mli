@@ -17,14 +17,14 @@ val command_ok : Postgresql.result -> unit
 val result_to_strings : Postgresql.result -> string list list
 
 val exec_cursor :
-  ?batch_size:int -> ?params:string list -> t -> string -> string list Gen.t
+     ?batch_size:int
+  -> ?params:string list
+  -> t
+  -> Type.PrimType.t list
+  -> string
+  -> Value.t list Gen.t
 
 val load_value_exn : Type.PrimType.t -> string -> Value.t
-
-val load_tuple_exn : Name.t list -> string list -> (Name.t * Value.t) list
-
-val to_tuples :
-  Name.t list -> string list Gen.t -> Value.t Map.M(Name.Compare_no_type).t Gen.t
 
 module Field : sig
   type t = {fname: string; type_: Type.PrimType.t} [@@deriving compare, sexp]

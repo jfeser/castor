@@ -15,10 +15,10 @@ module type S = sig
   val resolve : ?params:Set.M(Name.Compare_no_type).t -> t -> t
 
   type eval_ctx =
-    [ `Concat of eval_ctx Gen.t
+    [ `Concat of eval_ctx list
     | `Empty
     | `For of (Value.t list * eval_ctx) Gen.t
-    | `Scalar of Value.t
+    | `Scalar of Value.t Lazy.t
     | `Query of Value.t list Gen.t ]
 
   val to_ctx : Value.t list -> eval_ctx
@@ -29,7 +29,7 @@ module type S = sig
         'ctx -> Meta.t -> t * t -> (Value.t list * eval_ctx) Gen.t -> 'a
 
       method virtual build_ATuple :
-        'ctx -> Meta.t -> t list * tuple -> eval_ctx Gen.t -> 'a
+        'ctx -> Meta.t -> t list * tuple -> eval_ctx list -> 'a
 
       method virtual build_AHashIdx :
            'ctx
@@ -49,7 +49,7 @@ module type S = sig
 
       method virtual build_AEmpty : 'ctx -> Meta.t -> 'a
 
-      method virtual build_AScalar : 'ctx -> Meta.t -> pred -> Value.t -> 'a
+      method virtual build_AScalar : 'ctx -> Meta.t -> pred -> Value.t Lazy.t -> 'a
 
       method virtual build_Select :
         'ctx -> Meta.t -> pred list * t -> eval_ctx -> 'a
@@ -60,4 +60,6 @@ module type S = sig
 
       method run : 'ctx -> t -> 'a
     end
+
+  val annotate_type : t -> Type.t -> unit
 end

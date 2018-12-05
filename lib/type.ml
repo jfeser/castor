@@ -193,7 +193,6 @@ let rec len =
   in
   function
   | EmptyT -> zero
-  | NullT -> failwith "Unexpected type."
   | IntT x -> byte_width ~nullable:x.nullable x.range |> abstract
   | FixedT x -> byte_width ~nullable:x.nullable x.value.range |> abstract
   | BoolT _ -> abstract 1
@@ -208,6 +207,7 @@ let rec len =
       count_len + len_len + body_len
   | T.HashIdxT _ | T.OrderedIdxT (_, _, _) -> (0, 100000000)
   | FuncT (ts, _) -> List.sum (module AbsInt) ts ~f:len
+  | NullT as t -> Error.(create "Unexpected type." t [%sexp_of: T.t] |> raise)
 
 (* let rec to_schema : t -> Db.Schema.t = function
  *   | EmptyT -> []

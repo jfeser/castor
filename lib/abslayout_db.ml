@@ -16,10 +16,10 @@ module Make (Config : Config.S) = struct
   open Abslayout
 
   type eval_ctx =
-    [ `Concat of eval_ctx Gen.t
+    [ `Concat of eval_ctx list
     | `Empty
     | `For of (Value.t list * eval_ctx) Gen.t
-    | `Scalar of Value.t
+    | `Scalar of Value.t Lazy.t
     | `Query of Value.t list Gen.t ]
 
   (* let elim_as r =
@@ -70,9 +70,8 @@ module Make (Config : Config.S) = struct
     | AEmpty -> `Empty
     | AScalar p -> `Scalar p
     | ATuple (ts, _) -> `Concat (List.map ts ~f:gen_query)
-    | Select (_, q) | Filter (_, q) -> gen_query q
-    | Scan _ | Dedup _ | OrderBy _ | GroupBy _ | Join _ | As _ ->
-        failwith "Unsupported."
+    | Select (_, q) | Filter (_, q) | As (_, q) -> gen_query q
+    | Scan _ | Dedup _ | OrderBy _ | GroupBy _ | Join _ -> failwith "Unsupported."
 
   let rec subst ctx = function
     | `For (q1, q2) -> `For (Abslayout.subst ctx q1, subst ctx q2)
@@ -81,10 +80,10 @@ module Make (Config : Config.S) = struct
     | `Empty -> `Empty
     | `Query q -> `Query (Abslayout.subst ctx q)
 
-  let to_ctx = function
+  let to_ctx : _ -> eval_ctx = function
     | [] -> failwith "unexpected empty tuple"
-    | [v] -> `Scalar v
-    | vs -> `Concat (List.map vs ~f:(fun v -> `Scalar v) |> Gen.of_list)
+    | [v] -> `Scalar (lazy v)
+    | vs -> `Concat (List.map vs ~f:(fun v -> `Scalar (lazy v)))
 
   (* let rename =
    *   let fresh = Fresh.create () in
@@ -100,6 +99,14 @@ module Make (Config : Config.S) = struct
    *     end
    *   in
    *   visitor#visit_t (Map.empty (module Name.Compare_no_type)) *)
+
+  let rec to_schema = function
+    | `For (q1, q2) ->
+        (Meta.(find_exn q1 schema) |> List.map ~f:Name.type_exn) @ to_schema q2
+    | `Concat qs -> IntT {nullable= false} :: List.concat_map qs ~f:to_schema
+    | `Scalar p -> [pred_to_schema p |> Name.type_exn]
+    | `Query q -> Meta.(find_exn q schema) |> List.map ~f:Name.type_exn
+    | `Empty -> []
 
   let query_to_sql q =
     let fresh = Fresh.create () in
@@ -130,19 +137,26 @@ module Make (Config : Config.S) = struct
           let queries, schemas =
             List.map queries ~f:Sql.to_subquery |> List.unzip
           in
+          let counter_name = Fresh.name fresh "counter%d" in
           let queries =
             List.mapi queries ~f:(fun i q ->
                 let select_list =
-                  List.mapi schemas ~f:(fun j ns ->
-                      let names = List.map ns ~f:Name.to_sql in
-                      if i = j then names
-                      else List.repeat "null" (List.length names) )
+                  List.mapi
+                    (List.zip_exn schemas (List.map qs ~f:to_schema))
+                    ~f:(fun j (ns, ts) ->
+                      if i = j then List.map ns ~f:Name.to_sql
+                      else
+                        List.map2_exn ns ts ~f:(fun n t ->
+                            sprintf "null::%s as \"%s\"" (Type.PrimType.to_sql t)
+                              n.name ) )
                   |> List.concat |> String.concat ~sep:", "
                 in
-                sprintf "select %d, %s from %s" i select_list q )
+                sprintf "select %d as %s, %s from %s" i counter_name select_list q
+            )
           in
           let query = String.concat ~sep:" union all " queries in
-          let schema = List.concat schemas in
+          let query = sprintf "%s order by %s" query counter_name in
+          let schema = [Name.create counter_name] @ List.concat schemas in
           {sql= `Subquery query; schema}
       | `Empty -> {sql= `Subquery "select limit 0"; schema= []}
       | `Scalar p ->
@@ -154,14 +168,14 @@ module Make (Config : Config.S) = struct
     query_to_sql q
 
   let eval_query q =
-    let sql = query_to_sql q |> Sql.to_query in
-    let tups = Db.exec_cursor conn sql in
+    let sql = query_to_sql q in
+    let tups = Db.exec_cursor conn (to_schema q) (Sql.to_query sql) in
     let rec eval tups = function
       | `For (q1, q2) ->
           let extract_tup s t = List.take t (List.length s) in
           let outer_schema = Meta.(find_exn q1 schema) in
           let eq t1 t2 =
-            [%compare.equal: string list]
+            [%compare.equal: Value.t list]
               (extract_tup outer_schema t1)
               (extract_tup outer_schema t2)
           in
@@ -169,48 +183,59 @@ module Make (Config : Config.S) = struct
           `For
             ( Gen.group_lazy eq tups
             |> Gen.map ~f:(fun (t, ts) ->
-                   let t =
-                     Db.load_tuple_exn outer_schema (List.take t outer_width)
-                     |> List.map ~f:(fun (_, v) -> v)
-                   in
+                   let t = List.take t outer_width in
                    let ts = Gen.map ts ~f:(fun t -> List.drop t outer_width) in
                    (t, eval ts q2) ) )
       | `Concat qs ->
-          let eq t1 t2 = String.(List.hd_exn t1 = List.hd_exn t2) in
           let widths = List.map qs ~f:width in
-          let streams =
-            Gen.group_lazy eq tups
-            |> Gen.mapi ~f:(fun gidx (_, ts) ->
-                   let drop_ct =
-                     List.sum (module Int) (List.take widths gidx) ~f:(fun x -> x)
-                   in
-                   let width = List.nth_exn widths gidx in
-                   Gen.map ts ~f:(fun t ->
-                       let t = List.drop t drop_ct in
-                       List.take t width ) )
+          let tups = ref tups in
+          let put_back t = tups := Gen.append (Gen.singleton t) !tups in
+          let take_while pred =
+            let stop = ref false in
+            let next () =
+              if !stop then None
+              else
+                match Gen.get !tups with
+                | Some x ->
+                    if pred x then Some x
+                    else (
+                      stop := true ;
+                      put_back x ;
+                      None )
+                | None -> None
+            in
+            next
           in
-          let streams = Gen.map2 streams (Gen.of_list qs) ~f:eval in
+          let streams =
+            List.mapi qs ~f:(fun gidx q ->
+                let drop_ct =
+                  List.sum (module Int) (List.take widths gidx) ~f:(fun x -> x) + 1
+                in
+                let take_ct = width q in
+                let strm =
+                  take_while (fun t -> List.hd_exn t |> Value.to_int = gidx)
+                  |> Gen.map ~f:(fun t ->
+                         let t = List.drop t drop_ct in
+                         List.take t take_ct )
+                in
+                eval strm q )
+          in
           `Concat streams
       | `Empty ->
           if Gen.is_empty tups then `Empty
           else failwith "Expected an empty generator."
-      | `Scalar p -> (
-        match Gen.next tups with
-        | Some [x] ->
-            let type_ = Name.type_exn (pred_to_schema p) in
-            `Scalar (Db.load_value_exn type_ x)
-        | Some t ->
-            Error.(
-              create "Scalar: unexpected tuple width." (p, t)
-                [%sexp_of: pred * string list]
-              |> raise)
-        | None -> failwith "Expected a tuple." )
-      | `Query q ->
-          let schema = Meta.(find_exn q schema) in
-          `Query
-            (Gen.map tups ~f:(fun x ->
-                 let _, vs = Db.load_tuple_exn schema x |> List.unzip in
-                 vs ))
+      | `Scalar p ->
+          `Scalar
+            ( lazy
+              ( match Gen.next tups with
+              | Some [x] -> x
+              | Some t ->
+                  Error.(
+                    create "Scalar: unexpected tuple width." (p, t)
+                      [%sexp_of: pred * Value.t list]
+                    |> raise)
+              | None -> failwith "Expected a tuple." ) )
+      | `Query _ -> `Query tups
     in
     eval tups q
 
@@ -239,7 +264,7 @@ module Make (Config : Config.S) = struct
 
       method virtual build_AEmpty : 'ctx -> Meta.t -> 'a
 
-      method virtual build_AScalar : 'ctx -> Meta.t -> pred -> Value.t -> 'a
+      method virtual build_AScalar : 'ctx -> Meta.t -> pred -> Value.t Lazy.t -> 'a
 
       method virtual build_Select
           : 'ctx -> Meta.t -> pred list * t -> eval_ctx -> 'a
@@ -251,18 +276,18 @@ module Make (Config : Config.S) = struct
         | AEmpty, `Empty -> self#build_AEmpty ctx r.meta
         | AScalar x, `Scalar v -> self#build_AScalar ctx r.meta x v
         | AList x, `For vs -> self#build_AList ctx r.meta x vs
-        | AHashIdx x, `Concat vs ->
+        | AHashIdx x, `Concat [kctx; vctx] ->
             let key_gen, value_gen =
-              match (Gen.get_exn vs, Gen.get_exn vs) with
+              match (kctx, vctx) with
               | `Query g1, `For g2 -> (g1, g2)
               | _ ->
                   Error.create "Bug: Mismatched context." r [%sexp_of: t]
                   |> Error.raise
             in
             self#build_AHashIdx ctx r.meta x key_gen value_gen
-        | AOrderedIdx x, `Concat vs ->
+        | AOrderedIdx x, `Concat [kctx; vctx] ->
             let key_gen, value_gen =
-              match (Gen.get_exn vs, Gen.get_exn vs) with
+              match (kctx, vctx) with
               | `Query g1, `For g2 -> (g1, g2)
               | _ ->
                   Error.create "Bug: Mismatched context." r [%sexp_of: t]
@@ -299,7 +324,7 @@ module Make (Config : Config.S) = struct
         method build_AEmpty () _ = EmptyT
 
         method build_AScalar () _ _ v =
-          match v with
+          match Lazy.force v with
           | Value.Date x ->
               let x = Date.to_int x in
               IntT {range= AbsInt.abstract x; nullable= false}
@@ -318,10 +343,8 @@ module Make (Config : Config.S) = struct
           in
           ListT (elem_type, {count= AbsInt.abstract num_elems})
 
-        method build_ATuple () _ (ls, kind) gen =
-          let elem_types =
-            Gen.map2 gen (Gen.of_list ls) ~f:(self#visit_t ()) |> Gen.to_list
-          in
+        method build_ATuple () _ (ls, kind) ctxs =
+          let elem_types = List.map2_exn ctxs ls ~f:(self#visit_t ()) in
           let counts = List.map elem_types ~f:count in
           match kind with
           | Zip ->
@@ -370,20 +393,6 @@ module Make (Config : Config.S) = struct
     Logs.info (fun m ->
         m "The type is: %s" (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ) ;
     type_
-
-  let annotate_subquery_types =
-    let annotate_type r =
-      let type_ = to_type r in
-      Meta.(set_m r type_) type_
-    in
-    let visitor =
-      object
-        inherit runtime_subquery_visitor
-
-        method visit_Subquery r = annotate_type r
-      end
-    in
-    visitor#visit_t ()
 
   (* let schema_visitor =
    *   let unnamed t = {name= ""; relation= None; type_= Some t} in
@@ -735,7 +744,7 @@ module Make (Config : Config.S) = struct
               end)
                 #visit_hash_idx () m
             in
-            (AHashIdx (r, l, m), union key_ctx value_ctx)
+            (AHashIdx (r, l, m), value_ctx)
         | AOrderedIdx (r, l, m) ->
             let r, key_ctx = resolve outer_ctx r in
             let l, value_ctx = resolve (union outer_ctx key_ctx) l in
@@ -761,4 +770,49 @@ module Make (Config : Config.S) = struct
     in
     let r, _ = resolve params r in
     r
+
+  let rec annotate_type r t =
+    let open Type in
+    match (r.node, t) with
+    | AScalar _, (IntT _ | FixedT _ | BoolT _ | StringT _ | NullT) ->
+        Meta.(set_m r type_ t)
+    | AList (_, r'), ListT (t', _) ->
+        Meta.(set_m r type_ t) ;
+        annotate_type r' t'
+    | AHashIdx (_, vr, m), HashIdxT (kt, vt, _) ->
+        Meta.(set_m r type_ t) ;
+        Option.iter m.hi_key_layout ~f:(fun kr -> annotate_type kr kt) ;
+        annotate_type vr vt
+    | AOrderedIdx (_, vr, m), OrderedIdxT (kt, vt, _) ->
+        Meta.(set_m r type_ t) ;
+        Option.iter m.oi_key_layout ~f:(fun kr -> annotate_type kr kt) ;
+        annotate_type vr vt
+    | ATuple (rs, _), TupleT (ts, _) -> (
+        Meta.(set_m r type_ t) ;
+        match List.iter2 rs ts ~f:annotate_type with
+        | Ok () -> ()
+        | Unequal_lengths ->
+            Error.(
+              create "Mismatched tuple type." (r, t) [%sexp_of: Abslayout.t * T.t]
+              |> raise) )
+    | (Filter (_, r') | Select (_, r')), FuncT ([t'], _) ->
+        Meta.(set_m r type_ t) ;
+        annotate_type r' t'
+    | _ ->
+        Error.create "Unexpected type." (r, t) [%sexp_of: Abslayout.t * t]
+        |> Error.raise
+
+  let annotate_subquery_types =
+    let annotate_type r =
+      let type_ = to_type r in
+      Meta.(set_m r type_) type_
+    in
+    let visitor =
+      object
+        inherit runtime_subquery_visitor
+
+        method visit_Subquery r = annotate_type r
+      end
+    in
+    visitor#visit_t ()
 end

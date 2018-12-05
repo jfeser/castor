@@ -137,9 +137,33 @@ module Field = struct
   [@@deriving compare, hash, sexp]
 end
 
+let load_value_exn type_ v =
+  match type_ with
+  | Type.PrimType.IntT _ -> Value.Int (Int.of_string v)
+  | StringT _ -> String v
+  | BoolT _ -> (
+    match v with
+    | "t" -> Bool true
+    | "f" -> Bool false
+    | _ -> failwith "Unknown boolean value." )
+  | FixedT _ -> Fixed (Fixed_point.of_string v)
+  | NullT | VoidT | TupleT _ -> failwith "Not possible column types."
+
+let load_tuples_exn s r =
+  ( if List.length s <> r#nfields then
+    Error.(of_string "Unexpected tuple width." |> raise) ) ;
+  Gen.init ~limit:r#ntuples (fun tidx ->
+      List.mapi s ~f:(fun fidx type_ ->
+          if r#getisnull tidx fidx then Value.Null
+          else load_value_exn type_ (r#getvalue tidx fidx) ) )
+
+(* |> Gen.map ~f:(fun t ->
+   *        Stdio.print_endline ([%sexp_of: Value.t list] t |> Sexp.to_string_hum) ;
+   *        t ) *)
+
 let exec_cursor =
   let fresh = Fresh.create () in
-  fun ?(batch_size = 10000) ?(params = []) db query ->
+  fun ?(batch_size = 10000) ?(params = []) db schema query ->
     let db = create db.uri in
     Caml.Gc.finalise (fun db -> try (db.conn)#finish with Failure _ -> ()) db ;
     let query = subst_params params query in
@@ -161,7 +185,7 @@ let exec_cursor =
                 |> raise)
           | `Not_done idx ->
               let r = exec db fetch_query in
-              let tups = r#get_all_lst |> Gen.of_list in
+              let tups = load_tuples_exn schema r in
               db_idx := !db_idx + r#ntuples ;
               let idx = idx + r#ntuples in
               let state = if r#ntuples < batch_size then `Done else `Not_done idx in
@@ -170,33 +194,3 @@ let exec_cursor =
       |> Gen.flatten
     in
     seq
-
-let load_value_exn type_ v =
-  if String.(v = "") then Value.Null
-  else
-    match type_ with
-    | Type.PrimType.IntT _ -> Int (Int.of_string v)
-    | StringT _ -> String v
-    | BoolT _ -> (
-      match v with
-      | "t" -> Bool true
-      | "f" -> Bool false
-      | _ -> failwith "Unknown boolean value." )
-    | FixedT _ -> Fixed (Fixed_point.of_string v)
-    | NullT | VoidT | TupleT _ -> failwith "Not possible column types."
-
-let load_tuple_exn s vs =
-  match
-    List.map2 vs s ~f:(fun v name ->
-        let value = load_value_exn (Name.type_exn name) v in
-        (name, value) )
-  with
-  | Ok v -> v
-  | Unequal_lengths ->
-      Error.create "Unexpected tuple width." (s, vs)
-        [%sexp_of: Name.t list * string list]
-      |> Error.raise
-
-let to_tuples s =
-  Gen.map ~f:(fun ts ->
-      load_tuple_exn s ts |> Map.of_alist_exn (module Name.Compare_no_type) )

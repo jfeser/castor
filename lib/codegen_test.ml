@@ -202,78 +202,106 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
 
     exited normally |}]
 
-let%expect_test "example-2" =
-  run_test ~params:example_params ~print_layout:false
-    {|
-select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k], 
-      join(true, log as lp, log as lc))),
-  alist(select([lp.counter, lc.counter], 
-    join(lp.counter < lc.counter && 
-         lc.counter < lp.succ, 
-      filter(log.id = lp_k, log) as lp, 
-      filter(log.id = lc_k, log) as lc)),
-    atuple([ascalar(lp.counter), ascalar(lc.counter)], cross)),
-  (id_p, id_c)))
-|} ;
-  [%expect {|
-    1,2,
-
-    exited normally |}]
-
-let%expect_test "example-2-str" =
-  run_test ~params:example_str_params ~print_layout:false
-    {|
-select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k], 
-      join(true, log_str as lp, log_str as lc))),
-  alist(select([lp.counter, lc.counter], 
-    join(lp.counter < lc.counter && 
-         lc.counter < lp.succ, 
-      filter(log_str.id = lp_k, log_str) as lp, 
-      filter(log_str.id = lc_k, log_str) as lc)),
-    atuple([ascalar(lp.counter), ascalar(lc.counter)], cross)),
-  (id_p, id_c)))
-|} ;
-  [%expect {|
-    1,2,
-
-    exited normally |}]
-
-let%expect_test "example-3" =
-  run_test ~params:example_params ~print_layout:false
-    {|
-select([lp.counter, lc.counter],
-  atuple([ahashidx(dedup(select([id as k1], log)), 
-    alist(select([counter, succ], 
-        filter(k1 = id && counter < succ, log)), 
-      atuple([ascalar(counter), ascalar(succ)], cross)), 
-    id_p) as lp,
-  filter(lc.id = id_c,
-    aorderedidx(select([log.counter as k2], log), 
-      alist(filter(log.counter = k2, log),
-        atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
-      lp.counter, lp.succ) as lc)], cross))
-|} ;
-  [%expect {|
-    1,2,
-
-    exited normally |}]
-
-let%expect_test "example-3-str" =
-  run_test ~params:example_str_params ~print_layout:false
-    {|
-select([lp.counter, lc.counter],
-  atuple([ahashidx(dedup(select([id as k1], log_str)), 
-    alist(select([counter, succ], 
-        filter(k1 = id && counter < succ, log_str)), 
-      atuple([ascalar(counter), ascalar(succ)], cross)), 
-    id_p) as lp,
-  filter(lc.id = id_c,
-    aorderedidx(select([log_str.counter as k2], log_str), 
-      alist(filter(log_str.counter = k2, log_str),
-        atuple([ascalar(log_str.id), ascalar(log_str.counter)], cross)), 
-      lp.counter, lp.succ) as lc)], cross))
-|} ;
-  [%expect {|
-    1,2,
-
-    exited normally |}]
+(* let%expect_test "example-1-db" =
+ *   run_test ~params:example_db_params ~modules:make_modules_db ~print_layout:false
+ *     {|
+ * select([lp.counter, lc.counter], filter(lc.id = id_c && lp.id = id_p,
+ * alist(filter(succ > counter + 1, log_str) as lp,
+ * atuple([ascalar(lp.id), ascalar(lp.counter),
+ * alist(filter(lp.counter < log_str.counter &&
+ * log_str.counter < lp.succ, log_str) as lc,
+ * atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
+ * |} ;
+ *   [%expect {|
+ *     1,2,
+ * 
+ *     exited normally |}]
+ * 
+ * (\* let%expect_test "example-1-db" =
+ *  *   run_test ~params:example_db_params ~modules:make_modules_db ~print_layout:false
+ *  *     {|
+ *  * select([lp.counter, lc.counter], filter(lc.id = id_c && lp.id = id_p,
+ *  * alist(filter(succ > counter + 1, log_bench) as lp,
+ *  * atuple([ascalar(lp.id), ascalar(lp.counter),
+ *  * alist(filter(lp.counter < log_bench.counter &&
+ *  * log_bench.counter < lp.succ, log_bench) as lc,
+ *  * atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
+ *  * |} ;
+ *  *   [%expect {|
+ *  *     exited normally |}] *\)
+ * 
+ * let%expect_test "example-2" =
+ *   run_test ~params:example_params ~print_layout:false
+ *     {|
+ * select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k], 
+ *       join(true, log as lp, log as lc))),
+ *   alist(select([lp.counter, lc.counter], 
+ *     join(lp.counter < lc.counter && 
+ *          lc.counter < lp.succ, 
+ *       filter(log.id = lp_k, log) as lp, 
+ *       filter(log.id = lc_k, log) as lc)),
+ *     atuple([ascalar(lp.counter), ascalar(lc.counter)], cross)),
+ *   (id_p, id_c)))
+ * |} ;
+ *   [%expect {|
+ *     1,2,
+ * 
+ *     exited normally |}]
+ * 
+ * let%expect_test "example-2-str" =
+ *   run_test ~params:example_str_params ~print_layout:false
+ *     {|
+ * select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k], 
+ *       join(true, log_str as lp, log_str as lc))),
+ *   alist(select([lp.counter, lc.counter], 
+ *     join(lp.counter < lc.counter && 
+ *          lc.counter < lp.succ, 
+ *       filter(log_str.id = lp_k, log_str) as lp, 
+ *       filter(log_str.id = lc_k, log_str) as lc)),
+ *     atuple([ascalar(lp.counter), ascalar(lc.counter)], cross)),
+ *   (id_p, id_c)))
+ * |} ;
+ *   [%expect {|
+ *     1,2,
+ * 
+ *     exited normally |}]
+ * 
+ * let%expect_test "example-3" =
+ *   run_test ~params:example_params ~print_layout:false
+ *     {|
+ * select([lp.counter, lc.counter],
+ *   atuple([ahashidx(dedup(select([id as k], log)), 
+ *     alist(select([counter, succ], 
+ *         filter(k = id && counter < succ, log)), 
+ *       atuple([ascalar(counter), ascalar(succ)], cross)), 
+ *     id_p) as lp,
+ *   filter(lc.id = id_c,
+ *     aorderedidx(select([log.counter as k], log), 
+ *       alist(filter(log.counter = k, log),
+ *         atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
+ *       lp.counter, lp.succ) as lc)], cross))
+ * |} ;
+ *   [%expect {|
+ *     1,2,
+ * 
+ *     exited normally |}]
+ * 
+ * let%expect_test "example-3-str" =
+ *   run_test ~params:example_str_params ~print_layout:false
+ *     {|
+ * select([lp.counter, lc.counter],
+ *   atuple([ahashidx(dedup(select([id as k], log_str)), 
+ *     alist(select([counter, succ], 
+ *         filter(k = id && counter < succ, log_str)), 
+ *       atuple([ascalar(counter), ascalar(succ)], cross)), 
+ *     id_p) as lp,
+ *   filter(lc.id = id_c,
+ *     aorderedidx(select([log_str.counter as k], log_str), 
+ *       alist(filter(log_str.counter = k, log_str),
+ *         atuple([ascalar(log_str.id), ascalar(log_str.counter)], cross)), 
+ *       lp.counter, lp.succ) as lc)], cross))
+ * |} ;
+ *   [%expect {|
+ *     1,2,
+ * 
+ *     exited normally |}] *)

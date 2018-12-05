@@ -154,7 +154,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         ) ;
         seek sctx.writer end_pos
 
-      method build_ATuple sctx meta (elem_layouts, _) gen =
+      method build_ATuple sctx meta (elem_layouts, _) ctxs =
         let t = Meta.Direct.find_exn meta Meta.type_ in
         (* Reserve space for header. *)
         let hdr = make_header t in
@@ -162,9 +162,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         write_bytes sctx.writer (Bytes.make (size_exn hdr "len") '\x00') ;
         (* Serialize body *)
         Log.with_msg sctx "Tuple body" (fun () ->
-            List.iter elem_layouts ~f:(fun l ->
-                let ectx = Gen.get_exn gen in
-                self#visit_t sctx ectx l ) ) ;
+            List.iter2_exn ctxs elem_layouts ~f:(self#visit_t sctx) ) ;
         let end_pos = pos sctx.writer in
         (* Serialize header. *)
         seek sctx.writer header_pos ;
@@ -258,7 +256,14 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         Log.with_msg sctx "Table values" (fun () ->
             Gen.iter gen ~f:(fun (key, vctx) ->
                 let value_pos = pos sctx.writer in
-                let hash_val = Hashtbl.find_exn hash (serialize_key key) in
+                let skey = serialize_key key in
+                let hash_val =
+                  match Hashtbl.find hash skey with
+                  | Some v -> v
+                  | None ->
+                      Error.(
+                        create "BUG: Missing key." skey [%sexp_of: string] |> raise)
+                in
                 hash_table.(hash_val)
                 <- Pos.(value_pos |> to_bytes_exn |> Int64.to_int_exn) ;
                 self#visit_t sctx (M.to_ctx key) key_l ;
@@ -332,9 +337,10 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
       method build_AScalar sctx meta _ value =
         let type_ = Meta.Direct.(find_exn meta Meta.type_) in
         Log.with_msg sctx
-          (sprintf "Scalar (=%s)" ([%sexp_of: Value.t] value |> Sexp.to_string_hum))
+          (sprintf "Scalar (=%s)"
+             ([%sexp_of: Value.t] (Lazy.force value) |> Sexp.to_string_hum))
           (fun () ->
-            match value with
+            match Lazy.force value with
             | Null -> serialize_null sctx type_
             | Date x -> serialize_int sctx type_ (Date.to_int x)
             | Int x -> serialize_int sctx type_ x
@@ -368,13 +374,16 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
     (* Serialize the main layout. *)
     let sctx = {writer; log_ch} in
     let serializer = new serialize_fold in
+    M.annotate_type l (M.to_type l) ;
     serializer#run sctx l ;
     (* Serialize subquery layouts. *)
     let subquery_visitor =
       object
         inherit Abslayout0.runtime_subquery_visitor
 
-        method visit_Subquery r = serializer#run sctx r
+        method visit_Subquery r =
+          M.annotate_type r (M.to_type r) ;
+          serializer#run sctx r
       end
     in
     subquery_visitor#visit_t () l ;

@@ -26,6 +26,13 @@ module PrimType = struct
     | `Bool _ -> BoolT {nullable= false}
     | `Null -> NullT
 
+  let to_sql = function
+    | BoolT _ -> "boolean"
+    | IntT _ -> "integer"
+    | FixedT _ -> "numeric"
+    | StringT _ -> "varchar"
+    | _ -> failwith "Not a value type."
+
   let to_string : t -> string = function
     | BoolT _ -> "bool"
     | IntT _ -> "int"
