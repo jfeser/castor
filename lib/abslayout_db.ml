@@ -22,39 +22,6 @@ module Make (Config : Config.S) = struct
     | `Scalar of Value.t Lazy.t
     | `Query of Value.t list Gen.t ]
 
-  (* let elim_as r =
-   *   let subst_ctx = ref (Map.empty (module Name.Compare_no_type)) in
-   *   let visitor =
-   *     object
-   *       inherit [_] Abslayout0.map as super
-   * 
-   *       method! visit_t () r =
-   *         match r.node with
-   *         | As (s, r) ->
-   *             let meta = r.meta in
-   *             let schema = Meta.Direct.(find_exn meta Meta.schema) in
-   *             let name_map =
-   *               List.map schema ~f:(fun n ->
-   *                   (n, {n with relation= None; name= sprintf "%s_%s" s n.name}))
-   *             in
-   *             let schema' =
-   *               List.map schema ~f:(fun n ->
-   *                   let n' =
-   *                     {n with relation= None; name= sprintf "%s_%s" s n.name}
-   *                   in
-   *                   subst_ctx := Map.add_exn !subst_ctx ~key:n ~data:(Name n') ;
-   *                   n' )
-   *             in
-   *             let fields = List.map schema' ~f:(fun n -> As_pred Name n) in
-   *             let r' = select fields r in
-   *             Meta.(set_m r' schema schema') ;
-   *             r'
-   *         | _ -> super#visit_t () r
-   *     end
-   *   in
-   *   let r' = visitor#visit_t () r in
-   *   Abslayout.subst !subst_ctx r' *)
-
   let rec width = function
     | `Empty -> 0
     | `For (q1, q2) -> List.length Meta.(find_exn q1 schema) + width q2
@@ -84,21 +51,6 @@ module Make (Config : Config.S) = struct
     | [] -> failwith "unexpected empty tuple"
     | [v] -> `Scalar (lazy v)
     | vs -> `Concat (List.map vs ~f:(fun v -> `Scalar (lazy v)))
-
-  (* let rename =
-   *   let fresh = Fresh.create () in
-   *   let visitor =
-   *     object (self)
-   *       inherit [_] Abslayout0.mapreduce
-   *       inherit [_] Util.list_monoid
-   *       
-   *       method! visit_pred ctx p = subst_pred ctx p, self#zero
-   *       method! visit_Scan ctx rname =
-   *         let fields = List.map (Db.Relation.from_db conn rname) ~f:(fun f ->
-   *           )
-   *     end
-   *   in
-   *   visitor#visit_t (Map.empty (module Name.Compare_no_type)) *)
 
   let rec to_schema = function
     | `For (q1, q2) ->

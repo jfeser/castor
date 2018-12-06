@@ -25,7 +25,7 @@ let to_query {sql; _} =
   match sql with `Scan tbl -> sprintf "select * from %s" tbl | `Subquery q -> q
 
 let rec pred_to_sql = function
-  | As_pred (p, n) -> sprintf "%s as %s" (pred_to_sql p) n
+  | As_pred (p, n) -> sprintf "%s as \"%s\"" (pred_to_sql p) n
   | Name n -> sprintf "%s" (Name.to_sql n)
   | Int x -> Int.to_string x
   | Fixed x -> Fixed_point.to_string x
@@ -85,7 +85,7 @@ and agg_to_sql p =
   | `Agg -> pred_to_sql p
   | `Scalar -> (
     match pred_to_name p with
-    | Some n -> sprintf "min(%s) as %s" (pred_to_sql p) n.name
+    | Some n -> sprintf "min(%s) as \"%s\"" (pred_to_sql p) n.name
     | None -> sprintf "null" )
 
 and ralgebra_to_sql_helper r =
@@ -218,26 +218,3 @@ and ralgebra_to_sql_helper r =
 let of_ralgebra = ralgebra_to_sql_helper
 
 let ralgebra_to_sql r = to_query (ralgebra_to_sql_helper r)
-
-(* let ralgebra_foreach_helper q1 q2 =
- *   let sql1, s1 = to_subquery (ralgebra_to_sql_helper q1) in
- *   let q2 =
- *     let ctx =
- *       List.zip_exn s1 Meta.(find_exn q1 schema)
- *       |> List.map ~f:(fun (n, n') -> (n, Name n'))
- *       |> Map.of_alist_exn (module Name.Compare_no_type)
- *     in
- *     subst ctx q2
- *   in
- *   let sql2, s2 =  in
- *   let q1_fields = List.map s1 ~f:Name.to_sql in
- *   let q2_fields = List.map s2 ~f:Name.to_sql in
- *   let fields_str = String.concat ~sep:", " (q1_fields @ q2_fields) in
- *   let q1_fields_str = String.concat q1_fields ~sep:", " in
- *   { sql=
- *       `Subquery
- *         (sprintf "select %s from %s, lateral %s order by (%s)" fields_str sql1 sql2
- *            q1_fields_str)
- *   ; schema= s1 @ s2 }
- * 
- * let ralgebra_foreach q1 q2 = ralgebra_foreach_helper q1 (to_subquery (ralgebra_to_sql_helper q2)) |> to_query *)
