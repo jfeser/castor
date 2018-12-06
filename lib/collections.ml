@@ -237,6 +237,10 @@ module Fresh = struct
     let n = Printf.sprintf fmt x.ctr in
     x.ctr <- x.ctr + 1 ;
     if Hash_set.mem x.names n then name x fmt else ( Hash_set.add x.names n ; n )
+
+  let int x =
+    x.ctr <- x.ctr + 1 ;
+    x.ctr
 end
 
 module String = struct

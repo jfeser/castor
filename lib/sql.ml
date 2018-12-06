@@ -24,8 +24,13 @@ let to_subquery ?alias {sql; schema} =
 let to_query {sql; _} =
   match sql with `Scan tbl -> sprintf "select * from %s" tbl | `Subquery q -> q
 
+let fresh_sql_name n =
+  match n.Name.relation with
+  | Some r -> sprintf "%s_%s_%d" r n.name (Fresh.int fresh)
+  | None -> sprintf "%s_%d" n.name (Fresh.int fresh)
+
 let rec pred_to_sql = function
-  | As_pred (p, n) -> sprintf "%s as \"%s\"" (pred_to_sql p) n
+  | As_pred (p, _) -> pred_to_sql p
   | Name n -> sprintf "%s" (Name.to_sql n)
   | Int x -> Int.to_string x
   | Fixed x -> Fixed_point.to_string x
@@ -83,10 +88,7 @@ let rec pred_to_sql = function
 and agg_to_sql p =
   match pred_kind p with
   | `Agg -> pred_to_sql p
-  | `Scalar -> (
-    match pred_to_name p with
-    | Some n -> sprintf "min(%s) as \"%s\"" (pred_to_sql p) n.name
-    | None -> sprintf "null" )
+  | `Scalar -> sprintf "min(%s)" (pred_to_sql p)
 
 and ralgebra_to_sql_helper r =
   let rec f ({node; _} as r) =
@@ -103,13 +105,24 @@ and ralgebra_to_sql_helper r =
           in
           List.map fs ~f:(subst_pred ctx)
         in
+        let fields =
+          List.map fields ~f:(fun p ->
+              let field_name =
+                match pred_to_name p with
+                | Some n -> fresh_sql_name n
+                | None -> Fresh.name fresh "x%d"
+              in
+              (p, field_name) )
+        in
         let fields_str =
           let field_to_sql =
             match select_kind fs with `Agg -> agg_to_sql | `Scalar -> pred_to_sql
           in
-          fields |> List.map ~f:field_to_sql |> String.concat ~sep:", "
+          fields
+          |> List.map ~f:(fun (p, n) -> sprintf "%s as \"%s\"" (field_to_sql p) n)
+          |> String.concat ~sep:", "
         in
-        let new_schema = List.map fields ~f:pred_to_schema in
+        let new_schema = List.map fields ~f:(fun (_, n) -> Name.create n) in
         let new_query = sprintf "select %s from %s" fields_str sql in
         {sql= `Subquery new_query; schema= new_schema}
     | Filter (pred, r) ->
@@ -164,7 +177,10 @@ and ralgebra_to_sql_helper r =
         let sql, schema = to_subquery (f r) in
         let name_map =
           List.map schema ~f:(fun n ->
-              (n, {n with relation= None; name= sprintf "%s-%s" s n.name}) )
+              ( n
+              , { n with
+                  relation= None
+                ; name= sprintf "%s_%s_%d" s n.name (Fresh.int fresh) } ) )
         in
         let fields =
           List.map name_map ~f:(fun (n, n') ->

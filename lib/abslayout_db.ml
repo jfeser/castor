@@ -69,7 +69,7 @@ module Make (Config : Config.S) = struct
           let q2 =
             let ctx =
               List.zip_exn Meta.(find_exn q1 schema) s1
-              |> List.map ~f:(fun (n, n') -> (n, Name n'))
+              |> List.map ~f:(fun (n, n') -> (n, Name {n' with type_= n.type_}))
               |> Map.of_alist_exn (module Name.Compare_no_type)
             in
             subst ctx q2
@@ -249,10 +249,11 @@ module Make (Config : Config.S) = struct
         | ATuple x, `Concat vs -> self#build_ATuple ctx r.meta x vs
         | Select x, _ -> self#build_Select ctx r.meta x eval_ctx
         | Filter x, _ -> self#build_Filter ctx r.meta x eval_ctx
+        | As (_, r), _ -> self#visit_t ctx eval_ctx r
         | (AEmpty | AScalar _ | AList _ | AHashIdx _ | AOrderedIdx _ | ATuple _), _
           ->
             Error.create "Bug: Mismatched context." r [%sexp_of: t] |> Error.raise
-        | (Join _ | Dedup _ | OrderBy _ | Scan _ | GroupBy _ | As _), _ ->
+        | (Join _ | Dedup _ | OrderBy _ | Scan _ | GroupBy _), _ ->
             Error.create "Cannot materialize." r [%sexp_of: t] |> Error.raise
 
       method run ctx r = self#visit_t ctx (eval_query (gen_query r)) r
@@ -750,6 +751,7 @@ module Make (Config : Config.S) = struct
     | (Filter (_, r') | Select (_, r')), FuncT ([t'], _) ->
         Meta.(set_m r type_ t) ;
         annotate_type r' t'
+    | As (_, r), _ -> annotate_type r t
     | _ ->
         Error.create "Unexpected type." (r, t) [%sexp_of: Abslayout.t * t]
         |> Error.raise

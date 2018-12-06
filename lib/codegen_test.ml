@@ -251,42 +251,42 @@ select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as 
 
     exited normally |}]
 
-(* let%expect_test "example-3" =
- *   run_test ~params:example_params ~print_layout:false
- *     {|
- * select([lp.counter, lc.counter],
- *   atuple([ahashidx(dedup(select([id as k], log)), 
- *     alist(select([counter, succ], 
- *         filter(k = id && counter < succ, log)), 
- *       atuple([ascalar(counter), ascalar(succ)], cross)), 
- *     id_p) as lp,
- *   filter(lc.id = id_c,
- *     aorderedidx(select([log.counter as k], log), 
- *       alist(filter(log.counter = k, log),
- *         atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
- *       lp.counter, lp.succ) as lc)], cross))
- * |} ;
- *   [%expect {|
- *     1,2,
- * 
- *     exited normally |}] *)
+let%expect_test "example-3" =
+  run_test ~params:example_params ~print_layout:false
+    {|
+select([lp.counter, lc.counter],
+  atuple([ahashidx(dedup(select([id as k], log)), 
+    alist(select([counter, succ], 
+        filter(k = id && counter < succ, log)), 
+      atuple([ascalar(counter), ascalar(succ)], cross)), 
+    id_p) as lp,
+  filter(lc.id = id_c,
+    aorderedidx(select([log.counter as k], log), 
+      alist(filter(log.counter = k, log),
+        atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
+      lp.counter, lp.succ) as lc)], cross))
+|} ;
+  [%expect {|
+    1,2,
 
-(* let%expect_test "example-3-str" =
- *   run_test ~params:example_str_params ~print_layout:false
- *     {|
- * select([lp.counter, lc.counter],
- *   atuple([ahashidx(dedup(select([id as k], log_str)), 
- *     alist(select([counter, succ], 
- *         filter(k = id && counter < succ, log_str)), 
- *       atuple([ascalar(counter), ascalar(succ)], cross)), 
- *     id_p) as lp,
- *   filter(lc.id = id_c,
- *     aorderedidx(select([log_str.counter as k], log_str), 
- *       alist(filter(log_str.counter = k, log_str),
- *         atuple([ascalar(log_str.id), ascalar(log_str.counter)], cross)), 
- *       lp.counter, lp.succ) as lc)], cross))
- * |} ;
- *   [%expect {|
- *     1,2,
- * 
- *     exited normally |}] *)
+    exited normally |}]
+
+let%expect_test "example-3-str" =
+  run_test ~params:example_str_params ~print_layout:false
+    {|
+select([lp.counter, lc.counter],
+  atuple([ahashidx(dedup(select([id as k], log_str)), 
+    alist(select([counter, succ], 
+        filter(k = id && counter < succ, log_str)), 
+      atuple([ascalar(counter), ascalar(succ)], cross)), 
+    id_p) as lp,
+  filter(lc.id = id_c,
+    aorderedidx(select([log_str.counter as k], log_str), 
+      alist(filter(log_str.counter = k, log_str),
+        atuple([ascalar(log_str.id), ascalar(log_str.counter)], cross)), 
+      lp.counter, lp.succ) as lc)], cross))
+|} ;
+  [%expect {|
+    1,2,
+
+    exited normally |}]

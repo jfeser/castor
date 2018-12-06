@@ -156,21 +156,38 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
     Scalar: (Int 4)
     Scalar: (Int 5) |}]
 
-(* let%expect_test "example-3" =
- *   run_print_test ~params:example_params
- *     {|
- * select([lp.counter, lc.counter],
- *   atuple([ahashidx(select([id as k], log), 
- *     alist(select([counter, succ], 
- *         filter(k = id && counter < succ, log)), 
- *       atuple([ascalar(counter), ascalar(succ)], cross)), 
- *     id_p) as lp,
- *   filter(lc.id = id_c,
- *     aorderedidx(select([log.counter as k], log), 
- *       alist(filter(log.counter = k, log),
- *         atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
- *       lp.counter, lp.succ) as lc)], cross))
- * |} *)
+let%expect_test "example-3" =
+  run_print_test ~params:example_params
+    {|
+select([lp.counter, lc.counter],
+  atuple([ahashidx(select([id as k], log), 
+    alist(select([counter, succ], 
+        filter(k = id && counter < succ, log)), 
+      atuple([ascalar(counter), ascalar(succ)], cross)), 
+    id_p) as lp,
+  filter(lc.id = id_c,
+    aorderedidx(select([log.counter as k], log), 
+      alist(filter(log.counter = k, log),
+        atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
+      lp.counter, lp.succ) as lc)], cross))
+|};
+  [%expect {|
+    Tuple
+    HashIdx
+    HashIdx key: ((Int 1))
+    List
+    List key: ((Int 1) (Int 4))
+    Tuple
+    Scalar: (Int 1)
+    Scalar: (Int 4)
+    List key: ((Int 4) (Int 6))
+    Tuple
+    Scalar: (Int 4)
+    Scalar: (Int 6)
+    List key: ((Int 1) (Int 4))
+    Tuple
+    Scalar: (Int 1)
+    Error: Expected a tuple. |}]
 
 let%expect_test "subst" =
   let n = Name.of_string_exn in
