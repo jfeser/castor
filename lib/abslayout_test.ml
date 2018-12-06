@@ -96,8 +96,9 @@ atuple([ascalar(lp.id), ascalar(lp.counter),
 alist(filter(lp.counter < log.counter &&
 log.counter < lp.succ, log) as lc,
 atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
-|};
-  [%expect {|
+|} ;
+  [%expect
+    {|
     List
     List key: ((Int 1) (Int 4) (Int 1))
     Tuple
@@ -134,8 +135,9 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
       filter(log.id = lc_k, log) as lc)),
     atuple([ascalar(lp.counter), ascalar(lc.counter)], cross)),
   (id_p, id_c))
-|};
-  [%expect {|
+|} ;
+  [%expect
+    {|
     HashIdx
     HashIdx key: ((Int 1) (Int 2))
     List
