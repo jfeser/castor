@@ -8,7 +8,7 @@ homepage: "https://github.com/jfeser/castor"
 bug-reports: "https://github.com/jfeser/castor/issues"
 build: [["dune" "build" "-p" name "-j" jobs]]
 depends: [
-  "dune" {build & >= "1.1"}
+  "dune" {build & >= "1.1" & < "1.5g"}
   "menhir" {build}
 
   "bisect_ppx"
