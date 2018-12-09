@@ -170,7 +170,9 @@ module Make (Config : Config.S) = struct
   let rec eval_pred ctx p = eval_pred_shared eval ctx p
 
   and eval ctx query =
-    let sql = Sql.ralgebra_to_sql (subst (Map.map ctx ~f:pred_of_value) query) in
+    let sql =
+      Sql.(of_ralgebra (subst (Map.map ctx ~f:pred_of_value) query) |> to_sql)
+    in
     let schema = Meta.(find_exn query schema) in
     eval_with_schema schema sql |> Gen.map ~f:(Map.merge_right ctx)
 

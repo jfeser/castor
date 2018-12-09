@@ -87,6 +87,15 @@ end
 module Map = struct
   include Map
 
+  let merge_exn m1 m2 =
+    Map.merge m1 m2 ~f:(fun ~key:k v ->
+        match v with
+        | `Left x | `Right x -> Some x
+        | `Both _ ->
+            let cmp = Map.comparator m1 in
+            let sexp_of_k = cmp.sexp_of_t in
+            Error.(create "Key collision." k sexp_of_k |> raise) )
+
   let merge_right : ('k, 'v, _) t -> ('k, 'v, _) t -> ('k, 'v, _) t =
    fun m1 m2 ->
     merge m1 m2 ~f:(fun ~key:_ -> function

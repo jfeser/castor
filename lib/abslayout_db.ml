@@ -1,5 +1,4 @@
 open Base
-open Printf
 open Collections
 
 module type S = Abslayout_db_intf.S
@@ -65,63 +64,69 @@ module Make (Config : Config.S) = struct
     let rec query_to_sql q =
       match q with
       | `For (q1, q2) ->
-          let sql1, s1 = Sql.(to_subquery (of_ralgebra q1)) in
+          let open Sql in
+          let sql1 = of_ralgebra q1 in
+          let sql1_names = to_schema sql1 in
           let q2 =
             let ctx =
-              List.zip_exn Meta.(find_exn q1 schema) s1
-              |> List.map ~f:(fun (n, n') -> (n, Name {n' with type_= n.type_}))
+              List.zip_exn Meta.(find_exn q1 schema) sql1_names
+              |> List.map ~f:(fun (n, n') ->
+                     (n, Name (Name.create ?type_:n.type_ n')) )
               |> Map.of_alist_exn (module Name.Compare_no_type)
             in
             subst ctx q2
           in
-          let sql2, s2 = query_to_sql q2 |> Sql.to_subquery in
-          let q1_fields = List.map s1 ~f:Name.to_sql in
-          let q2_fields = List.map s2 ~f:Name.to_sql in
-          let fields_str = String.concat ~sep:", " (q1_fields @ q2_fields) in
-          let q1_fields_str = String.concat q1_fields ~sep:", " in
-          { sql=
-              `Subquery
-                (sprintf "select %s from %s, lateral %s order by (%s)" fields_str
-                   sql1 sql2 q1_fields_str)
-          ; schema= s1 @ s2 }
-      | `Concat qs ->
-          let queries = List.map qs ~f:query_to_sql in
-          let queries, schemas =
-            List.map queries ~f:Sql.to_subquery |> List.unzip
+          let sql2 = query_to_sql q2 in
+          let select_list =
+            let sql2_names = to_schema sql2 in
+            List.map (sql1_names @ sql2_names) ~f:(fun n ->
+                add_pred_alias (Name (Name.create n)) )
           in
+          Query
+            (create_query
+               ~order:
+                 (List.map sql1_names ~f:(fun n -> (Name (Name.create n), `Asc)))
+               ~relations:
+                 [ (`Subquery (sql1, Fresh.name fresh "t%d"), `Left)
+                 ; (`Subquery (sql2, Fresh.name fresh "t%d"), `Lateral) ]
+               select_list)
+      | `Concat qs ->
           let counter_name = Fresh.name fresh "counter%d" in
           let queries =
-            List.mapi queries ~f:(fun i q ->
-                let select_list =
-                  List.mapi
-                    (List.zip_exn schemas (List.map qs ~f:to_schema))
-                    ~f:(fun j (ns, ts) ->
-                      if i = j then List.map ns ~f:Name.to_sql
-                      else
-                        List.map2_exn ns ts ~f:(fun n t ->
-                            sprintf "null::%s as \"%s\"" (Type.PrimType.to_sql t)
-                              n.name ) )
-                  |> List.concat |> String.concat ~sep:", "
-                in
-                sprintf "select %d as %s, %s from %s" i counter_name select_list q
-            )
+            List.map qs ~f:(fun q ->
+                let sql = query_to_sql q in
+                let types = to_schema q in
+                let names = Sql.to_schema sql in
+                (sql, types, names) )
           in
-          let query = String.concat ~sep:" union all " queries in
-          let query = sprintf "%s order by %s" query counter_name in
-          let schema = [Name.create counter_name] @ List.concat schemas in
-          {sql= `Subquery query; schema}
-      | `Empty -> {sql= `Subquery "select limit 0"; schema= []}
-      | `Scalar p ->
-          let name = Fresh.name fresh "x%d" in
-          { sql= `Subquery (sprintf "select %s as %s" (Sql.pred_to_sql p) name)
-          ; schema= [Name.create name] }
+          let queries =
+            List.mapi queries ~f:(fun i (sql, _, _) ->
+                let select_list =
+                  (Int i, counter_name, None)
+                  :: ( List.mapi queries ~f:(fun j (_, types, names) ->
+                           if i = j then
+                             List.map names ~f:(fun n ->
+                                 (Name (Name.create n), n, None) )
+                           else
+                             List.map2_exn names types ~f:(fun n t ->
+                                 (Null, n, Some t) ) )
+                     |> List.concat )
+                in
+                let alias = Fresh.name fresh "t%d" in
+                Sql.create_query
+                  ~relations:[(`Subquery (sql, alias), `Left)]
+                  select_list )
+          in
+          Sql.Union_all queries
+      | `Empty -> Query (Sql.create_query ~limit:0 [])
+      | `Scalar p -> Query (Sql.create_query [(p, Fresh.name fresh "x%d", None)])
       | `Query q -> Sql.of_ralgebra q
     in
     query_to_sql q
 
   let eval_query q =
     let sql = query_to_sql q in
-    let tups = Db.exec_cursor conn (to_schema q) (Sql.to_query sql) in
+    let tups = Db.exec_cursor conn (to_schema q) (Sql.to_sql sql) in
     let rec eval tups = function
       | `For (q1, q2) ->
           let extract_tup s t = List.take t (List.length s) in
