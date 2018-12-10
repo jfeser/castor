@@ -27,6 +27,8 @@ let run_test ?(params = []) layout_str =
   let layout = M.annotate_key_layouts layout in
   annotate_foreach layout ;
   M.annotate_subquery_types layout ;
+  let type_ = M.to_type layout in
+  Stdio.print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ;
   I.irgen ~params ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter
 
 let run_test_db ?(params = []) layout_str =
@@ -69,6 +71,10 @@ let%expect_test "tuple-simple-cross" =
   run_test "ATuple([AScalar(1), AScalar(2)], cross)" ;
   [%expect
     {|
+    (TupleT
+     (((IntT ((range (1 1)) (nullable false)))
+       (IntT ((range (2 2)) (nullable false))))
+      ((count ((1 1))))))
     // Locals:
     // cstart4 : Int[nonnull] (persists=true)
     // cstart3 : Int[nonnull] (persists=true)
@@ -94,6 +100,10 @@ let%expect_test "tuple-simple-zip" =
   run_test "ATuple([AScalar(1), AScalar(2)], zip)" ;
   [%expect
     {|
+    (TupleT
+     (((IntT ((range (1 1)) (nullable false)))
+       (IntT ((range (2 2)) (nullable false))))
+      ((count ((1 1))))))
     // Locals:
     // start : Int[nonnull] (persists=true)
     fun zt_10 (start) : Tuple[Int[nonnull]] {
@@ -168,6 +178,14 @@ let%expect_test "sum-complex" =
      ATuple([AScalar(r1.f), AScalar(r1.g - r1.f)], cross)))" ;
   [%expect
     {|
+    (FuncT
+     (((ListT
+        ((TupleT
+          (((IntT ((range (1 3)) (nullable false)))
+            (IntT ((range (-1 2)) (nullable false))))
+           ((count ((1 1))))))
+         ((count (5 5))))))
+      (Width 2)))
     // Locals:
     // tup17 : Tuple[Int[nonnull], Int[nonnull]] (persists=false)
     // cstart25 : Int[nonnull] (persists=true)
@@ -251,6 +269,14 @@ let%expect_test "sum" =
      r1.f)], cross)))" ;
   [%expect
     {|
+    (FuncT
+     (((ListT
+        ((TupleT
+          (((IntT ((range (1 3)) (nullable false)))
+            (IntT ((range (-1 2)) (nullable false))))
+           ((count ((1 1))))))
+         ((count (5 5))))))
+      (Width 2)))
     // Locals:
     // cstart18 : Int[nonnull] (persists=true)
     // cstart21 : Int[nonnull] (persists=true)
@@ -325,6 +351,12 @@ let%expect_test "cross-tuple" =
   run_test "AList(r1, ATuple([AScalar(r1.f), AScalar(r1.g - r1.f)], cross))" ;
   [%expect
     {|
+    (ListT
+     ((TupleT
+       (((IntT ((range (1 3)) (nullable false)))
+         (IntT ((range (-1 2)) (nullable false))))
+        ((count ((1 1))))))
+      ((count (5 5)))))
     // Locals:
     // count8 : Int[nonnull] (persists=true)
     // i7 : Int[nonnull] (persists=true)
@@ -372,6 +404,12 @@ let%expect_test "hash-idx" =
      k, ascalar(k.f+1), f.f)], cross)" ;
   [%expect
     {|
+    (TupleT
+     (((ListT ((IntT ((range (1 3)) (nullable false))) ((count (5 5)))))
+       (HashIdxT
+        ((IntT ((range (1 3)) (nullable false)))
+         (IntT ((range (2 4)) (nullable false))) ((count ())))))
+      ((count ()))))
     // Locals:
     // kstart14 : Int[nonnull] (persists=false)
     // cstart11 : Int[nonnull] (persists=true)
@@ -458,6 +496,12 @@ let%expect_test "ordered-idx" =
      as k, ascalar(k.f+1), f.f, f.f+1)], cross)" ;
   [%expect
     {|
+    (TupleT
+     (((ListT ((IntT ((range (1 3)) (nullable false))) ((count (5 5)))))
+       (OrderedIdxT
+        ((IntT ((range (1 3)) (nullable false)))
+         (IntT ((range (2 4)) (nullable false))) ((count ())))))
+      ((count ()))))
     // Locals:
     // cstart18 : Int[nonnull] (persists=true)
     // key23 : Tuple[Int[nonnull]] (persists=true)
@@ -587,6 +631,20 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
 |} ;
   [%expect
     {|
+    (FuncT
+     (((ListT
+        ((TupleT
+          (((IntT ((range (1 1)) (nullable false)))
+            (IntT ((range (1 4)) (nullable false)))
+            (ListT
+             ((TupleT
+               (((IntT ((range (2 3)) (nullable false)))
+                 (IntT ((range (2 5)) (nullable false))))
+                ((count ((1 1))))))
+              ((count (1 2))))))
+           ((count ((1 2))))))
+         ((count (2 2))))))
+      Child_sum))
     // Locals:
     // cstart18 : Int[nonnull] (persists=true)
     // cstart21 : Int[nonnull] (persists=true)
@@ -600,16 +658,16 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
     // i13 : Int[nonnull] (persists=true)
     // i19 : Int[nonnull] (persists=true)
     fun printer () : Void {
-        cstart12 = 0;
+        cstart12 = 1;
         i13 = 0;
         count14 = 2;
         loop (i13 < count14) {
-            cstart15 = cstart12;
+            cstart15 = cstart12 + 1;
             cstart16 = cstart15 + 1;
             cstart17 = cstart16 + 1;
-            cstart18 = cstart17;
+            cstart18 = cstart17 + 1 + 1;
             i19 = 0;
-            count20 = 3;
+            count20 = buf[cstart17 : 1];
             loop (i19 < count20) {
                 cstart21 = cstart18;
                 cstart22 = cstart21 + 1;
@@ -624,7 +682,7 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
                 cstart18 = cstart18 + 2;
                 i19 = i19 + 1;
             }
-            cstart12 = cstart12 + 8;
+            cstart12 = cstart12 + buf[cstart12 : 1];
             i13 = i13 + 1;
         }
     }
@@ -643,16 +701,16 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
     // cstart5 : Int[nonnull] (persists=true)
     fun counter () : Int[nonnull] {
         c0 = 0;
-        cstart1 = 0;
+        cstart1 = 1;
         i2 = 0;
         count3 = 2;
         loop (i2 < count3) {
-            cstart4 = cstart1;
+            cstart4 = cstart1 + 1;
             cstart5 = cstart4 + 1;
             cstart6 = cstart5 + 1;
-            cstart7 = cstart6;
+            cstart7 = cstart6 + 1 + 1;
             i8 = 0;
-            count9 = 3;
+            count9 = buf[cstart6 : 1];
             loop (i8 < count9) {
                 cstart10 = cstart7;
                 cstart11 = cstart10 + 1;
@@ -664,7 +722,7 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
                 cstart7 = cstart7 + 2;
                 i8 = i8 + 1;
             }
-            cstart1 = cstart1 + 8;
+            cstart1 = cstart1 + buf[cstart1 : 1];
             i2 = i2 + 1;
         }
         return c0;
@@ -802,6 +860,18 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
 |} ;
   [%expect
     {|
+    (HashIdxT
+     ((TupleT
+       (((IntT ((range (1 1)) (nullable false)))
+         (IntT ((range (2 3)) (nullable false))))
+        ((count ((1 1))))))
+      (ListT
+       ((TupleT
+         (((IntT ((range (1 4)) (nullable false)))
+           (IntT ((range (2 5)) (nullable false))))
+          ((count ((1 1))))))
+        ((count (1 2)))))
+      ((count ()))))
     // Locals:
     // key13 : Tuple[Int[nonnull], Int[nonnull]] (persists=false)
     // i17 : Int[nonnull] (persists=true)
@@ -824,9 +894,9 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
              key13 = (buf[cstart14 : 1], buf[cstart15 : 1]);
              vstart12 = buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8] + 2;
              if (true && key13[0] = id_p && key13[1] = id_c) {
-                 cstart16 = vstart12;
+                 cstart16 = vstart12 + 1 + 1;
                  i17 = 0;
-                 count18 = 1;
+                 count18 = buf[vstart12 : 1];
                  loop (i17 < count18) {
                      cstart19 = cstart16;
                      cstart20 = cstart19 + 1;
@@ -865,9 +935,9 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
              key3 = (buf[cstart4 : 1], buf[cstart5 : 1]);
              vstart2 = buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8] + 2;
              if (true && key3[0] = id_p && key3[1] = id_c) {
-                 cstart6 = vstart2;
+                 cstart6 = vstart2 + 1 + 1;
                  i7 = 0;
-                 count8 = 1;
+                 count8 = buf[vstart2 : 1];
                  loop (i7 < count8) {
                      cstart9 = cstart6;
                      cstart10 = cstart9 + 1;
@@ -992,7 +1062,7 @@ let%expect_test "example-3" =
   run_test ~params:example_params
     {|
 select([lp.counter, lc.counter],
-  atuple([ahashidx(select([id as k], log), 
+  atuple([ahashidx(dedup(select([id as k], log)), 
     alist(select([counter, succ], 
         filter(k = id && counter < succ, log)), 
       atuple([ascalar(counter), ascalar(succ)], cross)), 
@@ -1005,6 +1075,30 @@ select([lp.counter, lc.counter],
 |} ;
   [%expect
     {|
+    (FuncT
+     (((TupleT
+        (((HashIdxT
+           ((IntT ((range (1 3)) (nullable false)))
+            (ListT
+             ((TupleT
+               (((IntT ((range (1 5)) (nullable false)))
+                 (IntT ((range (3 6)) (nullable false))))
+                ((count ((1 1))))))
+              ((count (1 2)))))
+            ((count ()))))
+          (FuncT
+           (((OrderedIdxT
+              ((IntT ((range (1 5)) (nullable false)))
+               (ListT
+                ((TupleT
+                  (((IntT ((range (1 3)) (nullable false)))
+                    (IntT ((range (1 5)) (nullable false))))
+                   ((count ((1 1))))))
+                 ((count (1 1)))))
+               ((count ())))))
+            Child_sum)))
+         ((count ())))))
+      (Width 2)))
     // Locals:
     // key44 : Tuple[Int[nonnull]] (persists=true)
     // vstart29 : Int[nonnull] (persists=false)
@@ -1046,9 +1140,9 @@ select([lp.counter, lc.counter],
              vstart29 = buf[cstart26 + 4 + 8 + buf[cstart26 + 4 : 8] + 8 +
              hash(cstart26 + 4 + 8, id_p) * 8 : 8] + 1;
              if (true && key30[0] = id_p) {
-                 cstart31 = vstart29;
+                 cstart31 = vstart29 + 1 + 1;
                  i32 = 0;
-                 count33 = 1;
+                 count33 = buf[vstart29 : 1];
                  loop (i32 < count33) {
                      cstart34 = cstart31;
                      cstart35 = cstart34 + 1;
@@ -1073,9 +1167,9 @@ select([lp.counter, lc.counter],
                              vstart37 = buf[cstart27 + 4 + 8 + low39 * 9 + 1 :
                              8];
                              key38 = key44;
-                             cstart45 = vstart37 + 1 + 1;
+                             cstart45 = vstart37;
                              i46 = 0;
-                             count47 = buf[vstart37 : 1];
+                             count47 = 1;
                              loop (i46 < count47) {
                                  cstart48 = cstart45;
                                  cstart49 = cstart48 + 1;
@@ -1147,9 +1241,9 @@ select([lp.counter, lc.counter],
              vstart4 = buf[cstart1 + 4 + 8 + buf[cstart1 + 4 : 8] + 8 +
              hash(cstart1 + 4 + 8, id_p) * 8 : 8] + 1;
              if (true && key5[0] = id_p) {
-                 cstart6 = vstart4;
+                 cstart6 = vstart4 + 1 + 1;
                  i7 = 0;
-                 count8 = 1;
+                 count8 = buf[vstart4 : 1];
                  loop (i7 < count8) {
                      cstart9 = cstart6;
                      cstart10 = cstart9 + 1;
@@ -1173,9 +1267,9 @@ select([lp.counter, lc.counter],
                                buf[cstart2 + 4 : 8] / 9) {
                              vstart12 = buf[cstart2 + 4 + 8 + low14 * 9 + 1 : 8];
                              key13 = key19;
-                             cstart20 = vstart12 + 1 + 1;
+                             cstart20 = vstart12;
                              i21 = 0;
-                             count22 = buf[vstart12 : 1];
+                             count22 = 1;
                              loop (i21 < count22) {
                                  cstart23 = cstart20;
                                  cstart24 = cstart23 + 1;
@@ -1213,6 +1307,11 @@ let%expect_test "subquery-first" =
 |} ;
   [%expect
     {|
+    (FuncT
+     (((FuncT
+        (((ListT ((IntT ((range (1 3)) (nullable false))) ((count (5 5))))))
+         Child_sum)))
+      (Width 1)))
     // Locals:
     // tup17 : Tuple[Int[nonnull]] (persists=false)
     // min19 : Int[nonnull] (persists=false)
@@ -1318,6 +1417,30 @@ select([lp.counter, lc.counter],
 |} ;
   [%expect
     {|
+    (FuncT
+     (((TupleT
+        (((HashIdxT
+           ((StringT ((nchars (3 8)) (nullable false)))
+            (ListT
+             ((TupleT
+               (((IntT ((range (1 5)) (nullable false)))
+                 (IntT ((range (3 6)) (nullable false))))
+                ((count ((1 1))))))
+              ((count (1 2)))))
+            ((count ()))))
+          (FuncT
+           (((OrderedIdxT
+              ((IntT ((range (1 5)) (nullable false)))
+               (ListT
+                ((TupleT
+                  (((StringT ((nchars (3 8)) (nullable false)))
+                    (IntT ((range (1 5)) (nullable false))))
+                   ((count ((1 1))))))
+                 ((count (1 1)))))
+               ((count ())))))
+            Child_sum)))
+         ((count ())))))
+      (Width 2)))
     // Locals:
     // key44 : Tuple[Int[nonnull]] (persists=true)
     // vstart29 : Int[nonnull] (persists=false)
