@@ -61,10 +61,14 @@ let join ?(fresh = global_fresh) s1 s2 sql1 sql2 pred =
   let pred = subst_pred (Map.merge_exn ctx1 ctx2) pred in
   let spj1 = to_spj sql1 in
   let spj2 = to_spj sql2 in
+  let select_list =
+    List.map (spj1.select @ spj2.select) ~f:(fun (_, n, _) ->
+        (Name (Name.create n), n, None) )
+  in
   Query
     (create_query ~conds:[pred]
        ~relations:[(`Subquery (sql1, a1), `Left); (`Subquery (sql2, a2), `Left)]
-       (spj1.select @ spj2.select))
+       select_list)
 
 let order_by schema sql key order =
   let ctx = subst_ctx sql schema in
@@ -111,7 +115,7 @@ let of_ralgebra ?(fresh = global_fresh) r =
     | Filter (pred, r) -> filter Meta.(find_exn r schema) (f r) pred
     | OrderBy {key; order; rel= r} ->
         order_by Meta.(find_exn r schema) (f r) key order
-    | Select (fs, r) -> select Meta.(find_exn r schema) (f r) fs
+    | Select (fs, r) -> select ~fresh Meta.(find_exn r schema) (f r) fs
     | Join {pred; r1; r2} ->
         join ~fresh
           Meta.(find_exn r1 schema)
@@ -194,9 +198,14 @@ and spj_to_sql {select; distinct; order; group; relations; conds; limit} =
   let select_sql =
     let select_list =
       List.map select ~f:(fun (p, n, t) ->
+          let alias_sql =
+            match p with
+            | Name n' when Name.Compare_no_type.(Name.create n = n') -> ""
+            | _ -> sprintf "as \"%s\"" n
+          in
           match Option.map t ~f:Type.PrimType.to_sql with
-          | Some t_sql -> sprintf "%s::%s as \"%s\"" (pred_to_sql p) t_sql n
-          | None -> sprintf "%s as \"%s\"" (pred_to_sql p) n )
+          | Some t_sql -> sprintf "%s::%s %s" (pred_to_sql p) t_sql alias_sql
+          | None -> sprintf "%s %s" (pred_to_sql p) alias_sql )
       |> String.concat ~sep:", "
     in
     let distinct_sql = if distinct then "distinct" else "" in
