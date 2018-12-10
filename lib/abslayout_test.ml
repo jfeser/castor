@@ -160,7 +160,7 @@ let%expect_test "example-3" =
   run_print_test ~params:example_params
     {|
 select([lp.counter, lc.counter],
-  atuple([ahashidx(select([id as k], log), 
+  atuple([ahashidx(dedup(select([id as k], log)), 
     alist(select([counter, succ], 
         filter(k = id && counter < succ, log)), 
       atuple([ascalar(counter), ascalar(succ)], cross)), 
@@ -184,10 +184,53 @@ select([lp.counter, lc.counter],
     Tuple
     Scalar: (Int 4)
     Scalar: (Int 6)
-    List key: ((Int 1) (Int 4))
+    HashIdx key: ((Int 2))
+    List
+    List key: ((Int 2) (Int 3))
+    Tuple
+    Scalar: (Int 2)
+    Scalar: (Int 3)
+    HashIdx key: ((Int 3))
+    List
+    List key: ((Int 3) (Int 4))
+    Tuple
+    Scalar: (Int 3)
+    Scalar: (Int 4)
+    List key: ((Int 5) (Int 6))
+    Tuple
+    Scalar: (Int 5)
+    Scalar: (Int 6)
+    OrderedIdx
+    OrderedIdx key: ((Int 1))
+    List
+    List key: ((Int 1) (Int 4) (Int 1))
     Tuple
     Scalar: (Int 1)
-    Error: Expected a tuple. |}]
+    Scalar: (Int 1)
+    OrderedIdx key: ((Int 2))
+    List
+    List key: ((Int 2) (Int 3) (Int 2))
+    Tuple
+    Scalar: (Int 2)
+    Scalar: (Int 2)
+    OrderedIdx key: ((Int 3))
+    List
+    List key: ((Int 3) (Int 4) (Int 3))
+    Tuple
+    Scalar: (Int 3)
+    Scalar: (Int 3)
+    OrderedIdx key: ((Int 4))
+    List
+    List key: ((Int 4) (Int 6) (Int 1))
+    Tuple
+    Scalar: (Int 1)
+    Scalar: (Int 4)
+    OrderedIdx key: ((Int 5))
+    List
+    List key: ((Int 5) (Int 6) (Int 3))
+    Tuple
+    Scalar: (Int 3)
+    Scalar: (Int 5) |}]
 
 let%expect_test "subst" =
   let n = Name.of_string_exn in
