@@ -24,9 +24,9 @@ let rec to_schema = function
   | Union_all [] -> failwith "No empty unions."
   | Union_all (q :: _) -> to_schema (Query q)
 
-let fresh = Fresh.create ()
+let global_fresh = Fresh.create ()
 
-let to_spj = function
+let to_spj ?(fresh = global_fresh) = function
   | Query q -> q
   | Union_all _ as q ->
       let alias = Fresh.name fresh "t%d" in
@@ -35,12 +35,12 @@ let to_spj = function
       in
       create_query ~relations:[(`Subquery (q, alias), `Left)] select_list
 
-let fresh_sql_name n =
-  match n.Name.relation with
-  | Some r -> sprintf "%s_%s_%d" r n.name (Fresh.int fresh)
-  | None -> sprintf "%s_%d" n.name (Fresh.int fresh)
-
-let add_pred_alias p =
+let add_pred_alias ?(fresh = global_fresh) p =
+  let fresh_sql_name n =
+    match n.Name.relation with
+    | Some r -> sprintf "%s_%s_%d" r n.name (Fresh.int fresh)
+    | None -> sprintf "%s_%d" n.name (Fresh.int fresh)
+  in
   let alias =
     match pred_to_name p with
     | Some n -> fresh_sql_name n
@@ -53,7 +53,7 @@ let subst_ctx sql schema =
   |> List.map ~f:(fun (n, n') -> (n, Name (Name.create n')))
   |> Map.of_alist_exn (module Name.Compare_no_type)
 
-let join s1 s2 sql1 sql2 pred =
+let join ?(fresh = global_fresh) s1 s2 sql1 sql2 pred =
   let a1 = Fresh.name fresh "t%d" in
   let a2 = Fresh.name fresh "t%d" in
   let ctx1 = subst_ctx sql1 s1 in
@@ -71,10 +71,14 @@ let order_by schema sql key order =
   let key = List.map key ~f:(fun p -> (subst_pred ctx p, order)) in
   Query {(to_spj sql) with order= key}
 
-let select schema sql fields =
+let select ?(fresh = global_fresh) schema sql fields =
+  let spj = to_spj sql in
+  let ctx =
+    List.map2_exn schema spj.select ~f:(fun n (p, _, _) -> (n, p))
+    |> Map.of_alist_exn (module Name.Compare_no_type)
+  in
   let fields =
-    let ctx = subst_ctx sql schema in
-    List.map fields ~f:(fun p -> p |> subst_pred ctx |> add_pred_alias)
+    List.map fields ~f:(fun p -> p |> subst_pred ctx |> add_pred_alias ~fresh)
   in
   Query {(to_spj sql) with select= fields}
 
@@ -90,7 +94,7 @@ let filter schema sql pred =
   let pred = subst_pred ctx pred in
   Query {spj with conds= pred :: spj.conds}
 
-let of_ralgebra r =
+let of_ralgebra ?(fresh = global_fresh) r =
   let rec f ({node; _} as r) =
     match node with
     | As (_, r) -> f r
@@ -103,19 +107,22 @@ let of_ralgebra r =
                 Meta.(find_exn r schema)
                 ~f:(fun n ->
                   let p = Name n in
-                  add_pred_alias p )))
+                  add_pred_alias ~fresh p )))
     | Filter (pred, r) -> filter Meta.(find_exn r schema) (f r) pred
     | OrderBy {key; order; rel= r} ->
         order_by Meta.(find_exn r schema) (f r) key order
     | Select (fs, r) -> select Meta.(find_exn r schema) (f r) fs
     | Join {pred; r1; r2} ->
-        join Meta.(find_exn r1 schema) Meta.(find_exn r2 schema) (f r1) (f r2) pred
+        join ~fresh
+          Meta.(find_exn r1 schema)
+          Meta.(find_exn r2 schema)
+          (f r1) (f r2) pred
     | GroupBy (ps, key, r) ->
         let sql = f r in
         let ctx = subst_ctx sql Meta.(find_exn r schema) in
         let key = List.map key ~f:(fun p -> subst_pred ctx (Name p)) in
         let preds =
-          List.map ps ~f:(fun p -> p |> subst_pred ctx |> add_pred_alias)
+          List.map ps ~f:(fun p -> p |> subst_pred ctx |> add_pred_alias ~fresh)
         in
         let alias = Fresh.name fresh "t%d" in
         Query
@@ -249,7 +256,3 @@ and to_sql = function
   | Union_all qs ->
       List.map qs ~f:(fun q -> sprintf "(%s)" (spj_to_sql q))
       |> String.concat ~sep:" union all "
-
-let to_subquery sql =
-  let alias = Fresh.name fresh "t%d" in
-  (sprintf "(%s) as %s" (to_sql sql) alias, to_schema sql |> List.map ~f:Name.create)
