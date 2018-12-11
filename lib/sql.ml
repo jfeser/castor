@@ -196,6 +196,18 @@ let rec pred_to_sql = function
   | Max n -> sprintf "max(%s)" (pred_to_sql n)
 
 and spj_to_sql {select; distinct; order; group; relations; conds; limit} =
+  let select =
+    (* If there is no grouping key and there are aggregates in the select list,
+       then we need to deal with any non-aggregates in the select. *)
+    if List.is_empty group then
+      match select_kind (List.map select ~f:(fun (p, _, _) -> p)) with
+      | `Agg ->
+          List.map select ~f:(fun (p, n, t) ->
+              let p' = match pred_kind p with `Agg -> p | `Scalar -> Min p in
+              (p', n, t) )
+      | `Scalar -> select
+    else select
+  in
   let select_sql =
     let select_list =
       List.map select ~f:(fun (p, n, t) ->

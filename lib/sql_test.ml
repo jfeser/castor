@@ -104,4 +104,5 @@ let%expect_test "tpch-1" =
                     sum(l.l_quantity) as agg3,
                     l.l_returnflag,
                     l.l_linestatus],
-                  lineitem as l)|}
+                  lineitem as l)|};
+  [%expect {| select  sum(lineitem."l_discount") as "x16", count(*) as "x17", sum(((lineitem."l_extendedprice") * ((1) - (lineitem."l_discount"))) * ((1) + (lineitem."l_tax"))) as "x18", sum((lineitem."l_extendedprice") * ((1) - (lineitem."l_discount"))) as "x19", sum(lineitem."l_extendedprice") as "x20", sum(lineitem."l_quantity") as "x21", min(lineitem."l_returnflag") as "lineitem_l_returnflag_23", min(lineitem."l_linestatus") as "lineitem_l_linestatus_24" from  lineitem |}]
