@@ -178,22 +178,3 @@ let%expect_test "list-list" =
        ((count (5 5)))))
      25
      "\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003") |}]
-
-(* let tests =
- *   let open OUnit2 in
- *   "serialize"
- *   >::: [ ( "to-byte"
- *          >:: fun ctxt ->
- *          let x = 0xABCDEF01 in
- *          assert_equal ~ctxt x (bytes_of_int ~width:64 x |> int_of_bytes_exn) )
- *        ; ( "from-byte"
- *          >:: fun ctxt ->
- *          let b = Bytes.of_string "\031\012\000\000" in
- *          let x = 3103 in
- *          assert_equal ~ctxt ~printer:Caml.string_of_int x (int_of_bytes_exn b) )
- *        ; ( "align"
- *          >:: fun ctxt ->
- *          let b = Bytes.of_string "\001\002\003" in
- *          let b' = align 8 b in
- *          assert_equal ~ctxt ~printer:Caml.string_of_int 8 (String.length b') ;
- *          assert_equal ~ctxt "\001\002\003\000\000\000\000\000" b' ) ] *)

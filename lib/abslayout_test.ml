@@ -170,8 +170,9 @@ select([lp.counter, lc.counter],
       alist(filter(log.counter = k, log),
         atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
       lp.counter, lp.succ) as lc)], cross))
-|};
-  [%expect {|
+|} ;
+  [%expect
+    {|
     Tuple
     HashIdx
     HashIdx key: ((Int 1))
