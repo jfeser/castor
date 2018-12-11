@@ -28,10 +28,91 @@ module Make (Config : Config.S) = struct
     | `Concat qs -> 1 + List.sum (module Int) qs ~f:width
     | `Query q -> List.length Meta.(find_exn q schema)
 
+  let rec pred_to_schema =
+    let open Type.PrimType in
+    let unnamed t = {name= ""; relation= None; type_= Some t} in
+    function
+    | As_pred (p, n) ->
+        let schema = pred_to_schema p in
+        {schema with relation= None; name= n}
+    | Name n -> n
+    | Int _ | Date _
+     |Unop ((Year | Month | Day | Strlen | ExtractY | ExtractM | ExtractD), _)
+     |Count ->
+        unnamed (IntT {nullable= false})
+    | Fixed _ | Avg _ -> unnamed (FixedT {nullable= false})
+    | Bool _ | Exists _
+     |Binop ((Eq | Lt | Le | Gt | Ge | And | Or), _, _)
+     |Unop (Not, _) ->
+        unnamed (BoolT {nullable= false})
+    | String _ -> unnamed (StringT {nullable= false})
+    | Null -> unnamed NullT
+    | Binop ((Add | Sub | Mul | Div | Mod), p1, p2) ->
+        let s1 = pred_to_schema p1 in
+        let s2 = pred_to_schema p2 in
+        unnamed (unify (Name.type_exn s1) (Name.type_exn s2))
+    | Binop (Strpos, _, _) -> unnamed (IntT {nullable= false})
+    | Sum p | Min p | Max p -> pred_to_schema p
+    | If (_, p1, p2) ->
+        let s1 = pred_to_schema p1 in
+        let s2 = pred_to_schema p2 in
+        Type.PrimType.unify (Name.type_exn s1) (Name.type_exn s2) |> ignore ;
+        unnamed (Name.type_exn s1)
+    | First r -> (
+        annotate_schema r ;
+        match Meta.(find_exn r schema) with
+        | [n] -> n
+        | [] -> failwith "Unexpected empty schema."
+        | _ -> failwith "Too many fields." )
+    | Substring _ -> unnamed (StringT {nullable= false})
+
+  (** Add a schema field to each metadata node. Variables must first be
+     annotated with type information. *)
+  and annotate_schema r =
+    let mapper =
+      object (self : 'a)
+        inherit [_] iter as super
+
+        method! visit_t () r =
+          super#visit_t () r ;
+          let schema =
+            match r.node with
+            | Select (x, _) ->
+                List.map x ~f:(fun p -> self#visit_pred () p ; pred_to_schema p)
+            | Filter (_, r) | Dedup r | AList (_, r) | OrderBy {rel= r; _} ->
+                Meta.(find_exn r schema)
+            | Join {r1; r2; _} | AOrderedIdx (r1, r2, _) | AHashIdx (r1, r2, _) ->
+                Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema)
+            | GroupBy (x, _, _) -> List.map x ~f:pred_to_schema
+            | AEmpty -> []
+            | AScalar e -> self#visit_pred () e ; [pred_to_schema e]
+            | ATuple (rs, (Cross | Zip)) ->
+                List.concat_map ~f:(fun r -> Meta.(find_exn r schema)) rs
+            | ATuple ([], Concat) -> []
+            | ATuple (r :: _, Concat) -> Meta.(find_exn r schema)
+            | As (n, r) ->
+                Meta.(find_exn r schema)
+                |> List.map ~f:(fun x -> {x with relation= Some n})
+            | Scan table ->
+                (Db.Relation.from_db conn table).fields
+                |> List.map ~f:(fun f ->
+                       Name.create ~relation:table ~type_:f.Db.Field.type_ f.fname
+                   )
+          in
+          Meta.set_m r Meta.schema schema
+      end
+    in
+    mapper#visit_t () r
+
   let rec gen_query q =
     match q.node with
     | AList (q1, q2) -> `For (q1, gen_query q2)
     | AHashIdx (q1, q2, _) | AOrderedIdx (q1, q2, _) ->
+        let q1 =
+          let order_key = List.map Meta.(find_exn q1 schema) ~f:(fun n -> Name n) in
+          let q1 = order_by order_key `Asc (dedup q1) in
+          annotate_schema q1 ; q1
+        in
         `Concat [`Query q1; `For (q1, gen_query q2)]
     | AEmpty -> `Empty
     | AScalar p -> `Scalar p
@@ -65,7 +146,8 @@ module Make (Config : Config.S) = struct
       match q with
       | `For (q1, q2) ->
           let open Sql in
-          let sql1 = of_ralgebra q1 in
+          let spj1 = of_ralgebra q1 |> to_spj in
+          let sql1 = Query spj1 in
           let sql1_names = to_schema sql1 in
           let q2 =
             let ctx =
@@ -76,7 +158,8 @@ module Make (Config : Config.S) = struct
             in
             subst ctx q2
           in
-          let sql2 = query_to_sql q2 in
+          let spj2 = query_to_sql q2 |> to_spj in
+          let sql2 = Query spj2 in
           let select_list =
             let sql2_names = to_schema sql2 in
             List.map (sql1_names @ sql2_names) ~f:(fun n ->
@@ -447,82 +530,6 @@ module Make (Config : Config.S) = struct
    *     method! visit_As () n r =
    *       List.map (self#visit_t () r) ~f:(fun x -> {x with relation= Some n})
    *   end *)
-
-  let rec pred_to_schema =
-    let open Type.PrimType in
-    let unnamed t = {name= ""; relation= None; type_= Some t} in
-    function
-    | As_pred (p, n) ->
-        let schema = pred_to_schema p in
-        {schema with relation= None; name= n}
-    | Name n -> n
-    | Int _ | Date _
-     |Unop ((Year | Month | Day | Strlen | ExtractY | ExtractM | ExtractD), _)
-     |Count ->
-        unnamed (IntT {nullable= false})
-    | Fixed _ | Avg _ -> unnamed (FixedT {nullable= false})
-    | Bool _ | Exists _
-     |Binop ((Eq | Lt | Le | Gt | Ge | And | Or), _, _)
-     |Unop (Not, _) ->
-        unnamed (BoolT {nullable= false})
-    | String _ -> unnamed (StringT {nullable= false})
-    | Null -> unnamed NullT
-    | Binop ((Add | Sub | Mul | Div | Mod), p1, p2) ->
-        let s1 = pred_to_schema p1 in
-        let s2 = pred_to_schema p2 in
-        unnamed (unify (Name.type_exn s1) (Name.type_exn s2))
-    | Binop (Strpos, _, _) -> unnamed (IntT {nullable= false})
-    | Sum p | Min p | Max p -> pred_to_schema p
-    | If (_, p1, p2) ->
-        let s1 = pred_to_schema p1 in
-        let s2 = pred_to_schema p2 in
-        Type.PrimType.unify (Name.type_exn s1) (Name.type_exn s2) |> ignore ;
-        unnamed (Name.type_exn s1)
-    | First r -> (
-        annotate_schema r ;
-        match Meta.(find_exn r schema) with
-        | [n] -> n
-        | [] -> failwith "Unexpected empty schema."
-        | _ -> failwith "Too many fields." )
-    | Substring _ -> unnamed (StringT {nullable= false})
-
-  (** Add a schema field to each metadata node. Variables must first be
-     annotated with type information. *)
-  and annotate_schema r =
-    let mapper =
-      object (self : 'a)
-        inherit [_] iter as super
-
-        method! visit_t () r =
-          super#visit_t () r ;
-          let schema =
-            match r.node with
-            | Select (x, _) ->
-                List.map x ~f:(fun p -> self#visit_pred () p ; pred_to_schema p)
-            | Filter (_, r) | Dedup r | AList (_, r) | OrderBy {rel= r; _} ->
-                Meta.(find_exn r schema)
-            | Join {r1; r2; _} | AOrderedIdx (r1, r2, _) | AHashIdx (r1, r2, _) ->
-                Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema)
-            | GroupBy (x, _, _) -> List.map x ~f:pred_to_schema
-            | AEmpty -> []
-            | AScalar e -> self#visit_pred () e ; [pred_to_schema e]
-            | ATuple (rs, (Cross | Zip)) ->
-                List.concat_map ~f:(fun r -> Meta.(find_exn r schema)) rs
-            | ATuple ([], Concat) -> []
-            | ATuple (r :: _, Concat) -> Meta.(find_exn r schema)
-            | As (n, r) ->
-                Meta.(find_exn r schema)
-                |> List.map ~f:(fun x -> {x with relation= Some n})
-            | Scan table ->
-                (Db.Relation.from_db conn table).fields
-                |> List.map ~f:(fun f ->
-                       Name.create ~relation:table ~type_:f.Db.Field.type_ f.fname
-                   )
-          in
-          Meta.set_m r Meta.schema schema
-      end
-    in
-    mapper#visit_t () r
 
   let to_schema r =
     annotate_schema r ;
