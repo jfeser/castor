@@ -10,10 +10,14 @@ let () =
     | Postgresql.Error e -> Some (Postgresql.string_of_error e)
     | _ -> None )
 
-type t = {uri: string; conn: Psql.connection sexp_opaque [@compare.ignore]}
+type t =
+  { uri: string
+  ; conn: Psql.connection sexp_opaque [@compare.ignore]
+  ; fresh: Fresh.t sexp_opaque [@compare.ignore] }
 [@@deriving compare, sexp]
 
-let create uri = {uri; conn= new Psql.connection ~conninfo:uri ()}
+let create uri =
+  {uri; conn= new Psql.connection ~conninfo:uri (); fresh= Fresh.create ()}
 
 let copy db =
   match db.conninfo with
@@ -194,3 +198,10 @@ let exec_cursor =
       |> Gen.flatten
     in
     seq
+
+let check db sql =
+  let name = Fresh.name db.fresh "check%d" in
+  let r = (db.conn)#prepare name sql in
+  match r#status with
+  | Command_ok -> Or_error.return ()
+  | _ -> Or_error.error "Unexpected query response." r#error [%sexp_of: string]

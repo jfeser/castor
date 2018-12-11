@@ -26,6 +26,8 @@ val exec_cursor :
 
 val load_value_exn : Type.PrimType.t -> string -> Value.t
 
+val check : t -> string -> unit Or_error.t
+
 module Field : sig
   type t = {fname: string; type_: Type.PrimType.t} [@@deriving compare, sexp]
 end

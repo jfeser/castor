@@ -36,6 +36,7 @@ let to_spj ?(fresh = global_fresh) = function
       create_query ~relations:[(`Subquery (q, alias), `Left)] select_list
 
 let add_pred_alias ?(fresh = global_fresh) p =
+  let pred_to_name = function Name n -> Some n | _ -> None in
   let fresh_sql_name n =
     match n.Name.relation with
     | Some r -> sprintf "%s_%s_%d" r n.name (Fresh.int fresh)
