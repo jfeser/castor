@@ -200,7 +200,11 @@ module Make (Config : Config.S) = struct
                   ~relations:[(`Subquery (sql, alias), `Left)]
                   select_list )
           in
-          Sql.Union_all queries
+          let union = Sql.Union_all queries |> Sql.to_spj in
+          let union =
+            {union with order= [(Name (Name.create counter_name), `Desc)]}
+          in
+          Query union
       | `Empty -> Query (Sql.create_query ~limit:0 [])
       | `Scalar p -> Query (Sql.create_query [(p, Fresh.name fresh "x%d", None)])
       | `Query q -> Sql.of_ralgebra q
