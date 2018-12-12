@@ -6,56 +6,61 @@ open Abslayout
 open Test_util
 module M = Abslayout_db.Make (Test_db)
 
-class print_fold =
-  object (self)
-    inherit [_, _] M.material_fold
+module M_tpch = Abslayout_db.Make (struct
+  let conn = Db.create ~port:"5432" "tpch"
+end)
 
-    method build_AList () _ (_, r) gen =
-      print_endline "List" ;
-      Gen.iter gen ~f:(fun (key, vctx) ->
-          printf "List key: %s\n"
-            ([%sexp_of: Value.t list] key |> Sexp.to_string_hum) ;
-          self#visit_t () vctx r )
+let run_print_test (module M : Abslayout_db.S) ?params query =
+  let print_fold =
+    object (self)
+      inherit [_, _] M.material_fold
 
-    method build_AHashIdx () _ (_, r, _) kgen vgen =
-      print_endline "HashIdx" ;
-      Gen.iter kgen ~f:(fun _ -> ()) ;
-      Gen.iter vgen ~f:(fun (key, vctx) ->
-          printf "HashIdx key: %s\n"
-            ([%sexp_of: Value.t list] key |> Sexp.to_string_hum) ;
-          self#visit_t () vctx r )
+      method build_AList () _ (_, r) gen =
+        print_endline "List" ;
+        Gen.iter gen ~f:(fun (key, vctx) ->
+            printf "List key: %s\n"
+              ([%sexp_of: Value.t list] key |> Sexp.to_string_hum) ;
+            self#visit_t () vctx r )
 
-    method build_AOrderedIdx () _ (_, r, _) kgen vgen =
-      print_endline "OrderedIdx" ;
-      Gen.iter kgen ~f:(fun _ -> ()) ;
-      Gen.iter vgen ~f:(fun (key, vctx) ->
-          printf "OrderedIdx key: %s\n"
-            ([%sexp_of: Value.t list] key |> Sexp.to_string_hum) ;
-          self#visit_t () vctx r )
+      method build_AHashIdx () _ (_, r, _) kgen vgen =
+        print_endline "HashIdx" ;
+        Gen.iter kgen ~f:(fun _ -> ()) ;
+        Gen.iter vgen ~f:(fun (key, vctx) ->
+            printf "HashIdx key: %s\n"
+              ([%sexp_of: Value.t list] key |> Sexp.to_string_hum) ;
+            self#visit_t () vctx r )
 
-    method build_ATuple () _ (rs, _) ctxs =
-      print_endline "Tuple" ;
-      List.iter2_exn ctxs rs ~f:(self#visit_t ())
+      method build_AOrderedIdx () _ (_, r, _) kgen vgen =
+        print_endline "OrderedIdx" ;
+        Gen.iter kgen ~f:(fun _ -> ()) ;
+        Gen.iter vgen ~f:(fun (key, vctx) ->
+            printf "OrderedIdx key: %s\n"
+              ([%sexp_of: Value.t list] key |> Sexp.to_string_hum) ;
+            self#visit_t () vctx r )
 
-    method build_AEmpty () _ = print_endline "Empty"
+      method build_ATuple () _ (rs, _) ctxs =
+        print_endline "Tuple" ;
+        List.iter2_exn ctxs rs ~f:(self#visit_t ())
 
-    method build_AScalar () _ _ v =
-      printf "Scalar: %s\n"
-        ([%sexp_of: Value.t] (Lazy.force v) |> Sexp.to_string_hum)
+      method build_AEmpty () _ = print_endline "Empty"
 
-    method build_Select () _ (_, r) ctx = self#visit_t () ctx r
+      method build_AScalar () _ _ v =
+        printf "Scalar: %s\n"
+          ([%sexp_of: Value.t] (Lazy.force v) |> Sexp.to_string_hum)
 
-    method build_Filter () _ (_, r) ctx = self#visit_t () ctx r
-  end
+      method build_Select () _ (_, r) ctx = self#visit_t () ctx r
 
-let run_print_test ?params query =
+      method build_Filter () _ (_, r) ctx = self#visit_t () ctx r
+    end
+  in
   let layout = of_string_exn query |> M.resolve ?params in
   M.annotate_schema layout ;
-  try (new print_fold)#run () layout with
+  try print_fold#run () layout with
   | Invalid_argument msg | Failure msg -> printf "Error: %s\n" msg
 
 let%expect_test "sum-complex" =
   run_print_test
+    (module M)
     "Select([sum(r1.f) + 5, count() + sum(r1.f / 2)], AList(r1, \
      ATuple([AScalar(r1.f), AScalar(r1.g - r1.f)], cross)))" ;
   [%expect
@@ -89,6 +94,7 @@ let example_params =
 
 let%expect_test "example-1" =
   run_print_test ~params:example_params
+    (module M)
     {|
 filter(lc.id = id_c && lp.id = id_p,
 alist(filter(succ > counter + 1, log) as lp,
@@ -125,6 +131,7 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
 
 let%expect_test "example-2" =
   run_print_test ~params:example_params
+    (module M)
     {|
 ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k], 
       join(true, log as lp, log as lc))),
@@ -158,6 +165,7 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
 
 let%expect_test "example-3" =
   run_print_test ~params:example_params
+    (module M)
     {|
 select([lp.counter, lc.counter],
   atuple([ahashidx(dedup(select([id as k], log)), 
@@ -232,6 +240,137 @@ select([lp.counter, lc.counter],
     Tuple
     Scalar: (Int 3)
     Scalar: (Int 5) |}]
+
+let%expect_test "tpch-2" =
+  let params =
+    [ Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "param1"
+    ; Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "param2"
+    ; Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "param3" ]
+    |> Set.of_list (module Name.Compare_no_type)
+  in
+  run_print_test ~params
+    (module M_tpch)
+    {|
+    ahashidx(dedup(select([region.r_name as region_r_name_0], region)),
+  select([s1.s_acctbal,
+          s1.s_name,
+          n1.n_name,
+          p1.p_partkey,
+          p1.p_mfgr,
+          s1.s_address,
+          s1.s_phone,
+          s1.s_comment],
+    atuple([select([n1.n_name, s1.s_suppkey, p1.p_partkey, p1.p_mfgr],
+              filter((p1.p_size = param1),
+                filter((if ((if (param2 = "STEEL") then 5 else (if (param2 =
+                                                                   "BRASS") then 4 else (if 
+                           (param2 = "NICKEL") then 3 else (if (param2 =
+                                                               "COPPER") then 2 else (if 
+                           (param2 = "TIN") then 1 else 0))))) = 0) then 
+                  (strpos(p1.p_type, param2) =
+                  ((strlen(p1.p_type) - strlen(param2)) + 1)) else ((if 
+                                                                   (param2 =
+                                                                   "STEEL") then 5 else (if 
+                                                                   (param2 =
+                                                                   "BRASS") then 4 else (if 
+                                                                   (param2 =
+                                                                   "NICKEL") then 3 else (if 
+                                                                   (param2 =
+                                                                   "COPPER") then 2 else (if 
+                                                                   (param2 =
+                                                                   "TIN") then 1 else 0)))))
+                                                                   =
+                                                                   p10_p_type)),
+                  alist(select([(if (strpos(p1.p_type, "STEEL") =
+                                    ((strlen(p1.p_type) - strlen("STEEL")) + 1)) then 5 else (if (
+                                                                    strpos(p1.p_type,
+                                                                    "BRASS") =
+                                                                    (
+                                                                    (strlen(p1.p_type)
+                                                                    -
+                                                                    strlen("BRASS"))
+                                                                    + 1)) then 4 else (if (
+                                                                    strpos(p1.p_type,
+                                                                    "NICKEL") =
+                                                                    (
+                                                                    (strlen(p1.p_type)
+                                                                    -
+                                                                    strlen("NICKEL"))
+                                                                    + 1)) then 3 else (if (
+                                                                    strpos(p1.p_type,
+                                                                    "COPPER") =
+                                                                    (
+                                                                    (strlen(p1.p_type)
+                                                                    -
+                                                                    strlen("COPPER"))
+                                                                    + 1)) then 2 else (if (
+                                                                    strpos(p1.p_type,
+                                                                    "TIN") =
+                                                                    (
+                                                                    (strlen(p1.p_type)
+                                                                    -
+                                                                    strlen("TIN"))
+                                                                    + 1)) then 1 else 0))))) as p10_p_type,
+                                n1.n_name,
+                                s1.s_suppkey,
+                                p1.p_partkey,
+                                p1.p_mfgr,
+                                p1.p_type,
+                                p1.p_size],
+                          orderby([s1.s_acctbal,
+                                   n1.n_name,
+                                   s1.s_name,
+                                   p1.p_partkey],
+                            filter((r1.r_name = region_r_name_0),
+                              filter((ps1.ps_supplycost =
+                                     (select([min(ps.ps_supplycost)],
+                                        filter((ps.ps_partkey = p1.p_partkey),
+                                          join((s.s_suppkey = ps.ps_suppkey),
+                                            join((s.s_nationkey =
+                                                 n.n_nationkey),
+                                              join((n.n_regionkey =
+                                                   r.r_regionkey),
+                                                nation as n,
+                                                filter((r.r_name =
+                                                       region_r_name_0),
+                                                  filter((region.r_name =
+                                                         region_r_name_0),
+                                                    region) as r)),
+                                              supplier as s),
+                                            partsupp as ps))))),
+                                join((p1.p_partkey = ps1.ps_partkey),
+                                  join((s1.s_suppkey = ps1.ps_suppkey),
+                                    join((s1.s_nationkey = n1.n_nationkey),
+                                      join((n1.n_regionkey = r1.r_regionkey),
+                                        nation as n1,
+                                        filter((region.r_name =
+                                               region_r_name_0),
+                                          region) as r1),
+                                      supplier as s1),
+                                    partsupp as ps1),
+                                  part as p1))),
+                            desc)),
+                    atuple([ascalar(p10_p_type),
+                            ascalar(n1.n_name),
+                            ascalar(s1.s_suppkey),
+                            ascalar(p1.p_partkey),
+                            ascalar(p1.p_mfgr),
+                            ascalar(p1.p_type),
+                            ascalar(p1.p_size)],
+                      cross))))),
+            ahashidx(dedup(
+                       select([s1.s_suppkey as s1_s_suppkey_1], supplier as s1)),
+              alist(filter((s1.s_suppkey = s1_s_suppkey_1), supplier as s1),
+                atuple([ascalar(s1.s_name),
+                        ascalar(s1.s_address),
+                        ascalar(s1.s_phone),
+                        ascalar(s1.s_acctbal),
+                        ascalar(s1.s_comment)],
+                  cross)),
+              s1.s_suppkey)],
+      cross)),
+  param3)
+|}
 
 let%expect_test "subst" =
   let n = Name.of_string_exn in
