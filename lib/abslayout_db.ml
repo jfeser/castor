@@ -147,7 +147,7 @@ module Make (Config : Config.S) = struct
       | `For (q1, q2) ->
           let open Sql in
           let spj1 = of_ralgebra q1 |> to_spj in
-          let sql1 = Query spj1 in
+          let sql1 = Query {spj1 with order= []} in
           let sql1_names = to_schema sql1 in
           let q2 =
             let ctx =
@@ -159,50 +159,71 @@ module Make (Config : Config.S) = struct
             subst ctx q2
           in
           let spj2 = query_to_sql q2 |> to_spj in
-          let sql2 = Query spj2 in
+          let sql2 = Query {spj2 with order= []} in
           let select_list =
             let sql2_names = to_schema sql2 in
             List.map (sql1_names @ sql2_names) ~f:(fun n ->
                 add_pred_alias (Name (Name.create n)) )
           in
+          let order =
+            List.map sql1_names ~f:(fun n -> (Name (Name.create n), `Asc))
+            @ spj2.order
+          in
           Query
-            (create_query
-               ~order:
-                 (List.map sql1_names ~f:(fun n -> (Name (Name.create n), `Asc)))
+            (create_query ~order
                ~relations:
                  [ (`Subquery (sql1, Fresh.name fresh "t%d"), `Left)
                  ; (`Subquery (sql2, Fresh.name fresh "t%d"), `Lateral) ]
                select_list)
       | `Concat qs ->
           let counter_name = Fresh.name fresh "counter%d" in
-          let queries =
-            List.map qs ~f:(fun q ->
-                let sql = query_to_sql q in
+          let scalars, other_queries =
+            List.partition_map qs ~f:(function
+              | `Scalar p -> `Fst p
+              | (`Concat _ | `Empty | `For _ | `Query _) as q -> `Snd q )
+          in
+          let scalar_query =
+            let sql =
+              Sql.create_query
+                (List.map scalars ~f:(fun p -> (p, Fresh.name fresh "x%d", None)))
+            in
+            let types =
+              List.map scalars ~f:(fun p -> p |> pred_to_schema |> Name.type_exn)
+            in
+            let names = Sql.(to_schema (Query sql)) in
+            (sql, types, names)
+          in
+          let other_queries =
+            List.map other_queries ~f:(fun q ->
+                let sql = query_to_sql q |> Sql.to_spj in
                 let types = to_schema q in
-                let names = Sql.to_schema sql in
+                let names = Sql.(to_schema (Query sql)) in
                 (sql, types, names) )
           in
+          let queries = scalar_query :: other_queries in
           let queries =
             List.mapi queries ~f:(fun i (sql, _, _) ->
                 let select_list =
                   (Int i, counter_name, None)
                   :: ( List.mapi queries ~f:(fun j (_, types, names) ->
-                           if i = j then
-                             List.map names ~f:(fun n ->
-                                 (Name (Name.create n), n, None) )
+                           if i = j then sql.select
                            else
                              List.map2_exn names types ~f:(fun n t ->
                                  (Null, n, Some t) ) )
                      |> List.concat )
                 in
-                let alias = Fresh.name fresh "t%d" in
-                Sql.create_query
-                  ~relations:[(`Subquery (sql, alias), `Left)]
-                  select_list )
+                {sql with select= select_list} )
           in
-          let union = Sql.Union_all queries |> Sql.to_spj in
           let union =
-            {union with order= [(Name (Name.create counter_name), `Desc)]}
+            let spj =
+              Sql.Union_all (List.map queries ~f:(fun q -> {q with order= []}))
+              |> Sql.to_spj
+            in
+            let order =
+              (Name (Name.create counter_name), `Asc)
+              :: List.concat_map queries ~f:(fun q -> q.order)
+            in
+            {spj with order}
           in
           Query union
       | `Empty -> Query (Sql.create_query ~limit:0 [])
@@ -231,7 +252,6 @@ module Make (Config : Config.S) = struct
                    let ts = Gen.map ts ~f:(fun t -> List.drop t outer_width) in
                    (t, eval ts q2) ) )
       | `Concat qs ->
-          let widths = List.map qs ~f:width in
           let tups = ref tups in
           let put_back t = tups := Gen.append (Gen.singleton t) !tups in
           let take_while pred =
@@ -250,19 +270,51 @@ module Make (Config : Config.S) = struct
             in
             next
           in
-          let streams =
-            List.mapi qs ~f:(fun gidx q ->
-                let drop_ct =
-                  List.sum (module Int) (List.take widths gidx) ~f:(fun x -> x) + 1
-                in
-                let take_ct = width q in
-                let strm =
-                  take_while (fun t -> List.hd_exn t |> Value.to_int = gidx)
-                  |> Gen.map ~f:(fun t ->
-                         let t = List.drop t drop_ct in
-                         List.take t take_ct )
-                in
-                eval strm q )
+          let nscalars =
+            List.sum (module Int) qs ~f:(function `Scalar _ -> 1 | _ -> 0)
+          in
+          let scalars =
+            lazy
+              ( match List.take (Gen.get_exn !tups) (nscalars + 1) with
+              | Int ctr :: vals ->
+                  if ctr = 0 then vals
+                  else
+                    Error.(
+                      create "Unexpected counter value." ctr [%sexp_of: int]
+                      |> raise)
+              | _ -> failwith "No counter field." )
+          in
+          let widths =
+            nscalars
+            :: List.filter_map qs ~f:(function
+                 | `Scalar _ -> None
+                 | q -> Some (width q) )
+          in
+          let _, _, streams =
+            List.fold_left qs ~init:(0, 1, []) ~f:(fun (sidx, oidx, ctxs) ->
+              function
+              | `Scalar _ ->
+                  let ctx =
+                    `Scalar (Lazy.map scalars ~f:(fun ss -> List.nth_exn ss sidx))
+                  in
+                  (sidx + 1, oidx, ctxs @ [ctx])
+              | q ->
+                  let take_ct = List.nth_exn widths oidx in
+                  let drop_ct =
+                    List.sum (module Int) (List.take widths oidx) ~f:(fun x -> x)
+                    + 1
+                  in
+                  let strm =
+                    take_while (fun t -> List.hd_exn t |> Value.to_int = oidx)
+                    |> Gen.map ~f:(fun t ->
+                           let t = List.drop t drop_ct in
+                           List.take t take_ct )
+                  in
+                  let strm () =
+                    Lazy.force scalars |> ignore ;
+                    Gen.get strm
+                  in
+                  (sidx, oidx + 1, ctxs @ [eval strm q]) )
           in
           `Concat streams
       | `Empty ->
