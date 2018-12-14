@@ -166,8 +166,7 @@ module Make (Config : Config.S) = struct
                 add_pred_alias (Name (Name.create n)) )
           in
           let order =
-            List.map sql1_names ~f:(fun n -> (Name (Name.create n), `Asc))
-            @ spj2.order
+            (to_order sql1 |> Or_error.ok_exn) @ (to_order sql2 |> Or_error.ok_exn)
           in
           Query
             (create_query ~order
@@ -221,7 +220,8 @@ module Make (Config : Config.S) = struct
             in
             let order =
               (Name (Name.create counter_name), `Asc)
-              :: List.concat_map queries ~f:(fun q -> q.order)
+              :: List.concat_map queries ~f:(fun q ->
+                     Sql.to_order (Query q) |> Or_error.ok_exn )
             in
             {spj with order}
           in

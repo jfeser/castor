@@ -1,5 +1,8 @@
+open Base
 open Collections
 open Abslayout
+
+type order = (pred * [`Asc | `Desc]) list
 
 type spj =
   { select: (pred * string * Type.PrimType.t option) list
@@ -7,7 +10,7 @@ type spj =
   ; conds: pred list
   ; relations:
       ([`Subquery of t * string | `Table of string] * [`Left | `Lateral]) list
-  ; order: (pred * [`Asc | `Desc]) list
+  ; order: order
   ; group: pred list
   ; limit: int option }
 
@@ -29,6 +32,8 @@ val create_query :
 val to_spj : ?fresh:Fresh.t -> t -> spj
 
 val to_schema : t -> string list
+
+val to_order : t -> order Or_error.t
 
 val join : ?fresh:Fresh.t -> Name.t list -> Name.t list -> t -> t -> pred -> t
 

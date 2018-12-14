@@ -3,13 +3,18 @@ open Printf
 open Collections
 open Abslayout
 
+type order = (pred * [`Asc | `Desc]) list [@@deriving compare, sexp_of]
+
+type select = (pred * string * Type.PrimType.t option) list
+[@@deriving compare, sexp_of]
+
 type spj =
-  { select: (pred * string * Type.PrimType.t option) list
+  { select: select
   ; distinct: bool
   ; conds: pred list
   ; relations:
       ([`Subquery of t * string | `Table of string] * [`Left | `Lateral]) list
-  ; order: (pred * [`Asc | `Desc]) list
+  ; order: order
   ; group: pred list
   ; limit: int option }
 
@@ -25,6 +30,22 @@ let rec to_schema = function
   | Union_all (q :: _) -> to_schema (Query q)
 
 let global_fresh = Fresh.create ()
+
+let to_order = function
+  | Union_all _ -> Ok []
+  | Query {select; order; _} ->
+      List.map order ~f:(fun (p, o) ->
+          let alias =
+            List.find_map select ~f:(fun (p', a, _) ->
+                if [%compare.equal: pred] p p' then Some a else None )
+          in
+          match alias with
+          | Some a -> Ok (Name (Name.create a), o)
+          | None ->
+              Error
+                (Error.create "Order clause depends on hidden expression."
+                   (p, select) [%sexp_of: pred * select]) )
+      |> Or_error.all
 
 let to_spj ?(fresh = global_fresh) = function
   | Query q -> q
@@ -72,9 +93,13 @@ let join ?(fresh = global_fresh) s1 s2 sql1 sql2 pred =
        select_list)
 
 let order_by schema sql key order =
-  let ctx = subst_ctx sql schema in
+  let spj = to_spj sql in
+  let ctx =
+    List.map2_exn schema spj.select ~f:(fun n (p, _, _) -> (n, p))
+    |> Map.of_alist_exn (module Name.Compare_no_type)
+  in
   let key = List.map key ~f:(fun p -> (subst_pred ctx p, order)) in
-  Query {(to_spj sql) with order= key}
+  Query {spj with order= key}
 
 let select ?(fresh = global_fresh) schema sql fields =
   let spj = to_spj sql in

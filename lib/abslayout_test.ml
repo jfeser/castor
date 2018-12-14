@@ -55,8 +55,7 @@ let run_print_test (module M : Abslayout_db.S) ?params query =
   in
   let layout = of_string_exn query |> M.resolve ?params in
   M.annotate_schema layout ;
-  try print_fold#run () layout with
-  | Invalid_argument msg | Failure msg -> printf "Error: %s\n" msg
+  try print_fold#run () layout with exn -> printf "Error: %s\n" (Exn.to_string exn)
 
 let%expect_test "sum-complex" =
   run_print_test
