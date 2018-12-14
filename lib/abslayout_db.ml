@@ -105,8 +105,17 @@ module Make (Config : Config.S) = struct
     mapper#visit_t () r
 
   let rec gen_query q =
+    (* TODO: Respect orderings from original queries. Needs a way to get the
+       ordering, then the ordering has to be extended with the remaining fields
+       so that it is total. *)
     match q.node with
-    | AList (q1, q2) -> `For (q1, gen_query q2)
+    | AList (q1, q2) ->
+        let q1 =
+          let order_key = List.map Meta.(find_exn q1 schema) ~f:(fun n -> Name n) in
+          let q1 = order_by order_key `Asc q1 in
+          annotate_schema q1 ; q1
+        in
+        `For (q1, gen_query q2)
     | AHashIdx (q1, q2, _) | AOrderedIdx (q1, q2, _) ->
         let q1 =
           let order_key = List.map Meta.(find_exn q1 schema) ~f:(fun n -> Name n) in
@@ -147,8 +156,9 @@ module Make (Config : Config.S) = struct
       | `For (q1, q2) ->
           let open Sql in
           let spj1 = of_ralgebra q1 |> to_spj in
-          let sql1 = Query {spj1 with order= []} in
-          let sql1_names = to_schema sql1 in
+          let sql1 = Query spj1 in
+          let sql1_no_order = Query {spj1 with order= []} in
+          let sql1_names = to_schema (Query spj1) in
           let q2 =
             let ctx =
               List.zip_exn Meta.(find_exn q1 schema) sql1_names
@@ -159,7 +169,8 @@ module Make (Config : Config.S) = struct
             subst ctx q2
           in
           let spj2 = query_to_sql q2 |> to_spj in
-          let sql2 = Query {spj2 with order= []} in
+          let sql2 = Query spj2 in
+          let sql2_no_order = Query {spj2 with order= []} in
           let select_list =
             let sql2_names = to_schema sql2 in
             List.map (sql1_names @ sql2_names) ~f:(fun n ->
@@ -171,8 +182,8 @@ module Make (Config : Config.S) = struct
           Query
             (create_query ~order
                ~relations:
-                 [ (`Subquery (sql1, Fresh.name fresh "t%d"), `Left)
-                 ; (`Subquery (sql2, Fresh.name fresh "t%d"), `Lateral) ]
+                 [ (`Subquery (sql1_no_order, Fresh.name fresh "t%d"), `Left)
+                 ; (`Subquery (sql2_no_order, Fresh.name fresh "t%d"), `Lateral) ]
                select_list)
       | `Concat qs ->
           let counter_name = Fresh.name fresh "counter%d" in
@@ -234,7 +245,7 @@ module Make (Config : Config.S) = struct
 
   let eval_query q =
     let sql = query_to_sql q in
-    let tups = Db.exec_cursor conn (to_schema q) (Sql.to_sql sql) in
+    let tups = Db.exec_cursor conn (to_schema q) (Sql.to_string sql) in
     let rec eval tups = function
       | `For (q1, q2) ->
           let extract_tup s t = List.take t (List.length s) in

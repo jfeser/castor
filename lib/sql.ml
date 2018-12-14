@@ -1,4 +1,5 @@
 open Base
+open Stdio
 open Printf
 open Collections
 open Abslayout
@@ -206,10 +207,10 @@ let rec pred_to_sql = function
       sprintf "case when %s then %s else %s end" (pred_to_sql p1) (pred_to_sql p2)
         (pred_to_sql p3)
   | Exists r ->
-      let sql = of_ralgebra r |> to_sql in
+      let sql = of_ralgebra r |> to_string in
       sprintf "exists (%s)" sql
   | First r ->
-      let sql = of_ralgebra r |> to_sql in
+      let sql = of_ralgebra r |> to_string in
       sprintf "(%s)" sql
   | Substring (p1, p2, p3) ->
       sprintf "substring(%s from %s for %s)" (pred_to_sql p1) (pred_to_sql p2)
@@ -255,7 +256,7 @@ and spj_to_sql {select; distinct; order; group; relations; conds; limit} =
       List.map relations ~f:(fun (rel, join_type) ->
           let rel_str =
             match rel with
-            | `Subquery (q, alias) -> sprintf "(%s) as \"%s\"" (to_sql q) alias
+            | `Subquery (q, alias) -> sprintf "(%s) as \"%s\"" (to_string q) alias
             | `Table t -> t
           in
           let join_str =
@@ -298,8 +299,14 @@ and spj_to_sql {select; distinct; order; group; relations; conds; limit} =
     limit_sql
   |> String.strip
 
-and to_sql = function
+and to_string = function
   | Query q -> spj_to_sql q
   | Union_all qs ->
       List.map qs ~f:(fun q -> sprintf "(%s)" (spj_to_sql q))
       |> String.concat ~sep:" union all "
+
+let to_string_hum sql =
+  let in_ch, out_ch = Unix.open_process "pg_format" in
+  Out_channel.output_string out_ch (to_string sql) ;
+  Out_channel.close out_ch ;
+  In_channel.input_all in_ch

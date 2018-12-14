@@ -43,6 +43,8 @@ val select : ?fresh:Fresh.t -> Name.t list -> t -> pred list -> t
 
 val pred_to_sql : pred -> string
 
-val to_sql : t -> string
+val to_string : t -> string
+
+val to_string_hum : t -> string
 
 val add_pred_alias : ?fresh:Fresh.t -> pred -> pred * string * _ option

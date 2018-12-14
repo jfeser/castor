@@ -15,7 +15,7 @@ let make_module_db () =
 let run_test s =
   let r = of_string_exn s |> M.resolve in
   M.annotate_schema r ;
-  print_endline (of_ralgebra ~fresh:(Fresh.create ()) r |> to_sql)
+  print_endline (of_ralgebra ~fresh:(Fresh.create ()) r |> to_string)
 
 let run_test_tpch ?params s =
   let conn = Db.create "tpch" ~port:"5432" in
@@ -25,7 +25,7 @@ let run_test_tpch ?params s =
   let params = Option.map params ~f:(Set.of_list (module Name.Compare_no_type)) in
   let r = of_string_exn s |> M.resolve ?params in
   M.annotate_schema r ;
-  let sql = of_ralgebra ~fresh:(Fresh.create ()) r |> to_sql in
+  let sql = of_ralgebra ~fresh:(Fresh.create ()) r |> to_string_hum in
   print_endline sql ;
   match Db.check conn sql with
   | Ok () -> ()
@@ -51,7 +51,7 @@ let%expect_test "eqjoin" =
 let%expect_test "order-by" =
   run_test "OrderBy([r1.f], Dedup(Select([r1.f], r1)), desc)" ;
   [%expect
-    {| select distinct r1."f" as "r1_f_3" from  r1   order by "r1_f_3" desc |}]
+    {| select distinct r1."f" as "r1_f_3" from  r1   order by r1."f" desc |}]
 
 let%expect_test "dedup" =
   run_test "Dedup(Select([r1.f], r1))" ;
@@ -91,7 +91,45 @@ let%expect_test "tpch-1" =
     filter((l_shipdate) <= ((date("1998-12-01")) - (day(1))), lineitem as l))
     ,asc)|} ;
   [%expect
-    {| select  "lineitem_l_returnflag_9" as "lineitem_l_returnflag_9_17", "lineitem_l_linestatus_10" as "lineitem_l_linestatus_10_18", sum("lineitem_l_quantity_5") as "x18", sum("lineitem_l_extendedprice_6") as "x19", sum(("lineitem_l_extendedprice_6") * ((1) - ("lineitem_l_discount_7"))) as "x20", sum((("lineitem_l_extendedprice_6") * ((1) - ("lineitem_l_discount_7"))) * ((1) + ("lineitem_l_tax_8"))) as "x21", avg("lineitem_l_quantity_5") as "x22", avg("lineitem_l_extendedprice_6") as "x23", avg("lineitem_l_discount_7") as "x24", count(*) as "x25" from  (select  lineitem."l_orderkey" as "lineitem_l_orderkey_1", lineitem."l_partkey" as "lineitem_l_partkey_2", lineitem."l_suppkey" as "lineitem_l_suppkey_3", lineitem."l_linenumber" as "lineitem_l_linenumber_4", lineitem."l_quantity" as "lineitem_l_quantity_5", lineitem."l_extendedprice" as "lineitem_l_extendedprice_6", lineitem."l_discount" as "lineitem_l_discount_7", lineitem."l_tax" as "lineitem_l_tax_8", lineitem."l_returnflag" as "lineitem_l_returnflag_9", lineitem."l_linestatus" as "lineitem_l_linestatus_10", lineitem."l_shipdate" as "lineitem_l_shipdate_11", lineitem."l_commitdate" as "lineitem_l_commitdate_12", lineitem."l_receiptdate" as "lineitem_l_receiptdate_13", lineitem."l_shipinstruct" as "lineitem_l_shipinstruct_14", lineitem."l_shipmode" as "lineitem_l_shipmode_15", lineitem."l_comment" as "lineitem_l_comment_16" from  lineitem where (lineitem."l_shipdate") <= ((date('1998-12-01')) - (interval '(1) day'))) as "t26"  group by ("lineitem_l_returnflag_9", "lineitem_l_linestatus_10") order by "lineitem_l_returnflag_9_17" , "lineitem_l_linestatus_10_18" |}]
+    {|
+      SELECT
+          "lineitem_l_returnflag_9" AS "lineitem_l_returnflag_9_17",
+          "lineitem_l_linestatus_10" AS "lineitem_l_linestatus_10_18",
+          sum("lineitem_l_quantity_5") AS "x18",
+          sum("lineitem_l_extendedprice_6") AS "x19",
+          sum(("lineitem_l_extendedprice_6") * ((1) - ("lineitem_l_discount_7"))) AS "x20",
+          sum((("lineitem_l_extendedprice_6") * ((1) - ("lineitem_l_discount_7"))) * ((1) + ("lineitem_l_tax_8"))) AS "x21",
+          avg("lineitem_l_quantity_5") AS "x22",
+          avg("lineitem_l_extendedprice_6") AS "x23",
+          avg("lineitem_l_discount_7") AS "x24",
+          count(*) AS "x25"
+      FROM (
+          SELECT
+              lineitem. "l_orderkey" AS "lineitem_l_orderkey_1",
+              lineitem. "l_partkey" AS "lineitem_l_partkey_2",
+              lineitem. "l_suppkey" AS "lineitem_l_suppkey_3",
+              lineitem. "l_linenumber" AS "lineitem_l_linenumber_4",
+              lineitem. "l_quantity" AS "lineitem_l_quantity_5",
+              lineitem. "l_extendedprice" AS "lineitem_l_extendedprice_6",
+              lineitem. "l_discount" AS "lineitem_l_discount_7",
+              lineitem. "l_tax" AS "lineitem_l_tax_8",
+              lineitem. "l_returnflag" AS "lineitem_l_returnflag_9",
+              lineitem. "l_linestatus" AS "lineitem_l_linestatus_10",
+              lineitem. "l_shipdate" AS "lineitem_l_shipdate_11",
+              lineitem. "l_commitdate" AS "lineitem_l_commitdate_12",
+              lineitem. "l_receiptdate" AS "lineitem_l_receiptdate_13",
+              lineitem. "l_shipinstruct" AS "lineitem_l_shipinstruct_14",
+              lineitem. "l_shipmode" AS "lineitem_l_shipmode_15",
+              lineitem. "l_comment" AS "lineitem_l_comment_16"
+          FROM
+              lineitem
+          WHERE (lineitem. "l_shipdate") <= ((date('1998-12-01')) - (interval '(1) day'))) AS "t26"
+      GROUP BY
+          ("lineitem_l_returnflag_9",
+              "lineitem_l_linestatus_10")
+      ORDER BY
+          "lineitem_l_returnflag_9",
+          "lineitem_l_linestatus_10" |}]
 
 let%expect_test "tpch-1" =
   run_test_tpch
@@ -104,5 +142,17 @@ let%expect_test "tpch-1" =
                     sum(l.l_quantity) as agg3,
                     l.l_returnflag,
                     l.l_linestatus],
-                  lineitem as l)|};
-  [%expect {| select  sum(lineitem."l_discount") as "x16", count(*) as "x17", sum(((lineitem."l_extendedprice") * ((1) - (lineitem."l_discount"))) * ((1) + (lineitem."l_tax"))) as "x18", sum((lineitem."l_extendedprice") * ((1) - (lineitem."l_discount"))) as "x19", sum(lineitem."l_extendedprice") as "x20", sum(lineitem."l_quantity") as "x21", min(lineitem."l_returnflag") as "lineitem_l_returnflag_23", min(lineitem."l_linestatus") as "lineitem_l_linestatus_24" from  lineitem |}]
+                  lineitem as l)|} ;
+  [%expect
+    {|
+      SELECT
+          sum(lineitem. "l_discount") AS "x16",
+          count(*) AS "x17",
+          sum(((lineitem. "l_extendedprice") * ((1) - (lineitem. "l_discount"))) * ((1) + (lineitem. "l_tax"))) AS "x18",
+          sum((lineitem. "l_extendedprice") * ((1) - (lineitem. "l_discount"))) AS "x19",
+          sum(lineitem. "l_extendedprice") AS "x20",
+          sum(lineitem. "l_quantity") AS "x21",
+          min(lineitem. "l_returnflag") AS "lineitem_l_returnflag_23",
+          min(lineitem. "l_linestatus") AS "lineitem_l_linestatus_24"
+      FROM
+          lineitem |}]
