@@ -50,8 +50,7 @@ let%expect_test "eqjoin" =
 
 let%expect_test "order-by" =
   run_test "OrderBy([r1.f], Dedup(Select([r1.f], r1)), desc)" ;
-  [%expect
-    {| select distinct r1."f" as "r1_f_3" from  r1   order by r1."f" desc |}]
+  [%expect {| select distinct r1."f" as "r1_f_3" from  r1   order by r1."f" desc |}]
 
 let%expect_test "dedup" =
   run_test "Dedup(Select([r1.f], r1))" ;
