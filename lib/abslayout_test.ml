@@ -13,7 +13,7 @@ end)
 let run_print_test (module M : Abslayout_db.S) ?params query =
   let print_fold =
     object (self)
-      inherit [_, _] M.material_fold
+      inherit [_, _] M.unsafe_material_fold
 
       method build_AList () _ (_, r) gen =
         print_endline "List" ;

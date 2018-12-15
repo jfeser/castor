@@ -125,7 +125,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
 
   class serialize_fold =
     object (self)
-      inherit [_, _] M.material_fold as super
+      inherit [_, _] M.unsafe_material_fold as super
 
       method build_AEmpty _ _ = ()
 

@@ -346,14 +346,14 @@ module Make (Config : Config.S) = struct
     in
     eval tups q
 
-  class virtual ['ctx, 'a] material_fold =
+  class virtual ['ctx, 'a] unsafe_material_fold =
     object (self)
-      method virtual build_AList
+      method virtual private build_AList
           : 'ctx -> Meta.t -> t * t -> (Value.t list * eval_ctx) Gen.t -> 'a
 
-      method virtual build_ATuple : _
+      method virtual private build_ATuple : _
 
-      method virtual build_AHashIdx
+      method virtual private build_AHashIdx
           :    'ctx
             -> Meta.t
             -> t * t * hash_idx
@@ -361,7 +361,7 @@ module Make (Config : Config.S) = struct
             -> (Value.t list * eval_ctx) Gen.t
             -> 'a
 
-      method virtual build_AOrderedIdx
+      method virtual private build_AOrderedIdx
           :    'ctx
             -> Meta.t
             -> t * t * ordered_idx
@@ -369,16 +369,18 @@ module Make (Config : Config.S) = struct
             -> (Value.t list * eval_ctx) Gen.t
             -> 'a
 
-      method virtual build_AEmpty : 'ctx -> Meta.t -> 'a
+      method virtual private build_AEmpty : 'ctx -> Meta.t -> 'a
 
-      method virtual build_AScalar : 'ctx -> Meta.t -> pred -> Value.t Lazy.t -> 'a
+      method virtual private build_AScalar
+          : 'ctx -> Meta.t -> pred -> Value.t Lazy.t -> 'a
 
-      method virtual build_Select
+      method virtual private build_Select
           : 'ctx -> Meta.t -> pred list * t -> eval_ctx -> 'a
 
-      method virtual build_Filter : 'ctx -> Meta.t -> pred * t -> eval_ctx -> 'a
+      method virtual private build_Filter
+          : 'ctx -> Meta.t -> pred * t -> eval_ctx -> 'a
 
-      method visit_t ctx eval_ctx r =
+      method private visit_t ctx eval_ctx r =
         match (r.node, eval_ctx) with
         | AEmpty, `Empty -> self#build_AEmpty ctx r.meta
         | AScalar x, `Scalar v -> self#build_AScalar ctx r.meta x v
@@ -414,25 +416,100 @@ module Make (Config : Config.S) = struct
       method run ctx r = self#visit_t ctx (eval_query (gen_query r)) r
     end
 
+  type ('i, 'a, 'v, 'o) fold = {pre: 'i -> 'a; body: 'a -> 'v -> 'a; post: 'a -> 'o}
+
+  class virtual ['out, 'l, 'h1, 'h2, 'h3, 'o1, 'o2, 'o3] material_fold =
+    object (self)
+      inherit [unit, 'out] unsafe_material_fold
+
+      method virtual list
+          : Meta.t -> t * t -> (unit, 'l, Value.t list * 'out, 'out) fold
+
+      method virtual hash_idx
+          :    Meta.t
+            -> t * t * hash_idx
+            -> (unit, 'h1, Value.t list, 'h2) fold
+               * ('h2, 'h3, 'out * 'out, 'out) fold
+
+      method virtual ordered_idx
+          :    Meta.t
+            -> t * t * ordered_idx
+            -> (unit, 'o1, Value.t list, 'o2) fold
+               * ('o2, 'o3, 'out * 'out, 'out) fold
+
+      method virtual tuple : Meta.t -> t list * tuple -> 'out list -> 'out
+
+      method virtual empty : Meta.t -> 'out
+
+      method virtual scalar : Meta.t -> pred -> Value.t -> 'out
+
+      method virtual select : Meta.t -> pred list * t -> 'out -> 'out
+
+      method virtual filter : Meta.t -> pred * t -> 'out -> 'out
+
+      method private build_AList ctx meta ((_, r) as expr) gen =
+        let {pre; body; post} = self#list meta expr in
+        Gen.fold gen ~init:(pre ()) ~f:(fun acc (tup, ectx) ->
+            let value = self#visit_t ctx ectx r in
+            body acc (tup, value) )
+        |> post
+
+      method private build_ATuple ctx meta ((rs, _) as expr) es =
+        self#tuple meta expr (List.map2_exn es rs ~f:(self#visit_t ctx))
+
+      method private build_AHashIdx ctx meta
+          ((_, value_query, {hi_key_layout= m_key_query; _}) as expr) kgen vgen =
+        let key_query = Option.value_exn m_key_query in
+        let f1, f2 = self#hash_idx meta expr in
+        let acc = Gen.fold kgen ~init:(f1.pre ()) ~f:f1.body in
+        Gen.fold vgen
+          ~init:(f2.pre (f1.post acc))
+          ~f:(fun acc (tup, ectx) ->
+            f2.body acc
+              ( self#visit_t ctx (to_ctx tup) key_query
+              , self#visit_t ctx ectx value_query ) )
+        |> f2.post
+
+      method private build_AOrderedIdx ctx meta
+          ((_, value_query, {oi_key_layout= m_key_query; _}) as expr) kgen vgen =
+        let key_query = Option.value_exn m_key_query in
+        let f1, f2 = self#ordered_idx meta expr in
+        let acc = Gen.fold kgen ~init:(f1.pre ()) ~f:f1.body in
+        Gen.fold vgen
+          ~init:(f2.pre (f1.post acc))
+          ~f:(fun acc (tup, ectx) ->
+            f2.body acc
+              ( self#visit_t ctx (to_ctx tup) key_query
+              , self#visit_t ctx ectx value_query ) )
+        |> f2.post
+
+      method private build_AEmpty _ meta = self#empty meta
+
+      method private build_AScalar _ meta expr gen =
+        self#scalar meta expr (Lazy.force gen)
+
+      method private build_Filter ctx meta ((_, r) as expr) ectx =
+        self#filter meta expr (self#visit_t ctx ectx r)
+
+      method private build_Select ctx meta ((_, r) as expr) ectx =
+        self#select meta expr (self#visit_t ctx ectx r)
+    end
+
   module TF = struct
     open Type
 
     class type_fold =
-      object (self)
-        inherit [_, _] material_fold
+      object
+        inherit [_, _, _, _, _, _, _, _] material_fold
 
-        method build_Select () _ (exprs, r) ctx =
-          let t = self#visit_t () ctx r in
-          FuncT ([t], `Width (List.length exprs))
+        method select _ (exprs, _) t = FuncT ([t], `Width (List.length exprs))
 
-        method build_Filter () _ (_, r) ctx =
-          let t = self#visit_t () ctx r in
-          FuncT ([t], `Child_sum)
+        method filter _ _ t = FuncT ([t], `Child_sum)
 
-        method build_AEmpty () _ = EmptyT
+        method empty _ = EmptyT
 
-        method build_AScalar () _ _ v =
-          match Lazy.force v with
+        method scalar _ _ =
+          function
           | Value.Date x ->
               let x = Date.to_int x in
               IntT {range= AbsInt.abstract x; nullable= false}
@@ -443,16 +520,14 @@ module Make (Config : Config.S) = struct
           | Null -> NullT
           | Fixed x -> FixedT {value= AbsFixed.of_fixed x; nullable= false}
 
-        method build_AList () _ (_, elem_query) gen =
-          let elem_type, num_elems =
-            Gen.fold gen ~init:(EmptyT, 0) ~f:(fun (t, c) (_, ctx) ->
-                let t' = self#visit_t () ctx elem_query in
-                (unify_exn t t', c + 1) )
-          in
-          ListT (elem_type, {count= AbsInt.abstract num_elems})
+        method list _ _ =
+          { pre= (fun () -> (EmptyT, 0))
+          ; body= (fun (t, c) (_, t') -> (unify_exn t t', c + 1))
+          ; post=
+              (fun (elem_type, num_elems) ->
+                ListT (elem_type, {count= AbsInt.abstract num_elems}) ) }
 
-        method build_ATuple () _ (ls, kind) ctxs =
-          let elem_types = List.map2_exn ctxs ls ~f:(self#visit_t ()) in
+        method tuple _ (_, kind) elem_types =
           let counts = List.map elem_types ~f:count in
           match kind with
           | Zip ->
@@ -465,31 +540,17 @@ module Make (Config : Config.S) = struct
               TupleT
                 (elem_types, {count= List.fold_left1_exn ~f:AbsCount.( * ) counts})
 
-        method build_AHashIdx () _ (_, value_query, {hi_key_layout= m_key_query; _})
-            key_gen value_gen =
-          let key_query = Option.value_exn m_key_query in
-          Gen.junk_all key_gen ;
-          let kt, vt =
-            Gen.fold value_gen ~init:(EmptyT, EmptyT)
-              ~f:(fun (kt, vt) (key, vctx) ->
-                let kt' = self#visit_t () (to_ctx key) key_query in
-                let vt' = self#visit_t () vctx value_query in
-                (unify_exn kt kt', unify_exn vt vt') )
-          in
-          HashIdxT (kt, vt, {count= None})
+        method hash_idx _ _ =
+          ( {pre= (fun () -> ()); body= (fun () _ -> ()); post= (fun () -> ())}
+          , { pre= (fun () -> (EmptyT, EmptyT))
+            ; body= (fun (kt, vt) (kt', vt') -> (unify_exn kt kt', unify_exn vt vt'))
+            ; post= (fun (kt, vt) -> HashIdxT (kt, vt, {count= None})) } )
 
-        method build_AOrderedIdx () _
-            (_, value_query, {oi_key_layout= m_key_query; _}) key_gen value_gen =
-          let key_query = Option.value_exn m_key_query in
-          Gen.junk_all key_gen ;
-          let kt, vt =
-            Gen.fold value_gen ~init:(EmptyT, EmptyT)
-              ~f:(fun (kt, vt) (key, vctx) ->
-                let kt' = self#visit_t () (to_ctx key) key_query in
-                let vt' = self#visit_t () vctx value_query in
-                (unify_exn kt kt', unify_exn vt vt') )
-          in
-          OrderedIdxT (kt, vt, {count= None})
+        method ordered_idx _ _ =
+          ( {pre= (fun () -> ()); body= (fun () _ -> ()); post= (fun () -> ())}
+          , { pre= (fun () -> (EmptyT, EmptyT))
+            ; body= (fun (kt, vt) (kt', vt') -> (unify_exn kt kt', unify_exn vt vt'))
+            ; post= (fun (kt, vt) -> OrderedIdxT (kt, vt, {count= None})) } )
       end
   end
 
