@@ -417,8 +417,25 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
 
   let gen_ordered_idx ?lb ?ub p r =
     let open A in
-    let lb = Option.value lb ~default:(Int (Int.min_value + 1)) in
-    let ub = Option.value ub ~default:(Int Int.max_value) in
+    let t = pred_to_schema p |> Name.type_exn in
+    let default_min =
+      let open Type.PrimType in
+      match t with
+      | IntT _ -> Int (Int.min_value + 1)
+      | FixedT _ -> Fixed Fixed_point.(min_value + of_int 1)
+      | DateT _ -> Date (Date.of_string "0000-01-01")
+      | _ -> failwith "Unexpected type."
+    in
+    let default_max =
+      let open Type.PrimType in
+      match t with
+      | IntT _ -> Int Int.max_value
+      | FixedT _ -> Fixed Fixed_point.max_value
+      | DateT _ -> Date (Date.of_string "9999-01-01")
+      | _ -> failwith "Unexpected type."
+    in
+    let lb = Option.value lb ~default:default_min in
+    let ub = Option.value ub ~default:default_max in
     let k = Fresh.name fresh "k%d" in
     let select_list = [As_pred (p, k)] in
     let filter_pred = Binop (Eq, Name (Name.create k), p) in
@@ -431,16 +448,17 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     let open A in
     { name= "elim-cmp-filter"
     ; f=
-        (function
-        | {node= Filter (Binop (And, Binop (Ge, p, lb), Binop (Lt, p', ub)), r); _}
-          when [%compare.equal: pred] p p' ->
-            gen_ordered_idx ~lb ~ub p r
-        | {node= Filter (Binop (Le, p, p'), r); _}
-         |{node= Filter (Binop (Lt, p, p'), r); _}
-         |{node= Filter (Binop (Ge, p', p), r); _}
-         |{node= Filter (Binop (Gt, p', p), r); _} ->
-            gen_ordered_idx ~ub:p' p r @ gen_ordered_idx ~lb:p p' r
-        | _ -> []) }
+        (fun r ->
+          match r with
+          | {node= Filter (Binop (And, Binop (Ge, p, lb), Binop (Lt, p', ub)), r); _}
+            when [%compare.equal: pred] p p' ->
+              gen_ordered_idx ~lb ~ub p r
+          | {node= Filter (Binop (Le, p, p'), r); _}
+           |{node= Filter (Binop (Lt, p, p'), r); _}
+           |{node= Filter (Binop (Ge, p', p), r); _}
+           |{node= Filter (Binop (Gt, p', p), r); _} ->
+              gen_ordered_idx ~ub:p' p r @ gen_ordered_idx ~lb:p p' r
+          | _ -> [] ) }
     |> run_everywhere
 
   (* let tf_elim_cmp_filter_simple _ =

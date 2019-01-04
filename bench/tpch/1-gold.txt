@@ -41,5 +41,5 @@ alist(orderby([k0_l_l_returnflag, k0_l_l_linestatus],
                 ascalar(l.l_returnflag),
                 ascalar(l.l_linestatus)],
           cross)),
-      (0 - 4611686018427387903),
+      date("0000-01-01"),
       (date("1998-12-01") - day(param0)))))

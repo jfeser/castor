@@ -115,3 +115,7 @@ let%expect_test "add" =
   let x2 = {value= 25; scale= 10} in
   x1 + x2 |> [%sexp_of: t] |> print_s ;
   [%expect {| ((value 373) (scale 100)) |}]
+
+let min_value = {value= Int.min_value; scale= 1}
+
+let max_value = {value= Int.max_value; scale= 1}
