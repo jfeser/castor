@@ -71,19 +71,19 @@ let pp_list ?(bracket = ("[", "]")) pp fmt ls =
   loop ls ; close_box () ; fprintf fmt "%s" closeb
 
 let op_to_str = function
-  | Eq -> "="
-  | Lt -> "<"
-  | Le -> "<="
-  | Gt -> ">"
-  | Ge -> ">="
-  | And -> "&&"
-  | Or -> "||"
-  | Add -> "+"
-  | Sub -> "-"
-  | Mul -> "*"
-  | Div -> "/"
-  | Mod -> "%"
-  | _ -> failwith "Not an inline op."
+  | Eq -> `Infix "="
+  | Lt -> `Infix "<"
+  | Le -> `Infix "<="
+  | Gt -> `Infix ">"
+  | Ge -> `Infix ">="
+  | And -> `Infix "&&"
+  | Or -> `Infix "||"
+  | Add -> `Infix "+"
+  | Sub -> `Infix "-"
+  | Mul -> `Infix "*"
+  | Div -> `Infix "/"
+  | Mod -> `Infix "%"
+  | Strpos -> `Prefix "strpos"
 
 let unop_to_str = function
   | Not -> "not"
@@ -129,10 +129,10 @@ and pp_pred fmt =
   | Bool x -> fprintf fmt "%B" x
   | String x -> fprintf fmt "%S" x
   | Name n -> pp_name fmt n
-  | Binop (Strpos, p1, p2) ->
-      fprintf fmt "@[<hov>strpos(%a,@ %a)@]" pp_pred p1 pp_pred p2
-  | Binop (op, p1, p2) ->
-      fprintf fmt "@[<hov>(%a@ %s@ %a)@]" pp_pred p1 (op_to_str op) pp_pred p2
+  | Binop (op, p1, p2) -> (
+    match op_to_str op with
+    | `Infix str -> fprintf fmt "@[<hov>(%a@ %s@ %a)@]" pp_pred p1 str pp_pred p2
+    | `Prefix str -> fprintf fmt "@[<hov>%s(%a,@ %a)@]" str pp_pred p1 pp_pred p2 )
   | Count -> fprintf fmt "count()"
   | Sum n -> fprintf fmt "sum(%a)" pp_pred n
   | Avg n -> fprintf fmt "avg(%a)" pp_pred n
@@ -232,7 +232,13 @@ let names_visitor =
     method! visit_Name () n = Set.singleton (module Name.Compare_no_type) n
 
     method! visit_pred () p =
-      match p with Exists _ | First _ -> self#zero | _ -> super#visit_pred () p
+      match p with
+      | Exists _ | First _ -> self#zero
+      | Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null | Unop _
+       |Binop _ | As_pred _ | Count | Sum _ | Avg _ | Min _ | Max _
+       |If (_, _, _)
+       |Substring (_, _, _) ->
+          super#visit_pred () p
   end
 
 let names r = names_visitor#visit_t () r
@@ -500,7 +506,11 @@ let rec pred_free p =
       method! visit_pred () p =
         match p with
         | Exists r | First r -> self#visit_subquery r
-        | _ -> super#visit_pred () p
+        | Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null | Unop _
+         |Binop _ | As_pred _ | Count | Sum _ | Avg _ | Min _ | Max _
+         |If (_, _, _)
+         |Substring (_, _, _) ->
+            super#visit_pred () p
     end
   in
   visitor#visit_pred () p

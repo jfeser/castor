@@ -160,7 +160,17 @@ let rec unify_exn t1 t2 =
       FuncT (List.map2_exn ~f:unify_exn t t', `Child_sum)
   | FuncT (t, `Width w), FuncT (t', `Width w') when Int.(w = w') ->
       FuncT (List.map2_exn ~f:unify_exn t t', `Width w)
-  | _ -> fail "Unexpected types."
+  | NullT, _
+   |IntT _, _
+   |FixedT _, _
+   |BoolT _, _
+   |StringT _, _
+   |TupleT _, _
+   |ListT _, _
+   |HashIdxT _, _
+   |OrderedIdxT _, _
+   |FuncT _, _ ->
+      fail "Unexpected types."
 
 (** Returns the width of the tuples produced by reading a layout with this type.
    *)

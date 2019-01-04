@@ -69,15 +69,15 @@ let build_extractvalue v i n b =
   (* Check that the argument really is a struct and that the index is
          valid. *)
   let typ = type_of v in
-  ( match classify_type typ with
-  | Struct ->
-      if i >= Array.length (struct_element_types typ) then
-        Error.create "Tuple index out of bounds." (v, i) [%sexp_of: llvalue * int]
-        |> Error.raise
-  | k ->
-      Error.create "Expected a tuple." (v, k, i)
-        [%sexp_of: llvalue * TypeKind.t * int]
-      |> Error.raise ) ;
+  let kind = classify_type typ in
+  if [%compare.equal: TypeKind.t] kind Struct then (
+    if i >= Array.length (struct_element_types typ) then
+      Error.create "Tuple index out of bounds." (v, i) [%sexp_of: llvalue * int]
+      |> Error.raise )
+  else
+    Error.create "Expected a tuple." (v, kind, i)
+      [%sexp_of: llvalue * TypeKind.t * int]
+    |> Error.raise ;
   build_extractvalue v i n b
 
 module Config = struct
@@ -573,14 +573,13 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     (* Check that the argument really is a struct and that the index is
          valid. *)
     let typ = type_of lltup in
-    ( match classify_type typ with
-    | Struct ->
-        if idx >= Array.length (struct_element_types typ) then
-          Logs.err (fun m ->
-              m "Tuple index out of bounds %s %d." (string_of_llvalue lltup) idx )
-    | _ ->
+    if [%compare.equal: TypeKind.t] (classify_type typ) Struct then
+      if idx >= Array.length (struct_element_types typ) then
         Logs.err (fun m ->
-            m "Expected a tuple but got %s." (string_of_llvalue lltup) ) ) ;
+            m "Tuple index out of bounds %s %d." (string_of_llvalue lltup) idx )
+      else
+        Logs.err (fun m ->
+            m "Expected a tuple but got %s." (string_of_llvalue lltup) ) ;
     build_extractvalue lltup idx "elemtmp" builder
 
   let codegen_hash fctx hash_offset key_ptr key_size =
@@ -974,7 +973,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
               call_printf comma_str [] )
       | VoidT -> call_printf void_str []
       | FixedT _ -> call_printf float_fmt [val_]
-      | _ -> failwith "Cannot print."
+      | IntT _ | DateT _ | StringT _ | BoolT _ -> failwith "Cannot print."
     in
     gen val_ type_ ; call_printf newline_str []
 
@@ -1309,12 +1308,14 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | Pointer ->
           let elem_t = element_type t in
           let elem_t =
-            match classify_type elem_t with
-            | Array -> element_type elem_t
-            | _ -> elem_t
+            if [%compare.equal: TypeKind.t] (classify_type elem_t) Array then
+              element_type elem_t
+            else elem_t
           in
           fprintf fmt "%a *" pp_type elem_t
-      | _ -> Error.(create "Unknown type." t [%sexp_of: lltype] |> raise)
+      | Half | Float | Double | X86fp80 | Fp128 | Ppc_fp128 | Label | Function
+       |Array | Vector | Metadata | X86_mmx ->
+          Error.(create "Unknown type." t [%sexp_of: lltype] |> raise)
     and pp_params fmt ts =
       Array.iteri ts ~f:(fun i t ->
           if i = 0 then fprintf fmt "params*" else fprintf fmt "%a" pp_type t ;
@@ -1326,18 +1327,19 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         Logs.debug (fun m -> m "Ignoring global %s." (string_of_llvalue v))
       in
       match classify_type t with
-      | Pointer -> (
+      | Pointer ->
           let elem_t = element_type t in
-          match classify_type elem_t with
-          | Function ->
-              let t = elem_t in
-              fprintf fmt "%a %s(%a);@," pp_type (return_type t) n pp_params
-                (param_types t)
-          | _ -> ignore_val () )
+          if [%compare.equal: TypeKind.t] (classify_type elem_t) Function then
+            let t = elem_t in
+            fprintf fmt "%a %s(%a);@," pp_type (return_type t) n pp_params
+              (param_types t)
+          else ignore_val ()
       | Function ->
           fprintf fmt "%a %s(%a);@," pp_type (return_type t) n pp_params
             (param_types t)
-      | _ -> ignore_val ()
+      | Void | Half | Float | Double | X86fp80 | Fp128 | Ppc_fp128 | Label
+       |Integer | Struct | Array | Vector | Metadata | X86_mmx ->
+          ignore_val ()
     in
     let fmt = Caml.Format.formatter_of_out_channel ch in
     pp_open_vbox fmt 0 ;

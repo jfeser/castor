@@ -892,7 +892,10 @@ module Make (Config : Config.S) = struct
         Meta.(set_m r type_ t) ;
         annotate_type r' t'
     | As (_, r), _ -> annotate_type r t
-    | _ ->
+    | ( ( Select _ | Filter _ | Join _ | GroupBy _ | OrderBy _ | Dedup _ | Scan _
+        | AEmpty | AScalar _ | AList _ | ATuple _ | AHashIdx _ | AOrderedIdx _ )
+      , ( NullT | IntT _ | FixedT _ | BoolT _ | StringT _ | TupleT _ | ListT _
+        | HashIdxT _ | OrderedIdxT _ | FuncT _ | EmptyT ) ) ->
         Error.create "Unexpected type." (r, t) [%sexp_of: Abslayout.t * t]
         |> Error.raise
 

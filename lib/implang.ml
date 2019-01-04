@@ -26,26 +26,26 @@ let pp_bool fmt = Format.fprintf fmt "%b"
 let rec pp_expr : Format.formatter -> expr -> unit =
   let open Format in
   let op_to_string = function
-    | IntAdd | FlAdd -> "+"
-    | IntSub | FlSub -> "-"
-    | IntMul | FlMul -> "*"
-    | IntDiv | FlDiv -> "/"
-    | Mod -> "%"
-    | IntLt | FlLt -> "<"
-    | FlLe -> "<="
-    | And -> "&&"
-    | Not -> "not"
-    | IntEq | StrEq | FlEq -> "="
-    | Or -> "||"
-    | IntHash | StrHash -> "hash"
-    | LoadStr -> "load_str"
-    | LoadBool -> "load_bool"
-    | Int2Fl -> "int2fl"
-    | StrLen -> "strlen"
-    | StrPos -> "strpos"
-    | ExtractY -> "to_year"
-    | ExtractM -> "to_mon"
-    | ExtractD -> "to_day"
+    | IntAdd | FlAdd -> `Infix "+"
+    | IntSub | FlSub -> `Infix "-"
+    | IntMul | FlMul -> `Infix "*"
+    | IntDiv | FlDiv -> `Infix "/"
+    | Mod -> `Infix "%"
+    | IntLt | FlLt -> `Infix "<"
+    | FlLe -> `Infix "<="
+    | And -> `Infix "&&"
+    | Not -> `Infix "not"
+    | IntEq | StrEq | FlEq -> `Infix "="
+    | Or -> `Infix "||"
+    | IntHash | StrHash -> `Prefix "hash"
+    | LoadStr -> `Prefix "load_str"
+    | LoadBool -> `Prefix "load_bool"
+    | Int2Fl -> `Prefix "int2fl"
+    | StrLen -> `Prefix "strlen"
+    | StrPos -> `Prefix "strpos"
+    | ExtractY -> `Prefix "to_year"
+    | ExtractM -> `Prefix "to_mon"
+    | ExtractD -> `Prefix "to_day"
   in
   fun fmt -> function
     | Null -> fprintf fmt "null"
@@ -57,13 +57,13 @@ let rec pp_expr : Format.formatter -> expr -> unit =
     | Tuple t -> fprintf fmt "(@[<hov>%a@])" (pp_tuple pp_expr) t
     | Slice (ptr, len) -> fprintf fmt "buf[%a :@ %d]" pp_expr ptr len
     | Index (tuple, idx) -> fprintf fmt "%a[%d]" pp_expr tuple idx
-    | Binop {op= IntHash | StrHash; arg1; arg2} ->
-        fprintf fmt "hash(%a, %a)" pp_expr arg1 pp_expr arg2
-    | Binop {op= LoadStr; arg1; arg2} ->
-        fprintf fmt "load_str(%a, %a)" pp_expr arg1 pp_expr arg2
-    | Binop {op; arg1; arg2} ->
-        fprintf fmt "%a %s@ %a" pp_expr arg1 (op_to_string op) pp_expr arg2
-    | Unop {op; arg} -> fprintf fmt "%s@ %a" (op_to_string op) pp_expr arg
+    | Binop {op; arg1; arg2} -> (
+      match op_to_string op with
+      | `Prefix str -> fprintf fmt "%s(%a, %a)" str pp_expr arg1 pp_expr arg2
+      | `Infix str -> fprintf fmt "%a %s@ %a" pp_expr arg1 str pp_expr arg2 )
+    | Unop {op; arg} ->
+        let (`Infix str | `Prefix str) = op_to_string op in
+        fprintf fmt "%s@ %a" str pp_expr arg
     | Done func -> fprintf fmt "done(%s)" func
     | Ternary (e1, e2, e3) ->
         fprintf fmt "%a ? %a : %a" pp_expr e1 pp_expr e2 pp_expr e3
@@ -233,7 +233,7 @@ module Builder = struct
         | LoadStr, IntT {nullable= false}, IntT {nullable= false} ->
             StringT {nullable= false}
         | StrPos, StringT _, StringT _ -> IntT {nullable= false}
-        | _ ->
+        | _, _, _ ->
             fail
               (Error.create "Type error." (e, t1, t2, ctx)
                  [%sexp_of: expr * t * t * t Hashtbl.M(String).t]) )

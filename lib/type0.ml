@@ -32,7 +32,8 @@ module PrimType = struct
     | IntT _ -> "integer"
     | FixedT _ -> "numeric"
     | StringT _ -> "varchar"
-    | _ -> failwith "Not a value type."
+    | DateT _ -> "date"
+    | TupleT _ | VoidT | NullT -> failwith "Not a value type."
 
   let to_string : t -> string = function
     | BoolT _ -> "bool"
@@ -89,7 +90,15 @@ module PrimType = struct
     | StringT {nullable= n1}, StringT {nullable= n2} -> StringT {nullable= n1 || n2}
     | TupleT t1, TupleT t2 -> TupleT (List.map2_exn t1 t2 ~f:unify)
     | VoidT, VoidT -> VoidT
-    | _, _ -> Error.create "Nonunifiable." (t1, t2) [%sexp_of: t * t] |> Error.raise
+    | NullT, _
+     |IntT _, _
+     |DateT _, _
+     |FixedT _, _
+     |StringT _, _
+     |BoolT _, _
+     |TupleT _, _
+     |VoidT, _ ->
+        Error.create "Nonunifiable." (t1, t2) [%sexp_of: t * t] |> Error.raise
 
   let rec width = function
     | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ | DateT _ -> 1
