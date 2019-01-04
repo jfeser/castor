@@ -721,8 +721,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
      * let {data= x2; null= n2} = unpack_null v2 in *)
     let x_out =
       match op with
-      | I.IntAdd -> build_nsw_add x1 x2 "addtmp" builder
-      | IntSub -> build_nsw_sub x1 x2 "subtmp" builder
+      | I.IntAdd | DateAdd -> build_nsw_add x1 x2 "addtmp" builder
+      | IntSub | DateSub -> build_nsw_sub x1 x2 "subtmp" builder
       | IntMul -> build_nsw_mul x1 x2 "multmp" builder
       | IntDiv -> build_sdiv x1 x2 "divtmp" builder
       | FlAdd -> build_fadd x1 x2 "addtmp" builder
@@ -730,9 +730,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | FlMul -> build_fmul x1 x2 "multmp" builder
       | FlDiv -> build_fdiv x1 x2 "divtmp" builder
       | Mod -> build_srem x1 x2 "modtmp" builder
-      | IntEq -> build_icmp Icmp.Eq x1 x2 "eqtmp" builder
+      | IntEq | DateEq -> build_icmp Icmp.Eq x1 x2 "eqtmp" builder
       | StrEq -> build_call scmp [|x1; x2|] "eqtmp" builder
-      | IntLt -> build_icmp Icmp.Slt x1 x2 "lttmp" builder
+      | IntLt | DateLt -> build_icmp Icmp.Slt x1 x2 "lttmp" builder
       | FlLt -> build_fcmp Fcmp.Olt x1 x2 "lttmp" builder
       | FlLe -> build_fcmp Fcmp.Ole x1 x2 "letmp" builder
       | FlEq -> build_fcmp Fcmp.Oeq x1 x2 "eqtmp" builder
@@ -742,7 +742,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | StrHash -> codegen_string_hash fctx x1 x2
       | LoadStr -> codegen_load_str fctx x1 x2
       | StrPos -> codegen_strpos fctx x1 x2
-      | StrLen | Not | Int2Fl | ExtractY | ExtractM | ExtractD | LoadBool ->
+      | StrLen | Not | Int2Fl | ExtractY | ExtractM | ExtractD | LoadBool | Int2Date
+        ->
           fail (Error.of_string "Not a binary operator.")
     in
     x_out
@@ -757,6 +758,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     match op with
     | I.Not -> build_not x "nottmp" builder
     | Int2Fl -> build_sitofp x fixed_type "" builder
+    | Int2Date -> x
     | StrLen -> (Llstring.unpack x).len
     | ExtractY -> build_call extract_y [|x|] "" builder
     | ExtractM -> build_call extract_m [|x|] "" builder
@@ -764,7 +766,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     | LoadBool -> codegen_load_bool fctx x
     | IntAdd | IntSub | IntLt | And | Or | IntEq | StrEq | IntHash | StrHash
      |IntMul | IntDiv | Mod | LoadStr | FlAdd | FlSub | FlMul | FlDiv | FlLt
-     |FlLe | FlEq | StrPos ->
+     |FlLe | FlEq | StrPos | DateAdd | DateSub | DateLt | DateEq ->
         fail (Error.of_string "Not a unary operator.")
 
   (* in
@@ -789,6 +791,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
   let rec codegen_expr fctx = function
     | I.Null -> failwith "TODO: Pick a runtime null rep."
     | Int x -> const_int int_type x
+    | Date x -> const_int int_type (Date.to_int x)
     | Fixed x -> const_float fixed_type Float.(of_int x.value / of_int x.scale)
     | Bool true -> const_int bool_type 1
     | Bool false -> const_int bool_type 0

@@ -4,32 +4,39 @@ open Abslayout
 open Test_util
 module M = Abslayout_db.Make (Test_db)
 
-let run_test ?(params = []) layout_str =
-  let module S =
-    Serialize.Make (struct
-        let layout_map_channel = None
-      end)
-      (M)
-  in
-  let module I =
-    Irgen.Make (struct
-        let code_only = true
+let run_test ?(params = []) ?(print_code = true) layout_str =
+  try
+    let module S =
+      Serialize.Make (struct
+          let layout_map_channel = None
+        end)
+        (M)
+    in
+    let module I =
+      Irgen.Make (struct
+          let code_only = true
 
-        let debug = false
-      end)
-      (M)
-      (S)
-      ()
-  in
-  let sparams = Set.of_list (module Name.Compare_no_type) params in
-  let layout = of_string_exn layout_str |> M.resolve ~params:sparams in
-  M.annotate_schema layout ;
-  let layout = M.annotate_key_layouts layout in
-  annotate_foreach layout ;
-  M.annotate_subquery_types layout ;
-  let type_ = M.to_type layout in
-  Stdio.print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ;
-  I.irgen ~params ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter
+          let debug = false
+        end)
+        (M)
+        (S)
+        ()
+    in
+    let sparams = Set.of_list (module Name.Compare_no_type) params in
+    let layout = of_string_exn layout_str |> M.resolve ~params:sparams in
+    M.annotate_schema layout ;
+    let layout = M.annotate_key_layouts layout in
+    annotate_foreach layout ;
+    M.annotate_subquery_types layout ;
+    let type_ = M.to_type layout in
+    Stdio.print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ;
+    let ir = I.irgen ~params ~data_fn:"/tmp/buf" layout in
+    if print_code then I.pp Caml.Format.std_formatter ir
+  with exn ->
+    Backtrace.(
+      elide := false ;
+      Exn.most_recent () |> to_string |> Stdio.print_endline) ;
+    Exn.(to_string exn |> Stdio.print_endline)
 
 let run_test_db ?(params = []) layout_str =
   let module M = Abslayout_db.Make (struct
@@ -618,6 +625,14 @@ let%expect_test "ordered-idx" =
         }
         return c0;
     } |}]
+
+let%expect_test "ordered-idx-date" =
+  run_test ~print_code:false
+    {|AOrderedIdx(dedup(select([r_date.f as k], r_date)), ascalar(k), date("2018-01-01"), date("2018-01-01"))|} ;
+  [%expect {|
+    (OrderedIdxT
+     ((DateT ((range (17136 17775)) (nullable false)))
+      (DateT ((range (17136 17775)) (nullable false))) ((count ())))) |}]
 
 let%expect_test "example-1" =
   run_test ~params:example_params

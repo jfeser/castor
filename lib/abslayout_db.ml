@@ -36,9 +36,8 @@ module Make (Config : Config.S) = struct
         let schema = pred_to_schema p in
         {schema with relation= None; name= n}
     | Name n -> n
-    | Int _ | Date _
-     |Unop ((Year | Month | Day | Strlen | ExtractY | ExtractM | ExtractD), _)
-     |Count ->
+    | Date _ | Unop ((Year | Month | Day), _) -> unnamed (DateT {nullable= false})
+    | Int _ | Unop ((Strlen | ExtractY | ExtractM | ExtractD), _) | Count ->
         unnamed (IntT {nullable= false})
     | Fixed _ | Avg _ -> unnamed (FixedT {nullable= false})
     | Bool _ | Exists _
@@ -512,7 +511,7 @@ module Make (Config : Config.S) = struct
           function
           | Value.Date x ->
               let x = Date.to_int x in
-              IntT {range= AbsInt.abstract x; nullable= false}
+              DateT {range= AbsInt.abstract x; nullable= false}
           | Int x -> IntT {range= AbsInt.abstract x; nullable= false}
           | Bool _ -> BoolT {nullable= false}
           | String x ->
@@ -867,7 +866,7 @@ module Make (Config : Config.S) = struct
   let rec annotate_type r t =
     let open Type in
     match (r.node, t) with
-    | AScalar _, (IntT _ | FixedT _ | BoolT _ | StringT _ | NullT) ->
+    | AScalar _, (IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | NullT) ->
         Meta.(set_m r type_ t)
     | AList (_, r'), ListT (t', _) ->
         Meta.(set_m r type_ t) ;
@@ -894,8 +893,8 @@ module Make (Config : Config.S) = struct
     | As (_, r), _ -> annotate_type r t
     | ( ( Select _ | Filter _ | Join _ | GroupBy _ | OrderBy _ | Dedup _ | Scan _
         | AEmpty | AScalar _ | AList _ | ATuple _ | AHashIdx _ | AOrderedIdx _ )
-      , ( NullT | IntT _ | FixedT _ | BoolT _ | StringT _ | TupleT _ | ListT _
-        | HashIdxT _ | OrderedIdxT _ | FuncT _ | EmptyT ) ) ->
+      , ( NullT | IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | TupleT _
+        | ListT _ | HashIdxT _ | OrderedIdxT _ | FuncT _ | EmptyT ) ) ->
         Error.create "Unexpected type." (r, t) [%sexp_of: Abslayout.t * t]
         |> Error.raise
 

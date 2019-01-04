@@ -83,6 +83,8 @@ end
 module T = struct
   type int_ = {range: AbsInt.t; nullable: bool} [@@deriving compare, sexp]
 
+  type date = {range: AbsInt.t; nullable: bool} [@@deriving compare, sexp]
+
   type bool_ = {nullable: bool} [@@deriving compare, sexp]
 
   type string_ = {nchars: AbsInt.t; nullable: bool} [@@deriving compare, sexp]
@@ -100,6 +102,7 @@ module T = struct
   type t =
     | NullT
     | IntT of int_
+    | DateT of date
     | FixedT of fixed
     | BoolT of bool_
     | StringT of string_
@@ -131,9 +134,12 @@ let rec unify_exn t1 t2 =
   | NullT, NullT -> NullT
   | IntT {range= b1; nullable= n1}, IntT {range= b2; nullable= n2} ->
       IntT {range= AbsInt.unify b1 b2; nullable= n1 || n2}
+  | DateT {range= b1; nullable= n1}, DateT {range= b2; nullable= n2} ->
+      DateT {range= AbsInt.unify b1 b2; nullable= n1 || n2}
   | FixedT {value= v1; nullable= n1}, FixedT {value= v2; nullable= n2} ->
       FixedT {value= AbsFixed.unify v1 v2; nullable= n1 || n2}
   | IntT x, NullT | NullT, IntT x -> IntT {x with nullable= true}
+  | DateT x, NullT | NullT, DateT x -> DateT {x with nullable= true}
   | FixedT x, NullT | NullT, FixedT x -> FixedT {x with nullable= true}
   | BoolT {nullable= n1}, BoolT {nullable= n2} -> BoolT {nullable= n1 || n2}
   | BoolT _, NullT | NullT, BoolT _ -> BoolT {nullable= true}
@@ -162,6 +168,7 @@ let rec unify_exn t1 t2 =
       FuncT (List.map2_exn ~f:unify_exn t t', `Width w)
   | NullT, _
    |IntT _, _
+   |DateT _, _
    |FixedT _, _
    |BoolT _, _
    |StringT _, _
@@ -175,7 +182,7 @@ let rec unify_exn t1 t2 =
 (** Returns the width of the tuples produced by reading a layout with this type.
    *)
 let rec width = function
-  | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ -> 1
+  | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ | DateT _ -> 1
   | TupleT (ts, _) -> List.map ts ~f:width |> List.sum (module Int) ~f:(fun x -> x)
   | ListT (t, _) -> width t
   | HashIdxT (kt, vt, _) | OrderedIdxT (kt, vt, _) -> width kt + width vt
@@ -184,9 +191,9 @@ let rec width = function
       List.map ts ~f:width |> List.sum (module Int) ~f:(fun x -> x)
   | FuncT (_, `Width w) -> w
 
-let count : t -> AbsCount.t = function
+let count = function
   | EmptyT -> AbsCount.abstract 0
-  | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ -> AbsCount.abstract 1
+  | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ | DateT _ -> AbsCount.abstract 1
   | TupleT (_, {count})
    |OrderedIdxT (_, _, {count; _})
    |HashIdxT (_, _, {count; _}) ->
@@ -204,6 +211,7 @@ let rec len =
   function
   | EmptyT -> zero
   | IntT x -> byte_width ~nullable:x.nullable x.range |> abstract
+  | DateT x -> byte_width ~nullable:x.nullable x.range |> abstract
   | FixedT x -> byte_width ~nullable:x.nullable x.value.range |> abstract
   | BoolT _ -> abstract 1
   | StringT x -> header_len x.nchars + x.nchars

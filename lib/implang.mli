@@ -3,6 +3,7 @@ open Collections
 
 type op = Implang0.op =
   | Int2Fl
+  | Int2Date
   | IntAdd
   | IntSub
   | IntMul
@@ -12,12 +13,16 @@ type op = Implang0.op =
   | FlSub
   | FlMul
   | FlDiv
+  | DateAdd
+  | DateSub
   | IntLt
   | FlLt
   | FlLe
   | FlEq
+  | DateLt
   | IntEq
   | StrEq
+  | DateEq
   | And
   | Or
   | Not
@@ -35,6 +40,7 @@ type op = Implang0.op =
 type expr = Implang0.expr =
   | Null
   | Int of int
+  | Date of Core.Date.t
   | Fixed of Fixed_point.t
   | Bool of bool
   | String of string

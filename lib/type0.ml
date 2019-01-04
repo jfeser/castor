@@ -82,7 +82,9 @@ module PrimType = struct
   let rec unify t1 t2 =
     match (t1, t2) with
     | IntT {nullable= n1}, IntT {nullable= n2} -> IntT {nullable= n1 || n2}
+    | DateT {nullable= n1}, DateT {nullable= n2} -> DateT {nullable= n1 || n2}
     | FixedT {nullable= n1}, FixedT {nullable= n2} -> FixedT {nullable= n1 || n2}
+    (* TODO: Remove coercion *)
     | FixedT {nullable= n1}, IntT {nullable= n2}
      |IntT {nullable= n1}, FixedT {nullable= n2} ->
         FixedT {nullable= n1 || n2}
@@ -99,6 +101,12 @@ module PrimType = struct
      |TupleT _, _
      |VoidT, _ ->
         Error.create "Nonunifiable." (t1, t2) [%sexp_of: t * t] |> Error.raise
+
+  let unify t1 t2 =
+    Or_error.try_with (fun () -> unify t1 t2)
+    |> (fun err ->
+         Or_error.tag_arg err "Failed to unify." (t1, t2) [%sexp_of: t * t] )
+    |> Or_error.ok_exn
 
   let rec width = function
     | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ | DateT _ -> 1

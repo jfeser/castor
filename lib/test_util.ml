@@ -49,6 +49,7 @@ let create db name fields values =
         | IntT _ -> sprintf "%s integer" f
         | StringT _ -> sprintf "%s varchar" f
         | BoolT _ -> sprintf "%s boolean" f
+        | DateT _ -> sprintf "%s date" f
         | _ -> failwith "Unexpected type." )
     |> String.concat ~sep:", "
   in
@@ -74,6 +75,17 @@ module Test_db = struct
   let () =
     create_simple conn "r" ["f"; "g"]
       [[0; 5]; [1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]; [4; 6]] ;
+    create conn "r_date"
+      [ ("f", Type.PrimType.DateT {nullable= false})
+      ; ("g", Type.PrimType.IntT {nullable= false}) ]
+      Core.Date.
+        [ [Date (of_string "2018-01-01"); Int 5]
+        ; [Date (of_string "2016-12-01"); Int 2]
+        ; [Date (of_string "2018-01-23"); Int 3]
+        ; [Date (of_string "2017-10-05"); Int 1]
+        ; [Date (of_string "2018-01-01"); Int 2]
+        ; [Date (of_string "2018-09-01"); Int 4]
+        ; [Date (of_string "2018-01-01"); Int 6] ] ;
     create_simple conn "s" ["f"; "g"]
       [[0; 5]; [1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]; [4; 6]] ;
     create_simple conn "log" ["counter"; "succ"; "id"]

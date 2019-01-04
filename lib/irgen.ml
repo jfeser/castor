@@ -150,6 +150,7 @@ struct
     let ctx = add_layout_start ctx r in
     match (r.node, t) with
     | Abslayout.AScalar r', Type.IntT t' -> scan_int ctx b r' t' cb
+    | Abslayout.AScalar r', Type.DateT t' -> scan_date ctx b r' t' cb
     | AScalar r', FixedT t' -> scan_fixed ctx b r' t' cb
     | AScalar r', BoolT t' -> scan_bool ctx b r' t' cb
     | AScalar r', StringT t' -> scan_string ctx b r' t' cb
@@ -163,7 +164,7 @@ struct
     | Select r', FuncT t' -> scan_select ctx b r' t' cb
     | (Join _ | GroupBy _ | OrderBy _ | Dedup _ | Scan _ | As _), _ ->
         Error.create "Unsupported at runtime." r [%sexp_of: A.t] |> Error.raise
-    | _ ->
+    | _, _ ->
         Error.create "Mismatched type." (r, t) [%sexp_of: A.t * Type.t]
         |> Error.raise
 
@@ -181,7 +182,7 @@ struct
       | A.Int x -> Int x
       | A.String x -> String x
       | A.Fixed x -> Fixed x
-      | Date x -> Int (Date.to_int x)
+      | Date x -> Date x
       | Unop (op, p) -> (
           let x = gen_pred p b in
           match op with
@@ -268,6 +269,20 @@ struct
     in
     debug_print "int" ival b ;
     cb b [ival]
+
+  and scan_date ctx b _ (Type.({nullable; range= (_, h) as range; _}) : Type.date)
+      (cb : callback) =
+    let open Builder in
+    let start = Ctx.find_exn ctx (Name.create "start") b in
+    let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
+    let _nval =
+      if nullable then
+        let null_val = h + 1 in
+        Infix.(build_eq ival (int null_val) b)
+      else Bool false
+    in
+    debug_print "date" ival b ;
+    cb b [Unop {op= Int2Date; arg= ival}]
 
   and scan_fixed ctx b _ Type.({nullable; value= {range= (_, h) as range; scale}})
       (cb : callback) =
