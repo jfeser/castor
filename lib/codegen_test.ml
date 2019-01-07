@@ -69,7 +69,7 @@ let make_modules ?layout_file () =
 
 let make_modules_db ?layout_file () =
   let module E = Eval.Make (struct
-    let conn = Db.create "demomatch" ~port:"5433"
+    let conn = Db.create "postgresql://localhost:5433/demomatch"
   end) in
   let module M = Abslayout_db.Make (E) in
   let module S =

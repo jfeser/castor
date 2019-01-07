@@ -20,11 +20,10 @@ log.setLevel(logging.DEBUG)
 def rpath(p):
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), p)
 
-DB = 'demomatch'
-PORT = '5432'
 CONFIG = configparser.ConfigParser()
 CONFIG.read(rpath('../../config'))
-COMPILE_EXE = CONFIG['default']['project_root'] + '/bin/compile.exe'
+COMPILE_EXE = CONFIG['default']['build_root'] + '/bin/compile.exe'
+DB = CONFIG['default']['demomatch_db']
 PRESENT_QUERIES = 10
 ABSENT_QUERIES = 10
 TABLE_SIZE = 10000000
@@ -70,7 +69,6 @@ for bench in BENCHMARKS:
             '-v',
             '-o', benchd,
             '-db', DB,
-            '-port', PORT,
             '-p', 'id_p:string',
             '-p', 'id_c:string',
             bench

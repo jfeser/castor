@@ -9,13 +9,10 @@ let () =
     | Postgresql.Error e -> Some (Postgresql.string_of_error e)
     | _ -> None )
 
-type t =
-  { db: string
-  ; port: string option
-  ; conn: Psql.connection sexp_opaque [@compare.ignore] }
+type t = {uri: string; conn: Psql.connection sexp_opaque [@compare.ignore]}
 [@@deriving compare, sexp]
 
-let create ?port db = {db; port; conn= new Psql.connection ~dbname:db ?port ()}
+let create uri = {uri; conn= new Psql.connection ~conninfo:uri ()}
 
 let subst_params params query =
   match params with
@@ -186,7 +183,7 @@ end
 let exec_cursor =
   let fresh = Fresh.create () in
   fun ?(batch_size = 10000) ?(params = []) db query ->
-    let db = create ?port:db.port db.db in
+    let db = create db.uri in
     Caml.Gc.finalise (fun db -> try (db.conn)#finish with Failure _ -> ()) db ;
     let query = subst_params params query in
     let cur = Fresh.name fresh "cur%d" in

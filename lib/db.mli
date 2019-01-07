@@ -2,7 +2,7 @@ open Base
 
 type t
 
-val create : ?port:string -> string -> t
+val create : string -> t
 
 val exec :
   ?max_retries:int -> ?params:string list -> t -> string -> Postgresql.result

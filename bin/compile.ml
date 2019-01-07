@@ -2,9 +2,9 @@ open Core
 open Castor
 open Collections
 
-let main ~debug ~gprof ~params ~db ~port ~code_only ?out_dir ch =
+let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
   let module CConfig = struct
-    let conn = Db.create db ?port
+    let conn = Db.create db
 
     let debug = debug
 
@@ -56,8 +56,7 @@ let () =
   basic ~summary:"Compile a query."
     (let%map_open verbose =
        flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
-     and db = flag "db" (required string) ~doc:"DBNAME the database to connect to"
-     and port = flag "port" (optional string) ~doc:"PORT the port to connect to"
+     and db = flag "db" (required string) ~doc:"CONNINFO the database to connect to"
      and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
      and debug = flag "debug" ~aliases:["g"] no_arg ~doc:"enable debug mode"
      and gprof = flag "prof" ~aliases:["pg"] no_arg ~doc:"enable profiling"
@@ -77,5 +76,5 @@ let () =
        else Logs.set_level (Some Logs.Info) ;
        Logs.info (fun m ->
            m "%s" (Sys.argv |> Array.to_list |> String.concat ~sep:" ") ) ;
-       main ~debug ~gprof ~params ~db ~port ~code_only ?out_dir ch)
+       main ~debug ~gprof ~params ~db ~code_only ?out_dir ch)
   |> run

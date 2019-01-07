@@ -25,7 +25,7 @@ module M = Abslayout_db.Make (E)
 
 let make_module_db () =
   let module E = Eval.Make (struct
-    let conn = Db.create "demomatch" ~port:"5433"
+    let conn = Db.create "postgresql://localhost:5433/demomatch"
   end) in
   let module A = Abslayout_db.Make (E) in
   ((module E : Eval.S), (module A : Abslayout_db.S))

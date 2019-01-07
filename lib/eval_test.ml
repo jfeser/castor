@@ -89,7 +89,7 @@ let%expect_test "eval-foreach" =
 
 let make_module_db () =
   let module E = Eval.Make (struct
-    let conn = Db.create ~port:"5433" "demomatch"
+    let conn = Db.create "postgresql://localhost:5433/demomatch"
   end) in
   let module A = Abslayout_db.Make (E) in
   ((module E : Eval.S), (module A : Abslayout_db.S))

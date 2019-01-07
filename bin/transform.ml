@@ -51,7 +51,7 @@ let () =
   let open Let_syntax in
   basic ~summary:"Explore transformations by hand."
     (let%map_open db =
-       flag "db" (required string) ~doc:"DB the database to connect to"
+       flag "db" (required string) ~doc:"CONNINFO the database to connect to"
      and transforms =
        flag "transform" ~aliases:["t"] (optional string) ~doc:"transforms to run"
      and verbose = flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"

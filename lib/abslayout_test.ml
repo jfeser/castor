@@ -158,7 +158,7 @@ let%expect_test "needed" =
  *     {| select * from (select * from ship_mode) as ship_mode where (ship_mode."sm_carrier") = ('GERMA') |}] *)
 
 let%expect_test "mat-col" =
-  let conn = Db.create "tpcds1" in
+  let conn = Db.create "postgresql://localhost:5432/tpcds1" in
   let layout =
     of_string_exn
       "AList(Filter(ship_mode.sm_carrier = \"GERMA\", ship_mode), \
@@ -227,7 +227,7 @@ let%expect_test "mat-col" =
           (type_ ((StringT (nullable false)))))))))) |}]
 
 let%expect_test "mat-hidx" =
-  let conn = Db.create "tpcds1" in
+  let conn = Db.create "postgresql://localhost:5432/tpcds1" in
   let layout =
     of_string_exn
       "AHashIdx(Dedup(Select([ship_mode.sm_type], Filter(ship_mode.sm_type = \
@@ -392,8 +392,9 @@ let%expect_test "annotate-orders" =
 let%expect_test "annotate-schema" =
   let r = "ascalar((select([min(r.f)], r)))" |> of_string_exn |> M.resolve in
   M.annotate_schema r ;
-  [%sexp_of: t] r |> print_s;
-  [%expect {|
+  [%sexp_of: t] r |> print_s ;
+  [%expect
+    {|
     ((node
       (AScalar
        (First
@@ -414,8 +415,9 @@ let%expect_test "annotate-schema" =
 let%expect_test "annotate-schema" =
   let r = "select([min(r.f)], r)" |> of_string_exn |> M.resolve in
   M.annotate_schema r ;
-  [%sexp_of: t] r |> print_s;
-  [%expect {|
+  [%sexp_of: t] r |> print_s ;
+  [%expect
+    {|
     ((node
       (Select
        (((Min (Name ((relation (r)) (name f) (type_ ((IntT (nullable false))))))))

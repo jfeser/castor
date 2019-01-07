@@ -4,8 +4,7 @@
 
 Options:
   -h --help   Show this screen.
-  -d DB       Database name to connect to [default: tpch].
-  -p PORT     Database server port [default: 5432].
+  -d CONNINFO Database to connect to.
   --sql-only  Only run the SQL queries.
   --gen-dune  Generate dune file for checking args.
 '''
@@ -164,13 +163,12 @@ def gen_str(s):
 def gen_fixed_date(d):
     return gen_date(d,d)
 
-DB = 'tpch'
 SQL_ONLY = False
 CONFIG = configparser.ConfigParser()
-CONFIG.read(rpath('../../config'))
-COMPILE_EXE = CONFIG['default']['project_root'] + '/bin/compile.exe'
-TRANSFORM_EXE = CONFIG['default']['project_root'] + '/bin/transform.exe'
-PORT = "5432"
+CONFIG.read(rpath('../../config.ini'))
+COMPILE_EXE = CONFIG['default']['build_root'] + '/bin/compile.exe'
+TRANSFORM_EXE = CONFIG['default']['build_root'] + '/bin/transform.exe'
+DB = CONFIG['default']['tpch_db']
 OUT_FILE = rpath('results.csv')
 BENCH_DIR = rpath('.')
 BENCHMARKS = [
@@ -380,8 +378,6 @@ def run_bench(name, query_name, params):
         benchd,
         "-db",
         DB,
-        "-port",
-        PORT,
     ] + param_types
 
     # Build, saving the log.
@@ -417,8 +413,7 @@ def run_bench(name, query_name, params):
         with open('sql', 'w') as f:
             f.write(sql_query)
         with open('golden.csv', 'w') as out:
-            call(['psql', '-d', DB, '-p', PORT, '-t', '-A', '-F', ',', '-c', r'\timing',
-                  '-f', 'sql'],
+            call(['psql', '-t', '-A', '-F', ',', '-c', r'\timing', '-f', 'sql', DB],
                 stdout=out)
     else:
         log.debug('Skipping SQL query. %s not a file.', sql)
@@ -462,7 +457,7 @@ def gen_dune():
   (deps "{name}.args" "{name}.txt" ../../bin/transform.exe)
   (action (ignore-stderr (with-stdout-to
             "{query}.gen"
-            (system "../../bin/transform.exe -db tpch_test {name}.txt %{{read:{name}.args}}"))))
+            (system "../../bin/transform.exe -db %{DB} {name}.txt %{{read:{name}.args}}"))))
 )
 (alias
   (name check_transforms)
@@ -471,8 +466,8 @@ def gen_dune():
             '''.format(name=bench['name'], query=query))
 
 args = docopt(__doc__)
-DB = args['-d']
-PORT = args['-p']
+if args['-d'] is not None:
+    DB = args['-d']
 SQL_ONLY = args['--sql-only']
 
 def should_run(query_name):
