@@ -1415,7 +1415,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
                let loader_fn =
                  match Name.type_exn n with
                  | NullT -> failwith "No null parameters."
-                 | IntT _ | DateT _ -> "load_int.c"
+                 | IntT _ -> "load_int.c"
+                 | DateT _ -> "load_date.c"
                  | BoolT _ -> "load_bool.c"
                  | StringT _ -> "load_string.c"
                  | FixedT _ -> "load_float.c"

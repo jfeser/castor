@@ -1,6 +1,6 @@
 (install
   (section etc)
-  (files stdlib.c load_bool.c load_float.c load_int.c load_string.c perf.c shared.h))
+  (files stdlib.c load_bool.c load_float.c load_int.c load_string.c load_date.c perf.c shared.h))
 
 (rule
   (deps stdlib.c stdlib_test.c)
