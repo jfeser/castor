@@ -573,13 +573,15 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     (* Check that the argument really is a struct and that the index is
          valid. *)
     let typ = type_of lltup in
-    if [%compare.equal: TypeKind.t] (classify_type typ) Struct then
+    ( if [%compare.equal: TypeKind.t] (classify_type typ) Struct then (
       if idx >= Array.length (struct_element_types typ) then
-        Logs.err (fun m ->
-            m "Tuple index out of bounds %s %d." (string_of_llvalue lltup) idx )
-      else
-        Logs.err (fun m ->
-            m "Expected a tuple but got %s." (string_of_llvalue lltup) ) ;
+        Error.(
+          createf "Tuple index out of bounds %s %d." (string_of_llvalue lltup) idx
+          |> raise) )
+    else
+      Error.(
+        createf "Expected a tuple but got %s." (string_of_llvalue lltup) |> raise)
+    ) ;
     build_extractvalue lltup idx "elemtmp" builder
 
   let codegen_hash fctx hash_offset key_ptr key_size =
