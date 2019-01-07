@@ -26,16 +26,16 @@ let pp_bool fmt = Format.fprintf fmt "%b"
 let rec pp_expr : Format.formatter -> expr -> unit =
   let open Format in
   let op_to_string = function
-    | IntAdd | FlAdd | DateAdd -> `Infix "+"
-    | IntSub | FlSub | DateSub -> `Infix "-"
+    | IntAdd | FlAdd -> `Infix "+"
+    | IntSub | FlSub -> `Infix "-"
     | IntMul | FlMul -> `Infix "*"
     | IntDiv | FlDiv -> `Infix "/"
     | Mod -> `Infix "%"
-    | IntLt | FlLt | DateLt -> `Infix "<"
+    | IntLt | FlLt -> `Infix "<"
     | FlLe -> `Infix "<="
     | And -> `Infix "&&"
     | Not -> `Infix "not"
-    | IntEq | StrEq | FlEq | DateEq -> `Infix "="
+    | IntEq | StrEq | FlEq -> `Infix "="
     | Or -> `Infix "||"
     | IntHash | StrHash -> `Prefix "hash"
     | LoadStr -> `Prefix "load_str"
@@ -221,18 +221,25 @@ module Builder = struct
         match (op, t1, t2) with
         | (IntAdd | IntSub | IntMul | IntDiv), IntT _, IntT _ ->
             IntT {nullable= false}
+        (* Adding an int to a date or a date to an int produces an offset from
+           the date. *)
+        | (IntAdd | IntSub), DateT _, IntT _ | (IntAdd | IntSub), IntT _, DateT _ ->
+            DateT {nullable= false}
+        (* Dates can be subtracted from each other, to get the number of days
+           between them, but they cannot be added. *)
+        | IntSub, DateT _, DateT _ -> IntT {nullable= false}
         | (FlAdd | FlSub | FlMul | FlDiv), FixedT _, FixedT _ ->
             FixedT {nullable= false}
-        | (DateAdd | DateSub), DateT _, DateT _ -> DateT {nullable= false}
         | (And | Or), BoolT _, BoolT _ | (And | Or), IntT _, IntT _ -> unify t1 t2
         | IntLt, IntT {nullable= n1}, IntT {nullable= n2} ->
             BoolT {nullable= n1 || n2}
+        | IntLt, DateT {nullable= n1}, DateT {nullable= n2} ->
+            BoolT {nullable= n1 || n2}
         | FlLt, FixedT _, FixedT _ -> BoolT {nullable= false}
-        | DateLt, DateT _, DateT _ -> BoolT {nullable= false}
-        | IntHash, IntT _, IntT _ | StrHash, IntT _, StringT _ ->
+        | IntHash, IntT _, (IntT _ | DateT _) | StrHash, IntT _, StringT _ ->
             IntT {nullable= false}
         | IntEq, IntT {nullable= n1}, IntT {nullable= n2}
-         |DateEq, DateT {nullable= n1}, DateT {nullable= n2}
+         |IntEq, DateT {nullable= n1}, DateT {nullable= n2}
          |StrEq, StringT {nullable= n1}, StringT {nullable= n2}
          |FlEq, FixedT {nullable= n1}, FixedT {nullable= n2} ->
             BoolT {nullable= n1 || n2}
@@ -404,7 +411,8 @@ module Builder = struct
     let t2 = type_of y b in
     let open Type.PrimType in
     match (t1, t2) with
-    | IntT {nullable= false}, IntT {nullable= false} ->
+    | IntT {nullable= false}, IntT {nullable= false}
+     |DateT {nullable= false}, DateT {nullable= false} ->
         Binop {op= IntEq; arg1= x; arg2= y}
     | StringT {nullable= false}, StringT {nullable= false} ->
         Binop {op= StrEq; arg1= x; arg2= y}
@@ -414,8 +422,6 @@ module Builder = struct
         List.init (List.length ts1) ~f:(fun i ->
             build_eq Infix.(index x i) Infix.(index y i) b )
         |> List.fold_left ~init:(Bool true) ~f:Infix.( && )
-    | DateT {nullable= false}, DateT {nullable= false} ->
-        Binop {op= DateEq; arg1= x; arg2= y}
     | FixedT {nullable= false}, FixedT {nullable= false} ->
         Binop {op= FlEq; arg1= x; arg2= y}
     | IntT {nullable= false}, FixedT {nullable= false} -> build_eq (int2fl x) y b
@@ -448,10 +454,9 @@ module Builder = struct
     let t2 = type_of y b in
     let open Type.PrimType in
     match (t1, t2) with
-    | IntT {nullable= false}, IntT {nullable= false} ->
+    | IntT {nullable= false}, IntT {nullable= false}
+     |DateT {nullable= false}, DateT {nullable= false} ->
         Binop {op= IntLt; arg1= x; arg2= y}
-    | DateT {nullable= false}, DateT {nullable= false} ->
-        Binop {op= DateLt; arg1= x; arg2= y}
     | FixedT {nullable= false}, FixedT {nullable= false} ->
         Binop {op= FlLt; arg1= x; arg2= y}
     | IntT {nullable= false}, FixedT {nullable= false} -> build_lt (int2fl x) y b
@@ -499,7 +504,8 @@ module Builder = struct
     in
     let open Type.PrimType in
     match t with
-    | IntT {nullable= false} | DateT {nullable= false} -> f (`Int x)
+    | IntT {nullable= false} -> f (`Int x)
+    | DateT {nullable= false} -> f (`Date x)
     | FixedT {nullable= false} -> f (`Fixed x)
     | IntT {nullable= true} | FixedT {nullable= true} | DateT {nullable= true} ->
         type_err "Nullable types." t
@@ -509,16 +515,19 @@ module Builder = struct
   let const_int =
     build_numeric0 (function
       | `Int x -> Infix.(int x)
-      | `Fixed x -> Fixed (Fixed_point.of_int x) )
+      | `Fixed x -> Fixed (Fixed_point.of_int x)
+      | `Date x -> Date (Date.of_int x) )
 
   let build_numeric2 f x y b =
     let t1 = type_of x b in
     let t2 = type_of y b in
     match (build_numeric0 (fun x -> x) t1 x, build_numeric0 (fun x -> x) t2 y) with
-    | `Int x, `Int y -> f (`Int (x, y))
+    | (`Int x | `Date x), (`Int y | `Date y) -> f (`Int (x, y))
     | `Fixed x, `Int y -> f (`Fixed (x, int2fl y))
     | `Int x, `Fixed y -> f (`Fixed (int2fl x, y))
     | `Fixed _, `Fixed _ -> f (`Fixed (x, y))
+    | `Fixed _, `Date _ | `Date _, `Fixed _ ->
+        failwith "Cannot convert fixed point to date."
 
   let build_add =
     build_numeric2 (function

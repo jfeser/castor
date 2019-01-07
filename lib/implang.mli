@@ -13,16 +13,12 @@ type op = Implang0.op =
   | FlSub
   | FlMul
   | FlDiv
-  | DateAdd
-  | DateSub
   | IntLt
   | FlLt
   | FlLe
   | FlEq
-  | DateLt
   | IntEq
   | StrEq
-  | DateEq
   | And
   | Or
   | Not
