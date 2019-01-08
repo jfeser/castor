@@ -48,14 +48,21 @@ let to_order = function
                    (p, select) [%sexp_of: pred * select]) )
       |> Or_error.all
 
+let rec to_select = function
+  | Union_all qs -> List.concat_map qs ~f:(fun q -> to_select (Query q))
+  | Query {select; _} -> select
+
+(** Convert a query to an SPJ by introducing a subquery. *)
+let create_subquery ?(fresh = global_fresh) q =
+  let alias = Fresh.name fresh "t%d" in
+  let select_list =
+    to_schema q |> List.map ~f:(fun n -> (Name (Name.create n), n, None))
+  in
+  create_query ~relations:[(`Subquery (q, alias), `Left)] select_list
+
 let to_spj ?(fresh = global_fresh) = function
   | Query q -> q
-  | Union_all _ as q ->
-      let alias = Fresh.name fresh "t%d" in
-      let select_list =
-        to_schema q |> List.map ~f:(fun n -> (Name (Name.create n), n, None))
-      in
-      create_query ~relations:[(`Subquery (q, alias), `Left)] select_list
+  | Union_all _ as q -> create_subquery ~fresh q
 
 let add_pred_alias ?(fresh = global_fresh) p =
   let pred_to_name = function Name n -> Some n | _ -> None in
@@ -103,7 +110,19 @@ let order_by schema sql key order =
   Query {spj with order= key}
 
 let select ?(fresh = global_fresh) schema sql fields =
-  let spj = to_spj sql in
+  (* Creating a subquery is always safe, but we want to avoid it if possible. We
+     don't need a subquery if:
+     - This select is aggregation free
+     - This select has aggregates but the inner select is aggregation free *)
+  let needs_subquery =
+    match
+      ( select_kind fields
+      , to_select sql |> List.map ~f:(fun (p, _, _) -> p) |> select_kind )
+    with
+    | `Scalar, _ | `Agg, `Scalar -> false
+    | `Agg, `Agg -> true
+  in
+  let spj = if needs_subquery then create_subquery sql else to_spj sql in
   let ctx =
     List.map2_exn schema spj.select ~f:(fun n (p, _, _) -> (n, p))
     |> Map.of_alist_exn (module Name.Compare_no_type)
@@ -111,7 +130,7 @@ let select ?(fresh = global_fresh) schema sql fields =
   let fields =
     List.map fields ~f:(fun p -> p |> subst_pred ctx |> add_pred_alias ~fresh)
   in
-  Query {(to_spj sql) with select= fields}
+  Query {spj with select= fields}
 
 let filter schema sql pred =
   let spj = to_spj sql in
