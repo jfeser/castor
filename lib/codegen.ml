@@ -968,9 +968,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | NullT -> call_printf null_str []
       | IntT {nullable= false} -> call_printf int_fmt [val_]
       | DateT {nullable= false} ->
-          let year = codegen_expr fctx (Unop {op= ExtractY; arg= expr}) in
-          let mon = codegen_expr fctx (Unop {op= ExtractM; arg= expr}) in
-          let day = codegen_expr fctx (Unop {op= ExtractD; arg= expr}) in
+          let year = build_call extract_y [|val_|] "" builder in
+          let mon = build_call extract_y [|val_|] "" builder in
+          let day = build_call extract_y [|val_|] "" builder in
           call_printf date_fmt [year; mon; day]
       | BoolT {nullable= false} ->
           let fmt = build_select val_ true_str false_str "" builder in
