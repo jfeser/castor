@@ -435,7 +435,7 @@ module Builder = struct
     let t = type_of y b in
     let open Type.PrimType in
     match t with
-    | IntT {nullable= false} | BoolT {nullable= false} ->
+    | IntT {nullable= false} | BoolT {nullable= false} | DateT {nullable= false} ->
         Binop {op= IntHash; arg1= x; arg2= y}
     | StringT {nullable= false} -> Binop {op= StrHash; arg1= x; arg2= y}
     | TupleT ts -> TupleHash (ts, x, y)
