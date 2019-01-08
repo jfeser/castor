@@ -576,7 +576,7 @@ module Make (Config : Config.S) = struct
                   (least_general_of_layout key_l, least_general_of_layout value_l)
                   )
             ; body= (fun (kt, vt) (kt', vt') -> (unify_exn kt kt', unify_exn vt vt'))
-            ; post= (fun (kt, vt) -> HashIdxT (kt, vt, {count= Top})) } )
+            ; post= (fun (kt, vt) -> HashIdxT (kt, vt, {count= Type.count vt})) } )
 
         method ordered_idx _ (_, value_l, {oi_key_layout; _}) =
           let key_l = Option.value_exn oi_key_layout in

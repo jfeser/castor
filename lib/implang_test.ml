@@ -417,8 +417,9 @@ let%expect_test "hash-idx" =
          ((count (Interval 5 5)))))
        (HashIdxT
         ((IntT ((range (Interval 1 3)) (nullable false)))
-         (IntT ((range (Interval 2 4)) (nullable false))) ((count Top)))))
-      ((count Top))))
+         (IntT ((range (Interval 2 4)) (nullable false)))
+         ((count (Interval 1 1))))))
+      ((count (Interval 5 5)))))
     // Locals:
     // kstart14 : Int[nonnull] (persists=false)
     // cstart11 : Int[nonnull] (persists=true)
@@ -774,7 +775,7 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
            (IntT ((range (Interval 2 5)) (nullable false))))
           ((count (Interval 1 1)))))
         ((count (Interval 1 2)))))
-      ((count Top))))
+      ((count (Interval 1 2)))))
     // Locals:
     // key13 : Tuple[Int[nonnull], Int[nonnull]] (persists=false)
     // i17 : Int[nonnull] (persists=true)
@@ -882,7 +883,7 @@ select([lp.counter, lc.counter],
                  (IntT ((range (Interval 3 6)) (nullable false))))
                 ((count (Interval 1 1)))))
               ((count (Interval 1 2)))))
-            ((count Top))))
+            ((count (Interval 1 2)))))
           (FuncT
            (((OrderedIdxT
               ((IntT ((range (Interval 1 5)) (nullable false)))
@@ -1226,7 +1227,7 @@ select([lp.counter, lc.counter],
                  (IntT ((range (Interval 3 6)) (nullable false))))
                 ((count (Interval 1 1)))))
               ((count (Interval 1 2)))))
-            ((count Top))))
+            ((count (Interval 1 2)))))
           (FuncT
            (((OrderedIdxT
               ((IntT ((range (Interval 1 5)) (nullable false)))
