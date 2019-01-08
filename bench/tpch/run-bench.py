@@ -209,7 +209,6 @@ def run_bench(name, query_name, params):
             compile_log = benchd + "/compile.log"
             query_file = benchd + "/query"
             check_call(["cp", query, query_file])
-            print(os.getcwd())
             with open(compile_log, "w") as cl:
                 check_call(compile_cmd_parts + [query_file], stdout=cl, stderr=cl)
         except Exception:
