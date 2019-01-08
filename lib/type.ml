@@ -4,6 +4,7 @@ include Type0
 
 exception TypeError of Error.t [@@deriving sexp]
 
+(** Range abstraction for integers. *)
 module AbsInt = struct
   type t = int * int [@@deriving compare, sexp]
 
@@ -71,6 +72,8 @@ module AbsFixed = struct
 
   let of_fixed f = {range= AbsInt.abstract f.Fixed_point.value; scale= f.scale}
 
+  let zero = of_fixed (Fixed_point.of_int 0)
+
   let rec unify f1 f2 =
     if f1.scale = f2.scale then {f1 with range= AbsInt.unify f1.range f2.range}
     else if f1.scale > f2.scale then unify f2 f1
@@ -120,6 +123,15 @@ include Comparable.Make (T)
 
 let bind2 : f:('a -> 'b -> 'c option) -> 'a option -> 'b option -> 'c option =
  fun ~f x y -> match (x, y) with Some a, Some b -> f a b | _ -> None
+
+let least_general_of_primtype = function
+  | PrimType.IntT {nullable} -> IntT {range= AbsInt.zero; nullable}
+  | NullT -> NullT
+  | DateT {nullable} -> DateT {range= AbsInt.zero; nullable}
+  | FixedT {nullable} -> FixedT {value= AbsFixed.zero; nullable}
+  | StringT {nullable} -> StringT {nchars= AbsInt.zero; nullable}
+  | BoolT {nullable} -> BoolT {nullable}
+  | TupleT _ | VoidT -> failwith "Not a layout type."
 
 let rec unify_exn t1 t2 =
   let fail m =

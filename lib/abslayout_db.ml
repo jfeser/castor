@@ -494,9 +494,39 @@ module Make (Config : Config.S) = struct
         self#select meta expr (self#visit_t ctx ectx r)
     end
 
+  (* Wrapper module allows opening Type without clashes. *)
   module TF = struct
     open Type
 
+    (** Returns the least general type of a layout. *)
+    let rec least_general_of_layout r =
+      match r.Abslayout.node with
+      | Select (ps, r') | GroupBy (ps, _, r') ->
+          FuncT ([least_general_of_layout r'], `Width (List.length ps))
+      | OrderBy {rel= r'; _} | Filter (_, r') | Dedup r' ->
+          FuncT ([least_general_of_layout r'], `Child_sum)
+      | Join {r1; r2; _} ->
+          FuncT
+            ([least_general_of_layout r1; least_general_of_layout r2], `Child_sum)
+      | AEmpty -> EmptyT
+      | AScalar p ->
+          Abslayout.pred_to_schema p |> Name.type_exn |> least_general_of_primtype
+      | AList (_, r') -> ListT (least_general_of_layout r', {count= AbsInt.zero})
+      | AHashIdx (_, vr, {hi_key_layout= Some kr; _}) ->
+          HashIdxT
+            (least_general_of_layout kr, least_general_of_layout vr, {count= None})
+      | AOrderedIdx (_, vr, {oi_key_layout= Some kr; _}) ->
+          OrderedIdxT
+            (least_general_of_layout kr, least_general_of_layout vr, {count= None})
+      | ATuple (rs, _) ->
+          TupleT (List.map rs ~f:least_general_of_layout, {count= None})
+      | As (_, r') -> least_general_of_layout r'
+      | AHashIdx (_, _, {hi_key_layout= None; _})
+       |AOrderedIdx (_, _, {oi_key_layout= None; _})
+       |Scan _ ->
+          failwith "Layout is still abstract."
+
+    (** Returns a layout type that is general enough to hold all of the data. *)
     class type_fold =
       object
         inherit [_, _, _, _, _, _, _, _] material_fold
@@ -519,8 +549,8 @@ module Make (Config : Config.S) = struct
           | Null -> NullT
           | Fixed x -> FixedT {value= AbsFixed.of_fixed x; nullable= false}
 
-        method list _ _ =
-          { pre= (fun () -> (EmptyT, 0))
+        method list _ (_, elem_l) =
+          { pre= (fun () -> (least_general_of_layout elem_l, 0))
           ; body= (fun (t, c) (_, t') -> (unify_exn t t', c + 1))
           ; post=
               (fun (elem_type, num_elems) ->
@@ -539,15 +569,23 @@ module Make (Config : Config.S) = struct
               TupleT
                 (elem_types, {count= List.fold_left1_exn ~f:AbsCount.( * ) counts})
 
-        method hash_idx _ _ =
+        method hash_idx _ (_, value_l, {hi_key_layout; _}) =
+          let key_l = Option.value_exn hi_key_layout in
           ( {pre= (fun () -> ()); body= (fun () _ -> ()); post= (fun () -> ())}
-          , { pre= (fun () -> (EmptyT, EmptyT))
+          , { pre=
+                (fun () ->
+                  (least_general_of_layout key_l, least_general_of_layout value_l)
+                  )
             ; body= (fun (kt, vt) (kt', vt') -> (unify_exn kt kt', unify_exn vt vt'))
             ; post= (fun (kt, vt) -> HashIdxT (kt, vt, {count= None})) } )
 
-        method ordered_idx _ _ =
+        method ordered_idx _ (_, value_l, {oi_key_layout; _}) =
+          let key_l = Option.value_exn oi_key_layout in
           ( {pre= (fun () -> ()); body= (fun () _ -> ()); post= (fun () -> ())}
-          , { pre= (fun () -> (EmptyT, EmptyT))
+          , { pre=
+                (fun () ->
+                  (least_general_of_layout key_l, least_general_of_layout value_l)
+                  )
             ; body= (fun (kt, vt) (kt', vt') -> (unify_exn kt kt', unify_exn vt vt'))
             ; post= (fun (kt, vt) -> OrderedIdxT (kt, vt, {count= None})) } )
       end
