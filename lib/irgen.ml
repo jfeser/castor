@@ -256,35 +256,35 @@ struct
 
   and scan_null _ b _ _ (cb : callback) = cb b [Null]
 
-  and scan_int ctx b _ (Type.({nullable; range= (_, h) as range; _}) : Type.int_)
+  and scan_int ctx b _ (Type.({nullable; range; _} as t) : Type.int_)
       (cb : callback) =
     let open Builder in
     let start = Ctx.find_exn ctx (Name.create "start") b in
     let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
     let _nval =
       if nullable then
-        let null_val = h + 1 in
+        let null_val = Serialize.int_sentinal t in
         Infix.(build_eq ival (int null_val) b)
       else Bool false
     in
     debug_print "int" ival b ;
     cb b [ival]
 
-  and scan_date ctx b _ (Type.({nullable; range= (_, h) as range; _}) : Type.date)
+  and scan_date ctx b _ (Type.({nullable; range; _} as t) : Type.date)
       (cb : callback) =
     let open Builder in
     let start = Ctx.find_exn ctx (Name.create "start") b in
     let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
     let _nval =
       if nullable then
-        let null_val = h + 1 in
+        let null_val = Serialize.date_sentinal t in
         Infix.(build_eq ival (int null_val) b)
       else Bool false
     in
     debug_print "date" ival b ;
     cb b [Unop {op= Int2Date; arg= ival}]
 
-  and scan_fixed ctx b _ Type.({nullable; value= {range= (_, h) as range; scale}})
+  and scan_fixed ctx b _ Type.({nullable; value= {range; scale}} as t)
       (cb : callback) =
     let open Builder in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -293,7 +293,7 @@ struct
     let xval = build_div (int2fl ival) (int2fl sval) b in
     let _nval =
       if nullable then
-        let null_val = h + 1 in
+        let null_val = Serialize.fixed_sentinal t in
         Infix.(build_eq ival (int null_val) b)
       else Bool true
     in
@@ -304,8 +304,7 @@ struct
     let start = Ctx.find_exn ctx (Name.create "start") b in
     cb b [Unop {op= LoadBool; arg= start}]
 
-  and scan_string ctx b _ (Type.({nchars= l, _; nullable; _}) as t) (cb : callback)
-      =
+  and scan_string ctx b _ (Type.({nullable; _} as st) as t) (cb : callback) =
     let open Builder in
     let hdr = Header.make_header (StringT t) in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -314,7 +313,7 @@ struct
     let xval = Binop {op= LoadStr; arg1= value_ptr; arg2= nchars} in
     let _nval =
       if nullable then
-        let null_val = l - 1 in
+        let null_val = Serialize.string_sentinal st in
         Infix.(build_eq nchars (int null_val) b)
       else Bool true
     in
@@ -396,9 +395,9 @@ struct
       in
       cb b (list_of_tuple tup b)
     in
-    match Type.AbsCount.kind meta.count with
-    | `Count x -> build_count_loop Infix.(int x) build_body b
-    | `Countable | `Unknown ->
+    match Type.AbsInt.to_int meta.count with
+    | Some x -> build_count_loop Infix.(int x) build_body b
+    | None ->
         build_body b ;
         let not_done =
           List.fold_left callee_funcs ~init:(Bool true) ~f:(fun acc f ->

@@ -32,7 +32,7 @@ let%expect_test "scalar-int" =
     {|
     0:1 Scalar (=(Int 1))
 
-    ((IntT ((range (1 1)) (nullable false))) 1 "\\001") |}]
+    ((IntT ((range (Interval 1 1)) (nullable false))) 1 "\\001") |}]
 
 let%expect_test "scalar-bool" =
   run_test "AScalar(true)" ;
@@ -50,7 +50,7 @@ let%expect_test "scalar-string" =
     0:4 Scalar (=(String test))
     0:0 String length (=4)
 
-    ((StringT ((nchars (4 4)) (nullable false))) 4 test) |}]
+    ((StringT ((nchars (Interval 4 4)) (nullable false))) 4 test) |}]
 
 let%expect_test "tuple" =
   run_test "ATuple([AScalar(1), AScalar(\"test\")], Cross)" ;
@@ -64,9 +64,9 @@ let%expect_test "tuple" =
     1:0 String length (=4)
 
     ((TupleT
-      (((IntT ((range (1 1)) (nullable false)))
-        (StringT ((nchars (4 4)) (nullable false))))
-       ((count ((1 1))))))
+      (((IntT ((range (Interval 1 1)) (nullable false)))
+        (StringT ((nchars (Interval 4 4)) (nullable false))))
+       ((count (Interval 1 1)))))
      5 "\\001test") |}]
 
 let%expect_test "hash-idx" =
@@ -90,8 +90,8 @@ let%expect_test "hash-idx" =
     153:1 Scalar (=(Int 3))
 
     ((HashIdxT
-      ((IntT ((range (1 3)) (nullable false)))
-       (IntT ((range (1 3)) (nullable false))) ((count ()))))
+      ((IntT ((range (Interval 1 3)) (nullable false)))
+       (IntT ((range (Interval 1 3)) (nullable false))) ((count Top))))
      154
      "\\154\\000\\000\\000h\\000\\000\\000\\000\\000\\000\\000\\b\\000\\000\\000$\\000\\000\\000\\t\\000\\000\\000\\b\\000\\000\\000\\001\\000\\000\\000\\016\\000\\000\\000\\004\\000\\000\\000\\b\\000\\000\\000J\\002\\000\\000\\001\\000\\000\\000\\169\\000\\000\\0008\\000\\000\\000\\007\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\011\\000\\000\\000\\001\\000\\000\\000\\001\\000\\000\\000\\001\\000\\000\\000\\000\\000\\000\\000\\016\\000\\000\\000\\001\\000\\000\\000\\000\\000\\000\\000\\001\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\024\\000\\000\\000\\000\\000\\000\\000\\150\\000\\000\\000\\000\\000\\000\\000\\152\\000\\000\\000\\000\\000\\000\\000\\148\\000\\000\\000\\000\\000\\000\\000\\001\\001\\002\\002\\003\\003") |}]
 
@@ -120,8 +120,8 @@ let%expect_test "ordered-idx" =
     41:1 Scalar (=(Int 3))
 
     ((OrderedIdxT
-      ((IntT ((range (1 3)) (nullable false)))
-       (IntT ((range (1 3)) (nullable false))) ((count ()))))
+      ((IntT ((range (Interval 1 3)) (nullable false)))
+       (IntT ((range (Interval 1 3)) (nullable false))) ((count Top))))
      42
      "*\\000\\000\\000\\027\\000\\000\\000\\000\\000\\000\\000\\001'\\000\\000\\000\\000\\000\\000\\000\\002(\\000\\000\\000\\000\\000\\000\\000\\003)\\000\\000\\000\\000\\000\\000\\000\\001\\002\\003") |}]
 
@@ -174,7 +174,9 @@ let%expect_test "list-list" =
     24:1 Scalar (=(Int 3))
 
     ((ListT
-      ((ListT ((IntT ((range (1 3)) (nullable false))) ((count (5 5)))))
-       ((count (5 5)))))
+      ((ListT
+        ((IntT ((range (Interval 1 3)) (nullable false)))
+         ((count (Interval 5 5)))))
+       ((count (Interval 5 5)))))
      25
      "\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003") |}]

@@ -73,6 +73,8 @@ let%expect_test "join" =
   [%expect
     {| select  "log_counter_4" , "log_succ_5" , "log_id_6" , "log_counter_1" , "log_succ_2" , "log_id_3"  from  (select  log."counter" as "log_counter_4", log."succ" as "log_succ_5", log."id" as "log_id_6" from  log) as "t6",  (select  log."counter" as "log_counter_1", log."succ" as "log_succ_2", log."id" as "log_id_3" from  log) as "t7" where (("log_counter_4") < ("log_counter_1")) and (("log_counter_1") < ("log_succ_5")) |}]
 
+let%expect_test "" = run_test "groupby([r1.f, sum((r1.f * r1.g))], [r1.f], r1)"
+
 (* let%expect_test "tpch-1" =
  *   run_test_tpch
  *     {|orderby([l_returnflag, l_linestatus],

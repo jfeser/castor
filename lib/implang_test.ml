@@ -79,9 +79,9 @@ let%expect_test "tuple-simple-cross" =
   [%expect
     {|
     (TupleT
-     (((IntT ((range (1 1)) (nullable false)))
-       (IntT ((range (2 2)) (nullable false))))
-      ((count ((1 1))))))
+     (((IntT ((range (Interval 1 1)) (nullable false)))
+       (IntT ((range (Interval 2 2)) (nullable false))))
+      ((count (Interval 1 1)))))
     // Locals:
     // cstart4 : Int[nonnull] (persists=true)
     // cstart3 : Int[nonnull] (persists=true)
@@ -108,9 +108,9 @@ let%expect_test "tuple-simple-zip" =
   [%expect
     {|
     (TupleT
-     (((IntT ((range (1 1)) (nullable false)))
-       (IntT ((range (2 2)) (nullable false))))
-      ((count ((1 1))))))
+     (((IntT ((range (Interval 1 1)) (nullable false)))
+       (IntT ((range (Interval 2 2)) (nullable false))))
+      ((count (Interval 1 1)))))
     // Locals:
     // start : Int[nonnull] (persists=true)
     fun zt_10 (start) : Tuple[Int[nonnull]] {
@@ -188,10 +188,10 @@ let%expect_test "sum-complex" =
     (FuncT
      (((ListT
         ((TupleT
-          (((IntT ((range (1 3)) (nullable false)))
-            (IntT ((range (-1 2)) (nullable false))))
-           ((count ((1 1))))))
-         ((count (5 5))))))
+          (((IntT ((range (Interval 1 3)) (nullable false)))
+            (IntT ((range (Interval -1 2)) (nullable false))))
+           ((count (Interval 1 1)))))
+         ((count (Interval 5 5))))))
       (Width 2)))
     // Locals:
     // tup17 : Tuple[Int[nonnull], Int[nonnull]] (persists=false)
@@ -279,10 +279,10 @@ let%expect_test "sum" =
     (FuncT
      (((ListT
         ((TupleT
-          (((IntT ((range (1 3)) (nullable false)))
-            (IntT ((range (-1 2)) (nullable false))))
-           ((count ((1 1))))))
-         ((count (5 5))))))
+          (((IntT ((range (Interval 1 3)) (nullable false)))
+            (IntT ((range (Interval -1 2)) (nullable false))))
+           ((count (Interval 1 1)))))
+         ((count (Interval 5 5))))))
       (Width 2)))
     // Locals:
     // cstart18 : Int[nonnull] (persists=true)
@@ -360,10 +360,10 @@ let%expect_test "cross-tuple" =
     {|
     (ListT
      ((TupleT
-       (((IntT ((range (1 3)) (nullable false)))
-         (IntT ((range (-1 2)) (nullable false))))
-        ((count ((1 1))))))
-      ((count (5 5)))))
+       (((IntT ((range (Interval 1 3)) (nullable false)))
+         (IntT ((range (Interval -1 2)) (nullable false))))
+        ((count (Interval 1 1)))))
+      ((count (Interval 5 5)))))
     // Locals:
     // count8 : Int[nonnull] (persists=true)
     // i7 : Int[nonnull] (persists=true)
@@ -412,11 +412,13 @@ let%expect_test "hash-idx" =
   [%expect
     {|
     (TupleT
-     (((ListT ((IntT ((range (1 3)) (nullable false))) ((count (5 5)))))
+     (((ListT
+        ((IntT ((range (Interval 1 3)) (nullable false)))
+         ((count (Interval 5 5)))))
        (HashIdxT
-        ((IntT ((range (1 3)) (nullable false)))
-         (IntT ((range (2 4)) (nullable false))) ((count ())))))
-      ((count ()))))
+        ((IntT ((range (Interval 1 3)) (nullable false)))
+         (IntT ((range (Interval 2 4)) (nullable false))) ((count Top)))))
+      ((count Top))))
     // Locals:
     // kstart14 : Int[nonnull] (persists=false)
     // cstart11 : Int[nonnull] (persists=true)
@@ -504,11 +506,13 @@ let%expect_test "ordered-idx" =
   [%expect
     {|
     (TupleT
-     (((ListT ((IntT ((range (1 3)) (nullable false))) ((count (5 5)))))
+     (((ListT
+        ((IntT ((range (Interval 1 3)) (nullable false)))
+         ((count (Interval 5 5)))))
        (OrderedIdxT
-        ((IntT ((range (1 3)) (nullable false)))
-         (IntT ((range (2 4)) (nullable false))) ((count ())))))
-      ((count ()))))
+        ((IntT ((range (Interval 1 3)) (nullable false)))
+         (IntT ((range (Interval 2 4)) (nullable false))) ((count Top)))))
+      ((count Top))))
     // Locals:
     // cstart18 : Int[nonnull] (persists=true)
     // key23 : Tuple[Int[nonnull]] (persists=true)
@@ -632,8 +636,8 @@ let%expect_test "ordered-idx-date" =
   [%expect
     {|
     (OrderedIdxT
-     ((DateT ((range (17136 17775)) (nullable false)))
-      (DateT ((range (17136 17775)) (nullable false))) ((count ())))) |}]
+     ((DateT ((range (Interval 17136 17775)) (nullable false)))
+      (DateT ((range (Interval 17136 17775)) (nullable false))) ((count Top)))) |}]
 
 let%expect_test "example-1" =
   run_test ~params:example_params
@@ -650,16 +654,16 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
     (FuncT
      (((ListT
         ((TupleT
-          (((IntT ((range (1 1)) (nullable false)))
-            (IntT ((range (1 4)) (nullable false)))
+          (((IntT ((range (Interval 1 1)) (nullable false)))
+            (IntT ((range (Interval 1 4)) (nullable false)))
             (ListT
              ((TupleT
-               (((IntT ((range (2 3)) (nullable false)))
-                 (IntT ((range (2 5)) (nullable false))))
-                ((count ((1 1))))))
-              ((count (1 2))))))
-           ((count ((1 2))))))
-         ((count (2 2))))))
+               (((IntT ((range (Interval 2 3)) (nullable false)))
+                 (IntT ((range (Interval 2 5)) (nullable false))))
+                ((count (Interval 1 1)))))
+              ((count (Interval 1 2))))))
+           ((count (Interval 1 2)))))
+         ((count (Interval 2 2))))))
       Child_sum))
     // Locals:
     // cstart18 : Int[nonnull] (persists=true)
@@ -761,16 +765,16 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
     {|
     (HashIdxT
      ((TupleT
-       (((IntT ((range (1 1)) (nullable false)))
-         (IntT ((range (2 3)) (nullable false))))
-        ((count ((1 1))))))
+       (((IntT ((range (Interval 1 1)) (nullable false)))
+         (IntT ((range (Interval 2 3)) (nullable false))))
+        ((count (Interval 1 1)))))
       (ListT
        ((TupleT
-         (((IntT ((range (1 4)) (nullable false)))
-           (IntT ((range (2 5)) (nullable false))))
-          ((count ((1 1))))))
-        ((count (1 2)))))
-      ((count ()))))
+         (((IntT ((range (Interval 1 4)) (nullable false)))
+           (IntT ((range (Interval 2 5)) (nullable false))))
+          ((count (Interval 1 1)))))
+        ((count (Interval 1 2)))))
+      ((count Top))))
     // Locals:
     // key13 : Tuple[Int[nonnull], Int[nonnull]] (persists=false)
     // i17 : Int[nonnull] (persists=true)
@@ -871,26 +875,26 @@ select([lp.counter, lc.counter],
     (FuncT
      (((TupleT
         (((HashIdxT
-           ((IntT ((range (1 3)) (nullable false)))
+           ((IntT ((range (Interval 1 3)) (nullable false)))
             (ListT
              ((TupleT
-               (((IntT ((range (1 5)) (nullable false)))
-                 (IntT ((range (3 6)) (nullable false))))
-                ((count ((1 1))))))
-              ((count (1 2)))))
-            ((count ()))))
+               (((IntT ((range (Interval 1 5)) (nullable false)))
+                 (IntT ((range (Interval 3 6)) (nullable false))))
+                ((count (Interval 1 1)))))
+              ((count (Interval 1 2)))))
+            ((count Top))))
           (FuncT
            (((OrderedIdxT
-              ((IntT ((range (1 5)) (nullable false)))
+              ((IntT ((range (Interval 1 5)) (nullable false)))
                (ListT
                 ((TupleT
-                  (((IntT ((range (1 3)) (nullable false)))
-                    (IntT ((range (1 5)) (nullable false))))
-                   ((count ((1 1))))))
-                 ((count (1 1)))))
-               ((count ())))))
+                  (((IntT ((range (Interval 1 3)) (nullable false)))
+                    (IntT ((range (Interval 1 5)) (nullable false))))
+                   ((count (Interval 1 1)))))
+                 ((count (Interval 1 1)))))
+               ((count Top)))))
             Child_sum)))
-         ((count ())))))
+         ((count Top)))))
       (Width 2)))
     // Locals:
     // key44 : Tuple[Int[nonnull]] (persists=true)
@@ -1102,7 +1106,9 @@ let%expect_test "subquery-first" =
     {|
     (FuncT
      (((FuncT
-        (((ListT ((IntT ((range (1 3)) (nullable false))) ((count (5 5))))))
+        (((ListT
+           ((IntT ((range (Interval 1 3)) (nullable false)))
+            ((count (Interval 5 5))))))
          Child_sum)))
       (Width 1)))
     // Locals:
@@ -1213,26 +1219,26 @@ select([lp.counter, lc.counter],
     (FuncT
      (((TupleT
         (((HashIdxT
-           ((StringT ((nchars (3 8)) (nullable false)))
+           ((StringT ((nchars (Interval 3 8)) (nullable false)))
             (ListT
              ((TupleT
-               (((IntT ((range (1 5)) (nullable false)))
-                 (IntT ((range (3 6)) (nullable false))))
-                ((count ((1 1))))))
-              ((count (1 2)))))
-            ((count ()))))
+               (((IntT ((range (Interval 1 5)) (nullable false)))
+                 (IntT ((range (Interval 3 6)) (nullable false))))
+                ((count (Interval 1 1)))))
+              ((count (Interval 1 2)))))
+            ((count Top))))
           (FuncT
            (((OrderedIdxT
-              ((IntT ((range (1 5)) (nullable false)))
+              ((IntT ((range (Interval 1 5)) (nullable false)))
                (ListT
                 ((TupleT
-                  (((StringT ((nchars (3 8)) (nullable false)))
-                    (IntT ((range (1 5)) (nullable false))))
-                   ((count ((1 1))))))
-                 ((count (1 1)))))
-               ((count ())))))
+                  (((StringT ((nchars (Interval 3 8)) (nullable false)))
+                    (IntT ((range (Interval 1 5)) (nullable false))))
+                   ((count (Interval 1 1)))))
+                 ((count (Interval 1 1)))))
+               ((count Top)))))
             Child_sum)))
-         ((count ())))))
+         ((count Top)))))
       (Width 2)))
     // Locals:
     // key44 : Tuple[Int[nonnull]] (persists=true)

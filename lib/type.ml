@@ -6,81 +6,86 @@ exception TypeError of Error.t [@@deriving sexp]
 
 (** Range abstraction for integers. *)
 module AbsInt = struct
-  type t = int * int [@@deriving compare, sexp]
+  type t = Bottom | Interval of int * int | Top [@@deriving compare, sexp]
 
-  let zero : t = (0, 0)
+  let top = Top
 
-  let ( + ) : t -> t -> t = fun (l1, h1) (l2, h2) -> (l1 + l2, h1 + h2)
+  let bot = Bottom
 
-  let ( - ) (l1, h1) (l2, h2) = (l1 - h2, l2 - h1)
+  let zero = Interval (0, 0)
 
-  let ( * ) : t -> t -> t =
-   fun (l1, h1) (l2, h2) ->
-    let min_many = List.fold_left1_exn ~f:Int.min in
-    let max_many = List.fold_left1_exn ~f:Int.max in
-    let xs = [l1 * l2; l1 * h2; l2 * h1; h2 * h1] in
-    (min_many xs, max_many xs)
+  let lift f i1 i2 =
+    match (i1, i2) with
+    | Bottom, _ | _, Bottom -> Bottom
+    | Top, _ | _, Top -> Top
+    | Interval (l1, h1), Interval (l2, h2) -> f (l1, h1) (l2, h2)
 
-  let unify : t -> t -> t = fun (l1, h1) (l2, h2) -> (Int.min l1 l2, Int.max h1 h2)
+  let ( + ) = lift (fun (l1, h1) (l2, h2) -> Interval (l1 + l2, h1 + h2))
 
-  let abstract : int -> t = fun x -> (x, x)
+  let ( - ) = lift (fun (l1, h1) (l2, h2) -> Interval (l1 - h2, l2 - h1))
 
-  let concretize : t -> int option = fun (l, h) -> if l = h then Some l else None
+  let ( * ) =
+    lift (fun (l1, h1) (l2, h2) ->
+        let min_many = List.fold_left1_exn ~f:Int.min in
+        let max_many = List.fold_left1_exn ~f:Int.max in
+        let xs = [l1 * l2; l1 * h2; l2 * h1; h2 * h1] in
+        Interval (min_many xs, max_many xs) )
 
-  let byte_width ~nullable (l, h) =
-    let open Int in
-    let maxval = Int.max (Int.abs l) (Int.abs h) in
-    let maxval = if nullable then maxval + 1 else maxval in
-    if maxval = 0 then 1
-    else
-      let bit_width = Float.((log (of_int maxval) /. log 2.0) + 1.0) in
-      bit_width /. 8.0 |> Float.iround_exn ~dir:`Up
-end
+  let meet i1 i2 =
+    match (i1, i2) with
+    | Bottom, _ | _, Bottom -> Bottom
+    | Top, x | x, Top -> x
+    | Interval (l1, h1), Interval (l2, h2) ->
+        if h1 < l2 || h2 < l1 then Bottom
+        else Interval (Int.max l1 l2, Int.min h1 h2)
 
-module AbsCount = struct
-  type t = AbsInt.t option [@@deriving compare, sexp]
+  let join i1 i2 =
+    match (i1, i2) with
+    | Bottom, x | x, Bottom -> x
+    | Top, _ | _, Top -> Top
+    | Interval (l1, h1), Interval (l2, h2) -> Interval (Int.min l1 l2, Int.max h1 h2)
 
-  let zero : t = Some AbsInt.zero
+  let of_int x = Interval (x, x)
 
-  let top = None
+  let to_int = function
+    | Interval (l, h) -> if l = h then Some l else None
+    | _ -> None
 
-  let ( + ) : t -> t -> t =
-   fun a b -> match (a, b) with Some x, Some y -> Some AbsInt.(x + y) | _ -> None
-
-  let ( * ) : t -> t -> t =
-   fun a b -> match (a, b) with Some x, Some y -> Some AbsInt.(x * y) | _ -> None
-
-  let abstract : int -> t = fun x -> Some (AbsInt.abstract x)
-
-  let concretize : t -> int option = Option.bind ~f:AbsInt.concretize
-
-  let kind : t -> [`Count of int | `Countable | `Unknown] = function
-    | Some x -> (
-      match AbsInt.concretize x with Some x -> `Count x | None -> `Countable )
-    | None -> `Unknown
-
-  let unify : t -> t -> t =
-   fun x y ->
-    let module Let_syntax = Option in
-    let%bind x = x in
-    let%map y = y in
-    AbsInt.unify x y
+  let byte_width ~nullable = function
+    | Bottom -> 1
+    | Top -> 8
+    | Interval (l, h) ->
+        let open Int in
+        let maxval = Int.max (Int.abs l) (Int.abs h) in
+        let maxval = if nullable then maxval + 1 else maxval in
+        if maxval = 0 then 1
+        else
+          let bit_width = Float.((log (of_int maxval) /. log 2.0) + 1.0) in
+          bit_width /. 8.0 |> Float.iround_exn ~dir:`Up
 end
 
 module AbsFixed = struct
   type t = {range: AbsInt.t; scale: int} [@@deriving compare, sexp]
 
-  let of_fixed f = {range= AbsInt.abstract f.Fixed_point.value; scale= f.scale}
+  let of_fixed f = {range= AbsInt.of_int f.Fixed_point.value; scale= f.scale}
 
   let zero = of_fixed (Fixed_point.of_int 0)
 
-  let rec unify f1 f2 =
-    if f1.scale = f2.scale then {f1 with range= AbsInt.unify f1.range f2.range}
-    else if f1.scale > f2.scale then unify f2 f1
+  let bot = {range= AbsInt.bot; scale= 1}
+
+  let top = {range= AbsInt.top; scale= 1}
+
+  let rec unify dir f1 f2 =
+    if f1.scale = f2.scale then {f1 with range= dir f1.range f2.range}
+    else if f1.scale > f2.scale then unify dir f2 f1
     else
       let scale_factor = f2.scale / f1.scale in
-      let scaled_range = AbsInt.(f1.range * abstract scale_factor) in
-      {f2 with range= AbsInt.unify f2.range scaled_range}
+      let scaled_range = AbsInt.(f1.range * of_int scale_factor) in
+      {f2 with range= dir f2.range scaled_range}
+
+  let meet = unify AbsInt.meet
+
+  let join = unify AbsInt.join
 end
 
 module T = struct
@@ -94,11 +99,11 @@ module T = struct
 
   type list_ = {count: AbsInt.t} [@@deriving compare, sexp]
 
-  type tuple = {count: AbsCount.t} [@@deriving compare, sexp]
+  type tuple = {count: AbsInt.t} [@@deriving compare, sexp]
 
-  type hash_idx = {count: AbsCount.t} [@@deriving compare, sexp]
+  type hash_idx = {count: AbsInt.t} [@@deriving compare, sexp]
 
-  type ordered_idx = {count: AbsCount.t} [@@deriving compare, sexp]
+  type ordered_idx = {count: AbsInt.t} [@@deriving compare, sexp]
 
   type fixed = {value: AbsFixed.t; nullable: bool} [@@deriving compare, sexp]
 
@@ -125,11 +130,11 @@ let bind2 : f:('a -> 'b -> 'c option) -> 'a option -> 'b option -> 'c option =
  fun ~f x y -> match (x, y) with Some a, Some b -> f a b | _ -> None
 
 let least_general_of_primtype = function
-  | PrimType.IntT {nullable} -> IntT {range= AbsInt.zero; nullable}
+  | PrimType.IntT {nullable} -> IntT {range= AbsInt.bot; nullable}
   | NullT -> NullT
-  | DateT {nullable} -> DateT {range= AbsInt.zero; nullable}
-  | FixedT {nullable} -> FixedT {value= AbsFixed.zero; nullable}
-  | StringT {nullable} -> StringT {nchars= AbsInt.zero; nullable}
+  | DateT {nullable} -> DateT {range= AbsInt.bot; nullable}
+  | FixedT {nullable} -> FixedT {value= AbsFixed.bot; nullable}
+  | StringT {nullable} -> StringT {nchars= AbsInt.bot; nullable}
   | BoolT {nullable} -> BoolT {nullable}
   | TupleT _ | VoidT -> failwith "Not a layout type."
 
@@ -145,18 +150,18 @@ let rec unify_exn t1 t2 =
   match (t1, t2) with
   | NullT, NullT -> NullT
   | IntT {range= b1; nullable= n1}, IntT {range= b2; nullable= n2} ->
-      IntT {range= AbsInt.unify b1 b2; nullable= n1 || n2}
+      IntT {range= AbsInt.join b1 b2; nullable= n1 || n2}
   | DateT {range= b1; nullable= n1}, DateT {range= b2; nullable= n2} ->
-      DateT {range= AbsInt.unify b1 b2; nullable= n1 || n2}
+      DateT {range= AbsInt.join b1 b2; nullable= n1 || n2}
   | FixedT {value= v1; nullable= n1}, FixedT {value= v2; nullable= n2} ->
-      FixedT {value= AbsFixed.unify v1 v2; nullable= n1 || n2}
+      FixedT {value= AbsFixed.join v1 v2; nullable= n1 || n2}
   | IntT x, NullT | NullT, IntT x -> IntT {x with nullable= true}
   | DateT x, NullT | NullT, DateT x -> DateT {x with nullable= true}
   | FixedT x, NullT | NullT, FixedT x -> FixedT {x with nullable= true}
   | BoolT {nullable= n1}, BoolT {nullable= n2} -> BoolT {nullable= n1 || n2}
   | BoolT _, NullT | NullT, BoolT _ -> BoolT {nullable= true}
   | StringT {nchars= b1; nullable= n1}, StringT {nchars= b2; nullable= n2} ->
-      StringT {nchars= AbsInt.unify b1 b2; nullable= n1 || n2}
+      StringT {nchars= AbsInt.join b1 b2; nullable= n1 || n2}
   | StringT x, NullT | NullT, StringT x -> StringT {x with nullable= true}
   | TupleT (e1s, {count= c1}), TupleT (e2s, {count= c2}) ->
       let elem_ts =
@@ -164,15 +169,15 @@ let rec unify_exn t1 t2 =
         | Ok ts -> ts
         | Unequal_lengths -> fail "Different number of columns."
       in
-      TupleT (elem_ts, {count= AbsCount.unify c1 c2})
+      TupleT (elem_ts, {count= AbsInt.join c1 c2})
   | ListT (et1, {count= c1}), ListT (et2, {count= c2}) ->
-      ListT (unify_exn et1 et2, {count= AbsInt.unify c1 c2})
+      ListT (unify_exn et1 et2, {count= AbsInt.join c1 c2})
   | OrderedIdxT (k1, v1, {count= c1}), OrderedIdxT (k2, v2, {count= c2}) ->
-      OrderedIdxT (unify_exn k1 k2, unify_exn v1 v2, {count= AbsCount.unify c1 c2})
+      OrderedIdxT (unify_exn k1 k2, unify_exn v1 v2, {count= AbsInt.join c1 c2})
   | HashIdxT (kt1, vt1, {count= c1}), HashIdxT (kt2, vt2, {count= c2}) ->
       let kt = unify_exn kt1 kt2 in
       let vt = unify_exn vt1 vt2 in
-      HashIdxT (kt, vt, {count= AbsCount.unify c1 c2})
+      HashIdxT (kt, vt, {count= AbsInt.join c1 c2})
   | EmptyT, t | t, EmptyT -> t
   | FuncT (t, `Child_sum), FuncT (t', `Child_sum) ->
       FuncT (List.map2_exn ~f:unify_exn t t', `Child_sum)
@@ -204,28 +209,28 @@ let rec width = function
   | FuncT (_, `Width w) -> w
 
 let count = function
-  | EmptyT -> AbsCount.abstract 0
-  | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ | DateT _ -> AbsCount.abstract 1
+  | EmptyT -> AbsInt.of_int 0
+  | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ | DateT _ -> AbsInt.of_int 1
   | TupleT (_, {count})
    |OrderedIdxT (_, _, {count; _})
    |HashIdxT (_, _, {count; _}) ->
       count
-  | ListT (_, {count}) -> Some count
-  | FuncT _ -> AbsCount.top
+  | ListT (_, {count}) -> count
+  | FuncT _ -> AbsInt.top
 
 let rec len =
   let open AbsInt in
   let header_len field_len =
-    match concretize field_len with
-    | Some _ -> abstract 0
-    | None -> byte_width ~nullable:false field_len |> abstract
+    match to_int field_len with
+    | Some _ -> of_int 0
+    | None -> byte_width ~nullable:false field_len |> of_int
   in
   function
   | EmptyT -> zero
-  | IntT x -> byte_width ~nullable:x.nullable x.range |> abstract
-  | DateT x -> byte_width ~nullable:x.nullable x.range |> abstract
-  | FixedT x -> byte_width ~nullable:x.nullable x.value.range |> abstract
-  | BoolT _ -> abstract 1
+  | IntT x -> byte_width ~nullable:x.nullable x.range |> of_int
+  | DateT x -> byte_width ~nullable:x.nullable x.range |> of_int
+  | FixedT x -> byte_width ~nullable:x.nullable x.value.range |> of_int
+  | BoolT _ -> of_int 1
   | StringT x -> header_len x.nchars + x.nchars
   | TupleT (ts, _) ->
       let body_len = List.sum (module AbsInt) ts ~f:len in
@@ -235,7 +240,8 @@ let rec len =
       let body_len = x.count * len t in
       let len_len = header_len body_len in
       count_len + len_len + body_len
-  | T.HashIdxT _ | T.OrderedIdxT (_, _, _) -> (0, 100000000)
+      (* TODO: Fix this nasty hack. *)
+  | T.HashIdxT _ | T.OrderedIdxT (_, _, _) -> Interval (0, 100000000)
   | FuncT (ts, _) -> List.sum (module AbsInt) ts ~f:len
   | NullT as t -> Error.(create "Unexpected type." t [%sexp_of: T.t] |> raise)
 

@@ -71,17 +71,42 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
   open Writer
   open Header
 
+  let string_sentinal : Type.string_ -> _ = function
+    | {nchars= Bottom; _} -> 0
+    | {nchars= Interval (_, max); _} -> max + 1
+    | {nchars= Top; _} -> failwith "No available sentinal values."
+
+  let int_sentinal : Type.int_ -> _ = function
+    | {range= Bottom; _} -> 0
+    | {range= Interval (_, max); _} -> max + 1
+    | {range= Top; _} -> failwith "No available sentinal values."
+
+  let date_sentinal : Type.date -> _ = function
+    | {range= Bottom; _} -> 0
+    | {range= Interval (_, max); _} -> max + 1
+    | {range= Top; _} -> failwith "No available sentinal values."
+
+  let fixed_sentinal : Type.fixed -> _ = function
+    | {value= {range= Bottom; _}; _} -> 0
+    | {value= {range= Interval (_, max); _}; _} -> max + 1
+    | {value= {range= Top; _}; _} -> failwith "No available sentinal values."
+
+  let bool_sentinal = 2
+
+  let null_sentinal = function
+    | Type.IntT x -> int_sentinal x
+    | BoolT _ -> bool_sentinal
+    | StringT x -> string_sentinal x
+    | DateT x -> date_sentinal x
+    | FixedT x -> fixed_sentinal x
+    | t -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
+
   let serialize_null sctx t =
     let hdr = make_header t in
     let str =
       match t with
       | NullT -> ""
-      | IntT {range= _, max; nullable= true; _} ->
-          of_int ~byte_width:(size_exn hdr "value") (max + 1)
-      | BoolT _ -> of_int ~byte_width:(size_exn hdr "value") 2
-      | StringT {nchars= min, _; _} ->
-          of_int ~byte_width:(size_exn hdr "len") (min - 1)
-      | t -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
+      | _ -> null_sentinal t |> of_int ~byte_width:(size_exn hdr "value")
     in
     Log.with_msg sctx "Null" (fun () -> write_string sctx.writer str)
 

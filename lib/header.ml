@@ -72,7 +72,7 @@ and make_access hdr name start =
 
 let rec make_header t =
   let make_size range =
-    match Type.AbsInt.concretize range with
+    match Type.AbsInt.to_int range with
     | Some x -> `Empty x
     | None -> `Fixed (Type.AbsInt.byte_width ~nullable:false range)
   in

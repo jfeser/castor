@@ -511,15 +511,15 @@ module Make (Config : Config.S) = struct
       | AEmpty -> EmptyT
       | AScalar p ->
           Abslayout.pred_to_schema p |> Name.type_exn |> least_general_of_primtype
-      | AList (_, r') -> ListT (least_general_of_layout r', {count= AbsInt.zero})
+      | AList (_, r') -> ListT (least_general_of_layout r', {count= Bottom})
       | AHashIdx (_, vr, {hi_key_layout= Some kr; _}) ->
           HashIdxT
-            (least_general_of_layout kr, least_general_of_layout vr, {count= None})
+            (least_general_of_layout kr, least_general_of_layout vr, {count= Bottom})
       | AOrderedIdx (_, vr, {oi_key_layout= Some kr; _}) ->
           OrderedIdxT
-            (least_general_of_layout kr, least_general_of_layout vr, {count= None})
+            (least_general_of_layout kr, least_general_of_layout vr, {count= Bottom})
       | ATuple (rs, _) ->
-          TupleT (List.map rs ~f:least_general_of_layout, {count= None})
+          TupleT (List.map rs ~f:least_general_of_layout, {count= Bottom})
       | As (_, r') -> least_general_of_layout r'
       | AHashIdx (_, _, {hi_key_layout= None; _})
        |AOrderedIdx (_, _, {oi_key_layout= None; _})
@@ -541,11 +541,11 @@ module Make (Config : Config.S) = struct
           function
           | Value.Date x ->
               let x = Date.to_int x in
-              DateT {range= AbsInt.abstract x; nullable= false}
-          | Int x -> IntT {range= AbsInt.abstract x; nullable= false}
+              DateT {range= AbsInt.of_int x; nullable= false}
+          | Int x -> IntT {range= AbsInt.of_int x; nullable= false}
           | Bool _ -> BoolT {nullable= false}
           | String x ->
-              StringT {nchars= AbsInt.abstract (String.length x); nullable= false}
+              StringT {nchars= AbsInt.of_int (String.length x); nullable= false}
           | Null -> NullT
           | Fixed x -> FixedT {value= AbsFixed.of_fixed x; nullable= false}
 
@@ -554,20 +554,19 @@ module Make (Config : Config.S) = struct
           ; body= (fun (t, c) (_, t') -> (unify_exn t t', c + 1))
           ; post=
               (fun (elem_type, num_elems) ->
-                ListT (elem_type, {count= AbsInt.abstract num_elems}) ) }
+                ListT (elem_type, {count= AbsInt.of_int num_elems}) ) }
 
         method tuple _ (_, kind) elem_types =
           let counts = List.map elem_types ~f:count in
           match kind with
           | Zip ->
-              TupleT
-                (elem_types, {count= List.fold_left1_exn ~f:AbsCount.unify counts})
+              TupleT (elem_types, {count= List.fold_left1_exn ~f:AbsInt.join counts})
           | Concat ->
               TupleT
-                (elem_types, {count= List.fold_left1_exn ~f:AbsCount.( + ) counts})
+                (elem_types, {count= List.fold_left1_exn ~f:AbsInt.( + ) counts})
           | Cross ->
               TupleT
-                (elem_types, {count= List.fold_left1_exn ~f:AbsCount.( * ) counts})
+                (elem_types, {count= List.fold_left1_exn ~f:AbsInt.( * ) counts})
 
         method hash_idx _ (_, value_l, {hi_key_layout; _}) =
           let key_l = Option.value_exn hi_key_layout in
@@ -577,7 +576,7 @@ module Make (Config : Config.S) = struct
                   (least_general_of_layout key_l, least_general_of_layout value_l)
                   )
             ; body= (fun (kt, vt) (kt', vt') -> (unify_exn kt kt', unify_exn vt vt'))
-            ; post= (fun (kt, vt) -> HashIdxT (kt, vt, {count= None})) } )
+            ; post= (fun (kt, vt) -> HashIdxT (kt, vt, {count= Top})) } )
 
         method ordered_idx _ (_, value_l, {oi_key_layout; _}) =
           let key_l = Option.value_exn oi_key_layout in
@@ -587,7 +586,7 @@ module Make (Config : Config.S) = struct
                   (least_general_of_layout key_l, least_general_of_layout value_l)
                   )
             ; body= (fun (kt, vt) (kt', vt') -> (unify_exn kt kt', unify_exn vt vt'))
-            ; post= (fun (kt, vt) -> OrderedIdxT (kt, vt, {count= None})) } )
+            ; post= (fun (kt, vt) -> OrderedIdxT (kt, vt, {count= Top})) } )
       end
   end
 
