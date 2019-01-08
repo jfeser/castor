@@ -874,7 +874,7 @@ module Make (Config : Config.S) = struct
               end)
                 #visit_hash_idx () m
             in
-            (AHashIdx (r, l, m), value_ctx)
+            (AHashIdx (r, l, m), Set.union key_ctx value_ctx)
         | AOrderedIdx (r, l, m) ->
             let r, key_ctx = resolve outer_ctx r in
             let l, value_ctx = resolve (union outer_ctx key_ctx) l in
@@ -886,7 +886,7 @@ module Make (Config : Config.S) = struct
               end)
                 #visit_ordered_idx () m
             in
-            (AOrderedIdx (r, l, m), value_ctx)
+            (AOrderedIdx (r, l, m), Set.union key_ctx value_ctx)
         | As (n, r) ->
             let r, ctx = resolve outer_ctx r in
             let ctx = rename n ctx in
