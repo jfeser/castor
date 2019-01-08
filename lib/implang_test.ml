@@ -629,7 +629,8 @@ let%expect_test "ordered-idx" =
 let%expect_test "ordered-idx-date" =
   run_test ~print_code:false
     {|AOrderedIdx(dedup(select([r_date.f as k], r_date)), ascalar(k), date("2018-01-01"), date("2018-01-01"))|} ;
-  [%expect {|
+  [%expect
+    {|
     (OrderedIdxT
      ((DateT ((range (17136 17775)) (nullable false)))
       (DateT ((range (17136 17775)) (nullable false))) ((count ())))) |}]
@@ -854,14 +855,14 @@ let%expect_test "example-3" =
   run_test ~params:example_params
     {|
 select([lp.counter, lc.counter],
-  atuple([ahashidx(dedup(select([id as k], log)), 
+  atuple([ahashidx(dedup(select([id as k1], log)), 
     alist(select([counter, succ], 
-        filter(k = id && counter < succ, log)), 
+        filter(k1 = id && counter < succ, log)), 
       atuple([ascalar(counter), ascalar(succ)], cross)), 
     id_p) as lp,
   filter(lc.id = id_c,
-    aorderedidx(select([log.counter as k], log), 
-      alist(filter(log.counter = k, log),
+    aorderedidx(select([log.counter as k2], log), 
+      alist(filter(log.counter = k2, log),
         atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
       lp.counter, lp.succ) as lc)], cross))
 |} ;
@@ -1196,14 +1197,14 @@ let%expect_test "example-3-str" =
   run_test ~params:example_db_params
     {|
 select([lp.counter, lc.counter],
-  atuple([ahashidx(dedup(select([id as k], log_str)), 
+  atuple([ahashidx(dedup(select([id as k1], log_str)), 
     alist(select([counter, succ], 
-        filter(k = id && counter < succ, log_str)), 
+        filter(k1 = id && counter < succ, log_str)), 
       atuple([ascalar(counter), ascalar(succ)], cross)), 
     id_p) as lp,
   filter(lc.id = id_c,
-    aorderedidx(select([log_str.counter as k], log_str), 
-      alist(filter(log_str.counter = k, log_str),
+    aorderedidx(select([log_str.counter as k2], log_str), 
+      alist(filter(log_str.counter = k2, log_str),
         atuple([ascalar(log_str.id), ascalar(log_str.counter)], cross)), 
       lp.counter, lp.succ) as lc)], cross))
 |} ;

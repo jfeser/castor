@@ -80,18 +80,7 @@ let run_test ?(params = []) ?(modules = make_modules) ?(print_layout = true)
     ?(fork = false) layout_str =
   let layout_file = Filename.temp_file "layout" "txt" in
   let (module M), (module S), (module I), (module C) = modules ~layout_file () in
-  let layout =
-    let params =
-      List.map params ~f:(fun (n, _) -> n)
-      |> Set.of_list (module Name.Compare_no_type)
-    in
-    of_string_exn layout_str |> M.resolve ~params
-  in
-  M.annotate_schema layout ;
-  let layout = M.annotate_key_layouts layout in
-  annotate_foreach layout ;
-  let out_dir = Filename.temp_dir "bin" "" in
-  let run_compiler () =
+  let run_compiler out_dir layout =
     let exe_fn, data_fn =
       let params = List.map ~f:Tuple.T2.get1 params in
       C.compile ~out_dir ~gprof:false ~params layout
@@ -111,7 +100,21 @@ let run_test ?(params = []) ?(modules = make_modules) ?(print_layout = true)
     print_endline (Unix.Exit_or_signal.to_string_hum ret) ;
     Out_channel.flush stdout
   in
-  if fork then run_in_fork run_compiler else run_compiler ()
+  try
+    let layout =
+      let params =
+        List.map params ~f:(fun (n, _) -> n)
+        |> Set.of_list (module Name.Compare_no_type)
+      in
+      of_string_exn layout_str |> M.resolve ~params
+    in
+    M.annotate_schema layout ;
+    let layout = M.annotate_key_layouts layout in
+    annotate_foreach layout ;
+    let out_dir = Filename.temp_dir "bin" "" in
+    if fork then run_in_fork (fun () -> run_compiler out_dir layout)
+    else run_compiler out_dir layout
+  with exn -> printf "Error: %s\n" (Exn.to_string exn)
 
 let%expect_test "ordered-idx" =
   run_test ~print_layout:false
@@ -242,14 +245,14 @@ let%expect_test "example-3" =
   run_test ~params:example_params ~print_layout:false
     {|
 select([lp.counter, lc.counter],
-  atuple([ahashidx(dedup(select([id as k], log)), 
+  atuple([ahashidx(dedup(select([id as k1], log)), 
     alist(select([counter, succ], 
-        filter(k = id && counter < succ, log)), 
+        filter(k1 = id && counter < succ, log)), 
       atuple([ascalar(counter), ascalar(succ)], cross)), 
     id_p) as lp,
   filter(lc.id = id_c,
-    aorderedidx(select([log.counter as k], log), 
-      alist(filter(log.counter = k, log),
+    aorderedidx(select([log.counter as k2], log), 
+      alist(filter(log.counter = k2, log),
         atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
       lp.counter, lp.succ) as lc)], cross))
 |} ;
@@ -262,14 +265,14 @@ let%expect_test "example-3-str" =
   run_test ~params:example_str_params ~print_layout:false
     {|
 select([lp.counter, lc.counter],
-  atuple([ahashidx(dedup(select([id as k], log_str)), 
+  atuple([ahashidx(dedup(select([id as k1], log_str)), 
     alist(select([counter, succ], 
-        filter(k = id && counter < succ, log_str)), 
+        filter(k1 = id && counter < succ, log_str)), 
       atuple([ascalar(counter), ascalar(succ)], cross)), 
     id_p) as lp,
   filter(lc.id = id_c,
-    aorderedidx(select([log_str.counter as k], log_str), 
-      alist(filter(log_str.counter = k, log_str),
+    aorderedidx(select([log_str.counter as k2], log_str), 
+      alist(filter(log_str.counter = k2, log_str),
         atuple([ascalar(log_str.id), ascalar(log_str.counter)], cross)), 
       lp.counter, lp.succ) as lc)], cross))
 |} ;

@@ -53,9 +53,10 @@ let run_print_test (module M : Abslayout_db.S) ?params query =
       method build_Filter () _ (_, r) ctx = self#visit_t () ctx r
     end
   in
-  let layout = of_string_exn query |> M.resolve ?params in
-  M.annotate_schema layout ;
-  try print_fold#run () layout with exn -> printf "Error: %s\n" (Exn.to_string exn)
+  try
+    let layout = of_string_exn query |> M.resolve ?params in
+    M.annotate_schema layout ; print_fold#run () layout
+  with exn -> printf "Error: %s\n" (Exn.to_string exn)
 
 let%expect_test "sum-complex" =
   run_print_test
@@ -167,14 +168,14 @@ let%expect_test "example-3" =
     (module M)
     {|
 select([lp.counter, lc.counter],
-  atuple([ahashidx(dedup(select([id as k], log)), 
+  atuple([ahashidx(dedup(select([id as k1], log)), 
     alist(select([counter, succ], 
-        filter(k = id && counter < succ, log)), 
+        filter(k1 = id && counter < succ, log)), 
       atuple([ascalar(counter), ascalar(succ)], cross)), 
     id_p) as lp,
   filter(lc.id = id_c,
-    aorderedidx(select([log.counter as k], log), 
-      alist(filter(log.counter = k, log),
+    aorderedidx(select([log.counter as k2], log), 
+      alist(filter(log.counter = k2, log),
         atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
       lp.counter, lp.succ) as lc)], cross))
 |} ;
