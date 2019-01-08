@@ -958,6 +958,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
   let float_fmt = define_global_str "float_fmt" "%f"
 
+  let date_fmt = define_global_str "date_fmt" "%04d-%02d-%02d"
+
   let codegen_print fctx type_ expr =
     let open Type.PrimType in
     Logs.debug (fun m -> m "Codegen for %a." I.pp_stmt (Print (type_, expr))) ;
@@ -965,6 +967,11 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let rec gen val_ = function
       | NullT -> call_printf null_str []
       | IntT {nullable= false} -> call_printf int_fmt [val_]
+      | DateT {nullable= false} ->
+          let year = codegen_expr fctx (Unop {op= ExtractY; arg= expr}) in
+          let mon = codegen_expr fctx (Unop {op= ExtractM; arg= expr}) in
+          let day = codegen_expr fctx (Unop {op= ExtractD; arg= expr}) in
+          call_printf date_fmt [year; mon; day]
       | BoolT {nullable= false} ->
           let fmt = build_select val_ true_str false_str "" builder in
           call_printf fmt []
@@ -978,7 +985,11 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
               call_printf comma_str [] )
       | VoidT -> call_printf void_str []
       | FixedT _ -> call_printf float_fmt [val_]
-      | IntT _ | DateT _ | StringT _ | BoolT _ -> failwith "Cannot print."
+      | IntT {nullable= true}
+       |DateT {nullable= true}
+       |StringT {nullable= true}
+       |BoolT {nullable= true} ->
+          failwith "Cannot print."
     in
     gen val_ type_ ; call_printf newline_str []
 
