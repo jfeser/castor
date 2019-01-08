@@ -32,9 +32,10 @@ let param =
         | "string" -> StringT {nullable= false}
         | "int" -> IntT {nullable= false}
         | "bool" -> BoolT {nullable= false}
-        | "date" -> IntT {nullable= false}
+        | "date" -> DateT {nullable= false}
         | "float" -> FixedT {nullable= false}
-        | _ -> failwith "Unexpected type name."
+        | _ ->
+            Error.create "Unexpected type name." v [%sexp_of: string] |> Error.raise
       in
       (k, v) )
 

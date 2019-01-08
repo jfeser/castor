@@ -1,4 +1,3 @@
-#include <time.h>
 #include "shared.h"
 
 void GLUE(set_,PARAM_NAME) (params *, long);
