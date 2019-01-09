@@ -20,14 +20,14 @@ let%expect_test "absfixed-unify" =
     ; AbsFixed.(of_fixed {value= 7999; scale= 10000}) ]
     ~f:AbsFixed.join
   |> [%sexp_of: AbsFixed.t] |> print_s ;
-  [%expect {| ((range (3400 70000)) (scale 10000)) |}]
+  [%expect {| ((range (Interval 3400 70000)) (scale 10000)) |}]
 
 let%expect_test "mult" =
   AbsInt.(Interval (0, 100) * Interval (0, 1000)) |> [%sexp_of: AbsInt.t] |> print_s ;
-  [%expect {| (0 100000) |}]
+  [%expect {| (Interval 0 100000) |}]
 
 let%expect_test "len-1" =
   ListT
     (IntT {range= Interval (1, 1000); nullable= false}, {count= Interval (0, 100)})
   |> len |> [%sexp_of: AbsInt.t] |> print_s ;
-  [%expect {| (3 203) |}]
+  [%expect {| (Interval 3 203) |}]
