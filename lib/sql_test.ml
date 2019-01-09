@@ -89,6 +89,10 @@ let%expect_test "select-fusion-2" =
   run_test "select([max(x)], select([r1.f as x], r1))" ;
   [%expect {| select  max(r1."f") as "x3" from  r1 |}]
 
+let%expect_test "filter-fusion" =
+  run_test "filter((x = 0), groupby([sum(r1.f) as x], [r1.g], r1))";
+  [%expect {| select  "x2"  from  (select  sum("r1_f_1") as "x2" from  (select  r1."f" as "r1_f_1", r1."g" as "r1_g_2" from  r1) as "t3"  group by ("r1_g_2")) as "t4" where ("x2") = (0) |}]
+
 (* let%expect_test "tpch-1" =
  *   run_test_tpch
  *     {|orderby([l_returnflag, l_linestatus],

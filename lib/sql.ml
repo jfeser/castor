@@ -133,7 +133,14 @@ let select ctx schema sql fields =
   Query {spj with select= fields}
 
 let filter ctx schema sql pred =
-  let spj = to_spj ctx sql in
+  (* If the inner query
+     contains aggregates, then it must be put in a subquery. *)
+  let needs_subquery =
+    match to_select sql |> List.map ~f:(fun (p, _, _) -> p) |> select_kind with
+    | `Scalar -> false
+    | `Agg -> true
+  in
+  let spj = if needs_subquery then create_subquery ctx sql else to_spj ctx sql in
   (* The where clause is evaluated before the select clause so we can't use the
      aliases in the select clause here. *)
   let ctx =
