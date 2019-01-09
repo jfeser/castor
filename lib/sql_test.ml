@@ -18,7 +18,7 @@ let run_test s =
   print_endline (of_ralgebra ~fresh:(Fresh.create ()) r |> to_string)
 
 let run_test_tpch ?params s =
-  let conn = Db.create "tpch" ~port:"5432" in
+  let conn = Db.create "postgresql://localhost:5432/tpch" in
   let module M = Abslayout_db.Make (struct
     let conn = conn
   end) in
@@ -74,12 +74,14 @@ let%expect_test "join" =
     {| select  "log_counter_4" , "log_succ_5" , "log_id_6" , "log_counter_1" , "log_succ_2" , "log_id_3"  from  (select  log."counter" as "log_counter_4", log."succ" as "log_succ_5", log."id" as "log_id_6" from  log) as "t6",  (select  log."counter" as "log_counter_1", log."succ" as "log_succ_2", log."id" as "log_id_3" from  log) as "t7" where (("log_counter_4") < ("log_counter_1")) and (("log_counter_1") < ("log_succ_5")) |}]
 
 let%expect_test "select-groupby" =
-  run_test "select([max(x)], groupby([r1.f, sum((r1.f * r1.g)) as x], [r1.f], r1))";
-  [%expect {| select  max("x3") as "x5" from  (select  "r1_f_1" as "r1_f_1_3", sum(("r1_f_1") * ("r1_g_2")) as "x3" from  (select  r1."f" as "r1_f_1", r1."g" as "r1_g_2" from  r1) as "t4"  group by ("r1_f_1")) as "t1596" |}]
+  run_test "select([max(x)], groupby([r1.f, sum((r1.f * r1.g)) as x], [r1.f], r1))" ;
+  [%expect
+    {| select  max("x3") as "x5" from  (select  "r1_f_1" as "r1_f_1_3", sum(("r1_f_1") * ("r1_g_2")) as "x3" from  (select  r1."f" as "r1_f_1", r1."g" as "r1_g_2" from  r1) as "t4"  group by ("r1_f_1")) as "t1596" |}]
 
 let%expect_test "select-fusion-1" =
-  run_test "select([max(x)], select([min(r1.f) as x], r1))";
-  [%expect {| select  max("x2") as "x3" from  (select  min(r1."f") as "x2" from  r1) as "t1597" |}]
+  run_test "select([max(x)], select([min(r1.f) as x], r1))" ;
+  [%expect
+    {| select  max("x2") as "x3" from  (select  min(r1."f") as "x2" from  r1) as "t1597" |}]
 
 let%expect_test "select-fusion-2" =
   run_test "select([max(x)], select([r1.f as x], r1))" ;

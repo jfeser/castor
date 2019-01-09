@@ -19,7 +19,7 @@ let reporter ppf =
 
 let create_test_db () =
   let url, _ = OS.Cmd.(run_out Cmd.(v "pg_tmp") |> out_string |> R.get_ok) in
-  Db.create_url url
+  Db.create url
 
 let create_db uri =
   try Db.create uri with exn ->

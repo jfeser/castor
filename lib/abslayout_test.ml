@@ -7,7 +7,7 @@ open Test_util
 module M = Abslayout_db.Make (Test_db)
 
 module M_tpch = Abslayout_db.Make (struct
-  let conn = Db.create ~port:"5432" "tpch"
+  let conn = Db.create "postgresql://localhost:5432/tpch"
 end)
 
 let run_print_test (module M : Abslayout_db.S) ?params query =

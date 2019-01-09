@@ -19,11 +19,6 @@ type t =
 let create uri =
   {uri; conn= new Psql.connection ~conninfo:uri (); fresh= Fresh.create ()}
 
-let copy db =
-  match db.conninfo with
-  | DbPort x -> create ?port:x.port x.db
-  | Url x -> create_url x
-
 let subst_params params query =
   match params with
   | [] -> query

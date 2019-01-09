@@ -5,10 +5,6 @@ type t
 
 val create : string -> t
 
-val create_url : string -> t
-
-val copy : t -> t
-
 val exec :
   ?max_retries:int -> ?params:string list -> t -> string -> Postgresql.result
 
