@@ -15,7 +15,8 @@ let make_module_db () =
 let run_test s =
   let r = of_string_exn s |> M.resolve in
   M.annotate_schema r ;
-  print_endline (of_ralgebra ~fresh:(Fresh.create ()) r |> to_string)
+  let ctx = Sql.create_ctx ~fresh:(Fresh.create ()) () in
+  print_endline (of_ralgebra ctx r |> to_string ctx)
 
 let run_test_tpch ?params s =
   let conn = Db.create "postgresql://localhost:5432/tpch" in
@@ -25,7 +26,8 @@ let run_test_tpch ?params s =
   let params = Option.map params ~f:(Set.of_list (module Name.Compare_no_type)) in
   let r = of_string_exn s |> M.resolve ?params in
   M.annotate_schema r ;
-  let sql = of_ralgebra ~fresh:(Fresh.create ()) r |> to_string_hum in
+  let ctx = Sql.create_ctx ~fresh:(Fresh.create ()) () in
+  let sql = of_ralgebra ctx r |> to_string_hum ctx in
   print_endline sql ;
   match Db.check conn sql with
   | Ok () -> ()
@@ -76,12 +78,12 @@ let%expect_test "join" =
 let%expect_test "select-groupby" =
   run_test "select([max(x)], groupby([r1.f, sum((r1.f * r1.g)) as x], [r1.f], r1))" ;
   [%expect
-    {| select  max("x3") as "x5" from  (select  "r1_f_1" as "r1_f_1_3", sum(("r1_f_1") * ("r1_g_2")) as "x3" from  (select  r1."f" as "r1_f_1", r1."g" as "r1_g_2" from  r1) as "t4"  group by ("r1_f_1")) as "t1596" |}]
+    {| select  max("x3") as "x6" from  (select  "r1_f_1" as "r1_f_1_3", sum(("r1_f_1") * ("r1_g_2")) as "x3" from  (select  r1."f" as "r1_f_1", r1."g" as "r1_g_2" from  r1) as "t4"  group by ("r1_f_1")) as "t5" |}]
 
 let%expect_test "select-fusion-1" =
   run_test "select([max(x)], select([min(r1.f) as x], r1))" ;
   [%expect
-    {| select  max("x2") as "x3" from  (select  min(r1."f") as "x2" from  r1) as "t1597" |}]
+    {| select  max("x2") as "x4" from  (select  min(r1."f") as "x2" from  r1) as "t3" |}]
 
 let%expect_test "select-fusion-2" =
   run_test "select([max(x)], select([r1.f as x], r1))" ;

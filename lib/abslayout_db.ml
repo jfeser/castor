@@ -148,13 +148,13 @@ module Make (Config : Config.S) = struct
     | `Query q -> Meta.(find_exn q schema) |> List.map ~f:Name.type_exn
     | `Empty -> []
 
-  let query_to_sql q =
-    let fresh = Fresh.create () in
+  let query_to_sql fresh q =
+    let ctx = Sql.create_ctx ~fresh () in
     let rec query_to_sql q =
       match q with
       | `For (q1, q2) ->
           let open Sql in
-          let spj1 = of_ralgebra q1 |> to_spj in
+          let spj1 = of_ralgebra ctx q1 |> to_spj ctx in
           let sql1 = Query spj1 in
           let sql1_no_order = Query {spj1 with order= []} in
           let sql1_names = to_schema (Query spj1) in
@@ -167,13 +167,13 @@ module Make (Config : Config.S) = struct
             in
             subst ctx q2
           in
-          let spj2 = query_to_sql q2 |> to_spj in
+          let spj2 = query_to_sql q2 |> to_spj ctx in
           let sql2 = Query spj2 in
           let sql2_no_order = Query {spj2 with order= []} in
           let select_list =
             let sql2_names = to_schema sql2 in
             List.map (sql1_names @ sql2_names) ~f:(fun n ->
-                add_pred_alias (Name (Name.create n)) )
+                add_pred_alias ctx (Name (Name.create n)) )
           in
           let order =
             (to_order sql1 |> Or_error.ok_exn) @ (to_order sql2 |> Or_error.ok_exn)
@@ -204,7 +204,7 @@ module Make (Config : Config.S) = struct
           in
           let other_queries =
             List.map other_queries ~f:(fun q ->
-                let sql = query_to_sql q |> Sql.to_spj in
+                let sql = query_to_sql q |> Sql.to_spj ctx in
                 let types = to_schema q in
                 let names = Sql.(to_schema (Query sql)) in
                 (sql, types, names) )
@@ -226,7 +226,7 @@ module Make (Config : Config.S) = struct
           let union =
             let spj =
               Sql.Union_all (List.map queries ~f:(fun q -> {q with order= []}))
-              |> Sql.to_spj
+              |> Sql.to_spj ctx
             in
             let order =
               (Name (Name.create counter_name), `Asc)
@@ -238,13 +238,15 @@ module Make (Config : Config.S) = struct
           Query union
       | `Empty -> Query (Sql.create_query ~limit:0 [])
       | `Scalar p -> Query (Sql.create_query [(p, Fresh.name fresh "x%d", None)])
-      | `Query q -> Sql.of_ralgebra q
+      | `Query q -> Sql.of_ralgebra ctx q
     in
     query_to_sql q
 
   let eval_query q =
-    let sql = query_to_sql q in
-    let tups = Db.exec_cursor conn (to_schema q) (Sql.to_string sql) in
+    let fresh = Fresh.create () in
+    let ctx = Sql.create_ctx ~fresh () in
+    let sql = query_to_sql fresh q in
+    let tups = Db.exec_cursor conn (to_schema q) (Sql.to_string ctx sql) in
     let rec eval tups = function
       | `For (q1, q2) ->
           let extract_tup s t = List.take t (List.length s) in
