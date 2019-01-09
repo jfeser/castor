@@ -18,6 +18,7 @@ depends: [
   "core" {>= "v0.11" & < "v0.12"}
   "stdio" {>= "v0.11" & < "v0.12"}
   "postgresql" {>= "4.4" & < "4.5"}
+  "bos" {>= "0.2" & < "0.3"}
   "logs" {>= "0.6" & < "0.7"}
   "llvm" {>= "6" & < "8"}
   "expect_test_helpers_kernel" {>= "v0.11" & < "v0.12"}
