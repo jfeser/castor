@@ -387,7 +387,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         super#visit_t sctx ectx layout
     end
 
-  let serialize writer l =
+  let serialize writer l t =
     Logs.info (fun m -> m "Serializing abstract layout.") ;
     let begin_pos = pos writer in
     let log_tmp_file =
@@ -399,7 +399,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
     (* Serialize the main layout. *)
     let sctx = {writer; log_ch} in
     let serializer = new serialize_fold in
-    M.annotate_type l (M.to_type l) ;
+    M.annotate_type l t ;
     serializer#run sctx l ;
     (* Serialize subquery layouts. *)
     let subquery_visitor =

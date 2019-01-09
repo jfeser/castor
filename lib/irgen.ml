@@ -690,7 +690,7 @@ struct
     let type_ = Abslayout_db.to_type r in
     let writer = Bitstring.Writer.with_file data_fn in
     let r, len =
-      if Config.code_only then (r, 0) else Serialize.serialize writer r
+      if Config.code_only then (r, 0) else Serialize.serialize writer r type_
     in
     Bitstring.Writer.flush writer ;
     Bitstring.Writer.close writer ;

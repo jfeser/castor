@@ -21,7 +21,7 @@ let run_test layout_str =
   annotate_foreach layout ;
   let type_ = M.to_type layout in
   let buf = Buffer.create 1024 in
-  let _, len = S.serialize (Bitstring.Writer.with_buffer buf) layout in
+  let _, len = S.serialize (Bitstring.Writer.with_buffer buf) layout type_ in
   let buf_str = Buffer.contents buf |> String.escaped in
   In_channel.input_all (In_channel.create layout_file) |> Stdio.print_endline ;
   [%sexp_of: Type.t * int * string] (type_, len, buf_str) |> print_s

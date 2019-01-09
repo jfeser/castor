@@ -7,7 +7,7 @@ module type S = sig
     (** Render a serialization log into a file map. *)
   end
 
-  val serialize : Bitstring.Writer.t -> t -> t * int
+  val serialize : Bitstring.Writer.t -> t -> Type.t -> t * int
   (** Serialize a layout to a binary format.
 
       @return The layout, annotated with the byte position of each
