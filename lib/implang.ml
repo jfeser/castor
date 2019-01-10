@@ -546,7 +546,11 @@ module Builder = struct
 
   let build_div =
     build_numeric2 (function
-      | `Int (x, y) -> Infix.(x / y)
+      | `Int (x, y) ->
+          Binop
+            { op= FlDiv
+            ; arg1= Unop {op= Int2Fl; arg= x}
+            ; arg2= Unop {op= Int2Fl; arg= y} }
       | `Fixed (x, y) -> Binop {op= FlDiv; arg1= x; arg2= y} )
 
   let build_concat vs b =
