@@ -189,10 +189,19 @@ def run_sql(name, params):
         with open("sql", "w") as f:
             f.write(sql_query)
 
-        with open("%s.csv" % name, "w") as out:
+        out_fn = "%s.csv" % name
+        with open(out_fn, "w") as out:
             p = Popen(["psql", "-t", "-A", "-F", ",", DB], stdout=out, stdin=PIPE)
             p.communicate(input=("\\timing \n " + sql_query).encode())
             p.wait()
+
+        with open(out_fn, "r") as csv:
+            lines = csv.read().split("\n")
+            time = lines[-2]
+        with open(out_fn, "w") as csv:
+            csv.write("\n".join(lines[1:-2]))
+        with open("%s.time" % name, "w") as time_f:
+            time_f.write(time)
     except:
         log.exception("Failed to run SQL query %s." % name)
     log.info("Done running SQL query %s." % name)

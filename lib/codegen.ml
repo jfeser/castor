@@ -954,7 +954,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
   let int_fmt = define_global_str "int_fmt" "%d"
 
-  let str_fmt = define_global_str "str_fmt" "\"%.*s\""
+  let str_fmt = define_global_str "str_fmt" "%.*s"
 
   let float_fmt = define_global_str "float_fmt" "%f"
 
@@ -980,9 +980,10 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
             [ build_extractvalue val_ 1 "" builder
             ; build_extractvalue val_ 0 "" builder ]
       | TupleT ts ->
+          let last_i = List.length ts - 1 in
           List.iteri ts ~f:(fun i t ->
               gen (build_extractvalue val_ i "" builder) t ;
-              call_printf comma_str [] )
+              if i < last_i then call_printf comma_str [] )
       | VoidT -> call_printf void_str []
       | FixedT _ -> call_printf float_fmt [val_]
       | IntT {nullable= true}
