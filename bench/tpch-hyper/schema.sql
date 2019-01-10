@@ -49,6 +49,14 @@ create table q4 (
 );
 create index q4_idx on q4 (o_orderdate);
 
+create table q5 (
+  r_name char(25) not null,
+  n_name char(25) not null,
+  o_orderdate date not null,
+  agg3 numeric not null,
+);
+create index q5_idx on q5 (r_name, o_orderdate);
+
 create table q6 (
   l_extendedprice decimal(12,2) not null,
   l_discount decimal(12,2) not null,
@@ -56,3 +64,12 @@ create table q6 (
   l_quantity decimal(12,2) not null
 );
 create index q6_idx on q6 (l_shipdate, l_discount, l_quantity);
+
+create table q7 (
+  r_name char(25) not null,
+  n_name char(25) not null,
+  o_orderdate date not null,
+  l_year integer not null,
+  
+);
+create index q5_idx on q5 (r_name, o_orderdate);

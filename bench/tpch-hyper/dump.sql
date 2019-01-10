@@ -70,6 +70,20 @@ create temp view q4 as (
    group by o_orderpriority, o_orderdate);
 \copy (select * from q4) to 'q4.tbl' delimiter '|';
 
+create temp view q5 as (
+  select o_orderdate, n_name, r_name, sum((l_extendedprice * (1 - l_discount))) as agg3
+    from orders, nation, region, lineitem, supplier, customer
+   where l_orderkey = o_orderkey and l_suppkey = s_suppkey and c_custkey = o_custkey and c_nationkey = s_nationkey and s_nationkey = n_nationkey and n_regionkey = r_regionkey
+   group by o_orderdate, n_name, r_name);
+\copy (select * from q5) to 'q5.tbl' delimiter '|';
+
 create temp view q6 as (
   select l_extendedprice, l_discount, l_shipdate, l_quantity from lineitem);
 \copy (select * from q6) to 'q6.tbl' delimiter '|';
+
+create temp view q7 as (
+  select n1.n_name, n2.n_name, year(l_shipdate) as l_year, sum((l_extendedprice * (1 - l_discount))) as revenue
+    from supplier, lineitem, orders, customer, nation as n1, nation as n2
+   where s_suppkey = l_suppkey and o_orderkey = l_orderkey and c_custkey = o_custkey and c_nationkey = n2.n_nationkey and l_shipdate > date '1995-01-01' and l_shipdate < date '1996-12-31' and s_nationkey = n1.n_nationkey
+   );
+\copy (select * from q7) to 'q7.tbl' delimiter '|';
