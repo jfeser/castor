@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 
-"""Usage: run-bench.py [options] [QUERY...]
+"""
+Usage:
+  run-bench.py sql [options] [QUERY...]
+  run-bench.py castor [options] [QUERY...]
+  run-bench.py gen-dune
 
 Options:
   -h --help   Show this screen.
   -d CONNINFO Database to connect to.
-  --sql-only  Only run the SQL queries.
   --gen-dune  Generate dune file for checking args.
 """
 
@@ -22,23 +25,18 @@ import json
 import random
 import shlex
 import subprocess
+from subprocess import Popen, PIPE
 from datetime import date
 import sys
 import re
 
-file_path = os.path.dirname(os.path.abspath(__file__))
+FILE_PATH = os.path.dirname(os.path.abspath(__file__))
 
 
 def rpath(p):
-    return os.path.normpath(os.path.join(file_path, p))
+    return os.path.normpath(os.path.join(FILE_PATH, p))
 
 
-def contents(fn):
-    with open(fn, "r") as f:
-        return f.read().strip()
-
-
-SQL_ONLY = False
 CONFIG = configparser.ConfigParser()
 CONFIG.read(rpath("../../config.ini"))
 COMPILE_EXE = CONFIG["default"]["build_root"] + "/bin/compile.exe"
@@ -163,14 +161,6 @@ handler.setFormatter(formatter)
 log.addHandler(handler)
 log.setLevel(logging.DEBUG)
 
-os.chdir(rpath("../../"))
-os.system("dune build @install")
-os.chdir(rpath("."))
-
-csv_file = open(OUT_FILE, "w")
-csv_writer = csv.writer(csv_file)
-csv_writer.writerow(["name", "time"])
-
 
 def call(cmd_args, *args, **kwargs):
     log.debug(" ".join(cmd_args))
@@ -187,7 +177,29 @@ def check_output(cmd_args, *args, **kwargs):
     return subprocess.check_output(cmd_args, *args, **kwargs)
 
 
-def run_bench(name, query_name, params):
+def run_sql(name, params):
+    sql = rpath(name + ".sql")
+    log.info("Running SQL query %s." % name)
+    try:
+        with open(sql, "r") as f:
+            sql_query = f.read()
+        for i, (_, param_value) in enumerate(params):
+            sql_query = re.sub(":%d(?![0-9]+)" % (i + 1), param_value, sql_query)
+
+        with open("sql", "w") as f:
+            f.write(sql_query)
+
+        with open("%s.csv" % name, "w") as out:
+            p = Popen(["psql", "-t", "-A", "-F", ",", DB], stdout=out, stdin=PIPE)
+            p.communicate(input=("\\timing \n " + sql_query).encode())
+            p.wait()
+    except:
+        log.exception("Failed to run SQL query %s." % name)
+    log.info("Done running SQL query %s." % name)
+
+
+def run_bench(name, query_name, params, csv_file):
+    csv_writer = csv.writer(csv_file)
     query = rpath(query_name + ".txt")
     sql = rpath(name + ".sql")
 
@@ -204,70 +216,47 @@ def run_bench(name, query_name, params):
     compile_cmd_parts = [COMPILE_EXE, "-v", "-o", benchd, "-db", DB] + param_types
 
     # Build, saving the log.
-    if not SQL_ONLY:
-        try:
-            compile_log = benchd + "/compile.log"
-            query_file = benchd + "/query"
-            check_call(["cp", query, query_file])
-            with open(compile_log, "w") as cl:
-                check_call(compile_cmd_parts + [query_file], stdout=cl, stderr=cl)
-        except Exception:
-            log.exception("Compile failed.")
-            csv_writer.writerow([query_name, None])
-            csv_file.flush()
-            return
+    try:
+        compile_log = benchd + "/compile.log"
+        query_file = benchd + "/query"
+        check_call(["cp", query, query_file])
+        with open(compile_log, "w") as cl:
+            check_call(compile_cmd_parts + [query_file], stdout=cl, stderr=cl)
+    except Exception:
+        log.exception("Compile failed.")
+        csv_writer.writerow([query_name, None])
+        csv_file.flush()
+        return
 
     # Run query and save results.
     os.chdir(benchd)
 
-    random.seed(0)
-    castor_params = [p[1]("castor") for p in params]
-    random.seed(0)
-    sql_params = [p[1]("sql") for p in params]
+    param_values = [p[1] for p in params]
+    time_cmd_parts = ["./scanner.exe", "-t", "1", "data.bin"] + param_values
+    time_cmd = " ".join(time_cmd_parts)
+    log.debug(time_cmd)
 
-    if os.path.isfile(sql):
-        log.debug("Running SQL version of query.")
-        with open(sql, "r") as f:
-            sql_query = f.read()
-            print(sql_query)
-        for i, param in enumerate(sql_params):
-            sql_query = re.sub(":%d(?![0-9]+)" % (i + 1), param, sql_query)
-        with open("sql", "w") as f:
-            f.write(sql_query)
-        with open("golden.csv", "w") as out:
-            call(
-                ["psql", "-t", "-A", "-F", ",", "-c", r"\timing", "-f", "sql", DB],
-                stdout=out,
-            )
-    else:
-        log.debug("Skipping SQL query. %s not a file.", sql)
-
-    if not SQL_ONLY:
-        time_cmd_parts = ["./scanner.exe", "-t", "1", "data.bin"] + castor_params
-        time_cmd = " ".join(time_cmd_parts)
-        log.debug(time_cmd)
-
-        cmd = ["./scanner.exe", "-p", "data.bin"] + castor_params
-        cmd_str = shlex.quote(" ".join(cmd))
+    cmd = ["./scanner.exe", "-p", "data.bin"] + param_values
+    cmd_str = shlex.quote(" ".join(cmd))
+    try:
+        boutput = check_output(time_cmd_parts)
+        output = boutput.decode("utf-8")
+        time_str = output.split(" ")[0][:-2]
+        time = None
         try:
-            boutput = check_output(time_cmd_parts)
-            output = boutput.decode("utf-8")
-            time_str = output.split(" ")[0][:-2]
-            time = None
-            try:
-                time = float(time_str)
-            except ValueError:
-                log.error("Failed to read time: %s", time_str)
-            csv_writer.writerow([query_name, time])
-            csv_file.flush()
+            time = float(time_str)
+        except ValueError:
+            log.error("Failed to read time: %s", time_str)
+        csv_writer.writerow([query_name, time])
+        csv_file.flush()
 
-            log.debug("Running %s in %s.", cmd_str, os.getcwd())
-            with open("results.csv", "w") as out:
-                call(cmd, stdout=out)
-            with open("mem.json", "w") as out:
-                call(["/usr/bin/time", "-v"] + time_cmd_parts, stdout=out, stderr=out)
-        except Exception:
-            log.exception("Running %s failed.", cmd)
+        log.debug("Running %s in %s.", cmd_str, os.getcwd())
+        with open("results.csv", "w") as out:
+            call(cmd, stdout=out)
+        with open("mem.json", "w") as out:
+            call(["/usr/bin/time", "-v"] + time_cmd_parts, stdout=out, stderr=out)
+    except Exception:
+        log.exception("Running %s failed.", cmd)
 
     os.chdir("..")
 
@@ -282,37 +271,54 @@ def gen_dune():
   (deps "{name}.args" "{name}.txt" ../../bin/transform.exe)
   (action (ignore-stderr (with-stdout-to
             "{query}.gen"
-            (system "../../bin/transform.exe -db %{DB} {name}.txt %{{read:{name}.args}}"))))
+            (system "../../bin/transform.exe -db {db} {name}.txt %{{read:{name}.args}}"))))
 )
 (alias
   (name check_transforms)
   (action (diff "{query}.txt" "{query}.gen"))
 )
             """.format(
-                    name=bench["name"], query=query
+                    db=DB, name=bench["name"], query=query
                 )
             )
 
 
 args = docopt(__doc__)
-if args["-d"] is not None:
-    DB = args["-d"]
-SQL_ONLY = args["--sql-only"]
 
 
 def should_run(query_name):
     return len(args["QUERY"]) == 0 or query_name in args["QUERY"]
 
 
-if args["--gen-dune"]:
-    gen_dune()
-    exit(0)
+if args["-d"] is not None:
+    DB = args["-d"]
 
-# Run benchmarks
-with ThreadPoolExecutor(max_workers=(multiprocessing.cpu_count() // 2)) as exe:
+# Ensure that the project is built
+os.chdir(rpath("../../"))
+os.system("dune build @install")
+os.chdir(rpath("."))
+
+
+if args["gen-dune"]:
+    gen_dune()
+
+elif args["sql"]:
     for bench in BENCHMARKS:
-        for query in bench["query"]:
-            if should_run(query):
-                exe.submit(run_bench, bench["name"], query, bench["params"])
+        name = bench["name"]
+        if should_run(name):
+            run_sql(name, bench["params"])
+
+elif args["castor"]:
+    csv_file = open(OUT_FILE, "w")
+    csv_writer = csv.writer(csv_file)
+    csv_writer.writerow(["name", "time"])
+
+    with ThreadPoolExecutor(max_workers=(multiprocessing.cpu_count() // 2)) as exe:
+        for bench in BENCHMARKS:
+            for query in bench["query"]:
+                if should_run(query):
+                    exe.submit(
+                        run_bench, bench["name"], query, bench["params"], csv_file
+                    )
 
 logging.shutdown()

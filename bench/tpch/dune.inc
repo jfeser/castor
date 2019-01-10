@@ -4,7 +4,7 @@
   (deps "1.args" "1.txt" ../../bin/transform.exe)
   (action (ignore-stderr (with-stdout-to
             "1-gold.gen"
-            (system "../../bin/transform.exe -db tpch_test 1.txt %{read:1.args}"))))
+            (system "../../bin/transform.exe -db postgresql://localhost:5432/tpch 1.txt %{read:1.args}"))))
 )
 (alias
   (name check_transforms)
@@ -17,7 +17,7 @@
   (deps "2.args" "2.txt" ../../bin/transform.exe)
   (action (ignore-stderr (with-stdout-to
             "2-gold.gen"
-            (system "../../bin/transform.exe -db tpch_test 2.txt %{read:2.args}"))))
+            (system "../../bin/transform.exe -db postgresql://localhost:5432/tpch 2.txt %{read:2.args}"))))
 )
 (alias
   (name check_transforms)
@@ -30,7 +30,7 @@
   (deps "3-no.args" "3-no.txt" ../../bin/transform.exe)
   (action (ignore-stderr (with-stdout-to
             "3-no-gold.gen"
-            (system "../../bin/transform.exe -db tpch_test 3-no.txt %{read:3-no.args}"))))
+            (system "../../bin/transform.exe -db postgresql://localhost:5432/tpch 3-no.txt %{read:3-no.args}"))))
 )
 (alias
   (name check_transforms)
@@ -43,7 +43,7 @@
   (deps "4.args" "4.txt" ../../bin/transform.exe)
   (action (ignore-stderr (with-stdout-to
             "4-gold.gen"
-            (system "../../bin/transform.exe -db tpch_test 4.txt %{read:4.args}"))))
+            (system "../../bin/transform.exe -db postgresql://localhost:5432/tpch 4.txt %{read:4.args}"))))
 )
 (alias
   (name check_transforms)
@@ -56,7 +56,7 @@
   (deps "5-no.args" "5-no.txt" ../../bin/transform.exe)
   (action (ignore-stderr (with-stdout-to
             "5-no-gold.gen"
-            (system "../../bin/transform.exe -db tpch_test 5-no.txt %{read:5-no.args}"))))
+            (system "../../bin/transform.exe -db postgresql://localhost:5432/tpch 5-no.txt %{read:5-no.args}"))))
 )
 (alias
   (name check_transforms)
@@ -69,7 +69,7 @@
   (deps "6.args" "6.txt" ../../bin/transform.exe)
   (action (ignore-stderr (with-stdout-to
             "6-gold.gen"
-            (system "../../bin/transform.exe -db tpch_test 6.txt %{read:6.args}"))))
+            (system "../../bin/transform.exe -db postgresql://localhost:5432/tpch 6.txt %{read:6.args}"))))
 )
 (alias
   (name check_transforms)
@@ -82,7 +82,7 @@
   (deps "7.args" "7.txt" ../../bin/transform.exe)
   (action (ignore-stderr (with-stdout-to
             "7-gold.gen"
-            (system "../../bin/transform.exe -db tpch_test 7.txt %{read:7.args}"))))
+            (system "../../bin/transform.exe -db postgresql://localhost:5432/tpch 7.txt %{read:7.args}"))))
 )
 (alias
   (name check_transforms)
@@ -95,7 +95,7 @@
   (deps "8.args" "8.txt" ../../bin/transform.exe)
   (action (ignore-stderr (with-stdout-to
             "8-gold.gen"
-            (system "../../bin/transform.exe -db tpch_test 8.txt %{read:8.args}"))))
+            (system "../../bin/transform.exe -db postgresql://localhost:5432/tpch 8.txt %{read:8.args}"))))
 )
 (alias
   (name check_transforms)
@@ -108,7 +108,7 @@
   (deps "9.args" "9.txt" ../../bin/transform.exe)
   (action (ignore-stderr (with-stdout-to
             "9-gold.gen"
-            (system "../../bin/transform.exe -db tpch_test 9.txt %{read:9.args}"))))
+            (system "../../bin/transform.exe -db postgresql://localhost:5432/tpch 9.txt %{read:9.args}"))))
 )
 (alias
   (name check_transforms)
@@ -121,7 +121,7 @@
   (deps "10-no.args" "10-no.txt" ../../bin/transform.exe)
   (action (ignore-stderr (with-stdout-to
             "10-no-gold.gen"
-            (system "../../bin/transform.exe -db tpch_test 10-no.txt %{read:10-no.args}"))))
+            (system "../../bin/transform.exe -db postgresql://localhost:5432/tpch 10-no.txt %{read:10-no.args}"))))
 )
 (alias
   (name check_transforms)
@@ -134,7 +134,7 @@
   (deps "11-no.args" "11-no.txt" ../../bin/transform.exe)
   (action (ignore-stderr (with-stdout-to
             "11-no-gold.gen"
-            (system "../../bin/transform.exe -db tpch_test 11-no.txt %{read:11-no.args}"))))
+            (system "../../bin/transform.exe -db postgresql://localhost:5432/tpch 11-no.txt %{read:11-no.args}"))))
 )
 (alias
   (name check_transforms)
@@ -147,7 +147,7 @@
   (deps "12.args" "12.txt" ../../bin/transform.exe)
   (action (ignore-stderr (with-stdout-to
             "12-gold.gen"
-            (system "../../bin/transform.exe -db tpch_test 12.txt %{read:12.args}"))))
+            (system "../../bin/transform.exe -db postgresql://localhost:5432/tpch 12.txt %{read:12.args}"))))
 )
 (alias
   (name check_transforms)
@@ -160,7 +160,7 @@
   (deps "14.args" "14.txt" ../../bin/transform.exe)
   (action (ignore-stderr (with-stdout-to
             "14-gold.gen"
-            (system "../../bin/transform.exe -db tpch_test 14.txt %{read:14.args}"))))
+            (system "../../bin/transform.exe -db postgresql://localhost:5432/tpch 14.txt %{read:14.args}"))))
 )
 (alias
   (name check_transforms)
@@ -173,7 +173,7 @@
   (deps "15.args" "15.txt" ../../bin/transform.exe)
   (action (ignore-stderr (with-stdout-to
             "15-gold.gen"
-            (system "../../bin/transform.exe -db tpch_test 15.txt %{read:15.args}"))))
+            (system "../../bin/transform.exe -db postgresql://localhost:5432/tpch 15.txt %{read:15.args}"))))
 )
 (alias
   (name check_transforms)
@@ -186,7 +186,7 @@
   (deps "16-no.args" "16-no.txt" ../../bin/transform.exe)
   (action (ignore-stderr (with-stdout-to
             "16-no-gold.gen"
-            (system "../../bin/transform.exe -db tpch_test 16-no.txt %{read:16-no.args}"))))
+            (system "../../bin/transform.exe -db postgresql://localhost:5432/tpch 16-no.txt %{read:16-no.args}"))))
 )
 (alias
   (name check_transforms)
@@ -199,7 +199,7 @@
   (deps "17.args" "17.txt" ../../bin/transform.exe)
   (action (ignore-stderr (with-stdout-to
             "17-gold.gen"
-            (system "../../bin/transform.exe -db tpch_test 17.txt %{read:17.args}"))))
+            (system "../../bin/transform.exe -db postgresql://localhost:5432/tpch 17.txt %{read:17.args}"))))
 )
 (alias
   (name check_transforms)
@@ -212,7 +212,7 @@
   (deps "18.args" "18.txt" ../../bin/transform.exe)
   (action (ignore-stderr (with-stdout-to
             "18-gold.gen"
-            (system "../../bin/transform.exe -db tpch_test 18.txt %{read:18.args}"))))
+            (system "../../bin/transform.exe -db postgresql://localhost:5432/tpch 18.txt %{read:18.args}"))))
 )
 (alias
   (name check_transforms)
@@ -225,7 +225,7 @@
   (deps "19.args" "19.txt" ../../bin/transform.exe)
   (action (ignore-stderr (with-stdout-to
             "19-gold.gen"
-            (system "../../bin/transform.exe -db tpch_test 19.txt %{read:19.args}"))))
+            (system "../../bin/transform.exe -db postgresql://localhost:5432/tpch 19.txt %{read:19.args}"))))
 )
 (alias
   (name check_transforms)
