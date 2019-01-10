@@ -1,8 +1,8 @@
 open Base
-open Stdio
 open Printf
 open Collections
 open Abslayout
+open Bos
 
 type ctx = {fresh: Fresh.t}
 
@@ -333,7 +333,11 @@ and to_string ctx = function
       |> String.concat ~sep:" union all "
 
 let to_string_hum ctx sql =
-  let in_ch, out_ch = Unix.open_process "pg_format" in
-  Out_channel.output_string out_ch (to_string ctx sql) ;
-  Out_channel.close out_ch ;
-  In_channel.input_all in_ch
+  let sql_str = to_string ctx sql in
+  let inp = OS.Cmd.in_string sql_str in
+  let out = OS.Cmd.run_io Cmd.(v "pg_format") inp in
+  match OS.Cmd.out_string ~trim:true out with
+  | Ok (sql', _) -> sql'
+  | Error msg ->
+      Logs.warn (fun m -> m "Formatting sql failed: %a." Rresult.R.pp_msg msg) ;
+      sql_str

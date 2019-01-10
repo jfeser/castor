@@ -50,5 +50,6 @@ val pred_to_sql : ctx -> pred -> string
 val to_string : ctx -> t -> string
 
 val to_string_hum : ctx -> t -> string
+(** Pretty print a SQL string if a sql formatter is available. *)
 
 val add_pred_alias : ctx -> pred -> pred * string * _ option
