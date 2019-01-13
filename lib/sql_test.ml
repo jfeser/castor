@@ -19,7 +19,7 @@ let run_test s =
   print_endline (of_ralgebra ctx r |> to_string ctx)
 
 let run_test_tpch ?params s =
-  let conn = Db.create "postgresql://localhost:5432/tpch" in
+  let conn = create_db "postgresql://localhost:5432/tpch" in
   let module M = Abslayout_db.Make (struct
     let conn = conn
   end) in
@@ -90,8 +90,9 @@ let%expect_test "select-fusion-2" =
   [%expect {| select  max(r1."f") as "x3" from  r1 |}]
 
 let%expect_test "filter-fusion" =
-  run_test "filter((x = 0), groupby([sum(r1.f) as x], [r1.g], r1))";
-  [%expect {| select  "x2"  from  (select  sum("r1_f_1") as "x2" from  (select  r1."f" as "r1_f_1", r1."g" as "r1_g_2" from  r1) as "t3"  group by ("r1_g_2")) as "t4" where ("x2") = (0) |}]
+  run_test "filter((x = 0), groupby([sum(r1.f) as x], [r1.g], r1))" ;
+  [%expect
+    {| select  "x2"  from  (select  sum("r1_f_1") as "x2" from  (select  r1."f" as "r1_f_1", r1."g" as "r1_g_2" from  r1) as "t3"  group by ("r1_g_2")) as "t4" where ("x2") = (0) |}]
 
 (* let%expect_test "tpch-1" =
  *   run_test_tpch
