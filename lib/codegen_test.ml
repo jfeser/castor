@@ -121,10 +121,10 @@ let%expect_test "ordered-idx" =
     "AOrderedIdx(OrderBy([r1.f], Dedup(Select([r1.f], r1)), asc) as k, \
      AList(Filter(r1.f = k.f, r1), ascalar(r1.g)), 1, 3)" ;
   [%expect {|
-    1,2,
-    1,3,
-    2,1,
-    2,2,
+    1,2
+    1,3
+    2,1
+    2,2
 
     exited normally |}]
 
@@ -135,7 +135,7 @@ let%expect_test "agg" =
      alist(r2, ascalar(r2.a)))" ;
   [%expect
     {|
-    3.000000,7.978000,5,39.890000,-0.420000,34.420000,
+    3.000000,7.978000,5,39.890000,-0.420000,34.420000
 
     exited normally |}]
 
@@ -144,8 +144,8 @@ let%expect_test "hash-idx" =
     "AHashIdx(Dedup(Select([r1.f], r1)) as k, AList(Filter(r1.f = k.f, r1), \
      ascalar(r1.g)), 2)" ;
   [%expect {|
-    2,1,
-    2,2,
+    2,1
+    2,2
 
     exited normally |}]
 
@@ -171,7 +171,7 @@ let%expect_test "strops" =
 select([strlen("test"), strpos("testing", "in")], ascalar(0))
 |} ;
   [%expect {|
-    4,5,
+    4,5
 
     exited normally |}]
 
@@ -186,7 +186,7 @@ log.counter < lp.succ, log) as lc,
 atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
 |} ;
   [%expect {|
-    1,2,
+    1,2
 
     exited normally |}]
 
@@ -201,7 +201,7 @@ log_str.counter < lp.succ, log_str) as lc,
 atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
 |} ;
   [%expect {|
-    1,2,
+    1,2
 
     exited normally |}]
 
@@ -219,7 +219,7 @@ select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as 
   (id_p, id_c)))
 |} ;
   [%expect {|
-    1,2,
+    1,2
 
     exited normally |}]
 
@@ -237,7 +237,7 @@ select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as 
   (id_p, id_c)))
 |} ;
   [%expect {|
-    1,2,
+    1,2
 
     exited normally |}]
 
@@ -257,7 +257,7 @@ select([lp.counter, lc.counter],
       lp.counter, lp.succ) as lc)], cross))
 |} ;
   [%expect {|
-    1,2,
+    1,2
 
     exited normally |}]
 
@@ -277,6 +277,6 @@ select([lp.counter, lc.counter],
       lp.counter, lp.succ) as lc)], cross))
 |} ;
   [%expect {|
-    1,2,
+    1,2
 
     exited normally |}]

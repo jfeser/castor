@@ -202,13 +202,13 @@ let%expect_test "sum-complex" =
     // found_tup18 : Bool[nonnull] (persists=false)
     // sum19 : Int[nonnull] (persists=false)
     // count24 : Int[nonnull] (persists=true)
-    // sum21 : Int[nonnull] (persists=false)
+    // sum21 : Fixed[nonnull] (persists=false)
     // cstart26 : Int[nonnull] (persists=true)
     fun printer () : Void {
         found_tup18 = false;
         sum19 = 0;
         count20 = 0;
-        sum21 = 0;
+        sum21 = 0.0;
         cstart22 = 0;
         i23 = 0;
         count24 = 5;
@@ -218,20 +218,20 @@ let%expect_test "sum-complex" =
             tup17 = (buf[cstart25 : 1], buf[cstart26 : 1]);
             sum19 = sum19 + tup17[0];
             count20 = count20 + 1;
-            sum21 = sum21 + tup17[0] / 2;
+            sum21 = sum21 + int2fl tup17[0] / int2fl 2;
             found_tup18 = true;
             cstart22 = cstart22 + 2;
             i23 = i23 + 1;
         }
         if (found_tup18) {
-            print(Tuple[Int[nonnull], Int[nonnull]],
-            (sum19 + 5, count20 + sum21));
+            print(Tuple[Int[nonnull], Fixed[nonnull]],
+            (sum19 + 5, int2fl count20 + sum21));
         } else {
 
         }
     }
     // Locals:
-    // sum8 : Int[nonnull] (persists=false)
+    // sum8 : Fixed[nonnull] (persists=false)
     // cstart9 : Int[nonnull] (persists=true)
     // cstart12 : Int[nonnull] (persists=true)
     // count11 : Int[nonnull] (persists=true)
@@ -247,7 +247,7 @@ let%expect_test "sum-complex" =
         found_tup5 = false;
         sum6 = 0;
         count7 = 0;
-        sum8 = 0;
+        sum8 = 0.0;
         cstart9 = 0;
         i10 = 0;
         count11 = 5;
@@ -257,7 +257,7 @@ let%expect_test "sum-complex" =
             tup4 = (buf[cstart12 : 1], buf[cstart13 : 1]);
             sum6 = sum6 + tup4[0];
             count7 = count7 + 1;
-            sum8 = sum8 + tup4[0] / 2;
+            sum8 = sum8 + int2fl tup4[0] / int2fl 2;
             found_tup5 = true;
             cstart9 = cstart9 + 2;
             i10 = i10 + 1;
