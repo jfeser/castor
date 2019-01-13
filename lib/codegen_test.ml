@@ -1,20 +1,21 @@
 open Core
 open Abslayout
+open Test_util
 
 let rels = Hashtbl.create (module Db.Relation)
 
 let _ =
-  Test_util.create rels "r1" ["f"; "g"]
+  create rels "r1" ["f"; "g"]
     [[0; 5]; [1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]; [4; 6]]
 
-let _ = Test_util.create rels "one" [] [[]]
+let _ = create rels "one" [] [[]]
 
 let _ =
-  Test_util.create rels "log" ["counter"; "succ"; "id"]
+  create rels "log" ["counter"; "succ"; "id"]
     [[1; 4; 1]; [2; 3; 2]; [3; 4; 3]; [4; 6; 1]; [5; 6; 3]]
 
 let _ =
-  Test_util.create_val rels "r2"
+  create_val rels "r2"
     [("a", Type.PrimType.FixedT {nullable= false})]
     [ [Fixed (Fixed_point.of_string "0.01")]
     ; [Fixed (Fixed_point.of_string "5")]
@@ -23,7 +24,7 @@ let _ =
     ; [Fixed (Fixed_point.of_string "-0.42")] ]
 
 let _ =
-  Test_util.create_val rels "log_str"
+  create_val rels "log_str"
     [ ("counter", Type.PrimType.IntT {nullable= false})
     ; ("succ", Type.PrimType.IntT {nullable= false})
     ; ("id", Type.PrimType.StringT {nullable= false}) ]
@@ -69,7 +70,7 @@ let make_modules ?layout_file () =
 
 let make_modules_db ?layout_file () =
   let module E = Eval.Make (struct
-    let conn = Db.create "postgresql://localhost:5433/demomatch"
+    let conn = create_db "postgresql://localhost:5433/demomatch"
   end) in
   let module M = Abslayout_db.Make (E) in
   let module S =
@@ -183,11 +184,6 @@ let%expect_test "hash-idx" =
 
     exited normally |}]
 
-(* let%expect_test "zip-tuple" =
- *   run_test
- *     "atuple([alist(select([r1.f], orderby([r1.f], r1, desc)), ascalar(r1.f)),\n             \
- *      alist(select([r1.g], orderby([r1.f], r1, desc)), ascalar(r1.g))], zip)" *)
-
 let example_params =
   [ (Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p", Value.Int 1)
   ; (Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c", Int 2) ]
@@ -244,19 +240,6 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
 
     exited normally |}]
 
-(* let%expect_test "example-1-db" =
- *   run_test ~params:example_db_params ~modules:make_modules_db ~print_layout:false
- *     {|
- * select([lp.counter, lc.counter], filter(lc.id = id_c && lp.id = id_p,
- * alist(filter(succ > counter + 1, log_bench) as lp,
- * atuple([ascalar(lp.id), ascalar(lp.counter),
- * alist(filter(lp.counter < log_bench.counter &&
- * log_bench.counter < lp.succ, log_bench) as lc,
- * atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
- * |} ;
- *   [%expect {|
- *     exited normally |}] *)
-
 let%expect_test "example-2" =
   run_test ~params:example_params ~print_layout:false
     {|
@@ -297,14 +280,14 @@ let%expect_test "example-3" =
   run_test ~params:example_params ~print_layout:false
     {|
 select([lp.counter, lc.counter],
-  atuple([ahashidx(dedup(select([id as k], log)), 
+  atuple([ahashidx(dedup(select([id as k1], log)), 
     alist(select([counter, succ], 
-        filter(k = id && counter < succ, log)), 
+        filter(k1 = id && counter < succ, log)), 
       atuple([ascalar(counter), ascalar(succ)], cross)), 
     id_p) as lp,
   filter(lc.id = id_c,
-    aorderedidx(select([log.counter as k], log), 
-      alist(filter(log.counter = k, log),
+    aorderedidx(select([log.counter as k2], log), 
+      alist(filter(log.counter = k2, log),
         atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
       lp.counter, lp.succ) as lc)], cross))
 |} ;
@@ -317,14 +300,14 @@ let%expect_test "example-3-str" =
   run_test ~params:example_str_params ~print_layout:false
     {|
 select([lp.counter, lc.counter],
-  atuple([ahashidx(dedup(select([id as k], log_str)), 
+  atuple([ahashidx(dedup(select([id as k1], log_str)), 
     alist(select([counter, succ], 
-        filter(k = id && counter < succ, log_str)), 
+        filter(k1 = id && counter < succ, log_str)), 
       atuple([ascalar(counter), ascalar(succ)], cross)), 
     id_p) as lp,
   filter(lc.id = id_c,
-    aorderedidx(select([log_str.counter as k], log_str), 
-      alist(filter(log_str.counter = k, log_str),
+    aorderedidx(select([log_str.counter as k2], log_str), 
+      alist(filter(log_str.counter = k2, log_str),
         atuple([ascalar(log_str.id), ascalar(log_str.counter)], cross)), 
       lp.counter, lp.succ) as lc)], cross))
 |} ;

@@ -2,19 +2,18 @@ open Base
 open Stdio
 open Abslayout
 open Sql
+open Test_util
 
 let rels = Hashtbl.create (module Db.Relation)
 
 let _ =
-  Test_util.create rels "r" ["f"; "g"]
-    [[0; 5]; [1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]; [4; 6]]
+  create rels "r" ["f"; "g"] [[0; 5]; [1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]; [4; 6]]
 
 let _ =
-  Test_util.create rels "s" ["f"; "g"]
-    [[0; 5]; [1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]; [4; 6]]
+  create rels "s" ["f"; "g"] [[0; 5]; [1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]; [4; 6]]
 
 let _ =
-  Test_util.create rels "log" ["counter"; "succ"; "id"]
+  create rels "log" ["counter"; "succ"; "id"]
     [[1; 4; 1]; [2; 3; 2]; [3; 4; 3]; [4; 6; 1]; [5; 6; 3]]
 
 module E = Eval.Make_mock (struct
@@ -25,7 +24,7 @@ module M = Abslayout_db.Make (E)
 
 let make_module_db () =
   let module E = Eval.Make (struct
-    let conn = Db.create "postgresql://localhost:5433/demomatch"
+    let conn = create_db "postgresql://localhost:5433/demomatch"
   end) in
   let module A = Abslayout_db.Make (E) in
   ((module E : Eval.S), (module A : Abslayout_db.S))

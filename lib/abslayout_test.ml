@@ -2,19 +2,18 @@ open Core
 open Base
 open Collections
 open Abslayout
+open Test_util
 
 let rels = Hashtbl.create (module Db.Relation)
 
 let _ =
-  Test_util.create rels "r" ["f"; "g"]
-    [[0; 5]; [1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]; [4; 6]]
+  create rels "r" ["f"; "g"] [[0; 5]; [1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]; [4; 6]]
 
 let _ =
-  Test_util.create rels "s" ["f"; "g"]
-    [[0; 5]; [1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]; [4; 6]]
+  create rels "s" ["f"; "g"] [[0; 5]; [1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]; [4; 6]]
 
 let _ =
-  Test_util.create rels "log" ["counter"; "succ"; "id"]
+  create rels "log" ["counter"; "succ"; "id"]
     [[1; 4; 1]; [2; 3; 2]; [3; 4; 3]; [4; 6; 1]; [5; 6; 3]]
 
 module E = Eval.Make_mock (struct
@@ -134,31 +133,8 @@ let%expect_test "needed" =
          ((relation ()) (name k2) (type_ ((IntT (nullable false)))))
          ((relation ()) (name "") (type_ ((IntT (nullable false)))))))))) |}]
 
-(* let%expect_test "project-empty" =
- *   let fresh = Fresh.create () in
- *   let r = of_string_exn "Select([], r)" in
- *   print_endline (ralgebra_to_sql ~fresh r) ;
- *   [%expect {| select top 0 from (select * from r) as r |}] *)
-
-(* let%expect_test "agg" =
- *   let fresh = Fresh.create () in
- *   let r = of_string_exn "Agg([Sum(r.g)], [r.f, r.g], r)" |> M.annotate_schema in
- *   print_endline (ralgebra_to_sql ~fresh r) ;
- *   [%expect
- *     {| select sum(r."g") from (select * from r) as r group by (r."f", r."g") |}]
- * 
- * let%expect_test "agg" =
- *   let fresh = Fresh.create () in
- *   let r =
- *     of_string_exn "Filter(ship_mode.sm_carrier = \"GERMA\", ship_mode)"
- *     |> M.annotate_schema
- *   in
- *   print_endline (ralgebra_to_sql ~fresh r) ;
- *   [%expect
- *     {| select * from (select * from ship_mode) as ship_mode where (ship_mode."sm_carrier") = ('GERMA') |}] *)
-
 let%expect_test "mat-col" =
-  let conn = Db.create "postgresql://localhost:5432/tpcds1" in
+  let conn = create_db "postgresql://localhost:5432/tpcds1" in
   let layout =
     of_string_exn
       "AList(Filter(ship_mode.sm_carrier = \"GERMA\", ship_mode), \
@@ -227,7 +203,7 @@ let%expect_test "mat-col" =
           (type_ ((StringT (nullable false)))))))))) |}]
 
 let%expect_test "mat-hidx" =
-  let conn = Db.create "postgresql://localhost:5432/tpcds1" in
+  let conn = create_db "postgresql://localhost:5432/tpcds1" in
   let layout =
     of_string_exn
       "AHashIdx(Dedup(Select([ship_mode.sm_type], Filter(ship_mode.sm_type = \

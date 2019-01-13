@@ -1,6 +1,7 @@
 open Core
 open Base
 open Abslayout
+open Test_util
 
 let rels = Hashtbl.create (module Db.Relation)
 
@@ -10,15 +11,14 @@ end)
 
 module M = Abslayout_db.Make (E)
 
-let _ =
-  Test_util.create rels "r1" ["f"; "g"] [[1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]]
+let _ = create rels "r1" ["f"; "g"] [[1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]]
 
 let _ =
-  Test_util.create rels "log" ["id"; "succ"; "counter"]
+  create rels "log" ["id"; "succ"; "counter"]
     [[1; 4; 1]; [2; 3; 2]; [3; 4; 3]; [4; 6; 1]; [5; 6; 3]]
 
 let _ =
-  Test_util.create_val rels "log_str"
+  create_val rels "log_str"
     [ ("counter", Type.PrimType.IntT {nullable= false})
     ; ("succ", Type.PrimType.IntT {nullable= false})
     ; ("id", Type.PrimType.StringT {nullable= false}) ]
@@ -56,7 +56,7 @@ let run_test ?(params = []) layout_str =
 
 let run_test_db ?(params = []) layout_str =
   let module E = Eval.Make (struct
-    let conn = Db.create "postgresql://localhost:5433/demomatch"
+    let conn = create_db "postgresql://localhost:5433/demomatch"
   end) in
   let module M = Abslayout_db.Make (E) in
   let module S =
@@ -697,123 +697,6 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
         return c0;
     } |}]
 
-(* let%expect_test "example-1-db" =
- *   run_test_db ~params:example_db_params
- *     {|
- * filter(lc.id = id_c && lp.id = id_p,
- * alist(filter(succ > counter + 1, log_bench) as lp,
- * atuple([ascalar(lp.id), ascalar(lp.counter),
- * alist(filter(lp.counter < log_bench.counter &&
- * log_bench.counter < lp.succ, log_bench) as lc,
- * atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
- * |};
- *   [%expect {|
- *     fun scalar_6 (start) {
- *         yield (load_str(start + 1, buf[start : 1]));
- *     }fun scalar_8 (lp_id,
- *          start) {
- *          yield (buf[start : 3]);
- *     }fun scalar_14 (lp_id,
- *          lp_counter,
- *          start) {
- *          yield (load_str(start + 1, buf[start : 1]));
- *     }fun scalar_16 (lp_id,
- *          lp_counter,
- *          lc_id,
- *          start) {
- *          yield (buf[start : 3]);
- *     }fun tuple_11 (lp_id,
- *          lp_counter,
- *          start) {
- *          cstart12 = start + 1;
- *          cstart13 = cstart12 + 1 + buf[cstart12 : 1];
- *          init scalar_14(lp_id, lp_counter, cstart12);
- *          tup15 = next(scalar_14);
- *          init scalar_16(lp_id, lp_counter, tup15[0], cstart13);
- *          tup17 = next(scalar_16);
- *          yield (tup15[0], tup17[0]);
- *     }fun list_10 (lp_id,
- *          lp_counter,
- *          start) {
- *          cstart = start + 1 + 1;
- *          pcount = buf[start : 1];
- *          loop (0 < pcount) {
- *              init tuple_11(lp_id, lp_counter, cstart);
- *              tup18 = next(tuple_11);
- *              yield tup18;
- *              cstart = cstart + buf[cstart : 1];
- *              pcount = pcount - 1;
- *          }
- *     }fun tuple_2 (start) {
- *          cstart3 = start + 2;
- *          cstart4 = cstart3 + 1 + buf[cstart3 : 1];
- *          cstart5 = cstart4 + 3;
- *          init scalar_6(cstart3);
- *          tup7 = next(scalar_6);
- *          init scalar_8(tup7[0], cstart4);
- *          tup9 = next(scalar_8);
- *          init list_10(tup7[0], tup9[0], cstart5);
- *          loop (not done(list_10)) {
- *              tup19 = next(list_10);
- *              if (not done(list_10)) {
- *                  yield (tup7[0], tup9[0], tup19[0], tup19[1]);
- *              } else {
- * 
- *              }
- *          }
- *     }fun list_1 () {
- *          cstart = 3;
- *          pcount = 404;
- *          loop (0 < pcount) {
- *              init tuple_2(cstart);
- *              loop (not done(tuple_2)) {
- *                  tup20 = next(tuple_2);
- *                  if (not done(tuple_2)) {
- *                      yield tup20;
- *                  } else {
- * 
- *                  }
- *              }
- *              cstart = cstart + buf[cstart : 2];
- *              pcount = pcount - 1;
- *          }
- *     }fun filter_0 () {
- *          init list_1();
- *          count22 = 404;
- *          loop (0 < count22) {
- *              tup21 = next(list_1);
- *              if (tup21[2] = id_c && tup21[0] = id_p) {
- *                  yield tup21;
- *              } else {
- * 
- *              }
- *              count22 = count22 - 1;
- *          }
- *     }fun printer () {
- *          init filter_0();
- *          loop (not done(filter_0)) {
- *              tup24 = next(filter_0);
- *              if (not done(filter_0)) {
- *                  print(Tuple[String[nonnull], Int[nonnull], String[nonnull],
- *                  Int[nonnull]], tup24);
- *              } else {
- * 
- *              }
- *          }
- *     }fun counter () {
- *          c = 0;
- *          init filter_0();
- *          loop (not done(filter_0)) {
- *              tup23 = next(filter_0);
- *              if (not done(filter_0)) {
- *                  c = c + 1;
- *              } else {
- * 
- *              }
- *          }
- *          return c;
- *     } |}] *)
-
 let%expect_test "example-2" =
   run_test ~params:example_params
     {|
@@ -909,124 +792,18 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
         return c0;
     } |}]
 
-(* let%expect_test "example-2-db" =
- *   run_test_db ~params:example_db_params
- *     {|
- * ahashidx(dedup(
- *       join(true, select([id as lp_k], log_bench), select([id as lc_k], log_bench))),
- *   alist(select([counter_lp, counter_lc], 
- *     join(counter_lp < counter_lc && 
- *          counter_lc < succ_lp, 
- *       filter(id_lp = lp_k,
- *         select([id as id_lp, counter as counter_lp, succ as succ_lp], log_bench)), 
- *       filter(id_lc = lc_k,
- *         select([id as id_lc, counter as counter_lc], log_bench)))),
- *     atuple([ascalar(counter_lp), ascalar(counter_lc)], cross)),
- *   (id_p, id_c))
- * |} ;
- *   [%expect
- *     {|
- *     fun scalar_4 (start) {
- *         yield (load_str(start + 1, buf[start : 1]));
- *     }fun scalar_6 (start,
- *          lp_k) {
- *          yield (load_str(start + 1, buf[start : 1]));
- *     }fun tuple_1 (start) {
- *          cstart2 = start + 1;
- *          cstart3 = cstart2 + 1 + buf[cstart2 : 1];
- *          init scalar_4(cstart2);
- *          tup5 = next(scalar_4);
- *          init scalar_6(cstart3, tup5[0]);
- *          tup7 = next(scalar_6);
- *          yield (tup5[0], tup7[0]);
- *     }fun scalar_12 (start,
- *          lp_k,
- *          lc_k) {
- *          yield (buf[start : 3]);
- *     }fun scalar_14 (start,
- *          lp_k,
- *          lc_k,
- *          counter_lp) {
- *          yield (buf[start : 3]);
- *     }fun tuple_9 (start,
- *          lp_k,
- *          lc_k) {
- *          cstart10 = start;
- *          cstart11 = cstart10 + 3;
- *          init scalar_12(cstart10, lp_k, lc_k);
- *          tup13 = next(scalar_12);
- *          init scalar_14(cstart11, lp_k, lc_k, tup13[0]);
- *          tup15 = next(scalar_14);
- *          yield (tup13[0], tup15[0]);
- *     }fun list_8 (start,
- *          lp_k,
- *          lc_k) {
- *          cstart = start;
- *          pcount = 1;
- *          loop (0 < pcount) {
- *              init tuple_9(cstart, lp_k, lc_k);
- *              tup16 = next(tuple_9);
- *              yield tup16;
- *              cstart = cstart + 6;
- *              pcount = pcount - 1;
- *          }
- *     }fun hash_idx_0 () {
- *          if (hash(11, (id_p, id_c)) * 8 < 0 || 11 + buf[3 : 8] - 1 <
- *              hash(11, (id_p, id_c)) * 8 || buf[11 + buf[3 : 8] + 8 +
- *              hash(11, (id_p, id_c)) * 8 : 8] = 0) {
- * 
- *          } else {
- *               kstart = buf[11 + buf[3 : 8] + 8 + hash(11, (id_p, id_c)) * 8 : 8];
- *               init tuple_1(kstart);
- *               key = next(tuple_1);
- *               vstart = buf[11 + buf[3 : 8] + 8 + hash(11, (id_p, id_c)) * 8 :
- *               8] + buf[buf[11 + buf[3 : 8] + 8 + hash(11, (id_p, id_c)) * 8 :
- *               8] : 1];
- *               if (true && key[0] = id_p && key[1] = id_c) {
- *                   init list_8(vstart, key[0], key[1]);
- *                   tup17 = next(list_8);
- *                   yield (key[0], key[1], tup17[0], tup17[1]);
- *               } else {
- * 
- *               }
- *          }
- *     }fun printer () {
- *          init hash_idx_0();
- *          loop (not done(hash_idx_0)) {
- *              tup19 = next(hash_idx_0);
- *              if (not done(hash_idx_0)) {
- *                  print(Tuple[String[nonnull], String[nonnull], Int[nonnull],
- *                  Int[nonnull]], tup19);
- *              } else {
- * 
- *              }
- *          }
- *     }fun counter () {
- *          c = 0;
- *          init hash_idx_0();
- *          loop (not done(hash_idx_0)) {
- *              tup18 = next(hash_idx_0);
- *              if (not done(hash_idx_0)) {
- *                  c = c + 1;
- *              } else {
- * 
- *              }
- *          }
- *          return c;
- *     } |}] *)
-
 let%expect_test "example-3" =
   run_test ~params:example_params
     {|
 select([lp.counter, lc.counter],
-  atuple([ahashidx(select([id as k], log), 
+  atuple([ahashidx(select([id as k1], log), 
     alist(select([counter, succ], 
-        filter(k = id && counter < succ, log)), 
+        filter(k1 = id && counter < succ, log)), 
       atuple([ascalar(counter), ascalar(succ)], cross)), 
     id_p) as lp,
   filter(lc.id = id_c,
-    aorderedidx(select([log.counter as k], log), 
-      alist(filter(log.counter = k, log),
+    aorderedidx(select([log.counter as k2], log), 
+      alist(filter(log.counter = k2, log),
         atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
       lp.counter, lp.succ) as lc)], cross))
 |} ;
@@ -1332,14 +1109,14 @@ let%expect_test "example-3-str" =
   run_test ~params:example_db_params
     {|
 select([lp.counter, lc.counter],
-  atuple([ahashidx(dedup(select([id as k], log_str)), 
+  atuple([ahashidx(dedup(select([id as k1], log_str)), 
     alist(select([counter, succ], 
-        filter(k = id && counter < succ, log_str)), 
+        filter(k1 = id && counter < succ, log_str)), 
       atuple([ascalar(counter), ascalar(succ)], cross)), 
     id_p) as lp,
   filter(lc.id = id_c,
-    aorderedidx(select([log_str.counter as k], log_str), 
-      alist(filter(log_str.counter = k, log_str),
+    aorderedidx(select([log_str.counter as k2], log_str), 
+      alist(filter(log_str.counter = k2, log_str),
         atuple([ascalar(log_str.id), ascalar(log_str.counter)], cross)), 
       lp.counter, lp.succ) as lc)], cross))
 |} ;
