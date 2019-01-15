@@ -26,6 +26,13 @@ let _, [f; _] =
 
 [@@@warning "+8"]
 
+(** Remove nondeterministic parts of the layout log. Returns the new log and
+   true if the log was modified, false otherwise. *)
+let process_layout_log log =
+  let map_entry_regex = Str.regexp {|Map entry (\([0-9]+\) => [0-9]+)|} in
+  let log' = Str.global_replace map_entry_regex {|Map entry (\1 => XXX)|} log in
+  (log', not String.(log = log'))
+
 let run_test layout_str =
   let layout_file = Filename.temp_file "layout" "txt" in
   let (module S) = make_modules layout_file in
@@ -37,8 +44,12 @@ let run_test layout_str =
   let buf = Buffer.create 1024 in
   let _, len = S.serialize (Bitstring.Writer.with_buffer buf) type_ layout in
   let buf_str = Buffer.contents buf |> String.escaped in
-  In_channel.input_all (In_channel.create layout_file) |> Stdio.print_endline ;
-  [%sexp_of: Type.t * int * string] (type_, len, buf_str) |> print_s
+  let layout_log, did_modify =
+    In_channel.input_all (In_channel.create layout_file) |> process_layout_log
+  in
+  Stdio.print_endline layout_log ;
+  if did_modify then [%sexp_of: Type.t * int] (type_, len) |> print_s
+  else [%sexp_of: Type.t * int * string] (type_, len, buf_str) |> print_s
 
 let%expect_test "scalar-int" =
   run_test "AScalar(1)" ;
@@ -92,9 +103,9 @@ let%expect_test "hash-idx" =
     12:104 Table hash
     116:8 Table map len
     124:24 Table key map
-    124:8 Map entry (0 => 150)
-    132:8 Map entry (1 => 152)
-    140:8 Map entry (2 => 148)
+    124:8 Map entry (0 => XXX)
+    132:8 Map entry (1 => XXX)
+    140:8 Map entry (2 => XXX)
     148:6 Table values
     148:1 Scalar (=(Int 1))
     149:1 Scalar (=(Int 1))
@@ -106,8 +117,7 @@ let%expect_test "hash-idx" =
     ((HashIdxT
       ((IntT ((range (1 3)) (nullable false)))
        (IntT ((range (1 3)) (nullable false))) ((count ()))))
-     154
-     "\\154\\000\\000\\000h\\000\\000\\000\\000\\000\\000\\000\\b\\000\\000\\000$\\000\\000\\000\\t\\000\\000\\000\\b\\000\\000\\000\\001\\000\\000\\000\\016\\000\\000\\000\\004\\000\\000\\000\\b\\000\\000\\000J\\002\\000\\000\\001\\000\\000\\000\\169\\000\\000\\0008\\000\\000\\000\\007\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\011\\000\\000\\000\\001\\000\\000\\000\\001\\000\\000\\000\\001\\000\\000\\000\\000\\000\\000\\000\\016\\000\\000\\000\\001\\000\\000\\000\\000\\000\\000\\000\\001\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\024\\000\\000\\000\\000\\000\\000\\000\\150\\000\\000\\000\\000\\000\\000\\000\\152\\000\\000\\000\\000\\000\\000\\000\\148\\000\\000\\000\\000\\000\\000\\000\\001\\001\\002\\002\\003\\003") |}]
+     154) |}]
 
 let%expect_test "ordered-idx" =
   run_test
