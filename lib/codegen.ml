@@ -940,15 +940,15 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     set_linkage Linkage.Internal global ;
     build_bitcast global (pointer_type (i8_type ctx)) "" builder
 
-  let true_str = define_global_str "true_str" "true"
+  let true_str = define_global_str "true_str" "t"
 
-  let false_str = define_global_str "false_str" "false"
+  let false_str = define_global_str "false_str" "f"
 
   let null_str = define_global_str "null_str" "null"
 
   let void_str = define_global_str "void_str" "()"
 
-  let comma_str = define_global_str "comma_str" ","
+  let sep_str = define_global_str "sep_str" "|"
 
   let newline_str = define_global_str "newline_str" "\n"
 
@@ -969,8 +969,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | IntT {nullable= false} -> call_printf int_fmt [val_]
       | DateT {nullable= false} ->
           let year = build_call extract_y [|val_|] "" builder in
-          let mon = build_call extract_y [|val_|] "" builder in
-          let day = build_call extract_y [|val_|] "" builder in
+          let mon = build_call extract_m [|val_|] "" builder in
+          let day = build_call extract_d [|val_|] "" builder in
           call_printf date_fmt [year; mon; day]
       | BoolT {nullable= false} ->
           let fmt = build_select val_ true_str false_str "" builder in
@@ -983,7 +983,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
           let last_i = List.length ts - 1 in
           List.iteri ts ~f:(fun i t ->
               gen (build_extractvalue val_ i "" builder) t ;
-              if i < last_i then call_printf comma_str [] )
+              if i < last_i then call_printf sep_str [] )
       | VoidT -> call_printf void_str []
       | FixedT _ -> call_printf float_fmt [val_]
       | IntT {nullable= true}
