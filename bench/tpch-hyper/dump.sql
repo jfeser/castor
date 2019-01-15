@@ -340,6 +340,7 @@ CREATE temp VIEW q14 AS (
 );
 
 \copy (select * from q13) to 'q13.tbl' delimiter '|';
+
 -- create temp view q15 as (
 --   select s_suppkey, s_name, s_address, s_phone, l_shipdate,
 --          (select sum((l.l_extendedprice *
