@@ -16,7 +16,7 @@ let run_test s =
   let r = of_string_exn s |> M.resolve in
   M.annotate_schema r ;
   let ctx = Sql.create_ctx ~fresh:(Fresh.create ()) () in
-  print_endline (of_ralgebra ctx r |> to_string ctx)
+  print_endline (of_ralgebra ctx r |> to_string_hum ctx)
 
 let run_test_tpch ?params s =
   let conn = create_db "postgresql://localhost:5432/tpch" in
@@ -35,36 +35,87 @@ let run_test_tpch ?params s =
 
 let%expect_test "select-agg" =
   run_test "select([(0.2 * avg(r.f)) as test], r)" ;
-  [%expect {| select  (0.2) * (avg(r."f")) as "x2" from  r |}]
+  [%expect {|
+    SELECT
+        (0.2) * (avg(r. "f")) AS "x2"
+    FROM
+        r |}]
 
 let%expect_test "project" =
-  run_test "Select([r.f], r)" ; [%expect {| select  r."f" as "r_f_3" from  r |}]
+  run_test "Select([r.f], r)" ; [%expect {|
+    SELECT
+        r. "f" AS "r_f_3"
+    FROM
+        r |}]
 
 let%expect_test "filter" =
   run_test "Filter(r.f = r.g, r)" ;
   [%expect
-    {| select  r."f" as "r_f_1", r."g" as "r_g_2" from  r where (r."f") = (r."g") |}]
+    {|
+      SELECT
+          r. "f" AS "r_f_1",
+          r. "g" AS "r_g_2"
+      FROM
+          r
+      WHERE (r. "f") = (r. "g") |}]
 
 let%expect_test "eqjoin" =
   run_test "Join(r.f = s.g, r as r, s as s)" ;
   [%expect
-    {| select  "r_f_3" , "r_g_4" , "s_f_1" , "s_g_2"  from  (select  r."f" as "r_f_3", r."g" as "r_g_4" from  r) as "t4",  (select  s."f" as "s_f_1", s."g" as "s_g_2" from  s) as "t5" where ("r_f_3") = ("s_g_2") |}]
+    {|
+      SELECT
+          "r_f_3",
+          "r_g_4",
+          "s_f_1",
+          "s_g_2"
+      FROM (
+          SELECT
+              r. "f" AS "r_f_3",
+              r. "g" AS "r_g_4"
+          FROM
+              r) AS "t4",
+          (
+              SELECT
+                  s. "f" AS "s_f_1",
+                  s. "g" AS "s_g_2"
+              FROM
+                  s) AS "t5"
+      WHERE ("r_f_3") = ("s_g_2") |}]
 
 let%expect_test "order-by" =
   run_test "OrderBy([r1.f], Dedup(Select([r1.f], r1)), desc)" ;
-  [%expect {| select distinct r1."f" as "r1_f_3" from  r1   order by r1."f" desc |}]
+  [%expect {|
+    SELECT DISTINCT
+        r1. "f" AS "r1_f_3"
+    FROM
+        r1
+    ORDER BY
+        r1. "f" DESC |}]
 
 let%expect_test "dedup" =
   run_test "Dedup(Select([r1.f], r1))" ;
-  [%expect {| select distinct r1."f" as "r1_f_3" from  r1 |}]
+  [%expect {|
+    SELECT DISTINCT
+        r1. "f" AS "r1_f_3"
+    FROM
+        r1 |}]
 
 let%expect_test "select" =
   run_test "Select([r1.f], r1)" ;
-  [%expect {| select  r1."f" as "r1_f_3" from  r1 |}]
+  [%expect {|
+    SELECT
+        r1. "f" AS "r1_f_3"
+    FROM
+        r1 |}]
 
 let%expect_test "scan" =
   run_test "r1" ;
-  [%expect {| select  r1."f" as "r1_f_1", r1."g" as "r1_g_2" from  r1 |}]
+  [%expect {|
+    SELECT
+        r1. "f" AS "r1_f_1",
+        r1. "g" AS "r1_g_2"
+    FROM
+        r1 |}]
 
 let%expect_test "join" =
   run_test
@@ -73,26 +124,88 @@ let%expect_test "join" =
     \          log as lp,\n\
     \          log as lc)" ;
   [%expect
-    {| select  "log_counter_4" , "log_succ_5" , "log_id_6" , "log_counter_1" , "log_succ_2" , "log_id_3"  from  (select  log."counter" as "log_counter_4", log."succ" as "log_succ_5", log."id" as "log_id_6" from  log) as "t6",  (select  log."counter" as "log_counter_1", log."succ" as "log_succ_2", log."id" as "log_id_3" from  log) as "t7" where (("log_counter_4") < ("log_counter_1")) and (("log_counter_1") < ("log_succ_5")) |}]
+    {|
+      SELECT
+          "log_counter_4",
+          "log_succ_5",
+          "log_id_6",
+          "log_counter_1",
+          "log_succ_2",
+          "log_id_3"
+      FROM (
+          SELECT
+              log. "counter" AS "log_counter_4",
+              log. "succ" AS "log_succ_5",
+              log. "id" AS "log_id_6"
+          FROM
+              log) AS "t6",
+          (
+              SELECT
+                  log. "counter" AS "log_counter_1",
+                  log. "succ" AS "log_succ_2",
+                  log. "id" AS "log_id_3"
+              FROM
+                  log) AS "t7"
+      WHERE (("log_counter_4") < ("log_counter_1"))
+      AND (("log_counter_1") < ("log_succ_5")) |}]
 
 let%expect_test "select-groupby" =
   run_test "select([max(x)], groupby([r1.f, sum((r1.f * r1.g)) as x], [r1.f], r1))" ;
   [%expect
-    {| select  max("x3") as "x6" from  (select  "r1_f_1" as "r1_f_1_3", sum(("r1_f_1") * ("r1_g_2")) as "x3" from  (select  r1."f" as "r1_f_1", r1."g" as "r1_g_2" from  r1) as "t4"  group by ("r1_f_1")) as "t5" |}]
+    {|
+      SELECT
+          max("x3") AS "x6"
+      FROM (
+          SELECT
+              "r1_f_1" AS "r1_f_1_3",
+              sum(("r1_f_1") * ("r1_g_2")) AS "x3"
+          FROM (
+              SELECT
+                  r1. "f" AS "r1_f_1",
+                  r1. "g" AS "r1_g_2"
+              FROM
+                  r1) AS "t4"
+          GROUP BY
+              ("r1_f_1")) AS "t5" |}]
 
 let%expect_test "select-fusion-1" =
   run_test "select([max(x)], select([min(r1.f) as x], r1))" ;
   [%expect
-    {| select  max("x2") as "x4" from  (select  min(r1."f") as "x2" from  r1) as "t3" |}]
+    {|
+      SELECT
+          max("x2") AS "x4"
+      FROM (
+          SELECT
+              min(r1. "f") AS "x2"
+          FROM
+              r1) AS "t3" |}]
 
 let%expect_test "select-fusion-2" =
   run_test "select([max(x)], select([r1.f as x], r1))" ;
-  [%expect {| select  max(r1."f") as "x3" from  r1 |}]
+  [%expect {|
+    SELECT
+        max(r1. "f") AS "x3"
+    FROM
+        r1 |}]
 
 let%expect_test "filter-fusion" =
   run_test "filter((x = 0), groupby([sum(r1.f) as x], [r1.g], r1))" ;
   [%expect
-    {| select  "x2"  from  (select  sum("r1_f_1") as "x2" from  (select  r1."f" as "r1_f_1", r1."g" as "r1_g_2" from  r1) as "t3"  group by ("r1_g_2")) as "t4" where ("x2") = (0) |}]
+    {|
+      SELECT
+          "x2"
+      FROM (
+          SELECT
+              sum("r1_f_1") AS "x2"
+          FROM (
+              SELECT
+                  r1. "f" AS "r1_f_1",
+                  r1. "g" AS "r1_g_2"
+              FROM
+                  r1) AS "t3"
+          GROUP BY
+              ("r1_g_2")) AS "t4"
+      WHERE ("x2") = (0) |}]
 
 (* let%expect_test "tpch-1" =
  *   run_test_tpch
