@@ -20,7 +20,7 @@ CREATE temp VIEW q1 AS (
         l_linestatus
 );
 
-\copy q1 to 'q1.tbl' delimiter '|';
+\copy (select * from q1) to 'q1.tbl' delimiter '|';
 CREATE temp VIEW q2 AS (
     SELECT
         s_suppkey,
@@ -157,9 +157,9 @@ CREATE temp VIEW q6 AS (
 \copy (select * from q6) to 'q6.tbl' delimiter '|';
 CREATE temp VIEW q7 AS (
     SELECT
-        n1.n_name,
-        n2.n_name,
-        year (l_shipdate) AS l_year,
+        n1.n_name AS supp_nation,
+        n2.n_name AS cust_nation,
+        extract(year FROM l_shipdate) AS l_year,
         sum((l_extendedprice * (1 - l_discount))) AS revenue
     FROM
         supplier,
@@ -176,37 +176,21 @@ CREATE temp VIEW q7 AS (
         AND l_shipdate > date '1995-01-01'
         AND l_shipdate < date '1996-12-31'
         AND s_nationkey = n1.n_nationkey
-);
-
-\copy (select * from q7) to 'q7.tbl' delimiter '|';
-CREATE temp VIEW q7 AS (
-    SELECT
+    GROUP BY
         n1.n_name,
         n2.n_name,
-        year (l_shipdate) AS l_year,
-        sum((l_extendedprice * (1 - l_discount))) AS revenue
-    FROM
-        supplier,
-        lineitem,
-        orders,
-        customer,
-        nation AS n1,
-        nation AS n2
-    WHERE
-        s_suppkey = l_suppkey
-        AND o_orderkey = l_orderkey
-        AND c_custkey = o_custkey
-        AND c_nationkey = n2.n_nationkey
-        AND l_shipdate > date '1995-01-01'
-        AND l_shipdate < date '1996-12-31'
-        AND s_nationkey = n1.n_nationkey
+        extract(year FROM l_shipdate)
+    ORDER BY
+        n1.n_name,
+        n2.n_name,
+        l_year
 );
 
 \copy (select * from q7) to 'q7.tbl' delimiter '|';
 CREATE temp VIEW q8 AS (
     SELECT
         r_name,
-        year (o_orderdate) AS o_year,
+        extract(year FROM o_orderdate) AS o_year,
         (l_extendedprice * (1 - l_discount)) AS volume,
         n2.n_name AS nation_name,
         p_type
@@ -216,6 +200,7 @@ CREATE temp VIEW q8 AS (
         supplier,
         orders,
         customer,
+        region,
         nation AS n1,
         nation AS n2
     WHERE
@@ -245,7 +230,7 @@ CREATE temp VIEW q9 AS (
         (strpos(part.p_name, 'white') > 0) AS wit1__10,
         (strpos(part.p_name, 'yellow') > 0) AS wit1__11,
         n_name AS nation,
-        year (o_orderdate) AS o_year,
+        extract(year FROM o_orderdate) AS o_year,
         ((l_extendedprice * (1 - l_discount)) - (ps_supplycost * l_quantity)) AS amount,
         p_name
     FROM
@@ -253,7 +238,8 @@ CREATE temp VIEW q9 AS (
         lineitem,
         partsupp,
         part,
-        orders
+        orders,
+        nation
     WHERE
         s_suppkey = l_suppkey
         AND ps_suppkey = l_suppkey
@@ -303,80 +289,116 @@ CREATE temp VIEW q10_2 AS (
 CREATE temp VIEW q12 AS (
     SELECT
         l_receiptdate,
-        sum(( IF (NOT ((orders.o_orderpriority = '1-URGENT')) && NOT ((orders.o_orderpriority = '2-HIGH'))) THEN
+        sum((
+                CASE WHEN (NOT ((orders.o_orderpriority = '1-URGENT'))
+                        AND NOT ((orders.o_orderpriority = '2-HIGH'))) THEN
                     1
                 ELSE
-                    0)) AS agg7,
-            sum(( IF ((orders.o_orderpriority = '1-URGENT') || (orders.o_orderpriority = '2-HIGH')) THEN
-                        1
-                    ELSE
-                        0)) AS agg6,
-                l_shipmode
-            FROM
-                lineitem,
-                orders
-            WHERE
-                l_commitdate < l_receiptdate
-                AND l_shipdate < l_commitdate
-                AND l_orderkey = o_orderkey
-            GROUP BY
-                l_shipmode
+                    0
+                END)) AS agg7,
+        sum((
+                CASE WHEN ((orders.o_orderpriority = '1-URGENT')
+                        OR (orders.o_orderpriority = '2-HIGH')) THEN
+                    1
+                ELSE
+                    0
+                END)) AS agg6,
+        l_shipmode
+    FROM
+        lineitem,
+        orders
+    WHERE
+        l_commitdate < l_receiptdate
+        AND l_shipdate < l_commitdate
+        AND l_orderkey = o_orderkey
+    GROUP BY
+        l_shipmode,
+        l_receiptdate
 );
 
 \copy (select * from q12) to 'q12.tbl' delimiter '|';
 CREATE temp VIEW q14 AS (
     SELECT
-        sum(( IF (strpos(p_type, 'PROMO') = 1) THEN
+        sum((
+                CASE WHEN (strpos(p_type, 'PROMO') = 1) THEN
                     (l_extendedprice * (1 - l_discount))
                 ELSE
-                    0.0)) AS agg1,
-            sum((l_extendedprice * (1 - l_discount))) AS agg2,
-            l_shipdate
-        FROM
-            lineitem,
-            part
-        WHERE
-            p_partkey = l_partkey
+                    0.0
+                END)) AS agg1,
+        sum((l_extendedprice * (1 - l_discount))) AS agg2,
+        l_shipdate
+    FROM
+        lineitem,
+        part
+    WHERE
+        p_partkey = l_partkey
+    GROUP BY
+        l_shipdate
 );
 
-\copy (select * from q13) to 'q13.tbl' delimiter '|';
-
--- create temp view q15 as (
---   select s_suppkey, s_name, s_address, s_phone, l_shipdate,
---          (select sum((l.l_extendedprice *
---                       (1 - l.l_discount))) from lineitem as l where l.l_shipdate >= l_shipdate and l.l_shipdate <= l_shipdate + '3' month group by l_suppkey) as total_revenue
---     from lineitem, supplier
---    where s_suppkey = l_suppkey and
---    group by l_suppkey
---            (
---     select max(total_revenue_i) from (select sum((l.l_extendedprice *
---                                                   (1 - l.l_discount))) as total_revenue_i from lineitem as l where l.l_shipdate >= l_shipdate and l.l_shipdate <= l_shipdate + '3' month group by l_suppkey) as t) as total_revenue
---     from supplier
-
-CREATE temp VIEW q16 AS (
+\copy (select * from q14) to 'q13.tbl' delimiter '|';
+CREATE temp VIEW q15 AS (
     SELECT
-        p_type,
-        p_brand,
-        p_size,
-        count(*) AS supplier_cnt
-    FROM
-        part,
-        partsupp
-    WHERE
-        p_partkey = ps_partkey
-        AND NOT EXISTS (
+        s_suppkey,
+        s_name,
+        s_address,
+        s_phone,
+        l_shipdate,
+        (
             SELECT
-                *
+                sum((l.l_extendedprice * (1 - l.l_discount)))
             FROM
-                supplier
+                lineitem AS l
             WHERE
-                ps_suppkey = s_suppkey
-                AND strpos(supplier.s_comment, 'Customer') >= 1
-                AND strpos(supplier.s_comment, 'Complaints') >= 1)
+                l.l_shipdate >= l_shipdate
+                AND l.l_shipdate <= l_shipdate + '3' month
+            GROUP BY
+                l_suppkey) AS total_revenue
+        FROM
+            lineitem,
+            supplier
+        WHERE
+            s_suppkey = l_suppkey
+            AND
         GROUP BY
-            p_type,
-            p_brand,
-            p_size
+            l_suppkey (
+                SELECT
+                    max(total_revenue_i)
+                FROM (
+                    SELECT
+                        sum((l.l_extendedprice * (1 - l.l_discount))) AS total_revenue_i
+                    FROM
+                        lineitem AS l
+                    WHERE
+                        l.l_shipdate >= l_shipdate
+                        AND l.l_shipdate <= l_shipdate + '3' month
+                    GROUP BY
+                        l_suppkey) AS t) AS total_revenue
+            FROM
+                supplier CREATE temp VIEW q16 AS (
+                    SELECT
+                        p_type,
+                        p_brand,
+                        p_size,
+                        count(*) AS supplier_cnt
+                    FROM
+                        part,
+                        partsupp
+                    WHERE
+                        p_partkey = ps_partkey
+                        AND NOT EXISTS (
+                            SELECT
+                                *
+                            FROM
+                                supplier
+                            WHERE
+                                ps_suppkey = s_suppkey
+                                AND strpos(supplier.s_comment, 'Customer') >= 1
+                                AND strpos(supplier.s_comment, 'Complaints') >= 1)
+                        GROUP BY
+                            p_type,
+                            p_brand,
+                            p_size
 );
 
 \copy (select * from q16) to 'q16.tbl' delimiter '|';
