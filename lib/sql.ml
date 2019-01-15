@@ -336,8 +336,8 @@ let to_string_hum ctx sql =
   let sql_str = to_string ctx sql in
   let inp = OS.Cmd.in_string sql_str in
   let out = OS.Cmd.run_io Cmd.(v "pg_format") inp in
-  match OS.Cmd.out_string ~trim:true out with
-  | Ok (sql', _) -> sql'
+  match OS.Cmd.to_string ~trim:true out with
+  | Ok sql' -> sql'
   | Error msg ->
       Logs.warn (fun m -> m "Formatting sql failed: %a." Rresult.R.pp_msg msg) ;
       sql_str
