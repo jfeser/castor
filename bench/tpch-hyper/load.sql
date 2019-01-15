@@ -1,18 +1,66 @@
-copy q1 from 'q1.tbl' delimiter '|';
-copy q2 from 'q2.tbl' delimiter '|';
-copy q2_supplier from 'q2_supplier.tbl' delimiter '|';
-copy q3 from 'q3.tbl' delimiter '|';
-copy q4 from 'q4.tbl' delimiter '|';
-copy q6 from 'q6.tbl' delimiter '|';
-copy q7 from 'q7.tbl' delimiter '|';
-copy q8 from 'q8.tbl' delimiter '|';
-copy q9 from 'q9.tbl' delimiter '|';
-copy q10 from 'q10.tbl' delimiter '|';
-copy q11 from 'q11.tbl' delimiter '|';
-copy q12 from 'q12.tbl' delimiter '|';
-copy q14 from 'q14.tbl' delimiter '|';
-copy q15 from 'q15.tbl' delimiter '|';
-copy q16 from 'q16.tbl' delimiter '|';
-copy q17 from 'q17.tbl' delimiter '|';
+COPY q1
+FROM
+    'q1.tbl' DELIMITER '|';
+
+COPY q2
+FROM
+    'q2.tbl' DELIMITER '|';
+
+COPY q2_supplier
+FROM
+    'q2_supplier.tbl' DELIMITER '|';
+
+COPY q3
+FROM
+    'q3.tbl' DELIMITER '|';
+
+COPY q4
+FROM
+    'q4.tbl' DELIMITER '|';
+
+COPY q6
+FROM
+    'q6.tbl' DELIMITER '|';
+
+COPY q7
+FROM
+    'q7.tbl' DELIMITER '|';
+
+COPY q8
+FROM
+    'q8.tbl' DELIMITER '|';
+
+COPY q9
+FROM
+    'q9.tbl' DELIMITER '|';
+
+COPY q10
+FROM
+    'q10.tbl' DELIMITER '|';
+
+COPY q11
+FROM
+    'q11.tbl' DELIMITER '|';
+
+COPY q12
+FROM
+    'q12.tbl' DELIMITER '|';
+
+COPY q14
+FROM
+    'q14.tbl' DELIMITER '|';
+
+COPY q15
+FROM
+    'q15.tbl' DELIMITER '|';
+
+COPY q16
+FROM
+    'q16.tbl' DELIMITER '|';
+
+COPY q17
+FROM
+    'q17.tbl' DELIMITER '|';
+
 -- copy q18 from 'q18.tbl' delimiter '|';
 -- copy q19 from 'q19.tbl' delimiter '|';
