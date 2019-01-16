@@ -191,7 +191,7 @@ def run_sql(name, params):
 
         out_fn = "%s.csv" % name
         with open(out_fn, "w") as out:
-            p = Popen(["psql", "-t", "-A", "-F", ",", DB], stdout=out, stdin=PIPE)
+            p = Popen(["psql", "-t", "-A", "-F", "|", DB], stdout=out, stdin=PIPE)
             p.communicate(input=("\\timing \n " + sql_query).encode())
             p.wait()
 
