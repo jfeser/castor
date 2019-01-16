@@ -378,29 +378,49 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     func
 
   let extract_y =
-    declare_function "extract_year"
-      (function_type (i64_type ctx) [|i64_type ctx|])
-      module_
+    let func =
+      declare_function "extract_year"
+        (function_type (i64_type ctx) [|i64_type ctx|])
+        module_
+    in
+    add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ;
+    func
 
   let extract_m =
-    declare_function "extract_month"
-      (function_type (i64_type ctx) [|i64_type ctx|])
-      module_
+    let func =
+      declare_function "extract_month"
+        (function_type (i64_type ctx) [|i64_type ctx|])
+        module_
+    in
+    add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ;
+    func
 
   let extract_d =
-    declare_function "extract_day"
-      (function_type (i64_type ctx) [|i64_type ctx|])
-      module_
+    let func =
+      declare_function "extract_day"
+        (function_type (i64_type ctx) [|i64_type ctx|])
+        module_
+    in
+    add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ;
+    func
 
   let add_m =
-    declare_function "add_month"
-      (function_type (i64_type ctx) [|i64_type ctx; i64_type ctx|])
-      module_
+    let func =
+      declare_function "add_month"
+        (function_type (i64_type ctx) [|i64_type ctx; i64_type ctx|])
+        module_
+    in
+    add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ;
+    func
 
   let add_y =
-    declare_function "add_year"
-      (function_type (i64_type ctx) [|i64_type ctx; i64_type ctx|])
-      module_
+    let func =
+      declare_function "add_year"
+        (function_type (i64_type ctx) [|i64_type ctx; i64_type ctx|])
+        module_
+    in
+    add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ;
+    func
 
   let rec declare_invariant v =
     let size t =
