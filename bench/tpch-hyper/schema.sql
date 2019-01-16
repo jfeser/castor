@@ -83,7 +83,7 @@ CREATE TABLE q7 (
     l_year integer NOT NULL
 );
 
-CREATE INDEX q5_idx ON q5 (r_name, o_orderdate);
+CREATE INDEX q7_idx ON q7 (r_name, o_orderdate);
 
 CREATE TABLE q8 (
     r_name char(25) NOT NULL,
