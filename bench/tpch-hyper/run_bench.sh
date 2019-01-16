@@ -2,6 +2,8 @@
 
 DRIVER_PATH=../../../hyperdemo/bin/driver
 
+rm -f ./*.tbl ./*.log db.dump db.dump.log 
+
 echo "Dumping data from Postgres..."
 psql -d tpch -f dump.sql
 
