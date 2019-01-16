@@ -111,9 +111,6 @@ module Make (Config : Config.S) = struct
     native_order @ total_order
 
   let rec gen_query q =
-    (* TODO: Respect orderings from original queries. Needs a way to get the
-       ordering, then the ordering has to be extended with the remaining fields
-       so that it is total. *)
     match q.node with
     | AList (q1, q2) ->
         let q1 =
