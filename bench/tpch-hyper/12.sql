@@ -1,2 +1,14 @@
-select l_shipmode, sum(agg6) as high_line_count, sum(agg7) as low_line_count
-  from q12 where l_receiptdate >= date '1994-01-01' and l_receiptdate < date '1994-01-01' + interval '1' year and (l_shipmode = 'MAIL' or l_shipmode = 'SHIP') order by l_shipmode;
+SELECT
+    l_shipmode,
+    sum(agg6) AS high_line_count,
+    sum(agg7) AS low_line_count
+FROM
+    q12
+WHERE
+    l_receiptdate >= date '1994-01-01'
+    AND l_receiptdate < date '1994-01-01' + interval '1' year
+    AND (l_shipmode = 'MAIL'
+        OR l_shipmode = 'SHIP')
+ORDER BY
+    l_shipmode;
+

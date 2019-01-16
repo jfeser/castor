@@ -1,2 +1,10 @@
-select n_name, sum(agg3) as revenue from q5 where o_orderdate >= date '1994-01-01'
-	                                            and o_orderdate < date '1994-01-01' + interval '1' year and n_name = 'ASIA';
+SELECT
+    n_name,
+    sum(agg3) AS revenue
+FROM
+    q5
+WHERE
+    o_orderdate >= date '1994-01-01'
+    AND o_orderdate < date '1994-01-01' + interval '1' year
+    AND n_name = 'ASIA';
+

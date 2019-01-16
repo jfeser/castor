@@ -1,19 +1,38 @@
-select nation, o_year, sum(amount) as sum_profit from q9
- where case
-       when ':1' = 'yellow' then wit1_11
-       when ':1' = 'white' then wit1_10
-       when ':1' = 'red' then wit1_9
-       when ':1' = 'purple' then wit1_8
-       when ':1' = 'pink' then wit1_7
-       when ':1' = 'orange' then wit1_6
-       when ':1' = 'navy' then wit1_5
-       when ':1' = 'grey' then wit1_4
-       when ':1' = 'green' then wit1_3
-       when ':1' = 'brown' then wit1_2
-       when ':1' = 'blue' then wit1_1
-       when ':1' = 'black' then wit1_0
-       else strpos(p_name, 'green') > 0
-       end
- order by nation, o_year;
-
+SELECT
+    nation,
+    o_year,
+    sum(amount) AS sum_profit
+FROM
+    q9
+WHERE
+    CASE WHEN ':1' = 'yellow' THEN
+        wit1_11
+    WHEN ':1' = 'white' THEN
+        wit1_10
+    WHEN ':1' = 'red' THEN
+        wit1_9
+    WHEN ':1' = 'purple' THEN
+        wit1_8
+    WHEN ':1' = 'pink' THEN
+        wit1_7
+    WHEN ':1' = 'orange' THEN
+        wit1_6
+    WHEN ':1' = 'navy' THEN
+        wit1_5
+    WHEN ':1' = 'grey' THEN
+        wit1_4
+    WHEN ':1' = 'green' THEN
+        wit1_3
+    WHEN ':1' = 'brown' THEN
+        wit1_2
+    WHEN ':1' = 'blue' THEN
+        wit1_1
+    WHEN ':1' = 'black' THEN
+        wit1_0
+    ELSE
+        strpos(p_name, 'green') > 0
+    END
+ORDER BY
+    nation,
+    o_year;
 

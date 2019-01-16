@@ -1,1 +1,16 @@
-select (sum(l_extendedprice) / 7.0) as avg_yearly from q17 where l_quantity < (select l_avgquantity from q17_2 where p_partkey = l_partkey) where p_brand = 'Brand#23' and p_container = 'MED BOX';
+SELECT
+    (sum(l_extendedprice) / 7.0) AS avg_yearly
+FROM
+    q17
+WHERE
+    l_quantity < (
+        SELECT
+            l_avgquantity
+        FROM
+            q17_2
+        WHERE
+            p_partkey = l_partkey)
+    WHERE
+        p_brand = 'Brand#23'
+        AND p_container = 'MED BOX';
+
