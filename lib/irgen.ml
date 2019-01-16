@@ -419,9 +419,10 @@ struct
     let start = Ctx.find_exn ctx (Name.create "start") b in
     let cstart = build_defn "cstart" (Header.make_position hdr "value" start) b in
     let ctx = Ctx.bind ctx "start" Type.PrimType.int_t cstart in
-    List.iter2_exn child_layouts child_types ~f:(fun r' t' ->
-        scan ctx b r' t' cb ;
-        build_assign (build_add (Int 1) (len cstart t') b) cstart b )
+    List.iter2_exn child_layouts child_types ~f:(fun child_layout child_type ->
+        let clen = len cstart child_type in
+        scan ctx b child_layout child_type cb ;
+        build_assign Infix.(cstart + clen) cstart b )
 
   and scan_list ctx b (_, child_layout) ((child_type, _) as t) (cb : callback) =
     let open Builder in
