@@ -77,10 +77,10 @@ CREATE TABLE q6 (
 CREATE INDEX q6_idx ON q6 (l_shipdate, l_discount, l_quantity);
 
 CREATE TABLE q7 (
-    r_name char(25) NOT NULL,
-    n_name char(25) NOT NULL,
-    o_orderdate date NOT NULL,
-    l_year integer NOT NULL
+    supp_nation char(25) NOT NULL,
+    cust_nation char(25) NOT NULL,
+    l_year integer NOT NULL,
+    revenue numeric NOT NULL
 );
 
 CREATE INDEX q7_idx ON q7 (r_name, o_orderdate);

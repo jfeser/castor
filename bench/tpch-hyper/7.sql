@@ -1,14 +1,15 @@
 SELECT
-    n1.n_name,
-    n2.n_name,
-    l_year
+    supp_nation,
+    cust_nation,
+    l_year,
+    revenue
 FROM
     q7
 WHERE
-    n1.n_name = :1
-    AND n2.n_name = :2
+    supp_nation = 'FRANCE'
+    AND cust_nation = 'GERMANY'
 ORDER BY
-    n1.n_name,
-    n2.n_name,
+    supp_nation,
+    cust_nation,
     l_year;
 
