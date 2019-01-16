@@ -352,7 +352,7 @@ CREATE temp VIEW q15 AS (
                 lineitem AS l
             WHERE
                 l.l_shipdate >= l_shipdate
-                AND l.l_shipdate <= l_shipdate + '3' month
+                AND l.l_shipdate <= l_shipdate + interval '3' month
             GROUP BY
                 l_suppkey) AS total_revenue
         FROM
@@ -372,7 +372,7 @@ CREATE temp VIEW q15 AS (
                         lineitem AS l
                     WHERE
                         l.l_shipdate >= l_shipdate
-                        AND l.l_shipdate <= l_shipdate + '3' month
+                        AND l.l_shipdate <= l_shipdate + interval '3' month
                     GROUP BY
                         l_suppkey) AS t) AS total_revenue
             FROM
