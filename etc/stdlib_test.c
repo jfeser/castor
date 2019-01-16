@@ -28,6 +28,13 @@ void extract_test(long date) {
          date, extract_year(date), extract_month(date), extract_day(date));
 }
 
+void load_date_test(char *date) {
+  long d;
+  load_date(date, &d);
+  printf("load_date(%s) = %ld-%ld-%ld\n",
+         date, extract_year(d), extract_month(d), extract_day(d));
+}
+
 int main() {
   strpos_test("testing", "in");
   strpos_test("tested", "in");
@@ -35,4 +42,6 @@ int main() {
   endswith_test("SMALL BRUSHED BRASS", "BRASS");
   endswith_test("SMALL BRUSHED BRASS", "COPPER");
   extract_test(8980);
+  load_date_test("1992-01-01");
+  load_date_test("1996-07-01");
 }

@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
 
@@ -37,3 +38,13 @@ long extract_day(long date) {
   return btime.tm_mday;
 }
 
+long load_date(char* s, long* out) {
+  struct tm time_tm;
+  if (strptime(s, "%Y-%m-%d", &time_tm) == NULL) {
+    return 1;
+  }
+  time_t time = mktime(&time_tm);
+  // Divide, rounding up.
+  *out = (time + 86400 - 1) / 86400;
+  return 0;
+}
