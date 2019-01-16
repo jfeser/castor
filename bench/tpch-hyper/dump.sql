@@ -205,6 +205,7 @@ CREATE temp VIEW q8 AS (
         nation AS n2
     WHERE
         p_partkey = l_partkey
+        AND s_suppkey = l_suppkey
         AND l_orderkey = o_orderkey
         AND o_custkey = c_custkey
         AND c_nationkey = n1.n_nationkey

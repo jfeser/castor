@@ -59,7 +59,7 @@ CREATE TABLE q5 (
     r_name char(25) NOT NULL,
     n_name char(25) NOT NULL,
     o_orderdate date NOT NULL,
-    agg3 numeric NOT NULL,
+    agg3 numeric NOT NULL
 );
 
 CREATE INDEX q5_idx ON q5 (r_name, o_orderdate);
@@ -80,7 +80,7 @@ CREATE TABLE q7 (
     r_name char(25) NOT NULL,
     n_name char(25) NOT NULL,
     o_orderdate date NOT NULL,
-    l_year integer NOT NULL,
+    l_year integer NOT NULL
 );
 
 CREATE INDEX q5_idx ON q5 (r_name, o_orderdate);
@@ -111,29 +111,30 @@ CREATE TABLE q9 (
     nation char(25) NOT NULL,
     o_year integer NOT NULL,
     amount numeric NOT NULL,
-    p_name varchar(55) NOT NULL,
+    p_name varchar(55) NOT NULL
 );
 
 CREATE TABLE q10_1 (
     o_orderdate date NOT NULL,
     revenue numeric NOT NULL,
     n_name char(25) NOT NULL,
-    c_custkey integer NOT NULL,
+    c_custkey integer NOT NULL
 );
 
 CREATE TABLE q10_2 (
-  c_custkey integer NOT NULL,
-  c_name varchar(25) NOT NULL,
-  c_address varchar(40) NOT NULL,
-  c_nationkey integer NOT NULL,
-  c_phone char(15) NOT NULL,
-  c_acctbal decimal (12,
-                     2) NOT NULL,
-                     c_mktsegment char(10) NOT NULL,
-                     c_comment varchar(117) NOT NULL,
+    c_custkey integer NOT NULL,
+    c_name varchar(25) NOT NULL,
+    c_address varchar(40) NOT NULL,
+    c_nationkey integer NOT NULL,
+    c_phone char(15) NOT NULL,
+    c_acctbal decimal (12,
+        2) NOT NULL,
+    c_mktsegment char(10) NOT NULL,
+    c_comment varchar(117) NOT NULL
 );
 
 CREATE INDEX q10_1_idx ON q10_1 (o_orderdate);
+
 CREATE INDEX q10_2_idx ON q10_2 (c_custkey);
 
 CREATE TABLE q11 (
@@ -194,21 +195,25 @@ CREATE INDEX q17_idx ON q17 (p_brand, p_container);
 
 CREATE TABLE q17_2 (
     l_partkey integer NOT NULL,
-    l_avgquantity numeric NOT NULL,
+    l_avgquantity numeric NOT NULL
 );
 
 CREATE INDEX q17_idx_2 ON q17_2 (l_partkey);
 
-create table q18_1 (
-  l_orderkey integer not null
+CREATE TABLE q18_1 (
+    l_orderkey integer NOT NULL
 );
-create index q18_1_idx on q18_1 (l_orderkey);
 
-create table q18_2 (
-  c_name varchar(25) not null,
-  c_custkey integer not null,
-  o_orderdate date not null,
-  o_orderkey integer not null,
-  o_totalprice decimal(12,2) not null
+CREATE INDEX q18_1_idx ON q18_1 (l_orderkey);
+
+CREATE TABLE q18_2 (
+    c_name varchar(25) NOT NULL,
+    c_custkey integer NOT NULL,
+    o_orderdate date NOT NULL,
+    o_orderkey integer NOT NULL,
+    o_totalprice decimal (12,
+        2) NOT NULL
 );
-create index q18_2_idx on q18_2 (o_orderkey);
+
+CREATE INDEX q18_2_idx ON q18_2 (o_orderkey);
+
