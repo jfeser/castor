@@ -300,4 +300,45 @@ let%expect_test "ordering" =
   run_test ~print_layout:false
     {|atuple([alist(orderby([r1.f], r1, desc), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f], r1, asc), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|} ;
   run_test ~print_layout:false
-    {|atuple([alist(orderby([r1.f], r1, asc), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f], r1, desc), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|}
+    {|atuple([alist(orderby([r1.f], r1, asc), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f], r1, desc), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|};
+  [%expect {|
+    3|4
+    2|1
+    2|2
+    1|2
+    1|3
+
+    exited normally
+    1|2
+    1|3
+    2|1
+    2|2
+    3|4
+
+    exited normally
+    3|4
+    2|1
+    2|2
+    1|2
+    1|3
+    9|9
+    1|2
+    1|3
+    2|1
+    2|2
+    3|4
+
+    exited normally
+    1|2
+    1|3
+    2|1
+    2|2
+    3|4
+    9|9
+    3|4
+    2|1
+    2|2
+    1|2
+    1|3
+
+    exited normally |}]

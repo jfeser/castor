@@ -87,6 +87,58 @@ let%expect_test "sum-complex" =
     Scalar: (Int 3)
     Scalar: (Int 1) |}]
 
+let%expect_test "orderby-tuple" =
+  run_print_test
+    (module M)
+    {|atuple([alist(orderby([r1.f], r1, desc), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f], r1, asc), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|};
+  [%expect {|
+    Tuple
+    List
+    List key: ((Int 3) (Int 4))
+    Tuple
+    Scalar: (Int 3)
+    Scalar: (Int 4)
+    List key: ((Int 2) (Int 1))
+    Tuple
+    Scalar: (Int 2)
+    Scalar: (Int 1)
+    List key: ((Int 2) (Int 2))
+    Tuple
+    Scalar: (Int 2)
+    Scalar: (Int 2)
+    List key: ((Int 1) (Int 2))
+    Tuple
+    Scalar: (Int 1)
+    Scalar: (Int 2)
+    List key: ((Int 1) (Int 3))
+    Tuple
+    Scalar: (Int 1)
+    Scalar: (Int 3)
+    Tuple
+    Scalar: (Int 9)
+    Scalar: (Int 9)
+    List
+    List key: ((Int 1) (Int 2))
+    Tuple
+    Scalar: (Int 1)
+    Scalar: (Int 2)
+    List key: ((Int 1) (Int 3))
+    Tuple
+    Scalar: (Int 1)
+    Scalar: (Int 3)
+    List key: ((Int 2) (Int 1))
+    Tuple
+    Scalar: (Int 2)
+    Scalar: (Int 1)
+    List key: ((Int 2) (Int 2))
+    Tuple
+    Scalar: (Int 2)
+    Scalar: (Int 2)
+    List key: ((Int 3) (Int 4))
+    Tuple
+    Scalar: (Int 3)
+    Scalar: (Int 4) |}]
+
 let example_params =
   [ Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p"
   ; Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c" ]
