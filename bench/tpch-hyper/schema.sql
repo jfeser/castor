@@ -137,14 +137,18 @@ CREATE INDEX q10_1_idx ON q10_1 (o_orderdate);
 
 CREATE INDEX q10_2_idx ON q10_2 (c_custkey);
 
-CREATE TABLE q11 (
+CREATE TABLE q11_1 (
     n_name char(25) NOT NULL,
-    const33 numeric NOT NULL,
-    ps_partkey integer NOT NULL,
-    value0 numeric NOT NULL
+    const33 numeric NOT NULL
 );
 
-CREATE INDEX q11_idx ON q11 (n_name);
+CREATE INDEX q11_1_idx ON q11_1 (n_name);
+
+CREATE TABLE q11_2 (
+    n_name char(25) NOT NULL,
+    ps_partkey integer NOT NULL,
+    value_ numeric NOT NULL
+);
 
 CREATE TABLE q12 (
     l_receiptdate date NOT NULL,
