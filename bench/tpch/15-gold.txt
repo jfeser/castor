@@ -1,3 +1,4 @@
+select([s_suppkey, s_name, s_address, s_phone, total_revenue],
 ahashidx(dedup(select([lineitem.l_shipdate as param1_0], lineitem)),
   alist(orderby([supplier.s_suppkey],
           select([supplier.s_suppkey,
@@ -30,4 +31,4 @@ ahashidx(dedup(select([lineitem.l_shipdate as param1_0], lineitem)),
             ascalar(supplier.s_phone),
             ascalar(total_revenue)],
       cross)),
-  param1)
+  param1))

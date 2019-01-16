@@ -1,3 +1,4 @@
+select([ps_partkey, value],
 ahashidx(dedup(select([nation.n_name as nation_n_name_0], nation)),
   atuple([select([(const33 * param2) as const3],
             ascalar((select([sum((partsupp.ps_supplycost *
@@ -27,4 +28,4 @@ ahashidx(dedup(select([nation.n_name as nation_n_name_0], nation)),
                             partsupp)))),
                 atuple([ascalar(partsupp.ps_partkey), ascalar(value)], cross))))],
     cross),
-  param1)
+  param1))

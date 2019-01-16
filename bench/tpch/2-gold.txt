@@ -1,3 +1,11 @@
+  select([s1.s_acctbal,
+          s1.s_name,
+          n1.n_name,
+          p1.p_partkey,
+          p1.p_mfgr,
+          s1.s_address,
+          s1.s_phone,
+          s1.s_comment],
 ahashidx(dedup(select([region.r_name as region_r_name_0], region)),
   select([s1.s_acctbal,
           s1.s_name,
@@ -116,4 +124,4 @@ ahashidx(dedup(select([region.r_name as region_r_name_0], region)),
                   cross)),
               s1.s_suppkey)],
       cross)),
-  param3)
+  param3))

@@ -1,3 +1,4 @@
+select([n1_name, n2_name, l_year, revenue],
 ahashidx(dedup(select([nation.n_name as param1_1], nation)),
   ahashidx(dedup(select([nation.n_name as param0_0], nation)),
     alist(orderby([n1_name, n2_name, l_year],
@@ -33,4 +34,4 @@ ahashidx(dedup(select([nation.n_name as param1_1], nation)),
               ascalar(revenue)],
         cross)),
     param0),
-  param1)
+  param1))

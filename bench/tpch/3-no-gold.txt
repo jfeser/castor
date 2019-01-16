@@ -1,3 +1,4 @@
+select([l_orderkey, revenue, o_orderdate, o_shippriority],
 ahashidx(dedup(
            select([customer.c_mktsegment as customer_c_mktsegment_0], customer)),
   alist(dedup(
@@ -30,4 +31,4 @@ ahashidx(dedup(
                   ascalar(lineitem.l_discount),
                   ascalar(lineitem.l_shipdate)],
             cross))))),
-  param0)
+  param0))

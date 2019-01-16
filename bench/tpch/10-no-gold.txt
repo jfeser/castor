@@ -1,3 +1,4 @@
+select([c_custkey, c_name, revenue, c_acctbal, n_name, c_address, c_phone, c_comment],
 atuple([select([param0_0, customer.c_custkey, revenue, nation.n_name],
           ahashidx(dedup(select([orders.o_orderdate as param0_0], orders)),
             alist(groupby([customer.c_custkey,
@@ -45,4 +46,4 @@ atuple([select([param0_0, customer.c_custkey, revenue, nation.n_name],
                     ascalar(customer.c_comment)],
               cross)),
           customer.c_custkey)],
-  cross)
+  cross))
