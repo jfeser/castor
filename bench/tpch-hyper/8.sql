@@ -10,5 +10,6 @@ FROM
     q8
 WHERE
     p_type = 'ECONOMY ANODIZED STEEL'
-    AND r_name = 'AMERICA';
+    AND r_name = 'AMERICA'
+ group by o_year;
 

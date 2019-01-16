@@ -6,6 +6,6 @@ FROM
     q16
 WHERE
     NOT (p_brand = 'Brand#45')
-    AND NOT (strpos(part.p_type, 'MEDIUM POLISHED') = 1)
-    AND (p_size = 49 || p_size = 14 || p_size = 23 || p_size = 45 || p_size = 19 || p_size = 3 || p_size = 36 || p_size = 9);
+    AND NOT (strpos(p_type, 'MEDIUM POLISHED') = 1)
+    AND (p_size = 49 or p_size = 14 or p_size = 23 or p_size = 45 or p_size = 19 or p_size = 3 or p_size = 36 or p_size = 9);
 

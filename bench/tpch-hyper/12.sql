@@ -9,6 +9,7 @@ WHERE
     AND l_receiptdate < date '1994-01-01' + interval '1' year
     AND (l_shipmode = 'MAIL'
         OR l_shipmode = 'SHIP')
+     group by l_shipmode
 ORDER BY
     l_shipmode;
 
