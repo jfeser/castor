@@ -2,7 +2,7 @@ open Core
 open Abslayout
 open Test_util
 
-let make_modules ?layout_file () =
+let make_modules ?layout_file ?(irgen_debug = false) () =
   let module M = Abslayout_db.Make (Test_db) in
   let module S =
     Serialize.Make (struct
@@ -14,7 +14,7 @@ let make_modules ?layout_file () =
     Irgen.Make (struct
         let code_only = false
 
-        let debug = false
+        let debug = irgen_debug
       end)
       (M)
       (S)
@@ -32,7 +32,7 @@ let make_modules ?layout_file () =
   , (module I : Irgen.S)
   , (module C : Codegen.S) )
 
-let make_modules_db ?layout_file () =
+let make_modules_db ?layout_file ?(irgen_debug = false) () =
   let module M = Abslayout_db.Make (struct
     let conn = create_db "postgresql://localhost:5433/demomatch"
   end) in
@@ -46,7 +46,7 @@ let make_modules_db ?layout_file () =
     Irgen.Make (struct
         let code_only = false
 
-        let debug = false
+        let debug = irgen_debug
       end)
       (M)
       (S)
@@ -77,9 +77,11 @@ let run_in_fork thunk =
       Unix.Exit_or_signal.to_string_hum err |> print_endline
 
 let run_test ?(params = []) ?(modules = make_modules) ?(print_layout = true)
-    ?(fork = false) layout_str =
+    ?(fork = false) ?irgen_debug layout_str =
   let layout_file = Filename.temp_file "layout" "txt" in
-  let (module M), (module S), (module I), (module C) = modules ~layout_file () in
+  let (module M), (module S), (module I), (module C) =
+    modules ~layout_file ?irgen_debug ()
+  in
   let run_compiler out_dir layout =
     let exe_fn, data_fn =
       let params = List.map ~f:Tuple.T2.get1 params in
