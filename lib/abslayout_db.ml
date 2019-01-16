@@ -103,6 +103,13 @@ module Make (Config : Config.S) = struct
     in
     mapper#visit_t () r
 
+  let total_order_key q =
+    let native_order = Abslayout.order_of q in
+    let total_order =
+      List.map Meta.(find_exn q schema) ~f:(fun n -> (Name n, Asc))
+    in
+    native_order @ total_order
+
   let rec gen_query q =
     (* TODO: Respect orderings from original queries. Needs a way to get the
        ordering, then the ordering has to be extended with the remaining fields
@@ -110,15 +117,15 @@ module Make (Config : Config.S) = struct
     match q.node with
     | AList (q1, q2) ->
         let q1 =
-          let order_key = List.map Meta.(find_exn q1 schema) ~f:(fun n -> Name n) in
-          let q1 = order_by order_key `Asc q1 in
+          let order_key = total_order_key q1 in
+          let q1 = order_by order_key q1 in
           annotate_schema q1 ; q1
         in
         `For (q1, gen_query q2)
     | AHashIdx (q1, q2, _) | AOrderedIdx (q1, q2, _) ->
         let q1 =
-          let order_key = List.map Meta.(find_exn q1 schema) ~f:(fun n -> Name n) in
-          let q1 = order_by order_key `Asc (dedup q1) in
+          let order_key = total_order_key q1 in
+          let q1 = order_by order_key (dedup q1) in
           annotate_schema q1 ; q1
         in
         `Concat [`Query q1; `For (q1, gen_query q2)]
@@ -229,7 +236,7 @@ module Make (Config : Config.S) = struct
               |> Sql.to_spj ctx
             in
             let order =
-              (Name (Name.create counter_name), `Asc)
+              (Name (Name.create counter_name), Asc)
               :: List.concat_map queries ~f:(fun q ->
                      Sql.to_order (Query q) |> Or_error.ok_exn )
             in
@@ -892,10 +899,12 @@ module Make (Config : Config.S) = struct
             let r, ctx = resolve outer_ctx r in
             let ctx = rename n ctx in
             (As (n, r), ctx)
-        | OrderBy ({key; rel; _} as x) ->
+        | OrderBy {key; rel} ->
             let rel, inner_ctx = resolve outer_ctx rel in
-            let key = List.map key ~f:(resolve_pred inner_ctx) in
-            (OrderBy {x with key; rel}, inner_ctx)
+            let key =
+              List.map key ~f:(fun (p, o) -> (resolve_pred inner_ctx p, o))
+            in
+            (OrderBy {key; rel}, inner_ctx)
       in
       ({node= node'; meta}, ctx')
     in

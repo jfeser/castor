@@ -6,8 +6,6 @@ open Bos
 
 type ctx = {fresh: Fresh.t}
 
-type order = (pred * [`Asc | `Desc]) list [@@deriving compare, sexp_of]
-
 type select = (pred * string * Type.PrimType.t option) list
 [@@deriving compare, sexp_of]
 
@@ -17,7 +15,7 @@ type spj =
   ; conds: pred list
   ; relations:
       ([`Subquery of t * string | `Table of string] * [`Left | `Lateral]) list
-  ; order: order
+  ; order: (pred * order) list
   ; group: pred list
   ; limit: int option }
 
@@ -100,13 +98,13 @@ let join ctx s1 s2 sql1 sql2 pred =
        ~relations:[(`Subquery (sql1, a1), `Left); (`Subquery (sql2, a2), `Left)]
        select_list)
 
-let order_by ctx schema sql key order =
+let order_by ctx schema sql key =
   let spj = to_spj ctx sql in
   let ctx =
     List.map2_exn schema spj.select ~f:(fun n (p, _, _) -> (n, p))
     |> Map.of_alist_exn (module Name.Compare_no_type)
   in
-  let key = List.map key ~f:(fun p -> (subst_pred ctx p, order)) in
+  let key = List.map key ~f:(fun (p, o) -> (subst_pred ctx p, o)) in
   Query {spj with order= key}
 
 let select ctx schema sql fields =
@@ -166,8 +164,7 @@ let of_ralgebra ctx r =
                   let p = Name n in
                   add_pred_alias ctx p )))
     | Filter (pred, r) -> filter ctx Meta.(find_exn r schema) (f r) pred
-    | OrderBy {key; order; rel= r} ->
-        order_by ctx Meta.(find_exn r schema) (f r) key order
+    | OrderBy {key; rel= r} -> order_by ctx Meta.(find_exn r schema) (f r) key
     | Select (fs, r) -> select ctx Meta.(find_exn r schema) (f r) fs
     | Join {pred; r1; r2} ->
         join ctx
@@ -313,8 +310,8 @@ and spj_to_sql ctx {select; distinct; order; group; relations; conds; limit} =
         List.map order ~f:(fun (p, dir) ->
             let dir_sql =
               match dir with
-              | `Asc -> (* Asc is the default order *) ""
-              | `Desc -> "desc"
+              | Asc -> (* Asc is the default order *) ""
+              | Desc -> "desc"
             in
             sprintf "%s %s" (pred_to_sql ctx p) dir_sql )
         |> String.concat ~sep:", "

@@ -45,7 +45,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | A.Scan _ | AEmpty | AScalar _ -> []
         | Dedup r -> List.map ~f:A.dedup (f r)
         | As (n, r) -> List.map ~f:(A.as_ n) (f r)
-        | OrderBy {key; order; rel} -> List.map (f rel) ~f:(A.order_by key order)
+        | OrderBy {key; rel} -> List.map (f rel) ~f:(A.order_by key)
         | AList (r1, r2) ->
             cstage (List.map (f r1) ~f:(fun r1 -> A.list r1 r2))
             @ rstage (List.map (f r2) ~f:(fun r2 -> A.list r1 r2))
@@ -497,9 +497,11 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     annotate_orders r1 ;
     annotate_eq r2 ;
     annotate_orders r2 ;
-    [%compare.equal: pred list] Meta.(find_exn r1 order) Meta.(find_exn r2 order)
+    [%compare.equal: (pred * order) list]
+      Meta.(find_exn r1 order)
+      Meta.(find_exn r2 order)
 
-  let orderby_list key order r1 r2 =
+  let orderby_list key r1 r2 =
     let open A in
     M.annotate_schema r1 ;
     M.annotate_schema r2 ;
@@ -510,7 +512,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     let eqs = Meta.(find_exn r2 eq) in
     let names =
       List.concat_map eqs ~f:(fun (n, n') -> [n; n'])
-      @ List.filter_map ~f:pred_to_name key
+      @ List.filter_map ~f:(fun (p, _) -> pred_to_name p) key
       @ schema1
     in
     (* Create map from names to sets of equal names. *)
@@ -528,23 +530,26 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     let exception No_key in
     try
       let new_key =
-        List.map key ~f:(fun p ->
-            match pred_to_name p with
-            | Some n -> (
-                let s = Hashtbl.find_exn eq_map n in
-                (* Find an equivalent name in schema 1. *)
-                let n' =
-                  List.find schema1 ~f:(fun n' ->
-                      let s' = Hashtbl.find_exn eq_map n' in
-                      Union_find.same_class s s' )
-                in
-                match n' with Some n' -> Name n' | None -> raise No_key )
-            | None -> raise No_key )
+        List.map key ~f:(fun (p, o) ->
+            let p' =
+              match pred_to_name p with
+              | Some n -> (
+                  let s = Hashtbl.find_exn eq_map n in
+                  (* Find an equivalent name in schema 1. *)
+                  let n' =
+                    List.find schema1 ~f:(fun n' ->
+                        let s' = Hashtbl.find_exn eq_map n' in
+                        Union_find.same_class s s' )
+                  in
+                  match n' with Some n' -> Name n' | None -> raise No_key )
+              | None -> raise No_key
+            in
+            (p', o) )
       in
-      [list (order_by new_key order r1) r2]
+      [list (order_by new_key r1) r2]
     with No_key -> []
 
-  let orderby_cross_tuple key order rs =
+  let orderby_cross_tuple key rs =
     let open A in
     List.iter rs ~f:M.annotate_schema ;
     match rs with
@@ -554,10 +559,9 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         let skey =
           Set.of_list
             (module Name.Compare_no_type)
-            (List.filter_map ~f:pred_to_name key)
+            (List.filter_map ~f:(fun (p, _) -> pred_to_name p) key)
         in
-        if Set.is_subset skey ~of_:sschema then
-          [tuple (order_by key order r :: rs) Cross]
+        if Set.is_subset skey ~of_:sschema then [tuple (order_by key r :: rs) Cross]
         else []
     | _ -> []
 
@@ -568,16 +572,16 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         (fun r ->
           let rs =
             match r with
-            | {node= OrderBy {key; rel= {node= Select (ps, r); _}; order}; _} ->
-                [select ps (order_by key order r)]
-            | {node= OrderBy {key; rel= {node= Filter (ps, r); _}; order}; _} ->
-                [filter ps (order_by key order r)]
-            | {node= OrderBy {key; rel= {node= AList (r1, r2); _}; order}; _} ->
+            | {node= OrderBy {key; rel= {node= Select (ps, r); _}}; _} ->
+                [select ps (order_by key r)]
+            | {node= OrderBy {key; rel= {node= Filter (ps, r); _}}; _} ->
+                [filter ps (order_by key r)]
+            | {node= OrderBy {key; rel= {node= AList (r1, r2); _}}; _} ->
                 (* If we order a lists keys then the keys will be ordered in the
                    list. *)
-                orderby_list key order r1 r2
-            | {node= OrderBy {key; rel= {node= ATuple (rs, Cross); _}; order}; _} ->
-                orderby_cross_tuple key order rs
+                orderby_list key r1 r2
+            | {node= OrderBy {key; rel= {node= ATuple (rs, Cross); _}}; _} ->
+                orderby_cross_tuple key rs
             | _ -> []
           in
           List.filter rs ~f:(same_orders r) ) }
@@ -754,8 +758,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           M.annotate_schema r ;
           let ret =
             match r.node with
-            | OrderBy {key; rel= {node= Filter (p, r); _}; order} ->
-                [(p, order_by key order r)]
+            | OrderBy {key; rel= {node= Filter (p, r); _}} -> [(p, order_by key r)]
             | GroupBy (ps, key, {node= Filter (p, r); _}) -> [(p, group_by ps key r)]
             | Filter (p, {node= Filter (p', r); _}) -> [(p', filter p r)]
             | Select (ps, {node= Filter (p, r); _}) ->

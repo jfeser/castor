@@ -4,15 +4,13 @@ open Abslayout
 
 type ctx
 
-type order = (pred * [`Asc | `Desc]) list
-
 type spj =
   { select: (pred * string * Type.PrimType.t option) list
   ; distinct: bool
   ; conds: pred list
   ; relations:
       ([`Subquery of t * string | `Table of string] * [`Left | `Lateral]) list
-  ; order: order
+  ; order: (pred * order) list
   ; group: pred list
   ; limit: int option }
 
@@ -27,7 +25,7 @@ val create_query :
   -> ?conds:pred list
   -> ?relations:([`Subquery of t * string | `Table of string] * [`Lateral | `Left])
                 list
-  -> ?order:(pred * [`Asc | `Desc]) list
+  -> ?order:(pred * order) list
   -> ?group:pred list
   -> ?limit:int
   -> (pred * string * Type0.PrimType.t option) list
@@ -37,11 +35,11 @@ val to_spj : ctx -> t -> spj
 
 val to_schema : t -> string list
 
-val to_order : t -> order Or_error.t
+val to_order : t -> (pred * order) list Or_error.t
 
 val join : ctx -> Name.t list -> Name.t list -> t -> t -> pred -> t
 
-val order_by : ctx -> Name.t list -> t -> pred list -> [`Asc | `Desc] -> t
+val order_by : ctx -> Name.t list -> t -> (pred * order) list -> t
 
 val select : ctx -> Name.t list -> t -> pred list -> t
 

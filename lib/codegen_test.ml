@@ -283,8 +283,19 @@ select([lp.counter, lc.counter],
 
 let%expect_test "output-test" =
   run_test ~print_layout:false
-    {|select([1, 100, 1.0, 0.0001, 1.0001, "this is a test", "test with, commas", date("1994-01-04"), true, false], ascalar(0))|};
-  [%expect {|
+    {|select([1, 100, 1.0, 0.0001, 1.0001, "this is a test", "test with, commas", date("1994-01-04"), true, false], ascalar(0))|} ;
+  [%expect
+    {|
     1|100|1.000000|0.000100|1.000100|this is a test|test with, commas|1994-01-04|t|f
 
     exited normally |}]
+
+let%expect_test "ordering" =
+  run_test ~print_layout:false
+    {|alist(orderby([r1.f], r1, desc), atuple([ascalar(r1.f), ascalar(r1.g)], cross))|} ;
+  run_test ~print_layout:false
+    {|alist(orderby([r1.f], r1, asc), atuple([ascalar(r1.f), ascalar(r1.g)], cross))|} ;
+  run_test ~print_layout:false
+    {|atuple([alist(orderby([r1.f], r1, desc), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f], r1, asc), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|} ;
+  run_test ~print_layout:false
+    {|atuple([alist(orderby([r1.f], r1, asc), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f], r1, desc), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|}

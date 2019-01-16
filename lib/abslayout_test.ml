@@ -578,9 +578,9 @@ let%expect_test "annotate-orders" =
   M.annotate_schema r ;
   annotate_eq r ;
   annotate_orders r ;
-  Meta.(find_exn r order) |> [%sexp_of: pred list] |> print_s ;
+  Meta.(find_exn r order) |> [%sexp_of: (pred * order) list] |> print_s ;
   [%expect
-    {| ((Name ((relation (r)) (name f) (type_ ((IntT (nullable false))))))) |}]
+    {| (((Name ((relation (r)) (name f) (type_ ((IntT (nullable false)))))) Asc)) |}]
 
 let%expect_test "annotate-schema" =
   let r = "ascalar((select([min(r.f)], r)))" |> of_string_exn |> M.resolve in
