@@ -300,45 +300,86 @@ let%expect_test "ordering" =
   run_test ~print_layout:false
     {|atuple([alist(orderby([r1.f], r1, desc), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f], r1, asc), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|} ;
   run_test ~print_layout:false
-    {|atuple([alist(orderby([r1.f], r1, asc), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f], r1, desc), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|};
+    {|atuple([alist(orderby([r1.f], r1, asc), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f], r1, desc), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|} ;
+  [%expect
+    {|
+    3|4
+    2|1
+    2|2
+    1|2
+    1|3
+
+    exited normally
+    1|2
+    1|3
+    2|1
+    2|2
+    3|4
+
+    exited normally
+    3|4
+    2|1
+    2|2
+    1|2
+    1|3
+    9|9
+    1|2
+    1|3
+    2|1
+    2|2
+    3|4
+
+    exited normally
+    1|2
+    1|3
+    2|1
+    2|2
+    3|4
+    9|9
+    3|4
+    2|1
+    2|2
+    1|2
+    1|3
+
+    exited normally |}]
+
+let%expect_test "ordered-idx-dates" =
+  run_test
+    {|AOrderedIdx(OrderBy([f], Dedup(Select([f], r_date)), desc) as k, 
+     AScalar(k.f), date("2017-10-04"), date("2018-10-04"))|};
   [%expect {|
-    3|4
-    2|1
-    2|2
-    1|2
-    1|3
+    0:4 Ordered idx len (=72)
+    4:8 Ordered idx index len (=50)
+    12:2 Scalar (=(Date 2016-12-01))
+    12:2 Scalar (=(Date 2016-12-01))
+    12:2 Ordered idx key
+    14:8 Ordered idx value ptr (=62)
+    22:2 Scalar (=(Date 2017-10-05))
+    22:2 Scalar (=(Date 2017-10-05))
+    22:2 Ordered idx key
+    24:8 Ordered idx value ptr (=64)
+    32:2 Scalar (=(Date 2018-01-01))
+    32:2 Scalar (=(Date 2018-01-01))
+    32:2 Ordered idx key
+    34:8 Ordered idx value ptr (=66)
+    42:2 Scalar (=(Date 2018-01-23))
+    42:2 Scalar (=(Date 2018-01-23))
+    42:2 Ordered idx key
+    44:8 Ordered idx value ptr (=68)
+    52:2 Scalar (=(Date 2018-09-01))
+    52:2 Scalar (=(Date 2018-09-01))
+    52:2 Ordered idx key
+    54:8 Ordered idx value ptr (=70)
+    62:2 Scalar (=(Date 2016-12-01))
+    64:2 Scalar (=(Date 2017-10-05))
+    66:2 Scalar (=(Date 2018-01-01))
+    68:2 Scalar (=(Date 2018-01-23))
+    70:2 Scalar (=(Date 2018-09-01))
 
-    exited normally
-    1|2
-    1|3
-    2|1
-    2|2
-    3|4
-
-    exited normally
-    3|4
-    2|1
-    2|2
-    1|2
-    1|3
-    9|9
-    1|2
-    1|3
-    2|1
-    2|2
-    3|4
-
-    exited normally
-    1|2
-    1|3
-    2|1
-    2|2
-    3|4
-    9|9
-    3|4
-    2|1
-    2|2
-    1|2
-    1|3
+    2017-10-05|2017-10-05
+    2018-01-01|2018-01-01
+    2018-01-23|2018-01-23
+    2018-09-01|2018-09-01
 
     exited normally |}]

@@ -92,11 +92,13 @@ struct
     let open Builder in
     let low = build_defn "low" Infix.(int 0) b in
     let high = build_defn "high" n b in
+    debug_print "bin_search" (Tuple [low; high; low_target; high_target]) b ;
     build_loop
       Infix.(low < high)
       (fun b ->
         let mid = build_defn "mid" Infix.((low + high) / int 2) b in
         let key = build_key mid b in
+        debug_print "bin_search" (Tuple [low; high; low_target; high_target; key]) b ;
         build_if
           ~cond:(build_lt key (Tuple [low_target]) b)
           ~then_:(fun b -> build_assign Infix.(mid + int 1) low b)
@@ -110,6 +112,9 @@ struct
         build_loop
           Infix.(build_lt key (Tuple [high_target]) b && low < n)
           (fun b ->
+            debug_print "bin_search"
+              (Tuple [low; high; low_target; high_target; key])
+              b ;
             callback key low b ;
             build_assign Infix.(low + int 1) low b ;
             build_assign (build_key low b) key b )
@@ -281,8 +286,9 @@ struct
         Infix.(build_eq ival (int null_val) b)
       else Bool false
     in
-    debug_print "date" ival b ;
-    cb b [Unop {op= Int2Date; arg= ival}]
+    let dval = Unop {op= Int2Date; arg= ival} in
+    debug_print "date" dval b ;
+    cb b [dval]
 
   and scan_fixed ctx b _ Type.({nullable; value= {range; scale}} as t)
       (cb : callback) =

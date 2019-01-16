@@ -90,8 +90,9 @@ let%expect_test "sum-complex" =
 let%expect_test "orderby-tuple" =
   run_print_test
     (module M)
-    {|atuple([alist(orderby([r1.f], r1, desc), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f], r1, asc), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|};
-  [%expect {|
+    {|atuple([alist(orderby([r1.f], r1, desc), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f], r1, asc), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|} ;
+  [%expect
+    {|
     Tuple
     List
     List key: ((Int 3) (Int 4))
@@ -138,6 +139,24 @@ let%expect_test "orderby-tuple" =
     Tuple
     Scalar: (Int 3)
     Scalar: (Int 4) |}]
+
+let%expect_test "ordered-idx-dates" =
+  run_print_test
+    (module M)
+    "AOrderedIdx(OrderBy([f], Dedup(Select([f], r_date)), desc) as k, \
+     AScalar(k.f), null, null)";
+  [%expect {|
+    OrderedIdx
+    OrderedIdx key: ((Date 2016-12-01))
+    Scalar: (Date 2016-12-01)
+    OrderedIdx key: ((Date 2017-10-05))
+    Scalar: (Date 2017-10-05)
+    OrderedIdx key: ((Date 2018-01-01))
+    Scalar: (Date 2018-01-01)
+    OrderedIdx key: ((Date 2018-01-23))
+    Scalar: (Date 2018-01-23)
+    OrderedIdx key: ((Date 2018-09-01))
+    Scalar: (Date 2018-09-01) |}]
 
 let example_params =
   [ Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p"

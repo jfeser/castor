@@ -125,6 +125,45 @@ let%expect_test "ordered-idx" =
      42
      "*\\000\\000\\000\\027\\000\\000\\000\\000\\000\\000\\000\\001'\\000\\000\\000\\000\\000\\000\\000\\002(\\000\\000\\000\\000\\000\\000\\000\\003)\\000\\000\\000\\000\\000\\000\\000\\001\\002\\003") |}]
 
+let%expect_test "ordered-idx-dates" =
+  run_test
+    "AOrderedIdx(OrderBy([f], Dedup(Select([f], r_date)), desc) as k, \
+     AScalar(k.f), null, null)";
+  [%expect {|
+    0:4 Ordered idx len (=72)
+    4:8 Ordered idx index len (=50)
+    12:2 Scalar (=(Date 2016-12-01))
+    12:2 Scalar (=(Date 2016-12-01))
+    12:2 Ordered idx key
+    14:8 Ordered idx value ptr (=62)
+    22:2 Scalar (=(Date 2017-10-05))
+    22:2 Scalar (=(Date 2017-10-05))
+    22:2 Ordered idx key
+    24:8 Ordered idx value ptr (=64)
+    32:2 Scalar (=(Date 2018-01-01))
+    32:2 Scalar (=(Date 2018-01-01))
+    32:2 Ordered idx key
+    34:8 Ordered idx value ptr (=66)
+    42:2 Scalar (=(Date 2018-01-23))
+    42:2 Scalar (=(Date 2018-01-23))
+    42:2 Ordered idx key
+    44:8 Ordered idx value ptr (=68)
+    52:2 Scalar (=(Date 2018-09-01))
+    52:2 Scalar (=(Date 2018-09-01))
+    52:2 Ordered idx key
+    54:8 Ordered idx value ptr (=70)
+    62:2 Scalar (=(Date 2016-12-01))
+    64:2 Scalar (=(Date 2017-10-05))
+    66:2 Scalar (=(Date 2018-01-01))
+    68:2 Scalar (=(Date 2018-01-23))
+    70:2 Scalar (=(Date 2018-09-01))
+
+    ((OrderedIdxT
+      ((DateT ((range (Interval 17136 17775)) (nullable false)))
+       (DateT ((range (Interval 17136 17775)) (nullable false))) ((count Top))))
+     72
+     "H\\000\\000\\0002\\000\\000\\000\\000\\000\\000\\000\\240B>\\000\\000\\000\\000\\000\\000\\000$D@\\000\\000\\000\\000\\000\\000\\000|DB\\000\\000\\000\\000\\000\\000\\000\\146DD\\000\\000\\000\\000\\000\\000\\000oEF\\000\\000\\000\\000\\000\\000\\000\\240B$D|D\\146DoE") |}]
+
 let%expect_test "list-list" =
   run_test "AList(r1, AList(r1 as r, AScalar(r.f)))" ;
   [%expect
