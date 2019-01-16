@@ -347,8 +347,9 @@ let%expect_test "ordering" =
 let%expect_test "ordered-idx-dates" =
   run_test
     {|AOrderedIdx(OrderBy([f], Dedup(Select([f], r_date)), desc) as k, 
-     AScalar(k.f), date("2017-10-04"), date("2018-10-04"))|};
-  [%expect {|
+     AScalar(k.f), date("2017-10-04"), date("2018-10-04"))|} ;
+  [%expect
+    {|
     0:4 Ordered idx len (=72)
     4:8 Ordered idx index len (=50)
     12:2 Scalar (=(Date 2016-12-01))
@@ -383,3 +384,7 @@ let%expect_test "ordered-idx-dates" =
     2018-09-01|2018-09-01
 
     exited normally |}]
+
+let%expect_test "date-arith" =
+  run_test
+    {|select([date("1997-07-01") + month(3), date("1997-07-01") + day(90)], ascalar(0))|}

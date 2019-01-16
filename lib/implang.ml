@@ -26,7 +26,7 @@ let pp_bool fmt = Format.fprintf fmt "%b"
 let rec pp_expr : Format.formatter -> expr -> unit =
   let open Format in
   let op_to_string = function
-    | IntAdd | FlAdd -> `Infix "+"
+    | IntAdd | FlAdd | AddY | AddM -> `Infix "+"
     | IntSub | FlSub -> `Infix "-"
     | IntMul | FlMul -> `Infix "*"
     | IntDiv | FlDiv -> `Infix "/"
@@ -223,7 +223,8 @@ module Builder = struct
             IntT {nullable= false}
         (* Adding an int to a date or a date to an int produces an offset from
            the date. *)
-        | (IntAdd | IntSub), DateT _, IntT _ | (IntAdd | IntSub), IntT _, DateT _ ->
+        | (IntAdd | IntSub | AddM | AddY), DateT _, IntT _
+         |(IntAdd | IntSub), IntT _, DateT _ ->
             DateT {nullable= false}
         (* Dates can be subtracted from each other, to get the number of days
            between them, but they cannot be added. *)

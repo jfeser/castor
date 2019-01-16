@@ -192,8 +192,11 @@ struct
           let x = gen_pred p b in
           match op with
           | A.Not -> Infix.(not x)
-          | A.Year -> Infix.(int 365 * x)
-          | A.Month -> Infix.(int 30 * x)
+          | A.Year | A.Month ->
+              Error.create "Found interval in unexpected position."
+                (A.Unop (op, p))
+                [%sexp_of: A.pred]
+              |> Error.raise
           | A.Day -> x
           | A.Strlen -> Unop {op= StrLen; arg= x}
           | A.ExtractY -> Unop {op= ExtractY; arg= x}
@@ -207,6 +210,23 @@ struct
         | None ->
             Error.create "Unbound variable." (n, ctx) [%sexp_of: Name.t * Ctx.t]
             |> Error.raise )
+      (* Special cases for date intervals. *)
+      | A.Binop (A.Add, arg1, Unop (Year, arg2)) ->
+          let e1 = gen_pred arg1 b in
+          let e2 = gen_pred arg2 b in
+          Binop {op= AddY; arg1= e1; arg2= e2}
+      | A.Binop (A.Add, arg1, Unop (Month, arg2)) ->
+          let e1 = gen_pred arg1 b in
+          let e2 = gen_pred arg2 b in
+          Binop {op= AddM; arg1= e1; arg2= e2}
+      | A.Binop (A.Sub, arg1, Unop (Year, arg2)) ->
+          let e1 = gen_pred arg1 b in
+          let e2 = gen_pred (A.Binop (A.Sub, A.Int 0, arg2)) b in
+          Binop {op= AddY; arg1= e1; arg2= e2}
+      | A.Binop (A.Sub, arg1, Unop (Month, arg2)) ->
+          let e1 = gen_pred arg1 b in
+          let e2 = gen_pred (A.Binop (A.Sub, A.Int 0, arg2)) b in
+          Binop {op= AddM; arg1= e1; arg2= e2}
       | A.Binop (op, arg1, arg2) -> (
           let e1 = gen_pred arg1 b in
           let e2 = gen_pred arg2 b in

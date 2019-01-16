@@ -31,6 +31,8 @@ type op =
   | ExtractY
   | ExtractM
   | ExtractD
+  | AddY
+  | AddM
 [@@deriving compare, sexp]
 
 type expr =

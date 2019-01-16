@@ -2,6 +2,10 @@
 #include <stdio.h>
 #include <time.h>
 
+// Divide out the number of seconds, rounding up.
+#define to_days(t) (((t) + 86400 - 1) / 86400)
+#define to_secs(t) ((t) * 86400)
+
 long strpos(char* s1, long l1, char* s2, long l2) {
   if (l1 < l2) { return 0; }
   for (int i = 0; i < l1; i++) {
@@ -38,13 +42,27 @@ long extract_day(long date) {
   return btime.tm_mday;
 }
 
+long add_year(long date, long years) {
+  struct tm bdate;
+  time_t secs = to_secs(date);
+  gmtime_r(&secs, &bdate);
+  bdate.tm_year += years;
+  return to_days(mktime(&bdate));
+}
+
+long add_month(long date, long months) {
+  struct tm bdate;
+  time_t secs = to_secs(date);
+  gmtime_r(&secs, &bdate);
+  bdate.tm_mon += months;
+  return to_days(mktime(&bdate));
+}
+
 long load_date(char* s, long* out) {
   struct tm time_tm;
   if (strptime(s, "%Y-%m-%d", &time_tm) == NULL) {
     return 1;
   }
-  time_t time = mktime(&time_tm);
-  // Divide, rounding up.
-  *out = (time + 86400 - 1) / 86400;
+  *out = to_days(mktime(&time_tm));
   return 0;
 }

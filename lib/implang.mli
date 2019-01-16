@@ -31,6 +31,8 @@ type op = Implang0.op =
   | ExtractY
   | ExtractM
   | ExtractD
+  | AddY
+  | AddM
 [@@deriving compare, sexp]
 
 type expr = Implang0.expr =

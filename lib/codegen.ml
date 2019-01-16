@@ -392,6 +392,16 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       (function_type (i64_type ctx) [|i64_type ctx|])
       module_
 
+  let add_m =
+    declare_function "add_month"
+      (function_type (i64_type ctx) [|i64_type ctx; i64_type ctx|])
+      module_
+
+  let add_y =
+    declare_function "add_year"
+      (function_type (i64_type ctx) [|i64_type ctx; i64_type ctx|])
+      module_
+
   let rec declare_invariant v =
     let size t =
       if type_is_sized t then
@@ -744,6 +754,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | StrHash -> codegen_string_hash fctx x1 x2
       | LoadStr -> codegen_load_str fctx x1 x2
       | StrPos -> codegen_strpos fctx x1 x2
+      | AddY -> build_call add_y [|x1; x2|] "" builder
+      | AddM -> build_call add_m [|x1; x2|] "" builder
       | StrLen | Not | Int2Fl | ExtractY | ExtractM | ExtractD | LoadBool | Int2Date
         ->
           fail (Error.of_string "Not a binary operator.")
@@ -768,7 +780,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     | LoadBool -> codegen_load_bool fctx x
     | IntAdd | IntSub | IntLt | And | Or | IntEq | StrEq | IntHash | StrHash
      |IntMul | IntDiv | Mod | LoadStr | FlAdd | FlSub | FlMul | FlDiv | FlLt
-     |FlLe | FlEq | StrPos ->
+     |FlLe | FlEq | StrPos | AddY | AddM ->
         fail (Error.of_string "Not a unary operator.")
 
   (* in
