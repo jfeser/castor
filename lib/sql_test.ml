@@ -35,87 +35,85 @@ let run_test_tpch ?params s =
 
 let%expect_test "select-agg" =
   run_test "select([(0.2 * avg(r.f)) as test], r)" ;
-  [%expect {|
+  [%expect
+    {|
     SELECT
-        (0.2) * (avg(r. "f")) AS "x2"
+        (0.2) * (avg(r_1. "f")) AS "test_4"
     FROM
-        r |}]
+        "r" AS "r_1" |}]
 
 let%expect_test "project" =
-  run_test "Select([r.f], r)" ; [%expect {|
+  run_test "Select([r.f], r)" ;
+  [%expect
+    {|
     SELECT
-        r. "f" AS "r_f_3"
+        r_1. "f" AS "r_1_f_4"
     FROM
-        r |}]
+        "r" AS "r_1" |}]
 
 let%expect_test "filter" =
   run_test "Filter(r.f = r.g, r)" ;
   [%expect
     {|
       SELECT
-          r. "f" AS "r_f_1",
-          r. "g" AS "r_g_2"
+          r_1. "f" AS "r_1_f_2",
+          r_1. "g" AS "r_1_g_3"
       FROM
-          r
-      WHERE (r. "f") = (r. "g") |}]
+          "r" AS "r_1"
+      WHERE ((r_1. "f") = (r_1. "g")) |}]
 
 let%expect_test "eqjoin" =
   run_test "Join(r.f = s.g, r as r, s as s)" ;
   [%expect
     {|
       SELECT
-          "r_f_3",
-          "r_g_4",
-          "s_f_1",
-          "s_g_2"
-      FROM (
-          SELECT
-              r. "f" AS "r_f_3",
-              r. "g" AS "r_g_4"
-          FROM
-              r) AS "t4",
-          (
-              SELECT
-                  s. "f" AS "s_f_1",
-                  s. "g" AS "s_g_2"
-              FROM
-                  s) AS "t5"
-      WHERE ("r_f_3") = ("s_g_2") |}]
+          r_4. "f" AS "r_4_f_5",
+          r_4. "g" AS "r_4_g_6",
+          s_1. "f" AS "s_1_f_2",
+          s_1. "g" AS "s_1_g_3"
+      FROM
+          "r" AS "r_4",
+          "s" AS "s_1"
+      WHERE ((r_4. "f") = (s_1. "g")) |}]
 
 let%expect_test "order-by" =
   run_test "OrderBy([r1.f], Dedup(Select([r1.f], r1)), desc)" ;
-  [%expect {|
+  [%expect
+    {|
     SELECT DISTINCT
-        r1. "f" AS "r1_f_3"
+        r1_1. "f" AS "r1_1_f_4"
     FROM
-        r1
+        "r1" AS "r1_1"
     ORDER BY
-        r1. "f" DESC |}]
+        r1_1. "f" DESC |}]
 
 let%expect_test "dedup" =
   run_test "Dedup(Select([r1.f], r1))" ;
-  [%expect {|
+  [%expect
+    {|
     SELECT DISTINCT
-        r1. "f" AS "r1_f_3"
+        r1_1. "f" AS "r1_1_f_4"
     FROM
-        r1 |}]
+        "r1" AS "r1_1" |}]
 
 let%expect_test "select" =
   run_test "Select([r1.f], r1)" ;
-  [%expect {|
+  [%expect
+    {|
     SELECT
-        r1. "f" AS "r1_f_3"
+        r1_1. "f" AS "r1_1_f_4"
     FROM
-        r1 |}]
+        "r1" AS "r1_1" |}]
 
 let%expect_test "scan" =
   run_test "r1" ;
-  [%expect {|
+  [%expect
+    {|
     SELECT
-        r1. "f" AS "r1_f_1",
-        r1. "g" AS "r1_g_2"
+        r1_1. "f" AS "r1_1_f_2",
+        r1_1. "g" AS "r1_1_g_3"
     FROM
-        r1 |}]
+        "r1" AS "r1_1" |}]
 
 let%expect_test "join" =
   run_test
@@ -126,86 +124,113 @@ let%expect_test "join" =
   [%expect
     {|
       SELECT
-          "log_counter_4",
-          "log_succ_5",
-          "log_id_6",
-          "log_counter_1",
-          "log_succ_2",
-          "log_id_3"
-      FROM (
-          SELECT
-              log. "counter" AS "log_counter_4",
-              log. "succ" AS "log_succ_5",
-              log. "id" AS "log_id_6"
-          FROM
-              log) AS "t6",
-          (
-              SELECT
-                  log. "counter" AS "log_counter_1",
-                  log. "succ" AS "log_succ_2",
-                  log. "id" AS "log_id_3"
-              FROM
-                  log) AS "t7"
-      WHERE (("log_counter_4") < ("log_counter_1"))
-      AND (("log_counter_1") < ("log_succ_5")) |}]
+          log_5. "counter" AS "log_5_counter_6",
+          log_5. "succ" AS "log_5_succ_7",
+          log_5. "id" AS "log_5_id_8",
+          log_1. "counter" AS "log_1_counter_2",
+          log_1. "succ" AS "log_1_succ_3",
+          log_1. "id" AS "log_1_id_4"
+      FROM
+          "log" AS "log_5",
+          "log" AS "log_1"
+      WHERE (((log_5. "counter") < (log_1. "counter"))
+          AND ((log_1. "counter") < (log_5. "succ"))) |}]
+
+let%expect_test "join-groupby" =
+  run_test
+    {|join(r1.f = r1.g || x = y, groupby([r1.f, sum((r1.f * r1.g)) as x], [r1.f], r1), groupby([r1.g, sum((r1.f * r1.g)) as y], [r1.g], r1))|} ;
+  [%expect
+    {|
+    SELECT
+        "r1_6_f_9" AS "r1_6_f_9_12",
+        "x_10" AS "x_10_13",
+        "r1_1_g_4" AS "r1_1_g_4_15",
+        "y_5" AS "y_5_16"
+    FROM (
+        SELECT
+            r1_6. "f" AS "r1_6_f_9",
+            sum((r1_6. "f") * (r1_6. "g")) AS "x_10"
+        FROM
+            "r1" AS "r1_6"
+        GROUP BY
+            (r1_6. "f")) AS "t10",
+        (
+            SELECT
+                r1_1. "g" AS "r1_1_g_4",
+                sum((r1_1. "f") * (r1_1. "g")) AS "y_5"
+            FROM
+                "r1" AS "r1_1"
+            GROUP BY
+                (r1_1. "g")) AS "t13"
+    WHERE ((("r1_6_f_9") = ("r1_1_g_4"))
+        OR (("x_10") = ("y_5"))) |}]
+
+let%expect_test "join-cond" =
+  run_test {|filter(true||false, join(true&&false, r1, r))|};
+  [%expect {|
+    SELECT
+        r1_4. "f" AS "r1_4_f_5",
+        r1_4. "g" AS "r1_4_g_6",
+        r_1. "f" AS "r_1_f_2",
+        r_1. "g" AS "r_1_g_3"
+    FROM
+        "r1" AS "r1_4",
+        "r" AS "r_1"
+    WHERE ((TRUE)
+        OR (FALSE))
+    AND ((TRUE)
+        AND (FALSE)) |}]
 
 let%expect_test "select-groupby" =
   run_test "select([max(x)], groupby([r1.f, sum((r1.f * r1.g)) as x], [r1.f], r1))" ;
   [%expect
     {|
       SELECT
-          max("x3") AS "x6"
+          max("x_5") AS "x_5_9"
       FROM (
           SELECT
-              "r1_f_1" AS "r1_f_1_3",
-              sum(("r1_f_1") * ("r1_g_2")) AS "x3"
-          FROM (
-              SELECT
-                  r1. "f" AS "r1_f_1",
-                  r1. "g" AS "r1_g_2"
-              FROM
-                  r1) AS "t4"
+              r1_1. "f" AS "r1_1_f_4",
+              sum((r1_1. "f") * (r1_1. "g")) AS "x_5"
+          FROM
+              "r1" AS "r1_1"
           GROUP BY
-              ("r1_f_1")) AS "t5" |}]
+              (r1_1. "f")) AS "t5" |}]
 
 let%expect_test "select-fusion-1" =
   run_test "select([max(x)], select([min(r1.f) as x], r1))" ;
   [%expect
     {|
       SELECT
-          max("x2") AS "x4"
+          max("x_4") AS "x_4_7"
       FROM (
           SELECT
-              min(r1. "f") AS "x2"
+              min(r1_1. "f") AS "x_4"
           FROM
-              r1) AS "t3" |}]
+              "r1" AS "r1_1") AS "t4" |}]
 
 let%expect_test "select-fusion-2" =
   run_test "select([max(x)], select([r1.f as x], r1))" ;
-  [%expect {|
+  [%expect
+    {|
     SELECT
-        max(r1. "f") AS "x3"
+        max(r1_1. "f") AS "x_5"
     FROM
-        r1 |}]
+        "r1" AS "r1_1" |}]
 
 let%expect_test "filter-fusion" =
   run_test "filter((x = 0), groupby([sum(r1.f) as x], [r1.g], r1))" ;
   [%expect
     {|
       SELECT
-          "x2"
+          "x_4" AS "x_4_6"
       FROM (
           SELECT
-              sum("r1_f_1") AS "x2"
-          FROM (
-              SELECT
-                  r1. "f" AS "r1_f_1",
-                  r1. "g" AS "r1_g_2"
-              FROM
-                  r1) AS "t3"
+              sum(r1_1. "f") AS "x_4"
+          FROM
+              "r1" AS "r1_1"
           GROUP BY
-              ("r1_g_2")) AS "t4"
-      WHERE ("x2") = (0) |}]
+              (r1_1. "g")) AS "t4"
+      WHERE (("x_4") = (0)) |}]
 
 (* let%expect_test "tpch-1" =
  *   run_test_tpch

@@ -1,9 +1,9 @@
 (install
   (section etc)
-  (files stdlib.c load_bool.c load_float.c load_int.c load_string.c load_date.c perf.c shared.h))
+  (files stdlib.c date.h load_bool.c load_float.c load_int.c load_string.c load_date.c perf.c shared.h))
 
 (rule
-  (deps stdlib.c stdlib_test.c)
+  (deps stdlib.c stdlib_test.c date.h)
   (targets stdlib_test.exe)
   (action (run %{cc} stdlib_test.c -o stdlib_test.exe)))
 
