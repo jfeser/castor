@@ -35,5 +35,5 @@ WHERE
 group by nation, o_year
 ORDER BY
     nation,
-    o_year;
+    o_year desc;
 
