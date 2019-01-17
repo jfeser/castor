@@ -177,7 +177,7 @@ module Make (Config : Config.S) = struct
           let select_list =
             let sql2_names = to_schema sql2 in
             List.map (sql1_names @ sql2_names) ~f:(fun n ->
-                add_pred_alias ctx (Name (Name.create n)) )
+                create_entry ~ctx (Name (Name.create n)) )
           in
           let order =
             (to_order sql1 |> Or_error.ok_exn) @ (to_order sql2 |> Or_error.ok_exn)
@@ -197,8 +197,7 @@ module Make (Config : Config.S) = struct
           in
           let scalar_query =
             let sql =
-              Sql.create_query
-                (List.map scalars ~f:(fun p -> (p, Fresh.name fresh "x%d", None)))
+              Sql.(create_query (List.map scalars ~f:(create_entry ~ctx)))
             in
             let types =
               List.map scalars ~f:(fun p -> p |> pred_to_schema |> Name.type_exn)
@@ -217,12 +216,13 @@ module Make (Config : Config.S) = struct
           let queries =
             List.mapi queries ~f:(fun i (sql, _, _) ->
                 let select_list =
-                  (Int i, counter_name, None)
+                  let open Sql in
+                  create_entry ~ctx ~alias:counter_name (Int i)
                   :: ( List.mapi queries ~f:(fun j (_, types, names) ->
                            if i = j then sql.select
                            else
                              List.map2_exn names types ~f:(fun n t ->
-                                 (Null, n, Some t) ) )
+                                 create_entry ~ctx ~alias:n ~cast:t Null ) )
                      |> List.concat )
                 in
                 {sql with select= select_list} )
@@ -241,7 +241,7 @@ module Make (Config : Config.S) = struct
           in
           Query union
       | `Empty -> Query (Sql.create_query ~limit:0 [])
-      | `Scalar p -> Query (Sql.create_query [(p, Fresh.name fresh "x%d", None)])
+      | `Scalar p -> Query Sql.(create_query [create_entry ~ctx p])
       | `Query q -> Sql.of_ralgebra ctx q
     in
     query_to_sql q
