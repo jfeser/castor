@@ -386,5 +386,9 @@ let%expect_test "ordered-idx-dates" =
     exited normally |}]
 
 let%expect_test "date-arith" =
-  run_test
-    {|select([date("1997-07-01") + month(3), date("1997-07-01") + day(90)], ascalar(0))|}
+  run_test ~print_layout:false
+    {|select([date("1997-07-01") + month(3), date("1997-07-01") + day(90)], ascalar(0))|};
+  [%expect {|
+    1997-10-01|1997-09-29
+
+    exited normally |}]
