@@ -151,8 +151,8 @@ CREATE TABLE q11_2 (
 
 CREATE TABLE q12 (
     l_receiptdate date NOT NULL,
-    agg7 integer NOT NULL,
     agg6 integer NOT NULL,
+    agg7 integer NOT NULL,
     l_shipmode char(10) NOT NULL
 );
 

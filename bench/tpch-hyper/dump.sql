@@ -321,14 +321,14 @@ CREATE temp VIEW q12 AS (
                     1
                 ELSE
                     0
-                END)) AS agg7,
+                END)) AS agg6,
         sum((
-                CASE WHEN ((orders.o_orderpriority = '1-URGENT')
-                        OR (orders.o_orderpriority = '2-HIGH')) THEN
+                CASE WHEN ((orders.o_orderpriority <> '1-URGENT')
+                        OR (orders.o_orderpriority <> '2-HIGH')) THEN
                     1
                 ELSE
                     0
-                END)) AS agg6,
+                END)) AS agg7,
         l_shipmode
     FROM
         lineitem,
@@ -346,7 +346,7 @@ CREATE temp VIEW q12 AS (
 CREATE temp VIEW q14 AS (
     SELECT
         sum((
-                CASE WHEN (strpos(p_type, 'PROMO') = 1) THEN
+          CASE WHEN p_type like 'PROMO%' THEN
                     (l_extendedprice * (1 - l_discount))
                 ELSE
                     0.0
@@ -392,21 +392,20 @@ CREATE temp VIEW q16 AS (
         p_type,
         p_brand,
         p_size,
-        count(*) AS supplier_cnt
+        count(distinct ps_suppkey) AS supplier_cnt
     FROM
         part,
         partsupp
     WHERE
         p_partkey = ps_partkey
-        AND NOT EXISTS (
-            SELECT
-                *
-            FROM
-                supplier
-            WHERE
-                ps_suppkey = s_suppkey
-                AND strpos(supplier.s_comment, 'Customer') >= 1
-                AND strpos(supplier.s_comment, 'Complaints') >= 1)
+    AND and ps_suppkey not in (
+		  select
+			  s_suppkey
+		    from
+			      supplier
+		   where
+			s_comment like '%Customer%Complaints%'
+	  )
         GROUP BY
             p_type,
             p_brand,
