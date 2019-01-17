@@ -165,8 +165,8 @@ CREATE temp VIEW q7 AS (
         AND o_orderkey = l_orderkey
         AND c_custkey = o_custkey
         AND c_nationkey = n2.n_nationkey
-        AND l_shipdate > date '1995-01-01'
-        AND l_shipdate < date '1996-12-31'
+        AND l_shipdate >= date '1995-01-01'
+        AND l_shipdate <= date '1996-12-31'
         AND s_nationkey = n1.n_nationkey
     GROUP BY
         n1.n_name,

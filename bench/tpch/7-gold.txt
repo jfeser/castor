@@ -19,8 +19,8 @@ ahashidx(dedup(select([nation.n_name as param1_1], nation)),
                             nation),
                           customer),
                         orders),
-                      filter(((lineitem.l_shipdate > date("1995-01-01")) &&
-                             (lineitem.l_shipdate < date("1996-12-31"))),
+                      filter(((lineitem.l_shipdate >= date("1995-01-01")) &&
+                             (lineitem.l_shipdate <= date("1996-12-31"))),
                         lineitem)),
                     join((supplier.s_nationkey = n1_nationkey),
                       select([nation.n_name as n1_name,
