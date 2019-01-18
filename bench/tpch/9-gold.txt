@@ -1,4 +1,4 @@
-alist(orderby([k0_nation, k0_o_year],
+alist(orderby([k0_nation, k0_o_year desc],
         dedup(
           select([nation as k0_nation, o_year as k0_o_year],
             select([nation.n_name as nation,
