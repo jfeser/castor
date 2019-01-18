@@ -1,6 +1,6 @@
 select([o_year, mkt_share],
 ahashidx(dedup(select([region.r_name as region_r_name_0], region)),
-  alist(orderby([k1_o_year desc],
+  alist(orderby([k1_o_year],
           dedup(
             select([o_year as k1_o_year],
               select([to_year(orders.o_orderdate) as o_year,
