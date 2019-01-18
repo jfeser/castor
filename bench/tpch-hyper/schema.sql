@@ -117,7 +117,8 @@ CREATE TABLE q9 (
 CREATE TABLE q10_1 (
     revenue numeric (16, 6) NOT NULL,
     n_name char(25) NOT NULL,
-    c_custkey integer NOT NULL
+    c_custkey integer NOT NULL,
+    o_orderdate date NOT NULL
 );
 CREATE TABLE q10_2 (
     c_custkey integer NOT NULL,
@@ -156,9 +157,9 @@ CREATE TABLE q12 (
 CREATE INDEX q12_idx ON q12 (l_receiptdate);
 
 CREATE TABLE q14 (
-    l_shipdate date NOT NULL,
     agg1 numeric(16, 6) NOT NULL,
-    agg2 numeric(16, 6) NOT NULL
+    agg2 numeric(16, 6) NOT NULL,
+    l_shipdate date NOT NULL
 );
 
 CREATE INDEX q14_idx ON q14 (l_shipdate);
