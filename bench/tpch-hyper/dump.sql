@@ -243,7 +243,8 @@ CREATE temp VIEW q10_1 AS (
     SELECT
         sum(((l_extendedprice * 1) - l_discount)) AS revenue,
         n_name,
-        c_custkey
+        c_custkey,
+        o_orderdate
     FROM
         customer,
         orders,
@@ -256,7 +257,8 @@ CREATE temp VIEW q10_1 AS (
         AND l_returnflag = 'R'
     GROUP BY
         c_custkey,
-        n_name
+        n_name,
+        o_orderdate
 );
 
 \copy (select * from q10_1) to 'q10_1.tbl' delimiter '|';
@@ -278,19 +280,16 @@ CREATE temp VIEW q10_2 AS (
 CREATE temp VIEW q11_1 AS (
     SELECT
         n_name,
-        (
-            SELECT
-                sum(ps_supplycost * ps_availqty)
-            FROM
-                partsupp,
-                supplier,
-                nation AS n
-            WHERE
-                n.n_name = n_name
-                AND ps_suppkey = s_suppkey
-                AND s_nationkey = n_nationkey) AS const33
-        FROM
-            nation
+        sum(ps_supplycost * ps_availqty) AS const33
+    FROM
+        partsupp,
+        supplier,
+        nation
+    WHERE
+        ps_suppkey = s_suppkey
+        AND s_nationkey = n_nationkey
+    GROUP BY
+        n_name
 );
 
 \copy (select * from q11_1) to 'q11_1.tbl' delimiter '|';
@@ -316,19 +315,19 @@ CREATE temp VIEW q12 AS (
     SELECT
         l_receiptdate,
         sum((
-                CASE WHEN (NOT ((orders.o_orderpriority = '1-URGENT'))
-                        AND NOT ((orders.o_orderpriority = '2-HIGH'))) THEN
+                CASE WHEN (((orders.o_orderpriority = '1-URGENT'))
+                        OR ((orders.o_orderpriority = '2-HIGH'))) THEN
                     1
                 ELSE
                     0
-                END)) AS agg6,
+                END)) AS agg_high,
         sum((
                 CASE WHEN ((orders.o_orderpriority <> '1-URGENT')
-                        OR (orders.o_orderpriority <> '2-HIGH')) THEN
+                        AND (orders.o_orderpriority <> '2-HIGH')) THEN
                     1
                 ELSE
                     0
-                END)) AS agg7,
+                END)) AS agg_low,
         l_shipmode
     FROM
         lineitem,
@@ -346,7 +345,7 @@ CREATE temp VIEW q12 AS (
 CREATE temp VIEW q14 AS (
     SELECT
         sum((
-          CASE WHEN p_type like 'PROMO%' THEN
+                CASE WHEN p_type LIKE 'PROMO%' THEN
                     (l_extendedprice * (1 - l_discount))
                 ELSE
                     0.0
@@ -392,20 +391,19 @@ CREATE temp VIEW q16 AS (
         p_type,
         p_brand,
         p_size,
-        count(distinct ps_suppkey) AS supplier_cnt
+        count(DISTINCT ps_suppkey) AS supplier_cnt
     FROM
         part,
         partsupp
     WHERE
         p_partkey = ps_partkey
-    AND and ps_suppkey not in (
-		  select
-			  s_suppkey
-		    from
-			      supplier
-		   where
-			s_comment like '%Customer%Complaints%'
-	  )
+        AND ps_suppkey NOT IN (
+            SELECT
+                s_suppkey
+            FROM
+                supplier
+            WHERE
+                s_comment LIKE '%Customer%Complaints%')
         GROUP BY
             p_type,
             p_brand,

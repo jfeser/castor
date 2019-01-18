@@ -1,7 +1,7 @@
 SELECT
     l_shipmode,
-    sum(agg6) AS high_line_count,
-    sum(agg7) AS low_line_count
+    sum(agg_high) AS high_line_count,
+    sum(agg_low) AS low_line_count
 FROM
     q12
 WHERE
@@ -9,7 +9,8 @@ WHERE
     AND l_receiptdate < date '1994-01-01' + interval '1' year
     AND (l_shipmode = 'MAIL'
         OR l_shipmode = 'SHIP')
-     group by l_shipmode
+GROUP BY
+    l_shipmode
 ORDER BY
     l_shipmode;
 

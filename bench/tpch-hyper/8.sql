@@ -11,5 +11,6 @@ FROM
 WHERE
     p_type = 'ECONOMY ANODIZED STEEL'
     AND r_name = 'AMERICA'
- group by o_year;
+GROUP BY
+    o_year;
 

@@ -7,5 +7,6 @@ WHERE
     o_orderdate >= date '1994-01-01'
     AND o_orderdate < date '1994-01-01' + interval '1' year
     AND r_name = 'ASIA'
-GROUP BY n_name;
+GROUP BY
+    n_name;
 

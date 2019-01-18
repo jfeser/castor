@@ -32,8 +32,10 @@ WHERE
     ELSE
         strpos(p_name, 'green') > 0
     END
-group by nation, o_year
+GROUP BY
+    nation,
+    o_year
 ORDER BY
     nation,
-    o_year desc;
+    o_year DESC;
 
