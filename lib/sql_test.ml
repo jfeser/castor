@@ -77,7 +77,7 @@ let%expect_test "eqjoin" =
       WHERE ((r_4. "f") = (s_1. "g")) |}]
 
 let%expect_test "order-by" =
-  run_test "OrderBy([r1.f], Dedup(Select([r1.f], r1)), desc)" ;
+  run_test "OrderBy([r1.f desc], Dedup(Select([r1.f], r1)))" ;
   [%expect
     {|
     SELECT DISTINCT
@@ -166,8 +166,9 @@ let%expect_test "join-groupby" =
         OR (("x_10") = ("y_5"))) |}]
 
 let%expect_test "join-cond" =
-  run_test {|filter(true||false, join(true&&false, r1, r))|};
-  [%expect {|
+  run_test {|filter(true||false, join(true&&false, r1, r))|} ;
+  [%expect
+    {|
     SELECT
         r1_4. "f" AS "r1_4_f_5",
         r1_4. "g" AS "r1_4_g_6",

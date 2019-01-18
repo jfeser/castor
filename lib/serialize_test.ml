@@ -97,7 +97,7 @@ let%expect_test "hash-idx" =
 
 let%expect_test "ordered-idx" =
   run_test
-    "AOrderedIdx(OrderBy([r1.f], Dedup(Select([r1.f], r1)), desc) as k, \
+    "AOrderedIdx(OrderBy([r1.f desc], Dedup(Select([r1.f], r1))) as k, \
      AScalar(k.f), null, null)" ;
   [%expect
     {|
@@ -127,9 +127,10 @@ let%expect_test "ordered-idx" =
 
 let%expect_test "ordered-idx-dates" =
   run_test
-    "AOrderedIdx(OrderBy([f], Dedup(Select([f], r_date)), desc) as k, \
-     AScalar(k.f), null, null)";
-  [%expect {|
+    "AOrderedIdx(OrderBy([f desc], Dedup(Select([f], r_date))) as k, AScalar(k.f), \
+     null, null)" ;
+  [%expect
+    {|
     0:4 Ordered idx len (=72)
     4:8 Ordered idx index len (=50)
     12:2 Scalar (=(Date 2016-12-01))

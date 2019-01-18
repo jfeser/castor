@@ -1,6 +1,6 @@
 select([o_year, mkt_share],
 ahashidx(dedup(select([region.r_name as region_r_name_0], region)),
-  alist(orderby([k1_o_year],
+  alist(orderby([k1_o_year desc],
           dedup(
             select([o_year as k1_o_year],
               select([to_year(orders.o_orderdate) as o_year,
@@ -27,8 +27,7 @@ ahashidx(dedup(select([region.r_name as region_r_name_0], region)),
                               nation.n_name as n2_name],
                         nation),
                       supplier)),
-                  part)))),
-          desc),
+                  part))))),
     select([o_year,
             (sum((if (nation_name = param1) then volume else 0.0)) /
             sum(volume)) as mkt_share],

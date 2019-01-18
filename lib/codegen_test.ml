@@ -120,7 +120,7 @@ let run_test ?(params = []) ?(modules = make_modules) ?(print_layout = true)
 
 let%expect_test "ordered-idx" =
   run_test ~print_layout:false
-    "AOrderedIdx(OrderBy([r1.f], Dedup(Select([r1.f], r1)), asc) as k, \
+    "AOrderedIdx(OrderBy([r1.f asc], Dedup(Select([r1.f], r1))) as k, \
      AList(Filter(r1.f = k.f, r1), ascalar(r1.g)), 1, 3)" ;
   [%expect {|
     1|2
@@ -294,13 +294,13 @@ let%expect_test "output-test" =
 
 let%expect_test "ordering" =
   run_test ~print_layout:false
-    {|alist(orderby([r1.f], r1, desc), atuple([ascalar(r1.f), ascalar(r1.g)], cross))|} ;
+    {|alist(orderby([r1.f desc], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross))|} ;
   run_test ~print_layout:false
-    {|alist(orderby([r1.f], r1, asc), atuple([ascalar(r1.f), ascalar(r1.g)], cross))|} ;
+    {|alist(orderby([r1.f], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross))|} ;
   run_test ~print_layout:false
-    {|atuple([alist(orderby([r1.f], r1, desc), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f], r1, asc), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|} ;
+    {|atuple([alist(orderby([r1.f desc], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|} ;
   run_test ~print_layout:false
-    {|atuple([alist(orderby([r1.f], r1, asc), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f], r1, desc), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|} ;
+    {|atuple([alist(orderby([r1.f], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f desc], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|} ;
   [%expect
     {|
     3|4
@@ -346,7 +346,7 @@ let%expect_test "ordering" =
 
 let%expect_test "ordered-idx-dates" =
   run_test
-    {|AOrderedIdx(OrderBy([f], Dedup(Select([f], r_date)), desc) as k, 
+    {|AOrderedIdx(OrderBy([f desc], Dedup(Select([f], r_date))) as k, 
      AScalar(k.f), date("2017-10-04"), date("2018-10-04"))|} ;
   [%expect
     {|
@@ -387,7 +387,7 @@ let%expect_test "ordered-idx-dates" =
 
 let%expect_test "date-arith" =
   run_test ~print_layout:false
-    {|select([date("1997-07-01") + month(3), date("1997-07-01") + day(90)], ascalar(0))|};
+    {|select([date("1997-07-01") + month(3), date("1997-07-01") + day(90)], ascalar(0))|} ;
   [%expect {|
     1997-10-01|1997-09-29
 

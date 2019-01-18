@@ -79,10 +79,12 @@ ralgebra_subquery:
   RPAREN { A.Dedup r |> node $symbolstartpos $endpos }
 
 | ORDERBY; LPAREN;
-  key = bracket_list(expr); COMMA;
-  rel = ralgebra; COMMA;
-  order = ORDER;
-  RPAREN { A.OrderBy { key = List.map (fun p -> p, order) key; rel } |> node $symbolstartpos $endpos }
+  key = bracket_list(pair(expr, option(ORDER))); COMMA;
+  rel = ralgebra;
+  RPAREN { A.OrderBy { key = List.map (fun (e, o) -> match o with
+                                                     | Some o -> e, o
+                                                     | None -> e, A.Asc) key; rel }
+           |> node $symbolstartpos $endpos }
 
 | AEMPTY { node $symbolstartpos $endpos AEmpty }
 

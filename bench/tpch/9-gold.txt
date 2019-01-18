@@ -17,8 +17,7 @@ alist(orderby([k0_nation, k0_o_year],
                   partsupp),
                 join((supplier.s_nationkey = nation.n_nationkey),
                   supplier,
-                  nation))))),
-        asc),
+                  nation)))))),
   select([nation, o_year, sum(amount) as sum_profit],
     filter((if (param1 = "yellow") then wit1__11 else (if (param1 = "white") then wit1__10 else (if 
       (param1 = "red") then wit1__9 else (if (param1 = "purple") then wit1__8 else (if 

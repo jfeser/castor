@@ -1,8 +1,7 @@
-alist(orderby([k0_lineitem_l_shipmode],
+alist(orderby([k0_lineitem_l_shipmode asc],
         dedup(
           select([lineitem.l_shipmode as k0_lineitem_l_shipmode],
-            join((orders.o_orderkey = lineitem.l_orderkey), orders, lineitem))),
-        asc),
+            join((orders.o_orderkey = lineitem.l_orderkey), orders, lineitem)))),
   filter(((lineitem.l_shipmode = param1) || (lineitem.l_shipmode = param2)),
     select([lineitem.l_shipmode,
             sum(agg6) as high_line_count,

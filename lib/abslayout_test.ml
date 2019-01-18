@@ -90,7 +90,7 @@ let%expect_test "sum-complex" =
 let%expect_test "orderby-tuple" =
   run_print_test
     (module M)
-    {|atuple([alist(orderby([r1.f], r1, desc), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f], r1, asc), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|} ;
+    {|atuple([alist(orderby([r1.f desc], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f asc], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|} ;
   [%expect
     {|
     Tuple
@@ -143,9 +143,10 @@ let%expect_test "orderby-tuple" =
 let%expect_test "ordered-idx-dates" =
   run_print_test
     (module M)
-    "AOrderedIdx(OrderBy([f], Dedup(Select([f], r_date)), desc) as k, \
-     AScalar(k.f), null, null)";
-  [%expect {|
+    "AOrderedIdx(OrderBy([f desc], Dedup(Select([f], r_date))) as k, AScalar(k.f), \
+     null, null)" ;
+  [%expect
+    {|
     OrderedIdx
     OrderedIdx key: ((Date 2016-12-01))
     Scalar: (Date 2016-12-01)
@@ -643,7 +644,7 @@ let%expect_test "mat-hidx" =
 
 let%expect_test "annotate-orders" =
   let r =
-    "alist(select([r.f as k], orderby([r.f], dedup(r), asc)), select([r.f, r.g], \
+    "alist(select([r.f as k], orderby([r.f asc], dedup(r))), select([r.f, r.g], \
      filter(r.f = k, r)))" |> of_string_exn |> M.resolve
   in
   M.annotate_schema r ;

@@ -45,7 +45,7 @@
 # 	s_name;
 # :n 100
 
-orderby([numwait, s_name],
+orderby([numwait desc, s_name desc],
   groupby([s_name, count() as numwait],
     [s_name],
     join((s_suppkey) = (l_suppkey),
@@ -63,5 +63,4 @@ orderby([numwait, s_name],
             lineitem))),
       join((s_nationkey) = (n_nationkey),
         filter((n_name) = (param1), nation),
-        supplier))),
-  desc)
+        supplier))))

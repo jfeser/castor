@@ -49,7 +49,7 @@
 # 	p_partkey;
 # :n 100
 
-orderby([s_acctbal, n_name, s_name, p_partkey],
+orderby([s_acctbal desc, n_name desc, s_name desc, p_partkey desc],
   select([s_acctbal,
           s_name,
           n_name,
@@ -79,5 +79,4 @@ orderby([s_acctbal, n_name, s_name, p_partkey],
           partsupp as ps1),
       filter(((p_size = param1) &&
              (strpos(p_type, param2) = (strlen(p_type) - strlen(param2) + 1))),
-        part as p1)))),
-  desc)
+        part as p1)))))

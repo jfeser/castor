@@ -38,5 +38,4 @@ orderby([revenue, o_orderdate],
       join((l_orderkey) = (o_orderkey),
         filter((o_orderdate) < (param1), orders),
         filter((l_shipdate) > (param1), lineitem)),
-      filter((c_mktsegment) = (param0), customer))),
-  asc)
+      filter((c_mktsegment) = (param0), customer))))

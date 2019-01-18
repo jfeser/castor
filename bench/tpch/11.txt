@@ -46,5 +46,4 @@ orderby([value],
         join((s_nationkey) = (n_nationkey),
           supplier,
           filter((n_name) = (param1), nation)),
-        partsupp))),
-  asc)
+        partsupp))))

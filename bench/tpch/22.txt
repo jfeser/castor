@@ -42,7 +42,7 @@
 # order by
 # 	cntrycode;
 
-orderby([cntrycode],
+orderby([cntrycode desc],
   groupby([cntrycode, count() as numcust, sum(c_acctbal) as totacctbal],
     [cntrycode],
     select([substr(c_phone, 1, 2) as cntrycode, c_acctbal],
@@ -65,5 +65,4 @@ orderby([cntrycode],
                         (substr(c_phone, 1, 2) = param7)))))))),
                    customer)))) &&
              not(exists(filter((o_custkey = c_custkey), orders))))),
-        customer))),
-  desc)
+        customer))))

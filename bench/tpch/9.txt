@@ -47,5 +47,4 @@ orderby([nation, o_year],
             filter((strpos(p_name, param1) > 0), part),
             join((o_orderkey = l_orderkey), orders, lineitem)),
           partsupp),
-        join((s_nationkey = n_nationkey), supplier, nation)))),
-  asc)
+        join((s_nationkey = n_nationkey), supplier, nation)))))
