@@ -124,12 +124,17 @@ let select ?groupby ctx schema sql fields =
      - This select is aggregation free
      - This select has aggregates but the inner select is aggregation free *)
   let needs_subquery =
-    match
-      ( select_kind fields
-      , to_select sql |> List.map ~f:(fun {pred= p; _} -> p) |> select_kind )
-    with
-    | `Scalar, _ | `Agg, `Scalar -> false
-    | `Agg, `Agg -> true
+    let for_agg =
+      match
+        ( select_kind fields
+        , to_select sql |> List.map ~f:(fun {pred= p; _} -> p) |> select_kind )
+      with
+      | `Scalar, _ | `Agg, `Scalar -> false
+      | `Agg, `Agg -> true
+    in
+    (* If the inner query is distinct then it must be wrapped. *)
+    let for_distinct = to_distinct sql in
+    for_agg || for_distinct
   in
   let spj = if needs_subquery then create_subquery ctx sql else to_spj ctx sql in
   let sctx =

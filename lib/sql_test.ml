@@ -233,6 +233,19 @@ let%expect_test "filter-fusion" =
               (r1_1. "g")) AS "t4"
       WHERE (("x_4") = (0)) |}]
 
+let%expect_test "groupby-dedup" =
+  run_test "groupby([sum(r1.f) as x], [r1.g], dedup(r1))";
+  [%expect {|
+    SELECT
+        sum("r1_1_f_2") AS "x_7"
+    FROM ( SELECT DISTINCT
+            r1_1. "f" AS "r1_1_f_2",
+            r1_1. "g" AS "r1_1_g_3"
+        FROM
+            "r1" AS "r1_1") AS "t3"
+    GROUP BY
+        ("r1_1_g_3") |}]
+
 (* let%expect_test "tpch-1" =
  *   run_test_tpch
  *     {|orderby([l_returnflag, l_linestatus],
