@@ -4,6 +4,7 @@
 Usage:
   run-bench.py sql [options] [QUERY...]
   run-bench.py castor [options] [QUERY...]
+  run-bench.py validate 
   run-bench.py gen-dune
 
 Options:
@@ -44,11 +45,18 @@ TRANSFORM_EXE = CONFIG["default"]["build_root"] + "/bin/transform.exe"
 DB = CONFIG["default"]["tpch_db"]
 OUT_FILE = rpath("results.csv")
 BENCH_DIR = rpath(".")
+VALIDATE_SCRIPT = rpath("cmpq.pl")
 
 BENCHMARKS = [
-    {"name": "1", "query": ["1-gold"], "params": [("param0:int", "90")]},
+    {
+        "name": "1",
+        "ordered": True,
+        "query": ["1-gold"],
+        "params": [("param0:int", "90")],
+    },
     {
         "name": "2",
+        "ordered": True,
         "query": ["2-gold"],
         "params": [
             ("param1:int", "15"),
@@ -58,17 +66,25 @@ BENCHMARKS = [
     },
     {
         "name": "3-no",
+        "ordered": False,
         "query": ["3-no-gold"],
         "params": [("param0:string", "BUILDING"), ("param1:date", "1995-3-15")],
     },
-    {"name": "4", "query": ["4-gold"], "params": [("param1:date", "1993-07-01")]},
+    {
+        "name": "4",
+        "ordered": True,
+        "query": ["4-gold"],
+        "params": [("param1:date", "1993-07-01")],
+    },
     {
         "name": "5-no",
+        "ordered": False,
         "query": ["5-no-gold"],
         "params": [("param0:string", "ASIA"), ("param1:date", "1994-01-01")],
     },
     {
         "name": "6",
+        "ordered": True,
         "query": ["6-gold"],
         "params": [
             ("param0:date", "1994-01-01"),
@@ -78,11 +94,13 @@ BENCHMARKS = [
     },
     {
         "name": "7",
+        "ordered": True,
         "query": ["7-gold"],
         "params": [("param0:string", "FRANCE"), ("param1:string", "GERMANY")],
     },
     {
         "name": "8",
+        "ordered": True,
         "query": ["8-gold"],
         "params": [
             ("param1:string", "BRAZIL"),
@@ -90,19 +108,27 @@ BENCHMARKS = [
             ("param3:string", "ECONOMY ANODIZED STEEL"),
         ],
     },
-    {"name": "9", "query": ["9-gold"], "params": [("param1:string", "green")]},
+    {
+        "name": "9",
+        "ordered": True,
+        "query": ["9-gold"],
+        "params": [("param1:string", "green")],
+    },
     {
         "name": "10-no",
+        "ordered": False,
         "query": ["10-no-gold"],
         "params": [("param0:date", "1993-10-01")],
     },
     {
         "name": "11-no",
+        "ordered": False,
         "query": ["11-no-gold"],
         "params": [("param1:string", "GERMANY"), ("param2:float", "0.0001")],
     },
     {
         "name": "12",
+        "ordered": True,
         "query": ["12-gold"],
         "params": [
             ("param1:string", "MAIL"),
@@ -112,13 +138,25 @@ BENCHMARKS = [
     },
     {
         "name": "13",
+        "ordered": True,
         "query": [],
         "params": [("param1:string", "special"), ("param2:string", "requests")],
     },
-    {"name": "14", "query": ["14-gold"], "params": [("param1:date", "1995-09-01")]},
-    {"name": "15", "query": ["15-gold"], "params": [("param1:date", "1996-01-01")]},
+    {
+        "name": "14",
+        "ordered": True,
+        "query": ["14-gold"],
+        "params": [("param1:date", "1995-09-01")],
+    },
+    {
+        "name": "15",
+        "ordered": True,
+        "query": ["15-gold"],
+        "params": [("param1:date", "1996-01-01")],
+    },
     {
         "name": "16-no",
+        "ordered": False,
         "query": ["16-no-gold"],
         "params": [
             ("param1:string", "Brand#45"),
@@ -135,12 +173,19 @@ BENCHMARKS = [
     },
     {
         "name": "17",
+        "ordered": True,
         "query": ["17-gold"],
         "params": [("param0:string", "Brand#23"), ("param1:string", "MED BOX")],
     },
-    {"name": "18", "query": ["18-gold"], "params": [("param1:int", "300")]},
+    {
+        "name": "18",
+        "ordered": True,
+        "query": ["18-gold"],
+        "params": [("param1:int", "300")],
+    },
     {
         "name": "19",
+        "ordered": True,
         "query": ["19-gold"],
         "params": [
             ("param0:string", "Brand#12"),
@@ -151,7 +196,12 @@ BENCHMARKS = [
             ("param5:float", "20.0"),
         ],
     },
-    {"name": "21-no", "query": [], "params": [("param1:string", None)]},
+    {
+        "name": "21-no",
+        "ordered": False,
+        "query": [],
+        "params": [("param1:string", None)],
+    },
 ]
 
 log = logging.getLogger(name=__file__)
@@ -207,13 +257,17 @@ def run_sql(name, params):
     log.info("Done running SQL query %s." % name)
 
 
+def bench_dir(query_name):
+    return os.path.splitext(query_name)[0]
+
+
 def run_bench(name, query_name, params, csv_file):
     csv_writer = csv.writer(csv_file)
     query = rpath(query_name + ".txt")
     sql = rpath(name + ".sql")
 
     # Make benchmark dir.
-    benchd = os.path.splitext(query_name)[0]
+    benchd = bench_dir(query_name)
     if os.path.isdir(benchd):
         shutil.rmtree(benchd)
     os.mkdir(benchd)
@@ -292,6 +346,24 @@ def gen_dune():
             )
 
 
+def sort_file(fn):
+    call(["sort", "-o", fn, fn])
+
+
+def validate():
+    for bench in BENCHMARKS:
+        bench_num = bench["name"].split("-")[0]
+        gold_csv = "%s.csv" % bench["name"]
+        if not bench["ordered"]:
+            sort_file(gold_csv)
+        for query in bench["query"]:
+            benchd = bench_dir(query)
+            result_csv = "%s/results.csv" % benchd
+            if not bench["ordered"]:
+                sort_file(result_csv)
+            call([VALIDATE_SCRIPT, bench_num, gold_csv, result_csv])
+
+
 args = docopt(__doc__)
 
 
@@ -329,5 +401,7 @@ elif args["castor"]:
                     exe.submit(
                         run_bench, bench["name"], query, bench["params"], csv_file
                     )
+elif args["validate"]:
+    validate()
 
 logging.shutdown()

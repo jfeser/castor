@@ -1,3 +1,7 @@
 */*
 *.csv
 *.time
+analysis_*.log
+hashes.txt
+keys.txt
+sql
