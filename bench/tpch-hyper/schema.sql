@@ -115,6 +115,7 @@ CREATE TABLE q9 (
 );
 
 CREATE TABLE q10_1 (
+    o_orderdate date NOT NULL,
     revenue numeric (16, 6) NOT NULL,
     n_name char(25) NOT NULL,
     c_custkey integer NOT NULL,
