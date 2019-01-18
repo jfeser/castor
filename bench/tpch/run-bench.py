@@ -351,12 +351,14 @@ def sort_file(fn):
 
 
 def ensure_newline(fn):
-    with open(fn, "r") as f:
-        s = f.read()
-    if s[-1] != "\n":
-        with open(fn, "w") as f:
-            f.write(s + "\n")
-
+    try:
+        with open(fn, "r") as f:
+            s = f.read()
+        if not s.endswith('\n'):
+            with open(fn, "w") as f:
+                f.write(s + "\n")
+    except FileNotFoundError:
+        return
 
 def validate():
     for bench in BENCHMARKS:
