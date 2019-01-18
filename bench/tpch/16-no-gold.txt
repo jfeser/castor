@@ -12,7 +12,7 @@ filter((not((part.p_brand = param1)) &&
     atuple([ascalar(k1 as p_type) as part,
             alist(groupby([part.p_brand, part.p_size, count() as supplier_cnt],
                     [part.p_brand, part.p_size],
-                    dedup(select([p_brand, p_size, ps_partkey],
+                    dedup(select([p_brand, p_size, ps_suppkey],
                     join((part.p_partkey = partsupp.ps_partkey),
                       filter((part.p_type = k1), part),
                         filter(not(exists(filter(((partsupp.ps_suppkey =
