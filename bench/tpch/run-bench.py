@@ -350,15 +350,25 @@ def sort_file(fn):
     call(["sort", "-o", fn, fn])
 
 
+def ensure_newline(fn):
+    with open(fn, "r") as f:
+        s = f.read()
+    if s[-1] != "\n":
+        with open(fn, "w") as f:
+            f.write(s + "\n")
+
+
 def validate():
     for bench in BENCHMARKS:
         bench_num = bench["name"].split("-")[0]
         gold_csv = "%s.csv" % bench["name"]
+        ensure_newline(gold_csv)
         if not bench["ordered"]:
             sort_file(gold_csv)
         for query in bench["query"]:
             benchd = bench_dir(query)
             result_csv = "%s/results.csv" % benchd
+            ensure_newline(result_csv)
             if not bench["ordered"]:
                 sort_file(result_csv)
             call([VALIDATE_SCRIPT, bench_num, gold_csv, result_csv])
