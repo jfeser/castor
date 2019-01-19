@@ -3,8 +3,8 @@ atuple([select([param0_0, customer.c_custkey, revenue, nation.n_name],
           ahashidx(dedup(select([orders.o_orderdate as param0_0], orders)),
             alist(groupby([customer.c_custkey,
                            customer.c_name,
-                           sum(((lineitem.l_extendedprice * 1) -
-                               lineitem.l_discount)) as revenue,
+                           sum((lineitem.l_extendedprice * (1 -
+                               lineitem.l_discount))) as revenue,
                            customer.c_acctbal,
                            nation.n_name,
                            customer.c_address,
