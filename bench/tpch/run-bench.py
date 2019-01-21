@@ -3,27 +3,23 @@
 """
 Usage:
   run-bench.py sql [options] [QUERY...]
-  run-bench.py castor [options] [QUERY...]
-  run-bench.py validate 
+  run-bench.py compile-castor [options] [QUERY...]
+  run-bench.py run-castor [options] [QUERY...]
+  run-bench.py validate
   run-bench.py gen-dune
 
 Options:
   -h --help   Show this screen.
   -d CONNINFO Database to connect to.
-  --gen-dune  Generate dune file for checking args.
 """
 
 from docopt import docopt
-import multiprocessing
-from concurrent.futures import ThreadPoolExecutor
 import configparser
 import csv
 import logging
-import psycopg2
 import os
 import shutil
 import json
-import random
 import shlex
 import subprocess
 from subprocess import Popen, PIPE
@@ -261,10 +257,9 @@ def bench_dir(query_name):
     return os.path.splitext(query_name)[0]
 
 
-def run_bench(name, query_name, params, csv_file):
+def compile_bench(query_name, params, csv_file):
     csv_writer = csv.writer(csv_file)
     query = rpath(query_name + ".txt")
-    sql = rpath(name + ".sql")
 
     # Make benchmark dir.
     benchd = bench_dir(query_name)
@@ -291,7 +286,10 @@ def run_bench(name, query_name, params, csv_file):
         csv_file.flush()
         return
 
-    # Run query and save results.
+
+def run_bench(query_name, params, csv_file):
+    csv_writer = csv.writer(csv_file)
+    benchd = bench_dir(query_name)
     os.chdir(benchd)
 
     param_values = [p[1] for p in params]
@@ -354,11 +352,12 @@ def ensure_newline(fn):
     try:
         with open(fn, "r") as f:
             s = f.read()
-        if not s.endswith('\n'):
+        if not s.endswith("\n"):
             with open(fn, "w") as f:
                 f.write(s + "\n")
     except FileNotFoundError:
         return
+
 
 def validate():
     for bench in BENCHMARKS:
@@ -401,18 +400,24 @@ elif args["sql"]:
         if should_run(name):
             run_sql(name, bench["params"])
 
-elif args["castor"]:
-    csv_file = open(OUT_FILE, "w")
+elif args["compile-castor"]:
+    csv_file = open(OUT_FILE, "a")
     csv_writer = csv.writer(csv_file)
-    csv_writer.writerow(["name", "time"])
 
-    with ThreadPoolExecutor(max_workers=(multiprocessing.cpu_count() // 2)) as exe:
-        for bench in BENCHMARKS:
-            for query in bench["query"]:
-                if should_run(query):
-                    exe.submit(
-                        run_bench, bench["name"], query, bench["params"], csv_file
-                    )
+    for bench in BENCHMARKS:
+        for query in bench["query"]:
+            if should_run(query):
+                compile_bench(query, bench["params"], csv_file)
+
+elif args["run-castor"]:
+    csv_file = open(OUT_FILE, "a")
+    csv_writer = csv.writer(csv_file)
+
+    for bench in BENCHMARKS:
+        for query in bench["query"]:
+            if should_run(query):
+                run_bench(query, bench["params"], csv_file)
+
 elif args["validate"]:
     validate()
 
