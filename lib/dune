@@ -15,9 +15,9 @@
 
 (library
  (public_name castor)
- (libraries base core stdio str postgresql oUnit llvm llvm.analysis llvm.target llvm.all_backends logs cmph hashcons expect_test_helpers_kernel visitors.runtime parsexp)
+ (libraries base core stdio str postgresql llvm llvm.analysis llvm.target llvm.all_backends logs cmph expect_test_helpers_kernel visitors.runtime gen bos ounit)
  (inline_tests)
- (preprocess (pps ppx_sexp_conv ppx_compare ppx_hash ppx_bin_prot ppx_let ppx_expect visitors.ppx bisect_ppx -conditional))
+ (preprocess (pps ppx_sexp_conv ppx_compare ppx_hash ppx_expect visitors.ppx bisect_ppx -conditional))
 )
 
 ; Local Variables:
