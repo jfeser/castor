@@ -18,3 +18,9 @@ hyper-output.log : db.dump $(queries)
 
 %.csv : %.sql db.dump
 	$(driver_path) db.dump -q $< 2> $@
+
+%.time : %.sql db.dump
+	/usr/bin/time -v $(driver_path) db.dump -q $< -s 2> $@
+
+hyper_results.csv : $(patsubst %.sql,%.time,$(queries)) hyper-output.log
+	./extract-results.py hyper-output.log > hyper_results.csv
