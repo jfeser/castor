@@ -57,8 +57,8 @@ CREATE INDEX q4_idx ON q4 (o_orderdate);
 
 CREATE TABLE q5 (
     o_orderdate date NOT NULL,
-    r_name char(25) NOT NULL,
     n_name char(25) NOT NULL,
+    r_name char(25) NOT NULL,
     agg3 numeric(16, 6) NOT NULL
 );
 

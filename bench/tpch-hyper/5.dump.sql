@@ -2,7 +2,7 @@ CREATE temp VIEW q5 AS (
   SELECT
     o_orderdate,
     n_name,
-    r_name,
+    trim(both from r_name),
     sum((l_extendedprice * (1 - l_discount))) AS agg3
     FROM
         orders,
