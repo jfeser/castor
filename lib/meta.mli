@@ -1,4 +1,5 @@
 open Base
+open Abslayout0
 
 type t = Abslayout0.meta [@@deriving sexp_of]
 
@@ -30,7 +31,7 @@ val free : Set.M(Name.Compare_no_type).t key
 
 val eq : (Name.t * Name.t) list key
 
-val order : Abslayout0.pred list key
+val order : (Abslayout0.pred * order) list key
 
 val type_ : Type.t key
 

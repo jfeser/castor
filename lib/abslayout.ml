@@ -15,7 +15,7 @@ let group_by a b c = {node= GroupBy (a, b, c); meta= Meta.empty ()}
 
 let dedup a = {node= Dedup a; meta= Meta.empty ()}
 
-let order_by a b c = {node= OrderBy {key= a; order= b; rel= c}; meta= Meta.empty ()}
+let order_by a b = {node= OrderBy {key= a; rel= b}; meta= Meta.empty ()}
 
 let scan a = {node= Scan a; meta= Meta.empty ()}
 
@@ -71,19 +71,19 @@ let pp_list ?(bracket = ("[", "]")) pp fmt ls =
   loop ls ; close_box () ; fprintf fmt "%s" closeb
 
 let op_to_str = function
-  | Eq -> "="
-  | Lt -> "<"
-  | Le -> "<="
-  | Gt -> ">"
-  | Ge -> ">="
-  | And -> "&&"
-  | Or -> "||"
-  | Add -> "+"
-  | Sub -> "-"
-  | Mul -> "*"
-  | Div -> "/"
-  | Mod -> "%"
-  | _ -> failwith "Not an inline op."
+  | Eq -> `Infix "="
+  | Lt -> `Infix "<"
+  | Le -> `Infix "<="
+  | Gt -> `Infix ">"
+  | Ge -> `Infix ">="
+  | And -> `Infix "&&"
+  | Or -> `Infix "||"
+  | Add -> `Infix "+"
+  | Sub -> `Infix "-"
+  | Mul -> `Infix "*"
+  | Div -> `Infix "/"
+  | Mod -> `Infix "%"
+  | Strpos -> `Prefix "strpos"
 
 let unop_to_str = function
   | Not -> "not"
@@ -108,10 +108,6 @@ let pp_kind fmt =
     | Zip -> fprintf fmt "zip"
     | Concat -> fprintf fmt "concat")
 
-let pp_order fmt =
-  let open Format in
-  function `Asc -> fprintf fmt "asc" | `Desc -> fprintf fmt "desc"
-
 let rec pp_key fmt = function
   | [] -> failwith "Unexpected empty key."
   | [p] -> pp_pred fmt p
@@ -129,10 +125,10 @@ and pp_pred fmt =
   | Bool x -> fprintf fmt "%B" x
   | String x -> fprintf fmt "%S" x
   | Name n -> pp_name fmt n
-  | Binop (Strpos, p1, p2) ->
-      fprintf fmt "@[<hov>strpos(%a,@ %a)@]" pp_pred p1 pp_pred p2
-  | Binop (op, p1, p2) ->
-      fprintf fmt "@[<hov>(%a@ %s@ %a)@]" pp_pred p1 (op_to_str op) pp_pred p2
+  | Binop (op, p1, p2) -> (
+    match op_to_str op with
+    | `Infix str -> fprintf fmt "@[<hov>(%a@ %s@ %a)@]" pp_pred p1 str pp_pred p2
+    | `Prefix str -> fprintf fmt "@[<hov>%s(%a,@ %a)@]" str pp_pred p1 pp_pred p2 )
   | Count -> fprintf fmt "count()"
   | Sum n -> fprintf fmt "sum(%a)" pp_pred n
   | Avg n -> fprintf fmt "avg(%a)" pp_pred n
@@ -145,6 +141,12 @@ and pp_pred fmt =
   | Substring (p1, p2, p3) ->
       fprintf fmt "@[<hov>substr(%a,@ %a,@ %a)@]" pp_pred p1 pp_pred p2 pp_pred p3
 
+and pp_order fmt (p, o) =
+  let open Caml.Format in
+  match o with
+  | Asc -> fprintf fmt "@[<hov>%a@]" pp_pred p
+  | Desc -> fprintf fmt "@[<hov>%a@ desc@]" pp_pred p
+
 and pp fmt {node; _} =
   let open Caml.Format in
   match node with
@@ -156,9 +158,8 @@ and pp fmt {node; _} =
   | GroupBy (a, k, r) ->
       fprintf fmt "@[<hv 2>groupby(%a,@ %a,@ %a)@]" (pp_list pp_pred) a
         (pp_list pp_name) k pp r
-  | OrderBy {key; order; rel} ->
-      fprintf fmt "@[<hv 2>orderby(%a,@ %a,@ %a)@]" (pp_list pp_pred) key pp rel
-        pp_order order
+  | OrderBy {key; rel} ->
+      fprintf fmt "@[<hv 2>orderby(%a,@ %a)@]" (pp_list pp_order) key pp rel
   | Dedup r -> fprintf fmt "@[<hv 2>dedup(@,%a)@]" pp r
   | Scan n -> fprintf fmt "%s" n
   | AEmpty -> fprintf fmt "aempty"
@@ -232,7 +233,13 @@ let names_visitor =
     method! visit_Name () n = Set.singleton (module Name.Compare_no_type) n
 
     method! visit_pred () p =
-      match p with Exists _ | First _ -> self#zero | _ -> super#visit_pred () p
+      match p with
+      | Exists _ | First _ -> self#zero
+      | Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null | Unop _
+       |Binop _ | As_pred _ | Count | Sum _ | Avg _ | Min _ | Max _
+       |If (_, _, _)
+       |Substring (_, _, _) ->
+          super#visit_pred () p
   end
 
 let names r = names_visitor#visit_t () r
@@ -459,7 +466,7 @@ let is_serializeable r =
 
       method! visit_GroupBy _ _ _ _ = false
 
-      method! visit_OrderBy _ _ _ _ = false
+      method! visit_OrderBy _ _ _ = false
 
       method! visit_Dedup _ _ = false
 
@@ -500,7 +507,11 @@ let rec pred_free p =
       method! visit_pred () p =
         match p with
         | Exists r | First r -> self#visit_subquery r
-        | _ -> super#visit_pred () p
+        | Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null | Unop _
+         |Binop _ | As_pred _ | Count | Sum _ | Avg _ | Min _ | Max _
+         |If (_, _, _)
+         |Substring (_, _, _) ->
+            super#visit_pred () p
     end
   in
   visitor#visit_pred () p
@@ -529,9 +540,11 @@ and free r =
           (Set.diff
              (Set.union (List.map ps ~f:pred_free |> union_list) (of_list key))
              (exposed r'))
-    | OrderBy {key; rel; _} ->
+    | OrderBy {key; rel} ->
         Set.union (free rel)
-          (Set.diff (List.map key ~f:pred_free |> union_list) (exposed rel))
+          (Set.diff
+             (List.map key ~f:(fun (p, _) -> pred_free p) |> union_list)
+             (exposed rel))
     | AList (r', r'') -> Set.union (free r') (Set.diff (free r'') (exposed r'))
     | AHashIdx (r', r'', {lookup; _}) ->
         union_list
@@ -594,7 +607,9 @@ let annotate_needed r =
         in
         needed ctx' r'
     | OrderBy {key; rel; _} ->
-        let ctx' = Set.union ctx (List.map ~f:pred_free key |> union_list) in
+        let ctx' =
+          Set.union ctx (List.map ~f:(fun (p, _) -> pred_free p) key |> union_list)
+        in
         needed ctx' rel
     | AList (pr, cr) | AHashIdx (pr, cr, _) | AOrderedIdx (pr, cr, _) ->
         needed Meta.(find_exn cr free) pr ;
@@ -772,11 +787,11 @@ let annotate_orders r =
       match r.node with
       | Select (ps, r) ->
           annotate_orders r
-          |> List.filter_map ~f:(fun p ->
+          |> List.filter_map ~f:(fun (p, d) ->
                  List.find_map ps ~f:(function
                    | As_pred (p', n) when [%compare.equal: pred] p p' ->
-                       Some (Name (Name.create n))
-                   | p' when [%compare.equal: pred] p p' -> Some p'
+                       Some (Name (Name.create n), d)
+                   | p' when [%compare.equal: pred] p p' -> Some (p', d)
                    | _ -> None ) )
       | Filter (_, r) | AHashIdx (_, r, _) -> annotate_orders r
       | Join {r1; r2; _} ->
@@ -787,39 +802,41 @@ let annotate_orders r =
           annotate_orders r |> ignore ;
           []
       | Scan _ | AEmpty -> []
-      | OrderBy {key; rel; _} ->
+      | OrderBy {key; rel} ->
           annotate_orders rel |> ignore ;
           key
-      | AScalar e -> [e]
+      | AScalar _ -> []
       | AList (r, r') ->
           let s' = Meta.(find_exn r' schema) in
           let eq' = Meta.(find_exn r' eq) in
           annotate_orders r' |> ignore ;
+          let open Name.Compare_no_type in
           annotate_orders r
-          |> List.filter_map
-               ~f:
-                 (let open Name.Compare_no_type in
-                 function
-                 | Name n ->
-                     if List.mem ~equal:( = ) s' n then Some (Name n)
-                     else
-                       List.find_map eq' ~f:(fun (n', n'') ->
-                           if n = n' then Some (Name n'')
-                           else if n = n'' then Some (Name n')
-                           else None )
-                 | _ -> None)
+          |> List.filter_map ~f:(function
+               | Name n, dir ->
+                   if List.mem ~equal:( = ) s' n then Some (Name n, dir)
+                   else
+                     List.find_map eq' ~f:(fun (n', n'') ->
+                         if n = n' then Some (Name n'', dir)
+                         else if n = n'' then Some (Name n', dir)
+                         else None )
+               | _ -> None )
       | ATuple (rs, Cross) -> List.map ~f:annotate_orders rs |> List.concat
       | ATuple (rs, (Zip | Concat)) ->
           List.iter ~f:(fun r -> annotate_orders r |> ignore) rs ;
           []
       | AOrderedIdx (r, _, _) ->
-          Meta.(find_exn r schema) |> List.map ~f:(fun n -> Name n)
+          Meta.(find_exn r schema) |> List.map ~f:(fun n -> (Name n, Asc))
       | As _ -> []
     in
     Meta.set_m r Meta.order order ;
     order
   in
   annotate_orders r |> ignore
+
+let order_of r =
+  annotate_orders r ;
+  Meta.(find_exn r order)
 
 let exists_bare_relations r =
   let visitor =

@@ -3,249 +3,596 @@ open Collections
 
 module type S = Abslayout_db_intf.S
 
-module Make (Eval : Eval.S) = struct
+module Config = struct
+  module type S = sig
+    val conn : Db.t
+  end
+end
+
+module Make (Config : Config.S) = struct
+  open Config
   open Abslayout0
   open Abslayout
 
-  let fresh = Fresh.create ()
-
-  let partition ~part:p ~lookup l =
-    let rel =
-      match pred_relations p with
-      | [r] -> r
-      | rs ->
-          Error.create "Unexpected number of relations." rs [%sexp_of: string list]
-          |> Error.raise
-    in
-    let name = Fresh.name fresh "x%d" in
-    let domain = as_ name (dedup (select [p] (scan rel))) in
-    let pred =
-      let subst =
-        object
-          inherit [_] endo
-
-          method! visit_Name _ _ n =
-            match n.relation with
-            | Some r when String.(rel = r) -> Name {n with relation= Some name}
-            | _ -> Name n
-        end
-      in
-      subst#visit_pred () p
-    in
-    let layout =
-      let subst =
-        object
-          inherit [_] endo
-
-          method! visit_Scan () r rel' =
-            if String.(rel = rel') then Filter (Binop (Eq, p, pred), scan rel)
-            else r
-        end
-      in
-      subst#visit_t () l
-    in
-    hash_idx domain layout lookup
-
   type eval_ctx =
-    [ `Eval of Ctx.t
-    | `Consume_outer of (Ctx.t * Ctx.t Seq.t) Seq.t sexp_opaque
-    | `Consume_inner of Ctx.t * Ctx.t Seq.t sexp_opaque ]
-  [@@deriving sexp]
+    [ `Concat of eval_ctx list
+    | `Empty
+    | `For of (Value.t list * eval_ctx) Gen.t
+    | `Scalar of Value.t Lazy.t
+    | `Query of Value.t list Gen.t ]
 
-  class virtual ['self] material_fold =
-    object (self : 'self)
-      method virtual build_AList : _
+  let rec width = function
+    | `Empty -> 0
+    | `For (q1, q2) -> List.length Meta.(find_exn q1 schema) + width q2
+    | `Scalar _ -> 1
+    | `Concat qs -> 1 + List.sum (module Int) qs ~f:width
+    | `Query q -> List.length Meta.(find_exn q schema)
 
-      method virtual build_ATuple : _
+  let rec pred_to_schema =
+    let open Type.PrimType in
+    let unnamed t = {name= ""; relation= None; type_= Some t} in
+    function
+    | As_pred (p, n) ->
+        let schema = pred_to_schema p in
+        {schema with relation= None; name= n}
+    | Name n -> n
+    | Date _ | Unop ((Year | Month | Day), _) -> unnamed (DateT {nullable= false})
+    | Int _ | Unop ((Strlen | ExtractY | ExtractM | ExtractD), _) | Count ->
+        unnamed (IntT {nullable= false})
+    | Fixed _ | Avg _ -> unnamed (FixedT {nullable= false})
+    | Bool _ | Exists _
+     |Binop ((Eq | Lt | Le | Gt | Ge | And | Or), _, _)
+     |Unop (Not, _) ->
+        unnamed (BoolT {nullable= false})
+    | String _ -> unnamed (StringT {nullable= false})
+    | Null -> unnamed NullT
+    | Binop ((Add | Sub | Mul | Div | Mod), p1, p2) ->
+        let s1 = pred_to_schema p1 in
+        let s2 = pred_to_schema p2 in
+        unnamed (unify (Name.type_exn s1) (Name.type_exn s2))
+    | Binop (Strpos, _, _) -> unnamed (IntT {nullable= false})
+    | Sum p | Min p | Max p -> pred_to_schema p
+    | If (_, p1, p2) ->
+        let s1 = pred_to_schema p1 in
+        let s2 = pred_to_schema p2 in
+        Type.PrimType.unify (Name.type_exn s1) (Name.type_exn s2) |> ignore ;
+        unnamed (Name.type_exn s1)
+    | First r -> (
+        annotate_schema r ;
+        match Meta.(find_exn r schema) with
+        | [n] -> n
+        | [] -> failwith "Unexpected empty schema."
+        | _ -> failwith "Too many fields." )
+    | Substring _ -> unnamed (StringT {nullable= false})
 
-      method virtual build_AHashIdx : _
+  (** Add a schema field to each metadata node. Variables must first be
+     annotated with type information. *)
+  and annotate_schema r =
+    let mapper =
+      object (self : 'a)
+        inherit [_] iter as super
 
-      method virtual build_AOrderedIdx : _
+        method! visit_t () r =
+          super#visit_t () r ;
+          let schema =
+            match r.node with
+            | Select (x, _) ->
+                List.map x ~f:(fun p -> self#visit_pred () p ; pred_to_schema p)
+            | Filter (_, r) | Dedup r | AList (_, r) | OrderBy {rel= r; _} ->
+                Meta.(find_exn r schema)
+            | Join {r1; r2; _} | AOrderedIdx (r1, r2, _) | AHashIdx (r1, r2, _) ->
+                Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema)
+            | GroupBy (x, _, _) -> List.map x ~f:pred_to_schema
+            | AEmpty -> []
+            | AScalar e -> self#visit_pred () e ; [pred_to_schema e]
+            | ATuple (rs, (Cross | Zip)) ->
+                List.concat_map ~f:(fun r -> Meta.(find_exn r schema)) rs
+            | ATuple ([], Concat) -> []
+            | ATuple (r :: _, Concat) -> Meta.(find_exn r schema)
+            | As (n, r) ->
+                Meta.(find_exn r schema)
+                |> List.map ~f:(fun x -> {x with relation= Some n})
+            | Scan table ->
+                (Db.Relation.from_db conn table).fields
+                |> List.map ~f:(fun f ->
+                       Name.create ~relation:table ~type_:f.Db.Field.type_ f.fname
+                   )
+          in
+          Meta.set_m r Meta.schema schema
+      end
+    in
+    mapper#visit_t () r
 
-      method virtual build_AEmpty : _
+  let total_order_key q =
+    let native_order = Abslayout.order_of q in
+    let total_order =
+      List.map Meta.(find_exn q schema) ~f:(fun n -> (Name n, Asc))
+    in
+    native_order @ total_order
 
-      method virtual build_AScalar : _
+  let rec gen_query q =
+    match q.node with
+    | AList (q1, q2) ->
+        let q1 =
+          let order_key = total_order_key q1 in
+          let q1 = order_by order_key q1 in
+          annotate_schema q1 ; q1
+        in
+        `For (q1, gen_query q2)
+    | AHashIdx (q1, q2, _) | AOrderedIdx (q1, q2, _) ->
+        let q1 =
+          let order_key = total_order_key q1 in
+          let q1 = order_by order_key (dedup q1) in
+          annotate_schema q1 ; q1
+        in
+        `Concat [`Query q1; `For (q1, gen_query q2)]
+    | AEmpty -> `Empty
+    | AScalar p -> `Scalar p
+    | ATuple (ts, _) -> `Concat (List.map ts ~f:gen_query)
+    | Select (_, q) | Filter (_, q) | As (_, q) -> gen_query q
+    | Scan _ | Dedup _ | OrderBy _ | GroupBy _ | Join _ -> failwith "Unsupported."
 
-      method virtual build_Select : _
+  let rec subst ctx = function
+    | `For (q1, q2) -> `For (Abslayout.subst ctx q1, subst ctx q2)
+    | `Concat qs -> `Concat (List.map ~f:(subst ctx) qs)
+    | `Scalar p -> `Scalar (subst_pred ctx p)
+    | `Empty -> `Empty
+    | `Query q -> `Query (Abslayout.subst ctx q)
 
-      method virtual build_Filter : _
+  let to_ctx : _ -> eval_ctx = function
+    | [] -> failwith "unexpected empty tuple"
+    | [v] -> `Scalar (lazy v)
+    | vs -> `Concat (List.map vs ~f:(fun v -> `Scalar (lazy v)))
 
-      method virtual build_Join : _
+  let rec to_schema = function
+    | `For (q1, q2) ->
+        (Meta.(find_exn q1 schema) |> List.map ~f:Name.type_exn) @ to_schema q2
+    | `Concat qs -> IntT {nullable= false} :: List.concat_map qs ~f:to_schema
+    | `Scalar p -> [pred_to_schema p |> Name.type_exn]
+    | `Query q -> Meta.(find_exn q schema) |> List.map ~f:Name.type_exn
+    | `Empty -> []
 
-      method visit_As ctx _ r = self#visit_t ctx r
-
-      method visit_AList ctx elem_query elem_layout =
-        ( match ctx with
-        | `Eval ctx ->
-            Eval.eval ctx elem_query
-            |> Seq.map ~f:(fun ctx -> self#visit_t (`Eval ctx) elem_layout)
-        | `Consume_outer ctxs ->
-            Seq.map ctxs ~f:(fun ctx ->
-                self#visit_t (`Consume_inner ctx) elem_layout )
-        | `Consume_inner (_, ctxs) ->
-            Seq.map ctxs ~f:(fun ctx -> self#visit_t (`Eval ctx) elem_layout) )
-        |> self#build_AList
-
-      method visit_ATuple ctx ls kind =
-        ( match ctx with
-        | `Eval _ -> List.map ls ~f:(fun l -> self#visit_t ctx l)
-        | `Consume_outer _ -> failwith "Cannot consume."
-        | `Consume_inner _ as ctx ->
-            (* If the tuple is in the inner loop of a foreach we pass the inner
-             loop sequence to the first layout that can consume it. Other
-             layouts that can consume are expected to perform evaluation. *)
-            let _, ret =
-              List.fold_left ls ~init:(ctx, []) ~f:(fun (ctx, ret) l ->
-                  match (ctx, next_inner_loop l) with
-                  | `Consume_inner (ctx', _), Some _ ->
-                      (`Eval ctx', ret @ [self#visit_t (ctx :> eval_ctx) l])
-                  | `Consume_inner (ctx', _), None ->
-                      (ctx, ret @ [self#visit_t (`Eval ctx') l])
-                  | `Eval _, _ -> (ctx, ret @ [self#visit_t (ctx :> eval_ctx) l]) )
+  let query_to_sql fresh q =
+    let ctx = Sql.create_ctx ~fresh () in
+    let rec query_to_sql q =
+      match q with
+      | `For (q1, q2) ->
+          let open Sql in
+          let spj1 = of_ralgebra ctx q1 |> to_spj ctx in
+          let sql1 = Query spj1 in
+          let sql1_no_order = Query {spj1 with order= []} in
+          let sql1_names = to_schema (Query spj1) in
+          let q2 =
+            let ctx =
+              List.zip_exn Meta.(find_exn q1 schema) sql1_names
+              |> List.map ~f:(fun (n, n') ->
+                     (n, Name (Name.create ?type_:n.type_ n')) )
+              |> Map.of_alist_exn (module Name.Compare_no_type)
             in
-            ret )
-        |> fun ts -> self#build_ATuple ts kind
+            subst ctx q2
+          in
+          let spj2 = query_to_sql q2 |> to_spj ctx in
+          let sql2 = Query spj2 in
+          let sql2_no_order = Query {spj2 with order= []} in
+          let select_list =
+            let sql2_names = to_schema sql2 in
+            List.map (sql1_names @ sql2_names) ~f:(fun n ->
+                create_entry ~ctx (Name (Name.create n)) )
+          in
+          let order =
+            (to_order sql1 |> Or_error.ok_exn) @ (to_order sql2 |> Or_error.ok_exn)
+          in
+          Query
+            (create_query ~order
+               ~relations:
+                 [ (`Subquery (sql1_no_order, Fresh.name fresh "t%d"), `Left)
+                 ; (`Subquery (sql2_no_order, Fresh.name fresh "t%d"), `Lateral) ]
+               select_list)
+      | `Concat qs ->
+          let counter_name = Fresh.name fresh "counter%d" in
+          let scalars, other_queries =
+            List.partition_map qs ~f:(function
+              | `Scalar p -> `Fst p
+              | (`Concat _ | `Empty | `For _ | `Query _) as q -> `Snd q )
+          in
+          let scalar_query =
+            let sql =
+              Sql.(create_query (List.map scalars ~f:(create_entry ~ctx)))
+            in
+            let types =
+              List.map scalars ~f:(fun p -> p |> pred_to_schema |> Name.type_exn)
+            in
+            let names = Sql.(to_schema (Query sql)) in
+            (sql, types, names)
+          in
+          let other_queries =
+            List.map other_queries ~f:(fun q ->
+                let sql = query_to_sql q |> Sql.to_spj ctx in
+                let types = to_schema q in
+                let names = Sql.(to_schema (Query sql)) in
+                (sql, types, names) )
+          in
+          let queries = scalar_query :: other_queries in
+          let queries =
+            List.mapi queries ~f:(fun i (sql, _, _) ->
+                let select_list =
+                  let open Sql in
+                  create_entry ~ctx ~alias:counter_name (Int i)
+                  :: ( List.mapi queries ~f:(fun j (_, types, names) ->
+                           if i = j then sql.select
+                           else
+                             List.map2_exn names types ~f:(fun n t ->
+                                 create_entry ~ctx ~alias:n ~cast:t Null ) )
+                     |> List.concat )
+                in
+                {sql with select= select_list} )
+          in
+          let union =
+            let spj =
+              Sql.Union_all (List.map queries ~f:(fun q -> {q with order= []}))
+              |> Sql.to_spj ctx
+            in
+            let order =
+              (Name (Name.create counter_name), Asc)
+              :: List.concat_map queries ~f:(fun q ->
+                     Sql.to_order (Query q) |> Or_error.ok_exn )
+            in
+            {spj with order}
+          in
+          Query union
+      | `Empty -> Query (Sql.create_query ~limit:0 [])
+      | `Scalar p -> Query Sql.(create_query [create_entry ~ctx p])
+      | `Query q -> Sql.of_ralgebra ctx q
+    in
+    query_to_sql q
 
-      method visit_AEmpty _ = self#build_AEmpty
+  let eval_query q =
+    let fresh = Fresh.create () in
+    let ctx = Sql.create_ctx ~fresh () in
+    let sql = query_to_sql fresh q in
+    let tups = Db.exec_cursor conn (to_schema q) (Sql.to_string_hum ctx sql) in
+    let rec eval tups = function
+      | `For (q1, q2) ->
+          let extract_tup s t = List.take t (List.length s) in
+          let outer_schema = Meta.(find_exn q1 schema) in
+          let eq t1 t2 =
+            [%compare.equal: Value.t list]
+              (extract_tup outer_schema t1)
+              (extract_tup outer_schema t2)
+          in
+          let outer_width = List.length outer_schema in
+          `For
+            ( Gen.group_lazy eq tups
+            |> Gen.map ~f:(fun (t, ts) ->
+                   let t = List.take t outer_width in
+                   let ts = Gen.map ts ~f:(fun t -> List.drop t outer_width) in
+                   (t, eval ts q2) ) )
+      | `Concat qs ->
+          let tups = ref tups in
+          let put_back t = tups := Gen.append (Gen.singleton t) !tups in
+          let take_while pred =
+            let stop = ref false in
+            let next () =
+              if !stop then None
+              else
+                match Gen.get !tups with
+                | Some x ->
+                    if pred x then Some x
+                    else (
+                      stop := true ;
+                      put_back x ;
+                      None )
+                | None -> None
+            in
+            next
+          in
+          let nscalars =
+            List.sum (module Int) qs ~f:(function `Scalar _ -> 1 | _ -> 0)
+          in
+          let scalars =
+            lazy
+              ( match List.take (Gen.get_exn !tups) (nscalars + 1) with
+              | Int ctr :: vals ->
+                  if ctr = 0 then vals
+                  else
+                    Error.(
+                      create "Unexpected counter value." ctr [%sexp_of: int]
+                      |> raise)
+              | _ -> failwith "No counter field." )
+          in
+          let widths =
+            nscalars
+            :: List.filter_map qs ~f:(function
+                 | `Scalar _ -> None
+                 | q -> Some (width q) )
+          in
+          let _, _, streams =
+            List.fold_left qs ~init:(0, 1, []) ~f:(fun (sidx, oidx, ctxs) ->
+              function
+              | `Scalar _ ->
+                  let ctx =
+                    `Scalar (Lazy.map scalars ~f:(fun ss -> List.nth_exn ss sidx))
+                  in
+                  (sidx + 1, oidx, ctxs @ [ctx])
+              | q ->
+                  let take_ct = List.nth_exn widths oidx in
+                  let drop_ct =
+                    List.sum (module Int) (List.take widths oidx) ~f:(fun x -> x)
+                    + 1
+                  in
+                  let strm =
+                    take_while (fun t -> List.hd_exn t |> Value.to_int = oidx)
+                    |> Gen.map ~f:(fun t ->
+                           let t = List.drop t drop_ct in
+                           List.take t take_ct )
+                  in
+                  let strm () =
+                    Lazy.force scalars |> ignore ;
+                    Gen.get strm
+                  in
+                  (sidx, oidx + 1, ctxs @ [eval strm q]) )
+          in
+          `Concat streams
+      | `Empty ->
+          if Gen.is_empty tups then `Empty
+          else failwith "Expected an empty generator."
+      | `Scalar p ->
+          `Scalar
+            ( lazy
+              ( match Gen.next tups with
+              | Some [x] -> x
+              | Some t ->
+                  Error.(
+                    create "Scalar: unexpected tuple width." (p, t)
+                      [%sexp_of: pred * Value.t list]
+                    |> raise)
+              | None -> failwith "Expected a tuple." ) )
+      | `Query _ -> `Query tups
+    in
+    eval tups q
 
-      method visit_AScalar ctx e =
-        match ctx with
-        | `Eval ctx -> self#build_AScalar (Eval.eval_pred ctx e)
-        | _ -> failwith "Cannot consume."
+  class virtual ['ctx, 'a] unsafe_material_fold =
+    object (self)
+      method virtual private build_AList
+          : 'ctx -> Meta.t -> t * t -> (Value.t list * eval_ctx) Gen.t -> 'a
 
-      method visit_Index ctx q key_l value_l =
-        let contexts =
-          match ctx with
-          | `Eval ctx ->
-              Eval.eval ctx q |> Seq.map ~f:(fun ctx -> (`Eval ctx, `Eval ctx))
-          | `Consume_outer ctxs ->
-              Seq.map ctxs ~f:(fun (ctx, child_ctxs) ->
-                  (`Eval ctx, `Consume_inner (ctx, child_ctxs)) )
-          | `Consume_inner (_, ctxs) ->
-              Seq.map ctxs ~f:(fun ctx -> (`Eval ctx, `Eval ctx))
-        in
-        Seq.map contexts ~f:(fun (kctx, vctx) ->
-            let key = self#visit_t kctx key_l in
-            let value = self#visit_t vctx value_l in
-            (key, value) )
+      method virtual private build_ATuple : _
 
-      method visit_AHashIdx ctx q value_l (h : hash_idx) =
-        let key_l =
-          Option.value_exn
-            ~error:(Error.create "Missing key layout." h [%sexp_of: hash_idx])
-            h.hi_key_layout
-        in
-        self#build_AHashIdx (self#visit_Index ctx q key_l value_l) h
+      method virtual private build_AHashIdx
+          :    'ctx
+            -> Meta.t
+            -> t * t * hash_idx
+            -> Value.t list Gen.t
+            -> (Value.t list * eval_ctx) Gen.t
+            -> 'a
 
-      method visit_AOrderedIdx ctx q value_l (h : ordered_idx) =
-        let key_l =
-          Option.value_exn
-            ~error:(Error.create "Missing key layout." h [%sexp_of: ordered_idx])
-            h.oi_key_layout
-        in
-        self#build_AOrderedIdx (self#visit_Index ctx q key_l value_l) h
+      method virtual private build_AOrderedIdx
+          :    'ctx
+            -> Meta.t
+            -> t * t * ordered_idx
+            -> Value.t list Gen.t
+            -> (Value.t list * eval_ctx) Gen.t
+            -> 'a
 
-      method visit_Select ctx exprs r' =
-        self#build_Select exprs (self#visit_t ctx r')
+      method virtual private build_AEmpty : 'ctx -> Meta.t -> 'a
 
-      method visit_Filter ctx _ r' = self#build_Filter (self#visit_t ctx r')
+      method virtual private build_AScalar
+          : 'ctx -> Meta.t -> pred -> Value.t Lazy.t -> 'a
 
-      method visit_Join ctx pred r1 r2 =
-        self#build_Join ctx pred (self#visit_t ctx r1) (self#visit_t ctx r2)
+      method virtual private build_Select
+          : 'ctx -> Meta.t -> pred list * t -> eval_ctx -> 'a
 
-      method visit_t ctx r =
-        match (r.node, ctx) with
-        | AEmpty, _ -> self#visit_AEmpty ctx
-        | AScalar e, _ -> self#visit_AScalar ctx e
-        | AList (q, r'), `Eval ctx
-          when Meta.(find r use_foreach |> Option.value ~default:true) -> (
-          match next_inner_loop r' with
-          | Some (_, q') ->
-              let ctx = `Consume_outer (Eval.eval_foreach ctx q q') in
-              self#visit_AList ctx q r'
-          | None -> self#visit_AList (`Eval ctx) q r' )
-        | AList (q, r'), _ -> self#visit_AList ctx q r'
-        | AHashIdx (q, r', x), `Eval ctx
-          when Meta.(find r use_foreach |> Option.value ~default:true) -> (
-          match next_inner_loop r' with
-          | Some (_, q') ->
-              let ctx' = `Consume_outer (Eval.eval_foreach ctx q q') in
-              self#visit_AHashIdx ctx' q r' x
-          | None -> self#visit_AHashIdx (`Eval ctx) q r' x )
-        | AHashIdx (r, a, t), _ -> self#visit_AHashIdx ctx r a t
-        | AOrderedIdx (q, r', x), `Eval ctx
-          when Meta.(find r use_foreach |> Option.value ~default:true) -> (
-          match next_inner_loop r' with
-          | Some (_, q') ->
-              let ctx' = `Consume_outer (Eval.eval_foreach ctx q q') in
-              self#visit_AOrderedIdx ctx' q r' x
-          | None -> self#visit_AOrderedIdx (`Eval ctx) q r' x )
-        | AOrderedIdx (r, a, t), _ -> self#visit_AOrderedIdx ctx r a t
-        | ATuple (a, k), _ -> self#visit_ATuple ctx a k
-        | Select (exprs, r'), _ -> self#visit_Select ctx exprs r'
-        | Filter (pred, r'), _ -> self#visit_Filter ctx pred r'
-        | Join {pred; r1; r2}, _ -> self#visit_Join ctx pred r1 r2
-        | As (n, r), _ -> self#visit_As ctx n r
-        | (Dedup _ | GroupBy _ | Scan _ | OrderBy _), _ ->
-            Error.create "Wrong context." r [%sexp_of: t] |> Error.raise
+      method virtual private build_Filter
+          : 'ctx -> Meta.t -> pred * t -> eval_ctx -> 'a
+
+      method private visit_t ctx eval_ctx r =
+        match (r.node, eval_ctx) with
+        | AEmpty, `Empty -> self#build_AEmpty ctx r.meta
+        | AScalar x, `Scalar v -> self#build_AScalar ctx r.meta x v
+        | AList x, `For vs -> self#build_AList ctx r.meta x vs
+        | AHashIdx x, `Concat [kctx; vctx] ->
+            let key_gen, value_gen =
+              match (kctx, vctx) with
+              | `Query g1, `For g2 -> (g1, g2)
+              | _ ->
+                  Error.create "Bug: Mismatched context." r [%sexp_of: t]
+                  |> Error.raise
+            in
+            self#build_AHashIdx ctx r.meta x key_gen value_gen
+        | AOrderedIdx x, `Concat [kctx; vctx] ->
+            let key_gen, value_gen =
+              match (kctx, vctx) with
+              | `Query g1, `For g2 -> (g1, g2)
+              | _ ->
+                  Error.create "Bug: Mismatched context." r [%sexp_of: t]
+                  |> Error.raise
+            in
+            self#build_AOrderedIdx ctx r.meta x key_gen value_gen
+        | ATuple x, `Concat vs -> self#build_ATuple ctx r.meta x vs
+        | Select x, _ -> self#build_Select ctx r.meta x eval_ctx
+        | Filter x, _ -> self#build_Filter ctx r.meta x eval_ctx
+        | As (_, r), _ -> self#visit_t ctx eval_ctx r
+        | (AEmpty | AScalar _ | AList _ | AHashIdx _ | AOrderedIdx _ | ATuple _), _
+          ->
+            Error.create "Bug: Mismatched context." r [%sexp_of: t] |> Error.raise
+        | (Join _ | Dedup _ | OrderBy _ | Scan _ | GroupBy _), _ ->
+            Error.create "Cannot materialize." r [%sexp_of: t] |> Error.raise
+
+      method run ctx r = self#visit_t ctx (eval_query (gen_query r)) r
     end
 
+  type ('i, 'a, 'v, 'o) fold = {pre: 'i -> 'a; body: 'a -> 'v -> 'a; post: 'a -> 'o}
+
+  class virtual ['out, 'l, 'h1, 'h2, 'h3, 'o1, 'o2, 'o3] material_fold =
+    object (self)
+      inherit [unit, 'out] unsafe_material_fold
+
+      method virtual list
+          : Meta.t -> t * t -> (unit, 'l, Value.t list * 'out, 'out) fold
+
+      method virtual hash_idx
+          :    Meta.t
+            -> t * t * hash_idx
+            -> (unit, 'h1, Value.t list, 'h2) fold
+               * ('h2, 'h3, 'out * 'out, 'out) fold
+
+      method virtual ordered_idx
+          :    Meta.t
+            -> t * t * ordered_idx
+            -> (unit, 'o1, Value.t list, 'o2) fold
+               * ('o2, 'o3, 'out * 'out, 'out) fold
+
+      method virtual tuple : Meta.t -> t list * tuple -> 'out list -> 'out
+
+      method virtual empty : Meta.t -> 'out
+
+      method virtual scalar : Meta.t -> pred -> Value.t -> 'out
+
+      method virtual select : Meta.t -> pred list * t -> 'out -> 'out
+
+      method virtual filter : Meta.t -> pred * t -> 'out -> 'out
+
+      method private build_AList ctx meta ((_, r) as expr) gen =
+        let {pre; body; post} = self#list meta expr in
+        Gen.fold gen ~init:(pre ()) ~f:(fun acc (tup, ectx) ->
+            let value = self#visit_t ctx ectx r in
+            body acc (tup, value) )
+        |> post
+
+      method private build_ATuple ctx meta ((rs, _) as expr) es =
+        self#tuple meta expr (List.map2_exn es rs ~f:(self#visit_t ctx))
+
+      method private build_AHashIdx ctx meta
+          ((_, value_query, {hi_key_layout= m_key_query; _}) as expr) kgen vgen =
+        let key_query = Option.value_exn m_key_query in
+        let f1, f2 = self#hash_idx meta expr in
+        let acc = Gen.fold kgen ~init:(f1.pre ()) ~f:f1.body in
+        Gen.fold vgen
+          ~init:(f2.pre (f1.post acc))
+          ~f:(fun acc (tup, ectx) ->
+            f2.body acc
+              ( self#visit_t ctx (to_ctx tup) key_query
+              , self#visit_t ctx ectx value_query ) )
+        |> f2.post
+
+      method private build_AOrderedIdx ctx meta
+          ((_, value_query, {oi_key_layout= m_key_query; _}) as expr) kgen vgen =
+        let key_query = Option.value_exn m_key_query in
+        let f1, f2 = self#ordered_idx meta expr in
+        let acc = Gen.fold kgen ~init:(f1.pre ()) ~f:f1.body in
+        Gen.fold vgen
+          ~init:(f2.pre (f1.post acc))
+          ~f:(fun acc (tup, ectx) ->
+            f2.body acc
+              ( self#visit_t ctx (to_ctx tup) key_query
+              , self#visit_t ctx ectx value_query ) )
+        |> f2.post
+
+      method private build_AEmpty _ meta = self#empty meta
+
+      method private build_AScalar _ meta expr gen =
+        self#scalar meta expr (Lazy.force gen)
+
+      method private build_Filter ctx meta ((_, r) as expr) ectx =
+        self#filter meta expr (self#visit_t ctx ectx r)
+
+      method private build_Select ctx meta ((_, r) as expr) ectx =
+        self#select meta expr (self#visit_t ctx ectx r)
+    end
+
+  (* Wrapper module allows opening Type without clashes. *)
   module TF = struct
     open Type
 
-    class ['self] type_fold =
-      object (_ : 'self)
-        inherit [_] material_fold
+    (** Returns the least general type of a layout. *)
+    let rec least_general_of_layout r =
+      match r.Abslayout.node with
+      | Select (ps, r') | GroupBy (ps, _, r') ->
+          FuncT ([least_general_of_layout r'], `Width (List.length ps))
+      | OrderBy {rel= r'; _} | Filter (_, r') | Dedup r' ->
+          FuncT ([least_general_of_layout r'], `Child_sum)
+      | Join {r1; r2; _} ->
+          FuncT
+            ([least_general_of_layout r1; least_general_of_layout r2], `Child_sum)
+      | AEmpty -> EmptyT
+      | AScalar p ->
+          Abslayout.pred_to_schema p |> Name.type_exn |> least_general_of_primtype
+      | AList (_, r') -> ListT (least_general_of_layout r', {count= Bottom})
+      | AHashIdx (_, vr, {hi_key_layout= Some kr; _}) ->
+          HashIdxT
+            (least_general_of_layout kr, least_general_of_layout vr, {count= Bottom})
+      | AOrderedIdx (_, vr, {oi_key_layout= Some kr; _}) ->
+          OrderedIdxT
+            (least_general_of_layout kr, least_general_of_layout vr, {count= Bottom})
+      | ATuple (rs, _) ->
+          TupleT (List.map rs ~f:least_general_of_layout, {count= Bottom})
+      | As (_, r') -> least_general_of_layout r'
+      | AHashIdx (_, _, {hi_key_layout= None; _})
+       |AOrderedIdx (_, _, {oi_key_layout= None; _})
+       |Scan _ ->
+          failwith "Layout is still abstract."
 
-        method build_Select exprs t = FuncT ([t], `Width (List.length exprs))
+    (** Returns a layout type that is general enough to hold all of the data. *)
+    class type_fold =
+      object
+        inherit [_, _, _, _, _, _, _, _] material_fold
 
-        method build_Filter t = FuncT ([t], `Child_sum)
+        method select _ (exprs, _) t = FuncT ([t], `Width (List.length exprs))
 
-        method build_Join _ _ t1 t2 = FuncT ([t1; t2], `Child_sum)
+        method filter _ _ t = FuncT ([t], `Child_sum)
 
-        method build_AEmpty = EmptyT
+        method empty _ = EmptyT
 
-        method build_AScalar =
+        method scalar _ _ =
           function
-          | Date x ->
+          | Value.Date x ->
               let x = Date.to_int x in
-              IntT {range= AbsInt.abstract x; nullable= false}
-          | Int x -> IntT {range= AbsInt.abstract x; nullable= false}
+              DateT {range= AbsInt.of_int x; nullable= false}
+          | Int x -> IntT {range= AbsInt.of_int x; nullable= false}
           | Bool _ -> BoolT {nullable= false}
           | String x ->
-              StringT {nchars= AbsInt.abstract (String.length x); nullable= false}
+              StringT {nchars= AbsInt.of_int (String.length x); nullable= false}
           | Null -> NullT
           | Fixed x -> FixedT {value= AbsFixed.of_fixed x; nullable= false}
 
-        method build_AList ls =
-          let t, c =
-            Seq.fold ls ~init:(EmptyT, AbsInt.zero) ~f:(fun (t, c) t' ->
-                (unify_exn t t', AbsInt.(c + abstract 1)) )
-          in
-          ListT (t, {count= c})
+        method list _ (_, elem_l) =
+          { pre= (fun () -> (least_general_of_layout elem_l, 0))
+          ; body= (fun (t, c) (_, t') -> (unify_exn t t', c + 1))
+          ; post=
+              (fun (elem_type, num_elems) ->
+                ListT (elem_type, {count= AbsInt.of_int num_elems}) ) }
 
-        method build_ATuple ls kind =
-          let counts = List.map ls ~f:count in
+        method tuple _ (_, kind) elem_types =
+          let counts = List.map elem_types ~f:count in
           match kind with
-          | Zip -> TupleT (ls, {count= List.fold_left1_exn ~f:AbsCount.unify counts})
+          | Zip ->
+              TupleT (elem_types, {count= List.fold_left1_exn ~f:AbsInt.join counts})
           | Concat ->
-              TupleT (ls, {count= List.fold_left1_exn ~f:AbsCount.( + ) counts})
+              TupleT
+                (elem_types, {count= List.fold_left1_exn ~f:AbsInt.( + ) counts})
           | Cross ->
-              TupleT (ls, {count= List.fold_left1_exn ~f:AbsCount.( * ) counts})
+              TupleT
+                (elem_types, {count= List.fold_left1_exn ~f:AbsInt.( * ) counts})
 
-        method build_AHashIdx kv _ =
-          let kt, vt =
-            Seq.fold kv ~init:(EmptyT, EmptyT) ~f:(fun (kt1, vt1) (kt2, vt2) ->
-                (unify_exn kt1 kt2, unify_exn vt1 vt2) )
-          in
-          HashIdxT (kt, vt, {count= None})
+        method hash_idx _ (_, value_l, {hi_key_layout; _}) =
+          let key_l = Option.value_exn hi_key_layout in
+          ( {pre= (fun () -> ()); body= (fun () _ -> ()); post= (fun () -> ())}
+          , { pre=
+                (fun () ->
+                  (least_general_of_layout key_l, least_general_of_layout value_l)
+                  )
+            ; body= (fun (kt, vt) (kt', vt') -> (unify_exn kt kt', unify_exn vt vt'))
+            ; post= (fun (kt, vt) -> HashIdxT (kt, vt, {count= Type.count vt})) } )
 
-        method build_AOrderedIdx kv _ =
-          let kt, vt =
-            Seq.fold kv ~init:(EmptyT, EmptyT) ~f:(fun (kt1, vt1) (kt2, vt2) ->
-                (unify_exn kt1 kt2, unify_exn vt1 vt2) )
-          in
-          OrderedIdxT (kt, vt, {count= None})
+        method ordered_idx _ (_, value_l, {oi_key_layout; _}) =
+          let key_l = Option.value_exn oi_key_layout in
+          ( {pre= (fun () -> ()); body= (fun () _ -> ()); post= (fun () -> ())}
+          , { pre=
+                (fun () ->
+                  (least_general_of_layout key_l, least_general_of_layout value_l)
+                  )
+            ; body= (fun (kt, vt) (kt', vt') -> (unify_exn kt kt', unify_exn vt vt'))
+            ; post= (fun (kt, vt) -> OrderedIdxT (kt, vt, {count= Top})) } )
       end
   end
 
@@ -253,26 +600,10 @@ module Make (Eval : Eval.S) = struct
 
   let to_type l =
     Logs.info (fun m -> m "Computing type of abstract layout.") ;
-    let type_ =
-      (new type_fold)#visit_t (`Eval (Map.empty (module Name.Compare_no_type))) l
-    in
+    let type_ = (new type_fold)#run () l in
     Logs.info (fun m ->
         m "The type is: %s" (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ) ;
     type_
-
-  let annotate_subquery_types =
-    let annotate_type r =
-      let type_ = to_type r in
-      Meta.(set_m r type_) type_
-    in
-    let visitor =
-      object
-        inherit runtime_subquery_visitor
-
-        method visit_Subquery r = annotate_type r
-      end
-    in
-    visitor#visit_t ()
 
   (* let schema_visitor =
    *   let unnamed t = {name= ""; relation= None; type_= Some t} in
@@ -370,80 +701,6 @@ module Make (Eval : Eval.S) = struct
    *       List.map (self#visit_t () r) ~f:(fun x -> {x with relation= Some n})
    *   end *)
 
-  let rec pred_to_schema =
-    let open Type.PrimType in
-    let unnamed t = {name= ""; relation= None; type_= Some t} in
-    function
-    | As_pred (p, n) ->
-        let schema = pred_to_schema p in
-        {schema with relation= None; name= n}
-    | Name n -> n
-    | Int _ | Date _
-     |Unop ((Year | Month | Day | Strlen | ExtractY | ExtractM | ExtractD), _)
-     |Count ->
-        unnamed (IntT {nullable= false})
-    | Fixed _ | Avg _ -> unnamed (FixedT {nullable= false})
-    | Bool _ | Exists _
-     |Binop ((Eq | Lt | Le | Gt | Ge | And | Or), _, _)
-     |Unop (Not, _) ->
-        unnamed (BoolT {nullable= false})
-    | String _ -> unnamed (StringT {nullable= false})
-    | Null -> unnamed NullT
-    | Binop ((Add | Sub | Mul | Div | Mod), p1, p2) ->
-        let s1 = pred_to_schema p1 in
-        let s2 = pred_to_schema p2 in
-        unnamed (unify (Name.type_exn s1) (Name.type_exn s2))
-    | Binop (Strpos, _, _) -> unnamed (IntT {nullable= false})
-    | Sum p | Min p | Max p -> pred_to_schema p
-    | If (_, p1, p2) ->
-        let s1 = pred_to_schema p1 in
-        let s2 = pred_to_schema p2 in
-        Type.PrimType.unify (Name.type_exn s1) (Name.type_exn s2) |> ignore ;
-        unnamed (Name.type_exn s1)
-    | First r -> (
-        annotate_schema r ;
-        match Meta.(find_exn r schema) with
-        | [n] -> n
-        | [] -> failwith "Unexpected empty schema."
-        | _ -> failwith "Too many fields." )
-    | Substring _ -> unnamed (StringT {nullable= false})
-
-  (** Add a schema field to each metadata node. Variables must first be
-     annotated with type information. *)
-  and annotate_schema r =
-    let mapper =
-      object (self : 'a)
-        inherit [_] iter as super
-
-        method! visit_t () r =
-          super#visit_t () r ;
-          let schema =
-            match r.node with
-            | Select (x, _) ->
-                List.map x ~f:(fun p -> self#visit_pred () p ; pred_to_schema p)
-            | Filter (_, r) | Dedup r | AList (_, r) | OrderBy {rel= r; _} ->
-                Meta.(find_exn r schema)
-            | Join {r1; r2; _} | AOrderedIdx (r1, r2, _) | AHashIdx (r1, r2, _) ->
-                Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema)
-            | GroupBy (x, _, _) -> List.map x ~f:pred_to_schema
-            | AEmpty -> []
-            | AScalar e -> self#visit_pred () e ; [pred_to_schema e]
-            | ATuple (rs, (Cross | Zip)) ->
-                List.concat_map ~f:(fun r -> Meta.(find_exn r schema)) rs
-            | ATuple ([], Concat) -> []
-            | ATuple (r :: _, Concat) -> Meta.(find_exn r schema)
-            | As (n, r) ->
-                Meta.(find_exn r schema)
-                |> List.map ~f:(fun x -> {x with relation= Some n})
-            | Scan table ->
-                (Eval.load_relation table).fields
-                |> List.map ~f:(fun f -> Name.of_field ~rel:table f)
-          in
-          Meta.set_m r Meta.schema schema
-      end
-    in
-    mapper#visit_t () r
-
   let to_schema r =
     annotate_schema r ;
     Meta.(find_exn r schema)
@@ -486,7 +743,7 @@ module Make (Eval : Eval.S) = struct
   (** Annotate names in an algebra expression with types. *)
   let resolve ?(params = Set.empty (module Name.Compare_no_type)) r =
     let resolve_relation r_name =
-      let r = Eval.load_relation r_name in
+      let r = Db.Relation.from_db conn r_name in
       List.map r.fields ~f:(fun f ->
           {relation= Some r.rname; name= f.fname; type_= Some f.type_} )
       |> Set.of_list (module Name.Compare_no_type)
@@ -622,7 +879,7 @@ module Make (Eval : Eval.S) = struct
               end)
                 #visit_hash_idx () m
             in
-            (AHashIdx (r, l, m), union key_ctx value_ctx)
+            (AHashIdx (r, l, m), Set.union key_ctx value_ctx)
         | AOrderedIdx (r, l, m) ->
             let r, key_ctx = resolve outer_ctx r in
             let l, value_ctx = resolve (union outer_ctx key_ctx) l in
@@ -634,18 +891,69 @@ module Make (Eval : Eval.S) = struct
               end)
                 #visit_ordered_idx () m
             in
-            (AOrderedIdx (r, l, m), value_ctx)
+            (AOrderedIdx (r, l, m), Set.union key_ctx value_ctx)
         | As (n, r) ->
             let r, ctx = resolve outer_ctx r in
             let ctx = rename n ctx in
             (As (n, r), ctx)
-        | OrderBy ({key; rel; _} as x) ->
+        | OrderBy {key; rel} ->
             let rel, inner_ctx = resolve outer_ctx rel in
-            let key = List.map key ~f:(resolve_pred inner_ctx) in
-            (OrderBy {x with key; rel}, inner_ctx)
+            let key =
+              List.map key ~f:(fun (p, o) -> (resolve_pred inner_ctx p, o))
+            in
+            (OrderBy {key; rel}, inner_ctx)
       in
       ({node= node'; meta}, ctx')
     in
     let r, _ = resolve params r in
     r
+
+  let rec annotate_type r t =
+    let open Type in
+    match (r.node, t) with
+    | AScalar _, (IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | NullT) ->
+        Meta.(set_m r type_ t)
+    | AList (_, r'), ListT (t', _) ->
+        Meta.(set_m r type_ t) ;
+        annotate_type r' t'
+    | AHashIdx (_, vr, m), HashIdxT (kt, vt, _) ->
+        Meta.(set_m r type_ t) ;
+        Option.iter m.hi_key_layout ~f:(fun kr -> annotate_type kr kt) ;
+        annotate_type vr vt
+    | AOrderedIdx (_, vr, m), OrderedIdxT (kt, vt, _) ->
+        Meta.(set_m r type_ t) ;
+        Option.iter m.oi_key_layout ~f:(fun kr -> annotate_type kr kt) ;
+        annotate_type vr vt
+    | ATuple (rs, _), TupleT (ts, _) -> (
+        Meta.(set_m r type_ t) ;
+        match List.iter2 rs ts ~f:annotate_type with
+        | Ok () -> ()
+        | Unequal_lengths ->
+            Error.(
+              create "Mismatched tuple type." (r, t) [%sexp_of: Abslayout.t * T.t]
+              |> raise) )
+    | (Filter (_, r') | Select (_, r')), FuncT ([t'], _) ->
+        Meta.(set_m r type_ t) ;
+        annotate_type r' t'
+    | As (_, r), _ -> annotate_type r t
+    | ( ( Select _ | Filter _ | Join _ | GroupBy _ | OrderBy _ | Dedup _ | Scan _
+        | AEmpty | AScalar _ | AList _ | ATuple _ | AHashIdx _ | AOrderedIdx _ )
+      , ( NullT | IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | TupleT _
+        | ListT _ | HashIdxT _ | OrderedIdxT _ | FuncT _ | EmptyT ) ) ->
+        Error.create "Unexpected type." (r, t) [%sexp_of: Abslayout.t * t]
+        |> Error.raise
+
+  let annotate_subquery_types =
+    let annotate_type r =
+      let type_ = to_type r in
+      Meta.(set_m r type_) type_
+    in
+    let visitor =
+      object
+        inherit runtime_subquery_visitor
+
+        method visit_Subquery r = annotate_type r
+      end
+    in
+    visitor#visit_t ()
 end

@@ -18,10 +18,9 @@ let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
         Some (Out_channel.create layout_file)
       else None
   end in
-  let module E = Eval.Make (CConfig) in
-  let module A = Abslayout_db.Make (E) in
-  let module S = Serialize.Make (CConfig) (E) (A) in
-  let module I = Irgen.Make (CConfig) (E) (S) () in
+  let module A = Abslayout_db.Make (CConfig) in
+  let module S = Serialize.Make (CConfig) (A) in
+  let module I = Irgen.Make (CConfig) (A) (S) () in
   let module C = Codegen.Make (CConfig) (I) () in
   let params = List.map params ~f:(fun (n, t) -> Name.create ~type_:t n) in
   (* Codegen *)

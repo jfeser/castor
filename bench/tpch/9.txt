@@ -34,7 +34,7 @@
 # 	o_year desc;
 # :n -1
 
-orderby([nation, o_year],
+orderby([nation asc, o_year desc],
   groupby([nation, o_year, sum(amount) as sum_profit],
     [nation, o_year],
     select([n_name as nation,
@@ -47,5 +47,4 @@ orderby([nation, o_year],
             filter((strpos(p_name, param1) > 0), part),
             join((o_orderkey = l_orderkey), orders, lineitem)),
           partsupp),
-        join((s_nationkey = n_nationkey), supplier, nation)))),
-  asc)
+        join((s_nationkey = n_nationkey), supplier, nation)))))

@@ -1,7 +1,6 @@
 alist(orderby([k0_orders_o_orderpriority],
         dedup(
-          select([orders.o_orderpriority as k0_orders_o_orderpriority], orders)),
-        asc),
+          select([orders.o_orderpriority as k0_orders_o_orderpriority], orders))),
   select([orders.o_orderpriority, sum(agg2) as order_count],
     aorderedidx(dedup(
                   select([orders.o_orderdate as k1],

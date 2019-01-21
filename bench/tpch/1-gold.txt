@@ -2,8 +2,7 @@ alist(orderby([k0_l_l_returnflag, k0_l_l_linestatus],
         dedup(
           select([l.l_returnflag as k0_l_l_returnflag,
                   l.l_linestatus as k0_l_l_linestatus],
-            lineitem as l)),
-        asc),
+            lineitem as l))),
   select([l.l_returnflag,
           l.l_linestatus,
           sum(agg3) as sum_qty,
@@ -41,5 +40,5 @@ alist(orderby([k0_l_l_returnflag, k0_l_l_linestatus],
                 ascalar(l.l_returnflag),
                 ascalar(l.l_linestatus)],
           cross)),
-      (0 - 4611686018427387903),
-      (date("1998-12-01") - day(param0)))))
+      date("0000-01-01"),
+      (date("1998-12-02") - day(param0)))))

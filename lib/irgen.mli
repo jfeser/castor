@@ -21,4 +21,8 @@ module type S = sig
   val pp : Formatter.t -> ir_module -> unit
 end
 
-module Make (Config : Config.S) (Eval : Eval.S) (Serialize : Serialize.S) () : S
+module Make
+    (Config : Config.S)
+    (Abslayout_db : Abslayout_db.S)
+    (Serialize : Serialize.S)
+    () : S

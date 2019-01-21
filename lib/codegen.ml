@@ -69,15 +69,15 @@ let build_extractvalue v i n b =
   (* Check that the argument really is a struct and that the index is
          valid. *)
   let typ = type_of v in
-  ( match classify_type typ with
-  | Struct ->
-      if i >= Array.length (struct_element_types typ) then
-        Error.create "Tuple index out of bounds." (v, i) [%sexp_of: llvalue * int]
-        |> Error.raise
-  | k ->
-      Error.create "Expected a tuple." (v, k, i)
-        [%sexp_of: llvalue * TypeKind.t * int]
-      |> Error.raise ) ;
+  let kind = classify_type typ in
+  if [%compare.equal: TypeKind.t] kind Struct then (
+    if i >= Array.length (struct_element_types typ) then
+      Error.create "Tuple index out of bounds." (v, i) [%sexp_of: llvalue * int]
+      |> Error.raise )
+  else
+    Error.create "Expected a tuple." (v, kind, i)
+      [%sexp_of: llvalue * TypeKind.t * int]
+    |> Error.raise ;
   build_extractvalue v i n b
 
 module Config = struct
@@ -378,19 +378,49 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     func
 
   let extract_y =
-    declare_function "extract_year"
-      (function_type (i64_type ctx) [|i64_type ctx|])
-      module_
+    let func =
+      declare_function "extract_year"
+        (function_type (i64_type ctx) [|i64_type ctx|])
+        module_
+    in
+    add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ;
+    func
 
   let extract_m =
-    declare_function "extract_month"
-      (function_type (i64_type ctx) [|i64_type ctx|])
-      module_
+    let func =
+      declare_function "extract_month"
+        (function_type (i64_type ctx) [|i64_type ctx|])
+        module_
+    in
+    add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ;
+    func
 
   let extract_d =
-    declare_function "extract_day"
-      (function_type (i64_type ctx) [|i64_type ctx|])
-      module_
+    let func =
+      declare_function "extract_day"
+        (function_type (i64_type ctx) [|i64_type ctx|])
+        module_
+    in
+    add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ;
+    func
+
+  let add_m =
+    let func =
+      declare_function "add_month"
+        (function_type (i64_type ctx) [|i64_type ctx; i64_type ctx|])
+        module_
+    in
+    add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ;
+    func
+
+  let add_y =
+    let func =
+      declare_function "add_year"
+        (function_type (i64_type ctx) [|i64_type ctx; i64_type ctx|])
+        module_
+    in
+    add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ;
+    func
 
   let rec declare_invariant v =
     let size t =
@@ -446,7 +476,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let open Type.PrimType in
     (* let type_ = *)
     match t with
-    | IntT _ -> int_type
+    | IntT _ | DateT _ -> int_type
     | BoolT _ -> bool_type
     | StringT _ -> str_type
     | TupleT ts -> struct_type ctx (List.map ts ~f:codegen_type |> Array.of_list)
@@ -573,14 +603,15 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     (* Check that the argument really is a struct and that the index is
          valid. *)
     let typ = type_of lltup in
-    ( match classify_type typ with
-    | Struct ->
-        if idx >= Array.length (struct_element_types typ) then
-          Logs.err (fun m ->
-              m "Tuple index out of bounds %s %d." (string_of_llvalue lltup) idx )
-    | _ ->
-        Logs.err (fun m ->
-            m "Expected a tuple but got %s." (string_of_llvalue lltup) ) ) ;
+    ( if [%compare.equal: TypeKind.t] (classify_type typ) Struct then (
+      if idx >= Array.length (struct_element_types typ) then
+        Error.(
+          createf "Tuple index out of bounds %s %d." (string_of_llvalue lltup) idx
+          |> raise) )
+    else
+      Error.(
+        createf "Expected a tuple but got %s." (string_of_llvalue lltup) |> raise)
+    ) ;
     build_extractvalue lltup idx "elemtmp" builder
 
   let codegen_hash fctx hash_offset key_ptr key_size =
@@ -628,7 +659,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
               Error.create "Not supported as part of a composite key." t
                 [%sexp_of: t]
               |> Error.raise
-          | IntT _ -> build_add (size_of int_type) size "" builder
+          | IntT _ | DateT _ -> build_add (size_of int_type) size "" builder
           | FixedT _ ->
               let size = build_add (size_of int_type) size "" builder in
               build_add (size_of int_type) size "" builder
@@ -650,7 +681,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         let open Type.PrimType in
         let key_offset =
           match type_ with
-          | IntT _ ->
+          | IntT _ | DateT _ ->
               let key_ptr =
                 build_inttoptr key_offset (pointer_type int_type) "" builder
               in
@@ -743,7 +774,10 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | StrHash -> codegen_string_hash fctx x1 x2
       | LoadStr -> codegen_load_str fctx x1 x2
       | StrPos -> codegen_strpos fctx x1 x2
-      | StrLen | Not | Int2Fl | ExtractY | ExtractM | ExtractD | LoadBool ->
+      | AddY -> build_call add_y [|x1; x2|] "" builder
+      | AddM -> build_call add_m [|x1; x2|] "" builder
+      | StrLen | Not | Int2Fl | ExtractY | ExtractM | ExtractD | LoadBool | Int2Date
+        ->
           fail (Error.of_string "Not a binary operator.")
     in
     x_out
@@ -758,6 +792,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     match op with
     | I.Not -> build_not x "nottmp" builder
     | Int2Fl -> build_sitofp x fixed_type "" builder
+    | Int2Date -> x
     | StrLen -> (Llstring.unpack x).len
     | ExtractY -> build_call extract_y [|x|] "" builder
     | ExtractM -> build_call extract_m [|x|] "" builder
@@ -765,7 +800,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     | LoadBool -> codegen_load_bool fctx x
     | IntAdd | IntSub | IntLt | And | Or | IntEq | StrEq | IntHash | StrHash
      |IntMul | IntDiv | Mod | LoadStr | FlAdd | FlSub | FlMul | FlDiv | FlLt
-     |FlLe | FlEq | StrPos ->
+     |FlLe | FlEq | StrPos | AddY | AddM ->
         fail (Error.of_string "Not a unary operator.")
 
   (* in
@@ -790,6 +825,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
   let rec codegen_expr fctx = function
     | I.Null -> failwith "TODO: Pick a runtime null rep."
     | Int x -> const_int int_type x
+    | Date x -> const_int int_type (Date.to_int x)
     | Fixed x -> const_float fixed_type Float.(of_int x.value / of_int x.scale)
     | Bool true -> const_int bool_type 1
     | Bool false -> const_int bool_type 0
@@ -936,23 +972,25 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     set_linkage Linkage.Internal global ;
     build_bitcast global (pointer_type (i8_type ctx)) "" builder
 
-  let true_str = define_global_str "true_str" "true"
+  let true_str = define_global_str "true_str" "t"
 
-  let false_str = define_global_str "false_str" "false"
+  let false_str = define_global_str "false_str" "f"
 
   let null_str = define_global_str "null_str" "null"
 
   let void_str = define_global_str "void_str" "()"
 
-  let comma_str = define_global_str "comma_str" ","
+  let sep_str = define_global_str "sep_str" "|"
 
   let newline_str = define_global_str "newline_str" "\n"
 
   let int_fmt = define_global_str "int_fmt" "%d"
 
-  let str_fmt = define_global_str "str_fmt" "\"%.*s\""
+  let str_fmt = define_global_str "str_fmt" "%.*s"
 
   let float_fmt = define_global_str "float_fmt" "%f"
+
+  let date_fmt = define_global_str "date_fmt" "%04d-%02d-%02d"
 
   let codegen_print fctx type_ expr =
     let open Type.PrimType in
@@ -961,6 +999,11 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let rec gen val_ = function
       | NullT -> call_printf null_str []
       | IntT {nullable= false} -> call_printf int_fmt [val_]
+      | DateT {nullable= false} ->
+          let year = build_call extract_y [|val_|] "" builder in
+          let mon = build_call extract_m [|val_|] "" builder in
+          let day = build_call extract_d [|val_|] "" builder in
+          call_printf date_fmt [year; mon; day]
       | BoolT {nullable= false} ->
           let fmt = build_select val_ true_str false_str "" builder in
           call_printf fmt []
@@ -969,12 +1012,17 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
             [ build_extractvalue val_ 1 "" builder
             ; build_extractvalue val_ 0 "" builder ]
       | TupleT ts ->
+          let last_i = List.length ts - 1 in
           List.iteri ts ~f:(fun i t ->
               gen (build_extractvalue val_ i "" builder) t ;
-              call_printf comma_str [] )
+              if i < last_i then call_printf sep_str [] )
       | VoidT -> call_printf void_str []
       | FixedT _ -> call_printf float_fmt [val_]
-      | _ -> failwith "Cannot print."
+      | IntT {nullable= true}
+       |DateT {nullable= true}
+       |StringT {nullable= true}
+       |BoolT {nullable= true} ->
+          failwith "Cannot print."
     in
     gen val_ type_ ; call_printf newline_str []
 
@@ -1309,12 +1357,14 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | Pointer ->
           let elem_t = element_type t in
           let elem_t =
-            match classify_type elem_t with
-            | Array -> element_type elem_t
-            | _ -> elem_t
+            if [%compare.equal: TypeKind.t] (classify_type elem_t) Array then
+              element_type elem_t
+            else elem_t
           in
           fprintf fmt "%a *" pp_type elem_t
-      | _ -> Error.(create "Unknown type." t [%sexp_of: lltype] |> raise)
+      | Half | Float | Double | X86fp80 | Fp128 | Ppc_fp128 | Label | Function
+       |Array | Vector | Metadata | X86_mmx ->
+          Error.(create "Unknown type." t [%sexp_of: lltype] |> raise)
     and pp_params fmt ts =
       Array.iteri ts ~f:(fun i t ->
           if i = 0 then fprintf fmt "params*" else fprintf fmt "%a" pp_type t ;
@@ -1326,18 +1376,19 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         Logs.debug (fun m -> m "Ignoring global %s." (string_of_llvalue v))
       in
       match classify_type t with
-      | Pointer -> (
+      | Pointer ->
           let elem_t = element_type t in
-          match classify_type elem_t with
-          | Function ->
-              let t = elem_t in
-              fprintf fmt "%a %s(%a);@," pp_type (return_type t) n pp_params
-                (param_types t)
-          | _ -> ignore_val () )
+          if [%compare.equal: TypeKind.t] (classify_type elem_t) Function then
+            let t = elem_t in
+            fprintf fmt "%a %s(%a);@," pp_type (return_type t) n pp_params
+              (param_types t)
+          else ignore_val ()
       | Function ->
           fprintf fmt "%a %s(%a);@," pp_type (return_type t) n pp_params
             (param_types t)
-      | _ -> ignore_val ()
+      | Void | Half | Float | Double | X86fp80 | Fp128 | Ppc_fp128 | Label
+       |Integer | Struct | Array | Vector | Metadata | X86_mmx ->
+          ignore_val ()
     in
     let fmt = Caml.Format.formatter_of_out_channel ch in
     pp_open_vbox fmt 0 ;
@@ -1409,6 +1460,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
                  match Name.type_exn n with
                  | NullT -> failwith "No null parameters."
                  | IntT _ -> "load_int.c"
+                 | DateT _ -> "load_date.c"
                  | BoolT _ -> "load_bool.c"
                  | StringT _ -> "load_string.c"
                  | FixedT _ -> "load_float.c"

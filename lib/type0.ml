@@ -5,6 +5,7 @@ module PrimType = struct
   type t =
     | NullT
     | IntT of {nullable: bool}
+    | DateT of {nullable: bool}
     | FixedT of {nullable: bool}
     | StringT of {nullable: bool}
     | BoolT of {nullable: bool}
@@ -26,6 +27,14 @@ module PrimType = struct
     | `Bool _ -> BoolT {nullable= false}
     | `Null -> NullT
 
+  let to_sql = function
+    | BoolT _ -> "boolean"
+    | IntT _ -> "integer"
+    | FixedT _ -> "numeric"
+    | StringT _ -> "varchar"
+    | DateT _ -> "date"
+    | TupleT _ | VoidT | NullT -> failwith "Not a value type."
+
   let to_string : t -> string = function
     | BoolT _ -> "bool"
     | IntT _ -> "int"
@@ -34,6 +43,7 @@ module PrimType = struct
     | NullT -> "null"
     | VoidT -> "void"
     | TupleT _ -> "tuple"
+    | DateT _ -> "date"
 
   let rec pp_tuple pp_v fmt =
     let open Format in
@@ -56,20 +66,25 @@ module PrimType = struct
       | VoidT -> fprintf fmt "Void"
       | FixedT {nullable= true} -> fprintf fmt "Fixed"
       | FixedT {nullable= false} -> fprintf fmt "Fixed[nonnull]"
+      | DateT {nullable= true} -> fprintf fmt "Date"
+      | DateT {nullable= false} -> fprintf fmt "Date[nonnull]"
 
   let is_nullable = function
     | NullT -> true
     | IntT {nullable= n}
      |BoolT {nullable= n}
      |StringT {nullable= n}
-     |FixedT {nullable= n} ->
+     |FixedT {nullable= n}
+     |DateT {nullable= n} ->
         n
     | TupleT _ | VoidT -> false
 
   let rec unify t1 t2 =
     match (t1, t2) with
     | IntT {nullable= n1}, IntT {nullable= n2} -> IntT {nullable= n1 || n2}
+    | DateT {nullable= n1}, DateT {nullable= n2} -> DateT {nullable= n1 || n2}
     | FixedT {nullable= n1}, FixedT {nullable= n2} -> FixedT {nullable= n1 || n2}
+    (* TODO: Remove coercion *)
     | FixedT {nullable= n1}, IntT {nullable= n2}
      |IntT {nullable= n1}, FixedT {nullable= n2} ->
         FixedT {nullable= n1 || n2}
@@ -77,10 +92,24 @@ module PrimType = struct
     | StringT {nullable= n1}, StringT {nullable= n2} -> StringT {nullable= n1 || n2}
     | TupleT t1, TupleT t2 -> TupleT (List.map2_exn t1 t2 ~f:unify)
     | VoidT, VoidT -> VoidT
-    | _, _ -> Error.create "Nonunifiable." (t1, t2) [%sexp_of: t * t] |> Error.raise
+    | NullT, _
+     |IntT _, _
+     |DateT _, _
+     |FixedT _, _
+     |StringT _, _
+     |BoolT _, _
+     |TupleT _, _
+     |VoidT, _ ->
+        Error.create "Nonunifiable." (t1, t2) [%sexp_of: t * t] |> Error.raise
+
+  let unify t1 t2 =
+    Or_error.try_with (fun () -> unify t1 t2)
+    |> (fun err ->
+         Or_error.tag_arg err "Failed to unify." (t1, t2) [%sexp_of: t * t] )
+    |> Or_error.ok_exn
 
   let rec width = function
-    | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ -> 1
+    | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ | DateT _ -> 1
     | TupleT ts -> List.map ts ~f:width |> List.sum (module Int) ~f:(fun x -> x)
     | VoidT -> 0
 end

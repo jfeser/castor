@@ -72,12 +72,17 @@ and make_access hdr name start =
 
 let rec make_header t =
   let make_size range =
-    match Type.AbsInt.concretize range with
+    match Type.AbsInt.to_int range with
     | Some x -> `Empty x
     | None -> `Fixed (Type.AbsInt.byte_width ~nullable:false range)
   in
   match t with
   | Type.IntT {range; nullable} ->
+      let len = Type.AbsInt.byte_width ~nullable range in
+      [ Field.{name= "len"; size= `Empty len; align= 1}
+      ; Field.{name= "count"; size= `Empty 1; align= 1}
+      ; Field.{name= "value"; size= `Fixed len; align= 1} ]
+  | Type.DateT {range; nullable} ->
       let len = Type.AbsInt.byte_width ~nullable range in
       [ Field.{name= "len"; size= `Empty len; align= 1}
       ; Field.{name= "count"; size= `Empty 1; align= 1}

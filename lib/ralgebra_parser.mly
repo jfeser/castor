@@ -8,7 +8,7 @@
 %token <Fixed_point.t> FIXED
 %token <bool> BOOL
 %token <string> STR
-%token <[`Asc | `Desc]> ORDER
+%token <Abslayout0.order> ORDER
 %token <Abslayout0.tuple> KIND
 %token <Type0.PrimType.t> PRIMTYPE
 %token <Core.Date.t> DATE
@@ -79,10 +79,12 @@ ralgebra_subquery:
   RPAREN { A.Dedup r |> node $symbolstartpos $endpos }
 
 | ORDERBY; LPAREN;
-  key = bracket_list(expr); COMMA;
-  rel = ralgebra; COMMA;
-  order = ORDER;
-  RPAREN { A.OrderBy { key; order; rel } |> node $symbolstartpos $endpos }
+  key = bracket_list(pair(expr, option(ORDER))); COMMA;
+  rel = ralgebra;
+  RPAREN { A.OrderBy { key = List.map (fun (e, o) -> match o with
+                                                     | Some o -> e, o
+                                                     | None -> e, A.Asc) key; rel }
+           |> node $symbolstartpos $endpos }
 
 | AEMPTY { node $symbolstartpos $endpos AEmpty }
 

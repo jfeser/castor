@@ -30,6 +30,8 @@ type unop = Abslayout0.unop =
 
 type tuple = Abslayout0.tuple = Cross | Zip | Concat [@@deriving compare, sexp_of]
 
+type order = Abslayout0.order = Asc | Desc [@@deriving compare, sexp_of]
+
 type pred = Abslayout0.pred =
   | Name of Name.t
   | Int of int
@@ -68,7 +70,7 @@ and node = Abslayout0.node =
   | Filter of (pred * t)
   | Join of {pred: pred; r1: t; r2: t}
   | GroupBy of pred list * Name.t list * t
-  | OrderBy of {key: pred list; order: [`Asc | `Desc]; rel: t}
+  | OrderBy of {key: (pred * order) list; rel: t}
   | Dedup of t
   | Scan of string
   | AEmpty
@@ -99,7 +101,7 @@ val group_by : pred list -> Name.t list -> t -> t
 
 val dedup : t -> t
 
-val order_by : pred list -> [`Asc | `Desc] -> t -> t
+val order_by : (pred * order) list -> t -> t
 
 val scan : string -> t
 
@@ -176,6 +178,8 @@ val pred_remove_as : pred -> pred
 val annotate_eq : t -> unit
 
 val annotate_orders : t -> unit
+
+val order_of : t -> (pred * order) list
 
 val validate : t -> unit
 

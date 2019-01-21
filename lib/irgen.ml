@@ -26,10 +26,12 @@ module type S = sig
   val pp : Formatter.t -> ir_module -> unit
 end
 
-module Make (Config : Config.S) (Eval : Eval.S) (Serialize : Serialize.S) () =
+module Make
+    (Config : Config.S)
+    (Abslayout_db : Abslayout_db.S)
+    (Serialize : Serialize.S)
+    () =
 struct
-  module Abslayout_db = Abslayout_db.Make (Eval)
-
   let fresh = Fresh.create ()
 
   let iters = ref []
@@ -90,11 +92,13 @@ struct
     let open Builder in
     let low = build_defn "low" Infix.(int 0) b in
     let high = build_defn "high" n b in
+    debug_print "bin_search" (Tuple [low; high; low_target; high_target]) b ;
     build_loop
       Infix.(low < high)
       (fun b ->
         let mid = build_defn "mid" Infix.((low + high) / int 2) b in
         let key = build_key mid b in
+        debug_print "bin_search" (Tuple [low; high; low_target; high_target; key]) b ;
         build_if
           ~cond:(build_lt key (Tuple [low_target]) b)
           ~then_:(fun b -> build_assign Infix.(mid + int 1) low b)
@@ -108,6 +112,9 @@ struct
         build_loop
           Infix.(build_lt key (Tuple [high_target]) b && low < n)
           (fun b ->
+            debug_print "bin_search"
+              (Tuple [low; high; low_target; high_target; key])
+              b ;
             callback key low b ;
             build_assign Infix.(low + int 1) low b ;
             build_assign (build_key low b) key b )
@@ -148,6 +155,7 @@ struct
     let ctx = add_layout_start ctx r in
     match (r.node, t) with
     | Abslayout.AScalar r', Type.IntT t' -> scan_int ctx b r' t' cb
+    | Abslayout.AScalar r', Type.DateT t' -> scan_date ctx b r' t' cb
     | AScalar r', FixedT t' -> scan_fixed ctx b r' t' cb
     | AScalar r', BoolT t' -> scan_bool ctx b r' t' cb
     | AScalar r', StringT t' -> scan_string ctx b r' t' cb
@@ -161,7 +169,7 @@ struct
     | Select r', FuncT t' -> scan_select ctx b r' t' cb
     | (Join _ | GroupBy _ | OrderBy _ | Dedup _ | Scan _ | As _), _ ->
         Error.create "Unsupported at runtime." r [%sexp_of: A.t] |> Error.raise
-    | _ ->
+    | _, _ ->
         Error.create "Mismatched type." (r, t) [%sexp_of: A.t * Type.t]
         |> Error.raise
 
@@ -179,13 +187,16 @@ struct
       | A.Int x -> Int x
       | A.String x -> String x
       | A.Fixed x -> Fixed x
-      | Date x -> Int (Date.to_int x)
+      | Date x -> Date x
       | Unop (op, p) -> (
           let x = gen_pred p b in
           match op with
           | A.Not -> Infix.(not x)
-          | A.Year -> Infix.(int 365 * x)
-          | A.Month -> Infix.(int 30 * x)
+          | A.Year | A.Month ->
+              Error.create "Found interval in unexpected position."
+                (A.Unop (op, p))
+                [%sexp_of: A.pred]
+              |> Error.raise
           | A.Day -> x
           | A.Strlen -> Unop {op= StrLen; arg= x}
           | A.ExtractY -> Unop {op= ExtractY; arg= x}
@@ -199,6 +210,23 @@ struct
         | None ->
             Error.create "Unbound variable." (n, ctx) [%sexp_of: Name.t * Ctx.t]
             |> Error.raise )
+      (* Special cases for date intervals. *)
+      | A.Binop (A.Add, arg1, Unop (Year, arg2)) ->
+          let e1 = gen_pred arg1 b in
+          let e2 = gen_pred arg2 b in
+          Binop {op= AddY; arg1= e1; arg2= e2}
+      | A.Binop (A.Add, arg1, Unop (Month, arg2)) ->
+          let e1 = gen_pred arg1 b in
+          let e2 = gen_pred arg2 b in
+          Binop {op= AddM; arg1= e1; arg2= e2}
+      | A.Binop (A.Sub, arg1, Unop (Year, arg2)) ->
+          let e1 = gen_pred arg1 b in
+          let e2 = gen_pred (A.Binop (A.Sub, A.Int 0, arg2)) b in
+          Binop {op= AddY; arg1= e1; arg2= e2}
+      | A.Binop (A.Sub, arg1, Unop (Month, arg2)) ->
+          let e1 = gen_pred arg1 b in
+          let e2 = gen_pred (A.Binop (A.Sub, A.Int 0, arg2)) b in
+          Binop {op= AddM; arg1= e1; arg2= e2}
       | A.Binop (op, arg1, arg2) -> (
           let e1 = gen_pred arg1 b in
           let e2 = gen_pred arg2 b in
@@ -253,21 +281,36 @@ struct
 
   and scan_null _ b _ _ (cb : callback) = cb b [Null]
 
-  and scan_int ctx b _ (Type.({nullable; range= (_, h) as range; _}) : Type.int_)
+  and scan_int ctx b _ (Type.({nullable; range; _} as t) : Type.int_)
       (cb : callback) =
     let open Builder in
     let start = Ctx.find_exn ctx (Name.create "start") b in
     let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
     let _nval =
       if nullable then
-        let null_val = h + 1 in
+        let null_val = Serialize.int_sentinal t in
         Infix.(build_eq ival (int null_val) b)
       else Bool false
     in
     debug_print "int" ival b ;
     cb b [ival]
 
-  and scan_fixed ctx b _ Type.({nullable; value= {range= (_, h) as range; scale}})
+  and scan_date ctx b _ (Type.({nullable; range; _} as t) : Type.date)
+      (cb : callback) =
+    let open Builder in
+    let start = Ctx.find_exn ctx (Name.create "start") b in
+    let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
+    let _nval =
+      if nullable then
+        let null_val = Serialize.date_sentinal t in
+        Infix.(build_eq ival (int null_val) b)
+      else Bool false
+    in
+    let dval = Unop {op= Int2Date; arg= ival} in
+    debug_print "date" dval b ;
+    cb b [dval]
+
+  and scan_fixed ctx b _ Type.({nullable; value= {range; scale}} as t)
       (cb : callback) =
     let open Builder in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -276,7 +319,7 @@ struct
     let xval = build_div (int2fl ival) (int2fl sval) b in
     let _nval =
       if nullable then
-        let null_val = h + 1 in
+        let null_val = Serialize.fixed_sentinal t in
         Infix.(build_eq ival (int null_val) b)
       else Bool true
     in
@@ -287,8 +330,7 @@ struct
     let start = Ctx.find_exn ctx (Name.create "start") b in
     cb b [Unop {op= LoadBool; arg= start}]
 
-  and scan_string ctx b _ (Type.({nchars= l, _; nullable; _}) as t) (cb : callback)
-      =
+  and scan_string ctx b _ (Type.({nullable; _} as st) as t) (cb : callback) =
     let open Builder in
     let hdr = Header.make_header (StringT t) in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -297,7 +339,7 @@ struct
     let xval = Binop {op= LoadStr; arg1= value_ptr; arg2= nchars} in
     let _nval =
       if nullable then
-        let null_val = l - 1 in
+        let null_val = Serialize.string_sentinal st in
         Infix.(build_eq nchars (int null_val) b)
       else Bool true
     in
@@ -379,9 +421,9 @@ struct
       in
       cb b (list_of_tuple tup b)
     in
-    match Type.AbsCount.kind meta.count with
-    | `Count x -> build_count_loop Infix.(int x) build_body b
-    | `Countable | `Unknown ->
+    match Type.AbsInt.to_int meta.count with
+    | Some x -> build_count_loop Infix.(int x) build_body b
+    | None ->
         build_body b ;
         let not_done =
           List.fold_left callee_funcs ~init:(Bool true) ~f:(fun acc f ->
@@ -403,9 +445,10 @@ struct
     let start = Ctx.find_exn ctx (Name.create "start") b in
     let cstart = build_defn "cstart" (Header.make_position hdr "value" start) b in
     let ctx = Ctx.bind ctx "start" Type.PrimType.int_t cstart in
-    List.iter2_exn child_layouts child_types ~f:(fun r' t' ->
-        scan ctx b r' t' cb ;
-        build_assign (build_add (Int 1) (len cstart t') b) cstart b )
+    List.iter2_exn child_layouts child_types ~f:(fun child_layout child_type ->
+        let clen = len cstart child_type in
+        scan ctx b child_layout child_type cb ;
+        build_assign Infix.(cstart + clen) cstart b )
 
   and scan_list ctx b (_, child_layout) ((child_type, _) as t) (cb : callback) =
     let open Builder in
@@ -674,7 +717,7 @@ struct
     let type_ = Abslayout_db.to_type r in
     let writer = Bitstring.Writer.with_file data_fn in
     let r, len =
-      if Config.code_only then (r, 0) else Serialize.serialize writer type_ r
+      if Config.code_only then (r, 0) else Serialize.serialize writer r type_
     in
     Bitstring.Writer.flush writer ;
     Bitstring.Writer.close writer ;

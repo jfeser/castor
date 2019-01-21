@@ -1,30 +1,16 @@
 open Core
 open Abslayout
-
-let rels = Hashtbl.create (module Db.Relation)
-
-module Eval = Eval.Make_mock (struct
-  let rels = rels
-end)
-
-module M = Abslayout_db.Make (Eval)
+open Test_util
+module M = Abslayout_db.Make (Test_db)
 
 let make_modules layout_file =
   let module S =
     Serialize.Make (struct
         let layout_map_channel = Some (Out_channel.create layout_file)
       end)
-      (Eval)
       (M)
   in
   (module S : Serialize.S)
-
-[@@@warning "-8"]
-
-let _, [f; _] =
-  Test_util.create rels "r1" ["f"; "g"] [[1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]]
-
-[@@@warning "+8"]
 
 (** Remove nondeterministic parts of the layout log. Returns the new log and
    true if the log was modified, false otherwise. *)
@@ -42,7 +28,7 @@ let run_test layout_str =
   annotate_foreach layout ;
   let type_ = M.to_type layout in
   let buf = Buffer.create 1024 in
-  let _, len = S.serialize (Bitstring.Writer.with_buffer buf) type_ layout in
+  let _, len = S.serialize (Bitstring.Writer.with_buffer buf) layout type_ in
   let buf_str = Buffer.contents buf |> String.escaped in
   let layout_log, did_modify =
     In_channel.input_all (In_channel.create layout_file) |> process_layout_log
@@ -57,7 +43,7 @@ let%expect_test "scalar-int" =
     {|
     0:1 Scalar (=(Int 1))
 
-    ((IntT ((range (1 1)) (nullable false))) 1 "\\001") |}]
+    ((IntT ((range (Interval 1 1)) (nullable false))) 1 "\\001") |}]
 
 let%expect_test "scalar-bool" =
   run_test "AScalar(true)" ;
@@ -75,7 +61,7 @@ let%expect_test "scalar-string" =
     0:4 Scalar (=(String test))
     0:0 String length (=4)
 
-    ((StringT ((nchars (4 4)) (nullable false))) 4 test) |}]
+    ((StringT ((nchars (Interval 4 4)) (nullable false))) 4 test) |}]
 
 let%expect_test "tuple" =
   run_test "ATuple([AScalar(1), AScalar(\"test\")], Cross)" ;
@@ -89,9 +75,9 @@ let%expect_test "tuple" =
     1:0 String length (=4)
 
     ((TupleT
-      (((IntT ((range (1 1)) (nullable false)))
-        (StringT ((nchars (4 4)) (nullable false))))
-       ((count ((1 1))))))
+      (((IntT ((range (Interval 1 1)) (nullable false)))
+        (StringT ((nchars (Interval 4 4)) (nullable false))))
+       ((count (Interval 1 1)))))
      5 "\\001test") |}]
 
 let%expect_test "hash-idx" =
@@ -115,13 +101,13 @@ let%expect_test "hash-idx" =
     153:1 Scalar (=(Int 3))
 
     ((HashIdxT
-      ((IntT ((range (1 3)) (nullable false)))
-       (IntT ((range (1 3)) (nullable false))) ((count ()))))
+      ((IntT ((range (Interval 1 3)) (nullable false)))
+       (IntT ((range (Interval 1 3)) (nullable false))) ((count (Interval 1 1)))))
      154) |}]
 
 let%expect_test "ordered-idx" =
   run_test
-    "AOrderedIdx(OrderBy([r1.f], Dedup(Select([r1.f], r1)), desc) as k, \
+    "AOrderedIdx(OrderBy([r1.f desc], Dedup(Select([r1.f], r1))) as k, \
      AScalar(k.f), null, null)" ;
   [%expect
     {|
@@ -144,10 +130,50 @@ let%expect_test "ordered-idx" =
     41:1 Scalar (=(Int 3))
 
     ((OrderedIdxT
-      ((IntT ((range (1 3)) (nullable false)))
-       (IntT ((range (1 3)) (nullable false))) ((count ()))))
+      ((IntT ((range (Interval 1 3)) (nullable false)))
+       (IntT ((range (Interval 1 3)) (nullable false))) ((count Top))))
      42
      "*\\000\\000\\000\\027\\000\\000\\000\\000\\000\\000\\000\\001'\\000\\000\\000\\000\\000\\000\\000\\002(\\000\\000\\000\\000\\000\\000\\000\\003)\\000\\000\\000\\000\\000\\000\\000\\001\\002\\003") |}]
+
+let%expect_test "ordered-idx-dates" =
+  run_test
+    "AOrderedIdx(OrderBy([f desc], Dedup(Select([f], r_date))) as k, AScalar(k.f), \
+     null, null)" ;
+  [%expect
+    {|
+    0:4 Ordered idx len (=72)
+    4:8 Ordered idx index len (=50)
+    12:2 Scalar (=(Date 2016-12-01))
+    12:2 Scalar (=(Date 2016-12-01))
+    12:2 Ordered idx key
+    14:8 Ordered idx value ptr (=62)
+    22:2 Scalar (=(Date 2017-10-05))
+    22:2 Scalar (=(Date 2017-10-05))
+    22:2 Ordered idx key
+    24:8 Ordered idx value ptr (=64)
+    32:2 Scalar (=(Date 2018-01-01))
+    32:2 Scalar (=(Date 2018-01-01))
+    32:2 Ordered idx key
+    34:8 Ordered idx value ptr (=66)
+    42:2 Scalar (=(Date 2018-01-23))
+    42:2 Scalar (=(Date 2018-01-23))
+    42:2 Ordered idx key
+    44:8 Ordered idx value ptr (=68)
+    52:2 Scalar (=(Date 2018-09-01))
+    52:2 Scalar (=(Date 2018-09-01))
+    52:2 Ordered idx key
+    54:8 Ordered idx value ptr (=70)
+    62:2 Scalar (=(Date 2016-12-01))
+    64:2 Scalar (=(Date 2017-10-05))
+    66:2 Scalar (=(Date 2018-01-01))
+    68:2 Scalar (=(Date 2018-01-23))
+    70:2 Scalar (=(Date 2018-09-01))
+
+    ((OrderedIdxT
+      ((DateT ((range (Interval 17136 17775)) (nullable false)))
+       (DateT ((range (Interval 17136 17775)) (nullable false))) ((count Top))))
+     72
+     "H\\000\\000\\0002\\000\\000\\000\\000\\000\\000\\000\\240B>\\000\\000\\000\\000\\000\\000\\000$D@\\000\\000\\000\\000\\000\\000\\000|DB\\000\\000\\000\\000\\000\\000\\000\\146DD\\000\\000\\000\\000\\000\\000\\000oEF\\000\\000\\000\\000\\000\\000\\000\\240B$D|D\\146DoE") |}]
 
 let%expect_test "list-list" =
   run_test "AList(r1, AList(r1 as r, AScalar(r.f)))" ;
@@ -198,26 +224,9 @@ let%expect_test "list-list" =
     24:1 Scalar (=(Int 3))
 
     ((ListT
-      ((ListT ((IntT ((range (1 3)) (nullable false))) ((count (5 5)))))
-       ((count (5 5)))))
+      ((ListT
+        ((IntT ((range (Interval 1 3)) (nullable false)))
+         ((count (Interval 5 5)))))
+       ((count (Interval 5 5)))))
      25
      "\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003") |}]
-
-(* let tests =
- *   let open OUnit2 in
- *   "serialize"
- *   >::: [ ( "to-byte"
- *          >:: fun ctxt ->
- *          let x = 0xABCDEF01 in
- *          assert_equal ~ctxt x (bytes_of_int ~width:64 x |> int_of_bytes_exn) )
- *        ; ( "from-byte"
- *          >:: fun ctxt ->
- *          let b = Bytes.of_string "\031\012\000\000" in
- *          let x = 3103 in
- *          assert_equal ~ctxt ~printer:Caml.string_of_int x (int_of_bytes_exn b) )
- *        ; ( "align"
- *          >:: fun ctxt ->
- *          let b = Bytes.of_string "\001\002\003" in
- *          let b' = align 8 b in
- *          assert_equal ~ctxt ~printer:Caml.string_of_int 8 (String.length b') ;
- *          assert_equal ~ctxt "\001\002\003\000\000\000\000\000" b' ) ] *)

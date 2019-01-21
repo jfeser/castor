@@ -3,16 +3,21 @@ open Printf
 module Pervasives = Caml.Pervasives
 open Collections
 module Psql = Postgresql
+module Stream = Caml.Stream
 
 let () =
   Caml.Printexc.register_printer (function
     | Postgresql.Error e -> Some (Postgresql.string_of_error e)
     | _ -> None )
 
-type t = {uri: string; conn: Psql.connection sexp_opaque [@compare.ignore]}
+type t =
+  { uri: string
+  ; conn: Psql.connection sexp_opaque [@compare.ignore]
+  ; fresh: Fresh.t sexp_opaque [@compare.ignore] }
 [@@deriving compare, sexp]
 
-let create uri = {uri; conn= new Psql.connection ~conninfo:uri ()}
+let create uri =
+  {uri; conn= new Psql.connection ~conninfo:uri (); fresh= Fresh.create ()}
 
 let subst_params params query =
   match params with
@@ -43,55 +48,6 @@ let rec exec ?(max_retries = 0) ?(params = []) db query =
     | _ -> fail r )
   | Single_tuple | Tuples_ok | Command_ok -> r
   | _ -> fail r
-
-let result_to_tuples (r : Psql.result) =
-  Seq.range 0 r#ntuples ~stop:`exclusive
-  |> Seq.unfold_with ~init:() ~f:(fun () tup_i ->
-         let tup =
-           List.init r#nfields ~f:(fun field_i ->
-               let value = r#getvalue tup_i field_i in
-               let type_ = r#ftype field_i in
-               let primval =
-                 match type_ with
-                 | Postgresql.BOOL -> (
-                   match value with
-                   | "t" -> Value.Bool true
-                   | "f" -> Bool false
-                   | _ -> failwith "Unknown boolean value." )
-                 | INT8 | INT2 | INT4 ->
-                     if String.(value = "") then Null else Int (Int.of_string value)
-                 | CHAR | TEXT | VARCHAR -> String value
-                 (* Blank padded character strings *)
-                 | BPCHAR -> String (String.strip value)
-                 | FLOAT4 | FLOAT8 | NUMERIC -> Fixed (Fixed_point.of_string value)
-                 | DATE -> Date (Date.of_string value)
-                 (* Time & date types *)
-                 | TIME | TIMESTAMP | TIMESTAMPTZ | INTERVAL | TIMETZ | ABSTIME
-                  |RELTIME
-                  |TINTERVAL
-                 (* Geometric types. *)
-                  |POINT | LSEG | PATH | BOX | POLYGON | LINE
-                  |CIRCLE
-                 (* Network types *)
-                  |MACADDR | INET
-                  |CIDR
-                 (* Other types*)
-                  |NAME | BYTEA | INT2VECTOR | JSON | CASH | ACLITEM | BIT
-                  |VARBIT | JSONB ->
-                     (* Store unknown values as strings. *)
-                     Logs.warn (fun m -> m "Unknown value: %s" value) ;
-                     String value
-                 | OID | OIDVECTOR | TID | XID | CID | REFCURSOR | REGPROC
-                  |REGPROCEDURE | REGOPER | REGOPERATOR | REGCLASS | REGTYPE ->
-                     failwith "Postgres internal type."
-                 | ANY | ANYARRAY | VOID | CSTRING | INTERNAL | LANGUAGE_HANDLER
-                  |RECORD | TRIGGER | OPAQUE | ANYELEMENT | UNKNOWN ->
-                     failwith "Pseudo type."
-               in
-               (r#fname field_i, primval) )
-           |> Map.of_alist_exn (module String)
-         in
-         Yield (tup, ()) )
 
 let result_to_strings (r : Psql.result) = r#get_all_lst
 
@@ -140,10 +96,10 @@ module Relation = struct
       |> List.map ~f:(fun (fname, type_str, nullable_str) ->
              let open Type.PrimType in
              let nullable =
-               if String.(nullable_str = "YES") then
+               if String.(strip nullable_str = "YES") then
                  let nulls =
                    exec1 ~params:[fname; rname] conn
-                     "select \"$0\" from \"$1\" where \"$0\" = null limit 1"
+                     "select \"$0\" from \"$1\" where \"$0\" is null limit 1"
                  in
                  List.length nulls > 0
                else false
@@ -152,10 +108,28 @@ module Relation = struct
                match type_str with
                | "character" | "character varying" | "varchar" | "text" ->
                    StringT {nullable}
-               | "date" | "interval" | "integer" | "smallint" | "bigint" ->
-                   IntT {nullable}
+               | "interval" | "integer" | "smallint" | "bigint" -> IntT {nullable}
+               | "date" -> DateT {nullable}
                | "boolean" -> BoolT {nullable}
-               | "numeric" | "real" | "double" -> FixedT {nullable}
+               | "numeric" ->
+                   let min, max, max_scale =
+                     exec3 ~params:[fname; rname] conn
+                       "select min(\"$0\"), max(\"$0\"), max(scale(\"$0\")) from \
+                        \"$1\""
+                     |> List.hd_exn
+                   in
+                   let is_int = Int.of_string max_scale = 0 in
+                   let fits_in_an_int63 =
+                     try
+                       Int.of_string min |> ignore ;
+                       Int.of_string max |> ignore ;
+                       true
+                     with Failure _ -> false
+                   in
+                   if is_int then
+                     if fits_in_an_int63 then IntT {nullable} else StringT {nullable}
+                   else FixedT {nullable}
+               | "real" | "double" -> FixedT {nullable}
                | "timestamp without time zone" -> StringT {nullable}
                | s -> failwith (Printf.sprintf "Unknown dtype %s" s)
              in
@@ -180,9 +154,51 @@ module Field = struct
   [@@deriving compare, hash, sexp]
 end
 
+let load_value type_ value =
+  let open Type.PrimType in
+  match type_ with
+  | BoolT {nullable} -> (
+    match value with
+    | "t" -> Ok (Value.Bool true)
+    | "f" -> Ok (Bool false)
+    | "" when nullable -> Ok Null
+    | _ -> Error (Error.create "Unknown boolean value." value [%sexp_of: string]) )
+  | IntT {nullable} ->
+      if String.(value = "") then
+        if nullable then Ok Null
+        else Error (Error.of_string "Unexpected null integer.")
+      else Ok (Int (Int.of_string value))
+  | StringT _ -> Ok (String value)
+  | FixedT {nullable} ->
+      if String.(value = "") then
+        if nullable then Ok Null
+        else Error (Error.of_string "Unexpected null fixed.")
+      else Ok (Fixed (Fixed_point.of_string value))
+  | DateT {nullable} ->
+      if String.(value = "") then
+        if nullable then Ok Null
+        else Error (Error.of_string "Unexpected null integer.")
+      else Ok (Date (Date.of_string value))
+  | NullT ->
+      if String.(value = "") then Ok Null
+      else Error (Error.create "Expected a null value." value [%sexp_of: string])
+  | VoidT | TupleT _ -> Error (Error.of_string "Not a value type.")
+
+let load_tuples_exn s r =
+  ( if List.length s <> r#nfields then
+    Error.(of_string "Unexpected tuple width." |> raise) ) ;
+  Gen.init ~limit:r#ntuples (fun tidx ->
+      List.mapi s ~f:(fun fidx type_ ->
+          if r#getisnull tidx fidx then Value.Null
+          else Or_error.ok_exn (load_value type_ (r#getvalue tidx fidx)) ) )
+
+(* |> Gen.map ~f:(fun t ->
+   *        Stdio.print_endline ([%sexp_of: Value.t list] t |> Sexp.to_string_hum) ;
+   *        t ) *)
+
 let exec_cursor =
   let fresh = Fresh.create () in
-  fun ?(batch_size = 10000) ?(params = []) db query ->
+  fun ?(batch_size = 10000) ?(params = []) db schema query ->
     let db = create db.uri in
     Caml.Gc.finalise (fun db -> try (db.conn)#finish with Failure _ -> ()) db ;
     let query = subst_params params query in
@@ -194,20 +210,29 @@ let exec_cursor =
     exec db declare_query |> command_ok ;
     let db_idx = ref 1 in
     let seq =
-      Seq.unfold_step ~init:(`Not_done 1) ~f:(function
-        | `Done -> (db.conn)#finish ; Done
-        | `Not_done idx when idx <> !db_idx ->
-            Error.(
-              create "Out of sync with underlying cursor." (idx, !db_idx)
-                [%sexp_of: int * int]
-              |> raise)
-        | `Not_done idx ->
-            let r = exec db fetch_query in
-            let tups = result_to_tuples r in
-            db_idx := !db_idx + r#ntuples ;
-            let idx = idx + r#ntuples in
-            let state = if r#ntuples < batch_size then `Done else `Not_done idx in
-            Yield (tups, state) )
-      |> Seq.concat
+      Gen.unfold
+        (function
+          | `Done -> (db.conn)#finish ; None
+          | `Not_done idx when idx <> !db_idx ->
+              Error.(
+                create "Out of sync with underlying cursor." (idx, !db_idx)
+                  [%sexp_of: int * int]
+                |> raise)
+          | `Not_done idx ->
+              let r = exec db fetch_query in
+              let tups = load_tuples_exn schema r in
+              db_idx := !db_idx + r#ntuples ;
+              let idx = idx + r#ntuples in
+              let state = if r#ntuples < batch_size then `Done else `Not_done idx in
+              Some (tups, state))
+        (`Not_done 1)
+      |> Gen.flatten
     in
     seq
+
+let check db sql =
+  let name = Fresh.name db.fresh "check%d" in
+  let r = (db.conn)#prepare name sql in
+  match r#status with
+  | Command_ok -> Or_error.return ()
+  | _ -> Or_error.error "Unexpected query response." r#error [%sexp_of: string]

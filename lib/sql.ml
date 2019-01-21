@@ -2,24 +2,208 @@ open Base
 open Printf
 open Collections
 open Abslayout
+open Bos
 
-type query = {schema: Name.t list; sql: [`Subquery of string | `Scan of string]}
+type ctx = {fresh: Fresh.t}
 
-let fresh = Fresh.create ()
+type select_entry = {pred: pred; alias: string; cast: Type.PrimType.t option}
+[@@deriving compare, sexp_of]
 
-let to_subquery {sql; schema} =
-  let alias = Fresh.name fresh "t%d" in
-  match sql with
-  | `Subquery q ->
-      ( sprintf "(%s) as %s" q alias
-      , List.map schema ~f:(fun n -> {n with relation= Some alias}) )
-  | `Scan tbl -> (tbl, schema)
+type spj =
+  { select: select_entry list
+  ; distinct: bool
+  ; conds: pred list
+  ; relations:
+      ([`Subquery of t * string | `Table of string * string] * [`Left | `Lateral])
+      list
+  ; order: (pred * order) list
+  ; group: pred list
+  ; limit: int option }
 
-let to_query {sql; _} =
-  match sql with `Scan tbl -> sprintf "select * from %s" tbl | `Subquery q -> q
+and t = Query of spj | Union_all of spj list [@@deriving compare, sexp_of]
 
-let rec pred_to_sql = function
-  | As_pred (p, n) -> sprintf "%s as %s" (pred_to_sql p) n
+let create_ctx ?fresh () = {fresh= Option.value fresh ~default:(Fresh.create ())}
+
+let create_query ?(distinct = false) ?(conds = []) ?(relations = []) ?(order = [])
+    ?(group = []) ?limit select =
+  {select; distinct; conds; relations; order; group; limit}
+
+let create_entry ~ctx ?alias ?cast pred =
+  match (alias, pred_to_name pred) with
+  | Some a, _ -> {pred; alias= a; cast}
+  | _, Some n ->
+      {pred; alias= sprintf "%s_%d" (Name.to_var n) (Fresh.int ctx.fresh); cast}
+  | None, None -> {pred; alias= Fresh.name ctx.fresh "x%d"; cast}
+
+let select_entry_name {alias; _} = alias
+
+let to_schema = function
+  | Query {select; _} | Union_all ({select; _} :: _) ->
+      List.map select ~f:select_entry_name
+  | Union_all [] -> failwith "No empty unions."
+
+let to_order = function
+  | Union_all _ -> Ok []
+  | Query {select; order; _} ->
+      List.map order ~f:(fun (p, o) ->
+          let alias =
+            List.find_map select ~f:(fun {pred; alias; _} ->
+                if [%compare.equal: pred] p pred then Some alias else None )
+          in
+          match alias with
+          | Some n -> Ok (Name (Name.create n), o)
+          | None ->
+              Error
+                (Error.create "Order clause depends on hidden expression."
+                   (p, select) [%sexp_of: pred * select_entry list]) )
+      |> Or_error.all
+
+let to_select = function
+  | Union_all qs -> List.concat_map qs ~f:(fun {select; _} -> select)
+  | Query {select; _} -> select
+
+let to_group = function Union_all _ -> [] | Query q -> q.group
+
+let to_distinct = function Union_all _ -> false | Query q -> q.distinct
+
+let to_limit = function Union_all _ -> None | Query q -> q.limit
+
+let has_aggregates sql =
+  match to_select sql |> List.map ~f:(fun {pred= p; _} -> p) |> select_kind with
+  | `Scalar -> false
+  | `Agg -> true
+
+(** Convert a query to an SPJ by introducing a subquery. *)
+let create_subquery ctx q =
+  let alias = Fresh.name ctx.fresh "t%d" in
+  let select_list =
+    to_schema q |> List.map ~f:(fun n -> create_entry ~ctx (Name (Name.create n)))
+  in
+  create_query ~relations:[(`Subquery (q, alias), `Left)] select_list
+
+let to_spj ctx = function Query q -> q | Union_all _ as q -> create_subquery ctx q
+
+let join ctx schema1 schema2 sql1 sql2 pred =
+  let needs_subquery =
+    to_distinct sql1 || to_distinct sql2
+    || List.length (to_group sql1) > 0
+    || List.length (to_group sql2) > 0
+    || Option.is_some (to_limit sql1)
+    || Option.is_some (to_limit sql2)
+    || has_aggregates sql1 || has_aggregates sql2
+  in
+  let spj1 = if needs_subquery then create_subquery ctx sql1 else to_spj ctx sql1 in
+  let spj2 = if needs_subquery then create_subquery ctx sql2 else to_spj ctx sql2 in
+  (* The where clause is evaluated before the select clause so we can't use the
+     aliases in the select clause here. *)
+  let ctx =
+    List.zip_exn schema1 spj1.select @ List.zip_exn schema2 spj2.select
+    |> List.map ~f:(fun (n, {pred= p; _}) -> (n, p))
+    |> Map.of_alist_exn (module Name.Compare_no_type)
+  in
+  let pred = subst_pred ctx pred in
+  let select_list = spj1.select @ spj2.select in
+  Query
+    (create_query
+       ~conds:(pred :: (spj1.conds @ spj2.conds))
+       ~relations:(spj1.relations @ spj2.relations)
+       select_list)
+
+let order_by ctx schema sql key =
+  let spj = to_spj ctx sql in
+  let ctx =
+    List.map2_exn schema spj.select ~f:(fun n {pred= p; _} -> (n, p))
+    |> Map.of_alist_exn (module Name.Compare_no_type)
+  in
+  let key = List.map key ~f:(fun (p, o) -> (subst_pred ctx p, o)) in
+  Query {spj with order= key}
+
+let select ?groupby ctx schema sql fields =
+  (* Creating a subquery is always safe, but we want to avoid it if possible. We
+     don't need a subquery if:
+     - This select is aggregation free
+     - This select has aggregates but the inner select is aggregation free *)
+  let needs_subquery =
+    let for_agg =
+      match
+        ( select_kind fields
+        , to_select sql |> List.map ~f:(fun {pred= p; _} -> p) |> select_kind )
+      with
+      | `Scalar, _ | `Agg, `Scalar -> false
+      | `Agg, `Agg -> true
+    in
+    (* If the inner query is distinct then it must be wrapped. *)
+    let for_distinct = to_distinct sql in
+    for_agg || for_distinct
+  in
+  let spj = if needs_subquery then create_subquery ctx sql else to_spj ctx sql in
+  let sctx =
+    List.map2_exn schema spj.select ~f:(fun n {pred= p; _} -> (n, p))
+    |> Map.of_alist_exn (module Name.Compare_no_type)
+  in
+  let fields =
+    List.map fields ~f:(fun p -> p |> subst_pred sctx |> create_entry ~ctx)
+  in
+  let spj = {spj with select= fields} in
+  let spj =
+    match groupby with
+    | Some key ->
+        let group = List.map key ~f:(subst_pred sctx) in
+        {spj with group}
+    | None -> spj
+  in
+  Query spj
+
+let filter ctx schema sql pred =
+  (* If the inner query
+     contains aggregates, then it must be put in a subquery. *)
+  let needs_subquery = has_aggregates sql in
+  let spj = if needs_subquery then create_subquery ctx sql else to_spj ctx sql in
+  (* The where clause is evaluated before the select clause so we can't use the
+     aliases in the select clause here. *)
+  let ctx =
+    List.zip_exn schema spj.select
+    |> List.map ~f:(fun (n, {pred= p; _}) -> (n, p))
+    |> Map.of_alist_exn (module Name.Compare_no_type)
+  in
+  let pred = subst_pred ctx pred in
+  Query {spj with conds= pred :: spj.conds}
+
+let of_ralgebra ctx r =
+  let rec f ({node; _} as r) =
+    match node with
+    | As (_, r) -> f r
+    | Dedup r -> Query {(to_spj ctx (f r)) with distinct= true}
+    | Scan tbl ->
+        let tbl_alias = sprintf "%s_%d" tbl (Fresh.int ctx.fresh) in
+        (* Add table alias to all fields to generate a select list. *)
+        let select_list =
+          List.map
+            Meta.(find_exn r schema)
+            ~f:(fun n -> create_entry ~ctx (Name {n with relation= Some tbl_alias}))
+        in
+        let relations = [(`Table (tbl, tbl_alias), `Left)] in
+        Query (create_query ~relations select_list)
+    | Filter (pred, r) -> filter ctx Meta.(find_exn r schema) (f r) pred
+    | OrderBy {key; rel= r} -> order_by ctx Meta.(find_exn r schema) (f r) key
+    | Select (fs, r) -> select ctx Meta.(find_exn r schema) (f r) fs
+    | Join {pred; r1; r2} ->
+        join ctx
+          Meta.(find_exn r1 schema)
+          Meta.(find_exn r2 schema)
+          (f r1) (f r2) pred
+    | GroupBy (ps, key, r) ->
+        let key = List.map ~f:(fun n -> Name n) key in
+        select ~groupby:key ctx Meta.(find_exn r schema) (f r) ps
+    | AEmpty | AScalar _ | AList _ | ATuple _ | AHashIdx _ | AOrderedIdx _ ->
+        Error.of_string "Only relational algebra constructs allowed." |> Error.raise
+  in
+  f r
+
+let rec pred_to_sql ctx p =
+  let p2s = pred_to_sql ctx in
+  match p with
+  | As_pred (p, _) -> p2s p
   | Name n -> sprintf "%s" (Name.to_sql n)
   | Int x -> Int.to_string x
   | Fixed x -> Fixed_point.to_string x
@@ -29,7 +213,7 @@ let rec pred_to_sql = function
   | String s -> sprintf "'%s'" s
   | Null -> "null"
   | Unop (op, p) -> (
-      let s = sprintf "(%s)" (pred_to_sql p) in
+      let s = sprintf "(%s)" (p2s p) in
       match op with
       | Not -> sprintf "not (%s)" s
       | Year -> sprintf "interval '%s year'" s
@@ -40,8 +224,8 @@ let rec pred_to_sql = function
       | ExtractM -> sprintf "cast(date_part('month', %s) as integer)" s
       | ExtractD -> sprintf "cast(date_part('day', %s) as integer)" s )
   | Binop (op, p1, p2) -> (
-      let s1 = sprintf "(%s)" (pred_to_sql p1) in
-      let s2 = sprintf "(%s)" (pred_to_sql p2) in
+      let s1 = sprintf "(%s)" (p2s p1) in
+      let s2 = sprintf "(%s)" (p2s p2) in
       match op with
       | Eq -> sprintf "%s = %s" s1 s2
       | Lt -> sprintf "%s < %s" s1 s2
@@ -57,161 +241,114 @@ let rec pred_to_sql = function
       | Mod -> sprintf "%s %% %s" s1 s2
       | Strpos -> sprintf "strpos(%s, %s)" s1 s2 )
   | If (p1, p2, p3) ->
-      sprintf "case when %s then %s else %s end" (pred_to_sql p1) (pred_to_sql p2)
-        (pred_to_sql p3)
+      sprintf "case when %s then %s else %s end" (p2s p1) (p2s p2) (p2s p3)
   | Exists r ->
-      let sql = ralgebra_to_sql_helper r |> to_query in
+      let sql = of_ralgebra ctx r |> to_string ctx in
       sprintf "exists (%s)" sql
   | First r ->
-      let sql = ralgebra_to_sql_helper r |> to_query in
+      let sql = of_ralgebra ctx r |> to_string ctx in
       sprintf "(%s)" sql
   | Substring (p1, p2, p3) ->
-      sprintf "substring(%s from %s for %s)" (pred_to_sql p1) (pred_to_sql p2)
-        (pred_to_sql p3)
+      sprintf "substring(%s from %s for %s)" (p2s p1) (p2s p2) (p2s p3)
   | Count -> "count(*)"
-  | Sum n -> sprintf "sum(%s)" (pred_to_sql n)
-  | Avg n -> sprintf "avg(%s)" (pred_to_sql n)
-  | Min n -> sprintf "min(%s)" (pred_to_sql n)
-  | Max n -> sprintf "max(%s)" (pred_to_sql n)
+  | Sum n -> sprintf "sum(%s)" (p2s n)
+  | Avg n -> sprintf "avg(%s)" (p2s n)
+  | Min n -> sprintf "min(%s)" (p2s n)
+  | Max n -> sprintf "max(%s)" (p2s n)
 
-and agg_to_sql p =
-  match pred_kind p with
-  | `Agg -> pred_to_sql p
-  | `Scalar -> (
-    match pred_to_name p with
-    | Some n -> sprintf "min(%s) as %s" (pred_to_sql p) n.name
-    | None -> sprintf "null" )
-
-and ralgebra_to_sql_helper r =
-  let rec f ({node; _} as r) =
-    match node with
-    | Scan tbl -> {sql= `Scan tbl; schema= Meta.(find_exn r schema)}
-    | Select ([], _) -> failwith "No empty selects."
-    | Select (fs, r) ->
-        let sql, schema = to_subquery (f r) in
-        let fields =
-          let ctx =
-            List.zip_exn Meta.(find_exn r schema) schema
-            |> List.map ~f:(fun (n, n') -> (n, Name n'))
-            |> Map.of_alist_exn (module Name.Compare_no_type)
-          in
-          List.map fs ~f:(subst_pred ctx)
-        in
-        let fields_str =
-          let field_to_sql =
-            match select_kind fs with `Agg -> agg_to_sql | `Scalar -> pred_to_sql
-          in
-          fields |> List.map ~f:field_to_sql |> String.concat ~sep:", "
-        in
-        let new_schema = List.map fields ~f:pred_to_schema in
-        let new_query = sprintf "select %s from %s" fields_str sql in
-        {sql= `Subquery new_query; schema= new_schema}
-    | Filter (pred, r) ->
-        let sql, schema = to_subquery (f r) in
-        let pred =
-          let ctx =
-            List.zip_exn Meta.(find_exn r schema) schema
-            |> List.map ~f:(fun (n, n') -> (n, Name n'))
-            |> Map.of_alist_exn (module Name.Compare_no_type)
-          in
-          subst_pred ctx pred |> pred_to_sql
-        in
-        let new_query = sprintf "select * from %s where %s" sql pred in
-        {sql= `Subquery new_query; schema}
-    | Join {pred; r1; r2} -> (
-      match (f r1, f r2) with {sql= sql1; schema= s1}, {sql= sql2; schema= s2} ->
-        let q1 =
-          match sql1 with `Subquery q -> sprintf "(%s)" q | `Scan tbl -> tbl
-        in
-        let q2 =
-          match sql2 with `Subquery q -> sprintf "(%s)" q | `Scan tbl -> tbl
-        in
-        let a1 = Fresh.name fresh "t%d" in
-        let a2 = Fresh.name fresh "t%d" in
-        let new_s1 = List.map s1 ~f:(fun n -> {n with relation= Some a1}) in
-        let new_s2 = List.map s2 ~f:(fun n -> {n with relation= Some a2}) in
-        let new_schema = new_s1 @ new_s2 in
-        let join_schema = Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema) in
-        if List.length new_schema <> List.length join_schema then
-          Error.create "Bug: schema mismatch" (new_schema, join_schema)
-            [%sexp_of: Name.t list * Name.t list]
-          |> Error.raise ;
-        let pred =
-          let ctx =
-            List.zip_exn
-              (Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema))
-              (new_s1 @ new_s2)
-            |> List.map ~f:(fun (n, n') -> (n, Name n'))
-            |> Map.of_alist_exn (module Name.Compare_no_type)
-          in
-          subst_pred ctx pred |> pred_to_sql
-        in
-        let new_query =
-          sprintf "select * from %s as %s, %s as %s where %s" q1 a1 q2 a2 pred
-        in
-        {sql= `Subquery new_query; schema= new_schema} )
-    | Dedup r ->
-        let sql, schema = to_subquery (f r) in
-        let query = sprintf "select distinct * from %s" sql in
-        {sql= `Subquery query; schema}
-    | As (_, r) -> f r
-    | OrderBy {key; order; rel= r} ->
-        let sql, schema = to_subquery (f r) in
-        let ctx =
-          List.zip_exn Meta.(find_exn r schema) schema
-          |> List.map ~f:(fun (n, n') -> (n, Name n'))
-          |> Map.of_alist_exn (module Name.Compare_no_type)
-        in
-        let sql_order = match order with `Asc -> "asc" | `Desc -> "desc" in
-        let sql_key =
-          List.map key ~f:(fun p -> subst_pred ctx p |> pred_to_sql)
-          |> String.concat ~sep:", "
-        in
-        let new_query =
-          sprintf "select * from %s order by (%s) %s" sql sql_key sql_order
-        in
-        {sql= `Subquery new_query; schema}
-    | GroupBy (ps, key, r) ->
-        let sql, schema = to_subquery (f r) in
-        let ctx =
-          List.zip_exn Meta.(find_exn r schema) schema
-          |> List.map ~f:(fun (n, n') -> (n, Name n'))
-          |> Map.of_alist_exn (module Name.Compare_no_type)
-        in
-        let sql_key =
-          List.map key ~f:(fun p -> subst_pred ctx (Name p) |> pred_to_sql)
-          |> String.concat ~sep:", "
-        in
-        let sql_preds =
-          List.map ps ~f:(fun p -> subst_pred ctx p |> pred_to_sql)
-          |> String.concat ~sep:", "
-        in
-        let new_query =
-          sprintf "select %s from %s group by (%s)" sql_preds sql sql_key
-        in
-        let new_schema = List.map ps ~f:pred_to_schema in
-        {sql= `Subquery new_query; schema= new_schema}
-    | AEmpty | AScalar _ | AList _ | ATuple _ | AHashIdx _ | AOrderedIdx _ ->
-        Error.of_string "Only relational algebra constructs allowed." |> Error.raise
+and spj_to_sql ctx {select; distinct; order; group; relations; conds; limit} =
+  let select =
+    (* If there is no grouping key and there are aggregates in the select list,
+       then we need to deal with any non-aggregates in the select. *)
+    if List.is_empty group then
+      match select_kind (List.map select ~f:(fun {pred= p; _} -> p)) with
+      | `Agg ->
+          List.map select ~f:(fun ({pred= p; _} as entry) ->
+              { entry with
+                pred= (match pred_kind p with `Agg -> p | `Scalar -> Min p) } )
+      | `Scalar -> select
+    else select
   in
-  f r
-
-let ralgebra_to_sql r = to_query (ralgebra_to_sql_helper r)
-
-let ralgebra_foreach q1 q2 =
-  let sql1, s1 = to_subquery (ralgebra_to_sql_helper q1) in
-  let q2 =
-    let ctx =
-      List.zip_exn s1 Meta.(find_exn q1 schema)
-      |> List.map ~f:(fun (n, n') -> (n, Name n'))
-      |> Map.of_alist_exn (module Name.Compare_no_type)
+  let select_sql =
+    let select_list =
+      List.map select ~f:(fun {pred= p; alias= n; cast= t} ->
+          let alias_sql =
+            match p with
+            | Name n' when Name.Compare_no_type.(Name.create n = n') -> ""
+            | _ -> sprintf "as \"%s\"" n
+          in
+          match Option.map t ~f:Type.PrimType.to_sql with
+          | Some t_sql -> sprintf "%s::%s %s" (pred_to_sql ctx p) t_sql alias_sql
+          | None -> sprintf "%s %s" (pred_to_sql ctx p) alias_sql )
+      |> String.concat ~sep:", "
     in
-    subst ctx q2
+    let distinct_sql = if distinct then "distinct" else "" in
+    sprintf "select %s %s" distinct_sql select_list
   in
-  let sql2, s2 = to_subquery (ralgebra_to_sql_helper q2) in
-  let q1_fields = List.map s1 ~f:Name.to_sql in
-  let q2_fields = List.map s2 ~f:Name.to_sql in
-  let fields_str = String.concat ~sep:", " (q1_fields @ q2_fields) in
-  let q1_fields_str = String.concat q1_fields ~sep:", " in
-  sprintf "select %s from %s, lateral %s order by (%s)" fields_str sql1 sql2
-    q1_fields_str
+  let relation_sql =
+    if List.is_empty relations then ""
+    else
+      List.map relations ~f:(fun (rel, join_type) ->
+          let rel_str =
+            match rel with
+            | `Subquery (q, alias) ->
+                sprintf "(%s) as \"%s\"" (to_string ctx q) alias
+            | `Table (t, alias) ->
+                if String.(t = alias) then sprintf "\"%s\"" t
+                else sprintf "\"%s\" as \"%s\"" t alias
+          in
+          let join_str =
+            match join_type with `Left -> "" | `Lateral -> "lateral"
+          in
+          sprintf "%s %s" join_str rel_str )
+      |> String.concat ~sep:", " |> sprintf "from %s"
+  in
+  let cond_sql =
+    if List.is_empty conds then ""
+    else
+      List.map conds ~f:(fun p -> p |> pred_to_sql ctx |> sprintf "(%s)")
+      |> String.concat ~sep:" and " |> sprintf "where %s"
+  in
+  let group_sql =
+    if List.is_empty group then ""
+    else
+      let group_keys =
+        List.map group ~f:(pred_to_sql ctx) |> String.concat ~sep:", "
+      in
+      sprintf "group by (%s)" group_keys
+  in
+  let order_sql =
+    if List.is_empty order then ""
+    else
+      let order_keys =
+        List.map order ~f:(fun (p, dir) ->
+            let dir_sql =
+              match dir with
+              | Asc -> (* Asc is the default order *) ""
+              | Desc -> "desc"
+            in
+            sprintf "%s %s" (pred_to_sql ctx p) dir_sql )
+        |> String.concat ~sep:", "
+      in
+      sprintf "order by %s" order_keys
+  in
+  let limit_sql = match limit with Some l -> sprintf "limit %d" l | None -> "" in
+  sprintf "%s %s %s %s %s %s" select_sql relation_sql cond_sql group_sql order_sql
+    limit_sql
+  |> String.strip
+
+and to_string ctx = function
+  | Query q -> spj_to_sql ctx q
+  | Union_all qs ->
+      List.map qs ~f:(fun q -> sprintf "(%s)" (spj_to_sql ctx q))
+      |> String.concat ~sep:" union all "
+
+let to_string_hum ctx sql =
+  let sql_str = to_string ctx sql in
+  let inp = OS.Cmd.in_string sql_str in
+  let out = OS.Cmd.run_io Cmd.(v "pg_format") inp in
+  match OS.Cmd.to_string ~trim:true out with
+  | Ok sql' -> sql'
+  | Error msg ->
+      Logs.warn (fun m -> m "Formatting sql failed: %a." Rresult.R.pp_msg msg) ;
+      sql_str

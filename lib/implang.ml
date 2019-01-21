@@ -26,30 +26,32 @@ let pp_bool fmt = Format.fprintf fmt "%b"
 let rec pp_expr : Format.formatter -> expr -> unit =
   let open Format in
   let op_to_string = function
-    | IntAdd | FlAdd -> "+"
-    | IntSub | FlSub -> "-"
-    | IntMul | FlMul -> "*"
-    | IntDiv | FlDiv -> "/"
-    | Mod -> "%"
-    | IntLt | FlLt -> "<"
-    | FlLe -> "<="
-    | And -> "&&"
-    | Not -> "not"
-    | IntEq | StrEq | FlEq -> "="
-    | Or -> "||"
-    | IntHash | StrHash -> "hash"
-    | LoadStr -> "load_str"
-    | LoadBool -> "load_bool"
-    | Int2Fl -> "int2fl"
-    | StrLen -> "strlen"
-    | StrPos -> "strpos"
-    | ExtractY -> "to_year"
-    | ExtractM -> "to_mon"
-    | ExtractD -> "to_day"
+    | IntAdd | FlAdd | AddY | AddM -> `Infix "+"
+    | IntSub | FlSub -> `Infix "-"
+    | IntMul | FlMul -> `Infix "*"
+    | IntDiv | FlDiv -> `Infix "/"
+    | Mod -> `Infix "%"
+    | IntLt | FlLt -> `Infix "<"
+    | FlLe -> `Infix "<="
+    | And -> `Infix "&&"
+    | Not -> `Infix "not"
+    | IntEq | StrEq | FlEq -> `Infix "="
+    | Or -> `Infix "||"
+    | IntHash | StrHash -> `Prefix "hash"
+    | LoadStr -> `Prefix "load_str"
+    | LoadBool -> `Prefix "load_bool"
+    | Int2Fl -> `Prefix "int2fl"
+    | Int2Date -> `Prefix "int2date"
+    | StrLen -> `Prefix "strlen"
+    | StrPos -> `Prefix "strpos"
+    | ExtractY -> `Prefix "to_year"
+    | ExtractM -> `Prefix "to_mon"
+    | ExtractD -> `Prefix "to_day"
   in
   fun fmt -> function
     | Null -> fprintf fmt "null"
     | Int x -> Int.pp fmt x
+    | Date x -> Core.Date.pp fmt x
     | Fixed x -> Fixed_point.pp fmt x
     | Bool x -> pp_bool fmt x
     | String x -> fprintf fmt "\"%s\"" (String.escaped x)
@@ -57,13 +59,13 @@ let rec pp_expr : Format.formatter -> expr -> unit =
     | Tuple t -> fprintf fmt "(@[<hov>%a@])" (pp_tuple pp_expr) t
     | Slice (ptr, len) -> fprintf fmt "buf[%a :@ %d]" pp_expr ptr len
     | Index (tuple, idx) -> fprintf fmt "%a[%d]" pp_expr tuple idx
-    | Binop {op= IntHash | StrHash; arg1; arg2} ->
-        fprintf fmt "hash(%a, %a)" pp_expr arg1 pp_expr arg2
-    | Binop {op= LoadStr; arg1; arg2} ->
-        fprintf fmt "load_str(%a, %a)" pp_expr arg1 pp_expr arg2
-    | Binop {op; arg1; arg2} ->
-        fprintf fmt "%a %s@ %a" pp_expr arg1 (op_to_string op) pp_expr arg2
-    | Unop {op; arg} -> fprintf fmt "%s@ %a" (op_to_string op) pp_expr arg
+    | Binop {op; arg1; arg2} -> (
+      match op_to_string op with
+      | `Prefix str -> fprintf fmt "%s(%a, %a)" str pp_expr arg1 pp_expr arg2
+      | `Infix str -> fprintf fmt "%a %s@ %a" pp_expr arg1 str pp_expr arg2 )
+    | Unop {op; arg} ->
+        let (`Infix str | `Prefix str) = op_to_string op in
+        fprintf fmt "%s@ %a" str pp_expr arg
     | Done func -> fprintf fmt "done(%s)" func
     | Ternary (e1, e2, e3) ->
         fprintf fmt "%a ? %a : %a" pp_expr e1 pp_expr e2 pp_expr e3
@@ -201,6 +203,7 @@ module Builder = struct
     match e with
     | Null -> NullT
     | Int _ -> IntT {nullable= false}
+    | Date _ -> DateT {nullable= false}
     | Fixed _ -> FixedT {nullable= false}
     | Bool _ -> BoolT {nullable= false}
     | String _ -> StringT {nullable= false}
@@ -218,22 +221,33 @@ module Builder = struct
         match (op, t1, t2) with
         | (IntAdd | IntSub | IntMul | IntDiv), IntT _, IntT _ ->
             IntT {nullable= false}
+        (* Adding an int to a date or a date to an int produces an offset from
+           the date. *)
+        | (IntAdd | IntSub | AddM | AddY), DateT _, IntT _
+         |(IntAdd | IntSub), IntT _, DateT _ ->
+            DateT {nullable= false}
+        (* Dates can be subtracted from each other, to get the number of days
+           between them, but they cannot be added. *)
+        | IntSub, DateT _, DateT _ -> IntT {nullable= false}
         | (FlAdd | FlSub | FlMul | FlDiv), FixedT _, FixedT _ ->
             FixedT {nullable= false}
         | (And | Or), BoolT _, BoolT _ | (And | Or), IntT _, IntT _ -> unify t1 t2
         | IntLt, IntT {nullable= n1}, IntT {nullable= n2} ->
             BoolT {nullable= n1 || n2}
+        | IntLt, DateT {nullable= n1}, DateT {nullable= n2} ->
+            BoolT {nullable= n1 || n2}
         | FlLt, FixedT _, FixedT _ -> BoolT {nullable= false}
-        | IntHash, IntT _, IntT _ | StrHash, IntT _, StringT _ ->
+        | IntHash, IntT _, (IntT _ | DateT _) | StrHash, IntT _, StringT _ ->
             IntT {nullable= false}
         | IntEq, IntT {nullable= n1}, IntT {nullable= n2}
+         |IntEq, DateT {nullable= n1}, DateT {nullable= n2}
          |StrEq, StringT {nullable= n1}, StringT {nullable= n2}
          |FlEq, FixedT {nullable= n1}, FixedT {nullable= n2} ->
             BoolT {nullable= n1 || n2}
         | LoadStr, IntT {nullable= false}, IntT {nullable= false} ->
             StringT {nullable= false}
         | StrPos, StringT _, StringT _ -> IntT {nullable= false}
-        | _ ->
+        | _, _, _ ->
             fail
               (Error.create "Type error." (e, t1, t2, ctx)
                  [%sexp_of: expr * t * t * t Hashtbl.M(String).t]) )
@@ -242,6 +256,7 @@ module Builder = struct
         match (op, t) with
         | Not, BoolT {nullable} -> BoolT {nullable}
         | Int2Fl, IntT _ -> FixedT {nullable= false}
+        | Int2Date, IntT _ -> DateT {nullable= false}
         | StrLen, StringT _ -> IntT {nullable= false}
         | LoadBool, IntT _ -> BoolT {nullable= false}
         | _ -> fail (Error.create "Type error." (op, t) [%sexp_of: op * t]) )
@@ -371,16 +386,16 @@ module Builder = struct
     build_iter iter_ args b ;
     Option.iter header ~f:(fun f -> f tup b) ;
     let add_footer b = Option.iter footer ~f:(fun f -> f tup b) in
-    match Option.map count ~f:(fun c -> Type.AbsCount.kind c) with
-    | Some (`Count 0) -> add_footer b
-    | Some (`Count 1) -> build_step tup iter_ b ; body tup b ; add_footer b
-    | Some (`Count x) ->
+    match Option.bind count ~f:Type.AbsInt.to_int with
+    | Some 0 -> add_footer b
+    | Some 1 -> build_step tup iter_ b ; body tup b ; add_footer b
+    | Some x ->
         build_count_loop
           Infix.(int x)
           (fun b -> build_step tup iter_ b ; body tup b)
           b ;
         add_footer b
-    | None | Some `Countable | Some `Unknown ->
+    | None ->
         build_loop
           Infix.(not (Done iter_.name))
           (fun b ->
@@ -392,41 +407,13 @@ module Builder = struct
               b )
           b
 
-  let type_err msg x y t1 t2 =
-    Error.create msg (x, y, t1, t2)
-      [%sexp_of: expr * expr * Type.PrimType.t * Type.PrimType.t]
-    |> Error.raise
-
-  (* let build_fixed x y b =
-   *   let ret = build_fresh_var "f" (FixedT {nullable= false}) b in
-   *   build_assign (Tuple [x; y]) ret b ;
-   *   ret
-   * 
-   * let build_convert_pair x y b =
-   *   let build_convert x s' =
-   *     let v = Infix.(index x 0) in
-   *     let s = Infix.(index x 1) in
-   *     build_fixed Infix.(v * (s' / s)) s' b
-   *   in
-   *   let s1 = Infix.(index x 1) in
-   *   let s2 = Infix.(index y 1) in
-   *   let z =
-   *     Ternary
-   *       ( Binop {op= IntEq; arg1= s1; arg2= s2}
-   *       , Tuple [x; y]
-   *       , Ternary
-   *           ( Infix.(s1 < s2)
-   *           , Tuple [build_convert x s2; y]
-   *           , Tuple [x; build_convert y s1] ) )
-   *   in
-   *   Infix.(index z 0, index z 1) *)
-
   let rec build_eq x y b =
     let t1 = type_of x b in
     let t2 = type_of y b in
     let open Type.PrimType in
     match (t1, t2) with
-    | IntT {nullable= false}, IntT {nullable= false} ->
+    | IntT {nullable= false}, IntT {nullable= false}
+     |DateT {nullable= false}, DateT {nullable= false} ->
         Binop {op= IntEq; arg1= x; arg2= y}
     | StringT {nullable= false}, StringT {nullable= false} ->
         Binop {op= StrEq; arg1= x; arg2= y}
@@ -449,7 +436,7 @@ module Builder = struct
     let t = type_of y b in
     let open Type.PrimType in
     match t with
-    | IntT {nullable= false} | BoolT {nullable= false} ->
+    | IntT {nullable= false} | BoolT {nullable= false} | DateT {nullable= false} ->
         Binop {op= IntHash; arg1= x; arg2= y}
     | StringT {nullable= false} -> Binop {op= StrHash; arg1= x; arg2= y}
     | TupleT ts -> TupleHash (ts, x, y)
@@ -468,7 +455,8 @@ module Builder = struct
     let t2 = type_of y b in
     let open Type.PrimType in
     match (t1, t2) with
-    | IntT {nullable= false}, IntT {nullable= false} ->
+    | IntT {nullable= false}, IntT {nullable= false}
+     |DateT {nullable= false}, DateT {nullable= false} ->
         Binop {op= IntLt; arg1= x; arg2= y}
     | FixedT {nullable= false}, FixedT {nullable= false} ->
         Binop {op= FlLt; arg1= x; arg2= y}
@@ -493,7 +481,8 @@ module Builder = struct
     let t2 = type_of y b in
     let open Type.PrimType in
     match (t1, t2) with
-    | IntT {nullable= false}, IntT {nullable= false} ->
+    | IntT {nullable= false}, IntT {nullable= false}
+     |DateT {nullable= false}, DateT {nullable= false} ->
         Infix.(build_lt x y b || build_eq x y b)
     | FixedT {nullable= false}, FixedT {nullable= false} ->
         Binop {op= FlLe; arg1= x; arg2= y}
@@ -517,8 +506,9 @@ module Builder = struct
     let open Type.PrimType in
     match t with
     | IntT {nullable= false} -> f (`Int x)
+    | DateT {nullable= false} -> f (`Date x)
     | FixedT {nullable= false} -> f (`Fixed x)
-    | IntT {nullable= true} | FixedT {nullable= true} ->
+    | IntT {nullable= true} | FixedT {nullable= true} | DateT {nullable= true} ->
         type_err "Nullable types." t
     | NullT | StringT _ | BoolT _ | TupleT _ | VoidT ->
         type_err "Nonnumeric types." t
@@ -526,34 +516,19 @@ module Builder = struct
   let const_int =
     build_numeric0 (function
       | `Int x -> Infix.(int x)
-      | `Fixed x -> Fixed (Fixed_point.of_int x) )
+      | `Fixed x -> Fixed (Fixed_point.of_int x)
+      | `Date x -> Date (Date.of_int x) )
 
   let build_numeric2 f x y b =
     let t1 = type_of x b in
     let t2 = type_of y b in
-    let open Type.PrimType in
-    match (t1, t2) with
-    | IntT {nullable= false}, IntT {nullable= false} -> f (`Int (x, y))
-    | FixedT {nullable= false}, FixedT {nullable= false} -> f (`Fixed (x, y))
-    | IntT {nullable= false}, FixedT {nullable= false} -> f (`Fixed (int2fl x, y))
-    | FixedT {nullable= false}, IntT {nullable= false} -> f (`Fixed (x, int2fl y))
-    | IntT _, FixedT _ | FixedT _, IntT _ -> type_err "Mismatched types." x y t1 t2
-    | IntT {nullable= true}, _
-     |_, IntT {nullable= true}
-     |FixedT {nullable= true}, _
-     |_, FixedT {nullable= true} ->
-        type_err "Nullable types." x y t1 t2
-    | NullT, _
-     |StringT _, _
-     |BoolT _, _
-     |TupleT _, _
-     |VoidT, _
-     |_, NullT
-     |_, StringT _
-     |_, BoolT _
-     |_, TupleT _
-     |_, VoidT ->
-        type_err "Nonnumeric types." x y t1 t2
+    match (build_numeric0 (fun x -> x) t1 x, build_numeric0 (fun x -> x) t2 y) with
+    | (`Int x | `Date x), (`Int y | `Date y) -> f (`Int (x, y))
+    | `Fixed x, `Int y -> f (`Fixed (x, int2fl y))
+    | `Int x, `Fixed y -> f (`Fixed (int2fl x, y))
+    | `Fixed _, `Fixed _ -> f (`Fixed (x, y))
+    | `Fixed _, `Date _ | `Date _, `Fixed _ ->
+        failwith "Cannot convert fixed point to date."
 
   let build_add =
     build_numeric2 (function
@@ -572,7 +547,11 @@ module Builder = struct
 
   let build_div =
     build_numeric2 (function
-      | `Int (x, y) -> Infix.(x / y)
+      | `Int (x, y) ->
+          Binop
+            { op= FlDiv
+            ; arg1= Unop {op= Int2Fl; arg= x}
+            ; arg2= Unop {op= Int2Fl; arg= y} }
       | `Fixed (x, y) -> Binop {op= FlDiv; arg1= x; arg2= y} )
 
   let build_concat vs b =

@@ -3,6 +3,7 @@ open Collections
 
 type op = Implang0.op =
   | Int2Fl
+  | Int2Date
   | IntAdd
   | IntSub
   | IntMul
@@ -30,11 +31,14 @@ type op = Implang0.op =
   | ExtractY
   | ExtractM
   | ExtractD
+  | AddY
+  | AddM
 [@@deriving compare, sexp]
 
 type expr = Implang0.expr =
   | Null
   | Int of int
+  | Date of Core.Date.t
   | Fixed of Fixed_point.t
   | Bool of bool
   | String of string
@@ -156,7 +160,7 @@ module Builder : sig
   val build_count_loop : expr -> (t -> unit) -> t -> unit
 
   val build_foreach :
-       ?count:Type.AbsCount.t
+       ?count:Type.AbsInt.t
     -> ?header:(expr -> t -> unit)
     -> ?footer:(expr -> t -> unit)
     -> ?persistent:bool

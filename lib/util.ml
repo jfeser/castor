@@ -11,6 +11,17 @@ let command_exn ?quiet:_ = function
       Or_error.tag_arg err "Running command failed." cmd_str [%sexp_of: string]
       |> Or_error.ok_exn
 
+let command_out_exn ?quiet:_ = function
+  | [] -> Error.of_string "Empty command" |> Error.raise
+  | cmd ->
+      let cmd_str = String.concat cmd ~sep:" " in
+      Logs.info (fun m -> m "%s" cmd_str) ;
+      let err = Unix.system cmd_str in
+      err |> Unix.Exit_or_signal.or_error
+      |> fun err ->
+      Or_error.tag_arg err "Running command failed." cmd_str [%sexp_of: string]
+      |> Or_error.ok_exn
+
 let param =
   let open Command in
   Arg_type.create (fun s ->
@@ -21,9 +32,10 @@ let param =
         | "string" -> StringT {nullable= false}
         | "int" -> IntT {nullable= false}
         | "bool" -> BoolT {nullable= false}
-        | "date" -> IntT {nullable= false}
+        | "date" -> DateT {nullable= false}
         | "float" -> FixedT {nullable= false}
-        | _ -> failwith "Unexpected type name."
+        | _ ->
+            Error.create "Unexpected type name." v [%sexp_of: string] |> Error.raise
       in
       (k, v) )
 

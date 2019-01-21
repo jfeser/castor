@@ -2,57 +2,21 @@ open Core
 open Abslayout
 open Test_util
 
-let rels = Hashtbl.create (module Db.Relation)
-
-let _ =
-  create rels "r1" ["f"; "g"]
-    [[0; 5]; [1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]; [4; 6]]
-
-let _ = create rels "one" [] [[]]
-
-let _ =
-  create rels "log" ["counter"; "succ"; "id"]
-    [[1; 4; 1]; [2; 3; 2]; [3; 4; 3]; [4; 6; 1]; [5; 6; 3]]
-
-let _ =
-  create_val rels "r2"
-    [("a", Type.PrimType.FixedT {nullable= false})]
-    [ [Fixed (Fixed_point.of_string "0.01")]
-    ; [Fixed (Fixed_point.of_string "5")]
-    ; [Fixed (Fixed_point.of_string "34.42")]
-    ; [Fixed (Fixed_point.of_string "0.88")]
-    ; [Fixed (Fixed_point.of_string "-0.42")] ]
-
-let _ =
-  create_val rels "log_str"
-    [ ("counter", Type.PrimType.IntT {nullable= false})
-    ; ("succ", Type.PrimType.IntT {nullable= false})
-    ; ("id", Type.PrimType.StringT {nullable= false}) ]
-    [ [Int 1; Int 4; String "foo"]
-    ; [Int 2; Int 3; String "fizzbuzz"]
-    ; [Int 3; Int 4; String "bar"]
-    ; [Int 4; Int 6; String "foo"]
-    ; [Int 5; Int 6; String "bar"] ]
-
-let make_modules ?layout_file () =
-  let module E = Eval.Make_mock (struct
-    let rels = rels
-  end) in
-  let module M = Abslayout_db.Make (E) in
+let make_modules ?layout_file ?(irgen_debug = false) () =
+  let module M = Abslayout_db.Make (Test_db) in
   let module S =
     Serialize.Make (struct
         let layout_map_channel = Option.map layout_file ~f:Out_channel.create
       end)
-      (E)
       (M)
   in
   let module I =
     Irgen.Make (struct
         let code_only = false
 
-        let debug = false
+        let debug = irgen_debug
       end)
-      (E)
+      (M)
       (S)
       ()
   in
@@ -68,25 +32,23 @@ let make_modules ?layout_file () =
   , (module I : Irgen.S)
   , (module C : Codegen.S) )
 
-let make_modules_db ?layout_file () =
-  let module E = Eval.Make (struct
+let make_modules_db ?layout_file ?(irgen_debug = false) () =
+  let module M = Abslayout_db.Make (struct
     let conn = create_db "postgresql://localhost:5433/demomatch"
   end) in
-  let module M = Abslayout_db.Make (E) in
   let module S =
     Serialize.Make (struct
         let layout_map_channel = Option.map layout_file ~f:Out_channel.create
       end)
-      (E)
       (M)
   in
   let module I =
     Irgen.Make (struct
         let code_only = false
 
-        let debug = false
+        let debug = irgen_debug
       end)
-      (E)
+      (M)
       (S)
       ()
   in
@@ -115,21 +77,12 @@ let run_in_fork thunk =
       Unix.Exit_or_signal.to_string_hum err |> print_endline
 
 let run_test ?(params = []) ?(modules = make_modules) ?(print_layout = true)
-    ?(fork = false) layout_str =
+    ?(fork = false) ?irgen_debug layout_str =
   let layout_file = Filename.temp_file "layout" "txt" in
-  let (module M), (module S), (module I), (module C) = modules ~layout_file () in
-  let layout =
-    let params =
-      List.map params ~f:(fun (n, _) -> n)
-      |> Set.of_list (module Name.Compare_no_type)
-    in
-    of_string_exn layout_str |> M.resolve ~params
+  let (module M), (module S), (module I), (module C) =
+    modules ~layout_file ?irgen_debug ()
   in
-  M.annotate_schema layout ;
-  let layout = M.annotate_key_layouts layout in
-  annotate_foreach layout ;
-  let out_dir = Filename.temp_dir "bin" "" in
-  let run_compiler () =
+  let run_compiler out_dir layout =
     let exe_fn, data_fn =
       let params = List.map ~f:Tuple.T2.get1 params in
       C.compile ~out_dir ~gprof:false ~params layout
@@ -149,17 +102,31 @@ let run_test ?(params = []) ?(modules = make_modules) ?(print_layout = true)
     print_endline (Unix.Exit_or_signal.to_string_hum ret) ;
     Out_channel.flush stdout
   in
-  if fork then run_in_fork run_compiler else run_compiler ()
+  try
+    let layout =
+      let params =
+        List.map params ~f:(fun (n, _) -> n)
+        |> Set.of_list (module Name.Compare_no_type)
+      in
+      of_string_exn layout_str |> M.resolve ~params
+    in
+    M.annotate_schema layout ;
+    let layout = M.annotate_key_layouts layout in
+    annotate_foreach layout ;
+    let out_dir = Filename.temp_dir "bin" "" in
+    if fork then run_in_fork (fun () -> run_compiler out_dir layout)
+    else run_compiler out_dir layout
+  with exn -> printf "Error: %s\n" (Exn.to_string exn)
 
 let%expect_test "ordered-idx" =
   run_test ~print_layout:false
-    "AOrderedIdx(OrderBy([r1.f], Dedup(Select([r1.f], r1)), asc) as k, \
+    "AOrderedIdx(OrderBy([r1.f asc], Dedup(Select([r1.f], r1))) as k, \
      AList(Filter(r1.f = k.f, r1), ascalar(r1.g)), 1, 3)" ;
   [%expect {|
-    1,2,
-    1,3,
-    2,1,
-    2,2,
+    1|2
+    1|3
+    2|1
+    2|2
 
     exited normally |}]
 
@@ -170,7 +137,7 @@ let%expect_test "agg" =
      alist(r2, ascalar(r2.a)))" ;
   [%expect
     {|
-    3.000000,7.978000,5,39.890000,-0.420000,34.420000,
+    3.000000|7.978000|5|39.890000|-0.420000|34.420000
 
     exited normally |}]
 
@@ -179,8 +146,8 @@ let%expect_test "hash-idx" =
     "AHashIdx(Dedup(Select([r1.f], r1)) as k, AList(Filter(r1.f = k.f, r1), \
      ascalar(r1.g)), 2)" ;
   [%expect {|
-    2,1,
-    2,2,
+    2|1
+    2|2
 
     exited normally |}]
 
@@ -206,7 +173,7 @@ let%expect_test "strops" =
 select([strlen("test"), strpos("testing", "in")], ascalar(0))
 |} ;
   [%expect {|
-    4,5,
+    4|5
 
     exited normally |}]
 
@@ -221,7 +188,7 @@ log.counter < lp.succ, log) as lc,
 atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
 |} ;
   [%expect {|
-    1,2,
+    1|2
 
     exited normally |}]
 
@@ -236,7 +203,7 @@ log_str.counter < lp.succ, log_str) as lc,
 atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
 |} ;
   [%expect {|
-    1,2,
+    1|2
 
     exited normally |}]
 
@@ -254,7 +221,7 @@ select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as 
   (id_p, id_c)))
 |} ;
   [%expect {|
-    1,2,
+    1|2
 
     exited normally |}]
 
@@ -272,7 +239,7 @@ select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as 
   (id_p, id_c)))
 |} ;
   [%expect {|
-    1,2,
+    1|2
 
     exited normally |}]
 
@@ -292,7 +259,7 @@ select([lp.counter, lc.counter],
       lp.counter, lp.succ) as lc)], cross))
 |} ;
   [%expect {|
-    1,2,
+    1|2
 
     exited normally |}]
 
@@ -312,6 +279,116 @@ select([lp.counter, lc.counter],
       lp.counter, lp.succ) as lc)], cross))
 |} ;
   [%expect {|
-    1,2,
+    1|2
+
+    exited normally |}]
+
+let%expect_test "output-test" =
+  run_test ~print_layout:false
+    {|select([1, 100, 1.0, 0.0001, 1.0001, "this is a test", "test with, commas", date("1994-01-04"), true, false], ascalar(0))|} ;
+  [%expect
+    {|
+    1|100|1.000000|0.000100|1.000100|this is a test|test with, commas|1994-01-04|t|f
+
+    exited normally |}]
+
+let%expect_test "ordering" =
+  run_test ~print_layout:false
+    {|alist(orderby([r1.f desc], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross))|} ;
+  run_test ~print_layout:false
+    {|alist(orderby([r1.f], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross))|} ;
+  run_test ~print_layout:false
+    {|atuple([alist(orderby([r1.f desc], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|} ;
+  run_test ~print_layout:false
+    {|atuple([alist(orderby([r1.f], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f desc], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|} ;
+  [%expect
+    {|
+    3|4
+    2|1
+    2|2
+    1|2
+    1|3
+
+    exited normally
+    1|2
+    1|3
+    2|1
+    2|2
+    3|4
+
+    exited normally
+    3|4
+    2|1
+    2|2
+    1|2
+    1|3
+    9|9
+    1|2
+    1|3
+    2|1
+    2|2
+    3|4
+
+    exited normally
+    1|2
+    1|3
+    2|1
+    2|2
+    3|4
+    9|9
+    3|4
+    2|1
+    2|2
+    1|2
+    1|3
+
+    exited normally |}]
+
+let%expect_test "ordered-idx-dates" =
+  run_test
+    {|AOrderedIdx(OrderBy([f desc], Dedup(Select([f], r_date))) as k, 
+     AScalar(k.f), date("2017-10-04"), date("2018-10-04"))|} ;
+  [%expect
+    {|
+    0:4 Ordered idx len (=72)
+    4:8 Ordered idx index len (=50)
+    12:2 Scalar (=(Date 2016-12-01))
+    12:2 Scalar (=(Date 2016-12-01))
+    12:2 Ordered idx key
+    14:8 Ordered idx value ptr (=62)
+    22:2 Scalar (=(Date 2017-10-05))
+    22:2 Scalar (=(Date 2017-10-05))
+    22:2 Ordered idx key
+    24:8 Ordered idx value ptr (=64)
+    32:2 Scalar (=(Date 2018-01-01))
+    32:2 Scalar (=(Date 2018-01-01))
+    32:2 Ordered idx key
+    34:8 Ordered idx value ptr (=66)
+    42:2 Scalar (=(Date 2018-01-23))
+    42:2 Scalar (=(Date 2018-01-23))
+    42:2 Ordered idx key
+    44:8 Ordered idx value ptr (=68)
+    52:2 Scalar (=(Date 2018-09-01))
+    52:2 Scalar (=(Date 2018-09-01))
+    52:2 Ordered idx key
+    54:8 Ordered idx value ptr (=70)
+    62:2 Scalar (=(Date 2016-12-01))
+    64:2 Scalar (=(Date 2017-10-05))
+    66:2 Scalar (=(Date 2018-01-01))
+    68:2 Scalar (=(Date 2018-01-23))
+    70:2 Scalar (=(Date 2018-09-01))
+
+    2017-10-05|2017-10-05
+    2018-01-01|2018-01-01
+    2018-01-23|2018-01-23
+    2018-09-01|2018-09-01
+
+    exited normally |}]
+
+let%expect_test "date-arith" =
+  run_test ~print_layout:false
+    {|select([date("1997-07-01") + month(3), date("1997-07-01") + day(90)], ascalar(0))|} ;
+  [%expect {|
+    1997-10-01|1997-09-29
 
     exited normally |}]

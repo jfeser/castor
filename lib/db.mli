@@ -1,4 +1,5 @@
 open Base
+open Collections
 
 type t
 
@@ -7,7 +8,7 @@ val create : string -> t
 val exec :
   ?max_retries:int -> ?params:string list -> t -> string -> Postgresql.result
 
-val result_to_tuples : Postgresql.result -> Value.t Map.M(String).t Sequence.t
+val command_ok : Postgresql.result -> unit
 
 val result_to_strings : Postgresql.result -> string list list
 
@@ -15,8 +16,11 @@ val exec_cursor :
      ?batch_size:int
   -> ?params:string list
   -> t
+  -> Type.PrimType.t list
   -> string
-  -> Value.t Map.M(String).t Sequence.t
+  -> Value.t list Gen.t
+
+val check : t -> string -> unit Or_error.t
 
 module Field : sig
   type t = {fname: string; type_: Type.PrimType.t} [@@deriving compare, sexp]

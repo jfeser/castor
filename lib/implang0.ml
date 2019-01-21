@@ -3,6 +3,7 @@ module Pervasives = Caml.Pervasives
 
 type op =
   | Int2Fl
+  | Int2Date
   | IntAdd
   | IntSub
   | IntMul
@@ -30,11 +31,14 @@ type op =
   | ExtractY
   | ExtractM
   | ExtractD
+  | AddY
+  | AddM
 [@@deriving compare, sexp]
 
 type expr =
   | Null
   | Int of (int[@opaque])
+  | Date of (Core.Date.t[@opaque])
   | Fixed of (Fixed_point.t[@opaque])
   | Bool of (bool[@opaque])
   | String of (string[@opaque])

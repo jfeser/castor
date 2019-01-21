@@ -1,6 +1,6 @@
 (include dune.inc)
 
-(rule (with-stdout-to dune.inc.gen (run ./run-bench.py --gen-dune)))
+(rule (with-stdout-to dune.inc.gen (run ./run-bench.py gen-dune)))
 (alias
  (name check_transforms)
  (action (diff dune.inc dune.inc.gen)))

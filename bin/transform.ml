@@ -15,8 +15,7 @@ let main ?(debug = false) ?sample:_ ?(transforms = "") ~db ~params query_str =
 
     let check_transforms = debug
   end in
-  let module E = Eval.Make (Config) in
-  let module M = Abslayout_db.Make (E) in
+  let module M = Abslayout_db.Make (Config) in
   let module Transform = Transform.Make (Config) (M) () in
   let query = Abslayout.of_string_exn query_str |> M.resolve ~params in
   let candidates =

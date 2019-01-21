@@ -1,6 +1,16 @@
-select l_orderkey, o_orderdate, o_shippriority, sum(l_extendedprice * (1 - l_discount))
-  from q3
- where l_shipdate > date '1995-03-15' and
-       o_orderdate < date '1995-03-15' and
-       c_mktsegment = 'BUILDING'
- group by l_orderkey, o_orderdate, o_shippriority;
+SELECT
+    l_orderkey,
+    o_orderdate,
+    o_shippriority,
+    sum(l_extendedprice * (1 - l_discount))
+FROM
+    q3
+WHERE
+    l_shipdate > date '1995-03-15'
+    AND o_orderdate < date '1995-03-15'
+    AND c_mktsegment = 'BUILDING'
+GROUP BY
+    l_orderkey,
+    o_orderdate,
+    o_shippriority;
+

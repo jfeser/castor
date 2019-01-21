@@ -42,5 +42,4 @@ orderby([l_shipmode],
     join((o_orderkey) = (l_orderkey),
       orders,
       filter((((l_shipmode) = (param1)) || ((l_shipmode) = (param2))) && (((l_commitdate) < (l_receiptdate)) && (((l_shipdate) < (l_commitdate)) && (((l_receiptdate) >= (param3)) && ((l_receiptdate) < ((param3) + (year(1))))))),
-        lineitem))),
-  asc)
+        lineitem))))
