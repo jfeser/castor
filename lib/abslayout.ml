@@ -143,8 +143,9 @@ and pp_pred fmt =
 
 and pp_order fmt (p, o) =
   let open Caml.Format in
-  let order = match o with Asc -> "asc" | Desc -> "desc" in
-  fprintf fmt "@[<hov>%a@ %s@]" pp_pred p order
+  match o with
+  | Asc -> fprintf fmt "@[<hov>%a@]" pp_pred p
+  | Desc -> fprintf fmt "@[<hov>%a@ desc@]" pp_pred p
 
 and pp fmt {node; _} =
   let open Caml.Format in

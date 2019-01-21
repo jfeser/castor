@@ -49,6 +49,14 @@
 # 	p_partkey;
 # :n 100
 
+  select([s1.s_acctbal,
+          s1.s_name,
+          n1.n_name,
+          p1.p_partkey,
+          p1.p_mfgr,
+          s1.s_address,
+          s1.s_phone,
+          s1.s_comment],
 orderby([s_acctbal desc, n_name, s_name, p_partkey],
   select([s_acctbal,
           s_name,
@@ -79,4 +87,4 @@ orderby([s_acctbal desc, n_name, s_name, p_partkey],
           partsupp as ps1),
       filter(((p_size = param1) &&
              (strpos(p_type, param2) = (strlen(p_type) - strlen(param2) + 1))),
-        part as p1)))))
+        part as p1))))))

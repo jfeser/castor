@@ -1,4 +1,4 @@
-alist(orderby([k0_lineitem_l_shipmode asc],
+alist(orderby([k0_lineitem_l_shipmode],
         dedup(
           select([lineitem.l_shipmode as k0_lineitem_l_shipmode],
             join((orders.o_orderkey = lineitem.l_orderkey), orders, lineitem)))),

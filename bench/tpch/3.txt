@@ -27,7 +27,7 @@
 # 	revenue desc,
 # 	o_orderdate;
 # :n 10
-
+select([l_orderkey, revenue, o_orderdate, o_shippriority],
 orderby([revenue, o_orderdate],
   groupby([l_orderkey,
            sum((l_extendedprice) * ((1) - (l_discount))) as revenue,
@@ -38,4 +38,4 @@ orderby([revenue, o_orderdate],
       join((l_orderkey) = (o_orderkey),
         filter((o_orderdate) < (param1), orders),
         filter((l_shipdate) > (param1), lineitem)),
-      filter((c_mktsegment) = (param0), customer))))
+      filter((c_mktsegment) = (param0), customer)))))

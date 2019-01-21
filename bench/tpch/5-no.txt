@@ -30,6 +30,7 @@
 # 	revenue desc;
 # :n -1
 
+select([n_name, revenue],
   groupby([n_name, sum((l_extendedprice) * ((1) - (l_discount))) as revenue],
     [n_name],
     join((l_orderkey) = (o_orderkey) && l_suppkey = s_suppkey,
@@ -43,4 +44,4 @@
           customer),
         filter(((o_orderdate) >= (param1)) && ((o_orderdate) < ((param1) + (year(1)))),
           orders)),
-      lineitem))
+      lineitem)))

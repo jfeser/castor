@@ -36,6 +36,7 @@
 # 	p_size;
 # :n -1
 
+select([p_brand, p_type, p_size, supplier_cnt],
 groupby([p_brand, p_type, p_size, count() as supplier_cnt],
   [p_brand, p_type, p_size],
   join((p_partkey = ps_partkey),
@@ -53,4 +54,4 @@ groupby([p_brand, p_type, p_size, count() as supplier_cnt],
                                ((strpos(s_comment, "Customer") >= 1) &&
                                (strpos(s_comment, "Complaints") >= 1))),
                           supplier))),
-        partsupp))))
+        partsupp)))))

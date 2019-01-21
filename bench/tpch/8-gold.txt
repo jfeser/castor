@@ -1,4 +1,3 @@
-select([o_year, mkt_share],
 ahashidx(dedup(select([region.r_name as region_r_name_0], region)),
   alist(orderby([k1_o_year],
           dedup(
@@ -68,4 +67,4 @@ ahashidx(dedup(select([region.r_name as region_r_name_0], region)),
                   ascalar(nation_name),
                   ascalar(part.p_type)],
             cross))))),
-  param2))
+  param2)

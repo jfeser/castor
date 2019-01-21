@@ -43,7 +43,7 @@
 # 	o_year;
 # :n -1
 
-orderby([o_year],
+orderby([o_year asc],
   groupby([o_year,
            (sum(if (nation_name = param1) then volume else 0.0) / sum(volume)) as mkt_share],
     [o_year],
