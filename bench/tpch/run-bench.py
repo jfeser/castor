@@ -5,6 +5,7 @@ Usage:
   run-bench.py sql [options] [QUERY...]
   run-bench.py compile-castor [options] [QUERY...]
   run-bench.py run-castor [options] [QUERY...]
+  run-bench.py time-castor [options] [QUERY...]
   run-bench.py validate
   run-bench.py gen-dune
 
@@ -257,8 +258,7 @@ def bench_dir(query_name):
     return os.path.splitext(query_name)[0]
 
 
-def compile_bench(query_name, params, csv_file):
-    csv_writer = csv.writer(csv_file)
+def compile_bench(query_name, params):
     query = rpath(query_name + ".txt")
 
     # Make benchmark dir.
@@ -282,12 +282,27 @@ def compile_bench(query_name, params, csv_file):
             check_call(compile_cmd_parts + [query_file], stdout=cl, stderr=cl)
     except Exception:
         log.exception("Compile failed.")
-        csv_writer.writerow([query_name, None])
-        csv_file.flush()
         return
 
 
-def run_bench(query_name, params, csv_file):
+def run_bench(query_name, params):
+    benchd = bench_dir(query_name)
+    os.chdir(benchd)
+
+    param_values = [p[1] for p in params]
+    cmd = ["./scanner.exe", "-p", "data.bin"] + param_values
+    cmd_str = shlex.quote(" ".join(cmd))
+    try:
+        log.debug("Running %s in %s.", cmd_str, os.getcwd())
+        with open("results.csv", "w") as out:
+            call(cmd, stdout=out)
+    except Exception:
+        log.exception("Running %s failed.", query_name)
+
+    os.chdir("..")
+
+
+def time_bench(query_name, params, csv_file):
     csv_writer = csv.writer(csv_file)
     benchd = bench_dir(query_name)
     os.chdir(benchd)
@@ -297,8 +312,6 @@ def run_bench(query_name, params, csv_file):
     time_cmd = " ".join(time_cmd_parts)
     log.debug(time_cmd)
 
-    cmd = ["./scanner.exe", "-p", "data.bin"] + param_values
-    cmd_str = shlex.quote(" ".join(cmd))
     try:
         boutput = check_output(time_cmd_parts)
         output = boutput.decode("utf-8")
@@ -311,13 +324,10 @@ def run_bench(query_name, params, csv_file):
         csv_writer.writerow([query_name, time])
         csv_file.flush()
 
-        log.debug("Running %s in %s.", cmd_str, os.getcwd())
-        with open("results.csv", "w") as out:
-            call(cmd, stdout=out)
         with open("mem.json", "w") as out:
             call(["/usr/bin/time", "-v"] + time_cmd_parts, stdout=out, stderr=out)
     except Exception:
-        log.exception("Running %s failed.", cmd)
+        log.exception("Timing %s failed.", query_name)
 
     os.chdir("..")
 
@@ -401,22 +411,23 @@ elif args["sql"]:
             run_sql(name, bench["params"])
 
 elif args["compile-castor"]:
-    csv_file = open(OUT_FILE, "a")
-    csv_writer = csv.writer(csv_file)
-
     for bench in BENCHMARKS:
         for query in bench["query"]:
             if should_run(query):
-                compile_bench(query, bench["params"], csv_file)
+                compile_bench(query, bench["params"])
 
 elif args["run-castor"]:
-    csv_file = open(OUT_FILE, "a")
-    csv_writer = csv.writer(csv_file)
-
     for bench in BENCHMARKS:
         for query in bench["query"]:
             if should_run(query):
-                run_bench(query, bench["params"], csv_file)
+                run_bench(query, bench["params"])
+
+elif args["time-castor"]:
+    with open("results.csv", "a") as csv_file:
+        for bench in BENCHMARKS:
+            for query in bench["query"]:
+                if should_run(query):
+                    time_bench(query, bench["params"], csv_file)
 
 elif args["validate"]:
     validate()
