@@ -11,7 +11,6 @@ FROM
     q10_1,
     q10_2
 WHERE
-    o_orderdate >= date '1993-10-01'
-    AND o_orderdate < date '1993-10-01' + interval '3' month
+    o_orderdate = date '1993-10-01'
     AND q10_1.c_custkey = q10_2.c_custkey;
 
