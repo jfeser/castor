@@ -324,9 +324,9 @@ def time_bench(query_name, params, csv_file):
 
         time_output = check_output(
             ["/usr/bin/time", "-v"] + time_cmd_parts, stderr=subprocess.STDOUT
-        )
-        match = re.search(r"Maximum resident set size \(kbytes\): (\d+)")
-        peak_rss = peak_rss.groups(1) if match is not None else None
+        ).decode('utf-8')
+        match = re.search(r"Maximum resident set size \(kbytes\): (\d+)", time_output)
+        peak_rss = match.groups(1)[0] if match is not None else None
         data_size = os.stat("data.bin").st_size
         csv_writer.writerow([query_name, time, peak_rss, data_size])
         csv_file.flush()
