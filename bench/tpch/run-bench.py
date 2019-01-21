@@ -321,11 +321,15 @@ def time_bench(query_name, params, csv_file):
             time = float(time_str)
         except ValueError:
             log.error("Failed to read time: %s", time_str)
-        csv_writer.writerow([query_name, time])
-        csv_file.flush()
 
-        with open("mem.json", "w") as out:
-            call(["/usr/bin/time", "-v"] + time_cmd_parts, stdout=out, stderr=out)
+        time_output = check_output(
+            ["/usr/bin/time", "-v"] + time_cmd_parts, stderr=subprocess.STDOUT
+        )
+        match = re.search(r"Maximum resident set size \(kbytes\): (\d+)")
+        peak_rss = peak_rss.groups(1) if match is not None else None
+        data_size = os.stat("data.bin").st_size
+        csv_writer.writerow([query_name, time, peak_rss, data_size])
+        csv_file.flush()
     except Exception:
         log.exception("Timing %s failed.", query_name)
 
@@ -385,6 +389,22 @@ def validate():
             call([VALIDATE_SCRIPT, bench_num, gold_csv, result_csv])
 
 
+def validate_hyper():
+    for bench in BENCHMARKS:
+        bench_num = bench["name"].split("-")[0]
+        gold_csv = "%s.csv" % bench["name"]
+        ensure_newline(gold_csv)
+        if not bench["ordered"]:
+            sort_file(gold_csv)
+        for query in bench["query"]:
+            benchd = bench_dir(query)
+            result_csv = "%s/results.csv" % benchd
+            ensure_newline(result_csv)
+            if not bench["ordered"]:
+                sort_file(result_csv)
+            call([VALIDATE_SCRIPT, bench_num, gold_csv, result_csv])
+
+
 args = docopt(__doc__)
 
 
@@ -423,7 +443,7 @@ elif args["run-castor"]:
                 run_bench(query, bench["params"])
 
 elif args["time-castor"]:
-    with open("results.csv", "a") as csv_file:
+    with open("castor_results.csv", "a") as csv_file:
         for bench in BENCHMARKS:
             for query in bench["query"]:
                 if should_run(query):
