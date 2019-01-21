@@ -115,7 +115,6 @@ CREATE TABLE q9 (
 );
 
 CREATE TABLE q10_1 (
-    o_orderdate date NOT NULL,
     revenue numeric (16, 6) NOT NULL,
     n_name char(25) NOT NULL,
     c_custkey integer NOT NULL,
@@ -180,7 +179,7 @@ CREATE TABLE q16 (
     p_type varchar(25) NOT NULL,
     p_brand char(10) NOT NULL,
     p_size integer NOT NULL,
-    supplier_ct integer NOT NULL
+    supplier_cnt integer NOT NULL
 );
 
 CREATE TABLE q17 (
@@ -197,21 +196,21 @@ CREATE INDEX q17_idx ON q17 (p_brand, p_container);
 
 CREATE TABLE q17_2 (
     l_partkey integer NOT NULL,
-    l_avgquantity numeric(16, 6) NOT NULL
+    l_avgquantity decimal(16,6) NOT NULL
 );
 
 CREATE INDEX q17_idx_2 ON q17_2 (l_partkey);
 
--- CREATE TABLE q18_1 (
---     l_orderkey integer NOT NULL
--- );
--- CREATE INDEX q18_1_idx ON q18_1 (l_orderkey);
--- CREATE TABLE q18_2 (
---     c_name varchar(25) NOT NULL,
---     c_custkey integer NOT NULL,
---     o_orderdate date NOT NULL,
---     o_orderkey integer NOT NULL,
---     o_totalprice decimal (12,
---         2) NOT NULL
--- );
--- CREATE INDEX q18_2_idx ON q18_2 (o_orderkey);
+-- -- CREATE TABLE q18_1 (
+-- --     l_orderkey integer NOT NULL
+-- -- );
+-- -- CREATE INDEX q18_1_idx ON q18_1 (l_orderkey);
+-- -- CREATE TABLE q18_2 (
+-- --     c_name varchar(25) NOT NULL,
+-- --     c_custkey integer NOT NULL,
+-- --     o_orderdate date NOT NULL,
+-- --     o_orderkey integer NOT NULL,
+-- --     o_totalprice decimal (12,
+-- --         2) NOT NULL
+-- -- );
+-- -- CREATE INDEX q18_2_idx ON q18_2 (o_orderkey);

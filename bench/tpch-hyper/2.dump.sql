@@ -1,4 +1,3 @@
-\copy (select * from q1) to 'q1.tbl' delimiter '|';
 CREATE temp VIEW q2 AS (
   SELECT
     s_suppkey,

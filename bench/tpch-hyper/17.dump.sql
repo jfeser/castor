@@ -16,7 +16,7 @@ CREATE temp VIEW q17 AS (
 CREATE temp VIEW q17_2 AS (
   SELECT
     l_partkey,
-    (0.2 * avg(l_quantity)) AS l_avgquantity
+    trunc((0.2 * avg(l_quantity)), 5) AS l_avgquantity
     FROM
         lineitem
    GROUP BY
