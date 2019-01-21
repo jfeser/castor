@@ -174,31 +174,31 @@ BENCHMARKS = [
         "query": ["17-gold"],
         "params": [("param0:string", "Brand#23"), ("param1:string", "MED BOX")],
     },
-    {
-        "name": "18",
-        "ordered": True,
-        "query": ["18-gold"],
-        "params": [("param1:int", "300")],
-    },
-    {
-        "name": "19",
-        "ordered": True,
-        "query": ["19-gold"],
-        "params": [
-            ("param0:string", "Brand#12"),
-            ("param1:string", "Brand#23"),
-            ("param2:string", "Brand#34"),
-            ("param3:float", "1.0"),
-            ("param4:float", "10.0"),
-            ("param5:float", "20.0"),
-        ],
-    },
-    {
-        "name": "21-no",
-        "ordered": False,
-        "query": [],
-        "params": [("param1:string", None)],
-    },
+    # {
+    #     "name": "18",
+    #     "ordered": True,
+    #     "query": ["18-gold"],
+    #     "params": [("param1:int", "300")],
+    # },
+    # {
+    #     "name": "19",
+    #     "ordered": True,
+    #     "query": ["19-gold"],
+    #     "params": [
+    #         ("param0:string", "Brand#12"),
+    #         ("param1:string", "Brand#23"),
+    #         ("param2:string", "Brand#34"),
+    #         ("param3:float", "1.0"),
+    #         ("param4:float", "10.0"),
+    #         ("param5:float", "20.0"),
+    #     ],
+    # },
+    # {
+    #     "name": "21-no",
+    #     "ordered": False,
+    #     "query": [],
+    #     "params": [("param1:string", None)],
+    # },
 ]
 
 log = logging.getLogger(name=__file__)
@@ -225,40 +225,48 @@ def check_output(cmd_args, *args, **kwargs):
 
 
 def run_sql(name, params):
-    sql = rpath(name + ".sql")
-    log.info("Running SQL query %s." % name)
-    try:
-        with open(sql, "r") as f:
-            sql_query = f.read()
-        for i, (_, param_value) in enumerate(params):
-            sql_query = re.sub(":%d(?![0-9]+)" % (i + 1), param_value, sql_query)
+    with open(rpath("postgres_results.csv"), "a") as result_csv:
+        sql = rpath(name + ".sql")
+        log.info("Running SQL query %s." % name)
+        try:
+            with open(sql, "r") as f:
+                sql_query = f.read()
+            for i, (_, param_value) in enumerate(params):
+                sql_query = re.sub(":%d(?![0-9]+)" % (i + 1), param_value, sql_query)
+            with open("sql", "w") as f:
+                f.write(sql_query)
 
-        with open("sql", "w") as f:
-            f.write(sql_query)
+            out_fn = "%s.csv" % name
+            with open(out_fn, "w") as out:
+                p = Popen(["psql", "-t", "-A", "-F", "|", DB], stdout=out, stdin=PIPE)
+                p.communicate(input=("\\timing \n " + sql_query).encode())
+                p.wait()
 
-        out_fn = "%s.csv" % name
-        with open(out_fn, "w") as out:
-            p = Popen(["psql", "-t", "-A", "-F", "|", DB], stdout=out, stdin=PIPE)
-            p.communicate(input=("\\timing \n " + sql_query).encode())
-            p.wait()
-
-        with open(out_fn, "r") as csv:
-            lines = csv.read().split("\n")
-            time = lines[-2]
-        with open(out_fn, "w") as csv:
-            csv.write("\n".join(lines[1:-2]))
-        with open("%s.time" % name, "w") as time_f:
-            time_f.write(time)
-    except:
-        log.exception("Failed to run SQL query %s." % name)
-    log.info("Done running SQL query %s." % name)
+            with open(out_fn, "r") as csv:
+                lines = csv.read().split("\n")
+                time = lines[-2]
+            with open(out_fn, "w") as csv:
+                csv.write("\n".join(lines[1:-2]))
+            result_csv.write("%s,%s\n" % (name, time.split(" ")[1]))
+            result_csv.flush()
+        except:
+            log.exception("Failed to run SQL query %s." % name)
+        log.info("Done running SQL query %s." % name)
 
 
 def bench_dir(query_name):
     return os.path.splitext(query_name)[0]
 
 
+def ensure_built():
+    # Ensure that the project is built
+    os.chdir(rpath("../../"))
+    os.system("dune build @install")
+    os.chdir(rpath("."))
+
+
 def compile_bench(query_name, params):
+    ensure_built()
     query = rpath(query_name + ".txt")
 
     # Make benchmark dir.
@@ -389,22 +397,6 @@ def validate():
             call([VALIDATE_SCRIPT, bench_num, gold_csv, result_csv])
 
 
-def validate_hyper():
-    for bench in BENCHMARKS:
-        bench_num = bench["name"].split("-")[0]
-        gold_csv = "%s.csv" % bench["name"]
-        ensure_newline(gold_csv)
-        if not bench["ordered"]:
-            sort_file(gold_csv)
-        for query in bench["query"]:
-            benchd = bench_dir(query)
-            result_csv = "%s/results.csv" % benchd
-            ensure_newline(result_csv)
-            if not bench["ordered"]:
-                sort_file(result_csv)
-            call([VALIDATE_SCRIPT, bench_num, gold_csv, result_csv])
-
-
 args = docopt(__doc__)
 
 
@@ -414,12 +406,6 @@ def should_run(query_name):
 
 if args["-d"] is not None:
     DB = args["-d"]
-
-# Ensure that the project is built
-os.chdir(rpath("../../"))
-os.system("dune build @install")
-os.chdir(rpath("."))
-
 
 if args["gen-dune"]:
     gen_dune()
