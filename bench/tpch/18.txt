@@ -38,7 +38,7 @@
 # 	o_orderdate;
 # :n 100
 
-orderby([o_totalprice desc, o_orderdate desc],
+orderby([o_totalprice desc, o_orderdate],
   groupby([c_name,
            c_custkey,
            o_orderkey,
