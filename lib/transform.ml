@@ -434,8 +434,36 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
       | DateT _ -> Date (Date.of_string "9999-01-01")
       | _ -> failwith "Unexpected type."
     in
-    let lb = Option.value lb ~default:default_min in
-    let ub = Option.value ub ~default:default_max in
+    let fix_upper_bound bound kind =
+      match kind with
+      | `Open -> bound
+      | `Closed -> (
+          let open Type.PrimType in
+          match t with
+          | IntT _ -> Binop (Add, bound, Int 1)
+          | DateT _ -> Binop (Add, bound, Unop (Day, Int 1))
+          | FixedT _ -> failwith "No open inequalities with fixed."
+          | NullT | StringT _ | BoolT _ | TupleT _ | VoidT ->
+              failwith "Unexpected type." )
+    in
+    let fix_lower_bound bound kind =
+      match kind with
+      | `Closed -> bound
+      | `Open -> (
+          let open Type.PrimType in
+          match t with
+          | IntT _ -> Binop (Add, bound, Int 1)
+          | DateT _ -> Binop (Add, bound, Unop (Day, Int 1))
+          | FixedT _ -> failwith "No open inequalities with fixed."
+          | NullT | StringT _ | BoolT _ | TupleT _ | VoidT ->
+              failwith "Unexpected type." )
+    in
+    let lb =
+      match lb with None -> default_min | Some (b, k) -> fix_lower_bound b k
+    in
+    let ub =
+      match ub with None -> default_max | Some (b, k) -> fix_upper_bound b k
+    in
     let k = Fresh.name fresh "k%d" in
     let select_list = [As_pred (p, k)] in
     let filter_pred = Binop (Eq, Name (Name.create k), p) in
@@ -452,12 +480,15 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           match r with
           | {node= Filter (Binop (And, Binop (Ge, p, lb), Binop (Lt, p', ub)), r); _}
             when [%compare.equal: pred] p p' ->
-              gen_ordered_idx ~lb ~ub p r
-          | {node= Filter (Binop (Le, p, p'), r); _}
-           |{node= Filter (Binop (Lt, p, p'), r); _}
-           |{node= Filter (Binop (Ge, p', p), r); _}
+              gen_ordered_idx ~lb:(lb, `Closed) ~ub:(ub, `Open) p r
+          | {node= Filter (Binop (Ge, p', p), r); _}
+           |{node= Filter (Binop (Le, p, p'), r); _} ->
+              gen_ordered_idx ~ub:(p', `Closed) p r
+              @ gen_ordered_idx ~lb:(p, `Closed) p' r
+          | {node= Filter (Binop (Lt, p, p'), r); _}
            |{node= Filter (Binop (Gt, p', p), r); _} ->
-              gen_ordered_idx ~ub:p' p r @ gen_ordered_idx ~lb:p p' r
+              gen_ordered_idx ~ub:(p', `Open) p r
+              @ gen_ordered_idx ~lb:(p, `Open) p' r
           | _ -> [] ) }
     |> run_everywhere
 
