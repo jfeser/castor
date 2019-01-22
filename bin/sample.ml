@@ -1,14 +1,13 @@
 open Core
-open Postgresql
-open Dblayout
+open Castor
 open Db
 
 let main ?(seed = 0) ~db_in ~db_out ~sample =
-  let conn = new connection ~dbname:db_in () in
+  let conn = Db.create (sprintf "postgresql:///%s" db_in) in
   Logs.info (fun m -> m "Creating new database %s." db_out) ;
   exec conn ~params:[db_out] "drop database if exists $0" |> ignore ;
   exec conn ~params:[db_out; db_in] "create database $0 with template $1" |> ignore ;
-  let conn = new connection ~dbname:db_out () in
+  let conn = Db.create (sprintf "postgresql:///%s" db_out) in
   exec conn ~params:[Int.to_string seed] "set seed to $0" |> ignore ;
   List.iter (Db.Relation.all_from_db conn) ~f:(fun r ->
       Logs.info (fun m -> m "Sampling from table %s." r.rname) ;
