@@ -14,28 +14,38 @@ let main kind =
            with Unix.Unix_error _ -> None ))
   in
   let build_root = Filename.realpath (Sys.getcwd ()) in
-  let formatter =
+  let formatter, option_to_str =
     match kind with
     | "ML" ->
-        printf
-          {|
-    let build_root = "%s"
-    let llvm_root = "%s"
-    let tpch_db = "%s"
-    let demomatch_db = "%s"
+        let option_to_str = function
+          | Some s -> sprintf "(Some \"%s\")" s
+          | None -> "None"
+        in
+        ( printf
+            {|
+let build_root = "%s"
+let llvm_root = "%s"
+let tpch_db = %s
+let demomatch_db = %s
+let tpcds_db = %s
 |}
+        , option_to_str )
     | "ENV" ->
-        printf
-          {|
+        let option_to_str = function Some s -> s | None -> "" in
+        ( printf
+            {|
 [default]
 build_root = %s
 llvm_root = %s
 tpch_db = %s
 demomatch_db = %s
+tpcds_db = %s
 |}
+        , option_to_str )
     | _ -> failwith "Unexpected kind."
   in
-  formatter build_root llvm_root tpch_db demomatch_db
+  formatter build_root llvm_root (option_to_str tpch_db)
+    (option_to_str demomatch_db) (option_to_str tpcds_db)
 
 let () =
   let open Command in

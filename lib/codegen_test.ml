@@ -2,85 +2,11 @@ open Core
 open Abslayout
 open Test_util
 
-let make_modules ?layout_file ?(irgen_debug = false) () =
-  let module M = Abslayout_db.Make (Test_db) in
-  let module S =
-    Serialize.Make (struct
-        let layout_map_channel = Option.map layout_file ~f:Out_channel.create
-      end)
-      (M)
-  in
-  let module I =
-    Irgen.Make (struct
-        let code_only = false
-
-        let debug = irgen_debug
-      end)
-      (M)
-      (S)
-      ()
-  in
-  let module C =
-    Codegen.Make (struct
-        let debug = false
-      end)
-      (I)
-      ()
-  in
-  ( (module M : Abslayout_db.S)
-  , (module S : Serialize.S)
-  , (module I : Irgen.S)
-  , (module C : Codegen.S) )
-
-let make_modules_db ?layout_file ?(irgen_debug = false) () =
-  let module M = Abslayout_db.Make (struct
-    let conn = create_db "postgresql://localhost:5433/demomatch"
-  end) in
-  let module S =
-    Serialize.Make (struct
-        let layout_map_channel = Option.map layout_file ~f:Out_channel.create
-      end)
-      (M)
-  in
-  let module I =
-    Irgen.Make (struct
-        let code_only = false
-
-        let debug = irgen_debug
-      end)
-      (M)
-      (S)
-      ()
-  in
-  let module C =
-    Codegen.Make (struct
-        let debug = false
-      end)
-      (I)
-      ()
-  in
-  ( (module M : Abslayout_db.S)
-  , (module S : Serialize.S)
-  , (module I : Irgen.S)
-  , (module C : Codegen.S) )
-
-let run_in_fork thunk =
-  match Unix.fork () with
-  | `In_the_child ->
-      Backtrace.elide := false ;
-      Logs.set_reporter (Logs.format_reporter ()) ;
-      Logs.set_level (Some Logs.Debug) ;
-      thunk () ;
-      exit 0
-  | `In_the_parent pid ->
-      let _, err = Unix.wait (`Pid pid) in
-      Unix.Exit_or_signal.to_string_hum err |> print_endline
-
-let run_test ?(params = []) ?(modules = make_modules) ?(print_layout = true)
-    ?(fork = false) ?irgen_debug layout_str =
+let run_test ?(params = []) ?(print_layout = true) ?(fork = false) ?irgen_debug
+    layout_str =
   let layout_file = Filename.temp_file "layout" "txt" in
   let (module M), (module S), (module I), (module C) =
-    modules ~layout_file ?irgen_debug ()
+    make_modules ~layout_file ?irgen_debug ()
   in
   let run_compiler out_dir layout =
     let exe_fn, data_fn =
@@ -151,22 +77,6 @@ let%expect_test "hash-idx" =
 
     exited normally |}]
 
-let example_params =
-  [ (Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p", Value.Int 1)
-  ; (Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c", Int 2) ]
-
-let example_str_params =
-  [ ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_p"
-    , Value.String "foo" )
-  ; ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_c"
-    , String "fizzbuzz" ) ]
-
-let example_db_params =
-  [ ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_p"
-    , Value.String "-1451410871729396224" )
-  ; ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_c"
-    , String "8557539814359574196" ) ]
-
 let%expect_test "strops" =
   run_test ~params:[] ~print_layout:false
     {|
@@ -178,7 +88,7 @@ select([strlen("test"), strpos("testing", "in")], ascalar(0))
     exited normally |}]
 
 let%expect_test "example-1" =
-  run_test ~params:example_params ~print_layout:false
+  run_test ~params:Demomatch.example_params ~print_layout:false
     {|
 select([lp.counter, lc.counter], filter(lc.id = id_c && lp.id = id_p,
 alist(filter(succ > counter + 1, log) as lp,
@@ -193,7 +103,7 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
     exited normally |}]
 
 let%expect_test "example-1-str" =
-  run_test ~params:example_str_params ~print_layout:false
+  run_test ~params:Demomatch.example_str_params ~print_layout:false
     {|
 select([lp.counter, lc.counter], filter(lc.id = id_c && lp.id = id_p,
 alist(filter(succ > counter + 1, log_str) as lp,
@@ -208,7 +118,7 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
     exited normally |}]
 
 let%expect_test "example-2" =
-  run_test ~params:example_params ~print_layout:false
+  run_test ~params:Demomatch.example_params ~print_layout:false
     {|
 select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k], 
       join(true, log as lp, log as lc))),
@@ -226,7 +136,7 @@ select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as 
     exited normally |}]
 
 let%expect_test "example-2-str" =
-  run_test ~params:example_str_params ~print_layout:false
+  run_test ~params:Demomatch.example_str_params ~print_layout:false
     {|
 select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k], 
       join(true, log_str as lp, log_str as lc))),
@@ -244,7 +154,7 @@ select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as 
     exited normally |}]
 
 let%expect_test "example-3" =
-  run_test ~params:example_params ~print_layout:false
+  run_test ~params:Demomatch.example_params ~print_layout:false
     {|
 select([lp.counter, lc.counter],
   atuple([ahashidx(dedup(select([id as k1], log)), 
@@ -264,7 +174,7 @@ select([lp.counter, lc.counter],
     exited normally |}]
 
 let%expect_test "example-3-str" =
-  run_test ~params:example_str_params ~print_layout:false
+  run_test ~params:Demomatch.example_str_params ~print_layout:false
     {|
 select([lp.counter, lc.counter],
   atuple([ahashidx(dedup(select([id as k1], log_str)), 

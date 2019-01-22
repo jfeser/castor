@@ -6,11 +6,7 @@ open Abslayout
 open Test_util
 module M = Abslayout_db.Make (Test_db)
 
-module M_tpch = Abslayout_db.Make (struct
-  let conn = Db.create "postgresql://localhost:5432/tpch"
-end)
-
-let run_print_test (module M : Abslayout_db.S) ?params query =
+let run_print_test ?params query =
   let print_fold =
     object (self)
       inherit [_, _] M.unsafe_material_fold
@@ -54,13 +50,17 @@ let run_print_test (module M : Abslayout_db.S) ?params query =
     end
   in
   try
-    let layout = of_string_exn query |> M.resolve ?params in
+    let sparams =
+      Option.map params ~f:(fun p ->
+          List.map p ~f:(fun (n, _) -> n)
+          |> Set.of_list (module Name.Compare_no_type) )
+    in
+    let layout = of_string_exn query |> M.resolve ?params:sparams in
     M.annotate_schema layout ; print_fold#run () layout
   with exn -> printf "Error: %s\n" (Exn.to_string exn)
 
 let%expect_test "sum-complex" =
   run_print_test
-    (module M)
     "Select([sum(r1.f) + 5, count() + sum(r1.f / 2)], AList(r1, \
      ATuple([AScalar(r1.f), AScalar(r1.g - r1.f)], cross)))" ;
   [%expect
@@ -89,7 +89,6 @@ let%expect_test "sum-complex" =
 
 let%expect_test "orderby-tuple" =
   run_print_test
-    (module M)
     {|atuple([alist(orderby([r1.f desc], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f asc], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|} ;
   [%expect
     {|
@@ -142,7 +141,6 @@ let%expect_test "orderby-tuple" =
 
 let%expect_test "ordered-idx-dates" =
   run_print_test
-    (module M)
     "AOrderedIdx(OrderBy([f desc], Dedup(Select([f], r_date))) as k, AScalar(k.f), \
      null, null)" ;
   [%expect
@@ -159,14 +157,8 @@ let%expect_test "ordered-idx-dates" =
     OrderedIdx key: ((Date 2018-09-01))
     Scalar: (Date 2018-09-01) |}]
 
-let example_params =
-  [ Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p"
-  ; Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c" ]
-  |> Set.of_list (module Name.Compare_no_type)
-
 let%expect_test "example-1" =
-  run_print_test ~params:example_params
-    (module M)
+  run_print_test ~params:Demomatch.example_params
     {|
 filter(lc.id = id_c && lp.id = id_p,
 alist(filter(succ > counter + 1, log) as lp,
@@ -202,8 +194,7 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
     Scalar: (Int 5) |}]
 
 let%expect_test "example-2" =
-  run_print_test ~params:example_params
-    (module M)
+  run_print_test ~params:Demomatch.example_params
     {|
 ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k], 
       join(true, log as lp, log as lc))),
@@ -236,8 +227,7 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
     Scalar: (Int 5) |}]
 
 let%expect_test "example-3" =
-  run_print_test ~params:example_params
-    (module M)
+  run_print_test ~params:Demomatch.example_params
     {|
 select([lp.counter, lc.counter],
   atuple([ahashidx(dedup(select([id as k1], log)), 
@@ -425,7 +415,11 @@ let%expect_test "needed" =
          ((relation ()) (name "") (type_ ((IntT (nullable false)))))))))) |}]
 
 let%expect_test "mat-col" =
-  let conn = create_db "postgresql://localhost:5432/tpcds1" in
+  let conn =
+    create_db
+      (Option.value_exn ~message:"No TPC-DS database specified. Cannot run test."
+         Config.tpcds_db)
+  in
   let layout =
     of_string_exn
       "AList(Filter(ship_mode.sm_carrier = \"GERMA\", ship_mode), \
@@ -493,7 +487,11 @@ let%expect_test "mat-col" =
           (type_ ((StringT (nullable false)))))))))) |}]
 
 let%expect_test "mat-hidx" =
-  let conn = create_db "postgresql://localhost:5432/tpcds1" in
+  let conn =
+    create_db
+      (Option.value_exn ~message:"No TPC-DS database specified. Cannot run test."
+         Config.tpcds_db)
+  in
   let layout =
     of_string_exn
       "AHashIdx(Dedup(Select([ship_mode.sm_type], Filter(ship_mode.sm_type = \

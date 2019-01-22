@@ -5,6 +5,19 @@ open Printf
 
 exception TestDbExn
 
+let run_in_fork thunk =
+  let open Core in
+  match Unix.fork () with
+  | `In_the_child ->
+      Backtrace.elide := false ;
+      Logs.set_reporter (Logs.format_reporter ()) ;
+      Logs.set_level (Some Logs.Debug) ;
+      thunk () ;
+      exit 0
+  | `In_the_parent pid ->
+      let _, err = Unix.wait (`Pid pid) in
+      Unix.Exit_or_signal.to_string_hum err |> print_endline
+
 let reporter ppf =
   let report _ level ~over k msgf =
     let k _ = over () ; k () in
@@ -108,4 +121,52 @@ module Test_db = struct
       ; [Int 3; Int 4; String "bar"]
       ; [Int 4; Int 6; String "foo"]
       ; [Int 5; Int 6; String "bar"] ]
+end
+
+let make_modules ?layout_file ?(irgen_debug = false) ?(code_only = false) () =
+  let module M = Abslayout_db.Make (Test_db) in
+  let module S =
+    Serialize.Make (struct
+        let layout_map_channel = Option.map layout_file ~f:Stdio.Out_channel.create
+      end)
+      (M)
+  in
+  let module I =
+    Irgen.Make (struct
+        let code_only = code_only
+
+        let debug = irgen_debug
+      end)
+      (M)
+      (S)
+      ()
+  in
+  let module C =
+    Codegen.Make (struct
+        let debug = false
+      end)
+      (I)
+      ()
+  in
+  ( (module M : Abslayout_db.S)
+  , (module S : Serialize.S)
+  , (module I : Irgen.S)
+  , (module C : Codegen.S) )
+
+module Demomatch = struct
+  let example_params =
+    [ (Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p", Value.Int 1)
+    ; (Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c", Int 2) ]
+
+  let example_str_params =
+    [ ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_p"
+      , Value.String "foo" )
+    ; ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_c"
+      , String "fizzbuzz" ) ]
+
+  let example_db_params =
+    [ ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_p"
+      , Value.String "-1451410871729396224" )
+    ; ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_c"
+      , String "8557539814359574196" ) ]
 end

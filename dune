@@ -22,6 +22,10 @@
   (name config)
   (deps config.ml config.ini))
 
+(alias
+  (name runtest)
+  (deps (glob_files etc/*.c) (glob_files etc/*.h)))
+
 ; Local Variables:
 ; mode: tuareg-dune
 ; End:

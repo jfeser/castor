@@ -2,27 +2,14 @@ open Core
 open Base
 open Abslayout
 open Test_util
-module M = Abslayout_db.Make (Test_db)
 
 let run_test ?(params = []) ?(print_code = true) layout_str =
+  let (module M), (module S), (module I), (module C) =
+    make_modules ~code_only:true ()
+  in
   try
-    let module S =
-      Serialize.Make (struct
-          let layout_map_channel = None
-        end)
-        (M)
-    in
-    let module I =
-      Irgen.Make (struct
-          let code_only = true
-
-          let debug = false
-        end)
-        (M)
-        (S)
-        ()
-    in
-    let sparams = Set.of_list (module Name.Compare_no_type) params in
+    let param_names = List.map params ~f:(fun (n, _) -> n) in
+    let sparams = Set.of_list (module Name.Compare_no_type) param_names in
     let layout = of_string_exn layout_str |> M.resolve ~params:sparams in
     M.annotate_schema layout ;
     let layout = M.annotate_key_layouts layout in
@@ -30,49 +17,13 @@ let run_test ?(params = []) ?(print_code = true) layout_str =
     M.annotate_subquery_types layout ;
     let type_ = M.to_type layout in
     Stdio.print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ;
-    let ir = I.irgen ~params ~data_fn:"/tmp/buf" layout in
+    let ir = I.irgen ~params:param_names ~data_fn:"/tmp/buf" layout in
     if print_code then I.pp Caml.Format.std_formatter ir
   with exn ->
     Backtrace.(
       elide := false ;
       Exn.most_recent () |> to_string |> Stdio.print_endline) ;
     Exn.(to_string exn |> Stdio.print_endline)
-
-let run_test_db ?(params = []) layout_str =
-  let module M = Abslayout_db.Make (struct
-    let conn = create_db "postgresql://localhost:5433/demomatch"
-  end) in
-  let module S =
-    Serialize.Make (struct
-        let layout_map_channel = None
-      end)
-      (M)
-  in
-  let module I =
-    Irgen.Make (struct
-        let code_only = true
-
-        let debug = false
-      end)
-      (M)
-      (S)
-      ()
-  in
-  let sparams = Set.of_list (module Name.Compare_no_type) params in
-  let layout = of_string_exn layout_str |> M.resolve ~params:sparams in
-  M.annotate_schema layout ;
-  let layout = M.annotate_key_layouts layout in
-  annotate_foreach layout ;
-  M.annotate_subquery_types layout ;
-  I.irgen ~params ~data_fn:"/tmp/buf" layout |> I.pp Caml.Format.std_formatter
-
-let example_params =
-  [ Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p"
-  ; Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c" ]
-
-let example_db_params =
-  [ Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_p"
-  ; Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_c" ]
 
 let%expect_test "tuple-simple-cross" =
   run_test "ATuple([AScalar(1), AScalar(2)], cross)" ;
@@ -641,7 +592,7 @@ let%expect_test "ordered-idx-date" =
       (DateT ((range (Interval 17136 17775)) (nullable false))) ((count Top)))) |}]
 
 let%expect_test "example-1" =
-  run_test ~params:example_params
+  run_test ~params:Demomatch.example_params
     {|
 filter(lc.id = id_c && lp.id = id_p,
 alist(filter(succ > counter + 1, log) as lp,
@@ -750,7 +701,7 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
     } |}]
 
 let%expect_test "example-2" =
-  run_test ~params:example_params
+  run_test ~params:Demomatch.example_params
     {|
 ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k], 
       join(true, log as lp, log as lc))),
@@ -857,7 +808,7 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
     } |}]
 
 let%expect_test "example-3" =
-  run_test ~params:example_params
+  run_test ~params:Demomatch.example_params
     {|
 select([lp.counter, lc.counter],
   atuple([ahashidx(dedup(select([id as k1], log)), 
@@ -1098,7 +1049,7 @@ select([lp.counter, lc.counter],
     } |}]
 
 let%expect_test "subquery-first" =
-  run_test ~params:example_params
+  run_test ~params:Demomatch.example_params
     {|
     select([log.id], filter((select([min(l.counter)],
  alist(log as l, ascalar(l.counter))))=log.id, alist(log, ascalar(log.id))))
@@ -1201,7 +1152,7 @@ let%expect_test "subquery-first" =
     } |}]
 
 let%expect_test "example-3-str" =
-  run_test ~params:example_db_params
+  run_test ~params:Demomatch.example_db_params
     {|
 select([lp.counter, lc.counter],
   atuple([ahashidx(dedup(select([id as k1], log_str)), 

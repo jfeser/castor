@@ -1,8 +1,9 @@
 open Core
 open Base
 open Abslayout
-open Implang_test
+open Test_util
 open Implang_opt
+module M = Abslayout_db.Make (Test_db)
 
 let run_test ?(params = []) layout_str opt_func =
   let module S =
@@ -21,18 +22,19 @@ let run_test ?(params = []) layout_str opt_func =
       (S)
       ()
   in
-  let sparams = Set.of_list (module Name.Compare_no_type) params in
+  let param_names = List.map params ~f:(fun (n, _) -> n) in
+  let sparams = Set.of_list (module Name.Compare_no_type) param_names in
   let layout = of_string_exn layout_str |> M.resolve ~params:sparams in
   M.annotate_schema layout ;
   let layout = M.annotate_key_layouts layout in
   annotate_foreach layout ;
   M.annotate_subquery_types layout ;
-  I.irgen ~params ~data_fn:"/tmp/buf" layout
+  I.irgen ~params:param_names ~data_fn:"/tmp/buf" layout
   |> opt_func
   |> I.pp Caml.Format.std_formatter
 
 let%expect_test "example-1" =
-  run_test ~params:example_params
+  run_test ~params:Demomatch.example_params
     {|
 filter(lc.id = id_c && lp.id = id_p,
 alist(filter(succ > counter + 1, log) as lp,

@@ -1,16 +1,6 @@
 open Core
 open Abslayout
 open Test_util
-module M = Abslayout_db.Make (Test_db)
-
-let make_modules layout_file =
-  let module S =
-    Serialize.Make (struct
-        let layout_map_channel = Some (Out_channel.create layout_file)
-      end)
-      (M)
-  in
-  (module S : Serialize.S)
 
 (** Remove nondeterministic parts of the layout log. Returns the new log and
    true if the log was modified, false otherwise. *)
@@ -21,7 +11,7 @@ let process_layout_log log =
 
 let run_test layout_str =
   let layout_file = Filename.temp_file "layout" "txt" in
-  let (module S) = make_modules layout_file in
+  let (module M), (module S), _, _ = make_modules ~layout_file () in
   let layout = of_string_exn layout_str |> M.resolve in
   M.annotate_schema layout ;
   let layout = M.annotate_key_layouts layout in

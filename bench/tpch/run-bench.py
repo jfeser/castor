@@ -406,6 +406,8 @@ def should_run(query_name):
 
 if args["-d"] is not None:
     DB = args["-d"]
+if DB == '':
+    raise RuntimeError('No TPC-H database specified. Cannot run benchmark. Fill in config.ini or pass -d DB.')
 
 if args["gen-dune"]:
     gen_dune()
