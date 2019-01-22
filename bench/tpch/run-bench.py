@@ -180,19 +180,19 @@ BENCHMARKS = [
     #     "query": ["18-gold"],
     #     "params": [("param1:int", "300")],
     # },
-    # {
-    #     "name": "19",
-    #     "ordered": True,
-    #     "query": ["19-gold"],
-    #     "params": [
-    #         ("param0:string", "Brand#12"),
-    #         ("param1:string", "Brand#23"),
-    #         ("param2:string", "Brand#34"),
-    #         ("param3:float", "1.0"),
-    #         ("param4:float", "10.0"),
-    #         ("param5:float", "20.0"),
-    #     ],
-    # },
+    {
+        "name": "19",
+        "ordered": True,
+        "query": ["19-gold"],
+        "params": [
+            ("param0:string", "Brand#12"),
+            ("param1:string", "Brand#23"),
+            ("param2:string", "Brand#34"),
+            ("param3:float", "1.0"),
+            ("param4:float", "10.0"),
+            ("param5:float", "20.0"),
+        ],
+    },
     # {
     #     "name": "21-no",
     #     "ordered": False,
@@ -255,7 +255,7 @@ def run_sql(name, params):
 
 
 def bench_dir(query_name):
-    return os.path.splitext(query_name)[0]
+    return os.path.splitext(rpath(query_name))[0]
 
 
 def ensure_built():

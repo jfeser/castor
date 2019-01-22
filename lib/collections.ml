@@ -84,6 +84,16 @@ module List = struct
     | [] -> ([], [], [])
 end
 
+module Set = struct
+  include Set
+
+  let pp pp_elem fmt set =
+    let open Caml.Format in
+    fprintf fmt "{" ;
+    Set.iter set ~f:(fprintf fmt "%a; " pp_elem) ;
+    fprintf fmt "}"
+end
+
 module Map = struct
   include Map
 

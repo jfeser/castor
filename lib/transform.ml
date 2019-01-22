@@ -589,7 +589,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
 
   let tf_push_select _ =
     (* Generate aggregates for collections that act by concatenating their children. *)
-    let gen_concat_select_list outer_preds inner_rel =
+    let gen_concat_select_list outer_preds inner_schema =
       let open Abslayout in
       let visitor =
         object (self : 'a)
@@ -635,9 +635,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
       in
       let inner_aggs = List.map inner_aggs ~f:(fun (n, a) -> As_pred (a, n.name)) in
       (* Don't want to project out anything that we might need later. *)
-      let inner_fields =
-        Meta.(find_exn inner_rel schema) |> List.map ~f:(fun n -> Name n)
-      in
+      let inner_fields = inner_schema |> List.map ~f:(fun n -> Name n) in
       (outer_aggs, inner_aggs @ inner_fields)
     in
     let open A in
@@ -652,11 +650,21 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
               in
               [select outer_preds (hash_idx' r (select ps r') m)]
           | {node= Select (ps, {node= AOrderedIdx (r, r', m); _}); _} ->
-              let outer_aggs, inner_aggs = gen_concat_select_list ps r' in
+              let outer_aggs, inner_aggs =
+                gen_concat_select_list ps Meta.(find_exn r' schema)
+              in
               [select outer_aggs (ordered_idx r (select inner_aggs r') m)]
           | {node= Select (ps, {node= AList (r, r'); _}); _} ->
-              let outer_aggs, inner_aggs = gen_concat_select_list ps r' in
+              let outer_aggs, inner_aggs =
+                gen_concat_select_list ps Meta.(find_exn r' schema)
+              in
               [select outer_aggs (list r (select inner_aggs r'))]
+          | {node= Select (ps, {node= ATuple (r' :: rs', Concat); _}); _} ->
+              let outer_aggs, inner_aggs =
+                gen_concat_select_list ps Meta.(find_exn r' schema)
+              in
+              [ select outer_aggs
+                  (tuple (List.map (r' :: rs') ~f:(select inner_aggs)) Concat) ]
           | _ -> [] ) }
     |> run_everywhere
 
@@ -750,42 +758,56 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     in
     visitor#visit_pred () p
 
-  let tf_hoist_filter _ =
+  let hoist_filter_if ~f r =
     let open A in
-    { name= "hoist-filter"
-    ; f=
-        (fun r ->
-          M.annotate_schema r ;
-          let ret =
-            match r.node with
-            | OrderBy {key; rel= {node= Filter (p, r); _}} -> [(p, order_by key r)]
-            | GroupBy (ps, key, {node= Filter (p, r); _}) -> [(p, group_by ps key r)]
-            | Filter (p, {node= Filter (p', r); _}) -> [(p', filter p r)]
-            | Select (ps, {node= Filter (p, r); _}) ->
-                (* These are the fields that are emitted by r, used in p and not
+    M.annotate_schema r ;
+    let ret =
+      match r.node with
+      | OrderBy {key; rel= {node= Filter (p, r); _}} -> [(p, order_by key r)]
+      | GroupBy (ps, key, {node= Filter (p, r); _}) -> [(p, group_by ps key r)]
+      | Filter (p, {node= Filter (p', r); _}) -> [(p', filter p r)]
+      | Select (ps, {node= Filter (p, r); _}) ->
+          (* These are the fields that are emitted by r, used in p and not
                  exposed already by ps. *)
-                let needed_fields =
-                  let of_list = Set.of_list (module Name.Compare_no_type) in
-                  Set.diff
-                    (Set.inter (pred_free p) (of_list Meta.(find_exn r schema)))
-                    (of_list (List.filter_map ~f:pred_to_name ps))
-                  |> Set.to_list
-                  |> List.map ~f:(fun n -> Name n)
-                in
-                [(p, select (ps @ needed_fields) r)]
-            | Join {pred; r1= {node= Filter (p, r); _}; r2} -> [(p, join pred r r2)]
-            | Join {pred; r1; r2= {node= Filter (p, r); _}} -> [(p, join pred r1 r)]
-            | _ -> []
+          let needed_fields =
+            let of_list = Set.of_list (module Name.Compare_no_type) in
+            Set.diff
+              (Set.inter (pred_free p) (of_list Meta.(find_exn r schema)))
+              (of_list (List.filter_map ~f:pred_to_name ps))
+            |> Set.to_list
+            |> List.map ~f:(fun n -> Name n)
           in
-          List.filter_map ret ~f:(fun (p, r) ->
-              M.annotate_schema r ;
-              let schema = Meta.(find_exn r schema) in
-              if predicate_is_valid p schema then Some (filter p r)
-              else (
-                Logs.debug (fun m ->
-                    m "Cannot hoist: %a" Sexp.pp_hum
-                      ([%sexp_of: Name.t list] schema) ) ;
-                None ) ) ) }
+          [(p, select (ps @ needed_fields) r)]
+      | Join {pred; r1= {node= Filter (p, r); _}; r2} -> [(p, join pred r r2)]
+      | Join {pred; r1; r2= {node= Filter (p, r); _}} -> [(p, join pred r1 r)]
+      | _ -> []
+    in
+    List.filter ret ~f
+    |> List.filter_map ~f:(fun (p, r) ->
+           M.annotate_schema r ;
+           let schema = Meta.(find_exn r schema) in
+           if predicate_is_valid p schema then Some (filter p r)
+           else (
+             Logs.debug (fun m ->
+                 m "Cannot hoist: %a" Sexp.pp_hum ([%sexp_of: Name.t list] schema)
+             ) ;
+             None ) )
+
+  let tf_hoist_filter _ =
+    {name= "hoist-filter"; f= hoist_filter_if ~f:(fun _ -> true)} |> run_everywhere
+
+  let tf_hoist_param_filter _ =
+    { name= "hoist-param-filter"
+    ; f=
+        hoist_filter_if ~f:(fun (p, _) ->
+            (object
+               inherit [_] Abslayout0.reduce
+
+               inherit [_] Util.disj_monoid
+
+               method! visit_Name () n = Set.mem Config.params n
+            end)
+              #visit_pred () p ) }
     |> run_everywhere
 
   let tf_elim_join _ =
@@ -1127,7 +1149,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     ; ("hoist-param", tf_hoist_param)
     ; ("precompute-filter", tf_precompute_filter)
     ; ("precompute-filter-bv", tf_precompute_filter_bv)
-    ; ("approx-dedup", tf_approx_dedup) ]
+    ; ("approx-dedup", tf_approx_dedup)
+    ; ("hoist-param-filter", tf_hoist_param_filter) ]
 
   let of_string_exn s =
     let tf_strs =
