@@ -14,7 +14,7 @@ all: validate
 	./run-bench.py run-castor $*
 
 # Results rule.
-results.csv :
+results.csv : $(patsubst %-gold,%/$(BINARY_NAME),$(BENCH_NAMES))
 	$(foreach name,$(BENCH_NAMES),./run-bench.py time-castor $(name);)
 
 # Sql rule.
