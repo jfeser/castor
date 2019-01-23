@@ -655,6 +655,12 @@ let annotate_needed r =
 
 let project r =
   let dummy = Set.empty (module Name.Compare_no_type) in
+  let select_needed r =
+    let schema = Meta.(find_exn r schema) in
+    let needed = Meta.(find_exn r needed) in
+    if List.for_all schema ~f:(Set.mem needed) then r
+    else select (Set.to_list needed |> List.map ~f:(fun n -> Name n)) r
+  in
   let project_visitor =
     object (self : 'a)
       inherit [_] map as super
@@ -677,6 +683,15 @@ let project r =
           |> List.map ~f:(self#visit_t dummy)
         in
         ATuple (rs', k)
+
+      method! visit_AList _ (rk, rv) =
+        AList (select_needed rk, self#visit_t dummy rv)
+
+      method! visit_AHashIdx _ (rk, rv, idx) =
+        AHashIdx (select_needed rk, self#visit_t dummy rv, idx)
+
+      method! visit_AOrderedIdx _ (rk, rv, idx) =
+        AOrderedIdx (select_needed rk, self#visit_t dummy rv, idx)
 
       method! visit_t _ r =
         let needed = Meta.(find_exn r needed) in

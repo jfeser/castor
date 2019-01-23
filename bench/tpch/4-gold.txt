@@ -12,15 +12,25 @@ alist(orderby([k0_orders_o_orderpriority],
                       filter((orders.o_orderpriority =
                              k0_orders_o_orderpriority),
                         orders)))),
-      alist(select([count() as agg2, orders.o_orderpriority],
-              filter((k1 = orders.o_orderdate),
-                filter(exists(filter(((lineitem.l_orderkey = orders.o_orderkey)
-                                     &&
-                                     (lineitem.l_commitdate <
-                                     lineitem.l_receiptdate)),
-                                lineitem)),
-                  filter((orders.o_orderpriority = k0_orders_o_orderpriority),
-                    orders)))),
+      alist(select([agg2, orders.o_orderpriority],
+              select([count() as agg2,
+                      orders.o_orderkey,
+                      orders.o_custkey,
+                      orders.o_orderstatus,
+                      orders.o_totalprice,
+                      orders.o_orderdate,
+                      orders.o_orderpriority,
+                      orders.o_clerk,
+                      orders.o_shippriority,
+                      orders.o_comment],
+                filter((k1 = orders.o_orderdate),
+                  filter(exists(filter(((lineitem.l_orderkey =
+                                        orders.o_orderkey) &&
+                                       (lineitem.l_commitdate <
+                                       lineitem.l_receiptdate)),
+                                  lineitem)),
+                    filter((orders.o_orderpriority = k0_orders_o_orderpriority),
+                      orders))))),
         atuple([ascalar(agg2), ascalar(orders.o_orderpriority)], cross)),
       param1,
       (param1 + month(3)))))
