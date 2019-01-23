@@ -174,12 +174,12 @@ BENCHMARKS = [
         "query": ["17-gold"],
         "params": [("param0:string", "Brand#23"), ("param1:string", "MED BOX")],
     },
-    # {
-    #     "name": "18",
-    #     "ordered": True,
-    #     "query": ["18-gold"],
-    #     "params": [("param1:int", "300")],
-    # },
+    {
+        "name": "18",
+        "ordered": True,
+        "query": ["18-gold"],
+        "params": [("param1:int", "300")],
+    },
     {
         "name": "19",
         "ordered": True,
