@@ -1084,7 +1084,11 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
                           ~equal:[%compare.equal: Name.Compare_name_only.t]) )
             in
             let fst_sel_list = List.map ~f:(fun n -> Name n) fst_sel_list in
-            let snd_sel_list = List.map ~f:(fun n -> Name n) snd_sel_list in
+            let snd_sel_list =
+              List.map
+                ~f:(fun n -> Name {n with relation= Some rel_fresh_v})
+                snd_sel_list
+            in
             [ tuple
                 [ select fst_sel_list r
                 ; as_ pk_rel
