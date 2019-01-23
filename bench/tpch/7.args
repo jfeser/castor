@@ -1,1 +1,1 @@
--p param0:string -p param1:string -t "partition-domain(param0, nation.n_name):17,partition-domain(param1, nation.n_name):18,row-store:17"
+-p param0:string -p param1:string -t "partition-domain(param0, nation.n_name):17,partition-domain(param1, nation.n_name):18,row-store:17,hoist-filter:1,hoist-filter:0"

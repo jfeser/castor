@@ -1,1 +1,1 @@
--p param1:string -p param2:string -p param3:int -p param4:int -p param5:int -p param6:int -p param7:int -p param8:int -p param9:int -p param10:int -t hoist-filter,hoist-filter,elim-groupby-partial:2,row-store:10
+-p param1:string -p param2:string -p param3:int -p param4:int -p param5:int -p param6:int -p param7:int -p param8:int -p param9:int -p param10:int -t hoist-filter:0,hoist-filter:1,hoist-filter:0,hoist-filter:0,elim-groupby-partial:2,row-store:11

@@ -39,6 +39,7 @@
 select([p_brand, p_type, p_size, supplier_cnt],
 groupby([p_brand, p_type, p_size, count() as supplier_cnt],
   [p_brand, p_type, p_size],
+  dedup(select([p_type, p_brand, p_size, ps_suppkey],
   join((p_partkey = ps_partkey),
     filter((not((p_brand = param1)) &&
            (not((strpos(p_type, param2) = 1)) &&
@@ -49,9 +50,8 @@ groupby([p_brand, p_type, p_size, count() as supplier_cnt],
            ((p_size = param7) ||
            ((p_size = param8) || ((p_size = param9) || (p_size = param10)))))))))),
       part),
-    dedup(
       filter(not(exists(filter(((ps_suppkey = s_suppkey) &&
                                ((strpos(s_comment, "Customer") >= 1) &&
                                (strpos(s_comment, "Complaints") >= 1))),
                           supplier))),
-        partsupp)))))
+        partsupp))))))

@@ -789,6 +789,22 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     in
     visitor#visit_pred () p
 
+  (** Extend a select operator to emit all of the fields in with_. Returns the
+     new select list. *)
+  let extend_select ~with_ ps r =
+    let open A in
+    let needed_fields =
+      let of_list = Set.of_list (module Name.Compare_no_type) in
+      (* These are the fields that are emitted by r, used in with_ and not
+         exposed already by ps. *)
+      Set.diff
+        (Set.inter with_ (of_list Meta.(find_exn r schema)))
+        (of_list (List.filter_map ~f:pred_to_name ps))
+      |> Set.to_list
+      |> List.map ~f:(fun n -> Name n)
+    in
+    ps @ needed_fields
+
   let hoist_filter_if ~f r =
     let open A in
     M.annotate_schema r ;
@@ -798,19 +814,10 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
       | GroupBy (ps, key, {node= Filter (p, r); _}) -> [(p, group_by ps key r)]
       | Filter (p, {node= Filter (p', r); _}) -> [(p', filter p r)]
       | Select (ps, {node= Filter (p, r); _}) ->
-          (* These are the fields that are emitted by r, used in p and not
-                 exposed already by ps. *)
-          let needed_fields =
-            let of_list = Set.of_list (module Name.Compare_no_type) in
-            Set.diff
-              (Set.inter (pred_free p) (of_list Meta.(find_exn r schema)))
-              (of_list (List.filter_map ~f:pred_to_name ps))
-            |> Set.to_list
-            |> List.map ~f:(fun n -> Name n)
-          in
-          [(p, select (ps @ needed_fields) r)]
+          [(p, select (extend_select ps r ~with_:(pred_free p)) r)]
       | Join {pred; r1= {node= Filter (p, r); _}; r2} -> [(p, join pred r r2)]
       | Join {pred; r1; r2= {node= Filter (p, r); _}} -> [(p, join pred r1 r)]
+      | Dedup {node= Filter (p, r); _} -> [(p, dedup r)]
       | _ -> []
     in
     List.filter ret ~f
@@ -823,6 +830,22 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
                  m "Cannot hoist: %a" Sexp.pp_hum ([%sexp_of: Name.t list] schema)
              ) ;
              None ) )
+
+  let tf_hoist_orderby _ =
+    let f r =
+      let open A in
+      match r.node with
+      | Select (ps, {node= OrderBy {key; rel}; _}) ->
+          [ order_by key
+              (select
+                 (extend_select ps rel
+                    ~with_:
+                      ( List.map key ~f:(fun (p, _) -> pred_free p)
+                      |> Set.union_list (module Name.Compare_no_type) ))
+                 rel) ]
+      | _ -> []
+    in
+    {name= "hoist-orderby"; f} |> run_everywhere
 
   let tf_hoist_filter _ =
     {name= "hoist-filter"; f= hoist_filter_if ~f:(fun _ -> true)} |> run_everywhere
@@ -1241,7 +1264,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     ; ("precompute-filter-bv", tf_precompute_filter_bv)
     ; ("approx-dedup", tf_approx_dedup)
     ; ("hoist-param-filter", tf_hoist_param_filter)
-    ; ("elim-subquery", tf_elim_subquery) ]
+    ; ("elim-subquery", tf_elim_subquery)
+    ; ("hoist-orderby", tf_hoist_orderby) ]
 
   let of_string_exn s =
     let tf_strs =
