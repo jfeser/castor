@@ -201,16 +201,40 @@ CREATE TABLE q17_2 (
 
 CREATE INDEX q17_idx_2 ON q17_2 (l_partkey);
 
--- -- CREATE TABLE q18_1 (
--- --     l_orderkey integer NOT NULL
--- -- );
--- -- CREATE INDEX q18_1_idx ON q18_1 (l_orderkey);
--- -- CREATE TABLE q18_2 (
--- --     c_name varchar(25) NOT NULL,
--- --     c_custkey integer NOT NULL,
--- --     o_orderdate date NOT NULL,
--- --     o_orderkey integer NOT NULL,
--- --     o_totalprice decimal (12,
--- --         2) NOT NULL
--- -- );
--- -- CREATE INDEX q18_2_idx ON q18_2 (o_orderkey);
+CREATE TABLE q18_1 (
+  l_orderkey integer NOT NULL,
+  sum_l_quantity integer not null
+);
+CREATE INDEX q18_1_idx ON q18_1 (l_orderkey);
+CREATE TABLE q18_2 (
+    c_name varchar(25) NOT NULL,
+    c_custkey integer NOT NULL,
+    o_orderkey integer NOT NULL,
+    o_orderdate date NOT NULL,
+    o_totalprice decimal (12, 2) NOT NULL,
+    sum_l_quantity integer not null
+);
+
+create table q19_1 (
+  l_quantity integer not null,
+  l_extendedprice decimal (12,
+                           2) NOT NULL,
+                           l_discount decimal (12,
+                                               2) NOT NULL,
+p_brand char(10) not null);
+
+create table q19_2 (
+  l_quantity integer not null,
+  l_extendedprice decimal (12,
+                           2) NOT NULL,
+                           l_discount decimal (12,
+                                               2) NOT NULL,
+                                               p_brand char(10) not null);
+
+create table q19_3 (
+  l_quantity integer not null,
+  l_extendedprice decimal (12,
+                           2) NOT NULL,
+                           l_discount decimal (12,
+                                               2) NOT NULL,
+                                               p_brand char(10) not null);

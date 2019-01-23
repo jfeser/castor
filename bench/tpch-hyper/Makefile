@@ -1,5 +1,5 @@
 driver_path := ../../../hyperdemo/bin/driver
-queries := 1.sql 2.sql 3-no.sql 4.sql 5.sql 6.sql 7.sql 8.sql 9.sql 10-no.sql 11-no.sql 12.sql 14.sql 15.sql 16-no.sql 17.sql
+queries := 1.sql 2.sql 3-no.sql 4.sql 5.sql 6.sql 7.sql 8.sql 9.sql 10-no.sql 11-no.sql 12.sql 14.sql 15.sql 16-no.sql 17.sql 18.sql 19.sql
 dumps := $(patsubst %.sql,%.dump.sql,$(queries))
 tables = $(patsubst %.sql,%.table,$(queries))
 outputs = $(patsubst %.sql,%.csv,$(queries))

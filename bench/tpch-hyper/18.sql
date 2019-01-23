@@ -1,0 +1,1 @@
+select c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, q18_1.sum_l_quantity from q18_1, q18_2 where q18_1.o_orderkey = q18_2.l_orderkey and q18_2.sum_l_quantity > 300 order by o_totalprice desc, o_orderdate;

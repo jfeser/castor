@@ -78,5 +78,6 @@ COPY q17_2
 FROM
     'q17_2.tbl' DELIMITER '|';
 
--- -- copy q18 from 'q18.tbl' delimiter '|';
--- -- copy q19 from 'q19.tbl' delimiter '|';
+copy q18_1 from 'q18_1.tbl' delimiter '|';
+copy q18_2 from 'q18_2.tbl' delimiter '|';
+-- copy q19 from 'q19.tbl' delimiter '|';
