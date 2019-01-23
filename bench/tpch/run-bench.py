@@ -282,15 +282,11 @@ def compile_bench(query_name, params):
     compile_cmd_parts = [COMPILE_EXE, "-v", "-o", benchd, "-db", DB] + param_types
 
     # Build, saving the log.
-    try:
-        compile_log = benchd + "/compile.log"
-        query_file = benchd + "/query"
-        check_call(["cp", query, query_file])
-        with open(compile_log, "w") as cl:
-            check_call(compile_cmd_parts + [query_file], stdout=cl, stderr=cl)
-    except Exception:
-        log.exception("Compile failed.")
-        return
+    compile_log = benchd + "/compile.log"
+    query_file = benchd + "/query"
+    check_call(["cp", query, query_file])
+    with open(compile_log, "w") as cl:
+        check_call(compile_cmd_parts + [query_file], stdout=cl, stderr=cl)
 
 
 def run_bench(query_name, params):
@@ -300,13 +296,9 @@ def run_bench(query_name, params):
     param_values = [p[1] for p in params]
     cmd = ["./scanner.exe", "-p", "data.bin"] + param_values
     cmd_str = shlex.quote(" ".join(cmd))
-    try:
-        log.debug("Running %s in %s.", cmd_str, os.getcwd())
-        with open("results.csv", "w") as out:
-            call(cmd, stdout=out)
-    except Exception:
-        log.exception("Running %s failed.", query_name)
-
+    log.debug("Running %s in %s.", cmd_str, os.getcwd())
+    with open("results.csv", "w") as out:
+        call(cmd, stdout=out)
     os.chdir("..")
 
 
