@@ -436,43 +436,45 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     in
     let fix_upper_bound bound kind =
       match kind with
-      | `Open -> bound
+      | `Open -> Ok bound
       | `Closed -> (
           let open Type.PrimType in
           match t with
-          | IntT _ -> Binop (Add, bound, Int 1)
-          | DateT _ -> Binop (Add, bound, Unop (Day, Int 1))
-          | FixedT _ -> failwith "No open inequalities with fixed."
+          | IntT _ -> Ok (Binop (Add, bound, Int 1))
+          | DateT _ -> Ok (Binop (Add, bound, Unop (Day, Int 1)))
+          | FixedT _ -> Error "No open inequalities with fixed."
           | NullT | StringT _ | BoolT _ | TupleT _ | VoidT ->
               failwith "Unexpected type." )
     in
     let fix_lower_bound bound kind =
       match kind with
-      | `Closed -> bound
+      | `Closed -> Ok bound
       | `Open -> (
           let open Type.PrimType in
           match t with
-          | IntT _ -> Binop (Add, bound, Int 1)
-          | DateT _ -> Binop (Add, bound, Unop (Day, Int 1))
-          | FixedT _ -> failwith "No open inequalities with fixed."
+          | IntT _ -> Ok (Binop (Add, bound, Int 1))
+          | DateT _ -> Ok (Binop (Add, bound, Unop (Day, Int 1)))
+          | FixedT _ -> Error "No open inequalities with fixed."
           | NullT | StringT _ | BoolT _ | TupleT _ | VoidT ->
               failwith "Unexpected type." )
     in
-    let lb =
-      match lb with None -> default_min | Some (b, k) -> fix_lower_bound b k
+    let open Result.Let_syntax in
+    let%bind lb =
+      match lb with None -> Ok default_min | Some (b, k) -> fix_lower_bound b k
     in
-    let ub =
-      match ub with None -> default_max | Some (b, k) -> fix_upper_bound b k
+    let%map ub =
+      match ub with None -> Ok default_max | Some (b, k) -> fix_upper_bound b k
     in
     let k = Fresh.name fresh "k%d" in
     let select_list = [As_pred (p, k)] in
     let filter_pred = Binop (Eq, Name (Name.create k), p) in
-    [ ordered_idx
-        (dedup (select select_list r))
-        (filter filter_pred r)
-        {oi_key_layout= None; lookup_low= lb; lookup_high= ub; order= `Desc} ]
+    ordered_idx
+      (dedup (select select_list r))
+      (filter filter_pred r)
+      {oi_key_layout= None; lookup_low= lb; lookup_high= ub; order= `Desc}
 
   let tf_elim_cmp_filter _ =
+    let result_to_list = function Ok x -> [x] | Error _ -> [] in
     let open A in
     { name= "elim-cmp-filter"
     ; f=
@@ -481,14 +483,15 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           | {node= Filter (Binop (And, Binop (Ge, p, lb), Binop (Lt, p', ub)), r); _}
             when [%compare.equal: pred] p p' ->
               gen_ordered_idx ~lb:(lb, `Closed) ~ub:(ub, `Open) p r
+              |> result_to_list
           | {node= Filter (Binop (Ge, p', p), r); _}
            |{node= Filter (Binop (Le, p, p'), r); _} ->
-              gen_ordered_idx ~ub:(p', `Closed) p r
-              @ gen_ordered_idx ~lb:(p, `Closed) p' r
+              (gen_ordered_idx ~ub:(p', `Closed) p r |> result_to_list)
+              @ (gen_ordered_idx ~lb:(p, `Closed) p' r |> result_to_list)
           | {node= Filter (Binop (Lt, p, p'), r); _}
            |{node= Filter (Binop (Gt, p', p), r); _} ->
-              gen_ordered_idx ~ub:(p', `Open) p r
-              @ gen_ordered_idx ~lb:(p, `Open) p' r
+              (gen_ordered_idx ~ub:(p', `Open) p r |> result_to_list)
+              @ (gen_ordered_idx ~lb:(p, `Open) p' r |> result_to_list)
           | _ -> [] ) }
     |> run_everywhere
 
