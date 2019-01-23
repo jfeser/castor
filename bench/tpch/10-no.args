@@ -1,1 +1,1 @@
--p param0:date -t "partition-domain(param0, orders.o_orderdate):9,split-out(customer,customer.c_custkey):0,row-store:13,project,row-store:4"
+-p param0:date -t "partition-domain(param0, orders.o_orderdate):9,split-out(customer,customer.c_custkey):0,row-store:15,project,row-store:6"

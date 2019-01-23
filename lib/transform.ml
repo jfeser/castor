@@ -1070,28 +1070,31 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           M.annotate_schema r ;
           let schema = Meta.(find_exn r schema) in
           if List.mem schema pk ~equal:eq then
-            let pk_fresh =
-              sprintf "%s_%s" (Name.to_var pk) (Fresh.name fresh "%d")
-            in
-            let sel_list =
-              List.filter schema ~f:(fun n ->
+            let pk_rel = Option.value_exn pk.relation in
+            let rel_fresh_k = sprintf "%s_%s" pk_rel (Fresh.name fresh "%d") in
+            let pk_k = {pk with relation= Some rel_fresh_k} in
+            let rel_fresh_v = sprintf "%s_%s" pk_rel (Fresh.name fresh "%d") in
+            let pk_v = {pk with relation= Some rel_fresh_v} in
+            (* Partition the schema of the original layout between the two new layouts. *)
+            let fst_sel_list, snd_sel_list =
+              List.partition_tf schema ~f:(fun n ->
                   eq n pk
                   || not
                        (List.mem rel_schema n
                           ~equal:[%compare.equal: Name.Compare_name_only.t]) )
-              |> List.map ~f:(fun n -> Name n)
             in
+            let fst_sel_list = List.map ~f:(fun n -> Name n) fst_sel_list in
+            let snd_sel_list = List.map ~f:(fun n -> Name n) snd_sel_list in
             [ tuple
-                [ select sel_list r
-                ; hash_idx
-                    (dedup
-                       (select
-                          [As_pred (Name pk, pk_fresh)]
-                          (as_ (Option.value_exn pk.relation) (scan rel))))
-                    (filter
-                       (Binop (Eq, Name pk, Name (Name.create pk_fresh)))
-                       (as_ (Option.value_exn pk.relation) (scan rel)))
-                    [Name pk] ]
+                [ select fst_sel_list r
+                ; as_ pk_rel
+                    (hash_idx
+                       (dedup (select [Name pk_k] (as_ rel_fresh_k (scan rel))))
+                       (select snd_sel_list
+                          (filter
+                             (Binop (Eq, Name pk_v, Name pk_k))
+                             (as_ rel_fresh_v (scan rel))))
+                       [Name pk]) ]
                 Cross ]
           else [] ) }
     |> run_everywhere ~stage:`Run

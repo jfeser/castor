@@ -1,12 +1,12 @@
 select([sum((lineitem.l_extendedprice * lineitem.l_discount)) as revenue],
   filter(((lineitem.l_discount >= (param1 - 0.01)) &&
          (lineitem.l_discount <= (param1 + 0.01001))),
-    aorderedidx(dedup(select([lineitem.l_quantity as k6], lineitem)),
+    aorderedidx(dedup(select([lineitem.l_quantity as k4], lineitem)),
       aorderedidx(dedup(
-                    select([lineitem.l_shipdate as k11],
-                      filter((k6 = lineitem.l_quantity), lineitem))),
-        alist(filter((k11 = lineitem.l_shipdate),
-                filter((k6 = lineitem.l_quantity), lineitem)),
+                    select([lineitem.l_shipdate as k7],
+                      filter((k4 = lineitem.l_quantity), lineitem))),
+        alist(filter((k7 = lineitem.l_shipdate),
+                filter((k4 = lineitem.l_quantity), lineitem)),
           atuple([ascalar(lineitem.l_extendedprice),
                   ascalar(lineitem.l_discount)],
             cross)),
