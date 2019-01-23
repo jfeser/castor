@@ -1,1 +1,1 @@
--p param1:date -t "partition-domain(param1,lineitem.l_shipdate):6,row-store:6"
+-p param1:date -t "partition-domain(param1,lineitem.l_shipdate):6,row-store:6,hoist-join-pred:0,elim-subquery:0"

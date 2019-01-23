@@ -1142,6 +1142,65 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     in
     {name= "approx-dedup"; f} |> run_everywhere ~stage:`Both
 
+  let is_correlated subquery input_schema =
+    not
+      (Set.is_empty
+         (Set.inter
+            Meta.(find_exn subquery free)
+            (Set.of_list (module Name.Compare_no_type) input_schema)))
+
+  let tf_elim_subquery _ =
+    let open A in
+    let f r_main =
+      match r_main.node with
+      | Filter (pred, r) ->
+          M.annotate_schema r_main ;
+          annotate_free r_main ;
+          let schema = Meta.(find_exn r schema) in
+          (* Mapping from uncorrelated subqueries to unique names. *)
+          let query_names =
+            (object (self)
+               inherit [_] Abslayout0.reduce
+
+               inherit [_] Util.list_monoid
+
+               method! visit_t xs query =
+                 if is_correlated query schema then xs
+                 else
+                   let result_type =
+                     match Meta.(find_exn query schema) with
+                     | [n] -> Name.type_exn n
+                     | _ -> failwith "Unexpected schema."
+                   in
+                   let result_name = Fresh.name fresh "x%d" in
+                   self#plus xs [(Name.create ~type_:result_type result_name, query)]
+            end)
+              #visit_pred [] pred
+          in
+          let subst_query ~for_:r ~in_:outer_pred new_pred =
+            (object
+               inherit [_] Abslayout0.endo
+
+               method! visit_Exists () p' r' =
+                 if [%compare.equal: A.t] r r' then new_pred else p'
+
+               method! visit_First () p' r' =
+                 if [%compare.equal: A.t] r r' then new_pred else p'
+            end)
+              #visit_pred () outer_pred
+          in
+          (* For each subquery, generate a join *)
+          List.map query_names ~f:(fun (n, q) ->
+              let select_list =
+                Meta.(find_exn q schema)
+                |> List.map ~f:(fun n' -> As_pred (Name n', n.name))
+              in
+              join (subst_query ~for_:q ~in_:pred (Name n)) r (select select_list q)
+          )
+      | _ -> []
+    in
+    {name= "elim-subquery"; f} |> run_everywhere ~stage:`Both
+
   (* let tf_to_cnf _ =
    *   let to_boolean p = match p with
    *     | Binop (And, p1, p2) ->
@@ -1181,7 +1240,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     ; ("precompute-filter", tf_precompute_filter)
     ; ("precompute-filter-bv", tf_precompute_filter_bv)
     ; ("approx-dedup", tf_approx_dedup)
-    ; ("hoist-param-filter", tf_hoist_param_filter) ]
+    ; ("hoist-param-filter", tf_hoist_param_filter)
+    ; ("elim-subquery", tf_elim_subquery) ]
 
   let of_string_exn s =
     let tf_strs =
