@@ -1072,6 +1072,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           if List.mem schema pk ~equal:eq then
             let pk_rel = Option.value_exn pk.relation in
             let rel_fresh_k = sprintf "%s_%s" pk_rel (Fresh.name fresh "%d") in
+            let pk_k_name = Fresh.name fresh "x%d" in
             let pk_k = {pk with relation= Some rel_fresh_k} in
             let rel_fresh_v = sprintf "%s_%s" pk_rel (Fresh.name fresh "%d") in
             let pk_v = {pk with relation= Some rel_fresh_v} in
@@ -1084,15 +1085,22 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
                           ~equal:[%compare.equal: Name.Compare_name_only.t]) )
             in
             let fst_sel_list = List.map ~f:(fun n -> Name n) fst_sel_list in
-            let snd_sel_list = List.map ~f:(fun n -> Name n) snd_sel_list in
+            let snd_sel_list =
+              List.map
+                ~f:(fun n -> Name {n with relation= Some rel_fresh_v})
+                snd_sel_list
+            in
             [ tuple
                 [ select fst_sel_list r
                 ; as_ pk_rel
                     (hash_idx
-                       (dedup (select [Name pk_k] (as_ rel_fresh_k (scan rel))))
+                       (dedup
+                          (select
+                             [As_pred (Name pk_k, pk_k_name)]
+                             (as_ rel_fresh_k (scan rel))))
                        (select snd_sel_list
                           (filter
-                             (Binop (Eq, Name pk_v, Name pk_k))
+                             (Binop (Eq, Name pk_v, Name (Name.create pk_k_name)))
                              (as_ rel_fresh_v (scan rel))))
                        [Name pk]) ]
                 Cross ]
