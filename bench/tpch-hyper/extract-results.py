@@ -1,37 +1,52 @@
 #!/usr/bin/env python3
 
-'''Usage: extract-results.py LOG'''
+'''Usage: extract-results.py FILE...'''
 
 import re
 from docopt import docopt
 import os
 
+time_regex = re.compile(r".*'(\d+[a-zA-Z-]*).*?([0-9]+)ms exe.*")
+mem_regex = re.compile(r'Maximum resident set size \(kbytes\): (\d+)')
+
+def to_str(x):
+    if x is None:
+        return ''
+    return str(x)
+
 def main(args):
-    with open(args['LOG'], 'r') as f:
-        text = f.read()
-
-    print('name,runtime,max_rss')
-    regex = re.compile(r".*'(\d+[a-zA-Z-]*).*?([0-9]+)ms exe.*")
-    for line in text.split('\n'):
-        match = regex.fullmatch(line)
-        if match is not None:
-            bench_name = match.groups()[0]
-            run_time = str(int(match.groups()[1]) / 100)
+    times = {}
+    mems = {}
+    for fn in args['FILE']:
+        if fn.endswith('.time'):
+            with open(fn, 'r') as f:
+                text = f.read()
+                name = fn.split('.')[0]
+                match = time_regex.fullmatch(text)
+                if match is None:
+                    time = None
+                else:
+                    time = str(int(match.groups()[1]) / 100)
+                times[name].append(time)
+        elif fn.endswith('.mem'):
+            with open(fn, 'r') as f:
+                text = f.read()
+                name = fn.split('.')[0]
+                match = mem_regex.search(text)
+                if match is None:
+                    max_rss = None
+                else:
+                    max_rss = match.group(1)
+                mems[name].append(max_rss)
         else:
-            bench_name = ''
-            run_time = ''
+            print('Ignoring file: ', fn)
 
-        time_fn = '%s.time' % bench_name
-        max_rss = ''
-        if os.path.exists(time_fn):
-            with open(time_fn, 'r') as f:
-                time_text = f.read()
-                match2 = re.search(r'Maximum resident set size \(kbytes\): (\d+)', time_text)
-                if match2 is not None:
-                    max_rss = match2.group(1)
-        if bench_name == '':
-            continue
-        print('%s,%s,%s' % (bench_name, run_time, max_rss))
+    print('name,runtime,max_rss,size')
+    for name in set(times.keys()) + set(mems.keys()):
+        data_size = str(os.stat("%s.db" % name).st_size)
+        run_time = to_str(times.get(name,None))
+        max_rss = to_str(mems.get(name,None))
+        print('%s,%s,%s,%s' % (name, run_time, max_rss, data_size))
 
 
 if __name__ == '__main__':

@@ -1,26 +1,27 @@
 driver_path := ../../../hyperdemo/bin/driver
-queries := 1.sql 2.sql 3-no.sql 4.sql 5.sql 6.sql 7.sql 8.sql 9.sql 10-no.sql 11-no.sql 12.sql 14.sql 15.sql 16-no.sql 17.sql 18.sql 19.sql
-dumps := $(patsubst %.sql,%.dump.sql,$(queries))
-tables = $(patsubst %.sql,%.table,$(queries))
-outputs = $(patsubst %.sql,%.csv,$(queries))
+prefixes := 1 2 3-no 4 5 6 7 8 9 10-no 11-no 12 14 15 16-no 17 18 19
 
-all: hyper-output.log $(outputs)
+all: hyper_results.csv $(prefixes:%=%.csv)
 
 %.table : %.dump.sql
 	psql -d tpch -f $<
 	touch $@
 
-db.dump : $(tables) schema.sql load.sql
-	$(driver_path) schema.sql load.sql --store db.dump 2>&1 | tee hyper-db-create.log
+%.db : %.schema.sql %.load.sql
+	$(driver_path) $^ --store $@ 2> $*-create.log
 
-hyper-output.log : db.dump $(queries)
-	$(driver_path) db.dump -r 100 -b $(queries) 2>&1 | tee hyper-output.log
+%.time : %.sql %.db
+	$(driver_path) $*.db -r 100 -b $*.sql 2> $@
 
-%.csv : %.sql db.dump
-	$(driver_path) db.dump -q $< 2> $@
+%.csv : %.sql %.db
+	$(driver_path) $*.db -q $*.sql 2> $@
 
-%.time : %.sql db.dump
-	/usr/bin/time -v $(driver_path) db.dump -q $< -s 2> $@
+%.mem : %.sql %.db
+	/usr/bin/time -v $(driver_path) $*.db -q $*.sql -s 2> $@
 
-hyper_results.csv : $(patsubst %.sql,%.time,$(queries)) hyper-output.log
-	./extract-results.py hyper-output.log > hyper_results.csv
+hyper_results.csv : $(prefixes:%=%.time) $(prefixes:%=%.mem)
+	./extract-results.py $^ > $@
+
+.PHONY: clean
+clean:
+	rm -f hyper-output.log *.time *.csv *.table *.tbl hyper_results.csv db.dump
