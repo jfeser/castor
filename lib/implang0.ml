@@ -55,6 +55,7 @@ type expr =
 
 and stmt =
   | Print of (Type.PrimType.t[@opaque]) * expr
+  | Consume of (Type.PrimType.t[@opaque]) * expr
   | Loop of {cond: expr; body: prog}
   | If of {cond: expr; tcase: prog; fcase: prog}
   | Iter of {var: string; func: string; args: expr list}

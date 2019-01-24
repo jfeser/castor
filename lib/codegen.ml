@@ -1026,6 +1026,26 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     in
     gen val_ type_ ; call_printf newline_str []
 
+  let codegen_consume fctx type_ expr =
+    (* Generate a dummy consumer function that LLVM will not optimize away. *)
+    let gen_consumer type_ =
+      let func =
+        declare_function "dummy_consume"
+          (function_type (void_type ctx) [|codegen_type type_|])
+          module_
+      in
+      let bb = append_block ctx "entry" func in
+      let builder = builder_at_end ctx bb in
+      build_ret_void builder |> ignore ;
+      add_function_attr func (create_enum_attr ctx "noinline" 0L) AttrIndex.Function ;
+      add_function_attr func (create_enum_attr ctx "optnone" 0L) AttrIndex.Function ;
+      func
+    in
+    Logs.debug (fun m -> m "Codegen for %a." I.pp_stmt (Consume (type_, expr))) ;
+    let consumer = gen_consumer type_ in
+    let val_ = codegen_expr fctx expr in
+    build_call consumer [|val_|] "" builder |> ignore
+
   let codegen_return fctx expr =
     let val_ = codegen_expr fctx expr in
     build_ret val_ builder |> ignore
@@ -1063,6 +1083,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | Assign {lhs; rhs} -> codegen_assign fctx lhs rhs
       | Yield ret -> codegen_yield fctx ret
       | Print (type_, expr) -> codegen_print fctx type_ expr
+      | Consume (type_, expr) -> codegen_consume fctx type_ expr
       | Return _ -> Error.(of_string "Iterator cannot return." |> raise)
     and codegen_prog fctx p = List.iter ~f:(codegen_stmt fctx) p in
     let set_attributes func =
@@ -1163,6 +1184,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | Iter {var; func; args} -> codegen_init fctx var func args
       | Assign {lhs; rhs} -> codegen_assign fctx lhs rhs
       | Print (type_, expr) -> codegen_print fctx type_ expr
+      | Consume (type_, expr) -> codegen_consume fctx type_ expr
       | Return expr -> codegen_return fctx expr
       | Yield _ ->
           fail (Error.of_string "Yields not allowed in function declarations.")
@@ -1395,7 +1417,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     fprintf fmt "typedef void params;@," ;
     fprintf fmt "typedef struct { char *ptr; long len; } string_t;@," ;
     fprintf fmt "params* create(void *);@," ;
-    fprintf fmt "long counter(params *);@," ;
+    fprintf fmt "void consumer(params *);@," ;
     fprintf fmt "void printer(params *);@," ;
     Hashtbl.data funcs |> List.iter ~f:(fun llfunc -> pp_value_decl fmt llfunc) ;
     pp_close_box fmt () ;

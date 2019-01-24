@@ -700,13 +700,10 @@ struct
     scan ctx b r t (fun b tup -> build_print (Tuple tup) b) ;
     build_func b
 
-  let counter ctx r t =
+  let consumer ctx r t =
     let open Builder in
-    let open Infix in
-    let b = create ~name:"counter" ~ctx ~ret:(IntT {nullable= false}) ~fresh in
-    let c = build_defn "c" Infix.(int 0) b in
-    scan ctx b r t (fun b _ -> build_assign (c + int 1) c b) ;
-    build_return c b ;
+    let b = create ~name:"consumer" ~ctx ~ret:VoidT ~fresh in
+    scan ctx b r t (fun b tup -> build_consume (Tuple tup) b) ;
     build_func b
 
   let irgen ~params ~data_fn r =
@@ -722,7 +719,7 @@ struct
     Bitstring.Writer.flush writer ;
     Bitstring.Writer.close writer ;
     { iters= !iters
-    ; funcs= [printer ctx r type_; counter ctx r type_]
+    ; funcs= [printer ctx r type_; consumer ctx r type_]
     ; params
     ; buffer_len= len }
 

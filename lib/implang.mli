@@ -60,6 +60,7 @@ type local = Implang0.local =
 
 type stmt = Implang0.stmt =
   | Print of Type.PrimType.t * expr
+  | Consume of Type.PrimType.t * expr
   | Loop of {cond: expr; body: prog}
   | If of {cond: expr; tcase: prog; fcase: prog}
   | Iter of {var: string; func: string; args: expr list}
@@ -142,6 +143,8 @@ module Builder : sig
   val build_unchecked_assign : expr -> expr -> t -> unit
 
   val build_print : expr -> t -> unit
+
+  val build_consume : expr -> t -> unit
 
   val build_return : expr -> t -> unit
 

@@ -32,7 +32,7 @@ void resume_stdout(int fd) {
 }
 
 int main(int argc, char **argv) {
-  int fd, len, print_flag = 0, count_flag = 0, run_time = 0, c;
+  int fd, len, print_flag = 0, run_time = 0, c;
   char *fn = NULL;
   struct stat stat;
 
@@ -40,9 +40,6 @@ int main(int argc, char **argv) {
     switch (c) {
     case 'p':
       print_flag = 1;
-      break;
-    case 'c':
-      count_flag = 1;
       break;
     case 't':
       run_time = atoi(optarg);
@@ -95,14 +92,14 @@ int main(int argc, char **argv) {
 
     /* Run once to figure out the number of runs needed. */
     clock_t start = clock();
-    printer(params);
+    consumer(params);
     clock_t stop = clock();
     int runs = (run_time * CLOCKS_PER_SEC) / (stop - start);
     runs = runs > 0 ? runs : 1;
     if (runs > 1) {
       start = clock();
       for (int i = 0; i < runs; i++) {
-        printer(params);
+        consumer(params);
       }
       stop = clock();
     }
@@ -110,8 +107,6 @@ int main(int argc, char **argv) {
 
     resume_stdout(fd);
     printf("%fms (%f qps)\n", msec / (float)runs, ((float)runs / msec) * 1000);
-  } else if (count_flag) {
-    printf("%ld\n", counter(params));
   } else if (print_flag) {
     printer(params);
   }

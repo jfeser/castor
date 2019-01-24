@@ -89,6 +89,8 @@ and pp_stmt : Format.formatter -> stmt -> unit =
     | Return e -> fprintf fmt "@[<hov>return@ %a;@]" pp_expr e
     | Print (t, e) ->
         fprintf fmt "@[<hov>print(%a,@ %a);@]" Type.PrimType.pp t pp_expr e
+    | Consume (t, e) ->
+        fprintf fmt "@[<hov>consume(%a,@ %a);@]" Type.PrimType.pp t pp_expr e
 
 and pp_prog : Format.formatter -> prog -> unit =
   let open Format in
@@ -339,6 +341,10 @@ module Builder = struct
   let build_print e b =
     let t = type_of e b in
     b.body := Print (t, e) :: !(b.body)
+
+  let build_consume e b =
+    let t = type_of e b in
+    b.body := Consume (t, e) :: !(b.body)
 
   let build_return e b = b.body := Return e :: !(b.body)
 
