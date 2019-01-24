@@ -7,8 +7,7 @@ SELECT
 FROM
     q15
 WHERE
-    l_shipdate >= date '1996-01-01'
-    AND l_shipdate < date '1996-01-01' + interval '3' month
+    l_shipdate = date '1996-01-01'
 ORDER BY
     s_suppkey;
 
