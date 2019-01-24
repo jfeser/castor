@@ -6,7 +6,7 @@ import re
 from docopt import docopt
 import os
 
-time_regex = re.compile(r".*'(\d+[a-zA-Z-]*).*?([0-9]+)ms exe.*")
+time_regex = re.compile(r"([0-9]+)ms exe")
 mem_regex = re.compile(r'Maximum resident set size \(kbytes\): (\d+)')
 
 def to_str(x):
@@ -22,12 +22,12 @@ def main(args):
             with open(fn, 'r') as f:
                 text = f.read()
                 name = fn.split('.')[0]
-                match = time_regex.fullmatch(text)
+                match = time_regex.search(text)
                 if match is None:
                     time = None
                 else:
-                    time = str(int(match.groups()[1]) / 100)
-                times[name].append(time)
+                    time = str(int(match.group(1)) / 100)
+                times[name] = time
         elif fn.endswith('.mem'):
             with open(fn, 'r') as f:
                 text = f.read()
@@ -37,13 +37,17 @@ def main(args):
                     max_rss = None
                 else:
                     max_rss = match.group(1)
-                mems[name].append(max_rss)
+                mems[name] = max_rss
         else:
             print('Ignoring file: ', fn)
-
+    print(times, mems)
     print('name,runtime,max_rss,size')
-    for name in set(times.keys()) + set(mems.keys()):
-        data_size = str(os.stat("%s.db" % name).st_size)
+    for name in set(times.keys()) | set(mems.keys()):
+        try:
+            data_size = str(os.stat("%s.db" % name).st_size)
+        except FileNotFoundError:
+            data_size = None
+        data_size = to_str(data_size)
         run_time = to_str(times.get(name,None))
         max_rss = to_str(mems.get(name,None))
         print('%s,%s,%s,%s' % (name, run_time, max_rss, data_size))

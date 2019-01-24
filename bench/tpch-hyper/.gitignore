@@ -5,3 +5,5 @@
 *.table
 tables
 *.time
+*.db
+*.mem

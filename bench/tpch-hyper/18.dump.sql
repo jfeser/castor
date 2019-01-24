@@ -14,7 +14,7 @@ CREATE temp VIEW q18_1 AS (
    group by c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice
 );
 
-\copy (select * from q18_1) to 'q19_1.tbl' delimiter '|';
+\copy (select * from q18_1) to 'q18_1.tbl' delimiter '|';
 
 CREATE temp VIEW q18_2 AS (
   SELECT
