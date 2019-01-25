@@ -35,6 +35,13 @@
  (preprocess (pps ppx_sexp_conv ppx_let))
  (modules sample))
 
+(executable
+ (name sample_tpch)
+ (libraries core postgresql castor logs)
+ (flags (:standard -g -bin-annot))
+ (preprocess (pps ppx_sexp_conv ppx_let))
+ (modules sample_tpch))
+
 ; Local Variables:
 ; mode: tuareg-dune
 ; End:
