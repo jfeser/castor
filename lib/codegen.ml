@@ -1449,6 +1449,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     in
     if Sys.is_directory out_dir = `No then Unix.mkdir out_dir ;
     let stdlib_fn = Project_config.build_root ^ "/etc/stdlib.c" in
+    let date_fn = Project_config.build_root ^ "/etc/date.c" in
     let main_fn = out_dir ^ "/main.c" in
     let ir_fn = out_dir ^ "/scanner.ir" in
     let module_fn = out_dir ^ "/scanner.ll" in
@@ -1515,7 +1516,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     in
     if debug then
       Util.command_exn ~quiet:()
-        ([clang] @ cflags @ [module_fn; stdlib_fn; main_fn; "-o"; exe_fn])
+        ([clang] @ cflags @ [module_fn; stdlib_fn; date_fn; main_fn; "-o"; exe_fn])
     else (
       Util.command_exn ~quiet:()
         [ opt
@@ -1528,6 +1529,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         ; "2>/dev/null" ] ;
       Util.command_exn ~quiet:()
         ( [clang] @ cflags
-        @ [opt_module_fn; stdlib_fn; main_fn; "-o"; exe_fn; "2>/dev/null"] ) ) ;
+        @ [opt_module_fn; stdlib_fn; date_fn; main_fn; "-o"; exe_fn; "2>/dev/null"]
+        ) ) ;
     (exe_fn, data_fn)
 end
