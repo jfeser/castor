@@ -1,11 +1,11 @@
 (install
   (section etc)
-  (files stdlib.c date.h load_bool.c load_float.c load_int.c load_string.c load_date.c perf.c shared.h))
+  (files date.c stdlib.c load_bool.c load_date.c load_float.c load_int.c load_string.c perf.c date.h shared.h))
 
 (rule
   (deps stdlib.c stdlib_test.c date.h)
   (targets stdlib_test.exe)
-  (action (run %{cc} stdlib_test.c -o stdlib_test.exe)))
+  (action (run %{cc} date.c stdlib_test.c -o stdlib_test.exe)))
 
 (rule
   (with-stdout-to stdlib_test.output (run ./stdlib_test.exe)))
