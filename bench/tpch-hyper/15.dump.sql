@@ -1,31 +1,21 @@
-create temp table q15_helper as (
-  select l1.l_shipdate, l2.l_suppkey, sum(l2.l_extendedprice * (1 - l2.l_discount)) as total_revenue
-    from (select l_shipdate, l_suppkey from lineitem) as l1,
-         (select l_shipdate, l_suppkey, l_extendedprice, l_discount from lineitem) as l2
-   where l2.l_shipdate >= l1.l_shipdate
-     and l2.l_shipdate < l1.l_shipdate + interval '3' month
-   group by l1.l_shipdate, l2.l_suppkey
-);
-create index on q15_helper (l_shipdate);
-create index on q15_helper (total_revenue);
+create temp table q15 as (select d as l_shipdate, s_suppkey, s_name, s_address, s_phone, total_revenue
+  from (select distinct l_shipdate as d from lineitem) as t5, lateral 
+         (select s_suppkey, s_name, s_address, s_phone, total_revenue
+            from supplier,
+                 (select l_suppkey as skey,
+                         sum(l_extendedprice * (1 - l_discount)) as total_revenue
+                    from lineitem
+                   where l_shipdate >= d and
+                         l_shipdate < d + interval '3 month'
+                   group by l_suppkey) as t1,
+                 (select max(total_revenue) as max_total_revenue
+                    from
+                        (select sum(l_extendedprice * (1 - l_discount)) as total_revenue
+                           from lineitem
+                          where l_shipdate >= d and
+                                l_shipdate < d + interval '3 month'
+                          group by l_suppkey) as t2) as t3
+           where s_suppkey = skey and total_revenue = max_total_revenue) as t4);
 
-create temp table q15 as (select
-                            l_shipdate,
-                            s_suppkey,
-                            s_name,
-                            s_address,
-                            s_phone,
-                            total_revenue
-                            from
-                                q15_helper as qhh, supplier as s
-                           where
-                 l_suppkey = s_suppkey and
-                 total_revenue = (
-                   select
-                     max(total_revenue)
-                     from
-                         q15_helper as qh
-                    where qh.l_shipdate = qhh.l_shipdate 
-                 ));
 
 \copy (select * from q15) to 'q15.tbl' delimiter '|';
