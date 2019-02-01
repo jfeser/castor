@@ -75,25 +75,27 @@ let%expect_test "hash-idx" =
   [%expect
     {|
     0:4 Table len
-    4:8 Table hash len
-    12:104 Table hash
-    116:8 Table map len
-    124:24 Table key map
-    124:8 Map entry (0 => XXX)
-    132:8 Map entry (1 => XXX)
-    140:8 Map entry (2 => XXX)
-    148:6 Table values
-    148:1 Scalar (=(Int 1))
-    149:1 Scalar (=(Int 1))
-    150:1 Scalar (=(Int 2))
-    151:1 Scalar (=(Int 2))
-    152:1 Scalar (=(Int 3))
-    153:1 Scalar (=(Int 3))
+    4:8 Table map len
+    4:0 Table hash len
+    4:0 Table hash
+    12:32 Table key map
+    12:8 Map entry (0 => XXX)
+    20:8 Map entry (1 => XXX)
+    28:8 Map entry (2 => XXX)
+    36:8 Map entry (3 => XXX)
+    44:6 Table values
+    44:1 Scalar (=(Int 1))
+    45:1 Scalar (=(Int 1))
+    46:1 Scalar (=(Int 2))
+    47:1 Scalar (=(Int 2))
+    48:1 Scalar (=(Int 3))
+    49:1 Scalar (=(Int 3))
 
     ((HashIdxT
       ((IntT ((range (Interval 1 3)) (nullable false)))
-       (IntT ((range (Interval 1 3)) (nullable false))) ((count (Interval 1 1)))))
-     154) |}]
+       (IntT ((range (Interval 1 3)) (nullable false)))
+       ((key_count (Interval 3 3)) (value_count (Interval 1 1)))))
+     50) |}]
 
 let%expect_test "ordered-idx" =
   run_test

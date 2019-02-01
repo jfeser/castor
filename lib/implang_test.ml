@@ -357,7 +357,7 @@ let%expect_test "hash-idx" =
        (HashIdxT
         ((IntT ((range (Interval 1 3)) (nullable false)))
          (IntT ((range (Interval 2 4)) (nullable false)))
-         ((count (Interval 1 1))))))
+         ((key_count (Interval 3 3)) (value_count (Interval 1 1))))))
       ((count (Interval 5 5)))))
     // Locals:
     // cstart8 : Int[nonnull] (persists=true)
@@ -375,18 +375,16 @@ let%expect_test "hash-idx" =
         i11 = 0;
         count12 = 5;
         loop (i11 < count12) {
-            if (hash(cstart9 + 4 + 8, buf[cstart10 : 1]) * 8 < 0 || buf[cstart9 +
-                4 + 8 + buf[cstart9 + 4 : 8] : 8] - 1 < hash(cstart9 + 4 +
-                8, buf[cstart10 : 1]) * 8 || buf[cstart9 + 4 + 8 + buf[cstart9 +
-                4 : 8] + 8 + hash(cstart9 + 4 + 8, buf[cstart10 : 1]) * 8 : 8] =
-                0) {
+            if (buf[cstart10 : 1] * 8 < 0 || buf[cstart9 + 4 + 0 + 0 : 8] - 1 <
+                buf[cstart10 : 1] * 8 || buf[cstart9 + 4 + 0 + 0 + 8 +
+                buf[cstart10 : 1] * 8 : 8] = 0) {
 
             } else {
-                 kstart13 = buf[cstart9 + 4 + 8 + buf[cstart9 + 4 : 8] + 8 +
-                 hash(cstart9 + 4 + 8, buf[cstart10 : 1]) * 8 : 8];
+                 kstart13 = buf[cstart9 + 4 + 0 + 0 + 8 + buf[cstart10 : 1] * 8 :
+                 8];
                  key15 = (buf[kstart13 : 1]);
-                 vstart14 = buf[cstart9 + 4 + 8 + buf[cstart9 + 4 : 8] + 8 +
-                 hash(cstart9 + 4 + 8, buf[cstart10 : 1]) * 8 : 8] + 1;
+                 vstart14 = buf[cstart9 + 4 + 0 + 0 + 8 + buf[cstart10 : 1] * 8 :
+                 8] + 1;
                  if (true && key15[0] = buf[cstart10 : 1]) {
                      print(Tuple[Int[nonnull], Int[nonnull], Int[nonnull]],
                      (buf[cstart10 : 1], key15[0], buf[vstart14 : 1]));
@@ -414,17 +412,16 @@ let%expect_test "hash-idx" =
         i3 = 0;
         count4 = 5;
         loop (i3 < count4) {
-            if (hash(cstart1 + 4 + 8, buf[cstart2 : 1]) * 8 < 0 || buf[cstart1 +
-                4 + 8 + buf[cstart1 + 4 : 8] : 8] - 1 < hash(cstart1 + 4 +
-                8, buf[cstart2 : 1]) * 8 || buf[cstart1 + 4 + 8 + buf[cstart1 +
-                4 : 8] + 8 + hash(cstart1 + 4 + 8, buf[cstart2 : 1]) * 8 : 8] = 0) {
+            if (buf[cstart2 : 1] * 8 < 0 || buf[cstart1 + 4 + 0 + 0 : 8] - 1 <
+                buf[cstart2 : 1] * 8 || buf[cstart1 + 4 + 0 + 0 + 8 +
+                buf[cstart2 : 1] * 8 : 8] = 0) {
 
             } else {
-                 kstart5 = buf[cstart1 + 4 + 8 + buf[cstart1 + 4 : 8] + 8 +
-                 hash(cstart1 + 4 + 8, buf[cstart2 : 1]) * 8 : 8];
+                 kstart5 = buf[cstart1 + 4 + 0 + 0 + 8 + buf[cstart2 : 1] * 8 :
+                 8];
                  key7 = (buf[kstart5 : 1]);
-                 vstart6 = buf[cstart1 + 4 + 8 + buf[cstart1 + 4 : 8] + 8 +
-                 hash(cstart1 + 4 + 8, buf[cstart2 : 1]) * 8 : 8] + 1;
+                 vstart6 = buf[cstart1 + 4 + 0 + 0 + 8 + buf[cstart2 : 1] * 8 :
+                 8] + 1;
                  if (true && key7[0] = buf[cstart2 : 1]) {
                      consume(Tuple[Int[nonnull], Int[nonnull], Int[nonnull]],
                      (buf[cstart2 : 1], key7[0], buf[vstart6 : 1]));
@@ -710,7 +707,7 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
            (IntT ((range (Interval 2 5)) (nullable false))))
           ((count (Interval 1 1)))))
         ((count (Interval 1 2)))))
-      ((count (Interval 1 2)))))
+      ((key_count (Interval 9 9)) (value_count (Interval 1 2)))))
     // Locals:
     // kstart10 : Int[nonnull] (persists=false)
     // cstart18 : Int[nonnull] (persists=true)
@@ -817,7 +814,7 @@ select([lp.counter, lc.counter],
                  (IntT ((range (Interval 3 6)) (nullable false))))
                 ((count (Interval 1 1)))))
               ((count (Interval 1 2)))))
-            ((count (Interval 1 2)))))
+            ((key_count (Interval 3 3)) (value_count (Interval 1 2)))))
           (FuncT
            (((OrderedIdxT
               ((IntT ((range (Interval 1 5)) (nullable false)))
@@ -860,17 +857,13 @@ select([lp.counter, lc.counter],
     fun printer () : Void {
         cstart25 = 4;
         cstart26 = cstart25 + buf[cstart25 : 4];
-        if (hash(cstart25 + 4 + 8, id_p) * 8 < 0 || buf[cstart25 + 4 + 8 +
-            buf[cstart25 + 4 : 8] : 8] - 1 < hash(cstart25 + 4 + 8, id_p) * 8 ||
-            buf[cstart25 + 4 + 8 + buf[cstart25 + 4 : 8] + 8 + hash(cstart25 +
-            4 + 8, id_p) * 8 : 8] = 0) {
+        if (id_p * 8 < 0 || buf[cstart25 + 4 + 0 + 0 : 8] - 1 < id_p * 8 ||
+            buf[cstart25 + 4 + 0 + 0 + 8 + id_p * 8 : 8] = 0) {
 
         } else {
-             kstart27 = buf[cstart25 + 4 + 8 + buf[cstart25 + 4 : 8] + 8 +
-             hash(cstart25 + 4 + 8, id_p) * 8 : 8];
+             kstart27 = buf[cstart25 + 4 + 0 + 0 + 8 + id_p * 8 : 8];
              key29 = (buf[kstart27 : 1]);
-             vstart28 = buf[cstart25 + 4 + 8 + buf[cstart25 + 4 : 8] + 8 +
-             hash(cstart25 + 4 + 8, id_p) * 8 : 8] + 1;
+             vstart28 = buf[cstart25 + 4 + 0 + 0 + 8 + id_p * 8 : 8] + 1;
              if (true && key29[0] = id_p) {
                  cstart30 = vstart28 + 1 + 1;
                  i31 = 0;
@@ -959,17 +952,13 @@ select([lp.counter, lc.counter],
     fun consumer () : Void {
         cstart0 = 4;
         cstart1 = cstart0 + buf[cstart0 : 4];
-        if (hash(cstart0 + 4 + 8, id_p) * 8 < 0 || buf[cstart0 + 4 + 8 +
-            buf[cstart0 + 4 : 8] : 8] - 1 < hash(cstart0 + 4 + 8, id_p) * 8 ||
-            buf[cstart0 + 4 + 8 + buf[cstart0 + 4 : 8] + 8 + hash(cstart0 + 4 +
-            8, id_p) * 8 : 8] = 0) {
+        if (id_p * 8 < 0 || buf[cstart0 + 4 + 0 + 0 : 8] - 1 < id_p * 8 ||
+            buf[cstart0 + 4 + 0 + 0 + 8 + id_p * 8 : 8] = 0) {
 
         } else {
-             kstart2 = buf[cstart0 + 4 + 8 + buf[cstart0 + 4 : 8] + 8 +
-             hash(cstart0 + 4 + 8, id_p) * 8 : 8];
+             kstart2 = buf[cstart0 + 4 + 0 + 0 + 8 + id_p * 8 : 8];
              key4 = (buf[kstart2 : 1]);
-             vstart3 = buf[cstart0 + 4 + 8 + buf[cstart0 + 4 : 8] + 8 +
-             hash(cstart0 + 4 + 8, id_p) * 8 : 8] + 1;
+             vstart3 = buf[cstart0 + 4 + 0 + 0 + 8 + id_p * 8 : 8] + 1;
              if (true && key4[0] = id_p) {
                  cstart5 = vstart3 + 1 + 1;
                  i6 = 0;
@@ -1156,7 +1145,7 @@ select([lp.counter, lc.counter],
                  (IntT ((range (Interval 3 6)) (nullable false))))
                 ((count (Interval 1 1)))))
               ((count (Interval 1 2)))))
-            ((count (Interval 1 2)))))
+            ((key_count (Interval 3 3)) (value_count (Interval 1 2)))))
           (FuncT
            (((OrderedIdxT
               ((IntT ((range (Interval 1 5)) (nullable false)))
