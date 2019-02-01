@@ -47,84 +47,84 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
   [%expect
     {|
     // Locals:
-    // cstart18 : Int[nonnull] (persists=true)
+    // i18 : Int[nonnull] (persists=true)
     // cstart21 : Int[nonnull] (persists=true)
     // cstart16 : Int[nonnull] (persists=true)
-    // cstart12 : Int[nonnull] (persists=true)
-    // cstart22 : Int[nonnull] (persists=true)
+    // count13 : Int[nonnull] (persists=true)
     // cstart17 : Int[nonnull] (persists=true)
-    // count14 : Int[nonnull] (persists=true)
     // cstart15 : Int[nonnull] (persists=true)
-    // count20 : Int[nonnull] (persists=true)
-    // i13 : Int[nonnull] (persists=true)
-    // i19 : Int[nonnull] (persists=true)
+    // cstart11 : Int[nonnull] (persists=true)
+    // i12 : Int[nonnull] (persists=true)
+    // cstart14 : Int[nonnull] (persists=true)
+    // count19 : Int[nonnull] (persists=true)
+    // cstart20 : Int[nonnull] (persists=true)
     fun printer () : Void {
-        cstart12 = 1;
-        i13 = 0;
-        count14 = 2;
-        loop (i13 < count14) {
-            cstart15 = cstart12 + 1;
+        cstart11 = 1;
+        i12 = 0;
+        count13 = 2;
+        loop (i12 < count13) {
+            cstart14 = cstart11 + 1;
+            cstart15 = cstart14 + 1;
             cstart16 = cstart15 + 1;
-            cstart17 = cstart16 + 1;
-            cstart18 = cstart17 + 1 + 1;
-            i19 = 0;
-            count20 = buf[cstart17 : 1];
-            loop (i19 < count20) {
-                cstart21 = cstart18;
-                cstart22 = cstart21 + 1;
-                if (buf[cstart21 : 1] = id_c && buf[cstart15 : 1] = id_p) {
+            cstart17 = cstart16 + 1 + 1;
+            i18 = 0;
+            count19 = buf[cstart16 : 1];
+            loop (i18 < count19) {
+                cstart20 = cstart17;
+                cstart21 = cstart20 + 1;
+                if (buf[cstart20 : 1] = id_c && buf[cstart14 : 1] = id_p) {
                     print(Tuple[Int[nonnull], Int[nonnull], Int[nonnull],
                     Int[nonnull]],
-                    (buf[cstart15 : 1], buf[cstart16 : 1], buf[cstart21 : 1],
-                     buf[cstart22 : 1]));
+                    (buf[cstart14 : 1], buf[cstart15 : 1], buf[cstart20 : 1],
+                     buf[cstart21 : 1]));
                 } else {
 
                 }
-                cstart18 = cstart18 + 2;
-                i19 = i19 + 1;
+                cstart17 = cstart17 + 2;
+                i18 = i18 + 1;
             }
-            cstart12 = cstart12 + buf[cstart12 : 1];
-            i13 = i13 + 1;
+            cstart11 = cstart11 + buf[cstart11 : 1];
+            i12 = i12 + 1;
         }
     }
     // Locals:
-    // cstart7 : Int[nonnull] (persists=true)
-    // count9 : Int[nonnull] (persists=true)
-    // i2 : Int[nonnull] (persists=true)
-    // i8 : Int[nonnull] (persists=true)
-    // cstart11 : Int[nonnull] (persists=true)
-    // cstart1 : Int[nonnull] (persists=true)
-    // c0 : Int[nonnull] (persists=true)
+    // i1 : Int[nonnull] (persists=true)
+    // count8 : Int[nonnull] (persists=true)
+    // i7 : Int[nonnull] (persists=true)
+    // cstart9 : Int[nonnull] (persists=true)
+    // count2 : Int[nonnull] (persists=true)
     // cstart4 : Int[nonnull] (persists=true)
-    // count3 : Int[nonnull] (persists=true)
+    // cstart3 : Int[nonnull] (persists=true)
     // cstart10 : Int[nonnull] (persists=true)
+    // cstart0 : Int[nonnull] (persists=true)
     // cstart6 : Int[nonnull] (persists=true)
     // cstart5 : Int[nonnull] (persists=true)
-    fun counter () : Int[nonnull] {
-        c0 = 0;
-        cstart1 = 1;
-        i2 = 0;
-        count3 = 2;
-        loop (i2 < count3) {
-            cstart4 = cstart1 + 1;
+    fun consumer () : Void {
+        cstart0 = 1;
+        i1 = 0;
+        count2 = 2;
+        loop (i1 < count2) {
+            cstart3 = cstart0 + 1;
+            cstart4 = cstart3 + 1;
             cstart5 = cstart4 + 1;
-            cstart6 = cstart5 + 1;
-            cstart7 = cstart6 + 1 + 1;
-            i8 = 0;
-            count9 = buf[cstart6 : 1];
-            loop (i8 < count9) {
-                cstart10 = cstart7;
-                cstart11 = cstart10 + 1;
-                if (buf[cstart10 : 1] = id_c && buf[cstart4 : 1] = id_p) {
-                    c0 = c0 + 1;
+            cstart6 = cstart5 + 1 + 1;
+            i7 = 0;
+            count8 = buf[cstart5 : 1];
+            loop (i7 < count8) {
+                cstart9 = cstart6;
+                cstart10 = cstart9 + 1;
+                if (buf[cstart9 : 1] = id_c && buf[cstart3 : 1] = id_p) {
+                    consume(Tuple[Int[nonnull], Int[nonnull], Int[nonnull],
+                    Int[nonnull]],
+                    (buf[cstart3 : 1], buf[cstart4 : 1], buf[cstart9 : 1],
+                     buf[cstart10 : 1]));
                 } else {
 
                 }
-                cstart7 = cstart7 + 2;
-                i8 = i8 + 1;
+                cstart6 = cstart6 + 2;
+                i7 = i7 + 1;
             }
-            cstart1 = cstart1 + buf[cstart1 : 1];
-            i2 = i2 + 1;
+            cstart0 = cstart0 + buf[cstart0 : 1];
+            i1 = i1 + 1;
         }
-        return c0;
     } |}]
