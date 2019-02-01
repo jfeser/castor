@@ -26,3 +26,7 @@ results.csv : $(BINARY_NAMES)
 .PHONY: validate
 validate : $(BENCH_NAMES)/results.csv $(BENCH_NAMES:%-gold=%.csv)
 	./run-bench.py validate
+
+.PHONY: clean
+clean :
+	rm -rf $(BENCH_NAMES) analysis*.log results.csv
