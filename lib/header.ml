@@ -114,12 +114,25 @@ let rec make_header t =
       [ Field.{name= "count"; size= make_size count; align= 1}
       ; Field.{name= "len"; size= make_size (Type.len t); align= 1}
       ; Field.{name= "value"; size= `Variable; align= 1} ]
-  | HashIdxT _ ->
-      [ Field.{name= "len"; size= make_size (Type.len t); align= 1}
-      ; Field.{name= "hash_len"; size= `Fixed 8; align= 1}
-      ; Field.{name= "hash_data"; size= `DescribedBy "hash_len"; align= 1}
-      ; Field.{name= "hash_map_len"; size= `Fixed 8; align= 1}
-      ; Field.{name= "hash_map"; size= `DescribedBy "hash_map_len"; align= 1} ]
+  | HashIdxT _ -> (
+      let len = Field.{name= "len"; size= make_size (Type.len t); align= 1} in
+      let hash_map_len = Field.{name= "hash_map_len"; size= `Fixed 8; align= 1} in
+      let hash_map =
+        Field.{name= "hash_map"; size= `DescribedBy "hash_map_len"; align= 1}
+      in
+      match Type.hash_kind_exn t with
+      | `Cmph ->
+          [ len
+          ; Field.{name= "hash_len"; size= `Fixed 8; align= 1}
+          ; Field.{name= "hash_data"; size= `DescribedBy "hash_len"; align= 1}
+          ; hash_map_len
+          ; hash_map ]
+      | `Direct ->
+          [ len
+          ; Field.{name= "hash_len"; size= `Fixed 0; align= 1}
+          ; Field.{name= "hash_data"; size= `Fixed 0; align= 1}
+          ; hash_map_len
+          ; hash_map ] )
   | OrderedIdxT _ ->
       [ Field.{name= "len"; size= make_size (Type.len t); align= 1}
       ; Field.{name= "idx_len"; size= `Fixed 8; align= 1}

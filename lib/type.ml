@@ -101,7 +101,8 @@ module T = struct
 
   type tuple = {count: AbsInt.t} [@@deriving compare, sexp]
 
-  type hash_idx = {count: AbsInt.t} [@@deriving compare, sexp]
+  type hash_idx = {key_count: AbsInt.t; value_count: AbsInt.t}
+  [@@deriving compare, sexp]
 
   type ordered_idx = {count: AbsInt.t} [@@deriving compare, sexp]
 
@@ -174,10 +175,12 @@ let rec unify_exn t1 t2 =
       ListT (unify_exn et1 et2, {count= AbsInt.join c1 c2})
   | OrderedIdxT (k1, v1, {count= c1}), OrderedIdxT (k2, v2, {count= c2}) ->
       OrderedIdxT (unify_exn k1 k2, unify_exn v1 v2, {count= AbsInt.join c1 c2})
-  | HashIdxT (kt1, vt1, {count= c1}), HashIdxT (kt2, vt2, {count= c2}) ->
+  | ( HashIdxT (kt1, vt1, {key_count= kc1; value_count= vc1})
+    , HashIdxT (kt2, vt2, {key_count= kc2; value_count= vc2}) ) ->
       let kt = unify_exn kt1 kt2 in
       let vt = unify_exn vt1 vt2 in
-      HashIdxT (kt, vt, {count= AbsInt.join c1 c2})
+      HashIdxT
+        (kt, vt, {key_count= AbsInt.join kc1 kc2; value_count= AbsInt.join vc1 vc2})
   | EmptyT, t | t, EmptyT -> t
   | FuncT (t, `Child_sum), FuncT (t', `Child_sum) ->
       FuncT (List.map2_exn ~f:unify_exn t t', `Child_sum)
@@ -211,10 +214,8 @@ let rec width = function
 let count = function
   | EmptyT -> AbsInt.of_int 0
   | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ | DateT _ -> AbsInt.of_int 1
-  | TupleT (_, {count})
-   |OrderedIdxT (_, _, {count; _})
-   |HashIdxT (_, _, {count; _}) ->
-      count
+  | TupleT (_, {count}) | OrderedIdxT (_, _, {count; _}) -> count
+  | HashIdxT (_, _, {value_count; _}) -> value_count
   | ListT (_, {count}) -> count
   | FuncT _ -> AbsInt.top
 
@@ -244,6 +245,12 @@ let rec len =
   | T.HashIdxT _ | T.OrderedIdxT (_, _, _) -> Interval (0, 100000000)
   | FuncT (ts, _) -> List.sum (module AbsInt) ts ~f:len
   | NullT as t -> Error.(create "Unexpected type." t [%sexp_of: T.t] |> raise)
+
+(** Use the type of a hash index to decide what hash method to use. *)
+let hash_kind_exn = function
+  | HashIdxT (kt, _, _) -> (
+    match kt with IntT _ | DateT _ -> `Direct | _ -> `Cmph )
+  | _ -> failwith "Unexpected type."
 
 (* let rec to_schema : t -> Db.Schema.t = function
  *   | EmptyT -> []

@@ -204,7 +204,6 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
             ~error:(Error.create "Missing key layout." hmeta [%sexp_of: hash_idx])
             hmeta.hi_key_layout
         in
-        let keys = Gen.to_list keys in
         let serialize_key = function
           | [Value.String s] -> s
           | vs ->
@@ -219,49 +218,58 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
                       create "Unexpected key value." v [%sexp_of: Value.t] |> raise) )
               |> String.concat ~sep:"|"
         in
-        let keys =
-          List.map keys ~f:serialize_key
-          |> List.dedup_and_sort ~compare:[%compare: string]
+        Logs.debug (fun m -> m "Generating hash.") ;
+        let hash, hash_body, hash_len =
+          match Type.hash_kind_exn type_ with
+          | `Direct ->
+              let hash = Hashtbl.create (module String) in
+              Gen.iter keys ~f:(fun k ->
+                  let key = serialize_key k in
+                  let data =
+                    match k with
+                    | [Value.Int x] -> x
+                    | [Date x] -> Date.to_int x
+                    | _ -> failwith "Unexpected key."
+                  in
+                  Hashtbl.set hash ~key ~data ) ;
+              (hash, "", 0)
+          | `Cmph ->
+              let keys = Gen.map keys ~f:serialize_key |> Gen.to_list in
+              let hash = Hashtbl.create (module String) in
+              let hash_body =
+                if List.length keys = 0 then ""
+                else
+                  (* Create a CMPH hash from the keyset. *)
+                  let cmph_hash =
+                    let open Cmph in
+                    let keyset = KeySet.create keys in
+                    List.find_map_exn [Config.default_chd; `Bdz; `Bmz; `Chm; `Fch]
+                      ~f:(fun algo ->
+                        try
+                          Some
+                            ( Config.create ~verbose:true ~seed:0 ~algo keyset
+                            |> Hash.of_config )
+                        with Error _ as err ->
+                          Logs.warn (fun m ->
+                              m "Creating CMPH hash failed: %a" Sexp.pp_hum
+                                ([%sexp_of: exn] err) ) ;
+                          None )
+                  in
+                  (* Populate hash table with CMPH hash values. *)
+                  List.iter keys ~f:(fun k ->
+                      Hashtbl.set hash ~key:k ~data:(Cmph.Hash.hash cmph_hash k) ) ;
+                  Cmph.Hash.to_packed cmph_hash
+              in
+              let hash_len = String.length hash_body in
+              (hash, hash_body, hash_len)
         in
-        Out_channel.with_file "keys.txt" ~f:(fun ch ->
-            List.iter keys ~f:(Out_channel.fprintf ch "%s\n") ) ;
-        Logs.debug (fun m -> m "Generating hash for %d keys." (List.length keys)) ;
-        let hash = Hashtbl.create (module String) in
-        let hash_body =
-          if List.length keys = 0 then ""
-          else
-            (* Create a CMPH hash from the keyset. *)
-            let cmph_hash =
-              let open Cmph in
-              let keyset = KeySet.create keys in
-              List.find_map_exn [Config.default_chd; `Bdz; `Bmz; `Chm; `Fch]
-                ~f:(fun algo ->
-                  try
-                    Some
-                      ( Config.create ~verbose:true ~seed:0 ~algo keyset
-                      |> Hash.of_config )
-                  with Error _ as err ->
-                    Logs.warn (fun m ->
-                        m "Creating CMPH hash failed: %a" Sexp.pp_hum
-                          ([%sexp_of: exn] err) ) ;
-                    None )
-            in
-            (* Populate hash table with CMPH hash values. *)
-            List.iter keys ~f:(fun k ->
-                Hashtbl.set hash ~key:k ~data:(Cmph.Hash.hash cmph_hash k) ) ;
-            (* Write the hashes to a file. *)
-            Out_channel.(
-              with_file "hashes.txt" ~f:(fun ch ->
-                  fprintf ch "%s"
-                    (Sexp.to_string_hum ([%sexp_of: int Hashtbl.M(String).t] hash))
-              )) ;
-            Cmph.Hash.to_packed cmph_hash
-        in
-        let hash_len = String.length hash_body in
+        (* Write the hashes to a file. *)
+        Out_channel.(
+          with_file "hashes.txt" ~f:(fun ch ->
+              fprintf ch "%s"
+                (Sexp.to_string_hum ([%sexp_of: int Hashtbl.M(String).t] hash)) )) ;
         let table_size =
-          List.fold_left keys
-            ~f:(fun m key -> Int.max m (Hashtbl.find_exn hash key))
-            ~init:0
+          Hashtbl.fold hash ~f:(fun ~key:_ ~data:v m -> Int.max m v) ~init:0
           |> fun m -> m + 1
         in
         let hdr = make_header type_ in

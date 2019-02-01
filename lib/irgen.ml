@@ -491,10 +491,12 @@ struct
     let lookup_expr = List.map lookup ~f:(fun p -> gen_pred ctx p b) in
     (* Compute the index in the mapping table for this key. *)
     let hash_key =
-      match lookup_expr with
-      | [] -> failwith "empty hash key"
-      | [x] -> build_hash hash_data_start x b
-      | xs -> build_hash hash_data_start (Tuple xs) b
+      match (Type.(hash_kind_exn (HashIdxT t)), lookup_expr) with
+      | _, [] -> failwith "empty hash key"
+      | `Direct, [x] -> x
+      | `Direct, _ -> failwith "Unexpected direct hash."
+      | `Cmph, [x] -> build_hash hash_data_start x b
+      | `Cmph, xs -> build_hash hash_data_start (Tuple xs) b
     in
     debug_print "hashing key" (Tuple lookup_expr) b ;
     let hash_key = Infix.(hash_key * int 8) in

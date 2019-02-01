@@ -520,7 +520,9 @@ module Make (Config : Config.S) = struct
       | AList (_, r') -> ListT (least_general_of_layout r', {count= Bottom})
       | AHashIdx (_, vr, {hi_key_layout= Some kr; _}) ->
           HashIdxT
-            (least_general_of_layout kr, least_general_of_layout vr, {count= Bottom})
+            ( least_general_of_layout kr
+            , least_general_of_layout vr
+            , {value_count= Bottom; key_count= Bottom} )
       | AOrderedIdx (_, vr, {oi_key_layout= Some kr; _}) ->
           OrderedIdxT
             (least_general_of_layout kr, least_general_of_layout vr, {count= Bottom})
@@ -576,13 +578,19 @@ module Make (Config : Config.S) = struct
 
         method hash_idx _ (_, value_l, {hi_key_layout; _}) =
           let key_l = Option.value_exn hi_key_layout in
-          ( {pre= (fun () -> ()); body= (fun () _ -> ()); post= (fun () -> ())}
+          ( {pre= (fun () -> 0); body= (fun x _ -> x + 1); post= (fun x -> x)}
           , { pre=
-                (fun () ->
-                  (least_general_of_layout key_l, least_general_of_layout value_l)
-                  )
-            ; body= (fun (kt, vt) (kt', vt') -> (unify_exn kt kt', unify_exn vt vt'))
-            ; post= (fun (kt, vt) -> HashIdxT (kt, vt, {count= Type.count vt})) } )
+                (fun kct ->
+                  ( AbsInt.of_int kct
+                  , least_general_of_layout key_l
+                  , least_general_of_layout value_l ) )
+            ; body=
+                (fun (kct, kt, vt) (kt', vt') ->
+                  (kct, unify_exn kt kt', unify_exn vt vt') )
+            ; post=
+                (fun (kct, kt, vt) ->
+                  HashIdxT (kt, vt, {key_count= kct; value_count= Type.count vt}) )
+            } )
 
         method ordered_idx _ (_, value_l, {oi_key_layout; _}) =
           let key_l = Option.value_exn oi_key_layout in
