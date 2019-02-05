@@ -42,6 +42,7 @@ let rec pp_expr : Format.formatter -> expr -> unit =
     | LoadBool -> `Prefix "load_bool"
     | Int2Fl -> `Prefix "int2fl"
     | Int2Date -> `Prefix "int2date"
+    | Date2Int -> `Prefix "date2int"
     | StrLen -> `Prefix "strlen"
     | StrPos -> `Prefix "strpos"
     | ExtractY -> `Prefix "to_year"
@@ -259,6 +260,7 @@ module Builder = struct
         | Not, BoolT {nullable} -> BoolT {nullable}
         | Int2Fl, IntT _ -> FixedT {nullable= false}
         | Int2Date, IntT _ -> DateT {nullable= false}
+        | Date2Int, DateT _ -> IntT {nullable= false}
         | StrLen, StringT _ -> IntT {nullable= false}
         | LoadBool, IntT _ -> BoolT {nullable= false}
         | _ -> fail (Error.create "Type error." (op, t) [%sexp_of: op * t]) )
@@ -504,6 +506,13 @@ module Builder = struct
   let build_gt x y b = Infix.(not (build_le x y b))
 
   let build_ge x y b = Infix.(not (build_lt x y b))
+
+  let build_to_int x b =
+    match type_of x b with
+    | DateT _ -> Unop {op= Date2Int; arg= x}
+    | IntT _ -> x
+    | NullT | FixedT _ | StringT _ | BoolT _ | TupleT _ | VoidT ->
+        failwith "Cannot convert to int."
 
   let build_numeric0 f t x =
     let type_err msg t =

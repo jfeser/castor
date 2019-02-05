@@ -4,6 +4,7 @@ module Pervasives = Caml.Pervasives
 type op =
   | Int2Fl
   | Int2Date
+  | Date2Int
   | IntAdd
   | IntSub
   | IntMul
