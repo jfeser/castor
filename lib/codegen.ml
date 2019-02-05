@@ -776,8 +776,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | StrPos -> codegen_strpos fctx x1 x2
       | AddY -> build_call add_y [|x1; x2|] "" builder
       | AddM -> build_call add_m [|x1; x2|] "" builder
-      | StrLen | Not | Int2Fl | ExtractY | ExtractM | ExtractD | LoadBool | Int2Date
-        ->
+      | StrLen | Not | Int2Fl | ExtractY | ExtractM | ExtractD | LoadBool
+       |Int2Date | Date2Int ->
           fail (Error.of_string "Not a binary operator.")
     in
     x_out
@@ -792,7 +792,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     match op with
     | I.Not -> build_not x "nottmp" builder
     | Int2Fl -> build_sitofp x fixed_type "" builder
-    | Int2Date -> x
+    | Int2Date | Date2Int -> x
     | StrLen -> (Llstring.unpack x).len
     | ExtractY -> build_call extract_y [|x|] "" builder
     | ExtractM -> build_call extract_m [|x|] "" builder

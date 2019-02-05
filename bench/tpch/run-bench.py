@@ -10,8 +10,9 @@ Usage:
   run-bench.py gen-dune
 
 Options:
-  -h --help   Show this screen.
-  -d CONNINFO Database to connect to.
+  -h --help    Show this screen.
+  -d CONNINFO  Database to connect to.
+  -t TIME_CMD  Time command to use.
 """
 
 from docopt import docopt
@@ -302,7 +303,7 @@ def run_bench(query_name, params):
     os.chdir("..")
 
 
-def time_bench(query_name, params, csv_file):
+def time_bench(query_name, params, csv_file, time_prog):
     csv_writer = csv.writer(csv_file)
     benchd = bench_dir(query_name)
     os.chdir(benchd)
@@ -323,8 +324,8 @@ def time_bench(query_name, params, csv_file):
             log.error("Failed to read time: %s", time_str)
 
         time_output = check_output(
-            ["/usr/bin/time", "-v"] + time_cmd_parts, stderr=subprocess.STDOUT
-        ).decode('utf-8')
+            [time_prog, "-v"] + time_cmd_parts, stderr=subprocess.STDOUT
+        ).decode("utf-8")
         match = re.search(r"Maximum resident set size \(kbytes\): (\d+)", time_output)
         peak_rss = match.groups(1)[0] if match is not None else None
         data_size = os.stat("data.bin").st_size
@@ -398,8 +399,11 @@ def should_run(query_name):
 
 if args["-d"] is not None:
     DB = args["-d"]
-if DB == '':
-    raise RuntimeError('No TPC-H database specified. Cannot run benchmark. Fill in config.ini or pass -d DB.')
+if DB == "":
+    raise RuntimeError(
+        "No TPC-H database specified. Cannot run benchmark. Fill in config.ini or pass -d DB."
+    )
+TIME_CMD = args["-t"]
 
 if args["gen-dune"]:
     gen_dune()
@@ -427,7 +431,7 @@ elif args["time-castor"]:
         for bench in BENCHMARKS:
             for query in bench["query"]:
                 if should_run(query):
-                    time_bench(query, bench["params"], csv_file)
+                    time_bench(query, bench["params"], csv_file, TIME_CMD)
 
 elif args["validate"]:
     validate()

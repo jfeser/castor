@@ -4,6 +4,7 @@ open Collections
 type op = Implang0.op =
   | Int2Fl
   | Int2Date
+  | Date2Int
   | IntAdd
   | IntSub
   | IntMul
@@ -196,6 +197,8 @@ module Builder : sig
   val build_printstr : string -> t -> unit
 
   val build_hash : expr -> expr -> t -> expr
+
+  val build_to_int : expr -> t -> expr
 
   val const_int : Type.PrimType.t -> int -> expr
 end

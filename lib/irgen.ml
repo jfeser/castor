@@ -493,7 +493,7 @@ struct
     let hash_key =
       match (Type.(hash_kind_exn (HashIdxT t)), lookup_expr) with
       | _, [] -> failwith "empty hash key"
-      | `Direct, [x] -> x
+      | `Direct, [x] -> build_to_int x b
       | `Direct, _ -> failwith "Unexpected direct hash."
       | `Cmph, [x] -> build_hash hash_data_start x b
       | `Cmph, xs -> build_hash hash_data_start (Tuple xs) b
