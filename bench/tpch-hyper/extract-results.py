@@ -5,6 +5,7 @@
 import re
 from docopt import docopt
 import os
+import sys
 
 time_regex = re.compile(r"([0-9]+)ms exe")
 mem_regex = re.compile(r'Maximum resident set size \(kbytes\): (\d+)')
@@ -39,8 +40,7 @@ def main(args):
                     max_rss = match.group(1)
                 mems[name] = max_rss
         else:
-            print('Ignoring file: ', fn)
-    print(times, mems)
+            print('Ignoring file: ', fn, file=sys.stderr)
     print('name,runtime,max_rss,size')
     for name in set(times.keys()) | set(mems.keys()):
         try:
