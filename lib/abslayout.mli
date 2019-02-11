@@ -45,6 +45,7 @@ type pred = Abslayout0.pred =
   | As_pred of (pred * string)
   | Count
   | Sum of pred
+  | Vec of pred list
   | Avg of pred
   | Min of pred
   | Max of pred

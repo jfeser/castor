@@ -585,18 +585,21 @@ struct
         in
         let cond = gen_pred ctx pred b in
         build_if ~cond
-          ~then_:(fun b ->
+          then_:(fun b ->
             debug_print "filter selected" (Tuple tup) b ;
             cb b tup )
           ~else_:(fun b -> debug_print "filter rejected" (Tuple tup) b)
           b )
-
+          
   and agg_init ctx p b =
     let open Builder in
     match A.pred_remove_as p with
     | A.Count ->
         `Count
           (build_defn ~persistent:false "count" (const_int Type.PrimType.int_t 0) b)
+    | A.Vec f ->
+        let t = type_of_pred ctx f b in
+        `Vec (f, build_defn ~persistent:false "sum" (const_int t 0) b)
     | A.Sum f ->
         let t = type_of_pred ctx f b in
         `Sum (f, build_defn ~persistent:false "sum" (const_int t 0) b)
@@ -622,6 +625,7 @@ struct
     match acc with
     | `Count x -> build_assign (build_add x one b) x b
     | `Sum (f, x) -> build_assign (build_add x (gen_pred ctx f b) b) x b
+    | `Vec (f, x) -> build_assign (build_add x (gen_pred ctx f b) b) x b
     | `Min (f, x) ->
         let v = gen_pred ctx f b in
         build_assign (Ternary (build_lt v x b, v, x)) x b
@@ -634,6 +638,23 @@ struct
         build_assign (build_add d one b) d b
     | `Passthru _ -> ()
 
+  and agg_fold temps =
+    let add vec vecs = if vec<>[] then vec::vecs else vecs in
+    let finish vec vecs = if (List.length vec)=4 then (vec::vecs,[]) else (vecs, vec) in
+    let (vs, v, c) = 
+      List.fold_left (fun (vs, v, c) acc ->
+        (
+          match acc with
+          | `Sum (f, x) -> 
+            if c=4 then ((add (List.rev v) vs), [`Sum (f, x)], 1) else (vs, (`Sum (f, x))::v, c+1)
+          | _ -> (vs, acc::v, 0)
+        )
+      ) ([], [], 0) temps
+    in
+    let vs, v = finish v vs in
+    let did_vectorize = (List.length vs) > 0 in
+    (List.rev vs), (List.rev v), did_vectorize
+
   and agg_extract ctx b =
     let open Builder in
     function
@@ -642,6 +663,17 @@ struct
     | `Passthru p ->
         [%sexp_of: A.pred * [`Agg | `Scalar]] (p, A.pred_kind p) |> print_s ;
         gen_pred ctx p b
+
+  and agg_fold_preds preds =
+    let ps, v, c =
+      List.fold_left (fun (ps, v, c) (n, p) ->
+        match p with
+        | `Sum f -> 
+          if c=4 then ((Vec v)::ps, [(n,p)], 1) else (ps, (n,p)::v, c+1)  
+        | _ -> ((n,p)::folded_preds, curr_vec, c)
+      ) ([], [], 0) preds
+    in
+    if c>0 then (Vec v)::ps else ps
 
   and scan_select ctx b r t cb =
     let open Builder in
@@ -672,6 +704,11 @@ struct
         (* Holds the state for each aggregate. *)
         let agg_temps =
           List.map agg_preds ~f:(fun (n, p) -> (n, agg_init pred_ctx p b))
+        in
+        let (n_acc_folded, p_acc_folded, n_vec, p_vec, c) =
+                List.fold_left (fun (n_acc_folded, p_acc_folded, n_vec, p_vec, c) (n, p) ->
+                        if c=4 then (n_vec::n_acc_folded, p_vec::p_acc_folded, [n], [p], 1) else (n_acc_folded, p_acc_folded, n::n_vec, p::p_vec, c+1)
+                ) ([], [], [], [], 0) agg_temps
         in
         (* Compute the aggregates. *)
         scan ctx b child_layout child_type (fun b tup ->

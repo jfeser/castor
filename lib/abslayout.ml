@@ -131,6 +131,7 @@ and pp_pred fmt =
     | `Prefix str -> fprintf fmt "@[<hov>%s(%a,@ %a)@]" str pp_pred p1 pp_pred p2 )
   | Count -> fprintf fmt "count()"
   | Sum n -> fprintf fmt "sum(%a)" pp_pred n
+  | Vec v -> List.iter (fun x -> pp_pred x) v
   | Avg n -> fprintf fmt "avg(%a)" pp_pred n
   | Min n -> fprintf fmt "min(%a)" pp_pred n
   | Max n -> fprintf fmt "max(%a)" pp_pred n
@@ -236,7 +237,7 @@ let names_visitor =
       match p with
       | Exists _ | First _ -> self#zero
       | Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null | Unop _
-       |Binop _ | As_pred _ | Count | Sum _ | Avg _ | Min _ | Max _
+       |Binop _ | As_pred _ | Count | Sum _ | Vec _ | Avg _ | Min _ | Max _
        |If (_, _, _)
        |Substring (_, _, _) ->
           super#visit_pred () p
@@ -328,6 +329,7 @@ let rec pred_to_schema =
       unnamed (unify (Name.type_exn s1) (Name.type_exn s2))
   | Binop (Strpos, _, _) -> unnamed (IntT {nullable= false})
   | Sum p | Min p | Max p -> pred_to_schema p
+  | Vec v -> List.iter (fun x -> pred_to_schema x) v
   | If (_, p1, p2) ->
       let s1 = pred_to_schema p1 in
       let s2 = pred_to_schema p2 in
@@ -410,6 +412,8 @@ let pred_kind p =
       inherit [_] Util.disj_monoid
 
       method! visit_Sum () _ = true
+
+      method! visit_Vec () _ = true
 
       method! visit_Avg () _ = true
 
@@ -508,7 +512,7 @@ let rec pred_free p =
         match p with
         | Exists r | First r -> self#visit_subquery r
         | Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null | Unop _
-         |Binop _ | As_pred _ | Count | Sum _ | Avg _ | Min _ | Max _
+         |Binop _ | As_pred _ | Count | Sum _ | Vec _ | Avg _ | Min _ | Max _
          |If (_, _, _)
          |Substring (_, _, _) ->
             super#visit_pred () p
