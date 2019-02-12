@@ -56,10 +56,10 @@ let () =
     (let%map_open verbose =
        flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
      and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
-     and db_in = flag "i" (required string) ~doc:"the input database"
-     and db_out = flag "o" (required string) ~doc:"the output database"
+     and db_in = flag "i" (required string) ~doc:"DB the input database"
+     and db_out = flag "o" (required string) ~doc:"DB the output database"
      and sample =
-       flag "n" (required int) ~doc:"the sample size for the lineitem relation"
+       flag "n" (required int) ~doc:"SIZE the sample size for the lineitem relation"
      and seed = flag "s" (optional int) ~doc:"the random seed" in
      fun () ->
        if verbose then Logs.set_level (Some Logs.Debug)
