@@ -1,2 +1,3 @@
-(lang dune 1.1)
+(lang dune 1.7)
 (using menhir 2.0)
+(name castor)
