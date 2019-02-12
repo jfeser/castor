@@ -15,7 +15,7 @@ type binop = Abslayout0.binop =
   | Div
   | Mod
   | Strpos
-[@@deriving compare, sexp]
+[@@deriving compare, hash, sexp]
 
 type unop = Abslayout0.unop =
   | Not
@@ -26,11 +26,12 @@ type unop = Abslayout0.unop =
   | ExtractY
   | ExtractM
   | ExtractD
-[@@deriving compare, sexp]
+[@@deriving compare, hash, sexp]
 
-type tuple = Abslayout0.tuple = Cross | Zip | Concat [@@deriving compare, sexp_of]
+type tuple = Abslayout0.tuple = Cross | Zip | Concat
+[@@deriving compare, hash, sexp_of]
 
-type order = Abslayout0.order = Asc | Desc [@@deriving compare, sexp_of]
+type order = Abslayout0.order = Asc | Desc [@@deriving compare, hash, sexp_of]
 
 type pred = Abslayout0.pred =
   | Name of Name.t
@@ -52,18 +53,18 @@ type pred = Abslayout0.pred =
   | First of t
   | Exists of t
   | Substring of pred * pred * pred
-[@@deriving compare, sexp_of]
+[@@deriving compare, hash, sexp_of]
 
 and hash_idx = Abslayout0.hash_idx =
   {hi_key_layout: Abslayout0.t option; lookup: pred list}
-[@@deriving sexp_of]
+[@@deriving compare, hash, sexp_of]
 
 and ordered_idx = Abslayout0.ordered_idx =
   { oi_key_layout: Abslayout0.t option
   ; lookup_low: pred
   ; lookup_high: pred
   ; order: [`Asc | `Desc] }
-[@@deriving sexp_of]
+[@@deriving compare, hash, sexp_of]
 
 and node = Abslayout0.node =
   | Select of (pred list * t)
@@ -80,9 +81,12 @@ and node = Abslayout0.node =
   | AHashIdx of (t * t * hash_idx)
   | AOrderedIdx of (t * t * ordered_idx)
   | As of string * t
-[@@deriving sexp_of]
+[@@deriving compare, hash, sexp_of]
 
-and t = Abslayout0.t = {node: node; meta: Meta.t} [@@deriving sexp_of]
+and t = Abslayout0.t = {node: node; meta: Meta.t [@compare.ignore]}
+[@@deriving compare, hash, sexp_of]
+
+include Comparator.S with type t := t
 
 val pp : Formatter.t -> t -> unit
 

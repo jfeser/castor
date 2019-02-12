@@ -1261,7 +1261,6 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     ; ("elim-disj-filter", tf_elim_disj_filter)
     ; ("elim-eq-filter", tf_elim_eq_filter)
     ; ("elim-cmp-filter", tf_elim_cmp_filter)
-      (* ; ("elim-cmp-filter-simple", tf_elim_cmp_filter_simple) *)
     ; ("elim-join", tf_elim_join)
     ; ("row-store", tf_row_store)
     ; ("project", tf_project)
