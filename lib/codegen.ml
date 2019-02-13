@@ -110,6 +110,87 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
   let builder = Llvm.builder ctx
 
+  module Tbaa = struct
+    module TypeDesc = struct
+      module T = struct
+        type t =
+          | Root of string option
+          | Scalar of {name: string; parent: t}
+          | Struct of {name: string; fields: (t * int) list}
+        [@@deriving compare, sexp]
+      end
+
+      include T
+      include Comparator.Make (T)
+    end
+
+    let to_meta descs =
+      let tctx = ref (Map.empty (module TypeDesc)) in
+      let open TypeDesc in
+      let rec to_meta desc =
+        match Map.find !tctx desc with
+        | Some meta -> meta
+        | None ->
+            let meta =
+              match desc with
+              | Root (Some name) -> mdnode ctx [|mdstring ctx name|]
+              | Root None -> mdnode ctx [||]
+              | Scalar {name; parent} ->
+                  let parent_meta = to_meta parent in
+                  mdnode ctx [|mdstring ctx name; parent_meta|]
+              | Struct {name; fields} ->
+                  let fields =
+                    List.sort
+                      ~compare:(fun (_, o1) (_, o2) -> Int.compare o1 o2)
+                      fields
+                  in
+                  let args =
+                    mdstring ctx name
+                    :: List.concat_map fields ~f:(fun (desc, offset) ->
+                           [to_meta desc; const_int (i64_type ctx) offset] )
+                  in
+                  mdnode ctx (Array.of_list args)
+            in
+            tctx := Map.set !tctx ~key:desc ~data:meta ;
+            meta
+      in
+      List.iter descs ~f:(fun d -> to_meta d |> ignore) ;
+      !tctx
+
+    let tag ?(offset = 0) ?(constant = false) ?access tctx base =
+      let args =
+        let open TypeDesc in
+        let const_meta = const_int (i64_type ctx) (if constant then 1 else 0) in
+        match base with
+        | Root _ -> failwith "Cannot use tbaa root as type tag."
+        | Scalar _ ->
+            let base_meta = Map.find_exn tctx base in
+            [base_meta; base_meta; const_int (i64_type ctx) 0; const_meta]
+        | Struct _ ->
+            [ Map.find_exn tctx base
+            ; Map.find_exn tctx (Option.value_exn access)
+            ; const_int (i64_type ctx) offset
+            ; const_meta ]
+      in
+      mdnode ctx (Array.of_list args)
+
+    let tbaa_kind = mdkind_id ctx "tbaa"
+
+    let apply_tag ?offset ?constant ?access tctx base instr =
+      set_metadata instr tbaa_kind (tag ?offset ?constant ?access tctx base) ;
+      instr
+  end
+
+  let root = Tbaa.TypeDesc.Root (Some "castor_root")
+
+  let db_val = Tbaa.TypeDesc.Scalar {name= "dbval"; parent= root}
+
+  let param_val = Tbaa.TypeDesc.Scalar {name= "paramval"; parent= root}
+
+  let runtime_val = Tbaa.TypeDesc.Scalar {name= "runval"; parent= root}
+
+  let tbaa_ctx = Tbaa.to_meta [root; db_val; param_val; runtime_val]
+
   (* Variables are either stored in the parameter struct or stored locally on
      the stack. Values that are stored in the parameter struct are also stored
      locally, but they are stored back to the parameter struct whenever the
@@ -323,8 +404,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
            [|pointer_type (i8_type ctx); pointer_type (i8_type ctx); i32_type ctx|])
         module_
     in
-    (* add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ; *)
     add_function_attr func (create_enum_attr ctx "readonly" 0L) AttrIndex.Function ;
+    add_function_attr func (create_enum_attr ctx "argmemonly" 0L) AttrIndex.Function ;
     add_function_attr func
       (create_enum_attr ctx "speculatable" 0L)
       AttrIndex.Function ;
@@ -336,29 +417,29 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         (var_arg_function_type (i32_type ctx) [|pointer_type (i8_type ctx)|])
         module_
     in
-    (* add_function_attr func (create_enum_attr ctx "readonly" 0L) AttrIndex.Function ; *)
     func
 
-  let strncmp =
+  let strcmp =
     let func =
-      declare_function "strncmp"
+      declare_function "strcmp"
         (function_type (i32_type ctx)
-           [|pointer_type (i8_type ctx); pointer_type (i8_type ctx); i64_type ctx|])
+           [|pointer_type (i8_type ctx); pointer_type (i8_type ctx)|])
         module_
     in
-    (* add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ; *)
-    add_function_attr func (create_enum_attr ctx "readonly" 0L) AttrIndex.Function ;
-    add_function_attr func (create_enum_attr ctx "argmemonly" 0L) AttrIndex.Function ;
     add_function_attr func
       (create_enum_attr ctx "speculatable" 0L)
       AttrIndex.Function ;
+    add_function_attr func (create_enum_attr ctx "norecurse" 0L) AttrIndex.Function ;
+    add_function_attr func (create_enum_attr ctx "nounwind" 0L) AttrIndex.Function ;
+    add_function_attr func (create_enum_attr ctx "readonly" 0L) AttrIndex.Function ;
+    add_function_attr func (create_enum_attr ctx "argmemonly" 0L) AttrIndex.Function ;
     func
 
   let strncpy =
-    declare_function "strncpy"
+    declare_function "strcpy"
       (function_type
          (pointer_type (i8_type ctx))
-         [|pointer_type (i8_type ctx); pointer_type (i8_type ctx); i64_type ctx|])
+         [|pointer_type (i8_type ctx); pointer_type (i8_type ctx); i32_type ctx|])
       module_
 
   let strpos =
@@ -371,10 +452,15 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
             ; i64_type ctx |])
         module_
     in
-    (* add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ; *)
     add_function_attr func
       (create_enum_attr ctx "speculatable" 0L)
       AttrIndex.Function ;
+    add_function_attr func (create_enum_attr ctx "norecurse" 0L) AttrIndex.Function ;
+    add_function_attr func (create_enum_attr ctx "nounwind" 0L) AttrIndex.Function ;
+    add_function_attr func (create_enum_attr ctx "readonly" 0L) AttrIndex.Function ;
+    add_function_attr func (create_enum_attr ctx "argmemonly" 0L) AttrIndex.Function ;
+    add_function_attr func (create_enum_attr ctx "nocapture" 0L) (AttrIndex.Param 0) ;
+    add_function_attr func (create_enum_attr ctx "nocapture" 0L) (AttrIndex.Param 2) ;
     func
 
   let extract_y =
@@ -422,33 +508,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     add_function_attr func (create_enum_attr ctx "readnone" 0L) AttrIndex.Function ;
     func
 
-  let rec declare_invariant v =
-    let size t =
-      if type_is_sized t then
-        const_int (i64_type ctx)
-          (DataLayout.size_in_bits t data_layout |> Int64.to_int_exn)
-      else const_int (i64_type ctx) (-1)
-    in
-    let t = type_of v in
-    match classify_type t with
-    | Pointer ->
-        build_call llvm_invariant_start
-          [| size (element_type t)
-           ; build_pointercast v (pointer_type (i8_type ctx)) "" builder |]
-          "" builder
-        |> ignore ;
-        declare_invariant (build_load v "" builder) |> ignore
-    | Struct ->
-        struct_element_types t
-        |> Array.iteri ~f:(fun i _ ->
-               declare_invariant (build_extractvalue v i "" builder) )
-    | Void | Half | Float | Double | X86fp80 | Fp128 | Ppc_fp128 | Integer | X86_mmx
-      ->
-        ()
-    | Array -> ()
-    | Vector -> failwith "Unsupported."
-    | Label | Function | Metadata -> failwith "Unexpected."
-
   let call_printf fmt_str args =
     let fmt_str_ptr =
       build_bitcast fmt_str (pointer_type (i8_type ctx)) "" builder
@@ -474,7 +533,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
   let rec codegen_type t =
     let open Type.PrimType in
-    (* let type_ = *)
     match t with
     | IntT _ | DateT _ -> int_type
     | BoolT _ -> bool_type
@@ -482,24 +540,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     | TupleT ts -> struct_type ctx (List.map ts ~f:codegen_type |> Array.of_list)
     | VoidT | NullT -> void_type ctx
     | FixedT _ -> fixed_type
-
-  (* codegen_type (TupleT [IntT {nullable= false}; IntT {nullable= false}]) *)
-  
-  (* in
-     * struct_type ctx [|type_; i1_type ctx|] *)
-  
-  (* type llnvalue = {data: llvalue; null: llvalue}
-   * 
-   * let unpack_null v =
-   *   { data= build_extractvalue v 0 "" builder
-   *   ; null= build_extractvalue v 1 "" builder }
-   * 
-   * let pack_null ~data ~null =
-   *   let struct_t = struct_type ctx [|type_of data; i1_type ctx|] in
-   *   let struct_ = build_entry_alloca struct_t "" builder in
-   *   build_store data (build_struct_gep struct_ 0 "" builder) builder |> ignore ;
-   *   build_store null (build_struct_gep struct_ 1 "" builder) builder |> ignore ;
-   *   build_load struct_ "" builder *)
 
   module Llstring = struct
     type t = {pos: llvalue; len: llvalue}
@@ -510,9 +550,13 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
     let pack s =
       let struct_ = build_entry_alloca str_type "str" builder in
-      build_store s.pos (build_struct_gep struct_ 0 "" builder) builder |> ignore ;
-      build_store s.len (build_struct_gep struct_ 1 "" builder) builder |> ignore ;
-      build_load struct_ "strptr" builder
+      build_store s.pos (build_struct_gep struct_ 0 "" builder) builder
+      |> Tbaa.apply_tag tbaa_ctx runtime_val
+      |> ignore ;
+      build_store s.len (build_struct_gep struct_ 1 "" builder) builder
+      |> Tbaa.apply_tag tbaa_ctx runtime_val
+      |> ignore ;
+      build_load struct_ "strptr" builder |> Tbaa.apply_tag tbaa_ctx runtime_val
   end
 
   let scmp =
@@ -521,6 +565,13 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         (function_type bool_type [|str_type; str_type|])
         module_
     in
+    add_function_attr func
+      (create_enum_attr ctx "speculatable" 0L)
+      AttrIndex.Function ;
+    add_function_attr func (create_enum_attr ctx "norecurse" 0L) AttrIndex.Function ;
+    add_function_attr func (create_enum_attr ctx "nounwind" 0L) AttrIndex.Function ;
+    add_function_attr func (create_enum_attr ctx "readonly" 0L) AttrIndex.Function ;
+    add_function_attr func (create_enum_attr ctx "argmemonly" 0L) AttrIndex.Function ;
     let bb = append_block ctx "entry" func in
     let eq_bb = append_block ctx "eq" func in
     let neq_bb = append_block ctx "neq" func in
@@ -534,7 +585,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     build_cond_br (build_icmp Icmp.Eq l1 l2 "" builder) eq_bb neq_bb builder
     |> ignore ;
     position_at_end eq_bb builder ;
-    let ret = build_call strncmp [|p1; p2; l1|] "" builder in
+    let ret = build_call strcmp [|p1; p2|] "" builder in
     let ret = build_icmp Icmp.Eq ret (const_int (i32_type ctx) 0) "" builder in
     let ret = build_intcast ret bool_type "" builder in
     build_ret ret builder |> ignore ;
@@ -543,14 +594,17 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     assert_valid_function func ;
     func
 
-  let codegen_string : string -> llvalue =
-   fun x ->
+  let codegen_string x =
     let ptr = build_global_stringptr x "" builder in
     let len = const_int int_type (String.length x) in
     let struct_ = build_entry_alloca str_type "str" builder in
-    build_store ptr (build_struct_gep struct_ 0 "" builder) builder |> ignore ;
-    build_store len (build_struct_gep struct_ 1 "" builder) builder |> ignore ;
-    build_load struct_ "strptr" builder
+    build_store ptr (build_struct_gep struct_ 0 "" builder) builder
+    |> Tbaa.apply_tag tbaa_ctx runtime_val
+    |> ignore ;
+    build_store len (build_struct_gep struct_ 1 "" builder) builder
+    |> Tbaa.apply_tag tbaa_ctx runtime_val
+    |> ignore ;
+    build_load struct_ "strptr" builder |> Tbaa.apply_tag tbaa_ctx runtime_val
 
   (** Codegen a call to done(). This looks up the done variable belonging to
        another iterator and returns it. *)
@@ -559,14 +613,17 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     match Hashtbl.find ctx'#values "done" with
     | Some (Param {idx; _}) ->
         let done_ptr = build_struct_gep (get_val fctx "params") idx "" builder in
-        build_load done_ptr "done" builder
+        build_load done_ptr "done" builder |> Tbaa.apply_tag tbaa_ctx runtime_val
     | Some (Local _) | None ->
         Error.of_string "Could not find 'done' value." |> Error.raise
 
   let codegen_slice codegen_expr fctx offset size_bytes =
     let size_bits = 8 * size_bytes in
     let offset = codegen_expr fctx offset in
-    let buf_ptr = build_load (get_val fctx "buf") "buf_ptr" builder in
+    let buf_ptr =
+      build_load (get_val fctx "buf") "buf_ptr" builder
+      |> Tbaa.apply_tag ~constant:true tbaa_ctx db_val
+    in
     let buf_ptr =
       build_pointercast buf_ptr (pointer_type (i8_type ctx)) "buf_ptr_cast" builder
     in
@@ -576,14 +633,20 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         (pointer_type (integer_type ctx size_bits))
         "slice_ptr_cast" builder
     in
-    let slice = build_load slice_ptr "slice_val" builder in
+    let slice =
+      build_load slice_ptr "slice_val" builder
+      |> Tbaa.apply_tag ~constant:true tbaa_ctx db_val
+    in
     (* Convert the slice to a 64 bit int. *)
     let slice = build_intcast slice (i64_type ctx) "int_val" builder in
     slice
 
   let codegen_load_bool fctx offset =
     let size_bits = 8 in
-    let buf_ptr = build_load (get_val fctx "buf") "buf_ptr" builder in
+    let buf_ptr =
+      build_load (get_val fctx "buf") "buf_ptr" builder
+      |> Tbaa.apply_tag ~constant:true tbaa_ctx db_val
+    in
     let buf_ptr =
       build_pointercast buf_ptr (pointer_type (i8_type ctx)) "buf_ptr_cast" builder
     in
@@ -593,7 +656,10 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         (pointer_type (integer_type ctx size_bits))
         "slice_ptr_cast" builder
     in
-    let slice = build_load slice_ptr "slice_val" builder in
+    let slice =
+      build_load slice_ptr "slice_val" builder
+      |> Tbaa.apply_tag ~constant:true tbaa_ctx db_val
+    in
     (* Convert the slice to a 64 bit int. *)
     let slice = build_trunc slice (i1_type ctx) "bool_val" builder in
     slice
@@ -615,7 +681,10 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     build_extractvalue lltup idx "elemtmp" builder
 
   let codegen_hash fctx hash_offset key_ptr key_size =
-    let buf_ptr = build_load (get_val fctx "buf") "buf_ptr" builder in
+    let buf_ptr =
+      build_load (get_val fctx "buf") "buf_ptr" builder
+      |> Tbaa.apply_tag ~constant:true tbaa_ctx db_val
+    in
     let buf_ptr =
       build_pointercast buf_ptr (pointer_type (i8_type ctx)) "" builder
     in
@@ -634,7 +703,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       build_pointercast key_ptr (pointer_type (i8_type ctx)) "key_ptr_cast" builder
     in
     build_call llvm_lifetime_start [|int_size; key_ptr_cast|] "" builder |> ignore ;
-    build_store key key_ptr builder |> ignore ;
+    build_store key key_ptr builder |> Tbaa.apply_tag tbaa_ctx runtime_val |> ignore ;
     let key_size =
       build_intcast (size_of (type_of key)) (i32_type ctx) "key_size" builder
     in
@@ -686,7 +755,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
                 build_inttoptr key_offset (pointer_type int_type) "" builder
               in
               let v = build_extractvalue key idx "" builder in
-              build_store v key_ptr builder |> ignore ;
+              build_store v key_ptr builder
+              |> Tbaa.apply_tag tbaa_ctx runtime_val
+              |> ignore ;
               let key_ptr = build_ptrtoint key_ptr (i64_type ctx) "" builder in
               build_add key_ptr (size_of int_type) "" builder
           | BoolT _ ->
@@ -694,7 +765,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
                 build_inttoptr key_offset (pointer_type bool_type) "" builder
               in
               let v = build_extractvalue key idx "" builder in
-              build_store v key_ptr builder |> ignore ;
+              build_store v key_ptr builder
+              |> Tbaa.apply_tag tbaa_ctx runtime_val
+              |> ignore ;
               let key_ptr = build_ptrtoint key_ptr (i64_type ctx) "" builder in
               build_add key_ptr (size_of bool_type) "" builder
           | StringT _ ->
@@ -704,6 +777,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
               let str_struct = build_extractvalue key idx "" builder in
               let str_ptr = build_extractvalue str_struct 0 "" builder in
               let str_size = build_extractvalue str_struct 1 "" builder in
+              let str_size = build_intcast str_size (i32_type ctx) "" builder in
               build_call strncpy [|key_ptr; str_ptr; str_size|] "" builder |> ignore ;
               let key_ptr = build_ptrtoint key_ptr (i64_type ctx) "" builder in
               build_add key_ptr str_size "" builder
@@ -718,6 +792,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
               build_inttoptr key_offset (pointer_type (i8_type ctx)) "" builder
             in
             build_store (const_int (i8_type ctx) (Char.to_int '|')) key_ptr builder
+            |> Tbaa.apply_tag tbaa_ctx runtime_val
             |> ignore ;
             let key_offset = build_ptrtoint key_ptr (i64_type ctx) "" builder in
             build_add key_offset (size_of (i8_type ctx)) "" builder )
@@ -731,15 +806,22 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
   let codegen_load_str fctx offset len =
     let struct_t = struct_type ctx [|pointer_type (i8_type ctx); i64_type ctx|] in
     let struct_ = build_entry_alloca struct_t "" builder in
-    let buf = build_load (get_val fctx "buf") "buf_ptr" builder in
+    let buf =
+      build_load (get_val fctx "buf") "buf_ptr" builder
+      |> Tbaa.apply_tag ~constant:true tbaa_ctx db_val
+    in
     let buf = build_pointercast buf (pointer_type (i8_type ctx)) "" builder in
     let ptr = build_in_bounds_gep buf [|offset|] "" builder in
     let ptr =
       build_pointercast ptr (pointer_type (i8_type ctx)) "string_ptr" builder
     in
-    build_store ptr (build_struct_gep struct_ 0 "" builder) builder |> ignore ;
-    build_store len (build_struct_gep struct_ 1 "" builder) builder |> ignore ;
-    build_load struct_ "" builder
+    build_store ptr (build_struct_gep struct_ 0 "" builder) builder
+    |> Tbaa.apply_tag tbaa_ctx runtime_val
+    |> ignore ;
+    build_store len (build_struct_gep struct_ 1 "" builder) builder
+    |> Tbaa.apply_tag tbaa_ctx runtime_val
+    |> ignore ;
+    build_load struct_ "" builder |> Tbaa.apply_tag ~constant:true tbaa_ctx db_val
 
   let codegen_strpos _ x1 x2 =
     let s1 = Llstring.unpack x1 in
@@ -813,8 +895,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let struct_ = build_entry_alloca struct_t "tupleptrtmp" builder in
     List.iteri vs ~f:(fun i v ->
         let ptr = build_struct_gep struct_ i "ptrtmp" builder in
-        build_store v ptr builder |> ignore ) ;
-    build_load struct_ "tupletmp" builder
+        build_store v ptr builder |> Tbaa.apply_tag tbaa_ctx runtime_val |> ignore
+    ) ;
+    build_load struct_ "tupletmp" builder |> Tbaa.apply_tag tbaa_ctx runtime_val
 
   let codegen_ternary codegen_expr e1 e2 e3 =
     let v1 = codegen_expr e1 in
@@ -831,7 +914,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     | Bool false -> const_int bool_type 0
     | Var n ->
         let v = get_val fctx n in
-        build_load v n builder
+        build_load v n builder |> Tbaa.apply_tag tbaa_ctx runtime_val
     | String x -> codegen_string x
     | Done iter -> codegen_done fctx iter
     | Slice (byte_idx, size_bytes) ->
@@ -910,7 +993,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     debug_printf (sprintf "Calling step %s.\n" iter) [] ;
     let val_ = build_param_call fctx step_func [||] "steptmp" builder in
     let var = get_val fctx var in
-    build_store val_ var builder |> ignore
+    build_store val_ var builder |> Tbaa.apply_tag tbaa_ctx runtime_val |> ignore
 
   let codegen_init fctx _ func args =
     let iter_fctx =
@@ -930,7 +1013,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
   let codegen_assign fctx lhs rhs =
     let val_ = codegen_expr fctx rhs in
     let var = get_val fctx lhs in
-    build_store val_ var builder |> ignore
+    build_store val_ var builder |> Tbaa.apply_tag tbaa_ctx runtime_val |> ignore
 
   let store_params ctx func =
     let params_ptr = param func 0 in
@@ -1039,6 +1122,13 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       build_ret_void builder |> ignore ;
       add_function_attr func (create_enum_attr ctx "noinline" 0L) AttrIndex.Function ;
       add_function_attr func (create_enum_attr ctx "optnone" 0L) AttrIndex.Function ;
+      add_function_attr func
+        (create_enum_attr ctx "inaccessiblememonly" 0L)
+        AttrIndex.Function ;
+      add_function_attr func
+        (create_enum_attr ctx "norecurse" 0L)
+        AttrIndex.Function ;
+      add_function_attr func (create_enum_attr ctx "nounwind" 0L) AttrIndex.Function ;
       func
     in
     Logs.debug (fun m -> m "Codegen for %a." I.pp_stmt (Consume (type_, expr))) ;
@@ -1233,7 +1323,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       let param_ptr = param fctx#llfunc 0 in
       Hashtbl.set fctx#values ~key:"params" ~data:(Local param_ptr) ;
       (* Declare the parameters pointer (and all sub-pointers) invariant. *)
-      declare_invariant param_ptr ;
       load_params fctx fctx#llfunc ;
       codegen_prog fctx body ;
       match block_terminator (insertion_block builder) with
