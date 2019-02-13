@@ -419,11 +419,11 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     in
     func
 
-  let strcmp =
+  let strncmp =
     let func =
-      declare_function "strcmp"
+      declare_function "strncmp"
         (function_type (i32_type ctx)
-           [|pointer_type (i8_type ctx); pointer_type (i8_type ctx)|])
+           [|pointer_type (i8_type ctx); pointer_type (i8_type ctx); i64_type ctx|])
         module_
     in
     add_function_attr func
@@ -436,7 +436,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     func
 
   let strncpy =
-    declare_function "strcpy"
+    declare_function "strncpy"
       (function_type
          (pointer_type (i8_type ctx))
          [|pointer_type (i8_type ctx); pointer_type (i8_type ctx); i32_type ctx|])
@@ -585,7 +585,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     build_cond_br (build_icmp Icmp.Eq l1 l2 "" builder) eq_bb neq_bb builder
     |> ignore ;
     position_at_end eq_bb builder ;
-    let ret = build_call strcmp [|p1; p2|] "" builder in
+    let ret = build_call strncmp [|p1; p2; l1|] "" builder in
     let ret = build_icmp Icmp.Eq ret (const_int (i32_type ctx) 0) "" builder in
     let ret = build_intcast ret bool_type "" builder in
     build_ret ret builder |> ignore ;
