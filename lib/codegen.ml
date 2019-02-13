@@ -777,8 +777,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
               let str_struct = build_extractvalue key idx "" builder in
               let str_ptr = build_extractvalue str_struct 0 "" builder in
               let str_size = build_extractvalue str_struct 1 "" builder in
-              let str_size = build_intcast str_size (i32_type ctx) "" builder in
-              build_call strncpy [|key_ptr; str_ptr; str_size|] "" builder |> ignore ;
+              let i32_str_size = build_intcast str_size (i32_type ctx) "" builder in
+              build_call strncpy [|key_ptr; str_ptr; i32_str_size|] "" builder
+              |> ignore ;
               let key_ptr = build_ptrtoint key_ptr (i64_type ctx) "" builder in
               build_add key_ptr str_size "" builder
           | (NullT | VoidT | TupleT _ | FixedT _) as t ->
