@@ -1,9 +1,8 @@
 DRIVER_PATH := ../../../hyperdemo/bin/driver
 PREFIXES := 1 2 3-no 4 5 6 7 8 9 10-no 11-no 12 14 15 16-no 17 18 19
+DB ?= postgresql:///tpch_1k
 
 all: hyper_results.csv $(PREFIXES:%=%.csv)
-
-dbs: $(prefixes:%=%.db)
 
 %.table : %.dump.sql
 	psql -d $(DB) -f $<
@@ -21,7 +20,7 @@ dbs: $(prefixes:%=%.db)
 %.mem : %.sql %.db | %.time
 	/usr/bin/time -v $(DRIVER_PATH) $*.db -q $*.sql -s 2> $@
 
-hyper_results.csv : $(PREFIXES:%=%.time) $(PREFIXES:%=%.mem)
+hyper_results.csv : $(PREFIXES:%=%.time) $(PREFIXES:%=%.mem) $(PREFIXES:%=%.db)
 	./extract-results.py $^ > $@
 
 .PHONY: clean

@@ -3,6 +3,8 @@ BENCH_NAMES := 1-gold 2-gold 3-no-gold 4-gold 5-no-gold 6-gold 7-gold 8-gold \
 	9-gold 10-no-gold 11-no-gold 12-gold 14-gold 15-gold 16-no-gold 17-gold \
 	18-gold 19-gold
 BINARY_NAMES := $(BENCH_NAMES:%=%/$(BINARY_NAME))
+DB ?= postgresql:///tpch_1k
+TIME ?= time
 
 all: results.csv validate
 
@@ -16,6 +18,10 @@ all: results.csv validate
 
 # Results rule.
 results.csv : $(BINARY_NAMES)
+	$(foreach name,$(BENCH_NAMES),./run-bench.py time-castor -t $(TIME) $(name);)
+
+# Results rule.
+pre-results.csv :
 	$(foreach name,$(BENCH_NAMES),./run-bench.py time-castor -t $(TIME) $(name);)
 
 # Sql rule.
