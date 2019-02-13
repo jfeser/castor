@@ -3,7 +3,7 @@
   (files date.c stdlib.c load_bool.c load_date.c load_float.c load_int.c load_string.c perf.c date.h shared.h))
 
 (rule
-  (deps stdlib.c stdlib_test.c date.h)
+  (deps stdlib.c stdlib_test.c date.c date.h)
   (targets stdlib_test.exe)
   (action (run %{cc} date.c stdlib_test.c -o stdlib_test.exe)))
 
