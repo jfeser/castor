@@ -301,7 +301,7 @@ def time_bench(query_name, params, csv_file, time_prog):
     os.chdir(benchd)
 
     param_values = [p[1] for p in params]
-    time_cmd_parts = ["./scanner.exe", "-t", "1", "data.bin"] + param_values
+    time_cmd_parts = ["./scanner.exe", "-t", "5", "data.bin"] + param_values
     time_cmd = " ".join(time_cmd_parts)
     log.debug(time_cmd)
 
