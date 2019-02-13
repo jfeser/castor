@@ -259,15 +259,7 @@ def bench_dir(query_name):
     return os.path.splitext(rpath(query_name))[0]
 
 
-def ensure_built():
-    # Ensure that the project is built
-    os.chdir(rpath("../../"))
-    os.system("dune build @install")
-    os.chdir(rpath("."))
-
-
 def compile_bench(query_name, params):
-    ensure_built()
     query = rpath(query_name + ".txt")
 
     # Make benchmark dir.

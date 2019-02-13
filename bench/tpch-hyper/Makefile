@@ -3,12 +3,14 @@ PREFIXES := 1 2 3-no 4 5 6 7 8 9 10-no 11-no 12 14 15 16-no 17 18 19
 
 all: hyper_results.csv $(PREFIXES:%=%.csv)
 
+dbs: $(prefixes:%=%.db)
+
 %.table : %.dump.sql
 	psql -d $(DB) -f $<
 	touch $@
 
 %.db : %.schema.sql %.load.sql %.table
-	$(DRIVER_PATH) $^ --store $@ 2> $*-create.log
+	$(DRIVER_PATH) $*.schema.sql $*.load.sql --store $@ 2> $*-create.log
 
 %.time : %.sql %.db
 	$(DRIVER_PATH) $*.db -r 100 -b $*.sql 2> $@
@@ -24,4 +26,4 @@ hyper_results.csv : $(PREFIXES:%=%.time) $(PREFIXES:%=%.mem)
 
 .PHONY: clean
 clean:
-	rm -f hyper-output.log *.time *.csv *.table *.tbl hyper_results.csv db.dump
+	rm -f *.log *.time *.csv *.table *.tbl *.db *.mem
