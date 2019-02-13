@@ -1,12 +1,9 @@
-open Base
-open Bos
-open Rresult
+open Core
 open Printf
 
 exception TestDbExn
 
 let run_in_fork thunk =
-  let open Core in
   match Unix.fork () with
   | `In_the_child ->
       Backtrace.elide := false ;
@@ -22,16 +19,18 @@ let reporter ppf =
   let report _ level ~over k msgf =
     let k _ = over () ; k () in
     let with_time h _ k ppf fmt =
-      let time = Core.Time.now () in
+      let time = Time.now () in
       Caml.(Format.kfprintf k ppf ("%a [%s] @[" ^^ fmt ^^ "@]@."))
-        Logs.pp_header (level, h) (Core.Time.to_string time)
+        Logs.pp_header (level, h) (Time.to_string time)
     in
     msgf @@ fun ?header ?tags fmt -> with_time header tags k ppf fmt
   in
   {Logs.report}
 
 let create_test_db () =
-  let url, _ = OS.Cmd.(run_out Cmd.(v "pg_tmp") |> out_string |> R.get_ok) in
+  let ch = Unix.open_process_in "pg_tmp" in
+  let url = In_channel.input_all ch in
+  Unix.close_process_in ch |> Unix.Exit_or_signal.or_error |> Or_error.ok_exn ;
   Db.create url
 
 let create_db uri =
@@ -45,7 +44,9 @@ let create_simple db name fields values =
   let fields_sql =
     List.map fields ~f:(sprintf "%s integer") |> String.concat ~sep:", "
   in
-  Db.(exec db (sprintf "create table %s (%s)" name fields_sql) |> command_ok) ;
+  Db.(
+    exec db (sprintf "create table if not exists %s (%s)" name fields_sql)
+    |> command_ok) ;
   List.iter values ~f:(fun vs ->
       let values_sql = List.map vs ~f:Int.to_string |> String.concat ~sep:", " in
       Db.(
@@ -91,7 +92,7 @@ module Test_db = struct
     create conn "r_date"
       [ ("f", Type.PrimType.DateT {nullable= false})
       ; ("g", Type.PrimType.IntT {nullable= false}) ]
-      Core.Date.
+      Date.
         [ [Date (of_string "2018-01-01"); Int 5]
         ; [Date (of_string "2016-12-01"); Int 2]
         ; [Date (of_string "2018-01-23"); Int 3]
