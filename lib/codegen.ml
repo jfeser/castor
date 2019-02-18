@@ -525,7 +525,11 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     const_int (i64_type ctx)
       (DataLayout.size_in_bits int_type data_layout |> Int64.to_int_exn)
 
-  let str_type = struct_type ctx [|pointer_type (i8_type ctx); i64_type ctx|]
+  let str_pointer_type = pointer_type (i8_type ctx)
+
+  let str_len_type = i64_type ctx
+
+  let str_type = struct_type ctx [|str_pointer_type; str_len_type|]
 
   let bool_type = i1_type ctx
 
@@ -541,6 +545,18 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     | VoidT | NullT -> void_type ctx
     | FixedT _ -> fixed_type
 
+  (** Generate a list of lltypes suitable for a tuple consumer function.
+     Flattens tuple and string structs into separate arguments. *)
+  let rec codegen_args_types t =
+    let open Type.PrimType in
+    match t with
+    | IntT _ | DateT _ -> [int_type]
+    | BoolT _ -> [bool_type]
+    | StringT _ -> [str_pointer_type; str_len_type]
+    | TupleT ts -> List.concat_map ts ~f:codegen_args_types
+    | VoidT | NullT -> []
+    | FixedT _ -> [fixed_type]
+
   module Llstring = struct
     type t = {pos: llvalue; len: llvalue}
 
@@ -548,15 +564,38 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       { pos= build_extractvalue v 0 "pos" builder
       ; len= build_extractvalue v 1 "len" builder }
 
-    let pack s =
+    let pack ?(tag = runtime_val) s =
       let struct_ = build_entry_alloca str_type "str" builder in
       build_store s.pos (build_struct_gep struct_ 0 "" builder) builder
-      |> Tbaa.apply_tag tbaa_ctx runtime_val
-      |> ignore ;
+      |> Tbaa.apply_tag tbaa_ctx tag |> ignore ;
       build_store s.len (build_struct_gep struct_ 1 "" builder) builder
-      |> Tbaa.apply_tag tbaa_ctx runtime_val
-      |> ignore ;
-      build_load struct_ "strptr" builder |> Tbaa.apply_tag tbaa_ctx runtime_val
+      |> Tbaa.apply_tag tbaa_ctx tag |> ignore ;
+      build_load struct_ "strptr" builder |> Tbaa.apply_tag tbaa_ctx tag
+  end
+
+  module Lltuple = struct
+    type t = llvalue list
+
+    let pack vs =
+      let ts = List.map vs ~f:type_of |> Array.of_list in
+      let struct_t = struct_type ctx ts in
+      let struct_ = build_entry_alloca struct_t "tupleptrtmp" builder in
+      List.iteri vs ~f:(fun i v ->
+          let ptr = build_struct_gep struct_ i "ptrtmp" builder in
+          build_store v ptr builder |> Tbaa.apply_tag tbaa_ctx runtime_val |> ignore
+      ) ;
+      build_load struct_ "tupletmp" builder |> Tbaa.apply_tag tbaa_ctx runtime_val
+
+    let unpack v =
+      let typ = type_of v in
+      let len =
+        match classify_type typ with
+        | Struct -> Array.length (struct_element_types typ)
+        | _ ->
+            Error.(
+              createf "Expected a tuple but got %s." (string_of_llvalue v) |> raise)
+      in
+      List.init len ~f:(fun i -> build_extractvalue v i "elemtmp" builder)
   end
 
   let scmp =
@@ -576,12 +615,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let eq_bb = append_block ctx "eq" func in
     let neq_bb = append_block ctx "neq" func in
     position_at_end bb builder ;
-    let s1 = param func 0 in
-    let s2 = param func 1 in
-    let p1 = build_extractvalue s1 0 "p1" builder in
-    let p2 = build_extractvalue s2 0 "p2" builder in
-    let l1 = build_extractvalue s1 1 "l1" builder in
-    let l2 = build_extractvalue s2 1 "l2" builder in
+    let Llstring.({pos= p1; len= l1}) = Llstring.unpack (param func 0) in
+    let Llstring.({pos= p2; len= l2}) = Llstring.unpack (param func 1) in
     build_cond_br (build_icmp Icmp.Eq l1 l2 "" builder) eq_bb neq_bb builder
     |> ignore ;
     position_at_end eq_bb builder ;
@@ -595,16 +630,10 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     func
 
   let codegen_string x =
-    let ptr = build_global_stringptr x "" builder in
-    let len = const_int int_type (String.length x) in
-    let struct_ = build_entry_alloca str_type "str" builder in
-    build_store ptr (build_struct_gep struct_ 0 "" builder) builder
-    |> Tbaa.apply_tag tbaa_ctx runtime_val
-    |> ignore ;
-    build_store len (build_struct_gep struct_ 1 "" builder) builder
-    |> Tbaa.apply_tag tbaa_ctx runtime_val
-    |> ignore ;
-    build_load struct_ "strptr" builder |> Tbaa.apply_tag tbaa_ctx runtime_val
+    Llstring.(
+      pack
+        { pos= build_global_stringptr x "" builder
+        ; len= const_int int_type (String.length x) })
 
   (** Codegen a call to done(). This looks up the done variable belonging to
        another iterator and returns it. *)
@@ -666,19 +695,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
   let codegen_index codegen_expr tup idx =
     let lltup = codegen_expr tup in
-    (* Check that the argument really is a struct and that the index is
-         valid. *)
-    let typ = type_of lltup in
-    ( if [%compare.equal: TypeKind.t] (classify_type typ) Struct then (
-      if idx >= Array.length (struct_element_types typ) then
-        Error.(
-          createf "Tuple index out of bounds %s %d." (string_of_llvalue lltup) idx
-          |> raise) )
-    else
-      Error.(
-        createf "Expected a tuple but got %s." (string_of_llvalue lltup) |> raise)
-    ) ;
-    build_extractvalue lltup idx "elemtmp" builder
+    List.nth_exn (Lltuple.unpack lltup) idx
 
   let codegen_hash fctx hash_offset key_ptr key_size =
     let buf_ptr =
@@ -712,8 +729,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     ret
 
   let codegen_string_hash fctx hash_ptr key =
-    let key_ptr = build_extractvalue key 0 "key_ptr" builder in
-    let key_size = build_extractvalue key 1 "key_size" builder in
+    let Llstring.({pos= key_ptr; len= key_size}) = Llstring.unpack key in
     let key_size = build_intcast key_size (i32_type ctx) "key_size" builder in
     codegen_hash fctx hash_ptr key_ptr key_size
 
@@ -734,7 +750,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
               build_add (size_of int_type) size "" builder
           | StringT _ ->
               let str_struct = build_extractvalue key idx "" builder in
-              let str_size = build_extractvalue str_struct 1 "" builder in
+              let Llstring.({len= str_size; _}) = Llstring.unpack str_struct in
               let str_size = build_intcast str_size int_type "key_size" builder in
               build_add str_size size "" builder
           | BoolT _ -> build_add (size_of bool_type) size "" builder )
@@ -775,8 +791,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
                 build_inttoptr key_offset (pointer_type (i8_type ctx)) "" builder
               in
               let str_struct = build_extractvalue key idx "" builder in
-              let str_ptr = build_extractvalue str_struct 0 "" builder in
-              let str_size = build_extractvalue str_struct 1 "" builder in
+              let Llstring.({pos= str_ptr; len= str_size}) =
+                Llstring.unpack str_struct
+              in
               let i32_str_size = build_intcast str_size (i32_type ctx) "" builder in
               build_call strncpy [|key_ptr; str_ptr; i32_str_size|] "" builder
               |> ignore ;
@@ -805,8 +822,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     hash
 
   let codegen_load_str fctx offset len =
-    let struct_t = struct_type ctx [|pointer_type (i8_type ctx); i64_type ctx|] in
-    let struct_ = build_entry_alloca struct_t "" builder in
     let buf =
       build_load (get_val fctx "buf") "buf_ptr" builder
       |> Tbaa.apply_tag ~constant:true tbaa_ctx db_val
@@ -816,13 +831,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let ptr =
       build_pointercast ptr (pointer_type (i8_type ctx)) "string_ptr" builder
     in
-    build_store ptr (build_struct_gep struct_ 0 "" builder) builder
-    |> Tbaa.apply_tag tbaa_ctx runtime_val
-    |> ignore ;
-    build_store len (build_struct_gep struct_ 1 "" builder) builder
-    |> Tbaa.apply_tag tbaa_ctx runtime_val
-    |> ignore ;
-    build_load struct_ "" builder |> Tbaa.apply_tag ~constant:true tbaa_ctx db_val
+    Llstring.(pack {pos= ptr; len})
 
   let codegen_strpos _ x1 x2 =
     let s1 = Llstring.unpack x1 in
@@ -832,8 +841,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
   let codegen_binop codegen_expr fctx op arg1 arg2 =
     let x1 = codegen_expr fctx arg1 in
     let x2 = codegen_expr fctx arg2 in
-    (* let {data= x1; null= n1} = unpack_null v1 in
-     * let {data= x2; null= n2} = unpack_null v2 in *)
     let x_out =
       match op with
       | I.IntAdd -> build_nsw_add x1 x2 "addtmp" builder
@@ -865,13 +872,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     in
     x_out
 
-  (* let null_out = build_or n1 n2 "" builder in
-     * pack_null ~data:x_out ~null:null_out *)
-
   let codegen_unop codegen_expr fctx op arg =
     let x = codegen_expr fctx arg in
-    (* let {data= x; null= null_out} = unpack_null v in *)
-    (* let x_out = *)
     match op with
     | I.Not -> build_not x "nottmp" builder
     | Int2Fl -> build_sitofp x fixed_type "" builder
@@ -886,19 +888,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
      |FlLe | FlEq | StrPos | AddY | AddM ->
         fail (Error.of_string "Not a unary operator.")
 
-  (* in
-     * pack_null ~data:x_out ~null:null_out *)
-
-  let codegen_tuple codegen_expr es =
-    let vs = List.map es ~f:codegen_expr in
-    let ts = List.map vs ~f:type_of |> Array.of_list in
-    let struct_t = struct_type ctx ts in
-    let struct_ = build_entry_alloca struct_t "tupleptrtmp" builder in
-    List.iteri vs ~f:(fun i v ->
-        let ptr = build_struct_gep struct_ i "ptrtmp" builder in
-        build_store v ptr builder |> Tbaa.apply_tag tbaa_ctx runtime_val |> ignore
-    ) ;
-    build_load struct_ "tupletmp" builder |> Tbaa.apply_tag tbaa_ctx runtime_val
+  let codegen_tuple codegen_expr es = List.map es ~f:codegen_expr |> Lltuple.pack
 
   let codegen_ternary codegen_expr e1 e2 e3 =
     let v1 = codegen_expr e1 in
@@ -1092,14 +1082,14 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
           let fmt = build_select val_ true_str false_str "" builder in
           call_printf fmt []
       | StringT {nullable= false} ->
-          call_printf str_fmt
-            [ build_extractvalue val_ 1 "" builder
-            ; build_extractvalue val_ 0 "" builder ]
+          let Llstring.({pos; len}) = Llstring.unpack val_ in
+          call_printf str_fmt [pos; len]
       | TupleT ts ->
           let last_i = List.length ts - 1 in
-          List.iteri ts ~f:(fun i t ->
-              gen (build_extractvalue val_ i "" builder) t ;
-              if i < last_i then call_printf sep_str [] )
+          List.zip_exn ts (Lltuple.unpack val_)
+          |> List.iteri ~f:(fun i (t, v) ->
+                 gen v t ;
+                 if i < last_i then call_printf sep_str [] )
       | VoidT -> call_printf void_str []
       | FixedT _ -> call_printf float_fmt [val_]
       | IntT {nullable= true}
@@ -1110,12 +1100,25 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     in
     gen val_ type_ ; call_printf newline_str []
 
+  (** Generate an argument list from a tuple and a type. *)
+  let rec codegen_args type_ tup =
+    let open Type.PrimType in
+    match type_ with
+    | IntT _ | DateT _ | BoolT _ | FixedT _ -> [tup]
+    | StringT _ ->
+        let Llstring.({pos; len}) = Llstring.unpack tup in
+        [pos; len]
+    | TupleT ts ->
+        let vs = Lltuple.unpack tup in
+        List.map2_exn ts vs ~f:codegen_args |> List.concat
+    | VoidT | NullT -> []
+
   let codegen_consume fctx type_ expr =
     (* Generate a dummy consumer function that LLVM will not optimize away. *)
     let gen_consumer type_ =
       let func =
         declare_function "dummy_consume"
-          (function_type (void_type ctx) [|codegen_type type_|])
+          (function_type (void_type ctx) (codegen_args_types type_ |> Array.of_list))
           module_
       in
       let bb = append_block ctx "entry" func in
@@ -1124,9 +1127,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       add_function_attr func (create_enum_attr ctx "noinline" 0L) AttrIndex.Function ;
       add_function_attr func (create_enum_attr ctx "optnone" 0L) AttrIndex.Function ;
       add_function_attr func
-        (create_enum_attr ctx "inaccessiblememonly" 0L)
-        AttrIndex.Function ;
-      add_function_attr func
         (create_enum_attr ctx "norecurse" 0L)
         AttrIndex.Function ;
       add_function_attr func (create_enum_attr ctx "nounwind" 0L) AttrIndex.Function ;
@@ -1134,8 +1134,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     in
     Logs.debug (fun m -> m "Codegen for %a." I.pp_stmt (Consume (type_, expr))) ;
     let consumer = gen_consumer type_ in
-    let val_ = codegen_expr fctx expr in
-    build_call consumer [|val_|] "" builder |> ignore
+    let args = codegen_expr fctx expr |> codegen_args type_ |> Array.of_list in
+    build_call consumer args "" builder |> ignore
 
   let codegen_return fctx expr =
     let val_ = codegen_expr fctx expr in
