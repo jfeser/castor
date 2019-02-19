@@ -3,8 +3,24 @@ BENCH_NAMES := 1-gold 2-gold 3-no-gold 4-gold 5-no-gold 6-gold 7-gold 8-gold \
 	9-gold 10-no-gold 11-no-gold 12-gold 14-gold 15-gold 16-no-gold 17-gold \
 	18-gold 19-gold
 BINARY_NAMES := $(BENCH_NAMES:%=%/$(BINARY_NAME))
+DB=postgresql:///tpch
+
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Linux)
+	export TIME := /usr/bin/time
+endif
+ifeq ($(UNAME_S),Darwin)
+	export TIME := gtime
+endif
 
 all: results.csv validate
+
+run: $(BENCH_NAMES:%=%/results.csv)
+
+sql: $(BENCH_NAMES:%-gold=%.csv)
+
+pre-results.csv :
+	$(foreach name,$(BENCH_NAMES),./run-bench.py time-castor -t $(TIME) $(name);)
 
 # Compile rule.
 %/$(BINARY_NAME) : %.txt
