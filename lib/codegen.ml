@@ -677,7 +677,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
           call_printf fmt []
       | StringT {nullable= false} ->
           let Llstring.({pos; len}) = Llstring.unpack val_ in
-          call_printf str_fmt [pos; len]
+          call_printf str_fmt [len; pos]
       | TupleT ts ->
           let last_i = List.length ts - 1 in
           List.zip_exn ts (Lltuple.unpack val_)
