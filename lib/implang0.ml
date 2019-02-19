@@ -80,5 +80,6 @@ and func =
   , sexp
   , visitors {variety= "endo"}
   , visitors {variety= "map"}
+  , visitors {variety= "mapreduce"}
   , visitors {variety= "iter"}
   , visitors {variety= "reduce"}]

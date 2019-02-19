@@ -124,6 +124,8 @@ type _var = Global of expr | Arg of int | Field of expr
 
 type _ctx = _var Map.M(Name.Compare_no_type).t
 
+val type_of : Type.PrimType.t Hashtbl.M(String).t -> expr -> Type.PrimType.t
+
 module Builder : sig
   type t
 

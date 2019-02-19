@@ -186,6 +186,90 @@ end
 
 let int2fl x = Unop {op= Int2Fl; arg= x}
 
+let rec type_of ctx e =
+  let open Type.PrimType in
+  match e with
+  | Null -> NullT
+  | Int _ -> IntT {nullable= false}
+  | Date _ -> DateT {nullable= false}
+  | Fixed _ -> FixedT {nullable= false}
+  | Bool _ -> BoolT {nullable= false}
+  | String _ -> StringT {nullable= false}
+  | Var x -> (
+    match Hashtbl.find ctx x with
+    | Some t -> t
+    | None ->
+        Error.create "Type lookup failed." (x, ctx)
+          [%sexp_of: string * t Hashtbl.M(String).t]
+        |> Error.raise )
+  | Tuple xs -> TupleT (List.map xs ~f:(fun e -> type_of ctx e))
+  | Binop {op; arg1; arg2} as e -> (
+      let t1 = type_of ctx arg1 in
+      let t2 = type_of ctx arg2 in
+      match (op, t1, t2) with
+      | (IntAdd | IntSub | IntMul | IntDiv), IntT _, IntT _ -> IntT {nullable= false}
+      (* Adding an int to a date or a date to an int produces an offset from
+           the date. *)
+      | (IntAdd | IntSub | AddM | AddY), DateT _, IntT _
+       |(IntAdd | IntSub), IntT _, DateT _ ->
+          DateT {nullable= false}
+      (* Dates can be subtracted from each other, to get the number of days
+           between them, but they cannot be added. *)
+      | IntSub, DateT _, DateT _ -> IntT {nullable= false}
+      | (FlAdd | FlSub | FlMul | FlDiv), FixedT _, FixedT _ ->
+          FixedT {nullable= false}
+      | (And | Or), BoolT _, BoolT _ | (And | Or), IntT _, IntT _ -> unify t1 t2
+      | IntLt, IntT {nullable= n1}, IntT {nullable= n2} -> BoolT {nullable= n1 || n2}
+      | IntLt, DateT {nullable= n1}, DateT {nullable= n2} ->
+          BoolT {nullable= n1 || n2}
+      | FlLt, FixedT _, FixedT _ -> BoolT {nullable= false}
+      | IntHash, IntT _, (IntT _ | DateT _) | StrHash, IntT _, StringT _ ->
+          IntT {nullable= false}
+      | IntEq, IntT {nullable= n1}, IntT {nullable= n2}
+       |IntEq, DateT {nullable= n1}, DateT {nullable= n2}
+       |StrEq, StringT {nullable= n1}, StringT {nullable= n2}
+       |FlEq, FixedT {nullable= n1}, FixedT {nullable= n2} ->
+          BoolT {nullable= n1 || n2}
+      | LoadStr, IntT {nullable= false}, IntT {nullable= false} ->
+          StringT {nullable= false}
+      | StrPos, StringT _, StringT _ -> IntT {nullable= false}
+      | _, _, _ ->
+          fail
+            (Error.create "Type error." (e, t1, t2, ctx)
+               [%sexp_of: expr * t * t * t Hashtbl.M(String).t]) )
+  | Unop {op; arg} -> (
+      let t = type_of ctx arg in
+      match (op, t) with
+      | Not, BoolT {nullable} -> BoolT {nullable}
+      | Int2Fl, IntT _ -> FixedT {nullable= false}
+      | Int2Date, IntT _ -> DateT {nullable= false}
+      | Date2Int, DateT _ -> IntT {nullable= false}
+      | StrLen, StringT _ -> IntT {nullable= false}
+      | LoadBool, IntT _ -> BoolT {nullable= false}
+      | _ -> fail (Error.create "Type error." (op, t) [%sexp_of: op * t]) )
+  | Slice (arg, _) -> (
+      let t = type_of ctx arg in
+      match t with
+      | IntT _ -> IntT {nullable= false}
+      | _ ->
+          fail
+            (Error.create "Type error." (e, t, ctx)
+               [%sexp_of: expr * t * t Hashtbl.M(String).t]) )
+  | Index (tup, idx) -> (
+    match type_of ctx tup with
+    | TupleT ts -> List.nth_exn ts idx
+    | t -> fail (Error.create "Expected a tuple." t [%sexp_of: t]) )
+  | Done _ -> BoolT {nullable= false}
+  | Ternary (e1, e2, e3) -> (
+    match type_of ctx e1 with
+    | BoolT {nullable= false} ->
+        let t1 = type_of ctx e2 in
+        let t2 = type_of ctx e3 in
+        unify t1 t2
+    | _ -> failwith "Unexpected conditional type." )
+  | TupleHash _ -> IntT {nullable= false}
+  | Substr _ -> StringT {nullable= false}
+
 module Builder = struct
   type t =
     { name: string
@@ -200,92 +284,7 @@ module Builder = struct
     ; fresh: Fresh.t sexp_opaque }
   [@@deriving sexp]
 
-  let rec type_of e b =
-    let ctx = b.type_ctx in
-    let open Type.PrimType in
-    match e with
-    | Null -> NullT
-    | Int _ -> IntT {nullable= false}
-    | Date _ -> DateT {nullable= false}
-    | Fixed _ -> FixedT {nullable= false}
-    | Bool _ -> BoolT {nullable= false}
-    | String _ -> StringT {nullable= false}
-    | Var x -> (
-      match Hashtbl.find ctx x with
-      | Some t -> t
-      | None ->
-          Error.create "Type lookup failed." (x, ctx)
-            [%sexp_of: string * t Hashtbl.M(String).t]
-          |> Error.raise )
-    | Tuple xs -> TupleT (List.map xs ~f:(fun e -> type_of e b))
-    | Binop {op; arg1; arg2} as e -> (
-        let t1 = type_of arg1 b in
-        let t2 = type_of arg2 b in
-        match (op, t1, t2) with
-        | (IntAdd | IntSub | IntMul | IntDiv), IntT _, IntT _ ->
-            IntT {nullable= false}
-        (* Adding an int to a date or a date to an int produces an offset from
-           the date. *)
-        | (IntAdd | IntSub | AddM | AddY), DateT _, IntT _
-         |(IntAdd | IntSub), IntT _, DateT _ ->
-            DateT {nullable= false}
-        (* Dates can be subtracted from each other, to get the number of days
-           between them, but they cannot be added. *)
-        | IntSub, DateT _, DateT _ -> IntT {nullable= false}
-        | (FlAdd | FlSub | FlMul | FlDiv), FixedT _, FixedT _ ->
-            FixedT {nullable= false}
-        | (And | Or), BoolT _, BoolT _ | (And | Or), IntT _, IntT _ -> unify t1 t2
-        | IntLt, IntT {nullable= n1}, IntT {nullable= n2} ->
-            BoolT {nullable= n1 || n2}
-        | IntLt, DateT {nullable= n1}, DateT {nullable= n2} ->
-            BoolT {nullable= n1 || n2}
-        | FlLt, FixedT _, FixedT _ -> BoolT {nullable= false}
-        | IntHash, IntT _, (IntT _ | DateT _) | StrHash, IntT _, StringT _ ->
-            IntT {nullable= false}
-        | IntEq, IntT {nullable= n1}, IntT {nullable= n2}
-         |IntEq, DateT {nullable= n1}, DateT {nullable= n2}
-         |StrEq, StringT {nullable= n1}, StringT {nullable= n2}
-         |FlEq, FixedT {nullable= n1}, FixedT {nullable= n2} ->
-            BoolT {nullable= n1 || n2}
-        | LoadStr, IntT {nullable= false}, IntT {nullable= false} ->
-            StringT {nullable= false}
-        | StrPos, StringT _, StringT _ -> IntT {nullable= false}
-        | _, _, _ ->
-            fail
-              (Error.create "Type error." (e, t1, t2, ctx)
-                 [%sexp_of: expr * t * t * t Hashtbl.M(String).t]) )
-    | Unop {op; arg} -> (
-        let t = type_of arg b in
-        match (op, t) with
-        | Not, BoolT {nullable} -> BoolT {nullable}
-        | Int2Fl, IntT _ -> FixedT {nullable= false}
-        | Int2Date, IntT _ -> DateT {nullable= false}
-        | Date2Int, DateT _ -> IntT {nullable= false}
-        | StrLen, StringT _ -> IntT {nullable= false}
-        | LoadBool, IntT _ -> BoolT {nullable= false}
-        | _ -> fail (Error.create "Type error." (op, t) [%sexp_of: op * t]) )
-    | Slice (arg, _) -> (
-        let t = type_of arg b in
-        match t with
-        | IntT _ -> IntT {nullable= false}
-        | _ ->
-            fail
-              (Error.create "Type error." (e, t, ctx)
-                 [%sexp_of: expr * t * t Hashtbl.M(String).t]) )
-    | Index (tup, idx) -> (
-      match type_of tup b with
-      | TupleT ts -> List.nth_exn ts idx
-      | t -> fail (Error.create "Expected a tuple." t [%sexp_of: t]) )
-    | Done _ -> BoolT {nullable= false}
-    | Ternary (e1, e2, e3) -> (
-      match type_of e1 b with
-      | BoolT {nullable= false} ->
-          let t1 = type_of e2 b in
-          let t2 = type_of e3 b in
-          unify t1 t2
-      | _ -> failwith "Unexpected conditional type." )
-    | TupleHash _ -> IntT {nullable= false}
-    | Substr _ -> StringT {nullable= false}
+  let type_of e b = type_of b.type_ctx e
 
   let create ~ctx ~name ~ret ~fresh =
     let args = Ctx0.make_caller_args ctx in

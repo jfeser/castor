@@ -1,4 +1,5 @@
 open Base
+open Collections
 open Implang0
 
 let read_names func =
@@ -191,4 +192,91 @@ let prune_funcs m =
 
 let prune_funcs = to_fixed_point prune_funcs
 
-let opt m = m |> prune_args |> prune_locals |> inline_sl_iter |> prune_funcs
+class is_const_expr_visitor const_names =
+  object
+    inherit [_] reduce
+
+    inherit [_] Util.conj_monoid
+
+    method! visit_Var (_ : bool) n = Set.mem const_names n
+  end
+
+class is_trivial_expr_visitor =
+  object
+    inherit [_] reduce
+
+    method private zero = false
+
+    method private plus = ( && )
+
+    method! visit_Int (_ : bool) _ = true
+
+    method! visit_Bool _ _ = true
+
+    method! visit_String _ _ = true
+
+    method! visit_Fixed _ _ = true
+
+    method! visit_Var _ _ = true
+  end
+
+class hoist_visitor const_names =
+  object
+    inherit [_] map as super
+
+    inherit [_] Util.list_monoid
+
+    val mutable hoisted = []
+
+    val mutable const_names = const_names
+
+    val is_trivial = new is_trivial_expr_visitor
+
+    val fresh = Fresh.create ()
+
+    method hoisted = hoisted
+
+    method! visit_expr () expr =
+      let is_const = new is_const_expr_visitor const_names in
+      let expr = super#visit_expr () expr in
+      if is_const#visit_expr true expr && not (is_trivial#visit_expr true expr) then (
+        let name = Fresh.name fresh "hoisted%d" in
+        hoisted <- (name, expr) :: hoisted ;
+        const_names <- Set.add const_names name ;
+        Var name )
+      else expr
+  end
+
+let hoist_const_exprs m =
+  let params =
+    Set.of_list (module String) (List.map m.Irgen.params ~f:(fun n -> n.name))
+  in
+  let funcs' =
+    List.map m.Irgen.funcs ~f:(fun func ->
+        let args =
+          List.map func.args ~f:(fun (n, _) -> n) |> Set.of_list (module String)
+        in
+        let const_names = Set.union params args in
+        let hoister = new hoist_visitor const_names in
+        let func' = hoister#visit_func () func in
+        let body' =
+          List.map hoister#hoisted ~f:(fun (n, e) -> Assign {lhs= n; rhs= e})
+          @ func'.body
+        in
+        let locals' =
+          let tctx =
+            List.map m.Irgen.params ~f:(fun n -> (n.name, Name.type_exn n))
+            @ func.args
+            |> Hashtbl.of_alist_exn (module String)
+          in
+          List.map hoister#hoisted ~f:(fun (n, e) ->
+              {lname= n; type_= Implang.type_of tctx e; persistent= false} )
+          @ func.locals
+        in
+        {func' with body= body'; locals= locals'} )
+  in
+  {m with funcs= funcs'}
+
+let opt m =
+  m |> prune_args |> prune_locals |> inline_sl_iter |> prune_funcs
+  |> hoist_const_exprs
