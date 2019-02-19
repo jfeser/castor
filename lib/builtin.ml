@@ -60,6 +60,10 @@ let create module_ =
     add_function_attr func
       (create_enum_attr ctx "speculatable" 0L)
       AttrIndex.Function ;
+    add_function_attr func (create_enum_attr ctx "noalias" 0L) (AttrIndex.Param 0) ;
+    add_function_attr func (create_enum_attr ctx "noalias" 0L) (AttrIndex.Param 1) ;
+    add_function_attr func (create_enum_attr ctx "nocapture" 0L) (AttrIndex.Param 0) ;
+    add_function_attr func (create_enum_attr ctx "nocapture" 0L) (AttrIndex.Param 1) ;
     add_function_attr func (create_enum_attr ctx "norecurse" 0L) AttrIndex.Function ;
     add_function_attr func (create_enum_attr ctx "nounwind" 0L) AttrIndex.Function ;
     add_function_attr func (create_enum_attr ctx "readonly" 0L) AttrIndex.Function ;
