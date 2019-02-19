@@ -13,6 +13,17 @@ ifeq ($(UNAME_S),Darwin)
 	export TIME := gtime
 endif
 
+DB := postgresql:///tpch_1k
+
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Linux)
+	TIME := /usr/bin/time
+endif
+ifeq ($(UNAME_S),Darwin)
+	TIME := gtime
+endif
+
+
 all: results.csv validate
 
 run: $(BENCH_NAMES:%=%/results.csv)
