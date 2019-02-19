@@ -35,7 +35,7 @@ let rec pp_expr : Format.formatter -> expr -> unit =
     | FlLe -> `Infix "<="
     | And -> `Infix "&&"
     | Not -> `Infix "not"
-    | IntEq | StrEq | FlEq -> `Infix "="
+    | IntEq | StrEq | FlEq -> `Infix "=="
     | Or -> `Infix "||"
     | IntHash | StrHash -> `Prefix "hash"
     | LoadStr -> `Prefix "load_str"
