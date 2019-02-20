@@ -265,6 +265,6 @@ let hoist_const_exprs m =
   in
   {m with funcs= funcs'}
 
-let opt m = m |> prune_args |> prune_locals |> inline_sl_iter |> prune_funcs
-
-(* |> hoist_const_exprs *)
+let opt m =
+  m |> prune_args |> prune_locals |> inline_sl_iter |> prune_funcs
+  |> hoist_const_exprs

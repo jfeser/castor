@@ -2,10 +2,10 @@
 
 """
 Usage:
-  run-bench.py sql [options] [QUERY...]
-  run-bench.py compile-castor [options] [QUERY...]
-  run-bench.py run-castor [options] [QUERY...]
-  run-bench.py time-castor [options] [QUERY...]
+  run-bench.py sql [-d DB] [QUERY...]
+  run-bench.py compile-castor [-d DB] [QUERY...]
+  run-bench.py run-castor [QUERY...]
+  run-bench.py time-castor [-t TIME_CMD] [QUERY...]
   run-bench.py validate
   run-bench.py gen-dune
 
@@ -399,22 +399,25 @@ def should_run(query_name):
 
 if args["-d"] is not None:
     DB = args["-d"]
-if DB == "":
-    raise RuntimeError(
-        "No TPC-H database specified. Cannot run benchmark. Fill in config.ini or pass -d DB."
-    )
-TIME_CMD = args["-t"]
 
 if args["gen-dune"]:
     gen_dune()
 
 elif args["sql"]:
+    if DB == "":
+        raise RuntimeError(
+            "No TPC-H database specified. Cannot run benchmark. Fill in config.ini or pass -d DB."
+        )
     for bench in BENCHMARKS:
         name = bench["name"]
         if should_run(name):
             run_sql(name, bench["params"])
 
 elif args["compile-castor"]:
+    if DB == "":
+        raise RuntimeError(
+            "No TPC-H database specified. Cannot run benchmark. Fill in config.ini or pass -d DB."
+        )
     for bench in BENCHMARKS:
         for query in bench["query"]:
             if should_run(query):
@@ -427,6 +430,7 @@ elif args["run-castor"]:
                 run_bench(query, bench["params"])
 
 elif args["time-castor"]:
+    TIME_CMD = args["-t"]
     with open("castor_results.csv", "a") as csv_file:
         for bench in BENCHMARKS:
             for query in bench["query"]:
