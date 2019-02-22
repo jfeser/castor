@@ -1,4 +1,5 @@
 open Base
+open Collections
 open Implang0
 
 let read_names func =
@@ -191,4 +192,132 @@ let prune_funcs m =
 
 let prune_funcs = to_fixed_point prune_funcs
 
-let opt m = m |> prune_args |> prune_locals |> inline_sl_iter |> prune_funcs
+class is_const_expr_visitor const_names =
+  object
+    inherit [_] reduce
+
+    inherit [_] Util.conj_monoid
+
+    method! visit_Var (_ : bool) n = Set.mem const_names n
+  end
+
+let is_trivial_expr = function
+  | Int _ | Bool _ | String _ | Fixed _ | Var _ -> true
+  | _ -> false
+
+class hoist_visitor const_names const_types =
+  object
+    inherit [_] map as super
+
+    inherit [_] Util.list_monoid
+
+    val mutable hoisted = []
+
+    val mutable const_names = const_names
+
+    val tctx = Hashtbl.of_alist_exn (module String) const_types
+
+    val fresh = Fresh.create ()
+
+    method hoisted = List.rev hoisted
+
+    method! visit_expr () expr =
+      let expr = super#visit_expr () expr in
+      let is_const = new is_const_expr_visitor const_names in
+      if is_const#visit_expr true expr && not (is_trivial_expr expr) then (
+        let name = Fresh.name fresh "hoisted%d" in
+        let type_ = Implang.type_of tctx expr in
+        hoisted <- (name, expr, type_) :: hoisted ;
+        const_names <- Set.add const_names name ;
+        Hashtbl.add_exn tctx ~key:name ~data:type_ ;
+        Var name )
+      else expr
+  end
+
+let hoist_const_exprs m =
+  let const_names =
+    Set.of_list
+      (module String)
+      ("buf" :: List.map m.Irgen.params ~f:(fun n -> n.name))
+  in
+  let const_types =
+    List.map m.Irgen.params ~f:(fun n -> (n.name, Name.type_exn n))
+  in
+  let funcs' =
+    List.map m.Irgen.funcs ~f:(fun func ->
+        let const_types = func.args @ const_types in
+        let const_names =
+          Set.union const_names
+            (List.map func.args ~f:(fun (n, _) -> n) |> Set.of_list (module String))
+        in
+        let hoister = new hoist_visitor const_names const_types in
+        let func' = hoister#visit_func () func in
+        let body' =
+          List.map hoister#hoisted ~f:(fun (n, e, _) -> Assign {lhs= n; rhs= e})
+          @ func'.body
+        in
+        let locals' =
+          List.map hoister#hoisted ~f:(fun (n, _, t) ->
+              {lname= n; type_= t; persistent= false} )
+          @ func.locals
+        in
+        {func' with body= body'; locals= locals'} )
+  in
+  {m with funcs= funcs'}
+
+let conj_preds_visitor =
+  object (self : 'a)
+    inherit [_] reduce
+
+    inherit [_] Util.list_monoid
+
+    method! visit_Binop ps op p1 p2 =
+      match op with
+      | And ->
+          let p1s = self#visit_expr [] p1 in
+          let p2s = self#visit_expr [] p2 in
+          p1s @ p2s @ ps
+      | _ -> [Binop {op; arg1= p1; arg2= p2}]
+  end
+
+let rec conj = function
+  | [] -> failwith "Empty"
+  | x :: xs -> Binop {op= And; arg1= x; arg2= conj xs}
+
+let split_expensive_predicates f =
+  let is_expensive_visitor =
+    object (self : 'a)
+      inherit [_] reduce as super
+
+      inherit [_] Util.disj_monoid
+
+      method! visit_Binop _ op p1 p2 =
+        let ret = super#visit_Binop self#zero op p1 p2 in
+        match op with StrLen | StrPos | StrEq | StrHash -> true | _ -> ret
+    end
+  in
+  let visitor =
+    object (self)
+      inherit [_] map
+
+      method! visit_If () cond then_ else_ =
+        let tcase = self#visit_prog () then_ in
+        let fcase = self#visit_prog () else_ in
+        let preds = conj_preds_visitor#visit_expr [] cond in
+        let costly, cheap =
+          List.partition_tf preds ~f:(is_expensive_visitor#visit_expr true)
+        in
+        match (costly, cheap) with
+        | [], xs | xs, [] -> If {cond= conj xs; tcase; fcase}
+        | xs, ys ->
+            If {cond= conj ys; tcase= [If {cond= conj xs; tcase; fcase}]; fcase}
+    end
+  in
+  visitor#visit_func () f
+
+let for_all_funcs ~f m = {m with Irgen.funcs= List.map m.Irgen.funcs ~f}
+
+let opt m =
+  m |> prune_args |> prune_locals |> inline_sl_iter |> prune_funcs
+  |> hoist_const_exprs
+  |> for_all_funcs ~f:split_expensive_predicates
