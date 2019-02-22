@@ -265,6 +265,59 @@ let hoist_const_exprs m =
   in
   {m with funcs= funcs'}
 
+let conj_preds_visitor =
+  object (self : 'a)
+    inherit [_] reduce
+
+    inherit [_] Util.list_monoid
+
+    method! visit_Binop ps op p1 p2 =
+      match op with
+      | And ->
+          let p1s = self#visit_expr [] p1 in
+          let p2s = self#visit_expr [] p2 in
+          p1s @ p2s @ ps
+      | _ -> [Binop {op; arg1= p1; arg2= p2}]
+  end
+
+let rec conj = function
+  | [] -> failwith "Empty"
+  | x :: xs -> Binop {op= And; arg1= x; arg2= conj xs}
+
+let split_expensive_predicates f =
+  let is_expensive_visitor =
+    object (self : 'a)
+      inherit [_] reduce as super
+
+      inherit [_] Util.disj_monoid
+
+      method! visit_Binop _ op p1 p2 =
+        let ret = super#visit_Binop self#zero op p1 p2 in
+        match op with StrLen | StrPos | StrEq | StrHash -> true | _ -> ret
+    end
+  in
+  let visitor =
+    object (self)
+      inherit [_] map
+
+      method! visit_If () cond then_ else_ =
+        let tcase = self#visit_prog () then_ in
+        let fcase = self#visit_prog () else_ in
+        let preds = conj_preds_visitor#visit_expr [] cond in
+        let costly, cheap =
+          List.partition_tf preds ~f:(is_expensive_visitor#visit_expr true)
+        in
+        match (costly, cheap) with
+        | [], xs | xs, [] -> If {cond= conj xs; tcase; fcase}
+        | xs, ys ->
+            If {cond= conj ys; tcase= [If {cond= conj xs; tcase; fcase}]; fcase}
+    end
+  in
+  visitor#visit_func () f
+
+let for_all_funcs ~f m = {m with Irgen.funcs= List.map m.Irgen.funcs ~f}
+
 let opt m =
   m |> prune_args |> prune_locals |> inline_sl_iter |> prune_funcs
   |> hoist_const_exprs
+  |> for_all_funcs ~f:split_expensive_predicates
