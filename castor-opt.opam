@@ -1,0 +1,19 @@
+opam-version: "2.0"
+name: "castor-opt"
+version: "~unknown"
+maintainer: "Jack Feser <feser@csail.mit.edu>"
+authors: "Jack Feser <feser@csail.mit.edu>"
+dev-repo: "git+https://github.com/jfeser/castor-opt.git"
+homepage: "https://github.com/jfeser/castor-opt"
+bug-reports: "https://github.com/jfeser/castor-opt/issues"
+build: [["dune" "build" "-p" name "-j" jobs]]
+depends: [
+  "dune" {build & >= "1.1"}
+  "castor"
+
+  "base" {>= "v0.11" & < "v0.12"}
+  "ppx_compare" {>= "v0.11" & < "v0.12"}
+  "ppx_sexp_conv" {>= "v0.11" & < "v0.12"}
+  "ppx_hash" {>= "v0.11" & < "v0.12"}
+  "ppx_let" {>= "v0.11" & < "v0.12"}
+]

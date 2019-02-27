@@ -1,0 +1,4 @@
+(executables
+  (names explore opt)
+  (libraries core castor castor_opt logs)
+  (preprocess (pps ppx_sexp_conv ppx_let ppx_sexp_conv ppx_compare ppx_hash)))
