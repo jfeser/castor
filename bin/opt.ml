@@ -23,7 +23,9 @@ let main ~params ~db ch =
   let ctx = Join_opt.create_ctx (Sql.create_ctx ()) conn Config.conn in
   let cost = Join_opt.estimate_cost ctx in
   let best_join = Join_opt.join_opt cost preds in
-  print_endline ([%sexp_of: Join_opt.t option] best_join |> Sexp.to_string_hum)
+  print_endline
+    ( [%sexp_of: (float array * Join_opt.t) list] best_join
+    |> Sexp.to_string_hum )
 
 let reporter ppf =
   let report _ level ~over k msgf =
