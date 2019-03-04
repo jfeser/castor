@@ -190,3 +190,11 @@ val validate : t -> unit
 val pred_constants : Name.t list -> pred -> pred list
 
 val conjuncts : pred -> pred list
+
+class virtual ['a] map : ['a] Abslayout0.map
+
+class virtual ['a] endo : ['a] Abslayout0.endo
+
+class virtual ['a] reduce : ['a] Abslayout0.reduce
+
+class virtual ['a] mapreduce : ['a] Abslayout0.mapreduce
