@@ -267,21 +267,25 @@ let hoist_const_exprs m =
 
 let conj_preds_visitor =
   object (self : 'a)
-    inherit [_] reduce
+    inherit [_] reduce as super
 
     inherit [_] Util.list_monoid
 
-    method! visit_Binop ps op p1 p2 =
+    method! visit_Binop () op p1 p2 =
       match op with
       | And ->
-          let p1s = self#visit_expr [] p1 in
-          let p2s = self#visit_expr [] p2 in
-          p1s @ p2s @ ps
+          let p1s = self#visit_expr () p1 in
+          let p2s = self#visit_expr () p2 in
+          p1s @ p2s
       | _ -> [Binop {op; arg1= p1; arg2= p2}]
+
+    method! visit_expr () p =
+      match super#visit_expr () p with [] -> [p] | ps -> ps
   end
 
 let rec conj = function
   | [] -> failwith "Empty"
+  | [x] -> x
   | x :: xs -> Binop {op= And; arg1= x; arg2= conj xs}
 
 let split_expensive_predicates f =
@@ -303,7 +307,7 @@ let split_expensive_predicates f =
       method! visit_If () cond then_ else_ =
         let tcase = self#visit_prog () then_ in
         let fcase = self#visit_prog () else_ in
-        let preds = conj_preds_visitor#visit_expr [] cond in
+        let preds = conj_preds_visitor#visit_expr () cond in
         let costly, cheap =
           List.partition_tf preds ~f:(is_expensive_visitor#visit_expr true)
         in
