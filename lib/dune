@@ -1,7 +1,7 @@
 (library
  (name castor_opt)
  (public_name castor-opt)
- (libraries castor core postgresql yojson)
+ (libraries castor core postgresql yojson combinat)
  (inline_tests)
  (preprocess (pps ppx_sexp_conv ppx_compare ppx_hash ppx_expect ppx_let))
 )
