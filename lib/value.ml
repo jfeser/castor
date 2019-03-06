@@ -2,14 +2,21 @@ open Base
 open Collections
 open Printf
 
-type t =
-  | Int of int
-  | Date of Date.t
-  | String of string
-  | Bool of bool
-  | Fixed of Fixed_point.t
-  | Null
-[@@deriving compare, sexp]
+module T = struct
+  type t =
+    | Int of int
+    | Date of Date.t
+    | String of string
+    | Bool of bool
+    | Fixed of Fixed_point.t
+    | Null
+  [@@deriving compare, hash, sexp, variants]
+end
+
+include T
+module C = Comparable.Make (T)
+
+module O : Comparable.Infix with type t := t = C
 
 let to_sql = function
   | Int x -> Int.to_string x
@@ -21,6 +28,8 @@ let to_sql = function
   | Null -> "null"
 
 let to_int = function Int x -> x | _ -> failwith "Not an int."
+
+let to_date = function Date x -> x | _ -> failwith "Not an date."
 
 let to_bool = function Bool x -> x | _ -> failwith "Not a bool."
 
@@ -35,3 +44,32 @@ let to_pred =
   | Fixed x -> A.Fixed x
   | Null -> A.Null
   | Date x -> A.Date x
+
+let ( + ) x y =
+  match (x, y) with
+  | Int a, Int b -> Int (a + b)
+  | Fixed a, Fixed b -> Fixed Fixed_point.(a + b)
+  | Int a, Fixed b | Fixed b, Int a -> Fixed Fixed_point.(b + of_int a)
+  | Date a, Int b -> Date (Date.add_days a b)
+  | _ -> failwith "Cannot +"
+
+let neg = function
+  | Int a -> Int (Int.neg a)
+  | Fixed a -> Fixed Fixed_point.(-a)
+  | Date _ | String _ | Bool _ | Null -> failwith "Cannot neg"
+
+let ( - ) x y = x + neg y
+
+let ( * ) x y =
+  match (x, y) with
+  | Int a, Int b -> Int (a * b)
+  | Fixed a, Fixed b -> Fixed Fixed_point.(a * b)
+  | Int a, Fixed b | Fixed b, Int a -> Fixed Fixed_point.(b * of_int a)
+  | _ -> failwith "Cannot *"
+
+let ( / ) x y =
+  match (x, y) with
+  | Int a, Int b -> Fixed (Fixed_point.of_float Float.(of_int a / of_int b))
+  | _ -> failwith "Cannot /"
+
+let ( % ) x y = to_int x % to_int y |> int

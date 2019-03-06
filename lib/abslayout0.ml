@@ -100,6 +100,10 @@ module T = struct
 end
 
 include T
+module C = Comparable.Make (T)
+
+module O : Comparable.Infix with type t := t = C
+
 include Comparator.Make (T)
 
 class virtual runtime_subquery_visitor =

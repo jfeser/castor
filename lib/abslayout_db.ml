@@ -92,11 +92,7 @@ module Make (Config : Config.S) = struct
             | As (n, r) ->
                 Meta.(find_exn r schema)
                 |> List.map ~f:(fun x -> {x with relation= Some n})
-            | Scan table ->
-                (Db.Relation.from_db conn table).fields
-                |> List.map ~f:(fun f ->
-                       Name.create ~relation:table ~type_:f.Db.Field.type_ f.fname
-                   )
+            | Scan table -> Db.schema conn table
           in
           Meta.set_m r Meta.schema schema
       end

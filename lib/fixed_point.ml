@@ -119,3 +119,5 @@ let%expect_test "add" =
 let min_value = {value= Int.min_value; scale= 1}
 
 let max_value = {value= Int.max_value; scale= 1}
+
+let of_float f = Float.to_string f |> of_string

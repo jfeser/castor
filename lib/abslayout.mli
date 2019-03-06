@@ -88,6 +88,8 @@ and t = Abslayout0.t = {node: node; meta: Meta.t [@compare.ignore]}
 
 include Comparator.S with type t := t
 
+module O : Comparable.Infix with type t := t
+
 val pp : Formatter.t -> t -> unit
 
 val name : t -> string

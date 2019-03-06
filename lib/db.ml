@@ -236,3 +236,7 @@ let check db sql =
   match r#status with
   | Command_ok -> Or_error.return ()
   | _ -> Or_error.error "Unexpected query response." r#error [%sexp_of: string]
+
+let schema conn table =
+  (Relation.from_db conn table).fields
+  |> List.map ~f:(fun f -> Name.create ~relation:table ~type_:f.Field.type_ f.fname)
