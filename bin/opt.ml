@@ -7,25 +7,20 @@ let main ~params ~db ch =
     List.map params ~f:(fun (n, t) -> Name.create ~type_:t n)
     |> Set.of_list (module Name.Compare_no_type)
   in
-  let conn = new Postgresql.connection ~conninfo:db () in
   let module Config = struct
     let conn = Db.create db
 
-    let params = params
+    let dbconn = new Postgresql.connection ~conninfo:db ()
 
-    let check_transforms = true
+    let params = params
   end in
   let module A = Abslayout_db.Make (Config) in
-  let module T = Transform.Make (Config) (A) () in
+  let module T = Transform.Make (Config) () in
   let query_str = In_channel.input_all ch in
   let query = Abslayout.of_string_exn query_str |> A.resolve ~params in
-  let preds = Join_opt.extract_joins query in
-  let ctx = Join_opt.create_ctx (Sql.create_ctx ()) conn Config.conn in
-  let cost = Join_opt.estimate_cost ctx in
-  let best_join = Join_opt.join_opt cost preds in
-  print_endline
-    ( [%sexp_of: (float array * Join_opt.t) list] best_join
-    |> Sexp.to_string_hum )
+  match T.opt query with
+  | Some query' -> Format.printf "%a" Abslayout.pp query'
+  | None -> ()
 
 let reporter ppf =
   let report _ level ~over k msgf =
