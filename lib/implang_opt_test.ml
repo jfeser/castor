@@ -72,7 +72,7 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
             loop (i18 < count19) {
                 cstart20 = cstart17;
                 cstart21 = cstart20 + 1;
-                if (buf[cstart20 : 1] = id_c && buf[cstart14 : 1] = id_p) {
+                if (buf[cstart20 : 1] == id_c && buf[cstart14 : 1] == id_p) {
                     print(Tuple[Int[nonnull], Int[nonnull], Int[nonnull],
                     Int[nonnull]],
                     (buf[cstart14 : 1], buf[cstart15 : 1], buf[cstart20 : 1],
@@ -113,7 +113,7 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
             loop (i7 < count8) {
                 cstart9 = cstart6;
                 cstart10 = cstart9 + 1;
-                if (buf[cstart9 : 1] = id_c && buf[cstart3 : 1] = id_p) {
+                if (buf[cstart9 : 1] == id_c && buf[cstart3 : 1] == id_p) {
                     consume(Tuple[Int[nonnull], Int[nonnull], Int[nonnull],
                     Int[nonnull]],
                     (buf[cstart3 : 1], buf[cstart4 : 1], buf[cstart9 : 1],

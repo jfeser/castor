@@ -377,7 +377,7 @@ let%expect_test "hash-idx" =
         loop (i11 < count12) {
             if (buf[cstart10 : 1] * 8 < 0 || buf[cstart9 + 4 + 0 + 0 : 8] - 1 <
                 buf[cstart10 : 1] * 8 || buf[cstart9 + 4 + 0 + 0 + 8 +
-                buf[cstart10 : 1] * 8 : 8] = 0) {
+                buf[cstart10 : 1] * 8 : 8] == 0) {
 
             } else {
                  kstart13 = buf[cstart9 + 4 + 0 + 0 + 8 + buf[cstart10 : 1] * 8 :
@@ -385,7 +385,7 @@ let%expect_test "hash-idx" =
                  key15 = (buf[kstart13 : 1]);
                  vstart14 = buf[cstart9 + 4 + 0 + 0 + 8 + buf[cstart10 : 1] * 8 :
                  8] + 1;
-                 if (true && key15[0] = buf[cstart10 : 1]) {
+                 if (true && key15[0] == buf[cstart10 : 1]) {
                      print(Tuple[Int[nonnull], Int[nonnull], Int[nonnull]],
                      (buf[cstart10 : 1], key15[0], buf[vstart14 : 1]));
                  } else {
@@ -414,7 +414,7 @@ let%expect_test "hash-idx" =
         loop (i3 < count4) {
             if (buf[cstart2 : 1] * 8 < 0 || buf[cstart1 + 4 + 0 + 0 : 8] - 1 <
                 buf[cstart2 : 1] * 8 || buf[cstart1 + 4 + 0 + 0 + 8 +
-                buf[cstart2 : 1] * 8 : 8] = 0) {
+                buf[cstart2 : 1] * 8 : 8] == 0) {
 
             } else {
                  kstart5 = buf[cstart1 + 4 + 0 + 0 + 8 + buf[cstart2 : 1] * 8 :
@@ -422,7 +422,7 @@ let%expect_test "hash-idx" =
                  key7 = (buf[kstart5 : 1]);
                  vstart6 = buf[cstart1 + 4 + 0 + 0 + 8 + buf[cstart2 : 1] * 8 :
                  8] + 1;
-                 if (true && key7[0] = buf[cstart2 : 1]) {
+                 if (true && key7[0] == buf[cstart2 : 1]) {
                      consume(Tuple[Int[nonnull], Int[nonnull], Int[nonnull]],
                      (buf[cstart2 : 1], key7[0], buf[vstart6 : 1]));
                  } else {
@@ -624,7 +624,7 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
             loop (i18 < count19) {
                 cstart20 = cstart17;
                 cstart21 = cstart20 + 1;
-                if (buf[cstart20 : 1] = id_c && buf[cstart14 : 1] = id_p) {
+                if (buf[cstart20 : 1] == id_c && buf[cstart14 : 1] == id_p) {
                     print(Tuple[Int[nonnull], Int[nonnull], Int[nonnull],
                     Int[nonnull]],
                     (buf[cstart14 : 1], buf[cstart15 : 1], buf[cstart20 : 1],
@@ -665,7 +665,7 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
             loop (i7 < count8) {
                 cstart9 = cstart6;
                 cstart10 = cstart9 + 1;
-                if (buf[cstart9 : 1] = id_c && buf[cstart3 : 1] = id_p) {
+                if (buf[cstart9 : 1] == id_c && buf[cstart3 : 1] == id_p) {
                     consume(Tuple[Int[nonnull], Int[nonnull], Int[nonnull],
                     Int[nonnull]],
                     (buf[cstart3 : 1], buf[cstart4 : 1], buf[cstart9 : 1],
@@ -721,7 +721,7 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
     // cstart19 : Int[nonnull] (persists=true)
     fun printer () : Void {
         if (<tuplehash> * 8 < 0 || buf[12 + buf[4 : 8] : 8] - 1 < <tuplehash> *
-            8 || buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8] = 0) {
+            8 || buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8] == 0) {
 
         } else {
              kstart10 = buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8];
@@ -729,7 +729,7 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
              cstart14 = cstart13 + 1;
              key12 = (buf[cstart13 : 1], buf[cstart14 : 1]);
              vstart11 = buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8] + 2;
-             if (true && key12[0] = id_p && key12[1] = id_c) {
+             if (true && key12[0] == id_p && key12[1] == id_c) {
                  cstart15 = vstart11 + 1 + 1;
                  i16 = 0;
                  count17 = buf[vstart11 : 1];
@@ -760,7 +760,7 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
     // i6 : Int[nonnull] (persists=true)
     fun consumer () : Void {
         if (<tuplehash> * 8 < 0 || buf[12 + buf[4 : 8] : 8] - 1 < <tuplehash> *
-            8 || buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8] = 0) {
+            8 || buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8] == 0) {
 
         } else {
              kstart0 = buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8];
@@ -768,7 +768,7 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
              cstart4 = cstart3 + 1;
              key2 = (buf[cstart3 : 1], buf[cstart4 : 1]);
              vstart1 = buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8] + 2;
-             if (true && key2[0] = id_p && key2[1] = id_c) {
+             if (true && key2[0] == id_p && key2[1] == id_c) {
                  cstart5 = vstart1 + 1 + 1;
                  i6 = 0;
                  count7 = buf[vstart1 : 1];
@@ -858,13 +858,13 @@ select([lp.counter, lc.counter],
         cstart25 = 4;
         cstart26 = cstart25 + buf[cstart25 : 4];
         if (id_p * 8 < 0 || buf[cstart25 + 4 + 0 + 0 : 8] - 1 < id_p * 8 ||
-            buf[cstart25 + 4 + 0 + 0 + 8 + id_p * 8 : 8] = 0) {
+            buf[cstart25 + 4 + 0 + 0 + 8 + id_p * 8 : 8] == 0) {
 
         } else {
              kstart27 = buf[cstart25 + 4 + 0 + 0 + 8 + id_p * 8 : 8];
              key29 = (buf[kstart27 : 1]);
              vstart28 = buf[cstart25 + 4 + 0 + 0 + 8 + id_p * 8 : 8] + 1;
-             if (true && key29[0] = id_p) {
+             if (true && key29[0] == id_p) {
                  cstart30 = vstart28 + 1 + 1;
                  i31 = 0;
                  count32 = buf[vstart28 : 1];
@@ -898,7 +898,7 @@ select([lp.counter, lc.counter],
                              loop (i45 < count46) {
                                  cstart47 = cstart44;
                                  cstart48 = cstart47 + 1;
-                                 if (buf[cstart47 : 1] = id_c) {
+                                 if (buf[cstart47 : 1] == id_c) {
                                      print(Tuple[Int[nonnull], Int[nonnull]],
                                      (buf[cstart33 : 1], buf[cstart48 : 1]));
                                  } else {
@@ -953,13 +953,13 @@ select([lp.counter, lc.counter],
         cstart0 = 4;
         cstart1 = cstart0 + buf[cstart0 : 4];
         if (id_p * 8 < 0 || buf[cstart0 + 4 + 0 + 0 : 8] - 1 < id_p * 8 ||
-            buf[cstart0 + 4 + 0 + 0 + 8 + id_p * 8 : 8] = 0) {
+            buf[cstart0 + 4 + 0 + 0 + 8 + id_p * 8 : 8] == 0) {
 
         } else {
              kstart2 = buf[cstart0 + 4 + 0 + 0 + 8 + id_p * 8 : 8];
              key4 = (buf[kstart2 : 1]);
              vstart3 = buf[cstart0 + 4 + 0 + 0 + 8 + id_p * 8 : 8] + 1;
-             if (true && key4[0] = id_p) {
+             if (true && key4[0] == id_p) {
                  cstart5 = vstart3 + 1 + 1;
                  i6 = 0;
                  count7 = buf[vstart3 : 1];
@@ -992,7 +992,7 @@ select([lp.counter, lc.counter],
                              loop (i20 < count21) {
                                  cstart22 = cstart19;
                                  cstart23 = cstart22 + 1;
-                                 if (buf[cstart22 : 1] = id_c) {
+                                 if (buf[cstart22 : 1] == id_c) {
                                      consume(Tuple[Int[nonnull], Int[nonnull]],
                                      (buf[cstart8 : 1], buf[cstart23 : 1]));
                                  } else {
@@ -1066,7 +1066,7 @@ let%expect_test "subquery-first" =
             } else {
 
             }
-            if (first14 = buf[cstart11 : 1]) {
+            if (first14 == buf[cstart11 : 1]) {
                 print(Tuple[Int[nonnull]], (buf[cstart11 : 1]));
             } else {
 
@@ -1108,7 +1108,7 @@ let%expect_test "subquery-first" =
             } else {
 
             }
-            if (first3 = buf[cstart0 : 1]) {
+            if (first3 == buf[cstart0 : 1]) {
                 consume(Tuple[Int[nonnull]], (buf[cstart0 : 1]));
             } else {
 
@@ -1191,7 +1191,7 @@ select([lp.counter, lc.counter],
         if (hash(cstart25 + 4 + 8, id_p) * 8 < 0 || buf[cstart25 + 4 + 8 +
             buf[cstart25 + 4 : 8] : 8] - 1 < hash(cstart25 + 4 + 8, id_p) * 8 ||
             buf[cstart25 + 4 + 8 + buf[cstart25 + 4 : 8] + 8 + hash(cstart25 +
-            4 + 8, id_p) * 8 : 8] = 0) {
+            4 + 8, id_p) * 8 : 8] == 0) {
 
         } else {
              kstart27 = buf[cstart25 + 4 + 8 + buf[cstart25 + 4 : 8] + 8 +
@@ -1201,7 +1201,7 @@ select([lp.counter, lc.counter],
              hash(cstart25 + 4 + 8, id_p) * 8 : 8] + 1 + buf[buf[cstart25 + 4 +
              8 + buf[cstart25 + 4 : 8] + 8 + hash(cstart25 + 4 + 8, id_p) * 8 :
              8] : 1];
-             if (true && key29[0] = id_p) {
+             if (true && key29[0] == id_p) {
                  cstart30 = vstart28 + 1 + 1;
                  i31 = 0;
                  count32 = buf[vstart28 : 1];
@@ -1235,7 +1235,7 @@ select([lp.counter, lc.counter],
                              loop (i45 < count46) {
                                  cstart47 = cstart44 + 1;
                                  cstart48 = cstart47 + 1 + buf[cstart47 : 1];
-                                 if (load_str(cstart47 + 1, buf[cstart47 : 1]) =
+                                 if (load_str(cstart47 + 1, buf[cstart47 : 1]) ==
                                      id_c) {
                                      print(Tuple[Int[nonnull], Int[nonnull]],
                                      (buf[cstart33 : 1], buf[cstart48 : 1]));
@@ -1293,7 +1293,7 @@ select([lp.counter, lc.counter],
         if (hash(cstart0 + 4 + 8, id_p) * 8 < 0 || buf[cstart0 + 4 + 8 +
             buf[cstart0 + 4 : 8] : 8] - 1 < hash(cstart0 + 4 + 8, id_p) * 8 ||
             buf[cstart0 + 4 + 8 + buf[cstart0 + 4 : 8] + 8 + hash(cstart0 + 4 +
-            8, id_p) * 8 : 8] = 0) {
+            8, id_p) * 8 : 8] == 0) {
 
         } else {
              kstart2 = buf[cstart0 + 4 + 8 + buf[cstart0 + 4 : 8] + 8 +
@@ -1303,7 +1303,7 @@ select([lp.counter, lc.counter],
              hash(cstart0 + 4 + 8, id_p) * 8 : 8] + 1 + buf[buf[cstart0 + 4 + 8 +
              buf[cstart0 + 4 : 8] + 8 + hash(cstart0 + 4 + 8, id_p) * 8 : 8] :
              1];
-             if (true && key4[0] = id_p) {
+             if (true && key4[0] == id_p) {
                  cstart5 = vstart3 + 1 + 1;
                  i6 = 0;
                  count7 = buf[vstart3 : 1];
@@ -1336,7 +1336,7 @@ select([lp.counter, lc.counter],
                              loop (i20 < count21) {
                                  cstart22 = cstart19 + 1;
                                  cstart23 = cstart22 + 1 + buf[cstart22 : 1];
-                                 if (load_str(cstart22 + 1, buf[cstart22 : 1]) =
+                                 if (load_str(cstart22 + 1, buf[cstart22 : 1]) ==
                                      id_c) {
                                      consume(Tuple[Int[nonnull], Int[nonnull]],
                                      (buf[cstart8 : 1], buf[cstart23 : 1]));
