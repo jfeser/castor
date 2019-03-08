@@ -58,7 +58,19 @@ let is_orderby r p =
 let is_filter r p =
   match (Path.get_exn p r).node with Filter _ -> true | _ -> false
 
+let is_dedup r p =
+  match (Path.get_exn p r).node with Dedup _ -> true | _ -> false
+
+let is_scan r p =
+  match (Path.get_exn p r).node with Scan _ -> true | _ -> false
+
 let negate f r p = not (f r p)
+
+module Infix = struct
+  let ( && ) f1 f2 r p = f1 r p && f2 r p
+
+  let ( || ) f1 f2 r p = f1 r p || f2 r p
+end
 
 let last_child _ = Some [Path.Child_last]
 
@@ -84,20 +96,12 @@ module Make (Config : Config.S) () = struct
   open Config
   module M = Abslayout_db.Make (Config)
 
-  module Tf =
-    Transform.Make (struct
-        include Config
-
-        let check_transforms = false
-      end)
-      (M)
-      ()
-
   let fresh = Fresh.create ()
 
   let sql_ctx = Sql.create_ctx ~fresh ()
 
   let is_param_filter r p =
+    M.annotate_schema r ;
     match (Path.get_exn p r).node with
     | Filter (pred, _) -> overlaps (pred_free pred) params
     | _ -> false
@@ -201,6 +205,7 @@ module Make (Config : Config.S) () = struct
     if same_orders r r' then Some r' else None
 
   let extend_select ~with_ ps r =
+    M.annotate_schema r ;
     let needed_fields =
       let of_list = Set.of_list (module Name.Compare_no_type) in
       (* These are the fields that are emitted by r, used in with_ and not
@@ -479,8 +484,9 @@ module Make (Config : Config.S) () = struct
       end) in
       let r = to_ralgebra r in
       M.annotate_schema r ;
-      (Explain.explain ctx.conn
-         (Sql.of_ralgebra ctx.sql r |> Sql.to_string ctx.sql))
+      ( Explain.explain ctx.conn
+          (Sql.of_ralgebra ctx.sql r |> Sql.to_string ctx.sql)
+      |> Or_error.ok_exn )
         .nrows |> Float.of_int
 
     let schema ctx r =
@@ -649,6 +655,16 @@ module Make (Config : Config.S) () = struct
       let scalars = List.map s ~f:(fun n -> scalar (Name n)) in
       Some (list r (tuple scalars Cross))
     else None
+
+  let is_serializable r =
+    let no_bad_runtime_op =
+      Path.(
+        all >>? is_run_time
+        >>? Infix.(is_join || is_groupby || is_orderby || is_dedup || is_scan))
+        r
+      |> Seq.is_empty
+    in
+    no_bad_runtime_op
 
   let opt =
     seq_many

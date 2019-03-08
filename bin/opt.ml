@@ -1,6 +1,7 @@
 open Core
 open Castor
 open Castor_opt
+open Abslayout
 
 let main ~params ~db ch =
   let params =
@@ -19,7 +20,10 @@ let main ~params ~db ch =
   let query_str = In_channel.input_all ch in
   let query = Abslayout.of_string_exn query_str |> A.resolve ~params in
   match T.opt query with
-  | Some query' -> Format.printf "%a" Abslayout.pp query'
+  | Some query' ->
+      if not (is_serializeable query') then
+        Logs.warn (fun m -> m "Query is not serializable.") ;
+      Format.printf "%a" Abslayout.pp query'
   | None -> ()
 
 let reporter ppf =
