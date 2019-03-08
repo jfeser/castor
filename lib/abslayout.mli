@@ -193,6 +193,8 @@ val pred_constants : Name.t list -> pred -> pred list
 
 val conjuncts : pred -> pred list
 
+val conjoin : pred list -> pred
+
 class virtual ['a] map : ['a] Abslayout0.map
 
 class virtual ['a] endo : ['a] Abslayout0.endo

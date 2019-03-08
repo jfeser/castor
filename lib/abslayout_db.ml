@@ -960,4 +960,6 @@ module Make (Config : Config.S) = struct
       end
     in
     visitor#visit_t ()
+
+  let bound r = to_schema r |> Set.of_list (module Name.Compare_no_type)
 end

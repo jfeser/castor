@@ -52,7 +52,8 @@ let rec set_exn p r s =
   | (Child_first | Child_last | Child_idx 0) :: p', As (n, r') ->
       as_ n (set_exn p' r' s)
   | p, (AEmpty | AScalar _ | Scan _) ->
-      Error.create "Invalid path. No children." p [%sexp_of: t] |> Error.raise
+      Error.create "Invalid path. No children." (p, r) [%sexp_of: t * Abslayout.t]
+      |> Error.raise
   | Child_idx _ :: _, _ ->
       Error.create "Invalid path. Invalid index." p [%sexp_of: t] |> Error.raise
 
@@ -87,9 +88,11 @@ let rec get_exn p r =
     | Some r' -> get_exn p' r'
     | None -> failwith "Empty tuple." )
   | p, (AEmpty | AScalar _ | Scan _) ->
-      Error.create "Invalid path: No children." p [%sexp_of: t] |> Error.raise
+      Error.create "Invalid path. No children." (p, r) [%sexp_of: t * Abslayout.t]
+      |> Error.raise
   | Child_idx _ :: _, _ ->
-      Error.create "Invalid path: Bad index." p [%sexp_of: t] |> Error.raise
+      Error.create "Invalid path: Bad index." (p, r) [%sexp_of: t * Abslayout.t]
+      |> Error.raise
 
 let all r =
   Seq.unfold
@@ -117,5 +120,54 @@ let all r =
                 List.foldi rs ~init:q ~f:(fun i q r ->
                     Fqueue.enqueue q (r, Child_idx i :: p) )
           in
-          Some (p, q)
+          Some (List.rev p, q)
       | None -> None )
+
+let%test_unit "all-valid" =
+  let q =
+    {|atuple([alist(orderby([r1.f desc], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f asc], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|}
+    |> of_string_exn
+  in
+  Seq.iter (all q) ~f:(fun p -> get_exn p q |> ignore)
+
+let rec is_run_time r p =
+  match (p, r.Abslayout.node) with
+  | [], _ -> true
+  | ( (Child_first | Child_last | Child_idx 0) :: p'
+    , ( Select (_, r')
+      | Filter (_, r')
+      | GroupBy (_, _, r')
+      | OrderBy {rel= r'; _}
+      | Dedup r'
+      | As (_, r') ) )
+   |(Child_first | Child_idx 0) :: p', (Join {r1= r'; _} | ATuple (r' :: _, _))
+   |( (Child_last | Child_idx 1) :: p'
+    , ( Join {r2= r'; _}
+      | AList (_, r')
+      | AHashIdx (_, r', _)
+      | AOrderedIdx (_, r', _) ) ) ->
+      is_run_time r' p'
+  | (Child_first | Child_idx 0) :: _, (AList _ | AHashIdx _ | AOrderedIdx _) ->
+      false
+  | Child_idx i :: p', ATuple (rs, _) when i >= 0 && i < List.length rs ->
+      is_run_time (List.nth_exn rs i) p'
+  | Child_last :: p', ATuple (rs, _) ->
+      let r' = List.last_exn rs in
+      is_run_time r' p'
+  | _, ATuple ([], _) ->
+      Error.create "Invalid path. No children." (p, r) [%sexp_of: t * Abslayout.t]
+      |> Error.raise
+  | p, (AEmpty | AScalar _ | Scan _) ->
+      Error.create "Invalid path. No children." (p, r) [%sexp_of: t * Abslayout.t]
+      |> Error.raise
+  | Child_idx _ :: _, _ ->
+      Error.create "Invalid path: Bad index." (p, r) [%sexp_of: t * Abslayout.t]
+      |> Error.raise
+
+let is_compile_time p r = not (is_run_time p r)
+
+let parent p _ = match List.rev p with [] -> None | _ :: p' -> Some (List.rev p')
+
+let%expect_test "parent" =
+  parent [Child_first; Child_last] () |> [%sexp_of: t option] |> print_s;
+  [%expect {| ((Child_first)) |}]

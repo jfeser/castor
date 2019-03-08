@@ -89,4 +89,6 @@ module type S = sig
     end
 
   val annotate_type : t -> Type.t -> unit
+
+  val bound : t -> Set.M(Name.Compare_no_type).t
 end

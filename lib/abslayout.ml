@@ -960,6 +960,11 @@ let conjuncts p =
   in
   visitor#visit_pred () p
 
+let rec conjoin = function
+  | [] -> Bool true
+  | [p] -> p
+  | p :: ps -> Binop (And, p, conjoin ps)
+
 (* let annotate_queries r =
  *   let rec annotate ctx r =
  *     match r.node with
