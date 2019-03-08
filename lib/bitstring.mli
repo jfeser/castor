@@ -29,6 +29,8 @@ val pp : Caml.Format.formatter -> t -> unit
 module Writer : sig
   type bitstring = t
 
+  module Id : Core.Unique_id.Id
+
   module Pos : sig
     type t [@@deriving sexp]
 
@@ -59,7 +61,7 @@ module Writer : sig
 
   val pos : t -> Pos.t
 
-  val id : t -> Core.Uuid.t
+  val id : t -> Id.t
 
   val seek : t -> Pos.t -> unit
 

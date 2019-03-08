@@ -145,6 +145,8 @@ end
 module Writer = struct
   type bitstring = t
 
+  module Id = Core.Unique_id.Int ()
+
   module Pos = struct
     type t = {bit_pos: int; byte_pos: int64} [@@deriving sexp]
 
@@ -160,10 +162,9 @@ module Writer = struct
       if bit_pos = 0 then byte_pos else failwith "Nonzero bit offset."
   end
 
-  type t =
-    {mutable buf: int; mutable pos: int; writer: ByteWriter.t; id: Core.Uuid.t}
+  type t = {mutable buf: int; mutable pos: int; writer: ByteWriter.t; id: Id.t}
 
-  let with_bytewriter w = {writer= w; buf= 0; pos= 0; id= Core.Uuid.create ()}
+  let with_bytewriter w = {writer= w; buf= 0; pos= 0; id= Id.create ()}
 
   let with_file fn = with_bytewriter (ByteWriter.of_file fn)
 
@@ -238,7 +239,7 @@ module Writer = struct
 
   let id t = t.id
 
-  let seek t Pos.({bit_pos; byte_pos}) =
+  let seek t Pos.{bit_pos; byte_pos} =
     flush t ;
     t.writer.seek byte_pos ;
     t.buf <- Char.to_int (t.writer.peek ()) ;

@@ -1,5 +1,4 @@
 open Core
-open Stdio
 open Castor
 
 let main ~in_place file =
@@ -18,7 +17,7 @@ let () =
   let open Command in
   let open Let_syntax in
   basic ~summary:"Format a relational algebra expression."
-    (let%map_open file = anon ("file" %: file)
+    (let%map_open file = anon ("file" %: string)
      and in_place = flag "i" no_arg ~doc:"write output in place" in
      fun () ->
        Logs.set_level (Some Logs.Info) ;

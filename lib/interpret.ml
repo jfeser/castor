@@ -152,7 +152,7 @@ let eval {db; params} r =
     | AHashIdx (rk, rv, {lookup; _}) ->
         let vs = List.map lookup ~f:(eval_pred ctx) |> Array.of_list in
         Seq.find_map (eval ctx rk) ~f:(fun t ->
-            if Array.equal vs t.values ~equal:Value.O.( = ) then
+            if Array.equal Value.O.( = ) vs t.values then
               Some (eval (bind ctx (to_ctx t)) rv)
             else None )
         |> Option.value ~default:Seq.empty

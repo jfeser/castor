@@ -20,12 +20,9 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
   module Log = struct
     open Bitstring.Writer
 
-    type insert =
-      {pos: int64; parent_id: Core.Uuid.Unstable.t; id: Core.Uuid.Unstable.t}
-    [@@deriving sexp]
+    type insert = {pos: int64; parent_id: Id.t; id: Id.t} [@@deriving sexp]
 
-    type entry = {msg: string; pos: int64; len: int64; id: Core.Uuid.Unstable.t}
-    [@@deriving sexp]
+    type entry = {msg: string; pos: int64; len: int64; id: Id.t} [@@deriving sexp]
 
     type msg = Entry of entry | Insert of insert [@@deriving sexp]
 
@@ -48,7 +45,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
       let inserts =
         List.filter_map msgs ~f:(function Entry _ -> None | Insert m -> Some m)
         |> List.map ~f:(fun (m : insert) -> (m.id, m))
-        |> Map.of_alist_exn (module Core.Uuid)
+        |> Map.of_alist_exn (module Id)
       in
       let rec offset id =
         match Map.find inserts id with

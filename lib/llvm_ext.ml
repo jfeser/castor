@@ -53,7 +53,7 @@ let build_entry_alloca ctx t n b =
   build_alloca t n builder
 
 let build_struct_gep v i n b =
-  let open Polymorphic_compare in
+  let open Poly in
   let ptr_t = type_of v in
   if not TypeKind.(classify_type ptr_t = Pointer) then
     Error.create "Not a pointer." v [%sexp_of: llvalue] |> Error.raise ;

@@ -1,4 +1,3 @@
-open Core
 open Base
 open Stdio
 open Collections

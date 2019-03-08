@@ -1,5 +1,5 @@
 open Base
-open Base.Polymorphic_compare
+open Base.Poly
 
 module Date = struct
   include Core.Date
@@ -321,6 +321,8 @@ module Tree = struct
       iter t
 
     let iter = `Custom iter
+
+    let length = `Define_using_fold
   end
 
   include T
