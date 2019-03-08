@@ -15,27 +15,50 @@ module Config = struct
   end
 end
 
-let deepest ps =
-  Seq.fold ps ~init:None ~f:(fun p_max_m p ->
+type ('r, 'p) path_set = 'r -> 'p Seq.t
+
+type ('r, 'p) path_filter = 'r -> 'p -> bool
+
+type ('r, 'p) path_selector = ('r, 'p) path_set -> 'r -> 'p option
+
+let overlaps s1 s2 = Set.inter s1 s2 |> Set.length > 0
+
+let ( >>? ) (s : ('r, 'p) path_set) (f : ('r, 'p) path_filter) r =
+  s r |> Seq.filter ~f:(fun p -> f r p)
+
+let ( >>| ) (s : ('r, 'p) path_set) (f : ('r, 'p) path_selector) = f s
+
+let ( >>= ) p f r = Option.bind (p r) ~f:(fun p' -> f p' r)
+
+let any ps r = Seq.hd (ps r)
+
+let deepest ps r =
+  Seq.fold (ps r) ~init:None ~f:(fun p_max_m p ->
       match p_max_m with
       | None -> Some p
       | Some p_max ->
           Some (if Path.length p > Path.length p_max then p else p_max) )
 
-let shallowest ps =
-  Seq.fold ps ~init:None ~f:(fun p_min_m p ->
+let shallowest ps r =
+  Seq.fold (ps r) ~init:None ~f:(fun p_min_m p ->
       match p_min_m with
       | None -> Some p
       | Some p_min ->
           Some (if Path.length p < Path.length p_min then p else p_min) )
 
-let is_join r =
-  Seq.filter ~f:(fun p ->
-      match (Path.get_exn p r).node with Join _ -> true | _ -> false )
+let is_join r p =
+  match (Path.get_exn p r).node with Join _ -> true | _ -> false
 
-let is_groupby r =
-  Seq.filter ~f:(fun p ->
-      match (Path.get_exn p r).node with GroupBy _ -> true | _ -> false )
+let is_groupby r p =
+  match (Path.get_exn p r).node with GroupBy _ -> true | _ -> false
+
+let is_orderby r p =
+  match (Path.get_exn p r).node with OrderBy _ -> true | _ -> false
+
+let is_filter r p =
+  match (Path.get_exn p r).node with Filter _ -> true | _ -> false
+
+let negate f r p = not (f r p)
 
 let last_child _ = Some [Path.Child_last]
 
@@ -44,7 +67,7 @@ let rec fix tf r =
   | Some r' -> if Abslayout.O.(r = r') then Some r else fix tf r'
   | None -> Some r
 
-let seq t1 t2 r = match t1 r with Some r' -> t2 r' | None -> Some r
+let seq t1 t2 r = match t1 r with Some r' -> t2 r' | None -> t2 r
 
 let rec seq_many = function
   | [] -> failwith "Empty transform list."
@@ -74,6 +97,109 @@ module Make (Config : Config.S) () = struct
 
   let sql_ctx = Sql.create_ctx ~fresh ()
 
+  let is_param_filter r p =
+    match (Path.get_exn p r).node with
+    | Filter (pred, _) -> overlaps (pred_free pred) params
+    | _ -> false
+
+  let has_params r p =
+    let r' = Path.get_exn p r in
+    overlaps (names r') params
+
+  let push_orderby r =
+    let open Option.Let_syntax in
+    let orderby_cross_tuple key rs =
+      List.iter rs ~f:M.annotate_schema ;
+      match rs with
+      | r :: rs ->
+          let schema = Meta.(find_exn r schema) in
+          let sschema = Set.of_list (module Name.Compare_no_type) schema in
+          let skey =
+            Set.of_list
+              (module Name.Compare_no_type)
+              (List.filter_map ~f:(fun (p, _) -> pred_to_name p) key)
+          in
+          if Set.is_subset skey ~of_:sschema then
+            Some (tuple (order_by key r :: rs) Cross)
+          else None
+      | _ -> None
+    in
+    let orderby_list key r1 r2 =
+      M.annotate_schema r1 ;
+      M.annotate_schema r2 ;
+      annotate_eq r1 ;
+      annotate_eq r2 ;
+      let schema1 = Meta.(find_exn r1 schema) in
+      let open Core in
+      let eqs = Meta.(find_exn r2 eq) in
+      let names =
+        List.concat_map eqs ~f:(fun (n, n') -> [n; n'])
+        @ List.filter_map ~f:(fun (p, _) -> pred_to_name p) key
+        @ schema1
+      in
+      (* Create map from names to sets of equal names. *)
+      let eq_map =
+        names
+        |> List.dedup_and_sort ~compare:[%compare: Name.Compare_no_type.t]
+        |> List.map ~f:(fun n -> (n, Union_find.create n))
+        |> Hashtbl.of_alist_exn (module Name.Compare_no_type)
+      in
+      (* Add known equalities. *)
+      List.iter eqs ~f:(fun (n, n') ->
+          let s = Hashtbl.find_exn eq_map n in
+          let s' = Hashtbl.find_exn eq_map n' in
+          Union_find.union s s' ) ;
+      let exception No_key in
+      try
+        let new_key =
+          List.map key ~f:(fun (p, o) ->
+              let p' =
+                match pred_to_name p with
+                | Some n -> (
+                    let s = Hashtbl.find_exn eq_map n in
+                    (* Find an equivalent name in schema 1. *)
+                    let n' =
+                      List.find schema1 ~f:(fun n' ->
+                          let s' = Hashtbl.find_exn eq_map n' in
+                          Union_find.same_class s s' )
+                    in
+                    match n' with Some n' -> Name n' | None -> raise No_key )
+                | None -> raise No_key
+              in
+              (p', o) )
+        in
+        Some (list (order_by new_key r1) r2)
+      with No_key -> None
+    in
+    let same_orders r1 r2 =
+      M.annotate_schema r1 ;
+      M.annotate_schema r2 ;
+      annotate_eq r1 ;
+      annotate_orders r1 ;
+      annotate_eq r2 ;
+      annotate_orders r2 ;
+      [%compare.equal: (pred * order) list]
+        Meta.(find_exn r1 order)
+        Meta.(find_exn r2 order)
+    in
+    let%bind r' =
+      match r.node with
+      | OrderBy {key; rel= {node= Select (ps, r); _}} ->
+          Some (select ps (order_by key r))
+      | OrderBy {key; rel= {node= Filter (ps, r); _}} ->
+          Some (filter ps (order_by key r))
+      | OrderBy {key; rel= {node= AHashIdx (r1, r2, m); _}} ->
+          Some (hash_idx' r1 (order_by key r2) m)
+      | OrderBy {key; rel= {node= AList (r1, r2); _}} ->
+          (* If we order a lists keys then the keys will be ordered in the
+                   list. *)
+          orderby_list key r1 r2
+      | OrderBy {key; rel= {node= ATuple (rs, Cross); _}} ->
+          orderby_cross_tuple key rs
+      | _ -> None
+    in
+    if same_orders r r' then Some r' else None
+
   let extend_select ~with_ ps r =
     let needed_fields =
       let of_list = Set.of_list (module Name.Compare_no_type) in
@@ -86,6 +212,12 @@ module Make (Config : Config.S) () = struct
       |> List.map ~f:(fun n -> Name n)
     in
     ps @ needed_fields
+
+  (** Split predicates that sit under a binder into the parts that depend on
+       bound variables and the parts that do not. *)
+  let split_bound binder p =
+    List.partition_tf (conjuncts p) ~f:(fun p' ->
+        overlaps (pred_free p') (M.bound binder) )
 
   let hoist_filter r =
     M.annotate_schema r ;
@@ -103,6 +235,17 @@ module Make (Config : Config.S) () = struct
     | Join {pred; r1; r2= {node= Filter (p, r); _}} ->
         Some (filter p (join pred r1 r))
     | Dedup {node= Filter (p, r); _} -> Some (filter p (dedup r))
+    | AList (rk, {node= Filter (p, r); _}) ->
+        let below, above = split_bound rk p in
+        Some (filter (conjoin above) (list rk (filter (conjoin below) r)))
+    | AHashIdx (rk, {node= Filter (p, r); _}, m) ->
+        let below, above = split_bound rk p in
+        Some
+          (filter (conjoin above) (hash_idx' rk (filter (conjoin below) r) m))
+    | AOrderedIdx (rk, {node= Filter (p, r); _}, m) ->
+        let below, above = split_bound rk p in
+        Some
+          (filter (conjoin above) (ordered_idx rk (filter (conjoin below) r) m))
     | _ -> None
 
   let split_filter r =
@@ -145,16 +288,86 @@ module Make (Config : Config.S) () = struct
         else (* Otherwise, if some keys are computed, fail. *) None
     | _ -> None
 
-  let deepest_param_filter r =
-    Path.all r
-    |> Seq.filter ~f:(fun p ->
-           match (Path.get_exn p r).node with
-           | Filter (pred, _) ->
-               Set.inter (pred_free pred) params |> Set.length > 0
-           | _ -> false )
-    |> deepest
+  let gen_ordered_idx ?lb ?ub p r =
+    let t = pred_to_schema p |> Name.type_exn in
+    let default_min =
+      let open Type.PrimType in
+      match t with
+      | IntT _ -> Int (Int.min_value + 1)
+      | FixedT _ -> Fixed Fixed_point.(min_value + of_int 1)
+      | DateT _ -> Date (Date.of_string "0000-01-01")
+      | _ -> failwith "Unexpected type."
+    in
+    let default_max =
+      let open Type.PrimType in
+      match t with
+      | IntT _ -> Int Int.max_value
+      | FixedT _ -> Fixed Fixed_point.max_value
+      | DateT _ -> Date (Date.of_string "9999-01-01")
+      | _ -> failwith "Unexpected type."
+    in
+    let fix_upper_bound bound kind =
+      match kind with
+      | `Open -> Ok bound
+      | `Closed -> (
+          let open Type.PrimType in
+          match t with
+          | IntT _ -> Ok (Binop (Add, bound, Int 1))
+          | DateT _ -> Ok (Binop (Add, bound, Unop (Day, Int 1)))
+          | FixedT _ -> Error "No open inequalities with fixed."
+          | NullT | StringT _ | BoolT _ | TupleT _ | VoidT ->
+              failwith "Unexpected type." )
+    in
+    let fix_lower_bound bound kind =
+      match kind with
+      | `Closed -> Ok bound
+      | `Open -> (
+          let open Type.PrimType in
+          match t with
+          | IntT _ -> Ok (Binop (Add, bound, Int 1))
+          | DateT _ -> Ok (Binop (Add, bound, Unop (Day, Int 1)))
+          | FixedT _ -> Error "No open inequalities with fixed."
+          | NullT | StringT _ | BoolT _ | TupleT _ | VoidT ->
+              failwith "Unexpected type." )
+    in
+    let open Result.Let_syntax in
+    let%bind lb =
+      match lb with
+      | None -> Ok default_min
+      | Some (b, k) -> fix_lower_bound b k
+    in
+    let%map ub =
+      match ub with
+      | None -> Ok default_max
+      | Some (b, k) -> fix_upper_bound b k
+    in
+    let k = Fresh.name fresh "k%d" in
+    let select_list = [As_pred (p, k)] in
+    let filter_pred = Binop (Eq, Name (Name.create k), p) in
+    ordered_idx
+      (dedup (select select_list r))
+      (filter filter_pred r)
+      {oi_key_layout= None; lookup_low= lb; lookup_high= ub; order= `Desc}
 
-  let hoist_deepest_filter = at_ hoist_filter deepest_param_filter
+  let rec first_ok = function
+    | Ok x :: _ -> Some x
+    | _ :: xs -> first_ok xs
+    | [] -> None
+
+  let elim_cmp_filter r =
+    match r.node with
+    | Filter (Binop (And, Binop (Ge, p, lb), Binop (Lt, p', ub)), r)
+      when [%compare.equal: pred] p p' ->
+        gen_ordered_idx ~lb:(lb, `Closed) ~ub:(ub, `Open) p r |> Result.ok
+    | Filter (Binop (Ge, p', p), r) | Filter (Binop (Le, p, p'), r) ->
+        first_ok
+          [ gen_ordered_idx ~ub:(p', `Closed) p r
+          ; gen_ordered_idx ~lb:(p, `Closed) p' r ]
+    | Filter (Binop (Lt, p, p'), r) | Filter (Binop (Gt, p', p), r) ->
+        first_ok
+          [ gen_ordered_idx ~ub:(p', `Open) p r
+          ; gen_ordered_idx ~lb:(p, `Open) p' r ]
+    | _ -> None
 
   let elim_eq_filter r =
     match r.node with
@@ -195,8 +408,6 @@ module Make (Config : Config.S) () = struct
   let id r _ = r
 
   let elim_join_hash = seq elim_join_nest (at_ elim_eq_filter last_child)
-
-  let hoist_all_filters = seq (fix hoist_deepest_filter) (fix split_filter)
 
   module Join_opt = struct
     module A = Abslayout
@@ -430,13 +641,37 @@ module Make (Config : Config.S) () = struct
       | None -> None
   end
 
+  let no_params r = Set.is_empty (Set.inter (names r) params)
+
+  let row_store r =
+    if no_params r then
+      let s = M.to_schema r in
+      let scalars = List.map s ~f:(fun n -> scalar (Name n)) in
+      Some (list r (tuple scalars Cross))
+    else None
+
   let opt =
     seq_many
-      [ (* fix
-       *     (at_ Join_opt.transform (fun r ->
-       *          Path.all r |> is_join r |> shallowest ))
-       * ; *)
+      [ (* Plan joins *)
         fix
-          (at_ elim_groupby (fun r -> Path.all r |> is_groupby r |> shallowest))
-      ; hoist_all_filters ]
+          (at_ Join_opt.transform
+             Path.(all >>? is_join >>? is_run_time >>| shallowest))
+      ; (* Eliminate groupby operators. *)
+        fix (at_ elim_groupby (Path.all >>? is_groupby >>| shallowest))
+      ; (* Hoist parameterized filters as far up as possible. *)
+        fix
+          (at_ hoist_filter
+             (Path.all >>? is_param_filter >>| deepest >>= Path.parent))
+      ; fix (at_ split_filter (Path.all >>? is_filter >>| any))
+      ; (* Push orderby operators into compile time position if possible. *)
+        fix
+          (at_ push_orderby
+             Path.(all >>? is_orderby >>? is_run_time >>| shallowest))
+      ; (* Eliminate the shallowest equality filter. *)
+        at_ elim_eq_filter Path.(all >>? is_run_time >>| shallowest)
+      ; (* Eliminate the shallowest comparison filter. *)
+        at_ elim_cmp_filter Path.(all >>? is_run_time >>| shallowest)
+      ; (* Eliminate all unparameterized relations. *)
+        at_ row_store
+          Path.(all >>? is_run_time >>? negate has_params >>| shallowest) ]
 end
