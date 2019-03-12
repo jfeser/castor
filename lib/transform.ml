@@ -5,7 +5,7 @@ open Collections
 open Abslayout
 open Printf
 
-type t = {f: Abslayout.t -> Abslayout.t option; name: string}
+type t = {f: Path.t -> Abslayout.t -> Abslayout.t option; name: string}
 
 module Config = struct
   module type S = sig
@@ -86,13 +86,15 @@ module Make (Config : Config.S) () = struct
 
   let ( @@ ) tf a = tf.f a
 
+  let apply tf p r = tf.f p r
+
   let fresh = Fresh.create ()
 
   let sql_ctx = Sql.create_ctx ~fresh ()
 
   let validated tf =
-    let f r =
-      Option.map (tf @@ r) ~f:(fun r' ->
+    let f p r =
+      Option.map (apply tf p r) ~f:(fun r' ->
           Or_error.iter_error
             Interpret.(equiv {db= conn; params= param_ctx} r r')
             ~f:(fun err ->
@@ -104,21 +106,27 @@ module Make (Config : Config.S) () = struct
     {f; name= sprintf "!%s" tf.name}
 
   let of_func ?(name = "<unknown>") f =
+    let f p r = Option.map (f (Path.get_exn p r)) ~f:(Path.set_exn p r) in
     let tf = {f; name} in
     let {f; name} = if validate then validated tf else tf in
     {f= (fun r -> Exn.reraise_uncaught name (fun () -> f r)); name}
 
-  let rec fix tf =
-    let tf' r =
-      match tf @@ r with
-      | Some r' -> if Abslayout.O.(r = r') then Some r else fix tf @@ r'
-      | None -> Some r
+  let fix tf =
+    let f p r =
+      let rec fix r =
+        match tf.f p r with
+        | Some r' -> if Abslayout.O.(r = r') then Some r else fix r'
+        | None -> Some r
+      in
+      fix r
     in
-    {f= tf'; name= sprintf "fix(%s)" tf.name}
+    {f; name= sprintf "fix(%s)" tf.name}
 
   let seq t1 t2 =
-    let tf r = match t1 @@ r with Some r' -> t2 @@ r' | None -> t2 @@ r in
-    {f= tf; name= sprintf "%s ; %s" t1.name t2.name}
+    let f p r =
+      match t1.f p r with Some r' -> t2.f p r' | None -> t2.f p r
+    in
+    {f; name= sprintf "%s ; %s" t1.name t2.name}
 
   let rec seq_many = function
     | [] -> failwith "Empty transform list."
@@ -126,13 +134,8 @@ module Make (Config : Config.S) () = struct
     | t :: ts -> seq t (seq_many ts)
 
   let at_ tf pspec =
-    let open Option.Let_syntax in
-    let tf' r =
-      let%bind p = pspec r in
-      let%map r' = tf @@ Path.get_exn p r in
-      Path.set_exn p r r'
-    in
-    {name= sprintf "(%s @ <path>)" tf.name; f= tf'}
+    let f p r = Option.bind (pspec r) ~f:(fun p' -> tf.f (p @ p') r) in
+    {name= sprintf "(%s @ <path>)" tf.name; f}
 
   let is_param_filter r p =
     M.annotate_schema r ;
@@ -502,12 +505,12 @@ module Make (Config : Config.S) () = struct
       | Flat r -> r
       | Hash {lkey; lhs; rkey; rhs} ->
           Option.value_exn
-            ( elim_join_hash
-            @@ join (Binop (Eq, lkey, rkey)) (emit_joins lhs) (emit_joins rhs)
-            )
+            (apply elim_join_hash Path.root
+               (join (Binop (Eq, lkey, rkey)) (emit_joins lhs) (emit_joins rhs)))
       | Nest {lhs; rhs; pred} ->
           Option.value_exn
-            (elim_join_nest @@ join pred (emit_joins lhs) (emit_joins rhs))
+            (apply elim_join_nest Path.root
+               (join pred (emit_joins lhs) (emit_joins rhs)))
 
     let rec to_ralgebra = function
       | Flat r -> r
