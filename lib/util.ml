@@ -22,22 +22,28 @@ let command_out_exn ?quiet:_ = function
       Or_error.tag_arg err "Running command failed." cmd_str [%sexp_of: string]
       |> Or_error.ok_exn
 
+let param_of_string s =
+  let lexbuf = Lexing.from_string s in
+  try Ralgebra_parser.param_eof Ralgebra_lexer.token lexbuf
+  with Parser_utils.ParseError (msg, line, col) as e ->
+    Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
+    raise e
+
 let param =
   let open Command in
   Arg_type.create (fun s ->
-      let k, v = String.lsplit2_exn ~on:':' s in
+      let name, type_, _ = param_of_string s in
+      (name, type_) )
+
+let param_and_value =
+  let open Command in
+  Arg_type.create (fun s ->
+      let name, type_, m_value = param_of_string s in
       let v =
-        let open Type.PrimType in
-        match v with
-        | "string" -> StringT {nullable= false}
-        | "int" -> IntT {nullable= false}
-        | "bool" -> BoolT {nullable= false}
-        | "date" -> DateT {nullable= false}
-        | "float" -> FixedT {nullable= false}
-        | _ ->
-            Error.create "Unexpected type name." v [%sexp_of: string] |> Error.raise
+        Option.value_exn m_value ~error:(Error.of_string "Expected a value.")
       in
-      (k, v) )
+      let v = Value.of_pred v in
+      (name, type_, v) )
 
 let channel =
   let open Command in
@@ -68,6 +74,17 @@ class ['s] set_monoid m =
     method private zero = Set.empty m
 
     method private plus = Set.union
+  end
+
+class ['s] map_monoid m =
+  object
+    inherit ['s] VisitorsRuntime.monoid
+
+    method private zero = Map.empty m
+
+    method private plus =
+      Map.merge ~f:(fun ~key:_ -> function
+        | `Both _ -> failwith "Duplicate key" | `Left x | `Right x -> Some x )
   end
 
 class ['s] conj_monoid =

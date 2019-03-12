@@ -4,17 +4,27 @@ open Abslayout
 open Collections
 module A = Abslayout
 
-let bind =
-  Map.merge ~f:(fun ~key:_ -> function `Both (_, x) | `Left x | `Right x -> Some x)
-
-let merge =
-  Map.merge ~f:(fun ~key:_ -> function
-    | `Both _ -> failwith "Contexts overlap." | `Left x | `Right x -> Some x )
-
 module Tuple = struct
   module T = struct
     type t = {values: Value.t array; schema: int Map.M(Name.Compare_no_type).t}
-    [@@deriving compare, sexp]
+    [@@deriving compare]
+
+    let to_map {values; schema} = Map.map schema ~f:(fun i -> values.(i))
+
+    let sexp_of_t t =
+      let out =
+        Array.create ~len:(Array.length t.values) (Name.create "", Value.Null)
+      in
+      Map.iteri t.schema ~f:(fun ~key ~data:i -> out.(i) <- (key, t.values.(i))) ;
+      [%sexp_of: (Name.t * Value.t) array] out
+
+    let to_string_hum t =
+      let out = Array.create ~len:(Array.length t.values) "" in
+      Map.iter t.schema ~f:(fun i -> out.(i) <- Value.to_sql t.values.(i)) ;
+      sprintf "[%s]" (String.concat ~sep:", " (Array.to_list out))
+
+    let compare t1 t2 =
+      [%compare: Value.t Map.M(Name.Compare_no_type).t] (to_map t1) (to_map t2)
   end
 
   include T
@@ -22,13 +32,25 @@ module Tuple = struct
 
   module O : Comparable.Infix with type t := t = C
 
-  let to_ctx {values; schema} = Map.map schema ~f:(fun i -> values.(i))
-
   let ( @ ) t1 t2 =
+    let merge =
+      Map.merge ~f:(fun ~key:_ -> function
+        | `Both _ -> failwith "Contexts overlap." | `Left x | `Right x -> Some x )
+    in
     { values= Array.append t1.values t2.values
     ; schema=
         merge t1.schema (Map.map t2.schema ~f:(fun i -> i + Array.length t1.values))
     }
+
+  let bind ctx {schema; values} =
+    Map.fold schema ~init:ctx ~f:(fun ~key ~data:i ctx ->
+        Map.set ctx ~key ~data:values.(i) )
+
+  let merge ctx {schema; values} =
+    Map.fold schema ~init:ctx ~f:(fun ~key ~data:i ctx ->
+        match Map.add ctx ~key ~data:values.(i) with
+        | `Duplicate -> failwith "Contexts overlap."
+        | `Ok ctx -> ctx )
 end
 
 open Tuple
@@ -54,19 +76,56 @@ let to_single_value t =
   t.values.(0)
 
 let eval {db; params} r =
-  let rec eval_pred ctx =
+  let rec eval_agg ctx preds tups =
+    let tx t = merge ctx t in
+    let tups = Seq.memoize tups in
+    List.map preds ~f:(fun np ->
+        let p, n =
+          match np with
+          | As_pred (p, n) -> (p, Name.create n)
+          | Name n -> (np, n)
+          | p ->
+              Logs.warn (fun m -> m "Unnamed predicate: %a" Abslayout.pp_pred np) ;
+              (p, Name.create "<unnamed>")
+        in
+        let open Value in
+        let v =
+          match p with
+          | Sum p ->
+              Seq.fold tups ~init:(Int 0) ~f:(fun x t -> x + eval_pred (tx t) p)
+          | Min p ->
+              Seq.fold tups ~init:(Int Int.max_value) ~f:(fun x t ->
+                  C.min x (eval_pred (tx t) p) )
+          | Max p ->
+              Seq.fold tups ~init:(Int Int.min_value) ~f:(fun x t ->
+                  C.max x (eval_pred (tx t) p) )
+          | Avg p ->
+              Seq.fold tups ~init:(Int 0, 0) ~f:(fun (n, d) t ->
+                  (n + eval_pred (tx t) p, Int.(d + 1)) )
+              |> fun (n, d) -> if d = 0 then Int 0 else n / Int d
+          | Count -> Int (Seq.length tups)
+          | p -> eval_pred (tx (Seq.hd_exn tups)) p
+        in
+        (n, v) )
+  and eval_pred ctx p =
     let open Value in
     let e = eval_pred ctx in
-    function
+    match p with
     | A.Int x -> Int x
-    | Name n -> Map.find_exn ctx n
+    | Name n ->
+        Option.value_exn
+          ~error:
+            (Error.create "Unknown name." (n, ctx)
+               [%sexp_of: Name.t * Value.t Map.M(Name).t])
+          (Map.find ctx n)
     | Fixed x -> Fixed x
     | Date x -> Date x
     | Bool x -> Bool x
     | String x -> String x
     | Null -> Null
     | As_pred (p, _) -> e p
-    | Count | Sum _ | Avg _ | Min _ | Max _ -> failwith "Unexpected aggregate."
+    | Count | Sum _ | Avg _ | Min _ | Max _ ->
+        Error.(of_string "Unexpected aggregate." |> raise)
     | If (p1, p2, p3) -> if to_bool (e p1) then e p2 else e p3
     | First r -> eval ctx r |> Seq.hd_exn |> to_single_value
     | Exists r -> Bool (eval ctx r |> Seq.is_empty |> not)
@@ -75,34 +134,48 @@ let eval {db; params} r =
         String
           (String.sub str ~pos:Int.(Value.to_int (e p2) - 1) ~len:(to_int (e p3)))
     | Unop (op, p) -> (
-        let v = e p in
-        match op with
-        | Not -> Bool (to_bool v |> not)
-        | Strlen -> Int (to_string v |> String.length)
-        | ExtractY -> Int (to_date v |> Date.year)
-        | ExtractM -> Int (to_date v |> Date.month |> Month.to_int)
-        | ExtractD -> Int (to_date v |> Date.day)
-        | _ -> failwith "Unexpected operator." )
+      match op with
+      | Not -> Bool (to_bool (e p) |> not)
+      | Strlen -> Int (to_string (e p) |> String.length)
+      | ExtractY -> Int (to_date (e p) |> Date.year)
+      | ExtractM -> Int (to_date (e p) |> Date.month |> Month.to_int)
+      | ExtractD -> Int (to_date (e p) |> Date.day)
+      | _ -> Error.(create "Unexpected operator" op [%sexp_of: unop] |> raise) )
     | Binop (op, p1, p2) -> (
-        let v1 = e p1 in
-        let v2 = e p2 in
-        match op with
-        | Eq -> O.(v1 = v2) |> bool
-        | Lt -> O.(v1 < v2) |> bool
-        | Le -> O.(v1 <= v2) |> bool
-        | Gt -> O.(v1 > v2) |> bool
-        | Ge -> O.(v1 >= v2) |> bool
-        | And -> (to_bool v1 && to_bool v2) |> bool
-        | Or -> (to_bool v1 || to_bool v2) |> bool
-        | Add -> v1 + v2
-        | Sub -> v1 - v2
-        | Mul -> v1 * v2
-        | Div -> v1 / v2
-        | Mod -> v1 % v2
-        | Strpos -> (
-          match String.substr_index (to_string v1) ~pattern:(to_string v2) with
-          | Some x -> int Int.(x + 1)
-          | None -> int 0 ) )
+      match op with
+      | Eq -> O.(e p1 = e p2) |> bool
+      | Lt -> O.(e p1 < e p2) |> bool
+      | Le -> O.(e p1 <= e p2) |> bool
+      | Gt -> O.(e p1 > e p2) |> bool
+      | Ge -> O.(e p1 >= e p2) |> bool
+      | And -> (to_bool (e p1) && to_bool (e p2)) |> bool
+      | Or -> (to_bool (e p1) || to_bool (e p2)) |> bool
+      | Add -> (
+        match p2 with
+        | Unop (Day, p2) -> Date.add_days (e p1 |> to_date) (e p2 |> to_int) |> date
+        | Unop (Month, p2) ->
+            Date.add_months (e p1 |> to_date) (e p2 |> to_int) |> date
+        | Unop (Year, p2) ->
+            Date.add_years (e p1 |> to_date) (e p2 |> to_int) |> date
+        | p2 -> e p1 + e p2 )
+      | Sub -> (
+        match p2 with
+        | Unop (Day, p2) ->
+            Date.add_days (e p1 |> to_date) (e p2 |> to_int |> Int.neg) |> date
+        | Unop (Month, p2) ->
+            Date.add_months (e p1 |> to_date) (e p2 |> to_int |> Int.neg) |> date
+        | Unop (Year, p2) ->
+            Date.add_years (e p1 |> to_date) (e p2 |> to_int |> Int.neg) |> date
+        | p2 -> e p1 + e p2 )
+      | Mul -> e p1 * e p2
+      | Div -> e p1 / e p2
+      | Mod -> e p1 % e p2
+      | Strpos -> (
+        match
+          String.substr_index (to_string (e p1)) ~pattern:(to_string (e p2))
+        with
+        | Some x -> int Int.(x + 1)
+        | None -> int 0 ) )
   and eval ctx r =
     match r.node with
     | Scan r ->
@@ -111,28 +184,34 @@ let eval {db; params} r =
           |> List.mapi ~f:(fun i n -> (n, i))
           |> Map.of_alist_exn (module Name.Compare_no_type)
         in
-        Db.exec_cursor db [] (Printf.sprintf "select * from \"%s\"" r)
+        let schema_types = Db.schema db r |> List.map ~f:Name.type_exn in
+        Db.exec_cursor db schema_types (Printf.sprintf "select * from \"%s\"" r)
         |> Gen.to_sequence
         |> Seq.map ~f:(fun vs -> Tuple.{values= Array.of_list vs; schema})
-    | Select (ps, r) ->
+    | Select (ps, r) -> (
         let schema =
           List.mapi ps ~f:(fun i p -> (name_exn p, i))
           |> Map.of_alist_exn (module Name.Compare_no_type)
         in
-        Seq.map (eval ctx r) ~f:(fun t ->
-            { values=
-                List.map ps ~f:(eval_pred (merge ctx (to_ctx t))) |> Array.of_list
-            ; schema } )
+        let tups = eval ctx r in
+        match select_kind ps with
+        | `Agg ->
+            let _, values = eval_agg ctx ps tups |> List.unzip in
+            Seq.singleton {values= Array.of_list values; schema}
+        | `Scalar ->
+            Seq.map (eval ctx r) ~f:(fun t ->
+                { values= List.map ps ~f:(eval_pred (merge ctx t)) |> Array.of_list
+                ; schema } ) )
     | Filter (p, r) ->
         Seq.filter (eval ctx r) ~f:(fun t ->
-            eval_pred (merge ctx (to_ctx t)) p |> Value.to_bool )
+            eval_pred (merge ctx t) p |> Value.to_bool )
     | Join {pred; r1; r2} ->
         let r1s = eval ctx r1 in
         let r2s = eval ctx r2 |> Seq.memoize in
         Seq.concat_map r1s ~f:(fun t1 ->
-            let ctx = merge ctx (to_ctx t1) in
+            let ctx = merge ctx t1 in
             Seq.filter_map r2s ~f:(fun t2 ->
-                let ctx = merge ctx (to_ctx t2) in
+                let ctx = merge ctx t2 in
                 let tup = t1 @ t2 in
                 if eval_pred ctx pred |> Value.to_bool then Some tup else None ) )
     | AEmpty -> Seq.empty
@@ -142,18 +221,18 @@ let eval {db; params} r =
           { values= [|eval_pred ctx p|]
           ; schema= Map.singleton (module Name.Compare_no_type) n 0 }
     | AList (rk, rv) ->
-        Seq.concat_map (eval ctx rk) ~f:(fun t -> eval (bind ctx (to_ctx t)) rv)
+        Seq.concat_map (eval ctx rk) ~f:(fun t -> eval (bind ctx t) rv)
     | ATuple ([], _) -> failwith "Empty tuple."
     | ATuple (_, Zip) -> failwith "Zip tuples unsupported."
     | ATuple (r :: rs, Cross) ->
         List.fold_left rs ~init:(eval ctx r) ~f:(fun acc r ->
-            Seq.concat_map acc ~f:(fun t -> eval (bind ctx (to_ctx t)) r) )
+            Seq.concat_map acc ~f:(fun t -> eval (bind ctx t) r) )
     | ATuple (rs, Concat) -> Seq.concat_map (Seq.of_list rs) ~f:(eval ctx)
     | AHashIdx (rk, rv, {lookup; _}) ->
         let vs = List.map lookup ~f:(eval_pred ctx) |> Array.of_list in
         Seq.find_map (eval ctx rk) ~f:(fun t ->
             if Array.equal Value.O.( = ) vs t.values then
-              Some (eval (bind ctx (to_ctx t)) rv)
+              Some (eval (bind ctx t) rv)
             else None )
         |> Option.value ~default:Seq.empty
     | AOrderedIdx (rk, rv, {lookup_low; lookup_high; _}) ->
@@ -161,8 +240,8 @@ let eval {db; params} r =
         let hi = eval_pred ctx lookup_high in
         Seq.concat_map (eval ctx rk) ~f:(fun t ->
             let v = to_single_value t in
-            if Value.O.(lo < v && v < hi) then eval (bind ctx (to_ctx t)) rv
-            else Seq.empty )
+            if Value.O.(lo < v && v < hi) then eval (bind ctx t) rv else Seq.empty
+        )
     | Dedup r ->
         eval ctx r |> Seq.to_list
         |> List.dedup_and_sort ~compare:[%compare: Tuple.t]
@@ -171,7 +250,9 @@ let eval {db; params} r =
         let cmps =
           List.map key ~f:(fun (p, o) t1 t2 ->
               let cmp =
-                Value.compare (eval_pred (to_ctx t1) p) (eval_pred (to_ctx t2) p)
+                Value.compare
+                  (eval_pred (merge ctx t1) p)
+                  (eval_pred (merge ctx t2) p)
               in
               match o with Asc -> cmp | Desc -> Int.neg cmp )
         in
@@ -182,54 +263,20 @@ let eval {db; params} r =
         let tbl = Hashtbl.create (module GroupKey) in
         eval ctx r
         |> Seq.iter ~f:(fun t ->
-               let k = List.map ns ~f:(Map.find_exn (to_ctx t)) in
+               let c = merge ctx t in
+               let k = List.map ns ~f:(Map.find_exn c) in
                Hashtbl.add_multi tbl ~key:k ~data:t ) ;
         Hashtbl.data tbl |> Seq.of_list
         |> Seq.map ~f:(fun ts ->
                let agg_names, agg_values =
-                 List.map ps ~f:(fun np ->
-                     let p, n =
-                       match np with
-                       | As_pred (p, n) -> (p, Name.create n)
-                       | _ -> failwith "Unnamed predicate."
-                     in
-                     let v =
-                       match p with
-                       | Sum p ->
-                           List.fold_left ts ~init:(Value.Int 0) ~f:(fun x t ->
-                               Value.(x + eval_pred (to_ctx t) p) )
-                       | Min p ->
-                           List.fold_left ts ~init:(Value.Int Int.max_value)
-                             ~f:(fun x t -> Value.C.min x (eval_pred (to_ctx t) p)
-                           )
-                       | Max p ->
-                           List.fold_left ts ~init:(Value.Int Int.min_value)
-                             ~f:(fun x t -> Value.C.max x (eval_pred (to_ctx t) p)
-                           )
-                       | Avg p ->
-                           List.fold_left ts ~init:(Value.Int 0, 0)
-                             ~f:(fun (n, d) t ->
-                               (Value.(n + eval_pred (to_ctx t) p), d + 1) )
-                           |> fun (n, d) ->
-                           if d = 0 then Value.Int 0 else Value.(n / Int d)
-                       | Count -> Value.Int (List.length ts)
-                       | p -> eval_pred (List.hd_exn ts |> to_ctx) p
-                     in
-                     (n, v) )
-                 |> List.unzip
-               in
-               let key_names, key_values =
-                 List.map ns ~f:(fun n ->
-                     (n, Map.find_exn (List.hd_exn ts |> to_ctx) n) )
-                 |> List.unzip
+                 eval_agg ctx ps (Seq.of_list ts) |> List.unzip
                in
                let schema =
-                 List.Infix.(agg_names @ key_names)
+                 agg_names
                  |> List.mapi ~f:(fun i n -> (n, i))
                  |> Map.of_alist_exn (module Name.Compare_no_type)
                in
-               let values = Array.of_list List.Infix.(agg_values @ key_values) in
-               {values; schema} )
+               {values= Array.of_list agg_values; schema} )
     | As (n, r) ->
         eval ctx r
         |> Seq.map ~f:(fun t ->
@@ -240,16 +287,44 @@ let eval {db; params} r =
                           (Name.{n' with relation= Some n}, i) )
                    |> Map.of_alist_exn (module Name.Compare_no_type) } )
   in
-  eval params r
+  Or_error.try_with (fun () -> eval params r)
 
-let equiv ctx r1 r2 =
-  Seq.zip_full (eval ctx r1) (eval ctx r2)
-  |> Seq.find_map ~f:(function
-       | `Both (t1, t2) ->
-           if Tuple.O.(t1 = t2) then None
-           else
-             Some
-               (Error.create "Mismatched tuples." (t1, t2)
-                  [%sexp_of: Tuple.t * Tuple.t])
-       | `Left t -> Some (Error.create "Extra tuple on LHS." t [%sexp_of: Tuple.t])
-       | `Right t -> Some (Error.create "Extra tuple on RHS." t [%sexp_of: Tuple.t]) )
+let equiv ?(ordered = false) ctx r1 r2 =
+  let open Or_error.Let_syntax in
+  if Abslayout.O.(r1 = r2) then Ok ()
+  else
+    let%bind s1 = eval ctx r1 in
+    let%bind s2 = eval ctx r2 in
+    let s1 =
+      if ordered then s1
+      else Seq.to_list s1 |> List.sort ~compare:[%compare: Tuple.t] |> Seq.of_list
+    in
+    let s2 =
+      if ordered then s2
+      else Seq.to_list s2 |> List.sort ~compare:[%compare: Tuple.t] |> Seq.of_list
+    in
+    let m_err =
+      Seq.zip_full s1 s2
+      |> Seq.find_map ~f:(function
+           | `Both (t1, t2) ->
+               if Tuple.O.(t1 = t2) then None
+               else
+                 Some
+                   (Error.create "Mismatched tuples."
+                      (Tuple.to_string_hum t1, Tuple.to_string_hum t2)
+                      [%sexp_of: string * string])
+           | `Left t ->
+               Some (Error.create "Extra tuple on LHS." t [%sexp_of: Tuple.t])
+           | `Right t ->
+               Some (Error.create "Extra tuple on RHS." t [%sexp_of: Tuple.t]) )
+    in
+    let ret = match m_err with Some err -> Error err | None -> Ok () in
+    let ret_pp fmt ret =
+      let open Caml.Format in
+      match ret with
+      | Ok () -> fprintf fmt "Ok!"
+      | Error err -> fprintf fmt "Failed: %a" Error.pp err
+    in
+    Caml.Format.printf "@[Comparing:@,%a@,===== and ======@,%a@,%a@]@.\n"
+      Abslayout.pp r1 Abslayout.pp r2 ret_pp ret ;
+    ret

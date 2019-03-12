@@ -22,6 +22,8 @@
 %start <Abslayout0.t> ralgebra_eof
 %start <Abslayout0.pred> expr_eof
 %start <Abslayout0.name> name_eof
+%start <Abslayout0.pred> value_eof
+%start <Abslayout0.param> param_eof
 %%
 
 ralgebra_eof:
@@ -32,6 +34,16 @@ expr_eof:
 
 name_eof:
 | x = name; EOF { x }
+
+value_eof:
+| x = value; EOF { x }
+
+param_eof:
+| x = param; EOF { x }
+
+param:
+| k=ID; COLON; t=PRIMTYPE; { (k, t, None) }
+| k=ID; COLON; t=PRIMTYPE; EQ; v=value { (k, t, Some v) }
 
 bracket_list(X):
 | LSBRAC; l = separated_list(COMMA, X); RSBRAC { l }
@@ -125,15 +137,18 @@ name:
 | f = ID; COLON; t = PRIMTYPE { A.({ relation = None; name = f; type_ = Some t }) }
 
 e0_binop: x = STRPOS { x }
-e0_unop: x = DAY | x = MONTH | x = YEAR | x = STRLEN | x = EXTRACTY | x = EXTRACTM | x = EXTRACTD { x }
+                e0_unop: x = DAY | x = MONTH | x = YEAR | x = STRLEN | x = EXTRACTY | x = EXTRACTM | x = EXTRACTD { x }
 
-e0:
+value:
 | x = INT { A.Int x }
 | DATEKW; x = parens(DATE); { A.Date x }
 | x = FIXED { A.Fixed x }
 | x = BOOL { A.Bool x }
 | x = STR { A.String x }
 | NULL { A.Null }
+
+e0:
+| x = value { x }
 | n = name { A.Name n }
 | op = e0_unop; x = parens(expr); { A.Unop (op, x) }
 | NOT; x = e0 {A.Unop (Not, x)}

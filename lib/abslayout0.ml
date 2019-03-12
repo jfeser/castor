@@ -97,6 +97,8 @@ module T = struct
     , compare]
 
   [@@@warning "+7"]
+
+  type param = string * Type.PrimType.t * pred option
 end
 
 include T

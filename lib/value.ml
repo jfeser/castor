@@ -18,6 +18,17 @@ module C = Comparable.Make (T)
 
 module O : Comparable.Infix with type t := t = C
 
+let of_pred =
+  let module A = Abslayout0 in
+  function
+  | A.Int x -> Int x
+  | A.String x -> String x
+  | A.Bool x -> Bool x
+  | A.Fixed x -> Fixed x
+  | A.Null -> Null
+  | A.Date x -> Date x
+  | _ -> failwith "Not a value."
+
 let to_sql = function
   | Int x -> Int.to_string x
   | Fixed x -> Fixed_point.to_string x
@@ -70,6 +81,9 @@ let ( * ) x y =
 let ( / ) x y =
   match (x, y) with
   | Int a, Int b -> Fixed (Fixed_point.of_float Float.(of_int a / of_int b))
-  | _ -> failwith "Cannot /"
+  | Fixed a, Fixed b -> Fixed Fixed_point.(a / b)
+  | Fixed a, Int b -> Fixed Fixed_point.(a / of_int b)
+  | Int a, Fixed b -> Fixed Fixed_point.(of_int a / b)
+  | _ -> Error.create "Cannot /" (x, y) [%sexp_of: t * t] |> Error.raise
 
 let ( % ) x y = to_int x % to_int y |> int

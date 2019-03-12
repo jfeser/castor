@@ -184,17 +184,16 @@ let load_value type_ value =
       else Error (Error.create "Expected a null value." value [%sexp_of: string])
   | VoidT | TupleT _ -> Error (Error.of_string "Not a value type.")
 
-let load_tuples_exn s r =
+let load_tuples_exn s (r : Postgresql.result) =
   ( if List.length s <> r#nfields then
-    Error.(of_string "Unexpected tuple width." |> raise) ) ;
+    Error.(
+      create "Unexpected tuple width." (r#get_fnames_lst, s)
+        [%sexp_of: string list * Type.PrimType.t list]
+      |> raise) ) ;
   Gen.init ~limit:r#ntuples (fun tidx ->
       List.mapi s ~f:(fun fidx type_ ->
           if r#getisnull tidx fidx then Value.Null
           else Or_error.ok_exn (load_value type_ (r#getvalue tidx fidx)) ) )
-
-(* |> Gen.map ~f:(fun t ->
-   *        Stdio.print_endline ([%sexp_of: Value.t list] t |> Sexp.to_string_hum) ;
-   *        t ) *)
 
 let exec_cursor =
   let fresh = Fresh.create () in

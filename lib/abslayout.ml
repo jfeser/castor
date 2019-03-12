@@ -68,7 +68,7 @@ let pp_list ?(bracket = ("[", "]")) pp fmt ls =
     | [x] -> fprintf fmt "%a" pp x
     | x :: xs -> fprintf fmt "%a,@ " pp x ; loop xs
   in
-  loop ls ; close_box () ; fprintf fmt "%s" closeb
+  loop ls ; pp_close_box fmt () ; fprintf fmt "%s" closeb
 
 let op_to_str = function
   | Eq -> `Infix "="
@@ -974,3 +974,18 @@ let rec conjoin = function
  *     |AScalar _ -> Meta.(set_m )
  *     |AList (_, _) |AHashIdx _ |AOrderedIdx _
  *     |ATuple _ *)
+
+(** Collect all named relations in an expression. *)
+let aliases =
+  let visitor =
+    object (self : 'a)
+      inherit [_] reduce
+
+      inherit [_] Util.list_monoid
+
+      method! visit_As () n r = self#plus [(n, as_ n r)] (self#visit_t () r)
+
+      method! visit_Scan () n = [(n, scan n)]
+    end
+  in
+  visitor#visit_t ()

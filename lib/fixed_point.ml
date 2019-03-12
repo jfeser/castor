@@ -110,6 +110,9 @@ let ( - ) x1 x2 =
 let ( * ) {value= v1; scale= s1} {value= v2; scale= s2} =
   {value= v1 * v2; scale= s1 * s2}
 
+let ( / ) {value= v1; scale= s1} {value= v2; scale= s2} =
+  {value= v1 / v2; scale= s1 / s2}
+
 let%expect_test "add" =
   let x1 = {value= 123; scale= 100} in
   let x2 = {value= 25; scale= 10} in

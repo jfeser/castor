@@ -90,6 +90,8 @@ include Comparator.S with type t := t
 
 module O : Comparable.Infix with type t := t
 
+val pp_pred : Formatter.t -> pred -> unit
+
 val pp : Formatter.t -> t -> unit
 
 val name : t -> string
@@ -194,6 +196,8 @@ val pred_constants : Name.t list -> pred -> pred list
 val conjuncts : pred -> pred list
 
 val conjoin : pred list -> pred
+
+val aliases : t -> (string * t) list
 
 class virtual ['a] map : ['a] Abslayout0.map
 
