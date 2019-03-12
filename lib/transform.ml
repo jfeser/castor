@@ -272,8 +272,11 @@ module Make (Config : Config.S) () = struct
         Some (filter p (group_by ps key r))
     | Filter (p, {node= Filter (p', r); _}) ->
         Some (filter (Binop (And, p, p')) r)
-    | Select (ps, {node= Filter (p, r); _}) ->
-        Some (filter p (select (extend_select ps r ~with_:(pred_free p)) r))
+    | Select (ps, {node= Filter (p, r); _}) -> (
+      match select_kind ps with
+      | `Scalar ->
+          Some (filter p (select (extend_select ps r ~with_:(pred_free p)) r))
+      | `Agg -> None )
     | Join {pred; r1= {node= Filter (p, r); _}; r2} ->
         Some (filter p (join pred r r2))
     | Join {pred; r1; r2= {node= Filter (p, r); _}} ->
