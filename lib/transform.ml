@@ -1,9 +1,11 @@
 open Base
+open Core
 open Castor
 open Collections
 open Abslayout
+open Printf
 
-type t = Abslayout.t -> Abslayout.t option
+type t = {f: Abslayout.t -> Abslayout.t option; name: string}
 
 module Config = struct
   module type S = sig
@@ -12,6 +14,10 @@ module Config = struct
     val dbconn : Postgresql.connection
 
     val params : Set.M(Name.Compare_no_type).t
+
+    val param_ctx : Value.t Map.M(Name.Compare_no_type).t
+
+    val validate : bool
   end
 end
 
@@ -74,31 +80,59 @@ end
 
 let last_child _ = Some [Path.Child_last]
 
-let rec fix tf r =
-  match tf r with
-  | Some r' -> if Abslayout.O.(r = r') then Some r else fix tf r'
-  | None -> Some r
-
-let seq t1 t2 r = match t1 r with Some r' -> t2 r' | None -> t2 r
-
-let rec seq_many = function
-  | [] -> failwith "Empty transform list."
-  | [t] -> t
-  | t :: ts -> seq t (seq_many ts)
-
-let at_ tf pspec r =
-  let open Option.Let_syntax in
-  let%bind p = pspec r in
-  let%map r' = tf (Path.get_exn p r) in
-  Path.set_exn p r r'
-
 module Make (Config : Config.S) () = struct
   open Config
   module M = Abslayout_db.Make (Config)
 
+  let ( @@ ) tf a = tf.f a
+
   let fresh = Fresh.create ()
 
   let sql_ctx = Sql.create_ctx ~fresh ()
+
+  let validated tf =
+    let f r =
+      Option.map (tf @@ r) ~f:(fun r' ->
+          Or_error.iter_error
+            Interpret.(equiv {db= conn; params= param_ctx} r r')
+            ~f:(fun err ->
+              Logs.err (fun m ->
+                  m "%s is not semantics preserving: %a" tf.name Error.pp err
+              ) ) ;
+          r' )
+    in
+    {f; name= sprintf "!%s" tf.name}
+
+  let of_func ?(name = "<unknown>") f =
+    let tf = {f; name} in
+    let {f; name} = if validate then validated tf else tf in
+    {f= (fun r -> Exn.reraise_uncaught name (fun () -> f r)); name}
+
+  let rec fix tf =
+    let tf' r =
+      match tf @@ r with
+      | Some r' -> if Abslayout.O.(r = r') then Some r else fix tf @@ r'
+      | None -> Some r
+    in
+    {f= tf'; name= sprintf "fix(%s)" tf.name}
+
+  let seq t1 t2 =
+    let tf r = match t1 @@ r with Some r' -> t2 @@ r' | None -> t2 @@ r in
+    {f= tf; name= sprintf "%s ; %s" t1.name t2.name}
+
+  let rec seq_many = function
+    | [] -> failwith "Empty transform list."
+    | [t] -> t
+    | t :: ts -> seq t (seq_many ts)
+
+  let at_ tf pspec =
+    let open Option.Let_syntax in
+    let tf' r =
+      let%bind p = pspec r in
+      let%map r' = tf @@ Path.get_exn p r in
+      Path.set_exn p r r'
+    in
+    {name= sprintf "(%s @ <path>)" tf.name; f= tf'}
 
   let is_param_filter r p =
     M.annotate_schema r ;
@@ -204,6 +238,8 @@ module Make (Config : Config.S) () = struct
     in
     if same_orders r r' then Some r' else None
 
+  let push_orderby = of_func push_orderby ~name:"push-orderby"
+
   let extend_select ~with_ ps r =
     M.annotate_schema r ;
     let needed_fields =
@@ -253,10 +289,14 @@ module Make (Config : Config.S) () = struct
           (filter (conjoin above) (ordered_idx rk (filter (conjoin below) r) m))
     | _ -> None
 
+  let hoist_filter = of_func hoist_filter ~name:"hoist-filter"
+
   let split_filter r =
     match r.node with
     | Filter (Binop (And, p, p'), r) -> Some (filter p (filter p' r))
     | _ -> None
+
+  let split_filter = of_func split_filter ~name:"split-filter"
 
   let elim_groupby r =
     M.annotate_schema r ;
@@ -277,21 +317,30 @@ module Make (Config : Config.S) () = struct
                (as_ key_name (dedup (select key_preds r)))
                (select ps (filter filter_pred r)))
         else if List.for_all key ~f:(fun n -> Option.is_some n.relation) then (
-          (* Otherwise, if all grouping keys are from base relations,
-             imprecisely select all of them. *)
-          let rels = Hashtbl.create (module String) in
+          (* Otherwise, if all grouping keys are from named relations,
+             select all possible grouping keys. *)
+          let rels = Hashtbl.create (module Abslayout) in
+          let alias_map = aliases r |> Map.of_alist_exn (module String) in
           List.iter key ~f:(fun n ->
-              Hashtbl.add_multi rels
-                ~key:(Option.value_exn n.relation)
-                ~data:(Name n) ) ;
+              let r_name = Option.value_exn n.relation in
+              let r =
+                Option.value_exn
+                  ~error:
+                    (Error.create "No relation matching name." r_name
+                       [%sexp_of: string])
+                  (Map.find alias_map r_name)
+              in
+              Hashtbl.add_multi rels ~key:r ~data:(Name n) ) ;
           let key_rel =
             Hashtbl.to_alist rels
-            |> List.map ~f:(fun (r, ns) -> dedup (select ns (scan r)))
+            |> List.map ~f:(fun (r, ns) -> dedup (select ns r))
             |> List.fold_left1_exn ~f:(join (Bool true))
           in
           Some (list (as_ key_name key_rel) (select ps (filter filter_pred r))) )
         else (* Otherwise, if some keys are computed, fail. *) None
     | _ -> None
+
+  let elim_groupby = of_func elim_groupby ~name:"elim-groupby"
 
   let gen_ordered_idx ?lb ?ub p r =
     let t = pred_to_schema p |> Name.type_exn in
@@ -374,6 +423,8 @@ module Make (Config : Config.S) () = struct
           ; gen_ordered_idx ~lb:(p, `Open) p' r ]
     | _ -> None
 
+  let elim_cmp_filter = of_func elim_cmp_filter ~name:"elim-cmp-filter"
+
   let elim_eq_filter r =
     match r.node with
     | Filter (p, r) ->
@@ -405,10 +456,14 @@ module Make (Config : Config.S) () = struct
                   key))
     | _ -> None
 
+  let elim_eq_filter = of_func elim_eq_filter ~name:"elim-eq-filter"
+
   let elim_join_nest r =
     match r.node with
     | Join {pred; r1; r2} -> Some (tuple [r1; filter pred r2] Cross)
     | _ -> None
+
+  let elim_join_nest = of_func elim_join_nest ~name:"elim-join-nest"
 
   let id r _ = r
 
@@ -447,11 +502,12 @@ module Make (Config : Config.S) () = struct
       | Flat r -> r
       | Hash {lkey; lhs; rkey; rhs} ->
           Option.value_exn
-            (elim_join_hash
-               (join (Binop (Eq, lkey, rkey)) (emit_joins lhs) (emit_joins rhs)))
+            ( elim_join_hash
+            @@ join (Binop (Eq, lkey, rkey)) (emit_joins lhs) (emit_joins rhs)
+            )
       | Nest {lhs; rhs; pred} ->
           Option.value_exn
-            (elim_join_nest (join pred (emit_joins lhs) (emit_joins rhs)))
+            (elim_join_nest @@ join pred (emit_joins lhs) (emit_joins rhs))
 
     let rec to_ralgebra = function
       | Flat r -> r
@@ -645,6 +701,8 @@ module Make (Config : Config.S) () = struct
       match join_opt cost preds |> List.hd with
       | Some (_, join) -> Some (emit_joins join)
       | None -> None
+
+    let transform = of_func ~name:"join-opt" transform
   end
 
   let no_params r = Set.is_empty (Set.inter (names r) params)
@@ -656,15 +714,28 @@ module Make (Config : Config.S) () = struct
       Some (list r (tuple scalars Cross))
     else None
 
+  let row_store = of_func row_store ~name:"to-row-store"
+
   let is_serializable r =
-    let no_bad_runtime_op =
+    M.annotate_schema r ;
+    annotate_free r ;
+    let bad_runtime_op =
       Path.(
         all >>? is_run_time
         >>? Infix.(is_join || is_groupby || is_orderby || is_dedup || is_scan))
         r
-      |> Seq.is_empty
+      |> Seq.is_empty |> not
     in
-    no_bad_runtime_op
+    let mis_bound_params =
+      Path.(all >>? is_compile_time) r
+      |> Seq.for_all ~f:(fun p ->
+             not (overlaps (free (Path.get_exn p r)) params) )
+      |> not
+    in
+    if bad_runtime_op then Error (Error.of_string "Bad runtime operation.")
+    else if mis_bound_params then
+      Error (Error.of_string "Parameters referenced at compile time.")
+    else Ok ()
 
   let opt =
     seq_many
