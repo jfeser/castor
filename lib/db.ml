@@ -16,6 +16,14 @@ type t =
   ; fresh: Fresh.t sexp_opaque [@compare.ignore] }
 [@@deriving compare, sexp]
 
+type 'a exec_cursor =
+     ?batch_size:int
+  -> ?params:string list
+  -> t
+  -> Type.PrimType.t list
+  -> string
+  -> 'a
+
 let create uri =
   {uri; conn= new Psql.connection ~conninfo:uri (); fresh= Fresh.create ()}
 
@@ -184,16 +192,24 @@ let load_value type_ value =
       else Error (Error.create "Expected a null value." value [%sexp_of: string])
   | VoidT | TupleT _ -> Error (Error.of_string "Not a value type.")
 
+let load_tuples s (r : Postgresql.result) =
+  if List.length s <> r#nfields then
+    Error
+      Error.(
+        create "Unexpected tuple width." (r#get_fnames_lst, s)
+          [%sexp_of: string list * Type.PrimType.t list])
+  else
+    let gen =
+      Gen.init ~limit:r#ntuples (fun tidx ->
+          List.mapi s ~f:(fun fidx type_ ->
+              if r#getisnull tidx fidx then Ok Value.Null
+              else load_value type_ (r#getvalue tidx fidx) )
+          |> Result.all )
+    in
+    Ok gen
+
 let load_tuples_exn s (r : Postgresql.result) =
-  ( if List.length s <> r#nfields then
-    Error.(
-      create "Unexpected tuple width." (r#get_fnames_lst, s)
-        [%sexp_of: string list * Type.PrimType.t list]
-      |> raise) ) ;
-  Gen.init ~limit:r#ntuples (fun tidx ->
-      List.mapi s ~f:(fun fidx type_ ->
-          if r#getisnull tidx fidx then Value.Null
-          else Or_error.ok_exn (load_value type_ (r#getvalue tidx fidx)) ) )
+  Or_error.ok_exn (load_tuples s r) |> Gen.map ~f:Or_error.ok_exn
 
 let exec_cursor =
   let fresh = Fresh.create () in
@@ -213,21 +229,29 @@ let exec_cursor =
         (function
           | `Done -> (db.conn)#finish ; None
           | `Not_done idx when idx <> !db_idx ->
-              Error.(
-                create "Out of sync with underlying cursor." (idx, !db_idx)
-                  [%sexp_of: int * int]
-                |> raise)
+              Some
+                ( Error
+                    Error.(
+                      create "Out of sync with underlying cursor." (idx, !db_idx)
+                        [%sexp_of: int * int])
+                , `Done )
           | `Not_done idx ->
               let r = exec db fetch_query in
               let tups = load_tuples_exn schema r in
               db_idx := !db_idx + r#ntuples ;
               let idx = idx + r#ntuples in
               let state = if r#ntuples < batch_size then `Done else `Not_done idx in
-              Some (tups, state))
+              Some (Ok tups, state))
         (`Not_done 1)
+      |> Gen.map ~f:(function
+           | Ok gen -> Gen.map gen ~f:(fun t -> Ok t)
+           | Error _ as e -> Gen.singleton e )
       |> Gen.flatten
     in
     seq
+
+let exec_cursor_exn ?batch_size ?params db schema query =
+  exec_cursor ?batch_size ?params db schema query |> Gen.map ~f:Or_error.ok_exn
 
 let check db sql =
   let name = Fresh.name db.fresh "check%d" in

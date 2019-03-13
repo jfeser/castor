@@ -182,6 +182,7 @@ module Gen = struct
   let to_sequence g =
     Sequence.unfold ~init:() ~f:(fun () ->
         match get g with Some x -> Some (x, ()) | None -> None )
+    |> Sequence.memoize
 
   let sexp_of_t sexp_of g = Sequence.sexp_of_t sexp_of (to_sequence g)
 
