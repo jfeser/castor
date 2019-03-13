@@ -147,6 +147,12 @@ module Make (Config : Config.S) () = struct
     let r' = Path.get_exn p r in
     overlaps (names r') params
 
+  let project r =
+    M.annotate_schema r ;
+    Some (project r)
+
+  let project = of_func project ~name:"project"
+
   let push_orderby r =
     let open Option.Let_syntax in
     let orderby_cross_tuple key rs =
@@ -766,5 +772,6 @@ module Make (Config : Config.S) () = struct
         at_ elim_cmp_filter Path.(all >>? is_run_time >>| shallowest)
       ; (* Eliminate all unparameterized relations. *)
         at_ row_store
-          Path.(all >>? is_run_time >>? negate has_params >>| shallowest) ]
+          Path.(all >>? is_run_time >>? negate has_params >>| shallowest)
+      ; project ]
 end
