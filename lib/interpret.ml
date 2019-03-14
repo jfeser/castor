@@ -90,43 +90,65 @@ let eval {db; params} r =
     Memo.general ~hashable (fun r ->
         let schema_types = Db.schema db r |> List.map ~f:Name.type_exn in
         Db.exec_cursor_exn db schema_types (Printf.sprintf "select * from \"%s\"" r)
-        |> Gen.to_sequence |> Seq.force_eagerly |> Seq.map ~f:Array.of_list )
+        |> Gen.to_sequence |> Seq.memoize |> Seq.map ~f:Array.of_list )
   in
   let rec eval_agg ctx preds schema (tups : Tuple.t Seq.t) =
     if Seq.is_empty tups then None
     else
-      let state =
-        Array.of_list preds
-        |> Array.map ~f:(fun p ->
-               let open Value in
-               match pred_remove_as p with
-               | Sum p -> Sum (Int 0, p)
-               | Min p -> Min (Int Int.max_value, p)
-               | Max p -> Max (Int Int.min_value, p)
-               | Avg p -> Avg (Int 0, 0, p)
-               | Count -> Count 0
-               | p -> Passthru (None, p) )
+      let fresh = Fresh.create () in
+      let preds, named_aggs =
+        List.map preds ~f:(collect_aggs ~fresh) |> List.unzip
       in
+      let named_aggs = List.concat named_aggs in
+      let state =
+        Array.of_list named_aggs
+        |> Array.map ~f:(fun (n, p) ->
+               let open Value in
+               let a =
+                 match pred_remove_as p with
+                 | Sum p -> Sum (Int 0, p)
+                 | Min p -> Min (Int Int.max_value, p)
+                 | Max p -> Max (Int Int.min_value, p)
+                 | Avg p -> Avg (Int 0, 0, p)
+                 | Count -> Count 0
+                 | p -> Passthru (None, p)
+               in
+               (n, a) )
+      in
+      let last_tup = ref [||] in
       Seq.iter tups ~f:(fun t ->
+          last_tup := t ;
           let ctx = Ctx.merge ctx schema t in
-          Array.map_inplace state ~f:(fun s ->
+          Array.map_inplace state ~f:(fun (n, s) ->
               let open Value in
+              let s =
+                match s with
+                | Sum (x, p) -> Sum (x + eval_pred ctx p, p)
+                | Min (x, p) -> Min (C.min x (eval_pred ctx p), p)
+                | Max (x, p) -> Max (C.max x (eval_pred ctx p), p)
+                | Avg (n, d, p) -> Avg (n + eval_pred ctx p, Int.(d + 1), p)
+                | Count x -> Count Int.(x + 1)
+                | Passthru (None, p) -> Passthru (Some (eval_pred ctx p), p)
+                | Passthru (Some _, _) as a -> a
+              in
+              (n, s) ) ) ;
+      let subst_ctx =
+        Array.map state ~f:(fun (n, s) ->
+            let open Value in
+            let s =
               match s with
-              | Sum (x, p) -> Sum (x + eval_pred ctx p, p)
-              | Min (x, p) -> Min (C.min x (eval_pred ctx p), p)
-              | Max (x, p) -> Max (C.max x (eval_pred ctx p), p)
-              | Avg (n, d, p) -> Avg (n + eval_pred ctx p, Int.(d + 1), p)
-              | Count x -> Count Int.(x + 1)
-              | Passthru (None, p) -> Passthru (Some (eval_pred ctx p), p)
-              | Passthru (Some _, _) as a -> a ) ) ;
-      Array.map state ~f:(fun s ->
-          let open Value in
-          match s with
-          | Sum (x, _) | Min (x, _) | Max (x, _) -> x
-          | Avg (n, d, _) -> if d = 0 then Int 0 else n / Int d
-          | Count x -> Int x
-          | Passthru (x, _) -> Option.value_exn x )
-      |> Option.some
+              | Sum (x, _) | Min (x, _) | Max (x, _) -> x
+              | Avg (n, d, _) -> if d = 0 then Int 0 else n / Int d
+              | Count x -> Int x
+              | Passthru (x, _) -> Option.value_exn x
+            in
+            (Name.create n, Value.to_pred s) )
+        |> Array.to_list
+        |> Map.of_alist_exn (module Name.Compare_no_type)
+      in
+      let ctx = Ctx.merge ctx schema !last_tup in
+      List.map preds ~f:(fun p -> subst_pred subst_ctx p |> eval_pred ctx)
+      |> Array.of_list |> Option.some
   and eval_pred ctx p =
     let open Value in
     let e = eval_pred ctx in
@@ -143,7 +165,7 @@ let eval {db; params} r =
     | Null -> Null
     | As_pred (p, _) -> e p
     | Count | Sum _ | Avg _ | Min _ | Max _ ->
-        Error.(of_string "Unexpected aggregate." |> raise)
+        Error.(create "Unexpected aggregate." p [%sexp_of: pred] |> raise)
     | If (p1, p2, p3) -> if to_bool (e p1) then e p2 else e p3
     | First r -> eval ctx r |> Seq.hd_exn |> to_single_value
     | Exists r -> Bool (eval ctx r |> Seq.is_empty |> not)
@@ -301,7 +323,9 @@ let eval {db; params} r =
 let equiv ?(ordered = false) ctx r1 r2 =
   let open Or_error.Let_syntax in
   if Abslayout.O.(r1 = r2) then Ok ()
-  else
+  else (
+    Caml.Format.printf "@[Comparing:@,%a@,===== and ======@,%a@@]@.\n" Abslayout.pp
+      r1 Abslayout.pp r2 ;
     let ret =
       (* Or_error.try_with_join (fun () -> *)
       let%bind s1 = eval ctx r1 in
@@ -318,15 +342,19 @@ let equiv ?(ordered = false) ctx r1 r2 =
         Seq.zip_full s1 s2
         |> Seq.find_map ~f:(function
              | `Both (t1, t2) ->
-                 if Tuple.O.(t1 = t2) then None
+                 if Tuple.O.(t1 = t2) then (
+                   printf "B: %s\n" (Tuple.to_string_hum t1) ;
+                   None )
                  else
                    Some
                      (Error.create "Mismatched tuples."
                         (Tuple.to_string_hum t1, Tuple.to_string_hum t2)
                         [%sexp_of: string * string])
              | `Left t ->
+                 printf "L: %s\n" (Tuple.to_string_hum t) ;
                  Some (Error.create "Extra tuple on LHS." t [%sexp_of: Tuple.t])
              | `Right t ->
+                 printf "R: %s\n" (Tuple.to_string_hum t) ;
                  Some (Error.create "Extra tuple on RHS." t [%sexp_of: Tuple.t]) )
       in
       match m_err with Some err -> Error err | None -> Ok ()
@@ -337,6 +365,5 @@ let equiv ?(ordered = false) ctx r1 r2 =
       | Ok () -> fprintf fmt "Ok!"
       | Error err -> fprintf fmt "Failed: %a" Error.pp err
     in
-    Caml.Format.printf "@[Comparing:@,%a@,===== and ======@,%a@,%a@]@.\n"
-      Abslayout.pp r1 Abslayout.pp r2 ret_pp ret ;
-    ret
+    Caml.Format.printf "%a\n" ret_pp ret ;
+    ret )
