@@ -3,6 +3,8 @@
 from jsmin import jsmin
 import json
 
+DEBUG = True
+
 with open('queries.json', 'r') as f:
     bench = json.loads(jsmin(f.read()))
 
@@ -35,8 +37,14 @@ def in_file(b):
 def out_file(b):
     return '%s-opt.txt' % b['name']
 
+def dump_snippet():
+    if DEBUG:
+        return '| tee $@'
+    else:
+        return '> $@'
+
 print('DB=postgresql:///tpch_1k')
-print('OPT=../../_build/default/castor-opt/bin/opt.exe')
+print('OPT=../bin/opt.exe')
 print('COMPILE=../../_build/default/castor/bin/compile.exe')
 print('BENCH_DIR=../../castor/bench/tpch/')
 print('all: opt compile')
@@ -50,9 +58,9 @@ build:
 ''')
 for b in bench:
     print('''
-{0}-opt.txt: build {2}
-\t$(OPT) -db $(DB) {1} {2} > $@
-    '''.format(b['name'], gen_params(b), in_file(b)))
+{0}-opt.txt: {2}
+\tdune exec $(OPT) -- -db $(DB) {1} -v -c {2} {3} $@
+    '''.format(b['name'], gen_params(b), in_file(b), dump_snippet()))
     print('''
 {0}-opt: build {1}
 \tmkdir -p $@
