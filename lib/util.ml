@@ -26,8 +26,8 @@ let param_of_string s =
   let lexbuf = Lexing.from_string s in
   try Ralgebra_parser.param_eof Ralgebra_lexer.token lexbuf
   with Parser_utils.ParseError (msg, line, col) as e ->
-    Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
-    raise e
+    let msg = sprintf "Parse error: %s (line: %d, col: %d)" msg line col in
+    Exn.reraise e msg
 
 let param =
   let open Command in

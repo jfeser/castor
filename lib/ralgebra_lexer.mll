@@ -25,9 +25,10 @@ let keyword_tbl = Hashtbl.of_alist_exn (module String) [
 "max", MAX;
 "avg", AVG;
 "sum", SUM;
-"int", PRIMTYPE (Type0.PrimType.IntT {nullable=true});
-"bool", PRIMTYPE (Type0.PrimType.BoolT {nullable=true});
-"string", PRIMTYPE (Type0.PrimType.StringT {nullable=true});
+"int", PRIMTYPE (Type0.PrimType.IntT {nullable=false});
+"bool", PRIMTYPE (Type0.PrimType.BoolT {nullable=false});
+"string", PRIMTYPE (Type0.PrimType.StringT {nullable=false});
+"fixed", PRIMTYPE (Type0.PrimType.FixedT {nullable=false});
 "as", AS;
 "null", NULL;
 "true", BOOL true;
@@ -61,7 +62,6 @@ let id = (alpha | '_') (alpha | digit | '_')*
 let int = digit+
 let fixed = digit+ ('.' digit+)?
 let str = '"'
-let date = '"' (((digit digit digit digit)) '-' ((digit digit)) '-' ((digit digit)) as x) '"'
 
 rule token = parse
   | '\n'       { Lexing.new_line lexbuf; token lexbuf }
@@ -87,7 +87,6 @@ rule token = parse
   | "%"        { MOD A.Mod }
   | int as x   { INT (Int.of_string x) }
   | fixed as x { FIXED (Fixed_point.of_string x) }
-  | date       { DATE (Core.Date.of_string x) }
   | '"'        { STR (string (Buffer.create 10) lexbuf) }
   | '#'        { comment lexbuf }
   | id as x    {

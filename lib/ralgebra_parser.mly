@@ -11,7 +11,6 @@
 %token <Abslayout0.order> ORDER
 %token <Abslayout0.tuple> KIND
 %token <Type0.PrimType.t> PRIMTYPE
-%token <Core.Date.t> DATE
 %token <Abslayout0.binop> EQ LT GT LE GE AND OR ADD SUB MUL DIV MOD STRPOS
 %token <Abslayout0.unop> MONTH DAY YEAR NOT STRLEN EXTRACTY EXTRACTM EXTRACTD
 %token AS JOIN SELECT DEDUP FILTER COUNT GROUPBY MIN MAX AVG SUM LPAREN RPAREN
@@ -40,10 +39,17 @@ value_eof:
 
 param_eof:
 | x = param; EOF { x }
+| error; EOF { error "Expected a parameter." $startpos }
 
 param:
-| k=ID; COLON; t=PRIMTYPE; { (k, t, None) }
-| k=ID; COLON; t=PRIMTYPE; EQ; v=value { (k, t, Some v) }
+| k=ID; COLON; t=primtype; { (k, t, None) }
+| k=ID; COLON; t=primtype; EQ; v=value { (k, t, Some v) }
+| ID; COLON; error { error "Expected a type." $startpos }
+| ID; COLON; primtype; EQ; error { error "Expected a value." $startpos }
+
+primtype:
+| x = PRIMTYPE { x }
+| DATEKW { Type0.PrimType.DateT {nullable=false} }
 
 bracket_list(X):
 | LSBRAC; l = separated_list(COMMA, X); RSBRAC { l }
@@ -141,7 +147,7 @@ e0_binop: x = STRPOS { x }
 
 value:
 | x = INT { A.Int x }
-| DATEKW; x = parens(DATE); { A.Date x }
+| DATEKW; x = parens(STR); { A.Date (Core.Date.of_string x) }
 | x = FIXED { A.Fixed x }
 | x = BOOL { A.Bool x }
 | x = STR { A.String x }
