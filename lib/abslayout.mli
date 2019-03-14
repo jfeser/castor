@@ -199,6 +199,8 @@ val conjoin : pred list -> pred
 
 val aliases : t -> (string * t) list
 
+val collect_aggs : fresh:Fresh.t -> pred -> pred * (string * pred) list
+
 class virtual ['a] map : ['a] Abslayout0.map
 
 class virtual ['a] endo : ['a] Abslayout0.endo

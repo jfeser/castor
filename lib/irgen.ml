@@ -122,30 +122,6 @@ struct
       ~else_:(fun _ -> ())
       b
 
-  let collect_aggs p =
-    let visitor =
-      object (self : 'a)
-        inherit [_] Abslayout0.mapreduce
-
-        inherit [_] Util.list_monoid
-
-        method private visit_Agg kind p =
-          let n = kind ^ Fresh.name fresh "%d" in
-          (A.Name (Name.create n), [(n, p)])
-
-        method! visit_Sum () p = self#visit_Agg "sum" (A.Sum p)
-
-        method! visit_Count () = self#visit_Agg "count" A.Count
-
-        method! visit_Min () p = self#visit_Agg "min" (A.Min p)
-
-        method! visit_Max () p = self#visit_Agg "max" (A.Max p)
-
-        method! visit_Avg () p = self#visit_Agg "avg" (A.Avg p)
-      end
-    in
-    visitor#visit_pred () p
-
   let rec scan ctx b r t (cb : callback) =
     match r.Abslayout.node with
     | As (_, r) -> scan ctx b r t cb
@@ -467,7 +443,7 @@ struct
 
   and scan_hash_idx ctx b r t cb =
     let open Builder in
-    let _, value_layout, Abslayout.({lookup; hi_key_layout= m_key_layout}) = r in
+    let _, value_layout, Abslayout.{lookup; hi_key_layout= m_key_layout} = r in
     let key_layout = Option.value_exn m_key_layout in
     let key_type, value_type, _ = t in
     let hdr = Header.make_header (HashIdxT t) in
@@ -530,7 +506,7 @@ struct
     let open Builder in
     let ( _
         , value_layout
-        , Abslayout.({oi_key_layout= m_key_layout; lookup_low; lookup_high; _}) ) =
+        , Abslayout.{oi_key_layout= m_key_layout; lookup_low; lookup_high; _} ) =
       r
     in
     let key_type, value_type, _ = t in
@@ -659,7 +635,9 @@ struct
             cb b (List.map args ~f:(fun p -> gen_pred ctx p b)) )
     | `Agg ->
         (* Extract all the aggregates from the arguments. *)
-        let scalar_preds, agg_preds = List.map ~f:collect_aggs args |> List.unzip in
+        let scalar_preds, agg_preds =
+          List.map ~f:(A.collect_aggs ~fresh) args |> List.unzip
+        in
         let agg_preds = List.concat agg_preds in
         let last_tup =
           build_var ~persistent:false "tup" (type_of_layout child_layout) b

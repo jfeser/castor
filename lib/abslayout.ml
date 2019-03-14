@@ -989,3 +989,27 @@ let aliases =
     end
   in
   visitor#visit_t ()
+
+let collect_aggs ~fresh p =
+  let visitor =
+    object (self : 'a)
+      inherit [_] Abslayout0.mapreduce
+
+      inherit [_] Util.list_monoid
+
+      method private visit_Agg kind p =
+        let n = kind ^ Fresh.name fresh "%d" in
+        (Name (Name.create n), [(n, p)])
+
+      method! visit_Sum () p = self#visit_Agg "sum" (Sum p)
+
+      method! visit_Count () = self#visit_Agg "count" Count
+
+      method! visit_Min () p = self#visit_Agg "min" (Min p)
+
+      method! visit_Max () p = self#visit_Agg "max" (Max p)
+
+      method! visit_Avg () p = self#visit_Agg "avg" (Avg p)
+    end
+  in
+  visitor#visit_pred () p
