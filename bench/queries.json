@@ -21,7 +21,7 @@
         "name": "3-no",
         "ordered": false,
         "query": ["3-no-gold"],
-        "params": {"param0:string": "BUILDING", "param1:date": "1995-3-15"}
+        "params": {"param0:string": "BUILDING", "param1:date": "1995-03-15"}
     },
     {
         "name": "4",
@@ -41,7 +41,7 @@
         "query": ["6-gold"],
         "params": {
             "param0:date": "1994-01-01",
-            "param1:float": 0.06,
+            "param1:fixed": 0.06,
             "param2:int": 24
         }
     },
@@ -77,7 +77,7 @@
         "name": "11-no",
         "ordered": false,
         "query": ["11-no-gold"],
-        "params": {"param1:string": "GERMANY", "param2:float": 0.0001}
+        "params": {"param1:string": "GERMANY", "param2:fixed": 0.0001}
     },
     {
         "name": "12",
@@ -138,9 +138,9 @@
             "param0:string": "Brand#12",
             "param1:string": "Brand#23",
             "param2:string": "Brand#34",
-            "param3:float": 1.0,
-            "param4:float": 10.0,
-            "param5:float": 20.0
+            "param3:fixed": 1.0,
+            "param4:fixed": 10.0,
+            "param5:fixed": 20.0
         }
     }
 ]
