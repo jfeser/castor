@@ -70,13 +70,36 @@ let is_dedup r p =
 let is_scan r p =
   match (Path.get_exn p r).node with Scan _ -> true | _ -> false
 
-let negate f r p = not (f r p)
+let is_select r p =
+  match (Path.get_exn p r).node with Select _ -> true | _ -> false
+
+let is_hash_idx r p =
+  match (Path.get_exn p r).node with AHashIdx _ -> true | _ -> false
+
+let is_ordered_idx r p =
+  match (Path.get_exn p r).node with AOrderedIdx _ -> true | _ -> false
+
+let is_list r p =
+  match (Path.get_exn p r).node with AList _ -> true | _ -> false
+
+let is_tuple r p =
+  match (Path.get_exn p r).node with ATuple _ -> true | _ -> false
+
+let above (f : _ -> Path.t -> bool) r p =
+  match List.rev p with [] -> false | _ :: p' -> f r (List.rev p')
+
+let is_serializable r p = is_serializeable (Path.get_exn p r)
 
 module Infix = struct
   let ( && ) f1 f2 r p = f1 r p && f2 r p
 
   let ( || ) f1 f2 r p = f1 r p || f2 r p
+
+  let not f r p = not (f r p)
 end
+
+let is_collection =
+  Infix.(is_hash_idx || is_ordered_idx || is_list || is_tuple)
 
 let last_child _ = Some [Path.Child_last]
 
@@ -105,9 +128,25 @@ module Make (Config : Config.S) () = struct
     in
     {f; name= sprintf "!%s" tf.name}
 
+  let traced tf =
+    let f p r =
+      Logs.debug (fun m ->
+          m "Transform %s running @ %a" tf.name
+            (fun fmt x -> Sexp.pp fmt ([%sexp_of: Path.t] x))
+            p ) ;
+      match tf.f p r with
+      | Some r' ->
+          Logs.debug (fun m -> m "Transform %s succeeded." tf.name) ;
+          Some r'
+      | None ->
+          Logs.debug (fun m -> m "Transform %s failed." tf.name) ;
+          None
+    in
+    {tf with f}
+
   let of_func ?(name = "<unknown>") f =
     let f p r = Option.map (f (Path.get_exn p r)) ~f:(Path.set_exn p r) in
-    let tf = {f; name} in
+    let tf = traced {f; name} in
     let {f; name} = if validate then validated tf else tf in
     {f= (fun r -> Exn.reraise_uncaught name (fun () -> f r)); name}
 
@@ -136,6 +175,10 @@ module Make (Config : Config.S) () = struct
   let at_ tf pspec =
     let f p r = Option.bind (pspec r) ~f:(fun p' -> tf.f (p @ p') r) in
     {name= sprintf "(%s @ <path>)" tf.name; f}
+
+  let first tf pset =
+    let f p r = Seq.find_map (pset r) ~f:(fun p' -> tf.f (p @ p') r) in
+    {name= sprintf "first %s in <path set>" tf.name; f}
 
   let is_param_filter r p =
     M.annotate_schema r ;
@@ -728,6 +771,87 @@ module Make (Config : Config.S) () = struct
 
   let row_store = of_func row_store ~name:"to-row-store"
 
+  let is_supported orig_bound new_bound pred =
+    let supported = Set.inter (pred_free pred) orig_bound in
+    Set.is_subset supported ~of_:new_bound
+
+  let push_filter r =
+    M.annotate_schema r ;
+    match r.node with
+    | Filter (p, {node= Filter (p', r'); _}) ->
+        Some (filter (Binop (And, p, p')) r')
+    | Filter (p, r') -> (
+        let orig_bound = M.bound r' in
+        match r'.node with
+        | AList (rk, rv) ->
+            if is_supported orig_bound (M.bound rk) p then
+              Some (list (filter p rk) rv)
+            else if is_supported orig_bound (M.bound rv) p then
+              Some (list (filter p rk) rv)
+            else None
+        | AHashIdx (rk, rv, m) ->
+            if is_supported orig_bound (M.bound rk) p then
+              Some (hash_idx' (filter p rk) rv m)
+            else if is_supported orig_bound (M.bound rv) p then
+              Some (hash_idx' rk (filter p rv) m)
+            else None
+        | AOrderedIdx (rk, rv, m) ->
+            if is_supported orig_bound (M.bound rk) p then
+              Some (ordered_idx (filter p rk) rv m)
+            else if is_supported orig_bound (M.bound rv) p then
+              Some (ordered_idx rk (filter p rv) m)
+            else None
+        | _ -> None )
+    | _ -> None
+
+  let push_filter = of_func push_filter ~name:"push-filter"
+
+  let push_select =
+    of_func (Push_select.push_select (module M)) ~name:"push-select"
+
+  let opt =
+    let open Infix in
+    seq_many
+      [ (* Plan joins *)
+        fix
+          (at_ Join_opt.transform
+             Path.(all >>? is_join >>? is_run_time >>| shallowest))
+      ; (* Eliminate groupby operators. *)
+        fix (at_ elim_groupby (Path.all >>? is_groupby >>| shallowest))
+      ; (* Hoist parameterized filters as far up as possible. *)
+        fix
+          (at_ hoist_filter
+             (Path.all >>? is_param_filter >>| deepest >>= Path.parent))
+      ; fix (at_ split_filter (Path.all >>? is_filter >>| any))
+      ; (* Push orderby operators into compile time position if possible. *)
+        fix
+          (at_ push_orderby
+             Path.(all >>? is_orderby >>? is_run_time >>| shallowest))
+      ; (* Eliminate the shallowest equality filter. *)
+        at_ elim_eq_filter
+          Path.(all >>? is_param_filter >>? is_run_time >>| shallowest)
+      ; (* Eliminate the shallowest comparison filter. *)
+        at_ elim_cmp_filter
+          Path.(all >>? is_param_filter >>? is_run_time >>| shallowest)
+      ; (* Push all unparameterized filters. *)
+        fix
+          (first push_filter
+             Path.(all >>? is_run_time >>? is_filter >>? not is_param_filter))
+      ; (* Push selections above collections. *)
+        fix
+          (at_ push_select
+             (Path.all >>? is_select >>? above is_collection >>| deepest))
+      ; (* Eliminate all unparameterized relations. *)
+        fix
+          (seq_many
+             [ at_ row_store
+                 Path.(
+                   all >>? is_run_time >>? not has_params
+                   >>? not is_serializable >>| shallowest)
+             ; project ])
+        (* Cleanup*)
+      ; fix project ]
+
   let is_serializable r =
     M.annotate_schema r ;
     annotate_free r ;
@@ -748,30 +872,4 @@ module Make (Config : Config.S) () = struct
     else if mis_bound_params then
       Error (Error.of_string "Parameters referenced at compile time.")
     else Ok ()
-
-  let opt =
-    seq_many
-      [ (* Plan joins *)
-        fix
-          (at_ Join_opt.transform
-             Path.(all >>? is_join >>? is_run_time >>| shallowest))
-      ; (* Eliminate groupby operators. *)
-        fix (at_ elim_groupby (Path.all >>? is_groupby >>| shallowest))
-      ; (* Hoist parameterized filters as far up as possible. *)
-        fix
-          (at_ hoist_filter
-             (Path.all >>? is_param_filter >>| deepest >>= Path.parent))
-      ; fix (at_ split_filter (Path.all >>? is_filter >>| any))
-      ; (* Push orderby operators into compile time position if possible. *)
-        fix
-          (at_ push_orderby
-             Path.(all >>? is_orderby >>? is_run_time >>| shallowest))
-      ; (* Eliminate the shallowest equality filter. *)
-        at_ elim_eq_filter Path.(all >>? is_run_time >>| shallowest)
-      ; (* Eliminate the shallowest comparison filter. *)
-        at_ elim_cmp_filter Path.(all >>? is_run_time >>| shallowest)
-      ; (* Eliminate all unparameterized relations. *)
-        at_ row_store
-          Path.(all >>? is_run_time >>? negate has_params >>| shallowest)
-      ; project ]
 end
