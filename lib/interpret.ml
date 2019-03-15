@@ -265,7 +265,8 @@ let eval {db; params} r =
     | ATuple (({node= AScalar p; _} as r) :: rs, Cross) ->
         (* Special case for scalar tuples. Should reduce # of sequences constructed. *)
         let s = schema r in
-        eval (Ctx.bind ctx s [|eval_pred ctx p|]) (tuple rs Cross)
+        let t = [|eval_pred ctx p|] in
+        eval (Ctx.bind ctx s t) (tuple rs Cross) |> Seq.map ~f:(fun t' -> t @ t')
     | ATuple (r :: rs, Cross) ->
         let s = schema r in
         Seq.concat_map (eval ctx r) ~f:(fun t ->
