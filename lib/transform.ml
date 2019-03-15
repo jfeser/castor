@@ -361,7 +361,8 @@ module Make (Config : Config.S) () = struct
         let key_preds = List.map key ~f:(fun n -> Name n) in
         let filter_pred =
           List.map key ~f:(fun n ->
-              Binop (Eq, Name n, Name {n with relation= Some key_name}) )
+              Binop (Eq, Name n, Name (Name.copy n ~relation:(Some key_name)))
+          )
           |> List.fold_left1_exn ~f:(fun acc p -> Binop (And, acc, p))
         in
         if Set.is_empty (free r) then
@@ -370,13 +371,13 @@ module Make (Config : Config.S) () = struct
             (list
                (as_ key_name (dedup (select key_preds r)))
                (select ps (filter filter_pred r)))
-        else if List.for_all key ~f:(fun n -> Option.is_some n.relation) then (
+        else if List.for_all key ~f:(fun n -> Option.is_some (Name.rel n)) then (
           (* Otherwise, if all grouping keys are from named relations,
              select all possible grouping keys. *)
           let rels = Hashtbl.create (module Abslayout) in
           let alias_map = aliases r |> Map.of_alist_exn (module String) in
           List.iter key ~f:(fun n ->
-              let r_name = Option.value_exn n.relation in
+              let r_name = Name.rel_exn n in
               let r =
                 Option.value_exn
                   ~error:
@@ -464,17 +465,69 @@ module Make (Config : Config.S) () = struct
 
   let elim_cmp_filter r =
     match r.node with
-    | Filter (Binop (And, Binop (Ge, p, lb), Binop (Lt, p', ub)), r)
-      when [%compare.equal: pred] p p' ->
-        gen_ordered_idx ~lb:(lb, `Closed) ~ub:(ub, `Open) p r |> Result.ok
-    | Filter (Binop (Ge, p', p), r) | Filter (Binop (Le, p, p'), r) ->
-        first_ok
-          [ gen_ordered_idx ~ub:(p', `Closed) p r
-          ; gen_ordered_idx ~lb:(p, `Closed) p' r ]
-    | Filter (Binop (Lt, p, p'), r) | Filter (Binop (Gt, p', p), r) ->
-        first_ok
-          [ gen_ordered_idx ~ub:(p', `Open) p r
-          ; gen_ordered_idx ~lb:(p, `Open) p' r ]
+    | Filter (p, r') -> (
+        let has_param p =
+          Set.diff (pred_free p) (M.bound r') |> Set.is_empty |> not
+        in
+        (* Select the comparisons which have a parameter on exactly one side and
+           partition by the unparameterized side of the comparison. *)
+        let cmps, rest =
+          conjuncts p
+          |> List.partition_map ~f:(function
+               | (Binop (Gt, p1, p2) | Binop (Lt, p2, p1)) as p ->
+                   if has_param p1 && not (has_param p2) then
+                     `Fst (p2, (`Lt, p1))
+                   else if has_param p2 && not (has_param p1) then
+                     `Fst (p1, (`Gt, p2))
+                   else `Snd p
+               | (Binop (Ge, p1, p2) | Binop (Le, p2, p1)) as p ->
+                   if has_param p1 && not (has_param p2) then
+                     `Fst (p2, (`Le, p1))
+                   else if has_param p2 && not (has_param p1) then
+                     `Fst (p1, (`Ge, p2))
+                   else `Snd p
+               | p -> `Snd p )
+        in
+        let cmps = Map.of_alist_multi (module Pred) cmps in
+        let best_bounds =
+          List.max_elt
+            ~compare:(fun (_, b1) (_, b2) ->
+              [%compare: int] (List.length b1) (List.length b2) )
+            (Map.to_alist cmps)
+        in
+        match best_bounds with
+        | Some (key, bounds) -> (
+            let lb =
+              List.filter_map bounds ~f:(fun (f, p) ->
+                  match f with
+                  | `Gt -> Some (p, `Closed)
+                  | `Ge -> Some (p, `Open)
+                  | _ -> None )
+            in
+            let ub =
+              List.filter_map bounds ~f:(fun (f, p) ->
+                  match f with
+                  | `Lt -> Some (p, `Closed)
+                  | `Le -> Some (p, `Open)
+                  | _ -> None )
+            in
+            let rest' =
+              Map.remove cmps key |> Map.to_alist
+              |> List.concat_map ~f:(fun (p, xs) ->
+                     List.map xs ~f:(fun (f, p') ->
+                         let op =
+                           match f with
+                           | `Gt -> Gt
+                           | `Lt -> Lt
+                           | `Ge -> Ge
+                           | `Le -> Le
+                         in
+                         Binop (op, p, p') ) )
+            in
+            match gen_ordered_idx ?lb:(List.hd lb) ?ub:(List.hd ub) key r' with
+            | Ok r -> Some (filter (conjoin (rest @ rest')) r)
+            | Error _ -> None )
+        | None -> None )
     | _ -> None
 
   let elim_cmp_filter = of_func elim_cmp_filter ~name:"elim-cmp-filter"

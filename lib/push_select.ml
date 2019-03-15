@@ -51,7 +51,7 @@ let gen_concat_select_list outer_preds inner_schema =
         (op @ [p'], ip') )
   in
   let inner_aggs =
-    List.map inner_aggs ~f:(fun (n, a) -> As_pred (a, n.name))
+    List.map inner_aggs ~f:(fun (n, a) -> As_pred (a, Name.name n))
   in
   (* Don't want to project out anything that we might need later. *)
   let inner_fields = inner_schema |> List.map ~f:(fun n -> Name n) in
