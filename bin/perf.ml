@@ -77,7 +77,7 @@ let run_candidate :
         let cmd = String.concat args ~sep:" " in
         let ret = Sys.command cmd in
         if ret = 0 then ()
-        else Error.create "Non-zero exit code" ret [%sexp_of : int] |> Error.raise
+        else Error.create "Non-zero exit code" ret [%sexp_of: int] |> Error.raise
   in
   let clang = Config.llvm_root ^ "/bin/clang" in
   let opt = Config.llvm_root ^ "/bin/opt" in
@@ -126,7 +126,7 @@ let benchmark : ?sample:int -> db:string -> Bench.t -> unit =
         match values with
         | [] ->
             Error.create "Empty parameter list." (name, pname)
-              [%sexp_of : string * string]
+              [%sexp_of: string * string]
             |> Error.raise
         | v :: _ -> (pname, v) )
   in
@@ -167,7 +167,7 @@ let benchmark : ?sample:int -> db:string -> Bench.t -> unit =
       Caml.Sys.command (sprintf "cp /tmp/golden.csv %s/golden.csv" (Sys.getcwd ()))
       |> ignore ;
       (* Dump the parameters used for testing. *)
-      [%sexp_of : (string * Db.primvalue) list] test_params
+      [%sexp_of: (string * Db.primvalue) list] test_params
       |> Sexp.save_hum "params.sexp" ;
       Seq.iter candidates ~f:(fun x ->
           let dir = Filename.temp_dir ~in_dir:"." "run" "" in
@@ -233,11 +233,11 @@ let () =
   Logs.set_reporter (Logs.format_reporter ()) ;
   let open Command in
   let ralgebra = Arg_type.create Ralgebra.of_string_exn in
-  let bench = Arg_type.create (fun s -> Sexp.load_sexp s |> [%of_sexp : Bench.t]) in
+  let bench = Arg_type.create (fun s -> Sexp.load_sexp s |> [%of_sexp: Bench.t]) in
   let param =
     Arg_type.create (fun s ->
         let k, v = String.lsplit2_exn ~on:':' s in
-        let v = Sexp.of_string v |> [%of_sexp : Db.primvalue] in
+        let v = Sexp.of_string v |> [%of_sexp: Db.primvalue] in
         (k, v) )
   in
   let open Let_syntax in

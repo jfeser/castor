@@ -4,48 +4,17 @@ open Collections
 
 module T = struct
   type t = Abslayout0.name =
-    {relation: string option; name: string; type_: Type0.PrimType.t option}
-  [@@deriving sexp]
-end
-
-module Compare = struct
-  module T = struct
-    type t = T.t =
-      {relation: string option; name: string; type_: Type0.PrimType.t option}
-    [@@deriving compare, hash, sexp]
-  end
-
-  include T
-  include Comparable.Make (T)
-end
-
-module Compare_no_type = struct
-  module T = struct
-    type t = T.t =
-      { relation: string option
-      ; name: string
-      ; type_: Type0.PrimType.t option [@compare.ignore] }
-    [@@deriving compare, hash, sexp]
-  end
-
-  include T
-  include Comparable.Make (T)
-end
-
-module Compare_name_only = struct
-  module T = struct
-    type t = T.t =
-      { relation: string option [@compare.ignore]
-      ; name: string
-      ; type_: Type0.PrimType.t option [@compare.ignore] }
-    [@@deriving compare, hash, sexp]
-  end
-
-  include T
-  include Comparable.Make (T)
+    { relation: string option
+    ; name: string
+    ; type_: Type0.PrimType.t option [@compare.ignore] }
+  [@@deriving compare, hash, sexp]
 end
 
 include T
+include Comparator.Make (T)
+module C = Comparable.Make (T)
+
+module O : Comparable.Infix with type t := t = C
 
 let create ?relation ?type_ name = {relation; name; type_}
 

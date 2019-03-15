@@ -3,25 +3,11 @@ open Collections
 
 type t = Abslayout0.name =
   {relation: string option; name: string; type_: Type.PrimType.t option}
-[@@deriving sexp]
+[@@deriving compare, hash, sexp]
 
-module Compare : sig
-  type t = Abslayout0.name [@@deriving compare, hash, sexp]
+include Comparator.S with type t := t
 
-  include Comparable.S with type t := t
-end
-
-module Compare_no_type : sig
-  type t = Abslayout0.name [@@deriving compare, hash, sexp]
-
-  include Comparable.S with type t := t
-end
-
-module Compare_name_only : sig
-  type t = Abslayout0.name [@@deriving compare, hash, sexp]
-
-  include Comparable.S with type t := t
-end
+module O : Comparable.Infix with type t := t
 
 val create : ?relation:string -> ?type_:Type.PrimType.t -> string -> t
 

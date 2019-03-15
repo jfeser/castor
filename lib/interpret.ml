@@ -27,7 +27,7 @@ module Tuple = struct
         try values.(i)
         with Invalid_argument _ ->
           Error.create "Schema mismatch." (schema, values, i)
-            [%sexp_of: int Map.M(Name.Compare_no_type).t * Value.t array * int]
+            [%sexp_of: int Map.M(Name).t * Value.t array * int]
           |> Error.raise )
 end
 
@@ -35,8 +35,8 @@ open Tuple
 
 module Ctx = struct
   type scope =
-    | Ctx of Value.t Map.M(Name.Compare_no_type).t
-    | Tuple of Value.t array * int Map.M(Name.Compare_no_type).t
+    | Ctx of Value.t Map.M(Name).t
+    | Tuple of Value.t array * int Map.M(Name).t
   [@@deriving sexp]
 
   type t = scope list [@@deriving sexp]
@@ -60,7 +60,7 @@ module GroupKey = struct
   type t = Value.t list [@@deriving compare, hash, sexp]
 end
 
-type ctx = {db: Db.t; params: Value.t Map.M(Name.Compare_no_type).t}
+type ctx = {db: Db.t; params: Value.t Map.M(Name).t}
 
 let name_exn p =
   match pred_to_name p with
@@ -144,7 +144,7 @@ let eval {db; params} r =
             in
             (Name.create n, Value.to_pred s) )
         |> Array.to_list
-        |> Map.of_alist_exn (module Name.Compare_no_type)
+        |> Map.of_alist_exn (module Name)
       in
       let ctx = Ctx.merge ctx schema !last_tup in
       List.map preds ~f:(fun p -> subst_pred subst_ctx p |> eval_pred ctx)
@@ -220,7 +220,7 @@ let eval {db; params} r =
     let schema r =
       Meta.(find_exn r schema)
       |> List.mapi ~f:(fun i n -> (n, i))
-      |> Map.of_alist_exn (module Name.Compare_no_type)
+      |> Map.of_alist_exn (module Name)
     in
     match r.node with
     | Scan r -> scan r
@@ -257,6 +257,10 @@ let eval {db; params} r =
     | ATuple ([], _) -> failwith "Empty tuple."
     | ATuple (_, Zip) -> failwith "Zip tuples unsupported."
     | ATuple ([r], Cross) -> eval ctx r
+    | ATuple (({node= AScalar p; _} as r) :: rs, Cross) ->
+        (* Special case for scalar tuples. Should reduce # of sequences constructed. *)
+        let s = schema r in
+        eval (Ctx.bind ctx s [|eval_pred ctx p|]) (tuple rs Cross)
     | ATuple (r :: rs, Cross) ->
         let s = schema r in
         Seq.concat_map (eval ctx r) ~f:(fun t ->
@@ -332,29 +336,35 @@ let equiv ?(ordered = false) ctx r1 r2 =
       let%bind s2 = eval ctx r2 in
       let s1 =
         if ordered then s1
-        else Seq.to_list s1 |> List.sort ~compare:[%compare: Tuple.t] |> Seq.of_list
+        else
+          Seq.to_list_rev s1
+          |> List.sort ~compare:[%compare: Tuple.t]
+          |> Seq.of_list
       in
       let s2 =
         if ordered then s2
-        else Seq.to_list s2 |> List.sort ~compare:[%compare: Tuple.t] |> Seq.of_list
+        else
+          Seq.to_list_rev s2
+          |> List.sort ~compare:[%compare: Tuple.t]
+          |> Seq.of_list
       in
       let m_err =
         Seq.zip_full s1 s2
         |> Seq.find_map ~f:(function
              | `Both (t1, t2) ->
-                 if Tuple.O.(t1 = t2) then (
-                   printf "B: %s\n" (Tuple.to_string_hum t1) ;
-                   None )
+                 if Tuple.O.(t1 = t2) then
+                   (* printf "B: %s\n" (Tuple.to_string_hum t1) ; *)
+                   None
                  else
                    Some
                      (Error.create "Mismatched tuples."
                         (Tuple.to_string_hum t1, Tuple.to_string_hum t2)
                         [%sexp_of: string * string])
              | `Left t ->
-                 printf "L: %s\n" (Tuple.to_string_hum t) ;
+                 (* printf "L: %s\n" (Tuple.to_string_hum t) ; *)
                  Some (Error.create "Extra tuple on LHS." t [%sexp_of: Tuple.t])
              | `Right t ->
-                 printf "R: %s\n" (Tuple.to_string_hum t) ;
+                 (* printf "R: %s\n" (Tuple.to_string_hum t) ; *)
                  Some (Error.create "Extra tuple on RHS." t [%sexp_of: Tuple.t]) )
       in
       match m_err with Some err -> Error err | None -> Ok ()

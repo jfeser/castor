@@ -157,14 +157,14 @@ let name_of_var = function
 
 type _var = Global of expr | Arg of int | Field of expr [@@deriving compare, sexp]
 
-type _ctx = _var Map.M(Name.Compare_no_type).t [@@deriving compare, sexp]
+type _ctx = _var Map.M(Name).t [@@deriving compare, sexp]
 
 module Ctx0 = struct
-  let empty = Map.empty (module Name.Compare_no_type)
+  let empty = Map.empty (module Name)
 
   let of_schema schema tup =
     List.map2_exn schema tup ~f:(fun n e -> (n, Field e))
-    |> Map.of_alist_exn (module Name.Compare_no_type)
+    |> Map.of_alist_exn (module Name)
 
   (* Create an argument list for a caller. *)
   let make_caller_args ctx =

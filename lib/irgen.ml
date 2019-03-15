@@ -5,7 +5,7 @@ open Implang
 module A = Abslayout
 
 type ir_module =
-  {iters: func list; funcs: func list; params: Name.Compare.t list; buffer_len: int}
+  {iters: func list; funcs: func list; params: Name.t list; buffer_len: int}
 [@@deriving compare, sexp]
 
 type callback = Builder.t -> expr list -> unit
@@ -689,7 +689,7 @@ struct
   let irgen ~params ~data_fn r =
     let ctx =
       List.map params ~f:(fun n -> (n, Ctx.Global (Var n.Name.name)))
-      |> Map.of_alist_exn (module Name.Compare_no_type)
+      |> Map.of_alist_exn (module Name)
     in
     let type_ = Abslayout_db.to_type r in
     let writer = Bitstring.Writer.with_file data_fn in

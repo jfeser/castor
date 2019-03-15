@@ -176,13 +176,13 @@ and pp fmt {node; _} =
 
 module Ctx = struct
   module T = struct
-    type t = Value.t Map.M(Name.Compare_no_type).t [@@deriving compare, sexp]
+    type t = Value.t Map.M(Name).t [@@deriving compare, sexp]
   end
 
   include T
   include Comparable.Make (T)
 
-  let empty = Map.empty (module Name.Compare_no_type)
+  let empty = Map.empty (module Name)
 end
 
 let of_lexbuf_exn lexbuf =
@@ -208,13 +208,13 @@ let pred_of_string_exn s = pred_of_lexbuf_exn (Lexing.from_string s)
  *     object (self)
  *       inherit [_] reduce
  * 
- *       method zero = Set.empty (module Name.Compare_no_type)
+ *       method zero = Set.empty (module Name)
  * 
  *       method plus = Set.union
  * 
  *       method! visit_Name () n =
  *         if Option.is_none n.relation then
- *           Set.singleton (module Name.Compare_no_type) n
+ *           Set.singleton (module Name) n
  *         else self#zero
  * 
  *       method visit_name _ _ = self#zero
@@ -226,11 +226,11 @@ let names_visitor =
   object (self : 'a)
     inherit [_] reduce as super
 
-    method zero = Set.empty (module Name.Compare_no_type)
+    method zero = Set.empty (module Name)
 
     method plus = Set.union
 
-    method! visit_Name () n = Set.singleton (module Name.Compare_no_type) n
+    method! visit_Name () n = Set.singleton (module Name) n
 
     method! visit_pred () p =
       match p with
@@ -476,8 +476,7 @@ let is_serializeable r =
 
       method visit_Collection ns r1 r2 =
         let ns =
-          Set.union ns
-            (Meta.(find_exn r1 schema) |> Set.of_list (module Name.Compare_no_type))
+          Set.union ns (Meta.(find_exn r1 schema) |> Set.of_list (module Name))
         in
         self#visit_t ns r2
 
@@ -490,15 +489,15 @@ let is_serializeable r =
       method! visit_ATuple ns (rs, _) = List.for_all ~f:(self#visit_t ns) rs
     end
   in
-  visitor#visit_t (Set.empty (module Name.Compare_no_type)) r
+  visitor#visit_t (Set.empty (module Name)) r
 
 let rec pred_free p =
-  let singleton = Set.singleton (module Name.Compare_no_type) in
+  let singleton = Set.singleton (module Name) in
   let visitor =
     object (self : 'a)
       inherit [_] reduce as super
 
-      inherit [_] Util.set_monoid (module Name.Compare_no_type)
+      inherit [_] Util.set_monoid (module Name)
 
       method visit_subquery r = free r
 
@@ -517,9 +516,9 @@ let rec pred_free p =
   visitor#visit_pred () p
 
 and free r =
-  let empty = Set.empty (module Name.Compare_no_type) in
-  let of_list = Set.of_list (module Name.Compare_no_type) in
-  let union_list = Set.union_list (module Name.Compare_no_type) in
+  let empty = Set.empty (module Name) in
+  let of_list = Set.of_list (module Name) in
+  let union_list = Set.union_list (module Name) in
   let exposed r = of_list Meta.(find_exn r schema) in
   let free_set =
     match r.node with
@@ -588,9 +587,9 @@ let annotate_free r =
    if it is in the schema of the top level query or it is in the free variable
    set of a query in scope. *)
 let annotate_needed r =
-  let singleton = Set.singleton (module Name.Compare_no_type) in
-  let of_list = Set.of_list (module Name.Compare_no_type) in
-  let union_list = Set.union_list (module Name.Compare_no_type) in
+  let singleton = Set.singleton (module Name) in
+  let of_list = Set.of_list (module Name) in
+  let union_list = Set.union_list (module Name) in
   let rec needed ctx r =
     Meta.(set_m r needed ctx) ;
     match r.node with
@@ -654,7 +653,7 @@ let annotate_needed r =
   needed (of_list Meta.(find_exn r schema)) r
 
 let project r =
-  let dummy = Set.empty (module Name.Compare_no_type) in
+  let dummy = Set.empty (module Name) in
   let select_needed r =
     let schema = Meta.(find_exn r schema) in
     let needed = Meta.(find_exn r needed) in
@@ -676,9 +675,7 @@ let project r =
       method! visit_ATuple needed (rs, k) =
         let rs' =
           List.filter rs ~f:(fun r ->
-              let s =
-                Meta.(find_exn r schema) |> Set.of_list (module Name.Compare_no_type)
-              in
+              let s = Meta.(find_exn r schema) |> Set.of_list (module Name) in
               not (Set.is_empty (Set.inter s needed)) )
           |> List.map ~f:(self#visit_t dummy)
         in
@@ -712,9 +709,7 @@ let pred_remove_as p =
   in
   visitor#visit_pred () p
 
-let dedup_pairs =
-  List.dedup_and_sort
-    ~compare:[%compare: Name.Compare_no_type.t * Name.Compare_no_type.t]
+let dedup_pairs = List.dedup_and_sort ~compare:[%compare: Name.t * Name.t]
 
 let pred_eqs p =
   let visitor =
@@ -764,7 +759,7 @@ let annotate_eq r =
           |> List.filter_map ~f:(fun ((n, n') as eq) ->
                  List.find_map ps
                    ~f:
-                     (let open Name.Compare_no_type in
+                     (let open Name.O in
                      function
                      | Name n'' when n'' = n' || n'' = n -> Some eq
                      | As_pred (Name n'', s) when n'' = n -> Some (Name.create s, n')
@@ -825,7 +820,7 @@ let annotate_orders r =
           let s' = Meta.(find_exn r' schema) in
           let eq' = Meta.(find_exn r' eq) in
           annotate_orders r' |> ignore ;
-          let open Name.Compare_no_type in
+          let open Name.O in
           annotate_orders r
           |> List.filter_map ~f:(function
                | Name n, dir ->
@@ -883,7 +878,7 @@ let pred_constants schema p =
     include T
     include Comparable.Make (T)
   end in
-  let schema = Set.of_list (module Name.Compare_no_type) schema in
+  let schema = Set.of_list (module Name) schema in
   let empty = Set.empty (module M) in
   let singleton = Set.singleton (module M) in
   let visitor =

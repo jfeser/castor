@@ -169,5 +169,5 @@ let is_compile_time p r = not (is_run_time p r)
 let parent p _ = match List.rev p with [] -> None | _ :: p' -> Some (List.rev p')
 
 let%expect_test "parent" =
-  parent [Child_first; Child_last] () |> [%sexp_of: t option] |> print_s;
+  parent [Child_first; Child_last] () |> [%sexp_of: t option] |> print_s ;
   [%expect {| ((Child_first)) |}]

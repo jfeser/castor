@@ -163,7 +163,7 @@ module Make (Config : Config.S) = struct
               List.zip_exn Meta.(find_exn q1 schema) sql1_names
               |> List.map ~f:(fun (n, n') ->
                      (n, Name (Name.create ?type_:n.type_ n')) )
-              |> Map.of_alist_exn (module Name.Compare_no_type)
+              |> Map.of_alist_exn (module Name)
             in
             subst ctx q2
           in
@@ -745,18 +745,15 @@ module Make (Config : Config.S) = struct
     annotator#visit_t ()
 
   (** Annotate names in an algebra expression with types. *)
-  let resolve ?(params = Set.empty (module Name.Compare_no_type)) r =
+  let resolve ?(params = Set.empty (module Name)) r =
     let resolve_relation r_name =
       let r = Db.Relation.from_db conn r_name in
       List.map r.fields ~f:(fun f ->
           {relation= Some r.rname; name= f.fname; type_= Some f.type_} )
-      |> Set.of_list (module Name.Compare_no_type)
+      |> Set.of_list (module Name)
     in
     let rename name s =
-      Set.map
-        (module Name.Compare_no_type)
-        s
-        ~f:(fun n -> {n with relation= Some name})
+      Set.map (module Name) s ~f:(fun n -> {n with relation= Some name})
     in
     let resolve_name ctx n =
       let could_not_resolve =
@@ -767,13 +764,12 @@ module Make (Config : Config.S) = struct
       | Some _, Some _ -> n
       | Some _, None -> n
       | None, Some _ -> (
-        match Set.find ctx ~f:(fun n' -> Name.Compare_no_type.(n' = n)) with
+        match Set.find ctx ~f:(fun n' -> Name.O.(n' = n)) with
         | Some n' -> n'
         | None -> Error.raise could_not_resolve )
       | None, None -> (
           let matches =
-            Set.to_list ctx
-            |> List.filter ~f:(fun n' -> Name.Compare_name_only.(n = n'))
+            Set.to_list ctx |> List.filter ~f:(fun n' -> String.(n.name = n'.name))
           in
           match matches with
           | [] -> Error.raise could_not_resolve
@@ -783,20 +779,18 @@ module Make (Config : Config.S) = struct
                 [%sexp_of: Name.t * Name.t * Name.t]
               |> Error.raise )
     in
-    let empty_ctx = Set.empty (module Name.Compare_no_type) in
+    let empty_ctx = Set.empty (module Name) in
     let preds_to_names preds =
       List.map preds ~f:pred_to_schema
       |> List.filter ~f:(fun n -> String.(n.name <> ""))
-      |> Set.of_list (module Name.Compare_no_type)
+      |> Set.of_list (module Name)
     in
     let pred_to_name pred =
       let n = pred_to_schema pred in
       if String.(n.name = "") then None else Some n
     in
     let union c1 c2 = Set.union c1 c2 in
-    let union_list =
-      List.fold_left ~init:(Set.empty (module Name.Compare_no_type)) ~f:union
-    in
+    let union_list = List.fold_left ~init:(Set.empty (module Name)) ~f:union in
     let rec resolve_pred ctx =
       let visitor =
         object
@@ -849,7 +843,7 @@ module Make (Config : Config.S) = struct
             let p = resolve_pred outer_ctx p in
             let ctx =
               match pred_to_name p with
-              | Some n -> Set.singleton (module Name.Compare_no_type) n
+              | Some n -> Set.singleton (module Name) n
               | None -> empty_ctx
             in
             (AScalar p, ctx)
@@ -961,5 +955,5 @@ module Make (Config : Config.S) = struct
     in
     visitor#visit_t ()
 
-  let bound r = to_schema r |> Set.of_list (module Name.Compare_no_type)
+  let bound r = to_schema r |> Set.of_list (module Name)
 end

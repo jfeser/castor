@@ -99,7 +99,7 @@ let join ctx schema1 schema2 sql1 sql2 pred =
   let ctx =
     List.zip_exn schema1 spj1.select @ List.zip_exn schema2 spj2.select
     |> List.map ~f:(fun (n, {pred= p; _}) -> (n, p))
-    |> Map.of_alist_exn (module Name.Compare_no_type)
+    |> Map.of_alist_exn (module Name)
   in
   let pred = subst_pred ctx pred in
   let select_list = spj1.select @ spj2.select in
@@ -113,7 +113,7 @@ let order_by ctx schema sql key =
   let spj = to_spj ctx sql in
   let ctx =
     List.map2_exn schema spj.select ~f:(fun n {pred= p; _} -> (n, p))
-    |> Map.of_alist_exn (module Name.Compare_no_type)
+    |> Map.of_alist_exn (module Name)
   in
   let key = List.map key ~f:(fun (p, o) -> (subst_pred ctx p, o)) in
   Query {spj with order= key}
@@ -139,7 +139,7 @@ let select ?groupby ctx schema sql fields =
   let spj = if needs_subquery then create_subquery ctx sql else to_spj ctx sql in
   let sctx =
     List.map2_exn schema spj.select ~f:(fun n {pred= p; _} -> (n, p))
-    |> Map.of_alist_exn (module Name.Compare_no_type)
+    |> Map.of_alist_exn (module Name)
   in
   let fields =
     List.map fields ~f:(fun p -> p |> subst_pred sctx |> create_entry ~ctx)
@@ -164,7 +164,7 @@ let filter ctx schema sql pred =
   let ctx =
     List.zip_exn schema spj.select
     |> List.map ~f:(fun (n, {pred= p; _}) -> (n, p))
-    |> Map.of_alist_exn (module Name.Compare_no_type)
+    |> Map.of_alist_exn (module Name)
   in
   let pred = subst_pred ctx pred in
   Query {spj with conds= pred :: spj.conds}
@@ -274,7 +274,7 @@ and spj_to_sql ctx {select; distinct; order; group; relations; conds; limit} =
       List.map select ~f:(fun {pred= p; alias= n; cast= t} ->
           let alias_sql =
             match p with
-            | Name n' when Name.Compare_no_type.(Name.create n = n') -> ""
+            | Name n' when Name.O.(Name.create n = n') -> ""
             | _ -> sprintf "as \"%s\"" n
           in
           match Option.map t ~f:Type.PrimType.to_sql with

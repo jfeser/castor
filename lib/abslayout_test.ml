@@ -51,8 +51,7 @@ let run_print_test ?params query =
   try
     let sparams =
       Option.map params ~f:(fun p ->
-          List.map p ~f:(fun (n, _) -> n)
-          |> Set.of_list (module Name.Compare_no_type) )
+          List.map p ~f:(fun (n, _) -> n) |> Set.of_list (module Name) )
     in
     let layout = of_string_exn query |> M.resolve ?params:sparams in
     M.annotate_schema layout ; print_fold#run () layout
@@ -306,9 +305,7 @@ let%expect_test "subst" =
   let n = Name.of_string_exn in
   let f = n "r.f" in
   let g = n "r.g" in
-  let ctx =
-    Map.of_alist_exn (module Name.Compare_no_type) [(f, Int 1); (g, Int 2)]
-  in
+  let ctx = Map.of_alist_exn (module Name) [(f, Int 1); (g, Int 2)] in
   let r = "Filter(r.f = r.g, Select([r.f, r.g], r))" |> of_string_exn in
   print_s ([%sexp_of: t] (subst ctx r)) ;
   [%expect

@@ -34,7 +34,8 @@ let create_test_db () =
   Db.create url
 
 let create_db uri =
-  try Db.create uri with exn ->
+  try Db.create uri
+  with exn ->
     Logs.warn (fun m ->
         m "Connecting to db failed. Cannot run test: %s" (Exn.to_string exn) ) ;
     raise TestDbExn

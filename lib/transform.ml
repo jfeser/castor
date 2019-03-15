@@ -7,7 +7,7 @@ module Config = struct
   module type S = sig
     val check_transforms : bool
 
-    val params : Set.M(Name.Compare_no_type).t
+    val params : Set.M(Name).t
   end
 end
 
@@ -87,8 +87,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
   let run_checked t r =
     let rs = run_unchecked t r in
     let check_schema r' =
-      let s = M.to_schema r |> Set.of_list (module Name.Compare_no_type) in
-      let s' = M.to_schema r' |> Set.of_list (module Name.Compare_no_type) in
+      let s = M.to_schema r |> Set.of_list (module Name) in
+      let s' = M.to_schema r' |> Set.of_list (module Name) in
       let schemas_ok = Set.is_subset s ~of_:s' in
       if not schemas_ok then
         Logs.warn (fun m ->
@@ -160,9 +160,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         | {node= GroupBy (ps, key, r); _} ->
             List.map key ~f:(fun k ->
                 let key_name = Fresh.name fresh "k%d" in
-                let new_key =
-                  List.filter key ~f:(fun k' -> Name.Compare_no_type.(k <> k'))
-                in
+                let new_key = List.filter key ~f:(fun k' -> Name.O.(k <> k')) in
                 let new_ps =
                   List.filter ps ~f:(fun p ->
                       not ([%compare.equal: pred] p (Name k)) )
@@ -326,9 +324,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
       | Filter (p, r') ->
           let schema = Meta.(find_exn r' schema) in
           let free_vars =
-            Set.diff (pred_free p)
-              (Set.of_list (module Name.Compare_no_type) schema)
-            |> Set.to_list
+            Set.diff (pred_free p) (Set.of_list (module Name) schema) |> Set.to_list
           in
           let free_var =
             match free_vars with
@@ -343,9 +339,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           let encoder =
             List.foldi values ~init:(Int 0) ~f:(fun i else_ v ->
                 let witness =
-                  subst_pred
-                    (Map.singleton (module Name.Compare_no_type) free_var v)
-                    p
+                  subst_pred (Map.singleton (module Name) free_var v) p
                 in
                 If (witness, Int (i + 1), else_) )
           in
@@ -378,9 +372,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
       | Filter (p, r') ->
           let schema = Meta.(find_exn r' schema) in
           let free_vars =
-            Set.diff (pred_free p)
-              (Set.of_list (module Name.Compare_no_type) schema)
-            |> Set.to_list
+            Set.diff (pred_free p) (Set.of_list (module Name) schema) |> Set.to_list
           in
           let free_var =
             match free_vars with
@@ -396,9 +388,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           let witnesses =
             List.mapi values ~f:(fun i v ->
                 As_pred
-                  ( subst_pred
-                      (Map.singleton (module Name.Compare_no_type) free_var v)
-                      p
+                  ( subst_pred (Map.singleton (module Name) free_var v) p
                   , sprintf "%s_%d" witness_name i ) )
           in
           let filter_pred =
@@ -504,7 +494,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
    *             Filter
    *               (Binop (And, Binop (Ge, Name n1, lb), Binop (Lt, Name n2, ub)), r); _
    *         } ->
-   *           if Name.Compare_no_type.(n1 = n2) then
+   *           if Name.(n1 = n2) then
    *             let rel =
    *               match (n1.relation, n2.relation) with
    *               | Some r1, Some r2 -> if String.(r1 = r2) then Some r1 else None
@@ -552,9 +542,9 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     (* Create map from names to sets of equal names. *)
     let eq_map =
       names
-      |> List.dedup_and_sort ~compare:[%compare: Name.Compare_no_type.t]
+      |> List.dedup_and_sort ~compare:[%compare: Name.t]
       |> List.map ~f:(fun n -> (n, Union_find.create n))
-      |> Hashtbl.of_alist_exn (module Name.Compare_no_type)
+      |> Hashtbl.of_alist_exn (module Name)
     in
     (* Add known equalities. *)
     List.iter eqs ~f:(fun (n, n') ->
@@ -589,10 +579,10 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     match rs with
     | r :: rs ->
         let schema = Meta.(find_exn r schema) in
-        let sschema = Set.of_list (module Name.Compare_no_type) schema in
+        let sschema = Set.of_list (module Name) schema in
         let skey =
           Set.of_list
-            (module Name.Compare_no_type)
+            (module Name)
             (List.filter_map ~f:(fun (p, _) -> pred_to_name p) key)
         in
         if Set.is_subset skey ~of_:sschema then [tuple (order_by key r :: rs) Cross]
@@ -781,9 +771,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
 
         method! visit_Name () n =
           let is_param = Option.is_none n.relation in
-          let in_schema =
-            List.mem s n ~equal:[%compare.equal: Name.Compare_no_type.t]
-          in
+          let in_schema = List.mem s n ~equal:[%compare.equal: Name.t] in
           let is_valid = is_param || in_schema in
           if not is_valid then
             Logs.debug (fun m -> m "Predicate not valid. %a missing." Name.pp n) ;
@@ -797,7 +785,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
   let extend_select ~with_ ps r =
     let open A in
     let needed_fields =
-      let of_list = Set.of_list (module Name.Compare_no_type) in
+      let of_list = Set.of_list (module Name) in
       (* These are the fields that are emitted by r, used in with_ and not
          exposed already by ps. *)
       Set.diff
@@ -844,7 +832,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
                  (extend_select ps rel
                     ~with_:
                       ( List.map key ~f:(fun (p, _) -> pred_free p)
-                      |> Set.union_list (module Name.Compare_no_type) ))
+                      |> Set.union_list (module Name) ))
                  rel) ]
       | _ -> []
     in
@@ -995,7 +983,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
               (dedup (select [As_pred (Name n_domain, fresh_name)] (scan rel)))
               (subst
                  (Map.singleton
-                    (module Name.Compare_no_type)
+                    (module Name)
                     n_subst
                     (Name (Name.create fresh_name)))
                  r)
@@ -1063,7 +1051,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           |> Error.raise
     in
     let rel_schema = M.to_schema (scan rel) in
-    let eq = [%compare.equal: Name.Compare_no_type.t] in
+    let eq = [%compare.equal: Name.t] in
     { name= "split-out"
     ; f=
         (fun r ->
@@ -1081,8 +1069,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
               List.partition_tf schema ~f:(fun n ->
                   eq n pk
                   || not
-                       (List.mem rel_schema n
-                          ~equal:[%compare.equal: Name.Compare_name_only.t]) )
+                       (List.mem rel_schema n ~equal:(fun n n' ->
+                            String.(n.name = n'.name) )) )
             in
             let fst_sel_list = List.map ~f:(fun n -> Name n) fst_sel_list in
             let snd_sel_list =
@@ -1184,7 +1172,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
       (Set.is_empty
          (Set.inter
             Meta.(find_exn subquery free)
-            (Set.of_list (module Name.Compare_no_type) input_schema)))
+            (Set.of_list (module Name) input_schema)))
 
   let tf_elim_subquery _ =
     let open A in

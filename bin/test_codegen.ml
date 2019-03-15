@@ -33,10 +33,10 @@ let main () =
   let layout = Transform.row_layout taxi in
   Logs.debug (fun m ->
       m "Relation schema %a." Sexp.pp_hum
-        ([%sexp_of : Schema.t] (Schema.of_relation taxi)) ) ;
+        ([%sexp_of: Schema.t] (Schema.of_relation taxi)) ) ;
   Logs.debug (fun m ->
       m "Layout schema %a." Sexp.pp_hum
-        ([%sexp_of : Schema.t] (Layout.to_schema_exn layout)) ) ;
+        ([%sexp_of: Schema.t] (Layout.to_schema_exn layout)) ) ;
   let l =
     let open Ralgebra0 in
     Filter
@@ -56,7 +56,8 @@ let main () =
 
         let builder = builder ctx
       end)
-      () in
+      ()
+  in
   CGen.codegen ir_module.buffer ir_module ;
   Out_channel.with_file buf_file ~f:(fun ch ->
       Out_channel.output_bytes ch ir_module.buffer ) ;

@@ -40,7 +40,7 @@ let round_up value align =
 let rec _make_position hdr name start =
   match hdr with
   | _, _, [] -> failwith "Field not found."
-  | prev_hdr, ptr, (Field.({name= n; size; _}) as f) :: next_hdr -> (
+  | prev_hdr, ptr, (Field.{name= n; size; _} as f) :: next_hdr -> (
       if String.(n = name) then ptr
       else
         match size with

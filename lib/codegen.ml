@@ -49,18 +49,19 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     set_target_triple triple m ;
     m
 
-  let Builtin.({ llvm_lifetime_start
-               ; llvm_lifetime_end
-               ; cmph_search_packed
-               ; printf
-               ; strncmp
-               ; strncpy
-               ; strpos
-               ; extract_y
-               ; extract_m
-               ; extract_d
-               ; add_m
-               ; add_y }) =
+  let Builtin.
+        { llvm_lifetime_start
+        ; llvm_lifetime_end
+        ; cmph_search_packed
+        ; printf
+        ; strncmp
+        ; strncpy
+        ; strpos
+        ; extract_y
+        ; extract_m
+        ; extract_d
+        ; add_m
+        ; add_y } =
     Builtin.create module_
 
   let builder = builder ctx
@@ -286,8 +287,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let eq_bb = append_block ctx "eq" func in
     let neq_bb = append_block ctx "neq" func in
     position_at_end bb builder ;
-    let Llstring.({pos= p1; len= l1}) = Llstring.unpack (param func 0) in
-    let Llstring.({pos= p2; len= l2}) = Llstring.unpack (param func 1) in
+    let Llstring.{pos= p1; len= l1} = Llstring.unpack (param func 0) in
+    let Llstring.{pos= p2; len= l2} = Llstring.unpack (param func 1) in
     build_cond_br (build_icmp Icmp.Eq l1 l2 "len_cmp" builder) eq_bb neq_bb builder
     |> ignore ;
     position_at_end eq_bb builder ;
@@ -390,7 +391,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     ret
 
   let codegen_string_hash fctx hash_ptr key =
-    let Llstring.({pos= key_ptr; len= key_size}) = Llstring.unpack key in
+    let Llstring.{pos= key_ptr; len= key_size} = Llstring.unpack key in
     let key_size = build_intcast key_size (i32_type ctx) "key_size" builder in
     codegen_hash fctx hash_ptr key_ptr key_size
 
@@ -411,7 +412,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
               build_add (size_of int_type) size "" builder
           | StringT _ ->
               let str_struct = build_extractvalue key idx "" builder in
-              let Llstring.({len= str_size; _}) = Llstring.unpack str_struct in
+              let Llstring.{len= str_size; _} = Llstring.unpack str_struct in
               let str_size = build_intcast str_size int_type "key_size" builder in
               build_add str_size size "" builder
           | BoolT _ -> build_add (size_of bool_type) size "" builder )
@@ -448,7 +449,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
                 build_inttoptr key_offset (pointer_type (i8_type ctx)) "" builder
               in
               let str_struct = build_extractvalue key idx "" builder in
-              let Llstring.({pos= str_ptr; len= str_size}) =
+              let Llstring.{pos= str_ptr; len= str_size} =
                 Llstring.unpack str_struct
               in
               let i32_str_size = build_intcast str_size (i32_type ctx) "" builder in
@@ -676,7 +677,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
           let fmt = build_select val_ true_str false_str "" builder in
           call_printf fmt []
       | StringT {nullable= false} ->
-          let Llstring.({pos; len}) = Llstring.unpack val_ in
+          let Llstring.{pos; len} = Llstring.unpack val_ in
           call_printf str_fmt [len; pos]
       | TupleT ts ->
           let last_i = List.length ts - 1 in
@@ -700,7 +701,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     match type_ with
     | IntT _ | DateT _ | BoolT _ | FixedT _ -> [tup]
     | StringT _ ->
-        let Llstring.({pos; len}) = Llstring.unpack tup in
+        let Llstring.{pos; len} = Llstring.unpack tup in
         [pos; len]
     | TupleT ts ->
         let vs = Lltuple.unpack tup in
@@ -752,7 +753,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
   let codegen_func fctx =
     let name = fctx#name in
-    let (I.({args; locals; ret_type; body; _}) as func) = fctx#func in
+    let (I.{args; locals; ret_type; body; _} as func) = fctx#func in
     Logs.debug (fun m -> m "Codegen for func %s started." name) ;
     Logs.debug (fun m -> m "%a" I.pp_func func) ;
     ( if (* Check that function is not already defined. *)
@@ -879,7 +880,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         build_store (param llfunc 1) (get_val fctx n) builder |> ignore ;
         build_ret_void builder |> ignore )
 
-  let codegen Irgen.({funcs= ir_funcs; params; buffer_len; _}) =
+  let codegen Irgen.{funcs= ir_funcs; params; buffer_len; _} =
     Logs.info (fun m -> m "Codegen started.") ;
     let module SB = ParamStructBuilder in
     let sb = SB.create () in
@@ -1014,8 +1015,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       Logs.debug (fun m -> m "Creating main file.") ;
       let funcs, calls =
         List.filter params ~f:(fun n ->
-            List.exists ir_module.Irgen.params ~f:(fun n' ->
-                Name.Compare_no_type.(n = n') ) )
+            List.exists ir_module.Irgen.params ~f:(fun n' -> Name.O.(n = n')) )
         |> List.mapi ~f:(fun i n ->
                Logs.debug (fun m -> m "Creating loader for %a." Name.pp n) ;
                let loader_fn =

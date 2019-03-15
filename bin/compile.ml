@@ -26,7 +26,7 @@ let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
   (* Codegen *)
   Logs.debug (fun m -> m "Codegen.") ;
   let ralgebra =
-    let params = Set.of_list (module Name.Compare_no_type) params in
+    let params = Set.of_list (module Name) params in
     let r = Abslayout.of_channel_exn ch |> A.resolve ~params in
     A.annotate_schema r ; A.annotate_key_layouts r
   in

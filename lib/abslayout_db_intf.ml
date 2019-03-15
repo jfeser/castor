@@ -12,7 +12,7 @@ module type S = sig
 
   val annotate_subquery_types : t -> unit
 
-  val resolve : ?params:Set.M(Name.Compare_no_type).t -> t -> t
+  val resolve : ?params:Set.M(Name).t -> t -> t
 
   type eval_ctx
 
@@ -90,5 +90,5 @@ module type S = sig
 
   val annotate_type : t -> Type.t -> unit
 
-  val bound : t -> Set.M(Name.Compare_no_type).t
+  val bound : t -> Set.M(Name).t
 end

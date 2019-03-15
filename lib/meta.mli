@@ -25,9 +25,9 @@ val start_pos : lexpos key
 
 val end_pos : lexpos key
 
-val needed : Set.M(Name.Compare_no_type).t key
+val needed : Set.M(Name).t key
 
-val free : Set.M(Name.Compare_no_type).t key
+val free : Set.M(Name).t key
 
 val eq : (Name.t * Name.t) list key
 

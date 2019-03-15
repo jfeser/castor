@@ -35,7 +35,7 @@ let validate : Ralgebra.t -> bool =
           true
         with Type.TypeError _ -> false )
   in
-  not has_refs && types_check
+  (not has_refs) && types_check
 
 let main :
        ?num:int
@@ -61,7 +61,7 @@ let main :
         match values with
         | [] ->
             Error.create "Empty parameter list." (name, pname)
-              [%sexp_of : string * string]
+              [%sexp_of: string * string]
             |> Error.raise
         | v :: _ -> (pname, v) )
   in
@@ -101,11 +101,11 @@ let main :
           | UNIQUE_VIOLATION -> return false
           | e ->
               let e = Error_code.to_string e in
-              fail (Error.create "Postgres error" e [%sexp_of : string])
+              fail (Error.create "Postgres error" e [%sexp_of: string])
         with Failure _ -> return true )
       | e ->
           let e = result_status e in
-          fail (Error.create "Postgres error" e [%sexp_of : string])
+          fail (Error.create "Postgres error" e [%sexp_of: string])
     in
     if do_write then Logs.debug (fun m -> m "Won the race to write %s." hash)
     else Logs.debug (fun m -> m "Lost the race to write %s." hash) ;
@@ -139,8 +139,7 @@ let main :
         match%map Reader.read_bin_prot ?max_len reader bin_reader_t with
         | `Ok r -> Result.Ok (to_candidate r)
         | `Eof ->
-            Result.Error (Error.create "EOF when reading." fn [%sexp_of : string])
-    )
+            Result.Error (Error.create "EOF when reading." fn [%sexp_of: string]) )
     >>| Result.map_error ~f:(fun e -> Error.(of_exn e |> tag ~tag:fn))
     >>| Result.join
     >>| fun e ->
@@ -174,12 +173,13 @@ returning hash;
                   m "Searching candidate failed: %s" (Error.to_string_hum e) ) ;
               true
         in
-        Db.exec qconn ~params:[queue; hash; Bool.to_string failed]
+        Db.exec qconn
+          ~params:[queue; hash; Bool.to_string failed]
           "update $0 set (search_state, search_failed) = ('searched', $2) where \
            hash = $1"
         |> ignore
     | r ->
-        Error.create "Unexpected db results." r [%sexp_of : string list]
+        Error.create "Unexpected db results." r [%sexp_of: string list]
         |> Error.raise
   in
   let is_done : unit -> string option =
@@ -280,7 +280,7 @@ let () =
   (* Set early so we get logs from command parsing code. *)
   Logs.set_reporter (Logs.format_reporter ()) ;
   let open Command in
-  let bench = Arg_type.create (fun s -> Sexp.load_sexp s |> [%of_sexp : Bench.t]) in
+  let bench = Arg_type.create (fun s -> Sexp.load_sexp s |> [%of_sexp: Bench.t]) in
   let open Let_syntax in
   async ~summary:"Generate candidates from a benchmark file."
     (let%map_open db =

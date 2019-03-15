@@ -6,7 +6,7 @@ module A = Abslayout
 let main ?(debug = false) ?sample:_ ?(transforms = "") ~db ~params query_str =
   let params =
     List.map params ~f:(fun (n, t) -> Name.create ~type_:t n)
-    |> Set.of_list (module Name.Compare_no_type)
+    |> Set.of_list (module Name)
   in
   let module Config = struct
     let conn = Db.create db

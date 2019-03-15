@@ -96,7 +96,7 @@ val pp : Formatter.t -> t -> unit
 
 val name : t -> string
 
-val names : t -> Set.M(Name.Compare_no_type).t
+val names : t -> Set.M(Name).t
 (** The set of names in a `t`. *)
 
 val select : pred list -> t -> t
@@ -132,7 +132,7 @@ val as_ : string -> t -> t
 val and_ : pred list -> pred
 
 module Ctx : sig
-  type t = Value.t Map.M(Name.Compare_no_type).t [@@deriving compare, sexp]
+  type t = Value.t Map.M(Name).t [@@deriving compare, sexp]
 
   include Comparable.S with type t := t
 
@@ -147,9 +147,9 @@ val pred_of_string_exn : string -> pred
 
 val of_channel_exn : Stdio.In_channel.t -> t
 
-val subst : pred Map.M(Name.Compare_no_type).t -> t -> t
+val subst : pred Map.M(Name).t -> t -> t
 
-val subst_pred : pred Map.M(Name.Compare_no_type).t -> pred -> pred
+val subst_pred : pred Map.M(Name).t -> pred -> pred
 
 val subst_single : pred -> pred -> t -> t
 
@@ -171,9 +171,9 @@ val select_kind : pred list -> [`Agg | `Scalar]
 
 val is_serializeable : t -> bool
 
-val pred_free : pred -> Set.M(Name.Compare_no_type).t
+val pred_free : pred -> Set.M(Name).t
 
-val free : t -> Set.M(Name.Compare_no_type).t
+val free : t -> Set.M(Name).t
 
 val annotate_free : t -> unit
 

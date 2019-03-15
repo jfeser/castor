@@ -31,8 +31,7 @@ let run_test ?(params = []) ?(print_layout = true) ?(fork = false) ?irgen_debug
   try
     let layout =
       let params =
-        List.map params ~f:(fun (n, _) -> n)
-        |> Set.of_list (module Name.Compare_no_type)
+        List.map params ~f:(fun (n, _) -> n) |> Set.of_list (module Name)
       in
       of_string_exn layout_str |> M.resolve ~params
     in

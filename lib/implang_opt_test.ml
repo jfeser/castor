@@ -23,7 +23,7 @@ let run_test ?(params = []) layout_str opt_func =
       ()
   in
   let param_names = List.map params ~f:(fun (n, _) -> n) in
-  let sparams = Set.of_list (module Name.Compare_no_type) param_names in
+  let sparams = Set.of_list (module Name) param_names in
   let layout = of_string_exn layout_str |> M.resolve ~params:sparams in
   M.annotate_schema layout ;
   let layout = M.annotate_key_layouts layout in
