@@ -1,9 +1,7 @@
-open Base
+open Core
 open Collections
 
-type t = private
-  {relation: string option; name: string; type_: Type.PrimType.t option}
-[@@deriving compare, hash, sexp]
+type t [@@deriving compare, hash, sexp]
 
 include Comparator.S with type t := t
 
@@ -18,6 +16,12 @@ val copy :
   -> t
   -> t
 
+val name : t -> string
+
+val type_ : t -> Type.PrimType.t option
+
+val rel : t -> string option
+
 val type_exn : t -> Type.PrimType.t
 
 val rel_exn : t -> string
@@ -31,3 +35,5 @@ val pp : Formatter.t -> t -> unit
 (* val of_string_exn : string -> t *)
 
 val fresh : Fresh.t -> (int -> string, unit, string) format -> t
+
+val create_table : unit -> (t, 'a) Bounded_int_table.t

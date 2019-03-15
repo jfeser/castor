@@ -1,7 +1,7 @@
 open Base
 open Collections
-include Abslayout0
 module Format = Caml.Format
+include Abslayout0
 
 let select a b =
   if List.is_empty a then Error.of_string "Empty selection list." |> Error.raise ;
@@ -95,12 +95,13 @@ let unop_to_str = function
   | ExtractM -> "to_mon"
   | ExtractD -> "to_day"
 
-let pp_name fmt =
+let pp_name fmt n =
   let open Format in
   let open Name in
-  function
-  | {relation= Some r; name; _} -> fprintf fmt "%s.%s" r name
-  | {relation= None; name; _} -> fprintf fmt "%s" name
+  let name = name n in
+  match rel n with
+  | Some r -> fprintf fmt "%s.%s" r name
+  | None -> fprintf fmt "%s" name
 
 let pp_kind fmt =
   Format.(
@@ -196,14 +197,6 @@ let of_channel_exn ch = of_lexbuf_exn (Lexing.from_channel ch)
 
 let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
 
-let pred_of_lexbuf_exn lexbuf =
-  try Ralgebra_parser.expr_eof Ralgebra_lexer.token lexbuf
-  with Parser_utils.ParseError (msg, line, col) as e ->
-    Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
-    raise e
-
-let pred_of_string_exn s = pred_of_lexbuf_exn (Lexing.from_string s)
-
 let name_of_lexbuf_exn lexbuf =
   try Ralgebra_parser.name_eof Ralgebra_lexer.token lexbuf
   with Parser_utils.ParseError (msg, line, col) as e ->
@@ -211,25 +204,6 @@ let name_of_lexbuf_exn lexbuf =
     raise e
 
 let name_of_string_exn s = name_of_lexbuf_exn (Lexing.from_string s)
-
-(* let params r =
- *   let ralgebra_params =
- *     object (self)
- *       inherit [_] reduce
- * 
- *       method zero = Set.empty (module Name)
- * 
- *       method plus = Set.union
- * 
- *       method! visit_Name () n =
- *         if Option.is_none n.relation then
- *           Set.singleton (module Name) n
- *         else self#zero
- * 
- *       method visit_name _ _ = self#zero
- *     end
- *   in
- *   ralgebra_params#visit_t () r *)
 
 let names_visitor =
   object (self : 'a)
@@ -253,10 +227,6 @@ let names_visitor =
 
 let names r = names_visitor#visit_t () r
 
-let pred_names r = names_visitor#visit_pred () r
-
-let pred_of_value = Value.to_pred
-
 let subst_visitor p_old p_new =
   object
     inherit [_] endo as super
@@ -264,8 +234,6 @@ let subst_visitor p_old p_new =
     method! visit_pred () p =
       if [%compare.equal: pred] p p_old then p_new else super#visit_pred () p
   end
-
-let subst_single p_old p_new = (subst_visitor p_old p_new)#visit_t ()
 
 let subst ctx =
   let v =
@@ -279,79 +247,6 @@ let subst ctx =
     end
   in
   v#visit_t ()
-
-let subst_pred ctx =
-  let v =
-    object
-      inherit [_] endo
-
-      method! visit_Name _ this v =
-        match Map.find ctx v with Some x -> x | None -> this
-
-      method visit_name _ x = x
-    end
-  in
-  v#visit_pred ()
-
-let pred_relations p =
-  let rels = ref [] in
-  let f =
-    object
-      inherit [_] iter
-
-      method! visit_Name () =
-        function
-        | {relation= Some r; _} -> rels := r :: !rels | {relation= None; _} -> ()
-
-      method visit_name () _ = ()
-
-      method visit_'m () _ = ()
-    end
-  in
-  f#visit_pred () p ; !rels
-
-(** Return the set of relations which have fields in the tuple produced by this
-   expression. *)
-let rec pred_to_schema =
-  let open Type.PrimType in
-  let unnamed t = Name.create ~type_:t "" in
-  function
-  | As_pred (p, n) ->
-      let schema = pred_to_schema p in
-      Name.copy schema ~relation:None ~name:n
-  | Name n -> n
-  | Int _ | Date _
-   |Unop ((Year | Month | Day | Strlen | ExtractY | ExtractM | ExtractD), _)
-   |Count ->
-      unnamed (IntT {nullable= false})
-  | Fixed _ | Avg _ -> unnamed (FixedT {nullable= false})
-  | Bool _ | Exists _
-   |Binop ((Eq | Lt | Le | Gt | Ge | And | Or), _, _)
-   |Unop (Not, _) ->
-      unnamed (BoolT {nullable= false})
-  | String _ -> unnamed (StringT {nullable= false})
-  | Null -> unnamed NullT
-  | Binop ((Add | Sub | Mul | Div | Mod), p1, p2) ->
-      let s1 = pred_to_schema p1 in
-      let s2 = pred_to_schema p2 in
-      unnamed (unify (Name.type_exn s1) (Name.type_exn s2))
-  | Binop (Strpos, _, _) -> unnamed (IntT {nullable= false})
-  | Sum p | Min p | Max p -> pred_to_schema p
-  | If (_, p1, p2) ->
-      let s1 = pred_to_schema p1 in
-      let s2 = pred_to_schema p2 in
-      Type.PrimType.unify (Name.type_exn s1) (Name.type_exn s2) |> ignore ;
-      unnamed (Name.type_exn s1)
-  | First r -> (
-    match Meta.(find_exn r schema) with
-    | [n] -> n
-    | [] -> failwith "Unexpected empty schema."
-    | _ -> failwith "Too many fields." )
-  | Substring _ -> unnamed (StringT {nullable= false})
-
-let pred_to_name pred =
-  let n = pred_to_schema pred in
-  if String.(n.name = "") then None else Some n
 
 let rec annotate_align r =
   match r.node with
@@ -410,95 +305,6 @@ let rec annotate_foreach r =
   | Join {r1; r2; _} -> annotate_foreach r1 ; annotate_foreach r2
   | Scan _ | AEmpty | AScalar _ -> ()
   | ATuple (rs, _) -> List.iter rs ~f:annotate_foreach
-
-let pred_kind p =
-  let visitor =
-    object
-      inherit [_] reduce
-
-      inherit [_] Util.disj_monoid
-
-      method! visit_Sum () _ = true
-
-      method! visit_Avg () _ = true
-
-      method! visit_Min () _ = true
-
-      method! visit_Max () _ = true
-
-      method! visit_Count () = true
-    end
-  in
-  if visitor#visit_pred () p then `Agg else `Scalar
-
-let select_kind l =
-  if List.exists l ~f:(fun p -> Poly.(pred_kind p = `Agg)) then `Agg else `Scalar
-
-let is_serializeable r =
-  let visitor =
-    object (self : 'a)
-      inherit [_] reduce
-
-      method zero = true
-
-      method plus = ( && )
-
-      method! visit_AEmpty _ = true
-
-      method! visit_AScalar _ _ = true
-
-      method! visit_Filter ns (p, r) =
-        let sq_visitor =
-          object
-            inherit [_] reduce
-
-            method zero = true
-
-            method plus = ( && )
-
-            method! visit_Exists _ r = self#visit_t ns r
-
-            method! visit_First _ r = self#visit_t ns r
-          end
-        in
-        List.fold_left ~init:self#zero ~f:self#plus
-          [ Set.is_empty (Set.inter (pred_names p) ns)
-          ; self#visit_t ns r
-          ; sq_visitor#visit_pred ns p ]
-
-      method! visit_Select ns (ps, r) =
-        self#plus
-          (List.for_all ps ~f:(fun p -> Set.is_empty (Set.inter (pred_names p) ns)))
-          (self#visit_t ns r)
-
-      method! visit_Join _ _ _ _ = false
-
-      method! visit_GroupBy _ _ _ _ = false
-
-      method! visit_OrderBy _ _ _ = false
-
-      method! visit_Dedup _ _ = false
-
-      method! visit_Scan _ _ = false
-
-      method! visit_As ns _ r = self#visit_t ns r
-
-      method visit_Collection ns r1 r2 =
-        let ns =
-          Set.union ns (Meta.(find_exn r1 schema) |> Set.of_list (module Name))
-        in
-        self#visit_t ns r2
-
-      method! visit_AOrderedIdx ns (r1, r2, _) = self#visit_Collection ns r1 r2
-
-      method! visit_AHashIdx ns (r1, r2, _) = self#visit_Collection ns r1 r2
-
-      method! visit_AList ns (r1, r2) = self#visit_Collection ns r1 r2
-
-      method! visit_ATuple ns (rs, _) = List.for_all ~f:(self#visit_t ns) rs
-    end
-  in
-  visitor#visit_t (Set.empty (module Name)) r
 
 let rec pred_free p =
   let singleton = Set.singleton (module Name) in
@@ -661,144 +467,7 @@ let annotate_needed r =
   subquery_needed_visitor#visit_t () r ;
   needed (of_list Meta.(find_exn r schema)) r
 
-let project r =
-  let dummy = Set.empty (module Name) in
-  let select_needed r =
-    let schema = Meta.(find_exn r schema) in
-    let needed = Meta.(find_exn r needed) in
-    if List.for_all schema ~f:(Set.mem needed) then r
-    else select (Set.to_list needed |> List.map ~f:(fun n -> Name n)) r
-  in
-  let project_visitor =
-    object (self : 'a)
-      inherit [_] map as super
-
-      method! visit_Select needed (ps, r) =
-        let ps' =
-          List.filter ps ~f:(fun p ->
-              match pred_to_name p with None -> false | Some n -> Set.mem needed n
-          )
-        in
-        Select (ps', self#visit_t dummy r)
-
-      method! visit_ATuple needed (rs, k) =
-        let rs' =
-          List.filter rs ~f:(fun r ->
-              let s = Meta.(find_exn r schema) |> Set.of_list (module Name) in
-              not (Set.is_empty (Set.inter s needed)) )
-          |> List.map ~f:(self#visit_t dummy)
-        in
-        ATuple (rs', k)
-
-      method! visit_AList _ (rk, rv) =
-        AList (select_needed rk, self#visit_t dummy rv)
-
-      method! visit_AHashIdx _ (rk, rv, idx) =
-        AHashIdx (select_needed rk, self#visit_t dummy rv, idx)
-
-      method! visit_AOrderedIdx _ (rk, rv, idx) =
-        AOrderedIdx (select_needed rk, self#visit_t dummy rv, idx)
-
-      method! visit_t _ r =
-        let needed = Meta.(find_exn r needed) in
-        super#visit_t needed r
-    end
-  in
-  annotate_free r ;
-  annotate_needed r ;
-  project_visitor#visit_t dummy r
-
-let pred_remove_as p =
-  let visitor =
-    object
-      inherit [_] map
-
-      method! visit_As_pred () (p, _) = p
-    end
-  in
-  visitor#visit_pred () p
-
 let dedup_pairs = List.dedup_and_sort ~compare:[%compare: Name.t * Name.t]
-
-let pred_eqs p =
-  let visitor =
-    object (self : 'a)
-      inherit [_] reduce
-
-      method zero = []
-
-      method plus = ( @ )
-
-      method! visit_Binop () (op, p1, p2) =
-        match (op, p1, p2) with
-        | Eq, Name n1, Name n2 -> [(n1, n2)]
-        | And, p1, p2 -> self#plus (self#visit_pred () p1) (self#visit_pred () p2)
-        | _ -> self#zero
-    end
-  in
-  visitor#visit_pred () p |> dedup_pairs
-
-let annotate_eq r =
-  let visitor =
-    object
-      inherit [_] iter as super
-
-      method! visit_As m n r =
-        super#visit_As None n r ;
-        let m = Option.value_exn m in
-        let schema = Meta.(find_exn r schema) in
-        let eqs =
-          List.map schema ~f:(fun n' -> (n', Name.create ~relation:n n'.name))
-          |> dedup_pairs
-        in
-        Meta.Direct.set_m m Meta.eq eqs
-
-      method! visit_Filter m (p, r) =
-        super#visit_Filter None (p, r) ;
-        let m = Option.value_exn m in
-        let r_eqs = Meta.(find_exn r eq) in
-        let eqs = pred_eqs p @ r_eqs |> dedup_pairs in
-        Meta.Direct.set_m m Meta.eq eqs
-
-      method! visit_Select m (ps, r) =
-        super#visit_Select None (ps, r) ;
-        let m = Option.value_exn m in
-        let eqs =
-          Meta.(find_exn r eq)
-          |> List.filter_map ~f:(fun ((n, n') as eq) ->
-                 List.find_map ps
-                   ~f:
-                     (let open Name.O in
-                     function
-                     | Name n'' when n'' = n' || n'' = n -> Some eq
-                     | As_pred (Name n'', s) when n'' = n -> Some (Name.create s, n')
-                     | As_pred (Name n'', s) when n'' = n' -> Some (n, Name.create s)
-                     | _ -> None) )
-        in
-        Meta.Direct.set_m m Meta.eq eqs
-
-      method! visit_Join m p r1 r2 =
-        super#visit_Join None p r1 r2 ;
-        let m = Option.value_exn m in
-        let r1_eqs = Meta.(find_exn r1 eq) in
-        let r2_eqs = Meta.(find_exn r2 eq) in
-        let eqs = pred_eqs p @ r1_eqs @ r2_eqs |> dedup_pairs in
-        Meta.Direct.set_m m Meta.eq eqs
-
-      method! visit_AList m (r1, r2) =
-        super#visit_AList None (r1, r2) ;
-        let m = Option.value_exn m in
-        let r1_eqs = Meta.(find_exn r1 eq) in
-        let r2_eqs = Meta.(find_exn r2 eq) in
-        let eqs = r1_eqs @ r2_eqs |> dedup_pairs in
-        Meta.Direct.set_m m Meta.eq eqs
-
-      method! visit_t _ ({meta; _} as r) =
-        Meta.(set_m r eq []) ;
-        super#visit_t (Some meta) r
-    end
-  in
-  visitor#visit_t None r
 
 let annotate_orders r =
   let rec annotate_orders r =
@@ -878,107 +547,6 @@ let validate r =
   if exists_bare_relations r then
     Error.of_string "Program contains bare relation references." |> Error.raise
 
-let pred_constants schema p =
-  let module M = struct
-    module T = struct
-      type t = pred [@@deriving compare, sexp_of]
-    end
-
-    include T
-    include Comparable.Make (T)
-  end in
-  let schema = Set.of_list (module Name) schema in
-  let empty = Set.empty (module M) in
-  let singleton = Set.singleton (module M) in
-  let visitor =
-    object
-      inherit [_] reduce as super
-
-      inherit [_] Util.set_monoid (module M)
-
-      method! visit_Name () n =
-        if Set.mem schema n then empty else singleton (Name n)
-
-      method! visit_Int () x = singleton (Int x)
-
-      method! visit_Fixed () x = singleton (Fixed x)
-
-      method! visit_Date () x = singleton (Date x)
-
-      method! visit_Bool () x = singleton (Bool x)
-
-      method! visit_String () x = singleton (String x)
-
-      method! visit_Null () = singleton Null
-
-      method! visit_As_pred () args =
-        let p, _ = args in
-        let ps = super#visit_As_pred () args in
-        if Set.mem ps p then Set.add ps (As_pred args) else ps
-
-      method! visit_Substring () p1 p2 p3 =
-        let ps = super#visit_Substring () p1 p2 p3 in
-        if Set.mem ps p1 && Set.mem ps p2 && Set.mem ps p3 then
-          Set.add ps (Substring (p1, p2, p3))
-        else ps
-
-      method! visit_First () r =
-        let free = Meta.(find_exn r free) in
-        if Set.is_empty (Set.inter free schema) then singleton (First r) else empty
-
-      method! visit_Exists () r =
-        let free = Meta.(find_exn r free) in
-        if Set.is_empty (Set.inter free schema) then singleton (Exists r) else empty
-
-      method! visit_If () p1 p2 p3 =
-        let ps = super#visit_If () p1 p2 p3 in
-        if Set.mem ps p1 && Set.mem ps p2 && Set.mem ps p3 then
-          Set.add ps (If (p1, p2, p3))
-        else ps
-
-      method! visit_Binop () args =
-        let ps = super#visit_Binop () args in
-        let _, p1, p2 = args in
-        if Set.mem ps p1 && Set.mem ps p2 then Set.add ps (Binop args) else ps
-
-      method! visit_Unop () args =
-        let ps = super#visit_Unop () args in
-        let _, p = args in
-        if Set.mem ps p then Set.add ps (Unop args) else ps
-    end
-  in
-  visitor#visit_pred () p |> Set.to_list
-
-let conjuncts p =
-  let visitor =
-    object (self : 'a)
-      inherit [_] reduce
-
-      inherit [_] Util.list_monoid
-
-      method! visit_Binop () (op, p1, p2) =
-        match op with
-        | And -> self#plus (self#visit_pred () p1) (self#visit_pred () p2)
-        | _ -> [Binop (op, p1, p2)]
-    end
-  in
-  visitor#visit_pred () p
-
-let rec conjoin = function
-  | [] -> Bool true
-  | [p] -> p
-  | p :: ps -> Binop (And, p, conjoin ps)
-
-(* let annotate_queries r =
- *   let rec annotate ctx r =
- *     match r.node with
- *     | Select (_, r') | Filter (_, r') |GroupBy (_, _, r')|OrderBy {rel=r'; _}|Dedup r' |As (_, r') -> annotate ctx r'
- *     | Join { r1; r2; _ } -> annotate ctx r1; annotate ctx r2
- *     |Scan _|AEmpty -> ()
- *     |AScalar _ -> Meta.(set_m )
- *     |AList (_, _) |AHashIdx _ |AOrderedIdx _
- *     |ATuple _ *)
-
 (** Collect all named relations in an expression. *)
 let aliases =
   let visitor =
@@ -994,26 +562,476 @@ let aliases =
   in
   visitor#visit_t ()
 
-let collect_aggs ~fresh p =
+module Pred = struct
+  type a = t
+
+  module T = struct
+    type t = Abslayout0.pred [@@deriving compare, sexp_of]
+  end
+
+  include T
+  include Comparator.Make (T)
+
+  let names r = names_visitor#visit_pred () r
+
+  let of_value = Value.to_pred
+
+  let rec conjoin = function
+    | [] -> Bool true
+    | [p] -> p
+    | p :: ps -> Binop (And, p, conjoin ps)
+
+  let collect_aggs ~fresh p =
+    let visitor =
+      object (self : 'a)
+        inherit [_] Abslayout0.mapreduce
+
+        inherit [_] Util.list_monoid
+
+        method private visit_Agg kind p =
+          let n = kind ^ Fresh.name fresh "%d" in
+          (Name (Name.create n), [(n, p)])
+
+        method! visit_Sum () p = self#visit_Agg "sum" (Sum p)
+
+        method! visit_Count () = self#visit_Agg "count" Count
+
+        method! visit_Min () p = self#visit_Agg "min" (Min p)
+
+        method! visit_Max () p = self#visit_Agg "max" (Max p)
+
+        method! visit_Avg () p = self#visit_Agg "avg" (Avg p)
+      end
+    in
+    visitor#visit_pred () p
+
+  let conjuncts p =
+    let visitor =
+      object (self : 'a)
+        inherit [_] reduce
+
+        inherit [_] Util.list_monoid
+
+        method! visit_Binop () (op, p1, p2) =
+          match op with
+          | And -> self#plus (self#visit_pred () p1) (self#visit_pred () p2)
+          | _ -> [Binop (op, p1, p2)]
+
+        method! visit_First () _ = self#zero
+
+        method! visit_Exists () _ = self#zero
+      end
+    in
+    visitor#visit_pred () p
+
+  let constants schema p =
+    let module M = struct
+      module T = struct
+        type t = pred [@@deriving compare, sexp_of]
+      end
+
+      include T
+      include Comparable.Make (T)
+    end in
+    let schema = Set.of_list (module Name) schema in
+    let empty = Set.empty (module M) in
+    let singleton = Set.singleton (module M) in
+    let visitor =
+      object
+        inherit [_] reduce as super
+
+        inherit [_] Util.set_monoid (module M)
+
+        method! visit_Name () n =
+          if Set.mem schema n then empty else singleton (Name n)
+
+        method! visit_Int () x = singleton (Int x)
+
+        method! visit_Fixed () x = singleton (Fixed x)
+
+        method! visit_Date () x = singleton (Date x)
+
+        method! visit_Bool () x = singleton (Bool x)
+
+        method! visit_String () x = singleton (String x)
+
+        method! visit_Null () = singleton Null
+
+        method! visit_As_pred () args =
+          let p, _ = args in
+          let ps = super#visit_As_pred () args in
+          if Set.mem ps p then Set.add ps (As_pred args) else ps
+
+        method! visit_Substring () p1 p2 p3 =
+          let ps = super#visit_Substring () p1 p2 p3 in
+          if Set.mem ps p1 && Set.mem ps p2 && Set.mem ps p3 then
+            Set.add ps (Substring (p1, p2, p3))
+          else ps
+
+        method! visit_First () r =
+          let free = Meta.(find_exn r free) in
+          if Set.is_empty (Set.inter free schema) then singleton (First r)
+          else empty
+
+        method! visit_Exists () r =
+          let free = Meta.(find_exn r free) in
+          if Set.is_empty (Set.inter free schema) then singleton (Exists r)
+          else empty
+
+        method! visit_If () p1 p2 p3 =
+          let ps = super#visit_If () p1 p2 p3 in
+          if Set.mem ps p1 && Set.mem ps p2 && Set.mem ps p3 then
+            Set.add ps (If (p1, p2, p3))
+          else ps
+
+        method! visit_Binop () args =
+          let ps = super#visit_Binop () args in
+          let _, p1, p2 = args in
+          if Set.mem ps p1 && Set.mem ps p2 then Set.add ps (Binop args) else ps
+
+        method! visit_Unop () args =
+          let ps = super#visit_Unop () args in
+          let _, p = args in
+          if Set.mem ps p then Set.add ps (Unop args) else ps
+      end
+    in
+    visitor#visit_pred () p |> Set.to_list
+
+  let eqs p =
+    let visitor =
+      object (self : 'a)
+        inherit [_] reduce
+
+        method zero = []
+
+        method plus = ( @ )
+
+        method! visit_Binop () (op, p1, p2) =
+          match (op, p1, p2) with
+          | Eq, Name n1, Name n2 -> [(n1, n2)]
+          | And, p1, p2 -> self#plus (self#visit_pred () p1) (self#visit_pred () p2)
+          | _ -> self#zero
+      end
+    in
+    visitor#visit_pred () p |> dedup_pairs
+
+  let remove_as p =
+    let visitor =
+      object
+        inherit [_] map
+
+        method! visit_As_pred () (p, _) = p
+      end
+    in
+    visitor#visit_pred () p
+
+  let kind p =
+    let visitor =
+      object
+        inherit [_] reduce
+
+        inherit [_] Util.disj_monoid
+
+        method! visit_Sum () _ = true
+
+        method! visit_Avg () _ = true
+
+        method! visit_Min () _ = true
+
+        method! visit_Max () _ = true
+
+        method! visit_Count () = true
+      end
+    in
+    if visitor#visit_pred () p then `Agg else `Scalar
+
+  let of_lexbuf_exn lexbuf =
+    try Ralgebra_parser.expr_eof Ralgebra_lexer.token lexbuf
+    with Parser_utils.ParseError (msg, line, col) as e ->
+      Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
+      raise e
+
+  let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
+
+  let subst_single p_old p_new = (subst_visitor p_old p_new)#visit_t ()
+
+  let subst ctx =
+    let v =
+      object
+        inherit [_] endo
+
+        method! visit_Name _ this v =
+          match Map.find ctx v with Some x -> x | None -> this
+
+        method visit_name _ x = x
+      end
+    in
+    v#visit_pred ()
+
+  let relations p =
+    let rels = ref [] in
+    let f =
+      object
+        inherit [_] iter
+
+        method! visit_Name () n =
+          match Name.rel n with Some r -> rels := r :: !rels | None -> ()
+
+        method visit_name () _ = ()
+
+        method visit_'m () _ = ()
+      end
+    in
+    f#visit_pred () p ; !rels
+
+  (** Return the set of relations which have fields in the tuple produced by this
+   expression. *)
+  let rec to_schema =
+    let open Type.PrimType in
+    let unnamed t = Name.create ~type_:t "" in
+    function
+    | As_pred (p, n) ->
+        let schema = to_schema p in
+        Name.copy schema ~relation:None ~name:n
+    | Name n -> n
+    | Int _ | Date _
+     |Unop ((Year | Month | Day | Strlen | ExtractY | ExtractM | ExtractD), _)
+     |Count ->
+        unnamed (IntT {nullable= false})
+    | Fixed _ | Avg _ -> unnamed (FixedT {nullable= false})
+    | Bool _ | Exists _
+     |Binop ((Eq | Lt | Le | Gt | Ge | And | Or), _, _)
+     |Unop (Not, _) ->
+        unnamed (BoolT {nullable= false})
+    | String _ -> unnamed (StringT {nullable= false})
+    | Null -> unnamed NullT
+    | Binop ((Add | Sub | Mul | Div | Mod), p1, p2) ->
+        let s1 = to_schema p1 in
+        let s2 = to_schema p2 in
+        unnamed (unify (Name.type_exn s1) (Name.type_exn s2))
+    | Binop (Strpos, _, _) -> unnamed (IntT {nullable= false})
+    | Sum p | Min p | Max p -> to_schema p
+    | If (_, p1, p2) ->
+        let s1 = to_schema p1 in
+        let s2 = to_schema p2 in
+        Type.PrimType.unify (Name.type_exn s1) (Name.type_exn s2) |> ignore ;
+        unnamed (Name.type_exn s1)
+    | First r -> (
+      match Meta.(find_exn r schema) with
+      | [n] -> n
+      | [] -> failwith "Unexpected empty schema."
+      | _ -> failwith "Too many fields." )
+    | Substring _ -> unnamed (StringT {nullable= false})
+
+  let to_name pred =
+    let n = to_schema pred in
+    if String.(Name.name n = "") then None else Some n
+end
+
+let pred_of_value = Pred.of_value
+
+let pred_relations = Pred.relations
+
+let pred_to_schema = Pred.to_schema
+
+let pred_to_name = Pred.to_name
+
+let subst_pred = Pred.subst
+
+let subst_single = Pred.subst_single
+
+let conjoin = Pred.conjoin
+
+let conjuncts = Pred.conjuncts
+
+let collect_aggs = Pred.collect_aggs
+
+let pred_constants = Pred.constants
+
+let pred_eqs = Pred.eqs
+
+let pred_remove_as = Pred.remove_as
+
+let pred_kind = Pred.kind
+
+let pred_of_string_exn = Pred.of_string_exn
+
+let pred_names = Pred.names
+
+let annotate_eq r =
   let visitor =
-    object (self : 'a)
-      inherit [_] Abslayout0.mapreduce
+    object
+      inherit [_] iter as super
 
-      inherit [_] Util.list_monoid
+      method! visit_As m n r =
+        super#visit_As None n r ;
+        let m = Option.value_exn m in
+        let schema = Meta.(find_exn r schema) in
+        let eqs =
+          List.map schema ~f:(fun n' -> (n', Name.(create ~relation:n (name n'))))
+          |> dedup_pairs
+        in
+        Meta.Direct.set_m m Meta.eq eqs
 
-      method private visit_Agg kind p =
-        let n = kind ^ Fresh.name fresh "%d" in
-        (Name (Name.create n), [(n, p)])
+      method! visit_Filter m (p, r) =
+        super#visit_Filter None (p, r) ;
+        let m = Option.value_exn m in
+        let r_eqs = Meta.(find_exn r eq) in
+        let eqs = pred_eqs p @ r_eqs |> dedup_pairs in
+        Meta.Direct.set_m m Meta.eq eqs
 
-      method! visit_Sum () p = self#visit_Agg "sum" (Sum p)
+      method! visit_Select m (ps, r) =
+        super#visit_Select None (ps, r) ;
+        let m = Option.value_exn m in
+        let eqs =
+          Meta.(find_exn r eq)
+          |> List.filter_map ~f:(fun ((n, n') as eq) ->
+                 List.find_map ps
+                   ~f:
+                     (let open Name.O in
+                     function
+                     | Name n'' when n'' = n' || n'' = n -> Some eq
+                     | As_pred (Name n'', s) when n'' = n -> Some (Name.create s, n')
+                     | As_pred (Name n'', s) when n'' = n' -> Some (n, Name.create s)
+                     | _ -> None) )
+        in
+        Meta.Direct.set_m m Meta.eq eqs
 
-      method! visit_Count () = self#visit_Agg "count" Count
+      method! visit_Join m p r1 r2 =
+        super#visit_Join None p r1 r2 ;
+        let m = Option.value_exn m in
+        let r1_eqs = Meta.(find_exn r1 eq) in
+        let r2_eqs = Meta.(find_exn r2 eq) in
+        let eqs = pred_eqs p @ r1_eqs @ r2_eqs |> dedup_pairs in
+        Meta.Direct.set_m m Meta.eq eqs
 
-      method! visit_Min () p = self#visit_Agg "min" (Min p)
+      method! visit_AList m (r1, r2) =
+        super#visit_AList None (r1, r2) ;
+        let m = Option.value_exn m in
+        let r1_eqs = Meta.(find_exn r1 eq) in
+        let r2_eqs = Meta.(find_exn r2 eq) in
+        let eqs = r1_eqs @ r2_eqs |> dedup_pairs in
+        Meta.Direct.set_m m Meta.eq eqs
 
-      method! visit_Max () p = self#visit_Agg "max" (Max p)
-
-      method! visit_Avg () p = self#visit_Agg "avg" (Avg p)
+      method! visit_t _ ({meta; _} as r) =
+        Meta.(set_m r eq []) ;
+        super#visit_t (Some meta) r
     end
   in
-  visitor#visit_pred () p
+  visitor#visit_t None r
+
+let select_kind l =
+  if List.exists l ~f:(fun p -> Poly.(pred_kind p = `Agg)) then `Agg else `Scalar
+
+let is_serializeable r =
+  let visitor =
+    object (self : 'a)
+      inherit [_] reduce
+
+      method zero = true
+
+      method plus = ( && )
+
+      method! visit_AEmpty _ = true
+
+      method! visit_AScalar _ _ = true
+
+      method! visit_Filter ns (p, r) =
+        let sq_visitor =
+          object
+            inherit [_] reduce
+
+            method zero = true
+
+            method plus = ( && )
+
+            method! visit_Exists _ r = self#visit_t ns r
+
+            method! visit_First _ r = self#visit_t ns r
+          end
+        in
+        List.fold_left ~init:self#zero ~f:self#plus
+          [ Set.is_empty (Set.inter (pred_names p) ns)
+          ; self#visit_t ns r
+          ; sq_visitor#visit_pred ns p ]
+
+      method! visit_Select ns (ps, r) =
+        self#plus
+          (List.for_all ps ~f:(fun p -> Set.is_empty (Set.inter (pred_names p) ns)))
+          (self#visit_t ns r)
+
+      method! visit_Join _ _ _ _ = false
+
+      method! visit_GroupBy _ _ _ _ = false
+
+      method! visit_OrderBy _ _ _ = false
+
+      method! visit_Dedup _ _ = false
+
+      method! visit_Scan _ _ = false
+
+      method! visit_As ns _ r = self#visit_t ns r
+
+      method visit_Collection ns r1 r2 =
+        let ns =
+          Set.union ns (Meta.(find_exn r1 schema) |> Set.of_list (module Name))
+        in
+        self#visit_t ns r2
+
+      method! visit_AOrderedIdx ns (r1, r2, _) = self#visit_Collection ns r1 r2
+
+      method! visit_AHashIdx ns (r1, r2, _) = self#visit_Collection ns r1 r2
+
+      method! visit_AList ns (r1, r2) = self#visit_Collection ns r1 r2
+
+      method! visit_ATuple ns (rs, _) = List.for_all ~f:(self#visit_t ns) rs
+    end
+  in
+  visitor#visit_t (Set.empty (module Name)) r
+
+let project r =
+  let dummy = Set.empty (module Name) in
+  let select_needed r =
+    let schema = Meta.(find_exn r schema) in
+    let needed = Meta.(find_exn r needed) in
+    if List.for_all schema ~f:(Set.mem needed) then r
+    else select (Set.to_list needed |> List.map ~f:(fun n -> Name n)) r
+  in
+  let project_visitor =
+    object (self : 'a)
+      inherit [_] map as super
+
+      method! visit_Select needed (ps, r) =
+        let ps' =
+          List.filter ps ~f:(fun p ->
+              match pred_to_name p with None -> false | Some n -> Set.mem needed n
+          )
+        in
+        Select (ps', self#visit_t dummy r)
+
+      method! visit_ATuple needed (rs, k) =
+        let rs' =
+          List.filter rs ~f:(fun r ->
+              let s = Meta.(find_exn r schema) |> Set.of_list (module Name) in
+              not (Set.is_empty (Set.inter s needed)) )
+          |> List.map ~f:(self#visit_t dummy)
+        in
+        ATuple (rs', k)
+
+      method! visit_AList _ (rk, rv) =
+        AList (select_needed rk, self#visit_t dummy rv)
+
+      method! visit_AHashIdx _ (rk, rv, idx) =
+        AHashIdx (select_needed rk, self#visit_t dummy rv, idx)
+
+      method! visit_AOrderedIdx _ (rk, rv, idx) =
+        AOrderedIdx (select_needed rk, self#visit_t dummy rv, idx)
+
+      method! visit_t _ r =
+        let needed = Meta.(find_exn r needed) in
+        super#visit_t needed r
+    end
+  in
+  annotate_free r ;
+  annotate_needed r ;
+  project_visitor#visit_t dummy r

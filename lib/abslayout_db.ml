@@ -162,7 +162,7 @@ module Make (Config : Config.S) = struct
             let ctx =
               List.zip_exn Meta.(find_exn q1 schema) sql1_names
               |> List.map ~f:(fun (n, n') ->
-                     (n, Name Name.(create ?type_:n.type_ n')) )
+                     (n, Name Name.(create ?type_:(Name.type_ n) n')) )
               |> Map.of_alist_exn (module Name)
             in
             subst ctx q2
@@ -246,7 +246,10 @@ module Make (Config : Config.S) = struct
     let fresh = Fresh.create () in
     let ctx = Sql.create_ctx ~fresh () in
     let sql = query_to_sql fresh q in
-    let tups = Db.exec_cursor_exn conn (to_schema q) (Sql.to_string_hum ctx sql) in
+    let tups =
+      Db.exec_cursor_exn conn (to_schema q) (Sql.to_string_hum ctx sql)
+      |> Gen.map ~f:Array.to_list
+    in
     let rec eval tups = function
       | `For (q1, q2) ->
           let extract_tup s t = List.take t (List.length s) in
@@ -749,46 +752,41 @@ module Make (Config : Config.S) = struct
     let open Name in
     let resolve_relation r_name =
       let r = Db.Relation.from_db conn r_name in
-      List.map r.fields ~f:(fun f ->
-          Name.create ~relation:r.rname ~type_:f.type_ f.fname )
+      List.map r.fields ~f:(fun f -> create ~relation:r.rname ~type_:f.type_ f.fname)
       |> Set.of_list (module Name)
     in
-    let rename name s =
-      Set.map (module Name) s ~f:(fun n -> Name.copy ~relation:(Some name) n)
-    in
+    let rename name s = Set.map (module Name) s ~f:(copy ~relation:(Some name)) in
     let resolve_name ctx n =
       let could_not_resolve =
-        Error.create "Could not resolve." (n, ctx)
-          [%sexp_of: Name.t * Set.M(Name).t]
+        Error.create "Could not resolve." (n, ctx) [%sexp_of: t * Set.M(Name).t]
       in
-      match (n.type_, n.relation) with
+      match (type_ n, rel n) with
       | Some _, Some _ -> n
       | Some _, None -> n
       | None, Some _ -> (
-        match Set.find ctx ~f:(fun n' -> Name.O.(n' = n)) with
+        match Set.find ctx ~f:(fun n' -> O.(n' = n)) with
         | Some n' -> n'
         | None -> Error.raise could_not_resolve )
       | None, None -> (
           let matches =
-            Set.to_list ctx |> List.filter ~f:(fun n' -> String.(n.name = n'.name))
+            Set.to_list ctx |> List.filter ~f:(fun n' -> String.(name n = name n'))
           in
           match matches with
           | [] -> Error.raise could_not_resolve
           | [n'] -> n'
           | n' :: n'' :: _ ->
-              Error.create "Ambiguous name." (n, n', n'')
-                [%sexp_of: Name.t * Name.t * Name.t]
+              Error.create "Ambiguous name." (n, n', n'') [%sexp_of: t * t * t]
               |> Error.raise )
     in
     let empty_ctx = Set.empty (module Name) in
     let preds_to_names preds =
       List.map preds ~f:pred_to_schema
-      |> List.filter ~f:(fun n -> String.(n.name <> ""))
+      |> List.filter ~f:(fun n -> String.(name n <> ""))
       |> Set.of_list (module Name)
     in
     let pred_to_name pred =
       let n = pred_to_schema pred in
-      if String.(n.name = "") then None else Some n
+      if String.(name n = "") then None else Some n
     in
     let union c1 c2 = Set.union c1 c2 in
     let union_list = List.fold_left ~init:(Set.empty (module Name)) ~f:union in

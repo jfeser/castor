@@ -236,12 +236,10 @@ class hoist_visitor const_names const_types =
 
 let hoist_const_exprs m =
   let const_names =
-    Set.of_list
-      (module String)
-      ("buf" :: List.map m.Irgen.params ~f:(fun n -> n.name))
+    Set.of_list (module String) ("buf" :: List.map m.Irgen.params ~f:Name.name)
   in
   let const_types =
-    List.map m.Irgen.params ~f:(fun n -> (n.name, Name.type_exn n))
+    List.map m.Irgen.params ~f:(fun n -> (Name.name n, Name.type_exn n))
   in
   let funcs' =
     List.map m.Irgen.funcs ~f:(fun func ->

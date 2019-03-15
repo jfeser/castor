@@ -16,14 +16,6 @@ type t =
   ; fresh: Fresh.t sexp_opaque [@compare.ignore] }
 [@@deriving compare, sexp]
 
-type 'a exec_cursor =
-     ?batch_size:int
-  -> ?params:string list
-  -> t
-  -> Type.PrimType.t list
-  -> string
-  -> 'a
-
 let create uri =
   {uri; conn= new Psql.connection ~conninfo:uri (); fresh= Fresh.create ()}
 
@@ -36,7 +28,6 @@ let subst_params params query =
 
 let rec exec ?(max_retries = 0) ?(params = []) db query =
   let query = subst_params params query in
-  Logs.debug (fun m -> m "Executing query (retries=%d): %s" max_retries query) ;
   let r = (db.conn)#exec query in
   let fail r =
     Error.(
@@ -192,26 +183,23 @@ let load_value type_ value =
       else Error (Error.create "Expected a null value." value [%sexp_of: string])
   | VoidT | TupleT _ -> Error (Error.of_string "Not a value type.")
 
-let load_tuples s (r : Postgresql.result) =
-  if List.length s <> r#nfields then
-    Error
-      Error.(
-        create "Unexpected tuple width." (r#get_fnames_lst, s)
-          [%sexp_of: string list * Type.PrimType.t list])
+let load_tuples_exn s (r : Postgresql.result) =
+  let nfields = List.length s in
+  if nfields <> r#nfields then
+    Error.(
+      create "Unexpected tuple width." (r#get_fnames_lst, s)
+        [%sexp_of: string list * Type.PrimType.t list]
+      |> raise)
   else
     let gen =
       Gen.init ~limit:r#ntuples (fun tidx ->
-          List.mapi s ~f:(fun fidx type_ ->
-              if r#getisnull tidx fidx then Ok Value.Null
-              else load_value type_ (r#getvalue tidx fidx) )
-          |> Result.all )
+          Array.of_list_mapi s ~f:(fun fidx type_ ->
+              if r#getisnull tidx fidx then Value.Null
+              else load_value type_ (r#getvalue tidx fidx) |> Or_error.ok_exn ) )
     in
-    Ok gen
+    gen
 
-let load_tuples_exn s (r : Postgresql.result) =
-  Or_error.ok_exn (load_tuples s r) |> Gen.map ~f:Or_error.ok_exn
-
-let exec_cursor =
+let exec_cursor_exn =
   let fresh = Fresh.create () in
   fun ?(batch_size = 10000) ?(params = []) db schema query ->
     let db = create db.uri in
@@ -230,10 +218,10 @@ let exec_cursor =
           | `Done -> (db.conn)#finish ; None
           | `Not_done idx when idx <> !db_idx ->
               Some
-                ( Error
-                    Error.(
-                      create "Out of sync with underlying cursor." (idx, !db_idx)
-                        [%sexp_of: int * int])
+                ( Error.(
+                    create "Out of sync with underlying cursor." (idx, !db_idx)
+                      [%sexp_of: int * int]
+                    |> raise)
                 , `Done )
           | `Not_done idx ->
               let r = exec db fetch_query in
@@ -241,17 +229,11 @@ let exec_cursor =
               db_idx := !db_idx + r#ntuples ;
               let idx = idx + r#ntuples in
               let state = if r#ntuples < batch_size then `Done else `Not_done idx in
-              Some (Ok tups, state))
+              Some (tups, state))
         (`Not_done 1)
-      |> Gen.map ~f:(function
-           | Ok gen -> Gen.map gen ~f:(fun t -> Ok t)
-           | Error _ as e -> Gen.singleton e )
       |> Gen.flatten
     in
     seq
-
-let exec_cursor_exn ?batch_size ?params db schema query =
-  exec_cursor ?batch_size ?params db schema query |> Gen.map ~f:Or_error.ok_exn
 
 let check db sql =
   let name = Fresh.name db.fresh "check%d" in

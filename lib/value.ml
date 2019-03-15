@@ -62,7 +62,7 @@ let ( + ) x y =
   | Fixed a, Fixed b -> Fixed Fixed_point.(a + b)
   | Int a, Fixed b | Fixed b, Int a -> Fixed Fixed_point.(b + of_int a)
   | Date a, Int b -> Date (Date.add_days a b)
-  | _ -> failwith "Cannot +"
+  | _ -> Error.create "Cannot +" (x, y) [%sexp_of: t * t] |> Error.raise
 
 let neg = function
   | Int a -> Int (Int.neg a)

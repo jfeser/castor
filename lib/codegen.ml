@@ -887,7 +887,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     (* Generate global constant for buffer. *)
     let buf_t = pointer_type (array_type int_type (buffer_len / 8)) in
     SB.build_global sb "buf" buf_t ;
-    let typed_params = List.map params ~f:(fun n -> (n.name, Name.type_exn n)) in
+    let typed_params = List.map params ~f:(fun n -> Name.(name n, type_exn n)) in
     (* Generate global constants for parameters. *)
     List.iter typed_params ~f:(fun (n, t) ->
         let lltype = codegen_type t in
@@ -1028,7 +1028,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
                  | FixedT _ -> "load_float.c"
                  | VoidT | TupleT _ -> failwith "Unsupported parameter type."
                in
-               (from_fn loader_fn) n.name i )
+               (from_fn loader_fn) (Name.name n) i )
         |> List.unzip
       in
       let header_str = "#include \"scanner.h\"" in

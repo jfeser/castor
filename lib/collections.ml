@@ -329,3 +329,11 @@ module Tree = struct
   include T
   include Container.Make (T)
 end
+
+module Array = struct
+  include Array
+
+  let take a n = Array.sub ~pos:0 ~len:n a
+
+  let drop a n = Array.sub ~pos:n ~len:(Array.length a - n) a
+end

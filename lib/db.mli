@@ -12,17 +12,13 @@ val command_ok : Postgresql.result -> unit
 
 val result_to_strings : Postgresql.result -> string list list
 
-type 'a exec_cursor =
+val exec_cursor_exn :
      ?batch_size:int
   -> ?params:string list
   -> t
   -> Type.PrimType.t list
   -> string
-  -> 'a
-
-val exec_cursor : Value.t list Or_error.t Collections.Gen.t exec_cursor
-
-val exec_cursor_exn : Value.t list Gen.t exec_cursor
+  -> Value.t array Gen.t
 
 val check : t -> string -> unit Or_error.t
 

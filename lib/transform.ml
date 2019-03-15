@@ -174,8 +174,10 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
                   else group_by new_ps new_key new_r
                 in
                 let key_scalar =
-                  let s = scalar (As_pred (Name (Name.create key_name), k.name)) in
-                  match k.relation with Some rel -> as_ rel s | None -> s
+                  let s =
+                    scalar (As_pred (Name (Name.create key_name), Name.name k))
+                  in
+                  match Name.rel k with Some rel -> as_ rel s | None -> s
                 in
                 list
                   (dedup (select [As_pred (Name k, key_name)] (scan rel)))
@@ -229,21 +231,21 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           let r = M.resolve r in
           match r with
           | {node= GroupBy (ps, key, r); _}
-            when List.for_all key ~f:(fun n -> Option.is_some n.relation) ->
+            when List.for_all key ~f:(fun n -> Option.is_some (Name.rel n)) ->
               (* Create an alias for each key. *)
               let key_aliases =
                 List.fold_left key
                   ~init:(Map.empty (module String))
                   ~f:(fun m k ->
-                    let k' = k.name ^ Fresh.name fresh "k%d" in
-                    Map.add_exn m ~key:k.name ~data:k' )
+                    let k' = Name.name k ^ Fresh.name fresh "k%d" in
+                    Map.add_exn m ~key:(Name.name k) ~data:k' )
               in
               (* First, group keys by their relation. *)
               let key_groups =
                 List.fold_left key
                   ~init:(Map.empty (module String))
                   ~f:(fun m k ->
-                    Map.add_multi m ~key:(Option.value_exn k.relation) ~data:k )
+                    Map.add_multi m ~key:(Option.value_exn (Name.rel k)) ~data:k )
               in
               (* Generate the relation of unique keys for each group. *)
               let key_rels =
@@ -251,7 +253,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
                     dedup
                       (select
                          (List.map ks ~f:(fun n ->
-                              As_pred (Name n, Map.find_exn key_aliases n.name) ))
+                              As_pred
+                                (Name n, Map.find_exn key_aliases (Name.name n)) ))
                          (scan rel)) )
                 |> Map.data
               in
@@ -265,8 +268,9 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
                           Binop
                             ( Eq
                             , Name n
-                            , Name (Map.find_exn key_aliases n.name |> Name.create)
-                            ) )
+                            , Name
+                                ( Map.find_exn key_aliases (Name.name n)
+                                |> Name.create ) ) )
                       |> List.fold_left1 ~f:(fun p p' -> Binop (And, p, p'))
                     in
                     wrap_rel rel (fun r -> (filter filter_pred r).node) )
@@ -348,7 +352,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
             List.foldi values ~init:(Int 0) ~f:(fun i else_ v ->
                 If (Binop (Eq, Name free_var, v), Int (i + 1), else_) )
           in
-          let fresh_name = Fresh.name fresh "p%d_" ^ field.name in
+          let fresh_name = Fresh.name fresh "p%d_" ^ Name.name field in
           let select_list =
             As_pred (encoder, fresh_name) :: List.map schema ~f:(fun n -> Name n)
           in
@@ -658,7 +662,9 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
             let p', ip' = visitor#visit_pred ip p in
             (op @ [p'], ip') )
       in
-      let inner_aggs = List.map inner_aggs ~f:(fun (n, a) -> As_pred (a, n.name)) in
+      let inner_aggs =
+        List.map inner_aggs ~f:(fun (n, a) -> As_pred (a, Name.name n))
+      in
       (* Don't want to project out anything that we might need later. *)
       let inner_fields = inner_schema |> List.map ~f:(fun n -> Name n) in
       (outer_aggs, inner_aggs @ inner_fields)
@@ -734,7 +740,9 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
             let p', ip' = visitor#visit_pred ip p in
             (op @ [p'], ip') )
       in
-      let inner_aggs = List.map inner_aggs ~f:(fun (n, a) -> As_pred (a, n.name)) in
+      let inner_aggs =
+        List.map inner_aggs ~f:(fun (n, a) -> As_pred (a, Name.name n))
+      in
       (* Don't want to project out anything that we might need later. *)
       let inner_fields =
         Meta.(find_exn inner_rel schema) |> List.map ~f:(fun n -> Name n)
@@ -771,7 +779,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           true
 
         method! visit_Name () n =
-          let is_param = Option.is_none n.relation in
+          let is_param = Option.is_none (Name.rel n) in
           let in_schema = List.mem s n ~equal:[%compare.equal: Name.t] in
           let is_valid = is_param || in_schema in
           if not is_valid then
@@ -1026,8 +1034,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           let keys =
             List.filter_map eqs ~f:(fun (p1, p2) ->
                 match (p1, p2) with
-                | Name n, _ when String.(n.name = name.name) -> Some p2
-                | _, Name n when String.(n.name = name.name) -> Some p1
+                | Name n, _ when String.(Name.name n = Name.name name) -> Some p2
+                | _, Name n when String.(Name.name n = Name.name name) -> Some p1
                 | _ -> None )
           in
           List.map keys ~f:(fun k ->
@@ -1059,7 +1067,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           M.annotate_schema r ;
           let schema = Meta.(find_exn r schema) in
           if List.mem schema pk ~equal:eq then
-            let pk_rel = Option.value_exn pk.Name.relation in
+            let pk_rel = Option.value_exn (Name.rel pk) in
             let rel_fresh_k = sprintf "%s_%s" pk_rel (Fresh.name fresh "%d") in
             let pk_k_name = Fresh.name fresh "x%d" in
             let pk_k = Name.copy pk ~relation:(Some rel_fresh_k) in
@@ -1071,7 +1079,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
                   eq n pk
                   || not
                        (List.mem rel_schema n ~equal:(fun n n' ->
-                            String.(n.name = n'.name) )) )
+                            String.(Name.(name n = name n')) )) )
             in
             let fst_sel_list = List.map ~f:(fun n -> Name n) fst_sel_list in
             let snd_sel_list =
@@ -1161,7 +1169,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     let f r =
       match r.node with
       | Dedup {node= Select ([As_pred (Name n, n')], _); _} -> (
-        match n.relation with
+        match Name.rel n with
         | Some r -> [dedup (select [As_pred (Name n, n')] (scan r))]
         | None -> [] )
       | _ -> []
@@ -1219,7 +1227,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           List.map query_names ~f:(fun (n, q) ->
               let select_list =
                 Meta.(find_exn q schema)
-                |> List.map ~f:(fun n' -> As_pred (Name n', n.name))
+                |> List.map ~f:(fun n' -> As_pred (Name n', Name.name n))
               in
               join (subst_query ~for_:q ~in_:pred (Name n)) r (select select_list q)
           )

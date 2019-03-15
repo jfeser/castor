@@ -36,10 +36,10 @@ open Tuple
 module Ctx = struct
   type scope =
     | Ctx of Value.t Map.M(Name).t
-    | Tuple of Value.t array * int Hashtbl.M(Name).t
-  [@@deriving sexp]
+    | Tuple of Value.t array * (Name.t, int) Bounded_int_table.t
+  [@@deriving sexp_of]
 
-  type t = scope list [@@deriving sexp]
+  type t = scope list [@@deriving sexp_of]
 
   let bind ctx schema t = Tuple (t, schema) :: ctx
 
@@ -51,7 +51,9 @@ module Ctx = struct
     | Ctx map :: ctx' -> (
       match Map.find map n with Some v -> Some v | None -> find ctx' n )
     | Tuple (t, schema) :: ctx' -> (
-      match Hashtbl.find schema n with Some i -> Some t.(i) | None -> find ctx' n )
+      match Bounded_int_table.find schema n with
+      | Some i -> Some t.(i)
+      | None -> find ctx' n )
 
   let of_map m = [Ctx m]
 end
@@ -90,7 +92,7 @@ let eval {db; params} r =
     Memo.general ~hashable (fun r ->
         let schema_types = Db.schema db r |> List.map ~f:Name.type_exn in
         Db.exec_cursor_exn db schema_types (Printf.sprintf "select * from \"%s\"" r)
-        |> Gen.to_sequence |> Seq.memoize |> Seq.map ~f:Array.of_list )
+        |> Gen.to_sequence |> Seq.memoize )
   in
   let rec eval_agg ctx preds schema (tups : Tuple.t Seq.t) =
     if Seq.is_empty tups then None
@@ -154,10 +156,12 @@ let eval {db; params} r =
     let e = eval_pred ctx in
     match p with
     | A.Int x -> Int x
-    | Name n ->
-        Option.value_exn
-          ~error:(Error.create "Unknown name." (n, ctx) [%sexp_of: Name.t * Ctx.t])
-          (Ctx.find ctx n)
+    | Name n -> (
+      match Ctx.find ctx n with
+      | Some v -> v
+      | None ->
+          Error.(
+            create "Unknown name." (n, ctx) [%sexp_of: Name.t * Ctx.t] |> raise) )
     | Fixed x -> Fixed x
     | Date x -> Date x
     | Bool x -> Bool x
@@ -218,9 +222,10 @@ let eval {db; params} r =
         | None -> int 0 ) )
   and eval ctx r : Tuple.t Seq.t =
     let schema r =
+      let tbl = Name.create_table () in
       Meta.(find_exn r schema)
-      |> List.mapi ~f:(fun i n -> (n, i))
-      |> Hashtbl.of_alist_exn (module Name)
+      |> List.iteri ~f:(fun i n -> Bounded_int_table.add_exn tbl ~key:n ~data:i) ;
+      tbl
     in
     match r.node with
     | Scan r -> scan r

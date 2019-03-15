@@ -17,7 +17,7 @@
 
 (library
  (public_name castor)
- (libraries base core stdio str postgresql llvm llvm.analysis llvm.target llvm.all_backends logs cmph expect_test_helpers_kernel visitors.runtime gen bos oUnit)
+ (libraries base core stdio str postgresql llvm llvm.analysis llvm.target llvm.all_backends logs cmph expect_test_helpers_kernel visitors.runtime gen bos oUnit hashcons)
  (inline_tests)
  (preprocess (pps ppx_sexp_conv ppx_compare ppx_hash ppx_expect ppx_let visitors.ppx ppx_variants_conv))
  (private_modules abslayout_test codegen_test implang_opt_test implang_test serialize_test type_tests sql_test test_util)

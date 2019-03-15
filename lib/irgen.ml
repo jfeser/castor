@@ -688,7 +688,7 @@ struct
 
   let irgen ~params ~data_fn r =
     let ctx =
-      List.map params ~f:(fun n -> (n, Ctx.Global (Var n.Name.name)))
+      List.map params ~f:(fun n -> (n, Ctx.Global (Var (Name.name n))))
       |> Map.of_alist_exn (module Name)
     in
     let type_ = Abslayout_db.to_type r in

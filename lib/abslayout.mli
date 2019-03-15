@@ -210,3 +210,43 @@ class virtual ['a] endo : ['a] Abslayout0.endo
 class virtual ['a] reduce : ['a] Abslayout0.reduce
 
 class virtual ['a] mapreduce : ['a] Abslayout0.mapreduce
+
+module Pred : sig
+  type a = t
+
+  type t = pred [@@deriving compare, sexp_of]
+
+  include Comparator.S with type t := t
+
+  val names : t -> (Name.t, Name.comparator_witness) Set.t
+
+  val of_value : Value.t -> t
+
+  val conjoin : t list -> t
+
+  val collect_aggs : fresh:Fresh.t -> t -> t * (string * t) list
+
+  val conjuncts : t -> t list
+
+  val constants : Name.t list -> t -> t list
+
+  val eqs : t -> (Name.t * Name.t) sexp_list
+
+  val remove_as : t -> t
+
+  val kind : t -> [`Agg | `Scalar]
+
+  val of_lexbuf_exn : Lexing.lexbuf -> t
+
+  val of_string_exn : string -> t
+
+  val subst_single : t -> t -> a -> a
+
+  val subst : (Name.t, t, 'a) Map.t -> t -> t
+
+  val relations : t -> string list
+
+  val to_schema : t -> Name.t
+
+  val to_name : t -> Name.t option
+end
