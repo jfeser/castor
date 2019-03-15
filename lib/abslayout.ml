@@ -97,6 +97,7 @@ let unop_to_str = function
 
 let pp_name fmt =
   let open Format in
+  let open Name in
   function
   | {relation= Some r; name; _} -> fprintf fmt "%s.%s" r name
   | {relation= None; name; _} -> fprintf fmt "%s" name
@@ -203,6 +204,14 @@ let pred_of_lexbuf_exn lexbuf =
 
 let pred_of_string_exn s = pred_of_lexbuf_exn (Lexing.from_string s)
 
+let name_of_lexbuf_exn lexbuf =
+  try Ralgebra_parser.name_eof Ralgebra_lexer.token lexbuf
+  with Parser_utils.ParseError (msg, line, col) as e ->
+    Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
+    raise e
+
+let name_of_string_exn s = name_of_lexbuf_exn (Lexing.from_string s)
+
 (* let params r =
  *   let ralgebra_params =
  *     object (self)
@@ -305,11 +314,11 @@ let pred_relations p =
    expression. *)
 let rec pred_to_schema =
   let open Type.PrimType in
-  let unnamed t = {name= ""; relation= None; type_= Some t} in
+  let unnamed t = Name.create ~type_:t "" in
   function
   | As_pred (p, n) ->
       let schema = pred_to_schema p in
-      {schema with relation= None; name= n}
+      Name.copy schema ~relation:None ~name:n
   | Name n -> n
   | Int _ | Date _
    |Unop ((Year | Month | Day | Strlen | ExtractY | ExtractM | ExtractD), _)
@@ -627,7 +636,7 @@ let annotate_needed r =
         let ctx' =
           List.filter
             Meta.(find_exn r' schema)
-            ~f:(fun n -> Set.mem ctx {n with relation= Some rel_name})
+            ~f:(fun n -> Set.mem ctx (Name.copy n ~relation:(Some rel_name)))
           |> of_list
         in
         needed ctx' r'

@@ -3,12 +3,6 @@ open Base
 module T = struct
   type meta = Core.Univ_map.t ref [@@deriving sexp_of]
 
-  type name =
-    { relation: string option
-    ; name: string
-    ; type_: Type0.PrimType.t option [@compare.ignore] }
-  [@@deriving compare, hash, sexp]
-
   type binop =
     | Eq
     | Lt
@@ -36,7 +30,7 @@ module T = struct
   module Pervasives = Caml.Pervasives
 
   type pred =
-    | Name of (name[@opaque])
+    | Name of (Name.t[@opaque])
     | Int of (int[@opaque])
     | Fixed of (Fixed_point.t[@opaque])
     | Date of (Core.Date.t[@opaque])
@@ -74,7 +68,7 @@ module T = struct
     | Select of (pred list * t)
     | Filter of (pred * t)
     | Join of {pred: pred; r1: t; r2: t}
-    | GroupBy of pred list * (name[@opaque]) list * t
+    | GroupBy of pred list * (Name.t[@opaque]) list * t
     | OrderBy of {key: (pred * order) list; rel: t}
     | Dedup of t
     | Scan of string

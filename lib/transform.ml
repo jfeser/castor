@@ -142,7 +142,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
             let key_preds = List.map key ~f:(fun n -> Name n) in
             let filter_pred =
               List.map key ~f:(fun n ->
-                  Binop (Eq, Name n, Name {n with relation= Some key_name}) )
+                  Binop (Eq, Name n, Name (Name.copy n ~relation:(Some key_name)))
+              )
               |> List.fold_left ~init:(Bool true) ~f:(fun acc p ->
                      Binop (And, acc, p) )
             in
@@ -312,7 +313,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     let open A in
     let field, values =
       match args with
-      | f :: vs -> (Name.of_string_exn f, List.map vs ~f:pred_of_string_exn)
+      | f :: vs -> (A.name_of_string_exn f, List.map vs ~f:pred_of_string_exn)
       | _ ->
           Error.create "Unexpected argument list." args [%sexp_of: string list]
           |> Error.raise
@@ -946,7 +947,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     let open A in
     let name =
       match args with
-      | [n] -> Name.of_string_exn n
+      | [n] -> A.name_of_string_exn n
       | _ -> failwith "Unexpected args."
     in
     let fresh_name =
@@ -969,7 +970,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     let n_subst, n_domain =
       match args with
       | [n_subst; n_domain] ->
-          (Name.of_string_exn n_subst, Name.of_string_exn n_domain)
+          (A.name_of_string_exn n_subst, A.name_of_string_exn n_domain)
       | _ -> failwith "Unexpected args."
     in
     let fresh_name =
@@ -1006,7 +1007,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     let open A in
     let name =
       match args with
-      | [n] -> Name.of_string_exn n
+      | [n] -> A.name_of_string_exn n
       | _ -> failwith "Unexpected args."
     in
     let fresh_name =
@@ -1045,7 +1046,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     let open A in
     let rel, pk =
       match args with
-      | [x; y] -> (x, Name.of_string_exn y)
+      | [x; y] -> (x, A.name_of_string_exn y)
       | _ ->
           Error.create "Unexpected args." args [%sexp_of: string list]
           |> Error.raise
@@ -1058,12 +1059,12 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
           M.annotate_schema r ;
           let schema = Meta.(find_exn r schema) in
           if List.mem schema pk ~equal:eq then
-            let pk_rel = Option.value_exn pk.relation in
+            let pk_rel = Option.value_exn pk.Name.relation in
             let rel_fresh_k = sprintf "%s_%s" pk_rel (Fresh.name fresh "%d") in
             let pk_k_name = Fresh.name fresh "x%d" in
-            let pk_k = {pk with relation= Some rel_fresh_k} in
+            let pk_k = Name.copy pk ~relation:(Some rel_fresh_k) in
             let rel_fresh_v = sprintf "%s_%s" pk_rel (Fresh.name fresh "%d") in
-            let pk_v = {pk with relation= Some rel_fresh_v} in
+            let pk_v = Name.copy pk ~relation:(Some rel_fresh_v) in
             (* Partition the schema of the original layout between the two new layouts. *)
             let fst_sel_list, snd_sel_list =
               List.partition_tf schema ~f:(fun n ->
@@ -1075,7 +1076,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
             let fst_sel_list = List.map ~f:(fun n -> Name n) fst_sel_list in
             let snd_sel_list =
               List.map
-                ~f:(fun n -> Name {n with relation= Some rel_fresh_v})
+                ~f:(fun n -> Name (Name.copy n ~relation:(Some rel_fresh_v)))
                 snd_sel_list
             in
             [ tuple
@@ -1099,7 +1100,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     let open A in
     let field =
       match args with
-      | [x] -> Name.of_string_exn x
+      | [x] -> A.name_of_string_exn x
       | _ -> failwith "Unexpected args."
     in
     { name= "partition-size"

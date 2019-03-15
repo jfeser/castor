@@ -30,11 +30,11 @@ module Make (Config : Config.S) = struct
 
   let rec pred_to_schema =
     let open Type.PrimType in
-    let unnamed t = {name= ""; relation= None; type_= Some t} in
+    let unnamed t = Name.create ~type_:t "" in
     function
     | As_pred (p, n) ->
         let schema = pred_to_schema p in
-        {schema with relation= None; name= n}
+        Name.copy ~relation:None ~name:n schema
     | Name n -> n
     | Date _ | Unop ((Year | Month | Day), _) -> unnamed (DateT {nullable= false})
     | Int _ | Unop ((Strlen | ExtractY | ExtractM | ExtractD), _) | Count ->
@@ -91,7 +91,7 @@ module Make (Config : Config.S) = struct
             | ATuple (r :: _, Concat) -> Meta.(find_exn r schema)
             | As (n, r) ->
                 Meta.(find_exn r schema)
-                |> List.map ~f:(fun x -> {x with relation= Some n})
+                |> List.map ~f:(fun x -> Name.copy ~relation:(Some n) x)
             | Scan table -> Db.schema conn table
           in
           Meta.set_m r Meta.schema schema
@@ -162,7 +162,7 @@ module Make (Config : Config.S) = struct
             let ctx =
               List.zip_exn Meta.(find_exn q1 schema) sql1_names
               |> List.map ~f:(fun (n, n') ->
-                     (n, Name (Name.create ?type_:n.type_ n')) )
+                     (n, Name Name.(create ?type_:n.type_ n')) )
               |> Map.of_alist_exn (module Name)
             in
             subst ctx q2
@@ -746,14 +746,15 @@ module Make (Config : Config.S) = struct
 
   (** Annotate names in an algebra expression with types. *)
   let resolve ?(params = Set.empty (module Name)) r =
+    let open Name in
     let resolve_relation r_name =
       let r = Db.Relation.from_db conn r_name in
       List.map r.fields ~f:(fun f ->
-          {relation= Some r.rname; name= f.fname; type_= Some f.type_} )
+          Name.create ~relation:r.rname ~type_:f.type_ f.fname )
       |> Set.of_list (module Name)
     in
     let rename name s =
-      Set.map (module Name) s ~f:(fun n -> {n with relation= Some name})
+      Set.map (module Name) s ~f:(fun n -> Name.copy ~relation:(Some name) n)
     in
     let resolve_name ctx n =
       let could_not_resolve =

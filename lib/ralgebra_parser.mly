@@ -20,7 +20,7 @@
 
 %start <Abslayout0.t> ralgebra_eof
 %start <Abslayout0.pred> expr_eof
-%start <Abslayout0.name> name_eof
+%start <Name.t> name_eof
 %start <Abslayout0.pred> value_eof
 %start <Abslayout0.param> param_eof
 %%
@@ -137,10 +137,10 @@ ralgebra_subquery:
 | error { error "Expected an operator or relation." $startpos }
 
 name:
-| r = ID; DOT; f = ID; { A.({ relation = Some r; name = f; type_ = None }) }
-| r = ID; DOT; f = ID; COLON; t = PRIMTYPE { A.({ relation = Some r; name = f; type_ = Some t }) }
-| f = ID; { A.({ relation = None; name = f; type_ = None }) }
-| f = ID; COLON; t = PRIMTYPE { A.({ relation = None; name = f; type_ = Some t }) }
+| r = ID; DOT; f = ID; { Name.create ~relation:r f }
+| r = ID; DOT; f = ID; COLON; t = PRIMTYPE { Name.create ~relation:r ~type_:t f }
+| f = ID; { Name.create f }
+| f = ID; COLON; t = PRIMTYPE { Name.create ~type_:t f }
 
 e0_binop: x = STRPOS { x }
                 e0_unop: x = DAY | x = MONTH | x = YEAR | x = STRLEN | x = EXTRACTY | x = EXTRACTM | x = EXTRACTD { x }

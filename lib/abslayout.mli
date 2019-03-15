@@ -145,6 +145,8 @@ val of_string_exn : string -> t
 
 val pred_of_string_exn : string -> pred
 
+val name_of_string_exn : string -> Name.t
+
 val of_channel_exn : Stdio.In_channel.t -> t
 
 val subst : pred Map.M(Name).t -> t -> t

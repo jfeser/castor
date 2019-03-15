@@ -180,7 +180,8 @@ let of_ralgebra ctx r =
         let select_list =
           List.map
             Meta.(find_exn r schema)
-            ~f:(fun n -> create_entry ~ctx (Name {n with relation= Some tbl_alias}))
+            ~f:(fun n ->
+              create_entry ~ctx (Name (Name.copy n ~relation:(Some tbl_alias))) )
         in
         let relations = [(`Table (tbl, tbl_alias), `Left)] in
         Query (create_query ~relations select_list)

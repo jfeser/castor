@@ -3,7 +3,7 @@ open Printf
 open Collections
 
 module T = struct
-  type t = Abslayout0.name =
+  type t =
     { relation: string option
     ; name: string
     ; type_: Type0.PrimType.t option [@compare.ignore] }
@@ -16,7 +16,15 @@ module C = Comparable.Make (T)
 
 module O : Comparable.Infix with type t := t = C
 
-let create ?relation ?type_ name = {relation; name; type_}
+let create' r t n = {relation= r; type_= t; name= n}
+
+let create ?relation ?type_ name = create' relation type_ name
+
+let copy ?relation ?type_ ?name n =
+  let r = Option.value relation ~default:n.relation in
+  let t = Option.value type_ ~default:n.type_ in
+  let n = Option.value name ~default:n.name in
+  create' r t n
 
 let type_exn ({type_; _} as n) =
   match type_ with
@@ -42,12 +50,12 @@ let pp fmt =
   | {relation= Some r; name; _} -> fprintf fmt "%s.%s" r name
   | {relation= None; name; _} -> fprintf fmt "%s" name
 
-let of_lexbuf_exn lexbuf =
-  try Ralgebra_parser.name_eof Ralgebra_lexer.token lexbuf
-  with Parser_utils.ParseError (msg, line, col) as e ->
-    Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
-    raise e
-
-let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
+(* let of_lexbuf_exn lexbuf =
+ *   try Ralgebra_parser.name_eof Ralgebra_lexer.token lexbuf
+ *   with Parser_utils.ParseError (msg, line, col) as e ->
+ *     Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
+ *     raise e
+ * 
+ * let of_string_exn s = of_lexbuf_exn (Lexing.from_string s) *)
 
 let fresh f fmt = create (Fresh.name f fmt)

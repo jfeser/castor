@@ -36,7 +36,7 @@ open Tuple
 module Ctx = struct
   type scope =
     | Ctx of Value.t Map.M(Name).t
-    | Tuple of Value.t array * int Map.M(Name).t
+    | Tuple of Value.t array * int Hashtbl.M(Name).t
   [@@deriving sexp]
 
   type t = scope list [@@deriving sexp]
@@ -51,7 +51,7 @@ module Ctx = struct
     | Ctx map :: ctx' -> (
       match Map.find map n with Some v -> Some v | None -> find ctx' n )
     | Tuple (t, schema) :: ctx' -> (
-      match Map.find schema n with Some i -> Some t.(i) | None -> find ctx' n )
+      match Hashtbl.find schema n with Some i -> Some t.(i) | None -> find ctx' n )
 
   let of_map m = [Ctx m]
 end
@@ -220,7 +220,7 @@ let eval {db; params} r =
     let schema r =
       Meta.(find_exn r schema)
       |> List.mapi ~f:(fun i n -> (n, i))
-      |> Map.of_alist_exn (module Name)
+      |> Hashtbl.of_alist_exn (module Name)
     in
     match r.node with
     | Scan r -> scan r
