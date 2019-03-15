@@ -5,11 +5,11 @@ open Castor_opt
 let main ~params:all_params ~db ~validate ch =
   let params =
     List.map all_params ~f:(fun (n, t, _) -> Name.create ~type_:t n)
-    |> Set.of_list (module Name.Compare_no_type)
+    |> Set.of_list (module Name)
   in
   let param_ctx =
     List.map all_params ~f:(fun (n, t, v) -> (Name.create ~type_:t n, v))
-    |> Map.of_alist_exn (module Name.Compare_no_type)
+    |> Map.of_alist_exn (module Name)
   in
   let module Config = struct
     let conn = Db.create db

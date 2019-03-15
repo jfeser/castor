@@ -13,9 +13,9 @@ module Config = struct
 
     val dbconn : Postgresql.connection
 
-    val params : Set.M(Name.Compare_no_type).t
+    val params : Set.M(Name).t
 
-    val param_ctx : Value.t Map.M(Name.Compare_no_type).t
+    val param_ctx : Value.t Map.M(Name).t
 
     val validate : bool
   end
@@ -203,10 +203,10 @@ module Make (Config : Config.S) () = struct
       match rs with
       | r :: rs ->
           let schema = Meta.(find_exn r schema) in
-          let sschema = Set.of_list (module Name.Compare_no_type) schema in
+          let sschema = Set.of_list (module Name) schema in
           let skey =
             Set.of_list
-              (module Name.Compare_no_type)
+              (module Name)
               (List.filter_map ~f:(fun (p, _) -> pred_to_name p) key)
           in
           if Set.is_subset skey ~of_:sschema then
@@ -230,9 +230,9 @@ module Make (Config : Config.S) () = struct
       (* Create map from names to sets of equal names. *)
       let eq_map =
         names
-        |> List.dedup_and_sort ~compare:[%compare: Name.Compare_no_type.t]
+        |> List.dedup_and_sort ~compare:[%compare: Name.t]
         |> List.map ~f:(fun n -> (n, Union_find.create n))
-        |> Hashtbl.of_alist_exn (module Name.Compare_no_type)
+        |> Hashtbl.of_alist_exn (module Name)
       in
       (* Add known equalities. *)
       List.iter eqs ~f:(fun (n, n') ->
@@ -295,12 +295,11 @@ module Make (Config : Config.S) () = struct
   let extend_select ~with_ ps r =
     M.annotate_schema r ;
     let needed_fields =
-      let of_list = Set.of_list (module Name.Compare_no_type) in
       (* These are the fields that are emitted by r, used in with_ and not
          exposed already by ps. *)
       Set.diff
-        (Set.inter with_ (of_list Meta.(find_exn r schema)))
-        (of_list (List.filter_map ~f:pred_to_name ps))
+        (Set.inter with_ (Set.of_list (module Name) Meta.(find_exn r schema)))
+        (Set.of_list (module Name) (List.filter_map ~f:pred_to_name ps))
       |> Set.to_list
       |> List.map ~f:(fun n -> Name n)
     in
