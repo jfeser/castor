@@ -3,17 +3,53 @@ open Printf
 
 exception TestDbExn
 
-let run_in_fork thunk =
+(* let run_in_fork thunk =
+ *   match Unix.fork () with
+ *   | `In_the_child ->
+ *       Backtrace.elide := false ;
+ *       Logs.set_reporter (Logs.format_reporter ()) ;
+ *       Logs.set_level (Some Logs.Debug) ;
+ *       thunk () ;
+ *       exit 0
+ *   | `In_the_parent pid ->
+ *       let _, err = Unix.wait (`Pid pid) in
+ *       Unix.Exit_or_signal.to_string_hum err |> print_endline *)
+
+let run_in_fork (type a) (thunk : unit -> a) : a =
+  let rd, wr = Unix.pipe () in
+  let rd = Unix.in_channel_of_descr rd in
+  let wr = Unix.out_channel_of_descr wr in
   match Unix.fork () with
   | `In_the_child ->
-      Backtrace.elide := false ;
-      Logs.set_reporter (Logs.format_reporter ()) ;
-      Logs.set_level (Some Logs.Debug) ;
-      thunk () ;
+      Marshal.(to_channel wr (thunk ()) [Closures]) ;
       exit 0
-  | `In_the_parent pid ->
-      let _, err = Unix.wait (`Pid pid) in
-      Unix.Exit_or_signal.to_string_hum err |> print_endline
+  | `In_the_parent _ -> Marshal.(from_channel rd)
+
+let run_in_fork_timed (type a) ?time ?(sleep_sec = 0.001) (thunk : unit -> a) :
+    a option =
+  let rd, wr = Unix.pipe () in
+  let rd = Unix.in_channel_of_descr rd in
+  let wr = Unix.out_channel_of_descr wr in
+  match Unix.fork () with
+  | `In_the_child ->
+      Marshal.(to_channel wr (thunk ()) [Closures]) ;
+      exit 0
+  | `In_the_parent pid -> (
+    match time with
+    | Some span ->
+        let start = Time.now () in
+        let rec sleep () =
+          if Time.Span.(Time.(diff (now ()) start) > span) then (
+            Signal.(send_i kill (`Pid pid)) ;
+            None )
+          else (
+            Unix.nanosleep sleep_sec |> ignore ;
+            match Unix.wait_nohang (`Pid pid) with
+            | None -> sleep ()
+            | Some _ -> Some Marshal.(from_channel rd) )
+        in
+        sleep ()
+    | None -> Some Marshal.(from_channel rd) )
 
 let reporter ppf =
   let report _ level ~over k msgf =
