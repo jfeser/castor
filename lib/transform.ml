@@ -639,13 +639,14 @@ module Make (Config : Config.S) () = struct
   let push_select =
     of_func (Push_select.push_select (module M)) ~name:"push-select"
 
+  let join_opt = of_func (fun _ -> None) ~name:"join-opt"
+
   let opt =
     let open Infix in
     seq_many
       [ (* Plan joins *)
         fix
-          (at_ Join_opt.transform
-             Path.(all >>? is_join >>? is_run_time >>| shallowest))
+          (at_ join_opt Path.(all >>? is_join >>? is_run_time >>| shallowest))
       ; (* Eliminate groupby operators. *)
         fix (at_ elim_groupby (Path.all >>? is_groupby >>| shallowest))
       ; (* Hoist parameterized filters as far up as possible. *)

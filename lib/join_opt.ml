@@ -29,13 +29,26 @@ module JoinGraph = struct
   let vertices g = fold_vertex (fun v l -> v :: l) g []
 
   let partition g vs =
-    fold_vertex
-      (fun v (lhs, rhs) ->
-        let in_set = Set.mem vs v in
-        let lhs = if in_set then remove_vertex lhs v else lhs in
-        let rhs = if in_set then rhs else remove_vertex rhs v in
-        (lhs, rhs) )
-      g (g, g)
+    let g1, g2 =
+      fold_vertex
+        (fun v (lhs, rhs) ->
+          let in_set = Set.mem vs v in
+          let lhs = if in_set then remove_vertex lhs v else lhs in
+          let rhs = if in_set then rhs else remove_vertex rhs v in
+          (lhs, rhs) )
+        g (g, g)
+    in
+    let es =
+      fold_edges_e
+        (fun ((v1, _, v2) as e) es ->
+          if
+            (Set.mem vs v1 && not (Set.mem vs v2))
+            || ((not (Set.mem vs v1)) && Set.mem vs v2)
+          then e :: es
+          else es )
+        g []
+    in
+    (g1, g2, es)
 
   let is_connected g =
     let n = nb_vertex g in
@@ -84,7 +97,7 @@ module JoinSpace = struct
       else
         let acc =
           Combinat.Combination.fold (n, k) ~init:acc ~f:(fun acc vs ->
-              let g1, g2 =
+              let g1, g2, es =
                 JoinGraph.partition graph
                   ( List.init k ~f:(fun i -> vertices.(vs.{i}))
                   |> Set.of_list (module Vertex) )
@@ -92,7 +105,7 @@ module JoinSpace = struct
               if JoinGraph.is_connected g1 && JoinGraph.is_connected g2 then
                 let s1 = {graph= g1; filters} in
                 let s2 = {graph= g2; filters} in
-                f acc (s1, s2)
+                f acc (s1, s2, es)
               else acc )
         in
         loop acc (k + 1)
@@ -143,6 +156,9 @@ module Cost = struct
     | StringT _ -> 25.0
     | BoolT _ -> 1.0
     | _ -> failwith "Unexpected type."
+
+  (* TODO: Not all lists have 16B headers *)
+  let list_size = 16.0
 end
 
 let ntuples ctx r =
@@ -172,7 +188,10 @@ let rec to_abslayout = function
   | Hash {lkey; rkey; lhs; rhs} ->
       A.(join (Binop (And, lkey, rkey)) (to_abslayout lhs) (to_abslayout rhs))
 
-let rec estimate_cost_parted ctx parts r =
+let estimate_cost_parted ctx parts r =
+  let module M = Abslayout_db.Make (struct
+    let conn = ctx.dbconn
+  end) in
   let s = schema ctx r |> Set.of_list (module Name) in
   let parts =
     List.filter parts ~f:(fun (_, _, ns, _) -> Set.is_subset ns ~of_:s)
@@ -192,6 +211,7 @@ let rec estimate_cost_parted ctx parts r =
     let c = A.(Name (Name.create "c")) in
     A.(select [Min c; Max c; Avg c] part_counts)
   in
+  M.annotate_schema part_aggs ;
   let sql = Sql.of_ralgebra ctx.sql part_aggs in
   let tups =
     Db.exec_cursor_exn ctx.dbconn
@@ -205,48 +225,69 @@ let rec estimate_cost_parted ctx parts r =
   | Some [|Int min; Int max; Fixed avg|] -> (min, max, Fixed_point.to_float avg)
   | _ -> failwith "Unexpected tuples."
 
-let rec estimate_cost ctx r =
+let rec estimate_cost ctx parts r =
   let sum = List.sum (module Float) in
   match r with
   | Flat _ ->
-      let nt = ntuples ctx r in
+      let _, _, nt = estimate_cost_parted ctx parts r in
       let scan_cost = sum (schema_types ctx r) ~f:Cost.read *. nt in
-      let size_cost = sum (schema_types ctx r) ~f:Cost.size *. nt in
+      let size_cost =
+        (sum (schema_types ctx r) ~f:Cost.size *. nt) +. Cost.list_size
+      in
       [|size_cost; scan_cost|]
-  | Nest {lhs; rhs; _} ->
-      let nt = ntuples ctx r in
-      let nt_lhs = ntuples ctx lhs in
-      let nt_rhs = ntuples ctx lhs in
-      let lhs_costs = estimate_cost ctx lhs in
+  | Nest {lhs; rhs; pred} ->
+      let _, _, lhs_nt = estimate_cost_parted ctx parts lhs in
+      let lhs_costs = estimate_cost ctx parts lhs in
       let lhs_size = lhs_costs.(0) in
       let lhs_scan = lhs_costs.(1) in
-      let rhs_costs = estimate_cost ctx rhs in
-      let rhs_size = rhs_costs.(0) in
-      let rhs_scan = rhs_costs.(1) in
-      let rhs_per_tuple_size = rhs_size /. nt_rhs in
-      let rhs_per_tuple_scan = rhs_scan /. nt_rhs in
-      let exp_factor = nt /. nt_lhs in
-      let scan_cost = lhs_scan +. (exp_factor *. rhs_per_tuple_scan) in
-      let size_cost = lhs_size +. (nt *. rhs_per_tuple_size) in
+      let rhs_per_partition_costs =
+        let lhs_names, rhs_names =
+          let lhs_schema = schema ctx lhs |> Set.of_list (module Name) in
+          let rhs_schema = schema ctx rhs |> Set.of_list (module Name) in
+          let pred_names =
+            A.Pred.names pred
+            |> Set.filter ~f:(fun n ->
+                   Set.mem lhs_schema n || Set.mem rhs_schema n )
+          in
+          Set.partition_tf pred_names ~f:(Set.mem lhs_schema)
+        in
+        estimate_cost ctx
+          ((to_ralgebra lhs, lhs_names, rhs_names, pred) :: parts)
+          rhs
+      in
+      let size_cost = lhs_size +. (lhs_nt *. rhs_per_partition_costs.(0)) in
+      let scan_cost = lhs_scan +. (lhs_nt *. rhs_per_partition_costs.(1)) in
       [|size_cost; scan_cost|]
-  | Hash {lkey; lhs; rhs; _} ->
-      let nt = ntuples ctx r in
-      let nt_lhs = ntuples ctx lhs in
-      let nt_rhs = ntuples ctx lhs in
-      let lhs_costs = estimate_cost ctx lhs in
+  | Hash {lkey; lhs; rhs; rkey} ->
+      let _, _, nt_lhs = estimate_cost_parted ctx parts lhs in
+      let lhs_costs = estimate_cost ctx parts lhs in
       let lhs_size = lhs_costs.(0) in
       let lhs_scan = lhs_costs.(1) in
-      let rhs_costs = estimate_cost ctx rhs in
+      let rhs_costs = estimate_cost ctx parts lhs in
       let rhs_size = rhs_costs.(0) in
-      let rhs_scan = rhs_costs.(1) in
-      let rhs_per_tuple_scan = rhs_scan /. nt_rhs in
-      let exp_factor = nt /. nt_lhs in
-      let scan_cost =
-        lhs_scan
-        +. (nt *. Cost.hash (Name.type_exn (A.pred_to_schema lkey)))
-        +. (exp_factor *. rhs_per_tuple_scan)
+      let rhs_per_partition_costs =
+        let pred = A.(Binop (Eq, lkey, rkey)) in
+        let lhs_names, rhs_names =
+          let lhs_schema = schema ctx lhs |> Set.of_list (module Name) in
+          let rhs_schema = schema ctx rhs |> Set.of_list (module Name) in
+          let pred_names =
+            A.(Pred.names pred)
+            |> Set.filter ~f:(fun n ->
+                   Set.mem lhs_schema n || Set.mem rhs_schema n )
+          in
+          Set.partition_tf pred_names ~f:(Set.mem lhs_schema)
+        in
+        estimate_cost ctx
+          ((to_ralgebra lhs, lhs_names, rhs_names, pred) :: parts)
+          rhs
       in
       let size_cost = lhs_size +. rhs_size in
+      let scan_cost =
+        lhs_scan
+        +. nt_lhs
+           *. ( Cost.hash (Name.type_exn (A.pred_to_schema lkey))
+              +. rhs_per_partition_costs.(1) )
+      in
       [|size_cost; scan_cost|]
 
 module ParetoSet = struct
@@ -342,13 +383,3 @@ let join_opt cost preds =
     |> Set.of_list (module String)
   in
   enumerate rels
-
-let cost = estimate_cost {conn= dbconn; dbconn= conn; sql= sql_ctx}
-
-let transform r =
-  let preds = extract_joins r in
-  match join_opt cost preds |> List.hd with
-  | Some (_, join) -> Some (emit_joins join)
-  | None -> None
-
-let transform = of_func ~name:"join-opt" transform
