@@ -99,7 +99,16 @@ let join ctx schema1 schema2 sql1 sql2 pred =
   let ctx =
     List.zip_exn schema1 spj1.select @ List.zip_exn schema2 spj2.select
     |> List.map ~f:(fun (n, {pred= p; _}) -> (n, p))
-    |> Map.of_alist_exn (module Name)
+    |> Map.of_alist (module Name)
+  in
+  let ctx =
+    match ctx with
+    | `Duplicate_key n ->
+        Error.(
+          create "Schemas overlap." (n, schema1, schema2)
+            [%sexp_of: Name.t * Name.t list * Name.t list]
+          |> raise)
+    | `Ok ctx -> ctx
   in
   let pred = subst_pred ctx pred in
   let select_list = spj1.select @ spj2.select in
