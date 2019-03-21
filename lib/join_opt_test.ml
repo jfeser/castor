@@ -1,18 +1,23 @@
 open Core
 open Castor
+module A = Abslayout
+
+module Config = struct
+  let dbconn = new Postgresql.connection ~conninfo:"postgresql:///tpch_1k" ()
+
+  let conn = Db.create "postgresql:///tpch_1k"
+
+  let validate = false
+
+  let param_ctx = Map.empty (module Name)
+end
+
+module Join_opt = Join_opt.Make (Config)
 open Join_opt
-
-let ctx =
-  { conn= new Postgresql.connection ~conninfo:"postgresql:///tpch_1k" ()
-  ; dbconn= Db.create "postgresql:///tpch_1k"
-  ; sql= Sql.create_ctx () }
-
-module M = Abslayout_db.Make (struct
-  let conn = ctx.dbconn
-end)
+module M = Abslayout_db.Make (Config)
 
 let%expect_test "parted-cost" =
-  estimate_ntuples_parted ctx [] (Flat (A.scan "orders"))
+  estimate_ntuples_parted [] (Flat (A.scan "orders"))
   |> [%sexp_of: int * int * float] |> print_s ;
   [%expect {| (1000 1000 1000) |}]
 
@@ -27,7 +32,7 @@ let n_nationkey = Name.create ~type_ ~relation:"nation" "n_nationkey"
 let o_custkey = Name.create ~type_ ~relation:"orders" "o_custkey"
 
 let%expect_test "parted-cost" =
-  estimate_ntuples_parted ctx
+  estimate_ntuples_parted
     [ ( A.scan "customer"
       , Set.singleton (module Name) c_custkey
       , Set.singleton (module Name) o_custkey
@@ -37,7 +42,7 @@ let%expect_test "parted-cost" =
   [%expect {| (1 2 1.002004008016032) |}]
 
 let%expect_test "parted-cost" =
-  estimate_ntuples_parted ctx
+  estimate_ntuples_parted
     [ ( A.scan "customer"
       , Set.singleton (module Name) c_custkey
       , Set.singleton (module Name) c_custkey
@@ -47,7 +52,7 @@ let%expect_test "parted-cost" =
   [%expect {| (1 1 1) |}]
 
 let%expect_test "cost" =
-  estimate_cost ctx []
+  estimate_cost []
     (Flat
        A.(
          join
@@ -57,7 +62,7 @@ let%expect_test "cost" =
   [%expect {| (257016 68000) |}]
 
 let%expect_test "cost" =
-  estimate_cost ctx []
+  estimate_cost []
     A.(
       Nest
         { pred= Binop (Eq, Name c_custkey, Name o_custkey)
@@ -67,21 +72,21 @@ let%expect_test "cost" =
   [%expect {| (272710 67936) |}]
 
 let%expect_test "cost" =
-  estimate_cost ctx []
+  estimate_cost []
     A.(
       Flat
         (join
            (Binop (Eq, Name c_nationkey, Name n_nationkey))
            (scan "nation") (scan "customer")))
   |> [%sexp_of: float array] |> print_s ;
-  estimate_cost ctx []
+  estimate_cost []
     A.(
       Nest
         { pred= Binop (Eq, Name c_nationkey, Name n_nationkey)
         ; lhs= Flat (scan "nation")
         ; rhs= Flat (scan "customer") })
   |> [%sexp_of: float array] |> print_s ;
-  estimate_cost ctx []
+  estimate_cost []
     A.(
       Hash
         { lkey= Name c_nationkey
@@ -159,7 +164,7 @@ let%expect_test "part-fold" =
     --- |}]
 
 let%expect_test "join-opt" =
-  opt ctx
+  opt
     A.(
       join
         (Binop (Eq, Name c_nationkey, Name n_nationkey))
@@ -167,7 +172,7 @@ let%expect_test "join-opt" =
   |> [%sexp_of: (float array * t) list] |> print_s
 
 let%expect_test "join-opt" =
-  opt ctx
+  opt
     A.(
       join
         (Binop (Eq, Name c_custkey, Name o_custkey))

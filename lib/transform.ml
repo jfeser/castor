@@ -3,9 +3,6 @@ open Core
 open Castor
 open Collections
 open Abslayout
-open Printf
-
-type t = {f: Path.t -> Abslayout.t -> Abslayout.t option; name: string}
 
 module Config = struct
   module type S = sig
@@ -21,177 +18,21 @@ module Config = struct
   end
 end
 
-type ('r, 'p) path_set = 'r -> 'p Seq.t
-
-type ('r, 'p) path_filter = 'r -> 'p -> bool
-
-type ('r, 'p) path_selector = ('r, 'p) path_set -> 'r -> 'p option
-
-let overlaps s1 s2 = Set.inter s1 s2 |> Set.length > 0
-
-let ( >>? ) (s : ('r, 'p) path_set) (f : ('r, 'p) path_filter) r =
-  s r |> Seq.filter ~f:(fun p -> f r p)
-
-let ( >>| ) (s : ('r, 'p) path_set) (f : ('r, 'p) path_selector) = f s
-
-let ( >>= ) p f r = Option.bind (p r) ~f:(fun p' -> f p' r)
-
-let any ps r = Seq.hd (ps r)
-
-let deepest ps r =
-  Seq.fold (ps r) ~init:None ~f:(fun p_max_m p ->
-      match p_max_m with
-      | None -> Some p
-      | Some p_max ->
-          Some (if Path.length p > Path.length p_max then p else p_max) )
-
-let shallowest ps r =
-  Seq.fold (ps r) ~init:None ~f:(fun p_min_m p ->
-      match p_min_m with
-      | None -> Some p
-      | Some p_min ->
-          Some (if Path.length p < Path.length p_min then p else p_min) )
-
-let is_join r p =
-  match (Path.get_exn p r).node with Join _ -> true | _ -> false
-
-let is_groupby r p =
-  match (Path.get_exn p r).node with GroupBy _ -> true | _ -> false
-
-let is_orderby r p =
-  match (Path.get_exn p r).node with OrderBy _ -> true | _ -> false
-
-let is_filter r p =
-  match (Path.get_exn p r).node with Filter _ -> true | _ -> false
-
-let is_dedup r p =
-  match (Path.get_exn p r).node with Dedup _ -> true | _ -> false
-
-let is_scan r p =
-  match (Path.get_exn p r).node with Scan _ -> true | _ -> false
-
-let is_select r p =
-  match (Path.get_exn p r).node with Select _ -> true | _ -> false
-
-let is_hash_idx r p =
-  match (Path.get_exn p r).node with AHashIdx _ -> true | _ -> false
-
-let is_ordered_idx r p =
-  match (Path.get_exn p r).node with AOrderedIdx _ -> true | _ -> false
-
-let is_list r p =
-  match (Path.get_exn p r).node with AList _ -> true | _ -> false
-
-let is_tuple r p =
-  match (Path.get_exn p r).node with ATuple _ -> true | _ -> false
-
-let above (f : _ -> Path.t -> bool) r p =
-  match List.rev p with [] -> false | _ :: p' -> f r (List.rev p')
-
-module Infix = struct
-  let ( && ) f1 f2 r p = f1 r p && f2 r p
-
-  let ( || ) f1 f2 r p = f1 r p || f2 r p
-
-  let not f r p = not (f r p)
-end
-
-let is_collection =
-  Infix.(is_hash_idx || is_ordered_idx || is_list || is_tuple)
-
-let last_child _ = Some [Path.Child_last]
-
 module Make (Config : Config.S) () = struct
   open Config
   module M = Abslayout_db.Make (Config)
+  module O = Ops.Make (Config)
+  open O
+  module J = Join_elim_tactics.Make (Config)
+  open J
 
   let is_serializable r p =
     M.annotate_schema r ;
     is_serializeable (Path.get_exn p r)
 
-  let ( @@ ) tf a = tf.f a
-
-  let apply tf p r = tf.f p r
-
   let fresh = Fresh.create ()
 
   let sql_ctx = Sql.create_ctx ~fresh ()
-
-  let validated tf =
-    let f p r =
-      Option.map (apply tf p r) ~f:(fun r' ->
-          let err =
-            let ret =
-              Test_util.run_in_fork_timed ~time:(Time.Span.of_sec 10.0)
-                (fun () -> Interpret.(equiv {db= conn; params= param_ctx} r r')
-              )
-            in
-            match ret with
-            | Some r -> r
-            | None ->
-                Logs.warn (fun m ->
-                    m "Failed to check transform %s: Timed out." tf.name ) ;
-                Ok ()
-          in
-          Or_error.iter_error err ~f:(fun err ->
-              Logs.err (fun m ->
-                  m "%s is not semantics preserving: %a" tf.name Error.pp err
-              ) ) ;
-          r' )
-    in
-    {f; name= sprintf "!%s" tf.name}
-
-  let traced tf =
-    let f p r =
-      Logs.debug (fun m ->
-          m "Transform %s running @ %a" tf.name
-            (fun fmt x -> Sexp.pp fmt ([%sexp_of: Path.t] x))
-            p ) ;
-      match tf.f p r with
-      | Some r' ->
-          Logs.debug (fun m -> m "Transform %s succeeded." tf.name) ;
-          Some r'
-      | None ->
-          Logs.debug (fun m -> m "Transform %s failed." tf.name) ;
-          None
-    in
-    {tf with f}
-
-  let of_func ?(name = "<unknown>") f =
-    let f p r = Option.map (f (Path.get_exn p r)) ~f:(Path.set_exn p r) in
-    let tf = traced {f; name} in
-    let {f; name} = if validate then validated tf else tf in
-    {f= (fun r -> Exn.reraise_uncaught name (fun () -> f r)); name}
-
-  let fix tf =
-    let f p r =
-      let rec fix r =
-        match tf.f p r with
-        | Some r' -> if Abslayout.O.(r = r') then Some r else fix r'
-        | None -> Some r
-      in
-      fix r
-    in
-    {f; name= sprintf "fix(%s)" tf.name}
-
-  let seq t1 t2 =
-    let f p r =
-      match t1.f p r with Some r' -> t2.f p r' | None -> t2.f p r
-    in
-    {f; name= sprintf "%s ; %s" t1.name t2.name}
-
-  let rec seq_many = function
-    | [] -> failwith "Empty transform list."
-    | [t] -> t
-    | t :: ts -> seq t (seq_many ts)
-
-  let at_ tf pspec =
-    let f p r = Option.bind (pspec r) ~f:(fun p' -> tf.f (p @ p') r) in
-    {name= sprintf "(%s @ <path>)" tf.name; f}
-
-  let first tf pset =
-    let f p r = Seq.find_map (pset r) ~f:(fun p' -> tf.f (p @ p') r) in
-    {name= sprintf "first %s in <path set>" tf.name; f}
 
   let is_param_filter r p =
     M.annotate_schema r ;
@@ -546,51 +387,11 @@ module Make (Config : Config.S) () = struct
 
   let elim_cmp_filter = of_func elim_cmp_filter ~name:"elim-cmp-filter"
 
-  let elim_eq_filter r =
-    match r.node with
-    | Filter (p, r) ->
-        let eqs, rest =
-          conjuncts p
-          |> List.partition_map ~f:(function
-               | Binop (Eq, p1, p2) -> `Fst (p1, Fresh.name fresh "k%d", p2)
-               | p -> `Snd p )
-        in
-        if List.length eqs = 0 then None
-        else
-          let select_list =
-            List.map eqs ~f:(fun (p, k, _) -> As_pred (p, k))
-          in
-          let inner_filter_pred =
-            List.map eqs ~f:(fun (p, k, _) ->
-                Binop (Eq, Name (Name.create k), p) )
-            |> and_
-          in
-          let key = List.map eqs ~f:(fun (_, _, p) -> p) in
-          let outer_filter r =
-            match rest with [] -> r | _ -> filter (and_ rest) r
-          in
-          Some
-            (outer_filter
-               (hash_idx
-                  (dedup (select select_list r))
-                  (filter inner_filter_pred r)
-                  key))
-    | _ -> None
-
-  let elim_eq_filter = of_func elim_eq_filter ~name:"elim-eq-filter"
-
-  let elim_join_nest r =
-    match r.node with
-    | Join {pred; r1; r2} -> Some (tuple [r1; filter pred r2] Cross)
-    | _ -> None
-
-  let elim_join_nest = of_func elim_join_nest ~name:"elim-join-nest"
-
-  let id r _ = r
-
-  let elim_join_hash = seq elim_join_nest (at_ elim_eq_filter last_child)
-
   let no_params r = Set.is_empty (Set.inter (names r) params)
+
+  let is_supported orig_bound new_bound pred =
+    let supported = Set.inter (pred_free pred) orig_bound in
+    Set.is_subset supported ~of_:new_bound
 
   let row_store r =
     if no_params r then
@@ -600,10 +401,6 @@ module Make (Config : Config.S) () = struct
     else None
 
   let row_store = of_func row_store ~name:"to-row-store"
-
-  let is_supported orig_bound new_bound pred =
-    let supported = Set.inter (pred_free pred) orig_bound in
-    Set.is_subset supported ~of_:new_bound
 
   let push_filter r =
     M.annotate_schema r ;
@@ -639,20 +436,18 @@ module Make (Config : Config.S) () = struct
   let push_select =
     of_func (Push_select.push_select (module M)) ~name:"push-select"
 
-  let join_opt = of_func (fun _ -> None) ~name:"join-opt"
+  module Join_opt = Join_opt.Make (Config)
 
   let opt =
     let open Infix in
     seq_many
-      [ (* Plan joins *)
-        fix
-          (at_ join_opt Path.(all >>? is_join >>? is_run_time >>| shallowest))
-      ; (* Eliminate groupby operators. *)
+      [ (* Eliminate groupby operators. *)
         fix (at_ elim_groupby (Path.all >>? is_groupby >>| shallowest))
       ; (* Hoist parameterized filters as far up as possible. *)
         fix
           (at_ hoist_filter
              (Path.all >>? is_param_filter >>| deepest >>= Path.parent))
+      ; at_ Join_opt.transform (Path.all >>? is_join >>| shallowest)
       ; (* Push orderby operators into compile time position if possible. *)
         fix
           (at_ push_orderby
