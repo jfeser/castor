@@ -36,7 +36,7 @@ open Tuple
 module Ctx = struct
   type scope =
     | Ctx of Value.t Map.M(Name).t
-    | Tuple of Value.t array * (Name.t, int) Bounded_int_table.t
+    | Tuple of Value.t array * (Name.t, int) Hashtbl.t
   [@@deriving sexp_of]
 
   type t = scope list [@@deriving sexp_of]
@@ -51,9 +51,7 @@ module Ctx = struct
     | Ctx map :: ctx' -> (
       match Map.find map n with Some v -> Some v | None -> find ctx' n )
     | Tuple (t, schema) :: ctx' -> (
-      match Bounded_int_table.find schema n with
-      | Some i -> Some t.(i)
-      | None -> find ctx' n )
+      match Hashtbl.find schema n with Some i -> Some t.(i) | None -> find ctx' n )
 
   let of_map m = [Ctx m]
 end
@@ -222,9 +220,9 @@ let eval {db; params} r =
         | None -> int 0 ) )
   and eval ctx r : Tuple.t Seq.t =
     let schema r =
-      let tbl = Name.create_table () in
+      let tbl = Hashtbl.create (module Name) in
       Meta.(find_exn r schema)
-      |> List.iteri ~f:(fun i n -> Bounded_int_table.add_exn tbl ~key:n ~data:i) ;
+      |> List.iteri ~f:(fun i n -> Hashtbl.add_exn tbl ~key:n ~data:i) ;
       tbl
     in
     match r.node with
