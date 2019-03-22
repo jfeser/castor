@@ -25,6 +25,8 @@ module Make (Config : Config.S) () = struct
   open O
   module F = Filter_tactics.Make (Config)
   open F
+  module S = Simple_tactics.Make (Config)
+  open S
 
   let is_serializable r p =
     M.annotate_schema r ;
@@ -184,17 +186,6 @@ module Make (Config : Config.S) () = struct
     | _ -> None
 
   let elim_groupby = of_func elim_groupby ~name:"elim-groupby"
-
-  let no_params r = Set.is_empty (Set.inter (names r) params)
-
-  let row_store r =
-    if no_params r then
-      let s = M.to_schema r in
-      let scalars = List.map s ~f:(fun n -> scalar (Name n)) in
-      Some (list r (tuple scalars Cross))
-    else None
-
-  let row_store = of_func row_store ~name:"to-row-store"
 
   let push_select =
     of_func (Push_select.push_select (module M)) ~name:"push-select"

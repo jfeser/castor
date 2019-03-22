@@ -18,6 +18,8 @@ module Make (C : Config.S) = struct
   open C
   module O = Ops.Make (C)
   open O
+  module S = Simple_tactics.Make (C)
+  open S
 
   let sql_ctx = Sql.create_ctx ()
 
@@ -498,7 +500,7 @@ module Make (C : Config.S) = struct
     let module J = Join_elim_tactics.Make (C) in
     let open J in
     function
-    | Flat _ -> id
+    | Flat _ -> row_store
     | Hash {lhs; rhs; _} ->
         seq_many
           [ at_ (emit_joins lhs) first_child
@@ -511,15 +513,11 @@ module Make (C : Config.S) = struct
           ; elim_join_nest ]
 
   let transform =
-    { name= "join-opt"
-    ; f=
-        (fun p r ->
-          let r = Castor.Path.get_exn p r in
-          Option.map
-            (opt r |> ParetoSet.min_elt (fun a -> a.(0)))
-            ~f:(fun j ->
-              `Tf
-                (at_
-                   (seq_many [of_func (reshape j); emit_joins j])
-                   (fun _ -> Some p)) ) ) }
+    let f p r =
+      Castor.Path.get_exn p r |> opt
+      |> ParetoSet.min_elt (fun a -> a.(0))
+      |> Option.map ~f:(fun j ->
+             `Tf (seq_many [of_func (reshape j); emit_joins j]) )
+    in
+    {name= "join-opt"; f}
 end

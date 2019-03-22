@@ -202,4 +202,7 @@ module Make (C : Config.S) = struct
     let tf = traced (first_order f name) in
     let {f; name} = if validate then validated tf else tf in
     {f= (fun r -> Exn.reraise_uncaught name (fun () -> f r)); name}
+
+  let autotune rs cost =
+    Seq.min_elt rs ~compare:(fun r1 r2 -> [%compare: float] (cost r1) (cost r2))
 end
