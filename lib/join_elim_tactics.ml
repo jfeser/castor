@@ -1,4 +1,4 @@
-open Base
+open! Base
 open Castor
 open Abslayout
 open Collections
@@ -6,6 +6,8 @@ open Collections
 module Make (C : Ops.Config.S) = struct
   module O = Ops.Make (C)
   open O
+  module F = Filter_tactics.Make (C)
+  open F
 
   let fresh = Fresh.create ()
 
@@ -16,38 +18,22 @@ module Make (C : Ops.Config.S) = struct
 
   let elim_join_nest = of_func elim_join_nest ~name:"elim-join-nest"
 
-  let elim_eq_filter r =
+  let elim_join_hash r =
     match r.node with
-    | Filter (p, r) ->
-        let eqs, rest =
-          conjuncts p
-          |> List.partition_map ~f:(function
-               | Binop (Eq, p1, p2) -> `Fst (p1, Fresh.name fresh "k%d", p2)
-               | p -> `Snd p )
-        in
-        if List.length eqs = 0 then None
-        else
-          let select_list =
-            List.map eqs ~f:(fun (p, k, _) -> As_pred (p, k))
-          in
-          let inner_filter_pred =
-            List.map eqs ~f:(fun (p, k, _) ->
-                Binop (Eq, Name (Name.create k), p) )
-            |> and_
-          in
-          let key = List.map eqs ~f:(fun (_, _, p) -> p) in
-          let outer_filter r =
-            match rest with [] -> r | _ -> filter (and_ rest) r
-          in
-          Some
-            (outer_filter
-               (hash_idx
-                  (dedup (select select_list r))
-                  (filter inner_filter_pred r)
-                  key))
+    | Join {pred= Binop (Eq, kl, kr); r1; r2} ->
+        let key = Fresh.name fresh "k%d" in
+        let filter_pred = Binop (Eq, kr, Name (Name.create key)) in
+        Some
+          (tuple
+             [ r1
+             ; hash_idx
+                 (dedup (select [As_pred (kl, key)] r1))
+                 (filter filter_pred r2) [kl] ]
+             Cross)
     | _ -> None
 
-  let elim_eq_filter = of_func elim_eq_filter ~name:"elim-eq-filter"
-
-  let elim_join_hash = seq elim_join_nest (at_ elim_eq_filter last_child)
+  let elim_join_hash =
+    seq
+      (of_func elim_join_hash ~name:"elim-join-hash")
+      (fix (at_ push_filter Path.(all >>? is_const_filter >>| shallowest)))
 end

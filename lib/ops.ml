@@ -2,6 +2,7 @@ open Core
 open Printf
 open Castor
 open Collections
+open Abslayout
 
 module Config = struct
   module type S = sig
@@ -10,10 +11,13 @@ module Config = struct
     val param_ctx : Value.t Map.M(Name).t
 
     val validate : bool
+
+    val params : Set.M(Name).t
   end
 end
 
 module Make (C : Config.S) = struct
+  module M = Abslayout_db.Make (C)
   open C
 
   type t =
@@ -37,6 +41,14 @@ module Make (C : Config.S) = struct
   let ( >>| ) (s : ('r, 'p) path_set) (f : ('r, 'p) path_selector) = f s
 
   let ( >>= ) p f r = Option.bind (p r) ~f:(fun p' -> f p' r)
+
+  module Infix = struct
+    let ( && ) f1 f2 r p = f1 r p && f2 r p
+
+    let ( || ) f1 f2 r p = f1 r p || f2 r p
+
+    let not f r p = not (f r p)
+  end
 
   let any ps r = Seq.hd (ps r)
 
@@ -87,16 +99,18 @@ module Make (C : Config.S) = struct
   let is_tuple r p =
     match (Path.get_exn p r).node with ATuple _ -> true | _ -> false
 
+  let is_param_filter r p =
+    M.annotate_schema r ;
+    match (Path.get_exn p r).node with
+    | Filter (pred, _) -> overlaps (pred_free pred) params
+    | _ -> false
+
+  let is_const_filter = Infix.(is_filter && not is_param_filter)
+
+  let matches f r p = f (Path.get_exn p r).node
+
   let above (f : _ -> Path.t -> bool) r p =
     match List.rev p with [] -> false | _ :: p' -> f r (List.rev p')
-
-  module Infix = struct
-    let ( && ) f1 f2 r p = f1 r p && f2 r p
-
-    let ( || ) f1 f2 r p = f1 r p || f2 r p
-
-    let not f r p = not (f r p)
-  end
 
   let is_collection =
     Infix.(is_hash_idx || is_ordered_idx || is_list || is_tuple)
