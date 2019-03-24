@@ -20,6 +20,8 @@ module Make (C : Config.S) = struct
   open O
   module S = Simple_tactics.Make (C)
   open S
+  module F = Filter_tactics.Make (C)
+  open F
 
   let sql_ctx = Sql.create_ctx ()
 
@@ -513,11 +515,18 @@ module Make (C : Config.S) = struct
           ; elim_join_nest ]
 
   let transform =
-    let f p r =
-      Castor.Path.get_exn p r |> opt
+    let f r =
+      opt r
       |> ParetoSet.min_elt (fun a -> a.(0))
       |> Option.map ~f:(fun j ->
-             `Tf (seq_many [of_func (reshape j); emit_joins j]) )
+             `Tf
+               (seq_many
+                  [ of_func (reshape j)
+                  ; emit_joins j
+                  ; fix
+                      (at_ push_filter
+                         Castor.Path.(all >>? is_const_filter >>| shallowest))
+                  ]) )
     in
     {name= "join-opt"; f}
 end

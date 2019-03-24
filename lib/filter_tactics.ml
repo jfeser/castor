@@ -28,13 +28,19 @@ module Make (C : Ops.Config.S) = struct
     List.partition_tf (conjuncts p) ~f:(fun p' ->
         overlaps (pred_free p') (M.bound binder) )
 
+  let is_supported orig_bound new_bound pred =
+    let supported = Set.inter (pred_free pred) orig_bound in
+    Set.is_subset supported ~of_:new_bound
+
   let hoist_filter r =
     M.annotate_schema r ;
     match r.node with
     | OrderBy {key; rel= {node= Filter (p, r); _}} ->
         Some (filter p (order_by key r))
     | GroupBy (ps, key, {node= Filter (p, r); _}) ->
-        Some (filter p (group_by ps key r))
+        if is_supported (M.bound r) (M.bound (group_by ps key r)) p then
+          Some (filter p (group_by ps key r))
+        else None
     | Filter (p, {node= Filter (p', r); _}) ->
         Some (filter (Binop (And, p, p')) r)
     | Select (ps, {node= Filter (p, r); _}) -> (
@@ -205,10 +211,6 @@ module Make (C : Ops.Config.S) = struct
 
   let elim_cmp_filter = of_func elim_cmp_filter ~name:"elim-cmp-filter"
 
-  let is_supported orig_bound new_bound pred =
-    let supported = Set.inter (pred_free pred) orig_bound in
-    Set.is_subset supported ~of_:new_bound
-
   let push_filter r =
     M.annotate_schema r ;
     match r.node with
@@ -235,6 +237,20 @@ module Make (C : Ops.Config.S) = struct
             else if is_supported orig_bound (M.bound rv) p then
               Some (ordered_idx rk (filter p rv) m)
             else None
+        | ATuple (rs, Concat) ->
+            Some (tuple (List.map rs ~f:(filter p)) Concat)
+        | ATuple (rs, Cross) ->
+            let rs_rev, _ =
+              List.fold_left rs ~init:([], orig_bound) ~f:(fun (rs, bound) r ->
+                  let bound = Set.union (M.bound r) bound in
+                  let rs =
+                    if is_supported orig_bound bound p then filter p r :: rs
+                    else r :: rs
+                  in
+                  (rs, bound) )
+            in
+            let rs = List.rev rs_rev in
+            Some (tuple rs Cross)
         | _ -> None )
     | _ -> None
 

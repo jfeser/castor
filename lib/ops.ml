@@ -21,11 +21,10 @@ module Make (C : Config.S) = struct
   open C
 
   type t =
-    { f: Path.t -> Abslayout.t -> [`Result of Abslayout.t | `Tf of t] option
-    ; name: string }
+    {f: Abslayout.t -> [`Result of Abslayout.t | `Tf of t] option; name: string}
 
   let first_order f name =
-    {name; f= (fun p r -> Option.map (f p r) ~f:(fun r -> `Result r))}
+    {name; f= (fun r -> Option.map (f r) ~f:(fun r -> `Result r))}
 
   type ('r, 'p) path_set = 'r -> 'p Seq.t
 
@@ -119,24 +118,30 @@ module Make (C : Config.S) = struct
 
   let first_child _ = Some [Path.Child_first]
 
-  let rec apply tf p r =
-    tf.f p r
-    |> Option.bind ~f:(function
-         | `Result r -> Some r
-         | `Tf tf' -> apply tf' p r )
+  let rec apply tf r =
+    tf.f r
+    |> Option.bind ~f:(function `Result r -> Some r | `Tf tf' -> apply tf' r)
 
   let at_ tf pspec =
-    let f p r = Option.bind (pspec r) ~f:(fun p' -> tf.f (p @ p') r) in
+    let f r =
+      Option.bind (pspec r) ~f:(fun p' ->
+          let r' = Path.get_exn p' r in
+          Option.map (apply tf r') ~f:(fun r'' ->
+              `Result (Path.set_exn p' r r'') ) )
+    in
     {name= sprintf "(%s @ <path>)" tf.name; f}
 
   let first tf pset =
-    let f p r = Seq.find_map (pset r) ~f:(fun p' -> tf.f (p @ p') r) in
+    let f r =
+      Seq.find_map (pset r) ~f:(fun p' -> apply (at_ tf (fun _ -> Some p')) r)
+      |> Option.map ~f:(fun r -> `Result r)
+    in
     {name= sprintf "first %s in <path set>" tf.name; f}
 
   let fix tf =
-    let f p r =
+    let f r =
       let rec fix r =
-        match apply tf p r with
+        match apply tf r with
         | Some r' -> if Abslayout.O.(r = r') then Some r else fix r'
         | None -> Some r
       in
@@ -145,8 +150,8 @@ module Make (C : Config.S) = struct
     first_order f (sprintf "fix(%s)" tf.name)
 
   let seq t1 t2 =
-    let f p r =
-      match apply t1 p r with Some r' -> apply t2 p r' | None -> apply t2 p r
+    let f r =
+      match apply t1 r with Some r' -> apply t2 r' | None -> apply t2 r
     in
     first_order f (sprintf "%s ; %s" t1.name t2.name)
 
@@ -155,11 +160,11 @@ module Make (C : Config.S) = struct
     | [t] -> t
     | t :: ts -> seq t (seq_many ts)
 
-  let id = first_order (fun _ r -> Some r) "id"
+  let id = first_order (fun r -> Some r) "id"
 
   let validated tf =
-    let f p r =
-      Option.map (apply tf p r) ~f:(fun r' ->
+    let f r =
+      Option.map (apply tf r) ~f:(fun r' ->
           let err =
             let ret =
               Test_util.run_in_fork_timed ~time:(Time.Span.of_sec 10.0)
@@ -182,12 +187,9 @@ module Make (C : Config.S) = struct
     first_order f (sprintf "!%s" tf.name)
 
   let traced tf =
-    let f p r =
-      Logs.debug (fun m ->
-          m "Transform %s running @ %a" tf.name
-            (fun fmt x -> Sexp.pp fmt ([%sexp_of: Path.t] x))
-            p ) ;
-      match tf.f p r with
+    let f r =
+      Logs.debug (fun m -> m "Transform %s running." tf.name) ;
+      match tf.f r with
       | Some r' ->
           Logs.debug (fun m -> m "Transform %s succeeded." tf.name) ;
           Some r'
@@ -198,7 +200,6 @@ module Make (C : Config.S) = struct
     {tf with f}
 
   let of_func ?(name = "<unknown>") f =
-    let f p r = Option.map (f (Path.get_exn p r)) ~f:(Path.set_exn p r) in
     let tf = traced (first_order f name) in
     let {f; name} = if validate then validated tf else tf in
     {f= (fun r -> Exn.reraise_uncaught name (fun () -> f r)); name}
