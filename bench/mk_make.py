@@ -44,25 +44,26 @@ def dump_snippet():
         return '> $@'
 
 print('DB=postgresql:///tpch_1k')
-print('OPT=../bin/opt.exe')
+print('OPT=../../_build/default/castor-opt/bin/opt.exe') # dune exec ../bin/opt.exe -- 
+print('OPT_FLAGS=-db $(DB) -v')
 print('COMPILE=../../_build/default/castor/bin/compile.exe')
 print('BENCH_DIR=../../castor/bench/tpch/')
 print('all: opt compile')
 print('opt: %s' % (' '.join([out_file(b) for b in bench])))
 print('compile: %s' % (' '.join(['%s-opt' % b['name'] for b in bench])))
-print('''
-.PHONY: build
-build:
-\tcd ..; dune build @install
-\tcd ../../castor; dune build @install
-''')
+# print('''
+# .PHONY: build
+# build:
+# \tcd ..; dune build @install
+# \tcd ../../castor; dune build @install
+# ''')
 for b in bench:
     print('''
 {0}-opt.txt: {2}
-\tdune exec $(OPT) -- -db $(DB) {1} -v -c {2} {3} $@
+\t$(OPT) $(OPT_FLAGS) {1} {2} {3} $@
     '''.format(b['name'], gen_params(b), in_file(b), dump_snippet()))
     print('''
-{0}-opt: build {1}
+{0}-opt: {1}
 \tmkdir -p $@
 \t$(COMPILE) -v -o $@ -db $(DB) {2} {1} > $@/compile.log
 '''.format(b['name'], out_file(b), gen_param_types(b)))
