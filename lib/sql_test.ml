@@ -10,7 +10,9 @@ let run_test s =
   let r = of_string_exn s |> M.resolve in
   M.annotate_schema r ;
   let ctx = Sql.create_ctx ~fresh:(Fresh.create ()) () in
-  print_endline (of_ralgebra ctx r |> to_string_hum ctx)
+  let sql_str = of_ralgebra ctx r |> to_string_hum ctx in
+  Db.check Test_db.conn sql_str |> Or_error.ok_exn ;
+  print_endline sql_str
 
 let%expect_test "select-agg" =
   run_test "select([(0.2 * avg(r.f)) as test], r)" ;
@@ -225,3 +227,47 @@ let%expect_test "groupby-dedup" =
             "r1" AS "r1_1") AS "t3"
     GROUP BY
         ("r1_1_g_3") |}]
+
+let%expect_test "hash-idx" =
+  run_test
+    "ahashidx(select([r1.f as k], r1), select([r1.g], filter(r1.f = k, r1)), null)" ;
+  [%expect
+    {|
+    SELECT
+        NULL AS "x12",
+        "r1_5_g_8" AS "r1_5_g_8_14"
+    FROM (
+        SELECT
+            r1_1. "f" AS "k_4"
+        FROM
+            "r1" AS "r1_1") AS "t11",
+        LATERAL (
+            SELECT
+                r1_5. "g" AS "r1_5_g_8"
+            FROM
+                "r1" AS "r1_5"
+            WHERE ((r1_5. "f") = ("k_4"))) AS "t10"
+    WHERE (("k_4") = (NULL)) |}]
+
+let%expect_test "ordered-idx" =
+  run_test
+    "aorderedidx(select([r1.f as k], r1), select([r1.g], filter(r1.f = k, r1)), \
+     null, null)" ;
+  [%expect
+    {|
+    SELECT
+        "k_4" AS "k_4_13",
+        "r1_5_g_8" AS "r1_5_g_8_14"
+    FROM (
+        SELECT
+            r1_1. "f" AS "k_4"
+        FROM
+            "r1" AS "r1_1") AS "t11",
+        LATERAL (
+            SELECT
+                r1_5. "g" AS "r1_5_g_8"
+            FROM
+                "r1" AS "r1_5"
+            WHERE ((r1_5. "f") = ("k_4"))) AS "t10"
+    WHERE (((NULL) < ("k_4"))
+        AND (("k_4") < (NULL))) |}]

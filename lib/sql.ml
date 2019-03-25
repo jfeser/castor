@@ -1,4 +1,4 @@
-open Base
+open Core
 open Printf
 open Collections
 open Abslayout
@@ -178,6 +178,34 @@ let filter ctx schema sql pred =
   let pred = subst_pred ctx pred in
   Query {spj with conds= pred :: spj.conds}
 
+let lat_join of_ralgebra ctx s1 sql1 q2 =
+  let spj1 = to_spj ctx sql1 in
+  let sql1_no_order = Query {spj1 with order= []} in
+  let sql1_names = to_schema (Query spj1) in
+  let q2 =
+    let ctx =
+      List.zip_exn s1 sql1_names
+      |> List.map ~f:(fun (n, n') -> (n, Name Name.(create ?type_:(Name.type_ n) n'))
+         )
+      |> Map.of_alist_exn (module Name)
+    in
+    subst ctx q2
+  in
+  let spj2 = of_ralgebra q2 |> to_spj ctx in
+  let sql2 = Query spj2 in
+  let sql2_no_order = Query {spj2 with order= []} in
+  let select_list =
+    let sql2_names = to_schema sql2 in
+    List.map (sql1_names @ sql2_names) ~f:(fun n ->
+        create_entry ~ctx (Name (Name.create n)) )
+  in
+  Query
+    (create_query
+       ~relations:
+         [ (`Subquery (sql1_no_order, Fresh.name ctx.fresh "t%d"), `Left)
+         ; (`Subquery (sql2_no_order, Fresh.name ctx.fresh "t%d"), `Lateral) ]
+       select_list)
+
 let of_ralgebra ctx r =
   let rec f ({node; _} as r) =
     match node with
@@ -205,8 +233,42 @@ let of_ralgebra ctx r =
     | GroupBy (ps, key, r) ->
         let key = List.map ~f:(fun n -> Name n) key in
         select ~groupby:key ctx Meta.(find_exn r schema) (f r) ps
-    | AEmpty | AScalar _ | AList _ | ATuple _ | AHashIdx _ | AOrderedIdx _ ->
-        Error.of_string "Only relational algebra constructs allowed." |> Error.raise
+    | ATuple ([], _) -> failwith "Empty tuple."
+    | ATuple ([r], Cross) -> f r
+    | ATuple (r :: rs, Cross) ->
+        lat_join f ctx Meta.(find_exn r schema) (f r) (tuple rs Cross)
+    | AEmpty -> Query (create_query ~limit:0 [])
+    | AScalar p -> Query (create_query [create_entry ~ctx p])
+    | ATuple (_, (Concat | Zip)) ->
+        Error.(create "Unsupported." r [%sexp_of: Abslayout.t] |> raise)
+    | AList (rk, rv) -> lat_join f ctx Meta.(find_exn rk schema) (f rk) rv
+    | AHashIdx (rk, rv, {lookup; _}) ->
+        let kschema = Meta.(find_exn rk schema) in
+        let vschema = Meta.(find_exn rv schema) in
+        let schema = kschema @ vschema in
+        let kvsql = lat_join f ctx kschema (f rk) rv in
+        let kvsql =
+          let p =
+            List.map2_exn kschema lookup ~f:(fun n p -> Binop (Eq, Name n, p))
+            |> Pred.conjoin
+          in
+          filter ctx schema kvsql p
+        in
+        select ctx schema kvsql (lookup @ List.map ~f:(fun n -> Name n) vschema)
+    | AOrderedIdx (rk, rv, {lookup_low; lookup_high; _}) ->
+        let kschema = Meta.(find_exn rk schema) in
+        let vschema = Meta.(find_exn rv schema) in
+        let n = List.hd_exn kschema in
+        let schema = kschema @ vschema in
+        let kvsql = lat_join f ctx kschema (f rk) rv in
+        let kvsql =
+          let p =
+            Binop
+              (And, Binop (Lt, lookup_low, Name n), Binop (Lt, Name n, lookup_high))
+          in
+          filter ctx schema kvsql p
+        in
+        select ctx schema kvsql (Name n :: List.map ~f:(fun n -> Name n) vschema)
   in
   f r
 
