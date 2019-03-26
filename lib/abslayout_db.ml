@@ -28,43 +28,6 @@ module Make (Config : Config.S) = struct
     | `Concat qs -> 1 + List.sum (module Int) qs ~f:width
     | `Query q -> List.length Meta.(find_exn q schema)
 
-  let rec pred_to_schema =
-    let open Type.PrimType in
-    let unnamed t = Name.create ~type_:t "" in
-    function
-    | As_pred (p, n) ->
-        let schema = pred_to_schema p in
-        Name.copy ~relation:None ~name:n schema
-    | Name n -> n
-    | Date _ | Unop ((Year | Month | Day), _) -> unnamed (DateT {nullable= false})
-    | Int _ | Unop ((Strlen | ExtractY | ExtractM | ExtractD), _) | Count ->
-        unnamed (IntT {nullable= false})
-    | Fixed _ | Avg _ -> unnamed (FixedT {nullable= false})
-    | Bool _ | Exists _
-     |Binop ((Eq | Lt | Le | Gt | Ge | And | Or), _, _)
-     |Unop (Not, _) ->
-        unnamed (BoolT {nullable= false})
-    | String _ -> unnamed (StringT {nullable= false})
-    | Null -> unnamed NullT
-    | Binop ((Add | Sub | Mul | Div | Mod), p1, p2) ->
-        let s1 = pred_to_schema p1 in
-        let s2 = pred_to_schema p2 in
-        unnamed (unify (Name.type_exn s1) (Name.type_exn s2))
-    | Binop (Strpos, _, _) -> unnamed (IntT {nullable= false})
-    | Sum p | Min p | Max p -> pred_to_schema p
-    | If (_, p1, p2) ->
-        let s1 = pred_to_schema p1 in
-        let s2 = pred_to_schema p2 in
-        Type.PrimType.unify (Name.type_exn s1) (Name.type_exn s2) |> ignore ;
-        unnamed (Name.type_exn s1)
-    | First r -> (
-        annotate_schema r ;
-        match Meta.(find_exn r schema) with
-        | [n] -> n
-        | [] -> failwith "Unexpected empty schema."
-        | _ -> failwith "Too many fields." )
-    | Substring _ -> unnamed (StringT {nullable= false})
-
   (** Add a schema field to each metadata node. Variables must first be
      annotated with type information. *)
   and annotate_schema r =
@@ -77,14 +40,14 @@ module Make (Config : Config.S) = struct
           let schema =
             match r.node with
             | Select (x, _) ->
-                List.map x ~f:(fun p -> self#visit_pred () p ; pred_to_schema p)
+                List.map x ~f:(fun p -> self#visit_pred () p ; Pred.to_schema p)
             | Filter (_, r) | Dedup r | AList (_, r) | OrderBy {rel= r; _} ->
                 Meta.(find_exn r schema)
             | Join {r1; r2; _} | AOrderedIdx (r1, r2, _) | AHashIdx (r1, r2, _) ->
                 Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema)
-            | GroupBy (x, _, _) -> List.map x ~f:pred_to_schema
+            | GroupBy (x, _, _) -> List.map x ~f:Pred.to_schema
             | AEmpty -> []
-            | AScalar e -> self#visit_pred () e ; [pred_to_schema e]
+            | AScalar e -> self#visit_pred () e ; [Pred.to_schema e]
             | ATuple (rs, (Cross | Zip)) ->
                 List.concat_map ~f:(fun r -> Meta.(find_exn r schema)) rs
             | ATuple ([], Concat) -> []
@@ -144,7 +107,7 @@ module Make (Config : Config.S) = struct
     | `For (q1, q2) ->
         (Meta.(find_exn q1 schema) |> List.map ~f:Name.type_exn) @ to_schema q2
     | `Concat qs -> IntT {nullable= false} :: List.concat_map qs ~f:to_schema
-    | `Scalar p -> [pred_to_schema p |> Name.type_exn]
+    | `Scalar p -> [Pred.to_schema p |> Name.type_exn]
     | `Query q -> Meta.(find_exn q schema) |> List.map ~f:Name.type_exn
     | `Empty -> []
 
@@ -196,7 +159,7 @@ module Make (Config : Config.S) = struct
               Sql.(create_query (List.map scalars ~f:(create_entry ~ctx)))
             in
             let types =
-              List.map scalars ~f:(fun p -> p |> pred_to_schema |> Name.type_exn)
+              List.map scalars ~f:(fun p -> p |> Pred.to_schema |> Name.type_exn)
             in
             let names = Sql.(to_schema (Query sql)) in
             (sql, types, names)
@@ -515,7 +478,7 @@ module Make (Config : Config.S) = struct
             ([least_general_of_layout r1; least_general_of_layout r2], `Child_sum)
       | AEmpty -> EmptyT
       | AScalar p ->
-          Abslayout.pred_to_schema p |> Name.type_exn |> least_general_of_primtype
+          Abslayout.Pred.to_schema p |> Name.type_exn |> least_general_of_primtype
       | AList (_, r') -> ListT (least_general_of_layout r', {count= Bottom})
       | AHashIdx (_, vr, {hi_key_layout= Some kr; _}) ->
           HashIdxT
@@ -684,12 +647,12 @@ module Make (Config : Config.S) = struct
     in
     let empty_ctx = Set.empty (module Name) in
     let preds_to_names preds =
-      List.map preds ~f:pred_to_schema
+      List.map preds ~f:Pred.to_schema
       |> List.filter ~f:(fun n -> String.(name n <> ""))
       |> Set.of_list (module Name)
     in
     let pred_to_name pred =
-      let n = pred_to_schema pred in
+      let n = Pred.to_schema pred in
       if String.(name n = "") then None else Some n
     in
     let union c1 c2 = Set.union c1 c2 in

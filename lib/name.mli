@@ -32,8 +32,6 @@ val to_var : t -> string
 
 val pp : Formatter.t -> t -> unit
 
-(* val of_string_exn : string -> t *)
-
 val fresh : Fresh.t -> (int -> string, unit, string) format -> t
 
 val create_table : unit -> (t, 'a) Bounded_int_table.t

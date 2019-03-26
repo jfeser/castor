@@ -4,7 +4,7 @@ open Collections
 open Abslayout
 open Bos
 
-type ctx = {fresh: Fresh.t}
+type ctx = {fresh: Fresh.t; fresh_names: (Name.t * int ref) Hashtbl.M(Name).t}
 
 type select_entry = {pred: pred; alias: string; cast: Type.PrimType.t option}
 [@@deriving compare, sexp_of]
@@ -22,7 +22,9 @@ type spj =
 
 and t = Query of spj | Union_all of spj list [@@deriving compare, sexp_of]
 
-let create_ctx ?fresh () = {fresh= Option.value fresh ~default:(Fresh.create ())}
+let create_ctx ?fresh () =
+  { fresh= Option.value fresh ~default:(Fresh.create ())
+  ; fresh_names= Hashtbl.create (module Name) }
 
 let create_query ?(distinct = false) ?(conds = []) ?(relations = []) ?(order = [])
     ?(group = []) ?limit select =
@@ -32,7 +34,13 @@ let create_entry ~ctx ?alias ?cast pred =
   match (alias, pred_to_name pred) with
   | Some a, _ -> {pred; alias= a; cast}
   | _, Some n ->
-      {pred; alias= sprintf "%s_%d" (Name.to_var n) (Fresh.int ctx.fresh); cast}
+      let orig_n, id =
+        Hashtbl.find_or_add ctx.fresh_names n ~default:(fun () -> (n, ref 0))
+      in
+      incr id ;
+      let new_n = sprintf "%s_%d" (Name.to_var orig_n) !id in
+      Hashtbl.set ctx.fresh_names ~key:(Name.create new_n) ~data:(orig_n, id) ;
+      {pred; alias= new_n; cast}
   | None, None -> {pred; alias= Fresh.name ctx.fresh "x%d"; cast}
 
 let select_entry_name {alias; _} = alias
@@ -83,6 +91,18 @@ let create_subquery ctx q =
 
 let to_spj ctx = function Query q -> q | Union_all _ as q -> create_subquery ctx q
 
+let make_ctx schema select =
+  if List.length schema <> List.length select then
+    Error.create "Mismatched schema and select." (schema, select)
+      [%sexp_of: Name.t list * select_entry list]
+    |> Error.raise ;
+  List.fold2_exn schema select
+    ~init:(Map.empty (module Name))
+    ~f:(fun m n {pred= p; _} ->
+      if Map.mem m n then
+        Logs.warn (fun m -> m "Duplicate name in schema %a." Name.pp n) ;
+      Map.set m ~key:n ~data:p )
+
 let join ctx schema1 schema2 sql1 sql2 pred =
   let needs_subquery =
     to_distinct sql1 || to_distinct sql2
@@ -96,20 +116,7 @@ let join ctx schema1 schema2 sql1 sql2 pred =
   let spj2 = if needs_subquery then create_subquery ctx sql2 else to_spj ctx sql2 in
   (* The where clause is evaluated before the select clause so we can't use the
      aliases in the select clause here. *)
-  let ctx =
-    List.zip_exn schema1 spj1.select @ List.zip_exn schema2 spj2.select
-    |> List.map ~f:(fun (n, {pred= p; _}) -> (n, p))
-    |> Map.of_alist (module Name)
-  in
-  let ctx =
-    match ctx with
-    | `Duplicate_key n ->
-        Error.(
-          create "Schemas overlap." (n, schema1, schema2)
-            [%sexp_of: Name.t * Name.t list * Name.t list]
-          |> raise)
-    | `Ok ctx -> ctx
-  in
+  let ctx = make_ctx (schema1 @ schema2) (spj1.select @ spj2.select) in
   let pred = subst_pred ctx pred in
   let select_list = spj1.select @ spj2.select in
   Query
@@ -120,10 +127,7 @@ let join ctx schema1 schema2 sql1 sql2 pred =
 
 let order_by ctx schema sql key =
   let spj = to_spj ctx sql in
-  let ctx =
-    List.map2_exn schema spj.select ~f:(fun n {pred= p; _} -> (n, p))
-    |> Map.of_alist_exn (module Name)
-  in
+  let ctx = make_ctx schema spj.select in
   let key = List.map key ~f:(fun (p, o) -> (subst_pred ctx p, o)) in
   Query {spj with order= key}
 
@@ -146,10 +150,7 @@ let select ?groupby ctx schema sql fields =
     for_agg || for_distinct
   in
   let spj = if needs_subquery then create_subquery ctx sql else to_spj ctx sql in
-  let sctx =
-    List.map2_exn schema spj.select ~f:(fun n {pred= p; _} -> (n, p))
-    |> Map.of_alist_exn (module Name)
-  in
+  let sctx = make_ctx schema spj.select in
   let fields =
     List.map fields ~f:(fun p -> p |> subst_pred sctx |> create_entry ~ctx)
   in
@@ -170,11 +171,7 @@ let filter ctx schema sql pred =
   let spj = if needs_subquery then create_subquery ctx sql else to_spj ctx sql in
   (* The where clause is evaluated before the select clause so we can't use the
      aliases in the select clause here. *)
-  let ctx =
-    List.zip_exn schema spj.select
-    |> List.map ~f:(fun (n, {pred= p; _}) -> (n, p))
-    |> Map.of_alist_exn (module Name)
-  in
+  let ctx = make_ctx schema spj.select in
   let pred = subst_pred ctx pred in
   Query {spj with conds= pred :: spj.conds}
 
@@ -244,31 +241,26 @@ let of_ralgebra ctx r =
     | AList (rk, rv) -> lat_join f ctx Meta.(find_exn rk schema) (f rk) rv
     | AHashIdx (rk, rv, {lookup; _}) ->
         let kschema = Meta.(find_exn rk schema) in
-        let vschema = Meta.(find_exn rv schema) in
-        let schema = kschema @ vschema in
-        let kvsql = lat_join f ctx kschema (f rk) rv in
-        let kvsql =
+        let ksql = f rk in
+        let ksql =
           let p =
             List.map2_exn kschema lookup ~f:(fun n p -> Binop (Eq, Name n, p))
             |> Pred.conjoin
           in
-          filter ctx schema kvsql p
+          filter ctx kschema ksql p
         in
-        select ctx schema kvsql (lookup @ List.map ~f:(fun n -> Name n) vschema)
+        lat_join f ctx kschema ksql rv
     | AOrderedIdx (rk, rv, {lookup_low; lookup_high; _}) ->
         let kschema = Meta.(find_exn rk schema) in
         let vschema = Meta.(find_exn rv schema) in
         let n = List.hd_exn kschema in
         let schema = kschema @ vschema in
         let kvsql = lat_join f ctx kschema (f rk) rv in
-        let kvsql =
-          let p =
-            Binop
-              (And, Binop (Lt, lookup_low, Name n), Binop (Lt, Name n, lookup_high))
-          in
-          filter ctx schema kvsql p
+        let p =
+          Binop
+            (And, Binop (Lt, lookup_low, Name n), Binop (Lt, Name n, lookup_high))
         in
-        select ctx schema kvsql (Name n :: List.map ~f:(fun n -> Name n) vschema)
+        filter ctx schema kvsql p
   in
   f r
 

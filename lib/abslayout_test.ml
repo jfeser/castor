@@ -421,28 +421,28 @@ let%expect_test "annotate-orders" =
   [%expect
     {| (((Name ((relation (r)) (name f) (type_ ((IntT (nullable false)))))) Asc)) |}]
 
-let%expect_test "annotate-schema" =
-  let r = "ascalar((select([min(r.f)], r)))" |> of_string_exn |> M.resolve in
-  M.annotate_schema r ;
-  [%sexp_of: t] r |> print_s ;
-  [%expect
-    {|
-    ((node
-      (AScalar
-       (First
-        ((node
-          (Select
-           (((Min
-              (Name ((relation (r)) (name f) (type_ ((IntT (nullable false))))))))
-            ((node (Scan r))
-             (meta
-              ((schema
-                (((relation (r)) (name f) (type_ ((IntT (nullable false)))))
-                 ((relation (r)) (name g) (type_ ((IntT (nullable false)))))))))))))
-         (meta
-          ((schema (((relation (r)) (name f) (type_ ((IntT (nullable false)))))))))))))
-     (meta
-      ((schema (((relation (r)) (name f) (type_ ((IntT (nullable false)))))))))) |}]
+(* let%expect_test "annotate-schema" =
+ *   let r = "ascalar((select([min(r.f)], r)))" |> of_string_exn |> M.resolve in
+ *   M.annotate_schema r ;
+ *   [%sexp_of: t] r |> print_s ;
+ *   [%expect
+ *     {|
+ *     ((node
+ *       (AScalar
+ *        (First
+ *         ((node
+ *           (Select
+ *            (((Min
+ *               (Name ((relation (r)) (name f) (type_ ((IntT (nullable false))))))))
+ *             ((node (Scan r))
+ *              (meta
+ *               ((schema
+ *                 (((relation (r)) (name f) (type_ ((IntT (nullable false)))))
+ *                  ((relation (r)) (name g) (type_ ((IntT (nullable false)))))))))))))
+ *          (meta
+ *           ((schema (((relation (r)) (name f) (type_ ((IntT (nullable false)))))))))))))
+ *      (meta
+ *       ((schema (((relation (r)) (name f) (type_ ((IntT (nullable false)))))))))) |}] *)
 
 let%expect_test "annotate-schema" =
   let r = "select([min(r.f)], r)" |> of_string_exn |> M.resolve in

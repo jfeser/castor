@@ -469,63 +469,6 @@ let annotate_needed r =
 
 let dedup_pairs = List.dedup_and_sort ~compare:[%compare: Name.t * Name.t]
 
-let annotate_orders r =
-  let rec annotate_orders r =
-    let order =
-      match r.node with
-      | Select (ps, r) ->
-          annotate_orders r
-          |> List.filter_map ~f:(fun (p, d) ->
-                 List.find_map ps ~f:(function
-                   | As_pred (p', n) when [%compare.equal: pred] p p' ->
-                       Some (Name (Name.create n), d)
-                   | p' when [%compare.equal: pred] p p' -> Some (p', d)
-                   | _ -> None ) )
-      | Filter (_, r) | AHashIdx (_, r, _) -> annotate_orders r
-      | Join {r1; r2; _} ->
-          annotate_orders r1 |> ignore ;
-          annotate_orders r2 |> ignore ;
-          []
-      | GroupBy (_, _, r) | Dedup r ->
-          annotate_orders r |> ignore ;
-          []
-      | Scan _ | AEmpty -> []
-      | OrderBy {key; rel} ->
-          annotate_orders rel |> ignore ;
-          key
-      | AScalar _ -> []
-      | AList (r, r') ->
-          let s' = Meta.(find_exn r' schema) in
-          let eq' = Meta.(find_exn r' eq) in
-          annotate_orders r' |> ignore ;
-          let open Name.O in
-          annotate_orders r
-          |> List.filter_map ~f:(function
-               | Name n, dir ->
-                   if List.mem ~equal:( = ) s' n then Some (Name n, dir)
-                   else
-                     List.find_map eq' ~f:(fun (n', n'') ->
-                         if n = n' then Some (Name n'', dir)
-                         else if n = n'' then Some (Name n', dir)
-                         else None )
-               | _ -> None )
-      | ATuple (rs, Cross) -> List.map ~f:annotate_orders rs |> List.concat
-      | ATuple (rs, (Zip | Concat)) ->
-          List.iter ~f:(fun r -> annotate_orders r |> ignore) rs ;
-          []
-      | AOrderedIdx (r, _, _) ->
-          Meta.(find_exn r schema) |> List.map ~f:(fun n -> (Name n, Asc))
-      | As _ -> []
-    in
-    Meta.set_m r Meta.order order ;
-    order
-  in
-  annotate_orders r |> ignore
-
-let order_of r =
-  annotate_orders r ;
-  Meta.(find_exn r order)
-
 let exists_bare_relations r =
   let visitor =
     object (self : 'a)
@@ -554,6 +497,10 @@ let aliases =
       inherit [_] reduce
 
       inherit [_] Util.list_monoid
+
+      method! visit_Exists () _ = self#zero
+
+      method! visit_First () _ = self#zero
 
       method! visit_As () n r = self#plus [(n, as_ n r)] (self#visit_t () r)
 
@@ -1035,3 +982,61 @@ let project r =
   annotate_free r ;
   annotate_needed r ;
   project_visitor#visit_t dummy r
+
+let annotate_orders r =
+  let rec annotate_orders r =
+    let order =
+      match r.node with
+      | Select (ps, r) ->
+          annotate_orders r
+          |> List.filter_map ~f:(fun (p, d) ->
+                 List.find_map ps ~f:(function
+                   | As_pred (p', n) when [%compare.equal: pred] p p' ->
+                       Some (Name (Name.create n), d)
+                   | p' when [%compare.equal: pred] p p' -> Some (p', d)
+                   | _ -> None ) )
+      | Filter (_, r) | AHashIdx (_, r, _) -> annotate_orders r
+      | Join {r1; r2; _} ->
+          annotate_orders r1 |> ignore ;
+          annotate_orders r2 |> ignore ;
+          []
+      | GroupBy (_, _, r) | Dedup r ->
+          annotate_orders r |> ignore ;
+          []
+      | Scan _ | AEmpty -> []
+      | OrderBy {key; rel} ->
+          annotate_orders rel |> ignore ;
+          key
+      | AScalar _ -> []
+      | AList (r, r') ->
+          let s' = Meta.(find_exn r' schema) in
+          let eq' = Meta.(find_exn r' eq) in
+          annotate_orders r' |> ignore ;
+          let open Name.O in
+          annotate_orders r
+          |> List.filter_map ~f:(function
+               | Name n, dir ->
+                   if List.mem ~equal:( = ) s' n then Some (Name n, dir)
+                   else
+                     List.find_map eq' ~f:(fun (n', n'') ->
+                         if n = n' then Some (Name n'', dir)
+                         else if n = n'' then Some (Name n', dir)
+                         else None )
+               | _ -> None )
+      | ATuple (rs, Cross) -> List.map ~f:annotate_orders rs |> List.concat
+      | ATuple (rs, (Zip | Concat)) ->
+          List.iter ~f:(fun r -> annotate_orders r |> ignore) rs ;
+          []
+      | AOrderedIdx (r, _, _) ->
+          Meta.(find_exn r schema) |> List.map ~f:(fun n -> (Name n, Asc))
+      | As _ -> []
+    in
+    Meta.set_m r Meta.order order ;
+    order
+  in
+  annotate_eq r ;
+  annotate_orders r |> ignore
+
+let order_of r =
+  annotate_orders r ;
+  Meta.(find_exn r order)
