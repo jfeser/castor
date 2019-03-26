@@ -106,6 +106,30 @@ module Make (C : Config.S) = struct
 
   let is_const_filter = Infix.(is_filter && not is_param_filter)
 
+  let is_param_eq_filter r p =
+    M.annotate_schema r ;
+    match (Path.get_exn p r).node with
+    | Filter (pred, _) ->
+        List.exists (Pred.conjuncts pred) ~f:(function
+          | Binop (Eq, p1, p2) ->
+              let x1 = overlaps (pred_free p1) params in
+              let x2 = overlaps (pred_free p2) params in
+              Bool.(x1 <> x2)
+          | _ -> false )
+    | _ -> false
+
+  let is_param_cmp_filter r p =
+    M.annotate_schema r ;
+    match (Path.get_exn p r).node with
+    | Filter (pred, _) ->
+        List.exists (Pred.conjuncts pred) ~f:(function
+          | Binop ((Lt | Gt | Ge | Le), p1, p2) ->
+              let x1 = overlaps (pred_free p1) params in
+              let x2 = overlaps (pred_free p2) params in
+              Bool.(x1 <> x2)
+          | _ -> false )
+    | _ -> false
+
   let matches f r p = f (Path.get_exn p r).node
 
   let above (f : _ -> Path.t -> bool) r p =
@@ -193,6 +217,9 @@ module Make (C : Config.S) = struct
       Logs.debug (fun m -> m "Transform %s running." tf.name) ;
       match tf.f r with
       | Some r' ->
+          ( match r' with
+          | `Result r' -> Format.printf "%a@." Abslayout.pp r'
+          | _ -> () ) ;
           Logs.debug (fun m -> m "Transform %s succeeded." tf.name) ;
           Some r'
       | None ->

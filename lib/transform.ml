@@ -244,10 +244,10 @@ module Make (Config : Config.S) () = struct
              Path.(all >>? is_orderby >>? is_run_time >>| shallowest))
       ; (* Eliminate the shallowest equality filter. *)
         at_ elim_eq_filter
-          Path.(all >>? is_param_filter >>? is_run_time >>| shallowest)
+          Path.(all >>? is_param_eq_filter >>? is_run_time >>| shallowest)
       ; (* Eliminate the shallowest comparison filter. *)
         at_ elim_cmp_filter
-          Path.(all >>? is_param_filter >>? is_run_time >>| shallowest)
+          Path.(all >>? is_param_cmp_filter >>? is_run_time >>| shallowest)
       ; (* Push all unparameterized filters. *)
         fix
           (first push_filter
