@@ -770,9 +770,10 @@ module Pred = struct
       | _ -> failwith "Too many fields." )
     | Substring _ -> unnamed (StringT {nullable= false})
 
-  let to_name pred =
-    let n = to_schema pred in
-    if String.(Name.name n = "") then None else Some n
+  let to_name = function
+    | Name n -> Some n
+    | As_pred (_, n) -> Some (Name.create n)
+    | _ -> None
 end
 
 let pred_of_value = Pred.of_value

@@ -116,9 +116,9 @@ let join ctx schema1 schema2 sql1 sql2 pred =
   let spj2 = if needs_subquery then create_subquery ctx sql2 else to_spj ctx sql2 in
   (* The where clause is evaluated before the select clause so we can't use the
      aliases in the select clause here. *)
-  let ctx = make_ctx (schema1 @ schema2) (spj1.select @ spj2.select) in
-  let pred = subst_pred ctx pred in
   let select_list = spj1.select @ spj2.select in
+  let ctx = make_ctx (schema1 @ schema2) select_list in
+  let pred = subst_pred ctx pred in
   Query
     (create_query
        ~conds:(pred :: (spj1.conds @ spj2.conds))
@@ -238,7 +238,13 @@ let of_ralgebra ctx r =
     | AScalar p -> Query (create_query [create_entry ~ctx p])
     | ATuple (_, (Concat | Zip)) ->
         Error.(create "Unsupported." r [%sexp_of: Abslayout.t] |> raise)
-    | AList (rk, rv) -> lat_join f ctx Meta.(find_exn rk schema) (f rk) rv
+    | AList (rk, rv) ->
+        let kschema = Meta.(find_exn rk schema) in
+        let vschema = Meta.(find_exn rv schema) in
+        let schema = kschema @ vschema in
+        select ctx schema
+          (lat_join f ctx Meta.(find_exn rk schema) (f rk) rv)
+          (List.map vschema ~f:(fun n -> Name n))
     | AHashIdx (rk, rv, {lookup; _}) ->
         let kschema = Meta.(find_exn rk schema) in
         let ksql = f rk in
