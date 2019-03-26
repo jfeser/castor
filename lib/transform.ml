@@ -144,9 +144,10 @@ module Make (Config : Config.S) () = struct
 
   let elim_groupby r =
     M.annotate_schema r ;
+    M.annotate_defs r ;
     annotate_free r ;
     match r.node with
-    | GroupBy (ps, key, r) ->
+    | GroupBy (ps, key, r) -> (
         let key_name = Fresh.name fresh "k%d" in
         let key_preds = List.map key ~f:(fun n -> Name n) in
         let filter_pred =
@@ -161,28 +162,64 @@ module Make (Config : Config.S) () = struct
             (list
                (as_ key_name (dedup (select key_preds r)))
                (select ps (filter filter_pred r)))
-        else if List.for_all key ~f:(fun n -> Option.is_some (Name.rel n)) then (
+        else
+          let exception Failed of Error.t in
+          let fail err = raise (Failed err) in
           (* Otherwise, if all grouping keys are from named relations,
              select all possible grouping keys. *)
+          let defs = Meta.(find_exn r defs) in
           let rels = Hashtbl.create (module Abslayout) in
-          let alias_map = aliases r |> Map.of_alist_exn (module String) in
-          List.iter key ~f:(fun n ->
-              let r_name = Name.rel_exn n in
-              let r =
-                Option.value_exn
-                  ~error:
-                    (Error.create "No relation matching name." r_name
-                       [%sexp_of: string])
-                  (Map.find alias_map r_name)
-              in
-              Hashtbl.add_multi rels ~key:r ~data:(Name n) ) ;
-          let key_rel =
-            Hashtbl.to_alist rels
-            |> List.map ~f:(fun (r, ns) -> dedup (select ns r))
-            |> List.fold_left1_exn ~f:(join (Bool true))
-          in
-          Some (list (as_ key_name key_rel) (select ps (filter filter_pred r))) )
-        else (* Otherwise, if some keys are computed, fail. *) None
+          let alias_map = aliases r in
+          try
+            (* Find the definition of each key and collect all the names in that
+               definition. If they all come from base relations, then we can
+               enumerate the keys. *)
+            List.iter key ~f:(fun n ->
+                let p =
+                  List.find_map defs ~f:(fun (n', p) ->
+                      Option.bind n' ~f:(fun n' ->
+                          if Name.O.(n = n') then Some p else None ) )
+                in
+                let p =
+                  match p with
+                  | Some p -> p
+                  | None ->
+                      raise
+                        (Failed
+                           (Error.create "No definition found for key." n
+                              [%sexp_of: Name.t]))
+                in
+                Set.iter (Pred.names p) ~f:(fun n ->
+                    let r_name =
+                      match Name.rel n with
+                      | Some r -> r
+                      | None ->
+                          fail
+                            (Error.create
+                               "Name does not come from base relation." n
+                               [%sexp_of: Name.t])
+                    in
+                    (* Look up relation in alias table. *)
+                    let r =
+                      match Map.find alias_map r_name with
+                      | Some r -> r
+                      | None ->
+                          fail
+                            (Error.create "Unknown relation." n
+                               [%sexp_of: Name.t])
+                    in
+                    Hashtbl.add_multi rels ~key:r ~data:(Name n) ) ) ;
+            let key_rel =
+              Hashtbl.to_alist rels
+              |> List.map ~f:(fun (r, ns) -> dedup (select ns r))
+              |> List.fold_left1_exn ~f:(join (Bool true))
+            in
+            Some
+              (list (as_ key_name key_rel) (select ps (filter filter_pred r)))
+          with Failed err ->
+            Logs.info (fun m -> m "%a" Error.pp err) ;
+            None )
+    (* Otherwise, if some keys are computed, fail. *)
     | _ -> None
 
   let elim_groupby = of_func elim_groupby ~name:"elim-groupby"
