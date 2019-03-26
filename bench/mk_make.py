@@ -44,19 +44,15 @@ def dump_snippet():
         return '> $@'
 
 print('DB=postgresql:///tpch_1k')
-print('OPT=../../_build/default/castor-opt/bin/opt.exe') # dune exec ../bin/opt.exe -- 
+# print('OPT=../../_build/default/castor-opt/bin/opt.exe')
+print('OPT=dune exec ../bin/opt.exe -- ')
 print('OPT_FLAGS=-db $(DB) -v')
-print('COMPILE=../../_build/default/castor/bin/compile.exe')
+# print('COMPILE=../../_build/default/castor/bin/compile.exe')
+print('COMPILE=dune exec ../../castor/bin/compile.exe -- ')
 print('BENCH_DIR=../../castor/bench/tpch/')
 print('all: opt compile')
 print('opt: %s' % (' '.join([out_file(b) for b in bench])))
 print('compile: %s' % (' '.join(['%s-opt' % b['name'] for b in bench])))
-# print('''
-# .PHONY: build
-# build:
-# \tcd ..; dune build @install
-# \tcd ../../castor; dune build @install
-# ''')
 for b in bench:
     print('''
 {0}-opt.txt: {2}
@@ -71,5 +67,5 @@ for b in bench:
 print('''
 .PHONY: clean
 clean:
-\trm -r *-opt.txt *-opt
+\trm -rf *-opt.txt *-opt
 ''')

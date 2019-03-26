@@ -149,6 +149,8 @@ module Make (C : Config.S) = struct
     in
     first_order f (sprintf "fix(%s)" tf.name)
 
+  let for_all tf pset = fix (first tf pset)
+
   let seq t1 t2 =
     let f r =
       match apply t1 r with Some r' -> apply t2 r' | None -> apply t2 r

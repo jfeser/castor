@@ -3,11 +3,18 @@ open Castor
 open Abslayout
 open Collections
 
-module Make (C : Ops.Config.S) = struct
+module Config = struct
+  module type S = sig
+    val fresh : Fresh.t
+
+    include Ops.Config.S
+  end
+end
+
+module Make (C : Config.S) = struct
   module O = Ops.Make (C)
   open O
-
-  let fresh = Fresh.create ()
+  open C
 
   let extend_select ~with_ ps r =
     M.annotate_schema r ;
@@ -288,4 +295,46 @@ module Make (C : Ops.Config.S) = struct
     | _ -> None
 
   let elim_eq_filter = of_func elim_eq_filter ~name:"elim-eq-filter"
+
+  (* let precompute_filter n =
+   *   let exception Failed of Error.t in
+   *   let run_exn r =
+   *     M.annotate_schema r ;
+   *     match r.node with
+   *     | Filter (p, r') ->
+   *         let schema = Meta.(find_exn r' schema) in
+   *         let free_vars =
+   *           Set.diff (pred_free p) (Set.of_list (module Name) schema)
+   *           |> Set.to_list
+   *         in
+   *         let free_var =
+   *           match free_vars with
+   *           | [v] -> v
+   *           | _ ->
+   *               let err =
+   *                 Error.of_string
+   *                   "Unexpected number of free variables in predicate."
+   *               in
+   *               raise (Failed err)
+   *         in
+   *         let witness_name = Fresh.name fresh "wit%d_" in
+   *         let witnesses =
+   *           List.mapi values ~f:(fun i v ->
+   *               As_pred
+   *                 ( subst_pred (Map.singleton (module Name) free_var v) p
+   *                 , sprintf "%s_%d" witness_name i ) )
+   *         in
+   *         let filter_pred =
+   *           List.foldi values ~init:p ~f:(fun i else_ v ->
+   *               If
+   *                 ( Binop (Eq, Name free_var, v)
+   *                 , Name (Name.create (sprintf "%s_%d" witness_name i))
+   *                 , else_ ) )
+   *         in
+   *         let select_list = witnesses @ List.map schema ~f:(fun n -> Name n) in
+   *         Some (filter filter_pred (select select_list r'))
+   *     | _ -> None
+   *   in
+   *   let f r = try run_exn r with Failed _ -> None in
+   *   of_func f ~name:"precompute-filter" *)
 end

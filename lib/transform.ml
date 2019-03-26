@@ -15,6 +15,8 @@ module Config = struct
     val param_ctx : Value.t Map.M(Name).t
 
     val validate : bool
+
+    val fresh : Fresh.t
   end
 end
 
@@ -31,8 +33,6 @@ module Make (Config : Config.S) () = struct
   let is_serializable r p =
     M.annotate_schema r ;
     is_serializeable (Path.get_exn p r)
-
-  let fresh = Fresh.create ()
 
   let sql_ctx = Sql.create_ctx ~fresh ()
 
@@ -187,10 +187,9 @@ module Make (Config : Config.S) () = struct
 
   let elim_groupby = of_func elim_groupby ~name:"elim-groupby"
 
-  let push_select =
-    of_func (Push_select.push_select (module M)) ~name:"push-select"
-
   module Join_opt = Join_opt.Make (Config)
+  module Simplify_tactic = Simplify_tactic.Make (Config)
+  module Select_tactics = Select_tactics.Make (Config)
 
   let opt =
     let open Infix in
@@ -218,7 +217,7 @@ module Make (Config : Config.S) () = struct
              Path.(all >>? is_run_time >>? is_filter >>? not is_param_filter))
       ; (* Push selections above collections. *)
         fix
-          (at_ push_select
+          (at_ Select_tactics.push_select
              (Path.all >>? is_select >>? above is_collection >>| deepest))
       ; (* Eliminate all unparameterized relations. *)
         fix
@@ -229,7 +228,8 @@ module Make (Config : Config.S) () = struct
                    >>? not is_serializable >>| shallowest)
              ; project ])
         (* Cleanup*)
-      ; fix project ]
+      ; fix project
+      ; Simplify_tactic.simplify ]
 
   let is_serializable r =
     M.annotate_schema r ;

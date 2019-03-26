@@ -11,6 +11,8 @@ module Config = struct
     include Ops.Config.S
 
     val dbconn : Postgresql.connection
+
+    include Filter_tactics.Config.S
   end
 end
 

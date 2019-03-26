@@ -1,5 +1,6 @@
 open Core
 open Castor
+open Collections
 open Castor_opt
 
 let main ~params:all_params ~db ~validate ch =
@@ -21,6 +22,8 @@ let main ~params:all_params ~db ~validate ch =
     let param_ctx = param_ctx
 
     let validate = validate
+
+    let fresh = Fresh.create ()
   end in
   let module A = Abslayout_db.Make (Config) in
   let module T = Transform.Make (Config) () in

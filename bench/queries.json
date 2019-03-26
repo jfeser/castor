@@ -5,7 +5,6 @@
         "query": ["1-gold"],
         "params": {"param0:int": "90"}
     },
-    /*
     {
         "name": "2",
         "ordered": true,
@@ -16,7 +15,6 @@
             "param3:string": "EUROPE"
         }
     },
-    */
     {
         "name": "3-no",
         "ordered": false,

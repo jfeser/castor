@@ -1,5 +1,6 @@
 open Core
 open Castor
+open Collections
 module A = Abslayout
 
 module Config = struct
@@ -12,6 +13,8 @@ module Config = struct
   let param_ctx = Map.empty (module Name)
 
   let params = Set.empty (module Name)
+
+  let fresh = Fresh.create ()
 end
 
 module Join_opt = Join_opt.Make (Config)

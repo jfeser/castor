@@ -3,13 +3,20 @@ open Castor
 open Abslayout
 open Collections
 
-module Make (C : Ops.Config.S) = struct
+module Config = struct
+  module type S = sig
+    val fresh : Fresh.t
+
+    include Ops.Config.S
+  end
+end
+
+module Make (C : Config.S) = struct
   module O = Ops.Make (C)
   open O
   module F = Filter_tactics.Make (C)
   open F
-
-  let fresh = Fresh.create ()
+  open C
 
   let elim_join_nest r =
     match r.node with
