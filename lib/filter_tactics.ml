@@ -180,6 +180,7 @@ module Make (C : Config.S) = struct
             [%compare: int] (List.length b1) (List.length b2) )
           (Map.to_alist cmps)
         |> List.find_map ~f:(fun (key, bounds) ->
+               let open Option.Let_syntax in
                let lb =
                  List.filter_map bounds ~f:(fun (f, p) ->
                      match f with
@@ -207,6 +208,7 @@ module Make (C : Config.S) = struct
                             in
                             Binop (op, p, p') ) )
                in
+               let%bind r' = Tactics_util.all_values [key] r' in
                match
                  gen_ordered_idx ?lb:(List.hd lb) ?ub:(List.hd ub) key r'
                with
@@ -274,6 +276,7 @@ module Make (C : Config.S) = struct
         in
         if List.length eqs = 0 then None
         else
+          let open Option.Let_syntax in
           let select_list =
             List.map eqs ~f:(fun (p, k, _) -> As_pred (p, k))
           in
@@ -286,12 +289,8 @@ module Make (C : Config.S) = struct
           let outer_filter r =
             match rest with [] -> r | _ -> filter (and_ rest) r
           in
-          Some
-            (outer_filter
-               (hash_idx
-                  (dedup (select select_list r))
-                  (filter inner_filter_pred r)
-                  key))
+          let%map r' = Tactics_util.all_values select_list r in
+          outer_filter (hash_idx r' (filter inner_filter_pred r) key)
     | _ -> None
 
   let elim_eq_filter = of_func elim_eq_filter ~name:"elim-eq-filter"

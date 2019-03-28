@@ -104,7 +104,10 @@ module Make (C : Config.S) = struct
     | Some r -> r
     | None ->
         Error.(
-          create "No source found for name." n [%sexp_of: Name.t] |> raise)
+          create "No source found for name."
+            (n, List.map leaves ~f:(fun (_, ns) -> ns))
+            [%sexp_of: Name.t * Set.M(Name).t list]
+          |> raise)
 
   module JoinSpace = struct
     module T = struct

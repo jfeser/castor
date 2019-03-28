@@ -218,7 +218,7 @@ module Make (C : Config.S) = struct
       match tf.f r with
       | Some r' ->
           ( match r' with
-          | `Result r' -> Format.printf "%a@." Abslayout.pp r'
+          | `Result _ -> (* Format.printf "%a@." Abslayout.pp r' *) ()
           | _ -> () ) ;
           Logs.debug (fun m -> m "Transform %s succeeded." tf.name) ;
           Some r'
