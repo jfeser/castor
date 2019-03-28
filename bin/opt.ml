@@ -3,7 +3,7 @@ open Castor
 open Collections
 open Castor_opt
 
-let main ~params:all_params ~db ~validate ch =
+let main ~params:all_params ~db ~validate ~verbose ch =
   let params =
     List.map all_params ~f:(fun (n, t, _) -> Name.create ~type_:t n)
     |> Set.of_list (module Name)
@@ -24,6 +24,8 @@ let main ~params:all_params ~db ~validate ch =
     let validate = validate
 
     let fresh = Fresh.create ()
+
+    let verbose = verbose
   end in
   let module A = Abslayout_db.Make (Config) in
   let module T = Transform.Make (Config) () in
@@ -102,5 +104,5 @@ let () =
        setup_log level ;
        Logs.info (fun m ->
            m "%s" (Sys.argv |> Array.to_list |> String.concat ~sep:" ") ) ;
-       main ~params ~db ~validate ch)
+       main ~params ~db ~validate ~verbose ch)
   |> run

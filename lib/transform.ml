@@ -6,17 +6,15 @@ open Abslayout
 
 module Config = struct
   module type S = sig
-    val conn : Db.t
+    include Ops.Config.S
 
-    val dbconn : Postgresql.connection
+    include Filter_tactics.Config.S
 
-    val params : Set.M(Name).t
+    include Simple_tactics.Config.S
 
-    val param_ctx : Value.t Map.M(Name).t
+    include Join_opt.Config.S
 
-    val validate : bool
-
-    val fresh : Fresh.t
+    include Abslayout_db.Config.S
   end
 end
 
@@ -42,7 +40,7 @@ module Make (Config : Config.S) () = struct
 
   let project r =
     M.annotate_schema r ;
-    Some (project r)
+    Some (Project.project r)
 
   let project = of_func project ~name:"project"
 
@@ -262,8 +260,7 @@ module Make (Config : Config.S) () = struct
              [ at_ row_store
                  Path.(
                    all >>? is_run_time >>? not has_params
-                   >>? not is_serializable >>| shallowest)
-             ; project ])
+                   >>? not is_serializable >>| shallowest) ])
         (* Cleanup*)
       ; fix project
       ; Simplify_tactic.simplify ]

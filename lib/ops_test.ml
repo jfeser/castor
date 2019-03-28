@@ -10,6 +10,8 @@ module Ops = Ops.Make (struct
   let validate = false
 
   let params = Set.empty (module Name)
+
+  let verbose = false
 end)
 
 open Ops
@@ -42,5 +44,6 @@ let%expect_test "at" =
   in
   match apply op r with
   | Some r -> Format.printf "%a" pp r
-  | None -> print_endline "Transform failed.";
-  [%expect {| filter(true, select([false], filter(false, test2))) |}]
+  | None ->
+      print_endline "Transform failed." ;
+      [%expect {| filter(true, select([false], filter(false, test2))) |}]

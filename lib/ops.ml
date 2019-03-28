@@ -13,6 +13,8 @@ module Config = struct
     val validate : bool
 
     val params : Set.M(Name).t
+
+    val verbose : bool
   end
 end
 
@@ -143,8 +145,19 @@ module Make (C : Config.S) = struct
   let first_child _ = Some [Path.Child_first]
 
   let rec apply tf r =
-    tf.f r
-    |> Option.bind ~f:(function `Result r -> Some r | `Tf tf' -> apply tf' r)
+    let ret =
+      tf.f r
+      |> Option.bind ~f:(function
+           | `Result r -> Some r
+           | `Tf tf' -> apply tf' r )
+    in
+    if verbose then
+      Option.iter ret ~f:(fun r' ->
+          if verbose then
+            Caml.Format.printf
+              "@[%s transformed:@,%a@,===== to ======@,%a@]@.\n" tf.name
+              Abslayout.pp r Abslayout.pp r' ) ;
+    ret
 
   let at_ tf pspec =
     let f r =
@@ -217,9 +230,6 @@ module Make (C : Config.S) = struct
       Logs.debug (fun m -> m "Transform %s running." tf.name) ;
       match tf.f r with
       | Some r' ->
-          ( match r' with
-          | `Result _ -> (* Format.printf "%a@." Abslayout.pp r' *) ()
-          | _ -> () ) ;
           Logs.debug (fun m -> m "Transform %s succeeded." tf.name) ;
           Some r'
       | None ->

@@ -4,13 +4,9 @@ open Abslayout
 
 module Config = struct
   module type S = sig
-    val conn : Db.t
+    include Abslayout_db.Config.S
 
-    val params : Set.M(Name).t
-
-    val param_ctx : Value.t Map.M(Name).t
-
-    val validate : bool
+    include Ops.Config.S
   end
 end
 

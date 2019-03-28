@@ -15,6 +15,8 @@ module Config = struct
   let params = Set.empty (module Name)
 
   let fresh = Fresh.create ()
+
+  let verbose = false
 end
 
 module Join_opt = Join_opt.Make (Config)

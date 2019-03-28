@@ -5,9 +5,11 @@ open Collections
 
 module Config = struct
   module type S = sig
+    include Ops.Config.S
+
     val fresh : Fresh.t
 
-    include Ops.Config.S
+    val params : Set.M(Name).t
   end
 end
 
@@ -87,7 +89,7 @@ module Make (C : Config.S) = struct
     | _ :: xs -> first_ok xs
     | [] -> None
 
-  let gen_ordered_idx ?lb ?ub p r =
+  let gen_ordered_idx ?lb ?ub p rk rv =
     let t = pred_to_schema p |> Name.type_exn in
     let default_min =
       let open Type.PrimType in
@@ -144,16 +146,15 @@ module Make (C : Config.S) = struct
     let select_list = [As_pred (p, k)] in
     let filter_pred = Binop (Eq, Name (Name.create k), p) in
     ordered_idx
-      (dedup (select select_list r))
-      (filter filter_pred r)
+      (dedup (select select_list rk))
+      (filter filter_pred rv)
       {oi_key_layout= None; lookup_low= lb; lookup_high= ub; order= `Desc}
+
+  let has_param p = Set.inter (pred_free p) params |> Set.is_empty |> not
 
   let elim_cmp_filter r =
     match r.node with
     | Filter (p, r') ->
-        let has_param p =
-          Set.diff (pred_free p) (M.bound r') |> Set.is_empty |> not
-        in
         (* Select the comparisons which have a parameter on exactly one side and
            partition by the unparameterized side of the comparison. *)
         let cmps, rest =
@@ -208,9 +209,9 @@ module Make (C : Config.S) = struct
                             in
                             Binop (op, p, p') ) )
                in
-               let%bind r' = Tactics_util.all_values [key] r' in
+               let%bind rk = Tactics_util.all_values [key] r' in
                match
-                 gen_ordered_idx ?lb:(List.hd lb) ?ub:(List.hd ub) key r'
+                 gen_ordered_idx ?lb:(List.hd lb) ?ub:(List.hd ub) key rk r'
                with
                | Ok r -> Some (filter (conjoin (rest @ rest')) r)
                | Error err ->
@@ -271,21 +272,25 @@ module Make (C : Config.S) = struct
         let eqs, rest =
           conjuncts p
           |> List.partition_map ~f:(function
-               | Binop (Eq, p1, p2) -> `Fst (p1, Fresh.name fresh "k%d", p2)
+               | Binop (Eq, p1, p2) as p ->
+                   if has_param p1 && not (has_param p2) then `Fst (p2, p1)
+                   else if has_param p2 && not (has_param p1) then `Fst (p1, p2)
+                   else `Snd p
                | p -> `Snd p )
         in
         if List.length eqs = 0 then None
         else
+          let eqs = List.map eqs ~f:(fun eq -> (eq, Fresh.name fresh "k%d")) in
           let open Option.Let_syntax in
           let select_list =
-            List.map eqs ~f:(fun (p, k, _) -> As_pred (p, k))
+            List.map eqs ~f:(fun ((v, _), n) -> As_pred (v, n))
           in
           let inner_filter_pred =
-            List.map eqs ~f:(fun (p, k, _) ->
-                Binop (Eq, Name (Name.create k), p) )
+            List.map eqs ~f:(fun ((v, _), n) ->
+                Binop (Eq, Name (Name.create n), v) )
             |> and_
           in
-          let key = List.map eqs ~f:(fun (_, _, p) -> p) in
+          let key = List.map eqs ~f:(fun ((_, k), _) -> k) in
           let outer_filter r =
             match rest with [] -> r | _ -> filter (and_ rest) r
           in
