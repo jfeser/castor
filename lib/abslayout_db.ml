@@ -246,6 +246,8 @@ module Make (Config : Config.S) = struct
     let fresh = Fresh.create () in
     let ctx = Sql.create_ctx ~fresh () in
     let sql = query_to_sql fresh q in
+    Logs.debug (fun m ->
+        m "Executing type checking query %s." (Sql.to_string_hum ctx sql) ) ;
     let tups =
       Db.exec_cursor_exn conn (to_schema q) (Sql.to_string_hum ctx sql)
       |> Gen.map ~f:Array.to_list
