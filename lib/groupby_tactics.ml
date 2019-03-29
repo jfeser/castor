@@ -155,8 +155,9 @@ groupby([o_year,
 |}
     in
     let r = M.resolve ~params r in
-    apply elim_groupby r |> Option.iter ~f:(Format.printf "%a@." Abslayout.pp);
-    [%expect {|
+    apply elim_groupby r |> Option.iter ~f:(Format.printf "%a@." Abslayout.pp) ;
+    [%expect
+      {|
       alist(select([to_year(orders.o_orderdate) as o_year],
               dedup(select([orders.o_orderdate], orders))) as k0,
         select([o_year,
