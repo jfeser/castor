@@ -179,10 +179,6 @@ val free : t -> Set.M(Name).t
 
 val annotate_free : t -> unit
 
-val annotate_needed : t -> unit
-
-val project : t -> t
-
 val pred_remove_as : pred -> pred
 
 val annotate_eq : t -> unit
@@ -199,9 +195,11 @@ val conjuncts : pred -> pred list
 
 val conjoin : pred list -> pred
 
-val aliases : t -> (string * t) list
+val aliases : t -> t Map.M(String).t
 
 val collect_aggs : fresh:Fresh.t -> pred -> pred * (string * pred) list
+
+class virtual ['a] iter : ['a] Abslayout0.iter
 
 class virtual ['a] map : ['a] Abslayout0.map
 

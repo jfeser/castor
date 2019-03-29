@@ -28,36 +28,73 @@ module Make (Config : Config.S) = struct
     | `Concat qs -> 1 + List.sum (module Int) qs ~f:width
     | `Query q -> List.length Meta.(find_exn q schema)
 
+  class virtual ['s] schema_visitor =
+    object (self : 'a)
+      inherit [_] iter as super
+
+      method virtual to_schema : Pred.t list -> 's
+
+      method virtual rename : string -> 's -> 's
+
+      method virtual key : _
+
+      method! visit_t () r =
+        super#visit_t () r ;
+        let schema =
+          match r.node with
+          | Select (x, _) ->
+              List.iter x ~f:(self#visit_pred ()) ;
+              self#to_schema x
+          | Filter (_, r) | Dedup r | AList (_, r) | OrderBy {rel= r; _} ->
+              Meta.(find_exn r self#key)
+          | Join {r1; r2; _} | AOrderedIdx (r1, r2, _) | AHashIdx (r1, r2, _) ->
+              Meta.(find_exn r1 self#key) @ Meta.(find_exn r2 self#key)
+          | GroupBy (x, _, _) -> self#to_schema x
+          | AEmpty -> []
+          | AScalar e ->
+              self#visit_pred () e ;
+              self#to_schema [e]
+          | ATuple (rs, (Cross | Zip)) ->
+              List.concat_map ~f:(fun r -> Meta.find_exn r self#key) rs
+          | ATuple ([], Concat) -> []
+          | ATuple (r :: _, Concat) -> Meta.find_exn r self#key
+          | As (n, r) -> Meta.find_exn r self#key |> self#rename n
+          | Scan table ->
+              self#to_schema (Db.schema conn table |> List.map ~f:(fun n -> Name n))
+        in
+        Meta.set_m r self#key schema
+    end
+
   (** Add a schema field to each metadata node. Variables must first be
      annotated with type information. *)
-  and annotate_schema r =
+  let annotate_schema r =
     let mapper =
-      object (self : 'a)
-        inherit [_] iter as super
+      object
+        inherit [_] schema_visitor
 
-        method! visit_t () r =
-          super#visit_t () r ;
-          let schema =
-            match r.node with
-            | Select (x, _) ->
-                List.map x ~f:(fun p -> self#visit_pred () p ; Pred.to_schema p)
-            | Filter (_, r) | Dedup r | AList (_, r) | OrderBy {rel= r; _} ->
-                Meta.(find_exn r schema)
-            | Join {r1; r2; _} | AOrderedIdx (r1, r2, _) | AHashIdx (r1, r2, _) ->
-                Meta.(find_exn r1 schema) @ Meta.(find_exn r2 schema)
-            | GroupBy (x, _, _) -> List.map x ~f:Pred.to_schema
-            | AEmpty -> []
-            | AScalar e -> self#visit_pred () e ; [Pred.to_schema e]
-            | ATuple (rs, (Cross | Zip)) ->
-                List.concat_map ~f:(fun r -> Meta.(find_exn r schema)) rs
-            | ATuple ([], Concat) -> []
-            | ATuple (r :: _, Concat) -> Meta.(find_exn r schema)
-            | As (n, r) ->
-                Meta.(find_exn r schema)
-                |> List.map ~f:(fun x -> Name.copy ~relation:(Some n) x)
-            | Scan table -> Db.schema conn table
-          in
-          Meta.set_m r Meta.schema schema
+        method to_schema = List.map ~f:Pred.to_schema
+
+        method rename r = List.map ~f:(Name.copy ~relation:(Some r))
+
+        method key = Meta.schema
+      end
+    in
+    mapper#visit_t () r
+
+  (** Add a schema field to each metadata node. Variables must first be
+     annotated with type information. *)
+  let annotate_defs r =
+    let mapper =
+      object
+        inherit [_] schema_visitor
+
+        method to_schema = List.map ~f:(fun p -> (Pred.to_name p, p))
+
+        method rename r =
+          List.map ~f:(fun (n, p) ->
+              (Option.map n ~f:(Name.copy ~relation:(Some r)), p) )
+
+        method key = Meta.defs
       end
     in
     mapper#visit_t () r

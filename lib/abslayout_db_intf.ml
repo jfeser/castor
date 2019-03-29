@@ -6,6 +6,8 @@ module type S = sig
 
   val annotate_schema : t -> unit
 
+  val annotate_defs : t -> unit
+
   val to_schema : t -> Name.t list
 
   val annotate_key_layouts : t -> t

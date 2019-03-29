@@ -323,7 +323,7 @@ let%expect_test "needed" =
   in
   M.annotate_schema r ;
   annotate_free r ;
-  annotate_needed r ;
+  Project.annotate_needed r ;
   print_s ([%sexp_of: t] r) ;
   [%expect
     {|
@@ -348,9 +348,9 @@ let%expect_test "needed" =
                ((free
                  (((relation (r)) (name f) (type_ ((IntT (nullable false)))))))
                 (needed
-                 (((relation ()) (name "") (type_ ((IntT (nullable false)))))
-                  ((relation ()) (name k1) (type_ ((IntT (nullable false)))))
-                  ((relation ()) (name k2) (type_ ((IntT (nullable false)))))))
+                 (((relation ()) (name k1) (type_ ((IntT (nullable false)))))
+                  ((relation ()) (name k2) (type_ ((IntT (nullable false)))))
+                  ((relation ()) (name "") (type_ ((IntT (nullable false)))))))
                 (schema
                  (((relation ()) (name k1) (type_ ((IntT (nullable false))))))))))
              ((node
@@ -366,9 +366,9 @@ let%expect_test "needed" =
                ((free
                  (((relation ()) (name k1) (type_ ((IntT (nullable false)))))))
                 (needed
-                 (((relation ()) (name "") (type_ ((IntT (nullable false)))))
-                  ((relation ()) (name k1) (type_ ((IntT (nullable false)))))
-                  ((relation ()) (name k2) (type_ ((IntT (nullable false)))))))
+                 (((relation ()) (name k1) (type_ ((IntT (nullable false)))))
+                  ((relation ()) (name k2) (type_ ((IntT (nullable false)))))
+                  ((relation ()) (name "") (type_ ((IntT (nullable false)))))))
                 (schema
                  (((relation ()) (name k2) (type_ ((IntT (nullable false))))))))))
              ((node
@@ -382,18 +382,18 @@ let%expect_test "needed" =
                ((free
                  (((relation ()) (name k2) (type_ ((IntT (nullable false)))))))
                 (needed
-                 (((relation ()) (name "") (type_ ((IntT (nullable false)))))
-                  ((relation ()) (name k1) (type_ ((IntT (nullable false)))))
-                  ((relation ()) (name k2) (type_ ((IntT (nullable false)))))))
+                 (((relation ()) (name k1) (type_ ((IntT (nullable false)))))
+                  ((relation ()) (name k2) (type_ ((IntT (nullable false)))))
+                  ((relation ()) (name "") (type_ ((IntT (nullable false)))))))
                 (schema
                  (((relation ()) (name "") (type_ ((IntT (nullable false)))))))))))
             Cross)))
          (meta
           ((free (((relation (r)) (name f) (type_ ((IntT (nullable false)))))))
            (needed
-            (((relation ()) (name "") (type_ ((IntT (nullable false)))))
-             ((relation ()) (name k1) (type_ ((IntT (nullable false)))))
-             ((relation ()) (name k2) (type_ ((IntT (nullable false)))))))
+            (((relation ()) (name k1) (type_ ((IntT (nullable false)))))
+             ((relation ()) (name k2) (type_ ((IntT (nullable false)))))
+             ((relation ()) (name "") (type_ ((IntT (nullable false)))))))
            (schema
             (((relation ()) (name k1) (type_ ((IntT (nullable false)))))
              ((relation ()) (name k2) (type_ ((IntT (nullable false)))))
@@ -401,9 +401,9 @@ let%expect_test "needed" =
      (meta
       ((free ())
        (needed
-        (((relation ()) (name "") (type_ ((IntT (nullable false)))))
-         ((relation ()) (name k1) (type_ ((IntT (nullable false)))))
-         ((relation ()) (name k2) (type_ ((IntT (nullable false)))))))
+        (((relation ()) (name k1) (type_ ((IntT (nullable false)))))
+         ((relation ()) (name k2) (type_ ((IntT (nullable false)))))
+         ((relation ()) (name "") (type_ ((IntT (nullable false)))))))
        (schema
         (((relation ()) (name k1) (type_ ((IntT (nullable false)))))
          ((relation ()) (name k2) (type_ ((IntT (nullable false)))))

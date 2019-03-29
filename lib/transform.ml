@@ -921,12 +921,11 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     |> run_everywhere
 
   let tf_project _ =
-    let open A in
     { name= "project"
     ; f=
         (fun r ->
           let r = M.resolve ~params:Config.params r in
-          M.annotate_schema r ; [project r] ) }
+          M.annotate_schema r ; [Project.project r] ) }
 
   let tf_hoist_join_pred _ =
     let open A in
