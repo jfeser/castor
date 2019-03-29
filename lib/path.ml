@@ -18,7 +18,7 @@ let deepest_first p1 p2 = -shallowest_first p1 p2
 
 let%expect_test "" =
   List.sort ~compare:shallowest_first [[1]; []; [1; 0]; [0]]
-  |> [%sexp_of: t list] |> print_s;
+  |> [%sexp_of: t list] |> print_s ;
   [%expect {| (() (0) (1) (1 0)) |}]
 
 let root = []
@@ -153,8 +153,10 @@ let rec is_run_time r p =
 
 let is_compile_time p r = not (is_run_time p r)
 
-let parent p _ = match List.rev p with [] -> None | _ :: p' -> Some (List.rev p')
+let parent p = match List.rev p with [] -> None | _ :: p' -> Some (List.rev p')
+
+let child p i = p @ [i]
 
 let%expect_test "parent" =
-  parent [0; 1] () |> [%sexp_of: t option] |> print_s ;
+  parent [0; 1] |> [%sexp_of: t option] |> print_s ;
   [%expect {| ((0)) |}]
