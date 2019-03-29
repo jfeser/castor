@@ -71,42 +71,65 @@ module Make (C : Config.S) = struct
     let inner_fields = inner_schema |> List.map ~f:(fun n -> Name n) in
     (outer_aggs, inner_aggs @ inner_fields)
 
+  (* Look for evidence of a previous pushed select. *)
+  let already_pushed r' =
+    try
+      match Path.get_exn (Path.child Path.root 1) r' with
+      | {node= Filter (_, {node= Select _; _}); _} -> true
+      | _ -> false
+    with _ -> false
+
   let push_select r =
     M.annotate_schema r ;
     match r.node with
-    | Select (ps, r') -> (
-      match r'.node with
-      | AHashIdx (rk, rv, m) ->
-          let outer_preds =
-            List.filter_map ps ~f:pred_to_name |> List.map ~f:(fun n -> Name n)
-          in
-          let inner_preds =
-            (* TODO: This hack works around problems with sql conversion and
+    | Select (ps, r') ->
+        if already_pushed r' then None
+        else
+          let open Option.Let_syntax in
+          let%bind outer_preds, inner_preds =
+            match r'.node with
+            | AHashIdx (rk, _, _) ->
+                let o =
+                  List.filter_map ps ~f:pred_to_name
+                  |> List.map ~f:(fun n -> Name n)
+                in
+                let i =
+                  (* TODO: This hack works around problems with sql conversion and
                lateral joins. *)
-            let kschema = Meta.(find_exn rk schema) in
-            List.filter ps ~f:(function
-              | Name n -> not (List.mem ~equal:Name.O.( = ) kschema n)
-              | _ -> true )
+                  let kschema = Meta.(find_exn rk schema) in
+                  List.filter ps ~f:(function
+                    | Name n -> not (List.mem ~equal:Name.O.( = ) kschema n)
+                    | _ -> true )
+                in
+                Some (o, i)
+            | AOrderedIdx (_, rv, _) | AList (_, rv) | ATuple (rv :: _, Concat)
+              ->
+                let o, i =
+                  gen_concat_select_list ps Meta.(find_exn rv schema)
+                in
+                Some (o, i)
+            | _ -> None
           in
-          Some (select outer_preds (hash_idx' rk (select inner_preds rv) m))
-      | AOrderedIdx (rk, rv, m) ->
-          let outer_aggs, inner_aggs =
-            gen_concat_select_list ps Meta.(find_exn rv schema)
+          let%map mk_collection =
+            match r'.node with
+            | AHashIdx (rk, rv, m) ->
+                Some (fun mk_select -> hash_idx' rk (mk_select rv) m)
+            | AOrderedIdx (rk, rv, m) ->
+                Some (fun mk_select -> ordered_idx rk (mk_select rv) m)
+            | AList (rk, rv) -> Some (fun mk_select -> list rk (mk_select rv))
+            | ATuple (r' :: rs', Concat) ->
+                Some
+                  (fun mk_select ->
+                    tuple (List.map (r' :: rs') ~f:mk_select) Concat )
+            | _ -> None
           in
-          Some (select outer_aggs (ordered_idx rk (select inner_aggs rv) m))
-      | AList (rk, rv) ->
-          let outer_aggs, inner_aggs =
-            gen_concat_select_list ps Meta.(find_exn rv schema)
-          in
-          Some (select outer_aggs (list rk (select inner_aggs rv)))
-      | ATuple (r' :: rs', Concat) ->
-          let outer_aggs, inner_aggs =
-            gen_concat_select_list ps Meta.(find_exn r' schema)
-          in
-          Some
-            (select outer_aggs
-               (tuple (List.map (r' :: rs') ~f:(select inner_aggs)) Concat))
-      | _ -> None )
+          let count_n = Fresh.name fresh "count%d" in
+          let inner_preds = As_pred (Count, count_n) :: inner_preds in
+          select outer_preds
+            (mk_collection (fun rv ->
+                 filter
+                   (Binop (Gt, Name (Name.create count_n), Int 0))
+                   (select inner_preds rv) ))
     | _ -> None
 
   let push_select = of_func push_select ~name:"push-select"
