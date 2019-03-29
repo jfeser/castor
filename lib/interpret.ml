@@ -331,9 +331,7 @@ let eval {db; params} r =
 let equiv ?(ordered = false) ctx r1 r2 =
   let open Or_error.Let_syntax in
   if Abslayout.O.(r1 = r2) then Ok ()
-  else (
-    Caml.Format.printf "@[Comparing:@,%a@,===== and ======@,%a@@]@.\n" Abslayout.pp
-      r1 Abslayout.pp r2 ;
+  else
     let ret =
       (* Or_error.try_with_join (fun () -> *)
       let%bind s1 = eval ctx r1 in
@@ -380,4 +378,4 @@ let equiv ?(ordered = false) ctx r1 r2 =
       | Error err -> fprintf fmt "Failed: %a" Error.pp err
     in
     Caml.Format.printf "%a\n" ret_pp ret ;
-    ret )
+    ret
