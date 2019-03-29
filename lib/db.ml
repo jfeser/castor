@@ -229,7 +229,7 @@ let exec_cursor_exn =
               db_idx := !db_idx + r#ntuples ;
               let idx = idx + r#ntuples in
               let state = if r#ntuples < batch_size then `Done else `Not_done idx in
-              Some (tups, state))
+              Some (tups, state) )
         (`Not_done 1)
       |> Gen.flatten
     in
