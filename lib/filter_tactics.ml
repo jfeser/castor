@@ -156,7 +156,14 @@ module Make (C : Config.S) = struct
       (filter filter_pred rv)
       {oi_key_layout= None; lookup_low= lb; lookup_high= ub; order= `Desc}
 
-  let has_param p = Set.inter (pred_free p) params |> Set.is_empty |> not
+  (** A predicate `p` is a candidate lookup key into a partitioning of `r` if it
+     does not depend on any of the fields in `r`.
+
+      TODO: In practice we also want it to have a parameter in it. Is this correct? *)
+  let is_candidate_key p r =
+    let pfree = pred_free p in
+    Set.inter (M.bound r) pfree |> Set.is_empty
+    && Set.inter params pfree |> Set.is_empty |> not
 
   let elim_cmp_filter r =
     match r.node with
@@ -167,16 +174,18 @@ module Make (C : Config.S) = struct
           conjuncts p
           |> List.partition_map ~f:(function
                | (Binop (Gt, p1, p2) | Binop (Lt, p2, p1)) as p ->
-                   if has_param p1 && not (has_param p2) then
-                     `Fst (p2, (`Lt, p1))
-                   else if has_param p2 && not (has_param p1) then
-                     `Fst (p1, (`Gt, p2))
+                   if is_candidate_key p1 r' && not (is_candidate_key p2 r')
+                   then `Fst (p2, (`Lt, p1))
+                   else if
+                     is_candidate_key p2 r' && not (is_candidate_key p1 r')
+                   then `Fst (p1, (`Gt, p2))
                    else `Snd p
                | (Binop (Ge, p1, p2) | Binop (Le, p2, p1)) as p ->
-                   if has_param p1 && not (has_param p2) then
-                     `Fst (p2, (`Le, p1))
-                   else if has_param p2 && not (has_param p1) then
-                     `Fst (p1, (`Ge, p2))
+                   if is_candidate_key p1 r' && not (is_candidate_key p2 r')
+                   then `Fst (p2, (`Le, p1))
+                   else if
+                     is_candidate_key p2 r' && not (is_candidate_key p1 r')
+                   then `Fst (p1, (`Ge, p2))
                    else `Snd p
                | p -> `Snd p )
         in
@@ -254,19 +263,21 @@ module Make (C : Config.S) = struct
             else None
         | ATuple (rs, Concat) ->
             Some (tuple (List.map rs ~f:(filter p)) Concat)
-        | ATuple (rs, Cross) ->
-            let rs_rev, _ =
-              List.fold_left rs ~init:([], orig_bound) ~f:(fun (rs, bound) r ->
-                  let bound = Set.union (M.bound r) bound in
-                  let rs =
-                    if invariant_support orig_bound bound p then
-                      filter p r :: rs
-                    else r :: rs
-                  in
-                  (rs, bound) )
-            in
-            let rs = List.rev rs_rev in
-            Some (tuple rs Cross)
+        | ATuple (_rs, Cross) ->
+            None
+            (* TODO: Figure out when this rule is useful. *)
+            (* let rs_rev, _ =
+             *   List.fold_left rs ~init:([], orig_bound) ~f:(fun (rs, bound) r ->
+             *       let bound = Set.union (M.bound r) bound in
+             *       let rs =
+             *         if invariant_support orig_bound bound p then
+             *           filter p r :: rs
+             *         else r :: rs
+             *       in
+             *       (rs, bound) )
+             * in
+             * let rs = List.rev rs_rev in
+             * Some (tuple rs Cross) *)
         | _ -> None )
     | _ -> None
 
@@ -279,8 +290,10 @@ module Make (C : Config.S) = struct
           conjuncts p
           |> List.partition_map ~f:(function
                | Binop (Eq, p1, p2) as p ->
-                   if has_param p1 && not (has_param p2) then `Fst (p2, p1)
-                   else if has_param p2 && not (has_param p1) then `Fst (p1, p2)
+                   if is_candidate_key p1 r && not (is_candidate_key p2 r) then
+                     `Fst (p2, p1)
+                   else if is_candidate_key p2 r && not (is_candidate_key p1 r)
+                   then `Fst (p1, p2)
                    else `Snd p
                | p -> `Snd p )
         in
@@ -431,8 +444,9 @@ filter((nation.n_regionkey = region.r_regionkey),
        cross)))
 |}
     in
-    apply push_filter r |> Option.iter ~f:(Format.printf "%a@." pp);
-    [%expect {|
+    apply push_filter r |> Option.iter ~f:(Format.printf "%a@." pp) ;
+    [%expect
+      {|
       alist(join((supplier.s_nationkey = nation.n_nationkey),
               join(((lineitem.l_suppkey = supplier.s_suppkey) &&
                    (customer.c_nationkey = supplier.s_nationkey)),
