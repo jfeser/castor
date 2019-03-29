@@ -155,7 +155,7 @@ module Make (Config : Config.S) () = struct
       ; (* Hoist parameterized filters as far up as possible. *)
         fix
           (at_ hoist_filter
-             (Path.all >>? is_param_filter >>| deepest >>= Path.parent))
+             (Path.all >>? is_param_filter >>| deepest >>= parent))
       ; at_ Join_opt.transform (Path.all >>? is_join >>| shallowest)
       ; (* Push orderby operators into compile time position if possible. *)
         fix

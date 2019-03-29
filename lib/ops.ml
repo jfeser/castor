@@ -134,15 +134,15 @@ module Make (C : Config.S) = struct
 
   let matches f r p = f (Path.get_exn p r).node
 
-  let above (f : _ -> Path.t -> bool) r p =
-    match List.rev p with [] -> false | _ :: p' -> f r (List.rev p')
+  let above f r p =
+    Option.map (Path.parent p) ~f:(f r) |> Option.value ~default:false
 
   let is_collection =
     Infix.(is_hash_idx || is_ordered_idx || is_list || is_tuple)
 
-  let last_child _ = Some [Path.Child_last]
+  let child i _ = Some (Path.child Path.root i)
 
-  let first_child _ = Some [Path.Child_first]
+  let parent p _ = Path.parent p
 
   let rec apply tf r =
     let ret =

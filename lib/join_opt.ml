@@ -510,13 +510,13 @@ module Make (C : Config.S) = struct
     | Flat _ -> row_store
     | Hash {lhs; rhs; _} ->
         seq_many
-          [ at_ (emit_joins lhs) first_child
-          ; at_ (emit_joins rhs) last_child
+          [ at_ (emit_joins lhs) (child 0)
+          ; at_ (emit_joins rhs) (child 1)
           ; elim_join_hash ]
     | Nest {lhs; rhs; _} ->
         seq_many
-          [ at_ (emit_joins lhs) first_child
-          ; at_ (emit_joins rhs) last_child
+          [ at_ (emit_joins lhs) (child 0)
+          ; at_ (emit_joins rhs) (child 1)
           ; elim_join_nest ]
 
   let transform =
