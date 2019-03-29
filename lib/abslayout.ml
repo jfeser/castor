@@ -3,9 +3,7 @@ open Collections
 module Format = Caml.Format
 include Abslayout0
 
-let select a b =
-  if List.is_empty a then Error.of_string "Empty selection list." |> Error.raise ;
-  {node= Select (a, b); meta= Meta.empty ()}
+let select a b = {node= Select (a, b); meta= Meta.empty ()}
 
 let join a b c = {node= Join {pred= a; r1= b; r2= c}; meta= Meta.empty ()}
 
