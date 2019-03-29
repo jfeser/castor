@@ -37,7 +37,13 @@ module Make (C : Config.S) = struct
     List.partition_tf (conjuncts p) ~f:(fun p' ->
         overlaps (pred_free p') (M.bound binder) )
 
-  let is_supported orig_bound new_bound pred =
+  (** Check that a predicate is fully supported by a relation (it does not
+      depend on anything in the context.) *)
+  let is_supported bound pred = Set.is_subset (pred_free pred) ~of_:bound
+
+  (** Check that a predicate is supported by a relation (it does not depend on
+     anything in the context that it did not previously depend on.) *)
+  let invariant_support orig_bound new_bound pred =
     let supported = Set.inter (pred_free pred) orig_bound in
     Set.is_subset supported ~of_:new_bound
 
@@ -47,7 +53,7 @@ module Make (C : Config.S) = struct
     | OrderBy {key; rel= {node= Filter (p, r); _}} ->
         Some (filter p (order_by key r))
     | GroupBy (ps, key, {node= Filter (p, r); _}) ->
-        if is_supported (M.bound r) (M.bound (group_by ps key r)) p then
+        if invariant_support (M.bound r) (M.bound (group_by ps key r)) p then
           Some (filter p (group_by ps key r))
         else None
     | Filter (p, {node= Filter (p', r); _}) ->
@@ -230,21 +236,20 @@ module Make (C : Config.S) = struct
         let orig_bound = M.bound r' in
         match r'.node with
         | AList (rk, rv) ->
-            if is_supported orig_bound (M.bound rk) p then
-              Some (list (filter p rk) rv)
-            else if is_supported orig_bound (M.bound rv) p then
-              Some (list (filter p rk) rv)
+            if is_supported (M.bound rk) p then Some (list (filter p rk) rv)
+            else if invariant_support orig_bound (M.bound rv) p then
+              Some (list rk (filter p rv))
             else None
         | AHashIdx (rk, rv, m) ->
-            if is_supported orig_bound (M.bound rk) p then
+            if is_supported (M.bound rk) p then
               Some (hash_idx' (filter p rk) rv m)
-            else if is_supported orig_bound (M.bound rv) p then
+            else if invariant_support orig_bound (M.bound rv) p then
               Some (hash_idx' rk (filter p rv) m)
             else None
         | AOrderedIdx (rk, rv, m) ->
-            if is_supported orig_bound (M.bound rk) p then
+            if is_supported (M.bound rk) p then
               Some (ordered_idx (filter p rk) rv m)
-            else if is_supported orig_bound (M.bound rv) p then
+            else if invariant_support orig_bound (M.bound rv) p then
               Some (ordered_idx rk (filter p rv) m)
             else None
         | ATuple (rs, Concat) ->
@@ -254,7 +259,8 @@ module Make (C : Config.S) = struct
               List.fold_left rs ~init:([], orig_bound) ~f:(fun (rs, bound) r ->
                   let bound = Set.union (M.bound r) bound in
                   let rs =
-                    if is_supported orig_bound bound p then filter p r :: rs
+                    if invariant_support orig_bound bound p then
+                      filter p r :: rs
                     else r :: rs
                   in
                   (rs, bound) )
@@ -341,4 +347,144 @@ module Make (C : Config.S) = struct
    *   in
    *   let f r = try run_exn r with Failed _ -> None in
    *   of_func f ~name:"precompute-filter" *)
+end
+
+module Test = struct
+  module C = struct
+    let params = Set.empty (module Name)
+
+    let fresh = Fresh.create ()
+
+    let verbose = false
+
+    let validate = false
+
+    let param_ctx = Map.empty (module Name)
+
+    let conn = Db.create "postgresql:///tpch_1k"
+  end
+
+  module T = Make (C)
+  open T
+  module O = Ops.Make (C)
+  open O
+
+  let%expect_test "" =
+    let r =
+      of_string_exn
+        {|
+filter((nation.n_regionkey = region.r_regionkey),
+   alist(join((supplier.s_nationkey = nation.n_nationkey),
+           join(((lineitem.l_suppkey = supplier.s_suppkey) &&
+                (customer.c_nationkey = supplier.s_nationkey)),
+             join((lineitem.l_orderkey = orders.o_orderkey),
+               join((customer.c_custkey = orders.o_custkey),
+                 customer,
+                 orders),
+               lineitem),
+             supplier),
+           nation),
+     atuple([ascalar(customer.c_custkey),
+             ascalar(customer.c_name),
+             ascalar(customer.c_address),
+             ascalar(customer.c_nationkey),
+             ascalar(customer.c_phone),
+             ascalar(customer.c_acctbal),
+             ascalar(customer.c_mktsegment),
+             ascalar(customer.c_comment),
+             ascalar(orders.o_orderkey),
+             ascalar(orders.o_custkey),
+             ascalar(orders.o_orderstatus),
+             ascalar(orders.o_totalprice),
+             ascalar(orders.o_orderdate),
+             ascalar(orders.o_orderpriority),
+             ascalar(orders.o_clerk),
+             ascalar(orders.o_shippriority),
+             ascalar(orders.o_comment),
+             ascalar(lineitem.l_orderkey),
+             ascalar(lineitem.l_partkey),
+             ascalar(lineitem.l_suppkey),
+             ascalar(lineitem.l_linenumber),
+             ascalar(lineitem.l_quantity),
+             ascalar(lineitem.l_extendedprice),
+             ascalar(lineitem.l_discount),
+             ascalar(lineitem.l_tax),
+             ascalar(lineitem.l_returnflag),
+             ascalar(lineitem.l_linestatus),
+             ascalar(lineitem.l_shipdate),
+             ascalar(lineitem.l_commitdate),
+             ascalar(lineitem.l_receiptdate),
+             ascalar(lineitem.l_shipinstruct),
+             ascalar(lineitem.l_shipmode),
+             ascalar(lineitem.l_comment),
+             ascalar(supplier.s_suppkey),
+             ascalar(supplier.s_name),
+             ascalar(supplier.s_address),
+             ascalar(supplier.s_nationkey),
+             ascalar(supplier.s_phone),
+             ascalar(supplier.s_acctbal),
+             ascalar(supplier.s_comment),
+             ascalar(nation.n_nationkey),
+             ascalar(nation.n_name),
+             ascalar(nation.n_regionkey),
+             ascalar(nation.n_comment)],
+       cross)))
+|}
+    in
+    apply push_filter r |> Option.iter ~f:(Format.printf "%a@." pp);
+    [%expect {|
+      alist(join((supplier.s_nationkey = nation.n_nationkey),
+              join(((lineitem.l_suppkey = supplier.s_suppkey) &&
+                   (customer.c_nationkey = supplier.s_nationkey)),
+                join((lineitem.l_orderkey = orders.o_orderkey),
+                  join((customer.c_custkey = orders.o_custkey), customer, orders),
+                  lineitem),
+                supplier),
+              nation),
+        filter((nation.n_regionkey = region.r_regionkey),
+          atuple([ascalar(customer.c_custkey),
+                  ascalar(customer.c_name),
+                  ascalar(customer.c_address),
+                  ascalar(customer.c_nationkey),
+                  ascalar(customer.c_phone),
+                  ascalar(customer.c_acctbal),
+                  ascalar(customer.c_mktsegment),
+                  ascalar(customer.c_comment),
+                  ascalar(orders.o_orderkey),
+                  ascalar(orders.o_custkey),
+                  ascalar(orders.o_orderstatus),
+                  ascalar(orders.o_totalprice),
+                  ascalar(orders.o_orderdate),
+                  ascalar(orders.o_orderpriority),
+                  ascalar(orders.o_clerk),
+                  ascalar(orders.o_shippriority),
+                  ascalar(orders.o_comment),
+                  ascalar(lineitem.l_orderkey),
+                  ascalar(lineitem.l_partkey),
+                  ascalar(lineitem.l_suppkey),
+                  ascalar(lineitem.l_linenumber),
+                  ascalar(lineitem.l_quantity),
+                  ascalar(lineitem.l_extendedprice),
+                  ascalar(lineitem.l_discount),
+                  ascalar(lineitem.l_tax),
+                  ascalar(lineitem.l_returnflag),
+                  ascalar(lineitem.l_linestatus),
+                  ascalar(lineitem.l_shipdate),
+                  ascalar(lineitem.l_commitdate),
+                  ascalar(lineitem.l_receiptdate),
+                  ascalar(lineitem.l_shipinstruct),
+                  ascalar(lineitem.l_shipmode),
+                  ascalar(lineitem.l_comment),
+                  ascalar(supplier.s_suppkey),
+                  ascalar(supplier.s_name),
+                  ascalar(supplier.s_address),
+                  ascalar(supplier.s_nationkey),
+                  ascalar(supplier.s_phone),
+                  ascalar(supplier.s_acctbal),
+                  ascalar(supplier.s_comment),
+                  ascalar(nation.n_nationkey),
+                  ascalar(nation.n_name),
+                  ascalar(nation.n_regionkey),
+                  ascalar(nation.n_comment)],
+            cross))) |}]
 end
