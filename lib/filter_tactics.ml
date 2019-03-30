@@ -15,8 +15,10 @@ end
 
 module Make (C : Config.S) = struct
   module O = Ops.Make (C)
+  module S = Simplify_tactic.Make (C)
   open O
   open C
+  open S
 
   let extend_select ~with_ ps r =
     M.annotate_schema r ;
@@ -39,7 +41,9 @@ module Make (C : Config.S) = struct
 
   (** Check that a predicate is fully supported by a relation (it does not
       depend on anything in the context.) *)
-  let is_supported bound pred = Set.is_subset (pred_free pred) ~of_:bound
+  let is_supported bound pred =
+    Set.for_all (pred_free pred) ~f:(fun n ->
+        Set.mem bound n || Poly.(Name.Meta.(find_exn n stage) = `Compile) )
 
   (** Check that a predicate is supported by a relation (it does not depend on
      anything in the context that it did not previously depend on.) *)
@@ -236,52 +240,64 @@ module Make (C : Config.S) = struct
 
   let elim_cmp_filter = of_func elim_cmp_filter ~name:"elim-cmp-filter"
 
+  (* | ATuple (_rs, Cross) ->
+   *     None
+   *     (\* TODO: Figure out when this rule is useful. *\)
+   *     (\* let rs_rev, _ =
+   *      *   List.fold_left rs ~init:([], orig_bound) ~f:(fun (rs, bound) r ->
+   *      *       let bound = Set.union (M.bound r) bound in
+   *      *       let rs =
+   *      *         if invariant_support orig_bound bound p then
+   *      *           filter p r :: rs
+   *      *         else r :: rs
+   *      *       in
+   *      *       (rs, bound) )
+   *      * in
+   *      * let rs = List.rev rs_rev in
+   *      * Some (tuple rs Cross) *\) *)
+
   let push_filter r =
     M.annotate_schema r ;
     match r.node with
     | Filter (p, {node= Filter (p', r'); _}) ->
         Some (filter (Binop (And, p, p')) r')
-    | Filter (p, r') -> (
+    | Filter (p, {node= ATuple (rs, Concat); _}) ->
+        Some (tuple (List.map rs ~f:(filter p)) Concat)
+    | Filter (p, r') ->
+        let open Option.Let_syntax in
         let orig_bound = M.bound r' in
-        match r'.node with
-        | AList (rk, rv) ->
-            if is_supported (M.bound rk) p then Some (list (filter p rk) rv)
-            else if invariant_support orig_bound (M.bound rv) p then
-              Some (list rk (filter p rv))
-            else None
-        | AHashIdx (rk, rv, m) ->
-            if is_supported (M.bound rk) p then
-              Some (hash_idx' (filter p rk) rv m)
-            else if invariant_support orig_bound (M.bound rv) p then
-              Some (hash_idx' rk (filter p rv) m)
-            else None
-        | AOrderedIdx (rk, rv, m) ->
-            if is_supported (M.bound rk) p then
-              Some (ordered_idx (filter p rk) rv m)
-            else if invariant_support orig_bound (M.bound rv) p then
-              Some (ordered_idx rk (filter p rv) m)
-            else None
-        | ATuple (rs, Concat) ->
-            Some (tuple (List.map rs ~f:(filter p)) Concat)
-        | ATuple (_rs, Cross) ->
-            None
-            (* TODO: Figure out when this rule is useful. *)
-            (* let rs_rev, _ =
-             *   List.fold_left rs ~init:([], orig_bound) ~f:(fun (rs, bound) r ->
-             *       let bound = Set.union (M.bound r) bound in
-             *       let rs =
-             *         if invariant_support orig_bound bound p then
-             *           filter p r :: rs
-             *         else r :: rs
-             *       in
-             *       (rs, bound) )
-             * in
-             * let rs = List.rev rs_rev in
-             * Some (tuple rs Cross) *)
-        | _ -> None )
+        let%map rk, rv, mk =
+          match r'.node with
+          | AList (rk, rv) -> Some (rk, rv, list)
+          | AHashIdx (rk, rv, m) ->
+              Some (rk, rv, fun rk rv -> hash_idx' rk rv m)
+          | AOrderedIdx (rk, rv, m) ->
+              Some (rk, rv, fun rk rv -> ordered_idx rk rv m)
+          | _ -> None
+        in
+        let unpushed, pushed =
+          Pred.conjuncts p
+          |> List.partition_map ~f:(fun p ->
+                 if is_supported (M.bound rk) p then `Snd (`K p)
+                 else if invariant_support orig_bound (M.bound rv) p then
+                   `Snd (`V p)
+                 else `Fst p )
+        in
+        let outer_pred = Pred.conjoin unpushed in
+        let pushed_key, pushed_val =
+          List.partition_map pushed ~f:(function
+            | `K p -> `Fst p
+            | `V p -> `Snd p )
+        in
+        let inner_key_pred = Pred.conjoin pushed_key in
+        let inner_val_pred = Pred.conjoin pushed_val in
+        filter outer_pred
+          (mk (filter inner_key_pred rk) (filter inner_val_pred rv))
     | _ -> None
 
-  let push_filter = of_func push_filter ~name:"push-filter"
+  let push_filter =
+    (* NOTE: Simplify is necessary to make push-filter safe under fixpoints. *)
+    seq (of_func push_filter ~name:"push-filter") simplify
 
   let elim_eq_filter r =
     match r.node with

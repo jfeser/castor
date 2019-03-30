@@ -140,10 +140,18 @@ module Make (Config : Config.S) () = struct
 
   let push_orderby = of_func push_orderby ~name:"push-orderby"
 
+  let resolve =
+    of_func (fun r -> M.resolve ~params r |> Option.some) ~name:"resolve"
+
   module Join_opt = Join_opt.Make (Config)
   module Simplify_tactic = Simplify_tactic.Make (Config)
   module Select_tactics = Select_tactics.Make (Config)
   module Groupby_tactics = Groupby_tactics.Make (Config)
+
+  let push_all_unparameterized_filters =
+    fix
+      (seq_many
+         [resolve; first push_filter Path.(all >>? is_run_time >>? is_filter)])
 
   let opt =
     let open Infix in
@@ -167,10 +175,7 @@ module Make (Config : Config.S) () = struct
       ; (* Eliminate the shallowest comparison filter. *)
         at_ elim_cmp_filter
           Path.(all >>? is_param_cmp_filter >>? is_run_time >>| shallowest)
-      ; (* Push all unparameterized filters. *)
-        fix
-          (first push_filter
-             Path.(all >>? is_run_time >>? is_filter >>? not is_param_filter))
+      ; push_all_unparameterized_filters
       ; (* Push selections above collections. *)
         fix
           (at_ Select_tactics.push_select
@@ -182,8 +187,9 @@ module Make (Config : Config.S) () = struct
                  Path.(
                    all >>? is_run_time >>? not has_params
                    >>? not is_serializable >>| shallowest) ])
-        (* Cleanup*)
-      ; fix project
+      ; push_all_unparameterized_filters
+      ; (* Cleanup*)
+        fix project
       ; Simplify_tactic.simplify ]
 
   let is_serializable r =
