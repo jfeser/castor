@@ -331,83 +331,52 @@ let%expect_test "needed" =
       (AList
        (((node (Scan r))
          (meta
-          ((free ())
-           (needed (((relation (r)) (name f) (type_ ((IntT (nullable false)))))))
-           (schema
-            (((relation (r)) (name f) (type_ ((IntT (nullable false)))))
-             ((relation (r)) (name g) (type_ ((IntT (nullable false))))))))))
+          ((free ()) (needed (((relation (r)) (name f))))
+           (schema (((relation (r)) (name f)) ((relation (r)) (name g)))))))
         ((node
           (ATuple
-           ((((node
-               (AScalar
-                (As_pred
-                 ((Name
-                   ((relation (r)) (name f) (type_ ((IntT (nullable false))))))
-                  k1))))
+           ((((node (AScalar (As_pred ((Name ((relation (r)) (name f))) k1))))
               (meta
-               ((free
-                 (((relation (r)) (name f) (type_ ((IntT (nullable false)))))))
+               ((free (((relation (r)) (name f))))
                 (needed
-                 (((relation ()) (name k1) (type_ ((IntT (nullable false)))))
-                  ((relation ()) (name k2) (type_ ((IntT (nullable false)))))
-                  ((relation ()) (name "") (type_ ((IntT (nullable false)))))))
-                (schema
-                 (((relation ()) (name k1) (type_ ((IntT (nullable false))))))))))
+                 (((relation ()) (name "")) ((relation ()) (name k1))
+                  ((relation ()) (name k2))))
+                (schema (((relation ()) (name k1)))))))
              ((node
                (AScalar
                 (As_pred
-                 ((Binop
-                   (Add
-                    (Name
-                     ((relation ()) (name k1) (type_ ((IntT (nullable false))))))
-                    (Int 1)))
-                  k2))))
+                 ((Binop (Add (Name ((relation ()) (name k1))) (Int 1))) k2))))
               (meta
-               ((free
-                 (((relation ()) (name k1) (type_ ((IntT (nullable false)))))))
+               ((free (((relation ()) (name k1))))
                 (needed
-                 (((relation ()) (name k1) (type_ ((IntT (nullable false)))))
-                  ((relation ()) (name k2) (type_ ((IntT (nullable false)))))
-                  ((relation ()) (name "") (type_ ((IntT (nullable false)))))))
-                (schema
-                 (((relation ()) (name k2) (type_ ((IntT (nullable false))))))))))
+                 (((relation ()) (name "")) ((relation ()) (name k1))
+                  ((relation ()) (name k2))))
+                (schema (((relation ()) (name k2)))))))
              ((node
-               (AScalar
-                (Binop
-                 (Add
-                  (Name
-                   ((relation ()) (name k2) (type_ ((IntT (nullable false))))))
-                  (Int 1)))))
+               (AScalar (Binop (Add (Name ((relation ()) (name k2))) (Int 1)))))
               (meta
-               ((free
-                 (((relation ()) (name k2) (type_ ((IntT (nullable false)))))))
+               ((free (((relation ()) (name k2))))
                 (needed
-                 (((relation ()) (name k1) (type_ ((IntT (nullable false)))))
-                  ((relation ()) (name k2) (type_ ((IntT (nullable false)))))
-                  ((relation ()) (name "") (type_ ((IntT (nullable false)))))))
-                (schema
-                 (((relation ()) (name "") (type_ ((IntT (nullable false)))))))))))
+                 (((relation ()) (name "")) ((relation ()) (name k1))
+                  ((relation ()) (name k2))))
+                (schema (((relation ()) (name ""))))))))
             Cross)))
          (meta
-          ((free (((relation (r)) (name f) (type_ ((IntT (nullable false)))))))
+          ((free (((relation (r)) (name f))))
            (needed
-            (((relation ()) (name k1) (type_ ((IntT (nullable false)))))
-             ((relation ()) (name k2) (type_ ((IntT (nullable false)))))
-             ((relation ()) (name "") (type_ ((IntT (nullable false)))))))
+            (((relation ()) (name "")) ((relation ()) (name k1))
+             ((relation ()) (name k2))))
            (schema
-            (((relation ()) (name k1) (type_ ((IntT (nullable false)))))
-             ((relation ()) (name k2) (type_ ((IntT (nullable false)))))
-             ((relation ()) (name "") (type_ ((IntT (nullable false)))))))))))))
+            (((relation ()) (name k1)) ((relation ()) (name k2))
+             ((relation ()) (name ""))))))))))
      (meta
       ((free ())
        (needed
-        (((relation ()) (name k1) (type_ ((IntT (nullable false)))))
-         ((relation ()) (name k2) (type_ ((IntT (nullable false)))))
-         ((relation ()) (name "") (type_ ((IntT (nullable false)))))))
+        (((relation ()) (name "")) ((relation ()) (name k1))
+         ((relation ()) (name k2))))
        (schema
-        (((relation ()) (name k1) (type_ ((IntT (nullable false)))))
-         ((relation ()) (name k2) (type_ ((IntT (nullable false)))))
-         ((relation ()) (name "") (type_ ((IntT (nullable false)))))))))) |}]
+        (((relation ()) (name k1)) ((relation ()) (name k2))
+         ((relation ()) (name ""))))))) |}]
 
 let%expect_test "annotate-orders" =
   let r =
@@ -419,7 +388,7 @@ let%expect_test "annotate-orders" =
   annotate_orders r ;
   Meta.(find_exn r order) |> [%sexp_of: (pred * order) list] |> print_s ;
   [%expect
-    {| (((Name ((relation (r)) (name f) (type_ ((IntT (nullable false)))))) Asc)) |}]
+    {| (((Name ((relation (r)) (name f))) Asc)) |}]
 
 (* let%expect_test "annotate-schema" =
  *   let r = "ascalar((select([min(r.f)], r)))" |> of_string_exn |> M.resolve in
@@ -452,11 +421,7 @@ let%expect_test "annotate-schema" =
     {|
     ((node
       (Select
-       (((Min (Name ((relation (r)) (name f) (type_ ((IntT (nullable false))))))))
+       (((Min (Name ((relation (r)) (name f)))))
         ((node (Scan r))
-         (meta
-          ((schema
-            (((relation (r)) (name f) (type_ ((IntT (nullable false)))))
-             ((relation (r)) (name g) (type_ ((IntT (nullable false)))))))))))))
-     (meta
-      ((schema (((relation (r)) (name f) (type_ ((IntT (nullable false)))))))))) |}]
+         (meta ((schema (((relation (r)) (name f)) ((relation (r)) (name g))))))))))
+     (meta ((schema (((relation (r)) (name f))))))) |}]

@@ -35,3 +35,13 @@ val pp : Formatter.t -> t -> unit
 val fresh : Fresh.t -> (int -> string, unit, string) format -> t
 
 val create_table : unit -> (t, 'a) Bounded_int_table.t
+
+module Meta : sig
+  val type_ : Type.PrimType.t Univ_map.Key.t
+
+  val stage : [`Compile | `Run] Univ_map.Key.t
+
+  val find : t -> 'a Univ_map.Key.t -> 'a option
+
+  val set : t -> 'a Univ_map.Key.t -> 'a -> t
+end

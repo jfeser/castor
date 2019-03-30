@@ -25,20 +25,21 @@ module Table = struct
 end
 
 module Sexp_T = struct
-  type t = {relation: string option; name: string; type_: Type0.PrimType.t option}
-  [@@deriving sexp]
+  type t = {relation: string option; name: string} [@@deriving sexp]
 end
 
 module T = struct
-  type t = {name: Key.t Hashcons.hash_consed; type_: Type0.PrimType.t option}
+  type t = {name: Key.t Hashcons.hash_consed; meta: Univ_map.t}
 
   let sexp_of_t x =
-    [%sexp_of: Sexp_T.t]
-      {name= x.name.node.name; relation= x.name.node.relation; type_= x.type_}
+    [%sexp_of: Sexp_T.t] {name= x.name.node.name; relation= x.name.node.relation}
+
+  let create_consed r n m =
+    {name= Table.(hashcons table Key.{relation= r; name= n}); meta= m}
 
   let t_of_sexp x =
-    let Sexp_T.{name; relation; type_} = [%of_sexp: Sexp_T.t] x in
-    {name= Table.(hashcons table {name; relation}); type_}
+    let Sexp_T.{name; relation} = [%of_sexp: Sexp_T.t] x in
+    create_consed relation name Univ_map.empty
 
   let compare x y = [%compare: int] x.name.tag y.name.tag
 
@@ -53,25 +54,40 @@ module C = Comparable.Make (T)
 
 module O : Comparable.Infix with type t := t = C
 
-let create_consed r t n =
-  {name= Table.(hashcons table Key.{relation= r; name= n}); type_= t}
+module Meta = struct
+  let type_ = Univ_map.Key.create ~name:"type" [%sexp_of: Type.PrimType.t]
 
-let create ?relation ?type_ name = create_consed relation type_ name
+  let stage = Univ_map.Key.create ~name:"stage" [%sexp_of: [`Compile | `Run]]
 
-let copy ?relation ?type_ ?name n =
-  let r = Option.value relation ~default:n.name.node.relation in
-  let t = Option.value type_ ~default:n.type_ in
-  let n = Option.value name ~default:n.name.node.name in
-  create_consed r t n
+  let find {meta; _} = Univ_map.find meta
+
+  let set ({meta; _} as n) k v = {n with meta= Univ_map.set meta k v}
+end
+
+let create ?relation ?type_ name =
+  let meta = Univ_map.empty in
+  let meta =
+    match type_ with Some t -> Univ_map.set meta Meta.type_ t | None -> meta
+  in
+  create_consed relation name meta
+
+let type_ n = Univ_map.find n.meta Meta.type_
+
+let copy ?relation ?type_:t ?name:n name =
+  let r = Option.value relation ~default:name.name.node.relation in
+  let t = Option.value t ~default:(type_ name) in
+  let n = Option.value n ~default:name.name.node.name in
+  let meta =
+    match t with Some t -> Univ_map.set name.meta Meta.type_ t | None -> name.meta
+  in
+  create_consed r n meta
 
 let name n = n.name.node.name
 
 let rel n = n.name.node.relation
 
-let type_ n = n.type_
-
 let type_exn n =
-  match n.type_ with
+  match type_ n with
   | Some t -> t
   | None -> Error.create "Missing type." n [%sexp_of: t] |> Error.raise
 

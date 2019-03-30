@@ -168,7 +168,7 @@ let%expect_test "select-groupby" =
   [%expect
     {|
       SELECT
-          max("x_1") AS "x_3"
+          max("x_1") AS "x2"
       FROM (
           SELECT
               r1_1. "f" AS "r1_1_f_2",
@@ -183,7 +183,7 @@ let%expect_test "select-fusion-1" =
   [%expect
     {|
       SELECT
-          max("x_1") AS "x_3"
+          max("x_1") AS "x2"
       FROM (
           SELECT
               min(r1_1. "f") AS "x_1"
@@ -195,7 +195,7 @@ let%expect_test "select-fusion-2" =
   [%expect
     {|
     SELECT
-        max(r1_1. "f") AS "x_2"
+        max(r1_1. "f") AS "x1"
     FROM
         "r1" AS "r1_1" |}]
 
