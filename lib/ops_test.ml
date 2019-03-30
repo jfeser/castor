@@ -42,8 +42,7 @@ let%expect_test "at" =
       (at_ tf Path.(all >>? is_scan >>| shallowest))
       Path.(all >>? is_select >>| shallowest)
   in
-  match apply op r with
+  ( match apply op r with
   | Some r -> Format.printf "%a" pp r
-  | None ->
-      print_endline "Transform failed." ;
-      [%expect {| filter(true, select([false], filter(false, test2))) |}]
+  | None -> print_endline "Transform failed." ) ;
+  [%expect {| filter(true, select([false], filter(false, test2))) |}]
