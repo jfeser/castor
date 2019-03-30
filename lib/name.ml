@@ -9,8 +9,6 @@ module Key = struct
   let equal = [%compare.equal: t]
 end
 
-open Key
-
 module Table = struct
   include Hashcons.Make (Key)
 
@@ -24,24 +22,27 @@ module Table = struct
     k'
 end
 
-module Sexp_T = struct
-  type t = {relation: string option; name: string} [@@deriving sexp]
-end
-
 module T = struct
   type t = {name: Key.t Hashcons.hash_consed; meta: Univ_map.t}
 
   let sexp_of_t x =
-    [%sexp_of: Sexp_T.t] {name= x.name.node.name; relation= x.name.node.relation}
+    [%sexp_of: Key.t] {name= x.name.node.name; relation= x.name.node.relation}
 
   let create_consed r n m =
     {name= Table.(hashcons table Key.{relation= r; name= n}); meta= m}
 
   let t_of_sexp x =
-    let Sexp_T.{name; relation} = [%of_sexp: Sexp_T.t] x in
+    let Key.{name; relation} = [%of_sexp: Key.t] x in
     create_consed relation name Univ_map.empty
 
-  let compare x y = [%compare: int] x.name.tag y.name.tag
+  let equal = phys_equal
+
+  let compare x y =
+    if equal x y then 0
+    else
+      [%compare: Key.t]
+        {relation= x.name.node.relation; name= x.name.node.name}
+        {relation= y.name.node.relation; name= y.name.node.name}
 
   let hash x = x.name.hkey
 
@@ -52,7 +53,13 @@ include T
 include Comparator.Make (T)
 module C = Comparable.Make (T)
 
-module O : Comparable.Infix with type t := t = C
+module O : Comparable.Infix with type t := t = struct
+  include C
+
+  let ( = ) = equal
+
+  let ( <> ) x y = not (equal x y)
+end
 
 module Meta = struct
   let type_ = Univ_map.Key.create ~name:"type" [%sexp_of: Type.PrimType.t]

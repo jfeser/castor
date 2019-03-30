@@ -339,8 +339,8 @@ let%expect_test "needed" =
               (meta
                ((free (((relation (r)) (name f))))
                 (needed
-                 (((relation ()) (name k1)) ((relation ()) (name k2))
-                  ((relation ()) (name ""))))
+                 (((relation ()) (name "")) ((relation ()) (name k1))
+                  ((relation ()) (name k2))))
                 (schema (((relation ()) (name k1)))))))
              ((node
                (AScalar
@@ -349,31 +349,31 @@ let%expect_test "needed" =
               (meta
                ((free (((relation ()) (name k1))))
                 (needed
-                 (((relation ()) (name k1)) ((relation ()) (name k2))
-                  ((relation ()) (name ""))))
+                 (((relation ()) (name "")) ((relation ()) (name k1))
+                  ((relation ()) (name k2))))
                 (schema (((relation ()) (name k2)))))))
              ((node
                (AScalar (Binop (Add (Name ((relation ()) (name k2))) (Int 1)))))
               (meta
                ((free (((relation ()) (name k2))))
                 (needed
-                 (((relation ()) (name k1)) ((relation ()) (name k2))
-                  ((relation ()) (name ""))))
+                 (((relation ()) (name "")) ((relation ()) (name k1))
+                  ((relation ()) (name k2))))
                 (schema (((relation ()) (name ""))))))))
             Cross)))
          (meta
           ((free (((relation (r)) (name f))))
            (needed
-            (((relation ()) (name k1)) ((relation ()) (name k2))
-             ((relation ()) (name ""))))
+            (((relation ()) (name "")) ((relation ()) (name k1))
+             ((relation ()) (name k2))))
            (schema
             (((relation ()) (name k1)) ((relation ()) (name k2))
              ((relation ()) (name ""))))))))))
      (meta
       ((free ())
        (needed
-        (((relation ()) (name k1)) ((relation ()) (name k2))
-         ((relation ()) (name ""))))
+        (((relation ()) (name "")) ((relation ()) (name k1))
+         ((relation ()) (name k2))))
        (schema
         (((relation ()) (name k1)) ((relation ()) (name k2))
          ((relation ()) (name ""))))))) |}]
