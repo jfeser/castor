@@ -4,6 +4,7 @@ open Collections
 open Abslayout
 open Test_util
 module M = Abslayout_db.Make (Test_db)
+module Project = Project.Make (Test_db)
 
 let run_print_test ?params query =
   let print_fold =
@@ -387,8 +388,7 @@ let%expect_test "annotate-orders" =
   annotate_eq r ;
   annotate_orders r ;
   Meta.(find_exn r order) |> [%sexp_of: (pred * order) list] |> print_s ;
-  [%expect
-    {| (((Name ((relation (r)) (name f))) Asc)) |}]
+  [%expect {| (((Name ((relation (r)) (name f))) Asc)) |}]
 
 (* let%expect_test "annotate-schema" =
  *   let r = "ascalar((select([min(r.f)], r)))" |> of_string_exn |> M.resolve in

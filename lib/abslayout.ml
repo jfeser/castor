@@ -443,10 +443,30 @@ let aliases =
   visitor#visit_t ()
 
 module Pred = struct
-  type a = t
+  type a = t [@@deriving compare, sexp_of]
 
   module T = struct
-    type t = Abslayout0.pred [@@deriving compare, sexp_of]
+    type t = Abslayout0.pred =
+      | Name of Name.t
+      | Int of int
+      | Fixed of Fixed_point.t
+      | Date of Core.Date.t
+      | Bool of bool
+      | String of string
+      | Null
+      | Unop of (unop * pred)
+      | Binop of (binop * pred * pred)
+      | As_pred of (pred * string)
+      | Count
+      | Sum of pred
+      | Avg of pred
+      | Min of pred
+      | Max of pred
+      | If of pred * pred * pred
+      | First of a
+      | Exists of a
+      | Substring of pred * pred * pred
+    [@@deriving compare, sexp_of, variants]
   end
 
   include T
@@ -927,3 +947,13 @@ let annotate_orders r =
 let order_of r =
   annotate_orders r ;
   Meta.(find_exn r order)
+
+let strip_meta =
+  let visitor =
+    object
+      inherit [_] map as super
+
+      method! visit_t () t = {(super#visit_t () t) with meta= Meta.empty ()}
+    end
+  in
+  visitor#visit_t ()

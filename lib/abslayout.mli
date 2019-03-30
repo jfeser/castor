@@ -204,6 +204,8 @@ val aliases : t -> t Map.M(String).t
 
 val collect_aggs : fresh:Fresh.t -> pred -> pred * (string * pred) list
 
+val strip_meta : t -> t
+
 class virtual ['a] iter : ['a] Abslayout0.iter
 
 class virtual ['a] map : ['a] Abslayout0.map
@@ -217,7 +219,27 @@ class virtual ['a] mapreduce : ['a] Abslayout0.mapreduce
 module Pred : sig
   type a = t
 
-  type t = pred [@@deriving compare, sexp_of]
+  type t = pred =
+    | Name of Name.t
+    | Int of int
+    | Fixed of Fixed_point.t
+    | Date of Core.Date.t
+    | Bool of bool
+    | String of string
+    | Null
+    | Unop of (unop * pred)
+    | Binop of (binop * pred * pred)
+    | As_pred of (pred * string)
+    | Count
+    | Sum of pred
+    | Avg of pred
+    | Min of pred
+    | Max of pred
+    | If of pred * pred * pred
+    | First of a
+    | Exists of a
+    | Substring of pred * pred * pred
+  [@@deriving compare, sexp_of, variants]
 
   include Comparator.S with type t := t
 

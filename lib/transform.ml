@@ -5,13 +5,20 @@ module A = Abslayout
 
 module Config = struct
   module type S = sig
+    include Project.Config.S
+
+    include Abslayout_db.Config.S
+
     val check_transforms : bool
 
     val params : Set.M(Name).t
   end
 end
 
-module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
+module Make (Config : Config.S) () = struct
+  module Project = Project.Make (Config)
+  module M = Abslayout_db.Make (Config)
+
   type t = {name: string; f: A.t -> A.t list} [@@deriving sexp]
 
   let fresh = Fresh.create ()
@@ -150,7 +157,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
             [ list
                 (as_ key_name (dedup (select key_preds r)))
                 (select ps (filter filter_pred r)) ]
-        | _ -> []) }
+        | _ -> [] ) }
     |> run_everywhere
 
   let tf_elim_groupby_partial _ =
@@ -182,7 +189,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
                 list
                   (dedup (select [As_pred (Name k, key_name)] (scan rel)))
                   (tuple [key_scalar; new_group_by] Cross) )
-        | _ -> []) }
+        | _ -> [] ) }
     |> run_everywhere
 
   let tf_elim_groupby_filter _ =
@@ -206,7 +213,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
             [ list
                 (dedup (select select_list r))
                 (select ps (filter p (filter filter_pred r))) ]
-        | _ -> []) }
+        | _ -> [] ) }
     |> run_everywhere
 
   (** Groupby eliminator that works when the grouping key is all direct field
@@ -307,7 +314,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
                   (hash_idx
                      (dedup (select select_list r))
                      (filter inner_filter_pred r) key) ]
-        | _ -> []) }
+        | _ -> [] ) }
     |> run_everywhere
 
   (** Given a restricted parameter range, precompute a filter that depends on a
@@ -870,7 +877,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     ; f=
         (function
         | {node= Join {pred; r1; r2}; _} -> [tuple [r1; filter pred r2] Cross]
-        | _ -> []) }
+        | _ -> [] ) }
     |> run_everywhere
 
   let tf_push_filter _ =
@@ -888,7 +895,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
             [hash_idx' r (filter p r') m]
         | {node= Filter (p, {node= AOrderedIdx (r, r', m); _}); _} ->
             [ordered_idx r (filter p r') m]
-        | _ -> []) }
+        | _ -> [] ) }
     |> run_everywhere
 
   let tf_merge_filter _ =
@@ -898,7 +905,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         (function
         | {node= Filter (p, {node= Filter (p', r); _}); _} ->
             [filter (Binop (And, p, p')) r]
-        | _ -> []) }
+        | _ -> [] ) }
     |> run_everywhere
 
   let tf_split_filter _ =
@@ -907,7 +914,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     ; f=
         (function
         | {node= Filter (Binop (And, p, p'), r); _} -> [filter p (filter p' r)]
-        | _ -> []) }
+        | _ -> [] ) }
     |> run_everywhere
 
   let tf_elim_disj_filter _ =
@@ -917,7 +924,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
         (function
         | {node= Filter (Binop (Or, p, p'), r); _} ->
             [tuple [filter p r; filter p' r] Concat]
-        | _ -> []) }
+        | _ -> [] ) }
     |> run_everywhere
 
   let tf_project _ =
@@ -933,7 +940,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) () = struct
     ; f=
         (function
         | {node= Join {pred; r1; r2}; _} -> [filter pred (join (Bool true) r1 r2)]
-        | _ -> []) }
+        | _ -> [] ) }
     |> run_everywhere
 
   let eq_preds r =
