@@ -185,44 +185,27 @@ let%expect_test "join-opt" =
          ((node (Scan nation))
           (meta
            ((schema
-             (((relation (nation)) (name n_nationkey)
-               (type_ ((IntT (nullable false)))))
-              ((relation (nation)) (name n_name)
-               (type_ ((StringT (nullable false)))))
-              ((relation (nation)) (name n_regionkey)
-               (type_ ((IntT (nullable false)))))
-              ((relation (nation)) (name n_comment)
-               (type_ ((StringT (nullable false))))))))))))
+             (((relation (nation)) (name n_nationkey))
+              ((relation (nation)) (name n_name))
+              ((relation (nation)) (name n_regionkey))
+              ((relation (nation)) (name n_comment)))))))))
        (rhs
         (Flat
          ((node (Scan customer))
           (meta
            ((schema
-             (((relation (customer)) (name c_custkey)
-               (type_ ((IntT (nullable false)))))
-              ((relation (customer)) (name c_name)
-               (type_ ((StringT (nullable false)))))
-              ((relation (customer)) (name c_address)
-               (type_ ((StringT (nullable false)))))
-              ((relation (customer)) (name c_nationkey)
-               (type_ ((IntT (nullable false)))))
-              ((relation (customer)) (name c_phone)
-               (type_ ((StringT (nullable false)))))
-              ((relation (customer)) (name c_acctbal)
-               (type_ ((FixedT (nullable false)))))
-              ((relation (customer)) (name c_mktsegment)
-               (type_ ((StringT (nullable false)))))
-              ((relation (customer)) (name c_comment)
-               (type_ ((StringT (nullable false))))))))))))
+             (((relation (customer)) (name c_custkey))
+              ((relation (customer)) (name c_name))
+              ((relation (customer)) (name c_address))
+              ((relation (customer)) (name c_nationkey))
+              ((relation (customer)) (name c_phone))
+              ((relation (customer)) (name c_acctbal))
+              ((relation (customer)) (name c_mktsegment))
+              ((relation (customer)) (name c_comment)))))))))
        (pred
         (Binop
-         (Eq
-          (Name
-           ((relation (customer)) (name c_nationkey)
-            (type_ ((IntT (nullable false))))))
-          (Name
-           ((relation (nation)) (name n_nationkey)
-            (type_ ((IntT (nullable false)))))))))))) |}]
+         (Eq (Name ((relation (customer)) (name c_nationkey)))
+          (Name ((relation (nation)) (name n_nationkey))))))))) |}]
 
 let%expect_test "join-opt" =
   opt
@@ -243,114 +226,66 @@ let%expect_test "join-opt" =
          ((node (Scan nation))
           (meta
            ((schema
-             (((relation (nation)) (name n_nationkey)
-               (type_ ((IntT (nullable false)))))
-              ((relation (nation)) (name n_name)
-               (type_ ((StringT (nullable false)))))
-              ((relation (nation)) (name n_regionkey)
-               (type_ ((IntT (nullable false)))))
-              ((relation (nation)) (name n_comment)
-               (type_ ((StringT (nullable false))))))))))))
+             (((relation (nation)) (name n_nationkey))
+              ((relation (nation)) (name n_name))
+              ((relation (nation)) (name n_regionkey))
+              ((relation (nation)) (name n_comment)))))))))
        (rhs
         (Flat
          ((node
            (Join
             (pred
              (Binop
-              (Eq
-               (Name
-                ((relation (customer)) (name c_custkey)
-                 (type_ ((IntT (nullable false))))))
-               (Name
-                ((relation (orders)) (name o_custkey)
-                 (type_ ((IntT (nullable false)))))))))
+              (Eq (Name ((relation (customer)) (name c_custkey)))
+               (Name ((relation (orders)) (name o_custkey))))))
             (r1
              ((node (Scan customer))
               (meta
                ((schema
-                 (((relation (customer)) (name c_custkey)
-                   (type_ ((IntT (nullable false)))))
-                  ((relation (customer)) (name c_name)
-                   (type_ ((StringT (nullable false)))))
-                  ((relation (customer)) (name c_address)
-                   (type_ ((StringT (nullable false)))))
-                  ((relation (customer)) (name c_nationkey)
-                   (type_ ((IntT (nullable false)))))
-                  ((relation (customer)) (name c_phone)
-                   (type_ ((StringT (nullable false)))))
-                  ((relation (customer)) (name c_acctbal)
-                   (type_ ((FixedT (nullable false)))))
-                  ((relation (customer)) (name c_mktsegment)
-                   (type_ ((StringT (nullable false)))))
-                  ((relation (customer)) (name c_comment)
-                   (type_ ((StringT (nullable false)))))))))))
+                 (((relation (customer)) (name c_custkey))
+                  ((relation (customer)) (name c_name))
+                  ((relation (customer)) (name c_address))
+                  ((relation (customer)) (name c_nationkey))
+                  ((relation (customer)) (name c_phone))
+                  ((relation (customer)) (name c_acctbal))
+                  ((relation (customer)) (name c_mktsegment))
+                  ((relation (customer)) (name c_comment))))))))
             (r2
              ((node (Scan orders))
               (meta
                ((schema
-                 (((relation (orders)) (name o_orderkey)
-                   (type_ ((IntT (nullable false)))))
-                  ((relation (orders)) (name o_custkey)
-                   (type_ ((IntT (nullable false)))))
-                  ((relation (orders)) (name o_orderstatus)
-                   (type_ ((StringT (nullable false)))))
-                  ((relation (orders)) (name o_totalprice)
-                   (type_ ((FixedT (nullable false)))))
-                  ((relation (orders)) (name o_orderdate)
-                   (type_ ((DateT (nullable false)))))
-                  ((relation (orders)) (name o_orderpriority)
-                   (type_ ((StringT (nullable false)))))
-                  ((relation (orders)) (name o_clerk)
-                   (type_ ((StringT (nullable false)))))
-                  ((relation (orders)) (name o_shippriority)
-                   (type_ ((IntT (nullable false)))))
-                  ((relation (orders)) (name o_comment)
-                   (type_ ((StringT (nullable false)))))))))))))
+                 (((relation (orders)) (name o_orderkey))
+                  ((relation (orders)) (name o_custkey))
+                  ((relation (orders)) (name o_orderstatus))
+                  ((relation (orders)) (name o_totalprice))
+                  ((relation (orders)) (name o_orderdate))
+                  ((relation (orders)) (name o_orderpriority))
+                  ((relation (orders)) (name o_clerk))
+                  ((relation (orders)) (name o_shippriority))
+                  ((relation (orders)) (name o_comment))))))))))
           (meta
            ((schema
-             (((relation (customer)) (name c_custkey)
-               (type_ ((IntT (nullable false)))))
-              ((relation (customer)) (name c_name)
-               (type_ ((StringT (nullable false)))))
-              ((relation (customer)) (name c_address)
-               (type_ ((StringT (nullable false)))))
-              ((relation (customer)) (name c_nationkey)
-               (type_ ((IntT (nullable false)))))
-              ((relation (customer)) (name c_phone)
-               (type_ ((StringT (nullable false)))))
-              ((relation (customer)) (name c_acctbal)
-               (type_ ((FixedT (nullable false)))))
-              ((relation (customer)) (name c_mktsegment)
-               (type_ ((StringT (nullable false)))))
-              ((relation (customer)) (name c_comment)
-               (type_ ((StringT (nullable false)))))
-              ((relation (orders)) (name o_orderkey)
-               (type_ ((IntT (nullable false)))))
-              ((relation (orders)) (name o_custkey)
-               (type_ ((IntT (nullable false)))))
-              ((relation (orders)) (name o_orderstatus)
-               (type_ ((StringT (nullable false)))))
-              ((relation (orders)) (name o_totalprice)
-               (type_ ((FixedT (nullable false)))))
-              ((relation (orders)) (name o_orderdate)
-               (type_ ((DateT (nullable false)))))
-              ((relation (orders)) (name o_orderpriority)
-               (type_ ((StringT (nullable false)))))
-              ((relation (orders)) (name o_clerk)
-               (type_ ((StringT (nullable false)))))
-              ((relation (orders)) (name o_shippriority)
-               (type_ ((IntT (nullable false)))))
-              ((relation (orders)) (name o_comment)
-               (type_ ((StringT (nullable false))))))))))))
+             (((relation (customer)) (name c_custkey))
+              ((relation (customer)) (name c_name))
+              ((relation (customer)) (name c_address))
+              ((relation (customer)) (name c_nationkey))
+              ((relation (customer)) (name c_phone))
+              ((relation (customer)) (name c_acctbal))
+              ((relation (customer)) (name c_mktsegment))
+              ((relation (customer)) (name c_comment))
+              ((relation (orders)) (name o_orderkey))
+              ((relation (orders)) (name o_custkey))
+              ((relation (orders)) (name o_orderstatus))
+              ((relation (orders)) (name o_totalprice))
+              ((relation (orders)) (name o_orderdate))
+              ((relation (orders)) (name o_orderpriority))
+              ((relation (orders)) (name o_clerk))
+              ((relation (orders)) (name o_shippriority))
+              ((relation (orders)) (name o_comment)))))))))
        (pred
         (Binop
-         (Eq
-          (Name
-           ((relation (customer)) (name c_nationkey)
-            (type_ ((IntT (nullable false))))))
-          (Name
-           ((relation (nation)) (name n_nationkey)
-            (type_ ((IntT (nullable false)))))))))))
+         (Eq (Name ((relation (customer)) (name c_nationkey)))
+          (Name ((relation (nation)) (name n_nationkey))))))))
      ((274559.99999999994 68335.999999999985)
       (Nest
        (lhs
@@ -358,14 +293,10 @@ let%expect_test "join-opt" =
          ((node (Scan nation))
           (meta
            ((schema
-             (((relation (nation)) (name n_nationkey)
-               (type_ ((IntT (nullable false)))))
-              ((relation (nation)) (name n_name)
-               (type_ ((StringT (nullable false)))))
-              ((relation (nation)) (name n_regionkey)
-               (type_ ((IntT (nullable false)))))
-              ((relation (nation)) (name n_comment)
-               (type_ ((StringT (nullable false))))))))))))
+             (((relation (nation)) (name n_nationkey))
+              ((relation (nation)) (name n_name))
+              ((relation (nation)) (name n_regionkey))
+              ((relation (nation)) (name n_comment)))))))))
        (rhs
         (Nest
          (lhs
@@ -373,60 +304,33 @@ let%expect_test "join-opt" =
            ((node (Scan customer))
             (meta
              ((schema
-               (((relation (customer)) (name c_custkey)
-                 (type_ ((IntT (nullable false)))))
-                ((relation (customer)) (name c_name)
-                 (type_ ((StringT (nullable false)))))
-                ((relation (customer)) (name c_address)
-                 (type_ ((StringT (nullable false)))))
-                ((relation (customer)) (name c_nationkey)
-                 (type_ ((IntT (nullable false)))))
-                ((relation (customer)) (name c_phone)
-                 (type_ ((StringT (nullable false)))))
-                ((relation (customer)) (name c_acctbal)
-                 (type_ ((FixedT (nullable false)))))
-                ((relation (customer)) (name c_mktsegment)
-                 (type_ ((StringT (nullable false)))))
-                ((relation (customer)) (name c_comment)
-                 (type_ ((StringT (nullable false))))))))))))
+               (((relation (customer)) (name c_custkey))
+                ((relation (customer)) (name c_name))
+                ((relation (customer)) (name c_address))
+                ((relation (customer)) (name c_nationkey))
+                ((relation (customer)) (name c_phone))
+                ((relation (customer)) (name c_acctbal))
+                ((relation (customer)) (name c_mktsegment))
+                ((relation (customer)) (name c_comment)))))))))
          (rhs
           (Flat
            ((node (Scan orders))
             (meta
              ((schema
-               (((relation (orders)) (name o_orderkey)
-                 (type_ ((IntT (nullable false)))))
-                ((relation (orders)) (name o_custkey)
-                 (type_ ((IntT (nullable false)))))
-                ((relation (orders)) (name o_orderstatus)
-                 (type_ ((StringT (nullable false)))))
-                ((relation (orders)) (name o_totalprice)
-                 (type_ ((FixedT (nullable false)))))
-                ((relation (orders)) (name o_orderdate)
-                 (type_ ((DateT (nullable false)))))
-                ((relation (orders)) (name o_orderpriority)
-                 (type_ ((StringT (nullable false)))))
-                ((relation (orders)) (name o_clerk)
-                 (type_ ((StringT (nullable false)))))
-                ((relation (orders)) (name o_shippriority)
-                 (type_ ((IntT (nullable false)))))
-                ((relation (orders)) (name o_comment)
-                 (type_ ((StringT (nullable false))))))))))))
+               (((relation (orders)) (name o_orderkey))
+                ((relation (orders)) (name o_custkey))
+                ((relation (orders)) (name o_orderstatus))
+                ((relation (orders)) (name o_totalprice))
+                ((relation (orders)) (name o_orderdate))
+                ((relation (orders)) (name o_orderpriority))
+                ((relation (orders)) (name o_clerk))
+                ((relation (orders)) (name o_shippriority))
+                ((relation (orders)) (name o_comment)))))))))
          (pred
           (Binop
-           (Eq
-            (Name
-             ((relation (customer)) (name c_custkey)
-              (type_ ((IntT (nullable false))))))
-            (Name
-             ((relation (orders)) (name o_custkey)
-              (type_ ((IntT (nullable false)))))))))))
+           (Eq (Name ((relation (customer)) (name c_custkey)))
+            (Name ((relation (orders)) (name o_custkey))))))))
        (pred
         (Binop
-         (Eq
-          (Name
-           ((relation (customer)) (name c_nationkey)
-            (type_ ((IntT (nullable false))))))
-          (Name
-           ((relation (nation)) (name n_nationkey)
-            (type_ ((IntT (nullable false)))))))))))) |}]
+         (Eq (Name ((relation (customer)) (name c_nationkey)))
+          (Name ((relation (nation)) (name n_nationkey))))))))) |}]
