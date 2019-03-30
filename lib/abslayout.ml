@@ -93,14 +93,6 @@ let unop_to_str = function
   | ExtractM -> "to_mon"
   | ExtractD -> "to_day"
 
-let pp_name fmt n =
-  let open Format in
-  let open Name in
-  let name = name n in
-  match rel n with
-  | Some r -> fprintf fmt "%s.%s" r name
-  | None -> fprintf fmt "%s" name
-
 let pp_kind fmt =
   Format.(
     function
@@ -108,71 +100,74 @@ let pp_kind fmt =
     | Zip -> fprintf fmt "zip"
     | Concat -> fprintf fmt "concat")
 
-let rec pp_key fmt = function
-  | [] -> failwith "Unexpected empty key."
-  | [p] -> pp_pred fmt p
-  | ps -> pp_list ~bracket:("(", ")") pp_pred fmt ps
+let mk_pp ?(pp_name = Name.pp) () =
+  let rec pp_key fmt = function
+    | [] -> failwith "Unexpected empty key."
+    | [p] -> pp_pred fmt p
+    | ps -> pp_list ~bracket:("(", ")") pp_pred fmt ps
+  and pp_pred fmt =
+    let open Format in
+    function
+    | As_pred (p, n) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp_pred p n
+    | Null -> fprintf fmt "null"
+    | Int x -> if x >= 0 then fprintf fmt "%d" x else fprintf fmt "(0 - %d)" (-x)
+    | Fixed x -> fprintf fmt "%s" (Fixed_point.to_string x)
+    | Date x -> fprintf fmt "date(\"%s\")" (Date.to_string x)
+    | Unop (op, x) -> fprintf fmt "%s(%a)" (unop_to_str op) pp_pred x
+    | Bool x -> fprintf fmt "%B" x
+    | String x -> fprintf fmt "%S" x
+    | Name n -> pp_name fmt n
+    | Binop (op, p1, p2) -> (
+      match op_to_str op with
+      | `Infix str -> fprintf fmt "@[<hov>(%a@ %s@ %a)@]" pp_pred p1 str pp_pred p2
+      | `Prefix str -> fprintf fmt "@[<hov>%s(%a,@ %a)@]" str pp_pred p1 pp_pred p2
+      )
+    | Count -> fprintf fmt "count()"
+    | Sum n -> fprintf fmt "sum(%a)" pp_pred n
+    | Avg n -> fprintf fmt "avg(%a)" pp_pred n
+    | Min n -> fprintf fmt "min(%a)" pp_pred n
+    | Max n -> fprintf fmt "max(%a)" pp_pred n
+    | If (p1, p2, p3) ->
+        fprintf fmt "(if %a then %a else %a)" pp_pred p1 pp_pred p2 pp_pred p3
+    | First r -> fprintf fmt "(%a)" pp r
+    | Exists r -> fprintf fmt "@[<hv 2>exists(%a)@]" pp r
+    | Substring (p1, p2, p3) ->
+        fprintf fmt "@[<hov>substr(%a,@ %a,@ %a)@]" pp_pred p1 pp_pred p2 pp_pred p3
+  and pp_order fmt (p, o) =
+    let open Format in
+    match o with
+    | Asc -> fprintf fmt "@[<hov>%a@]" pp_pred p
+    | Desc -> fprintf fmt "@[<hov>%a@ desc@]" pp_pred p
+  and pp fmt {node; _} =
+    let open Format in
+    match node with
+    | Select (ps, r) ->
+        fprintf fmt "@[<hv 2>select(%a,@ %a)@]" (pp_list pp_pred) ps pp r
+    | Filter (p, r) -> fprintf fmt "@[<hv 2>filter(%a,@ %a)@]" pp_pred p pp r
+    | Join {pred; r1; r2} ->
+        fprintf fmt "@[<hv 2>join(%a,@ %a,@ %a)@]" pp_pred pred pp r1 pp r2
+    | GroupBy (a, k, r) ->
+        fprintf fmt "@[<hv 2>groupby(%a,@ %a,@ %a)@]" (pp_list pp_pred) a
+          (pp_list pp_name) k pp r
+    | OrderBy {key; rel} ->
+        fprintf fmt "@[<hv 2>orderby(%a,@ %a)@]" (pp_list pp_order) key pp rel
+    | Dedup r -> fprintf fmt "@[<hv 2>dedup(@,%a)@]" pp r
+    | Scan n -> fprintf fmt "%s" n
+    | AEmpty -> fprintf fmt "aempty"
+    | AScalar p -> fprintf fmt "@[<hv 2>ascalar(%a)@]" pp_pred p
+    | AList (r1, r2) -> fprintf fmt "@[<hv 2>alist(%a,@ %a)@]" pp r1 pp r2
+    | ATuple (rs, kind) ->
+        fprintf fmt "@[<hv 2>atuple(%a,@ %a)@]" (pp_list pp) rs pp_kind kind
+    | AHashIdx (r1, r2, {lookup; _}) ->
+        fprintf fmt "@[<hv 2>ahashidx(%a,@ %a,@ %a)@]" pp r1 pp r2 pp_key lookup
+    | AOrderedIdx (r1, r2, {lookup_low; lookup_high; _}) ->
+        fprintf fmt "@[<hv 2>aorderedidx(%a,@ %a,@ %a,@ %a)@]" pp r1 pp r2 pp_pred
+          lookup_low pp_pred lookup_high
+    | As (n, r) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp r n
+  in
+  (pp, pp_pred)
 
-and pp_pred fmt =
-  let open Format in
-  function
-  | As_pred (p, n) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp_pred p n
-  | Null -> fprintf fmt "null"
-  | Int x -> if x >= 0 then fprintf fmt "%d" x else fprintf fmt "(0 - %d)" (-x)
-  | Fixed x -> fprintf fmt "%s" (Fixed_point.to_string x)
-  | Date x -> fprintf fmt "date(\"%s\")" (Date.to_string x)
-  | Unop (op, x) -> fprintf fmt "%s(%a)" (unop_to_str op) pp_pred x
-  | Bool x -> fprintf fmt "%B" x
-  | String x -> fprintf fmt "%S" x
-  | Name n -> pp_name fmt n
-  | Binop (op, p1, p2) -> (
-    match op_to_str op with
-    | `Infix str -> fprintf fmt "@[<hov>(%a@ %s@ %a)@]" pp_pred p1 str pp_pred p2
-    | `Prefix str -> fprintf fmt "@[<hov>%s(%a,@ %a)@]" str pp_pred p1 pp_pred p2 )
-  | Count -> fprintf fmt "count()"
-  | Sum n -> fprintf fmt "sum(%a)" pp_pred n
-  | Avg n -> fprintf fmt "avg(%a)" pp_pred n
-  | Min n -> fprintf fmt "min(%a)" pp_pred n
-  | Max n -> fprintf fmt "max(%a)" pp_pred n
-  | If (p1, p2, p3) ->
-      fprintf fmt "(if %a then %a else %a)" pp_pred p1 pp_pred p2 pp_pred p3
-  | First r -> fprintf fmt "(%a)" pp r
-  | Exists r -> fprintf fmt "@[<hv 2>exists(%a)@]" pp r
-  | Substring (p1, p2, p3) ->
-      fprintf fmt "@[<hov>substr(%a,@ %a,@ %a)@]" pp_pred p1 pp_pred p2 pp_pred p3
-
-and pp_order fmt (p, o) =
-  let open Caml.Format in
-  match o with
-  | Asc -> fprintf fmt "@[<hov>%a@]" pp_pred p
-  | Desc -> fprintf fmt "@[<hov>%a@ desc@]" pp_pred p
-
-and pp fmt {node; _} =
-  let open Caml.Format in
-  match node with
-  | Select (ps, r) ->
-      fprintf fmt "@[<hv 2>select(%a,@ %a)@]" (pp_list pp_pred) ps pp r
-  | Filter (p, r) -> fprintf fmt "@[<hv 2>filter(%a,@ %a)@]" pp_pred p pp r
-  | Join {pred; r1; r2} ->
-      fprintf fmt "@[<hv 2>join(%a,@ %a,@ %a)@]" pp_pred pred pp r1 pp r2
-  | GroupBy (a, k, r) ->
-      fprintf fmt "@[<hv 2>groupby(%a,@ %a,@ %a)@]" (pp_list pp_pred) a
-        (pp_list pp_name) k pp r
-  | OrderBy {key; rel} ->
-      fprintf fmt "@[<hv 2>orderby(%a,@ %a)@]" (pp_list pp_order) key pp rel
-  | Dedup r -> fprintf fmt "@[<hv 2>dedup(@,%a)@]" pp r
-  | Scan n -> fprintf fmt "%s" n
-  | AEmpty -> fprintf fmt "aempty"
-  | AScalar p -> fprintf fmt "@[<hv 2>ascalar(%a)@]" pp_pred p
-  | AList (r1, r2) -> fprintf fmt "@[<hv 2>alist(%a,@ %a)@]" pp r1 pp r2
-  | ATuple (rs, kind) ->
-      fprintf fmt "@[<hv 2>atuple(%a,@ %a)@]" (pp_list pp) rs pp_kind kind
-  | AHashIdx (r1, r2, {lookup; _}) ->
-      fprintf fmt "@[<hv 2>ahashidx(%a,@ %a,@ %a)@]" pp r1 pp r2 pp_key lookup
-  | AOrderedIdx (r1, r2, {lookup_low; lookup_high; _}) ->
-      fprintf fmt "@[<hv 2>aorderedidx(%a,@ %a,@ %a,@ %a)@]" pp r1 pp r2 pp_pred
-        lookup_low pp_pred lookup_high
-  | As (n, r) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp r n
+let pp, pp_pred = mk_pp ()
 
 module Ctx = struct
   module T = struct

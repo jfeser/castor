@@ -61,6 +61,8 @@ module Meta = struct
 
   let find {meta; _} = Univ_map.find meta
 
+  let find_exn {meta; _} = Univ_map.find_exn meta
+
   let set ({meta; _} as n) k v = {n with meta= Univ_map.set meta k v}
 end
 
@@ -106,11 +108,18 @@ let to_sql n =
   | None -> sprintf "\"%s\"" n.name.node.name
 
 let pp fmt n =
-  let open Caml.Format in
+  let open Format in
   let name = n.name.node.name in
   match n.name.node.relation with
   | Some r -> fprintf fmt "%s.%s" r name
   | None -> fprintf fmt "%s" name
+
+let pp_with_stage fmt n =
+  let open Format in
+  match Meta.(find n stage) with
+  | Some `Compile -> fprintf fmt "%a@@comp" pp n
+  | Some `Run -> fprintf fmt "%a@@run" pp n
+  | None -> fprintf fmt "%a@@unk" pp n
 
 let fresh f fmt = create (Fresh.name f fmt)
 

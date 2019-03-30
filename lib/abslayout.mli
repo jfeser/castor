@@ -94,6 +94,11 @@ val pp_pred : Formatter.t -> pred -> unit
 
 val pp : Formatter.t -> t -> unit
 
+val mk_pp :
+     ?pp_name:(Formatter.t -> Name.t -> unit)
+  -> unit
+  -> (Formatter.t -> t -> unit) * (Formatter.t -> pred -> unit)
+
 val name : t -> string
 
 val names : t -> Set.M(Name).t
