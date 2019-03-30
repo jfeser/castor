@@ -1,4 +1,4 @@
-open Base
+open Core
 open Castor
 open Abslayout
 open Collections
@@ -19,50 +19,45 @@ module Make (C : Config.S) = struct
   open Ops
   module M = Abslayout_db.Make (C)
 
-  (* Generate aggregates for collections that act by concatenating their children. *)
-  let gen_concat_select_list outer_preds inner_schema =
+  (** Extend a list of predicates to include those needed by aggregate `p`.
+     Returns a name to use in the aggregate. *)
+  let extend_aggs aggs p =
+    let aggs = ref aggs in
+    let add_agg a =
+      match
+        List.find !aggs ~f:(fun (_, a') -> [%compare.equal: pred] a a')
+      with
+      | Some (n, _) -> Name n
+      | None ->
+          let type_ = pred_to_schema a |> Name.type_exn in
+          let n = Fresh.name fresh "agg%d" |> Name.create ~type_ in
+          aggs := (n, a) :: !aggs ;
+          Name n
+    in
     let visitor =
-      object (self : 'a)
-        inherit [_] Abslayout0.mapreduce
+      object
+        inherit [_] Abslayout0.map
 
-        inherit [_] Util.list_monoid
+        method! visit_Sum () p = Sum (add_agg (Sum p))
 
-        method add_agg aggs a =
-          match
-            List.find aggs ~f:(fun (_, a') -> [%compare.equal: pred] a a')
-          with
-          | Some (n, _) -> (Name n, aggs)
-          | None ->
-              let type_ = pred_to_schema a |> Name.type_exn in
-              let n = Fresh.name fresh "agg%d" |> Name.create ~type_ in
-              (Name n, (n, a) :: aggs)
+        method! visit_Count () = Sum (add_agg Count)
 
-        method! visit_Sum aggs p =
-          let n, aggs' = self#add_agg aggs (Sum p) in
-          (Sum n, aggs')
+        method! visit_Min () p = Min (add_agg (Min p))
 
-        method! visit_Count aggs =
-          let n, aggs' = self#add_agg aggs Count in
-          (Sum n, aggs')
+        method! visit_Max () p = Max (add_agg (Max p))
 
-        method! visit_Min aggs p =
-          let n, aggs' = self#add_agg aggs (Min p) in
-          (Min n, aggs')
-
-        method! visit_Max aggs p =
-          let n, aggs' = self#add_agg aggs (Max p) in
-          (Max n, aggs')
-
-        method! visit_Avg aggs p =
-          let s, aggs' = self#add_agg aggs (Sum p) in
-          let c, aggs'' = self#add_agg aggs' Count in
-          (Binop (Div, Sum s, Sum c), aggs'')
+        method! visit_Avg () p = Binop (Div, Sum (add_agg (Sum p)), Sum Count)
       end
     in
+    let p' = visitor#visit_pred () p in
+    (!aggs, p')
+
+  (* Generate aggregates for collections that act by concatenating their children. *)
+  let gen_concat_select_list outer_preds inner_schema =
     let outer_aggs, inner_aggs =
       List.fold_left outer_preds ~init:([], []) ~f:(fun (op, ip) p ->
-          let p', ip' = visitor#visit_pred ip p in
-          (op @ [p'], ip') )
+          let ip, p = extend_aggs ip p in
+          (op @ [p], ip) )
     in
     let inner_aggs =
       List.map inner_aggs ~f:(fun (n, a) -> As_pred (a, Name.name n))
@@ -133,4 +128,91 @@ module Make (C : Config.S) = struct
     | _ -> None
 
   let push_select = of_func push_select ~name:"push-select"
+end
+
+module Test = struct
+  module C = struct
+    let params =
+      Set.of_list
+        (module Name)
+        [Name.create ~type_:(DateT {nullable= false}) "param0"]
+
+    let fresh = Fresh.create ()
+
+    let verbose = false
+
+    let validate = false
+
+    let param_ctx = Map.empty (module Name)
+
+    let conn = Db.create "postgresql:///tpch_1k"
+  end
+
+  module T = Make (C)
+  module O = Ops.Make (C)
+  open T
+  open O
+  open C
+
+  let%expect_test "" =
+    let r =
+      of_string_exn
+        {|
+select([customer.c_custkey,
+         customer.c_name,
+         sum((lineitem.l_extendedprice * (1 - lineitem.l_discount))) as revenue,
+         customer.c_acctbal,
+         nation.n_name,
+         customer.c_address,
+         customer.c_phone,
+         customer.c_comment],
+   aorderedidx(dedup(
+                 select([orders.o_orderdate as k1],
+                   dedup(
+                     select([orders.o_orderdate],
+                       join((customer.c_custkey = orders.o_custkey),
+                         join((customer.c_nationkey = nation.n_nationkey),
+                           customer,
+                           nation),
+                         join((lineitem.l_orderkey = orders.o_orderkey),
+                           lineitem,
+                           orders)))))),
+       join((customer.c_custkey = orders.o_custkey),
+         join((customer.c_nationkey = nation.n_nationkey), customer, nation),
+         join((lineitem.l_orderkey = orders.o_orderkey), lineitem, orders)),
+     (param0 + day(1)),
+     ((param0 + month(3)) + day(1))))
+|}
+    in
+    let r = M.resolve ~params r in
+    apply push_select r |> Option.iter ~f:(Format.printf "%a@." pp) ;
+    [%expect
+      {|
+      select([customer.c_custkey,
+              customer.c_name,
+              sum(agg0) as revenue,
+              customer.c_acctbal,
+              nation.n_name,
+              customer.c_address,
+              customer.c_phone,
+              customer.c_comment],
+        aorderedidx(dedup(
+                      select([orders.o_orderdate as k1],
+                        dedup(
+                          select([orders.o_orderdate],
+                            join((customer.c_custkey = orders.o_custkey),
+                              join((customer.c_nationkey = nation.n_nationkey),
+                                customer,
+                                nation),
+                              join((lineitem.l_orderkey = orders.o_orderkey),
+                                lineitem,
+                                orders)))))),
+          filter((count1 > 0),
+            select([count() as count1,
+                    sum((lineitem.l_extendedprice * (1 - lineitem.l_discount))) as agg0],
+              join((customer.c_custkey = orders.o_custkey),
+                join((customer.c_nationkey = nation.n_nationkey), customer, nation),
+                join((lineitem.l_orderkey = orders.o_orderkey), lineitem, orders)))),
+          (param0 + day(1)),
+          ((param0 + month(3)) + day(1)))) |}]
 end
