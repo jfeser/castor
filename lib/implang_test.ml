@@ -13,7 +13,6 @@ let run_test ?(params = []) ?(print_code = true) layout_str =
     let layout = of_string_exn layout_str |> M.resolve ~params:sparams in
     M.annotate_schema layout ;
     let layout = M.annotate_key_layouts layout in
-    annotate_foreach layout ;
     M.annotate_subquery_types layout ;
     let type_ = M.to_type layout in
     Stdio.print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ;

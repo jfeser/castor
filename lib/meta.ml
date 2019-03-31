@@ -26,8 +26,6 @@ let end_pos = Univ_map.Key.create ~name:"end_pos" [%sexp_of: lexpos]
 
 let align = Univ_map.Key.create ~name:"align" [%sexp_of: int]
 
-let use_foreach = Univ_map.Key.create ~name:"use_foreach" [%sexp_of: bool]
-
 let eq = Univ_map.Key.create ~name:"eq" [%sexp_of: (Name.t * Name.t) list]
 
 let order = Univ_map.Key.create ~name:"order" [%sexp_of: (pred * order) list]

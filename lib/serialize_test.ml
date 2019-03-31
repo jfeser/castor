@@ -15,7 +15,6 @@ let run_test layout_str =
   let layout = of_string_exn layout_str |> M.resolve in
   M.annotate_schema layout ;
   let layout = M.annotate_key_layouts layout in
-  annotate_foreach layout ;
   let type_ = M.to_type layout in
   let buf = Buffer.create 1024 in
   let _, len = S.serialize (Bitstring.Writer.with_buffer buf) layout type_ in

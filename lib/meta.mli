@@ -21,8 +21,6 @@ val pos : pos key
 
 val align : int key
 
-val use_foreach : bool key
-
 val start_pos : lexpos key
 
 val end_pos : lexpos key
