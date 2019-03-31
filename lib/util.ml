@@ -1,26 +1,33 @@
 open Core
 
+(** Run a command, logging it if it fails. *)
 let command_exn ?quiet:_ = function
   | [] -> Error.of_string "Empty command" |> Error.raise
   | cmd ->
       let cmd_str = String.concat cmd ~sep:" " in
       Logs.info (fun m -> m "%s" cmd_str) ;
       let err = Unix.system cmd_str in
-      err |> Unix.Exit_or_signal.or_error
-      |> fun err ->
-      Or_error.tag_arg err "Running command failed." cmd_str [%sexp_of: string]
-      |> Or_error.ok_exn
+      Or_error.(
+        tag_arg
+          (Unix.Exit_or_signal.or_error err)
+          "Running command failed." cmd_str [%sexp_of: string]
+        |> ok_exn)
 
+(** Run a command and return its output on stdout, logging it if it fails. *)
 let command_out_exn ?quiet:_ = function
   | [] -> Error.of_string "Empty command" |> Error.raise
   | cmd ->
+      let open Unix in
       let cmd_str = String.concat cmd ~sep:" " in
       Logs.info (fun m -> m "%s" cmd_str) ;
-      let err = Unix.system cmd_str in
-      err |> Unix.Exit_or_signal.or_error
-      |> fun err ->
-      Or_error.tag_arg err "Running command failed." cmd_str [%sexp_of: string]
-      |> Or_error.ok_exn
+      let ch = open_process_in cmd_str in
+      let out = In_channel.input_all ch in
+      Or_error.(
+        tag_arg
+          (Exit_or_signal.or_error (close_process_in ch))
+          "Running command failed." cmd_str [%sexp_of: string]
+        |> ok_exn) ;
+      out
 
 let param_of_string s =
   let lexbuf = Lexing.from_string s in

@@ -663,7 +663,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
   let codegen_print fctx type_ expr =
     let open Type.PrimType in
-    Logs.debug (fun m -> m "Codegen for %a." I.pp_stmt (Print (type_, expr))) ;
     let val_ = codegen_expr fctx expr in
     let rec gen val_ = function
       | NullT -> call_printf null_str []
@@ -753,9 +752,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
   let codegen_func fctx =
     let name = fctx#name in
-    let (I.{args; locals; ret_type; body; _} as func) = fctx#func in
+    let I.{args; locals; ret_type; body; _} = fctx#func in
     Logs.debug (fun m -> m "Codegen for func %s started." name) ;
-    Logs.debug (fun m -> m "%a" I.pp_func func) ;
     ( if (* Check that function is not already defined. *)
          Hashtbl.(mem funcs name)
     then Error.(of_string "Function already defined." |> raise) ) ;
@@ -847,7 +845,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       let t = named_struct_type ctx n in
       assert (List.length b.vars > 0) ;
       struct_set_body t (List.rev b.vars |> Array.of_list) false ;
-      Logs.debug (fun m -> m "Creating params struct %s." (string_of_lltype t)) ;
       assert (not (is_opaque t)) ;
       t
   end
@@ -965,15 +962,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     pp_print_flush fmt ()
 
   let c_template fn args =
-    let args_str =
-      List.map args ~f:(fun (n, x) -> sprintf "-D%s=%s" n x)
-      |> String.concat ~sep:" "
-    in
-    let cmd = sprintf "%s -E %s %s" clang args_str fn in
-    Logs.debug (fun m -> m "%s" cmd) ;
-    let out = Unix.open_process_in cmd |> In_channel.input_all in
-    Logs.debug (fun m -> m "Template output: %s" out) ;
-    out
+    let args_strs = List.map args ~f:(fun (n, x) -> sprintf "-D%s=%s" n x) in
+    Util.command_out_exn ([clang; "-E"] @ args_strs @ [fn])
 
   let from_fn fn n i =
     let template = Project_config.build_root ^ "/etc/" ^ fn in
