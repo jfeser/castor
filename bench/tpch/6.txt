@@ -16,5 +16,5 @@
 # :n -1
 
 select([sum(l_extendedprice * l_discount) as revenue],
-filter(l_shipdate >= param0 && l_shipdate < (param0 + year(1)) && l_discount >= param1 - 0.01 && l_discount <= param1 + 0.01001 && l_quantity < param2, lineitem))
+filter(l_shipdate >= param0 && l_shipdate < (param0 + year(1)) && l_discount > param1 - 0.01 && l_discount < param1 + 0.01001 && l_quantity < param2, lineitem))
 
