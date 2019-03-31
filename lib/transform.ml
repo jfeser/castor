@@ -27,6 +27,8 @@ module Make (Config : Config.S) () = struct
   open F
   module S = Simple_tactics.Make (Config)
   open S
+  module P = Project.Make (Config)
+  open P
 
   let is_serializable r p =
     M.annotate_schema r ;
@@ -40,7 +42,7 @@ module Make (Config : Config.S) () = struct
 
   let project r =
     M.annotate_schema r ;
-    Some (Project.project r)
+    Some (project r)
 
   let project = of_func project ~name:"project"
 
