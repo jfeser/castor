@@ -11,9 +11,12 @@ depends: [
   "dune" {build & >= "1.1"}
   "castor"
 
-  "base" {>= "v0.11" & < "v0.12"}
-  "ppx_compare" {>= "v0.11" & < "v0.12"}
-  "ppx_sexp_conv" {>= "v0.11" & < "v0.12"}
-  "ppx_hash" {>= "v0.11" & < "v0.12"}
-  "ppx_let" {>= "v0.11" & < "v0.12"}
+  "base" {>= "v0.12"}
+  "ppx_compare" {>= "v0.12"}
+  "ppx_sexp_conv" {>= "v0.12"}
+  "ppx_hash" {>= "v0.12"}
+  "ppx_let" {>= "v0.12"}
+  "logs" {>= "0.6"}
+  "cmdliner" {>= "1.0"}
+  "yojson" {>= "1.7"}
 ]
