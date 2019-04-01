@@ -723,8 +723,6 @@ let pred_kind = Pred.kind
 
 let pred_of_string_exn = Pred.of_string_exn
 
-let pred_names = Pred.names
-
 let annotate_eq r =
   let visitor =
     object
@@ -790,71 +788,59 @@ let annotate_eq r =
 let select_kind l =
   if List.exists l ~f:(fun p -> Poly.(pred_kind p = `Agg)) then `Agg else `Scalar
 
-let is_serializeable r =
+class ['a] stage_iter =
+  object (self : 'a)
+    inherit [_] iter
+
+    method! visit_AList phase (rk, rv) =
+      self#visit_t `Compile rk ;
+      self#visit_t phase rv
+
+    method! visit_AHashIdx phase (rk, rv, _) =
+      self#visit_t `Compile rk ;
+      self#visit_t phase rv
+
+    method! visit_AOrderedIdx phase (rk, rv, _) =
+      self#visit_t `Compile rk ;
+      self#visit_t phase rv
+  end
+
+let ops_serializable r =
+  let ok = ref true in
   let visitor =
-    object (self : 'a)
-      inherit [_] reduce
+    object
+      inherit [_] stage_iter as super
 
-      method zero = true
-
-      method plus = ( && )
-
-      method! visit_AEmpty _ = true
-
-      method! visit_AScalar _ _ = true
-
-      method! visit_Filter ns (p, r) =
-        let sq_visitor =
-          object
-            inherit [_] reduce
-
-            method zero = true
-
-            method plus = ( && )
-
-            method! visit_Exists _ r = self#visit_t ns r
-
-            method! visit_First _ r = self#visit_t ns r
-          end
-        in
-        List.fold_left ~init:self#zero ~f:self#plus
-          [ Set.is_empty (Set.inter (pred_names p) ns)
-          ; self#visit_t ns r
-          ; sq_visitor#visit_pred ns p ]
-
-      method! visit_Select ns (ps, r) =
-        self#plus
-          (List.for_all ps ~f:(fun p -> Set.is_empty (Set.inter (pred_names p) ns)))
-          (self#visit_t ns r)
-
-      method! visit_Join _ _ _ _ = false
-
-      method! visit_GroupBy _ _ _ _ = false
-
-      method! visit_OrderBy _ _ _ = false
-
-      method! visit_Dedup _ _ = false
-
-      method! visit_Scan _ _ = false
-
-      method! visit_As ns _ r = self#visit_t ns r
-
-      method visit_Collection ns r1 r2 =
-        let ns =
-          Set.union ns (Meta.(find_exn r1 schema) |> Set.of_list (module Name))
-        in
-        self#visit_t ns r2
-
-      method! visit_AOrderedIdx ns (r1, r2, _) = self#visit_Collection ns r1 r2
-
-      method! visit_AHashIdx ns (r1, r2, _) = self#visit_Collection ns r1 r2
-
-      method! visit_AList ns (r1, r2) = self#visit_Collection ns r1 r2
-
-      method! visit_ATuple ns (rs, _) = List.for_all ~f:(self#visit_t ns) rs
+      method! visit_t s r =
+        super#visit_t s r ;
+        match r.node with
+        | Scan _ | GroupBy (_, _, _) | Join _ | OrderBy _ | Dedup _ ->
+            ok := !ok && Poly.(s = `Compile)
+        | Select _ | Filter _ | AEmpty | AScalar _ | AList _ | ATuple _
+         |AHashIdx _ | AOrderedIdx _
+         |As (_, _) ->
+            ()
     end
   in
-  visitor#visit_t (Set.empty (module Name)) r
+  visitor#visit_t `Run r ;
+  !ok
+
+let names_serializable r =
+  let ok = ref true in
+  let visitor =
+    object
+      inherit [_] stage_iter
+
+      method! visit_Name s n = ok := !ok && Poly.(Name.Meta.(find_exn n stage) = s)
+    end
+  in
+  visitor#visit_t `Run r ;
+  !ok
+
+(** Return true if `r` is serializable. This function performs two checks:
+     - `r` must not contain any compile time only operations in run time position.
+     - Run-time names may only appear in run-time position and vice versa. *)
+let is_serializeable r = names_serializable r && ops_serializable r
 
 let annotate_orders r =
   let rec annotate_orders r =
