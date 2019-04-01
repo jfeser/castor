@@ -796,13 +796,18 @@ class ['a] stage_iter =
       self#visit_t `Compile rk ;
       self#visit_t phase rv
 
-    method! visit_AHashIdx phase (rk, rv, _) =
+    method! visit_AHashIdx phase (rk, rv, {lookup; _}) =
+      List.iter lookup ~f:(self#visit_pred phase) ;
       self#visit_t `Compile rk ;
       self#visit_t phase rv
 
-    method! visit_AOrderedIdx phase (rk, rv, _) =
+    method! visit_AOrderedIdx phase (rk, rv, {lookup_low; lookup_high; _}) =
+      self#visit_pred phase lookup_low ;
+      self#visit_pred phase lookup_high ;
       self#visit_t `Compile rk ;
       self#visit_t phase rv
+
+    method! visit_AScalar _ p = self#visit_pred `Compile p
   end
 
 let ops_serializable r =
@@ -831,7 +836,14 @@ let names_serializable r =
     object
       inherit [_] stage_iter
 
-      method! visit_Name s n = ok := !ok && Poly.(Name.Meta.(find_exn n stage) = s)
+      method! visit_Name s n =
+        let this_ok = Poly.(Name.Meta.(find_exn n stage) = s) in
+        ( if not this_ok then
+          let stage = match s with `Compile -> "compile" | `Run -> "run" in
+          Logs.debug (fun m ->
+              m "Cannot serialize: Found %a in %s time position." Name.pp_with_stage
+                n stage ) ) ;
+        ok := !ok && this_ok
     end
   in
   visitor#visit_t `Run r ;
