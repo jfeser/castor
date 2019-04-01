@@ -185,10 +185,13 @@ module Make (Config : Config.S) () = struct
       ; (* Eliminate all unparameterized relations. *)
         fix
           (seq_many
-             [ at_ row_store
+             [ (* NOTE: Needed for is_serializable check. *)
+               resolve
+             ; at_ row_store
                  Path.(
                    all >>? is_run_time >>? not has_params
-                   >>? not is_serializable >>| shallowest) ])
+                   >>? not is_serializable >>| shallowest)
+             ; push_all_unparameterized_filters ])
       ; push_all_unparameterized_filters
       ; (* Cleanup*)
         fix project

@@ -257,14 +257,35 @@ module Make (C : Config.S) = struct
    *      * Some (tuple rs Cross) *\) *)
 
   let push_filter r =
+    let open Option.Let_syntax in
     M.annotate_schema r ;
-    match r.node with
-    | Filter (p, {node= Filter (p', r'); _}) ->
-        Some (filter (Binop (And, p, p')) r')
-    | Filter (p, {node= ATuple (rs, Concat); _}) ->
-        Some (tuple (List.map rs ~f:(filter p)) Concat)
-    | Filter (p, r') ->
-        let open Option.Let_syntax in
+    let%bind p, r' =
+      match r.node with Filter (p, r') -> Some (p, r') | _ -> None
+    in
+    match r'.node with
+    | Filter (p', r') -> Some (filter (Binop (And, p, p')) r')
+    | ATuple (rs, Concat) -> Some (tuple (List.map rs ~f:(filter p)) Concat)
+    | ATuple (rs, Cross) ->
+        let ps = Pred.conjuncts p in
+        (* Find the earliest placement for each predicate. *)
+        let bound i =
+          List.take rs (i + 1)
+          |> List.map ~f:M.bound
+          |> Set.union_list (module Name)
+        in
+        let preds = Array.create ~len:(List.length rs) [] in
+        let rec place_all ps i =
+          if i >= List.length rs - 1 then preds.(i) <- ps
+          else
+            let bnd = bound i in
+            let pl, up = List.partition_tf ps ~f:(is_supported bnd) in
+            preds.(i) <- pl ;
+            place_all up (i + 1)
+        in
+        place_all ps 0 ;
+        let rs = List.mapi rs ~f:(fun i -> filter (Pred.conjoin preds.(i))) in
+        Some (tuple rs Cross)
+    | _ ->
         let orig_bound = M.bound r' in
         let%map rk, rv, mk =
           match r'.node with
@@ -293,7 +314,6 @@ module Make (C : Config.S) = struct
         let inner_val_pred = Pred.conjoin pushed_val in
         filter outer_pred
           (mk (filter inner_key_pred rk) (filter inner_val_pred rv))
-    | _ -> None
 
   let push_filter =
     (* NOTE: Simplify is necessary to make push-filter safe under fixpoints. *)
