@@ -141,8 +141,10 @@ let pp_with_stage_and_refcnt fmt n =
     | Some `Run -> "run"
     | None -> "unk"
   in
-  let refcnt = match Meta.(find n refcnt) with Some x -> x | None -> 0 in
-  fprintf fmt "%a@@%s#%d" pp n stage refcnt
+  let refcnt =
+    match Meta.(find n refcnt) with Some x -> Int.to_string x | None -> "?"
+  in
+  fprintf fmt "%a@@%s#%s" pp n stage refcnt
 
 let fresh f fmt = create (Fresh.name f fmt)
 

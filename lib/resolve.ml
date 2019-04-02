@@ -18,7 +18,10 @@ module Make (C : Config.S) = struct
     object
       inherit [_] endo
 
-      method! visit_Name () _ n = Name (copy n ~meta:!(Meta.find_exn n meta_ref))
+      method! visit_Name () p n =
+        match Meta.find n meta_ref with
+        | Some m -> Name (copy n ~meta:!m)
+        | None -> p
     end
 
   module Ctx = struct
@@ -91,19 +94,10 @@ module Make (C : Config.S) = struct
           | Some x -> Some (x + 1)
           | None -> Some 1 )
 
-    (** Create a context from a list of definitions. *)
-    let of_names s ns =
-      let m =
-        List.map ns ~f:(fun n ->
-            let meta =
-              match Meta.find n meta_ref with Some m -> !m | None -> Name.meta n
-            in
-            let meta = Univ_map.set meta Meta.refcnt 0 in
-            (n, ref meta) )
-        |> Map.of_alist_exn (module Name)
-      in
-      let e = Map.empty (module Name) in
-      match s with `Run -> create m e | `Compile -> create e m
+    let incr_refs s {r; c} =
+      match s with
+      | `Run -> Map.iter r ~f:incr_ref
+      | `Compile -> Map.iter c ~f:incr_ref
 
     let to_schema p =
       let t =
@@ -112,7 +106,44 @@ module Make (C : Config.S) = struct
       in
       Option.map (Pred.to_name p) ~f:(Name.copy ~type_:(Some t))
 
-    let of_preds s ps = List.filter_map ps ~f:to_schema |> of_names s
+    let of_defs s ps =
+      let visitor def meta =
+        object
+          inherit [_] map
+
+          method! visit_Name () n =
+            if Name.O.(n = def) then Name Name.Meta.(set n meta_ref meta)
+            else Name n
+        end
+      in
+      (* Create a list of definitions with fresh metadata refs. *)
+      let metas, defs =
+        List.map ps ~f:(fun p ->
+            match to_schema p with
+            | Some n ->
+                (* If this is a definition point, annotate it with fresh metadata
+                 and expose it in the context. *)
+                let meta =
+                  match Meta.find n meta_ref with
+                  | Some m -> !m
+                  | None -> Name.meta n
+                in
+                let meta = Univ_map.set meta Meta.refcnt 0 in
+                let meta = ref meta in
+                let p = (visitor n meta)#visit_pred () p in
+                (Some (n, meta), p)
+            | None -> (None, p) )
+        |> List.unzip
+      in
+      let ctx =
+        let m =
+          List.filter_map metas ~f:(function x -> x)
+          |> Map.of_alist_exn (module Name)
+        in
+        let e = Map.empty (module Name) in
+        match s with `Run -> create m e | `Compile -> create e m
+      in
+      (defs, ctx)
 
     let rename {r; c} name =
       let rn m =
@@ -155,8 +186,13 @@ module Make (C : Config.S) = struct
 
   let resolve_relation stage r_name =
     let r = Db.Relation.from_db conn r_name in
-    List.map r.fields ~f:(fun f -> create ~relation:r.rname ~type_:f.type_ f.fname)
-    |> Ctx.of_names stage
+    (* TODO: Nowhere to put the defs here *)
+    let _, ctx =
+      List.map r.fields ~f:(fun f ->
+          Name (create ~relation:r.rname ~type_:f.type_ f.fname) )
+      |> Ctx.of_defs stage
+    in
+    ctx
 
   let rec resolve_pred stage (ctx : Ctx.t) =
     let visitor =
@@ -186,7 +222,8 @@ module Make (C : Config.S) = struct
             let ctx = Ctx.merge outer_ctx inner_ctx in
             (r, List.map preds ~f:(resolve_pred stage ctx))
           in
-          (Select (preds, r), Ctx.of_preds stage preds)
+          let defs, ctx = Ctx.of_defs stage preds in
+          (Select (defs, r), ctx)
       | Filter (pred, r) ->
           let r, value_ctx = rsame outer_ctx r in
           let pred = resolve_pred stage (Ctx.merge outer_ctx value_ctx) pred in
@@ -203,15 +240,20 @@ module Make (C : Config.S) = struct
           let ctx = Ctx.merge outer_ctx inner_ctx in
           let aggs = List.map ~f:(resolve_pred stage ctx) aggs in
           let key = List.map key ~f:(resolve_name stage ctx) in
-          (GroupBy (aggs, key, r), Ctx.of_preds stage aggs)
+          let defs, ctx = Ctx.of_defs stage aggs in
+          (GroupBy (defs, key, r), ctx)
       | Dedup r ->
           let r, inner_ctx = rsame outer_ctx r in
           (Dedup r, inner_ctx)
       | AEmpty -> (AEmpty, Ctx.empty)
       | AScalar p ->
           let p = resolve_pred `Compile outer_ctx p in
-          let ctx = Ctx.of_preds `Run [p] in
-          (AScalar p, ctx)
+          let def, ctx =
+            match Ctx.of_defs `Run [p] with
+            | [def], ctx -> (def, ctx)
+            | _ -> assert false
+          in
+          (AScalar def, ctx)
       | AList (r, l) ->
           let r, outer_ctx' = resolve `Compile outer_ctx r in
           let l, ctx = rsame (Ctx.merge outer_ctx' outer_ctx) l in
@@ -267,8 +309,12 @@ module Make (C : Config.S) = struct
 
   (** Annotate names in an algebra expression with types. *)
   let resolve ?(params = Set.empty (module Name)) r =
-    let ctx = Ctx.of_names `Run (Set.to_list params) in
-    let r, _ = resolve `Run ctx r in
+    let _, ctx =
+      Ctx.of_defs `Run (Set.to_list params |> List.map ~f:(fun n -> Name n))
+    in
+    let r, ctx = resolve `Run ctx r in
+    (* Ensure that all the outputs are referenced. *)
+    Ctx.incr_refs `Run ctx ;
     fix_meta_visitor#visit_t () r
 end
 
@@ -280,7 +326,7 @@ module Test = struct
   module T = Make (C)
   open T
 
-  let pp, _ = mk_pp ~pp_name:pp_with_stage ()
+  let pp, _ = mk_pp ~pp_name:pp_with_stage_and_refcnt ()
 
   let%expect_test "" =
     let r =
@@ -336,54 +382,56 @@ module Test = struct
       ~params:
         (Set.of_list
            (module Name)
-           [create "param1"; create "param2"; create "param3"])
+           [ create ~type_:(StringT {nullable= false}) "param1"
+           ; create ~type_:(StringT {nullable= false}) "param2"
+           ; create ~type_:(DateT {nullable= false}) "param3" ])
       r
     |> Format.printf "%a@." pp ;
     [%expect
       {|
-      alist(orderby([k0.l_shipmode@comp],
-              select([lineitem.l_shipmode@comp],
-                dedup(select([lineitem.l_shipmode@comp], lineitem))) as k0),
-        select([lineitem.l_shipmode@run,
-                sum((if ((orders.o_orderpriority@run = "1-URGENT") ||
-                        (orders.o_orderpriority@run = "2-HIGH")) then 1 else 0)) as high_line_count,
-                sum((if (not((orders.o_orderpriority@run = "1-URGENT")) &&
-                        not((orders.o_orderpriority@run = "2-HIGH"))) then 1 else 0)) as low_line_count],
-          filter(((lineitem.l_shipmode@run = k0.l_shipmode@comp) &&
-                 (((lineitem.l_shipmode@run = param1@run) ||
-                  (lineitem.l_shipmode@run = param2@run)) &&
-                 ((lineitem.l_commitdate@run < lineitem.l_receiptdate@run) &&
-                 ((lineitem.l_shipdate@run < lineitem.l_commitdate@run) &&
-                 ((lineitem.l_receiptdate@run >= param3@run) &&
-                 (lineitem.l_receiptdate@run < (param3@run + year(1)))))))),
-            alist(join((orders.o_orderkey@comp = lineitem.l_orderkey@comp),
+      alist(orderby([k0.l_shipmode@comp#2],
+              select([lineitem.l_shipmode@comp#2],
+                dedup(select([lineitem.l_shipmode@comp#1], lineitem))) as k0),
+        select([lineitem.l_shipmode@run#0,
+                sum((if ((orders.o_orderpriority@run#4 = "1-URGENT") ||
+                        (orders.o_orderpriority@run#4 = "2-HIGH")) then 1 else 0)) as high_line_count,
+                sum((if (not((orders.o_orderpriority@run#4 = "1-URGENT")) &&
+                        not((orders.o_orderpriority@run#4 = "2-HIGH"))) then 1 else 0)) as low_line_count],
+          filter(((lineitem.l_shipmode@run#4 = k0.l_shipmode@comp#2) &&
+                 (((lineitem.l_shipmode@run#4 = param1@run#1) ||
+                  (lineitem.l_shipmode@run#4 = param2@run#1)) &&
+                 ((lineitem.l_commitdate@run#2 < lineitem.l_receiptdate@run#3) &&
+                 ((lineitem.l_shipdate@run#1 < lineitem.l_commitdate@run#2) &&
+                 ((lineitem.l_receiptdate@run#3 >= param3@run#2) &&
+                 (lineitem.l_receiptdate@run#3 < (param3@run#2 + year(1)))))))),
+            alist(join((orders.o_orderkey@comp#2 = lineitem.l_orderkey@comp#2),
                     lineitem,
                     orders),
-              atuple([ascalar(lineitem.l_orderkey@comp),
-                      ascalar(lineitem.l_partkey@comp),
-                      ascalar(lineitem.l_suppkey@comp),
-                      ascalar(lineitem.l_linenumber@comp),
-                      ascalar(lineitem.l_quantity@comp),
-                      ascalar(lineitem.l_extendedprice@comp),
-                      ascalar(lineitem.l_discount@comp),
-                      ascalar(lineitem.l_tax@comp),
-                      ascalar(lineitem.l_returnflag@comp),
-                      ascalar(lineitem.l_linestatus@comp),
-                      ascalar(lineitem.l_shipdate@comp),
-                      ascalar(lineitem.l_commitdate@comp),
-                      ascalar(lineitem.l_receiptdate@comp),
-                      ascalar(lineitem.l_shipinstruct@comp),
-                      ascalar(lineitem.l_shipmode@comp),
-                      ascalar(lineitem.l_comment@comp),
-                      ascalar(orders.o_orderkey@comp),
-                      ascalar(orders.o_custkey@comp),
-                      ascalar(orders.o_orderstatus@comp),
-                      ascalar(orders.o_totalprice@comp),
-                      ascalar(orders.o_orderdate@comp),
-                      ascalar(orders.o_orderpriority@comp),
-                      ascalar(orders.o_clerk@comp),
-                      ascalar(orders.o_shippriority@comp),
-                      ascalar(orders.o_comment@comp)],
+              atuple([ascalar(lineitem.l_orderkey@run#0),
+                      ascalar(lineitem.l_partkey@run#0),
+                      ascalar(lineitem.l_suppkey@run#0),
+                      ascalar(lineitem.l_linenumber@run#0),
+                      ascalar(lineitem.l_quantity@run#0),
+                      ascalar(lineitem.l_extendedprice@run#0),
+                      ascalar(lineitem.l_discount@run#0),
+                      ascalar(lineitem.l_tax@run#0),
+                      ascalar(lineitem.l_returnflag@run#0),
+                      ascalar(lineitem.l_linestatus@run#0),
+                      ascalar(lineitem.l_shipdate@run#1),
+                      ascalar(lineitem.l_commitdate@run#2),
+                      ascalar(lineitem.l_receiptdate@run#3),
+                      ascalar(lineitem.l_shipinstruct@run#0),
+                      ascalar(lineitem.l_shipmode@run#4),
+                      ascalar(lineitem.l_comment@run#0),
+                      ascalar(orders.o_orderkey@run#0),
+                      ascalar(orders.o_custkey@run#0),
+                      ascalar(orders.o_orderstatus@run#0),
+                      ascalar(orders.o_totalprice@run#0),
+                      ascalar(orders.o_orderdate@run#0),
+                      ascalar(orders.o_orderpriority@run#4),
+                      ascalar(orders.o_clerk@run#0),
+                      ascalar(orders.o_shippriority@run#0),
+                      ascalar(orders.o_comment@run#0)],
                 cross))))) |}]
 
   let%expect_test "" =
@@ -590,210 +638,221 @@ select([nation.n_name, revenue],
          (param1 + day(1)),
          ((param1 + year(1)) + day(1))))))|}
     in
-    resolve ~params:(Set.of_list (module Name) [create "param0"; create "param1"]) r
+    resolve
+      ~params:
+        (Set.of_list
+           (module Name)
+           [ create ~type_:(StringT {nullable= false}) "param0"
+           ; create ~type_:(DateT {nullable= false}) "param1" ])
+      r
     |> Format.printf "%a@." pp ;
     [%expect
       {|
-      select([nation.n_name@run, revenue@run],
-        alist(select([nation.n_name@comp],
-                dedup(select([nation.n_name@comp], nation))) as k0,
-          select([nation.n_name@run, sum(agg3@run) as revenue],
+      select([nation.n_name@run#0, revenue@run#0],
+        alist(select([nation.n_name@comp#1],
+                dedup(select([nation.n_name@comp#1], nation))) as k0,
+          select([nation.n_name@run#1, sum(agg3@run#1) as revenue],
             aorderedidx(dedup(
-                          select([orders.o_orderdate@comp as k2],
-                            dedup(select([orders.o_orderdate@comp], orders)))),
-              filter((count4@run > 0),
+                          select([orders.o_orderdate@comp#1 as k2],
+                            dedup(select([orders.o_orderdate@comp#1], orders)))),
+              filter((count4@run#1 > 0),
                 select([count() as count4,
-                        sum((lineitem.l_extendedprice@run *
-                            (1 - lineitem.l_discount@run))) as agg3,
-                        k1@comp,
-                        region.r_regionkey@run,
-                        region.r_name@run,
-                        region.r_comment@run,
-                        customer.c_custkey@run,
-                        customer.c_name@run,
-                        customer.c_address@run,
-                        customer.c_nationkey@run,
-                        customer.c_phone@run,
-                        customer.c_acctbal@run,
-                        customer.c_mktsegment@run,
-                        customer.c_comment@run,
-                        orders.o_orderkey@run,
-                        orders.o_custkey@run,
-                        orders.o_orderstatus@run,
-                        orders.o_totalprice@run,
-                        orders.o_orderdate@run,
-                        orders.o_orderpriority@run,
-                        orders.o_clerk@run,
-                        orders.o_shippriority@run,
-                        orders.o_comment@run,
-                        lineitem.l_orderkey@run,
-                        lineitem.l_partkey@run,
-                        lineitem.l_suppkey@run,
-                        lineitem.l_linenumber@run,
-                        lineitem.l_quantity@run,
-                        lineitem.l_extendedprice@run,
-                        lineitem.l_discount@run,
-                        lineitem.l_tax@run,
-                        lineitem.l_returnflag@run,
-                        lineitem.l_linestatus@run,
-                        lineitem.l_shipdate@run,
-                        lineitem.l_commitdate@run,
-                        lineitem.l_receiptdate@run,
-                        lineitem.l_shipinstruct@run,
-                        lineitem.l_shipmode@run,
-                        lineitem.l_comment@run,
-                        supplier.s_suppkey@run,
-                        supplier.s_name@run,
-                        supplier.s_address@run,
-                        supplier.s_nationkey@run,
-                        supplier.s_phone@run,
-                        supplier.s_acctbal@run,
-                        supplier.s_comment@run,
-                        nation.n_nationkey@run,
-                        nation.n_name@run,
-                        nation.n_regionkey@run,
-                        nation.n_comment@run],
+                        sum((lineitem.l_extendedprice@run#2 *
+                            (1 - lineitem.l_discount@run#2))) as agg3,
+                        k1@run#0,
+                        region.r_regionkey@run#0,
+                        region.r_name@run#0,
+                        region.r_comment@run#0,
+                        customer.c_custkey@run#0,
+                        customer.c_name@run#0,
+                        customer.c_address@run#0,
+                        customer.c_nationkey@run#0,
+                        customer.c_phone@run#0,
+                        customer.c_acctbal@run#0,
+                        customer.c_mktsegment@run#0,
+                        customer.c_comment@run#0,
+                        orders.o_orderkey@run#0,
+                        orders.o_custkey@run#0,
+                        orders.o_orderstatus@run#0,
+                        orders.o_totalprice@run#0,
+                        orders.o_orderdate@run#0,
+                        orders.o_orderpriority@run#0,
+                        orders.o_clerk@run#0,
+                        orders.o_shippriority@run#0,
+                        orders.o_comment@run#0,
+                        lineitem.l_orderkey@run#0,
+                        lineitem.l_partkey@run#0,
+                        lineitem.l_suppkey@run#0,
+                        lineitem.l_linenumber@run#0,
+                        lineitem.l_quantity@run#0,
+                        lineitem.l_extendedprice@run#0,
+                        lineitem.l_discount@run#0,
+                        lineitem.l_tax@run#0,
+                        lineitem.l_returnflag@run#0,
+                        lineitem.l_linestatus@run#0,
+                        lineitem.l_shipdate@run#0,
+                        lineitem.l_commitdate@run#0,
+                        lineitem.l_receiptdate@run#0,
+                        lineitem.l_shipinstruct@run#0,
+                        lineitem.l_shipmode@run#0,
+                        lineitem.l_comment@run#0,
+                        supplier.s_suppkey@run#0,
+                        supplier.s_name@run#0,
+                        supplier.s_address@run#0,
+                        supplier.s_nationkey@run#0,
+                        supplier.s_phone@run#0,
+                        supplier.s_acctbal@run#0,
+                        supplier.s_comment@run#0,
+                        nation.n_nationkey@run#0,
+                        nation.n_name@run#1,
+                        nation.n_regionkey@run#0,
+                        nation.n_comment@run#0],
                   ahashidx(dedup(
-                             select([region.r_name@run as k1],
+                             select([region.r_name@run#1 as k1],
                                atuple([alist(region,
-                                         atuple([ascalar(region.r_regionkey@comp),
-                                                 ascalar(region.r_name@comp),
-                                                 ascalar(region.r_comment@comp)],
+                                         atuple([ascalar(region.r_regionkey@run#1),
+                                                 ascalar(region.r_name@run#1),
+                                                 ascalar(region.r_comment@run#0)],
                                            cross)),
-                                       filter((nation.n_regionkey@run =
-                                              region.r_regionkey@run),
-                                         alist(join((supplier.s_nationkey@comp =
-                                                    nation.n_nationkey@comp),
-                                                 join(((lineitem.l_suppkey@comp =
-                                                       supplier.s_suppkey@comp) &&
-                                                      (customer.c_nationkey@comp =
-                                                      supplier.s_nationkey@comp)),
-                                                   join((lineitem.l_orderkey@comp =
-                                                        orders.o_orderkey@comp),
-                                                     join((customer.c_custkey@comp
-                                                          = orders.o_custkey@comp),
+                                       filter((nation.n_regionkey@run#1 =
+                                              region.r_regionkey@run#1),
+                                         alist(join((supplier.s_nationkey@comp#3 =
+                                                    nation.n_nationkey@comp#2),
+                                                 join(((lineitem.l_suppkey@comp#2 =
+                                                       supplier.s_suppkey@comp#2)
+                                                      &&
+                                                      (customer.c_nationkey@comp#2
+                                                      =
+                                                      supplier.s_nationkey@comp#3)),
+                                                   join((lineitem.l_orderkey@comp#2
+                                                        = orders.o_orderkey@comp#2),
+                                                     join((customer.c_custkey@comp#2
+                                                          =
+                                                          orders.o_custkey@comp#2),
                                                        customer,
                                                        orders),
                                                      lineitem),
                                                    supplier),
                                                  nation),
-                                           atuple([ascalar(customer.c_custkey@comp),
-                                                   ascalar(customer.c_name@comp),
-                                                   ascalar(customer.c_address@comp),
-                                                   ascalar(customer.c_nationkey@comp),
-                                                   ascalar(customer.c_phone@comp),
-                                                   ascalar(customer.c_acctbal@comp),
-                                                   ascalar(customer.c_mktsegment@comp),
-                                                   ascalar(customer.c_comment@comp),
-                                                   ascalar(orders.o_orderkey@comp),
-                                                   ascalar(orders.o_custkey@comp),
-                                                   ascalar(orders.o_orderstatus@comp),
-                                                   ascalar(orders.o_totalprice@comp),
-                                                   ascalar(orders.o_orderdate@comp),
-                                                   ascalar(orders.o_orderpriority@comp),
-                                                   ascalar(orders.o_clerk@comp),
-                                                   ascalar(orders.o_shippriority@comp),
-                                                   ascalar(orders.o_comment@comp),
-                                                   ascalar(lineitem.l_orderkey@comp),
-                                                   ascalar(lineitem.l_partkey@comp),
-                                                   ascalar(lineitem.l_suppkey@comp),
-                                                   ascalar(lineitem.l_linenumber@comp),
-                                                   ascalar(lineitem.l_quantity@comp),
-                                                   ascalar(lineitem.l_extendedprice@comp),
-                                                   ascalar(lineitem.l_discount@comp),
-                                                   ascalar(lineitem.l_tax@comp),
-                                                   ascalar(lineitem.l_returnflag@comp),
-                                                   ascalar(lineitem.l_linestatus@comp),
-                                                   ascalar(lineitem.l_shipdate@comp),
-                                                   ascalar(lineitem.l_commitdate@comp),
-                                                   ascalar(lineitem.l_receiptdate@comp),
-                                                   ascalar(lineitem.l_shipinstruct@comp),
-                                                   ascalar(lineitem.l_shipmode@comp),
-                                                   ascalar(lineitem.l_comment@comp),
-                                                   ascalar(supplier.s_suppkey@comp),
-                                                   ascalar(supplier.s_name@comp),
-                                                   ascalar(supplier.s_address@comp),
-                                                   ascalar(supplier.s_nationkey@comp),
-                                                   ascalar(supplier.s_phone@comp),
-                                                   ascalar(supplier.s_acctbal@comp),
-                                                   ascalar(supplier.s_comment@comp),
-                                                   ascalar(nation.n_nationkey@comp),
-                                                   ascalar(nation.n_name@comp),
-                                                   ascalar(nation.n_regionkey@comp),
-                                                   ascalar(nation.n_comment@comp)],
+                                           atuple([ascalar(customer.c_custkey@run#0),
+                                                   ascalar(customer.c_name@run#0),
+                                                   ascalar(customer.c_address@run#0),
+                                                   ascalar(customer.c_nationkey@run#0),
+                                                   ascalar(customer.c_phone@run#0),
+                                                   ascalar(customer.c_acctbal@run#0),
+                                                   ascalar(customer.c_mktsegment@run#0),
+                                                   ascalar(customer.c_comment@run#0),
+                                                   ascalar(orders.o_orderkey@run#0),
+                                                   ascalar(orders.o_custkey@run#0),
+                                                   ascalar(orders.o_orderstatus@run#0),
+                                                   ascalar(orders.o_totalprice@run#0),
+                                                   ascalar(orders.o_orderdate@run#0),
+                                                   ascalar(orders.o_orderpriority@run#0),
+                                                   ascalar(orders.o_clerk@run#0),
+                                                   ascalar(orders.o_shippriority@run#0),
+                                                   ascalar(orders.o_comment@run#0),
+                                                   ascalar(lineitem.l_orderkey@run#0),
+                                                   ascalar(lineitem.l_partkey@run#0),
+                                                   ascalar(lineitem.l_suppkey@run#0),
+                                                   ascalar(lineitem.l_linenumber@run#0),
+                                                   ascalar(lineitem.l_quantity@run#0),
+                                                   ascalar(lineitem.l_extendedprice@run#0),
+                                                   ascalar(lineitem.l_discount@run#0),
+                                                   ascalar(lineitem.l_tax@run#0),
+                                                   ascalar(lineitem.l_returnflag@run#0),
+                                                   ascalar(lineitem.l_linestatus@run#0),
+                                                   ascalar(lineitem.l_shipdate@run#0),
+                                                   ascalar(lineitem.l_commitdate@run#0),
+                                                   ascalar(lineitem.l_receiptdate@run#0),
+                                                   ascalar(lineitem.l_shipinstruct@run#0),
+                                                   ascalar(lineitem.l_shipmode@run#0),
+                                                   ascalar(lineitem.l_comment@run#0),
+                                                   ascalar(supplier.s_suppkey@run#0),
+                                                   ascalar(supplier.s_name@run#0),
+                                                   ascalar(supplier.s_address@run#0),
+                                                   ascalar(supplier.s_nationkey@run#0),
+                                                   ascalar(supplier.s_phone@run#0),
+                                                   ascalar(supplier.s_acctbal@run#0),
+                                                   ascalar(supplier.s_comment@run#0),
+                                                   ascalar(nation.n_nationkey@run#0),
+                                                   ascalar(nation.n_name@run#0),
+                                                   ascalar(nation.n_regionkey@run#1),
+                                                   ascalar(nation.n_comment@run#0)],
                                              cross)))],
                                  cross))),
-                    atuple([alist(filter((k1@comp = region.r_name@comp), region),
-                              atuple([ascalar(region.r_regionkey@comp),
-                                      ascalar(region.r_name@comp),
-                                      ascalar(region.r_comment@comp)],
+                    atuple([alist(filter((k1@comp#2 = region.r_name@comp#2),
+                                    region),
+                              atuple([ascalar(region.r_regionkey@run#2),
+                                      ascalar(region.r_name@run#1),
+                                      ascalar(region.r_comment@run#1)],
                                 cross)),
-                            filter((nation.n_regionkey@run =
-                                   region.r_regionkey@run),
-                              alist(filter(((nation.n_name@comp = k0.n_name@comp)
-                                           && (k2@comp = orders.o_orderdate@comp)),
-                                      join((supplier.s_nationkey@comp =
-                                           nation.n_nationkey@comp),
-                                        join(((lineitem.l_suppkey@comp =
-                                              supplier.s_suppkey@comp) &&
-                                             (customer.c_nationkey@comp =
-                                             supplier.s_nationkey@comp)),
-                                          join((lineitem.l_orderkey@comp =
-                                               orders.o_orderkey@comp),
-                                            join((customer.c_custkey@comp =
-                                                 orders.o_custkey@comp),
+                            filter((nation.n_regionkey@run#2 =
+                                   region.r_regionkey@run#2),
+                              alist(filter(((nation.n_name@comp#2 =
+                                            k0.n_name@comp#1) &&
+                                           (k2@comp#1 = orders.o_orderdate@comp#2)),
+                                      join((supplier.s_nationkey@comp#3 =
+                                           nation.n_nationkey@comp#2),
+                                        join(((lineitem.l_suppkey@comp#2 =
+                                              supplier.s_suppkey@comp#2) &&
+                                             (customer.c_nationkey@comp#2 =
+                                             supplier.s_nationkey@comp#3)),
+                                          join((lineitem.l_orderkey@comp#2 =
+                                               orders.o_orderkey@comp#2),
+                                            join((customer.c_custkey@comp#2 =
+                                                 orders.o_custkey@comp#2),
                                               customer,
                                               orders),
                                             lineitem),
                                           supplier),
                                         nation)),
-                                atuple([ascalar(customer.c_custkey@comp),
-                                        ascalar(customer.c_name@comp),
-                                        ascalar(customer.c_address@comp),
-                                        ascalar(customer.c_nationkey@comp),
-                                        ascalar(customer.c_phone@comp),
-                                        ascalar(customer.c_acctbal@comp),
-                                        ascalar(customer.c_mktsegment@comp),
-                                        ascalar(customer.c_comment@comp),
-                                        ascalar(orders.o_orderkey@comp),
-                                        ascalar(orders.o_custkey@comp),
-                                        ascalar(orders.o_orderstatus@comp),
-                                        ascalar(orders.o_totalprice@comp),
-                                        ascalar(orders.o_orderdate@comp),
-                                        ascalar(orders.o_orderpriority@comp),
-                                        ascalar(orders.o_clerk@comp),
-                                        ascalar(orders.o_shippriority@comp),
-                                        ascalar(orders.o_comment@comp),
-                                        ascalar(lineitem.l_orderkey@comp),
-                                        ascalar(lineitem.l_partkey@comp),
-                                        ascalar(lineitem.l_suppkey@comp),
-                                        ascalar(lineitem.l_linenumber@comp),
-                                        ascalar(lineitem.l_quantity@comp),
-                                        ascalar(lineitem.l_extendedprice@comp),
-                                        ascalar(lineitem.l_discount@comp),
-                                        ascalar(lineitem.l_tax@comp),
-                                        ascalar(lineitem.l_returnflag@comp),
-                                        ascalar(lineitem.l_linestatus@comp),
-                                        ascalar(lineitem.l_shipdate@comp),
-                                        ascalar(lineitem.l_commitdate@comp),
-                                        ascalar(lineitem.l_receiptdate@comp),
-                                        ascalar(lineitem.l_shipinstruct@comp),
-                                        ascalar(lineitem.l_shipmode@comp),
-                                        ascalar(lineitem.l_comment@comp),
-                                        ascalar(supplier.s_suppkey@comp),
-                                        ascalar(supplier.s_name@comp),
-                                        ascalar(supplier.s_address@comp),
-                                        ascalar(supplier.s_nationkey@comp),
-                                        ascalar(supplier.s_phone@comp),
-                                        ascalar(supplier.s_acctbal@comp),
-                                        ascalar(supplier.s_comment@comp),
-                                        ascalar(nation.n_nationkey@comp),
-                                        ascalar(nation.n_name@comp),
-                                        ascalar(nation.n_regionkey@comp),
-                                        ascalar(nation.n_comment@comp)],
+                                atuple([ascalar(customer.c_custkey@run#1),
+                                        ascalar(customer.c_name@run#1),
+                                        ascalar(customer.c_address@run#1),
+                                        ascalar(customer.c_nationkey@run#1),
+                                        ascalar(customer.c_phone@run#1),
+                                        ascalar(customer.c_acctbal@run#1),
+                                        ascalar(customer.c_mktsegment@run#1),
+                                        ascalar(customer.c_comment@run#1),
+                                        ascalar(orders.o_orderkey@run#1),
+                                        ascalar(orders.o_custkey@run#1),
+                                        ascalar(orders.o_orderstatus@run#1),
+                                        ascalar(orders.o_totalprice@run#1),
+                                        ascalar(orders.o_orderdate@run#1),
+                                        ascalar(orders.o_orderpriority@run#1),
+                                        ascalar(orders.o_clerk@run#1),
+                                        ascalar(orders.o_shippriority@run#1),
+                                        ascalar(orders.o_comment@run#1),
+                                        ascalar(lineitem.l_orderkey@run#1),
+                                        ascalar(lineitem.l_partkey@run#1),
+                                        ascalar(lineitem.l_suppkey@run#1),
+                                        ascalar(lineitem.l_linenumber@run#1),
+                                        ascalar(lineitem.l_quantity@run#1),
+                                        ascalar(lineitem.l_extendedprice@run#2),
+                                        ascalar(lineitem.l_discount@run#2),
+                                        ascalar(lineitem.l_tax@run#1),
+                                        ascalar(lineitem.l_returnflag@run#1),
+                                        ascalar(lineitem.l_linestatus@run#1),
+                                        ascalar(lineitem.l_shipdate@run#1),
+                                        ascalar(lineitem.l_commitdate@run#1),
+                                        ascalar(lineitem.l_receiptdate@run#1),
+                                        ascalar(lineitem.l_shipinstruct@run#1),
+                                        ascalar(lineitem.l_shipmode@run#1),
+                                        ascalar(lineitem.l_comment@run#1),
+                                        ascalar(supplier.s_suppkey@run#1),
+                                        ascalar(supplier.s_name@run#1),
+                                        ascalar(supplier.s_address@run#1),
+                                        ascalar(supplier.s_nationkey@run#1),
+                                        ascalar(supplier.s_phone@run#1),
+                                        ascalar(supplier.s_acctbal@run#1),
+                                        ascalar(supplier.s_comment@run#1),
+                                        ascalar(nation.n_nationkey@run#1),
+                                        ascalar(nation.n_name@run#1),
+                                        ascalar(nation.n_regionkey@run#2),
+                                        ascalar(nation.n_comment@run#1)],
                                   cross)))],
                       cross),
-                    param0@run))),
-              (param1@run + day(1)),
-              ((param1@run + year(1)) + day(1)))))) |}]
+                    param0@run#1))),
+              (param1@run#2 + day(1)),
+              ((param1@run#2 + year(1)) + day(1)))))) |}]
 end
