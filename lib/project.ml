@@ -13,134 +13,17 @@ module Make (C : Config.S) = struct
 
   let test = Logs.Src.create ~doc:"Source for testing project." "project-test"
 
-  (** Annotate all subexpressions with the set of needed fields. A field is needed
-   if it is in the schema of the top level query or it is in the free variable
-   set of a query in scope. *)
-  let annotate_needed r =
-    let singleton = Set.singleton (module Name) in
-    let of_list = Set.of_list (module Name) in
-    let union_list = Set.union_list (module Name) in
-    let rec needed ctx r =
-      Meta.(set_m r needed ctx) ;
-      match r.node with
-      | Scan _ | AScalar _ | AEmpty -> ()
-      | Select (ps, r') -> needed (List.map ps ~f:pred_free |> union_list) r'
-      | Filter (p, r') -> needed (Set.union ctx (pred_free p)) r'
-      | Dedup r' -> needed ctx r'
-      | Join {pred; r1; r2} ->
-          let ctx' = Set.union (pred_free pred) ctx in
-          needed ctx' r1 ; needed ctx' r2
-      | GroupBy (ps, key, r') ->
-          let ctx' =
-            List.map ps ~f:pred_free |> union_list |> Set.union (of_list key)
-          in
-          needed ctx' r'
-      | OrderBy {key; rel; _} ->
-          let ctx' =
-            Set.union ctx (List.map ~f:(fun (p, _) -> pred_free p) key |> union_list)
-          in
-          needed ctx' rel
-      | AList (pr, cr) | AHashIdx (pr, cr, _) | AOrderedIdx (pr, cr, _) ->
-          needed Meta.(find_exn cr free) pr ;
-          needed ctx cr
-      | ATuple (rs, Zip) ->
-          List.iter rs ~f:(fun r ->
-              needed (Set.inter ctx (Meta.(find_exn r schema) |> of_list)) r )
-      | ATuple (rs, Concat) -> List.iter rs ~f:(needed ctx)
-      | ATuple (rs, Cross) ->
-          List.fold_right rs ~init:ctx ~f:(fun r ctx ->
-              needed ctx r ;
-              let ctx = Set.union Meta.(find_exn r free) ctx in
-              ctx )
-          |> ignore
-      | As (rel_name, r') ->
-          let ctx' =
-            List.filter
-              Meta.(find_exn r' schema)
-              ~f:(fun n -> Set.mem ctx (Name.copy n ~relation:(Some rel_name)))
-            |> of_list
-          in
-          needed ctx' r'
-    in
-    let subquery_needed_visitor =
+  let wrap_selects r =
+    let visitor =
       object
-        inherit [_] iter
+        inherit [_] map
 
-        method! visit_First () r =
-          match Meta.(find_exn r schema) with
-          | n :: _ -> needed (singleton n) r
-          | [] -> failwith "Unexpected empty schema."
-
-        method! visit_Exists () r =
-          (* TODO: None of these fields are really needed. Use the first one
-             because it's simple. *)
-          match Meta.(find_exn r schema) with
-          | n :: _ -> needed (singleton n) r
-          | [] -> failwith "Unexpected empty schema."
+        method! visit_Scan () s =
+          let schema = M.relation_schema s in
+          Select (List.map schema ~f:(fun n -> Name n), scan s)
       end
     in
-    annotate_free r ;
-    M.annotate_schema r ;
-    subquery_needed_visitor#visit_t () r ;
-    needed (of_list Meta.(find_exn r schema)) r
-
-  (** Select the fields in `r` that are needed. *)
-  let select_needed r =
-    let schema = Meta.(find_exn r schema) in
-    let needed = Meta.(find_exn r needed) in
-    let select_list =
-      List.filter schema ~f:(Set.mem needed) |> List.map ~f:Pred.name
-    in
-    (* Don't emit selects of the entire schema. *)
-    if List.length select_list < List.length schema then select select_list r else r
-
-  (* let project r =
-   *   let dummy = Set.empty (module Name) in
-   *   let project_visitor =
-   *     object (self : 'a)
-   *       inherit [_] map as super
-   * 
-   *       method! visit_Select needed (ps, r) =
-   *         let ps' =
-   *           List.filter ps ~f:(fun p ->
-   *               match pred_to_name p with
-   *               | None -> false
-   *               | Some n -> Set.mem needed n )
-   *         in
-   *         Select (ps', self#visit_t dummy r)
-   * 
-   *       method! visit_ATuple needed (rs, k) =
-   *         let rs' =
-   *           List.filter rs ~f:(fun r ->
-   *               let s = Meta.(find_exn r schema) |> Set.of_list (module Name) in
-   *               let is_unneeded = Set.is_empty (Set.inter s needed) in
-   *               if is_unneeded then
-   *                 Logs.debug ~src:test (fun m ->
-   *                     m "Removing tuple element (needed=%a): %a" (Set.pp Name.pp)
-   *                       needed Abslayout.pp r ) ;
-   *               not is_unneeded )
-   *           |> List.map ~f:(self#visit_t dummy)
-   *         in
-   *         ATuple (rs', k)
-   * 
-   *       method! visit_AList _ (rk, rv) =
-   *         AList (self#visit_t dummy rk, self#visit_t dummy rv)
-   * 
-   *       method! visit_AHashIdx _ (rk, rv, idx) =
-   *         AHashIdx (self#visit_t dummy rk, self#visit_t dummy rv, idx)
-   * 
-   *       method! visit_AOrderedIdx _ (rk, rv, idx) =
-   *         AOrderedIdx (self#visit_t dummy rk, self#visit_t dummy rv, idx)
-   * 
-   *       method! visit_t _ r =
-   *         let needed = Meta.(find_exn r needed) in
-   *         super#visit_t needed r
-   *     end
-   *   in
-   *   let r = strip_meta r in
-   *   M.annotate_schema r ;
-   *   annotate_needed r ;
-   *   project_visitor#visit_t dummy r *)
+    M.annotate_schema r ; visitor#visit_t () r
 
   let project_defs ps =
     List.filter ps ~f:(fun p ->
@@ -156,39 +39,45 @@ module Make (C : Config.S) = struct
               (* Be conservative if refcount is missing. *)
               true ) )
 
-  let project r =
-    let project_visitor =
-      object (self : 'a)
-        inherit [_] endo as super
+  let project_visitor =
+    object (self : 'a)
+      inherit [_] endo as super
 
-        method! visit_Select () _ (ps, r) =
-          Select (project_defs ps, self#visit_t () r)
+      method! visit_Select () _ (ps, r) = Select (project_defs ps, self#visit_t () r)
 
-        method! visit_GroupBy () _ ps ns r =
-          GroupBy (project_defs ps, ns, self#visit_t () r)
+      method! visit_GroupBy () _ ps ns r =
+        GroupBy (project_defs ps, ns, self#visit_t () r)
 
-        method! visit_AScalar () _ p =
-          match project_defs [p] with
-          | [] -> AScalar Null
-          | [p] -> AScalar p
-          | _ -> assert false
+      method! visit_AScalar () _ p =
+        match project_defs [p] with
+        | [] -> AScalar Null
+        | [p] -> AScalar p
+        | _ -> assert false
 
-        method! visit_ATuple () t (ps, k) =
-          match super#visit_ATuple () t (ps, k) with
-          | ATuple (ps, (Cross as k)) ->
-              let ps =
-                List.filter ps ~f:(fun r ->
-                    match r.node with AScalar Null -> false | _ -> true )
-              in
-              (* Preserve a single scalar to avoid messing up count aggregates.
+      method! visit_ATuple () t (ps, k) =
+        match super#visit_ATuple () t (ps, k) with
+        | ATuple (ps, (Cross as k)) ->
+            let ps =
+              List.filter ps ~f:(fun r ->
+                  match r.node with AScalar Null -> false | _ -> true )
+            in
+            (* Preserve a single scalar to avoid messing up count aggregates.
                  *)
-              let ps = if List.is_empty ps then [scalar Null] else ps in
-              ATuple (ps, k)
-          | ATuple _ as a -> a
-          | _ -> assert false
-      end
+            let ps = if List.is_empty ps then [scalar Null] else ps in
+            ATuple (ps, k)
+        | ATuple _ as a -> a
+        | _ -> assert false
+    end
+
+  let project ~params r =
+    let r = M.resolve ~params r in
+    let r = wrap_selects r in
+    let rec loop r =
+      let r' = M.resolve r ~params |> project_visitor#visit_t () in
+      Logs.debug ~src:test (fun m -> m "%a@." pp r') ;
+      if Abslayout.O.(r = r') then r' else loop r'
     in
-    project_visitor#visit_t () r
+    loop r
 end
 
 module Test = struct
@@ -266,7 +155,7 @@ alist(orderby([k0.l_shipmode],
        ((param3 + year(1)) + day(1)))))
 |}
     in
-    M.resolve
+    project
       ~params:
         (Set.of_list
            (module Name)
@@ -274,7 +163,7 @@ alist(orderby([k0.l_shipmode],
            ; Name.create ~type_:(StringT {nullable= false}) "param2"
            ; Name.create ~type_:(DateT {nullable= false}) "param3" ])
       r
-    |> project |> Format.printf "%a@." pp ;
+    |> Format.printf "%a@." pp ;
     [%expect
       {|
       alist(orderby([k0.l_shipmode],
@@ -517,26 +406,14 @@ select([nation.n_name, revenue],
          (param1 + day(1)),
          ((param1 + year(1)) + day(1))))))|}
     in
-    let rec fix f x =
-      let x' = f x in
-      if Abslayout.O.(x = x') then x' else fix f x'
-    in
     Logs.Src.set_level test (Some Logs.Debug) ;
     Logs.(set_reporter (format_reporter ())) ;
-    fix
-      (fun r ->
-        let r' =
-          M.resolve
-            ~params:
-              (Set.of_list
-                 (module Name)
-                 [ Name.create ~type_:(StringT {nullable= false}) "param0"
-                 ; Name.create ~type_:(DateT {nullable= false}) "param1" ])
-            r
-          |> project
-        in
-        Format.printf "%a@.============\n" pp r' ;
-        r' )
+    project
+      ~params:
+        (Set.of_list
+           (module Name)
+           [ Name.create ~type_:(StringT {nullable= false}) "param0"
+           ; Name.create ~type_:(DateT {nullable= false}) "param1" ])
       r
-    |> ignore
+    |> Format.printf "%a@." pp
 end

@@ -319,69 +319,6 @@ let%expect_test "subst" =
          (meta ())))))
      (meta ())) |}]
 
-(* TODO: This test has a staging error *)
-(* let%expect_test "needed" =
- *   let r =
- *     "alist(r, atuple([ascalar(r.f as k1), ascalar((k1 + 1) as k2), ascalar(k2 + \
- *      1)], cross))" |> of_string_exn |> M.resolve
- *   in
- *   M.annotate_schema r ;
- *   annotate_free r ;
- *   Project.annotate_needed r ;
- *   print_s ([%sexp_of: t] r) ;
- *   [%expect
- *     {|
- *     ((node
- *       (AList
- *        (((node (Scan r))
- *          (meta
- *           ((free ()) (needed (((relation (r)) (name f))))
- *            (schema (((relation (r)) (name f)) ((relation (r)) (name g)))))))
- *         ((node
- *           (ATuple
- *            ((((node (AScalar (As_pred ((Name ((relation (r)) (name f))) k1))))
- *               (meta
- *                ((free (((relation (r)) (name f))))
- *                 (needed
- *                  (((relation ()) (name "")) ((relation ()) (name k1))
- *                   ((relation ()) (name k2))))
- *                 (schema (((relation ()) (name k1)))))))
- *              ((node
- *                (AScalar
- *                 (As_pred
- *                  ((Binop (Add (Name ((relation ()) (name k1))) (Int 1))) k2))))
- *               (meta
- *                ((free (((relation ()) (name k1))))
- *                 (needed
- *                  (((relation ()) (name "")) ((relation ()) (name k1))
- *                   ((relation ()) (name k2))))
- *                 (schema (((relation ()) (name k2)))))))
- *              ((node
- *                (AScalar (Binop (Add (Name ((relation ()) (name k2))) (Int 1)))))
- *               (meta
- *                ((free (((relation ()) (name k2))))
- *                 (needed
- *                  (((relation ()) (name "")) ((relation ()) (name k1))
- *                   ((relation ()) (name k2))))
- *                 (schema (((relation ()) (name ""))))))))
- *             Cross)))
- *          (meta
- *           ((free (((relation (r)) (name f))))
- *            (needed
- *             (((relation ()) (name "")) ((relation ()) (name k1))
- *              ((relation ()) (name k2))))
- *            (schema
- *             (((relation ()) (name k1)) ((relation ()) (name k2))
- *              ((relation ()) (name ""))))))))))
- *      (meta
- *       ((free ())
- *        (needed
- *         (((relation ()) (name "")) ((relation ()) (name k1))
- *          ((relation ()) (name k2))))
- *        (schema
- *         (((relation ()) (name k1)) ((relation ()) (name k2))
- *          ((relation ()) (name ""))))))) |}] *)
-
 (* TODO: This test has a staging error. *)
 (* let%expect_test "annotate-orders" =
  *   let r =

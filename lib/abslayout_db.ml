@@ -28,6 +28,8 @@ module Make (Config : Config.S) = struct
     | `Concat qs -> 1 + List.sum (module Int) qs ~f:width
     | `Query q -> List.length Meta.(find_exn q schema)
 
+  let relation_schema s = Db.schema conn s
+
   class virtual ['s] schema_visitor =
     object (self : 'a)
       inherit [_] iter as super

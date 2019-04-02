@@ -928,11 +928,7 @@ module Make (Config : Config.S) () = struct
     |> run_everywhere
 
   let tf_project _ =
-    { name= "project"
-    ; f=
-        (fun r ->
-          let r = M.resolve ~params:Config.params r in
-          M.annotate_schema r ; [Project.project r] ) }
+    {name= "project"; f= (fun r -> [Project.project ~params:Config.params r])}
 
   let tf_hoist_join_pred _ =
     let open A in
