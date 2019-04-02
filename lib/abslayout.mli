@@ -270,4 +270,6 @@ module Pred : sig
   val to_schema : t -> Name.t
 
   val to_name : t -> Name.t option
+
+  val to_type : t -> Type.PrimType.t
 end

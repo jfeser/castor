@@ -96,6 +96,7 @@ log.counter < lp.succ, log) as lc,
 atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
 |} ;
   [%expect {|
+    [WARNING] Cross-stage shadowing of lp.counter.
     1|2
 
     exited normally |}]
@@ -111,6 +112,7 @@ log_str.counter < lp.succ, log_str) as lc,
 atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross))))
 |} ;
   [%expect {|
+    [WARNING] Cross-stage shadowing of lp.counter.
     1|2
 
     exited normally |}]

@@ -51,18 +51,6 @@ let run_in_fork_timed (type a) ?time ?(sleep_sec = 0.001) (thunk : unit -> a) :
         sleep ()
     | None -> Some Marshal.(from_channel rd) )
 
-let reporter ppf =
-  let report _ level ~over k msgf =
-    let k _ = over () ; k () in
-    let with_time h _ k ppf fmt =
-      let time = Time.now () in
-      Caml.(Format.kfprintf k ppf ("%a [%s] @[" ^^ fmt ^^ "@]@."))
-        Logs.pp_header (level, h) (Time.to_string time)
-    in
-    msgf @@ fun ?header ?tags fmt -> with_time header tags k ppf fmt
-  in
-  {Logs.report}
-
 let create_test_db () =
   let ch = Unix.open_process_in "pg_tmp" in
   let url = In_channel.input_all ch in
@@ -113,6 +101,17 @@ let create db name fields values =
 
 module Expect_test_config = struct
   include Expect_test_config
+
+  let reporter ppf =
+    let report _ level ~over k msgf =
+      let k _ = over () ; k () in
+      let with_time h _ k ppf fmt =
+        Caml.(Format.kfprintf k ppf ("%a @[" ^^ fmt ^^ "@]@."))
+          Logs.pp_header (level, h)
+      in
+      msgf @@ fun ?header ?tags fmt -> with_time header tags k ppf fmt
+    in
+    {Logs.report}
 
   let run thunk =
     Logs.set_reporter (reporter Caml.Format.std_formatter) ;

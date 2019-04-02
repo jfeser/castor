@@ -634,6 +634,8 @@ module Pred = struct
     in
     v#visit_pred ()
 
+  (** Return the set of relations which have fields in the tuple produced by
+     this expression. *)
   let relations p =
     let rels = ref [] in
     let f =
@@ -650,49 +652,47 @@ module Pred = struct
     in
     f#visit_pred () p ; !rels
 
-  (** Return the set of relations which have fields in the tuple produced by this
-   expression. *)
-  let rec to_schema =
-    let open Type.PrimType in
-    let unnamed t = Name.create ~type_:t "" in
-    function
-    | As_pred (p, n) ->
-        let schema = to_schema p in
-        Name.copy schema ~relation:None ~name:n
-    | Name n -> n
+  let rec to_type = function
+    | As_pred (p, _) -> to_type p
+    | Name n -> Name.Meta.(find_exn n type_)
     | Int _ | Date _
      |Unop ((Year | Month | Day | Strlen | ExtractY | ExtractM | ExtractD), _)
      |Count ->
-        unnamed (IntT {nullable= false})
-    | Fixed _ | Avg _ -> unnamed (FixedT {nullable= false})
+        IntT {nullable= false}
+    | Fixed _ | Avg _ -> FixedT {nullable= false}
     | Bool _ | Exists _
      |Binop ((Eq | Lt | Le | Gt | Ge | And | Or), _, _)
      |Unop (Not, _) ->
-        unnamed (BoolT {nullable= false})
-    | String _ -> unnamed (StringT {nullable= false})
-    | Null -> unnamed NullT
+        BoolT {nullable= false}
+    | String _ -> StringT {nullable= false}
+    | Null -> NullT
     | Binop ((Add | Sub | Mul | Div | Mod), p1, p2) ->
-        let s1 = to_schema p1 in
-        let s2 = to_schema p2 in
-        unnamed (unify (Name.type_exn s1) (Name.type_exn s2))
-    | Binop (Strpos, _, _) -> unnamed (IntT {nullable= false})
-    | Sum p | Min p | Max p -> to_schema p
+        let s1 = to_type p1 in
+        let s2 = to_type p2 in
+        Type.PrimType.unify s1 s2
+    | Binop (Strpos, _, _) -> IntT {nullable= false}
+    | Sum p | Min p | Max p -> to_type p
     | If (_, p1, p2) ->
-        let s1 = to_schema p1 in
-        let s2 = to_schema p2 in
-        Type.PrimType.unify (Name.type_exn s1) (Name.type_exn s2) |> ignore ;
-        unnamed (Name.type_exn s1)
+        let s1 = to_type p1 in
+        let s2 = to_type p2 in
+        Type.PrimType.unify s1 s2
     | First r -> (
       match Meta.(find_exn r schema) with
-      | [n] -> n
+      | [n] -> Name.Meta.(find_exn n type_)
       | [] -> failwith "Unexpected empty schema."
       | _ -> failwith "Too many fields." )
-    | Substring _ -> unnamed (StringT {nullable= false})
+    | Substring _ -> StringT {nullable= false}
 
   let to_name = function
     | Name n -> Some n
     | As_pred (_, n) -> Some (Name.create n)
     | _ -> None
+
+  let to_schema p =
+    let t = to_type p in
+    match to_name p with
+    | Some n -> Name.copy n ~type_:(Some t)
+    | None -> Name.create ~type_:t ""
 end
 
 let pred_of_value = Pred.of_value

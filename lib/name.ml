@@ -66,11 +66,15 @@ module Meta = struct
 
   let stage = Univ_map.Key.create ~name:"stage" [%sexp_of: [`Compile | `Run]]
 
+  let refcnt = Univ_map.Key.create ~name:"refcnt" [%sexp_of: int]
+
   let find {meta; _} = Univ_map.find meta
 
   let find_exn {meta; _} = Univ_map.find_exn meta
 
   let set ({meta; _} as n) k v = {n with meta= Univ_map.set meta k v}
+
+  let change ({meta; _} as n) ~f k = {n with meta= Univ_map.change meta ~f k}
 end
 
 let create ?relation ?type_ name =
@@ -82,18 +86,19 @@ let create ?relation ?type_ name =
 
 let type_ n = Univ_map.find n.meta Meta.type_
 
-let copy ?relation ?type_:t ?name:n name =
+let copy ?relation ?type_:t ?name:n ?meta name =
   let r = Option.value relation ~default:name.name.node.relation in
   let t = Option.value t ~default:(type_ name) in
   let n = Option.value n ~default:name.name.node.name in
-  let meta =
-    match t with Some t -> Univ_map.set name.meta Meta.type_ t | None -> name.meta
-  in
+  let m = Option.value meta ~default:name.meta in
+  let meta = match t with Some t -> Univ_map.set m Meta.type_ t | None -> m in
   create_consed r n meta
 
 let name n = n.name.node.name
 
 let rel n = n.name.node.relation
+
+let meta n = n.meta
 
 let type_exn n =
   match type_ n with
@@ -127,6 +132,17 @@ let pp_with_stage fmt n =
   | Some `Compile -> fprintf fmt "%a@@comp" pp n
   | Some `Run -> fprintf fmt "%a@@run" pp n
   | None -> fprintf fmt "%a@@unk" pp n
+
+let pp_with_stage_and_refcnt fmt n =
+  let open Format in
+  let stage =
+    match Meta.(find n stage) with
+    | Some `Compile -> "comp"
+    | Some `Run -> "run"
+    | None -> "unk"
+  in
+  let refcnt = match Meta.(find n refcnt) with Some x -> x | None -> 0 in
+  fprintf fmt "%a@@%s#%d" pp n stage refcnt
 
 let fresh f fmt = create (Fresh.name f fmt)
 
