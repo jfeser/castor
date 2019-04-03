@@ -392,7 +392,7 @@ module Test = struct
       alist(orderby([k0.l_shipmode@comp#2],
               select([lineitem.l_shipmode@comp#2],
                 dedup(select([lineitem.l_shipmode@comp#1], lineitem))) as k0),
-        select([lineitem.l_shipmode@run#0,
+        select([lineitem.l_shipmode@run#1,
                 sum((if ((orders.o_orderpriority@run#4 = "1-URGENT") ||
                         (orders.o_orderpriority@run#4 = "2-HIGH")) then 1 else 0)) as high_line_count,
                 sum((if (not((orders.o_orderpriority@run#4 = "1-URGENT")) &&
@@ -648,7 +648,7 @@ select([nation.n_name, revenue],
     |> Format.printf "%a@." pp ;
     [%expect
       {|
-      select([nation.n_name@run#0, revenue@run#0],
+      select([nation.n_name@run#1, revenue@run#1],
         alist(select([nation.n_name@comp#1],
                 dedup(select([nation.n_name@comp#1], nation))) as k0,
           select([nation.n_name@run#1, sum(agg3@run#1) as revenue],
