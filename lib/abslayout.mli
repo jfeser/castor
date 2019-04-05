@@ -96,6 +96,7 @@ val pp : Formatter.t -> t -> unit
 
 val mk_pp :
      ?pp_name:(Formatter.t -> Name.t -> unit)
+  -> ?pp_meta:(Formatter.t -> Core.Univ_map.t -> unit)
   -> unit
   -> (Formatter.t -> t -> unit) * (Formatter.t -> pred -> unit)
 

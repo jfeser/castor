@@ -570,6 +570,7 @@ let%expect_test "ordered-idx-date" =
     {|AOrderedIdx(dedup(select([r_date.f as k], r_date)), ascalar(k), date("2018-01-01"), date("2018-01-01"))|} ;
   [%expect
     {|
+    [WARNING] Output shadowing of k.
     (OrderedIdxT
      ((DateT ((range (Interval 17136 17775)) (nullable false)))
       (DateT ((range (Interval 17136 17775)) (nullable false))) ((count Top)))) |}]

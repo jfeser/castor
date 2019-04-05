@@ -73,6 +73,7 @@ let%expect_test "hash-idx" =
   run_test "AHashIdx(Dedup(Select([r1.f], r1)) as k, AScalar(k.f), null)" ;
   [%expect
     {|
+    [WARNING] Output shadowing of k.f.
     0:4 Table len
     4:8 Table map len
     4:0 Table hash len
@@ -102,6 +103,7 @@ let%expect_test "ordered-idx" =
      AScalar(k.f), null, null)" ;
   [%expect
     {|
+    [WARNING] Output shadowing of k.f.
     0:4 Ordered idx len (=42)
     4:8 Ordered idx index len (=27)
     12:1 Scalar (=(Int 1))
@@ -132,6 +134,7 @@ let%expect_test "ordered-idx-dates" =
      null, null)" ;
   [%expect
     {|
+    [WARNING] Output shadowing of k.f.
     0:4 Ordered idx len (=72)
     4:8 Ordered idx index len (=50)
     12:2 Scalar (=(Date 2016-12-01))

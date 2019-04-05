@@ -100,7 +100,7 @@ let pp_kind fmt =
     | Zip -> fprintf fmt "zip"
     | Concat -> fprintf fmt "concat")
 
-let mk_pp ?(pp_name = Name.pp) () =
+let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
   let rec pp_key fmt = function
     | [] -> failwith "Unexpected empty key."
     | [p] -> pp_pred fmt p
@@ -138,32 +138,34 @@ let mk_pp ?(pp_name = Name.pp) () =
     match o with
     | Asc -> fprintf fmt "@[<hov>%a@]" pp_pred p
     | Desc -> fprintf fmt "@[<hov>%a@ desc@]" pp_pred p
-  and pp fmt {node; _} =
+  and pp fmt {node; meta} =
     let open Format in
-    match node with
-    | Select (ps, r) ->
-        fprintf fmt "@[<hv 2>select(%a,@ %a)@]" (pp_list pp_pred) ps pp r
-    | Filter (p, r) -> fprintf fmt "@[<hv 2>filter(%a,@ %a)@]" pp_pred p pp r
+    fprintf fmt "@[<hv 2>" ;
+    ( match node with
+    | Select (ps, r) -> fprintf fmt "select(%a,@ %a)" (pp_list pp_pred) ps pp r
+    | Filter (p, r) -> fprintf fmt "filter(%a,@ %a)" pp_pred p pp r
     | Join {pred; r1; r2} ->
-        fprintf fmt "@[<hv 2>join(%a,@ %a,@ %a)@]" pp_pred pred pp r1 pp r2
+        fprintf fmt "join(%a,@ %a,@ %a)" pp_pred pred pp r1 pp r2
     | GroupBy (a, k, r) ->
-        fprintf fmt "@[<hv 2>groupby(%a,@ %a,@ %a)@]" (pp_list pp_pred) a
-          (pp_list pp_name) k pp r
+        fprintf fmt "groupby(%a,@ %a,@ %a)" (pp_list pp_pred) a (pp_list pp_name) k
+          pp r
     | OrderBy {key; rel} ->
-        fprintf fmt "@[<hv 2>orderby(%a,@ %a)@]" (pp_list pp_order) key pp rel
-    | Dedup r -> fprintf fmt "@[<hv 2>dedup(@,%a)@]" pp r
+        fprintf fmt "orderby(%a,@ %a)" (pp_list pp_order) key pp rel
+    | Dedup r -> fprintf fmt "dedup(@,%a)" pp r
     | Scan n -> fprintf fmt "%s" n
     | AEmpty -> fprintf fmt "aempty"
-    | AScalar p -> fprintf fmt "@[<hv 2>ascalar(%a)@]" pp_pred p
-    | AList (r1, r2) -> fprintf fmt "@[<hv 2>alist(%a,@ %a)@]" pp r1 pp r2
+    | AScalar p -> fprintf fmt "ascalar(%a)" pp_pred p
+    | AList (r1, r2) -> fprintf fmt "alist(%a,@ %a)" pp r1 pp r2
     | ATuple (rs, kind) ->
-        fprintf fmt "@[<hv 2>atuple(%a,@ %a)@]" (pp_list pp) rs pp_kind kind
+        fprintf fmt "atuple(%a,@ %a)" (pp_list pp) rs pp_kind kind
     | AHashIdx (r1, r2, {lookup; _}) ->
-        fprintf fmt "@[<hv 2>ahashidx(%a,@ %a,@ %a)@]" pp r1 pp r2 pp_key lookup
+        fprintf fmt "ahashidx(%a,@ %a,@ %a)" pp r1 pp r2 pp_key lookup
     | AOrderedIdx (r1, r2, {lookup_low; lookup_high; _}) ->
-        fprintf fmt "@[<hv 2>aorderedidx(%a,@ %a,@ %a,@ %a)@]" pp r1 pp r2 pp_pred
-          lookup_low pp_pred lookup_high
-    | As (n, r) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp r n
+        fprintf fmt "aorderedidx(%a,@ %a,@ %a,@ %a)" pp r1 pp r2 pp_pred lookup_low
+          pp_pred lookup_high
+    | As (n, r) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp r n ) ;
+    Option.iter pp_meta ~f:(fun ppm -> fprintf fmt "#@[<hv 2>%a@]" ppm !meta) ;
+    fprintf fmt "@]"
   in
   (pp, pp_pred)
 

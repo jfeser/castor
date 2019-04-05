@@ -145,6 +145,7 @@ let%expect_test "ordered-idx-dates" =
      null, null)" ;
   [%expect
     {|
+    [WARNING] Output shadowing of k.f.
     OrderedIdx
     OrderedIdx key: ((Date 2016-12-01))
     Scalar: (Date 2016-12-01)
@@ -364,5 +365,7 @@ let%expect_test "annotate-schema" =
       (Select
        (((Min (Name ((relation (r)) (name f)))))
         ((node (Scan r))
-         (meta ((schema (((relation (r)) (name f)) ((relation (r)) (name g))))))))))
-     (meta ((schema (((relation ()) (name ""))))))) |}]
+         (meta
+          ((refcnt ((((relation (r)) (name f)) 1) (((relation (r)) (name g)) 0)))
+           (schema (((relation (r)) (name f)) ((relation (r)) (name g))))))))))
+     (meta ((refcnt ()) (schema (((relation ()) (name ""))))))) |}]

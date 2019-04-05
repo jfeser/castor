@@ -1,4 +1,4 @@
-open Base
+open Core
 open Abslayout
 
 module type S = sig
@@ -17,6 +17,8 @@ module type S = sig
   val annotate_subquery_types : t -> unit
 
   val resolve : ?params:Set.M(Name).t -> t -> t
+
+  val refcnt : int Map.M(Name).t Univ_map.Key.t
 
   type eval_ctx
 

@@ -260,6 +260,7 @@ let%expect_test "ordered-idx-dates" =
      AScalar(k.f), date("2017-10-04"), date("2018-10-04"))|} ;
   [%expect
     {|
+    [WARNING] Output shadowing of k.f.
     0:4 Ordered idx len (=72)
     4:8 Ordered idx index len (=50)
     12:2 Scalar (=(Date 2016-12-01))
