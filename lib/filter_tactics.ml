@@ -57,6 +57,11 @@ module Make (C : Config.S) = struct
     | OrderBy {key; rel= {node= Filter (p, r); _}} ->
         Some (filter p (order_by key r))
     | GroupBy (ps, key, {node= Filter (p, r); _}) ->
+        Logs.debug (fun m ->
+            m "%a %a" Sexp.pp_hum
+              (M.bound r |> [%sexp_of: Set.M(Name).t])
+              Sexp.pp_hum
+              (M.bound (group_by ps key r) |> [%sexp_of: Set.M(Name).t]) ) ;
         if invariant_support (M.bound r) (M.bound (group_by ps key r)) p then
           Some (filter p (group_by ps key r))
         else None
@@ -299,9 +304,14 @@ module Make (C : Config.S) = struct
         let unpushed, pushed =
           Pred.conjuncts p
           |> List.partition_map ~f:(fun p ->
-                 if is_supported (M.bound rk) p then `Snd (`K p)
-                 else if invariant_support orig_bound (M.bound rv) p then
-                   `Snd (`V p)
+                 let rk_bnd = M.bound rk in
+                 if is_supported rk_bnd p then `Snd (`K p)
+                 else if
+                   (* TODO: Don't push filters into places that will shadow
+                      their variables. This is gross tho. Fix later? q*)
+                   Set.is_empty (Set.inter (Pred.names p) rk_bnd)
+                   && invariant_support orig_bound (M.bound rv) p
+                 then `Snd (`V p)
                  else `Fst p )
         in
         let outer_pred = Pred.conjoin unpushed in

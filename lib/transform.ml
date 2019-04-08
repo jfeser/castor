@@ -42,7 +42,7 @@ module Make (Config : Config.S) () = struct
 
   let project r =
     M.annotate_schema r ;
-    Some (project r)
+    Some (project ~params:Config.params r)
 
   let project = of_func project ~name:"project"
 
@@ -179,9 +179,8 @@ module Make (Config : Config.S) () = struct
           Path.(all >>? is_param_cmp_filter >>? is_run_time >>| shallowest)
       ; push_all_unparameterized_filters
       ; (* Push selections above collections. *)
-        fix
-          (at_ Select_tactics.push_select
-             (Path.all >>? is_select >>? above is_collection >>| deepest))
+        for_all Select_tactics.push_select
+          Path.(all >>? is_select >>? is_run_time >>? above is_collection)
       ; (* Eliminate all unparameterized relations. *)
         fix
           (seq_many
