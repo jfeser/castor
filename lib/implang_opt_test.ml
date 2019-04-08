@@ -3,38 +3,42 @@ open Base
 open Abslayout
 open Test_util
 open Implang_opt
-module M = Abslayout_db.Make (Test_db)
 
-let run_test ?(params = []) layout_str opt_func =
-  let module S =
-    Serialize.Make (struct
-        let layout_map_channel = None
-      end)
-      (M)
-  in
-  let module I =
-    Irgen.Make (struct
-        let code_only = true
+let%test_module _ =
+  ( module struct
+    let m, _, _, _ = make_modules ()
 
-        let debug = false
-      end)
-      (M)
-      (S)
-      ()
-  in
-  let param_names = List.map params ~f:(fun (n, _) -> n) in
-  let sparams = Set.of_list (module Name) param_names in
-  let layout = of_string_exn layout_str |> M.resolve ~params:sparams in
-  M.annotate_schema layout ;
-  let layout = M.annotate_key_layouts layout in
-  M.annotate_subquery_types layout ;
-  I.irgen ~params:param_names ~data_fn:"/tmp/buf" layout
-  |> opt_func
-  |> I.pp Caml.Format.std_formatter
+    let run_test ?(params = []) layout_str opt_func =
+      let module M = (val m) in
+      let module S =
+        Serialize.Make (struct
+            let layout_map_channel = None
+          end)
+          (M)
+      in
+      let module I =
+        Irgen.Make (struct
+            let code_only = true
 
-let%expect_test "example-1" =
-  run_test ~params:Demomatch.example_params
-    {|
+            let debug = false
+          end)
+          (M)
+          (S)
+          ()
+      in
+      let param_names = List.map params ~f:(fun (n, _) -> n) in
+      let sparams = Set.of_list (module Name) param_names in
+      let layout = of_string_exn layout_str |> M.resolve ~params:sparams in
+      M.annotate_schema layout ;
+      let layout = M.annotate_key_layouts layout in
+      M.annotate_subquery_types layout ;
+      I.irgen ~params:param_names ~data_fn:"/tmp/buf" layout
+      |> opt_func
+      |> I.pp Caml.Format.std_formatter
+
+    let%expect_test "example-1" =
+      run_test ~params:Demomatch.example_params
+        {|
 filter(lc.id = id_c && lp.id = id_p,
 alist(filter(succ > counter + 1, log) as lp,
 atuple([ascalar(lp.id), ascalar(lp.counter),
@@ -42,9 +46,9 @@ alist(filter(lp.counter < log.counter &&
 log.counter < lp.succ, log) as lc,
 atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
 |}
-    opt ;
-  [%expect
-    {|
+        opt ;
+      [%expect
+        {|
     [WARNING] Cross-stage shadowing of lp.counter.
     // Locals:
     // i18 : Int[nonnull] (persists=true)
@@ -128,3 +132,4 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
             i1 = i1 + 1;
         }
     } |}]
+  end )

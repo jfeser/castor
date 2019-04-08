@@ -119,7 +119,11 @@ module Expect_test_config = struct
     try thunk () with TestDbExn -> ()
 end
 
-module Test_db = struct
+module type Test_db_S = sig
+  val conn : Db.t
+end
+
+module Test_db () = struct
   let conn = create_test_db ()
 
   let () =
@@ -160,7 +164,18 @@ module Test_db = struct
       ; [Int 5; Int 6; String "bar"] ]
 end
 
+let make_test_db =
+  let test_db =
+    lazy
+      ( module struct
+        include Test_db ()
+      end
+      : Test_db_S )
+  in
+  fun () -> Lazy.force test_db
+
 let make_modules ?layout_file ?(irgen_debug = false) ?(code_only = false) () =
+  let (module Test_db) = make_test_db () in
   let module M = Abslayout_db.Make (Test_db) in
   let module S =
     Serialize.Make (struct
