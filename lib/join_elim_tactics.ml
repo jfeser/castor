@@ -14,8 +14,9 @@ end
 module Make (C : Config.S) = struct
   module O = Ops.Make (C)
   open O
-  module F = Filter_tactics.Make (C)
-  open F
+
+  (* module F = Filter_tactics.Make (C)
+   * open F *)
   open C
 
   let elim_join_nest r =
@@ -40,7 +41,8 @@ module Make (C : Config.S) = struct
     | _ -> None
 
   let elim_join_hash =
-    seq
-      (of_func elim_join_hash ~name:"elim-join-hash")
-      (fix (at_ push_filter Path.(all >>? is_const_filter >>| shallowest)))
+    (* seq *)
+    of_func elim_join_hash ~name:"elim-join-hash"
+
+  (* (fix (at_ push_filter Path.(all >>? is_const_filter >>| shallowest))) *)
 end

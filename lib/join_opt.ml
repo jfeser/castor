@@ -22,8 +22,9 @@ module Make (C : Config.S) = struct
   open O
   module S = Simple_tactics.Make (C)
   open S
-  module F = Filter_tactics.Make (C)
-  open F
+
+  (* module F = Filter_tactics.Make (C)
+   * open F *)
 
   let sql_ctx = Sql.create_ctx ()
 
@@ -299,6 +300,7 @@ module Make (C : Config.S) = struct
       let c = A.(Name (Name.create "c")) in
       A.(select [Min c; Max c; Avg c] part_counts)
     in
+    let part_aggs = M.resolve ~params part_aggs in
     M.annotate_schema part_aggs ;
     let sql = Sql.of_ralgebra sql_ctx part_aggs in
     let tups =
@@ -524,14 +526,7 @@ module Make (C : Config.S) = struct
       opt r
       |> ParetoSet.min_elt (fun a -> a.(0))
       |> Option.map ~f:(fun j ->
-             `Tf
-               (seq_many
-                  [ of_func (reshape j)
-                  ; emit_joins j
-                  ; fix
-                      (at_ push_filter
-                         Castor.Path.(all >>? is_const_filter >>| shallowest))
-                  ]) )
+             `Tf (seq_many [of_func (reshape j); emit_joins j]) )
     in
     {name= "join-opt"; f}
 end

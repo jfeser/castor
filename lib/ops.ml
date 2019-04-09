@@ -151,12 +151,6 @@ module Make (C : Config.S) = struct
            | `Result r -> Some r
            | `Tf tf' -> apply tf' r )
     in
-    if verbose then
-      Option.iter ret ~f:(fun r' ->
-          if verbose then
-            Caml.Format.printf
-              "@[%s transformed:@,%a@,===== to ======@,%a@]@.\n" tf.name
-              Abslayout.pp r Abslayout.pp r' ) ;
     ret
 
   let at_ tf pspec =
@@ -228,10 +222,12 @@ module Make (C : Config.S) = struct
   let traced tf =
     let f r =
       Logs.debug (fun m -> m "Transform %s running." tf.name) ;
-      match tf.f r with
+      match apply tf r with
       | Some r' ->
-          Logs.debug (fun m -> m "Transform %s succeeded." tf.name) ;
-          Some r'
+          Logs.debug (fun m ->
+              m "@[%s transformed:@,%a@,===== to ======@,%a@]@.\n" tf.name
+                Abslayout.pp r Abslayout.pp r' ) ;
+          Some (`Result r')
       | None ->
           Logs.debug (fun m -> m "Transform %s failed." tf.name) ;
           None
@@ -239,7 +235,7 @@ module Make (C : Config.S) = struct
     {tf with f}
 
   let of_func ?(name = "<unknown>") f =
-    let tf = traced (first_order f name) in
+    let tf = first_order f name in
     let {f; name} = if validate then validated tf else tf in
     {f= (fun r -> Exn.reraise_uncaught name (fun () -> f r)); name}
 

@@ -159,14 +159,18 @@ module Make (Config : Config.S) () = struct
     let open Infix in
     seq_many
       [ (* Eliminate groupby operators. *)
-        fix
-          (at_ Groupby_tactics.elim_groupby
-             (Path.all >>? is_groupby >>| shallowest))
+        traced
+          (fix
+             (at_ Groupby_tactics.elim_groupby
+                (Path.all >>? is_groupby >>| shallowest)))
       ; (* Hoist parameterized filters as far up as possible. *)
         fix
           (at_ hoist_filter
              (Path.all >>? is_param_filter >>| deepest >>= parent))
       ; at_ Join_opt.transform (Path.all >>? is_join >>| shallowest)
+      ; resolve
+      ; fix
+          (at_ push_filter Castor.Path.(all >>? is_const_filter >>| shallowest))
       ; (* Push orderby operators into compile time position if possible. *)
         fix
           (at_ push_orderby
