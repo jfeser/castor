@@ -32,7 +32,7 @@ let main ~params:all_params ~db ~validate ~verbose ch =
   let module O = Ops.Make (Config) in
   let query_str = In_channel.input_all ch in
   let query = Abslayout.of_string_exn query_str |> A.resolve ~params in
-  match O.(apply T.opt query) with
+  match Transform.optimize (module Config) query with
   | Some query' ->
       Or_error.iter_error (T.is_serializable query') ~f:(fun err ->
           Logs.warn (fun m -> m "Query is not serializable: %a" Error.pp err)

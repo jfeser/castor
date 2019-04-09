@@ -221,3 +221,34 @@ module Make (Config : Config.S) () = struct
       Error (Error.of_string "Parameters referenced at compile time.")
     else Ok ()
 end
+
+let optimize (module C : Config.S) r =
+  (* Annotate query with free variables. *)
+  let module M = Abslayout_db.Make (C) in
+  M.annotate_schema r ;
+  annotate_free r ;
+  (* Recursively optimize subqueries. *)
+  let visitor =
+    object (self : 'a)
+      inherit [_] map
+
+      method visit_subquery r =
+        let module C = struct
+          include C
+
+          let params = Set.union params Meta.(find_exn r free)
+        end in
+        let module T = Make (C) () in
+        let module O = Ops.Make (C) in
+        Option.value_exn O.(apply T.opt r)
+
+      method! visit_Exists () r = Exists (self#visit_subquery r)
+
+      method! visit_First () r = First (self#visit_subquery r)
+    end
+  in
+  let r = visitor#visit_t () r in
+  let module T = Make (C) () in
+  let module O = Ops.Make (C) in
+  (* Optimize outer query. *)
+  O.(apply T.opt r)
