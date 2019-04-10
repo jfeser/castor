@@ -39,6 +39,8 @@ val pp_with_stage : Formatter.t -> t -> unit
 
 val pp_with_stage_and_refcnt : Formatter.t -> t -> unit
 
+val pp_with_stage_and_type : Formatter.t -> t -> unit
+
 val fresh : Fresh.t -> (int -> string, unit, string) format -> t
 
 val create_table : unit -> (t, 'a) Bounded_int_table.t

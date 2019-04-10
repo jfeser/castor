@@ -70,7 +70,14 @@ module Meta = struct
 
   let find {meta; _} = Univ_map.find meta
 
-  let find_exn {meta; _} = Univ_map.find_exn meta
+  let find_exn ({meta; _} as n) k =
+    match Univ_map.find meta k with
+    | Some x -> x
+    | None ->
+        Error.create "Missing metadata."
+          (n, Univ_map.Key.name k, meta)
+          [%sexp_of: t * string * Univ_map.t]
+        |> Error.raise
 
   let set ({meta; _} as n) k v = {n with meta= Univ_map.set meta k v}
 
@@ -145,6 +152,21 @@ let pp_with_stage_and_refcnt fmt n =
     match Meta.(find n refcnt) with Some x -> Int.to_string x | None -> "?"
   in
   fprintf fmt "%a@@%s#%s" pp n stage refcnt
+
+let pp_with_stage_and_type fmt n =
+  let open Format in
+  let stage =
+    match Meta.(find n stage) with
+    | Some `Compile -> "comp"
+    | Some `Run -> "run"
+    | None -> "unk"
+  in
+  let type_ =
+    match Meta.(find n type_) with
+    | Some t -> Type.PrimType.to_string t
+    | None -> "unk"
+  in
+  fprintf fmt "%a@@%s:%s" pp n stage type_
 
 let fresh f fmt = create (Fresh.name f fmt)
 
