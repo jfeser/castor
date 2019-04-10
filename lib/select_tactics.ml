@@ -46,7 +46,8 @@ module Make (C : Config.S) = struct
 
         method! visit_Max () p = Max (add_agg (Max p))
 
-        method! visit_Avg () p = Binop (Div, Sum (add_agg (Sum p)), Sum Count)
+        method! visit_Avg () p =
+          Binop (Div, Sum (add_agg (Sum p)), Sum (add_agg Count))
       end
     in
     let p' = visitor#visit_pred () p in
