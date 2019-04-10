@@ -97,18 +97,13 @@ module Make (C : Config.S) = struct
   end
 
   let source_relation leaves n =
-    let r_m =
-      List.find_map leaves ~f:(fun (r, s) ->
-          if Set.mem s n then Some r else None )
-    in
-    match r_m with
-    | Some r -> r
-    | None ->
-        Error.(
-          create "No source found for name."
-            (n, List.map leaves ~f:(fun (_, ns) -> ns))
-            [%sexp_of: Name.t * Set.M(Name).t list]
-          |> raise)
+    List.find_map leaves ~f:(fun (r, s) -> if Set.mem s n then Some r else None)
+    |> Result.of_option
+         ~error:
+           Error.(
+             create "No source found for name."
+               (n, List.map leaves ~f:(fun (_, ns) -> ns))
+               [%sexp_of: Name.t * Set.M(Name).t list])
 
   module JoinSpace = struct
     module T = struct
@@ -128,6 +123,14 @@ module Make (C : Config.S) = struct
 
     let empty =
       {graph= JoinGraph.empty; filters= Set.empty (module A.Pred); leaves= []}
+
+    let union s1 s2 =
+      { graph= JoinGraph.union s1.graph s2.graph
+      ; filters= Set.union s1.filters s2.filters
+      ; leaves=
+          List.append s1.leaves s2.leaves
+          |> List.dedup_and_sort ~compare:(fun (r1, _) (r2, _) ->
+                 [%compare: A.t] r1 r2 ) }
 
     let length {graph; _} = JoinGraph.nb_vertex graph
 
@@ -162,55 +165,51 @@ module Make (C : Config.S) = struct
       if JoinGraph.nb_vertex graph = 1 then JoinGraph.choose_vertex graph
       else contract (fun ~label:p j1 j2 -> A.join p j1 j2) graph
 
+    (** Collect the leaves of the join tree rooted at r. *)
+    let rec to_leaves r =
+      let open A in
+      match r.node with
+      | Join {r1; r2; _} -> Set.union (to_leaves r1) (to_leaves r2)
+      | _ -> Set.singleton (module A) r
+
+    (** Convert a join tree to a join graph. *)
+    let rec to_graph leaves r =
+      match r.A.node with
+      | Join {r1; r2; pred= p} ->
+          let s = union (to_graph leaves r1) (to_graph leaves r2) in
+          (* Collect the set of relations that this join depends on. *)
+          List.fold_left (A.Pred.conjuncts p) ~init:s ~f:(fun s p ->
+              let pred_rels =
+                List.map
+                  (A.Pred.names p |> Set.to_list)
+                  ~f:(source_relation leaves)
+                |> Or_error.all
+              in
+              match pred_rels with
+              | Ok [r1; r2] ->
+                  { s with
+                    graph= JoinGraph.add_or_update_edge s.graph (r1, p, r2) }
+              | Ok _ ->
+                  Logs.warn (fun m ->
+                      m "Join-opt: Unhandled predicate %a. Too many relations."
+                        A.pp_pred p ) ;
+                  s
+              | Error e ->
+                  Logs.warn (fun m ->
+                      m "Join opt: Unhandled predicate %a. %a" A.pp_pred p
+                        Error.pp e ) ;
+                  s )
+      | _ -> empty
+
     let of_abslayout r =
-      let rec leaves r =
-        let open A in
-        match r.node with
-        | Join {r1; r2; _} -> Set.union (leaves r1) (leaves r2)
-        | Filter (_, r) -> leaves r
-        | _ -> Set.singleton (module A) r
-      in
+      Logs.debug (fun m -> m "Join-opt: Planning join for %a." A.pp r) ;
       let leaves =
-        leaves r |> Set.to_list
+        to_leaves r |> Set.to_list
         |> List.map ~f:(fun r ->
                let s = Meta.(find_exn r schema) |> Set.of_list (module Name) in
                (r, s) )
       in
-      (object (self : 'a)
-         inherit [_] A.reduce
-
-         method zero = empty
-
-         method plus s1 s2 : t =
-           { graph= JoinGraph.union s1.graph s2.graph
-           ; filters= Set.union s1.filters s2.filters
-           ; leaves=
-               List.append s1.leaves s2.leaves
-               |> List.dedup_and_sort ~compare:(fun (r1, _) (r2, _) ->
-                      [%compare: A.t] r1 r2 ) }
-
-         method! visit_Join () p r1 r2 =
-           let s : t = self#plus (self#visit_t () r1) (self#visit_t () r2) in
-           List.fold_left (A.Pred.conjuncts p) ~init:s ~f:(fun s p ->
-               let pred_rels =
-                 List.map
-                   (A.Pred.names p |> Set.to_list)
-                   ~f:(source_relation leaves)
-               in
-               match pred_rels with
-               | [r1; r2] ->
-                   { s with
-                     graph= JoinGraph.add_or_update_edge s.graph (r1, p, r2) }
-               | _ ->
-                   Logs.warn (fun m ->
-                       m "Join-opt: Unhandled predicate %a" A.pp_pred p ) ;
-                   s )
-
-         method! visit_Filter () (p, r) : t =
-           let s = self#visit_t () r in
-           {s with filters= Set.add s.filters p}
-      end)
-        #visit_t () r
+      to_graph leaves r
 
     let partition_fold ~init ~f {graph; filters; leaves} =
       let vertices = JoinGraph.vertices graph |> Array.of_list in
