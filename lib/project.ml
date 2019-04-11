@@ -27,59 +27,9 @@ module Make (C : Config.S) = struct
               (* Be conservative if refcount is missing. *)
               true ) )
 
-  let all_unref refcnt r =
-    List.for_all
-      Meta.(find_exn r schema)
-      ~f:(fun n -> match Map.(find refcnt n) with Some c -> c = 0 | None -> false)
-
-  let project_visitor =
-    object (self : 'a)
-      inherit [_] endo as super
-
-      method! visit_t count r =
-        let refcnt = Univ_map.(find_exn !(r.meta) M.refcnt) in
-        if (not count) && all_unref refcnt r then empty
-        else
-          match r.node with
-          | Select (ps, r) ->
-              let count =
-                count || List.exists ps ~f:(function Count -> true | _ -> false)
-              in
-              select (project_defs refcnt ps) (self#visit_t count r)
-          | Dedup r -> dedup (self#visit_t false r)
-          | GroupBy (ps, ns, r) ->
-              group_by (project_defs refcnt ps) ns (self#visit_t count r)
-          | AScalar p -> (
-            match project_defs refcnt [p] with
-            | [] -> scalar Null
-            | [p] -> scalar p
-            | _ -> assert false )
-          | ATuple ([], _) -> empty
-          | ATuple ([r], _) -> r
-          | ATuple (rs, Cross) ->
-              let rs = List.map rs ~f:(self#visit_t count) in
-              let rs =
-                List.filter rs ~f:(fun r ->
-                    match r.node with AScalar Null | AEmpty -> false | _ -> true )
-              in
-              let rs = if count && List.length rs = 0 then [scalar Null] else rs in
-              tuple rs Cross
-          | Join {r1; r2; pred} ->
-              (* If one side of a join is unused then the join can be dropped. *)
-              let r1_unref = all_unref refcnt r1 in
-              let r2_unref = all_unref refcnt r2 in
-              let r1 = self#visit_t count r1 in
-              let r2 = self#visit_t count r2 in
-              if count then join pred r1 r2
-              else if r1_unref then r2
-              else if r2_unref then r1
-              else join pred r1 r2
-          | AHashIdx (rk, rv, m) ->
-              hash_idx' (self#visit_t false rk) (self#visit_t count rv) m
-          | AOrderedIdx (rk, rv, m) ->
-              ordered_idx (self#visit_t false rk) (self#visit_t count rv) m
-          | _ -> super#visit_t count r
-    end
+  let all_unref refcnt schema =
+    List.for_all schema ~f:(fun n ->
+        match Map.(find refcnt n) with Some c -> c = 0 | None -> false )
 
   let pp_with_refcount, _ =
     mk_pp
@@ -94,13 +44,120 @@ module Make (C : Config.S) = struct
         | None -> () )
       ()
 
+  let project_visitor =
+    object (self : 'a)
+      inherit [_] map as super
+
+      method! visit_t count r =
+        let open Option.Let_syntax in
+        let r' =
+          let%bind refcnt = Univ_map.(find !(r.meta) M.refcnt) in
+          let%map schema = Meta.(find r Meta.schema) in
+          if (not count) && all_unref refcnt schema then empty
+          else
+            match r.node with
+            | AList ({node= AEmpty; _}, _)
+             |AList (_, {node= AEmpty; _})
+             |AHashIdx ({node= AEmpty; _}, _, _)
+             |AHashIdx (_, {node= AEmpty; _}, _)
+             |AOrderedIdx ({node= AEmpty; _}, _, _)
+             |AOrderedIdx (_, {node= AEmpty; _}, _)
+             |Select (_, {node= AEmpty; _})
+             |Filter (_, {node= AEmpty; _})
+             |Dedup {node= AEmpty; _}
+             |GroupBy (_, _, {node= AEmpty; _})
+             |OrderBy {rel= {node= AEmpty; _}; _}
+             |Join {r1= {node= AEmpty; _}; _}
+             |Join {r2= {node= AEmpty; _}; _} ->
+                empty
+            | Select (ps, r) ->
+                let count =
+                  count || List.exists ps ~f:(function Count -> true | _ -> false)
+                in
+                select (project_defs refcnt ps) (self#visit_t count r)
+            | Dedup r -> dedup (self#visit_t false r)
+            | GroupBy (ps, ns, r) ->
+                let count =
+                  count || List.exists ps ~f:(function Count -> true | _ -> false)
+                in
+                group_by (project_defs refcnt ps) ns (self#visit_t count r)
+            | AScalar p -> (
+              match project_defs refcnt [p] with
+              | [] -> if count then scalar Null else empty
+              | [p] -> scalar p
+              | _ -> assert false )
+            | ATuple ([], _) -> empty
+            | ATuple ([r], _) -> self#visit_t count r
+            | ATuple (rs, Concat) ->
+                let rs = List.map rs ~f:(self#visit_t count) in
+                let rs = List.filter rs ~f:(fun r -> r.node <> AEmpty) in
+                tuple rs Concat
+            | ATuple (rs, Cross) ->
+                if
+                  List.exists rs ~f:(fun r ->
+                      match r.node with AEmpty -> true | _ -> false )
+                then empty
+                else
+                  let rs =
+                    (* Remove unreferenced parts of the tuple. *)
+                    List.filter rs ~f:(fun r ->
+                        let is_unref =
+                          all_unref
+                            Univ_map.(find_exn !(r.meta) M.refcnt)
+                            Meta.(find_exn r schema)
+                        in
+                        let is_scalar =
+                          match r.node with AScalar _ -> true | _ -> false
+                        in
+                        (* If the count matters, then we can only remove
+                           unreferenced scalars. *)
+                        let should_remove =
+                          (count && is_unref && is_scalar)
+                          || (* Otherwise we can remove anything unreferenced. *)
+                             ((not count) && is_unref)
+                        in
+                        if should_remove then
+                          Logs.debug ~src:test (fun m ->
+                              m "Removing tuple element %a." pp_with_refcount r ) ;
+                        not should_remove )
+                  in
+                  let rs =
+                    (* We care about the count here (or at least the difference
+                       between 1 record and none). *)
+                    List.map rs ~f:(self#visit_t true)
+                  in
+                  let rs =
+                    if count && List.length rs = 0 then [scalar Null] else rs
+                  in
+                  tuple rs Cross
+            | Join {r1; r2; pred} ->
+                (* If one side of a join is unused then the join can be dropped. *)
+                let r1_unref = all_unref refcnt Meta.(find_exn r1 schema) in
+                let r2_unref = all_unref refcnt Meta.(find_exn r2 schema) in
+                let r1 = self#visit_t count r1 in
+                let r2 = self#visit_t count r2 in
+                if count then join pred r1 r2
+                else if r1_unref then r2
+                else if r2_unref then r1
+                else join pred r1 r2
+            | AHashIdx (rk, rv, m) ->
+                hash_idx' (self#visit_t false rk) (self#visit_t count rv) m
+            | AOrderedIdx (rk, rv, m) ->
+                ordered_idx (self#visit_t false rk) (self#visit_t count rv) m
+            | _ -> super#visit_t count r
+        in
+        match r' with Some r' -> r' | None -> r
+    end
+
+  let project_once = project_visitor#visit_t true
+
   let project ?(params = Set.empty (module Name)) r =
     let rec loop r =
-      (* Format.printf "pre %a@." pp_with_refcount r ; *)
       let r' = M.resolve r ~params in
-      (* Format.printf "post %a@." pp_with_refcount r ; *)
       M.annotate_schema r' ;
-      let r' = project_visitor#visit_t true r' in
+      Logs.debug ~src:test (fun m -> m "pre %a@." pp_with_refcount r') ;
+      let r' = project_once r' in
+      Logs.debug ~src:test (fun m -> m "post %a@." pp_with_refcount r') ;
       if Abslayout.O.(r = r') then r' else loop r'
     in
     loop r
@@ -152,31 +209,8 @@ alist(orderby([k0.l_shipmode],
                          alist(join((orders.o_orderkey = lineitem.l_orderkey),
                                  lineitem,
                                  orders),
-                           atuple([ascalar(lineitem.l_orderkey),
-                                   ascalar(lineitem.l_partkey),
-                                   ascalar(lineitem.l_suppkey),
-                                   ascalar(lineitem.l_linenumber),
-                                   ascalar(lineitem.l_quantity),
-                                   ascalar(lineitem.l_extendedprice),
-                                   ascalar(lineitem.l_discount),
-                                   ascalar(lineitem.l_tax),
-                                   ascalar(lineitem.l_returnflag),
-                                   ascalar(lineitem.l_linestatus),
-                                   ascalar(lineitem.l_shipdate),
-                                   ascalar(lineitem.l_commitdate),
-                                   ascalar(lineitem.l_receiptdate),
-                                   ascalar(lineitem.l_shipinstruct),
-                                   ascalar(lineitem.l_shipmode),
-                                   ascalar(lineitem.l_comment),
-                                   ascalar(orders.o_orderkey),
-                                   ascalar(orders.o_custkey),
-                                   ascalar(orders.o_orderstatus),
-                                   ascalar(orders.o_totalprice),
-                                   ascalar(orders.o_orderdate),
-                                   ascalar(orders.o_orderpriority),
-                                   ascalar(orders.o_clerk),
-                                   ascalar(orders.o_shippriority),
-                                   ascalar(orders.o_comment)],
+                           atuple([ascalar(lineitem.l_commitdate),
+                                   ascalar(lineitem.l_receiptdate)],
                              cross)))))),
        filter((count4 > 0),
          select([count() as count4,
@@ -258,51 +292,6 @@ select([nation.n_name, revenue],
          filter((count4 > 0),
            select([count() as count4,
                    sum((lineitem.l_extendedprice * (1 - lineitem.l_discount))) as agg3,
-                   k1,
-                   region.r_regionkey,
-                   region.r_name,
-                   region.r_comment,
-                   customer.c_custkey,
-                   customer.c_name,
-                   customer.c_address,
-                   customer.c_nationkey,
-                   customer.c_phone,
-                   customer.c_acctbal,
-                   customer.c_mktsegment,
-                   customer.c_comment,
-                   orders.o_orderkey,
-                   orders.o_custkey,
-                   orders.o_orderstatus,
-                   orders.o_totalprice,
-                   orders.o_orderdate,
-                   orders.o_orderpriority,
-                   orders.o_clerk,
-                   orders.o_shippriority,
-                   orders.o_comment,
-                   lineitem.l_orderkey,
-                   lineitem.l_partkey,
-                   lineitem.l_suppkey,
-                   lineitem.l_linenumber,
-                   lineitem.l_quantity,
-                   lineitem.l_extendedprice,
-                   lineitem.l_discount,
-                   lineitem.l_tax,
-                   lineitem.l_returnflag,
-                   lineitem.l_linestatus,
-                   lineitem.l_shipdate,
-                   lineitem.l_commitdate,
-                   lineitem.l_receiptdate,
-                   lineitem.l_shipinstruct,
-                   lineitem.l_shipmode,
-                   lineitem.l_comment,
-                   supplier.s_suppkey,
-                   supplier.s_name,
-                   supplier.s_address,
-                   supplier.s_nationkey,
-                   supplier.s_phone,
-                   supplier.s_acctbal,
-                   supplier.s_comment,
-                   nation.n_nationkey,
                    nation.n_name,
                    nation.n_regionkey,
                    nation.n_comment],
@@ -330,49 +319,7 @@ select([nation.n_name, revenue],
                                                 lineitem),
                                               supplier),
                                             nation),
-                                      atuple([ascalar(customer.c_custkey),
-                                              ascalar(customer.c_name),
-                                              ascalar(customer.c_address),
-                                              ascalar(customer.c_nationkey),
-                                              ascalar(customer.c_phone),
-                                              ascalar(customer.c_acctbal),
-                                              ascalar(customer.c_mktsegment),
-                                              ascalar(customer.c_comment),
-                                              ascalar(orders.o_orderkey),
-                                              ascalar(orders.o_custkey),
-                                              ascalar(orders.o_orderstatus),
-                                              ascalar(orders.o_totalprice),
-                                              ascalar(orders.o_orderdate),
-                                              ascalar(orders.o_orderpriority),
-                                              ascalar(orders.o_clerk),
-                                              ascalar(orders.o_shippriority),
-                                              ascalar(orders.o_comment),
-                                              ascalar(lineitem.l_orderkey),
-                                              ascalar(lineitem.l_partkey),
-                                              ascalar(lineitem.l_suppkey),
-                                              ascalar(lineitem.l_linenumber),
-                                              ascalar(lineitem.l_quantity),
-                                              ascalar(lineitem.l_extendedprice),
-                                              ascalar(lineitem.l_discount),
-                                              ascalar(lineitem.l_tax),
-                                              ascalar(lineitem.l_returnflag),
-                                              ascalar(lineitem.l_linestatus),
-                                              ascalar(lineitem.l_shipdate),
-                                              ascalar(lineitem.l_commitdate),
-                                              ascalar(lineitem.l_receiptdate),
-                                              ascalar(lineitem.l_shipinstruct),
-                                              ascalar(lineitem.l_shipmode),
-                                              ascalar(lineitem.l_comment),
-                                              ascalar(supplier.s_suppkey),
-                                              ascalar(supplier.s_name),
-                                              ascalar(supplier.s_address),
-                                              ascalar(supplier.s_nationkey),
-                                              ascalar(supplier.s_phone),
-                                              ascalar(supplier.s_acctbal),
-                                              ascalar(supplier.s_comment),
-                                              ascalar(nation.n_nationkey),
-                                              ascalar(nation.n_name),
-                                              ascalar(nation.n_regionkey),
+                                      atuple([ascalar(nation.n_regionkey),
                                               ascalar(nation.n_comment)],
                                         cross)))],
                             cross))),
@@ -399,46 +346,9 @@ select([nation.n_name, revenue],
                                        lineitem),
                                      supplier),
                                    nation)),
-                           atuple([ascalar(customer.c_custkey),
-                                   ascalar(customer.c_name),
-                                   ascalar(customer.c_address),
-                                   ascalar(customer.c_nationkey),
-                                   ascalar(customer.c_phone),
-                                   ascalar(customer.c_acctbal),
-                                   ascalar(customer.c_mktsegment),
-                                   ascalar(customer.c_comment),
-                                   ascalar(orders.o_orderkey),
-                                   ascalar(orders.o_custkey),
-                                   ascalar(orders.o_orderstatus),
-                                   ascalar(orders.o_totalprice),
-                                   ascalar(orders.o_orderdate),
-                                   ascalar(orders.o_orderpriority),
-                                   ascalar(orders.o_clerk),
-                                   ascalar(orders.o_shippriority),
-                                   ascalar(orders.o_comment),
-                                   ascalar(lineitem.l_orderkey),
-                                   ascalar(lineitem.l_partkey),
-                                   ascalar(lineitem.l_suppkey),
-                                   ascalar(lineitem.l_linenumber),
-                                   ascalar(lineitem.l_quantity),
-                                   ascalar(lineitem.l_extendedprice),
+                           atuple([ascalar(lineitem.l_extendedprice),
                                    ascalar(lineitem.l_discount),
                                    ascalar(lineitem.l_tax),
-                                   ascalar(lineitem.l_returnflag),
-                                   ascalar(lineitem.l_linestatus),
-                                   ascalar(lineitem.l_shipdate),
-                                   ascalar(lineitem.l_commitdate),
-                                   ascalar(lineitem.l_receiptdate),
-                                   ascalar(lineitem.l_shipinstruct),
-                                   ascalar(lineitem.l_shipmode),
-                                   ascalar(lineitem.l_comment),
-                                   ascalar(supplier.s_suppkey),
-                                   ascalar(supplier.s_name),
-                                   ascalar(supplier.s_address),
-                                   ascalar(supplier.s_nationkey),
-                                   ascalar(supplier.s_phone),
-                                   ascalar(supplier.s_acctbal),
-                                   ascalar(supplier.s_comment),
                                    ascalar(nation.n_nationkey),
                                    ascalar(nation.n_name),
                                    ascalar(nation.n_regionkey),
@@ -449,8 +359,6 @@ select([nation.n_name, revenue],
          (param1 + day(1)),
          ((param1 + year(1)) + day(1))))))|}
     in
-    Logs.Src.set_level test (Some Logs.Debug) ;
-    Logs.(set_reporter (format_reporter ())) ;
     project
       ~params:
         (Set.of_list
@@ -461,957 +369,6 @@ select([nation.n_name, revenue],
     |> Format.printf "%a@." pp ;
     [%expect
       {|
-      run.exe: [WARNING] Shadowing of region.r_regionkey@comp.
-      run.exe: [WARNING] Shadowing of region.r_name@comp.
-      run.exe: [WARNING] Shadowing of region.r_regionkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_quantity@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_extendedprice@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_quantity@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_discount@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_extendedprice@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_quantity@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_discount@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_extendedprice@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_quantity@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_tax@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_discount@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_extendedprice@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_quantity@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_returnflag@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_tax@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_discount@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_extendedprice@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linestatus@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_quantity@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_returnflag@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_tax@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_discount@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_extendedprice@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linestatus@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_quantity@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_returnflag@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_tax@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_commitdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_discount@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_extendedprice@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linestatus@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_quantity@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_returnflag@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_tax@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_commitdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_discount@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_extendedprice@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linestatus@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_quantity@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_receiptdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_returnflag@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_tax@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_commitdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_discount@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_extendedprice@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linestatus@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_quantity@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_receiptdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_returnflag@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipinstruct@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_tax@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_commitdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_discount@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_extendedprice@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linestatus@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_quantity@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_receiptdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_returnflag@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipinstruct@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipmode@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_tax@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_comment@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_commitdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_discount@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_extendedprice@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linestatus@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_quantity@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_receiptdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_returnflag@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipinstruct@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipmode@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_tax@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_comment@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_commitdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_discount@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_extendedprice@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linestatus@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_quantity@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_receiptdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_returnflag@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipinstruct@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipmode@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_tax@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_suppkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_comment@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_commitdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_discount@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_extendedprice@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linestatus@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_quantity@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_receiptdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_returnflag@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipinstruct@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipmode@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_tax@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_name@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_suppkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_comment@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_commitdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_discount@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_extendedprice@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linestatus@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_quantity@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_receiptdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_returnflag@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipinstruct@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipmode@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_tax@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_address@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_name@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_suppkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_comment@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_commitdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_discount@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_extendedprice@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linestatus@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_quantity@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_receiptdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_returnflag@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipinstruct@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipmode@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_tax@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_address@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_name@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_nationkey@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_suppkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_comment@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_commitdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_discount@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_extendedprice@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linestatus@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_quantity@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_receiptdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_returnflag@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipinstruct@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipmode@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_tax@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_address@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_name@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_nationkey@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_phone@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_suppkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_comment@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_commitdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_discount@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_extendedprice@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linestatus@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_quantity@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_receiptdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_returnflag@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipinstruct@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipmode@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_tax@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_acctbal@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_address@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_name@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_nationkey@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_phone@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_suppkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_comment@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_commitdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_discount@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_extendedprice@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linestatus@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_quantity@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_receiptdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_returnflag@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipinstruct@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipmode@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_tax@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_acctbal@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_address@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_comment@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_name@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_nationkey@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_phone@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_suppkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_comment@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_commitdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_discount@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_extendedprice@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linestatus@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_quantity@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_receiptdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_returnflag@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipinstruct@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipmode@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_tax@comp.
-      run.exe: [WARNING] Shadowing of nation.n_nationkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_acctbal@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_address@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_comment@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_name@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_nationkey@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_phone@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_suppkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_comment@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_commitdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_discount@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_extendedprice@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linestatus@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_quantity@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_receiptdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_returnflag@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipinstruct@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipmode@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_tax@comp.
-      run.exe: [WARNING] Shadowing of nation.n_name@comp.
-      run.exe: [WARNING] Shadowing of nation.n_nationkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_acctbal@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_address@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_comment@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_name@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_nationkey@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_phone@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_suppkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_acctbal@comp.
-      run.exe: [WARNING] Shadowing of customer.c_address@comp.
-      run.exe: [WARNING] Shadowing of customer.c_comment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_custkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_mktsegment@comp.
-      run.exe: [WARNING] Shadowing of customer.c_name@comp.
-      run.exe: [WARNING] Shadowing of customer.c_nationkey@comp.
-      run.exe: [WARNING] Shadowing of customer.c_phone@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_comment@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_commitdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_discount@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_extendedprice@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linenumber@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_linestatus@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_orderkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_partkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_quantity@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_receiptdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_returnflag@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipdate@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipinstruct@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_shipmode@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_suppkey@comp.
-      run.exe: [WARNING] Shadowing of lineitem.l_tax@comp.
-      run.exe: [WARNING] Shadowing of nation.n_name@comp.
-      run.exe: [WARNING] Shadowing of nation.n_nationkey@comp.
-      run.exe: [WARNING] Shadowing of nation.n_regionkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_clerk@comp.
-      run.exe: [WARNING] Shadowing of orders.o_comment@comp.
-      run.exe: [WARNING] Shadowing of orders.o_custkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderdate@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderkey@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderpriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_orderstatus@comp.
-      run.exe: [WARNING] Shadowing of orders.o_shippriority@comp.
-      run.exe: [WARNING] Shadowing of orders.o_totalprice@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_acctbal@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_address@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_comment@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_name@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_nationkey@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_phone@comp.
-      run.exe: [WARNING] Shadowing of supplier.s_suppkey@comp.
-      run.exe: [WARNING] Shadowing of region.r_regionkey@comp.
-      run.exe: [WARNING] Shadowing of region.r_regionkey@comp.
       select([nation.n_name, revenue],
         alist(select([nation.n_name], dedup(select([nation.n_name], nation))) as k0,
           select([nation.n_name, sum(agg3) as revenue],
@@ -1454,4 +411,128 @@ select([nation.n_name, revenue],
                     param0))),
               (param1 + day(1)),
               ((param1 + year(1)) + day(1)))))) |}]
+
+  let%expect_test "" =
+    let r =
+      of_string_exn
+        {|
+        select([(sum((partsupp.ps_supplycost * partsupp.ps_availqty)) * param2) as v],
+      ahashidx(dedup(
+                 select([nation.n_name as k1],
+                   atuple([alist(partsupp,
+                             atuple([ascalar(partsupp.ps_partkey),
+                                     ascalar(partsupp.ps_suppkey),
+                                     ascalar(partsupp.ps_availqty),
+                                     ascalar(partsupp.ps_supplycost),
+                                     ascalar(partsupp.ps_comment)],
+                               cross)),
+                           ahashidx(dedup(
+                                      select([partsupp.ps_suppkey as k0],
+                                        alist(partsupp,
+                                          atuple([ascalar(partsupp.ps_partkey),
+                                                  ascalar(partsupp.ps_suppkey),
+                                                  ascalar(partsupp.ps_availqty),
+                                                  ascalar(partsupp.ps_supplycost),
+                                                  ascalar(partsupp.ps_comment)],
+                                            cross)))),
+                             alist(filter((supplier.s_suppkey = k0),
+                                     join((supplier.s_nationkey =
+                                          nation.n_nationkey),
+                                       nation,
+                                       supplier)),
+                               atuple([ascalar(nation.n_nationkey),
+                                       ascalar(nation.n_name),
+                                       ascalar(nation.n_regionkey),
+                                       ascalar(nation.n_comment),
+                                       ascalar(supplier.s_suppkey),
+                                       ascalar(supplier.s_name),
+                                       ascalar(supplier.s_address),
+                                       ascalar(supplier.s_nationkey),
+                                       ascalar(supplier.s_phone),
+                                       ascalar(supplier.s_acctbal),
+                                       ascalar(supplier.s_comment)],
+                                 cross)),
+                             partsupp.ps_suppkey)],
+                     cross))),
+        atuple([alist(partsupp,
+                  atuple([ascalar(partsupp.ps_partkey),
+                          ascalar(partsupp.ps_suppkey),
+                          ascalar(partsupp.ps_availqty),
+                          ascalar(partsupp.ps_supplycost),
+                          ascalar(partsupp.ps_comment)],
+                    cross)),
+                ahashidx(dedup(
+                           select([partsupp.ps_suppkey as k0],
+                             alist(partsupp,
+                               atuple([ascalar(partsupp.ps_partkey),
+                                       ascalar(partsupp.ps_suppkey),
+                                       ascalar(partsupp.ps_availqty),
+                                       ascalar(partsupp.ps_supplycost),
+                                       ascalar(partsupp.ps_comment)],
+                                 cross)))),
+                  alist(filter((k1 = nation.n_name),
+                          filter((supplier.s_suppkey = k0),
+                            join((supplier.s_nationkey = nation.n_nationkey),
+                              nation,
+                              supplier))),
+                    atuple([ascalar(nation.n_nationkey),
+                            ascalar(nation.n_name),
+                            ascalar(nation.n_regionkey),
+                            ascalar(nation.n_comment),
+                            ascalar(supplier.s_suppkey),
+                            ascalar(supplier.s_name),
+                            ascalar(supplier.s_address),
+                            ascalar(supplier.s_nationkey),
+                            ascalar(supplier.s_phone),
+                            ascalar(supplier.s_acctbal),
+                            ascalar(supplier.s_comment)],
+                      cross)),
+                  partsupp.ps_suppkey)],
+          cross),
+        param1))
+|}
+    in
+    project
+      ~params:
+        (Set.of_list
+           (module Name)
+           [ Name.create ~type_:(StringT {nullable= false}) "param1"
+           ; Name.create ~type_:(IntT {nullable= false}) "param2" ])
+      r
+    |> Format.printf "%a@." pp ;
+    [%expect
+      {|
+      select([(sum((partsupp.ps_supplycost * partsupp.ps_availqty)) * param2) as v],
+        ahashidx(dedup(
+                   select([nation.n_name as k1],
+                     atuple([alist(partsupp, ascalar(partsupp.ps_suppkey)),
+                             ahashidx(dedup(
+                                        select([partsupp.ps_suppkey as k0],
+                                          alist(partsupp,
+                                            ascalar(partsupp.ps_suppkey)))),
+                               alist(filter((supplier.s_suppkey = k0),
+                                       join((supplier.s_nationkey =
+                                            nation.n_nationkey),
+                                         nation,
+                                         supplier)),
+                                 ascalar(nation.n_name)),
+                               partsupp.ps_suppkey)],
+                       cross))),
+          atuple([alist(partsupp,
+                    atuple([ascalar(partsupp.ps_suppkey),
+                            ascalar(partsupp.ps_availqty),
+                            ascalar(partsupp.ps_supplycost)],
+                      cross)),
+                  ahashidx(dedup(
+                             select([partsupp.ps_suppkey as k0],
+                               alist(partsupp, ascalar(partsupp.ps_suppkey)))),
+                    alist(filter((k1 = nation.n_name),
+                            filter((supplier.s_suppkey = k0),
+                              join((supplier.s_nationkey = nation.n_nationkey),
+                                nation,
+                                supplier))),
+                      ascalar(null)),
+                    partsupp.ps_suppkey)],
+            cross),
+          param1)) |}]
 end

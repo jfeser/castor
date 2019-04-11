@@ -50,6 +50,8 @@ module Make (C : Config.S) = struct
       type t = private row list [@@deriving sexp_of]
 
       val of_list : row list -> t
+
+      val bind : t -> t -> t
     end = struct
       type row =
         { rname: Name.t
@@ -60,20 +62,28 @@ module Make (C : Config.S) = struct
 
       type t = row list [@@deriving sexp_of]
 
+      let compare_row r1 r2 =
+        [%compare: Name.t * [`Run | `Compile]] (r1.rname, r1.rstage)
+          (r2.rname, r2.rstage)
+
       let of_list l =
         let l =
           List.map l ~f:(fun r ->
               {r with rname= Name.Meta.(set r.rname stage r.rstage)} )
         in
-        let compare r1 r2 =
-          [%compare: Name.t * [`Run | `Compile]] (r1.rname, r1.rstage)
-            (r2.rname, r2.rstage)
-        in
-        List.find_all_dups l ~compare
+        List.find_all_dups l ~compare:compare_row
         |> List.iter ~f:(fun r ->
                Logs.warn (fun m -> m "Shadowing of %a." Name.pp_with_stage r.rname)
            ) ;
-        List.dedup_and_sort ~compare l
+        List.dedup_and_sort ~compare:compare_row l
+
+      (** Bind c2 over c1. *)
+      let bind c1 c2 =
+        let c1 =
+          List.filter c1 ~f:(fun r ->
+              not (List.mem c2 ~equal:[%compare.equal: row] r) )
+        in
+        c1 @ c2
     end
 
     include T
@@ -298,7 +308,7 @@ module Make (C : Config.S) = struct
           (AScalar def, ctx)
       | AList (r, l) ->
           let r, outer_ctx' = resolve `Compile outer_ctx r in
-          let l, ctx = rsame (Ctx.merge outer_ctx' outer_ctx) l in
+          let l, ctx = rsame (Ctx.bind outer_ctx outer_ctx') l in
           (AList (r, l), ctx)
       | ATuple (ls, (Zip as t)) ->
           let ls, ctxs = List.map ls ~f:(rsame outer_ctx) |> List.unzip in
@@ -311,13 +321,13 @@ module Make (C : Config.S) = struct
             List.fold_left ls
               ~init:([], Ctx.of_list [])
               ~f:(fun (ls, ctx) l ->
-                let l, ctx' = rsame (Ctx.merge outer_ctx ctx) l in
+                let l, ctx' = rsame (Ctx.bind outer_ctx ctx) l in
                 (l :: ls, Ctx.merge ctx ctx') )
           in
           (ATuple (List.rev ls, t), ctx)
       | AHashIdx (r, l, m) ->
           let r, key_ctx = resolve `Compile outer_ctx r in
-          let l, value_ctx = rsame (Ctx.merge outer_ctx key_ctx) l in
+          let l, value_ctx = rsame (Ctx.bind outer_ctx key_ctx) l in
           let m =
             (object
                inherit [_] map
@@ -329,7 +339,7 @@ module Make (C : Config.S) = struct
           (AHashIdx (r, l, m), Ctx.merge key_ctx value_ctx)
       | AOrderedIdx (r, l, m) ->
           let r, key_ctx = resolve `Compile outer_ctx r in
-          let l, value_ctx = rsame (Ctx.merge outer_ctx key_ctx) l in
+          let l, value_ctx = rsame (Ctx.bind outer_ctx key_ctx) l in
           let m =
             (object
                inherit [_] map
@@ -1079,8 +1089,9 @@ select([nation.n_name, revenue],
                                                  cross))
 |}
     in
-    resolve r |> Format.printf "%a@." pp;
-    [%expect {|
+    resolve r |> Format.printf "%a@." pp ;
+    [%expect
+      {|
       alist(select([n1_name@comp, n2_name@comp, l_year@comp, revenue@comp],
               orderby([n1_name@comp, n2_name@comp, l_year@comp],
                 groupby([n1_name@comp,
