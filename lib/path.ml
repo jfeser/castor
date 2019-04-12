@@ -43,8 +43,8 @@ let rec set_exn p r s =
       tuple
         (List.mapi rs ~f:(fun i' r' -> if i = i' then set_exn p' r' s else r'))
         t
-  | 0 :: p', AHashIdx (r', r2, h) -> hash_idx' (set_exn p' r' s) r2 h
-  | 1 :: p', AHashIdx (r1, r', h) -> hash_idx' r1 (set_exn p' r' s) h
+  | 0 :: p', AHashIdx (r', r2, h) -> hash_idx (set_exn p' r' s) r2 h
+  | 1 :: p', AHashIdx (r1, r', h) -> hash_idx r1 (set_exn p' r' s) h
   | 0 :: p', AOrderedIdx (r', r2, h) -> ordered_idx (set_exn p' r' s) r2 h
   | 1 :: p', AOrderedIdx (r1, r', h) -> ordered_idx r1 (set_exn p' r' s) h
   | 0 :: p', As (n, r') -> as_ n (set_exn p' r' s)

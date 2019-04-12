@@ -127,9 +127,7 @@ val list : t -> t -> t
 
 val tuple : t list -> tuple -> t
 
-val hash_idx : t -> t -> pred list -> t
-
-val hash_idx' : t -> t -> hash_idx -> t
+val hash_idx : t -> t -> hash_idx -> t
 
 val ordered_idx : t -> t -> ordered_idx -> t
 

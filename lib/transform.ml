@@ -65,8 +65,8 @@ module Make (Config : Config.S) () = struct
             @ List.map (f r2) ~f:(fun r2 -> A.join pred r1 r2)
         | GroupBy (x, y, r') -> List.map (f r') ~f:(A.group_by x y)
         | AHashIdx (r1, r2, m) ->
-            cstage (List.map (f r1) ~f:(fun r1 -> A.hash_idx' r1 r2 m))
-            @ rstage (List.map (f r2) ~f:(fun r2 -> A.hash_idx' r1 r2 m))
+            cstage (List.map (f r1) ~f:(fun r1 -> A.hash_idx r1 r2 m))
+            @ rstage (List.map (f r2) ~f:(fun r2 -> A.hash_idx r1 r2 m))
         | AOrderedIdx (r1, r2, m) ->
             cstage (List.map (f r1) ~f:(fun r1 -> A.ordered_idx r1 r2 m))
             @ rstage (List.map (f r2) ~f:(fun r2 -> A.ordered_idx r1 r2 m))
@@ -313,7 +313,8 @@ module Make (Config : Config.S) () = struct
               [ outer_filter
                   (hash_idx
                      (dedup (select select_list r))
-                     (filter inner_filter_pred r) key) ]
+                     (filter inner_filter_pred r)
+                     {hi_key_layout= None; lookup= key}) ]
         | _ -> [] ) }
     |> run_everywhere
 
@@ -686,7 +687,7 @@ module Make (Config : Config.S) () = struct
               let outer_preds =
                 List.filter_map ps ~f:pred_to_name |> List.map ~f:(fun n -> Name n)
               in
-              [select outer_preds (hash_idx' r (select ps r') m)]
+              [select outer_preds (hash_idx r (select ps r') m)]
           | {node= Select (ps, {node= AOrderedIdx (r, r', m); _}); _} ->
               let outer_aggs, inner_aggs =
                 gen_concat_select_list ps Meta.(find_exn r' schema)
@@ -892,7 +893,7 @@ module Make (Config : Config.S) () = struct
         | {node= Filter (p, {node= AList (r, r'); _}); _} ->
             [list (filter p r) r'; list r (filter p r')]
         | {node= Filter (p, {node= AHashIdx (r, r', m); _}); _} ->
-            [hash_idx' r (filter p r') m]
+            [hash_idx r (filter p r') m]
         | {node= Filter (p, {node= AOrderedIdx (r, r', m); _}); _} ->
             [ordered_idx r (filter p r') m]
         | _ -> [] ) }
@@ -998,7 +999,7 @@ module Make (Config : Config.S) () = struct
                     n_subst
                     (Name (Name.create fresh_name)))
                  r)
-              [Name n_subst] ] ) }
+              {hi_key_layout= None; lookup= [Name n_subst]} ] ) }
     |> run_everywhere ~stage:`Run
 
   let replace_pred r p1 p2 =
@@ -1049,7 +1050,7 @@ module Make (Config : Config.S) () = struct
                    (replace_rel rel filtered_rel r)
                    k
                    (Name (Name.create fresh_name)))
-                [k] ) ) }
+                {hi_key_layout= None; lookup= [k]} ) ) }
     |> run_everywhere ~stage:`Run
 
   let tf_split_out args =
@@ -1101,7 +1102,7 @@ module Make (Config : Config.S) () = struct
                           (filter
                              (Binop (Eq, Name pk_v, Name (Name.create pk_k_name)))
                              (as_ rel_fresh_v (scan rel))))
-                       [Name pk]) ]
+                       {hi_key_layout= None; lookup= [Name pk]}) ]
                 Cross ]
           else [] ) }
     |> run_everywhere ~stage:`Run

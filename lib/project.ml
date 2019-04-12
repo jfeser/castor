@@ -141,7 +141,7 @@ module Make (C : Config.S) = struct
                 else if r2_unref then r1
                 else join pred r1 r2
             | AHashIdx (rk, rv, m) ->
-                hash_idx' (self#visit_t false rk) (self#visit_t count rv) m
+                hash_idx (self#visit_t false rk) (self#visit_t count rv) m
             | AOrderedIdx (rk, rv, m) ->
                 ordered_idx (self#visit_t false rk) (self#visit_t count rv) m
             | _ -> super#visit_t count r

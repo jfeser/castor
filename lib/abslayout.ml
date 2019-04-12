@@ -3,36 +3,45 @@ open Collections
 module Format = Caml.Format
 include Abslayout0
 
-let select a b = {node= Select (a, b); meta= Meta.empty ()}
+let strip_meta =
+  let visitor =
+    object
+      inherit [_] map as super
 
-let join a b c = {node= Join {pred= a; r1= b; r2= c}; meta= Meta.empty ()}
+      method! visit_t () t = {(super#visit_t () t) with meta= Meta.empty ()}
+    end
+  in
+  visitor#visit_t ()
 
-let filter a b = {node= Filter (a, b); meta= Meta.empty ()}
+let wrap x = {node= x; meta= Meta.empty ()}
 
-let group_by a b c = {node= GroupBy (a, b, c); meta= Meta.empty ()}
+let select a b = wrap (Select (a, strip_meta b))
 
-let dedup a = {node= Dedup a; meta= Meta.empty ()}
+let join a b c = wrap (Join {pred= a; r1= strip_meta b; r2= strip_meta c})
 
-let order_by a b = {node= OrderBy {key= a; rel= b}; meta= Meta.empty ()}
+let filter a b = wrap (Filter (a, strip_meta b))
 
-let scan a = {node= Scan a; meta= Meta.empty ()}
+let group_by a b c = wrap (GroupBy (a, b, strip_meta c))
 
-let empty = {node= AEmpty; meta= Meta.empty ()}
+let dedup a = wrap (Dedup (strip_meta a))
 
-let scalar a = {node= AScalar a; meta= Meta.empty ()}
+let order_by a b = wrap (OrderBy {key= a; rel= strip_meta b})
 
-let list a b = {node= AList (a, b); meta= Meta.empty ()}
+let scan a = wrap (Scan a)
 
-let tuple a b = {node= ATuple (a, b); meta= Meta.empty ()}
+let empty = wrap AEmpty
 
-let hash_idx a b c =
-  {node= AHashIdx (a, b, {hi_key_layout= None; lookup= c}); meta= Meta.empty ()}
+let scalar a = wrap (AScalar a)
 
-let hash_idx' a b c = {node= AHashIdx (a, b, c); meta= Meta.empty ()}
+let list a b = wrap (AList (strip_meta a, strip_meta b))
 
-let ordered_idx a b c = {node= AOrderedIdx (a, b, c); meta= Meta.empty ()}
+let tuple a b = wrap (ATuple (List.map ~f:strip_meta a, b))
 
-let as_ a b = {node= As (a, b); meta= Meta.empty ()}
+let hash_idx a b c = wrap (AHashIdx (strip_meta a, strip_meta b, c))
+
+let ordered_idx a b c = wrap (AOrderedIdx (strip_meta a, strip_meta b, c))
+
+let as_ a b = wrap (As (a, strip_meta b))
 
 let rec and_ = function
   | [] -> Bool true
@@ -913,13 +922,3 @@ let annotate_orders r =
 let order_of r =
   annotate_orders r ;
   Meta.(find_exn r order)
-
-let strip_meta =
-  let visitor =
-    object
-      inherit [_] map as super
-
-      method! visit_t () t = {(super#visit_t () t) with meta= Meta.empty ()}
-    end
-  in
-  visitor#visit_t ()
