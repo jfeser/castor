@@ -69,7 +69,6 @@ let%test_module _ =
          ATuple([AScalar(r1.f), AScalar(r1.g - r1.f)], cross)))" ;
       [%expect
         {|
-    [WARNING] Cross-stage shadowing of r1.f.
     List
     List key: ((Int 1) (Int 2))
     Tuple
@@ -175,7 +174,6 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
 |} ;
       [%expect
         {|
-    [WARNING] Cross-stage shadowing of lp.counter.
     List
     List key: ((Int 1) (Int 4) (Int 1))
     Tuple

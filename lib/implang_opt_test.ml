@@ -49,7 +49,6 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
         opt ;
       [%expect
         {|
-    [WARNING] Cross-stage shadowing of lp.counter.
     // Locals:
     // i18 : Int[nonnull] (persists=true)
     // cstart21 : Int[nonnull] (persists=true)

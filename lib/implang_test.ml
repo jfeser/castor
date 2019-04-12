@@ -130,7 +130,6 @@ let%expect_test "sum-complex" =
      ATuple([AScalar(r1.f), AScalar(r1.g - r1.f)], cross)))" ;
   [%expect
     {|
-    [WARNING] Cross-stage shadowing of r1.f.
     (FuncT
      (((ListT
         ((TupleT
@@ -220,7 +219,6 @@ let%expect_test "sum" =
      r1.f)], cross)))" ;
   [%expect
     {|
-    [WARNING] Cross-stage shadowing of r1.f.
     (FuncT
      (((ListT
         ((TupleT
@@ -300,7 +298,6 @@ let%expect_test "cross-tuple" =
   run_test "AList(r1, ATuple([AScalar(r1.f), AScalar(r1.g - r1.f)], cross))" ;
   [%expect
     {|
-    [WARNING] Cross-stage shadowing of r1.f.
     (ListT
      ((TupleT
        (((IntT ((range (Interval 1 3)) (nullable false)))
@@ -587,7 +584,6 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
 |} ;
   [%expect
     {|
-    [WARNING] Cross-stage shadowing of lp.counter.
     (FuncT
      (((ListT
         ((TupleT
