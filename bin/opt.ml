@@ -40,42 +40,32 @@ let main ~params:all_params ~db ~validate ~verbose ch =
       Format.printf "%a" Abslayout.pp query'
   | None -> ()
 
-let reporter ppf =
-  let report _ level ~over k msgf =
-    let k _ = over () ; k () in
-    let with_time h _ k ppf fmt =
-      let time = Core.Time.now () in
-      Format.kfprintf k ppf
-        ("%a [%s] @[" ^^ fmt ^^ "@]@.")
-        Logs.pp_header (level, h) (Core.Time.to_string time)
-    in
-    msgf @@ fun ?header ?tags fmt -> with_time header tags k ppf fmt
-  in
-  {Logs.report}
-
-let pp_level (level : Logs.level) =
-  let style =
-    match level with
-    | Logs.App -> Logs_fmt.app_style
-    | Error -> Logs_fmt.err_style
-    | Warning -> Logs_fmt.warn_style
-    | Info -> Logs_fmt.info_style
-    | Debug -> Logs_fmt.debug_style
-  in
-  Fmt.(styled style string)
-
 let setup_log level =
-  Fmt_tty.setup_std_outputs () ;
+  let format_reporter ppf =
+    let open Logs in
+    let report src level ~over k msgf =
+      let style =
+        match level with
+        | Logs.App -> `White
+        | Debug -> `Green
+        | Info -> `Blue
+        | Warning -> `Yellow
+        | Error -> `Red
+      in
+      let k _ = over () ; k () in
+      let format ?header:_ ?tags:_ fmt =
+        Fmt.kpf k ppf
+          ("[%a] [%a] [%s] @[" ^^ fmt ^^ "@]@.")
+          Fmt.(styled style Logs.pp_level)
+          level Time.pp (Time.now ()) (Src.name src)
+      in
+      msgf format
+    in
+    {report}
+  in
+  let ppf = Fmt_tty.setup Out_channel.stderr in
   Logs.set_level (Some level) ;
-  Logs.set_reporter
-    (Logs_fmt.reporter
-       ~pp_header:(fun fmt (level, hdr) ->
-         let hdr = Option.value hdr ~default:"" in
-         Fmt.pf fmt "[%a] [%a] %s" (pp_level level)
-           (Logs.level_to_string (Some level))
-           Time.pp (Time.now ()) hdr )
-       ()) ;
-  ()
+  Logs.set_reporter (format_reporter ppf)
 
 let () =
   let open Command in
