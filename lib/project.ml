@@ -149,15 +149,17 @@ module Make (C : Config.S) = struct
         match r' with Some r' -> r' | None -> r
     end
 
-  let project_once = project_visitor#visit_t true
+  let project_once r =
+    Logs.debug ~src:test (fun m -> m "pre %a@." pp_with_refcount r) ;
+    let r' = project_visitor#visit_t true r in
+    Logs.debug ~src:test (fun m -> m "post %a@." pp r') ;
+    r'
 
   let project ?(params = Set.empty (module Name)) r =
     let rec loop r =
       let r' = M.resolve r ~params in
       M.annotate_schema r' ;
-      Logs.debug ~src:test (fun m -> m "pre %a@." pp_with_refcount r') ;
       let r' = project_once r' in
-      Logs.debug ~src:test (fun m -> m "post %a@." pp_with_refcount r') ;
       if Abslayout.O.(r = r') then r' else loop r'
     in
     loop r
@@ -169,6 +171,155 @@ module Test = struct
   end)
 
   open T
+
+  let () = Logs.Src.set_level test (Some Error)
+
+  let with_logs f =
+    Logs.(set_reporter (format_reporter ())) ;
+    Logs.Src.set_level test (Some Debug) ;
+    let ret = f () in
+    Logs.Src.set_level test (Some Error) ;
+    Logs.(set_reporter nop_reporter) ;
+    ret
+
+  let%expect_test "" =
+    let r =
+      of_string_exn
+        {|
+select([nation.n_name as k1],
+                                                          atuple([alist(
+                                                                    partsupp,
+                                                                    atuple(
+                                                                    [ascalar(partsupp.ps_partkey),
+                                                                    ascalar(partsupp.ps_suppkey),
+                                                                    ascalar(partsupp.ps_availqty),
+                                                                    ascalar(partsupp.ps_supplycost),
+                                                                    ascalar(partsupp.ps_comment)],
+                                                                    cross)),
+                                                                  ahashidx(
+                                                                    dedup(
+                                                                    select(
+                                                                    [partsupp.ps_suppkey as k0],
+                                                                    alist(
+                                                                    partsupp,
+                                                                    atuple(
+                                                                    [ascalar(partsupp.ps_partkey),
+                                                                    ascalar(partsupp.ps_suppkey),
+                                                                    ascalar(partsupp.ps_availqty),
+                                                                    ascalar(partsupp.ps_supplycost),
+                                                                    ascalar(partsupp.ps_comment)],
+                                                                    cross)))),
+                                                                    alist(
+                                                                    filter(
+                                                                    (supplier.s_suppkey
+                                                                    = k0),
+                                                                    join(
+                                                                    (supplier.s_nationkey
+                                                                    =
+                                                                    nation.n_nationkey),
+                                                                    nation,
+                                                                    supplier)),
+                                                                    atuple(
+                                                                    [ascalar(nation.n_nationkey),
+                                                                    ascalar(nation.n_name),
+                                                                    ascalar(nation.n_regionkey),
+                                                                    ascalar(nation.n_comment),
+                                                                    ascalar(supplier.s_suppkey),
+                                                                    ascalar(supplier.s_name),
+                                                                    ascalar(supplier.s_address),
+                                                                    ascalar(supplier.s_nationkey),
+                                                                    ascalar(supplier.s_phone),
+                                                                    ascalar(supplier.s_acctbal),
+                                                                    ascalar(supplier.s_comment)],
+                                                                    cross)),
+                                                                    partsupp.ps_suppkey)],
+                                                            cross))    |}
+    in
+    project r |> Format.printf "%a@." pp ;
+    [%expect
+      {|
+      select([nation.n_name as k1],
+        atuple([alist(partsupp, ascalar(partsupp.ps_suppkey)),
+                ahashidx(dedup(
+                           select([partsupp.ps_suppkey as k0],
+                             alist(partsupp, ascalar(partsupp.ps_suppkey)))),
+                  alist(filter((supplier.s_suppkey = k0),
+                          join((supplier.s_nationkey = nation.n_nationkey),
+                            nation,
+                            supplier)),
+                    ascalar(nation.n_name)),
+                  partsupp.ps_suppkey)],
+          cross)) |}]
+
+  let%expect_test "" =
+    let r =
+      of_string_exn
+        {|
+dedup(select([nation.n_name as k1],
+                                                          atuple([alist(
+                                                                    partsupp,
+                                                                    atuple(
+                                                                    [ascalar(partsupp.ps_partkey),
+                                                                    ascalar(partsupp.ps_suppkey),
+                                                                    ascalar(partsupp.ps_availqty),
+                                                                    ascalar(partsupp.ps_supplycost),
+                                                                    ascalar(partsupp.ps_comment)],
+                                                                    cross)),
+                                                                  ahashidx(
+                                                                    dedup(
+                                                                    select(
+                                                                    [partsupp.ps_suppkey as k0],
+                                                                    alist(
+                                                                    partsupp,
+                                                                    atuple(
+                                                                    [ascalar(partsupp.ps_partkey),
+                                                                    ascalar(partsupp.ps_suppkey),
+                                                                    ascalar(partsupp.ps_availqty),
+                                                                    ascalar(partsupp.ps_supplycost),
+                                                                    ascalar(partsupp.ps_comment)],
+                                                                    cross)))),
+                                                                    alist(
+                                                                    filter(
+                                                                    (supplier.s_suppkey
+                                                                    = k0),
+                                                                    join(
+                                                                    (supplier.s_nationkey
+                                                                    =
+                                                                    nation.n_nationkey),
+                                                                    nation,
+                                                                    supplier)),
+                                                                    atuple(
+                                                                    [ascalar(nation.n_nationkey),
+                                                                    ascalar(nation.n_name),
+                                                                    ascalar(nation.n_regionkey),
+                                                                    ascalar(nation.n_comment),
+                                                                    ascalar(supplier.s_suppkey),
+                                                                    ascalar(supplier.s_name),
+                                                                    ascalar(supplier.s_address),
+                                                                    ascalar(supplier.s_nationkey),
+                                                                    ascalar(supplier.s_phone),
+                                                                    ascalar(supplier.s_acctbal),
+                                                                    ascalar(supplier.s_comment)],
+                                                                    cross)),
+                                                                    partsupp.ps_suppkey)],
+                                                            cross)))    |}
+    in
+    project r |> Format.printf "%a@." pp ;
+    [%expect
+      {|
+      dedup(
+        select([nation.n_name as k1],
+          atuple([alist(partsupp, ascalar(partsupp.ps_suppkey)),
+                  ahashidx(dedup(
+                             select([partsupp.ps_suppkey as k0],
+                               alist(partsupp, ascalar(partsupp.ps_suppkey)))),
+                    alist(filter((supplier.s_suppkey = k0),
+                            join((supplier.s_nationkey = nation.n_nationkey),
+                              nation,
+                              supplier)),
+                      ascalar(nation.n_name)),
+                    partsupp.ps_suppkey)],
+            cross))) |}]
 
   let%expect_test "" =
     let r =
@@ -191,6 +342,295 @@ module Test = struct
       select([lineitem.l_receiptdate],
         alist(join((orders.o_orderkey = lineitem.l_orderkey), lineitem, orders),
           ascalar(lineitem.l_receiptdate))) |}]
+
+  let%expect_test "" =
+    let r =
+      {|
+ahashidx(dedup(
+                                                        select([nation.n_name as k1],
+                                                          atuple([alist(
+                                                                    partsupp,
+                                                                    atuple(
+                                                                    [ascalar(partsupp.ps_partkey),
+                                                                    ascalar(partsupp.ps_suppkey),
+                                                                    ascalar(partsupp.ps_availqty),
+                                                                    ascalar(partsupp.ps_supplycost),
+                                                                    ascalar(partsupp.ps_comment)],
+                                                                    cross)),
+                                                                  ahashidx(
+                                                                    dedup(
+                                                                    select(
+                                                                    [partsupp.ps_suppkey as k0],
+                                                                    alist(
+                                                                    partsupp,
+                                                                    atuple(
+                                                                    [ascalar(partsupp.ps_partkey),
+                                                                    ascalar(partsupp.ps_suppkey),
+                                                                    ascalar(partsupp.ps_availqty),
+                                                                    ascalar(partsupp.ps_supplycost),
+                                                                    ascalar(partsupp.ps_comment)],
+                                                                    cross)))),
+                                                                    alist(
+                                                                    filter(
+                                                                    (supplier.s_suppkey
+                                                                    = k0),
+                                                                    join(
+                                                                    (supplier.s_nationkey
+                                                                    =
+                                                                    nation.n_nationkey),
+                                                                    nation,
+                                                                    supplier)),
+                                                                    atuple(
+                                                                    [ascalar(nation.n_nationkey),
+                                                                    ascalar(nation.n_name),
+                                                                    ascalar(nation.n_regionkey),
+                                                                    ascalar(nation.n_comment),
+                                                                    ascalar(supplier.s_suppkey),
+                                                                    ascalar(supplier.s_name),
+                                                                    ascalar(supplier.s_address),
+                                                                    ascalar(supplier.s_nationkey),
+                                                                    ascalar(supplier.s_phone),
+                                                                    ascalar(supplier.s_acctbal),
+                                                                    ascalar(supplier.s_comment)],
+                                                                    cross)),
+                                                                    partsupp.ps_suppkey)],
+                                                            cross))),
+                                               atuple([alist(partsupp,
+                                                         atuple([ascalar(partsupp.ps_partkey),
+                                                                 ascalar(partsupp.ps_suppkey),
+                                                                 ascalar(partsupp.ps_availqty),
+                                                                 ascalar(partsupp.ps_supplycost),
+                                                                 ascalar(partsupp.ps_comment)],
+                                                           cross)),
+                                                       ahashidx(dedup(
+                                                                  select(
+                                                                    [partsupp.ps_suppkey as k0],
+                                                                    alist(
+                                                                    partsupp,
+                                                                    atuple(
+                                                                    [ascalar(partsupp.ps_partkey),
+                                                                    ascalar(partsupp.ps_suppkey),
+                                                                    ascalar(partsupp.ps_availqty),
+                                                                    ascalar(partsupp.ps_supplycost),
+                                                                    ascalar(partsupp.ps_comment)],
+                                                                    cross)))),
+                                                         alist(filter(
+                                                                 (k1 =
+                                                                 nation.n_name),
+                                                                 filter(
+                                                                   (supplier.s_suppkey
+                                                                   = k0),
+                                                                   join(
+                                                                    (supplier.s_nationkey
+                                                                    =
+                                                                    nation.n_nationkey),
+                                                                    nation,
+                                                                    supplier))),
+                                                           atuple([ascalar(nation.n_nationkey),
+                                                                   ascalar(nation.n_name),
+                                                                   ascalar(nation.n_regionkey),
+                                                                   ascalar(nation.n_comment),
+                                                                   ascalar(supplier.s_suppkey),
+                                                                   ascalar(supplier.s_name),
+                                                                   ascalar(supplier.s_address),
+                                                                   ascalar(supplier.s_nationkey),
+                                                                   ascalar(supplier.s_phone),
+                                                                   ascalar(supplier.s_acctbal),
+                                                                   ascalar(supplier.s_comment)],
+                                                             cross)),
+                                                         partsupp.ps_suppkey)],
+                                                 cross),
+                                               null)|}
+      |> of_string_exn
+    in
+    project r |> Format.printf "%a@." pp ;
+    [%expect
+      {|
+      ahashidx(dedup(
+                 select([nation.n_name as k1],
+                   atuple([alist(partsupp, ascalar(partsupp.ps_suppkey)),
+                           ahashidx(dedup(
+                                      select([partsupp.ps_suppkey as k0],
+                                        alist(partsupp,
+                                          ascalar(partsupp.ps_suppkey)))),
+                             alist(filter((supplier.s_suppkey = k0),
+                                     join((supplier.s_nationkey =
+                                          nation.n_nationkey),
+                                       nation,
+                                       supplier)),
+                               ascalar(nation.n_name)),
+                             partsupp.ps_suppkey)],
+                     cross))),
+        atuple([alist(partsupp,
+                  atuple([ascalar(partsupp.ps_partkey),
+                          ascalar(partsupp.ps_suppkey),
+                          ascalar(partsupp.ps_availqty),
+                          ascalar(partsupp.ps_supplycost),
+                          ascalar(partsupp.ps_comment)],
+                    cross)),
+                ahashidx(dedup(
+                           select([partsupp.ps_suppkey as k0],
+                             alist(partsupp, ascalar(partsupp.ps_suppkey)))),
+                  alist(filter((k1 = nation.n_name),
+                          filter((supplier.s_suppkey = k0),
+                            join((supplier.s_nationkey = nation.n_nationkey),
+                              nation,
+                              supplier))),
+                    atuple([ascalar(nation.n_nationkey),
+                            ascalar(nation.n_name),
+                            ascalar(nation.n_regionkey),
+                            ascalar(nation.n_comment),
+                            ascalar(supplier.s_suppkey),
+                            ascalar(supplier.s_name),
+                            ascalar(supplier.s_address),
+                            ascalar(supplier.s_nationkey),
+                            ascalar(supplier.s_phone),
+                            ascalar(supplier.s_acctbal),
+                            ascalar(supplier.s_comment)],
+                      cross)),
+                  partsupp.ps_suppkey)],
+          cross),
+        null) |}]
+
+  let%expect_test "" =
+    let r =
+      {|
+select([(sum((partsupp.ps_supplycost
+                                                        *
+                                                        partsupp.ps_availqty))
+                                                   ) as v], ahashidx(dedup(
+                                                        select([nation.n_name as k1],
+                                                          atuple([alist(
+                                                                    partsupp,
+                                                                    atuple(
+                                                                    [ascalar(partsupp.ps_partkey),
+                                                                    ascalar(partsupp.ps_suppkey),
+                                                                    ascalar(partsupp.ps_availqty),
+                                                                    ascalar(partsupp.ps_supplycost),
+                                                                    ascalar(partsupp.ps_comment)],
+                                                                    cross)),
+                                                                  ahashidx(
+                                                                    dedup(
+                                                                    select(
+                                                                    [partsupp.ps_suppkey as k0],
+                                                                    alist(
+                                                                    partsupp,
+                                                                    atuple(
+                                                                    [ascalar(partsupp.ps_partkey),
+                                                                    ascalar(partsupp.ps_suppkey),
+                                                                    ascalar(partsupp.ps_availqty),
+                                                                    ascalar(partsupp.ps_supplycost),
+                                                                    ascalar(partsupp.ps_comment)],
+                                                                    cross)))),
+                                                                    alist(
+                                                                    filter(
+                                                                    (supplier.s_suppkey
+                                                                    = k0),
+                                                                    join(
+                                                                    (supplier.s_nationkey
+                                                                    =
+                                                                    nation.n_nationkey),
+                                                                    nation,
+                                                                    supplier)),
+                                                                    atuple(
+                                                                    [ascalar(nation.n_nationkey),
+                                                                    ascalar(nation.n_name),
+                                                                    ascalar(nation.n_regionkey),
+                                                                    ascalar(nation.n_comment),
+                                                                    ascalar(supplier.s_suppkey),
+                                                                    ascalar(supplier.s_name),
+                                                                    ascalar(supplier.s_address),
+                                                                    ascalar(supplier.s_nationkey),
+                                                                    ascalar(supplier.s_phone),
+                                                                    ascalar(supplier.s_acctbal),
+                                                                    ascalar(supplier.s_comment)],
+                                                                    cross)),
+                                                                    partsupp.ps_suppkey)],
+                                                            cross))),
+                                               atuple([alist(partsupp,
+                                                         atuple([ascalar(partsupp.ps_partkey),
+                                                                 ascalar(partsupp.ps_suppkey),
+                                                                 ascalar(partsupp.ps_availqty),
+                                                                 ascalar(partsupp.ps_supplycost),
+                                                                 ascalar(partsupp.ps_comment)],
+                                                           cross)),
+                                                       ahashidx(dedup(
+                                                                  select(
+                                                                    [partsupp.ps_suppkey as k0],
+                                                                    alist(
+                                                                    partsupp,
+                                                                    atuple(
+                                                                    [ascalar(partsupp.ps_partkey),
+                                                                    ascalar(partsupp.ps_suppkey),
+                                                                    ascalar(partsupp.ps_availqty),
+                                                                    ascalar(partsupp.ps_supplycost),
+                                                                    ascalar(partsupp.ps_comment)],
+                                                                    cross)))),
+                                                         alist(filter(
+                                                                 (k1 =
+                                                                 nation.n_name),
+                                                                 filter(
+                                                                   (supplier.s_suppkey
+                                                                   = k0),
+                                                                   join(
+                                                                    (supplier.s_nationkey
+                                                                    =
+                                                                    nation.n_nationkey),
+                                                                    nation,
+                                                                    supplier))),
+                                                           atuple([ascalar(nation.n_nationkey),
+                                                                   ascalar(nation.n_name),
+                                                                   ascalar(nation.n_regionkey),
+                                                                   ascalar(nation.n_comment),
+                                                                   ascalar(supplier.s_suppkey),
+                                                                   ascalar(supplier.s_name),
+                                                                   ascalar(supplier.s_address),
+                                                                   ascalar(supplier.s_nationkey),
+                                                                   ascalar(supplier.s_phone),
+                                                                   ascalar(supplier.s_acctbal),
+                                                                   ascalar(supplier.s_comment)],
+                                                             cross)),
+                                                         partsupp.ps_suppkey)],
+                                                 cross),
+                                               null))|}
+      |> of_string_exn
+    in
+    project r |> Format.printf "%a@." pp ;
+    [%expect
+      {|
+      select([sum((partsupp.ps_supplycost * partsupp.ps_availqty)) as v],
+        ahashidx(dedup(
+                   select([nation.n_name as k1],
+                     atuple([alist(partsupp, ascalar(partsupp.ps_suppkey)),
+                             ahashidx(dedup(
+                                        select([partsupp.ps_suppkey as k0],
+                                          alist(partsupp,
+                                            ascalar(partsupp.ps_suppkey)))),
+                               alist(filter((supplier.s_suppkey = k0),
+                                       join((supplier.s_nationkey =
+                                            nation.n_nationkey),
+                                         nation,
+                                         supplier)),
+                                 ascalar(nation.n_name)),
+                               partsupp.ps_suppkey)],
+                       cross))),
+          atuple([alist(partsupp,
+                    atuple([ascalar(partsupp.ps_suppkey),
+                            ascalar(partsupp.ps_availqty),
+                            ascalar(partsupp.ps_supplycost)],
+                      cross)),
+                  ahashidx(dedup(
+                             select([partsupp.ps_suppkey as k0],
+                               alist(partsupp, ascalar(partsupp.ps_suppkey)))),
+                    alist(filter((k1 = nation.n_name),
+                            filter((supplier.s_suppkey = k0),
+                              join((supplier.s_nationkey = nation.n_nationkey),
+                                nation,
+                                supplier))),
+                      ascalar(null)),
+                    partsupp.ps_suppkey)],
+            cross),
+          null)) |}]
 
   let%expect_test "" =
     let r =
