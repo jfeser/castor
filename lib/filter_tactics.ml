@@ -83,7 +83,7 @@ module Make (C : Config.S) = struct
     | AHashIdx (rk, {node= Filter (p, r); _}, m) ->
         let below, above = split_bound rk p in
         Some
-          (filter (conjoin above) (hash_idx' rk (filter (conjoin below) r) m))
+          (filter (conjoin above) (hash_idx rk (filter (conjoin below) r) m))
     | AOrderedIdx (rk, {node= Filter (p, r); _}, m) ->
         let below, above = split_bound rk p in
         Some
@@ -295,8 +295,7 @@ module Make (C : Config.S) = struct
         let%map rk, rv, mk =
           match r'.node with
           | AList (rk, rv) -> Some (rk, rv, list)
-          | AHashIdx (rk, rv, m) ->
-              Some (rk, rv, fun rk rv -> hash_idx' rk rv m)
+          | AHashIdx (rk, rv, m) -> Some (rk, rv, fun rk rv -> hash_idx rk rv m)
           | AOrderedIdx (rk, rv, m) ->
               Some (rk, rv, fun rk rv -> ordered_idx rk rv m)
           | _ -> None
@@ -360,7 +359,10 @@ module Make (C : Config.S) = struct
             match rest with [] -> r | _ -> filter (and_ rest) r
           in
           let%map r' = Tactics_util.all_values select_list r in
-          outer_filter (hash_idx r' (filter inner_filter_pred r) key)
+          outer_filter
+            (hash_idx r'
+               (filter inner_filter_pred r)
+               {lookup= key; hi_key_layout= None})
     | _ -> None
 
   let elim_eq_filter = of_func elim_eq_filter ~name:"elim-eq-filter"

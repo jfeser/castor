@@ -36,7 +36,8 @@ module Make (C : Config.S) = struct
              [ r1
              ; hash_idx
                  (dedup (select [As_pred (kl, key)] r1))
-                 (filter filter_pred r2) [kl] ]
+                 (filter filter_pred r2)
+                 {lookup= [kl]; hi_key_layout= None} ]
              Cross)
     | _ -> None
 

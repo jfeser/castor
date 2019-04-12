@@ -42,7 +42,7 @@ module Make (Config : Config.S) () = struct
 
   let project r =
     M.annotate_schema r ;
-    Some (project ~params:Config.params r)
+    Some (project_once r)
 
   let project = of_func project ~name:"project"
 
@@ -129,7 +129,7 @@ module Make (Config : Config.S) () = struct
       | OrderBy {key; rel= {node= Filter (ps, r); _}} ->
           Some (filter ps (order_by key r))
       | OrderBy {key; rel= {node= AHashIdx (r1, r2, m); _}} ->
-          Some (hash_idx' r1 (order_by key r2) m)
+          Some (hash_idx r1 (order_by key r2) m)
       | OrderBy {key; rel= {node= AList (r1, r2); _}} ->
           (* If we order a lists keys then the keys will be ordered in the
                    list. *)
@@ -159,10 +159,9 @@ module Make (Config : Config.S) () = struct
     let open Infix in
     seq_many
       [ (* Eliminate groupby operators. *)
-        traced
-          (fix
-             (at_ Groupby_tactics.elim_groupby
-                (Path.all >>? is_groupby >>| shallowest)))
+        fix
+          (at_ Groupby_tactics.elim_groupby
+             (Path.all >>? is_groupby >>| shallowest))
       ; (* Hoist parameterized filters as far up as possible. *)
         fix
           (at_ hoist_filter
@@ -197,7 +196,7 @@ module Make (Config : Config.S) () = struct
              ; push_all_unparameterized_filters ])
       ; push_all_unparameterized_filters
       ; (* Cleanup*)
-        fix project
+        fix (seq resolve project)
       ; Simplify_tactic.simplify ]
 
   let is_serializable r =
