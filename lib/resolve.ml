@@ -79,10 +79,17 @@ module Make (C : Config.S) = struct
 
       (** Bind c2 over c1. *)
       let bind c1 c2 =
+        let compare_row r1 r2 = [%compare: Name.t] r1.rname r2.rname in
         let c1 =
           List.filter c1 ~f:(fun r ->
               not (List.mem c2 ~equal:[%compare.equal: row] r) )
         in
+        let c = c1 @ c2 in
+        List.find_all_dups c ~compare:[%compare: row]
+        |> List.iter ~f:(fun _r ->
+               failwith "Output shadowing."
+               (* Logs.warn (fun m -> m "Output shadowing of %a." Name.pp r.rname) *)
+           ) ;
         c1 @ c2
     end
 
@@ -176,7 +183,7 @@ module Make (C : Config.S) = struct
         List.filter_map metas
           ~f:
             (Option.map ~f:(fun (n, meta) ->
-                 {rname= n; rmeta= meta; rrefs= [ref 0]; rstage= s} ))
+                 {rname= n; rmeta= meta; rrefs= []; rstage= s} ))
       in
       (defs, of_list ctx)
 
@@ -266,6 +273,14 @@ module Make (C : Config.S) = struct
     visitor#visit_pred ctx
 
   and resolve stage outer_ctx ({node; meta} as r) =
+    let all_has_stage (ctx : Ctx.t) s =
+      List.for_all (ctx :> Ctx.row list) ~f:(fun r -> r.Ctx.rstage = s)
+    in
+    let no_leakage (kctx : Ctx.t) (vctx : Ctx.t) =
+      List.for_all
+        (kctx :> Ctx.row list)
+        ~f:(fun r -> not (List.mem ~equal:phys_equal (vctx :> Ctx.row list) r))
+    in
     let rsame = resolve stage in
     let resolve' = function
       | Select (preds, r) ->
@@ -306,10 +321,12 @@ module Make (C : Config.S) = struct
             | _ -> assert false
           in
           (AScalar def, ctx)
-      | AList (r, l) ->
-          let r, outer_ctx' = resolve `Compile outer_ctx r in
-          let l, ctx = rsame (Ctx.bind outer_ctx outer_ctx') l in
-          (AList (r, l), ctx)
+      | AList (rk, rv) ->
+          let rk, kctx = resolve `Compile outer_ctx rk in
+          assert (all_has_stage kctx `Compile) ;
+          let rv, vctx = rsame (Ctx.bind outer_ctx kctx) rv in
+          assert (no_leakage kctx vctx) ;
+          (AList (rk, rv), vctx)
       | ATuple (ls, (Zip as t)) ->
           let ls, ctxs = List.map ls ~f:(rsame outer_ctx) |> List.unzip in
           (ATuple (ls, t), Ctx.merge_list ctxs)
@@ -327,6 +344,7 @@ module Make (C : Config.S) = struct
           (ATuple (List.rev ls, t), ctx)
       | AHashIdx (r, l, m) ->
           let r, key_ctx = resolve `Compile outer_ctx r in
+          assert (all_has_stage key_ctx `Compile) ;
           let l, value_ctx = rsame (Ctx.bind outer_ctx key_ctx) l in
           let m =
             (object
@@ -339,6 +357,7 @@ module Make (C : Config.S) = struct
           (AHashIdx (r, l, m), Ctx.merge key_ctx value_ctx)
       | AOrderedIdx (r, l, m) ->
           let r, key_ctx = resolve `Compile outer_ctx r in
+          assert (all_has_stage key_ctx `Compile) ;
           let l, value_ctx = rsame (Ctx.bind outer_ctx key_ctx) l in
           let m =
             (object
@@ -369,6 +388,8 @@ module Make (C : Config.S) = struct
         Exn.reraisef exn "Resolving: %a" pp r ()
     in
     let ctx, refcnts = Ctx.add_refcnts ctx in
+    (* Logs.debug (fun m ->
+     *     m "%a@ %a" Abslayout.pp r Sexp.pp_hum ([%sexp_of: Ctx.t] ctx) ) ; *)
     meta := Univ_map.set !meta mut_refcnt refcnts ;
     ({node; meta}, ctx)
 
