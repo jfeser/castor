@@ -11,7 +11,9 @@ end
 module Make (C : Config.S) = struct
   module M = Abslayout_db.Make (C)
 
-  let test = Logs.Src.create ~doc:"Source for testing project." "project-test"
+  let test =
+    let src = Logs.Src.create ~doc:"Source for testing project." "project-test" in
+    Logs.Src.set_level src None ; src
 
   let project_defs refcnt ps =
     List.filter ps ~f:(fun p ->
@@ -171,8 +173,6 @@ module Test = struct
   end)
 
   open T
-
-  let () = Logs.Src.set_level test (Some Error)
 
   let with_logs f =
     Logs.(set_reporter (format_reporter ())) ;
