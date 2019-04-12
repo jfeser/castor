@@ -1,6 +1,7 @@
 opam-version: "2.0"
 name: "castor"
 version: "~unknown"
+synopsis: "A deductive database synthesizer"
 maintainer: "Jack Feser <feser@csail.mit.edu>"
 authors: "Jack Feser <feser@csail.mit.edu>"
 dev-repo: "git+https://github.com/jfeser/castor.git"
@@ -20,7 +21,7 @@ depends: [
   "postgresql" {>= "4.4" & < "4.5"}
   "bos" {>= "0.2" & < "0.3"}
   "logs" {>= "0.6" & < "0.7"}
-  "llvm" {>= "6" & < "8"}
+  "llvm" {>= "7.0.0" & < "8.0.0"}
   "expect_test_helpers_kernel" {>= "v0.12"}
   "gen" {>= "0.5" & < "0.6"}
   "cmph" {>= "0.1" & < "0.2"}
