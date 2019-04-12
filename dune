@@ -14,9 +14,7 @@
  (deps (file discover.exe))
  (targets config.ini)
  (mode promote)
- (action 
- (with-stdout-to config.ini
-          (run ./discover.exe -kind ENV))))
+ (action (with-stdout-to config.ini (run ./discover.exe -kind ENV))))
 
 (alias
   (name config)
