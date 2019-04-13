@@ -1,13 +1,5 @@
-(install
- (section bin)
- (files compile.exe pretty.exe transform.exe))
-
-(rule
- (targets config.ml)
- (deps    ../config.ml)
- (action  (copy %{deps} %{targets})))
-
 (executable
+ (public_name castor-pretty)
  (name pretty)
  (libraries core castor)
  (flags (:standard -g -bin-annot))
@@ -15,13 +7,15 @@
  (modules pretty))
 
 (executable
+ (public_name castor-compile)
  (name compile)
  (libraries core castor logs)
  (flags (:standard -g -bin-annot))
  (preprocess (pps ppx_sexp_conv ppx_let))
- (modules compile config))
+ (modules compile))
 
 (executable
+ (public_name castor-transform)
  (name transform)
  (libraries core castor logs)
  (flags (:standard -g -bin-annot))

@@ -1,19 +1,27 @@
 open Core
 open Stdio
-open Config_defaults
 
 let main kind =
   let llvm_root =
-    let configs = ["llvm-config"; "llvm-config-6.0"] in
-    Option.value_exn ~message:"No LLVM root found."
-      (List.find_map configs ~f:(fun c ->
-           try
-             Some
-               ( Unix.open_process_in (sprintf "%s --prefix" c)
-               |> In_channel.input_all |> String.strip |> Filename.realpath )
-           with Unix.Unix_error _ -> None ))
+    match Config_defaults.llvm_root with
+    | Some r -> r
+    | None ->
+        let configs = ["llvm-config"; "llvm-config-6.0"] in
+        let dir =
+          List.find_map configs ~f:(fun c ->
+              try
+                Unix.open_process_in (sprintf "%s --prefix" c)
+                |> In_channel.input_all |> String.strip |> Filename.realpath
+                |> Option.some
+              with Unix.Unix_error _ -> None )
+        in
+        Option.value_exn ~message:"No LLVM root found." dir
   in
-  let build_root = Filename.realpath (Sys.getcwd ()) in
+  let build_root =
+    match Config_defaults.build_root with
+    | Some r -> r
+    | None -> Filename.realpath (Sys.getcwd ())
+  in
   let formatter, option_to_str =
     match kind with
     | "ML" ->
@@ -44,8 +52,10 @@ tpcds_db = %s
         , option_to_str )
     | _ -> failwith "Unexpected kind."
   in
-  formatter build_root llvm_root (option_to_str tpch_db)
-    (option_to_str demomatch_db) (option_to_str tpcds_db)
+  formatter build_root llvm_root
+    (option_to_str Config_defaults.tpch_db)
+    (option_to_str Config_defaults.demomatch_db)
+    (option_to_str Config_defaults.tpcds_db)
 
 let () =
   let open Command in
