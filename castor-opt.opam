@@ -1,6 +1,7 @@
 opam-version: "2.0"
 name: "castor-opt"
 version: "~unknown"
+synopsis: "Optimizer for the Castor synthesizer"
 maintainer: "Jack Feser <feser@csail.mit.edu>"
 authors: "Jack Feser <feser@csail.mit.edu>"
 dev-repo: "git+https://github.com/jfeser/castor-opt.git"
