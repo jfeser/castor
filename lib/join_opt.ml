@@ -1,5 +1,4 @@
 open Core
-open Base
 open Castor
 open Collections
 module A = Abslayout
@@ -108,10 +107,10 @@ module Make (C : Config.S) = struct
   module JoinSpace = struct
     module T = struct
       type t =
-        { graph: JoinGraph.t
-        ; filters: Set.M(A.Pred).t
-        ; leaves: (JoinGraph.Vertex.t * Set.M(Name).t) list }
+        {graph: JoinGraph.t; filters: Set.M(A.Pred).t Map.M(JoinGraph.Vertex).t}
       [@@deriving compare, sexp_of]
+
+      let t_of_sexp _ = failwith "unimplemented"
     end
 
     include T
@@ -122,15 +121,15 @@ module Make (C : Config.S) = struct
     let to_string {graph; _} = JoinGraph.to_string graph
 
     let empty =
-      {graph= JoinGraph.empty; filters= Set.empty (module A.Pred); leaves= []}
+      {graph= JoinGraph.empty; filters= Map.empty (module JoinGraph.Vertex)}
 
     let union s1 s2 =
+      let merger ~key:_ = function
+        | `Left x | `Right x -> Some x
+        | `Both (x, y) -> Some (Set.union x y)
+      in
       { graph= JoinGraph.union s1.graph s2.graph
-      ; filters= Set.union s1.filters s2.filters
-      ; leaves=
-          List.append s1.leaves s2.leaves
-          |> List.dedup_and_sort ~compare:(fun (r1, _) (r2, _) ->
-                 [%compare: A.t] r1 r2 ) }
+      ; filters= Map.merge ~f:merger s1.filters s2.filters }
 
     let length {graph; _} = JoinGraph.nb_vertex graph
 
@@ -186,6 +185,17 @@ module Make (C : Config.S) = struct
                 |> Or_error.all
               in
               match pred_rels with
+              | Ok [] ->
+                  Logs.warn (fun m ->
+                      m "Join-opt: Unhandled predicate %a. Constant predicate."
+                        A.pp_pred p ) ;
+                  s
+              | Ok [r] ->
+                  { s with
+                    filters=
+                      Map.update s.filters r ~f:(function
+                        | Some fs -> Set.add fs p
+                        | None -> Set.singleton (module A.Pred) p ) }
               | Ok [r1; r2] ->
                   { s with
                     graph= JoinGraph.add_or_update_edge s.graph (r1, p, r2) }
@@ -211,8 +221,8 @@ module Make (C : Config.S) = struct
       in
       to_graph leaves r
 
-    let partition_fold ~init ~f {graph; filters; leaves} =
-      let vertices = JoinGraph.vertices graph |> Array.of_list in
+    let partition_fold ~init ~f s =
+      let vertices = JoinGraph.vertices s.graph |> Array.of_list in
       let n = Array.length vertices in
       let rec loop acc k =
         if k >= n then acc
@@ -220,13 +230,13 @@ module Make (C : Config.S) = struct
           let acc =
             Combinat.Combination.fold (k, n) ~init:acc ~f:(fun acc vs ->
                 let g1, g2, es =
-                  JoinGraph.partition graph
+                  JoinGraph.partition s.graph
                     ( List.init k ~f:(fun i -> vertices.(vs.{i}))
                     |> Set.of_list (module JoinGraph.Vertex) )
                 in
                 if JoinGraph.is_connected g1 && JoinGraph.is_connected g2 then
-                  let s1 = {graph= g1; filters; leaves} in
-                  let s2 = {graph= g2; filters; leaves} in
+                  let s1 = {s with graph= g1} in
+                  let s2 = {s with graph= g2} in
                   f acc (s1, s2, es)
                 else acc )
           in
@@ -527,4 +537,14 @@ module Make (C : Config.S) = struct
              `Tf (seq_many [of_func (reshape j); emit_joins j]) )
     in
     {name= "join-opt"; f}
+
+  let transform_simple =
+    let f r =
+      let open Abslayout in
+      match r.node with
+      | Join {pred; r1; r2} ->
+          Some (`Result (tuple [r1; filter pred r2] Cross))
+      | _ -> None
+    in
+    {name= "join-elim"; f}
 end

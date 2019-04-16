@@ -166,10 +166,15 @@ module Make (Config : Config.S) () = struct
         fix
           (at_ hoist_filter
              (Path.all >>? is_param_filter >>| deepest >>= parent))
-      ; at_ Join_opt.transform (Path.all >>? is_join >>| shallowest)
-      ; resolve
-      ; fix
-          (at_ push_filter Castor.Path.(all >>? is_const_filter >>| shallowest))
+        (* Eliminate unparameterized join nests. *)
+      ; at_ Join_opt.transform
+          (Path.all >>? is_join >>? not has_params >>| shallowest)
+      ; at_ Join_opt.transform_simple (Path.all >>? is_join >>| shallowest)
+        (* Push constant filters *)
+      ; seq resolve
+          (fix
+             (at_ push_filter
+                Castor.Path.(all >>? is_const_filter >>| shallowest)))
       ; (* Push orderby operators into compile time position if possible. *)
         fix
           (at_ push_orderby
