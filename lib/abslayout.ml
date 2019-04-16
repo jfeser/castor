@@ -698,41 +698,7 @@ module Pred = struct
     | Name n -> Some n
     | As_pred (_, n) -> Some (Name.create n)
     | _ -> None
-
-  let to_schema p =
-    let t = to_type p in
-    match to_name p with
-    | Some n -> Name.copy n ~type_:(Some t)
-    | None -> Name.create ~type_:t ""
 end
-
-let pred_of_value = Pred.of_value
-
-let pred_relations = Pred.relations
-
-let pred_to_schema = Pred.to_schema
-
-let pred_to_name = Pred.to_name
-
-let subst_pred = Pred.subst
-
-let subst_single = Pred.subst_single
-
-let conjoin = Pred.conjoin
-
-let conjuncts = Pred.conjuncts
-
-let collect_aggs = Pred.collect_aggs
-
-let pred_constants = Pred.constants
-
-let pred_eqs = Pred.eqs
-
-let pred_remove_as = Pred.remove_as
-
-let pred_kind = Pred.kind
-
-let pred_of_string_exn = Pred.of_string_exn
 
 let annotate_eq r =
   let visitor =
@@ -753,7 +719,7 @@ let annotate_eq r =
         super#visit_Filter None (p, r) ;
         let m = Option.value_exn m in
         let r_eqs = Meta.(find_exn r eq) in
-        let eqs = pred_eqs p @ r_eqs |> dedup_pairs in
+        let eqs = Pred.eqs p @ r_eqs |> dedup_pairs in
         Meta.Direct.set_m m Meta.eq eqs
 
       method! visit_Select m (ps, r) =
@@ -778,7 +744,7 @@ let annotate_eq r =
         let m = Option.value_exn m in
         let r1_eqs = Meta.(find_exn r1 eq) in
         let r2_eqs = Meta.(find_exn r2 eq) in
-        let eqs = pred_eqs p @ r1_eqs @ r2_eqs |> dedup_pairs in
+        let eqs = Pred.eqs p @ r1_eqs @ r2_eqs |> dedup_pairs in
         Meta.Direct.set_m m Meta.eq eqs
 
       method! visit_AList m (r1, r2) =
@@ -797,7 +763,7 @@ let annotate_eq r =
   visitor#visit_t None r
 
 let select_kind l =
-  if List.exists l ~f:(fun p -> Poly.(pred_kind p = `Agg)) then `Agg else `Scalar
+  if List.exists l ~f:(fun p -> Poly.(Pred.kind p = `Agg)) then `Agg else `Scalar
 
 class ['a] stage_iter =
   object (self : 'a)

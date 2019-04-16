@@ -293,7 +293,7 @@ module Make (Config : Config.S) () = struct
         (function
         | {node= Filter (p, r); _} ->
             let eqs, rest =
-              conjuncts p
+              Pred.conjuncts p
               |> List.partition_map ~f:(function
                    | Binop (Eq, p1, p2) -> `Fst (p1, Fresh.name fresh "k%d", p2)
                    | p -> `Snd p )
@@ -325,7 +325,7 @@ module Make (Config : Config.S) () = struct
     let open A in
     let field, values =
       match args with
-      | f :: vs -> (A.name_of_string_exn f, List.map vs ~f:pred_of_string_exn)
+      | f :: vs -> (A.name_of_string_exn f, List.map vs ~f:Pred.of_string_exn)
       | _ ->
           Error.create "Unexpected argument list." args [%sexp_of: string list]
           |> Error.raise
@@ -352,7 +352,7 @@ module Make (Config : Config.S) () = struct
           let encoder =
             List.foldi values ~init:(Int 0) ~f:(fun i else_ v ->
                 let witness =
-                  subst_pred (Map.singleton (module Name) free_var v) p
+                  Pred.subst (Map.singleton (module Name) free_var v) p
                 in
                 If (witness, Int (i + 1), else_) )
           in
@@ -377,7 +377,7 @@ module Make (Config : Config.S) () = struct
 
   let tf_precompute_filter_bv args =
     let open A in
-    let values = List.map args ~f:pred_of_string_exn in
+    let values = List.map args ~f:Pred.of_string_exn in
     let exception Failed of Error.t in
     let run_exn r =
       M.annotate_schema r ;
@@ -401,7 +401,7 @@ module Make (Config : Config.S) () = struct
           let witnesses =
             List.mapi values ~f:(fun i v ->
                 As_pred
-                  ( subst_pred (Map.singleton (module Name) free_var v) p
+                  ( Pred.subst (Map.singleton (module Name) free_var v) p
                   , sprintf "%s_%d" witness_name i ) )
           in
           let filter_pred =
@@ -420,7 +420,7 @@ module Make (Config : Config.S) () = struct
 
   let gen_ordered_idx ?lb ?ub p r =
     let open A in
-    let t = pred_to_schema p |> Name.type_exn in
+    let t = Pred.to_type p in
     let default_min =
       let open Type.PrimType in
       match t with
@@ -549,7 +549,7 @@ module Make (Config : Config.S) () = struct
     let eqs = Meta.(find_exn r2 eq) in
     let names =
       List.concat_map eqs ~f:(fun (n, n') -> [n; n'])
-      @ List.filter_map ~f:(fun (p, _) -> pred_to_name p) key
+      @ List.filter_map ~f:(fun (p, _) -> Pred.to_name p) key
       @ schema1
     in
     (* Create map from names to sets of equal names. *)
@@ -569,7 +569,7 @@ module Make (Config : Config.S) () = struct
       let new_key =
         List.map key ~f:(fun (p, o) ->
             let p' =
-              match pred_to_name p with
+              match Pred.to_name p with
               | Some n -> (
                   let s = Hashtbl.find_exn eq_map n in
                   (* Find an equivalent name in schema 1. *)
@@ -596,7 +596,7 @@ module Make (Config : Config.S) () = struct
         let skey =
           Set.of_list
             (module Name)
-            (List.filter_map ~f:(fun (p, _) -> pred_to_name p) key)
+            (List.filter_map ~f:(fun (p, _) -> Pred.to_name p) key)
         in
         if Set.is_subset skey ~of_:sschema then [tuple (order_by key r :: rs) Cross]
         else []
@@ -685,7 +685,7 @@ module Make (Config : Config.S) () = struct
           match r with
           | {node= Select (ps, {node= AHashIdx (r, r', m); _}); _} ->
               let outer_preds =
-                List.filter_map ps ~f:pred_to_name |> List.map ~f:(fun n -> Name n)
+                List.filter_map ps ~f:Pred.to_name |> List.map ~f:(fun n -> Name n)
               in
               [select outer_preds (hash_idx r (select ps r') m)]
           | {node= Select (ps, {node= AOrderedIdx (r, r', m); _}); _} ->
@@ -807,7 +807,7 @@ module Make (Config : Config.S) () = struct
          exposed already by ps. *)
       Set.diff
         (Set.inter with_ (of_list Meta.(find_exn r schema)))
-        (of_list (List.filter_map ~f:pred_to_name ps))
+        (of_list (List.filter_map ~f:Pred.to_name ps))
       |> Set.to_list
       |> List.map ~f:(fun n -> Name n)
     in
@@ -1137,9 +1137,9 @@ module Make (Config : Config.S) () = struct
       annotate_free r ;
       let consts =
         match r.node with
-        | Filter (p, r') -> pred_constants Meta.(find_exn r' schema) p
+        | Filter (p, r') -> Pred.constants Meta.(find_exn r' schema) p
         | Select (ps, r') ->
-            List.concat_map ps ~f:(pred_constants Meta.(find_exn r' schema))
+            List.concat_map ps ~f:(Pred.constants Meta.(find_exn r' schema))
             |> List.dedup_and_sort ~compare:[%compare: pred]
         | _ -> []
       in
@@ -1147,7 +1147,7 @@ module Make (Config : Config.S) () = struct
       let fresh_name = Name.create fresh_id in
       List.map consts ~f:(fun p ->
           tuple
-            [scalar (As_pred (p, fresh_id)); subst_single p (Name fresh_name) r]
+            [scalar (As_pred (p, fresh_id)); Pred.subst_single p (Name fresh_name) r]
             Cross )
     in
     {name= "hoist-pred-const"; f} |> run_everywhere ~stage:`Run

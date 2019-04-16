@@ -74,7 +74,12 @@ module Make (Config : Config.S) = struct
       object
         inherit [_] schema_visitor
 
-        method to_schema = List.map ~f:Pred.to_schema
+        method to_schema =
+          List.map ~f:(fun p ->
+              let t = Pred.to_type p in
+              match Pred.to_name p with
+              | Some n -> Name.copy ~type_:(Some t) n
+              | None -> Name.create "__unnamed__" ~type_:t )
 
         method rename r = List.map ~f:(Name.copy ~relation:(Some r))
 
@@ -133,7 +138,7 @@ module Make (Config : Config.S) = struct
   let rec subst ctx = function
     | `For (q1, q2) -> `For (Abslayout.subst ctx q1, subst ctx q2)
     | `Concat qs -> `Concat (List.map ~f:(subst ctx) qs)
-    | `Scalar p -> `Scalar (subst_pred ctx p)
+    | `Scalar p -> `Scalar (Pred.subst ctx p)
     | `Empty -> `Empty
     | `Query q -> `Query (Abslayout.subst ctx q)
 
@@ -146,7 +151,7 @@ module Make (Config : Config.S) = struct
     | `For (q1, q2) ->
         (Meta.(find_exn q1 schema) |> List.map ~f:Name.type_exn) @ to_schema q2
     | `Concat qs -> IntT {nullable= false} :: List.concat_map qs ~f:to_schema
-    | `Scalar p -> [Pred.to_schema p |> Name.type_exn]
+    | `Scalar p -> [Pred.to_type p]
     | `Query q -> Meta.(find_exn q schema) |> List.map ~f:Name.type_exn
     | `Empty -> []
 
@@ -197,9 +202,7 @@ module Make (Config : Config.S) = struct
             let sql =
               Sql.(create_query (List.map scalars ~f:(create_entry ~ctx)))
             in
-            let types =
-              List.map scalars ~f:(fun p -> p |> Pred.to_schema |> Name.type_exn)
-            in
+            let types = List.map scalars ~f:Pred.to_type in
             let names = Sql.(to_schema (Query sql)) in
             (sql, types, names)
           in
@@ -518,8 +521,7 @@ module Make (Config : Config.S) = struct
           FuncT
             ([least_general_of_layout r1; least_general_of_layout r2], `Child_sum)
       | AEmpty -> EmptyT
-      | AScalar p ->
-          Abslayout.Pred.to_schema p |> Name.type_exn |> least_general_of_primtype
+      | AScalar p -> Abslayout.Pred.to_type p |> least_general_of_primtype
       | AList (_, r') -> ListT (least_general_of_layout r', {count= Bottom})
       | AHashIdx (_, vr, {hi_key_layout= Some kr; _}) ->
           HashIdxT

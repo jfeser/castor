@@ -371,5 +371,5 @@ select([lp.counter, lc.counter],
          (meta
           ((refcnt ((((relation (r)) (name f)) 1) (((relation (r)) (name g)) 0)))
            (schema (((relation (r)) (name f)) ((relation (r)) (name g))))))))))
-     (meta ((refcnt ()) (schema (((relation ()) (name ""))))))) |}]
+     (meta ((refcnt ()) (schema (((relation ()) (name __unnamed__))))))) |}]
   end )

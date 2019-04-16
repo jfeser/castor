@@ -63,7 +63,7 @@ end
 type ctx = {db: Db.t; params: Value.t Map.M(Name).t}
 
 let name_exn p =
-  match pred_to_name p with
+  match Pred.to_name p with
   | Some n -> n
   | None -> failwith "Expected a named predicate."
 
@@ -97,7 +97,7 @@ let eval {db; params} r =
     else
       let fresh = Fresh.create () in
       let preds, named_aggs =
-        List.map preds ~f:(collect_aggs ~fresh) |> List.unzip
+        List.map preds ~f:(Pred.collect_aggs ~fresh) |> List.unzip
       in
       let named_aggs = List.concat named_aggs in
       let state =
@@ -105,7 +105,7 @@ let eval {db; params} r =
         |> Array.map ~f:(fun (n, p) ->
                let open Value in
                let a =
-                 match pred_remove_as p with
+                 match Pred.remove_as p with
                  | Sum p -> Sum (Int 0, p)
                  | Min p -> Min (Int Int.max_value, p)
                  | Max p -> Max (Int Int.min_value, p)
@@ -147,7 +147,7 @@ let eval {db; params} r =
         |> Map.of_alist_exn (module Name)
       in
       let ctx = Ctx.merge ctx schema !last_tup in
-      List.map preds ~f:(fun p -> subst_pred subst_ctx p |> eval_pred ctx)
+      List.map preds ~f:(fun p -> Pred.subst subst_ctx p |> eval_pred ctx)
       |> Array.of_list |> Option.some
   and eval_pred ctx p =
     let open Value in

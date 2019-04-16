@@ -143,11 +143,7 @@ module Ctx : sig
   val empty : t
 end
 
-val pred_relations : pred -> string list
-
 val of_string_exn : string -> t
-
-val pred_of_string_exn : string -> pred
 
 val name_of_string_exn : string -> Name.t
 
@@ -155,19 +151,7 @@ val of_channel_exn : Stdio.In_channel.t -> t
 
 val subst : pred Map.M(Name).t -> t -> t
 
-val subst_pred : pred Map.M(Name).t -> pred -> pred
-
-val subst_single : pred -> pred -> t -> t
-
-val pred_to_schema : pred -> Name.t
-
-val pred_to_name : pred -> Name.t option
-
 val annotate_align : t -> unit
-
-val pred_of_value : Value.t -> pred
-
-val pred_kind : pred -> [`Agg | `Scalar]
 
 val select_kind : pred list -> [`Agg | `Scalar]
 
@@ -179,8 +163,6 @@ val free : t -> Set.M(Name).t
 
 val annotate_free : t -> unit
 
-val pred_remove_as : pred -> pred
-
 val annotate_eq : t -> unit
 
 val annotate_orders : t -> unit
@@ -189,15 +171,7 @@ val order_of : t -> (pred * order) list
 
 val validate : t -> unit
 
-val pred_constants : Name.t list -> pred -> pred list
-
-val conjuncts : pred -> pred list
-
-val conjoin : pred list -> pred
-
 val aliases : t -> t Map.M(String).t
-
-val collect_aggs : fresh:Fresh.t -> pred -> pred * (string * pred) list
 
 val strip_meta : t -> t
 
@@ -265,8 +239,6 @@ module Pred : sig
   val subst : (Name.t, t, 'a) Map.t -> t -> t
 
   val relations : t -> string list
-
-  val to_schema : t -> Name.t
 
   val to_name : t -> Name.t option
 

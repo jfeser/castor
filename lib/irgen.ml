@@ -569,7 +569,7 @@ struct
 
   and agg_init ctx p b =
     let open Builder in
-    match A.pred_remove_as p with
+    match A.Pred.remove_as p with
     | A.Count ->
         `Count
           (build_defn ~persistent:false "count" (const_int Type.PrimType.int_t 0) b)
@@ -616,7 +616,7 @@ struct
     | `Count x | `Sum (_, x) | `Min (_, x) | `Max (_, x) -> x
     | `Avg (_, n, d) -> build_div n d b
     | `Passthru p ->
-        [%sexp_of: A.pred * [`Agg | `Scalar]] (p, A.pred_kind p) |> print_s ;
+        [%sexp_of: A.pred * [`Agg | `Scalar]] (p, A.Pred.kind p) |> print_s ;
         gen_pred ctx p b
 
   and scan_select ctx b r t cb =
@@ -636,7 +636,7 @@ struct
     | `Agg ->
         (* Extract all the aggregates from the arguments. *)
         let scalar_preds, agg_preds =
-          List.map ~f:(A.collect_aggs ~fresh) args |> List.unzip
+          List.map ~f:(A.Pred.collect_aggs ~fresh) args |> List.unzip
         in
         let agg_preds = List.concat agg_preds in
         let last_tup =

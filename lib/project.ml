@@ -17,7 +17,7 @@ module Make (C : Config.S) = struct
 
   let project_defs refcnt ps =
     List.filter ps ~f:(fun p ->
-        match pred_to_name p with
+        match Pred.to_name p with
         | None ->
             (* Filter out definitions that have no name *)
             false

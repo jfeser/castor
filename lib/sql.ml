@@ -31,7 +31,7 @@ let create_query ?(distinct = false) ?(conds = []) ?(relations = []) ?(order = [
   {select; distinct; conds; relations; order; group; limit}
 
 let create_entry ~ctx ?alias ?cast pred =
-  match (alias, pred_to_name pred) with
+  match (alias, Pred.to_name pred) with
   | Some a, _ -> {pred; alias= a; cast}
   | _, Some n ->
       let orig_n, id =
@@ -118,7 +118,7 @@ let join ctx schema1 schema2 sql1 sql2 pred =
      aliases in the select clause here. *)
   let select_list = spj1.select @ spj2.select in
   let ctx = make_ctx (schema1 @ schema2) select_list in
-  let pred = subst_pred ctx pred in
+  let pred = Pred.subst ctx pred in
   Query
     (create_query
        ~conds:(pred :: (spj1.conds @ spj2.conds))
@@ -128,7 +128,7 @@ let join ctx schema1 schema2 sql1 sql2 pred =
 let order_by ctx schema sql key =
   let spj = to_spj ctx sql in
   let ctx = make_ctx schema spj.select in
-  let key = List.map key ~f:(fun (p, o) -> (subst_pred ctx p, o)) in
+  let key = List.map key ~f:(fun (p, o) -> (Pred.subst ctx p, o)) in
   Query {spj with order= key}
 
 let select ?groupby ctx schema sql fields =
@@ -152,13 +152,13 @@ let select ?groupby ctx schema sql fields =
   let spj = if needs_subquery then create_subquery ctx sql else to_spj ctx sql in
   let sctx = make_ctx schema spj.select in
   let fields =
-    List.map fields ~f:(fun p -> p |> subst_pred sctx |> create_entry ~ctx)
+    List.map fields ~f:(fun p -> p |> Pred.subst sctx |> create_entry ~ctx)
   in
   let spj = {spj with select= fields} in
   let spj =
     match groupby with
     | Some key ->
-        let group = List.map key ~f:(subst_pred sctx) in
+        let group = List.map key ~f:(Pred.subst sctx) in
         {spj with group}
     | None -> spj
   in
@@ -172,7 +172,7 @@ let filter ctx schema sql pred =
   (* The where clause is evaluated before the select clause so we can't use the
      aliases in the select clause here. *)
   let ctx = make_ctx schema spj.select in
-  let pred = subst_pred ctx pred in
+  let pred = Pred.subst ctx pred in
   Query {spj with conds= pred :: spj.conds}
 
 let lat_join of_ralgebra ctx s1 sql1 q2 =
@@ -335,7 +335,7 @@ and spj_to_sql ctx {select; distinct; order; group; relations; conds; limit} =
       | `Agg ->
           List.map select ~f:(fun ({pred= p; _} as entry) ->
               { entry with
-                pred= (match pred_kind p with `Agg -> p | `Scalar -> Min p) } )
+                pred= (match Pred.kind p with `Agg -> p | `Scalar -> Min p) } )
       | `Scalar -> select
     else select
   in
