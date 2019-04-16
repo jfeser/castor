@@ -29,8 +29,9 @@ module Make (C : Config.S) = struct
       with
       | Some (n, _) -> Name n
       | None ->
-          let type_ = pred_to_schema a |> Name.type_exn in
-          let n = Fresh.name fresh "agg%d" |> Name.create ~type_ in
+          let n =
+            Fresh.name fresh "agg%d" |> Name.create ~type_:(Pred.to_type a)
+          in
           aggs := (n, a) :: !aggs ;
           Name n
     in
@@ -86,7 +87,7 @@ module Make (C : Config.S) = struct
             match r'.node with
             | AHashIdx (rk, _, _) ->
                 let o =
-                  List.filter_map ps ~f:pred_to_name
+                  List.filter_map ps ~f:Pred.to_name
                   |> List.map ~f:(fun n -> Name n)
                 in
                 let i =

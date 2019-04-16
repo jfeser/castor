@@ -358,8 +358,7 @@ module Make (C : Config.S) = struct
         let scan_cost =
           lhs_scan
           +. nt_lhs
-             *. ( Cost.hash (Name.type_exn (A.pred_to_schema lkey))
-                +. rhs_per_partition_costs.(1) )
+             *. (Cost.hash (A.Pred.to_type lkey) +. rhs_per_partition_costs.(1))
         in
         [|size_cost; scan_cost|]
 

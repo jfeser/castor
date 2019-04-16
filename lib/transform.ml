@@ -57,7 +57,7 @@ module Make (Config : Config.S) () = struct
           let skey =
             Set.of_list
               (module Name)
-              (List.filter_map ~f:(fun (p, _) -> pred_to_name p) key)
+              (List.filter_map ~f:(fun (p, _) -> Pred.to_name p) key)
           in
           if Set.is_subset skey ~of_:sschema then
             Some (tuple (order_by key r :: rs) Cross)
@@ -74,7 +74,7 @@ module Make (Config : Config.S) () = struct
       let eqs = Meta.(find_exn r2 eq) in
       let names =
         List.concat_map eqs ~f:(fun (n, n') -> [n; n'])
-        @ List.filter_map ~f:(fun (p, _) -> pred_to_name p) key
+        @ List.filter_map ~f:(fun (p, _) -> Pred.to_name p) key
         @ schema1
       in
       (* Create map from names to sets of equal names. *)
@@ -94,7 +94,7 @@ module Make (Config : Config.S) () = struct
         let new_key =
           List.map key ~f:(fun (p, o) ->
               let p' =
-                match pred_to_name p with
+                match Pred.to_name p with
                 | Some n -> (
                     let s = Hashtbl.find_exn eq_map n in
                     (* Find an equivalent name in schema 1. *)

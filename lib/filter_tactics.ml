@@ -27,7 +27,7 @@ module Make (C : Config.S) = struct
          exposed already by ps. *)
       Set.diff
         (Set.inter with_ (Set.of_list (module Name) Meta.(find_exn r schema)))
-        (Set.of_list (module Name) (List.filter_map ~f:pred_to_name ps))
+        (Set.of_list (module Name) (List.filter_map ~f:Pred.to_name ps))
       |> Set.to_list
       |> List.map ~f:(fun n -> Name n)
     in
@@ -36,7 +36,7 @@ module Make (C : Config.S) = struct
   (** Split predicates that sit under a binder into the parts that depend on
        bound variables and the parts that do not. *)
   let split_bound binder p =
-    List.partition_tf (conjuncts p) ~f:(fun p' ->
+    List.partition_tf (Pred.conjuncts p) ~f:(fun p' ->
         overlaps (pred_free p') (M.bound binder) )
 
   (** Check that a predicate is fully supported by a relation (it does not
@@ -79,15 +79,19 @@ module Make (C : Config.S) = struct
     | Dedup {node= Filter (p, r); _} -> Some (filter p (dedup r))
     | AList (rk, {node= Filter (p, r); _}) ->
         let below, above = split_bound rk p in
-        Some (filter (conjoin above) (list rk (filter (conjoin below) r)))
+        Some
+          (filter (Pred.conjoin above)
+             (list rk (filter (Pred.conjoin below) r)))
     | AHashIdx (rk, {node= Filter (p, r); _}, m) ->
         let below, above = split_bound rk p in
         Some
-          (filter (conjoin above) (hash_idx rk (filter (conjoin below) r) m))
+          (filter (Pred.conjoin above)
+             (hash_idx rk (filter (Pred.conjoin below) r) m))
     | AOrderedIdx (rk, {node= Filter (p, r); _}, m) ->
         let below, above = split_bound rk p in
         Some
-          (filter (conjoin above) (ordered_idx rk (filter (conjoin below) r) m))
+          (filter (Pred.conjoin above)
+             (ordered_idx rk (filter (Pred.conjoin below) r) m))
     | _ -> None
 
   let hoist_filter = of_func hoist_filter ~name:"hoist-filter"
@@ -105,7 +109,7 @@ module Make (C : Config.S) = struct
     | [] -> None
 
   let gen_ordered_idx ?lb ?ub p rk rv =
-    let t = pred_to_schema p |> Name.type_exn in
+    let t = Pred.to_type p in
     let default_min =
       let open Type.PrimType in
       match t with
@@ -180,7 +184,7 @@ module Make (C : Config.S) = struct
         (* Select the comparisons which have a parameter on exactly one side and
            partition by the unparameterized side of the comparison. *)
         let cmps, rest =
-          conjuncts p
+          Pred.conjuncts p
           |> List.partition_map ~f:(function
                | (Binop (Gt, p1, p2) | Binop (Lt, p2, p1)) as p ->
                    if is_candidate_key p1 r' && not (is_candidate_key p2 r')
@@ -237,7 +241,7 @@ module Make (C : Config.S) = struct
                match
                  gen_ordered_idx ?lb:(List.hd lb) ?ub:(List.hd ub) key rk r'
                with
-               | Ok r -> Some (filter (conjoin (rest @ rest')) r)
+               | Ok r -> Some (filter (Pred.conjoin (rest @ rest')) r)
                | Error err ->
                    Logs.warn (fun m -> m "Elim-cmp: %s" err) ;
                    None )
@@ -332,7 +336,7 @@ module Make (C : Config.S) = struct
     match r.node with
     | Filter (p, r) ->
         let eqs, rest =
-          conjuncts p
+          Pred.conjuncts p
           |> List.partition_map ~f:(function
                | Binop (Eq, p1, p2) as p ->
                    if is_candidate_key p1 r && not (is_candidate_key p2 r) then
