@@ -23,12 +23,10 @@ module Make (Config : Config.S) = struct
 
   let rec width = function
     | `Empty -> 0
-    | `For (q1, q2) -> List.length Meta.(find_exn q1 schema) + width q2
+    | `For (q1, q2) -> List.length (schema_exn q1) + width q2
     | `Scalar _ -> 1
     | `Concat qs -> 1 + List.sum (module Int) qs ~f:width
-    | `Query q -> List.length Meta.(find_exn q schema)
-
-  let relation_schema s = Db.schema conn s
+    | `Query q -> List.length (schema_exn q)
 
   class virtual ['s] schema_visitor =
     object (self : 'a)
@@ -61,32 +59,12 @@ module Make (Config : Config.S) = struct
           | ATuple ([], Concat) -> []
           | ATuple (r :: _, Concat) -> Meta.find_exn r self#key
           | As (n, r) -> Meta.find_exn r self#key |> self#rename n
-          | Scan table ->
-              self#to_schema (Db.schema conn table |> List.map ~f:(fun n -> Name n))
+          | Relation {r_schema= Some schema; _} ->
+              self#to_schema (List.map schema ~f:(fun n -> Name n))
+          | Relation {r_schema= None; _} -> failwith ""
         in
         Meta.set_m r self#key schema
     end
-
-  (** Add a schema field to each metadata node. Variables must first be
-     annotated with type information. *)
-  let annotate_schema r =
-    let mapper =
-      object
-        inherit [_] schema_visitor
-
-        method to_schema =
-          List.map ~f:(fun p ->
-              let t = Pred.to_type p in
-              match Pred.to_name p with
-              | Some n -> Name.copy ~type_:(Some t) n
-              | None -> Name.create "__unnamed__" ~type_:t )
-
-        method rename r = List.map ~f:(Name.copy ~relation:(Some r))
-
-        method key = Meta.schema
-      end
-    in
-    mapper#visit_t () r
 
   (** Add a schema field to each metadata node. Variables must first be
      annotated with type information. *)
@@ -108,9 +86,7 @@ module Make (Config : Config.S) = struct
 
   let total_order_key q =
     let native_order = Abslayout.order_of q in
-    let total_order =
-      List.map Meta.(find_exn q schema) ~f:(fun n -> (Name n, Asc))
-    in
+    let total_order = List.map (schema_exn q) ~f:(fun n -> (Name n, Asc)) in
     native_order @ total_order
 
   let rec gen_query q =
@@ -118,22 +94,21 @@ module Make (Config : Config.S) = struct
     | AList (q1, q2) ->
         let q1 =
           let order_key = total_order_key q1 in
-          let q1 = order_by order_key q1 in
-          annotate_schema q1 ; q1
+          order_by order_key q1
         in
         `For (q1, gen_query q2)
     | AHashIdx (q1, q2, _) | AOrderedIdx (q1, q2, _) ->
         let q1 =
           let order_key = total_order_key q1 in
-          let q1 = order_by order_key (dedup q1) in
-          annotate_schema q1 ; q1
+          order_by order_key (dedup q1)
         in
         `Concat [`Query q1; `For (q1, gen_query q2)]
     | AEmpty -> `Empty
     | AScalar p -> `Scalar p
     | ATuple (ts, _) -> `Concat (List.map ts ~f:gen_query)
     | Select (_, q) | Filter (_, q) | As (_, q) -> gen_query q
-    | Scan _ | Dedup _ | OrderBy _ | GroupBy _ | Join _ -> failwith "Unsupported."
+    | Relation _ | Dedup _ | OrderBy _ | GroupBy _ | Join _ ->
+        failwith "Unsupported."
 
   let rec subst ctx = function
     | `For (q1, q2) -> `For (Abslayout.subst ctx q1, subst ctx q2)
@@ -148,11 +123,10 @@ module Make (Config : Config.S) = struct
     | vs -> `Concat (List.map vs ~f:(fun v -> `Scalar (lazy v)))
 
   let rec to_schema = function
-    | `For (q1, q2) ->
-        (Meta.(find_exn q1 schema) |> List.map ~f:Name.type_exn) @ to_schema q2
+    | `For (q1, q2) -> (schema_exn q1 |> List.map ~f:Name.type_exn) @ to_schema q2
     | `Concat qs -> IntT {nullable= false} :: List.concat_map qs ~f:to_schema
     | `Scalar p -> [Pred.to_type p]
-    | `Query q -> Meta.(find_exn q schema) |> List.map ~f:Name.type_exn
+    | `Query q -> schema_exn q |> List.map ~f:Name.type_exn
     | `Empty -> []
 
   let query_to_sql fresh q =
@@ -167,7 +141,7 @@ module Make (Config : Config.S) = struct
           let sql1_names = to_schema (Query spj1) in
           let q2 =
             let ctx =
-              List.zip_exn Meta.(find_exn q1 schema) sql1_names
+              List.zip_exn (schema_exn q1) sql1_names
               |> List.map ~f:(fun (n, n') ->
                      (n, Name Name.(create ?type_:(Name.type_ n) n')) )
               |> Map.of_alist_exn (module Name)
@@ -260,7 +234,7 @@ module Make (Config : Config.S) = struct
     let rec eval tups = function
       | `For (q1, q2) ->
           let extract_tup s t = List.take t (List.length s) in
-          let outer_schema = Meta.(find_exn q1 schema) in
+          let outer_schema = schema_exn q1 in
           let eq t1 t2 =
             [%compare.equal: Value.t list]
               (extract_tup outer_schema t1)
@@ -421,7 +395,7 @@ module Make (Config : Config.S) = struct
         | (AEmpty | AScalar _ | AList _ | AHashIdx _ | AOrderedIdx _ | ATuple _), _
           ->
             Error.create "Bug: Mismatched context." r [%sexp_of: t] |> Error.raise
-        | (Join _ | Dedup _ | OrderBy _ | Scan _ | GroupBy _), _ ->
+        | (Join _ | Dedup _ | OrderBy _ | Relation _ | GroupBy _), _ ->
             Error.create "Cannot materialize." r [%sexp_of: t] |> Error.raise
 
       method run ctx r = self#visit_t ctx (eval_query (gen_query r)) r
@@ -536,7 +510,7 @@ module Make (Config : Config.S) = struct
       | As (_, r') -> least_general_of_layout r'
       | AHashIdx (_, _, {hi_key_layout= None; _})
        |AOrderedIdx (_, _, {oi_key_layout= None; _})
-       |Scan _ ->
+       |Relation _ ->
           failwith "Layout is still abstract."
 
     (** Returns a layout type that is general enough to hold all of the data. *)
@@ -618,19 +592,12 @@ module Make (Config : Config.S) = struct
         m "The type is: %s" (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ) ;
     type_
 
-  let to_schema r =
-    annotate_schema r ;
-    Meta.(find_exn r schema)
-
   let annotate_key_layouts =
     let key_layout schema =
-      let layout =
-        match List.map schema ~f:(fun n -> scalar (Name n)) with
-        | [] -> failwith "empty schema"
-        | [x] -> x
-        | xs -> tuple xs Cross
-      in
-      annotate_schema layout ; layout
+      match List.map schema ~f:(fun n -> scalar (Name n)) with
+      | [] -> failwith "empty schema"
+      | [x] -> x
+      | xs -> tuple xs Cross
     in
     let annotator =
       object (self : 'a)
@@ -642,8 +609,8 @@ module Make (Config : Config.S) = struct
           match hi_key_layout with
           | Some _ -> AHashIdx r
           | None ->
-              let schema = Meta.find_exn x Meta.schema in
-              AHashIdx (x, y, {m with hi_key_layout= Some (key_layout schema)})
+              AHashIdx
+                (x, y, {m with hi_key_layout= Some (key_layout (schema_exn x))})
 
         method! visit_AOrderedIdx () ((x, y, ({oi_key_layout; _} as m)) as r) =
           let x = self#visit_t () x in
@@ -651,8 +618,8 @@ module Make (Config : Config.S) = struct
           match oi_key_layout with
           | Some _ -> AOrderedIdx r
           | None ->
-              let schema = Meta.find_exn x Meta.schema in
-              AOrderedIdx (x, y, {m with oi_key_layout= Some (key_layout schema)})
+              AOrderedIdx
+                (x, y, {m with oi_key_layout= Some (key_layout (schema_exn x))})
       end
     in
     annotator#visit_t ()
@@ -685,8 +652,9 @@ module Make (Config : Config.S) = struct
         Meta.(set_m r type_ t) ;
         annotate_type r' t'
     | As (_, r), _ -> annotate_type r t
-    | ( ( Select _ | Filter _ | Join _ | GroupBy _ | OrderBy _ | Dedup _ | Scan _
-        | AEmpty | AScalar _ | AList _ | ATuple _ | AHashIdx _ | AOrderedIdx _ )
+    | ( ( Select _ | Filter _ | Join _ | GroupBy _ | OrderBy _ | Dedup _
+        | Relation _ | AEmpty | AScalar _ | AList _ | ATuple _ | AHashIdx _
+        | AOrderedIdx _ )
       , ( NullT | IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | TupleT _
         | ListT _ | HashIdxT _ | OrderedIdxT _ | FuncT _ | EmptyT ) ) ->
         Error.create "Unexpected type." (r, t) [%sexp_of: Abslayout.t * t]
@@ -706,7 +674,7 @@ module Make (Config : Config.S) = struct
     in
     visitor#visit_t ()
 
-  let bound r = to_schema r |> Set.of_list (module Name)
+  let bound r = schema_exn r |> Set.of_list (module Name)
 
   include Resolve.Make (Config)
 end

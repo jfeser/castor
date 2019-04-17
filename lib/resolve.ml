@@ -240,15 +240,15 @@ module Make (C : Config.S) = struct
     in
     List.iter m.rrefs ~f:incr ; m.rname
 
-  let resolve_relation stage r_name =
-    let r = Db.Relation.from_db conn r_name in
-    (* TODO: Nowhere to put the defs here *)
-    let _, ctx =
-      List.map r.fields ~f:(fun f ->
-          Name (create ~relation:r.rname ~type_:f.type_ f.fname) )
-      |> Ctx.of_defs stage
+  let resolve_relation stage r =
+    let schema =
+      List.map (Db.Relation.from_db conn r.r_name).fields ~f:(fun f ->
+          create ~relation:r.r_name ~type_:f.type_ f.fname )
     in
-    ctx
+    let r = {r with r_schema= Some schema} in
+    (* TODO: Nowhere to put the defs here *)
+    let _, ctx = List.map schema ~f:(fun n -> Name n) |> Ctx.of_defs stage in
+    (r, ctx)
 
   let rec resolve_pred stage (ctx : Ctx.t) =
     let visitor =
@@ -297,7 +297,9 @@ module Make (C : Config.S) = struct
           let ctx = Ctx.merge_list [inner_ctx1; inner_ctx2; outer_ctx] in
           let pred = resolve_pred stage ctx pred in
           (Join {pred; r1; r2}, Ctx.merge inner_ctx1 inner_ctx2)
-      | Scan l -> (Scan l, resolve_relation stage l)
+      | Relation r ->
+          let r, ctx = resolve_relation stage r in
+          (Relation r, ctx)
       | GroupBy (aggs, key, r) ->
           let r, inner_ctx = rsame outer_ctx r in
           let ctx = Ctx.merge outer_ctx inner_ctx in

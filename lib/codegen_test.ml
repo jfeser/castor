@@ -35,7 +35,6 @@ let run_test ?(params = []) ?(print_layout = true) ?(fork = false) ?irgen_debug
       in
       of_string_exn layout_str |> M.resolve ~params
     in
-    M.annotate_schema layout ;
     let layout = M.annotate_key_layouts layout in
     let out_dir = Filename.temp_dir "bin" "" in
     if fork then run_in_fork (fun () -> run_compiler out_dir layout)

@@ -66,6 +66,9 @@ and ordered_idx = Abslayout0.ordered_idx =
   ; order: [`Asc | `Desc] }
 [@@deriving compare, hash, sexp_of]
 
+and relation = Abslayout0.relation = {r_name: string; r_schema: Name.t list option}
+[@@deriving compare, hash, sexp_of]
+
 and node = Abslayout0.node =
   | Select of (pred list * t)
   | Filter of (pred * t)
@@ -73,7 +76,7 @@ and node = Abslayout0.node =
   | GroupBy of pred list * Name.t list * t
   | OrderBy of {key: (pred * order) list; rel: t}
   | Dedup of t
-  | Scan of string
+  | Relation of relation
   | AEmpty
   | AScalar of pred
   | AList of (t * t)
@@ -117,7 +120,7 @@ val dedup : t -> t
 
 val order_by : (pred * order) list -> t -> t
 
-val scan : string -> t
+val relation : relation -> t
 
 val empty : t
 
@@ -134,6 +137,8 @@ val ordered_idx : t -> t -> ordered_idx -> t
 val as_ : string -> t -> t
 
 val and_ : pred list -> pred
+
+val schema_exn : t -> Name.t list
 
 module Ctx : sig
   type t = Value.t Map.M(Name).t [@@deriving compare, sexp]

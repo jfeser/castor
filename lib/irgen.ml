@@ -79,9 +79,9 @@ struct
 
   let type_of_schema s = Type.PrimType.TupleT (types_of_schema s)
 
-  let type_of_layout l = Meta.(find_exn l schema) |> type_of_schema
+  let type_of_layout l = A.schema_exn l |> type_of_schema
 
-  let types_of_layout l = Meta.(find_exn l schema) |> types_of_schema
+  let types_of_layout l = A.schema_exn l |> types_of_schema
 
   let list_of_tuple t b =
     match Builder.type_of t b with
@@ -143,7 +143,7 @@ struct
     | AOrderedIdx r', OrderedIdxT t' -> scan_ordered_idx ctx b r' t' cb
     | Filter r', FuncT t' -> scan_filter ctx b r' t' cb
     | Select r', FuncT t' -> scan_select ctx b r' t' cb
-    | (Join _ | GroupBy _ | OrderBy _ | Dedup _ | Scan _ | As _), _ ->
+    | (Join _ | GroupBy _ | OrderBy _ | Dedup _ | Relation _ | As _), _ ->
         Error.create "Unsupported at runtime." r [%sexp_of: A.t] |> Error.raise
     | _, _ ->
         Error.create "Mismatched type." (r, t) [%sexp_of: A.t * Type.t]
@@ -332,7 +332,7 @@ struct
           let ctx = Ctx.bind ctx "start" Type.PrimType.int_t cstart in
           scan ctx b clayout ctype (fun b tup ->
               let next_ctx =
-                let tuple_ctx = Ctx.of_schema Meta.(find_exn clayout schema) tup in
+                let tuple_ctx = Ctx.of_schema (A.schema_exn clayout) tup in
                 Ctx.bind_ctx ctx tuple_ctx
               in
               make_loops next_ctx (fields @ tup) clayouts ctypes cstarts b )
@@ -455,7 +455,7 @@ struct
     in
     let key_ctx = Ctx.bind ctx "start" Type.PrimType.int_t kstart in
     let value_ctx =
-      let key_schema = Meta.(find_exn key_layout schema) in
+      let key_schema = A.schema_exn key_layout in
       let ctx =
         Ctx.bind_ctx ctx (Ctx.of_schema key_schema (list_of_tuple key_tuple b))
       in
@@ -518,7 +518,7 @@ struct
     let key_tuple = build_var "key" (type_of_layout key_layout) b in
     let key_ctx = Ctx.bind ctx "start" Type.PrimType.int_t kstart in
     let value_ctx =
-      let key_schema = Meta.(find_exn key_layout schema) in
+      let key_schema = A.schema_exn key_layout in
       let ctx =
         Ctx.bind_ctx ctx (Ctx.of_schema key_schema (list_of_tuple key_tuple b))
       in
@@ -556,7 +556,7 @@ struct
     in
     scan ctx b child_layout child_type (fun b tup ->
         let ctx =
-          let child_schema = Meta.(find_exn child_layout schema) in
+          let child_schema = A.schema_exn child_layout in
           Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
         in
         let cond = gen_pred ctx pred b in
@@ -629,7 +629,7 @@ struct
     | `Scalar ->
         scan ctx b child_layout child_type (fun b tup ->
             let ctx =
-              let child_schema = Meta.(find_exn child_layout schema) in
+              let child_schema = A.schema_exn child_layout in
               Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
             in
             cb b (List.map args ~f:(fun p -> gen_pred ctx p b)) )
@@ -644,7 +644,7 @@ struct
         in
         let found_tup = build_defn ~persistent:false "found_tup" (Bool false) b in
         let pred_ctx =
-          let child_schema = Meta.(find_exn child_layout schema) in
+          let child_schema = A.schema_exn child_layout in
           Ctx.bind_ctx ctx (Ctx.of_schema child_schema (list_of_tuple last_tup b))
         in
         (* Holds the state for each aggregate. *)

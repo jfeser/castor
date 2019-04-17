@@ -48,7 +48,7 @@ let rec set_exn p r s =
   | 0 :: p', AOrderedIdx (r', r2, h) -> ordered_idx (set_exn p' r' s) r2 h
   | 1 :: p', AOrderedIdx (r1, r', h) -> ordered_idx r1 (set_exn p' r' s) h
   | 0 :: p', As (n, r') -> as_ n (set_exn p' r' s)
-  | p, (AEmpty | AScalar _ | Scan _) ->
+  | p, (AEmpty | AScalar _ | Relation _) ->
       Error.create "Invalid path. No children." (p, r) [%sexp_of: t * Abslayout.t]
       |> Error.raise
   | _ :: _, _ ->
@@ -78,7 +78,7 @@ let rec get_exn p r =
   | i :: p', ATuple (rs, _) ->
       assert (i >= 0 && i < List.length rs) ;
       get_exn p' (List.nth_exn rs i)
-  | p, (AEmpty | AScalar _ | Scan _) ->
+  | p, (AEmpty | AScalar _ | Relation _) ->
       Error.create "Invalid path. No children." (p, r) [%sexp_of: t * Abslayout.t]
       |> Error.raise
   | _ ->
@@ -93,7 +93,7 @@ let all r =
       | Some ((r, p), q) ->
           let q =
             match r.node with
-            | AScalar _ | Scan _ | AEmpty -> q
+            | AScalar _ | Relation _ | AEmpty -> q
             | Select (_, r')
              |Filter (_, r')
              |GroupBy (_, _, r')
@@ -144,7 +144,7 @@ let rec is_run_time r p =
   | _, ATuple ([], _) ->
       Error.create "Invalid path. No children." (p, r) [%sexp_of: t * Abslayout.t]
       |> Error.raise
-  | p, (AEmpty | AScalar _ | Scan _) ->
+  | p, (AEmpty | AScalar _ | Relation _) ->
       Error.create "Invalid path. No children." (p, r) [%sexp_of: t * Abslayout.t]
       |> Error.raise
   | _ :: _, _ ->

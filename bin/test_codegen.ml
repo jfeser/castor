@@ -41,7 +41,7 @@ let main () =
     let open Ralgebra0 in
     Filter
       ( Binop (Gt, Field (Relation.field_exn taxi "xpos"), Var ("xv", IntT))
-      , Scan layout )
+      , Relation layout )
   in
   let module IGen = IRGen.Make () in
   let ir_module = IGen.irgen l in

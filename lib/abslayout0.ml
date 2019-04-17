@@ -64,6 +64,8 @@ module T = struct
 
   and t = {node: node; meta: meta [@opaque] [@compare.ignore]}
 
+  and relation = {r_name: string; r_schema: (Name.t[@opaque]) list option}
+
   and node =
     | Select of (pred list * t)
     | Filter of (pred * t)
@@ -71,7 +73,7 @@ module T = struct
     | GroupBy of pred list * (Name.t[@opaque]) list * t
     | OrderBy of {key: (pred * order) list; rel: t}
     | Dedup of t
-    | Scan of string
+    | Relation of relation
     | AEmpty
     | AScalar of pred
     | AList of (t * t)

@@ -92,7 +92,7 @@ let eval {db; params} r =
         Db.exec_cursor_exn db schema_types (Printf.sprintf "select * from \"%s\"" r)
         |> Gen.to_sequence |> Seq.memoize )
   in
-  let rec eval_agg ctx preds schema (tups : Tuple.t Seq.t) =
+  let rec eval_agg ctx preds schema tups =
     if Seq.is_empty tups then None
     else
       let fresh = Fresh.create () in
@@ -221,12 +221,11 @@ let eval {db; params} r =
   and eval ctx r : Tuple.t Seq.t =
     let schema r =
       let tbl = Hashtbl.create (module Name) in
-      Meta.(find_exn r schema)
-      |> List.iteri ~f:(fun i n -> Hashtbl.add_exn tbl ~key:n ~data:i) ;
+      schema_exn r |> List.iteri ~f:(fun i n -> Hashtbl.add_exn tbl ~key:n ~data:i) ;
       tbl
     in
     match r.node with
-    | Scan r -> scan r
+    | Relation r -> scan r.r_name
     | Select (ps, r) -> (
         let s = schema r in
         let tups = eval ctx r in
@@ -321,7 +320,6 @@ let eval {db; params} r =
   let module M = Abslayout_db.Make (struct
     let conn = db
   end) in
-  M.annotate_schema r ;
   (* Or_error.try_with ~backtrace:true (
    *   fun () -> *)
   Ok (eval (Ctx.of_map params) r)

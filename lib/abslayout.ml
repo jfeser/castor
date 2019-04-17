@@ -27,7 +27,7 @@ let dedup a = wrap (Dedup (strip_meta a))
 
 let order_by a b = wrap (OrderBy {key= a; rel= strip_meta b})
 
-let scan a = wrap (Scan a)
+let relation r = wrap (Relation r)
 
 let empty = wrap AEmpty
 
@@ -48,6 +48,8 @@ let rec and_ = function
   | [x] -> x
   | x :: xs -> Binop (And, x, and_ xs)
 
+let schema_exn = Schema.schema_exn
+
 let name r =
   match r.node with
   | Select _ -> "select"
@@ -56,7 +58,7 @@ let name r =
   | GroupBy _ -> "group_by"
   | Dedup _ -> "dedup"
   | OrderBy _ -> "order_by"
-  | Scan _ -> "scan"
+  | Relation _ -> "scan"
   | AEmpty -> "empty"
   | AScalar _ -> "scalar"
   | AList _ -> "list"
@@ -161,7 +163,7 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
     | OrderBy {key; rel} ->
         fprintf fmt "orderby(%a,@ %a)" (pp_list pp_order) key pp rel
     | Dedup r -> fprintf fmt "dedup(@,%a)" pp r
-    | Scan n -> fprintf fmt "%s" n
+    | Relation {r_name; _} -> fprintf fmt "%s" r_name
     | AEmpty -> fprintf fmt "aempty"
     | AScalar p -> fprintf fmt "ascalar(%a)" pp_pred p
     | AList (r1, r2) -> fprintf fmt "alist(%a,@ %a)" pp r1 pp r2
@@ -246,7 +248,7 @@ let subst ctx =
 
 let rec annotate_align r =
   match r.node with
-  | Scan _ | AEmpty | AScalar _ -> Meta.(set_m r align 1)
+  | Relation _ | AEmpty | AScalar _ -> Meta.(set_m r align 1)
   | As (_, r')
    |Select (_, r')
    |Filter (_, r')
@@ -296,10 +298,10 @@ and free r =
   let empty = Set.empty (module Name) in
   let of_list = Set.of_list (module Name) in
   let union_list = Set.union_list (module Name) in
-  let exposed r = of_list Meta.(find_exn r schema) in
+  let exposed r = of_list (schema_exn r) in
   let free_set =
     match r.node with
-    | Scan _ | AEmpty -> empty
+    | Relation _ | AEmpty -> empty
     | AScalar p -> pred_free p
     | Select (ps, r') ->
         Set.union (free r')
@@ -371,9 +373,9 @@ let exists_bare_relations r =
 
       method! visit_t () r =
         match r.node with
-        | As (_, {node= Scan _; _}) -> self#zero
+        | As (_, {node= Relation _; _}) -> self#zero
         | As (_, r') -> self#visit_t () r'
-        | Scan _ -> true
+        | Relation _ -> true
         | _ -> super#visit_t () r
     end
   in
@@ -406,7 +408,7 @@ let aliases =
 
       method! visit_As () n r = self#plus (self#one n (as_ n r)) (self#visit_t () r)
 
-      method! visit_Scan () n = self#one n (scan n)
+      method! visit_Relation () r = self#one r.r_name (relation r)
     end
   in
   visitor#visit_t ()
@@ -638,41 +640,9 @@ module Pred = struct
     in
     f#visit_pred () p ; !rels
 
-  let rec to_type = function
-    | As_pred (p, _) -> to_type p
-    | Name n -> Name.Meta.(find_exn n type_)
-    | Int _ | Date _
-     |Unop ((Year | Month | Day | Strlen | ExtractY | ExtractM | ExtractD), _)
-     |Count ->
-        IntT {nullable= false}
-    | Fixed _ | Avg _ -> FixedT {nullable= false}
-    | Bool _ | Exists _
-     |Binop ((Eq | Lt | Le | Gt | Ge | And | Or), _, _)
-     |Unop (Not, _) ->
-        BoolT {nullable= false}
-    | String _ -> StringT {nullable= false}
-    | Null -> NullT
-    | Binop ((Add | Sub | Mul | Div | Mod), p1, p2) ->
-        let s1 = to_type p1 in
-        let s2 = to_type p2 in
-        Type.PrimType.unify s1 s2
-    | Binop (Strpos, _, _) -> IntT {nullable= false}
-    | Sum p | Min p | Max p -> to_type p
-    | If (_, p1, p2) ->
-        let s1 = to_type p1 in
-        let s2 = to_type p2 in
-        Type.PrimType.unify s1 s2
-    | First r -> (
-      match Meta.(find_exn r schema) with
-      | [n] -> Name.Meta.(find_exn n type_)
-      | [] -> failwith "Unexpected empty schema."
-      | _ -> failwith "Too many fields." )
-    | Substring _ -> StringT {nullable= false}
+  let to_type = Schema.to_type
 
-  let to_name = function
-    | Name n -> Some n
-    | As_pred (_, n) -> Some (Name.create n)
-    | _ -> None
+  let to_name = Schema.to_name
 end
 
 let annotate_eq r =
@@ -683,7 +653,7 @@ let annotate_eq r =
       method! visit_As m n r =
         super#visit_As None n r ;
         let m = Option.value_exn m in
-        let schema = Meta.(find_exn r schema) in
+        let schema = schema_exn r in
         let eqs =
           List.map schema ~f:(fun n' -> (n', Name.(create ~relation:n (name n'))))
           |> dedup_pairs
@@ -772,7 +742,7 @@ let ops_serializable_exn r =
       method! visit_t s r =
         super#visit_t s r ;
         match r.node with
-        | Scan _ | GroupBy (_, _, _) | Join _ | OrderBy _ | Dedup _ ->
+        | Relation _ | GroupBy (_, _, _) | Join _ | OrderBy _ | Dedup _ ->
             raise (Un_serial "Cannot serialize: Bad operator in run-time position.")
         | _ -> ()
     end
@@ -825,13 +795,13 @@ let annotate_orders r =
       | GroupBy (_, _, r) | Dedup r ->
           annotate_orders r |> ignore ;
           []
-      | Scan _ | AEmpty -> []
+      | Relation _ | AEmpty -> []
       | OrderBy {key; rel} ->
           annotate_orders rel |> ignore ;
           key
       | AScalar _ -> []
       | AList (r, r') ->
-          let s' = Meta.(find_exn r' schema) in
+          let s' = schema_exn r' in
           let eq' = Meta.(find_exn r' eq) in
           annotate_orders r' |> ignore ;
           let open Name.O in
@@ -850,7 +820,7 @@ let annotate_orders r =
           List.iter ~f:(fun r -> annotate_orders r |> ignore) rs ;
           []
       | AOrderedIdx (r, _, _) ->
-          Meta.(find_exn r schema) |> List.map ~f:(fun n -> (Name n, Asc))
+          schema_exn r |> List.map ~f:(fun n -> (Name n, Asc))
       | As _ -> []
     in
     Meta.set_m r Meta.order order ;

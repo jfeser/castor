@@ -13,7 +13,6 @@ let run_test layout_str =
   let layout_file = Filename.temp_file "layout" "txt" in
   let (module M), (module S), _, _ = make_modules ~layout_file () in
   let layout = of_string_exn layout_str |> M.resolve in
-  M.annotate_schema layout ;
   let layout = M.annotate_key_layouts layout in
   let type_ = M.to_type layout in
   let buf = Buffer.create 1024 in

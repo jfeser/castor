@@ -4,13 +4,7 @@ open Abslayout
 module type S = sig
   val to_type : t -> Type.t
 
-  val annotate_schema : t -> unit
-
-  val relation_schema : string -> Name.t list
-
   val annotate_defs : t -> unit
-
-  val to_schema : t -> Name.t list
 
   val annotate_key_layouts : t -> t
 

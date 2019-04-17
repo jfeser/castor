@@ -60,7 +60,7 @@ let%test_module _ =
               List.map p ~f:(fun (n, _) -> n) |> Set.of_list (module Name) )
         in
         let layout = of_string_exn query |> M.resolve ?params:sparams in
-        M.annotate_schema layout ; print_fold#run () layout
+        print_fold#run () layout
       with exn -> printf "Error: %s\n" (Exn.to_string exn)
 
     let%expect_test "sum-complex" =
@@ -319,7 +319,10 @@ select([lp.counter, lc.counter],
     ((node
       (Filter
        ((Binop (Eq (Int 1) (Int 2)))
-        ((node (Select (((Int 1) (Int 2)) ((node (Scan r)) (meta ())))))
+        ((node
+          (Select
+           (((Int 1) (Int 2))
+            ((node (Relation ((r_name r) (r_schema ())))) (meta ())))))
          (meta ())))))
      (meta ())) |}]
 
@@ -348,7 +351,7 @@ select([lp.counter, lc.counter],
  *           (Select
  *            (((Min
  *               (Name ((relation (r)) (name f) (type_ ((IntT (nullable false))))))))
- *             ((node (Scan r))
+ *             ((node (Relation r))
  *              (meta
  *               ((schema
  *                 (((relation (r)) (name f) (type_ ((IntT (nullable false)))))
@@ -360,18 +363,19 @@ select([lp.counter, lc.counter],
 
     let%expect_test "annotate-schema" =
       let r = "select([min(r.f)], r)" |> of_string_exn |> M.resolve in
-      M.annotate_schema r ;
       [%sexp_of: t] r |> print_s ;
       [%expect
         {|
     ((node
       (Select
        (((Min (Name ((relation (r)) (name f)))))
-        ((node (Scan r))
+        ((node
+          (Relation
+           ((r_name r)
+            (r_schema ((((relation (r)) (name f)) ((relation (r)) (name g))))))))
          (meta
-          ((refcnt ((((relation (r)) (name f)) 1) (((relation (r)) (name g)) 0)))
-           (schema (((relation (r)) (name f)) ((relation (r)) (name g))))))))))
-     (meta ((refcnt ()) (schema (((relation ()) (name __unnamed__))))))) |}]
+          ((refcnt ((((relation (r)) (name f)) 1) (((relation (r)) (name g)) 0)))))))))
+     (meta ((refcnt ())))) |}]
 
     let%expect_test "pred_names" =
       let p =
@@ -421,6 +425,6 @@ select([lp.counter, lc.counter],
                                                                     month(3))
                                                                     + day(1))))))))|}
       in
-      Pred.names p |> [%sexp_of: Set.M(Name).t] |> print_s;
+      Pred.names p |> [%sexp_of: Set.M(Name).t] |> print_s ;
       [%expect {| (((relation ()) (name total_revenue))) |}]
   end )

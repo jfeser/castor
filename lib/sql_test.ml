@@ -11,7 +11,6 @@ let%test_module _ =
       let module Test_db = (val make_test_db ()) in
       let module M = Abslayout_db.Make (Test_db) in
       let r = of_string_exn s |> M.resolve in
-      M.annotate_schema r ;
       let ctx = Sql.create_ctx ~fresh:(Fresh.create ()) () in
       let sql_str = of_ralgebra ctx r |> to_string_hum ctx in
       Db.check Test_db.conn sql_str |> Or_error.ok_exn ;

@@ -53,8 +53,8 @@ module Make (C : Config.S) = struct
       method! visit_t count r =
         let open Option.Let_syntax in
         let r' =
-          let%bind refcnt = Univ_map.(find !(r.meta) M.refcnt) in
-          let%map schema = Meta.(find r Meta.schema) in
+          let%map refcnt = Univ_map.(find !(r.meta) M.refcnt) in
+          let schema = schema_exn r in
           if (not count) && all_unref refcnt schema then empty
           else
             match r.node with
@@ -106,7 +106,7 @@ module Make (C : Config.S) = struct
                         let is_unref =
                           all_unref
                             Univ_map.(find_exn !(r.meta) M.refcnt)
-                            Meta.(find_exn r schema)
+                            (schema_exn r)
                         in
                         let is_scalar =
                           match r.node with AScalar _ -> true | _ -> false
@@ -134,8 +134,8 @@ module Make (C : Config.S) = struct
                   tuple rs Cross
             | Join {r1; r2; pred} ->
                 (* If one side of a join is unused then the join can be dropped. *)
-                let r1_unref = all_unref refcnt Meta.(find_exn r1 schema) in
-                let r2_unref = all_unref refcnt Meta.(find_exn r2 schema) in
+                let r1_unref = all_unref refcnt (schema_exn r1) in
+                let r2_unref = all_unref refcnt (schema_exn r2) in
                 let r1 = self#visit_t count r1 in
                 let r2 = self#visit_t count r2 in
                 if count then join pred r1 r2
@@ -159,9 +159,7 @@ module Make (C : Config.S) = struct
 
   let project ?(params = Set.empty (module Name)) r =
     let rec loop r =
-      let r' = M.resolve r ~params in
-      M.annotate_schema r' ;
-      let r' = project_once r' in
+      let r' = M.resolve r ~params |> project_once in
       if Abslayout.O.(r = r') then r' else loop r'
     in
     loop r
@@ -199,15 +197,15 @@ select([nation.n_name as k1],
                                                                   ahashidx(
                                                                     dedup(
                                                                     select(
-                                                                    [partsupp.ps_suppkey as k0],
+                                                                    [p.ps_suppkey as k0],
                                                                     alist(
-                                                                    partsupp,
+                                                                    partsupp as p,
                                                                     atuple(
-                                                                    [ascalar(partsupp.ps_partkey),
-                                                                    ascalar(partsupp.ps_suppkey),
-                                                                    ascalar(partsupp.ps_availqty),
-                                                                    ascalar(partsupp.ps_supplycost),
-                                                                    ascalar(partsupp.ps_comment)],
+                                                                    [ascalar(p.ps_partkey),
+                                                                    ascalar(p.ps_suppkey),
+                                                                    ascalar(p.ps_availqty),
+                                                                    ascalar(p.ps_supplycost),
+                                                                    ascalar(p.ps_comment)],
                                                                     cross)))),
                                                                     alist(
                                                                     filter(
@@ -241,8 +239,8 @@ select([nation.n_name as k1],
       select([nation.n_name as k1],
         atuple([alist(partsupp, ascalar(partsupp.ps_suppkey)),
                 ahashidx(dedup(
-                           select([partsupp.ps_suppkey as k0],
-                             alist(partsupp, ascalar(partsupp.ps_suppkey)))),
+                           select([p.ps_suppkey as k0],
+                             alist(partsupp as p, ascalar(p.ps_suppkey)))),
                   alist(filter((supplier.s_suppkey = k0),
                           join((supplier.s_nationkey = nation.n_nationkey),
                             nation,
@@ -268,15 +266,15 @@ dedup(select([nation.n_name as k1],
                                                                   ahashidx(
                                                                     dedup(
                                                                     select(
-                                                                    [partsupp.ps_suppkey as k0],
+                                                                    [p.ps_suppkey as k0],
                                                                     alist(
-                                                                    partsupp,
+                                                                    partsupp as p,
                                                                     atuple(
-                                                                    [ascalar(partsupp.ps_partkey),
-                                                                    ascalar(partsupp.ps_suppkey),
-                                                                    ascalar(partsupp.ps_availqty),
-                                                                    ascalar(partsupp.ps_supplycost),
-                                                                    ascalar(partsupp.ps_comment)],
+                                                                    [ascalar(p.ps_partkey),
+                                                                    ascalar(p.ps_suppkey),
+                                                                    ascalar(p.ps_availqty),
+                                                                    ascalar(p.ps_supplycost),
+                                                                    ascalar(p.ps_comment)],
                                                                     cross)))),
                                                                     alist(
                                                                     filter(
@@ -311,8 +309,8 @@ dedup(select([nation.n_name as k1],
         select([nation.n_name as k1],
           atuple([alist(partsupp, ascalar(partsupp.ps_suppkey)),
                   ahashidx(dedup(
-                             select([partsupp.ps_suppkey as k0],
-                               alist(partsupp, ascalar(partsupp.ps_suppkey)))),
+                             select([p.ps_suppkey as k0],
+                               alist(partsupp as p, ascalar(p.ps_suppkey)))),
                     alist(filter((supplier.s_suppkey = k0),
                             join((supplier.s_nationkey = nation.n_nationkey),
                               nation,
@@ -360,15 +358,15 @@ ahashidx(dedup(
                                                                   ahashidx(
                                                                     dedup(
                                                                     select(
-                                                                    [partsupp.ps_suppkey as k0],
+                                                                    [p.ps_suppkey as k0],
                                                                     alist(
-                                                                    partsupp,
+                                                                    partsupp as p,
                                                                     atuple(
-                                                                    [ascalar(partsupp.ps_partkey),
-                                                                    ascalar(partsupp.ps_suppkey),
-                                                                    ascalar(partsupp.ps_availqty),
-                                                                    ascalar(partsupp.ps_supplycost),
-                                                                    ascalar(partsupp.ps_comment)],
+                                                                    [ascalar(p.ps_partkey),
+                                                                    ascalar(p.ps_suppkey),
+                                                                    ascalar(p.ps_availqty),
+                                                                    ascalar(p.ps_supplycost),
+                                                                    ascalar(p.ps_comment)],
                                                                     cross)))),
                                                                     alist(
                                                                     filter(
@@ -450,9 +448,8 @@ ahashidx(dedup(
                  select([nation.n_name as k1],
                    atuple([alist(partsupp, ascalar(partsupp.ps_suppkey)),
                            ahashidx(dedup(
-                                      select([partsupp.ps_suppkey as k0],
-                                        alist(partsupp,
-                                          ascalar(partsupp.ps_suppkey)))),
+                                      select([p.ps_suppkey as k0],
+                                        alist(partsupp as p, ascalar(p.ps_suppkey)))),
                              alist(filter((supplier.s_suppkey = k0),
                                      join((supplier.s_nationkey =
                                           nation.n_nationkey),
@@ -512,15 +509,15 @@ select([(sum((partsupp.ps_supplycost
                                                                   ahashidx(
                                                                     dedup(
                                                                     select(
-                                                                    [partsupp.ps_suppkey as k0],
+                                                                    [p.ps_suppkey as k0],
                                                                     alist(
-                                                                    partsupp,
+                                                                    partsupp as p,
                                                                     atuple(
-                                                                    [ascalar(partsupp.ps_partkey),
-                                                                    ascalar(partsupp.ps_suppkey),
-                                                                    ascalar(partsupp.ps_availqty),
-                                                                    ascalar(partsupp.ps_supplycost),
-                                                                    ascalar(partsupp.ps_comment)],
+                                                                    [ascalar(p.ps_partkey),
+                                                                    ascalar(p.ps_suppkey),
+                                                                    ascalar(p.ps_availqty),
+                                                                    ascalar(p.ps_supplycost),
+                                                                    ascalar(p.ps_comment)],
                                                                     cross)))),
                                                                     alist(
                                                                     filter(
@@ -603,9 +600,9 @@ select([(sum((partsupp.ps_supplycost
                    select([nation.n_name as k1],
                      atuple([alist(partsupp, ascalar(partsupp.ps_suppkey)),
                              ahashidx(dedup(
-                                        select([partsupp.ps_suppkey as k0],
-                                          alist(partsupp,
-                                            ascalar(partsupp.ps_suppkey)))),
+                                        select([p.ps_suppkey as k0],
+                                          alist(partsupp as p,
+                                            ascalar(p.ps_suppkey)))),
                                alist(filter((supplier.s_suppkey = k0),
                                        join((supplier.s_nationkey =
                                             nation.n_nationkey),
@@ -867,13 +864,13 @@ select([nation.n_name, revenue],
                                      ascalar(partsupp.ps_comment)],
                                cross)),
                            ahashidx(dedup(
-                                      select([partsupp.ps_suppkey as k0],
-                                        alist(partsupp,
-                                          atuple([ascalar(partsupp.ps_partkey),
-                                                  ascalar(partsupp.ps_suppkey),
-                                                  ascalar(partsupp.ps_availqty),
-                                                  ascalar(partsupp.ps_supplycost),
-                                                  ascalar(partsupp.ps_comment)],
+                                      select([p.ps_suppkey as k0],
+                                        alist(partsupp as p,
+                                          atuple([ascalar(p.ps_partkey),
+                                                  ascalar(p.ps_suppkey),
+                                                  ascalar(p.ps_availqty),
+                                                  ascalar(p.ps_supplycost),
+                                                  ascalar(p.ps_comment)],
                                             cross)))),
                              alist(filter((supplier.s_suppkey = k0),
                                      join((supplier.s_nationkey =
@@ -902,13 +899,13 @@ select([nation.n_name, revenue],
                           ascalar(partsupp.ps_comment)],
                     cross)),
                 ahashidx(dedup(
-                           select([partsupp.ps_suppkey as k0],
-                             alist(partsupp,
-                               atuple([ascalar(partsupp.ps_partkey),
-                                       ascalar(partsupp.ps_suppkey),
-                                       ascalar(partsupp.ps_availqty),
-                                       ascalar(partsupp.ps_supplycost),
-                                       ascalar(partsupp.ps_comment)],
+                           select([p1.ps_suppkey as k0],
+                             alist(partsupp as p1,
+                               atuple([ascalar(p1.ps_partkey),
+                                       ascalar(p1.ps_suppkey),
+                                       ascalar(p1.ps_availqty),
+                                       ascalar(p1.ps_supplycost),
+                                       ascalar(p1.ps_comment)],
                                  cross)))),
                   alist(filter((k1 = nation.n_name),
                           filter((supplier.s_suppkey = k0),
@@ -947,9 +944,9 @@ select([nation.n_name, revenue],
                    select([nation.n_name as k1],
                      atuple([alist(partsupp, ascalar(partsupp.ps_suppkey)),
                              ahashidx(dedup(
-                                        select([partsupp.ps_suppkey as k0],
-                                          alist(partsupp,
-                                            ascalar(partsupp.ps_suppkey)))),
+                                        select([p.ps_suppkey as k0],
+                                          alist(partsupp as p,
+                                            ascalar(p.ps_suppkey)))),
                                alist(filter((supplier.s_suppkey = k0),
                                        join((supplier.s_nationkey =
                                             nation.n_nationkey),
@@ -964,8 +961,8 @@ select([nation.n_name, revenue],
                             ascalar(partsupp.ps_supplycost)],
                       cross)),
                   ahashidx(dedup(
-                             select([partsupp.ps_suppkey as k0],
-                               alist(partsupp, ascalar(partsupp.ps_suppkey)))),
+                             select([p1.ps_suppkey as k0],
+                               alist(partsupp as p1, ascalar(p1.ps_suppkey)))),
                     alist(filter((k1 = nation.n_name),
                             filter((supplier.s_suppkey = k0),
                               join((supplier.s_nationkey = nation.n_nationkey),

@@ -14,8 +14,6 @@ type lexpos = Lexing.position =
 
 let empty () = ref Univ_map.empty
 
-let schema = Univ_map.Key.create ~name:"schema" [%sexp_of: Name.t list]
-
 let defs = Univ_map.Key.create ~name:"defs" [%sexp_of: (Name.t option * pred) list]
 
 let pos = Univ_map.Key.create ~name:"pos" [%sexp_of: pos]

@@ -13,8 +13,6 @@ type lexpos = Lexing.position =
 
 val empty : unit -> t
 
-val schema : Name.t list key
-
 val defs : (Name.t option * pred) list key
 
 val pos : pos key
