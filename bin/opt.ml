@@ -55,7 +55,7 @@ let setup_log level =
       let k _ = over () ; k () in
       let format ?header:_ ?tags:_ fmt =
         Fmt.kpf k ppf
-          ("[%a] [%a] [%s] @[" ^^ fmt ^^ "@]@.")
+          ("@[[%a] [%a] [%s]@ " ^^ fmt ^^ "@]@.")
           Fmt.(styled style Logs.pp_level)
           level Time.pp (Time.now ()) (Src.name src)
       in
@@ -64,6 +64,7 @@ let setup_log level =
     {report}
   in
   let ppf = Fmt_tty.setup Out_channel.stderr in
+  Format.pp_set_margin ppf 120 ;
   Logs.set_level (Some level) ;
   Logs.set_reporter (format_reporter ppf)
 

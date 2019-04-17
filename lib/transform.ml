@@ -37,8 +37,9 @@ module Make (Config : Config.S) () = struct
   let sql_ctx = Sql.create_ctx ~fresh ()
 
   let has_params r p =
+    M.annotate_schema r ;
     let r' = Path.get_exn p r in
-    overlaps (names r') params
+    overlaps (free r') params
 
   let project r =
     M.annotate_schema r ;
@@ -197,7 +198,7 @@ module Make (Config : Config.S) () = struct
              ; at_ row_store
                  Path.(
                    all >>? is_run_time >>? not has_params
-                   >>? not is_serializable >>| shallowest)
+                   >>? not is_serializable >>? not is_collection >>| shallowest)
              ; push_all_unparameterized_filters ])
       ; push_all_unparameterized_filters
       ; (* Cleanup*)
