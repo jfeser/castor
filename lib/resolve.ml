@@ -46,12 +46,11 @@ module Make (C : Config.S) = struct
         ; rstage: [`Run | `Compile]
         ; rmeta: Univ_map.t ref
         ; rrefs: int ref list }
+      [@@deriving compare]
 
       type t = private row list [@@deriving sexp_of]
 
       val of_list : row list -> t
-
-      val bind : t -> t -> t
     end = struct
       type row =
         { rname: Name.t
@@ -75,25 +74,20 @@ module Make (C : Config.S) = struct
         |> List.iter ~f:(fun r ->
                Logs.warn (fun m -> m "Shadowing of %a." Name.pp_with_stage r.rname)
            ) ;
-        List.dedup_and_sort ~compare:compare_row l
-
-      (** Bind c2 over c1. *)
-      let bind c1 c2 =
-        let compare_row r1 r2 = [%compare: Name.t] r1.rname r2.rname in
-        let c1 =
-          List.filter c1 ~f:(fun r ->
-              not (List.mem c2 ~equal:[%compare.equal: row] r) )
-        in
-        let c = c1 @ c2 in
-        List.find_all_dups c ~compare:[%compare: row]
-        |> List.iter ~f:(fun _r ->
-               failwith "Output shadowing."
-               (* Logs.warn (fun m -> m "Output shadowing of %a." Name.pp r.rname) *)
-           ) ;
-        c1 @ c2
+        l
     end
 
     include T
+
+    (** Bind c2 over c1. *)
+    let bind (c1 : t) (c2 : t) =
+      let c2 = (c2 :> row list) in
+      let c1 =
+        List.filter
+          (c1 :> row list)
+          ~f:(fun r -> not (List.mem c2 ~equal:[%compare.equal: row] r))
+      in
+      of_list (c1 @ c2)
 
     let merge (c1 : t) (c2 : t) : t = of_list ((c1 :> row list) @ (c2 :> row list))
 
@@ -101,22 +95,24 @@ module Make (C : Config.S) = struct
 
     let find_name (m : t) rel f =
       let m = (m :> row list) in
-      match rel with
-      | `Rel r ->
-          let k = Name.create ~relation:r f in
-          List.find m ~f:(fun r -> Name.O.(r.rname = k))
-      | `NoRel ->
-          let k = Name.create f in
-          List.find m ~f:(fun r -> Name.O.(r.rname = k))
-      | `AnyRel -> (
-        match List.filter m ~f:(fun r -> String.(name r.rname = f)) with
-        | [] -> None
-        | [r] -> Some r
-        | r' :: r'' :: _ ->
-            Logs.err (fun m ->
-                m "Ambiguous name %s: could refer to %a or %a" f Name.pp r'.rname
-                  Name.pp r''.rname ) ;
-            None )
+      let names =
+        match rel with
+        | `Rel r ->
+            let k = Name.create ~relation:r f in
+            List.filter m ~f:(fun r -> Name.O.(r.rname = k))
+        | `NoRel ->
+            let k = Name.create f in
+            List.filter m ~f:(fun r -> Name.O.(r.rname = k))
+        | `AnyRel -> List.filter m ~f:(fun r -> String.(name r.rname = f))
+      in
+      match names with
+      | [] -> None
+      | [r] -> Some r
+      | r' :: r'' :: _ ->
+          Logs.err (fun m ->
+              m "Ambiguous name %s: could refer to %a or %a" f Name.pp r'.rname
+                Name.pp r''.rname ) ;
+          None
 
     let in_stage (c : t) s =
       List.filter
@@ -136,7 +132,7 @@ module Make (C : Config.S) = struct
             | `Rel r -> Name.create ~relation:r f
             | _ -> Name.create f
           in
-          Logs.warn (fun m ->
+          Logs.info (fun m ->
               m "Cross-stage shadowing of %a." Name.pp (to_name rel f) ) ;
           match s with `Run -> Some mr | `Compile -> Some mc )
 
