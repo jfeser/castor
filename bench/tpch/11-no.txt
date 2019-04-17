@@ -34,12 +34,12 @@
 # :n -1
 
 select([ps_partkey, value],
-  filter((value) > ((select([((sum((ps_supplycost) * (ps_availqty))) * (param2)) as v],
-                       join((ps_suppkey) = (s_suppkey),
+  filter((value) > ((select([((sum((ps.ps_supplycost) * (ps.ps_availqty))) * (param2)) as v],
+                       join((ps.ps_suppkey) = (s_suppkey),
                          join((s_nationkey) = (n_nationkey),
                            supplier,
                            filter((n_name) = (param1), nation)),
-                         partsupp)))),
+                         partsupp as ps)))),
     groupby([ps_partkey, sum((ps_supplycost) * (ps_availqty)) as value],
       [ps_partkey],
       join((ps_suppkey) = (s_suppkey),
