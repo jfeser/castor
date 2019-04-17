@@ -1130,27 +1130,27 @@ module Make (Config : Config.S) () = struct
               Concat ] ) }
     |> run_everywhere ~stage:`Run
 
-  let tf_hoist_pred_constant _ =
-    let open A in
-    let f r =
-      M.annotate_schema r ;
-      annotate_free r ;
-      let consts =
-        match r.node with
-        | Filter (p, r') -> Pred.constants Meta.(find_exn r' schema) p
-        | Select (ps, r') ->
-            List.concat_map ps ~f:(Pred.constants Meta.(find_exn r' schema))
-            |> List.dedup_and_sort ~compare:[%compare: pred]
-        | _ -> []
-      in
-      let fresh_id = Fresh.name fresh "const%d" in
-      let fresh_name = Name.create fresh_id in
-      List.map consts ~f:(fun p ->
-          tuple
-            [scalar (As_pred (p, fresh_id)); Pred.subst_single p (Name fresh_name) r]
-            Cross )
-    in
-    {name= "hoist-pred-const"; f} |> run_everywhere ~stage:`Run
+  (* let tf_hoist_pred_constant _ =
+   *   let open A in
+   *   let f r =
+   *     M.annotate_schema r ;
+   *     annotate_free r ;
+   *     let consts =
+   *       match r.node with
+   *       | Filter (p, r') -> Pred.constants Meta.(find_exn r' schema) p
+   *       | Select (ps, r') ->
+   *           List.concat_map ps ~f:(Pred.constants Meta.(find_exn r' schema))
+   *           |> List.dedup_and_sort ~compare:[%compare: pred]
+   *       | _ -> []
+   *     in
+   *     let fresh_id = Fresh.name fresh "const%d" in
+   *     let fresh_name = Name.create fresh_id in
+   *     List.map consts ~f:(fun p ->
+   *         tuple
+   *           [scalar (As_pred (p, fresh_id)); Pred.subst_single p (Name fresh_name) r]
+   *           Cross )
+   *   in
+   *   {name= "hoist-pred-const"; f} |> run_everywhere ~stage:`Run *)
 
   let tf_hoist_param _ =
     let open A in
@@ -1271,7 +1271,7 @@ module Make (Config : Config.S) () = struct
     ; ("partition-size", tf_partition_size)
     ; ("partition-domain", tf_partition_domain)
     ; ("split-out", tf_split_out)
-    ; ("hoist-pred-const", tf_hoist_pred_constant)
+      (* ; ("hoist-pred-const", tf_hoist_pred_constant) *)
     ; ("hoist-param", tf_hoist_param)
     ; ("precompute-filter", tf_precompute_filter)
     ; ("precompute-filter-bv", tf_precompute_filter_bv)
