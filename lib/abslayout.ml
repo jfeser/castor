@@ -231,14 +231,6 @@ let names_visitor =
 
 let names r = names_visitor#visit_t () r
 
-let subst_visitor p_old p_new =
-  object
-    inherit [_] endo as super
-
-    method! visit_pred () p =
-      if [%compare.equal: pred] p p_old then p_new else super#visit_pred () p
-  end
-
 let subst ctx =
   let v =
     object
@@ -420,7 +412,7 @@ let aliases =
   visitor#visit_t ()
 
 module Pred = struct
-  type a = t [@@deriving compare, sexp_of]
+  type a = t [@@deriving compare, hash, sexp_of]
 
   module T = struct
     type t = Abslayout0.pred =
@@ -443,7 +435,7 @@ module Pred = struct
       | First of a
       | Exists of a
       | Substring of pred * pred * pred
-    [@@deriving compare, sexp_of, variants]
+    [@@deriving compare, hash, sexp_of, variants]
   end
 
   include T
@@ -482,24 +474,9 @@ module Pred = struct
     in
     visitor#visit_pred () p
 
-  let conjuncts p =
-    let visitor =
-      object (self : 'a)
-        inherit [_] reduce
-
-        inherit [_] Util.list_monoid
-
-        method! visit_Binop () (op, p1, p2) =
-          match op with
-          | And -> self#plus (self#visit_pred () p1) (self#visit_pred () p2)
-          | _ -> [Binop (op, p1, p2)]
-
-        method! visit_First () _ = self#zero
-
-        method! visit_Exists () _ = self#zero
-      end
-    in
-    visitor#visit_pred () p
+  let rec conjuncts = function
+    | Binop (And, p1, p2) -> conjuncts p1 @ conjuncts p2
+    | p -> [p]
 
   let constants schema p =
     let module M = struct
@@ -629,8 +606,6 @@ module Pred = struct
       raise e
 
   let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
-
-  let subst_single p_old p_new = (subst_visitor p_old p_new)#visit_t ()
 
   let subst ctx =
     let v =
@@ -787,8 +762,9 @@ class ['a] stage_iter =
     method! visit_AScalar _ p = self#visit_pred `Compile p
   end
 
-let ops_serializable r =
-  let ok = ref true in
+exception Un_serial of string
+
+let ops_serializable_exn r =
   let visitor =
     object
       inherit [_] stage_iter as super
@@ -797,39 +773,37 @@ let ops_serializable r =
         super#visit_t s r ;
         match r.node with
         | Scan _ | GroupBy (_, _, _) | Join _ | OrderBy _ | Dedup _ ->
-            ok := !ok && Poly.(s = `Compile)
-        | Select _ | Filter _ | AEmpty | AScalar _ | AList _ | ATuple _
-         |AHashIdx _ | AOrderedIdx _
-         |As (_, _) ->
-            ()
+            raise (Un_serial "Cannot serialize: Bad operator in run-time position.")
+        | _ -> ()
     end
   in
-  visitor#visit_t `Run r ;
-  !ok
+  visitor#visit_t `Run r
 
-let names_serializable r =
-  let ok = ref true in
+let names_serializable_exn r =
   let visitor =
     object
       inherit [_] stage_iter
 
       method! visit_Name s n =
         let this_ok = Poly.(Name.Meta.(find_exn n stage) = s) in
-        ( if not this_ok then
+        if not this_ok then
           let stage = match s with `Compile -> "compile" | `Run -> "run" in
-          Logs.debug (fun m ->
-              m "Cannot serialize: Found %a in %s time position." Name.pp_with_stage
-                n stage ) ) ;
-        ok := !ok && this_ok
+          raise
+            (Un_serial
+               (Format.asprintf "Cannot serialize: Found %a in %s time position."
+                  Name.pp_with_stage n stage))
     end
   in
-  visitor#visit_t `Run r ;
-  !ok
+  visitor#visit_t `Run r
+
+let is_serializeable_msg r =
+  try ops_serializable_exn r ; names_serializable_exn r ; None
+  with Un_serial msg -> Some msg
 
 (** Return true if `r` is serializable. This function performs two checks:
      - `r` must not contain any compile time only operations in run time position.
      - Run-time names may only appear in run-time position and vice versa. *)
-let is_serializeable r = names_serializable r && ops_serializable r
+let is_serializeable r = Option.is_none (is_serializeable_msg r)
 
 let annotate_orders r =
   let rec annotate_orders r =

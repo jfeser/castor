@@ -208,7 +208,7 @@ module Pred : sig
     | First of a
     | Exists of a
     | Substring of pred * pred * pred
-  [@@deriving compare, sexp_of, variants]
+  [@@deriving compare, hash, sexp_of, variants]
 
   include Comparator.S with type t := t
 
@@ -234,9 +234,7 @@ module Pred : sig
 
   val of_string_exn : string -> t
 
-  val subst_single : t -> t -> a -> a
-
-  val subst : (Name.t, t, 'a) Map.t -> t -> t
+  val subst : t Map.M(Name).t -> t -> t
 
   val relations : t -> string list
 
