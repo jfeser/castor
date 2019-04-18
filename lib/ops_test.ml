@@ -16,13 +16,17 @@ end)
 
 open Ops
 
+let test1 = {r_name= "test"; r_schema= []}
+
+let test2 = {r_name= "test2"; r_schema= []}
+
 let%expect_test "at" =
   let r =
     filter (Bool true)
-      (select [Bool false] (filter (Bool false) (scan "test")))
+      (select [Bool false] (filter (Bool false) (relation test1)))
   in
-  let tf = of_func (fun _ -> Some (scan "test2")) in
-  let op = at_ tf Path.(all >>? is_scan >>| shallowest) in
+  let tf = of_func (fun _ -> Some (relation test2)) in
+  let op = at_ tf Path.(all >>? is_relation >>| shallowest) in
   ( match apply op r with
   | Some r -> Format.printf "%a" pp r
   | None -> print_endline "Transform failed." ) ;
@@ -31,15 +35,15 @@ let%expect_test "at" =
 let%expect_test "at" =
   let r =
     filter (Bool true)
-      (select [Bool false] (filter (Bool false) (scan "test")))
+      (select [Bool false] (filter (Bool false) (relation test1)))
   in
   let tf =
-    let f _ = Some (`Result (scan "test2")) in
+    let f _ = Some (`Result (relation test2)) in
     {f; name= "tf"}
   in
   let op =
     at_
-      (at_ tf Path.(all >>? is_scan >>| shallowest))
+      (at_ tf Path.(all >>? is_relation >>| shallowest))
       Path.(all >>? is_select >>| shallowest)
   in
   ( match apply op r with

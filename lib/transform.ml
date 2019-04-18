@@ -30,30 +30,24 @@ module Make (Config : Config.S) () = struct
   module P = Project.Make (Config)
   open P
 
-  let is_serializable r p =
-    M.annotate_schema r ;
-    is_serializeable (Path.get_exn p r)
+  let is_serializable r p = is_serializeable (Path.get_exn p r)
 
   let sql_ctx = Sql.create_ctx ~fresh ()
 
   let has_params r p =
-    M.annotate_schema r ;
     let r' = Path.get_exn p r in
     overlaps (free r') params
 
-  let project r =
-    M.annotate_schema r ;
-    Some (project_once r)
+  let project r = Some (project_once r)
 
   let project = of_func project ~name:"project"
 
   let push_orderby r =
     let open Option.Let_syntax in
     let orderby_cross_tuple key rs =
-      List.iter rs ~f:M.annotate_schema ;
       match rs with
       | r :: rs ->
-          let schema = Meta.(find_exn r schema) in
+          let schema = schema_exn r in
           let sschema = Set.of_list (module Name) schema in
           let skey =
             Set.of_list
@@ -66,11 +60,9 @@ module Make (Config : Config.S) () = struct
       | _ -> None
     in
     let orderby_list key r1 r2 =
-      M.annotate_schema r1 ;
-      M.annotate_schema r2 ;
       annotate_eq r1 ;
       annotate_eq r2 ;
-      let schema1 = Meta.(find_exn r1 schema) in
+      let schema1 = schema_exn r1 in
       let open Core in
       let eqs = Meta.(find_exn r2 eq) in
       let names =
@@ -113,8 +105,6 @@ module Make (Config : Config.S) () = struct
       with No_key -> None
     in
     let same_orders r1 r2 =
-      M.annotate_schema r1 ;
-      M.annotate_schema r2 ;
       annotate_eq r1 ;
       annotate_orders r1 ;
       annotate_eq r2 ;
@@ -206,12 +196,12 @@ module Make (Config : Config.S) () = struct
       ; Simplify_tactic.simplify ]
 
   let is_serializable r =
-    M.annotate_schema r ;
     annotate_free r ;
     let bad_runtime_op =
       Path.(
         all >>? is_run_time
-        >>? Infix.(is_join || is_groupby || is_orderby || is_dedup || is_scan))
+        >>? Infix.(
+              is_join || is_groupby || is_orderby || is_dedup || is_relation))
         r
       |> Seq.is_empty |> not
     in
@@ -230,7 +220,6 @@ end
 let optimize (module C : Config.S) r =
   (* Annotate query with free variables. *)
   let module M = Abslayout_db.Make (C) in
-  M.annotate_schema r ;
   annotate_free r ;
   (* Recursively optimize subqueries. *)
   let visitor =

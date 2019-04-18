@@ -20,7 +20,7 @@ module Make (Config : Config.S) = struct
 
   let row_store r =
     if no_params r then
-      let s = M.to_schema r in
+      let s = schema_exn r in
       let scalars = List.map s ~f:(fun n -> scalar (Name n)) in
       Some (list r (tuple scalars Cross))
     else None

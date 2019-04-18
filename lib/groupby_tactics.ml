@@ -20,7 +20,6 @@ module Make (C : Config.S) = struct
   module M = Abslayout_db.Make (C)
 
   let elim_groupby r =
-    M.annotate_schema r ;
     M.annotate_defs r ;
     annotate_free r ;
     match r.node with

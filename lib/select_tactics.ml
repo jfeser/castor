@@ -77,7 +77,6 @@ module Make (C : Config.S) = struct
     with _ -> false
 
   let push_select r =
-    M.annotate_schema r ;
     match r.node with
     | Select (ps, r') ->
         if already_pushed r' then None
@@ -93,7 +92,7 @@ module Make (C : Config.S) = struct
                 let i =
                   (* TODO: This hack works around problems with sql conversion and
                lateral joins. *)
-                  let kschema = Meta.(find_exn rk schema) in
+                  let kschema = schema_exn rk in
                   List.filter ps ~f:(function
                     | Name n -> not (List.mem ~equal:Name.O.( = ) kschema n)
                     | _ -> true )
@@ -101,9 +100,7 @@ module Make (C : Config.S) = struct
                 Some (o, i)
             | AOrderedIdx (_, rv, _) | AList (_, rv) | ATuple (rv :: _, Concat)
               ->
-                let o, i =
-                  gen_concat_select_list ps Meta.(find_exn rv schema)
-                in
+                let o, i = gen_concat_select_list ps (schema_exn rv) in
                 Some (o, i)
             | _ -> None
           in

@@ -21,12 +21,11 @@ module Make (C : Config.S) = struct
   open S
 
   let extend_select ~with_ ps r =
-    M.annotate_schema r ;
     let needed_fields =
       (* These are the fields that are emitted by r, used in with_ and not
          exposed already by ps. *)
       Set.diff
-        (Set.inter with_ (Set.of_list (module Name) Meta.(find_exn r schema)))
+        (Set.inter with_ (Set.of_list (module Name) (schema_exn r)))
         (Set.of_list (module Name) (List.filter_map ~f:Pred.to_name ps))
       |> Set.to_list
       |> List.map ~f:(fun n -> Name n)
@@ -52,7 +51,6 @@ module Make (C : Config.S) = struct
     Set.is_subset supported ~of_:new_bound
 
   let hoist_filter r =
-    M.annotate_schema r ;
     match r.node with
     | OrderBy {key; rel= {node= Filter (p, r); _}} ->
         Some (filter p (order_by key r))
@@ -267,7 +265,6 @@ module Make (C : Config.S) = struct
 
   let push_filter r =
     let open Option.Let_syntax in
-    M.annotate_schema r ;
     let%bind p, r' =
       match r.node with Filter (p, r') -> Some (p, r') | _ -> None
     in
@@ -495,8 +492,9 @@ module Test = struct
                 (module Name)
                 [Name.create ~type_:(IntT {nullable= false}) "param1"])
     in
-    apply push_filter r |> Option.iter ~f:(Format.printf "%a@." pp);
-    [%expect {|
+    apply push_filter r |> Option.iter ~f:(Format.printf "%a@." pp) ;
+    [%expect
+      {|
       alist(filter(((customer.c_name = null) &&
                    ((customer.c_custkey = null) &&
                    ((orders.o_orderkey = null) &&

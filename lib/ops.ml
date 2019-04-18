@@ -82,8 +82,8 @@ module Make (C : Config.S) = struct
   let is_dedup r p =
     match (Path.get_exn p r).node with Dedup _ -> true | _ -> false
 
-  let is_scan r p =
-    match (Path.get_exn p r).node with Scan _ -> true | _ -> false
+  let is_relation r p =
+    match (Path.get_exn p r).node with Relation _ -> true | _ -> false
 
   let is_select r p =
     match (Path.get_exn p r).node with Select _ -> true | _ -> false
@@ -101,7 +101,6 @@ module Make (C : Config.S) = struct
     match (Path.get_exn p r).node with ATuple _ -> true | _ -> false
 
   let is_param_filter r p =
-    M.annotate_schema r ;
     match (Path.get_exn p r).node with
     | Filter (pred, _) -> overlaps (pred_free pred) params
     | _ -> false
@@ -109,7 +108,6 @@ module Make (C : Config.S) = struct
   let is_const_filter = Infix.(is_filter && not is_param_filter)
 
   let is_param_eq_filter r p =
-    M.annotate_schema r ;
     match (Path.get_exn p r).node with
     | Filter (pred, _) ->
         List.exists (Pred.conjuncts pred) ~f:(function
@@ -121,7 +119,6 @@ module Make (C : Config.S) = struct
     | _ -> false
 
   let is_param_cmp_filter r p =
-    M.annotate_schema r ;
     match (Path.get_exn p r).node with
     | Filter (pred, _) ->
         List.exists (Pred.conjuncts pred) ~f:(function

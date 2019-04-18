@@ -24,22 +24,19 @@ module Make (C : Config.S) = struct
   let filter_const = of_func filter_const ~name:"filter-const"
 
   let elim_structure r =
-    M.annotate_schema r ;
     match r.node with
     | AHashIdx (rk, rv, {lookup; _}) ->
         let key_pred =
-          let rk_schema = Meta.(find_exn rk schema) in
+          let rk_schema = schema_exn rk in
           List.map2_exn rk_schema lookup ~f:(fun p1 p2 ->
               Binop (Eq, Name p1, p2) )
           |> Pred.conjoin
         in
-        let values =
-          Meta.(find_exn rv schema) |> List.map ~f:(fun n -> Name n)
-        in
+        let values = schema_exn rv |> List.map ~f:(fun n -> Name n) in
         Some (select values (tuple [filter key_pred rk; rv] Cross))
     | AOrderedIdx (rk, rv, {lookup_low; lookup_high; _}) ->
         let key_pred =
-          let rk_schema = Meta.(find_exn rk schema) in
+          let rk_schema = schema_exn rk in
           match rk_schema with
           | [n] ->
               Pred.conjoin
@@ -47,14 +44,10 @@ module Make (C : Config.S) = struct
                 ; Binop (Lt, Name n, lookup_high) ]
           | _ -> failwith "Unexpected schema."
         in
-        let values =
-          Meta.(find_exn rv schema) |> List.map ~f:(fun n -> Name n)
-        in
+        let values = schema_exn rv |> List.map ~f:(fun n -> Name n) in
         Some (select values (tuple [filter key_pred rk; rv] Cross))
     | AList (rk, rv) ->
-        let values =
-          Meta.(find_exn rv schema) |> List.map ~f:(fun n -> Name n)
-        in
+        let values = schema_exn rv |> List.map ~f:(fun n -> Name n) in
         Some (select values (tuple [rk; rv] Cross))
     | _ -> None
 

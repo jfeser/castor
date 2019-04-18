@@ -216,7 +216,7 @@ module Make (C : Config.S) = struct
       let leaves =
         to_leaves r |> Set.to_list
         |> List.map ~f:(fun r ->
-               let s = Meta.(find_exn r schema) |> Set.of_list (module Name) in
+               let s = A.schema_exn r |> Set.of_list (module Name) in
                (r, s) )
       in
       to_graph leaves r
@@ -280,15 +280,12 @@ module Make (C : Config.S) = struct
 
   let ntuples r =
     let r = to_ralgebra r in
-    M.annotate_schema r ;
     ( Explain.explain dbconn
         (Sql.of_ralgebra sql_ctx r |> Sql.to_string sql_ctx)
     |> Or_error.ok_exn )
       .nrows |> Float.of_int
 
-  let schema r =
-    M.annotate_schema r ;
-    Meta.(find_exn r schema)
+  let schema r = A.schema_exn r
 
   let schema_types r = schema r |> List.map ~f:Name.type_exn
 
@@ -310,7 +307,6 @@ module Make (C : Config.S) = struct
       A.(select [Min c; Max c; Avg c] part_counts)
     in
     let part_aggs = M.resolve ~params part_aggs in
-    M.annotate_schema part_aggs ;
     let sql = Sql.of_ralgebra sql_ctx part_aggs in
     let tups =
       Db.exec_cursor_exn conn
@@ -507,9 +503,7 @@ module Make (C : Config.S) = struct
     in
     opt
 
-  let opt r =
-    M.annotate_schema r ;
-    opt (Set.empty (module Name)) (JoinSpace.of_abslayout r)
+  let opt r = opt (Set.empty (module Name)) (JoinSpace.of_abslayout r)
 
   let reshape j _ = Some (to_ralgebra j)
 
