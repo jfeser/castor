@@ -241,13 +241,9 @@ module Make (C : Config.S) = struct
     List.iter m.rrefs ~f:incr ; m.rname
 
   let resolve_relation stage r =
-    let schema =
-      List.map (Db.Relation.from_db conn r.r_name).fields ~f:(fun f ->
-          create ~relation:r.r_name ~type_:f.type_ f.fname )
-    in
-    let r = {r with r_schema= Some schema} in
+    let r = Db.relation conn r.r_name in
     (* TODO: Nowhere to put the defs here *)
-    let _, ctx = List.map schema ~f:(fun n -> Name n) |> Ctx.of_defs stage in
+    let _, ctx = List.map r.r_schema ~f:(fun n -> Name n) |> Ctx.of_defs stage in
     (r, ctx)
 
   let rec resolve_pred stage (ctx : Ctx.t) =

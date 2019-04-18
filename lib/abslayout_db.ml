@@ -59,9 +59,8 @@ module Make (Config : Config.S) = struct
           | ATuple ([], Concat) -> []
           | ATuple (r :: _, Concat) -> Meta.find_exn r self#key
           | As (n, r) -> Meta.find_exn r self#key |> self#rename n
-          | Relation {r_schema= Some schema; _} ->
-              self#to_schema (List.map schema ~f:(fun n -> Name n))
-          | Relation {r_schema= None; _} -> failwith ""
+          | Relation {r_schema; _} ->
+              self#to_schema (List.map r_schema ~f:(fun n -> Name n))
         in
         Meta.set_m r self#key schema
     end

@@ -58,6 +58,4 @@ and schema_exn r =
   | ATuple ([], Concat) -> []
   | ATuple (r :: _, Concat) -> schema_exn r
   | As (n, r) -> rename (schema_exn r) n
-  | Relation {r_schema= Some schema; _} -> schema
-  | Relation {r_name; r_schema= None; _} ->
-      Error.(create "Missing schema annotation." r_name [%sexp_of: string] |> raise)
+  | Relation {r_schema; _} -> r_schema

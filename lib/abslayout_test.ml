@@ -372,7 +372,7 @@ select([lp.counter, lc.counter],
         ((node
           (Relation
            ((r_name r)
-            (r_schema ((((relation (r)) (name f)) ((relation (r)) (name g))))))))
+            (r_schema (((relation (r)) (name f)) ((relation (r)) (name g)))))))
          (meta
           ((refcnt ((((relation (r)) (name f)) 1) (((relation (r)) (name g)) 0)))))))))
      (meta ((refcnt ())))) |}]

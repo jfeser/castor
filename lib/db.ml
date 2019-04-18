@@ -1,4 +1,4 @@
-open Base
+open Core
 open Printf
 module Pervasives = Caml.Pervasives
 open Collections
@@ -73,23 +73,10 @@ let exec3 ?params conn query =
            Error.create "Unexpected query results." t [%sexp_of: string list]
            |> Error.raise )
 
-type field_t = {fname: string; type_: Type.PrimType.t}
-
-and relation_t = {rname: string; fields: field_t list}
-[@@deriving compare, hash, sexp]
-
-module Relation = struct
-  type db = t
-
-  type t = relation_t = {rname: string; fields: field_t list}
-  [@@deriving compare, hash, sexp]
-
-  let sexp_of_t {rname; _} = [%sexp_of: string] rname
-
-  let from_db conn rname =
-    let rel = {rname; fields= []} in
-    let fields =
-      exec3 ~params:[rname] conn
+let relation =
+  let relation_main conn r_name =
+    let r_schema =
+      exec3 ~params:[r_name] conn
         "select column_name, data_type, is_nullable from \
          information_schema.columns where table_name='$0'"
       |> List.map ~f:(fun (fname, type_str, nullable_str) ->
@@ -97,7 +84,7 @@ module Relation = struct
              let nullable =
                if String.(strip nullable_str = "YES") then
                  let nulls =
-                   exec1 ~params:[fname; rname] conn
+                   exec1 ~params:[fname; r_name] conn
                      "select \"$0\" from \"$1\" where \"$0\" is null limit 1"
                  in
                  List.length nulls > 0
@@ -112,7 +99,7 @@ module Relation = struct
                | "boolean" -> BoolT {nullable}
                | "numeric" ->
                    let min, max, max_scale =
-                     exec3 ~params:[fname; rname] conn
+                     exec3 ~params:[fname; r_name] conn
                        "select min(\"$0\"), max(\"$0\"), max(scale(\"$0\")) from \
                         \"$1\""
                      |> List.hd_exn
@@ -132,26 +119,21 @@ module Relation = struct
                | "timestamp without time zone" -> StringT {nullable}
                | s -> failwith (Printf.sprintf "Unknown dtype %s" s)
              in
-             {fname; type_} )
+             Name.create ~relation:r_name ~type_ fname )
     in
-    {rel with fields}
+    Abslayout0.{r_name; r_schema}
+  in
+  let relation_memo =
+    Memo.general (fun (conn, rname) -> relation_main conn rname)
+  in
+  fun conn rname -> relation_memo (conn, rname)
 
-  let from_db' = Core.Memo.general (fun (conn, rname) -> from_db conn rname)
-
-  let from_db conn rname = from_db' (conn, rname)
-
-  let all_from_db conn =
-    let names =
-      exec1 conn
-        "select tablename from pg_catalog.pg_tables where schemaname='public'"
-    in
-    List.map names ~f:(from_db conn)
-end
-
-module Field = struct
-  type t = field_t = {fname: string; type_: Type.PrimType.t [@compare.ignore]}
-  [@@deriving compare, hash, sexp]
-end
+let all_relations conn =
+  let names =
+    exec1 conn
+      "select tablename from pg_catalog.pg_tables where schemaname='public'"
+  in
+  List.map names ~f:(relation conn)
 
 let load_value type_ value =
   let open Type.PrimType in
@@ -241,7 +223,3 @@ let check db sql =
   match r#status with
   | Command_ok -> Or_error.return ()
   | _ -> Or_error.error "Unexpected query response." r#error [%sexp_of: string]
-
-let schema conn table =
-  (Relation.from_db conn table).fields
-  |> List.map ~f:(fun f -> Name.create ~relation:table ~type_:f.Field.type_ f.fname)
