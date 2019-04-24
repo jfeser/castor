@@ -28,8 +28,11 @@ let%test_module _ =
       in
       let param_names = List.map params ~f:(fun (n, _) -> n) in
       let sparams = Set.of_list (module Name) param_names in
-      let layout = of_string_exn layout_str |> M.resolve ~params:sparams in
-      let layout = M.annotate_key_layouts layout in
+      let layout =
+        of_string_exn layout_str |> M.annotate_relations
+        |> M.resolve ~params:sparams
+      in
+      let layout = annotate_key_layouts layout in
       M.annotate_subquery_types layout ;
       I.irgen ~params:param_names ~data_fn:"/tmp/buf" layout
       |> opt_func

@@ -1,7 +1,6 @@
 open Base
 open Stdio
 open Collections
-open Abslayout
 open Sql
 open Test_util
 
@@ -10,7 +9,7 @@ let%test_module _ =
     let run_test s =
       let module Test_db = (val make_test_db ()) in
       let module M = Abslayout_db.Make (Test_db) in
-      let r = of_string_exn s |> M.resolve in
+      let r = M.load_string s in
       let ctx = Sql.create_ctx ~fresh:(Fresh.create ()) () in
       let sql_str = of_ralgebra ctx r |> to_string_hum ctx in
       Db.check Test_db.conn sql_str |> Or_error.ok_exn ;
@@ -121,7 +120,7 @@ let%test_module _ =
 
     let%expect_test "join-groupby" =
       run_test
-        {|join(r1.f = r1.g || x = y, groupby([r1.f, sum((r1.f * r1.g)) as x], [r1.f], r1), groupby([r1.g, sum((r1.f * r1.g)) as y], [r1.g], r1))|} ;
+        {|join(r1.f = r1b.g || x = y, groupby([r1.f, sum((r1.f * r1.g)) as x], [r1.f], r1), groupby([r1b.g, sum((r1b.f * r1b.g)) as y], [r1b.g], r1 as r1b))|} ;
       [%expect
         {|
     SELECT
@@ -237,6 +236,7 @@ let%test_module _ =
          null)" ;
       [%expect
         {|
+    [ERROR] Missing as: select([.], r1)
     SELECT
         "k_1" AS "k_2",
         "r1_2_g_2" AS "r1_2_g_3"
@@ -258,6 +258,7 @@ let%test_module _ =
          r1)), null, null)" ;
       [%expect
         {|
+    [ERROR] Missing as: select([.], r1)
     SELECT
         "k_1" AS "k_2",
         "r1_2_g_2" AS "r1_2_g_3"

@@ -182,7 +182,7 @@ module Test = struct
 
   let%expect_test "" =
     let r =
-      of_string_exn
+      M.load_string
         {|
 select([nation.n_name as k1],
                                                           atuple([alist(
@@ -251,7 +251,7 @@ select([nation.n_name as k1],
 
   let%expect_test "" =
     let r =
-      of_string_exn
+      M.load_string
         {|
 dedup(select([nation.n_name as k1],
                                                           atuple([alist(
@@ -332,7 +332,7 @@ dedup(select([nation.n_name as k1],
                                    ascalar(orders.o_comment)],
                              cross)))
     |}
-      |> of_string_exn
+      |> M.load_string
     in
     project r |> Format.printf "%a@." pp ;
     [%expect
@@ -439,7 +439,7 @@ ahashidx(dedup(
                                                          partsupp.ps_suppkey)],
                                                  cross),
                                                null)|}
-      |> of_string_exn
+      |> M.load_string
     in
     project r |> Format.printf "%a@." pp ;
     [%expect
@@ -590,7 +590,7 @@ select([(sum((partsupp.ps_supplycost
                                                          partsupp.ps_suppkey)],
                                                  cross),
                                                null))|}
-      |> of_string_exn
+      |> M.load_string
     in
     project r |> Format.printf "%a@." pp ;
     [%expect
@@ -630,8 +630,15 @@ select([(sum((partsupp.ps_supplycost
           null)) |}]
 
   let%expect_test "" =
+    let params =
+      Set.of_list
+        (module Name)
+        [ Name.create ~type_:(StringT {nullable= false}) "param1"
+        ; Name.create ~type_:(StringT {nullable= false}) "param2"
+        ; Name.create ~type_:(DateT {nullable= false}) "param3" ]
+    in
     let r =
-      of_string_exn
+      M.load_string ~params
         {|
 alist(orderby([k0.l_shipmode],
          select([lineitem.l_shipmode],
@@ -672,15 +679,7 @@ alist(orderby([k0.l_shipmode],
        ((param3 + year(1)) + day(1)))))
 |}
     in
-    project
-      ~params:
-        (Set.of_list
-           (module Name)
-           [ Name.create ~type_:(StringT {nullable= false}) "param1"
-           ; Name.create ~type_:(StringT {nullable= false}) "param2"
-           ; Name.create ~type_:(DateT {nullable= false}) "param3" ])
-      r
-    |> Format.printf "%a@." pp ;
+    project ~params r |> Format.printf "%a@." pp ;
     [%expect
       {|
       alist(orderby([k0.l_shipmode],
@@ -717,8 +716,14 @@ alist(orderby([k0.l_shipmode],
             ((param3 + year(1)) + day(1))))) |}]
 
   let%expect_test _ =
+    let params =
+      Set.of_list
+        (module Name)
+        [ Name.create ~type_:(StringT {nullable= false}) "param0"
+        ; Name.create ~type_:(DateT {nullable= false}) "param1" ]
+    in
     let r =
-      of_string_exn
+      M.load_string ~params
         {|
 select([nation.n_name, revenue],
    alist(select([nation.n_name], dedup(select([nation.n_name], nation))) as k0,
@@ -796,14 +801,7 @@ select([nation.n_name, revenue],
          (param1 + day(1)),
          ((param1 + year(1)) + day(1))))))|}
     in
-    project
-      ~params:
-        (Set.of_list
-           (module Name)
-           [ Name.create ~type_:(StringT {nullable= false}) "param0"
-           ; Name.create ~type_:(DateT {nullable= false}) "param1" ])
-      r
-    |> Format.printf "%a@." pp ;
+    project ~params r |> Format.printf "%a@." pp ;
     [%expect
       {|
       select([nation.n_name, revenue],
@@ -850,8 +848,14 @@ select([nation.n_name, revenue],
               ((param1 + year(1)) + day(1)))))) |}]
 
   let%expect_test "" =
+    let params =
+      Set.of_list
+        (module Name)
+        [ Name.create ~type_:(StringT {nullable= false}) "param1"
+        ; Name.create ~type_:(IntT {nullable= false}) "param2" ]
+    in
     let r =
-      of_string_exn
+      M.load_string ~params
         {|
         select([(sum((partsupp.ps_supplycost * partsupp.ps_availqty)) * param2) as v],
       ahashidx(dedup(
@@ -929,14 +933,7 @@ select([nation.n_name, revenue],
         param1))
 |}
     in
-    project
-      ~params:
-        (Set.of_list
-           (module Name)
-           [ Name.create ~type_:(StringT {nullable= false}) "param1"
-           ; Name.create ~type_:(IntT {nullable= false}) "param2" ])
-      r
-    |> Format.printf "%a@." pp ;
+    project ~params r |> Format.printf "%a@." pp ;
     [%expect
       {|
       select([(sum((partsupp.ps_supplycost * partsupp.ps_availqty)) * param2) as v],

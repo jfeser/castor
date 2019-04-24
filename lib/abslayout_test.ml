@@ -54,14 +54,15 @@ let%test_module _ =
           method build_Filter () _ (_, r) ctx = self#visit_t () ctx r
         end
       in
-      try
+      let run () =
         let sparams =
           Option.map params ~f:(fun p ->
               List.map p ~f:(fun (n, _) -> n) |> Set.of_list (module Name) )
         in
-        let layout = of_string_exn query |> M.resolve ?params:sparams in
+        let layout = M.load_string ?params:sparams query in
         print_fold#run () layout
-      with exn -> printf "Error: %s\n" (Exn.to_string exn)
+      in
+      Exn.handle_uncaught ~exit:false run
 
     let%expect_test "sum-complex" =
       run_print_test
@@ -93,23 +94,11 @@ let%test_module _ =
 
     let%expect_test "orderby-tuple" =
       run_print_test
-        {|atuple([alist(orderby([r1.f desc], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f asc], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|} ;
+        {|atuple([alist(orderby([r1.f desc], r1) as r1a, atuple([ascalar(r1a.f), ascalar(r1a.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f asc], r1) as r1b, atuple([ascalar(r1b.f), ascalar(r1b.g)], cross))], concat)|} ;
       [%expect
         {|
     Tuple
     List
-    List key: ((Int 3) (Int 4))
-    Tuple
-    Scalar: (Int 3)
-    Scalar: (Int 4)
-    List key: ((Int 2) (Int 1))
-    Tuple
-    Scalar: (Int 2)
-    Scalar: (Int 1)
-    List key: ((Int 2) (Int 2))
-    Tuple
-    Scalar: (Int 2)
-    Scalar: (Int 2)
     List key: ((Int 1) (Int 2))
     Tuple
     Scalar: (Int 1)
@@ -118,6 +107,18 @@ let%test_module _ =
     Tuple
     Scalar: (Int 1)
     Scalar: (Int 3)
+    List key: ((Int 2) (Int 1))
+    Tuple
+    Scalar: (Int 2)
+    Scalar: (Int 1)
+    List key: ((Int 2) (Int 2))
+    Tuple
+    Scalar: (Int 2)
+    Scalar: (Int 2)
+    List key: ((Int 3) (Int 4))
+    Tuple
+    Scalar: (Int 3)
+    Scalar: (Int 4)
     Tuple
     Scalar: (Int 9)
     Scalar: (Int 9)
@@ -202,12 +203,12 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
       run_print_test ~params:Demomatch.example_params
         {|
 ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k], 
-      join(true, log as lp, log as lc))),
+      join(true, log as lp, log as lc))) as k,
   alist(select([lp.counter, lc.counter], 
     join(lp.counter < lc.counter && 
          lc.counter < lp.succ, 
-      filter(log.id = lp_k, log) as lp, 
-      filter(log.id = lc_k, log) as lc)),
+      filter(log.id = k.lp_k, log) as lp, 
+      filter(log.id = k.lc_k, log) as lc)),
     atuple([ascalar(lp.counter), ascalar(lc.counter)], cross)),
   (id_p, id_c))
 |} ;
@@ -248,6 +249,11 @@ select([lp.counter, lc.counter],
 |} ;
       [%expect
         {|
+    [WARNING] Unexpected as: ahashidx(dedup(.), alist(., .), id_p)
+    [WARNING] Unexpected as: aorderedidx(select(.], .),
+                               alist(., .),
+                               lp.counter,
+                               lp.succ)
     Tuple
     HashIdx
     HashIdx key: ((Int 1))
@@ -362,7 +368,7 @@ select([lp.counter, lc.counter],
  *       ((schema (((relation (r)) (name f) (type_ ((IntT (nullable false)))))))))) |}] *)
 
     let%expect_test "annotate-schema" =
-      let r = "select([min(r.f)], r)" |> of_string_exn |> M.resolve in
+      let r = M.load_string "select([min(r.f)], r)" in
       [%sexp_of: t] r |> print_s ;
       [%expect
         {|

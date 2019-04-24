@@ -97,6 +97,8 @@ val pp_pred : Formatter.t -> pred -> unit
 
 val pp : Formatter.t -> t -> unit
 
+val pp_small : Formatter.t -> t -> unit
+
 val mk_pp :
      ?pp_name:(Formatter.t -> Name.t -> unit)
   -> ?pp_meta:(Formatter.t -> Core.Univ_map.t -> unit)
@@ -247,3 +249,5 @@ module Pred : sig
 
   val to_type : t -> Type.PrimType.t
 end
+
+val annotate_key_layouts : t -> t

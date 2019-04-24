@@ -33,9 +33,9 @@ let run_test ?(params = []) ?(print_layout = true) ?(fork = false) ?irgen_debug
       let params =
         List.map params ~f:(fun (n, _) -> n) |> Set.of_list (module Name)
       in
-      of_string_exn layout_str |> M.resolve ~params
+      of_string_exn layout_str |> M.annotate_relations |> M.resolve ~params
+      |> annotate_key_layouts
     in
-    let layout = M.annotate_key_layouts layout in
     let out_dir = Filename.temp_dir "bin" "" in
     if fork then run_in_fork (fun () -> run_compiler out_dir layout)
     else run_compiler out_dir layout
@@ -118,12 +118,12 @@ let%expect_test "example-2" =
   run_test ~params:Demomatch.example_params ~print_layout:false
     {|
 select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k], 
-      join(true, log as lp, log as lc))),
+      join(true, log as lp, log as lc))) as k,
   alist(select([lp.counter, lc.counter], 
     join(lp.counter < lc.counter && 
          lc.counter < lp.succ, 
-      filter(log.id = lp_k, log) as lp, 
-      filter(log.id = lc_k, log) as lc)),
+      filter(log.id = k.lp_k, log) as lp, 
+      filter(log.id = k.lc_k, log) as lc)),
     atuple([ascalar(lp.counter), ascalar(lc.counter)], cross)),
   (id_p, id_c)))
 |} ;
@@ -136,12 +136,12 @@ let%expect_test "example-2-str" =
   run_test ~params:Demomatch.example_str_params ~print_layout:false
     {|
 select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k], 
-      join(true, log_str as lp, log_str as lc))),
+      join(true, log_str as lp, log_str as lc))) as k,
   alist(select([lp.counter, lc.counter], 
     join(lp.counter < lc.counter && 
          lc.counter < lp.succ, 
-      filter(log_str.id = lp_k, log_str) as lp, 
-      filter(log_str.id = lc_k, log_str) as lc)),
+      filter(log_str.id = k.lp_k, log_str) as lp, 
+      filter(log_str.id = k.lc_k, log_str) as lc)),
     atuple([ascalar(lp.counter), ascalar(lc.counter)], cross)),
   (id_p, id_c)))
 |} ;
@@ -165,7 +165,13 @@ select([lp.counter, lc.counter],
         atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
       lp.counter, lp.succ) as lc)], cross))
 |} ;
-  [%expect {|
+  [%expect
+    {|
+    [WARNING] Unexpected as: ahashidx(dedup(.), alist(., .), id_p)
+    [WARNING] Unexpected as: aorderedidx(select(.], .),
+                               alist(., .),
+                               lp.counter,
+                               lp.succ)
     1|2
 
     exited normally |}]
@@ -185,7 +191,13 @@ select([lp.counter, lc.counter],
         atuple([ascalar(log_str.id), ascalar(log_str.counter)], cross)), 
       lp.counter, lp.succ) as lc)], cross))
 |} ;
-  [%expect {|
+  [%expect
+    {|
+    [WARNING] Unexpected as: ahashidx(dedup(.), alist(., .), id_p)
+    [WARNING] Unexpected as: aorderedidx(select(.], .),
+                               alist(., .),
+                               lp.counter,
+                               lp.succ)
     1|2
 
     exited normally |}]
@@ -201,34 +213,33 @@ let%expect_test "output-test" =
 
 let%expect_test "ordering" =
   run_test ~print_layout:false
-    {|alist(orderby([r1.f desc], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross))|} ;
-  run_test ~print_layout:false
-    {|alist(orderby([r1.f], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross))|} ;
-  run_test ~print_layout:false
-    {|atuple([alist(orderby([r1.f desc], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|} ;
-  run_test ~print_layout:false
-    {|atuple([alist(orderby([r1.f], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f desc], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|} ;
-  [%expect
-    {|
-    3|4
-    2|1
-    2|2
-    1|2
-    1|3
-
-    exited normally
+    {|alist(orderby([r1.f desc], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross))|} ;
+  [%expect {|
     1|2
     1|3
     2|1
     2|2
     3|4
 
-    exited normally
-    3|4
-    2|1
-    2|2
+    exited normally |}] ;
+  run_test ~print_layout:false
+    {|alist(orderby([r1.f], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross))|} ;
+  [%expect {|
     1|2
     1|3
+    2|1
+    2|2
+    3|4
+
+    exited normally |}] ;
+  run_test ~print_layout:false
+    {|atuple([alist(orderby([r1.f desc], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f], r1) as k1, atuple([ascalar(k1.f), ascalar(k1.g)], cross))], concat)|} ;
+  [%expect {|
+    1|2
+    1|3
+    2|1
+    2|2
+    3|4
     9|9
     1|2
     1|3
@@ -236,18 +247,21 @@ let%expect_test "ordering" =
     2|2
     3|4
 
-    exited normally
+    exited normally |}] ;
+  run_test ~print_layout:false
+    {|atuple([alist(orderby([f], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([f desc], r1) as k1, atuple([ascalar(k1.f), ascalar(k1.g)], cross))], concat)|} ;
+  [%expect {|
     1|2
     1|3
     2|1
     2|2
     3|4
     9|9
-    3|4
-    2|1
-    2|2
     1|2
     1|3
+    2|1
+    2|2
+    3|4
 
     exited normally |}]
 

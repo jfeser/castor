@@ -592,38 +592,6 @@ module Make (Config : Config.S) = struct
         m "The type is: %s" (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ) ;
     type_
 
-  let annotate_key_layouts =
-    let key_layout schema =
-      match List.map schema ~f:(fun n -> scalar (Name n)) with
-      | [] -> failwith "empty schema"
-      | [x] -> x
-      | xs -> tuple xs Cross
-    in
-    let annotator =
-      object (self : 'a)
-        inherit [_] map
-
-        method! visit_AHashIdx () ((x, y, ({hi_key_layout; _} as m)) as r) =
-          let x = self#visit_t () x in
-          let y = self#visit_t () y in
-          match hi_key_layout with
-          | Some _ -> AHashIdx r
-          | None ->
-              AHashIdx
-                (x, y, {m with hi_key_layout= Some (key_layout (schema_exn x))})
-
-        method! visit_AOrderedIdx () ((x, y, ({oi_key_layout; _} as m)) as r) =
-          let x = self#visit_t () x in
-          let y = self#visit_t () y in
-          match oi_key_layout with
-          | Some _ -> AOrderedIdx r
-          | None ->
-              AOrderedIdx
-                (x, y, {m with oi_key_layout= Some (key_layout (schema_exn x))})
-      end
-    in
-    annotator#visit_t ()
-
   let rec annotate_type r t =
     let open Type in
     match (r.node, t) with
@@ -676,5 +644,23 @@ module Make (Config : Config.S) = struct
 
   let bound r = schema_exn r |> Set.of_list (module Name)
 
+  let annotate_relations =
+    let visitor =
+      object
+        inherit [_] endo
+
+        method! visit_Relation () _ r =
+          let schema =
+            List.map (Db.Relation.from_db conn r.r_name).fields ~f:(fun f ->
+                Name.create ~relation:r.r_name ~type_:f.type_ f.fname )
+          in
+          Relation {r with r_schema= Some schema}
+      end
+    in
+    visitor#visit_t ()
+
   include Resolve.Make (Config)
+
+  let load_string ?(params = Set.empty (module Name)) s =
+    of_string_exn s |> annotate_relations |> resolve ~params |> annotate_key_layouts
 end

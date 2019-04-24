@@ -10,8 +10,10 @@ let run_test ?(params = []) ?(print_code = true) layout_str =
   try
     let param_names = List.map params ~f:(fun (n, _) -> n) in
     let sparams = Set.of_list (module Name) param_names in
-    let layout = of_string_exn layout_str |> M.resolve ~params:sparams in
-    let layout = M.annotate_key_layouts layout in
+    let layout =
+      of_string_exn layout_str |> M.annotate_relations |> M.resolve ~params:sparams
+      |> annotate_key_layouts
+    in
     M.annotate_subquery_types layout ;
     let type_ = M.to_type layout in
     Stdio.print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ;
@@ -348,6 +350,7 @@ let%expect_test "hash-idx" =
      k, ascalar(k.f+1), f.f)], cross)" ;
   [%expect
     {|
+    [WARNING] Unexpected as: alist(r1, ascalar(r1.f))
     (TupleT
      (((ListT
         ((IntT ((range (Interval 1 3)) (nullable false)))
@@ -438,6 +441,7 @@ let%expect_test "ordered-idx" =
      as k, ascalar(k.f+1), f.f, f.f+1)], cross)" ;
   [%expect
     {|
+    [WARNING] Unexpected as: alist(r1, ascalar(r1.f))
     (TupleT
      (((ListT
         ((IntT ((range (Interval 1 3)) (nullable false)))
@@ -563,10 +567,10 @@ let%expect_test "ordered-idx" =
 
 let%expect_test "ordered-idx-date" =
   run_test ~print_code:false
-    {|AOrderedIdx(dedup(select([r_date.f as k], r_date)), ascalar(k), date("2018-01-01"), date("2018-01-01"))|} ;
+    {|AOrderedIdx(dedup(select([f], r_date)) as k, ascalar(k.f), date("2018-01-01"), date("2018-01-01"))|} ;
   [%expect
     {|
-    [WARNING] Output shadowing of k.
+    [WARNING] Output shadowing of k.f.
     (OrderedIdxT
      ((DateT ((range (Interval 17136 17775)) (nullable false)))
       (DateT ((range (Interval 17136 17775)) (nullable false))) ((count Top)))) |}]
@@ -684,12 +688,12 @@ let%expect_test "example-2" =
   run_test ~params:Demomatch.example_params
     {|
 ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k], 
-      join(true, log as lp, log as lc))),
+      join(true, log as lp, log as lc))) as k,
   alist(select([lp.counter, lc.counter], 
     join(lp.counter < lc.counter && 
          lc.counter < lp.succ, 
-      filter(log.id = lp_k, log) as lp, 
-      filter(log.id = lc_k, log) as lc)),
+      filter(log.id = k.lp_k, log) as lp, 
+      filter(log.id = k.lc_k, log) as lc)),
     atuple([ascalar(lp.counter), ascalar(lc.counter)], cross)),
   (id_p, id_c))
 |} ;
@@ -803,6 +807,11 @@ select([lp.counter, lc.counter],
 |} ;
   [%expect
     {|
+    [WARNING] Unexpected as: ahashidx(dedup(.), alist(., .), id_p)
+    [WARNING] Unexpected as: aorderedidx(select(.], .),
+                               alist(., .),
+                               lp.counter,
+                               lp.succ)
     (FuncT
      (((TupleT
         (((HashIdxT
@@ -1134,6 +1143,11 @@ select([lp.counter, lc.counter],
 |} ;
   [%expect
     {|
+    [WARNING] Unexpected as: ahashidx(dedup(.), alist(., .), id_p)
+    [WARNING] Unexpected as: aorderedidx(select(.], .),
+                               alist(., .),
+                               lp.counter,
+                               lp.succ)
     (FuncT
      (((TupleT
         (((HashIdxT

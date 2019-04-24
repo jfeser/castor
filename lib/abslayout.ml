@@ -182,6 +182,12 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
 
 let pp, pp_pred = mk_pp ()
 
+let pp_small fmt x =
+  let max = Format.pp_get_max_boxes fmt () in
+  Format.pp_set_max_boxes fmt 5 ;
+  pp fmt x ;
+  Format.pp_set_max_boxes fmt max
+
 module Ctx = struct
   module T = struct
     type t = Value.t Map.M(Name).t [@@deriving compare, sexp]
@@ -832,3 +838,34 @@ let annotate_orders r =
 let order_of r =
   annotate_orders r ;
   Meta.(find_exn r order)
+
+let annotate_key_layouts r =
+  let key_layout schema =
+    match List.map schema ~f:(fun n -> scalar (Name n)) with
+    | [] -> failwith "empty schema"
+    | [x] -> x
+    | xs -> tuple xs Cross
+  in
+  let annotator =
+    object (self : 'a)
+      inherit [_] map
+
+      method! visit_AHashIdx () ((x, y, ({hi_key_layout; _} as m)) as r) =
+        let x = self#visit_t () x in
+        let y = self#visit_t () y in
+        match hi_key_layout with
+        | Some _ -> AHashIdx r
+        | None ->
+            AHashIdx (x, y, {m with hi_key_layout= Some (key_layout (schema_exn x))})
+
+      method! visit_AOrderedIdx () ((x, y, ({oi_key_layout; _} as m)) as r) =
+        let x = self#visit_t () x in
+        let y = self#visit_t () y in
+        match oi_key_layout with
+        | Some _ -> AOrderedIdx r
+        | None ->
+            AOrderedIdx
+              (x, y, {m with oi_key_layout= Some (key_layout (schema_exn x))})
+    end
+  in
+  annotator#visit_t () r

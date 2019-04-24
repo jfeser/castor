@@ -12,8 +12,10 @@ let process_layout_log log =
 let run_test layout_str =
   let layout_file = Filename.temp_file "layout" "txt" in
   let (module M), (module S), _, _ = make_modules ~layout_file () in
-  let layout = of_string_exn layout_str |> M.resolve in
-  let layout = M.annotate_key_layouts layout in
+  let layout =
+    of_string_exn layout_str |> M.annotate_relations |> M.resolve
+    |> annotate_key_layouts
+  in
   let type_ = M.to_type layout in
   let buf = Buffer.create 1024 in
   let _, len = S.serialize (Bitstring.Writer.with_buffer buf) layout type_ in

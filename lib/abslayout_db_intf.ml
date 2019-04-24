@@ -6,11 +6,11 @@ module type S = sig
 
   val annotate_defs : t -> unit
 
-  val annotate_key_layouts : t -> t
-
   val annotate_subquery_types : t -> unit
 
   val resolve : ?params:Set.M(Name).t -> t -> t
+
+  val load_string : ?params:Set.M(Name).t -> string -> t
 
   val refcnt : int Map.M(Name).t Univ_map.Key.t
 
@@ -91,4 +91,6 @@ module type S = sig
   val annotate_type : t -> Type.t -> unit
 
   val bound : t -> Set.M(Name).t
+
+  val annotate_relations : t -> t
 end
