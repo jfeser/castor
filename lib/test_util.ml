@@ -221,4 +221,50 @@ module Demomatch = struct
       , Value.String "-1451410871729396224" )
     ; ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_c"
       , String "8557539814359574196" ) ]
+
+  let example1 log =
+    sprintf
+      {|
+select([p_counter, c_counter], filter(c_id = id_c && p_id = id_p,
+alist(filter(succ > counter + 1, %s) as lp,
+atuple([ascalar(lp.id as p_id), ascalar(lp.counter as p_counter),
+alist(filter(lp.counter < counter && counter < lp.succ, %s) as lc,
+atuple([ascalar(lc.id as c_id), ascalar(lc.counter as c_counter)], cross))], cross))))
+|}
+      log log
+
+  let example2 =
+    {|
+ahashidx(dedup(
+      join(true, select([id as p_id], log), select([id as c_id], log))) as k,
+  alist(select([p_counter, c_counter],
+    join(p_counter < c_counter && c_counter < p_succ,
+      filter(p_id = k.p_id,
+        select([id as p_id, counter as p_counter, succ as p_succ], log)), 
+      filter(p_id = k.c_id,
+        select([id as c_id, counter as c_counter], log)))) as lk,
+    atuple([ascalar(lk.p_counter), ascalar(lk.c_counter)], cross)),
+  (id_p, id_c))
+|}
+
+  let example3 log =
+    sprintf
+      {|
+select([p_counter, c_counter],
+  atuple([
+    ahashidx(dedup(select([id], %s)) as hk, 
+    alist(select([counter, succ], filter(hk.id = id && counter < succ, %s)) as lk1, 
+      atuple([ascalar(lk1.counter as p_counter), ascalar(lk1.succ as p_succ)], cross)), 
+    id_p),
+  filter(c_id = id_c,
+    aorderedidx(select([counter], %s) as ok, 
+      alist(filter(counter = ok.counter, %s) as lk2,
+        atuple([ascalar(lk2.id as c_id), ascalar(lk2.counter as c_counter)], cross)), 
+      p_counter, p_succ))], cross))
+|}
+      log log log log
 end
+
+let sum_complex =
+  "Select([sum(f) + 5, count() + sum(f / 2)], AList(r1 as k, ATuple([AScalar(k.f), \
+   AScalar(k.g - k.f)], cross)))"

@@ -39,16 +39,7 @@ let%test_module _ =
       |> I.pp Caml.Format.std_formatter
 
     let%expect_test "example-1" =
-      run_test ~params:Demomatch.example_params
-        {|
-filter(lc.id = id_c && lp.id = id_p,
-alist(filter(succ > counter + 1, log) as lp,
-atuple([ascalar(lp.id), ascalar(lp.counter),
-alist(filter(lp.counter < log.counter &&
-log.counter < lp.succ, log) as lc,
-atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
-|}
-        opt ;
+      Demomatch.(run_test ~params:Demomatch.example_params (example1 "log") opt) ;
       [%expect
         {|
     // Locals:
@@ -78,10 +69,8 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
                 cstart20 = cstart17;
                 cstart21 = cstart20 + 1;
                 if (buf[cstart20 : 1] == id_c && buf[cstart14 : 1] == id_p) {
-                    print(Tuple[Int[nonnull], Int[nonnull], Int[nonnull],
-                    Int[nonnull]],
-                    (buf[cstart14 : 1], buf[cstart15 : 1], buf[cstart20 : 1],
-                     buf[cstart21 : 1]));
+                    print(Tuple[Int[nonnull], Int[nonnull]],
+                    (buf[cstart15 : 1], buf[cstart21 : 1]));
                 } else {
 
                 }
@@ -119,10 +108,8 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
                 cstart9 = cstart6;
                 cstart10 = cstart9 + 1;
                 if (buf[cstart9 : 1] == id_c && buf[cstart3 : 1] == id_p) {
-                    consume(Tuple[Int[nonnull], Int[nonnull], Int[nonnull],
-                    Int[nonnull]],
-                    (buf[cstart3 : 1], buf[cstart4 : 1], buf[cstart9 : 1],
-                     buf[cstart10 : 1]));
+                    consume(Tuple[Int[nonnull], Int[nonnull]],
+                    (buf[cstart4 : 1], buf[cstart10 : 1]));
                 } else {
 
                 }

@@ -36,37 +36,49 @@ module Make (C : Config.S) = struct
     end
 
   let shadow_check r =
-    let alias_visitor =
+    let relations_visitor =
+      object
+        inherit [_] reduce
+
+        inherit [_] Util.set_monoid (module String)
+
+        method! visit_Relation () r = Set.singleton (module String) r.r_name
+      end
+    in
+    let alias_visitor relations =
       object (self)
         inherit [_] iter
 
-        method check_name seen n =
-          if Hash_set.mem seen n then
-            Error.(create "Duplicate relation." n [%sexp_of: string] |> raise)
-          else Hash_set.add seen n
+        val aliases = Hash_set.create (module String) ()
 
-        method check_alias seen r =
+        method check_name n =
+          if Hash_set.mem aliases n then
+            Error.(create "Duplicate alias." n [%sexp_of: string] |> raise)
+          else if Set.mem relations n then
+            Error.(
+              create "Alias overlaps with relation." n [%sexp_of: string] |> raise)
+          else Hash_set.add aliases n
+
+        method check_alias () r =
           match r.node with
-          | As (n, _) -> self#check_name seen n
-          | Relation r -> self#check_name seen r.r_name
-          | _ -> Logs.err (fun m -> m "Missing as: %a" pp_small r)
+          | As (n, r') -> self#check_name n ; self#visit_t () r'
+          | Relation r -> self#check_name r.r_name
+          | r' ->
+              self#visit_node () r' ;
+              Logs.err (fun m -> m "Missing as: %a" pp_small r)
 
-        method! visit_AList seen (rk, _) = self#check_alias seen rk
+        method! visit_AList () (rk, rv) =
+          self#check_alias () rk ; self#visit_t () rv
 
-        method! visit_AHashIdx seen (rk, _, _) = self#check_alias seen rk
+        method! visit_AHashIdx () (rk, rv, _) =
+          self#check_alias () rk ; self#visit_t () rv
 
-        method! visit_AOrderedIdx seen (rk, _, _) = self#check_alias seen rk
-
-        method! visit_Relation seen rel = self#check_name seen rel.r_name
-
-        method! visit_As seen name r =
-          match r.node with
-          | Relation _ -> self#check_name seen name
-          | _ -> Logs.warn (fun m -> m "Unexpected as: %a" pp_small r)
+        method! visit_AOrderedIdx () (rk, rv, _) =
+          self#check_alias () rk ; self#visit_t () rv
       end
     in
-    let seen = Hash_set.create (module String) () in
-    alias_visitor#visit_t seen r
+    let rels = relations_visitor#visit_t () r in
+    (alias_visitor rels)#visit_t () r
 
   module Ctx = struct
     module T : sig
@@ -107,6 +119,12 @@ module Make (C : Config.S) = struct
     end
 
     include T
+
+    let drop_relations (c : t) =
+      List.map
+        (c :> row list)
+        ~f:(fun r -> {r with rname= Name.copy ~relation:None r.rname})
+      |> of_list
 
     (** Bind c2 over c1. *)
     let bind (c1 : t) (c2 : t) =
@@ -321,7 +339,7 @@ module Make (C : Config.S) = struct
           let ctx = Ctx.merge_list [inner_ctx1; inner_ctx2; outer_ctx] in
           let pred = resolve_pred stage ctx pred in
           (Join {pred; r1; r2}, Ctx.merge inner_ctx1 inner_ctx2)
-      | Relation r -> (Relation r, resolve_relation stage r)
+      | Relation r -> (Relation r, resolve_relation stage r |> Ctx.drop_relations)
       | GroupBy (aggs, key, r) ->
           let r, inner_ctx = rsame outer_ctx r in
           let ctx = Ctx.merge outer_ctx inner_ctx in
@@ -370,7 +388,7 @@ module Make (C : Config.S) = struct
           let m =
             {m with lookup= List.map m.lookup ~f:(resolve_pred stage outer_ctx)}
           in
-          (AHashIdx (r, vl, m), Ctx.merge key_ctx value_ctx)
+          (AHashIdx (r, vl, m), Ctx.(merge key_ctx value_ctx |> drop_relations))
       | AOrderedIdx (r, l, m) ->
           let r, key_ctx = resolve `Compile outer_ctx r in
           assert (all_has_stage key_ctx `Compile) ;
@@ -381,7 +399,7 @@ module Make (C : Config.S) = struct
               lookup_low= resolve_pred stage outer_ctx m.lookup_low
             ; lookup_high= resolve_pred stage outer_ctx m.lookup_high }
           in
-          (AOrderedIdx (r, vl, m), Ctx.merge key_ctx value_ctx)
+          (AOrderedIdx (r, vl, m), Ctx.(merge key_ctx value_ctx |> drop_relations))
       | As (n, r) ->
           let r, ctx = rsame outer_ctx r in
           (As (n, r), Ctx.rename ctx n)

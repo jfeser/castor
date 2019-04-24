@@ -126,9 +126,7 @@ let%expect_test "tuple-simple-zip" =
     } |}]
 
 let%expect_test "sum-complex" =
-  run_test
-    "Select([sum(r1.f) + 5, count() + sum(r1.f / 2)], AList(r1, \
-     ATuple([AScalar(r1.f), AScalar(r1.g - r1.f)], cross)))" ;
+  run_test sum_complex ;
   [%expect
     {|
     (FuncT
@@ -216,8 +214,8 @@ let%expect_test "sum-complex" =
 
 let%expect_test "sum" =
   run_test
-    "Select([sum(r1.f), count()], AList(r1, ATuple([AScalar(r1.f), AScalar(r1.g - \
-     r1.f)], cross)))" ;
+    "Select([sum(f), count()], AList(r1 as k, ATuple([AScalar(k.f), AScalar(k.g - \
+     k.f)], cross)))" ;
   [%expect
     {|
     (FuncT
@@ -296,7 +294,7 @@ let%expect_test "sum" =
     } |}]
 
 let%expect_test "cross-tuple" =
-  run_test "AList(r1, ATuple([AScalar(r1.f), AScalar(r1.g - r1.f)], cross))" ;
+  run_test "AList(r1 as k, ATuple([AScalar(k.f), AScalar(k.g - k.f)], cross))" ;
   [%expect
     {|
     (ListT
@@ -346,11 +344,10 @@ let%expect_test "cross-tuple" =
 
 let%expect_test "hash-idx" =
   run_test
-    "ATuple([AList(r1, AScalar(r1.f)) as f, AHashIdx(dedup(select([r1.f], r1)) as \
-     k, ascalar(k.f+1), f.f)], cross)" ;
+    "ATuple([AList(r1 as k, AScalar(k.f)), AHashIdx(dedup(select([f], r1)) as k1, \
+     ascalar(k1.f + 1), f)], cross)" ;
   [%expect
     {|
-    [WARNING] Unexpected as: alist(r1, ascalar(r1.f))
     (TupleT
      (((ListT
         ((IntT ((range (Interval 1 3)) (nullable false)))
@@ -437,11 +434,10 @@ let%expect_test "hash-idx" =
 
 let%expect_test "ordered-idx" =
   run_test
-    "ATuple([AList(r1, AScalar(r1.f)) as f, AOrderedIdx(dedup(select([r1.f], r1)) \
-     as k, ascalar(k.f+1), f.f, f.f+1)], cross)" ;
+    "ATuple([AList(r1 as k, AScalar(k.f)), AOrderedIdx(dedup(select([f], r1)) as \
+     k1, ascalar(k1.f+1), f, f+1)], cross)" ;
   [%expect
     {|
-    [WARNING] Unexpected as: alist(r1, ascalar(r1.f))
     (TupleT
      (((ListT
         ((IntT ((range (Interval 1 3)) (nullable false)))
@@ -570,37 +566,31 @@ let%expect_test "ordered-idx-date" =
     {|AOrderedIdx(dedup(select([f], r_date)) as k, ascalar(k.f), date("2018-01-01"), date("2018-01-01"))|} ;
   [%expect
     {|
-    [WARNING] Output shadowing of k.f.
+    [WARNING] Output shadowing of f.
     (OrderedIdxT
      ((DateT ((range (Interval 17136 17775)) (nullable false)))
       (DateT ((range (Interval 17136 17775)) (nullable false))) ((count Top)))) |}]
 
 let%expect_test "example-1" =
-  run_test ~params:Demomatch.example_params
-    {|
-filter(lc.id = id_c && lp.id = id_p,
-alist(filter(succ > counter + 1, log) as lp,
-atuple([ascalar(lp.id), ascalar(lp.counter),
-alist(filter(lp.counter < log.counter &&
-log.counter < lp.succ, log) as lc,
-atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
-|} ;
+  Demomatch.(run_test ~params:Demomatch.example_params (example1 "log")) ;
   [%expect
     {|
     (FuncT
-     (((ListT
-        ((TupleT
-          (((IntT ((range (Interval 1 1)) (nullable false)))
-            (IntT ((range (Interval 1 4)) (nullable false)))
-            (ListT
-             ((TupleT
-               (((IntT ((range (Interval 2 3)) (nullable false)))
-                 (IntT ((range (Interval 2 5)) (nullable false))))
-                ((count (Interval 1 1)))))
-              ((count (Interval 1 2))))))
-           ((count (Interval 1 2)))))
-         ((count (Interval 2 2))))))
-      Child_sum))
+     (((FuncT
+        (((ListT
+           ((TupleT
+             (((IntT ((range (Interval 1 1)) (nullable false)))
+               (IntT ((range (Interval 1 4)) (nullable false)))
+               (ListT
+                ((TupleT
+                  (((IntT ((range (Interval 2 3)) (nullable false)))
+                    (IntT ((range (Interval 2 5)) (nullable false))))
+                   ((count (Interval 1 1)))))
+                 ((count (Interval 1 2))))))
+              ((count (Interval 1 2)))))
+            ((count (Interval 2 2))))))
+         Child_sum)))
+      (Width 2)))
     // Locals:
     // i18 : Int[nonnull] (persists=true)
     // cstart21 : Int[nonnull] (persists=true)
@@ -628,10 +618,8 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
                 cstart20 = cstart17;
                 cstart21 = cstart20 + 1;
                 if (buf[cstart20 : 1] == id_c && buf[cstart14 : 1] == id_p) {
-                    print(Tuple[Int[nonnull], Int[nonnull], Int[nonnull],
-                    Int[nonnull]],
-                    (buf[cstart14 : 1], buf[cstart15 : 1], buf[cstart20 : 1],
-                     buf[cstart21 : 1]));
+                    print(Tuple[Int[nonnull], Int[nonnull]],
+                    (buf[cstart15 : 1], buf[cstart21 : 1]));
                 } else {
 
                 }
@@ -669,10 +657,8 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
                 cstart9 = cstart6;
                 cstart10 = cstart9 + 1;
                 if (buf[cstart9 : 1] == id_c && buf[cstart3 : 1] == id_p) {
-                    consume(Tuple[Int[nonnull], Int[nonnull], Int[nonnull],
-                    Int[nonnull]],
-                    (buf[cstart3 : 1], buf[cstart4 : 1], buf[cstart9 : 1],
-                     buf[cstart10 : 1]));
+                    consume(Tuple[Int[nonnull], Int[nonnull]],
+                    (buf[cstart4 : 1], buf[cstart10 : 1]));
                 } else {
 
                 }
@@ -684,353 +670,342 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
         }
     } |}]
 
-let%expect_test "example-2" =
-  run_test ~params:Demomatch.example_params
-    {|
-ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k], 
-      join(true, log as lp, log as lc))) as k,
-  alist(select([lp.counter, lc.counter], 
-    join(lp.counter < lc.counter && 
-         lc.counter < lp.succ, 
-      filter(log.id = k.lp_k, log) as lp, 
-      filter(log.id = k.lc_k, log) as lc)),
-    atuple([ascalar(lp.counter), ascalar(lc.counter)], cross)),
-  (id_p, id_c))
-|} ;
-  [%expect
-    {|
-    (HashIdxT
-     ((TupleT
-       (((IntT ((range (Interval 1 1)) (nullable false)))
-         (IntT ((range (Interval 2 3)) (nullable false))))
-        ((count (Interval 1 1)))))
-      (ListT
-       ((TupleT
-         (((IntT ((range (Interval 1 4)) (nullable false)))
-           (IntT ((range (Interval 2 5)) (nullable false))))
-          ((count (Interval 1 1)))))
-        ((count (Interval 1 2)))))
-      ((key_count (Interval 9 9)) (value_count (Interval 1 2)))))
-    // Locals:
-    // kstart10 : Int[nonnull] (persists=false)
-    // cstart18 : Int[nonnull] (persists=true)
-    // i16 : Int[nonnull] (persists=true)
-    // vstart11 : Int[nonnull] (persists=false)
-    // cstart15 : Int[nonnull] (persists=true)
-    // cstart13 : Int[nonnull] (persists=true)
-    // count17 : Int[nonnull] (persists=true)
-    // key12 : Tuple[Int[nonnull], Int[nonnull]] (persists=false)
-    // cstart14 : Int[nonnull] (persists=true)
-    // cstart19 : Int[nonnull] (persists=true)
-    fun printer () : Void {
-        if (<tuplehash> * 8 < 0 || buf[12 + buf[4 : 8] : 8] - 1 < <tuplehash> *
-            8 || buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8] == 0) {
-
-        } else {
-             kstart10 = buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8];
-             cstart13 = kstart10;
-             cstart14 = cstart13 + 1;
-             key12 = (buf[cstart13 : 1], buf[cstart14 : 1]);
-             vstart11 = buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8] + 2;
-             if (true && key12[0] == id_p && key12[1] == id_c) {
-                 cstart15 = vstart11 + 1 + 1;
-                 i16 = 0;
-                 count17 = buf[vstart11 : 1];
-                 loop (i16 < count17) {
-                     cstart18 = cstart15;
-                     cstart19 = cstart18 + 1;
-                     print(Tuple[Int[nonnull], Int[nonnull], Int[nonnull],
-                     Int[nonnull]],
-                     (key12[0], key12[1], buf[cstart18 : 1], buf[cstart19 : 1]));
-                     cstart15 = cstart15 + 2;
-                     i16 = i16 + 1;
-                 }
-             } else {
-
-             }
-        }
-    }
-    // Locals:
-    // cstart9 : Int[nonnull] (persists=true)
-    // kstart0 : Int[nonnull] (persists=false)
-    // cstart8 : Int[nonnull] (persists=true)
-    // vstart1 : Int[nonnull] (persists=false)
-    // key2 : Tuple[Int[nonnull], Int[nonnull]] (persists=false)
-    // cstart4 : Int[nonnull] (persists=true)
-    // cstart3 : Int[nonnull] (persists=true)
-    // count7 : Int[nonnull] (persists=true)
-    // cstart5 : Int[nonnull] (persists=true)
-    // i6 : Int[nonnull] (persists=true)
-    fun consumer () : Void {
-        if (<tuplehash> * 8 < 0 || buf[12 + buf[4 : 8] : 8] - 1 < <tuplehash> *
-            8 || buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8] == 0) {
-
-        } else {
-             kstart0 = buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8];
-             cstart3 = kstart0;
-             cstart4 = cstart3 + 1;
-             key2 = (buf[cstart3 : 1], buf[cstart4 : 1]);
-             vstart1 = buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8] + 2;
-             if (true && key2[0] == id_p && key2[1] == id_c) {
-                 cstart5 = vstart1 + 1 + 1;
-                 i6 = 0;
-                 count7 = buf[vstart1 : 1];
-                 loop (i6 < count7) {
-                     cstart8 = cstart5;
-                     cstart9 = cstart8 + 1;
-                     consume(Tuple[Int[nonnull], Int[nonnull], Int[nonnull],
-                     Int[nonnull]],
-                     (key2[0], key2[1], buf[cstart8 : 1], buf[cstart9 : 1]));
-                     cstart5 = cstart5 + 2;
-                     i6 = i6 + 1;
-                 }
-             } else {
-
-             }
-        }
-    } |}]
-
-let%expect_test "example-3" =
-  run_test ~params:Demomatch.example_params
-    {|
-select([lp.counter, lc.counter],
-  atuple([ahashidx(dedup(select([id as k1], log)), 
-    alist(select([counter, succ], 
-        filter(k1 = id && counter < succ, log)), 
-      atuple([ascalar(counter), ascalar(succ)], cross)), 
-    id_p) as lp,
-  filter(lc.id = id_c,
-    aorderedidx(select([log.counter as k2], log), 
-      alist(filter(log.counter = k2, log),
-        atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
-      lp.counter, lp.succ) as lc)], cross))
-|} ;
-  [%expect
-    {|
-    [WARNING] Unexpected as: ahashidx(dedup(.), alist(., .), id_p)
-    [WARNING] Unexpected as: aorderedidx(select(.], .),
-                               alist(., .),
-                               lp.counter,
-                               lp.succ)
-    (FuncT
-     (((TupleT
-        (((HashIdxT
-           ((IntT ((range (Interval 1 3)) (nullable false)))
-            (ListT
-             ((TupleT
-               (((IntT ((range (Interval 1 5)) (nullable false)))
-                 (IntT ((range (Interval 3 6)) (nullable false))))
-                ((count (Interval 1 1)))))
-              ((count (Interval 1 2)))))
-            ((key_count (Interval 3 3)) (value_count (Interval 1 2)))))
-          (FuncT
-           (((OrderedIdxT
-              ((IntT ((range (Interval 1 5)) (nullable false)))
-               (ListT
-                ((TupleT
-                  (((IntT ((range (Interval 1 3)) (nullable false)))
-                    (IntT ((range (Interval 1 5)) (nullable false))))
-                   ((count (Interval 1 1)))))
-                 ((count (Interval 1 1)))))
-               ((count Top)))))
-            Child_sum)))
-         ((count Top)))))
-      (Width 2)))
-    // Locals:
-    // kstart35 : Int[nonnull] (persists=true)
-    // vstart28 : Int[nonnull] (persists=false)
-    // cstart25 : Int[nonnull] (persists=true)
-    // cstart47 : Int[nonnull] (persists=true)
-    // i45 : Int[nonnull] (persists=true)
-    // cstart44 : Int[nonnull] (persists=true)
-    // cstart34 : Int[nonnull] (persists=true)
-    // key42 : Tuple[Int[nonnull]] (persists=false)
-    // cstart48 : Int[nonnull] (persists=true)
-    // key29 : Tuple[Int[nonnull]] (persists=false)
-    // i31 : Int[nonnull] (persists=true)
-    // key41 : Tuple[Int[nonnull]] (persists=false)
-    // key43 : Tuple[Int[nonnull]] (persists=true)
-    // key37 : Tuple[Int[nonnull]] (persists=true)
-    // cstart30 : Int[nonnull] (persists=true)
-    // cstart33 : Int[nonnull] (persists=true)
-    // low38 : Int[nonnull] (persists=true)
-    // count32 : Int[nonnull] (persists=true)
-    // vstart36 : Int[nonnull] (persists=true)
-    // key49 : Tuple[Int[nonnull]] (persists=false)
-    // count46 : Int[nonnull] (persists=true)
-    // mid40 : Int[nonnull] (persists=true)
-    // high39 : Int[nonnull] (persists=true)
-    // kstart27 : Int[nonnull] (persists=false)
-    // cstart26 : Int[nonnull] (persists=true)
-    fun printer () : Void {
-        cstart25 = 4;
-        cstart26 = cstart25 + buf[cstart25 : 4];
-        if (id_p * 8 < 0 || buf[cstart25 + 4 + 0 + 0 : 8] - 1 < id_p * 8 ||
-            buf[cstart25 + 4 + 0 + 0 + 8 + id_p * 8 : 8] == 0) {
-
-        } else {
-             kstart27 = buf[cstart25 + 4 + 0 + 0 + 8 + id_p * 8 : 8];
-             key29 = (buf[kstart27 : 1]);
-             vstart28 = buf[cstart25 + 4 + 0 + 0 + 8 + id_p * 8 : 8] + 1;
-             if (true && key29[0] == id_p) {
-                 cstart30 = vstart28 + 1 + 1;
-                 i31 = 0;
-                 count32 = buf[vstart28 : 1];
-                 loop (i31 < count32) {
-                     cstart33 = cstart30;
-                     cstart34 = cstart33 + 1;
-                     low38 = 0;
-                     high39 = buf[cstart26 + 4 : 8] / 9;
-                     loop (low38 < high39) {
-                         mid40 = low38 + high39 / 2;
-                         kstart35 = cstart26 + 4 + 8 + mid40 * 9;
-                         key41 = (buf[kstart35 : 1]);
-                         if (key41[0] < buf[cstart33 : 1]) {
-                             low38 = mid40 + 1;
-                         } else {
-                              high39 = mid40;
-                         }
-                     }
-                     if (low38 < buf[cstart26 + 4 : 8] / 9) {
-                         kstart35 = cstart26 + 4 + 8 + low38 * 9;
-                         key42 = (buf[kstart35 : 1]);
-                         key43 = key42;
-                         loop (key43[0] < buf[cstart34 : 1] && low38 <
-                               buf[cstart26 + 4 : 8] / 9) {
-                             vstart36 = buf[cstart26 + 4 + 8 + low38 * 9 + 1 :
-                             8];
-                             key37 = key43;
-                             cstart44 = vstart36;
-                             i45 = 0;
-                             count46 = 1;
-                             loop (i45 < count46) {
-                                 cstart47 = cstart44;
-                                 cstart48 = cstart47 + 1;
-                                 if (buf[cstart47 : 1] == id_c) {
-                                     print(Tuple[Int[nonnull], Int[nonnull]],
-                                     (buf[cstart33 : 1], buf[cstart48 : 1]));
-                                 } else {
-
-                                 }
-                                 cstart44 = cstart44 + 2;
-                                 i45 = i45 + 1;
-                             }
-                             low38 = low38 + 1;
-                             kstart35 = cstart26 + 4 + 8 + low38 * 9;
-                             key49 = (buf[kstart35 : 1]);
-                             key43 = key49;
-                         }
-                     } else {
-
-                     }
-                     cstart30 = cstart30 + 2;
-                     i31 = i31 + 1;
-                 }
-             } else {
-
-             }
-        }
-    }
-    // Locals:
-    // kstart10 : Int[nonnull] (persists=true)
-    // cstart9 : Int[nonnull] (persists=true)
-    // key17 : Tuple[Int[nonnull]] (persists=false)
-    // cstart22 : Int[nonnull] (persists=true)
-    // cstart8 : Int[nonnull] (persists=true)
-    // low13 : Int[nonnull] (persists=true)
-    // key4 : Tuple[Int[nonnull]] (persists=false)
-    // key16 : Tuple[Int[nonnull]] (persists=false)
-    // key24 : Tuple[Int[nonnull]] (persists=false)
-    // cstart23 : Int[nonnull] (persists=true)
-    // cstart0 : Int[nonnull] (persists=true)
-    // cstart19 : Int[nonnull] (persists=true)
-    // high14 : Int[nonnull] (persists=true)
-    // mid15 : Int[nonnull] (persists=true)
-    // vstart11 : Int[nonnull] (persists=true)
-    // i20 : Int[nonnull] (persists=true)
-    // cstart1 : Int[nonnull] (persists=true)
-    // count21 : Int[nonnull] (persists=true)
-    // vstart3 : Int[nonnull] (persists=false)
-    // kstart2 : Int[nonnull] (persists=false)
-    // key18 : Tuple[Int[nonnull]] (persists=true)
-    // count7 : Int[nonnull] (persists=true)
-    // key12 : Tuple[Int[nonnull]] (persists=true)
-    // cstart5 : Int[nonnull] (persists=true)
-    // i6 : Int[nonnull] (persists=true)
-    fun consumer () : Void {
-        cstart0 = 4;
-        cstart1 = cstart0 + buf[cstart0 : 4];
-        if (id_p * 8 < 0 || buf[cstart0 + 4 + 0 + 0 : 8] - 1 < id_p * 8 ||
-            buf[cstart0 + 4 + 0 + 0 + 8 + id_p * 8 : 8] == 0) {
-
-        } else {
-             kstart2 = buf[cstart0 + 4 + 0 + 0 + 8 + id_p * 8 : 8];
-             key4 = (buf[kstart2 : 1]);
-             vstart3 = buf[cstart0 + 4 + 0 + 0 + 8 + id_p * 8 : 8] + 1;
-             if (true && key4[0] == id_p) {
-                 cstart5 = vstart3 + 1 + 1;
-                 i6 = 0;
-                 count7 = buf[vstart3 : 1];
-                 loop (i6 < count7) {
-                     cstart8 = cstart5;
-                     cstart9 = cstart8 + 1;
-                     low13 = 0;
-                     high14 = buf[cstart1 + 4 : 8] / 9;
-                     loop (low13 < high14) {
-                         mid15 = low13 + high14 / 2;
-                         kstart10 = cstart1 + 4 + 8 + mid15 * 9;
-                         key16 = (buf[kstart10 : 1]);
-                         if (key16[0] < buf[cstart8 : 1]) {
-                             low13 = mid15 + 1;
-                         } else {
-                              high14 = mid15;
-                         }
-                     }
-                     if (low13 < buf[cstart1 + 4 : 8] / 9) {
-                         kstart10 = cstart1 + 4 + 8 + low13 * 9;
-                         key17 = (buf[kstart10 : 1]);
-                         key18 = key17;
-                         loop (key18[0] < buf[cstart9 : 1] && low13 <
-                               buf[cstart1 + 4 : 8] / 9) {
-                             vstart11 = buf[cstart1 + 4 + 8 + low13 * 9 + 1 : 8];
-                             key12 = key18;
-                             cstart19 = vstart11;
-                             i20 = 0;
-                             count21 = 1;
-                             loop (i20 < count21) {
-                                 cstart22 = cstart19;
-                                 cstart23 = cstart22 + 1;
-                                 if (buf[cstart22 : 1] == id_c) {
-                                     consume(Tuple[Int[nonnull], Int[nonnull]],
-                                     (buf[cstart8 : 1], buf[cstart23 : 1]));
-                                 } else {
-
-                                 }
-                                 cstart19 = cstart19 + 2;
-                                 i20 = i20 + 1;
-                             }
-                             low13 = low13 + 1;
-                             kstart10 = cstart1 + 4 + 8 + low13 * 9;
-                             key24 = (buf[kstart10 : 1]);
-                             key18 = key24;
-                         }
-                     } else {
-
-                     }
-                     cstart5 = cstart5 + 2;
-                     i6 = i6 + 1;
-                 }
-             } else {
-
-             }
-        }
-    } |}]
+(* let%expect_test "example-2" =
+ *   Demomatch.(run_test ~params:example_params example2) ;
+ *   [%expect
+ *     {|
+ *     (HashIdxT
+ *      ((TupleT
+ *        (((IntT ((range (Interval 1 1)) (nullable false)))
+ *          (IntT ((range (Interval 2 3)) (nullable false))))
+ *         ((count (Interval 1 1)))))
+ *       (ListT
+ *        ((TupleT
+ *          (((IntT ((range (Interval 1 4)) (nullable false)))
+ *            (IntT ((range (Interval 2 5)) (nullable false))))
+ *           ((count (Interval 1 1)))))
+ *         ((count (Interval 1 2)))))
+ *       ((key_count (Interval 9 9)) (value_count (Interval 1 2)))))
+ *     // Locals:
+ *     // kstart10 : Int[nonnull] (persists=false)
+ *     // cstart18 : Int[nonnull] (persists=true)
+ *     // i16 : Int[nonnull] (persists=true)
+ *     // vstart11 : Int[nonnull] (persists=false)
+ *     // cstart15 : Int[nonnull] (persists=true)
+ *     // cstart13 : Int[nonnull] (persists=true)
+ *     // count17 : Int[nonnull] (persists=true)
+ *     // key12 : Tuple[Int[nonnull], Int[nonnull]] (persists=false)
+ *     // cstart14 : Int[nonnull] (persists=true)
+ *     // cstart19 : Int[nonnull] (persists=true)
+ *     fun printer () : Void {
+ *         if (<tuplehash> * 8 < 0 || buf[12 + buf[4 : 8] : 8] - 1 < <tuplehash> *
+ *             8 || buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8] == 0) {
+ * 
+ *         } else {
+ *              kstart10 = buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8];
+ *              cstart13 = kstart10;
+ *              cstart14 = cstart13 + 1;
+ *              key12 = (buf[cstart13 : 1], buf[cstart14 : 1]);
+ *              vstart11 = buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8] + 2;
+ *              if (true && key12[0] == id_p && key12[1] == id_c) {
+ *                  cstart15 = vstart11 + 1 + 1;
+ *                  i16 = 0;
+ *                  count17 = buf[vstart11 : 1];
+ *                  loop (i16 < count17) {
+ *                      cstart18 = cstart15;
+ *                      cstart19 = cstart18 + 1;
+ *                      print(Tuple[Int[nonnull], Int[nonnull], Int[nonnull],
+ *                      Int[nonnull]],
+ *                      (key12[0], key12[1], buf[cstart18 : 1], buf[cstart19 : 1]));
+ *                      cstart15 = cstart15 + 2;
+ *                      i16 = i16 + 1;
+ *                  }
+ *              } else {
+ * 
+ *              }
+ *         }
+ *     }
+ *     // Locals:
+ *     // cstart9 : Int[nonnull] (persists=true)
+ *     // kstart0 : Int[nonnull] (persists=false)
+ *     // cstart8 : Int[nonnull] (persists=true)
+ *     // vstart1 : Int[nonnull] (persists=false)
+ *     // key2 : Tuple[Int[nonnull], Int[nonnull]] (persists=false)
+ *     // cstart4 : Int[nonnull] (persists=true)
+ *     // cstart3 : Int[nonnull] (persists=true)
+ *     // count7 : Int[nonnull] (persists=true)
+ *     // cstart5 : Int[nonnull] (persists=true)
+ *     // i6 : Int[nonnull] (persists=true)
+ *     fun consumer () : Void {
+ *         if (<tuplehash> * 8 < 0 || buf[12 + buf[4 : 8] : 8] - 1 < <tuplehash> *
+ *             8 || buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8] == 0) {
+ * 
+ *         } else {
+ *              kstart0 = buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8];
+ *              cstart3 = kstart0;
+ *              cstart4 = cstart3 + 1;
+ *              key2 = (buf[cstart3 : 1], buf[cstart4 : 1]);
+ *              vstart1 = buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8] + 2;
+ *              if (true && key2[0] == id_p && key2[1] == id_c) {
+ *                  cstart5 = vstart1 + 1 + 1;
+ *                  i6 = 0;
+ *                  count7 = buf[vstart1 : 1];
+ *                  loop (i6 < count7) {
+ *                      cstart8 = cstart5;
+ *                      cstart9 = cstart8 + 1;
+ *                      consume(Tuple[Int[nonnull], Int[nonnull], Int[nonnull],
+ *                      Int[nonnull]],
+ *                      (key2[0], key2[1], buf[cstart8 : 1], buf[cstart9 : 1]));
+ *                      cstart5 = cstart5 + 2;
+ *                      i6 = i6 + 1;
+ *                  }
+ *              } else {
+ * 
+ *              }
+ *         }
+ *     } |}]
+ * 
+ * let%expect_test "example-3" =
+ *   run_test ~params:Demomatch.example_params
+ *     {|
+ * select([lp.counter, lc.counter],
+ *   atuple([ahashidx(dedup(select([id as k1], log)), 
+ *     alist(select([counter, succ], 
+ *         filter(k1 = id && counter < succ, log)), 
+ *       atuple([ascalar(counter), ascalar(succ)], cross)), 
+ *     id_p) as lp,
+ *   filter(lc.id = id_c,
+ *     aorderedidx(select([log.counter as k2], log), 
+ *       alist(filter(log.counter = k2, log),
+ *         atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
+ *       lp.counter, lp.succ) as lc)], cross))
+ * |} ;
+ *   [%expect
+ *     {|
+ *     [WARNING] Unexpected as: ahashidx(dedup(.), alist(., .), id_p)
+ *     [WARNING] Unexpected as: aorderedidx(select(.], .),
+ *                                alist(., .),
+ *                                lp.counter,
+ *                                lp.succ)
+ *     (FuncT
+ *      (((TupleT
+ *         (((HashIdxT
+ *            ((IntT ((range (Interval 1 3)) (nullable false)))
+ *             (ListT
+ *              ((TupleT
+ *                (((IntT ((range (Interval 1 5)) (nullable false)))
+ *                  (IntT ((range (Interval 3 6)) (nullable false))))
+ *                 ((count (Interval 1 1)))))
+ *               ((count (Interval 1 2)))))
+ *             ((key_count (Interval 3 3)) (value_count (Interval 1 2)))))
+ *           (FuncT
+ *            (((OrderedIdxT
+ *               ((IntT ((range (Interval 1 5)) (nullable false)))
+ *                (ListT
+ *                 ((TupleT
+ *                   (((IntT ((range (Interval 1 3)) (nullable false)))
+ *                     (IntT ((range (Interval 1 5)) (nullable false))))
+ *                    ((count (Interval 1 1)))))
+ *                  ((count (Interval 1 1)))))
+ *                ((count Top)))))
+ *             Child_sum)))
+ *          ((count Top)))))
+ *       (Width 2)))
+ *     // Locals:
+ *     // kstart35 : Int[nonnull] (persists=true)
+ *     // vstart28 : Int[nonnull] (persists=false)
+ *     // cstart25 : Int[nonnull] (persists=true)
+ *     // cstart47 : Int[nonnull] (persists=true)
+ *     // i45 : Int[nonnull] (persists=true)
+ *     // cstart44 : Int[nonnull] (persists=true)
+ *     // cstart34 : Int[nonnull] (persists=true)
+ *     // key42 : Tuple[Int[nonnull]] (persists=false)
+ *     // cstart48 : Int[nonnull] (persists=true)
+ *     // key29 : Tuple[Int[nonnull]] (persists=false)
+ *     // i31 : Int[nonnull] (persists=true)
+ *     // key41 : Tuple[Int[nonnull]] (persists=false)
+ *     // key43 : Tuple[Int[nonnull]] (persists=true)
+ *     // key37 : Tuple[Int[nonnull]] (persists=true)
+ *     // cstart30 : Int[nonnull] (persists=true)
+ *     // cstart33 : Int[nonnull] (persists=true)
+ *     // low38 : Int[nonnull] (persists=true)
+ *     // count32 : Int[nonnull] (persists=true)
+ *     // vstart36 : Int[nonnull] (persists=true)
+ *     // key49 : Tuple[Int[nonnull]] (persists=false)
+ *     // count46 : Int[nonnull] (persists=true)
+ *     // mid40 : Int[nonnull] (persists=true)
+ *     // high39 : Int[nonnull] (persists=true)
+ *     // kstart27 : Int[nonnull] (persists=false)
+ *     // cstart26 : Int[nonnull] (persists=true)
+ *     fun printer () : Void {
+ *         cstart25 = 4;
+ *         cstart26 = cstart25 + buf[cstart25 : 4];
+ *         if (id_p * 8 < 0 || buf[cstart25 + 4 + 0 + 0 : 8] - 1 < id_p * 8 ||
+ *             buf[cstart25 + 4 + 0 + 0 + 8 + id_p * 8 : 8] == 0) {
+ * 
+ *         } else {
+ *              kstart27 = buf[cstart25 + 4 + 0 + 0 + 8 + id_p * 8 : 8];
+ *              key29 = (buf[kstart27 : 1]);
+ *              vstart28 = buf[cstart25 + 4 + 0 + 0 + 8 + id_p * 8 : 8] + 1;
+ *              if (true && key29[0] == id_p) {
+ *                  cstart30 = vstart28 + 1 + 1;
+ *                  i31 = 0;
+ *                  count32 = buf[vstart28 : 1];
+ *                  loop (i31 < count32) {
+ *                      cstart33 = cstart30;
+ *                      cstart34 = cstart33 + 1;
+ *                      low38 = 0;
+ *                      high39 = buf[cstart26 + 4 : 8] / 9;
+ *                      loop (low38 < high39) {
+ *                          mid40 = low38 + high39 / 2;
+ *                          kstart35 = cstart26 + 4 + 8 + mid40 * 9;
+ *                          key41 = (buf[kstart35 : 1]);
+ *                          if (key41[0] < buf[cstart33 : 1]) {
+ *                              low38 = mid40 + 1;
+ *                          } else {
+ *                               high39 = mid40;
+ *                          }
+ *                      }
+ *                      if (low38 < buf[cstart26 + 4 : 8] / 9) {
+ *                          kstart35 = cstart26 + 4 + 8 + low38 * 9;
+ *                          key42 = (buf[kstart35 : 1]);
+ *                          key43 = key42;
+ *                          loop (key43[0] < buf[cstart34 : 1] && low38 <
+ *                                buf[cstart26 + 4 : 8] / 9) {
+ *                              vstart36 = buf[cstart26 + 4 + 8 + low38 * 9 + 1 :
+ *                              8];
+ *                              key37 = key43;
+ *                              cstart44 = vstart36;
+ *                              i45 = 0;
+ *                              count46 = 1;
+ *                              loop (i45 < count46) {
+ *                                  cstart47 = cstart44;
+ *                                  cstart48 = cstart47 + 1;
+ *                                  if (buf[cstart47 : 1] == id_c) {
+ *                                      print(Tuple[Int[nonnull], Int[nonnull]],
+ *                                      (buf[cstart33 : 1], buf[cstart48 : 1]));
+ *                                  } else {
+ * 
+ *                                  }
+ *                                  cstart44 = cstart44 + 2;
+ *                                  i45 = i45 + 1;
+ *                              }
+ *                              low38 = low38 + 1;
+ *                              kstart35 = cstart26 + 4 + 8 + low38 * 9;
+ *                              key49 = (buf[kstart35 : 1]);
+ *                              key43 = key49;
+ *                          }
+ *                      } else {
+ * 
+ *                      }
+ *                      cstart30 = cstart30 + 2;
+ *                      i31 = i31 + 1;
+ *                  }
+ *              } else {
+ * 
+ *              }
+ *         }
+ *     }
+ *     // Locals:
+ *     // kstart10 : Int[nonnull] (persists=true)
+ *     // cstart9 : Int[nonnull] (persists=true)
+ *     // key17 : Tuple[Int[nonnull]] (persists=false)
+ *     // cstart22 : Int[nonnull] (persists=true)
+ *     // cstart8 : Int[nonnull] (persists=true)
+ *     // low13 : Int[nonnull] (persists=true)
+ *     // key4 : Tuple[Int[nonnull]] (persists=false)
+ *     // key16 : Tuple[Int[nonnull]] (persists=false)
+ *     // key24 : Tuple[Int[nonnull]] (persists=false)
+ *     // cstart23 : Int[nonnull] (persists=true)
+ *     // cstart0 : Int[nonnull] (persists=true)
+ *     // cstart19 : Int[nonnull] (persists=true)
+ *     // high14 : Int[nonnull] (persists=true)
+ *     // mid15 : Int[nonnull] (persists=true)
+ *     // vstart11 : Int[nonnull] (persists=true)
+ *     // i20 : Int[nonnull] (persists=true)
+ *     // cstart1 : Int[nonnull] (persists=true)
+ *     // count21 : Int[nonnull] (persists=true)
+ *     // vstart3 : Int[nonnull] (persists=false)
+ *     // kstart2 : Int[nonnull] (persists=false)
+ *     // key18 : Tuple[Int[nonnull]] (persists=true)
+ *     // count7 : Int[nonnull] (persists=true)
+ *     // key12 : Tuple[Int[nonnull]] (persists=true)
+ *     // cstart5 : Int[nonnull] (persists=true)
+ *     // i6 : Int[nonnull] (persists=true)
+ *     fun consumer () : Void {
+ *         cstart0 = 4;
+ *         cstart1 = cstart0 + buf[cstart0 : 4];
+ *         if (id_p * 8 < 0 || buf[cstart0 + 4 + 0 + 0 : 8] - 1 < id_p * 8 ||
+ *             buf[cstart0 + 4 + 0 + 0 + 8 + id_p * 8 : 8] == 0) {
+ * 
+ *         } else {
+ *              kstart2 = buf[cstart0 + 4 + 0 + 0 + 8 + id_p * 8 : 8];
+ *              key4 = (buf[kstart2 : 1]);
+ *              vstart3 = buf[cstart0 + 4 + 0 + 0 + 8 + id_p * 8 : 8] + 1;
+ *              if (true && key4[0] == id_p) {
+ *                  cstart5 = vstart3 + 1 + 1;
+ *                  i6 = 0;
+ *                  count7 = buf[vstart3 : 1];
+ *                  loop (i6 < count7) {
+ *                      cstart8 = cstart5;
+ *                      cstart9 = cstart8 + 1;
+ *                      low13 = 0;
+ *                      high14 = buf[cstart1 + 4 : 8] / 9;
+ *                      loop (low13 < high14) {
+ *                          mid15 = low13 + high14 / 2;
+ *                          kstart10 = cstart1 + 4 + 8 + mid15 * 9;
+ *                          key16 = (buf[kstart10 : 1]);
+ *                          if (key16[0] < buf[cstart8 : 1]) {
+ *                              low13 = mid15 + 1;
+ *                          } else {
+ *                               high14 = mid15;
+ *                          }
+ *                      }
+ *                      if (low13 < buf[cstart1 + 4 : 8] / 9) {
+ *                          kstart10 = cstart1 + 4 + 8 + low13 * 9;
+ *                          key17 = (buf[kstart10 : 1]);
+ *                          key18 = key17;
+ *                          loop (key18[0] < buf[cstart9 : 1] && low13 <
+ *                                buf[cstart1 + 4 : 8] / 9) {
+ *                              vstart11 = buf[cstart1 + 4 + 8 + low13 * 9 + 1 : 8];
+ *                              key12 = key18;
+ *                              cstart19 = vstart11;
+ *                              i20 = 0;
+ *                              count21 = 1;
+ *                              loop (i20 < count21) {
+ *                                  cstart22 = cstart19;
+ *                                  cstart23 = cstart22 + 1;
+ *                                  if (buf[cstart22 : 1] == id_c) {
+ *                                      consume(Tuple[Int[nonnull], Int[nonnull]],
+ *                                      (buf[cstart8 : 1], buf[cstart23 : 1]));
+ *                                  } else {
+ * 
+ *                                  }
+ *                                  cstart19 = cstart19 + 2;
+ *                                  i20 = i20 + 1;
+ *                              }
+ *                              low13 = low13 + 1;
+ *                              kstart10 = cstart1 + 4 + 8 + low13 * 9;
+ *                              key24 = (buf[kstart10 : 1]);
+ *                              key18 = key24;
+ *                          }
+ *                      } else {
+ * 
+ *                      }
+ *                      cstart5 = cstart5 + 2;
+ *                      i6 = i6 + 1;
+ *                  }
+ *              } else {
+ * 
+ *              }
+ *         }
+ *     } |}] *)
 
 let%expect_test "subquery-first" =
   run_test ~params:Demomatch.example_params
     {|
-    select([log.id], filter((select([min(l.counter)],
- alist(log as l, ascalar(l.counter))))=log.id, alist(log, ascalar(log.id))))
+    select([id], filter((select([min(counter)],
+ alist(log as l, ascalar(counter)))) = id, alist(log as ll, ascalar(ll.id))))
 |} ;
   [%expect
     {|
@@ -1127,27 +1102,14 @@ let%expect_test "subquery-first" =
     } |}]
 
 let%expect_test "example-3-str" =
-  run_test ~params:Demomatch.example_db_params
-    {|
-select([lp.counter, lc.counter],
-  atuple([ahashidx(dedup(select([id as k1], log_str)), 
-    alist(select([counter, succ], 
-        filter(k1 = id && counter < succ, log_str)), 
-      atuple([ascalar(counter), ascalar(succ)], cross)), 
-    id_p) as lp,
-  filter(lc.id = id_c,
-    aorderedidx(select([log_str.counter as k2], log_str), 
-      alist(filter(log_str.counter = k2, log_str),
-        atuple([ascalar(log_str.id), ascalar(log_str.counter)], cross)), 
-      lp.counter, lp.succ) as lc)], cross))
-|} ;
+  Demomatch.(run_test ~params:example_db_params (example3 "log_str")) ;
   [%expect
     {|
-    [WARNING] Unexpected as: ahashidx(dedup(.), alist(., .), id_p)
-    [WARNING] Unexpected as: aorderedidx(select(.], .),
-                               alist(., .),
-                               lp.counter,
-                               lp.succ)
+    [WARNING] Shadowing of id@comp.
+    [WARNING] Shadowing of id@comp.
+    [WARNING] Shadowing of id@comp.
+    [WARNING] Shadowing of id@comp.
+    [WARNING] Shadowing of id@comp.
     (FuncT
      (((TupleT
         (((HashIdxT

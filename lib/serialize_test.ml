@@ -71,10 +71,10 @@ let%expect_test "tuple" =
      5 "\\001test") |}]
 
 let%expect_test "hash-idx" =
-  run_test "AHashIdx(Dedup(Select([r1.f], r1)) as k, AScalar(k.f), null)" ;
+  run_test "AHashIdx(Dedup(Select([f], r1)) as k, AScalar(k.f), null)" ;
   [%expect
     {|
-    [WARNING] Output shadowing of k.f.
+    [WARNING] Output shadowing of f.
     0:4 Table len
     4:8 Table map len
     4:0 Table hash len
@@ -100,11 +100,11 @@ let%expect_test "hash-idx" =
 
 let%expect_test "ordered-idx" =
   run_test
-    "AOrderedIdx(OrderBy([r1.f desc], Dedup(Select([r1.f], r1))) as k, \
-     AScalar(k.f), null, null)" ;
+    "AOrderedIdx(OrderBy([f desc], Dedup(Select([f], r1))) as k, AScalar(k.f), \
+     null, null)" ;
   [%expect
     {|
-    [WARNING] Output shadowing of k.f.
+    [WARNING] Output shadowing of f.
     0:4 Ordered idx len (=42)
     4:8 Ordered idx index len (=27)
     12:1 Scalar (=(Int 1))
@@ -135,7 +135,7 @@ let%expect_test "ordered-idx-dates" =
      null, null)" ;
   [%expect
     {|
-    [WARNING] Output shadowing of k.f.
+    [WARNING] Output shadowing of f.
     0:4 Ordered idx len (=72)
     4:8 Ordered idx index len (=50)
     12:2 Scalar (=(Date 2016-12-01))
@@ -171,7 +171,7 @@ let%expect_test "ordered-idx-dates" =
      "H\\000\\000\\0002\\000\\000\\000\\000\\000\\000\\000\\240B>\\000\\000\\000\\000\\000\\000\\000$D@\\000\\000\\000\\000\\000\\000\\000|DB\\000\\000\\000\\000\\000\\000\\000\\146DD\\000\\000\\000\\000\\000\\000\\000oEF\\000\\000\\000\\000\\000\\000\\000\\240B$D|D\\146DoE") |}]
 
 let%expect_test "list-list" =
-  run_test "AList(r1, AList(r1 as r, AScalar(r.f)))" ;
+  run_test "AList(r1 as k1, AList(r1 as k2, AScalar(k2.f)))" ;
   [%expect
     {|
     0:25 List body

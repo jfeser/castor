@@ -16,7 +16,7 @@ let%test_module _ =
       print_endline sql_str
 
     let%expect_test "select-agg" =
-      run_test "select([(0.2 * avg(r.f)) as test], r)" ;
+      run_test "select([(0.2 * avg(f)) as test], r)" ;
       [%expect
         {|
     SELECT
@@ -25,7 +25,7 @@ let%test_module _ =
         "r" AS "r_1" |}]
 
     let%expect_test "project" =
-      run_test "Select([r.f], r)" ;
+      run_test "Select([f], r)" ;
       [%expect
         {|
     SELECT
@@ -34,7 +34,7 @@ let%test_module _ =
         "r" AS "r_1" |}]
 
     let%expect_test "filter" =
-      run_test "Filter(r.f = r.g, r)" ;
+      run_test "Filter(f = g, r)" ;
       [%expect
         {|
       SELECT
@@ -45,21 +45,34 @@ let%test_module _ =
       WHERE ((r_1. "f") = (r_1. "g")) |}]
 
     let%expect_test "eqjoin" =
-      run_test "Join(r.f = s.g, r as r, s as s)" ;
+      run_test
+        "Join(r_f = s_g, select([f as r_f, g as r_g], r), select([f as s_f, g as \
+         s_g], s))" ;
       [%expect
         {|
       SELECT
-          r_2. "f" AS "r_2_f_1",
-          r_2. "g" AS "r_2_g_1",
-          s_1. "f" AS "s_1_f_1",
-          s_1. "g" AS "s_1_g_1"
+          r_2. "f" AS "r_f_1",
+          r_2. "g" AS "r_g_1",
+          s_1. "f" AS "s_f_1",
+          s_1. "g" AS "s_g_1"
       FROM
           "r" AS "r_2",
           "s" AS "s_1"
       WHERE ((r_2. "f") = (s_1. "g")) |}]
 
+    let%expect_test "join-select" =
+      run_test "join(true, select([id as p_id], log), select([id as c_id], log))" ;
+      [%expect {|
+        SELECT
+            log_2. "id" AS "p_id_1",
+            log_1. "id" AS "c_id_1"
+        FROM
+            "log" AS "log_2",
+            "log" AS "log_1"
+        WHERE (TRUE) |}]
+
     let%expect_test "order-by" =
-      run_test "OrderBy([r1.f desc], Dedup(Select([r1.f], r1)))" ;
+      run_test "OrderBy([f desc], Dedup(Select([f], r1)))" ;
       [%expect
         {|
     SELECT DISTINCT
@@ -70,7 +83,7 @@ let%test_module _ =
         r1_1. "f" DESC |}]
 
     let%expect_test "dedup" =
-      run_test "Dedup(Select([r1.f], r1))" ;
+      run_test "Dedup(Select([f], r1))" ;
       [%expect
         {|
     SELECT DISTINCT
@@ -79,7 +92,7 @@ let%test_module _ =
         "r1" AS "r1_1" |}]
 
     let%expect_test "select" =
-      run_test "Select([r1.f], r1)" ;
+      run_test "Select([f], r1)" ;
       [%expect
         {|
     SELECT
@@ -99,19 +112,15 @@ let%test_module _ =
 
     let%expect_test "join" =
       run_test
-        "join(lp.counter < lc.counter &&\n\
-        \             lc.counter < lp.succ, \n\
-        \          log as lp,\n\
-        \          log as lc)" ;
+        "join(p_counter < c_counter && c_counter < p_succ, \n\
+        \          select([counter as p_counter, succ as p_succ], log),\n\
+        \          select([counter as c_counter], log))" ;
       [%expect
         {|
       SELECT
-          log_2. "counter" AS "log_2_counter_1",
-          log_2. "succ" AS "log_2_succ_1",
-          log_2. "id" AS "log_2_id_1",
-          log_1. "counter" AS "log_1_counter_1",
-          log_1. "succ" AS "log_1_succ_1",
-          log_1. "id" AS "log_1_id_1"
+          log_2. "counter" AS "p_counter_1",
+          log_2. "succ" AS "p_succ_1",
+          log_1. "counter" AS "c_counter_1"
       FROM
           "log" AS "log_2",
           "log" AS "log_1"
@@ -120,7 +129,7 @@ let%test_module _ =
 
     let%expect_test "join-groupby" =
       run_test
-        {|join(r1.f = r1b.g || x = y, groupby([r1.f, sum((r1.f * r1.g)) as x], [r1.f], r1), groupby([r1b.g, sum((r1b.f * r1b.g)) as y], [r1b.g], r1 as r1b))|} ;
+        {|join(f = g || x = y, groupby([f, sum((f * g)) as x], [f], r1), groupby([g, sum((f * g)) as y], [g], r1))|} ;
       [%expect
         {|
     SELECT
@@ -151,6 +160,24 @@ let%test_module _ =
       run_test {|filter(true||false, join(true&&false, r1, r))|} ;
       [%expect
         {|
+    [WARNING] Shadowing of f@run.
+    [WARNING] Shadowing of g@run.
+    [WARNING] Shadowing of f@run.
+    [WARNING] Shadowing of g@run.
+    [WARNING] Output shadowing of f.
+    [WARNING] Output shadowing of g.
+    [WARNING] Shadowing of f@run.
+    [WARNING] Shadowing of g@run.
+    [WARNING] Shadowing of f@run.
+    [WARNING] Shadowing of g@run.
+    [WARNING] Output shadowing of f.
+    [WARNING] Output shadowing of g.
+    [WARNING] Shadowing of f@run.
+    [WARNING] Shadowing of g@run.
+    [WARNING] Duplicate name in schema f.
+    [WARNING] Duplicate name in schema g.
+    [WARNING] Duplicate name in schema f.
+    [WARNING] Duplicate name in schema g.
     SELECT
         r1_2. "f" AS "r1_2_f_1",
         r1_2. "g" AS "r1_2_g_1",
@@ -165,8 +192,7 @@ let%test_module _ =
         AND (FALSE)) |}]
 
     let%expect_test "select-groupby" =
-      run_test
-        "select([max(x)], groupby([r1.f, sum((r1.f * r1.g)) as x], [r1.f], r1))" ;
+      run_test "select([max(x)], groupby([f, sum((f * g)) as x], [f], r1))" ;
       [%expect
         {|
       SELECT
@@ -181,7 +207,7 @@ let%test_module _ =
               (r1_1. "f")) AS "t1" |}]
 
     let%expect_test "select-fusion-1" =
-      run_test "select([max(x)], select([min(r1.f) as x], r1))" ;
+      run_test "select([max(x)], select([min(f) as x], r1))" ;
       [%expect
         {|
       SELECT
@@ -193,7 +219,7 @@ let%test_module _ =
               "r1" AS "r1_1") AS "t1" |}]
 
     let%expect_test "select-fusion-2" =
-      run_test "select([max(x)], select([r1.f as x], r1))" ;
+      run_test "select([max(x)], select([f as x], r1))" ;
       [%expect
         {|
     SELECT
@@ -202,7 +228,7 @@ let%test_module _ =
         "r1" AS "r1_1" |}]
 
     let%expect_test "filter-fusion" =
-      run_test "filter((x = 0), groupby([sum(r1.f) as x], [r1.g], r1))" ;
+      run_test "filter((x = 0), groupby([sum(f) as x], [g], r1))" ;
       [%expect
         {|
       SELECT
@@ -217,7 +243,7 @@ let%test_module _ =
       WHERE (("x_1") = (0)) |}]
 
     let%expect_test "groupby-dedup" =
-      run_test "groupby([sum(r1.f) as x], [r1.g], dedup(r1))" ;
+      run_test "groupby([sum(f) as x], [g], dedup(r1))" ;
       [%expect
         {|
     SELECT
@@ -232,17 +258,15 @@ let%test_module _ =
 
     let%expect_test "hash-idx" =
       run_test
-        "ahashidx(select([r1.f as k], r1), select([r1.g], filter(r1.f = k, r1)), \
-         null)" ;
+        "ahashidx(select([f], r1) as k, select([g], filter(f = k.f, r1)), null)" ;
       [%expect
         {|
-    [ERROR] Missing as: select([.], r1)
     SELECT
-        "k_1" AS "k_2",
+        "r1_1_f_2" AS "r1_1_f_3",
         "r1_2_g_2" AS "r1_2_g_3"
     FROM (
         SELECT
-            r1_1. "f" AS "k_1"
+            r1_1. "f" AS "r1_1_f_2"
         FROM
             "r1" AS "r1_1"
         WHERE ((r1_1. "f") = (NULL))) AS "t3", LATERAL (
@@ -250,21 +274,20 @@ let%test_module _ =
                 r1_2. "g" AS "r1_2_g_2"
             FROM
                 "r1" AS "r1_2"
-            WHERE ((r1_2. "f") = ("k_1"))) AS "t2" |}]
+            WHERE ((r1_2. "f") = ("r1_1_f_2"))) AS "t2" |}]
 
     let%expect_test "ordered-idx" =
       run_test
-        "aorderedidx(select([r1.f as k], r1), select([r1.g], filter(r1.f = k, \
-         r1)), null, null)" ;
+        "aorderedidx(select([f], r1) as k, select([g], filter(f = k.f, r1)), null, \
+         null)" ;
       [%expect
         {|
-    [ERROR] Missing as: select([.], r1)
     SELECT
-        "k_1" AS "k_2",
+        "r1_1_f_2" AS "r1_1_f_3",
         "r1_2_g_2" AS "r1_2_g_3"
     FROM (
         SELECT
-            r1_1. "f" AS "k_1"
+            r1_1. "f" AS "r1_1_f_2"
         FROM
             "r1" AS "r1_1") AS "t3",
         LATERAL (
@@ -272,7 +295,7 @@ let%test_module _ =
                 r1_2. "g" AS "r1_2_g_2"
             FROM
                 "r1" AS "r1_2"
-            WHERE ((r1_2. "f") = ("k_1"))) AS "t2"
-    WHERE (((NULL) < ("k_1"))
-        AND (("k_1") < (NULL))) |}]
+            WHERE ((r1_2. "f") = ("r1_1_f_2"))) AS "t2"
+    WHERE (((NULL) < ("r1_1_f_2"))
+        AND (("r1_1_f_2") < (NULL))) |}]
   end )
