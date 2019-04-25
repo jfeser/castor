@@ -869,3 +869,37 @@ let annotate_key_layouts r =
     end
   in
   annotator#visit_t () r
+
+let strip_unused_as =
+  let visitor =
+    object (self)
+      inherit [_] endo
+
+      method skip_as r =
+        match r.node with
+        | As (n, r) -> as_ n (self#visit_t () r)
+        | _ -> self#visit_t () r
+
+      method! visit_AList () _ (rk, rv) =
+        let rk = self#skip_as rk in
+        let rv = self#visit_t () rv in
+        AList (rk, rv)
+
+      method! visit_AHashIdx () _ (rk, rv, m) =
+        let rk = self#skip_as rk in
+        let rv = self#visit_t () rv in
+        let m = self#visit_hash_idx () m in
+        AHashIdx (rk, rv, m)
+
+      method! visit_AOrderedIdx () _ (rk, rv, m) =
+        let rk = self#skip_as rk in
+        let rv = self#visit_t () rv in
+        let m = self#visit_ordered_idx () m in
+        AOrderedIdx (rk, rv, m)
+
+      method! visit_As () _ _ r =
+        Logs.warn (fun m -> m "Removing misplaced as: %a" pp_small r) ;
+        r.node
+    end
+  in
+  visitor#visit_t ()

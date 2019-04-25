@@ -251,3 +251,5 @@ module Pred : sig
 end
 
 val annotate_key_layouts : t -> t
+
+val strip_unused_as : t -> t

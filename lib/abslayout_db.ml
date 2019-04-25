@@ -657,5 +657,6 @@ module Make (Config : Config.S) = struct
   include Resolve.Make (Config)
 
   let load_string ?(params = Set.empty (module Name)) s =
-    of_string_exn s |> annotate_relations |> resolve ~params |> annotate_key_layouts
+    of_string_exn s |> strip_unused_as |> annotate_relations |> resolve ~params
+    |> annotate_key_layouts
 end
