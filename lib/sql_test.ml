@@ -62,7 +62,8 @@ let%test_module _ =
 
     let%expect_test "join-select" =
       run_test "join(true, select([id as p_id], log), select([id as c_id], log))" ;
-      [%expect {|
+      [%expect
+        {|
         SELECT
             log_2. "id" AS "p_id_1",
             log_1. "id" AS "c_id_1"
@@ -157,32 +158,13 @@ let%test_module _ =
         OR (("x_1") = ("y_1"))) |}]
 
     let%expect_test "join-cond" =
-      run_test {|filter(true||false, join(true&&false, r1, r))|} ;
+      run_test
+        {|filter(true||false, join(true&&false, select([f], r1), select([g], r)))|} ;
       [%expect
         {|
-    [WARNING] Shadowing of f@run.
-    [WARNING] Shadowing of g@run.
-    [WARNING] Shadowing of f@run.
-    [WARNING] Shadowing of g@run.
-    [WARNING] Output shadowing of f.
-    [WARNING] Output shadowing of g.
-    [WARNING] Shadowing of f@run.
-    [WARNING] Shadowing of g@run.
-    [WARNING] Shadowing of f@run.
-    [WARNING] Shadowing of g@run.
-    [WARNING] Output shadowing of f.
-    [WARNING] Output shadowing of g.
-    [WARNING] Shadowing of f@run.
-    [WARNING] Shadowing of g@run.
-    [WARNING] Duplicate name in schema f.
-    [WARNING] Duplicate name in schema g.
-    [WARNING] Duplicate name in schema f.
-    [WARNING] Duplicate name in schema g.
     SELECT
-        r1_2. "f" AS "r1_2_f_1",
-        r1_2. "g" AS "r1_2_g_1",
-        r_1. "f" AS "r_1_f_1",
-        r_1. "g" AS "r_1_g_1"
+        r1_2. "f" AS "r1_2_f_2",
+        r_1. "g" AS "r_1_g_2"
     FROM
         "r1" AS "r1_2",
         "r" AS "r_1"

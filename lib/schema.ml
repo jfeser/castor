@@ -8,6 +8,8 @@ let to_name = function
   | As_pred (_, n) -> Some (Name.create n)
   | _ -> None
 
+let drop_relation = List.map ~f:(fun n -> Name.copy ~relation:None n)
+
 let rec to_type = function
   | As_pred (p, _) -> to_type p
   | Name n -> Name.Meta.(find_exn n type_)
@@ -51,9 +53,9 @@ and schema_exn r =
   | Select (x, _) | GroupBy (x, _, _) -> of_preds x
   | Filter (_, r) | Dedup r | AList (_, r) | OrderBy {rel= r; _} -> schema_exn r
   | Join {r1; r2; _} | AOrderedIdx (r1, r2, _) | AHashIdx (r1, r2, _) ->
-      schema_exn r1 @ schema_exn r2
+      (schema_exn r1 |> drop_relation) @ schema_exn r2
   | AEmpty -> []
-  | AScalar e -> of_preds [e]
+  | AScalar e -> of_preds [e] |> drop_relation
   | ATuple (rs, (Cross | Zip)) -> List.concat_map ~f:schema_exn rs
   | ATuple ([], Concat) -> []
   | ATuple (r :: _, Concat) -> schema_exn r

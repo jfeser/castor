@@ -102,19 +102,19 @@ module Make (C : Config.S) = struct
 
       type t = row list [@@deriving sexp_of]
 
-      let compare_row r1 r2 =
-        [%compare: Name.t * [`Run | `Compile]] (r1.rname, r1.rstage)
-          (r2.rname, r2.rstage)
+      let compare_row r1 r2 = [%compare: Name.t] r1.rname r2.rname
 
       let of_list l =
         let l =
           List.map l ~f:(fun r ->
               {r with rname= Name.Meta.(set r.rname stage r.rstage)} )
         in
-        List.find_all_dups l ~compare:compare_row
-        |> List.iter ~f:(fun r ->
-               Logs.warn (fun m -> m "Shadowing of %a." Name.pp_with_stage r.rname)
-           ) ;
+        let dups = List.find_all_dups l ~compare:compare_row in
+        if List.length dups > 0 then (
+          List.iter dups ~f:(fun r ->
+              Logs.err (fun m -> m "Ambiguous name %a." Name.pp_with_stage r.rname)
+          ) ;
+          Error.(of_string "Ambiguous names." |> raise) ) ;
         l
     end
 
@@ -132,7 +132,11 @@ module Make (C : Config.S) = struct
       let c1 =
         List.filter
           (c1 :> row list)
-          ~f:(fun r -> not (List.mem c2 ~equal:[%compare.equal: row] r))
+          ~f:(fun r ->
+            if List.mem c2 ~equal:[%compare.equal: row] r then (
+              Logs.warn (fun m -> m "Shadowing of %a." Name.pp_with_stage r.rname) ;
+              false )
+            else true )
       in
       of_list (c1 @ c2)
 
@@ -140,48 +144,12 @@ module Make (C : Config.S) = struct
 
     let merge_list (ls : t list) : t = List.concat (ls :> row list list) |> of_list
 
-    let find_name (m : t) rel f =
-      let m = (m :> row list) in
-      let names =
-        match rel with
-        | `Rel r ->
-            let k = Name.create ~relation:r f in
-            List.filter m ~f:(fun r -> Name.O.(r.rname = k))
-        | `NoRel ->
-            let k = Name.create f in
-            List.filter m ~f:(fun r -> Name.O.(r.rname = k))
-        | `AnyRel -> List.filter m ~f:(fun r -> String.(name r.rname = f))
-      in
-      match names with
-      | [] -> None
-      | [r] -> Some r
-      | r' :: r'' :: _ ->
-          Logs.err (fun m ->
-              m "Ambiguous name %s: could refer to %a or %a" f Name.pp r'.rname
-                Name.pp r''.rname ) ;
-          None
+    let find (m : t) f = List.find (m :> row list) ~f:(fun r -> Name.O.(r.rname = f))
 
     let in_stage (c : t) s =
       List.filter
         (c :> row list)
         ~f:(fun r -> [%compare.equal: [`Run | `Compile]] r.rstage s)
-
-    let find s (m : t) rel f =
-      match
-        ( find_name (in_stage m `Run |> of_list) rel f
-        , find_name (in_stage m `Compile |> of_list) rel f )
-      with
-      | Some v, None | None, Some v -> Some v
-      | None, None -> None
-      | Some mr, Some mc -> (
-          let to_name rel f =
-            match rel with
-            | `Rel r -> Name.create ~relation:r f
-            | _ -> Name.create f
-          in
-          Logs.info (fun m ->
-              m "Cross-stage shadowing of %a." Name.pp (to_name rel f) ) ;
-          match s with `Run -> Some mr | `Compile -> Some mc )
 
     let incr_refs s (m : t) =
       let incr_ref {rrefs; _} = List.iter rrefs ~f:incr in
@@ -260,30 +228,13 @@ module Make (C : Config.S) = struct
 
   (** Given a context containing names and a new name, determine which of the
      existing names corresponds and annotate the new name with the same type. *)
-  let resolve_name s ctx n =
-    let could_not_resolve =
-      Error.create "Could not resolve." (n, ctx) [%sexp_of: t * Ctx.t]
-    in
+  let resolve_name ctx n =
     let m =
-      match rel n with
-      | Some r -> (
-        (* If the name has a relational part, then it must exactly match a
-             name in the set. *)
-        match Ctx.find s ctx (`Rel r) (name n) with
-        | Some m -> m
-        | None -> Error.raise could_not_resolve )
-      | None -> (
-        (* If the name has no relational part, first try to resolve it to
-             another name that also lacks a relational part. *)
-        match Ctx.find s ctx `NoRel (name n) with
-        | Some m -> m
-        | None -> (
-          (* If no such name exists, then resolve it only if there is exactly
-               one name where the field parts match. Otherwise the name is
-               ambiguous. *)
-          match Ctx.find s ctx `AnyRel (name n) with
-          | Some m -> m
-          | None -> Error.raise could_not_resolve ) )
+      match Ctx.find ctx n with
+      | Some m -> m
+      | None ->
+          Error.raise
+            (Error.create "Could not resolve." (n, ctx) [%sexp_of: t * Ctx.t])
     in
     List.iter m.rrefs ~f:incr ; m.rname
 
@@ -292,12 +243,12 @@ module Make (C : Config.S) = struct
     let _, ctx = List.map schema ~f:(fun n -> Name n) |> Ctx.of_defs stage in
     ctx
 
-  let rec resolve_pred stage (ctx : Ctx.t) =
+  let rec resolve_pred (ctx : Ctx.t) =
     let visitor =
       object
         inherit [_] endo
 
-        method! visit_Name ctx _ n = Name (resolve_name stage ctx n)
+        method! visit_Name ctx _ n = Name (resolve_name ctx n)
 
         method! visit_Exists ctx _ r =
           let r', _ = resolve `Run ctx r in
@@ -325,26 +276,26 @@ module Make (C : Config.S) = struct
           let r, preds =
             let r, inner_ctx = rsame outer_ctx r in
             let ctx = Ctx.merge outer_ctx inner_ctx in
-            (r, List.map preds ~f:(resolve_pred stage ctx))
+            (r, List.map preds ~f:(resolve_pred ctx))
           in
           let defs, ctx = Ctx.of_defs stage preds in
           (Select (defs, r), ctx)
       | Filter (pred, r) ->
           let r, value_ctx = rsame outer_ctx r in
-          let pred = resolve_pred stage (Ctx.merge outer_ctx value_ctx) pred in
+          let pred = resolve_pred (Ctx.merge outer_ctx value_ctx) pred in
           (Filter (pred, r), value_ctx)
       | Join {pred; r1; r2} ->
           let r1, inner_ctx1 = rsame outer_ctx r1 in
           let r2, inner_ctx2 = rsame outer_ctx r2 in
           let ctx = Ctx.merge_list [inner_ctx1; inner_ctx2; outer_ctx] in
-          let pred = resolve_pred stage ctx pred in
+          let pred = resolve_pred ctx pred in
           (Join {pred; r1; r2}, Ctx.merge inner_ctx1 inner_ctx2)
       | Relation r -> (Relation r, resolve_relation stage r |> Ctx.drop_relations)
       | GroupBy (aggs, key, r) ->
           let r, inner_ctx = rsame outer_ctx r in
           let ctx = Ctx.merge outer_ctx inner_ctx in
-          let aggs = List.map ~f:(resolve_pred stage ctx) aggs in
-          let key = List.map key ~f:(resolve_name stage ctx) in
+          let aggs = List.map ~f:(resolve_pred ctx) aggs in
+          let key = List.map key ~f:(resolve_name ctx) in
           let defs, ctx = Ctx.of_defs stage aggs in
           (GroupBy (defs, key, r), ctx)
       | Dedup r ->
@@ -352,13 +303,13 @@ module Make (C : Config.S) = struct
           (Dedup r, inner_ctx)
       | AEmpty -> (AEmpty, Ctx.of_list [])
       | AScalar p ->
-          let p = resolve_pred `Compile outer_ctx p in
+          let p = resolve_pred outer_ctx p in
           let def, ctx =
             match Ctx.of_defs stage [p] with
             | [def], ctx -> (def, ctx)
             | _ -> assert false
           in
-          (AScalar def, ctx)
+          (AScalar def, Ctx.drop_relations ctx)
       | AList (rk, rv) ->
           let rk, kctx = resolve `Compile outer_ctx rk in
           assert (all_has_stage kctx `Compile) ;
@@ -385,9 +336,7 @@ module Make (C : Config.S) = struct
           assert (all_has_stage key_ctx `Compile) ;
           let inner_ctx = Ctx.bind outer_ctx key_ctx in
           let vl, value_ctx = rsame inner_ctx l in
-          let m =
-            {m with lookup= List.map m.lookup ~f:(resolve_pred stage outer_ctx)}
-          in
+          let m = {m with lookup= List.map m.lookup ~f:(resolve_pred outer_ctx)} in
           (AHashIdx (r, vl, m), Ctx.(merge key_ctx value_ctx |> drop_relations))
       | AOrderedIdx (r, l, m) ->
           let r, key_ctx = resolve `Compile outer_ctx r in
@@ -396,8 +345,8 @@ module Make (C : Config.S) = struct
           let vl, value_ctx = rsame inner_ctx l in
           let m =
             { m with
-              lookup_low= resolve_pred stage outer_ctx m.lookup_low
-            ; lookup_high= resolve_pred stage outer_ctx m.lookup_high }
+              lookup_low= resolve_pred outer_ctx m.lookup_low
+            ; lookup_high= resolve_pred outer_ctx m.lookup_high }
           in
           (AOrderedIdx (r, vl, m), Ctx.(merge key_ctx value_ctx |> drop_relations))
       | As (n, r) ->
@@ -405,9 +354,7 @@ module Make (C : Config.S) = struct
           (As (n, r), Ctx.rename ctx n)
       | OrderBy {key; rel} ->
           let rel, inner_ctx = rsame outer_ctx rel in
-          let key =
-            List.map key ~f:(fun (p, o) -> (resolve_pred stage inner_ctx p, o))
-          in
+          let key = List.map key ~f:(fun (p, o) -> (resolve_pred inner_ctx p, o)) in
           (OrderBy {key; rel}, inner_ctx)
     in
     let node, ctx =

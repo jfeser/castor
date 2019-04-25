@@ -1,14 +1,13 @@
 open Core
-open Abslayout
 open Test_util
 
-let run_test ?(params = []) ?(print_layout = true) ?(fork = false) ?irgen_debug
-    layout_str =
+let run_test ?(params = []) ?print_layout ?(fork = false) ?irgen_debug layout_str =
   let layout_file = Filename.temp_file "layout" "txt" in
   let (module M), (module S), (module I), (module C) =
     make_modules ~layout_file ?irgen_debug ()
   in
-  let run_compiler out_dir layout =
+  let run_compiler ?(print_layout = true) layout =
+    let out_dir = Filename.temp_dir "bin" "" in
     let exe_fn, data_fn =
       let params = List.map ~f:Tuple.T2.get1 params in
       C.compile ~out_dir ~gprof:false ~params layout
@@ -28,18 +27,17 @@ let run_test ?(params = []) ?(print_layout = true) ?(fork = false) ?irgen_debug
     print_endline (Unix.Exit_or_signal.to_string_hum ret) ;
     Out_channel.flush stdout
   in
-  try
+  let run () =
     let layout =
       let params =
         List.map params ~f:(fun (n, _) -> n) |> Set.of_list (module Name)
       in
-      of_string_exn layout_str |> M.annotate_relations |> M.resolve ~params
-      |> annotate_key_layouts
+      M.load_string ~params layout_str
     in
-    let out_dir = Filename.temp_dir "bin" "" in
-    if fork then run_in_fork (fun () -> run_compiler out_dir layout)
-    else run_compiler out_dir layout
-  with exn -> printf "Error: %s\n" (Exn.to_string exn)
+    if fork then run_in_fork (fun () -> run_compiler ?print_layout layout)
+    else run_compiler ?print_layout layout
+  in
+  Exn.handle_uncaught ~exit:false run
 
 let%expect_test "ordered-idx" =
   run_test ~print_layout:false
@@ -93,101 +91,41 @@ let%expect_test "example-1" =
 
 let%expect_test "example-1-str" =
   Demomatch.(
-    run_test ~params:Demomatch.example_str_params ~print_layout:false
-      (example1 "log_str")) ;
+    run_test ~params:example_str_params ~print_layout:false (example1 "log_str")) ;
   [%expect {|
     1|2
 
     exited normally |}]
 
-(* let%expect_test "example-2" =
- *   run_test ~params:Demomatch.example_params ~print_layout:false
- *     {|
- * select([p_counter, c_counter],
- *   ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k], 
- *         join(true, log as lp, log as lc))) as k,
- *   alist(select([lp.counter, lc.counter], 
- *     join(lp.counter < lc.counter && 
- *          lc.counter < lp.succ, 
- *       filter(log.id = k.lp_k, log) as lp, 
- *       filter(log.id = k.lc_k, log) as lc)),
- *     atuple([ascalar(lp.counter), ascalar(lc.counter)], cross)),
- *   (id_p, id_c)))
- * |} ;
- *   [%expect {|
- *     1|2
- * 
- *     exited normally |}]
- * 
- * let%expect_test "example-2-str" =
- *   run_test ~params:Demomatch.example_str_params ~print_layout:false
- *     {|
- * select([lp.counter, lc.counter], ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k], 
- *       join(true, log_str as lp, log_str as lc))) as k,
- *   alist(select([lp.counter, lc.counter], 
- *     join(lp.counter < lc.counter && 
- *          lc.counter < lp.succ, 
- *       filter(log_str.id = k.lp_k, log_str) as lp, 
- *       filter(log_str.id = k.lc_k, log_str) as lc)),
- *     atuple([ascalar(lp.counter), ascalar(lc.counter)], cross)),
- *   (id_p, id_c)))
- * |} ;
- *   [%expect {|
- *     1|2
- * 
- *     exited normally |}]
- * 
- * let%expect_test "example-3" =
- *   run_test ~params:Demomatch.example_params ~print_layout:false
- *     {|
- * select([lp.counter, lc.counter],
- *   atuple([ahashidx(dedup(select([id as k1], log)), 
- *     alist(select([counter, succ], 
- *         filter(k1 = id && counter < succ, log)), 
- *       atuple([ascalar(counter), ascalar(succ)], cross)), 
- *     id_p) as lp,
- *   filter(lc.id = id_c,
- *     aorderedidx(select([log.counter as k2], log), 
- *       alist(filter(log.counter = k2, log),
- *         atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
- *       lp.counter, lp.succ) as lc)], cross))
- * |} ;
- *   [%expect
- *     {|
- *     [WARNING] Unexpected as: ahashidx(dedup(.), alist(., .), id_p)
- *     [WARNING] Unexpected as: aorderedidx(select(.], .),
- *                                alist(., .),
- *                                lp.counter,
- *                                lp.succ)
- *     1|2
- * 
- *     exited normally |}]
- * 
- * let%expect_test "example-3-str" =
- *   run_test ~params:Demomatch.example_str_params ~print_layout:false
- *     {|
- * select([lp.counter, lc.counter],
- *   atuple([ahashidx(dedup(select([id as k1], log_str)), 
- *     alist(select([counter, succ], 
- *         filter(k1 = id && counter < succ, log_str)), 
- *       atuple([ascalar(counter), ascalar(succ)], cross)), 
- *     id_p) as lp,
- *   filter(lc.id = id_c,
- *     aorderedidx(select([log_str.counter as k2], log_str), 
- *       alist(filter(log_str.counter = k2, log_str),
- *         atuple([ascalar(log_str.id), ascalar(log_str.counter)], cross)), 
- *       lp.counter, lp.succ) as lc)], cross))
- * |} ;
- *   [%expect
- *     {|
- *     [WARNING] Unexpected as: ahashidx(dedup(.), alist(., .), id_p)
- *     [WARNING] Unexpected as: aorderedidx(select(.], .),
- *                                alist(., .),
- *                                lp.counter,
- *                                lp.succ)
- *     1|2
- * 
- *     exited normally |}] *)
+let%expect_test "example-2" =
+  Demomatch.(run_test ~params:example_params ~print_layout:false (example2 "log")) ;
+  [%expect {|
+    1|2
+
+    exited normally |}]
+
+let%expect_test "example-2-str" =
+  Demomatch.(
+    run_test ~params:example_str_params ~print_layout:false (example2 "log_str")) ;
+  [%expect {|
+    1|2
+
+    exited normally |}]
+
+let%expect_test "example-3" =
+  Demomatch.(run_test ~params:example_params ~print_layout:false (example3 "log")) ;
+  [%expect {|
+    1|2
+
+    exited normally |}]
+
+let%expect_test "example-3-str" =
+  Demomatch.(
+    run_test ~params:example_str_params ~print_layout:false (example3 "log_str")) ;
+  [%expect {|
+    1|2
+
+    exited normally |}]
 
 let%expect_test "output-test" =
   run_test ~print_layout:false
@@ -257,10 +195,9 @@ let%expect_test "ordering" =
 let%expect_test "ordered-idx-dates" =
   run_test
     {|AOrderedIdx(OrderBy([f desc], Dedup(Select([f], r_date))) as k, 
-     AScalar(k.f), date("2017-10-04"), date("2018-10-04"))|} ;
+     AScalar(k.f as v), date("2017-10-04"), date("2018-10-04"))|} ;
   [%expect
     {|
-    [WARNING] Output shadowing of f.
     0:4 Ordered idx len (=72)
     4:8 Ordered idx index len (=50)
     12:2 Scalar (=(Date 2016-12-01))

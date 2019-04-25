@@ -233,27 +233,30 @@ atuple([ascalar(lc.id as c_id), ascalar(lc.counter as c_counter)], cross))], cro
 |}
       log log
 
-  let example2 =
-    {|
+  let example2 log =
+    sprintf
+      {|
+select([p_counter, c_counter],
 ahashidx(dedup(
-      join(true, select([id as p_id], log), select([id as c_id], log))) as k,
+      join(true, select([id as p_id], %s), select([id as c_id], %s))) as k,
   alist(select([p_counter, c_counter],
     join(p_counter < c_counter && c_counter < p_succ,
       filter(p_id = k.p_id,
-        select([id as p_id, counter as p_counter, succ as p_succ], log)), 
-      filter(p_id = k.c_id,
-        select([id as c_id, counter as c_counter], log)))) as lk,
+        select([id as p_id, counter as p_counter, succ as p_succ], %s)), 
+      filter(c_id = k.c_id,
+        select([id as c_id, counter as c_counter], %s)))) as lk,
     atuple([ascalar(lk.p_counter), ascalar(lk.c_counter)], cross)),
-  (id_p, id_c))
+  (id_p, id_c)))
 |}
+      log log log log
 
   let example3 log =
     sprintf
       {|
 select([p_counter, c_counter],
   atuple([
-    ahashidx(dedup(select([id], %s)) as hk, 
-    alist(select([counter, succ], filter(hk.id = id && counter < succ, %s)) as lk1, 
+    ahashidx(dedup(select([id as p_id], %s)) as hk,
+    alist(select([counter, succ], filter(hk.p_id = id && counter < succ, %s)) as lk1, 
       atuple([ascalar(lk1.counter as p_counter), ascalar(lk1.succ as p_succ)], cross)), 
     id_p),
   filter(c_id = id_c,

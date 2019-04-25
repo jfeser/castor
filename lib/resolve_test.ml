@@ -44,7 +44,7 @@ let%expect_test "" =
   Format.printf "%a@." pp_with_refcount r ;
   [%expect
     {|
-      select([k.l_receiptdate@run],
+      select([l_receiptdate@run],
         alist(join((o_orderkey@comp = l_orderkey@comp), lineitem#, orders#)# as k#,
           atuple([ascalar(k.l_orderkey@comp)#,
                   ascalar(k.l_commitdate@comp)#,

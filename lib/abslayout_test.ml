@@ -144,11 +144,10 @@ let%test_module _ =
 
     let%expect_test "ordered-idx-dates" =
       run_print_test
-        "AOrderedIdx(OrderBy([f desc], Dedup(Select([f], r_date))) as k, \
-         AScalar(k.f), null, null)" ;
+        "AOrderedIdx(OrderBy([ff desc], Dedup(Select([f as ff], r_date))) as k, \
+         AScalar(k.ff as f), null, null)" ;
       [%expect
         {|
-    [WARNING] Output shadowing of f.
     OrderedIdx
     OrderedIdx key: ((Date 2016-12-01))
     Scalar: (Date 2016-12-01)
@@ -162,14 +161,7 @@ let%test_module _ =
     Scalar: (Date 2018-09-01) |}]
 
     let%expect_test "example-1" =
-      run_print_test ~params:Demomatch.example_params
-        {|
-filter(c_id = id_c && p_id = id_p,
-alist(filter(succ > counter + 1, log) as lp,
-atuple([ascalar(lp.id as p_id), ascalar(lp.counter as p_counter),
-alist(filter(lp.counter < counter && counter < lp.succ, log) as lc,
-atuple([ascalar(lc.id as c_id), ascalar(lc.counter as c_counter)], cross))], cross)))
-|} ;
+      Demomatch.(run_print_test ~params:Demomatch.example_params (example1 "log")) ;
       [%expect
         {|
     List
@@ -196,60 +188,32 @@ atuple([ascalar(lc.id as c_id), ascalar(lc.counter as c_counter)], cross))], cro
     Scalar: (Int 3)
     Scalar: (Int 5) |}]
 
-    (* TODO: Reenable me! *)
-    (*         let%expect_test "example-2" =
- *       run_print_test ~params:Demomatch.example_params
- *         {|
- * ahashidx(dedup(
- *       join(true, select([id as p_id], log), select([id as c_id], log))) as k,
- *   alist(
- *     join(p_counter < c_counter && c_counter < p_succ,
- *       filter(p_id = k.p_id, select([id as p_id, counter as p_counter, succ as p_succ], log)),
- *       filter(c_id = k.c_id, select([id as c_id, counter as c_counter, succ as c_succ], log))) as lk,
- *     atuple([ascalar(lk.p_counter), ascalar(lk.c_counter)], cross)),
- *   (id_p, id_c))
- * |} ;
- *       [%expect
- *         {|
- *     HashIdx
- *     HashIdx key: ((Int 1) (Int 2))
- *     List
- *     List key: ((Int 1) (Int 1) (Int 4) (Int 2) (Int 2) (Int 3))
- *     Tuple
- *     Scalar: (Int 1)
- *     Scalar: (Int 2)
- *     HashIdx key: ((Int 1) (Int 3))
- *     List
- *     List key: ((Int 1) (Int 1) (Int 4) (Int 3) (Int 3) (Int 4))
- *     Tuple
- *     Scalar: (Int 1)
- *     Scalar: (Int 3)
- *     List key: ((Int 1) (Int 4) (Int 6) (Int 3) (Int 5) (Int 6))
- *     Tuple
- *     Scalar: (Int 4)
- *     Scalar: (Int 5) |}] *)
-
-    let%expect_test "example-3" =
-      run_print_test ~params:Demomatch.example_params
-        {|
-select([p_counter, c_counter],  
-  atuple([
-   select([counter as p_counter, succ as p_succ],
-   ahashidx(dedup(select([id], log)) as hk, 
-    alist(select([counter, succ], 
-        filter(hk.id = id && counter < succ, log)) as lk1, 
-      atuple([ascalar(lk1.counter), ascalar(lk1.succ)], cross)), 
-    id_p)),
-  filter(c_id = id_c,
-    select([id as c_id, counter as c_counter],
-    aorderedidx(select([counter], log) as ok, 
-      alist(filter(counter = ok.counter, log) as lk2,
-        atuple([ascalar(lk2.id), ascalar(lk2.counter)], cross)), 
-      p_counter, p_succ)))], cross))
-|} ;
+    let%expect_test "example-2" =
+      Demomatch.(run_print_test ~params:example_params (example2 "log")) ;
       [%expect
         {|
-    [WARNING] Output shadowing of counter.
+    HashIdx
+    HashIdx key: ((Int 1) (Int 2))
+    List
+    List key: ((Int 1) (Int 2))
+    Tuple
+    Scalar: (Int 1)
+    Scalar: (Int 2)
+    HashIdx key: ((Int 1) (Int 3))
+    List
+    List key: ((Int 1) (Int 3))
+    Tuple
+    Scalar: (Int 1)
+    Scalar: (Int 3)
+    List key: ((Int 4) (Int 5))
+    Tuple
+    Scalar: (Int 4)
+    Scalar: (Int 5) |}]
+
+    let%expect_test "example-3" =
+      Demomatch.(run_print_test ~params:example_params (example3 "log")) ;
+      [%expect
+        {|
     Tuple
     HashIdx
     HashIdx key: ((Int 1))
