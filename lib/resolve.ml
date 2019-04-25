@@ -75,6 +75,10 @@ module Make (C : Config.S) = struct
 
         method! visit_AOrderedIdx () (rk, rv, _) =
           self#check_alias () rk ; self#visit_t () rv
+
+        method! visit_As () _ r =
+          Logs.err (fun m -> m "Unexpected as: %a" pp_small r) ;
+          self#visit_t () r
       end
     in
     let rels = relations_visitor#visit_t () r in
@@ -102,7 +106,9 @@ module Make (C : Config.S) = struct
 
       type t = row list [@@deriving sexp_of]
 
-      let compare_row r1 r2 = [%compare: Name.t] r1.rname r2.rname
+      let compare_row r1 r2 =
+        [%compare: Name.t * [`Run | `Compile]] (r1.rname, r1.rstage)
+          (r2.rname, r2.rstage)
 
       let of_list l =
         let l =

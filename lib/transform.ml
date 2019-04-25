@@ -23,14 +23,7 @@ module Make (Config : Config.S) () = struct
 
   let fresh = Fresh.create ()
 
-  let db_relation n =
-    A.relation
-      { r_name= n
-      ; r_schema=
-          (Db.Relation.from_db Config.conn n).fields
-          |> List.map ~f:(fun f ->
-                 Name.create ~relation:n ~type_:f.Db.Field.type_ f.fname )
-          |> Option.some }
+  let db_relation n = A.relation (Db.relation Config.conn n)
 
   let run_everywhere ?(stage = `Both) {name; f= f_inner} =
     let cstage ls = match stage with `Both | `Compile -> ls | `Run -> [] in

@@ -649,12 +649,7 @@ module Make (Config : Config.S) = struct
       object
         inherit [_] endo
 
-        method! visit_Relation () _ r =
-          let schema =
-            List.map (Db.Relation.from_db conn r.r_name).fields ~f:(fun f ->
-                Name.create ~type_:f.type_ f.fname )
-          in
-          Relation {r with r_schema= Some schema}
+        method! visit_Relation () _ r = Relation (Db.relation conn r.r_name)
       end
     in
     visitor#visit_t ()
