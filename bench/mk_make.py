@@ -31,11 +31,20 @@ def gen_param_types(b):
         params.append('-p \'%s\'' % p)
     return ' '.join(params)
 
+def gen_param_values(b):
+    params = []
+    for (p, v) in b['params'].items():
+        params.append('\'%s\'' % v)
+    return ' '.join(params)
+
 def in_file(b):
     return '$(BENCH_DIR)/%s.txt' % b['name']
 
 def out_file(b):
     return '%s-opt.txt' % b['name']
+
+def out_dir(b):
+    return '%s-opt' % b['name']
 
 def dump_snippet():
     if DEBUG:
@@ -44,25 +53,33 @@ def dump_snippet():
         return '> $@'
 
 print('DB=postgresql:///tpch_1k')
-# print('OPT=../../_build/default/castor-opt/bin/opt.exe')
 print('OPT=dune exec ../bin/opt.exe -- ')
 print('OPT_FLAGS=-db $(DB) -v')
-# print('COMPILE=../../_build/default/castor/bin/compile.exe')
 print('COMPILE=dune exec ../../castor/bin/compile.exe -- ')
 print('BENCH_DIR=../../castor/bench/tpch/')
+print('TIME_PER_BENCH=1')
 print('all: opt compile')
 print('opt: %s' % (' '.join([out_file(b) for b in bench])))
-print('compile: %s' % (' '.join(['%s-opt' % b['name'] for b in bench])))
+print('compile: %s' % (' '.join([out_dir(b) for b in bench])))
+print('run: %s' % (' '.join(['%s-opt.csv' % b['name'] for b in bench])))
+# print('time: opt-times.csv')
 for b in bench:
     print('''
-{0}-opt.txt: {2}
+{0}: {2}
 \t$(OPT) $(OPT_FLAGS) {1} {2} {3} $@
-    '''.format(b['name'], gen_params(b), in_file(b), dump_snippet()))
+    '''.format(out_file(b), gen_params(b), in_file(b), dump_snippet()))
     print('''
-{0}-opt: {1}
+{0}: {1}
 \tmkdir -p $@
 \t$(COMPILE) -v -o $@ -db $(DB) {2} {1} > $@/compile.log
-'''.format(b['name'], out_file(b), gen_param_types(b)))
+'''.format(out_dir(b), out_file(b), gen_param_types(b)))
+    print('''
+{0}-opt.csv: {1}
+\t./{1}/scanner.exe -p {1}/data.bin {2} > $@
+'''.format(b['name'], out_dir(b), gen_param_values(b)))
+
+# print('opt-times.csv: %s' % ' '.join([out_dir(b) for b in bench]))
+# print('\t./{0}/scanner.exe -t $(TIME_PER_BENCH) {1}')
 
 print('''
 .PHONY: clean
