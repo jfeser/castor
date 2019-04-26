@@ -18,8 +18,78 @@ module Make (C : Config.S) = struct
   module Ops = Ops.Make (C)
   open Ops
   module M = Abslayout_db.Make (C)
+  module P = Project.Make (C)
 
   let src = Logs.Src.create "groupby-tactics"
+
+  (** Remove all references to names in params while ensuring that the resulting
+     relation overapproximates the original. *)
+  let over_approx params r =
+    let visitor =
+      object (self)
+        inherit [_] endo as super
+
+        method! visit_Filter () f (p, r) =
+          if Set.is_empty (Set.inter (Pred.names p) params) then
+            super#visit_node () f
+          else (self#visit_t () r).node
+
+        method! visit_Select () f (ps, r) =
+          match select_kind ps with
+          | `Agg -> f
+          | `Scalar -> Select (ps, self#visit_t () r)
+
+        method! visit_GroupBy () f _ _ _ = f
+      end
+    in
+    let r = visitor#visit_t () r in
+    let remains = Set.inter (free r) params in
+    if Set.is_empty remains then Ok r
+    else
+      Or_error.error "Failed to remove all parameters." remains
+        [%sexp_of: Set.M(Name).t]
+
+  let _base_relation_approx key r =
+    let exception Failed of Error.t in
+    let value_exn err = function Some v -> v | None -> raise (Failed err) in
+    (* Otherwise, if all grouping keys are from named relations, select all
+       possible grouping keys. *)
+    let defs = Meta.(find_exn r defs) in
+    let rels = Hashtbl.create (module Abslayout) in
+    let alias_map = aliases r in
+    try
+      (* Find the definition of each key. *)
+      let key_defs =
+        List.map key ~f:(fun n ->
+            List.find_map defs ~f:(fun (n', p) ->
+                Option.bind n' ~f:(fun n' ->
+                    if Name.O.(n = n') then Some p else None ) )
+            |> value_exn
+                 (Error.create "No definition found for key." n
+                    [%sexp_of: Name.t]) )
+      in
+      (* Collect all the names in each definition. If they all come from base
+         relations, then we can enumerate the keys. *)
+      List.iter key_defs ~f:(fun p ->
+          Set.iter (Pred.names p) ~f:(fun n ->
+              let r =
+                Name.rel n
+                |> value_exn
+                     (Error.create "Name does not come from base relation." n
+                        [%sexp_of: Name.t])
+                |> Map.find alias_map
+                |> value_exn
+                     (Error.create "Relation not found in alias table." n
+                        [%sexp_of: Name.t])
+              in
+              Hashtbl.add_multi rels ~key:r ~data:(Name n) ) ) ;
+      let key_rel =
+        Hashtbl.to_alist rels
+        |> List.map ~f:(fun (r, ns) -> dedup (select ns r))
+        |> List.fold_left1_exn ~f:(join (Bool true))
+      in
+      Ok (select key_defs key_rel)
+    with Failed err -> Error err
 
   let elim_groupby r =
     M.annotate_defs r ;
@@ -34,60 +104,12 @@ module Make (C : Config.S) = struct
           )
           |> List.fold_left1_exn ~f:(fun acc p -> Binop (And, acc, p))
         in
-        if Set.is_empty (free r) then
-          (* Use precise version. *)
-          Some
-            (list
-               (as_ key_name (dedup (select key_preds r)))
-               (select ps (filter filter_pred r)))
-        else
-          let exception Failed of Error.t in
-          let value_exn err = function
-            | Some v -> v
-            | None -> raise (Failed err)
-          in
-          (* Otherwise, if all grouping keys are from named relations,
-             select all possible grouping keys. *)
-          let defs = Meta.(find_exn r defs) in
-          let rels = Hashtbl.create (module Abslayout) in
-          let alias_map = aliases r in
-          try
-            (* Find the definition of each key. *)
-            let key_defs =
-              List.map key ~f:(fun n ->
-                  List.find_map defs ~f:(fun (n', p) ->
-                      Option.bind n' ~f:(fun n' ->
-                          if Name.O.(n = n') then Some p else None ) )
-                  |> value_exn
-                       (Error.create "No definition found for key." n
-                          [%sexp_of: Name.t]) )
-            in
-            (* Collect all the names in each definition. If they all come from
-               base relations, then we can enumerate the keys. *)
-            List.iter key_defs ~f:(fun p ->
-                Set.iter (Pred.names p) ~f:(fun n ->
-                    let r =
-                      Name.rel n
-                      |> value_exn
-                           (Error.create
-                              "Name does not come from base relation." n
-                              [%sexp_of: Name.t])
-                      |> Map.find alias_map
-                      |> value_exn
-                           (Error.create "Relation not found in alias table." n
-                              [%sexp_of: Name.t])
-                    in
-                    Hashtbl.add_multi rels ~key:r ~data:(Name n) ) ) ;
-            let key_rel =
-              Hashtbl.to_alist rels
-              |> List.map ~f:(fun (r, ns) -> dedup (select ns r))
-              |> List.fold_left1_exn ~f:(join (Bool true))
-            in
-            Some
-              (list
-                 (as_ key_name (select key_defs key_rel))
-                 (select ps (filter filter_pred r)))
-          with Failed err ->
+        let keys = P.project ~params:(free r) (dedup (select key_preds r)) in
+        (* Try to remove any remaining parameters from the keys relation. *)
+        match over_approx C.params keys with
+        | Ok keys ->
+            Some (list (as_ key_name keys) (select ps (filter filter_pred r)))
+        | Error err ->
             Logs.info ~src (fun m -> m "elim-groupby: %a" Error.pp err) ;
             None )
     (* Otherwise, if some keys are computed, fail. *)
