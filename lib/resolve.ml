@@ -290,6 +290,11 @@ module Make (C : Config.S) = struct
           let r, value_ctx = rsame outer_ctx r in
           let pred = resolve_pred (Ctx.merge outer_ctx value_ctx) pred in
           (Filter (pred, r), value_ctx)
+      | DepJoin ({d_lhs; d_rhs; d_alias} as d) ->
+          let d_lhs, lctx = resolve `Compile outer_ctx d_lhs in
+          let lctx = Ctx.rename lctx d_alias in
+          let d_rhs, rctx = rsame (Ctx.bind outer_ctx lctx) d_rhs in
+          (DepJoin {d with d_lhs; d_rhs}, rctx)
       | Join {pred; r1; r2} ->
           let r1, inner_ctx1 = rsame outer_ctx r1 in
           let r2, inner_ctx2 = rsame outer_ctx r2 in

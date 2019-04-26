@@ -242,6 +242,10 @@ let eval {db; params} r =
         let s = schema r in
         Seq.filter (eval ctx r) ~f:(fun t ->
             eval_pred (Ctx.merge ctx s t) p |> Value.to_bool )
+    | DepJoin {d_lhs; d_alias; d_rhs} ->
+        let s = schema (as_ d_alias d_lhs) in
+        Seq.concat_map (eval ctx d_lhs) ~f:(fun t ->
+            Seq.map (eval (Ctx.bind ctx s t) d_rhs) ~f:(fun t' -> t @ t') )
     | Join {pred; r1; r2} ->
         let r1s = eval ctx r1 in
         let s1 = schema r1 in

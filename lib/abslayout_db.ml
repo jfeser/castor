@@ -28,62 +28,6 @@ module Make (Config : Config.S) = struct
     | `Concat qs -> 1 + List.sum (module Int) qs ~f:width
     | `Query q -> List.length (schema_exn q)
 
-  class virtual ['s] schema_visitor =
-    object (self : 'a)
-      inherit [_] iter as super
-
-      method virtual to_schema : Pred.t list -> 's
-
-      method virtual rename : string -> 's -> 's
-
-      method virtual key : _
-
-      method! visit_t () r =
-        super#visit_t () r ;
-        let schema =
-          match r.node with
-          | Select (x, _) ->
-              List.iter x ~f:(self#visit_pred ()) ;
-              self#to_schema x
-          | Filter (_, r) | Dedup r | AList (_, r) | OrderBy {rel= r; _} ->
-              Meta.(find_exn r self#key)
-          | Join {r1; r2; _} | AOrderedIdx (r1, r2, _) | AHashIdx (r1, r2, _) ->
-              Meta.(find_exn r1 self#key) @ Meta.(find_exn r2 self#key)
-          | GroupBy (x, _, _) -> self#to_schema x
-          | AEmpty -> []
-          | AScalar e ->
-              self#visit_pred () e ;
-              self#to_schema [e]
-          | ATuple (rs, (Cross | Zip)) ->
-              List.concat_map ~f:(fun r -> Meta.find_exn r self#key) rs
-          | ATuple ([], Concat) -> []
-          | ATuple (r :: _, Concat) -> Meta.find_exn r self#key
-          | As (n, r) -> Meta.find_exn r self#key |> self#rename n
-          | Relation {r_schema= Some schema; _} ->
-              self#to_schema (List.map schema ~f:(fun n -> Name n))
-          | Relation {r_schema= None; _} -> failwith ""
-        in
-        Meta.set_m r self#key schema
-    end
-
-  (** Add a schema field to each metadata node. Variables must first be
-     annotated with type information. *)
-  let annotate_defs r =
-    let mapper =
-      object
-        inherit [_] schema_visitor
-
-        method to_schema = List.map ~f:(fun p -> (Pred.to_name p, p))
-
-        method rename r =
-          List.map ~f:(fun (n, p) ->
-              (Option.map n ~f:(Name.copy ~relation:(Some r)), p) )
-
-        method key = Meta.defs
-      end
-    in
-    mapper#visit_t () r
-
   let total_order_key q =
     let native_order = Abslayout.order_of q in
     let total_order = List.map (schema_exn q) ~f:(fun n -> (Name n, Asc)) in
@@ -91,6 +35,7 @@ module Make (Config : Config.S) = struct
 
   let rec gen_query q =
     match q.node with
+    | DepJoin {d_lhs; d_alias; d_rhs} -> `For (as_ d_alias d_lhs, gen_query d_rhs)
     | AList (q1, q2) ->
         let q1 =
           let order_key = total_order_key q1 in
@@ -365,6 +310,8 @@ module Make (Config : Config.S) = struct
       method virtual private build_Filter
           : 'ctx -> Meta.t -> pred * t -> eval_ctx -> 'a
 
+      method virtual private build_DepJoin : _
+
       method private visit_t ctx eval_ctx r =
         match (r.node, eval_ctx) with
         | AEmpty, `Empty -> self#build_AEmpty ctx r.meta
@@ -389,11 +336,13 @@ module Make (Config : Config.S) = struct
             in
             self#build_AOrderedIdx ctx r.meta x key_gen value_gen
         | ATuple x, `Concat vs -> self#build_ATuple ctx r.meta x vs
+        | DepJoin x, `Concat [lhs; rhs] -> self#build_DepJoin ctx r.meta x (lhs, rhs)
         | Select x, _ -> self#build_Select ctx r.meta x eval_ctx
         | Filter x, _ -> self#build_Filter ctx r.meta x eval_ctx
         | As (_, r), _ -> self#visit_t ctx eval_ctx r
-        | (AEmpty | AScalar _ | AList _ | AHashIdx _ | AOrderedIdx _ | ATuple _), _
-          ->
+        | ( ( DepJoin _ | AEmpty | AScalar _ | AList _ | AHashIdx _ | AOrderedIdx _
+            | ATuple _ )
+          , _ ) ->
             Error.create "Bug: Mismatched context." r [%sexp_of: t] |> Error.raise
         | (Join _ | Dedup _ | OrderBy _ | Relation _ | GroupBy _), _ ->
             Error.create "Cannot materialize." r [%sexp_of: t] |> Error.raise
@@ -431,6 +380,8 @@ module Make (Config : Config.S) = struct
       method virtual select : Meta.t -> pred list * t -> 'out -> 'out
 
       method virtual filter : Meta.t -> pred * t -> 'out -> 'out
+
+      method virtual depjoin : Meta.t -> depjoin -> 'out -> 'out -> 'out
 
       method private build_AList ctx meta ((_, r) as expr) gen =
         let {pre; body; post} = self#list meta expr in
@@ -478,6 +429,11 @@ module Make (Config : Config.S) = struct
 
       method private build_Select ctx meta ((_, r) as expr) ectx =
         self#select meta expr (self#visit_t ctx ectx r)
+
+      method private build_DepJoin ctx meta expr (lhs, rhs) =
+        self#depjoin meta expr
+          (self#visit_t ctx lhs expr.d_lhs)
+          (self#visit_t ctx rhs expr.d_rhs)
     end
 
   (* Wrapper module allows opening Type without clashes. *)
@@ -497,6 +453,10 @@ module Make (Config : Config.S) = struct
       | AEmpty -> EmptyT
       | AScalar p -> Abslayout.Pred.to_type p |> least_general_of_primtype
       | AList (_, r') -> ListT (least_general_of_layout r', {count= Bottom})
+      | DepJoin {d_lhs; d_rhs; _} ->
+          FuncT
+            ( [least_general_of_layout d_lhs; least_general_of_layout d_rhs]
+            , `Child_sum )
       | AHashIdx (_, vr, {hi_key_layout= Some kr; _}) ->
           HashIdxT
             ( least_general_of_layout kr
@@ -521,6 +481,8 @@ module Make (Config : Config.S) = struct
         method select _ (exprs, _) t = FuncT ([t], `Width (List.length exprs))
 
         method filter _ _ t = FuncT ([t], `Child_sum)
+
+        method depjoin _ _ t1 t2 = FuncT ([t1; t2], `Child_sum)
 
         method empty _ = EmptyT
 
@@ -594,33 +556,29 @@ module Make (Config : Config.S) = struct
 
   let rec annotate_type r t =
     let open Type in
+    Meta.(set_m r type_ t) ;
     match (r.node, t) with
-    | AScalar _, (IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | NullT) ->
-        Meta.(set_m r type_ t)
-    | AList (_, r'), ListT (t', _) ->
-        Meta.(set_m r type_ t) ;
+    | AScalar _, (IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | NullT) -> ()
+    | AList (_, r'), ListT (t', _)
+     |(Filter (_, r') | Select (_, r')), FuncT ([t'], _) ->
         annotate_type r' t'
     | AHashIdx (_, vr, m), HashIdxT (kt, vt, _) ->
-        Meta.(set_m r type_ t) ;
         Option.iter m.hi_key_layout ~f:(fun kr -> annotate_type kr kt) ;
         annotate_type vr vt
     | AOrderedIdx (_, vr, m), OrderedIdxT (kt, vt, _) ->
-        Meta.(set_m r type_ t) ;
         Option.iter m.oi_key_layout ~f:(fun kr -> annotate_type kr kt) ;
         annotate_type vr vt
     | ATuple (rs, _), TupleT (ts, _) -> (
-        Meta.(set_m r type_ t) ;
-        match List.iter2 rs ts ~f:annotate_type with
-        | Ok () -> ()
-        | Unequal_lengths ->
-            Error.(
-              create "Mismatched tuple type." (r, t) [%sexp_of: Abslayout.t * T.t]
-              |> raise) )
-    | (Filter (_, r') | Select (_, r')), FuncT ([t'], _) ->
-        Meta.(set_m r type_ t) ;
-        annotate_type r' t'
+      match List.iter2 rs ts ~f:annotate_type with
+      | Ok () -> ()
+      | Unequal_lengths ->
+          Error.(
+            create "Mismatched tuple type." (r, t) [%sexp_of: Abslayout.t * T.t]
+            |> raise) )
+    | DepJoin {d_lhs; d_rhs; _}, FuncT ([t1; t2], _) ->
+        annotate_type d_lhs t1 ; annotate_type d_rhs t2
     | As (_, r), _ -> annotate_type r t
-    | ( ( Select _ | Filter _ | Join _ | GroupBy _ | OrderBy _ | Dedup _
+    | ( ( Select _ | Filter _ | DepJoin _ | Join _ | GroupBy _ | OrderBy _ | Dedup _
         | Relation _ | AEmpty | AScalar _ | AList _ | ATuple _ | AHashIdx _
         | AOrderedIdx _ )
       , ( NullT | IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | TupleT _

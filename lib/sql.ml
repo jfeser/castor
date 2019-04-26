@@ -220,6 +220,9 @@ let of_ralgebra ctx r =
     | Filter (pred, r) -> filter ctx (schema_exn r) (f r) pred
     | OrderBy {key; rel= r} -> order_by ctx (schema_exn r) (f r) key
     | Select (fs, r) -> select ctx (schema_exn r) (f r) fs
+    | DepJoin {d_lhs; d_rhs; d_alias} ->
+        let d_lhs = as_ d_alias d_lhs in
+        lat_join f ctx (schema_exn d_lhs) (f d_lhs) d_rhs
     | Join {pred; r1; r2} ->
         join ctx (schema_exn r1) (schema_exn r2) (f r1) (f r2) pred
     | GroupBy (ps, key, r) ->

@@ -51,7 +51,12 @@ and schema_exn r =
   in
   match r.node with
   | Select (x, _) | GroupBy (x, _, _) -> of_preds x
-  | Filter (_, r) | Dedup r | AList (_, r) | OrderBy {rel= r; _} -> schema_exn r
+  | Filter (_, r)
+   |Dedup r
+   |AList (_, r)
+   |OrderBy {rel= r; _}
+   |DepJoin {d_rhs= r; _} ->
+      schema_exn r
   | Join {r1; r2; _} | AOrderedIdx (r1, r2, _) | AHashIdx (r1, r2, _) ->
       (schema_exn r1 |> drop_relation) @ schema_exn r2
   | AEmpty -> []

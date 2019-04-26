@@ -92,6 +92,18 @@ module Set = struct
     fprintf fmt "{" ;
     Set.iter set ~f:(fprintf fmt "%a; " pp_elem) ;
     fprintf fmt "}"
+
+  module O = struct
+    let ( <= ) s1 s2 = Set.is_subset s1 ~of_:s2
+
+    let ( >= ) s1 s2 = Set.is_subset s2 ~of_:s1
+
+    let ( || ) = Set.union
+
+    let ( && ) = Set.inter
+
+    let ( - ) = Set.diff
+  end
 end
 
 module Map = struct

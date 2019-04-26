@@ -382,6 +382,9 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
 
       method build_Filter sctx _ (_, r) ectx = self#visit_t sctx ectx r
 
+      method build_DepJoin sctx _ {d_lhs; d_rhs; _} (ctx1, ctx2) =
+        self#visit_t sctx ctx1 d_lhs ; self#visit_t sctx ctx2 d_rhs
+
       method! visit_t sctx ectx layout =
         (* Update position metadata in layout. *)
         let pos = pos sctx.writer |> Pos.to_bytes_exn in

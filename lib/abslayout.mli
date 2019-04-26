@@ -69,10 +69,14 @@ and ordered_idx = Abslayout0.ordered_idx =
 and relation = Abslayout0.relation = {r_name: string; r_schema: Name.t list option}
 [@@deriving compare, hash, sexp_of]
 
+and depjoin = Abslayout0.depjoin = {d_lhs: t; d_alias: string; d_rhs: t}
+[@@deriving compare, hash, sexp_of]
+
 and node = Abslayout0.node =
   | Select of (pred list * t)
   | Filter of (pred * t)
   | Join of {pred: pred; r1: t; r2: t}
+  | DepJoin of depjoin
   | GroupBy of pred list * Name.t list * t
   | OrderBy of {key: (pred * order) list; rel: t}
   | Dedup of t
@@ -111,6 +115,8 @@ val names : t -> Set.M(Name).t
 (** The set of names in a `t`. *)
 
 val select : pred list -> t -> t
+
+val dep_join : t -> string -> t -> t
 
 val join : pred -> t -> t -> t
 
@@ -157,8 +163,6 @@ val name_of_string_exn : string -> Name.t
 val of_channel_exn : Stdio.In_channel.t -> t
 
 val subst : pred Map.M(Name).t -> t -> t
-
-val annotate_align : t -> unit
 
 val select_kind : pred list -> [`Agg | `Scalar]
 

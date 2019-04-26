@@ -17,6 +17,9 @@ let wrap x = {node= x; meta= Meta.empty ()}
 
 let select a b = wrap (Select (a, strip_meta b))
 
+let dep_join a b c =
+  wrap (DepJoin {d_lhs= strip_meta a; d_alias= b; d_rhs= strip_meta c})
+
 let join a b c = wrap (Join {pred= a; r1= strip_meta b; r2= strip_meta c})
 
 let filter a b = wrap (Filter (a, strip_meta b))
@@ -54,6 +57,7 @@ let name r =
   match r.node with
   | Select _ -> "select"
   | Filter _ -> "filter"
+  | DepJoin _ -> "depjoin"
   | Join _ -> "join"
   | GroupBy _ -> "group_by"
   | Dedup _ -> "dedup"
@@ -155,6 +159,8 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
     ( match node with
     | Select (ps, r) -> fprintf fmt "select(%a,@ %a)" (pp_list pp_pred) ps pp r
     | Filter (p, r) -> fprintf fmt "filter(%a,@ %a)" pp_pred p pp r
+    | DepJoin {d_lhs; d_alias; d_rhs} ->
+        fprintf fmt "depjoin(%a as %s,@ %a)" pp d_lhs d_alias pp d_rhs
     | Join {pred; r1; r2} ->
         fprintf fmt "join(%a,@ %a,@ %a)" pp_pred pred pp r1 pp r2
     | GroupBy (a, k, r) ->
@@ -252,30 +258,6 @@ let subst ctx =
   in
   v#visit_t ()
 
-let rec annotate_align r =
-  match r.node with
-  | Relation _ | AEmpty | AScalar _ -> Meta.(set_m r align 1)
-  | As (_, r')
-   |Select (_, r')
-   |Filter (_, r')
-   |AList (_, r')
-   |AOrderedIdx (_, r', _)
-   |OrderBy {rel= r'; _}
-   |Dedup r' ->
-      annotate_align r' ;
-      Meta.(set_m r align Meta.(find_exn r' align))
-  | Join _ | GroupBy (_, _, _) -> failwith ""
-  | ATuple (rs, _) ->
-      List.iter rs ~f:annotate_align ;
-      let align =
-        List.map rs ~f:(fun r' -> Meta.(find_exn r' align))
-        |> List.fold_left ~init:1 ~f:Int.max
-      in
-      Meta.set_m r Meta.align align
-  | AHashIdx (_, r', _) ->
-      annotate_align r' ;
-      Meta.(set_m r align (Int.max Meta.(find_exn r' align) 4))
-
 let rec pred_free p =
   let singleton = Set.singleton (module Name) in
   let visitor =
@@ -305,31 +287,29 @@ and free r =
   let of_list = Set.of_list (module Name) in
   let union_list = Set.union_list (module Name) in
   let exposed r = of_list (schema_exn r) in
+  let scope r s = Set.map (module Name) s ~f:(Name.copy ~relation:(Some r)) in
   let free_set =
     match r.node with
     | Relation _ | AEmpty -> empty
     | AScalar p -> pred_free p
     | Select (ps, r') ->
-        Set.union (free r')
-          (Set.diff (List.map ps ~f:pred_free |> union_list) (exposed r'))
+        Set.O.(free r' || ((List.map ps ~f:pred_free |> union_list) - exposed r'))
     | Filter (p, r') -> Set.union (free r') (Set.diff (pred_free p) (exposed r'))
     | Dedup r' -> free r'
+    | DepJoin {d_lhs; d_alias; d_rhs} ->
+        Set.O.(free d_lhs || (free d_rhs - (exposed d_lhs |> scope d_alias)))
     | Join {pred; r1; r2} ->
-        union_list
-          [ free r1
-          ; free r2
-          ; Set.diff (pred_free pred) (Set.union (exposed r1) (exposed r2)) ]
+        Set.O.(free r1 || free r2 || (pred_free pred - (exposed r1 || exposed r2)))
     | GroupBy (ps, key, r') ->
-        Set.union (free r')
-          (Set.diff
-             (Set.union (List.map ps ~f:pred_free |> union_list) (of_list key))
-             (exposed r'))
+        Set.O.(
+          free r'
+          || ((List.map ps ~f:pred_free |> union_list || of_list key) - exposed r'))
     | OrderBy {key; rel} ->
-        Set.union (free rel)
-          (Set.diff
-             (List.map key ~f:(fun (p, _) -> pred_free p) |> union_list)
-             (exposed rel))
-    | AList (r', r'') -> Set.union (free r') (Set.diff (free r'') (exposed r'))
+        Set.O.(
+          free rel
+          || (List.map key ~f:(fun (p, _) -> pred_free p) |> union_list)
+             - exposed rel)
+    | AList (r', r'') -> Set.O.(free r' || (free r'' - exposed r'))
     | AHashIdx (r', r'', {lookup; _}) ->
         union_list
           [ free r'
@@ -794,7 +774,7 @@ let annotate_orders r =
                    | p' when [%compare.equal: pred] p p' -> Some (p', d)
                    | _ -> None ) )
       | Filter (_, r) | AHashIdx (_, r, _) -> annotate_orders r
-      | Join {r1; r2; _} ->
+      | DepJoin {d_lhs= r1; d_rhs= r2; _} | Join {r1; r2; _} ->
           annotate_orders r1 |> ignore ;
           annotate_orders r2 |> ignore ;
           []

@@ -25,62 +25,9 @@ module Make (Config : Config.S) () = struct
 
   let db_relation n = A.relation (Db.relation Config.conn n)
 
-  let run_everywhere ?(stage = `Both) {name; f= f_inner} =
-    let cstage ls = match stage with `Both | `Compile -> ls | `Run -> [] in
-    let rstage ls = match stage with `Both | `Run -> ls | `Compile -> [] in
-    let rec p = function
-      | A.Exists r -> List.map ~f:(fun r -> A.Exists r) (f r)
-      | A.First r -> List.map ~f:(fun r -> A.First r) (f r)
-      | ( A.Name _ | A.Int _ | A.Fixed _ | A.Date _ | A.Bool _ | A.String _ | A.Null
-        | A.Count | A.Sum _ | A.Avg _ | A.Min _ | A.Max _ ) as pred ->
-          [pred]
-      | A.Binop (op, r1, r2) ->
-          List.map (p r1) ~f:(fun r1' -> A.Binop (op, r1', r2))
-          @ List.map (p r2) ~f:(fun r2' -> A.Binop (op, r1, r2'))
-      | A.If (r1, r2, r3) ->
-          List.map (p r1) ~f:(fun r1' -> A.If (r1', r2, r3))
-          @ List.map (p r2) ~f:(fun r2' -> A.If (r1, r2', r3))
-          @ List.map (p r3) ~f:(fun r3' -> A.If (r1, r2, r3'))
-      | A.Unop (op, r) -> List.map (p r) ~f:(fun r' -> A.Unop (op, r'))
-      | A.As_pred (r, n) -> List.map (p r) ~f:(fun r' -> A.As_pred (r', n))
-      | A.Substring (r1, r2, r3) ->
-          List.map (p r1) ~f:(fun r1' -> A.Substring (r1', r2, r3))
-          @ List.map (p r2) ~f:(fun r2' -> A.Substring (r1, r2', r3))
-          @ List.map (p r3) ~f:(fun r3' -> A.Substring (r1, r2, r3'))
-    and f r =
-      let rs = f_inner r in
-      let rs' =
-        match r.node with
-        | A.Relation _ | AEmpty | AScalar _ -> []
-        | Dedup r -> List.map ~f:A.dedup (f r)
-        | As (n, r) -> List.map ~f:(A.as_ n) (f r)
-        | OrderBy {key; rel} -> List.map (f rel) ~f:(A.order_by key)
-        | AList (r1, r2) ->
-            cstage (List.map (f r1) ~f:(fun r1 -> A.list r1 r2))
-            @ rstage (List.map (f r2) ~f:(fun r2 -> A.list r1 r2))
-        | Select (fs, r') -> List.map (f r') ~f:(A.select fs)
-        | Filter (ps, r') ->
-            List.map (p ps) ~f:(fun ps' -> A.filter ps' r')
-            @ List.map (f r') ~f:(A.filter ps)
-        | Join {r1; r2; pred} ->
-            List.map (f r1) ~f:(fun r1 -> A.join pred r1 r2)
-            @ List.map (f r2) ~f:(fun r2 -> A.join pred r1 r2)
-        | GroupBy (x, y, r') -> List.map (f r') ~f:(A.group_by x y)
-        | AHashIdx (r1, r2, m) ->
-            cstage (List.map (f r1) ~f:(fun r1 -> A.hash_idx r1 r2 m))
-            @ rstage (List.map (f r2) ~f:(fun r2 -> A.hash_idx r1 r2 m))
-        | AOrderedIdx (r1, r2, m) ->
-            cstage (List.map (f r1) ~f:(fun r1 -> A.ordered_idx r1 r2 m))
-            @ rstage (List.map (f r2) ~f:(fun r2 -> A.ordered_idx r1 r2 m))
-        | ATuple (rs, m) ->
-            List.mapi rs ~f:(fun i r ->
-                List.map (f r) ~f:(fun r' ->
-                    A.tuple (List.take rs i @ [r'] @ List.drop rs (i + 1)) m ) )
-            |> List.concat
-      in
-      rs @ rs'
-    in
-    {name; f}
+  let run_everywhere ?(stage = `Both) (_ : t) : t =
+    let _ = stage in
+    failwith "Unimplemented."
 
   let run_unchecked t r =
     let rs =

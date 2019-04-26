@@ -66,10 +66,13 @@ module T = struct
 
   and relation = {r_name: string; r_schema: (Name.t[@opaque]) list option}
 
+  and depjoin = {d_lhs: t; d_alias: string; d_rhs: t}
+
   and node =
     | Select of (pred list * t)
     | Filter of (pred * t)
     | Join of {pred: pred; r1: t; r2: t}
+    | DepJoin of depjoin
     | GroupBy of pred list * (Name.t[@opaque]) list * t
     | OrderBy of {key: (pred * order) list; rel: t}
     | Dedup of t

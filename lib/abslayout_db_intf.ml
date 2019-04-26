@@ -4,8 +4,6 @@ open Abslayout
 module type S = sig
   val to_type : t -> Type.t
 
-  val annotate_defs : t -> unit
-
   val annotate_subquery_types : t -> unit
 
   val resolve : ?params:Set.M(Name).t -> t -> t
@@ -47,6 +45,9 @@ module type S = sig
       method virtual private build_AScalar :
         'ctx -> Meta.t -> pred -> Value.t Lazy.t -> 'a
 
+      method virtual private build_DepJoin :
+        'ctx -> Meta.t -> depjoin -> eval_ctx * eval_ctx -> 'a
+
       method virtual private build_Select :
         'ctx -> Meta.t -> pred list * t -> eval_ctx -> 'a
 
@@ -80,6 +81,8 @@ module type S = sig
       method virtual empty : Meta.t -> 'out
 
       method virtual scalar : Meta.t -> pred -> Value.t -> 'out
+
+      method virtual depjoin : Meta.t -> depjoin -> 'out -> 'out -> 'out
 
       method virtual select : Meta.t -> pred list * t -> 'out -> 'out
 

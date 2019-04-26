@@ -51,6 +51,9 @@ let%test_module _ =
 
           method build_Select () _ (_, r) ctx = self#visit_t () ctx r
 
+          method build_DepJoin () _ {d_lhs; d_rhs; _} (ctx1, ctx2) =
+            self#visit_t () ctx1 d_lhs ; self#visit_t () ctx2 d_rhs
+
           method build_Filter () _ (_, r) ctx = self#visit_t () ctx r
         end
       in
