@@ -39,4 +39,4 @@ orderby([l_returnflag, l_linestatus],
            avg(l_discount) as avg_disc,
            count() as count_order],
     [l_returnflag, l_linestatus],
-    filter((l_shipdate) <= ((date("1998-12-01")) - (day(param0))), lineitem as l)))
+    filter((l_shipdate) <= ((date("1998-12-01")) - (day(param0))), lineitem)))
