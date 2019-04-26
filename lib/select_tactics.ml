@@ -129,126 +129,126 @@ module Make (C : Config.S) = struct
   let push_select = of_func push_select ~name:"push-select"
 end
 
-module Test = struct
-  module C = struct
-    let params =
-      Set.of_list
-        (module Name)
-        [Name.create ~type_:(DateT {nullable= false}) "param0"]
-
-    let fresh = Fresh.create ()
-
-    let verbose = false
-
-    let validate = false
-
-    let param_ctx = Map.empty (module Name)
-
-    let conn = Db.create "postgresql:///tpch_1k"
-  end
-
-  module T = Make (C)
-  module O = Ops.Make (C)
-  open T
-  open O
-  open C
-
-  let%expect_test "" =
-    let r =
-      of_string_exn
-        {|
-select([customer.c_custkey,
-         customer.c_name,
-         sum((lineitem.l_extendedprice * (1 - lineitem.l_discount))) as revenue,
-         customer.c_acctbal,
-         nation.n_name,
-         customer.c_address,
-         customer.c_phone,
-         customer.c_comment],
-   aorderedidx(dedup(
-                 select([orders.o_orderdate as k1],
-                   dedup(
-                     select([orders.o_orderdate],
-                       join((customer.c_custkey = orders.o_custkey),
-                         join((customer.c_nationkey = nation.n_nationkey),
-                           customer,
-                           nation),
-                         join((lineitem.l_orderkey = orders.o_orderkey),
-                           lineitem,
-                           orders)))))),
-       join((customer.c_custkey = orders.o_custkey),
-         join((customer.c_nationkey = nation.n_nationkey), customer, nation),
-         join((lineitem.l_orderkey = orders.o_orderkey), lineitem, orders)),
-     (param0 + day(1)),
-     ((param0 + month(3)) + day(1))))
-|}
-    in
-    let r = M.resolve ~params r in
-    apply push_select r |> Option.iter ~f:(Format.printf "%a@." pp) ;
-    [%expect
-      {|
-      select([customer.c_custkey,
-              customer.c_name,
-              sum(agg0) as revenue,
-              customer.c_acctbal,
-              nation.n_name,
-              customer.c_address,
-              customer.c_phone,
-              customer.c_comment],
-        aorderedidx(dedup(
-                      select([orders.o_orderdate as k1],
-                        dedup(
-                          select([orders.o_orderdate],
-                            join((customer.c_custkey = orders.o_custkey),
-                              join((customer.c_nationkey = nation.n_nationkey),
-                                customer,
-                                nation),
-                              join((lineitem.l_orderkey = orders.o_orderkey),
-                                lineitem,
-                                orders)))))),
-          filter((count1 > 0),
-            select([count() as count1,
-                    sum((lineitem.l_extendedprice * (1 - lineitem.l_discount))) as agg0,
-                    customer.c_custkey,
-                    customer.c_name,
-                    customer.c_address,
-                    customer.c_nationkey,
-                    customer.c_phone,
-                    customer.c_acctbal,
-                    customer.c_mktsegment,
-                    customer.c_comment,
-                    nation.n_nationkey,
-                    nation.n_name,
-                    nation.n_regionkey,
-                    nation.n_comment,
-                    lineitem.l_orderkey,
-                    lineitem.l_partkey,
-                    lineitem.l_suppkey,
-                    lineitem.l_linenumber,
-                    lineitem.l_quantity,
-                    lineitem.l_extendedprice,
-                    lineitem.l_discount,
-                    lineitem.l_tax,
-                    lineitem.l_returnflag,
-                    lineitem.l_linestatus,
-                    lineitem.l_shipdate,
-                    lineitem.l_commitdate,
-                    lineitem.l_receiptdate,
-                    lineitem.l_shipinstruct,
-                    lineitem.l_shipmode,
-                    lineitem.l_comment,
-                    orders.o_orderkey,
-                    orders.o_custkey,
-                    orders.o_orderstatus,
-                    orders.o_totalprice,
-                    orders.o_orderdate,
-                    orders.o_orderpriority,
-                    orders.o_clerk,
-                    orders.o_shippriority,
-                    orders.o_comment],
-              join((customer.c_custkey = orders.o_custkey),
-                join((customer.c_nationkey = nation.n_nationkey), customer, nation),
-                join((lineitem.l_orderkey = orders.o_orderkey), lineitem, orders)))),
-          (param0 + day(1)),
-          ((param0 + month(3)) + day(1)))) |}]
-end
+(* module Test = struct
+ *   module C = struct
+ *     let params =
+ *       Set.of_list
+ *         (module Name)
+ *         [Name.create ~type_:(DateT {nullable= false}) "param0"]
+ * 
+ *     let fresh = Fresh.create ()
+ * 
+ *     let verbose = false
+ * 
+ *     let validate = false
+ * 
+ *     let param_ctx = Map.empty (module Name)
+ * 
+ *     let conn = Db.create "postgresql:///tpch_1k"
+ *   end
+ * 
+ *   module T = Make (C)
+ *   module O = Ops.Make (C)
+ *   open T
+ *   open O
+ *   open C
+ * 
+ *   let%expect_test "" =
+ *     let r =
+ *       of_string_exn
+ *         {|
+ * select([customer.c_custkey,
+ *          customer.c_name,
+ *          sum((lineitem.l_extendedprice * (1 - lineitem.l_discount))) as revenue,
+ *          customer.c_acctbal,
+ *          nation.n_name,
+ *          customer.c_address,
+ *          customer.c_phone,
+ *          customer.c_comment],
+ *    aorderedidx(dedup(
+ *                  select([orders.o_orderdate as k1],
+ *                    dedup(
+ *                      select([orders.o_orderdate],
+ *                        join((customer.c_custkey = orders.o_custkey),
+ *                          join((customer.c_nationkey = nation.n_nationkey),
+ *                            customer,
+ *                            nation),
+ *                          join((lineitem.l_orderkey = orders.o_orderkey),
+ *                            lineitem,
+ *                            orders)))))),
+ *        join((customer.c_custkey = orders.o_custkey),
+ *          join((customer.c_nationkey = nation.n_nationkey), customer, nation),
+ *          join((lineitem.l_orderkey = orders.o_orderkey), lineitem, orders)),
+ *      (param0 + day(1)),
+ *      ((param0 + month(3)) + day(1))))
+ * |}
+ *     in
+ *     let r = M.resolve ~params r in
+ *     apply push_select r |> Option.iter ~f:(Format.printf "%a@." pp) ;
+ *     [%expect
+ *       {|
+ *       select([customer.c_custkey,
+ *               customer.c_name,
+ *               sum(agg0) as revenue,
+ *               customer.c_acctbal,
+ *               nation.n_name,
+ *               customer.c_address,
+ *               customer.c_phone,
+ *               customer.c_comment],
+ *         aorderedidx(dedup(
+ *                       select([orders.o_orderdate as k1],
+ *                         dedup(
+ *                           select([orders.o_orderdate],
+ *                             join((customer.c_custkey = orders.o_custkey),
+ *                               join((customer.c_nationkey = nation.n_nationkey),
+ *                                 customer,
+ *                                 nation),
+ *                               join((lineitem.l_orderkey = orders.o_orderkey),
+ *                                 lineitem,
+ *                                 orders)))))),
+ *           filter((count1 > 0),
+ *             select([count() as count1,
+ *                     sum((lineitem.l_extendedprice * (1 - lineitem.l_discount))) as agg0,
+ *                     customer.c_custkey,
+ *                     customer.c_name,
+ *                     customer.c_address,
+ *                     customer.c_nationkey,
+ *                     customer.c_phone,
+ *                     customer.c_acctbal,
+ *                     customer.c_mktsegment,
+ *                     customer.c_comment,
+ *                     nation.n_nationkey,
+ *                     nation.n_name,
+ *                     nation.n_regionkey,
+ *                     nation.n_comment,
+ *                     lineitem.l_orderkey,
+ *                     lineitem.l_partkey,
+ *                     lineitem.l_suppkey,
+ *                     lineitem.l_linenumber,
+ *                     lineitem.l_quantity,
+ *                     lineitem.l_extendedprice,
+ *                     lineitem.l_discount,
+ *                     lineitem.l_tax,
+ *                     lineitem.l_returnflag,
+ *                     lineitem.l_linestatus,
+ *                     lineitem.l_shipdate,
+ *                     lineitem.l_commitdate,
+ *                     lineitem.l_receiptdate,
+ *                     lineitem.l_shipinstruct,
+ *                     lineitem.l_shipmode,
+ *                     lineitem.l_comment,
+ *                     orders.o_orderkey,
+ *                     orders.o_custkey,
+ *                     orders.o_orderstatus,
+ *                     orders.o_totalprice,
+ *                     orders.o_orderdate,
+ *                     orders.o_orderpriority,
+ *                     orders.o_clerk,
+ *                     orders.o_shippriority,
+ *                     orders.o_comment],
+ *               join((customer.c_custkey = orders.o_custkey),
+ *                 join((customer.c_nationkey = nation.n_nationkey), customer, nation),
+ *                 join((lineitem.l_orderkey = orders.o_orderkey), lineitem, orders)))),
+ *           (param0 + day(1)),
+ *           ((param0 + month(3)) + day(1)))) |}]
+ * end *)

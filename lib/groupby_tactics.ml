@@ -19,6 +19,8 @@ module Make (C : Config.S) = struct
   open Ops
   module M = Abslayout_db.Make (C)
 
+  let src = Logs.Src.create "groupby-tactics"
+
   let elim_groupby r =
     M.annotate_defs r ;
     annotate_free r ;
@@ -86,7 +88,7 @@ module Make (C : Config.S) = struct
                  (as_ key_name (select key_defs key_rel))
                  (select ps (filter filter_pred r)))
           with Failed err ->
-            Logs.info (fun m -> m "elim-groupby: %a" Error.pp err) ;
+            Logs.info ~src (fun m -> m "elim-groupby: %a" Error.pp err) ;
             None )
     (* Otherwise, if some keys are computed, fail. *)
     | _ -> None
@@ -119,72 +121,50 @@ module Test = struct
   open T
   open Ops
 
+  let with_logs f =
+    Logs.(set_reporter (format_reporter ())) ;
+    Logs.Src.set_level src (Some Debug) ;
+    let ret = f () in
+    Logs.Src.set_level src (Some Error) ;
+    Logs.(set_reporter nop_reporter) ;
+    ret
+
   let%expect_test "" =
     let r =
-      of_string_exn
+      M.load_string ~params
         {|
 groupby([o_year,
          (sum((if (nation_name = param1) then volume else 0.0)) /
          sum(volume)) as mkt_share],
   [o_year],
-  select([to_year(orders.o_orderdate) as o_year,
-          (lineitem.l_extendedprice * (1 - lineitem.l_discount)) as volume,
+  select([to_year(o_orderdate) as o_year,
+          (l_extendedprice * (1 - l_discount)) as volume,
           n2_name as nation_name],
-    join((part.p_partkey = lineitem.l_partkey),
-      join((supplier.s_suppkey = lineitem.l_suppkey),
-        join((lineitem.l_orderkey = orders.o_orderkey),
-          join((orders.o_custkey = customer.c_custkey),
-            join((customer.c_nationkey = n1_nationkey),
-              join((n1_regionkey = region.r_regionkey),
-                select([nation.n_regionkey as n1_regionkey,
-                        nation.n_nationkey as n1_nationkey],
+    join((p_partkey = l_partkey),
+      join((s_suppkey = l_suppkey),
+        join((l_orderkey = o_orderkey),
+          join((o_custkey = c_custkey),
+            join((c_nationkey = n1_nationkey),
+              join((n1_regionkey = r_regionkey),
+                select([n_regionkey as n1_regionkey, n_nationkey as n1_nationkey],
                   nation),
-                filter((region.r_name = param2), region)),
+                filter((r_name = param2), region)),
               customer),
-            filter(((orders.o_orderdate >= date("1995-01-01")) &&
-                   (orders.o_orderdate <= date("1996-12-31"))),
+            filter(((o_orderdate >= date("1995-01-01")) &&
+                   (o_orderdate <= date("1996-12-31"))),
               orders)),
           lineitem),
-        join((supplier.s_nationkey = n2_nationkey),
-          select([nation.n_nationkey as n2_nationkey,
-                  nation.n_name as n2_name],
+        join((s_nationkey = n2_nationkey),
+          select([n_nationkey as n2_nationkey, n_name as n2_name],
             nation),
           supplier)),
-      filter((part.p_type = param3), part))))
+      filter((p_type = param3), part))))
 |}
     in
-    let r = M.resolve ~params r in
-    apply elim_groupby r |> Option.iter ~f:(Format.printf "%a@." Abslayout.pp) ;
+    with_logs (fun () ->
+        apply elim_groupby r
+        |> Option.iter ~f:(Format.printf "%a@." Abslayout.pp) ) ;
     [%expect
       {|
-      alist(select([to_year(orders.o_orderdate) as o_year],
-              dedup(select([orders.o_orderdate], orders))) as k0,
-        select([o_year,
-                (sum((if (nation_name = param1) then volume else 0.0)) /
-                sum(volume)) as mkt_share],
-          filter((o_year = k0.o_year),
-            select([to_year(orders.o_orderdate) as o_year,
-                    (lineitem.l_extendedprice * (1 - lineitem.l_discount)) as volume,
-                    n2_name as nation_name],
-              join((part.p_partkey = lineitem.l_partkey),
-                join((supplier.s_suppkey = lineitem.l_suppkey),
-                  join((lineitem.l_orderkey = orders.o_orderkey),
-                    join((orders.o_custkey = customer.c_custkey),
-                      join((customer.c_nationkey = n1_nationkey),
-                        join((n1_regionkey = region.r_regionkey),
-                          select([nation.n_regionkey as n1_regionkey,
-                                  nation.n_nationkey as n1_nationkey],
-                            nation),
-                          filter((region.r_name = param2), region)),
-                        customer),
-                      filter(((orders.o_orderdate >= date("1995-01-01")) &&
-                             (orders.o_orderdate <= date("1996-12-31"))),
-                        orders)),
-                    lineitem),
-                  join((supplier.s_nationkey = n2_nationkey),
-                    select([nation.n_nationkey as n2_nationkey,
-                            nation.n_name as n2_name],
-                      nation),
-                    supplier)),
-                filter((part.p_type = param3), part)))))) |}]
+      run.exe: [INFO] elim-groupby: ("Name does not come from base relation." ((relation ()) (name o_orderdate))) |}]
 end

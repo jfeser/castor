@@ -16,9 +16,9 @@ end)
 
 open Ops
 
-let test1 = {r_name= "test"; r_schema= []}
+let test1 = {r_name= "test"; r_schema= None}
 
-let test2 = {r_name= "test2"; r_schema= []}
+let test2 = {r_name= "test2"; r_schema= None}
 
 let%expect_test "at" =
   let r =

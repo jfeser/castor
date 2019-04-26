@@ -31,7 +31,7 @@ let main ~params:all_params ~db ~validate ~verbose ch =
   let module T = Transform.Make (Config) () in
   let module O = Ops.Make (Config) in
   let query_str = In_channel.input_all ch in
-  let query = Abslayout.of_string_exn query_str |> A.resolve ~params in
+  let query = A.load_string ~params query_str in
   match Transform.optimize (module Config) query with
   | Some query' ->
       Or_error.iter_error (T.is_serializable query') ~f:(fun err ->
