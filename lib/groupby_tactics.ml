@@ -27,19 +27,19 @@ module Make (C : Config.S) = struct
   let over_approx params r =
     let visitor =
       object (self)
-        inherit [_] endo as super
+        inherit [_] map as super
 
-        method! visit_Filter () f (p, r) =
+        method! visit_Filter () (p, r) =
           if Set.is_empty (Set.inter (Pred.names p) params) then
-            super#visit_node () f
+            super#visit_Filter () (p, r)
           else (self#visit_t () r).node
 
-        method! visit_Select () f (ps, r) =
+        method! visit_Select () (ps, r) =
           match select_kind ps with
-          | `Agg -> f
+          | `Agg -> Select (ps, r)
           | `Scalar -> Select (ps, self#visit_t () r)
 
-        method! visit_GroupBy () f _ _ _ = f
+        method! visit_GroupBy () ps ks r = GroupBy (ps, ks, r)
       end
     in
     let r = visitor#visit_t () r in
@@ -92,7 +92,6 @@ module Make (C : Config.S) = struct
     with Failed err -> Error err
 
   let elim_groupby r =
-    M.annotate_defs r ;
     annotate_free r ;
     match r.node with
     | GroupBy (ps, key, r) -> (
@@ -188,5 +187,37 @@ groupby([o_year,
         |> Option.iter ~f:(Format.printf "%a@." Abslayout.pp) ) ;
     [%expect
       {|
-      run.exe: [INFO] elim-groupby: ("Name does not come from base relation." ((relation ()) (name o_orderdate))) |}]
+      alist(dedup(
+              select([o_year],
+                select([to_year(o_orderdate) as o_year],
+                  filter(((o_orderdate >= date("1995-01-01")) &&
+                         (o_orderdate <= date("1996-12-31"))),
+                    orders)))) as k0,
+        select([o_year,
+                (sum((if (nation_name = param1) then volume else 0.0)) /
+                sum(volume)) as mkt_share],
+          filter((o_year = k0.o_year),
+            select([to_year(o_orderdate) as o_year,
+                    (l_extendedprice * (1 - l_discount)) as volume,
+                    n2_name as nation_name],
+              join((p_partkey = l_partkey),
+                join((s_suppkey = l_suppkey),
+                  join((l_orderkey = o_orderkey),
+                    join((o_custkey = c_custkey),
+                      join((c_nationkey = n1_nationkey),
+                        join((n1_regionkey = r_regionkey),
+                          select([n_regionkey as n1_regionkey,
+                                  n_nationkey as n1_nationkey],
+                            nation),
+                          filter((r_name = param2), region)),
+                        customer),
+                      filter(((o_orderdate >= date("1995-01-01")) &&
+                             (o_orderdate <= date("1996-12-31"))),
+                        orders)),
+                    lineitem),
+                  join((s_nationkey = n2_nationkey),
+                    select([n_nationkey as n2_nationkey, n_name as n2_name],
+                      nation),
+                    supplier)),
+                filter((p_type = param3), part)))))) |}]
 end
