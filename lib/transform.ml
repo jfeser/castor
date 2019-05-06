@@ -60,6 +60,7 @@ module Make (Config : Config.S) () = struct
       | _ -> None
     in
     let orderby_list key r1 r2 =
+      let scope = scope_exn r1 in
       annotate_eq r1 ;
       annotate_eq r2 ;
       let schema1 = schema_exn r1 in
@@ -101,7 +102,7 @@ module Make (Config : Config.S) () = struct
               in
               (p', o) )
         in
-        Some (list (order_by new_key r1) r2)
+        Some (list (order_by new_key r1) scope r2)
       with No_key -> None
     in
     let same_orders r1 r2 =
@@ -120,7 +121,7 @@ module Make (Config : Config.S) () = struct
       | OrderBy {key; rel= {node= Filter (ps, r); _}} ->
           Some (filter ps (order_by key r))
       | OrderBy {key; rel= {node= AHashIdx (r1, r2, m); _}} ->
-          Some (hash_idx r1 (order_by key r2) m)
+          Some (hash_idx r1 (scope_exn r1) (order_by key r2) m)
       | OrderBy {key; rel= {node= AList (r1, r2); _}} ->
           (* If we order a lists keys then the keys will be ordered in the
                    list. *)
@@ -234,7 +235,7 @@ let optimize (module C : Config.S) r =
         end in
         let module T = Make (C) () in
         let module O = Ops.Make (C) in
-        Option.value_exn O.(apply T.opt r)
+        Option.value_exn (O.apply T.opt r)
 
       method! visit_Exists () r = Exists (self#visit_subquery r)
 
@@ -245,4 +246,4 @@ let optimize (module C : Config.S) r =
   let module T = Make (C) () in
   let module O = Ops.Make (C) in
   (* Optimize outer query. *)
-  O.(apply T.opt r)
+  O.apply T.opt r

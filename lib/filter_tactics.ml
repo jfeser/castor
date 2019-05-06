@@ -79,17 +79,17 @@ module Make (C : Config.S) = struct
         let below, above = split_bound rk p in
         Some
           (filter (Pred.conjoin above)
-             (list rk (filter (Pred.conjoin below) r)))
+             (list rk (scope_exn rk) (filter (Pred.conjoin below) r)))
     | AHashIdx (rk, {node= Filter (p, r); _}, m) ->
         let below, above = split_bound rk p in
         Some
           (filter (Pred.conjoin above)
-             (hash_idx rk (filter (Pred.conjoin below) r) m))
+             (hash_idx rk (scope_exn rk) (filter (Pred.conjoin below) r) m))
     | AOrderedIdx (rk, {node= Filter (p, r); _}, m) ->
         let below, above = split_bound rk p in
         Some
           (filter (Pred.conjoin above)
-             (ordered_idx rk (filter (Pred.conjoin below) r) m))
+             (ordered_idx rk (scope_exn rk) (filter (Pred.conjoin below) r) m))
     | _ -> None
 
   let hoist_filter = of_func hoist_filter ~name:"hoist-filter"
@@ -171,7 +171,8 @@ module Make (C : Config.S) = struct
     in
     let k = Fresh.name fresh "k%d" in
     ordered_idx
-      (as_ k (dedup (select [p] rk)))
+      (dedup (select [p] rk))
+      k
       (filter (Binop (Eq, qualify k p, p)) rv)
       {oi_key_layout= None; lookup_low= lb; lookup_high= ub; order= `Desc}
 
@@ -300,27 +301,29 @@ module Make (C : Config.S) = struct
         let rs = List.mapi rs ~f:(fun i -> filter (Pred.conjoin preds.(i))) in
         Some (tuple rs Cross)
     | _ ->
-        let orig_bound = M.bound r' in
-        let%map rk, rv, mk =
+        let%map rk, scope, rv, mk =
           match r'.node with
-          | AList (rk, rv) -> Some (rk, rv, list)
-          | AHashIdx (rk, rv, m) -> Some (rk, rv, fun rk rv -> hash_idx rk rv m)
+          | AList (rk, rv) -> Some (strip_scope rk, scope_exn rk, rv, list)
+          | AHashIdx (rk, rv, m) ->
+              Some
+                ( strip_scope rk
+                , scope_exn rk
+                , rv
+                , fun rk s rv -> hash_idx rk s rv m )
           | AOrderedIdx (rk, rv, m) ->
-              Some (rk, rv, fun rk rv -> ordered_idx rk rv m)
+              Some
+                ( strip_scope rk
+                , scope_exn rk
+                , rv
+                , fun rk s rv -> ordered_idx rk s rv m )
           | _ -> None
         in
+        let rk_bnd = Set.of_list (module Name) (schema_exn rk) in
         let unpushed, pushed =
           Pred.conjuncts p
           |> List.partition_map ~f:(fun p ->
-                 let rk_bnd = M.bound rk in
                  if is_supported rk_bnd p then `Snd (`K p)
-                 else if
-                   (* TODO: Don't push filters into places that will shadow
-                      their variables. This is gross tho. Fix later? q*)
-                   Set.is_empty (Set.inter (Pred.names p) rk_bnd)
-                   && invariant_support orig_bound (M.bound rv) p
-                 then `Snd (`V p)
-                 else `Fst p )
+                 else `Snd (`V (Pred.scoped (schema_exn rk) scope p)) )
         in
         let outer_pred = Pred.conjoin unpushed in
         let pushed_key, pushed_val =
@@ -331,7 +334,7 @@ module Make (C : Config.S) = struct
         let inner_key_pred = Pred.conjoin pushed_key in
         let inner_val_pred = Pred.conjoin pushed_val in
         filter outer_pred
-          (mk (filter inner_key_pred rk) (filter inner_val_pred rv))
+          (mk (filter inner_key_pred rk) scope (filter inner_val_pred rv))
 
   let push_filter =
     (* NOTE: Simplify is necessary to make push-filter safe under fixpoints. *)
@@ -353,23 +356,21 @@ module Make (C : Config.S) = struct
         in
         if List.length eqs = 0 then None
         else
-          let eqs = List.map eqs ~f:(fun eq -> (eq, Fresh.name fresh "k%d")) in
+          let scope = Fresh.name fresh "s%d" in
           let open Option.Let_syntax in
-          let select_list =
-            List.map eqs ~f:(fun ((v, _), n) -> As_pred (v, n))
-          in
+          let select_list, key = List.unzip eqs in
           let inner_filter_pred =
-            List.map eqs ~f:(fun ((v, _), n) ->
-                Binop (Eq, Name (Name.create n), v) )
+            let s = schema_exn r in
+            List.map select_list ~f:(fun v ->
+                Binop (Eq, v, Pred.scoped s scope v) )
             |> and_
           in
-          let key = List.map eqs ~f:(fun ((_, k), _) -> k) in
           let outer_filter r =
             match rest with [] -> r | _ -> filter (and_ rest) r
           in
           let%map r' = Tactics_util.all_values select_list r in
           outer_filter
-            (hash_idx r'
+            (hash_idx r' scope
                (filter inner_filter_pred r)
                {lookup= key; hi_key_layout= None})
     | _ -> None

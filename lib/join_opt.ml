@@ -527,18 +527,16 @@ module Make (C : Config.S) = struct
     let f r =
       opt r
       |> ParetoSet.min_elt (fun a -> a.(0))
-      |> Option.map ~f:(fun j ->
-             `Tf (seq_many [of_func (reshape j); emit_joins j]) )
+      |> Option.map ~f:(fun j -> seq_many [of_func (reshape j); emit_joins j])
     in
-    {name= "join-opt"; f}
+    higher_order f "join-opt"
 
   let transform_simple =
     let f r =
       let open Abslayout in
       match r.node with
-      | Join {pred; r1; r2} ->
-          Some (`Result (tuple [r1; filter pred r2] Cross))
+      | Join {pred; r1; r2} -> Some (tuple [r1; filter pred r2] Cross)
       | _ -> None
     in
-    {name= "join-elim"; f}
+    first_order f "join-elim"
 end

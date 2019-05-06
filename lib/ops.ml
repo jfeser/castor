@@ -22,11 +22,41 @@ module Make (C : Config.S) = struct
   module M = Abslayout_db.Make (C)
   open C
 
-  type t =
-    {f: Abslayout.t -> [`Result of Abslayout.t | `Tf of t] option; name: string}
+  module T : sig
+    type t = private
+      { f: Abslayout.t -> [`Result of Abslayout.t | `Tf of t] option
+      ; name: string }
 
-  let first_order f name =
-    {name; f= (fun r -> Option.map (f r) ~f:(fun r -> `Result r))}
+    val first_order :
+      ?short_name:string -> (Abslayout.t -> Abslayout.t option) -> string -> t
+
+    val higher_order :
+      ?short_name:string -> (Abslayout.t -> t option) -> string -> t
+  end = struct
+    type t =
+      { f: Abslayout.t -> [`Result of Abslayout.t | `Tf of t] option
+      ; name: string }
+
+    let first_order ?short_name f name =
+      let f r =
+        Option.map
+          (Exn.reraise_uncaught (Option.value short_name ~default:name)
+             (fun () -> f r))
+          ~f:(fun r -> `Result r)
+      in
+      {name; f}
+
+    let higher_order ?short_name f name =
+      let f r =
+        Option.map
+          (Exn.reraise_uncaught (Option.value short_name ~default:name)
+             (fun () -> f r))
+          ~f:(fun r -> `Tf r)
+      in
+      {name; f}
+  end
+
+  include T
 
   type ('r, 'p) path_set = 'r -> 'p Seq.t
 
@@ -154,17 +184,16 @@ module Make (C : Config.S) = struct
     let f r =
       Option.bind (pspec r) ~f:(fun p' ->
           let r' = Path.get_exn p' r in
-          Option.map (apply tf r') ~f:(fun r'' ->
-              `Result (Path.set_exn p' r r'') ) )
+          Option.map (apply tf r') ~f:(fun r'' -> Path.set_exn p' r r'') )
     in
-    {name= sprintf "(%s @ <path>)" tf.name; f}
+    first_order ~short_name:"@" f (sprintf "(%s @ <path>)" tf.name)
 
   let first tf pset =
     let f r =
       Seq.find_map (pset r) ~f:(fun p' -> apply (at_ tf (fun _ -> Some p')) r)
-      |> Option.map ~f:(fun r -> `Result r)
     in
-    {name= sprintf "first %s in <path set>" tf.name; f}
+    first_order ~short_name:"first" f
+      (sprintf "first %s in <path set>" tf.name)
 
   let fix tf =
     let f r =
@@ -175,7 +204,7 @@ module Make (C : Config.S) = struct
       in
       fix r
     in
-    first_order f (sprintf "fix(%s)" tf.name)
+    first_order ~short_name:"fix" f (sprintf "fix(%s)" tf.name)
 
   let for_all tf pset = fix (first tf pset)
 
@@ -224,17 +253,16 @@ module Make (C : Config.S) = struct
           Logs.debug (fun m ->
               m "@[%s transformed:@,%a@,===== to ======@,%a@]@.\n" tf.name
                 Abslayout.pp r Abslayout.pp r' ) ;
-          Some (`Result r')
+          Some r'
       | None ->
           Logs.debug (fun m -> m "Transform %s failed." tf.name) ;
           None
     in
-    {tf with f}
+    first_order f tf.name
 
   let of_func ?(name = "<unknown>") f =
     let tf = first_order f name in
-    let {f; name} = if validate then validated tf else tf in
-    {f= (fun r -> Exn.reraise_uncaught name (fun () -> f r)); name}
+    if validate then validated tf else tf
 
   let autotune rs cost =
     Seq.min_elt rs ~compare:(fun r1 r2 -> [%compare: float] (cost r1) (cost r2))

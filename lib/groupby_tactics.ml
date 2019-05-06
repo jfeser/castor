@@ -107,7 +107,7 @@ module Make (C : Config.S) = struct
         (* Try to remove any remaining parameters from the keys relation. *)
         match over_approx C.params keys with
         | Ok keys ->
-            Some (list (as_ key_name keys) (select ps (filter filter_pred r)))
+            Some (list keys key_name (select ps (filter filter_pred r)))
         | Error err ->
             Logs.info ~src (fun m -> m "elim-groupby: %a" Error.pp err) ;
             None )

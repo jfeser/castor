@@ -107,10 +107,14 @@ module Make (C : Config.S) = struct
           let%map mk_collection =
             match r'.node with
             | AHashIdx (rk, rv, m) ->
-                Some (fun mk_select -> hash_idx rk (mk_select rv) m)
+                Some
+                  (fun mk_select -> hash_idx rk (scope_exn rk) (mk_select rv) m)
             | AOrderedIdx (rk, rv, m) ->
-                Some (fun mk_select -> ordered_idx rk (mk_select rv) m)
-            | AList (rk, rv) -> Some (fun mk_select -> list rk (mk_select rv))
+                Some
+                  (fun mk_select ->
+                    ordered_idx rk (scope_exn rk) (mk_select rv) m )
+            | AList (rk, rv) ->
+                Some (fun mk_select -> list rk (scope_exn rk) (mk_select rv))
             | ATuple (r' :: rs', Concat) ->
                 Some
                   (fun mk_select ->

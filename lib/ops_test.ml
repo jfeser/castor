@@ -37,10 +37,7 @@ let%expect_test "at" =
     filter (Bool true)
       (select [Bool false] (filter (Bool false) (relation test1)))
   in
-  let tf =
-    let f _ = Some (`Result (relation test2)) in
-    {f; name= "tf"}
-  in
+  let tf = first_order (fun _ -> Some (relation test2)) "tf" in
   let op =
     at_
       (at_ tf Path.(all >>? is_relation >>| shallowest))

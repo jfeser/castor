@@ -23,12 +23,12 @@ module Make (Config : Config.S) = struct
 
   let row_store r =
     if no_params r then
-      let s = schema_exn r in
-      let k = Fresh.name fresh "k%d" in
+      let scope = Fresh.name fresh "s%d" in
       let scalars =
-        List.map s ~f:(fun n -> scalar (Name (Name.copy ~relation:(Some k) n)))
+        Schema.scoped scope (schema_exn r)
+        |> List.map ~f:(fun n -> scalar (Name n))
       in
-      Some (list (as_ k r) (tuple scalars Cross))
+      Some (list r scope (tuple scalars Cross))
     else None
 
   let row_store = of_func row_store ~name:"to-row-store"
