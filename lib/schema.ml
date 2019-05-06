@@ -1,14 +1,14 @@
 open Core
 open Abslayout0
 
-let rename s n = List.map ~f:(Name.copy ~relation:(Some n)) s
+let scoped s = List.map ~f:(Name.scoped s)
+
+let unscoped = List.map ~f:Name.unscoped
 
 let to_name = function
   | Name n -> Some n
   | As_pred (_, n) -> Some (Name.create n)
   | _ -> None
-
-let drop_relation = List.map ~f:(fun n -> Name.copy ~relation:None n)
 
 let rec to_type = function
   | As_pred (p, _) -> to_type p
@@ -50,21 +50,18 @@ and schema_exn r =
         | None -> Name.create "__unnamed__" ~type_:t )
   in
   match r.node with
+  | AList (_, r) | DepJoin {d_rhs= r; _} -> schema_exn r |> unscoped
   | Select (x, _) | GroupBy (x, _, _) -> of_preds x
-  | Filter (_, r)
-   |Dedup r
-   |AList (_, r)
-   |OrderBy {rel= r; _}
-   |DepJoin {d_rhs= r; _} ->
-      schema_exn r
-  | Join {r1; r2; _} | AOrderedIdx (r1, r2, _) | AHashIdx (r1, r2, _) ->
-      (schema_exn r1 |> drop_relation) @ schema_exn r2
+  | Filter (_, r) | Dedup r | OrderBy {rel= r; _} -> schema_exn r
+  | Join {r1; r2; _} -> schema_exn r1 @ schema_exn r2
+  | AOrderedIdx (r1, r2, _) | AHashIdx (r1, r2, _) ->
+      (schema_exn r1 |> unscoped) @ schema_exn r2
   | AEmpty -> []
-  | AScalar e -> of_preds [e] |> drop_relation
+  | AScalar e -> of_preds [e]
   | ATuple (rs, (Cross | Zip)) -> List.concat_map ~f:schema_exn rs
   | ATuple ([], Concat) -> []
   | ATuple (r :: _, Concat) -> schema_exn r
-  | As (n, r) -> rename (schema_exn r) n
+  | As (n, r) -> scoped n (schema_exn r)
   | Relation {r_schema= Some schema; _} -> schema
   | Relation {r_name; r_schema= None; _} ->
       Error.(create "Missing schema annotation." r_name [%sexp_of: string] |> raise)

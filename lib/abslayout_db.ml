@@ -35,7 +35,6 @@ module Make (Config : Config.S) = struct
 
   let rec gen_query q =
     match q.node with
-    | DepJoin {d_lhs; d_alias; d_rhs} -> `For (as_ d_alias d_lhs, gen_query d_rhs)
     | AList (q1, q2) ->
         let q1 =
           let order_key = total_order_key q1 in
@@ -51,6 +50,7 @@ module Make (Config : Config.S) = struct
     | AEmpty -> `Empty
     | AScalar p -> `Scalar p
     | ATuple (ts, _) -> `Concat (List.map ts ~f:gen_query)
+    | DepJoin {d_lhs; d_rhs; _} -> `Concat [gen_query d_lhs; gen_query d_rhs]
     | Select (_, q) | Filter (_, q) | As (_, q) -> gen_query q
     | Relation _ | Dedup _ | OrderBy _ | GroupBy _ | Join _ ->
         failwith "Unsupported."
@@ -431,9 +431,9 @@ module Make (Config : Config.S) = struct
         self#select meta expr (self#visit_t ctx ectx r)
 
       method private build_DepJoin ctx meta expr (lhs, rhs) =
-        self#depjoin meta expr
-          (self#visit_t ctx lhs expr.d_lhs)
-          (self#visit_t ctx rhs expr.d_rhs)
+        let l = self#visit_t ctx lhs expr.d_lhs in
+        let r = self#visit_t ctx rhs expr.d_rhs in
+        self#depjoin meta expr l r
     end
 
   (* Wrapper module allows opening Type without clashes. *)

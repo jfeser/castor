@@ -13,10 +13,9 @@
 %token <Type0.PrimType.t> PRIMTYPE
 %token <Abslayout0.binop> EQ LT GT LE GE AND OR ADD SUB MUL DIV MOD STRPOS
 %token <Abslayout0.unop> MONTH DAY YEAR NOT STRLEN EXTRACTY EXTRACTM EXTRACTD
-%token AS JOIN SELECT DEDUP FILTER COUNT GROUPBY MIN MAX AVG SUM LPAREN RPAREN
-   LSBRAC RSBRAC COLON DOT COMMA EOF
-   AEMPTY ASCALAR ATUPLE ALIST AHASHIDX AORDEREDIDX NULL ORDERBY IF THEN
-   ELSE DATEKW EXISTS SUBSTRING
+%token AS DEPJOIN JOIN SELECT DEDUP FILTER COUNT GROUPBY MIN MAX AVG SUM LPAREN
+RPAREN LSBRAC RSBRAC COLON DOT COMMA EOF AEMPTY ASCALAR ATUPLE ALIST AHASHIDX
+AORDEREDIDX NULL ORDERBY IF THEN ELSE DATEKW EXISTS SUBSTRING
 
 %start <Abslayout0.t> ralgebra_eof
 %start <Abslayout0.pred> expr_eof
@@ -85,6 +84,9 @@ ralgebra_subquery:
   x = expr; COMMA;
   r = ralgebra;
   RPAREN { A.Filter (x, r) |> node $symbolstartpos $endpos }
+
+  | DEPJOIN; LPAREN; d_lhs = ralgebra; AS; d_alias = ID; COMMA; d_rhs = ralgebra; RPAREN
+    { A.DepJoin {d_lhs; d_alias; d_rhs} |> node $symbolstartpos $endpos }
 
 | JOIN; LPAREN;
   p = expr; COMMA;

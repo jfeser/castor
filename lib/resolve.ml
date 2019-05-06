@@ -126,10 +126,8 @@ module Make (C : Config.S) = struct
 
     include T
 
-    let drop_relations (c : t) =
-      List.map
-        (c :> row list)
-        ~f:(fun r -> {r with rname= Name.copy ~relation:None r.rname})
+    let unscoped (c : t) =
+      List.map (c :> row list) ~f:(fun r -> {r with rname= Name.unscoped r.rname})
       |> of_list
 
     (** Bind c2 over c1. *)
@@ -294,14 +292,14 @@ module Make (C : Config.S) = struct
           let d_lhs, lctx = resolve `Compile outer_ctx d_lhs in
           let lctx = Ctx.rename lctx d_alias in
           let d_rhs, rctx = rsame (Ctx.bind outer_ctx lctx) d_rhs in
-          (DepJoin {d with d_lhs; d_rhs}, rctx)
+          (DepJoin {d with d_lhs; d_rhs}, Ctx.unscoped rctx)
       | Join {pred; r1; r2} ->
           let r1, inner_ctx1 = rsame outer_ctx r1 in
           let r2, inner_ctx2 = rsame outer_ctx r2 in
           let ctx = Ctx.merge_list [inner_ctx1; inner_ctx2; outer_ctx] in
           let pred = resolve_pred ctx pred in
           (Join {pred; r1; r2}, Ctx.merge inner_ctx1 inner_ctx2)
-      | Relation r -> (Relation r, resolve_relation stage r |> Ctx.drop_relations)
+      | Relation r -> (Relation r, resolve_relation stage r |> Ctx.unscoped)
       | GroupBy (aggs, key, r) ->
           let r, inner_ctx = rsame outer_ctx r in
           let ctx = Ctx.merge outer_ctx inner_ctx in
@@ -320,35 +318,26 @@ module Make (C : Config.S) = struct
             | [def], ctx -> (def, ctx)
             | _ -> assert false
           in
-          (AScalar def, Ctx.drop_relations ctx)
+          (AScalar def, ctx)
       | AList (rk, rv) ->
           let rk, kctx = resolve `Compile outer_ctx rk in
           assert (all_has_stage kctx `Compile) ;
           let rv, vctx = rsame (Ctx.bind outer_ctx kctx) rv in
           assert (no_leakage kctx vctx) ;
-          (AList (rk, rv), vctx)
-      | ATuple (ls, (Zip as t)) ->
-          let ls, ctxs = List.map ls ~f:(rsame outer_ctx) |> List.unzip in
-          (ATuple (ls, t), Ctx.merge_list ctxs)
+          (AList (rk, rv), Ctx.unscoped vctx)
       | ATuple (ls, (Concat as t)) ->
           let ls, ctxs = List.map ls ~f:(rsame outer_ctx) |> List.unzip in
           (ATuple (ls, t), List.hd_exn ctxs)
-      | ATuple (ls, (Cross as t)) ->
-          let ls, ctx =
-            List.fold_left ls
-              ~init:([], Ctx.of_list [])
-              ~f:(fun (ls, ctx) l ->
-                let l, ctx' = rsame (Ctx.bind outer_ctx ctx) l in
-                (l :: ls, Ctx.merge ctx ctx') )
-          in
-          (ATuple (List.rev ls, t), ctx)
+      | ATuple (ls, ((Cross | Zip) as t)) ->
+          let ls, ctxs = List.map ls ~f:(rsame outer_ctx) |> List.unzip in
+          (ATuple (ls, t), Ctx.merge_list ctxs)
       | AHashIdx (r, l, m) ->
           let r, key_ctx = resolve `Compile outer_ctx r in
           assert (all_has_stage key_ctx `Compile) ;
           let inner_ctx = Ctx.bind outer_ctx key_ctx in
           let vl, value_ctx = rsame inner_ctx l in
           let m = {m with lookup= List.map m.lookup ~f:(resolve_pred outer_ctx)} in
-          (AHashIdx (r, vl, m), Ctx.(merge key_ctx value_ctx |> drop_relations))
+          (AHashIdx (r, vl, m), Ctx.(merge key_ctx value_ctx |> unscoped))
       | AOrderedIdx (r, l, m) ->
           let r, key_ctx = resolve `Compile outer_ctx r in
           assert (all_has_stage key_ctx `Compile) ;
@@ -359,7 +348,7 @@ module Make (C : Config.S) = struct
               lookup_low= resolve_pred outer_ctx m.lookup_low
             ; lookup_high= resolve_pred outer_ctx m.lookup_high }
           in
-          (AOrderedIdx (r, vl, m), Ctx.(merge key_ctx value_ctx |> drop_relations))
+          (AOrderedIdx (r, vl, m), Ctx.(merge key_ctx value_ctx |> unscoped))
       | As (n, r) ->
           let r, ctx = rsame outer_ctx r in
           (As (n, r), Ctx.rename ctx n)

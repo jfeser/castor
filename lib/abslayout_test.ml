@@ -217,7 +217,6 @@ let%test_module _ =
       Demomatch.(run_print_test ~params:example_params (example3 "log")) ;
       [%expect
         {|
-    Tuple
     HashIdx
     HashIdx key: ((Int 1))
     List

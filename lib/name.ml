@@ -134,6 +134,10 @@ let to_sql n =
   | Some r -> sprintf "%s.\"%s\"" r n.name.node.name
   | None -> sprintf "\"%s\"" n.name.node.name
 
+let scoped s n = copy ~relation:(Some s) n
+
+let unscoped n = copy ~relation:None n
+
 let pp fmt n =
   let open Format in
   let name = n.name.node.name in

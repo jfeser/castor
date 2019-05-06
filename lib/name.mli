@@ -29,6 +29,10 @@ val type_exn : t -> Type.PrimType.t
 
 val rel_exn : t -> string
 
+val scoped : string -> t -> t
+
+val unscoped : t -> t
+
 val to_sql : t -> string
 
 val to_var : t -> string

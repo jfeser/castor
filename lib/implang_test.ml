@@ -344,11 +344,11 @@ let%expect_test "cross-tuple" =
 
 let%expect_test "hash-idx" =
   run_test
-    "ATuple([AList(r1 as k, AScalar(k.f as ff)), AHashIdx(dedup(select([f], r1)) \
-     as k1, ascalar(k1.f + 1), ff)], cross)" ;
+    "depjoin(AList(r1 as kl, AScalar(kl.f)) as k, AHashIdx(dedup(select([f], r1)) \
+     as kh, ascalar(kh.f + 1), k.f))" ;
   [%expect
     {|
-    (TupleT
+    (FuncT
      (((ListT
         ((IntT ((range (Interval 1 3)) (nullable false)))
          ((count (Interval 5 5)))))
@@ -356,208 +356,184 @@ let%expect_test "hash-idx" =
         ((IntT ((range (Interval 1 3)) (nullable false)))
          (IntT ((range (Interval 2 4)) (nullable false)))
          ((key_count (Interval 3 3)) (value_count (Interval 1 1))))))
-      ((count (Interval 5 5)))))
+      Child_sum))
     // Locals:
-    // cstart8 : Int[nonnull] (persists=true)
-    // count12 : Int[nonnull] (persists=true)
-    // vstart14 : Int[nonnull] (persists=false)
-    // kstart13 : Int[nonnull] (persists=false)
-    // i11 : Int[nonnull] (persists=true)
-    // cstart9 : Int[nonnull] (persists=true)
-    // cstart10 : Int[nonnull] (persists=true)
-    // key15 : Tuple[Int[nonnull]] (persists=false)
+    // count8 : Int[nonnull] (persists=true)
+    // i7 : Int[nonnull] (persists=true)
+    // vstart10 : Int[nonnull] (persists=false)
+    // key11 : Tuple[Int[nonnull]] (persists=false)
+    // cstart6 : Int[nonnull] (persists=true)
+    // kstart9 : Int[nonnull] (persists=false)
     fun printer () : Void {
-        cstart8 = 4;
-        cstart9 = cstart8 + 5;
-        cstart10 = cstart8;
-        i11 = 0;
-        count12 = 5;
-        loop (i11 < count12) {
-            if (buf[cstart10 : 1] * 8 < 0 || buf[cstart9 + 4 + 0 + 0 : 8] - 1 <
-                buf[cstart10 : 1] * 8 || buf[cstart9 + 4 + 0 + 0 + 8 +
-                buf[cstart10 : 1] * 8 : 8] == 0) {
+        cstart6 = 4;
+        i7 = 0;
+        count8 = 5;
+        loop (i7 < count8) {
+            if (buf[cstart6 : 1] * 8 < 0 || buf[13 : 8] - 1 < buf[cstart6 : 1] *
+                8 || buf[21 + buf[cstart6 : 1] * 8 : 8] == 0) {
 
             } else {
-                 kstart13 = buf[cstart9 + 4 + 0 + 0 + 8 + buf[cstart10 : 1] * 8 :
-                 8];
-                 key15 = (buf[kstart13 : 1]);
-                 vstart14 = buf[cstart9 + 4 + 0 + 0 + 8 + buf[cstart10 : 1] * 8 :
-                 8] + 1;
-                 if (true && key15[0] == buf[cstart10 : 1]) {
-                     print(Tuple[Int[nonnull], Int[nonnull], Int[nonnull]],
-                     (buf[cstart10 : 1], key15[0], buf[vstart14 : 1]));
+                 kstart9 = buf[21 + buf[cstart6 : 1] * 8 : 8];
+                 key11 = (buf[kstart9 : 1]);
+                 vstart10 = buf[21 + buf[cstart6 : 1] * 8 : 8] + 1;
+                 if (true && key11[0] == buf[cstart6 : 1]) {
+                     print(Tuple[Int[nonnull], Int[nonnull]],
+                     (key11[0], buf[vstart10 : 1]));
                  } else {
 
                  }
             }
-            cstart10 = cstart10 + 1;
-            i11 = i11 + 1;
+            cstart6 = cstart6 + 1;
+            i7 = i7 + 1;
         }
     }
     // Locals:
-    // i3 : Int[nonnull] (persists=true)
-    // cstart2 : Int[nonnull] (persists=true)
-    // cstart1 : Int[nonnull] (persists=true)
-    // kstart5 : Int[nonnull] (persists=false)
-    // vstart6 : Int[nonnull] (persists=false)
+    // kstart3 : Int[nonnull] (persists=false)
+    // key5 : Tuple[Int[nonnull]] (persists=false)
+    // i1 : Int[nonnull] (persists=true)
+    // vstart4 : Int[nonnull] (persists=false)
     // cstart0 : Int[nonnull] (persists=true)
-    // count4 : Int[nonnull] (persists=true)
-    // key7 : Tuple[Int[nonnull]] (persists=false)
+    // count2 : Int[nonnull] (persists=true)
     fun consumer () : Void {
         cstart0 = 4;
-        cstart1 = cstart0 + 5;
-        cstart2 = cstart0;
-        i3 = 0;
-        count4 = 5;
-        loop (i3 < count4) {
-            if (buf[cstart2 : 1] * 8 < 0 || buf[cstart1 + 4 + 0 + 0 : 8] - 1 <
-                buf[cstart2 : 1] * 8 || buf[cstart1 + 4 + 0 + 0 + 8 +
-                buf[cstart2 : 1] * 8 : 8] == 0) {
+        i1 = 0;
+        count2 = 5;
+        loop (i1 < count2) {
+            if (buf[cstart0 : 1] * 8 < 0 || buf[13 : 8] - 1 < buf[cstart0 : 1] *
+                8 || buf[21 + buf[cstart0 : 1] * 8 : 8] == 0) {
 
             } else {
-                 kstart5 = buf[cstart1 + 4 + 0 + 0 + 8 + buf[cstart2 : 1] * 8 :
-                 8];
-                 key7 = (buf[kstart5 : 1]);
-                 vstart6 = buf[cstart1 + 4 + 0 + 0 + 8 + buf[cstart2 : 1] * 8 :
-                 8] + 1;
-                 if (true && key7[0] == buf[cstart2 : 1]) {
-                     consume(Tuple[Int[nonnull], Int[nonnull], Int[nonnull]],
-                     (buf[cstart2 : 1], key7[0], buf[vstart6 : 1]));
+                 kstart3 = buf[21 + buf[cstart0 : 1] * 8 : 8];
+                 key5 = (buf[kstart3 : 1]);
+                 vstart4 = buf[21 + buf[cstart0 : 1] * 8 : 8] + 1;
+                 if (true && key5[0] == buf[cstart0 : 1]) {
+                     consume(Tuple[Int[nonnull], Int[nonnull]],
+                     (key5[0], buf[vstart4 : 1]));
                  } else {
 
                  }
             }
-            cstart2 = cstart2 + 1;
-            i3 = i3 + 1;
+            cstart0 = cstart0 + 1;
+            i1 = i1 + 1;
         }
     } |}]
 
 let%expect_test "ordered-idx" =
   run_test
-    "ATuple([AList(r1 as k, AScalar(k.f)), AOrderedIdx(dedup(select([f as kf], \
-     r1)) as k1, ascalar(k1.kf+1), f, f+1)], cross)" ;
+    "depjoin(AList(r1 as kl, AScalar(kl.f)) as k, AOrderedIdx(dedup(select([f as \
+     kf], r1)) as k1, ascalar(k1.kf+1), k.f, k.f+1))" ;
   [%expect
     {|
-    (TupleT
+    (FuncT
      (((ListT
         ((IntT ((range (Interval 1 3)) (nullable false)))
          ((count (Interval 5 5)))))
        (OrderedIdxT
         ((IntT ((range (Interval 1 3)) (nullable false)))
          (IntT ((range (Interval 2 4)) (nullable false))) ((count Top)))))
-      ((count Top))))
+      Child_sum))
     // Locals:
-    // i18 : Int[nonnull] (persists=true)
-    // vstart21 : Int[nonnull] (persists=true)
-    // low23 : Int[nonnull] (persists=true)
-    // mid25 : Int[nonnull] (persists=true)
-    // key22 : Tuple[Int[nonnull]] (persists=true)
-    // cstart16 : Int[nonnull] (persists=true)
-    // key28 : Tuple[Int[nonnull]] (persists=true)
-    // key27 : Tuple[Int[nonnull]] (persists=false)
-    // cstart17 : Int[nonnull] (persists=true)
-    // key26 : Tuple[Int[nonnull]] (persists=false)
-    // high24 : Int[nonnull] (persists=true)
-    // cstart15 : Int[nonnull] (persists=true)
-    // key29 : Tuple[Int[nonnull]] (persists=false)
-    // count19 : Int[nonnull] (persists=true)
-    // kstart20 : Int[nonnull] (persists=true)
+    // vstart17 : Int[nonnull] (persists=true)
+    // key22 : Tuple[Int[nonnull]] (persists=false)
+    // i14 : Int[nonnull] (persists=true)
+    // key23 : Tuple[Int[nonnull]] (persists=false)
+    // high20 : Int[nonnull] (persists=true)
+    // mid21 : Int[nonnull] (persists=true)
+    // kstart16 : Int[nonnull] (persists=true)
+    // key25 : Tuple[Int[nonnull]] (persists=false)
+    // count15 : Int[nonnull] (persists=true)
+    // cstart13 : Int[nonnull] (persists=true)
+    // key24 : Tuple[Int[nonnull]] (persists=true)
+    // key18 : Tuple[Int[nonnull]] (persists=true)
+    // low19 : Int[nonnull] (persists=true)
     fun printer () : Void {
-        cstart15 = 4;
-        cstart16 = cstart15 + 5;
-        cstart17 = cstart15;
-        i18 = 0;
-        count19 = 5;
-        loop (i18 < count19) {
-            low23 = 0;
-            high24 = buf[cstart16 + 4 : 8] / 9;
-            loop (low23 < high24) {
-                mid25 = low23 + high24 / 2;
-                kstart20 = cstart16 + 4 + 8 + mid25 * 9;
-                key26 = (buf[kstart20 : 1]);
-                if (key26[0] < buf[cstart17 : 1]) {
-                    low23 = mid25 + 1;
+        cstart13 = 4;
+        i14 = 0;
+        count15 = 5;
+        loop (i14 < count15) {
+            low19 = 0;
+            high20 = buf[13 : 8] / 9;
+            loop (low19 < high20) {
+                mid21 = low19 + high20 / 2;
+                kstart16 = 21 + mid21 * 9;
+                key22 = (buf[kstart16 : 1]);
+                if (key22[0] < buf[cstart13 : 1]) {
+                    low19 = mid21 + 1;
                 } else {
-                     high24 = mid25;
+                     high20 = mid21;
                 }
             }
-            if (low23 < buf[cstart16 + 4 : 8] / 9) {
-                kstart20 = cstart16 + 4 + 8 + low23 * 9;
-                key27 = (buf[kstart20 : 1]);
-                key28 = key27;
-                loop (key28[0] < buf[cstart17 : 1] + 1 && low23 < buf[cstart16 +
-                      4 : 8] / 9) {
-                    vstart21 = buf[cstart16 + 4 + 8 + low23 * 9 + 1 : 8];
-                    key22 = key28;
-                    print(Tuple[Int[nonnull], Int[nonnull], Int[nonnull]],
-                    (buf[cstart17 : 1], key22[0], buf[vstart21 : 1]));
-                    low23 = low23 + 1;
-                    kstart20 = cstart16 + 4 + 8 + low23 * 9;
-                    key29 = (buf[kstart20 : 1]);
-                    key28 = key29;
+            if (low19 < buf[13 : 8] / 9) {
+                kstart16 = 21 + low19 * 9;
+                key23 = (buf[kstart16 : 1]);
+                key24 = key23;
+                loop (key24[0] < buf[cstart13 : 1] + 1 && low19 < buf[13 : 8] / 9) {
+                    vstart17 = buf[21 + low19 * 9 + 1 : 8];
+                    key18 = key24;
+                    print(Tuple[Int[nonnull], Int[nonnull]],
+                    (key18[0], buf[vstart17 : 1]));
+                    low19 = low19 + 1;
+                    kstart16 = 21 + low19 * 9;
+                    key25 = (buf[kstart16 : 1]);
+                    key24 = key25;
                 }
             } else {
 
             }
-            cstart17 = cstart17 + 1;
-            i18 = i18 + 1;
+            cstart13 = cstart13 + 1;
+            i14 = i14 + 1;
         }
     }
     // Locals:
-    // key13 : Tuple[Int[nonnull]] (persists=true)
-    // cstart2 : Int[nonnull] (persists=true)
-    // high9 : Int[nonnull] (persists=true)
-    // mid10 : Int[nonnull] (persists=true)
-    // key11 : Tuple[Int[nonnull]] (persists=false)
-    // count4 : Int[nonnull] (persists=true)
-    // low8 : Int[nonnull] (persists=true)
-    // key14 : Tuple[Int[nonnull]] (persists=false)
-    // i3 : Int[nonnull] (persists=true)
-    // cstart1 : Int[nonnull] (persists=true)
-    // kstart5 : Int[nonnull] (persists=true)
-    // vstart6 : Int[nonnull] (persists=true)
+    // i1 : Int[nonnull] (persists=true)
+    // key10 : Tuple[Int[nonnull]] (persists=false)
+    // vstart4 : Int[nonnull] (persists=true)
+    // mid8 : Int[nonnull] (persists=true)
+    // key9 : Tuple[Int[nonnull]] (persists=false)
+    // key11 : Tuple[Int[nonnull]] (persists=true)
+    // count2 : Int[nonnull] (persists=true)
+    // high7 : Int[nonnull] (persists=true)
+    // kstart3 : Int[nonnull] (persists=true)
+    // key5 : Tuple[Int[nonnull]] (persists=true)
+    // low6 : Int[nonnull] (persists=true)
     // key12 : Tuple[Int[nonnull]] (persists=false)
     // cstart0 : Int[nonnull] (persists=true)
-    // key7 : Tuple[Int[nonnull]] (persists=true)
     fun consumer () : Void {
         cstart0 = 4;
-        cstart1 = cstart0 + 5;
-        cstart2 = cstart0;
-        i3 = 0;
-        count4 = 5;
-        loop (i3 < count4) {
-            low8 = 0;
-            high9 = buf[cstart1 + 4 : 8] / 9;
-            loop (low8 < high9) {
-                mid10 = low8 + high9 / 2;
-                kstart5 = cstart1 + 4 + 8 + mid10 * 9;
-                key11 = (buf[kstart5 : 1]);
-                if (key11[0] < buf[cstart2 : 1]) {
-                    low8 = mid10 + 1;
+        i1 = 0;
+        count2 = 5;
+        loop (i1 < count2) {
+            low6 = 0;
+            high7 = buf[13 : 8] / 9;
+            loop (low6 < high7) {
+                mid8 = low6 + high7 / 2;
+                kstart3 = 21 + mid8 * 9;
+                key9 = (buf[kstart3 : 1]);
+                if (key9[0] < buf[cstart0 : 1]) {
+                    low6 = mid8 + 1;
                 } else {
-                     high9 = mid10;
+                     high7 = mid8;
                 }
             }
-            if (low8 < buf[cstart1 + 4 : 8] / 9) {
-                kstart5 = cstart1 + 4 + 8 + low8 * 9;
-                key12 = (buf[kstart5 : 1]);
-                key13 = key12;
-                loop (key13[0] < buf[cstart2 : 1] + 1 && low8 < buf[cstart1 + 4 :
-                      8] / 9) {
-                    vstart6 = buf[cstart1 + 4 + 8 + low8 * 9 + 1 : 8];
-                    key7 = key13;
-                    consume(Tuple[Int[nonnull], Int[nonnull], Int[nonnull]],
-                    (buf[cstart2 : 1], key7[0], buf[vstart6 : 1]));
-                    low8 = low8 + 1;
-                    kstart5 = cstart1 + 4 + 8 + low8 * 9;
-                    key14 = (buf[kstart5 : 1]);
-                    key13 = key14;
+            if (low6 < buf[13 : 8] / 9) {
+                kstart3 = 21 + low6 * 9;
+                key10 = (buf[kstart3 : 1]);
+                key11 = key10;
+                loop (key11[0] < buf[cstart0 : 1] + 1 && low6 < buf[13 : 8] / 9) {
+                    vstart4 = buf[21 + low6 * 9 + 1 : 8];
+                    key5 = key11;
+                    consume(Tuple[Int[nonnull], Int[nonnull]],
+                    (key5[0], buf[vstart4 : 1]));
+                    low6 = low6 + 1;
+                    kstart3 = 21 + low6 * 9;
+                    key12 = (buf[kstart3 : 1]);
+                    key11 = key12;
                 }
             } else {
 
             }
-            cstart2 = cstart2 + 1;
-            i3 = i3 + 1;
+            cstart0 = cstart0 + 1;
+            i1 = i1 + 1;
         }
     } |}]
 
@@ -769,7 +745,7 @@ let%expect_test "example-3" =
   [%expect
     {|
     (FuncT
-     (((TupleT
+     (((FuncT
         (((HashIdxT
            ((IntT ((range (Interval 1 3)) (nullable false)))
             (ListT
@@ -780,107 +756,105 @@ let%expect_test "example-3" =
               ((count (Interval 1 2)))))
             ((key_count (Interval 3 3)) (value_count (Interval 1 2)))))
           (FuncT
-           (((OrderedIdxT
-              ((IntT ((range (Interval 1 5)) (nullable false)))
-               (ListT
-                ((TupleT
-                  (((IntT ((range (Interval 1 3)) (nullable false)))
-                    (IntT ((range (Interval 1 5)) (nullable false))))
-                   ((count (Interval 1 1)))))
-                 ((count (Interval 1 1)))))
-               ((count Top)))))
-            Child_sum)))
-         ((count Top)))))
+           (((FuncT
+              (((OrderedIdxT
+                 ((IntT ((range (Interval 1 5)) (nullable false)))
+                  (ListT
+                   ((TupleT
+                     (((IntT ((range (Interval 1 3)) (nullable false)))
+                       (IntT ((range (Interval 1 5)) (nullable false))))
+                      ((count (Interval 1 1)))))
+                    ((count (Interval 1 1)))))
+                  ((count Top)))))
+               Child_sum)))
+            (Width 2))))
+         Child_sum)))
       (Width 2)))
     // Locals:
-    // kstart35 : Int[nonnull] (persists=true)
-    // vstart28 : Int[nonnull] (persists=false)
-    // cstart25 : Int[nonnull] (persists=true)
-    // cstart47 : Int[nonnull] (persists=true)
-    // i45 : Int[nonnull] (persists=true)
+    // cstart29 : Int[nonnull] (persists=true)
     // cstart44 : Int[nonnull] (persists=true)
-    // cstart34 : Int[nonnull] (persists=true)
-    // key42 : Tuple[Int[nonnull]] (persists=false)
-    // cstart48 : Int[nonnull] (persists=true)
-    // key29 : Tuple[Int[nonnull]] (persists=false)
-    // i31 : Int[nonnull] (persists=true)
-    // key41 : Tuple[Int[nonnull]] (persists=false)
-    // key43 : Tuple[Int[nonnull]] (persists=true)
-    // key37 : Tuple[Int[nonnull]] (persists=true)
+    // i27 : Int[nonnull] (persists=true)
+    // key25 : Tuple[Int[nonnull]] (persists=false)
+    // count42 : Int[nonnull] (persists=true)
+    // cstart43 : Int[nonnull] (persists=true)
+    // vstart24 : Int[nonnull] (persists=false)
+    // kstart23 : Int[nonnull] (persists=false)
+    // count28 : Int[nonnull] (persists=true)
+    // key38 : Tuple[Int[nonnull]] (persists=false)
+    // low34 : Int[nonnull] (persists=true)
+    // key37 : Tuple[Int[nonnull]] (persists=false)
     // cstart30 : Int[nonnull] (persists=true)
-    // cstart33 : Int[nonnull] (persists=true)
-    // low38 : Int[nonnull] (persists=true)
-    // count32 : Int[nonnull] (persists=true)
-    // vstart36 : Int[nonnull] (persists=true)
-    // key49 : Tuple[Int[nonnull]] (persists=false)
-    // count46 : Int[nonnull] (persists=true)
-    // mid40 : Int[nonnull] (persists=true)
-    // high39 : Int[nonnull] (persists=true)
-    // kstart27 : Int[nonnull] (persists=false)
+    // high35 : Int[nonnull] (persists=true)
+    // kstart31 : Int[nonnull] (persists=true)
+    // key39 : Tuple[Int[nonnull]] (persists=true)
+    // i41 : Int[nonnull] (persists=true)
+    // key45 : Tuple[Int[nonnull]] (persists=false)
+    // mid36 : Int[nonnull] (persists=true)
+    // key33 : Tuple[Int[nonnull]] (persists=true)
+    // vstart32 : Int[nonnull] (persists=true)
+    // cstart40 : Int[nonnull] (persists=true)
     // cstart26 : Int[nonnull] (persists=true)
     fun printer () : Void {
-        cstart25 = 4;
-        cstart26 = cstart25 + buf[cstart25 : 4];
-        if (id_p * 8 < 0 || buf[cstart25 + 4 + 0 + 0 : 8] - 1 < id_p * 8 ||
-            buf[cstart25 + 4 + 0 + 0 + 8 + id_p * 8 : 8] == 0) {
+        if (id_p * 8 < 0 || buf[8 : 8] - 1 < id_p * 8 || buf[16 + id_p * 8 :
+            8] == 0) {
 
         } else {
-             kstart27 = buf[cstart25 + 4 + 0 + 0 + 8 + id_p * 8 : 8];
-             key29 = (buf[kstart27 : 1]);
-             vstart28 = buf[cstart25 + 4 + 0 + 0 + 8 + id_p * 8 : 8] + 1;
-             if (true && key29[0] == id_p) {
-                 cstart30 = vstart28 + 1 + 1;
-                 i31 = 0;
-                 count32 = buf[vstart28 : 1];
-                 loop (i31 < count32) {
-                     cstart33 = cstart30;
-                     cstart34 = cstart33 + 1;
-                     low38 = 0;
-                     high39 = buf[cstart26 + 4 : 8] / 9;
-                     loop (low38 < high39) {
-                         mid40 = low38 + high39 / 2;
-                         kstart35 = cstart26 + 4 + 8 + mid40 * 9;
-                         key41 = (buf[kstart35 : 1]);
-                         if (key41[0] < buf[cstart33 : 1]) {
-                             low38 = mid40 + 1;
+             kstart23 = buf[16 + id_p * 8 : 8];
+             key25 = (buf[kstart23 : 1]);
+             vstart24 = buf[16 + id_p * 8 : 8] + 1;
+             if (true && key25[0] == id_p) {
+                 cstart26 = vstart24 + 1 + 1;
+                 i27 = 0;
+                 count28 = buf[vstart24 : 1];
+                 loop (i27 < count28) {
+                     cstart29 = cstart26;
+                     cstart30 = cstart29 + 1;
+                     low34 = 0;
+                     high35 = buf[4 + buf[4 : 4] + 4 : 8] / 9;
+                     loop (low34 < high35) {
+                         mid36 = low34 + high35 / 2;
+                         kstart31 = 4 + buf[4 : 4] + 4 + 8 + mid36 * 9;
+                         key37 = (buf[kstart31 : 1]);
+                         if (key37[0] < buf[cstart29 : 1]) {
+                             low34 = mid36 + 1;
                          } else {
-                              high39 = mid40;
+                              high35 = mid36;
                          }
                      }
-                     if (low38 < buf[cstart26 + 4 : 8] / 9) {
-                         kstart35 = cstart26 + 4 + 8 + low38 * 9;
-                         key42 = (buf[kstart35 : 1]);
-                         key43 = key42;
-                         loop (key43[0] < buf[cstart34 : 1] && low38 <
-                               buf[cstart26 + 4 : 8] / 9) {
-                             vstart36 = buf[cstart26 + 4 + 8 + low38 * 9 + 1 :
-                             8];
-                             key37 = key43;
-                             cstart44 = vstart36;
-                             i45 = 0;
-                             count46 = 1;
-                             loop (i45 < count46) {
-                                 cstart47 = cstart44;
-                                 cstart48 = cstart47 + 1;
-                                 if (buf[cstart47 : 1] == id_c) {
+                     if (low34 < buf[4 + buf[4 : 4] + 4 : 8] / 9) {
+                         kstart31 = 4 + buf[4 : 4] + 4 + 8 + low34 * 9;
+                         key38 = (buf[kstart31 : 1]);
+                         key39 = key38;
+                         loop (key39[0] < buf[cstart30 : 1] && low34 < buf[4 +
+                               buf[4 : 4] + 4 : 8] / 9) {
+                             vstart32 = buf[4 + buf[4 : 4] + 4 + 8 + low34 * 9 +
+                             1 : 8];
+                             key33 = key39;
+                             cstart40 = vstart32;
+                             i41 = 0;
+                             count42 = 1;
+                             loop (i41 < count42) {
+                                 cstart43 = cstart40;
+                                 cstart44 = cstart43 + 1;
+                                 if (buf[cstart43 : 1] == id_c) {
                                      print(Tuple[Int[nonnull], Int[nonnull]],
-                                     (buf[cstart33 : 1], buf[cstart48 : 1]));
+                                     (buf[cstart29 : 1], buf[cstart44 : 1]));
                                  } else {
 
                                  }
-                                 cstart44 = cstart44 + 2;
-                                 i45 = i45 + 1;
+                                 cstart40 = cstart40 + 2;
+                                 i41 = i41 + 1;
                              }
-                             low38 = low38 + 1;
-                             kstart35 = cstart26 + 4 + 8 + low38 * 9;
-                             key49 = (buf[kstart35 : 1]);
-                             key43 = key49;
+                             low34 = low34 + 1;
+                             kstart31 = 4 + buf[4 : 4] + 4 + 8 + low34 * 9;
+                             key45 = (buf[kstart31 : 1]);
+                             key39 = key45;
                          }
                      } else {
 
                      }
-                     cstart30 = cstart30 + 2;
-                     i31 = i31 + 1;
+                     cstart26 = cstart26 + 2;
+                     i27 = i27 + 1;
                  }
              } else {
 
@@ -888,93 +862,90 @@ let%expect_test "example-3" =
         }
     }
     // Locals:
-    // kstart10 : Int[nonnull] (persists=true)
-    // cstart9 : Int[nonnull] (persists=true)
-    // key17 : Tuple[Int[nonnull]] (persists=false)
-    // cstart22 : Int[nonnull] (persists=true)
-    // cstart8 : Int[nonnull] (persists=true)
-    // low13 : Int[nonnull] (persists=true)
-    // key4 : Tuple[Int[nonnull]] (persists=false)
-    // key16 : Tuple[Int[nonnull]] (persists=false)
-    // key24 : Tuple[Int[nonnull]] (persists=false)
-    // cstart23 : Int[nonnull] (persists=true)
-    // cstart0 : Int[nonnull] (persists=true)
-    // cstart19 : Int[nonnull] (persists=true)
-    // high14 : Int[nonnull] (persists=true)
-    // mid15 : Int[nonnull] (persists=true)
-    // vstart11 : Int[nonnull] (persists=true)
-    // i20 : Int[nonnull] (persists=true)
-    // cstart1 : Int[nonnull] (persists=true)
-    // count21 : Int[nonnull] (persists=true)
-    // vstart3 : Int[nonnull] (persists=false)
-    // kstart2 : Int[nonnull] (persists=false)
-    // key18 : Tuple[Int[nonnull]] (persists=true)
-    // count7 : Int[nonnull] (persists=true)
-    // key12 : Tuple[Int[nonnull]] (persists=true)
-    // cstart5 : Int[nonnull] (persists=true)
-    // i6 : Int[nonnull] (persists=true)
+    // i18 : Int[nonnull] (persists=true)
+    // key10 : Tuple[Int[nonnull]] (persists=true)
+    // key22 : Tuple[Int[nonnull]] (persists=false)
+    // cstart21 : Int[nonnull] (persists=true)
+    // high12 : Int[nonnull] (persists=true)
+    // cstart17 : Int[nonnull] (persists=true)
+    // mid13 : Int[nonnull] (persists=true)
+    // count5 : Int[nonnull] (persists=true)
+    // key14 : Tuple[Int[nonnull]] (persists=false)
+    // key16 : Tuple[Int[nonnull]] (persists=true)
+    // key2 : Tuple[Int[nonnull]] (persists=false)
+    // count19 : Int[nonnull] (persists=true)
+    // cstart6 : Int[nonnull] (persists=true)
+    // cstart7 : Int[nonnull] (persists=true)
+    // vstart9 : Int[nonnull] (persists=true)
+    // kstart8 : Int[nonnull] (persists=true)
+    // key15 : Tuple[Int[nonnull]] (persists=false)
+    // kstart0 : Int[nonnull] (persists=false)
+    // vstart1 : Int[nonnull] (persists=false)
+    // i4 : Int[nonnull] (persists=true)
+    // cstart3 : Int[nonnull] (persists=true)
+    // low11 : Int[nonnull] (persists=true)
+    // cstart20 : Int[nonnull] (persists=true)
     fun consumer () : Void {
-        cstart0 = 4;
-        cstart1 = cstart0 + buf[cstart0 : 4];
-        if (id_p * 8 < 0 || buf[cstart0 + 4 + 0 + 0 : 8] - 1 < id_p * 8 ||
-            buf[cstart0 + 4 + 0 + 0 + 8 + id_p * 8 : 8] == 0) {
+        if (id_p * 8 < 0 || buf[8 : 8] - 1 < id_p * 8 || buf[16 + id_p * 8 :
+            8] == 0) {
 
         } else {
-             kstart2 = buf[cstart0 + 4 + 0 + 0 + 8 + id_p * 8 : 8];
-             key4 = (buf[kstart2 : 1]);
-             vstart3 = buf[cstart0 + 4 + 0 + 0 + 8 + id_p * 8 : 8] + 1;
-             if (true && key4[0] == id_p) {
-                 cstart5 = vstart3 + 1 + 1;
-                 i6 = 0;
-                 count7 = buf[vstart3 : 1];
-                 loop (i6 < count7) {
-                     cstart8 = cstart5;
-                     cstart9 = cstart8 + 1;
-                     low13 = 0;
-                     high14 = buf[cstart1 + 4 : 8] / 9;
-                     loop (low13 < high14) {
-                         mid15 = low13 + high14 / 2;
-                         kstart10 = cstart1 + 4 + 8 + mid15 * 9;
-                         key16 = (buf[kstart10 : 1]);
-                         if (key16[0] < buf[cstart8 : 1]) {
-                             low13 = mid15 + 1;
+             kstart0 = buf[16 + id_p * 8 : 8];
+             key2 = (buf[kstart0 : 1]);
+             vstart1 = buf[16 + id_p * 8 : 8] + 1;
+             if (true && key2[0] == id_p) {
+                 cstart3 = vstart1 + 1 + 1;
+                 i4 = 0;
+                 count5 = buf[vstart1 : 1];
+                 loop (i4 < count5) {
+                     cstart6 = cstart3;
+                     cstart7 = cstart6 + 1;
+                     low11 = 0;
+                     high12 = buf[4 + buf[4 : 4] + 4 : 8] / 9;
+                     loop (low11 < high12) {
+                         mid13 = low11 + high12 / 2;
+                         kstart8 = 4 + buf[4 : 4] + 4 + 8 + mid13 * 9;
+                         key14 = (buf[kstart8 : 1]);
+                         if (key14[0] < buf[cstart6 : 1]) {
+                             low11 = mid13 + 1;
                          } else {
-                              high14 = mid15;
+                              high12 = mid13;
                          }
                      }
-                     if (low13 < buf[cstart1 + 4 : 8] / 9) {
-                         kstart10 = cstart1 + 4 + 8 + low13 * 9;
-                         key17 = (buf[kstart10 : 1]);
-                         key18 = key17;
-                         loop (key18[0] < buf[cstart9 : 1] && low13 <
-                               buf[cstart1 + 4 : 8] / 9) {
-                             vstart11 = buf[cstart1 + 4 + 8 + low13 * 9 + 1 : 8];
-                             key12 = key18;
-                             cstart19 = vstart11;
-                             i20 = 0;
-                             count21 = 1;
-                             loop (i20 < count21) {
-                                 cstart22 = cstart19;
-                                 cstart23 = cstart22 + 1;
-                                 if (buf[cstart22 : 1] == id_c) {
+                     if (low11 < buf[4 + buf[4 : 4] + 4 : 8] / 9) {
+                         kstart8 = 4 + buf[4 : 4] + 4 + 8 + low11 * 9;
+                         key15 = (buf[kstart8 : 1]);
+                         key16 = key15;
+                         loop (key16[0] < buf[cstart7 : 1] && low11 < buf[4 +
+                               buf[4 : 4] + 4 : 8] / 9) {
+                             vstart9 = buf[4 + buf[4 : 4] + 4 + 8 + low11 * 9 +
+                             1 : 8];
+                             key10 = key16;
+                             cstart17 = vstart9;
+                             i18 = 0;
+                             count19 = 1;
+                             loop (i18 < count19) {
+                                 cstart20 = cstart17;
+                                 cstart21 = cstart20 + 1;
+                                 if (buf[cstart20 : 1] == id_c) {
                                      consume(Tuple[Int[nonnull], Int[nonnull]],
-                                     (buf[cstart8 : 1], buf[cstart23 : 1]));
+                                     (buf[cstart6 : 1], buf[cstart21 : 1]));
                                  } else {
 
                                  }
-                                 cstart19 = cstart19 + 2;
-                                 i20 = i20 + 1;
+                                 cstart17 = cstart17 + 2;
+                                 i18 = i18 + 1;
                              }
-                             low13 = low13 + 1;
-                             kstart10 = cstart1 + 4 + 8 + low13 * 9;
-                             key24 = (buf[kstart10 : 1]);
-                             key18 = key24;
+                             low11 = low11 + 1;
+                             kstart8 = 4 + buf[4 : 4] + 4 + 8 + low11 * 9;
+                             key22 = (buf[kstart8 : 1]);
+                             key16 = key22;
                          }
                      } else {
 
                      }
-                     cstart5 = cstart5 + 2;
-                     i6 = i6 + 1;
+                     cstart3 = cstart3 + 2;
+                     i4 = i4 + 1;
                  }
              } else {
 
@@ -1087,7 +1058,7 @@ let%expect_test "example-3-str" =
   [%expect
     {|
     (FuncT
-     (((TupleT
+     (((FuncT
         (((HashIdxT
            ((StringT ((nchars (Interval 3 8)) (nullable false)))
             (ListT
@@ -1098,114 +1069,108 @@ let%expect_test "example-3-str" =
               ((count (Interval 1 2)))))
             ((key_count (Interval 3 3)) (value_count (Interval 1 2)))))
           (FuncT
-           (((OrderedIdxT
-              ((IntT ((range (Interval 1 5)) (nullable false)))
-               (ListT
-                ((TupleT
-                  (((StringT ((nchars (Interval 3 8)) (nullable false)))
-                    (IntT ((range (Interval 1 5)) (nullable false))))
-                   ((count (Interval 1 1)))))
-                 ((count (Interval 1 1)))))
-               ((count Top)))))
-            Child_sum)))
-         ((count Top)))))
+           (((FuncT
+              (((OrderedIdxT
+                 ((IntT ((range (Interval 1 5)) (nullable false)))
+                  (ListT
+                   ((TupleT
+                     (((StringT ((nchars (Interval 3 8)) (nullable false)))
+                       (IntT ((range (Interval 1 5)) (nullable false))))
+                      ((count (Interval 1 1)))))
+                    ((count (Interval 1 1)))))
+                  ((count Top)))))
+               Child_sum)))
+            (Width 2))))
+         Child_sum)))
       (Width 2)))
     // Locals:
-    // kstart35 : Int[nonnull] (persists=true)
-    // vstart28 : Int[nonnull] (persists=false)
-    // cstart25 : Int[nonnull] (persists=true)
-    // cstart47 : Int[nonnull] (persists=true)
-    // i45 : Int[nonnull] (persists=true)
+    // cstart29 : Int[nonnull] (persists=true)
     // cstart44 : Int[nonnull] (persists=true)
-    // cstart34 : Int[nonnull] (persists=true)
-    // key42 : Tuple[Int[nonnull]] (persists=false)
-    // cstart48 : Int[nonnull] (persists=true)
-    // key29 : Tuple[String[nonnull]] (persists=false)
-    // i31 : Int[nonnull] (persists=true)
-    // key41 : Tuple[Int[nonnull]] (persists=false)
-    // key43 : Tuple[Int[nonnull]] (persists=true)
-    // key37 : Tuple[Int[nonnull]] (persists=true)
+    // i27 : Int[nonnull] (persists=true)
+    // key25 : Tuple[String[nonnull]] (persists=false)
+    // count42 : Int[nonnull] (persists=true)
+    // cstart43 : Int[nonnull] (persists=true)
+    // vstart24 : Int[nonnull] (persists=false)
+    // kstart23 : Int[nonnull] (persists=false)
+    // count28 : Int[nonnull] (persists=true)
+    // key38 : Tuple[Int[nonnull]] (persists=false)
+    // low34 : Int[nonnull] (persists=true)
+    // key37 : Tuple[Int[nonnull]] (persists=false)
     // cstart30 : Int[nonnull] (persists=true)
-    // cstart33 : Int[nonnull] (persists=true)
-    // low38 : Int[nonnull] (persists=true)
-    // count32 : Int[nonnull] (persists=true)
-    // vstart36 : Int[nonnull] (persists=true)
-    // key49 : Tuple[Int[nonnull]] (persists=false)
-    // count46 : Int[nonnull] (persists=true)
-    // mid40 : Int[nonnull] (persists=true)
-    // high39 : Int[nonnull] (persists=true)
-    // kstart27 : Int[nonnull] (persists=false)
+    // high35 : Int[nonnull] (persists=true)
+    // kstart31 : Int[nonnull] (persists=true)
+    // key39 : Tuple[Int[nonnull]] (persists=true)
+    // i41 : Int[nonnull] (persists=true)
+    // key45 : Tuple[Int[nonnull]] (persists=false)
+    // mid36 : Int[nonnull] (persists=true)
+    // key33 : Tuple[Int[nonnull]] (persists=true)
+    // vstart32 : Int[nonnull] (persists=true)
+    // cstart40 : Int[nonnull] (persists=true)
     // cstart26 : Int[nonnull] (persists=true)
     fun printer () : Void {
-        cstart25 = 4;
-        cstart26 = cstart25 + buf[cstart25 : 4];
-        if (hash(cstart25 + 4 + 8, id_p) * 8 < 0 || buf[cstart25 + 4 + 8 +
-            buf[cstart25 + 4 : 8] : 8] - 1 < hash(cstart25 + 4 + 8, id_p) * 8 ||
-            buf[cstart25 + 4 + 8 + buf[cstart25 + 4 : 8] + 8 + hash(cstart25 +
-            4 + 8, id_p) * 8 : 8] == 0) {
+        if (hash(16, id_p) * 8 < 0 || buf[16 + buf[8 : 8] : 8] - 1 <
+            hash(16, id_p) * 8 || buf[16 + buf[8 : 8] + 8 + hash(16, id_p) * 8 :
+            8] == 0) {
 
         } else {
-             kstart27 = buf[cstart25 + 4 + 8 + buf[cstart25 + 4 : 8] + 8 +
-             hash(cstart25 + 4 + 8, id_p) * 8 : 8];
-             key29 = (load_str(kstart27 + 1, buf[kstart27 : 1]));
-             vstart28 = buf[cstart25 + 4 + 8 + buf[cstart25 + 4 : 8] + 8 +
-             hash(cstart25 + 4 + 8, id_p) * 8 : 8] + 1 + buf[buf[cstart25 + 4 +
-             8 + buf[cstart25 + 4 : 8] + 8 + hash(cstart25 + 4 + 8, id_p) * 8 :
-             8] : 1];
-             if (true && key29[0] == id_p) {
-                 cstart30 = vstart28 + 1 + 1;
-                 i31 = 0;
-                 count32 = buf[vstart28 : 1];
-                 loop (i31 < count32) {
-                     cstart33 = cstart30;
-                     cstart34 = cstart33 + 1;
-                     low38 = 0;
-                     high39 = buf[cstart26 + 4 : 8] / 9;
-                     loop (low38 < high39) {
-                         mid40 = low38 + high39 / 2;
-                         kstart35 = cstart26 + 4 + 8 + mid40 * 9;
-                         key41 = (buf[kstart35 : 1]);
-                         if (key41[0] < buf[cstart33 : 1]) {
-                             low38 = mid40 + 1;
+             kstart23 = buf[16 + buf[8 : 8] + 8 + hash(16, id_p) * 8 : 8];
+             key25 = (load_str(kstart23 + 1, buf[kstart23 : 1]));
+             vstart24 = buf[16 + buf[8 : 8] + 8 + hash(16, id_p) * 8 : 8] + 1 +
+             buf[buf[16 + buf[8 : 8] + 8 + hash(16, id_p) * 8 : 8] : 1];
+             if (true && key25[0] == id_p) {
+                 cstart26 = vstart24 + 1 + 1;
+                 i27 = 0;
+                 count28 = buf[vstart24 : 1];
+                 loop (i27 < count28) {
+                     cstart29 = cstart26;
+                     cstart30 = cstart29 + 1;
+                     low34 = 0;
+                     high35 = buf[4 + buf[4 : 4] + 4 : 8] / 9;
+                     loop (low34 < high35) {
+                         mid36 = low34 + high35 / 2;
+                         kstart31 = 4 + buf[4 : 4] + 4 + 8 + mid36 * 9;
+                         key37 = (buf[kstart31 : 1]);
+                         if (key37[0] < buf[cstart29 : 1]) {
+                             low34 = mid36 + 1;
                          } else {
-                              high39 = mid40;
+                              high35 = mid36;
                          }
                      }
-                     if (low38 < buf[cstart26 + 4 : 8] / 9) {
-                         kstart35 = cstart26 + 4 + 8 + low38 * 9;
-                         key42 = (buf[kstart35 : 1]);
-                         key43 = key42;
-                         loop (key43[0] < buf[cstart34 : 1] && low38 <
-                               buf[cstart26 + 4 : 8] / 9) {
-                             vstart36 = buf[cstart26 + 4 + 8 + low38 * 9 + 1 :
-                             8];
-                             key37 = key43;
-                             cstart44 = vstart36 + 1;
-                             i45 = 0;
-                             count46 = 1;
-                             loop (i45 < count46) {
-                                 cstart47 = cstart44 + 1;
-                                 cstart48 = cstart47 + 1 + buf[cstart47 : 1];
-                                 if (load_str(cstart47 + 1, buf[cstart47 : 1]) ==
+                     if (low34 < buf[4 + buf[4 : 4] + 4 : 8] / 9) {
+                         kstart31 = 4 + buf[4 : 4] + 4 + 8 + low34 * 9;
+                         key38 = (buf[kstart31 : 1]);
+                         key39 = key38;
+                         loop (key39[0] < buf[cstart30 : 1] && low34 < buf[4 +
+                               buf[4 : 4] + 4 : 8] / 9) {
+                             vstart32 = buf[4 + buf[4 : 4] + 4 + 8 + low34 * 9 +
+                             1 : 8];
+                             key33 = key39;
+                             cstart40 = vstart32 + 1;
+                             i41 = 0;
+                             count42 = 1;
+                             loop (i41 < count42) {
+                                 cstart43 = cstart40 + 1;
+                                 cstart44 = cstart43 + 1 + buf[cstart43 : 1];
+                                 if (load_str(cstart43 + 1, buf[cstart43 : 1]) ==
                                      id_c) {
                                      print(Tuple[Int[nonnull], Int[nonnull]],
-                                     (buf[cstart33 : 1], buf[cstart48 : 1]));
+                                     (buf[cstart29 : 1], buf[cstart44 : 1]));
                                  } else {
 
                                  }
-                                 cstart44 = cstart44 + buf[cstart44 : 1];
-                                 i45 = i45 + 1;
+                                 cstart40 = cstart40 + buf[cstart40 : 1];
+                                 i41 = i41 + 1;
                              }
-                             low38 = low38 + 1;
-                             kstart35 = cstart26 + 4 + 8 + low38 * 9;
-                             key49 = (buf[kstart35 : 1]);
-                             key43 = key49;
+                             low34 = low34 + 1;
+                             kstart31 = 4 + buf[4 : 4] + 4 + 8 + low34 * 9;
+                             key45 = (buf[kstart31 : 1]);
+                             key39 = key45;
                          }
                      } else {
 
                      }
-                     cstart30 = cstart30 + 2;
-                     i31 = i31 + 1;
+                     cstart26 = cstart26 + 2;
+                     i27 = i27 + 1;
                  }
              } else {
 
@@ -1213,100 +1178,93 @@ let%expect_test "example-3-str" =
         }
     }
     // Locals:
-    // kstart10 : Int[nonnull] (persists=true)
-    // cstart9 : Int[nonnull] (persists=true)
-    // key17 : Tuple[Int[nonnull]] (persists=false)
-    // cstart22 : Int[nonnull] (persists=true)
-    // cstart8 : Int[nonnull] (persists=true)
-    // low13 : Int[nonnull] (persists=true)
-    // key4 : Tuple[String[nonnull]] (persists=false)
-    // key16 : Tuple[Int[nonnull]] (persists=false)
-    // key24 : Tuple[Int[nonnull]] (persists=false)
-    // cstart23 : Int[nonnull] (persists=true)
-    // cstart0 : Int[nonnull] (persists=true)
-    // cstart19 : Int[nonnull] (persists=true)
-    // high14 : Int[nonnull] (persists=true)
-    // mid15 : Int[nonnull] (persists=true)
-    // vstart11 : Int[nonnull] (persists=true)
-    // i20 : Int[nonnull] (persists=true)
-    // cstart1 : Int[nonnull] (persists=true)
-    // count21 : Int[nonnull] (persists=true)
-    // vstart3 : Int[nonnull] (persists=false)
-    // kstart2 : Int[nonnull] (persists=false)
-    // key18 : Tuple[Int[nonnull]] (persists=true)
-    // count7 : Int[nonnull] (persists=true)
-    // key12 : Tuple[Int[nonnull]] (persists=true)
-    // cstart5 : Int[nonnull] (persists=true)
-    // i6 : Int[nonnull] (persists=true)
+    // i18 : Int[nonnull] (persists=true)
+    // key10 : Tuple[Int[nonnull]] (persists=true)
+    // key22 : Tuple[Int[nonnull]] (persists=false)
+    // cstart21 : Int[nonnull] (persists=true)
+    // high12 : Int[nonnull] (persists=true)
+    // cstart17 : Int[nonnull] (persists=true)
+    // mid13 : Int[nonnull] (persists=true)
+    // count5 : Int[nonnull] (persists=true)
+    // key14 : Tuple[Int[nonnull]] (persists=false)
+    // key16 : Tuple[Int[nonnull]] (persists=true)
+    // key2 : Tuple[String[nonnull]] (persists=false)
+    // count19 : Int[nonnull] (persists=true)
+    // cstart6 : Int[nonnull] (persists=true)
+    // cstart7 : Int[nonnull] (persists=true)
+    // vstart9 : Int[nonnull] (persists=true)
+    // kstart8 : Int[nonnull] (persists=true)
+    // key15 : Tuple[Int[nonnull]] (persists=false)
+    // kstart0 : Int[nonnull] (persists=false)
+    // vstart1 : Int[nonnull] (persists=false)
+    // i4 : Int[nonnull] (persists=true)
+    // cstart3 : Int[nonnull] (persists=true)
+    // low11 : Int[nonnull] (persists=true)
+    // cstart20 : Int[nonnull] (persists=true)
     fun consumer () : Void {
-        cstart0 = 4;
-        cstart1 = cstart0 + buf[cstart0 : 4];
-        if (hash(cstart0 + 4 + 8, id_p) * 8 < 0 || buf[cstart0 + 4 + 8 +
-            buf[cstart0 + 4 : 8] : 8] - 1 < hash(cstart0 + 4 + 8, id_p) * 8 ||
-            buf[cstart0 + 4 + 8 + buf[cstart0 + 4 : 8] + 8 + hash(cstart0 + 4 +
-            8, id_p) * 8 : 8] == 0) {
+        if (hash(16, id_p) * 8 < 0 || buf[16 + buf[8 : 8] : 8] - 1 <
+            hash(16, id_p) * 8 || buf[16 + buf[8 : 8] + 8 + hash(16, id_p) * 8 :
+            8] == 0) {
 
         } else {
-             kstart2 = buf[cstart0 + 4 + 8 + buf[cstart0 + 4 : 8] + 8 +
-             hash(cstart0 + 4 + 8, id_p) * 8 : 8];
-             key4 = (load_str(kstart2 + 1, buf[kstart2 : 1]));
-             vstart3 = buf[cstart0 + 4 + 8 + buf[cstart0 + 4 : 8] + 8 +
-             hash(cstart0 + 4 + 8, id_p) * 8 : 8] + 1 + buf[buf[cstart0 + 4 + 8 +
-             buf[cstart0 + 4 : 8] + 8 + hash(cstart0 + 4 + 8, id_p) * 8 : 8] :
-             1];
-             if (true && key4[0] == id_p) {
-                 cstart5 = vstart3 + 1 + 1;
-                 i6 = 0;
-                 count7 = buf[vstart3 : 1];
-                 loop (i6 < count7) {
-                     cstart8 = cstart5;
-                     cstart9 = cstart8 + 1;
-                     low13 = 0;
-                     high14 = buf[cstart1 + 4 : 8] / 9;
-                     loop (low13 < high14) {
-                         mid15 = low13 + high14 / 2;
-                         kstart10 = cstart1 + 4 + 8 + mid15 * 9;
-                         key16 = (buf[kstart10 : 1]);
-                         if (key16[0] < buf[cstart8 : 1]) {
-                             low13 = mid15 + 1;
+             kstart0 = buf[16 + buf[8 : 8] + 8 + hash(16, id_p) * 8 : 8];
+             key2 = (load_str(kstart0 + 1, buf[kstart0 : 1]));
+             vstart1 = buf[16 + buf[8 : 8] + 8 + hash(16, id_p) * 8 : 8] + 1 +
+             buf[buf[16 + buf[8 : 8] + 8 + hash(16, id_p) * 8 : 8] : 1];
+             if (true && key2[0] == id_p) {
+                 cstart3 = vstart1 + 1 + 1;
+                 i4 = 0;
+                 count5 = buf[vstart1 : 1];
+                 loop (i4 < count5) {
+                     cstart6 = cstart3;
+                     cstart7 = cstart6 + 1;
+                     low11 = 0;
+                     high12 = buf[4 + buf[4 : 4] + 4 : 8] / 9;
+                     loop (low11 < high12) {
+                         mid13 = low11 + high12 / 2;
+                         kstart8 = 4 + buf[4 : 4] + 4 + 8 + mid13 * 9;
+                         key14 = (buf[kstart8 : 1]);
+                         if (key14[0] < buf[cstart6 : 1]) {
+                             low11 = mid13 + 1;
                          } else {
-                              high14 = mid15;
+                              high12 = mid13;
                          }
                      }
-                     if (low13 < buf[cstart1 + 4 : 8] / 9) {
-                         kstart10 = cstart1 + 4 + 8 + low13 * 9;
-                         key17 = (buf[kstart10 : 1]);
-                         key18 = key17;
-                         loop (key18[0] < buf[cstart9 : 1] && low13 <
-                               buf[cstart1 + 4 : 8] / 9) {
-                             vstart11 = buf[cstart1 + 4 + 8 + low13 * 9 + 1 : 8];
-                             key12 = key18;
-                             cstart19 = vstart11 + 1;
-                             i20 = 0;
-                             count21 = 1;
-                             loop (i20 < count21) {
-                                 cstart22 = cstart19 + 1;
-                                 cstart23 = cstart22 + 1 + buf[cstart22 : 1];
-                                 if (load_str(cstart22 + 1, buf[cstart22 : 1]) ==
+                     if (low11 < buf[4 + buf[4 : 4] + 4 : 8] / 9) {
+                         kstart8 = 4 + buf[4 : 4] + 4 + 8 + low11 * 9;
+                         key15 = (buf[kstart8 : 1]);
+                         key16 = key15;
+                         loop (key16[0] < buf[cstart7 : 1] && low11 < buf[4 +
+                               buf[4 : 4] + 4 : 8] / 9) {
+                             vstart9 = buf[4 + buf[4 : 4] + 4 + 8 + low11 * 9 +
+                             1 : 8];
+                             key10 = key16;
+                             cstart17 = vstart9 + 1;
+                             i18 = 0;
+                             count19 = 1;
+                             loop (i18 < count19) {
+                                 cstart20 = cstart17 + 1;
+                                 cstart21 = cstart20 + 1 + buf[cstart20 : 1];
+                                 if (load_str(cstart20 + 1, buf[cstart20 : 1]) ==
                                      id_c) {
                                      consume(Tuple[Int[nonnull], Int[nonnull]],
-                                     (buf[cstart8 : 1], buf[cstart23 : 1]));
+                                     (buf[cstart6 : 1], buf[cstart21 : 1]));
                                  } else {
 
                                  }
-                                 cstart19 = cstart19 + buf[cstart19 : 1];
-                                 i20 = i20 + 1;
+                                 cstart17 = cstart17 + buf[cstart17 : 1];
+                                 i18 = i18 + 1;
                              }
-                             low13 = low13 + 1;
-                             kstart10 = cstart1 + 4 + 8 + low13 * 9;
-                             key24 = (buf[kstart10 : 1]);
-                             key18 = key24;
+                             low11 = low11 + 1;
+                             kstart8 = 4 + buf[4 : 4] + 4 + 8 + low11 * 9;
+                             key22 = (buf[kstart8 : 1]);
+                             key16 = key22;
                          }
                      } else {
 
                      }
-                     cstart5 = cstart5 + 2;
-                     i6 = i6 + 1;
+                     cstart3 = cstart3 + 2;
+                     i4 = i4 + 1;
                  }
              } else {
 

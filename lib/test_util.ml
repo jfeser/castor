@@ -254,16 +254,17 @@ ahashidx(dedup(
     sprintf
       {|
 select([p_counter, c_counter],
-  atuple([
+  depjoin(
     ahashidx(dedup(select([id as p_id], %s)) as hk,
     alist(select([counter, succ], filter(hk.p_id = id && counter < succ, %s)) as lk1, 
       atuple([ascalar(lk1.counter as p_counter), ascalar(lk1.succ as p_succ)], cross)), 
-    id_p),
+    id_p) as dk,
+  select([dk.p_counter, c_counter],
   filter(c_id = id_c,
     aorderedidx(select([counter], %s) as ok, 
       alist(filter(counter = ok.counter, %s) as lk2,
         atuple([ascalar(lk2.id as c_id), ascalar(lk2.counter as c_counter)], cross)), 
-      p_counter, p_succ))], cross))
+      dk.p_counter, dk.p_succ)))))
 |}
       log log log log
 end

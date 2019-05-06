@@ -28,7 +28,7 @@ let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
   let ralgebra =
     let params = Set.of_list (module Name) params in
     let r = Abslayout.of_channel_exn ch |> A.resolve ~params in
-    A.annotate_key_layouts r
+    Abslayout.annotate_key_layouts r
   in
   A.annotate_subquery_types ralgebra ;
   C.compile ~gprof ~params ?out_dir ralgebra |> ignore

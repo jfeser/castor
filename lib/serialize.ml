@@ -176,15 +176,14 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         ) ;
         seek sctx.writer end_pos
 
-      method build_ATuple sctx meta (elem_layouts, _) ctxs =
-        let t = Meta.Direct.find_exn meta Meta.type_ in
+      method build_Tuple sctx t ls ctxs =
         (* Reserve space for header. *)
         let hdr = make_header t in
         let header_pos = pos sctx.writer in
         write_bytes sctx.writer (Bytes.make (size_exn hdr "len") '\x00') ;
         (* Serialize body *)
         Log.with_msg sctx "Tuple body" (fun () ->
-            List.iter2_exn ctxs elem_layouts ~f:(self#visit_t sctx) ) ;
+            List.iter2_exn ctxs ls ~f:(self#visit_t sctx) ) ;
         let end_pos = pos sctx.writer in
         (* Serialize header. *)
         seek sctx.writer header_pos ;
@@ -193,6 +192,20 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
             write_string sctx.writer (of_int ~byte_width:(size_exn hdr "len") len)
         ) ;
         seek sctx.writer end_pos
+
+      method build_ATuple sctx meta (elem_layouts, _) ctxs =
+        let t = Meta.Direct.find_exn meta Meta.type_ in
+        self#build_Tuple sctx t elem_layouts ctxs
+
+      method build_Select sctx _ (_, r) ectx = self#visit_t sctx ectx r
+
+      method build_Filter sctx _ (_, r) ectx = self#visit_t sctx ectx r
+
+      method build_DepJoin sctx _ {d_lhs; d_rhs; _} (ctx1, ctx2) =
+        let lhs_t = Meta.(find_exn d_lhs type_) in
+        let rhs_t = Meta.(find_exn d_lhs type_) in
+        let tuple_t = Type.(TupleT ([lhs_t; rhs_t], {count= AbsInt.top})) in
+        self#build_Tuple sctx tuple_t [d_lhs; d_rhs] [ctx1; ctx2]
 
       method build_AHashIdx sctx meta (_, value_l, hmeta) keys gen =
         let type_ = Meta.Direct.find_exn meta Meta.type_ in
@@ -377,13 +390,6 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
             | Fixed x -> serialize_fixed sctx type_ x
             | Bool x -> serialize_bool sctx type_ x
             | String x -> serialize_string sctx type_ x )
-
-      method build_Select sctx _ (_, r) ectx = self#visit_t sctx ectx r
-
-      method build_Filter sctx _ (_, r) ectx = self#visit_t sctx ectx r
-
-      method build_DepJoin sctx _ {d_lhs; d_rhs; _} (ctx1, ctx2) =
-        self#visit_t sctx ctx1 d_lhs ; self#visit_t sctx ctx2 d_rhs
 
       method! visit_t sctx ectx layout =
         (* Update position metadata in layout. *)

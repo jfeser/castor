@@ -143,6 +143,7 @@ struct
     | AOrderedIdx r', OrderedIdxT t' -> scan_ordered_idx ctx b r' t' cb
     | Filter r', FuncT t' -> scan_filter ctx b r' t' cb
     | Select r', FuncT t' -> scan_select ctx b r' t' cb
+    | DepJoin r', FuncT t' -> scan_depjoin ctx b r' t' cb
     | (Join _ | GroupBy _ | OrderBy _ | Dedup _ | Relation _ | As _), _ ->
         Error.create "Unsupported at runtime." r [%sexp_of: A.t] |> Error.raise
     | _, _ ->
@@ -331,11 +332,7 @@ struct
       | clayout :: clayouts, ctype :: ctypes, cstart :: cstarts ->
           let ctx = Ctx.bind ctx "start" Type.PrimType.int_t cstart in
           scan ctx b clayout ctype (fun b tup ->
-              let next_ctx =
-                let tuple_ctx = Ctx.of_schema (A.schema_exn clayout) tup in
-                Ctx.bind_ctx ctx tuple_ctx
-              in
-              make_loops next_ctx (fields @ tup) clayouts ctypes cstarts b )
+              make_loops ctx (fields @ tup) clayouts ctypes cstarts b )
       | _ -> failwith ""
     in
     let hdr = Header.make_header (TupleT t) in
@@ -673,6 +670,32 @@ struct
             cb b output )
           ~else_:(fun _ -> ())
           b
+
+  and scan_depjoin ctx b {d_lhs; d_alias; d_rhs} (child_types, _) (cb : callback) =
+    let lhs_t, rhs_t =
+      match child_types with
+      | [lhs_t; rhs_t] -> (lhs_t, rhs_t)
+      | _ -> failwith "Unexpected type."
+    in
+    let hdr =
+      Header.make_header (TupleT ([lhs_t; rhs_t], {count= Type.AbsInt.top}))
+    in
+    let start = Ctx.find_exn ctx (Name.create "start") b in
+    let lhs_start = Header.make_position hdr "value" start in
+    let lhs_ctx = Ctx.bind ctx "start" Type.PrimType.int_t lhs_start in
+    let rhs_ctx =
+      let rhs_start = Infix.(lhs_start + len lhs_start lhs_t) in
+      Ctx.bind ctx "start" Type.PrimType.int_t rhs_start
+    in
+    debug_print "scanning depjoin" (Int 0) b ;
+    scan lhs_ctx b d_lhs lhs_t (fun b tup ->
+        let rhs_ctx =
+          let tuple_ctx =
+            Ctx.of_schema (A.schema_exn d_lhs |> Schema.scoped d_alias) tup
+          in
+          Ctx.bind_ctx rhs_ctx tuple_ctx
+        in
+        scan rhs_ctx b d_rhs rhs_t cb )
 
   let printer ctx r t =
     let open Builder in
