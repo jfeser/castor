@@ -32,7 +32,7 @@ module Make (C : Config.S) = struct
   let all_unref r =
     let refcnt = Meta.find_exn r M.refcnt in
     let schema = schema_exn r in
-    List.for_all schema ~f:(fun n ->
+    List.for_all (Schema.unscoped schema) ~f:(fun n ->
         match Map.(find refcnt n) with Some c -> c = 0 | None -> false )
 
   let pp_with_refcount, _ =
@@ -109,34 +109,28 @@ module Make (C : Config.S) = struct
               let rs = List.filter rs ~f:(fun r -> r.node <> AEmpty) in
               tuple rs Concat
           | ATuple (rs, Cross) ->
-              if
-                List.exists rs ~f:(fun r ->
-                    match r.node with AEmpty -> true | _ -> false )
-              then empty
-              else
-                let rs =
-                  (* Remove unreferenced parts of the tuple. *)
-                  List.filter rs ~f:(fun r ->
-                      let is_unref = all_unref r in
-                      let is_scalar =
-                        match r.node with AScalar _ -> true | _ -> false
-                      in
-                      let should_remove =
-                        match count with
-                        (* If the count matters, then we can only remove
+              let rs =
+                (* Remove unreferenced parts of the tuple. *)
+                List.filter rs ~f:(fun r ->
+                    let is_unref = all_unref r in
+                    let is_scalar =
+                      match r.node with AScalar _ -> true | _ -> false
+                    in
+                    let should_remove =
+                      match count with
+                      (* If the count matters, then we can only remove
                            unreferenced scalars. *)
-                        | Exact -> is_unref && is_scalar
-                        (* Otherwise we can remove anything unreferenced. *)
-                        | AtLeastOne -> is_unref
-                      in
-                      if should_remove then
-                        Logs.debug ~src:test (fun m ->
-                            m "Removing tuple element %a." pp_with_refcount r ) ;
-                      not should_remove )
-                in
-                let rs = List.map rs ~f:(self#visit_t ()) in
-                let rs = if List.length rs = 0 then [scalar Null] else rs in
-                tuple rs Cross
+                      | Exact -> is_unref && is_scalar
+                      (* Otherwise we can remove anything unreferenced. *)
+                      | AtLeastOne -> is_unref
+                    in
+                    if should_remove then
+                      Logs.debug ~src:test (fun m ->
+                          m "Removing tuple element %a." pp_with_refcount r ) ;
+                    not should_remove )
+              in
+              let rs = if List.length rs = 0 then [scalar Null] else rs in
+              tuple rs Cross
           | Join {r1; r2; pred} -> (
             match count with
             | Exact -> join pred (self#visit_t () r1) (self#visit_t () r2)
