@@ -130,6 +130,9 @@ module Make (C : Config.S) = struct
   let is_tuple r p =
     match (Path.get_exn p r).node with ATuple _ -> true | _ -> false
 
+  let is_depjoin r p =
+    match (Path.get_exn p r).node with DepJoin _ -> true | _ -> false
+
   let is_param_filter r p =
     match (Path.get_exn p r).node with
     | Filter (pred, _) -> overlaps (pred_free pred) params

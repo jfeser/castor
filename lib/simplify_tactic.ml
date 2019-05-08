@@ -26,15 +26,16 @@ module Make (C : Config.S) = struct
   let elim_structure r =
     match r.node with
     | AHashIdx (rk, rv, {lookup; _}) ->
+        let scope = scope_exn rk in
         let key_pred =
           let rk_schema = schema_exn rk in
           List.map2_exn rk_schema lookup ~f:(fun p1 p2 ->
               Binop (Eq, Name p1, p2) )
           |> Pred.conjoin
         in
-        let values = schema_exn rv |> List.map ~f:(fun n -> Name n) in
-        Some (select values (tuple [filter key_pred rk; rv] Cross))
+        Some (dep_join (strip_scope rk) scope (filter key_pred rv))
     | AOrderedIdx (rk, rv, {lookup_low; lookup_high; _}) ->
+        let scope = scope_exn rk in
         let key_pred =
           let rk_schema = schema_exn rk in
           match rk_schema with
@@ -44,25 +45,42 @@ module Make (C : Config.S) = struct
                 ; Binop (Lt, Name n, lookup_high) ]
           | _ -> failwith "Unexpected schema."
         in
-        let values = schema_exn rv |> List.map ~f:(fun n -> Name n) in
-        Some (select values (tuple [filter key_pred rk; rv] Cross))
+        Some (dep_join (strip_scope rk) scope (filter key_pred rv))
     | AList (rk, rv) ->
-        let values = schema_exn rv |> List.map ~f:(fun n -> Name n) in
-        Some (select values (tuple [rk; rv] Cross))
+        let scope = scope_exn rk in
+        Some (dep_join (strip_scope rk) scope rv)
     | _ -> None
 
   let elim_structure = of_func elim_structure ~name:"elim-structure"
+
+  let elim_depjoin r =
+    match r.node with
+    | DepJoin {d_lhs; d_alias; d_rhs= {node= AScalar p; _}} ->
+        Some (select [Pred.unscoped d_alias p] (strip_scope d_lhs))
+    | DepJoin {d_lhs; d_alias; d_rhs= {node= ATuple (rs, Cross); _}} ->
+        let open Option.Let_syntax in
+        let%bind s =
+          List.map rs ~f:(fun r ->
+              match r.node with AScalar p -> Some p | _ -> None )
+          |> Option.all
+        in
+        let s = List.map ~f:(Pred.unscoped d_alias) s in
+        Some (select s (strip_scope d_lhs))
+    | _ -> None
+
+  let elim_depjoin = of_func elim_depjoin ~name:"elim-depjoin"
 
   let simplify =
     seq_many
       [ (* Drop constant filters if possible. *)
         for_all filter_const Path.(all >>? is_filter)
-        (* Eliminate complex structures in compile time position. *)
-        (* fix
-         *   (at_ elim_structure
-         *      Path.(
-         *        all >>? is_compile_time
-         *        >>? Infix.(is_list || is_hash_idx || is_ordered_idx)
-         *        >>| shallowest)) *)
-       ]
+      ; (* Eliminate complex structures in compile time position. *)
+        fix
+          (at_ elim_structure
+             Path.(
+               all >>? is_compile_time
+               >>? Infix.(is_list || is_hash_idx || is_ordered_idx)
+               >>| shallowest))
+      ; (* Eliminate depjoin patterns. *)
+        for_all elim_depjoin Path.(all >>? is_depjoin) ]
 end
