@@ -29,7 +29,9 @@ module Make (C : Config.S) = struct
               (* Be conservative if refcount is missing. *)
               true ) )
 
-  let all_unref refcnt schema =
+  let all_unref r =
+    let refcnt = Meta.find_exn r M.refcnt in
+    let schema = schema_exn r in
     List.for_all schema ~f:(fun n ->
         match Map.(find refcnt n) with Some c -> c = 0 | None -> false )
 
@@ -88,7 +90,7 @@ module Make (C : Config.S) = struct
       method! visit_t () r =
         let refcnt = Meta.find_exn r M.refcnt in
         let count = Meta.find_exn r count in
-        if all_unref refcnt (schema_exn r) && count = AtLeastOne then scalar Null
+        if all_unref r && count = AtLeastOne then scalar Null
         else
           match r.node with
           | Select (ps, r) -> select (project_defs refcnt ps) (self#visit_t () r)
@@ -115,11 +117,7 @@ module Make (C : Config.S) = struct
                 let rs =
                   (* Remove unreferenced parts of the tuple. *)
                   List.filter rs ~f:(fun r ->
-                      let is_unref =
-                        all_unref
-                          Univ_map.(find_exn !(r.meta) M.refcnt)
-                          (schema_exn r)
-                      in
+                      let is_unref = all_unref r in
                       let is_scalar =
                         match r.node with AScalar _ -> true | _ -> false
                       in
@@ -144,26 +142,19 @@ module Make (C : Config.S) = struct
             | Exact -> join pred (self#visit_t () r1) (self#visit_t () r2)
             (* If one side of a join is unused then the join can be dropped. *)
             | AtLeastOne ->
-                let r1_unref = all_unref refcnt (schema_exn r1) in
-                if r1_unref then self#visit_t () r2
-                else
-                  let r2_unref = all_unref refcnt (schema_exn r2) in
-                  if r2_unref then self#visit_t () r1
-                  else join pred (self#visit_t () r1) (self#visit_t () r2) )
+                if all_unref r1 then self#visit_t () r2
+                else if all_unref r2 then self#visit_t () r1
+                else join pred (self#visit_t () r1) (self#visit_t () r2) )
           | DepJoin {d_lhs; d_rhs; d_alias} -> (
             match count with
             | Exact ->
                 dep_join (self#visit_t () d_lhs) d_alias (self#visit_t () d_rhs)
             (* If one side of a join is unused then the join can be dropped. *)
             | AtLeastOne ->
-                let l_unref = all_unref refcnt (schema_exn d_lhs) in
-                if l_unref then self#visit_t () d_rhs
+                if all_unref d_lhs then self#visit_t () d_rhs
+                else if all_unref d_rhs then scalar Null
                 else
-                  let r_unref = all_unref refcnt (schema_exn d_rhs) in
-                  if r_unref then self#visit_t () d_lhs
-                  else
-                    dep_join (self#visit_t () d_lhs) d_alias (self#visit_t () d_rhs)
-            )
+                  dep_join (self#visit_t () d_lhs) d_alias (self#visit_t () d_rhs) )
           | _ -> super#visit_t () r
     end
 
