@@ -7,8 +7,6 @@ module Config = struct
   module type S = sig
     include Ops.Config.S
 
-    val fresh : Fresh.t
-
     val params : Set.M(Name).t
   end
 end
@@ -169,7 +167,7 @@ module Make (C : Config.S) = struct
       | None -> Ok default_max
       | Some (b, k) -> fix_upper_bound b k
     in
-    let k = Fresh.name fresh "k%d" in
+    let k = Fresh.name Global.fresh "k%d" in
     ordered_idx
       (dedup (select [p] rk))
       k
@@ -283,23 +281,20 @@ module Make (C : Config.S) = struct
     | ATuple (rs, Cross) ->
         let ps = Pred.conjuncts p in
         (* Find the earliest placement for each predicate. *)
-        let bound i =
-          List.take rs (i + 1)
-          |> List.map ~f:M.bound
-          |> Set.union_list (module Name)
-        in
         let preds = Array.create ~len:(List.length rs) [] in
         let rec place_all ps i =
-          if i >= List.length rs - 1 then preds.(i) <- ps
+          if i >= List.length rs then ps
           else
-            let bnd = bound i in
+            let bnd =
+              List.nth_exn rs i |> schema_exn |> Set.of_list (module Name)
+            in
             let pl, up = List.partition_tf ps ~f:(is_supported bnd) in
             preds.(i) <- pl ;
             place_all up (i + 1)
         in
-        place_all ps 0 ;
+        let rest = place_all ps 0 in
         let rs = List.mapi rs ~f:(fun i -> filter (Pred.conjoin preds.(i))) in
-        Some (tuple rs Cross)
+        Some (filter (Pred.conjoin rest) (tuple rs Cross))
     | _ ->
         let%map rk, scope, rv, mk =
           match r'.node with
@@ -356,7 +351,7 @@ module Make (C : Config.S) = struct
         in
         if List.length eqs = 0 then None
         else
-          let scope = Fresh.name fresh "s%d" in
+          let scope = Fresh.name Global.fresh "s%d" in
           let open Option.Let_syntax in
           let select_list, key = List.unzip eqs in
           let inner_filter_pred =

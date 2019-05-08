@@ -2,6 +2,7 @@ open Core
 open Castor
 open Collections
 module A = Abslayout
+open Test_util
 
 module Config = struct
   let dbconn = new Postgresql.connection ~conninfo:"postgresql:///tpch_1k" ()
@@ -13,8 +14,6 @@ module Config = struct
   let param_ctx = Map.empty (module Name)
 
   let params = Set.empty (module Name)
-
-  let fresh = Fresh.create ()
 
   let verbose = false
 end
@@ -120,8 +119,7 @@ let%expect_test "to-from-ralgebra" =
   in
   JoinSpace.of_abslayout r |> JoinSpace.to_ralgebra
   |> Format.printf "%a" Abslayout.pp ;
-  [%expect
-    {|
+  [%expect {|
     join((c_nationkey = n_nationkey), nation, customer) |}]
 
 let%expect_test "to-from-ralgebra" =

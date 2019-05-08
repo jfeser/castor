@@ -1,4 +1,3 @@
-open Base
 open Core
 open Castor
 open Collections
@@ -32,7 +31,7 @@ module Make (Config : Config.S) () = struct
 
   let is_serializable r p = is_serializeable (Path.get_exn p r)
 
-  let sql_ctx = Sql.create_ctx ~fresh ()
+  let sql_ctx = Sql.create_ctx ()
 
   let has_params r p =
     let r' = Path.get_exn p r in
@@ -43,94 +42,41 @@ module Make (Config : Config.S) () = struct
   let project = of_func project ~name:"project"
 
   let push_orderby r =
-    let open Option.Let_syntax in
+    let key_is_supported r key =
+      let s = Set.of_list (module Name) (schema_exn r) in
+      List.for_all key ~f:(fun (p, _) -> is_supported s p)
+    in
     let orderby_cross_tuple key rs =
       match rs with
       | r :: rs ->
-          let schema = schema_exn r in
-          let sschema = Set.of_list (module Name) schema in
-          let skey =
-            Set.of_list
-              (module Name)
-              (List.filter_map ~f:(fun (p, _) -> Pred.to_name p) key)
-          in
-          if Set.is_subset skey ~of_:sschema then
+          if key_is_supported r key then
             Some (tuple (order_by key r :: rs) Cross)
           else None
       | _ -> None
     in
     let orderby_list key r1 r2 =
       let scope = scope_exn r1 in
-      annotate_eq r1 ;
-      annotate_eq r2 ;
-      let schema1 = schema_exn r1 in
-      let open Core in
-      let eqs = Meta.(find_exn r2 eq) in
-      let names =
-        List.concat_map eqs ~f:(fun (n, n') -> [n; n'])
-        @ List.filter_map ~f:(fun (p, _) -> Pred.to_name p) key
-        @ schema1
-      in
-      (* Create map from names to sets of equal names. *)
-      let eq_map =
-        names
-        |> List.dedup_and_sort ~compare:[%compare: Name.t]
-        |> List.map ~f:(fun n -> (n, Union_find.create n))
-        |> Hashtbl.of_alist_exn (module Name)
-      in
-      (* Add known equalities. *)
-      List.iter eqs ~f:(fun (n, n') ->
-          let s = Hashtbl.find_exn eq_map n in
-          let s' = Hashtbl.find_exn eq_map n' in
-          Union_find.union s s' ) ;
-      let exception No_key in
-      try
-        let new_key =
-          List.map key ~f:(fun (p, o) ->
-              let p' =
-                match Pred.to_name p with
-                | Some n -> (
-                    let s = Hashtbl.find_exn eq_map n in
-                    (* Find an equivalent name in schema 1. *)
-                    let n' =
-                      List.find schema1 ~f:(fun n' ->
-                          let s' = Hashtbl.find_exn eq_map n' in
-                          Union_find.same_class s s' )
-                    in
-                    match n' with Some n' -> Name n' | None -> raise No_key )
-                | None -> raise No_key
-              in
-              (p', o) )
-        in
-        Some (list (order_by new_key r1) scope r2)
-      with No_key -> None
+      let r1 = strip_scope r1 in
+      if key_is_supported r1 key then Some (list (order_by key r1) scope r2)
+      else None
     in
-    let same_orders r1 r2 =
-      annotate_eq r1 ;
-      annotate_orders r1 ;
-      annotate_eq r2 ;
-      annotate_orders r2 ;
-      [%compare.equal: (pred * order) list]
-        Meta.(find_exn r1 order)
-        Meta.(find_exn r2 order)
-    in
-    let%bind r' =
-      match r.node with
-      | OrderBy {key; rel= {node= Select (ps, r); _}} ->
+    match r.node with
+    | OrderBy {key; rel= {node= Select (ps, r); _}} ->
+        let s = Set.of_list (module Name) (schema_exn r) in
+        if List.for_all key ~f:(fun (p, _) -> is_supported s p) then
           Some (select ps (order_by key r))
-      | OrderBy {key; rel= {node= Filter (ps, r); _}} ->
-          Some (filter ps (order_by key r))
-      | OrderBy {key; rel= {node= AHashIdx (r1, r2, m); _}} ->
-          Some (hash_idx r1 (scope_exn r1) (order_by key r2) m)
-      | OrderBy {key; rel= {node= AList (r1, r2); _}} ->
-          (* If we order a lists keys then the keys will be ordered in the
+        else None
+    | OrderBy {key; rel= {node= Filter (ps, r); _}} ->
+        Some (filter ps (order_by key r))
+    | OrderBy {key; rel= {node= AHashIdx (r1, r2, m); _}} ->
+        Some (hash_idx r1 (scope_exn r1) (order_by key r2) m)
+    | OrderBy {key; rel= {node= AList (r1, r2); _}} ->
+        (* If we order a lists keys then the keys will be ordered in the
                    list. *)
-          orderby_list key r1 r2
-      | OrderBy {key; rel= {node= ATuple (rs, Cross); _}} ->
-          orderby_cross_tuple key rs
-      | _ -> None
-    in
-    if same_orders r r' then Some r' else None
+        orderby_list key r1 r2
+    | OrderBy {key; rel= {node= ATuple (rs, Cross); _}} ->
+        orderby_cross_tuple key rs
+    | _ -> None
 
   let push_orderby = of_func push_orderby ~name:"push-orderby"
 
@@ -141,6 +87,7 @@ module Make (Config : Config.S) () = struct
   module Simplify_tactic = Simplify_tactic.Make (Config)
   module Select_tactics = Select_tactics.Make (Config)
   module Groupby_tactics = Groupby_tactics.Make (Config)
+  module Join_elim_tactics = Join_elim_tactics.Make (Config)
 
   let push_all_unparameterized_filters =
     fix
@@ -161,7 +108,8 @@ module Make (Config : Config.S) () = struct
         (* Eliminate unparameterized join nests. *)
       ; at_ Join_opt.transform
           (Path.all >>? is_join >>? not has_params >>| shallowest)
-      ; at_ Join_opt.transform_simple (Path.all >>? is_join >>| shallowest)
+      ; at_ Join_elim_tactics.elim_join_nest
+          (Path.all >>? is_join >>| shallowest)
         (* Push constant filters *)
       ; seq resolve
           (fix

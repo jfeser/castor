@@ -5,8 +5,6 @@ open Collections
 
 module Config = struct
   module type S = sig
-    val fresh : Fresh.t
-
     include Ops.Config.S
 
     include Abslayout_db.Config.S
@@ -14,7 +12,6 @@ module Config = struct
 end
 
 module Make (C : Config.S) = struct
-  open C
   module Ops = Ops.Make (C)
   open Ops
   module M = Abslayout_db.Make (C)
@@ -30,7 +27,8 @@ module Make (C : Config.S) = struct
       | Some (n, _) -> Name n
       | None ->
           let n =
-            Fresh.name fresh "agg%d" |> Name.create ~type_:(Pred.to_type a)
+            Fresh.name Global.fresh "agg%d"
+            |> Name.create ~type_:(Pred.to_type a)
           in
           aggs := (n, a) :: !aggs ;
           Name n
@@ -121,7 +119,7 @@ module Make (C : Config.S) = struct
                     tuple (List.map (r' :: rs') ~f:mk_select) Concat )
             | _ -> None
           in
-          let count_n = Fresh.name fresh "count%d" in
+          let count_n = Fresh.name Global.fresh "count%d" in
           let inner_preds = As_pred (Count, count_n) :: inner_preds in
           select outer_preds
             (mk_collection (fun rv ->

@@ -8,8 +8,6 @@ module Config = struct
     include Abslayout_db.Config.S
 
     include Ops.Config.S
-
-    val fresh : Fresh.t
   end
 end
 
@@ -23,7 +21,7 @@ module Make (Config : Config.S) = struct
 
   let row_store r =
     if no_params r then
-      let scope = Fresh.name fresh "s%d" in
+      let scope = Fresh.name Global.fresh "s%d" in
       let scalars =
         Schema.scoped scope (schema_exn r)
         |> List.map ~f:(fun n -> scalar (Name n))

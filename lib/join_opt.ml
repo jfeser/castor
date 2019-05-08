@@ -387,7 +387,7 @@ module Make (C : Config.S) = struct
       match s with
       | [] -> [(c, v)]
       | (c', v') :: s' ->
-          if Array.(equal Float.( = ) c c') || dominates c' c then s
+          if Array.equal Float.( = ) c c' || dominates c' c then s
           else if dominates c c' then add s' c v
           else (c', v') :: add s' c v
 
@@ -530,13 +530,4 @@ module Make (C : Config.S) = struct
       |> Option.map ~f:(fun j -> seq_many [of_func (reshape j); emit_joins j])
     in
     higher_order f "join-opt"
-
-  let transform_simple =
-    let f r =
-      let open Abslayout in
-      match r.node with
-      | Join {pred; r1; r2} -> Some (tuple [r1; filter pred r2] Cross)
-      | _ -> None
-    in
-    first_order f "join-elim"
 end

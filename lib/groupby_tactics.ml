@@ -8,13 +8,10 @@ module Config = struct
     include Ops.Config.S
 
     include Abslayout_db.Config.S
-
-    val fresh : Fresh.t
   end
 end
 
 module Make (C : Config.S) = struct
-  open C
   module Ops = Ops.Make (C)
   open Ops
   module M = Abslayout_db.Make (C)
@@ -95,7 +92,7 @@ module Make (C : Config.S) = struct
     annotate_free r ;
     match r.node with
     | GroupBy (ps, key, r) -> (
-        let key_name = Fresh.name fresh "k%d" in
+        let key_name = Fresh.name Global.fresh "k%d" in
         let key_preds = List.map key ~f:(fun n -> Name n) in
         let filter_pred =
           List.map key ~f:(fun n ->

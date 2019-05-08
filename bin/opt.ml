@@ -23,8 +23,6 @@ let main ~params:all_params ~db ~validate ~verbose ch =
 
     let validate = validate
 
-    let fresh = Fresh.create ()
-
     let verbose = verbose
   end in
   let module A = Abslayout_db.Make (Config) in
