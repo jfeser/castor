@@ -105,9 +105,7 @@ module Make (C : Config.S) = struct
 
       type t = row list [@@deriving sexp_of]
 
-      let compare_row r1 r2 =
-        [%compare: Name.t * [`Run | `Compile]] (r1.rname, r1.rstage)
-          (r2.rname, r2.rstage)
+      let compare_row r1 r2 = [%compare: Name.t] r1.rname r2.rname
 
       let of_list l =
         let l =
@@ -148,6 +146,12 @@ module Make (C : Config.S) = struct
       of_list (c1 @ c2)
 
     let merge (c1 : t) (c2 : t) : t = of_list ((c1 :> row list) @ (c2 :> row list))
+
+    (** This compensates for the overloaded hashidx and orderedidx key fields *)
+    let merge_forgiving (c1 : t) (c2 : t) =
+      (c1 :> row list) @ (c2 :> row list)
+      |> List.dedup_and_sort ~compare:[%compare: row]
+      |> of_list
 
     let merge_list (ls : t list) : t = List.concat (ls :> row list list) |> of_list
 
@@ -340,7 +344,7 @@ module Make (C : Config.S) = struct
           let inner_ctx = Ctx.bind outer_ctx (Ctx.scoped scope kctx) in
           let vl, vctx = rsame inner_ctx l in
           let m = {m with lookup= List.map m.lookup ~f:(resolve_pred outer_ctx)} in
-          (AHashIdx (as_ scope r, vl, m), Ctx.(merge kctx vctx))
+          (AHashIdx (as_ scope r, vl, m), Ctx.(merge_forgiving kctx vctx))
       | AOrderedIdx (r, l, m) ->
           let scope = scope_exn r in
           let r = strip_scope r in
@@ -353,7 +357,7 @@ module Make (C : Config.S) = struct
               lookup_low= resolve_pred outer_ctx m.lookup_low
             ; lookup_high= resolve_pred outer_ctx m.lookup_high }
           in
-          (AOrderedIdx (as_ scope r, vl, m), Ctx.(merge kctx vctx))
+          (AOrderedIdx (as_ scope r, vl, m), Ctx.(merge_forgiving kctx vctx))
       | As _ -> Error.(createf "Unexpected as." |> raise)
       | OrderBy {key; rel} ->
           let rel, inner_ctx = rsame outer_ctx rel in
