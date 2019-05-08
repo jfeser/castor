@@ -13,11 +13,56 @@ let strip_meta =
   in
   visitor#visit_t ()
 
+let strip_scope r = match r.node with As (_, r) -> r | _ -> r
+
+let scopes r =
+  let visitor =
+    object (self : 'a)
+      inherit [_] reduce
+
+      inherit [_] Util.list_monoid
+
+      method! visit_As () n r = self#plus [n] (self#visit_t () r)
+    end
+  in
+  visitor#visit_t () r
+
+let alpha_scopes r =
+  let map =
+    scopes r
+    |> List.dedup_and_sort ~compare:[%compare: string]
+    |> List.map ~f:(fun s -> (s, Fresh.name Global.fresh "s%d"))
+    |> Map.of_alist_exn (module String)
+  in
+  let visitor =
+    object (self : 'a)
+      inherit [_] endo
+
+      method! visit_Name () p n =
+        let open Option.Let_syntax in
+        let name =
+          let%bind s = Name.rel n in
+          let%map s' = Map.find map s in
+          Name (Name.copy ~relation:(Some s') n)
+        in
+        Option.value name ~default:p
+
+      method! visit_As () _ s r = As (Map.find_exn map s, self#visit_t () r)
+    end
+  in
+  visitor#visit_t () r
+
 let wrap x = {node= x; meta= Meta.empty ()}
 
 let select a b = wrap (Select (a, strip_meta b))
 
+let has_scope_overlap rs ss =
+  List.concat_map rs ~f:scopes @ ss |> List.contains_dup ~compare:[%compare: string]
+
 let dep_join a b c =
+  let a, c =
+    if has_scope_overlap [a; c] [b] then (alpha_scopes a, alpha_scopes c) else (a, c)
+  in
   wrap (DepJoin {d_lhs= strip_meta a; d_alias= b; d_rhs= strip_meta c})
 
 let join a b c = wrap (Join {pred= a; r1= strip_meta b; r2= strip_meta c})
@@ -36,15 +81,32 @@ let empty = wrap AEmpty
 
 let scalar a = wrap (AScalar a)
 
-let list a b = wrap (AList (strip_meta a, strip_meta b))
+let as_ a b = wrap (As (a, strip_meta b))
+
+let list a b c =
+  let a = strip_scope a in
+  let a, c =
+    if has_scope_overlap [a; c] [b] then (alpha_scopes a, alpha_scopes c) else (a, c)
+  in
+  wrap (AList (strip_meta (as_ b a), strip_meta c))
 
 let tuple a b = wrap (ATuple (List.map ~f:strip_meta a, b))
 
-let hash_idx a b c = wrap (AHashIdx (strip_meta a, strip_meta b, c))
+let hash_idx a b c d =
+  let a = strip_scope a in
+  let a, c =
+    if has_scope_overlap [a; c] [b] then (alpha_scopes a, alpha_scopes c) else (a, c)
+  in
+  wrap (AHashIdx (strip_meta (as_ b a), strip_meta c, d))
 
-let ordered_idx a b c = wrap (AOrderedIdx (strip_meta a, strip_meta b, c))
+let ordered_idx a b c d =
+  let a = strip_scope a in
+  let a, c =
+    if has_scope_overlap [a; c] [b] then (alpha_scopes a, alpha_scopes c) else (a, c)
+  in
+  wrap (AOrderedIdx (strip_meta (as_ b a), strip_meta c, d))
 
-let as_ a b = wrap (As (a, strip_meta b))
+let scope r = match r.node with As (n, _) -> Some n | _ -> None
 
 let rec and_ = function
   | [] -> Bool true
@@ -193,6 +255,15 @@ let pp_small fmt x =
   Format.pp_set_max_boxes fmt 5 ;
   pp fmt x ;
   Format.pp_set_max_boxes fmt max
+
+let pp_small_str () x =
+  Format.(pp_small str_formatter x) ;
+  Format.flush_str_formatter ()
+
+let scope_exn r =
+  Option.value_exn
+    ~error:(Error.createf "Expected a scope on %a." pp_small_str r)
+    (scope r)
 
 module Ctx = struct
   module T = struct
@@ -438,7 +509,7 @@ module Pred = struct
     | [p] -> p
     | p :: ps -> Binop (And, p, conjoin ps)
 
-  let collect_aggs ~fresh p =
+  let collect_aggs p =
     let visitor =
       object (self : 'a)
         inherit [_] Abslayout0.mapreduce
@@ -446,7 +517,7 @@ module Pred = struct
         inherit [_] Util.list_monoid
 
         method private visit_Agg kind p =
-          let n = kind ^ Fresh.name fresh "%d" in
+          let n = kind ^ Fresh.name Global.fresh "%d" in
           (Name (Name.create n), [(n, p)])
 
         method! visit_Sum () p = self#visit_Agg "sum" (Sum p)
@@ -607,6 +678,13 @@ module Pred = struct
       end
     in
     v#visit_pred ()
+
+  let scoped names scope p =
+    let ctx =
+      List.map names ~f:(fun n -> (n, Name (Name.scoped scope n)))
+      |> Map.of_alist_exn (module Name)
+    in
+    subst ctx p
 
   (** Return the set of relations which have fields in the tuple produced by
      this expression. *)

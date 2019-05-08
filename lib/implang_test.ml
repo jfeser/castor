@@ -62,12 +62,7 @@ let%expect_test "tuple-simple-zip" =
       ((count (Interval 1 1)))))
     // Locals:
     // start : Int[nonnull] (persists=true)
-    fun zt_9 (start) : Tuple[Int[nonnull]] {
-        yield (buf[start : 1]);
-    }
-    // Locals:
-    // start : Int[nonnull] (persists=true)
-    fun zt_8 (start) : Tuple[Int[nonnull]] {
+    fun zt_3 (start) : Tuple[Int[nonnull]] {
         yield (buf[start : 1]);
     }
     // Locals:
@@ -81,47 +76,52 @@ let%expect_test "tuple-simple-zip" =
         yield (buf[start : 1]);
     }
     // Locals:
-    // i12 : Int[nonnull] (persists=true)
-    // cstart7 : Int[nonnull] (persists=true)
-    // tup10 : Tuple[Int[nonnull]] (persists=true)
-    // tup11 : Tuple[Int[nonnull]] (persists=true)
-    // count13 : Int[nonnull] (persists=true)
+    // start : Int[nonnull] (persists=true)
+    fun zt_0 (start) : Tuple[Int[nonnull]] {
+        yield (buf[start : 1]);
+    }
+    // Locals:
+    // i8 : Int[nonnull] (persists=true)
+    // tup7 : Tuple[Int[nonnull]] (persists=true)
+    // count9 : Int[nonnull] (persists=true)
+    // tup6 : Tuple[Int[nonnull]] (persists=true)
+    // cstart5 : Int[nonnull] (persists=true)
     fun printer () : Void {
-        cstart7 = 0;
-        cstart7 = 0;
-        init zt_8(cstart7);
-        cstart7 = cstart7 + 1;
-        init zt_9(cstart7);
-        cstart7 = cstart7 + 1;
-        i12 = 0;
-        count13 = 1;
-        loop (i12 < count13) {
-            tup10 = next(zt_8);
-            tup11 = next(zt_9);
-            print(Tuple[Int[nonnull], Int[nonnull]], (tup10[0], tup11[0]));
-            i12 = i12 + 1;
+        cstart5 = 0;
+        cstart5 = 0;
+        init zt_2(cstart5);
+        cstart5 = cstart5 + 1;
+        init zt_3(cstart5);
+        cstart5 = cstart5 + 1;
+        i8 = 0;
+        count9 = 1;
+        loop (i8 < count9) {
+            tup6 = next(zt_2);
+            tup7 = next(zt_3);
+            print(Tuple[Int[nonnull], Int[nonnull]], (tup6[0], tup7[0]));
+            i8 = i8 + 1;
         }
     }
     // Locals:
-    // tup4 : Tuple[Int[nonnull]] (persists=true)
-    // i5 : Int[nonnull] (persists=true)
-    // tup3 : Tuple[Int[nonnull]] (persists=true)
-    // count6 : Int[nonnull] (persists=true)
+    // i3 : Int[nonnull] (persists=true)
+    // tup2 : Tuple[Int[nonnull]] (persists=true)
+    // tup1 : Tuple[Int[nonnull]] (persists=true)
     // cstart0 : Int[nonnull] (persists=true)
+    // count4 : Int[nonnull] (persists=true)
     fun consumer () : Void {
         cstart0 = 0;
         cstart0 = 0;
+        init zt_0(cstart0);
+        cstart0 = cstart0 + 1;
         init zt_1(cstart0);
         cstart0 = cstart0 + 1;
-        init zt_2(cstart0);
-        cstart0 = cstart0 + 1;
-        i5 = 0;
-        count6 = 1;
-        loop (i5 < count6) {
-            tup3 = next(zt_1);
-            tup4 = next(zt_2);
-            consume(Tuple[Int[nonnull], Int[nonnull]], (tup3[0], tup4[0]));
-            i5 = i5 + 1;
+        i3 = 0;
+        count4 = 1;
+        loop (i3 < count4) {
+            tup1 = next(zt_0);
+            tup2 = next(zt_1);
+            consume(Tuple[Int[nonnull], Int[nonnull]], (tup1[0], tup2[0]));
+            i3 = i3 + 1;
         }
     } |}]
 

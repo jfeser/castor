@@ -1,6 +1,5 @@
-open Core
+open! Core
 open Printf
-open Collections
 open Hashcons
 
 module Key = struct
@@ -180,7 +179,7 @@ let pp_with_stage_and_type fmt n =
   in
   fprintf fmt "%a@@%s:%s" pp n stage type_
 
-let fresh f fmt = create (Fresh.name f fmt)
+let fresh fmt = create (Fresh.name Global.fresh fmt)
 
 let create_table () =
   Bounded_int_table.create ~sexp_of_key:[%sexp_of: t] ~num_keys:!Table.max_tag

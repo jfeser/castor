@@ -32,8 +32,6 @@ module Make
     (Serialize : Serialize.S)
     () =
 struct
-  let fresh = Fresh.create ()
-
   let iters = ref []
 
   let add_iter i = iters := i :: !iters
@@ -369,9 +367,9 @@ struct
              This loop also initializes the iterator and computes the next start
              position. *)
              let b' =
-               create ~ctx:callee_ctx ~name:(Fresh.name fresh "zt_%d")
+               create ~ctx:callee_ctx
+                 ~name:(Fresh.name Global.fresh "zt_%d")
                  ~ret:(type_of_layout callee_layout)
-                 ~fresh
              in
              scan callee_ctx b' callee_layout callee_type (fun b tup ->
                  build_yield (Tuple tup) b ) ;
@@ -633,7 +631,7 @@ struct
     | `Agg ->
         (* Extract all the aggregates from the arguments. *)
         let scalar_preds, agg_preds =
-          List.map ~f:(A.Pred.collect_aggs ~fresh) args |> List.unzip
+          List.map ~f:A.Pred.collect_aggs args |> List.unzip
         in
         let agg_preds = List.concat agg_preds in
         let last_tup =
@@ -699,13 +697,13 @@ struct
 
   let printer ctx r t =
     let open Builder in
-    let b = create ~ctx ~name:"printer" ~ret:VoidT ~fresh in
+    let b = create ~ctx ~name:"printer" ~ret:VoidT in
     scan ctx b r t (fun b tup -> build_print (Tuple tup) b) ;
     build_func b
 
   let consumer ctx r t =
     let open Builder in
-    let b = create ~name:"consumer" ~ctx ~ret:VoidT ~fresh in
+    let b = create ~name:"consumer" ~ctx ~ret:VoidT in
     scan ctx b r t (fun b tup -> build_consume (Tuple tup) b) ;
     build_func b
 

@@ -217,15 +217,13 @@ class hoist_visitor const_names const_types =
 
     val tctx = Hashtbl.of_alist_exn (module String) const_types
 
-    val fresh = Fresh.create ()
-
     method hoisted = List.rev hoisted
 
     method! visit_expr () expr =
       let expr = super#visit_expr () expr in
       let is_const = new is_const_expr_visitor const_names in
       if is_const#visit_expr true expr && not (is_trivial_expr expr) then (
-        let name = Fresh.name fresh "hoisted%d" in
+        let name = Fresh.name Global.fresh "hoisted%d" in
         let type_ = Implang.type_of tctx expr in
         hoisted <- (name, expr, type_) :: hoisted ;
         const_names <- Set.add const_names name ;

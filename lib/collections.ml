@@ -1,5 +1,4 @@
-open Base
-open Base.Poly
+open! Core
 
 module Date = struct
   include Core.Date
@@ -253,26 +252,6 @@ module T2 = struct
    fun c1 c2 (x1, y1) (x2, y2) ->
     let k1 = c1 x1 x2 in
     if k1 <> 0 then k1 else c2 y1 y2
-end
-
-module Fresh = struct
-  type t = {mutable ctr: int; names: Hash_set.M(String).t}
-
-  let create : ?names:Hash_set.M(String).t -> unit -> t =
-   fun ?names () ->
-    match names with
-    | Some x -> {ctr= 0; names= x}
-    | None -> {ctr= 0; names= Hash_set.create (module String)}
-
-  let rec name : t -> (int -> 'a, unit, string) format -> 'a =
-   fun x fmt ->
-    let n = Printf.sprintf fmt x.ctr in
-    x.ctr <- x.ctr + 1 ;
-    if Hash_set.mem x.names n then name x fmt else ( Hash_set.add x.names n ; n )
-
-  let int x =
-    x.ctr <- x.ctr + 1 ;
-    x.ctr
 end
 
 module String = struct

@@ -10,14 +10,10 @@ let () =
     | Postgresql.Error e -> Some (Postgresql.string_of_error e)
     | _ -> None )
 
-type t =
-  { uri: string
-  ; conn: Psql.connection sexp_opaque [@compare.ignore]
-  ; fresh: Fresh.t sexp_opaque [@compare.ignore] }
+type t = {uri: string; conn: Psql.connection sexp_opaque [@compare.ignore]}
 [@@deriving compare, sexp]
 
-let create uri =
-  {uri; conn= new Psql.connection ~conninfo:uri (); fresh= Fresh.create ()}
+let create uri = {uri; conn= new Psql.connection ~conninfo:uri ()}
 
 let subst_params params query =
   match params with
@@ -52,10 +48,10 @@ let result_to_strings (r : Psql.result) = r#get_all_lst
 
 let command_ok (r : Psql.result) =
   match r#status with
-  | Psql.Command_ok -> ()
-  | _ ->
-      Error.(
-        create "Unexpected query response." r#error [%sexp_of: string] |> raise)
+  | Command_ok -> Or_error.return ()
+  | _ -> Or_error.error "Unexpected query response." r#error [%sexp_of: string]
+
+let command_ok_exn (r : Psql.result) = command_ok r |> Or_error.ok_exn
 
 let exec1 ?params conn query =
   exec ?params conn query |> result_to_strings
@@ -191,7 +187,7 @@ let exec_cursor_exn =
       sprintf "begin transaction; declare %s cursor for %s;" cur query
     in
     let fetch_query = sprintf "fetch %d from %s;" batch_size cur in
-    exec db declare_query |> command_ok ;
+    exec db declare_query |> command_ok_exn ;
     let db_idx = ref 1 in
     let seq =
       Gen.unfold
@@ -217,8 +213,7 @@ let exec_cursor_exn =
     seq
 
 let check db sql =
-  let name = Fresh.name db.fresh "check%d" in
-  let r = (db.conn)#prepare name sql in
-  match r#status with
-  | Command_ok -> Or_error.return ()
-  | _ -> Or_error.error "Unexpected query response." r#error [%sexp_of: string]
+  let open Or_error.Let_syntax in
+  let name = Fresh.name Global.fresh "check%d" in
+  let%bind () = command_ok ((db.conn)#prepare name sql) in
+  command_ok ((db.conn)#exec (sprintf "deallocate %s" name))

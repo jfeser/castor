@@ -15,14 +15,6 @@
  (modules compile))
 
 (executable
- (public_name castor-transform)
- (name transform)
- (libraries core castor logs)
- (flags (:standard -g -bin-annot))
- (preprocess (pps ppx_sexp_conv ppx_let))
- (modules transform))
-
-(executable
  (name sample)
  (libraries core postgresql castor logs)
  (flags (:standard -g -bin-annot))

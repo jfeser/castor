@@ -97,10 +97,7 @@ let eval {db; params} r =
   let rec eval_agg ctx preds schema tups =
     if Seq.is_empty tups then None
     else
-      let fresh = Fresh.create () in
-      let preds, named_aggs =
-        List.map preds ~f:(Pred.collect_aggs ~fresh) |> List.unzip
-      in
+      let preds, named_aggs = List.map preds ~f:Pred.collect_aggs |> List.unzip in
       let named_aggs = List.concat named_aggs in
       let state =
         Array.of_list named_aggs

@@ -13,7 +13,8 @@ module Make (C : Config.S) = struct
 
   let test =
     let src = Logs.Src.create ~doc:"Source for testing project." "project-test" in
-    Logs.Src.set_level src None ; src
+    Logs.Src.set_level src (Some Debug) ;
+    src
 
   let project_defs refcnt ps =
     List.filter ps ~f:(fun p ->
@@ -70,7 +71,9 @@ module Make (C : Config.S) = struct
              |GroupBy (_, _, {node= AEmpty; _})
              |OrderBy {rel= {node= AEmpty; _}; _}
              |Join {r1= {node= AEmpty; _}; _}
-             |Join {r2= {node= AEmpty; _}; _} ->
+             |Join {r2= {node= AEmpty; _}; _}
+             |DepJoin {d_lhs= {node= AEmpty; _}; _}
+             |DepJoin {d_rhs= {node= AEmpty; _}; _} ->
                 empty
             | Select (ps, r) ->
                 let count =
@@ -142,10 +145,22 @@ module Make (C : Config.S) = struct
                 else if r1_unref then r2
                 else if r2_unref then r1
                 else join pred r1 r2
+            | DepJoin {d_lhs; d_rhs; d_alias} ->
+                (* If one side of a join is unused then the join can be dropped. *)
+                let l_unref = all_unref refcnt (schema_exn d_lhs) in
+                let r_unref = all_unref refcnt (schema_exn d_rhs) in
+                let d_lhs = self#visit_t count d_lhs in
+                let d_rhs = self#visit_t count d_rhs in
+                if count then dep_join d_lhs d_alias d_rhs
+                else if l_unref then d_rhs
+                else if r_unref then empty
+                else dep_join d_lhs d_alias d_rhs
             | AHashIdx (rk, rv, m) ->
-                hash_idx (self#visit_t false rk) (self#visit_t count rv) m
+                hash_idx (self#visit_t false rk) (scope_exn rk)
+                  (self#visit_t count rv) m
             | AOrderedIdx (rk, rv, m) ->
-                ordered_idx (self#visit_t false rk) (self#visit_t count rv) m
+                ordered_idx (self#visit_t false rk) (scope_exn rk)
+                  (self#visit_t count rv) m
             | _ -> super#visit_t count r
         in
         match r' with Some r' -> r' | None -> r

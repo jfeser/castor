@@ -1,5 +1,4 @@
-open Core
-open Collections
+open! Core
 
 type t [@@deriving compare, hash, sexp]
 
@@ -45,7 +44,7 @@ val pp_with_stage_and_refcnt : Formatter.t -> t -> unit
 
 val pp_with_stage_and_type : Formatter.t -> t -> unit
 
-val fresh : Fresh.t -> (int -> string, unit, string) format -> t
+val fresh : (int -> string, unit, string) format -> t
 
 val create_table : unit -> (t, 'a) Bounded_int_table.t
 

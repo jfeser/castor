@@ -103,6 +103,8 @@ val pp : Formatter.t -> t -> unit
 
 val pp_small : Formatter.t -> t -> unit
 
+val pp_small_str : unit -> t -> string
+
 val mk_pp :
      ?pp_name:(Formatter.t -> Name.t -> unit)
   -> ?pp_meta:(Formatter.t -> Core.Univ_map.t -> unit)
@@ -134,15 +136,23 @@ val empty : t
 
 val scalar : pred -> t
 
-val list : t -> t -> t
+val list : t -> string -> t -> t
 
 val tuple : t list -> tuple -> t
 
-val hash_idx : t -> t -> hash_idx -> t
+val hash_idx : t -> string -> t -> hash_idx -> t
 
-val ordered_idx : t -> t -> ordered_idx -> t
+val ordered_idx : t -> string -> t -> ordered_idx -> t
 
 val as_ : string -> t -> t
+
+val strip_scope : t -> t
+
+val scope : t -> string option
+
+val scope_exn : t -> string
+
+val alpha_scopes : t -> t
 
 val and_ : pred list -> pred
 
@@ -229,7 +239,7 @@ module Pred : sig
 
   val conjoin : t list -> t
 
-  val collect_aggs : fresh:Fresh.t -> t -> t * (string * t) list
+  val collect_aggs : t -> t * (string * t) list
 
   val conjuncts : t -> t list
 
@@ -246,6 +256,8 @@ module Pred : sig
   val of_string_exn : string -> t
 
   val subst : t Map.M(Name).t -> t -> t
+
+  val scoped : Name.t list -> string -> t -> t
 
   val relations : t -> string list
 

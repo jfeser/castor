@@ -2,6 +2,7 @@ open Core
 open Abslayout
 open Name
 open Resolve
+open Test_util
 
 module C = struct
   let conn = Db.create "postgresql:///tpch_1k"

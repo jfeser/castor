@@ -1,5 +1,4 @@
-open Base
-open Collections
+open! Core
 open Abslayout
 
 type ctx
@@ -20,7 +19,7 @@ type spj =
 
 and t = Query of spj | Union_all of spj list [@@deriving compare, sexp_of]
 
-val create_ctx : ?fresh:Fresh.t -> unit -> ctx
+val create_ctx : unit -> ctx
 
 val of_ralgebra : ctx -> Abslayout.t -> t
 

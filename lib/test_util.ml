@@ -71,12 +71,12 @@ let create_simple db name fields values =
   in
   Db.(
     exec db (sprintf "create table if not exists %s (%s)" name fields_sql)
-    |> command_ok) ;
+    |> command_ok_exn) ;
   List.iter values ~f:(fun vs ->
       let values_sql = List.map vs ~f:Int.to_string |> String.concat ~sep:", " in
       Db.(
-        exec db (sprintf "insert into %s values (%s)" name values_sql) |> command_ok)
-  )
+        exec db (sprintf "insert into %s values (%s)" name values_sql)
+        |> command_ok_exn) )
 
 (** Create a database table. *)
 let create db name fields values =
@@ -92,12 +92,12 @@ let create db name fields values =
         | _ -> failwith "Unexpected type." )
     |> String.concat ~sep:", "
   in
-  Db.(exec db (sprintf "create table %s (%s)" name fields_sql) |> command_ok) ;
+  Db.(exec db (sprintf "create table %s (%s)" name fields_sql) |> command_ok_exn) ;
   List.iter values ~f:(fun vs ->
       let values_sql = List.map vs ~f:Value.to_sql |> String.concat ~sep:", " in
       Db.(
-        exec db (sprintf "insert into %s values (%s)" name values_sql) |> command_ok)
-  )
+        exec db (sprintf "insert into %s values (%s)" name values_sql)
+        |> command_ok_exn) )
 
 module Expect_test_config = struct
   include Expect_test_config
@@ -114,6 +114,7 @@ module Expect_test_config = struct
     {Logs.report}
 
   let run thunk =
+    Fresh.reset Global.fresh ;
     Logs.set_reporter (reporter Caml.Format.std_formatter) ;
     Logs.set_level (Some Logs.Warning) ;
     try thunk () with TestDbExn -> ()

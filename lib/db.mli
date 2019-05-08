@@ -8,7 +8,9 @@ val create : string -> t
 val exec :
   ?max_retries:int -> ?params:string list -> t -> string -> Postgresql.result
 
-val command_ok : Postgresql.result -> unit
+val command_ok : Postgresql.result -> unit Or_error.t
+
+val command_ok_exn : Postgresql.result -> unit
 
 val result_to_strings : Postgresql.result -> string list list
 

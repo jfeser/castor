@@ -74,8 +74,8 @@ module Make (Config : Config.S) = struct
     | `Query q -> schema_exn q |> List.map ~f:Name.type_exn
     | `Empty -> []
 
-  let query_to_sql fresh q =
-    let ctx = Sql.create_ctx ~fresh () in
+  let query_to_sql q =
+    let ctx = Sql.create_ctx () in
     let rec query_to_sql q =
       match q with
       | `For (q1, q2) ->
@@ -107,11 +107,12 @@ module Make (Config : Config.S) = struct
           Query
             (create_query ~order
                ~relations:
-                 [ (`Subquery (sql1_no_order, Fresh.name fresh "t%d"), `Left)
-                 ; (`Subquery (sql2_no_order, Fresh.name fresh "t%d"), `Lateral) ]
+                 [ (`Subquery (sql1_no_order, Fresh.name Global.fresh "t%d"), `Left)
+                 ; ( `Subquery (sql2_no_order, Fresh.name Global.fresh "t%d")
+                   , `Lateral ) ]
                select_list)
       | `Concat qs ->
-          let counter_name = Fresh.name fresh "counter%d" in
+          let counter_name = Fresh.name Global.fresh "counter%d" in
           let scalars, other_queries =
             List.partition_map qs ~f:(function
               | `Scalar p -> `Fst p
@@ -167,9 +168,8 @@ module Make (Config : Config.S) = struct
     query_to_sql q
 
   let eval_query q =
-    let fresh = Fresh.create () in
-    let ctx = Sql.create_ctx ~fresh () in
-    let sql = query_to_sql fresh q in
+    let ctx = Sql.create_ctx () in
+    let sql = query_to_sql q in
     Logs.debug (fun m ->
         m "Executing type checking query %s." (Sql.to_string_hum ctx sql) ) ;
     let tups =

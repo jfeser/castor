@@ -4,7 +4,7 @@ open Collections
 open Abslayout
 open Bos
 
-type ctx = {fresh: Fresh.t; fresh_names: (Name.t * int ref) Hashtbl.M(Name).t}
+type ctx = {fresh_names: (Name.t * int ref) Hashtbl.M(Name).t}
 
 type select_entry = {pred: pred; alias: string; cast: Type.PrimType.t option}
 [@@deriving compare, sexp_of]
@@ -22,9 +22,7 @@ type spj =
 
 and t = Query of spj | Union_all of spj list [@@deriving compare, sexp_of]
 
-let create_ctx ?fresh () =
-  { fresh= Option.value fresh ~default:(Fresh.create ())
-  ; fresh_names= Hashtbl.create (module Name) }
+let create_ctx () = {fresh_names= Hashtbl.create (module Name)}
 
 let create_query ?(distinct = false) ?(conds = []) ?(relations = []) ?(order = [])
     ?(group = []) ?limit select =
@@ -41,7 +39,7 @@ let create_entry ~ctx ?alias ?cast pred =
       let new_n = sprintf "%s_%d" (Name.to_var orig_n) !id in
       Hashtbl.set ctx.fresh_names ~key:(Name.create new_n) ~data:(orig_n, id) ;
       {pred; alias= new_n; cast}
-  | None, None -> {pred; alias= Fresh.name ctx.fresh "x%d"; cast}
+  | None, None -> {pred; alias= Fresh.name Global.fresh "x%d"; cast}
 
 let select_entry_name {alias; _} = alias
 
@@ -83,7 +81,7 @@ let has_aggregates sql =
 
 (** Convert a query to an SPJ by introducing a subquery. *)
 let create_subquery ctx q =
-  let alias = Fresh.name ctx.fresh "t%d" in
+  let alias = Fresh.name Global.fresh "t%d" in
   let select_list =
     to_schema q |> List.map ~f:(fun n -> create_entry ~ctx (Name (Name.create n)))
   in
@@ -199,8 +197,8 @@ let lat_join of_ralgebra ctx s1 sql1 q2 =
   Query
     (create_query
        ~relations:
-         [ (`Subquery (sql1_no_order, Fresh.name ctx.fresh "t%d"), `Left)
-         ; (`Subquery (sql2_no_order, Fresh.name ctx.fresh "t%d"), `Lateral) ]
+         [ (`Subquery (sql1_no_order, Fresh.name Global.fresh "t%d"), `Left)
+         ; (`Subquery (sql2_no_order, Fresh.name Global.fresh "t%d"), `Lateral) ]
        select_list)
 
 let of_ralgebra ctx r =
@@ -209,7 +207,7 @@ let of_ralgebra ctx r =
     | As (_, r) -> f r
     | Dedup r -> Query {(to_spj ctx (f r)) with distinct= true}
     | Relation {r_name= tbl; _} ->
-        let tbl_alias = sprintf "%s_%d" tbl (Fresh.int ctx.fresh) in
+        let tbl_alias = tbl ^ Fresh.name Global.fresh "_%d" in
         (* Add table alias to all fields to generate a select list. *)
         let select_list =
           List.map (schema_exn r) ~f:(fun n ->
