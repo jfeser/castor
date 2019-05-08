@@ -1,8 +1,7 @@
-open Base
+open! Core
 open Abslayout0
-module Univ_map = Core.Univ_map
 
-type t = Core.Univ_map.t ref [@@deriving sexp_of]
+type t = Univ_map.t ref [@@deriving sexp_of]
 
 type 'a key = 'a Univ_map.Key.t
 

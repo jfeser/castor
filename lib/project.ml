@@ -13,8 +13,7 @@ module Make (C : Config.S) = struct
 
   let test =
     let src = Logs.Src.create ~doc:"Source for testing project." "project-test" in
-    Logs.Src.set_level src (Some Debug) ;
-    src
+    Logs.Src.set_level src None ; src
 
   let project_defs refcnt ps =
     List.filter ps ~f:(fun p ->
@@ -47,130 +46,133 @@ module Make (C : Config.S) = struct
         | None -> () )
       ()
 
+  type count = AtLeastOne | Exact [@@deriving sexp]
+
+  let count = Univ_map.Key.create ~name:"count" [%sexp_of: count]
+
+  let annotate_count r =
+    let count_matters =
+      List.exists ~f:(function Count | Sum _ | Avg _ -> true | _ -> false)
+    in
+    let visitor =
+      object (self)
+        inherit [_] map as super
+
+        method! visit_t c r =
+          let c =
+            match r.node with
+            | Dedup _ -> AtLeastOne
+            | Select (s, _) | GroupBy (s, _, _) ->
+                if count_matters s then Exact else c
+            | _ -> c
+          in
+          Meta.set (super#visit_t c r) count c
+
+        method! visit_AHashIdx c (rk, rv, m) =
+          AHashIdx
+            (self#visit_t AtLeastOne rk, self#visit_t c rv, self#visit_hash_idx c m)
+
+        method! visit_AOrderedIdx c (rk, rv, m) =
+          AOrderedIdx
+            ( self#visit_t AtLeastOne rk
+            , self#visit_t c rv
+            , self#visit_ordered_idx c m )
+      end
+    in
+    visitor#visit_t Exact r
+
   let project_visitor =
     object (self : 'a)
       inherit [_] map as super
 
-      method! visit_t count r =
-        let open Option.Let_syntax in
-        let r' =
-          let%map refcnt = Univ_map.(find !(r.meta) M.refcnt) in
-          let schema = schema_exn r in
-          if (not count) && all_unref refcnt schema then empty
-          else
-            match r.node with
-            | AList ({node= AEmpty; _}, _)
-             |AList (_, {node= AEmpty; _})
-             |AHashIdx ({node= AEmpty; _}, _, _)
-             |AHashIdx (_, {node= AEmpty; _}, _)
-             |AOrderedIdx ({node= AEmpty; _}, _, _)
-             |AOrderedIdx (_, {node= AEmpty; _}, _)
-             |Select (_, {node= AEmpty; _})
-             |Filter (_, {node= AEmpty; _})
-             |Dedup {node= AEmpty; _}
-             |GroupBy (_, _, {node= AEmpty; _})
-             |OrderBy {rel= {node= AEmpty; _}; _}
-             |Join {r1= {node= AEmpty; _}; _}
-             |Join {r2= {node= AEmpty; _}; _}
-             |DepJoin {d_lhs= {node= AEmpty; _}; _}
-             |DepJoin {d_rhs= {node= AEmpty; _}; _} ->
-                empty
-            | Select (ps, r) ->
-                let count =
-                  count || List.exists ps ~f:(function Count -> true | _ -> false)
-                in
-                select (project_defs refcnt ps) (self#visit_t count r)
-            | Dedup r -> dedup (self#visit_t false r)
-            | GroupBy (ps, ns, r) ->
-                let count =
-                  count || List.exists ps ~f:(function Count -> true | _ -> false)
-                in
-                group_by (project_defs refcnt ps) ns (self#visit_t count r)
-            | AScalar p -> (
-              match project_defs refcnt [p] with
-              | [] -> if count then scalar Null else empty
-              | [p] -> scalar p
-              | _ -> assert false )
-            | ATuple ([], _) -> empty
-            | ATuple ([r], _) -> self#visit_t count r
-            | ATuple (rs, Concat) ->
-                let rs = List.map rs ~f:(self#visit_t count) in
-                let rs = List.filter rs ~f:(fun r -> r.node <> AEmpty) in
-                tuple rs Concat
-            | ATuple (rs, Cross) ->
-                if
-                  List.exists rs ~f:(fun r ->
-                      match r.node with AEmpty -> true | _ -> false )
-                then empty
-                else
-                  let rs =
-                    (* Remove unreferenced parts of the tuple. *)
-                    List.filter rs ~f:(fun r ->
-                        let is_unref =
-                          all_unref
-                            Univ_map.(find_exn !(r.meta) M.refcnt)
-                            (schema_exn r)
-                        in
-                        let is_scalar =
-                          match r.node with AScalar _ -> true | _ -> false
-                        in
+      method! visit_t () r =
+        let refcnt = Meta.find_exn r M.refcnt in
+        let count = Meta.find_exn r count in
+        if all_unref refcnt (schema_exn r) && count = AtLeastOne then scalar Null
+        else
+          match r.node with
+          | Select (ps, r) -> select (project_defs refcnt ps) (self#visit_t () r)
+          | Dedup r -> dedup (self#visit_t () r)
+          | GroupBy (ps, ns, r) ->
+              group_by (project_defs refcnt ps) ns (self#visit_t () r)
+          | AScalar p -> (
+            match project_defs refcnt [p] with
+            | [] -> scalar Null
+            | [p] -> scalar p
+            | _ -> assert false )
+          | ATuple ([], _) -> empty
+          | ATuple ([r], _) -> self#visit_t () r
+          | ATuple (rs, Concat) ->
+              let rs = List.map rs ~f:(self#visit_t ()) in
+              let rs = List.filter rs ~f:(fun r -> r.node <> AEmpty) in
+              tuple rs Concat
+          | ATuple (rs, Cross) ->
+              if
+                List.exists rs ~f:(fun r ->
+                    match r.node with AEmpty -> true | _ -> false )
+              then empty
+              else
+                let rs =
+                  (* Remove unreferenced parts of the tuple. *)
+                  List.filter rs ~f:(fun r ->
+                      let is_unref =
+                        all_unref
+                          Univ_map.(find_exn !(r.meta) M.refcnt)
+                          (schema_exn r)
+                      in
+                      let is_scalar =
+                        match r.node with AScalar _ -> true | _ -> false
+                      in
+                      let should_remove =
+                        match count with
                         (* If the count matters, then we can only remove
                            unreferenced scalars. *)
-                        let should_remove =
-                          (count && is_unref && is_scalar)
-                          || (* Otherwise we can remove anything unreferenced. *)
-                             ((not count) && is_unref)
-                        in
-                        if should_remove then
-                          Logs.debug ~src:test (fun m ->
-                              m "Removing tuple element %a." pp_with_refcount r ) ;
-                        not should_remove )
-                  in
-                  let rs =
-                    (* We care about the count here (or at least the difference
-                       between 1 record and none). *)
-                    List.map rs ~f:(self#visit_t true)
-                  in
-                  let rs =
-                    if count && List.length rs = 0 then [scalar Null] else rs
-                  in
-                  tuple rs Cross
-            | Join {r1; r2; pred} ->
-                (* If one side of a join is unused then the join can be dropped. *)
+                        | Exact -> is_unref && is_scalar
+                        (* Otherwise we can remove anything unreferenced. *)
+                        | AtLeastOne -> is_unref
+                      in
+                      if should_remove then
+                        Logs.debug ~src:test (fun m ->
+                            m "Removing tuple element %a." pp_with_refcount r ) ;
+                      not should_remove )
+                in
+                let rs = List.map rs ~f:(self#visit_t ()) in
+                let rs = if List.length rs = 0 then [scalar Null] else rs in
+                tuple rs Cross
+          | Join {r1; r2; pred} -> (
+            match count with
+            | Exact -> join pred (self#visit_t () r1) (self#visit_t () r2)
+            (* If one side of a join is unused then the join can be dropped. *)
+            | AtLeastOne ->
                 let r1_unref = all_unref refcnt (schema_exn r1) in
-                let r2_unref = all_unref refcnt (schema_exn r2) in
-                let r1 = self#visit_t count r1 in
-                let r2 = self#visit_t count r2 in
-                if count then join pred r1 r2
-                else if r1_unref then r2
-                else if r2_unref then r1
-                else join pred r1 r2
-            | DepJoin {d_lhs; d_rhs; d_alias} ->
-                (* If one side of a join is unused then the join can be dropped. *)
+                if r1_unref then self#visit_t () r2
+                else
+                  let r2_unref = all_unref refcnt (schema_exn r2) in
+                  if r2_unref then self#visit_t () r1
+                  else join pred (self#visit_t () r1) (self#visit_t () r2) )
+          | DepJoin {d_lhs; d_rhs; d_alias} -> (
+            match count with
+            | Exact ->
+                dep_join (self#visit_t () d_lhs) d_alias (self#visit_t () d_rhs)
+            (* If one side of a join is unused then the join can be dropped. *)
+            | AtLeastOne ->
                 let l_unref = all_unref refcnt (schema_exn d_lhs) in
-                let r_unref = all_unref refcnt (schema_exn d_rhs) in
-                let d_lhs = self#visit_t count d_lhs in
-                let d_rhs = self#visit_t count d_rhs in
-                if count then dep_join d_lhs d_alias d_rhs
-                else if l_unref then d_rhs
-                else if r_unref then empty
-                else dep_join d_lhs d_alias d_rhs
-            | AHashIdx (rk, rv, m) ->
-                hash_idx (self#visit_t false rk) (scope_exn rk)
-                  (self#visit_t count rv) m
-            | AOrderedIdx (rk, rv, m) ->
-                ordered_idx (self#visit_t false rk) (scope_exn rk)
-                  (self#visit_t count rv) m
-            | _ -> super#visit_t count r
-        in
-        match r' with Some r' -> r' | None -> r
+                if l_unref then self#visit_t () d_rhs
+                else
+                  let r_unref = all_unref refcnt (schema_exn d_rhs) in
+                  if r_unref then self#visit_t () d_lhs
+                  else
+                    dep_join (self#visit_t () d_lhs) d_alias (self#visit_t () d_rhs)
+            )
+          | _ -> super#visit_t () r
     end
 
   let project_once r =
     Logs.debug ~src:test (fun m -> m "pre %a@." pp_with_refcount r) ;
-    let r' = project_visitor#visit_t true r in
-    Logs.debug ~src:test (fun m -> m "post %a@." pp r') ;
-    r'
+    let r = annotate_count r in
+    let r = project_visitor#visit_t () r in
+    Logs.debug ~src:test (fun m -> m "post %a@." pp r) ;
+    r
 
   let project ?(params = Set.empty (module Name)) r =
     let rec loop r =

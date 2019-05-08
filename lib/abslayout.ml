@@ -673,8 +673,6 @@ module Pred = struct
 
         method! visit_Name _ this v =
           match Map.find ctx v with Some x -> x | None -> this
-
-        method visit_name _ x = x
       end
     in
     v#visit_pred ()
@@ -685,6 +683,20 @@ module Pred = struct
       |> Map.of_alist_exn (module Name)
     in
     subst ctx p
+
+  let unscoped scope p =
+    let v =
+      object
+        inherit [_] endo
+
+        method! visit_Name _ this n =
+          match Name.rel n with
+          | Some s ->
+              if String.(s = scope) then Name (Name.copy ~relation:None n) else this
+          | None -> this
+      end
+    in
+    v#visit_pred () p
 
   (** Return the set of relations which have fields in the tuple produced by
      this expression. *)

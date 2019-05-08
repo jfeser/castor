@@ -259,6 +259,8 @@ module Pred : sig
 
   val scoped : Name.t list -> string -> t -> t
 
+  val unscoped : string -> t -> t
+
   val relations : t -> string list
 
   val to_name : t -> Name.t option

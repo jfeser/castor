@@ -1,9 +1,9 @@
-open Base
+open! Core
 open Abslayout0
 
 type t = Abslayout0.meta [@@deriving sexp_of]
 
-type 'a key
+type 'a key = 'a Univ_map.Key.t
 
 type pos = Pos of int64 | Many_pos
 
