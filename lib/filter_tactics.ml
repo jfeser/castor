@@ -30,11 +30,13 @@ module Make (C : Config.S) = struct
     in
     ps @ needed_fields
 
+  let schema_set_exn r = schema_exn r |> Set.of_list (module Name)
+
   (** Split predicates that sit under a binder into the parts that depend on
        bound variables and the parts that do not. *)
   let split_bound binder p =
     List.partition_tf (Pred.conjuncts p) ~f:(fun p' ->
-        overlaps (pred_free p') (M.bound binder) )
+        overlaps (pred_free p') (schema_set_exn binder) )
 
   (** Check that a predicate is fully supported by a relation (it does not
       depend on anything in the context.) *)
@@ -55,11 +57,15 @@ module Make (C : Config.S) = struct
     | GroupBy (ps, key, {node= Filter (p, r); _}) ->
         Logs.debug (fun m ->
             m "%a %a" Sexp.pp_hum
-              (M.bound r |> [%sexp_of: Set.M(Name).t])
+              (schema_set_exn r |> [%sexp_of: Set.M(Name).t])
               Sexp.pp_hum
-              (M.bound (group_by ps key r) |> [%sexp_of: Set.M(Name).t]) ) ;
-        if invariant_support (M.bound r) (M.bound (group_by ps key r)) p then
-          Some (filter p (group_by ps key r))
+              (schema_set_exn (group_by ps key r) |> [%sexp_of: Set.M(Name).t])
+        ) ;
+        if
+          invariant_support (schema_set_exn r)
+            (schema_set_exn (group_by ps key r))
+            p
+        then Some (filter p (group_by ps key r))
         else None
     | Filter (p, {node= Filter (p', r); _}) ->
         Some (filter (Binop (And, p, p')) r)
@@ -180,7 +186,7 @@ module Make (C : Config.S) = struct
       TODO: In practice we also want it to have a parameter in it. Is this correct? *)
   let is_candidate_key p r =
     let pfree = pred_free p in
-    Set.inter (M.bound r) pfree |> Set.is_empty
+    Set.inter (schema_set_exn r) pfree |> Set.is_empty
     && Set.inter params pfree |> Set.is_empty |> not
 
   let elim_cmp_filter r =
