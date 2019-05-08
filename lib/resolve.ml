@@ -258,7 +258,8 @@ module Make (C : Config.S) = struct
           Exists r'
 
         method! visit_First ctx _ r =
-          let r', _ = resolve `Run ctx r in
+          let r', ctx = resolve `Run ctx r in
+          Ctx.incr_refs `Run ctx ;
           First r'
       end
     in
