@@ -66,9 +66,28 @@ module Make (C : Config.S) = struct
         in
         let s = List.map ~f:(Pred.unscoped d_alias) s in
         Some (select s (strip_scope d_lhs))
+    | DepJoin
+        {d_lhs; d_alias; d_rhs= {node= Select (ps, {node= AScalar Null; _}); _}}
+      ->
+        Some
+          (select (List.map ~f:(Pred.unscoped d_alias) ps) (strip_scope d_lhs))
     | _ -> None
 
   let elim_depjoin = of_func elim_depjoin ~name:"elim-depjoin"
+
+  let flatten_select r =
+    match r.node with
+    | Select (ps, {node= Select (ps', r); _}) ->
+        let ctx =
+          List.filter_map ps' ~f:(fun p ->
+              Option.map (Pred.to_name p) ~f:(fun n -> (n, p)) )
+          |> Map.of_alist_exn (module Name)
+        in
+        let ps = List.map ps ~f:(Pred.subst ctx) in
+        Some (select ps r)
+    | _ -> None
+
+  let flatten_select = of_func flatten_select ~name:"flatten-select"
 
   let simplify =
     seq_many
@@ -81,6 +100,6 @@ module Make (C : Config.S) = struct
                all >>? is_compile_time
                >>? Infix.(is_list || is_hash_idx || is_ordered_idx)
                >>| shallowest))
-      ; (* Eliminate depjoin patterns. *)
-        for_all elim_depjoin Path.(all >>? is_depjoin) ]
+      ; for_all elim_depjoin Path.(all >>? is_depjoin)
+      ; for_all flatten_select Path.(all >>? is_select) ]
 end
