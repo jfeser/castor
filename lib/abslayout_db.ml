@@ -547,60 +547,55 @@ module Make (Config : Config.S) = struct
 
   include TF
 
-  let to_type l =
+  let type_of r =
     Logs.info (fun m -> m "Computing type of abstract layout.") ;
-    let type_ = (new type_fold)#run () l in
+    let type_ = (new type_fold)#run () r in
     Logs.info (fun m ->
         m "The type is: %s" (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ) ;
     type_
 
-  let rec annotate_type r t =
-    let open Type in
-    Meta.(set_m r type_ t) ;
-    match (r.node, t) with
-    | AScalar _, (IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | NullT) -> ()
-    | AList (_, r'), ListT (t', _)
-     |(Filter (_, r') | Select (_, r')), FuncT ([t'], _) ->
-        annotate_type r' t'
-    | AHashIdx (_, vr, m), HashIdxT (kt, vt, _) ->
-        Option.iter m.hi_key_layout ~f:(fun kr -> annotate_type kr kt) ;
-        annotate_type vr vt
-    | AOrderedIdx (_, vr, m), OrderedIdxT (kt, vt, _) ->
-        Option.iter m.oi_key_layout ~f:(fun kr -> annotate_type kr kt) ;
-        annotate_type vr vt
-    | ATuple (rs, _), TupleT (ts, _) -> (
-      match List.iter2 rs ts ~f:annotate_type with
-      | Ok () -> ()
-      | Unequal_lengths ->
-          Error.(
-            create "Mismatched tuple type." (r, t) [%sexp_of: Abslayout.t * T.t]
-            |> raise) )
-    | DepJoin {d_lhs; d_rhs; _}, FuncT ([t1; t2], _) ->
-        annotate_type d_lhs t1 ; annotate_type d_rhs t2
-    | As (_, r), _ -> annotate_type r t
-    | ( ( Select _ | Filter _ | DepJoin _ | Join _ | GroupBy _ | OrderBy _ | Dedup _
-        | Relation _ | AEmpty | AScalar _ | AList _ | ATuple _ | AHashIdx _
-        | AOrderedIdx _ )
-      , ( NullT | IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | TupleT _
-        | ListT _ | HashIdxT _ | OrderedIdxT _ | FuncT _ | EmptyT ) ) ->
-        Error.create "Unexpected type." (r, t) [%sexp_of: Abslayout.t * t]
-        |> Error.raise
-
-  let annotate_subquery_types =
-    let annotate_type r =
-      let type_ = to_type r in
-      Meta.(set_m r type_) type_
+  let annotate_type r =
+    let rec annot r t =
+      let open Type in
+      Meta.(set_m r type_ t) ;
+      match (r.node, t) with
+      | AScalar _, (IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | NullT) -> ()
+      | AList (_, r'), ListT (t', _)
+       |(Filter (_, r') | Select (_, r')), FuncT ([t'], _) ->
+          annot r' t'
+      | AHashIdx (_, vr, m), HashIdxT (kt, vt, _) ->
+          Option.iter m.hi_key_layout ~f:(fun kr -> annot kr kt) ;
+          annot vr vt
+      | AOrderedIdx (_, vr, m), OrderedIdxT (kt, vt, _) ->
+          Option.iter m.oi_key_layout ~f:(fun kr -> annot kr kt) ;
+          annot vr vt
+      | ATuple (rs, _), TupleT (ts, _) -> (
+        match List.iter2 rs ts ~f:annot with
+        | Ok () -> ()
+        | Unequal_lengths ->
+            Error.(
+              create "Mismatched tuple type." (r, t) [%sexp_of: Abslayout.t * T.t]
+              |> raise) )
+      | DepJoin {d_lhs; d_rhs; _}, FuncT ([t1; t2], _) ->
+          annot d_lhs t1 ; annot d_rhs t2
+      | As (_, r), _ -> annot r t
+      | ( ( Select _ | Filter _ | DepJoin _ | Join _ | GroupBy _ | OrderBy _
+          | Dedup _ | Relation _ | AEmpty | AScalar _ | AList _ | ATuple _
+          | AHashIdx _ | AOrderedIdx _ )
+        , ( NullT | IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | TupleT _
+          | ListT _ | HashIdxT _ | OrderedIdxT _ | FuncT _ | EmptyT ) ) ->
+          Error.create "Unexpected type." (r, t) [%sexp_of: Abslayout.t * t]
+          |> Error.raise
     in
+    annot r (type_of r) ;
     let visitor =
       object
         inherit runtime_subquery_visitor
 
-        method visit_Subquery r = annotate_type r
+        method visit_Subquery r = annot r (type_of r)
       end
     in
-    visitor#visit_t ()
-
-  let bound r = schema_exn r |> Set.of_list (module Name)
+    visitor#visit_t () r
 
   let annotate_relations =
     let visitor =

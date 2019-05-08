@@ -2,9 +2,9 @@ open Core
 open Abslayout
 
 module type S = sig
-  val to_type : t -> Type.t
+  val type_of : t -> Type.t
 
-  val annotate_subquery_types : t -> unit
+  val annotate_type : t -> unit
 
   val resolve : ?params:Set.M(Name).t -> t -> t
 
@@ -90,10 +90,6 @@ module type S = sig
 
       method run : unit -> t -> 'out
     end
-
-  val annotate_type : t -> Type.t -> unit
-
-  val bound : t -> Set.M(Name).t
 
   val annotate_relations : t -> t
 end

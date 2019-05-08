@@ -33,7 +33,7 @@ let%test_module _ =
         |> M.resolve ~params:sparams
       in
       let layout = annotate_key_layouts layout in
-      M.annotate_subquery_types layout ;
+      M.annotate_type layout ;
       I.irgen ~params:param_names ~data_fn:"/tmp/buf" layout
       |> opt_func
       |> I.pp Caml.Format.std_formatter

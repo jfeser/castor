@@ -1,6 +1,4 @@
-open Core
-open Base
-open Abslayout
+open! Core
 open Test_util
 
 let run_test ?(params = []) ?(print_code = true) layout_str =
@@ -10,12 +8,9 @@ let run_test ?(params = []) ?(print_code = true) layout_str =
   try
     let param_names = List.map params ~f:(fun (n, _) -> n) in
     let sparams = Set.of_list (module Name) param_names in
-    let layout =
-      of_string_exn layout_str |> M.annotate_relations |> M.resolve ~params:sparams
-      |> annotate_key_layouts
-    in
-    M.annotate_subquery_types layout ;
-    let type_ = M.to_type layout in
+    let layout = M.load_string ~params:sparams layout_str in
+    M.annotate_type layout ;
+    let type_ = Meta.(find_exn layout type_) in
     Stdio.print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ;
     let ir = I.irgen ~params:param_names ~data_fn:"/tmp/buf" layout in
     if print_code then I.pp Caml.Format.std_formatter ir

@@ -16,9 +16,10 @@ let run_test layout_str =
     of_string_exn layout_str |> M.annotate_relations |> M.resolve
     |> annotate_key_layouts
   in
-  let type_ = M.to_type layout in
+  M.annotate_type layout ;
+  let type_ = Meta.(find_exn layout type_) in
   let buf = Buffer.create 1024 in
-  let _, len = S.serialize (Bitstring.Writer.with_buffer buf) layout type_ in
+  let _, len = S.serialize (Bitstring.Writer.with_buffer buf) layout in
   let buf_str = Buffer.contents buf |> String.escaped in
   let layout_log, did_modify =
     In_channel.input_all (In_channel.create layout_file) |> process_layout_log

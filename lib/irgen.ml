@@ -712,10 +712,10 @@ struct
       List.map params ~f:(fun n -> (n, Ctx.Global (Var (Name.name n))))
       |> Map.of_alist_exn (module Name)
     in
-    let type_ = Abslayout_db.to_type r in
+    let type_ = Meta.(find_exn r type_) in
     let writer = Bitstring.Writer.with_file data_fn in
     let r, len =
-      if Config.code_only then (r, 0) else Serialize.serialize writer r type_
+      if Config.code_only then (r, 0) else Serialize.serialize writer r
     in
     Bitstring.Writer.flush writer ;
     Bitstring.Writer.close writer ;

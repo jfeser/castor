@@ -1,4 +1,4 @@
-open Core
+open! Core
 open Test_util
 
 let run_test ?(params = []) ?print_layout ?(fork = false) ?irgen_debug layout_str =
@@ -34,6 +34,7 @@ let run_test ?(params = []) ?print_layout ?(fork = false) ?irgen_debug layout_st
       in
       M.load_string ~params layout_str
     in
+    M.annotate_type layout ;
     if fork then run_in_fork (fun () -> run_compiler ?print_layout layout)
     else run_compiler ?print_layout layout
   in

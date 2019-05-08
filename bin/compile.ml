@@ -27,10 +27,9 @@ let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
   Logs.debug (fun m -> m "Codegen.") ;
   let ralgebra =
     let params = Set.of_list (module Name) params in
-    let r = Abslayout.of_channel_exn ch |> A.resolve ~params in
-    Abslayout.annotate_key_layouts r
+    A.load_string ~params (In_channel.input_all ch)
   in
-  A.annotate_subquery_types ralgebra ;
+  A.annotate_type ralgebra ;
   C.compile ~gprof ~params ?out_dir ralgebra |> ignore
 
 let reporter ppf =

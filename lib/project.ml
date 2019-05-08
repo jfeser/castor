@@ -29,11 +29,15 @@ module Make (C : Config.S) = struct
               (* Be conservative if refcount is missing. *)
               true ) )
 
-  let all_unref r =
-    let refcnt = Meta.find_exn r M.refcnt in
+  (** True if all fields emitted by r are unreferenced when emitted by r'. *)
+  let all_unref_at r r' =
+    let refcnt = Meta.find_exn r' M.refcnt in
     let schema = schema_exn r in
     List.for_all (Schema.unscoped schema) ~f:(fun n ->
         match Map.(find refcnt n) with Some c -> c = 0 | None -> false )
+
+  (** True if all fields emitted by r are unreferenced. *)
+  let all_unref r = all_unref_at r r
 
   let pp_with_refcount, _ =
     mk_pp
@@ -136,8 +140,8 @@ module Make (C : Config.S) = struct
             | Exact -> join pred (self#visit_t () r1) (self#visit_t () r2)
             (* If one side of a join is unused then the join can be dropped. *)
             | AtLeastOne ->
-                if all_unref r1 then self#visit_t () r2
-                else if all_unref r2 then self#visit_t () r1
+                if all_unref_at r1 r then self#visit_t () r2
+                else if all_unref_at r2 r then self#visit_t () r1
                 else join pred (self#visit_t () r1) (self#visit_t () r2) )
           | DepJoin {d_lhs; d_rhs; d_alias} -> (
             match count with
