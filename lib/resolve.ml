@@ -1,7 +1,7 @@
 open Core
 open Abslayout
 open Collections
-open Name
+module N = Name
 
 module Config = struct
   module type S = sig end
@@ -20,8 +20,8 @@ module Make (C : Config.S) = struct
       inherit [_] map as super
 
       method! visit_Name () n =
-        match Meta.find n meta_ref with
-        | Some m -> Name (copy n ~meta:!m)
+        match N.Meta.find n meta_ref with
+        | Some m -> Name (N.copy n ~meta:!m)
         | None -> Name n
 
       method! visit_t () ({meta= _; _} as r) =
@@ -129,6 +129,10 @@ module Make (C : Config.S) = struct
       List.map (c :> row list) ~f:(fun r -> {r with rname= Name.unscoped r.rname})
       |> of_list
 
+    let scoped s (c : t) =
+      List.map (c :> row list) ~f:(fun r -> {r with rname= Name.scoped s r.rname})
+      |> of_list
+
     (** Bind c2 over c1. *)
     let bind (c1 : t) (c2 : t) =
       let c2 = (c2 :> row list) in
@@ -183,7 +187,7 @@ module Make (C : Config.S) = struct
                 (* If this is a definition point, annotate it with fresh metadata
                  and expose it in the context. *)
                 let meta =
-                  match Meta.find n meta_ref with
+                  match N.Meta.find n meta_ref with
                   | Some m -> !m
                   | None -> Name.meta n
                 in
@@ -221,12 +225,6 @@ module Make (C : Config.S) = struct
                | _ -> assert false )
       in
       (of_list ctx, refcounts)
-
-    let rename (ctx : t) name : t =
-      List.map
-        ~f:(fun r -> {r with rname= copy ~relation:(Some name) r.rname})
-        (ctx :> row list)
-      |> of_list
   end
 
   (** Given a context containing names and a new name, determine which of the
@@ -237,7 +235,7 @@ module Make (C : Config.S) = struct
       | Some m -> m
       | None ->
           Error.raise
-            (Error.create "Could not resolve." (n, ctx) [%sexp_of: t * Ctx.t])
+            (Error.create "Could not resolve." (n, ctx) [%sexp_of: N.t * Ctx.t])
     in
     List.iter m.rrefs ~f:incr ; m.rname
 
@@ -269,12 +267,15 @@ module Make (C : Config.S) = struct
     let all_has_stage (ctx : Ctx.t) s =
       List.for_all (ctx :> Ctx.row list) ~f:(fun r -> r.Ctx.rstage = s)
     in
-    let no_leakage (kctx : Ctx.t) (vctx : Ctx.t) =
-      List.for_all
-        (kctx :> Ctx.row list)
-        ~f:(fun r -> not (List.mem ~equal:phys_equal (vctx :> Ctx.row list) r))
-    in
     let rsame = resolve stage in
+    let as_ s r =
+      let rc =
+        Meta.find_exn r mut_refcnt |> Map.to_alist
+        |> List.map ~f:(fun (n, c) -> (Name.scoped s n, c))
+        |> Map.of_alist_exn (module Name)
+      in
+      Meta.set {node= As (s, r); meta= Meta.empty ()} mut_refcnt rc
+    in
     let resolve' = function
       | Select (preds, r) ->
           let r, preds =
@@ -290,16 +291,16 @@ module Make (C : Config.S) = struct
           (Filter (pred, r), value_ctx)
       | DepJoin ({d_lhs; d_rhs; d_alias} as d) ->
           let d_lhs, lctx = resolve `Compile outer_ctx d_lhs in
-          let lctx = Ctx.rename lctx d_alias in
+          let lctx = Ctx.scoped d_alias lctx in
           let d_rhs, rctx = rsame (Ctx.bind outer_ctx lctx) d_rhs in
-          (DepJoin {d with d_lhs; d_rhs}, Ctx.unscoped rctx)
+          (DepJoin {d with d_lhs; d_rhs}, rctx)
       | Join {pred; r1; r2} ->
           let r1, inner_ctx1 = rsame outer_ctx r1 in
           let r2, inner_ctx2 = rsame outer_ctx r2 in
           let ctx = Ctx.merge_list [inner_ctx1; inner_ctx2; outer_ctx] in
           let pred = resolve_pred ctx pred in
           (Join {pred; r1; r2}, Ctx.merge inner_ctx1 inner_ctx2)
-      | Relation r -> (Relation r, resolve_relation stage r |> Ctx.unscoped)
+      | Relation r -> (Relation r, resolve_relation stage r)
       | GroupBy (aggs, key, r) ->
           let r, inner_ctx = rsame outer_ctx r in
           let ctx = Ctx.merge outer_ctx inner_ctx in
@@ -320,11 +321,11 @@ module Make (C : Config.S) = struct
           in
           (AScalar def, ctx)
       | AList (rk, rv) ->
+          let scope = scope_exn rk in
+          let rk = strip_scope rk in
           let rk, kctx = resolve `Compile outer_ctx rk in
-          assert (all_has_stage kctx `Compile) ;
-          let rv, vctx = rsame (Ctx.bind outer_ctx kctx) rv in
-          assert (no_leakage kctx vctx) ;
-          (AList (rk, rv), Ctx.unscoped vctx)
+          let rv, vctx = rsame (Ctx.bind outer_ctx (Ctx.scoped scope kctx)) rv in
+          (AList (as_ scope rk, rv), vctx)
       | ATuple (ls, (Concat as t)) ->
           let ls, ctxs = List.map ls ~f:(rsame outer_ctx) |> List.unzip in
           (ATuple (ls, t), List.hd_exn ctxs)
@@ -332,26 +333,28 @@ module Make (C : Config.S) = struct
           let ls, ctxs = List.map ls ~f:(rsame outer_ctx) |> List.unzip in
           (ATuple (ls, t), Ctx.merge_list ctxs)
       | AHashIdx (r, l, m) ->
-          let r, key_ctx = resolve `Compile outer_ctx r in
-          assert (all_has_stage key_ctx `Compile) ;
-          let inner_ctx = Ctx.bind outer_ctx key_ctx in
-          let vl, value_ctx = rsame inner_ctx l in
+          let scope = scope_exn r in
+          let r = strip_scope r in
+          let r, kctx = resolve `Compile outer_ctx r in
+          assert (all_has_stage kctx `Compile) ;
+          let inner_ctx = Ctx.bind outer_ctx (Ctx.scoped scope kctx) in
+          let vl, vctx = rsame inner_ctx l in
           let m = {m with lookup= List.map m.lookup ~f:(resolve_pred outer_ctx)} in
-          (AHashIdx (r, vl, m), Ctx.(merge key_ctx value_ctx |> unscoped))
+          (AHashIdx (as_ scope r, vl, m), Ctx.(merge kctx vctx))
       | AOrderedIdx (r, l, m) ->
-          let r, key_ctx = resolve `Compile outer_ctx r in
-          assert (all_has_stage key_ctx `Compile) ;
-          let inner_ctx = Ctx.bind outer_ctx key_ctx in
-          let vl, value_ctx = rsame inner_ctx l in
+          let scope = scope_exn r in
+          let r = strip_scope r in
+          let r, kctx = resolve `Compile outer_ctx r in
+          assert (all_has_stage kctx `Compile) ;
+          let inner_ctx = Ctx.bind outer_ctx (Ctx.scoped scope kctx) in
+          let vl, vctx = rsame inner_ctx l in
           let m =
             { m with
               lookup_low= resolve_pred outer_ctx m.lookup_low
             ; lookup_high= resolve_pred outer_ctx m.lookup_high }
           in
-          (AOrderedIdx (r, vl, m), Ctx.(merge key_ctx value_ctx |> unscoped))
-      | As (n, r) ->
-          let r, ctx = rsame outer_ctx r in
-          (As (n, r), Ctx.rename ctx n)
+          (AOrderedIdx (as_ scope r, vl, m), Ctx.(merge kctx vctx))
+      | As _ -> Error.(createf "Unexpected as." |> raise)
       | OrderBy {key; rel} ->
           let rel, inner_ctx = rsame outer_ctx rel in
           let key = List.map key ~f:(fun (p, o) -> (resolve_pred inner_ctx p, o)) in
@@ -366,6 +369,7 @@ module Make (C : Config.S) = struct
         in
         Exn.reraisef exn "Resolving: %a" pp r ()
     in
+    let ctx = Ctx.unscoped ctx in
     let ctx, refcnts = Ctx.add_refcnts ctx in
     (* Logs.debug (fun m ->
      *     m "%a@ %a" Abslayout.pp r Sexp.pp_hum ([%sexp_of: Ctx.t] ctx) ) ; *)
