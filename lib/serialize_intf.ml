@@ -3,7 +3,9 @@ open Abslayout
 
 module type S = sig
   module Log : sig
-    val render : string -> Out_channel.t -> unit
+    type t
+
+    val render : t -> Out_channel.t -> unit
     (** Render a serialization log into a file map. *)
   end
 

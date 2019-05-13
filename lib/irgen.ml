@@ -523,8 +523,10 @@ struct
     let key_len = len index_start key_type in
     let ptr_len = Infix.(int 8) in
     let kp_len = Infix.(key_len + ptr_len) in
+    let key_start i = Infix.(index_start + (i * kp_len)) in
+    let ptr_start i = Infix.(key_start i + key_len) in
     let key_index i b =
-      build_assign Infix.(index_start + (i * kp_len)) kstart b ;
+      build_assign (key_start i) kstart b ;
       let key = build_var ~persistent:false "key" (type_of_layout key_layout) b in
       scan key_ctx b key_layout key_type (fun b tup ->
           build_assign (Tuple tup) key b ) ;
@@ -535,7 +537,7 @@ struct
       (gen_pred ctx lookup_high b)
       (fun key idx b ->
         build_assign
-          Infix.(Slice (index_start + (idx * kp_len) + key_len, 8))
+          Infix.(Slice (ptr_start idx, 8) + index_len + index_start)
           vstart b ;
         build_assign key key_tuple b ;
         scan value_ctx b value_layout value_type (fun b value_tup ->
