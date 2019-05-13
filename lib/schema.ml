@@ -1,4 +1,4 @@
-open Core
+open! Core
 open Abslayout0
 
 let scoped s = List.map ~f:(Name.scoped s)

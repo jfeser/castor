@@ -239,7 +239,7 @@ let rec pred_to_sql p =
   | Name n -> sprintf "%s" (Name.to_sql n)
   | Int x -> Int.to_string x
   | Fixed x -> Fixed_point.to_string x
-  | Date x -> sprintf "date('%s')" (Core.Date.to_string x)
+  | Date x -> sprintf "date('%s')" (Date.to_string x)
   | Bool true -> "true"
   | Bool false -> "false"
   | String s -> sprintf "'%s'" s

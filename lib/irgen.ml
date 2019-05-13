@@ -1,5 +1,4 @@
-open Core
-open Base
+open! Core
 open Collections
 open Implang
 module A = Abslayout

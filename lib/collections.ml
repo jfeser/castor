@@ -1,7 +1,7 @@
 open! Core
 
 module Date = struct
-  include Core.Date
+  include Date
 
   (** Convert a date into the number of days since the Unix epoch. *)
   let to_int x = diff x unix_epoch

@@ -1,6 +1,6 @@
 (executable
  (name discover)
- (libraries core stdio)
+ (libraries core)
  (preprocess (pps ppx_let))
  (modules discover config_defaults))
 

@@ -1,4 +1,4 @@
-open Core
+open! Core
 open Castor
 
 let main ~in_place file =

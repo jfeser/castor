@@ -1,4 +1,4 @@
-open Base
+open! Core
 open Collections
 
 type binop = Abslayout0.binop =
@@ -37,7 +37,7 @@ type pred = Abslayout0.pred =
   | Name of Name.t
   | Int of int
   | Fixed of Fixed_point.t
-  | Date of Core.Date.t
+  | Date of Date.t
   | Bool of bool
   | String of string
   | Null of Type.PrimType.t option
@@ -107,7 +107,7 @@ val pp_small_str : unit -> t -> string
 
 val mk_pp :
      ?pp_name:(Formatter.t -> Name.t -> unit)
-  -> ?pp_meta:(Formatter.t -> Core.Univ_map.t -> unit)
+  -> ?pp_meta:(Formatter.t -> Univ_map.t -> unit)
   -> unit
   -> (Formatter.t -> t -> unit) * (Formatter.t -> pred -> unit)
 
@@ -158,19 +158,11 @@ val and_ : pred list -> pred
 
 val schema_exn : t -> Name.t list
 
-module Ctx : sig
-  type t = Value.t Map.M(Name).t [@@deriving compare, sexp]
-
-  include Comparable.S with type t := t
-
-  val empty : t
-end
-
 val of_string_exn : string -> t
 
 val name_of_string_exn : string -> Name.t
 
-val of_channel_exn : Stdio.In_channel.t -> t
+val of_channel_exn : In_channel.t -> t
 
 val subst : pred Map.M(Name).t -> t -> t
 
@@ -213,7 +205,7 @@ module Pred : sig
     | Name of Name.t
     | Int of int
     | Fixed of Fixed_point.t
-    | Date of Core.Date.t
+    | Date of Date.t
     | Bool of bool
     | String of string
     | Null of Type.PrimType.t option

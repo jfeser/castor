@@ -1,7 +1,7 @@
 open! Core
 open Collections
-open Abslayout0
 open Abslayout
+open Abslayout0
 
 module type S = Abslayout_db_intf.S
 

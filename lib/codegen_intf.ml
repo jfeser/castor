@@ -1,7 +1,9 @@
+open! Core
+
 module type S = sig
   val codegen : Irgen.ir_module -> Llvm.llmodule
 
-  val write_header : Stdio.Out_channel.t -> unit
+  val write_header : Out_channel.t -> unit
 
   val compile :
        ?out_dir:string

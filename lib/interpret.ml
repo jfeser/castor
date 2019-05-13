@@ -1,5 +1,4 @@
-open Core
-open Base
+open! Core
 open Abslayout
 open Collections
 module A = Abslayout
@@ -86,8 +85,7 @@ type agg =
 
 let eval {db; params} r =
   let scan =
-    let hashable = Hashable.of_key (module String) in
-    Memo.general ~hashable (fun r ->
+    Memo.general ~hashable:String.hashable (fun r ->
         let schema_types =
           Option.value_exn (Db.relation db r).r_schema |> List.map ~f:Name.type_exn
         in

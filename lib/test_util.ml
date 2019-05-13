@@ -1,5 +1,4 @@
-open Core
-open Printf
+open! Core
 
 exception TestDbExn
 

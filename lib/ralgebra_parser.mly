@@ -1,4 +1,5 @@
 %{
+    open! Core
     module A = Abslayout0
     open Parser_utils
 %}
@@ -101,7 +102,7 @@ ralgebra_subquery:
 | ORDERBY; LPAREN;
   key = bracket_list(pair(expr, option(ORDER))); COMMA;
   rel = ralgebra;
-  RPAREN { A.OrderBy { key = List.map (fun (e, o) -> match o with
+  RPAREN { A.OrderBy { key = List.map ~f:(fun (e, o) -> match o with
                                                      | Some o -> e, o
                                                      | None -> e, A.Asc) key; rel }
            |> node $symbolstartpos $endpos }
@@ -149,7 +150,7 @@ e0_binop: x = STRPOS { x }
 
 value:
 | x = INT { A.Int x }
-| DATEKW; x = parens(STR); { A.Date (Core.Date.of_string x) }
+| DATEKW; x = parens(STR); { A.Date (Date.of_string x) }
 | x = FIXED { A.Fixed x }
 | x = BOOL { A.Bool x }
 | x = STR { A.String x }

@@ -1,4 +1,4 @@
-open Stdio
+open! Core
 open Abslayout
 
 module type S = sig

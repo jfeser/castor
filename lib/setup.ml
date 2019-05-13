@@ -6,7 +6,7 @@ let make_modules ?layout_file ?(irgen_debug = false) ?(code_only = false) () =
   let module M = Abslayout_db.Make (Test_db) in
   let module S =
     Serialize.Make (struct
-        let layout_map_channel = Option.map layout_file ~f:Stdio.Out_channel.create
+        let layout_map_channel = Option.map layout_file ~f:Out_channel.create
       end)
       (M)
   in

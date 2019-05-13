@@ -1,4 +1,4 @@
-open Base
+open! Core
 open Collections
 open Implang0
 

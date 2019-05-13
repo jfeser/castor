@@ -1,6 +1,5 @@
-open Base
+open! Core
 open Collections
-module Format = Caml.Format
 include Abslayout0
 
 let strip_meta =
@@ -137,17 +136,6 @@ let scope_exn r =
   Option.value_exn
     ~error:(Error.createf "Expected a scope on %a." pp_small_str r)
     (scope r)
-
-module Ctx = struct
-  module T = struct
-    type t = Value.t Map.M(Name).t [@@deriving compare, sexp]
-  end
-
-  include T
-  include Comparable.Make (T)
-
-  let empty = Map.empty (module Name)
-end
 
 let of_lexbuf_exn lexbuf =
   try Ralgebra_parser.ralgebra_eof Ralgebra_lexer.token lexbuf
@@ -349,7 +337,7 @@ module Pred = struct
       | Name of Name.t
       | Int of int
       | Fixed of Fixed_point.t
-      | Date of Core.Date.t
+      | Date of Date.t
       | Bool of bool
       | String of string
       | Null of Type.PrimType.t option
@@ -412,6 +400,8 @@ module Pred = struct
     let module M = struct
       module T = struct
         type t = pred [@@deriving compare, sexp_of]
+
+        let t_of_sexp _ = failwith "Unimplemented."
       end
 
       include T

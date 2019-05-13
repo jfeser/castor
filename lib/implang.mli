@@ -1,4 +1,4 @@
-open Base
+open! Core
 open Collections
 
 type op = Implang0.op =
@@ -39,7 +39,7 @@ type op = Implang0.op =
 type expr = Implang0.expr =
   | Null
   | Int of int
-  | Date of Core.Date.t
+  | Date of Date.t
   | Fixed of Fixed_point.t
   | Bool of bool
   | String of string

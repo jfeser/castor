@@ -1,5 +1,4 @@
 open! Core
-open Printf
 open Hashcons
 
 module Key = struct

@@ -1,7 +1,7 @@
 open! Core
 
 module T = struct
-  type meta = Core.Univ_map.t ref [@@deriving sexp_of]
+  type meta = Univ_map.t ref [@@deriving sexp_of]
 
   type binop =
     | Eq
@@ -33,7 +33,7 @@ module T = struct
     | Name of (Name.t[@opaque])
     | Int of (int[@opaque])
     | Fixed of (Fixed_point.t[@opaque])
-    | Date of (Core.Date.t[@opaque])
+    | Date of (Date.t[@opaque])
     | Bool of (bool[@opaque])
     | String of (string[@opaque])
     | Null of (Type.PrimType.t option[@opaque])

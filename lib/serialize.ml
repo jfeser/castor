@@ -1,6 +1,4 @@
-open Base
-open Stdio
-open Printf
+open! Core
 open Collections
 open Abslayout
 
@@ -406,7 +404,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
     let begin_pos = pos writer in
     let log_tmp_file =
       if Option.is_some Config.layout_map_channel then
-        Core.Filename.temp_file "serialize" "log"
+        Filename.temp_file "serialize" "log"
       else "/dev/null"
     in
     let log_ch = Out_channel.create log_tmp_file in

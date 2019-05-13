@@ -11,14 +11,14 @@ let run_test ?(params = []) ?(print_code = true) layout_str =
     let layout = M.load_string ~params:sparams layout_str in
     M.annotate_type layout ;
     let type_ = Meta.(find_exn layout type_) in
-    Stdio.print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ;
+    print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ;
     let ir = I.irgen ~params:param_names ~data_fn:"/tmp/buf" layout in
     if print_code then I.pp Caml.Format.std_formatter ir
   with exn ->
     Backtrace.(
       elide := false ;
-      Exn.most_recent () |> to_string |> Stdio.print_endline) ;
-    Exn.(to_string exn |> Stdio.print_endline)
+      Exn.most_recent () |> to_string |> print_endline) ;
+    Exn.(to_string exn |> print_endline)
 
 let%expect_test "tuple-simple-cross" =
   run_test "ATuple([AScalar(1), AScalar(2)], cross)" ;

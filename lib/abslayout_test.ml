@@ -1,5 +1,4 @@
-open Base
-open Stdio
+open! Core
 open Collections
 open Abslayout
 open Test_util

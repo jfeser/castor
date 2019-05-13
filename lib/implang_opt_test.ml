@@ -1,47 +1,24 @@
-open Core
-open Base
-open Abslayout
+open! Core
 open Test_util
 open Implang_opt
 
-let%test_module _ =
-  ( module struct
-    let m, _, _, _ = Setup.make_modules ()
+let run_test ?(params = []) layout_str opt_func =
+  let (module M), (module S), (module I), _ =
+    Setup.make_modules ~code_only:true ()
+  in
+  let param_names = List.map params ~f:(fun (n, _) -> n) in
+  let layout =
+    M.load_string ~params:(Set.of_list (module Name) param_names) layout_str
+  in
+  M.annotate_type layout ;
+  I.irgen ~params:param_names ~data_fn:"/tmp/buf" layout
+  |> opt_func
+  |> I.pp Caml.Format.std_formatter
 
-    let run_test ?(params = []) layout_str opt_func =
-      let module M = (val m) in
-      let module S =
-        Serialize.Make (struct
-            let layout_map_channel = None
-          end)
-          (M)
-      in
-      let module I =
-        Irgen.Make (struct
-            let code_only = true
-
-            let debug = false
-          end)
-          (M)
-          (S)
-          ()
-      in
-      let param_names = List.map params ~f:(fun (n, _) -> n) in
-      let sparams = Set.of_list (module Name) param_names in
-      let layout =
-        of_string_exn layout_str |> M.annotate_relations
-        |> M.resolve ~params:sparams
-      in
-      let layout = annotate_key_layouts layout in
-      M.annotate_type layout ;
-      I.irgen ~params:param_names ~data_fn:"/tmp/buf" layout
-      |> opt_func
-      |> I.pp Caml.Format.std_formatter
-
-    let%expect_test "example-1" =
-      Demomatch.(run_test ~params:Demomatch.example_params (example1 "log") opt) ;
-      [%expect
-        {|
+let%expect_test "example-1" =
+  Demomatch.(run_test ~params:Demomatch.example_params (example1 "log") opt) ;
+  [%expect
+    {|
     // Locals:
     // i18 : Int[nonnull] (persists=true)
     // cstart21 : Int[nonnull] (persists=true)
@@ -120,4 +97,3 @@ let%test_module _ =
             i1 = i1 + 1;
         }
     } |}]
-  end )

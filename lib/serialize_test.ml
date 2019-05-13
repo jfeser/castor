@@ -20,7 +20,7 @@ let run_test layout_str =
   let layout_log, did_modify =
     In_channel.input_all (In_channel.create layout_file) |> process_layout_log
   in
-  Stdio.print_endline layout_log ;
+  print_endline layout_log ;
   if did_modify then [%sexp_of: Type.t * int] (type_, len) |> print_s
   else [%sexp_of: Type.t * int * string] (type_, len, buf_str) |> print_s
 

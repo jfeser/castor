@@ -1,4 +1,4 @@
-open Core
+open! Core
 
 (** Run a command, logging it if it fails. *)
 let command_exn ?quiet:_ = function

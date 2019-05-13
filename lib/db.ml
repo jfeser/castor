@@ -1,9 +1,6 @@
-open Base
-open Printf
-module Pervasives = Caml.Pervasives
+open! Core
 open Collections
 module Psql = Postgresql
-module Stream = Caml.Stream
 
 let () =
   Caml.Printexc.register_printer (function
@@ -119,7 +116,7 @@ let relation conn r_name =
   in
   Abslayout0.{r_name; r_schema}
 
-let relation_memo = Core.Memo.general (fun (conn, rname) -> relation conn rname)
+let relation_memo = Memo.general (fun (conn, rname) -> relation conn rname)
 
 let relation conn rname = relation_memo (conn, rname)
 

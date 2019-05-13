@@ -15,9 +15,7 @@ depends: [
   "bisect_ppx"
   "ounit" {>= "2"}
 
-  "base" {>= "v0.12"}
   "core" {>= "v0.12"}
-  "stdio" {>= "v0.12"}
   "postgresql" {>= "4.4" & < "4.5"}
   "bos" {>= "0.2" & < "0.3"}
   "logs" {>= "0.6" & < "0.7"}

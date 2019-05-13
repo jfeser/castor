@@ -1,6 +1,5 @@
 {
-open Base
-open Printf
+open! Core
 open Ralgebra_parser
 open Parser_utils
 

@@ -1,6 +1,5 @@
-open Base
+open! Core
 open Collections
-open Printf
 
 module T = struct
   type t =
@@ -32,7 +31,7 @@ let of_pred =
 let to_sql = function
   | Int x -> Int.to_string x
   | Fixed x -> Fixed_point.to_string x
-  | Date x -> sprintf "date('%s')" (Core.Date.to_string x)
+  | Date x -> sprintf "date('%s')" (Date.to_string x)
   | Bool true -> "true"
   | Bool false -> "false"
   | String s -> sprintf "'%s'" s

@@ -1,4 +1,4 @@
-open Core
+open! Core
 open Castor
 open Collections
 
@@ -36,10 +36,10 @@ let reporter ppf =
   let report _ level ~over k msgf =
     let k _ = over () ; k () in
     let with_time h _ k ppf fmt =
-      let time = Core.Time.now () in
+      let time = Time.now () in
       Format.kfprintf k ppf
         ("%a [%s] @[" ^^ fmt ^^ "@]@.")
-        Logs.pp_header (level, h) (Core.Time.to_string time)
+        Logs.pp_header (level, h) (Time.to_string time)
     in
     msgf @@ fun ?header ?tags fmt -> with_time header tags k ppf fmt
   in

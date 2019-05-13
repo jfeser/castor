@@ -1,4 +1,4 @@
-open Core
+open! Core
 open Castor
 open Db
 

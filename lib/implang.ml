@@ -1,7 +1,5 @@
-open Core
-open Base
+open! Core
 open Collections
-module Format = Caml.Format
 module A = Abslayout
 include Implang0
 
@@ -52,7 +50,7 @@ let rec pp_expr : Format.formatter -> expr -> unit =
   fun fmt -> function
     | Null -> fprintf fmt "null"
     | Int x -> Int.pp fmt x
-    | Date x -> Core.Date.pp fmt x
+    | Date x -> Date.pp fmt x
     | Fixed x -> Fixed_point.pp fmt x
     | Bool x -> pp_bool fmt x
     | String x -> fprintf fmt "\"%s\"" (String.escaped x)
