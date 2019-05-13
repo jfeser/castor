@@ -25,8 +25,6 @@ module Make (C : Config.S) = struct
   (* module F = Filter_tactics.Make (C)
    * open F *)
 
-  let sql_ctx = Sql.create_ctx ()
-
   module M = Abslayout_db.Make (struct
     let conn = conn
   end)
@@ -280,8 +278,7 @@ module Make (C : Config.S) = struct
 
   let ntuples r =
     let r = to_ralgebra r in
-    ( Explain.explain dbconn
-        (Sql.of_ralgebra sql_ctx r |> Sql.to_string sql_ctx)
+    ( Explain.explain dbconn (Sql.of_ralgebra r |> Sql.to_string)
     |> Or_error.ok_exn )
       .nrows |> Float.of_int
 
@@ -305,14 +302,14 @@ module Make (C : Config.S) = struct
       A.(select [Min c; Max c; Avg c] part_counts)
     in
     let part_aggs = M.resolve ~params part_aggs in
-    let sql = Sql.of_ralgebra sql_ctx part_aggs in
+    let sql = Sql.of_ralgebra part_aggs in
     let tups =
       Db.exec_cursor_exn conn
         Type.PrimType.
           [ IntT {nullable= false}
           ; IntT {nullable= false}
           ; FixedT {nullable= false} ]
-        (Sql.to_string sql_ctx sql)
+        (Sql.to_string sql)
     in
     match Gen.to_list tups with
     | [|Int min; Int max; Fixed avg|] :: _ ->

@@ -31,8 +31,6 @@ module Make (Config : Config.S) () = struct
 
   let is_serializable r p = is_serializeable (Path.get_exn p r)
 
-  let sql_ctx = Sql.create_ctx ()
-
   let has_params r p =
     let r' = Path.get_exn p r in
     overlaps (free r') params

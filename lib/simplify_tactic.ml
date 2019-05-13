@@ -25,30 +25,9 @@ module Make (C : Config.S) = struct
 
   let elim_structure r =
     match r.node with
-    | AHashIdx (rk, rv, {lookup; _}) ->
-        let scope = scope_exn rk in
-        let key_pred =
-          let rk_schema = schema_exn rk in
-          List.map2_exn rk_schema lookup ~f:(fun p1 p2 ->
-              Binop (Eq, Name p1, p2) )
-          |> Pred.conjoin
-        in
-        Some (dep_join (strip_scope rk) scope (filter key_pred rv))
-    | AOrderedIdx (rk, rv, {lookup_low; lookup_high; _}) ->
-        let scope = scope_exn rk in
-        let key_pred =
-          let rk_schema = schema_exn rk in
-          match rk_schema with
-          | [n] ->
-              Pred.conjoin
-                [ Binop (Lt, lookup_low, Name n)
-                ; Binop (Lt, Name n, lookup_high) ]
-          | _ -> failwith "Unexpected schema."
-        in
-        Some (dep_join (strip_scope rk) scope (filter key_pred rv))
-    | AList (rk, rv) ->
-        let scope = scope_exn rk in
-        Some (dep_join (strip_scope rk) scope rv)
+    | AHashIdx (rk, rv, m) -> Some (hash_idx_to_depjoin rk rv m)
+    | AOrderedIdx (rk, rv, m) -> Some (ordered_idx_to_depjoin rk rv m)
+    | AList (rk, rv) -> Some (list_to_depjoin rk rv)
     | _ -> None
 
   let elim_structure = of_func elim_structure ~name:"elim-structure"
@@ -67,8 +46,9 @@ module Make (C : Config.S) = struct
         let s = List.map ~f:(Pred.unscoped d_alias) s in
         Some (select s (strip_scope d_lhs))
     | DepJoin
-        {d_lhs; d_alias; d_rhs= {node= Select (ps, {node= AScalar Null; _}); _}}
-      ->
+        { d_lhs
+        ; d_alias
+        ; d_rhs= {node= Select (ps, {node= AScalar (Null None); _}); _} } ->
         Some
           (select (List.map ~f:(Pred.unscoped d_alias) ps) (strip_scope d_lhs))
     | _ -> None

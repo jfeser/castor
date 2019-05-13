@@ -323,8 +323,7 @@ module Make (C : Config.S) = struct
         let unpushed, pushed =
           Pred.conjuncts p
           |> List.partition_map ~f:(fun p ->
-                 if is_supported rk_bnd p then `Snd (`K p)
-                 else `Snd (`V (Pred.scoped (schema_exn rk) scope p)) )
+                 if is_supported rk_bnd p then `Snd (`K p) else `Snd (`V p) )
         in
         let outer_pred = Pred.conjoin unpushed in
         let pushed_key, pushed_val =
