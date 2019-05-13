@@ -96,53 +96,6 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
     | FixedT x -> fixed_sentinal x
     | t -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
 
-  let serialize_null sctx t =
-    let hdr = make_header t in
-    let str =
-      match t with
-      | NullT -> ""
-      | _ -> null_sentinal t |> of_int ~byte_width:(size_exn hdr "value")
-    in
-    Log.with_msg sctx "Null" (fun () -> write_string sctx.writer str)
-
-  let serialize_int sctx t x =
-    let hdr = make_header t in
-    let sval = of_int ~byte_width:(size_exn hdr "value") x in
-    write_string sctx.writer sval
-
-  let serialize_fixed sctx t x =
-    match t with
-    | Type.FixedT {value= {scale; _}; _} ->
-        let hdr = make_header t in
-        let sval =
-          of_int ~byte_width:(size_exn hdr "value")
-            Fixed_point.((convert x scale).value)
-        in
-        write_string sctx.writer sval
-    | _ -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
-
-  let serialize_bool sctx t x =
-    let hdr = make_header t in
-    let str =
-      match (t, x) with
-      | BoolT _, true -> of_int ~byte_width:(size_exn hdr "value") 1
-      | BoolT _, false -> of_int ~byte_width:(size_exn hdr "value") 0
-      | t, _ ->
-          Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
-    in
-    write_string sctx.writer str
-
-  let serialize_string sctx t body =
-    let hdr = make_header t in
-    match t with
-    | StringT _ ->
-        let len = String.length body in
-        Log.with_msg sctx (sprintf "String length (=%d)" len) (fun () ->
-            of_int ~byte_width:(size_exn hdr "nchars") len
-            |> write_string sctx.writer ) ;
-        Log.with_msg sctx "String body" (fun () -> write_string sctx.writer body)
-    | t -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
-
   class serialize_fold =
     object (self)
       inherit [_, _] M.unsafe_material_fold as super
@@ -158,7 +111,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         write_bytes sctx.writer (Bytes.make (size_exn hdr "len") '\x00') ;
         (* Serialize list body. *)
         let count = ref 0 in
-        Log.with_msg sctx "List body" (fun () ->
+        self#log sctx "List body" (fun () ->
             Gen.iter gen ~f:(fun (_, vctx) ->
                 count := !count + 1 ;
                 self#visit_t sctx vctx elem_layout ) ) ;
@@ -166,10 +119,10 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         (* Serialize list header. *)
         let len = Pos.(end_pos - header_pos) |> Int64.to_int_exn in
         seek sctx.writer header_pos ;
-        Log.with_msg sctx (sprintf "List count (=%d)" !count) (fun () ->
+        self#log sctx (sprintf "List count (=%d)" !count) (fun () ->
             write_string sctx.writer
               (of_int ~byte_width:(size_exn hdr "count") !count) ) ;
-        Log.with_msg sctx (sprintf "List len (=%d)" len) (fun () ->
+        self#log sctx (sprintf "List len (=%d)" len) (fun () ->
             write_string sctx.writer (of_int ~byte_width:(size_exn hdr "len") len)
         ) ;
         seek sctx.writer end_pos
@@ -180,13 +133,13 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         let header_pos = pos sctx.writer in
         write_bytes sctx.writer (Bytes.make (size_exn hdr "len") '\x00') ;
         (* Serialize body *)
-        Log.with_msg sctx "Tuple body" (fun () ->
+        self#log sctx "Tuple body" (fun () ->
             List.iter2_exn ctxs ls ~f:(self#visit_t sctx) ) ;
         let end_pos = pos sctx.writer in
         (* Serialize header. *)
         seek sctx.writer header_pos ;
         let len = Pos.(end_pos - header_pos) |> Int64.to_int_exn in
-        Log.with_msg sctx (sprintf "Tuple len (=%d)" len) (fun () ->
+        self#log sctx (sprintf "Tuple len (=%d)" len) (fun () ->
             write_string sctx.writer (of_int ~byte_width:(size_exn hdr "len") len)
         ) ;
         seek sctx.writer end_pos
@@ -282,19 +235,19 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         in
         let hdr = make_header type_ in
         let header_pos = pos sctx.writer in
-        Log.with_msg sctx "Table len" (fun () ->
+        self#log sctx "Table len" (fun () ->
             write_bytes sctx.writer (Bytes.make (size_exn hdr "len") '\x00') ) ;
-        Log.with_msg sctx "Table hash len" (fun () ->
+        self#log sctx "Table hash len" (fun () ->
             write_bytes sctx.writer (Bytes.make (size_exn hdr "hash_len") '\x00') ) ;
-        Log.with_msg sctx "Table hash" (fun () ->
+        self#log sctx "Table hash" (fun () ->
             write_bytes sctx.writer (Bytes.make hash_len '\x00') ) ;
-        Log.with_msg sctx "Table map len" (fun () ->
+        self#log sctx "Table map len" (fun () ->
             write_bytes sctx.writer
               (Bytes.make (size_exn hdr "hash_map_len") '\x00') ) ;
-        Log.with_msg sctx "Table key map" (fun () ->
+        self#log sctx "Table key map" (fun () ->
             write_bytes sctx.writer (Bytes.make (8 * table_size) '\x00') ) ;
         let hash_table = Array.create ~len:table_size 0x0 in
-        Log.with_msg sctx "Table values" (fun () ->
+        self#log sctx "Table values" (fun () ->
             Gen.iter gen ~f:(fun (key, vctx) ->
                 let value_pos = pos sctx.writer in
                 let skey = serialize_key key in
@@ -320,7 +273,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         write_string sctx.writer
           (of_int ~byte_width:(size_exn hdr "hash_map_len") (8 * table_size)) ;
         Array.iteri hash_table ~f:(fun i x ->
-            Log.with_msg sctx (sprintf "Map entry (%d => %d)" i x) (fun () ->
+            self#log sctx (sprintf "Map entry (%d => %d)" i x) (fun () ->
                 write_string sctx.writer (of_int ~byte_width:8 x) ) ) ;
         seek sctx.writer end_pos
 
@@ -341,7 +294,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         (* Make a first pass to get the keys and value pointers set up. *)
         Gen.iter keys ~f:(fun key ->
             (* Serialize key. *)
-            self#visit_t sctx (M.to_ctx key) key_l ;
+            self#skip_t sctx (M.to_ctx key) key_l ;
             (* Save space for value pointer. *)
             write_bytes sctx.writer (Bytes.make 8 '\x00') ) ;
         let index_end_pos = pos sctx.writer in
@@ -351,11 +304,11 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         Gen.iter gen ~f:(fun (key, vctx) ->
             seek sctx.writer !index_pos ;
             (* Serialize key. *)
-            Log.with_msg sctx "Ordered idx key" (fun () ->
+            self#log sctx "Ordered idx key" (fun () ->
                 self#visit_t sctx (M.to_ctx key) key_l ) ;
             (* Serialize value ptr. *)
             let ptr = !value_pos |> Pos.to_bytes_exn |> Int64.to_int_exn in
-            Log.with_msg sctx (sprintf "Ordered idx value ptr (=%d)" ptr) (fun () ->
+            self#log sctx (sprintf "Ordered idx value ptr (=%d)" ptr) (fun () ->
                 write_string sctx.writer (ptr |> of_int ~byte_width:8) ) ;
             index_pos := pos sctx.writer ;
             seek sctx.writer !value_pos ;
@@ -366,28 +319,76 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         seek sctx.writer len_pos ;
         let len = Pos.(end_pos - len_pos) in
         let index_len = Pos.(index_end_pos - index_start_pos) in
-        Log.with_msg sctx (sprintf "Ordered idx len (=%Ld)" len) (fun () ->
+        self#log sctx (sprintf "Ordered idx len (=%Ld)" len) (fun () ->
             write_string sctx.writer (of_int64 ~byte_width:(size_exn hdr "len") len)
         ) ;
-        Log.with_msg sctx (sprintf "Ordered idx index len (=%Ld)" index_len)
-          (fun () ->
+        self#log sctx (sprintf "Ordered idx index len (=%Ld)" index_len) (fun () ->
             write_string sctx.writer
               (of_int64 ~byte_width:(size_exn hdr "idx_len") index_len) ) ;
         seek sctx.writer end_pos
 
+      method serialize_null sctx t =
+        let hdr = make_header t in
+        let str =
+          match t with
+          | NullT -> ""
+          | _ -> null_sentinal t |> of_int ~byte_width:(size_exn hdr "value")
+        in
+        self#log sctx "Null" (fun () -> write_string sctx.writer str)
+
+      method serialize_int sctx t x =
+        let hdr = make_header t in
+        let sval = of_int ~byte_width:(size_exn hdr "value") x in
+        write_string sctx.writer sval
+
+      method serialize_fixed sctx t x =
+        match t with
+        | Type.FixedT {value= {scale; _}; _} ->
+            let hdr = make_header t in
+            let sval =
+              of_int ~byte_width:(size_exn hdr "value")
+                Fixed_point.((convert x scale).value)
+            in
+            write_string sctx.writer sval
+        | _ ->
+            Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
+
+      method serialize_bool sctx t x =
+        let hdr = make_header t in
+        let str =
+          match (t, x) with
+          | BoolT _, true -> of_int ~byte_width:(size_exn hdr "value") 1
+          | BoolT _, false -> of_int ~byte_width:(size_exn hdr "value") 0
+          | t, _ ->
+              Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
+        in
+        write_string sctx.writer str
+
+      method serialize_string sctx t body =
+        let hdr = make_header t in
+        match t with
+        | StringT _ ->
+            let len = String.length body in
+            self#log sctx (sprintf "String length (=%d)" len) (fun () ->
+                of_int ~byte_width:(size_exn hdr "nchars") len
+                |> write_string sctx.writer ) ;
+            self#log sctx "String body" (fun () -> write_string sctx.writer body)
+        | t ->
+            Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
+
       method build_AScalar sctx meta _ value =
         let type_ = Meta.Direct.(find_exn meta Meta.type_) in
-        Log.with_msg sctx
+        self#log sctx
           (sprintf "Scalar (=%s)"
              ([%sexp_of: Value.t] (Lazy.force value) |> Sexp.to_string_hum))
           (fun () ->
             match Lazy.force value with
-            | Null -> serialize_null sctx type_
-            | Date x -> serialize_int sctx type_ (Date.to_int x)
-            | Int x -> serialize_int sctx type_ x
-            | Fixed x -> serialize_fixed sctx type_ x
-            | Bool x -> serialize_bool sctx type_ x
-            | String x -> serialize_string sctx type_ x )
+            | Null -> self#serialize_null sctx type_
+            | Date x -> self#serialize_int sctx type_ (Date.to_int x)
+            | Int x -> self#serialize_int sctx type_ x
+            | Fixed x -> self#serialize_fixed sctx type_ x
+            | Bool x -> self#serialize_bool sctx type_ x
+            | String x -> self#serialize_string sctx type_ x )
 
       method! visit_t sctx ectx layout =
         (* Update position metadata in layout. *)
@@ -397,6 +398,15 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           | Some Many_pos -> Many_pos
           | None -> Pos pos ) ;
         super#visit_t sctx ectx layout
+
+      val mutable should_log = true
+
+      method log ctx msg f = if should_log then Log.with_msg ctx msg f else f ()
+
+      method skip_t sctx ectx layout =
+        should_log <- false ;
+        super#visit_t sctx ectx layout ;
+        should_log <- true
     end
 
   let serialize writer l =
