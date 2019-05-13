@@ -100,14 +100,10 @@ let%test_module _ =
         {|
     Tuple
     List
-    List key: ((Int 1) (Int 2))
+    List key: ((Int 3) (Int 4))
     Tuple
-    Scalar: (Int 1)
-    Scalar: (Int 2)
-    List key: ((Int 1) (Int 3))
-    Tuple
-    Scalar: (Int 1)
     Scalar: (Int 3)
+    Scalar: (Int 4)
     List key: ((Int 2) (Int 1))
     Tuple
     Scalar: (Int 2)
@@ -116,10 +112,14 @@ let%test_module _ =
     Tuple
     Scalar: (Int 2)
     Scalar: (Int 2)
-    List key: ((Int 3) (Int 4))
+    List key: ((Int 1) (Int 2))
     Tuple
+    Scalar: (Int 1)
+    Scalar: (Int 2)
+    List key: ((Int 1) (Int 3))
+    Tuple
+    Scalar: (Int 1)
     Scalar: (Int 3)
-    Scalar: (Int 4)
     Tuple
     Scalar: (Int 9)
     Scalar: (Int 9)
@@ -152,16 +152,16 @@ let%test_module _ =
       [%expect
         {|
     OrderedIdx
-    OrderedIdx key: ((Date 2016-12-01))
-    Scalar: (Date 2016-12-01)
-    OrderedIdx key: ((Date 2017-10-05))
-    Scalar: (Date 2017-10-05)
-    OrderedIdx key: ((Date 2018-01-01))
-    Scalar: (Date 2018-01-01)
+    OrderedIdx key: ((Date 2018-09-01))
+    Scalar: (Date 2018-09-01)
     OrderedIdx key: ((Date 2018-01-23))
     Scalar: (Date 2018-01-23)
-    OrderedIdx key: ((Date 2018-09-01))
-    Scalar: (Date 2018-09-01) |}]
+    OrderedIdx key: ((Date 2018-01-01))
+    Scalar: (Date 2018-01-01)
+    OrderedIdx key: ((Date 2017-10-05))
+    Scalar: (Date 2017-10-05)
+    OrderedIdx key: ((Date 2016-12-01))
+    Scalar: (Date 2016-12-01) |}]
 
     let%expect_test "example-1" =
       Demomatch.(run_print_test ~params:Demomatch.example_params (example1 "log")) ;

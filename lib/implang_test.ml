@@ -3,7 +3,7 @@ open Test_util
 
 let run_test ?(params = []) ?(print_code = true) layout_str =
   let (module M), (module S), (module I), (module C) =
-    make_modules ~code_only:true ()
+    Setup.make_modules ~code_only:true ()
   in
   try
     let param_names = List.map params ~f:(fun (n, _) -> n) in
@@ -55,6 +55,10 @@ let%expect_test "tuple-simple-zip" =
      (((IntT ((range (Interval 1 1)) (nullable false)))
        (IntT ((range (Interval 2 2)) (nullable false))))
       ((count (Interval 1 1)))))
+    [ERROR] Tried to get schema of unnamed predicate 1.
+    [ERROR] Tried to get schema of unnamed predicate 2.
+    [ERROR] Tried to get schema of unnamed predicate 1.
+    [ERROR] Tried to get schema of unnamed predicate 2.
     // Locals:
     // start : Int[nonnull] (persists=true)
     fun zt_3 (start) : Tuple[Int[nonnull]] {
@@ -221,6 +225,10 @@ let%expect_test "sum" =
            ((count (Interval 1 1)))))
          ((count (Interval 5 5))))))
       (Width 2)))
+    [ERROR] Tried to get schema of unnamed predicate (k.g - k.f).
+    [ERROR] Tried to get schema of unnamed predicate (k.g - k.f).
+    [ERROR] Tried to get schema of unnamed predicate (k.g - k.f).
+    [ERROR] Tried to get schema of unnamed predicate (k.g - k.f).
     // Locals:
     // i18 : Int[nonnull] (persists=true)
     // count16 : Int[nonnull] (persists=false)
@@ -963,6 +971,8 @@ let%expect_test "subquery-first" =
             ((count (Interval 5 5))))))
          Child_sum)))
       (Width 1)))
+    [ERROR] Tried to get schema of unnamed predicate min(counter).
+    [ERROR] Tried to get schema of unnamed predicate min(counter).
     // Locals:
     // found_tup17 : Bool[nonnull] (persists=false)
     // tup16 : Tuple[Int[nonnull]] (persists=false)

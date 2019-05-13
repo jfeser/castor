@@ -6,7 +6,7 @@ open Implang_opt
 
 let%test_module _ =
   ( module struct
-    let m, _, _, _ = make_modules ()
+    let m, _, _, _ = Setup.make_modules ()
 
     let run_test ?(params = []) layout_str opt_func =
       let module M = (val m) in

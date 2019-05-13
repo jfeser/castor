@@ -40,7 +40,7 @@ type pred = Abslayout0.pred =
   | Date of Core.Date.t
   | Bool of bool
   | String of string
-  | Null
+  | Null of Type.PrimType.t option
   | Unop of (unop * pred)
   | Binop of (binop * pred * pred)
   | As_pred of (pred * string)
@@ -216,7 +216,7 @@ module Pred : sig
     | Date of Core.Date.t
     | Bool of bool
     | String of string
-    | Null
+    | Null of Type.PrimType.t option
     | Unop of (unop * pred)
     | Binop of (binop * pred * pred)
     | As_pred of (pred * string)
@@ -271,3 +271,11 @@ end
 val annotate_key_layouts : t -> t
 
 val strip_unused_as : t -> t
+
+val list_to_depjoin : t -> t -> t
+
+val hash_idx_to_depjoin : t -> t -> hash_idx -> t
+
+val ordered_idx_to_depjoin : t -> t -> ordered_idx -> t
+
+val ensure_alias : t -> t

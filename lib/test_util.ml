@@ -175,37 +175,6 @@ let make_test_db =
   in
   fun () -> Lazy.force test_db
 
-let make_modules ?layout_file ?(irgen_debug = false) ?(code_only = false) () =
-  let (module Test_db) = make_test_db () in
-  let module M = Abslayout_db.Make (Test_db) in
-  let module S =
-    Serialize.Make (struct
-        let layout_map_channel = Option.map layout_file ~f:Stdio.Out_channel.create
-      end)
-      (M)
-  in
-  let module I =
-    Irgen.Make (struct
-        let code_only = code_only
-
-        let debug = irgen_debug
-      end)
-      (M)
-      (S)
-      ()
-  in
-  let module C =
-    Codegen.Make (struct
-        let debug = false
-      end)
-      (I)
-      ()
-  in
-  ( (module M : Abslayout_db.S)
-  , (module S : Serialize.S)
-  , (module I : Irgen.S)
-  , (module C : Codegen.S) )
-
 module Demomatch = struct
   let example_params =
     [ (Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p", Value.Int 1)
@@ -272,4 +241,4 @@ end
 
 let sum_complex =
   "Select([sum(f) + 5, count() + sum(f / 2)], AList(r1 as k, ATuple([AScalar(k.f), \
-   AScalar(k.g - k.f)], cross)))"
+   AScalar((k.g - k.f) as v)], cross)))"

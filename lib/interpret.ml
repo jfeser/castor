@@ -163,7 +163,7 @@ let eval {db; params} r =
     | Date x -> Date x
     | Bool x -> Bool x
     | String x -> String x
-    | Null -> Null
+    | Null _ -> Null
     | As_pred (p, _) -> e p
     | Count | Sum _ | Avg _ | Min _ | Max _ ->
         Error.(create "Unexpected aggregate." p [%sexp_of: pred] |> raise)

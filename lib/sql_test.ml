@@ -8,8 +8,7 @@ let%test_module _ =
       let module Test_db = (val make_test_db ()) in
       let module M = Abslayout_db.Make (Test_db) in
       let r = M.load_string s in
-      let ctx = Sql.create_ctx () in
-      let sql_str = of_ralgebra ctx r |> to_string_hum ctx in
+      let sql_str = of_ralgebra r |> to_string_hum in
       Db.check Test_db.conn sql_str |> Or_error.ok_exn ;
       print_endline sql_str
 
@@ -18,7 +17,7 @@ let%test_module _ =
       [%expect
         {|
     SELECT
-        (0.2) * (avg(r_0. "f")) AS "test_1"
+        (0.2) * (avg(r_0. "f")) AS "test_0"
     FROM
         "r" AS "r_0" |}]
 
@@ -27,7 +26,7 @@ let%test_module _ =
       [%expect
         {|
     SELECT
-        r_0. "f" AS "r_0_f_2"
+        r_0. "f" AS "f_0"
     FROM
         "r" AS "r_0" |}]
 
@@ -36,8 +35,8 @@ let%test_module _ =
       [%expect
         {|
       SELECT
-          r_0. "f" AS "r_0_f_1",
-          r_0. "g" AS "r_0_g_1"
+          r_0. "f" AS "r_0_f_0",
+          r_0. "g" AS "r_0_g_0"
       FROM
           "r" AS "r_0"
       WHERE ((r_0. "f") = (r_0. "g")) |}]
@@ -49,10 +48,10 @@ let%test_module _ =
       [%expect
         {|
       SELECT
-          r_1. "f" AS "r_f_1",
-          r_1. "g" AS "r_g_1",
-          s_0. "f" AS "s_f_1",
-          s_0. "g" AS "s_g_1"
+          r_1. "f" AS "r_f_0",
+          r_1. "g" AS "r_g_0",
+          s_0. "f" AS "s_f_0",
+          s_0. "g" AS "s_g_0"
       FROM
           "r" AS "r_1",
           "s" AS "s_0"
@@ -63,8 +62,8 @@ let%test_module _ =
       [%expect
         {|
         SELECT
-            log_1. "id" AS "p_id_1",
-            log_0. "id" AS "c_id_1"
+            log_1. "id" AS "p_id_0",
+            log_0. "id" AS "c_id_0"
         FROM
             "log" AS "log_1",
             "log" AS "log_0"
@@ -75,7 +74,7 @@ let%test_module _ =
       [%expect
         {|
     SELECT DISTINCT
-        r1_0. "f" AS "r1_0_f_2"
+        r1_0. "f" AS "f_0"
     FROM
         "r1" AS "r1_0"
     ORDER BY
@@ -86,7 +85,7 @@ let%test_module _ =
       [%expect
         {|
     SELECT DISTINCT
-        r1_0. "f" AS "r1_0_f_2"
+        r1_0. "f" AS "f_0"
     FROM
         "r1" AS "r1_0" |}]
 
@@ -95,7 +94,7 @@ let%test_module _ =
       [%expect
         {|
     SELECT
-        r1_0. "f" AS "r1_0_f_2"
+        r1_0. "f" AS "f_0"
     FROM
         "r1" AS "r1_0" |}]
 
@@ -104,8 +103,8 @@ let%test_module _ =
       [%expect
         {|
     SELECT
-        r1_0. "f" AS "r1_0_f_1",
-        r1_0. "g" AS "r1_0_g_1"
+        r1_0. "f" AS "r1_0_f_0",
+        r1_0. "g" AS "r1_0_g_0"
     FROM
         "r1" AS "r1_0" |}]
 
@@ -117,9 +116,9 @@ let%test_module _ =
       [%expect
         {|
       SELECT
-          log_1. "counter" AS "p_counter_1",
-          log_1. "succ" AS "p_succ_1",
-          log_0. "counter" AS "c_counter_1"
+          log_1. "counter" AS "p_counter_0",
+          log_1. "succ" AS "p_succ_0",
+          log_0. "counter" AS "c_counter_0"
       FROM
           "log" AS "log_1",
           "log" AS "log_0"
@@ -132,28 +131,28 @@ let%test_module _ =
       [%expect
         {|
     SELECT
-        "r1_1_f_2" AS "r1_1_f_3",
-        "x_1" AS "x_2",
-        "r1_0_g_2" AS "r1_0_g_3",
-        "y_1" AS "y_2"
+        "f_0" AS "f_0_0",
+        "x_0" AS "x_0_0",
+        "g_0" AS "g_0_0",
+        "y_0" AS "y_0_0"
     FROM (
         SELECT
-            r1_1. "f" AS "r1_1_f_2",
-            sum((r1_1. "f") * (r1_1. "g")) AS "x_1"
+            r1_1. "f" AS "f_0",
+            sum((r1_1. "f") * (r1_1. "g")) AS "x_0"
         FROM
             "r1" AS "r1_1"
         GROUP BY
             (r1_1. "f")) AS "t0",
         (
             SELECT
-                r1_0. "g" AS "r1_0_g_2",
-                sum((r1_0. "f") * (r1_0. "g")) AS "y_1"
+                r1_0. "g" AS "g_0",
+                sum((r1_0. "f") * (r1_0. "g")) AS "y_0"
             FROM
                 "r1" AS "r1_0"
             GROUP BY
                 (r1_0. "g")) AS "t1"
-    WHERE ((("r1_1_f_2") = ("r1_0_g_2"))
-        OR (("x_1") = ("y_1"))) |}]
+    WHERE ((("f_0") = ("g_0"))
+        OR (("x_0") = ("y_0"))) |}]
 
     let%expect_test "join-cond" =
       run_test
@@ -161,8 +160,8 @@ let%test_module _ =
       [%expect
         {|
     SELECT
-        r1_1. "f" AS "r1_1_f_2",
-        r_0. "g" AS "r_0_g_2"
+        r1_1. "f" AS "f_0",
+        r_0. "g" AS "g_0"
     FROM
         "r1" AS "r1_1",
         "r" AS "r_0"
@@ -176,11 +175,11 @@ let%test_module _ =
       [%expect
         {|
       SELECT
-          max("x_1") AS "x0"
+          max("x_0") AS "a0_0"
       FROM (
           SELECT
-              r1_0. "f" AS "r1_0_f_2",
-              sum((r1_0. "f") * (r1_0. "g")) AS "x_1"
+              r1_0. "f" AS "f_0",
+              sum((r1_0. "f") * (r1_0. "g")) AS "x_0"
           FROM
               "r1" AS "r1_0"
           GROUP BY
@@ -191,10 +190,10 @@ let%test_module _ =
       [%expect
         {|
       SELECT
-          max("x_1") AS "x0"
+          max("x_0") AS "a0_0"
       FROM (
           SELECT
-              min(r1_0. "f") AS "x_1"
+              min(r1_0. "f") AS "x_0"
           FROM
               "r1" AS "r1_0") AS "t0" |}]
 
@@ -203,7 +202,7 @@ let%test_module _ =
       [%expect
         {|
     SELECT
-        max(r1_0. "f") AS "x0"
+        max(r1_0. "f") AS "a0_0"
     FROM
         "r1" AS "r1_0" |}]
 
@@ -212,29 +211,29 @@ let%test_module _ =
       [%expect
         {|
       SELECT
-          "x_1" AS "x_2"
+          "x_0" AS "x_0_0"
       FROM (
           SELECT
-              sum(r1_0. "f") AS "x_1"
+              sum(r1_0. "f") AS "x_0"
           FROM
               "r1" AS "r1_0"
           GROUP BY
               (r1_0. "g")) AS "t0"
-      WHERE (("x_1") = (0)) |}]
+      WHERE (("x_0") = (0)) |}]
 
     let%expect_test "groupby-dedup" =
       run_test "groupby([sum(f) as x], [g], dedup(r1))" ;
       [%expect
         {|
     SELECT
-        sum("r1_0_f_1") AS "x_1"
+        sum("r1_0_f_0") AS "x_0"
     FROM ( SELECT DISTINCT
-            r1_0. "f" AS "r1_0_f_1",
-            r1_0. "g" AS "r1_0_g_1"
+            r1_0. "f" AS "r1_0_f_0",
+            r1_0. "g" AS "r1_0_g_0"
         FROM
             "r1" AS "r1_0") AS "t0"
     GROUP BY
-        ("r1_0_g_1") |}]
+        ("r1_0_g_0") |}]
 
     let%expect_test "hash-idx" =
       run_test
@@ -242,19 +241,19 @@ let%test_module _ =
       [%expect
         {|
     SELECT
-        "r1_0_f_2" AS "r1_0_f_3",
-        "r1_1_g_2" AS "r1_1_g_3"
+        "g_0" AS "g_0_0"
     FROM (
         SELECT
-            r1_0. "f" AS "r1_0_f_2"
+            r1_0. "f" AS "f_0"
         FROM
-            "r1" AS "r1_0"
-        WHERE ((r1_0. "f") = (NULL))) AS "t1", LATERAL (
+            "r1" AS "r1_0") AS "t1",
+        LATERAL (
             SELECT
-                r1_1. "g" AS "r1_1_g_2"
+                r1_1. "g" AS "g_0"
             FROM
                 "r1" AS "r1_1"
-            WHERE ((r1_1. "f") = ("r1_0_f_2"))) AS "t0" |}]
+            WHERE (("f_0") = (NULL))
+            AND ((r1_1. "f") = ("f_0"))) AS "t0" |}]
 
     let%expect_test "ordered-idx" =
       run_test
@@ -263,19 +262,18 @@ let%test_module _ =
       [%expect
         {|
     SELECT
-        "r1_0_f_2" AS "r1_0_f_3",
-        "r1_1_g_2" AS "r1_1_g_3"
+        "g_0" AS "g_0_0"
     FROM (
         SELECT
-            r1_0. "f" AS "r1_0_f_2"
+            r1_0. "f" AS "f_0"
         FROM
             "r1" AS "r1_0") AS "t1",
         LATERAL (
             SELECT
-                r1_1. "g" AS "r1_1_g_2"
+                r1_1. "g" AS "g_0"
             FROM
                 "r1" AS "r1_1"
-            WHERE ((r1_1. "f") = ("r1_0_f_2"))) AS "t0"
-    WHERE (((NULL) < ("r1_0_f_2"))
-        AND (("r1_0_f_2") < (NULL))) |}]
+            WHERE (((NULL) < ("f_0"))
+                AND (("f_0") < (NULL)))
+            AND ((r1_1. "f") = ("f_0"))) AS "t0" |}]
   end )

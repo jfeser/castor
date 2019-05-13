@@ -153,7 +153,7 @@ value:
 | x = FIXED { A.Fixed x }
 | x = BOOL { A.Bool x }
 | x = STR { A.String x }
-| NULL { A.Null }
+| NULL { A.Null None }
 
 e0:
 | x = value { x }

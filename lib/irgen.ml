@@ -158,7 +158,7 @@ struct
     let open Builder in
     let rec gen_pred p b =
       match p with
-      | A.Null -> Null
+      | A.Null _ -> Null
       | A.Int x -> Int x
       | A.String x -> String x
       | A.Fixed x -> Fixed x

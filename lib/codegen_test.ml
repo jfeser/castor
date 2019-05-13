@@ -4,7 +4,7 @@ open Test_util
 let run_test ?(params = []) ?print_layout ?(fork = false) ?irgen_debug layout_str =
   let layout_file = Filename.temp_file "layout" "txt" in
   let (module M), (module S), (module I), (module C) =
-    make_modules ~layout_file ?irgen_debug ()
+    Setup.make_modules ~layout_file ?irgen_debug ()
   in
   let run_compiler ?(print_layout = true) layout =
     let out_dir = Filename.temp_dir "bin" "" in
@@ -79,6 +79,8 @@ let%expect_test "strops" =
 select([strlen("test"), strpos("testing", "in")], ascalar(0))
 |} ;
   [%expect {|
+    [ERROR] Tried to get schema of unnamed predicate 0.
+    [ERROR] Tried to get schema of unnamed predicate 0.
     4|5
 
     exited normally |}]
@@ -133,6 +135,8 @@ let%expect_test "output-test" =
     {|select([1, 100, 1.0, 0.0001, 1.0001, "this is a test", "test with, commas", date("1994-01-04"), true, false], ascalar(0))|} ;
   [%expect
     {|
+    [ERROR] Tried to get schema of unnamed predicate 0.
+    [ERROR] Tried to get schema of unnamed predicate 0.
     1|100|1.000000|0.000100|1.000100|this is a test|test with, commas|1994-01-04|t|f
 
     exited normally |}]
@@ -141,11 +145,11 @@ let%expect_test "ordering" =
   run_test ~print_layout:false
     {|alist(orderby([f desc], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross))|} ;
   [%expect {|
-    1|2
-    1|3
+    3|4
     2|1
     2|2
-    3|4
+    1|2
+    1|3
 
     exited normally |}] ;
   run_test ~print_layout:false
@@ -162,11 +166,11 @@ let%expect_test "ordering" =
     {|atuple([alist(orderby([f desc], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([f], r1) as k1, atuple([ascalar(k1.f), ascalar(k1.g)], cross))], concat)|} ;
   [%expect
     {|
-    1|2
-    1|3
+    3|4
     2|1
     2|2
-    3|4
+    1|2
+    1|3
     9|9
     1|2
     1|3
@@ -185,11 +189,11 @@ let%expect_test "ordering" =
     2|2
     3|4
     9|9
-    1|2
-    1|3
+    3|4
     2|1
     2|2
-    3|4
+    1|2
+    1|3
 
     exited normally |}]
 
@@ -201,36 +205,37 @@ let%expect_test "ordered-idx-dates" =
     {|
     0:4 Ordered idx len (=72)
     4:8 Ordered idx index len (=50)
-    12:2 Scalar (=(Date 2016-12-01))
-    12:2 Scalar (=(Date 2016-12-01))
+    12:2 Scalar (=(Date 2018-09-01))
+    12:2 Scalar (=(Date 2018-09-01))
     12:2 Ordered idx key
     14:8 Ordered idx value ptr (=62)
-    22:2 Scalar (=(Date 2017-10-05))
-    22:2 Scalar (=(Date 2017-10-05))
+    22:2 Scalar (=(Date 2018-01-23))
+    22:2 Scalar (=(Date 2018-01-23))
     22:2 Ordered idx key
     24:8 Ordered idx value ptr (=64)
     32:2 Scalar (=(Date 2018-01-01))
     32:2 Scalar (=(Date 2018-01-01))
     32:2 Ordered idx key
     34:8 Ordered idx value ptr (=66)
-    42:2 Scalar (=(Date 2018-01-23))
-    42:2 Scalar (=(Date 2018-01-23))
+    42:2 Scalar (=(Date 2017-10-05))
+    42:2 Scalar (=(Date 2017-10-05))
     42:2 Ordered idx key
     44:8 Ordered idx value ptr (=68)
-    52:2 Scalar (=(Date 2018-09-01))
-    52:2 Scalar (=(Date 2018-09-01))
+    52:2 Scalar (=(Date 2016-12-01))
+    52:2 Scalar (=(Date 2016-12-01))
     52:2 Ordered idx key
     54:8 Ordered idx value ptr (=70)
-    62:2 Scalar (=(Date 2016-12-01))
-    64:2 Scalar (=(Date 2017-10-05))
+    62:2 Scalar (=(Date 2018-09-01))
+    64:2 Scalar (=(Date 2018-01-23))
     66:2 Scalar (=(Date 2018-01-01))
-    68:2 Scalar (=(Date 2018-01-23))
-    70:2 Scalar (=(Date 2018-09-01))
+    68:2 Scalar (=(Date 2017-10-05))
+    70:2 Scalar (=(Date 2016-12-01))
 
-    2017-10-05|2017-10-05
-    2018-01-01|2018-01-01
-    2018-01-23|2018-01-23
     2018-09-01|2018-09-01
+    2018-01-23|2018-01-23
+    2018-01-01|2018-01-01
+    2017-10-05|2017-10-05
+    2016-12-01|2016-12-01
 
     exited normally |}]
 
@@ -238,6 +243,8 @@ let%expect_test "date-arith" =
   run_test ~print_layout:false
     {|select([date("1997-07-01") + month(3), date("1997-07-01") + day(90)], ascalar(0))|} ;
   [%expect {|
+    [ERROR] Tried to get schema of unnamed predicate 0.
+    [ERROR] Tried to get schema of unnamed predicate 0.
     1997-10-01|1997-09-29
 
     exited normally |}]

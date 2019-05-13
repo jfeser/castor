@@ -25,7 +25,7 @@ let of_pred =
   | A.String x -> String x
   | A.Bool x -> Bool x
   | A.Fixed x -> Fixed x
-  | A.Null -> Null
+  | A.Null _ -> Null
   | A.Date x -> Date x
   | _ -> failwith "Not a value."
 
@@ -53,7 +53,7 @@ let to_pred =
   | String x -> A.String x
   | Bool x -> A.Bool x
   | Fixed x -> A.Fixed x
-  | Null -> A.Null
+  | Null -> A.Null None
   | Date x -> A.Date x
 
 let ( + ) x y =

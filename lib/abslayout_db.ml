@@ -1,5 +1,7 @@
-open Base
+open! Core
 open Collections
+open Abslayout0
+open Abslayout
 
 module type S = Abslayout_db_intf.S
 
@@ -11,188 +13,168 @@ end
 
 module Make (Config : Config.S) = struct
   open Config
-  open Abslayout0
-  open Abslayout
 
-  type eval_ctx =
-    [ `Concat of eval_ctx list
-    | `Empty
-    | `For of (Value.t list * eval_ctx) Gen.t
-    | `Scalar of Value.t Lazy.t
-    | `Query of Value.t list Gen.t ]
+  module Query = struct
+    type t =
+      | Empty
+      | Query of Abslayout.t
+      | Scalars of Pred.t list
+      | Concat of t list
+      | For of Abslayout.t * string * t
+  end
 
-  let rec width = function
-    | `Empty -> 0
-    | `For (q1, q2) -> List.length (schema_exn q1) + width q2
-    | `Scalar _ -> 1
-    | `Concat qs -> 1 + List.sum (module Int) qs ~f:width
-    | `Query q -> List.length (schema_exn q)
+  module Q = Query
+
+  module Ctx = struct
+    type t =
+      | Empty
+      | Query of Value.t list Gen.t
+      | Scalars of Value.t Lazy.t list
+      | Concat of t list
+      | For of (Value.t list * t) Gen.t
+  end
+
+  module C = Ctx
+
+  let rec width =
+    let open Query in
+    function
+    | Empty -> 0
+    | For (q1, _, q2) -> List.length (schema_exn q1) + width q2
+    | Scalars ps -> List.length ps
+    | Concat qs -> 1 + List.sum (module Int) qs ~f:width
+    | Query q -> List.length (schema_exn q)
 
   let total_order_key q =
     let native_order = Abslayout.order_of q in
     let total_order = List.map (schema_exn q) ~f:(fun n -> (Name n, Asc)) in
     native_order @ total_order
 
+  let to_scalars rs =
+    List.map rs ~f:(fun t -> match t.node with AScalar p -> Some p | _ -> None)
+    |> Option.all
+
+  let to_ctx t = C.Scalars (List.map t ~f:Lazy.return)
+
   let rec gen_query q =
+    let open Query in
     match q.node with
     | AList (q1, q2) ->
+        let scope = scope_exn q1 in
+        let q1 = strip_scope q1 in
         let q1 =
           let order_key = total_order_key q1 in
           order_by order_key q1
         in
-        `For (q1, gen_query q2)
+        For (q1, scope, gen_query q2)
     | AHashIdx (q1, q2, _) | AOrderedIdx (q1, q2, _) ->
+        let scope = scope_exn q1 in
+        let q1 = strip_scope q1 in
         let q1 =
           let order_key = total_order_key q1 in
           order_by order_key (dedup q1)
         in
-        `Concat [`Query q1; `For (q1, gen_query q2)]
-    | AEmpty -> `Empty
-    | AScalar p -> `Scalar p
-    | ATuple (ts, _) -> `Concat (List.map ts ~f:gen_query)
-    | DepJoin {d_lhs; d_rhs; _} -> `Concat [gen_query d_lhs; gen_query d_rhs]
+        Concat [Query q1; For (q1, scope, gen_query q2)]
+    | AEmpty -> Empty
+    | AScalar p -> Scalars [p]
+    | ATuple (ts, _) -> (
+      match to_scalars ts with
+      | Some ps -> Scalars ps
+      | None -> Concat (List.map ~f:gen_query ts) )
+    | DepJoin {d_lhs; d_rhs; _} -> Concat [gen_query d_lhs; gen_query d_rhs]
     | Select (_, q) | Filter (_, q) | As (_, q) -> gen_query q
     | Relation _ | Dedup _ | OrderBy _ | GroupBy _ | Join _ ->
         failwith "Unsupported."
 
-  let rec subst ctx = function
-    | `For (q1, q2) -> `For (Abslayout.subst ctx q1, subst ctx q2)
-    | `Concat qs -> `Concat (List.map ~f:(subst ctx) qs)
-    | `Scalar p -> `Scalar (Pred.subst ctx p)
-    | `Empty -> `Empty
-    | `Query q -> `Query (Abslayout.subst ctx q)
+  let unwrap_order r =
+    match r.node with OrderBy {key; rel} -> (key, rel) | _ -> ([], r)
 
-  let to_ctx : _ -> eval_ctx = function
-    | [] -> failwith "unexpected empty tuple"
-    | [v] -> `Scalar (lazy v)
-    | vs -> `Concat (List.map vs ~f:(fun v -> `Scalar (lazy v)))
-
-  let rec to_schema = function
-    | `For (q1, q2) -> (schema_exn q1 |> List.map ~f:Name.type_exn) @ to_schema q2
-    | `Concat qs -> IntT {nullable= false} :: List.concat_map qs ~f:to_schema
-    | `Scalar p -> [Pred.to_type p]
-    | `Query q -> schema_exn q |> List.map ~f:Name.type_exn
-    | `Empty -> []
-
-  let query_to_sql q =
-    let ctx = Sql.create_ctx () in
-    let rec query_to_sql q =
-      match q with
-      | `For (q1, q2) ->
-          let open Sql in
-          let spj1 = of_ralgebra ctx q1 |> to_spj ctx in
-          let sql1 = Query spj1 in
-          let sql1_no_order = Query {spj1 with order= []} in
-          let sql1_names = to_schema (Query spj1) in
-          let q2 =
-            let ctx =
-              List.zip_exn (schema_exn q1) sql1_names
-              |> List.map ~f:(fun (n, n') ->
-                     (n, Name Name.(create ?type_:(Name.type_ n) n')) )
-              |> Map.of_alist_exn (module Name)
-            in
-            subst ctx q2
+  let rec to_ralgebra =
+    let open Query in
+    function
+    | For (q1, scope, q2) ->
+        let o1, q1 = unwrap_order q1 in
+        let o2, q2 = to_ralgebra q2 |> unwrap_order in
+        (* Generate a renaming so that the upward exposed names are fresh. *)
+        let sctx =
+          (schema_exn q1 |> Schema.scoped scope) @ schema_exn q2
+          |> List.map ~f:(fun n ->
+                 let n' = Fresh.name Global.fresh "x%d" in
+                 (n, n') )
+        in
+        let slist = List.map sctx ~f:(fun (n, n') -> As_pred (Name n, n')) in
+        let order =
+          let sctx =
+            List.map sctx ~f:(fun (n, n') -> (n, Name (Name.create n')))
+            |> Map.of_alist_exn (module Name)
           in
-          let spj2 = query_to_sql q2 |> to_spj ctx in
-          let sql2 = Query spj2 in
-          let sql2_no_order = Query {spj2 with order= []} in
-          let select_list =
-            let sql2_names = to_schema sql2 in
-            List.map (sql1_names @ sql2_names) ~f:(fun n ->
-                create_entry ~ctx (Name (Name.create n)) )
+          (* The renaming refers to the scoped names from q1, so scope before
+             renaming. *)
+          let o1 =
+            List.map o1 ~f:(fun (p, o) -> (Pred.scoped (schema_exn q1) scope p, o))
           in
-          let order =
-            (to_order sql1 |> Or_error.ok_exn) @ (to_order sql2 |> Or_error.ok_exn)
-          in
-          Query
-            (create_query ~order
-               ~relations:
-                 [ (`Subquery (sql1_no_order, Fresh.name Global.fresh "t%d"), `Left)
-                 ; ( `Subquery (sql2_no_order, Fresh.name Global.fresh "t%d")
-                   , `Lateral ) ]
-               select_list)
-      | `Concat qs ->
-          let counter_name = Fresh.name Global.fresh "counter%d" in
-          let scalars, other_queries =
-            List.partition_map qs ~f:(function
-              | `Scalar p -> `Fst p
-              | (`Concat _ | `Empty | `For _ | `Query _) as q -> `Snd q )
-          in
-          let scalar_query =
-            let sql =
-              Sql.(create_query (List.map scalars ~f:(create_entry ~ctx)))
-            in
-            let types = List.map scalars ~f:Pred.to_type in
-            let names = Sql.(to_schema (Query sql)) in
-            (sql, types, names)
-          in
-          let other_queries =
-            List.map other_queries ~f:(fun q ->
-                let sql = query_to_sql q |> Sql.to_spj ctx in
-                let types = to_schema q in
-                let names = Sql.(to_schema (Query sql)) in
-                (sql, types, names) )
-          in
-          let queries = scalar_query :: other_queries in
-          let queries =
-            List.mapi queries ~f:(fun i (sql, _, _) ->
-                let select_list =
-                  let open Sql in
-                  create_entry ~ctx ~alias:counter_name (Int i)
-                  :: ( List.mapi queries ~f:(fun j (_, types, names) ->
-                           if i = j then sql.select
-                           else
-                             List.map2_exn names types ~f:(fun n t ->
-                                 create_entry ~ctx ~alias:n ~cast:t Null ) )
-                     |> List.concat )
-                in
-                {sql with select= select_list} )
-          in
-          let union =
-            let spj =
-              Sql.Union_all (List.map queries ~f:(fun q -> {q with order= []}))
-              |> Sql.to_spj ctx
-            in
-            let order =
-              (Name (Name.create counter_name), Asc)
-              :: List.concat_map queries ~f:(fun q ->
-                     Sql.to_order (Query q) |> Or_error.ok_exn )
-            in
-            {spj with order}
-          in
-          Query union
-      | `Empty -> Query (Sql.create_query ~limit:0 [])
-      | `Scalar p -> Query Sql.(create_query [create_entry ~ctx p])
-      | `Query q -> Sql.of_ralgebra ctx q
-    in
-    query_to_sql q
+          List.map (o1 @ o2) ~f:(fun (p, o) -> (Pred.subst sctx p, o))
+        in
+        order_by order (dep_join q1 scope (select slist q2))
+    | Concat qs ->
+        let counter_name = Fresh.name Global.fresh "counter%d" in
+        let orders, qs =
+          List.map qs ~f:(fun q -> unwrap_order (to_ralgebra q)) |> List.unzip
+        in
+        (* The queries in qs can have different schemas, so we need to normalize
+         them. This means creating a select list that has the union of the
+         names in the queries. *)
+        let queries_norm =
+          List.mapi qs ~f:(fun i q ->
+              let select_list =
+                (* Add a counter so we know which query we're on. *)
+                As_pred (Int i, counter_name)
+                :: List.concat_mapi qs ~f:(fun j q' ->
+                       schema_exn q'
+                       |>
+                       (* Take the names from this query's schema. *)
+                       if i = j then List.map ~f:(fun n -> Name n)
+                       else
+                         (* Otherwise emit null. *)
+                         List.map ~f:(fun n ->
+                             As_pred (Null (Some (Name.type_exn n)), Name.name n) )
+                   )
+              in
+              select select_list q )
+        in
+        let order = (Name (Name.create counter_name), Asc) :: List.concat orders in
+        order_by order (tuple queries_norm Concat)
+    | Empty -> empty
+    | Scalars ps -> tuple (List.map ps ~f:scalar) Cross
+    | Query q -> q
 
   let eval_query q =
-    let ctx = Sql.create_ctx () in
-    let sql = query_to_sql q in
+    let r = to_ralgebra q in
+    let sql = Sql.of_ralgebra r in
     Logs.debug (fun m ->
-        m "Executing type checking query %s." (Sql.to_string_hum ctx sql) ) ;
+        m "Executing type checking query %s." (Sql.to_string_hum sql) ) ;
     let tups =
-      Db.exec_cursor_exn conn (to_schema q) (Sql.to_string_hum ctx sql)
+      Db.exec_cursor_exn conn
+        (schema_exn r |> List.map ~f:Name.type_exn)
+        (Sql.to_string_hum sql)
       |> Gen.map ~f:Array.to_list
     in
     let rec eval tups = function
-      | `For (q1, q2) ->
-          let extract_tup s t = List.take t (List.length s) in
-          let outer_schema = schema_exn q1 in
-          let eq t1 t2 =
-            [%compare.equal: Value.t list]
-              (extract_tup outer_schema t1)
-              (extract_tup outer_schema t2)
+      | Q.For (q1, _, q2) ->
+          let extract_tup1, drop_tup1 =
+            let n = List.length (schema_exn q1) in
+            ((fun t -> List.take t n), fun t -> List.drop t n)
           in
-          let outer_width = List.length outer_schema in
-          `For
-            ( Gen.group_lazy eq tups
+          let eq t1 t2 =
+            [%compare.equal: Value.t list] (extract_tup1 t1) (extract_tup1 t2)
+          in
+          let gen =
+            Gen.group_lazy eq tups
             |> Gen.map ~f:(fun (t, ts) ->
-                   let t = List.take t outer_width in
-                   let ts = Gen.map ts ~f:(fun t -> List.drop t outer_width) in
-                   (t, eval ts q2) ) )
-      | `Concat qs ->
+                   (extract_tup1 t, eval (Gen.map ts ~f:drop_tup1) q2) )
+          in
+          C.For gen
+      | Q.Concat qs ->
           let tups = ref tups in
           let put_back t = tups := Gen.append (Gen.singleton t) !tups in
           let take_while pred =
@@ -211,75 +193,51 @@ module Make (Config : Config.S) = struct
             in
             next
           in
-          let nscalars =
-            List.sum (module Int) qs ~f:(function `Scalar _ -> 1 | _ -> 0)
+          let widths = List.map qs ~f:width in
+          let extract_counter tup = List.hd_exn tup |> Value.to_int in
+          let mk_extract_tuple ctr =
+            let take_ct = List.nth_exn widths ctr in
+            let drop_ct =
+              List.sum (module Int) (List.take widths ctr) ~f:(fun x -> x) + 1
+            in
+            fun tup -> List.take (List.drop tup drop_ct) take_ct
           in
-          let scalars =
-            lazy
-              ( match List.take (Gen.get_exn !tups) (nscalars + 1) with
-              | Int ctr :: vals ->
-                  if ctr = 0 then vals
-                  else
-                    Error.(
-                      create "Unexpected counter value." ctr [%sexp_of: int]
-                      |> raise)
-              | _ -> failwith "No counter field." )
+          let streams =
+            List.mapi qs ~f:(fun oidx q ->
+                let extract_tuple = mk_extract_tuple oidx in
+                let strm =
+                  take_while (fun t -> extract_counter t = oidx)
+                  |> Gen.map ~f:extract_tuple
+                in
+                eval strm q )
           in
-          let widths =
-            nscalars
-            :: List.filter_map qs ~f:(function
-                 | `Scalar _ -> None
-                 | q -> Some (width q) )
-          in
-          let _, _, streams =
-            List.fold_left qs ~init:(0, 1, []) ~f:(fun (sidx, oidx, ctxs) ->
-              function
-              | `Scalar _ ->
-                  let ctx =
-                    `Scalar (Lazy.map scalars ~f:(fun ss -> List.nth_exn ss sidx))
-                  in
-                  (sidx + 1, oidx, ctxs @ [ctx])
-              | q ->
-                  let take_ct = List.nth_exn widths oidx in
-                  let drop_ct =
-                    List.sum (module Int) (List.take widths oidx) ~f:(fun x -> x)
-                    + 1
-                  in
-                  let strm =
-                    take_while (fun t -> List.hd_exn t |> Value.to_int = oidx)
-                    |> Gen.map ~f:(fun t ->
-                           let t = List.drop t drop_ct in
-                           List.take t take_ct )
-                  in
-                  let strm () =
-                    Lazy.force scalars |> ignore ;
-                    Gen.get strm
-                  in
-                  (sidx, oidx + 1, ctxs @ [eval strm q]) )
-          in
-          `Concat streams
-      | `Empty ->
-          if Gen.is_empty tups then `Empty
+          C.Concat streams
+      | Q.Empty ->
+          if Gen.is_empty tups then C.Empty
           else failwith "Expected an empty generator."
-      | `Scalar p ->
-          `Scalar
-            ( lazy
+      | Q.Scalars ps ->
+          let tup =
+            lazy
               ( match Gen.next tups with
-              | Some [x] -> x
+              | Some xs when List.length xs = List.length ps -> xs
               | Some t ->
                   Error.(
-                    create "Scalar: unexpected tuple width." (p, t)
-                      [%sexp_of: pred * Value.t list]
+                    create "Scalar: unexpected tuple width." (ps, t)
+                      [%sexp_of: pred list * Value.t list]
                     |> raise)
-              | None -> failwith "Expected a tuple." ) )
-      | `Query _ -> `Query tups
+              | None -> failwith "Expected a tuple." )
+          in
+          C.Scalars
+            (List.init (List.length ps) ~f:(fun i ->
+                 Lazy.map tup ~f:(fun t -> List.nth_exn t i) ))
+      | Q.Query _ -> C.Query tups
     in
     eval tups q
 
   class virtual ['ctx, 'a] unsafe_material_fold =
     object (self)
       method virtual private build_AList
-          : 'ctx -> Meta.t -> t * t -> (Value.t list * eval_ctx) Gen.t -> 'a
+          : 'ctx -> Meta.t -> t * t -> (Value.t list * Ctx.t) Gen.t -> 'a
 
       method virtual private build_ATuple : _
 
@@ -288,7 +246,7 @@ module Make (Config : Config.S) = struct
             -> Meta.t
             -> t * t * hash_idx
             -> Value.t list Gen.t
-            -> (Value.t list * eval_ctx) Gen.t
+            -> (Value.t list * Ctx.t) Gen.t
             -> 'a
 
       method virtual private build_AOrderedIdx
@@ -296,7 +254,7 @@ module Make (Config : Config.S) = struct
             -> Meta.t
             -> t * t * ordered_idx
             -> Value.t list Gen.t
-            -> (Value.t list * eval_ctx) Gen.t
+            -> (Value.t list * Ctx.t) Gen.t
             -> 'a
 
       method virtual private build_AEmpty : 'ctx -> Meta.t -> 'a
@@ -305,38 +263,41 @@ module Make (Config : Config.S) = struct
           : 'ctx -> Meta.t -> pred -> Value.t Lazy.t -> 'a
 
       method virtual private build_Select
-          : 'ctx -> Meta.t -> pred list * t -> eval_ctx -> 'a
+          : 'ctx -> Meta.t -> pred list * t -> Ctx.t -> 'a
 
       method virtual private build_Filter
-          : 'ctx -> Meta.t -> pred * t -> eval_ctx -> 'a
+          : 'ctx -> Meta.t -> pred * t -> Ctx.t -> 'a
 
       method virtual private build_DepJoin : _
 
       method private visit_t ctx eval_ctx r =
+        let open Ctx in
         match (r.node, eval_ctx) with
-        | AEmpty, `Empty -> self#build_AEmpty ctx r.meta
-        | AScalar x, `Scalar v -> self#build_AScalar ctx r.meta x v
-        | AList x, `For vs -> self#build_AList ctx r.meta x vs
-        | AHashIdx x, `Concat [kctx; vctx] ->
+        | AEmpty, Empty -> self#build_AEmpty ctx r.meta
+        | AScalar x, Scalars [v] -> self#build_AScalar ctx r.meta x v
+        | AList x, For vs -> self#build_AList ctx r.meta x vs
+        | AHashIdx x, Concat [kctx; vctx] ->
             let key_gen, value_gen =
               match (kctx, vctx) with
-              | `Query g1, `For g2 -> (g1, g2)
+              | Query g1, For g2 -> (g1, g2)
               | _ ->
                   Error.create "Bug: Mismatched context." r [%sexp_of: t]
                   |> Error.raise
             in
             self#build_AHashIdx ctx r.meta x key_gen value_gen
-        | AOrderedIdx x, `Concat [kctx; vctx] ->
+        | AOrderedIdx x, Concat [kctx; vctx] ->
             let key_gen, value_gen =
               match (kctx, vctx) with
-              | `Query g1, `For g2 -> (g1, g2)
+              | Query g1, For g2 -> (g1, g2)
               | _ ->
                   Error.create "Bug: Mismatched context." r [%sexp_of: t]
                   |> Error.raise
             in
             self#build_AOrderedIdx ctx r.meta x key_gen value_gen
-        | ATuple x, `Concat vs -> self#build_ATuple ctx r.meta x vs
-        | DepJoin x, `Concat [lhs; rhs] -> self#build_DepJoin ctx r.meta x (lhs, rhs)
+        | ATuple x, Scalars ps ->
+            self#build_ATuple ctx r.meta x (List.map ps ~f:(fun p -> Scalars [p]))
+        | ATuple x, Concat vs -> self#build_ATuple ctx r.meta x vs
+        | DepJoin x, Concat [lhs; rhs] -> self#build_DepJoin ctx r.meta x (lhs, rhs)
         | Select x, _ -> self#build_Select ctx r.meta x eval_ctx
         | Filter x, _ -> self#build_Filter ctx r.meta x eval_ctx
         | As (_, r), _ -> self#visit_t ctx eval_ctx r
@@ -347,7 +308,8 @@ module Make (Config : Config.S) = struct
         | (Join _ | Dedup _ | OrderBy _ | Relation _ | GroupBy _), _ ->
             Error.create "Cannot materialize." r [%sexp_of: t] |> Error.raise
 
-      method run ctx r = self#visit_t ctx (eval_query (gen_query r)) r
+      method run ctx r =
+        self#visit_t ctx (eval_query (gen_query (ensure_alias r))) r
     end
 
   type ('i, 'a, 'v, 'o) fold = {pre: 'i -> 'a; body: 'a -> 'v -> 'a; post: 'a -> 'o}
@@ -612,4 +574,123 @@ module Make (Config : Config.S) = struct
   let load_string ?(params = Set.empty (module Name)) s =
     of_string_exn s |> strip_unused_as |> annotate_relations |> resolve ~params
     |> annotate_key_layouts
+end
+
+module Test = struct
+  module Config = struct
+    include (val Test_util.make_test_db ())
+  end
+
+  include Make (Config)
+
+  let%expect_test "" =
+    let ralgebra = "alist(r1 as k, filter(k.f = g, ascalar(k.g)))" |> load_string in
+    let q = gen_query ralgebra in
+    let r = to_ralgebra q in
+    let sql = Sql.of_ralgebra r in
+    printf "%s" (Sql.to_string_hum sql) ;
+    [%expect
+      {|
+      SELECT
+          "x0_0" AS "x0_0_0",
+          "x1_0" AS "x1_0_0",
+          "x2_0" AS "x2_0_0"
+      FROM (
+          SELECT
+              r1_0. "f" AS "r1_0_f_0",
+              r1_0. "g" AS "r1_0_g_0"
+          FROM
+              "r1" AS "r1_0") AS "t1",
+          LATERAL (
+              SELECT
+                  "r1_0_f_0" AS "x0_0",
+                  "r1_0_g_0" AS "x1_0",
+                  "r1_0_g_0" AS "x2_0") AS "t0"
+      ORDER BY
+          "x0_0",
+          "x1_0" |}]
+
+  let%expect_test "" =
+    let ralgebra =
+      "depjoin(ascalar(0 as f) as k, select([k.f + g], alist(r1 as k1, \
+       ascalar(k1.g))))" |> load_string
+    in
+    let q = gen_query ralgebra in
+    let r = to_ralgebra q in
+    let sql = Sql.of_ralgebra r in
+    printf "%s" (Sql.to_string_hum sql) ;
+    [%expect
+      {|
+      SELECT
+          "counter0_0" AS "counter0_0_0",
+          "f_1" AS "f_1_0",
+          "x3_0" AS "x3_0_0",
+          "x4_0" AS "x4_0_0",
+          "x5_0" AS "x5_0_0"
+      FROM ((
+              SELECT
+                  0 AS "counter0_0",
+                  0 AS "f_1",
+                  (null::integer) AS "x3_0",
+                  (null::integer) AS "x4_0",
+                  (null::integer) AS "x5_0")
+          UNION ALL (
+              SELECT
+                  1 AS "counter0_1",
+                  (null::integer) AS "f_2",
+                  "x3_1" AS "x3_2",
+                  "x4_1" AS "x4_2",
+                  "x5_1" AS "x5_2"
+              FROM (
+                  SELECT
+                      r1_1. "f" AS "r1_1_f_0",
+                      r1_1. "g" AS "r1_1_g_0"
+                  FROM
+                      "r1" AS "r1_1") AS "t3",
+                  LATERAL (
+                      SELECT
+                          "r1_1_f_0" AS "x3_1",
+                          "r1_1_g_0" AS "x4_1",
+                          "r1_1_g_0" AS "x5_1") AS "t2")) AS "t4"
+      ORDER BY
+          "counter0_0",
+          "x3_0",
+          "x4_0" |}]
+
+  let%expect_test "" =
+    let ralgebra = load_string Test_util.sum_complex in
+    let q = gen_query ralgebra in
+    let r = to_ralgebra q in
+    Format.printf "%a" pp r ;
+    [%expect
+      {|
+      orderby([x6, x7],
+        depjoin(r1 as k,
+          select([k.f as x6, k.g as x7, f as x8, v as x9],
+            atuple([ascalar(k.f), ascalar((k.g - k.f) as v)], cross)))) |}] ;
+    let sql = Sql.of_ralgebra r in
+    printf "%s" (Sql.to_string_hum sql) ;
+    [%expect
+      {|
+      SELECT
+          "x6_0" AS "x6_0_0",
+          "x7_0" AS "x7_0_0",
+          "x8_0" AS "x8_0_0",
+          "x9_0" AS "x9_0_0"
+      FROM (
+          SELECT
+              r1_2. "f" AS "r1_2_f_0",
+              r1_2. "g" AS "r1_2_g_0"
+          FROM
+              "r1" AS "r1_2") AS "t6",
+          LATERAL (
+              SELECT
+                  "r1_2_f_0" AS "x6_0",
+                  "r1_2_g_0" AS "x7_0",
+                  "r1_2_f_0" AS "x8_0",
+                  ("r1_2_g_0") - ("r1_2_f_0") AS "x9_0"
+              WHERE (TRUE)) AS "t5"
+      ORDER BY
+          "x6_0",
+          "x7_0" |}]
 end

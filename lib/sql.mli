@@ -1,8 +1,6 @@
 open! Core
 open Abslayout
 
-type ctx
-
 type select_entry = {pred: pred; alias: string; cast: Type.PrimType.t option}
 [@@deriving compare, sexp_of]
 
@@ -19,9 +17,7 @@ type spj =
 
 and t = Query of spj | Union_all of spj list [@@deriving compare, sexp_of]
 
-val create_ctx : unit -> ctx
-
-val of_ralgebra : ctx -> Abslayout.t -> t
+val of_ralgebra : Abslayout.t -> t
 
 val create_query :
      ?distinct:bool
@@ -35,24 +31,23 @@ val create_query :
   -> select_entry list
   -> spj
 
-val create_entry :
-  ctx:ctx -> ?alias:string -> ?cast:Type.PrimType.t -> pred -> select_entry
+val create_entry : ?alias:string -> ?cast:Type.PrimType.t -> pred -> select_entry
 
-val to_spj : ctx -> t -> spj
+val to_spj : t -> spj
 
 val to_schema : t -> string list
 
 val to_order : t -> (pred * order) list Or_error.t
 
-val join : ctx -> Name.t list -> Name.t list -> t -> t -> pred -> t
+val join : Name.t list -> Name.t list -> t -> t -> pred -> t
 
-val order_by : ctx -> Name.t list -> t -> (pred * order) list -> t
+val order_by : (Abslayout.t -> t) -> (pred * order) list -> Abslayout.t -> t
 
-val select : ?groupby:pred list -> ctx -> Name.t list -> t -> pred list -> t
+val select : ?groupby:pred list -> Name.t list -> t -> pred list -> t
 
-val pred_to_sql : ctx -> pred -> string
+val pred_to_sql : pred -> string
 
-val to_string : ctx -> t -> string
+val to_string : t -> string
 
-val to_string_hum : ctx -> t -> string
+val to_string_hum : t -> string
 (** Pretty print a SQL string if a sql formatter is available. *)
