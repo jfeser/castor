@@ -259,6 +259,9 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
 
       method build_AOrderedIdx sctx meta (_, value_l, ometa) keys gen =
         let t = Meta.Direct.(find_exn meta Meta.type_) in
+        let _, vt, m =
+          match t with OrderedIdxT (kt, vt, m) -> (kt, vt, m) | _ -> assert false
+        in
         let hdr = make_header t in
         let key_l =
           Option.value_exn
@@ -287,12 +290,13 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
             (* Serialize value. *)
             valf#visit_t sctx vctx value_l ) ;
         let index_start = self#pos in
+        let ptr_size = Type.oi_ptr_size vt m in
         List.iter !keys ~f:(fun (kbuf, keyf, vptr) ->
             self#log "Ordered idx key" (fun () ->
                 self#log_insert keyf ;
                 write_string writer (Buffer.contents kbuf) ) ;
             self#log (sprintf "Ordered idx ptr (=%Ld)" vptr) (fun () ->
-                write_string writer (of_int64 ~byte_width:8 vptr) ) ) ;
+                write_string writer (of_int64 ~byte_width:ptr_size vptr) ) ) ;
         let index_end = self#pos in
         self#log "Ordered idx body" (fun () ->
             self#log_insert valf ;

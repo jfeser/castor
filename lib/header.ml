@@ -133,9 +133,9 @@ let rec make_header t =
           ; Field.{name= "hash_data"; size= `Fixed 0; align= 1}
           ; hash_map_len
           ; hash_map ] )
-  | OrderedIdxT _ ->
+  | OrderedIdxT (kt, vt, m) ->
       [ Field.{name= "len"; size= make_size (Type.len t); align= 1}
-      ; Field.{name= "idx_len"; size= `Fixed 8; align= 1}
+      ; Field.{name= "idx_len"; size= make_size (Type.oi_map_len kt vt m); align= 1}
       ; Field.{name= "idx"; size= `DescribedBy "idx_len"; align= 1}
       ; Field.{name= "data"; size= `Variable; align= 1} ]
   | FuncT ([t], _) -> make_header t

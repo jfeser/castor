@@ -503,7 +503,7 @@ struct
         , Abslayout.{oi_key_layout= m_key_layout; lookup_low; lookup_high; _} ) =
       r
     in
-    let key_type, value_type, _ = t in
+    let key_type, value_type, m = t in
     let key_layout = Option.value_exn m_key_layout in
     let hdr = Header.make_header (OrderedIdxT t) in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -521,10 +521,12 @@ struct
     let index_len = Header.make_access hdr "idx_len" start in
     let index_start = Header.make_position hdr "idx" start in
     let key_len = len index_start key_type in
-    let ptr_len = Infix.(int 8) in
+    let ptr_size = Type.oi_ptr_size value_type m in
+    let ptr_len = Infix.(int ptr_size) in
     let kp_len = Infix.(key_len + ptr_len) in
     let key_start i = Infix.(index_start + (i * kp_len)) in
     let ptr_start i = Infix.(key_start i + key_len) in
+    let read_ptr i = Slice (ptr_start i, ptr_size) in
     let key_index i b =
       build_assign (key_start i) kstart b ;
       let key = build_var ~persistent:false "key" (type_of_layout key_layout) b in
@@ -536,9 +538,7 @@ struct
     build_bin_search key_index n (gen_pred ctx lookup_low b)
       (gen_pred ctx lookup_high b)
       (fun key idx b ->
-        build_assign
-          Infix.(Slice (ptr_start idx, 8) + index_len + index_start)
-          vstart b ;
+        build_assign Infix.(read_ptr idx + index_len + index_start) vstart b ;
         build_assign key key_tuple b ;
         scan value_ctx b value_layout value_type (fun b value_tup ->
             cb b (list_of_tuple key_tuple b @ value_tup) ) )

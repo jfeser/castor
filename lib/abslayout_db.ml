@@ -500,10 +500,13 @@ module Make (Config : Config.S) = struct
           ( {pre= (fun () -> ()); body= (fun () _ -> ()); post= (fun () -> ())}
           , { pre=
                 (fun () ->
-                  (least_general_of_layout key_l, least_general_of_layout value_l)
-                  )
-            ; body= (fun (kt, vt) (kt', vt') -> (unify_exn kt kt', unify_exn vt vt'))
-            ; post= (fun (kt, vt) -> OrderedIdxT (kt, vt, {count= Top})) } )
+                  ( least_general_of_layout key_l
+                  , least_general_of_layout value_l
+                  , AbsInt.zero ) )
+            ; body=
+                (fun (kt, vt, ct) (kt', vt') ->
+                  (unify_exn kt kt', unify_exn vt vt', AbsInt.(ct + of_int 1)) )
+            ; post= (fun (kt, vt, ct) -> OrderedIdxT (kt, vt, {count= ct})) } )
       end
   end
 
