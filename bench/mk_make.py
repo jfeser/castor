@@ -46,16 +46,20 @@ def out_file(b):
 def out_dir(b):
     return '%s-opt' % b['name']
 
-def dump_snippet():
+def dump_to(fn):
     if DEBUG:
-        return '| tee $@'
+        return '| tee %s' % fn
     else:
-        return '> $@'
+        return '> %s' % fn
 
 print('DB=postgresql:///tpch_1k')
 print('OPT=dune exec ../bin/opt.exe -- ')
 print('OPT_FLAGS=-db $(DB) -v')
 print('COMPILE=dune exec ../../castor/bin/compile.exe -- ')
+if DEBUG:
+    print('CFLAGS=-debug -v')
+else:
+    print('CFLAGS=-v')
 print('BENCH_DIR=../../castor/bench/tpch/')
 print('TIME_PER_BENCH=1')
 print('all: opt compile')
@@ -66,13 +70,13 @@ print('run: %s' % (' '.join(['%s-opt.csv' % b['name'] for b in bench])))
 for b in bench:
     print('''
 {0}: {2}
-\t$(OPT) $(OPT_FLAGS) {1} {2} {3} $@
-    '''.format(out_file(b), gen_params(b), in_file(b), dump_snippet()))
+\t$(OPT) $(OPT_FLAGS) {1} {2} {3}
+    '''.format(out_file(b), gen_params(b), in_file(b), dump_to('$@')))
     print('''
 {0}: {1}
 \tmkdir -p $@
-\t$(COMPILE) -v -o $@ -db $(DB) {2} {1} > $@/compile.log
-'''.format(out_dir(b), out_file(b), gen_param_types(b)))
+\t$(COMPILE) $(CFLAGS) -o $@ -db $(DB) {2} {1} {3}
+'''.format(out_dir(b), out_file(b), gen_param_types(b), dump_to('$@/compile.log')))
     print('''
 {0}-opt.csv: {1}
 \t./{1}/scanner.exe -p {1}/data.bin {2} > $@
