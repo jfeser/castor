@@ -64,7 +64,7 @@ module T = struct
 
   and t = {node: node; meta: meta [@opaque] [@compare.ignore]}
 
-  and relation = {r_name: string; r_schema: (Name.t[@opaque]) list}
+  and relation = {r_name: string; r_schema: (Name.t[@opaque]) list option}
 
   and depjoin = {d_lhs: t; d_alias: string; d_rhs: t}
 

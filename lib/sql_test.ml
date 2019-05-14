@@ -241,7 +241,8 @@ let%test_module _ =
       [%expect
         {|
     SELECT
-        "g_0" AS "g_0_0"
+        "f_0_0" AS "f_0_0_0",
+        "g_1" AS "g_1_0"
     FROM (
         SELECT
             r1_0. "f" AS "f_0"
@@ -249,7 +250,8 @@ let%test_module _ =
             "r1" AS "r1_0") AS "t1",
         LATERAL (
             SELECT
-                r1_1. "g" AS "g_0"
+                "f_0" AS "f_0_0",
+                r1_1. "g" AS "g_1"
             FROM
                 "r1" AS "r1_1"
             WHERE (("f_0") = (NULL))
@@ -262,7 +264,8 @@ let%test_module _ =
       [%expect
         {|
     SELECT
-        "g_0" AS "g_0_0"
+        "f_0_0" AS "f_0_0_0",
+        "g_1" AS "g_1_0"
     FROM (
         SELECT
             r1_0. "f" AS "f_0"
@@ -270,7 +273,8 @@ let%test_module _ =
             "r1" AS "r1_0") AS "t1",
         LATERAL (
             SELECT
-                r1_1. "g" AS "g_0"
+                "f_0" AS "f_0_0",
+                r1_1. "g" AS "g_1"
             FROM
                 "r1" AS "r1_1"
             WHERE (((NULL) < ("f_0"))

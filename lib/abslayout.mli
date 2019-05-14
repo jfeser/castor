@@ -66,7 +66,7 @@ and ordered_idx = Abslayout0.ordered_idx =
   ; order: [`Asc | `Desc] }
 [@@deriving compare, hash, sexp_of]
 
-and relation = Abslayout0.relation = {r_name: string; r_schema: Name.t list}
+and relation = Abslayout0.relation = {r_name: string; r_schema: Name.t list option}
 [@@deriving compare, hash, sexp_of]
 
 and depjoin = Abslayout0.depjoin = {d_lhs: t; d_alias: string; d_rhs: t}
