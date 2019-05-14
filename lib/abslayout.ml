@@ -850,15 +850,19 @@ let list_to_depjoin rk rv =
 
 let hash_idx_to_depjoin rk rv {lookup; _} =
   let scope = scope_exn rk in
+  let rk_schema = schema_exn rk in
+  let rv_schema = schema_exn rv in
   let key_pred =
-    let rk_schema = schema_exn rk in
     List.map2_exn rk_schema lookup ~f:(fun p1 p2 -> Binop (Eq, Name p1, p2))
     |> Pred.conjoin
   in
-  dep_join (strip_scope rk) scope (filter key_pred rv)
+  let slist = rk_schema @ rv_schema |> List.map ~f:(fun n -> Name n) in
+  dep_join (strip_scope rk) scope (select slist (filter key_pred rv))
 
 let ordered_idx_to_depjoin rk rv {lookup_low; lookup_high; _} =
   let scope = scope_exn rk in
+  let rk_schema = schema_exn rk in
+  let rv_schema = schema_exn rv in
   let key_pred =
     let rk_schema = schema_exn rk in
     match rk_schema with
@@ -867,7 +871,8 @@ let ordered_idx_to_depjoin rk rv {lookup_low; lookup_high; _} =
           [Binop (Lt, lookup_low, Name n); Binop (Lt, Name n, lookup_high)]
     | _ -> failwith "Unexpected schema."
   in
-  dep_join (strip_scope rk) scope (filter key_pred rv)
+  let slist = rk_schema @ rv_schema |> List.map ~f:(fun n -> Name n) in
+  dep_join (strip_scope rk) scope (select slist (filter key_pred rv))
 
 let ensure_alias r =
   let visitor =

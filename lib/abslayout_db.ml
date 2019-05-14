@@ -150,6 +150,7 @@ module Make (Config : Config.S) = struct
 
   let eval_query q =
     let r = to_ralgebra q in
+    Logs.debug (fun m -> m "Executing type checking query %a." pp r) ;
     let sql = Sql.of_ralgebra r in
     Logs.debug (fun m ->
         m "Executing type checking query %s." (Sql.to_string_hum sql) ) ;
