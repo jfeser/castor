@@ -1,4 +1,4 @@
-open Base
+open! Core
 open Collections
 include Type0
 
@@ -7,6 +7,11 @@ exception TypeError of Error.t [@@deriving sexp]
 (** Range abstraction for integers. *)
 module AbsInt = struct
   type t = Bottom | Interval of int * int | Top [@@deriving compare, sexp]
+
+  let pp fmt = function
+    | Top -> Format.fprintf fmt "⊤"
+    | Bottom -> Format.fprintf fmt "⊥"
+    | Interval (l, h) -> Format.fprintf fmt "[%d, %d]" l h
 
   let top = Top
 
@@ -241,24 +246,31 @@ let rec len =
       let body_len = x.count * len t in
       let len_len = header_len body_len in
       count_len + len_len + body_len
+  | T.OrderedIdxT (kt, vt, m) ->
+      let values = m.count * len vt in
+      oi_map_len kt vt m + values
+  | T.HashIdxT _ ->
       (* TODO: Fix this nasty hack. *)
-  | T.HashIdxT _ | T.OrderedIdxT (_, _, _) -> Interval (0, 100000000)
+      Interval (0, 100000000)
   | FuncT (ts, _) -> List.sum (module AbsInt) ts ~f:len
   | NullT as t -> Error.(create "Unexpected type." t [%sexp_of: T.t] |> raise)
+
+(** Range of ordered index map lengths. *)
+and oi_map_len kt vt m = AbsInt.(m.count * (len kt + of_int (oi_ptr_size vt m)))
+
+(** Size of pointers (in bytes) in ordered indexes. *)
+and oi_ptr_size vt m = AbsInt.(byte_width ~nullable:false AbsInt.(m.count * len vt))
+
+(** Range of hash index map lengths. *)
+and hi_map_len kt vt m =
+  AbsInt.(m.key_count * of_int 16 * of_int (hi_ptr_size kt vt m))
+
+(** Size of pointers (in bytes) in hash indexes. *)
+and hi_ptr_size kt vt m =
+  AbsInt.(byte_width ~nullable:false AbsInt.(m.key_count * (len kt + len vt)))
 
 (** Use the type of a hash index to decide what hash method to use. *)
 let hash_kind_exn = function
   | HashIdxT (kt, _, _) -> (
     match kt with IntT _ | DateT _ -> `Direct | _ -> `Cmph )
   | _ -> failwith "Unexpected type."
-
-(* let rec to_schema : t -> Db.Schema.t = function
- *   | EmptyT -> []
- *   | NullT m -> [m.field]
- *   | IntT m -> [m.field]
- *   | BoolT m -> [m.field]
- *   | StringT m -> [m.field]
- *   | CrossTupleT (ts, _) | ZipTupleT (ts, _) -> List.concat_map ~f:to_schema ts
- *   | OrderedListT (t, _) | UnorderedListT (t, _) -> to_schema t
- *   | TableT (_, t, m) -> m.field :: to_schema t
- *   | GroupingT (_, _, m) -> Layout.grouping_to_schema m.output *)

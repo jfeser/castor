@@ -1,9 +1,7 @@
-open Core
+open! Core
 
 module Config : sig
-  module type S = sig
-    val conn : Db.t
-  end
+  module type S = sig end
 end
 
 module Make (C : Config.S) : sig

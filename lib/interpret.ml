@@ -1,5 +1,4 @@
-open Core
-open Base
+open! Core
 open Abslayout
 open Collections
 module A = Abslayout
@@ -86,10 +85,9 @@ type agg =
 
 let eval {db; params} r =
   let scan =
-    let hashable = Hashable.of_key (module String) in
-    Memo.general ~hashable (fun r ->
+    Memo.general ~hashable:String.hashable (fun r ->
         let schema_types =
-          (Db.relation db r).r_schema |> List.map ~f:Name.type_exn
+          Option.value_exn (Db.relation db r).r_schema |> List.map ~f:Name.type_exn
         in
         Db.exec_cursor_exn db schema_types (Printf.sprintf "select * from \"%s\"" r)
         |> Gen.to_sequence |> Seq.memoize )
@@ -97,10 +95,7 @@ let eval {db; params} r =
   let rec eval_agg ctx preds schema tups =
     if Seq.is_empty tups then None
     else
-      let fresh = Fresh.create () in
-      let preds, named_aggs =
-        List.map preds ~f:(Pred.collect_aggs ~fresh) |> List.unzip
-      in
+      let preds, named_aggs = List.map preds ~f:Pred.collect_aggs |> List.unzip in
       let named_aggs = List.concat named_aggs in
       let state =
         Array.of_list named_aggs
@@ -166,7 +161,7 @@ let eval {db; params} r =
     | Date x -> Date x
     | Bool x -> Bool x
     | String x -> String x
-    | Null -> Null
+    | Null _ -> Null
     | As_pred (p, _) -> e p
     | Count | Sum _ | Avg _ | Min _ | Max _ ->
         Error.(create "Unexpected aggregate." p [%sexp_of: pred] |> raise)
@@ -242,6 +237,10 @@ let eval {db; params} r =
         let s = schema r in
         Seq.filter (eval ctx r) ~f:(fun t ->
             eval_pred (Ctx.merge ctx s t) p |> Value.to_bool )
+    | DepJoin {d_lhs; d_alias; d_rhs} ->
+        let s = schema (as_ d_alias d_lhs) in
+        Seq.concat_map (eval ctx d_lhs) ~f:(fun t ->
+            Seq.map (eval (Ctx.bind ctx s t) d_rhs) ~f:(fun t' -> t @ t') )
     | Join {pred; r1; r2} ->
         let r1s = eval ctx r1 in
         let s1 = schema r1 in

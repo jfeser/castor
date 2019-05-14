@@ -1,23 +1,16 @@
-open Core
-open Printf
-module Pervasives = Caml.Pervasives
+open! Core
 open Collections
 module Psql = Postgresql
-module Stream = Caml.Stream
 
 let () =
   Caml.Printexc.register_printer (function
     | Postgresql.Error e -> Some (Postgresql.string_of_error e)
     | _ -> None )
 
-type t =
-  { uri: string
-  ; conn: Psql.connection sexp_opaque [@compare.ignore]
-  ; fresh: Fresh.t sexp_opaque [@compare.ignore] }
+type t = {uri: string; conn: Psql.connection sexp_opaque [@compare.ignore]}
 [@@deriving compare, sexp]
 
-let create uri =
-  {uri; conn= new Psql.connection ~conninfo:uri (); fresh= Fresh.create ()}
+let create uri = {uri; conn= new Psql.connection ~conninfo:uri ()}
 
 let subst_params params query =
   match params with
@@ -52,10 +45,10 @@ let result_to_strings (r : Psql.result) = r#get_all_lst
 
 let command_ok (r : Psql.result) =
   match r#status with
-  | Psql.Command_ok -> ()
-  | _ ->
-      Error.(
-        create "Unexpected query response." r#error [%sexp_of: string] |> raise)
+  | Command_ok -> Or_error.return ()
+  | _ -> Or_error.error "Unexpected query response." r#error [%sexp_of: string]
+
+let command_ok_exn (r : Psql.result) = command_ok r |> Or_error.ok_exn
 
 let exec1 ?params conn query =
   exec ?params conn query |> result_to_strings
@@ -73,60 +66,59 @@ let exec3 ?params conn query =
            Error.create "Unexpected query results." t [%sexp_of: string list]
            |> Error.raise )
 
-let relation =
-  let relation_main conn r_name =
-    let r_schema =
-      exec3 ~params:[r_name] conn
-        "select column_name, data_type, is_nullable from \
-         information_schema.columns where table_name='$0'"
-      |> List.map ~f:(fun (fname, type_str, nullable_str) ->
-             let open Type.PrimType in
-             let nullable =
-               if String.(strip nullable_str = "YES") then
-                 let nulls =
-                   exec1 ~params:[fname; r_name] conn
-                     "select \"$0\" from \"$1\" where \"$0\" is null limit 1"
+let relation conn r_name =
+  let r_schema =
+    exec3 ~params:[r_name] conn
+      "select column_name, data_type, is_nullable from information_schema.columns \
+       where table_name='$0'"
+    |> List.map ~f:(fun (fname, type_str, nullable_str) ->
+           let open Type.PrimType in
+           let nullable =
+             if String.(strip nullable_str = "YES") then
+               let nulls =
+                 exec1 ~params:[fname; r_name] conn
+                   "select \"$0\" from \"$1\" where \"$0\" is null limit 1"
+               in
+               List.length nulls > 0
+             else false
+           in
+           let type_ =
+             match type_str with
+             | "character" | "character varying" | "varchar" | "text" ->
+                 StringT {nullable}
+             | "interval" | "integer" | "smallint" | "bigint" -> IntT {nullable}
+             | "date" -> DateT {nullable}
+             | "boolean" -> BoolT {nullable}
+             | "numeric" ->
+                 let min, max, max_scale =
+                   exec3 ~params:[fname; r_name] conn
+                     "select min(\"$0\"), max(\"$0\"), max(scale(\"$0\")) from \
+                      \"$1\""
+                   |> List.hd_exn
                  in
-                 List.length nulls > 0
-               else false
-             in
-             let type_ =
-               match type_str with
-               | "character" | "character varying" | "varchar" | "text" ->
-                   StringT {nullable}
-               | "interval" | "integer" | "smallint" | "bigint" -> IntT {nullable}
-               | "date" -> DateT {nullable}
-               | "boolean" -> BoolT {nullable}
-               | "numeric" ->
-                   let min, max, max_scale =
-                     exec3 ~params:[fname; r_name] conn
-                       "select min(\"$0\"), max(\"$0\"), max(scale(\"$0\")) from \
-                        \"$1\""
-                     |> List.hd_exn
-                   in
-                   let is_int = Int.of_string max_scale = 0 in
-                   let fits_in_an_int63 =
-                     try
-                       Int.of_string min |> ignore ;
-                       Int.of_string max |> ignore ;
-                       true
-                     with Failure _ -> false
-                   in
-                   if is_int then
-                     if fits_in_an_int63 then IntT {nullable} else StringT {nullable}
-                   else FixedT {nullable}
-               | "real" | "double" -> FixedT {nullable}
-               | "timestamp without time zone" -> StringT {nullable}
-               | s -> failwith (Printf.sprintf "Unknown dtype %s" s)
-             in
-             Name.create ~relation:r_name ~type_ fname )
-    in
-    Abslayout0.{r_name; r_schema}
+                 let is_int = Int.of_string max_scale = 0 in
+                 let fits_in_an_int63 =
+                   try
+                     Int.of_string min |> ignore ;
+                     Int.of_string max |> ignore ;
+                     true
+                   with Failure _ -> false
+                 in
+                 if is_int then
+                   if fits_in_an_int63 then IntT {nullable} else StringT {nullable}
+                 else FixedT {nullable}
+             | "real" | "double" -> FixedT {nullable}
+             | "timestamp without time zone" -> StringT {nullable}
+             | s -> failwith (Printf.sprintf "Unknown dtype %s" s)
+           in
+           Name.create ~type_ fname )
+    |> Option.some
   in
-  let relation_memo =
-    Memo.general (fun (conn, rname) -> relation_main conn rname)
-  in
-  fun conn rname -> relation_memo (conn, rname)
+  Abslayout0.{r_name; r_schema}
+
+let relation_memo = Memo.general (fun (conn, rname) -> relation conn rname)
+
+let relation conn rname = relation_memo (conn, rname)
 
 let all_relations conn =
   let names =
@@ -192,7 +184,7 @@ let exec_cursor_exn =
       sprintf "begin transaction; declare %s cursor for %s;" cur query
     in
     let fetch_query = sprintf "fetch %d from %s;" batch_size cur in
-    exec db declare_query |> command_ok ;
+    exec db declare_query |> command_ok_exn ;
     let db_idx = ref 1 in
     let seq =
       Gen.unfold
@@ -218,8 +210,7 @@ let exec_cursor_exn =
     seq
 
 let check db sql =
-  let name = Fresh.name db.fresh "check%d" in
-  let r = (db.conn)#prepare name sql in
-  match r#status with
-  | Command_ok -> Or_error.return ()
-  | _ -> Or_error.error "Unexpected query response." r#error [%sexp_of: string]
+  let open Or_error.Let_syntax in
+  let name = Fresh.name Global.fresh "check%d" in
+  let%bind () = command_ok ((db.conn)#prepare name sql) in
+  command_ok ((db.conn)#exec (sprintf "deallocate %s" name))

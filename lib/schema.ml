@@ -1,7 +1,9 @@
-open Core
+open! Core
 open Abslayout0
 
-let rename s n = List.map ~f:(Name.copy ~relation:(Some n)) s
+let scoped s = List.map ~f:(Name.scoped s)
+
+let unscoped = List.map ~f:Name.unscoped
 
 let to_name = function
   | Name n -> Some n
@@ -21,7 +23,8 @@ let rec to_type = function
    |Unop (Not, _) ->
       BoolT {nullable= false}
   | String _ -> StringT {nullable= false}
-  | Null -> NullT
+  | Null None -> failwith "Untyped null."
+  | Null (Some t) -> t
   | Binop ((Add | Sub | Mul | Div | Mod), p1, p2) ->
       let s1 = to_type p1 in
       let s2 = to_type p2 in
@@ -45,17 +48,24 @@ and schema_exn r =
         let t = to_type p in
         match to_name p with
         | Some n -> Name.copy ~type_:(Some t) n
-        | None -> Name.create "__unnamed__" ~type_:t )
+        | None ->
+            Logs.err (fun m ->
+                m "Tried to get schema of unnamed predicate %a." pp_pred p ) ;
+            Name.create ~type_:t (Fresh.name Global.fresh "x%d") )
   in
   match r.node with
-  | Select (x, _) | GroupBy (x, _, _) -> of_preds x
-  | Filter (_, r) | Dedup r | AList (_, r) | OrderBy {rel= r; _} -> schema_exn r
-  | Join {r1; r2; _} | AOrderedIdx (r1, r2, _) | AHashIdx (r1, r2, _) ->
-      schema_exn r1 @ schema_exn r2
+  | AList (_, r) | DepJoin {d_rhs= r; _} -> schema_exn r |> unscoped
+  | Select (x, _) | GroupBy (x, _, _) -> of_preds x |> unscoped
+  | Filter (_, r) | Dedup r | OrderBy {rel= r; _} -> schema_exn r |> unscoped
+  | Join {r1; r2; _} -> schema_exn r1 @ schema_exn r2 |> unscoped
+  | AOrderedIdx (r1, r2, _) | AHashIdx (r1, r2, _) ->
+      schema_exn r1 @ schema_exn r2 |> unscoped
   | AEmpty -> []
-  | AScalar e -> of_preds [e]
-  | ATuple (rs, (Cross | Zip)) -> List.concat_map ~f:schema_exn rs
+  | AScalar e -> of_preds [e] |> unscoped
+  | ATuple (rs, (Cross | Zip)) -> List.concat_map ~f:schema_exn rs |> unscoped
   | ATuple ([], Concat) -> []
-  | ATuple (r :: _, Concat) -> schema_exn r
-  | As (n, r) -> rename (schema_exn r) n
-  | Relation {r_schema; _} -> r_schema
+  | ATuple (r :: _, Concat) -> schema_exn r |> unscoped
+  | As (n, r) -> scoped n (schema_exn r)
+  | Relation {r_schema= Some schema; _} -> schema |> unscoped
+  | Relation {r_name; r_schema= None; _} ->
+      Error.(create "Missing schema annotation." r_name [%sexp_of: string] |> raise)

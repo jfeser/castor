@@ -1,7 +1,4 @@
-open Base
-open Core
-open Stdio
-open Printf
+open! Core
 open Collections
 open Llvm_analysis
 open Llvm_target
@@ -108,7 +105,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
   [@@deriving sexp_of]
 
   module SymbolTable = struct
-    type t = var Base.Hashtbl.M(String).t list [@@deriving sexp_of]
+    type t = var Hashtbl.M(String).t list [@@deriving sexp_of]
 
     let lookup ?params maps key =
       let params =
@@ -118,8 +115,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
           match Hashtbl.find m "params" with
           | Some (Local v) -> v
           | Some (Param _) ->
-              Error.create "Params mistagged." m
-                [%sexp_of: var Base.Hashtbl.M(String).t]
+              Error.create "Params mistagged." m [%sexp_of: var Hashtbl.M(String).t]
               |> Error.raise
           | None ->
               Error.create "Params not found." (Hashtbl.keys m)

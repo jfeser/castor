@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
+
+#include "stdlib.h"
 #include "date.h"
 
 long strpos(char* s1, long l1, char* s2, long l2) {

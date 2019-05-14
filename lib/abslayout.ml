@@ -1,6 +1,5 @@
-open Base
+open! Core
 open Collections
-module Format = Caml.Format
 include Abslayout0
 
 let strip_meta =
@@ -13,9 +12,57 @@ let strip_meta =
   in
   visitor#visit_t ()
 
+let strip_scope r = match r.node with As (_, r) -> r | _ -> r
+
+let scopes r =
+  let visitor =
+    object (self : 'a)
+      inherit [_] reduce
+
+      inherit [_] Util.list_monoid
+
+      method! visit_As () n r = self#plus [n] (self#visit_t () r)
+    end
+  in
+  visitor#visit_t () r
+
+let alpha_scopes r =
+  let map =
+    scopes r
+    |> List.dedup_and_sort ~compare:[%compare: string]
+    |> List.map ~f:(fun s -> (s, Fresh.name Global.fresh "s%d"))
+    |> Map.of_alist_exn (module String)
+  in
+  let visitor =
+    object (self : 'a)
+      inherit [_] endo
+
+      method! visit_Name () p n =
+        let open Option.Let_syntax in
+        let name =
+          let%bind s = Name.rel n in
+          let%map s' = Map.find map s in
+          Name (Name.copy ~relation:(Some s') n)
+        in
+        Option.value name ~default:p
+
+      method! visit_As () _ s r = As (Map.find_exn map s, self#visit_t () r)
+    end
+  in
+  visitor#visit_t () r
+
 let wrap x = {node= x; meta= Meta.empty ()}
 
 let select a b = wrap (Select (a, strip_meta b))
+
+let has_scope_overlap rs ss =
+  List.concat_map rs ~f:scopes @ ss |> List.contains_dup ~compare:[%compare: string]
+
+let dep_join a b c =
+  let a, c =
+    if has_scope_overlap [a; c] [b] then (alpha_scopes a, alpha_scopes c) else (a, c)
+  in
+  wrap (DepJoin {d_lhs= strip_meta a; d_alias= b; d_rhs= strip_meta c})
 
 let join a b c = wrap (Join {pred= a; r1= strip_meta b; r2= strip_meta c})
 
@@ -33,15 +80,32 @@ let empty = wrap AEmpty
 
 let scalar a = wrap (AScalar a)
 
-let list a b = wrap (AList (strip_meta a, strip_meta b))
+let as_ a b = wrap (As (a, strip_meta b))
+
+let list a b c =
+  let a = strip_scope a in
+  let a, c =
+    if has_scope_overlap [a; c] [b] then (alpha_scopes a, alpha_scopes c) else (a, c)
+  in
+  wrap (AList (strip_meta (as_ b a), strip_meta c))
 
 let tuple a b = wrap (ATuple (List.map ~f:strip_meta a, b))
 
-let hash_idx a b c = wrap (AHashIdx (strip_meta a, strip_meta b, c))
+let hash_idx a b c d =
+  let a = strip_scope a in
+  let a, c =
+    if has_scope_overlap [a; c] [b] then (alpha_scopes a, alpha_scopes c) else (a, c)
+  in
+  wrap (AHashIdx (strip_meta (as_ b a), strip_meta c, d))
 
-let ordered_idx a b c = wrap (AOrderedIdx (strip_meta a, strip_meta b, c))
+let ordered_idx a b c d =
+  let a = strip_scope a in
+  let a, c =
+    if has_scope_overlap [a; c] [b] then (alpha_scopes a, alpha_scopes c) else (a, c)
+  in
+  wrap (AOrderedIdx (strip_meta (as_ b a), strip_meta c, d))
 
-let as_ a b = wrap (As (a, strip_meta b))
+let scope r = match r.node with As (n, _) -> Some n | _ -> None
 
 let rec and_ = function
   | [] -> Bool true
@@ -54,6 +118,7 @@ let name r =
   match r.node with
   | Select _ -> "select"
   | Filter _ -> "filter"
+  | DepJoin _ -> "depjoin"
   | Join _ -> "join"
   | GroupBy _ -> "group_by"
   | Dedup _ -> "dedup"
@@ -67,131 +132,10 @@ let name r =
   | AOrderedIdx _ -> "ordered_idx"
   | As _ -> "as"
 
-let pp_list ?(bracket = ("[", "]")) pp fmt ls =
-  let openb, closeb = bracket in
-  let open Format in
-  pp_open_hvbox fmt 1 ;
-  fprintf fmt "%s" openb ;
-  let rec loop = function
-    | [] -> ()
-    | [x] -> fprintf fmt "%a" pp x
-    | x :: xs -> fprintf fmt "%a,@ " pp x ; loop xs
-  in
-  loop ls ; pp_close_box fmt () ; fprintf fmt "%s" closeb
-
-let op_to_str = function
-  | Eq -> `Infix "="
-  | Lt -> `Infix "<"
-  | Le -> `Infix "<="
-  | Gt -> `Infix ">"
-  | Ge -> `Infix ">="
-  | And -> `Infix "&&"
-  | Or -> `Infix "||"
-  | Add -> `Infix "+"
-  | Sub -> `Infix "-"
-  | Mul -> `Infix "*"
-  | Div -> `Infix "/"
-  | Mod -> `Infix "%"
-  | Strpos -> `Prefix "strpos"
-
-let unop_to_str = function
-  | Not -> "not"
-  | Day -> "day"
-  | Month -> "month"
-  | Year -> "year"
-  | Strlen -> "strlen"
-  | ExtractY -> "to_year"
-  | ExtractM -> "to_mon"
-  | ExtractD -> "to_day"
-
-let pp_kind fmt =
-  Format.(
-    function
-    | Cross -> fprintf fmt "cross"
-    | Zip -> fprintf fmt "zip"
-    | Concat -> fprintf fmt "concat")
-
-let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
-  let rec pp_key fmt = function
-    | [] -> failwith "Unexpected empty key."
-    | [p] -> pp_pred fmt p
-    | ps -> pp_list ~bracket:("(", ")") pp_pred fmt ps
-  and pp_pred fmt =
-    let open Format in
-    function
-    | As_pred (p, n) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp_pred p n
-    | Null -> fprintf fmt "null"
-    | Int x -> if x >= 0 then fprintf fmt "%d" x else fprintf fmt "(0 - %d)" (-x)
-    | Fixed x -> fprintf fmt "%s" (Fixed_point.to_string x)
-    | Date x -> fprintf fmt "date(\"%s\")" (Date.to_string x)
-    | Unop (op, x) -> fprintf fmt "%s(%a)" (unop_to_str op) pp_pred x
-    | Bool x -> fprintf fmt "%B" x
-    | String x -> fprintf fmt "%S" x
-    | Name n -> pp_name fmt n
-    | Binop (op, p1, p2) -> (
-      match op_to_str op with
-      | `Infix str -> fprintf fmt "@[<hov>(%a@ %s@ %a)@]" pp_pred p1 str pp_pred p2
-      | `Prefix str -> fprintf fmt "@[<hov>%s(%a,@ %a)@]" str pp_pred p1 pp_pred p2
-      )
-    | Count -> fprintf fmt "count()"
-    | Sum n -> fprintf fmt "sum(%a)" pp_pred n
-    | Avg n -> fprintf fmt "avg(%a)" pp_pred n
-    | Min n -> fprintf fmt "min(%a)" pp_pred n
-    | Max n -> fprintf fmt "max(%a)" pp_pred n
-    | If (p1, p2, p3) ->
-        fprintf fmt "(if %a then %a else %a)" pp_pred p1 pp_pred p2 pp_pred p3
-    | First r -> fprintf fmt "(%a)" pp r
-    | Exists r -> fprintf fmt "@[<hv 2>exists(%a)@]" pp r
-    | Substring (p1, p2, p3) ->
-        fprintf fmt "@[<hov>substr(%a,@ %a,@ %a)@]" pp_pred p1 pp_pred p2 pp_pred p3
-  and pp_order fmt (p, o) =
-    let open Format in
-    match o with
-    | Asc -> fprintf fmt "@[<hov>%a@]" pp_pred p
-    | Desc -> fprintf fmt "@[<hov>%a@ desc@]" pp_pred p
-  and pp fmt {node; meta} =
-    let open Format in
-    fprintf fmt "@[<hv 2>" ;
-    ( match node with
-    | Select (ps, r) -> fprintf fmt "select(%a,@ %a)" (pp_list pp_pred) ps pp r
-    | Filter (p, r) -> fprintf fmt "filter(%a,@ %a)" pp_pred p pp r
-    | Join {pred; r1; r2} ->
-        fprintf fmt "join(%a,@ %a,@ %a)" pp_pred pred pp r1 pp r2
-    | GroupBy (a, k, r) ->
-        fprintf fmt "groupby(%a,@ %a,@ %a)" (pp_list pp_pred) a (pp_list pp_name) k
-          pp r
-    | OrderBy {key; rel} ->
-        fprintf fmt "orderby(%a,@ %a)" (pp_list pp_order) key pp rel
-    | Dedup r -> fprintf fmt "dedup(@,%a)" pp r
-    | Relation {r_name; _} -> fprintf fmt "%s" r_name
-    | AEmpty -> fprintf fmt "aempty"
-    | AScalar p -> fprintf fmt "ascalar(%a)" pp_pred p
-    | AList (r1, r2) -> fprintf fmt "alist(%a,@ %a)" pp r1 pp r2
-    | ATuple (rs, kind) ->
-        fprintf fmt "atuple(%a,@ %a)" (pp_list pp) rs pp_kind kind
-    | AHashIdx (r1, r2, {lookup; _}) ->
-        fprintf fmt "ahashidx(%a,@ %a,@ %a)" pp r1 pp r2 pp_key lookup
-    | AOrderedIdx (r1, r2, {lookup_low; lookup_high; _}) ->
-        fprintf fmt "aorderedidx(%a,@ %a,@ %a,@ %a)" pp r1 pp r2 pp_pred lookup_low
-          pp_pred lookup_high
-    | As (n, r) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp r n ) ;
-    Option.iter pp_meta ~f:(fun ppm -> fprintf fmt "#@[<hv 2>%a@]" ppm !meta) ;
-    fprintf fmt "@]"
-  in
-  (pp, pp_pred)
-
-let pp, pp_pred = mk_pp ()
-
-module Ctx = struct
-  module T = struct
-    type t = Value.t Map.M(Name).t [@@deriving compare, sexp]
-  end
-
-  include T
-  include Comparable.Make (T)
-
-  let empty = Map.empty (module Name)
-end
+let scope_exn r =
+  Option.value_exn
+    ~error:(Error.createf "Expected a scope on %a." pp_small_str r)
+    (scope r)
 
 let of_lexbuf_exn lexbuf =
   try Ralgebra_parser.ralgebra_eof Ralgebra_lexer.token lexbuf
@@ -224,7 +168,7 @@ let names_visitor =
     method! visit_pred () p =
       match p with
       | Exists _ | First _ -> self#zero
-      | Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null | Unop _
+      | Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null _ | Unop _
        |Binop _ | As_pred _ | Count | Sum _ | Avg _ | Min _ | Max _
        |If (_, _, _)
        |Substring (_, _, _) ->
@@ -240,35 +184,9 @@ let subst ctx =
 
       method! visit_Name _ this v =
         match Map.find ctx v with Some x -> x | None -> this
-
-      method visit_name _ x = x
     end
   in
   v#visit_t ()
-
-let rec annotate_align r =
-  match r.node with
-  | Relation _ | AEmpty | AScalar _ -> Meta.(set_m r align 1)
-  | As (_, r')
-   |Select (_, r')
-   |Filter (_, r')
-   |AList (_, r')
-   |AOrderedIdx (_, r', _)
-   |OrderBy {rel= r'; _}
-   |Dedup r' ->
-      annotate_align r' ;
-      Meta.(set_m r align Meta.(find_exn r' align))
-  | Join _ | GroupBy (_, _, _) -> failwith ""
-  | ATuple (rs, _) ->
-      List.iter rs ~f:annotate_align ;
-      let align =
-        List.map rs ~f:(fun r' -> Meta.(find_exn r' align))
-        |> List.fold_left ~init:1 ~f:Int.max
-      in
-      Meta.set_m r Meta.align align
-  | AHashIdx (_, r', _) ->
-      annotate_align r' ;
-      Meta.(set_m r align (Int.max Meta.(find_exn r' align) 4))
 
 let rec pred_free p =
   let singleton = Set.singleton (module Name) in
@@ -285,7 +203,7 @@ let rec pred_free p =
       method! visit_pred () p =
         match p with
         | Exists r | First r -> self#visit_subquery r
-        | Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null | Unop _
+        | Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null _ | Unop _
          |Binop _ | As_pred _ | Count | Sum _ | Avg _ | Min _ | Max _
          |If (_, _, _)
          |Substring (_, _, _) ->
@@ -299,31 +217,29 @@ and free r =
   let of_list = Set.of_list (module Name) in
   let union_list = Set.union_list (module Name) in
   let exposed r = of_list (schema_exn r) in
+  let scope r s = Set.map (module Name) s ~f:(Name.copy ~relation:(Some r)) in
   let free_set =
     match r.node with
     | Relation _ | AEmpty -> empty
     | AScalar p -> pred_free p
     | Select (ps, r') ->
-        Set.union (free r')
-          (Set.diff (List.map ps ~f:pred_free |> union_list) (exposed r'))
+        Set.O.(free r' || ((List.map ps ~f:pred_free |> union_list) - exposed r'))
     | Filter (p, r') -> Set.union (free r') (Set.diff (pred_free p) (exposed r'))
     | Dedup r' -> free r'
+    | DepJoin {d_lhs; d_alias; d_rhs} ->
+        Set.O.(free d_lhs || (free d_rhs - (exposed d_lhs |> scope d_alias)))
     | Join {pred; r1; r2} ->
-        union_list
-          [ free r1
-          ; free r2
-          ; Set.diff (pred_free pred) (Set.union (exposed r1) (exposed r2)) ]
+        Set.O.(free r1 || free r2 || (pred_free pred - (exposed r1 || exposed r2)))
     | GroupBy (ps, key, r') ->
-        Set.union (free r')
-          (Set.diff
-             (Set.union (List.map ps ~f:pred_free |> union_list) (of_list key))
-             (exposed r'))
+        Set.O.(
+          free r'
+          || ((List.map ps ~f:pred_free |> union_list || of_list key) - exposed r'))
     | OrderBy {key; rel} ->
-        Set.union (free rel)
-          (Set.diff
-             (List.map key ~f:(fun (p, _) -> pred_free p) |> union_list)
-             (exposed rel))
-    | AList (r', r'') -> Set.union (free r') (Set.diff (free r'') (exposed r'))
+        Set.O.(
+          free rel
+          || (List.map key ~f:(fun (p, _) -> pred_free p) |> union_list)
+             - exposed rel)
+    | AList (r', r'') -> Set.O.(free r' || (free r'' - exposed r'))
     | AHashIdx (r', r'', {lookup; _}) ->
         union_list
           [ free r'
@@ -421,10 +337,10 @@ module Pred = struct
       | Name of Name.t
       | Int of int
       | Fixed of Fixed_point.t
-      | Date of Core.Date.t
+      | Date of Date.t
       | Bool of bool
       | String of string
-      | Null
+      | Null of Type.PrimType.t option
       | Unop of (unop * pred)
       | Binop of (binop * pred * pred)
       | As_pred of (pred * string)
@@ -452,7 +368,7 @@ module Pred = struct
     | [p] -> p
     | p :: ps -> Binop (And, p, conjoin ps)
 
-  let collect_aggs ~fresh p =
+  let collect_aggs p =
     let visitor =
       object (self : 'a)
         inherit [_] Abslayout0.mapreduce
@@ -460,7 +376,7 @@ module Pred = struct
         inherit [_] Util.list_monoid
 
         method private visit_Agg kind p =
-          let n = kind ^ Fresh.name fresh "%d" in
+          let n = kind ^ Fresh.name Global.fresh "%d" in
           (Name (Name.create n), [(n, p)])
 
         method! visit_Sum () p = self#visit_Agg "sum" (Sum p)
@@ -484,6 +400,8 @@ module Pred = struct
     let module M = struct
       module T = struct
         type t = pred [@@deriving compare, sexp_of]
+
+        let t_of_sexp _ = failwith "Unimplemented."
       end
 
       include T
@@ -511,7 +429,7 @@ module Pred = struct
 
         method! visit_String () x = singleton (String x)
 
-        method! visit_Null () = singleton Null
+        method! visit_Null () x = singleton (Null x)
 
         method! visit_As_pred () args =
           let p, _ = args in
@@ -616,11 +534,30 @@ module Pred = struct
 
         method! visit_Name _ this v =
           match Map.find ctx v with Some x -> x | None -> this
-
-        method visit_name _ x = x
       end
     in
     v#visit_pred ()
+
+  let scoped names scope p =
+    let ctx =
+      List.map names ~f:(fun n -> (n, Name (Name.scoped scope n)))
+      |> Map.of_alist_exn (module Name)
+    in
+    subst ctx p
+
+  let unscoped scope p =
+    let v =
+      object
+        inherit [_] endo
+
+        method! visit_Name _ this n =
+          match Name.rel n with
+          | Some s ->
+              if String.(s = scope) then Name (Name.copy ~relation:None n) else this
+          | None -> this
+      end
+    in
+    v#visit_pred () p
 
   (** Return the set of relations which have fields in the tuple produced by
      this expression. *)
@@ -643,6 +580,15 @@ module Pred = struct
   let to_type = Schema.to_type
 
   let to_name = Schema.to_name
+
+  (** Ensure that a predicate is decorated with an alias. If the predicate is
+     nameless, then the alias will be fresh. *)
+  let ensure_alias = function
+    | As_pred _ as p -> p
+    | p -> (
+      match to_name p with
+      | Some n -> As_pred (p, Name.name n)
+      | None -> As_pred (p, Fresh.name Global.fresh "a%d") )
 end
 
 let annotate_eq r =
@@ -788,7 +734,7 @@ let annotate_orders r =
                    | p' when [%compare.equal: pred] p p' -> Some (p', d)
                    | _ -> None ) )
       | Filter (_, r) | AHashIdx (_, r, _) -> annotate_orders r
-      | Join {r1; r2; _} ->
+      | DepJoin {d_lhs= r1; d_rhs= r2; _} | Join {r1; r2; _} ->
           annotate_orders r1 |> ignore ;
           annotate_orders r2 |> ignore ;
           []
@@ -832,3 +778,120 @@ let annotate_orders r =
 let order_of r =
   annotate_orders r ;
   Meta.(find_exn r order)
+
+let annotate_key_layouts r =
+  let key_layout schema =
+    match List.map schema ~f:(fun n -> scalar (Name n)) with
+    | [] -> failwith "empty schema"
+    | [x] -> x
+    | xs -> tuple xs Cross
+  in
+  let annotator =
+    object (self : 'a)
+      inherit [_] map
+
+      method! visit_AHashIdx () ((x, y, ({hi_key_layout; _} as m)) as r) =
+        let x = self#visit_t () x in
+        let y = self#visit_t () y in
+        match hi_key_layout with
+        | Some _ -> AHashIdx r
+        | None ->
+            AHashIdx (x, y, {m with hi_key_layout= Some (key_layout (schema_exn x))})
+
+      method! visit_AOrderedIdx () ((x, y, ({oi_key_layout; _} as m)) as r) =
+        let x = self#visit_t () x in
+        let y = self#visit_t () y in
+        match oi_key_layout with
+        | Some _ -> AOrderedIdx r
+        | None ->
+            AOrderedIdx
+              (x, y, {m with oi_key_layout= Some (key_layout (schema_exn x))})
+    end
+  in
+  annotator#visit_t () r
+
+let strip_unused_as =
+  let visitor =
+    object (self)
+      inherit [_] endo
+
+      method skip_as r =
+        match r.node with
+        | As (n, r) -> as_ n (self#visit_t () r)
+        | _ -> self#visit_t () r
+
+      method! visit_AList () _ (rk, rv) =
+        let rk = self#skip_as rk in
+        let rv = self#visit_t () rv in
+        AList (rk, rv)
+
+      method! visit_AHashIdx () _ (rk, rv, m) =
+        let rk = self#skip_as rk in
+        let rv = self#visit_t () rv in
+        let m = self#visit_hash_idx () m in
+        AHashIdx (rk, rv, m)
+
+      method! visit_AOrderedIdx () _ (rk, rv, m) =
+        let rk = self#skip_as rk in
+        let rv = self#visit_t () rv in
+        let m = self#visit_ordered_idx () m in
+        AOrderedIdx (rk, rv, m)
+
+      method! visit_As () _ _ r =
+        Logs.warn (fun m -> m "Removing misplaced as: %a" pp_small r) ;
+        r.node
+    end
+  in
+  visitor#visit_t ()
+
+let list_to_depjoin rk rv =
+  let scope = scope_exn rk in
+  dep_join (strip_scope rk) scope rv
+
+let hash_idx_to_depjoin rk rv {lookup; _} =
+  let scope = scope_exn rk in
+  let rk_schema = schema_exn rk in
+  let rv_schema = schema_exn rv in
+  let key_pred =
+    List.map2_exn rk_schema lookup ~f:(fun p1 p2 -> Binop (Eq, Name p1, p2))
+    |> Pred.conjoin
+  in
+  let slist = rk_schema @ rv_schema |> List.map ~f:(fun n -> Name n) in
+  dep_join (strip_scope rk) scope (select slist (filter key_pred rv))
+
+let ordered_idx_to_depjoin rk rv {lookup_low; lookup_high; _} =
+  let scope = scope_exn rk in
+  let rk_schema = schema_exn rk in
+  let rv_schema = schema_exn rv in
+  let key_pred =
+    let rk_schema = schema_exn rk in
+    match rk_schema with
+    | [n] ->
+        Pred.conjoin
+          [Binop (Lt, lookup_low, Name n); Binop (Lt, Name n, lookup_high)]
+    | _ -> failwith "Unexpected schema."
+  in
+  let slist = rk_schema @ rv_schema |> List.map ~f:(fun n -> Name n) in
+  dep_join (strip_scope rk) scope (select slist (filter key_pred rv))
+
+let ensure_alias r =
+  let visitor =
+    object (self)
+      inherit [_] endo
+
+      method! visit_Select () _ (ps, r) =
+        Select
+          ( List.map ps ~f:(fun p -> p |> self#visit_pred () |> Pred.ensure_alias)
+          , self#visit_t () r )
+
+      method! visit_GroupBy () _ ps k r =
+        GroupBy
+          ( List.map ps ~f:(fun p -> p |> self#visit_pred () |> Pred.ensure_alias)
+          , k
+          , self#visit_t () r )
+
+      method! visit_AScalar () _ p =
+        AScalar (self#visit_pred () p |> Pred.ensure_alias)
+    end
+  in
+  visitor#visit_t () r

@@ -1,5 +1,4 @@
-open Core
-open Stdio
+open! Core
 
 let main kind =
   let llvm_root =

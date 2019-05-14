@@ -1,7 +1,5 @@
-open Core
-open Base
+open! Core
 open Collections
-module Format = Caml.Format
 module A = Abslayout
 include Implang0
 
@@ -52,7 +50,7 @@ let rec pp_expr : Format.formatter -> expr -> unit =
   fun fmt -> function
     | Null -> fprintf fmt "null"
     | Int x -> Int.pp fmt x
-    | Date x -> Core.Date.pp fmt x
+    | Date x -> Date.pp fmt x
     | Fixed x -> Fixed_point.pp fmt x
     | Bool x -> pp_bool fmt x
     | String x -> fprintf fmt "\"%s\"" (String.escaped x)
@@ -280,13 +278,12 @@ module Builder = struct
           (** The type context is separate from the locals because it also includes
        global variables. *)
     ; type_ctx: Type.PrimType.t Hashtbl.M(String).t
-    ; body: prog ref
-    ; fresh: Fresh.t sexp_opaque }
+    ; body: prog ref }
   [@@deriving sexp]
 
   let type_of e b = type_of b.type_ctx e
 
-  let create ~ctx ~name ~ret ~fresh =
+  let create ~ctx ~name ~ret =
     let args = Ctx0.make_caller_args ctx in
     let type_ctx =
       Map.to_alist ctx
@@ -304,7 +301,7 @@ module Builder = struct
       | `Ok l -> l
       | `Duplicate_key _ -> fail (Error.of_string "Duplicate argument.")
     in
-    {name; args; ret; locals; body= ref []; type_ctx; fresh}
+    {name; args; ret; locals; body= ref []; type_ctx}
 
   (** Create a function builder with an empty body and a copy of the locals
       table. *)
@@ -371,7 +368,7 @@ module Builder = struct
     b.body := ite :: !(b.body)
 
   let build_var ?persistent n t b =
-    let n = n ^ Fresh.name b.fresh "%d" in
+    let n = n ^ Fresh.name Global.fresh "%d" in
     build_var ?persistent n t b
 
   let build_defn ?persistent v e b =

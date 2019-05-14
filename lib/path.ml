@@ -1,4 +1,4 @@
-open Core
+open! Core
 open Collections
 open Abslayout
 
@@ -30,29 +30,38 @@ let rec set_exn p r s =
   | [], _ -> s
   | 0 :: p', Select (ps, r') -> select ps (set_exn p' r' s)
   | 0 :: p', Filter (p, r') -> filter p (set_exn p' r' s)
+  | 0 :: p', DepJoin {d_lhs; d_rhs; d_alias} ->
+      dep_join (set_exn p' d_lhs s) d_alias d_rhs
+  | 1 :: p', DepJoin {d_lhs; d_rhs; d_alias} ->
+      dep_join d_lhs d_alias (set_exn p' d_rhs s)
   | 0 :: p', Join {pred; r1; r2} -> join pred (set_exn p' r1 s) r2
   | 1 :: p', Join {pred; r1; r2} -> join pred r1 (set_exn p' r2 s)
   | 0 :: p', GroupBy (ps, ns, r') -> group_by ps ns (set_exn p' r' s)
   | 0 :: p', OrderBy {key; rel= r'} -> order_by key (set_exn p' r' s)
   | 0 :: p', Dedup r' -> dedup (set_exn p' r' s)
-  | 0 :: p', AList (r', r2) -> list (set_exn p' r' s) r2
-  | 1 :: p', AList (r1, r') -> list r1 (set_exn p' r' s)
+  | 0 :: p', AList (r', r2) ->
+      let rk = set_exn p' r' s in
+      list rk (scope_exn rk) r2
+  | 1 :: p', AList (r1, r') -> list r1 (scope_exn r1) (set_exn p' r' s)
   | _, ATuple ([], _) -> failwith "Empty tuple."
   | i :: p', ATuple (rs, t) ->
       assert (i >= 0 && i < List.length rs) ;
       tuple
         (List.mapi rs ~f:(fun i' r' -> if i = i' then set_exn p' r' s else r'))
         t
-  | 0 :: p', AHashIdx (r', r2, h) -> hash_idx (set_exn p' r' s) r2 h
-  | 1 :: p', AHashIdx (r1, r', h) -> hash_idx r1 (set_exn p' r' s) h
-  | 0 :: p', AOrderedIdx (r', r2, h) -> ordered_idx (set_exn p' r' s) r2 h
-  | 1 :: p', AOrderedIdx (r1, r', h) -> ordered_idx r1 (set_exn p' r' s) h
+  | 0 :: p', AHashIdx (r', r2, h) ->
+      let rk = set_exn p' r' s in
+      hash_idx rk (scope_exn rk) r2 h
+  | 1 :: p', AHashIdx (r1, r', h) -> hash_idx r1 (scope_exn r1) (set_exn p' r' s) h
+  | 0 :: p', AOrderedIdx (r', r2, h) ->
+      let rk = set_exn p' r' s in
+      ordered_idx rk (scope_exn rk) r2 h
+  | 1 :: p', AOrderedIdx (r1, r', h) ->
+      ordered_idx r1 (scope_exn r1) (set_exn p' r' s) h
   | 0 :: p', As (n, r') -> as_ n (set_exn p' r' s)
-  | p, (AEmpty | AScalar _ | Relation _) ->
-      Error.create "Invalid path. No children." (p, r) [%sexp_of: t * Abslayout.t]
+  | p, _ ->
+      Error.create "Invalid path in set." (p, r) [%sexp_of: t * Abslayout.t]
       |> Error.raise
-  | _ :: _, _ ->
-      Error.create "Invalid path. Invalid index." p [%sexp_of: t] |> Error.raise
 
 let rec get_exn p r =
   match (p, r.Abslayout.node) with
@@ -65,12 +74,14 @@ let rec get_exn p r =
       | OrderBy {rel= r'; _}
       | Dedup r'
       | As (_, r')
+      | DepJoin {d_lhs= r'; _}
       | Join {r1= r'; _}
       | AList (r', _)
       | AHashIdx (r', _, _)
       | AOrderedIdx (r', _, _) ) )
    |( 1 :: p'
-    , ( Join {r2= r'; _}
+    , ( DepJoin {d_rhs= r'; _}
+      | Join {r2= r'; _}
       | AList (_, r')
       | AHashIdx (_, r', _)
       | AOrderedIdx (_, r', _) ) ) ->
@@ -78,11 +89,19 @@ let rec get_exn p r =
   | i :: p', ATuple (rs, _) ->
       assert (i >= 0 && i < List.length rs) ;
       get_exn p' (List.nth_exn rs i)
-  | p, (AEmpty | AScalar _ | Relation _) ->
-      Error.create "Invalid path. No children." (p, r) [%sexp_of: t * Abslayout.t]
-      |> Error.raise
-  | _ ->
-      Error.create "Invalid path: Bad index." (p, r) [%sexp_of: t * Abslayout.t]
+  | _, (AEmpty | AScalar _ | Relation _)
+   |_, Select _
+   |_, Filter _
+   |_, DepJoin _
+   |_, Join _
+   |_, GroupBy (_, _, _)
+   |_, OrderBy _
+   |_, Dedup _
+   |_, AList _
+   |_, AHashIdx _
+   |_, AOrderedIdx _
+   |_, As (_, _) ->
+      Error.create "Invalid path in get." (p, r) [%sexp_of: t * Abslayout.t]
       |> Error.raise
 
 let all r =
@@ -104,7 +123,8 @@ let all r =
             | Join {r1; r2; _}
              |AList (r1, r2)
              |AHashIdx (r1, r2, _)
-             |AOrderedIdx (r1, r2, _) ->
+             |AOrderedIdx (r1, r2, _)
+             |DepJoin {d_lhs= r1; d_rhs= r2; _} ->
                 let q = Fqueue.enqueue q (r1, 0 :: p) in
                 Fqueue.enqueue q (r2, 1 :: p)
             | ATuple (rs, _) ->
@@ -131,12 +151,14 @@ let rec is_run_time r p =
       | Dedup r'
       | As (_, r')
       | Join {r1= r'; _}
-      | ATuple (r' :: _, _) ) )
+      | ATuple (r' :: _, _)
+      | DepJoin {d_lhs= r'; _} ) )
    |( 1 :: p'
     , ( Join {r2= r'; _}
       | AList (_, r')
       | AHashIdx (_, r', _)
-      | AOrderedIdx (_, r', _) ) ) ->
+      | AOrderedIdx (_, r', _)
+      | DepJoin {d_rhs= r'; _} ) ) ->
       is_run_time r' p'
   | 0 :: _, (AList _ | AHashIdx _ | AOrderedIdx _) -> false
   | i :: p', ATuple (rs, _) when i >= 0 && i < List.length rs ->

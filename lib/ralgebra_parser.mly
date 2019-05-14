@@ -1,4 +1,5 @@
 %{
+    open! Core
     module A = Abslayout0
     open Parser_utils
 %}
@@ -13,10 +14,9 @@
 %token <Type0.PrimType.t> PRIMTYPE
 %token <Abslayout0.binop> EQ LT GT LE GE AND OR ADD SUB MUL DIV MOD STRPOS
 %token <Abslayout0.unop> MONTH DAY YEAR NOT STRLEN EXTRACTY EXTRACTM EXTRACTD
-%token AS JOIN SELECT DEDUP FILTER COUNT GROUPBY MIN MAX AVG SUM LPAREN RPAREN
-   LSBRAC RSBRAC COLON DOT COMMA EOF
-   AEMPTY ASCALAR ATUPLE ALIST AHASHIDX AORDEREDIDX NULL ORDERBY IF THEN
-   ELSE DATEKW EXISTS SUBSTRING
+%token AS DEPJOIN JOIN SELECT DEDUP FILTER COUNT GROUPBY MIN MAX AVG SUM LPAREN
+RPAREN LSBRAC RSBRAC COLON DOT COMMA EOF AEMPTY ASCALAR ATUPLE ALIST AHASHIDX
+AORDEREDIDX NULL ORDERBY IF THEN ELSE DATEKW EXISTS SUBSTRING
 
 %start <Abslayout0.t> ralgebra_eof
 %start <Abslayout0.pred> expr_eof
@@ -86,6 +86,9 @@ ralgebra_subquery:
   r = ralgebra;
   RPAREN { A.Filter (x, r) |> node $symbolstartpos $endpos }
 
+  | DEPJOIN; LPAREN; d_lhs = ralgebra; AS; d_alias = ID; COMMA; d_rhs = ralgebra; RPAREN
+    { A.DepJoin {d_lhs; d_alias; d_rhs} |> node $symbolstartpos $endpos }
+
 | JOIN; LPAREN;
   p = expr; COMMA;
   r1 = ralgebra; COMMA;
@@ -99,7 +102,7 @@ ralgebra_subquery:
 | ORDERBY; LPAREN;
   key = bracket_list(pair(expr, option(ORDER))); COMMA;
   rel = ralgebra;
-  RPAREN { A.OrderBy { key = List.map (fun (e, o) -> match o with
+  RPAREN { A.OrderBy { key = List.map ~f:(fun (e, o) -> match o with
                                                      | Some o -> e, o
                                                      | None -> e, A.Asc) key; rel }
            |> node $symbolstartpos $endpos }
@@ -147,11 +150,11 @@ e0_binop: x = STRPOS { x }
 
 value:
 | x = INT { A.Int x }
-| DATEKW; x = parens(STR); { A.Date (Core.Date.of_string x) }
+| DATEKW; x = parens(STR); { A.Date (Date.of_string x) }
 | x = FIXED { A.Fixed x }
 | x = BOOL { A.Bool x }
 | x = STR { A.String x }
-| NULL { A.Null }
+| NULL { A.Null None }
 
 e0:
 | x = value { x }

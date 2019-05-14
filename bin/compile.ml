@@ -1,4 +1,4 @@
-open Core
+open! Core
 open Castor
 open Collections
 
@@ -27,20 +27,19 @@ let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
   Logs.debug (fun m -> m "Codegen.") ;
   let ralgebra =
     let params = Set.of_list (module Name) params in
-    let r = Abslayout.of_channel_exn ch |> A.resolve ~params in
-    A.annotate_key_layouts r
+    A.load_string ~params (In_channel.input_all ch)
   in
-  A.annotate_subquery_types ralgebra ;
+  A.annotate_type ralgebra ;
   C.compile ~gprof ~params ?out_dir ralgebra |> ignore
 
 let reporter ppf =
   let report _ level ~over k msgf =
     let k _ = over () ; k () in
     let with_time h _ k ppf fmt =
-      let time = Core.Time.now () in
+      let time = Time.now () in
       Format.kfprintf k ppf
         ("%a [%s] @[" ^^ fmt ^^ "@]@.")
-        Logs.pp_header (level, h) (Core.Time.to_string time)
+        Logs.pp_header (level, h) (Time.to_string time)
     in
     msgf @@ fun ?header ?tags fmt -> with_time header tags k ppf fmt
   in

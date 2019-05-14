@@ -1,6 +1,4 @@
-open Core
-open Printf
-open Collections
+open! Core
 open Hashcons
 
 module Key = struct
@@ -134,6 +132,10 @@ let to_sql n =
   | Some r -> sprintf "%s.\"%s\"" r n.name.node.name
   | None -> sprintf "\"%s\"" n.name.node.name
 
+let scoped s n = copy ~relation:(Some s) n
+
+let unscoped n = copy ~relation:None n
+
 let pp fmt n =
   let open Format in
   let name = n.name.node.name in
@@ -176,7 +178,7 @@ let pp_with_stage_and_type fmt n =
   in
   fprintf fmt "%a@@%s:%s" pp n stage type_
 
-let fresh f fmt = create (Fresh.name f fmt)
+let fresh fmt = create (Fresh.name Global.fresh fmt)
 
 let create_table () =
   Bounded_int_table.create ~sexp_of_key:[%sexp_of: t] ~num_keys:!Table.max_tag

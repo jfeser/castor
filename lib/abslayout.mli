@@ -1,4 +1,4 @@
-open Base
+open! Core
 open Collections
 
 type binop = Abslayout0.binop =
@@ -37,10 +37,10 @@ type pred = Abslayout0.pred =
   | Name of Name.t
   | Int of int
   | Fixed of Fixed_point.t
-  | Date of Core.Date.t
+  | Date of Date.t
   | Bool of bool
   | String of string
-  | Null
+  | Null of Type.PrimType.t option
   | Unop of (unop * pred)
   | Binop of (binop * pred * pred)
   | As_pred of (pred * string)
@@ -69,10 +69,14 @@ and ordered_idx = Abslayout0.ordered_idx =
 and relation = Abslayout0.relation = {r_name: string; r_schema: Name.t list}
 [@@deriving compare, hash, sexp_of]
 
+and depjoin = Abslayout0.depjoin = {d_lhs: t; d_alias: string; d_rhs: t}
+[@@deriving compare, hash, sexp_of]
+
 and node = Abslayout0.node =
   | Select of (pred list * t)
   | Filter of (pred * t)
   | Join of {pred: pred; r1: t; r2: t}
+  | DepJoin of depjoin
   | GroupBy of pred list * Name.t list * t
   | OrderBy of {key: (pred * order) list; rel: t}
   | Dedup of t
@@ -97,9 +101,13 @@ val pp_pred : Formatter.t -> pred -> unit
 
 val pp : Formatter.t -> t -> unit
 
+val pp_small : Formatter.t -> t -> unit
+
+val pp_small_str : unit -> t -> string
+
 val mk_pp :
      ?pp_name:(Formatter.t -> Name.t -> unit)
-  -> ?pp_meta:(Formatter.t -> Core.Univ_map.t -> unit)
+  -> ?pp_meta:(Formatter.t -> Univ_map.t -> unit)
   -> unit
   -> (Formatter.t -> t -> unit) * (Formatter.t -> pred -> unit)
 
@@ -109,6 +117,8 @@ val names : t -> Set.M(Name).t
 (** The set of names in a `t`. *)
 
 val select : pred list -> t -> t
+
+val dep_join : t -> string -> t -> t
 
 val join : pred -> t -> t -> t
 
@@ -126,37 +136,35 @@ val empty : t
 
 val scalar : pred -> t
 
-val list : t -> t -> t
+val list : t -> string -> t -> t
 
 val tuple : t list -> tuple -> t
 
-val hash_idx : t -> t -> hash_idx -> t
+val hash_idx : t -> string -> t -> hash_idx -> t
 
-val ordered_idx : t -> t -> ordered_idx -> t
+val ordered_idx : t -> string -> t -> ordered_idx -> t
 
 val as_ : string -> t -> t
+
+val strip_scope : t -> t
+
+val scope : t -> string option
+
+val scope_exn : t -> string
+
+val alpha_scopes : t -> t
 
 val and_ : pred list -> pred
 
 val schema_exn : t -> Name.t list
 
-module Ctx : sig
-  type t = Value.t Map.M(Name).t [@@deriving compare, sexp]
-
-  include Comparable.S with type t := t
-
-  val empty : t
-end
-
 val of_string_exn : string -> t
 
 val name_of_string_exn : string -> Name.t
 
-val of_channel_exn : Stdio.In_channel.t -> t
+val of_channel_exn : In_channel.t -> t
 
 val subst : pred Map.M(Name).t -> t -> t
-
-val annotate_align : t -> unit
 
 val select_kind : pred list -> [`Agg | `Scalar]
 
@@ -197,10 +205,10 @@ module Pred : sig
     | Name of Name.t
     | Int of int
     | Fixed of Fixed_point.t
-    | Date of Core.Date.t
+    | Date of Date.t
     | Bool of bool
     | String of string
-    | Null
+    | Null of Type.PrimType.t option
     | Unop of (unop * pred)
     | Binop of (binop * pred * pred)
     | As_pred of (pred * string)
@@ -223,7 +231,7 @@ module Pred : sig
 
   val conjoin : t list -> t
 
-  val collect_aggs : fresh:Fresh.t -> t -> t * (string * t) list
+  val collect_aggs : t -> t * (string * t) list
 
   val conjuncts : t -> t list
 
@@ -241,9 +249,25 @@ module Pred : sig
 
   val subst : t Map.M(Name).t -> t -> t
 
+  val scoped : Name.t list -> string -> t -> t
+
+  val unscoped : string -> t -> t
+
   val relations : t -> string list
 
   val to_name : t -> Name.t option
 
   val to_type : t -> Type.PrimType.t
 end
+
+val annotate_key_layouts : t -> t
+
+val strip_unused_as : t -> t
+
+val list_to_depjoin : t -> t -> t
+
+val hash_idx_to_depjoin : t -> t -> hash_idx -> t
+
+val ordered_idx_to_depjoin : t -> t -> ordered_idx -> t
+
+val ensure_alias : t -> t

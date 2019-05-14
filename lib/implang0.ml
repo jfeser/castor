@@ -1,5 +1,4 @@
-open Base
-module Pervasives = Caml.Pervasives
+open! Core
 
 type op =
   | Int2Fl
@@ -39,7 +38,7 @@ type op =
 type expr =
   | Null
   | Int of (int[@opaque])
-  | Date of (Core.Date.t[@opaque])
+  | Date of (Date.t[@opaque])
   | Fixed of (Fixed_point.t[@opaque])
   | Bool of (bool[@opaque])
   | String of (string[@opaque])

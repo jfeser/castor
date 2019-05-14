@@ -1,7 +1,5 @@
-open Base
-open Stdio
+open! Core
 open Collections
-module Format = Caml.Format
 
 type piece = {str: string; len: int} [@@deriving sexp, compare]
 
@@ -16,7 +14,7 @@ let of_int ~byte_width x =
     |> Error.raise ;
   let buf = Bytes.make byte_width '\x00' in
   for i = 0 to byte_width - 1 do
-    Bytes.set buf i ((x lsr (i * 8)) land 0xFF |> Caml.char_of_int)
+    Bytes.set buf i ((x lsr (i * 8)) land 0xFF |> char_of_int)
   done ;
   Bytes.to_string buf
 
@@ -145,7 +143,7 @@ end
 module Writer = struct
   type bitstring = t
 
-  module Id = Core.Unique_id.Int ()
+  module Id = Unique_id.Int ()
 
   module Pos = struct
     type t = {bit_pos: int; byte_pos: int64} [@@deriving sexp]
@@ -382,7 +380,7 @@ let tests =
                 assert_equal ~ctxt ~printer ~cmp:Buffer.equal buf1 buf2 ) ] ]
 
 let%expect_test "seek1" =
-  let fn = Caml.Filename.temp_file "test" "txt" in
+  let fn = Filename.temp_file "test" "txt" in
   let writer = with_file fn in
   let pos = pos writer in
   write_string writer "testing" ;
@@ -393,7 +391,7 @@ let%expect_test "seek1" =
   [%expect {| fishing |}]
 
 let%expect_test "seek2" =
-  let fn = Caml.Filename.temp_file "test" "txt" in
+  let fn = Filename.temp_file "test" "txt" in
   let writer = with_file fn in
   write_string writer "t" ;
   let pos = pos writer in
@@ -413,17 +411,17 @@ let%expect_test "seek2" =
     tarting |}]
 
 let%expect_test "write_file" =
-  let fn1 = Core.Filename.temp_file "test1" "txt" in
-  let fn2 = Core.Filename.temp_file "test2" "txt" in
+  let fn1 = Filename.temp_file "test1" "txt" in
+  let fn2 = Filename.temp_file "test2" "txt" in
   let w1 = with_file fn1 in
   let w2 = with_file fn2 in
   write_string w1 "testing" ;
-  [%sexp_of: Pos.t] (pos w1) |> Core.print_s ;
+  [%sexp_of: Pos.t] (pos w1) |> print_s ;
   write_string w2 "more testing" ;
-  [%sexp_of: Pos.t] (pos w2) |> Core.print_s ;
+  [%sexp_of: Pos.t] (pos w2) |> print_s ;
   flush w2 ;
   write_file w1 fn2 ;
-  [%sexp_of: Pos.t] (pos w1) |> Core.print_s ;
+  [%sexp_of: Pos.t] (pos w1) |> print_s ;
   [%expect
     {|
     ((bit_pos 0) (byte_pos 7))

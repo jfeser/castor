@@ -1,4 +1,5 @@
 %{
+    open! Core
     open Parser_utils
 %}
 
@@ -19,7 +20,6 @@ transform:
   a = delimited(LPAREN, separated_list(COMMA, ID), RPAREN)?;
   i = preceded(COLON, ID)?
         {
-          let open Base in
           (n, Option.value ~default:[] a, Option.map ~f:Int.of_string i)
         }
 | error { error "Expected a transform." $startpos }

@@ -1,5 +1,4 @@
-open Base
-open Stdio
+open! Core
 
 module Config : sig
   module type S = sig

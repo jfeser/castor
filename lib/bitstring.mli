@@ -1,4 +1,4 @@
-open Base
+open! Core
 
 type t
 
@@ -24,12 +24,12 @@ val byte_length : t -> int
 
 val int_length : t -> int
 
-val pp : Caml.Format.formatter -> t -> unit
+val pp : Format.formatter -> t -> unit
 
 module Writer : sig
   type bitstring = t
 
-  module Id : Core.Unique_id.Id
+  module Id : Unique_id.Id
 
   module Pos : sig
     type t [@@deriving sexp]

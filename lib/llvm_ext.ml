@@ -1,5 +1,4 @@
-open Base
-open Printf
+open! Core
 
 include (
   Llvm :

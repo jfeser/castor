@@ -48,17 +48,17 @@ let () =
 (* let rec loop ct =
    *   if ct <= 0 then () else
    *     let (xmin, xmax, ymin, ymax) = (Random.int 99, Random.int 99, Random.int 99, Random.int 99) in
-   *     Stdio.printf "Selecting from (%d, %d, %d, %d)\n" xmin xmax ymin ymax;
+   *     printf "Selecting from (%d, %d, %d, %d)\n" xmin xmax ymin ymax;
    *     let exprs =
    *       filter (scan conn taxi) (fun [_; xpos; ypos; _] ->
    *           let open Infix in
    *           (v xpos <= i xmax) && (i xmin <= v xpos) && (v ypos <= i ymax) && (i ymin <= v ypos)
    *         )
    *     in
-   *     Stdio.printf "Avg locality: %f\n" (avg_locality exprs);
+   *     printf "Avg locality: %f\n" (avg_locality exprs);
    *     Seq.iter exprs ~f:(fun (_, e) ->
    *         sprintf "(%s)" (String.concat ~sep:", " (List.map e ~f:expr_to_string))
-   *         |> Stdio.print_endline);
+   *         |> print_endline);
    *     loop (ct - 1)
    * in
    * loop 10 *)

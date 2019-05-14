@@ -1,4 +1,4 @@
-open Base
+open! Core
 
 module Config : sig
   module type S = sig

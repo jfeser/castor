@@ -1,5 +1,4 @@
-open Core
-open Printf
+open! Core
 
 exception TestDbExn
 
@@ -71,12 +70,12 @@ let create_simple db name fields values =
   in
   Db.(
     exec db (sprintf "create table if not exists %s (%s)" name fields_sql)
-    |> command_ok) ;
+    |> command_ok_exn) ;
   List.iter values ~f:(fun vs ->
       let values_sql = List.map vs ~f:Int.to_string |> String.concat ~sep:", " in
       Db.(
-        exec db (sprintf "insert into %s values (%s)" name values_sql) |> command_ok)
-  )
+        exec db (sprintf "insert into %s values (%s)" name values_sql)
+        |> command_ok_exn) )
 
 (** Create a database table. *)
 let create db name fields values =
@@ -92,12 +91,12 @@ let create db name fields values =
         | _ -> failwith "Unexpected type." )
     |> String.concat ~sep:", "
   in
-  Db.(exec db (sprintf "create table %s (%s)" name fields_sql) |> command_ok) ;
+  Db.(exec db (sprintf "create table %s (%s)" name fields_sql) |> command_ok_exn) ;
   List.iter values ~f:(fun vs ->
       let values_sql = List.map vs ~f:Value.to_sql |> String.concat ~sep:", " in
       Db.(
-        exec db (sprintf "insert into %s values (%s)" name values_sql) |> command_ok)
-  )
+        exec db (sprintf "insert into %s values (%s)" name values_sql)
+        |> command_ok_exn) )
 
 module Expect_test_config = struct
   include Expect_test_config
@@ -114,6 +113,7 @@ module Expect_test_config = struct
     {Logs.report}
 
   let run thunk =
+    Fresh.reset Global.fresh ;
     Logs.set_reporter (reporter Caml.Format.std_formatter) ;
     Logs.set_level (Some Logs.Warning) ;
     try thunk () with TestDbExn -> ()
@@ -174,37 +174,6 @@ let make_test_db =
   in
   fun () -> Lazy.force test_db
 
-let make_modules ?layout_file ?(irgen_debug = false) ?(code_only = false) () =
-  let (module Test_db) = make_test_db () in
-  let module M = Abslayout_db.Make (Test_db) in
-  let module S =
-    Serialize.Make (struct
-        let layout_map_channel = Option.map layout_file ~f:Stdio.Out_channel.create
-      end)
-      (M)
-  in
-  let module I =
-    Irgen.Make (struct
-        let code_only = code_only
-
-        let debug = irgen_debug
-      end)
-      (M)
-      (S)
-      ()
-  in
-  let module C =
-    Codegen.Make (struct
-        let debug = false
-      end)
-      (I)
-      ()
-  in
-  ( (module M : Abslayout_db.S)
-  , (module S : Serialize.S)
-  , (module I : Irgen.S)
-  , (module C : Codegen.S) )
-
 module Demomatch = struct
   let example_params =
     [ (Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p", Value.Int 1)
@@ -221,4 +190,54 @@ module Demomatch = struct
       , Value.String "-1451410871729396224" )
     ; ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_c"
       , String "8557539814359574196" ) ]
+
+  let example1 log =
+    sprintf
+      {|
+select([p_counter, c_counter], filter(c_id = id_c && p_id = id_p,
+alist(filter(succ > counter + 1, %s) as lp,
+atuple([ascalar(lp.id as p_id), ascalar(lp.counter as p_counter),
+alist(filter(lp.counter < counter && counter < lp.succ, %s) as lc,
+atuple([ascalar(lc.id as c_id), ascalar(lc.counter as c_counter)], cross))], cross))))
+|}
+      log log
+
+  let example2 log =
+    sprintf
+      {|
+select([p_counter, c_counter],
+ahashidx(dedup(
+      join(true, select([id as p_id], %s), select([id as c_id], %s))) as k,
+  alist(select([p_counter, c_counter],
+    join(p_counter < c_counter && c_counter < p_succ,
+      filter(p_id = k.p_id,
+        select([id as p_id, counter as p_counter, succ as p_succ], %s)), 
+      filter(c_id = k.c_id,
+        select([id as c_id, counter as c_counter], %s)))) as lk,
+    atuple([ascalar(lk.p_counter), ascalar(lk.c_counter)], cross)),
+  (id_p, id_c)))
+|}
+      log log log log
+
+  let example3 log =
+    sprintf
+      {|
+select([p_counter, c_counter],
+  depjoin(
+    ahashidx(dedup(select([id as p_id], %s)) as hk,
+    alist(select([counter, succ], filter(hk.p_id = id && counter < succ, %s)) as lk1, 
+      atuple([ascalar(lk1.counter as p_counter), ascalar(lk1.succ as p_succ)], cross)), 
+    id_p) as dk,
+  select([dk.p_counter, c_counter],
+  filter(c_id = id_c,
+    aorderedidx(select([counter], %s) as ok, 
+      alist(filter(counter = ok.counter, %s) as lk2,
+        atuple([ascalar(lk2.id as c_id), ascalar(lk2.counter as c_counter)], cross)), 
+      dk.p_counter, dk.p_succ)))))
+|}
+      log log log log
 end
+
+let sum_complex =
+  "Select([sum(f) + 5, count() + sum(f / 2)], AList(r1 as k, ATuple([AScalar(k.f), \
+   AScalar((k.g - k.f) as v)], cross)))"

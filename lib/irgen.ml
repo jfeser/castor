@@ -1,5 +1,4 @@
-open Core
-open Base
+open! Core
 open Collections
 open Implang
 module A = Abslayout
@@ -32,8 +31,6 @@ module Make
     (Serialize : Serialize.S)
     () =
 struct
-  let fresh = Fresh.create ()
-
   let iters = ref []
 
   let add_iter i = iters := i :: !iters
@@ -143,6 +140,7 @@ struct
     | AOrderedIdx r', OrderedIdxT t' -> scan_ordered_idx ctx b r' t' cb
     | Filter r', FuncT t' -> scan_filter ctx b r' t' cb
     | Select r', FuncT t' -> scan_select ctx b r' t' cb
+    | DepJoin r', FuncT t' -> scan_depjoin ctx b r' t' cb
     | (Join _ | GroupBy _ | OrderBy _ | Dedup _ | Relation _ | As _), _ ->
         Error.create "Unsupported at runtime." r [%sexp_of: A.t] |> Error.raise
     | _, _ ->
@@ -159,7 +157,7 @@ struct
     let open Builder in
     let rec gen_pred p b =
       match p with
-      | A.Null -> Null
+      | A.Null _ -> Null
       | A.Int x -> Int x
       | A.String x -> String x
       | A.Fixed x -> Fixed x
@@ -331,11 +329,7 @@ struct
       | clayout :: clayouts, ctype :: ctypes, cstart :: cstarts ->
           let ctx = Ctx.bind ctx "start" Type.PrimType.int_t cstart in
           scan ctx b clayout ctype (fun b tup ->
-              let next_ctx =
-                let tuple_ctx = Ctx.of_schema (A.schema_exn clayout) tup in
-                Ctx.bind_ctx ctx tuple_ctx
-              in
-              make_loops next_ctx (fields @ tup) clayouts ctypes cstarts b )
+              make_loops ctx (fields @ tup) clayouts ctypes cstarts b )
       | _ -> failwith ""
     in
     let hdr = Header.make_header (TupleT t) in
@@ -372,9 +366,9 @@ struct
              This loop also initializes the iterator and computes the next start
              position. *)
              let b' =
-               create ~ctx:callee_ctx ~name:(Fresh.name fresh "zt_%d")
+               create ~ctx:callee_ctx
+                 ~name:(Fresh.name Global.fresh "zt_%d")
                  ~ret:(type_of_layout callee_layout)
-                 ~fresh
              in
              scan callee_ctx b' callee_layout callee_type (fun b tup ->
                  build_yield (Tuple tup) b ) ;
@@ -477,15 +471,16 @@ struct
     debug_print "hashing key" (Tuple lookup_expr) b ;
     let hash_key = Infix.(hash_key * int 8) in
     (* Get a pointer to the value. *)
-    let value_ptr = Infix.(Slice (mapping_start + hash_key, 8)) in
-    debug_print "value pointer is" value_ptr b ;
+    let value_ptr =
+      Infix.(Slice (mapping_start + hash_key, 8) + mapping_start + mapping_len)
+    in
+    debug_print "value ptr is" value_ptr b ;
     (* If the pointer is null, then the key is not present. *)
     build_if
       ~cond:
         Infix.(
-          hash_key < int 0
-          || hash_key >= mapping_len
-          || build_eq value_ptr (int 0x0) b)
+          hash_key < int 0 || hash_key >= mapping_len
+          (* || build_eq value_ptr (int 0x0) b *))
       ~then_:(fun b -> debug_print "no values found" value_ptr b)
       ~else_:(fun b ->
         debug_print "found values" value_ptr b ;
@@ -509,7 +504,7 @@ struct
         , Abslayout.{oi_key_layout= m_key_layout; lookup_low; lookup_high; _} ) =
       r
     in
-    let key_type, value_type, _ = t in
+    let key_type, value_type, m = t in
     let key_layout = Option.value_exn m_key_layout in
     let hdr = Header.make_header (OrderedIdxT t) in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -527,10 +522,14 @@ struct
     let index_len = Header.make_access hdr "idx_len" start in
     let index_start = Header.make_position hdr "idx" start in
     let key_len = len index_start key_type in
-    let ptr_len = Infix.(int 8) in
+    let ptr_size = Type.oi_ptr_size value_type m in
+    let ptr_len = Infix.(int ptr_size) in
     let kp_len = Infix.(key_len + ptr_len) in
+    let key_start i = Infix.(index_start + (i * kp_len)) in
+    let ptr_start i = Infix.(key_start i + key_len) in
+    let read_ptr i = Slice (ptr_start i, ptr_size) in
     let key_index i b =
-      build_assign Infix.(index_start + (i * kp_len)) kstart b ;
+      build_assign (key_start i) kstart b ;
       let key = build_var ~persistent:false "key" (type_of_layout key_layout) b in
       scan key_ctx b key_layout key_type (fun b tup ->
           build_assign (Tuple tup) key b ) ;
@@ -540,9 +539,7 @@ struct
     build_bin_search key_index n (gen_pred ctx lookup_low b)
       (gen_pred ctx lookup_high b)
       (fun key idx b ->
-        build_assign
-          Infix.(Slice (index_start + (idx * kp_len) + key_len, 8))
-          vstart b ;
+        build_assign Infix.(read_ptr idx + index_len + index_start) vstart b ;
         build_assign key key_tuple b ;
         scan value_ctx b value_layout value_type (fun b value_tup ->
             cb b (list_of_tuple key_tuple b @ value_tup) ) )
@@ -636,7 +633,7 @@ struct
     | `Agg ->
         (* Extract all the aggregates from the arguments. *)
         let scalar_preds, agg_preds =
-          List.map ~f:(A.Pred.collect_aggs ~fresh) args |> List.unzip
+          List.map ~f:A.Pred.collect_aggs args |> List.unzip
         in
         let agg_preds = List.concat agg_preds in
         let last_tup =
@@ -674,15 +671,41 @@ struct
           ~else_:(fun _ -> ())
           b
 
+  and scan_depjoin ctx b {d_lhs; d_alias; d_rhs} (child_types, _) (cb : callback) =
+    let lhs_t, rhs_t =
+      match child_types with
+      | [lhs_t; rhs_t] -> (lhs_t, rhs_t)
+      | _ -> failwith "Unexpected type."
+    in
+    let hdr =
+      Header.make_header (TupleT ([lhs_t; rhs_t], {count= Type.AbsInt.top}))
+    in
+    let start = Ctx.find_exn ctx (Name.create "start") b in
+    let lhs_start = Header.make_position hdr "value" start in
+    let lhs_ctx = Ctx.bind ctx "start" Type.PrimType.int_t lhs_start in
+    let rhs_ctx =
+      let rhs_start = Infix.(lhs_start + len lhs_start lhs_t) in
+      Ctx.bind ctx "start" Type.PrimType.int_t rhs_start
+    in
+    debug_print "scanning depjoin" (Int 0) b ;
+    scan lhs_ctx b d_lhs lhs_t (fun b tup ->
+        let rhs_ctx =
+          let tuple_ctx =
+            Ctx.of_schema (A.schema_exn d_lhs |> Schema.scoped d_alias) tup
+          in
+          Ctx.bind_ctx rhs_ctx tuple_ctx
+        in
+        scan rhs_ctx b d_rhs rhs_t cb )
+
   let printer ctx r t =
     let open Builder in
-    let b = create ~ctx ~name:"printer" ~ret:VoidT ~fresh in
+    let b = create ~ctx ~name:"printer" ~ret:VoidT in
     scan ctx b r t (fun b tup -> build_print (Tuple tup) b) ;
     build_func b
 
   let consumer ctx r t =
     let open Builder in
-    let b = create ~name:"consumer" ~ctx ~ret:VoidT ~fresh in
+    let b = create ~name:"consumer" ~ctx ~ret:VoidT in
     scan ctx b r t (fun b tup -> build_consume (Tuple tup) b) ;
     build_func b
 
@@ -691,10 +714,10 @@ struct
       List.map params ~f:(fun n -> (n, Ctx.Global (Var (Name.name n))))
       |> Map.of_alist_exn (module Name)
     in
-    let type_ = Abslayout_db.to_type r in
+    let type_ = Meta.(find_exn r type_) in
     let writer = Bitstring.Writer.with_file data_fn in
     let r, len =
-      if Config.code_only then (r, 0) else Serialize.serialize writer r type_
+      if Config.code_only then (r, 0) else Serialize.serialize writer r
     in
     Bitstring.Writer.flush writer ;
     Bitstring.Writer.close writer ;

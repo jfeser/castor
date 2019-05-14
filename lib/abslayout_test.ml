@@ -1,5 +1,4 @@
-open Base
-open Stdio
+open! Core
 open Collections
 open Abslayout
 open Test_util
@@ -51,22 +50,24 @@ let%test_module _ =
 
           method build_Select () _ (_, r) ctx = self#visit_t () ctx r
 
+          method build_DepJoin () _ {d_lhs; d_rhs; _} (ctx1, ctx2) =
+            self#visit_t () ctx1 d_lhs ; self#visit_t () ctx2 d_rhs
+
           method build_Filter () _ (_, r) ctx = self#visit_t () ctx r
         end
       in
-      try
+      let run () =
         let sparams =
           Option.map params ~f:(fun p ->
               List.map p ~f:(fun (n, _) -> n) |> Set.of_list (module Name) )
         in
-        let layout = of_string_exn query |> M.resolve ?params:sparams in
+        let layout = M.load_string ?params:sparams query in
         print_fold#run () layout
-      with exn -> printf "Error: %s\n" (Exn.to_string exn)
+      in
+      Exn.handle_uncaught ~exit:false run
 
     let%expect_test "sum-complex" =
-      run_print_test
-        "Select([sum(r1.f) + 5, count() + sum(r1.f / 2)], AList(r1, \
-         ATuple([AScalar(r1.f), AScalar(r1.g - r1.f)], cross)))" ;
+      run_print_test sum_complex ;
       [%expect
         {|
     List
@@ -93,7 +94,7 @@ let%test_module _ =
 
     let%expect_test "orderby-tuple" =
       run_print_test
-        {|atuple([alist(orderby([r1.f desc], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f asc], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|} ;
+        {|atuple([alist(orderby([f desc], r1) as r1a, atuple([ascalar(r1a.f), ascalar(r1a.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([f asc], r1) as r1b, atuple([ascalar(r1b.f), ascalar(r1b.g)], cross))], concat)|} ;
       [%expect
         {|
     Tuple
@@ -145,33 +146,24 @@ let%test_module _ =
 
     let%expect_test "ordered-idx-dates" =
       run_print_test
-        "AOrderedIdx(OrderBy([f desc], Dedup(Select([f], r_date))) as k, \
-         AScalar(k.f), null, null)" ;
+        "AOrderedIdx(OrderBy([ff desc], Dedup(Select([f as ff], r_date))) as k, \
+         AScalar(k.ff as f), null, null)" ;
       [%expect
         {|
-    [WARNING] Output shadowing of k.f.
     OrderedIdx
-    OrderedIdx key: ((Date 2016-12-01))
-    Scalar: (Date 2016-12-01)
-    OrderedIdx key: ((Date 2017-10-05))
-    Scalar: (Date 2017-10-05)
-    OrderedIdx key: ((Date 2018-01-01))
-    Scalar: (Date 2018-01-01)
+    OrderedIdx key: ((Date 2018-09-01))
+    Scalar: (Date 2018-09-01)
     OrderedIdx key: ((Date 2018-01-23))
     Scalar: (Date 2018-01-23)
-    OrderedIdx key: ((Date 2018-09-01))
-    Scalar: (Date 2018-09-01) |}]
+    OrderedIdx key: ((Date 2018-01-01))
+    Scalar: (Date 2018-01-01)
+    OrderedIdx key: ((Date 2017-10-05))
+    Scalar: (Date 2017-10-05)
+    OrderedIdx key: ((Date 2016-12-01))
+    Scalar: (Date 2016-12-01) |}]
 
     let%expect_test "example-1" =
-      run_print_test ~params:Demomatch.example_params
-        {|
-filter(lc.id = id_c && lp.id = id_p,
-alist(filter(succ > counter + 1, log) as lp,
-atuple([ascalar(lp.id), ascalar(lp.counter),
-alist(filter(lp.counter < log.counter &&
-log.counter < lp.succ, log) as lc,
-atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
-|} ;
+      Demomatch.(run_print_test ~params:Demomatch.example_params (example1 "log")) ;
       [%expect
         {|
     List
@@ -199,18 +191,7 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
     Scalar: (Int 5) |}]
 
     let%expect_test "example-2" =
-      run_print_test ~params:Demomatch.example_params
-        {|
-ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k], 
-      join(true, log as lp, log as lc))),
-  alist(select([lp.counter, lc.counter], 
-    join(lp.counter < lc.counter && 
-         lc.counter < lp.succ, 
-      filter(log.id = lp_k, log) as lp, 
-      filter(log.id = lc_k, log) as lc)),
-    atuple([ascalar(lp.counter), ascalar(lc.counter)], cross)),
-  (id_p, id_c))
-|} ;
+      Demomatch.(run_print_test ~params:example_params (example2 "log")) ;
       [%expect
         {|
     HashIdx
@@ -232,23 +213,9 @@ ahashidx(dedup(select([lp.id as lp_k, lc.id as lc_k],
     Scalar: (Int 5) |}]
 
     let%expect_test "example-3" =
-      run_print_test ~params:Demomatch.example_params
-        {|
-select([lp.counter, lc.counter],
-  atuple([ahashidx(dedup(select([id as k1], log)), 
-    alist(select([counter, succ], 
-        filter(k1 = id && counter < succ, log)), 
-      atuple([ascalar(counter), ascalar(succ)], cross)), 
-    id_p) as lp,
-  filter(lc.id = id_c,
-    aorderedidx(select([log.counter as k2], log), 
-      alist(filter(log.counter = k2, log),
-        atuple([ascalar(log.id), ascalar(log.counter)], cross)), 
-      lp.counter, lp.succ) as lc)], cross))
-|} ;
+      Demomatch.(run_print_test ~params:example_params (example3 "log")) ;
       [%expect
         {|
-    Tuple
     HashIdx
     HashIdx key: ((Int 1))
     List
@@ -362,19 +329,19 @@ select([lp.counter, lc.counter],
  *       ((schema (((relation (r)) (name f) (type_ ((IntT (nullable false)))))))))) |}] *)
 
     let%expect_test "annotate-schema" =
-      let r = "select([min(r.f)], r)" |> of_string_exn |> M.resolve in
+      let r = M.load_string "select([min(f)], r)" in
       [%sexp_of: t] r |> print_s ;
       [%expect
         {|
     ((node
       (Select
-       (((Min (Name ((relation (r)) (name f)))))
+       (((Min (Name ((relation ()) (name f)))))
         ((node
           (Relation
            ((r_name r)
-            (r_schema (((relation (r)) (name f)) ((relation (r)) (name g)))))))
+            (r_schema ((((relation ()) (name f)) ((relation ()) (name g))))))))
          (meta
-          ((refcnt ((((relation (r)) (name f)) 1) (((relation (r)) (name g)) 0)))))))))
+          ((refcnt ((((relation ()) (name f)) 1) (((relation ()) (name g)) 0)))))))))
      (meta ((refcnt ())))) |}]
 
     let%expect_test "pred_names" =

@@ -1,4 +1,4 @@
-open Base
+open! Core
 open Llvm
 
 module TypeDesc : sig

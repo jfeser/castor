@@ -1,6 +1,5 @@
 {
-open Base
-open Printf
+open! Core
 open Ralgebra_parser
 open Parser_utils
 
@@ -10,6 +9,7 @@ let keyword_tbl = Hashtbl.of_alist_exn (module String) [
 "select", SELECT;
 "dedup", DEDUP;
 "filter", FILTER;
+"depjoin", DEPJOIN;
 "join", JOIN;
 "count", COUNT;
 "zip", KIND A.Zip;

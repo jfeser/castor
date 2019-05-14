@@ -1,53 +1,24 @@
-open Core
-open Base
-open Abslayout
+open! Core
 open Test_util
 open Implang_opt
 
-let%test_module _ =
-  ( module struct
-    let m, _, _, _ = make_modules ()
+let run_test ?(params = []) layout_str opt_func =
+  let (module M), (module S), (module I), _ =
+    Setup.make_modules ~code_only:true ()
+  in
+  let param_names = List.map params ~f:(fun (n, _) -> n) in
+  let layout =
+    M.load_string ~params:(Set.of_list (module Name) param_names) layout_str
+  in
+  M.annotate_type layout ;
+  I.irgen ~params:param_names ~data_fn:"/tmp/buf" layout
+  |> opt_func
+  |> I.pp Caml.Format.std_formatter
 
-    let run_test ?(params = []) layout_str opt_func =
-      let module M = (val m) in
-      let module S =
-        Serialize.Make (struct
-            let layout_map_channel = None
-          end)
-          (M)
-      in
-      let module I =
-        Irgen.Make (struct
-            let code_only = true
-
-            let debug = false
-          end)
-          (M)
-          (S)
-          ()
-      in
-      let param_names = List.map params ~f:(fun (n, _) -> n) in
-      let sparams = Set.of_list (module Name) param_names in
-      let layout = of_string_exn layout_str |> M.resolve ~params:sparams in
-      let layout = M.annotate_key_layouts layout in
-      M.annotate_subquery_types layout ;
-      I.irgen ~params:param_names ~data_fn:"/tmp/buf" layout
-      |> opt_func
-      |> I.pp Caml.Format.std_formatter
-
-    let%expect_test "example-1" =
-      run_test ~params:Demomatch.example_params
-        {|
-filter(lc.id = id_c && lp.id = id_p,
-alist(filter(succ > counter + 1, log) as lp,
-atuple([ascalar(lp.id), ascalar(lp.counter),
-alist(filter(lp.counter < log.counter &&
-log.counter < lp.succ, log) as lc,
-atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
-|}
-        opt ;
-      [%expect
-        {|
+let%expect_test "example-1" =
+  Demomatch.(run_test ~params:Demomatch.example_params (example1 "log") opt) ;
+  [%expect
+    {|
     // Locals:
     // i18 : Int[nonnull] (persists=true)
     // cstart21 : Int[nonnull] (persists=true)
@@ -75,10 +46,8 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
                 cstart20 = cstart17;
                 cstart21 = cstart20 + 1;
                 if (buf[cstart20 : 1] == id_c && buf[cstart14 : 1] == id_p) {
-                    print(Tuple[Int[nonnull], Int[nonnull], Int[nonnull],
-                    Int[nonnull]],
-                    (buf[cstart14 : 1], buf[cstart15 : 1], buf[cstart20 : 1],
-                     buf[cstart21 : 1]));
+                    print(Tuple[Int[nonnull], Int[nonnull]],
+                    (buf[cstart15 : 1], buf[cstart21 : 1]));
                 } else {
 
                 }
@@ -116,10 +85,8 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
                 cstart9 = cstart6;
                 cstart10 = cstart9 + 1;
                 if (buf[cstart9 : 1] == id_c && buf[cstart3 : 1] == id_p) {
-                    consume(Tuple[Int[nonnull], Int[nonnull], Int[nonnull],
-                    Int[nonnull]],
-                    (buf[cstart3 : 1], buf[cstart4 : 1], buf[cstart9 : 1],
-                     buf[cstart10 : 1]));
+                    consume(Tuple[Int[nonnull], Int[nonnull]],
+                    (buf[cstart4 : 1], buf[cstart10 : 1]));
                 } else {
 
                 }
@@ -130,4 +97,3 @@ atuple([ascalar(lc.id), ascalar(lc.counter)], cross))], cross)))
             i1 = i1 + 1;
         }
     } |}]
-  end )

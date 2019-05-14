@@ -1,5 +1,4 @@
-open Base
-module Format = Caml.Format
+open! Core
 
 module PrimType = struct
   type t =

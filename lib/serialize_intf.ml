@@ -1,13 +1,15 @@
-open Stdio
+open! Core
 open Abslayout
 
 module type S = sig
   module Log : sig
-    val render : string -> Out_channel.t -> unit
+    type t
+
+    val render : t -> Out_channel.t -> unit
     (** Render a serialization log into a file map. *)
   end
 
-  val serialize : Bitstring.Writer.t -> t -> Type.t -> t * int
+  val serialize : Bitstring.Writer.t -> t -> t * int
   (** Serialize a layout to a binary format.
 
       @return The layout, annotated with the byte position of each

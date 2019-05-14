@@ -1,4 +1,4 @@
-open Base
+open! Core
 open Implang
 
 module Config : sig

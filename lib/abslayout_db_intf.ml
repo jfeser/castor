@@ -1,37 +1,37 @@
-open Core
+open! Core
 open Abslayout
 
 module type S = sig
-  val to_type : t -> Type.t
+  module Ctx : sig
+    type t
+  end
 
-  val annotate_defs : t -> unit
+  val type_of : t -> Type.t
 
-  val annotate_key_layouts : t -> t
-
-  val annotate_subquery_types : t -> unit
+  val annotate_type : t -> unit
 
   val resolve : ?params:Set.M(Name).t -> t -> t
 
+  val load_string : ?params:Set.M(Name).t -> string -> t
+
   val refcnt : int Map.M(Name).t Univ_map.Key.t
 
-  type eval_ctx
-
-  val to_ctx : Value.t list -> eval_ctx
+  val to_ctx : Value.t list -> Ctx.t
 
   class virtual ['ctx, 'a] unsafe_material_fold :
     object
       method virtual private build_AList :
-        'ctx -> Meta.t -> t * t -> (Value.t list * eval_ctx) Gen.t -> 'a
+        'ctx -> Meta.t -> t * t -> (Value.t list * Ctx.t) Gen.t -> 'a
 
       method virtual private build_ATuple :
-        'ctx -> Meta.t -> t list * tuple -> eval_ctx list -> 'a
+        'ctx -> Meta.t -> t list * tuple -> Ctx.t list -> 'a
 
       method virtual private build_AHashIdx :
            'ctx
         -> Meta.t
         -> t * t * hash_idx
         -> Value.t list Gen.t
-        -> (Value.t list * eval_ctx) Gen.t
+        -> (Value.t list * Ctx.t) Gen.t
         -> 'a
 
       method virtual private build_AOrderedIdx :
@@ -39,7 +39,7 @@ module type S = sig
         -> Meta.t
         -> t * t * ordered_idx
         -> Value.t list Gen.t
-        -> (Value.t list * eval_ctx) Gen.t
+        -> (Value.t list * Ctx.t) Gen.t
         -> 'a
 
       method virtual private build_AEmpty : 'ctx -> Meta.t -> 'a
@@ -47,13 +47,16 @@ module type S = sig
       method virtual private build_AScalar :
         'ctx -> Meta.t -> pred -> Value.t Lazy.t -> 'a
 
+      method virtual private build_DepJoin :
+        'ctx -> Meta.t -> depjoin -> Ctx.t * Ctx.t -> 'a
+
       method virtual private build_Select :
-        'ctx -> Meta.t -> pred list * t -> eval_ctx -> 'a
+        'ctx -> Meta.t -> pred list * t -> Ctx.t -> 'a
 
       method virtual private build_Filter :
-        'ctx -> Meta.t -> pred * t -> eval_ctx -> 'a
+        'ctx -> Meta.t -> pred * t -> Ctx.t -> 'a
 
-      method private visit_t : 'ctx -> eval_ctx -> t -> 'a
+      method private visit_t : 'ctx -> Ctx.t -> t -> 'a
 
       method run : 'ctx -> t -> 'a
     end
@@ -81,6 +84,8 @@ module type S = sig
 
       method virtual scalar : Meta.t -> pred -> Value.t -> 'out
 
+      method virtual depjoin : Meta.t -> depjoin -> 'out -> 'out -> 'out
+
       method virtual select : Meta.t -> pred list * t -> 'out -> 'out
 
       method virtual filter : Meta.t -> pred * t -> 'out -> 'out
@@ -88,7 +93,5 @@ module type S = sig
       method run : unit -> t -> 'out
     end
 
-  val annotate_type : t -> Type.t -> unit
-
-  val bound : t -> Set.M(Name).t
+  val annotate_relations : t -> t
 end

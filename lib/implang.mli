@@ -1,4 +1,4 @@
-open Base
+open! Core
 open Collections
 
 type op = Implang0.op =
@@ -39,7 +39,7 @@ type op = Implang0.op =
 type expr = Implang0.expr =
   | Null
   | Int of int
-  | Date of Core.Date.t
+  | Date of Date.t
   | Fixed of Fixed_point.t
   | Bool of bool
   | String of string
@@ -131,7 +131,7 @@ module Builder : sig
 
   val type_of : expr -> t -> Type.PrimType.t
 
-  val create : ctx:_ctx -> name:string -> ret:Type.PrimType.t -> fresh:Fresh.t -> t
+  val create : ctx:_ctx -> name:string -> ret:Type.PrimType.t -> t
 
   val new_scope : t -> t
 
