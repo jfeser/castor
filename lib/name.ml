@@ -2,7 +2,7 @@ open! Core
 open Hashcons
 
 module Key = struct
-  type t = {relation: string option; name: string} [@@deriving compare, hash, sexp]
+  type t = {scope: string option; name: string} [@@deriving compare, hash, sexp]
 
   let equal = [%compare.equal: t]
 end
@@ -24,14 +24,14 @@ module T = struct
   type t = {name: Key.t Hashcons.hash_consed; meta: Univ_map.t}
 
   let sexp_of_t x =
-    [%sexp_of: Key.t] {name= x.name.node.name; relation= x.name.node.relation}
+    [%sexp_of: Key.t] {name= x.name.node.name; scope= x.name.node.scope}
 
   let create_consed r n m =
-    {name= Table.(hashcons table Key.{relation= r; name= n}); meta= m}
+    {name= Table.(hashcons table Key.{scope= r; name= n}); meta= m}
 
   let t_of_sexp x =
-    let Key.{name; relation} = [%of_sexp: Key.t] x in
-    create_consed relation name Univ_map.empty
+    let Key.{name; scope} = [%of_sexp: Key.t] x in
+    create_consed scope name Univ_map.empty
 
   let equal = phys_equal
 
@@ -39,8 +39,8 @@ module T = struct
     if equal x y then 0
     else
       [%compare: Key.t]
-        {relation= x.name.node.relation; name= x.name.node.name}
-        {relation= y.name.node.relation; name= y.name.node.name}
+        {scope= x.name.node.scope; name= x.name.node.name}
+        {scope= y.name.node.scope; name= y.name.node.name}
 
   let hash x = x.name.hkey
 
@@ -88,19 +88,19 @@ let check_name n =
   if not (Str.string_match valid_regex n 0) then
     Error.(create "Invalid name." n [%sexp_of: string] |> raise)
 
-let create ?relation ?type_ name =
+let create ?scope ?type_ name =
   check_name name ;
-  Option.iter ~f:check_name relation ;
+  Option.iter ~f:check_name scope ;
   let meta = Univ_map.empty in
   let meta =
     match type_ with Some t -> Univ_map.set meta Meta.type_ t | None -> meta
   in
-  create_consed relation name meta
+  create_consed scope name meta
 
 let type_ n = Univ_map.find n.meta Meta.type_
 
-let copy ?relation ?type_:t ?name:n ?meta name =
-  let r = Option.value relation ~default:name.name.node.relation in
+let copy ?scope ?type_:t ?name:n ?meta name =
+  let r = Option.value scope ~default:name.name.node.scope in
   let t = Option.value t ~default:(type_ name) in
   let n = Option.value n ~default:name.name.node.name in
   let m = Option.value meta ~default:name.meta in
@@ -109,7 +109,7 @@ let copy ?relation ?type_:t ?name:n ?meta name =
 
 let name n = n.name.node.name
 
-let rel n = n.name.node.relation
+let rel n = n.name.node.scope
 
 let meta n = n.meta
 
@@ -119,27 +119,27 @@ let type_exn n =
   | None -> Error.create "Missing type." n [%sexp_of: t] |> Error.raise
 
 let rel_exn n =
-  match n.name.node.relation with
+  match n.name.node.scope with
   | Some t -> t
-  | None -> Error.create "Missing relation." n [%sexp_of: t] |> Error.raise
+  | None -> Error.create "Missing scope." n [%sexp_of: t] |> Error.raise
 
 let to_var n =
   let name = n.name.node.name in
-  match n.name.node.relation with Some r -> sprintf "%s_%s" r name | None -> name
+  match n.name.node.scope with Some r -> sprintf "%s_%s" r name | None -> name
 
 let to_sql n =
-  match n.name.node.relation with
+  match n.name.node.scope with
   | Some r -> sprintf "%s.\"%s\"" r n.name.node.name
   | None -> sprintf "\"%s\"" n.name.node.name
 
-let scoped s n = copy ~relation:(Some s) n
+let scoped s n = copy ~scope:(Some s) n
 
-let unscoped n = copy ~relation:None n
+let unscoped n = copy ~scope:None n
 
 let pp fmt n =
   let open Format in
   let name = n.name.node.name in
-  match n.name.node.relation with
+  match n.name.node.scope with
   | Some r -> fprintf fmt "%s.%s" r name
   | None -> fprintf fmt "%s" name
 

@@ -276,8 +276,8 @@ let%test_module _ =
     Scalar: (Int 5) |}]
 
     let%expect_test "subst" =
-      let f = Name.create ~relation:"r" "f" in
-      let g = Name.create ~relation:"r" "g" in
+      let f = Name.create ~scope:"r" "f" in
+      let g = Name.create ~scope:"r" "g" in
       let ctx = Map.of_alist_exn (module Name) [(f, Int 1); (g, Int 2)] in
       let r = "Filter(r.f = r.g, Select([r.f, r.g], r))" |> of_string_exn in
       print_s ([%sexp_of: t] (subst ctx r)) ;

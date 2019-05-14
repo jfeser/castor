@@ -188,7 +188,7 @@ let of_ralgebra r =
         (* Add table alias to all fields to generate a select list. *)
         let select_list =
           List.map (schema_exn r) ~f:(fun n ->
-              create_entry (Name (Name.copy n ~relation:(Some tbl_alias))) )
+              create_entry (Name (Name.copy n ~scope:(Some tbl_alias))) )
         in
         let relations = [(`Table (tbl, tbl_alias), `Left)] in
         Query (create_query ~relations select_list)

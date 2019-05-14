@@ -6,10 +6,10 @@ include Comparator.S with type t := t
 
 module O : Comparable.Infix with type t := t
 
-val create : ?relation:string -> ?type_:Type.PrimType.t -> string -> t
+val create : ?scope:string -> ?type_:Type.PrimType.t -> string -> t
 
 val copy :
-     ?relation:string sexp_option
+     ?scope:string sexp_option
   -> ?type_:Type.PrimType.t sexp_option
   -> ?name:string
   -> ?meta:Univ_map.t

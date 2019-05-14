@@ -140,8 +140,8 @@ ralgebra_subquery:
 | error { error "Expected an operator or relation." $startpos }
 
 name:
-| r = ID; DOT; f = ID; { Name.create ~relation:r f }
-| r = ID; DOT; f = ID; COLON; t = PRIMTYPE { Name.create ~relation:r ~type_:t f }
+| r = ID; DOT; f = ID; { Name.create ~scope:r f }
+| r = ID; DOT; f = ID; COLON; t = PRIMTYPE { Name.create ~scope:r ~type_:t f }
 | f = ID; { Name.create f }
 | f = ID; COLON; t = PRIMTYPE { Name.create ~type_:t f }
 

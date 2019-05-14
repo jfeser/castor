@@ -42,7 +42,7 @@ let alpha_scopes r =
         let name =
           let%bind s = Name.rel n in
           let%map s' = Map.find map s in
-          Name (Name.copy ~relation:(Some s') n)
+          Name (Name.copy ~scope:(Some s') n)
         in
         Option.value name ~default:p
 
@@ -217,7 +217,7 @@ and free r =
   let of_list = Set.of_list (module Name) in
   let union_list = Set.union_list (module Name) in
   let exposed r = of_list (schema_exn r) in
-  let scope r s = Set.map (module Name) s ~f:(Name.copy ~relation:(Some r)) in
+  let scope r s = Set.map (module Name) s ~f:(Name.copy ~scope:(Some r)) in
   let free_set =
     match r.node with
     | Relation _ | AEmpty -> empty
@@ -553,7 +553,7 @@ module Pred = struct
         method! visit_Name _ this n =
           match Name.rel n with
           | Some s ->
-              if String.(s = scope) then Name (Name.copy ~relation:None n) else this
+              if String.(s = scope) then Name (Name.copy ~scope:None n) else this
           | None -> this
       end
     in
@@ -601,7 +601,7 @@ let annotate_eq r =
         let m = Option.value_exn m in
         let schema = schema_exn r in
         let eqs =
-          List.map schema ~f:(fun n' -> (n', Name.(create ~relation:n (name n'))))
+          List.map schema ~f:(fun n' -> (n', Name.(create ~scope:n (name n'))))
           |> dedup_pairs
         in
         Meta.Direct.set_m m Meta.eq eqs
