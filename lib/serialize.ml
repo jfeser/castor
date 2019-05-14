@@ -76,6 +76,68 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
     | FixedT x -> fixed_sentinal x
     | t -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
 
+  let serialize_key = function
+    | [Value.String s] -> s
+    | vs ->
+        List.map vs ~f:(function
+          | Int x -> Bitstring.of_int ~byte_width:8 x
+          | Date x -> Date.to_int x |> Bitstring.of_int ~byte_width:8
+          | Bool true -> Bitstring.of_int 1 ~byte_width:1
+          | Bool false -> Bitstring.of_int 1 ~byte_width:1
+          | String s -> s
+          | v ->
+              Error.(create "Unexpected key value." v [%sexp_of: Value.t] |> raise) )
+        |> String.concat ~sep:"|"
+
+  let make_direct_hash keys =
+    let hash =
+      Seq.map keys ~f:(fun (k, p) ->
+          let h =
+            match k with
+            | [Value.Int x] -> x
+            | [Date x] -> Date.to_int x
+            | _ -> failwith "Unexpected key."
+          in
+          (h, p) )
+    in
+    (hash, "")
+
+  let make_cmph_hash keys =
+    if Seq.length keys = 0 then (Seq.empty, "")
+    else
+      let keys = Seq.map keys ~f:(fun (k, p) -> (serialize_key k, p)) in
+      (* Create a CMPH hash from the keyset. *)
+      let cmph_hash =
+        let open Cmph in
+        let keyset =
+          Seq.map keys ~f:(fun (k, _) -> k) |> Seq.to_list |> KeySet.create
+        in
+        List.find_map_exn [Config.default_chd; `Bdz; `Bmz; `Chm; `Fch]
+          ~f:(fun algo ->
+            try
+              Some
+                (Config.create ~verbose:true ~seed:0 ~algo keyset |> Hash.of_config)
+            with Error _ as err ->
+              Logs.warn (fun m ->
+                  m "Creating CMPH hash failed: %a" Sexp.pp_hum
+                    ([%sexp_of: exn] err) ) ;
+              None )
+      in
+      (* Populate hash table with CMPH hash values. *)
+      ( Seq.map keys ~f:(fun (k, p) -> (Cmph.Hash.hash cmph_hash k, p))
+      , Cmph.Hash.to_packed cmph_hash )
+
+  let make_hash type_ keys =
+    let hash, body =
+      match Type.hash_kind_exn type_ with
+      | `Direct -> make_direct_hash keys
+      | `Cmph -> make_cmph_hash keys
+    in
+    let max_key = Seq.fold hash ~init:0 ~f:(fun m (h, _) -> Int.max h m) in
+    let hash_array = Array.create ~len:(max_key + 1) 0 in
+    Seq.iter hash ~f:(fun (h, p) -> hash_array.(h) <- p) ;
+    (hash_array, body)
+
   class serialize_fold writer =
     object (self : 'self)
       inherit [_, _] M.unsafe_material_fold as super
@@ -83,6 +145,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
       val log_msgs = Log.create ()
 
       method pos = Writer.pos writer
+
+      method flush = Writer.flush writer
 
       method build_AEmpty () _ = ()
 
@@ -141,121 +205,59 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         self#build_Tuple sctx tuple_t [d_lhs; d_rhs] [ctx1; ctx2]
 
       method build_AHashIdx sctx meta (_, value_l, hmeta) keys gen =
+        (* Burn the keys*)
+        Gen.iter keys ~f:(fun _ -> ()) ;
         let type_ = Meta.Direct.find_exn meta Meta.type_ in
         let key_l =
           Option.value_exn
             ~error:(Error.create "Missing key layout." hmeta [%sexp_of: hash_idx])
             hmeta.hi_key_layout
         in
-        let serialize_key = function
-          | [Value.String s] -> s
-          | vs ->
-              List.map vs ~f:(function
-                | Int x -> Bitstring.of_int ~byte_width:8 x
-                | Date x -> Date.to_int x |> Bitstring.of_int ~byte_width:8
-                | Bool true -> Bitstring.of_int 1 ~byte_width:1
-                | Bool false -> Bitstring.of_int 1 ~byte_width:1
-                | String s -> s
-                | v ->
-                    Error.(
-                      create "Unexpected key value." v [%sexp_of: Value.t] |> raise) )
-              |> String.concat ~sep:"|"
-        in
+        (* Collect keys and write values to a child buffer. *)
+        let keys = Queue.create () in
+        let vbuf = Buffer.create 1024 in
+        let valf = new serialize_fold (with_buffer vbuf) in
+        Gen.iter gen ~f:(fun (key, vctx) ->
+            let vptr = valf#pos |> Pos.to_bytes_exn |> Int64.to_int_exn in
+            Queue.enqueue keys (key, vptr) ;
+            valf#visit_t sctx (M.to_ctx key) key_l ;
+            valf#visit_t sctx vctx value_l ) ;
         Logs.debug (fun m -> m "Generating hash.") ;
-        let hash, hash_body, hash_len =
-          match Type.hash_kind_exn type_ with
-          | `Direct ->
-              let hash = Hashtbl.create (module String) in
-              Gen.iter keys ~f:(fun k ->
-                  let key = serialize_key k in
-                  let data =
-                    match k with
-                    | [Value.Int x] -> x
-                    | [Date x] -> Date.to_int x
-                    | _ -> failwith "Unexpected key."
-                  in
-                  Hashtbl.set hash ~key ~data ) ;
-              (hash, "", 0)
-          | `Cmph ->
-              let keys = Gen.map keys ~f:serialize_key |> Gen.to_list in
-              let hash = Hashtbl.create (module String) in
-              let hash_body =
-                if List.length keys = 0 then ""
-                else
-                  (* Create a CMPH hash from the keyset. *)
-                  let cmph_hash =
-                    let open Cmph in
-                    let keyset = KeySet.create keys in
-                    List.find_map_exn [Config.default_chd; `Bdz; `Bmz; `Chm; `Fch]
-                      ~f:(fun algo ->
-                        try
-                          Some
-                            ( Config.create ~verbose:true ~seed:0 ~algo keyset
-                            |> Hash.of_config )
-                        with Error _ as err ->
-                          Logs.warn (fun m ->
-                              m "Creating CMPH hash failed: %a" Sexp.pp_hum
-                                ([%sexp_of: exn] err) ) ;
-                          None )
-                  in
-                  (* Populate hash table with CMPH hash values. *)
-                  List.iter keys ~f:(fun k ->
-                      Hashtbl.set hash ~key:k ~data:(Cmph.Hash.hash cmph_hash k) ) ;
-                  Cmph.Hash.to_packed cmph_hash
-              in
-              let hash_len = String.length hash_body in
-              (hash, hash_body, hash_len)
+        let hash, hash_body =
+          make_hash type_ (Queue.to_array keys |> Array.to_sequence)
         in
         (* Write the hashes to a file. *)
-        Out_channel.(
-          with_file "hashes.txt" ~f:(fun ch ->
-              fprintf ch "%s"
-                (Sexp.to_string_hum ([%sexp_of: int Hashtbl.M(String).t] hash)) )) ;
-        let table_size =
-          Hashtbl.fold hash ~f:(fun ~key:_ ~data:v m -> Int.max m v) ~init:0
-          |> fun m -> m + 1
-        in
+        (* Out_channel.(
+         *   with_file "hashes.txt" ~f:(fun ch ->
+         *       fprintf ch "%s"
+         *         (Sexp.to_string_hum ([%sexp_of: int Hashtbl.M(String).t] hash)) )) ; *)
+        Logs.debug (fun m -> m "Generating hash finished.") ;
         let hdr = make_header type_ in
-        let header_pos = pos writer in
+        let hash_len = String.length hash_body in
+        let hash_map_len = Array.length hash * 8 in
+        let value_len = valf#pos |> Pos.to_bytes_exn |> Int64.to_int_exn in
         self#log "Table len" (fun () ->
-            write_bytes writer (Bytes.make (size_exn hdr "len") '\x00') ) ;
+            let flen = size_exn hdr "len" in
+            let len =
+              flen + size_exn hdr "hash_len" + hash_len
+              + size_exn hdr "hash_map_len" + hash_map_len + value_len
+            in
+            write_string writer (of_int ~byte_width:flen len) ) ;
         self#log "Table hash len" (fun () ->
-            write_bytes writer (Bytes.make (size_exn hdr "hash_len") '\x00') ) ;
-        self#log "Table hash" (fun () ->
-            write_bytes writer (Bytes.make hash_len '\x00') ) ;
+            write_string writer
+              (of_int ~byte_width:(size_exn hdr "hash_len") hash_len) ) ;
+        self#log "Table hash" (fun () -> write_string writer hash_body) ;
         self#log "Table map len" (fun () ->
-            write_bytes writer (Bytes.make (size_exn hdr "hash_map_len") '\x00') ) ;
+            write_string writer
+              (of_int ~byte_width:(size_exn hdr "hash_map_len") hash_map_len) ) ;
         self#log "Table key map" (fun () ->
-            write_bytes writer (Bytes.make (8 * table_size) '\x00') ) ;
-        let hash_table = Array.create ~len:table_size 0x0 in
+            Array.iteri hash ~f:(fun h p ->
+                self#log (sprintf "Map entry (%d => %d)" h p) (fun () ->
+                    write_string writer (of_int ~byte_width:8 p) ) ) ) ;
         self#log "Table values" (fun () ->
-            Gen.iter gen ~f:(fun (key, vctx) ->
-                let value_pos = pos writer in
-                let skey = serialize_key key in
-                let hash_val =
-                  match Hashtbl.find hash skey with
-                  | Some v -> v
-                  | None ->
-                      Error.(
-                        create "BUG: Missing key." skey [%sexp_of: string] |> raise)
-                in
-                hash_table.(hash_val)
-                <- Pos.(value_pos |> to_bytes_exn |> Int64.to_int_exn) ;
-                self#visit_t sctx (M.to_ctx key) key_l ;
-                self#visit_t sctx vctx value_l ) ) ;
-        let end_pos = pos writer in
-        seek writer header_pos ;
-        let len = Pos.(end_pos - header_pos) in
-        write_string writer
-          (of_int ~byte_width:(size_exn hdr "len") (Int64.to_int_exn len)) ;
-        write_string writer (of_int ~byte_width:(size_exn hdr "hash_len") hash_len) ;
-        write_string writer hash_body ;
-        write_string writer
-          (of_int ~byte_width:(size_exn hdr "hash_map_len") (8 * table_size)) ;
-        Array.iteri hash_table ~f:(fun i x ->
-            self#log (sprintf "Map entry (%d => %d)" i x) (fun () ->
-                write_string writer (of_int ~byte_width:8 x) ) ) ;
-        seek writer end_pos
+            valf#flush ;
+            self#log_insert valf ;
+            write_string writer (Buffer.contents vbuf) )
 
       method build_AOrderedIdx sctx meta (_, value_l, ometa) keys gen =
         let t = Meta.Direct.(find_exn meta Meta.type_) in
@@ -299,6 +301,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
                 write_string writer (of_int64 ~byte_width:ptr_size vptr) ) ) ;
         let index_end = self#pos in
         self#log "Ordered idx body" (fun () ->
+            valf#flush ;
             self#log_insert valf ;
             write_string writer (Buffer.contents vbuf) ) ;
         let end_pos = self#pos in

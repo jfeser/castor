@@ -258,13 +258,16 @@ let rec len =
 (** Range of ordered index map lengths. *)
 and oi_map_len kt vt m = AbsInt.(m.count * (len kt + of_int (oi_ptr_size vt m)))
 
-(** Size of pointers (in bytes) in ordered indices. *)
-and oi_ptr_size vt m =
-  let y = AbsInt.(m.count * len vt) in
-  let x = AbsInt.(byte_width ~nullable:false y) in
-  Logs.debug (fun m -> m "pointer range %a" AbsInt.pp y) ;
-  Logs.debug (fun m -> m "pointer size %d" x) ;
-  x
+(** Size of pointers (in bytes) in ordered indexes. *)
+and oi_ptr_size vt m = AbsInt.(byte_width ~nullable:false AbsInt.(m.count * len vt))
+
+(** Range of hash index map lengths. *)
+and hi_map_len kt vt m =
+  AbsInt.(m.key_count * of_int 16 * of_int (hi_ptr_size kt vt m))
+
+(** Size of pointers (in bytes) in hash indexes. *)
+and hi_ptr_size kt vt m =
+  AbsInt.(byte_width ~nullable:false AbsInt.(m.key_count * (len kt + len vt)))
 
 (** Use the type of a hash index to decide what hash method to use. *)
 let hash_kind_exn = function

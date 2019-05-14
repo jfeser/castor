@@ -471,15 +471,16 @@ struct
     debug_print "hashing key" (Tuple lookup_expr) b ;
     let hash_key = Infix.(hash_key * int 8) in
     (* Get a pointer to the value. *)
-    let value_ptr = Infix.(Slice (mapping_start + hash_key, 8)) in
-    debug_print "value pointer is" value_ptr b ;
+    let value_ptr =
+      Infix.(Slice (mapping_start + hash_key, 8) + mapping_start + mapping_len)
+    in
+    debug_print "value ptr is" value_ptr b ;
     (* If the pointer is null, then the key is not present. *)
     build_if
       ~cond:
         Infix.(
-          hash_key < int 0
-          || hash_key >= mapping_len
-          || build_eq value_ptr (int 0x0) b)
+          hash_key < int 0 || hash_key >= mapping_len
+          (* || build_eq value_ptr (int 0x0) b *))
       ~then_:(fun b -> debug_print "no values found" value_ptr b)
       ~else_:(fun b ->
         debug_print "found values" value_ptr b ;
