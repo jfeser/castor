@@ -87,6 +87,9 @@ module Make (C : Config.S) = struct
     in
     visitor#visit_t Exact r
 
+  (* This is just a sentinal so we can use any value. *)
+  let dummy = Bool false
+
   let project_visitor =
     object (self : 'a)
       inherit [_] map as super
@@ -94,7 +97,7 @@ module Make (C : Config.S) = struct
       method! visit_t () r =
         let refcnt = Meta.find_exn r M.refcnt in
         let count = Meta.find_exn r count in
-        if all_unref r && count = AtLeastOne then scalar (Null None)
+        if all_unref r && count = AtLeastOne then scalar dummy
         else
           match r.node with
           | Select (ps, r) -> select (project_defs refcnt ps) (self#visit_t () r)
@@ -103,7 +106,7 @@ module Make (C : Config.S) = struct
               group_by (project_defs refcnt ps) ns (self#visit_t () r)
           | AScalar p -> (
             match project_defs refcnt [p] with
-            | [] -> scalar (Null None)
+            | [] -> scalar dummy
             | [p] -> scalar p
             | _ -> assert false )
           | ATuple ([], _) -> empty
@@ -133,7 +136,7 @@ module Make (C : Config.S) = struct
                           m "Removing tuple element %a." pp_with_refcount r ) ;
                     not should_remove )
               in
-              let rs = if List.length rs = 0 then [scalar (Null None)] else rs in
+              let rs = if List.length rs = 0 then [scalar dummy] else rs in
               tuple rs Cross
           | Join {r1; r2; pred} -> (
             match count with
@@ -150,7 +153,7 @@ module Make (C : Config.S) = struct
             (* If one side of a join is unused then the join can be dropped. *)
             | AtLeastOne ->
                 if all_unref d_lhs then self#visit_t () d_rhs
-                else if all_unref d_rhs then scalar (Null None)
+                else if all_unref d_rhs then scalar dummy
                 else
                   dep_join (self#visit_t () d_lhs) d_alias (self#visit_t () d_rhs) )
           | _ -> super#visit_t () r
