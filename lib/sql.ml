@@ -39,22 +39,6 @@ let to_schema = function
       List.map select ~f:select_entry_name
   | Union_all [] -> failwith "No empty unions."
 
-let to_order = function
-  | Union_all _ -> Ok []
-  | Query {select; order; _} ->
-      List.map order ~f:(fun (p, o) ->
-          let alias =
-            List.find_map select ~f:(fun {pred; alias; _} ->
-                if [%compare.equal: pred] p pred then Some alias else None )
-          in
-          match alias with
-          | Some n -> Ok (Name (Name.create n), o)
-          | None ->
-              Error
-                (Error.create "Order clause depends on hidden expression."
-                   (p, select) [%sexp_of: pred * select_entry list]) )
-      |> Or_error.all
-
 let to_select = function
   | Union_all qs -> List.concat_map qs ~f:(fun {select; _} -> select)
   | Query {select; _} -> select
@@ -122,7 +106,8 @@ let order_by of_ralgebra key r =
   in
   Query {spj with order= key}
 
-let select ?groupby schema sql fields =
+let select ?groupby of_ralgebra ps r =
+  let sql = of_ralgebra r in
   (* Creating a subquery is always safe, but we want to avoid it if possible. We
      don't need a subquery if:
      - This select is aggregation free
@@ -130,7 +115,7 @@ let select ?groupby schema sql fields =
   let needs_subquery =
     let for_agg =
       match
-        ( select_kind fields
+        ( select_kind ps
         , to_select sql |> List.map ~f:(fun {pred= p; _} -> p) |> select_kind )
       with
       | `Scalar, _ | `Agg, `Scalar -> false
@@ -141,8 +126,8 @@ let select ?groupby schema sql fields =
     for_agg || for_distinct
   in
   let spj = if needs_subquery then create_subquery sql else to_spj sql in
-  let sctx = make_ctx schema spj.select in
-  let fields = List.map fields ~f:(fun p -> p |> Pred.subst sctx |> create_entry) in
+  let sctx = make_ctx (schema_exn r) spj.select in
+  let fields = List.map ps ~f:(fun p -> p |> Pred.subst sctx |> create_entry) in
   let spj = {spj with select= fields} in
   let spj =
     match groupby with
@@ -209,12 +194,12 @@ let of_ralgebra r =
         Query (create_query ~relations select_list)
     | Filter (pred, r) -> filter f pred r
     | OrderBy {key; rel= r} -> order_by f key r
-    | Select (fs, r) -> select (schema_exn r) (f r) fs
+    | Select (fs, r) -> select f fs r
     | DepJoin {d_lhs; d_rhs; d_alias} -> dep_join f d_lhs d_alias d_rhs
     | Join {pred; r1; r2} -> join (schema_exn r1) (schema_exn r2) (f r1) (f r2) pred
     | GroupBy (ps, key, r) ->
         let key = List.map ~f:(fun n -> Name n) key in
-        select ~groupby:key (schema_exn r) (f r) ps
+        select ~groupby:key f ps r
     | ATuple ([], _) -> failwith "Empty tuple."
     | ATuple ([r], (Cross | Concat)) -> f r
     | ATuple (r :: rs, Cross) ->
