@@ -12,6 +12,10 @@ module Config = struct
     val dbconn : Postgresql.connection
 
     include Filter_tactics.Config.S
+
+    include Simple_tactics.Config.S
+
+    include Resolve.Config.S
   end
 end
 
@@ -21,13 +25,7 @@ module Make (C : Config.S) = struct
   open O
   module S = Simple_tactics.Make (C)
   open S
-
-  (* module F = Filter_tactics.Make (C)
-   * open F *)
-
-  module M = Abslayout_db.Make (struct
-    let conn = conn
-  end)
+  module R = Resolve.Make (C)
 
   module JoinGraph = struct
     module Vertex = struct
@@ -301,7 +299,7 @@ module Make (C : Config.S) = struct
       let c = A.(Name (Name.create "c")) in
       A.(select [Min c; Max c; Avg c] part_counts)
     in
-    let part_aggs = M.resolve ~params part_aggs in
+    let part_aggs = R.resolve ~params part_aggs in
     let sql = Sql.of_ralgebra part_aggs in
     let tups =
       Db.exec_cursor_exn conn

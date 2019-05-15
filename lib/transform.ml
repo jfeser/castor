@@ -90,7 +90,7 @@ module Make (Config : Config.S) () = struct
   let push_all_unparameterized_filters =
     fix
       (seq_many
-         [resolve; first push_filter Path.(all >>? is_run_time >>? is_filter)])
+         [resolve; for_all push_filter Path.(all >>? is_run_time >>? is_filter)])
 
   let opt =
     let open Infix in
