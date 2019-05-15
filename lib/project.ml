@@ -74,9 +74,10 @@ module Make (C : Config.S) = struct
           in
           Meta.set (super#visit_t c r) count c
 
-        method! visit_AHashIdx c (rk, rv, m) =
+        method! visit_AHashIdx c h =
           AHashIdx
-            (self#visit_t AtLeastOne rk, self#visit_t c rv, self#visit_hash_idx c m)
+            { (self#visit_hash_idx c h) with
+              hi_keys= self#visit_t AtLeastOne h.hi_keys }
 
         method! visit_AOrderedIdx c (rk, rv, m) =
           AOrderedIdx

@@ -58,7 +58,7 @@ and schema_exn r =
   | Select (x, _) | GroupBy (x, _, _) -> of_preds x |> unscoped
   | Filter (_, r) | Dedup r | OrderBy {rel= r; _} -> schema_exn r |> unscoped
   | Join {r1; r2; _} -> schema_exn r1 @ schema_exn r2 |> unscoped
-  | AOrderedIdx (r1, r2, _) | AHashIdx (r1, r2, _) ->
+  | AOrderedIdx (r1, r2, _) | AHashIdx {hi_keys= r1; hi_values= r2; _} ->
       schema_exn r1 @ schema_exn r2 |> unscoped
   | AEmpty -> []
   | AScalar e -> of_preds [e] |> unscoped

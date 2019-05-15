@@ -67,7 +67,13 @@ module Make (Config : Config.S) = struct
           order_by order_key q1
         in
         For (q1, scope, gen_query q2)
-    | AHashIdx (q1, q2, _) | AOrderedIdx (q1, q2, _) ->
+    | AHashIdx h ->
+        let q1 =
+          let order_key = total_order_key h.hi_keys in
+          order_by order_key (dedup h.hi_keys)
+        in
+        Concat [Query q1; For (q1, h.hi_scope, gen_query h.hi_values)]
+    | AOrderedIdx (q1, q2, _) ->
         let scope = scope_exn q1 in
         let q1 = strip_scope q1 in
         let q1 =
@@ -245,7 +251,7 @@ module Make (Config : Config.S) = struct
       method virtual private build_AHashIdx
           :    'ctx
             -> Meta.t
-            -> t * t * hash_idx
+            -> hash_idx
             -> Value.t list Gen.t
             -> (Value.t list * Ctx.t) Gen.t
             -> 'a
@@ -324,7 +330,7 @@ module Make (Config : Config.S) = struct
 
       method virtual hash_idx
           :    Meta.t
-            -> t * t * hash_idx
+            -> hash_idx
             -> (unit, 'h1, Value.t list, 'h2) fold
                * ('h2, 'h3, 'out * 'out, 'out) fold
 
@@ -356,9 +362,9 @@ module Make (Config : Config.S) = struct
       method private build_ATuple ctx meta ((rs, _) as expr) es =
         self#tuple meta expr (List.map2_exn es rs ~f:(self#visit_t ctx))
 
-      method private build_AHashIdx ctx meta
-          ((_, value_query, {hi_key_layout= m_key_query; _}) as expr) kgen vgen =
-        let key_query = Option.value_exn m_key_query in
+      method private build_AHashIdx ctx meta ({hi_values; hi_key_layout; _} as expr)
+          kgen vgen =
+        let key_query = Option.value_exn hi_key_layout in
         let f1, f2 = self#hash_idx meta expr in
         let acc = Gen.fold kgen ~init:(f1.pre ()) ~f:f1.body in
         Gen.fold vgen
@@ -366,7 +372,7 @@ module Make (Config : Config.S) = struct
           ~f:(fun acc (tup, ectx) ->
             f2.body acc
               ( self#visit_t ctx (to_ctx tup) key_query
-              , self#visit_t ctx ectx value_query ) )
+              , self#visit_t ctx ectx hi_values ) )
         |> f2.post
 
       method private build_AOrderedIdx ctx meta
@@ -420,10 +426,10 @@ module Make (Config : Config.S) = struct
           FuncT
             ( [least_general_of_layout d_lhs; least_general_of_layout d_rhs]
             , `Child_sum )
-      | AHashIdx (_, vr, {hi_key_layout= Some kr; _}) ->
+      | AHashIdx h ->
           HashIdxT
-            ( least_general_of_layout kr
-            , least_general_of_layout vr
+            ( least_general_of_layout (Option.value_exn h.hi_key_layout)
+            , least_general_of_layout h.hi_values
             , {value_count= Bottom; key_count= Bottom} )
       | AOrderedIdx (_, vr, {oi_key_layout= Some kr; _}) ->
           OrderedIdxT
@@ -431,9 +437,7 @@ module Make (Config : Config.S) = struct
       | ATuple (rs, _) ->
           TupleT (List.map rs ~f:least_general_of_layout, {count= Bottom})
       | As (_, r') -> least_general_of_layout r'
-      | AHashIdx (_, _, {hi_key_layout= None; _})
-       |AOrderedIdx (_, _, {oi_key_layout= None; _})
-       |Relation _ ->
+      | AOrderedIdx (_, _, {oi_key_layout= None; _}) | Relation _ ->
           failwith "Layout is still abstract."
 
     (** Returns a layout type that is general enough to hold all of the data. *)
@@ -480,14 +484,14 @@ module Make (Config : Config.S) = struct
               TupleT
                 (elem_types, {count= List.fold_left1_exn ~f:AbsInt.( * ) counts})
 
-        method hash_idx _ (_, value_l, {hi_key_layout; _}) =
-          let key_l = Option.value_exn hi_key_layout in
+        method hash_idx _ h =
+          let key_l = Option.value_exn h.hi_key_layout in
           ( {pre= (fun () -> 0); body= (fun x _ -> x + 1); post= (fun x -> x)}
           , { pre=
                 (fun kct ->
                   ( AbsInt.of_int kct
                   , least_general_of_layout key_l
-                  , least_general_of_layout value_l ) )
+                  , least_general_of_layout h.hi_values ) )
             ; body=
                 (fun (kct, kt, vt) (kt', vt') ->
                   (kct, unify_exn kt kt', unify_exn vt vt') )
@@ -529,9 +533,9 @@ module Make (Config : Config.S) = struct
       | AList (_, r'), ListT (t', _)
        |(Filter (_, r') | Select (_, r')), FuncT ([t'], _) ->
           annot r' t'
-      | AHashIdx (_, vr, m), HashIdxT (kt, vt, _) ->
-          Option.iter m.hi_key_layout ~f:(fun kr -> annot kr kt) ;
-          annot vr vt
+      | AHashIdx h, HashIdxT (kt, vt, _) ->
+          Option.iter h.hi_key_layout ~f:(fun kr -> annot kr kt) ;
+          annot h.hi_values vt
       | AOrderedIdx (_, vr, m), OrderedIdxT (kt, vt, _) ->
           Option.iter m.oi_key_layout ~f:(fun kr -> annot kr kt) ;
           annot vr vt

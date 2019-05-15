@@ -122,10 +122,10 @@ ralgebra_subquery:
   RPAREN { A.ATuple (ls, k) |> node $symbolstartpos $endpos }
 
 | AHASHIDX; LPAREN;
-  r = ralgebra; COMMA;
+  r = ralgebra; AS; s = ID; COMMA;
   x = ralgebra; COMMA;
   e = key;
-  RPAREN { A.(AHashIdx (r, x,  { lookup = e; hi_key_layout = None })) |> node $symbolstartpos $endpos }
+  RPAREN { A.(AHashIdx {hi_keys= r; hi_values= x; hi_key_layout = None; hi_lookup=e; hi_scope=s}) |> node $symbolstartpos $endpos }
 
 | AORDEREDIDX; LPAREN;
   r = ralgebra; COMMA;

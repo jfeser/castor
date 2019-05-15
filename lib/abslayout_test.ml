@@ -22,13 +22,13 @@ let%test_module _ =
                   ([%sexp_of: Value.t list] key |> Sexp.to_string_hum) ;
                 self#visit_t () vctx r )
 
-          method build_AHashIdx () _ (_, r, _) kgen vgen =
+          method build_AHashIdx () _ h kgen vgen =
             print_endline "HashIdx" ;
             Gen.iter kgen ~f:(fun _ -> ()) ;
             Gen.iter vgen ~f:(fun (key, vctx) ->
                 printf "HashIdx key: %s\n"
                   ([%sexp_of: Value.t list] key |> Sexp.to_string_hum) ;
-                self#visit_t () vctx r )
+                self#visit_t () vctx h.hi_values )
 
           method build_AOrderedIdx () _ (_, r, _) kgen vgen =
             print_endline "OrderedIdx" ;
@@ -335,13 +335,12 @@ let%test_module _ =
         {|
     ((node
       (Select
-       (((Min (Name ((relation ()) (name f)))))
+       (((Min (Name ((scope ()) (name f)))))
         ((node
           (Relation
            ((r_name r)
-            (r_schema ((((relation ()) (name f)) ((relation ()) (name g))))))))
-         (meta
-          ((refcnt ((((relation ()) (name f)) 1) (((relation ()) (name g)) 0)))))))))
+            (r_schema ((((scope ()) (name f)) ((scope ()) (name g))))))))
+         (meta ((refcnt ((((scope ()) (name f)) 1) (((scope ()) (name g)) 0)))))))))
      (meta ((refcnt ())))) |}]
 
     let%expect_test "pred_names" =
@@ -393,5 +392,5 @@ let%test_module _ =
                                                                     + day(1))))))))|}
       in
       Pred.names p |> [%sexp_of: Set.M(Name).t] |> print_s ;
-      [%expect {| (((relation ()) (name total_revenue))) |}]
+      [%expect {| (((scope ()) (name total_revenue))) |}]
   end )

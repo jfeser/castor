@@ -212,7 +212,7 @@ let of_ralgebra r =
     | ATuple (_, Zip) ->
         Error.(create "Unsupported." r [%sexp_of: Abslayout.t] |> raise)
     | AList (rk, rv) -> f (list_to_depjoin rk rv)
-    | AHashIdx (rk, rv, m) -> f (hash_idx_to_depjoin rk rv m)
+    | AHashIdx h -> f (hash_idx_to_depjoin h)
     | AOrderedIdx (rk, rv, m) -> f (ordered_idx_to_depjoin rk rv m)
   in
   ensure_alias r |> f

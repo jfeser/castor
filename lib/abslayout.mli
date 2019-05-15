@@ -56,7 +56,11 @@ type pred = Abslayout0.pred =
 [@@deriving compare, hash, sexp_of]
 
 and hash_idx = Abslayout0.hash_idx =
-  {hi_key_layout: Abslayout0.t option; lookup: pred list}
+  { hi_keys: t
+  ; hi_values: t
+  ; hi_scope: string
+  ; hi_key_layout: t option
+  ; hi_lookup: pred list }
 [@@deriving compare, hash, sexp_of]
 
 and ordered_idx = Abslayout0.ordered_idx =
@@ -85,7 +89,7 @@ and node = Abslayout0.node =
   | AScalar of pred
   | AList of (t * t)
   | ATuple of (t list * tuple)
-  | AHashIdx of (t * t * hash_idx)
+  | AHashIdx of hash_idx
   | AOrderedIdx of (t * t * ordered_idx)
   | As of string * t
 [@@deriving compare, hash, sexp_of]
@@ -116,6 +120,8 @@ val name : t -> string
 val names : t -> Set.M(Name).t
 (** The set of names in a `t`. *)
 
+val wrap : node -> t
+
 val select : pred list -> t -> t
 
 val dep_join : t -> string -> t -> t
@@ -140,7 +146,7 @@ val list : t -> string -> t -> t
 
 val tuple : t list -> tuple -> t
 
-val hash_idx : t -> string -> t -> hash_idx -> t
+val hash_idx : ?key_layout:t -> t -> string -> t -> pred list -> t
 
 val ordered_idx : t -> string -> t -> ordered_idx -> t
 
@@ -266,7 +272,7 @@ val strip_unused_as : t -> t
 
 val list_to_depjoin : t -> t -> t
 
-val hash_idx_to_depjoin : t -> t -> hash_idx -> t
+val hash_idx_to_depjoin : hash_idx -> t
 
 val ordered_idx_to_depjoin : t -> t -> ordered_idx -> t
 

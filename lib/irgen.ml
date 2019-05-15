@@ -437,8 +437,7 @@ struct
 
   and scan_hash_idx ctx b r t cb =
     let open Builder in
-    let _, value_layout, Abslayout.{lookup; hi_key_layout= m_key_layout} = r in
-    let key_layout = Option.value_exn m_key_layout in
+    let key_layout = Option.value_exn r.hi_key_layout in
     let key_type, value_type, _ = t in
     let hdr = Header.make_header (HashIdxT t) in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -458,7 +457,7 @@ struct
     let hash_data_start = Header.make_position hdr "hash_data" start in
     let mapping_start = Header.make_position hdr "hash_map" start in
     let mapping_len = Header.make_access hdr "hash_map_len" start in
-    let lookup_expr = List.map lookup ~f:(fun p -> gen_pred ctx p b) in
+    let lookup_expr = List.map r.hi_lookup ~f:(fun p -> gen_pred ctx p b) in
     (* Compute the index in the mapping table for this key. *)
     let hash_key =
       match (Type.(hash_kind_exn (HashIdxT t)), lookup_expr) with
@@ -491,7 +490,7 @@ struct
         build_if
           ~cond:(build_eq key_tuple (Tuple lookup_expr) b)
           ~then_:(fun b ->
-            scan value_ctx b value_layout value_type (fun b value_tup ->
+            scan value_ctx b r.hi_values value_type (fun b value_tup ->
                 cb b (list_of_tuple key_tuple b @ value_tup) ) )
           ~else_:(fun _ -> ())
           b )

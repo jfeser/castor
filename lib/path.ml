@@ -49,10 +49,9 @@ let rec set_exn p r s =
       tuple
         (List.mapi rs ~f:(fun i' r' -> if i = i' then set_exn p' r' s else r'))
         t
-  | 0 :: p', AHashIdx (r', r2, h) ->
-      let rk = set_exn p' r' s in
-      hash_idx rk (scope_exn rk) r2 h
-  | 1 :: p', AHashIdx (r1, r', h) -> hash_idx r1 (scope_exn r1) (set_exn p' r' s) h
+  | 0 :: p', AHashIdx h -> wrap (AHashIdx {h with hi_keys= set_exn p' h.hi_keys s})
+  | 1 :: p', AHashIdx h ->
+      wrap (AHashIdx {h with hi_values= set_exn p' h.hi_values s})
   | 0 :: p', AOrderedIdx (r', r2, h) ->
       let rk = set_exn p' r' s in
       ordered_idx rk (scope_exn rk) r2 h
@@ -77,13 +76,13 @@ let rec get_exn p r =
       | DepJoin {d_lhs= r'; _}
       | Join {r1= r'; _}
       | AList (r', _)
-      | AHashIdx (r', _, _)
+      | AHashIdx {hi_keys= r'; _}
       | AOrderedIdx (r', _, _) ) )
    |( 1 :: p'
     , ( DepJoin {d_rhs= r'; _}
       | Join {r2= r'; _}
       | AList (_, r')
-      | AHashIdx (_, r', _)
+      | AHashIdx {hi_values= r'; _}
       | AOrderedIdx (_, r', _) ) ) ->
       get_exn p' r'
   | i :: p', ATuple (rs, _) ->
@@ -122,7 +121,7 @@ let all r =
                 Fqueue.enqueue q (r', 0 :: p)
             | Join {r1; r2; _}
              |AList (r1, r2)
-             |AHashIdx (r1, r2, _)
+             |AHashIdx {hi_keys= r1; hi_values= r2; _}
              |AOrderedIdx (r1, r2, _)
              |DepJoin {d_lhs= r1; d_rhs= r2; _} ->
                 let q = Fqueue.enqueue q (r1, 0 :: p) in
@@ -156,7 +155,7 @@ let rec is_run_time r p =
    |( 1 :: p'
     , ( Join {r2= r'; _}
       | AList (_, r')
-      | AHashIdx (_, r', _)
+      | AHashIdx {hi_values= r'; _}
       | AOrderedIdx (_, r', _)
       | DepJoin {d_rhs= r'; _} ) ) ->
       is_run_time r' p'

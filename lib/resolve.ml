@@ -70,8 +70,8 @@ module Make (C : Config.S) = struct
         method! visit_AList () (rk, rv) =
           self#check_alias () rk ; self#visit_t () rv
 
-        method! visit_AHashIdx () (rk, rv, _) =
-          self#check_alias () rk ; self#visit_t () rv
+        method! visit_AHashIdx () h =
+          self#check_name h.hi_scope ; self#visit_hash_idx () h
 
         method! visit_AOrderedIdx () (rk, rv, _) =
           self#check_alias () rk ; self#visit_t () rv
@@ -336,15 +336,18 @@ module Make (C : Config.S) = struct
       | ATuple (ls, ((Cross | Zip) as t)) ->
           let ls, ctxs = List.map ls ~f:(rsame outer_ctx) |> List.unzip in
           (ATuple (ls, t), Ctx.merge_list ctxs)
-      | AHashIdx (r, l, m) ->
-          let scope = scope_exn r in
-          let r = strip_scope r in
-          let r, kctx = resolve `Compile outer_ctx r in
+      | AHashIdx h ->
+          let r, kctx = resolve `Compile outer_ctx h.hi_keys in
           assert (all_has_stage kctx `Compile) ;
-          let inner_ctx = Ctx.bind outer_ctx (Ctx.scoped scope kctx) in
-          let vl, vctx = rsame inner_ctx l in
-          let m = {m with lookup= List.map m.lookup ~f:(resolve_pred outer_ctx)} in
-          (AHashIdx (as_ scope r, vl, m), Ctx.(merge_forgiving kctx vctx))
+          let inner_ctx = Ctx.bind outer_ctx (Ctx.scoped h.hi_scope kctx) in
+          let vl, vctx = rsame inner_ctx h.hi_values in
+          let h =
+            { h with
+              hi_keys= r
+            ; hi_values= vl
+            ; hi_lookup= List.map h.hi_lookup ~f:(resolve_pred outer_ctx) }
+          in
+          (AHashIdx h, Ctx.(merge_forgiving kctx vctx))
       | AOrderedIdx (r, l, m) ->
           let scope = scope_exn r in
           let r = strip_scope r in

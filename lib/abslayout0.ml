@@ -50,7 +50,12 @@ module T = struct
     | Exists of t
     | Substring of pred * pred * pred
 
-  and hash_idx = {hi_key_layout: t option; lookup: pred list}
+  and hash_idx =
+    { hi_keys: t
+    ; hi_values: t
+    ; hi_scope: string
+    ; hi_key_layout: t option
+    ; hi_lookup: pred list }
 
   and ordered_idx =
     { oi_key_layout: t option
@@ -81,7 +86,7 @@ module T = struct
     | AScalar of pred
     | AList of (t * t)
     | ATuple of (t list * tuple)
-    | AHashIdx of (t * t * hash_idx)
+    | AHashIdx of hash_idx
     | AOrderedIdx of (t * t * ordered_idx)
     | As of string * t
   [@@deriving
@@ -120,7 +125,7 @@ class virtual runtime_subquery_visitor =
 
     method! visit_AList () (_, r) = super#visit_t () r
 
-    method! visit_AHashIdx () (_, r, _) = super#visit_t () r
+    method! visit_AHashIdx () {hi_values= r; _} = super#visit_t () r
 
     method! visit_AOrderedIdx () (_, r, _) = super#visit_t () r
 
@@ -233,8 +238,8 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
     | AList (r1, r2) -> fprintf fmt "alist(%a,@ %a)" pp r1 pp r2
     | ATuple (rs, kind) ->
         fprintf fmt "atuple(%a,@ %a)" (pp_list pp) rs pp_kind kind
-    | AHashIdx (r1, r2, {lookup; _}) ->
-        fprintf fmt "ahashidx(%a,@ %a,@ %a)" pp r1 pp r2 pp_key lookup
+    | AHashIdx {hi_keys= r1; hi_values= r2; hi_lookup; _} ->
+        fprintf fmt "ahashidx(%a,@ %a,@ %a)" pp r1 pp r2 pp_key hi_lookup
     | AOrderedIdx (r1, r2, {lookup_low; lookup_high; _}) ->
         fprintf fmt "aorderedidx(%a,@ %a,@ %a,@ %a)" pp r1 pp r2 pp_pred lookup_low
           pp_pred lookup_high

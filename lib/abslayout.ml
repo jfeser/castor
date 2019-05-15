@@ -91,12 +91,18 @@ let list a b c =
 
 let tuple a b = wrap (ATuple (List.map ~f:strip_meta a, b))
 
-let hash_idx a b c d =
+let hash_idx ?key_layout a b c d =
   let a = strip_scope a in
   let a, c =
     if has_scope_overlap [a; c] [b] then (alpha_scopes a, alpha_scopes c) else (a, c)
   in
-  wrap (AHashIdx (strip_meta (as_ b a), strip_meta c, d))
+  wrap
+    (AHashIdx
+       { hi_keys= strip_meta (as_ b a)
+       ; hi_values= strip_meta c
+       ; hi_scope= b
+       ; hi_lookup= d
+       ; hi_key_layout= key_layout })
 
 let ordered_idx a b c d =
   let a = strip_scope a in
@@ -240,11 +246,11 @@ and free r =
           || (List.map key ~f:(fun (p, _) -> pred_free p) |> union_list)
              - exposed rel)
     | AList (r', r'') -> Set.O.(free r' || (free r'' - exposed r'))
-    | AHashIdx (r', r'', {lookup; _}) ->
+    | AHashIdx h ->
         union_list
-          [ free r'
-          ; Set.diff (free r'') (exposed r')
-          ; List.map ~f:pred_free lookup |> union_list ]
+          [ free h.hi_keys
+          ; Set.diff (free h.hi_values) (exposed h.hi_keys)
+          ; List.map ~f:pred_free h.hi_lookup |> union_list ]
     | AOrderedIdx (r', r'', {lookup_low; lookup_high; _}) ->
         union_list
           [ free r'
@@ -664,10 +670,10 @@ class ['a] stage_iter =
       self#visit_t `Compile rk ;
       self#visit_t phase rv
 
-    method! visit_AHashIdx phase (rk, rv, {lookup; _}) =
-      List.iter lookup ~f:(self#visit_pred phase) ;
-      self#visit_t `Compile rk ;
-      self#visit_t phase rv
+    method! visit_AHashIdx phase h =
+      List.iter h.hi_lookup ~f:(self#visit_pred phase) ;
+      self#visit_t `Compile h.hi_keys ;
+      self#visit_t phase h.hi_values
 
     method! visit_AOrderedIdx phase (rk, rv, {lookup_low; lookup_high; _}) =
       self#visit_pred phase lookup_low ;
@@ -733,7 +739,7 @@ let annotate_orders r =
                        Some (Name (Name.create n), d)
                    | p' when [%compare.equal: pred] p p' -> Some (p', d)
                    | _ -> None ) )
-      | Filter (_, r) | AHashIdx (_, r, _) -> annotate_orders r
+      | Filter (_, r) | AHashIdx {hi_values= r; _} -> annotate_orders r
       | DepJoin {d_lhs= r1; d_rhs= r2; _} | Join {r1; r2; _} ->
           annotate_orders r1 |> ignore ;
           annotate_orders r2 |> ignore ;
@@ -790,13 +796,13 @@ let annotate_key_layouts r =
     object (self : 'a)
       inherit [_] map
 
-      method! visit_AHashIdx () ((x, y, ({hi_key_layout; _} as m)) as r) =
-        let x = self#visit_t () x in
-        let y = self#visit_t () y in
-        match hi_key_layout with
-        | Some _ -> AHashIdx r
-        | None ->
-            AHashIdx (x, y, {m with hi_key_layout= Some (key_layout (schema_exn x))})
+      method! visit_AHashIdx () h =
+        let h = self#visit_hash_idx () h in
+        let hi_key_layout =
+          Option.first_some h.hi_key_layout
+            (Some (key_layout (schema_exn h.hi_keys)))
+        in
+        AHashIdx {h with hi_key_layout}
 
       method! visit_AOrderedIdx () ((x, y, ({oi_key_layout; _} as m)) as r) =
         let x = self#visit_t () x in
@@ -825,12 +831,6 @@ let strip_unused_as =
         let rv = self#visit_t () rv in
         AList (rk, rv)
 
-      method! visit_AHashIdx () _ (rk, rv, m) =
-        let rk = self#skip_as rk in
-        let rv = self#visit_t () rv in
-        let m = self#visit_hash_idx () m in
-        AHashIdx (rk, rv, m)
-
       method! visit_AOrderedIdx () _ (rk, rv, m) =
         let rk = self#skip_as rk in
         let rv = self#visit_t () rv in
@@ -848,16 +848,15 @@ let list_to_depjoin rk rv =
   let scope = scope_exn rk in
   dep_join (strip_scope rk) scope rv
 
-let hash_idx_to_depjoin rk rv {lookup; _} =
-  let scope = scope_exn rk in
-  let rk_schema = schema_exn rk in
-  let rv_schema = schema_exn rv in
+let hash_idx_to_depjoin h =
+  let rk_schema = schema_exn h.hi_keys |> Schema.scoped h.hi_scope in
+  let rv_schema = schema_exn h.hi_values in
   let key_pred =
-    List.map2_exn rk_schema lookup ~f:(fun p1 p2 -> Binop (Eq, Name p1, p2))
+    List.map2_exn rk_schema h.hi_lookup ~f:(fun p1 p2 -> Binop (Eq, Name p1, p2))
     |> Pred.conjoin
   in
   let slist = rk_schema @ rv_schema |> List.map ~f:(fun n -> Name n) in
-  dep_join (strip_scope rk) scope (select slist (filter key_pred rv))
+  dep_join h.hi_keys h.hi_scope (select slist (filter key_pred h.hi_values))
 
 let ordered_idx_to_depjoin rk rv {lookup_low; lookup_high; _} =
   let scope = scope_exn rk in

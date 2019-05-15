@@ -204,14 +204,14 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         let tuple_t = Type.(TupleT ([lhs_t; rhs_t], {count= AbsInt.top})) in
         self#build_Tuple sctx tuple_t [d_lhs; d_rhs] [ctx1; ctx2]
 
-      method build_AHashIdx sctx meta (_, value_l, hmeta) keys gen =
+      method build_AHashIdx sctx meta h keys gen =
         (* Burn the keys*)
         Gen.iter keys ~f:(fun _ -> ()) ;
         let type_ = Meta.Direct.find_exn meta Meta.type_ in
         let key_l =
           Option.value_exn
-            ~error:(Error.create "Missing key layout." hmeta [%sexp_of: hash_idx])
-            hmeta.hi_key_layout
+            ~error:(Error.create "Missing key layout." h [%sexp_of: hash_idx])
+            h.hi_key_layout
         in
         (* Collect keys and write values to a child buffer. *)
         let keys = Queue.create () in
@@ -221,7 +221,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
             let vptr = valf#pos |> Pos.to_bytes_exn |> Int64.to_int_exn in
             Queue.enqueue keys (key, vptr) ;
             valf#visit_t sctx (M.to_ctx key) key_l ;
-            valf#visit_t sctx vctx value_l ) ;
+            valf#visit_t sctx vctx h.hi_values ) ;
         Logs.debug (fun m -> m "Generating hash.") ;
         let hash, hash_body =
           make_hash type_ (Queue.to_array keys |> Array.to_sequence)

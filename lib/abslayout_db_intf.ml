@@ -29,7 +29,7 @@ module type S = sig
       method virtual private build_AHashIdx :
            'ctx
         -> Meta.t
-        -> t * t * hash_idx
+        -> hash_idx
         -> Value.t list Gen.t
         -> (Value.t list * Ctx.t) Gen.t
         -> 'a
@@ -70,7 +70,7 @@ module type S = sig
 
       method virtual hash_idx :
            Meta.t
-        -> t * t * hash_idx
+        -> hash_idx
         -> (unit, 'h1, Value.t list, 'h2) fold * ('h2, 'h3, 'out * 'out, 'out) fold
 
       method virtual ordered_idx :

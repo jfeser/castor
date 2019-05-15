@@ -271,12 +271,15 @@ let eval {db; params} r =
             Seq.map (eval (Ctx.bind ctx s t) (tuple rs Cross)) ~f:(fun t' -> t @ t')
         )
     | ATuple (rs, Concat) -> Seq.concat_map (Seq.of_list rs) ~f:(eval ctx)
-    | AHashIdx (rk, rv, {lookup; _}) ->
-        let vs = List.map lookup ~f:(eval_pred ctx) |> Array.of_list in
-        let sk = schema rk in
-        Seq.find_map (eval ctx rk) ~f:(fun tk ->
+    | AHashIdx h ->
+        let vs = List.map h.hi_lookup ~f:(eval_pred ctx) |> Array.of_list in
+        let sk = schema h.hi_keys in
+        Seq.find_map (eval ctx h.hi_keys) ~f:(fun tk ->
             if Array.equal Value.O.( = ) vs tk then
-              Some (Seq.map (eval (Ctx.bind ctx sk tk) rv) ~f:(fun tv -> tk @ tv))
+              Some
+                (Seq.map
+                   (eval (Ctx.bind ctx sk tk) h.hi_values)
+                   ~f:(fun tv -> tk @ tv))
             else None )
         |> Option.value ~default:Seq.empty
     | AOrderedIdx (rk, rv, {lookup_low; lookup_high; _}) ->
