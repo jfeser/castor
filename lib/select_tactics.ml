@@ -82,7 +82,7 @@ module Make (C : Config.S) = struct
           let open Option.Let_syntax in
           let%bind outer_preds, inner_preds =
             match r'.node with
-            | AHashIdx (rk, _, _) ->
+            | AHashIdx h ->
                 let o =
                   List.filter_map ps ~f:Pred.to_name
                   |> List.map ~f:(fun n -> Name n)
@@ -90,7 +90,9 @@ module Make (C : Config.S) = struct
                 let i =
                   (* TODO: This hack works around problems with sql conversion and
                lateral joins. *)
-                  let kschema = schema_exn rk in
+                  let kschema =
+                    schema_exn h.hi_keys |> Schema.scoped h.hi_scope
+                  in
                   List.filter ps ~f:(function
                     | Name n -> not (List.mem ~equal:Name.O.( = ) kschema n)
                     | _ -> true )
@@ -104,9 +106,10 @@ module Make (C : Config.S) = struct
           in
           let%map mk_collection =
             match r'.node with
-            | AHashIdx (rk, rv, m) ->
+            | AHashIdx h ->
                 Some
-                  (fun mk_select -> hash_idx rk (scope_exn rk) (mk_select rv) m)
+                  (fun mk_select ->
+                    hash_idx' {h with hi_values= mk_select h.hi_values} )
             | AOrderedIdx (rk, rv, m) ->
                 Some
                   (fun mk_select ->

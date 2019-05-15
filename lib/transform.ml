@@ -66,8 +66,8 @@ module Make (Config : Config.S) () = struct
         else None
     | OrderBy {key; rel= {node= Filter (ps, r); _}} ->
         Some (filter ps (order_by key r))
-    | OrderBy {key; rel= {node= AHashIdx (r1, r2, m); _}} ->
-        Some (hash_idx r1 (scope_exn r1) (order_by key r2) m)
+    | OrderBy {key; rel= {node= AHashIdx h; _}} ->
+        Some (hash_idx' {h with hi_values= order_by key h.hi_values})
     | OrderBy {key; rel= {node= AList (r1, r2); _}} ->
         (* If we order a lists keys then the keys will be ordered in the
                    list. *)

@@ -25,7 +25,7 @@ module Make (C : Config.S) = struct
 
   let elim_structure r =
     match r.node with
-    | AHashIdx (rk, rv, m) -> Some (hash_idx_to_depjoin rk rv m)
+    | AHashIdx h -> Some (hash_idx_to_depjoin h)
     | AOrderedIdx (rk, rv, m) -> Some (ordered_idx_to_depjoin rk rv m)
     | AList (rk, rv) -> Some (list_to_depjoin rk rv)
     | _ -> None

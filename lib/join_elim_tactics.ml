@@ -44,7 +44,7 @@ module Make (C : Config.S) = struct
                   (dedup (select [kl] r1))
                   hash_scope
                   (filter (r1_scoped hash_scope (Binop (Eq, kl, kr))) r2)
-                  {lookup= [r1_scoped join_scope kl]; hi_key_layout= None}))
+                  [r1_scoped join_scope kl]))
         in
         Logs.debug (fun m -> m "%a" pp layout) ;
         Some layout

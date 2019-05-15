@@ -187,9 +187,8 @@ let%expect_test "join-opt" =
            (Relation
             ((r_name nation)
              (r_schema
-              ((((relation ()) (name n_nationkey)) ((relation ()) (name n_name))
-                ((relation ()) (name n_regionkey))
-                ((relation ()) (name n_comment))))))))
+              ((((scope ()) (name n_nationkey)) ((scope ()) (name n_name))
+                ((scope ()) (name n_regionkey)) ((scope ()) (name n_comment))))))))
           (meta ()))))
        (rhs
         (Flat
@@ -197,17 +196,15 @@ let%expect_test "join-opt" =
            (Relation
             ((r_name customer)
              (r_schema
-              ((((relation ()) (name c_custkey)) ((relation ()) (name c_name))
-                ((relation ()) (name c_address))
-                ((relation ()) (name c_nationkey)) ((relation ()) (name c_phone))
-                ((relation ()) (name c_acctbal))
-                ((relation ()) (name c_mktsegment))
-                ((relation ()) (name c_comment))))))))
+              ((((scope ()) (name c_custkey)) ((scope ()) (name c_name))
+                ((scope ()) (name c_address)) ((scope ()) (name c_nationkey))
+                ((scope ()) (name c_phone)) ((scope ()) (name c_acctbal))
+                ((scope ()) (name c_mktsegment)) ((scope ()) (name c_comment))))))))
           (meta ()))))
        (pred
         (Binop
-         (Eq (Name ((relation ()) (name c_nationkey)))
-          (Name ((relation ()) (name n_nationkey))))))))) |}]
+         (Eq (Name ((scope ()) (name c_nationkey)))
+          (Name ((scope ()) (name n_nationkey))))))))) |}]
 
 let%expect_test "join-opt" =
   opt
@@ -229,9 +226,8 @@ let%expect_test "join-opt" =
            (Relation
             ((r_name nation)
              (r_schema
-              ((((relation ()) (name n_nationkey)) ((relation ()) (name n_name))
-                ((relation ()) (name n_regionkey))
-                ((relation ()) (name n_comment))))))))
+              ((((scope ()) (name n_nationkey)) ((scope ()) (name n_name))
+                ((scope ()) (name n_regionkey)) ((scope ()) (name n_comment))))))))
           (meta ()))))
        (rhs
         (Flat
@@ -239,42 +235,38 @@ let%expect_test "join-opt" =
            (Join
             (pred
              (Binop
-              (Eq (Name ((relation ()) (name c_custkey)))
-               (Name ((relation ()) (name o_custkey))))))
+              (Eq (Name ((scope ()) (name c_custkey)))
+               (Name ((scope ()) (name o_custkey))))))
             (r1
              ((node
                (Relation
                 ((r_name customer)
                  (r_schema
-                  ((((relation ()) (name c_custkey))
-                    ((relation ()) (name c_name))
-                    ((relation ()) (name c_address))
-                    ((relation ()) (name c_nationkey))
-                    ((relation ()) (name c_phone))
-                    ((relation ()) (name c_acctbal))
-                    ((relation ()) (name c_mktsegment))
-                    ((relation ()) (name c_comment))))))))
+                  ((((scope ()) (name c_custkey)) ((scope ()) (name c_name))
+                    ((scope ()) (name c_address)) ((scope ()) (name c_nationkey))
+                    ((scope ()) (name c_phone)) ((scope ()) (name c_acctbal))
+                    ((scope ()) (name c_mktsegment))
+                    ((scope ()) (name c_comment))))))))
               (meta ())))
             (r2
              ((node
                (Relation
                 ((r_name orders)
                  (r_schema
-                  ((((relation ()) (name o_orderkey))
-                    ((relation ()) (name o_custkey))
-                    ((relation ()) (name o_orderstatus))
-                    ((relation ()) (name o_totalprice))
-                    ((relation ()) (name o_orderdate))
-                    ((relation ()) (name o_orderpriority))
-                    ((relation ()) (name o_clerk))
-                    ((relation ()) (name o_shippriority))
-                    ((relation ()) (name o_comment))))))))
+                  ((((scope ()) (name o_orderkey)) ((scope ()) (name o_custkey))
+                    ((scope ()) (name o_orderstatus))
+                    ((scope ()) (name o_totalprice))
+                    ((scope ()) (name o_orderdate))
+                    ((scope ()) (name o_orderpriority))
+                    ((scope ()) (name o_clerk))
+                    ((scope ()) (name o_shippriority))
+                    ((scope ()) (name o_comment))))))))
               (meta ())))))
           (meta ()))))
        (pred
         (Binop
-         (Eq (Name ((relation ()) (name c_nationkey)))
-          (Name ((relation ()) (name n_nationkey))))))))
+         (Eq (Name ((scope ()) (name c_nationkey)))
+          (Name ((scope ()) (name n_nationkey))))))))
      ((274559.99999999994 68335.999999999985)
       (Nest
        (lhs
@@ -283,9 +275,8 @@ let%expect_test "join-opt" =
            (Relation
             ((r_name nation)
              (r_schema
-              ((((relation ()) (name n_nationkey)) ((relation ()) (name n_name))
-                ((relation ()) (name n_regionkey))
-                ((relation ()) (name n_comment))))))))
+              ((((scope ()) (name n_nationkey)) ((scope ()) (name n_name))
+                ((scope ()) (name n_regionkey)) ((scope ()) (name n_comment))))))))
           (meta ()))))
        (rhs
         (Nest
@@ -295,12 +286,10 @@ let%expect_test "join-opt" =
              (Relation
               ((r_name customer)
                (r_schema
-                ((((relation ()) (name c_custkey)) ((relation ()) (name c_name))
-                  ((relation ()) (name c_address))
-                  ((relation ()) (name c_nationkey))
-                  ((relation ()) (name c_phone)) ((relation ()) (name c_acctbal))
-                  ((relation ()) (name c_mktsegment))
-                  ((relation ()) (name c_comment))))))))
+                ((((scope ()) (name c_custkey)) ((scope ()) (name c_name))
+                  ((scope ()) (name c_address)) ((scope ()) (name c_nationkey))
+                  ((scope ()) (name c_phone)) ((scope ()) (name c_acctbal))
+                  ((scope ()) (name c_mktsegment)) ((scope ()) (name c_comment))))))))
             (meta ()))))
          (rhs
           (Flat
@@ -308,21 +297,19 @@ let%expect_test "join-opt" =
              (Relation
               ((r_name orders)
                (r_schema
-                ((((relation ()) (name o_orderkey))
-                  ((relation ()) (name o_custkey))
-                  ((relation ()) (name o_orderstatus))
-                  ((relation ()) (name o_totalprice))
-                  ((relation ()) (name o_orderdate))
-                  ((relation ()) (name o_orderpriority))
-                  ((relation ()) (name o_clerk))
-                  ((relation ()) (name o_shippriority))
-                  ((relation ()) (name o_comment))))))))
+                ((((scope ()) (name o_orderkey)) ((scope ()) (name o_custkey))
+                  ((scope ()) (name o_orderstatus))
+                  ((scope ()) (name o_totalprice))
+                  ((scope ()) (name o_orderdate))
+                  ((scope ()) (name o_orderpriority)) ((scope ()) (name o_clerk))
+                  ((scope ()) (name o_shippriority))
+                  ((scope ()) (name o_comment))))))))
             (meta ()))))
          (pred
           (Binop
-           (Eq (Name ((relation ()) (name c_custkey)))
-            (Name ((relation ()) (name o_custkey))))))))
+           (Eq (Name ((scope ()) (name c_custkey)))
+            (Name ((scope ()) (name o_custkey))))))))
        (pred
         (Binop
-         (Eq (Name ((relation ()) (name c_nationkey)))
-          (Name ((relation ()) (name n_nationkey))))))))) |}]
+         (Eq (Name ((scope ()) (name c_nationkey)))
+          (Name ((scope ()) (name n_nationkey))))))))) |}]

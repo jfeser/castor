@@ -96,8 +96,7 @@ module Make (C : Config.S) = struct
         let key_preds = List.map key ~f:(fun n -> Name n) in
         let filter_pred =
           List.map key ~f:(fun n ->
-              Binop (Eq, Name n, Name (Name.copy n ~relation:(Some key_name)))
-          )
+              Binop (Eq, Name n, Name (Name.copy n ~scope:(Some key_name))) )
           |> List.fold_left1_exn ~f:(fun acc p -> Binop (And, acc, p))
         in
         let keys = P.project ~params:(free r) (dedup (select key_preds r)) in

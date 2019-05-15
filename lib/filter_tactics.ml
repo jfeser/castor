@@ -84,11 +84,11 @@ module Make (C : Config.S) = struct
         Some
           (filter (Pred.conjoin above)
              (list rk (scope_exn rk) (filter (Pred.conjoin below) r)))
-    | AHashIdx (rk, {node= Filter (p, r); _}, m) ->
+    | AHashIdx ({hi_keys= rk; hi_values= {node= Filter (p, r); _}; _} as h) ->
         let below, above = split_bound rk p in
         Some
           (filter (Pred.conjoin above)
-             (hash_idx rk (scope_exn rk) (filter (Pred.conjoin below) r) m))
+             (hash_idx' {h with hi_values= filter (Pred.conjoin below) r}))
     | AOrderedIdx (rk, {node= Filter (p, r); _}, m) ->
         let below, above = split_bound rk p in
         Some
@@ -115,7 +115,7 @@ module Make (C : Config.S) = struct
       object
         inherit [_] Abslayout.endo
 
-        method! visit_Name () _ n = Name (Name.copy ~relation:(Some rn) n)
+        method! visit_Name () _ n = Name (Name.copy ~scope:(Some rn) n)
       end
     in
     visitor#visit_pred () p
@@ -305,12 +305,14 @@ module Make (C : Config.S) = struct
         let%map rk, scope, rv, mk =
           match r'.node with
           | AList (rk, rv) -> Some (strip_scope rk, scope_exn rk, rv, list)
-          | AHashIdx (rk, rv, m) ->
+          | AHashIdx h ->
               Some
-                ( strip_scope rk
-                , scope_exn rk
-                , rv
-                , fun rk s rv -> hash_idx rk s rv m )
+                ( h.hi_keys
+                , h.hi_scope
+                , h.hi_values
+                , fun rk s rv ->
+                    hash_idx' {h with hi_keys= rk; hi_scope= s; hi_values= rv}
+                )
           | AOrderedIdx (rk, rv, m) ->
               Some
                 ( strip_scope rk
@@ -369,10 +371,7 @@ module Make (C : Config.S) = struct
             match rest with [] -> r | _ -> filter (and_ rest) r
           in
           let%map r' = Tactics_util.all_values select_list r in
-          outer_filter
-            (hash_idx r' scope
-               (filter inner_filter_pred r)
-               {lookup= key; hi_key_layout= None})
+          outer_filter (hash_idx r' scope (filter inner_filter_pred r) key)
     | _ -> None
 
   let elim_eq_filter = of_func elim_eq_filter ~name:"elim-eq-filter"
