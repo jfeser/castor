@@ -13,8 +13,7 @@ module Make (C : Config.S) = struct
 
   let test =
     let src = Logs.Src.create ~doc:"Source for testing project." "project-test" in
-    Logs.Src.set_level src (Some Debug) ;
-    src
+    Logs.Src.set_level src None ; src
 
   let project_def refcnt p =
     match Pred.to_name p with

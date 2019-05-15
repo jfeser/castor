@@ -98,7 +98,7 @@ let hash_idx ?key_layout a b c d =
   in
   wrap
     (AHashIdx
-       { hi_keys= strip_meta (as_ b a)
+       { hi_keys= strip_meta a
        ; hi_values= strip_meta c
        ; hi_scope= b
        ; hi_lookup= d

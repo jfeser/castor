@@ -77,7 +77,8 @@ module Make (C : Config.S) = struct
           self#check_alias () rk ; self#visit_t () rv
 
         method! visit_As () _ r =
-          Error.(createf "Unexpected as: %a" pp_small_str r |> raise)
+          Logs.err (fun m -> m "Unexpected as: %a" pp_small r) ;
+          self#visit_t () r
       end
     in
     let rels = relations_visitor#visit_t () r in
