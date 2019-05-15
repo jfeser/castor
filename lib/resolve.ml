@@ -145,6 +145,26 @@ module Make (C : Config.S) = struct
       in
       of_list (c1 @ c2)
 
+    let concat (cs : t list) =
+      match cs with
+      | [] -> failwith "Empty list."
+      | c :: cs ->
+          let m =
+            List.map (c :> row list) ~f:(fun r -> (r.rname, r))
+            |> Map.of_alist_exn (module Name)
+          in
+          let m =
+            List.fold_left
+              (cs :> row list list)
+              ~init:m
+              ~f:(fun m rs ->
+                List.fold_left rs ~init:m ~f:(fun m r ->
+                    let r' = Map.find_exn m r.rname in
+                    let r' = {r' with rrefs= r'.rrefs @ r.rrefs} in
+                    Map.set m ~key:r.rname ~data:r' ) )
+          in
+          Map.data m |> of_list
+
     let merge (c1 : t) (c2 : t) : t = of_list ((c1 :> row list) @ (c2 :> row list))
 
     (** This compensates for the overloaded hashidx and orderedidx key fields *)
@@ -332,7 +352,7 @@ module Make (C : Config.S) = struct
           (AList (as_ scope rk, rv), vctx)
       | ATuple (ls, (Concat as t)) ->
           let ls, ctxs = List.map ls ~f:(rsame outer_ctx) |> List.unzip in
-          (ATuple (ls, t), List.hd_exn ctxs)
+          (ATuple (ls, t), Ctx.concat ctxs)
       | ATuple (ls, ((Cross | Zip) as t)) ->
           let ls, ctxs = List.map ls ~f:(rsame outer_ctx) |> List.unzip in
           (ATuple (ls, t), Ctx.merge_list ctxs)

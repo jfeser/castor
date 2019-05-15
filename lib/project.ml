@@ -4,12 +4,12 @@ open Collections
 
 module Config = struct
   module type S = sig
-    include Abslayout_db.Config.S
+    include Resolve.Config.S
   end
 end
 
 module Make (C : Config.S) = struct
-  module M = Abslayout_db.Make (C)
+  module M = Resolve.Make (C)
 
   let test =
     let src = Logs.Src.create ~doc:"Source for testing project." "project-test" in
@@ -112,10 +112,7 @@ module Make (C : Config.S) = struct
             | _ -> assert false )
           | ATuple ([], _) -> empty
           | ATuple ([r], _) -> self#visit_t () r
-          | ATuple (rs, Concat) ->
-              let rs = List.map rs ~f:(self#visit_t ()) in
-              let rs = List.filter rs ~f:(fun r -> r.node <> AEmpty) in
-              tuple rs Concat
+          | ATuple (rs, Concat) -> tuple (List.map rs ~f:(self#visit_t ())) Concat
           | ATuple (rs, Cross) ->
               let rs =
                 (* Remove unreferenced parts of the tuple. *)
@@ -176,9 +173,7 @@ module Make (C : Config.S) = struct
 end
 
 module Test = struct
-  module T = Make (struct
-    let conn = Db.create "postgresql:///tpch_1k"
-  end)
+  module T = Make ()
 
   open T
 

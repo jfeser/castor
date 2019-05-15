@@ -8,10 +8,16 @@ module type S = Abslayout_db_intf.S
 module Config = struct
   module type S = sig
     val conn : Db.t
+
+    include Resolve.Config.S
+
+    include Project.Config.S
   end
 end
 
 module Make (Config : Config.S) = struct
+  module P = Project.Make (Config)
+  module R = Resolve.Make (Config)
   open Config
 
   module Query = struct
@@ -155,7 +161,7 @@ module Make (Config : Config.S) = struct
     | Query q -> q
 
   let eval_query q =
-    let r = to_ralgebra q in
+    let r = to_ralgebra q |> P.project in
     Logs.debug (fun m -> m "Executing type checking query %a." pp r) ;
     let sql = Sql.of_ralgebra r in
     Logs.debug (fun m ->
@@ -577,10 +583,8 @@ module Make (Config : Config.S) = struct
     in
     visitor#visit_t ()
 
-  include Resolve.Make (Config)
-
   let load_string ?(params = Set.empty (module Name)) s =
-    of_string_exn s |> strip_unused_as |> annotate_relations |> resolve ~params
+    of_string_exn s |> strip_unused_as |> annotate_relations |> R.resolve ~params
     |> annotate_key_layouts
 end
 
