@@ -49,9 +49,8 @@ let rec set_exn p r s =
       tuple
         (List.mapi rs ~f:(fun i' r' -> if i = i' then set_exn p' r' s else r'))
         t
-  | 0 :: p', AHashIdx h -> wrap (AHashIdx {h with hi_keys= set_exn p' h.hi_keys s})
-  | 1 :: p', AHashIdx h ->
-      wrap (AHashIdx {h with hi_values= set_exn p' h.hi_values s})
+  | 0 :: p', AHashIdx h -> hash_idx' {h with hi_keys= set_exn p' h.hi_keys s}
+  | 1 :: p', AHashIdx h -> hash_idx' {h with hi_values= set_exn p' h.hi_values s}
   | 0 :: p', AOrderedIdx (r', r2, h) ->
       let rk = set_exn p' r' s in
       ordered_idx rk (scope_exn rk) r2 h

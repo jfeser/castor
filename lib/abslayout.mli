@@ -120,8 +120,6 @@ val name : t -> string
 val names : t -> Set.M(Name).t
 (** The set of names in a `t`. *)
 
-val wrap : node -> t
-
 val select : pred list -> t -> t
 
 val dep_join : t -> string -> t -> t
@@ -147,6 +145,8 @@ val list : t -> string -> t -> t
 val tuple : t list -> tuple -> t
 
 val hash_idx : ?key_layout:t -> t -> string -> t -> pred list -> t
+
+val hash_idx' : hash_idx -> t
 
 val ordered_idx : t -> string -> t -> ordered_idx -> t
 

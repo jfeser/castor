@@ -104,6 +104,9 @@ let hash_idx ?key_layout a b c d =
        ; hi_lookup= d
        ; hi_key_layout= key_layout })
 
+let hash_idx' h =
+  hash_idx ?key_layout:h.hi_key_layout h.hi_keys h.hi_scope h.hi_values h.hi_lookup
+
 let ordered_idx a b c d =
   let a = strip_scope a in
   let a, c =
