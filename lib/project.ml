@@ -13,21 +13,23 @@ module Make (C : Config.S) = struct
 
   let test =
     let src = Logs.Src.create ~doc:"Source for testing project." "project-test" in
-    Logs.Src.set_level src None ; src
+    Logs.Src.set_level src (Some Debug) ;
+    src
 
-  let project_defs refcnt ps =
-    List.filter ps ~f:(fun p ->
-        match Pred.to_name p with
-        | None ->
-            (* Filter out definitions that have no name *)
-            false
-        | Some n -> (
-          (* Filter out definitions that are never referenced. *)
-          match Map.(find refcnt n) with
-          | Some c -> c > 0
-          | None ->
-              (* Be conservative if refcount is missing. *)
-              true ) )
+  let project_def refcnt p =
+    match Pred.to_name p with
+    | None ->
+        (* Filter out definitions that have no name *)
+        false
+    | Some n -> (
+      (* Filter out definitions that are never referenced. *)
+      match Map.(find refcnt n) with
+      | Some c -> c > 0
+      | None ->
+          (* Be conservative if refcount is missing. *)
+          true )
+
+  let project_defs refcnt ps = List.filter ps ~f:(project_def refcnt)
 
   (** True if all fields emitted by r are unreferenced when emitted by r'. *)
   let all_unref_at r r' =
@@ -96,7 +98,11 @@ module Make (C : Config.S) = struct
       inherit [_] map as super
 
       method! visit_t () r =
-        let refcnt = Meta.find_exn r M.refcnt in
+        let refcnt =
+          Option.value_exn
+            ~error:(Error.createf "No refcnt found %a" pp_small_str r)
+            (Meta.find r M.refcnt)
+        in
         let count = Meta.find_exn r count in
         if all_unref r && count = AtLeastOne then scalar dummy
         else
@@ -105,11 +111,7 @@ module Make (C : Config.S) = struct
           | Dedup r -> dedup (self#visit_t () r)
           | GroupBy (ps, ns, r) ->
               group_by (project_defs refcnt ps) ns (self#visit_t () r)
-          | AScalar p -> (
-            match project_defs refcnt [p] with
-            | [] -> scalar dummy
-            | [p] -> scalar p
-            | _ -> assert false )
+          | AScalar p -> if project_def refcnt p then scalar p else scalar dummy
           | ATuple ([], _) -> empty
           | ATuple ([r], _) -> self#visit_t () r
           | ATuple (rs, Concat) -> tuple (List.map rs ~f:(self#visit_t ())) Concat
