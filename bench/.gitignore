@@ -1,2 +1,5 @@
 *-opt.txt
+*-opt.csv
+*-opt/
+hashes.txt
 Makefile
