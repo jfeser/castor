@@ -78,7 +78,7 @@ module Make (Config : Config.S) = struct
           let order_key = total_order_key h.hi_keys in
           order_by order_key (dedup h.hi_keys)
         in
-        Concat [Query q1; For (q1, h.hi_scope, gen_query h.hi_values)]
+        For (q1, h.hi_scope, gen_query h.hi_values)
     | AOrderedIdx (q1, q2, _) ->
         let scope = scope_exn q1 in
         let q1 = strip_scope q1 in
@@ -86,7 +86,7 @@ module Make (Config : Config.S) = struct
           let order_key = total_order_key q1 in
           order_by order_key (dedup q1)
         in
-        Concat [Query q1; For (q1, scope, gen_query q2)]
+        For (q1, scope, gen_query q2)
     | AEmpty -> Empty
     | AScalar p -> Scalars [p]
     | ATuple (ts, _) -> (
@@ -161,7 +161,8 @@ module Make (Config : Config.S) = struct
     | Query q -> q
 
   let eval_query q =
-    let r = to_ralgebra q |> P.project in
+    Logs.debug (fun m -> m "Executing type checking query %a." pp (to_ralgebra q)) ;
+    let r = to_ralgebra q |> R.resolve |> P.project in
     Logs.debug (fun m -> m "Executing type checking query %a." pp r) ;
     let sql = Sql.of_ralgebra r in
     Logs.debug (fun m ->
@@ -255,18 +256,12 @@ module Make (Config : Config.S) = struct
       method virtual private build_ATuple : _
 
       method virtual private build_AHashIdx
-          :    'ctx
-            -> Meta.t
-            -> hash_idx
-            -> Value.t list Gen.t
-            -> (Value.t list * Ctx.t) Gen.t
-            -> 'a
+          : 'ctx -> Meta.t -> hash_idx -> (Value.t list * Ctx.t) Gen.t -> 'a
 
       method virtual private build_AOrderedIdx
           :    'ctx
             -> Meta.t
             -> t * t * ordered_idx
-            -> Value.t list Gen.t
             -> (Value.t list * Ctx.t) Gen.t
             -> 'a
 
@@ -289,24 +284,9 @@ module Make (Config : Config.S) = struct
         | AEmpty, Empty -> self#build_AEmpty ctx r.meta
         | AScalar x, Scalars [v] -> self#build_AScalar ctx r.meta x v
         | AList x, For vs -> self#build_AList ctx r.meta x vs
-        | AHashIdx x, Concat [kctx; vctx] ->
-            let key_gen, value_gen =
-              match (kctx, vctx) with
-              | Query g1, For g2 -> (g1, g2)
-              | _ ->
-                  Error.create "Bug: Mismatched context." r [%sexp_of: t]
-                  |> Error.raise
-            in
-            self#build_AHashIdx ctx r.meta x key_gen value_gen
-        | AOrderedIdx x, Concat [kctx; vctx] ->
-            let key_gen, value_gen =
-              match (kctx, vctx) with
-              | Query g1, For g2 -> (g1, g2)
-              | _ ->
-                  Error.create "Bug: Mismatched context." r [%sexp_of: t]
-                  |> Error.raise
-            in
-            self#build_AOrderedIdx ctx r.meta x key_gen value_gen
+        | AHashIdx x, For value_gen -> self#build_AHashIdx ctx r.meta x value_gen
+        | AOrderedIdx x, For value_gen ->
+            self#build_AOrderedIdx ctx r.meta x value_gen
         | ATuple x, Scalars ps ->
             self#build_ATuple ctx r.meta x (List.map ps ~f:(fun p -> Scalars [p]))
         | ATuple x, Concat vs -> self#build_ATuple ctx r.meta x vs
@@ -327,7 +307,7 @@ module Make (Config : Config.S) = struct
 
   type ('i, 'a, 'v, 'o) fold = {pre: 'i -> 'a; body: 'a -> 'v -> 'a; post: 'a -> 'o}
 
-  class virtual ['out, 'l, 'h1, 'h2, 'h3, 'o1, 'o2, 'o3] material_fold =
+  class virtual ['out, 'l, 'h, 'o] material_fold =
     object (self)
       inherit [unit, 'out] unsafe_material_fold
 
@@ -335,16 +315,10 @@ module Make (Config : Config.S) = struct
           : Meta.t -> t * t -> (unit, 'l, Value.t list * 'out, 'out) fold
 
       method virtual hash_idx
-          :    Meta.t
-            -> hash_idx
-            -> (unit, 'h1, Value.t list, 'h2) fold
-               * ('h2, 'h3, 'out * 'out, 'out) fold
+          : Meta.t -> hash_idx -> (unit, 'h, 'out * 'out, 'out) fold
 
       method virtual ordered_idx
-          :    Meta.t
-            -> t * t * ordered_idx
-            -> (unit, 'o1, Value.t list, 'o2) fold
-               * ('o2, 'o3, 'out * 'out, 'out) fold
+          : Meta.t -> t * t * ordered_idx -> (unit, 'o, 'out * 'out, 'out) fold
 
       method virtual tuple : Meta.t -> t list * tuple -> 'out list -> 'out
 
@@ -369,26 +343,20 @@ module Make (Config : Config.S) = struct
         self#tuple meta expr (List.map2_exn es rs ~f:(self#visit_t ctx))
 
       method private build_AHashIdx ctx meta ({hi_values; hi_key_layout; _} as expr)
-          kgen vgen =
+          vgen =
         let key_query = Option.value_exn hi_key_layout in
-        let f1, f2 = self#hash_idx meta expr in
-        let acc = Gen.fold kgen ~init:(f1.pre ()) ~f:f1.body in
-        Gen.fold vgen
-          ~init:(f2.pre (f1.post acc))
-          ~f:(fun acc (tup, ectx) ->
+        let f2 = self#hash_idx meta expr in
+        Gen.fold vgen ~init:(f2.pre ()) ~f:(fun acc (tup, ectx) ->
             f2.body acc
               ( self#visit_t ctx (to_ctx tup) key_query
               , self#visit_t ctx ectx hi_values ) )
         |> f2.post
 
       method private build_AOrderedIdx ctx meta
-          ((_, value_query, {oi_key_layout= m_key_query; _}) as expr) kgen vgen =
+          ((_, value_query, {oi_key_layout= m_key_query; _}) as expr) vgen =
         let key_query = Option.value_exn m_key_query in
-        let f1, f2 = self#ordered_idx meta expr in
-        let acc = Gen.fold kgen ~init:(f1.pre ()) ~f:f1.body in
-        Gen.fold vgen
-          ~init:(f2.pre (f1.post acc))
-          ~f:(fun acc (tup, ectx) ->
+        let f2 = self#ordered_idx meta expr in
+        Gen.fold vgen ~init:(f2.pre ()) ~f:(fun acc (tup, ectx) ->
             f2.body acc
               ( self#visit_t ctx (to_ctx tup) key_query
               , self#visit_t ctx ectx value_query ) )
@@ -449,7 +417,7 @@ module Make (Config : Config.S) = struct
     (** Returns a layout type that is general enough to hold all of the data. *)
     class type_fold =
       object
-        inherit [_, _, _, _, _, _, _, _] material_fold
+        inherit [_, _, _, _] material_fold
 
         method select _ (exprs, _) t = FuncT ([t], `Width (List.length exprs))
 
@@ -492,32 +460,33 @@ module Make (Config : Config.S) = struct
 
         method hash_idx _ h =
           let key_l = Option.value_exn h.hi_key_layout in
-          ( {pre= (fun () -> 0); body= (fun x _ -> x + 1); post= (fun x -> x)}
-          , { pre=
-                (fun kct ->
-                  ( AbsInt.of_int kct
-                  , least_general_of_layout key_l
-                  , least_general_of_layout h.hi_values ) )
-            ; body=
-                (fun (kct, kt, vt) (kt', vt') ->
-                  (kct, unify_exn kt kt', unify_exn vt vt') )
-            ; post=
-                (fun (kct, kt, vt) ->
-                  HashIdxT (kt, vt, {key_count= kct; value_count= Type.count vt}) )
-            } )
+          { pre=
+              (fun () ->
+                ( 0
+                , least_general_of_layout key_l
+                , least_general_of_layout h.hi_values ) )
+          ; body=
+              (fun (kct, kt, vt) (kt', vt') ->
+                (kct + 1, unify_exn kt kt', unify_exn vt vt') )
+          ; post=
+              (fun (kct, kt, vt) ->
+                HashIdxT
+                  ( kt
+                  , vt
+                  , {key_count= AbsInt.of_int kct; value_count= Type.count vt} ) )
+          }
 
         method ordered_idx _ (_, value_l, {oi_key_layout; _}) =
           let key_l = Option.value_exn oi_key_layout in
-          ( {pre= (fun () -> ()); body= (fun () _ -> ()); post= (fun () -> ())}
-          , { pre=
-                (fun () ->
-                  ( least_general_of_layout key_l
-                  , least_general_of_layout value_l
-                  , AbsInt.zero ) )
-            ; body=
-                (fun (kt, vt, ct) (kt', vt') ->
-                  (unify_exn kt kt', unify_exn vt vt', AbsInt.(ct + of_int 1)) )
-            ; post= (fun (kt, vt, ct) -> OrderedIdxT (kt, vt, {count= ct})) } )
+          { pre=
+              (fun () ->
+                ( least_general_of_layout key_l
+                , least_general_of_layout value_l
+                , AbsInt.zero ) )
+          ; body=
+              (fun (kt, vt, ct) (kt', vt') ->
+                (unify_exn kt kt', unify_exn vt vt', AbsInt.(ct + of_int 1)) )
+          ; post= (fun (kt, vt, ct) -> OrderedIdxT (kt, vt, {count= ct})) }
       end
   end
 

@@ -668,7 +668,7 @@ let%expect_test "example-2" =
               (IntT ((range (Interval 2 5)) (nullable false))))
              ((count (Interval 1 1)))))
            ((count (Interval 1 2)))))
-         ((key_count (Interval 9 9)) (value_count (Interval 1 2))))))
+         ((key_count (Interval 2 2)) (value_count (Interval 1 2))))))
       (Width 2)))
     // Locals:
     // kstart10 : Int[nonnull] (persists=false)

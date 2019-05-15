@@ -204,9 +204,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         let tuple_t = Type.(TupleT ([lhs_t; rhs_t], {count= AbsInt.top})) in
         self#build_Tuple sctx tuple_t [d_lhs; d_rhs] [ctx1; ctx2]
 
-      method build_AHashIdx sctx meta h keys gen =
-        (* Burn the keys*)
-        Gen.iter keys ~f:(fun _ -> ()) ;
+      method build_AHashIdx sctx meta h gen =
         let type_ = Meta.Direct.find_exn meta Meta.type_ in
         let key_l =
           Option.value_exn
@@ -259,7 +257,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
             self#log_insert valf ;
             write_string writer (Buffer.contents vbuf) )
 
-      method build_AOrderedIdx sctx meta (_, value_l, ometa) keys gen =
+      method build_AOrderedIdx sctx meta (_, value_l, ometa) gen =
         let t = Meta.Direct.(find_exn meta Meta.type_) in
         let _, vt, m =
           match t with OrderedIdxT (kt, vt, m) -> (kt, vt, m) | _ -> assert false
@@ -275,8 +273,6 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         let len_pos = pos writer in
         write_bytes writer (Bytes.make (size_exn hdr "len") '\x00') ;
         write_bytes writer (Bytes.make (size_exn hdr "idx_len") '\x00') ;
-        (* Burn the keys*)
-        Gen.iter keys ~f:(fun _ -> ()) ;
         let vbuf = Buffer.create 1024 in
         let valf = new serialize_fold (Writer.with_buffer vbuf) in
         let keys = ref [] in

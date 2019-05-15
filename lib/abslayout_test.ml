@@ -22,17 +22,15 @@ let%test_module _ =
                   ([%sexp_of: Value.t list] key |> Sexp.to_string_hum) ;
                 self#visit_t () vctx r )
 
-          method build_AHashIdx () _ h kgen vgen =
+          method build_AHashIdx () _ h vgen =
             print_endline "HashIdx" ;
-            Gen.iter kgen ~f:(fun _ -> ()) ;
             Gen.iter vgen ~f:(fun (key, vctx) ->
                 printf "HashIdx key: %s\n"
                   ([%sexp_of: Value.t list] key |> Sexp.to_string_hum) ;
                 self#visit_t () vctx h.hi_values )
 
-          method build_AOrderedIdx () _ (_, r, _) kgen vgen =
+          method build_AOrderedIdx () _ (_, r, _) vgen =
             print_endline "OrderedIdx" ;
-            Gen.iter kgen ~f:(fun _ -> ()) ;
             Gen.iter vgen ~f:(fun (key, vctx) ->
                 printf "OrderedIdx key: %s\n"
                   ([%sexp_of: Value.t list] key |> Sexp.to_string_hum) ;

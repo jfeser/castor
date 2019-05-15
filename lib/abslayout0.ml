@@ -54,7 +54,7 @@ module T = struct
     { hi_keys: t
     ; hi_values: t
     ; hi_scope: string
-    ; hi_key_layout: t option
+    ; hi_key_layout: t option [@opaque]
     ; hi_lookup: pred list }
 
   and ordered_idx =

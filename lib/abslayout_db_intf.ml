@@ -23,20 +23,10 @@ module type S = sig
         'ctx -> Meta.t -> t list * tuple -> Ctx.t list -> 'a
 
       method virtual private build_AHashIdx :
-           'ctx
-        -> Meta.t
-        -> hash_idx
-        -> Value.t list Gen.t
-        -> (Value.t list * Ctx.t) Gen.t
-        -> 'a
+        'ctx -> Meta.t -> hash_idx -> (Value.t list * Ctx.t) Gen.t -> 'a
 
       method virtual private build_AOrderedIdx :
-           'ctx
-        -> Meta.t
-        -> t * t * ordered_idx
-        -> Value.t list Gen.t
-        -> (Value.t list * Ctx.t) Gen.t
-        -> 'a
+        'ctx -> Meta.t -> t * t * ordered_idx -> (Value.t list * Ctx.t) Gen.t -> 'a
 
       method virtual private build_AEmpty : 'ctx -> Meta.t -> 'a
 
@@ -59,20 +49,16 @@ module type S = sig
 
   type ('i, 'a, 'v, 'o) fold = {pre: 'i -> 'a; body: 'a -> 'v -> 'a; post: 'a -> 'o}
 
-  class virtual ['out, 'l, 'h1, 'h2, 'h3, 'o1, 'o2, 'o3] material_fold :
+  class virtual ['out, 'l, 'h, 'o] material_fold :
     object
       method virtual list :
         Meta.t -> t * t -> (unit, 'l, Value.t list * 'out, 'out) fold
 
       method virtual hash_idx :
-           Meta.t
-        -> hash_idx
-        -> (unit, 'h1, Value.t list, 'h2) fold * ('h2, 'h3, 'out * 'out, 'out) fold
+        Meta.t -> hash_idx -> (unit, 'h, 'out * 'out, 'out) fold
 
       method virtual ordered_idx :
-           Meta.t
-        -> t * t * ordered_idx
-        -> (unit, 'o1, Value.t list, 'o2) fold * ('o2, 'o3, 'out * 'out, 'out) fold
+        Meta.t -> t * t * ordered_idx -> (unit, 'o, 'out * 'out, 'out) fold
 
       method virtual tuple : Meta.t -> t list * tuple -> 'out list -> 'out
 
