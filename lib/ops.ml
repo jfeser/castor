@@ -217,6 +217,10 @@ module Make (C : Config.S) = struct
     in
     first_order f (sprintf "%s ; %s" t1.name t2.name)
 
+  let seq' t1 t2 =
+    let f r = Option.bind (apply t1 r) ~f:(apply t2) in
+    first_order f (sprintf "%s ; %s" t1.name t2.name)
+
   let rec seq_many = function
     | [] -> failwith "Empty transform list."
     | [t] -> t
@@ -253,6 +257,8 @@ module Make (C : Config.S) = struct
       Logs.debug (fun m -> m "Transform %s running." tf.name) ;
       match apply tf r with
       | Some r' ->
+          if Abslayout.O.(r = r') then
+            Logs.warn (fun m -> m "Invariant transformation %s" tf.name) ;
           Logs.debug (fun m ->
               m "@[%s transformed:@,%a@,===== to ======@,%a@]@.\n" tf.name
                 Abslayout.pp r Abslayout.pp r' ) ;
