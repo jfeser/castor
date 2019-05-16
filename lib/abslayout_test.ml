@@ -5,10 +5,12 @@ open Test_util
 
 let%test_module _ =
   ( module struct
-    module Test_db = Test_db ()
+    module Config = struct
+      let conn = Lazy.force test_db_conn
+    end
 
-    module M = Abslayout_db.Make (Test_db)
-    module Project = Project.Make (Test_db)
+    module M = Abslayout_db.Make (Config)
+    module Project = Project.Make (Config)
 
     let run_print_test ?params query =
       let print_fold =

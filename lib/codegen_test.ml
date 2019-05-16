@@ -54,7 +54,6 @@ let%expect_test "ordered-idx" =
     exited normally |}]
 
 let%expect_test "agg" =
-  [%expect {||}] ;
   run_test
     "select([1.0 + 2.0, avg(a), count(), sum(a), min(a), max(a)], alist(r2 as k, \
      ascalar(k.a)))" ;

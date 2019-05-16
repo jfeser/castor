@@ -557,21 +557,24 @@ module Make (Config : Config.S) = struct
     |> annotate_key_layouts
 end
 
-module Test = struct
-  module Config = struct
-    include (val Test_util.make_test_db ())
-  end
+let%test_module _ =
+  ( module struct
+    module Config = struct
+      let conn = Lazy.force Test_util.test_db_conn
+    end
 
-  include Make (Config)
+    include Make (Config)
 
-  let%expect_test "" =
-    let ralgebra = "alist(r1 as k, filter(k.f = g, ascalar(k.g)))" |> load_string in
-    let q = gen_query ralgebra in
-    let r = to_ralgebra q in
-    let sql = Sql.of_ralgebra r in
-    printf "%s" (Sql.to_string_hum sql) ;
-    [%expect
-      {|
+    let%expect_test "" =
+      let ralgebra =
+        "alist(r1 as k, filter(k.f = g, ascalar(k.g)))" |> load_string
+      in
+      let q = gen_query ralgebra in
+      let r = to_ralgebra q in
+      let sql = Sql.of_ralgebra r in
+      printf "%s" (Sql.to_string_hum sql) ;
+      [%expect
+        {|
       SELECT
           "x0_0" AS "x0_0_0",
           "x1_0" AS "x1_0_0",
@@ -591,17 +594,17 @@ module Test = struct
           "x0_0",
           "x1_0" |}]
 
-  let%expect_test "" =
-    let ralgebra =
-      "depjoin(ascalar(0 as f) as k, select([k.f + g], alist(r1 as k1, \
-       ascalar(k1.g))))" |> load_string
-    in
-    let q = gen_query ralgebra in
-    let r = to_ralgebra q in
-    let sql = Sql.of_ralgebra r in
-    printf "%s" (Sql.to_string_hum sql) ;
-    [%expect
-      {|
+    let%expect_test "" =
+      let ralgebra =
+        "depjoin(ascalar(0 as f) as k, select([k.f + g], alist(r1 as k1, \
+         ascalar(k1.g))))" |> load_string
+      in
+      let q = gen_query ralgebra in
+      let r = to_ralgebra q in
+      let sql = Sql.of_ralgebra r in
+      printf "%s" (Sql.to_string_hum sql) ;
+      [%expect
+        {|
       SELECT
           "counter0_0" AS "counter0_0_0",
           "f_1" AS "f_1_0",
@@ -638,21 +641,21 @@ module Test = struct
           "x3_0",
           "x4_0" |}]
 
-  let%expect_test "" =
-    let ralgebra = load_string Test_util.sum_complex in
-    let q = gen_query ralgebra in
-    let r = to_ralgebra q in
-    Format.printf "%a" pp r ;
-    [%expect
-      {|
+    let%expect_test "" =
+      let ralgebra = load_string Test_util.sum_complex in
+      let q = gen_query ralgebra in
+      let r = to_ralgebra q in
+      Format.printf "%a" pp r ;
+      [%expect
+        {|
       orderby([x6, x7],
         depjoin(r1 as k,
           select([k.f as x6, k.g as x7, f as x8, v as x9],
             atuple([ascalar(k.f), ascalar((k.g - k.f) as v)], cross)))) |}] ;
-    let sql = Sql.of_ralgebra r in
-    printf "%s" (Sql.to_string_hum sql) ;
-    [%expect
-      {|
+      let sql = Sql.of_ralgebra r in
+      printf "%s" (Sql.to_string_hum sql) ;
+      [%expect
+        {|
       SELECT
           "x6_0" AS "x6_0_0",
           "x7_0" AS "x7_0_0",
@@ -674,4 +677,4 @@ module Test = struct
       ORDER BY
           "x6_0",
           "x7_0" |}]
-end
+  end )
