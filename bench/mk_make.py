@@ -3,7 +3,7 @@
 from jsmin import jsmin
 import json
 
-DEBUG = True
+DEBUG = False
 
 with open('queries.json', 'r') as f:
     bench = json.loads(jsmin(f.read()))
@@ -53,9 +53,12 @@ def dump_to(fn):
         return '> %s' % fn
 
 print('DB=postgresql:///tpch_1k')
-print('OPT=dune exec ../bin/opt.exe -- ')
+print('DBC=postgresql:///tpch_1k')
+print('OPT_PATH=../bin/opt.exe')
+print('COMPILE_PATH=../../castor/bin/compile.exe')
+print('OPT=dune exec --no-build ../bin/opt.exe -- ')
 print('OPT_FLAGS=-db $(DB) -v')
-print('COMPILE=dune exec ../../castor/bin/compile.exe -- ')
+print('COMPILE=dune exec --no-build ../../castor/bin/compile.exe -- ')
 if DEBUG:
     print('CFLAGS=-debug -v')
 else:
@@ -63,8 +66,15 @@ else:
 print('BENCH_DIR=../../castor/bench/tpch/')
 print('TIME_PER_BENCH=1')
 print('all: opt compile')
-print('opt: %s' % (' '.join([out_file(b) for b in bench])))
-print('compile: %s' % (' '.join([out_dir(b) for b in bench])))
+print('''
+obuild:
+\tdune build $(OPT_PATH)
+
+cbuild:
+\tdune build $(COMPILE_PATH)
+''')
+print('opt: obuild %s' % (' '.join([out_file(b) for b in bench])))
+print('compile: cbuild %s' % (' '.join([out_dir(b) for b in bench])))
 print('run: %s' % (' '.join(['%s-opt.csv' % b['name'] for b in bench])))
 # print('time: opt-times.csv')
 for b in bench:
@@ -75,7 +85,7 @@ for b in bench:
     print('''
 {0}: {1}
 \tmkdir -p $@
-\t$(COMPILE) $(CFLAGS) -o $@ -db $(DB) {2} {1} {3}
+\t$(COMPILE) $(CFLAGS) -o $@ -db $(DBC) {2} {1} {3}
 '''.format(out_dir(b), out_file(b), gen_param_types(b), dump_to('$@/compile.log')))
     print('''
 {0}-opt.csv: {1}
