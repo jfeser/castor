@@ -1,10 +1,11 @@
 #define __USE_XOPEN
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
 
-#include "stdlib.h"
 #include "date.h"
+#include "castorlib.h"
 
 long strpos(char* s1, long l1, char* s2, long l2) {
   if (l1 < l2) { return 0; }

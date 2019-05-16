@@ -1,4 +1,6 @@
-#include "shared.h"
+// NOTE: DO NOT INCLUDE HEADERS HERE.
+#define GLUE_HELPER(x, y) x##y
+#define GLUE(x, y) GLUE_HELPER(x, y)
 
 void GLUE(set_,PARAM_NAME) (params *, double);
 

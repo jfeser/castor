@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <string.h>
-#include "stdlib.c"
+#include "castorlib.h"
 
 void strpos_test(char *s1, char* s2) {
   long l1, l2;

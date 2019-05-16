@@ -1,5 +1,5 @@
-#ifndef STDLIB_H
-#define STDLIB_H
+#ifndef CASTORLIB_H
+#define CASTORLIB_H
 
 long strpos(char* s1, long l1, char* s2, long l2);
 long extract_year(long date);
