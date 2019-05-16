@@ -238,8 +238,8 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
     | AList (r1, r2) -> fprintf fmt "alist(%a,@ %a)" pp r1 pp r2
     | ATuple (rs, kind) ->
         fprintf fmt "atuple(%a,@ %a)" (pp_list pp) rs pp_kind kind
-    | AHashIdx {hi_keys= r1; hi_values= r2; hi_lookup; _} ->
-        fprintf fmt "ahashidx(%a,@ %a,@ %a)" pp r1 pp r2 pp_key hi_lookup
+    | AHashIdx {hi_keys= r1; hi_scope= s; hi_values= r2; hi_lookup; _} ->
+        fprintf fmt "ahashidx(%a as %s,@ %a,@ %a)" pp r1 s pp r2 pp_key hi_lookup
     | AOrderedIdx (r1, r2, {lookup_low; lookup_high; _}) ->
         fprintf fmt "aorderedidx(%a,@ %a,@ %a,@ %a)" pp r1 pp r2 pp_pred lookup_low
           pp_pred lookup_high
