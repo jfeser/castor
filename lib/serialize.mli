@@ -2,7 +2,7 @@ open! Core
 
 module Config : sig
   module type S = sig
-    val layout_map_channel : Out_channel.t option
+    val layout_file : string option
   end
 end
 

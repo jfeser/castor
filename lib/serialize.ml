@@ -4,16 +4,16 @@ open Abslayout
 
 module Config = struct
   module type S = sig
-    val layout_map_channel : Out_channel.t option
+    val layout_file : string option
   end
 end
 
 module type S = Serialize_intf.S
 
 module Make (Config : Config.S) (M : Abslayout_db.S) = struct
-  type serialize_ctx =
-    {writer: Bitstring.Writer.t sexp_opaque; log_ch: Out_channel.t sexp_opaque}
-  [@@deriving sexp]
+  open Config
+
+  let debug = Option.is_some layout_file
 
   module Log = struct
     open Bitstring.Writer
@@ -24,12 +24,15 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
 
     let create = Bag.create
 
-    let with_msg log writer msg f =
+    let with_msgf log writer msgf f =
       let start = pos writer in
       let ret = f () in
       let len = Pos.(pos writer - start) in
+      let msg = msgf Format.sprintf in
       Bag.add log {pos= Pos.to_bytes_exn start; len; msg} |> ignore ;
       ret
+
+    let with_msg log writer msg f = with_msgf log writer (fun m -> m "%s" msg) f
 
     let render log out_ch =
       Bag.to_list log
@@ -144,6 +147,22 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
 
       val log_msgs = Log.create ()
 
+      method log msg ~f = if debug then Log.with_msg log_msgs writer msg f else f ()
+
+      method logf
+          : 'a.    ((('a, unit, string) format -> 'a) -> string) -> f:(unit -> unit)
+            -> unit =
+        fun msgf ~f -> if debug then Log.with_msgf log_msgs writer msgf f else f ()
+
+      method log_msgs = log_msgs
+
+      method log_insert (child : serialize_fold) =
+        let pos = Writer.Pos.to_bytes_exn self#pos in
+        Bag.until_empty child#log_msgs (fun m ->
+            Bag.add_unit log_msgs {m with pos= Int64.(m.Log.pos + pos)} )
+
+      method log_render ch = Log.render log_msgs ch
+
       method pos = Writer.pos writer
 
       method flush = Writer.flush writer
@@ -159,7 +178,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         write_bytes writer (Bytes.make (size_exn hdr "len") '\x00') ;
         (* Serialize list body. *)
         let count = ref 0 in
-        self#log "List body" (fun () ->
+        self#log "List body" ~f:(fun () ->
             Gen.iter gen ~f:(fun (_, vctx) ->
                 count := !count + 1 ;
                 self#visit_t sctx vctx elem_layout ) ) ;
@@ -167,10 +186,14 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         (* Serialize list header. *)
         let len = Pos.(end_pos - header_pos) |> Int64.to_int_exn in
         seek writer header_pos ;
-        self#log (sprintf "List count (=%d)" !count) (fun () ->
+        self#logf
+          (fun m -> m "List count (=%d)" !count)
+          ~f:(fun () ->
             write_string writer (of_int ~byte_width:(size_exn hdr "count") !count)
-        ) ;
-        self#log (sprintf "List len (=%d)" len) (fun () ->
+            ) ;
+        self#logf
+          (fun m -> m "List len (=%d)" len)
+          ~f:(fun () ->
             write_string writer (of_int ~byte_width:(size_exn hdr "len") len) ) ;
         seek writer end_pos
 
@@ -180,13 +203,15 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         let header_pos = pos writer in
         write_bytes writer (Bytes.make (size_exn hdr "len") '\x00') ;
         (* Serialize body *)
-        self#log "Tuple body" (fun () ->
+        self#log "Tuple body" ~f:(fun () ->
             List.iter2_exn ctxs ls ~f:(self#visit_t sctx) ) ;
         let end_pos = pos writer in
         (* Serialize header. *)
         seek writer header_pos ;
         let len = Pos.(end_pos - header_pos) |> Int64.to_int_exn in
-        self#log (sprintf "Tuple len (=%d)" len) (fun () ->
+        self#logf
+          (fun m -> m "Tuple len (=%d)" len)
+          ~f:(fun () ->
             write_string writer (of_int ~byte_width:(size_exn hdr "len") len) ) ;
         seek writer end_pos
 
@@ -234,25 +259,26 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         let hash_len = String.length hash_body in
         let hash_map_len = Array.length hash * 8 in
         let value_len = valf#pos |> Pos.to_bytes_exn |> Int64.to_int_exn in
-        self#log "Table len" (fun () ->
+        self#log "Table len" ~f:(fun () ->
             let flen = size_exn hdr "len" in
             let len =
               flen + size_exn hdr "hash_len" + hash_len
               + size_exn hdr "hash_map_len" + hash_map_len + value_len
             in
             write_string writer (of_int ~byte_width:flen len) ) ;
-        self#log "Table hash len" (fun () ->
+        self#log "Table hash len" ~f:(fun () ->
             write_string writer
               (of_int ~byte_width:(size_exn hdr "hash_len") hash_len) ) ;
-        self#log "Table hash" (fun () -> write_string writer hash_body) ;
-        self#log "Table map len" (fun () ->
+        self#log "Table hash" ~f:(fun () -> write_string writer hash_body) ;
+        self#log "Table map len" ~f:(fun () ->
             write_string writer
               (of_int ~byte_width:(size_exn hdr "hash_map_len") hash_map_len) ) ;
-        self#log "Table key map" (fun () ->
+        self#log "Table key map" ~f:(fun () ->
             Array.iteri hash ~f:(fun h p ->
-                self#log (sprintf "Map entry (%d => %d)" h p) (fun () ->
-                    write_string writer (of_int ~byte_width:8 p) ) ) ) ;
-        self#log "Table values" (fun () ->
+                self#logf
+                  (fun m -> m "Map entry (%d => %d)" h p)
+                  ~f:(fun () -> write_string writer (of_int ~byte_width:8 p)) ) ) ;
+        self#log "Table values" ~f:(fun () ->
             valf#flush ;
             self#log_insert valf ;
             write_string writer (Buffer.contents vbuf) )
@@ -281,7 +307,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
             let kbuf = Buffer.create 8 in
             let kwriter = Writer.with_buffer kbuf in
             let keyf = new serialize_fold kwriter in
-            keyf#log "Ordered idx key" (fun () ->
+            keyf#log "Ordered idx key" ~f:(fun () ->
                 keyf#visit_t () (M.to_ctx key) key_l ) ;
             Writer.flush kwriter ;
             keys := !keys @ [(kbuf, keyf, Writer.Pos.to_bytes_exn valf#pos)] ;
@@ -290,13 +316,15 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         let index_start = self#pos in
         let ptr_size = Type.oi_ptr_size vt m in
         List.iter !keys ~f:(fun (kbuf, keyf, vptr) ->
-            self#log "Ordered idx key" (fun () ->
+            self#log "Ordered idx key" ~f:(fun () ->
                 self#log_insert keyf ;
                 write_string writer (Buffer.contents kbuf) ) ;
-            self#log (sprintf "Ordered idx ptr (=%Ld)" vptr) (fun () ->
-                write_string writer (of_int64 ~byte_width:ptr_size vptr) ) ) ;
+            self#logf
+              (fun m -> m "Ordered idx ptr (=%Ld)" vptr)
+              ~f:(fun () -> write_string writer (of_int64 ~byte_width:ptr_size vptr))
+        ) ;
         let index_end = self#pos in
-        self#log "Ordered idx body" (fun () ->
+        self#log "Ordered idx body" ~f:(fun () ->
             valf#flush ;
             self#log_insert valf ;
             write_string writer (Buffer.contents vbuf) ) ;
@@ -304,9 +332,13 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         let len = Writer.Pos.(end_pos - len_pos) in
         let index_len = Writer.Pos.(index_end - index_start) in
         Writer.seek writer len_pos ;
-        self#log (sprintf "Ordered idx len (=%Ld)" len) (fun () ->
+        self#logf
+          (fun m -> m "Ordered idx len (=%Ld)" len)
+          ~f:(fun () ->
             write_string writer (of_int64 ~byte_width:(size_exn hdr "len") len) ) ;
-        self#log (sprintf "Ordered idx index len (=%Ld)" index_len) (fun () ->
+        self#logf
+          (fun m -> m "Ordered idx index len (=%Ld)" index_len)
+          ~f:(fun () ->
             write_string writer
               (of_int64 ~byte_width:(size_exn hdr "idx_len") index_len) ) ;
         seek writer end_pos
@@ -318,7 +350,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           | NullT -> ""
           | _ -> null_sentinal t |> of_int ~byte_width:(size_exn hdr "value")
         in
-        self#log "Null" (fun () -> write_string writer str)
+        self#log "Null" ~f:(fun () -> write_string writer str)
 
       method serialize_int _ t x =
         let hdr = make_header t in
@@ -353,19 +385,22 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         match t with
         | StringT _ ->
             let len = String.length body in
-            self#log (sprintf "String length (=%d)" len) (fun () ->
+            self#logf
+              (fun m -> m "String length (=%d)" len)
+              ~f:(fun () ->
                 of_int ~byte_width:(size_exn hdr "nchars") len
                 |> write_string writer ) ;
-            self#log "String body" (fun () -> write_string writer body)
+            self#log "String body" ~f:(fun () -> write_string writer body)
         | t ->
             Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
 
       method build_AScalar sctx meta _ value =
         let type_ = Meta.Direct.(find_exn meta Meta.type_) in
-        self#log
-          (sprintf "Scalar (=%s)"
-             ([%sexp_of: Value.t] (Lazy.force value) |> Sexp.to_string_hum))
-          (fun () ->
+        self#logf
+          (fun m ->
+            m "Scalar (=%s)"
+              ([%sexp_of: Value.t] (Lazy.force value) |> Sexp.to_string_hum) )
+          ~f:(fun () ->
             match Lazy.force value with
             | Null -> self#serialize_null sctx type_
             | Date x -> self#serialize_int sctx type_ (Date.to_int x)
@@ -382,32 +417,13 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           | Some Many_pos -> Many_pos
           | None -> Pos pos ) ;
         super#visit_t sctx ectx layout
-
-      val mutable should_log = true
-
-      method log msg f =
-        if should_log then Log.with_msg log_msgs writer msg f else f ()
-
-      method log_msgs = log_msgs
-
-      method log_insert (child : serialize_fold) =
-        let pos = Writer.Pos.to_bytes_exn self#pos in
-        Bag.until_empty child#log_msgs (fun m ->
-            Bag.add_unit log_msgs {m with pos= Int64.(m.Log.pos + pos)} )
-
-      method log_render ch = Log.render log_msgs ch
-
-      method skip_t sctx ectx layout =
-        should_log <- false ;
-        super#visit_t sctx ectx layout ;
-        should_log <- true
     end
 
   let serialize writer l =
     Logs.info (fun m -> m "Serializing abstract layout.") ;
-    let begin_pos = pos writer in
-    (* Serialize the main layout. *)
     let serializer = new serialize_fold writer in
+    let begin_pos = serializer#pos in
+    (* Serialize the main layout. *)
     serializer#run () l ;
     (* Serialize subquery layouts. *)
     let subquery_visitor =
@@ -418,11 +434,9 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
       end
     in
     subquery_visitor#visit_t () l ;
-    let end_pos = pos writer in
-    let len = Pos.(end_pos - begin_pos) |> Int64.to_int_exn in
-    flush writer ;
-    ( match Config.layout_map_channel with
-    | Some ch -> serializer#log_render ch
-    | None -> () ) ;
+    serializer#flush ;
+    Option.iter layout_file ~f:(fun f ->
+        Out_channel.with_file f ~f:serializer#log_render ) ;
+    let len = Pos.(serializer#pos - begin_pos) |> Int64.to_int_exn in
     (l, len)
 end
