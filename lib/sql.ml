@@ -1,7 +1,6 @@
 open! Core
 open Collections
 open Abslayout
-open Bos
 
 type select_entry = {pred: pred; alias: string; cast: Type.PrimType.t option}
 [@@deriving compare, sexp_of]
@@ -359,6 +358,7 @@ and to_string = function
       |> String.concat ~sep:" union all "
 
 let to_string_hum sql =
+  let open Bos in
   let sql_str = to_string sql in
   let inp = OS.Cmd.in_string sql_str in
   let out = OS.Cmd.run_io Cmd.(v "pg_format") inp in
