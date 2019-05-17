@@ -37,6 +37,8 @@ let to_sql = function
   | String s -> sprintf "'%s'" s
   | Null -> "null"
 
+let pp fmt v = Format.fprintf fmt "%s" (to_sql v)
+
 let to_int = function Int x -> x | _ -> failwith "Not an int."
 
 let to_date = function Date x -> x | _ -> failwith "Not an date."

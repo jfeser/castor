@@ -28,6 +28,13 @@
  (preprocess (pps ppx_sexp_conv ppx_let))
  (modules sample_tpch))
 
+(executable
+ (name bench_gen)
+ (libraries core core_bench castor)
+ (flags (:standard -g -bin-annot))
+ (preprocess (pps ppx_sexp_conv ppx_let))
+ (modules bench_gen))
+
 ; Local Variables:
 ; mode: tuareg-dune
 ; End:

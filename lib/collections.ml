@@ -213,6 +213,53 @@ module Gen = struct
           in
           Some (x, group_gen)
 
+  let group_eager eq gen =
+    let cur = ref (`Group []) in
+    let rec next () =
+      match !cur with
+      | `Done -> None
+      | `Group g -> (
+        match gen () with
+        | None ->
+            cur := `Done ;
+            Some g
+        | Some x -> (
+          match g with
+          | [] ->
+              cur := `Group [x] ;
+              next ()
+          | y :: _ ->
+              if eq x y then (
+                cur := `Group (x :: g) ;
+                next () )
+              else (
+                cur := `Group [x] ;
+                Some g ) ) )
+    in
+    next
+
+  let group_eager_q eq gen =
+    let open Queue in
+    let is_done = ref false in
+    let g = create () in
+    let rec next () =
+      if !is_done then None
+      else
+        match gen () with
+        | None ->
+            is_done := true ;
+            Some (to_array g)
+        | Some x -> (
+          match peek g with
+          | None -> enqueue g x ; next ()
+          | Some y ->
+              if eq x y then ( enqueue g x ; next () )
+              else
+                let g' = to_array g in
+                clear g ; enqueue g x ; Some g' )
+    in
+    next
+
   let rec junk_all g = match Gen.next g with Some _ -> junk_all g | None -> ()
 
   (** Ensure that `g1` is fully consumed before `g2` is used. *)
@@ -230,6 +277,25 @@ module Gen = struct
       else failwith "Failed to fully consume generator."
     in
     (g1', g2')
+
+  let%expect_test "" =
+    let eq (i, _) (i', _) = i = i' in
+    let print (i, j) = printf "%d %d, " i j in
+    init ~limit:5 (fun i -> init ~limit:3 (fun j -> (i, j)))
+    |> flatten |> group_lazy eq
+    |> iter ~f:(fun (_, ts) -> iter ts ~f:print) ;
+    [%expect
+      {| 0 0, 0 1, 0 2, 1 0, 1 1, 1 2, 2 0, 2 1, 2 2, 3 0, 3 1, 3 2, 4 0, 4 1, 4 2, |}] ;
+    init ~limit:5 (fun i -> init ~limit:3 (fun j -> (i, j)))
+    |> flatten |> group ~eq
+    |> iter ~f:(List.iter ~f:print) ;
+    [%expect
+      {| 0 2, 0 1, 0 0, 1 2, 1 1, 1 0, 2 2, 2 1, 2 0, 3 2, 3 1, 3 0, 4 2, 4 1, 4 0, |}] ;
+    init ~limit:5 (fun i -> init ~limit:3 (fun j -> (i, j)))
+    |> flatten |> group ~eq
+    |> iter ~f:(fun g -> List.rev g |> List.iter ~f:print) ;
+    [%expect
+      {| 0 0, 0 1, 0 2, 1 0, 1 1, 1 2, 2 0, 2 1, 2 2, 3 0, 3 1, 3 2, 4 0, 4 1, 4 2, |}]
 end
 
 module Bytes = struct

@@ -183,9 +183,15 @@ module Make (Config : Config.S) = struct
             [%compare.equal: Value.t list] (extract_tup1 t1) (extract_tup1 t2)
           in
           let gen =
-            Gen.group_lazy eq tups
-            |> Gen.map ~f:(fun (t, ts) ->
-                   (extract_tup1 t, eval (Gen.map ts ~f:drop_tup1) q2) )
+            Gen.group_eager eq tups
+            |> Gen.filter_map ~f:(fun ts ->
+                   let ts = List.rev ts in
+                   Option.map (List.hd ts) ~f:(fun t ->
+                       let x = extract_tup1 t in
+                       let y =
+                         eval (ts |> Gen.of_list |> Gen.map ~f:drop_tup1) q2
+                       in
+                       (x, y) ) )
           in
           C.For gen
       | Q.Concat qs ->
