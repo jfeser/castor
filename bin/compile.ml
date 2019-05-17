@@ -10,12 +10,12 @@ let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
 
     let code_only = code_only
 
-    let layout_map_channel =
+    let layout_file =
       if debug then
         let layout_file =
           match out_dir with Some d -> d ^ "/layout.txt" | None -> "layout.txt"
         in
-        Some (Out_channel.create layout_file)
+        Some layout_file
       else None
   end in
   let module A = Abslayout_db.Make (CConfig) in

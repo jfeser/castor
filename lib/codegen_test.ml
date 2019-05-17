@@ -108,8 +108,52 @@ let%expect_test "example-2" =
     exited normally |}]
 
 let%expect_test "example-2-str" =
-  Demomatch.(run_test ~params:example_str_params (example2 "log_str")) ;
+  Demomatch.(
+    run_test ~print_layout:true ~params:example_str_params (example2 "log_str")) ;
   [%expect {|
+    0:4 Table len
+    4:8 Table hash len
+    12:104 Table hash
+    116:8 Table map len
+    124:16 Table key map
+    124:8 Map entry (0 => 14)
+    132:8 Map entry (1 => 0)
+    140:31 Table values
+    140:1 Tuple len (=8)
+    141:7 Tuple body
+    141:3 Scalar (=(String foo))
+    141:3 String body
+    141:0 String length (=3)
+    144:4 Scalar (=(String bar))
+    144:1 String length (=3)
+    145:3 String body
+    148:1 List count (=2)
+    149:1 List len (=6)
+    150:4 List body
+    150:2 Tuple body
+    150:1 Scalar (=(Int 1))
+    150:0 Tuple len (=2)
+    151:1 Scalar (=(Int 3))
+    152:2 Tuple body
+    152:1 Scalar (=(Int 4))
+    152:0 Tuple len (=2)
+    153:1 Scalar (=(Int 5))
+    154:1 Tuple len (=13)
+    155:12 Tuple body
+    155:3 Scalar (=(String foo))
+    155:3 String body
+    155:0 String length (=3)
+    158:9 Scalar (=(String fizzbuzz))
+    158:1 String length (=8)
+    159:8 String body
+    167:1 List count (=1)
+    168:1 List len (=4)
+    169:2 List body
+    169:2 Tuple body
+    169:1 Scalar (=(Int 1))
+    169:0 Tuple len (=2)
+    170:1 Scalar (=(Int 2))
+
     1|2
 
     exited normally |}]

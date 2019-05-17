@@ -283,15 +283,7 @@ let tests =
                 >:: fun ctxt ->
                 assert_equal ~ctxt 1 (length (Piece {len= 1; str= "\x80"})) ) ]
        ; "writer"
-         >::: [ (* "flush" >:: (fun ctxt ->
-       *     let flushed = ref false in
-       *     let w = Writer.create (fun c ->
-       *         assert_equal ~ctxt ~printer:Char.escaped '\x80' c;
-       *         flushed := true) in
-       *     Writer.write_bit w 1;
-       *     Writer.flush w;
-       *     assert_equal ~ctxt true !flushed); *)
-                ( "write_bit"
+         >::: [ ( "write_bit"
                 >:: fun ctxt ->
                 let buf1 = Buffer.create 1 in
                 Buffer.add_char buf1 '\x80' ;

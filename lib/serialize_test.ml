@@ -15,7 +15,9 @@ let run_test layout_str =
   M.annotate_type layout ;
   let type_ = Meta.(find_exn layout type_) in
   let buf = Buffer.create 1024 in
-  let _, len = S.serialize (Bitstring.Writer.with_buffer buf) layout in
+  let writer = Bitstring.Writer.with_buffer buf in
+  let _, len = S.serialize writer layout in
+  Bitstring.Writer.flush writer ;
   let buf_str = Buffer.contents buf |> String.escaped in
   let layout_log, did_modify =
     In_channel.input_all (In_channel.create layout_file) |> process_layout_log
@@ -57,8 +59,8 @@ let%expect_test "tuple" =
     0:5 Tuple body
     0:1 Scalar (=(Int 1))
     0:0 Tuple len (=5)
-    1:4 Scalar (=(String test))
     1:4 String body
+    1:4 Scalar (=(String test))
     1:0 String length (=4)
 
     ((TupleT
@@ -100,6 +102,7 @@ let%expect_test "ordered-idx" =
      v), null, null)" ;
   [%expect
     {|
+    0:6 Ordered idx map
     0:1 Ordered idx key
     0:1 Scalar (=(Int 3))
     0:1 Ordered idx key
@@ -130,6 +133,7 @@ let%expect_test "ordered-idx-dates" =
      as v), null, null)" ;
   [%expect
     {|
+    0:15 Ordered idx map
     0:2 Ordered idx key
     0:2 Scalar (=(Date 2018-09-01))
     0:2 Ordered idx key
@@ -172,9 +176,9 @@ let%expect_test "list-list" =
     0:25 List body
     0:5 List body
     0:1 Scalar (=(Int 1))
-    0:0 List len (=25)
     0:0 List count (=5)
     0:0 List len (=5)
+    0:0 List len (=25)
     0:0 List count (=5)
     1:1 Scalar (=(Int 1))
     2:1 Scalar (=(Int 2))
@@ -182,32 +186,32 @@ let%expect_test "list-list" =
     4:1 Scalar (=(Int 3))
     5:5 List body
     5:1 Scalar (=(Int 1))
-    5:0 List len (=5)
     5:0 List count (=5)
+    5:0 List len (=5)
     6:1 Scalar (=(Int 1))
     7:1 Scalar (=(Int 2))
     8:1 Scalar (=(Int 2))
     9:1 Scalar (=(Int 3))
     10:5 List body
     10:1 Scalar (=(Int 1))
-    10:0 List len (=5)
     10:0 List count (=5)
+    10:0 List len (=5)
     11:1 Scalar (=(Int 1))
     12:1 Scalar (=(Int 2))
     13:1 Scalar (=(Int 2))
     14:1 Scalar (=(Int 3))
     15:5 List body
     15:1 Scalar (=(Int 1))
-    15:0 List len (=5)
     15:0 List count (=5)
+    15:0 List len (=5)
     16:1 Scalar (=(Int 1))
     17:1 Scalar (=(Int 2))
     18:1 Scalar (=(Int 2))
     19:1 Scalar (=(Int 3))
     20:5 List body
     20:1 Scalar (=(Int 1))
-    20:0 List len (=5)
     20:0 List count (=5)
+    20:0 List len (=5)
     21:1 Scalar (=(Int 1))
     22:1 Scalar (=(Int 2))
     23:1 Scalar (=(Int 2))

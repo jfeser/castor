@@ -16,8 +16,6 @@ val concat : t list -> t
 
 val empty : t
 
-(* val append : t -> t -> t *)
-
 val length : t -> int
 
 val byte_length : t -> int
