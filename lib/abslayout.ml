@@ -368,6 +368,8 @@ module Pred = struct
   include T
   include Comparator.Make (T)
 
+  let pp = pp_pred
+
   let names r = names_visitor#visit_pred () r
 
   let of_value = Value.to_pred

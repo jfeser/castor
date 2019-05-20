@@ -231,6 +231,8 @@ module Pred : sig
 
   include Comparator.S with type t := t
 
+  val pp : Formatter.t -> pred -> unit
+
   val names : t -> (Name.t, Name.comparator_witness) Set.t
 
   val of_value : Value.t -> t

@@ -61,10 +61,11 @@ let rec pp_expr : Format.formatter -> expr -> unit =
     | Binop {op; arg1; arg2} -> (
       match op_to_string op with
       | `Prefix str -> fprintf fmt "%s(%a, %a)" str pp_expr arg1 pp_expr arg2
-      | `Infix str -> fprintf fmt "%a %s@ %a" pp_expr arg1 str pp_expr arg2 )
+      | `Infix str -> fprintf fmt "@[<hov>%a %s@ %a@]" pp_expr arg1 str pp_expr arg2
+      )
     | Unop {op; arg} ->
         let (`Infix str | `Prefix str) = op_to_string op in
-        fprintf fmt "%s@ %a" str pp_expr arg
+        fprintf fmt "@[<hov>%s(%a)@]" str pp_expr arg
     | Done func -> fprintf fmt "done(%s)" func
     | Ternary (e1, e2, e3) ->
         fprintf fmt "%a ? %a : %a" pp_expr e1 pp_expr e2 pp_expr e3
@@ -576,6 +577,30 @@ module Builder = struct
   let build_printstr s b = build_print (String s) b
 
   let _ = build_printstr
+
+  module Test = struct
+    open Type.PrimType
+
+    let%expect_test "" =
+      let b = create ~ctx:(Map.empty (module Name)) ~name:"" ~ret:int_t in
+      build_lt (Int 0) (Int 1) b |> Format.printf "%a" pp_expr;
+      [%expect {| 0 < 1 |}]
+
+    let%expect_test "" =
+      let b = create ~ctx:(Map.empty (module Name)) ~name:"" ~ret:int_t in
+      build_le (Int 0) (Int 1) b |> Format.printf "%a" pp_expr;
+      [%expect {| 0 < 1 || 0 == 1 |}]
+
+    let%expect_test "" =
+      let b = create ~ctx:(Map.empty (module Name)) ~name:"" ~ret:int_t in
+      build_gt (Int 0) (Int 1) b |> Format.printf "%a" pp_expr;
+      [%expect {| not(0 < 1 || 0 == 1) |}]
+
+    let%expect_test "" =
+      let b = create ~ctx:(Map.empty (module Name)) ~name:"" ~ret:int_t in
+      build_ge (Int 0) (Int 1) b |> Format.printf "%a" pp_expr;
+      [%expect {| not(0 < 1) |}]
+  end
 end
 
 module Ctx = struct
