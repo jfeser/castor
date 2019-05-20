@@ -17,7 +17,6 @@ depends: [
 
   "core" {>= "v0.12"}
   "postgresql" {>= "4.4" & < "4.5"}
-  "faraday" {>= "0.7"}
   "bos" {>= "0.2" & < "0.3"}
   "logs" {>= "0.6" & < "0.7"}
   "llvm" {>= "7.0.0" & < "8.0.0"}
@@ -25,6 +24,13 @@ depends: [
   "gen" {>= "0.5" & < "0.6"}
   "cmph" {>= "0.1" & < "0.2"}
   "hashcons" {>= "1.3"}
+
+  "lwt" {>= "4.2.1"}
+  "lwt_ppx" {>= "1.2.2"}
+
+  "faraday" {>= "0.7"}
+  "faraday-lwt" {>= "0.7"}
+  "faraday-lwt-unix" {>= "0.7"}
 
   "ppx_compare" {>= "v0.12"}
   "ppx_sexp_conv" {>= "v0.12"}

@@ -1,7 +1,7 @@
 open! Core
 open! Lwt
 open Collections
-open Abslayout
+module A = Abslayout
 
 module Config = struct
   module type S = sig
@@ -148,11 +148,12 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
 
       method msgs = msgs
 
-      method log msg ~f : unit = self#logf (fun m -> m "%s" msg) ~f
+      method log : 'a. string -> f:(unit -> 'a) -> 'a =
+        fun msg ~f -> self#logf (fun m -> m "%s" msg) ~f
 
       method logf
-          : 'a.    ((('a, unit, string) format -> 'a) -> string) -> f:(unit -> unit)
-            -> unit =
+          : 'a 'b.    ((('a, unit, string) format -> 'a) -> string)
+            -> f:(unit -> 'b) -> 'b =
         fun msgf ~f ->
           if debug then (
             let start = self#pos in
@@ -176,21 +177,28 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         Out_channel.flush ch
     end
 
+  let gen_iter_s ~f g =
+    Gen.fold g ~init:(return ()) ~f:(fun p x ->
+        let%lwt () = p in
+        f x )
+
   class serialize_fold =
     object (self : 'self)
       inherit [_, _] M.unsafe_material_fold as super
 
-      method build_AEmpty _ _ = ()
+      method build_AEmpty _ _ = return ()
 
       method build_AList (s : logged_serializer) meta (_, elem_layout) gen =
         let t = Meta.Direct.(find_exn meta Meta.type_) in
         (* Serialize list body. *)
         let child = new logged_serializer () in
         let count = ref 0 in
-        child#log "List body" ~f:(fun () ->
-            Gen.iter gen ~f:(fun (_, vctx) ->
-                count := !count + 1 ;
-                self#visit_t child vctx elem_layout ) ) ;
+        let%lwt () =
+          child#log "List body" ~f:(fun () ->
+              gen_iter_s gen ~f:(fun (_, vctx) ->
+                  count := !count + 1 ;
+                  self#visit_t child vctx elem_layout ) )
+        in
         (* Serialize list header. *)
         let hdr = make_header t in
         let len =
@@ -204,13 +212,16 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         s#logf
           (fun m -> m "List len (=%d)" len)
           ~f:(fun () -> s#write_string (of_int ~byte_width:(size_exn hdr "len") len)) ;
-        child#write_into s
+        return (child#write_into s)
 
       method build_Tuple (s : logged_serializer) t ls ctxs =
         (* Serialize body *)
         let child = new logged_serializer () in
-        child#log "Tuple body" ~f:(fun () ->
-            List.iter2_exn ctxs ls ~f:(self#visit_t child) ) ;
+        let%lwt () =
+          child#log "Tuple body" ~f:(fun () ->
+              List.zip_exn ctxs ls
+              |> Lwt_list.iter_s (fun (c, l) -> self#visit_t child c l) )
+        in
         (* Serialize header. *)
         let hdr = make_header t in
         let len =
@@ -220,7 +231,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         s#logf
           (fun m -> m "Tuple len (=%d)" len)
           ~f:(fun () -> s#write_string (of_int ~byte_width:(size_exn hdr "len") len)) ;
-        child#write_into s
+        return (child#write_into s)
 
       method build_ATuple s meta (elem_layouts, _) ctxs =
         let t = Meta.Direct.find_exn meta Meta.type_ in
@@ -240,17 +251,19 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         let type_ = Meta.Direct.find_exn meta Meta.type_ in
         let key_l =
           Option.value_exn
-            ~error:(Error.create "Missing key layout." h [%sexp_of: hash_idx])
+            ~error:(Error.create "Missing key layout." h [%sexp_of: A.hash_idx])
             h.hi_key_layout
         in
         (* Collect keys and write values to a child buffer. *)
         let keys = Queue.create () in
         let valf = new logged_serializer () in
-        Gen.iter gen ~f:(fun (key, vctx) ->
-            let vptr = valf#pos in
-            Queue.enqueue keys (key, vptr) ;
-            self#visit_t valf (M.to_ctx key) key_l ;
-            self#visit_t valf vctx h.hi_values ) ;
+        let%lwt () =
+          gen_iter_s gen ~f:(fun (key, vctx) ->
+              let vptr = valf#pos in
+              Queue.enqueue keys (key, vptr) ;
+              let%lwt () = self#visit_t valf (M.to_ctx key) key_l in
+              self#visit_t valf vctx h.hi_values )
+        in
         Logs.debug (fun m -> m "Generating hash.") ;
         let hash, hash_body =
           make_hash type_ (Queue.to_array keys |> Array.to_sequence)
@@ -279,7 +292,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
                 s#logf
                   (fun m -> m "Map entry (%d => %d)" h p)
                   ~f:(fun () -> s#write_string (of_int ~byte_width:8 p)) ) ) ;
-        s#log "Table values" ~f:(fun () -> valf#write_into s)
+        return (s#log "Table values" ~f:(fun () -> valf#write_into s))
 
       method build_AOrderedIdx s meta (_, value_l, ometa) gen =
         let t = Meta.Direct.(find_exn meta Meta.type_) in
@@ -289,19 +302,23 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         let key_l =
           Option.value_exn
             ~error:
-              (Error.create "Missing key layout." ometa [%sexp_of: ordered_idx])
+              (Error.create "Missing key layout." ometa [%sexp_of: A.ordered_idx])
             ometa.oi_key_layout
         in
         let vals = new logged_serializer () in
         let keys = ref [] in
-        Gen.iter gen ~f:(fun (key, vctx) ->
-            (* Serialize key. *)
-            let keyf = new logged_serializer () in
-            keyf#log "Ordered idx key" ~f:(fun () ->
-                self#visit_t keyf (M.to_ctx key) key_l ) ;
-            keys := !keys @ [(keyf, vals#pos)] ;
-            (* Serialize value. *)
-            self#visit_t vals vctx value_l ) ;
+        let%lwt () =
+          gen_iter_s gen ~f:(fun (key, vctx) ->
+              (* Serialize key. *)
+              let keyf = new logged_serializer () in
+              let%lwt () =
+                keyf#log "Ordered idx key" ~f:(fun () ->
+                    self#visit_t keyf (M.to_ctx key) key_l )
+              in
+              keys := !keys @ [(keyf, vals#pos)] ;
+              (* Serialize value. *)
+              self#visit_t vals vctx value_l )
+        in
         let ptr_size = Type.oi_ptr_size vt m in
         (* Serialize keys and value pointers. *)
         let idxs = new logged_serializer () in
@@ -327,9 +344,9 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           ~f:(fun () ->
             s#write_string (of_int ~byte_width:(size_exn hdr "idx_len") idx_len) ) ;
         s#log "Ordered idx map" ~f:(fun () -> idxs#write_into s) ;
-        s#log "Ordered idx body" ~f:(fun () -> vals#write_into s)
+        return (s#log "Ordered idx body" ~f:(fun () -> vals#write_into s))
 
-      method serialize_null s t =
+      method serialize_null (s : logged_serializer) t =
         let hdr = make_header t in
         let str =
           match t with
@@ -393,6 +410,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
             | Fixed x -> self#serialize_fixed s type_ x
             | Bool x -> self#serialize_bool s type_ x
             | String x -> self#serialize_string s type_ x )
+        |> return
 
       method! visit_t s ectx layout =
         (* Update position metadata in layout. *)
@@ -404,22 +422,31 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         super#visit_t s ectx layout
     end
 
-  let serialize ch l =
+  let serialize fd l =
+    let open Lwt_main in
     Logs.info (fun m -> m "Serializing abstract layout.") ;
     let serializer = new logged_serializer () in
-    (* Serialize the main layout. *)
-    (new serialize_fold)#run serializer l ;
-    (* Serialize subquery layouts. *)
-    let subquery_visitor =
-      object
-        inherit Abslayout0.runtime_subquery_visitor
-
-        method visit_Subquery r = (new serialize_fold)#run serializer r
-      end
+    let write =
+      let writev = Faraday_lwt_unix.writev_of_fd (Lwt_unix.of_unix_file_descr fd) in
+      Faraday_lwt.serialize serializer#writer ~yield:(fun _ -> yield ()) ~writev
     in
-    subquery_visitor#visit_t () l ;
-    serializer#write_into_channel ch ;
-    Out_channel.flush ch ;
+    let serialize =
+      (* Serialize the main layout. *)
+      let s = ref ((new serialize_fold)#run serializer l) in
+      (* Serialize subquery layouts. *)
+      let subquery_visitor =
+        object
+          inherit Abslayout0.runtime_subquery_visitor
+
+          method visit_Subquery r =
+            s := Infix.(!s >>= fun () -> (new serialize_fold)#run serializer r)
+        end
+      in
+      subquery_visitor#visit_t () l ;
+      let%lwt () = !s in
+      return (Faraday.close serializer#writer)
+    in
+    run (join [write; serialize]) ;
     Option.iter layout_file ~f:(fun f ->
         Out_channel.with_file f ~f:serializer#render ) ;
     let len = serializer#pos in

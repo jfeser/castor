@@ -18,7 +18,9 @@ let run_test layout_str =
   M.annotate_type layout ;
   let type_ = Meta.(find_exn layout type_) in
   let _, len =
-    Out_channel.with_file layout_file ~f:(fun ch -> S.serialize ch layout)
+    Unix.(
+      with_file layout_file ~mode:[O_WRONLY; O_CREAT; O_TRUNC] ~f:(fun fd ->
+          S.serialize fd layout ))
   in
   let buf_str = In_channel.read_all layout_file |> String.escaped in
   let layout_log, did_modify =
