@@ -110,7 +110,8 @@ let%expect_test "example-2" =
 let%expect_test "example-2-str" =
   Demomatch.(
     run_test ~print_layout:true ~params:example_str_params (example2 "log_str")) ;
-  [%expect {|
+  [%expect
+    {|
     0:4 Table len
     4:8 Table hash len
     12:104 Table hash

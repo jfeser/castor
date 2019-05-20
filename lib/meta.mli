@@ -5,7 +5,7 @@ type t = Abslayout0.meta [@@deriving sexp_of]
 
 type 'a key = 'a Univ_map.Key.t
 
-type pos = Pos of int64 | Many_pos
+type pos = Pos of int | Many_pos
 
 type lexpos = Lexing.position =
   {pos_fname: string; pos_lnum: int; pos_bol: int; pos_cnum: int}

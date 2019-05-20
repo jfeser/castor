@@ -5,7 +5,7 @@ type t = Univ_map.t ref [@@deriving sexp_of]
 
 type 'a key = 'a Univ_map.Key.t
 
-type pos = Pos of int64 | Many_pos [@@deriving sexp]
+type pos = Pos of int | Many_pos [@@deriving sexp]
 
 type lexpos = Lexing.position =
   {pos_fname: string; pos_lnum: int; pos_bol: int; pos_cnum: int}

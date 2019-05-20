@@ -67,7 +67,7 @@ struct
                passed in. *)
             Map.update ctx start_name ~f:(function
               | Some x -> x
-              | None -> Ctx.(Global Infix.(int (Int64.to_int_exn start))) )
+              | None -> Ctx.(Global Infix.(int start)) )
         | Some Many_pos | None -> ctx
     in
     ctx
@@ -714,12 +714,10 @@ struct
       |> Map.of_alist_exn (module Name)
     in
     let type_ = Meta.(find_exn r type_) in
-    let writer = Bitstring.Writer.with_file data_fn in
     let r, len =
-      if Config.code_only then (r, 0) else Serialize.serialize writer r
+      if Config.code_only then (r, 0)
+      else Out_channel.with_file data_fn ~f:(fun ch -> Serialize.serialize ch r)
     in
-    Bitstring.Writer.flush writer ;
-    Bitstring.Writer.close writer ;
     { iters= !iters
     ; funcs= [printer ctx r type_; consumer ctx r type_]
     ; params

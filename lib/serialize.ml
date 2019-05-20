@@ -1,4 +1,5 @@
 open! Core
+open! Lwt
 open Collections
 open Abslayout
 
@@ -16,7 +17,6 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
   let debug = Option.is_some layout_file
 
   open Bitstring
-  open Writer
   open Header
 
   let string_sentinal : Type.string_ -> _ = function
@@ -111,39 +111,38 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
     Seq.iter hash ~f:(fun (h, p) -> hash_array.(h) <- p) ;
     (hash_array, body)
 
-  class serializer =
+  class serializer ?(size = 1024) () =
     object (self : 'self)
-      val buf = Buffer.create 1024
+      val writer = Faraday.create size
 
-      val mutable writer = Writer.with_buffer (Buffer.create 1)
-
-      initializer writer <- Writer.with_buffer buf
+      val mutable pos = 0
 
       method writer = writer
 
-      method pos = Writer.pos writer
+      method pos = pos
 
-      method flush = Writer.flush writer
+      method write_string s =
+        pos <- pos + String.length s ;
+        Faraday.write_string self#writer s
 
-      method write_string = Writer.write_string writer
-
-      method write_bytes = Writer.write_bytes writer
+      method schedule_bigstring s =
+        pos <- pos + Bigstringaf.length s ;
+        Faraday.schedule_bigstring self#writer s
 
       method write_into (s : 'self) =
         if s = self then failwith "Cannot write into self." ;
-        self#flush ;
-        s#write_string (Buffer.to_string buf)
+        s#schedule_bigstring (Faraday.serialize_to_bigstring self#writer)
 
-      method write_into_writer w =
-        self#flush ;
-        Writer.write_string w (Buffer.to_string buf)
+      method write_into_channel ch =
+        Out_channel.output_string ch
+          (Bigstringaf.to_string (Faraday.serialize_to_bigstring self#writer))
     end
 
-  type msg = {msg: string; pos: int64; len: int64}
+  type msg = {msg: string; pos: int; len: int}
 
-  class logged_serializer =
+  class logged_serializer ?size () =
     object (self : 'self)
-      inherit serializer as super
+      inherit serializer ?size () as super
 
       val msgs = Bag.create ()
 
@@ -159,26 +158,21 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
             let start = self#pos in
             let ret = f () in
             Bag.add_unit msgs
-              { pos= Pos.to_bytes_exn start
-              ; len= Pos.(self#pos - start)
-              ; msg= msgf Format.sprintf } ;
+              {pos= start; len= self#pos - start; msg= msgf Format.sprintf} ;
             ret )
           else f ()
 
       method! write_into (s : 'self) =
-        let pos = Pos.to_bytes_exn s#pos in
+        let pos = s#pos in
         super#write_into s ;
-        Bag.until_empty msgs (fun m ->
-            Bag.add_unit s#msgs {m with pos= Int64.(m.pos + pos)} )
+        Bag.until_empty msgs (fun m -> Bag.add_unit s#msgs {m with pos= m.pos + pos})
 
       method render ch =
         Bag.to_list msgs
         |> List.sort ~compare:(fun m1 m2 ->
-               [%compare: int64 * int64]
-                 (m1.pos, Int64.(-m1.len))
-                 (m2.pos, Int64.(-m2.len)) )
+               [%compare: int * int] (m1.pos, -m1.len) (m2.pos, -m2.len) )
         |> List.iter ~f:(fun m ->
-               Out_channel.fprintf ch "%Ld:%Ld %s\n" m.pos m.len m.msg ) ;
+               Out_channel.fprintf ch "%d:%d %s\n" m.pos m.len m.msg ) ;
         Out_channel.flush ch
     end
 
@@ -191,7 +185,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
       method build_AList (s : logged_serializer) meta (_, elem_layout) gen =
         let t = Meta.Direct.(find_exn meta Meta.type_) in
         (* Serialize list body. *)
-        let child = new logged_serializer in
+        let child = new logged_serializer () in
         let count = ref 0 in
         child#log "List body" ~f:(fun () ->
             Gen.iter gen ~f:(fun (_, vctx) ->
@@ -200,7 +194,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         (* Serialize list header. *)
         let hdr = make_header t in
         let len =
-          let body_len = Int64.to_int_exn (Pos.to_bytes_exn child#pos) in
+          let body_len = child#pos in
           size_exn hdr "count" + size_exn hdr "len" + body_len
         in
         s#logf
@@ -214,13 +208,13 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
 
       method build_Tuple (s : logged_serializer) t ls ctxs =
         (* Serialize body *)
-        let child = new logged_serializer in
+        let child = new logged_serializer () in
         child#log "Tuple body" ~f:(fun () ->
             List.iter2_exn ctxs ls ~f:(self#visit_t child) ) ;
         (* Serialize header. *)
         let hdr = make_header t in
         let len =
-          let body_len = Int64.to_int_exn (Pos.to_bytes_exn child#pos) in
+          let body_len = child#pos in
           size_exn hdr "len" + body_len
         in
         s#logf
@@ -251,9 +245,9 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         in
         (* Collect keys and write values to a child buffer. *)
         let keys = Queue.create () in
-        let valf = new logged_serializer in
+        let valf = new logged_serializer () in
         Gen.iter gen ~f:(fun (key, vctx) ->
-            let vptr = valf#pos |> Pos.to_bytes_exn |> Int64.to_int_exn in
+            let vptr = valf#pos in
             Queue.enqueue keys (key, vptr) ;
             self#visit_t valf (M.to_ctx key) key_l ;
             self#visit_t valf vctx h.hi_values ) ;
@@ -265,7 +259,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         let hdr = make_header type_ in
         let hash_len = String.length hash_body in
         let hash_map_len = Array.length hash * 8 in
-        let value_len = valf#pos |> Pos.to_bytes_exn |> Int64.to_int_exn in
+        let value_len = valf#pos in
         s#log "Table len" ~f:(fun () ->
             let flen = size_exn hdr "len" in
             let len =
@@ -298,28 +292,27 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
               (Error.create "Missing key layout." ometa [%sexp_of: ordered_idx])
             ometa.oi_key_layout
         in
-        let vals = new logged_serializer in
+        let vals = new logged_serializer () in
         let keys = ref [] in
         Gen.iter gen ~f:(fun (key, vctx) ->
             (* Serialize key. *)
-            let keyf = new logged_serializer in
+            let keyf = new logged_serializer () in
             keyf#log "Ordered idx key" ~f:(fun () ->
                 self#visit_t keyf (M.to_ctx key) key_l ) ;
-            keys := !keys @ [(keyf, Pos.to_bytes_exn vals#pos)] ;
+            keys := !keys @ [(keyf, vals#pos)] ;
             (* Serialize value. *)
             self#visit_t vals vctx value_l ) ;
         let ptr_size = Type.oi_ptr_size vt m in
         (* Serialize keys and value pointers. *)
-        let idxs = new logged_serializer in
+        let idxs = new logged_serializer () in
         List.iter !keys ~f:(fun (keyf, vptr) ->
             idxs#log "Ordered idx key" ~f:(fun () -> keyf#write_into idxs) ;
             idxs#logf
-              (fun m -> m "Ordered idx ptr (=%Ld)" vptr)
-              ~f:(fun () -> idxs#write_string (of_int64 ~byte_width:ptr_size vptr))
-        ) ;
+              (fun m -> m "Ordered idx ptr (=%d)" vptr)
+              ~f:(fun () -> idxs#write_string (of_int ~byte_width:ptr_size vptr)) ) ;
         let hdr = make_header t in
-        let idx_len = idxs#pos |> Pos.to_bytes_exn |> Int64.to_int_exn in
-        let val_len = vals#pos |> Pos.to_bytes_exn |> Int64.to_int_exn in
+        let idx_len = idxs#pos in
+        let val_len = vals#pos in
         let len =
           Header.size_exn hdr "len"
           + Header.size_exn hdr "idx_len"
@@ -403,18 +396,17 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
 
       method! visit_t s ectx layout =
         (* Update position metadata in layout. *)
-        let pos = s#pos |> Pos.to_bytes_exn in
+        let pos = s#pos in
         Meta.update layout Meta.pos ~f:(function
-          | Some (Pos pos' as p) -> if Int64.(pos = pos') then p else Many_pos
+          | Some (Pos pos' as p) -> if pos = pos' then p else Many_pos
           | Some Many_pos -> Many_pos
           | None -> Pos pos ) ;
         super#visit_t s ectx layout
     end
 
-  let serialize writer l =
+  let serialize ch l =
     Logs.info (fun m -> m "Serializing abstract layout.") ;
-    let serializer = new logged_serializer in
-    let begin_pos = serializer#pos in
+    let serializer = new logged_serializer () in
     (* Serialize the main layout. *)
     (new serialize_fold)#run serializer l ;
     (* Serialize subquery layouts. *)
@@ -426,9 +418,10 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
       end
     in
     subquery_visitor#visit_t () l ;
-    serializer#write_into_writer writer ;
+    serializer#write_into_channel ch ;
+    Out_channel.flush ch ;
     Option.iter layout_file ~f:(fun f ->
         Out_channel.with_file f ~f:serializer#render ) ;
-    let len = Pos.(serializer#pos - begin_pos) |> Int64.to_int_exn in
+    let len = serializer#pos in
     (l, len)
 end

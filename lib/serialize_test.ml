@@ -9,18 +9,20 @@ let process_layout_log log =
   (log', not String.(log = log'))
 
 let run_test layout_str =
-  let layout_file = Filename.temp_file "layout" "txt" in
-  let (module M), (module S), _, _ = Setup.make_modules ~layout_file () in
+  let layout_file = Filename.temp_file "layout" "bin" in
+  let layout_log_file = Filename.temp_file "layout" "txt" in
+  let (module M), (module S), _, _ =
+    Setup.make_modules ~layout_file:layout_log_file ()
+  in
   let layout = M.load_string layout_str in
   M.annotate_type layout ;
   let type_ = Meta.(find_exn layout type_) in
-  let buf = Buffer.create 1024 in
-  let writer = Bitstring.Writer.with_buffer buf in
-  let _, len = S.serialize writer layout in
-  Bitstring.Writer.flush writer ;
-  let buf_str = Buffer.contents buf |> String.escaped in
+  let _, len =
+    Out_channel.with_file layout_file ~f:(fun ch -> S.serialize ch layout)
+  in
+  let buf_str = In_channel.read_all layout_file |> String.escaped in
   let layout_log, did_modify =
-    In_channel.input_all (In_channel.create layout_file) |> process_layout_log
+    In_channel.input_all (In_channel.create layout_log_file) |> process_layout_log
   in
   print_endline layout_log ;
   if did_modify then [%sexp_of: Type.t * int] (type_, len) |> print_s
