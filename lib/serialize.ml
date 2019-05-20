@@ -16,8 +16,18 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
 
   let debug = Option.is_some layout_file
 
-  open Bitstring
   open Header
+
+  (** Serialize an integer. Little endian. Width is the number of bits to use. *)
+  let of_int ~byte_width x =
+    if byte_width > 0 && Float.(of_int x >= 2.0 ** (of_int byte_width * 8.0)) then
+      Error.create "Integer too large." (x, byte_width) [%sexp_of: int * int]
+      |> Error.raise ;
+    let buf = Bytes.make byte_width '\x00' in
+    for i = 0 to byte_width - 1 do
+      Bytes.set buf i ((x lsr (i * 8)) land 0xFF |> char_of_int)
+    done ;
+    Bytes.to_string buf
 
   let string_sentinal : Type.string_ -> _ = function
     | {nchars= Bottom; _} -> 0
@@ -53,10 +63,10 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
     | [Value.String s] -> s
     | vs ->
         List.map vs ~f:(function
-          | Int x -> Bitstring.of_int ~byte_width:8 x
-          | Date x -> Date.to_int x |> Bitstring.of_int ~byte_width:8
-          | Bool true -> Bitstring.of_int 1 ~byte_width:1
-          | Bool false -> Bitstring.of_int 1 ~byte_width:1
+          | Int x -> of_int ~byte_width:8 x
+          | Date x -> Date.to_int x |> of_int ~byte_width:8
+          | Bool true -> of_int 1 ~byte_width:1
+          | Bool false -> of_int 1 ~byte_width:1
           | String s -> s
           | v ->
               Error.(create "Unexpected key value." v [%sexp_of: Value.t] |> raise) )

@@ -7,17 +7,6 @@ type piece = {str: string; len: int} [@@deriving sexp, compare]
 
 type t = Label of string * t | Piece of piece | PList of t list
 
-(** Serialize an integer. Little endian. Width is the number of bits to use. *)
-let of_int ~byte_width x =
-  if byte_width > 0 && Float.(of_int x >= 2.0 ** (of_int byte_width * 8.0)) then
-    Error.create "Integer too large." (x, byte_width) [%sexp_of: int * int]
-    |> Error.raise ;
-  let buf = Bytes.make byte_width '\x00' in
-  for i = 0 to byte_width - 1 do
-    Bytes.set buf i ((x lsr (i * 8)) land 0xFF |> char_of_int)
-  done ;
-  Bytes.to_string buf
-
 let of_int64 ~byte_width x =
   let buf = Bytes.make byte_width '\x00' in
   for i = 0 to byte_width - 1 do
