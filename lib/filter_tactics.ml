@@ -322,25 +322,18 @@ module Make (C : Config.S) = struct
           | _ -> None
         in
         let rk_bnd = Set.of_list (module Name) (schema_exn rk) in
-        let unpushed, pushed =
+        let pushed_key, pushed_val =
           Pred.conjuncts p
           |> List.partition_map ~f:(fun p ->
-                 if is_supported rk_bnd p then `Snd (`K p) else `Snd (`V p) )
-        in
-        let outer_pred = Pred.conjoin unpushed in
-        let pushed_key, pushed_val =
-          List.partition_map pushed ~f:(function
-            | `K p -> `Fst p
-            | `V p -> `Snd p )
+                 if is_supported rk_bnd p then `Fst p else `Snd p )
         in
         let inner_key_pred = Pred.conjoin pushed_key in
         let inner_val_pred = Pred.conjoin pushed_val in
-        filter outer_pred
-          (mk (filter inner_key_pred rk) scope (filter inner_val_pred rv))
+        mk (filter inner_key_pred rk) scope (filter inner_val_pred rv)
 
   let push_filter =
     (* NOTE: Simplify is necessary to make push-filter safe under fixpoints. *)
-    seq (of_func push_filter ~name:"push-filter") simplify
+    seq' (of_func push_filter ~name:"push-filter") simplify
 
   let elim_eq_filter r =
     match r.node with

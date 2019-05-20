@@ -74,6 +74,10 @@ module Make (Config : Config.S) () = struct
         orderby_list key r1 r2
     | OrderBy {key; rel= {node= ATuple (rs, Cross); _}} ->
         orderby_cross_tuple key rs
+    | OrderBy {key; rel= {node= DepJoin d; _}} ->
+        if key_is_supported d.d_lhs key then
+          Some (dep_join' {d with d_lhs= order_by key d.d_lhs})
+        else None
     | _ -> None
 
   let push_orderby = of_func push_orderby ~name:"push-orderby"
