@@ -122,11 +122,12 @@ module Test = struct
     let validate = false
 
     let params =
+      let open Type.PrimType in
       Set.of_list
         (module Name)
-        [ Name.create ~type_:(StringT {nullable= false}) "param1"
-        ; Name.create ~type_:(StringT {nullable= false}) "param2"
-        ; Name.create ~type_:(StringT {nullable= false}) "param3" ]
+        [ Name.create ~type_:string_t "param1"
+        ; Name.create ~type_:string_t "param2"
+        ; Name.create ~type_:string_t "param3" ]
 
     let param_ctx = Map.empty (module Name)
 
