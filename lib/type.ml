@@ -140,7 +140,7 @@ let least_general_of_primtype = function
   | NullT -> NullT
   | DateT {nullable} -> DateT {range= AbsInt.bot; nullable}
   | FixedT {nullable} -> FixedT {value= AbsFixed.bot; nullable}
-  | StringT {nullable} -> StringT {nchars= AbsInt.bot; nullable}
+  | StringT {nullable; _} -> StringT {nchars= AbsInt.bot; nullable}
   | BoolT {nullable} -> BoolT {nullable}
   | TupleT _ | VoidT -> failwith "Not a layout type."
 

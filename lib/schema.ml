@@ -10,26 +10,28 @@ let to_name = function
   | As_pred (_, n) -> Some (Name.create n)
   | _ -> None
 
-let rec to_type = function
+let rec to_type =
+  let open Type.PrimType in
+  function
   | As_pred (p, _) -> to_type p
   | Name n -> Name.Meta.(find_exn n type_)
   | Int _ | Date _
    |Unop ((Year | Month | Day | Strlen | ExtractY | ExtractM | ExtractD), _)
    |Count ->
-      IntT {nullable= false}
-  | Fixed _ | Avg _ -> FixedT {nullable= false}
+      int_t
+  | Fixed _ | Avg _ -> fixed_t
   | Bool _ | Exists _
    |Binop ((Eq | Lt | Le | Gt | Ge | And | Or), _, _)
    |Unop (Not, _) ->
-      BoolT {nullable= false}
-  | String _ -> StringT {nullable= false}
+      bool_t
+  | String _ -> string_t
   | Null None -> failwith "Untyped null."
   | Null (Some t) -> t
   | Binop ((Add | Sub | Mul | Div | Mod), p1, p2) ->
       let s1 = to_type p1 in
       let s2 = to_type p2 in
       Type.PrimType.unify s1 s2
-  | Binop (Strpos, _, _) -> IntT {nullable= false}
+  | Binop (Strpos, _, _) -> int_t
   | Sum p | Min p | Max p -> to_type p
   | If (_, p1, p2) ->
       let s1 = to_type p1 in
@@ -40,7 +42,7 @@ let rec to_type = function
     | [n] -> Name.Meta.(find_exn n type_)
     | [] -> failwith "Unexpected empty schema."
     | _ -> failwith "Too many fields." )
-  | Substring _ -> StringT {nullable= false}
+  | Substring _ -> string_t
 
 and schema_exn r =
   let of_preds =

@@ -84,8 +84,9 @@ let relation conn r_name =
            in
            let type_ =
              match type_str with
-             | "character" | "character varying" | "varchar" | "text" ->
-                 StringT {nullable}
+             | "character" | "char" -> StringT {nullable; padded= true}
+             | "character varying" | "varchar" | "text" ->
+                 StringT {nullable; padded= false}
              | "interval" | "integer" | "smallint" | "bigint" -> IntT {nullable}
              | "date" -> DateT {nullable}
              | "boolean" -> BoolT {nullable}
@@ -105,10 +106,11 @@ let relation conn r_name =
                    with Failure _ -> false
                  in
                  if is_int then
-                   if fits_in_an_int63 then IntT {nullable} else StringT {nullable}
+                   if fits_in_an_int63 then IntT {nullable}
+                   else StringT {nullable; padded= false}
                  else FixedT {nullable}
              | "real" | "double" -> FixedT {nullable}
-             | "timestamp without time zone" -> StringT {nullable}
+             | "timestamp without time zone" -> StringT {nullable; padded= false}
              | s -> failwith (Printf.sprintf "Unknown dtype %s" s)
            in
            Name.create ~type_ fname )
@@ -141,7 +143,9 @@ let load_value type_ value =
         if nullable then Ok Null
         else Error (Error.of_string "Unexpected null integer.")
       else Ok (Int (Int.of_string value))
-  | StringT _ -> Ok (String value)
+  | StringT {padded= true; _} ->
+      Ok (String (String.rstrip ~drop:(fun c -> c = ' ') value))
+  | StringT {padded= false; _} -> Ok (String value)
   | FixedT {nullable} ->
       if String.(value = "") then
         if nullable then Ok Null

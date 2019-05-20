@@ -1,4 +1,5 @@
 open! Core
+open Type.PrimType
 
 let run_in_fork (type a) (thunk : unit -> a) : a =
   let rd, wr = Unix.pipe () in
@@ -81,7 +82,6 @@ let create_simple db name fields values =
 let create db name fields values =
   let fields_sql =
     List.map fields ~f:(fun (f, t) ->
-        let open Type.PrimType in
         match t with
         | FixedT _ -> sprintf "%s numeric" f
         | IntT _ -> sprintf "%s integer" f
@@ -104,8 +104,7 @@ let test_db_conn =
      create_simple conn "r" ["f"; "g"]
        [[0; 5]; [1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]; [4; 6]] ;
      create conn "r_date"
-       [ ("f", Type.PrimType.DateT {nullable= false})
-       ; ("g", Type.PrimType.IntT {nullable= false}) ]
+       [("f", date_t); ("g", int_t)]
        Date.
          [ [Date (of_string "2018-01-01"); Int 5]
          ; [Date (of_string "2016-12-01"); Int 2]
@@ -120,17 +119,14 @@ let test_db_conn =
        [[1; 4; 1]; [2; 3; 2]; [3; 4; 3]; [4; 6; 1]; [5; 6; 3]] ;
      create_simple conn "r1" ["f"; "g"] [[1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]] ;
      create_simple conn "one" [] [] ;
-     create conn "r2"
-       [("a", Type.PrimType.FixedT {nullable= false})]
+     create conn "r2" [("a", fixed_t)]
        [ [Fixed (Fixed_point.of_string "0.01")]
        ; [Fixed (Fixed_point.of_string "5")]
        ; [Fixed (Fixed_point.of_string "34.42")]
        ; [Fixed (Fixed_point.of_string "0.88")]
        ; [Fixed (Fixed_point.of_string "-0.42")] ] ;
      create conn "log_str"
-       [ ("counter", Type.PrimType.IntT {nullable= false})
-       ; ("succ", Type.PrimType.IntT {nullable= false})
-       ; ("id", Type.PrimType.StringT {nullable= false}) ]
+       [("counter", int_t); ("succ", int_t); ("id", string_t)]
        [ [Int 1; Int 4; String "foo"]
        ; [Int 2; Int 3; String "fizzbuzz"]
        ; [Int 3; Int 4; String "bar"]
@@ -140,20 +136,16 @@ let test_db_conn =
 
 module Demomatch = struct
   let example_params =
-    [ (Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_p", Value.Int 1)
-    ; (Name.create ~type_:Type.PrimType.(IntT {nullable= false}) "id_c", Int 2) ]
+    [ (Name.create ~type_:int_t "id_p", Value.Int 1)
+    ; (Name.create ~type_:int_t "id_c", Int 2) ]
 
   let example_str_params =
-    [ ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_p"
-      , Value.String "foo" )
-    ; ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_c"
-      , String "fizzbuzz" ) ]
+    [ (Name.create ~type_:string_t "id_p", Value.String "foo")
+    ; (Name.create ~type_:string_t "id_c", String "fizzbuzz") ]
 
   let example_db_params =
-    [ ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_p"
-      , Value.String "-1451410871729396224" )
-    ; ( Name.create ~type_:Type.PrimType.(StringT {nullable= false}) "id_c"
-      , String "8557539814359574196" ) ]
+    [ (Name.create ~type_:string_t "id_p", Value.String "-1451410871729396224")
+    ; (Name.create ~type_:string_t "id_c", String "8557539814359574196") ]
 
   let example1 log =
     sprintf

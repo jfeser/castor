@@ -188,11 +188,11 @@ let rec type_of ctx e =
   let open Type.PrimType in
   match e with
   | Null -> NullT
-  | Int _ -> IntT {nullable= false}
-  | Date _ -> DateT {nullable= false}
-  | Fixed _ -> FixedT {nullable= false}
-  | Bool _ -> BoolT {nullable= false}
-  | String _ -> StringT {nullable= false}
+  | Int _ -> int_t
+  | Date _ -> date_t
+  | Fixed _ -> fixed_t
+  | Bool _ -> bool_t
+  | String _ -> string_t
   | Var x -> (
     match Hashtbl.find ctx x with
     | Some t -> t
@@ -225,11 +225,10 @@ let rec type_of ctx e =
           IntT {nullable= false}
       | IntEq, IntT {nullable= n1}, IntT {nullable= n2}
        |IntEq, DateT {nullable= n1}, DateT {nullable= n2}
-       |StrEq, StringT {nullable= n1}, StringT {nullable= n2}
+       |StrEq, StringT {nullable= n1; _}, StringT {nullable= n2; _}
        |FlEq, FixedT {nullable= n1}, FixedT {nullable= n2} ->
           BoolT {nullable= n1 || n2}
-      | LoadStr, IntT {nullable= false}, IntT {nullable= false} ->
-          StringT {nullable= false}
+      | LoadStr, IntT {nullable= false}, IntT {nullable= false} -> string_t
       | StrPos, StringT _, StringT _ -> IntT {nullable= false}
       | _, _, _ ->
           fail
@@ -266,7 +265,7 @@ let rec type_of ctx e =
         unify t1 t2
     | _ -> failwith "Unexpected conditional type." )
   | TupleHash _ -> IntT {nullable= false}
-  | Substr _ -> StringT {nullable= false}
+  | Substr _ -> string_t
 
 module Builder = struct
   type t =
@@ -419,7 +418,7 @@ module Builder = struct
     | IntT {nullable= false}, IntT {nullable= false}
      |DateT {nullable= false}, DateT {nullable= false} ->
         Binop {op= IntEq; arg1= x; arg2= y}
-    | StringT {nullable= false}, StringT {nullable= false} ->
+    | StringT {nullable= false; _}, StringT {nullable= false; _} ->
         Binop {op= StrEq; arg1= x; arg2= y}
     | BoolT {nullable= false}, BoolT {nullable= false} ->
         Infix.((x && y) || ((not x) && not y))
@@ -442,7 +441,7 @@ module Builder = struct
     match t with
     | IntT {nullable= false} | BoolT {nullable= false} | DateT {nullable= false} ->
         Binop {op= IntHash; arg1= x; arg2= y}
-    | StringT {nullable= false} -> Binop {op= StrHash; arg1= x; arg2= y}
+    | StringT {nullable= false; _} -> Binop {op= StrHash; arg1= x; arg2= y}
     | TupleT ts -> TupleHash (ts, x, y)
     | _ ->
         Error.create "Unhashable type." (y, t) [%sexp_of: expr * t] |> Error.raise

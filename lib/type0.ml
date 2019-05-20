@@ -6,23 +6,27 @@ module PrimType = struct
     | IntT of {nullable: bool}
     | DateT of {nullable: bool}
     | FixedT of {nullable: bool}
-    | StringT of {nullable: bool}
+    | StringT of {nullable: bool; padded: bool}
     | BoolT of {nullable: bool}
     | TupleT of t list
     | VoidT
   [@@deriving compare, hash, sexp]
 
+  let null_t = NullT
+
   let int_t = IntT {nullable= false}
+
+  let date_t = DateT {nullable= false}
 
   let fixed_t = FixedT {nullable= false}
 
-  let string_t = StringT {nullable= false}
+  let string_t = StringT {nullable= false; padded= false}
 
   let bool_t = BoolT {nullable= false}
 
   let of_primvalue = function
     | `Int _ -> IntT {nullable= false}
-    | `String _ -> StringT {nullable= false}
+    | `String _ -> StringT {nullable= false; padded= false}
     | `Bool _ -> BoolT {nullable= false}
     | `Null -> NullT
 
@@ -57,8 +61,8 @@ module PrimType = struct
       | NullT -> fprintf fmt "Null"
       | IntT {nullable= true} -> fprintf fmt "Int"
       | IntT {nullable= false} -> fprintf fmt "Int[nonnull]"
-      | StringT {nullable= true} -> fprintf fmt "String"
-      | StringT {nullable= false} -> fprintf fmt "String[nonnull]"
+      | StringT {nullable= true; _} -> fprintf fmt "String"
+      | StringT {nullable= false; _} -> fprintf fmt "String[nonnull]"
       | BoolT {nullable= true} -> fprintf fmt "Bool"
       | BoolT {nullable= false} -> fprintf fmt "Bool[nonnull]"
       | TupleT ts -> fprintf fmt "Tuple[%a]" (pp_tuple pp) ts
@@ -72,7 +76,7 @@ module PrimType = struct
     | NullT -> true
     | IntT {nullable= n}
      |BoolT {nullable= n}
-     |StringT {nullable= n}
+     |StringT {nullable= n; _}
      |FixedT {nullable= n}
      |DateT {nullable= n} ->
         n
@@ -88,7 +92,8 @@ module PrimType = struct
      |IntT {nullable= n1}, FixedT {nullable= n2} ->
         FixedT {nullable= n1 || n2}
     | BoolT {nullable= n1}, BoolT {nullable= n2} -> BoolT {nullable= n1 || n2}
-    | StringT {nullable= n1}, StringT {nullable= n2} -> StringT {nullable= n1 || n2}
+    | StringT {nullable= n1; _}, StringT {nullable= n2; _} ->
+        StringT {nullable= n1 || n2; padded= false}
     | TupleT t1, TupleT t2 -> TupleT (List.map2_exn t1 t2 ~f:unify)
     | VoidT, VoidT -> VoidT
     | NullT, _

@@ -25,10 +25,10 @@ let keyword_tbl = Hashtbl.of_alist_exn (module String) [
 "max", MAX;
 "avg", AVG;
 "sum", SUM;
-"int", PRIMTYPE (Type0.PrimType.IntT {nullable=false});
-"bool", PRIMTYPE (Type0.PrimType.BoolT {nullable=false});
-"string", PRIMTYPE (Type0.PrimType.StringT {nullable=false});
-"fixed", PRIMTYPE (Type0.PrimType.FixedT {nullable=false});
+"int", PRIMTYPE (Type0.PrimType.int_t);
+"bool", PRIMTYPE (Type0.PrimType.bool_t);
+"string", PRIMTYPE (Type0.PrimType.string_t);
+"fixed", PRIMTYPE (Type0.PrimType.fixed_t);
 "as", AS;
 "null", NULL;
 "true", BOOL true;

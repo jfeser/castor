@@ -671,7 +671,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | BoolT {nullable= false} ->
           let fmt = build_select val_ true_str false_str "" builder in
           call_printf fmt []
-      | StringT {nullable= false} ->
+      | StringT {nullable= false; _} ->
           let Llstring.{pos; len} = Llstring.unpack val_ in
           call_printf str_fmt [len; pos]
       | TupleT ts ->
@@ -684,7 +684,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | FixedT _ -> call_printf float_fmt [val_]
       | IntT {nullable= true}
        |DateT {nullable= true}
-       |StringT {nullable= true}
+       |StringT {nullable= true; _}
        |BoolT {nullable= true} ->
           failwith "Cannot print."
     in
