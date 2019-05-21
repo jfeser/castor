@@ -558,9 +558,14 @@ struct
         let cond = gen_pred ctx pred b in
         build_if ~cond
           ~then_:(fun b ->
-            debug_print "filter selected" (Tuple tup) b ;
+            debug_print
+              (Format.asprintf "filter %a selected" A.Pred.pp pred)
+              (Tuple tup) b ;
             cb b tup )
-          ~else_:(fun b -> debug_print "filter rejected" (Tuple tup) b)
+          ~else_:(fun b ->
+            debug_print
+              (Format.asprintf "filter %a rejected" A.Pred.pp pred)
+              (Tuple tup) b )
           b )
 
   and agg_init ctx p b =
