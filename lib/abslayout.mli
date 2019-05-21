@@ -124,6 +124,8 @@ val select : pred list -> t -> t
 
 val dep_join : t -> string -> t -> t
 
+val dep_join' : depjoin -> t
+
 val join : pred -> t -> t -> t
 
 val filter : pred -> t -> t
