@@ -1,4 +1,5 @@
 open! Core
+module A = Abslayout
 open Collections
 open Implang0
 
@@ -261,24 +262,6 @@ let hoist_const_exprs m =
   in
   {m with funcs= funcs'}
 
-let conj_preds_visitor =
-  object (self : 'a)
-    inherit [_] reduce as super
-
-    inherit [_] Util.list_monoid
-
-    method! visit_Binop () op p1 p2 =
-      match op with
-      | And ->
-          let p1s = self#visit_expr () p1 in
-          let p2s = self#visit_expr () p2 in
-          p1s @ p2s
-      | _ -> [Binop {op; arg1= p1; arg2= p2}]
-
-    method! visit_expr () p =
-      match super#visit_expr () p with [] -> [p] | ps -> ps
-  end
-
 let rec conj = function
   | [] -> failwith "Empty"
   | [x] -> x
@@ -303,7 +286,7 @@ let split_expensive_predicates f =
       method! visit_If () cond then_ else_ =
         let tcase = self#visit_prog () then_ in
         let fcase = self#visit_prog () else_ in
-        let preds = conj_preds_visitor#visit_expr () cond in
+        let preds = conjuncts cond in
         let costly, cheap =
           List.partition_tf preds ~f:(is_expensive_visitor#visit_expr true)
         in
@@ -321,3 +304,127 @@ let opt m =
   m |> prune_args |> prune_locals |> inline_sl_iter |> prune_funcs
   |> hoist_const_exprs
   |> for_all_funcs ~f:split_expensive_predicates
+
+let%test_module _ =
+  ( module struct
+    module M = Abslayout_db.Make (struct
+      let conn = Lazy.force Test_util.test_db_conn
+    end)
+
+    module S =
+      Serialize.Make (struct
+          let layout_file = None
+        end)
+        (M)
+
+    module I =
+      Irgen.Make (struct
+          let debug = false
+
+          let code_only = true
+        end)
+        (M)
+        (S)
+        ()
+
+    let%expect_test "" =
+      let r = M.load_string "filter(c > 0, select([count() as c], ascalar(0)))" in
+      M.annotate_type r ;
+      let ir = I.irgen ~params:[] ~data_fn:"" r in
+      Format.printf "%a" I.pp ir ;
+      [%expect {|
+        [ERROR] Tried to get schema of unnamed predicate 0.
+        [ERROR] Tried to get schema of unnamed predicate 0.
+        [ERROR] Tried to get schema of unnamed predicate 0.
+        [ERROR] Tried to get schema of unnamed predicate 0.
+        // Locals:
+        // count7 : Int[nonnull] (persists=false)
+        // found_tup6 : Bool[nonnull] (persists=false)
+        // tup5 : Tuple[Int[nonnull]] (persists=false)
+        fun printer () : Void {
+            found_tup6 = false;
+            count7 = 0;
+            tup5 = (buf[0 : 1]);
+            count7 = count7 + 1;
+            found_tup6 = true;
+            if (found_tup6) {
+                if (not(count7 < 0 || count7 == 0)) {
+                    print(Tuple[Int[nonnull]], (count7));
+                } else {
+
+                }
+            } else {
+
+            }
+        }
+        // Locals:
+        // found_tup2 : Bool[nonnull] (persists=false)
+        // tup1 : Tuple[Int[nonnull]] (persists=false)
+        // count3 : Int[nonnull] (persists=false)
+        fun consumer () : Void {
+            found_tup2 = false;
+            count3 = 0;
+            tup1 = (buf[0 : 1]);
+            count3 = count3 + 1;
+            found_tup2 = true;
+            if (found_tup2) {
+                if (not(count3 < 0 || count3 == 0)) {
+                    consume(Tuple[Int[nonnull]], (count3));
+                } else {
+
+                }
+            } else {
+
+            }
+        } |}] ;
+      let ir' = opt ir in
+      Format.printf "%a" I.pp ir' ; [%expect {|
+        // Locals:
+        // hoisted0 : Int[nonnull] (persists=false)
+        // hoisted1 : Tuple[Int[nonnull]] (persists=false)
+        // count7 : Int[nonnull] (persists=false)
+        // found_tup6 : Bool[nonnull] (persists=false)
+        // tup5 : Tuple[Int[nonnull]] (persists=false)
+        fun printer () : Void {
+            hoisted0 = buf[0 : 1];
+            hoisted1 = (hoisted0);
+            found_tup6 = false;
+            count7 = 0;
+            tup5 = hoisted1;
+            count7 = count7 + 1;
+            found_tup6 = true;
+            if (found_tup6) {
+                if (not(count7 < 0 || count7 == 0)) {
+                    print(Tuple[Int[nonnull]], (count7));
+                } else {
+
+                }
+            } else {
+
+            }
+        }
+        // Locals:
+        // hoisted2 : Int[nonnull] (persists=false)
+        // hoisted3 : Tuple[Int[nonnull]] (persists=false)
+        // found_tup2 : Bool[nonnull] (persists=false)
+        // tup1 : Tuple[Int[nonnull]] (persists=false)
+        // count3 : Int[nonnull] (persists=false)
+        fun consumer () : Void {
+            hoisted2 = buf[0 : 1];
+            hoisted3 = (hoisted2);
+            found_tup2 = false;
+            count3 = 0;
+            tup1 = hoisted3;
+            count3 = count3 + 1;
+            found_tup2 = true;
+            if (found_tup2) {
+                if (not(count3 < 0 || count3 == 0)) {
+                    consume(Tuple[Int[nonnull]], (count3));
+                } else {
+
+                }
+            } else {
+
+            }
+        } |}]
+  end )
