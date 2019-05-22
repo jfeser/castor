@@ -3,7 +3,7 @@
 from jsmin import jsmin
 import json
 
-DEBUG = False
+DEBUG = True
 
 with open('queries.json', 'r') as f:
     bench = json.loads(jsmin(f.read()))
@@ -65,18 +65,37 @@ else:
     print('CFLAGS=-v')
 print('BENCH_DIR=../../castor/bench/tpch/')
 print('TIME_PER_BENCH=1')
-print('all: opt compile')
+print('all: opt compile run time')
 print('''
 obuild:
 \tdune build $(OPT_PATH)
+.PHONY: obuild
 
 cbuild:
 \tdune build $(COMPILE_PATH)
+.PHONY: cbuild
 ''')
-print('opt: obuild %s' % (' '.join([out_file(b) for b in bench])))
-print('compile: cbuild %s' % (' '.join([out_dir(b) for b in bench])))
-print('run: %s' % (' '.join(['%s-opt.csv' % b['name'] for b in bench])))
-# print('time: opt-times.csv')
+
+print('''
+opt: obuild %s
+.PHONY: opt
+''' % (' '.join([out_file(b) for b in bench])))
+
+print('''
+compile: cbuild %s
+.PHONY: compile
+''' % (' '.join([out_dir(b) for b in bench])))
+
+print('''
+run: %s
+.PHONY: run
+''' % (' '.join(['%s-opt.csv' % b['name'] for b in bench])))
+
+print('''
+time: %s
+.PHONY: time
+''' % (' '.join(['%s-opt.time' % b['name'] for b in bench])))
+
 for b in bench:
     print('''
 {0}: {2}
@@ -92,11 +111,13 @@ for b in bench:
 \t./{1}/scanner.exe -p {1}/data.bin {2} > $@
 '''.format(b['name'], out_dir(b), gen_param_values(b)))
 
-# print('opt-times.csv: %s' % ' '.join([out_dir(b) for b in bench]))
-# print('\t./{0}/scanner.exe -t $(TIME_PER_BENCH) {1}')
+    print('''
+{0}-opt.time: {1}
+\t./{1}/scanner.exe -t $(TIME_PER_BENCH) {1}/data.bin {2} > $@
+'''.format(b['name'], out_dir(b), gen_param_values(b)))
 
 print('''
 .PHONY: clean
 clean:
-\trm -rf *-opt.txt *-opt
+\trm -rf *-opt.txt *-opt *-opt.csv
 ''')
