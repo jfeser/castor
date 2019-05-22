@@ -54,7 +54,7 @@ module Expect_test_config = struct
   let run thunk =
     Fresh.reset Global.fresh ;
     Logs.set_reporter (reporter Caml.Format.std_formatter) ;
-    Logs.set_level (Some Logs.Warning) ;
+    Logs.Src.set_level Log.src (Some Logs.Warning) ;
     thunk () ;
     ()
 end

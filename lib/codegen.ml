@@ -749,7 +749,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
   let codegen_func fctx =
     let name = fctx#name in
     let I.{args; locals; ret_type; body; _} = fctx#func in
-    Logs.debug (fun m -> m "Codegen for func %s started." name) ;
+    Log.debug (fun m -> m "Codegen for func %s started." name) ;
     ( if (* Check that function is not already defined. *)
          Hashtbl.(mem funcs name)
     then Error.(of_string "Function already defined." |> raise) ) ;
@@ -797,7 +797,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     | None ->
         build_ret_void builder |> ignore ;
         assert_valid_function fctx#llfunc ;
-        Logs.debug (fun m -> m "Codegen for func %s completed." name)
+        Log.debug (fun m -> m "Codegen for func %s completed." name)
 
   let codegen_create () =
     let func_t =
@@ -874,7 +874,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         build_ret_void builder |> ignore )
 
   let codegen Irgen.{funcs= ir_funcs; params; buffer_len; _} =
-    Logs.info (fun m -> m "Codegen started.") ;
+    Log.info (fun m -> m "Codegen started.") ;
     let module SB = ParamStructBuilder in
     let sb = SB.create () in
     (* Generate global constant for buffer. *)
@@ -891,7 +891,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     codegen_create () ;
     codegen_param_setters typed_params ;
     assert_valid_module module_ ;
-    Logs.info (fun m -> m "Codegen completed.") ;
+    Log.info (fun m -> m "Codegen completed.") ;
     module_
 
   let write_header ch =
@@ -899,7 +899,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let rec pp_type fmt t =
       match classify_type t with
       | Struct ->
-          Logs.warn (fun m -> m "Outputting structure type as string.") ;
+          Log.warn (fun m -> m "Outputting structure type as string.") ;
           fprintf fmt "string_t"
       | Void -> fprintf fmt "void"
       | Integer -> (
@@ -929,7 +929,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       let t = type_of v in
       let n = value_name v in
       let ignore_val () =
-        Logs.debug (fun m -> m "Ignoring global %s." (string_of_llvalue v))
+        Log.debug (fun m -> m "Ignoring global %s." (string_of_llvalue v))
       in
       match classify_type t with
       | Pointer ->
@@ -988,7 +988,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     (* Generate IR module. *)
     let ir_module =
       let unopt = IG.irgen ~params ~data_fn layout in
-      Logs.info (fun m -> m "Optimizing intermediate language.") ;
+      Log.info (fun m -> m "Optimizing intermediate language.") ;
       Implang_opt.opt unopt
     in
     Out_channel.with_file ir_fn ~f:(fun ch ->
@@ -998,12 +998,12 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     Out_channel.with_file header_fn ~f:write_header ;
     (* Generate main file. *)
     let () =
-      Logs.debug (fun m -> m "Creating main file.") ;
+      Log.debug (fun m -> m "Creating main file.") ;
       let funcs, calls =
         List.filter params ~f:(fun n ->
             List.exists ir_module.Irgen.params ~f:(fun n' -> Name.O.(n = n')) )
         |> List.mapi ~f:(fun i n ->
-               Logs.debug (fun m -> m "Creating loader for %a." Name.pp n) ;
+               Log.debug (fun m -> m "Creating loader for %a." Name.pp n) ;
                let loader_fn =
                  match Name.type_exn n with
                  | NullT -> failwith "No null parameters."

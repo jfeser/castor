@@ -89,13 +89,29 @@ struct
     let open Builder in
     let low = build_defn "low" Infix.(int 0) b in
     let high = build_defn "high" n b in
-    debug_print "bin_search" (Tuple [low; high; low_target; high_target]) b ;
+    let print ~key =
+      debug_print "bin_search"
+        (Tuple
+           [ String "lo"
+           ; low
+           ; String "hi"
+           ; high
+           ; String "lo-target"
+           ; low_target
+           ; String "hi-target"
+           ; high_target
+           ; String "key"
+           ; key ])
+        b
+    in
+    print ~key:(Int 0) ;
+    (* Find the lower bound *)
     build_loop
       Infix.(low < high)
       (fun b ->
         let mid = build_defn "mid" Infix.((low + high) / int 2) b in
         let key = build_key mid b in
-        debug_print "bin_search" (Tuple [low; high; low_target; high_target; key]) b ;
+        print ~key ;
         build_if
           ~cond:(build_lt key (Tuple [low_target]) b)
           ~then_:(fun b -> build_assign Infix.(mid + int 1) low b)
@@ -109,9 +125,7 @@ struct
         build_loop
           Infix.(build_lt key (Tuple [high_target]) b && low < n)
           (fun b ->
-            debug_print "bin_search"
-              (Tuple [low; high; low_target; high_target; key])
-              b ;
+            print ~key ;
             callback key low b ;
             build_assign Infix.(low + int 1) low b ;
             build_assign (build_key low b) key b )
@@ -438,7 +452,7 @@ struct
   and scan_hash_idx ctx b r t cb =
     let open Builder in
     let key_layout = A.h_key_layout r in
-    let key_type, value_type, _ = t in
+    let key_type, value_type, m = t in
     let hdr = Header.make_header (HashIdxT t) in
     let start = Ctx.find_exn ctx (Name.create "start") b in
     let kstart = build_var ~persistent:false "kstart" Type.PrimType.int_t b in
@@ -457,7 +471,9 @@ struct
     let hash_data_start = Header.make_position hdr "hash_data" start in
     let mapping_start = Header.make_position hdr "hash_map" start in
     let mapping_len = Header.make_access hdr "hash_map_len" start in
+    let hash_ptr_len = Type.hi_ptr_size key_type value_type m in
     let lookup_expr = List.map r.hi_lookup ~f:(fun p -> gen_pred ctx p b) in
+    debug_print "scanning hash idx" start b ;
     (* Compute the index in the mapping table for this key. *)
     let hash_key =
       match (Type.(hash_kind_exn (HashIdxT t)), lookup_expr) with
@@ -468,10 +484,12 @@ struct
       | `Cmph, xs -> build_hash hash_data_start (Tuple xs) b
     in
     debug_print "hashing key" (Tuple lookup_expr) b ;
-    let hash_key = Infix.(hash_key * int 8) in
+    let hash_key = Infix.(hash_key * int hash_ptr_len) in
     (* Get a pointer to the value. *)
     let value_ptr =
-      Infix.(Slice (mapping_start + hash_key, 8) + mapping_start + mapping_len)
+      Infix.(
+        Slice (mapping_start + hash_key, hash_ptr_len)
+        + Header.make_position hdr "data" start)
     in
     debug_print "value ptr is" value_ptr b ;
     (* If the pointer is null, then the key is not present. *)
@@ -537,6 +555,7 @@ struct
       key
     in
     let n = Infix.(index_len / kp_len) in
+    debug_print "scanning ordered idx" start b ;
     build_bin_search key_index n (gen_pred ctx lookup_low b)
       (gen_pred ctx lookup_high b)
       (fun key idx b ->
@@ -691,6 +710,9 @@ struct
     let lhs_ctx = Ctx.bind ctx "start" Type.PrimType.int_t lhs_start in
     let rhs_ctx =
       let rhs_start = Infix.(lhs_start + len lhs_start lhs_t) in
+      debug_print "lhs_start" lhs_start b ;
+      debug_print "lhs_len" (len lhs_start lhs_t) b ;
+      debug_print "rhs_start" rhs_start b ;
       Ctx.bind ctx "start" Type.PrimType.int_t rhs_start
     in
     debug_print "scanning depjoin" (Int 0) b ;

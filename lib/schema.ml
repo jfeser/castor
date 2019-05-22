@@ -51,7 +51,7 @@ and schema_exn r =
         match to_name p with
         | Some n -> Name.copy ~type_:(Some t) n
         | None ->
-            Logs.err (fun m ->
+            Log.err (fun m ->
                 m "Tried to get schema of unnamed predicate %a." pp_pred p ) ;
             Name.create ~type_:t (Fresh.name Global.fresh "x%d") )
   in

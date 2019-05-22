@@ -65,7 +65,7 @@ module Make (C : Config.S) = struct
           | Relation r -> self#check_name r.r_name
           | r' ->
               self#visit_node () r' ;
-              Logs.err (fun m -> m "Missing as: %a" pp_small r)
+              Log.err (fun m -> m "Missing as: %a" pp_small r)
 
         method! visit_AList () (rk, rv) =
           self#check_alias () rk ; self#visit_t () rv
@@ -77,7 +77,7 @@ module Make (C : Config.S) = struct
           self#check_alias () rk ; self#visit_t () rv
 
         method! visit_As () _ r =
-          Logs.err (fun m -> m "Unexpected as: %a" pp_small r) ;
+          Log.err (fun m -> m "Unexpected as: %a" pp_small r) ;
           self#visit_t () r
       end
     in
@@ -116,7 +116,7 @@ module Make (C : Config.S) = struct
         let dups = List.find_all_dups l ~compare:compare_row in
         if List.length dups > 0 then (
           List.iter dups ~f:(fun r ->
-              Logs.err (fun m -> m "Ambiguous name %a." Name.pp_with_stage r.rname)
+              Log.err (fun m -> m "Ambiguous name %a." Name.pp_with_stage r.rname)
           ) ;
           Error.(of_string "Ambiguous names." |> raise) ) ;
         l
@@ -140,7 +140,7 @@ module Make (C : Config.S) = struct
           (c1 :> row list)
           ~f:(fun r ->
             if List.mem c2 ~equal:[%compare.equal: row] r then (
-              Logs.warn (fun m -> m "Shadowing of %a." Name.pp_with_stage r.rname) ;
+              Log.warn (fun m -> m "Shadowing of %a." Name.pp_with_stage r.rname) ;
               false )
             else true )
       in
@@ -245,7 +245,7 @@ module Make (C : Config.S) = struct
                match data with
                | [x] -> x
                | x :: _ ->
-                   Logs.warn (fun m -> m "Output shadowing of %a." Name.pp n) ;
+                   Log.warn (fun m -> m "Output shadowing of %a." Name.pp n) ;
                    x
                | _ -> assert false )
       in
@@ -401,7 +401,7 @@ module Make (C : Config.S) = struct
     in
     let ctx = Ctx.unscoped ctx in
     let ctx, refcnts = Ctx.add_refcnts ctx in
-    (* Logs.debug (fun m ->
+    (* Log.debug (fun m ->
      *     m "%a@ %a" Abslayout.pp r Sexp.pp_hum ([%sexp_of: Ctx.t] ctx) ) ; *)
     meta := Univ_map.set !meta mut_refcnt refcnts ;
     ({node; meta}, ctx)

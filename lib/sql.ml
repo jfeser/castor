@@ -72,7 +72,7 @@ let make_ctx schema select =
     ~init:(Map.empty (module Name))
     ~f:(fun m n {pred= p; _} ->
       if Map.mem m n then
-        Logs.warn (fun m -> m "Duplicate name in schema %a." Name.pp n) ;
+        Log.warn (fun m -> m "Duplicate name in schema %a." Name.pp n) ;
       Map.set m ~key:n ~data:p )
 
 let join schema1 schema2 sql1 sql2 pred =
@@ -365,5 +365,5 @@ let to_string_hum sql =
   match OS.Cmd.to_string ~trim:true out with
   | Ok sql' -> sql'
   | Error msg ->
-      Logs.warn (fun m -> m "Formatting sql failed: %a." Rresult.R.pp_msg msg) ;
+      Log.warn (fun m -> m "Formatting sql failed: %a." Rresult.R.pp_msg msg) ;
       sql_str

@@ -112,48 +112,48 @@ let%expect_test "example-2-str" =
     run_test ~print_layout:true ~params:example_str_params (example2 "log_str")) ;
   [%expect
     {|
-    0:4 Table len
-    4:8 Table hash len
-    12:104 Table hash
-    116:8 Table map len
-    124:16 Table key map
-    124:8 Map entry (0 => 14)
-    132:8 Map entry (1 => 0)
-    140:31 Table values
-    140:1 Tuple len (=8)
-    141:7 Tuple body
-    141:3 Scalar (=(String foo))
-    141:3 String body
-    141:0 String length (=3)
-    144:4 Scalar (=(String bar))
-    144:1 String length (=3)
-    145:3 String body
-    148:1 List count (=2)
-    149:1 List len (=6)
-    150:4 List body
-    150:2 Tuple body
-    150:1 Scalar (=(Int 1))
-    150:0 Tuple len (=2)
-    151:1 Scalar (=(Int 3))
-    152:2 Tuple body
-    152:1 Scalar (=(Int 4))
-    152:0 Tuple len (=2)
-    153:1 Scalar (=(Int 5))
-    154:1 Tuple len (=13)
-    155:12 Tuple body
-    155:3 Scalar (=(String foo))
-    155:3 String body
-    155:0 String length (=3)
-    158:9 Scalar (=(String fizzbuzz))
-    158:1 String length (=8)
-    159:8 String body
-    167:1 List count (=1)
-    168:1 List len (=4)
-    169:2 List body
-    169:2 Tuple body
-    169:1 Scalar (=(Int 1))
-    169:0 Tuple len (=2)
-    170:1 Scalar (=(Int 2))
+    0:2 Table len (=142)
+    2:2 Table hash len (=104)
+    4:104 Table hash
+    108:1 Table map len (=2)
+    109:2 Table key map
+    109:1 Map entry (0 => 14)
+    110:1 Map entry (1 => 0)
+    111:31 Table values
+    111:1 Tuple len (=8)
+    112:7 Tuple body
+    112:3 Scalar (=(String foo))
+    112:3 String body
+    112:0 String length (=3)
+    115:4 Scalar (=(String bar))
+    115:1 String length (=3)
+    116:3 String body
+    119:1 List count (=2)
+    120:1 List len (=6)
+    121:4 List body
+    121:2 Tuple body
+    121:1 Scalar (=(Int 1))
+    121:0 Tuple len (=2)
+    122:1 Scalar (=(Int 3))
+    123:2 Tuple body
+    123:1 Scalar (=(Int 4))
+    123:0 Tuple len (=2)
+    124:1 Scalar (=(Int 5))
+    125:1 Tuple len (=13)
+    126:12 Tuple body
+    126:3 Scalar (=(String foo))
+    126:3 String body
+    126:0 String length (=3)
+    129:9 Scalar (=(String fizzbuzz))
+    129:1 String length (=8)
+    130:8 String body
+    138:1 List count (=1)
+    139:1 List len (=4)
+    140:2 List body
+    140:2 Tuple body
+    140:1 Scalar (=(Int 1))
+    140:0 Tuple len (=2)
+    141:1 Scalar (=(Int 2))
 
     1|2
 
@@ -169,125 +169,126 @@ let%expect_test "example-3" =
 let%expect_test "example-3-str" =
   Demomatch.(
     run_test ~print_layout:true ~params:example_str_params (example3 "log_str")) ;
-  [%expect {|
-    0:4 Tuple len (=236)
-    4:232 Tuple body
-    4:4 Table len
-    8:8 Table hash len
-    16:104 Table hash
-    120:8 Table map len
-    128:24 Table key map
-    128:8 Map entry (0 => 23)
-    136:8 Map entry (1 => 10)
-    144:8 Map entry (2 => 0)
-    152:33 Table values
-    152:4 Scalar (=(String bar))
-    152:1 String length (=3)
-    153:3 String body
-    156:1 List count (=2)
-    157:1 List len (=6)
-    158:4 List body
-    158:2 Tuple body
-    158:1 Scalar (=(Int 3))
-    158:0 Tuple len (=2)
-    159:1 Scalar (=(Int 4))
-    160:2 Tuple body
-    160:1 Scalar (=(Int 5))
-    160:0 Tuple len (=2)
-    161:1 Scalar (=(Int 6))
-    162:9 Scalar (=(String fizzbuzz))
-    162:1 String length (=8)
-    163:8 String body
-    171:1 List count (=1)
-    172:1 List len (=4)
-    173:2 Tuple body
-    173:2 List body
-    173:1 Scalar (=(Int 2))
-    173:0 Tuple len (=2)
-    174:1 Scalar (=(Int 3))
-    175:4 Scalar (=(String foo))
-    175:1 String length (=3)
-    176:3 String body
-    179:1 List count (=2)
-    180:1 List len (=6)
-    181:4 List body
-    181:2 Tuple body
-    181:1 Scalar (=(Int 1))
-    181:0 Tuple len (=2)
-    182:1 Scalar (=(Int 4))
-    183:2 Tuple body
-    183:1 Scalar (=(Int 4))
-    183:0 Tuple len (=2)
-    184:1 Scalar (=(Int 6))
-    185:1 Ordered idx len (=51)
-    186:10 Ordered idx map
-    186:1 Ordered idx key
-    186:1 Scalar (=(Int 1))
-    186:1 Ordered idx key
-    186:0 Ordered idx index len (=10)
-    187:1 Ordered idx ptr (=0)
-    188:1 Ordered idx key
-    188:1 Scalar (=(Int 2))
-    188:1 Ordered idx key
-    189:1 Ordered idx ptr (=7)
-    190:1 Ordered idx key
-    190:1 Scalar (=(Int 3))
-    190:1 Ordered idx key
-    191:1 Ordered idx ptr (=19)
-    192:1 Ordered idx key
-    192:1 Scalar (=(Int 4))
-    192:1 Ordered idx key
-    193:1 Ordered idx ptr (=26)
-    194:1 Ordered idx key
-    194:1 Scalar (=(Int 5))
-    194:1 Ordered idx key
-    195:1 Ordered idx ptr (=33)
-    196:40 Ordered idx body
-    196:1 List len (=7)
-    196:0 List count (=1)
-    197:6 List body
-    197:1 Tuple len (=6)
-    198:5 Tuple body
-    198:4 Scalar (=(String foo))
-    198:1 String length (=3)
-    199:3 String body
-    202:1 Scalar (=(Int 1))
-    203:1 List len (=12)
-    203:0 List count (=1)
-    204:11 List body
-    204:1 Tuple len (=11)
-    205:10 Tuple body
-    205:9 Scalar (=(String fizzbuzz))
-    205:1 String length (=8)
-    206:8 String body
-    214:1 Scalar (=(Int 2))
-    215:1 List len (=7)
-    215:0 List count (=1)
-    216:6 List body
-    216:1 Tuple len (=6)
-    217:5 Tuple body
-    217:4 Scalar (=(String bar))
-    217:1 String length (=3)
-    218:3 String body
-    221:1 Scalar (=(Int 3))
-    222:1 List len (=7)
-    222:0 List count (=1)
-    223:6 List body
-    223:1 Tuple len (=6)
-    224:5 Tuple body
-    224:4 Scalar (=(String foo))
-    224:1 String length (=3)
-    225:3 String body
-    228:1 Scalar (=(Int 4))
-    229:1 List len (=7)
-    229:0 List count (=1)
-    230:6 List body
-    230:1 Tuple len (=6)
-    231:5 Tuple body
-    231:4 Scalar (=(String bar))
-    231:1 String length (=3)
-    232:3 String body
-    235:1 Scalar (=(Int 5))
+  [%expect
+    {|
+    0:2 Tuple len (=198)
+    2:196 Tuple body
+    2:2 Table len (=145)
+    4:2 Table hash len (=104)
+    6:104 Table hash
+    110:1 Table map len (=3)
+    111:3 Table key map
+    111:1 Map entry (0 => 23)
+    112:1 Map entry (1 => 10)
+    113:1 Map entry (2 => 0)
+    114:33 Table values
+    114:4 Scalar (=(String bar))
+    114:1 String length (=3)
+    115:3 String body
+    118:1 List count (=2)
+    119:1 List len (=6)
+    120:4 List body
+    120:2 Tuple body
+    120:1 Scalar (=(Int 3))
+    120:0 Tuple len (=2)
+    121:1 Scalar (=(Int 4))
+    122:2 Tuple body
+    122:1 Scalar (=(Int 5))
+    122:0 Tuple len (=2)
+    123:1 Scalar (=(Int 6))
+    124:9 Scalar (=(String fizzbuzz))
+    124:1 String length (=8)
+    125:8 String body
+    133:1 List count (=1)
+    134:1 List len (=4)
+    135:2 Tuple body
+    135:2 List body
+    135:1 Scalar (=(Int 2))
+    135:0 Tuple len (=2)
+    136:1 Scalar (=(Int 3))
+    137:4 Scalar (=(String foo))
+    137:1 String length (=3)
+    138:3 String body
+    141:1 List count (=2)
+    142:1 List len (=6)
+    143:4 List body
+    143:2 Tuple body
+    143:1 Scalar (=(Int 1))
+    143:0 Tuple len (=2)
+    144:1 Scalar (=(Int 4))
+    145:2 Tuple body
+    145:1 Scalar (=(Int 4))
+    145:0 Tuple len (=2)
+    146:1 Scalar (=(Int 6))
+    147:1 Ordered idx len (=51)
+    148:10 Ordered idx map
+    148:1 Ordered idx key
+    148:1 Scalar (=(Int 1))
+    148:1 Ordered idx key
+    148:0 Ordered idx index len (=10)
+    149:1 Ordered idx ptr (=0)
+    150:1 Ordered idx key
+    150:1 Scalar (=(Int 2))
+    150:1 Ordered idx key
+    151:1 Ordered idx ptr (=7)
+    152:1 Ordered idx key
+    152:1 Scalar (=(Int 3))
+    152:1 Ordered idx key
+    153:1 Ordered idx ptr (=19)
+    154:1 Ordered idx key
+    154:1 Scalar (=(Int 4))
+    154:1 Ordered idx key
+    155:1 Ordered idx ptr (=26)
+    156:1 Ordered idx key
+    156:1 Scalar (=(Int 5))
+    156:1 Ordered idx key
+    157:1 Ordered idx ptr (=33)
+    158:40 Ordered idx body
+    158:1 List len (=7)
+    158:0 List count (=1)
+    159:6 List body
+    159:1 Tuple len (=6)
+    160:5 Tuple body
+    160:4 Scalar (=(String foo))
+    160:1 String length (=3)
+    161:3 String body
+    164:1 Scalar (=(Int 1))
+    165:1 List len (=12)
+    165:0 List count (=1)
+    166:11 List body
+    166:1 Tuple len (=11)
+    167:10 Tuple body
+    167:9 Scalar (=(String fizzbuzz))
+    167:1 String length (=8)
+    168:8 String body
+    176:1 Scalar (=(Int 2))
+    177:1 List len (=7)
+    177:0 List count (=1)
+    178:6 List body
+    178:1 Tuple len (=6)
+    179:5 Tuple body
+    179:4 Scalar (=(String bar))
+    179:1 String length (=3)
+    180:3 String body
+    183:1 Scalar (=(Int 3))
+    184:1 List len (=7)
+    184:0 List count (=1)
+    185:6 List body
+    185:1 Tuple len (=6)
+    186:5 Tuple body
+    186:4 Scalar (=(String foo))
+    186:1 String length (=3)
+    187:3 String body
+    190:1 Scalar (=(Int 4))
+    191:1 List len (=7)
+    191:0 List count (=1)
+    192:6 List body
+    192:1 Tuple len (=6)
+    193:5 Tuple body
+    193:4 Scalar (=(String bar))
+    193:1 String length (=3)
+    194:3 String body
+    197:1 Scalar (=(Int 5))
 
     1|2
 

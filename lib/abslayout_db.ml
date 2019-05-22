@@ -161,11 +161,11 @@ module Make (Config : Config.S) = struct
     | Query q -> q
 
   let eval_query q =
-    Logs.debug (fun m -> m "Executing type checking query %a." pp (to_ralgebra q)) ;
+    Log.debug (fun m -> m "Executing type checking query %a." pp (to_ralgebra q)) ;
     let r = to_ralgebra q |> R.resolve |> P.project in
-    Logs.debug (fun m -> m "Executing type checking query %a." pp r) ;
+    Log.debug (fun m -> m "Executing type checking query %a." pp r) ;
     let sql = Sql.of_ralgebra r in
-    Logs.debug (fun m ->
+    Log.debug (fun m ->
         m "Executing type checking query %s." (Sql.to_string_hum sql) ) ;
     let tups =
       Db.exec_cursor_exn conn
@@ -496,9 +496,9 @@ module Make (Config : Config.S) = struct
   include TF
 
   let type_of r =
-    Logs.info (fun m -> m "Computing type of abstract layout.") ;
+    Log.info (fun m -> m "Computing type of abstract layout.") ;
     let type_ = (new type_fold)#run () r in
-    Logs.info (fun m ->
+    Log.info (fun m ->
         m "The type is: %s" (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ) ;
     type_
 

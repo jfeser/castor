@@ -20,7 +20,10 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
 
   (** Serialize an integer. Little endian. Width is the number of bits to use. *)
   let of_int ~byte_width x =
-    if byte_width > 0 && Float.(of_int x >= 2.0 ** (of_int byte_width * 8.0)) then
+    if
+      (* Note that integers are stored signed. *)
+      byte_width > 0 && Float.(of_int x >= 2.0 ** ((of_int byte_width * 8.0) - 1.0))
+    then
       Error.create "Integer too large." (x, byte_width) [%sexp_of: int * int]
       |> Error.raise ;
     let buf = Bytes.make byte_width '\x00' in
@@ -101,7 +104,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
               Some
                 (Config.create ~verbose:true ~seed:0 ~algo keyset |> Hash.of_config)
             with Error _ as err ->
-              Logs.warn (fun m ->
+              Log.warn (fun m ->
                   m "Creating CMPH hash failed: %a" Sexp.pp_hum
                     ([%sexp_of: exn] err) ) ;
               None )
@@ -259,6 +262,9 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
 
       method build_AHashIdx s meta h gen =
         let type_ = Meta.Direct.find_exn meta Meta.type_ in
+        let kt, vt, m =
+          match type_ with HashIdxT (kt, vt, m) -> (kt, vt, m) | _ -> assert false
+        in
         let key_l = A.h_key_layout h in
         (* Collect keys and write values to a child buffer. *)
         let keys = Queue.create () in
@@ -270,34 +276,39 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
               let%lwt () = self#visit_t valf (M.to_ctx key) key_l in
               self#visit_t valf vctx h.hi_values )
         in
-        Logs.debug (fun m -> m "Generating hash.") ;
+        Log.debug (fun m -> m "Generating hash.") ;
         let hash, hash_body =
           make_hash type_ (Queue.to_array keys |> Array.to_sequence)
         in
-        Logs.debug (fun m -> m "Generating hash finished.") ;
+        Log.debug (fun m -> m "Generating hash finished.") ;
         let hdr = make_header type_ in
         let hash_len = String.length hash_body in
-        let hash_map_len = Array.length hash * 8 in
+        let ptr_size = Type.hi_ptr_size kt vt m in
+        let hash_map_len = Array.length hash * ptr_size in
         let value_len = valf#pos in
-        s#log "Table len" ~f:(fun () ->
-            let flen = size_exn hdr "len" in
-            let len =
-              flen + size_exn hdr "hash_len" + hash_len
-              + size_exn hdr "hash_map_len" + hash_map_len + value_len
-            in
-            s#write_string (of_int ~byte_width:flen len) ) ;
-        s#log "Table hash len" ~f:(fun () ->
+        let len =
+          size_exn hdr "len" + size_exn hdr "hash_len" + hash_len
+          + size_exn hdr "hash_map_len" + hash_map_len + value_len
+        in
+        s#logf
+          (fun m -> m "Table len (=%d)" len)
+          ~f:(fun () -> s#write_string (of_int ~byte_width:(size_exn hdr "len") len)) ;
+        s#logf
+          (fun m -> m "Table hash len (=%d)" hash_len)
+          ~f:(fun () ->
             s#write_string (of_int ~byte_width:(size_exn hdr "hash_len") hash_len)
-        ) ;
+            ) ;
         s#log "Table hash" ~f:(fun () -> s#write_string hash_body) ;
-        s#log "Table map len" ~f:(fun () ->
+        s#logf
+          (fun m -> m "Table map len (=%d)" hash_map_len)
+          ~f:(fun () ->
             s#write_string
               (of_int ~byte_width:(size_exn hdr "hash_map_len") hash_map_len) ) ;
         s#log "Table key map" ~f:(fun () ->
             Array.iteri hash ~f:(fun h p ->
                 s#logf
                   (fun m -> m "Map entry (%d => %d)" h p)
-                  ~f:(fun () -> s#write_string (of_int ~byte_width:8 p)) ) ) ;
+                  ~f:(fun () -> s#write_string (of_int ~byte_width:ptr_size p)) ) ) ;
         return (s#log "Table values" ~f:(fun () -> valf#write_into s))
 
       method build_AOrderedIdx s meta (_, value_l, ometa) gen =
@@ -430,7 +441,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
 
   let serialize fd l =
     let open Lwt_main in
-    Logs.info (fun m -> m "Serializing abstract layout.") ;
+    Log.info (fun m -> m "Serializing abstract layout.") ;
     let serializer = new logged_serializer () in
     let write =
       let writev = Faraday_lwt_unix.writev_of_fd (Lwt_unix.of_unix_file_descr fd) in

@@ -41,7 +41,7 @@ let prune_args m =
         List.filter_mapi f.args ~f:(fun i (n, _) ->
             if Set.mem ns n then Some i
             else (
-              Logs.debug (fun m -> m "Removing parameter %s from %s." n f.name) ;
+              Log.debug (fun m -> m "Removing parameter %s from %s." n f.name) ;
               None ) )
       in
       Hashtbl.set needed_args ~key:f.name ~data:args ) ;
@@ -82,7 +82,7 @@ let prune_locals m =
           List.filter f.locals ~f:(fun {lname; _} ->
               let should_prune = not (Set.mem ns lname) in
               if should_prune then
-                Logs.debug (fun m -> m "Dropping local %s in %s." lname f.name) ;
+                Log.debug (fun m -> m "Dropping local %s in %s." lname f.name) ;
               not should_prune )
         in
         {f with locals= locals'} )
@@ -111,7 +111,7 @@ let inline sl_iters func =
           | [s] -> [self#visit_stmt () s]
           | Iter {func= iter'; args; _} :: Step {var; iter} :: ss
             when [%compare.equal: string] iter' iter && Hashtbl.mem sl_iters iter ->
-              Logs.debug (fun m -> m "Inlining %s into %s." iter func.name) ;
+              Log.debug (fun m -> m "Inlining %s into %s." iter func.name) ;
               let func = Hashtbl.find_exn sl_iters iter in
               (* Substitute arguments into the inlinee. *)
               let ctx =
@@ -332,7 +332,8 @@ let%test_module _ =
       M.annotate_type r ;
       let ir = I.irgen ~params:[] ~data_fn:"" r in
       Format.printf "%a" I.pp ir ;
-      [%expect {|
+      [%expect
+        {|
         [ERROR] Tried to get schema of unnamed predicate 0.
         [ERROR] Tried to get schema of unnamed predicate 0.
         [ERROR] Tried to get schema of unnamed predicate 0.
@@ -378,7 +379,9 @@ let%test_module _ =
             }
         } |}] ;
       let ir' = opt ir in
-      Format.printf "%a" I.pp ir' ; [%expect {|
+      Format.printf "%a" I.pp ir' ;
+      [%expect
+        {|
         // Locals:
         // hoisted0 : Int[nonnull] (persists=false)
         // hoisted1 : Tuple[Int[nonnull]] (persists=false)

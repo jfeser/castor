@@ -157,7 +157,7 @@ let scope_exn r =
 let of_lexbuf_exn lexbuf =
   try Ralgebra_parser.ralgebra_eof Ralgebra_lexer.token lexbuf
   with Parser_utils.ParseError (msg, line, col) as e ->
-    Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
+    Log.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
     raise e
 
 let of_channel_exn ch = of_lexbuf_exn (Lexing.from_channel ch)
@@ -167,7 +167,7 @@ let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
 let name_of_lexbuf_exn lexbuf =
   try Ralgebra_parser.name_eof Ralgebra_lexer.token lexbuf
   with Parser_utils.ParseError (msg, line, col) as e ->
-    Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
+    Log.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
     raise e
 
 let name_of_string_exn s = name_of_lexbuf_exn (Lexing.from_string s)
@@ -541,7 +541,7 @@ module Pred = struct
   let of_lexbuf_exn lexbuf =
     try Ralgebra_parser.expr_eof Ralgebra_lexer.token lexbuf
     with Parser_utils.ParseError (msg, line, col) as e ->
-      Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
+      Log.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
       raise e
 
   let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
@@ -851,7 +851,7 @@ let strip_unused_as =
         AOrderedIdx (rk, rv, m)
 
       method! visit_As () _ _ r =
-        Logs.warn (fun m -> m "Removing misplaced as: %a" pp_small r) ;
+        Log.warn (fun m -> m "Removing misplaced as: %a" pp_small r) ;
         r.node
     end
   in

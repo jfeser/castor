@@ -224,6 +224,18 @@ let count = function
   | ListT (_, {count}) -> count
   | FuncT _ -> AbsInt.top
 
+let hash_kind_of_key_type_exn = function IntT _ | DateT _ -> `Direct | _ -> `Cmph
+
+(** Use the type of a hash index to decide what hash method to use. *)
+let hash_kind_exn = function
+  | HashIdxT (kt, _, _) -> hash_kind_of_key_type_exn kt
+  | _ -> failwith "Unexpected type."
+
+let range_exn = function
+  | IntT x -> x.range
+  | DateT x -> x.range
+  | _ -> failwith "Has no range."
+
 let rec len =
   let open AbsInt in
   let header_len field_len =
@@ -249,10 +261,8 @@ let rec len =
   | T.OrderedIdxT (kt, vt, m) ->
       let values = m.count * len vt in
       oi_map_len kt vt m + values
-  | T.HashIdxT _ ->
-      (* let values = m.key_count * len vt in
-       * hi_map_len kt vt m + values *)
-      Interval (0, 100000000)
+  | T.HashIdxT (kt, vt, m) ->
+      hi_hash_len kt m + hi_map_len kt vt m + (m.key_count * len vt)
   | FuncT (ts, _) -> List.sum (module AbsInt) ts ~f:len
   | NullT as t -> Error.(create "Unexpected type." t [%sexp_of: T.t] |> raise)
 
@@ -262,16 +272,24 @@ and oi_map_len kt vt m = AbsInt.(m.count * (len kt + of_int (oi_ptr_size vt m)))
 (** Size of pointers (in bytes) in ordered indexes. *)
 and oi_ptr_size vt m = AbsInt.(byte_width ~nullable:false AbsInt.(m.count * len vt))
 
+(** Range of hash index hash data lengths. *)
+and hi_hash_len ?(bytes_per_key = AbsInt.of_int 1) kt m =
+  let open AbsInt in
+  match hash_kind_of_key_type_exn kt with
+  | `Direct -> of_int 0
+  | `Cmph ->
+      (* The interval represents uncertainty about the hash size, and CMPH hashes
+       seem to have some fixed overhead ~100B? *)
+      AbsInt.((m.key_count * bytes_per_key * Interval (1, 2)) + of_int 128)
+
 (** Range of hash index map lengths. *)
-and hi_map_len ?(bytes_per_key = AbsInt.of_int 1) kt vt m =
-  AbsInt.(m.key_count * bytes_per_key * of_int (hi_ptr_size kt vt m))
+and hi_map_len kt vt m =
+  let open AbsInt in
+  match hash_kind_of_key_type_exn kt with
+  | `Direct -> join (of_int 0) (range_exn kt)
+  | `Cmph ->
+      AbsInt.(m.key_count * AbsInt.Interval (1, 2) * of_int (hi_ptr_size kt vt m))
 
 (** Size of pointers (in bytes) in hash indexes. *)
 and hi_ptr_size kt vt m =
   AbsInt.(byte_width ~nullable:false AbsInt.(m.key_count * (len kt + len vt)))
-
-(** Use the type of a hash index to decide what hash method to use. *)
-let hash_kind_exn = function
-  | HashIdxT (kt, _, _) -> (
-    match kt with IntT _ | DateT _ -> `Direct | _ -> `Cmph )
-  | _ -> failwith "Unexpected type."

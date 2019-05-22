@@ -368,18 +368,17 @@ let%expect_test "hash-idx" =
     // cstart6 : Int[nonnull] (persists=true)
     // kstart9 : Int[nonnull] (persists=false)
     fun printer () : Void {
-        cstart6 = 4;
+        cstart6 = 1;
         i7 = 0;
         count8 = 5;
         loop (i7 < count8) {
-            if (buf[cstart6 : 1] * 8 < 0 ||
-                buf[13 : 8] - 1 < buf[cstart6 : 1] * 8) {
+            if (buf[cstart6 : 1] * 1 < 0 || buf[7 : 1] - 1 < buf[cstart6 : 1] * 1) {
 
             } else {
-                 kstart9 = buf[21 + buf[cstart6 : 1] * 8 : 8] + 21 + buf[13 : 8];
+                 kstart9 = buf[8 + buf[cstart6 : 1] * 1 : 1] + 8 + buf[7 : 1];
                  key11 = (buf[kstart9 : 1]);
                  vstart10 =
-                 buf[21 + buf[cstart6 : 1] * 8 : 8] + 21 + buf[13 : 8] + 1;
+                 buf[8 + buf[cstart6 : 1] * 1 : 1] + 8 + buf[7 : 1] + 1;
                  if (true && key11[0] == buf[cstart6 : 1]) {
                      print(Tuple[Int[nonnull], Int[nonnull]],
                      (key11[0], buf[vstart10 : 1]));
@@ -399,18 +398,17 @@ let%expect_test "hash-idx" =
     // cstart0 : Int[nonnull] (persists=true)
     // count2 : Int[nonnull] (persists=true)
     fun consumer () : Void {
-        cstart0 = 4;
+        cstart0 = 1;
         i1 = 0;
         count2 = 5;
         loop (i1 < count2) {
-            if (buf[cstart0 : 1] * 8 < 0 ||
-                buf[13 : 8] - 1 < buf[cstart0 : 1] * 8) {
+            if (buf[cstart0 : 1] * 1 < 0 || buf[7 : 1] - 1 < buf[cstart0 : 1] * 1) {
 
             } else {
-                 kstart3 = buf[21 + buf[cstart0 : 1] * 8 : 8] + 21 + buf[13 : 8];
+                 kstart3 = buf[8 + buf[cstart0 : 1] * 1 : 1] + 8 + buf[7 : 1];
                  key5 = (buf[kstart3 : 1]);
                  vstart4 =
-                 buf[21 + buf[cstart0 : 1] * 8 : 8] + 21 + buf[13 : 8] + 1;
+                 buf[8 + buf[cstart0 : 1] * 1 : 1] + 8 + buf[7 : 1] + 1;
                  if (true && key5[0] == buf[cstart0 : 1]) {
                      consume(Tuple[Int[nonnull], Int[nonnull]],
                      (key5[0], buf[vstart4 : 1]));
@@ -682,18 +680,18 @@ let%expect_test "example-2" =
     // cstart14 : Int[nonnull] (persists=true)
     // cstart19 : Int[nonnull] (persists=true)
     fun printer () : Void {
-        if (<tuplehash> * 8 < 0 || buf[12 + buf[4 : 8] : 8] - 1 < <tuplehash> * 8) {
+        if (<tuplehash> * 1 < 0 || buf[4 + buf[2 : 2] : 1] - 1 < <tuplehash> * 1) {
 
         } else {
              kstart10 =
-             buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8] + 12 + buf[4 : 8] + 8 +
-             buf[12 + buf[4 : 8] : 8];
+             buf[4 + buf[2 : 2] + 1 + <tuplehash> * 1 : 1] +
+             4 + buf[2 : 2] + 1 + buf[4 + buf[2 : 2] : 1];
              cstart13 = kstart10;
              cstart14 = cstart13 + 1;
              key12 = (buf[cstart13 : 1], buf[cstart14 : 1]);
              vstart11 =
-             buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8] + 12 + buf[4 : 8] + 8 +
-             buf[12 + buf[4 : 8] : 8] + 2;
+             buf[4 + buf[2 : 2] + 1 + <tuplehash> * 1 : 1] +
+             4 + buf[2 : 2] + 1 + buf[4 + buf[2 : 2] : 1] + 2;
              if (true && key12[0] == id_p && key12[1] == id_c) {
                  cstart15 = vstart11 + 1 + 1;
                  i16 = 0;
@@ -723,18 +721,18 @@ let%expect_test "example-2" =
     // cstart5 : Int[nonnull] (persists=true)
     // i6 : Int[nonnull] (persists=true)
     fun consumer () : Void {
-        if (<tuplehash> * 8 < 0 || buf[12 + buf[4 : 8] : 8] - 1 < <tuplehash> * 8) {
+        if (<tuplehash> * 1 < 0 || buf[4 + buf[2 : 2] : 1] - 1 < <tuplehash> * 1) {
 
         } else {
              kstart0 =
-             buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8] + 12 + buf[4 : 8] + 8 +
-             buf[12 + buf[4 : 8] : 8];
+             buf[4 + buf[2 : 2] + 1 + <tuplehash> * 1 : 1] +
+             4 + buf[2 : 2] + 1 + buf[4 + buf[2 : 2] : 1];
              cstart3 = kstart0;
              cstart4 = cstart3 + 1;
              key2 = (buf[cstart3 : 1], buf[cstart4 : 1]);
              vstart1 =
-             buf[12 + buf[4 : 8] + 8 + <tuplehash> * 8 : 8] + 12 + buf[4 : 8] + 8 +
-             buf[12 + buf[4 : 8] : 8] + 2;
+             buf[4 + buf[2 : 2] + 1 + <tuplehash> * 1 : 1] +
+             4 + buf[2 : 2] + 1 + buf[4 + buf[2 : 2] : 1] + 2;
              if (true && key2[0] == id_p && key2[1] == id_c) {
                  cstart5 = vstart1 + 1 + 1;
                  i6 = 0;
@@ -808,12 +806,12 @@ let%expect_test "example-3" =
     // cstart40 : Int[nonnull] (persists=true)
     // cstart26 : Int[nonnull] (persists=true)
     fun printer () : Void {
-        if (id_p * 8 < 0 || buf[8 : 8] - 1 < id_p * 8) {
+        if (id_p * 1 < 0 || buf[2 : 1] - 1 < id_p * 1) {
 
         } else {
-             kstart23 = buf[16 + id_p * 8 : 8] + 16 + buf[8 : 8];
+             kstart23 = buf[3 + id_p * 1 : 1] + 3 + buf[2 : 1];
              key25 = (buf[kstart23 : 1]);
-             vstart24 = buf[16 + id_p * 8 : 8] + 16 + buf[8 : 8] + 1;
+             vstart24 = buf[3 + id_p * 1 : 1] + 3 + buf[2 : 1] + 1;
              if (true && key25[0] == id_p) {
                  cstart26 = vstart24 + 1 + 1;
                  i27 = 0;
@@ -825,7 +823,7 @@ let%expect_test "example-3" =
                      high35 = 10 / 2;
                      loop (low34 < high35) {
                          mid36 = low34 + high35 / 2;
-                         kstart31 = 4 + buf[4 : 4] + mid36 * 2;
+                         kstart31 = 1 + buf[1 : 1] + mid36 * 2;
                          key37 = (buf[kstart31 : 1]);
                          if (key37[0] < buf[cstart29 : 1]) {
                              low34 = mid36 + 1;
@@ -834,13 +832,13 @@ let%expect_test "example-3" =
                          }
                      }
                      if (low34 < 10 / 2) {
-                         kstart31 = 4 + buf[4 : 4] + low34 * 2;
+                         kstart31 = 1 + buf[1 : 1] + low34 * 2;
                          key38 = (buf[kstart31 : 1]);
                          key39 = key38;
                          loop (key39[0] < buf[cstart30 : 1] && low34 < 10 / 2) {
                              vstart32 =
-                             buf[4 + buf[4 : 4] + low34 * 2 + 1 : 1] + 10 +
-                             4 + buf[4 : 4];
+                             buf[1 + buf[1 : 1] + low34 * 2 + 1 : 1] + 10 +
+                             1 + buf[1 : 1];
                              key33 = key39;
                              cstart40 = vstart32;
                              i41 = 0;
@@ -858,7 +856,7 @@ let%expect_test "example-3" =
                                  i41 = i41 + 1;
                              }
                              low34 = low34 + 1;
-                             kstart31 = 4 + buf[4 : 4] + low34 * 2;
+                             kstart31 = 1 + buf[1 : 1] + low34 * 2;
                              key45 = (buf[kstart31 : 1]);
                              key39 = key45;
                          }
@@ -898,12 +896,12 @@ let%expect_test "example-3" =
     // low11 : Int[nonnull] (persists=true)
     // cstart20 : Int[nonnull] (persists=true)
     fun consumer () : Void {
-        if (id_p * 8 < 0 || buf[8 : 8] - 1 < id_p * 8) {
+        if (id_p * 1 < 0 || buf[2 : 1] - 1 < id_p * 1) {
 
         } else {
-             kstart0 = buf[16 + id_p * 8 : 8] + 16 + buf[8 : 8];
+             kstart0 = buf[3 + id_p * 1 : 1] + 3 + buf[2 : 1];
              key2 = (buf[kstart0 : 1]);
-             vstart1 = buf[16 + id_p * 8 : 8] + 16 + buf[8 : 8] + 1;
+             vstart1 = buf[3 + id_p * 1 : 1] + 3 + buf[2 : 1] + 1;
              if (true && key2[0] == id_p) {
                  cstart3 = vstart1 + 1 + 1;
                  i4 = 0;
@@ -915,7 +913,7 @@ let%expect_test "example-3" =
                      high12 = 10 / 2;
                      loop (low11 < high12) {
                          mid13 = low11 + high12 / 2;
-                         kstart8 = 4 + buf[4 : 4] + mid13 * 2;
+                         kstart8 = 1 + buf[1 : 1] + mid13 * 2;
                          key14 = (buf[kstart8 : 1]);
                          if (key14[0] < buf[cstart6 : 1]) {
                              low11 = mid13 + 1;
@@ -924,13 +922,13 @@ let%expect_test "example-3" =
                          }
                      }
                      if (low11 < 10 / 2) {
-                         kstart8 = 4 + buf[4 : 4] + low11 * 2;
+                         kstart8 = 1 + buf[1 : 1] + low11 * 2;
                          key15 = (buf[kstart8 : 1]);
                          key16 = key15;
                          loop (key16[0] < buf[cstart7 : 1] && low11 < 10 / 2) {
                              vstart9 =
-                             buf[4 + buf[4 : 4] + low11 * 2 + 1 : 1] + 10 +
-                             4 + buf[4 : 4];
+                             buf[1 + buf[1 : 1] + low11 * 2 + 1 : 1] + 10 +
+                             1 + buf[1 : 1];
                              key10 = key16;
                              cstart17 = vstart9;
                              i18 = 0;
@@ -948,7 +946,7 @@ let%expect_test "example-3" =
                                  i18 = i18 + 1;
                              }
                              low11 = low11 + 1;
-                             kstart8 = 4 + buf[4 : 4] + low11 * 2;
+                             kstart8 = 1 + buf[1 : 1] + low11 * 2;
                              key22 = (buf[kstart8 : 1]);
                              key16 = key22;
                          }
@@ -1121,20 +1119,20 @@ let%expect_test "example-3-str" =
     // cstart40 : Int[nonnull] (persists=true)
     // cstart26 : Int[nonnull] (persists=true)
     fun printer () : Void {
-        if (hash(16, id_p) * 8 < 0 ||
-            buf[16 + buf[8 : 8] : 8] - 1 < hash(16, id_p) * 8) {
+        if (hash(6, id_p) * 1 < 0 ||
+            buf[6 + buf[4 : 2] : 1] - 1 < hash(6, id_p) * 1) {
 
         } else {
              kstart23 =
-             buf[16 + buf[8 : 8] + 8 + hash(16, id_p) * 8 : 8] +
-             16 + buf[8 : 8] + 8 + buf[16 + buf[8 : 8] : 8];
+             buf[6 + buf[4 : 2] + 1 + hash(6, id_p) * 1 : 1] +
+             6 + buf[4 : 2] + 1 + buf[6 + buf[4 : 2] : 1];
              key25 = (load_str(kstart23 + 1, buf[kstart23 : 1]));
              vstart24 =
-             buf[16 + buf[8 : 8] + 8 + hash(16, id_p) * 8 : 8] +
-             16 + buf[8 : 8] + 8 + buf[16 + buf[8 : 8] : 8] +
+             buf[6 + buf[4 : 2] + 1 + hash(6, id_p) * 1 : 1] +
+             6 + buf[4 : 2] + 1 + buf[6 + buf[4 : 2] : 1] +
              1 +
-             buf[buf[16 + buf[8 : 8] + 8 + hash(16, id_p) * 8 : 8] +
-                 16 + buf[8 : 8] + 8 + buf[16 + buf[8 : 8] : 8] : 1];
+             buf[buf[6 + buf[4 : 2] + 1 + hash(6, id_p) * 1 : 1] +
+                 6 + buf[4 : 2] + 1 + buf[6 + buf[4 : 2] : 1] : 1];
              if (true && key25[0] == id_p) {
                  cstart26 = vstart24 + 1 + 1;
                  i27 = 0;
@@ -1146,7 +1144,7 @@ let%expect_test "example-3-str" =
                      high35 = 10 / 2;
                      loop (low34 < high35) {
                          mid36 = low34 + high35 / 2;
-                         kstart31 = 4 + buf[4 : 4] + 1 + mid36 * 2;
+                         kstart31 = 2 + buf[2 : 2] + 1 + mid36 * 2;
                          key37 = (buf[kstart31 : 1]);
                          if (key37[0] < buf[cstart29 : 1]) {
                              low34 = mid36 + 1;
@@ -1155,13 +1153,13 @@ let%expect_test "example-3-str" =
                          }
                      }
                      if (low34 < 10 / 2) {
-                         kstart31 = 4 + buf[4 : 4] + 1 + low34 * 2;
+                         kstart31 = 2 + buf[2 : 2] + 1 + low34 * 2;
                          key38 = (buf[kstart31 : 1]);
                          key39 = key38;
                          loop (key39[0] < buf[cstart30 : 1] && low34 < 10 / 2) {
                              vstart32 =
-                             buf[4 + buf[4 : 4] + 1 + low34 * 2 + 1 : 1] + 10 +
-                             4 + buf[4 : 4] + 1;
+                             buf[2 + buf[2 : 2] + 1 + low34 * 2 + 1 : 1] + 10 +
+                             2 + buf[2 : 2] + 1;
                              key33 = key39;
                              cstart40 = vstart32 + 1;
                              i41 = 0;
@@ -1180,7 +1178,7 @@ let%expect_test "example-3-str" =
                                  i41 = i41 + 1;
                              }
                              low34 = low34 + 1;
-                             kstart31 = 4 + buf[4 : 4] + 1 + low34 * 2;
+                             kstart31 = 2 + buf[2 : 2] + 1 + low34 * 2;
                              key45 = (buf[kstart31 : 1]);
                              key39 = key45;
                          }
@@ -1220,20 +1218,20 @@ let%expect_test "example-3-str" =
     // low11 : Int[nonnull] (persists=true)
     // cstart20 : Int[nonnull] (persists=true)
     fun consumer () : Void {
-        if (hash(16, id_p) * 8 < 0 ||
-            buf[16 + buf[8 : 8] : 8] - 1 < hash(16, id_p) * 8) {
+        if (hash(6, id_p) * 1 < 0 ||
+            buf[6 + buf[4 : 2] : 1] - 1 < hash(6, id_p) * 1) {
 
         } else {
              kstart0 =
-             buf[16 + buf[8 : 8] + 8 + hash(16, id_p) * 8 : 8] +
-             16 + buf[8 : 8] + 8 + buf[16 + buf[8 : 8] : 8];
+             buf[6 + buf[4 : 2] + 1 + hash(6, id_p) * 1 : 1] +
+             6 + buf[4 : 2] + 1 + buf[6 + buf[4 : 2] : 1];
              key2 = (load_str(kstart0 + 1, buf[kstart0 : 1]));
              vstart1 =
-             buf[16 + buf[8 : 8] + 8 + hash(16, id_p) * 8 : 8] +
-             16 + buf[8 : 8] + 8 + buf[16 + buf[8 : 8] : 8] +
+             buf[6 + buf[4 : 2] + 1 + hash(6, id_p) * 1 : 1] +
+             6 + buf[4 : 2] + 1 + buf[6 + buf[4 : 2] : 1] +
              1 +
-             buf[buf[16 + buf[8 : 8] + 8 + hash(16, id_p) * 8 : 8] +
-                 16 + buf[8 : 8] + 8 + buf[16 + buf[8 : 8] : 8] : 1];
+             buf[buf[6 + buf[4 : 2] + 1 + hash(6, id_p) * 1 : 1] +
+                 6 + buf[4 : 2] + 1 + buf[6 + buf[4 : 2] : 1] : 1];
              if (true && key2[0] == id_p) {
                  cstart3 = vstart1 + 1 + 1;
                  i4 = 0;
@@ -1245,7 +1243,7 @@ let%expect_test "example-3-str" =
                      high12 = 10 / 2;
                      loop (low11 < high12) {
                          mid13 = low11 + high12 / 2;
-                         kstart8 = 4 + buf[4 : 4] + 1 + mid13 * 2;
+                         kstart8 = 2 + buf[2 : 2] + 1 + mid13 * 2;
                          key14 = (buf[kstart8 : 1]);
                          if (key14[0] < buf[cstart6 : 1]) {
                              low11 = mid13 + 1;
@@ -1254,13 +1252,13 @@ let%expect_test "example-3-str" =
                          }
                      }
                      if (low11 < 10 / 2) {
-                         kstart8 = 4 + buf[4 : 4] + 1 + low11 * 2;
+                         kstart8 = 2 + buf[2 : 2] + 1 + low11 * 2;
                          key15 = (buf[kstart8 : 1]);
                          key16 = key15;
                          loop (key16[0] < buf[cstart7 : 1] && low11 < 10 / 2) {
                              vstart9 =
-                             buf[4 + buf[4 : 4] + 1 + low11 * 2 + 1 : 1] + 10 +
-                             4 + buf[4 : 4] + 1;
+                             buf[2 + buf[2 : 2] + 1 + low11 * 2 + 1 : 1] + 10 +
+                             2 + buf[2 : 2] + 1;
                              key10 = key16;
                              cstart17 = vstart9 + 1;
                              i18 = 0;
@@ -1279,7 +1277,7 @@ let%expect_test "example-3-str" =
                                  i18 = i18 + 1;
                              }
                              low11 = low11 + 1;
-                             kstart8 = 4 + buf[4 : 4] + 1 + low11 * 2;
+                             kstart8 = 2 + buf[2 : 2] + 1 + low11 * 2;
                              key22 = (buf[kstart8 : 1]);
                              key16 = key22;
                          }

@@ -11,9 +11,11 @@ end
 module Make (C : Config.S) = struct
   module M = Resolve.Make (C)
 
-  let test =
-    let src = Logs.Src.create ~doc:"Source for testing project." "project-test" in
-    Logs.Src.set_level src None ; src
+  let src = Logs.Src.create ~doc:"Source for testing project." "project-test"
+
+  let () = Logs.Src.set_level src None
+
+  module Log = (val Logs.src_log src)
 
   let project_def refcnt p =
     match Pred.to_name p with
@@ -131,7 +133,7 @@ module Make (C : Config.S) = struct
                       | AtLeastOne -> is_unref
                     in
                     if should_remove then
-                      Logs.debug ~src:test (fun m ->
+                      Log.debug (fun m ->
                           m "Removing tuple element %a." pp_with_refcount r ) ;
                     not should_remove )
               in
@@ -159,10 +161,10 @@ module Make (C : Config.S) = struct
     end
 
   let project_once r =
-    Logs.debug ~src:test (fun m -> m "pre %a@." pp_with_refcount r) ;
+    Log.debug (fun m -> m "pre %a@." pp_with_refcount r) ;
     let r = annotate_count r in
     let r = project_visitor#visit_t () r in
-    Logs.debug ~src:test (fun m -> m "post %a@." pp r) ;
+    Log.debug (fun m -> m "post %a@." pp r) ;
     r
 
   let project ?(params = Set.empty (module Name)) r =
@@ -180,9 +182,9 @@ module Test = struct
 
   let with_logs f =
     Logs.(set_reporter (format_reporter ())) ;
-    Logs.Src.set_level test (Some Debug) ;
+    Logs.Src.set_level src (Some Debug) ;
     let ret = f () in
-    Logs.Src.set_level test (Some Error) ;
+    Logs.Src.set_level src (Some Error) ;
     Logs.(set_reporter nop_reporter) ;
     ret
 end
