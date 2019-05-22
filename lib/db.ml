@@ -12,6 +12,16 @@ type t = {uri: string; conn: Psql.connection sexp_opaque [@compare.ignore]}
 
 let create uri = {uri; conn= new Psql.connection ~conninfo:uri ()}
 
+let conn {conn; _} = conn
+
+let param =
+  let open Command.Let_syntax in
+  [%map_open
+    let uri =
+      flag "db" (required string) ~doc:"CONNINFO the database to connect to"
+    in
+    create uri]
+
 let subst_params params query =
   match params with
   | [] -> query

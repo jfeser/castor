@@ -5,6 +5,10 @@ type t
 
 val create : string -> t
 
+val conn : t -> Postgresql.connection
+
+val param : t Command.Spec.param
+
 val exec :
   ?max_retries:int -> ?params:string list -> t -> string -> Postgresql.result
 
