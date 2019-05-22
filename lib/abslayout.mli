@@ -124,6 +124,8 @@ val select : pred list -> t -> t
 
 val dep_join : t -> string -> t -> t
 
+val dep_join' : depjoin -> t
+
 val join : pred -> t -> t -> t
 
 val filter : pred -> t -> t
@@ -148,7 +150,11 @@ val hash_idx : ?key_layout:t -> t -> string -> t -> pred list -> t
 
 val hash_idx' : hash_idx -> t
 
+val h_key_layout : hash_idx -> t
+
 val ordered_idx : t -> string -> t -> ordered_idx -> t
+
+val o_key_layout : ordered_idx -> t
 
 val as_ : string -> t -> t
 

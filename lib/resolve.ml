@@ -265,7 +265,9 @@ module Make (C : Config.S) = struct
     List.iter m.rrefs ~f:incr ; m.rname
 
   let resolve_relation stage r =
-    let schema = Option.value_exn r.r_schema in
+    let schema =
+      Option.value_exn ~message:"No schema annotation on relation." r.r_schema
+    in
     let _, ctx = List.map schema ~f:(fun n -> Name n) |> Ctx.of_defs stage in
     ctx
 

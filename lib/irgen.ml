@@ -437,7 +437,7 @@ struct
 
   and scan_hash_idx ctx b r t cb =
     let open Builder in
-    let key_layout = Option.value_exn r.hi_key_layout in
+    let key_layout = A.h_key_layout r in
     let key_type, value_type, _ = t in
     let hdr = Header.make_header (HashIdxT t) in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -504,7 +504,9 @@ struct
       r
     in
     let key_type, value_type, m = t in
-    let key_layout = Option.value_exn m_key_layout in
+    let key_layout =
+      Option.value_exn ~message:"No ordered idx key layout." m_key_layout
+    in
     let hdr = Header.make_header (OrderedIdxT t) in
     let start = Ctx.find_exn ctx (Name.create "start") b in
     let kstart = build_var "kstart" Type.PrimType.int_t b in

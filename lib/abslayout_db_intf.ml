@@ -10,6 +10,8 @@ module type S = sig
 
   val annotate_type : t -> unit
 
+  val load_layout : ?params:Set.M(Name).t -> t -> t
+
   val load_string : ?params:Set.M(Name).t -> string -> t
 
   val to_ctx : Value.t list -> Ctx.t

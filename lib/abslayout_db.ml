@@ -348,20 +348,18 @@ module Make (Config : Config.S) = struct
       method private build_ATuple ctx meta ((rs, _) as expr) es =
         self#tuple meta expr (List.map2_exn es rs ~f:(self#visit_t ctx))
 
-      method private build_AHashIdx ctx meta ({hi_values; hi_key_layout; _} as expr)
-          vgen =
-        let key_query = Option.value_exn hi_key_layout in
-        let f2 = self#hash_idx meta expr in
+      method private build_AHashIdx ctx meta h vgen =
+        let key_query = h_key_layout h in
+        let f2 = self#hash_idx meta h in
         Gen.fold vgen ~init:(f2.pre ()) ~f:(fun acc (tup, ectx) ->
             f2.body acc
               ( self#visit_t ctx (to_ctx tup) key_query
-              , self#visit_t ctx ectx hi_values ) )
+              , self#visit_t ctx ectx h.hi_values ) )
         |> f2.post
 
-      method private build_AOrderedIdx ctx meta
-          ((_, value_query, {oi_key_layout= m_key_query; _}) as expr) vgen =
-        let key_query = Option.value_exn m_key_query in
-        let f2 = self#ordered_idx meta expr in
+      method private build_AOrderedIdx ctx meta ((_, value_query, m) as o) vgen =
+        let key_query = o_key_layout m in
+        let f2 = self#ordered_idx meta o in
         Gen.fold vgen ~init:(f2.pre ()) ~f:(fun acc (tup, ectx) ->
             f2.body acc
               ( self#visit_t ctx (to_ctx tup) key_query
@@ -408,7 +406,7 @@ module Make (Config : Config.S) = struct
             , `Child_sum )
       | AHashIdx h ->
           HashIdxT
-            ( least_general_of_layout (Option.value_exn h.hi_key_layout)
+            ( least_general_of_layout (h_key_layout h)
             , least_general_of_layout h.hi_values
             , {value_count= Bottom; key_count= Bottom} )
       | AOrderedIdx (_, vr, {oi_key_layout= Some kr; _}) ->
@@ -465,11 +463,10 @@ module Make (Config : Config.S) = struct
                 (elem_types, {count= List.fold_left1_exn ~f:AbsInt.( * ) counts})
 
         method hash_idx _ h =
-          let key_l = Option.value_exn h.hi_key_layout in
           { pre=
               (fun () ->
                 ( 0
-                , least_general_of_layout key_l
+                , least_general_of_layout (h_key_layout h)
                 , least_general_of_layout h.hi_values ) )
           ; body=
               (fun (kct, kt, vt) (kt', vt') ->
@@ -558,9 +555,11 @@ module Make (Config : Config.S) = struct
     in
     visitor#visit_t ()
 
-  let load_string ?(params = Set.empty (module Name)) s =
-    of_string_exn s |> strip_unused_as |> annotate_relations |> R.resolve ~params
+  let load_layout ?(params = Set.empty (module Name)) l =
+    l |> strip_unused_as |> annotate_relations |> R.resolve ~params
     |> annotate_key_layouts
+
+  let load_string ?params s = of_string_exn s |> load_layout ?params
 end
 
 let%test_module _ =

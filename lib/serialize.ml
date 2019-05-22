@@ -259,11 +259,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
 
       method build_AHashIdx s meta h gen =
         let type_ = Meta.Direct.find_exn meta Meta.type_ in
-        let key_l =
-          Option.value_exn
-            ~error:(Error.create "Missing key layout." h [%sexp_of: A.hash_idx])
-            h.hi_key_layout
-        in
+        let key_l = A.h_key_layout h in
         (* Collect keys and write values to a child buffer. *)
         let keys = Queue.create () in
         let valf = new logged_serializer () in

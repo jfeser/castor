@@ -64,6 +64,8 @@ let dep_join a b c =
   in
   wrap (DepJoin {d_lhs= strip_meta a; d_alias= b; d_rhs= strip_meta c})
 
+let dep_join' x = dep_join x.d_lhs x.d_alias x.d_rhs
+
 let join a b c = wrap (Join {pred= a; r1= strip_meta b; r2= strip_meta c})
 
 let filter a b = wrap (Filter (a, strip_meta b))
@@ -104,6 +106,9 @@ let hash_idx ?key_layout a b c d =
        ; hi_lookup= d
        ; hi_key_layout= key_layout })
 
+let h_key_layout {hi_key_layout; _} =
+  Option.value_exn ~message:"No key layout annotation found." hi_key_layout
+
 let hash_idx' h =
   hash_idx ?key_layout:h.hi_key_layout h.hi_keys h.hi_scope h.hi_values h.hi_lookup
 
@@ -113,6 +118,9 @@ let ordered_idx a b c d =
     if has_scope_overlap [a; c] [b] then (alpha_scopes a, alpha_scopes c) else (a, c)
   in
   wrap (AOrderedIdx (strip_meta (as_ b a), strip_meta c, d))
+
+let o_key_layout {oi_key_layout; _} =
+  Option.value_exn ~message:"No key layout annotation found." oi_key_layout
 
 let scope r = match r.node with As (n, _) -> Some n | _ -> None
 
