@@ -10,8 +10,6 @@ module Ops = Ops.Make (struct
   let validate = false
 
   let params = Set.empty (module Name)
-
-  let verbose = false
 end)
 
 open Ops

@@ -13,8 +13,6 @@ module Config = struct
     val validate : bool
 
     val params : Set.M(Name).t
-
-    val verbose : bool
   end
 end
 
