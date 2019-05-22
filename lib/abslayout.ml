@@ -64,7 +64,7 @@ let dep_join a b c =
   in
   wrap (DepJoin {d_lhs= strip_meta a; d_alias= b; d_rhs= strip_meta c})
 
-let dep_join' x = dep_join x.d_lhs x.d_alias x.d_rhs
+let dep_join' d = dep_join d.d_lhs d.d_alias d.d_rhs
 
 let join a b c = wrap (Join {pred= a; r1= strip_meta b; r2= strip_meta c})
 
