@@ -249,9 +249,10 @@ let rec len =
   | T.OrderedIdxT (kt, vt, m) ->
       let values = m.count * len vt in
       oi_map_len kt vt m + values
-  | T.HashIdxT (kt, vt, m) ->
-      let values = m.key_count * len vt in
-      hi_map_len kt vt m + values
+  | T.HashIdxT _ ->
+      (* let values = m.key_count * len vt in
+       * hi_map_len kt vt m + values *)
+      Interval (0, 100000000)
   | FuncT (ts, _) -> List.sum (module AbsInt) ts ~f:len
   | NullT as t -> Error.(create "Unexpected type." t [%sexp_of: T.t] |> raise)
 
