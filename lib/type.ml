@@ -249,9 +249,9 @@ let rec len =
   | T.OrderedIdxT (kt, vt, m) ->
       let values = m.count * len vt in
       oi_map_len kt vt m + values
-  | T.HashIdxT _ ->
-      (* TODO: Fix this nasty hack. *)
-      Interval (0, 100000000)
+  | T.HashIdxT (kt, vt, m) ->
+      let values = m.key_count * len vt in
+      hi_map_len kt vt m + values
   | FuncT (ts, _) -> List.sum (module AbsInt) ts ~f:len
   | NullT as t -> Error.(create "Unexpected type." t [%sexp_of: T.t] |> raise)
 
@@ -262,8 +262,8 @@ and oi_map_len kt vt m = AbsInt.(m.count * (len kt + of_int (oi_ptr_size vt m)))
 and oi_ptr_size vt m = AbsInt.(byte_width ~nullable:false AbsInt.(m.count * len vt))
 
 (** Range of hash index map lengths. *)
-and hi_map_len kt vt m =
-  AbsInt.(m.key_count * of_int 16 * of_int (hi_ptr_size kt vt m))
+and hi_map_len ?(bytes_per_key = AbsInt.of_int 1) kt vt m =
+  AbsInt.(m.key_count * bytes_per_key * of_int (hi_ptr_size kt vt m))
 
 (** Size of pointers (in bytes) in hash indexes. *)
 and hi_ptr_size kt vt m =
