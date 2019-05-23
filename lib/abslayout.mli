@@ -101,19 +101,19 @@ include Comparator.S with type t := t
 
 module O : Comparable.Infix with type t := t
 
-val pp_pred : Formatter.t -> pred -> unit
+val pp_pred : Format.formatter -> pred -> unit
 
-val pp : Formatter.t -> t -> unit
+val pp : Format.formatter -> t -> unit
 
-val pp_small : Formatter.t -> t -> unit
+val pp_small : Format.formatter -> t -> unit
 
 val pp_small_str : unit -> t -> string
 
 val mk_pp :
-     ?pp_name:(Formatter.t -> Name.t -> unit)
-  -> ?pp_meta:(Formatter.t -> Univ_map.t -> unit)
+     ?pp_name:(Format.formatter -> Name.t -> unit)
+  -> ?pp_meta:(Format.formatter -> Univ_map.t -> unit)
   -> unit
-  -> (Formatter.t -> t -> unit) * (Formatter.t -> pred -> unit)
+  -> (Format.formatter -> t -> unit) * (Format.formatter -> pred -> unit)
 
 val name : t -> string
 
@@ -196,8 +196,6 @@ val order_of : t -> (pred * order) list
 
 val validate : t -> unit
 
-val aliases : t -> t Map.M(String).t
-
 val strip_meta : t -> t
 
 class virtual ['a] iter : ['a] Abslayout0.iter
@@ -237,7 +235,7 @@ module Pred : sig
 
   include Comparator.S with type t := t
 
-  val pp : Formatter.t -> pred -> unit
+  val pp : Format.formatter -> pred -> unit
 
   val names : t -> (Name.t, Name.comparator_witness) Set.t
 
@@ -285,3 +283,5 @@ val hash_idx_to_depjoin : hash_idx -> t
 val ordered_idx_to_depjoin : t -> t -> ordered_idx -> t
 
 val ensure_alias : t -> t
+
+val aliases : t -> Pred.t Map.M(Name).t

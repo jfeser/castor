@@ -9,7 +9,7 @@ module Config = struct
   module type S = sig
     val conn : Db.t
 
-    include Resolve.Config.S
+    val simplify : (t -> t) option
 
     include Project.Config.S
   end
@@ -160,9 +160,11 @@ module Make (Config : Config.S) = struct
     | Scalars ps -> tuple (List.map ps ~f:scalar) Cross
     | Query q -> q
 
+  let simplify = Option.value simplify ~default:(fun r -> R.resolve r |> P.project)
+
   let eval_query q =
     Log.debug (fun m -> m "Executing type checking query %a." pp (to_ralgebra q)) ;
-    let r = to_ralgebra q |> R.resolve |> P.project in
+    let r = to_ralgebra q |> simplify in
     Log.debug (fun m -> m "Executing type checking query %a." pp r) ;
     let sql = Sql.of_ralgebra r in
     Log.debug (fun m ->
@@ -566,6 +568,8 @@ let%test_module _ =
   ( module struct
     module Config = struct
       let conn = Lazy.force Test_util.test_db_conn
+
+      let simplify = None
     end
 
     include Make (Config)

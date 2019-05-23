@@ -318,34 +318,6 @@ let validate r =
   if exists_bare_relations r then
     Error.of_string "Program contains bare relation references." |> Error.raise
 
-(** Collect all named relations in an expression. *)
-let aliases =
-  let visitor =
-    object (self : 'a)
-      inherit [_] reduce
-
-      method zero = Map.empty (module String)
-
-      method one k v = Map.singleton (module String) k v
-
-      method plus =
-        Map.merge ~f:(fun ~key:_ -> function
-          | `Left r | `Right r -> Some r
-          | `Both (r1, r2) ->
-              if O.(r1 = r2) then Some r1
-              else failwith "Multiple relations with same alias" )
-
-      method! visit_Exists () _ = self#zero
-
-      method! visit_First () _ = self#zero
-
-      method! visit_As () n r = self#plus (self#one n (as_ n r)) (self#visit_t () r)
-
-      method! visit_Relation () r = self#one r.r_name (relation r)
-    end
-  in
-  visitor#visit_t ()
-
 module Pred = struct
   type a = t [@@deriving compare, hash, sexp_of]
 
@@ -371,10 +343,15 @@ module Pred = struct
       | Exists of a
       | Substring of pred * pred * pred
     [@@deriving compare, hash, sexp_of, variants]
+
+    let t_of_sexp _ = failwith "Unimplemented"
   end
 
   include T
   include Comparator.Make (T)
+  module C = Comparable.Make (T)
+
+  module O : Comparable.Infix with type t := t = C
 
   let pp = pp_pred
 
@@ -907,3 +884,36 @@ let ensure_alias r =
     end
   in
   visitor#visit_t () r
+
+(** Collect all named relations in an expression. *)
+let aliases =
+  let visitor =
+    object (self : 'a)
+      inherit [_] reduce
+
+      method zero = Map.empty (module Name)
+
+      method one k v = Map.singleton (module Name) k v
+
+      method plus =
+        Map.merge ~f:(fun ~key:_ -> function
+          | `Left r | `Right r -> Some r
+          | `Both (r1, r2) ->
+              if Pred.O.(r1 = r2) then Some r1
+              else failwith "Multiple relations with same alias" )
+
+      method! visit_Exists () _ = self#zero
+
+      method! visit_First () _ = self#zero
+
+      method! visit_Select () (ps, r) =
+        match select_kind ps with
+        | `Scalar ->
+            List.fold_left ps ~init:(self#visit_t () r) ~f:(fun m p ->
+                match p with
+                | As_pred (p, n) -> self#plus (self#one (Name.create n) p) m
+                | _ -> m )
+        | `Agg -> self#zero
+    end
+  in
+  visitor#visit_t ()

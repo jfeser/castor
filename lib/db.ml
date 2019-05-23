@@ -1,6 +1,7 @@
 open! Core
 open Collections
 module Psql = Postgresql
+module A = Abslayout0
 
 let () =
   Caml.Printexc.register_printer (function
@@ -126,7 +127,7 @@ let relation conn r_name =
            Name.create ~type_ fname )
     |> Option.some
   in
-  Abslayout0.{r_name; r_schema}
+  A.{r_name; r_schema}
 
 let relation_memo = Memo.general (fun (conn, rname) -> relation conn rname)
 
@@ -138,6 +139,10 @@ let all_relations conn =
       "select tablename from pg_catalog.pg_tables where schemaname='public'"
   in
   List.map names ~f:(relation conn)
+
+let relation_has_field conn f =
+  List.find (all_relations conn) ~f:(fun r ->
+      List.exists (Option.value_exn r.A.r_schema) ~f:(fun n -> Name.name n = f) )
 
 let load_value type_ value =
   let open Type.PrimType in

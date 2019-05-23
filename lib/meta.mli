@@ -31,6 +31,8 @@ val order : (Abslayout0.pred * order) list key
 
 val type_ : Type.t key
 
+val refcnt : int Map.M(Name).t key
+
 val find : Abslayout0.t -> 'a key -> 'a option
 
 val find_exn : Abslayout0.t -> 'a key -> 'a

@@ -1,24 +1,22 @@
 open! Core
 open Abslayout
-open Name
-open Resolve
 open Test_util
 
 module C = struct
   let conn = Db.create "postgresql:///tpch_1k"
+
+  let simplify = None
 end
 
 module M = Abslayout_db.Make (C)
-module T = Make (C)
-open T
 
-let pp, _ = mk_pp ~pp_name:pp_with_stage ()
+let pp, _ = mk_pp ~pp_name:Name.pp_with_stage ()
 
 let pp_with_refcount, _ =
-  mk_pp ~pp_name:pp_with_stage
+  mk_pp ~pp_name:Name.pp_with_stage
     ~pp_meta:(fun fmt meta ->
       let open Format in
-      match Univ_map.find meta refcnt with
+      match Univ_map.find meta Meta.refcnt with
       | Some r ->
           fprintf fmt "@[<hv 2>{" ;
           Map.iteri r ~f:(fun ~key:n ~data:c ->

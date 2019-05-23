@@ -31,6 +31,8 @@ let type_ = Univ_map.Key.create ~name:"type" [%sexp_of: Type.t]
 
 let free = Univ_map.Key.create ~name:"free" [%sexp_of: Set.M(Name).t]
 
+let refcnt = Univ_map.Key.create ~name:"refcnt" [%sexp_of: int Map.M(Name).t]
+
 let update r key ~f = r.meta := Univ_map.update !(r.meta) key ~f
 
 let find ralgebra key = Univ_map.find !(ralgebra.meta) key

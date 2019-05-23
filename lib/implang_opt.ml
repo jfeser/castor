@@ -309,6 +309,8 @@ let%test_module _ =
   ( module struct
     module M = Abslayout_db.Make (struct
       let conn = Lazy.force Test_util.test_db_conn
+
+      let simplify = None
     end)
 
     module S =

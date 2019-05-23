@@ -31,3 +31,5 @@ val check : t -> string -> unit Or_error.t
 val relation : t -> string -> Abslayout0.relation
 
 val all_relations : t -> Abslayout0.relation list
+
+val relation_has_field : t -> string -> Abslayout0.relation option

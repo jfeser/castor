@@ -34,7 +34,7 @@ module Make (C : Config.S) = struct
 
   (** True if all fields emitted by r are unreferenced when emitted by r'. *)
   let all_unref_at r r' =
-    let refcnt = Meta.find_exn r' M.refcnt in
+    let refcnt = Meta.find_exn r' Meta.refcnt in
     let schema = schema_exn r in
     List.for_all (Schema.unscoped schema) ~f:(fun n ->
         match Map.(find refcnt n) with Some c -> c = 0 | None -> false )
@@ -46,7 +46,7 @@ module Make (C : Config.S) = struct
     mk_pp
       ~pp_meta:(fun fmt meta ->
         let open Format in
-        match Univ_map.find meta M.refcnt with
+        match Univ_map.find meta Meta.refcnt with
         | Some r ->
             fprintf fmt "@[<hv 2>{" ;
             Map.iteri r ~f:(fun ~key:n ~data:c ->
@@ -94,16 +94,17 @@ module Make (C : Config.S) = struct
   (* This is just a sentinal so we can use any value. *)
   let dummy = Bool false
 
+  let get_refcnt r =
+    Option.value_exn
+      ~error:(Error.createf "No refcnt found %a" pp_small_str r)
+      (Meta.find r Meta.refcnt)
+
   let project_visitor =
     object (self : 'a)
       inherit [_] map as super
 
       method! visit_t () r =
-        let refcnt =
-          Option.value_exn
-            ~error:(Error.createf "No refcnt found %a" pp_small_str r)
-            (Meta.find r M.refcnt)
-        in
+        let refcnt = get_refcnt r in
         let count = Meta.find_exn r count in
         if all_unref r && count = AtLeastOne then scalar dummy
         else
@@ -112,6 +113,21 @@ module Make (C : Config.S) = struct
           | Dedup r -> dedup (self#visit_t () r)
           | GroupBy (ps, ns, r) ->
               group_by (project_defs refcnt ps) ns (self#visit_t () r)
+          | AList (rk, rv) ->
+              let scope = scope_exn rk in
+              let rk = strip_scope rk in
+              let rk =
+                let refcnt = get_refcnt rk in
+                let schema = schema_exn rk in
+                let old_n = List.length schema in
+                let ps =
+                  project_defs refcnt
+                    (schema_exn rk |> List.map ~f:(fun n -> Name n))
+                in
+                let new_n = List.length ps in
+                if old_n > new_n then select ps rk else self#visit_t () rk
+              in
+              list rk scope (self#visit_t () rv)
           | AScalar p -> if project_def refcnt p then scalar p else scalar dummy
           | ATuple ([], _) -> empty
           | ATuple ([r], _) -> self#visit_t () r

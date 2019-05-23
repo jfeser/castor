@@ -5,6 +5,8 @@ open Test_util
 let run_test s =
   let module Config = struct
     let conn = Lazy.force test_db_conn
+
+    let simplify = None
   end in
   let module M = Abslayout_db.Make (Config) in
   let r = M.load_string s in

@@ -7,6 +7,8 @@ let%test_module _ =
   ( module struct
     module Config = struct
       let conn = Lazy.force test_db_conn
+
+      let simplify = None
     end
 
     module M = Abslayout_db.Make (Config)

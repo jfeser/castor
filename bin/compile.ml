@@ -18,6 +18,8 @@ let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
         in
         Some layout_file
       else None
+
+    let simplify = None
   end in
   let module A = Abslayout_db.Make (CConfig) in
   let module S = Serialize.Make (CConfig) (A) in

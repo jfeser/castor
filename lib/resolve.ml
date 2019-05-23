@@ -13,8 +13,6 @@ module Make (C : Config.S) = struct
   let mut_refcnt =
     Univ_map.Key.create ~name:"mut-refcnt" [%sexp_of: int ref Map.M(Name).t]
 
-  let refcnt = Univ_map.Key.create ~name:"refcnt" [%sexp_of: int Map.M(Name).t]
-
   let fix_meta_visitor =
     object
       inherit [_] map as super
@@ -29,7 +27,7 @@ module Make (C : Config.S) = struct
         (* Replace mutable refcounts with immutable refcounts. *)
         ( match Univ_map.find !meta mut_refcnt with
         | Some defs ->
-            meta := Map.map defs ~f:( ! ) |> Univ_map.set !meta refcnt ;
+            meta := Map.map defs ~f:( ! ) |> Univ_map.set !meta Meta.refcnt ;
             meta := Univ_map.remove !meta mut_refcnt
         | None -> () ) ;
         r
