@@ -7,6 +7,8 @@ module Config = struct
   module type S = sig
     include Ops.Config.S
 
+    include Project.Config.S
+
     include Abslayout_db.Config.S
   end
 end
@@ -45,48 +47,6 @@ module Make (C : Config.S) = struct
     else
       Or_error.error "Failed to remove all parameters." remains
         [%sexp_of: Set.M(Name).t]
-
-  let _base_relation_approx key r =
-    let exception Failed of Error.t in
-    let value_exn err = function Some v -> v | None -> raise (Failed err) in
-    (* Otherwise, if all grouping keys are from named relations, select all
-       possible grouping keys. *)
-    let defs = Meta.(find_exn r defs) in
-    let rels = Hashtbl.create (module Abslayout) in
-    let alias_map = aliases r in
-    try
-      (* Find the definition of each key. *)
-      let key_defs =
-        List.map key ~f:(fun n ->
-            List.find_map defs ~f:(fun (n', p) ->
-                Option.bind n' ~f:(fun n' ->
-                    if Name.O.(n = n') then Some p else None ) )
-            |> value_exn
-                 (Error.create "No definition found for key." n
-                    [%sexp_of: Name.t]) )
-      in
-      (* Collect all the names in each definition. If they all come from base
-         relations, then we can enumerate the keys. *)
-      List.iter key_defs ~f:(fun p ->
-          Set.iter (Pred.names p) ~f:(fun n ->
-              let r =
-                Name.rel n
-                |> value_exn
-                     (Error.create "Name does not come from base relation." n
-                        [%sexp_of: Name.t])
-                |> Map.find alias_map
-                |> value_exn
-                     (Error.create "Relation not found in alias table." n
-                        [%sexp_of: Name.t])
-              in
-              Hashtbl.add_multi rels ~key:r ~data:(Name n) ) ) ;
-      let key_rel =
-        Hashtbl.to_alist rels
-        |> List.map ~f:(fun (r, ns) -> dedup (select ns r))
-        |> List.fold_left1_exn ~f:(join (Bool true))
-      in
-      Ok (select key_defs key_rel)
-    with Failed err -> Error err
 
   let elim_groupby r =
     annotate_free r ;
@@ -132,6 +92,8 @@ module Test = struct
     let param_ctx = Map.empty (module Name)
 
     let fresh = Fresh.create ()
+
+    let simplify = None
   end
 
   module T = Make (C)

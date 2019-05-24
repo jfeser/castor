@@ -7,27 +7,58 @@ module Config = struct
   module type S = sig
     include Ops.Config.S
 
+    include Simplify_tactic.Config.S
+
+    include Project.Config.S
+
     include Filter_tactics.Config.S
 
     include Simple_tactics.Config.S
 
     include Join_opt.Config.S
 
-    include Abslayout_db.Config.S
+    include Select_tactics.Config.S
+
+    include Groupby_tactics.Config.S
+
+    include Join_elim_tactics.Config.S
+
+    include Type_cost.Config.S
   end
 end
 
 module Make (Config : Config.S) () = struct
   open Config
-  module M = Abslayout_db.Make (Config)
   module O = Ops.Make (Config)
   open O
+  module Sf = Simplify_tactic.Make (Config)
+  module M0 = Abslayout_db.Make (Config)
+
+  let resolve =
+    of_func (fun r -> M0.R.resolve ~params r |> Option.some) ~name:"resolve"
+
   module F = Filter_tactics.Make (Config)
-  open F
   module S = Simple_tactics.Make (Config)
-  open S
-  module P = Project.Make (Config)
-  open P
+  module Project = Project.Make (Config)
+  module Join_opt = Join_opt.Make (Config)
+  module Simplify_tactic = Simplify_tactic.Make (Config)
+  module Select_tactics = Select_tactics.Make (Config)
+  module Groupby_tactics = Groupby_tactics.Make (Config)
+  module Join_elim_tactics = Join_elim_tactics.Make (Config)
+
+  let project r = Some (Project.project_once r)
+
+  let project = of_func project ~name:"project"
+
+  module Config = struct
+    include Config
+
+    let simplify =
+      let tf = fix (seq_many [resolve; project; traced Sf.simplify]) in
+      Some (fun r -> Option.value (apply tf r) ~default:r)
+  end
+
+  module Type_cost = Type_cost.Make (Config)
 
   let is_serializable r p = is_serializeable (Path.get_exn p r)
 
@@ -35,14 +66,10 @@ module Make (Config : Config.S) () = struct
     let r' = Path.get_exn p r in
     overlaps (free r') params
 
-  let project r = Some (project_once r)
-
-  let project = of_func project ~name:"project"
-
   let push_orderby r =
     let key_is_supported r key =
       let s = Set.of_list (module Name) (schema_exn r) in
-      List.for_all key ~f:(fun (p, _) -> is_supported s p)
+      List.for_all key ~f:(fun (p, _) -> F.is_supported s p)
     in
     let orderby_cross_tuple key rs =
       match rs with
@@ -61,7 +88,7 @@ module Make (Config : Config.S) () = struct
     match r.node with
     | OrderBy {key; rel= {node= Select (ps, r); _}} ->
         let s = Set.of_list (module Name) (schema_exn r) in
-        if List.for_all key ~f:(fun (p, _) -> is_supported s p) then
+        if List.for_all key ~f:(fun (p, _) -> F.is_supported s p) then
           Some (select ps (order_by key r))
         else None
     | OrderBy {key; rel= {node= Filter (ps, r); _}} ->
@@ -82,19 +109,11 @@ module Make (Config : Config.S) () = struct
 
   let push_orderby = of_func push_orderby ~name:"push-orderby"
 
-  let resolve =
-    of_func (fun r -> M.resolve ~params r |> Option.some) ~name:"resolve"
-
-  module Join_opt = Join_opt.Make (Config)
-  module Simplify_tactic = Simplify_tactic.Make (Config)
-  module Select_tactics = Select_tactics.Make (Config)
-  module Groupby_tactics = Groupby_tactics.Make (Config)
-  module Join_elim_tactics = Join_elim_tactics.Make (Config)
-
   let push_all_unparameterized_filters =
     fix
       (seq_many
-         [resolve; for_all push_filter Path.(all >>? is_run_time >>? is_filter)])
+         [ resolve
+         ; for_all F.push_filter Path.(all >>? is_run_time >>? is_filter) ])
 
   let opt =
     let open Infix in
@@ -105,7 +124,7 @@ module Make (Config : Config.S) () = struct
              (Path.all >>? is_groupby >>| shallowest))
       ; (* Hoist parameterized filters as far up as possible. *)
         fix
-          (at_ hoist_filter
+          (at_ F.hoist_filter
              (Path.all >>? is_param_filter >>| deepest >>= parent))
         (* Eliminate unparameterized join nests. *)
       ; at_ Join_opt.transform
@@ -115,18 +134,32 @@ module Make (Config : Config.S) () = struct
         (* Push constant filters *)
       ; seq resolve
           (fix
-             (at_ push_filter
+             (at_ F.push_filter
                 Castor.Path.(all >>? is_const_filter >>| shallowest)))
       ; (* Push orderby operators into compile time position if possible. *)
         fix
           (at_ push_orderby
              Path.(all >>? is_orderby >>? is_run_time >>| shallowest))
-      ; (* Eliminate the shallowest equality filter. *)
-        at_ elim_eq_filter
-          Path.(all >>? is_param_eq_filter >>? is_run_time >>| shallowest)
-      ; (* Eliminate the shallowest comparison filter. *)
-        at_ elim_cmp_filter
-          Path.(all >>? is_param_cmp_filter >>? is_run_time >>| shallowest)
+      ; (* Hoist parameterized filters as far up as possible. *)
+        fix (for_all F.hoist_filter (Path.all >>? is_param_filter >> parent))
+      ; Branching.(
+          unfold
+            (traced
+               (at_ (traced F.push_filter)
+                  Path.(
+                    all >>? is_param_cmp_filter >>? is_run_time >>| shallowest)))
+            (seq_many
+               [ (* Eliminate the deepest comparison filter. *)
+                 at_ (traced F.elim_cmp_filter)
+                   Path.(
+                     all >>? is_param_cmp_filter >>? is_run_time >>| deepest)
+               ; fix (seq resolve project)
+               ; push_all_unparameterized_filters
+               ; Simplify_tactic.simplify ])
+          |> lower (min Type_cost.len))
+      ; (* Eliminate the deepest equality filter. *)
+        at_ F.elim_eq_filter
+          Path.(all >>? is_param_eq_filter >>? is_run_time >>| deepest)
       ; push_all_unparameterized_filters
       ; (* Push selections above collections. *)
         for_all Select_tactics.push_select
@@ -136,7 +169,7 @@ module Make (Config : Config.S) () = struct
           (seq_many
              [ (* NOTE: Needed for is_serializable check. *)
                resolve
-             ; at_ row_store
+             ; at_ S.row_store
                  Path.(
                    all >>? is_run_time >>? not has_params
                    >>? not is_serializable >>? not is_collection >>| shallowest)
@@ -185,7 +218,8 @@ let optimize (module C : Config.S) r =
         end in
         let module T = Make (C) () in
         let module O = Ops.Make (C) in
-        Option.value_exn (O.apply T.opt r)
+        Option.value_exn ~message:"Transforming subquery failed."
+          (O.apply T.opt r)
 
       method! visit_Exists () r = Exists (self#visit_subquery r)
 

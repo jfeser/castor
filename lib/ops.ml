@@ -1,4 +1,4 @@
-open Core
+open! Core
 open Printf
 open Castor
 open Collections
@@ -16,44 +16,42 @@ module Config = struct
   end
 end
 
+module T : sig
+  type t = private
+    {f: Abslayout.t -> [`Result of Abslayout.t | `Tf of t] option; name: string}
+
+  val first_order :
+    ?short_name:string -> (Abslayout.t -> Abslayout.t option) -> string -> t
+
+  val higher_order :
+    ?short_name:string -> (Abslayout.t -> t option) -> string -> t
+end = struct
+  type t =
+    {f: Abslayout.t -> [`Result of Abslayout.t | `Tf of t] option; name: string}
+
+  let first_order ?short_name f name =
+    let f r =
+      Option.map
+        (Exn.reraise_uncaught (Option.value short_name ~default:name)
+           (fun () -> f r))
+        ~f:(fun r -> `Result r)
+    in
+    {name; f}
+
+  let higher_order ?short_name f name =
+    let f r =
+      Option.map
+        (Exn.reraise_uncaught (Option.value short_name ~default:name)
+           (fun () -> f r))
+        ~f:(fun r -> `Tf r)
+    in
+    {name; f}
+end
+
+include T
+
 module Make (C : Config.S) = struct
-  module M = Abslayout_db.Make (C)
   open C
-
-  module T : sig
-    type t = private
-      { f: Abslayout.t -> [`Result of Abslayout.t | `Tf of t] option
-      ; name: string }
-
-    val first_order :
-      ?short_name:string -> (Abslayout.t -> Abslayout.t option) -> string -> t
-
-    val higher_order :
-      ?short_name:string -> (Abslayout.t -> t option) -> string -> t
-  end = struct
-    type t =
-      { f: Abslayout.t -> [`Result of Abslayout.t | `Tf of t] option
-      ; name: string }
-
-    let first_order ?short_name f name =
-      let f r =
-        Option.map
-          (Exn.reraise_uncaught (Option.value short_name ~default:name)
-             (fun () -> f r))
-          ~f:(fun r -> `Result r)
-      in
-      {name; f}
-
-    let higher_order ?short_name f name =
-      let f r =
-        Option.map
-          (Exn.reraise_uncaught (Option.value short_name ~default:name)
-             (fun () -> f r))
-          ~f:(fun r -> `Tf r)
-      in
-      {name; f}
-  end
-
   include T
 
   type ('r, 'p) path_set = 'r -> 'p Seq.t
@@ -62,14 +60,16 @@ module Make (C : Config.S) = struct
 
   type ('r, 'p) path_selector = ('r, 'p) path_set -> 'r -> 'p option
 
-  let overlaps s1 s2 = Set.inter s1 s2 |> Set.length > 0
+  let overlaps s1 s2 = not (Set.inter s1 s2 |> Set.is_empty)
+
+  let ( >> ) s f r = s r |> Seq.filter_map ~f:(f r)
 
   let ( >>? ) (s : ('r, 'p) path_set) (f : ('r, 'p) path_filter) r =
     s r |> Seq.filter ~f:(fun p -> f r p)
 
   let ( >>| ) (s : ('r, 'p) path_set) (f : ('r, 'p) path_selector) = f s
 
-  let ( >>= ) p f r = Option.bind (p r) ~f:(fun p' -> f p' r)
+  let ( >>= ) p f r = Option.bind (p r) ~f:(f r)
 
   module Infix = struct
     let ( && ) f1 f2 r p = f1 r p && f2 r p
@@ -170,7 +170,7 @@ module Make (C : Config.S) = struct
 
   let child i _ = Some (Path.child Path.root i)
 
-  let parent p _ = Path.parent p
+  let parent _ p = Path.parent p
 
   let rec apply tf r =
     let ret =
@@ -262,7 +262,8 @@ module Make (C : Config.S) = struct
                 Abslayout.pp r Abslayout.pp r' ) ;
           Some r'
       | None ->
-          Logs.debug (fun m -> m "Transform %s failed." tf.name) ;
+          Logs.debug (fun m ->
+              m "@[Transform %s failed on:@,%a@]@.\n" tf.name Abslayout.pp r ) ;
           None
     in
     first_order f tf.name
@@ -271,6 +272,35 @@ module Make (C : Config.S) = struct
     let tf = first_order f name in
     if validate then validated tf else tf
 
-  let autotune rs cost =
-    Seq.min_elt rs ~compare:(fun r1 r2 -> [%compare: float] (cost r1) (cost r2))
+  module Branching = struct
+    type t = {b_f: Abslayout.t -> Abslayout.t Seq.t; b_name: string}
+
+    let lift tf =
+      { b_f=
+          (fun r ->
+            match apply tf r with
+            | Some r' -> Seq.singleton r'
+            | None -> Seq.empty )
+      ; b_name= tf.name }
+
+    let lower elim tf = first_order (fun r -> elim (tf.b_f r)) tf.b_name
+
+    let unfold tf_branch tf =
+      { b_f=
+          (fun r ->
+            Seq.append (Seq.singleton r)
+              (Seq.unfold ~init:r ~f:(fun r ->
+                   Option.bind (apply tf_branch r) ~f:(fun r' ->
+                       if Abslayout.O.(r = r') then None else Some (r, r') ) ))
+            |> Seq.filter_map ~f:(apply tf) )
+      ; b_name= "unfold" }
+
+    let min cost rs =
+      Seq.fold rs ~init:(None, Float.max_value) ~f:(fun (rb, cb) r ->
+          let c = cost r in
+          if c < cb then (Some r, c) else (rb, cb) )
+      |> Tuple.T2.get1
+
+    let ( *> ) x y = first_order (fun r -> y (x r)) ""
+  end
 end

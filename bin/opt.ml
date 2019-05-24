@@ -4,6 +4,7 @@ open Collections
 open Castor_opt
 
 let main ~params:all_params ~db ~validate ch =
+  Logs.Src.set_level Log.src (Some Debug) ;
   Logs.info (fun m ->
       m "%s" (Sys.argv |> Array.to_list |> String.concat ~sep:" ") ) ;
   let params =
@@ -24,6 +25,8 @@ let main ~params:all_params ~db ~validate ch =
     let param_ctx = param_ctx
 
     let validate = validate
+
+    let simplify = None
   end in
   let module A = Abslayout_db.Make (Config) in
   let module T = Transform.Make (Config) () in

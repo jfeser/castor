@@ -17,6 +17,7 @@ module Make (C : Config.S) = struct
   open O
   open C
   open S
+  module Tactics_util = Tactics_util.Make (C)
 
   let extend_select ~with_ ps r =
     let needed_fields =
@@ -50,51 +51,60 @@ module Make (C : Config.S) = struct
     let supported = Set.inter (pred_free pred) orig_bound in
     Set.is_subset supported ~of_:new_bound
 
+  let to_filter r =
+    match r.node with Filter (p, r) -> Some (p, r) | _ -> None
+
   let hoist_filter r =
+    let open Option.Let_syntax in
     match r.node with
-    | OrderBy {key; rel= {node= Filter (p, r); _}} ->
-        Some (filter p (order_by key r))
-    | GroupBy (ps, key, {node= Filter (p, r); _}) ->
-        Logs.debug (fun m ->
-            m "%a %a" Sexp.pp_hum
-              (schema_set_exn r |> [%sexp_of: Set.M(Name).t])
-              Sexp.pp_hum
-              (schema_set_exn (group_by ps key r) |> [%sexp_of: Set.M(Name).t])
-        ) ;
+    | OrderBy {key; rel} ->
+        let%map p, r = to_filter rel in
+        filter p (order_by key r)
+    | GroupBy (ps, key, r) ->
+        let%bind p, r = to_filter r in
         if
           invariant_support (schema_set_exn r)
             (schema_set_exn (group_by ps key r))
             p
         then Some (filter p (group_by ps key r))
         else None
-    | Filter (p, {node= Filter (p', r); _}) ->
-        Some (filter (Binop (And, p, p')) r)
-    | Select (ps, {node= Filter (p, r); _}) -> (
-      match select_kind ps with
-      | `Scalar ->
-          Some (filter p (select (extend_select ps r ~with_:(pred_free p)) r))
-      | `Agg -> None )
-    | Join {pred; r1= {node= Filter (p, r); _}; r2} ->
-        Some (filter p (join pred r r2))
-    | Join {pred; r1; r2= {node= Filter (p, r); _}} ->
-        Some (filter p (join pred r1 r))
-    | Dedup {node= Filter (p, r); _} -> Some (filter p (dedup r))
-    | AList (rk, {node= Filter (p, r); _}) ->
+    | Filter (p', r) ->
+        let%map p, r = to_filter r in
+        filter (Binop (And, p, p')) r
+    | Select (ps, r) -> (
+        let%bind p, r = to_filter r in
+        match select_kind ps with
+        | `Scalar ->
+            Some
+              (filter p (select (extend_select ps r ~with_:(pred_free p)) r))
+        | `Agg -> None )
+    | Join {pred; r1; r2} -> (
+      match (to_filter r1, to_filter r2) with
+      | Some (p1, r1), Some (p2, r2) ->
+          Some (filter (Pred.conjoin [p1; p2]) (join pred r1 r2))
+      | None, Some (p, r2) -> Some (filter p (join pred r1 r2))
+      | Some (p, r1), None -> Some (filter p (join pred r1 r2))
+      | None, None -> None )
+    | Dedup r ->
+        let%map p, r = to_filter r in
+        filter p (dedup r)
+    | AList (rk, rv) ->
+        let%map p, r = to_filter rv in
         let below, above = split_bound rk p in
-        Some
-          (filter (Pred.conjoin above)
-             (list rk (scope_exn rk) (filter (Pred.conjoin below) r)))
-    | AHashIdx ({hi_keys= rk; hi_values= {node= Filter (p, r); _}; _} as h) ->
+        filter (Pred.conjoin above)
+          (list rk (scope_exn rk) (filter (Pred.conjoin below) r))
+    | AHashIdx ({hi_keys= rk; hi_values= rv; _} as h) ->
+        let%map p, r = to_filter rv in
         let below, above = split_bound rk p in
-        Some
-          (filter (Pred.conjoin above)
-             (hash_idx' {h with hi_values= filter (Pred.conjoin below) r}))
-    | AOrderedIdx (rk, {node= Filter (p, r); _}, m) ->
+        filter (Pred.conjoin above)
+          (hash_idx' {h with hi_values= filter (Pred.conjoin below) r})
+    | AOrderedIdx (rk, rv, m) ->
+        let%map p, r = to_filter rv in
         let below, above = split_bound rk p in
-        Some
-          (filter (Pred.conjoin above)
-             (ordered_idx rk (scope_exn rk) (filter (Pred.conjoin below) r) m))
-    | _ -> None
+        filter (Pred.conjoin above)
+          (ordered_idx rk (scope_exn rk) (filter (Pred.conjoin below) r) m)
+    | Relation _ | AEmpty | AScalar _ | ATuple _ | As (_, _) | DepJoin _ ->
+        None
 
   let hoist_filter = of_func hoist_filter ~name:"hoist-filter"
 
@@ -146,7 +156,7 @@ module Make (C : Config.S) = struct
           match t with
           | IntT _ -> Ok (Binop (Add, bound, Int 1))
           | DateT _ -> Ok (Binop (Add, bound, Unop (Day, Int 1)))
-          | FixedT _ -> Error "No open inequalities with fixed."
+          | FixedT _ -> Or_error.errorf "No open inequalities with fixed."
           | NullT | StringT _ | BoolT _ | TupleT _ | VoidT ->
               failwith "Unexpected type." )
     in
@@ -158,11 +168,11 @@ module Make (C : Config.S) = struct
           match t with
           | IntT _ -> Ok (Binop (Add, bound, Int 1))
           | DateT _ -> Ok (Binop (Add, bound, Unop (Day, Int 1)))
-          | FixedT _ -> Error "No open inequalities with fixed."
+          | FixedT _ -> Or_error.errorf "No open inequalities with fixed."
           | NullT | StringT _ | BoolT _ | TupleT _ | VoidT ->
               failwith "Unexpected type." )
     in
-    let open Result.Let_syntax in
+    let open Or_error.Let_syntax in
     let%bind lb =
       match lb with
       | None -> Ok default_min
@@ -186,8 +196,7 @@ module Make (C : Config.S) = struct
       TODO: In practice we also want it to have a parameter in it. Is this correct? *)
   let is_candidate_key p r =
     let pfree = pred_free p in
-    Set.inter (schema_set_exn r) pfree |> Set.is_empty
-    && Set.inter params pfree |> Set.is_empty |> not
+    (not (overlaps (schema_set_exn r) pfree)) && overlaps params pfree
 
   let elim_cmp_filter r =
     match r.node with
@@ -220,41 +229,45 @@ module Make (C : Config.S) = struct
             [%compare: int] (List.length b1) (List.length b2) )
           (Map.to_alist cmps)
         |> List.find_map ~f:(fun (key, bounds) ->
-               let open Option.Let_syntax in
-               let lb =
-                 List.filter_map bounds ~f:(fun (f, p) ->
-                     match f with
-                     | `Gt -> Some (p, `Closed)
-                     | `Ge -> Some (p, `Open)
-                     | _ -> None )
+               let x =
+                 let open Or_error.Let_syntax in
+                 let lb =
+                   List.filter_map bounds ~f:(fun (f, p) ->
+                       match f with
+                       | `Gt -> Some (p, `Closed)
+                       | `Ge -> Some (p, `Open)
+                       | _ -> None )
+                 in
+                 let ub =
+                   List.filter_map bounds ~f:(fun (f, p) ->
+                       match f with
+                       | `Lt -> Some (p, `Closed)
+                       | `Le -> Some (p, `Open)
+                       | _ -> None )
+                 in
+                 let rest' =
+                   Map.remove cmps key |> Map.to_alist
+                   |> List.concat_map ~f:(fun (p, xs) ->
+                          List.map xs ~f:(fun (f, p') ->
+                              let op =
+                                match f with
+                                | `Gt -> Gt
+                                | `Lt -> Lt
+                                | `Ge -> Ge
+                                | `Le -> Le
+                              in
+                              Binop (op, p, p') ) )
+                 in
+                 let%bind rk = Tactics_util.all_values [key] r' in
+                 let%map idx =
+                   gen_ordered_idx ?lb:(List.hd lb) ?ub:(List.hd ub) key rk r'
+                 in
+                 (rest', idx)
                in
-               let ub =
-                 List.filter_map bounds ~f:(fun (f, p) ->
-                     match f with
-                     | `Lt -> Some (p, `Closed)
-                     | `Le -> Some (p, `Open)
-                     | _ -> None )
-               in
-               let rest' =
-                 Map.remove cmps key |> Map.to_alist
-                 |> List.concat_map ~f:(fun (p, xs) ->
-                        List.map xs ~f:(fun (f, p') ->
-                            let op =
-                              match f with
-                              | `Gt -> Gt
-                              | `Lt -> Lt
-                              | `Ge -> Ge
-                              | `Le -> Le
-                            in
-                            Binop (op, p, p') ) )
-               in
-               let%bind rk = Tactics_util.all_values [key] r' in
-               match
-                 gen_ordered_idx ?lb:(List.hd lb) ?ub:(List.hd ub) key rk r'
-               with
-               | Ok r -> Some (filter (Pred.conjoin (rest @ rest')) r)
+               match x with
+               | Ok (rest', r) -> Some (filter (Pred.conjoin (rest @ rest')) r)
                | Error err ->
-                   Logs.warn (fun m -> m "Elim-cmp: %s" err) ;
+                   Logs.warn (fun m -> m "Elim-cmp: %a" Error.pp err) ;
                    None )
     | _ -> None
 
@@ -278,10 +291,8 @@ module Make (C : Config.S) = struct
 
   let push_filter r =
     let open Option.Let_syntax in
-    let%bind p, r' =
-      match r.node with Filter (p, r') -> Some (p, r') | _ -> None
-    in
-    match r'.node with
+    let%bind p, r = to_filter r in
+    match r.node with
     | Filter (p', r') -> Some (filter (Binop (And, p, p')) r')
     | ATuple (rs, Concat) -> Some (tuple (List.map rs ~f:(filter p)) Concat)
     | ATuple (rs, Cross) ->
@@ -303,7 +314,9 @@ module Make (C : Config.S) = struct
         Some (filter (Pred.conjoin rest) (tuple rs Cross))
     | _ ->
         let%map rk, scope, rv, mk =
-          match r'.node with
+          match r.node with
+          | DepJoin {d_lhs= rk; d_rhs= rv; d_alias} ->
+              Some (rk, d_alias, rv, dep_join)
           | AList (rk, rv) -> Some (strip_scope rk, scope_exn rk, rv, list)
           | AHashIdx h ->
               Some
@@ -363,7 +376,7 @@ module Make (C : Config.S) = struct
           let outer_filter r =
             match rest with [] -> r | _ -> filter (and_ rest) r
           in
-          let%map r' = Tactics_util.all_values select_list r in
+          let%map r' = Tactics_util.all_values select_list r |> Result.ok in
           outer_filter (hash_idx r' scope (filter inner_filter_pred r) key)
     | _ -> None
 

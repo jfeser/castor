@@ -16,6 +16,8 @@ module Config = struct
   let params = Set.empty (module Name)
 
   let verbose = false
+
+  let simplify = None
 end
 
 module Join_opt = Join_opt.Make (Config)

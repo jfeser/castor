@@ -5,15 +5,12 @@ open Abslayout
 module Config = struct
   module type S = sig
     include Ops.Config.S
-
-    include Abslayout_db.Config.S
   end
 end
 
 module Make (C : Config.S) = struct
   module Ops = Ops.Make (C)
   open Ops
-  module M = Abslayout_db.Make (C)
 
   let filter_const r =
     match r.node with
@@ -48,6 +45,19 @@ module Make (C : Config.S) = struct
     | DepJoin
         { d_lhs
         ; d_alias
+        ; d_rhs= {node= Select (ps, {node= ATuple (rs, Cross); _}); _} } ->
+        let open Option.Let_syntax in
+        let%bind s =
+          List.map rs ~f:(fun r ->
+              match r.node with AScalar p -> Some p | _ -> None )
+          |> Option.all
+        in
+        let s = List.map ~f:(Pred.unscoped d_alias) s in
+        let ps = List.map ~f:(Pred.unscoped d_alias) ps in
+        Some (select ps (select s (strip_scope d_lhs)))
+    | DepJoin
+        { d_lhs
+        ; d_alias
         ; d_rhs= {node= Select (ps, {node= AScalar (Null None); _}); _} } ->
         Some
           (select (List.map ~f:(Pred.unscoped d_alias) ps) (strip_scope d_lhs))
@@ -69,6 +79,25 @@ module Make (C : Config.S) = struct
 
   let flatten_select = of_func flatten_select ~name:"flatten-select"
 
+  let flatten_dedup r =
+    match r.node with Dedup {node= Dedup r'; _} -> Some r' | _ -> None
+
+  let flatten_dedup = of_func flatten_dedup ~name:"flatten-dedup"
+
+  let flatten_tuple r =
+    match r.node with
+    | ATuple (ts, k) ->
+        let ts =
+          List.concat_map ts ~f:(fun r' ->
+              match r'.node with
+              | ATuple (ts', k') when k = k' -> ts'
+              | _ -> [r'] )
+        in
+        Some (tuple ts k)
+    | _ -> None
+
+  let flatten_tuple = of_func flatten_tuple ~name:"flatten-tuple"
+
   let simplify =
     seq_many
       [ (* Drop constant filters if possible. *)
@@ -81,5 +110,7 @@ module Make (C : Config.S) = struct
                >>? Infix.(is_list || is_hash_idx || is_ordered_idx)
                >>| shallowest))
       ; for_all elim_depjoin Path.(all >>? is_depjoin)
-      ; for_all flatten_select Path.(all >>? is_select) ]
+      ; for_all flatten_select Path.(all >>? is_select)
+      ; for_all flatten_dedup Path.(all >>? is_dedup)
+      ; for_all flatten_tuple Path.(all >>? is_tuple) ]
 end

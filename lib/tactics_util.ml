@@ -1,53 +1,69 @@
-open Base
+open! Core
 open Castor
 open Abslayout
 open Collections
 
-(** Precise selection of all valuations of a list of predicates from a relation.
-   *)
-let all_values_precise ps r =
-  if Set.is_empty (free r) then Some (dedup (select ps r)) else None
+module Config = struct
+  module type S = sig
+    val conn : Db.t
+  end
+end
 
-(** Approximate selection of all valuations of a list of predicates from a
+module Make (Config : Config.S) = struct
+  open Config
+
+  (** Precise selection of all valuations of a list of predicates from a relation.
+   *)
+  let all_values_precise ps r =
+    if Set.is_empty (free r) then Ok (dedup (select ps r))
+    else Or_error.errorf "Predicate contains free variables."
+
+  let rec closure m =
+    let m' = Map.map m ~f:(Pred.subst m) in
+    if [%compare.equal: Pred.t Map.M(Name).t] m m' then m else closure m'
+
+  let group_by m ~f l =
+    List.fold_left ~init:(Map.empty m)
+      ~f:(fun m e -> Map.add_multi m ~key:(f e) ~data:e)
+      l
+
+  (** Approximate selection of all valuations of a list of predicates from a
    relation. Works if the relation is parameterized, but only when the
    predicates do not depend on those parameters. *)
-let all_values_approx ps r =
-  let exception Failed of Error.t in
-  let fail err = raise (Failed err) in
-  (* Otherwise, if all grouping keys are from named relations,
-             select all possible grouping keys. *)
-  let rels = Hashtbl.create (module Abslayout) in
-  let alias_map = aliases r in
-  try
+  let all_values_approx ps r =
+    let open Or_error.Let_syntax in
+    (* Otherwise, if all grouping keys are from named relations, select all
+     possible grouping keys. *)
+    let alias_map = aliases r |> closure in
     (* Find the definition of each key and collect all the names in that
-               definition. If they all come from base relations, then we can
-               enumerate the keys. *)
-    List.iter ps ~f:(fun p ->
-        Set.iter (Pred.names p) ~f:(fun n ->
-            let r_name =
-              match Name.rel n with
-              | Some r -> r
+       definition. If they all come from base relations, then we can enumerate
+       the keys. *)
+    let preds = List.map ps ~f:(Pred.subst alias_map) in
+    let%map rels =
+      List.map preds ~f:(fun p ->
+          List.map
+            (Pred.names p |> Set.to_list)
+            ~f:(fun n ->
+              match Db.relation_has_field conn (Name.name n) with
+              | Some r -> Ok (r, n)
               | None ->
-                  fail
-                    (Error.create "Name does not come from base relation." n
-                       [%sexp_of: Name.t])
-            in
-            (* Look up relation in alias table. *)
-            let r =
-              match Map.find alias_map r_name with
-              | Some r -> r
-              | None ->
-                  fail (Error.create "Unknown relation." n [%sexp_of: Name.t])
-            in
-            Hashtbl.add_multi rels ~key:r ~data:(Name n) ) ) ;
-    Hashtbl.to_alist rels
-    |> List.map ~f:(fun (r, ns) -> dedup (select ns r))
+                  Or_error.error "Name does not come from base relation." n
+                    [%sexp_of: Name.t] )
+          |> Or_error.all )
+      |> Or_error.all
+    in
+    List.concat rels
+    |> List.map ~f:(fun (r, n) -> (r.r_name, n))
+    |> Map.of_alist_multi (module String)
+    |> Map.to_alist
+    |> List.map ~f:(fun (r, ns) ->
+           dedup
+             (select
+                (List.map ns ~f:(fun n -> Name n))
+                (relation (Db.relation conn r))) )
     |> List.fold_left1_exn ~f:(join (Bool true))
-    |> Option.some
-  with Failed err ->
-    Logs.info (fun m -> m "%a" Error.pp err) ;
-    None
+    |> select preds
 
-let all_values ps r =
-  List.find_map [all_values_precise; all_values_approx] ~f:(fun to_vs ->
-      to_vs ps r )
+  let all_values ps r =
+    Or_error.find_ok [all_values_precise ps r; all_values_approx ps r]
+end
