@@ -23,13 +23,13 @@ module Make (Config : Config.S) = struct
   module Query = struct
     [@@@warning "-17"]
 
-    type t =
+    type 'q t =
       | Empty
-      | Query of (Abslayout.t[@name "abslayout"])
+      | Query of 'q
       | Scalars of (Pred.t[@name "pred"]) list
-      | Concat of t list
-      | For of (Abslayout.t[@name "abslayout"]) * string * t
-      | Let of (string * t) list * t
+      | Concat of 'q t list
+      | For of 'q * string * 'q t
+      | Let of (string * 'q t) list * 'q t
       | Var of string
     [@@deriving
       visitors {variety= "reduce"}
@@ -53,7 +53,7 @@ module Make (Config : Config.S) = struct
                 | Some s' -> not (List.mem ss s' ~equal:String.( = ))
                 | None -> true )
 
-          method visit_abslayout () q = self#visit_names () (names q)
+          method visit_'q () q = self#visit_names () (names q)
 
           method visit_pred () p = self#visit_names () (Pred.names p)
 
@@ -73,7 +73,7 @@ module Make (Config : Config.S) = struct
 
           method visit_pred _ x = (x, self#zero)
 
-          method visit_abslayout _ x = (x, self#zero)
+          method visit_'q _ x = (x, self#zero)
 
           method! visit_For ss r s q =
             let q', binds = self#visit_t (s :: ss) q in
@@ -95,7 +95,7 @@ module Make (Config : Config.S) = struct
 
           method visit_pred _ x = x
 
-          method visit_abslayout _ x = x
+          method visit_'q _ x = x
 
           method! visit_For ss r s q =
             let ss = s :: ss in
@@ -106,9 +106,23 @@ module Make (Config : Config.S) = struct
         end
       in
       visitor#visit_t [] q
+
+    let to_width q =
+      let visitor =
+        object
+          inherit [_] map
+
+          method visit_'q () q = List.length (schema_exn q)
+
+          method visit_pred () x = x
+        end
+      in
+      visitor#visit_t () q
   end
 
   module Q = Query
+
+  module Stripped_query = struct end
 
   module Ctx = struct
     type t =
@@ -127,11 +141,11 @@ module Make (Config : Config.S) = struct
     let open Query in
     function
     | Empty | Var _ -> 0
-    | For (q1, _, q2) -> List.length (schema_exn q1) + width q2
+    | For (n, _, q2) -> n + width q2
     | Scalars ps -> List.length ps
     | Concat qs -> 1 + List.sum (module Int) qs ~f:width
     | Let (binds, q) -> width (to_concat binds q)
-    | Query q -> List.length (schema_exn q)
+    | Query n -> n
 
   let total_order_key q =
     let native_order = Abslayout.order_of q in
@@ -340,9 +354,8 @@ module Make (Config : Config.S) = struct
         Gen.junk tups ;
         let q, strm = Map.find_exn ctx n in
         eval ctx (strm ()) q
-    | Q.For (q1, _, q2) ->
+    | Q.For (n, _, q2) ->
         let extract_tup1, drop_tup1 =
-          let n = List.length (schema_exn q1) in
           ((fun t -> List.take t n), fun t -> List.drop t n)
         in
         let eq t1 t2 =
@@ -395,7 +408,7 @@ module Make (Config : Config.S) = struct
         (Sql.to_string_hum sql)
       |> Gen.map ~f:Array.to_list
     in
-    eval (Map.empty (module String)) tups q
+    eval (Map.empty (module String)) tups (Q.to_width q)
 
   class virtual ['ctx, 'a] unsafe_material_fold =
     object (self)
