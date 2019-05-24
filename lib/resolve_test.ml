@@ -44,9 +44,19 @@ let%expect_test "" =
   [%expect
     {|
       select([l_receiptdate@run],
-        alist(join((o_orderkey@comp = l_orderkey@comp), lineitem#, orders#)# as k#,
-          atuple([ascalar(k.l_orderkey@comp)#,
-                  ascalar(k.l_commitdate@comp)#,
-                  ascalar(k.l_receiptdate@comp)#,
-                  ascalar(k.o_comment@comp)#],
-            cross)#)#)# |}]
+        alist(join((o_orderkey@comp = l_orderkey@comp),
+                lineitem#{l_commitdate=1, l_orderkey=2, l_receiptdate=1, },
+                orders#{o_comment=1, o_orderkey=1, })#{l_commitdate=1,
+                                                        l_orderkey=1,
+                                                        l_receiptdate=1,
+                                                        o_comment=1,
+                                                        } as k#{k.l_commitdate=1,
+                                                                 k.l_orderkey=1,
+                                                                 k.l_receiptdate=1,
+                                                                 k.o_comment=1,
+                                                                 },
+          atuple([ascalar(k.l_orderkey@comp)#{},
+                  ascalar(k.l_commitdate@comp)#{},
+                  ascalar(k.l_receiptdate@comp)#{l_receiptdate=1, },
+                  ascalar(k.o_comment@comp)#{}],
+            cross)#{l_receiptdate=1, })#{l_receiptdate=1, })#{l_receiptdate=1, } |}]

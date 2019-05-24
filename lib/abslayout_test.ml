@@ -68,6 +68,71 @@ let%test_module _ =
       in
       Exn.handle_uncaught ~exit:false run
 
+    let%expect_test "" =
+      run_print_test "alist(r1 as k, alist(r1 as j, ascalar(j.f)))" ;
+      [%expect {|
+        List
+        List key: ((Int 1) (Int 2))
+        List
+        List key: ((Int 1) (Int 2))
+        Scalar: (Int 1)
+        List key: ((Int 1) (Int 3))
+        Scalar: (Int 1)
+        List key: ((Int 2) (Int 1))
+        Scalar: (Int 2)
+        List key: ((Int 2) (Int 2))
+        Scalar: (Int 2)
+        List key: ((Int 3) (Int 4))
+        Scalar: (Int 3)
+        List key: ((Int 1) (Int 3))
+        List
+        List key: ((Int 1) (Int 2))
+        Scalar: (Int 1)
+        List key: ((Int 1) (Int 3))
+        Scalar: (Int 1)
+        List key: ((Int 2) (Int 1))
+        Scalar: (Int 2)
+        List key: ((Int 2) (Int 2))
+        Scalar: (Int 2)
+        List key: ((Int 3) (Int 4))
+        Scalar: (Int 3)
+        List key: ((Int 2) (Int 1))
+        List
+        List key: ((Int 1) (Int 2))
+        Scalar: (Int 1)
+        List key: ((Int 1) (Int 3))
+        Scalar: (Int 1)
+        List key: ((Int 2) (Int 1))
+        Scalar: (Int 2)
+        List key: ((Int 2) (Int 2))
+        Scalar: (Int 2)
+        List key: ((Int 3) (Int 4))
+        Scalar: (Int 3)
+        List key: ((Int 2) (Int 2))
+        List
+        List key: ((Int 1) (Int 2))
+        Scalar: (Int 1)
+        List key: ((Int 1) (Int 3))
+        Scalar: (Int 1)
+        List key: ((Int 2) (Int 1))
+        Scalar: (Int 2)
+        List key: ((Int 2) (Int 2))
+        Scalar: (Int 2)
+        List key: ((Int 3) (Int 4))
+        Scalar: (Int 3)
+        List key: ((Int 3) (Int 4))
+        List
+        List key: ((Int 1) (Int 2))
+        Scalar: (Int 1)
+        List key: ((Int 1) (Int 3))
+        Scalar: (Int 1)
+        List key: ((Int 2) (Int 1))
+        Scalar: (Int 2)
+        List key: ((Int 2) (Int 2))
+        Scalar: (Int 2)
+        List key: ((Int 3) (Int 4))
+        Scalar: (Int 3) |}]
+
     let%expect_test "sum-complex" =
       run_print_test sum_complex ;
       [%expect

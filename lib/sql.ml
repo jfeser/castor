@@ -102,6 +102,12 @@ let order_by of_ralgebra key r =
   let key =
     let ctx = make_ctx (schema_exn r) spj.select in
     List.map key ~f:(fun (p, o) -> (Pred.subst ctx p, o))
+    |> List.filter ~f:(fun (p, _) ->
+           match p with
+           | Name _ | As_pred (Name _, _) -> true
+           | _ ->
+               Log.warn (fun m -> m "Non-name in order-by: %a" Pred.pp p) ;
+               false )
   in
   Query {spj with order= key}
 
