@@ -126,29 +126,19 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
 
   class serializer ?(size = 1024) () =
     object (self : 'self)
-      val writer = Faraday.create size
+      val buf = Buffer.create size
 
-      val mutable pos = 0
+      method buf = buf
 
-      method writer = writer
+      method pos = Buffer.length buf
 
-      method pos = pos
-
-      method write_string s =
-        pos <- pos + String.length s ;
-        Faraday.write_string self#writer s
-
-      method schedule_bigstring s =
-        pos <- pos + Bigstringaf.length s ;
-        Faraday.schedule_bigstring self#writer s
+      method write_string s = Buffer.add_string buf s
 
       method write_into (s : 'self) =
         if s = self then failwith "Cannot write into self." ;
-        s#schedule_bigstring (Faraday.serialize_to_bigstring self#writer)
+        Buffer.add_buffer s#buf self#buf
 
-      method write_into_channel ch =
-        Out_channel.output_string ch
-          (Bigstringaf.to_string (Faraday.serialize_to_bigstring self#writer))
+      method write_into_channel ch = Out_channel.output_buffer ch self#buf
     end
 
   type msg = {msg: string; pos: int; len: int}
@@ -157,9 +147,11 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
     object (self : 'self)
       inherit serializer ?size () as super
 
-      val msgs = Bag.create ()
+      val mutable msgs = []
 
       method msgs = msgs
+
+      method set_msgs m = msgs <- m
 
       method log : 'a. string -> f:(unit -> 'a) -> 'a =
         fun msg ~f -> self#logf (fun m -> m "%s" msg) ~f
@@ -171,18 +163,18 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           if debug then (
             let start = self#pos in
             let ret = f () in
-            Bag.add_unit msgs
-              {pos= start; len= self#pos - start; msg= msgf Format.sprintf} ;
+            let m = {pos= start; len= self#pos - start; msg= msgf Format.sprintf} in
+            msgs <- m :: msgs ;
             ret )
           else f ()
 
       method! write_into (s : 'self) =
         let pos = s#pos in
         super#write_into s ;
-        Bag.until_empty msgs (fun m -> Bag.add_unit s#msgs {m with pos= m.pos + pos})
+        s#set_msgs (s#msgs @ List.map msgs ~f:(fun m -> {m with pos= m.pos + pos}))
 
       method render ch =
-        Bag.to_list msgs
+        msgs
         |> List.sort ~compare:(fun m1 m2 ->
                [%compare: int * int] (m1.pos, -m1.len) (m2.pos, -m2.len) )
         |> List.iter ~f:(fun m ->
@@ -199,7 +191,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
       method list meta _ =
         let t = Meta.Direct.find_exn meta Meta.type_ in
         let init = return (new logged_serializer (), 0) in
-        let fold acc (_, _, vp) =
+        let fold acc (_, vp) =
           let%lwt body, count = acc and v = vp in
           v#write_into body ;
           return (body, count + 1)
@@ -246,7 +238,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
             ~f:(fun () ->
               main#write_string (of_int ~byte_width:(size_exn hdr "len") len) ) ;
           (* Serialize body *)
-          body#write_into main ;
+          main#log "Tuple body" ~f:(fun () -> body#write_into main) ;
           return main
         in
         M.Fold.(Fold {init; fold; extract})
@@ -441,27 +433,21 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
             | Bool x -> self#serialize_bool main type_ x
             | String x -> self#serialize_string main type_ x ) ;
         return main
-      (* method! visit_t s ectx layout =
-       *   (\* Update position metadata in layout. *\)
-       *   let pos = s#pos in
-       *   Meta.update layout Meta.pos ~f:(function
-       *     | Some (Pos pos' as p) -> if pos = pos' then p else Many_pos
-       *     | Some Many_pos -> Many_pos
-       *     | None -> Pos pos ) ;
-       *   super#visit_t s
-         ectx layout *)
     end
 
-  let serialize fd l =
+  let set_pos r pos =
+    Meta.update r Meta.pos ~f:(function
+      | Some (Pos pos' as p) -> if pos = pos' then p else Many_pos
+      | Some Many_pos -> Many_pos
+      | None -> Pos pos )
+
+  let serialize ch l =
     let open Lwt_main in
     Log.info (fun m -> m "Serializing abstract layout.") ;
     let serializer = new logged_serializer () in
-    let write =
-      let writev = Faraday_lwt_unix.writev_of_fd (Lwt_unix.of_unix_file_descr fd) in
-      Faraday_lwt.serialize serializer#writer ~yield:(fun _ -> yield ()) ~writev
-    in
     let serialize =
       (* Serialize the main layout. *)
+      set_pos l serializer#pos ;
       let s =
         ref
           (let%lwt w = (new serialize_fold)#run l in
@@ -473,6 +459,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           inherit Abslayout0.runtime_subquery_visitor
 
           method visit_Subquery r =
+            set_pos r serializer#pos ;
             s :=
               let%lwt () = !s in
               let%lwt w = (new serialize_fold)#run r in
@@ -481,9 +468,10 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
       in
       subquery_visitor#visit_t () l ;
       let%lwt () = !s in
-      return (Faraday.close serializer#writer)
+      return ()
     in
-    run (join [write; serialize]) ;
+    run serialize ;
+    serializer#write_into_channel ch ;
     Option.iter layout_file ~f:(fun f ->
         Out_channel.with_file f ~f:serializer#render ) ;
     let len = serializer#pos in

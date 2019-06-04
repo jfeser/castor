@@ -375,6 +375,7 @@ module Make (Config : Config.S) = struct
               fun t ->
                 let (Fold {init; fold; extract}) = self#tuple m x in
                 List.fold2_exn xs t ~init ~f:(fun acc r v ->
+                    let m = r.meta in
                     match r.node with
                     | AScalar p -> fold acc (self#scalar m p v)
                     | _ -> failwith "Expected a scalar tuple." )
@@ -384,13 +385,24 @@ module Make (Config : Config.S) = struct
               let g = self#scalars {a with meta= child} in
               fun t -> f (g t)
 
-      method private for_ : (int, A.t) Q.t -> (Value.t list * 'a * 'a, 'a) Fold.t =
+      method private for_
+          : (int, A.t) Q.t -> (Value.t list * 'a option * 'a, 'a) Fold.t =
         fun a ->
           let m = a.Q.meta.A.meta in
           match a.Q.meta.A.node with
-          | AList x -> self#list m x
-          | AHashIdx x -> self#hash_idx m x
-          | AOrderedIdx x -> self#ordered_idx m x
+          | AList x ->
+              let (Fold g) = self#list m x in
+              Fold {g with fold= (fun a (x, _, z) -> g.fold a (x, z))}
+          | AHashIdx x ->
+              let (Fold g) = self#hash_idx m x in
+              Fold
+                { g with
+                  fold= (fun a (x, y, z) -> g.fold a (x, Option.value_exn y, z)) }
+          | AOrderedIdx x ->
+              let (Fold g) = self#ordered_idx m x in
+              Fold
+                { g with
+                  fold= (fun a (x, y, z) -> g.fold a (x, Option.value_exn y, z)) }
           | _ ->
               let f, child = self#func a in
               let (Fold g) = self#for_ {a with meta= child} in
@@ -408,21 +420,17 @@ module Make (Config : Config.S) = struct
               let (Fold g) = self#concat {a with meta= child} in
               Fold {g with extract= (fun acc -> f (g.extract acc))}
 
-      method private to_lhs q =
+      method private key_layout q =
         match q.node with
-        | AHashIdx x -> A.h_key_layout x
-        | AOrderedIdx (_, _, x) -> A.o_key_layout x
-        | AList (q, _) ->
-            A.tuple
-              (A.schema_exn q |> List.map ~f:(fun n -> A.scalar (Name n)))
-              A.Cross
+        | AHashIdx x -> Some (A.h_key_layout x)
+        | AOrderedIdx (_, _, x) -> Some (A.o_key_layout x)
         | Select (_, q')
          |Filter (_, q')
          |Dedup q'
          |OrderBy {rel= q'; _}
          |GroupBy (_, _, q') ->
-            self#to_lhs q'
-        | _ -> failwith "No lhs."
+            self#key_layout q'
+        | _ -> None
 
       method private eval_for lctx tups a (n, _, q2) =
         let fold = self#for_ a in
@@ -436,7 +444,10 @@ module Make (Config : Config.S) = struct
                let%map lhs = ts |> List.hd in
                let lhs = Tuple.T2.get1 lhs in
                let rhs = ts |> Gen.of_list |> Gen.map ~f:Tuple.T2.get2 in
-               let lval = self#scalars {a with meta= self#to_lhs a.Q.meta} lhs in
+               let lval =
+                 Option.map (self#key_layout a.Q.meta) ~f:(fun l ->
+                     self#scalars {a with meta= l} lhs )
+               in
                let rval = self#eval lctx rhs q2 in
                (lhs, lval, rval) )
         |> run_gen fold
@@ -638,15 +649,23 @@ module Make (Config : Config.S) = struct
 
       method list _ (_, elem_l) =
         let init = (least_general_of_layout elem_l, 0) in
-        let fold (t, c) (_, _, t') = (T.unify_exn t t', c + 1) in
+        let fold (t, c) (_, t') = (T.unify_exn t t', c + 1) in
         let extract (elem_type, num_elems) =
           T.ListT (elem_type, {count= T.AbsInt.of_int num_elems})
         in
         Fold {init; fold; extract}
 
       method tuple _ (_, kind) =
-        (** FIXME *)
-        let init = (T.AbsInt.of_int 1, []) in
+        let init =
+          let c =
+            (* Use the right identity element. *)
+            match kind with
+            | Zip -> T.AbsInt.Bottom
+            | Concat -> T.AbsInt.of_int 0
+            | Cross -> T.AbsInt.of_int 1
+          in
+          (c, [])
+        in
         let fold (c, ts) t =
           let c' =
             match kind with

@@ -31,7 +31,18 @@ let%test_module _ =
                       @ v )
                 ; extract= (fun x -> x) })
 
-          method list _ _ = self#collection "List"
+          method list _ _ =
+            let kind = "List" in
+            M.Fold.(
+              Fold
+                { init= [kind]
+                ; fold=
+                    (fun msgs (k, v) ->
+                      msgs
+                      @ [ sprintf "%s key: %s" kind
+                            ([%sexp_of: Value.t list] k |> Sexp.to_string_hum) ]
+                      @ v )
+                ; extract= (fun x -> x) })
 
           method hash_idx _ _ = self#collection "HashIdx"
 

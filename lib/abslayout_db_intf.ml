@@ -32,7 +32,7 @@ module type S = sig
 
       method virtual tuple : Meta.t -> t list * tuple -> ('a, 'a) Fold.t
 
-      method virtual list : Meta.t -> t * t -> (Value.t list * 'a * 'a, 'a) Fold.t
+      method virtual list : Meta.t -> t * t -> (Value.t list * 'a, 'a) Fold.t
 
       method virtual hash_idx :
         Meta.t -> hash_idx -> (Value.t list * 'a * 'a, 'a) Fold.t

@@ -745,10 +745,7 @@ struct
     let type_ = Meta.(find_exn r type_) in
     let r, len =
       if Config.code_only then (r, 0)
-      else
-        Unix.(
-          with_file data_fn ~mode:[O_WRONLY; O_CREAT; O_TRUNC] ~f:(fun fd ->
-              Serialize.serialize fd r ))
+      else Out_channel.(with_file data_fn ~f:(fun ch -> Serialize.serialize ch r))
     in
     { iters= !iters
     ; funcs= [printer ctx r type_; consumer ctx r type_]

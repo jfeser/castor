@@ -18,9 +18,7 @@ let run_test layout_str =
   M.annotate_type layout ;
   let type_ = Meta.(find_exn layout type_) in
   let _, len =
-    Unix.(
-      with_file layout_file ~mode:[O_WRONLY; O_CREAT; O_TRUNC] ~f:(fun fd ->
-          S.serialize fd layout ))
+    Out_channel.(with_file layout_file ~f:(fun ch -> S.serialize ch layout))
   in
   let buf_str = In_channel.read_all layout_file |> String.escaped in
   let layout_log, did_modify =
@@ -63,8 +61,8 @@ let%expect_test "tuple" =
     0:5 Tuple body
     0:1 Scalar (=(Int 1))
     0:0 Tuple len (=5)
-    1:4 String body
     1:4 Scalar (=(String test))
+    1:4 String body
     1:0 String length (=4)
 
     ((TupleT
@@ -109,17 +107,14 @@ let%expect_test "ordered-idx" =
     0:6 Ordered idx map
     0:1 Ordered idx key
     0:1 Scalar (=(Int 3))
-    0:1 Ordered idx key
     0:0 Ordered idx index len (=6)
     0:0 Ordered idx len (=9)
     1:1 Ordered idx ptr (=0)
     2:1 Ordered idx key
     2:1 Scalar (=(Int 2))
-    2:1 Ordered idx key
     3:1 Ordered idx ptr (=1)
     4:1 Ordered idx key
     4:1 Scalar (=(Int 1))
-    4:1 Ordered idx key
     5:1 Ordered idx ptr (=2)
     6:3 Ordered idx body
     6:1 Scalar (=(Int 3))
@@ -140,25 +135,20 @@ let%expect_test "ordered-idx-dates" =
     0:15 Ordered idx map
     0:2 Ordered idx key
     0:2 Scalar (=(Date 2018-09-01))
-    0:2 Ordered idx key
     0:0 Ordered idx index len (=15)
     0:0 Ordered idx len (=25)
     2:1 Ordered idx ptr (=0)
     3:2 Ordered idx key
     3:2 Scalar (=(Date 2018-01-23))
-    3:2 Ordered idx key
     5:1 Ordered idx ptr (=2)
     6:2 Ordered idx key
     6:2 Scalar (=(Date 2018-01-01))
-    6:2 Ordered idx key
     8:1 Ordered idx ptr (=4)
     9:2 Ordered idx key
     9:2 Scalar (=(Date 2017-10-05))
-    9:2 Ordered idx key
     11:1 Ordered idx ptr (=6)
     12:2 Ordered idx key
     12:2 Scalar (=(Date 2016-12-01))
-    12:2 Ordered idx key
     14:1 Ordered idx ptr (=8)
     15:10 Ordered idx body
     15:2 Scalar (=(Date 2018-09-01))
@@ -180,9 +170,9 @@ let%expect_test "list-list" =
     0:25 List body
     0:5 List body
     0:1 Scalar (=(Int 1))
+    0:0 List len (=25)
     0:0 List count (=5)
     0:0 List len (=5)
-    0:0 List len (=25)
     0:0 List count (=5)
     1:1 Scalar (=(Int 1))
     2:1 Scalar (=(Int 2))
@@ -190,32 +180,32 @@ let%expect_test "list-list" =
     4:1 Scalar (=(Int 3))
     5:5 List body
     5:1 Scalar (=(Int 1))
-    5:0 List count (=5)
     5:0 List len (=5)
+    5:0 List count (=5)
     6:1 Scalar (=(Int 1))
     7:1 Scalar (=(Int 2))
     8:1 Scalar (=(Int 2))
     9:1 Scalar (=(Int 3))
     10:5 List body
     10:1 Scalar (=(Int 1))
-    10:0 List count (=5)
     10:0 List len (=5)
+    10:0 List count (=5)
     11:1 Scalar (=(Int 1))
     12:1 Scalar (=(Int 2))
     13:1 Scalar (=(Int 2))
     14:1 Scalar (=(Int 3))
     15:5 List body
     15:1 Scalar (=(Int 1))
-    15:0 List count (=5)
     15:0 List len (=5)
+    15:0 List count (=5)
     16:1 Scalar (=(Int 1))
     17:1 Scalar (=(Int 2))
     18:1 Scalar (=(Int 2))
     19:1 Scalar (=(Int 3))
     20:5 List body
     20:1 Scalar (=(Int 1))
-    20:0 List count (=5)
     20:0 List len (=5)
+    20:0 List count (=5)
     21:1 Scalar (=(Int 1))
     22:1 Scalar (=(Int 2))
     23:1 Scalar (=(Int 2))
