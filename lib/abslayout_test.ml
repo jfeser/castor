@@ -17,45 +17,41 @@ let%test_module _ =
     let run_print_test ?params query =
       let print_fold =
         object (self)
-          inherit [_, _] M.unsafe_material_fold
+          inherit [_] M.abslayout_fold
 
-          method build_AList () _ (_, r) gen =
-            print_endline "List" ;
-            Gen.iter gen ~f:(fun (key, vctx) ->
-                printf "List key: %s\n"
-                  ([%sexp_of: Value.t list] key |> Sexp.to_string_hum) ;
-                self#visit_t () vctx r )
+          method collection kind =
+            M.Fold.(
+              Fold
+                { init= [kind]
+                ; fold=
+                    (fun msgs (k, _, v) ->
+                      msgs
+                      @ [ sprintf "%s key: %s" kind
+                            ([%sexp_of: Value.t list] k |> Sexp.to_string_hum) ]
+                      @ v )
+                ; extract= (fun x -> x) })
 
-          method build_AHashIdx () _ h vgen =
-            print_endline "HashIdx" ;
-            Gen.iter vgen ~f:(fun (key, vctx) ->
-                printf "HashIdx key: %s\n"
-                  ([%sexp_of: Value.t list] key |> Sexp.to_string_hum) ;
-                self#visit_t () vctx h.hi_values )
+          method list _ _ = self#collection "List"
 
-          method build_AOrderedIdx () _ (_, r, _) vgen =
-            print_endline "OrderedIdx" ;
-            Gen.iter vgen ~f:(fun (key, vctx) ->
-                printf "OrderedIdx key: %s\n"
-                  ([%sexp_of: Value.t list] key |> Sexp.to_string_hum) ;
-                self#visit_t () vctx r )
+          method hash_idx _ _ = self#collection "HashIdx"
 
-          method build_ATuple () _ (rs, _) ctxs =
-            print_endline "Tuple" ;
-            List.iter2_exn ctxs rs ~f:(self#visit_t ())
+          method ordered_idx _ _ = self#collection "OrderedIdx"
 
-          method build_AEmpty () _ = print_endline "Empty"
+          method tuple _ _ =
+            M.Fold.(
+              Fold
+                { init= ["Tuple"]
+                ; fold= (fun msgs v -> msgs @ v)
+                ; extract= (fun x -> x) })
 
-          method build_AScalar () _ _ v =
-            printf "Scalar: %s\n"
-              ([%sexp_of: Value.t] (Lazy.force v) |> Sexp.to_string_hum)
+          method empty _ = ["Empty"]
 
-          method build_Select () _ (_, r) ctx = self#visit_t () ctx r
+          method scalar _ _ v =
+            [sprintf "Scalar: %s" ([%sexp_of: Value.t] v |> Sexp.to_string_hum)]
 
-          method build_DepJoin () _ {d_lhs; d_rhs; _} (ctx1, ctx2) =
-            self#visit_t () ctx1 d_lhs ; self#visit_t () ctx2 d_rhs
+          method depjoin _ _ = ( @ )
 
-          method build_Filter () _ (_, r) ctx = self#visit_t () ctx r
+          method join _ _ = ( @ )
         end
       in
       let run () =
@@ -64,13 +60,14 @@ let%test_module _ =
               List.map p ~f:(fun (n, _) -> n) |> Set.of_list (module Name) )
         in
         let layout = M.load_string ?params:sparams query in
-        print_fold#run () layout
+        print_fold#run layout |> List.iter ~f:print_endline
       in
       Exn.handle_uncaught ~exit:false run
 
     let%expect_test "" =
       run_print_test "alist(r1 as k, alist(r1 as j, ascalar(j.f)))" ;
-      [%expect {|
+      [%expect
+        {|
         List
         List key: ((Int 1) (Int 2))
         List

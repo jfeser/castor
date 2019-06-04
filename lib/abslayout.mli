@@ -76,13 +76,19 @@ and relation = Abslayout0.relation = {r_name: string; r_schema: Name.t list opti
 and depjoin = Abslayout0.depjoin = {d_lhs: t; d_alias: string; d_rhs: t}
 [@@deriving compare, hash, sexp_of]
 
+and join = Abslayout0.join = {pred: pred; r1: t; r2: t}
+[@@deriving compare, hash, sexp_of]
+
+and order_by = Abslayout0.order_by = {key: (pred * order) list; rel: t}
+[@@deriving compare, hash, sexp_of]
+
 and node = Abslayout0.node =
   | Select of (pred list * t)
   | Filter of (pred * t)
-  | Join of {pred: pred; r1: t; r2: t}
+  | Join of join
   | DepJoin of depjoin
-  | GroupBy of pred list * Name.t list * t
-  | OrderBy of {key: (pred * order) list; rel: t}
+  | GroupBy of (pred list * Name.t list * t)
+  | OrderBy of order_by
   | Dedup of t
   | Relation of relation
   | AEmpty

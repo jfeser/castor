@@ -626,8 +626,8 @@ let annotate_eq r =
         in
         Meta.Direct.set_m m Meta.eq eqs
 
-      method! visit_Join m p r1 r2 =
-        super#visit_Join None p r1 r2 ;
+      method! visit_Join m ({pred= p; r1; r2} as j) =
+        super#visit_Join None j ;
         let m = Option.value_exn m in
         let r1_eqs = Meta.(find_exn r1 eq) in
         let r2_eqs = Meta.(find_exn r2 eq) in
@@ -873,7 +873,7 @@ let ensure_alias r =
           ( List.map ps ~f:(fun p -> p |> self#visit_pred () |> Pred.ensure_alias)
           , self#visit_t () r )
 
-      method! visit_GroupBy () _ ps k r =
+      method! visit_GroupBy () _ (ps, k, r) =
         GroupBy
           ( List.map ps ~f:(fun p -> p |> self#visit_pred () |> Pred.ensure_alias)
           , k

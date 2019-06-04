@@ -2,10 +2,6 @@ open! Core
 open Abslayout
 
 module type S = sig
-  module Ctx : sig
-    type t
-  end
-
   val type_of : t -> Type.t
 
   val annotate_type : t -> unit
@@ -14,67 +10,47 @@ module type S = sig
 
   val load_string : ?params:Set.M(Name).t -> string -> t
 
-  val to_ctx : Value.t list -> Ctx.t
+  module Fold : sig
+    type ('a, 'b, 'c) fold = {init: 'b; fold: 'b -> 'a -> 'b; extract: 'b -> 'c}
 
-  class virtual ['ctx, 'a] unsafe_material_fold :
+    type ('a, 'c) t = Fold : ('a, 'b, 'c) fold -> ('a, 'c) t
+
+    val run : ('a, 'c) t -> 'a list -> 'c
+
+    val run_gen : ('a, 'c) t -> 'a Gen.t -> 'c
+  end
+
+  class virtual ['a] abslayout_fold :
     object
-      method virtual private build_AList :
-        'ctx -> Meta.t -> t * t -> (Value.t list * Ctx.t) Gen.t -> 'a
+      method virtual empty : Meta.t -> 'a
 
-      method virtual private build_ATuple :
-        'ctx -> Meta.t -> t list * tuple -> Ctx.t list -> 'a
+      method virtual scalar : Meta.t -> pred -> Value.t -> 'a
 
-      method virtual private build_AHashIdx :
-        'ctx -> Meta.t -> hash_idx -> (Value.t list * Ctx.t) Gen.t -> 'a
+      method virtual join : Meta.t -> join -> 'a -> 'a -> 'a
 
-      method virtual private build_AOrderedIdx :
-        'ctx -> Meta.t -> t * t * ordered_idx -> (Value.t list * Ctx.t) Gen.t -> 'a
+      method virtual depjoin : Meta.t -> depjoin -> 'a -> 'a -> 'a
 
-      method virtual private build_AEmpty : 'ctx -> Meta.t -> 'a
+      method virtual tuple : Meta.t -> t list * tuple -> ('a, 'a) Fold.t
 
-      method virtual private build_AScalar :
-        'ctx -> Meta.t -> pred -> Value.t Lazy.t -> 'a
-
-      method virtual private build_DepJoin :
-        'ctx -> Meta.t -> depjoin -> Ctx.t * Ctx.t -> 'a
-
-      method virtual private build_Select :
-        'ctx -> Meta.t -> pred list * t -> Ctx.t -> 'a
-
-      method virtual private build_Filter :
-        'ctx -> Meta.t -> pred * t -> Ctx.t -> 'a
-
-      method private visit_t : 'ctx -> Ctx.t -> t -> 'a
-
-      method run : 'ctx -> t -> 'a
-    end
-
-  type ('i, 'a, 'v, 'o) fold = {pre: 'i -> 'a; body: 'a -> 'v -> 'a; post: 'a -> 'o}
-
-  class virtual ['out, 'l, 'h, 'o] material_fold :
-    object
-      method virtual list :
-        Meta.t -> t * t -> (unit, 'l, Value.t list * 'out, 'out) fold
+      method virtual list : Meta.t -> t * t -> (Value.t list * 'a * 'a, 'a) Fold.t
 
       method virtual hash_idx :
-        Meta.t -> hash_idx -> (unit, 'h, 'out * 'out, 'out) fold
+        Meta.t -> hash_idx -> (Value.t list * 'a * 'a, 'a) Fold.t
 
       method virtual ordered_idx :
-        Meta.t -> t * t * ordered_idx -> (unit, 'o, 'out * 'out, 'out) fold
+        Meta.t -> t * t * ordered_idx -> (Value.t list * 'a * 'a, 'a) Fold.t
 
-      method virtual tuple : Meta.t -> t list * tuple -> 'out list -> 'out
+      method dedup : Meta.t -> 'a -> 'a
 
-      method virtual empty : Meta.t -> 'out
+      method filter : Meta.t -> pred * t -> 'a -> 'a
 
-      method virtual scalar : Meta.t -> pred -> Value.t -> 'out
+      method group_by : Meta.t -> pred list * Name.t list * t -> 'a -> 'a
 
-      method virtual depjoin : Meta.t -> depjoin -> 'out -> 'out -> 'out
+      method order_by : Meta.t -> order_by -> 'a -> 'a
 
-      method virtual select : Meta.t -> pred list * t -> 'out -> 'out
+      method select : Meta.t -> pred list * t -> 'a -> 'a
 
-      method virtual filter : Meta.t -> pred * t -> 'out -> 'out
-
-      method run : unit -> t -> 'out
+      method run : t -> 'a
     end
 
   val annotate_relations : t -> t

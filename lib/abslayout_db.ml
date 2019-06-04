@@ -1,7 +1,8 @@
 open! Core
 open Collections
-open Abslayout
 open Abslayout0
+module A = Abslayout
+module T = Type
 
 module type S = Abslayout_db_intf.S
 
@@ -9,205 +10,217 @@ module Config = struct
   module type S = sig
     val conn : Db.t
 
-    val simplify : (t -> t) option
+    val simplify : (A.t -> A.t) option
 
     include Project.Config.S
   end
 end
 
-module Make (Config : Config.S) = struct
-  module P = Project.Make (Config)
-  module R = Resolve.Make (Config)
-  open Config
+module Query = struct
+  [@@@warning "-17"]
 
-  module Query = struct
-    [@@@warning "-17"]
+  type ('q, 'm) node =
+    | Empty
+    | Scalars of (A.Pred.t[@name "pred"]) list
+    | Concat of ('q, 'm) t list
+    | For of ('q * string * ('q, 'm) t)
+    | Let of ((string * ('q, 'm) t) list * ('q, 'm) t)
+    | Var of string
 
-    type 'q t =
-      | Empty
-      | Query of 'q
-      | Scalars of (Pred.t[@name "pred"]) list
-      | Concat of 'q t list
-      | For of 'q * string * 'q t
-      | Let of (string * 'q t) list * 'q t
-      | Var of string
-    [@@deriving
-      visitors {variety= "reduce"}
-      , visitors {variety= "mapreduce"}
-      , visitors {variety= "map"}]
+  and ('q, 'm) t = {node: ('q, 'm) node; meta: 'm}
+  [@@deriving
+    visitors {variety= "reduce"}
+    , visitors {variety= "mapreduce"}
+    , visitors {variety= "map"}
+    , sexp_of]
 
-    [@@@warning "+17"]
+  [@@@warning "+17"]
 
-    (** A query is invariant in a set of scopes if it doesn't refer to any name
+  let empty c = {node= Empty; meta= c}
+
+  let scalars c p = {node= Scalars p; meta= c}
+
+  let concat c x = {node= Concat x; meta= c}
+
+  let for_ c x = {node= For x; meta= c}
+
+  let let_ c x = {node= Let x; meta= c}
+
+  let var c x = {node= Var x; meta= c}
+
+  let map_meta ~f q =
+    let visitor =
+      object
+        inherit [_] map
+
+        method visit_'m () = f
+
+        method visit_'q () x = x
+
+        method visit_pred () x = x
+      end
+    in
+    visitor#visit_t () q
+
+  (** A query is invariant in a set of scopes if it doesn't refer to any name
        in one of the scopes. *)
-    let is_invariant ss q =
-      let visitor =
-        object (self : 'self)
-          inherit [_] reduce
+  let is_invariant ss q =
+    let visitor =
+      object (self : 'self)
+        inherit [_] reduce
 
-          inherit [_] Util.conj_monoid
+        inherit [_] Util.conj_monoid
 
-          method visit_names () ns =
-            Set.for_all ns ~f:(fun n ->
-                match Name.rel n with
-                | Some s' -> not (List.mem ss s' ~equal:String.( = ))
-                | None -> true )
+        method visit_names () ns =
+          Set.for_all ns ~f:(fun n ->
+              match Name.rel n with
+              | Some s' -> not (List.mem ss s' ~equal:String.( = ))
+              | None -> true )
 
-          method visit_'q () q = self#visit_names () (names q)
+        method visit_'q () q = self#visit_names () (A.names q)
 
-          method visit_pred () p = self#visit_names () (Pred.names p)
+        method visit_'m () _ = self#zero
 
-          method! visit_Var () _ = false
+        method visit_pred () p = self#visit_names () (A.Pred.names p)
 
-          method! visit_Empty () = false
-        end
-      in
-      visitor#visit_t () q
+        method! visit_Var () _ = false
 
-    let hoist_invariant ss q =
-      let visitor =
-        object (self : 'self)
-          inherit [_] mapreduce as super
+        method! visit_Empty () = false
+      end
+    in
+    visitor#visit_t () q
 
-          inherit [_] Util.list_monoid
+  let hoist_invariant ss q =
+    let visitor =
+      object (self : 'self)
+        inherit [_] mapreduce as super
 
-          method visit_pred _ x = (x, self#zero)
+        inherit [_] Util.list_monoid
 
-          method visit_'q _ x = (x, self#zero)
+        method visit_'m _ x = (x, self#zero)
 
-          method! visit_For ss r s q =
-            let q', binds = self#visit_t (s :: ss) q in
-            (For (r, s, q'), binds)
+        method visit_pred _ x = (x, self#zero)
 
-          method! visit_t ss q =
-            if is_invariant ss q then
-              let n = Fresh.name Global.fresh "q%d" in
-              (Var n, [(n, q)])
-            else super#visit_t ss q
-        end
-      in
-      visitor#visit_t ss q
+        method visit_'q _ x = (x, self#zero)
 
-    let hoist_all q =
-      let visitor =
-        object (self : 'self)
-          inherit [_] map
+        method! visit_For ss (r, s, q) =
+          let q', binds = self#visit_t (s :: ss) q in
+          (For (r, s, q'), binds)
 
-          method visit_pred _ x = x
+        method! visit_t ss q =
+          if is_invariant ss q then
+            let n = Fresh.name Global.fresh "q%d" in
+            (var A.empty n, [(n, q)])
+          else super#visit_t ss q
+      end
+    in
+    visitor#visit_t ss q
 
-          method visit_'q _ x = x
+  let hoist_all q =
+    let visitor =
+      object (self : 'self)
+        inherit [_] map as super
 
-          method! visit_For ss r s q =
-            let ss = s :: ss in
-            let q', binds = hoist_invariant ss q in
-            match binds with
-            | [] -> For (r, s, self#visit_t ss q)
-            | _ -> Let (binds, For (r, s, self#visit_t ss q'))
-        end
-      in
-      visitor#visit_t [] q
+        method visit_pred _ x = x
 
-    let to_width q =
-      let visitor =
-        object
-          inherit [_] map
+        method visit_'q _ x = x
 
-          method visit_'q () q = List.length (schema_exn q)
+        method visit_'m _ x = x
 
-          method visit_pred () x = x
-        end
-      in
-      visitor#visit_t () q
-  end
+        method! visit_t ss q =
+          match q.node with
+          | For (r, s, q') -> (
+              let ss = s :: ss in
+              let q', binds = hoist_invariant ss q' in
+              match binds with
+              | [] -> for_ q.meta (r, s, self#visit_t ss q')
+              | _ -> let_ A.empty (binds, for_ q.meta (r, s, self#visit_t ss q')) )
+          | _ -> super#visit_t ss q
+      end
+    in
+    visitor#visit_t [] q
 
-  module Q = Query
+  let to_width q =
+    let visitor =
+      object
+        inherit [_] map
 
-  module Stripped_query = struct end
+        method visit_'q () q = List.length (A.schema_exn q)
 
-  module Ctx = struct
-    type t =
-      | Empty
-      | Query of Value.t list Gen.t
-      | Scalars of Value.t Lazy.t list
-      | Concat of t list
-      | For of (Value.t list * t) Gen.t
-  end
+        method visit_'m () x = x
 
-  module C = Ctx
-
-  let to_concat binds q = Q.Concat (List.map binds ~f:Tuple.T2.get2 @ [q])
-
-  let rec width =
-    let open Query in
-    function
-    | Empty | Var _ -> 0
-    | For (n, _, q2) -> n + width q2
-    | Scalars ps -> List.length ps
-    | Concat qs -> 1 + List.sum (module Int) qs ~f:width
-    | Let (binds, q) -> width (to_concat binds q)
-    | Query n -> n
+        method visit_pred () x = x
+      end
+    in
+    visitor#visit_t () q
 
   let total_order_key q =
     let native_order = Abslayout.order_of q in
-    let total_order = List.map (schema_exn q) ~f:(fun n -> (Name n, Asc)) in
+    let total_order = List.map (A.schema_exn q) ~f:(fun n -> (Name n, Asc)) in
     native_order @ total_order
 
   let to_scalars rs =
-    List.map rs ~f:(fun t -> match t.node with AScalar p -> Some p | _ -> None)
+    List.map rs ~f:(fun t -> match t.A.node with A.AScalar p -> Some p | _ -> None)
     |> Option.all
 
-  let to_ctx t = C.Scalars (List.map t ~f:Lazy.return)
-
-  let rec gen_query q =
-    let open Query in
-    match q.node with
+  let rec of_ralgebra q =
+    match q.A.node with
     | AList (q1, q2) ->
-        let scope = scope_exn q1 in
-        let q1 = strip_scope q1 in
+        let scope = A.scope_exn q1 in
+        let q1 = A.strip_scope q1 in
         let q1 =
           let order_key = total_order_key q1 in
-          order_by order_key q1
+          A.order_by order_key q1
         in
-        For (q1, scope, gen_query q2)
+        for_ q (q1, scope, of_ralgebra q2)
     | AHashIdx h ->
         let q1 =
           let order_key = total_order_key h.hi_keys in
-          order_by order_key (dedup h.hi_keys)
+          A.order_by order_key (A.dedup h.hi_keys)
         in
-        For (q1, h.hi_scope, gen_query h.hi_values)
+        for_ q (q1, h.hi_scope, of_ralgebra h.hi_values)
     | AOrderedIdx (q1, q2, _) ->
-        let scope = scope_exn q1 in
-        let q1 = strip_scope q1 in
+        let scope = A.scope_exn q1 in
+        let q1 = A.strip_scope q1 in
         let q1 =
           let order_key = total_order_key q1 in
-          order_by order_key (dedup q1)
+          A.order_by order_key (A.dedup q1)
         in
-        For (q1, scope, gen_query q2)
-    | AEmpty -> Empty
-    | AScalar p -> Scalars [p]
+        for_ q (q1, scope, of_ralgebra q2)
+    | AEmpty -> empty q
+    | AScalar p -> scalars q [p]
     | ATuple (ts, _) -> (
       match to_scalars ts with
-      | Some ps -> Scalars ps
-      | None -> Concat (List.map ~f:gen_query ts) )
-    | DepJoin {d_lhs; d_rhs; _} -> Concat [gen_query d_lhs; gen_query d_rhs]
-    | Select (_, q) | Filter (_, q) | As (_, q) -> gen_query q
-    | Relation _ | Dedup _ | OrderBy _ | GroupBy _ | Join _ ->
-        failwith "Unsupported."
+      | Some ps -> scalars q ps
+      | None -> concat q (List.map ~f:of_ralgebra ts) )
+    | DepJoin {d_lhs; d_rhs; _} -> concat q [of_ralgebra d_lhs; of_ralgebra d_rhs]
+    | Select (_, q')
+     |Filter (_, q')
+     |Dedup q'
+     |OrderBy {rel= q'; _}
+     |GroupBy (_, _, q') ->
+        {(of_ralgebra q') with meta= q}
+    | Relation _ | Join _ | As _ -> failwith "Unsupported."
+
+  let to_concat binds q = concat None (List.map binds ~f:Tuple.T2.get2 @ [q])
 
   let unwrap_order r =
-    match r.node with OrderBy {key; rel} -> (key, rel) | _ -> ([], r)
+    match r.A.node with A.OrderBy {key; rel} -> (key, rel) | _ -> ([], r)
 
-  let rec to_ralgebra =
-    let open Query in
-    function
-    | Var _ -> scalar (As_pred (Int 0, Fresh.name Global.fresh "var%d"))
-    | Let (binds, q) -> to_ralgebra (to_concat binds q)
+  let wrap q = map_meta ~f:Option.some q
+
+  let unwrap q = map_meta ~f:(fun m -> Option.value_exn m) q
+
+  let rec to_ralgebra' q =
+    match q.node with
+    | Var _ -> A.scalar (As_pred (Int 0, Fresh.name Global.fresh "var%d"))
+    | Let (binds, q) -> to_ralgebra' (to_concat binds q)
     | For (q1, scope, q2) ->
         let o1, q1 = unwrap_order q1 in
-        let o2, q2 = to_ralgebra q2 |> unwrap_order in
+        let o2, q2 = to_ralgebra' q2 |> unwrap_order in
         (* Generate a renaming so that the upward exposed names are fresh. *)
         let sctx =
-          (schema_exn q1 |> Schema.scoped scope) @ schema_exn q2
+          (A.schema_exn q1 |> Schema.scoped scope) @ A.schema_exn q2
           |> List.map ~f:(fun n ->
                  let n' = Fresh.name Global.fresh "x%d" in
                  (n, n') )
@@ -221,15 +234,16 @@ module Make (Config : Config.S) = struct
           (* The renaming refers to the scoped names from q1, so scope before
              renaming. *)
           let o1 =
-            List.map o1 ~f:(fun (p, o) -> (Pred.scoped (schema_exn q1) scope p, o))
+            List.map o1 ~f:(fun (p, o) ->
+                (A.Pred.scoped (A.schema_exn q1) scope p, o) )
           in
-          List.map (o1 @ o2) ~f:(fun (p, o) -> (Pred.subst sctx p, o))
+          List.map (o1 @ o2) ~f:(fun (p, o) -> (A.Pred.subst sctx p, o))
         in
-        order_by order (dep_join q1 scope (select slist q2))
+        A.order_by order (A.dep_join q1 scope (A.select slist q2))
     | Concat qs ->
         let counter_name = Fresh.name Global.fresh "counter%d" in
         let orders, qs =
-          List.map qs ~f:(fun q -> unwrap_order (to_ralgebra q)) |> List.unzip
+          List.map qs ~f:(fun q -> unwrap_order (to_ralgebra' q)) |> List.unzip
         in
         (* The queries in qs can have different schemas, so we need to normalize
          them. This means creating a select list that has the union of the
@@ -240,7 +254,7 @@ module Make (Config : Config.S) = struct
                 (* Add a counter so we know which query we're on. *)
                 As_pred (Int i, counter_name)
                 :: List.concat_mapi qs ~f:(fun j q' ->
-                       schema_exn q'
+                       A.schema_exn q'
                        |>
                        (* Take the names from this query's schema. *)
                        if i = j then List.map ~f:(fun n -> Name n)
@@ -250,53 +264,185 @@ module Make (Config : Config.S) = struct
                              As_pred (Null (Some (Name.type_exn n)), Name.name n) )
                    )
               in
-              select select_list q )
+              A.select select_list q )
         in
         let order = (Name (Name.create counter_name), Asc) :: List.concat orders in
-        order_by order (tuple queries_norm Concat)
-    | Empty -> empty
-    | Scalars ps -> tuple (List.map ps ~f:scalar) Cross
-    | Query q -> q
+        A.order_by order (A.tuple queries_norm A.Concat)
+    | Empty -> A.empty
+    | Scalars ps -> A.tuple (List.map ps ~f:A.scalar) Cross
+
+  let to_ralgebra q = wrap q |> to_ralgebra'
+
+  let rec width' q =
+    match q.node with
+    | Empty | Var _ -> 0
+    | For (n, _, q2) -> n + width' q2
+    | Scalars ps -> List.length ps
+    | Concat qs -> 1 + List.sum (module Int) qs ~f:width'
+    | Let (binds, q) -> width' (to_concat binds q)
+
+  let width q = wrap q |> width'
+end
+
+module Make (Config : Config.S) = struct
+  module P = Project.Make (Config)
+  module R = Resolve.Make (Config)
+  open Config
+  module Q = Query
 
   let simplify = Option.value simplify ~default:(fun r -> R.resolve r |> P.project)
 
-  let rec eval_concat ctx tups qs =
-    let tups = ref tups in
-    let put_back t = tups := Gen.append (Gen.singleton t) !tups in
-    let take_while pred =
-      let stop = ref false in
-      let next () =
-        if !stop then None
-        else
-          match Gen.get !tups with
-          | Some x ->
-              if pred x then Some x
-              else (
-                stop := true ;
-                put_back x ;
-                None )
-          | None -> None
-      in
-      next
-    in
-    let widths = List.map qs ~f:width in
-    let extract_counter tup = List.hd_exn tup |> Value.to_int in
-    let mk_extract_tuple ctr =
-      let take_ct = List.nth_exn widths ctr in
-      let drop_ct =
-        List.sum (module Int) (List.take widths ctr) ~f:(fun x -> x) + 1
-      in
-      fun tup -> List.take (List.drop tup drop_ct) take_ct
-    in
-    List.mapi qs ~f:(fun oidx q ->
-        let extract_tuple = mk_extract_tuple oidx in
-        let strm =
-          take_while (fun t -> extract_counter t = oidx) |> Gen.map ~f:extract_tuple
-        in
-        eval ctx strm q )
+  module Fold = struct
+    type ('a, 'b, 'c) fold = {init: 'b; fold: 'b -> 'a -> 'b; extract: 'b -> 'c}
 
-  and eval ctx tups = function
-    | Q.Let (binds, q) ->
+    type ('a, 'c) t = Fold : ('a, 'b, 'c) fold -> ('a, 'c) t
+
+    let run (Fold {init; fold; extract}) l =
+      List.fold_left l ~init ~f:fold |> extract
+
+    let run_gen (Fold {init; fold; extract}) l = Gen.fold l ~init ~f:fold |> extract
+  end
+
+  open Fold
+
+  let two_arg_fold f =
+    let init = [] in
+    let fold acc x =
+      if List.length acc < 2 then x :: acc else failwith "Unexpected concat size."
+    in
+    let extract acc =
+      match List.rev acc with [lhs; rhs] -> f lhs rhs | _ -> assert false
+    in
+    Fold {init; fold; extract}
+
+  class virtual ['a] abslayout_fold =
+    object (self)
+      method virtual list : _
+
+      method virtual hash_idx : _
+
+      method virtual ordered_idx : _
+
+      method virtual tuple : _
+
+      method virtual empty : _
+
+      method virtual scalar : _
+
+      method select _ _ x = x
+
+      method filter _ _ x = x
+
+      method virtual depjoin : _
+
+      method order_by _ _ x = x
+
+      method group_by _ _ x = x
+
+      method dedup _ x = x
+
+      method virtual join : _
+
+      method private func a =
+        let m = a.Q.meta.A.meta in
+        match a.Q.meta.A.node with
+        | Filter ((_, c) as x) -> (self#filter m x, c)
+        | Select ((_, c) as x) -> (self#select m x, c)
+        | OrderBy ({rel= c; _} as x) -> (self#order_by m x, c)
+        | GroupBy ((_, _, c) as x) -> (self#group_by m x, c)
+        | Dedup c -> (self#dedup m, c)
+        | x -> Error.(create "Expected a function." x [%sexp_of: A.node] |> raise)
+
+      method private qempty : (int, A.t) Q.t -> 'a =
+        fun a ->
+          let m = a.Q.meta.A.meta in
+          match a.Q.meta.A.node with
+          | AEmpty -> self#empty m
+          | _ ->
+              let f, child = self#func a in
+              f (self#qempty {a with meta= child})
+
+      method private scalars : (int, A.t) Q.t -> 't -> 'a =
+        fun a ->
+          let m = a.Q.meta.A.meta in
+          match a.Q.meta.A.node with
+          | AScalar x -> (
+              fun t ->
+                match t with
+                | [v] -> self#scalar m x v
+                | _ -> failwith "Expected a singleton tuple." )
+          | ATuple ((xs, _) as x) ->
+              fun t ->
+                let (Fold {init; fold; extract}) = self#tuple m x in
+                List.fold2_exn xs t ~init ~f:(fun acc r v ->
+                    match r.node with
+                    | AScalar p -> fold acc (self#scalar m p v)
+                    | _ -> failwith "Expected a scalar tuple." )
+                |> extract
+          | _ ->
+              let f, child = self#func a in
+              let g = self#scalars {a with meta= child} in
+              fun t -> f (g t)
+
+      method private for_ : (int, A.t) Q.t -> (Value.t list * 'a * 'a, 'a) Fold.t =
+        fun a ->
+          let m = a.Q.meta.A.meta in
+          match a.Q.meta.A.node with
+          | AList x -> self#list m x
+          | AHashIdx x -> self#hash_idx m x
+          | AOrderedIdx x -> self#ordered_idx m x
+          | _ ->
+              let f, child = self#func a in
+              let (Fold g) = self#for_ {a with meta= child} in
+              Fold {g with extract= (fun x -> f (g.extract x))}
+
+      method private concat : (int, A.t) Q.t -> ('a, 'a) Fold.t =
+        fun a ->
+          let m = a.Q.meta.A.meta in
+          match a.Q.meta.A.node with
+          | ATuple x -> self#tuple m x
+          | DepJoin x -> two_arg_fold (self#depjoin m x)
+          | Join x -> two_arg_fold (self#join m x)
+          | _ ->
+              let f, child = self#func a in
+              let (Fold g) = self#concat {a with meta= child} in
+              Fold {g with extract= (fun acc -> f (g.extract acc))}
+
+      method private to_lhs q =
+        match q.node with
+        | AHashIdx x -> A.h_key_layout x
+        | AOrderedIdx (_, _, x) -> A.o_key_layout x
+        | AList (q, _) ->
+            A.tuple
+              (A.schema_exn q |> List.map ~f:(fun n -> A.scalar (Name n)))
+              A.Cross
+        | Select (_, q')
+         |Filter (_, q')
+         |Dedup q'
+         |OrderBy {rel= q'; _}
+         |GroupBy (_, _, q') ->
+            self#to_lhs q'
+        | _ -> failwith "No lhs."
+
+      method private eval_for lctx tups a (n, _, q2) =
+        let fold = self#for_ a in
+        let split_tup t = List.split_n t n in
+        Gen.map tups ~f:split_tup
+        |> Gen.group_eager (fun (t1, _) (t2, _) ->
+               [%compare.equal: Value.t list] t1 t2 )
+        |> Gen.filter_map ~f:(fun ts ->
+               let open Option.Let_syntax in
+               let ts = List.rev ts in
+               let%map lhs = ts |> List.hd in
+               let lhs = Tuple.T2.get1 lhs in
+               let rhs = ts |> Gen.of_list |> Gen.map ~f:Tuple.T2.get2 in
+               let lval = self#scalars {a with meta= self#to_lhs a.Q.meta} lhs in
+               let rval = self#eval lctx rhs q2 in
+               (lhs, lval, rval) )
+        |> run_gen fold
+
+      method private eval_concat lctx tups a qs =
+        let (Fold {init; fold; extract}) = self#concat a in
         let tups = ref tups in
         let put_back t = tups := Gen.append (Gen.singleton t) !tups in
         let take_while pred =
@@ -315,7 +461,61 @@ module Make (Config : Config.S) = struct
           in
           next
         in
-        let widths = List.map binds ~f:(fun (_, q) -> width q) @ [width q] in
+        let widths = List.map qs ~f:Q.width in
+        let extract_counter tup = List.hd_exn tup |> Value.to_int in
+        let mk_extract_tuple ctr =
+          let take_ct = List.nth_exn widths ctr in
+          let drop_ct =
+            List.sum (module Int) (List.take widths ctr) ~f:(fun x -> x) + 1
+          in
+          fun tup -> List.take (List.drop tup drop_ct) take_ct
+        in
+        List.foldi ~init qs ~f:(fun oidx acc q ->
+            let extract_tuple = mk_extract_tuple oidx in
+            let strm =
+              take_while (fun t -> extract_counter t = oidx)
+              |> Gen.map ~f:extract_tuple
+            in
+            fold acc (self#eval lctx strm q) )
+        |> extract
+
+      method private eval_scalars _ tups a ps =
+        let values =
+          match Gen.next tups with
+          | Some xs when List.length xs = List.length ps -> xs
+          | Some t ->
+              Error.(
+                create "Scalar: unexpected tuple width." (ps, t)
+                  [%sexp_of: pred list * Value.t list]
+                |> raise)
+          | None -> failwith "Expected a tuple."
+        in
+        self#scalars a values
+
+      method private eval_empty _ tups a =
+        if Gen.is_empty tups then self#qempty a
+        else failwith "Empty: expected an empty generator."
+
+      method private eval_let (lctx : 'a Map.M(String).t) tups (binds, q) =
+        let tups = ref tups in
+        let put_back t = tups := Gen.append (Gen.singleton t) !tups in
+        let take_while pred =
+          let stop = ref false in
+          let next () =
+            if !stop then None
+            else
+              match Gen.get !tups with
+              | Some x ->
+                  if pred x then Some x
+                  else (
+                    stop := true ;
+                    put_back x ;
+                    None )
+              | None -> None
+          in
+          next
+        in
+        let widths = List.map binds ~f:(fun (_, q) -> Q.width q) @ [Q.width q] in
         let extract_counter tup = List.hd_exn tup |> Value.to_int in
         let mk_extract_tuple ctr =
           let take_ct = List.nth_exn widths ctr in
@@ -329,12 +529,12 @@ module Make (Config : Config.S) = struct
               let extract_tuple = mk_extract_tuple oidx in
               let strm =
                 take_while (fun t -> extract_counter t = oidx)
-                |> Gen.map ~f:extract_tuple |> Gen.persistent_lazy
+                |> Gen.map ~f:extract_tuple
               in
-              (n, (q, strm)) )
+              (n, self#eval lctx strm q) )
         in
-        let ctx =
-          List.fold_left binds ~init:ctx ~f:(fun ctx (n, q) ->
+        let lctx =
+          List.fold_left binds ~init:lctx ~f:(fun ctx (n, q) ->
               Map.set ctx ~key:n ~data:q )
         in
         let oidx = List.length binds in
@@ -342,318 +542,155 @@ module Make (Config : Config.S) = struct
         let strm =
           take_while (fun t -> extract_counter t = oidx) |> Gen.map ~f:extract_tuple
         in
-        let forced = ref false in
-        let strm () =
-          if not !forced then (
-            forced := true ;
-            List.iter binds ~f:(fun (_, (_, s)) -> s () |> Gen.iter ~f:(fun _ -> ())) ) ;
-          strm ()
+        self#eval lctx strm q
+
+      method private eval_var lctx tups n = Gen.junk tups ; Map.find_exn lctx n
+
+      method private eval lctx tups a =
+        match a.Q.node with
+        | Q.Let x -> self#eval_let lctx tups x
+        | Q.Var x -> self#eval_var lctx tups x
+        | Q.For x -> self#eval_for lctx tups a x
+        | Q.Concat x -> self#eval_concat lctx tups a x
+        | Q.Empty -> self#eval_empty lctx tups a
+        | Q.Scalars x -> self#eval_scalars lctx tups a x
+
+      method run r =
+        let q = A.ensure_alias r |> Q.of_ralgebra |> Q.hoist_all in
+        Log.debug (fun m ->
+            m "Executing type checking query %a." pp (Q.to_ralgebra q) ) ;
+        let r = Q.to_ralgebra q |> simplify in
+        Log.debug (fun m -> m "Executing type checking query %a." pp r) ;
+        let sql = Sql.of_ralgebra r in
+        Log.debug (fun m ->
+            m "Executing type checking query %s." (Sql.to_string_hum sql) ) ;
+        let tups =
+          Db.exec_cursor_exn conn
+            (A.schema_exn r |> List.map ~f:Name.type_exn)
+            (Sql.to_string_hum sql)
+          |> Gen.map ~f:Array.to_list
         in
-        eval ctx strm q
-    | Q.Var n ->
-        Gen.junk tups ;
-        let q, strm = Map.find_exn ctx n in
-        eval ctx (strm ()) q
-    | Q.For (n, _, q2) ->
-        let extract_tup1, drop_tup1 =
-          ((fun t -> List.take t n), fun t -> List.drop t n)
-        in
-        let eq t1 t2 =
-          [%compare.equal: Value.t list] (extract_tup1 t1) (extract_tup1 t2)
-        in
-        let gen =
-          Gen.group_eager eq tups
-          |> Gen.filter_map ~f:(fun ts ->
-                 let ts = List.rev ts in
-                 Option.map (List.hd ts) ~f:(fun t ->
-                     let x = extract_tup1 t in
-                     let y =
-                       eval ctx (ts |> Gen.of_list |> Gen.map ~f:drop_tup1) q2
-                     in
-                     (x, y) ) )
-        in
-        C.For gen
-    | Q.Concat qs -> C.Concat (eval_concat ctx tups qs)
-    | Q.Empty ->
-        if Gen.is_empty tups then C.Empty
-        else failwith "Expected an empty generator."
-    | Q.Scalars ps ->
-        let tup =
-          lazy
-            ( match Gen.next tups with
-            | Some xs when List.length xs = List.length ps -> xs
-            | Some t ->
-                Error.(
-                  create "Scalar: unexpected tuple width." (ps, t)
-                    [%sexp_of: pred list * Value.t list]
-                  |> raise)
-            | None -> failwith "Expected a tuple." )
-        in
-        C.Scalars
-          (List.init (List.length ps) ~f:(fun i ->
-               Lazy.map tup ~f:(fun t -> List.nth_exn t i) ))
-    | Q.Query _ -> C.Query tups
-
-  let eval_query q =
-    let q = Q.hoist_all q in
-    Log.debug (fun m -> m "Executing type checking query %a." pp (to_ralgebra q)) ;
-    let r = to_ralgebra q |> simplify in
-    Log.debug (fun m -> m "Executing type checking query %a." pp r) ;
-    let sql = Sql.of_ralgebra r in
-    Log.debug (fun m ->
-        m "Executing type checking query %s." (Sql.to_string_hum sql) ) ;
-    let tups =
-      Db.exec_cursor_exn conn
-        (schema_exn r |> List.map ~f:Name.type_exn)
-        (Sql.to_string_hum sql)
-      |> Gen.map ~f:Array.to_list
-    in
-    eval (Map.empty (module String)) tups (Q.to_width q)
-
-  class virtual ['ctx, 'a] unsafe_material_fold =
-    object (self)
-      method virtual private build_AList
-          : 'ctx -> Meta.t -> t * t -> (Value.t list * Ctx.t) Gen.t -> 'a
-
-      method virtual private build_ATuple : _
-
-      method virtual private build_AHashIdx
-          : 'ctx -> Meta.t -> hash_idx -> (Value.t list * Ctx.t) Gen.t -> 'a
-
-      method virtual private build_AOrderedIdx
-          :    'ctx
-            -> Meta.t
-            -> t * t * ordered_idx
-            -> (Value.t list * Ctx.t) Gen.t
-            -> 'a
-
-      method virtual private build_AEmpty : 'ctx -> Meta.t -> 'a
-
-      method virtual private build_AScalar
-          : 'ctx -> Meta.t -> pred -> Value.t Lazy.t -> 'a
-
-      method virtual private build_Select
-          : 'ctx -> Meta.t -> pred list * t -> Ctx.t -> 'a
-
-      method virtual private build_Filter
-          : 'ctx -> Meta.t -> pred * t -> Ctx.t -> 'a
-
-      method virtual private build_DepJoin : _
-
-      method private visit_t ctx eval_ctx r =
-        let open Ctx in
-        match (r.node, eval_ctx) with
-        | AEmpty, Empty -> self#build_AEmpty ctx r.meta
-        | AScalar x, Scalars [v] -> self#build_AScalar ctx r.meta x v
-        | AList x, For vs -> self#build_AList ctx r.meta x vs
-        | AHashIdx x, For value_gen -> self#build_AHashIdx ctx r.meta x value_gen
-        | AOrderedIdx x, For value_gen ->
-            self#build_AOrderedIdx ctx r.meta x value_gen
-        | ATuple x, Scalars ps ->
-            self#build_ATuple ctx r.meta x (List.map ps ~f:(fun p -> Scalars [p]))
-        | ATuple x, Concat vs -> self#build_ATuple ctx r.meta x vs
-        | DepJoin x, Concat [lhs; rhs] -> self#build_DepJoin ctx r.meta x (lhs, rhs)
-        | Select x, _ -> self#build_Select ctx r.meta x eval_ctx
-        | Filter x, _ -> self#build_Filter ctx r.meta x eval_ctx
-        | As (_, r), _ -> self#visit_t ctx eval_ctx r
-        | ( ( DepJoin _ | AEmpty | AScalar _ | AList _ | AHashIdx _ | AOrderedIdx _
-            | ATuple _ )
-          , _ ) ->
-            Error.create "Bug: Mismatched context." r [%sexp_of: t] |> Error.raise
-        | (Join _ | Dedup _ | OrderBy _ | Relation _ | GroupBy _), _ ->
-            Error.create "Cannot materialize." r [%sexp_of: t] |> Error.raise
-
-      method run ctx r =
-        self#visit_t ctx (eval_query (gen_query (ensure_alias r))) r
+        self#eval (Map.empty (module String)) tups (Q.to_width q)
     end
 
-  type ('i, 'a, 'v, 'o) fold = {pre: 'i -> 'a; body: 'a -> 'v -> 'a; post: 'a -> 'o}
+  (** Returns the least general type of a layout. *)
+  let rec least_general_of_layout r =
+    match r.Abslayout.node with
+    | Select (ps, r') | GroupBy (ps, _, r') ->
+        T.FuncT ([least_general_of_layout r'], `Width (List.length ps))
+    | OrderBy {rel= r'; _} | Filter (_, r') | Dedup r' ->
+        FuncT ([least_general_of_layout r'], `Child_sum)
+    | Join {r1; r2; _} ->
+        FuncT ([least_general_of_layout r1; least_general_of_layout r2], `Child_sum)
+    | AEmpty -> EmptyT
+    | AScalar p -> Abslayout.Pred.to_type p |> T.least_general_of_primtype
+    | AList (_, r') -> ListT (least_general_of_layout r', {count= Bottom})
+    | DepJoin {d_lhs; d_rhs; _} ->
+        FuncT
+          ( [least_general_of_layout d_lhs; least_general_of_layout d_rhs]
+          , `Child_sum )
+    | AHashIdx h ->
+        HashIdxT
+          ( least_general_of_layout (A.h_key_layout h)
+          , least_general_of_layout h.hi_values
+          , {value_count= Bottom; key_count= Bottom} )
+    | AOrderedIdx (_, vr, {oi_key_layout= Some kr; _}) ->
+        OrderedIdxT
+          (least_general_of_layout kr, least_general_of_layout vr, {count= Bottom})
+    | ATuple (rs, _) ->
+        TupleT (List.map rs ~f:least_general_of_layout, {count= Bottom})
+    | As (_, r') -> least_general_of_layout r'
+    | AOrderedIdx (_, _, {oi_key_layout= None; _}) | Relation _ ->
+        failwith "Layout is still abstract."
 
-  class virtual ['out, 'l, 'h, 'o] material_fold =
-    object (self)
-      inherit [unit, 'out] unsafe_material_fold
+  (** Returns a layout type that is general enough to hold all of the data. *)
+  class type_fold =
+    object
+      inherit [_] abslayout_fold
 
-      method virtual list
-          : Meta.t -> t * t -> (unit, 'l, Value.t list * 'out, 'out) fold
+      method! select _ (exprs, _) t = T.FuncT ([t], `Width (List.length exprs))
 
-      method virtual hash_idx
-          : Meta.t -> hash_idx -> (unit, 'h, 'out * 'out, 'out) fold
+      method join _ _ t1 t2 = T.FuncT ([t1; t2], `Child_sum)
 
-      method virtual ordered_idx
-          : Meta.t -> t * t * ordered_idx -> (unit, 'o, 'out * 'out, 'out) fold
+      method depjoin _ _ t1 t2 = T.FuncT ([t1; t2], `Child_sum)
 
-      method virtual tuple : Meta.t -> t list * tuple -> 'out list -> 'out
+      method! filter _ _ t = T.FuncT ([t], `Child_sum)
 
-      method virtual empty : Meta.t -> 'out
+      method! order_by _ _ t = T.FuncT ([t], `Child_sum)
 
-      method virtual scalar : Meta.t -> pred -> Value.t -> 'out
+      method! dedup _ t = T.FuncT ([t], `Child_sum)
 
-      method virtual select : Meta.t -> pred list * t -> 'out -> 'out
+      method! group_by _ (exprs, _, _) t = FuncT ([t], `Width (List.length exprs))
 
-      method virtual filter : Meta.t -> pred * t -> 'out -> 'out
+      method empty _ = EmptyT
 
-      method virtual depjoin : Meta.t -> depjoin -> 'out -> 'out -> 'out
+      method scalar _ _ =
+        function
+        | Value.Date x ->
+            let x = Date.to_int x in
+            DateT {range= T.AbsInt.of_int x; nullable= false}
+        | Int x -> IntT {range= T.AbsInt.of_int x; nullable= false}
+        | Bool _ -> BoolT {nullable= false}
+        | String x ->
+            StringT {nchars= T.AbsInt.of_int (String.length x); nullable= false}
+        | Null -> NullT
+        | Fixed x -> FixedT {value= T.AbsFixed.of_fixed x; nullable= false}
 
-      method private build_AList ctx meta ((_, r) as expr) gen =
-        let {pre; body; post} = self#list meta expr in
-        Gen.fold gen ~init:(pre ()) ~f:(fun acc (tup, ectx) ->
-            let value = self#visit_t ctx ectx r in
-            body acc (tup, value) )
-        |> post
+      method list _ (_, elem_l) =
+        let init = (least_general_of_layout elem_l, 0) in
+        let fold (t, c) (_, _, t') = (T.unify_exn t t', c + 1) in
+        let extract (elem_type, num_elems) =
+          T.ListT (elem_type, {count= T.AbsInt.of_int num_elems})
+        in
+        Fold {init; fold; extract}
 
-      method private build_ATuple ctx meta ((rs, _) as expr) es =
-        self#tuple meta expr (List.map2_exn es rs ~f:(self#visit_t ctx))
+      method tuple _ (_, kind) =
+        (** FIXME *)
+        let init = (T.AbsInt.of_int 1, []) in
+        let fold (c, ts) t =
+          let c' =
+            match kind with
+            | Zip -> T.AbsInt.join c (T.count t)
+            | Concat -> T.AbsInt.(c + T.count t)
+            | Cross -> T.AbsInt.(c * T.count t)
+          in
+          (c', t :: ts)
+        in
+        let extract (c, ts) = T.TupleT (List.rev ts, {count= c}) in
+        Fold {init; fold; extract}
 
-      method private build_AHashIdx ctx meta h vgen =
-        let key_query = h_key_layout h in
-        let f2 = self#hash_idx meta h in
-        Gen.fold vgen ~init:(f2.pre ()) ~f:(fun acc (tup, ectx) ->
-            f2.body acc
-              ( self#visit_t ctx (to_ctx tup) key_query
-              , self#visit_t ctx ectx h.hi_values ) )
-        |> f2.post
+      method hash_idx _ h =
+        let init =
+          ( 0
+          , least_general_of_layout (A.h_key_layout h)
+          , least_general_of_layout h.hi_values )
+        in
+        let fold (kct, kt, vt) (_, kt', vt') =
+          (kct + 1, T.unify_exn kt kt', T.unify_exn vt vt')
+        in
+        let extract (kct, kt, vt) =
+          T.HashIdxT
+            (kt, vt, {key_count= T.AbsInt.of_int kct; value_count= Type.count vt})
+        in
+        Fold {init; fold; extract}
 
-      method private build_AOrderedIdx ctx meta ((_, value_query, m) as o) vgen =
-        let key_query = o_key_layout m in
-        let f2 = self#ordered_idx meta o in
-        Gen.fold vgen ~init:(f2.pre ()) ~f:(fun acc (tup, ectx) ->
-            f2.body acc
-              ( self#visit_t ctx (to_ctx tup) key_query
-              , self#visit_t ctx ectx value_query ) )
-        |> f2.post
-
-      method private build_AEmpty _ meta = self#empty meta
-
-      method private build_AScalar _ meta expr gen =
-        self#scalar meta expr (Lazy.force gen)
-
-      method private build_Filter ctx meta ((_, r) as expr) ectx =
-        self#filter meta expr (self#visit_t ctx ectx r)
-
-      method private build_Select ctx meta ((_, r) as expr) ectx =
-        self#select meta expr (self#visit_t ctx ectx r)
-
-      method private build_DepJoin ctx meta expr (lhs, rhs) =
-        let l = self#visit_t ctx lhs expr.d_lhs in
-        let r = self#visit_t ctx rhs expr.d_rhs in
-        self#depjoin meta expr l r
+      method ordered_idx _ (_, value_l, {oi_key_layout; _}) =
+        let key_l = Option.value_exn oi_key_layout in
+        let init =
+          ( least_general_of_layout key_l
+          , least_general_of_layout value_l
+          , T.AbsInt.zero )
+        in
+        let fold (kt, vt, ct) (_, kt', vt') =
+          (T.unify_exn kt kt', T.unify_exn vt vt', T.AbsInt.(ct + of_int 1))
+        in
+        let extract (kt, vt, ct) = T.OrderedIdxT (kt, vt, {count= ct}) in
+        Fold {init; fold; extract}
     end
-
-  (* Wrapper module allows opening Type without clashes. *)
-  module TF = struct
-    open Type
-
-    (** Returns the least general type of a layout. *)
-    let rec least_general_of_layout r =
-      match r.Abslayout.node with
-      | Select (ps, r') | GroupBy (ps, _, r') ->
-          FuncT ([least_general_of_layout r'], `Width (List.length ps))
-      | OrderBy {rel= r'; _} | Filter (_, r') | Dedup r' ->
-          FuncT ([least_general_of_layout r'], `Child_sum)
-      | Join {r1; r2; _} ->
-          FuncT
-            ([least_general_of_layout r1; least_general_of_layout r2], `Child_sum)
-      | AEmpty -> EmptyT
-      | AScalar p -> Abslayout.Pred.to_type p |> least_general_of_primtype
-      | AList (_, r') -> ListT (least_general_of_layout r', {count= Bottom})
-      | DepJoin {d_lhs; d_rhs; _} ->
-          FuncT
-            ( [least_general_of_layout d_lhs; least_general_of_layout d_rhs]
-            , `Child_sum )
-      | AHashIdx h ->
-          HashIdxT
-            ( least_general_of_layout (h_key_layout h)
-            , least_general_of_layout h.hi_values
-            , {value_count= Bottom; key_count= Bottom} )
-      | AOrderedIdx (_, vr, {oi_key_layout= Some kr; _}) ->
-          OrderedIdxT
-            (least_general_of_layout kr, least_general_of_layout vr, {count= Bottom})
-      | ATuple (rs, _) ->
-          TupleT (List.map rs ~f:least_general_of_layout, {count= Bottom})
-      | As (_, r') -> least_general_of_layout r'
-      | AOrderedIdx (_, _, {oi_key_layout= None; _}) | Relation _ ->
-          failwith "Layout is still abstract."
-
-    (** Returns a layout type that is general enough to hold all of the data. *)
-    class type_fold =
-      object
-        inherit [_, _, _, _] material_fold
-
-        method select _ (exprs, _) t = FuncT ([t], `Width (List.length exprs))
-
-        method filter _ _ t = FuncT ([t], `Child_sum)
-
-        method depjoin _ _ t1 t2 = FuncT ([t1; t2], `Child_sum)
-
-        method empty _ = EmptyT
-
-        method scalar _ _ =
-          function
-          | Value.Date x ->
-              let x = Date.to_int x in
-              DateT {range= AbsInt.of_int x; nullable= false}
-          | Int x -> IntT {range= AbsInt.of_int x; nullable= false}
-          | Bool _ -> BoolT {nullable= false}
-          | String x ->
-              StringT {nchars= AbsInt.of_int (String.length x); nullable= false}
-          | Null -> NullT
-          | Fixed x -> FixedT {value= AbsFixed.of_fixed x; nullable= false}
-
-        method list _ (_, elem_l) =
-          { pre= (fun () -> (least_general_of_layout elem_l, 0))
-          ; body= (fun (t, c) (_, t') -> (unify_exn t t', c + 1))
-          ; post=
-              (fun (elem_type, num_elems) ->
-                ListT (elem_type, {count= AbsInt.of_int num_elems}) ) }
-
-        method tuple _ (_, kind) elem_types =
-          let counts = List.map elem_types ~f:count in
-          match kind with
-          | Zip ->
-              TupleT (elem_types, {count= List.fold_left1_exn ~f:AbsInt.join counts})
-          | Concat ->
-              TupleT
-                (elem_types, {count= List.fold_left1_exn ~f:AbsInt.( + ) counts})
-          | Cross ->
-              TupleT
-                (elem_types, {count= List.fold_left1_exn ~f:AbsInt.( * ) counts})
-
-        method hash_idx _ h =
-          { pre=
-              (fun () ->
-                ( 0
-                , least_general_of_layout (h_key_layout h)
-                , least_general_of_layout h.hi_values ) )
-          ; body=
-              (fun (kct, kt, vt) (kt', vt') ->
-                (kct + 1, unify_exn kt kt', unify_exn vt vt') )
-          ; post=
-              (fun (kct, kt, vt) ->
-                HashIdxT
-                  ( kt
-                  , vt
-                  , {key_count= AbsInt.of_int kct; value_count= Type.count vt} ) )
-          }
-
-        method ordered_idx _ (_, value_l, {oi_key_layout; _}) =
-          let key_l = Option.value_exn oi_key_layout in
-          { pre=
-              (fun () ->
-                ( least_general_of_layout key_l
-                , least_general_of_layout value_l
-                , AbsInt.zero ) )
-          ; body=
-              (fun (kt, vt, ct) (kt', vt') ->
-                (unify_exn kt kt', unify_exn vt vt', AbsInt.(ct + of_int 1)) )
-          ; post= (fun (kt, vt, ct) -> OrderedIdxT (kt, vt, {count= ct})) }
-      end
-  end
-
-  include TF
 
   let type_of r =
     Log.info (fun m -> m "Computing type of abstract layout.") ;
-    let type_ = (new type_fold)#run () r in
+    let type_ = (new type_fold)#run r in
     Log.info (fun m ->
         m "The type is: %s" (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ) ;
     type_
@@ -712,10 +749,10 @@ module Make (Config : Config.S) = struct
     visitor#visit_t ()
 
   let load_layout ?(params = Set.empty (module Name)) l =
-    l |> strip_unused_as |> annotate_relations |> R.resolve ~params
-    |> annotate_key_layouts
+    l |> A.strip_unused_as |> annotate_relations |> R.resolve ~params
+    |> A.annotate_key_layouts
 
-  let load_string ?params s = of_string_exn s |> load_layout ?params
+  let load_string ?params s = A.of_string_exn s |> load_layout ?params
 end
 
 let%test_module _ =
@@ -732,8 +769,8 @@ let%test_module _ =
       let ralgebra =
         "alist(r1 as k, filter(k.f = g, ascalar(k.g)))" |> load_string
       in
-      let q = gen_query ralgebra in
-      let r = to_ralgebra q in
+      let q = Q.of_ralgebra ralgebra in
+      let r = Q.to_ralgebra q in
       let sql = Sql.of_ralgebra r in
       printf "%s" (Sql.to_string_hum sql) ;
       [%expect
@@ -762,8 +799,8 @@ let%test_module _ =
         "depjoin(ascalar(0 as f) as k, select([k.f + g], alist(r1 as k1, \
          ascalar(k1.g))))" |> load_string
       in
-      let q = gen_query ralgebra in
-      let r = to_ralgebra q in
+      let q = Q.of_ralgebra ralgebra in
+      let r = Q.to_ralgebra q in
       let sql = Sql.of_ralgebra r in
       printf "%s" (Sql.to_string_hum sql) ;
       [%expect
@@ -806,8 +843,8 @@ let%test_module _ =
 
     let%expect_test "" =
       let ralgebra = load_string Test_util.sum_complex in
-      let q = gen_query ralgebra in
-      let r = to_ralgebra q in
+      let q = Q.of_ralgebra ralgebra in
+      let r = Q.to_ralgebra q in
       Format.printf "%a" pp r ;
       [%expect
         {|
@@ -843,8 +880,8 @@ let%test_module _ =
 
     let%expect_test "" =
       let ralgebra = load_string "alist(r1 as k, alist(r1 as j, ascalar(j.f)))" in
-      let q = gen_query ralgebra in
-      let r = to_ralgebra q in
+      let q = Q.of_ralgebra ralgebra in
+      let r = Q.to_ralgebra q in
       Format.printf "%a" pp r ;
       [%expect
         {|
