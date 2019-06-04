@@ -235,35 +235,36 @@ let%expect_test "join-opt" =
         (Flat
          ((node
            (Join
-            (pred
-             (Binop
-              (Eq (Name ((scope ()) (name c_custkey)))
-               (Name ((scope ()) (name o_custkey))))))
-            (r1
-             ((node
-               (Relation
-                ((r_name customer)
-                 (r_schema
-                  ((((scope ()) (name c_custkey)) ((scope ()) (name c_name))
-                    ((scope ()) (name c_address)) ((scope ()) (name c_nationkey))
-                    ((scope ()) (name c_phone)) ((scope ()) (name c_acctbal))
-                    ((scope ()) (name c_mktsegment))
-                    ((scope ()) (name c_comment))))))))
-              (meta ())))
-            (r2
-             ((node
-               (Relation
-                ((r_name orders)
-                 (r_schema
-                  ((((scope ()) (name o_orderkey)) ((scope ()) (name o_custkey))
-                    ((scope ()) (name o_orderstatus))
-                    ((scope ()) (name o_totalprice))
-                    ((scope ()) (name o_orderdate))
-                    ((scope ()) (name o_orderpriority))
-                    ((scope ()) (name o_clerk))
-                    ((scope ()) (name o_shippriority))
-                    ((scope ()) (name o_comment))))))))
-              (meta ())))))
+            ((pred
+              (Binop
+               (Eq (Name ((scope ()) (name c_custkey)))
+                (Name ((scope ()) (name o_custkey))))))
+             (r1
+              ((node
+                (Relation
+                 ((r_name customer)
+                  (r_schema
+                   ((((scope ()) (name c_custkey)) ((scope ()) (name c_name))
+                     ((scope ()) (name c_address))
+                     ((scope ()) (name c_nationkey)) ((scope ()) (name c_phone))
+                     ((scope ()) (name c_acctbal))
+                     ((scope ()) (name c_mktsegment))
+                     ((scope ()) (name c_comment))))))))
+               (meta ())))
+             (r2
+              ((node
+                (Relation
+                 ((r_name orders)
+                  (r_schema
+                   ((((scope ()) (name o_orderkey)) ((scope ()) (name o_custkey))
+                     ((scope ()) (name o_orderstatus))
+                     ((scope ()) (name o_totalprice))
+                     ((scope ()) (name o_orderdate))
+                     ((scope ()) (name o_orderpriority))
+                     ((scope ()) (name o_clerk))
+                     ((scope ()) (name o_shippriority))
+                     ((scope ()) (name o_comment))))))))
+               (meta ()))))))
           (meta ()))))
        (pred
         (Binop

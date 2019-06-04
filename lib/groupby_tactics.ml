@@ -38,7 +38,7 @@ module Make (C : Config.S) = struct
           | `Agg -> Select (ps, r)
           | `Scalar -> Select (ps, self#visit_t () r)
 
-        method! visit_GroupBy () ps ks r = GroupBy (ps, ks, r)
+        method! visit_GroupBy () (ps, ks, r) = GroupBy (ps, ks, r)
       end
     in
     let r = visitor#visit_t () r in
