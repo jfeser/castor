@@ -193,14 +193,16 @@ module Query = struct
       match to_scalars ts with
       | Some ps -> scalars q ps
       | None -> concat q (List.map ~f:of_ralgebra ts) )
-    | DepJoin {d_lhs; d_rhs; _} -> concat q [of_ralgebra d_lhs; of_ralgebra d_rhs]
+    | DepJoin {d_lhs= q1; d_rhs= q2; _} | Join {r1= q1; r2= q2; _} ->
+        concat q [of_ralgebra q1; of_ralgebra q2]
     | Select (_, q')
      |Filter (_, q')
      |Dedup q'
      |OrderBy {rel= q'; _}
      |GroupBy (_, _, q') ->
         {(of_ralgebra q') with meta= q}
-    | Relation _ | Join _ | As _ -> failwith "Unsupported."
+    | Relation _ -> failwith "Bare relation."
+    | As _ -> failwith "Unexpected as."
 
   let to_concat binds q = concat None (List.map binds ~f:Tuple.T2.get2 @ [q])
 
@@ -568,13 +570,13 @@ module Make (Config : Config.S) = struct
 
       method run r =
         let q = A.ensure_alias r |> Q.of_ralgebra |> Q.hoist_all in
-        Log.debug (fun m ->
-            m "Executing type checking query %a." pp (Q.to_ralgebra q) ) ;
+        (* Log.debug (fun m ->
+         *     m "Executing type checking query %a." pp (Q.to_ralgebra q) ) ; *)
         let r = Q.to_ralgebra q |> simplify in
-        Log.debug (fun m -> m "Executing type checking query %a." pp r) ;
+        (* Log.debug (fun m -> m "Executing type checking query %a." pp r) ; *)
         let sql = Sql.of_ralgebra r in
-        Log.debug (fun m ->
-            m "Executing type checking query %s." (Sql.to_string_hum sql) ) ;
+        (* Log.debug (fun m ->
+         *     m "Executing type checking query %s." (Sql.to_string_hum sql) ) ; *)
         let tups =
           Db.exec_cursor_exn conn
             (A.schema_exn r |> List.map ~f:Name.type_exn)
