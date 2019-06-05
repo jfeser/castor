@@ -315,7 +315,7 @@ module Make (C : Config.S) = struct
           let pred = resolve_pred (Ctx.merge outer_ctx value_ctx) pred in
           (Filter (pred, r), value_ctx)
       | DepJoin ({d_lhs; d_rhs; d_alias} as d) ->
-          let d_lhs, lctx = resolve `Compile outer_ctx d_lhs in
+          let d_lhs, lctx = rsame outer_ctx d_lhs in
           let lctx = Ctx.scoped d_alias lctx in
           let d_rhs, rctx = rsame (Ctx.bind outer_ctx lctx) d_rhs in
           (DepJoin {d with d_lhs; d_rhs}, rctx)
