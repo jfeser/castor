@@ -54,7 +54,7 @@ module Make (Config : Config.S) () = struct
     include Config
 
     let simplify =
-      let tf = fix (seq_many [resolve; project; traced Sf.simplify]) in
+      let tf = fix (seq_many [resolve; project; Sf.simplify]) in
       Some (fun r -> Option.value (apply tf r) ~default:r)
   end
 
@@ -143,19 +143,23 @@ module Make (Config : Config.S) () = struct
       ; (* Hoist parameterized filters as far up as possible. *)
         fix (for_all F.hoist_filter (Path.all >>? is_param_filter >> parent))
       ; Branching.(
-          unfold
-            (traced
-               (at_ (traced F.push_filter)
-                  Path.(
-                    all >>? is_param_cmp_filter >>? is_run_time >>| shallowest)))
-            (seq_many
-               [ (* Eliminate the deepest comparison filter. *)
-                 at_ (traced F.elim_cmp_filter)
-                   Path.(
-                     all >>? is_param_cmp_filter >>? is_run_time >>| deepest)
-               ; fix (seq resolve project)
-               ; push_all_unparameterized_filters
-               ; Simplify_tactic.simplify ])
+          seq_many
+            [ unroll_fix
+                (traced
+                   (O.at_ (traced F.push_filter)
+                      Path.(
+                        all >>? is_param_cmp_filter >>? is_run_time
+                        >>| shallowest)))
+            ; (* Eliminate the deepest comparison filter. *)
+              at_ F.elim_cmp_filter
+                Path.(all >>? is_param_cmp_filter >>? is_run_time >>| deepest)
+            ; lift
+                (O.seq_many
+                   [ push_all_unparameterized_filters
+                   ; for_all S.row_store
+                       Path.(all >>? is_run_time >>? is_relation)
+                   ; fix (O.seq resolve project)
+                   ; Simplify_tactic.simplify ]) ]
           |> lower (min Type_cost.len))
       ; (* Eliminate the deepest equality filter. *)
         at_ F.elim_eq_filter

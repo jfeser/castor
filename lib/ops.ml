@@ -275,6 +275,8 @@ module Make (C : Config.S) = struct
   module Branching = struct
     type t = {b_f: Abslayout.t -> Abslayout.t Seq.t; b_name: string}
 
+    let of_func ~name b_f = {b_f; b_name= name}
+
     let lift tf =
       { b_f=
           (fun r ->
@@ -285,15 +287,33 @@ module Make (C : Config.S) = struct
 
     let lower elim tf = first_order (fun r -> elim (tf.b_f r)) tf.b_name
 
-    let unfold tf_branch tf =
+    let unroll_fix tf_branch =
       { b_f=
           (fun r ->
             Seq.append (Seq.singleton r)
               (Seq.unfold ~init:r ~f:(fun r ->
                    Option.bind (apply tf_branch r) ~f:(fun r' ->
                        if Abslayout.O.(r = r') then None else Some (r, r') ) ))
-            |> Seq.filter_map ~f:(apply tf) )
+            )
       ; b_name= "unfold" }
+
+    let seq t1 t2 =
+      {b_f= (fun r -> t1.b_f r |> Seq.concat_map ~f:t2.b_f); b_name= "seq"}
+
+    let rec seq_many = function
+      | [] -> failwith "No transforms."
+      | [t] -> t
+      | t :: ts -> seq t (seq_many ts)
+
+    let at_ tf pspec =
+      let f r =
+        match pspec r with
+        | Some p ->
+            let r' = Path.get_exn p r in
+            Seq.map (tf.b_f r') ~f:(fun r'' -> Path.set_exn p r r'')
+        | None -> Seq.empty
+      in
+      of_func f ~name:(sprintf "(%s @ <path>)" tf.b_name)
 
     let min cost rs =
       Seq.fold rs ~init:(None, Float.max_value) ~f:(fun (rb, cb) r ->
