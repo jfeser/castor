@@ -156,7 +156,7 @@ module Make (C : Config.S) = struct
           match t with
           | IntT _ -> Ok (Binop (Add, bound, Int 1))
           | DateT _ -> Ok (Binop (Add, bound, Unop (Day, Int 1)))
-          | FixedT _ -> Or_error.errorf "No open inequalities with fixed."
+          | FixedT _ -> Ok (Binop (Add, bound, Fixed Fixed_point.epsilon))
           | NullT | StringT _ | BoolT _ | TupleT _ | VoidT ->
               failwith "Unexpected type." )
     in
@@ -168,7 +168,7 @@ module Make (C : Config.S) = struct
           match t with
           | IntT _ -> Ok (Binop (Add, bound, Int 1))
           | DateT _ -> Ok (Binop (Add, bound, Unop (Day, Int 1)))
-          | FixedT _ -> Or_error.errorf "No open inequalities with fixed."
+          | FixedT _ -> Ok (Binop (Add, bound, Fixed Fixed_point.epsilon))
           | NullT | StringT _ | BoolT _ | TupleT _ | VoidT ->
               failwith "Unexpected type." )
     in
@@ -224,11 +224,8 @@ module Make (C : Config.S) = struct
         in
         let cmps = Map.of_alist_multi (module Pred) cmps in
         (* Order by the number of available bounds. *)
-        List.sort
-          ~compare:(fun (_, b1) (_, b2) ->
-            [%compare: int] (List.length b1) (List.length b2) )
-          (Map.to_alist cmps)
-        |> List.find_map ~f:(fun (key, bounds) ->
+        Map.to_alist cmps
+        |> List.filter_map ~f:(fun (key, bounds) ->
                let x =
                  let open Or_error.Let_syntax in
                  let lb =
@@ -269,9 +266,11 @@ module Make (C : Config.S) = struct
                | Error err ->
                    Logs.warn (fun m -> m "Elim-cmp: %a" Error.pp err) ;
                    None )
-    | _ -> None
+        |> Seq.of_list
+    | _ -> Seq.empty
 
-  let elim_cmp_filter = of_func elim_cmp_filter ~name:"elim-cmp-filter"
+  let elim_cmp_filter =
+    Branching.of_func elim_cmp_filter ~name:"elim-cmp-filter"
 
   (* | ATuple (_rs, Cross) ->
    *     None
@@ -424,275 +423,3 @@ module Make (C : Config.S) = struct
    *   let f r = try run_exn r with Failed _ -> None in
    *   of_func f ~name:"precompute-filter" *)
 end
-
-(* module Test = struct
- *   module C = struct
- *     let params = Set.empty (module Name)
- * 
- *     let fresh = Fresh.create ()
- * 
- *     let verbose = false
- * 
- *     let validate = false
- * 
- *     let param_ctx = Map.empty (module Name)
- * 
- *     let conn = Db.create "postgresql:///tpch_1k"
- *   end
- * 
- *   module T = Make (C)
- *   open T
- *   module O = Ops.Make (C)
- *   open O
- * 
- *   let%expect_test "" =
- *     let r =
- *       of_string_exn
- *         {|filter(((((((customer.c_name = null) && (customer.c_custkey = null)) &&
- *           (orders.o_orderkey = null)) && (orders.o_orderdate = null)) &&
- *         (orders.o_totalprice = null)) &&
- *        exists(ahashidx(dedup(
- *                          select([lineitem.l_orderkey as k1],
- *                            alist(dedup(select([lineitem.l_orderkey], lineitem)) as k0,
- *                              select([lineitem.l_orderkey], filter((lineitem.l_orderkey = k0.l_orderkey), lineitem))))),
- *                 alist(dedup(select([lineitem.l_orderkey], lineitem)) as k0,
- *                   filter((sum_l_quantity > param1),
- *                     alist(filter((k1 = lineitem.l_orderkey),
- *                             select([lineitem.l_orderkey, sum(lineitem.l_quantity) as sum_l_quantity],
- *                               filter((lineitem.l_orderkey = k0.l_orderkey), lineitem))),
- *                       atuple([ascalar(lineitem.l_orderkey), ascalar(sum_l_quantity)], cross)))),
- *                 orders.o_orderkey))),
- *   alist(join((customer.c_custkey = orders.o_custkey),
- *           join((orders.o_orderkey = lineitem.l_orderkey), orders, lineitem),
- *           customer),
- *     atuple([ascalar(orders.o_orderkey),
- *             ascalar(orders.o_custkey),
- *             ascalar(orders.o_orderstatus),
- *             ascalar(orders.o_totalprice),
- *             ascalar(orders.o_orderdate),
- *             ascalar(orders.o_orderpriority),
- *             ascalar(orders.o_clerk),
- *             ascalar(orders.o_shippriority),
- *             ascalar(orders.o_comment),
- *             ascalar(lineitem.l_orderkey),
- *             ascalar(lineitem.l_partkey),
- *             ascalar(lineitem.l_suppkey),
- *             ascalar(lineitem.l_linenumber),
- *             ascalar(lineitem.l_quantity),
- *             ascalar(lineitem.l_extendedprice),
- *             ascalar(lineitem.l_discount),
- *             ascalar(lineitem.l_tax),
- *             ascalar(lineitem.l_returnflag),
- *             ascalar(lineitem.l_linestatus),
- *             ascalar(lineitem.l_shipdate),
- *             ascalar(lineitem.l_commitdate),
- *             ascalar(lineitem.l_receiptdate),
- *             ascalar(lineitem.l_shipinstruct),
- *             ascalar(lineitem.l_shipmode),
- *             ascalar(lineitem.l_comment),
- *             ascalar(customer.c_custkey),
- *             ascalar(customer.c_name),
- *             ascalar(customer.c_address),
- *             ascalar(customer.c_nationkey),
- *             ascalar(customer.c_phone),
- *             ascalar(customer.c_acctbal),
- *             ascalar(customer.c_mktsegment),
- *             ascalar(customer.c_comment)],
- *       cross)))
- * |}
- *       |> M.resolve
- *            ~params:
- *              (Set.of_list
- *                 (module Name)
- *                 [Name.create ~type_:(IntT {nullable= false}) "param1"])
- *     in
- *     apply push_filter r |> Option.iter ~f:(Format.printf "%a@." pp) ;
- *     [%expect
- *       {|
- *       alist(filter(((customer.c_name = null) &&
- *                    ((customer.c_custkey = null) &&
- *                    ((orders.o_orderkey = null) &&
- *                    ((orders.o_orderdate = null) && (orders.o_totalprice = null))))),
- *               join((customer.c_custkey = orders.o_custkey),
- *                 join((orders.o_orderkey = lineitem.l_orderkey), orders, lineitem),
- *                 customer)),
- *         filter(exists(ahashidx(dedup(
- *                                  select([lineitem.l_orderkey as k1],
- *                                    alist(dedup(
- *                                            select([lineitem.l_orderkey], lineitem)) as k0,
- *                                      select([lineitem.l_orderkey],
- *                                        filter((lineitem.l_orderkey = k0.l_orderkey),
- *                                          lineitem))))),
- *                         alist(dedup(select([lineitem.l_orderkey], lineitem)) as k0,
- *                           filter((sum_l_quantity > param1),
- *                             alist(filter((k1 = lineitem.l_orderkey),
- *                                     select([lineitem.l_orderkey,
- *                                             sum(lineitem.l_quantity) as sum_l_quantity],
- *                                       filter((lineitem.l_orderkey = k0.l_orderkey),
- *                                         lineitem))),
- *                               atuple([ascalar(lineitem.l_orderkey),
- *                                       ascalar(sum_l_quantity)],
- *                                 cross)))),
- *                         orders.o_orderkey)),
- *           atuple([ascalar(orders.o_orderkey),
- *                   ascalar(orders.o_custkey),
- *                   ascalar(orders.o_orderstatus),
- *                   ascalar(orders.o_totalprice),
- *                   ascalar(orders.o_orderdate),
- *                   ascalar(orders.o_orderpriority),
- *                   ascalar(orders.o_clerk),
- *                   ascalar(orders.o_shippriority),
- *                   ascalar(orders.o_comment),
- *                   ascalar(lineitem.l_orderkey),
- *                   ascalar(lineitem.l_partkey),
- *                   ascalar(lineitem.l_suppkey),
- *                   ascalar(lineitem.l_linenumber),
- *                   ascalar(lineitem.l_quantity),
- *                   ascalar(lineitem.l_extendedprice),
- *                   ascalar(lineitem.l_discount),
- *                   ascalar(lineitem.l_tax),
- *                   ascalar(lineitem.l_returnflag),
- *                   ascalar(lineitem.l_linestatus),
- *                   ascalar(lineitem.l_shipdate),
- *                   ascalar(lineitem.l_commitdate),
- *                   ascalar(lineitem.l_receiptdate),
- *                   ascalar(lineitem.l_shipinstruct),
- *                   ascalar(lineitem.l_shipmode),
- *                   ascalar(lineitem.l_comment),
- *                   ascalar(customer.c_custkey),
- *                   ascalar(customer.c_name),
- *                   ascalar(customer.c_address),
- *                   ascalar(customer.c_nationkey),
- *                   ascalar(customer.c_phone),
- *                   ascalar(customer.c_acctbal),
- *                   ascalar(customer.c_mktsegment),
- *                   ascalar(customer.c_comment)],
- *             cross))) |}]
- * 
- *   let%expect_test "" =
- *     let r =
- *       of_string_exn
- *         {|
- * filter((nation.n_regionkey = region.r_regionkey),
- *    alist(join((supplier.s_nationkey = nation.n_nationkey),
- *            join(((lineitem.l_suppkey = supplier.s_suppkey) &&
- *                 (customer.c_nationkey = supplier.s_nationkey)),
- *              join((lineitem.l_orderkey = orders.o_orderkey),
- *                join((customer.c_custkey = orders.o_custkey),
- *                  customer,
- *                  orders),
- *                lineitem),
- *              supplier),
- *            nation),
- *      atuple([ascalar(customer.c_custkey),
- *              ascalar(customer.c_name),
- *              ascalar(customer.c_address),
- *              ascalar(customer.c_nationkey),
- *              ascalar(customer.c_phone),
- *              ascalar(customer.c_acctbal),
- *              ascalar(customer.c_mktsegment),
- *              ascalar(customer.c_comment),
- *              ascalar(orders.o_orderkey),
- *              ascalar(orders.o_custkey),
- *              ascalar(orders.o_orderstatus),
- *              ascalar(orders.o_totalprice),
- *              ascalar(orders.o_orderdate),
- *              ascalar(orders.o_orderpriority),
- *              ascalar(orders.o_clerk),
- *              ascalar(orders.o_shippriority),
- *              ascalar(orders.o_comment),
- *              ascalar(lineitem.l_orderkey),
- *              ascalar(lineitem.l_partkey),
- *              ascalar(lineitem.l_suppkey),
- *              ascalar(lineitem.l_linenumber),
- *              ascalar(lineitem.l_quantity),
- *              ascalar(lineitem.l_extendedprice),
- *              ascalar(lineitem.l_discount),
- *              ascalar(lineitem.l_tax),
- *              ascalar(lineitem.l_returnflag),
- *              ascalar(lineitem.l_linestatus),
- *              ascalar(lineitem.l_shipdate),
- *              ascalar(lineitem.l_commitdate),
- *              ascalar(lineitem.l_receiptdate),
- *              ascalar(lineitem.l_shipinstruct),
- *              ascalar(lineitem.l_shipmode),
- *              ascalar(lineitem.l_comment),
- *              ascalar(supplier.s_suppkey),
- *              ascalar(supplier.s_name),
- *              ascalar(supplier.s_address),
- *              ascalar(supplier.s_nationkey),
- *              ascalar(supplier.s_phone),
- *              ascalar(supplier.s_acctbal),
- *              ascalar(supplier.s_comment),
- *              ascalar(nation.n_nationkey),
- *              ascalar(nation.n_name),
- *              ascalar(nation.n_regionkey),
- *              ascalar(nation.n_comment)],
- *        cross)))
- * |}
- *       |> M.resolve
- *            ~params:
- *              (Set.of_list
- *                 (module Name)
- *                 [ Name.create
- *                     ~type_:(StringT {nullable= false})
- *                     ~relation:"region" "r_regionkey" ])
- *     in
- *     apply push_filter r |> Option.iter ~f:(Format.printf "%a@." pp) ;
- *     [%expect
- *       {|
- *       filter((nation.n_regionkey = region.r_regionkey),
- *         alist(join((supplier.s_nationkey = nation.n_nationkey),
- *                 join(((lineitem.l_suppkey = supplier.s_suppkey) &&
- *                      (customer.c_nationkey = supplier.s_nationkey)),
- *                   join((lineitem.l_orderkey = orders.o_orderkey),
- *                     join((customer.c_custkey = orders.o_custkey), customer, orders),
- *                     lineitem),
- *                   supplier),
- *                 nation),
- *           atuple([ascalar(customer.c_custkey),
- *                   ascalar(customer.c_name),
- *                   ascalar(customer.c_address),
- *                   ascalar(customer.c_nationkey),
- *                   ascalar(customer.c_phone),
- *                   ascalar(customer.c_acctbal),
- *                   ascalar(customer.c_mktsegment),
- *                   ascalar(customer.c_comment),
- *                   ascalar(orders.o_orderkey),
- *                   ascalar(orders.o_custkey),
- *                   ascalar(orders.o_orderstatus),
- *                   ascalar(orders.o_totalprice),
- *                   ascalar(orders.o_orderdate),
- *                   ascalar(orders.o_orderpriority),
- *                   ascalar(orders.o_clerk),
- *                   ascalar(orders.o_shippriority),
- *                   ascalar(orders.o_comment),
- *                   ascalar(lineitem.l_orderkey),
- *                   ascalar(lineitem.l_partkey),
- *                   ascalar(lineitem.l_suppkey),
- *                   ascalar(lineitem.l_linenumber),
- *                   ascalar(lineitem.l_quantity),
- *                   ascalar(lineitem.l_extendedprice),
- *                   ascalar(lineitem.l_discount),
- *                   ascalar(lineitem.l_tax),
- *                   ascalar(lineitem.l_returnflag),
- *                   ascalar(lineitem.l_linestatus),
- *                   ascalar(lineitem.l_shipdate),
- *                   ascalar(lineitem.l_commitdate),
- *                   ascalar(lineitem.l_receiptdate),
- *                   ascalar(lineitem.l_shipinstruct),
- *                   ascalar(lineitem.l_shipmode),
- *                   ascalar(lineitem.l_comment),
- *                   ascalar(supplier.s_suppkey),
- *                   ascalar(supplier.s_name),
- *                   ascalar(supplier.s_address),
- *                   ascalar(supplier.s_nationkey),
- *                   ascalar(supplier.s_phone),
- *                   ascalar(supplier.s_acctbal),
- *                   ascalar(supplier.s_comment),
- *                   ascalar(nation.n_nationkey),
- *                   ascalar(nation.n_name),
- *                   ascalar(nation.n_regionkey),
- *                   ascalar(nation.n_comment)],
- *             cross))) |}]
- * end *)
