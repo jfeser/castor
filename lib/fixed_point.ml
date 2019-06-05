@@ -123,6 +123,8 @@ let min_value = {value= Int.min_value; scale= 1}
 
 let max_value = {value= Int.max_value; scale= 1}
 
+let epsilon = {value= 1; scale= 1000000000000000000}
+
 let of_float f = Float.to_string f |> of_string
 
 let to_float {value= v; scale= s} = Float.(of_int v / of_int s)
