@@ -115,6 +115,31 @@ module Make (Config : Config.S) () = struct
          [ resolve
          ; for_all F.push_filter Path.(all >>? is_run_time >>? is_filter) ])
 
+  let elim_param_filter tf test =
+    (* Eliminate comparison filters. *)
+    fix
+      (seq_many
+         [ (* Hoist parameterized filters as far up as possible. *)
+           fix
+             (for_all F.hoist_filter (Path.all >>? is_param_filter >> parent))
+         ; Branching.(
+             seq_many
+               [ unroll_fix
+                   (O.at_ F.push_filter
+                      Path.(all >>? test >>? is_run_time >>| shallowest))
+               ; (* Eliminate a comparison filter. *)
+                 choose
+                   (at_ tf Path.(all >>? test >>? is_run_time >>| shallowest))
+                   id
+               ; lift
+                   (O.seq_many
+                      [ push_all_unparameterized_filters
+                      ; for_all S.row_store
+                          Path.(all >>? is_run_time >>? is_relation)
+                      ; fix (O.seq resolve project)
+                      ; Simplify_tactic.simplify ]) ]
+             |> lower (min Type_cost.(cost ~kind:`Avg read))) ])
+
   let opt =
     let open Infix in
     seq_many
@@ -140,30 +165,10 @@ module Make (Config : Config.S) () = struct
         fix
           (at_ push_orderby
              Path.(all >>? is_orderby >>? is_run_time >>| shallowest))
-      ; (* Hoist parameterized filters as far up as possible. *)
-        fix (for_all F.hoist_filter (Path.all >>? is_param_filter >> parent))
-      ; Branching.(
-          seq_many
-            [ unroll_fix
-                (traced
-                   (O.at_ (traced F.push_filter)
-                      Path.(
-                        all >>? is_param_cmp_filter >>? is_run_time
-                        >>| shallowest)))
-            ; (* Eliminate the deepest comparison filter. *)
-              at_ F.elim_cmp_filter
-                Path.(all >>? is_param_cmp_filter >>? is_run_time >>| deepest)
-            ; lift
-                (O.seq_many
-                   [ push_all_unparameterized_filters
-                   ; for_all S.row_store
-                       Path.(all >>? is_run_time >>? is_relation)
-                   ; fix (O.seq resolve project)
-                   ; Simplify_tactic.simplify ]) ]
-          |> lower (min Type_cost.len))
+      ; (* Eliminate comparison filters. *)
+        elim_param_filter F.elim_cmp_filter is_param_cmp_filter
       ; (* Eliminate the deepest equality filter. *)
-        at_ F.elim_eq_filter
-          Path.(all >>? is_param_eq_filter >>? is_run_time >>| deepest)
+        elim_param_filter (Branching.lift F.elim_eq_filter) is_param_eq_filter
       ; push_all_unparameterized_filters
       ; (* Push selections above collections. *)
         for_all Select_tactics.push_select

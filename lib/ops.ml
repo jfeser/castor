@@ -300,6 +300,11 @@ module Make (C : Config.S) = struct
     let seq t1 t2 =
       {b_f= (fun r -> t1.b_f r |> Seq.concat_map ~f:t2.b_f); b_name= "seq"}
 
+    let choose t1 t2 =
+      {b_f= (fun r -> Seq.append (t1.b_f r) (t2.b_f r)); b_name= "choose"}
+
+    let id = {b_f= (fun r -> Seq.singleton r); b_name= "id"}
+
     let rec seq_many = function
       | [] -> failwith "No transforms."
       | [t] -> t
@@ -317,8 +322,9 @@ module Make (C : Config.S) = struct
 
     let min cost rs =
       Seq.fold rs ~init:(None, Float.max_value) ~f:(fun (rb, cb) r ->
-          let c = cost r in
-          if c < cb then (Some r, c) else (rb, cb) )
+          match cost r with
+          | Some c -> if c < cb then (Some r, c) else (rb, cb)
+          | None -> (rb, cb) )
       |> Tuple.T2.get1
 
     let ( *> ) x y = first_order (fun r -> y (x r)) ""
