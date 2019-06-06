@@ -1,24 +1,34 @@
 (executable
  (name discover)
  (libraries core)
- (preprocess (pps ppx_let))
+ (preprocess
+  (pps ppx_let))
  (modules discover config_defaults))
 
-(rule (with-stdout-to config.ml (run ./discover.exe -kind ML)))
+(rule
+ (with-stdout-to
+  config.ml
+  (run ./discover.exe -kind ML)))
 
 (rule
- (deps (file discover.exe))
+ (deps
+  (file discover.exe))
  (targets config.ini)
  (mode promote-until-clean)
- (action (with-stdout-to config.ini (run ./discover.exe -kind ENV))))
+ (action
+  (with-stdout-to
+   config.ini
+   (run ./discover.exe -kind ENV))))
 
 (alias
-  (name config)
-  (deps config.ini))
+ (name config)
+ (deps config.ini))
 
 (alias
-  (name runtest)
-  (deps (glob_files etc/*.c) (glob_files etc/*.h)))
+ (name runtest)
+ (deps
+  (glob_files etc/*.c)
+  (glob_files etc/*.h)))
 
 ; Local Variables:
 ; mode: tuareg-dune

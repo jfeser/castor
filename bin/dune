@@ -2,37 +2,47 @@
  (public_name castor-pretty)
  (name pretty)
  (libraries core castor)
- (flags (:standard -g -bin-annot))
- (preprocess (pps ppx_sexp_conv ppx_let))
+ (flags
+  (:standard -g -bin-annot))
+ (preprocess
+  (pps ppx_sexp_conv ppx_let))
  (modules pretty))
 
 (executable
  (public_name castor-compile)
  (name compile)
  (libraries core castor logs)
- (flags (:standard -g -bin-annot))
- (preprocess (pps ppx_sexp_conv ppx_let))
+ (flags
+  (:standard -g -bin-annot))
+ (preprocess
+  (pps ppx_sexp_conv ppx_let))
  (modules compile))
 
 (executable
  (name sample)
  (libraries core postgresql castor logs)
- (flags (:standard -g -bin-annot))
- (preprocess (pps ppx_sexp_conv ppx_let))
+ (flags
+  (:standard -g -bin-annot))
+ (preprocess
+  (pps ppx_sexp_conv ppx_let))
  (modules sample))
 
 (executable
  (name sample_tpch)
  (libraries core postgresql castor logs)
- (flags (:standard -g -bin-annot))
- (preprocess (pps ppx_sexp_conv ppx_let))
+ (flags
+  (:standard -g -bin-annot))
+ (preprocess
+  (pps ppx_sexp_conv ppx_let))
  (modules sample_tpch))
 
 (executable
  (name bench_gen)
  (libraries core core_bench castor)
- (flags (:standard -g -bin-annot))
- (preprocess (pps ppx_sexp_conv ppx_let))
+ (flags
+  (:standard -g -bin-annot))
+ (preprocess
+  (pps ppx_sexp_conv ppx_let))
  (modules bench_gen))
 
 ; Local Variables:

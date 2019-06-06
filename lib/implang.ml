@@ -583,22 +583,22 @@ module Builder = struct
 
     let%expect_test "" =
       let b = create ~ctx:(Map.empty (module Name)) ~name:"" ~ret:int_t in
-      build_lt (Int 0) (Int 1) b |> Format.printf "%a" pp_expr;
+      build_lt (Int 0) (Int 1) b |> Format.printf "%a" pp_expr ;
       [%expect {| 0 < 1 |}]
 
     let%expect_test "" =
       let b = create ~ctx:(Map.empty (module Name)) ~name:"" ~ret:int_t in
-      build_le (Int 0) (Int 1) b |> Format.printf "%a" pp_expr;
+      build_le (Int 0) (Int 1) b |> Format.printf "%a" pp_expr ;
       [%expect {| 0 < 1 || 0 == 1 |}]
 
     let%expect_test "" =
       let b = create ~ctx:(Map.empty (module Name)) ~name:"" ~ret:int_t in
-      build_gt (Int 0) (Int 1) b |> Format.printf "%a" pp_expr;
+      build_gt (Int 0) (Int 1) b |> Format.printf "%a" pp_expr ;
       [%expect {| not(0 < 1 || 0 == 1) |}]
 
     let%expect_test "" =
       let b = create ~ctx:(Map.empty (module Name)) ~name:"" ~ret:int_t in
-      build_ge (Int 0) (Int 1) b |> Format.printf "%a" pp_expr;
+      build_ge (Int 0) (Int 1) b |> Format.printf "%a" pp_expr ;
       [%expect {| not(0 < 1) |}]
   end
 end

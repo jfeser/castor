@@ -32,5 +32,10 @@
     (ounit :with-test)
     (expect_test_helpers_kernel (and :with-test (>= v0.12)))))
 
+(using fmt 1.1)
 (using menhir 2.0)
 (generate_opam_files true)
+
+; Local Variables:
+; mode: dune
+; End:
