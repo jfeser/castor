@@ -442,7 +442,6 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
       | None -> Pos pos )
 
   let serialize ch l =
-    let open Lwt_main in
     Log.info (fun m -> m "Serializing abstract layout.") ;
     let serializer = new logged_serializer () in
     let serialize =
@@ -470,7 +469,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
       let%lwt () = !s in
       return ()
     in
-    run serialize ;
+    Lwt_main.run serialize ;
     serializer#write_into_channel ch ;
     Option.iter layout_file ~f:(fun f ->
         Out_channel.with_file f ~f:serializer#render ) ;

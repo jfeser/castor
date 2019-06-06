@@ -17,7 +17,7 @@
 
 (library
  (public_name castor)
- (libraries core str lwt faraday faraday-lwt faraday-lwt-unix postgresql llvm llvm.analysis llvm.target llvm.all_backends logs cmph expect_test_helpers_kernel visitors.runtime gen bos oUnit hashcons fmt fmt.tty)
+ (libraries core str lwt lwt.unix postgresql llvm llvm.analysis llvm.target llvm.all_backends logs cmph expect_test_helpers_kernel visitors.runtime gen bos  hashcons fmt fmt.tty)
  (inline_tests)
  (preprocess (pps ppx_sexp_conv ppx_compare ppx_hash ppx_expect ppx_let visitors.ppx ppx_variants_conv lwt_ppx))
  (private_modules abslayout_test codegen_test implang_opt_test implang_test serialize_test type_tests sql_test)
