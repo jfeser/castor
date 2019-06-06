@@ -1,5 +1,6 @@
 (executable
-  (name opt)
-  (public_name opt.exe)
-  (libraries core castor castor_opt logs logs.fmt fmt fmt.tty)
-  (preprocess (pps ppx_sexp_conv ppx_let ppx_sexp_conv ppx_compare ppx_hash)))
+ (name opt)
+ (public_name opt.exe)
+ (libraries core castor castor_opt logs logs.fmt fmt fmt.tty)
+ (preprocess
+  (pps ppx_sexp_conv ppx_let ppx_sexp_conv ppx_compare ppx_hash)))

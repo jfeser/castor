@@ -32,8 +32,9 @@ let%expect_test "push-filter-comptime" =
   in
   Option.iter
     (apply (at_ push_filter Path.(all >>? is_filter >>| shallowest)) r)
-    ~f:(Format.printf "%a\n" pp);
-  [%expect {| alist(r as r1, alist(filter((r1.f = f), r) as r2, ascalar(r2.f))) |}]
+    ~f:(Format.printf "%a\n" pp) ;
+  [%expect
+    {| alist(r as r1, alist(filter((r1.f = f), r) as r2, ascalar(r2.f))) |}]
 
 let%expect_test "push-filter-runtime" =
   let r =
@@ -42,5 +43,6 @@ let%expect_test "push-filter-runtime" =
   in
   Option.iter
     (apply (at_ push_filter Path.(all >>? is_filter >>| shallowest)) r)
-    ~f:(Format.printf "%a\n" pp);
-  [%expect {| depjoin(r as r1, alist(r as r2, filter((r1.f = f), ascalar(r2.f)))) |}]
+    ~f:(Format.printf "%a\n" pp) ;
+  [%expect
+    {| depjoin(r as r1, alist(r as r2, filter((r1.f = f), ascalar(r2.f)))) |}]
