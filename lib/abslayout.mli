@@ -67,6 +67,8 @@ and ordered_idx = Abslayout0.ordered_idx =
   { oi_key_layout: Abslayout0.t option
   ; lookup_low: pred
   ; lookup_high: pred
+  ; bound_low: [`Open | `Closed]
+  ; bound_high: [`Open | `Closed]
   ; order: [`Asc | `Desc] }
 [@@deriving compare, hash, sexp_of]
 

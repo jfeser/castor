@@ -85,7 +85,8 @@ struct
     | TupleT ts -> List.mapi ts ~f:(fun i _ -> Infix.(index t i))
     | _ -> failwith "Expected a tuple type."
 
-  let build_bin_search build_key n low_target high_target callback b =
+  let build_bin_search build_key n low_target low_bound high_target high_bound
+      callback b =
     let open Builder in
     let low = build_defn "low" Infix.(int 0) b in
     let high = build_defn "high" n b in
@@ -112,8 +113,11 @@ struct
         let mid = build_defn "mid" Infix.((low + high) / int 2) b in
         let key = build_key mid b in
         print ~key ;
+        (* We're approaching the lower bound from below. If the lower bound is
+           open, then keep searching when the key equals the lower bound. *)
+        let cmp = match low_bound with `Open -> build_le | `Closed -> build_lt in
         build_if
-          ~cond:(build_lt key (Tuple [low_target]) b)
+          ~cond:(cmp key (Tuple [low_target]) b)
           ~then_:(fun b -> build_assign Infix.(mid + int 1) low b)
           ~else_:(fun b -> build_assign mid high b)
           b )
@@ -122,8 +126,9 @@ struct
       ~cond:Infix.(low < n)
       ~then_:(fun b ->
         let key = build_defn "key" (build_key low b) b in
+        let cmp = match high_bound with `Open -> build_lt | `Closed -> build_le in
         build_loop
-          Infix.(build_lt key (Tuple [high_target]) b && low < n)
+          Infix.(cmp key (Tuple [high_target]) b && low < n)
           (fun b ->
             print ~key ;
             callback key low b ;
@@ -516,14 +521,10 @@ struct
 
   and scan_ordered_idx ctx b r t cb =
     let open Builder in
-    let ( _
-        , value_layout
-        , Abslayout.{oi_key_layout= m_key_layout; lookup_low; lookup_high; _} ) =
-      r
-    in
-    let key_type, value_type, m = t in
+    let _, value_layout, m = r in
+    let key_type, value_type, mt = t in
     let key_layout =
-      Option.value_exn ~message:"No ordered idx key layout." m_key_layout
+      Option.value_exn ~message:"No ordered idx key layout." m.oi_key_layout
     in
     let hdr = Header.make_header (OrderedIdxT t) in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -541,7 +542,7 @@ struct
     let index_len = Header.make_access hdr "idx_len" start in
     let index_start = Header.make_position hdr "idx" start in
     let key_len = len index_start key_type in
-    let ptr_size = Type.oi_ptr_size value_type m in
+    let ptr_size = Type.oi_ptr_size value_type mt in
     let ptr_len = Infix.(int ptr_size) in
     let kp_len = Infix.(key_len + ptr_len) in
     let key_start i = Infix.(index_start + (i * kp_len)) in
@@ -556,8 +557,11 @@ struct
     in
     let n = Infix.(index_len / kp_len) in
     debug_print "scanning ordered idx" start b ;
-    build_bin_search key_index n (gen_pred ctx lookup_low b)
-      (gen_pred ctx lookup_high b)
+    build_bin_search key_index n
+      (gen_pred ctx m.lookup_low b)
+      m.bound_low
+      (gen_pred ctx m.lookup_high b)
+      m.bound_high
       (fun key idx b ->
         build_assign Infix.(read_ptr idx + index_len + index_start) vstart b ;
         build_assign key key_tuple b ;

@@ -69,6 +69,9 @@ ralgebra:
   | name = ID { A.Relation {r_name=name; r_schema=None} |> node $symbolstartpos $endpos }
   | r = ralgebra; AS; n = ID; { A.As (n, r) |> node $symbolstartpos $endpos }
 
+ub_op: LT { `Open } | LE { `Closed }
+lb_op: GT { `Open } | GE { `Closed }
+
 ralgebra_subquery:
   | SELECT; LPAREN;
 x = bracket_list(expr); COMMA;
@@ -130,10 +133,12 @@ RPAREN { A.(AHashIdx {hi_keys= r; hi_values= x; hi_key_layout = None; hi_lookup=
   | AORDEREDIDX; LPAREN;
 r = ralgebra; COMMA;
 x = ralgebra; COMMA;
-e1 = expr; COMMA;
-e2 = expr;
+lb = option(lb_op); e1 = expr; COMMA;
+ub = option(ub_op); e2 = expr;
 RPAREN { A.(AOrderedIdx (r, x, { lookup_low = e1;
                                  lookup_high = e2;
+                                 bound_low = Option.value lb ~default:`Closed;
+                                 bound_high = Option.value ub ~default:`Open;
                                  order = `Asc;
                                  oi_key_layout = None })) |> node $symbolstartpos $endpos }
 

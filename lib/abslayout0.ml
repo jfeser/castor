@@ -61,6 +61,8 @@ module T = struct
     { oi_key_layout: t option
     ; lookup_low: pred
     ; lookup_high: pred
+    ; bound_low: ([`Open | `Closed][@opaque])
+    ; bound_high: ([`Open | `Closed][@opaque])
     ; order: ([`Asc | `Desc][@opaque]) }
 
   and tuple = Cross | Zip | Concat
@@ -175,6 +177,8 @@ let unop_to_str = function
   | ExtractM -> "to_mon"
   | ExtractD -> "to_day"
 
+let pp_op fmt = function `Infix x | `Prefix x -> Format.fprintf fmt "%s" x
+
 let pp_kind fmt =
   Format.(
     function
@@ -244,9 +248,12 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
         fprintf fmt "atuple(%a,@ %a)" (pp_list pp) rs pp_kind kind
     | AHashIdx {hi_keys= r1; hi_scope= s; hi_values= r2; hi_lookup; _} ->
         fprintf fmt "ahashidx(%a as %s,@ %a,@ %a)" pp r1 s pp r2 pp_key hi_lookup
-    | AOrderedIdx (r1, r2, {lookup_low; lookup_high; _}) ->
-        fprintf fmt "aorderedidx(%a,@ %a,@ %a,@ %a)" pp r1 pp r2 pp_pred lookup_low
-          pp_pred lookup_high
+    | AOrderedIdx (r1, r2, ({lookup_low; lookup_high; _} as m)) ->
+        let lop = match m.bound_low with `Closed -> Ge | `Open -> Gt in
+        let uop = match m.bound_high with `Closed -> Le | `Open -> Lt in
+        fprintf fmt "aorderedidx(%a,@ %a,@ %a %a,@ %a %a)" pp r1 pp r2 pp_op
+          (op_to_str lop) pp_pred lookup_low pp_op (op_to_str uop) pp_pred
+          lookup_high
     | As (n, r) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp r n ) ;
     Option.iter pp_meta ~f:(fun ppm -> fprintf fmt "#@[<hv 2>%a@]" ppm !meta) ;
     fprintf fmt "@]"
