@@ -28,6 +28,10 @@ let%expect_test "mult" =
 
 let%expect_test "len-1" =
   ListT
-    (IntT {range= Interval (1, 1000); nullable= false}, {count= Interval (0, 100)})
+    ( IntT
+        { range= Interval (1, 1000)
+        ; nullable= false
+        ; distinct= Map.empty (module Int) }
+    , {count= Interval (0, 100)} )
   |> len |> [%sexp_of: AbsInt.t] |> print_s ;
   [%expect {| (Interval 3 203) |}]

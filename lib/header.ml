@@ -78,12 +78,12 @@ let rec make_header t =
   in
   let open Field in
   match t with
-  | Type.IntT {range; nullable} ->
+  | Type.IntT {range; nullable; _} ->
       let len = Type.AbsInt.byte_width ~nullable range in
       [ {name= "len"; size= `Empty len; align= 1}
       ; {name= "count"; size= `Empty 1; align= 1}
       ; {name= "value"; size= `Fixed len; align= 1} ]
-  | Type.DateT {range; nullable} ->
+  | Type.DateT {range; nullable; _} ->
       let len = Type.AbsInt.byte_width ~nullable range in
       [ {name= "len"; size= `Empty len; align= 1}
       ; {name= "count"; size= `Empty 1; align= 1}

@@ -10,7 +10,7 @@
   (name castor)
   (synopsis "A deductive database synthesizer")
   (depends
-    (dune (and :build (>= 1.1)))
+    (dune (and :build (>= 1.10)))
     (menhir :build)
 
     (core (>= v0.12))

@@ -19,6 +19,16 @@ module AbsInt = struct
 
   let zero = Interval (0, 0)
 
+  let inf = function
+    | Top -> Ok Int.min_value
+    | Bottom -> Error (Error.of_string "Bottom has no infimum.")
+    | Interval (x, _) -> Ok x
+
+  let sup = function
+    | Top -> Ok Int.max_value
+    | Bottom -> Error (Error.of_string "Bottom has no supremum.")
+    | Interval (_, x) -> Ok x
+
   let lift f i1 i2 =
     match (i1, i2) with
     | Bottom, _ | _, Bottom -> Bottom
@@ -93,25 +103,52 @@ module AbsFixed = struct
   let join = unify AbsInt.join
 end
 
+module Distinct = struct
+  type ('a, 'b) t = ('a, int, 'b) Map.t
+
+  let add m x = Map.update m x ~f:(function Some c -> c + 1 | None -> 1)
+
+  let num m x = Map.find m x |> Option.value ~default:0
+
+  let total m = Map.data m |> List.sum (module Int) ~f:(fun x -> x)
+
+  let join m1 m2 =
+    Map.merge m1 m2 ~f:(fun ~key:_ -> function
+      | `Both (c1, c2) -> Some (c1 + c2) | `Left c | `Right c -> Some c )
+end
+
 module T = struct
-  type int_ = {range: AbsInt.t; nullable: bool} [@@deriving compare, sexp]
+  type int_ =
+    { range: AbsInt.t
+    ; distinct: int Map.M(Int).t sexp_opaque
+    ; nullable: (bool[@sexp.bool]) }
+  [@@deriving compare, sexp_of]
 
-  type date = {range: AbsInt.t; nullable: bool} [@@deriving compare, sexp]
+  type date =
+    { range: AbsInt.t
+    ; distinct: int Map.M(Int).t sexp_opaque
+    ; nullable: (bool[@sexp.bool]) }
+  [@@deriving compare, sexp_of]
 
-  type bool_ = {nullable: bool} [@@deriving compare, sexp]
+  type bool_ = {nullable: (bool[@sexp.bool])} [@@deriving compare, sexp_of]
 
-  type string_ = {nchars: AbsInt.t; nullable: bool} [@@deriving compare, sexp]
+  type string_ =
+    { nchars: AbsInt.t
+    ; distinct: int Map.M(String).t sexp_opaque
+    ; nullable: (bool[@sexp.bool]) }
+  [@@deriving compare, sexp_of]
 
-  type list_ = {count: AbsInt.t} [@@deriving compare, sexp]
+  type list_ = {count: AbsInt.t} [@@deriving compare, sexp_of]
 
-  type tuple = {count: AbsInt.t} [@@deriving compare, sexp]
+  type tuple = {count: AbsInt.t} [@@deriving compare, sexp_of]
 
   type hash_idx = {key_count: AbsInt.t; value_count: AbsInt.t}
-  [@@deriving compare, sexp]
+  [@@deriving compare, sexp_of]
 
-  type ordered_idx = {count: AbsInt.t} [@@deriving compare, sexp]
+  type ordered_idx = {count: AbsInt.t} [@@deriving compare, sexp_of]
 
-  type fixed = {value: AbsFixed.t; nullable: bool} [@@deriving compare, sexp]
+  type fixed = {value: AbsFixed.t; nullable: (bool[@sexp.bool])}
+  [@@deriving compare, sexp_of]
 
   type t =
     | NullT
@@ -126,21 +163,23 @@ module T = struct
     | OrderedIdxT of (t * t * ordered_idx)
     | FuncT of (t list * [`Child_sum | `Width of int])
     | EmptyT
-  [@@deriving compare, sexp]
+  [@@deriving compare, sexp_of]
 end
 
 include T
-include Comparable.Make (T)
 
 let bind2 : f:('a -> 'b -> 'c option) -> 'a option -> 'b option -> 'c option =
  fun ~f x y -> match (x, y) with Some a, Some b -> f a b | _ -> None
 
 let least_general_of_primtype = function
-  | PrimType.IntT {nullable} -> IntT {range= AbsInt.bot; nullable}
+  | PrimType.IntT {nullable} ->
+      IntT {range= AbsInt.bot; nullable; distinct= Map.empty (module Int)}
   | NullT -> NullT
-  | DateT {nullable} -> DateT {range= AbsInt.bot; nullable}
+  | DateT {nullable} ->
+      DateT {range= AbsInt.bot; nullable; distinct= Map.empty (module Int)}
   | FixedT {nullable} -> FixedT {value= AbsFixed.bot; nullable}
-  | StringT {nullable; _} -> StringT {nchars= AbsInt.bot; nullable}
+  | StringT {nullable; _} ->
+      StringT {nchars= AbsInt.bot; nullable; distinct= Map.empty (module String)}
   | BoolT {nullable} -> BoolT {nullable}
   | TupleT _ | VoidT -> failwith "Not a layout type."
 
@@ -155,10 +194,14 @@ let rec unify_exn t1 t2 =
   in
   match (t1, t2) with
   | NullT, NullT -> NullT
-  | IntT {range= b1; nullable= n1}, IntT {range= b2; nullable= n2} ->
-      IntT {range= AbsInt.join b1 b2; nullable= n1 || n2}
-  | DateT {range= b1; nullable= n1}, DateT {range= b2; nullable= n2} ->
-      DateT {range= AbsInt.join b1 b2; nullable= n1 || n2}
+  | ( IntT {range= b1; nullable= n1; distinct= d1}
+    , IntT {range= b2; nullable= n2; distinct= d2} ) ->
+      IntT
+        {range= AbsInt.join b1 b2; nullable= n1 || n2; distinct= Distinct.join d1 d2}
+  | ( DateT {range= b1; nullable= n1; distinct= d1}
+    , DateT {range= b2; nullable= n2; distinct= d2} ) ->
+      DateT
+        {range= AbsInt.join b1 b2; nullable= n1 || n2; distinct= Distinct.join d1 d2}
   | FixedT {value= v1; nullable= n1}, FixedT {value= v2; nullable= n2} ->
       FixedT {value= AbsFixed.join v1 v2; nullable= n1 || n2}
   | IntT x, NullT | NullT, IntT x -> IntT {x with nullable= true}
@@ -166,8 +209,12 @@ let rec unify_exn t1 t2 =
   | FixedT x, NullT | NullT, FixedT x -> FixedT {x with nullable= true}
   | BoolT {nullable= n1}, BoolT {nullable= n2} -> BoolT {nullable= n1 || n2}
   | BoolT _, NullT | NullT, BoolT _ -> BoolT {nullable= true}
-  | StringT {nchars= b1; nullable= n1}, StringT {nchars= b2; nullable= n2} ->
-      StringT {nchars= AbsInt.join b1 b2; nullable= n1 || n2}
+  | ( StringT {nchars= b1; nullable= n1; distinct= d1}
+    , StringT {nchars= b2; nullable= n2; distinct= d2} ) ->
+      StringT
+        { nchars= AbsInt.join b1 b2
+        ; nullable= n1 || n2
+        ; distinct= Distinct.join d1 d2 }
   | StringT x, NullT | NullT, StringT x -> StringT {x with nullable= true}
   | TupleT (e1s, {count= c1}), TupleT (e2s, {count= c2}) ->
       let elem_ts =
