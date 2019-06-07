@@ -26,6 +26,14 @@ val exec_cursor_exn :
   -> string
   -> Value.t array Gen.t
 
+val exec_cursor_lwt_exn :
+     ?batch_size:int
+  -> ?params:string list
+  -> t
+  -> Type.PrimType.t list
+  -> string
+  -> Value.t array Lwt_stream.t
+
 val check : t -> string -> unit Or_error.t
 
 val relation : t -> string -> Abslayout0.relation

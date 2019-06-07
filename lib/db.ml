@@ -192,6 +192,19 @@ let load_tuples_exn s (r : Postgresql.result) =
     in
     gen
 
+let load_tuples_list_exn s (r : Postgresql.result) =
+  let nfields = List.length s in
+  if nfields <> r#nfields then
+    Error.(
+      create "Unexpected tuple width." (r#get_fnames_lst, s)
+        [%sexp_of: string list * Type.PrimType.t list]
+      |> raise)
+  else
+    List.init r#ntuples ~f:(fun tidx ->
+        Array.of_list_mapi s ~f:(fun fidx type_ ->
+            if r#getisnull tidx fidx then Value.Null
+            else load_value type_ (r#getvalue tidx fidx) |> Or_error.ok_exn ) )
+
 let exec_cursor_exn =
   let fresh = Fresh.create () in
   fun ?(batch_size = 10000) ?(params = []) db schema query ->
@@ -227,6 +240,32 @@ let exec_cursor_exn =
       |> Gen.flatten
     in
     seq
+
+let exec_cursor_lwt_exn =
+  let fresh = Fresh.create () in
+  fun ?(batch_size = 10000) ?(params = []) db schema query ->
+    let db = create db.uri in
+    Caml.Gc.finalise (fun db -> try (db.conn)#finish with Failure _ -> ()) db ;
+    let query = subst_params params query in
+    let cur = Fresh.name fresh "cur%d" in
+    let declare_query =
+      sprintf "begin transaction; declare %s cursor for %s;" cur query
+    in
+    let fetch_query = sprintf "fetch %d from %s;" batch_size cur in
+    exec db declare_query |> command_ok_exn ;
+    let is_done = ref false in
+    Lwt_stream.(
+      from
+        (Lwt_preemptive.detach (fun () ->
+             if !is_done then None
+             else
+               let r = exec db fetch_query in
+               let tups = load_tuples_list_exn schema r in
+               if r#ntuples < batch_size then (
+                 exec db "end transaction;" |> command_ok_exn ;
+                 is_done := true ) ;
+               Some tups ))
+      |> flatten)
 
 let check db sql =
   let open Or_error.Let_syntax in

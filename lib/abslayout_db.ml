@@ -1,4 +1,5 @@
 open! Core
+open! Lwt
 open Collections
 open Abslayout0
 module A = Abslayout
@@ -303,6 +304,10 @@ module Make (Config : Config.S) = struct
       List.fold_left l ~init ~f:fold |> extract
 
     let run_gen (Fold {init; fold; extract}) l = Gen.fold l ~init ~f:fold |> extract
+
+    let run_lwt (Fold {init; fold; extract}) l =
+      let%lwt ret = Lwt_stream.fold_s (fun x y -> return (fold y x)) l init in
+      return (extract ret)
   end
 
   open Fold
@@ -316,6 +321,44 @@ module Make (Config : Config.S) = struct
       match List.rev acc with [lhs; rhs] -> f lhs rhs | _ -> assert false
     in
     Fold {init; fold; extract}
+
+  let group_by eq strm =
+    let cur = ref (`Group []) in
+    let rec next () =
+      match !cur with
+      | `Done -> return None
+      | `Group g -> (
+          let%lwt tup = Lwt_stream.get strm in
+          match tup with
+          | None ->
+              cur := `Done ;
+              return (Some g)
+          | Some x -> (
+            match g with
+            | [] ->
+                cur := `Group [x] ;
+                next ()
+            | y :: _ ->
+                if eq x y then (
+                  cur := `Group (x :: g) ;
+                  next () )
+                else (
+                  cur := `Group [x] ;
+                  return (Some g) ) ) )
+    in
+    Lwt_stream.from next
+
+  let extract_group widths ctr tups =
+    let extract_counter tup = List.hd_exn tup |> Value.to_int in
+    let extract_tuple =
+      let take_ct = List.nth_exn widths ctr in
+      let drop_ct =
+        List.sum (module Int) (List.take widths ctr) ~f:(fun x -> x) + 1
+      in
+      fun tup -> List.take (List.drop tup drop_ct) take_ct
+    in
+    let%lwt group = Lwt_stream.get_while (fun t -> extract_counter t = ctr) tups in
+    List.map group ~f:extract_tuple |> Lwt_stream.of_list |> return
 
   class virtual ['a] abslayout_fold =
     object (self)
@@ -434,67 +477,44 @@ module Make (Config : Config.S) = struct
             self#key_layout q'
         | _ -> None
 
-      method private eval_for lctx tups a (n, _, q2) =
+      method private eval_for lctx tups a (n, _, q2) : 'a Lwt.t =
         let fold = self#for_ a in
         let split_tup t = List.split_n t n in
-        Gen.map tups ~f:split_tup
-        |> Gen.group_eager (fun (t1, _) (t2, _) ->
-               [%compare.equal: Value.t list] t1 t2 )
-        |> Gen.filter_map ~f:(fun ts ->
-               let open Option.Let_syntax in
+        Lwt_stream.map split_tup tups
+        |> group_by (fun (t1, _) (t2, _) -> [%compare.equal: Value.t list] t1 t2)
+        |> Lwt_stream.filter_map_s (fun ts ->
                let ts = List.rev ts in
-               let%map lhs = ts |> List.hd in
-               let lhs = Tuple.T2.get1 lhs in
-               let rhs = ts |> Gen.of_list |> Gen.map ~f:Tuple.T2.get2 in
-               let lval =
-                 Option.map (self#key_layout a.Q.meta) ~f:(fun l ->
-                     self#scalars {a with meta= l} lhs )
-               in
-               let rval = self#eval lctx rhs q2 in
-               (lhs, lval, rval) )
-        |> run_gen fold
+               match List.hd ts with
+               | None -> return None
+               | Some lhs ->
+                   let lhs = Tuple.T2.get1 lhs in
+                   let rhs =
+                     ts |> List.map ~f:Tuple.T2.get2 |> Lwt_stream.of_list
+                   in
+                   let lval =
+                     Option.map (self#key_layout a.Q.meta) ~f:(fun l ->
+                         self#scalars {a with meta= l} lhs )
+                   in
+                   let%lwt rval = self#eval lctx rhs q2 in
+                   return (Some (lhs, lval, rval)) )
+        |> run_lwt fold
 
-      method private eval_concat lctx tups a qs =
+      method private eval_concat lctx tups a qs : 'a Lwt.t =
         let (Fold {init; fold; extract}) = self#concat a in
-        let tups = ref tups in
-        let put_back t = tups := Gen.append (Gen.singleton t) !tups in
-        let take_while pred =
-          let stop = ref false in
-          let next () =
-            if !stop then None
-            else
-              match Gen.get !tups with
-              | Some x ->
-                  if pred x then Some x
-                  else (
-                    stop := true ;
-                    put_back x ;
-                    None )
-              | None -> None
-          in
-          next
-        in
         let widths = List.map qs ~f:Q.width in
-        let extract_counter tup = List.hd_exn tup |> Value.to_int in
-        let mk_extract_tuple ctr =
-          let take_ct = List.nth_exn widths ctr in
-          let drop_ct =
-            List.sum (module Int) (List.take widths ctr) ~f:(fun x -> x) + 1
-          in
-          fun tup -> List.take (List.drop tup drop_ct) take_ct
+        let%lwt acc =
+          List.foldi ~init:(return init) qs ~f:(fun oidx acc q ->
+              let%lwt acc = acc in
+              let%lwt group = extract_group widths oidx tups in
+              let%lwt v = self#eval lctx group q in
+              return (fold acc v) )
         in
-        List.foldi ~init qs ~f:(fun oidx acc q ->
-            let extract_tuple = mk_extract_tuple oidx in
-            let strm =
-              take_while (fun t -> extract_counter t = oidx)
-              |> Gen.map ~f:extract_tuple
-            in
-            fold acc (self#eval lctx strm q) )
-        |> extract
+        return (extract acc)
 
-      method private eval_scalars _ tups a ps =
+      method private eval_scalars _ tups a ps : 'a Lwt.t =
+        let%lwt tup = Lwt_stream.get tups in
         let values =
-          match Gen.next tups with
+          match tup with
           | Some xs when List.length xs = List.length ps -> xs
           | Some t ->
               Error.(
@@ -503,63 +523,38 @@ module Make (Config : Config.S) = struct
                 |> raise)
           | None -> failwith "Expected a tuple."
         in
-        self#scalars a values
+        return (self#scalars a values)
 
-      method private eval_empty _ tups a =
-        if Gen.is_empty tups then self#qempty a
+      method private eval_empty _ tups a : 'a Lwt.t =
+        let%lwt is_empty = Lwt_stream.is_empty tups in
+        if is_empty then return (self#qempty a)
         else failwith "Empty: expected an empty generator."
 
-      method private eval_let (lctx : 'a Map.M(String).t) tups (binds, q) =
-        let tups = ref tups in
-        let put_back t = tups := Gen.append (Gen.singleton t) !tups in
-        let take_while pred =
-          let stop = ref false in
-          let next () =
-            if !stop then None
-            else
-              match Gen.get !tups with
-              | Some x ->
-                  if pred x then Some x
-                  else (
-                    stop := true ;
-                    put_back x ;
-                    None )
-              | None -> None
-          in
-          next
-        in
+      method private eval_let lctx tups (binds, q) : 'a Lwt.t =
         let widths = List.map binds ~f:(fun (_, q) -> Q.width q) @ [Q.width q] in
-        let extract_counter tup = List.hd_exn tup |> Value.to_int in
-        let mk_extract_tuple ctr =
-          let take_ct = List.nth_exn widths ctr in
-          let drop_ct =
-            List.sum (module Int) (List.take widths ctr) ~f:(fun x -> x) + 1
-          in
-          fun tup -> List.take (List.drop tup drop_ct) take_ct
-        in
-        let binds =
-          List.mapi binds ~f:(fun oidx (n, q) ->
-              let extract_tuple = mk_extract_tuple oidx in
-              let strm =
-                take_while (fun t -> extract_counter t = oidx)
-                |> Gen.map ~f:extract_tuple
-              in
-              (n, self#eval lctx strm q) )
+        (* The first n groups contain the values for the bound layouts. *)
+        let%lwt binds =
+          Lwt_list.mapi_s
+            (fun oidx (n, q) ->
+              let%lwt strm = extract_group widths oidx tups in
+              let%lwt v = self#eval lctx strm q in
+              return (n, v) )
+            binds
         in
         let lctx =
-          List.fold_left binds ~init:lctx ~f:(fun ctx (n, q) ->
-              Map.set ctx ~key:n ~data:q )
+          List.fold_left ~init:lctx
+            ~f:(fun ctx (n, v) -> Map.set ctx ~key:n ~data:v)
+            binds
         in
-        let oidx = List.length binds in
-        let extract_tuple = mk_extract_tuple oidx in
-        let strm =
-          take_while (fun t -> extract_counter t = oidx) |> Gen.map ~f:extract_tuple
-        in
+        (* The n+1 group contains values for the layout in the body of the let. *)
+        let%lwt strm = extract_group widths (List.length binds) tups in
         self#eval lctx strm q
 
-      method private eval_var lctx tups n = Gen.junk tups ; Map.find_exn lctx n
+      method private eval_var lctx tups n : 'a Lwt.t =
+        let%lwt () = Lwt_stream.junk tups in
+        return (Map.find_exn lctx n)
 
-      method private eval lctx tups a =
+      method private eval lctx tups a : 'a Lwt.t =
         match a.Q.node with
         | Q.Let x -> self#eval_let lctx tups x
         | Q.Var x -> self#eval_var lctx tups x
@@ -570,20 +565,15 @@ module Make (Config : Config.S) = struct
 
       method run r =
         let q = A.ensure_alias r |> Q.of_ralgebra |> Q.hoist_all in
-        (* Log.debug (fun m ->
-         *     m "Executing type checking query %a." pp (Q.to_ralgebra q) ) ; *)
         let r = Q.to_ralgebra q |> simplify in
-        (* Log.debug (fun m -> m "Executing type checking query %a." pp r) ; *)
         let sql = Sql.of_ralgebra r in
-        (* Log.debug (fun m ->
-         *     m "Executing type checking query %s." (Sql.to_string_hum sql) ) ; *)
         let tups =
-          Db.exec_cursor_exn conn
+          Db.exec_cursor_lwt_exn conn
             (A.schema_exn r |> List.map ~f:Name.type_exn)
             (Sql.to_string_hum sql)
-          |> Gen.map ~f:Array.to_list
+          |> Lwt_stream.map Array.to_list
         in
-        self#eval (Map.empty (module String)) tups (Q.to_width q)
+        self#eval (Map.empty (module String)) tups (Q.to_width q) |> Lwt_main.run
     end
 
   (** Returns the least general type of a layout. *)
