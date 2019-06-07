@@ -148,47 +148,19 @@ module Make (C : Config.S) = struct
       | DateT _ -> Date (Date.of_string "9999-01-01")
       | _ -> failwith "Unexpected type."
     in
-    let fix_upper_bound bound kind =
-      match kind with
-      | `Open -> Ok bound
-      | `Closed -> (
-          let open Type.PrimType in
-          match t with
-          | IntT _ -> Ok (Binop (Add, bound, Int 1))
-          | DateT _ -> Ok (Binop (Add, bound, Unop (Day, Int 1)))
-          | FixedT _ -> Ok (Binop (Add, bound, Fixed Fixed_point.epsilon))
-          | NullT | StringT _ | BoolT _ | TupleT _ | VoidT ->
-              failwith "Unexpected type." )
-    in
-    let fix_lower_bound bound kind =
-      match kind with
-      | `Closed -> Ok bound
-      | `Open -> (
-          let open Type.PrimType in
-          match t with
-          | IntT _ -> Ok (Binop (Add, bound, Int 1))
-          | DateT _ -> Ok (Binop (Add, bound, Unop (Day, Int 1)))
-          | FixedT _ -> Ok (Binop (Add, bound, Fixed Fixed_point.epsilon))
-          | NullT | StringT _ | BoolT _ | TupleT _ | VoidT ->
-              failwith "Unexpected type." )
-    in
-    let open Or_error.Let_syntax in
-    let%bind lb =
-      match lb with
-      | None -> Ok default_min
-      | Some (b, k) -> fix_lower_bound b k
-    in
-    let%map ub =
-      match ub with
-      | None -> Ok default_max
-      | Some (b, k) -> fix_upper_bound b k
-    in
+    let lp, lk = Option.value lb ~default:(default_min, `Closed) in
+    let up, uk = Option.value ub ~default:(default_max, `Closed) in
     let k = Fresh.name Global.fresh "k%d" in
     ordered_idx
       (dedup (select [p] rk))
       k
       (filter (Binop (Eq, qualify k p, p)) rv)
-      {oi_key_layout= None; lookup_low= lb; lookup_high= ub; order= `Desc}
+      { oi_key_layout= None
+      ; lookup_low= lp
+      ; bound_low= lk
+      ; lookup_high= up
+      ; bound_high= uk
+      ; order= `Desc }
 
   (** A predicate `p` is a candidate lookup key into a partitioning of `r` if it
      does not depend on any of the fields in `r`.
@@ -255,8 +227,8 @@ module Make (C : Config.S) = struct
                               in
                               Binop (op, p, p') ) )
                  in
-                 let%bind rk = Tactics_util.all_values [key] r' in
-                 let%map idx =
+                 let%map rk = Tactics_util.all_values [key] r' in
+                 let idx =
                    gen_ordered_idx ?lb:(List.hd lb) ?ub:(List.hd ub) key rk r'
                  in
                  (rest', idx)
