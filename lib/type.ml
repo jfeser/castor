@@ -112,9 +112,7 @@ module Distinct = struct
 
   let total m = Map.data m |> List.sum (module Int) ~f:(fun x -> x)
 
-  let join m1 m2 =
-    Map.merge m1 m2 ~f:(fun ~key:_ -> function
-      | `Both (c1, c2) -> Some (c1 + c2) | `Left c | `Right c -> Some c )
+  let join m1 m2 = Map.merge_skewed m1 m2 ~combine:(fun ~key:_ c1 c2 -> c1 + c2)
 end
 
 module T = struct
