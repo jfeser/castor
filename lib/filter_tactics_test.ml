@@ -65,7 +65,7 @@ let%expect_test "elim-eq-filter" =
       [%expect
         {|
           ahashidx(dedup(select([fresh], select([f as fresh], r))) as s0,
-            filter((fresh = s0.fresh), select([f as fresh], r)),
+            select([], filter((fresh = s0.fresh), select([f as fresh], r))),
             param) |}]
   )
 
@@ -79,6 +79,7 @@ let%expect_test "elim-eq-filter-approx" =
       [%expect
         {|
           ahashidx(select([f as fresh], dedup(select([f], r))) as s0,
-            filter((fresh = s0.fresh), select([f as fresh], filter((g = param), r))),
+            select([],
+              filter((fresh = s0.fresh), select([f as fresh], filter((g = param), r)))),
             param) |}]
   )

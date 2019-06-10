@@ -75,4 +75,14 @@ module Make (Config : Config.S) = struct
   let is_supported bound pred =
     Set.for_all (pred_free pred) ~f:(fun n ->
         Set.mem bound n || Poly.(Name.Meta.(find_exn n stage) = `Compile) )
+
+  (** Remove names from a selection list. *)
+  let select_out ns r =
+    let ns = List.map ns ~f:Name.unscoped in
+    select
+      ( schema_exn r
+      |> List.filter ~f:(fun n' ->
+             not (List.mem ~equal:Name.O.( = ) ns (Name.unscoped n')) )
+      |> List.map ~f:(fun n -> Name n) )
+      r
 end
