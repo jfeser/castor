@@ -151,10 +151,21 @@ module Make (C : Config.S) = struct
     let lp, lk = Option.value lb ~default:(default_min, `Closed) in
     let up, uk = Option.value ub ~default:(default_max, `Closed) in
     let k = Fresh.name Global.fresh "k%d" in
+    let select_out_pred r =
+      match Pred.to_name p with
+      | Some n ->
+          select
+            ( schema_exn r
+            |> List.filter_map ~f:(fun n' ->
+                   if Name.(O.(unscoped n = unscoped n')) then None
+                   else Some (Name n') ) )
+            r
+      | None -> r
+    in
     ordered_idx
       (dedup (select [p] rk))
       k
-      (filter (Binop (Eq, qualify k p, p)) rv)
+      (select_out_pred (filter (Binop (Eq, qualify k p, p)) rv))
       { oi_key_layout= None
       ; lookup_low= lp
       ; bound_low= lk
