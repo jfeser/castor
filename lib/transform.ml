@@ -45,6 +45,7 @@ module Make (Config : Config.S) () = struct
   module Select_tactics = Select_tactics.Make (Config)
   module Groupby_tactics = Groupby_tactics.Make (Config)
   module Join_elim_tactics = Join_elim_tactics.Make (Config)
+  module Tactics_util = Tactics_util.Make (Config)
 
   let project r = Some (Project.project_once r)
 
@@ -69,7 +70,7 @@ module Make (Config : Config.S) () = struct
   let push_orderby r =
     let key_is_supported r key =
       let s = Set.of_list (module Name) (schema_exn r) in
-      List.for_all key ~f:(fun (p, _) -> F.is_supported s p)
+      List.for_all key ~f:(fun (p, _) -> Tactics_util.is_supported s p)
     in
     let orderby_cross_tuple key rs =
       match rs with
@@ -88,8 +89,8 @@ module Make (Config : Config.S) () = struct
     match r.node with
     | OrderBy {key; rel= {node= Select (ps, r); _}} ->
         let s = Set.of_list (module Name) (schema_exn r) in
-        if List.for_all key ~f:(fun (p, _) -> F.is_supported s p) then
-          Some (select ps (order_by key r))
+        if List.for_all key ~f:(fun (p, _) -> Tactics_util.is_supported s p)
+        then Some (select ps (order_by key r))
         else None
     | OrderBy {key; rel= {node= Filter (ps, r); _}} ->
         Some (filter ps (order_by key r))

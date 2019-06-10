@@ -39,12 +39,6 @@ module Make (C : Config.S) = struct
     List.partition_tf (Pred.conjuncts p) ~f:(fun p' ->
         overlaps (pred_free p') (schema_set_exn binder) )
 
-  (** Check that a predicate is fully supported by a relation (it does not
-      depend on anything in the context.) *)
-  let is_supported bound pred =
-    Set.for_all (pred_free pred) ~f:(fun n ->
-        Set.mem bound n || Poly.(Name.Meta.(find_exn n stage) = `Compile) )
-
   (** Check that a predicate is supported by a relation (it does not depend on
      anything in the context that it did not previously depend on.) *)
   let invariant_support orig_bound new_bound pred =
@@ -214,15 +208,15 @@ module Make (C : Config.S) = struct
                  let lb =
                    List.filter_map bounds ~f:(fun (f, p) ->
                        match f with
-                       | `Gt -> Some (p, `Closed)
-                       | `Ge -> Some (p, `Open)
+                       | `Gt -> Some (p, `Open)
+                       | `Ge -> Some (p, `Closed)
                        | _ -> None )
                  in
                  let ub =
                    List.filter_map bounds ~f:(fun (f, p) ->
                        match f with
-                       | `Lt -> Some (p, `Closed)
-                       | `Le -> Some (p, `Open)
+                       | `Lt -> Some (p, `Open)
+                       | `Le -> Some (p, `Closed)
                        | _ -> None )
                  in
                  let rest' =
@@ -287,7 +281,9 @@ module Make (C : Config.S) = struct
             let bnd =
               List.nth_exn rs i |> schema_exn |> Set.of_list (module Name)
             in
-            let pl, up = List.partition_tf ps ~f:(is_supported bnd) in
+            let pl, up =
+              List.partition_tf ps ~f:(Tactics_util.is_supported bnd)
+            in
             preds.(i) <- pl ;
             place_all up (i + 1)
         in
@@ -320,7 +316,8 @@ module Make (C : Config.S) = struct
         let pushed_key, pushed_val =
           Pred.conjuncts p
           |> List.partition_map ~f:(fun p ->
-                 if is_supported rk_bnd p then `Fst p else `Snd p )
+                 if Tactics_util.is_supported rk_bnd p then `Fst p else `Snd p
+             )
         in
         let inner_key_pred = Pred.conjoin pushed_key in
         let inner_val_pred = Pred.conjoin pushed_val in
@@ -330,9 +327,14 @@ module Make (C : Config.S) = struct
     (* NOTE: Simplify is necessary to make push-filter safe under fixpoints. *)
     seq' (of_func push_filter ~name:"push-filter") simplify
 
+  let elim_eq_filter_src =
+    let src = Logs.Src.create "elim-eq-filter" in
+    Logs.Src.set_level src None ;
+    src
+
   let elim_eq_filter r =
     match r.node with
-    | Filter (p, r) ->
+    | Filter (p, r) -> (
         let eqs, rest =
           Pred.conjuncts p
           |> List.partition_map ~f:(function
@@ -344,10 +346,11 @@ module Make (C : Config.S) = struct
                    else `Snd p
                | p -> `Snd p )
         in
-        if List.length eqs = 0 then None
+        if List.length eqs = 0 then (
+          Logs.info ~src:elim_eq_filter_src (fun m -> m "Found no equalities.") ;
+          None )
         else
           let scope = Fresh.name Global.fresh "s%d" in
-          let open Option.Let_syntax in
           let select_list, key = List.unzip eqs in
           let inner_filter_pred =
             let s = schema_exn r in
@@ -358,9 +361,18 @@ module Make (C : Config.S) = struct
           let outer_filter r =
             match rest with [] -> r | _ -> filter (and_ rest) r
           in
-          let%map r' = Tactics_util.all_values select_list r |> Result.ok in
-          outer_filter (hash_idx r' scope (filter inner_filter_pred r) key)
-    | _ -> None
+          match Tactics_util.all_values select_list r with
+          | Ok r' ->
+              Some
+                (outer_filter
+                   (hash_idx r' scope (filter inner_filter_pred r) key))
+          | Error err ->
+              Logs.info ~src:elim_eq_filter_src (fun m ->
+                  m "Could not get all values: %a" Error.pp err ) ;
+              None )
+    | _ ->
+        Logs.debug ~src:elim_eq_filter_src (fun m -> m "Not a filter.") ;
+        None
 
   let elim_eq_filter = of_func elim_eq_filter ~name:"elim-eq-filter"
 

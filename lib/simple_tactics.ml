@@ -20,7 +20,11 @@ module Make (Config : Config.S) = struct
   let no_params r = Set.is_empty (Set.inter (names r) params)
 
   let row_store r =
-    if no_params r then
+    if
+      (* Relation has no free variables that are bound at runtime. *)
+      Set.for_all (free r) ~f:(fun n ->
+          Poly.(Name.Meta.(find_exn n stage) = `Compile) )
+    then
       let scope = Fresh.name Global.fresh "s%d" in
       let scalars =
         Schema.scoped scope (schema_exn r)

@@ -2,9 +2,13 @@ open! Core
 open Castor
 open Abslayout
 open Filter_tactics
+open Test_util
 
 module C = struct
-  let params = Set.empty (module Name)
+  let params =
+    Set.singleton
+      (module Name)
+      (Name.create ~type_:Type.PrimType.int_t "param")
 
   let fresh = Fresh.create ()
 
@@ -14,7 +18,7 @@ module C = struct
 
   let param_ctx = Map.empty (module Name)
 
-  let conn = Lazy.force Test_util.test_db_conn
+  let conn = Lazy.force test_db_conn
 
   let simplify = None
 end
@@ -46,3 +50,35 @@ let%expect_test "push-filter-runtime" =
     ~f:(Format.printf "%a\n" pp) ;
   [%expect
     {| depjoin(r as r1, alist(r as r2, filter((r1.f = f), ascalar(r2.f)))) |}]
+
+let with_log src f =
+  Logs.Src.set_level src (Some Debug) ;
+  Exn.protect ~f ~finally:(fun () -> Logs.Src.set_level src None)
+
+let%expect_test "elim-eq-filter" =
+  let r =
+    M.load_string ~params:C.params
+      "filter(fresh = param, select([f as fresh], r))"
+  in
+  with_log elim_eq_filter_src (fun () ->
+      Option.iter (apply elim_eq_filter r) ~f:(Format.printf "%a\n" pp) ;
+      [%expect
+        {|
+          ahashidx(dedup(select([fresh], select([f as fresh], r))) as s0,
+            filter((fresh = s0.fresh), select([f as fresh], r)),
+            param) |}]
+  )
+
+let%expect_test "elim-eq-filter-approx" =
+  let r =
+    M.load_string ~params:C.params
+      "filter(fresh = param, select([f as fresh], filter(g = param, r)))"
+  in
+  with_log elim_eq_filter_src (fun () ->
+      Option.iter (apply elim_eq_filter r) ~f:(Format.printf "%a\n" pp) ;
+      [%expect
+        {|
+          ahashidx(select([f as fresh], dedup(select([f], r))) as s0,
+            filter((fresh = s0.fresh), select([f as fresh], filter((g = param), r))),
+            param) |}]
+  )

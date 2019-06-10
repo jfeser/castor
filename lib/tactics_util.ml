@@ -38,6 +38,7 @@ module Make (Config : Config.S) = struct
     (* Find the definition of each key and collect all the names in that
        definition. If they all come from base relations, then we can enumerate
        the keys. *)
+    let orig_names = List.map ps ~f:Pred.to_name in
     let preds = List.map ps ~f:(Pred.subst alias_map) in
     let%map rels =
       List.map preds ~f:(fun p ->
@@ -62,8 +63,16 @@ module Make (Config : Config.S) = struct
                 (List.map ns ~f:(fun n -> Name n))
                 (relation (Db.relation conn r))) )
     |> List.fold_left1_exn ~f:(join (Bool true))
-    |> select preds
+    |> select
+         (List.map2_exn orig_names preds ~f:(fun n p ->
+              match n with Some n -> As_pred (p, Name.name n) | None -> p ))
 
   let all_values ps r =
     Or_error.find_ok [all_values_precise ps r; all_values_approx ps r]
+
+  (** Check that a predicate is fully supported by a relation (it does not
+      depend on anything in the context.) *)
+  let is_supported bound pred =
+    Set.for_all (pred_free pred) ~f:(fun n ->
+        Set.mem bound n || Poly.(Name.Meta.(find_exn n stage) = `Compile) )
 end

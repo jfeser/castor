@@ -39,7 +39,7 @@ let main ~params:all_params ~db ~validate ch =
           Logs.warn (fun m -> m "Query is not serializable: %a" Error.pp err)
       ) ;
       Format.printf "%a" Abslayout.pp query'
-  | None -> ()
+  | None -> Logs.warn (fun m -> m "Optimization failed.")
 
 let () =
   let open Command.Let_syntax in
