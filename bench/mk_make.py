@@ -2,6 +2,7 @@
 
 from jsmin import jsmin
 import json
+import shlex
 
 DEBUG = True
 
@@ -96,6 +97,11 @@ time: %s
 .PHONY: time
 ''' % (' '.join(['%s-opt.time' % b['name'] for b in bench])))
 
+print('''
+gold: %s
+.PHONY: gold
+''' % (' '.join(['gold/%s.csv' % b['name'] for b in bench])))
+
 for b in bench:
     print('''
 {0}: {2}
@@ -115,6 +121,16 @@ for b in bench:
 {0}-opt.time: {1}
 \t./{1}/scanner.exe -t $(TIME_PER_BENCH) {1}/data.bin {2} > $@
 '''.format(b['name'], out_dir(b), gen_param_values(b)))
+    print('''
+{0}-opt.valid: {1}
+\t../bin/validate.py {0} {2} {0}-opt.csv > $@
+    '''.format(b['name'], out_dir(b), str(b['ordered'])))
+
+    print('''
+gold/{0}.csv:
+\tmkdir -p gold
+\t../bin/run_psql.py $(DB) {0}.sql {1} > $@
+    '''.format(b['name'], shlex.quote(json.dumps(list(b['params'].values())))))
 
 print('''
 .PHONY: clean
