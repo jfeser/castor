@@ -1,5 +1,8 @@
 *-opt.txt
 *-opt.csv
 *-opt/
+*.time
+analysis_*.log
+gold/
 hashes.txt
 Makefile

@@ -4,7 +4,7 @@ from jsmin import jsmin
 import json
 import shlex
 
-DEBUG = True
+DEBUG = False
 
 with open('queries.json', 'r') as f:
     bench = json.loads(jsmin(f.read()))
@@ -102,6 +102,11 @@ gold: %s
 .PHONY: gold
 ''' % (' '.join(['gold/%s.csv' % b['name'] for b in bench])))
 
+print('''
+validate: %s
+.PHONY: validate
+''' % (' '.join(['analysis_%s-opt.csv.log' % b['name'] for b in bench])))
+
 for b in bench:
     print('''
 {0}: {2}
@@ -122,8 +127,8 @@ for b in bench:
 \t./{1}/scanner.exe -t $(TIME_PER_BENCH) {1}/data.bin {2} > $@
 '''.format(b['name'], out_dir(b), gen_param_values(b)))
     print('''
-{0}-opt.valid: {1}
-\t../bin/validate.py {0} {2} {0}-opt.csv > $@
+analysis_{0}-opt.csv.log: {1}
+\t../bin/validate.py {0} {2} {0}-opt.csv
     '''.format(b['name'], out_dir(b), str(b['ordered'])))
 
     print('''

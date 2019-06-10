@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 
+import os
+import subprocess
+import sys
+
+FILE_PATH = os.path.dirname(os.path.abspath(__file__))
+
 def rpath(p):
     return os.path.normpath(os.path.join(FILE_PATH, p))
 
 VALIDATE_SCRIPT = rpath("cmpq.pl")
 
 def call(cmd_args, *args, **kwargs):
-    log.debug(" ".join(cmd_args))
     return subprocess.call(cmd_args, *args, **kwargs)
 
 def sort_file(fn):
@@ -23,11 +28,11 @@ def ensure_newline(fn):
         return
 
 def validate(name, ordered, result_csv):
-    bench_num = bench["name"].split("-")[0]
-    gold_csv = "gold/%s.csv" % bench["name"]
+    bench_num = name.split("-")[0]
+    gold_csv = "gold/%s.csv" % name
     ensure_newline(gold_csv)
     ensure_newline(result_csv)
-    if not bench["ordered"]:
+    if not ordered:
         sort_file(gold_csv)
         sort_file(result_csv)
     call([VALIDATE_SCRIPT, bench_num, gold_csv, result_csv])
