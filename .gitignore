@@ -1,3 +1,5 @@
 # Merlin configuring file for Vim and Emacs
 .merlin
 *.install
+*.opam
+
