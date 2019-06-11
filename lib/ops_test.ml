@@ -25,7 +25,7 @@ let%expect_test "at" =
   in
   let tf = of_func (fun _ -> Some (relation test2)) in
   let op = at_ tf Path.(all >>? is_relation >>| shallowest) in
-  ( match apply op r with
+  ( match apply op Path.root r with
   | Some r -> Format.printf "%a" pp r
   | None -> print_endline "Transform failed." ) ;
   [%expect {| filter(true, select([false], filter(false, test2))) |}]
@@ -35,13 +35,13 @@ let%expect_test "at" =
     filter (Bool true)
       (select [Bool false] (filter (Bool false) (relation test1)))
   in
-  let tf = first_order (fun _ -> Some (relation test2)) "tf" in
+  let tf = local (fun _ -> Some (relation test2)) "tf" in
   let op =
     at_
       (at_ tf Path.(all >>? is_relation >>| shallowest))
       Path.(all >>? is_select >>| shallowest)
   in
-  ( match apply op r with
+  ( match apply op Path.root r with
   | Some r -> Format.printf "%a" pp r
   | None -> print_endline "Transform failed." ) ;
   [%expect {| filter(true, select([false], filter(false, test2))) |}]

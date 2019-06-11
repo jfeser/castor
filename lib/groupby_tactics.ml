@@ -142,7 +142,7 @@ groupby([o_year,
 |}
     in
     with_logs (fun () ->
-        apply elim_groupby r
+        apply elim_groupby Path.root r
         |> Option.iter ~f:(Format.printf "%a@." Abslayout.pp) ) ;
     [%expect
       {|

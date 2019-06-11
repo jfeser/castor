@@ -1,9 +1,9 @@
 open Core
+open Graph
+open Printf
 open Castor
 open Collections
 module A = Abslayout
-open Graph
-open Printf
 
 module Config = struct
   module type S = sig
@@ -519,10 +519,13 @@ module Make (C : Config.S) = struct
           ; elim_join_nest ]
 
   let transform =
-    let f r =
-      opt r
+    let f p r =
+      opt (Path.get_exn p r)
       |> ParetoSet.min_elt (fun a -> a.(0))
-      |> Option.map ~f:(fun j -> seq_many [of_func (reshape j); emit_joins j])
+      |> Option.map ~f:(fun j ->
+             at_
+               (seq_many [of_func (reshape j); emit_joins j])
+               (fun _ -> Some p) )
     in
     higher_order f "join-opt"
 end

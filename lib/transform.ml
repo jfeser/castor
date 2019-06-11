@@ -56,7 +56,7 @@ module Make (Config : Config.S) () = struct
 
     let simplify =
       let tf = fix (seq_many [resolve; project; Sf.simplify]) in
-      Some (fun r -> Option.value (apply tf r) ~default:r)
+      Some (fun r -> Option.value (apply tf Path.root r) ~default:r)
   end
 
   module Type_cost = Type_cost.Make (Config)
@@ -229,7 +229,7 @@ let optimize (module C : Config.S) r =
         let module T = Make (C) () in
         let module O = Ops.Make (C) in
         Option.value_exn ~message:"Transforming subquery failed."
-          (O.apply T.opt r)
+          (O.apply T.opt Path.root r)
 
       method! visit_Exists () r = Exists (self#visit_subquery r)
 
@@ -240,4 +240,4 @@ let optimize (module C : Config.S) r =
   let module T = Make (C) () in
   let module O = Ops.Make (C) in
   (* Optimize outer query. *)
-  O.apply T.opt r
+  O.apply T.opt Path.root r
