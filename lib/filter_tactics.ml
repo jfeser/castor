@@ -85,16 +85,19 @@ module Make (C : Config.S) = struct
     | AList (rk, rv) ->
         let%map p, r = to_filter rv in
         let below, above = split_bound rk p in
+        let above = List.map above ~f:(Pred.unscoped (scope_exn rk)) in
         filter (Pred.conjoin above)
           (list rk (scope_exn rk) (filter (Pred.conjoin below) r))
     | AHashIdx ({hi_keys= rk; hi_values= rv; _} as h) ->
         let%map p, r = to_filter rv in
         let below, above = split_bound rk p in
+        let above = List.map above ~f:(Pred.unscoped h.hi_scope) in
         filter (Pred.conjoin above)
           (hash_idx' {h with hi_values= filter (Pred.conjoin below) r})
     | AOrderedIdx (rk, rv, m) ->
         let%map p, r = to_filter rv in
         let below, above = split_bound rk p in
+        let above = List.map above ~f:(Pred.unscoped (scope_exn rk)) in
         filter (Pred.conjoin above)
           (ordered_idx rk (scope_exn rk) (filter (Pred.conjoin below) r) m)
     | Relation _ | AEmpty | AScalar _ | ATuple _ | As (_, _) | DepJoin _ ->
@@ -238,8 +241,7 @@ module Make (C : Config.S) = struct
         |> Seq.of_list
     | _ -> Seq.empty
 
-  let elim_cmp_filter =
-    Branching.of_func elim_cmp_filter ~name:"elim-cmp-filter"
+  let elim_cmp_filter = Branching.local elim_cmp_filter ~name:"elim-cmp-filter"
 
   (* | ATuple (_rs, Cross) ->
    *     None
@@ -312,7 +314,12 @@ module Make (C : Config.S) = struct
              )
         in
         let inner_key_pred = Pred.conjoin pushed_key in
-        let inner_val_pred = Pred.conjoin pushed_val in
+        let inner_val_pred =
+          let pushed_val =
+            List.map pushed_val ~f:(Pred.scoped (Set.to_list rk_bnd) scope)
+          in
+          Pred.conjoin pushed_val
+        in
         mk (filter inner_key_pred rk) scope (filter inner_val_pred rv)
 
   let push_filter =

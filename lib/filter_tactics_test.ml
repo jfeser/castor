@@ -35,7 +35,9 @@ let%expect_test "push-filter-comptime" =
       "alist(r as r1, filter(r1.f = f, alist(r as r2, ascalar(r2.f))))"
   in
   Option.iter
-    (apply (at_ push_filter Path.(all >>? is_filter >>| shallowest)) r)
+    (apply
+       (at_ push_filter Path.(all >>? is_filter >>| shallowest))
+       Path.root r)
     ~f:(Format.printf "%a\n" pp) ;
   [%expect
     {| alist(r as r1, alist(filter((r1.f = f), r) as r2, ascalar(r2.f))) |}]
@@ -46,10 +48,25 @@ let%expect_test "push-filter-runtime" =
       "depjoin(r as r1, filter(r1.f = f, alist(r as r2, ascalar(r2.f))))"
   in
   Option.iter
-    (apply (at_ push_filter Path.(all >>? is_filter >>| shallowest)) r)
+    (apply
+       (at_ push_filter Path.(all >>? is_filter >>| shallowest))
+       Path.root r)
     ~f:(Format.printf "%a\n" pp) ;
   [%expect
-    {| depjoin(r as r1, alist(r as r2, filter((r1.f = f), ascalar(r2.f)))) |}]
+    {| depjoin(r as r1, alist(r as r2, filter((r1.f = r2.f), ascalar(r2.f)))) |}]
+
+let%expect_test "push-filter-support" =
+  let r =
+    M.load_string ~params:C.params
+      "filter(f > param, ahashidx(select([f], r) as k, ascalar(0), 0))"
+  in
+  Option.iter
+    (apply
+       (at_ push_filter Path.(all >>? is_filter >>| shallowest))
+       Path.root r)
+    ~f:(Format.printf "%a\n" pp) ;
+  [%expect
+    {| ahashidx(select([f], r) as k, filter((k.f > param), ascalar(0)), 0) |}]
 
 let with_log src f =
   Logs.Src.set_level src (Some Debug) ;
@@ -61,7 +78,9 @@ let%expect_test "elim-eq-filter" =
       "filter(fresh = param, select([f as fresh], r))"
   in
   with_log elim_eq_filter_src (fun () ->
-      Option.iter (apply elim_eq_filter r) ~f:(Format.printf "%a\n" pp) ;
+      Option.iter
+        (apply elim_eq_filter Path.root r)
+        ~f:(Format.printf "%a\n" pp) ;
       [%expect
         {|
           ahashidx(dedup(select([fresh], select([f as fresh], r))) as s0,
@@ -75,7 +94,9 @@ let%expect_test "elim-eq-filter-approx" =
       "filter(fresh = param, select([f as fresh], filter(g = param, r)))"
   in
   with_log elim_eq_filter_src (fun () ->
-      Option.iter (apply elim_eq_filter r) ~f:(Format.printf "%a\n" pp) ;
+      Option.iter
+        (apply elim_eq_filter Path.root r)
+        ~f:(Format.printf "%a\n" pp) ;
       [%expect
         {|
           ahashidx(select([f as fresh], dedup(select([f], r))) as s0,
