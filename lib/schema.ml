@@ -8,7 +8,9 @@ let scoped s = List.map ~f:(Name.scoped s)
 let unscoped = List.map ~f:Name.unscoped
 
 let to_name = function
-  | Name n -> Some n
+  | Name n ->
+      (* NOTE: Scopes are not emitted as part of schemas. *)
+      Some (Name.copy ~scope:None n)
   | As_pred (_, n) -> Some (Name.create n)
   | _ -> None
 
