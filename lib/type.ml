@@ -315,7 +315,7 @@ let rec len =
 and oi_map_len kt vt m = AbsInt.(m.count * (len kt + of_int (oi_ptr_size vt m)))
 
 (** Size of pointers (in bytes) in ordered indexes. *)
-and oi_ptr_size vt m = AbsInt.(byte_width ~nullable:false AbsInt.(m.count * len vt))
+and oi_ptr_size vt m = AbsInt.(byte_width ~nullable:false (m.count * len vt))
 
 (** Range of hash index hash data lengths. *)
 and hi_hash_len ?(bytes_per_key = AbsInt.of_int 1) kt m =
@@ -325,16 +325,38 @@ and hi_hash_len ?(bytes_per_key = AbsInt.of_int 1) kt m =
   | `Cmph ->
       (* The interval represents uncertainty about the hash size, and CMPH hashes
        seem to have some fixed overhead ~100B? *)
-      AbsInt.((m.key_count * bytes_per_key * Interval (1, 2)) + of_int 128)
+      (m.key_count * bytes_per_key * Interval (1, 2)) + of_int 128
 
 (** Range of hash index map lengths. *)
 and hi_map_len kt vt m =
   let open AbsInt in
   match hash_kind_of_key_type_exn kt with
-  | `Direct -> join (of_int 0) (range_exn kt)
-  | `Cmph ->
-      AbsInt.(m.key_count * AbsInt.Interval (1, 2) * of_int (hi_ptr_size kt vt m))
+  | `Direct -> range_exn kt * of_int (hi_ptr_size kt vt m)
+  | `Cmph -> m.key_count * Interval (1, 2) * of_int (hi_ptr_size kt vt m)
 
 (** Size of pointers (in bytes) in hash indexes. *)
 and hi_ptr_size kt vt m =
-  AbsInt.(byte_width ~nullable:false AbsInt.(m.key_count * (len kt + len vt)))
+  AbsInt.(byte_width ~nullable:false (m.key_count * (len kt + len vt)))
+
+let%expect_test "" =
+  let type_ =
+    HashIdxT
+      ( IntT
+          { range= Interval (23141, 5989538)
+          ; distinct= Map.empty (module Int)
+          ; nullable= false }
+      , ListT
+          ( ListT
+              ( FuncT
+                  ( [ IntT
+                        { range= Interval (1, 50)
+                        ; distinct= Map.empty (module Int)
+                        ; nullable= false } ]
+                  , `Child_sum )
+              , {count= Interval (1, 1)} )
+          , {count= Interval (1, 1)} )
+      , {key_count= Interval (1000, 1000); value_count= Interval (1, 1)} )
+  in
+  len type_ |> [%sexp_of: AbsInt.t] |> print_s ;
+  (* Should be larger than 11983084 *)
+  [%expect "(Interval 47282 11980076)"]
