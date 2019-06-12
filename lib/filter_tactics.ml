@@ -243,62 +243,57 @@ module Make (C : Config.S) = struct
 
   let elim_cmp_filter = Branching.local elim_cmp_filter ~name:"elim-cmp-filter"
 
-  (* | ATuple (_rs, Cross) ->
-   *     None
-   *     (\* TODO: Figure out when this rule is useful. *\)
-   *     (\* let rs_rev, _ =
-   *      *   List.fold_left rs ~init:([], orig_bound) ~f:(fun (rs, bound) r ->
-   *      *       let bound = Set.union (M.bound r) bound in
-   *      *       let rs =
-   *      *         if invariant_support orig_bound bound p then
-   *      *           filter p r :: rs
-   *      *         else r :: rs
-   *      *       in
-   *      *       (rs, bound) )
-   *      * in
-   *      * let rs = List.rev rs_rev in
-   *      * Some (tuple rs Cross) *\) *)
+  let push_filter_cross_tuple p rs =
+    let ps = Pred.conjuncts p in
+    (* Find the earliest placement for each predicate. *)
+    let preds = Array.create ~len:(List.length rs) [] in
+    let rec place_all ps i =
+      if i >= List.length rs then ps
+      else
+        let bnd =
+          List.nth_exn rs i |> schema_exn |> Set.of_list (module Name)
+        in
+        let pl, up = List.partition_tf ps ~f:(Tactics_util.is_supported bnd) in
+        preds.(i) <- pl ;
+        place_all up (i + 1)
+    in
+    let rest = place_all ps 0 in
+    let rs = List.mapi rs ~f:(fun i -> filter (Pred.conjoin preds.(i))) in
+    filter (Pred.conjoin rest) (tuple rs Cross)
+
+  let push_filter_list p rk rv =
+    let scope = scope_exn rk in
+    let rk = strip_scope rk in
+    let rk_bnd = Set.of_list (module Name) (schema_exn rk) in
+    let pushed_key, pushed_val =
+      Pred.conjuncts p
+      |> List.partition_map ~f:(fun p ->
+             if Tactics_util.is_supported rk_bnd p then `Fst p else `Snd p )
+    in
+    let inner_key_pred = Pred.conjoin pushed_key in
+    let inner_val_pred = Pred.conjoin pushed_val in
+    list (filter inner_key_pred rk) scope (filter inner_val_pred rv)
+
+  let push_filter_select p ps r =
+    let ctx =
+      List.filter_map ps ~f:(fun p ->
+          Option.map (Pred.to_name p) ~f:(fun n -> (n, Pred.remove_as p)) )
+      |> Map.of_alist_exn (module Name)
+    in
+    let p' = Pred.subst ctx p in
+    select ps (filter p' r)
 
   let push_filter r =
     let open Option.Let_syntax in
     let%bind p, r = to_filter r in
     match r.node with
     | Filter (p', r') -> Some (filter (Binop (And, p, p')) r')
+    | Select (ps, r) -> Some (push_filter_select p ps r)
     | ATuple (rs, Concat) -> Some (tuple (List.map rs ~f:(filter p)) Concat)
-    | ATuple (rs, Cross) ->
-        let ps = Pred.conjuncts p in
-        (* Find the earliest placement for each predicate. *)
-        let preds = Array.create ~len:(List.length rs) [] in
-        let rec place_all ps i =
-          if i >= List.length rs then ps
-          else
-            let bnd =
-              List.nth_exn rs i |> schema_exn |> Set.of_list (module Name)
-            in
-            let pl, up =
-              List.partition_tf ps ~f:(Tactics_util.is_supported bnd)
-            in
-            preds.(i) <- pl ;
-            place_all up (i + 1)
-        in
-        let rest = place_all ps 0 in
-        let rs = List.mapi rs ~f:(fun i -> filter (Pred.conjoin preds.(i))) in
-        Some (filter (Pred.conjoin rest) (tuple rs Cross))
+    | ATuple (rs, Cross) -> Some (push_filter_cross_tuple p rs)
     (* Lists are a special case because their keys are bound at compile time and
        are not available at runtime. *)
-    | AList (rk, rv) ->
-        let scope = scope_exn rk in
-        let rk = strip_scope rk in
-        let rk_bnd = Set.of_list (module Name) (schema_exn rk) in
-        let pushed_key, pushed_val =
-          Pred.conjuncts p
-          |> List.partition_map ~f:(fun p ->
-                 if Tactics_util.is_supported rk_bnd p then `Fst p else `Snd p
-             )
-        in
-        let inner_key_pred = Pred.conjoin pushed_key in
-        let inner_val_pred = Pred.conjoin pushed_val in
-        Some (list (filter inner_key_pred rk) scope (filter inner_val_pred rv))
+    | AList (rk, rv) -> Some (push_filter_list p rk rv)
     | _ ->
         let%map rk, scope, rv, mk =
           match r.node with

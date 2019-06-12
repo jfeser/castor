@@ -68,6 +68,25 @@ let%expect_test "push-filter-support" =
   [%expect
     {| ahashidx(select([f], r) as k, filter((k.f > param), ascalar(0)), 0) |}]
 
+let%expect_test "push-filter-select" =
+  let r =
+    M.load_string "filter(test > 0, select([x as test], ascalar(0 as x)))"
+  in
+  Option.iter (apply push_filter Path.root r) ~f:(Format.printf "%a\n" pp) ;
+  [%expect
+    {| select([x as test], filter((x > 0), ascalar(0 as x))) |}]
+
+let%expect_test "push-filter-select" =
+  let r =
+    M.load_string
+      "filter(a = b, select([(x - 1) as a, (x + 1) as b], ascalar(0 as x)))"
+  in
+  Option.iter (apply push_filter Path.root r) ~f:(Format.printf "%a\n" pp) ;
+  [%expect
+    {|
+      select([(x - 1) as a, (x + 1) as b],
+        filter(((x - 1) = (x + 1)), ascalar(0 as x))) |}]
+
 let with_log src f =
   Logs.Src.set_level src (Some Debug) ;
   Exn.protect ~f ~finally:(fun () -> Logs.Src.set_level src None)
