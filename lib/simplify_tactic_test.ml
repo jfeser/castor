@@ -39,8 +39,9 @@ let%expect_test "" =
   in
   Option.iter
     (apply elim_depjoin Path.root r)
-    ~f:(Format.printf "%a" Abslayout.pp);
-  [%expect {|
+    ~f:(Format.printf "%a" Abslayout.pp) ;
+  [%expect
+    {|
     select([l_quantity as x77,
             l_extendedprice as x78,
             l_discount as x79,
@@ -56,3 +57,15 @@ let%expect_test "" =
                 l_discount as l_discount,
                 l_shipdate as l_shipdate],
           lineitem))) |}]
+
+let%expect_test "" =
+  let r =
+    M.load_string
+      {| depjoin(ascalar(0 as f) as k, select([f], select([k.f], ascalar(0 as g)))) |}
+  in
+  Option.iter
+    (apply
+       (at_ flatten_select (Path.all >>? is_select >>| shallowest))
+       Path.root r)
+    ~f:(Format.printf "%a" Abslayout.pp) ;
+  [%expect {| depjoin(ascalar(0 as f) as k, select([k.f], ascalar(0 as g))) |}]

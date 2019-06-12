@@ -74,7 +74,11 @@ module Make (Config : Config.S) = struct
       depend on anything in the context.) *)
   let is_supported bound pred =
     Set.for_all (pred_free pred) ~f:(fun n ->
-        Set.mem bound n || Poly.(Name.Meta.(find_exn n stage) = `Compile) )
+        Set.mem bound n
+        (* TODO: We assume that compile time names that are bound in the context
+           are ok, but this might not be true? *)
+        || Poly.(Name.Meta.(find_exn n stage) = `Compile)
+           && Option.is_some (Name.rel n) )
 
   (** Remove names from a selection list. *)
   let select_out ns r =
