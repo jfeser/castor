@@ -68,13 +68,33 @@ let%expect_test "push-filter-support" =
   [%expect
     {| ahashidx(select([f], r) as k, filter((k.f > param), ascalar(0)), 0) |}]
 
+let%expect_test "push-filter-support" =
+  let r =
+    M.load_string
+      {|
+alist(filter((0 = g),
+        depjoin(ascalar(0 as f) as k,
+          select([k.f, g], ascalar(0 as g)))) as k1, ascalar(0))
+
+|}
+  in
+  Option.iter
+    (apply
+       (at_ push_filter Path.(all >>? is_filter >>| shallowest))
+       Path.root r)
+    ~f:(Format.printf "%a\n" pp) ;
+  [%expect
+    {|
+      alist(depjoin(ascalar(0 as f) as k,
+              filter((0 = g), select([k.f, g], ascalar(0 as g)))) as k1,
+        ascalar(0)) |}]
+
 let%expect_test "push-filter-select" =
   let r =
     M.load_string "filter(test > 0, select([x as test], ascalar(0 as x)))"
   in
   Option.iter (apply push_filter Path.root r) ~f:(Format.printf "%a\n" pp) ;
-  [%expect
-    {| select([x as test], filter((x > 0), ascalar(0 as x))) |}]
+  [%expect {| select([x as test], filter((x > 0), ascalar(0 as x))) |}]
 
 let%expect_test "push-filter-select" =
   let r =

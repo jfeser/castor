@@ -275,20 +275,24 @@ module Make (C : Config.S) = struct
     list (filter inner_key_pred rk) scope (filter inner_val_pred rv)
 
   let push_filter_select p ps r =
-    let ctx =
-      List.filter_map ps ~f:(fun p ->
-          Option.map (Pred.to_name p) ~f:(fun n -> (n, Pred.remove_as p)) )
-      |> Map.of_alist_exn (module Name)
-    in
-    let p' = Pred.subst ctx p in
-    select ps (filter p' r)
+    match select_kind ps with
+    | `Scalar ->
+        let ctx =
+          List.filter_map ps ~f:(fun p ->
+              Option.map (Pred.to_name p) ~f:(fun n -> (n, Pred.remove_as p))
+          )
+          |> Map.of_alist_exn (module Name)
+        in
+        let p' = Pred.subst ctx p in
+        Some (select ps (filter p' r))
+    | `Agg -> None
 
   let push_filter r =
     let open Option.Let_syntax in
     let%bind p, r = to_filter r in
     match r.node with
     | Filter (p', r') -> Some (filter (Binop (And, p, p')) r')
-    | Select (ps, r) -> Some (push_filter_select p ps r)
+    | Select (ps, r) -> push_filter_select p ps r
     | ATuple (rs, Concat) -> Some (tuple (List.map rs ~f:(filter p)) Concat)
     | ATuple (rs, Cross) -> Some (push_filter_cross_tuple p rs)
     (* Lists are a special case because their keys are bound at compile time and
@@ -334,7 +338,7 @@ module Make (C : Config.S) = struct
 
   let push_filter =
     (* NOTE: Simplify is necessary to make push-filter safe under fixpoints. *)
-    traced (seq' (of_func push_filter ~name:"push-filter") simplify)
+    seq' (traced (of_func push_filter ~name:"push-filter")) simplify
 
   let elim_eq_filter_src =
     let src = Logs.Src.create "elim-eq-filter" in
