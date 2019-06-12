@@ -1,0 +1,58 @@
+open! Core
+open! Castor
+open Simplify_tactic
+
+module Config = struct
+  let conn = Db.create "postgresql:///tpch_1k"
+
+  let params = Set.empty (module Name)
+
+  let param_ctx = Map.empty (module Name)
+
+  let validate = false
+
+  let simplify = None
+end
+
+module T = Make (Config)
+open T
+module M = Abslayout_db.Make (Config)
+open Ops
+
+let%expect_test "" =
+  let r =
+    M.load_string
+      {|
+      depjoin(select([l_quantity as l_quantity,
+                l_extendedprice as l_extendedprice,
+                l_discount as l_discount,
+                l_shipdate as l_shipdate],
+          lineitem) as s3,
+  select([s3.l_quantity as x77,
+          s3.l_extendedprice as x78,
+          s3.l_discount as x79,
+          s3.l_shipdate as x80,
+          l_extendedprice as x81,
+          l_discount as x82],
+    atuple([ascalar(s3.l_extendedprice as l_extendedprice), ascalar(s3.l_discount as l_discount)], cross)))
+|}
+  in
+  Option.iter
+    (apply elim_depjoin Path.root r)
+    ~f:(Format.printf "%a" Abslayout.pp);
+  [%expect {|
+    select([l_quantity as x77,
+            l_extendedprice as x78,
+            l_discount as x79,
+            l_shipdate as x80,
+            l_extendedprice as x81,
+            l_discount as x82],
+      select([l_extendedprice as l_extendedprice,
+              l_discount as l_discount,
+              l_quantity,
+              l_shipdate],
+        select([l_quantity as l_quantity,
+                l_extendedprice as l_extendedprice,
+                l_discount as l_discount,
+                l_shipdate as l_shipdate],
+          lineitem))) |}]

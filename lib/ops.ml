@@ -273,25 +273,31 @@ module Make (C : Config.S) = struct
 
   let traced tf =
     let f p r =
-      Logs.debug (fun m -> m "Transform %s running." tf.name) ;
+      Logs.debug (fun m -> m "@[Running %s on:@,%a@]\n" tf.name Abslayout.pp r) ;
       match apply tf p r with
       | Some r' ->
           if Abslayout.O.(r = r') then
-            Logs.warn (fun m -> m "Invariant transformation %s" tf.name) ;
-          Logs.debug (fun m ->
-              m "@[%s transformed:@,%a@,===== to ======@,%a@]@.\n" tf.name
-                Abslayout.pp (Path.get_exn p r) Abslayout.pp
-                (Path.get_exn p r') ) ;
+            Logs.warn (fun m -> m "Invariant transformation %s." tf.name)
+          else
+            Logs.debug (fun m ->
+                m "@[%s transformed:@,%a@,===== to ======@,%a@]@.\n" tf.name
+                  Abslayout.pp (Path.get_exn p r) Abslayout.pp
+                  (Path.get_exn p r') ) ;
           Some r'
       | None ->
-          Logs.debug (fun m ->
-              m "@[Transform %s failed on:@,%a@]@.\n" tf.name Abslayout.pp r ) ;
+          Logs.debug (fun m -> m "@[Transform %s failed.\n" tf.name) ;
           None
     in
     global f tf.name
 
   let of_func ?(name = "<unknown>") f =
-    let tf = local f name in
+    let tf =
+      global
+        (fun p r ->
+          let r = R.resolve ~params r in
+          Option.map (f (Path.get_exn p r)) ~f:(Path.set_exn p r) )
+        name
+    in
     let tf = if validate then validated tf else tf in
     if trace then traced tf else tf
 

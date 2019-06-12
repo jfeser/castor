@@ -29,6 +29,15 @@ module Make (C : Config.S) = struct
 
   let elim_structure = of_func elim_structure ~name:"elim-structure"
 
+  let concat_select ps ps' =
+    let ns = List.filter_map ps ~f:Pred.to_name |> Set.of_list (module Name) in
+    let ps' =
+      List.filter ps' ~f:(fun p ->
+          Option.map (Pred.to_name p) ~f:(fun n -> not (Set.mem ns n))
+          |> Option.value ~default:true )
+    in
+    ps @ ps'
+
   let elim_depjoin r =
     match r.node with
     | DepJoin {d_lhs; d_alias; d_rhs= {node= AScalar p; _}} ->
@@ -42,19 +51,24 @@ module Make (C : Config.S) = struct
         in
         let s = List.map ~f:(Pred.unscoped d_alias) s in
         Some (select s (strip_scope d_lhs))
+    (* depjoin(r, select(ps, atuple(ps'))) -> select(ps, select(ps', r)) *)
     | DepJoin
         { d_lhs
         ; d_alias
         ; d_rhs= {node= Select (ps, {node= ATuple (rs, Cross); _}); _} } ->
         let open Option.Let_syntax in
-        let%bind s =
+        let%bind ps' =
           List.map rs ~f:(fun r ->
               match r.node with AScalar p -> Some p | _ -> None )
           |> Option.all
         in
-        let s = List.map ~f:(Pred.unscoped d_alias) s in
+        let ps' = List.map ~f:(Pred.unscoped d_alias) ps' in
+        (* Ensure that no fields are dropped by the first select. *)
+        let ps' =
+          concat_select ps' (schema_exn d_lhs |> Schema.to_select_list)
+        in
         let ps = List.map ~f:(Pred.unscoped d_alias) ps in
-        Some (select ps (select s (strip_scope d_lhs)))
+        Some (select ps (select ps' (strip_scope d_lhs)))
     | DepJoin
         { d_lhs
         ; d_alias
