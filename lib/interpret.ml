@@ -83,6 +83,15 @@ type agg =
   | Count of int
   | Passthru of (Value.t option * pred)
 
+module Schema = struct
+  let of_ralgebra ?scope r =
+    let tbl = Hashtbl.create (module Name) in
+    schema_exn r
+    |> List.iteri ~f:(fun i n ->
+           Hashtbl.add_exn tbl ~key:(Name.copy ~scope n) ~data:i ) ;
+    tbl
+end
+
 let eval {db; params} r =
   let scan =
     Memo.general ~hashable:String.hashable (fun r ->
@@ -216,15 +225,10 @@ let eval {db; params} r =
         | Some x -> int Int.(x + 1)
         | None -> int 0 ) )
   and eval ctx r : Tuple.t Seq.t =
-    let schema r =
-      let tbl = Hashtbl.create (module Name) in
-      schema_exn r |> List.iteri ~f:(fun i n -> Hashtbl.add_exn tbl ~key:n ~data:i) ;
-      tbl
-    in
     match r.node with
     | Relation r -> scan r.r_name
     | Select (ps, r) -> (
-        let s = schema r in
+        let s = Schema.of_ralgebra r in
         let tups = eval ctx r in
         match select_kind ps with
         | `Agg ->
@@ -234,18 +238,18 @@ let eval {db; params} r =
             Seq.map (eval ctx r) ~f:(fun t ->
                 List.map ps ~f:(eval_pred (Ctx.merge ctx s t)) |> Array.of_list ) )
     | Filter (p, r) ->
-        let s = schema r in
+        let s = Schema.of_ralgebra r in
         Seq.filter (eval ctx r) ~f:(fun t ->
             eval_pred (Ctx.merge ctx s t) p |> Value.to_bool )
     | DepJoin {d_lhs; d_alias; d_rhs} ->
-        let s = schema (as_ d_alias d_lhs) in
+        let s = Schema.of_ralgebra ~scope:d_alias d_lhs in
         Seq.concat_map (eval ctx d_lhs) ~f:(fun t ->
             Seq.map (eval (Ctx.bind ctx s t) d_rhs) ~f:(fun t' -> t @ t') )
     | Join {pred; r1; r2} ->
         let r1s = eval ctx r1 in
-        let s1 = schema r1 in
+        let s1 = Schema.of_ralgebra r1 in
         let r2s = eval ctx r2 in
-        let s2 = schema r2 in
+        let s2 = Schema.of_ralgebra r2 in
         Seq.concat_map r1s ~f:(fun t1 ->
             let ctx = Ctx.merge ctx s1 t1 in
             Seq.filter_map r2s ~f:(fun t2 ->
@@ -255,25 +259,25 @@ let eval {db; params} r =
     | AEmpty -> Seq.empty
     | AScalar p -> Seq.singleton [|eval_pred ctx p|]
     | AList (rk, rv) ->
-        let sk = schema rk in
+        let sk = Schema.of_ralgebra ~scope:(scope_exn rk) rk in
         Seq.concat_map (eval ctx rk) ~f:(fun t -> eval (Ctx.bind ctx sk t) rv)
     | ATuple ([], _) -> failwith "Empty tuple."
     | ATuple (_, Zip) -> failwith "Zip tuples unsupported."
     | ATuple ([r], Cross) -> eval ctx r
     | ATuple (({node= AScalar p; _} as r) :: rs, Cross) ->
         (* Special case for scalar tuples. Should reduce # of sequences constructed. *)
-        let s = schema r in
+        let s = Schema.of_ralgebra r in
         let t = [|eval_pred ctx p|] in
         eval (Ctx.bind ctx s t) (tuple rs Cross) |> Seq.map ~f:(fun t' -> t @ t')
     | ATuple (r :: rs, Cross) ->
-        let s = schema r in
+        let s = Schema.of_ralgebra r in
         Seq.concat_map (eval ctx r) ~f:(fun t ->
             Seq.map (eval (Ctx.bind ctx s t) (tuple rs Cross)) ~f:(fun t' -> t @ t')
         )
     | ATuple (rs, Concat) -> Seq.concat_map (Seq.of_list rs) ~f:(eval ctx)
     | AHashIdx h ->
         let vs = List.map h.hi_lookup ~f:(eval_pred ctx) |> Array.of_list in
-        let sk = schema h.hi_keys in
+        let sk = Schema.of_ralgebra ~scope:h.hi_scope h.hi_keys in
         Seq.find_map (eval ctx h.hi_keys) ~f:(fun tk ->
             if Array.equal Value.O.( = ) vs tk then
               Some
@@ -285,7 +289,7 @@ let eval {db; params} r =
     | AOrderedIdx (rk, rv, {lookup_low; lookup_high; _}) ->
         let lo = eval_pred ctx lookup_low in
         let hi = eval_pred ctx lookup_high in
-        let sk = schema rk in
+        let sk = Schema.of_ralgebra ~scope:(scope_exn rk) rk in
         Seq.filter (eval ctx rk) ~f:(fun t ->
             let v = to_single_value t in
             Value.O.(lo < v && v < hi) )
@@ -296,7 +300,7 @@ let eval {db; params} r =
         |> List.dedup_and_sort ~compare:[%compare: Tuple.t]
         |> Seq.of_list
     | OrderBy {key; rel} ->
-        let s = schema rel in
+        let s = Schema.of_ralgebra rel in
         let cmps =
           List.map key ~f:(fun (p, o) t1 t2 ->
               let cmp =
@@ -310,7 +314,7 @@ let eval {db; params} r =
         |> List.sort ~compare:(Comparable.lexicographic cmps)
         |> Seq.of_list
     | GroupBy (ps, ns, r) ->
-        let s = schema r in
+        let s = Schema.of_ralgebra r in
         let tbl = Hashtbl.create (module GroupKey) in
         eval ctx r
         |> Seq.iter ~f:(fun t ->
