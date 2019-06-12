@@ -284,6 +284,21 @@ module Make (C : Config.S) = struct
         let rest = place_all ps 0 in
         let rs = List.mapi rs ~f:(fun i -> filter (Pred.conjoin preds.(i))) in
         Some (filter (Pred.conjoin rest) (tuple rs Cross))
+    (* Lists are a special case because their keys are bound at compile time and
+       are not available at runtime. *)
+    | AList (rk, rv) ->
+        let scope = scope_exn rk in
+        let rk = strip_scope rk in
+        let rk_bnd = Set.of_list (module Name) (schema_exn rk) in
+        let pushed_key, pushed_val =
+          Pred.conjuncts p
+          |> List.partition_map ~f:(fun p ->
+                 if Tactics_util.is_supported rk_bnd p then `Fst p else `Snd p
+             )
+        in
+        let inner_key_pred = Pred.conjoin pushed_key in
+        let inner_val_pred = Pred.conjoin pushed_val in
+        Some (list (filter inner_key_pred rk) scope (filter inner_val_pred rv))
     | _ ->
         let%map rk, scope, rv, mk =
           match r.node with
@@ -324,7 +339,7 @@ module Make (C : Config.S) = struct
 
   let push_filter =
     (* NOTE: Simplify is necessary to make push-filter safe under fixpoints. *)
-    seq' (of_func push_filter ~name:"push-filter") simplify
+    traced (seq' (of_func push_filter ~name:"push-filter") simplify)
 
   let elim_eq_filter_src =
     let src = Logs.Src.create "elim-eq-filter" in

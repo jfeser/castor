@@ -53,7 +53,7 @@ let%expect_test "push-filter-runtime" =
        Path.root r)
     ~f:(Format.printf "%a\n" pp) ;
   [%expect
-    {| depjoin(r as r1, alist(r as r2, filter((r1.f = r2.f), ascalar(r2.f)))) |}]
+    {| depjoin(r as r1, alist(r as r2, filter((r1.f = f), ascalar(r2.f)))) |}]
 
 let%expect_test "push-filter-support" =
   let r =
