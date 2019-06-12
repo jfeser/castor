@@ -3,6 +3,8 @@ open Collections
 
 type t [@@deriving compare, sexp]
 
+val ( @ ) : t -> t -> t
+
 val shallowest_first : t -> t -> int
 
 val deepest_first : t -> t -> int

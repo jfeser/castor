@@ -1,6 +1,8 @@
 open! Core
 open Abslayout0
 
+type t = Name.t list [@@deriving sexp]
+
 let scoped s = List.map ~f:(Name.scoped s)
 
 let unscoped = List.map ~f:Name.unscoped
@@ -71,3 +73,5 @@ and schema_exn r =
   | Relation {r_schema= Some schema; _} -> schema |> unscoped
   | Relation {r_name; r_schema= None; _} ->
       Error.(create "Missing schema annotation." r_name [%sexp_of: string] |> raise)
+
+let to_select_list s = List.map s ~f:(fun n -> Name n)

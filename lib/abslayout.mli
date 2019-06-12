@@ -152,6 +152,8 @@ val scalar : pred -> t
 
 val list : t -> string -> t -> t
 
+val list' : t * t -> t
+
 val tuple : t list -> tuple -> t
 
 val hash_idx : ?key_layout:t -> t -> string -> t -> pred list -> t

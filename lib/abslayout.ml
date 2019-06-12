@@ -51,6 +51,13 @@ let alpha_scopes r =
   in
   visitor#visit_t () r
 
+let scope r = match r.node with As (n, _) -> Some n | _ -> None
+
+let scope_exn r =
+  Option.value_exn
+    ~error:(Error.createf "Expected a scope on %a." pp_small_str r)
+    (scope r)
+
 let wrap x = {node= x; meta= Meta.empty ()}
 
 let select a b = wrap (Select (a, strip_meta b))
@@ -91,6 +98,8 @@ let list a b c =
   in
   wrap (AList (strip_meta (as_ b a), strip_meta c))
 
+let list' (a, b) = list a (scope_exn a) b
+
 let tuple a b = wrap (ATuple (List.map ~f:strip_meta a, b))
 
 let hash_idx ?key_layout a b c d =
@@ -122,8 +131,6 @@ let ordered_idx a b c d =
 let o_key_layout {oi_key_layout; _} =
   Option.value_exn ~message:"No key layout annotation found." oi_key_layout
 
-let scope r = match r.node with As (n, _) -> Some n | _ -> None
-
 let rec and_ = function
   | [] -> Bool true
   | [x] -> x
@@ -148,11 +155,6 @@ let name r =
   | AHashIdx _ -> "hash_idx"
   | AOrderedIdx _ -> "ordered_idx"
   | As _ -> "as"
-
-let scope_exn r =
-  Option.value_exn
-    ~error:(Error.createf "Expected a scope on %a." pp_small_str r)
-    (scope r)
 
 let of_lexbuf_exn lexbuf =
   try Ralgebra_parser.ralgebra_eof Ralgebra_lexer.token lexbuf
@@ -391,6 +393,10 @@ module Pred = struct
   let rec conjuncts = function
     | Binop (And, p1, p2) -> conjuncts p1 @ conjuncts p2
     | p -> [p]
+
+  let%expect_test "" =
+    conjuncts (Binop (Eq, Int 0, Int 1)) |> [%sexp_of: t list] |> print_s ;
+    [%expect {| ((Binop (Eq (Int 0) (Int 1)))) |}]
 
   let constants schema p =
     let module M = struct

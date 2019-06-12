@@ -6,6 +6,8 @@ type elem = int [@@deriving compare, sexp]
 
 type t = elem list [@@deriving compare, sexp]
 
+let ( @ ) = ( @ )
+
 let shallowest_first p1 p2 =
   match
     List.fold2 p1 p2 ~init:0 ~f:(fun c e1 e2 ->
