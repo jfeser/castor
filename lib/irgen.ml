@@ -467,7 +467,7 @@ struct
     in
     let key_ctx = Ctx.bind ctx "start" Type.PrimType.int_t kstart in
     let value_ctx =
-      let key_schema = A.schema_exn key_layout in
+      let key_schema = A.schema_exn key_layout |> Schema.scoped r.A.hi_scope in
       let ctx =
         Ctx.bind_ctx ctx (Ctx.of_schema key_schema (list_of_tuple key_tuple b))
       in
@@ -722,10 +722,10 @@ struct
     debug_print "scanning depjoin" (Int 0) b ;
     scan lhs_ctx b d_lhs lhs_t (fun b tup ->
         let rhs_ctx =
-          let tuple_ctx =
+          let lhs_ctx =
             Ctx.of_schema (A.schema_exn d_lhs |> Schema.scoped d_alias) tup
           in
-          Ctx.bind_ctx rhs_ctx tuple_ctx
+          Ctx.bind_ctx rhs_ctx lhs_ctx
         in
         scan rhs_ctx b d_rhs rhs_t cb )
 
