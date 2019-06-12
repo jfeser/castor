@@ -278,7 +278,8 @@ module Query = struct
 
   let rec width' q =
     match q.node with
-    | Empty | Var _ -> 0
+    | Empty -> 0
+    | Var _ -> 1
     | For (n, _, q2) -> n + width' q2
     | Scalars ps -> List.length ps
     | Concat qs -> 1 + List.sum (module Int) qs ~f:width'
