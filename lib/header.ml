@@ -128,4 +128,5 @@ let rec make_header t =
       ; {name= "idx"; size= `DescribedBy "idx_len"; align= 1}
       ; {name= "data"; size= `Variable; align= 1} ]
   | FuncT ([t], _) -> make_header t
+  | FuncT ([t1; t2], _) -> make_header (TupleT ([t1; t2], {count= Type.AbsInt.Top}))
   | FuncT _ -> failwith "No header."

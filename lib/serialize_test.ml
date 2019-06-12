@@ -223,3 +223,26 @@ let%expect_test "list-list" =
        ((count (Interval 5 5)))))
      25
      "\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003") |}]
+
+let%expect_test "depjoin" =
+  run_test "depjoin(alist(r1 as k1, ascalar(k1.f)) as k3, ascalar(5))";
+  [%expect {|
+    0:6 Tuple body
+    0:5 List body
+    0:1 Scalar (=(Int 1))
+    0:0 Tuple len (=6)
+    0:0 List len (=5)
+    0:0 List count (=5)
+    1:1 Scalar (=(Int 1))
+    2:1 Scalar (=(Int 2))
+    3:1 Scalar (=(Int 2))
+    4:1 Scalar (=(Int 3))
+    5:1 Scalar (=(Int 5))
+
+    ((FuncT
+      (((ListT
+         ((IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
+          ((count (Interval 5 5)))))
+        (IntT ((range (Interval 5 5)) (distinct <opaque>) (nullable false))))
+       Child_sum))
+     6 "\\001\\001\\002\\002\\003\\005") |}]

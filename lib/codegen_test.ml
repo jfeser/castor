@@ -380,3 +380,16 @@ let%expect_test "date-arith" =
     1997-10-01|1997-09-29
 
     exited normally |}]
+
+let%expect_test "depjoin" =
+  run_test
+    "depjoin(alist(r1 as k1, ascalar(k1.f)) as k3, select([k3.f + g], ascalar(5 as \
+     g)))";
+  [%expect {|
+    6
+    6
+    7
+    7
+    8
+
+    exited normally |}]
