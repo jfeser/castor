@@ -650,9 +650,19 @@ module Make (Config : Config.S) = struct
         | Null -> NullT
         | Fixed x -> FixedT {value= T.AbsFixed.of_fixed x; nullable= false}
 
-      method list _ (_, elem_l) =
+      method list _ ((_, elem_l) as l) =
         let init = (least_general_of_layout elem_l, 0) in
-        let fold (t, c) (_, t') = (T.unify_exn t t', c + 1) in
+        let fold (t, c) (_, t') =
+          try (T.unify_exn t t', c + 1)
+          with Type.TypeError _ as exn ->
+            Logs.err (fun m -> m "Type checking failed on: %a" A.pp (A.list' l)) ;
+            Logs.err (fun m ->
+                m "%a does not unify with %a" Sexp.pp_hum
+                  ([%sexp_of: T.t] t)
+                  Sexp.pp_hum
+                  ([%sexp_of: T.t] t') ) ;
+            raise exn
+        in
         let extract (elem_type, num_elems) =
           T.ListT (elem_type, {count= T.AbsInt.of_int num_elems})
         in
@@ -712,7 +722,15 @@ module Make (Config : Config.S) = struct
 
   let type_of r =
     Log.info (fun m -> m "Computing type of abstract layout.") ;
-    let type_ = (new type_fold)#run r in
+    let type_ =
+      try (new type_fold)#run r
+      with exn ->
+        let trace = Backtrace.Exn.most_recent () in
+        Logs.err (fun m ->
+            m "Type computation failed: %a@,%s" Exn.pp exn
+              (Backtrace.to_string trace) ) ;
+        raise exn
+    in
     Log.info (fun m ->
         m "The type is: %s" (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ) ;
     type_
