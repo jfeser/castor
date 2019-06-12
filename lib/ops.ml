@@ -23,31 +23,42 @@ module T : sig
 
   val global :
        ?short_name:string
+    -> ?reraise:bool
     -> (Path.t -> Abslayout.t -> Abslayout.t option)
     -> string
     -> t
 
   val local :
-    ?short_name:string -> (Abslayout.t -> Abslayout.t option) -> string -> t
+       ?short_name:string
+    -> ?reraise:bool
+    -> (Abslayout.t -> Abslayout.t option)
+    -> string
+    -> t
 end = struct
   type t =
     { f: Path.t -> Abslayout.t -> [`Result of Abslayout.t | `Tf of t] option
     ; name: string }
 
-  let global ?short_name f name =
+  let trace reraise name thunk r =
+    try thunk r
+    with exn ->
+      if reraise then
+        Logs.err (fun m ->
+            m "@[Transform %s failed on: %a@,@]\n" name Abslayout.pp r ) ;
+      raise exn
+
+  let global ?short_name ?(reraise = true) f name =
+    let name = Option.value short_name ~default:name in
     let f p r =
-      Option.map
-        (Exn.reraise_uncaught (Option.value short_name ~default:name)
-           (fun () -> f p r))
-        ~f:(fun r -> `Result r)
+      Option.map (trace reraise name (f p) r) ~f:(fun r -> `Result r)
     in
     {name; f}
 
-  let local ?short_name f name =
+  let local ?short_name ?(reraise = true) f name =
+    let name = Option.value short_name ~default:name in
     let f p r =
       Option.map
-        (Exn.reraise_uncaught (Option.value short_name ~default:name)
-           (fun () -> f (Path.get_exn p r)))
+        (trace reraise name f (Path.get_exn p r))
         ~f:(fun r' -> `Result (Path.set_exn p r r'))
     in
     {name; f}
@@ -195,7 +206,7 @@ module Make (C : Config.S) = struct
         (pspec (Path.get_exn p r))
         ~f:(fun p' -> apply tf Path.(p @ p') r)
     in
-    global ~short_name:"@" f (sprintf "(%s @ <path>)" tf.name)
+    global ~reraise:false ~short_name:"@" f (sprintf "(%s @ <path>)" tf.name)
 
   let first tf pset =
     let f p r =
@@ -203,7 +214,8 @@ module Make (C : Config.S) = struct
         (pset (Path.get_exn p r))
         ~f:(fun p' -> apply (at_ tf (fun _ -> Some p')) p r)
     in
-    global ~short_name:"first" f (sprintf "first %s in <path set>" tf.name)
+    global ~reraise:false ~short_name:"first" f
+      (sprintf "first %s in <path set>" tf.name)
 
   let fix tf =
     let f p r =
@@ -214,7 +226,7 @@ module Make (C : Config.S) = struct
       in
       fix r
     in
-    global ~short_name:"fix" f (sprintf "fix(%s)" tf.name)
+    global ~reraise:false ~short_name:"fix" f (sprintf "fix(%s)" tf.name)
 
   let for_all tf pset = fix (first tf pset)
 
@@ -222,11 +234,11 @@ module Make (C : Config.S) = struct
     let f p r =
       match apply t1 p r with Some r' -> apply t2 p r' | None -> apply t2 p r
     in
-    global f (sprintf "%s ; %s" t1.name t2.name)
+    global ~reraise:false f (sprintf "%s ; %s" t1.name t2.name)
 
   let seq' t1 t2 =
     let f p r = Option.bind (apply t1 p r) ~f:(apply t2 p) in
-    global f (sprintf "%s ; %s" t1.name t2.name)
+    global ~reraise:false f (sprintf "%s ; %s" t1.name t2.name)
 
   let rec seq_many = function
     | [] -> failwith "Empty transform list."
@@ -273,7 +285,7 @@ module Make (C : Config.S) = struct
                   (Path.get_exn p r') ) ;
           Some r'
       | None ->
-          Logs.debug (fun m -> m "@[Transform %s failed.\n" tf.name) ;
+          Logs.debug (fun m -> m "@[Transform %s does not apply.\n" tf.name) ;
           None
     in
     global f tf.name
