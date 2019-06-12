@@ -519,13 +519,11 @@ module Make (C : Config.S) = struct
           ; elim_join_nest ]
 
   let transform =
-    let f p r =
-      opt (Path.get_exn p r)
+    let f r =
+      opt r
       |> ParetoSet.min_elt (fun a -> a.(0))
-      |> Option.map ~f:(fun j ->
-             at_
-               (seq_many [of_func (reshape j); emit_joins j])
-               (fun _ -> Some p) )
+      |> Option.map ~f:(fun j -> seq (of_func (reshape j)) (emit_joins j))
+      |> Option.bind ~f:(fun tf -> apply tf Path.root r)
     in
-    higher_order f "join-opt"
+    local f "join-opt"
 end

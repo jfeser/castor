@@ -29,9 +29,6 @@ module T : sig
 
   val local :
     ?short_name:string -> (Abslayout.t -> Abslayout.t option) -> string -> t
-
-  val higher_order :
-    ?short_name:string -> (Path.t -> Abslayout.t -> t option) -> string -> t
 end = struct
   type t =
     { f: Path.t -> Abslayout.t -> [`Result of Abslayout.t | `Tf of t] option
@@ -52,15 +49,6 @@ end = struct
         (Exn.reraise_uncaught (Option.value short_name ~default:name)
            (fun () -> f (Path.get_exn p r)))
         ~f:(fun r' -> `Result (Path.set_exn p r r'))
-    in
-    {name; f}
-
-  let higher_order ?short_name f name =
-    let f p r =
-      Option.map
-        (Exn.reraise_uncaught (Option.value short_name ~default:name)
-           (fun () -> f p r))
-        ~f:(fun r -> `Tf r)
     in
     {name; f}
 end
