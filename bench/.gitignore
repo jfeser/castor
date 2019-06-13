@@ -2,7 +2,7 @@
 *-opt.csv
 *-opt/
 *.time
-analysis_*.log
+*.log
 gold/
 hashes.txt
 Makefile

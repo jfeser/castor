@@ -47,11 +47,6 @@ def out_file(b):
 def out_dir(b):
     return '%s-opt' % b['name']
 
-def dump_to(fn):
-    if DEBUG:
-        return '| tee %s' % fn
-    else:
-        return '> %s' % fn
 
 print('DB=postgresql:///tpch_1k')
 print('DBC=postgresql:///tpch_1k')
@@ -110,13 +105,13 @@ validate: %s
 for b in bench:
     print('''
 {0}: {2}
-\t$(OPT) $(OPT_FLAGS) {1} {2} {3}
-    '''.format(out_file(b), gen_params(b), in_file(b), dump_to('$@')))
+\t$(OPT) $(OPT_FLAGS) {1} {2} 2>{3} >$@
+    '''.format(out_file(b), gen_params(b), in_file(b), '%s-opt.log' % b['name']))
     print('''
 {0}: {1}
 \tmkdir -p $@
-\t$(COMPILE) $(CFLAGS) -o $@ -db $(DBC) {2} {1} {3}
-'''.format(out_dir(b), out_file(b), gen_param_types(b), dump_to('$@/compile.log')))
+\t$(COMPILE) $(CFLAGS) -o $@ -db $(DBC) {2} {1} > $@/compile.log 2>&1
+'''.format(out_dir(b), out_file(b), gen_param_types(b)))
     print('''
 {0}-opt.csv: {1}
 \t./{1}/scanner.exe -p {1}/data.bin {2} > $@
