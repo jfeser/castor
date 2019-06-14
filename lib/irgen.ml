@@ -370,7 +370,7 @@ struct
   and scan_ziptuple ctx b r t cb =
     let open Builder in
     let child_layouts, _ = r in
-    let child_types, meta = t in
+    let child_types, _ = t in
     let hdr = Header.make_header (TupleT t) in
     let pstart = Ctx.find_exn ctx (Name.create "start") b in
     let cstart = build_defn "cstart" pstart b in
@@ -410,7 +410,7 @@ struct
       in
       cb b (list_of_tuple tup b)
     in
-    match Type.AbsInt.to_int meta.count with
+    match Type.count (TupleT t) |> Type.AbsInt.to_int with
     | Some x -> build_count_loop Infix.(int x) build_body b
     | None ->
         build_body b ;
@@ -706,9 +706,7 @@ struct
       | [lhs_t; rhs_t] -> (lhs_t, rhs_t)
       | _ -> failwith "Unexpected type."
     in
-    let hdr =
-      Header.make_header (TupleT ([lhs_t; rhs_t], {count= Type.AbsInt.top}))
-    in
+    let hdr = Header.make_header (TupleT ([lhs_t; rhs_t], {kind= `Cross})) in
     let start = Ctx.find_exn ctx (Name.create "start") b in
     let lhs_start = Header.make_position hdr "value" start in
     let lhs_ctx = Ctx.bind ctx "start" Type.PrimType.int_t lhs_start in

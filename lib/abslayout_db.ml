@@ -597,12 +597,20 @@ module Make (Config : Config.S) = struct
         HashIdxT
           ( least_general_of_layout (A.h_key_layout h)
           , least_general_of_layout h.hi_values
-          , {value_count= Bottom; key_count= Bottom} )
+          , {key_count= Bottom} )
     | AOrderedIdx (_, vr, {oi_key_layout= Some kr; _}) ->
         OrderedIdxT
-          (least_general_of_layout kr, least_general_of_layout vr, {count= Bottom})
-    | ATuple (rs, _) ->
-        TupleT (List.map rs ~f:least_general_of_layout, {count= Bottom})
+          ( least_general_of_layout kr
+          , least_general_of_layout vr
+          , {key_count= Bottom} )
+    | ATuple (rs, k) ->
+        let kind =
+          match k with
+          | Cross -> `Cross
+          | Concat -> `Concat
+          | _ -> failwith "Unsupported"
+        in
+        TupleT (List.map rs ~f:least_general_of_layout, {kind})
     | As (_, r') -> least_general_of_layout r'
     | AOrderedIdx (_, _, {oi_key_layout= None; _}) | Relation _ ->
         failwith "Layout is still abstract."
@@ -669,26 +677,12 @@ module Make (Config : Config.S) = struct
         Fold {init; fold; extract}
 
       method tuple _ (_, kind) =
-        let init =
-          let c =
-            (* Use the right identity element. *)
-            match kind with
-            | Zip -> T.AbsInt.Bottom
-            | Concat -> T.AbsInt.of_int 0
-            | Cross -> T.AbsInt.of_int 1
-          in
-          (c, [])
+        let kind =
+          match kind with Cross -> `Cross | Zip -> failwith "" | Concat -> `Concat
         in
-        let fold (c, ts) t =
-          let c' =
-            match kind with
-            | Zip -> T.AbsInt.join c (T.count t)
-            | Concat -> T.AbsInt.(c + T.count t)
-            | Cross -> T.AbsInt.(c * T.count t)
-          in
-          (c', t :: ts)
-        in
-        let extract (c, ts) = T.TupleT (List.rev ts, {count= c}) in
+        let init = [] in
+        let fold ts t = t :: ts in
+        let extract ts = T.TupleT (List.rev ts, {kind}) in
         Fold {init; fold; extract}
 
       method hash_idx _ h =
@@ -701,22 +695,21 @@ module Make (Config : Config.S) = struct
           (kct + 1, T.unify_exn kt kt', T.unify_exn vt vt')
         in
         let extract (kct, kt, vt) =
-          T.HashIdxT
-            (kt, vt, {key_count= T.AbsInt.of_int kct; value_count= Type.count vt})
+          T.HashIdxT (kt, vt, {key_count= T.AbsInt.of_int kct})
         in
         Fold {init; fold; extract}
 
       method ordered_idx _ (_, value_l, {oi_key_layout; _}) =
         let key_l = Option.value_exn oi_key_layout in
         let init =
-          ( least_general_of_layout key_l
-          , least_general_of_layout value_l
-          , T.AbsInt.zero )
+          (least_general_of_layout key_l, least_general_of_layout value_l, 0)
         in
         let fold (kt, vt, ct) (_, kt', vt') =
-          (T.unify_exn kt kt', T.unify_exn vt vt', T.AbsInt.(ct + of_int 1))
+          (T.unify_exn kt kt', T.unify_exn vt vt', ct + 1)
         in
-        let extract (kt, vt, ct) = T.OrderedIdxT (kt, vt, {count= ct}) in
+        let extract (kt, vt, ct) =
+          T.OrderedIdxT (kt, vt, {key_count= T.AbsInt.of_int ct})
+        in
         Fold {init; fold; extract}
     end
 
@@ -821,15 +814,15 @@ let%test_module _ =
           "x2_0" AS "x2_0_0"
       FROM (
           SELECT
-              r1_0. "f" AS "r1_0_f_0",
-              r1_0. "g" AS "r1_0_g_0"
+              r1_0. "f" AS "f_0",
+              r1_0. "g" AS "g_0"
           FROM
               "r1" AS "r1_0") AS "t1",
           LATERAL (
               SELECT
-                  "r1_0_f_0" AS "x0_0",
-                  "r1_0_g_0" AS "x1_0",
-                  "r1_0_g_0" AS "x2_0") AS "t0"
+                  "f_0" AS "x0_0",
+                  "g_0" AS "x1_0",
+                  "g_0" AS "x2_0") AS "t0"
       ORDER BY
           "x0_0",
           "x1_0" |}]
@@ -847,35 +840,35 @@ let%test_module _ =
         {|
       SELECT
           "counter0_0" AS "counter0_0_0",
-          "f_1" AS "f_1_0",
+          "f_2" AS "f_2_0",
           "x3_0" AS "x3_0_0",
           "x4_0" AS "x4_0_0",
           "x5_0" AS "x5_0_0"
       FROM ((
               SELECT
                   0 AS "counter0_0",
-                  0 AS "f_1",
+                  0 AS "f_2",
                   (null::integer) AS "x3_0",
                   (null::integer) AS "x4_0",
                   (null::integer) AS "x5_0")
           UNION ALL (
               SELECT
                   1 AS "counter0_1",
-                  (null::integer) AS "f_2",
+                  (null::integer) AS "f_4",
                   "x3_1" AS "x3_2",
                   "x4_1" AS "x4_2",
                   "x5_1" AS "x5_2"
               FROM (
                   SELECT
-                      r1_1. "f" AS "r1_1_f_0",
-                      r1_1. "g" AS "r1_1_g_0"
+                      r1_1. "f" AS "f_3",
+                      r1_1. "g" AS "g_2"
                   FROM
                       "r1" AS "r1_1") AS "t3",
                   LATERAL (
                       SELECT
-                          "r1_1_f_0" AS "x3_1",
-                          "r1_1_g_0" AS "x4_1",
-                          "r1_1_g_0" AS "x5_1") AS "t2")) AS "t4"
+                          "f_3" AS "x3_1",
+                          "g_2" AS "x4_1",
+                          "g_2" AS "x5_1") AS "t2")) AS "t4"
       ORDER BY
           "counter0_0",
           "x3_0",
@@ -903,16 +896,16 @@ let%test_module _ =
           "x9_0" AS "x9_0_0"
       FROM (
           SELECT
-              r1_2. "f" AS "r1_2_f_0",
-              r1_2. "g" AS "r1_2_g_0"
+              r1_2. "f" AS "f_5",
+              r1_2. "g" AS "g_4"
           FROM
               "r1" AS "r1_2") AS "t6",
           LATERAL (
               SELECT
-                  "r1_2_f_0" AS "x6_0",
-                  "r1_2_g_0" AS "x7_0",
-                  "r1_2_f_0" AS "x8_0",
-                  ("r1_2_g_0") - ("r1_2_f_0") AS "x9_0"
+                  "f_5" AS "x6_0",
+                  "g_4" AS "x7_0",
+                  "f_5" AS "x8_0",
+                  ("g_4") - ("f_5") AS "x9_0"
               WHERE (TRUE)) AS "t5"
       ORDER BY
           "x6_0",
@@ -943,28 +936,28 @@ let%test_module _ =
             "x17_0" AS "x17_0_0"
         FROM (
             SELECT
-                r1_3. "f" AS "r1_3_f_0",
-                r1_3. "g" AS "r1_3_g_0"
+                r1_3. "f" AS "f_7",
+                r1_3. "g" AS "g_5"
             FROM
                 "r1" AS "r1_3") AS "t10",
             LATERAL (
                 SELECT
-                    "r1_3_f_0" AS "x13_0",
-                    "r1_3_g_0" AS "x14_0",
+                    "f_7" AS "x13_0",
+                    "g_5" AS "x14_0",
                     "x10_0" AS "x15_0",
                     "x11_0" AS "x16_0",
                     "x12_0" AS "x17_0"
                 FROM (
                     SELECT
-                        r1_4. "f" AS "r1_4_f_0",
-                        r1_4. "g" AS "r1_4_g_0"
+                        r1_4. "f" AS "f_8",
+                        r1_4. "g" AS "g_6"
                     FROM
                         "r1" AS "r1_4") AS "t8",
                     LATERAL (
                         SELECT
-                            "r1_4_f_0" AS "x10_0",
-                            "r1_4_g_0" AS "x11_0",
-                            "r1_4_f_0" AS "x12_0") AS "t7") AS "t9"
+                            "f_8" AS "x10_0",
+                            "g_6" AS "x11_0",
+                            "f_8" AS "x12_0") AS "t7") AS "t9"
         ORDER BY
             "x13_0",
             "x14_0",

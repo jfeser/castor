@@ -27,7 +27,7 @@ let%expect_test "tuple-simple-cross" =
     (TupleT
      (((IntT ((range (Interval 1 1)) (distinct <opaque>) (nullable false)))
        (IntT ((range (Interval 2 2)) (distinct <opaque>) (nullable false))))
-      ((count (Interval 1 1)))))
+      ((kind Cross))))
     // Locals:
     // cstart3 : Int[nonnull] (persists=true)
     // cstart2 : Int[nonnull] (persists=true)
@@ -47,83 +47,6 @@ let%expect_test "tuple-simple-cross" =
         (buf[cstart0 : 1], buf[cstart1 : 1]));
     } |}]
 
-let%expect_test "tuple-simple-zip" =
-  run_test "ATuple([AScalar(1), AScalar(2)], zip)" ;
-  [%expect
-    {|
-    (TupleT
-     (((IntT ((range (Interval 1 1)) (distinct <opaque>) (nullable false)))
-       (IntT ((range (Interval 2 2)) (distinct <opaque>) (nullable false))))
-      ((count (Interval 1 1)))))
-    [ERROR] Tried to get schema of unnamed predicate 1.
-    [ERROR] Tried to get schema of unnamed predicate 2.
-    [ERROR] Tried to get schema of unnamed predicate 1.
-    [ERROR] Tried to get schema of unnamed predicate 2.
-    // Locals:
-    // start : Int[nonnull] (persists=true)
-    fun zt_3 (start) : Tuple[Int[nonnull]] {
-        yield (buf[start : 1]);
-    }
-    // Locals:
-    // start : Int[nonnull] (persists=true)
-    fun zt_2 (start) : Tuple[Int[nonnull]] {
-        yield (buf[start : 1]);
-    }
-    // Locals:
-    // start : Int[nonnull] (persists=true)
-    fun zt_1 (start) : Tuple[Int[nonnull]] {
-        yield (buf[start : 1]);
-    }
-    // Locals:
-    // start : Int[nonnull] (persists=true)
-    fun zt_0 (start) : Tuple[Int[nonnull]] {
-        yield (buf[start : 1]);
-    }
-    // Locals:
-    // i8 : Int[nonnull] (persists=true)
-    // tup7 : Tuple[Int[nonnull]] (persists=true)
-    // count9 : Int[nonnull] (persists=true)
-    // tup6 : Tuple[Int[nonnull]] (persists=true)
-    // cstart5 : Int[nonnull] (persists=true)
-    fun printer () : Void {
-        cstart5 = 0;
-        cstart5 = 0;
-        init zt_2(cstart5);
-        cstart5 = cstart5 + 1;
-        init zt_3(cstart5);
-        cstart5 = cstart5 + 1;
-        i8 = 0;
-        count9 = 1;
-        loop (i8 < count9) {
-            tup6 = next(zt_2);
-            tup7 = next(zt_3);
-            print(Tuple[Int[nonnull], Int[nonnull]], (tup6[0], tup7[0]));
-            i8 = i8 + 1;
-        }
-    }
-    // Locals:
-    // i3 : Int[nonnull] (persists=true)
-    // tup2 : Tuple[Int[nonnull]] (persists=true)
-    // tup1 : Tuple[Int[nonnull]] (persists=true)
-    // cstart0 : Int[nonnull] (persists=true)
-    // count4 : Int[nonnull] (persists=true)
-    fun consumer () : Void {
-        cstart0 = 0;
-        cstart0 = 0;
-        init zt_0(cstart0);
-        cstart0 = cstart0 + 1;
-        init zt_1(cstart0);
-        cstart0 = cstart0 + 1;
-        i3 = 0;
-        count4 = 1;
-        loop (i3 < count4) {
-            tup1 = next(zt_0);
-            tup2 = next(zt_1);
-            consume(Tuple[Int[nonnull], Int[nonnull]], (tup1[0], tup2[0]));
-            i3 = i3 + 1;
-        }
-    } |}]
-
 let%expect_test "sum-complex" =
   run_test sum_complex ;
   [%expect
@@ -133,7 +56,7 @@ let%expect_test "sum-complex" =
         ((TupleT
           (((IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
             (IntT ((range (Interval -1 2)) (distinct <opaque>) (nullable false))))
-           ((count (Interval 1 1)))))
+           ((kind Cross))))
          ((count (Interval 5 5))))))
       (Width 2)))
     // Locals:
@@ -222,7 +145,7 @@ let%expect_test "sum" =
         ((TupleT
           (((IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
             (IntT ((range (Interval -1 2)) (distinct <opaque>) (nullable false))))
-           ((count (Interval 1 1)))))
+           ((kind Cross))))
          ((count (Interval 5 5))))))
       (Width 2)))
     [ERROR] Tried to get schema of unnamed predicate (k.g - k.f).
@@ -304,7 +227,7 @@ let%expect_test "cross-tuple" =
      ((TupleT
        (((IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
          (IntT ((range (Interval -1 2)) (distinct <opaque>) (nullable false))))
-        ((count (Interval 1 1)))))
+        ((kind Cross))))
       ((count (Interval 5 5)))))
     // Locals:
     // cstart8 : Int[nonnull] (persists=true)
@@ -358,7 +281,7 @@ let%expect_test "hash-idx" =
        (HashIdxT
         ((IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
          (IntT ((range (Interval 2 4)) (distinct <opaque>) (nullable false)))
-         ((key_count (Interval 3 3)) (value_count (Interval 1 1))))))
+         ((key_count (Interval 3 3))))))
       Child_sum))
     // Locals:
     // count8 : Int[nonnull] (persists=true)
@@ -434,7 +357,7 @@ let%expect_test "ordered-idx" =
        (OrderedIdxT
         ((IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
          (IntT ((range (Interval 2 4)) (distinct <opaque>) (nullable false)))
-         ((count (Interval 3 3))))))
+         ((key_count (Interval 3 3))))))
       Child_sum))
     // Locals:
     // vstart17 : Int[nonnull] (persists=true)
@@ -551,7 +474,7 @@ let%expect_test "ordered-idx-date" =
        ((range (Interval 17136 17775)) (distinct <opaque>) (nullable false)))
       (DateT
        ((range (Interval 17136 17775)) (distinct <opaque>) (nullable false)))
-      ((count (Interval 5 5))))) |}]
+      ((key_count (Interval 5 5))))) |}]
 
 let%expect_test "example-1" =
   Demomatch.(run_test ~params:Demomatch.example_params (example1 "log")) ;
@@ -573,9 +496,9 @@ let%expect_test "example-1" =
                     (IntT
                      ((range (Interval 2 5)) (distinct <opaque>)
                       (nullable false))))
-                   ((count (Interval 1 1)))))
+                   ((kind Cross))))
                  ((count (Interval 1 2))))))
-              ((count (Interval 1 2)))))
+              ((kind Cross))))
             ((count (Interval 2 2))))))
          Child_sum)))
       (Width 2)))
@@ -667,16 +590,16 @@ let%expect_test "example-2" =
         ((TupleT
           (((IntT ((range (Interval 1 1)) (distinct <opaque>) (nullable false)))
             (IntT ((range (Interval 2 3)) (distinct <opaque>) (nullable false))))
-           ((count (Interval 1 1)))))
+           ((kind Cross))))
          (ListT
           ((TupleT
             (((IntT
                ((range (Interval 1 4)) (distinct <opaque>) (nullable false)))
               (IntT
                ((range (Interval 2 5)) (distinct <opaque>) (nullable false))))
-             ((count (Interval 1 1)))))
+             ((kind Cross))))
            ((count (Interval 1 2)))))
-         ((key_count (Interval 2 2)) (value_count (Interval 1 2))))))
+         ((key_count (Interval 2 2))))))
       (Width 2)))
     // Locals:
     // kstart10 : Int[nonnull] (persists=false)
@@ -775,9 +698,9 @@ let%expect_test "example-3" =
                   ((range (Interval 1 5)) (distinct <opaque>) (nullable false)))
                  (IntT
                   ((range (Interval 3 6)) (distinct <opaque>) (nullable false))))
-                ((count (Interval 1 1)))))
+                ((kind Cross))))
               ((count (Interval 1 2)))))
-            ((key_count (Interval 3 3)) (value_count (Interval 1 2)))))
+            ((key_count (Interval 3 3)))))
           (FuncT
            (((FuncT
               (((OrderedIdxT
@@ -791,9 +714,9 @@ let%expect_test "example-3" =
                        (IntT
                         ((range (Interval 1 5)) (distinct <opaque>)
                          (nullable false))))
-                      ((count (Interval 1 1)))))
+                      ((kind Cross))))
                     ((count (Interval 1 1)))))
-                  ((count (Interval 5 5))))))
+                  ((key_count (Interval 5 5))))))
                Child_sum)))
             (Width 2))))
          Child_sum)))
@@ -1096,9 +1019,9 @@ let%expect_test "example-3-str" =
                   ((range (Interval 1 5)) (distinct <opaque>) (nullable false)))
                  (IntT
                   ((range (Interval 3 6)) (distinct <opaque>) (nullable false))))
-                ((count (Interval 1 1)))))
+                ((kind Cross))))
               ((count (Interval 1 2)))))
-            ((key_count (Interval 3 3)) (value_count (Interval 1 2)))))
+            ((key_count (Interval 3 3)))))
           (FuncT
            (((FuncT
               (((OrderedIdxT
@@ -1112,9 +1035,9 @@ let%expect_test "example-3-str" =
                        (IntT
                         ((range (Interval 1 5)) (distinct <opaque>)
                          (nullable false))))
-                      ((count (Interval 1 1)))))
+                      ((kind Cross))))
                     ((count (Interval 1 1)))))
-                  ((count (Interval 5 5))))))
+                  ((key_count (Interval 5 5))))))
                Child_sum)))
             (Width 2))))
          Child_sum)))

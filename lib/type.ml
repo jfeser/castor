@@ -60,6 +60,10 @@ module AbsInt = struct
     | Top, _ | _, Top -> Top
     | Interval (l1, h1), Interval (l2, h2) -> Interval (Int.min l1 l2, Int.max h1 h2)
 
+  let ( && ) = meet
+
+  let ( || ) = join
+
   let of_int x = Interval (x, x)
 
   let to_int = function
@@ -138,12 +142,11 @@ module T = struct
 
   type list_ = {count: AbsInt.t} [@@deriving compare, sexp_of]
 
-  type tuple = {count: AbsInt.t} [@@deriving compare, sexp_of]
+  type tuple = {kind: [`Cross | `Concat]} [@@deriving compare, sexp_of]
 
-  type hash_idx = {key_count: AbsInt.t; value_count: AbsInt.t}
-  [@@deriving compare, sexp_of]
+  type hash_idx = {key_count: AbsInt.t} [@@deriving compare, sexp_of]
 
-  type ordered_idx = {count: AbsInt.t} [@@deriving compare, sexp_of]
+  type ordered_idx = {key_count: AbsInt.t} [@@deriving compare, sexp_of]
 
   type fixed = {value: AbsFixed.t; nullable: (bool[@sexp.bool])}
   [@@deriving compare, sexp_of]
@@ -195,11 +198,11 @@ let rec unify_exn t1 t2 =
   | ( IntT {range= b1; nullable= n1; distinct= d1}
     , IntT {range= b2; nullable= n2; distinct= d2} ) ->
       IntT
-        {range= AbsInt.join b1 b2; nullable= n1 || n2; distinct= Distinct.join d1 d2}
+        {range= AbsInt.(b1 || b2); nullable= n1 || n2; distinct= Distinct.join d1 d2}
   | ( DateT {range= b1; nullable= n1; distinct= d1}
     , DateT {range= b2; nullable= n2; distinct= d2} ) ->
       DateT
-        {range= AbsInt.join b1 b2; nullable= n1 || n2; distinct= Distinct.join d1 d2}
+        {range= AbsInt.(b1 || b2); nullable= n1 || n2; distinct= Distinct.join d1 d2}
   | FixedT {value= v1; nullable= n1}, FixedT {value= v2; nullable= n2} ->
       FixedT {value= AbsFixed.join v1 v2; nullable= n1 || n2}
   | IntT x, NullT | NullT, IntT x -> IntT {x with nullable= true}
@@ -210,27 +213,25 @@ let rec unify_exn t1 t2 =
   | ( StringT {nchars= b1; nullable= n1; distinct= d1}
     , StringT {nchars= b2; nullable= n2; distinct= d2} ) ->
       StringT
-        { nchars= AbsInt.join b1 b2
+        { nchars= AbsInt.(b1 || b2)
         ; nullable= n1 || n2
         ; distinct= Distinct.join d1 d2 }
   | StringT x, NullT | NullT, StringT x -> StringT {x with nullable= true}
-  | TupleT (e1s, {count= c1}), TupleT (e2s, {count= c2}) ->
+  | TupleT (e1s, {kind= k1}), TupleT (e2s, {kind= k2}) when k1 = k2 ->
       let elem_ts =
         match List.map2 e1s e2s ~f:unify_exn with
         | Ok ts -> ts
         | Unequal_lengths -> fail "Different number of columns."
       in
-      TupleT (elem_ts, {count= AbsInt.join c1 c2})
+      TupleT (elem_ts, {kind= k1})
   | ListT (et1, {count= c1}), ListT (et2, {count= c2}) ->
-      ListT (unify_exn et1 et2, {count= AbsInt.join c1 c2})
-  | OrderedIdxT (k1, v1, {count= c1}), OrderedIdxT (k2, v2, {count= c2}) ->
-      OrderedIdxT (unify_exn k1 k2, unify_exn v1 v2, {count= AbsInt.join c1 c2})
-  | ( HashIdxT (kt1, vt1, {key_count= kc1; value_count= vc1})
-    , HashIdxT (kt2, vt2, {key_count= kc2; value_count= vc2}) ) ->
+      ListT (unify_exn et1 et2, {count= AbsInt.(c1 || c2)})
+  | OrderedIdxT (k1, v1, {key_count= c1}), OrderedIdxT (k2, v2, {key_count= c2}) ->
+      OrderedIdxT (unify_exn k1 k2, unify_exn v1 v2, {key_count= AbsInt.(c1 || c2)})
+  | HashIdxT (kt1, vt1, {key_count= kc1}), HashIdxT (kt2, vt2, {key_count= kc2}) ->
       let kt = unify_exn kt1 kt2 in
       let vt = unify_exn vt1 vt2 in
-      HashIdxT
-        (kt, vt, {key_count= AbsInt.join kc1 kc2; value_count= AbsInt.join vc1 vc2})
+      HashIdxT (kt, vt, {key_count= AbsInt.(kc1 || kc2)})
   | EmptyT, t | t, EmptyT -> t
   | FuncT (t, `Child_sum), FuncT (t', `Child_sum) ->
       FuncT (List.map2_exn ~f:unify_exn t t', `Child_sum)
@@ -261,11 +262,14 @@ let rec width = function
       List.map ts ~f:width |> List.sum (module Int) ~f:(fun x -> x)
   | FuncT (_, `Width w) -> w
 
-let count = function
+let rec count = function
   | EmptyT -> AbsInt.of_int 0
   | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ | DateT _ -> AbsInt.of_int 1
-  | TupleT (_, {count}) | OrderedIdxT (_, _, {count; _}) -> count
-  | HashIdxT (_, _, {value_count; _}) -> value_count
+  | TupleT (ts, {kind= `Concat}) -> List.sum (module AbsInt) ts ~f:count
+  | TupleT (ts, {kind= `Cross}) ->
+      List.map ts ~f:count |> List.fold_left ~init:(AbsInt.of_int 1) ~f:AbsInt.( * )
+  | OrderedIdxT (_, vt, {key_count}) -> AbsInt.(count vt || (key_count * count vt))
+  | HashIdxT (_, vt, _) -> count vt
   | ListT (_, {count}) -> count
   | FuncT _ -> AbsInt.top
 
@@ -304,7 +308,7 @@ let rec len =
       let len_len = header_len body_len in
       count_len + len_len + body_len
   | T.OrderedIdxT (kt, vt, m) ->
-      let values = m.count * len vt in
+      let values = m.key_count * len vt in
       oi_map_len kt vt m + values
   | T.HashIdxT (kt, vt, m) ->
       hi_hash_len kt m + hi_map_len kt vt m + (m.key_count * len vt)
@@ -312,10 +316,10 @@ let rec len =
   | NullT as t -> Error.(create "Unexpected type." t [%sexp_of: T.t] |> raise)
 
 (** Range of ordered index map lengths. *)
-and oi_map_len kt vt m = AbsInt.(m.count * (len kt + of_int (oi_ptr_size vt m)))
+and oi_map_len kt vt m = AbsInt.(m.key_count * (len kt + of_int (oi_ptr_size vt m)))
 
 (** Size of pointers (in bytes) in ordered indexes. *)
-and oi_ptr_size vt m = AbsInt.(byte_width ~nullable:false (m.count * len vt))
+and oi_ptr_size vt m = AbsInt.(byte_width ~nullable:false (m.key_count * len vt))
 
 (** Range of hash index hash data lengths. *)
 and hi_hash_len ?(bytes_per_key = AbsInt.of_int 1) kt m =
@@ -355,7 +359,7 @@ let%expect_test "" =
                   , `Child_sum )
               , {count= Interval (1, 1)} )
           , {count= Interval (1, 1)} )
-      , {key_count= Interval (1000, 1000); value_count= Interval (1, 1)} )
+      , {key_count= Interval (1000, 1000)} )
   in
   len type_ |> [%sexp_of: AbsInt.t] |> print_s ;
   (* Should be larger than 11983084 *)

@@ -254,9 +254,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           | FuncT ([lhs_t; rhs_t], _) -> (lhs_t, rhs_t)
           | _ -> assert false
         in
-        M.Fold.run
-          (self#tuple' (TupleT ([lhs_t; rhs_t], {count= Type.AbsInt.Top})))
-          [lhs; rhs]
+        M.Fold.run (self#tuple' (TupleT ([lhs_t; rhs_t], {kind= `Cross}))) [lhs; rhs]
 
       method join meta _ lhs rhs = self#join' meta lhs rhs
 

@@ -27,7 +27,7 @@ let%expect_test "project" =
   run_test "Select([f], r)" ;
   [%expect {|
     SELECT
-        r_0. "f" AS "f_0"
+        r_0. "f" AS "f_1"
     FROM
         "r" AS "r_0" |}]
 
@@ -36,8 +36,8 @@ let%expect_test "filter" =
   [%expect
     {|
       SELECT
-          r_0. "f" AS "r_0_f_0",
-          r_0. "g" AS "r_0_g_0"
+          r_0. "f" AS "f_0",
+          r_0. "g" AS "g_0"
       FROM
           "r" AS "r_0"
       WHERE ((r_0. "f") = (r_0. "g")) |}]
@@ -75,7 +75,7 @@ let%expect_test "order-by" =
   [%expect
     {|
     SELECT DISTINCT
-        r1_0. "f" AS "f_0"
+        r1_0. "f" AS "f_1"
     FROM
         "r1" AS "r1_0"
     ORDER BY
@@ -86,7 +86,7 @@ let%expect_test "dedup" =
   [%expect
     {|
     SELECT DISTINCT
-        r1_0. "f" AS "f_0"
+        r1_0. "f" AS "f_1"
     FROM
         "r1" AS "r1_0" |}]
 
@@ -95,7 +95,7 @@ let%expect_test "select" =
   [%expect
     {|
     SELECT
-        r1_0. "f" AS "f_0"
+        r1_0. "f" AS "f_1"
     FROM
         "r1" AS "r1_0" |}]
 
@@ -104,8 +104,8 @@ let%expect_test "scan" =
   [%expect
     {|
     SELECT
-        r1_0. "f" AS "r1_0_f_0",
-        r1_0. "g" AS "r1_0_g_0"
+        r1_0. "f" AS "f_0",
+        r1_0. "g" AS "g_0"
     FROM
         "r1" AS "r1_0" |}]
 
@@ -132,13 +132,13 @@ let%expect_test "join-groupby" =
   [%expect
     {|
     SELECT
-        "f_0" AS "f_0_0",
+        "f_2" AS "f_2_0",
         "x_0" AS "x_0_0",
-        "g_0" AS "g_0_0",
+        "g_1" AS "g_1_0",
         "y_0" AS "y_0_0"
     FROM (
         SELECT
-            r1_1. "f" AS "f_0",
+            r1_1. "f" AS "f_2",
             sum((r1_1. "f") * (r1_1. "g")) AS "x_0"
         FROM
             "r1" AS "r1_1"
@@ -146,13 +146,13 @@ let%expect_test "join-groupby" =
             (r1_1. "f")) AS "t0",
         (
             SELECT
-                r1_0. "g" AS "g_0",
+                r1_0. "g" AS "g_1",
                 sum((r1_0. "f") * (r1_0. "g")) AS "y_0"
             FROM
                 "r1" AS "r1_0"
             GROUP BY
                 (r1_0. "g")) AS "t1"
-    WHERE ((("f_0") = ("g_0"))
+    WHERE ((("f_2") = ("g_1"))
         OR (("x_0") = ("y_0"))) |}]
 
 let%expect_test "join-cond" =
@@ -161,8 +161,8 @@ let%expect_test "join-cond" =
   [%expect
     {|
     SELECT
-        r1_1. "f" AS "f_0",
-        r_0. "g" AS "g_0"
+        r1_1. "f" AS "f_2",
+        r_0. "g" AS "g_1"
     FROM
         "r1" AS "r1_1",
         "r" AS "r_0"
@@ -179,7 +179,7 @@ let%expect_test "select-groupby" =
           max("x_0") AS "a0_0"
       FROM (
           SELECT
-              r1_0. "f" AS "f_0",
+              r1_0. "f" AS "f_1",
               sum((r1_0. "f") * (r1_0. "g")) AS "x_0"
           FROM
               "r1" AS "r1_0"
@@ -227,35 +227,35 @@ let%expect_test "groupby-dedup" =
   [%expect
     {|
     SELECT
-        sum("r1_0_f_0") AS "x_0"
+        sum("f_0") AS "x_0"
     FROM ( SELECT DISTINCT
-            r1_0. "f" AS "r1_0_f_0",
-            r1_0. "g" AS "r1_0_g_0"
+            r1_0. "f" AS "f_0",
+            r1_0. "g" AS "g_0"
         FROM
             "r1" AS "r1_0") AS "t0"
     GROUP BY
-        ("r1_0_g_0") |}]
+        ("g_0") |}]
 
 let%expect_test "hash-idx" =
   run_test "ahashidx(select([f], r1) as k, select([g], filter(f = k.f, r1)), null)" ;
   [%expect
     {|
     SELECT
-        "f_0_0" AS "f_0_0_0",
-        "g_1" AS "g_1_0"
+        "f_1_0" AS "f_1_0_0",
+        "g_3" AS "g_3_0"
     FROM (
         SELECT
-            r1_0. "f" AS "f_0"
+            r1_0. "f" AS "f_1"
         FROM
             "r1" AS "r1_0") AS "t1",
         LATERAL (
             SELECT
-                "f_0" AS "f_0_0",
-                r1_1. "g" AS "g_1"
+                "f_1" AS "f_1_0",
+                r1_1. "g" AS "g_3"
             FROM
                 "r1" AS "r1_1"
-            WHERE (("f_0") = (NULL))
-            AND ((r1_1. "f") = ("f_0"))) AS "t0" |}]
+            WHERE (("f_1") = (NULL))
+            AND ((r1_1. "f") = ("f_1"))) AS "t0" |}]
 
 let%expect_test "ordered-idx" =
   run_test
@@ -263,19 +263,19 @@ let%expect_test "ordered-idx" =
   [%expect
     {|
     SELECT
-        "f_0_0" AS "f_0_0_0",
-        "g_1" AS "g_1_0"
+        "f_1_0" AS "f_1_0_0",
+        "g_3" AS "g_3_0"
     FROM (
         SELECT
-            r1_0. "f" AS "f_0"
+            r1_0. "f" AS "f_1"
         FROM
             "r1" AS "r1_0") AS "t1",
         LATERAL (
             SELECT
-                "f_0" AS "f_0_0",
-                r1_1. "g" AS "g_1"
+                "f_1" AS "f_1_0",
+                r1_1. "g" AS "g_3"
             FROM
                 "r1" AS "r1_1"
-            WHERE (((NULL) < ("f_0"))
-                AND (("f_0") < (NULL)))
-            AND ((r1_1. "f") = ("f_0"))) AS "t0" |}]
+            WHERE (((NULL) < ("f_1"))
+                AND (("f_1") < (NULL)))
+            AND ((r1_1. "f") = ("f_1"))) AS "t0" |}]

@@ -70,7 +70,7 @@ let%expect_test "tuple" =
     ((TupleT
       (((IntT ((range (Interval 1 1)) (distinct <opaque>) (nullable false)))
         (StringT ((nchars (Interval 4 4)) (distinct <opaque>) (nullable false))))
-       ((count (Interval 1 1)))))
+       ((kind Cross))))
      5 "\\001test") |}]
 
 let%expect_test "hash-idx" =
@@ -97,7 +97,7 @@ let%expect_test "hash-idx" =
     ((HashIdxT
       ((IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
        (IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
-       ((key_count (Interval 3 3)) (value_count (Interval 1 1)))))
+       ((key_count (Interval 3 3)))))
      12) |}]
 
 let%expect_test "ordered-idx" =
@@ -126,7 +126,7 @@ let%expect_test "ordered-idx" =
     ((OrderedIdxT
       ((IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
        (IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
-       ((count (Interval 3 3)))))
+       ((key_count (Interval 3 3)))))
      9 "\\003\\000\\002\\001\\001\\002\\003\\002\\001") |}]
 
 let%expect_test "ordered-idx-dates" =
@@ -165,7 +165,7 @@ let%expect_test "ordered-idx-dates" =
         ((range (Interval 17136 17775)) (distinct <opaque>) (nullable false)))
        (DateT
         ((range (Interval 17136 17775)) (distinct <opaque>) (nullable false)))
-       ((count (Interval 5 5)))))
+       ((key_count (Interval 5 5)))))
      25 "oE\\000\\146D\\002|D\\004$D\\006\\240B\\boE\\146D|D$D\\240B") |}]
 
 let%expect_test "list-list" =
