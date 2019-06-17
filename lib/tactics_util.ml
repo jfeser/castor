@@ -40,7 +40,7 @@ module Make (Config : Config.S) = struct
        the keys. *)
     let orig_names = List.map ps ~f:Pred.to_name in
     let preds = List.map ps ~f:(Pred.subst alias_map) in
-    let%map rels =
+    let%bind rels =
       List.map preds ~f:(fun p ->
           List.map
             (Pred.names p |> Set.to_list)
@@ -53,19 +53,27 @@ module Make (Config : Config.S) = struct
           |> Or_error.all )
       |> Or_error.all
     in
-    List.concat rels
-    |> List.map ~f:(fun (r, n) -> (r.r_name, n))
-    |> Map.of_alist_multi (module String)
-    |> Map.to_alist
-    |> List.map ~f:(fun (r, ns) ->
-           dedup
-             (select
-                (List.map ns ~f:(fun n -> Name n))
-                (relation (Db.relation conn r))) )
-    |> List.fold_left1_exn ~f:(join (Bool true))
-    |> select
-         (List.map2_exn orig_names preds ~f:(fun n p ->
-              match n with Some n -> As_pred (p, Name.name n) | None -> p ))
+    let joined_rels =
+      List.concat rels
+      |> List.map ~f:(fun (r, n) -> (r.r_name, n))
+      |> Map.of_alist_multi (module String)
+      |> Map.to_alist
+      |> List.map ~f:(fun (r, ns) ->
+             dedup
+               (select
+                  (List.map ns ~f:(fun n -> Name n))
+                  (relation (Db.relation conn r))) )
+      |> List.reduce ~f:(join (Bool true))
+    in
+    match joined_rels with
+    | Some r ->
+        Ok
+          (select
+             (List.map2_exn orig_names preds ~f:(fun n p ->
+                  match n with Some n -> As_pred (p, Name.name n) | None -> p
+              ))
+             r)
+    | None -> Or_error.errorf "No relations found."
 
   let all_values ps r =
     Or_error.find_ok [all_values_precise ps r; all_values_approx ps r]
