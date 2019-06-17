@@ -271,3 +271,23 @@ let pp_small fmt x =
 let pp_small_str () x =
   Format.(pp_small str_formatter x) ;
   Format.flush_str_formatter ()
+
+let names_visitor =
+  object (self : 'a)
+    inherit [_] reduce as super
+
+    method zero = Set.empty (module Name)
+
+    method plus = Set.union
+
+    method! visit_Name () n = Set.singleton (module Name) n
+
+    method! visit_pred () p =
+      match p with
+      | Exists _ | First _ -> self#zero
+      | Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null _ | Unop _
+       |Binop _ | As_pred _ | Count | Sum _ | Avg _ | Min _ | Max _
+       |If (_, _, _)
+       |Substring (_, _, _) ->
+          super#visit_pred () p
+  end

@@ -584,18 +584,18 @@ struct
         build_if ~cond
           ~then_:(fun b ->
             debug_print
-              (Format.asprintf "filter %a selected" A.Pred.pp pred)
+              (Format.asprintf "filter %a selected" Pred.pp pred)
               (Tuple tup) b ;
             cb b tup )
           ~else_:(fun b ->
             debug_print
-              (Format.asprintf "filter %a rejected" A.Pred.pp pred)
+              (Format.asprintf "filter %a rejected" Pred.pp pred)
               (Tuple tup) b )
           b )
 
   and agg_init ctx p b =
     let open Builder in
-    match A.Pred.remove_as p with
+    match Pred.remove_as p with
     | A.Count ->
         `Count
           (build_defn ~persistent:false "count" (const_int Type.PrimType.int_t 0) b)
@@ -642,7 +642,7 @@ struct
     | `Count x | `Sum (_, x) | `Min (_, x) | `Max (_, x) -> x
     | `Avg (_, n, d) -> build_div n d b
     | `Passthru p ->
-        [%sexp_of: A.pred * [`Agg | `Scalar]] (p, A.Pred.kind p) |> print_s ;
+        [%sexp_of: A.pred * [`Agg | `Scalar]] (p, Pred.kind p) |> print_s ;
         gen_pred ctx p b
 
   and scan_select ctx b r t cb =
@@ -662,7 +662,7 @@ struct
     | `Agg ->
         (* Extract all the aggregates from the arguments. *)
         let scalar_preds, agg_preds =
-          List.map ~f:A.Pred.collect_aggs args |> List.unzip
+          List.map ~f:Pred.collect_aggs args |> List.unzip
         in
         let agg_preds = List.concat agg_preds in
         let last_tup =

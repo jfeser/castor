@@ -22,7 +22,7 @@ module Query = struct
 
   type ('q, 'm) node =
     | Empty
-    | Scalars of (A.Pred.t[@name "pred"]) list
+    | Scalars of (Pred.t[@name "pred"]) list
     | Concat of ('q, 'm) t list
     | For of ('q * string * ('q, 'm) t)
     | Let of ((string * ('q, 'm) t) list * ('q, 'm) t)
@@ -82,7 +82,7 @@ module Query = struct
 
         method visit_'m () _ = self#zero
 
-        method visit_pred () p = self#visit_names () (A.Pred.names p)
+        method visit_pred () p = self#visit_names () (Pred.names p)
 
         method! visit_Var () _ = false
 
@@ -237,10 +237,9 @@ module Query = struct
           (* The renaming refers to the scoped names from q1, so scope before
              renaming. *)
           let o1 =
-            List.map o1 ~f:(fun (p, o) ->
-                (A.Pred.scoped (A.schema_exn q1) scope p, o) )
+            List.map o1 ~f:(fun (p, o) -> (Pred.scoped (A.schema_exn q1) scope p, o))
           in
-          List.map (o1 @ o2) ~f:(fun (p, o) -> (A.Pred.subst sctx p, o))
+          List.map (o1 @ o2) ~f:(fun (p, o) -> (Pred.subst sctx p, o))
         in
         A.order_by order (A.dep_join q1 scope (A.select slist q2))
     | Concat qs ->
@@ -587,7 +586,7 @@ module Make (Config : Config.S) = struct
     | Join {r1; r2; _} ->
         FuncT ([least_general_of_layout r1; least_general_of_layout r2], `Child_sum)
     | AEmpty -> EmptyT
-    | AScalar p -> Abslayout.Pred.to_type p |> T.least_general_of_primtype
+    | AScalar p -> Pred.to_type p |> T.least_general_of_primtype
     | AList (_, r') -> ListT (least_general_of_layout r', {count= Bottom})
     | DepJoin {d_lhs; d_rhs; _} ->
         FuncT
