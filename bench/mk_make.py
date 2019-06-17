@@ -48,6 +48,7 @@ def out_dir(b):
     return '%s-opt' % b['name']
 
 
+print('SHELL:=/bin/bash')
 print('DB=postgresql:///tpch_1k')
 print('DBC=postgresql:///tpch_1k')
 print('OPT_PATH=../bin/opt.exe')
@@ -105,7 +106,7 @@ validate: %s
 for b in bench:
     print('''
 {0}: {2}
-\t$(OPT) $(OPT_FLAGS) {1} {2} 2>{3} >$@
+\t$(OPT) $(OPT_FLAGS) {1} {2} >$@ 2> >(tee {3} >&2)
     '''.format(out_file(b), gen_params(b), in_file(b), '%s-opt.log' % b['name']))
     print('''
 {0}: {1}
