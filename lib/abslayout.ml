@@ -540,6 +540,18 @@ module Pred = struct
     in
     v#visit_pred ()
 
+  let subst_tree p ~pattern ~with_ =
+    let v =
+      object
+        inherit [_] endo as super
+
+        method! visit_pred () this =
+          if [%compare.equal: t] this pattern then with_
+          else super#visit_pred () this
+      end
+    in
+    v#visit_pred () p
+
   let scoped names scope p =
     let ctx =
       List.map names ~f:(fun n -> (n, Name (Name.scoped scope n)))

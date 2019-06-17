@@ -271,6 +271,8 @@ module Pred : sig
 
   val subst : t Map.M(Name).t -> t -> t
 
+  val subst_tree : t -> pattern:t -> with_:t -> t
+
   val scoped : Name.t list -> string -> t -> t
 
   val unscoped : string -> t -> t
