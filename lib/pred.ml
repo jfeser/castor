@@ -211,13 +211,15 @@ let subst ctx =
   in
   v#visit_pred ()
 
-let subst_tree p ~pattern ~with_ =
+let subst_tree ctx p =
   let v =
     object
       inherit [_] Abslayout0.endo as super
 
       method! visit_pred () this =
-        if [%compare.equal: t] this pattern then with_ else super#visit_pred () this
+        match Map.find ctx this with
+        | Some x -> x
+        | None -> super#visit_pred () this
     end
   in
   v#visit_pred () p
@@ -273,3 +275,29 @@ let ensure_alias = function
     match to_name p with
     | Some n -> As_pred (p, Name.name n)
     | None -> As_pred (p, Fresh.name Global.fresh "a%d") )
+
+let to_nnf p =
+  let visitor =
+    object (self : 'self)
+      inherit [_] Abslayout0.map as super
+
+      method! visit_Unop () (op, arg) =
+        if op = Not then
+          match arg with
+          | Binop (Or, p1, p2) ->
+              self#visit_pred () (Binop (And, Unop (Not, p1), Unop (Not, p2)))
+          | Binop (And, p1, p2) ->
+              Binop
+                ( Or
+                , self#visit_pred () (Unop (Not, p1))
+                , self#visit_pred () (Unop (Not, p2)) )
+          | Binop (Gt, p1, p2) -> self#visit_Binop () (Le, p1, p2)
+          | Binop (Ge, p1, p2) -> self#visit_Binop () (Lt, p1, p2)
+          | Binop (Lt, p1, p2) -> self#visit_Binop () (Ge, p1, p2)
+          | Binop (Le, p1, p2) -> self#visit_Binop () (Gt, p1, p2)
+          | Unop (Not, p) -> self#visit_pred () p
+          | p -> Unop (op, self#visit_pred () p)
+        else super#visit_Unop () (op, arg)
+    end
+  in
+  visitor#visit_pred () p
