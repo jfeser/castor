@@ -48,6 +48,11 @@ module Make (C : Config.S) = struct
   let to_filter r =
     match r.node with Filter (p, r) -> Some (p, r) | _ -> None
 
+  let merge_select s1 s2 =
+    s1 @ s2
+    |> List.dedup_and_sort ~compare:(fun p1 p2 ->
+           [%compare: Name.t option] (Schema.to_name p1) (Schema.to_name p2) )
+
   let hoist_filter r =
     let open Option.Let_syntax in
     match r.node with
@@ -84,10 +89,7 @@ module Make (C : Config.S) = struct
         filter p (dedup r)
     | AList (rk, rv) ->
         let%map p, r = to_filter rv in
-        let below, above = split_bound rk p in
-        let above = List.map above ~f:(Pred.unscoped (scope_exn rk)) in
-        filter (Pred.conjoin above)
-          (list rk (scope_exn rk) (filter (Pred.conjoin below) r))
+        filter (Pred.unscoped (scope_exn rk) p) (list rk (scope_exn rk) r)
     | AHashIdx ({hi_keys= rk; hi_values= rv; _} as h) ->
         let%map p, r = to_filter rv in
         let below, above = split_bound rk p in
@@ -100,8 +102,21 @@ module Make (C : Config.S) = struct
         let above = List.map above ~f:(Pred.unscoped (scope_exn rk)) in
         filter (Pred.conjoin above)
           (ordered_idx rk (scope_exn rk) (filter (Pred.conjoin below) r) m)
-    | Relation _ | AEmpty | AScalar _ | ATuple _ | As (_, _) | DepJoin _ ->
-        None
+    | DepJoin {d_lhs; d_alias; d_rhs} ->
+        let%map p, r = to_filter d_rhs in
+        (* Ensure all the required names are selected. *)
+        let select_list =
+          let lhs_schema = schema_exn d_lhs in
+          let lhs_select =
+            lhs_schema |> Schema.to_select_list
+            |> List.map ~f:(Pred.scoped lhs_schema d_alias)
+          in
+          let rhs_select = schema_exn d_rhs |> Schema.to_select_list in
+          merge_select lhs_select rhs_select
+        in
+        filter (Pred.unscoped d_alias p)
+          (dep_join d_lhs d_alias (select select_list r))
+    | Relation _ | AEmpty | AScalar _ | ATuple _ | As (_, _) -> None
 
   let hoist_filter = of_func hoist_filter ~name:"hoist-filter"
 
@@ -338,60 +353,174 @@ module Make (C : Config.S) = struct
 
   let push_filter =
     (* NOTE: Simplify is necessary to make push-filter safe under fixpoints. *)
-    seq' (traced (of_func push_filter ~name:"push-filter")) simplify
+    seq' (of_func push_filter ~name:"push-filter") simplify
 
   let elim_eq_filter_src =
     let src = Logs.Src.create "elim-eq-filter" in
-    Logs.Src.set_level src None ;
+    Logs.Src.set_level src (Some Debug) ;
     src
+
+  let contains_not p =
+    let visitor =
+      object (self)
+        inherit [_] reduce
+
+        inherit [_] Util.disj_monoid
+
+        method! visit_Unop () (op, p) =
+          if op = Not then true else self#visit_pred () p
+      end
+    in
+    visitor#visit_pred () p
+
+  let is_eq_subtree p =
+    let visitor =
+      object (self)
+        inherit [_] reduce
+
+        inherit [_] Util.conj_monoid
+
+        method! visit_Binop () (op, p1, p2) =
+          (op = And || op = Or)
+          && self#visit_pred () p1 && self#visit_pred () p2
+          || op = Eq
+
+        method! visit_Unop () (op, p) = op <> Not && self#visit_pred () p
+      end
+    in
+    visitor#visit_pred () p
+
+  (** Domain computations for predicates containing conjunctions, disjunctions
+     and equalities. *)
+  module EqDomain = struct
+    type domain =
+      | And of domain * domain
+      | Or of domain * domain
+      | Domain of Abslayout.t
+    [@@deriving compare]
+
+    type t = domain Map.M(Pred).t
+
+    let intersect d1 d2 =
+      Map.merge d1 d2 ~f:(fun ~key:_ v ->
+          let ret =
+            match v with
+            | `Both (d1, d2) ->
+                if [%compare.equal: domain] d1 d2 then d1 else And (d1, d2)
+            | `Left d | `Right d -> d
+          in
+          Some ret )
+
+    let union d1 d2 =
+      Map.merge d1 d2 ~f:(fun ~key:_ v ->
+          let ret =
+            match v with
+            | `Both (d1, d2) ->
+                if [%compare.equal: domain] d1 d2 then d1 else Or (d1, d2)
+            | `Left d | `Right d -> d
+          in
+          Some ret )
+
+    let rec of_pred r =
+      let open Or_error.Let_syntax in
+      function
+      | Binop (And, p1, p2) ->
+          let%bind ds1 = of_pred r p1 in
+          let%map ds2 = of_pred r p2 in
+          intersect ds1 ds2
+      | Binop (Or, p1, p2) ->
+          let%bind ds1 = of_pred r p1 in
+          let%map ds2 = of_pred r p2 in
+          union ds1 ds2
+      | Binop (Eq, p1, p2) -> (
+        match
+          (Tactics_util.all_values [p1] r, Tactics_util.all_values [p2] r)
+        with
+        | _, Ok vs2 when is_candidate_key p1 r && not (is_candidate_key p2 r)
+          ->
+            Ok (Map.singleton (module Pred) p1 (Domain vs2))
+        | Ok vs1, _ when is_candidate_key p2 r && not (is_candidate_key p1 r)
+          ->
+            Ok (Map.singleton (module Pred) p2 (Domain vs1))
+        | _, Ok _ | Ok _, _ ->
+            Or_error.error "No candidate keys." (p1, p2)
+              [%sexp_of: Pred.t * Pred.t]
+        | Error e1, Error e2 -> Error (Error.of_list [e1; e2]) )
+      | p ->
+          Or_error.error "Not part of an equality predicate." p
+            [%sexp_of: Pred.t]
+
+    let to_ralgebra d =
+      let schema r = List.hd_exn (schema_exn r) in
+      let rec extract = function
+        | And (d1, d2) ->
+            let e1 = extract d1 in
+            let e2 = extract d2 in
+            let n1 = schema e1 in
+            let n2 = schema e2 in
+            dedup
+              (select [Name n1] (join (Binop (Eq, Name n1, Name n2)) e1 e2))
+        | Or (d1, d2) ->
+            let e1 = extract d1 in
+            let e2 = extract d2 in
+            let n1 = schema e1 in
+            let n2 = schema e2 in
+            let n = Fresh.name Global.fresh "x%d" in
+            dedup
+              (tuple
+                 [ select [As_pred (Name n1, n)] e1
+                 ; select [As_pred (Name n2, n)] e2 ]
+                 Concat)
+        | Domain d ->
+            let n = schema d in
+            let n' = Fresh.name Global.fresh "x%d" in
+            select [As_pred (Name n, n')] d
+      in
+      Map.map d ~f:extract
+  end
 
   let elim_eq_filter r =
     match r.node with
     | Filter (p, r) -> (
         let eqs, rest =
-          Pred.conjuncts p
-          |> List.partition_map ~f:(function
-               | Binop (Eq, p1, p2) as p ->
-                   if is_candidate_key p1 r && not (is_candidate_key p2 r) then
-                     `Fst (p2, p1)
-                   else if is_candidate_key p2 r && not (is_candidate_key p1 r)
-                   then `Fst (p1, p2)
-                   else `Snd p
-               | p -> `Snd p )
+          Pred.to_nnf p |> Pred.conjuncts
+          |> List.partition_map ~f:(fun p ->
+                 match EqDomain.of_pred r p with
+                 | Ok d -> `Fst (p, d)
+                 | Error e ->
+                     Logs.info ~src:elim_eq_filter_src (fun m ->
+                         m "%a" Error.pp e ) ;
+                     `Snd p )
         in
-        if List.length eqs = 0 then (
-          Logs.info ~src:elim_eq_filter_src (fun m -> m "Found no equalities.") ;
-          None )
-        else
-          let scope = Fresh.name Global.fresh "s%d" in
-          let select_list, key = List.unzip eqs in
-          let inner_filter_pred =
-            let s = schema_exn r in
-            List.map select_list ~f:(fun v ->
-                Binop (Eq, v, Pred.scoped s scope v) )
-            |> and_
-          in
-          let outer_filter r =
-            match rest with [] -> r | _ -> filter (and_ rest) r
-          in
-          match Tactics_util.all_values select_list r with
-          | Ok r' ->
-              Some
-                (outer_filter
-                   (hash_idx r' scope
-                      ((* Drop the key from the values relation. *)
-                       Tactics_util.select_out (schema_exn r')
-                         (filter inner_filter_pred r))
-                      key))
-          | Error err ->
-              Logs.info ~src:elim_eq_filter_src (fun m ->
-                  m "Could not get all values: %a" Error.pp err ) ;
-              None )
+        let inner, eqs = List.unzip eqs in
+        let eqs = List.reduce ~f:EqDomain.intersect eqs in
+        let inner = Pred.conjoin inner in
+        match eqs with
+        | None ->
+            Logs.err ~src:elim_eq_filter_src (fun m -> m "Found no equalities.") ;
+            None
+        | Some eqs ->
+            let eqs = EqDomain.to_ralgebra eqs in
+            let scope = Fresh.name Global.fresh "s%d" in
+            let key, rels = Map.to_alist eqs |> List.unzip in
+            let r_keys = dedup (tuple rels Cross) in
+            let inner_filter_pred =
+              let ctx =
+                Map.map eqs ~f:(fun r ->
+                    Name (List.hd_exn (schema_exn r) |> Name.scoped scope) )
+              in
+              Pred.subst_tree ctx inner
+            in
+            let outer_filter_pred = Pred.conjoin rest in
+            Some
+              (filter outer_filter_pred
+                 (hash_idx r_keys scope (filter inner_filter_pred r) key)) )
     | _ ->
-        Logs.debug ~src:elim_eq_filter_src (fun m -> m "Not a filter.") ;
+        Logs.err ~src:elim_eq_filter_src (fun m -> m "Not a filter.") ;
         None
 
-  let elim_eq_filter = of_func elim_eq_filter ~name:"elim-eq-filter"
+  let elim_eq_filter =
+    seq' (of_func elim_eq_filter ~name:"elim-eq-filter") (try_ filter_const)
 
   (* let precompute_filter n =
    *   let exception Failed of Error.t in

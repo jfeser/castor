@@ -35,6 +35,7 @@ module Make (Config : Config.S) () = struct
   module M0 = Abslayout_db.Make (Config)
   module F = Filter_tactics.Make (Config)
   module S = Simple_tactics.Make (Config)
+  module R = Resolve.Make (Config)
   module Project = Project.Make (Config)
   module Join_opt = Join_opt.Make (Config)
   module Simplify_tactic = Simplify_tactic.Make (Config)
@@ -60,7 +61,8 @@ module Make (Config : Config.S) () = struct
   let is_serializable r p = is_serializeable (Path.get_exn p r)
 
   let has_params r p =
-    let r' = Path.get_exn p r in
+    let r' = R.resolve ~params r in
+    let r' = Path.get_exn p r' in
     overlaps (free r') params
 
   let push_orderby r =
@@ -161,7 +163,9 @@ module Make (Config : Config.S) () = struct
       ; (* Eliminate comparison filters. *)
         elim_param_filter F.elim_cmp_filter is_param_cmp_filter
       ; (* Eliminate the deepest equality filter. *)
-        elim_param_filter (Branching.lift F.elim_eq_filter) is_param_eq_filter
+        elim_param_filter
+          (Branching.lift (traced F.elim_eq_filter))
+          is_param_filter
       ; push_all_unparameterized_filters
       ; (* Push selections above collections. *)
         for_all Select_tactics.push_select
@@ -169,7 +173,7 @@ module Make (Config : Config.S) () = struct
       ; (* Eliminate all unparameterized relations. *)
         fix
           (seq_many
-             [ at_ (traced S.row_store)
+             [ at_ S.row_store
                  Path.(
                    all >>? is_run_time >>? not has_params
                    >>? not is_serializable
@@ -182,6 +186,7 @@ module Make (Config : Config.S) () = struct
       ; Simplify_tactic.simplify ]
 
   let is_serializable r =
+    let r = R.resolve ~params r in
     annotate_free r ;
     let bad_runtime_op =
       Path.(

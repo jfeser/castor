@@ -155,6 +155,10 @@ module Make (C : Config.S) = struct
     | Filter (pred, _) -> overlaps (pred_free pred) params
     | _ -> false
 
+  let contains f r p =
+    let r' = Path.get_exn p r in
+    Seq.exists Path.(all r') ~f:(fun p -> f r' p)
+
   let is_const_filter = Infix.(is_filter && not is_param_filter)
 
   let is_param_eq_filter r p =
@@ -219,12 +223,12 @@ module Make (C : Config.S) = struct
 
   let fix tf =
     let f p r =
-      let rec fix r =
-        match apply tf p r with
-        | Some r' -> if Abslayout.O.(r = r') then Some r else fix r'
-        | None -> Some r
+      let rec fix r_in =
+        match apply tf p r_in with
+        | Some r_out -> if Abslayout.O.(r_in = r_out) then r_in else fix r_out
+        | None -> r_in
       in
-      fix r
+      Some (fix r)
     in
     global ~reraise:false ~short_name:"fix" f (sprintf "fix(%s)" tf.name)
 
@@ -239,6 +243,10 @@ module Make (C : Config.S) = struct
   let seq' t1 t2 =
     let f p r = Option.bind (apply t1 p r) ~f:(apply t2 p) in
     global ~reraise:false f (sprintf "%s ; %s" t1.name t2.name)
+
+  let try_ tf =
+    let f p r = Some (Option.value (apply tf p r) ~default:r) in
+    global f (sprintf "try(%s)" tf.name)
 
   let rec seq_many = function
     | [] -> failwith "Empty transform list."
@@ -273,7 +281,9 @@ module Make (C : Config.S) = struct
 
   let traced tf =
     let f p r =
-      Logs.debug (fun m -> m "@[Running %s on:@,%a@]\n" tf.name Abslayout.pp r) ;
+      Logs.debug (fun m ->
+          m "@[Running %s on:@,%a@]\n" tf.name Abslayout.pp (Path.get_exn p r)
+      ) ;
       match apply tf p r with
       | Some r' ->
           if Abslayout.O.(r = r') then
@@ -324,8 +334,8 @@ module Make (C : Config.S) = struct
             Seq.append (Seq.singleton r)
               (Seq.unfold ~init:r ~f:(fun r ->
                    Option.bind (apply tf_branch p r) ~f:(fun r' ->
-                       if Abslayout.O.(r = r') then None else Some (r, r') ) ))
-            )
+                       if Abslayout.O.(r = r') then None else Some (r', r') )
+               )) )
       ; b_name= "unfold" }
 
     let seq t1 t2 =

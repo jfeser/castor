@@ -122,8 +122,11 @@ let%expect_test "elim-eq-filter" =
         ~f:(Format.printf "%a\n" pp) ;
       [%expect
         {|
-          ahashidx(dedup(select([fresh], select([f as fresh], r))) as s0,
-            select([], filter((fresh = s0.fresh), select([f as fresh], r))),
+          ahashidx(dedup(
+                     atuple([select([fresh as x0],
+                               dedup(select([fresh], select([f as fresh], r))))],
+                       cross)) as s0,
+            filter((fresh = s0.x0), select([f as fresh], r)),
             param) |}]
   )
 
@@ -138,8 +141,70 @@ let%expect_test "elim-eq-filter-approx" =
         ~f:(Format.printf "%a\n" pp) ;
       [%expect
         {|
-          ahashidx(select([f as fresh], dedup(select([f], r))) as s0,
-            select([],
-              filter((fresh = s0.fresh), select([f as fresh], filter((g = param), r)))),
+          ahashidx(dedup(
+                     atuple([select([fresh as x0],
+                               select([f as fresh], dedup(select([f], r))))],
+                       cross)) as s0,
+            filter((fresh = s0.x0), select([f as fresh], filter((g = param), r))),
             param) |}]
   )
+
+let%expect_test "elim-eq-filter" =
+  let r =
+    M.load_string ~params:C.params
+      "filter((fresh = param) && true, select([f as fresh, g], r))"
+  in
+  with_log elim_eq_filter_src (fun () ->
+      Option.iter
+        (apply elim_eq_filter Path.root r)
+        ~f:(Format.printf "%a\n" pp) ;
+      [%expect {|
+        [INFO] ("Not part of an equality predicate." (Bool true))
+        ahashidx(dedup(
+                   atuple([select([fresh as x0],
+                             dedup(select([fresh], select([f as fresh, g], r))))],
+                     cross)) as s0,
+          filter((fresh = s0.x0), select([f as fresh, g], r)),
+          param) |}] )
+
+let%expect_test "elim-eq-filter" =
+  let r =
+    M.load_string ~params:C.params
+      "filter((fresh1 = param && fresh2 = (param +1)) || (fresh2 = param && \
+       fresh1 = (param +1)), select([f as fresh1, g as fresh2], r))"
+  in
+  with_log elim_eq_filter_src (fun () ->
+      Option.iter
+        (apply elim_eq_filter Path.root r)
+        ~f:(Format.printf "%a\n" pp) ;
+      [%expect {|
+        ahashidx(dedup(
+                   atuple([dedup(
+                             atuple([select([x0 as x2],
+                                       select([fresh1 as x0],
+                                         dedup(
+                                           select([fresh1],
+                                             select([f as fresh1, g as fresh2], r))))),
+                                     select([x1 as x2],
+                                       select([fresh2 as x1],
+                                         dedup(
+                                           select([fresh2],
+                                             select([f as fresh1, g as fresh2], r)))))],
+                               concat)),
+                           dedup(
+                             atuple([select([x3 as x5],
+                                       select([fresh2 as x3],
+                                         dedup(
+                                           select([fresh2],
+                                             select([f as fresh1, g as fresh2], r))))),
+                                     select([x4 as x5],
+                                       select([fresh1 as x4],
+                                         dedup(
+                                           select([fresh1],
+                                             select([f as fresh1, g as fresh2], r)))))],
+                               concat))],
+                     cross)) as s0,
+          filter((((fresh1 = s0.x2) && (fresh2 = s0.x5)) ||
+                 ((fresh2 = s0.x2) && (fresh1 = s0.x5))),
+            select([f as fresh1, g as fresh2], r)),
+          (param, (param + 1))) |}] )

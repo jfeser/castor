@@ -22,7 +22,7 @@ module Make (Config : Config.S) = struct
     | TupleT (elem_ts, _) | FuncT (elem_ts, _) ->
         List.sum (module AbsInt) elem_ts ~f:read
     | HashIdxT (_, vt, _) -> AbsInt.(join zero (read vt))
-    | OrderedIdxT (_, vt, m) -> AbsInt.(join zero (read vt * m.count))
+    | OrderedIdxT (_, vt, _) -> AbsInt.(join zero (read vt))
 
   let cost ?(kind = `Max) p r =
     Logs.debug (fun m -> m "Computing cost of %a." Abslayout.pp r) ;

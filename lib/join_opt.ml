@@ -35,7 +35,7 @@ module Make (C : Config.S) = struct
     end
 
     module Edge = struct
-      include A.Pred
+      include Pred
 
       let default = A.Bool true
     end
@@ -103,7 +103,7 @@ module Make (C : Config.S) = struct
   module JoinSpace = struct
     module T = struct
       type t =
-        {graph: JoinGraph.t; filters: Set.M(A.Pred).t Map.M(JoinGraph.Vertex).t}
+        {graph: JoinGraph.t; filters: Set.M(Pred).t Map.M(JoinGraph.Vertex).t}
       [@@deriving compare, sexp_of]
 
       let t_of_sexp _ = failwith "unimplemented"
@@ -173,10 +173,10 @@ module Make (C : Config.S) = struct
       | Join {r1; r2; pred= p} ->
           let s = union (to_graph leaves r1) (to_graph leaves r2) in
           (* Collect the set of relations that this join depends on. *)
-          List.fold_left (A.Pred.conjuncts p) ~init:s ~f:(fun s p ->
+          List.fold_left (Pred.conjuncts p) ~init:s ~f:(fun s p ->
               let pred_rels =
                 List.map
-                  (A.Pred.names p |> Set.to_list)
+                  (Pred.names p |> Set.to_list)
                   ~f:(source_relation leaves)
                 |> Or_error.all
               in
@@ -191,7 +191,7 @@ module Make (C : Config.S) = struct
                     filters=
                       Map.update s.filters r ~f:(function
                         | Some fs -> Set.add fs p
-                        | None -> Set.singleton (module A.Pred) p ) }
+                        | None -> Set.singleton (module Pred) p ) }
               | Ok [r1; r2] ->
                   { s with
                     graph= JoinGraph.add_or_update_edge s.graph (r1, p, r2) }
@@ -316,7 +316,7 @@ module Make (C : Config.S) = struct
 
   let to_parts rhs pred =
     let rhs_schema = A.schema_exn rhs |> Set.of_list (module Name) in
-    A.Pred.names pred |> Set.filter ~f:(Set.mem rhs_schema)
+    Pred.names pred |> Set.filter ~f:(Set.mem rhs_schema)
 
   let rec estimate_cost parts r =
     let sum = List.sum (module Float) in
@@ -357,7 +357,7 @@ module Make (C : Config.S) = struct
         let scan_cost =
           lhs_scan
           +. nt_lhs
-             *. (Cost.hash (A.Pred.to_type lkey) +. rhs_per_partition_costs.(1))
+             *. (Cost.hash (Pred.to_type lkey) +. rhs_per_partition_costs.(1))
         in
         [|size_cost; scan_cost|]
 
@@ -405,7 +405,7 @@ module Make (C : Config.S) = struct
     else
       JoinSpace.partition_fold s ~init:ParetoSet.empty
         ~f:(fun cs (s1, s2, es) ->
-          let pred = A.Pred.conjoin (List.map es ~f:(fun (_, p, _) -> p)) in
+          let pred = Pred.conjoin (List.map es ~f:(fun (_, p, _) -> p)) in
           (* Add flat joins to pareto set. *)
           let flat_joins =
             let select_flat s =
@@ -446,7 +446,7 @@ module Make (C : Config.S) = struct
             in
             (* Figure out which partition a key comes from. *)
             let key_side k =
-              let rs = A.Pred.names k |> Set.to_list in
+              let rs = Pred.names k |> Set.to_list in
               if List.for_all rs ~f:(Set.mem lhs_schema) then Some s1
               else if List.for_all rs ~f:(Set.mem rhs_schema) then Some s2
               else None
