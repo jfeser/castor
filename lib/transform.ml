@@ -124,13 +124,11 @@ module Make (Config : Config.S) () = struct
                    (O.at_ F.push_filter
                       Path.(all >>? test >>? is_run_time >>| shallowest))
                ; (* Eliminate a comparison filter. *)
-                 choose
-                   (at_ tf Path.(all >>? test >>? is_run_time >>| shallowest))
-                   id
+                 choose (for_all tf Path.(all >>? test >>? is_run_time)) id
                ; lift
                    (O.seq_many
                       [ push_all_unparameterized_filters
-                      ; for_all S.row_store
+                      ; O.for_all S.row_store
                           Path.(all >>? is_run_time >>? is_relation)
                       ; fix project
                       ; Simplify_tactic.simplify ]) ]

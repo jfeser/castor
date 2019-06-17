@@ -360,6 +360,12 @@ module Make (C : Config.S) = struct
       in
       {b_f= f; b_name= sprintf "(%s @ <path>)" tf.b_name}
 
+    let for_all tf pspec =
+      let f p r =
+        Seq.concat_map (pspec r) ~f:(fun p' -> tf.b_f Path.(p @ p') r)
+      in
+      {b_f= f; b_name= sprintf "(%s @ <path>)" tf.b_name}
+
     let min cost rs =
       Seq.fold rs ~init:(None, Float.max_value) ~f:(fun (rb, cb) r ->
           match cost r with
