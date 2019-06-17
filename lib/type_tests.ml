@@ -13,7 +13,7 @@ let%expect_test "byte-width-2" =
   [%expect {| 4 |}]
 
 let%expect_test "absfixed-unify" =
-  List.fold_left1
+  List.reduce_exn
     [ AbsFixed.(of_fixed {value= 3; scale= 1})
     ; AbsFixed.(of_fixed {value= 34; scale= 100})
     ; AbsFixed.(of_fixed {value= 7; scale= 1})

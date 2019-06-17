@@ -24,12 +24,6 @@ module List = struct
 
   let all_equal_exn : 'a list -> 'a = fun l -> Or_error.ok_exn (all_equal l)
 
-  let fold_left1_exn : 'a t -> f:('b -> 'a -> 'b) -> 'b =
-   fun l ~f ->
-    match l with
-    | [] -> failwith "Unexpected empty list."
-    | x :: xs -> fold_left ~init:x ~f xs
-
   let fmerge :
       cmp:('a -> 'a -> int) -> ('a * 'b) list -> ('a * 'b) list -> ('a * 'b) list =
    fun ~cmp l1 l2 -> List.merge ~compare:(fun (x1, _) (x2, _) -> cmp x1 x2) l1 l2
@@ -46,10 +40,6 @@ module List = struct
       match l with
       | [] -> failwith "Unexpected empty list."
       | x :: xs -> scanl1' x [x] f xs |> List.rev
-
-  let fold_left1 ~f = function
-    | [] -> failwith "Unexpected empty list."
-    | x :: xs -> List.fold_left ~init:x ~f xs
 
   let count_consecutive_duplicates :
       'a t -> equal:('a -> 'a -> bool) -> ('a * int) t =

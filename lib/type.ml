@@ -41,8 +41,8 @@ module AbsInt = struct
 
   let ( * ) =
     lift (fun (l1, h1) (l2, h2) ->
-        let min_many = List.fold_left1_exn ~f:Int.min in
-        let max_many = List.fold_left1_exn ~f:Int.max in
+        let min_many = List.reduce_exn ~f:Int.min in
+        let max_many = List.reduce_exn ~f:Int.max in
         let xs = [l1 * l2; l1 * h2; l2 * h1; h2 * h1] in
         Interval (min_many xs, max_many xs) )
 
