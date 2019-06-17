@@ -33,10 +33,6 @@ module Make (Config : Config.S) () = struct
   open O
   module Sf = Simplify_tactic.Make (Config)
   module M0 = Abslayout_db.Make (Config)
-
-  let resolve =
-    of_func (fun r -> M0.R.resolve ~params r |> Option.some) ~name:"resolve"
-
   module F = Filter_tactics.Make (Config)
   module S = Simple_tactics.Make (Config)
   module Project = Project.Make (Config)
@@ -55,7 +51,7 @@ module Make (Config : Config.S) () = struct
     include Config
 
     let simplify =
-      let tf = fix (seq_many [resolve; project; Sf.simplify]) in
+      let tf = fix (seq_many [project; Sf.simplify]) in
       Some (fun r -> Option.value (apply tf Path.root r) ~default:r)
   end
 
@@ -111,10 +107,7 @@ module Make (Config : Config.S) () = struct
   let push_orderby = of_func push_orderby ~name:"push-orderby"
 
   let push_all_unparameterized_filters =
-    fix
-      (seq_many
-         [ resolve
-         ; for_all F.push_filter Path.(all >>? is_run_time >>? is_filter) ])
+    fix (for_all F.push_filter Path.(all >>? is_run_time >>? is_filter))
 
   let elim_param_filter tf test =
     (* Eliminate comparison filters. *)
@@ -137,7 +130,7 @@ module Make (Config : Config.S) () = struct
                       [ push_all_unparameterized_filters
                       ; for_all S.row_store
                           Path.(all >>? is_run_time >>? is_relation)
-                      ; fix (O.seq resolve project)
+                      ; fix project
                       ; Simplify_tactic.simplify ]) ]
              |> lower (min Type_cost.(cost ~kind:`Avg read))) ])
 
@@ -158,10 +151,9 @@ module Make (Config : Config.S) () = struct
       ; at_ Join_elim_tactics.elim_join_nest
           (Path.all >>? is_join >>| shallowest)
         (* Push constant filters *)
-      ; seq resolve
-          (fix
-             (at_ F.push_filter
-                Castor.Path.(all >>? is_const_filter >>| shallowest)))
+      ; fix
+          (at_ F.push_filter
+             Castor.Path.(all >>? is_const_filter >>| shallowest))
       ; (* Push orderby operators into compile time position if possible. *)
         fix
           (at_ push_orderby
@@ -177,16 +169,16 @@ module Make (Config : Config.S) () = struct
       ; (* Eliminate all unparameterized relations. *)
         fix
           (seq_many
-             [ (* NOTE: Needed for is_serializable check. *)
-               resolve
-             ; at_ S.row_store
+             [ at_ (traced S.row_store)
                  Path.(
                    all >>? is_run_time >>? not has_params
-                   >>? not is_serializable >>? not is_collection >>| shallowest)
+                   >>? not is_serializable
+                   >>? not (contains is_collection)
+                   >>| shallowest)
              ; push_all_unparameterized_filters ])
       ; push_all_unparameterized_filters
       ; (* Cleanup*)
-        fix (seq resolve project)
+        fix project
       ; Simplify_tactic.simplify ]
 
   let is_serializable r =
