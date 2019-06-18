@@ -27,6 +27,19 @@ module T = struct
 end
 
 include T
+
+let normalize p =
+  let visitor =
+    object (self)
+      inherit [_] Abslayout0.endo
+
+      method! visit_As_pred () _ (p, _) = self#visit_pred () p
+    end
+  in
+  match p with
+  | As_pred (p', n) -> As_pred (visitor#visit_pred () p', n)
+  | p -> visitor#visit_pred () p
+
 include Comparator.Make (T)
 module C = Comparable.Make (T)
 
@@ -35,6 +48,8 @@ module O : Comparable.Infix with type t := t = C
 let pp = Abslayout0.pp_pred
 
 let names r = Abslayout0.names_visitor#visit_pred () r
+
+let as_pred x = normalize (as_pred x)
 
 let of_value = Value.to_pred
 
@@ -200,7 +215,7 @@ let of_lexbuf_exn lexbuf =
 
 let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
 
-let subst ctx =
+let subst ctx p =
   let v =
     object
       inherit [_] Abslayout0.endo
@@ -209,7 +224,7 @@ let subst ctx =
         match Map.find ctx v with Some x -> x | None -> this
     end
   in
-  v#visit_pred ()
+  v#visit_pred () p |> normalize
 
 let subst_tree ctx p =
   let v =
@@ -222,7 +237,7 @@ let subst_tree ctx p =
         | None -> super#visit_pred () this
     end
   in
-  v#visit_pred () p
+  v#visit_pred () p |> normalize
 
 let scoped names scope p =
   let ctx =
