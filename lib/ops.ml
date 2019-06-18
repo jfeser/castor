@@ -69,7 +69,7 @@ include T
 module Make (C : Config.S) = struct
   open C
   include T
-  module R = Resolve.Make (C)
+  module R = Resolve
 
   let trace = false
 

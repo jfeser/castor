@@ -14,8 +14,6 @@ module Config = struct
     include Filter_tactics.Config.S
 
     include Simple_tactics.Config.S
-
-    include Resolve.Config.S
   end
 end
 
@@ -25,7 +23,7 @@ module Make (C : Config.S) = struct
   open O
   module S = Simple_tactics.Make (C)
   open S
-  module R = Resolve.Make (C)
+  module R = Resolve
 
   module JoinGraph = struct
     module Vertex = struct

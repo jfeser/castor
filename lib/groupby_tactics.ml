@@ -2,12 +2,11 @@ open Core
 open Castor
 open Abslayout
 open Collections
+module P = Project
 
 module Config = struct
   module type S = sig
     include Ops.Config.S
-
-    include Project.Config.S
 
     include Abslayout_db.Config.S
   end
@@ -17,7 +16,6 @@ module Make (C : Config.S) = struct
   module Ops = Ops.Make (C)
   open Ops
   module M = Abslayout_db.Make (C)
-  module P = Project.Make (C)
 
   let src = Logs.Src.create "groupby-tactics"
 
@@ -57,7 +55,7 @@ module Make (C : Config.S) = struct
         let filter_pred =
           List.map key ~f:(fun n ->
               Binop (Eq, Name n, Name (Name.copy n ~scope:(Some key_name))) )
-          |> List.fold_left1_exn ~f:(fun acc p -> Binop (And, acc, p))
+          |> List.reduce_exn ~f:(fun acc p -> Binop (And, acc, p))
         in
         let keys = P.project ~params:(free r) (dedup (select key_preds r)) in
         (* Try to remove any remaining parameters from the keys relation. *)

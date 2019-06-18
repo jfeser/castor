@@ -2,14 +2,13 @@ open Core
 open Castor
 open Collections
 open Abslayout
+module R = Resolve
 
 module Config = struct
   module type S = sig
     include Ops.Config.S
 
     include Simplify_tactic.Config.S
-
-    include Project.Config.S
 
     include Filter_tactics.Config.S
 
@@ -35,8 +34,6 @@ module Make (Config : Config.S) () = struct
   module M0 = Abslayout_db.Make (Config)
   module F = Filter_tactics.Make (Config)
   module S = Simple_tactics.Make (Config)
-  module R = Resolve.Make (Config)
-  module Project = Project.Make (Config)
   module Join_opt = Join_opt.Make (Config)
   module Simplify_tactic = Simplify_tactic.Make (Config)
   module Select_tactics = Select_tactics.Make (Config)
@@ -58,7 +55,8 @@ module Make (Config : Config.S) () = struct
 
   module Type_cost = Type_cost.Make (Config)
 
-  let is_serializable r p = is_serializeable (Path.get_exn p r)
+  let is_serializable r p =
+    is_serializeable (Path.get_exn p (R.resolve ~params r))
 
   let has_params r p =
     let r' = R.resolve ~params r in
@@ -179,6 +177,10 @@ module Make (Config : Config.S) () = struct
                    >>| shallowest)
              ; push_all_unparameterized_filters ])
       ; push_all_unparameterized_filters
+      ; (* Push orderby operators into compile time position if possible. *)
+        fix
+          (at_ push_orderby
+             Path.(all >>? is_orderby >>? is_run_time >>| shallowest))
       ; (* Cleanup*)
         fix project
       ; Simplify_tactic.simplify ]
