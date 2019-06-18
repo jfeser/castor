@@ -13,9 +13,9 @@ val root : t
 
 val length : t -> int
 
-val set_exn : t -> Abslayout.t -> Abslayout.t -> Abslayout.t
+val set_exn : t -> Abslayout0.t -> Abslayout0.t -> Abslayout0.t
 
-val get_exn : t -> Abslayout.t -> Abslayout.t
+val get_exn : t -> Abslayout0.t -> Abslayout0.t
 
 val all : Abslayout.t -> t Seq.t
 

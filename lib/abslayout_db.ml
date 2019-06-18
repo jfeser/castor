@@ -12,8 +12,6 @@ module Config = struct
     val conn : Db.t
 
     val simplify : (A.t -> A.t) option
-
-    include Project.Config.S
   end
 end
 
@@ -288,8 +286,8 @@ module Query = struct
 end
 
 module Make (Config : Config.S) = struct
-  module P = Project.Make (Config)
-  module R = Resolve.Make (Config)
+  module R = Resolve
+  module P = Project
   open Config
   module Q = Query
 

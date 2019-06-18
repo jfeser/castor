@@ -12,7 +12,6 @@ let%test_module _ =
     end
 
     module M = Abslayout_db.Make (Config)
-    module Project = Project.Make (Config)
 
     let run_print_test ?params query =
       let print_fold =

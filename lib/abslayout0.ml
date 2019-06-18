@@ -69,8 +69,6 @@ module T = struct
 
   and order = Asc | Desc
 
-  and t = {node: node; meta: meta [@opaque] [@compare.ignore]}
-
   and relation = {r_name: string; r_schema: (Name.t[@opaque]) list option}
 
   and depjoin = {d_lhs: t; d_alias: string; d_rhs: t}
@@ -78,6 +76,8 @@ module T = struct
   and join = {pred: pred; r1: t; r2: t}
 
   and order_by = {key: (pred * order) list; rel: t}
+
+  and t = {node: node; meta: meta [@opaque] [@compare.ignore]}
 
   and node =
     | Select of (pred list * t)
@@ -291,3 +291,12 @@ let names_visitor =
        |Substring (_, _, _) ->
           super#visit_pred () p
   end
+
+let scope r = match r.node with As (n, _) -> Some n | _ -> None
+
+let scope_exn r =
+  Option.value_exn
+    ~error:(Error.createf "Expected a scope on %a." pp_small_str r)
+    (scope r)
+
+let strip_scope r = match r.node with As (_, r) -> r | _ -> r

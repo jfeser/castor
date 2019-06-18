@@ -12,8 +12,6 @@ let strip_meta =
   in
   visitor#visit_t ()
 
-let strip_scope r = match r.node with As (_, r) -> r | _ -> r
-
 let scopes r =
   let visitor =
     object (self : 'a)
@@ -50,13 +48,6 @@ let alpha_scopes r =
     end
   in
   visitor#visit_t () r
-
-let scope r = match r.node with As (n, _) -> Some n | _ -> None
-
-let scope_exn r =
-  Option.value_exn
-    ~error:(Error.createf "Expected a scope on %a." pp_small_str r)
-    (scope r)
 
 let wrap x = {node= x; meta= Meta.empty ()}
 
