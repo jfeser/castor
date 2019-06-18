@@ -136,5 +136,5 @@ gold/{0}.csv:
 print('''
 .PHONY: clean
 clean:
-\trm -rf *-opt.txt *-opt *-opt.csv
+\trm -rf *-opt.txt *-opt *-opt.csv *-opt.log *-opt.time analysis_*.log hashes.txt
 ''')
