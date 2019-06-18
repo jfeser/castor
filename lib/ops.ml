@@ -374,5 +374,20 @@ module Make (C : Config.S) = struct
       |> Tuple.T2.get1
 
     let ( *> ) x y = global (fun r -> y (x r)) ""
+
+    let traced tf =
+      let b_f p r =
+        Logs.debug (fun m ->
+            m "@[Running %s on:@,%a@]\n" tf.b_name Abslayout.pp
+              (Path.get_exn p r) ) ;
+        tf.b_f p r
+        |> Seq.map ~f:(fun r' ->
+               Logs.debug (fun m ->
+                   m "@[%s transformed:@,%a@,===== to ======@,%a@]@.\n"
+                     tf.b_name Abslayout.pp (Path.get_exn p r) Abslayout.pp
+                     (Path.get_exn p r') ) ;
+               r' )
+      in
+      {tf with b_f}
   end
 end

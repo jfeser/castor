@@ -163,13 +163,11 @@ module Make (C : Config.S) = struct
     let lp, lk = Option.value lb ~default:(default_min, `Closed) in
     let up, uk = Option.value ub ~default:(default_max, `Closed) in
     let k = Fresh.name Global.fresh "k%d" in
+    let n = Fresh.name Global.fresh "x%d" in
     ordered_idx
-      (dedup (select [p] rk))
+      (dedup (select [Pred.as_pred (p, n)] rk))
       k
-      ((* Drop the key from the values relation. *)
-       Tactics_util.select_out
-         (Option.to_list (Pred.to_name p))
-         (filter (Binop (Eq, qualify k p, p)) rv))
+      (filter (Binop (Eq, Name (Name.create ~scope:k n), p)) rv)
       { oi_key_layout= None
       ; lookup_low= lp
       ; bound_low= lk
@@ -185,6 +183,11 @@ module Make (C : Config.S) = struct
     let pfree = pred_free p in
     (not (overlaps (schema_set_exn r) pfree)) && overlaps params pfree
 
+  (** A predicate is a candidate to be matched if all its free variables are
+     bound by the relation that it is above. *)
+  let is_candidate_match p r =
+    Set.is_subset (pred_free p) ~of_:(schema_set_exn r)
+
   let elim_cmp_filter r =
     match r.node with
     | Filter (p, r') ->
@@ -194,23 +197,20 @@ module Make (C : Config.S) = struct
           Pred.conjuncts p
           |> List.partition_map ~f:(function
                | (Binop (Gt, p1, p2) | Binop (Lt, p2, p1)) as p ->
-                   if is_candidate_key p1 r' && not (is_candidate_key p2 r')
-                   then `Fst (p2, (`Lt, p1))
-                   else if
-                     is_candidate_key p2 r' && not (is_candidate_key p1 r')
+                   if is_candidate_key p1 r' && is_candidate_match p2 r' then
+                     `Fst (p2, (`Lt, p1))
+                   else if is_candidate_key p2 r' && is_candidate_match p1 r'
                    then `Fst (p1, (`Gt, p2))
                    else `Snd p
                | (Binop (Ge, p1, p2) | Binop (Le, p2, p1)) as p ->
-                   if is_candidate_key p1 r' && not (is_candidate_key p2 r')
-                   then `Fst (p2, (`Le, p1))
-                   else if
-                     is_candidate_key p2 r' && not (is_candidate_key p1 r')
+                   if is_candidate_key p1 r' && is_candidate_match p2 r' then
+                     `Fst (p2, (`Le, p1))
+                   else if is_candidate_key p2 r' && is_candidate_match p1 r'
                    then `Fst (p1, (`Ge, p2))
                    else `Snd p
                | p -> `Snd p )
         in
         let cmps = Map.of_alist_multi (module Pred) cmps in
-        (* Order by the number of available bounds. *)
         Map.to_alist cmps
         |> List.filter_map ~f:(fun (key, bounds) ->
                let x =
@@ -256,7 +256,8 @@ module Make (C : Config.S) = struct
         |> Seq.of_list
     | _ -> Seq.empty
 
-  let elim_cmp_filter = Branching.local elim_cmp_filter ~name:"elim-cmp-filter"
+  let elim_cmp_filter =
+    Branching.(local elim_cmp_filter ~name:"elim-cmp-filter")
 
   let push_filter_cross_tuple p rs =
     let ps = Pred.conjuncts p in
@@ -436,11 +437,9 @@ module Make (C : Config.S) = struct
         match
           (Tactics_util.all_values [p1] r, Tactics_util.all_values [p2] r)
         with
-        | _, Ok vs2 when is_candidate_key p1 r && not (is_candidate_key p2 r)
-          ->
+        | _, Ok vs2 when is_candidate_key p1 r && is_candidate_match p2 r ->
             Ok (Map.singleton (module Pred) p1 (Domain vs2))
-        | Ok vs1, _ when is_candidate_key p2 r && not (is_candidate_key p1 r)
-          ->
+        | Ok vs1, _ when is_candidate_key p2 r && is_candidate_match p1 r ->
             Ok (Map.singleton (module Pred) p2 (Domain vs1))
         | _, Ok _ | Ok _, _ ->
             Or_error.error "No candidate keys." (p1, p2)

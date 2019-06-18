@@ -158,14 +158,16 @@ let%expect_test "elim-eq-filter" =
       Option.iter
         (apply elim_eq_filter Path.root r)
         ~f:(Format.printf "%a\n" pp) ;
-      [%expect {|
+      [%expect
+        {|
         [INFO] ("Not part of an equality predicate." (Bool true))
         ahashidx(dedup(
                    atuple([select([fresh as x0],
                              dedup(select([fresh], select([f as fresh, g], r))))],
                      cross)) as s0,
           filter((fresh = s0.x0), select([f as fresh, g], r)),
-          param) |}] )
+          param) |}]
+  )
 
 let%expect_test "elim-eq-filter" =
   let r =
@@ -177,7 +179,8 @@ let%expect_test "elim-eq-filter" =
       Option.iter
         (apply elim_eq_filter Path.root r)
         ~f:(Format.printf "%a\n" pp) ;
-      [%expect {|
+      [%expect
+        {|
         ahashidx(dedup(
                    atuple([dedup(
                              atuple([select([x0 as x2],
@@ -207,4 +210,21 @@ let%expect_test "elim-eq-filter" =
           filter((((fresh1 = s0.x2) && (fresh2 = s0.x5)) ||
                  ((fresh2 = s0.x2) && (fresh1 = s0.x5))),
             select([f as fresh1, g as fresh2], r)),
-          (param, (param + 1))) |}] )
+          (param, (param + 1))) |}]
+  )
+
+let%expect_test "elim-eq-filter" =
+  let r =
+    M.load_string ~params:C.params "depjoin(r as k, filter(k.f = param, r))"
+  in
+  with_log elim_eq_filter_src (fun () ->
+      Option.iter
+        (apply
+           (at_ elim_eq_filter Path.(all >>? is_filter >>| shallowest))
+           Path.root r)
+        ~f:(Format.printf "%a\n" pp) ;
+      [%expect {|
+        [INFO] ("No candidate keys."
+         ((Name ((scope (k)) (name f))) (Name ((scope ()) (name param)))))
+        [ERROR] Found no equalities.
+ |}] )
