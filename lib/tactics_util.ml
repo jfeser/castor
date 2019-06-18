@@ -70,8 +70,9 @@ module Make (Config : Config.S) = struct
         Ok
           (select
              (List.map2_exn orig_names preds ~f:(fun n p ->
-                  match n with Some n -> As_pred (p, Name.name n) | None -> p
-              ))
+                  match n with
+                  | Some n -> Pred.as_pred (p, Name.name n)
+                  | None -> p ))
              r)
     | None -> Or_error.errorf "No relations found."
 

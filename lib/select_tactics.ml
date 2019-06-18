@@ -60,7 +60,7 @@ module Make (C : Config.S) = struct
           (op @ [p], ip) )
     in
     let inner_aggs =
-      List.map inner_aggs ~f:(fun (n, a) -> As_pred (a, Name.name n))
+      List.map inner_aggs ~f:(fun (n, a) -> Pred.as_pred (a, Name.name n))
     in
     (* Don't want to project out anything that we might need later. *)
     let inner_fields = inner_schema |> List.map ~f:(fun n -> Name n) in
@@ -123,7 +123,7 @@ module Make (C : Config.S) = struct
             | _ -> None
           in
           let count_n = Fresh.name Global.fresh "count%d" in
-          let inner_preds = As_pred (Count, count_n) :: inner_preds in
+          let inner_preds = Pred.as_pred (Count, count_n) :: inner_preds in
           select outer_preds
             (mk_collection (fun rv ->
                  filter

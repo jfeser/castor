@@ -291,7 +291,10 @@ module Make (C : Config.S) = struct
     let s = A.schema_exn (to_ralgebra r) |> Set.of_list (module Name) in
     let parts = Set.filter parts ~f:(Set.mem s) in
     let part_counts =
-      A.(group_by [As_pred (Count, "c")] (Set.to_list parts) (to_abslayout r))
+      A.(
+        group_by
+          [Pred.as_pred (Count, "c")]
+          (Set.to_list parts) (to_abslayout r))
     in
     let part_aggs =
       let c = A.(Name (Name.create "c")) in

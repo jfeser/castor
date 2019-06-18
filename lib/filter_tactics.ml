@@ -468,13 +468,13 @@ module Make (C : Config.S) = struct
             let n = Fresh.name Global.fresh "x%d" in
             dedup
               (tuple
-                 [ select [As_pred (Name n1, n)] e1
-                 ; select [As_pred (Name n2, n)] e2 ]
+                 [ select [Pred.as_pred (Name n1, n)] e1
+                 ; select [Pred.as_pred (Name n2, n)] e2 ]
                  Concat)
         | Domain d ->
             let n = schema d in
             let n' = Fresh.name Global.fresh "x%d" in
-            select [As_pred (Name n, n')] d
+            select [Pred.as_pred (Name n, n')] d
       in
       Map.map d ~f:extract
   end
