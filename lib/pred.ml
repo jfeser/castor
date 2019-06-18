@@ -27,19 +27,6 @@ module T = struct
 end
 
 include T
-
-let normalize p =
-  let visitor =
-    object (self)
-      inherit [_] Abslayout0.endo
-
-      method! visit_As_pred () _ (p, _) = self#visit_pred () p
-    end
-  in
-  match p with
-  | As_pred (p', n) -> As_pred (visitor#visit_pred () p', n)
-  | p -> visitor#visit_pred () p
-
 include Comparator.Make (T)
 module C = Comparable.Make (T)
 
@@ -48,6 +35,22 @@ module O : Comparable.Infix with type t := t = C
 let pp = Abslayout0.pp_pred
 
 let names r = Abslayout0.names_visitor#visit_pred () r
+
+let normalize p =
+  let visitor =
+    object (self)
+      inherit [_] Abslayout0.endo
+
+      method! visit_As_pred () _ (p, _) = self#visit_pred () p
+
+      method! visit_Exists () p _ = p
+
+      method! visit_First () p _ = p
+    end
+  in
+  match p with
+  | As_pred (p', n) -> As_pred (visitor#visit_pred () p', n)
+  | p -> visitor#visit_pred () p
 
 let as_pred x = normalize (as_pred x)
 
