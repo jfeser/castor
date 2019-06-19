@@ -1,38 +1,42 @@
 open! Core
 
-type op =
-  | Int2Fl
-  | Int2Date
-  | Date2Int
-  | IntAdd
-  | IntSub
-  | IntMul
-  | IntDiv
-  | Mod
-  | FlAdd
-  | FlSub
-  | FlMul
-  | FlDiv
-  | IntLt
-  | FlLt
-  | FlLe
-  | FlEq
-  | IntEq
-  | StrEq
-  | And
-  | Or
-  | Not
-  | IntHash
-  | StrHash
-  | LoadStr
-  | LoadBool
-  | StrLen
-  | StrPos
-  | ExtractY
-  | ExtractM
-  | ExtractD
-  | AddY
-  | AddM
+type unop =
+  [ `Int2Fl
+  | `Int2Date
+  | `Date2Int
+  | `ExtractY
+  | `ExtractM
+  | `ExtractD
+  | `Not
+  | `StrLen
+  | `LoadBool ]
+[@@deriving compare, sexp]
+
+type binop =
+  [ `IntAdd
+  | `IntSub
+  | `IntMul
+  | `IntDiv
+  | `Mod
+  | `FlAdd
+  | `FlSub
+  | `FlMul
+  | `FlDiv
+  | `IntLt
+  | `FlLt
+  | `FlLe
+  | `FlEq
+  | `IntEq
+  | `StrEq
+  | `And
+  | `Or
+  | `IntHash
+  | `StrHash
+  | `LoadStr
+  | `StrPos
+  | `AddY
+  | `AddM
+  | `AddD ]
 [@@deriving compare, sexp]
 
 type expr =
@@ -46,8 +50,8 @@ type expr =
   | Tuple of expr list
   | Slice of expr * int
   | Index of expr * int
-  | Binop of {op: (op[@opaque]); arg1: expr; arg2: expr}
-  | Unop of {op: (op[@opaque]); arg: expr}
+  | Binop of {op: (binop[@opaque]); arg1: expr; arg2: expr}
+  | Unop of {op: (unop[@opaque]); arg: expr}
   | Done of string
   | Ternary of expr * expr * expr
   | TupleHash of (Type.PrimType.t[@opaque]) list * expr * expr
@@ -84,5 +88,5 @@ and func =
   , visitors {variety= "reduce"}]
 
 let rec conjuncts = function
-  | Binop {op= And; arg1= p1; arg2= p2} -> conjuncts p1 @ conjuncts p2
+  | Binop {op= `And; arg1= p1; arg2= p2} -> conjuncts p1 @ conjuncts p2
   | p -> [p]

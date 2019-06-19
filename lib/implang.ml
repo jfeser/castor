@@ -24,28 +24,28 @@ let pp_bool fmt = Format.fprintf fmt "%b"
 let rec pp_expr : Format.formatter -> expr -> unit =
   let open Format in
   let op_to_string = function
-    | IntAdd | FlAdd | AddY | AddM -> `Infix "+"
-    | IntSub | FlSub -> `Infix "-"
-    | IntMul | FlMul -> `Infix "*"
-    | IntDiv | FlDiv -> `Infix "/"
-    | Mod -> `Infix "%"
-    | IntLt | FlLt -> `Infix "<"
-    | FlLe -> `Infix "<="
-    | And -> `Infix "&&"
-    | Not -> `Infix "not"
-    | IntEq | StrEq | FlEq -> `Infix "=="
-    | Or -> `Infix "||"
-    | IntHash | StrHash -> `Prefix "hash"
-    | LoadStr -> `Prefix "load_str"
-    | LoadBool -> `Prefix "load_bool"
-    | Int2Fl -> `Prefix "int2fl"
-    | Int2Date -> `Prefix "int2date"
-    | Date2Int -> `Prefix "date2int"
-    | StrLen -> `Prefix "strlen"
-    | StrPos -> `Prefix "strpos"
-    | ExtractY -> `Prefix "to_year"
-    | ExtractM -> `Prefix "to_mon"
-    | ExtractD -> `Prefix "to_day"
+    | `IntAdd | `FlAdd | `AddY | `AddM | `AddD -> `Infix "+"
+    | `IntSub | `FlSub -> `Infix "-"
+    | `IntMul | `FlMul -> `Infix "*"
+    | `IntDiv | `FlDiv -> `Infix "/"
+    | `Mod -> `Infix "%"
+    | `IntLt | `FlLt -> `Infix "<"
+    | `FlLe -> `Infix "<="
+    | `And -> `Infix "&&"
+    | `Not -> `Infix "not"
+    | `IntEq | `StrEq | `FlEq -> `Infix "=="
+    | `Or -> `Infix "||"
+    | `IntHash | `StrHash -> `Prefix "hash"
+    | `LoadStr -> `Prefix "load_str"
+    | `LoadBool -> `Prefix "load_bool"
+    | `Int2Fl -> `Prefix "int2fl"
+    | `Int2Date -> `Prefix "int2date"
+    | `Date2Int -> `Prefix "date2int"
+    | `StrLen -> `Prefix "strlen"
+    | `StrPos -> `Prefix "strpos"
+    | `ExtractY -> `Prefix "to_year"
+    | `ExtractM -> `Prefix "to_mon"
+    | `ExtractD -> `Prefix "to_day"
   in
   fun fmt -> function
     | Null -> fprintf fmt "null"
@@ -118,17 +118,17 @@ module Infix = struct
   let ( + ) x y =
     match (x, y) with
     | Int a, Int b -> Int (a + b)
-    | _ -> Binop {op= IntAdd; arg1= x; arg2= y}
+    | _ -> Binop {op= `IntAdd; arg1= x; arg2= y}
 
-  let ( - ) x y = Binop {op= IntSub; arg1= x; arg2= y}
+  let ( - ) x y = Binop {op= `IntSub; arg1= x; arg2= y}
 
-  let ( * ) x y = Binop {op= IntMul; arg1= x; arg2= y}
+  let ( * ) x y = Binop {op= `IntMul; arg1= x; arg2= y}
 
-  let ( / ) x y = Binop {op= IntDiv; arg1= x; arg2= y}
+  let ( / ) x y = Binop {op= `IntDiv; arg1= x; arg2= y}
 
-  let ( % ) x y = Binop {op= Mod; arg1= x; arg2= y}
+  let ( % ) x y = Binop {op= `Mod; arg1= x; arg2= y}
 
-  let ( < ) x y = Binop {op= IntLt; arg1= x; arg2= y}
+  let ( < ) x y = Binop {op= `IntLt; arg1= x; arg2= y}
 
   let ( > ) x y = y < x
 
@@ -136,11 +136,11 @@ module Infix = struct
 
   let ( >= ) x y = y <= x
 
-  let ( && ) x y = Binop {op= And; arg1= x; arg2= y}
+  let ( && ) x y = Binop {op= `And; arg1= x; arg2= y}
 
-  let ( || ) x y = Binop {op= Or; arg1= x; arg2= y}
+  let ( || ) x y = Binop {op= `Or; arg1= x; arg2= y}
 
-  let not x = Unop {op= Not; arg= x}
+  let not x = Unop {op= `Not; arg= x}
 
   let index tup idx =
     assert (Int.(idx >= 0)) ;
@@ -183,7 +183,23 @@ module Ctx0 = struct
     Map.set ctx ~key:(Name.create ~type_ name) ~data:(Field expr)
 end
 
-let int2fl x = Unop {op= Int2Fl; arg= x}
+let int2fl x = Unop {op= `Int2Fl; arg= x}
+
+let date2int x = Unop {op= `Date2Int; arg= x}
+
+let check_type fail =
+  let open Type.PrimType in
+  object
+    method is_int = function IntT _ -> () | _ -> fail ()
+
+    method is_bool = function BoolT _ -> () | _ -> fail ()
+
+    method is_date = function DateT _ -> () | _ -> fail ()
+
+    method is_string = function StringT _ -> () | _ -> fail ()
+
+    method is_fixed = function FixedT _ -> () | _ -> fail ()
+  end
 
 let rec type_of ctx e =
   let open Type.PrimType in
@@ -202,49 +218,41 @@ let rec type_of ctx e =
           [%sexp_of: string * t Hashtbl.M(String).t]
         |> Error.raise )
   | Tuple xs -> TupleT (List.map xs ~f:(fun e -> type_of ctx e))
-  | Binop {op; arg1; arg2} as e -> (
+  | Binop {op; arg1; arg2} -> (
       let t1 = type_of ctx arg1 in
       let t2 = type_of ctx arg2 in
-      match (op, t1, t2) with
-      | (IntAdd | IntSub | IntMul | IntDiv), IntT _, IntT _ -> IntT {nullable= false}
-      (* Adding an int to a date or a date to an int produces an offset from
-           the date. *)
-      | (IntAdd | IntSub | AddM | AddY), DateT _, IntT _
-       |(IntAdd | IntSub), IntT _, DateT _ ->
-          DateT {nullable= false}
-      (* Dates can be subtracted from each other, to get the number of days
-           between them, but they cannot be added. *)
-      | IntSub, DateT _, DateT _ -> IntT {nullable= false}
-      | (FlAdd | FlSub | FlMul | FlDiv), FixedT _, FixedT _ ->
-          FixedT {nullable= false}
-      | (And | Or), BoolT _, BoolT _ | (And | Or), IntT _, IntT _ -> unify t1 t2
-      | IntLt, IntT {nullable= n1}, IntT {nullable= n2} -> BoolT {nullable= n1 || n2}
-      | IntLt, DateT {nullable= n1}, DateT {nullable= n2} ->
-          BoolT {nullable= n1 || n2}
-      | FlLt, FixedT _, FixedT _ -> BoolT {nullable= false}
-      | IntHash, IntT _, (IntT _ | DateT _) | StrHash, IntT _, StringT _ ->
-          IntT {nullable= false}
-      | IntEq, IntT {nullable= n1}, IntT {nullable= n2}
-       |IntEq, DateT {nullable= n1}, DateT {nullable= n2}
-       |StrEq, StringT {nullable= n1; _}, StringT {nullable= n2; _}
-       |FlEq, FixedT {nullable= n1}, FixedT {nullable= n2} ->
-          BoolT {nullable= n1 || n2}
-      | LoadStr, IntT {nullable= false}, IntT {nullable= false} -> string_t
-      | StrPos, StringT _, StringT _ -> IntT {nullable= false}
-      | _, _, _ ->
-          fail
-            (Error.create "Type error." (e, t1, t2, ctx)
-               [%sexp_of: expr * t * t * t Hashtbl.M(String).t]) )
+      let fail () =
+        Error.create "Type error." (op, t1, t2) [%sexp_of: binop * t * t]
+        |> Error.raise
+      in
+      let c = check_type fail in
+      match op with
+      | `IntAdd | `IntSub | `IntMul | `IntDiv | `Mod ->
+          c#is_int t1 ; c#is_int t2 ; int_t
+      | `FlAdd | `FlSub | `FlMul | `FlDiv -> c#is_fixed t1 ; c#is_fixed t2 ; fixed_t
+      | `AddD | `AddM | `AddY -> c#is_date t1 ; c#is_int t2 ; date_t
+      | `And | `Or -> c#is_bool t1 ; c#is_bool t2 ; bool_t
+      | `IntLt | `IntEq -> c#is_int t1 ; c#is_int t2 ; bool_t
+      | `FlLt | `FlLe | `FlEq -> c#is_fixed t1 ; c#is_fixed t2 ; bool_t
+      | `IntHash -> c#is_int t1 ; c#is_int t2 ; int_t
+      | `StrHash -> c#is_int t1 ; c#is_string t2 ; int_t
+      | `StrEq -> c#is_string t1 ; c#is_string t2 ; bool_t
+      | `LoadStr -> c#is_int t1 ; c#is_int t2 ; string_t
+      | `StrPos -> c#is_string t1 ; c#is_string t2 ; int_t )
   | Unop {op; arg} -> (
       let t = type_of ctx arg in
-      match (op, t) with
-      | Not, BoolT {nullable} -> BoolT {nullable}
-      | Int2Fl, IntT _ -> FixedT {nullable= false}
-      | Int2Date, IntT _ -> DateT {nullable= false}
-      | Date2Int, DateT _ -> IntT {nullable= false}
-      | StrLen, StringT _ -> IntT {nullable= false}
-      | LoadBool, IntT _ -> BoolT {nullable= false}
-      | _ -> fail (Error.create "Type error." (op, t) [%sexp_of: op * t]) )
+      let fail () =
+        Error.create "Type error." (op, t) [%sexp_of: unop * t] |> Error.raise
+      in
+      let c = check_type fail in
+      match op with
+      | `Not -> c#is_bool t ; bool_t
+      | `Int2Fl -> c#is_int t ; fixed_t
+      | `Int2Date -> c#is_int t ; date_t
+      | `Date2Int -> c#is_date t ; int_t
+      | `StrLen -> c#is_string t ; int_t
+      | `LoadBool -> c#is_int t ; bool_t
+      | `ExtractM | `ExtractD | `ExtractY -> c#is_date t ; int_t )
   | Slice (arg, _) -> (
       let t = type_of ctx arg in
       match t with
@@ -416,11 +424,12 @@ module Builder = struct
     let t2 = type_of y b in
     let open Type.PrimType in
     match (t1, t2) with
-    | IntT {nullable= false}, IntT {nullable= false}
-     |DateT {nullable= false}, DateT {nullable= false} ->
-        Binop {op= IntEq; arg1= x; arg2= y}
+    | IntT {nullable= false}, IntT {nullable= false} ->
+        Binop {op= `IntEq; arg1= x; arg2= y}
+    | DateT {nullable= false}, DateT {nullable= false} ->
+        Binop {op= `IntEq; arg1= date2int x; arg2= date2int y}
     | StringT {nullable= false; _}, StringT {nullable= false; _} ->
-        Binop {op= StrEq; arg1= x; arg2= y}
+        Binop {op= `StrEq; arg1= x; arg2= y}
     | BoolT {nullable= false}, BoolT {nullable= false} ->
         Infix.((x && y) || ((not x) && not y))
     | TupleT ts1, TupleT ts2 when List.length ts1 = List.length ts2 ->
@@ -428,7 +437,7 @@ module Builder = struct
             build_eq Infix.(index x i) Infix.(index y i) b )
         |> List.fold_left ~init:(Bool true) ~f:Infix.( && )
     | FixedT {nullable= false}, FixedT {nullable= false} ->
-        Binop {op= FlEq; arg1= x; arg2= y}
+        Binop {op= `FlEq; arg1= x; arg2= y}
     | IntT {nullable= false}, FixedT {nullable= false} -> build_eq (int2fl x) y b
     | FixedT {nullable= false}, IntT {nullable= false} -> build_eq x (int2fl y) b
     | _ ->
@@ -440,9 +449,10 @@ module Builder = struct
     let t = type_of y b in
     let open Type.PrimType in
     match t with
-    | IntT {nullable= false} | BoolT {nullable= false} | DateT {nullable= false} ->
-        Binop {op= IntHash; arg1= x; arg2= y}
-    | StringT {nullable= false; _} -> Binop {op= StrHash; arg1= x; arg2= y}
+    | IntT {nullable= false} | BoolT {nullable= false} ->
+        Binop {op= `IntHash; arg1= x; arg2= y}
+    | DateT {nullable= false} -> Binop {op= `IntHash; arg1= x; arg2= date2int y}
+    | StringT {nullable= false; _} -> Binop {op= `StrHash; arg1= x; arg2= y}
     | TupleT ts -> TupleHash (ts, x, y)
     | _ ->
         Error.create "Unhashable type." (y, t) [%sexp_of: expr * t] |> Error.raise
@@ -459,11 +469,12 @@ module Builder = struct
     let t2 = type_of y b in
     let open Type.PrimType in
     match (t1, t2) with
-    | IntT {nullable= false}, IntT {nullable= false}
-     |DateT {nullable= false}, DateT {nullable= false} ->
-        Binop {op= IntLt; arg1= x; arg2= y}
+    | IntT {nullable= false}, IntT {nullable= false} ->
+        Binop {op= `IntLt; arg1= x; arg2= y}
+    | DateT {nullable= false}, DateT {nullable= false} ->
+        Binop {op= `IntLt; arg1= date2int x; arg2= date2int y}
     | FixedT {nullable= false}, FixedT {nullable= false} ->
-        Binop {op= FlLt; arg1= x; arg2= y}
+        Binop {op= `FlLt; arg1= x; arg2= y}
     | IntT {nullable= false}, FixedT {nullable= false} -> build_lt (int2fl x) y b
     | FixedT {nullable= false}, IntT {nullable= false} -> build_lt x (int2fl y) b
     | TupleT ts1, TupleT ts2 when List.length ts1 = List.length ts2 ->
@@ -489,7 +500,7 @@ module Builder = struct
      |DateT {nullable= false}, DateT {nullable= false} ->
         Infix.(build_lt x y b || build_eq x y b)
     | FixedT {nullable= false}, FixedT {nullable= false} ->
-        Binop {op= FlLe; arg1= x; arg2= y}
+        Binop {op= `FlLe; arg1= x; arg2= y}
     | IntT {nullable= false}, FixedT {nullable= false} -> build_le (int2fl x) y b
     | FixedT {nullable= false}, IntT {nullable= false} -> build_le x (int2fl y) b
     | TupleT ts1, TupleT ts2 when List.length ts1 = List.length ts2 ->
@@ -505,7 +516,7 @@ module Builder = struct
 
   let build_to_int x b =
     match type_of x b with
-    | DateT _ -> Unop {op= Date2Int; arg= x}
+    | DateT _ -> date2int x
     | IntT _ -> x
     | NullT | FixedT _ | StringT _ | BoolT _ | TupleT _ | VoidT ->
         failwith "Cannot convert to int."
@@ -517,53 +528,49 @@ module Builder = struct
     let open Type.PrimType in
     match t with
     | IntT {nullable= false} -> f (`Int x)
-    | DateT {nullable= false} -> f (`Date x)
     | FixedT {nullable= false} -> f (`Fixed x)
     | IntT {nullable= true} | FixedT {nullable= true} | DateT {nullable= true} ->
         type_err "Nullable types." t
-    | NullT | StringT _ | BoolT _ | TupleT _ | VoidT ->
+    | NullT | StringT _ | BoolT _ | TupleT _ | VoidT | DateT _ ->
         type_err "Nonnumeric types." t
 
   let const_int =
     build_numeric0 (function
       | `Int x -> Infix.(int x)
-      | `Fixed x -> Fixed (Fixed_point.of_int x)
-      | `Date x -> Date (Date.of_int x) )
+      | `Fixed x -> Fixed (Fixed_point.of_int x) )
 
   let build_numeric2 f x y b =
     let t1 = type_of x b in
     let t2 = type_of y b in
     match (build_numeric0 (fun x -> x) t1 x, build_numeric0 (fun x -> x) t2 y) with
-    | (`Int x | `Date x), (`Int y | `Date y) -> f (`Int (x, y))
+    | `Int x, `Int y -> f (`Int (x, y))
     | `Fixed x, `Int y -> f (`Fixed (x, int2fl y))
     | `Int x, `Fixed y -> f (`Fixed (int2fl x, y))
     | `Fixed _, `Fixed _ -> f (`Fixed (x, y))
-    | `Fixed _, `Date _ | `Date _, `Fixed _ ->
-        failwith "Cannot convert fixed point to date."
 
   let build_add =
     build_numeric2 (function
       | `Int (x, y) -> Infix.(x + y)
-      | `Fixed (x, y) -> Binop {op= FlAdd; arg1= x; arg2= y} )
+      | `Fixed (x, y) -> Binop {op= `FlAdd; arg1= x; arg2= y} )
 
   let build_sub =
     build_numeric2 (function
       | `Int (x, y) -> Infix.(x - y)
-      | `Fixed (x, y) -> Binop {op= FlSub; arg1= x; arg2= y} )
+      | `Fixed (x, y) -> Binop {op= `FlSub; arg1= x; arg2= y} )
 
   let build_mul =
     build_numeric2 (function
       | `Int (x, y) -> Infix.(x * y)
-      | `Fixed (x, y) -> Binop {op= FlMul; arg1= x; arg2= y} )
+      | `Fixed (x, y) -> Binop {op= `FlMul; arg1= x; arg2= y} )
 
   let build_div =
     build_numeric2 (function
       | `Int (x, y) ->
           Binop
-            { op= FlDiv
-            ; arg1= Unop {op= Int2Fl; arg= x}
-            ; arg2= Unop {op= Int2Fl; arg= y} }
-      | `Fixed (x, y) -> Binop {op= FlDiv; arg1= x; arg2= y} )
+            { op= `FlDiv
+            ; arg1= Unop {op= `Int2Fl; arg= x}
+            ; arg2= Unop {op= `Int2Fl; arg= y} }
+      | `Fixed (x, y) -> Binop {op= `FlDiv; arg1= x; arg2= y} )
 
   let build_concat vs b =
     List.concat_map vs ~f:(fun v ->

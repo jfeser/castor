@@ -265,18 +265,22 @@ let hoist_const_exprs m =
 let rec conj = function
   | [] -> failwith "Empty"
   | [x] -> x
-  | x :: xs -> Binop {op= And; arg1= x; arg2= conj xs}
+  | x :: xs -> Binop {op= `And; arg1= x; arg2= conj xs}
 
 let split_expensive_predicates f =
   let is_expensive_visitor =
-    object (self : 'a)
+    object
       inherit [_] reduce as super
 
       inherit [_] Util.disj_monoid
 
+      method! visit_Unop () op p =
+        let ret = super#visit_Unop () op p in
+        match op with `StrLen -> true | _ -> ret
+
       method! visit_Binop _ op p1 p2 =
-        let ret = super#visit_Binop self#zero op p1 p2 in
-        match op with StrLen | StrPos | StrEq | StrHash -> true | _ -> ret
+        let ret = super#visit_Binop () op p1 p2 in
+        match op with `StrPos | `StrEq | `StrHash -> true | _ -> ret
     end
   in
   let visitor =
@@ -288,7 +292,7 @@ let split_expensive_predicates f =
         let fcase = self#visit_prog () else_ in
         let preds = conjuncts cond in
         let costly, cheap =
-          List.partition_tf preds ~f:(is_expensive_visitor#visit_expr true)
+          List.partition_tf preds ~f:(is_expensive_visitor#visit_expr ())
         in
         match (costly, cheap) with
         | [], xs | xs, [] -> If {cond= conj xs; tcase; fcase}

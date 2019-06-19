@@ -185,16 +185,15 @@ struct
           let x = gen_pred p b in
           match op with
           | A.Not -> Infix.(not x)
-          | A.Year | A.Month ->
+          | A.Year | A.Month | A.Day ->
               Error.create "Found interval in unexpected position."
                 (A.Unop (op, p))
                 [%sexp_of: A.pred]
               |> Error.raise
-          | A.Day -> x
-          | A.Strlen -> Unop {op= StrLen; arg= x}
-          | A.ExtractY -> Unop {op= ExtractY; arg= x}
-          | A.ExtractM -> Unop {op= ExtractM; arg= x}
-          | A.ExtractD -> Unop {op= ExtractD; arg= x} )
+          | A.Strlen -> Unop {op= `StrLen; arg= x}
+          | A.ExtractY -> Unop {op= `ExtractY; arg= x}
+          | A.ExtractM -> Unop {op= `ExtractM; arg= x}
+          | A.ExtractD -> Unop {op= `ExtractD; arg= x} )
       | A.Bool x -> Bool x
       | A.As_pred (x, _) -> gen_pred x b
       | Name n -> (
@@ -205,21 +204,20 @@ struct
             |> Error.raise )
       (* Special cases for date intervals. *)
       | A.Binop (A.Add, arg1, Unop (Year, arg2)) ->
-          let e1 = gen_pred arg1 b in
-          let e2 = gen_pred arg2 b in
-          Binop {op= AddY; arg1= e1; arg2= e2}
+          Binop {op= `AddY; arg1= gen_pred arg1 b; arg2= gen_pred arg2 b}
       | A.Binop (A.Add, arg1, Unop (Month, arg2)) ->
-          let e1 = gen_pred arg1 b in
-          let e2 = gen_pred arg2 b in
-          Binop {op= AddM; arg1= e1; arg2= e2}
+          Binop {op= `AddM; arg1= gen_pred arg1 b; arg2= gen_pred arg2 b}
+      | A.Binop (A.Add, arg1, Unop (Day, arg2)) ->
+          Binop {op= `AddD; arg1= gen_pred arg1 b; arg2= gen_pred arg2 b}
       | A.Binop (A.Sub, arg1, Unop (Year, arg2)) ->
-          let e1 = gen_pred arg1 b in
           let e2 = gen_pred (A.Binop (A.Sub, A.Int 0, arg2)) b in
-          Binop {op= AddY; arg1= e1; arg2= e2}
+          Binop {op= `AddY; arg1= gen_pred arg1 b; arg2= e2}
       | A.Binop (A.Sub, arg1, Unop (Month, arg2)) ->
-          let e1 = gen_pred arg1 b in
           let e2 = gen_pred (A.Binop (A.Sub, A.Int 0, arg2)) b in
-          Binop {op= AddM; arg1= e1; arg2= e2}
+          Binop {op= `AddM; arg1= gen_pred arg1 b; arg2= e2}
+      | A.Binop (A.Sub, arg1, Unop (Day, arg2)) ->
+          let e2 = gen_pred (A.Binop (A.Sub, A.Int 0, arg2)) b in
+          Binop {op= `AddD; arg1= gen_pred arg1 b; arg2= e2}
       | A.Binop (op, arg1, arg2) -> (
           let e1 = gen_pred arg1 b in
           let e2 = gen_pred arg2 b in
@@ -236,7 +234,7 @@ struct
           | A.Mul -> build_mul e1 e2 b
           | A.Div -> build_div e1 e2 b
           | A.Mod -> Infix.(e1 % e2)
-          | A.Strpos -> Binop {op= StrPos; arg1= e1; arg2= e2} )
+          | A.Strpos -> Binop {op= `StrPos; arg1= e1; arg2= e2} )
       | (A.Count | A.Min _ | A.Max _ | A.Sum _ | A.Avg _) as p ->
           Error.create "Not a scalar predicate." p [%sexp_of: A.pred] |> Error.raise
       | A.If (p1, p2, p3) ->
@@ -299,7 +297,7 @@ struct
         Infix.(build_eq ival (int null_val) b)
       else Bool false
     in
-    let dval = Unop {op= Int2Date; arg= ival} in
+    let dval = Unop {op= `Int2Date; arg= ival} in
     debug_print "date" dval b ;
     cb b [dval]
 
@@ -321,7 +319,7 @@ struct
 
   and scan_bool ctx b _ _ (cb : callback) =
     let start = Ctx.find_exn ctx (Name.create "start") b in
-    cb b [Unop {op= LoadBool; arg= start}]
+    cb b [Unop {op= `LoadBool; arg= start}]
 
   and scan_string ctx b _ (Type.({nullable; _} as st) as t) (cb : callback) =
     let open Builder in
@@ -329,7 +327,7 @@ struct
     let start = Ctx.find_exn ctx (Name.create "start") b in
     let value_ptr = Header.make_position hdr "value" start in
     let nchars = Header.make_access hdr "nchars" start in
-    let xval = Binop {op= LoadStr; arg1= value_ptr; arg2= nchars} in
+    let xval = Binop {op= `LoadStr; arg1= value_ptr; arg2= nchars} in
     let _nval =
       if nullable then
         let null_val = Serialize.string_sentinal st in
