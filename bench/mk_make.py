@@ -21,22 +21,25 @@ def value_to_castor(type_, value):
 
 def gen_params(b):
     params = []
-    for (p, v) in b['params'].items():
+    for [p, v] in b['params']:
         type_ = p.split(':')[1]
         params.append('-p \'%s=%s\'' % (p, value_to_castor(type_, v)))
     return ' '.join(params)
 
 def gen_param_types(b):
     params = []
-    for (p, v) in b['params'].items():
+    for [p, v] in b['params']:
         params.append('-p \'%s\'' % p)
     return ' '.join(params)
 
 def gen_param_values(b):
     params = []
-    for (p, v) in b['params'].items():
+    for [p, v] in b['params']:
         params.append('\'%s\'' % v)
     return ' '.join(params)
+
+def param_values_sql(b):
+    return [v for [_, v] in b['params']]
 
 def in_file(b):
     return '$(BENCH_DIR)/%s.txt' % b['name']
@@ -130,8 +133,8 @@ analysis_{0}-opt.csv.log: {1}
     print('''
 gold/{0}.csv:
 \tmkdir -p gold
-\t../bin/run_psql.py $(DB) {0}.sql {1} > $@
-    '''.format(b['name'], shlex.quote(json.dumps(list(b['params'].values())))))
+\t../bin/run_psql.py $(DBC) {0}.sql {1} > $@
+    '''.format(b['name'], shlex.quote(json.dumps(param_values_sql(b)))))
 
 print('''
 .PHONY: clean

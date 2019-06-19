@@ -1,144 +1,344 @@
 [
-    {
-        "name": "1",
-        "ordered": true,
-        "query": ["1-gold"],
-        "params": {"param0:int": "90"}
-    },
-    {
-        "name": "2",
-        "ordered": true,
-        "query": ["2-gold"],
-        "params": {
-            "param1:int": "15",
-            "param2:string": "BRASS",
-            "param3:string": "EUROPE"
-        }
-    },
-    {
-        "name": "3-no",
-        "ordered": false,
-        "query": ["3-no-gold"],
-        "params": {"param0:string": "BUILDING", "param1:date": "1995-03-15"}
-    },
-    {
-        "name": "4",
-        "ordered": true,
-        "query": ["4-gold"],
-        "params": {"param1:date": "1993-07-01"}
-    },
-    {
-        "name": "5-no",
-        "ordered": false,
-        "query": ["5-no-gold"],
-        "params": {"param0:string": "ASIA", "param1:date": "1994-01-01"}
-    },
-    {
-        "name": "6",
-        "ordered": true,
-        "query": ["6-gold"],
-        "params": {
-            "param0:date": "1994-01-01",
-            "param1:fixed": 0.06,
-            "param2:int": 24
-        }
-    },
-    {
-        "name": "7",
-        "ordered": true,
-        "query": ["7-gold"],
-        "params": {"param0:string": "FRANCE", "param1:string": "GERMANY"}
-    },
-    {
-        "name": "8",
-        "ordered": true,
-        "query": ["8-gold"],
-        "params": {
-            "param1:string": "BRAZIL",
-            "param2:string": "AMERICA",
-            "param3:string": "ECONOMY ANODIZED STEEL"
-        }
-    },
-    {
-        "name": "9",
-        "ordered": true,
-        "query": ["9-gold"],
-        "params": {"param1:string": "green"}
-    },
-    {
-        "name": "10-no",
-        "ordered": false,
-        "query": ["10-no-gold"],
-        "params": {"param0:date": "1993-10-01"}
-    },
-    {
-        "name": "11-no",
-        "ordered": false,
-        "query": ["11-no-gold"],
-        "params": {"param1:string": "GERMANY", "param2:fixed": 0.0001}
-    },
-    {
-        "name": "12",
-        "ordered": true,
-        "query": ["12-gold"],
-        "params": {
-            "param1:string": "MAIL",
-            "param2:string": "SHIP",
-            "param3:date": "1994-01-01"
-        }
-    },
-    {
-        "name": "14",
-        "ordered": true,
-        "query": ["14-gold"],
-        "params": {"param1:date": "1995-09-01"}
-    },
-    {
-        "name": "15",
-        "ordered": true,
-        "query": ["15-gold"],
-        "params": {"param1:date": "1996-01-01"}
-    },
-    {
-        "name": "16-no",
-        "ordered": false,
-        "query": ["16-no-gold"],
-        "params": {
-            "param1:string": "Brand#45",
-            "param2:string": "MEDIUM POLISHED",
-            "param3:int": 49,
-            "param4:int": 14,
-            "param5:int": 23,
-            "param6:int": 45,
-            "param7:int": 19,
-            "param8:int": 3,
-            "param9:int": 36,
-            "param10:int": 9
-        }
-    },
-    {
-        "name": "17",
-        "ordered": true,
-        "query": ["17-gold"],
-        "params": {"param0:string": "Brand#23", "param1:string": "MED BOX"}
-    },
-    {
-        "name": "18",
-        "ordered": true,
-        "query": ["18-gold"],
-        "params": {"param1:int": 300}
-    },
-    {
-        "name": "19",
-        "ordered": true,
-        "query": ["19-gold"],
-        "params": {
-            "param0:string": "Brand#12",
-            "param1:string": "Brand#23",
-            "param2:string": "Brand#34",
-            "param3:fixed": 1.0,
-            "param4:fixed": 10.0,
-            "param5:fixed": 20.0
-        }
-    }
+  {
+    "name": "1",
+    "ordered": true,
+    "query": [
+      "1-gold"
+    ],
+    "params": [
+      [
+        "param0:int",
+        "90"
+      ]
+    ]
+  },
+  {
+    "name": "2",
+    "ordered": true,
+    "query": [
+      "2-gold"
+    ],
+    "params": [
+      [
+        "param1:int",
+        "15"
+      ],
+      [
+        "param2:string",
+        "BRASS"
+      ],
+      [
+        "param3:string",
+        "EUROPE"
+      ]
+    ]
+  },
+  {
+    "name": "3-no",
+    "ordered": false,
+    "query": [
+      "3-no-gold"
+    ],
+    "params": [
+      [
+        "param0:string",
+        "BUILDING"
+      ],
+      [
+        "param1:date",
+        "1995-03-15"
+      ]
+    ]
+  },
+  {
+    "name": "4",
+    "ordered": true,
+    "query": [
+      "4-gold"
+    ],
+    "params": [
+      [
+        "param1:date",
+        "1993-07-01"
+      ]
+    ]
+  },
+  {
+    "name": "5-no",
+    "ordered": false,
+    "query": [
+      "5-no-gold"
+    ],
+    "params": [
+      [
+        "param0:string",
+        "ASIA"
+      ],
+      [
+        "param1:date",
+        "1994-01-01"
+      ]
+    ]
+  },
+  {
+    "name": "6",
+    "ordered": true,
+    "query": [
+      "6-gold"
+    ],
+    "params": [
+      [
+        "param0:date",
+        "1994-01-01"
+      ],
+      [
+        "param1:fixed",
+        0.06
+      ],
+      [
+        "param2:int",
+        24
+      ]
+    ]
+  },
+  {
+    "name": "7",
+    "ordered": true,
+    "query": [
+      "7-gold"
+    ],
+    "params": [
+      [
+        "param0:string",
+        "FRANCE"
+      ],
+      [
+        "param1:string",
+        "GERMANY"
+      ]
+    ]
+  },
+  {
+    "name": "8",
+    "ordered": true,
+    "query": [
+      "8-gold"
+    ],
+    "params": [
+      [
+        "param1:string",
+        "BRAZIL"
+      ],
+      [
+        "param2:string",
+        "AMERICA"
+      ],
+      [
+        "param3:string",
+        "ECONOMY ANODIZED STEEL"
+      ]
+    ]
+  },
+  {
+    "name": "9",
+    "ordered": true,
+    "query": [
+      "9-gold"
+    ],
+    "params": [
+      [
+        "param1:string",
+        "green"
+      ]
+    ]
+  },
+  {
+    "name": "10-no",
+    "ordered": false,
+    "query": [
+      "10-no-gold"
+    ],
+    "params": [
+      [
+        "param0:date",
+        "1993-10-01"
+      ]
+    ]
+  },
+  {
+    "name": "11-no",
+    "ordered": false,
+    "query": [
+      "11-no-gold"
+    ],
+    "params": [
+      [
+        "param1:string",
+        "GERMANY"
+      ],
+      [
+        "param2:fixed",
+        0.0001
+      ]
+    ]
+  },
+  {
+    "name": "12",
+    "ordered": true,
+    "query": [
+      "12-gold"
+    ],
+    "params": [
+      [
+        "param1:string",
+        "MAIL"
+      ],
+      [
+        "param2:string",
+        "SHIP"
+      ],
+      [
+        "param3:date",
+        "1994-01-01"
+      ]
+    ]
+  },
+  {
+    "name": "14",
+    "ordered": true,
+    "query": [
+      "14-gold"
+    ],
+    "params": [
+      [
+        "param1:date",
+        "1995-09-01"
+      ]
+    ]
+  },
+  {
+    "name": "15",
+    "ordered": true,
+    "query": [
+      "15-gold"
+    ],
+    "params": [
+      [
+        "param1:date",
+        "1996-01-01"
+      ]
+    ]
+  },
+  {
+    "name": "16-no",
+    "ordered": false,
+    "query": [
+      "16-no-gold"
+    ],
+    "params": [
+      [
+        "param1:string",
+        "Brand#45"
+      ],
+      [
+        "param2:string",
+        "MEDIUM POLISHED"
+      ],
+      [
+        "param3:int",
+        49
+      ],
+      [
+        "param4:int",
+        14
+      ],
+      [
+        "param5:int",
+        23
+      ],
+      [
+        "param6:int",
+        45
+      ],
+      [
+        "param7:int",
+        19
+      ],
+      [
+        "param8:int",
+        3
+      ],
+      [
+        "param9:int",
+        36
+      ],
+      [
+        "param10:int",
+        9
+      ]
+    ]
+  },
+  {
+    "name": "17",
+    "ordered": true,
+    "query": [
+      "17-gold"
+    ],
+    "params": [
+      [
+        "param0:string",
+        "Brand#23"
+      ],
+      [
+        "param1:string",
+        "MED BOX"
+      ]
+    ]
+  },
+  {
+    "name": "18",
+    "ordered": true,
+    "query": [
+      "18-gold"
+    ],
+    "params": [
+      [
+        "param1:int",
+        300
+      ]
+    ]
+  },
+  {
+    "name": "19",
+    "ordered": true,
+    "query": [
+      "19-gold"
+    ],
+    "params": [
+      [
+        "param0:string",
+        "Brand#12"
+      ],
+      [
+        "param1:string",
+        "Brand#23"
+      ],
+      [
+        "param2:string",
+        "Brand#34"
+      ],
+      [
+        "param3:fixed",
+        1.0
+      ],
+      [
+        "param4:fixed",
+        10.0
+      ],
+      [
+        "param5:fixed",
+        20.0
+      ]
+    ]
+  }
 ]
