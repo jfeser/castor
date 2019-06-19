@@ -243,7 +243,7 @@ let exec_cursor_exn =
 
 let exec_cursor_lwt_exn =
   let fresh = Fresh.create () in
-  fun ?(batch_size = 10000) ?(params = []) db schema query ->
+  fun ?(batch_size = 100) ?(params = []) db schema query ->
     let db = create db.uri in
     Caml.Gc.finalise (fun db -> try (db.conn)#finish with Failure _ -> ()) db ;
     let query = subst_params params query in
