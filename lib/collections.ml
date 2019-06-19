@@ -82,6 +82,11 @@ module Set = struct
     Set.iter set ~f:(fprintf fmt "%a; " pp_elem) ;
     fprintf fmt "}"
 
+  let any_overlap m ss =
+    let len = List.sum (module Int) ~f:Set.length ss in
+    let len' = Set.union_list m ss |> Set.length in
+    len' < len
+
   module O = struct
     let ( <= ) s1 s2 = Set.is_subset s1 ~of_:s2
 

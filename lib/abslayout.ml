@@ -14,25 +14,24 @@ let strip_meta =
 
 let scopes r =
   let visitor =
-    object (self : 'a)
+    object
       inherit [_] reduce
 
-      inherit [_] Util.list_monoid
+      inherit [_] Util.set_monoid (module String)
 
-      method! visit_As () n r = self#plus [n] (self#visit_t () r)
+      method! visit_scope () s = Set.singleton (module String) s
     end
   in
   visitor#visit_t () r
 
 let alpha_scopes r =
   let map =
-    scopes r
-    |> List.dedup_and_sort ~compare:[%compare: string]
+    scopes r |> Set.to_list
     |> List.map ~f:(fun s -> (s, Fresh.name Global.fresh "s%d"))
     |> Map.of_alist_exn (module String)
   in
   let visitor =
-    object (self : 'a)
+    object
       inherit [_] endo
 
       method! visit_Name () p n =
@@ -44,7 +43,7 @@ let alpha_scopes r =
         in
         Option.value name ~default:p
 
-      method! visit_As () _ s r = As (Map.find_exn map s, self#visit_t () r)
+      method! visit_scope () s = Map.find_exn map s
     end
   in
   visitor#visit_t () r
@@ -53,18 +52,27 @@ let wrap x = {node= x; meta= Meta.empty ()}
 
 let select a b = wrap (Select (a, strip_meta b))
 
-let has_scope_overlap rs ss =
-  List.concat_map rs ~f:scopes @ ss |> List.contains_dup ~compare:[%compare: string]
+let ensure_no_overlap_2 r1 r2 ss =
+  if
+    Set.inter (scopes r1) (Set.union (scopes r2) (Set.of_list (module String) ss))
+    |> Set.is_empty
+  then (r1, r2)
+  else (alpha_scopes r1, r2)
+
+let ensure_no_overlap_k rs =
+  let all_scopes = List.map ~f:scopes rs in
+  if Set.any_overlap (module String) all_scopes then List.map rs ~f:alpha_scopes
+  else rs
 
 let dep_join a b c =
-  let a, c =
-    if has_scope_overlap [a; c] [b] then (alpha_scopes a, alpha_scopes c) else (a, c)
-  in
+  let a, c = ensure_no_overlap_2 a c [b] in
   wrap (DepJoin {d_lhs= strip_meta a; d_alias= b; d_rhs= strip_meta c})
 
 let dep_join' d = dep_join d.d_lhs d.d_alias d.d_rhs
 
-let join a b c = wrap (Join {pred= a; r1= strip_meta b; r2= strip_meta c})
+let join a b c =
+  let b, c = ensure_no_overlap_2 b c [] in
+  wrap (Join {pred= a; r1= strip_meta b; r2= strip_meta c})
 
 let filter a b = wrap (Filter (a, strip_meta b))
 
@@ -84,20 +92,19 @@ let as_ a b = wrap (As (a, strip_meta b))
 
 let list a b c =
   let a = strip_scope a in
-  let a, c =
-    if has_scope_overlap [a; c] [b] then (alpha_scopes a, alpha_scopes c) else (a, c)
-  in
+  let a, c = ensure_no_overlap_2 a c [b] in
   wrap (AList (strip_meta (as_ b a), strip_meta c))
 
 let list' (a, b) = list a (scope_exn a) b
 
-let tuple a b = wrap (ATuple (List.map ~f:strip_meta a, b))
+let tuple a b =
+  let a = List.map ~f:strip_meta a in
+  let a = ensure_no_overlap_k a in
+  wrap (ATuple (a, b))
 
 let hash_idx ?key_layout a b c d =
   let a = strip_scope a in
-  let a, c =
-    if has_scope_overlap [a; c] [b] then (alpha_scopes a, alpha_scopes c) else (a, c)
-  in
+  let a, c = ensure_no_overlap_2 a c [b] in
   wrap
     (AHashIdx
        { hi_keys= strip_meta a
@@ -114,9 +121,7 @@ let hash_idx' h =
 
 let ordered_idx a b c d =
   let a = strip_scope a in
-  let a, c =
-    if has_scope_overlap [a; c] [b] then (alpha_scopes a, alpha_scopes c) else (a, c)
-  in
+  let a, c = ensure_no_overlap_2 a c [b] in
   wrap (AOrderedIdx (strip_meta (as_ b a), strip_meta c, d))
 
 let o_key_layout {oi_key_layout; _} =

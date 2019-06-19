@@ -50,10 +50,12 @@ module T = struct
     | Exists of t
     | Substring of pred * pred * pred
 
+  and scope = string
+
   and hash_idx =
     { hi_keys: t
     ; hi_values: t
-    ; hi_scope: string
+    ; hi_scope: scope
     ; hi_key_layout: t option [@opaque]
     ; hi_lookup: pred list }
 
@@ -71,7 +73,7 @@ module T = struct
 
   and relation = {r_name: string; r_schema: (Name.t[@opaque]) list option}
 
-  and depjoin = {d_lhs: t; d_alias: string; d_rhs: t}
+  and depjoin = {d_lhs: t; d_alias: scope; d_rhs: t}
 
   and join = {pred: pred; r1: t; r2: t}
 
@@ -94,7 +96,7 @@ module T = struct
     | ATuple of (t list * tuple)
     | AHashIdx of hash_idx
     | AOrderedIdx of (t * t * ordered_idx)
-    | As of string * t
+    | As of scope * t
   [@@deriving
     visitors {variety= "endo"}
     , visitors {variety= "map"}
