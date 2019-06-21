@@ -22,7 +22,7 @@ module Query = struct
     | Empty
     | Scalars of (Pred.t[@name "pred"]) list
     | Concat of ('q, 'm) t list
-    | For of ('q * string * ('q, 'm) t)
+    | For of ('q * string * ('q, 'm) t * bool)
     | Let of ((string * ('q, 'm) t) list * ('q, 'm) t)
     | Var of string
 
@@ -102,9 +102,9 @@ module Query = struct
 
         method visit_'q _ x = (x, self#zero)
 
-        method! visit_For ss (r, s, q) =
+        method! visit_For ss (r, s, q, x) =
           let q', binds = self#visit_t (s :: ss) q in
-          (For (r, s, q'), binds)
+          (For (r, s, q', x), binds)
 
         method! visit_t ss q =
           if is_invariant ss q then
@@ -128,12 +128,13 @@ module Query = struct
 
         method! visit_t ss q =
           match q.node with
-          | For (r, s, q') -> (
+          | For (r, s, q', x) -> (
               let ss = s :: ss in
               let q', binds = hoist_invariant ss q' in
               match binds with
-              | [] -> for_ q.meta (r, s, self#visit_t ss q')
-              | _ -> let_ A.empty (binds, for_ q.meta (r, s, self#visit_t ss q')) )
+              | [] -> for_ q.meta (r, s, self#visit_t ss q', x)
+              | _ -> let_ A.empty (binds, for_ q.meta (r, s, self#visit_t ss q', x))
+              )
           | _ -> super#visit_t ss q
       end
     in
@@ -171,13 +172,13 @@ module Query = struct
           let order_key = total_order_key q1 in
           A.order_by order_key q1
         in
-        for_ q (q1, scope, of_ralgebra q2)
+        for_ q (q1, scope, of_ralgebra q2, false)
     | AHashIdx h ->
         let q1 =
           let order_key = total_order_key h.hi_keys in
           A.order_by order_key (A.dedup h.hi_keys)
         in
-        for_ q (q1, h.hi_scope, of_ralgebra h.hi_values)
+        for_ q (q1, h.hi_scope, of_ralgebra h.hi_values, true)
     | AOrderedIdx (q1, q2, _) ->
         let scope = A.scope_exn q1 in
         let q1 = A.strip_scope q1 in
@@ -185,7 +186,7 @@ module Query = struct
           let order_key = total_order_key q1 in
           A.order_by order_key (A.dedup q1)
         in
-        for_ q (q1, scope, of_ralgebra q2)
+        for_ q (q1, scope, of_ralgebra q2, true)
     | AEmpty -> empty q
     | AScalar p -> scalars q [p]
     | ATuple (ts, _) -> (
@@ -216,7 +217,7 @@ module Query = struct
     match q.node with
     | Var _ -> A.scalar (As_pred (Int 0, Fresh.name Global.fresh "var%d"))
     | Let (binds, q) -> to_ralgebra' (to_concat binds q)
-    | For (q1, scope, q2) ->
+    | For (q1, scope, q2, distinct) ->
         (* Extend the lhs query with a row number. Even if this query emits
          duplicate results, the row number will ensure that the duplicates
          remain distinct. *)
@@ -224,10 +225,12 @@ module Query = struct
           let o1, q1 = unwrap_order q1 in
           let row_number = Fresh.name Global.fresh "rn%d" in
           let q1 =
-            A.select
-              ( As_pred (Row_number, row_number)
-              :: (A.schema_exn q1 |> Schema.to_select_list) )
-              q1
+            if distinct then q1
+            else
+              A.select
+                ( As_pred (Row_number, row_number)
+                :: (A.schema_exn q1 |> Schema.to_select_list) )
+                q1
           in
           (o1, q1)
         in
@@ -291,7 +294,7 @@ module Query = struct
     match q.node with
     | Empty -> 0
     | Var _ -> 1
-    | For (n, _, q2) -> 1 + n + width' q2
+    | For (n, _, q2, distinct) -> (if distinct then 0 else 1) + n + width' q2
     | Scalars ps -> List.length ps
     | Concat qs -> 1 + List.sum (module Int) qs ~f:width'
     | Let (binds, q) -> width' (to_concat binds q)
@@ -496,7 +499,7 @@ module Make (Config : Config.S) = struct
             self#key_layout q'
         | _ -> None
 
-      method private eval_for lctx tups a (n, _, q2) : 'a Lwt.t =
+      method private eval_for lctx tups a (n, _, q2, distinct) : 'a Lwt.t =
         let fold = self#for_ a in
         let extract_lhs t = List.take t n in
         let extract_rhs t = List.drop t n in
@@ -509,21 +512,36 @@ module Make (Config : Config.S) = struct
               tups
           else tups
         in
-        tups
-        (* Extract the row number from each tuple. *)
-        |> Lwt_stream.map (function
-             | [] -> Error.of_string "Unexpected empty tuple." |> Error.raise
-             | rn :: t -> (rn, t) )
-        (* Group by row numbers *)
-        |> group_by (fun (rn1, _) (rn2, _) -> [%compare.equal: Value.t] rn1 rn2)
-        (* Drop the row number from each group. *)
-        |> Lwt_stream.map (fun g -> List.map g ~f:(fun (_, t) -> t))
-        (* Split each group into one lhs and many rhs. *)
-        |> Lwt_stream.map (fun g ->
-               let lhs = List.hd_exn g |> extract_lhs in
-               let rhs = List.map g ~f:extract_rhs in
-               (lhs, rhs) )
+        let groups =
+          if distinct then
+            tups
+            (* Split each tuple into lhs and rhs. *)
+            |> Lwt_stream.map (fun t -> (extract_lhs t, extract_rhs t))
+            (* Group by lhs *)
+            |> group_by (fun (t1, _) (t2, _) -> [%compare.equal: Value.t list] t1 t2)
+            (* Split each group into one lhs and many rhs. *)
+            |> Lwt_stream.map (fun g ->
+                   let lhs = List.hd_exn g |> Tuple.T2.get1 in
+                   let rhs = List.map g ~f:Tuple.T2.get2 in
+                   (lhs, rhs) )
+          else
+            tups
+            (* Extract the row number from each tuple. *)
+            |> Lwt_stream.map (function
+                 | [] -> Error.of_string "Unexpected empty tuple." |> Error.raise
+                 | rn :: t -> (rn, t) )
+            (* Group by row numbers *)
+            |> group_by (fun (rn1, _) (rn2, _) -> [%compare.equal: Value.t] rn1 rn2)
+            (* Drop the row number from each group. *)
+            |> Lwt_stream.map (fun g -> List.map g ~f:(fun (_, t) -> t))
+            (* Split each group into one lhs and many rhs. *)
+            |> Lwt_stream.map (fun g ->
+                   let lhs = List.hd_exn g |> extract_lhs in
+                   let rhs = List.map g ~f:extract_rhs in
+                   (lhs, rhs) )
+        in
         (* Process each group. *)
+        groups
         |> Lwt_stream.map_s (fun (lhs, rhs) ->
                let lval =
                  Option.map (self#key_layout a.Q.meta) ~f:(fun l ->
@@ -628,7 +646,6 @@ module Make (Config : Config.S) = struct
         let q = A.ensure_alias r |> Q.of_ralgebra |> Q.hoist_all in
         let r = Q.to_ralgebra q |> simplify in
         let sql = Sql.of_ralgebra r in
-        Logs.debug (fun m -> m "Running query %s" (Sql.to_string_hum sql)) ;
         let tups =
           Db.exec_cursor_lwt_exn conn
             (A.schema_exn r |> List.map ~f:Name.type_exn)
