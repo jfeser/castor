@@ -45,6 +45,7 @@ type pred = Abslayout0.pred =
   | Binop of (binop * pred * pred)
   | As_pred of (pred * string)
   | Count
+  | Row_number
   | Sum of pred
   | Avg of pred
   | Min of pred

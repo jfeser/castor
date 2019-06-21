@@ -13,6 +13,7 @@ module T = struct
     | Binop of (Abslayout0.binop * t * t)
     | As_pred of (t * string)
     | Count
+    | Row_number
     | Sum of t
     | Avg of t
     | Min of t

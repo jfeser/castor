@@ -41,6 +41,7 @@ module T = struct
     | Binop of ((binop[@opaque]) * pred * pred)
     | As_pred of (pred * string)
     | Count
+    | Row_number
     | Sum of pred
     | Avg of pred
     | Min of pred
@@ -210,6 +211,7 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
       | `Infix str -> fprintf fmt "@[<hov>(%a@ %s@ %a)@]" pp_pred p1 str pp_pred p2
       | `Prefix str -> fprintf fmt "@[<hov>%s(%a,@ %a)@]" str pp_pred p1 pp_pred p2
       )
+    | Row_number -> fprintf fmt "row_number()"
     | Count -> fprintf fmt "count()"
     | Sum n -> fprintf fmt "sum(%a)" pp_pred n
     | Avg n -> fprintf fmt "avg(%a)" pp_pred n
@@ -285,13 +287,7 @@ let names_visitor =
     method! visit_Name () n = Set.singleton (module Name) n
 
     method! visit_pred () p =
-      match p with
-      | Exists _ | First _ -> self#zero
-      | Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null _ | Unop _
-       |Binop _ | As_pred _ | Count | Sum _ | Avg _ | Min _ | Max _
-       |If (_, _, _)
-       |Substring (_, _, _) ->
-          super#visit_pred () p
+      match p with Exists _ | First _ -> self#zero | _ -> super#visit_pred () p
   end
 
 let scope r = match r.node with As (n, _) -> Some n | _ -> None

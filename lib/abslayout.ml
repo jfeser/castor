@@ -198,11 +198,7 @@ let rec pred_free p =
       method! visit_pred () p =
         match p with
         | Exists r | First r -> self#visit_subquery r
-        | Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null _ | Unop _
-         |Binop _ | As_pred _ | Count | Sum _ | Avg _ | Min _ | Max _
-         |If (_, _, _)
-         |Substring (_, _, _) ->
-            super#visit_pred () p
+        | _ -> super#visit_pred () p
     end
   in
   visitor#visit_pred () p

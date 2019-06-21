@@ -389,3 +389,40 @@ module Array = struct
 
   let drop a n = Array.sub ~pos:n ~len:(Array.length a - n) a
 end
+
+(** A list with cheap appends instead of cheap prepends. *)
+module RevList : sig
+  type 'a t
+
+  include Sexpable.S1 with type 'a t := 'a t
+
+  val empty : 'a t
+
+  val ( ++ ) : 'a t -> 'a -> 'a t
+
+  val singleton : 'a -> 'a t
+
+  val is_empty : 'a t -> bool
+
+  val length : 'a t -> int
+
+  val to_list : 'a t -> 'a list
+
+  val last : 'a t -> 'a option
+end = struct
+  type 'a t = 'a list [@@deriving sexp]
+
+  let empty = []
+
+  let is_empty = List.is_empty
+
+  let singleton x = [x]
+
+  let ( ++ ) l x = x :: l
+
+  let to_list = List.rev
+
+  let last = List.hd
+
+  let length = List.length
+end

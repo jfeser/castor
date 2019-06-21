@@ -278,6 +278,7 @@ let rec pred_to_sql p =
   | Avg n -> sprintf "avg(%s)" (p2s n)
   | Min n -> sprintf "min(%s)" (p2s n)
   | Max n -> sprintf "max(%s)" (p2s n)
+  | Row_number -> "row_number() over ()"
 
 and spj_to_sql {select; distinct; order; group; relations; conds; limit} =
   let select =

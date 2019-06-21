@@ -358,15 +358,85 @@ let%expect_test "ordering" =
 
 let%expect_test "ordered-idx-dates" =
   run_test
-    {|AOrderedIdx(OrderBy([f desc], Dedup(Select([f], r_date))) as k, 
-     AScalar(k.f as v), date("2017-10-04"), date("2018-10-04"))|} ;
+    {|AOrderedIdx(OrderBy([f asc], Dedup(Select([f], r_date))) as k, 
+     AScalar(k.f as v), date("2017-10-05"), date("2018-09-01"))|} ;
   [%expect
     {|
-    2018-09-01|2018-09-01
-    2018-01-23|2018-01-23
-    2018-01-01|2018-01-01
     2017-10-05|2017-10-05
+    2018-01-01|2018-01-01
+    2018-01-23|2018-01-23
+
+    exited normally |}]
+
+let%expect_test "ordered-idx-dates" =
+  run_test
+    {|
+AOrderedIdx(OrderBy([f asc], Dedup(Select([f], r_date))) as k,
+     AScalar(k.f as v), >= date("2017-10-05"), < date("2018-09-01"))
+|} ;
+  [%expect
+    {|
+    2017-10-05|2017-10-05
+    2018-01-01|2018-01-01
+    2018-01-23|2018-01-23
+
+    exited normally |}]
+
+let%expect_test "ordered-idx-dates" =
+  run_test
+    {|
+AOrderedIdx(OrderBy([f asc], Dedup(Select([f], r_date))) as k,
+     AScalar(k.f as v), > date("2017-10-05"), <= date("2018-09-01"))
+|} ;
+  [%expect
+    {|
+    2018-01-01|2018-01-01
+    2018-01-23|2018-01-23
+    2018-09-01|2018-09-01
+
+    exited normally |}]
+
+let%expect_test "ordered-idx-dates" =
+  run_test
+    {|
+AOrderedIdx(OrderBy([f asc], Dedup(Select([f], r_date))) as k,
+     AScalar(k.f as v), > date("2017-10-05"), < date("2018-09-01"))
+|} ;
+  [%expect
+    {|
+    2018-01-01|2018-01-01
+    2018-01-23|2018-01-23
+
+    exited normally |}]
+
+let%expect_test "ordered-idx-dates" =
+  run_test
+    {|
+AOrderedIdx(OrderBy([f asc], Dedup(Select([f], r_date))) as k,
+     AScalar(k.f as v), >= date("2017-10-05"), <= date("2018-09-01"))
+|} ;
+  [%expect
+    {|
+    2017-10-05|2017-10-05
+    2018-01-01|2018-01-01
+    2018-01-23|2018-01-23
+    2018-09-01|2018-09-01
+
+    exited normally |}]
+
+let%expect_test "ordered-idx-dates" =
+  run_test
+    {|
+AOrderedIdx(OrderBy([f asc], Dedup(Select([f], r_date))) as k,
+     AScalar(k.f as v), >= date("0000-01-01"), <= date("9999-01-01"))
+|} ;
+  [%expect
+    {|
     2016-12-01|2016-12-01
+    2017-10-05|2017-10-05
+    2018-01-01|2018-01-01
+    2018-01-23|2018-01-23
+    2018-09-01|2018-09-01
 
     exited normally |}]
 
@@ -384,7 +454,7 @@ let%expect_test "date-arith" =
 let%expect_test "depjoin" =
   run_test
     "depjoin(alist(r1 as k1, ascalar(k1.f)) as k3, select([k3.f + g], ascalar(5 as \
-     g)))";
+     g)))" ;
   [%expect {|
     6
     6

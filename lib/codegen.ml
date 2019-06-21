@@ -817,13 +817,13 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     build_ret params builder |> ignore
 
   module ParamStructBuilder = struct
-    type t = {mutable vars: lltype list}
+    type t = {mutable vars: lltype RevList.t}
 
-    let create : unit -> t = fun () -> {vars= []}
+    let create () = {vars= RevList.empty}
 
     let build tbl b n t =
-      let idx = List.length b.vars in
-      b.vars <- t :: b.vars ;
+      let idx = RevList.length b.vars in
+      b.vars <- RevList.(b.vars ++ t) ;
       match Hashtbl.add tbl ~key:n ~data:(Param {idx; alloca= None}) with
       | `Duplicate -> Error.(of_string "Variable already defined." |> raise)
       | `Ok -> ()
@@ -833,8 +833,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let build_param_struct : t -> string -> lltype =
      fun b n ->
       let t = named_struct_type ctx n in
-      assert (List.length b.vars > 0) ;
-      struct_set_body t (List.rev b.vars |> Array.of_list) false ;
+      assert (RevList.length b.vars > 0) ;
+      struct_set_body t (RevList.to_list b.vars |> Array.of_list) false ;
       assert (not (is_opaque t)) ;
       t
   end

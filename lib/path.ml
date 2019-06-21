@@ -105,8 +105,9 @@ let rec get_exn p r =
       |> Error.raise
 
 let all r =
+  let open RevList in
   Seq.unfold
-    ~init:(Fqueue.singleton (r, []))
+    ~init:(Fqueue.singleton (r, empty))
     ~f:(fun q ->
       match Fqueue.dequeue q with
       | Some ((r, p), q) ->
@@ -119,18 +120,18 @@ let all r =
              |OrderBy {rel= r'; _}
              |Dedup r'
              |As (_, r') ->
-                Fqueue.enqueue q (r', 0 :: p)
+                Fqueue.enqueue q (r', p ++ 0)
             | Join {r1; r2; _}
              |AList (r1, r2)
              |AHashIdx {hi_keys= r1; hi_values= r2; _}
              |AOrderedIdx (r1, r2, _)
              |DepJoin {d_lhs= r1; d_rhs= r2; _} ->
-                let q = Fqueue.enqueue q (r1, 0 :: p) in
-                Fqueue.enqueue q (r2, 1 :: p)
+                let q = Fqueue.enqueue q (r1, p ++ 0) in
+                Fqueue.enqueue q (r2, p ++ 1)
             | ATuple (rs, _) ->
-                List.foldi rs ~init:q ~f:(fun i q r -> Fqueue.enqueue q (r, i :: p))
+                List.foldi rs ~init:q ~f:(fun i q r -> Fqueue.enqueue q (r, p ++ i))
           in
-          Some (List.rev p, q)
+          Some (RevList.to_list p, q)
       | None -> None )
 
 let%test_unit "all-valid" =

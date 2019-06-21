@@ -19,7 +19,7 @@ let rec to_type =
   function
   | As_pred (p, _) -> to_type p
   | Name n -> Name.Meta.(find_exn n type_)
-  | Int _ | Date _
+  | Int _ | Date _ | Row_number
    |Unop ((Year | Month | Day | Strlen | ExtractY | ExtractM | ExtractD), _)
    |Count ->
       int_t

@@ -235,7 +235,7 @@ struct
           | A.Div -> build_div e1 e2 b
           | A.Mod -> Infix.(e1 % e2)
           | A.Strpos -> Binop {op= `StrPos; arg1= e1; arg2= e2} )
-      | (A.Count | A.Min _ | A.Max _ | A.Sum _ | A.Avg _) as p ->
+      | (A.Count | A.Min _ | A.Max _ | A.Sum _ | A.Avg _ | A.Row_number) as p ->
           Error.create "Not a scalar predicate." p [%sexp_of: A.pred] |> Error.raise
       | A.If (p1, p2, p3) ->
           let ret_var =
@@ -354,13 +354,13 @@ struct
     let child_starts =
       let _, ret =
         List.fold_left child_types
-          ~init:(Header.make_position hdr "value" start, [])
+          ~init:(Header.make_position hdr "value" start, RevList.empty)
           ~f:(fun (cstart, ret) ctype ->
             let cstart = build_defn "cstart" cstart b in
             let next_cstart = Infix.(cstart + len cstart ctype) in
-            (next_cstart, cstart :: ret) )
+            (next_cstart, RevList.(ret ++ cstart)) )
       in
-      List.rev ret
+      RevList.to_list ret
     in
     debug_print "scanning crosstuple" (Int 0) b ;
     make_loops ctx [] child_layouts child_types child_starts b

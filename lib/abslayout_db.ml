@@ -217,7 +217,20 @@ module Query = struct
     | Var _ -> A.scalar (As_pred (Int 0, Fresh.name Global.fresh "var%d"))
     | Let (binds, q) -> to_ralgebra' (to_concat binds q)
     | For (q1, scope, q2) ->
-        let o1, q1 = unwrap_order q1 in
+        (* Extend the lhs query with a row number. Even if this query emits
+         duplicate results, the row number will ensure that the duplicates
+         remain distinct. *)
+        let o1, q1 =
+          let o1, q1 = unwrap_order q1 in
+          let row_number = Fresh.name Global.fresh "rn%d" in
+          let q1 =
+            A.select
+              ( As_pred (Row_number, row_number)
+              :: (A.schema_exn q1 |> Schema.to_select_list) )
+              q1
+          in
+          (o1, q1)
+        in
         let o2, q2 = to_ralgebra' q2 |> unwrap_order in
         (* Generate a renaming so that the upward exposed names are fresh. *)
         let sctx =
@@ -227,6 +240,7 @@ module Query = struct
                  (n, n') )
         in
         let slist = List.map sctx ~f:(fun (n, n') -> As_pred (Name n, n')) in
+        (* Stick together the orders from the lhs and rhs queries. *)
         let order =
           let sctx =
             List.map sctx ~f:(fun (n, n') -> (n, Name (Name.create n')))
@@ -277,7 +291,7 @@ module Query = struct
     match q.node with
     | Empty -> 0
     | Var _ -> 1
-    | For (n, _, q2) -> n + width' q2
+    | For (n, _, q2) -> 1 + n + width' q2
     | Scalars ps -> List.length ps
     | Concat qs -> 1 + List.sum (module Int) qs ~f:width'
     | Let (binds, q) -> width' (to_concat binds q)
@@ -304,24 +318,26 @@ module Make (Config : Config.S) = struct
     let run_gen (Fold {init; fold; extract}) l = Gen.fold l ~init ~f:fold |> extract
 
     let run_lwt (Fold {init; fold; extract}) l =
-      let%lwt ret = Lwt_stream.fold_s (fun x y -> return (fold y x)) l init in
+      let%lwt ret = Lwt_stream.fold (fun x y -> fold y x) l init in
       return (extract ret)
   end
 
   open Fold
 
   let two_arg_fold f =
-    let init = [] in
+    let init = RevList.empty in
     let fold acc x =
-      if List.length acc < 2 then x :: acc else failwith "Unexpected concat size."
+      if RevList.length acc < 2 then RevList.(acc ++ x)
+      else failwith "Unexpected concat size."
     in
     let extract acc =
-      match List.rev acc with [lhs; rhs] -> f lhs rhs | _ -> assert false
+      match RevList.to_list acc with [lhs; rhs] -> f lhs rhs | _ -> assert false
     in
     Fold {init; fold; extract}
 
   let group_by eq strm =
-    let cur = ref (`Group []) in
+    let open RevList in
+    let cur = ref (`Group empty) in
     let rec next () =
       match !cur with
       | `Done -> return None
@@ -330,19 +346,22 @@ module Make (Config : Config.S) = struct
           match tup with
           | None ->
               cur := `Done ;
-              return (Some g)
+              (* Never return empty groups. *)
+              if is_empty g then return None else return (Some (to_list g))
           | Some x -> (
-            match g with
-            | [] ->
-                cur := `Group [x] ;
+            match last g with
+            | None ->
+                cur := `Group (singleton x) ;
                 next ()
-            | y :: _ ->
+            | Some y ->
                 if eq x y then (
-                  cur := `Group (x :: g) ;
+                  cur := `Group (g ++ x) ;
                   next () )
                 else (
-                  cur := `Group [x] ;
-                  return (Some g) ) ) )
+                  cur := `Group (singleton x) ;
+                  (* NOTE: Groups are created back to front, so must be
+                     reversed. *)
+                  return (Some (to_list g)) ) ) )
     in
     Lwt_stream.from next
 
@@ -356,7 +375,7 @@ module Make (Config : Config.S) = struct
       fun tup -> List.take (List.drop tup drop_ct) take_ct
     in
     let%lwt group = Lwt_stream.get_while (fun t -> extract_counter t = ctr) tups in
-    List.map group ~f:extract_tuple |> Lwt_stream.of_list |> return
+    List.map group ~f:extract_tuple |> return
 
   class virtual ['a] abslayout_fold =
     object (self)
@@ -385,6 +404,8 @@ module Make (Config : Config.S) = struct
       method dedup _ x = x
 
       method virtual join : _
+
+      method private debug = false
 
       method private func a =
         let m = a.Q.meta.A.meta in
@@ -477,39 +498,72 @@ module Make (Config : Config.S) = struct
 
       method private eval_for lctx tups a (n, _, q2) : 'a Lwt.t =
         let fold = self#for_ a in
-        let split_tup t = List.split_n t n in
-        Lwt_stream.map split_tup tups
-        |> group_by (fun (t1, _) (t2, _) -> [%compare.equal: Value.t list] t1 t2)
-        |> Lwt_stream.filter_map_s (fun ts ->
-               let ts = List.rev ts in
-               match List.hd ts with
-               | None -> return None
-               | Some lhs ->
-                   let lhs = Tuple.T2.get1 lhs in
-                   let rhs =
-                     ts |> List.map ~f:Tuple.T2.get2 |> Lwt_stream.of_list
-                   in
-                   let lval =
-                     Option.map (self#key_layout a.Q.meta) ~f:(fun l ->
-                         self#scalars {a with meta= l} lhs )
-                   in
-                   let%lwt rval = self#eval lctx rhs q2 in
-                   return (Some (lhs, lval, rval)) )
+        let extract_lhs t = List.take t n in
+        let extract_rhs t = List.drop t n in
+        let tups =
+          if self#debug then
+            Lwt_stream.map
+              (fun t ->
+                print_s ([%sexp_of: string * Value.t list] ("for", t)) ;
+                t )
+              tups
+          else tups
+        in
+        tups
+        (* Extract the row number from each tuple. *)
+        |> Lwt_stream.map (function
+             | [] -> Error.of_string "Unexpected empty tuple." |> Error.raise
+             | rn :: t -> (rn, t) )
+        (* Group by row numbers *)
+        |> group_by (fun (rn1, _) (rn2, _) -> [%compare.equal: Value.t] rn1 rn2)
+        (* Drop the row number from each group. *)
+        |> Lwt_stream.map (fun g -> List.map g ~f:(fun (_, t) -> t))
+        (* Split each group into one lhs and many rhs. *)
+        |> Lwt_stream.map (fun g ->
+               let lhs = List.hd_exn g |> extract_lhs in
+               let rhs = List.map g ~f:extract_rhs in
+               (lhs, rhs) )
+        (* Process each group. *)
+        |> Lwt_stream.map_s (fun (lhs, rhs) ->
+               let lval =
+                 Option.map (self#key_layout a.Q.meta) ~f:(fun l ->
+                     self#scalars {a with meta= l} lhs )
+               in
+               let%lwt rval = self#eval lctx (Lwt_stream.of_list rhs) q2 in
+               return (lhs, lval, rval) )
         |> run_lwt fold
 
       method private eval_concat lctx tups a qs : 'a Lwt.t =
         let (Fold {init; fold; extract}) = self#concat a in
+        let tups =
+          if self#debug then
+            Lwt_stream.map
+              (fun t ->
+                print_s ([%sexp_of: string * Value.t list] ("concat", t)) ;
+                t )
+              tups
+          else tups
+        in
         let widths = List.map qs ~f:Q.width in
         let%lwt acc =
           List.foldi ~init:(return init) qs ~f:(fun oidx acc q ->
               let%lwt acc = acc in
               let%lwt group = extract_group widths oidx tups in
-              let%lwt v = self#eval lctx group q in
+              let%lwt v = self#eval lctx (Lwt_stream.of_list group) q in
               return (fold acc v) )
         in
         return (extract acc)
 
       method private eval_scalars _ tups a ps : 'a Lwt.t =
+        let tups =
+          if self#debug then
+            Lwt_stream.map
+              (fun t ->
+                print_s ([%sexp_of: string * Value.t list] ("scalar", t)) ;
+                t )
+              tups
+          else tups
+        in
         let%lwt tup = Lwt_stream.get tups in
         let values =
           match tup with
@@ -535,7 +589,7 @@ module Make (Config : Config.S) = struct
           Lwt_list.mapi_s
             (fun oidx (n, q) ->
               let%lwt strm = extract_group widths oidx tups in
-              let%lwt v = self#eval lctx strm q in
+              let%lwt v = self#eval lctx (Lwt_stream.of_list strm) q in
               return (n, v) )
             binds
         in
@@ -546,13 +600,22 @@ module Make (Config : Config.S) = struct
         in
         (* The n+1 group contains values for the layout in the body of the let. *)
         let%lwt strm = extract_group widths (List.length binds) tups in
-        self#eval lctx strm q
+        self#eval lctx (Lwt_stream.of_list strm) q
 
       method private eval_var lctx tups n : 'a Lwt.t =
         let%lwt () = Lwt_stream.junk tups in
         return (Map.find_exn lctx n)
 
       method private eval lctx tups a : 'a Lwt.t =
+        let tups =
+          let l' = Q.width a in
+          Lwt_stream.map
+            (fun t ->
+              let l = List.length t in
+              if l = l' then t
+              else Error.createf "Expected length %d got %d" l' l |> Error.raise )
+            tups
+        in
         match a.Q.node with
         | Q.Let x -> self#eval_let lctx tups x
         | Q.Var x -> self#eval_var lctx tups x
@@ -565,10 +628,11 @@ module Make (Config : Config.S) = struct
         let q = A.ensure_alias r |> Q.of_ralgebra |> Q.hoist_all in
         let r = Q.to_ralgebra q |> simplify in
         let sql = Sql.of_ralgebra r in
+        Logs.debug (fun m -> m "Running query %s" (Sql.to_string_hum sql)) ;
         let tups =
           Db.exec_cursor_lwt_exn conn
             (A.schema_exn r |> List.map ~f:Name.type_exn)
-            (Sql.to_string_hum sql)
+            (Sql.to_string sql)
           |> Lwt_stream.map Array.to_list
         in
         self#eval (Map.empty (module String)) tups (Q.to_width q) |> Lwt_main.run
@@ -677,9 +741,9 @@ module Make (Config : Config.S) = struct
         let kind =
           match kind with Cross -> `Cross | Zip -> failwith "" | Concat -> `Concat
         in
-        let init = [] in
-        let fold ts t = t :: ts in
-        let extract ts = T.TupleT (List.rev ts, {kind}) in
+        let init = RevList.empty in
+        let fold = RevList.( ++ ) in
+        let extract ts = T.TupleT (RevList.to_list ts, {kind}) in
         Fold {init; fold; extract}
 
       method hash_idx _ h =
@@ -808,21 +872,24 @@ let%test_module _ =
       SELECT
           "x0_0" AS "x0_0_0",
           "x1_0" AS "x1_0_0",
-          "x2_0" AS "x2_0_0"
+          "x2_0" AS "x2_0_0",
+          "x3_0" AS "x3_0_0"
       FROM (
           SELECT
-              r1_0. "f" AS "f_0",
-              r1_0. "g" AS "g_0"
+              row_number() OVER () AS "rn0_0",
+              r1_0. "f" AS "f_1",
+              r1_0. "g" AS "g_1"
           FROM
               "r1" AS "r1_0") AS "t1",
           LATERAL (
               SELECT
-                  "f_0" AS "x0_0",
-                  "g_0" AS "x1_0",
-                  "g_0" AS "x2_0") AS "t0"
+                  "rn0_0" AS "x0_0",
+                  "f_1" AS "x1_0",
+                  "g_1" AS "x2_0",
+                  "g_1" AS "x3_0") AS "t0"
       ORDER BY
-          "x0_0",
-          "x1_0" |}]
+          "x1_0",
+          "x2_0" |}]
 
     let%expect_test "" =
       let ralgebra =
@@ -837,39 +904,44 @@ let%test_module _ =
         {|
       SELECT
           "counter0_0" AS "counter0_0_0",
-          "f_2" AS "f_2_0",
-          "x3_0" AS "x3_0_0",
+          "f_3" AS "f_3_0",
           "x4_0" AS "x4_0_0",
-          "x5_0" AS "x5_0_0"
+          "x5_0" AS "x5_0_0",
+          "x6_0" AS "x6_0_0",
+          "x7_0" AS "x7_0_0"
       FROM ((
               SELECT
                   0 AS "counter0_0",
-                  0 AS "f_2",
-                  (null::integer) AS "x3_0",
+                  0 AS "f_3",
                   (null::integer) AS "x4_0",
-                  (null::integer) AS "x5_0")
+                  (null::integer) AS "x5_0",
+                  (null::integer) AS "x6_0",
+                  (null::integer) AS "x7_0")
           UNION ALL (
               SELECT
                   1 AS "counter0_1",
-                  (null::integer) AS "f_4",
-                  "x3_1" AS "x3_2",
+                  (null::integer) AS "f_6",
                   "x4_1" AS "x4_2",
-                  "x5_1" AS "x5_2"
+                  "x5_1" AS "x5_2",
+                  "x6_1" AS "x6_2",
+                  "x7_1" AS "x7_2"
               FROM (
                   SELECT
-                      r1_1. "f" AS "f_3",
-                      r1_1. "g" AS "g_2"
+                      row_number() OVER () AS "rn1_0",
+                      r1_1. "f" AS "f_5",
+                      r1_1. "g" AS "g_4"
                   FROM
                       "r1" AS "r1_1") AS "t3",
                   LATERAL (
                       SELECT
-                          "f_3" AS "x3_1",
-                          "g_2" AS "x4_1",
-                          "g_2" AS "x5_1") AS "t2")) AS "t4"
+                          "rn1_0" AS "x4_1",
+                          "f_5" AS "x5_1",
+                          "g_4" AS "x6_1",
+                          "g_4" AS "x7_1") AS "t2")) AS "t4"
       ORDER BY
           "counter0_0",
-          "x3_0",
-          "x4_0" |}]
+          "x5_0",
+          "x6_0" |}]
 
     let%expect_test "" =
       let ralgebra = load_string Test_util.sum_complex in
@@ -878,35 +950,38 @@ let%test_module _ =
       Format.printf "%a" pp r ;
       [%expect
         {|
-      orderby([x6, x7],
-        depjoin(r1 as k,
-          select([k.f as x6, k.g as x7, f as x8, v as x9],
+      orderby([x9, x10],
+        depjoin(select([row_number() as rn2, f, g], r1) as k,
+          select([k.rn2 as x8, k.f as x9, k.g as x10, f as x11, v as x12],
             atuple([ascalar(k.f), ascalar((k.g - k.f) as v)], cross)))) |}] ;
       let sql = Sql.of_ralgebra r in
       printf "%s" (Sql.to_string_hum sql) ;
       [%expect
         {|
       SELECT
-          "x6_0" AS "x6_0_0",
-          "x7_0" AS "x7_0_0",
           "x8_0" AS "x8_0_0",
-          "x9_0" AS "x9_0_0"
+          "x9_0" AS "x9_0_0",
+          "x10_0" AS "x10_0_0",
+          "x11_0" AS "x11_0_0",
+          "x12_0" AS "x12_0_0"
       FROM (
           SELECT
-              r1_2. "f" AS "f_5",
-              r1_2. "g" AS "g_4"
+              row_number() OVER () AS "rn2_0",
+              r1_2. "f" AS "f_8",
+              r1_2. "g" AS "g_7"
           FROM
               "r1" AS "r1_2") AS "t6",
           LATERAL (
               SELECT
-                  "f_5" AS "x6_0",
-                  "g_4" AS "x7_0",
-                  "f_5" AS "x8_0",
-                  ("g_4") - ("f_5") AS "x9_0"
+                  "rn2_0" AS "x8_0",
+                  "f_8" AS "x9_0",
+                  "g_7" AS "x10_0",
+                  "f_8" AS "x11_0",
+                  ("g_7") - ("f_8") AS "x12_0"
               WHERE (TRUE)) AS "t5"
       ORDER BY
-          "x6_0",
-          "x7_0" |}]
+          "x9_0",
+          "x10_0" |}]
 
     let%expect_test "" =
       let ralgebra = load_string "alist(r1 as k, alist(r1 as j, ascalar(j.f)))" in
@@ -915,49 +990,62 @@ let%test_module _ =
       Format.printf "%a" pp r ;
       [%expect
         {|
-        orderby([x13, x14, x15, x16],
-          depjoin(r1 as k,
-            select([k.f as x13, k.g as x14, x10 as x15, x11 as x16, x12 as x17],
-              depjoin(r1 as j,
-                select([j.f as x10, j.g as x11, f as x12],
+        orderby([x18, x19, x21, x22],
+          depjoin(select([row_number() as rn3, f, g], r1) as k,
+            select([k.rn3 as x17,
+                    k.f as x18,
+                    k.g as x19,
+                    x13 as x20,
+                    x14 as x21,
+                    x15 as x22,
+                    x16 as x23],
+              depjoin(select([row_number() as rn4, f, g], r1) as j,
+                select([j.rn4 as x13, j.f as x14, j.g as x15, f as x16],
                   atuple([ascalar(j.f)], cross)))))) |}] ;
       let sql = Sql.of_ralgebra r in
       printf "%s" (Sql.to_string_hum sql) ;
       [%expect
         {|
         SELECT
-            "x13_0" AS "x13_0_0",
-            "x14_0" AS "x14_0_0",
-            "x15_0" AS "x15_0_0",
-            "x16_0" AS "x16_0_0",
-            "x17_0" AS "x17_0_0"
+            "x17_0" AS "x17_0_0",
+            "x18_0" AS "x18_0_0",
+            "x19_0" AS "x19_0_0",
+            "x20_0" AS "x20_0_0",
+            "x21_0" AS "x21_0_0",
+            "x22_0" AS "x22_0_0",
+            "x23_0" AS "x23_0_0"
         FROM (
             SELECT
-                r1_3. "f" AS "f_7",
-                r1_3. "g" AS "g_5"
+                row_number() OVER () AS "rn3_0",
+                r1_3. "f" AS "f_11",
+                r1_3. "g" AS "g_9"
             FROM
                 "r1" AS "r1_3") AS "t10",
             LATERAL (
                 SELECT
-                    "f_7" AS "x13_0",
-                    "g_5" AS "x14_0",
-                    "x10_0" AS "x15_0",
-                    "x11_0" AS "x16_0",
-                    "x12_0" AS "x17_0"
+                    "rn3_0" AS "x17_0",
+                    "f_11" AS "x18_0",
+                    "g_9" AS "x19_0",
+                    "x13_0" AS "x20_0",
+                    "x14_0" AS "x21_0",
+                    "x15_0" AS "x22_0",
+                    "x16_0" AS "x23_0"
                 FROM (
                     SELECT
-                        r1_4. "f" AS "f_8",
-                        r1_4. "g" AS "g_6"
+                        row_number() OVER () AS "rn4_0",
+                        r1_4. "f" AS "f_13",
+                        r1_4. "g" AS "g_11"
                     FROM
                         "r1" AS "r1_4") AS "t8",
                     LATERAL (
                         SELECT
-                            "f_8" AS "x10_0",
-                            "g_6" AS "x11_0",
-                            "f_8" AS "x12_0") AS "t7") AS "t9"
+                            "rn4_0" AS "x13_0",
+                            "f_13" AS "x14_0",
+                            "g_11" AS "x15_0",
+                            "f_13" AS "x16_0") AS "t7") AS "t9"
         ORDER BY
-            "x13_0",
-            "x14_0",
-            "x15_0",
-            "x16_0" |}]
+            "x18_0",
+            "x19_0",
+            "x21_0",
+            "x22_0" |}]
   end )

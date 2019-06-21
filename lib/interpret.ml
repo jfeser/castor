@@ -172,7 +172,7 @@ let eval {db; params} r =
     | String x -> String x
     | Null _ -> Null
     | As_pred (p, _) -> e p
-    | Count | Sum _ | Avg _ | Min _ | Max _ ->
+    | Count | Sum _ | Avg _ | Min _ | Max _ | Row_number ->
         Error.(create "Unexpected aggregate." p [%sexp_of: pred] |> raise)
     | If (p1, p2, p3) -> if to_bool (e p1) then e p2 else e p3
     | First r -> eval ctx r |> Seq.hd_exn |> to_single_value

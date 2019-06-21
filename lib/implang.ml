@@ -286,7 +286,7 @@ module Builder = struct
           (** The type context is separate from the locals because it also includes
        global variables. *)
     ; type_ctx: Type.PrimType.t Hashtbl.M(String).t
-    ; body: prog ref }
+    ; body: stmt RevList.t ref }
   [@@deriving sexp]
 
   let type_of e b = type_of b.type_ctx e
@@ -309,11 +309,11 @@ module Builder = struct
       | `Ok l -> l
       | `Duplicate_key _ -> fail (Error.of_string "Duplicate argument.")
     in
-    {name; args; ret; locals; body= ref []; type_ctx}
+    {name; args; ret; locals; body= ref RevList.empty; type_ctx}
 
   (** Create a function builder with an empty body and a copy of the locals
       table. *)
-  let new_scope b = {b with body= ref []}
+  let new_scope b = {b with body= ref RevList.empty}
 
   let build_var ?(persistent = true) n t {locals; type_ctx; _} =
     if Hashtbl.mem locals n then
@@ -330,50 +330,54 @@ module Builder = struct
     | None ->
         Error.create "Not an argument index." (i, b) [%sexp_of: int * t] |> fail
 
-  let build_yield e b = b.body := Yield e :: !(b.body)
+  let build_yield e b = b.body := RevList.(!(b.body) ++ Yield e)
 
   let build_func {name; args; ret; locals; body; _} =
-    {name; args; ret_type= ret; locals= Hashtbl.data locals; body= List.rev !body}
+    { name
+    ; args
+    ; ret_type= ret
+    ; locals= Hashtbl.data locals
+    ; body= RevList.to_list !body }
 
   let build_assign e v b =
     let lhs_t = type_of v b in
     let rhs_t = type_of e b in
     ignore (Type.PrimType.unify lhs_t rhs_t) ;
-    b.body := Assign {lhs= name_of_var v; rhs= e} :: !(b.body)
+    b.body := RevList.(!(b.body) ++ Assign {lhs= name_of_var v; rhs= e})
 
   let build_unchecked_assign e v b =
-    b.body := Assign {lhs= name_of_var v; rhs= e} :: !(b.body)
+    b.body := RevList.(!(b.body) ++ Assign {lhs= name_of_var v; rhs= e})
 
   let build_print e b =
     let t = type_of e b in
-    b.body := Print (t, e) :: !(b.body)
+    b.body := RevList.(!(b.body) ++ Print (t, e))
 
   let build_consume e b =
     let t = type_of e b in
-    b.body := Consume (t, e) :: !(b.body)
+    b.body := RevList.(!(b.body) ++ Consume (t, e))
 
-  let build_return e b = b.body := Return e :: !(b.body)
+  let build_return e b = b.body := RevList.(!(b.body) ++ Return e)
 
   let build_loop c f b =
     let child_b = new_scope b in
     f child_b ;
-    b.body := Loop {cond= c; body= List.rev !(child_b.body)} :: !(b.body)
+    b.body := RevList.(!(b.body) ++ Loop {cond= c; body= to_list !(child_b.body)})
 
   let build_iter (f : func) a b =
-    b.body := Iter {func= f.name; args= a; var= ""} :: !(b.body)
+    b.body := RevList.(!(b.body) ++ Iter {func= f.name; args= a; var= ""})
 
   let build_step var (iter : func) b =
-    b.body := Step {var= name_of_var var; iter= iter.name} :: !(b.body)
+    b.body := RevList.(!(b.body) ++ Step {var= name_of_var var; iter= iter.name})
 
   let build_if ~cond ~then_ ~else_ b =
     let b_then = new_scope b in
     let b_else = new_scope b in
     then_ b_then ;
     else_ b_else ;
-    let ite =
-      If {cond; tcase= List.rev !(b_then.body); fcase= List.rev !(b_else.body)}
-    in
-    b.body := ite :: !(b.body)
+    b.body :=
+      RevList.(
+        !(b.body)
+        ++ If {cond; tcase= to_list !(b_then.body); fcase= to_list !(b_else.body)})
 
   let build_var ?persistent n t b =
     let n = n ^ Fresh.name Global.fresh "%d" in

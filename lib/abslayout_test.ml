@@ -236,6 +236,38 @@ let%test_module _ =
     OrderedIdx key: ((Date 2016-12-01))
     Scalar: (Date 2016-12-01) |}]
 
+    let%expect_test "ordered-idx-dates" =
+      run_print_test
+        "AOrderedIdx(dedup(select([f], r_date)) as k, alist(filter(f = k.f, \
+         select([f], r_date)) as k1, ascalar(k1.f)), null, null)" ;
+      [%expect
+        {|
+    OrderedIdx
+    OrderedIdx key: ((Date 2016-12-01))
+    List
+    List key: ((Date 2016-12-01))
+    Scalar: (Date 2016-12-01)
+    OrderedIdx key: ((Date 2017-10-05))
+    List
+    List key: ((Date 2017-10-05))
+    Scalar: (Date 2017-10-05)
+    OrderedIdx key: ((Date 2018-01-01))
+    List
+    List key: ((Date 2018-01-01))
+    Scalar: (Date 2018-01-01)
+    List key: ((Date 2018-01-01))
+    Scalar: (Date 2018-01-01)
+    List key: ((Date 2018-01-01))
+    Scalar: (Date 2018-01-01)
+    OrderedIdx key: ((Date 2018-01-23))
+    List
+    List key: ((Date 2018-01-23))
+    Scalar: (Date 2018-01-23)
+    OrderedIdx key: ((Date 2018-09-01))
+    List
+    List key: ((Date 2018-09-01))
+    Scalar: (Date 2018-09-01) |}]
+
     let%expect_test "example-1" =
       Demomatch.(run_print_test ~params:Demomatch.example_params (example1 "log")) ;
       [%expect
