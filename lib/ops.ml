@@ -216,7 +216,10 @@ module Make (C : Config.S) = struct
     let f p r =
       Seq.find_map
         (pset (Path.get_exn p r))
-        ~f:(fun p' -> apply (at_ tf (fun _ -> Some p')) p r)
+        ~f:(fun p' ->
+          Option.bind
+            (apply (at_ tf (fun _ -> Some p')) p r)
+            ~f:(fun r' -> if Abslayout.O.(r = r') then None else Some r') )
     in
     global ~reraise:false ~short_name:"first" f
       (sprintf "first %s in <path set>" tf.name)

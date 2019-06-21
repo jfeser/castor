@@ -319,48 +319,41 @@ module Make (C : Config.S) = struct
     let rhs_schema = A.schema_exn rhs |> Set.of_list (module Name) in
     Pred.names pred |> Set.filter ~f:(Set.mem rhs_schema)
 
-  let rec estimate_cost parts r =
+  let rec size_cost parts r =
     let sum = List.sum (module Float) in
     match r with
     | Flat _ ->
         let _, _, nt = estimate_ntuples_parted parts r in
-        let scan_cost =
-          sum (schema_types (to_ralgebra r)) ~f:Cost.read *. nt
-        in
-        let size_cost =
-          (sum (schema_types (to_ralgebra r)) ~f:Cost.size *. nt)
-          +. Cost.list_size
-        in
-        [|size_cost; scan_cost|]
+        (sum (schema_types (to_ralgebra r)) ~f:Cost.size *. nt)
+        +. Cost.list_size
     | Nest {lhs; rhs; pred} ->
         let _, _, lhs_nt = estimate_ntuples_parted parts lhs in
-        let lhs_costs = estimate_cost parts lhs in
-        let lhs_size = lhs_costs.(0) in
-        let lhs_scan = lhs_costs.(1) in
-        let rhs_per_partition_costs =
-          estimate_cost (Set.union (to_parts (to_ralgebra rhs) pred) parts) rhs
+        let rhs_per_partition_cost =
+          size_cost (Set.union (to_parts (to_ralgebra rhs) pred) parts) rhs
         in
-        let size_cost = lhs_size +. (lhs_nt *. rhs_per_partition_costs.(0)) in
-        let scan_cost = lhs_scan +. (lhs_nt *. rhs_per_partition_costs.(1)) in
-        [|size_cost; scan_cost|]
+        size_cost parts lhs +. (lhs_nt *. rhs_per_partition_cost)
+    | Hash {lhs; rhs; _} -> size_cost parts lhs +. size_cost parts rhs
+
+  let rec scan_cost parts r =
+    let sum = List.sum (module Float) in
+    match r with
+    | Flat _ ->
+        let _, _, nt = estimate_ntuples_parted parts r in
+        sum (schema_types (to_ralgebra r)) ~f:Cost.read *. nt
+    | Nest {lhs; rhs; pred} ->
+        let _, _, lhs_nt = estimate_ntuples_parted parts lhs in
+        let rhs_per_partition_cost =
+          scan_cost (Set.union (to_parts (to_ralgebra rhs) pred) parts) rhs
+        in
+        scan_cost parts lhs +. (lhs_nt *. rhs_per_partition_cost)
     | Hash {lkey; lhs; rhs; rkey} ->
         let _, _, nt_lhs = estimate_ntuples_parted parts lhs in
-        let lhs_costs = estimate_cost parts lhs in
-        let lhs_size = lhs_costs.(0) in
-        let lhs_scan = lhs_costs.(1) in
-        let rhs_costs = estimate_cost parts lhs in
-        let rhs_size = rhs_costs.(0) in
-        let rhs_per_partition_costs =
+        let rhs_per_partition_cost =
           let pred = A.(Binop (Eq, lkey, rkey)) in
-          estimate_cost (Set.union (to_parts (to_ralgebra rhs) pred) parts) rhs
+          scan_cost (Set.union (to_parts (to_ralgebra rhs) pred) parts) rhs
         in
-        let size_cost = lhs_size +. rhs_size in
-        let scan_cost =
-          lhs_scan
-          +. nt_lhs
-             *. (Cost.hash (Pred.to_type lkey) +. rhs_per_partition_costs.(1))
-        in
-        [|size_cost; scan_cost|]
+        scan_cost parts lhs
+        +. (nt_lhs *. (Cost.hash (Pred.to_type lkey) +. rhs_per_partition_cost))
 
   module ParetoSet = struct
     type 'a t = (float array * 'a) list
@@ -402,7 +395,7 @@ module Make (C : Config.S) = struct
         m "Choosing join for space %s." (JoinSpace.to_string s) ) ;
     if JoinSpace.length s = 1 then
       let j = Flat (JoinSpace.choose s) in
-      ParetoSet.singleton (estimate_cost parts j) j
+      ParetoSet.singleton [|scan_cost parts j|] j
     else
       JoinSpace.partition_fold s ~init:ParetoSet.empty
         ~f:(fun cs (s1, s2, es) ->
@@ -416,25 +409,25 @@ module Make (C : Config.S) = struct
             List.cartesian_product (select_flat s1) (select_flat s2)
             |> List.map ~f:(fun (r1, r2) ->
                    let j = Flat (A.join pred r1 r2) in
-                   (estimate_cost parts j, j) )
+                   ([|scan_cost parts j|], j) )
             |> ParetoSet.of_list
           in
           (* Add nest joins to pareto set. *)
-          let nest_joins =
-            let lhs_parts =
-              Set.union (to_parts (JoinSpace.to_ralgebra s1) pred) parts
-            in
-            let rhs_parts =
-              Set.union (to_parts (JoinSpace.to_ralgebra s2) pred) parts
-            in
-            let lhs_set = List.map (opt lhs_parts s1) ~f:(fun (_, j) -> j) in
-            let rhs_set = List.map (opt rhs_parts s2) ~f:(fun (_, j) -> j) in
-            List.cartesian_product lhs_set rhs_set
-            |> List.map ~f:(fun (j1, j2) ->
-                   let j = Nest {lhs= j1; rhs= j2; pred} in
-                   (estimate_cost parts j, j) )
-            |> ParetoSet.of_list
-          in
+          (* let nest_joins =
+           *   let lhs_parts =
+           *     Set.union (to_parts (JoinSpace.to_ralgebra s1) pred) parts
+           *   in
+           *   let rhs_parts =
+           *     Set.union (to_parts (JoinSpace.to_ralgebra s2) pred) parts
+           *   in
+           *   let lhs_set = List.map (opt lhs_parts s1) ~f:(fun (_, j) -> j) in
+           *   let rhs_set = List.map (opt rhs_parts s2) ~f:(fun (_, j) -> j) in
+           *   List.cartesian_product lhs_set rhs_set
+           *   |> List.map ~f:(fun (j1, j2) ->
+           *          let j = Nest {lhs= j1; rhs= j2; pred} in
+           *          ([|scan_cost parts j|], j) )
+           *   |> ParetoSet.of_list
+           * in *)
           (* Add hash joins to pareto set. *)
           let hash_joins =
             let lhs_schema =
@@ -471,9 +464,9 @@ module Make (C : Config.S) = struct
               | _ -> None
             in
             Option.value m_s ~default:[]
-            |> List.map ~f:(fun j -> (estimate_cost parts j, j))
+            |> List.map ~f:(fun j -> ([|scan_cost parts j|], j))
           in
-          ParetoSet.union_all [cs; flat_joins; nest_joins; hash_joins] )
+          ParetoSet.union_all [cs; flat_joins; (* nest_joins; *) hash_joins] )
 
   let opt =
     let module Key = struct
@@ -522,7 +515,7 @@ module Make (C : Config.S) = struct
   let transform =
     let f r =
       opt r
-      |> ParetoSet.min_elt (fun a -> a.(1))
+      |> ParetoSet.min_elt (fun a -> a.(0))
       |> Option.map ~f:(fun j -> seq (of_func (reshape j)) (emit_joins j))
       |> Option.bind ~f:(fun tf -> apply tf Path.root r)
     in

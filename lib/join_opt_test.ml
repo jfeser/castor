@@ -59,6 +59,8 @@ let%expect_test "parted-cost" =
   |> [%sexp_of: int * int * float] |> print_s ;
   [%expect {| (1 1 1) |}]
 
+let estimate_cost p r = [|size_cost p r; scan_cost p r|]
+
 let%expect_test "cost" =
   estimate_cost
     (Set.empty (module Name))
@@ -110,7 +112,7 @@ let%expect_test "cost" =
   [%expect {|
     (194626 47904)
     (138592 32336)
-    (2932 32361) |}]
+    (138208 32361) |}]
 
 let%expect_test "to-from-ralgebra" =
   let r =
@@ -181,7 +183,7 @@ let%expect_test "join-opt" =
   |> [%sexp_of: (float array * t) list] |> print_s ;
   [%expect
     {|
-    (((138592 32336)
+    (((32336)
       (Nest
        (lhs
         (Flat
@@ -220,57 +222,7 @@ let%expect_test "join-opt" =
   |> [%sexp_of: (float array * t) list] |> print_s ;
   [%expect
     {|
-    (((258866 68400)
-      (Nest
-       (lhs
-        (Flat
-         ((node
-           (Relation
-            ((r_name nation)
-             (r_schema
-              ((((scope ()) (name n_nationkey)) ((scope ()) (name n_name))
-                ((scope ()) (name n_regionkey)) ((scope ()) (name n_comment))))))))
-          (meta ()))))
-       (rhs
-        (Flat
-         ((node
-           (Join
-            ((pred
-              (Binop
-               (Eq (Name ((scope ()) (name c_custkey)))
-                (Name ((scope ()) (name o_custkey))))))
-             (r1
-              ((node
-                (Relation
-                 ((r_name customer)
-                  (r_schema
-                   ((((scope ()) (name c_custkey)) ((scope ()) (name c_name))
-                     ((scope ()) (name c_address))
-                     ((scope ()) (name c_nationkey)) ((scope ()) (name c_phone))
-                     ((scope ()) (name c_acctbal))
-                     ((scope ()) (name c_mktsegment))
-                     ((scope ()) (name c_comment))))))))
-               (meta ())))
-             (r2
-              ((node
-                (Relation
-                 ((r_name orders)
-                  (r_schema
-                   ((((scope ()) (name o_orderkey)) ((scope ()) (name o_custkey))
-                     ((scope ()) (name o_orderstatus))
-                     ((scope ()) (name o_totalprice))
-                     ((scope ()) (name o_orderdate))
-                     ((scope ()) (name o_orderpriority))
-                     ((scope ()) (name o_clerk))
-                     ((scope ()) (name o_shippriority))
-                     ((scope ()) (name o_comment))))))))
-               (meta ()))))))
-          (meta ()))))
-       (pred
-        (Binop
-         (Eq (Name ((scope ()) (name c_nationkey)))
-          (Name ((scope ()) (name n_nationkey))))))))
-     ((274559.99999999994 68335.999999999985)
+    (((68335.999999999985)
       (Nest
        (lhs
         (Flat

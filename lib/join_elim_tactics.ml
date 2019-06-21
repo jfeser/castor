@@ -18,11 +18,12 @@ module Make (C : Config.S) = struct
     | Join {pred; r1; r2} ->
         let scope = Fresh.name Global.fresh "s%d" in
         let pred = Pred.scoped (schema_exn r1) scope pred in
-        let slist =
-          let r1_schema = Schema.scoped scope (schema_exn r1) in
-          r1_schema @ schema_exn r2 |> List.map ~f:(fun n -> Name n)
+        let tuple_elems =
+          ( schema_exn r1 |> Schema.scoped scope |> Schema.to_select_list
+          |> List.map ~f:scalar )
+          @ [filter pred r2]
         in
-        Some (dep_join r1 scope (select slist (filter pred r2)))
+        Some (list r1 scope (tuple tuple_elems Cross))
     | _ -> None
 
   let elim_join_nest = of_func elim_join_nest ~name:"elim-join-nest"

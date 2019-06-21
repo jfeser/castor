@@ -19,8 +19,10 @@ module Make (Config : Config.S) = struct
       ->
         len t
     | ListT (elem_t, m) -> AbsInt.(read elem_t * m.count)
-    | TupleT (elem_ts, _) | FuncT (elem_ts, _) ->
-        List.sum (module AbsInt) elem_ts ~f:read
+    | FuncT ([t], _) -> read t
+    | FuncT ([t1; t2], _) -> AbsInt.(read t1 * read t2)
+    | FuncT _ -> failwith "Unexpected function."
+    | TupleT (elem_ts, _) -> List.sum (module AbsInt) elem_ts ~f:read
     | HashIdxT (_, vt, _) -> AbsInt.(join zero (read vt))
     | OrderedIdxT (_, vt, _) -> AbsInt.(join zero (read vt))
 

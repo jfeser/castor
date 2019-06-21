@@ -109,6 +109,9 @@ module Make (Config : Config.S) () = struct
   let push_all_unparameterized_filters =
     fix (for_all F.push_filter Path.(all >>? is_run_time >>? is_filter))
 
+  let hoist_all_filters =
+    fix (for_all F.hoist_filter (Path.all >>? is_filter >> parent))
+
   let elim_param_filter tf test =
     (* Eliminate comparison filters. *)
     fix
@@ -128,6 +131,7 @@ module Make (Config : Config.S) () = struct
                       [ push_all_unparameterized_filters
                       ; O.for_all S.row_store
                           Path.(all >>? is_run_time >>? is_relation)
+                      ; push_all_unparameterized_filters
                       ; fix project
                       ; Simplify_tactic.simplify ]) ]
              |> lower (min Type_cost.(cost ~kind:`Avg read))) ])
@@ -146,6 +150,8 @@ module Make (Config : Config.S) () = struct
         (* Eliminate unparameterized join nests. *)
       ; at_ Join_opt.transform
           (Path.all >>? is_join >>? not has_params >>| shallowest)
+      ; push_all_unparameterized_filters
+      ; project
       ; at_ Join_elim_tactics.elim_join_nest
           (Path.all >>? is_join >>| shallowest)
         (* Push constant filters *)
@@ -159,13 +165,8 @@ module Make (Config : Config.S) () = struct
       ; (* Eliminate comparison filters. *)
         elim_param_filter F.elim_cmp_filter is_param_cmp_filter
       ; (* Eliminate the deepest equality filter. *)
-        elim_param_filter
-          (Branching.lift (traced F.elim_eq_filter))
-          is_param_filter
+        elim_param_filter (Branching.lift F.elim_eq_filter) is_param_filter
       ; push_all_unparameterized_filters
-      ; (* Push selections above collections. *)
-        for_all Select_tactics.push_select
-          Path.(all >>? is_select >>? is_run_time >>? above is_collection)
       ; (* Eliminate all unparameterized relations. *)
         fix
           (seq_many
@@ -177,6 +178,10 @@ module Make (Config : Config.S) () = struct
                    >>| shallowest)
              ; push_all_unparameterized_filters ])
       ; push_all_unparameterized_filters
+      ; (* Push selections above collections. *)
+        fix
+          (for_all Select_tactics.push_select
+             Path.(all >>? is_select >>? is_run_time >>? above is_collection))
       ; (* Push orderby operators into compile time position if possible. *)
         fix
           (at_ push_orderby
