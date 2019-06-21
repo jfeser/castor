@@ -130,6 +130,7 @@ let project_visitor =
                     | AtLeastOne -> is_unref
                   in
                   not should_remove )
+              |> List.map ~f:(self#visit_t ())
             in
             let rs = if List.length rs = 0 then [scalar dummy] else rs in
             tuple rs Cross
