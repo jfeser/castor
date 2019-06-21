@@ -32,7 +32,7 @@ def validate(name, ordered, result_csv):
     gold_csv = "gold/%s.csv" % name
     ensure_newline(gold_csv)
     ensure_newline(result_csv)
-    if not ordered:
+    if not bool(ordered):
         sort_file(gold_csv)
         sort_file(result_csv)
     call([VALIDATE_SCRIPT, bench_num, gold_csv, result_csv])
