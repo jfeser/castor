@@ -2,7 +2,7 @@ open! Core
 open Abslayout
 
 module type S = sig
-  val serialize : Out_channel.t -> t -> t * int
+  val serialize : string -> t -> t * int
   (** Serialize a layout to a binary format.
 
       @return The layout, annotated with the byte position of each

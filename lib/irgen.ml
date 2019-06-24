@@ -744,8 +744,7 @@ struct
     in
     let type_ = Meta.(find_exn r type_) in
     let r, len =
-      if Config.code_only then (r, 0)
-      else Out_channel.(with_file data_fn ~f:(fun ch -> Serialize.serialize ch r))
+      if Config.code_only then (r, 0) else Serialize.serialize data_fn r
     in
     { iters= !iters
     ; funcs= [printer ctx r type_; consumer ctx r type_]

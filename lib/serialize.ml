@@ -124,7 +124,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
     Seq.iter hash ~f:(fun (h, p) -> hash_array.(h) <- p) ;
     (hash_array, body)
 
-  class serializer ?(size = 1024) () =
+  class _buffer_serializer ?(size = 1024) () =
     object (self : 'self)
       val buf = Buffer.create size
 
@@ -141,11 +141,29 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
       method write_into_channel ch = Out_channel.output_buffer ch self#buf
     end
 
+  class bigbuffer_serializer ?(size = 8) () =
+    object (self : 'self)
+      val buf = Bigbuffer.create size
+
+      method buf = buf
+
+      method pos = Bigbuffer.length buf
+
+      method write_string s = Bigbuffer.add_string buf s
+
+      method write_into (s : 'self) =
+        if s = self then failwith "Cannot write into self." ;
+        Bigbuffer.add_buffer s#buf self#buf
+
+      method write_into_channel ch =
+        Bigstring.really_output ch (Bigbuffer.big_contents self#buf)
+    end
+
   type msg = {msg: string; pos: int; len: int}
 
   class logged_serializer ?size () =
     object (self : 'self)
-      inherit serializer ?size () as super
+      inherit bigbuffer_serializer ?size () as super
 
       val mutable msgs = []
 
@@ -277,11 +295,9 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         in
         let extract acc =
           let%lwt kq, vs = acc in
-          Log.debug (fun m -> m "Generating hash.") ;
           let hash, hash_body =
             make_hash type_ (Queue.to_array kq |> Array.to_sequence)
           in
-          Log.debug (fun m -> m "Generating hash finished.") ;
           let hdr = make_header type_ in
           let hash_len = String.length hash_body in
           let ptr_size = Type.hi_ptr_size kt vt m in
@@ -439,7 +455,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
       | Some Many_pos -> Many_pos
       | None -> Pos pos )
 
-  let serialize ch l =
+  let serialize fn l =
     Log.info (fun m -> m "Serializing abstract layout.") ;
     let serializer = new logged_serializer () in
     let serialize =
@@ -468,9 +484,17 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
       return ()
     in
     Lwt_main.run serialize ;
-    serializer#write_into_channel ch ;
-    Option.iter layout_file ~f:(fun f ->
-        Out_channel.with_file f ~f:serializer#render ) ;
     let len = serializer#pos in
+    let data_fn, data_ch = Filename.open_temp_file "data" "bin" in
+    serializer#write_into_channel data_ch ;
+    (Unix.create_process ~prog:"mv" ~args:[data_fn; fn]).pid |> Unix.waitpid
+    |> ignore ;
+    Out_channel.close data_ch ;
+    let layout_fn, layout_ch = Filename.open_temp_file "layout" "txt" in
+    Option.iter layout_file ~f:(fun fn ->
+        serializer#render layout_ch ;
+        (Unix.create_process ~prog:"mv" ~args:[layout_fn; fn]).pid |> Unix.waitpid
+        |> ignore ) ;
+    Out_channel.close layout_ch ;
     (l, len)
 end

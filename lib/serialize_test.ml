@@ -17,9 +17,7 @@ let run_test layout_str =
   let layout = M.load_string layout_str in
   M.annotate_type layout ;
   let type_ = Meta.(find_exn layout type_) in
-  let _, len =
-    Out_channel.(with_file layout_file ~f:(fun ch -> S.serialize ch layout))
-  in
+  let _, len = S.serialize layout_file layout in
   let buf_str = In_channel.read_all layout_file |> String.escaped in
   let layout_log, did_modify =
     In_channel.input_all (In_channel.create layout_log_file) |> process_layout_log
@@ -225,8 +223,9 @@ let%expect_test "list-list" =
      "\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003") |}]
 
 let%expect_test "depjoin" =
-  run_test "depjoin(alist(r1 as k1, ascalar(k1.f)) as k3, ascalar(5))";
-  [%expect {|
+  run_test "depjoin(alist(r1 as k1, ascalar(k1.f)) as k3, ascalar(5))" ;
+  [%expect
+    {|
     0:6 Tuple body
     0:5 List body
     0:1 Scalar (=(Int 1))
