@@ -85,55 +85,70 @@ struct
     | TupleT ts -> List.mapi ts ~f:(fun i _ -> Infix.(index t i))
     | _ -> failwith "Expected a tuple type."
 
-  let build_bin_search build_key n low_target low_bound high_target high_bound
-      callback b =
+  (** True if the key is on the right side of the bound, false otherwise. *)
+  let cmp ~build_open ~build_closed bounds key b =
+    List.filter_mapi bounds ~f:(fun i bnd ->
+        let key_val = Index (key, i) in
+        Option.map bnd ~f:(function
+          | e, `Open -> build_open key_val e b
+          | e, `Closed -> build_closed key_val e b ) )
+    |> List.reduce ~f:Infix.( && )
+    |> Option.value ~default:(Bool true)
+
+  (** Build a binary search algorithm over indices in [0, n).
+
+      - build_key builds a key given an index
+  *)
+  let build_bin_search build_key n bounds callback b =
     let open Builder in
+    let lower_bounds, upper_bounds = List.unzip bounds in
+    (* True if the key is above the lower bound, false otherwise. *)
+    let is_above_lower =
+      cmp ~build_open:build_gt ~build_closed:build_ge lower_bounds
+    in
+    (* True if the key is below the upper bound, false otherwise. *)
+    let is_below_upper =
+      cmp ~build_open:build_lt ~build_closed:build_le upper_bounds
+    in
+    (* Binary search for the lower bound *)
     let low = build_defn "low" Infix.(int 0) b in
     let high = build_defn "high" n b in
-    let print ~key =
+    let print ~key idx =
       debug_print "bin_search"
         (Tuple
            [ String "lo"
            ; low
            ; String "hi"
            ; high
-           ; String "lo-target"
-           ; low_target
-           ; String "hi-target"
-           ; high_target
+           ; String "idx"
+           ; idx
            ; String "key"
            ; key ])
         b
     in
-    print ~key:(Int 0) ;
-    (* Find the lower bound *)
     build_loop
       Infix.(low < high)
       (fun b ->
         let mid = build_defn "mid" Infix.((low + high) / int 2) b in
         let key = build_key mid b in
-        print ~key ;
-        (* We're approaching the lower bound from below. If the lower bound is
-           open, then keep searching when the key equals the lower bound. *)
-        let cmp = match low_bound with `Open -> build_le | `Closed -> build_lt in
-        build_if
-          ~cond:(cmp key (Tuple [low_target]) b)
-          ~then_:(fun b -> build_assign Infix.(mid + int 1) low b)
-          ~else_:(fun b -> build_assign mid high b)
+        print ~key mid ;
+        build_if ~cond:(is_above_lower key b)
+          ~then_:(fun b -> build_assign mid high b)
+          ~else_:(fun b -> build_assign Infix.(mid + int 1) low b)
           b )
       b ;
+    (* Iterate through the keys until one is found that is above the upper bound. *)
+    let idx = build_defn "idx" low b in
     build_if
-      ~cond:Infix.(low < n)
+      ~cond:Infix.(idx < n)
       ~then_:(fun b ->
-        let key = build_defn "key" (build_key low b) b in
-        let cmp = match high_bound with `Open -> build_lt | `Closed -> build_le in
+        let key = build_defn "key" (build_key idx b) b in
         build_loop
-          Infix.(cmp key (Tuple [high_target]) b && low < n)
+          Infix.(is_below_upper key b && idx < n)
           (fun b ->
-            print ~key ;
-            callback key low b ;
-            build_assign Infix.(low + int 1) low b ;
-            build_assign (build_key low b) key b )
+            callback key idx b ;
+            build_assign Infix.(idx + int 1) idx b ;
+            build_assign (build_key idx b) key b )
           b )
       ~else_:(fun _ -> ())
       b
@@ -555,11 +570,11 @@ struct
     in
     let n = Infix.(index_len / kp_len) in
     debug_print "scanning ordered idx" start b ;
-    build_bin_search key_index n
-      (gen_pred ctx m.lookup_low b)
-      m.bound_low
-      (gen_pred ctx m.lookup_high b)
-      m.bound_high
+    let bounds =
+      let mk_bound = Option.map ~f:(fun (p, bnd) -> (gen_pred ctx p b, bnd)) in
+      List.map m.oi_lookup ~f:(fun (lb, ub) -> (mk_bound lb, mk_bound ub))
+    in
+    build_bin_search key_index n bounds
       (fun key idx b ->
         build_assign Infix.(read_ptr idx + index_len + index_start) vstart b ;
         build_assign key key_tuple b ;

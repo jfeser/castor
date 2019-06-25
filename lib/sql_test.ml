@@ -276,6 +276,6 @@ let%expect_test "ordered-idx" =
                 r1_1. "g" AS "g_3"
             FROM
                 "r1" AS "r1_1"
-            WHERE (((NULL) < ("f_1"))
+            WHERE ((("f_1") >= (NULL))
                 AND (("f_1") < (NULL)))
             AND ((r1_1. "f") = ("f_1"))) AS "t0" |}]

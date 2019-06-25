@@ -236,12 +236,17 @@ and free r =
           [ free h.hi_keys
           ; Set.diff (free h.hi_values) (exposed h.hi_keys)
           ; List.map ~f:pred_free h.hi_lookup |> union_list ]
-    | AOrderedIdx (r', r'', {lookup_low; lookup_high; _}) ->
+    | AOrderedIdx (r', r'', m) ->
+        let one_bound_free = function
+          | Some (p, _) -> pred_free p
+          | None -> empty
+        in
+        let bound_free (b1, b2) =
+          Set.union (one_bound_free b1) (one_bound_free b2)
+        in
         union_list
-          [ free r'
-          ; Set.diff (free r'') (exposed r')
-          ; pred_free lookup_low
-          ; pred_free lookup_high ]
+          ( [free r'; Set.diff (free r'') (exposed r')]
+          @ List.map ~f:bound_free m.oi_lookup )
     | ATuple (rs, (Zip | Concat)) -> List.map rs ~f:free |> union_list
     | ATuple (rs, Cross) ->
         let n, _ =
@@ -370,9 +375,9 @@ class ['a] stage_iter =
       self#visit_t `Compile h.hi_keys ;
       self#visit_t phase h.hi_values
 
-    method! visit_AOrderedIdx phase (rk, rv, {lookup_low; lookup_high; _}) =
-      self#visit_pred phase lookup_low ;
-      self#visit_pred phase lookup_high ;
+    method! visit_AOrderedIdx phase (rk, rv, m) =
+      let bound_iter = Option.iter ~f:(fun (p, _) -> self#visit_pred phase p) in
+      List.iter m.oi_lookup ~f:(fun (b1, b2) -> bound_iter b1 ; bound_iter b2) ;
       self#visit_t `Compile rk ;
       self#visit_t phase rv
 
@@ -553,17 +558,30 @@ let hash_idx_to_depjoin h =
   let slist = rk_schema @ rv_schema |> List.map ~f:(fun n -> Name n) in
   dep_join h.hi_keys h.hi_scope (select slist (filter key_pred h.hi_values))
 
-let ordered_idx_to_depjoin rk rv {lookup_low; lookup_high; _} =
+let ordered_idx_to_depjoin rk rv m =
   let scope = scope_exn rk in
   let rk_schema = schema_exn rk in
   let rv_schema = schema_exn rv in
   let key_pred =
     let rk_schema = schema_exn rk in
-    match rk_schema with
-    | [n] ->
-        Pred.conjoin
-          [Binop (Lt, lookup_low, Name n); Binop (Lt, Name n, lookup_high)]
-    | _ -> failwith "Unexpected schema."
+    List.zip_exn rk_schema m.oi_lookup
+    |> List.concat_map ~f:(fun (n, (lb, ub)) ->
+           let p1 =
+             Option.map lb ~f:(fun (p, b) ->
+                 match b with
+                 | `Closed -> [Binop (Ge, Name n, p)]
+                 | `Open -> [Binop (Gt, Name n, p)] )
+             |> Option.value ~default:[]
+           in
+           let p2 =
+             Option.map ub ~f:(fun (p, b) ->
+                 match b with
+                 | `Closed -> [Binop (Le, Name n, p)]
+                 | `Open -> [Binop (Lt, Name n, p)] )
+             |> Option.value ~default:[]
+           in
+           p1 @ p2 )
+    |> Pred.conjoin
   in
   let slist = rk_schema @ rv_schema |> List.map ~f:(fun n -> Name n) in
   dep_join (strip_scope rk) scope (select slist (filter key_pred rv))

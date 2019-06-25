@@ -60,13 +60,10 @@ module T = struct
     ; hi_key_layout: t option [@opaque]
     ; hi_lookup: pred list }
 
+  and bound = pred * ([`Open | `Closed][@opaque])
+
   and ordered_idx =
-    { oi_key_layout: t option
-    ; lookup_low: pred
-    ; lookup_high: pred
-    ; bound_low: ([`Open | `Closed][@opaque])
-    ; bound_high: ([`Open | `Closed][@opaque])
-    ; order: ([`Asc | `Desc][@opaque]) }
+    {oi_key_layout: t option; oi_lookup: (bound option * bound option) list}
 
   and tuple = Cross | Zip | Concat
 
@@ -143,6 +140,14 @@ class virtual runtime_subquery_visitor =
     method! visit_First () r = super#visit_t () r ; self#visit_Subquery r
   end
 
+let pp_option pp fmt =
+  let open Format in
+  function Some x -> fprintf fmt "%a" pp x | None -> ()
+
+let pp_tuple ?(sep = ", ") pp fmt (x, y) =
+  let open Format in
+  fprintf fmt "%a%s%a" pp x sep pp y
+
 let pp_list ?(bracket = ("[", "]")) pp fmt ls =
   let openb, closeb = bracket in
   let open Format in
@@ -190,13 +195,12 @@ let pp_kind fmt =
     | Concat -> fprintf fmt "concat")
 
 let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
+  let open Format in
   let rec pp_key fmt = function
     | [] -> failwith "Unexpected empty key."
     | [p] -> pp_pred fmt p
     | ps -> pp_list ~bracket:("(", ")") pp_pred fmt ps
-  and pp_pred fmt =
-    let open Format in
-    function
+  and pp_pred fmt = function
     | As_pred (p, n) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp_pred p n
     | Null _ -> fprintf fmt "null"
     | Int x -> if x >= 0 then fprintf fmt "%d" x else fprintf fmt "(0 - %d)" (-x)
@@ -224,12 +228,16 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
     | Substring (p1, p2, p3) ->
         fprintf fmt "@[<hov>substr(%a,@ %a,@ %a)@]" pp_pred p1 pp_pred p2 pp_pred p3
   and pp_order fmt (p, o) =
-    let open Format in
     match o with
     | Asc -> fprintf fmt "@[<hov>%a@]" pp_pred p
     | Desc -> fprintf fmt "@[<hov>%a@ desc@]" pp_pred p
+  and pp_lower_bound fmt (p, b) =
+    let op = match b with `Closed -> Ge | `Open -> Gt in
+    fprintf fmt "%a %a" pp_op (op_to_str op) pp_pred p
+  and pp_upper_bound fmt (p, b) =
+    let op = match b with `Closed -> Le | `Open -> Lt in
+    fprintf fmt "%a %a" pp_op (op_to_str op) pp_pred p
   and pp fmt {node; meta} =
-    let open Format in
     fprintf fmt "@[<hv 2>" ;
     ( match node with
     | Select (ps, r) -> fprintf fmt "select(%a,@ %a)" (pp_list pp_pred) ps pp r
@@ -252,12 +260,12 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
         fprintf fmt "atuple(%a,@ %a)" (pp_list pp) rs pp_kind kind
     | AHashIdx {hi_keys= r1; hi_scope= s; hi_values= r2; hi_lookup; _} ->
         fprintf fmt "ahashidx(%a as %s,@ %a,@ %a)" pp r1 s pp r2 pp_key hi_lookup
-    | AOrderedIdx (r1, r2, ({lookup_low; lookup_high; _} as m)) ->
-        let lop = match m.bound_low with `Closed -> Ge | `Open -> Gt in
-        let uop = match m.bound_high with `Closed -> Le | `Open -> Lt in
-        fprintf fmt "aorderedidx(%a,@ %a,@ %a %a,@ %a %a)" pp r1 pp r2 pp_op
-          (op_to_str lop) pp_pred lookup_low pp_op (op_to_str uop) pp_pred
-          lookup_high
+    | AOrderedIdx (r1, r2, {oi_lookup; _}) ->
+        fprintf fmt "aorderedidx(%a,@ %a,@ %a)" pp r1 pp r2
+          (pp_list ~bracket:("", "") (fun fmt (lb, ub) ->
+               fprintf fmt "%a, %a" (pp_option pp_lower_bound) lb
+                 (pp_option pp_upper_bound) ub ))
+          oi_lookup
     | As (n, r) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp r n ) ;
     Option.iter pp_meta ~f:(fun ppm -> fprintf fmt "#@[<hv 2>%a@]" ppm !meta) ;
     fprintf fmt "@]"

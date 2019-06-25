@@ -64,13 +64,10 @@ and hash_idx = Abslayout0.hash_idx =
   ; hi_lookup: pred list }
 [@@deriving compare, hash, sexp_of]
 
+and bound = pred * ([`Open | `Closed][@opaque])
+
 and ordered_idx = Abslayout0.ordered_idx =
-  { oi_key_layout: Abslayout0.t option
-  ; lookup_low: pred
-  ; lookup_high: pred
-  ; bound_low: [`Open | `Closed]
-  ; bound_high: [`Open | `Closed]
-  ; order: [`Asc | `Desc] }
+  {oi_key_layout: t option; oi_lookup: (bound option * bound option) list}
 [@@deriving compare, hash, sexp_of]
 
 and relation = Abslayout0.relation = {r_name: string; r_schema: Name.t list option}

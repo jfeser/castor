@@ -286,15 +286,7 @@ let eval {db; params} r =
                    ~f:(fun tv -> tk @ tv))
             else None )
         |> Option.value ~default:Seq.empty
-    | AOrderedIdx (rk, rv, {lookup_low; lookup_high; _}) ->
-        let lo = eval_pred ctx lookup_low in
-        let hi = eval_pred ctx lookup_high in
-        let sk = Schema.of_ralgebra ~scope:(scope_exn rk) rk in
-        Seq.filter (eval ctx rk) ~f:(fun t ->
-            let v = to_single_value t in
-            Value.O.(lo < v && v < hi) )
-        |> Seq.concat_map ~f:(fun tk ->
-               Seq.map (eval (Ctx.bind ctx sk tk) rv) ~f:(fun tv -> tk @ tv) )
+    | AOrderedIdx _ -> failwith "todo"
     | Dedup r ->
         eval ctx r |> Seq.to_list
         |> List.dedup_and_sort ~compare:[%compare: Tuple.t]

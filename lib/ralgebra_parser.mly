@@ -130,19 +130,17 @@ x = ralgebra; COMMA;
 e = key;
 RPAREN { A.(AHashIdx {hi_keys= r; hi_values= x; hi_key_layout = None; hi_lookup=e; hi_scope=s}) |> node $symbolstartpos $endpos }
 
-  | AORDEREDIDX; LPAREN;
-r = ralgebra; COMMA;
-x = ralgebra; COMMA;
-lb = option(lb_op); e1 = expr; COMMA;
-ub = option(ub_op); e2 = expr;
-RPAREN { A.(AOrderedIdx (r, x, { lookup_low = e1;
-                                 lookup_high = e2;
-                                 bound_low = Option.value lb ~default:`Closed;
-                                 bound_high = Option.value ub ~default:`Open;
-                                 order = `Asc;
-                                 oi_key_layout = None })) |> node $symbolstartpos $endpos }
+  | AORDEREDIDX; LPAREN; r = ralgebra; COMMA; x = ralgebra; COMMA; b = separated_list(COMMA, bound) RPAREN
+    {
+      A.(AOrderedIdx (r, x, { oi_lookup = b; oi_key_layout = None }))
+      |> node $symbolstartpos $endpos
+    }
 
   | error { error "Expected an operator or relation." $startpos }
+
+lower_bound: op = option(lb_op); e = expr { (e, Option.value op ~default:`Closed) }
+upper_bound: op = option(ub_op); e = expr { (e, Option.value op ~default:`Open) }
+bound: l = option(lower_bound); COMMA; u = option(upper_bound) { (l, u) }
 
 name:
   | r = ID; DOT; f = ID; { Name.create ~scope:r f }

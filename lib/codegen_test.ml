@@ -440,6 +440,21 @@ AOrderedIdx(OrderBy([f asc], Dedup(Select([f], r_date))) as k,
 
     exited normally |}]
 
+let%expect_test "ordered-idx-dates" =
+  run_test
+    {|
+AOrderedIdx(OrderBy([f1 asc, f2 asc], Dedup(Select([f as f1, f as f2], r_date))) as k,
+     AScalar(k.f1 as v), >= date("0000-01-01"), <= date("9999-01-01"), >= date("0000-01-01"), < date("2018-09-01"))
+|} ;
+  [%expect
+    {|
+    2016-12-01|2016-12-01|2016-12-01
+    2017-10-05|2017-10-05|2017-10-05
+    2018-01-01|2018-01-01|2018-01-01
+    2018-01-23|2018-01-23|2018-01-23
+
+    exited normally |}]
+
 let%expect_test "date-arith" =
   run_test
     {|select([date("1997-07-01") + month(3), date("1997-07-01") + day(90)], ascalar(0))|} ;

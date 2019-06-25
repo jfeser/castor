@@ -320,3 +320,22 @@ let to_nnf p =
     end
   in
   visitor#visit_pred () p
+
+let to_cnf p =
+  let visitor =
+    object (self : 'self)
+      inherit [_] Abslayout0.map as super
+
+      method! visit_Binop () (op, a1, a2) =
+        if op = Or then
+          match a2 with
+          | Binop (And, a, a') ->
+              Binop
+                ( And
+                , self#visit_Binop () (Or, a1, a)
+                , self#visit_Binop () (Or, a1, a') )
+          | _ -> super#visit_Binop () (op, a1, a2)
+        else super#visit_Binop () (op, a1, a2)
+    end
+  in
+  visitor#visit_pred () (to_nnf p)

@@ -368,10 +368,14 @@ and resolve stage outer_ctx ({node; meta} as r) =
         assert (all_has_stage kctx `Compile) ;
         let inner_ctx = Ctx.bind outer_ctx (Ctx.scoped scope kctx) in
         let vl, vctx = rsame inner_ctx l in
+        let resolve_bound =
+          Option.map ~f:(fun (p, b) -> (resolve_pred outer_ctx p, b))
+        in
         let m =
           { m with
-            lookup_low= resolve_pred outer_ctx m.lookup_low
-          ; lookup_high= resolve_pred outer_ctx m.lookup_high }
+            oi_lookup=
+              List.map m.oi_lookup ~f:(fun (lb, ub) ->
+                  (resolve_bound lb, resolve_bound ub) ) }
         in
         (AOrderedIdx (as_ scope r, vl, m), Ctx.(merge_forgiving kctx vctx))
     | As _ -> Error.(createf "Unexpected as." |> raise)
