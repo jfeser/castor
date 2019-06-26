@@ -217,6 +217,8 @@ module Ctx : sig
 
   val empty : t
 
+  val of_alist_exn : (Name.t * var) list -> t
+
   val of_schema : Name.t list -> expr list -> t
 
   val make_caller_args : t -> (string * Type0.PrimType.t) list

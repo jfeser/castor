@@ -132,6 +132,7 @@ let test_db_conn =
        ; [Int 3; Int 4; String "bar"]
        ; [Int 4; Int 6; String "foo"]
        ; [Int 5; Int 6; String "bar"] ] ;
+     create conn "ints" [("x", int_t)] (List.init 10 ~f:(fun i -> [Value.Int i])) ;
      conn)
 
 module Demomatch = struct

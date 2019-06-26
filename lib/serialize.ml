@@ -18,6 +18,14 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
 
   open Header
 
+  let int_of_string bs =
+    if String.length bs > 4 then failwith "Too many bytes." ;
+    let ret = ref 0 in
+    for i = 0 to String.length bs - 1 do
+      ret := !ret lor (int_of_char bs.[i] lsl (i * 8))
+    done ;
+    !ret
+
   (** Serialize an integer. Little endian. Width is the number of bits to use. *)
   let of_int ~byte_width x =
     if
@@ -336,13 +344,24 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
 
       method ordered_idx meta _ =
         let t = Meta.Direct.(find_exn meta Meta.type_) in
-        let _, vt, m =
+        let kt, vt, m =
           match t with OrderedIdxT (kt, vt, m) -> (kt, vt, m) | _ -> assert false
         in
         let init = return ([], new logged_serializer ()) in
-        let fold acc (_, kp, vp) =
+        let fold acc (ks, kp, vp) =
+          let ks =
+            match kt with
+            | Type.TupleT (ts, _) ->
+                List.map2_exn ks ts ~f:(fun v t ->
+                    let s = new logged_serializer ~size:8 () in
+                    self#serialize_scalar s t v ;
+                    let bytes = Bigbuffer.contents s#buf in
+                    int_of_string bytes )
+                |> Array.of_list |> Option.some
+            | _ -> None
+          in
           let%lwt keys, vals = acc and k = kp and v = vp in
-          let keys = keys @ [(k, vals#pos)] in
+          let keys = keys @ [(k, ks, vals#pos)] in
           v#write_into vals ;
           return (keys, vals)
         in
@@ -351,7 +370,14 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           (* Serialize keys and value pointers. *)
           let ptr_size = Type.oi_ptr_size vt m in
           let idxs = new logged_serializer () in
-          List.iter keys ~f:(fun (keyf, vptr) ->
+          let keys =
+            match kt with
+            | Type.TupleT _ ->
+                List.sort keys ~compare:(fun (_, k1, _) (_, k2, _) ->
+                    Zorder.compare (Option.value_exn k1) (Option.value_exn k2) )
+            | _ -> keys
+          in
+          List.iter keys ~f:(fun (keyf, _, vptr) ->
               idxs#log "Ordered idx key" ~f:(fun () -> keyf#write_into idxs) ;
               idxs#logf
                 (fun m -> m "Ordered idx ptr (=%d)" vptr)
@@ -432,20 +458,22 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         | t ->
             Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
 
+      method private serialize_scalar s type_ value =
+        match value with
+        | Value.Null -> self#serialize_null s type_
+        | Date x -> self#serialize_int s type_ (Date.to_int x)
+        | Int x -> self#serialize_int s type_ x
+        | Fixed x -> self#serialize_fixed s type_ x
+        | Bool x -> self#serialize_bool s type_ x
+        | String x -> self#serialize_string s type_ x
+
       method scalar meta _ value =
         let type_ = Meta.Direct.(find_exn meta Meta.type_) in
         let main = new logged_serializer () in
         main#logf
           (fun m ->
             m "Scalar (=%s)" ([%sexp_of: Value.t] value |> Sexp.to_string_hum) )
-          ~f:(fun () ->
-            match value with
-            | Null -> self#serialize_null main type_
-            | Date x -> self#serialize_int main type_ (Date.to_int x)
-            | Int x -> self#serialize_int main type_ x
-            | Fixed x -> self#serialize_fixed main type_ x
-            | Bool x -> self#serialize_bool main type_ x
-            | String x -> self#serialize_string main type_ x ) ;
+          ~f:(fun () -> self#serialize_scalar main type_ value) ;
         return main
     end
 

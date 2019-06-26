@@ -86,13 +86,13 @@ struct
     | _ -> failwith "Expected a tuple type."
 
   (** True if the key is on the right side of the bound, false otherwise. *)
-  let cmp ~build_open ~build_closed bounds key b =
+  let cmp ~build_open ~build_closed ~reducer bounds key b =
     List.filter_mapi bounds ~f:(fun i bnd ->
         let key_val = Index (key, i) in
         Option.map bnd ~f:(function
           | e, `Open -> build_open key_val e b
           | e, `Closed -> build_closed key_val e b ) )
-    |> List.reduce ~f:Infix.( && )
+    |> List.reduce ~f:reducer
     |> Option.value ~default:(Bool true)
 
   (** Build a binary search algorithm over indices in [0, n).
@@ -104,11 +104,23 @@ struct
     let lower_bounds, upper_bounds = List.unzip bounds in
     (* True if the key is above the lower bound, false otherwise. *)
     let is_above_lower =
-      cmp ~build_open:build_gt ~build_closed:build_ge lower_bounds
+      cmp ~build_open:build_gt ~build_closed:build_ge ~reducer:Infix.( || )
+        lower_bounds
     in
     (* True if the key is below the upper bound, false otherwise. *)
     let is_below_upper =
-      cmp ~build_open:build_lt ~build_closed:build_le upper_bounds
+      cmp ~build_open:build_lt ~build_closed:build_le ~reducer:Infix.( || )
+        upper_bounds
+    in
+    (* True if the key is above the lower bound, false otherwise. *)
+    let is_above_lower_tight =
+      cmp ~build_open:build_gt ~build_closed:build_ge ~reducer:Infix.( && )
+        lower_bounds
+    in
+    (* True if the key is below the upper bound, false otherwise. *)
+    let is_below_upper_tight =
+      cmp ~build_open:build_lt ~build_closed:build_le ~reducer:Infix.( && )
+        upper_bounds
     in
     (* Binary search for the lower bound *)
     let low = build_defn "low" Infix.(int 0) b in
@@ -146,7 +158,11 @@ struct
         build_loop
           Infix.(is_below_upper key b && idx < n)
           (fun b ->
-            callback key idx b ;
+            build_if
+              ~cond:Infix.(is_below_upper_tight key b && is_above_lower_tight key b)
+              ~then_:(fun b -> callback key idx b)
+              ~else_:(fun _ -> ())
+              b ;
             build_assign Infix.(idx + int 1) idx b ;
             build_assign (build_key idx b) key b )
           b )
@@ -755,7 +771,7 @@ struct
   let irgen ~params ~data_fn r =
     let ctx =
       List.map params ~f:(fun n -> (n, Ctx.Global (Var (Name.name n))))
-      |> Map.of_alist_exn (module Name)
+      |> Ctx.of_alist_exn
     in
     let type_ = Meta.(find_exn r type_) in
     let r, len =

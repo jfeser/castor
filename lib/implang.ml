@@ -161,9 +161,17 @@ type _ctx = _var Map.M(Name).t [@@deriving compare, sexp]
 module Ctx0 = struct
   let empty = Map.empty (module Name)
 
+  let of_alist_exn l =
+    Map.of_alist (module Name) l
+    |> function
+    | `Duplicate_key n ->
+        Error.create "Cannot create context with duplicate name." n
+          [%sexp_of: Name.t]
+        |> Error.raise
+    | `Ok x -> x
+
   let of_schema schema tup =
-    List.map2_exn schema tup ~f:(fun n e -> (n, Field e))
-    |> Map.of_alist_exn (module Name)
+    List.map2_exn schema tup ~f:(fun n e -> (n, Field e)) |> of_alist_exn
 
   (* Create an argument list for a caller. *)
   let make_caller_args ctx =

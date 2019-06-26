@@ -339,3 +339,7 @@ let to_cnf p =
     end
   in
   visitor#visit_pred () (to_nnf p)
+
+let max_of p1 p2 = if_ (binop (Lt, p1, p2)) p2 p1
+
+let min_of p1 p2 = if_ (binop (Lt, p1, p2)) p1 p2

@@ -397,10 +397,15 @@ let%expect_test "ordered-idx" =
                 key25 = (buf[kstart17 : 1]);
                 key26 = key25;
                 loop (key26[0] < buf[cstart14 : 1] + 1 && idx24 < 6 / 2) {
-                    vstart18 = buf[5 + idx24 * 2 + 1 : 1] + 6 + 5;
-                    key19 = key26;
-                    print(Tuple[Int[nonnull], Int[nonnull]],
-                    (key19[0], buf[vstart18 : 1]));
+                    if (key26[0] < buf[cstart14 : 1] + 1 &&
+                        not(key26[0] < buf[cstart14 : 1])) {
+                        vstart18 = buf[5 + idx24 * 2 + 1 : 1] + 6 + 5;
+                        key19 = key26;
+                        print(Tuple[Int[nonnull], Int[nonnull]],
+                        (key19[0], buf[vstart18 : 1]));
+                    } else {
+
+                    }
                     idx24 = idx24 + 1;
                     kstart17 = 5 + idx24 * 2;
                     key27 = (buf[kstart17 : 1]);
@@ -451,10 +456,15 @@ let%expect_test "ordered-idx" =
                 key11 = (buf[kstart3 : 1]);
                 key12 = key11;
                 loop (key12[0] < buf[cstart0 : 1] + 1 && idx10 < 6 / 2) {
-                    vstart4 = buf[5 + idx10 * 2 + 1 : 1] + 6 + 5;
-                    key5 = key12;
-                    consume(Tuple[Int[nonnull], Int[nonnull]],
-                    (key5[0], buf[vstart4 : 1]));
+                    if (key12[0] < buf[cstart0 : 1] + 1 &&
+                        not(key12[0] < buf[cstart0 : 1])) {
+                        vstart4 = buf[5 + idx10 * 2 + 1 : 1] + 6 + 5;
+                        key5 = key12;
+                        consume(Tuple[Int[nonnull], Int[nonnull]],
+                        (key5[0], buf[vstart4 : 1]));
+                    } else {
+
+                    }
                     idx10 = idx10 + 1;
                     kstart3 = 5 + idx10 * 2;
                     key13 = (buf[kstart3 : 1]);
@@ -782,24 +792,29 @@ let%expect_test "example-3" =
                          key40 = (buf[kstart32 : 1]);
                          key41 = key40;
                          loop (key41[0] < buf[cstart31 : 1] && idx39 < 10 / 2) {
-                             vstart33 =
-                             buf[1 + buf[1 : 1] + idx39 * 2 + 1 : 1] + 10 +
-                             1 + buf[1 : 1];
-                             key34 = key41;
-                             cstart42 = vstart33;
-                             i43 = 0;
-                             count44 = 1;
-                             loop (i43 < count44) {
-                                 cstart45 = cstart42;
-                                 cstart46 = cstart45 + 1;
-                                 if (buf[cstart45 : 1] == id_c) {
-                                     print(Tuple[Int[nonnull], Int[nonnull]],
-                                     (buf[cstart30 : 1], buf[cstart46 : 1]));
-                                 } else {
+                             if (key41[0] < buf[cstart31 : 1] &&
+                                 not(key41[0] < buf[cstart30 : 1])) {
+                                 vstart33 =
+                                 buf[1 + buf[1 : 1] + idx39 * 2 + 1 : 1] + 10 +
+                                 1 + buf[1 : 1];
+                                 key34 = key41;
+                                 cstart42 = vstart33;
+                                 i43 = 0;
+                                 count44 = 1;
+                                 loop (i43 < count44) {
+                                     cstart45 = cstart42;
+                                     cstart46 = cstart45 + 1;
+                                     if (buf[cstart45 : 1] == id_c) {
+                                         print(Tuple[Int[nonnull], Int[nonnull]],
+                                         (buf[cstart30 : 1], buf[cstart46 : 1]));
+                                     } else {
 
+                                     }
+                                     cstart42 = cstart42 + 2;
+                                     i43 = i43 + 1;
                                  }
-                                 cstart42 = cstart42 + 2;
-                                 i43 = i43 + 1;
+                             } else {
+
                              }
                              idx39 = idx39 + 1;
                              kstart32 = 1 + buf[1 : 1] + idx39 * 2;
@@ -874,24 +889,30 @@ let%expect_test "example-3" =
                          key16 = (buf[kstart8 : 1]);
                          key17 = key16;
                          loop (key17[0] < buf[cstart7 : 1] && idx15 < 10 / 2) {
-                             vstart9 =
-                             buf[1 + buf[1 : 1] + idx15 * 2 + 1 : 1] + 10 +
-                             1 + buf[1 : 1];
-                             key10 = key17;
-                             cstart18 = vstart9;
-                             i19 = 0;
-                             count20 = 1;
-                             loop (i19 < count20) {
-                                 cstart21 = cstart18;
-                                 cstart22 = cstart21 + 1;
-                                 if (buf[cstart21 : 1] == id_c) {
-                                     consume(Tuple[Int[nonnull], Int[nonnull]],
-                                     (buf[cstart6 : 1], buf[cstart22 : 1]));
-                                 } else {
+                             if (key17[0] < buf[cstart7 : 1] &&
+                                 not(key17[0] < buf[cstart6 : 1])) {
+                                 vstart9 =
+                                 buf[1 + buf[1 : 1] + idx15 * 2 + 1 : 1] + 10 +
+                                 1 + buf[1 : 1];
+                                 key10 = key17;
+                                 cstart18 = vstart9;
+                                 i19 = 0;
+                                 count20 = 1;
+                                 loop (i19 < count20) {
+                                     cstart21 = cstart18;
+                                     cstart22 = cstart21 + 1;
+                                     if (buf[cstart21 : 1] == id_c) {
+                                         consume(Tuple[Int[nonnull],
+                                         Int[nonnull]],
+                                         (buf[cstart6 : 1], buf[cstart22 : 1]));
+                                     } else {
 
+                                     }
+                                     cstart18 = cstart18 + 2;
+                                     i19 = i19 + 1;
                                  }
-                                 cstart18 = cstart18 + 2;
-                                 i19 = i19 + 1;
+                             } else {
+
                              }
                              idx15 = idx15 + 1;
                              kstart8 = 1 + buf[1 : 1] + idx15 * 2;
@@ -1115,25 +1136,30 @@ let%expect_test "example-3-str" =
                          key40 = (buf[kstart32 : 1]);
                          key41 = key40;
                          loop (key41[0] < buf[cstart31 : 1] && idx39 < 10 / 2) {
-                             vstart33 =
-                             buf[2 + buf[2 : 2] + 1 + idx39 * 2 + 1 : 1] + 10 +
-                             2 + buf[2 : 2] + 1;
-                             key34 = key41;
-                             cstart42 = vstart33 + 1;
-                             i43 = 0;
-                             count44 = 1;
-                             loop (i43 < count44) {
-                                 cstart45 = cstart42 + 1;
-                                 cstart46 = cstart45 + 1 + buf[cstart45 : 1];
-                                 if (load_str(cstart45 + 1, buf[cstart45 : 1]) ==
-                                     id_c) {
-                                     print(Tuple[Int[nonnull], Int[nonnull]],
-                                     (buf[cstart30 : 1], buf[cstart46 : 1]));
-                                 } else {
+                             if (key41[0] < buf[cstart31 : 1] &&
+                                 not(key41[0] < buf[cstart30 : 1])) {
+                                 vstart33 =
+                                 buf[2 + buf[2 : 2] + 1 + idx39 * 2 + 1 : 1] + 10 +
+                                 2 + buf[2 : 2] + 1;
+                                 key34 = key41;
+                                 cstart42 = vstart33 + 1;
+                                 i43 = 0;
+                                 count44 = 1;
+                                 loop (i43 < count44) {
+                                     cstart45 = cstart42 + 1;
+                                     cstart46 = cstart45 + 1 + buf[cstart45 : 1];
+                                     if (load_str(cstart45 + 1, buf[cstart45 :
+                                         1]) == id_c) {
+                                         print(Tuple[Int[nonnull], Int[nonnull]],
+                                         (buf[cstart30 : 1], buf[cstart46 : 1]));
+                                     } else {
 
+                                     }
+                                     cstart42 = cstart42 + buf[cstart42 : 1];
+                                     i43 = i43 + 1;
                                  }
-                                 cstart42 = cstart42 + buf[cstart42 : 1];
-                                 i43 = i43 + 1;
+                             } else {
+
                              }
                              idx39 = idx39 + 1;
                              kstart32 = 2 + buf[2 : 2] + 1 + idx39 * 2;
@@ -1216,25 +1242,31 @@ let%expect_test "example-3-str" =
                          key16 = (buf[kstart8 : 1]);
                          key17 = key16;
                          loop (key17[0] < buf[cstart7 : 1] && idx15 < 10 / 2) {
-                             vstart9 =
-                             buf[2 + buf[2 : 2] + 1 + idx15 * 2 + 1 : 1] + 10 +
-                             2 + buf[2 : 2] + 1;
-                             key10 = key17;
-                             cstart18 = vstart9 + 1;
-                             i19 = 0;
-                             count20 = 1;
-                             loop (i19 < count20) {
-                                 cstart21 = cstart18 + 1;
-                                 cstart22 = cstart21 + 1 + buf[cstart21 : 1];
-                                 if (load_str(cstart21 + 1, buf[cstart21 : 1]) ==
-                                     id_c) {
-                                     consume(Tuple[Int[nonnull], Int[nonnull]],
-                                     (buf[cstart6 : 1], buf[cstart22 : 1]));
-                                 } else {
+                             if (key17[0] < buf[cstart7 : 1] &&
+                                 not(key17[0] < buf[cstart6 : 1])) {
+                                 vstart9 =
+                                 buf[2 + buf[2 : 2] + 1 + idx15 * 2 + 1 : 1] + 10 +
+                                 2 + buf[2 : 2] + 1;
+                                 key10 = key17;
+                                 cstart18 = vstart9 + 1;
+                                 i19 = 0;
+                                 count20 = 1;
+                                 loop (i19 < count20) {
+                                     cstart21 = cstart18 + 1;
+                                     cstart22 = cstart21 + 1 + buf[cstart21 : 1];
+                                     if (load_str(cstart21 + 1, buf[cstart21 :
+                                         1]) == id_c) {
+                                         consume(Tuple[Int[nonnull],
+                                         Int[nonnull]],
+                                         (buf[cstart6 : 1], buf[cstart22 : 1]));
+                                     } else {
 
+                                     }
+                                     cstart18 = cstart18 + buf[cstart18 : 1];
+                                     i19 = i19 + 1;
                                  }
-                                 cstart18 = cstart18 + buf[cstart18 : 1];
-                                 i19 = i19 + 1;
+                             } else {
+
                              }
                              idx15 = idx15 + 1;
                              kstart8 = 2 + buf[2 : 2] + 1 + idx15 * 2;
