@@ -143,37 +143,13 @@ module Make (C : Config.S) = struct
     visitor#visit_pred () p
 
   let gen_ordered_idx ?lb ?ub p rk rv =
-    let t = Pred.to_type p in
-    let default_min =
-      let open Type.PrimType in
-      match t with
-      | IntT _ -> Int (Int.min_value + 1)
-      | FixedT _ -> Fixed Fixed_point.(min_value + of_int 1)
-      | DateT _ -> Date (Date.of_string "0000-01-01")
-      | _ -> failwith "Unexpected type."
-    in
-    let default_max =
-      let open Type.PrimType in
-      match t with
-      | IntT _ -> Int Int.max_value
-      | FixedT _ -> Fixed Fixed_point.max_value
-      | DateT _ -> Date (Date.of_string "9999-01-01")
-      | _ -> failwith "Unexpected type."
-    in
-    let lp, lk = Option.value lb ~default:(default_min, `Closed) in
-    let up, uk = Option.value ub ~default:(default_max, `Closed) in
     let k = Fresh.name Global.fresh "k%d" in
     let n = Fresh.name Global.fresh "x%d" in
     ordered_idx
       (dedup (select [Pred.as_pred (p, n)] rk))
       k
       (filter (Binop (Eq, Name (Name.create ~scope:k n), p)) rv)
-      { oi_key_layout= None
-      ; lookup_low= lp
-      ; bound_low= lk
-      ; lookup_high= up
-      ; bound_high= uk
-      ; order= `Desc }
+      {oi_key_layout= None; oi_lookup= [(lb, ub)]}
 
   (** A predicate `p` is a candidate lookup key into a partitioning of `r` if it
      does not depend on any of the fields in `r`.
@@ -190,7 +166,7 @@ module Make (C : Config.S) = struct
 
   let elim_cmp_filter r =
     match r.node with
-    | Filter (p, r') ->
+    | Filter (p, r') -> (
         (* Select the comparisons which have a parameter on exactly one side and
            partition by the unparameterized side of the comparison. *)
         let cmps, rest =
@@ -210,50 +186,82 @@ module Make (C : Config.S) = struct
                    else `Snd p
                | p -> `Snd p )
         in
-        let cmps = Map.of_alist_multi (module Pred) cmps in
-        Map.to_alist cmps
-        |> List.filter_map ~f:(fun (key, bounds) ->
-               let x =
-                 let open Or_error.Let_syntax in
-                 let lb =
-                   List.filter_map bounds ~f:(fun (f, p) ->
-                       match f with
-                       | `Gt -> Some (p, `Open)
-                       | `Ge -> Some (p, `Closed)
-                       | _ -> None )
+        let cmps, rest' =
+          Map.of_alist_multi (module Pred) cmps
+          |> Map.to_alist
+          |> List.map ~f:(fun (key, bounds) ->
+                 let lb, rest =
+                   let open_lb =
+                     List.filter_map bounds ~f:(fun (f, p) ->
+                         match f with `Gt -> Some p | _ -> None )
+                   in
+                   let closed_lb =
+                     List.filter_map bounds ~f:(fun (f, p) ->
+                         match f with `Ge -> Some p | _ -> None )
+                   in
+                   match
+                     (List.length open_lb = 0, List.length closed_lb = 0)
+                   with
+                   | true, true -> (None, [])
+                   | _, true ->
+                       ( Option.map (List.reduce ~f:Pred.max_of open_lb)
+                           ~f:(fun max -> (max, `Open))
+                       , [] )
+                   | _ ->
+                       ( Option.map
+                           (List.reduce ~f:Pred.max_of (open_lb @ closed_lb))
+                           ~f:(fun max -> (max, `Closed))
+                       , List.map open_lb ~f:(fun p -> Pred.binop (Gt, key, p))
+                       )
                  in
-                 let ub =
-                   List.filter_map bounds ~f:(fun (f, p) ->
-                       match f with
-                       | `Lt -> Some (p, `Open)
-                       | `Le -> Some (p, `Closed)
-                       | _ -> None )
+                 let ub, rest' =
+                   let open_ub =
+                     List.filter_map bounds ~f:(fun (f, p) ->
+                         match f with `Lt -> Some p | _ -> None )
+                   in
+                   let closed_ub =
+                     List.filter_map bounds ~f:(fun (f, p) ->
+                         match f with `Le -> Some p | _ -> None )
+                   in
+                   match
+                     (List.length open_ub = 0, List.length closed_ub = 0)
+                   with
+                   | true, true -> (None, [])
+                   | _, true ->
+                       ( Option.map (List.reduce ~f:Pred.min_of open_ub)
+                           ~f:(fun p -> (p, `Open))
+                       , [] )
+                   | _ ->
+                       ( Option.map
+                           (List.reduce ~f:Pred.min_of (open_ub @ closed_ub))
+                           ~f:(fun p -> (p, `Closed))
+                       , List.map open_ub ~f:(fun p -> Pred.binop (Gt, key, p))
+                       )
                  in
-                 let rest' =
-                   Map.remove cmps key |> Map.to_alist
-                   |> List.concat_map ~f:(fun (p, xs) ->
-                          List.map xs ~f:(fun (f, p') ->
-                              let op =
-                                match f with
-                                | `Gt -> Gt
-                                | `Lt -> Lt
-                                | `Ge -> Ge
-                                | `Le -> Le
-                              in
-                              Binop (op, p, p') ) )
-                 in
-                 let%map rk = Tactics_util.all_values [key] r' in
-                 let idx =
-                   gen_ordered_idx ?lb:(List.hd lb) ?ub:(List.hd ub) key rk r'
-                 in
-                 (rest', idx)
-               in
-               match x with
-               | Ok (rest', r) -> Some (filter (Pred.conjoin (rest @ rest')) r)
-               | Error err ->
-                   Logs.warn (fun m -> m "Elim-cmp: %a" Error.pp err) ;
-                   None )
-        |> Seq.of_list
+                 ((key, (lb, ub)), rest @ rest') )
+          |> List.unzip
+        in
+        let rest = rest @ List.concat rest' in
+        let key, cmps = List.unzip cmps in
+        let x =
+          let open Or_error.Let_syntax in
+          let%map all_keys = Tactics_util.all_values key r' in
+          let scope = Fresh.name Global.fresh "s%d" in
+          ordered_idx all_keys scope
+            (Tactics_util.select_out (schema_exn all_keys)
+               (filter
+                  ( List.map key ~f:(fun p ->
+                        Pred.binop
+                          (Eq, p, Pred.scoped (schema_exn all_keys) scope p) )
+                  |> Pred.conjoin )
+                  r'))
+            {oi_key_layout= None; oi_lookup= cmps}
+        in
+        match x with
+        | Ok r -> Seq.singleton (filter (Pred.conjoin rest) r)
+        | Error err ->
+            Logs.warn (fun m -> m "Elim-cmp: %a" Error.pp err) ;
+            Seq.empty )
     | _ -> Seq.empty
 
   let elim_cmp_filter =
