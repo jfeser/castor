@@ -136,14 +136,12 @@ struct
            ; idx
            ; String "key"
            ; key ])
-        b
     in
     build_loop
       Infix.(low < high)
       (fun b ->
         let mid = build_defn "mid" Infix.((low + high) / int 2) b in
         let key = build_key mid b in
-        print ~key mid ;
         build_if ~cond:(is_above_lower key b)
           ~then_:(fun b -> build_assign mid high b)
           ~else_:(fun b -> build_assign Infix.(mid + int 1) low b)
@@ -160,7 +158,7 @@ struct
           (fun b ->
             build_if
               ~cond:Infix.(is_below_upper_tight key b && is_above_lower_tight key b)
-              ~then_:(fun b -> callback key idx b)
+              ~then_:(fun b -> print ~key idx b ; callback key idx b)
               ~else_:(fun _ -> ())
               b ;
             build_assign Infix.(idx + int 1) idx b ;
