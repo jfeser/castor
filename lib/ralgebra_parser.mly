@@ -16,7 +16,7 @@
 %token <Abslayout0.unop> MONTH DAY YEAR NOT STRLEN EXTRACTY EXTRACTM EXTRACTD
 %token AS DEPJOIN JOIN SELECT DEDUP FILTER COUNT GROUPBY MIN MAX AVG SUM LPAREN
 RPAREN LSBRAC RSBRAC COLON DOT COMMA EOF AEMPTY ASCALAR ATUPLE ALIST AHASHIDX
-AORDEREDIDX NULL ORDERBY IF THEN ELSE DATEKW EXISTS SUBSTRING
+AORDEREDIDX NULL ORDERBY IF THEN ELSE DATEKW EXISTS SUBSTRING ROW_NUMBER
 
 %start <Abslayout0.t> ralgebra_eof
 %start <Abslayout0.pred> expr_eof
@@ -169,6 +169,7 @@ e0:
   | AVG; f = parens(expr) { A.Avg f }
   | SUM; f = parens(expr) { A.Sum f }
   | COUNT; LPAREN; RPAREN; { A.Count }
+  | ROW_NUMBER; LPAREN; RPAREN; { A.Row_number }
   | EXISTS; r = parens(ralgebra); {A.Exists (r)}
   | SUBSTRING; xs = parens(separated_nonempty_list(COMMA, expr)) {
                             match xs with

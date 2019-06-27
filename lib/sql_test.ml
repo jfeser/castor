@@ -28,8 +28,7 @@ let%expect_test "select-agg" =
 
 let%expect_test "project" =
   run_test "Select([f], r)" ;
-  [%expect
-    {|
+  [%expect {|
     SELECT
         r_0. "f" AS "f_1"
     FROM
@@ -307,4 +306,15 @@ let%expect_test "depjoin-agg" =
                     0 AS "a0_0",
                     "f_1",
                     "g_1") AS "t0") AS "t1"
+|}]
+
+let%expect_test "select-agg-window" =
+  run_test "select([count(), min(f), row_number()], r)" ;
+  [%expect {|
+    SELECT
+        count(*) AS "a0_0",
+        min(r_0. "f") AS "a1_0",
+        row_number() OVER () AS "a2_0"
+    FROM
+        "r" AS "r_0"
 |}]

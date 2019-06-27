@@ -326,8 +326,7 @@ and spj_to_sql {select; distinct; order; group; relations; conds; limit} =
       match select_kind (List.map select ~f:(fun {pred= p; _} -> p)) with
       | `Agg ->
           List.map select ~f:(fun ({pred= p; _} as entry) ->
-              { entry with
-                pred= (match Pred.kind p with `Agg -> p | `Scalar -> Min p) } )
+              {entry with pred= (if Pred.kind p = `Scalar then Min p else p)} )
       | `Scalar -> select
     else select
   in

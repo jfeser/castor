@@ -209,7 +209,11 @@ let kind p =
       method! visit_Count () = true
     end
   in
-  if visitor#visit_pred () p then `Agg else `Scalar
+  match remove_as p with
+  | Row_number -> `Window
+  | _ -> if visitor#visit_pred () p then `Agg else `Scalar
+
+let%test "" = kind Row_number = `Window
 
 let of_lexbuf_exn lexbuf =
   try Ralgebra_parser.expr_eof Ralgebra_lexer.token lexbuf
