@@ -668,9 +668,7 @@ struct
     function
     | `Count x | `Sum (_, x) | `Min (_, x) | `Max (_, x) -> x
     | `Avg (_, n, d) -> build_div n d b
-    | `Passthru p ->
-        [%sexp_of: A.pred * [`Agg | `Scalar]] (p, Pred.kind p) |> print_s ;
-        gen_pred ctx p b
+    | `Passthru p -> gen_pred ctx p b
 
   and scan_select ctx b r t cb =
     let open Builder in
