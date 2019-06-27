@@ -111,11 +111,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
             try
               Some
                 (Config.create ~verbose:true ~seed:0 ~algo keyset |> Hash.of_config)
-            with Error _ as err ->
-              Log.warn (fun m ->
-                  m "Creating CMPH hash failed: %a" Sexp.pp_hum
-                    ([%sexp_of: exn] err)) ;
-              None)
+            with Error _ -> None)
       in
       (* Populate hash table with CMPH hash values. *)
       ( Seq.map keys ~f:(fun (k, p) -> (Cmph.Hash.hash cmph_hash k, p))
