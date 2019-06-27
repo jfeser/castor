@@ -8,7 +8,7 @@ let main ~in_place file =
   if in_place then
     Out_channel.with_file file ~f:(fun ch ->
         let fmt = Format.formatter_of_out_channel ch in
-        write fmt )
+        write fmt)
   else write std_formatter
 
 let () =

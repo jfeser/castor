@@ -253,7 +253,7 @@ and free r =
           List.fold_left rs ~init:(empty, empty) ~f:(fun (n, e) r' ->
               let e' = exposed r' in
               let n' = Set.union n (Set.diff (free r') e) in
-              (n', e') )
+              (n', e'))
         in
         n
     | As (_, r') -> free r'
@@ -332,7 +332,7 @@ let annotate_eq r =
                      | Name n'' when n'' = n' || n'' = n -> Some eq
                      | As_pred (Name n'', s) when n'' = n -> Some (Name.create s, n')
                      | As_pred (Name n'', s) when n'' = n' -> Some (n, Name.create s)
-                     | _ -> None) )
+                     | _ -> None))
         in
         Meta.Direct.set_m m Meta.eq eqs
 
@@ -438,7 +438,7 @@ let annotate_orders r =
                    | As_pred (p', n) when [%compare.equal: pred] p p' ->
                        Some (Name (Name.create n), d)
                    | p' when [%compare.equal: pred] p p' -> Some (p', d)
-                   | _ -> None ) )
+                   | _ -> None))
       | Filter (_, r) | AHashIdx {hi_values= r; _} -> annotate_orders r
       | DepJoin {d_lhs= r1; d_rhs= r2; _} | Join {r1; r2; _} ->
           annotate_orders r1 |> ignore ;
@@ -465,8 +465,8 @@ let annotate_orders r =
                      List.find_map eq' ~f:(fun (n', n'') ->
                          if n = n' then Some (Name n'', dir)
                          else if n = n'' then Some (Name n', dir)
-                         else None )
-               | _ -> None )
+                         else None)
+               | _ -> None)
       | ATuple (rs, Cross) -> List.map ~f:annotate_orders rs |> List.concat
       | ATuple (rs, (Zip | Concat)) ->
           List.iter ~f:(fun r -> annotate_orders r |> ignore) rs ;
@@ -570,17 +570,17 @@ let ordered_idx_to_depjoin rk rv m =
              Option.map lb ~f:(fun (p, b) ->
                  match b with
                  | `Closed -> [Binop (Ge, Name n, p)]
-                 | `Open -> [Binop (Gt, Name n, p)] )
+                 | `Open -> [Binop (Gt, Name n, p)])
              |> Option.value ~default:[]
            in
            let p2 =
              Option.map ub ~f:(fun (p, b) ->
                  match b with
                  | `Closed -> [Binop (Le, Name n, p)]
-                 | `Open -> [Binop (Lt, Name n, p)] )
+                 | `Open -> [Binop (Lt, Name n, p)])
              |> Option.value ~default:[]
            in
-           p1 @ p2 )
+           p1 @ p2)
     |> Pred.conjoin
   in
   let slist = rk_schema @ rv_schema |> List.map ~f:(fun n -> Name n) in
@@ -619,11 +619,12 @@ let aliases =
       method one k v = Map.singleton (module Name) k v
 
       method plus =
-        Map.merge ~f:(fun ~key:_ -> function
+        Map.merge ~f:(fun ~key:_ ->
+          function
           | `Left r | `Right r -> Some r
           | `Both (r1, r2) ->
               if Pred.O.(r1 = r2) then Some r1
-              else failwith "Multiple relations with same alias" )
+              else failwith "Multiple relations with same alias")
 
       method! visit_Exists () _ = self#zero
 
@@ -635,7 +636,7 @@ let aliases =
             List.fold_left ps ~init:(self#visit_t () r) ~f:(fun m p ->
                 match p with
                 | As_pred (p, n) -> self#plus (self#one (Name.create n) p) m
-                | _ -> m )
+                | _ -> m)
         | `Agg -> self#zero
     end
   in

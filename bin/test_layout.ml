@@ -16,7 +16,7 @@ let () =
       List.fold_left (paths layout) ~init:file ~f:(fun file p ->
           let fundec, file = path_to_writer ~layout:layout_ctype file p in
           file.globals <- Cil.GFun (fundec, Cil.locUnknown) :: file.globals ;
-          file )
+          file)
     in
     Cil.dumpFile Cil.defaultCilPrinter stdout "" file
   with Postgresql.Error e -> print_endline (string_of_error e)

@@ -12,7 +12,7 @@ let main kind =
                 Unix.open_process_in (sprintf "%s --prefix" c)
                 |> In_channel.input_all |> String.strip |> Filename.realpath
                 |> Option.some
-              with Unix.Unix_error _ -> None )
+              with Unix.Unix_error _ -> None)
         in
         Option.value_exn ~message:"No LLVM root found." dir
   in

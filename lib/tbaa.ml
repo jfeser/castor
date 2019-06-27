@@ -35,7 +35,7 @@ let to_meta ctx descs =
               let args =
                 mdstring ctx name
                 :: List.concat_map fields ~f:(fun (desc, offset) ->
-                       [to_meta desc; const_int (i64_type ctx) offset] )
+                       [to_meta desc; const_int (i64_type ctx) offset])
               in
               mdnode ctx (Array.of_list args)
         in

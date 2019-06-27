@@ -310,7 +310,8 @@ let%expect_test "depjoin-agg" =
 
 let%expect_test "select-agg-window" =
   run_test "select([count(), min(f), row_number()], r)" ;
-  [%expect {|
+  [%expect
+    {|
     SELECT
         count(*) AS "a0_0",
         min(r_0. "f") AS "a1_0",

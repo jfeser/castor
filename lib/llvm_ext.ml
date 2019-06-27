@@ -3,12 +3,12 @@ open! Core
 include (
   Llvm :
     module type of Llvm
-    with module TypeKind := Llvm.TypeKind
-     and type lltype = Llvm.lltype
-     and type llvalue = Llvm.llvalue
-     and type llmodule = Llvm.llmodule
-     and type llcontext = Llvm.llcontext
-     and type llmdkind = Llvm.llmdkind )
+      with module TypeKind := Llvm.TypeKind
+       and type lltype = Llvm.lltype
+       and type llvalue = Llvm.llvalue
+       and type llmodule = Llvm.llmodule
+       and type llcontext = Llvm.llcontext
+       and type llmdkind = Llvm.llmdkind )
 
 module TypeKind = struct
   type t = Llvm.TypeKind.t =

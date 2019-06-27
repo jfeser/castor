@@ -18,7 +18,7 @@ let main () =
   Logs.set_level (Some Logs.Debug) ;
   Printexc.register_printer (function
     | Postgresql.Error e -> Some (Postgresql.string_of_error e)
-    | _ -> None ) ;
+    | _ -> None) ;
   let ir_file, buf_file =
     match Caml.Sys.argv with
     | [|_; x; y|] -> (x, y)
@@ -33,10 +33,10 @@ let main () =
   let layout = Transform.row_layout taxi in
   Logs.debug (fun m ->
       m "Relation schema %a." Sexp.pp_hum
-        ([%sexp_of: Schema.t] (Schema.of_relation taxi)) ) ;
+        ([%sexp_of: Schema.t] (Schema.of_relation taxi))) ;
   Logs.debug (fun m ->
       m "Layout schema %a." Sexp.pp_hum
-        ([%sexp_of: Schema.t] (Layout.to_schema_exn layout)) ) ;
+        ([%sexp_of: Schema.t] (Layout.to_schema_exn layout))) ;
   let l =
     let open Ralgebra0 in
     Filter
@@ -47,7 +47,8 @@ let main () =
   let ir_module = IGen.irgen l in
   let module_ = Llvm.create_module (Llvm.global_context ()) "scanner" in
   let module CGen =
-    Codegen.Make (struct
+    Codegen.Make
+      (struct
         open Llvm
 
         let ctx = global_context ()
@@ -60,7 +61,7 @@ let main () =
   in
   CGen.codegen ir_module.buffer ir_module ;
   Out_channel.with_file buf_file ~f:(fun ch ->
-      Out_channel.output_bytes ch ir_module.buffer ) ;
+      Out_channel.output_bytes ch ir_module.buffer) ;
   Out_channel.with_file "scanner.h" ~f:CGen.write_header ;
   Llvm.print_module ir_file module_ ;
   Caml.Sys.command (sprintf "llc -O0 -filetype=obj \"%s\"" ir_file) |> ignore ;

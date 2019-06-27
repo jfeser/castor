@@ -9,13 +9,15 @@ let make_modules ?layout_file ?(irgen_debug = false) ?(code_only = false) () =
   end in
   let module M = Abslayout_db.Make (Config) in
   let module S =
-    Serialize.Make (struct
+    Serialize.Make
+      (struct
         let layout_file = layout_file
       end)
       (M)
   in
   let module I =
-    Irgen.Make (struct
+    Irgen.Make
+      (struct
         let code_only = code_only
 
         let debug = irgen_debug
@@ -25,7 +27,8 @@ let make_modules ?layout_file ?(irgen_debug = false) ?(code_only = false) () =
       ()
   in
   let module C =
-    Codegen.Make (struct
+    Codegen.Make
+      (struct
         let debug = false
       end)
       (I)

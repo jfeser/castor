@@ -103,12 +103,12 @@ module Ctx = struct
     let of_list l =
       let l =
         List.map l ~f:(fun r ->
-            {r with rname= Name.Meta.(set r.rname stage r.rstage)} )
+            {r with rname= Name.Meta.(set r.rname stage r.rstage)})
       in
       let dups = List.find_all_dups l ~compare:compare_row in
       if List.length dups > 0 then (
         List.iter dups ~f:(fun r ->
-            Log.err (fun m -> m "Ambiguous name %a." Name.pp_with_stage r.rname) ) ;
+            Log.err (fun m -> m "Ambiguous name %a." Name.pp_with_stage r.rname)) ;
         Error.(of_string "Ambiguous names." |> raise) ) ;
       l
   end
@@ -133,7 +133,7 @@ module Ctx = struct
           if List.mem c2 ~equal:[%compare.equal: row] r then (
             Log.warn (fun m -> m "Shadowing of %a." Name.pp_with_stage r.rname) ;
             false )
-          else true )
+          else true)
     in
     of_list (c1 @ c2)
 
@@ -153,7 +153,7 @@ module Ctx = struct
               List.fold_left rs ~init:m ~f:(fun m r ->
                   let r' = Map.find_exn m r.rname in
                   let r' = {r' with rrefs= r'.rrefs @ r.rrefs} in
-                  Map.set m ~key:r.rname ~data:r' ) )
+                  Map.set m ~key:r.rname ~data:r'))
         in
         Map.data m |> of_list
 
@@ -209,14 +209,14 @@ module Ctx = struct
               let meta = ref meta in
               let p = (visitor n meta)#visit_pred () p in
               (Some (n, meta), p)
-          | None -> (None, p) )
+          | None -> (None, p))
       |> List.unzip
     in
     let ctx =
       List.filter_map metas
         ~f:
           (Option.map ~f:(fun (n, meta) ->
-               {rname= n; rmeta= meta; rrefs= []; rstage= s} ))
+               {rname= n; rmeta= meta; rrefs= []; rstage= s}))
     in
     (defs, of_list ctx)
 
@@ -226,7 +226,7 @@ module Ctx = struct
         (ctx :> row list)
         ~f:(fun r ->
           let rc = ref 0 in
-          ({r with rrefs= rc :: r.rrefs}, (r.rname, rc)) )
+          ({r with rrefs= rc :: r.rrefs}, (r.rname, rc)))
       |> List.unzip
     in
     let refcounts =
@@ -237,7 +237,7 @@ module Ctx = struct
              | x :: _ ->
                  Log.warn (fun m -> m "Output shadowing of %a." Name.pp n) ;
                  x
-             | _ -> assert false )
+             | _ -> assert false)
     in
     (of_list ctx, refcounts)
 end
@@ -375,7 +375,7 @@ and resolve stage outer_ctx ({node; meta} as r) =
           { m with
             oi_lookup=
               List.map m.oi_lookup ~f:(fun (lb, ub) ->
-                  (resolve_bound lb, resolve_bound ub) ) }
+                  (resolve_bound lb, resolve_bound ub)) }
         in
         (AOrderedIdx (as_ scope r, vl, m), Ctx.(merge_forgiving kctx vctx))
     | As _ -> Error.(createf "Unexpected as." |> raise)

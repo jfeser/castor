@@ -158,7 +158,7 @@ module Make (Config : Config.S) = struct
                     let m = r.meta in
                     match r.node with
                     | AScalar p -> fold acc (self#scalar m p v)
-                    | _ -> failwith "Expected a scalar tuple." )
+                    | _ -> failwith "Expected a scalar tuple.")
                 |> extract
           | _ ->
               let f, child = self#func a in
@@ -221,7 +221,7 @@ module Make (Config : Config.S) = struct
             Lwt_stream.map
               (fun t ->
                 print_s ([%sexp_of: string * Value.t list] ("for", t)) ;
-                t )
+                t)
               tups
           else tups
         in
@@ -231,18 +231,19 @@ module Make (Config : Config.S) = struct
             (* Split each tuple into lhs and rhs. *)
             |> Lwt_stream.map (fun t -> (extract_lhs t, extract_rhs t))
             (* Group by lhs *)
-            |> group_by (fun (t1, _) (t2, _) -> [%compare.equal: Value.t list] t1 t2)
+            |> group_by (fun (t1, _) (t2, _) ->
+                   [%compare.equal: Value.t list] t1 t2)
             (* Split each group into one lhs and many rhs. *)
             |> Lwt_stream.map (fun g ->
                    let lhs = List.hd_exn g |> Tuple.T2.get1 in
                    let rhs = List.map g ~f:Tuple.T2.get2 in
-                   (lhs, rhs) )
+                   (lhs, rhs))
           else
             tups
             (* Extract the row number from each tuple. *)
             |> Lwt_stream.map (function
                  | [] -> Error.of_string "Unexpected empty tuple." |> Error.raise
-                 | rn :: t -> (rn, t) )
+                 | rn :: t -> (rn, t))
             (* Group by row numbers *)
             |> group_by (fun (rn1, _) (rn2, _) -> [%compare.equal: Value.t] rn1 rn2)
             (* Drop the row number from each group. *)
@@ -251,17 +252,17 @@ module Make (Config : Config.S) = struct
             |> Lwt_stream.map (fun g ->
                    let lhs = List.hd_exn g |> extract_lhs in
                    let rhs = List.map g ~f:extract_rhs in
-                   (lhs, rhs) )
+                   (lhs, rhs))
         in
         (* Process each group. *)
         groups
         |> Lwt_stream.map_s (fun (lhs, rhs) ->
                let lval =
                  Option.map (self#key_layout a.Q.meta) ~f:(fun l ->
-                     self#scalars {a with meta= l} lhs )
+                     self#scalars {a with meta= l} lhs)
                in
                let%lwt rval = self#eval lctx (Lwt_stream.of_list rhs) q2 in
-               return (lhs, lval, rval) )
+               return (lhs, lval, rval))
         |> run_lwt fold
 
       method private eval_concat lctx tups a qs : 'a Lwt.t =
@@ -271,7 +272,7 @@ module Make (Config : Config.S) = struct
             Lwt_stream.map
               (fun t ->
                 print_s ([%sexp_of: string * Value.t list] ("concat", t)) ;
-                t )
+                t)
               tups
           else tups
         in
@@ -281,7 +282,7 @@ module Make (Config : Config.S) = struct
               let%lwt acc = acc in
               let%lwt group = extract_group widths oidx tups in
               let%lwt v = self#eval lctx (Lwt_stream.of_list group) q in
-              return (fold acc v) )
+              return (fold acc v))
         in
         return (extract acc)
 
@@ -291,7 +292,7 @@ module Make (Config : Config.S) = struct
             Lwt_stream.map
               (fun t ->
                 print_s ([%sexp_of: string * Value.t list] ("scalar", t)) ;
-                t )
+                t)
               tups
           else tups
         in
@@ -321,7 +322,7 @@ module Make (Config : Config.S) = struct
             (fun oidx (n, q) ->
               let%lwt strm = extract_group widths oidx tups in
               let%lwt v = self#eval lctx (Lwt_stream.of_list strm) q in
-              return (n, v) )
+              return (n, v))
             binds
         in
         let lctx =
@@ -344,7 +345,7 @@ module Make (Config : Config.S) = struct
             (fun t ->
               let l = List.length t in
               if l = l' then t
-              else Error.createf "Expected length %d got %d" l' l |> Error.raise )
+              else Error.createf "Expected length %d got %d" l' l |> Error.raise)
             tups
         in
         match a.Q.node with
@@ -460,7 +461,7 @@ module Make (Config : Config.S) = struct
                 m "%a does not unify with %a" Sexp.pp_hum
                   ([%sexp_of: T.t] t)
                   Sexp.pp_hum
-                  ([%sexp_of: T.t] t') ) ;
+                  ([%sexp_of: T.t] t')) ;
             raise exn
         in
         let extract (elem_type, num_elems) =
@@ -513,11 +514,11 @@ module Make (Config : Config.S) = struct
         let trace = Backtrace.Exn.most_recent () in
         Logs.err (fun m ->
             m "Type computation failed: %a@,%s" Exn.pp exn
-              (Backtrace.to_string trace) ) ;
+              (Backtrace.to_string trace)) ;
         raise exn
     in
     Log.info (fun m ->
-        m "The type is: %s" (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ) ;
+        m "The type is: %s" (Sexp.to_string_hum ([%sexp_of: Type.t] type_))) ;
     type_
 
   let annotate_type r =

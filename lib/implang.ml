@@ -103,7 +103,7 @@ and pp_locals fmt locals =
   let open Format in
   fprintf fmt "@[<v>// Locals:@," ;
   List.iter locals ~f:(fun {lname= n; type_= t; persistent= p} ->
-      fprintf fmt "// @[<h>%s : %a (persists=%b)@]@," n Type.PrimType.pp t p ) ;
+      fprintf fmt "// @[<h>%s : %a (persists=%b)@]@," n Type.PrimType.pp t p) ;
   fprintf fmt "@]"
 
 and pp_func fmt {name; args; body; locals; ret_type} =
@@ -183,7 +183,7 @@ module Ctx0 = struct
            | Field _ ->
                Error.create "Unexpected field in caller context." ctx
                  [%sexp_of: _ctx]
-               |> Error.raise )
+               |> Error.raise)
     |> List.sort ~compare:(fun (_, i1) (_, i2) -> Int.compare i1 i2)
     |> List.map ~f:(fun (n, _) -> (Name.to_var n, Name.type_exn n))
 
@@ -305,7 +305,7 @@ module Builder = struct
       Map.to_alist ctx
       |> List.filter_map ~f:(function
            | n, Global _ -> Some (Name.to_var n, Name.type_exn n)
-           | _ -> None )
+           | _ -> None)
       |> Hashtbl.of_alist_exn (module String)
     in
     List.iter args ~f:(fun (n, t) -> Hashtbl.set type_ctx ~key:n ~data:t) ;
@@ -402,7 +402,7 @@ module Builder = struct
       Infix.(ctr < count)
       (fun b ->
         f b ;
-        build_assign Infix.(ctr + int 1) ctr b )
+        build_assign Infix.(ctr + int 1) ctr b)
       b
 
   let build_foreach ?count ?header ?footer ?persistent iter_ args body b =
@@ -428,7 +428,7 @@ module Builder = struct
               ~cond:Infix.(not (Done iter_.name))
               ~then_:(fun b -> body tup b)
               ~else_:(fun b -> add_footer b)
-              b )
+              b)
           b
 
   let rec build_eq x y b =
@@ -446,7 +446,7 @@ module Builder = struct
         Infix.((x && y) || ((not x) && not y))
     | TupleT ts1, TupleT ts2 when List.length ts1 = List.length ts2 ->
         List.init (List.length ts1) ~f:(fun i ->
-            build_eq Infix.(index x i) Infix.(index y i) b )
+            build_eq Infix.(index x i) Infix.(index y i) b)
         |> List.fold_left ~init:(Bool true) ~f:Infix.( && )
     | FixedT {nullable= false}, FixedT {nullable= false} ->
         Binop {op= `FlEq; arg1= x; arg2= y}
@@ -549,7 +549,7 @@ module Builder = struct
   let const_int =
     build_numeric0 (function
       | `Int x -> Infix.(int x)
-      | `Fixed x -> Fixed (Fixed_point.of_int x) )
+      | `Fixed x -> Fixed (Fixed_point.of_int x))
 
   let build_numeric2 f x y b =
     let t1 = type_of x b in
@@ -563,17 +563,17 @@ module Builder = struct
   let build_add =
     build_numeric2 (function
       | `Int (x, y) -> Infix.(x + y)
-      | `Fixed (x, y) -> Binop {op= `FlAdd; arg1= x; arg2= y} )
+      | `Fixed (x, y) -> Binop {op= `FlAdd; arg1= x; arg2= y})
 
   let build_sub =
     build_numeric2 (function
       | `Int (x, y) -> Infix.(x - y)
-      | `Fixed (x, y) -> Binop {op= `FlSub; arg1= x; arg2= y} )
+      | `Fixed (x, y) -> Binop {op= `FlSub; arg1= x; arg2= y})
 
   let build_mul =
     build_numeric2 (function
       | `Int (x, y) -> Infix.(x * y)
-      | `Fixed (x, y) -> Binop {op= `FlMul; arg1= x; arg2= y} )
+      | `Fixed (x, y) -> Binop {op= `FlMul; arg1= x; arg2= y})
 
   let build_div =
     build_numeric2 (function
@@ -582,7 +582,7 @@ module Builder = struct
             { op= `FlDiv
             ; arg1= Unop {op= `Int2Fl; arg= x}
             ; arg2= Unop {op= `Int2Fl; arg= y} }
-      | `Fixed (x, y) -> Binop {op= `FlDiv; arg1= x; arg2= y} )
+      | `Fixed (x, y) -> Binop {op= `FlDiv; arg1= x; arg2= y})
 
   let build_concat vs b =
     List.concat_map vs ~f:(fun v ->
@@ -590,7 +590,7 @@ module Builder = struct
         | TupleT ts -> List.length ts |> List.init ~f:(fun i -> Infix.index v i)
         | t ->
             Error.create "Not a tuple." (v, t) [%sexp_of: expr * Type.PrimType.t]
-            |> Error.raise )
+            |> Error.raise)
     |> fun x -> Tuple x
 
   let build_printstr s b = build_print (String s) b
@@ -645,7 +645,7 @@ module Ctx = struct
            | Arg _ | Field _ ->
                (* Pass caller arguments and fields in as arguments to the callee. *)
                let callee_var = Arg (List.length args) in
-               (Map.set ~key ~data:callee_var cctx, args @ [var_to_expr var b]) )
+               (Map.set ~key ~data:callee_var cctx, args @ [var_to_expr var b]))
 
   let find (ctx : t) name builder =
     Option.map (Map.find ctx name) ~f:(fun v -> var_to_expr v builder)

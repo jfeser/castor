@@ -59,7 +59,7 @@ let is_invariant ss q =
         Set.for_all ns ~f:(fun n ->
             match Name.rel n with
             | Some s' -> not (List.mem ss s' ~equal:String.( = ))
-            | None -> true )
+            | None -> true)
 
       method visit_'q () q = self#visit_names () (A.names q)
 
@@ -224,7 +224,7 @@ let rec to_ralgebra' q =
         (A.schema_exn q1 |> Schema.scoped scope) @ A.schema_exn q2
         |> List.map ~f:(fun n ->
                let n' = Fresh.name Global.fresh "x%d" in
-               (n, n') )
+               (n, n'))
       in
       let slist = List.map sctx ~f:(fun (n, n') -> A.As_pred (Name n, n')) in
       (* Stick together the orders from the lhs and rhs queries. *)
@@ -262,10 +262,9 @@ let rec to_ralgebra' q =
                      else
                        (* Otherwise emit null. *)
                        List.map ~f:(fun n ->
-                           A.As_pred (Null (Some (Name.type_exn n)), Name.name n) )
-                 )
+                           A.As_pred (Null (Some (Name.type_exn n)), Name.name n)))
             in
-            A.select select_list q )
+            A.select select_list q)
       in
       let order =
         (A.Name (Name.create counter_name), A.Asc) :: List.concat orders

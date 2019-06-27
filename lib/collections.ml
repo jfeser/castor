@@ -57,7 +57,8 @@ module List = struct
     let _, l' =
       List.fold_left l
         ~init:(Set.empty m, [])
-        ~f:(fun (s, xs) x -> if Set.mem s x then (s, xs) else (Set.add s x, x :: xs))
+        ~f:(fun (s, xs) x ->
+          if Set.mem s x then (s, xs) else (Set.add s x, x :: xs))
     in
     List.rev l'
 
@@ -110,12 +111,12 @@ module Map = struct
         | `Both _ ->
             let cmp = Map.comparator m1 in
             let sexp_of_k = cmp.sexp_of_t in
-            Error.(create "Key collision." k sexp_of_k |> raise) )
+            Error.(create "Key collision." k sexp_of_k |> raise))
 
   let merge_right : ('k, 'v, _) t -> ('k, 'v, _) t -> ('k, 'v, _) t =
    fun m1 m2 ->
-    merge m1 m2 ~f:(fun ~key:_ -> function
-      | `Right x | `Left x -> Some x | `Both (_, y) -> Some y )
+    merge m1 m2 ~f:(fun ~key:_ ->
+      function `Right x | `Left x -> Some x | `Both (_, y) -> Some y)
 end
 
 module Seq = struct
@@ -134,7 +135,7 @@ module Seq = struct
         | Some x ->
             let row, seqs' = List.unzip x in
             Some (row, seqs')
-        | None -> None )
+        | None -> None)
 
   let fold1_exn : 'a t -> f:('a -> 'a -> 'a) -> 'a =
    fun s ~f ->
@@ -153,7 +154,7 @@ module Seq = struct
             Q.enqueue q x ;
             Yield (x, (seq', q))
         | None -> (
-          match Q.dequeue q with Some x -> Skip (step x, q) | None -> Done ) )
+          match Q.dequeue q with Some x -> Skip (step x, q) | None -> Done ))
 
   let dfs : 'a -> ('a -> 'a t) -> 'a t =
    fun seed step ->
@@ -162,7 +163,7 @@ module Seq = struct
       ~f:(fun (seq, xs) ->
         match next seq with
         | Some (x, seq') -> Yield (x, (seq', x :: xs))
-        | None -> ( match xs with x :: xs' -> Skip (step x, xs') | [] -> Done ) )
+        | None -> ( match xs with x :: xs' -> Skip (step x, xs') | [] -> Done ))
 
   let all_equal (type a) ?(sexp_of_t = fun _ -> [%sexp_of: string] "unknown")
       (l : a t) =
@@ -171,7 +172,7 @@ module Seq = struct
           match s with
           | `Empty -> `Equal v
           | `Equal v' -> if v = v' then s else `Unequal (v, v')
-          | `Unequal _ -> s )
+          | `Unequal _ -> s)
     in
     match s with
     | `Empty -> Or_error.error_string "Empty list."
@@ -187,7 +188,7 @@ module Gen = struct
 
   let to_sequence g =
     Sequence.unfold ~init:() ~f:(fun () ->
-        match get g with Some x -> Some (x, ()) | None -> None )
+        match get g with Some x -> Some (x, ()) | None -> None)
     |> Sequence.memoize
 
   let sexp_of_t sexp_of g = Sequence.sexp_of_t sexp_of (to_sequence g)
@@ -204,7 +205,7 @@ module Gen = struct
           let group_gen () =
             match get () with
             | None -> None
-            | Some x' -> if eq x x' then Some x' else ( put_back x' ; None )
+            | Some x' -> if eq x x' then Some x' else (put_back x' ; None)
           in
           Some (x, group_gen)
 
@@ -248,7 +249,7 @@ module Gen = struct
           match peek g with
           | None -> enqueue g x ; next ()
           | Some y ->
-              if eq x y then ( enqueue g x ; next () )
+              if eq x y then (enqueue g x ; next ())
               else
                 let g' = to_array g in
                 clear g ; enqueue g x ; Some g' )
@@ -321,7 +322,7 @@ module String = struct
   let template : t -> t list -> t =
    fun s x ->
     List.foldi x ~init:s ~f:(fun i s v ->
-        substr_replace_all s ~pattern:(Printf.sprintf "/*$%d*/" i) ~with_:v )
+        substr_replace_all s ~pattern:(Printf.sprintf "/*$%d*/" i) ~with_:v)
 
   let duplicate : t -> int -> t = fun s n -> concat (List.repeat s n)
 end

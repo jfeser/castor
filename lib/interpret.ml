@@ -27,7 +27,7 @@ module Tuple = struct
         with Invalid_argument _ ->
           Error.create "Schema mismatch." (schema, values, i)
             [%sexp_of: int Map.M(Name).t * Value.t array * int]
-          |> Error.raise )
+          |> Error.raise)
 end
 
 open Tuple
@@ -88,7 +88,7 @@ module Schema = struct
     let tbl = Hashtbl.create (module Name) in
     schema_exn r
     |> List.iteri ~f:(fun i n ->
-           Hashtbl.add_exn tbl ~key:(Name.copy ~scope n) ~data:i ) ;
+           Hashtbl.add_exn tbl ~key:(Name.copy ~scope n) ~data:i) ;
     tbl
 end
 
@@ -99,7 +99,7 @@ let eval {db; params} r =
           Option.value_exn (Db.relation db r).r_schema |> List.map ~f:Name.type_exn
         in
         Db.exec_cursor_exn db schema_types (Printf.sprintf "select * from \"%s\"" r)
-        |> Gen.to_sequence |> Seq.memoize )
+        |> Gen.to_sequence |> Seq.memoize)
   in
   let rec eval_agg ctx preds schema tups =
     if Seq.is_empty tups then None
@@ -119,7 +119,7 @@ let eval {db; params} r =
                  | Count -> Count 0
                  | p -> Passthru (None, p)
                in
-               (n, a) )
+               (n, a))
       in
       let last_tup = ref [||] in
       Seq.iter tups ~f:(fun t ->
@@ -137,7 +137,7 @@ let eval {db; params} r =
                 | Passthru (None, p) -> Passthru (Some (eval_pred ctx p), p)
                 | Passthru (Some _, _) as a -> a
               in
-              (n, s) ) ) ;
+              (n, s))) ;
       let subst_ctx =
         Array.map state ~f:(fun (n, s) ->
             let open Value in
@@ -148,7 +148,7 @@ let eval {db; params} r =
               | Count x -> Int x
               | Passthru (x, _) -> Option.value_exn x
             in
-            (Name.create n, Value.to_pred s) )
+            (Name.create n, Value.to_pred s))
         |> Array.to_list
         |> Map.of_alist_exn (module Name)
       in
@@ -236,15 +236,15 @@ let eval {db; params} r =
             |> Option.value ~default:Seq.empty
         | `Scalar ->
             Seq.map (eval ctx r) ~f:(fun t ->
-                List.map ps ~f:(eval_pred (Ctx.merge ctx s t)) |> Array.of_list ) )
+                List.map ps ~f:(eval_pred (Ctx.merge ctx s t)) |> Array.of_list) )
     | Filter (p, r) ->
         let s = Schema.of_ralgebra r in
         Seq.filter (eval ctx r) ~f:(fun t ->
-            eval_pred (Ctx.merge ctx s t) p |> Value.to_bool )
+            eval_pred (Ctx.merge ctx s t) p |> Value.to_bool)
     | DepJoin {d_lhs; d_alias; d_rhs} ->
         let s = Schema.of_ralgebra ~scope:d_alias d_lhs in
         Seq.concat_map (eval ctx d_lhs) ~f:(fun t ->
-            Seq.map (eval (Ctx.bind ctx s t) d_rhs) ~f:(fun t' -> t @ t') )
+            Seq.map (eval (Ctx.bind ctx s t) d_rhs) ~f:(fun t' -> t @ t'))
     | Join {pred; r1; r2} ->
         let r1s = eval ctx r1 in
         let s1 = Schema.of_ralgebra r1 in
@@ -255,7 +255,7 @@ let eval {db; params} r =
             Seq.filter_map r2s ~f:(fun t2 ->
                 let ctx = Ctx.merge ctx s2 t2 in
                 let tup = t1 @ t2 in
-                if eval_pred ctx pred |> Value.to_bool then Some tup else None ) )
+                if eval_pred ctx pred |> Value.to_bool then Some tup else None))
     | AEmpty -> Seq.empty
     | AScalar p -> Seq.singleton [|eval_pred ctx p|]
     | AList (rk, rv) ->
@@ -272,8 +272,7 @@ let eval {db; params} r =
     | ATuple (r :: rs, Cross) ->
         let s = Schema.of_ralgebra r in
         Seq.concat_map (eval ctx r) ~f:(fun t ->
-            Seq.map (eval (Ctx.bind ctx s t) (tuple rs Cross)) ~f:(fun t' -> t @ t')
-        )
+            Seq.map (eval (Ctx.bind ctx s t) (tuple rs Cross)) ~f:(fun t' -> t @ t'))
     | ATuple (rs, Concat) -> Seq.concat_map (Seq.of_list rs) ~f:(eval ctx)
     | AHashIdx h ->
         let vs = List.map h.hi_lookup ~f:(eval_pred ctx) |> Array.of_list in
@@ -284,7 +283,7 @@ let eval {db; params} r =
                 (Seq.map
                    (eval (Ctx.bind ctx sk tk) h.hi_values)
                    ~f:(fun tv -> tk @ tv))
-            else None )
+            else None)
         |> Option.value ~default:Seq.empty
     | AOrderedIdx _ -> failwith "todo"
     | Dedup r ->
@@ -300,7 +299,7 @@ let eval {db; params} r =
                   (eval_pred (Ctx.merge ctx s t1) p)
                   (eval_pred (Ctx.merge ctx s t2) p)
               in
-              match o with Asc -> cmp | Desc -> Int.neg cmp )
+              match o with Asc -> cmp | Desc -> Int.neg cmp)
         in
         eval ctx rel |> Seq.to_list
         |> List.sort ~compare:(Comparable.lexicographic cmps)
@@ -312,7 +311,7 @@ let eval {db; params} r =
         |> Seq.iter ~f:(fun t ->
                let c = Ctx.merge ctx s t in
                let k = List.map ns ~f:(fun n -> Option.value_exn (Ctx.find c n)) in
-               Hashtbl.add_multi tbl ~key:k ~data:t ) ;
+               Hashtbl.add_multi tbl ~key:k ~data:t) ;
         Hashtbl.data tbl |> Seq.of_list
         |> Seq.filter_map ~f:(fun ts -> eval_agg ctx ps s (Seq.of_list ts))
     | As (_, r) -> eval ctx r
@@ -367,7 +366,7 @@ let equiv ?(ordered = false) ctx r1 r2 =
                  Some (Error.create "Extra tuple on LHS." t [%sexp_of: Tuple.t])
              | `Right t ->
                  (* printf "R: %s\n" (Tuple.to_string_hum t) ; *)
-                 Some (Error.create "Extra tuple on RHS." t [%sexp_of: Tuple.t]) )
+                 Some (Error.create "Extra tuple on RHS." t [%sexp_of: Tuple.t]))
       in
       match m_err with Some err -> Error err | None -> Ok ()
     in

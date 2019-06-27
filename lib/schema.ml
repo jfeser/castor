@@ -56,8 +56,8 @@ and schema_exn r =
         | Some n -> Name.copy ~type_:(Some t) n
         | None ->
             Log.err (fun m ->
-                m "Tried to get schema of unnamed predicate %a." pp_pred p ) ;
-            Name.create ~type_:t (Fresh.name Global.fresh "x%d") )
+                m "Tried to get schema of unnamed predicate %a." pp_pred p) ;
+            Name.create ~type_:t (Fresh.name Global.fresh "x%d"))
   in
   match r.node with
   | AList (_, r) | DepJoin {d_rhs= r; _} -> schema_exn r |> unscoped

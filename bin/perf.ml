@@ -35,7 +35,7 @@ let run_candidate :
   let ir_module = IRGen.irgen ralgebra in
   (* Dump IR. *)
   Out_channel.with_file "scanner.ir" ~f:(fun ch ->
-      IRGen.pp (Format.formatter_of_out_channel ch) ir_module ) ;
+      IRGen.pp (Format.formatter_of_out_channel ch) ir_module) ;
   (* Codegen *)
   Codegen.codegen ir_module.buffer ir_module ;
   Llvm.print_module "scanner.ll" CConfig.module_ ;
@@ -43,10 +43,10 @@ let run_candidate :
   (* Serialize. *)
   Out_channel.with_file "db.buf" ~f:(fun ch ->
       let w = Bitstring.Writer.with_channel ch in
-      Bitstring.Writer.write w ir_module.buffer ) ;
+      Bitstring.Writer.write w ir_module.buffer) ;
   Out_channel.with_file "db.txt" ~f:(fun ch ->
       let fmt = Format.formatter_of_out_channel ch in
-      Bitstring.pp fmt ir_module.buffer ) ;
+      Bitstring.pp fmt ir_module.buffer) ;
   (* Compile and link *)
   let params_str =
     List.map params ~f:(fun (n, v) ->
@@ -58,7 +58,7 @@ let run_candidate :
           | `String x -> sprintf "\"%s\"" x
           | _ -> Error.of_string "Unexpected param type." |> Error.raise
         in
-        sprintf "set_%s(params, %s);" n val_str )
+        sprintf "set_%s(params, %s);" n val_str)
     |> String.concat ~sep:"\n"
   in
   let perf_template = Config.project_root ^ "/bin/templates/perf.c" in
@@ -70,7 +70,7 @@ let run_candidate :
       let () =
         Out_channel.(with_file "main.c" ~f:(fun ch -> output_string ch out))
       in
-      () )) ;
+      ())) ;
   let command_exn : string list -> unit = function
     | [] -> Error.of_string "Empty command" |> Error.raise
     | args ->
@@ -128,7 +128,7 @@ let benchmark : ?sample:int -> db:string -> Bench.t -> unit =
             Error.create "Empty parameter list." (name, pname)
               [%sexp_of: string * string]
             |> Error.raise
-        | v :: _ -> (pname, v) )
+        | v :: _ -> (pname, v))
   in
   let module Config = struct
     let conn = new connection ~dbname:db ()
@@ -174,7 +174,7 @@ let benchmark : ?sample:int -> db:string -> Bench.t -> unit =
           in_dir dir ~f:(fun () ->
               (* Dump the candidate expression. *)
               Out_channel.with_file "ralgebra" ~f:(fun ch ->
-                  Out_channel.output_string ch (Ralgebra.to_string x) ) ;
+                  Out_channel.output_string ch (Ralgebra.to_string x)) ;
               let runtime, dbsize, exesize, failed =
                 run_candidate ~params:test_params ~gprof:false ~debug:false x
               in
@@ -186,8 +186,8 @@ let benchmark : ?sample:int -> db:string -> Bench.t -> unit =
               bind insert_stmt 5 (INT (if failed then 1L else 0L)) |> ignore ;
               step insert_stmt |> ignore ;
               (* Remember to flush logs file. *)
-              Out_channel.flush log_ch ) ) ;
-      Out_channel.close log_ch ) ;
+              Out_channel.flush log_ch)) ;
+      Out_channel.close log_ch) ;
   if Logs.err_count () > 0 then exit 1 else exit 0
 
 let main :
@@ -225,7 +225,7 @@ let main :
   in_dir dir ~f:(fun () ->
       match Seq.next candidates with
       | Some (x, _) -> run_candidate ~debug ~params ~gprof x |> ignore
-      | _ -> failwith "" ) ;
+      | _ -> failwith "") ;
   if Logs.err_count () > 0 then exit 1 else exit 0
 
 let () =
@@ -238,7 +238,7 @@ let () =
     Arg_type.create (fun s ->
         let k, v = String.lsplit2_exn ~on:':' s in
         let v = Sexp.of_string v |> [%of_sexp: Db.primvalue] in
-        (k, v) )
+        (k, v))
   in
   let open Let_syntax in
   group ~summary:"Benchmark tool."

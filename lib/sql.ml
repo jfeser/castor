@@ -77,7 +77,7 @@ let make_ctx schema select =
     ~f:(fun m (n, {pred= p; _}) ->
       if Map.mem m n then
         Log.warn (fun m -> m "Duplicate name in schema %a." Name.pp n) ;
-      Map.set m ~key:n ~data:p )
+      Map.set m ~key:n ~data:p)
 
 let join schema1 schema2 sql1 sql2 pred =
   let needs_subquery =
@@ -111,7 +111,7 @@ let order_by of_ralgebra key r =
            | Name _ | As_pred (Name _, _) -> true
            | _ ->
                Log.warn (fun m -> m "Non-name in order-by: %a" Pred.pp p) ;
-               false )
+               false)
   in
   Query {spj with order= key}
 
@@ -203,8 +203,8 @@ let dep_join of_ralgebra q1 scope q2 =
        names emitted by the q1 sql. *)
     let ctx =
       List.zip_exn (schema_exn q1 |> Schema.scoped scope) sql1_names
-      |> List.map ~f:(fun (n, n') -> (n, Name Name.(create ?type_:(Name.type_ n) n'))
-         )
+      |> List.map ~f:(fun (n, n') ->
+             (n, Name Name.(create ?type_:(Name.type_ n) n')))
       |> Map.of_alist_exn (module Name)
     in
     subst ctx q2
@@ -231,7 +231,7 @@ let of_ralgebra r =
         (* Add table alias to all fields to generate a select list. *)
         let select_list =
           List.map (schema_exn r) ~f:(fun n ->
-              create_entry (Name (Name.copy n ~scope:(Some tbl_alias))) )
+              create_entry (Name (Name.copy n ~scope:(Some tbl_alias))))
         in
         let relations = [(`Table (tbl, tbl_alias), `Left)] in
         Query (create_query ~relations select_list)
@@ -326,7 +326,7 @@ and spj_to_sql {select; distinct; order; group; relations; conds; limit} =
       match select_kind (List.map select ~f:(fun {pred= p; _} -> p)) with
       | `Agg ->
           List.map select ~f:(fun ({pred= p; _} as entry) ->
-              {entry with pred= (if Pred.kind p = `Scalar then Min p else p)} )
+              {entry with pred= (if Pred.kind p = `Scalar then Min p else p)})
       | `Scalar -> select
     else select
   in
@@ -340,7 +340,7 @@ and spj_to_sql {select; distinct; order; group; relations; conds; limit} =
           in
           match Option.map t ~f:Type.PrimType.to_sql with
           | Some t_sql -> sprintf "%s::%s %s" (pred_to_sql p) t_sql alias_sql
-          | None -> sprintf "%s %s" (pred_to_sql p) alias_sql )
+          | None -> sprintf "%s %s" (pred_to_sql p) alias_sql)
       |> String.concat ~sep:", "
     in
     let distinct_sql = if distinct then "distinct" else "" in
@@ -360,7 +360,7 @@ and spj_to_sql {select; distinct; order; group; relations; conds; limit} =
           let join_str =
             match join_type with `Left -> "" | `Lateral -> "lateral"
           in
-          sprintf "%s %s" join_str rel_str )
+          sprintf "%s %s" join_str rel_str)
       |> String.concat ~sep:", " |> sprintf "from %s"
   in
   let cond_sql =
@@ -385,7 +385,7 @@ and spj_to_sql {select; distinct; order; group; relations; conds; limit} =
               | Asc -> (* Asc is the default order *) ""
               | Desc -> "desc"
             in
-            sprintf "%s %s" (pred_to_sql p) dir_sql )
+            sprintf "%s %s" (pred_to_sql p) dir_sql)
         |> String.concat ~sep:", "
       in
       sprintf "order by %s" order_keys

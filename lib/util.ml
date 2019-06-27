@@ -40,7 +40,7 @@ let param =
   let open Command in
   Arg_type.create (fun s ->
       let name, type_, _ = param_of_string s in
-      (name, type_) )
+      (name, type_))
 
 let param_and_value =
   let open Command in
@@ -50,7 +50,7 @@ let param_and_value =
         Option.value_exn m_value ~error:(Error.of_string "Expected a value.")
       in
       let v = Value.of_pred v in
-      (name, type_, v) )
+      (name, type_, v))
 
 let channel =
   let open Command in
@@ -90,8 +90,9 @@ class ['s] map_monoid m =
     method private zero = Map.empty m
 
     method private plus =
-      Map.merge ~f:(fun ~key:_ -> function
-        | `Both _ -> failwith "Duplicate key" | `Left x | `Right x -> Some x )
+      Map.merge ~f:(fun ~key:_ ->
+        function
+        | `Both _ -> failwith "Duplicate key" | `Left x | `Right x -> Some x)
   end
 
 class ['s] conj_monoid =

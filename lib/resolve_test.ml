@@ -20,9 +20,9 @@ let pp_with_refcount, _ =
       | Some r ->
           fprintf fmt "@[<hv 2>{" ;
           Map.iteri r ~f:(fun ~key:n ~data:c ->
-              if c > 0 then fprintf fmt "%a=%d,@ " Name.pp n c ) ;
+              if c > 0 then fprintf fmt "%a=%d,@ " Name.pp n c) ;
           fprintf fmt "}@]"
-      | None -> () )
+      | None -> ())
     ()
 
 let%expect_test "" =

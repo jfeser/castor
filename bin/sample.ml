@@ -16,7 +16,7 @@ let main ?(seed = 0) ~db_in ~db_out ~sample =
         ~params:[r.rname; Int.to_string sample]
         "create table $0 as (select * from old_$0 order by random() limit $1)"
       |> ignore ;
-      exec conn ~params:[r.rname] "drop table old_$0 cascade" |> ignore )
+      exec conn ~params:[r.rname] "drop table old_$0 cascade" |> ignore)
 
 let () =
   (* Set early so we get logs from command parsing code. *)

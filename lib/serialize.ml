@@ -80,7 +80,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           | Bool false -> of_int 1 ~byte_width:1
           | String s -> s
           | v ->
-              Error.(create "Unexpected key value." v [%sexp_of: Value.t] |> raise) )
+              Error.(create "Unexpected key value." v [%sexp_of: Value.t] |> raise))
         |> String.concat ~sep:"|"
 
   let make_direct_hash keys =
@@ -92,7 +92,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
             | [Date x] -> Date.to_int x
             | _ -> failwith "Unexpected key."
           in
-          (h, p) )
+          (h, p))
     in
     (hash, "")
 
@@ -114,8 +114,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
             with Error _ as err ->
               Log.warn (fun m ->
                   m "Creating CMPH hash failed: %a" Sexp.pp_hum
-                    ([%sexp_of: exn] err) ) ;
-              None )
+                    ([%sexp_of: exn] err)) ;
+              None)
       in
       (* Populate hash table with CMPH hash values. *)
       ( Seq.map keys ~f:(fun (k, p) -> (Cmph.Hash.hash cmph_hash k, p))
@@ -202,9 +202,9 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
       method render ch =
         msgs
         |> List.sort ~compare:(fun m1 m2 ->
-               [%compare: int * int] (m1.pos, -m1.len) (m2.pos, -m2.len) )
+               [%compare: int * int] (m1.pos, -m1.len) (m2.pos, -m2.len))
         |> List.iter ~f:(fun m ->
-               Out_channel.fprintf ch "%d:%d %s\n" m.pos m.len m.msg ) ;
+               Out_channel.fprintf ch "%d:%d %s\n" m.pos m.len m.msg) ;
         Out_channel.flush ch
     end
 
@@ -234,11 +234,11 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           main#logf
             (fun m -> m "List count (=%d)" count)
             ~f:(fun () ->
-              main#write_string (of_int ~byte_width:(size_exn hdr "count") count) ) ;
+              main#write_string (of_int ~byte_width:(size_exn hdr "count") count)) ;
           main#logf
             (fun m -> m "List len (=%d)" len)
             ~f:(fun () ->
-              main#write_string (of_int ~byte_width:(size_exn hdr "len") len) ) ;
+              main#write_string (of_int ~byte_width:(size_exn hdr "len") len)) ;
           main#log "List body" ~f:(fun () -> body#write_into main) ;
           return main
         in
@@ -262,7 +262,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           main#logf
             (fun m -> m "Tuple len (=%d)" len)
             ~f:(fun () ->
-              main#write_string (of_int ~byte_width:(size_exn hdr "len") len) ) ;
+              main#write_string (of_int ~byte_width:(size_exn hdr "len") len)) ;
           (* Serialize body *)
           main#log "Tuple body" ~f:(fun () -> body#write_into main) ;
           return main
@@ -319,24 +319,23 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           main#logf
             (fun m -> m "Table len (=%d)" len)
             ~f:(fun () ->
-              main#write_string (of_int ~byte_width:(size_exn hdr "len") len) ) ;
+              main#write_string (of_int ~byte_width:(size_exn hdr "len") len)) ;
           main#logf
             (fun m -> m "Table hash len (=%d)" hash_len)
             ~f:(fun () ->
               main#write_string
-                (of_int ~byte_width:(size_exn hdr "hash_len") hash_len) ) ;
+                (of_int ~byte_width:(size_exn hdr "hash_len") hash_len)) ;
           main#log "Table hash" ~f:(fun () -> main#write_string hash_body) ;
           main#logf
             (fun m -> m "Table map len (=%d)" hash_map_len)
             ~f:(fun () ->
               main#write_string
-                (of_int ~byte_width:(size_exn hdr "hash_map_len") hash_map_len) ) ;
+                (of_int ~byte_width:(size_exn hdr "hash_map_len") hash_map_len)) ;
           main#log "Table key map" ~f:(fun () ->
               Array.iteri hash ~f:(fun h p ->
                   main#logf
                     (fun m -> m "Map entry (%d => %d)" h p)
-                    ~f:(fun () -> main#write_string (of_int ~byte_width:ptr_size p))
-              ) ) ;
+                    ~f:(fun () -> main#write_string (of_int ~byte_width:ptr_size p)))) ;
           main#log "Table values" ~f:(fun () -> vs#write_into main) ;
           return main
         in
@@ -356,7 +355,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
                     let s = new logged_serializer ~size:8 () in
                     self#serialize_scalar s t v ;
                     let bytes = Bigbuffer.contents s#buf in
-                    int_of_string bytes )
+                    int_of_string bytes)
                 |> Array.of_list |> Option.some
             | _ -> None
           in
@@ -374,15 +373,14 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
             match kt with
             | Type.TupleT _ ->
                 List.sort keys ~compare:(fun (_, k1, _) (_, k2, _) ->
-                    Zorder.compare (Option.value_exn k1) (Option.value_exn k2) )
+                    Zorder.compare (Option.value_exn k1) (Option.value_exn k2))
             | _ -> keys
           in
           List.iter keys ~f:(fun (keyf, _, vptr) ->
               idxs#log "Ordered idx key" ~f:(fun () -> keyf#write_into idxs) ;
               idxs#logf
                 (fun m -> m "Ordered idx ptr (=%d)" vptr)
-                ~f:(fun () -> idxs#write_string (of_int ~byte_width:ptr_size vptr))
-          ) ;
+                ~f:(fun () -> idxs#write_string (of_int ~byte_width:ptr_size vptr))) ;
           let hdr = make_header t in
           let idx_len = idxs#pos in
           let val_len = vals#pos in
@@ -396,12 +394,12 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           main#logf
             (fun m -> m "Ordered idx len (=%d)" len)
             ~f:(fun () ->
-              main#write_string (of_int ~byte_width:(size_exn hdr "len") len) ) ;
+              main#write_string (of_int ~byte_width:(size_exn hdr "len") len)) ;
           main#logf
             (fun m -> m "Ordered idx index len (=%d)" idx_len)
             ~f:(fun () ->
               main#write_string
-                (of_int ~byte_width:(size_exn hdr "idx_len") idx_len) ) ;
+                (of_int ~byte_width:(size_exn hdr "idx_len") idx_len)) ;
           main#log "Ordered idx map" ~f:(fun () -> idxs#write_into main) ;
           main#log "Ordered idx body" ~f:(fun () -> vals#write_into main) ;
           return main
@@ -453,7 +451,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
             s#logf
               (fun m -> m "String length (=%d)" len)
               ~f:(fun () ->
-                of_int ~byte_width:(size_exn hdr "nchars") len |> s#write_string ) ;
+                of_int ~byte_width:(size_exn hdr "nchars") len |> s#write_string) ;
             s#log "String body" ~f:(fun () -> s#write_string body)
         | t ->
             Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
@@ -472,7 +470,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         let main = new logged_serializer () in
         main#logf
           (fun m ->
-            m "Scalar (=%s)" ([%sexp_of: Value.t] value |> Sexp.to_string_hum) )
+            m "Scalar (=%s)" ([%sexp_of: Value.t] value |> Sexp.to_string_hum))
           ~f:(fun () -> self#serialize_scalar main type_ value) ;
         return main
     end
@@ -481,7 +479,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
     Meta.update r Meta.pos ~f:(function
       | Some (Pos pos' as p) -> if pos = pos' then p else Many_pos
       | Some Many_pos -> Many_pos
-      | None -> Pos pos )
+      | None -> Pos pos)
 
   let serialize fn l =
     Log.info (fun m -> m "Serializing abstract layout.") ;
@@ -522,7 +520,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
     Option.iter layout_file ~f:(fun fn ->
         serializer#render layout_ch ;
         (Unix.create_process ~prog:"mv" ~args:[layout_fn; fn]).pid |> Unix.waitpid
-        |> ignore ) ;
+        |> ignore) ;
     Out_channel.close layout_ch ;
     (l, len)
 end

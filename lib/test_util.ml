@@ -77,7 +77,7 @@ let create_simple db name fields values =
       let values_sql = List.map vs ~f:Int.to_string |> String.concat ~sep:", " in
       Db.(
         exec db (sprintf "insert into %s values (%s)" name values_sql)
-        |> command_ok_exn) )
+        |> command_ok_exn))
 
 let create db name fields values =
   let fields_sql =
@@ -88,7 +88,7 @@ let create db name fields values =
         | StringT _ -> sprintf "%s varchar" f
         | BoolT _ -> sprintf "%s boolean" f
         | DateT _ -> sprintf "%s date" f
-        | _ -> failwith "Unexpected type." )
+        | _ -> failwith "Unexpected type.")
     |> String.concat ~sep:", "
   in
   Db.(exec db (sprintf "create table %s (%s)" name fields_sql) |> command_ok_exn) ;
@@ -96,7 +96,7 @@ let create db name fields values =
       let values_sql = List.map vs ~f:Value.to_sql |> String.concat ~sep:", " in
       Db.(
         exec db (sprintf "insert into %s values (%s)" name values_sql)
-        |> command_ok_exn) )
+        |> command_ok_exn))
 
 let test_db_conn =
   lazy

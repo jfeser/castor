@@ -48,7 +48,7 @@ let%expect_test "" =
   in
   List.iter (to_cnf p) ~f:(fun clause ->
       List.iter clause ~f:(Format.printf "@[<h>%a@]@." pp) ;
-      printf "\n" ) ;
+      printf "\n") ;
   [%expect
     {|
     (p_partkey = s0.l_partkey)
@@ -3986,8 +3986,9 @@ let%expect_test "" =
   in
   List.iter (simplify p) ~f:(fun clause ->
       List.iter clause ~f:(Format.printf "@[<h>%a@]@." pp) ;
-      printf "\n" );
-  [%expect {|
+      printf "\n") ;
+  [%expect
+    {|
     (p_brand = param0)
     (p_brand = param1)
     (p_brand = param2)

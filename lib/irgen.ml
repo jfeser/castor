@@ -59,7 +59,7 @@ struct
       if Config.code_only then
         Map.update ctx start_name ~f:(function
           | Some x -> x
-          | None -> Ctx.(Global Infix.(int 0)) )
+          | None -> Ctx.(Global Infix.(int 0)))
       else
         match Meta.(find r pos) with
         | Some (Pos start) ->
@@ -67,7 +67,7 @@ struct
                passed in. *)
             Map.update ctx start_name ~f:(function
               | Some x -> x
-              | None -> Ctx.(Global Infix.(int start)) )
+              | None -> Ctx.(Global Infix.(int start)))
         | Some Many_pos | None -> ctx
     in
     ctx
@@ -91,7 +91,7 @@ struct
         let key_val = Index (key, i) in
         Option.map bnd ~f:(function
           | e, `Open -> build_open key_val e b
-          | e, `Closed -> build_closed key_val e b ) )
+          | e, `Closed -> build_closed key_val e b))
     |> List.reduce ~f:reducer
     |> Option.value ~default:(Bool true)
 
@@ -145,7 +145,7 @@ struct
         build_if ~cond:(is_above_lower key b)
           ~then_:(fun b -> build_assign mid high b)
           ~else_:(fun b -> build_assign Infix.(mid + int 1) low b)
-          b )
+          b)
       b ;
     (* Iterate through the keys until one is found that is above the upper bound. *)
     let idx = build_defn "idx" low b in
@@ -162,8 +162,8 @@ struct
               ~else_:(fun _ -> ())
               b ;
             build_assign Infix.(idx + int 1) idx b ;
-            build_assign (build_key idx b) key b )
-          b )
+            build_assign (build_key idx b) key b)
+          b)
       ~else_:(fun _ -> ())
       b
 
@@ -375,7 +375,7 @@ struct
       | clayout :: clayouts, ctype :: ctypes, cstart :: cstarts ->
           let ctx = Ctx.bind ctx "start" Type.PrimType.int_t cstart in
           scan ctx b clayout ctype (fun b tup ->
-              make_loops ctx (fields @ tup) clayouts ctypes cstarts b )
+              make_loops ctx (fields @ tup) clayouts ctypes cstarts b)
       | _ -> failwith ""
     in
     let hdr = Header.make_header (TupleT t) in
@@ -387,7 +387,7 @@ struct
           ~f:(fun (cstart, ret) ctype ->
             let cstart = build_defn "cstart" cstart b in
             let next_cstart = Infix.(cstart + len cstart ctype) in
-            (next_cstart, RevList.(ret ++ cstart)) )
+            (next_cstart, RevList.(ret ++ cstart)))
       in
       RevList.to_list ret
     in
@@ -417,12 +417,12 @@ struct
                  ~ret:(type_of_layout callee_layout)
              in
              scan callee_ctx b' callee_layout callee_type (fun b tup ->
-                 build_yield (Tuple tup) b ) ;
+                 build_yield (Tuple tup) b) ;
              let iter = build_func b' in
              add_iter iter ;
              build_iter iter callee_args b ;
              build_assign Infix.(cstart + len cstart callee_type) cstart b ;
-             iter )
+             iter)
     in
     let child_tuples =
       List.map callee_funcs ~f:(fun f -> build_var "tup" f.ret_type b)
@@ -431,7 +431,7 @@ struct
       List.iter2_exn callee_funcs child_tuples ~f:(fun f t -> build_step t f b) ;
       let tup =
         List.map2_exn child_types child_tuples ~f:(fun in_t child_tup ->
-            List.init (Type.width in_t) ~f:(fun i -> Infix.(index child_tup i)) )
+            List.init (Type.width in_t) ~f:(fun i -> Infix.(index child_tup i)))
         |> List.concat
         |> fun l -> Tuple l
       in
@@ -443,7 +443,7 @@ struct
         build_body b ;
         let not_done =
           List.fold_left callee_funcs ~init:(Bool true) ~f:(fun acc f ->
-              Infix.(acc && not (Done f.name)) )
+              Infix.(acc && not (Done f.name)))
         in
         build_loop not_done build_body b
 
@@ -464,7 +464,7 @@ struct
     List.iter2_exn child_layouts child_types ~f:(fun child_layout child_type ->
         let clen = len cstart child_type in
         scan ctx b child_layout child_type cb ;
-        build_assign Infix.(cstart + clen) cstart b )
+        build_assign Infix.(cstart + clen) cstart b)
 
   and scan_list ctx b (_, child_layout) ((child_type, _) as t) (cb : callback) =
     let open Builder in
@@ -478,7 +478,7 @@ struct
       (fun b ->
         let clen = len cstart child_type in
         scan callee_ctx b child_layout child_type cb ;
-        build_assign Infix.(cstart + clen) cstart b )
+        build_assign Infix.(cstart + clen) cstart b)
       b
 
   and scan_hash_idx ctx b r t cb =
@@ -535,15 +535,15 @@ struct
         debug_print "found values" value_ptr b ;
         build_assign value_ptr kstart b ;
         scan key_ctx b key_layout key_type (fun b tup ->
-            build_assign (Tuple tup) key_tuple b ) ;
+            build_assign (Tuple tup) key_tuple b) ;
         build_assign Infix.(value_ptr + len value_ptr key_type) vstart b ;
         build_if
           ~cond:(build_eq key_tuple (Tuple lookup_expr) b)
           ~then_:(fun b ->
             scan value_ctx b r.hi_values value_type (fun b value_tup ->
-                cb b (list_of_tuple key_tuple b @ value_tup) ) )
+                cb b (list_of_tuple key_tuple b @ value_tup)))
           ~else_:(fun _ -> ())
-          b )
+          b)
       b
 
   and scan_ordered_idx ctx b r t cb =
@@ -579,7 +579,7 @@ struct
       build_assign (key_start i) kstart b ;
       let key = build_var ~persistent:false "key" (type_of_layout key_layout) b in
       scan key_ctx b key_layout key_type (fun b tup ->
-          build_assign (Tuple tup) key b ) ;
+          build_assign (Tuple tup) key b) ;
       key
     in
     let n = Infix.(index_len / kp_len) in
@@ -593,7 +593,7 @@ struct
         build_assign Infix.(read_ptr idx + index_len + index_start) vstart b ;
         build_assign key key_tuple b ;
         scan value_ctx b value_layout value_type (fun b value_tup ->
-            cb b (list_of_tuple key_tuple b @ value_tup) ) )
+            cb b (list_of_tuple key_tuple b @ value_tup)))
       b
 
   and scan_filter ctx b r t cb =
@@ -613,12 +613,12 @@ struct
             debug_print
               (Format.asprintf "filter %a selected" Pred.pp pred)
               (Tuple tup) b ;
-            cb b tup )
+            cb b tup)
           ~else_:(fun b ->
             debug_print
               (Format.asprintf "filter %a rejected" Pred.pp pred)
-              (Tuple tup) b )
-          b )
+              (Tuple tup) b)
+          b)
 
   and agg_init ctx p b =
     let open Builder in
@@ -683,7 +683,7 @@ struct
               let child_schema = A.schema_exn child_layout in
               Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
             in
-            cb b (List.map args ~f:(fun p -> gen_pred ctx p b)) )
+            cb b (List.map args ~f:(fun p -> gen_pred ctx p b)))
     | `Agg ->
         (* Extract all the aggregates from the arguments. *)
         let scalar_preds, agg_preds =
@@ -706,7 +706,7 @@ struct
         scan ctx b child_layout child_type (fun b tup ->
             build_assign (Tuple tup) last_tup b ;
             List.iter agg_temps ~f:(fun (_, p) -> agg_step pred_ctx b p) ;
-            build_assign (Bool true) found_tup b ) ;
+            build_assign (Bool true) found_tup b) ;
         (* Extract and return aggregates. *)
         build_if ~cond:found_tup
           ~then_:(fun b ->
@@ -715,13 +715,13 @@ struct
             in
             let output_ctx =
               List.fold_left agg_temps ~init:pred_ctx ~f:(fun ctx (n, v) ->
-                  Ctx.bind ctx n (type_of v b) v )
+                  Ctx.bind ctx n (type_of v b) v)
             in
             let output =
               List.map ~f:(fun p -> gen_pred output_ctx p b) scalar_preds
             in
             debug_print "select produced" (Tuple output) b ;
-            cb b output )
+            cb b output)
           ~else_:(fun _ -> ())
           b
 
@@ -750,7 +750,7 @@ struct
           in
           Ctx.bind_ctx rhs_ctx lhs_ctx
         in
-        scan rhs_ctx b d_rhs rhs_t cb )
+        scan rhs_ctx b d_rhs rhs_t cb)
 
   let printer ctx r t =
     let open Builder in

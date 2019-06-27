@@ -7,7 +7,7 @@ module A = Abslayout0
 let () =
   Caml.Printexc.register_printer (function
     | Postgresql.Error e -> Some (Postgresql.string_of_error e)
-    | _ -> None )
+    | _ -> None)
 
 type t = {uri: string; conn: Psql.connection sexp_opaque [@compare.ignore]}
 [@@deriving compare, sexp]
@@ -29,7 +29,7 @@ let subst_params params query =
   | [] -> query
   | _ ->
       List.foldi params ~init:query ~f:(fun i q v ->
-          String.substr_replace_all ~pattern:(Printf.sprintf "$%d" i) ~with_:v q )
+          String.substr_replace_all ~pattern:(Printf.sprintf "$%d" i) ~with_:v q)
 
 let rec exec ?(max_retries = 0) ?(params = []) db query =
   let query = subst_params params query in
@@ -68,7 +68,7 @@ let exec1 ?params conn query =
        | [x] -> x
        | t ->
            Error.create "Unexpected query results." t [%sexp_of: string list]
-           |> Error.raise )
+           |> Error.raise)
 
 let exec3 ?params conn query =
   exec ?params conn query |> result_to_strings
@@ -76,7 +76,7 @@ let exec3 ?params conn query =
        | [x; y; z] -> (x, y, z)
        | t ->
            Error.create "Unexpected query results." t [%sexp_of: string list]
-           |> Error.raise )
+           |> Error.raise)
 
 let relation conn r_name =
   let r_schema =
@@ -125,7 +125,7 @@ let relation conn r_name =
              | "timestamp without time zone" -> StringT {nullable; padded= false}
              | s -> failwith (Printf.sprintf "Unknown dtype %s" s)
            in
-           Name.create ~type_ fname )
+           Name.create ~type_ fname)
     |> Option.some
   in
   A.{r_name; r_schema}
@@ -143,7 +143,7 @@ let all_relations conn =
 
 let relation_has_field conn f =
   List.find (all_relations conn) ~f:(fun r ->
-      List.exists (Option.value_exn r.A.r_schema) ~f:(fun n -> Name.name n = f) )
+      List.exists (Option.value_exn r.A.r_schema) ~f:(fun n -> Name.name n = f))
 
 let load_value type_ value =
   let open Type.PrimType in
@@ -189,7 +189,7 @@ let load_tuples_exn s (r : Postgresql.result) =
       Gen.init ~limit:r#ntuples (fun tidx ->
           Array.of_list_mapi s ~f:(fun fidx type_ ->
               if r#getisnull tidx fidx then Value.Null
-              else load_value type_ (r#getvalue tidx fidx) |> Or_error.ok_exn ) )
+              else load_value type_ (r#getvalue tidx fidx) |> Or_error.ok_exn))
     in
     gen
 
@@ -204,7 +204,7 @@ let load_tuples_list_exn s (r : Postgresql.result) =
     List.init r#ntuples ~f:(fun tidx ->
         Array.of_list_mapi s ~f:(fun fidx type_ ->
             if r#getisnull tidx fidx then Value.Null
-            else load_value type_ (r#getvalue tidx fidx) |> Or_error.ok_exn ) )
+            else load_value type_ (r#getvalue tidx fidx) |> Or_error.ok_exn))
 
 let exec_cursor_exn =
   let fresh = Fresh.create () in
@@ -236,7 +236,7 @@ let exec_cursor_exn =
               db_idx := !db_idx + r#ntuples ;
               let idx = idx + r#ntuples in
               let state = if r#ntuples < batch_size then `Done else `Not_done idx in
-              Some (tups, state) )
+              Some (tups, state))
         (`Not_done 1)
       |> Gen.flatten
     in
@@ -287,7 +287,7 @@ let exec_cursor_lwt_exn =
             exec db "abort;" |> command_ok_exn ;
             (db.conn)#finish ;
             is_done := true ;
-            raise Lwt_unix.Timeout )
+            raise Lwt_unix.Timeout)
       |> flatten)
 
 let check db sql =

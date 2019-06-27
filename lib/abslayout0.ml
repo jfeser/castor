@@ -264,7 +264,7 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
         fprintf fmt "aorderedidx(%a,@ %a,@ %a)" pp r1 pp r2
           (pp_list ~bracket:("", "") (fun fmt (lb, ub) ->
                fprintf fmt "%a, %a" (pp_option pp_lower_bound) lb
-                 (pp_option pp_upper_bound) ub ))
+                 (pp_option pp_upper_bound) ub))
           oi_lookup
     | As (n, r) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp r n ) ;
     Option.iter pp_meta ~f:(fun ppm -> fprintf fmt "#@[<hv 2>%a@]" ppm !meta) ;

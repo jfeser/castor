@@ -27,7 +27,7 @@ let%test_module _ =
                       msgs
                       @ [ sprintf "%s key: %s" kind
                             ([%sexp_of: Value.t list] k |> Sexp.to_string_hum) ]
-                      @ v )
+                      @ v)
                 ; extract= (fun x -> x) })
 
           method list _ _ =
@@ -40,7 +40,7 @@ let%test_module _ =
                       msgs
                       @ [ sprintf "%s key: %s" kind
                             ([%sexp_of: Value.t list] k |> Sexp.to_string_hum) ]
-                      @ v )
+                      @ v)
                 ; extract= (fun x -> x) })
 
           method hash_idx _ _ = self#collection "HashIdx"
@@ -67,7 +67,7 @@ let%test_module _ =
       let run () =
         let sparams =
           Option.map params ~f:(fun p ->
-              List.map p ~f:(fun (n, _) -> n) |> Set.of_list (module Name) )
+              List.map p ~f:(fun (n, _) -> n) |> Set.of_list (module Name))
         in
         let layout = M.load_string ?params:sparams query in
         print_fold#run layout |> List.iter ~f:print_endline

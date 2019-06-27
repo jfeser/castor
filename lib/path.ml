@@ -11,7 +11,7 @@ let ( @ ) = ( @ )
 let shallowest_first p1 p2 =
   match
     List.fold2 p1 p2 ~init:0 ~f:(fun c e1 e2 ->
-        if c = 0 then [%compare: int] e1 e2 else c )
+        if c = 0 then [%compare: int] e1 e2 else c)
   with
   | Ok o -> o
   | Unequal_lengths -> [%compare: int] (List.length p1) (List.length p2)
@@ -132,7 +132,7 @@ let all r =
                 List.foldi rs ~init:q ~f:(fun i q r -> Fqueue.enqueue q (r, p ++ i))
           in
           Some (RevList.to_list p, q)
-      | None -> None )
+      | None -> None)
 
 let%test_unit "all-valid" =
   let q =

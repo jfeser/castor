@@ -42,9 +42,9 @@ let prune_args m =
             if Set.mem ns n then Some i
             else (
               Log.debug (fun m -> m "Removing parameter %s from %s." n f.name) ;
-              None ) )
+              None ))
       in
-      Hashtbl.set needed_args ~key:f.name ~data:args ) ;
+      Hashtbl.set needed_args ~key:f.name ~data:args) ;
   let prune_func f =
     let args' =
       Hashtbl.find_exn needed_args f.name |> List.map ~f:(List.nth_exn f.args)
@@ -83,9 +83,9 @@ let prune_locals m =
               let should_prune = not (Set.mem ns lname) in
               if should_prune then
                 Log.debug (fun m -> m "Dropping local %s in %s." lname f.name) ;
-              not should_prune )
+              not should_prune)
         in
-        {f with locals= locals'} )
+        {f with locals= locals'})
   in
   {m with iters= iters'}
 
@@ -133,7 +133,7 @@ let inline sl_iters func =
                 List.filter_map func.locals ~f:(fun l ->
                     if List.exists func.args ~f:(fun (n, _) -> String.(n = l.lname))
                     then None
-                    else Some {l with persistent= false} )
+                    else Some {l with persistent= false})
                 @ !locals ;
               let func'' = yield_visitor#visit_func () func' in
               let body = func''.body in
@@ -166,7 +166,7 @@ let inline_sl_iter m =
       in
       let has_loop, yield_ct = visitor#visit_func () f in
       if (not has_loop) && yield_ct = 1 then
-        Hashtbl.set sl_iters ~key:f.name ~data:f ) ;
+        Hashtbl.set sl_iters ~key:f.name ~data:f) ;
   let iters' = List.map m.iters ~f:(inline sl_iters) in
   {m with iters= iters'}
 
@@ -187,7 +187,7 @@ let calls f f' =
 let prune_funcs m =
   let iters' =
     List.filter m.Irgen.iters ~f:(fun f ->
-        List.exists (m.iters @ m.funcs) ~f:(fun f' -> calls f' f) )
+        List.exists (m.iters @ m.funcs) ~f:(fun f' -> calls f' f))
   in
   {m with iters= iters'}
 
@@ -255,10 +255,10 @@ let hoist_const_exprs m =
         in
         let locals' =
           List.map hoister#hoisted ~f:(fun (n, _, t) ->
-              {lname= n; type_= t; persistent= false} )
+              {lname= n; type_= t; persistent= false})
           @ func.locals
         in
-        {func' with body= body'; locals= locals'} )
+        {func' with body= body'; locals= locals'})
   in
   {m with funcs= funcs'}
 
@@ -318,13 +318,15 @@ let%test_module _ =
     end)
 
     module S =
-      Serialize.Make (struct
+      Serialize.Make
+        (struct
           let layout_file = None
         end)
         (M)
 
     module I =
-      Irgen.Make (struct
+      Irgen.Make
+        (struct
           let debug = false
 
           let code_only = true

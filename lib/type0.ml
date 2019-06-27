@@ -109,7 +109,7 @@ module PrimType = struct
   let unify t1 t2 =
     Or_error.try_with (fun () -> unify t1 t2)
     |> (fun err ->
-         Or_error.tag_arg err "Failed to unify." (t1, t2) [%sexp_of: t * t] )
+         Or_error.tag_arg err "Failed to unify." (t1, t2) [%sexp_of: t * t])
     |> Or_error.ok_exn
 
   let rec width = function

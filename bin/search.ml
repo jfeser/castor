@@ -33,7 +33,7 @@ let validate : Ralgebra.t -> bool =
         try
           Type.of_layout_exn l |> ignore ;
           true
-        with Type.TypeError _ -> false )
+        with Type.TypeError _ -> false)
   in
   (not has_refs) && types_check
 
@@ -63,7 +63,7 @@ let main :
             Error.create "Empty parameter list." (name, pname)
               [%sexp_of: string * string]
             |> Error.raise
-        | v :: _ -> (pname, v) )
+        | v :: _ -> (pname, v))
   in
   let qconn = new connection ~dbname:"benchmarks" () in
   (* Create search queue. *)
@@ -119,7 +119,7 @@ let main :
             Writer.flushed w
             >>| fun () ->
             Logs.info (fun m -> m "Done writing %s." hash) ;
-            Result.Ok () )
+            Result.Ok ())
       else return ()
     in
     (* Unlock the candidate in the search queue. *)
@@ -139,7 +139,7 @@ let main :
         match%map Reader.read_bin_prot ?max_len reader bin_reader_t with
         | `Ok r -> Result.Ok (to_candidate r)
         | `Eof ->
-            Result.Error (Error.create "EOF when reading." fn [%sexp_of: string]) )
+            Result.Error (Error.create "EOF when reading." fn [%sexp_of: string]))
     >>| Result.map_error ~f:(fun e -> Error.(of_exn e |> tag ~tag:fn))
     >>| Result.join
     >>| fun e ->
@@ -170,7 +170,7 @@ returning hash;
           | Ok () -> false
           | Error e ->
               Logs.warn (fun m ->
-                  m "Searching candidate failed: %s" (Error.to_string_hum e) ) ;
+                  m "Searching candidate failed: %s" (Error.to_string_hum e)) ;
               true
         in
         Db.exec qconn
@@ -213,7 +213,8 @@ returning hash;
       ; (check_disk, "Disk use")
       ; (check_time, "Runtime") ]
     in
-    List.find_map checks ~f:(fun (check, msg) -> if check () then Some msg else None)
+    List.find_map checks ~f:(fun (check, msg) ->
+        if check () then Some msg else None)
   in
   let module Config = struct
     let conn = new connection ~dbname:db ()
@@ -245,12 +246,12 @@ returning hash;
                       hash
                   in
                   Gc.add_finalizer_last_exn cand (fun () ->
-                      Logs.info (fun m -> m "Deallocated %s" name) ) ;
+                      Logs.info (fun m -> m "Deallocated %s" name)) ;
                   Logs.info (fun m -> m "Generated %s" name) ;
                   serialize cand
                   >>| fun () ->
                   Logs.info (fun m -> m "Compacting the heap.") ;
-                  Gc.compact () ) ) )
+                  Gc.compact ())))
     in
     match is_done () with Some msg -> `Finished msg | None -> `Repeat ()
   in
@@ -274,7 +275,7 @@ returning hash;
       | Ok () -> ()
       | Error e -> Logs.err (fun m -> m "%s" (Error.to_string_hum e)) ) ;
       let%map msg = Deferred.repeat_until_finished () search in
-      Logs.info (fun m -> m "Terminated: %s" msg) )
+      Logs.info (fun m -> m "Terminated: %s" msg))
 
 let () =
   (* Set early so we get logs from command parsing code. *)

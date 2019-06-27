@@ -13,7 +13,7 @@ let () =
       let ocaml_trace = Backtrace.get () in
       print_endline (Backtrace.to_string ocaml_trace) ;
       print_endline "" ;
-      print_endline err ) ;
+      print_endline err) ;
   Llvm_all_backends.initialize ()
 
 module Project_config = Config
@@ -127,7 +127,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       let lookup_single m k =
         Option.map (Hashtbl.find m k) ~f:(function
           | Param {alloca= Some x; _} | Local x -> x
-          | Param {idx; alloca= None} -> build_struct_gep params idx k builder )
+          | Param {idx; alloca= None} -> build_struct_gep params idx k builder)
       in
       (* Look up a name in a scope list. The first scope which contains the
          name's value is returned. *)
@@ -251,7 +251,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       let struct_ = build_entry_alloca ctx struct_t "tupleptrtmp" builder in
       List.iteri vs ~f:(fun i v ->
           let ptr = build_struct_gep struct_ i "ptrtmp" builder in
-          build_store v ptr builder |> tag runtime_val |> ignore ) ;
+          build_store v ptr builder |> tag runtime_val |> ignore) ;
       build_load struct_ "tupletmp" builder |> tag runtime_val
 
     let unpack v =
@@ -411,7 +411,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
               let Llstring.{len= str_size; _} = Llstring.unpack str_struct in
               let str_size = build_intcast str_size int_type "key_size" builder in
               build_add str_size size "" builder
-          | BoolT _ -> build_add (size_of bool_type) size "" builder )
+          | BoolT _ -> build_add (size_of bool_type) size "" builder)
     in
     let key_size =
       build_add key_size
@@ -469,7 +469,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
             build_add key_offset (size_of (i8_type ctx)) "" builder )
           else key_offset
         in
-        key_offset )
+        key_offset)
     |> ignore ;
     let hash = codegen_hash fctx hash_ptr key_ptr key_size in
     hash
@@ -673,7 +673,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
           List.zip_exn ts (Lltuple.unpack val_)
           |> List.iteri ~f:(fun i (t, v) ->
                  gen v t ;
-                 if i < last_i then call_printf sep_str [] )
+                 if i < last_i then call_printf sep_str [])
       | VoidT -> call_printf void_str []
       | FixedT _ -> call_printf float_fmt [val_]
       | IntT {nullable= true}
@@ -727,7 +727,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
             let param_type = type_of param in
             let param_alloca = build_entry_alloca ctx param_type name builder in
             build_store param param_alloca builder |> ignore ;
-            Param {idx; alloca= Some param_alloca} )
+            Param {idx; alloca= Some param_alloca})
 
   let rec codegen_stmt fctx = function
     | I.Loop {cond; body} -> codegen_loop fctx codegen_prog cond body
@@ -779,7 +779,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     List.iter locals ~f:(fun {lname= n; type_= t; _} ->
         let lltype = codegen_type t in
         let var = build_alloca lltype n builder in
-        Hashtbl.set fctx#values ~key:n ~data:(Local var) ) ;
+        Hashtbl.set fctx#values ~key:n ~data:(Local var)) ;
     (* Put arguments into symbol table. *)
     let param_ptr = param fctx#llfunc 0 in
     Hashtbl.set fctx#values ~key:"params" ~data:(Local param_ptr) ;
@@ -865,7 +865,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         let bb = append_block ctx "entry" llfunc in
         position_at_end bb builder ;
         build_store (param llfunc 1) (get_val fctx n) builder |> ignore ;
-        build_ret_void builder |> ignore )
+        build_ret_void builder |> ignore)
 
   let codegen Irgen.{funcs= ir_funcs; params; buffer_len; _} =
     Log.info (fun m -> m "Codegen started.") ;
@@ -878,7 +878,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     (* Generate global constants for parameters. *)
     List.iter typed_params ~f:(fun (n, t) ->
         let lltype = codegen_type t in
-        SB.build_global sb n lltype ) ;
+        SB.build_global sb n lltype) ;
     let fctxs = List.map ir_funcs ~f:(fun func -> new fctx func typed_params) in
     params_struct_t := SB.build_param_struct sb "params" ;
     List.iter fctxs ~f:codegen_func ;
@@ -918,7 +918,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     and pp_params fmt ts =
       Array.iteri ts ~f:(fun i t ->
           if i = 0 then fprintf fmt "params*" else fprintf fmt "%a" pp_type t ;
-          if i < Array.length ts - 1 then fprintf fmt "," )
+          if i < Array.length ts - 1 then fprintf fmt ",")
     and pp_value_decl fmt v =
       let t = type_of v in
       let n = value_name v in
@@ -987,7 +987,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     in
     Out_channel.with_file ir_fn ~f:(fun ch ->
         let fmt = Caml.Format.formatter_of_out_channel ch in
-        IG.pp fmt ir_module ) ;
+        IG.pp fmt ir_module) ;
     (* Generate header. *)
     Out_channel.with_file header_fn ~f:write_header ;
     (* Generate main file. *)
@@ -995,7 +995,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       Log.debug (fun m -> m "Creating main file.") ;
       let funcs, calls =
         List.filter params ~f:(fun n ->
-            List.exists ir_module.Irgen.params ~f:(fun n' -> Name.O.(n = n')) )
+            List.exists ir_module.Irgen.params ~f:(fun n' -> Name.O.(n = n')))
         |> List.mapi ~f:(fun i n ->
                Log.debug (fun m -> m "Creating loader for %a." Name.pp n) ;
                let loader_fn =
@@ -1008,7 +1008,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
                  | FixedT _ -> "load_float.c"
                  | VoidT | TupleT _ -> failwith "Unsupported parameter type."
                in
-               (from_fn loader_fn) (Name.name n) i )
+               (from_fn loader_fn) (Name.name n) i)
         |> List.unzip
       in
       let header_str = "#include \"scanner.h\"" in
@@ -1018,7 +1018,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       let perf_c =
         let open In_channel in
         with_file perf_template ~f:(fun ch ->
-            String.template (input_all ch) [funcs_str; calls_str] )
+            String.template (input_all ch) [funcs_str; calls_str])
       in
       Out_channel.(with_file main_fn ~f:(fun ch -> output_string ch perf_c))
     in

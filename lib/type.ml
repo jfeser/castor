@@ -44,7 +44,7 @@ module AbsInt = struct
         let min_many = List.reduce_exn ~f:Int.min in
         let max_many = List.reduce_exn ~f:Int.max in
         let xs = [l1 * l2; l1 * h2; l2 * h1; h2 * h1] in
-        Interval (min_many xs, max_many xs) )
+        Interval (min_many xs, max_many xs))
 
   let meet i1 i2 =
     match (i1, i2) with

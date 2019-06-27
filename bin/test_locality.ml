@@ -42,8 +42,8 @@ let () =
                          (int (ntuples l))
                          (seq [`S ("x" += "f"); `Y (Implang.Var "x")])) ])
             |> Seq.iter ~f:(fun v ->
-                   print_endline (Sexp.to_string_hum (Implang.sexp_of_value v)) )
-          with e -> Exn.to_string e |> print_endline ) )
+                   print_endline (Sexp.to_string_hum (Implang.sexp_of_value v)))
+          with e -> Exn.to_string e |> print_endline))
 
 (* let rec loop ct =
    *   if ct <= 0 then () else

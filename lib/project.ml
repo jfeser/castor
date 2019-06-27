@@ -22,7 +22,7 @@ let all_unref_at r r' =
   let refcnt = Meta.find_exn r' Meta.refcnt in
   let schema = schema_exn r in
   List.for_all (Schema.unscoped schema) ~f:(fun n ->
-      match Map.(find refcnt n) with Some c -> c = 0 | None -> false )
+      match Map.(find refcnt n) with Some c -> c = 0 | None -> false)
 
 (** True if all fields emitted by r are unreferenced. *)
 let all_unref r = all_unref_at r r
@@ -35,9 +35,9 @@ let _pp_with_refcount, _ =
       | Some r ->
           fprintf fmt "@[<hv 2>{" ;
           Map.iteri r ~f:(fun ~key:n ~data:c ->
-              if c > 0 then fprintf fmt "%a=%d,@ " Name.pp n c ) ;
+              if c > 0 then fprintf fmt "%a=%d,@ " Name.pp n c) ;
           fprintf fmt "}@]"
-      | None -> () )
+      | None -> ())
     ()
 
 type count = AtLeastOne | Exact [@@deriving sexp]
@@ -129,7 +129,7 @@ let project_visitor =
                     (* Otherwise we can remove anything unreferenced. *)
                     | AtLeastOne -> is_unref
                   in
-                  not should_remove )
+                  not should_remove)
               |> List.map ~f:(self#visit_t ())
             in
             let rs = if List.length rs = 0 then [scalar dummy] else rs in
