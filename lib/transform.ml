@@ -186,6 +186,14 @@ module Make (Config : Config.S) () = struct
         fix
           (at_ push_orderby
              Path.(all >>? is_orderby >>? is_run_time >>| shallowest))
+        (* Last-ditch tactic to eliminate orderby. *)
+      ; for_all S.row_store Path.(all >>? is_orderby >>? is_run_time)
+      ; (* Try throwing away structure if it reduces overall cost. *)
+        Branching.(
+          choose id
+            (for_all (lift S.row_store)
+               Path.(all >>? is_run_time >>? not has_params))
+          |> lower (min Type_cost.(cost ~kind:`Avg read)))
       ; (* Cleanup*)
         fix project
       ; Simplify_tactic.simplify ]
