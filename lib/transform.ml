@@ -23,6 +23,8 @@ module Config = struct
     include Join_elim_tactics.Config.S
 
     include Type_cost.Config.S
+
+    val cost_timeout : float option
   end
 end
 
@@ -134,7 +136,9 @@ module Make (Config : Config.S) () = struct
                       ; push_all_unparameterized_filters
                       ; fix project
                       ; Simplify_tactic.simplify ]) ]
-             |> lower (min Type_cost.(cost ~kind:`Avg read))) ])
+             |> lower
+                  (min Type_cost.(cost ?timeout:cost_timeout ~kind:`Avg read)))
+         ])
 
   let opt =
     let open Infix in
@@ -212,7 +216,7 @@ module Make (Config : Config.S) () = struct
     let mis_bound_params =
       Path.(all >>? is_compile_time) r
       |> Seq.for_all ~f:(fun p ->
-             not (overlaps (free (Path.get_exn p r)) params) )
+             not (overlaps (free (Path.get_exn p r)) params))
       |> not
     in
     if bad_runtime_op then Error (Error.of_string "Bad runtime operation.")
