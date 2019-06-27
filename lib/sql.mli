@@ -2,6 +2,8 @@ open! Core
 
 type t
 
+val src : Logs.Src.t
+
 val of_ralgebra : Abslayout.t -> t
 
 val to_string : t -> string

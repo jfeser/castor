@@ -2,6 +2,12 @@ open! Core
 open Collections
 open Abslayout
 
+let src =
+  let src = Logs.Src.create "sql-test" in
+  Logs.Src.set_level src None ; src
+
+module LogT = (val Logs.src_log src : Logs.LOG)
+
 type select_entry = {pred: pred; alias: string; cast: Type.PrimType.t option}
 [@@deriving compare, sexp_of]
 
@@ -54,23 +60,21 @@ let has_aggregates sql =
   | `Agg -> true
 
 (** Convert a query to an SPJ by introducing a subquery. *)
-let create_subquery q =
+let create_subquery ?(extra_select = []) q =
   let alias = Fresh.name Global.fresh "t%d" in
   let select_list =
-    to_schema q |> List.map ~f:(fun n -> create_entry (Name (Name.create n)))
+    to_schema q @ extra_select
+    |> List.map ~f:(fun n -> create_entry (Name (Name.create n)))
   in
   create_query ~relations:[(`Subquery (q, alias), `Left)] select_list
 
 let to_spj = function Query q -> q | Union_all _ as q -> create_subquery q
 
 let make_ctx schema select =
-  if List.length schema <> List.length select then
-    Error.create "Mismatched schema and select." (schema, select)
-      [%sexp_of: Name.t list * select_entry list]
-    |> Error.raise ;
-  List.fold2_exn schema select
+  let pairs, _ = List.zip_with_remainder schema select in
+  List.fold pairs
     ~init:(Map.empty (module Name))
-    ~f:(fun m n {pred= p; _} ->
+    ~f:(fun m (n, {pred= p; _}) ->
       if Map.mem m n then
         Log.warn (fun m -> m "Duplicate name in schema %a." Name.pp n) ;
       Map.set m ~key:n ~data:p )
@@ -111,26 +115,60 @@ let order_by of_ralgebra key r =
   in
   Query {spj with order= key}
 
+let scoped_names ns p =
+  let visitor =
+    object
+      inherit [_] reduce
+
+      inherit [_] Util.set_monoid (module Name)
+
+      method! visit_Name () n =
+        if Set.mem ns n then Set.empty (module Name)
+        else Set.singleton (module Name) n
+    end
+  in
+  visitor#visit_pred () p
+
 let select ?groupby of_ralgebra ps r =
   let sql = of_ralgebra r in
-  (* Creating a subquery is always safe, but we want to avoid it if possible. We
-     don't need a subquery if:
-     - This select is aggregation free
-     - This select has aggregates but the inner select is aggregation free *)
-  let needs_subquery =
-    let for_agg =
-      match
-        ( select_kind ps
-        , to_select sql |> List.map ~f:(fun {pred= p; _} -> p) |> select_kind )
-      with
-      | `Scalar, _ | `Agg, `Scalar -> false
-      | `Agg, `Agg -> true
+  let kind = select_kind ps in
+  let spj =
+    (* Creating a subquery is always safe, but we want to avoid it if possible. We
+       don't need a subquery if:
+       - This select is aggregation free
+       - This select has aggregates but the inner select is aggregation free *)
+    let needs_subquery =
+      let for_agg =
+        match
+          (kind, to_select sql |> List.map ~f:(fun {pred= p; _} -> p) |> select_kind)
+        with
+        | `Scalar, _ | `Agg, `Scalar -> false
+        | `Agg, `Agg -> true
+      in
+      (* If the inner query is distinct then it must be wrapped. *)
+      let for_distinct = to_distinct sql in
+      for_agg || for_distinct
     in
-    (* If the inner query is distinct then it must be wrapped. *)
-    let for_distinct = to_distinct sql in
-    for_agg || for_distinct
+    if needs_subquery then create_subquery sql else to_spj sql
   in
-  let spj = if needs_subquery then create_subquery sql else to_spj sql in
+  (* If this select has aggregates and uses names from a containing scope, then
+     those names must be selected first by the subquery. If there are extra
+     fields to select, add them then wrap them in a subquery. *)
+  let spj =
+    (* Names that must have come from an outer scope because they are not in the
+       schema of the child. *)
+    let scoped =
+      List.map ps ~f:(scoped_names (schema_exn r |> Set.of_list (module Name)))
+      |> Set.union_list (module Name)
+    in
+    if kind = `Agg && not (Set.is_empty scoped) then
+      let extra_fields =
+        Set.to_list scoped
+        |> List.map ~f:(fun n -> create_entry ~alias:(Name.name n) (Name n))
+      in
+      create_subquery (Query {spj with select= spj.select @ extra_fields})
+    else spj
+  in
   let sctx = make_ctx (schema_exn r) spj.select in
   let fields = List.map ps ~f:(fun p -> p |> Pred.subst sctx |> create_entry) in
   let spj = {spj with select= fields} in

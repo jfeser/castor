@@ -3,6 +3,7 @@ open Sql
 open Test_util
 
 let run_test s =
+  Logs.Src.set_level src (Some Debug) ;
   let module Config = struct
     let conn = Lazy.force test_db_conn
 
@@ -11,8 +12,10 @@ let run_test s =
   let module M = Abslayout_db.Make (Config) in
   let r = M.load_string s in
   let sql_str = of_ralgebra r |> to_string_hum in
-  Db.check Config.conn sql_str |> Or_error.ok_exn ;
-  print_endline sql_str
+  ( match Db.check Config.conn sql_str with
+  | Ok () -> ()
+  | Error e -> print_endline (Error.to_string_hum e) ) ;
+  print_endline sql_str ; Logs.Src.set_level src None
 
 let%expect_test "select-agg" =
   run_test "select([(0.2 * avg(f)) as test], r)" ;
@@ -25,7 +28,8 @@ let%expect_test "select-agg" =
 
 let%expect_test "project" =
   run_test "Select([f], r)" ;
-  [%expect {|
+  [%expect
+    {|
     SELECT
         r_0. "f" AS "f_1"
     FROM
@@ -279,3 +283,28 @@ let%expect_test "ordered-idx" =
             WHERE ((("f_1") >= (NULL))
                 AND (("f_1") < (NULL)))
             AND ((r1_1. "f") = ("f_1"))) AS "t0" |}]
+
+let%expect_test "depjoin-agg" =
+  run_test
+    "depjoin(select([f, g], r) as k, select([min(k.f), max(k.g)], ascalar(0)))" ;
+  [%expect
+    {|
+    SELECT
+        "a1_0" AS "a1_0_0",
+        "a2_0" AS "a2_0_0"
+    FROM (
+        SELECT
+            r_0. "f" AS "f_1",
+            r_0. "g" AS "g_1"
+        FROM
+            "r" AS "r_0") AS "t2",
+        LATERAL (
+            SELECT
+                min("f_1") AS "a1_0",
+                max("g_1") AS "a2_0"
+            FROM (
+                SELECT
+                    0 AS "a0_0",
+                    "f_1",
+                    "g_1") AS "t0") AS "t1"
+|}]
