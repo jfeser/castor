@@ -29,6 +29,7 @@ val exec_cursor_exn :
 val exec_cursor_lwt_exn :
      ?batch_size:int
   -> ?params:string list
+  -> ?timeout:float
   -> t
   -> Type.PrimType.t list
   -> string

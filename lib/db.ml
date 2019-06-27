@@ -1,4 +1,5 @@
 open! Core
+open! Lwt
 open Collections
 module Psql = Postgresql
 module A = Abslayout0
@@ -243,28 +244,50 @@ let exec_cursor_exn =
 
 let exec_cursor_lwt_exn =
   let fresh = Fresh.create () in
-  fun ?(batch_size = 100) ?(params = []) db schema query ->
+  fun ?(batch_size = 100) ?(params = []) ?timeout db schema query ->
     let db = create db.uri in
     Caml.Gc.finalise (fun db -> try (db.conn)#finish with Failure _ -> ()) db ;
     let query = subst_params params query in
     let cur = Fresh.name fresh "cur%d" in
-    let declare_query =
-      sprintf "begin transaction; declare %s cursor for %s;" cur query
-    in
     let fetch_query = sprintf "fetch %d from %s;" batch_size cur in
-    exec db declare_query |> command_ok_exn ;
+    (* Wait for results from a send_query call. consume_input pulls any available input from the database *)
+    let rec wait_for_results rs () =
+      (db.conn)#consume_input ;
+      if (db.conn)#is_busy then
+        (* TODO: Better not to busy wait here. *)
+        let%lwt () = Lwt_unix.yield () in
+        wait_for_results rs ()
+      else
+        match (db.conn)#get_result with
+        | Some r -> wait_for_results (r :: rs) ()
+        | None -> return rs
+    in
+    exec db (sprintf "begin transaction; declare %s cursor for %s;" cur query)
+    |> command_ok_exn ;
     let is_done = ref false in
     Lwt_stream.(
-      from
-        (Lwt_preemptive.detach (fun () ->
-             if !is_done then None
-             else
-               let r = exec db fetch_query in
-               let tups = load_tuples_list_exn schema r in
-               if r#ntuples < batch_size then (
-                 exec db "end transaction;" |> command_ok_exn ;
-                 is_done := true ) ;
-               Some tups ))
+      from (fun () ->
+          try%lwt
+            if !is_done then return None
+            else (
+              (db.conn)#send_query fetch_query ;
+              let%lwt rs =
+                match timeout with
+                | Some t -> Lwt_unix.with_timeout t (wait_for_results [])
+                | None -> wait_for_results [] ()
+              in
+              let tups =
+                List.concat_map rs ~f:(fun r -> load_tuples_list_exn schema r)
+              in
+              if List.length tups < batch_size then (
+                exec db "end transaction;" |> command_ok_exn ;
+                is_done := true ) ;
+              return (Some tups) )
+          with Lwt_unix.Timeout ->
+            exec db "abort;" |> command_ok_exn ;
+            (db.conn)#finish ;
+            is_done := true ;
+            raise Lwt_unix.Timeout )
       |> flatten)
 
 let check db sql =
