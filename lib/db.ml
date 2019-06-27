@@ -284,8 +284,11 @@ let exec_cursor_lwt_exn =
                 is_done := true ) ;
               return (Some tups) )
           with Lwt_unix.Timeout ->
-            exec db "abort;" |> command_ok_exn ;
+            let pid = (db.conn)#backend_pid in
+            (db.conn)#request_cancel ;
             (db.conn)#finish ;
+            (* Kill postgres backend process. *)
+            Signal.(send_i term (`Pid (Pid.of_int pid))) ;
             is_done := true ;
             raise Lwt_unix.Timeout)
       |> flatten)

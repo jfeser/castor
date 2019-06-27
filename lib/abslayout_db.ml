@@ -356,13 +356,13 @@ module Make (Config : Config.S) = struct
         | Q.Empty -> self#eval_empty lctx tups a
         | Q.Scalars x -> self#eval_scalars lctx tups a x
 
-      method run r =
+      method run ?timeout r =
         let q = A.ensure_alias r |> Q.of_ralgebra |> Q.hoist_all in
         let r = Q.to_ralgebra q |> simplify in
         let sql = Sql.of_ralgebra r in
         Logs.debug (fun m -> m "Running query %s" (Sql.to_string_hum sql)) ;
         let tups =
-          Db.exec_cursor_lwt_exn conn
+          Db.exec_cursor_lwt_exn ?timeout conn
             (A.schema_exn r |> List.map ~f:Name.type_exn)
             (Sql.to_string sql)
           |> Lwt_stream.map Array.to_list
@@ -506,10 +506,10 @@ module Make (Config : Config.S) = struct
         Fold {init; fold; extract}
     end
 
-  let type_of r =
+  let type_of ?timeout r =
     Log.info (fun m -> m "Computing type of abstract layout.") ;
     let type_ =
-      try (new type_fold)#run r
+      try (new type_fold)#run ?timeout r
       with exn ->
         let trace = Backtrace.Exn.most_recent () in
         Logs.err (fun m ->

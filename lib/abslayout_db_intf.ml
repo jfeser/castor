@@ -2,7 +2,7 @@ open! Core
 open Abslayout
 
 module type S = sig
-  val type_of : t -> Type.t
+  val type_of : ?timeout:float -> t -> Type.t
 
   val annotate_type : t -> unit
 
@@ -50,7 +50,7 @@ module type S = sig
 
       method select : Meta.t -> pred list * t -> 'a -> 'a
 
-      method run : t -> 'a
+      method run : ?timeout:float -> t -> 'a
     end
 
   val annotate_relations : t -> t
