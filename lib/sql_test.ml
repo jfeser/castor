@@ -22,9 +22,13 @@ let%expect_test "select-agg" =
   [%expect
     {|
     SELECT
-        (0.2) * (avg(r_0. "f")) AS "test_0"
-    FROM
-        "r" AS "r_0" |}]
+        (0.2) * (avg("f_0")) AS "test_0"
+    FROM (
+        SELECT
+            r_0. "f" AS "f_0",
+            r_0. "g" AS "g_0"
+        FROM
+            "r" AS "r_0") AS "t0" |}]
 
 let%expect_test "project" =
   run_test "Select([f], r)" ;
@@ -141,20 +145,28 @@ let%expect_test "join-groupby" =
         "y_0" AS "y_0_0"
     FROM (
         SELECT
-            r1_1. "f" AS "f_2",
-            sum((r1_1. "f") * (r1_1. "g")) AS "x_0"
-        FROM
-            "r1" AS "r1_1"
+            "f_1" AS "f_2",
+            sum(("f_1") * ("g_2")) AS "x_0"
+        FROM (
+            SELECT
+                r1_1. "f" AS "f_1",
+                r1_1. "g" AS "g_2"
+            FROM
+                "r1" AS "r1_1") AS "t1"
         GROUP BY
-            (r1_1. "f")) AS "t0",
+            ("f_1")) AS "t2",
         (
             SELECT
-                r1_0. "g" AS "g_1",
-                sum((r1_0. "f") * (r1_0. "g")) AS "y_0"
-            FROM
-                "r1" AS "r1_0"
+                "g_0" AS "g_1",
+                sum(("f_0") * ("g_0")) AS "y_0"
+            FROM (
+                SELECT
+                    r1_0. "f" AS "f_0",
+                    r1_0. "g" AS "g_0"
+                FROM
+                    "r1" AS "r1_0") AS "t0"
             GROUP BY
-                (r1_0. "g")) AS "t1"
+                ("g_0")) AS "t3"
     WHERE ((("f_2") = ("g_1"))
         OR (("x_0") = ("y_0"))) |}]
 
@@ -182,12 +194,16 @@ let%expect_test "select-groupby" =
           max("x_0") AS "a0_0"
       FROM (
           SELECT
-              r1_0. "f" AS "f_1",
-              sum((r1_0. "f") * (r1_0. "g")) AS "x_0"
-          FROM
-              "r1" AS "r1_0"
+              "f_0" AS "f_1",
+              sum(("f_0") * ("g_0")) AS "x_0"
+          FROM (
+              SELECT
+                  r1_0. "f" AS "f_0",
+                  r1_0. "g" AS "g_0"
+              FROM
+                  "r1" AS "r1_0") AS "t0"
           GROUP BY
-              (r1_0. "f")) AS "t0" |}]
+              ("f_0")) AS "t1" |}]
 
 let%expect_test "select-fusion-1" =
   run_test "select([max(x)], select([min(f) as x], r1))" ;
@@ -197,18 +213,25 @@ let%expect_test "select-fusion-1" =
           max("x_0") AS "a0_0"
       FROM (
           SELECT
-              min(r1_0. "f") AS "x_0"
-          FROM
-              "r1" AS "r1_0") AS "t0" |}]
+              min("f_0") AS "x_0"
+          FROM (
+              SELECT
+                  r1_0. "f" AS "f_0",
+                  r1_0. "g" AS "g_0"
+              FROM
+                  "r1" AS "r1_0") AS "t0") AS "t1" |}]
 
 let%expect_test "select-fusion-2" =
   run_test "select([max(x)], select([f as x], r1))" ;
   [%expect
     {|
     SELECT
-        max(r1_0. "f") AS "a0_0"
-    FROM
-        "r1" AS "r1_0" |}]
+        max("x_0") AS "a0_0"
+    FROM (
+        SELECT
+            r1_0. "f" AS "x_0"
+        FROM
+            "r1" AS "r1_0") AS "t0" |}]
 
 let%expect_test "filter-fusion" =
   run_test "filter((x = 0), groupby([sum(f) as x], [g], r1))" ;
@@ -218,11 +241,15 @@ let%expect_test "filter-fusion" =
           "x_0" AS "x_0_0"
       FROM (
           SELECT
-              sum(r1_0. "f") AS "x_0"
-          FROM
-              "r1" AS "r1_0"
+              sum("f_0") AS "x_0"
+          FROM (
+              SELECT
+                  r1_0. "f" AS "f_0",
+                  r1_0. "g" AS "g_0"
+              FROM
+                  "r1" AS "r1_0") AS "t0"
           GROUP BY
-              (r1_0. "g")) AS "t0"
+              ("g_0")) AS "t1"
       WHERE (("x_0") = (0)) |}]
 
 let%expect_test "groupby-dedup" =
@@ -296,16 +323,40 @@ let%expect_test "depjoin-agg" =
             r_0. "f" AS "f_1",
             r_0. "g" AS "g_1"
         FROM
-            "r" AS "r_0") AS "t2",
+            "r" AS "r_0") AS "t3",
         LATERAL (
             SELECT
                 min("f_1") AS "a1_0",
                 max("g_1") AS "a2_0"
             FROM (
                 SELECT
-                    0 AS "a0_0",
+                    "a0_0" AS "a0_0_0",
                     "f_1",
-                    "g_1") AS "t0") AS "t1"
+                    "g_1"
+                FROM (
+                    SELECT
+                        0 AS "a0_0") AS "t0") AS "t1") AS "t2"
+|}]
+
+let%expect_test "depjoin-agg" =
+  run_test "depjoin(select([f, g], r) as k, select([count(), f], ascalar(k.f)))" ;
+  [%expect {|
+    SELECT
+        "a0_0" AS "a0_0_0",
+        "f_3" AS "f_3_0"
+    FROM (
+        SELECT
+            r_0. "f" AS "f_1",
+            r_0. "g" AS "g_1"
+        FROM
+            "r" AS "r_0") AS "t2",
+        LATERAL (
+            SELECT
+                count(*) AS "a0_0",
+                min("f_2") AS "f_3"
+            FROM (
+                SELECT
+                    "f_1" AS "f_2") AS "t0") AS "t1"
 |}]
 
 let%expect_test "select-agg-window" =
@@ -314,8 +365,12 @@ let%expect_test "select-agg-window" =
     {|
     SELECT
         count(*) AS "a0_0",
-        min(r_0. "f") AS "a1_0",
+        min("f_0") AS "a1_0",
         row_number() OVER () AS "a2_0"
-    FROM
-        "r" AS "r_0"
+    FROM (
+        SELECT
+            r_0. "f" AS "f_0",
+            r_0. "g" AS "g_0"
+        FROM
+            "r" AS "r_0") AS "t0"
 |}]

@@ -142,8 +142,8 @@ let select ?groupby of_ralgebra ps r =
         match
           (kind, to_select sql |> List.map ~f:(fun {pred= p; _} -> p) |> select_kind)
         with
-        | `Scalar, _ | `Agg, `Scalar -> false
-        | `Agg, `Agg -> true
+        | `Scalar, _ -> false
+        | `Agg, `Scalar | `Agg, `Agg -> true
       in
       (* If the inner query is distinct then it must be wrapped. *)
       let for_distinct = to_distinct sql in
