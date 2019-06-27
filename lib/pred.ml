@@ -325,24 +325,22 @@ let to_nnf p =
   in
   visitor#visit_pred () p
 
-let to_cnf p =
-  let visitor =
-    object (self : 'self)
-      inherit [_] Abslayout0.map as super
+let rec to_cnf = function
+  | Binop (And, p, q) -> to_cnf p @ to_cnf q
+  | Binop (Or, p, q) ->
+      List.cartesian_product (to_cnf p) (to_cnf q)
+      |> List.map ~f:(fun (l1, l2) -> List.append l1 l2)
+  | Unop (Not, Unop (Not, p)) -> to_cnf p
+  | Unop (Not, Binop (And, p, q)) ->
+      to_cnf (Binop (Or, Unop (Not, p), Unop (Not, q)))
+  | Unop (Not, Binop (Or, p, q)) ->
+      to_cnf (Binop (And, Unop (Not, p), Unop (Not, q)))
+  | p -> [[p]]
 
-      method! visit_Binop () (op, a1, a2) =
-        if op = Or then
-          match a2 with
-          | Binop (And, a, a') ->
-              Binop
-                ( And
-                , self#visit_Binop () (Or, a1, a)
-                , self#visit_Binop () (Or, a1, a') )
-          | _ -> super#visit_Binop () (op, a1, a2)
-        else super#visit_Binop () (op, a1, a2)
-    end
-  in
-  visitor#visit_pred () (to_nnf p)
+let simplify p =
+  to_cnf p
+  |> List.map ~f:(List.dedup_and_sort ~compare:[%compare: t])
+  |> List.dedup_and_sort ~compare:[%compare: t list]
 
 let max_of p1 p2 = if_ (binop (Lt, p1, p2)) p2 p1
 
