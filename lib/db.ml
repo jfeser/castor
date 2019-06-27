@@ -288,7 +288,8 @@ let exec_cursor_lwt_exn =
             (db.conn)#request_cancel ;
             (db.conn)#finish ;
             (* Kill postgres backend process. *)
-            Signal.(send_i term (`Pid (Pid.of_int pid))) ;
+            ( try Signal.(send_i term (`Pid (Pid.of_int pid)))
+              with Unix.Unix_error _ -> () ) ;
             is_done := true ;
             raise Lwt_unix.Timeout)
       |> flatten)
