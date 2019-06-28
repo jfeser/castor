@@ -37,7 +37,7 @@ module Make (C : Config.S) = struct
        bound variables and the parts that do not. *)
   let split_bound binder p =
     List.partition_tf (Pred.conjuncts p) ~f:(fun p' ->
-        overlaps (pred_free p') (schema_set_exn binder) )
+        overlaps (pred_free p') (schema_set_exn binder))
 
   (** Check that a predicate is supported by a relation (it does not depend on
      anything in the context that it did not previously depend on.) *)
@@ -51,7 +51,14 @@ module Make (C : Config.S) = struct
   let merge_select s1 s2 =
     s1 @ s2
     |> List.dedup_and_sort ~compare:(fun p1 p2 ->
-           [%compare: Name.t option] (Schema.to_name p1) (Schema.to_name p2) )
+           [%compare: Name.t option] (Schema.to_name p1) (Schema.to_name p2))
+
+  (* let simplify r =
+   *   let open Option.Let_syntax in
+   *   let%map p, r = to_filter r in
+   *   filter (Pred.simplify p) r
+   * 
+   * let hoist_filter = of_func simplify ~name:"simplify" *)
 
   let hoist_filter r =
     let open Option.Let_syntax in
@@ -184,7 +191,7 @@ module Make (C : Config.S) = struct
                    else if is_candidate_key p2 r' && is_candidate_match p1 r'
                    then `Fst (p1, (`Ge, p2))
                    else `Snd p
-               | p -> `Snd p )
+               | p -> `Snd p)
         in
         let cmps, rest' =
           Map.of_alist_multi (module Pred) cmps
@@ -193,11 +200,11 @@ module Make (C : Config.S) = struct
                  let lb, rest =
                    let open_lb =
                      List.filter_map bounds ~f:(fun (f, p) ->
-                         match f with `Gt -> Some p | _ -> None )
+                         match f with `Gt -> Some p | _ -> None)
                    in
                    let closed_lb =
                      List.filter_map bounds ~f:(fun (f, p) ->
-                         match f with `Ge -> Some p | _ -> None )
+                         match f with `Ge -> Some p | _ -> None)
                    in
                    match
                      (List.length open_lb = 0, List.length closed_lb = 0)
@@ -217,11 +224,11 @@ module Make (C : Config.S) = struct
                  let ub, rest' =
                    let open_ub =
                      List.filter_map bounds ~f:(fun (f, p) ->
-                         match f with `Lt -> Some p | _ -> None )
+                         match f with `Lt -> Some p | _ -> None)
                    in
                    let closed_ub =
                      List.filter_map bounds ~f:(fun (f, p) ->
-                         match f with `Le -> Some p | _ -> None )
+                         match f with `Le -> Some p | _ -> None)
                    in
                    match
                      (List.length open_ub = 0, List.length closed_ub = 0)
@@ -238,7 +245,7 @@ module Make (C : Config.S) = struct
                        , List.map open_ub ~f:(fun p -> Pred.binop (Gt, key, p))
                        )
                  in
-                 ((key, (lb, ub)), rest @ rest') )
+                 ((key, (lb, ub)), rest @ rest'))
           |> List.unzip
         in
         let rest = rest @ List.concat rest' in
@@ -252,7 +259,7 @@ module Make (C : Config.S) = struct
                (filter
                   ( List.map key ~f:(fun p ->
                         Pred.binop
-                          (Eq, p, Pred.scoped (schema_exn all_keys) scope p) )
+                          (Eq, p, Pred.scoped (schema_exn all_keys) scope p))
                   |> Pred.conjoin )
                   r'))
             {oi_key_layout= None; oi_lookup= cmps}
@@ -292,7 +299,7 @@ module Make (C : Config.S) = struct
     let pushed_key, pushed_val =
       Pred.conjuncts p
       |> List.partition_map ~f:(fun p ->
-             if Tactics_util.is_supported rk_bnd p then `Fst p else `Snd p )
+             if Tactics_util.is_supported rk_bnd p then `Fst p else `Snd p)
     in
     let inner_key_pred = Pred.conjoin pushed_key in
     let inner_val_pred = Pred.conjoin pushed_val in
@@ -303,20 +310,37 @@ module Make (C : Config.S) = struct
     | `Scalar ->
         let ctx =
           List.filter_map ps ~f:(fun p ->
-              Option.map (Pred.to_name p) ~f:(fun n -> (n, Pred.remove_as p))
-          )
+              Option.map (Pred.to_name p) ~f:(fun n -> (n, Pred.remove_as p)))
           |> Map.of_alist_exn (module Name)
         in
         let p' = Pred.subst ctx p in
-        Some (select ps (filter p' r))
-    | `Agg -> None
+        select ps (filter p' r)
+    | `Agg ->
+        let scalar_ctx =
+          List.filter_map ps ~f:(fun p ->
+              if Pred.kind p = `Scalar then
+                Option.map (Pred.to_name p) ~f:(fun n -> (n, Pred.remove_as p))
+              else None)
+          |> Map.of_alist_exn (module Name)
+        in
+        let names = Map.keys scalar_ctx |> Set.of_list (module Name) in
+        let pushed, unpushed =
+          Pred.conjuncts p
+          |> List.partition_map ~f:(fun p ->
+                 if Tactics_util.is_supported names p then
+                   `Fst (Pred.subst scalar_ctx p)
+                 else `Snd p)
+        in
+        filter (Pred.conjoin unpushed)
+          (select ps (filter (Pred.conjoin pushed) r))
 
   let push_filter r =
     let open Option.Let_syntax in
     let%bind p, r = to_filter r in
     match r.node with
     | Filter (p', r') -> Some (filter (Binop (And, p, p')) r')
-    | Select (ps, r) -> push_filter_select p ps r
+    | Dedup r' -> Some (dedup (filter p r'))
+    | Select (ps, r) -> Some (push_filter_select p ps r)
     | ATuple (rs, Concat) -> Some (tuple (List.map rs ~f:(filter p)) Concat)
     | ATuple (rs, Cross) -> Some (push_filter_cross_tuple p rs)
     (* Lists are a special case because their keys are bound at compile time and
@@ -348,8 +372,7 @@ module Make (C : Config.S) = struct
         let pushed_key, pushed_val =
           Pred.conjuncts p
           |> List.partition_map ~f:(fun p ->
-                 if Tactics_util.is_supported rk_bnd p then `Fst p else `Snd p
-             )
+                 if Tactics_util.is_supported rk_bnd p then `Fst p else `Snd p)
         in
         let inner_key_pred = Pred.conjoin pushed_key in
         let inner_val_pred =
@@ -418,7 +441,7 @@ module Make (C : Config.S) = struct
                 if [%compare.equal: domain] d1 d2 then d1 else And (d1, d2)
             | `Left d | `Right d -> d
           in
-          Some ret )
+          Some ret)
 
     let union d1 d2 =
       Map.merge d1 d2 ~f:(fun ~key:_ v ->
@@ -428,7 +451,7 @@ module Make (C : Config.S) = struct
                 if [%compare.equal: domain] d1 d2 then d1 else Or (d1, d2)
             | `Left d | `Right d -> d
           in
-          Some ret )
+          Some ret)
 
     let rec of_pred r =
       let open Or_error.Let_syntax in
@@ -496,15 +519,16 @@ module Make (C : Config.S) = struct
                  | Ok d -> `Fst (p, d)
                  | Error e ->
                      Logs.info ~src:elim_eq_filter_src (fun m ->
-                         m "%a" Error.pp e ) ;
-                     `Snd p )
+                         m "%a" Error.pp e) ;
+                     `Snd p)
         in
         let inner, eqs = List.unzip eqs in
         let eqs = List.reduce ~f:EqDomain.intersect eqs in
         let inner = Pred.conjoin inner in
         match eqs with
         | None ->
-            Logs.err ~src:elim_eq_filter_src (fun m -> m "Found no equalities.") ;
+            Logs.err ~src:elim_eq_filter_src (fun m ->
+                m "Found no equalities.") ;
             None
         | Some eqs ->
             let eqs = EqDomain.to_ralgebra eqs in
@@ -514,7 +538,7 @@ module Make (C : Config.S) = struct
             let inner_filter_pred =
               let ctx =
                 Map.map eqs ~f:(fun r ->
-                    Name (List.hd_exn (schema_exn r) |> Name.scoped scope) )
+                    Name (List.hd_exn (schema_exn r) |> Name.scoped scope))
               in
               Pred.subst_tree ctx inner
             in
