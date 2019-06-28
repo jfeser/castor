@@ -5,9 +5,9 @@ module A = Abslayout
 open Test_util
 
 module Config = struct
-  let dbconn = new Postgresql.connection ~conninfo:"postgresql:///tpch_1k" ()
+  let cost_conn = Db.create "postgresql:///tpch_1k"
 
-  let conn = Db.create "postgresql:///tpch_1k"
+  let conn = cost_conn
 
   let validate = false
 
@@ -34,11 +34,11 @@ let n_nationkey = Name.create ~type_ "n_nationkey"
 
 let o_custkey = Name.create ~type_ "o_custkey"
 
-let orders = Db.relation Config.conn "orders"
+let orders = Db.relation Config.cost_conn "orders"
 
-let customer = Db.relation Config.conn "customer"
+let customer = Db.relation Config.cost_conn "customer"
 
-let nation = Db.relation Config.conn "nation"
+let nation = Db.relation Config.cost_conn "nation"
 
 let%expect_test "parted-cost" =
   estimate_ntuples_parted (Set.empty (module Name)) (Flat (A.relation orders))
@@ -158,7 +158,7 @@ let%expect_test "part-fold" =
   of_abslayout r
   |> partition_fold ~init:() ~f:(fun () (s1, s2, _) ->
          Format.printf "%a@.%a@.---\n" Abslayout.pp (to_ralgebra s1)
-           Abslayout.pp (to_ralgebra s2) ) ;
+           Abslayout.pp (to_ralgebra s2)) ;
   [%expect
     {|
     join((c_nationkey = n_nationkey), nation, customer)

@@ -44,7 +44,7 @@ end = struct
     with exn ->
       if reraise then
         Logs.err (fun m ->
-            m "@[Transform %s failed on: %a@,@]\n" name Abslayout.pp r ) ;
+            m "@[Transform %s failed on: %a@,@]\n" name Abslayout.pp r) ;
       raise exn
 
   let global ?short_name ?(reraise = true) f name =
@@ -105,14 +105,14 @@ module Make (C : Config.S) = struct
         match p_max_m with
         | None -> Some p
         | Some p_max ->
-            Some (if Path.length p > Path.length p_max then p else p_max) )
+            Some (if Path.length p > Path.length p_max then p else p_max))
 
   let shallowest ps r =
     Seq.fold (ps r) ~init:None ~f:(fun p_min_m p ->
         match p_min_m with
         | None -> Some p
         | Some p_min ->
-            Some (if Path.length p < Path.length p_min then p else p_min) )
+            Some (if Path.length p < Path.length p_min then p else p_min))
 
   let is_join r p =
     match (Path.get_exn p r).node with Join _ -> true | _ -> false
@@ -169,7 +169,7 @@ module Make (C : Config.S) = struct
               let x1 = overlaps (pred_free p1) params in
               let x2 = overlaps (pred_free p2) params in
               Bool.(x1 <> x2)
-          | _ -> false )
+          | _ -> false)
     | _ -> false
 
   let is_param_cmp_filter r p =
@@ -180,7 +180,7 @@ module Make (C : Config.S) = struct
               let x1 = overlaps (pred_free p1) params in
               let x2 = overlaps (pred_free p2) params in
               Bool.(x1 <> x2)
-          | _ -> false )
+          | _ -> false)
     | _ -> false
 
   let matches f r p = f (Path.get_exn p r).node
@@ -200,7 +200,7 @@ module Make (C : Config.S) = struct
       tf.f p r
       |> Option.bind ~f:(function
            | `Result r -> Some r
-           | `Tf tf' -> apply tf' p r )
+           | `Tf tf' -> apply tf' p r)
     in
     ret
 
@@ -219,7 +219,7 @@ module Make (C : Config.S) = struct
         ~f:(fun p' ->
           Option.bind
             (apply (at_ tf (fun _ -> Some p')) p r)
-            ~f:(fun r' -> if Abslayout.O.(r = r') then None else Some r') )
+            ~f:(fun r' -> if Abslayout.O.(r = r') then None else Some r'))
     in
     global ~reraise:false ~short_name:"first" f
       (sprintf "first %s in <path set>" tf.name)
@@ -264,29 +264,27 @@ module Make (C : Config.S) = struct
           let err =
             let ret =
               Test_util.run_in_fork_timed ~time:(Time.Span.of_sec 10.0)
-                (fun () -> Interpret.(equiv {db= conn; params= param_ctx} r r')
-              )
+                (fun () ->
+                  Interpret.(equiv {db= conn; params= param_ctx} r r'))
             in
             match ret with
             | Some r -> r
             | None ->
                 Logs.warn (fun m ->
-                    m "Failed to check transform %s: Timed out." tf.name ) ;
+                    m "Failed to check transform %s: Timed out." tf.name) ;
                 Ok ()
           in
           Or_error.iter_error err ~f:(fun err ->
               Logs.err (fun m ->
-                  m "%s is not semantics preserving: %a" tf.name Error.pp err
-              ) ) ;
-          r' )
+                  m "%s is not semantics preserving: %a" tf.name Error.pp err)) ;
+          r')
     in
     global f (sprintf "!%s" tf.name)
 
   let traced tf =
     let f p r =
       Logs.debug (fun m ->
-          m "@[Running %s on:@,%a@]\n" tf.name Abslayout.pp (Path.get_exn p r)
-      ) ;
+          m "@[Running %s on:@,%a@]\n" tf.name Abslayout.pp (Path.get_exn p r)) ;
       match apply tf p r with
       | Some r' ->
           if Abslayout.O.(r = r') then
@@ -295,7 +293,7 @@ module Make (C : Config.S) = struct
             Logs.debug (fun m ->
                 m "@[%s transformed:@,%a@,===== to ======@,%a@]@.\n" tf.name
                   Abslayout.pp (Path.get_exn p r) Abslayout.pp
-                  (Path.get_exn p r') ) ;
+                  (Path.get_exn p r')) ;
           Some r'
       | None ->
           Logs.debug (fun m -> m "@[Transform %s does not apply.\n" tf.name) ;
@@ -308,7 +306,7 @@ module Make (C : Config.S) = struct
       global
         (fun p r ->
           let r = R.resolve ~params r in
-          Option.map (f (Path.get_exn p r)) ~f:(Path.set_exn p r) )
+          Option.map (f (Path.get_exn p r)) ~f:(Path.set_exn p r))
         name
     in
     let tf = if validate then validated tf else tf in
@@ -326,7 +324,7 @@ module Make (C : Config.S) = struct
           (fun p r ->
             match apply tf p r with
             | Some r' -> Seq.singleton r'
-            | None -> Seq.empty )
+            | None -> Seq.empty)
       ; b_name= tf.name }
 
     let lower elim tf = global (fun p r -> elim (tf.b_f p r)) tf.b_name
@@ -337,8 +335,7 @@ module Make (C : Config.S) = struct
             Seq.append (Seq.singleton r)
               (Seq.unfold ~init:r ~f:(fun r ->
                    Option.bind (apply tf_branch p r) ~f:(fun r' ->
-                       if Abslayout.O.(r = r') then None else Some (r', r') )
-               )) )
+                       if Abslayout.O.(r = r') then None else Some (r', r')))))
       ; b_name= "unfold" }
 
     let seq t1 t2 =
@@ -363,6 +360,10 @@ module Make (C : Config.S) = struct
       in
       {b_f= f; b_name= sprintf "(%s @ <path>)" tf.b_name}
 
+    let filter f =
+      { b_f= (fun p r -> if f r p then Seq.singleton r else Seq.empty)
+      ; b_name= "filter" }
+
     let for_all tf pspec =
       let f p r =
         Seq.concat_map (pspec r) ~f:(fun p' -> tf.b_f Path.(p @ p') r)
@@ -373,7 +374,7 @@ module Make (C : Config.S) = struct
       Seq.fold rs ~init:(None, Float.max_value) ~f:(fun (rb, cb) r ->
           match cost r with
           | Some c -> if c < cb then (Some r, c) else (rb, cb)
-          | None -> (rb, cb) )
+          | None -> (rb, cb))
       |> Tuple.T2.get1
 
     let ( *> ) x y = global (fun r -> y (x r)) ""
@@ -382,14 +383,14 @@ module Make (C : Config.S) = struct
       let b_f p r =
         Logs.debug (fun m ->
             m "@[Running %s on:@,%a@]\n" tf.b_name Abslayout.pp
-              (Path.get_exn p r) ) ;
+              (Path.get_exn p r)) ;
         tf.b_f p r
         |> Seq.map ~f:(fun r' ->
                Logs.debug (fun m ->
                    m "@[%s transformed:@,%a@,===== to ======@,%a@]@.\n"
                      tf.b_name Abslayout.pp (Path.get_exn p r) Abslayout.pp
-                     (Path.get_exn p r') ) ;
-               r' )
+                     (Path.get_exn p r')) ;
+               r')
       in
       {tf with b_f}
   end

@@ -3,7 +3,7 @@ open Castor
 open Collections
 open Castor_opt
 
-let main ~params:all_params ~db ~validate ~cost_timeout ch =
+let main ~params:all_params ~db ~cost_db ~validate ~cost_timeout ch =
   Logs.Src.set_level Log.src (Some Debug) ;
   Logs.info (fun m ->
       m "%s" (Sys.argv |> Array.to_list |> String.concat ~sep:" ")) ;
@@ -16,9 +16,10 @@ let main ~params:all_params ~db ~validate ~cost_timeout ch =
     |> Map.of_alist_exn (module Name)
   in
   let module Config = struct
-    let conn = db
+    let conn = Db.create db
 
-    let dbconn = Db.conn db
+    let cost_conn =
+      Option.map cost_db ~f:Db.create |> Option.value ~default:conn
 
     let params = params
 
@@ -49,16 +50,19 @@ let () =
       let () = Log.param
       and validate =
         flag "validate" ~aliases:["c"] no_arg ~doc:"validate transforms"
-      and db = Db.param
+      and db = flag "db" (required string) ~doc:"CONNINFO the main database"
+      and cost_db =
+        flag "cost-db" (optional string)
+          ~doc:"CONNINFO the database to use for computing costs"
+      and cost_timeout =
+        flag "cost-timeout" (optional float)
+          ~doc:"terminate cost function after n seconds"
       and params =
         flag "param" ~aliases:["p"]
           (listed Util.param_and_value)
           ~doc:"NAME:TYPE query parameters"
-      and cost_timeout =
-        flag "cost-timeout" (optional float)
-          ~doc:"terminate cost function after n seconds"
       and ch =
         anon (maybe_with_default In_channel.stdin ("query" %: Util.channel))
       in
-      fun () -> main ~params ~db ~validate ~cost_timeout ch]
+      fun () -> main ~params ~db ~cost_db ~cost_timeout ~validate ch]
   |> Command.run

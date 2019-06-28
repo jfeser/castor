@@ -1,12 +1,15 @@
 open Core
+open Castor
 open Yojson.Basic
 open Postgresql
 
 type t = {nrows: int; cost: float}
 
-let explain (conn : connection) query =
+let explain (conn : Db.t) query =
   let open Result.Let_syntax in
-  let r : result = conn#exec (sprintf "explain (format json) %s" query) in
+  let r : result =
+    (Db.conn conn)#exec (sprintf "explain (format json) %s" query)
+  in
   let%bind json_str =
     match r#status with
     | Single_tuple | Tuples_ok -> Ok (r#getvalue 0 0)

@@ -5,13 +5,23 @@ module Config = struct
   module type S = sig
     val params : Set.M(Name).t
 
-    include Abslayout_db.Config.S
+    val cost_timeout : float option
+
+    val cost_conn : Db.t
+
+    val simplify : (Abslayout.t -> Abslayout.t) option
   end
 end
 
 module Make (Config : Config.S) = struct
   open Config
-  module M = Abslayout_db.Make (Config)
+
+  module M = Abslayout_db.Make (struct
+    include Config
+
+    let conn = cost_conn
+  end)
+
   open Type
 
   let rec read = function
@@ -26,11 +36,13 @@ module Make (Config : Config.S) = struct
     | HashIdxT (_, vt, _) -> AbsInt.(join zero (read vt))
     | OrderedIdxT (_, vt, _) -> AbsInt.(join zero (read vt))
 
-  let cost ?timeout ?(kind = `Max) p r =
+  let cost ?(kind = `Max) p r =
     Logs.debug (fun m -> m "Computing cost of %a." Abslayout.pp r) ;
     let open Result.Let_syntax in
     try
-      let c = M.load_layout ~params r |> M.type_of ?timeout |> p in
+      let c =
+        M.load_layout ~params r |> M.type_of ?timeout:cost_timeout |> p
+      in
       let out =
         match kind with
         | `Min -> AbsInt.inf c

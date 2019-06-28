@@ -49,8 +49,8 @@ module Make (Config : Config.S) = struct
               | Some r -> Ok (r, n)
               | None ->
                   Or_error.error "Name does not come from base relation." n
-                    [%sexp_of: Name.t] )
-          |> Or_error.all )
+                    [%sexp_of: Name.t])
+          |> Or_error.all)
       |> Or_error.all
     in
     let joined_rels =
@@ -62,7 +62,7 @@ module Make (Config : Config.S) = struct
              dedup
                (select
                   (List.map ns ~f:(fun n -> Name n))
-                  (relation (Db.relation conn r))) )
+                  (relation (Db.relation conn r))))
       |> List.reduce ~f:(join (Bool true))
     in
     match joined_rels with
@@ -72,7 +72,7 @@ module Make (Config : Config.S) = struct
              (List.map2_exn orig_names preds ~f:(fun n p ->
                   match n with
                   | Some n -> Pred.as_pred (p, Name.name n)
-                  | None -> p ))
+                  | None -> p))
              r)
     | None -> Or_error.errorf "No relations found."
 
@@ -87,7 +87,7 @@ module Make (Config : Config.S) = struct
         (* TODO: We assume that compile time names that are bound in the context
            are ok, but this might not be true? *)
         || Poly.(Name.Meta.(find_exn n stage) = `Compile)
-           && Option.is_some (Name.rel n) )
+           && Option.is_some (Name.rel n))
 
   (** Remove names from a selection list. *)
   let select_out ns r =
@@ -95,7 +95,18 @@ module Make (Config : Config.S) = struct
     select
       ( schema_exn r
       |> List.filter ~f:(fun n' ->
-             not (List.mem ~equal:Name.O.( = ) ns (Name.unscoped n')) )
+             not (List.mem ~equal:Name.O.( = ) ns (Name.unscoped n')))
       |> List.map ~f:(fun n -> Name n) )
       r
+
+  let all_disjoint ps r =
+    let tup =
+      select [Max (Pred.sum_exn (List.map ps ~f:Pred.pseudo_bool))] r
+      |> Sql.of_ralgebra |> Sql.to_string
+      |> Db.exec_cursor_exn conn [Type.PrimType.int_t]
+      |> Gen.get
+    in
+    match tup with
+    | Some [|Int x|] -> x <= 1
+    | _ -> failwith "Unexpected tuple."
 end

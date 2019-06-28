@@ -9,11 +9,11 @@ module Config = struct
   module type S = sig
     include Ops.Config.S
 
-    val dbconn : Postgresql.connection
-
     include Filter_tactics.Config.S
 
     include Simple_tactics.Config.S
+
+    val cost_conn : Db.t
   end
 end
 
@@ -68,7 +68,7 @@ module Make (C : Config.S) = struct
             let in_set = Set.mem vs v in
             let lhs = if in_set then remove_vertex lhs v else lhs in
             let rhs = if in_set then rhs else remove_vertex rhs v in
-            (lhs, rhs) )
+            (lhs, rhs))
           g (g, g)
       in
       let es =
@@ -78,7 +78,7 @@ module Make (C : Config.S) = struct
               (Set.mem vs v1 && not (Set.mem vs v2))
               || ((not (Set.mem vs v1)) && Set.mem vs v2)
             then e :: es
-            else es )
+            else es)
           g []
       in
       (g1, g2, es)
@@ -90,7 +90,8 @@ module Make (C : Config.S) = struct
   end
 
   let source_relation leaves n =
-    List.find_map leaves ~f:(fun (r, s) -> if Set.mem s n then Some r else None)
+    List.find_map leaves ~f:(fun (r, s) ->
+        if Set.mem s n then Some r else None)
     |> Result.of_option
          ~error:
            Error.(
@@ -148,7 +149,7 @@ module Make (C : Config.S) = struct
         G.fold_vertex
           (fun vertex m ->
             Map.set m ~key:vertex
-              ~data:(Set.singleton (module Vertex) vertex, vertex) )
+              ~data:(Set.singleton (module Vertex) vertex, vertex))
           g
           (Map.empty (module Vertex))
       in
@@ -182,27 +183,27 @@ module Make (C : Config.S) = struct
               | Ok [] ->
                   Logs.warn (fun m ->
                       m "Join-opt: Unhandled predicate %a. Constant predicate."
-                        A.pp_pred p ) ;
+                        A.pp_pred p) ;
                   s
               | Ok [r] ->
                   { s with
                     filters=
                       Map.update s.filters r ~f:(function
                         | Some fs -> Set.add fs p
-                        | None -> Set.singleton (module Pred) p ) }
+                        | None -> Set.singleton (module Pred) p) }
               | Ok [r1; r2] ->
                   { s with
                     graph= JoinGraph.add_or_update_edge s.graph (r1, p, r2) }
               | Ok _ ->
                   Logs.warn (fun m ->
                       m "Join-opt: Unhandled predicate %a. Too many relations."
-                        A.pp_pred p ) ;
+                        A.pp_pred p) ;
                   s
               | Error e ->
                   Logs.warn (fun m ->
                       m "Join opt: Unhandled predicate %a. %a" A.pp_pred p
-                        Error.pp e ) ;
-                  s )
+                        Error.pp e) ;
+                  s)
       | _ -> empty
 
     let of_abslayout r =
@@ -211,7 +212,7 @@ module Make (C : Config.S) = struct
         to_leaves r |> Set.to_list
         |> List.map ~f:(fun r ->
                let s = A.schema_exn r |> Set.of_list (module Name) in
-               (r, s) )
+               (r, s))
       in
       to_graph leaves r
 
@@ -232,7 +233,7 @@ module Make (C : Config.S) = struct
                   let s1 = {s with graph= g1} in
                   let s2 = {s with graph= g2} in
                   f acc (s1, s2, es)
-                else acc )
+                else acc)
           in
           loop acc (k + 1)
       in
@@ -274,7 +275,7 @@ module Make (C : Config.S) = struct
 
   let ntuples r =
     let r = to_ralgebra r in
-    ( Explain.explain dbconn (Sql.of_ralgebra r |> Sql.to_string)
+    ( Explain.explain cost_conn (Sql.of_ralgebra r |> Sql.to_string)
     |> Or_error.ok_exn )
       .nrows |> Float.of_int
 
@@ -392,7 +393,7 @@ module Make (C : Config.S) = struct
 
   let opt_nonrec opt parts s =
     Logs.debug (fun m ->
-        m "Choosing join for space %s." (JoinSpace.to_string s) ) ;
+        m "Choosing join for space %s." (JoinSpace.to_string s)) ;
     if JoinSpace.length s = 1 then
       let j = Flat (JoinSpace.choose s) in
       ParetoSet.singleton [|scan_cost parts j|] j
@@ -404,12 +405,12 @@ module Make (C : Config.S) = struct
           let flat_joins =
             let select_flat s =
               List.filter_map (opt parts s) ~f:(fun (_, j) ->
-                  match j with Flat r -> Some r | _ -> None )
+                  match j with Flat r -> Some r | _ -> None)
             in
             List.cartesian_product (select_flat s1) (select_flat s2)
             |> List.map ~f:(fun (r1, r2) ->
                    let j = Flat (A.join pred r1 r2) in
-                   ([|scan_cost parts j|], j) )
+                   ([|scan_cost parts j|], j))
             |> ParetoSet.of_list
           in
           (* Add nest joins to pareto set. *)
@@ -460,13 +461,13 @@ module Make (C : Config.S) = struct
                     in
                     List.cartesian_product (opt parts s1) (opt rhs_parts s2)
                     |> List.map ~f:(fun ((_, r1), (_, r2)) ->
-                           Hash {lkey= k1; rkey= k2; lhs= r1; rhs= r2} )
+                           Hash {lkey= k1; rkey= k2; lhs= r1; rhs= r2})
               | _ -> None
             in
             Option.value m_s ~default:[]
             |> List.map ~f:(fun j -> ([|scan_cost parts j|], j))
           in
-          ParetoSet.union_all [cs; flat_joins; (* nest_joins; *) hash_joins] )
+          ParetoSet.union_all [cs; flat_joins; (* nest_joins; *) hash_joins])
 
   let opt =
     let module Key = struct

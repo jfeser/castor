@@ -553,6 +553,19 @@ module Make (C : Config.S) = struct
   let elim_eq_filter =
     seq' (of_func elim_eq_filter ~name:"elim-eq-filter") (try_ filter_const)
 
+  let elim_disjunct r =
+    let open Option.Let_syntax in
+    let%bind p, r = to_filter r in
+    let clauses = Pred.disjuncts p in
+    if
+      Tactics_util.all_disjoint
+        (List.map ~f:(Pred.to_static ~params) clauses)
+        r
+    then Some (tuple (List.map clauses ~f:(fun p -> filter p r)) Concat)
+    else None
+
+  let elim_disjunct = of_func elim_disjunct ~name:"elim-disjunct"
+
   (* let precompute_filter n =
    *   let exception Failed of Error.t in
    *   let run_exn r =
