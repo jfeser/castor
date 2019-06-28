@@ -48,4 +48,20 @@ let%expect_test "" =
   in
   Format.printf "@[<h>%a@]@." pp (simplify p) ;
   [%expect {|
+    (((p_partkey = s0.l_partkey) &&
+     ((s0.l_shipinstruct = "DELIVER IN PERSON") &&
+     ((p_size >= 1) && ((s0.l_shipmode = "AIR") || (s0.l_shipmode = "AIR REG")))))
+    &&
+    (((p_partkey = s0.l_partkey) &&
+     ((p_size >= 1) &&
+     (((s0.l_shipmode = "AIR") || (s0.l_shipmode = "AIR REG")) &&
+     (s0.l_shipinstruct = "DELIVER IN PERSON")))) ||
+    (((p_partkey = s0.l_partkey) &&
+     ((p_size >= 1) &&
+     (((s0.l_shipmode = "AIR") || (s0.l_shipmode = "AIR REG")) &&
+     (s0.l_shipinstruct = "DELIVER IN PERSON")))) ||
+    ((p_partkey = s0.l_partkey) &&
+    ((p_size >= 1) &&
+    (((s0.l_shipmode = "AIR") || (s0.l_shipmode = "AIR REG")) &&
+    (s0.l_shipinstruct = "DELIVER IN PERSON")))))))
  |}]
