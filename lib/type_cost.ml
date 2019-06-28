@@ -37,7 +37,6 @@ module Make (Config : Config.S) = struct
     | OrderedIdxT (_, vt, _) -> AbsInt.(join zero (read vt))
 
   let cost ?(kind = `Max) p r =
-    Logs.debug (fun m -> m "Computing cost of %a." Abslayout.pp r) ;
     let open Result.Let_syntax in
     try
       let c =

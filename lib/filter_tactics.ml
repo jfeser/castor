@@ -558,9 +558,11 @@ module Make (C : Config.S) = struct
     let%bind p, r = to_filter r in
     let clauses = Pred.disjuncts p in
     if
-      Tactics_util.all_disjoint
-        (List.map ~f:(Pred.to_static ~params) clauses)
-        r
+      try
+        Tactics_util.all_disjoint
+          (List.map ~f:(Pred.to_static ~params) clauses)
+          r
+      with _ -> false
     then Some (tuple (List.map clauses ~f:(fun p -> filter p r)) Concat)
     else None
 

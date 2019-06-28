@@ -59,7 +59,13 @@ module Make (Config : Config.S) () = struct
   module Type_cost = Type_cost.Make (Config)
 
   let is_serializable r p =
-    is_serializeable (Path.get_exn p (R.resolve ~params r))
+    let r' = Path.get_exn p (R.resolve ~params r) in
+    if is_serializeable r' then (
+      Logs.debug (fun m -> m "Is serializable: %a" Abslayout.pp r') ;
+      true )
+    else (
+      Logs.debug (fun m -> m "Is not serializable: %a" Abslayout.pp r') ;
+      false )
 
   let has_params r p =
     let r' = R.resolve ~params r in
@@ -166,7 +172,7 @@ module Make (Config : Config.S) () = struct
       ; at_ Join_elim_tactics.elim_join_nest
           (Path.all >>? is_join >>| shallowest)
       ; try_
-          (first (traced F.elim_disjunct) (Path.all >>? is_filter))
+          (first F.elim_disjunct (Path.all >>? is_filter))
           (seq_many
              [ (* Push constant filters *)
                fix
@@ -209,9 +215,10 @@ module Make (Config : Config.S) () = struct
                Branching.(
                  seq_many
                    [ choose id
-                       (for_all (lift S.row_store)
-                          Path.(all >>? is_run_time >>? not has_params))
-                   ; lift push_all_unparameterized_filters
+                       (seq_many
+                          [ for_all (lift S.row_store)
+                              Path.(all >>? is_run_time >>? not has_params)
+                          ; lift push_all_unparameterized_filters ])
                    ; filter is_serializable ]
                  |> lower (min Type_cost.(cost ~kind:`Avg read)))
                (* Cleanup*)
