@@ -393,10 +393,14 @@ let ops_serializable_exn r =
 
       method! visit_t s r =
         super#visit_t s r ;
-        match r.node with
-        | Relation _ | GroupBy (_, _, _) | Join _ | OrderBy _ | Dedup _ ->
-            raise (Un_serial "Cannot serialize: Bad operator in run-time position.")
-        | _ -> ()
+        if s = `Run then
+          match r.node with
+          | Relation _ | GroupBy (_, _, _) | Join _ | OrderBy _ | Dedup _ ->
+              raise
+                (Un_serial
+                   (Format.asprintf
+                      "Cannot serialize: Bad operator in run-time position %a" pp r))
+          | _ -> ()
     end
   in
   visitor#visit_t `Run r
@@ -425,7 +429,12 @@ let is_serializeable_msg r =
 (** Return true if `r` is serializable. This function performs two checks:
      - `r` must not contain any compile time only operations in run time position.
      - Run-time names may only appear in run-time position and vice versa. *)
-let is_serializeable r = Option.is_none (is_serializeable_msg r)
+let is_serializeable r =
+  match is_serializeable_msg r with
+  | Some msg ->
+      Logs.debug (fun m -> m "%s" msg) ;
+      false
+  | None -> true
 
 let annotate_orders r =
   let rec annotate_orders r =

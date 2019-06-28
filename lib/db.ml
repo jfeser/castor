@@ -250,49 +250,54 @@ let exec_cursor_lwt_exn =
     let query = subst_params params query in
     let cur = Fresh.name fresh "cur%d" in
     let fetch_query = sprintf "fetch %d from %s;" batch_size cur in
-    (* Wait for results from a send_query call. consume_input pulls any available input from the database *)
-    let rec wait_for_results rs () =
+    (* Wait for results from a send_query call. consume_input pulls any
+       available input from the database *)
+    let rec wait_for_results rs =
       (db.conn)#consume_input ;
       if (db.conn)#is_busy then
         (* TODO: Better not to busy wait here. *)
-        let%lwt () = Lwt_unix.yield () in
-        wait_for_results rs ()
+        let%lwt () = Lwt_unix.sleep 0.01 in
+        wait_for_results rs
       else
         match (db.conn)#get_result with
-        | Some r -> wait_for_results (r :: rs) ()
+        | Some r -> wait_for_results (r :: rs)
         | None -> return rs
     in
     exec db (sprintf "begin transaction; declare %s cursor for %s;" cur query)
     |> command_ok_exn ;
     let is_done = ref false in
-    Lwt_stream.(
-      from (fun () ->
-          try%lwt
-            if !is_done then return None
-            else (
-              (db.conn)#send_query fetch_query ;
-              let%lwt rs =
-                match timeout with
-                | Some t -> Lwt_unix.with_timeout t (wait_for_results [])
-                | None -> wait_for_results [] ()
-              in
-              let tups =
-                List.concat_map rs ~f:(fun r -> load_tuples_list_exn schema r)
-              in
-              if List.length tups < batch_size then (
-                exec db "end transaction;" |> command_ok_exn ;
-                is_done := true ) ;
-              return (Some tups) )
-          with Lwt_unix.Timeout ->
-            let pid = (db.conn)#backend_pid in
-            (db.conn)#request_cancel ;
-            (db.conn)#finish ;
-            (* Kill postgres backend process. *)
-            ( try Signal.(send_i term (`Pid (Pid.of_int pid)))
-              with Unix.Unix_error _ -> () ) ;
-            is_done := true ;
-            raise Lwt_unix.Timeout)
-      |> flatten)
+    let timeout_thread = Option.map timeout ~f:Lwt_unix.timeout in
+    let stream =
+      Lwt_stream.(
+        from (fun () ->
+            try%lwt
+              if !is_done then return None
+              else (
+                (db.conn)#send_query fetch_query ;
+                let%lwt rs =
+                  match timeout_thread with
+                  | Some t -> Lwt.choose [t; wait_for_results []]
+                  | None -> wait_for_results []
+                in
+                let tups =
+                  List.concat_map rs ~f:(fun r -> load_tuples_list_exn schema r)
+                in
+                if List.length tups < batch_size then (
+                  exec db "end transaction;" |> command_ok_exn ;
+                  is_done := true ) ;
+                return (Some tups) )
+            with Lwt_unix.Timeout ->
+              let pid = (db.conn)#backend_pid in
+              (db.conn)#request_cancel ;
+              (db.conn)#finish ;
+              (* Kill postgres backend process. *)
+              ( try Signal.(send_i term (`Pid (Pid.of_int pid)))
+                with Unix.Unix_error _ -> () ) ;
+              is_done := true ;
+              raise Lwt_unix.Timeout)
+        |> flatten)
+    in
+    stream
 
 let check db sql =
   let open Or_error.Let_syntax in

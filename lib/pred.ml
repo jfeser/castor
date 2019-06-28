@@ -62,6 +62,11 @@ let rec conjoin = function
   | [p] -> p
   | p :: ps -> Binop (And, p, conjoin ps)
 
+let rec disjoin = function
+  | [] -> Bool false
+  | [p] -> p
+  | p :: ps -> Binop (Or, p, disjoin ps)
+
 let collect_aggs p =
   let visitor =
     object (self : 'a)
@@ -88,6 +93,10 @@ let collect_aggs p =
 
 let rec conjuncts = function
   | Binop (And, p1, p2) -> conjuncts p1 @ conjuncts p2
+  | p -> [p]
+
+let rec disjuncts = function
+  | Binop (Or, p1, p2) -> disjuncts p1 @ disjuncts p2
   | p -> [p]
 
 let%expect_test "" =
@@ -338,10 +347,91 @@ let rec to_cnf = function
   | p -> [[p]]
 
 let simplify p =
-  to_cnf p
-  |> List.map ~f:(List.dedup_and_sort ~compare:[%compare: t])
-  |> List.dedup_and_sort ~compare:[%compare: t list]
+  let p = to_nnf p in
+  (* Extract common clauses from disjunctions. *)
+  let common_visitor =
+    object
+      inherit [_] Abslayout0.map
+
+      method! visit_Binop () (op, p1, p2) =
+        if op = Or then
+          let clauses = disjuncts (Binop (op, p1, p2)) |> List.map ~f:conjuncts in
+          let common =
+            List.map clauses ~f:C.Set.of_list |> List.reduce_exn ~f:Set.inter
+          in
+          let clauses = List.map ~f:(List.filter ~f:(Set.mem common)) clauses in
+          let common = Set.to_list common in
+          let clauses = disjoin (List.map ~f:conjoin clauses) in
+          Binop (And, conjoin common, clauses)
+        else Binop (op, p1, p2)
+    end
+  in
+  (* Remove duplicate clauses from conjunctions and disjunctions. *)
+  let _dup_visitor =
+    object (self : 'self)
+      inherit [_] Abslayout0.map as super
+
+      method! visit_Binop () (op, p1, p2) =
+        if op = Or then
+          disjuncts (Binop (op, p1, p2))
+          |> List.dedup_and_sort ~compare:[%compare: t]
+          |> List.map ~f:(self#visit_pred ())
+          |> disjoin
+        else if op = And then
+          conjuncts (Binop (op, p1, p2))
+          |> List.dedup_and_sort ~compare:[%compare: t]
+          |> List.map ~f:(self#visit_pred ())
+          |> conjoin
+        else super#visit_Binop () (op, p1, p2)
+    end
+  in
+  p |> to_nnf |> common_visitor#visit_pred ()
+
+(* |> dup_visitor#visit_pred () *)
 
 let max_of p1 p2 = if_ (binop (Lt, p1, p2)) p2 p1
 
 let min_of p1 p2 = if_ (binop (Lt, p1, p2)) p1 p2
+
+let pseudo_bool p = If (p, Int 1, Int 0)
+
+let sum_exn = List.reduce_exn ~f:(fun p1 p2 -> Binop (Add, p1, p2))
+
+type a = [`Leaf of t | `And of b list]
+
+and b = [`Leaf of t | `Or of a list]
+
+let rec to_and_or : t -> [a | b] = function
+  | Binop (And, p1, p2) -> (
+    match (to_and_or p1, to_and_or p2) with
+    | `And p1, `And p2 -> `And (p1 @ p2)
+    | `And p1, (#b as p2) | (#b as p2), `And p1 -> `And (p2 :: p1)
+    | (#b as p1), (#b as p2) -> `And [p1; p2] )
+  | Binop (Or, p1, p2) -> (
+    match (to_and_or p1, to_and_or p2) with
+    | `Or p1, `Or p2 -> `Or (p1 @ p2)
+    | `Or p1, (#a as p2) | (#a as p2), `Or p1 -> `Or (p2 :: p1)
+    | (#a as p1), (#a as p2) -> `Or [p1; p2] )
+  | p -> `Leaf p
+
+let is_static ~params p =
+  Set.for_all (names p) ~f:(fun n ->
+      (not (Set.mem params n)) && Option.is_none (Name.rel n))
+
+let to_static ~params p =
+  let p = to_nnf p in
+  let p = to_and_or p in
+  let rec to_static : [a | b] -> _ = function
+    | `And ps ->
+        List.filter_map ps ~f:(function
+          | `Leaf p -> if is_static ~params p then Some p else None
+          | `Or _ as p -> Some (to_static p))
+        |> conjoin
+    | `Or ps ->
+        List.filter_map ps ~f:(function
+          | `Leaf p -> if is_static ~params p then Some p else Some (Bool true)
+          | `And _ as p -> Some (to_static p))
+        |> disjoin
+    | `Leaf p -> if is_static ~params p then p else Bool true
+  in
+  to_static p

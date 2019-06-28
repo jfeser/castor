@@ -58,6 +58,7 @@ let annotate_count r =
           | Dedup _ -> AtLeastOne
           | Select (s, _) | GroupBy (s, _, _) ->
               if count_matters s then Exact else c
+          | AHashIdx _ | ATuple _ -> Exact
           | _ -> c
         in
         Meta.set (super#visit_t c r) count c
@@ -122,12 +123,13 @@ let project_visitor =
                     match r.node with AScalar _ -> true | _ -> false
                   in
                   let should_remove =
-                    match count with
-                    (* If the count matters, then we can only remove
-                           unreferenced scalars. *)
-                    | Exact -> is_unref && is_scalar
-                    (* Otherwise we can remove anything unreferenced. *)
-                    | AtLeastOne -> is_unref
+                    is_unref && is_scalar
+                    (* match count with
+                     * (\* If the count matters, then we can only remove
+                     *        unreferenced scalars. *\)
+                     * | Exact -> is_unref && is_scalar
+                     * (\* Otherwise we can remove anything unreferenced. *\)
+                     * | AtLeastOne -> is_unref *)
                   in
                   not should_remove)
               |> List.map ~f:(self#visit_t ())
