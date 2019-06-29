@@ -70,6 +70,11 @@ module AbsInt = struct
     | Interval (l, h) -> if l = h then Some l else None
     | _ -> None
 
+  let size = function
+    | Interval (l, h) -> Int.(h - l)
+    | Top -> Int.max_value
+    | Bottom -> 0
+
   let byte_width ~nullable = function
     | Bottom -> 1
     | Top -> 8
@@ -273,7 +278,10 @@ let rec count = function
   | ListT (_, {count}) -> count
   | FuncT _ -> AbsInt.top
 
-let hash_kind_of_key_type_exn = function IntT _ | DateT _ -> `Direct | _ -> `Cmph
+let hash_kind_of_key_type_exn = function
+  | IntT {range= r; distinct= d; _} | DateT {range= r; distinct= d; _} ->
+      if AbsInt.size r / Map.length d < 5 then `Direct else `Cmph
+  | _ -> `Cmph
 
 (** Use the type of a hash index to decide what hash method to use. *)
 let hash_kind_exn = function
