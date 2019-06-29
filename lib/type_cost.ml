@@ -36,30 +36,31 @@ module Make (Config : Config.S) = struct
     | HashIdxT (_, vt, _) -> AbsInt.(join zero (read vt))
     | OrderedIdxT (_, vt, _) -> AbsInt.(join zero (read vt))
 
-  let cost ?(kind = `Max) p r =
-    let open Result.Let_syntax in
-    try
-      let c =
-        M.load_layout ~params r |> M.type_of ?timeout:cost_timeout |> p
-      in
-      let out =
-        match kind with
-        | `Min -> AbsInt.inf c
-        | `Max -> AbsInt.sup c
-        | `Avg ->
-            let%bind l = AbsInt.inf c in
-            let%map h = AbsInt.sup c in
-            l + ((h - l) / 2)
-      in
-      match out with
-      | Ok x ->
-          let x = Float.of_int x in
-          Logs.debug (fun m -> m "Found cost %f." x) ;
-          Some x
-      | Error e ->
-          Logs.warn (fun m -> m "Computing cost failed: %a" Error.pp e) ;
-          None
-    with Lwt_unix.Timeout ->
-      Logs.warn (fun m -> m "Computing cost timed out.") ;
-      Some Float.max_value
+  let cost ?(kind = `Max) p =
+    Memo.general (fun r ->
+        let open Result.Let_syntax in
+        try
+          let c =
+            M.load_layout ~params r |> M.type_of ?timeout:cost_timeout |> p
+          in
+          let out =
+            match kind with
+            | `Min -> AbsInt.inf c
+            | `Max -> AbsInt.sup c
+            | `Avg ->
+                let%bind l = AbsInt.inf c in
+                let%map h = AbsInt.sup c in
+                l + ((h - l) / 2)
+          in
+          match out with
+          | Ok x ->
+              let x = Float.of_int x in
+              Logs.debug (fun m -> m "Found cost %f." x) ;
+              x
+          | Error e ->
+              Logs.warn (fun m -> m "Computing cost failed: %a" Error.pp e) ;
+              Float.max_value
+        with Lwt_unix.Timeout ->
+          Logs.warn (fun m -> m "Computing cost timed out.") ;
+          Float.max_value)
 end
