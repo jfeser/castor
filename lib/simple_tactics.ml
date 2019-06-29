@@ -23,7 +23,12 @@ module Make (Config : Config.S) = struct
     if
       (* Relation has no free variables that are bound at runtime. *)
       Set.for_all (free r) ~f:(fun n ->
-          Poly.(Name.Meta.(find_exn n stage) = `Compile) )
+          match Name.Meta.(find n stage) with
+          | Some `Compile -> true
+          | Some `Run -> false
+          | None ->
+              Logs.warn (fun m -> m "Missing stage on %a." Name.pp n) ;
+              false)
     then
       let scope = Fresh.name Global.fresh "s%d" in
       let scalars =

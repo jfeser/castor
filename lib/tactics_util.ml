@@ -88,7 +88,11 @@ module Make (Config : Config.S) = struct
         Set.mem bound n
         (* TODO: We assume that compile time names that are bound in the context
            are ok, but this might not be true? *)
-        || Poly.(Name.Meta.(find_exn n stage) = `Compile)
+        || ( match Name.Meta.(find n stage) with
+           | Some s -> s = `Compile
+           | None ->
+               Logs.warn (fun m -> m "Missing stage on %a" Name.pp n) ;
+               false )
            && Option.is_some (Name.rel n))
 
   (** Remove names from a selection list. *)
