@@ -372,9 +372,10 @@ module Make (C : Config.S) = struct
 
     let min cost rs =
       Seq.fold rs ~init:(None, Float.max_value) ~f:(fun (rb, cb) r ->
-          match cost r with
-          | Some c -> if c < cb then (Some r, c) else (rb, cb)
-          | None -> (rb, cb))
+          let c = cost r in
+          match rb with
+          | Some _ -> if c < cb then (Some r, c) else (rb, cb)
+          | None -> (Some r, c))
       |> Tuple.T2.get1
 
     let ( *> ) x y = global (fun r -> y (x r)) ""
