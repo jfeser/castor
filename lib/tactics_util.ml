@@ -6,6 +6,8 @@ open Collections
 module Config = struct
   module type S = sig
     val conn : Db.t
+
+    val cost_conn : Db.t
   end
 end
 
@@ -45,7 +47,7 @@ module Make (Config : Config.S) = struct
           List.map
             (Pred.names p |> Set.to_list)
             ~f:(fun n ->
-              match Db.relation_has_field conn (Name.name n) with
+              match Db.relation_has_field cost_conn (Name.name n) with
               | Some r -> Ok (r, n)
               | None ->
                   Or_error.error "Name does not come from base relation." n
@@ -62,7 +64,7 @@ module Make (Config : Config.S) = struct
              dedup
                (select
                   (List.map ns ~f:(fun n -> Name n))
-                  (relation (Db.relation conn r))))
+                  (relation (Db.relation cost_conn r))))
       |> List.reduce ~f:(join (Bool true))
     in
     match joined_rels with

@@ -6,6 +6,12 @@ open Collections
 module A = Abslayout
 
 module Config = struct
+  module type My_S = sig
+    val cost_conn : Db.t
+
+    val params : Set.M(Name).t
+  end
+
   module type S = sig
     include Ops.Config.S
 
@@ -13,12 +19,14 @@ module Config = struct
 
     include Simple_tactics.Config.S
 
-    val cost_conn : Db.t
+    include My_S
   end
 end
 
 module Make (C : Config.S) = struct
-  open C
+  module My_C : Config.My_S = C
+
+  open My_C
   module O = Ops.Make (C)
   open O
   module S = Simple_tactics.Make (C)
@@ -304,7 +312,7 @@ module Make (C : Config.S) = struct
     let part_aggs = R.resolve ~params part_aggs in
     let sql = Sql.of_ralgebra part_aggs in
     let tups =
-      Db.exec_cursor_exn conn
+      Db.exec_cursor_exn cost_conn
         Type.PrimType.
           [ IntT {nullable= false}
           ; IntT {nullable= false}

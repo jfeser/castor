@@ -20,6 +20,8 @@ module C = struct
 
   let conn = Lazy.force test_db_conn
 
+  let cost_conn = Lazy.force test_db_conn
+
   let simplify = None
 end
 
@@ -127,8 +129,7 @@ let%expect_test "elim-eq-filter" =
                                dedup(select([fresh], select([f as fresh], r))))],
                        cross)) as s0,
             filter((fresh = s0.x0), select([f as fresh], r)),
-            param) |}]
-  )
+            param) |}])
 
 let%expect_test "elim-eq-filter-approx" =
   let r =
@@ -146,8 +147,7 @@ let%expect_test "elim-eq-filter-approx" =
                                select([f as fresh], dedup(select([f], r))))],
                        cross)) as s0,
             filter((fresh = s0.x0), select([f as fresh], filter((g = param), r))),
-            param) |}]
-  )
+            param) |}])
 
 let%expect_test "elim-eq-filter" =
   let r =
@@ -166,8 +166,7 @@ let%expect_test "elim-eq-filter" =
                              dedup(select([fresh], select([f as fresh, g], r))))],
                      cross)) as s0,
           filter((fresh = s0.x0), select([f as fresh, g], r)),
-          param) |}]
-  )
+          param) |}])
 
 let%expect_test "elim-eq-filter" =
   let r =
@@ -210,8 +209,7 @@ let%expect_test "elim-eq-filter" =
           filter((((fresh1 = s0.x2) && (fresh2 = s0.x5)) ||
                  ((fresh2 = s0.x2) && (fresh1 = s0.x5))),
             select([f as fresh1, g as fresh2], r)),
-          (param, (param + 1))) |}]
-  )
+          (param, (param + 1))) |}])
 
 let%expect_test "elim-eq-filter" =
   let r =
@@ -223,8 +221,9 @@ let%expect_test "elim-eq-filter" =
            (at_ elim_eq_filter Path.(all >>? is_filter >>| shallowest))
            Path.root r)
         ~f:(Format.printf "%a\n" pp) ;
-      [%expect {|
+      [%expect
+        {|
         [INFO] ("No candidate keys."
          ((Name ((scope (k)) (name f))) (Name ((scope ()) (name param)))))
         [ERROR] Found no equalities.
- |}] )
+ |}])

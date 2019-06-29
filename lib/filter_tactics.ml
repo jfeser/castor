@@ -4,10 +4,18 @@ open Abslayout
 open Collections
 
 module Config = struct
+  module type My_S = sig
+    val params : Set.M(Name).t
+  end
+
   module type S = sig
     include Ops.Config.S
 
-    val params : Set.M(Name).t
+    include Simplify_tactic.Config.S
+
+    include Tactics_util.Config.S
+
+    include My_S
   end
 end
 
@@ -15,9 +23,12 @@ module Make (C : Config.S) = struct
   module O = Ops.Make (C)
   module S = Simplify_tactic.Make (C)
   open O
-  open C
   open S
   module Tactics_util = Tactics_util.Make (C)
+
+  module My_C : Config.My_S = C
+
+  open My_C
 
   let extend_select ~with_ ps r =
     let needed_fields =
