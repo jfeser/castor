@@ -411,13 +411,16 @@ let names_serializable_exn r =
       inherit [_] stage_iter
 
       method! visit_Name s n =
-        let this_ok = Poly.(Name.Meta.(find_exn n stage) = s) in
-        if not this_ok then
-          let stage = match s with `Compile -> "compile" | `Run -> "run" in
-          raise
-            (Un_serial
-               (Format.asprintf "Cannot serialize: Found %a in %s time position."
-                  Name.pp_with_stage n stage))
+        match Name.Meta.(find n stage) with
+        | Some s' ->
+            if s <> s' then
+              let stage = match s with `Compile -> "compile" | `Run -> "run" in
+              raise
+                (Un_serial
+                   (Format.asprintf
+                      "Cannot serialize: Found %a in %s time position."
+                      Name.pp_with_stage n stage))
+        | None -> Logs.warn (fun m -> m "Missing stage on %a" Name.pp n)
     end
   in
   visitor#visit_t `Run r
