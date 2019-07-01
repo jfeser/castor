@@ -277,9 +277,9 @@ let rec pred_to_sql p =
       let s = sprintf "(%s)" (p2s p) in
       match op with
       | Not -> sprintf "not (%s)" s
-      | Year -> sprintf "interval '%s year'" s
-      | Month -> sprintf "interval '%s month'" s
-      | Day -> sprintf "interval '%s day'" s
+      | Year -> sprintf "%s * interval '1 year'" s
+      | Month -> sprintf "%s * interval '1 month'" s
+      | Day -> sprintf "%s * interval '1 day'" s
       | Strlen -> sprintf "char_length(%s)" s
       | ExtractY -> sprintf "cast(date_part('year', %s) as integer)" s
       | ExtractM -> sprintf "cast(date_part('month', %s) as integer)" s
