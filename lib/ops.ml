@@ -394,5 +394,9 @@ module Make (C : Config.S) = struct
                r')
       in
       {tf with b_f}
+
+    let global ~name b_f = {b_f; b_name= name}
+
+    let apply tf p r = tf.b_f p r
   end
 end

@@ -1,6 +1,7 @@
 open! Core
 open Castor
 open Abslayout
+open Collections
 open Filter_tactics
 open Test_util
 
@@ -227,3 +228,13 @@ let%expect_test "elim-eq-filter" =
          ((Name ((scope (k)) (name f))) (Name ((scope ()) (name param)))))
         [ERROR] Found no equalities.
  |}])
+
+let%expect_test "elim-eq-filter" =
+  let r = M.load_string ~params:C.params "filter(f = param, r)" in
+  Seq.iter (Branching.apply partition Path.root r) ~f:(Format.printf "%a\n" pp) ;
+  [%expect
+    {|
+        [INFO] ("No candidate keys."
+         ((Name ((scope (k)) (name f))) (Name ((scope ()) (name param)))))
+        [ERROR] Found no equalities.
+ |}]

@@ -579,6 +579,83 @@ module Make (C : Config.S) = struct
 
   let elim_disjunct = of_func elim_disjunct ~name:"elim-disjunct"
 
+  let partition _ r =
+    let open Option.Let_syntax in
+    let part_on r n =
+      let visitor =
+        object
+          inherit [_] reduce as super
+
+          inherit [_] Util.list_monoid
+
+          method! visit_Filter () (p, r) =
+            super#visit_Filter () (p, r)
+            @ ( Pred.conjuncts p
+              |> List.filter ~f:(fun p -> Set.mem (Pred.names p) n) )
+        end
+      in
+      let preds = visitor#visit_t () r in
+      let%bind fields =
+        List.map preds ~f:(fun p -> Set.remove (Pred.names p) n)
+        |> List.reduce ~f:Set.union
+      in
+      match Set.to_list fields with
+      | [f] ->
+          let%bind keys = Tactics_util.all_values [Name f] r |> Or_error.ok in
+          let key_name = Fresh.name Global.fresh "k%d" in
+          let keys = select [As_pred (Name f, key_name)] keys in
+          let scope = Fresh.name Global.fresh "s%d" in
+          let r' =
+            subst
+              (Map.singleton
+                 (module Name)
+                 n
+                 (Name (Name.scoped scope (Name.create key_name))))
+              r
+          in
+          if Set.mem (names r') n then None
+          else Some (hash_idx keys scope r' [Name n])
+      | _ -> None
+    in
+    Set.to_sequence params |> Seq.filter_map ~f:(part_on r)
+
+  let partition = Branching.global partition ~name:"partition"
+
+  let elim_subquery _ r =
+    let open Option.Let_syntax in
+    let%bind p, r = to_filter r in
+    let schema_names = schema_exn r |> Set.of_list (module Name) in
+    let visitor =
+      object
+        inherit [_] mapreduce
+
+        inherit [_] Util.list_monoid
+
+        method! visit_Exists () r =
+          if Set.inter schema_names (names r) |> Set.is_empty then
+            let qname = Fresh.name Global.fresh "q%d" in
+            ( Name (Name.create qname)
+            , [select [As_pred (Binop (Gt, Count, Int 0), qname)] r] )
+          else (Exists r, [])
+
+        method! visit_First () r =
+          let n = schema_exn r |> List.hd_exn in
+          if Set.inter schema_names (names r) |> Set.is_empty then
+            let qname = Fresh.name Global.fresh "q%d" in
+            ( Name (Name.create qname)
+            , [select [As_pred (Min (Name n), qname)] r] )
+          else (Exists r, [])
+      end
+    in
+    let p, subqueries = visitor#visit_pred () p in
+    if List.length subqueries > 0 then
+      let scope = Fresh.name Global.fresh "s%d" in
+      let sq_tuple = tuple subqueries Cross in
+      Some
+        (dep_join sq_tuple scope
+           (filter (Pred.scoped (schema_exn sq_tuple) scope p) r))
+    else None
+
   (* let precompute_filter n =
    *   let exception Failed of Error.t in
    *   let run_exn r =
