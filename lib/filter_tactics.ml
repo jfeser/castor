@@ -134,7 +134,7 @@ module Make (C : Config.S) = struct
         in
         filter (Pred.unscoped d_alias p)
           (dep_join d_lhs d_alias (select select_list r))
-    | Relation _ | AEmpty | AScalar _ | ATuple _ | As (_, _) -> None
+    | Relation _ | AEmpty | AScalar _ | ATuple _ | As (_, _) | Range _ -> None
 
   let hoist_filter = of_func hoist_filter ~name:"hoist-filter"
 
@@ -579,6 +579,44 @@ module Make (C : Config.S) = struct
 
   let elim_disjunct = of_func elim_disjunct ~name:"elim-disjunct"
 
+  let to_lower_bound n =
+    List.find_map ~f:(function
+      | Binop (Eq, Name n', p) when Name.O.(n' = n) -> Some p
+      | Binop (Eq, p, Name n') when Name.O.(n' = n) -> Some p
+      | Binop (Lt, Name n', p) when Name.O.(n' = n) -> Some p
+      | Binop (Le, Name n', p) when Name.O.(n' = n) -> Some p
+      | Binop (Gt, p, Name n') when Name.O.(n' = n) -> Some p
+      | Binop (Ge, p, Name n') when Name.O.(n' = n) -> Some p
+      | Binop (Lt, Binop (Add, Name n', p'), p) when Name.O.(n' = n) ->
+          Some (Binop (Sub, p, p'))
+      | Binop (Le, Binop (Add, Name n', p'), p) when Name.O.(n' = n) ->
+          Some (Binop (Sub, p, p'))
+      | Binop (Gt, p, Binop (Add, Name n', p')) when Name.O.(n' = n) ->
+          Some (Binop (Sub, p, p'))
+      | Binop (Ge, p, Binop (Add, Name n', p')) when Name.O.(n' = n) ->
+          Some (Binop (Sub, p, p'))
+      | _ -> None)
+
+  let to_upper_bound n =
+    List.find_map ~f:(function
+      | Binop (Eq, Name n', p) when Name.O.(n' = n) -> Some p
+      | Binop (Eq, p, Name n') when Name.O.(n' = n) -> Some p
+      | Binop (Lt, p, Name n') when Name.O.(n' = n) -> Some p
+      | Binop (Le, p, Name n') when Name.O.(n' = n) -> Some p
+      | Binop (Gt, Name n', p) when Name.O.(n' = n) -> Some p
+      | Binop (Ge, Name n', p) when Name.O.(n' = n) -> Some p
+      | Binop (Lt, p, Binop (Add, Name n', p')) when Name.O.(n' = n) ->
+          Some (Binop (Add, p, p'))
+      | Binop (Le, p, Binop (Add, Name n', p')) when Name.O.(n' = n) ->
+          Some (Binop (Add, p, p'))
+      | Binop (Gt, Binop (Add, Name n', p'), p) when Name.O.(n' = n) ->
+          Some (Binop (Add, p, p'))
+      | Binop (Ge, Binop (Add, Name n', p'), p) when Name.O.(n' = n) ->
+          Some (Binop (Add, p, p'))
+      | _ -> None)
+
+  let to_range n ps = (to_lower_bound n ps, to_upper_bound n ps)
+
   let partition _ r =
     let open Option.Let_syntax in
     let part_on r n =
@@ -595,28 +633,41 @@ module Make (C : Config.S) = struct
         end
       in
       let preds = visitor#visit_t () r in
+      let key_range = to_range n preds in
       let%bind fields =
         List.map preds ~f:(fun p -> Set.remove (Pred.names p) n)
-        |> List.reduce ~f:Set.union
+        |> List.reduce ~f:Set.union |> Option.map ~f:Set.to_list
       in
-      match Set.to_list fields with
-      | [f] ->
-          let%bind keys = Tactics_util.all_values [Name f] r |> Or_error.ok in
-          let key_name = Fresh.name Global.fresh "k%d" in
-          let keys = select [As_pred (Name f, key_name)] keys in
-          let scope = Fresh.name Global.fresh "s%d" in
-          let r' =
-            subst
-              (Map.singleton
-                 (module Name)
-                 n
-                 (Name (Name.scoped scope (Name.create key_name))))
-              r
-          in
-          if Set.mem (names r') n then None
-          else Some (hash_idx keys scope r' [Name n])
+      match (fields, key_range) with
+      | [f], (Some l, Some h) -> (
+        match Name.type_exn f with
+        | IntT _ | DateT _ ->
+            let%bind vals =
+              Tactics_util.all_values [Name f] r |> Or_error.ok
+            in
+            let key_name = Fresh.name Global.fresh "k%d" in
+            let keys =
+              select
+                [As_pred (Name (Name.create "range"), key_name)]
+                (range
+                   (First (select [As_pred (Min l, "l")] vals))
+                   (First (select [As_pred (Max h, "h")] vals)))
+            in
+            let scope = Fresh.name Global.fresh "s%d" in
+            let r' =
+              subst
+                (Map.singleton
+                   (module Name)
+                   n
+                   (Name (Name.scoped scope (Name.create key_name))))
+                r
+            in
+            if Set.mem (names r') n then None
+            else Some (hash_idx keys scope r' [Name n])
+        | _ -> None )
       | _ -> None
     in
+    let r = Resolve.resolve ~params r in
     Set.to_sequence params |> Seq.filter_map ~f:(part_on r)
 
   let partition = Branching.global partition ~name:"partition"

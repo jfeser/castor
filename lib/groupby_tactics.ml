@@ -2,7 +2,6 @@ open Core
 open Castor
 open Abslayout
 open Collections
-module P = Project
 
 module Config = struct
   module type S = sig
@@ -54,10 +53,10 @@ module Make (C : Config.S) = struct
         let key_preds = List.map key ~f:(fun n -> Name n) in
         let filter_pred =
           List.map key ~f:(fun n ->
-              Binop (Eq, Name n, Name (Name.copy n ~scope:(Some key_name))) )
+              Binop (Eq, Name n, Name (Name.copy n ~scope:(Some key_name))))
           |> List.reduce_exn ~f:(fun acc p -> Binop (And, acc, p))
         in
-        let keys = P.project ~params:(free r) (dedup (select key_preds r)) in
+        let keys = dedup (select key_preds r) in
         (* Try to remove any remaining parameters from the keys relation. *)
         match over_approx C.params keys with
         | Ok keys ->
@@ -141,7 +140,7 @@ groupby([o_year,
     in
     with_logs (fun () ->
         apply elim_groupby Path.root r
-        |> Option.iter ~f:(Format.printf "%a@." Abslayout.pp) ) ;
+        |> Option.iter ~f:(Format.printf "%a@." Abslayout.pp)) ;
     [%expect
       {|
       alist(dedup(
