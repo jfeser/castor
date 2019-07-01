@@ -507,16 +507,12 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
     in
     Lwt_main.run serialize ;
     let len = serializer#pos in
-    let data_fn, data_ch = Filename.open_temp_file "data" "bin" in
-    serializer#write_into_channel data_ch ;
-    (Unix.create_process ~prog:"mv" ~args:[data_fn; fn]).pid |> Unix.waitpid
-    |> ignore ;
-    Out_channel.close data_ch ;
-    let layout_fn, layout_ch = Filename.open_temp_file "layout" "txt" in
+    Out_channel.with_file fn ~f:serializer#write_into_channel ;
     Option.iter layout_file ~f:(fun fn ->
+        let layout_fn, layout_ch = Filename.open_temp_file "layout" "txt" in
         serializer#render layout_ch ;
         (Unix.create_process ~prog:"mv" ~args:[layout_fn; fn]).pid |> Unix.waitpid
-        |> ignore) ;
-    Out_channel.close layout_ch ;
+        |> ignore ;
+        Out_channel.close layout_ch) ;
     (l, len)
 end
