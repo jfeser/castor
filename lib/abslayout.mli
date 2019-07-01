@@ -91,6 +91,7 @@ and node = Abslayout0.node =
   | OrderBy of order_by
   | Dedup of t
   | Relation of relation
+  | Range of pred * pred
   | AEmpty
   | AScalar of pred
   | AList of (t * t)
@@ -125,6 +126,8 @@ val name : t -> string
 
 val names : t -> Set.M(Name).t
 (** The set of names in a `t`. *)
+
+val range : pred -> pred -> t
 
 val select : pred list -> t -> t
 

@@ -16,7 +16,10 @@ type spj =
   ; distinct: bool
   ; conds: pred list
   ; relations:
-      ([`Subquery of t * string | `Table of string * string] * [`Left | `Lateral])
+      ( [ `Subquery of t * string
+        | `Table of string * string
+        | `Series of Pred.t * Pred.t * string ]
+      * [`Left | `Lateral] )
       list
   ; order: (pred * order) list
   ; group: pred list
@@ -225,6 +228,12 @@ let of_ralgebra r =
   let rec f r =
     match r.node with
     | As _ -> failwith "Unexpected as."
+    | Range (p, p') ->
+        let alias = Fresh.name Global.fresh "t%d" in
+        Query
+          (create_query
+             ~relations:[(`Series (p, p', alias), `Left)]
+             [create_entry (Name (Name.create "range"))])
     | Dedup r -> Query {(to_spj (f r)) with distinct= true}
     | Relation {r_name= tbl; _} ->
         let tbl_alias = tbl ^ Fresh.name Global.fresh "_%d" in
@@ -356,6 +365,19 @@ and spj_to_sql {select; distinct; order; group; relations; conds; limit} =
             | `Table (t, alias) ->
                 if String.(t = alias) then sprintf "\"%s\"" t
                 else sprintf "\"%s\" as \"%s\"" t alias
+            | `Series (p, p', alias) -> (
+                let t = Type.PrimType.unify (Pred.to_type p) (Pred.to_type p') in
+                match t with
+                | DateT _ ->
+                    sprintf
+                      {|
+(select range::date from
+generate_series(%s :: timestamp, %s :: timestamp, '1 day' :: interval) range) as "%s"|}
+                      (pred_to_sql p) (pred_to_sql p') alias
+                | IntT _ ->
+                    sprintf "generate_series(%s, %s) as %s(range)" (pred_to_sql p)
+                      (pred_to_sql p') alias
+                | _ -> failwith "Unexpected series type." )
           in
           let join_str =
             match join_type with `Left -> "" | `Lateral -> "lateral"

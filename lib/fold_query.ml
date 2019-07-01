@@ -171,7 +171,7 @@ let rec of_ralgebra q =
         A.order_by order_key (A.dedup q1)
       in
       for_ q (q1, scope, of_ralgebra q2, true)
-  | AEmpty -> empty q
+  | AEmpty | Range _ -> empty q
   | AScalar p -> scalars q [p]
   | ATuple (ts, _) -> (
     match to_scalars ts with

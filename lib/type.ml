@@ -280,7 +280,9 @@ let rec count = function
 
 let hash_kind_of_key_type_exn = function
   | IntT {range= r; distinct= d; _} | DateT {range= r; distinct= d; _} ->
-      if AbsInt.size r / Map.length d < 5 then `Direct else `Cmph
+      if Map.length d = 0 then `Direct
+      else if AbsInt.size r / Map.length d < 5 then `Direct
+      else `Cmph
   | _ -> `Cmph
 
 (** Use the type of a hash index to decide what hash method to use. *)

@@ -64,6 +64,8 @@ let ensure_no_overlap_k rs =
   if Set.any_overlap (module String) all_scopes then List.map rs ~f:alpha_scopes
   else rs
 
+let range a b = wrap (Range (a, b))
+
 let dep_join a b c =
   let a, c = ensure_no_overlap_2 a c [b] in
   wrap (DepJoin {d_lhs= strip_meta a; d_alias= b; d_rhs= strip_meta c})
@@ -151,6 +153,7 @@ let name r =
   | AHashIdx _ -> "hash_idx"
   | AOrderedIdx _ -> "ordered_idx"
   | As _ -> "as"
+  | Range _ -> "range"
 
 let of_lexbuf_exn lexbuf =
   try Ralgebra_parser.ralgebra_eof Ralgebra_lexer.token lexbuf
@@ -211,7 +214,7 @@ and free r =
   let scope r s = Set.map (module Name) s ~f:(Name.copy ~scope:(Some r)) in
   let free_set =
     match r.node with
-    | Relation _ | AEmpty -> empty
+    | Relation _ | AEmpty | Range _ -> empty
     | AScalar p -> pred_free p
     | Select (ps, r') ->
         Set.O.(free r' || ((List.map ps ~f:pred_free |> union_list) - exposed r'))
@@ -485,7 +488,7 @@ let annotate_orders r =
           []
       | AOrderedIdx (r, _, _) ->
           schema_exn r |> List.map ~f:(fun n -> (Name n, Asc))
-      | As _ -> []
+      | As _ | Range _ -> []
     in
     Meta.set_m r Meta.order order ;
     order

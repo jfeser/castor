@@ -78,83 +78,92 @@ let annotate_count r =
 let dummy = Bool false
 
 let get_refcnt r =
-  Option.value_exn
-    ~error:(Error.createf "No refcnt found %a" pp_small_str r)
-    (Meta.find r Meta.refcnt)
+  match Meta.find r Meta.refcnt with
+  | Some c -> Some c
+  | None ->
+      Logs.warn (fun m -> m "No refcnt found on %a" pp_small r) ;
+      None
 
 let project_visitor =
   object (self : 'a)
     inherit [_] map as super
 
     method! visit_t () r =
-      let refcnt = get_refcnt r in
-      let count = Meta.find_exn r count in
-      if all_unref r && count = AtLeastOne then scalar dummy
-      else
-        match r.node with
-        | Select (ps, r) -> select (project_defs refcnt ps) (self#visit_t () r)
-        | Dedup r -> dedup (self#visit_t () r)
-        | GroupBy (ps, ns, r) ->
-            group_by (project_defs refcnt ps) ns (self#visit_t () r)
-        | AList (rk, rv) ->
-            let scope = scope_exn rk in
-            let rk = strip_scope rk in
-            let rk =
-              let refcnt = get_refcnt rk in
-              let schema = schema_exn rk in
-              let old_n = List.length schema in
-              let ps =
-                project_defs refcnt (schema_exn rk |> List.map ~f:(fun n -> Name n))
-              in
-              let new_n = List.length ps in
-              if old_n > new_n then select ps rk else self#visit_t () rk
-            in
-            list rk scope (self#visit_t () rv)
-        | AScalar p -> if project_def refcnt p then scalar p else scalar dummy
-        | ATuple ([], _) -> empty
-        | ATuple ([r], _) -> self#visit_t () r
-        | ATuple (rs, Concat) -> tuple (List.map rs ~f:(self#visit_t ())) Concat
-        | ATuple (rs, Cross) ->
-            let rs =
-              (* Remove unreferenced parts of the tuple. *)
-              List.filter rs ~f:(fun r ->
-                  let is_unref = all_unref r in
-                  let is_scalar =
-                    match r.node with AScalar _ -> true | _ -> false
-                  in
-                  let should_remove =
-                    is_unref && is_scalar
-                    (* match count with
-                     * (\* If the count matters, then we can only remove
-                     *        unreferenced scalars. *\)
-                     * | Exact -> is_unref && is_scalar
-                     * (\* Otherwise we can remove anything unreferenced. *\)
-                     * | AtLeastOne -> is_unref *)
-                  in
-                  not should_remove)
-              |> List.map ~f:(self#visit_t ())
-            in
-            let rs = if List.length rs = 0 then [scalar dummy] else rs in
-            tuple rs Cross
-        | Join {r1; r2; pred} -> (
-          match count with
-          | Exact -> join pred (self#visit_t () r1) (self#visit_t () r2)
-          (* If one side of a join is unused then the join can be dropped. *)
-          | AtLeastOne ->
-              if all_unref_at r1 r then self#visit_t () r2
-              else if all_unref_at r2 r then self#visit_t () r1
-              else join pred (self#visit_t () r1) (self#visit_t () r2) )
-        | DepJoin {d_lhs; d_rhs; d_alias} -> (
-          match count with
-          | Exact ->
-              dep_join (self#visit_t () d_lhs) d_alias (self#visit_t () d_rhs)
-          (* If one side of a join is unused then the join can be dropped. *)
-          | AtLeastOne ->
-              if all_unref d_lhs then self#visit_t () d_rhs
-              else if all_unref d_rhs then scalar dummy
-              else dep_join (self#visit_t () d_lhs) d_alias (self#visit_t () d_rhs)
-          )
-        | _ -> super#visit_t () r
+      match get_refcnt r with
+      | None -> r
+      | Some refcnt -> (
+          let count = Meta.find_exn r count in
+          if all_unref r && count = AtLeastOne then scalar dummy
+          else
+            match r.node with
+            | Select (ps, r) -> select (project_defs refcnt ps) (self#visit_t () r)
+            | Dedup r -> dedup (self#visit_t () r)
+            | GroupBy (ps, ns, r) ->
+                group_by (project_defs refcnt ps) ns (self#visit_t () r)
+            | AList (rk, rv) ->
+                let scope = scope_exn rk in
+                let rk = strip_scope rk in
+                let rk =
+                  match get_refcnt rk with
+                  | None -> rk
+                  | Some refcnt ->
+                      let schema = schema_exn rk in
+                      let old_n = List.length schema in
+                      let ps =
+                        project_defs refcnt
+                          (schema_exn rk |> List.map ~f:(fun n -> Name n))
+                      in
+                      let new_n = List.length ps in
+                      if old_n > new_n then select ps rk else self#visit_t () rk
+                in
+                list rk scope (self#visit_t () rv)
+            | AScalar p -> if project_def refcnt p then scalar p else scalar dummy
+            | ATuple ([], _) -> empty
+            | ATuple ([r], _) -> self#visit_t () r
+            | ATuple (rs, Concat) -> tuple (List.map rs ~f:(self#visit_t ())) Concat
+            | ATuple (rs, Cross) ->
+                let rs =
+                  (* Remove unreferenced parts of the tuple. *)
+                  List.filter rs ~f:(fun r ->
+                      let is_unref = all_unref r in
+                      let is_scalar =
+                        match r.node with AScalar _ -> true | _ -> false
+                      in
+                      let should_remove =
+                        is_unref && is_scalar
+                        (* match count with
+                         * (\* If the count matters, then we can only remove
+                         *        unreferenced scalars. *\)
+                         * | Exact -> is_unref && is_scalar
+                         * (\* Otherwise we can remove anything unreferenced. *\)
+                         * | AtLeastOne -> is_unref *)
+                      in
+                      not should_remove)
+                  |> List.map ~f:(self#visit_t ())
+                in
+                let rs = if List.length rs = 0 then [scalar dummy] else rs in
+                tuple rs Cross
+            | Join {r1; r2; pred} -> (
+              match count with
+              | Exact -> join pred (self#visit_t () r1) (self#visit_t () r2)
+              (* If one side of a join is unused then the join can be dropped. *)
+              | AtLeastOne ->
+                  if all_unref_at r1 r then self#visit_t () r2
+                  else if all_unref_at r2 r then self#visit_t () r1
+                  else join pred (self#visit_t () r1) (self#visit_t () r2) )
+            | DepJoin {d_lhs; d_rhs; d_alias} -> (
+              match count with
+              | Exact ->
+                  dep_join (self#visit_t () d_lhs) d_alias (self#visit_t () d_rhs)
+              (* If one side of a join is unused then the join can be dropped. *)
+              | AtLeastOne ->
+                  if all_unref d_lhs then self#visit_t () d_rhs
+                  else if all_unref d_rhs then scalar dummy
+                  else
+                    dep_join (self#visit_t () d_lhs) d_alias (self#visit_t () d_rhs)
+              )
+            | Range (p, p') -> range p p'
+            | _ -> super#visit_t () r )
   end
 
 let project_once r =

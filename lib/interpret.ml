@@ -315,6 +315,7 @@ let eval {db; params} r =
         Hashtbl.data tbl |> Seq.of_list
         |> Seq.filter_map ~f:(fun ts -> eval_agg ctx ps s (Seq.of_list ts))
     | As (_, r) -> eval ctx r
+    | _ -> failwith ""
   in
   let module M = Abslayout_db.Make (struct
     let conn = db

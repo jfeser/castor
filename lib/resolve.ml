@@ -115,6 +115,9 @@ module Ctx = struct
 
   include T
 
+  let singleton n s =
+    of_list [{rname= n; rstage= s; rmeta= ref Univ_map.empty; rrefs= []}]
+
   let unscoped (c : t) =
     List.map (c :> row list) ~f:(fun r -> {r with rname= Name.unscoped r.rname})
     |> of_list
@@ -261,7 +264,7 @@ let resolve_relation stage r =
   let _, ctx = List.map schema ~f:(fun n -> Name n) |> Ctx.of_defs stage in
   ctx
 
-let rec resolve_pred (ctx : Ctx.t) =
+let rec resolve_pred stage (ctx : Ctx.t) =
   let visitor =
     object
       inherit [_] endo
@@ -269,13 +272,12 @@ let rec resolve_pred (ctx : Ctx.t) =
       method! visit_Name ctx _ n = Name (resolve_name ctx n)
 
       method! visit_Exists ctx _ r =
-        let r', _ = resolve `Run ctx r in
+        let r', _ = resolve stage ctx r in
         Exists r'
 
       method! visit_First ctx _ r =
-        let r', ctx = resolve `Run ctx r in
-        Ctx.incr_refs `Run ctx ;
-        First r'
+        let r', ctx = resolve stage ctx r in
+        Ctx.incr_refs stage ctx ; First r'
     end
   in
   visitor#visit_pred ctx
@@ -298,13 +300,13 @@ and resolve stage outer_ctx ({node; meta} as r) =
         let r, preds =
           let r, inner_ctx = rsame outer_ctx r in
           let ctx = Ctx.merge outer_ctx inner_ctx in
-          (r, List.map preds ~f:(resolve_pred ctx))
+          (r, List.map preds ~f:(resolve_pred stage ctx))
         in
         let defs, ctx = Ctx.of_defs stage preds in
         (Select (defs, r), ctx)
     | Filter (pred, r) ->
         let r, value_ctx = rsame outer_ctx r in
-        let pred = resolve_pred (Ctx.merge outer_ctx value_ctx) pred in
+        let pred = resolve_pred stage (Ctx.merge outer_ctx value_ctx) pred in
         (Filter (pred, r), value_ctx)
     | DepJoin ({d_lhs; d_rhs; d_alias} as d) ->
         let d_lhs, lctx = rsame outer_ctx d_lhs in
@@ -315,13 +317,18 @@ and resolve stage outer_ctx ({node; meta} as r) =
         let r1, inner_ctx1 = rsame outer_ctx r1 in
         let r2, inner_ctx2 = rsame outer_ctx r2 in
         let ctx = Ctx.merge_list [inner_ctx1; inner_ctx2; outer_ctx] in
-        let pred = resolve_pred ctx pred in
+        let pred = resolve_pred stage ctx pred in
         (Join {pred; r1; r2}, Ctx.merge inner_ctx1 inner_ctx2)
     | Relation r -> (Relation r, resolve_relation stage r)
+    | Range (p, p') ->
+        let p = resolve_pred stage outer_ctx p in
+        let p' = resolve_pred stage outer_ctx p' in
+        ( Range (p, p')
+        , Ctx.singleton (Name.create ~type_:(Pred.to_type p) "range") stage )
     | GroupBy (aggs, key, r) ->
         let r, inner_ctx = rsame outer_ctx r in
         let ctx = Ctx.merge outer_ctx inner_ctx in
-        let aggs = List.map ~f:(resolve_pred ctx) aggs in
+        let aggs = List.map ~f:(resolve_pred stage ctx) aggs in
         let key = List.map key ~f:(resolve_name ctx) in
         let defs, ctx = Ctx.of_defs stage aggs in
         (GroupBy (defs, key, r), ctx)
@@ -330,7 +337,7 @@ and resolve stage outer_ctx ({node; meta} as r) =
         (Dedup r, inner_ctx)
     | AEmpty -> (AEmpty, Ctx.of_list [])
     | AScalar p ->
-        let p = resolve_pred outer_ctx p in
+        let p = resolve_pred stage outer_ctx p in
         let def, ctx =
           match Ctx.of_defs stage [p] with
           | [def], ctx -> (def, ctx)
@@ -358,7 +365,7 @@ and resolve stage outer_ctx ({node; meta} as r) =
           { h with
             hi_keys= r
           ; hi_values= vl
-          ; hi_lookup= List.map h.hi_lookup ~f:(resolve_pred outer_ctx) }
+          ; hi_lookup= List.map h.hi_lookup ~f:(resolve_pred stage outer_ctx) }
         in
         (AHashIdx h, Ctx.(merge_forgiving kctx vctx))
     | AOrderedIdx (r, l, m) ->
@@ -369,7 +376,7 @@ and resolve stage outer_ctx ({node; meta} as r) =
         let inner_ctx = Ctx.bind outer_ctx (Ctx.scoped scope kctx) in
         let vl, vctx = rsame inner_ctx l in
         let resolve_bound =
-          Option.map ~f:(fun (p, b) -> (resolve_pred outer_ctx p, b))
+          Option.map ~f:(fun (p, b) -> (resolve_pred stage outer_ctx p, b))
         in
         let m =
           { m with
@@ -381,7 +388,9 @@ and resolve stage outer_ctx ({node; meta} as r) =
     | As _ -> Error.(createf "Unexpected as." |> raise)
     | OrderBy {key; rel} ->
         let rel, inner_ctx = rsame outer_ctx rel in
-        let key = List.map key ~f:(fun (p, o) -> (resolve_pred inner_ctx p, o)) in
+        let key =
+          List.map key ~f:(fun (p, o) -> (resolve_pred stage inner_ctx p, o))
+        in
         (OrderBy {key; rel}, inner_ctx)
   in
   let node, ctx =

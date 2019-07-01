@@ -88,6 +88,7 @@ module T = struct
     | OrderBy of order_by
     | Dedup of t
     | Relation of relation
+    | Range of pred * pred
     | AEmpty
     | AScalar of pred
     | AList of (t * t)
@@ -253,6 +254,7 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
         fprintf fmt "orderby(%a,@ %a)" (pp_list pp_order) key pp rel
     | Dedup r -> fprintf fmt "dedup(@,%a)" pp r
     | Relation {r_name; _} -> fprintf fmt "%s" r_name
+    | Range (pl, ph) -> fprintf fmt "range(%a, %a)" pp_pred pl pp_pred ph
     | AEmpty -> fprintf fmt "aempty"
     | AScalar p -> fprintf fmt "ascalar(%a)" pp_pred p
     | AList (r1, r2) -> fprintf fmt "alist(%a,@ %a)" pp r1 pp r2

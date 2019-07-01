@@ -372,6 +372,7 @@ module Make (Config : Config.S) = struct
   (** Returns the least general type of a layout. *)
   let rec least_general_of_layout r =
     match r.Abslayout.node with
+    | Range _ -> T.FuncT ([], `Width 1)
     | Select (ps, r') | GroupBy (ps, _, r') ->
         T.FuncT ([least_general_of_layout r'], `Width (List.length ps))
     | OrderBy {rel= r'; _} | Filter (_, r') | Dedup r' ->
@@ -525,7 +526,9 @@ module Make (Config : Config.S) = struct
       let open Type in
       Meta.(set_m r type_ t) ;
       match (r.node, t) with
-      | AScalar _, (IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | NullT) -> ()
+      | ( (AScalar _ | Range _)
+        , (IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | NullT) ) ->
+          ()
       | AList (_, r'), ListT (t', _)
        |(Filter (_, r') | Select (_, r')), FuncT ([t'], _) ->
           annot r' t'
@@ -547,7 +550,7 @@ module Make (Config : Config.S) = struct
       | As (_, r), _ -> annot r t
       | ( ( Select _ | Filter _ | DepJoin _ | Join _ | GroupBy _ | OrderBy _
           | Dedup _ | Relation _ | AEmpty | AScalar _ | AList _ | ATuple _
-          | AHashIdx _ | AOrderedIdx _ )
+          | AHashIdx _ | AOrderedIdx _ | Range _ )
         , ( NullT | IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | TupleT _
           | ListT _ | HashIdxT _ | OrderedIdxT _ | FuncT _ | EmptyT ) ) ->
           Error.create "Unexpected type." (r, t) [%sexp_of: Abslayout.t * t]

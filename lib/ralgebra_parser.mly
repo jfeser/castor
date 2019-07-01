@@ -16,7 +16,7 @@
 %token <Abslayout0.unop> MONTH DAY YEAR NOT STRLEN EXTRACTY EXTRACTM EXTRACTD
 %token AS DEPJOIN JOIN SELECT DEDUP FILTER COUNT GROUPBY MIN MAX AVG SUM LPAREN
 RPAREN LSBRAC RSBRAC COLON DOT COMMA EOF AEMPTY ASCALAR ATUPLE ALIST AHASHIDX
-AORDEREDIDX NULL ORDERBY IF THEN ELSE DATEKW EXISTS SUBSTRING ROW_NUMBER
+AORDEREDIDX NULL ORDERBY IF THEN ELSE DATEKW EXISTS SUBSTRING ROW_NUMBER RANGE
 
 %start <Abslayout0.t> ralgebra_eof
 %start <Abslayout0.pred> expr_eof
@@ -135,6 +135,9 @@ RPAREN { A.(AHashIdx {hi_keys= r; hi_values= x; hi_key_layout = None; hi_lookup=
       A.(AOrderedIdx (r, x, { oi_lookup = b; oi_key_layout = None }))
       |> node $symbolstartpos $endpos
     }
+
+  | RANGE; LPAREN; pl=expr; COMMA; ph=expr; RPAREN
+    { A.(Range (pl, ph)) |> node $symbolstartpos $endpos }
 
   | error { error "Expected an operator or relation." $startpos }
 

@@ -19,9 +19,9 @@ let rec to_type =
   function
   | As_pred (p, _) -> to_type p
   | Name n -> Name.Meta.(find_exn n type_)
-  | Int _ | Date _ | Row_number
-   |Unop ((Year | Month | Day | Strlen | ExtractY | ExtractM | ExtractD), _)
-   |Count ->
+  | Date _ | Unop ((Year | Month | Day), _) -> date_t
+  | Int _ | Row_number | Unop ((Strlen | ExtractY | ExtractM | ExtractD), _) | Count
+    ->
       int_t
   | Fixed _ | Avg _ -> fixed_t
   | Bool _ | Exists _
@@ -75,5 +75,8 @@ and schema_exn r =
   | Relation {r_schema= Some schema; _} -> schema |> unscoped
   | Relation {r_name; r_schema= None; _} ->
       Error.(create "Missing schema annotation." r_name [%sexp_of: string] |> raise)
+  | Range (p, p') ->
+      let t = Type.PrimType.unify (to_type p) (to_type p') in
+      [Name.create ~type_:t "range"]
 
 let to_select_list s = List.map s ~f:(fun n -> Name n)

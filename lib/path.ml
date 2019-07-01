@@ -89,7 +89,7 @@ let rec get_exn p r =
   | i :: p', ATuple (rs, _) ->
       assert (i >= 0 && i < List.length rs) ;
       get_exn p' (List.nth_exn rs i)
-  | _, (AEmpty | AScalar _ | Relation _)
+  | _, (AEmpty | AScalar _ | Relation _ | Range _)
    |_, Select _
    |_, Filter _
    |_, DepJoin _
@@ -113,7 +113,7 @@ let all r =
       | Some ((r, p), q) ->
           let q =
             match r.node with
-            | AScalar _ | Relation _ | AEmpty -> q
+            | AScalar _ | Relation _ | AEmpty | Range _ -> q
             | Select (_, r')
              |Filter (_, r')
              |GroupBy (_, _, r')
