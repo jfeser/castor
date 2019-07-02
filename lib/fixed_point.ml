@@ -31,6 +31,10 @@ let of_string s =
   match String.lsplit2 s ~on:'.' with
   | Some (lhs, rhs) ->
       let rhs = String.rstrip ~drop:(fun c -> Char.(c = '0')) rhs in
+      let rhs =
+        let len = String.length rhs in
+        if Int.(len <= 18) then rhs else String.drop_suffix rhs (len - 18)
+      in
       let pow = String.length rhs in
       {value= Int.of_string (lhs ^ rhs); scale= Int.pow 10 pow}
   | None -> {value= Int.of_string s; scale= 1}
