@@ -33,7 +33,7 @@ val exec_cursor_lwt_exn :
   -> t
   -> Type.PrimType.t list
   -> string
-  -> Value.t array Lwt_stream.t
+  -> (Value.t array, exn) result Lwt_stream.t
 
 val check : t -> string -> unit Or_error.t
 

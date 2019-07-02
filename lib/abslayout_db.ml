@@ -364,7 +364,7 @@ module Make (Config : Config.S) = struct
           Db.exec_cursor_lwt_exn ?timeout conn
             (A.schema_exn r |> List.map ~f:Name.type_exn)
             (Sql.to_string sql)
-          |> Lwt_stream.map Array.to_list
+          |> Lwt_stream.map (fun r -> Result.ok_exn r |> Array.to_list)
         in
         self#eval (Map.empty (module String)) tups (Q.to_width q) |> Lwt_main.run
     end
