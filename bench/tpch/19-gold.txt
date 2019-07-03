@@ -1,73 +1,73 @@
 select([sum(agg0) as revenue],
-  atuple([select([sum((lineitem.l_extendedprice * (1 - lineitem.l_discount))) as agg0],
-            filter((part.p_brand = param0),
-              filter((lineitem.l_quantity <= (param3 + 10)),
-                filter((lineitem.l_quantity >= param3),
-                  alist(filter((part.p_partkey = lineitem.l_partkey),
-                          filter(((part.p_container = "SM CASE") ||
-                                 ((part.p_container = "SM BOX") ||
-                                 ((part.p_container = "SM PACK") ||
-                                 (part.p_container = "SM PKG")))),
-                            filter((part.p_size >= 1),
-                              filter((part.p_size <= 5),
-                                filter(((lineitem.l_shipmode = "AIR") ||
-                                       (lineitem.l_shipmode = "AIR REG")),
-                                  filter((lineitem.l_shipinstruct =
+  atuple([select([sum((l_extendedprice * (1 - l_discount))) as agg0],
+            filter((p_brand = param0),
+              filter((l_quantity <= (param3 + 10)),
+                filter((l_quantity >= param3),
+                  alist(filter((p_partkey = l_partkey),
+                          filter(((p_container = "SM CASE") ||
+                                 ((p_container = "SM BOX") ||
+                                 ((p_container = "SM PACK") ||
+                                 (p_container = "SM PKG")))),
+                            filter((p_size >= 1),
+                              filter((p_size <= 5),
+                                filter(((l_shipmode = "AIR") ||
+                                       (l_shipmode = "AIR REG")),
+                                  filter((l_shipinstruct =
                                          "DELIVER IN PERSON"),
-                                    join(true, lineitem, part))))))),
-                    atuple([ascalar(lineitem.l_quantity),
-                            ascalar(lineitem.l_extendedprice),
-                            ascalar(lineitem.l_discount),
-                            ascalar(part.p_brand)],
+                                    join(true, lineitem, part))))))) as s1,
+                    atuple([ascalar(s1.l_quantity),
+                            ascalar(s1.l_extendedprice),
+                            ascalar(s1.l_discount),
+                            ascalar(s1.p_brand)],
                       cross)))))),
           select([sum(agg2) as agg0],
-            atuple([select([sum((lineitem.l_extendedprice *
-                                (1 - lineitem.l_discount))) as agg2],
-                      filter((part.p_brand = param1),
-                        filter((lineitem.l_quantity <= (param4 + 10)),
-                          filter((lineitem.l_quantity >= param4),
-                            alist(filter((part.p_partkey = lineitem.l_partkey),
-                                    filter(((part.p_container = "MED BAG") ||
-                                           ((part.p_container = "MED BOX") ||
-                                           ((part.p_container = "MED PKG") ||
-                                           (part.p_container = "MED PACK")))),
-                                      filter((part.p_size >= 1),
-                                        filter((part.p_size <= 10),
-                                          filter(((lineitem.l_shipmode = "AIR")
+            atuple([select([sum((l_extendedprice *
+                                (1 - l_discount))) as agg2],
+                      filter((p_brand = param1),
+                        filter((l_quantity <= (param4 + 10)),
+                          filter((l_quantity >= param4),
+                            alist(filter((p_partkey = l_partkey),
+                                    filter(((p_container = "MED BAG") ||
+                                           ((p_container = "MED BOX") ||
+                                           ((p_container = "MED PKG") ||
+                                           (p_container = "MED PACK")))),
+                                      filter((p_size >= 1),
+                                        filter((p_size <= 10),
+                                          filter(((l_shipmode = "AIR")
                                                  ||
-                                                 (lineitem.l_shipmode =
+                                                 (l_shipmode =
                                                  "AIR REG")),
-                                            filter((lineitem.l_shipinstruct =
+                                            filter((l_shipinstruct =
                                                    "DELIVER IN PERSON"),
-                                              join(true, lineitem, part))))))),
-                              atuple([ascalar(lineitem.l_quantity),
-                                      ascalar(lineitem.l_extendedprice),
-                                      ascalar(lineitem.l_discount),
-                                      ascalar(part.p_brand)],
+                                              join(true, lineitem, part))))))) as s2,
+                              atuple([ascalar(s2.l_quantity),
+                                      ascalar(s2.l_extendedprice),
+                                      ascalar(s2.l_discount),
+                                      ascalar(s2.p_brand)],
                                 cross)))))),
-                    select([sum((lineitem.l_extendedprice *
-                                (1 - lineitem.l_discount))) as agg2],
-                      filter((part.p_brand = param2),
-                        filter((lineitem.l_quantity >= param5),
-                          filter((lineitem.l_quantity <= (param5 + 10)),
-                            alist(filter((part.p_partkey = lineitem.l_partkey),
-                                    filter(((part.p_container = "LG CASE") ||
-                                           ((part.p_container = "LG BOX") ||
-                                           ((part.p_container = "LG PACK") ||
-                                           (part.p_container = "LG PKG")))),
-                                      filter((part.p_size >= 1),
-                                        filter((part.p_size <= 15),
-                                          filter(((lineitem.l_shipmode = "AIR")
+                    select([sum((l_extendedprice *
+                                (1 - l_discount))) as agg2],
+                      filter((p_brand = param2),
+                        filter((l_quantity >= param5),
+                          filter((l_quantity <= (param5 + 10)),
+                            alist(filter((p_partkey = l_partkey),
+                                    filter(((p_container = "LG CASE") ||
+                                           ((p_container = "LG BOX") ||
+                                           ((p_container = "LG PACK") ||
+                                           (p_container = "LG PKG")))),
+                                      filter((p_size >= 1),
+                                        filter((p_size <= 15),
+                                          filter(((l_shipmode = "AIR")
                                                  ||
-                                                 (lineitem.l_shipmode =
+                                                 (l_shipmode =
                                                  "AIR REG")),
-                                            filter((lineitem.l_shipinstruct =
+                                            filter((l_shipinstruct =
                                                    "DELIVER IN PERSON"),
-                                              join(true, lineitem, part))))))),
-                              atuple([ascalar(lineitem.l_quantity),
-                                      ascalar(lineitem.l_extendedprice),
-                                      ascalar(lineitem.l_discount),
-                                      ascalar(part.p_brand)],
+                                              join(true, lineitem, part))))))) as s3,
+                              atuple([ascalar(s3.l_quantity),
+                                      ascalar(s3.l_extendedprice),
+                                      ascalar(s3.l_discount),
+                                      ascalar(s3.p_brand)],
                                 cross))))))],
               concat))],
     concat))
