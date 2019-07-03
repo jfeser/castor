@@ -55,10 +55,11 @@ print('SHELL:=/bin/bash')
 print('DB=postgresql:///tpch_1k')
 print('DBC=postgresql:///tpch')
 print('OPT_PATH=../bin/opt.exe')
-print('COMPILE_PATH=../../castor/bin/compile.exe')
-print('OPT=dune exec --no-build ../bin/opt.exe -- ')
+print('CASTOR_PATH=../../castor/')
+print('COMPILE_PATH=$(CASTOR_PATH)/bin/compile.exe')
+print('OPT=dune exec --no-build $(OPT_PATH) -- ')
 print('OPT_FLAGS=-cost-db $(DB) -cost-timeout 60.0 -db $(DBC) -v')
-print('COMPILE=dune exec --no-build ../../castor/bin/compile.exe -- ')
+print('COMPILE=dune exec --no-build $(COMPILE_PATH) -- ')
 if DEBUG:
     print('CFLAGS=-debug -v')
 else:
@@ -87,6 +88,11 @@ compile: cbuild %s
 ''' % (' '.join([out_dir(b) for b in bench])))
 
 print('''
+compile-gold: cbuild %s
+.PHONY: compile
+''' % (' '.join(['%s-gold' % b['name'] for b in bench])))
+
+print('''
 run: %s
 .PHONY: run
 ''' % (' '.join(['%s-opt.csv' % b['name'] for b in bench])))
@@ -111,11 +117,13 @@ for b in bench:
 {0}: {2}
 \t$(OPT) $(OPT_FLAGS) {1} {2} >$@ 2> >(tee {3} >&2)
     '''.format(out_file(b), gen_params(b), in_file(b), '%s-opt.log' % b['name']))
+
     print('''
 {0}: {1}
 \tmkdir -p $@
 \t$(COMPILE) $(CFLAGS) -o $@ -db $(DBC) {2} {1} > $@/compile.log 2>&1
 '''.format(out_dir(b), out_file(b), gen_param_types(b)))
+
     print('''
 {0}-opt.csv: {1}
 \t./{1}/scanner.exe -p {1}/data.bin {2} > $@
@@ -125,10 +133,32 @@ for b in bench:
 {0}-opt.time: {1}
 \t./{1}/scanner.exe -t $(TIME_PER_BENCH) {1}/data.bin {2} > $@
 '''.format(b['name'], out_dir(b), gen_param_values(b)))
+
     print('''
 analysis_{0}-opt.csv.log: {1}
 \t../bin/validate.py {0} {2} {0}-opt.csv
     '''.format(b['name'], out_dir(b), str(b['ordered'])))
+
+    print('''
+{0}-gold: $(CASTOR_PATH)/bench/tpch/{0}-gold.txt
+\tmkdir -p $@
+\t$(COMPILE) $(CFLAGS) -o $@ -db $(DBC) {1} $< > $@/compile.log 2>&1
+'''.format(b['name'], gen_param_types(b)))
+
+    print('''
+{0}-gold.csv: {0}-gold/scanner.exe
+\t./$</scanner.exe -p $</data.bin {1} > $@
+'''.format(b['name'], gen_param_values(b)))
+
+    print('''
+{0}-gold.time: {0}-gold/scanner.exe
+\t./$</scanner.exe -t $(TIME_PER_BENCH) $</data.bin {1} > $@
+'''.format(b['name'], gen_param_values(b)))
+
+    print('''
+analysis_{0}-gold.csv.log: {0}-gold.csv
+\t../bin/validate.py {0} {1} $<
+    '''.format(b['name'], str(b['ordered'])))
 
     print('''
 gold/{0}.csv:
