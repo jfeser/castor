@@ -1,12 +1,12 @@
-  select([s_acctbal,
-          s_name,
-          n_name,
-          p_partkey,
-          p_mfgr,
-          s_address,
-          s_phone,
-          s_comment],
-ahashidx(dedup(select([region.r_name as region_r_name_0], region)) as k1,
+select([s_acctbal,
+        s_name,
+        n_name,
+        p_partkey,
+        p_mfgr,
+        s_address,
+        s_phone,
+        s_comment],
+  ahashidx(dedup(select([region.r_name as region_r_name_0], region)) as k1,
     filter((r_name = k1.region_r_name_0),
       select([s_acctbal,
               s_name,
@@ -17,11 +17,7 @@ ahashidx(dedup(select([region.r_name as region_r_name_0], region)) as k1,
               s_phone,
               s_comment,
               r_name],
-        depjoin(select([n_name,
-                        r_name,
-                        s_suppkey,
-                        p_partkey,
-                        p_mfgr],
+        depjoin(select([n_name, r_name, s_suppkey, p_partkey, p_mfgr],
                   filter((p_size = param1),
                     filter((if ((if (param2 = "STEEL") then 5 else (if 
                                (param2 = "BRASS") then 4 else (if (param2 =
@@ -29,36 +25,36 @@ ahashidx(dedup(select([region.r_name as region_r_name_0], region)) as k1,
                                (param2 = "COPPER") then 2 else (if (param2 =
                                                                    "TIN") then 1 else 0)))))
                                = 0) then (strpos(p_type, param2) =
-                                         ((strlen(p_type) - strlen(param2))
-                                         + 1)) else ((if (param2 = "STEEL") then 5 else (if 
-                                                    (param2 = "BRASS") then 4 else (if 
-                                                    (param2 = "NICKEL") then 3 else (if 
-                                                    (param2 = "COPPER") then 2 else (if 
-                                                    (param2 = "TIN") then 1 else 0)))))
-                                                    = p24_p_type)),
+                                         ((strlen(p_type) - strlen(param2)) +
+                                         1)) else ((if (param2 = "STEEL") then 5 else (if 
+                                                  (param2 = "BRASS") then 4 else (if 
+                                                  (param2 = "NICKEL") then 3 else (if 
+                                                  (param2 = "COPPER") then 2 else (if 
+                                                  (param2 = "TIN") then 1 else 0)))))
+                                                  = p24_p_type)),
                       alist(orderby([s_acctbal desc,
                                      n_name,
                                      s_name,
                                      p_partkey],
                               select([(if (strpos(p_type, "STEEL") =
-                                          ((strlen(p_type) -
-                                           strlen("STEEL")) + 1)) then 5 else (if (
+                                          ((strlen(p_type) - strlen("STEEL"))
+                                          + 1)) then 5 else (if (strpos(p_type,
+                                                                 "BRASS") =
+                                                                ((strlen(p_type)
+                                                                 -
+                                                                 strlen("BRASS"))
+                                                                + 1)) then 4 else (if (
                                                                     strpos(p_type,
-                                                                    "BRASS") =
-                                                                    (
-                                                                    (strlen(p_type)
-                                                                    -
-                                                                    strlen("BRASS"))
-                                                                    + 1)) then 4 else (if (
-                                                                    strpos(p_type,
-                                                                    "NICKEL") =
+                                                                    "NICKEL")
+                                                                    =
                                                                     (
                                                                     (strlen(p_type)
                                                                     -
                                                                     strlen("NICKEL"))
                                                                     + 1)) then 3 else (if (
                                                                     strpos(p_type,
-                                                                    "COPPER") =
+                                                                    "COPPER")
+                                                                    =
                                                                     (
                                                                     (strlen(p_type)
                                                                     -
@@ -91,7 +87,9 @@ ahashidx(dedup(select([region.r_name as region_r_name_0], region)) as k1,
                                       join((s_nationkey = n_nationkey),
                                         join((n_regionkey = r_regionkey),
                                           nation,
-                                          filter((r_name = k1.region_r_name_0), region)),
+                                          filter((r_name =
+                                                 k1.region_r_name_0),
+                                            region)),
                                         supplier),
                                       partsupp)),
                                   join((p_partkey = ps_partkey),
@@ -99,7 +97,9 @@ ahashidx(dedup(select([region.r_name as region_r_name_0], region)) as k1,
                                       join((s_nationkey = n_nationkey),
                                         join((n_regionkey = r_regionkey),
                                           nation,
-                                          filter((r_name = k1.region_r_name_0), region)),
+                                          filter((r_name =
+                                                 k1.region_r_name_0),
+                                            region)),
                                         supplier),
                                       partsupp),
                                     part)))) as k2,
@@ -112,13 +112,13 @@ ahashidx(dedup(select([region.r_name as region_r_name_0], region)) as k1,
                                 ascalar(k2.p_type),
                                 ascalar(k2.p_size)],
                           cross))))) as k5,
-                ahashidx(dedup(select([s_suppkey as x2], supplier)) as k3,
-                  alist(filter((s_suppkey = k3.x2), supplier) as k4,
-                    atuple([ascalar(k4.s_name),
-                            ascalar(k4.s_address),
-                            ascalar(k4.s_phone),
-                            ascalar(k4.s_acctbal),
-                            ascalar(k4.s_comment)],
-                      cross)),
-                  k5.s_suppkey)))),
-  param3))
+          ahashidx(dedup(select([s_suppkey as x2], supplier)) as k3,
+            alist(filter((s_suppkey = k3.x2), supplier) as k4,
+              atuple([ascalar(k4.s_name),
+                      ascalar(k4.s_address),
+                      ascalar(k4.s_phone),
+                      ascalar(k4.s_acctbal),
+                      ascalar(k4.s_comment)],
+                cross)),
+            k5.s_suppkey)))),
+    param3))

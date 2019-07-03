@@ -21,8 +21,7 @@ select([sum(agg0) as revenue],
                             ascalar(s1.p_brand)],
                       cross)))))),
           select([sum(agg2) as agg0],
-            atuple([select([sum((l_extendedprice *
-                                (1 - l_discount))) as agg2],
+            atuple([select([sum((l_extendedprice * (1 - l_discount))) as agg2],
                       filter((p_brand = param1),
                         filter((l_quantity <= (param4 + 10)),
                           filter((l_quantity >= param4),
@@ -33,10 +32,8 @@ select([sum(agg0) as revenue],
                                            (p_container = "MED PACK")))),
                                       filter((p_size >= 1),
                                         filter((p_size <= 10),
-                                          filter(((l_shipmode = "AIR")
-                                                 ||
-                                                 (l_shipmode =
-                                                 "AIR REG")),
+                                          filter(((l_shipmode = "AIR") ||
+                                                 (l_shipmode = "AIR REG")),
                                             filter((l_shipinstruct =
                                                    "DELIVER IN PERSON"),
                                               join(true, lineitem, part))))))) as s2,
@@ -45,8 +42,7 @@ select([sum(agg0) as revenue],
                                       ascalar(s2.l_discount),
                                       ascalar(s2.p_brand)],
                                 cross)))))),
-                    select([sum((l_extendedprice *
-                                (1 - l_discount))) as agg2],
+                    select([sum((l_extendedprice * (1 - l_discount))) as agg2],
                       filter((p_brand = param2),
                         filter((l_quantity >= param5),
                           filter((l_quantity <= (param5 + 10)),
@@ -57,10 +53,8 @@ select([sum(agg0) as revenue],
                                            (p_container = "LG PKG")))),
                                       filter((p_size >= 1),
                                         filter((p_size <= 15),
-                                          filter(((l_shipmode = "AIR")
-                                                 ||
-                                                 (l_shipmode =
-                                                 "AIR REG")),
+                                          filter(((l_shipmode = "AIR") ||
+                                                 (l_shipmode = "AIR REG")),
                                             filter((l_shipinstruct =
                                                    "DELIVER IN PERSON"),
                                               join(true, lineitem, part))))))) as s3,
