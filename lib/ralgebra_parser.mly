@@ -150,6 +150,7 @@ name:
   | r = ID; DOT; f = ID; COLON; t = PRIMTYPE { Name.create ~scope:r ~type_:t f }
   | f = ID; { Name.create f }
   | f = ID; COLON; t = PRIMTYPE { Name.create ~type_:t f }
+  | RANGE { Name.create "range" }
 
 e0_binop: x = STRPOS { x }
 e0_unop: x = DAY | x = MONTH | x = YEAR | x = STRLEN | x = EXTRACTY | x = EXTRACTM | x = EXTRACTD { x }
