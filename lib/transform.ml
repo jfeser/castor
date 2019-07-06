@@ -18,23 +18,39 @@ module Make (Config : Config.S) () = struct
 
   type t = {name: string; f: A.t -> A.t list} [@@deriving sexp]
 
-  let fresh = Fresh.create ()
+  let fresh = Global.fresh
 
   let db_relation n = A.relation (Db.relation Config.conn n)
 
-  let run_everywhere ?(stage = `Both) (_ : t) : t =
-    let _ = stage in
-    failwith "Unimplemented."
+  let run_everywhere ?(stage = `Both) tf =
+    let f r =
+      Path.all r
+      |> Seq.concat_map ~f:(fun p ->
+             let right_stage =
+               match stage with
+               | `Both -> true
+               | (`Compile | `Run) as s -> Path.stage_exn p r = s
+             in
+             if right_stage then
+               tf.f (Path.get_exn p r)
+               |> List.map ~f:(Path.set_exn p r)
+               |> Seq.of_list
+             else Seq.empty)
+      |> Seq.to_list
+    in
+    {tf with f}
 
   let run_unchecked t r =
+    printf "Running %s\n" t.name ;
     let rs =
       t.f r
       |> List.dedup_and_sort ~compare:[%compare: Abslayout.t]
       |> List.filter ~f:(fun r' -> not ([%compare.equal: Abslayout.t] r r'))
     in
     let len = List.length rs in
-    if len > 0 then
-      Logs.info (fun m -> m "%d new candidates from running %s." len t.name) ;
+    if len > 0 then (
+      List.iteri rs ~f:(fun i -> Format.printf "%d\n%a@.\n\n" i A.pp) ;
+      Logs.info (fun m -> m "%d new candidates from running %s." len t.name) ) ;
     rs
 
   let run_checked t r =
@@ -118,7 +134,11 @@ module Make (Config : Config.S) () = struct
             List.map key ~f:(fun k ->
                 let key_name = Fresh.name fresh "k%d" in
                 let scope = Fresh.name fresh "s%d" in
-                let rel = Name.rel_exn k in
+                let rel =
+                  (Option.value_exn
+                     (Db.relation_has_field Config.conn (Name.name k)))
+                    .r_name
+                in
                 let lhs =
                   dedup (select [As_pred (Name k, key_name)] (db_relation rel))
                 in
@@ -128,7 +148,10 @@ module Make (Config : Config.S) () = struct
                       not ([%compare.equal: pred] p (Name k)))
                   |> List.map ~f:(Pred.scoped (schema_exn lhs) scope)
                 in
-                let filter_pred = Binop (Eq, Name k, Name (Name.create key_name)) in
+                let filter_pred =
+                  Binop (Eq, Name k, Name (Name.create key_name))
+                  |> Pred.scoped (schema_exn lhs) scope
+                in
                 let new_r =
                   replace_rel rel (filter filter_pred (db_relation rel)) r
                 in
@@ -154,6 +177,7 @@ module Make (Config : Config.S) () = struct
     ; f=
         (function
         | {node= GroupBy (ps, key, {node= Filter (p, r); _}); _} when no_params r ->
+            let scope = Fresh.name fresh "s%d" in
             let key_name = Fresh.name fresh "k%d" in
             let new_key =
               List.map key ~f:(fun n -> sprintf "%s_%s" key_name (Name.to_var n))
@@ -161,15 +185,14 @@ module Make (Config : Config.S) () = struct
             let select_list =
               List.map2_exn key new_key ~f:(fun n n' -> As_pred (Name n, n'))
             in
+            let lhs = dedup (select select_list r) in
             let filter_pred =
               List.map2_exn key new_key ~f:(fun n n' ->
                   Binop (Eq, Name n, Name (Name.create n')))
               |> List.reduce_exn ~f:(fun acc p -> Binop (And, acc, p))
+              |> Pred.scoped (schema_exn lhs) scope
             in
-            [ list
-                (dedup (select select_list r))
-                key_name
-                (select ps (filter p (filter filter_pred r))) ]
+            [list lhs scope (select ps (filter p (filter filter_pred r)))]
         | _ -> []) }
     |> run_everywhere
 
@@ -499,7 +522,7 @@ module Make (Config : Config.S) () = struct
     let open A in
     annotate_eq r1 ;
     annotate_eq r2 ;
-    let schema1 = schema_exn r1 in
+    let schema1 = schema_exn r1 |> Schema.scoped (scope_exn r1) in
     let open Core in
     let eqs = Meta.(find_exn r2 eq) in
     let names =
@@ -983,11 +1006,6 @@ module Make (Config : Config.S) () = struct
       Caml.Format.sprintf "%s_%s" (Name.to_var name) (Fresh.name fresh "%d")
     in
     let rel = Name.rel_exn name in
-    let filtered_rel =
-      filter
-        (Binop (Eq, Name name, Name (Name.create fresh_name)))
-        (db_relation rel)
-    in
     { name= "partition-eq"
     ; f=
         (fun r ->
@@ -1002,9 +1020,19 @@ module Make (Config : Config.S) () = struct
                 | _ -> None)
           in
           let lhs =
-            dedup (select [As_pred (Name name, fresh_name)] (db_relation rel))
+            dedup
+              (select
+                 [As_pred (Name (Name.copy ~scope:None name), fresh_name)]
+                 (db_relation rel))
+            |> Resolve.resolve ~params:Config.params
           in
           let scope = Fresh.name Global.fresh "s%d" in
+          let pred =
+            Binop
+              (Eq, Name (Name.copy ~scope:None name), Name (Name.create fresh_name))
+            |> Pred.scoped (schema_exn lhs) scope
+          in
+          let filtered_rel = filter pred (db_relation rel) in
           List.map keys ~f:(fun k ->
               (* The predicate that we chose as the key can be replaced by
                  `fresh_name`. *)
@@ -1012,7 +1040,7 @@ module Make (Config : Config.S) () = struct
                 (replace_pred
                    (replace_rel rel filtered_rel r)
                    k
-                   (Name (Name.create fresh_name)))
+                   (Name (Name.create ~scope fresh_name)))
                 [k])) }
     |> run_everywhere ~stage:`Run
 

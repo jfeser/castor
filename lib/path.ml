@@ -63,6 +63,48 @@ let rec set_exn p r s =
       Error.create "Invalid path in set." (p, r) [%sexp_of: t * Abslayout.t]
       |> Error.raise
 
+let stage_exn p r =
+  let rec stage p r s =
+    match (p, r.node) with
+    | [], _ -> s
+    | _, ATuple ([], _) -> failwith "Empty tuple."
+    | ( 0 :: p'
+      , ( Select (_, r')
+        | Filter (_, r')
+        | GroupBy (_, _, r')
+        | OrderBy {rel= r'; _}
+        | Dedup r'
+        | As (_, r')
+        | DepJoin {d_lhs= r'; _}
+        | Join {r1= r'; _} ) )
+     |( 1 :: p'
+      , ( DepJoin {d_rhs= r'; _}
+        | Join {r2= r'; _}
+        | AList (_, r')
+        | AHashIdx {hi_values= r'; _}
+        | AOrderedIdx (_, r', _) ) ) ->
+        stage p' r' s
+    | 0 :: _, (AList _ | AHashIdx _ | AOrderedIdx _) -> `Compile
+    | i :: p', ATuple (rs, _) ->
+        assert (i >= 0 && i < List.length rs) ;
+        stage p' (List.nth_exn rs i) s
+    | _, (AEmpty | AScalar _ | Relation _ | Range _)
+     |_, Select _
+     |_, Filter _
+     |_, DepJoin _
+     |_, Join _
+     |_, GroupBy (_, _, _)
+     |_, OrderBy _
+     |_, Dedup _
+     |_, AList _
+     |_, AHashIdx _
+     |_, AOrderedIdx _
+     |_, As (_, _) ->
+        Error.create "Invalid path in get." (p, r) [%sexp_of: t * Abslayout.t]
+        |> Error.raise
+  in
+  stage p r `Run
+
 let rec get_exn p r =
   match (p, r.Abslayout.node) with
   | [], _ -> r

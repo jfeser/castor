@@ -14,23 +14,25 @@ let main ?(debug = false) ?sample:_ ?(transforms = "") ~db ~params query_str =
     let params = params
 
     let check_transforms = debug
+
+    let simplify = None
   end in
   let module M = Abslayout_db.Make (Config) in
   let module Transform = Transform.Make (Config) () in
-  let query = Abslayout.of_string_exn query_str |> M.resolve ~params in
+  let query = M.load_string ~params query_str in
   let candidates =
     Transform.of_string_exn transforms
     |> List.fold_left ~init:[query] ~f:(fun rs tf ->
-           List.concat_map rs ~f:tf.Transform.f )
+           List.concat_map rs ~f:tf.Transform.f)
   in
   List.iteri candidates ~f:(fun i r ->
       Abslayout.pp Format.str_formatter r ;
       Format.eprintf "%s\n\n" (Format.flush_str_formatter ()) ;
-      let r = M.resolve ~params r in
+      let r = Resolve.resolve ~params r in
       Format.eprintf "Candidate #%d (serializable=%b):\n" i (A.is_serializeable r) ;
       Abslayout.pp Format.str_formatter r ;
       Format.eprintf "%s\n\n" (Format.flush_str_formatter ()) ;
-      Out_channel.flush stderr ) ;
+      Out_channel.flush stderr) ;
   match candidates with
   | [] -> Error.of_string "No candidates to output." |> Error.raise
   | [r] -> Format.printf "%a" Abslayout.pp r
@@ -72,6 +74,6 @@ let () =
        else Logs.set_level (Some Logs.Info) ;
        let query = In_channel.input_all ch in
        Logs.info (fun m ->
-           m "%s" (Sys.argv |> Array.to_list |> String.concat ~sep:" ") ) ;
+           m "%s" (Sys.argv |> Array.to_list |> String.concat ~sep:" ")) ;
        main ~debug ?sample ?transforms ~db ~params query)
   |> run

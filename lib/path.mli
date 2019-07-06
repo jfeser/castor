@@ -17,6 +17,8 @@ val set_exn : t -> Abslayout0.t -> Abslayout0.t -> Abslayout0.t
 
 val get_exn : t -> Abslayout0.t -> Abslayout0.t
 
+val stage_exn : t -> Abslayout0.t -> [`Compile | `Run]
+
 val all : Abslayout.t -> t Seq.t
 
 val is_run_time : Abslayout.t -> t -> bool

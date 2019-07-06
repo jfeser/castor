@@ -28,6 +28,15 @@
  (modules sample))
 
 (executable
+ (name transform)
+ (libraries core postgresql castor logs)
+ (flags
+  (:standard -g -bin-annot))
+ (preprocess
+  (pps ppx_sexp_conv ppx_let))
+ (modules transform))
+
+(executable
  (name sample_tpch)
  (libraries core postgresql castor logs)
  (flags
