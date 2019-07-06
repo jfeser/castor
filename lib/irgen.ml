@@ -46,7 +46,8 @@ struct
     match type_ with
     | StringT _ ->
         Infix.(
-          int (Header.size_exn hdr "nchars") + Header.make_access hdr "nchars" start)
+          int (Header.size hdr "nchars" |> Or_error.ok_exn)
+          + Header.make_access hdr "nchars" start)
     | FuncT ([t], _) -> len start t
     | _ -> Header.make_access hdr "len" start
 

@@ -12,7 +12,7 @@ module Field = struct
   [@@deriving sexp]
 end
 
-type t = Field.t list
+type t = Field.t list [@@deriving sexp]
 
 open Implang
 
@@ -23,14 +23,15 @@ let field_exn fields name =
       (Error.create "Missing field." (fields, name)
          [%sexp_of: Field.t list * string])
 
-let size_to_int_exn = function
-  | `Fixed x -> x
-  | `Empty _ -> 0
-  | _ -> failwith "No fixed size."
+let size_to_int = function
+  | `Fixed x -> Ok x
+  | `Empty _ -> Ok 0
+  | _ -> Or_error.errorf "No fixed size."
 
-let size_exn hdr name =
+let size hdr name =
   let field = field_exn hdr name in
-  size_to_int_exn field.Field.size
+  let ret = size_to_int field.Field.size in
+  Or_error.tag_arg ret "size" (hdr, name) [%sexp_of: t * string]
 
 let round_up value align =
   assert (Int.is_pow2 align) ;

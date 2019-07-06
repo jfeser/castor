@@ -1,5 +1,4 @@
 open! Core
-open! Lwt
 open Collections
 module A = Abslayout
 
@@ -204,22 +203,26 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         Out_channel.flush ch
     end
 
+  let size_exn hdr name = Or_error.ok_exn (size hdr name)
+
+  let serialize_field hdr name value = of_int ~byte_width:(size_exn hdr name) value
+
   class serialize_fold =
     object (self : 'self)
       inherit [_] M.abslayout_fold
 
-      method empty _ = return (new logged_serializer ())
+      method empty _ = new logged_serializer ()
 
       method list meta _ =
         let t = Meta.Direct.find_exn meta Meta.type_ in
-        let init = return (new logged_serializer (), 0) in
+        let init = (new logged_serializer (), 0) in
         let fold acc (_, vp) =
-          let%lwt body, count = acc and v = vp in
+          let body, count = acc and v = vp in
           v#write_into body ;
-          return (body, count + 1)
+          (body, count + 1)
         in
         let extract acc =
-          let%lwt body, count = acc in
+          let body, count = acc in
           (* Serialize header. *)
           let hdr = make_header t in
           let len =
@@ -229,25 +232,23 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           let main = new logged_serializer () in
           main#logf
             (fun m -> m "List count (=%d)" count)
-            ~f:(fun () ->
-              main#write_string (of_int ~byte_width:(size_exn hdr "count") count)) ;
+            ~f:(fun () -> main#write_string (serialize_field hdr "count" count)) ;
           main#logf
             (fun m -> m "List len (=%d)" len)
-            ~f:(fun () ->
-              main#write_string (of_int ~byte_width:(size_exn hdr "len") len)) ;
+            ~f:(fun () -> main#write_string (serialize_field hdr "len" len)) ;
           main#log "List body" ~f:(fun () -> body#write_into main) ;
-          return main
+          main
         in
         M.Fold.(Fold {init; fold; extract})
 
       method tuple' t =
-        let init = return (new logged_serializer ()) in
+        let init = new logged_serializer () in
         let fold acc vp =
-          let%lwt body = acc and v = vp in
-          v#write_into body ; return body
+          let body = acc and v = vp in
+          v#write_into body ; body
         in
         let extract acc =
-          let%lwt body = acc in
+          let body = acc in
           (* Serialize header. *)
           let main = new logged_serializer () in
           let hdr = make_header t in
@@ -257,11 +258,10 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           in
           main#logf
             (fun m -> m "Tuple len (=%d)" len)
-            ~f:(fun () ->
-              main#write_string (of_int ~byte_width:(size_exn hdr "len") len)) ;
+            ~f:(fun () -> main#write_string (serialize_field hdr "len" len)) ;
           (* Serialize body *)
           main#log "Tuple body" ~f:(fun () -> body#write_into main) ;
-          return main
+          main
         in
         M.Fold.(Fold {init; fold; extract})
 
@@ -288,17 +288,17 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           match type_ with HashIdxT (kt, vt, m) -> (kt, vt, m) | _ -> assert false
         in
         (* Collect keys and write values to a child buffer. *)
-        let init = return (Queue.create (), new logged_serializer ()) in
+        let init = (Queue.create (), new logged_serializer ()) in
         let fold acc (key, kp, vp) =
-          let%lwt kq, vs = acc and k = kp and v = vp in
+          let kq, vs = acc and k = kp and v = vp in
           let vptr = vs#pos in
           Queue.enqueue kq (key, vptr) ;
           k#write_into vs ;
           v#write_into vs ;
-          return (kq, vs)
+          (kq, vs)
         in
         let extract acc =
-          let%lwt kq, vs = acc in
+          let kq, vs = acc in
           let hash, hash_body =
             make_hash type_ (Queue.to_array kq |> Array.to_sequence)
           in
@@ -314,26 +314,23 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           let main = new logged_serializer () in
           main#logf
             (fun m -> m "Table len (=%d)" len)
-            ~f:(fun () ->
-              main#write_string (of_int ~byte_width:(size_exn hdr "len") len)) ;
+            ~f:(fun () -> main#write_string (serialize_field hdr "len" len)) ;
           main#logf
             (fun m -> m "Table hash len (=%d)" hash_len)
             ~f:(fun () ->
-              main#write_string
-                (of_int ~byte_width:(size_exn hdr "hash_len") hash_len)) ;
+              main#write_string (serialize_field hdr "hash_len" hash_len)) ;
           main#log "Table hash" ~f:(fun () -> main#write_string hash_body) ;
           main#logf
             (fun m -> m "Table map len (=%d)" hash_map_len)
             ~f:(fun () ->
-              main#write_string
-                (of_int ~byte_width:(size_exn hdr "hash_map_len") hash_map_len)) ;
+              main#write_string (serialize_field hdr "hash_map_len" hash_map_len)) ;
           main#log "Table key map" ~f:(fun () ->
               Array.iteri hash ~f:(fun h p ->
                   main#logf
                     (fun m -> m "Map entry (%d => %d)" h p)
                     ~f:(fun () -> main#write_string (of_int ~byte_width:ptr_size p)))) ;
           main#log "Table values" ~f:(fun () -> vs#write_into main) ;
-          return main
+          main
         in
         M.Fold.(Fold {init; fold; extract})
 
@@ -342,7 +339,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         let kt, vt, m =
           match t with OrderedIdxT (kt, vt, m) -> (kt, vt, m) | _ -> assert false
         in
-        let init = return ([], new logged_serializer ()) in
+        let init = ([], new logged_serializer ()) in
         let fold acc (ks, kp, vp) =
           let ks =
             match kt with
@@ -355,13 +352,12 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
                 |> Array.of_list |> Option.some
             | _ -> None
           in
-          let%lwt keys, vals = acc and k = kp and v = vp in
+          let keys, vals = acc and k = kp and v = vp in
           let keys = keys @ [(k, ks, vals#pos)] in
-          v#write_into vals ;
-          return (keys, vals)
+          v#write_into vals ; (keys, vals)
         in
         let extract acc =
-          let%lwt keys, vals = acc in
+          let keys, vals = acc in
           (* Serialize keys and value pointers. *)
           let ptr_size = Type.oi_ptr_size vt m in
           let idxs = new logged_serializer () in
@@ -381,39 +377,34 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           let idx_len = idxs#pos in
           let val_len = vals#pos in
           let len =
-            Header.size_exn hdr "len"
-            + Header.size_exn hdr "idx_len"
-            + idx_len + val_len
+            size_exn hdr "len" + size_exn hdr "idx_len" + idx_len + val_len
           in
           (* Write header. *)
           let main = new logged_serializer () in
           main#logf
             (fun m -> m "Ordered idx len (=%d)" len)
-            ~f:(fun () ->
-              main#write_string (of_int ~byte_width:(size_exn hdr "len") len)) ;
+            ~f:(fun () -> main#write_string (serialize_field hdr "len" len)) ;
           main#logf
             (fun m -> m "Ordered idx index len (=%d)" idx_len)
-            ~f:(fun () ->
-              main#write_string
-                (of_int ~byte_width:(size_exn hdr "idx_len") idx_len)) ;
+            ~f:(fun () -> main#write_string (serialize_field hdr "idx_len" idx_len)) ;
           main#log "Ordered idx map" ~f:(fun () -> idxs#write_into main) ;
           main#log "Ordered idx body" ~f:(fun () -> vals#write_into main) ;
-          return main
+          main
         in
         M.Fold.(Fold {init; fold; extract})
 
       method serialize_null (s : logged_serializer) t =
         let hdr = make_header t in
-        let str =
-          match t with
-          | NullT -> ""
-          | _ -> null_sentinal t |> of_int ~byte_width:(size_exn hdr "value")
-        in
-        s#log "Null" ~f:(fun () -> s#write_string str)
+        match t with
+        | NullT -> s#log "Null" ~f:(fun () -> s#write_string "")
+        | StringT _ -> self#serialize_null_string s t
+        | _ ->
+            s#log "Null" ~f:(fun () ->
+                s#write_string (serialize_field hdr "value" (null_sentinal t)))
 
       method serialize_int s t x =
         let hdr = make_header t in
-        let sval = of_int ~byte_width:(size_exn hdr "value") x in
+        let sval = serialize_field hdr "value" x in
         s#write_string sval
 
       method serialize_fixed s t x =
@@ -421,8 +412,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         | Type.FixedT {value= {scale; _}; _} ->
             let hdr = make_header t in
             let sval =
-              of_int ~byte_width:(size_exn hdr "value")
-                Fixed_point.((convert x scale).value)
+              serialize_field hdr "value" Fixed_point.((convert x scale).value)
             in
             s#write_string sval
         | _ ->
@@ -431,13 +421,28 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
       method serialize_bool s t x =
         let hdr = make_header t in
         let str =
-          match (t, x) with
-          | BoolT _, true -> of_int ~byte_width:(size_exn hdr "value") 1
-          | BoolT _, false -> of_int ~byte_width:(size_exn hdr "value") 0
-          | t, _ ->
-              Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
+          let value =
+            match (t, x) with
+            | BoolT _, true -> 1
+            | BoolT _, false -> 0
+            | t, _ ->
+                Error.(
+                  create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
+          in
+          serialize_field hdr "value" value
         in
         s#write_string str
+
+      method serialize_null_string (s : logged_serializer) t =
+        let hdr = make_header t in
+        match t with
+        | StringT t ->
+            s#logf
+              (fun m -> m "Null string")
+              ~f:(fun () ->
+                serialize_field hdr "nchars" (string_sentinal t) |> s#write_string)
+        | t ->
+            Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
 
       method serialize_string (s : logged_serializer) t body =
         let hdr = make_header t in
@@ -446,8 +451,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
             let len = String.length body in
             s#logf
               (fun m -> m "String length (=%d)" len)
-              ~f:(fun () ->
-                of_int ~byte_width:(size_exn hdr "nchars") len |> s#write_string) ;
+              ~f:(fun () -> serialize_field hdr "nchars" len |> s#write_string) ;
             s#log "String body" ~f:(fun () -> s#write_string body)
         | t ->
             Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
@@ -468,7 +472,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           (fun m ->
             m "Scalar (=%s)" ([%sexp_of: Value.t] value |> Sexp.to_string_hum))
           ~f:(fun () -> self#serialize_scalar main type_ value) ;
-        return main
+        main
     end
 
   let set_pos r pos =
@@ -480,32 +484,22 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
   let serialize fn l =
     Log.info (fun m -> m "Serializing abstract layout.") ;
     let serializer = new logged_serializer () in
-    let serialize =
-      (* Serialize the main layout. *)
-      set_pos l serializer#pos ;
-      let s =
-        ref
-          (let%lwt w = (new serialize_fold)#run l in
-           return (w#write_into serializer))
-      in
-      (* Serialize subquery layouts. *)
-      let subquery_visitor =
-        object
-          inherit Abslayout0.runtime_subquery_visitor
+    (* Serialize the main layout. *)
+    set_pos l serializer#pos ;
+    let w = (new serialize_fold)#run l in
+    w#write_into serializer ;
+    (* Serialize subquery layouts. *)
+    let subquery_visitor =
+      object
+        inherit Abslayout0.runtime_subquery_visitor
 
-          method visit_Subquery r =
-            set_pos r serializer#pos ;
-            s :=
-              let%lwt () = !s in
-              let%lwt w = (new serialize_fold)#run r in
-              return (w#write_into serializer)
-        end
-      in
-      subquery_visitor#visit_t () l ;
-      let%lwt () = !s in
-      return ()
+        method visit_Subquery r =
+          set_pos r serializer#pos ;
+          let w = (new serialize_fold)#run r in
+          w#write_into serializer
+      end
     in
-    Lwt_main.run serialize ;
+    subquery_visitor#visit_t () l ;
     let len = serializer#pos in
     Out_channel.with_file fn ~f:serializer#write_into_channel ;
     Option.iter layout_file ~f:(fun fn ->
