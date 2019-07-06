@@ -29,6 +29,8 @@ module Make (Config : Config.S) = struct
       ~f:(fun m e -> Map.add_multi m ~key:(f e) ~data:e)
       l
 
+  let alias_map r = aliases r |> closure
+
   (** Approximate selection of all valuations of a list of predicates from a
    relation. Works if the relation is parameterized, but only when the
    predicates do not depend on those parameters. *)
@@ -36,7 +38,7 @@ module Make (Config : Config.S) = struct
     let open Or_error.Let_syntax in
     (* Otherwise, if all grouping keys are from named relations, select all
      possible grouping keys. *)
-    let alias_map = aliases r |> closure in
+    let alias_map = alias_map r in
     (* Find the definition of each key and collect all the names in that
        definition. If they all come from base relations, then we can enumerate
        the keys. *)

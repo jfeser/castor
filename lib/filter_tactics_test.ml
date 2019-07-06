@@ -229,12 +229,21 @@ let%expect_test "elim-eq-filter" =
         [ERROR] Found no equalities.
  |}])
 
-let%expect_test "elim-eq-filter" =
+let%expect_test "partition" =
   let r = M.load_string ~params:C.params "filter(f = param, r)" in
   Seq.iter (Branching.apply partition Path.root r) ~f:(Format.printf "%a\n" pp) ;
   [%expect
     {|
-        [INFO] ("No candidate keys."
-         ((Name ((scope (k)) (name f))) (Name ((scope ()) (name param)))))
-        [ERROR] Found no equalities.
+        ahashidx(select([range as k0],
+                   range((select([min(f) as l],
+                            select([f as f], dedup(select([f], r))))), (select(
+                                                                          [max(f) as h],
+                                                                          select(
+                                                                            [f as f],
+                                                                            dedup(
+                                                                            select(
+                                                                            [f],
+                                                                            r))))))) as s0,
+          filter((f = s0.k0), r),
+          param)
  |}]

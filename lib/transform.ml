@@ -60,12 +60,12 @@ module Make (Config : Config.S) () = struct
 
   let is_serializable r p =
     let r' = Path.get_exn p (R.resolve ~params r) in
-    if is_serializeable r' then (
-      Logs.debug (fun m -> m "Is serializable: %a" Abslayout.pp r') ;
-      true )
-    else (
-      Logs.debug (fun m -> m "Is not serializable: %a" Abslayout.pp r') ;
-      false )
+    if is_serializeable r' then
+      (* Logs.debug (fun m -> m "Is serializable: %a" Abslayout.pp r') ; *)
+      true
+    else
+      (* Logs.debug (fun m -> m "Is not serializable: %a" Abslayout.pp r') ; *)
+      false
 
   let has_params r p =
     let r' = R.resolve ~params r in
@@ -116,6 +116,26 @@ module Make (Config : Config.S) () = struct
     | _ -> None
 
   let push_orderby = of_func push_orderby ~name:"push-orderby"
+
+  (* Recursively optimize subqueries. *)
+  let apply_to_subqueries tf =
+    let f r =
+      let visitor =
+        object (self : 'a)
+          inherit [_] map
+
+          method visit_subquery r =
+            Option.value_exn ~message:"Transforming subquery failed."
+              (O.apply tf Path.root r)
+
+          method! visit_Exists () r = Exists (self#visit_subquery r)
+
+          method! visit_First () r = First (self#visit_subquery r)
+        end
+      in
+      Some (visitor#visit_t () r)
+    in
+    of_func f ~name:"apply-to-subqueries"
 
   let push_all_unparameterized_filters =
     fix (for_all F.push_filter Path.(all >>? is_run_time >>? is_filter))
@@ -231,7 +251,7 @@ module Make (Config : Config.S) () = struct
              ; push_all_unparameterized_filters
              ; Simplify_tactic.simplify ]) ]
 
-  let opt_toplevel = try_partition opt
+  let opt_toplevel = seq_many [try_partition opt; apply_to_subqueries opt]
 
   let is_serializable r =
     let r = R.resolve ~params r in
@@ -260,28 +280,6 @@ let optimize (module C : Config.S) r =
   (* Annotate query with free variables. *)
   let module M = Abslayout_db.Make (C) in
   annotate_free r ;
-  (* Recursively optimize subqueries. *)
-  let visitor =
-    object (self : 'a)
-      inherit [_] map
-
-      method visit_subquery r =
-        let module C = struct
-          include C
-
-          let params = Set.union params Meta.(find_exn r free)
-        end in
-        let module T = Make (C) () in
-        let module O = Ops.Make (C) in
-        Option.value_exn ~message:"Transforming subquery failed."
-          (O.apply T.opt Path.root r)
-
-      method! visit_Exists () r = Exists (self#visit_subquery r)
-
-      method! visit_First () r = First (self#visit_subquery r)
-    end
-  in
-  let r = visitor#visit_t () r in
   let module T = Make (C) () in
   let module O = Ops.Make (C) in
   (* Optimize outer query. *)

@@ -37,9 +37,12 @@ module Make (Config : Config.S) = struct
     | OrderedIdxT (_, vt, _) -> AbsInt.(join zero (read vt))
 
   let cost ?(kind = `Max) p =
-    Memo.general (fun r ->
+    Memo.general
+      ~hashable:(Hashtbl.Hashable.of_key (module Abslayout))
+      (fun r ->
         let open Result.Let_syntax in
         try
+          Logs.debug (fun m -> m "Computing cost of %a." Abslayout.pp r) ;
           let c =
             M.load_layout ~params r |> M.type_of ?timeout:cost_timeout |> p
           in

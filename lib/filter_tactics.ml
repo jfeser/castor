@@ -638,34 +638,45 @@ module Make (C : Config.S) = struct
         List.map preds ~f:(fun p -> Set.remove (Pred.names p) n)
         |> List.reduce ~f:Set.union |> Option.map ~f:Set.to_list
       in
+      let fields =
+        let m = Tactics_util.alias_map r in
+        List.map fields ~f:(fun n ->
+            Map.find m n |> Option.value ~default:(Name n))
+        |> List.dedup_and_sort ~compare:[%compare: Pred.t]
+      in
       match (fields, key_range) with
-      | [f], (Some l, Some h) -> (
-        match Name.type_exn f with
-        | IntT _ | DateT _ ->
-            let%bind vals =
-              Tactics_util.all_values [Name f] r |> Or_error.ok
-            in
-            let key_name = Fresh.name Global.fresh "k%d" in
-            let keys =
-              select
-                [As_pred (Name (Name.create "range"), key_name)]
-                (range
-                   (First (select [As_pred (Min l, "l")] vals))
-                   (First (select [As_pred (Max h, "h")] vals)))
-            in
-            let scope = Fresh.name Global.fresh "s%d" in
-            let r' =
-              subst
-                (Map.singleton
-                   (module Name)
-                   n
-                   (Name (Name.scoped scope (Name.create key_name))))
-                r
-            in
-            if Set.mem (names r') n then None
-            else Some (hash_idx keys scope r' [Name n])
-        | _ -> None )
-      | _ -> None
+      | [f], (Some l, Some h) ->
+          let key_name = Fresh.name Global.fresh "k%d" in
+          let%bind keys =
+            match Pred.to_type f with
+            | IntT _ | DateT _ ->
+                let%map vals = Tactics_util.all_values [f] r |> Or_error.ok in
+                range
+                  (First (select [As_pred (Min l, "l")] vals))
+                  (First (select [As_pred (Max h, "h")] vals))
+            | StringT _ -> Tactics_util.all_values [f] r |> Or_error.ok
+            | _ -> None
+          in
+          let keys =
+            select
+              [As_pred (Name (List.hd_exn (schema_exn keys)), key_name)]
+              keys
+          in
+          let scope = Fresh.name Global.fresh "s%d" in
+          let r' =
+            subst
+              (Map.singleton
+                 (module Name)
+                 n
+                 (Name (Name.scoped scope (Name.create key_name))))
+              r
+          in
+          if Set.mem (names r') n then None
+          else Some (hash_idx keys scope r' [Name n])
+      | fs, _ ->
+          Logs.debug (fun m ->
+              m "Partition: Found too many fields. %a" (Fmt.list Pred.pp) fs) ;
+          None
     in
     let r = Resolve.resolve ~params r in
     Set.to_sequence params |> Seq.filter_map ~f:(part_on r)
