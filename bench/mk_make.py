@@ -103,6 +103,16 @@ time: %s
 ''' % (' '.join(['%s-opt.time' % b['name'] for b in bench])))
 
 print('''
+run-gold: %s
+.PHONY: run
+''' % (' '.join(['%s-gold.csv' % b['name'] for b in bench])))
+
+print('''
+time-gold: %s
+.PHONY: time
+''' % (' '.join(['%s-gold.time' % b['name'] for b in bench])))
+
+print('''
 gold: %s
 .PHONY: gold
 ''' % (' '.join(['gold/%s.csv' % b['name'] for b in bench])))
