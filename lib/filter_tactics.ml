@@ -641,16 +641,30 @@ module Make (C : Config.S) = struct
       let fields =
         let m = Tactics_util.alias_map r in
         List.map fields ~f:(fun n ->
-            Map.find m n |> Option.value ~default:(Name n))
-        |> List.dedup_and_sort ~compare:[%compare: Pred.t]
+            (* If n is an alias for a field in a base relation, find the name of
+               that field. *)
+            match Map.find m n with
+            | Some n' -> (n', Some n)
+            | None -> (Name n, None))
+        |> List.dedup_and_sort ~compare:[%compare: Pred.t * Name.t option]
       in
       match (fields, key_range) with
-      | [f], (Some l, Some h) ->
+      | [(f, alias)], (Some l, Some h) ->
           let key_name = Fresh.name Global.fresh "k%d" in
           let%bind keys =
             match Pred.to_type f with
             | IntT _ | DateT _ ->
                 let%map vals = Tactics_util.all_values [f] r |> Or_error.ok in
+                let vals =
+                  match alias with
+                  | Some a ->
+                      select
+                        [ As_pred
+                            (Name (List.hd_exn (schema_exn vals)), Name.name a)
+                        ]
+                        vals
+                  | None -> vals
+                in
                 range
                   (First (select [As_pred (Min l, "l")] vals))
                   (First (select [As_pred (Max h, "h")] vals))
@@ -675,7 +689,8 @@ module Make (C : Config.S) = struct
           else Some (hash_idx keys scope r' [Name n])
       | fs, _ ->
           Logs.debug (fun m ->
-              m "Partition: Found too many fields. %a" (Fmt.list Pred.pp) fs) ;
+              m "Partition: Found too many fields. %a" (Fmt.list Pred.pp)
+                (List.map ~f:Tuple.T2.get1 fs)) ;
           None
     in
     let r = Resolve.resolve ~params r in
