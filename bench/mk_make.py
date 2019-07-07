@@ -157,12 +157,12 @@ analysis_{0}-opt.csv.log: {1}
 
     print('''
 {0}-gold.csv: {0}-gold/scanner.exe
-\t./$</scanner.exe -p $</data.bin {1} > $@
+\t./$< -p $</data.bin {1} > $@
 '''.format(b['name'], gen_param_values(b)))
 
     print('''
 {0}-gold.time: {0}-gold/scanner.exe
-\t./$</scanner.exe -t $(TIME_PER_BENCH) $</data.bin {1} > $@
+\t./$< -t $(TIME_PER_BENCH) $</data.bin {1} > $@
 '''.format(b['name'], gen_param_values(b)))
 
     print('''
