@@ -672,8 +672,8 @@ module Make (C : Config.S) = struct
                   (select
                      [As_pred (Name (Name.create "range"), key_name)]
                      (range
-                        (Name (Name.create ~scope "l"))
-                        (Name (Name.create ~scope "h"))))
+                        (Name (Name.create ~scope "lo"))
+                        (Name (Name.create ~scope "hi"))))
             | StringT _ ->
                 let%map keys = Tactics_util.all_values [f] r |> Or_error.ok in
                 select
