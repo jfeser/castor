@@ -436,18 +436,18 @@ module Make (Config : Config.S) = struct
             DateT
               { range= T.AbsInt.of_int x
               ; nullable= false
-              ; distinct= Map.singleton (module Int) x 1 }
+              ; distinct= T.Distinct.singleton (module Int) x 1 }
         | Int x ->
             IntT
               { range= T.AbsInt.of_int x
               ; nullable= false
-              ; distinct= Map.singleton (module Int) x 1 }
+              ; distinct= T.Distinct.singleton (module Int) x 1 }
         | Bool _ -> BoolT {nullable= false}
         | String x ->
             StringT
               { nchars= T.AbsInt.of_int (String.length x)
               ; nullable= false
-              ; distinct= Map.singleton (module String) x 1 }
+              ; distinct= T.Distinct.singleton (module String) x 1 }
         | Null -> NullT
         | Fixed x -> FixedT {value= T.AbsFixed.of_fixed x; nullable= false}
 

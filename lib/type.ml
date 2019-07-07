@@ -112,28 +112,36 @@ module AbsFixed = struct
   let join = unify AbsInt.join
 end
 
-module Distinct = struct
-  type ('a, 'b) t = ('a, int, 'b) Map.t
+module Distinct : sig
+  type ('a, 'b) t
 
-  let add m x = Map.update m x ~f:(function Some c -> c + 1 | None -> 1)
+  val empty : ('a, 'b) Map.comparator -> ('a, 'b) t
 
-  let num m x = Map.find m x |> Option.value ~default:0
+  val singleton : ('a, 'b) Map.comparator -> 'a -> int -> ('a, 'b) t
 
-  let total m = Map.data m |> List.sum (module Int) ~f:(fun x -> x)
+  val join : ('a, 'b) t -> ('a, 'b) t -> ('a, 'b) t
+end = struct
+  type ('a, 'b) t = unit
 
-  let join m1 m2 = Map.merge_skewed m1 m2 ~combine:(fun ~key:_ c1 c2 -> c1 + c2)
+  let singleton _ _ _ = ()
+
+  let empty _m = ()
+
+  let join _m1 _m2 = ()
 end
 
 module T = struct
   type int_ =
     { range: AbsInt.t
-    ; distinct: int Map.M(Int).t sexp_opaque
+    ; distinct: (int, Int.comparator_witness) Distinct.t sexp_opaque
+          [@compare.ignore]
     ; nullable: (bool[@sexp.bool]) }
   [@@deriving compare, sexp_of]
 
   type date =
     { range: AbsInt.t
-    ; distinct: int Map.M(Int).t sexp_opaque
+    ; distinct: (int, Int.comparator_witness) Distinct.t sexp_opaque
+          [@compare.ignore]
     ; nullable: (bool[@sexp.bool]) }
   [@@deriving compare, sexp_of]
 
@@ -141,7 +149,8 @@ module T = struct
 
   type string_ =
     { nchars: AbsInt.t
-    ; distinct: int Map.M(String).t sexp_opaque
+    ; distinct: (string, String.comparator_witness) Distinct.t sexp_opaque
+          [@compare.ignore]
     ; nullable: (bool[@sexp.bool]) }
   [@@deriving compare, sexp_of]
 
@@ -179,13 +188,14 @@ let bind2 : f:('a -> 'b -> 'c option) -> 'a option -> 'b option -> 'c option =
 
 let least_general_of_primtype = function
   | PrimType.IntT {nullable} ->
-      IntT {range= AbsInt.bot; nullable; distinct= Map.empty (module Int)}
+      IntT {range= AbsInt.bot; nullable; distinct= Distinct.empty (module Int)}
   | NullT -> NullT
   | DateT {nullable} ->
-      DateT {range= AbsInt.bot; nullable; distinct= Map.empty (module Int)}
+      DateT {range= AbsInt.bot; nullable; distinct= Distinct.empty (module Int)}
   | FixedT {nullable} -> FixedT {value= AbsFixed.bot; nullable}
   | StringT {nullable; _} ->
-      StringT {nchars= AbsInt.bot; nullable; distinct= Map.empty (module String)}
+      StringT
+        {nchars= AbsInt.bot; nullable; distinct= Distinct.empty (module String)}
   | BoolT {nullable} -> BoolT {nullable}
   | TupleT _ | VoidT -> failwith "Not a layout type."
 
@@ -278,16 +288,17 @@ let rec count = function
   | ListT (_, {count}) -> count
   | FuncT _ -> AbsInt.top
 
-let hash_kind_of_key_type_exn = function
-  | IntT {range= r; distinct= d; _} | DateT {range= r; distinct= d; _} ->
-      if Map.length d = 0 then `Direct
-      else if AbsInt.size r / Map.length d < 5 then `Direct
-      else `Cmph
+let hash_kind_of_key_type_exn c = function
+  | IntT {range= r; _} | DateT {range= r; _} -> (
+    match (c, r) with
+    | AbsInt.Interval (_, h_count), Interval (l_range, h_range) ->
+        if h_count / (h_range - l_range) < 5 then `Direct else `Cmph
+    | _ -> `Cmph )
   | _ -> `Cmph
 
 (** Use the type of a hash index to decide what hash method to use. *)
 let hash_kind_exn = function
-  | HashIdxT (kt, _, _) -> hash_kind_of_key_type_exn kt
+  | HashIdxT (kt, _, m) -> hash_kind_of_key_type_exn m.key_count kt
   | _ -> failwith "Unexpected type."
 
 let range_exn = function
@@ -334,7 +345,7 @@ and oi_ptr_size vt m = AbsInt.(byte_width ~nullable:false (m.key_count * len vt)
 (** Range of hash index hash data lengths. *)
 and hi_hash_len ?(bytes_per_key = AbsInt.of_int 1) kt m =
   let open AbsInt in
-  match hash_kind_of_key_type_exn kt with
+  match hash_kind_of_key_type_exn m.key_count kt with
   | `Direct -> of_int 0
   | `Cmph ->
       (* The interval represents uncertainty about the hash size, and CMPH hashes
@@ -344,7 +355,7 @@ and hi_hash_len ?(bytes_per_key = AbsInt.of_int 1) kt m =
 (** Range of hash index map lengths. *)
 and hi_map_len kt vt m =
   let open AbsInt in
-  match hash_kind_of_key_type_exn kt with
+  match hash_kind_of_key_type_exn m.key_count kt with
   | `Direct -> range_exn kt * of_int (hi_ptr_size kt vt m)
   | `Cmph -> m.key_count * Interval (1, 2) * of_int (hi_ptr_size kt vt m)
 
@@ -357,14 +368,14 @@ let%expect_test "" =
     HashIdxT
       ( IntT
           { range= Interval (23141, 5989538)
-          ; distinct= Map.empty (module Int)
+          ; distinct= Distinct.empty (module Int)
           ; nullable= false }
       , ListT
           ( ListT
               ( FuncT
                   ( [ IntT
                         { range= Interval (1, 50)
-                        ; distinct= Map.empty (module Int)
+                        ; distinct= Distinct.empty (module Int)
                         ; nullable= false } ]
                   , `Child_sum )
               , {count= Interval (1, 1)} )
