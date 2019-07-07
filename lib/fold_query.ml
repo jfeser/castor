@@ -46,27 +46,35 @@ let map_meta ~f q =
   in
   visitor#visit_t () q
 
-(** A query is invariant in a set of scopes if it doesn't refer to any name
-       in one of the scopes. *)
+(** A query is invariant in a set of scopes if it doesn't refer to any name in
+   one of the scopes. *)
 let is_invariant ss q =
+  let names_visitor =
+    object
+      inherit [_] Abslayout0.reduce
+
+      inherit [_] Util.conj_monoid
+
+      method! visit_Name () n =
+        match Name.rel n with
+        | Some s' -> not (List.mem ss s' ~equal:String.( = ))
+        | None -> true
+    end
+  in
   let visitor =
     object (self : 'self)
       inherit [_] reduce
 
       inherit [_] Util.conj_monoid
 
-      method visit_names () ns =
-        Set.for_all ns ~f:(fun n ->
-            match Name.rel n with
-            | Some s' -> not (List.mem ss s' ~equal:String.( = ))
-            | None -> true)
-
-      method visit_'q () q = self#visit_names () (A.names q)
+      method visit_'q () q = names_visitor#visit_t () q
 
       method visit_'m () _ = self#zero
 
-      method visit_pred () p = self#visit_names () (Pred.names p)
+      method visit_pred () p = names_visitor#visit_pred () p
 
+      (* Vars are not invariant so we don't have to reason about hoisting above
+         other let bindings. *)
       method! visit_Var () _ = false
 
       method! visit_Empty () = false
