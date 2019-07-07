@@ -234,16 +234,9 @@ let%expect_test "partition" =
   Seq.iter (Branching.apply partition Path.root r) ~f:(Format.printf "%a\n" pp) ;
   [%expect
     {|
-        ahashidx(select([range as k0],
-                   range((select([min(f) as l],
-                            select([f as f], dedup(select([f], r))))), (select(
-                                                                          [max(f) as h],
-                                                                          select(
-                                                                            [f as f],
-                                                                            dedup(
-                                                                            select(
-                                                                            [f],
-                                                                            r))))))) as s0,
+        ahashidx(depjoin(select([min(f) as lo, max(f) as hi],
+                           select([f as f], dedup(select([f], r)))) as k1,
+                   select([range as k0], range(k1.l, k1.h))) as s0,
           filter((f = s0.k0), r),
           param)
  |}]

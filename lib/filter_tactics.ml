@@ -665,16 +665,21 @@ module Make (C : Config.S) = struct
                         vals
                   | None -> vals
                 in
-                range
-                  (First (select [As_pred (Min l, "l")] vals))
-                  (First (select [As_pred (Max h, "h")] vals))
-            | StringT _ -> Tactics_util.all_values [f] r |> Or_error.ok
+                let scope = Fresh.name Global.fresh "k%d" in
+                dep_join
+                  (select [As_pred (Min l, "lo"); As_pred (Max h, "hi")] vals)
+                  scope
+                  (select
+                     [As_pred (Name (Name.create "range"), key_name)]
+                     (range
+                        (Name (Name.create ~scope "l"))
+                        (Name (Name.create ~scope "h"))))
+            | StringT _ ->
+                let%map keys = Tactics_util.all_values [f] r |> Or_error.ok in
+                select
+                  [As_pred (Name (List.hd_exn (schema_exn keys)), key_name)]
+                  keys
             | _ -> None
-          in
-          let keys =
-            select
-              [As_pred (Name (List.hd_exn (schema_exn keys)), key_name)]
-              keys
           in
           let scope = Fresh.name Global.fresh "s%d" in
           let r' =
