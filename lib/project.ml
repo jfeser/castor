@@ -74,9 +74,6 @@ let annotate_count r =
   in
   visitor#visit_t Exact r
 
-(* This is just a sentinal so we can use any value. *)
-let dummy = Bool false
-
 let get_refcnt r =
   match Meta.find r Meta.refcnt with
   | Some c -> Some c
@@ -84,16 +81,20 @@ let get_refcnt r =
       Logs.warn (fun m -> m "No refcnt found on %a" pp_small r) ;
       None
 
-let project_visitor =
+class project_visitor =
   object (self : 'a)
     inherit [_] map as super
+
+    val fresh = Fresh.create ()
+
+    method dummy = scalar (As_pred (Bool false, Fresh.name fresh "d%d"))
 
     method! visit_t () r =
       match get_refcnt r with
       | None -> r
       | Some refcnt -> (
           let count = Meta.find_exn r count in
-          if all_unref r && count = AtLeastOne then scalar dummy
+          if all_unref r && count = AtLeastOne then self#dummy
           else
             match r.node with
             | Select (ps, r) -> select (project_defs refcnt ps) (self#visit_t () r)
@@ -117,7 +118,7 @@ let project_visitor =
                       if old_n > new_n then select ps rk else self#visit_t () rk
                 in
                 list rk scope (self#visit_t () rv)
-            | AScalar p -> if project_def refcnt p then scalar p else scalar dummy
+            | AScalar p -> if project_def refcnt p then scalar p else self#dummy
             | ATuple ([], _) -> empty
             | ATuple ([r], _) -> self#visit_t () r
             | ATuple (rs, Concat) -> tuple (List.map rs ~f:(self#visit_t ())) Concat
@@ -141,7 +142,7 @@ let project_visitor =
                       not should_remove)
                   |> List.map ~f:(self#visit_t ())
                 in
-                let rs = if List.length rs = 0 then [scalar dummy] else rs in
+                let rs = if List.length rs = 0 then [self#dummy] else rs in
                 tuple rs Cross
             | Join {r1; r2; pred} -> (
               match count with
@@ -158,7 +159,7 @@ let project_visitor =
               (* If one side of a join is unused then the join can be dropped. *)
               | AtLeastOne ->
                   if all_unref d_lhs then self#visit_t () d_rhs
-                  else if all_unref d_rhs then scalar dummy
+                  else if all_unref d_rhs then self#dummy
                   else
                     dep_join (self#visit_t () d_lhs) d_alias (self#visit_t () d_rhs)
               )
@@ -166,10 +167,7 @@ let project_visitor =
             | _ -> super#visit_t () r )
   end
 
-let project_once r =
-  let r = annotate_count r in
-  let r = project_visitor#visit_t () r in
-  r
+let project_once r = annotate_count r |> (new project_visitor)#visit_t ()
 
 let project ?(params = Set.empty (module Name)) r =
   let rec loop r =

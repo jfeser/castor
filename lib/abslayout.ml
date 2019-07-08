@@ -552,6 +552,11 @@ let strip_unused_as =
         let m = self#visit_ordered_idx () m in
         AOrderedIdx (rk, rv, m)
 
+      method! visit_AScalar () _ =
+        function
+        | As_pred (p, n) -> AScalar (As_pred (self#visit_pred () p, n))
+        | p -> AScalar (self#visit_pred () p)
+
       method! visit_As () _ _ r =
         Log.warn (fun m -> m "Removing misplaced as: %a" pp_small r) ;
         r.node
