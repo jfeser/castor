@@ -193,10 +193,10 @@ module Make (Config : Config.S) = struct
           (Path.all >>? is_join >>? not has_free >>| shallowest)
       ; push_all_unparameterized_filters
       ; project
-      ; at_ Join_elim_tactics.elim_join_nest
+      ; at_ Join_elim_tactics.elim_join_filter
           (Path.all >>? is_join >>| shallowest)
       ; try_
-          (first F.elim_disjunct (Path.all >>? is_filter))
+          (first (traced F.elim_disjunct) (Path.all >>? is_filter))
           (seq_many
              [ (* Push constant filters *)
                fix

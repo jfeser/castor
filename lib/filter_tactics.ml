@@ -263,17 +263,19 @@ module Make (C : Config.S) = struct
         let key, cmps = List.unzip cmps in
         let x =
           let open Or_error.Let_syntax in
-          let%map all_keys = Tactics_util.all_values key r' in
-          let scope = Fresh.name Global.fresh "s%d" in
-          ordered_idx all_keys scope
-            (Tactics_util.select_out (schema_exn all_keys)
-               (filter
-                  ( List.map key ~f:(fun p ->
-                        Pred.binop
-                          (Eq, p, Pred.scoped (schema_exn all_keys) scope p))
-                  |> Pred.conjoin )
-                  r'))
-            {oi_key_layout= None; oi_lookup= cmps}
+          if key = [] then Or_error.error_string "No candidate keys found."
+          else
+            let%map all_keys = Tactics_util.all_values key r' in
+            let scope = Fresh.name Global.fresh "s%d" in
+            ordered_idx all_keys scope
+              (Tactics_util.select_out (schema_exn all_keys)
+                 (filter
+                    ( List.map key ~f:(fun p ->
+                          Pred.binop
+                            (Eq, p, Pred.scoped (schema_exn all_keys) scope p))
+                    |> Pred.conjoin )
+                    r'))
+              {oi_key_layout= None; oi_lookup= cmps}
         in
         match x with
         | Ok r -> Seq.singleton (filter (Pred.conjoin rest) r)
@@ -564,11 +566,12 @@ module Make (C : Config.S) = struct
     let%bind p, r = to_filter r in
     let clauses = Pred.disjuncts p in
     if
-      try
-        Tactics_util.all_disjoint
-          (List.map ~f:(Pred.to_static ~params) clauses)
-          r
-      with _ -> false
+      ( try
+          Tactics_util.all_disjoint
+            (List.map ~f:(Pred.to_static ~params) clauses)
+            r
+        with _ -> false )
+      && List.length clauses > 1
     then Some (tuple (List.map clauses ~f:(fun p -> filter p r)) Concat)
     else None
 
@@ -641,24 +644,26 @@ module Make (C : Config.S) = struct
             match Map.find m n with
             | Some n' -> (n', Some n)
             | None -> (Name n, None))
-        |> List.dedup_and_sort ~compare:[%compare: Pred.t * Name.t option]
+        |> Map.of_alist_multi (module Pred)
+        |> Map.to_alist
       in
       match (fields, key_range) with
-      | [(f, alias)], (Some l, Some h) ->
+      | [(f, aliases)], (Some l, Some h) ->
           let key_name = Fresh.name Global.fresh "k%d" in
           let%bind keys =
             match Pred.to_type f with
             | IntT _ | DateT _ ->
                 let%map vals = Tactics_util.all_values [f] r |> Or_error.ok in
                 let vals =
-                  match alias with
-                  | Some a ->
-                      select
-                        [ As_pred
-                            (Name (List.hd_exn (schema_exn vals)), Name.name a)
-                        ]
-                        vals
-                  | None -> vals
+                  let val_name = List.hd_exn (schema_exn vals) in
+                  let select_list =
+                    Name val_name
+                    :: List.filter_map aliases
+                         ~f:
+                           (Option.map ~f:(fun n ->
+                                As_pred (Name val_name, Name.name n)))
+                  in
+                  select select_list vals
                 in
                 let scope = Fresh.name Global.fresh "k%d" in
                 dep_join
