@@ -28,7 +28,7 @@ module Config = struct
   end
 end
 
-module Make (Config : Config.S) () = struct
+module Make (Config : Config.S) = struct
   open Config
   module O = Ops.Make (Config)
   open O
@@ -277,10 +277,47 @@ module Make (Config : Config.S) () = struct
 end
 
 let optimize (module C : Config.S) r =
+  let open Option.Let_syntax in
   (* Annotate query with free variables. *)
-  let module M = Abslayout_db.Make (C) in
   annotate_free r ;
-  let module T = Make (C) () in
-  let module O = Ops.Make (C) in
   (* Optimize outer query. *)
-  O.apply T.opt_toplevel Path.root r
+  let%map r =
+    let module T = Make (C) in
+    let module O = Ops.Make (C) in
+    O.apply T.(try_partition opt) Path.root r
+  in
+  (* Recursively optimize subqueries. *)
+  let apply_to_subqueries r =
+    let visitor =
+      object (self : 'a)
+        inherit [_] map
+
+        method visit_subquery r =
+          let module C = struct
+            include C
+
+            let params = Set.union params (free r)
+          end in
+          let module O = Ops.Make (C) in
+          let module T = Make (C) in
+          Option.value_exn ~message:"Transforming subquery failed."
+            (O.apply T.opt Path.root r)
+
+        method! visit_Exists () r = Exists (self#visit_subquery r)
+
+        method! visit_First () r = First (self#visit_subquery r)
+
+        method! visit_AList () (rk, rv) = AList (rk, self#visit_t () rv)
+
+        method! visit_AOrderedIdx () (rk, rv, m) =
+          AOrderedIdx (rk, self#visit_t () rv, m)
+
+        method! visit_AHashIdx () h =
+          AHashIdx {h with hi_values= self#visit_t () h.hi_values}
+
+        method! visit_AScalar () v = AScalar v
+      end
+    in
+    visitor#visit_t () r
+  in
+  apply_to_subqueries r

@@ -32,7 +32,7 @@ let main ~params:all_params ~db ~cost_db ~validate ~cost_timeout ch =
     let cost_timeout = cost_timeout
   end in
   let module A = Abslayout_db.Make (Config) in
-  let module T = Transform.Make (Config) () in
+  let module T = Transform.Make (Config) in
   let module O = Ops.Make (Config) in
   let query_str = In_channel.input_all ch in
   let query = A.load_string ~params query_str in
