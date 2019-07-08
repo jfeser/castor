@@ -325,6 +325,10 @@ let%expect_test "ordering" =
     {|atuple([alist(orderby([f desc], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([f], r1) as k1, atuple([ascalar(k1.f), ascalar(k1.g)], cross))], concat)|} ;
   [%expect
     {|
+    [WARNING] Name does not appear in all concat fields: f
+    [WARNING] Name does not appear in all concat fields: g
+    [WARNING] Name does not appear in all concat fields: f
+    [WARNING] Name does not appear in all concat fields: g
     3|4
     2|1
     2|2
@@ -342,6 +346,10 @@ let%expect_test "ordering" =
     {|atuple([alist(orderby([f], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([f desc], r1) as k1, atuple([ascalar(k1.f), ascalar(k1.g)], cross))], concat)|} ;
   [%expect
     {|
+    [WARNING] Name does not appear in all concat fields: f
+    [WARNING] Name does not appear in all concat fields: g
+    [WARNING] Name does not appear in all concat fields: f
+    [WARNING] Name does not appear in all concat fields: g
     1|2
     1|3
     2|1

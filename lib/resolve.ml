@@ -78,22 +78,14 @@ let shadow_check r =
 
 module Ctx = struct
   module T : sig
-    type row =
-      { rname: Name.t
-      ; rstage: [`Run | `Compile]
-      ; rmeta: Univ_map.t ref
-      ; rrefs: int ref list }
+    type row = {rname: Name.t; rstage: [`Run | `Compile]; rrefs: int ref list}
     [@@deriving compare]
 
     type t = private row list [@@deriving sexp_of]
 
     val of_list : row list -> t
   end = struct
-    type row =
-      { rname: Name.t
-      ; rstage: [`Run | `Compile]
-      ; rmeta: Univ_map.t ref
-      ; rrefs: int ref list }
+    type row = {rname: Name.t; rstage: [`Run | `Compile]; rrefs: int ref list}
     [@@deriving sexp_of]
 
     type t = row list [@@deriving sexp_of]
@@ -115,8 +107,7 @@ module Ctx = struct
 
   include T
 
-  let singleton n s =
-    of_list [{rname= n; rstage= s; rmeta= ref Univ_map.empty; rrefs= []}]
+  let singleton n s = of_list [{rname= n; rstage= s; rrefs= []}]
 
   let unscoped (c : t) =
     List.map (c :> row list) ~f:(fun r -> {r with rname= Name.unscoped r.rname})
@@ -141,24 +132,25 @@ module Ctx = struct
     of_list (c1 @ c2)
 
   let concat (cs : t list) =
-    match cs with
-    | [] -> failwith "Empty list."
-    | c :: cs ->
-        let m =
-          List.map (c :> row list) ~f:(fun r -> (r.rname, r))
-          |> Map.of_alist_exn (module Name)
-        in
-        let m =
-          List.fold_left
-            (cs :> row list list)
-            ~init:m
-            ~f:(fun m rs ->
-              List.fold_left rs ~init:m ~f:(fun m r ->
-                  let r' = Map.find_exn m r.rname in
-                  let r' = {r' with rrefs= r'.rrefs @ r.rrefs} in
-                  Map.set m ~key:r.rname ~data:r'))
-        in
-        Map.data m |> of_list
+    let cs = (cs :> row list list) in
+    let inter_names =
+      List.map cs ~f:(fun c ->
+          List.map c ~f:(fun r -> r.rname) |> Set.of_list (module Name))
+      |> List.reduce_exn ~f:Set.inter
+    in
+    List.map cs
+      ~f:
+        (List.filter ~f:(fun r ->
+             if Set.mem inter_names r.rname then true
+             else (
+               Logs.warn (fun m ->
+                   m "Name does not appear in all concat fields: %a" Name.pp r.rname) ;
+               false )))
+    |> List.map ~f:(List.sort ~compare:[%compare: row])
+    |> List.transpose_exn
+    |> List.map
+         ~f:(List.reduce_exn ~f:(fun r r' -> {r with rrefs= r.rrefs @ r'.rrefs}))
+    |> of_list
 
   let merge (c1 : t) (c2 : t) : t = of_list ((c1 :> row list) @ (c2 :> row list))
 
@@ -217,9 +209,7 @@ module Ctx = struct
     in
     let ctx =
       List.filter_map metas
-        ~f:
-          (Option.map ~f:(fun (n, meta) ->
-               {rname= n; rmeta= meta; rrefs= []; rstage= s}))
+        ~f:(Option.map ~f:(fun (n, _) -> {rname= n; rrefs= []; rstage= s}))
     in
     (defs, of_list ctx)
 

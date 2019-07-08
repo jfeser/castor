@@ -60,3 +60,20 @@ let%expect_test "" =
                   ascalar(k.l_receiptdate@comp)#{l_receiptdate=1, },
                   ascalar(k.o_comment@comp)#{}],
             cross)#{l_receiptdate=1, })#{l_receiptdate=1, })#{l_receiptdate=1, } |}]
+
+let%expect_test "" =
+  let r =
+    {|
+      select([f], atuple([atuple([ascalar(0 as f), ascalar(1 as g)], cross),
+                          atuple([ascalar(2 as g), ascalar(3 as f)], cross)], concat))
+    |}
+    |> M.load_string
+  in
+  Format.printf "%a@." pp_with_refcount r;
+  [%expect {|
+    select([f@run],
+      atuple([atuple([ascalar(0 as f)#{f=1, }, ascalar(1 as g)#{}],
+                cross)#{f=1, },
+              atuple([ascalar(2 as g)#{}, ascalar(3 as f)#{f=1, }],
+                cross)#{f=1, }],
+        concat)#{f=1, })#{f=1, } |}]
