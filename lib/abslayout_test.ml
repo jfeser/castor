@@ -140,6 +140,47 @@ let%test_module _ =
         List key: ((Int 3) (Int 4))
         Scalar: (Int 3) |}]
 
+    let%expect_test "" =
+      run_print_test "atuple([filter(false, ascalar(0)), ascalar(1)], cross)";
+      [%expect {|
+        Tuple
+        Scalar: (Int 0)
+        Scalar: (Int 1) |}]
+
+    let%expect_test "" =
+      run_print_test
+        "alist(r as k, atuple([filter(false, ascalar(k.f)), ascalar(k.f+1)], cross))";
+      [%expect {|
+        List
+        List key: ((Int 0) (Int 5))
+        Tuple
+        Scalar: (Int 0)
+        Scalar: (Int 1)
+        List key: ((Int 1) (Int 2))
+        Tuple
+        Scalar: (Int 1)
+        Scalar: (Int 2)
+        List key: ((Int 1) (Int 3))
+        Tuple
+        Scalar: (Int 1)
+        Scalar: (Int 2)
+        List key: ((Int 2) (Int 1))
+        Tuple
+        Scalar: (Int 2)
+        Scalar: (Int 3)
+        List key: ((Int 2) (Int 2))
+        Tuple
+        Scalar: (Int 2)
+        Scalar: (Int 3)
+        List key: ((Int 3) (Int 4))
+        Tuple
+        Scalar: (Int 3)
+        Scalar: (Int 4)
+        List key: ((Int 4) (Int 6))
+        Tuple
+        Scalar: (Int 4)
+        Scalar: (Int 5) |}]
+
     let%expect_test "sum-complex" =
       run_print_test sum_complex ;
       [%expect
@@ -499,4 +540,47 @@ let%test_module _ =
       in
       Pred.names p |> [%sexp_of: Set.M(Name).t] |> print_s ;
       [%expect {| (((scope ()) (name total_revenue))) |}]
+
+    (* let%expect_test "" =
+     *   let module M = Abslayout_db.Make (struct
+     *     let conn = Db.create "postgresql:///tpch_1k"
+     * 
+     *     let simplify = None
+     *   end) in
+     *   let r =
+     *     M.load_string
+     *       ~params:
+     *         (let open Type.PrimType in
+     *         Set.of_list
+     *           (module Name)
+     *           [ Name.create ~type_:string_t "param1"
+     *           ; Name.create ~type_:string_t "param2"
+     *           ; Name.create ~type_:date_t "param3" ])
+     *       {|
+     *     ahashidx(depjoin(select([min(l_receiptdate) as lo, max((l_receiptdate + year(1))) as hi],
+     *                                      dedup(select([l_receiptdate], lineitem))) as k1,
+     *                              select([range as k0], range(k1.lo, k1.hi))) as s0,
+     *                     alist(orderby([l_shipmode], dedup(select([l_shipmode], lineitem))) as k2,
+     *                       select([l_shipmode,
+     *                               sum((if ((o_orderpriority = "1-URGENT") || (o_orderpriority = "2-HIGH")) then 1 else 0)) as high_line_count,
+     *                               sum((if (not((o_orderpriority = "1-URGENT")) && not((o_orderpriority = "2-HIGH"))) then 1 else 0)) as low_line_count],
+     *                         alist(select([l_shipmode, o_orderpriority],
+     *                                 depjoin(filter(((l_commitdate < l_receiptdate) &&
+     *                                                ((l_shipdate < l_commitdate) &&
+     *                                                ((l_receiptdate >= s0.k0) &&
+     *                                                ((l_receiptdate < (s0.k0 + year(1))) && (l_shipmode = k2.l_shipmode))))),
+     *                                           lineitem) as s2,
+     *                                   atuple([ascalar(s2.l_shipmode), filter((o_orderkey = s2.l_orderkey), orders)], cross))) as s1,
+     *                           ahashidx(dedup(
+     *                                      atuple([select([l_shipmode as x73], dedup(select([l_shipmode], lineitem))),
+     *                                              select([l_shipmode as x74], dedup(select([l_shipmode], lineitem)))],
+     *                                        cross)) as s4,
+     *                             atuple([filter(((l_shipmode = s4.x73) || (l_shipmode = s4.x74)), ascalar(s1.l_shipmode)),
+     *                                     ascalar(s1.o_orderpriority)],
+     *                               cross),
+     *                             (param1, param2))))),
+     *                     param3)
+     * |}
+     *   in
+     *   M.type_of r |> [%sexp_of: Type.t] |> print_s *)
   end )

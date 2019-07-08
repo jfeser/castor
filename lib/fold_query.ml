@@ -216,13 +216,14 @@ let rec to_ralgebra' q =
       let o1, q1 =
         let o1, q1 = unwrap_order q1 in
         let row_number = Fresh.name Global.fresh "rn%d" in
-        let q1 =
-          if distinct then q1
+        let o1, q1 =
+          if distinct then (o1, q1)
           else
-            A.select
-              ( As_pred (Row_number, row_number)
-              :: (A.schema_exn q1 |> Schema.to_select_list) )
-              q1
+            ( o1 @ [(Name (Name.create row_number), Asc)]
+            , A.select
+                ( As_pred (Row_number, row_number)
+                :: (A.schema_exn q1 |> Schema.to_select_list) )
+                q1 )
         in
         (o1, q1)
       in
@@ -242,7 +243,7 @@ let rec to_ralgebra' q =
           |> Map.of_alist_exn (module Name)
         in
         (* The renaming refers to the scoped names from q1, so scope before
-             renaming. *)
+           renaming. *)
         let o1 =
           List.map o1 ~f:(fun (p, o) -> (Pred.scoped (A.schema_exn q1) scope p, o))
         in

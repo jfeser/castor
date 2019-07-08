@@ -623,7 +623,8 @@ let%test_module _ =
                   "g_1" AS "x3_0") AS "t0"
       ORDER BY
           "x1_0",
-          "x2_0" |}]
+          "x2_0",
+          "x0_0" |}]
 
     let%expect_test "" =
       let ralgebra =
@@ -675,7 +676,8 @@ let%test_module _ =
       ORDER BY
           "counter0_0",
           "x5_0",
-          "x6_0" |}]
+          "x6_0",
+          "x4_0" |}]
 
     let%expect_test "" =
       let ralgebra = load_string Test_util.sum_complex in
@@ -684,7 +686,7 @@ let%test_module _ =
       Format.printf "%a" pp r ;
       [%expect
         {|
-      orderby([x9, x10],
+      orderby([x9, x10, x8],
         depjoin(select([row_number() as rn2, f, g], r1) as k,
           select([k.rn2 as x8, k.f as x9, k.g as x10, f as x11, v as x12],
             atuple([ascalar(k.f), ascalar((k.g - k.f) as v)], cross)))) |}] ;
@@ -715,7 +717,8 @@ let%test_module _ =
               WHERE (TRUE)) AS "t5"
       ORDER BY
           "x9_0",
-          "x10_0" |}]
+          "x10_0",
+          "x8_0" |}]
 
     let%expect_test "" =
       let ralgebra = load_string "alist(r1 as k, alist(r1 as j, ascalar(j.f)))" in
@@ -724,7 +727,7 @@ let%test_module _ =
       Format.printf "%a" pp r ;
       [%expect
         {|
-        orderby([x18, x19, x21, x22],
+        orderby([x18, x19, x17, x21, x22, x20],
           depjoin(select([row_number() as rn3, f, g], r1) as k,
             select([k.rn3 as x17,
                     k.f as x18,
@@ -780,6 +783,8 @@ let%test_module _ =
         ORDER BY
             "x18_0",
             "x19_0",
+            "x17_0",
             "x21_0",
-            "x22_0" |}]
+            "x22_0",
+            "x20_0" |}]
   end )
