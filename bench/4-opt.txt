@@ -1,13 +1,13 @@
-ahashidx(depjoin(select([min(o_orderdate) as lo,
+ahashidx(depjoin(dedup(select([min(o_orderdate) as lo,
                          max((o_orderdate + month(3))) as hi],
-                   dedup(orders)) as k1,
+                   orders)) as k1,
            select([range as k0], range(k1.lo, k1.hi))) as s0,
   alist(depjoin(orderby([o_orderpriority],
-                  select([o_orderpriority],
+                  dedup(select([o_orderpriority],
                     filter(((o_orderdate >= s0.k0) &&
                            ((o_orderdate < (s0.k0 + month(3))) &&
                            exists(ascalar(false as d0)))),
-                      dedup(orders)))) as k2,
+                      orders)))) as k2,
           select([o_orderpriority, sum(agg0) as order_count],
             depjoin(select([o_orderpriority],
                       filter(((o_orderpriority = k2.o_orderpriority) &&

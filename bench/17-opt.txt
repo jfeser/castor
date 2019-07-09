@@ -1,6 +1,6 @@
-ahashidx(select([p_brand as k0], dedup(part)) as s0,
+ahashidx(dedup(select([p_brand as k0], part)) as s0,
   select([avg_yearly],
-    ahashidx(dedup(select([p_container as x11], dedup(part))) as s3,
+    ahashidx(dedup(select([p_container as x11], part)) as s3,
       filter((count0 > 0),
         select([count() as count0,
                 (sum(l1_extendedprice) / 7.0) as avg_yearly],

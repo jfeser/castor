@@ -1,5 +1,5 @@
 select([sum((l_extendedprice * l_discount)) as revenue],
-  aorderedidx(select([l_discount, l_quantity, l_shipdate], dedup(lineitem)) as s19,
+  aorderedidx(dedup(select([l_discount, l_quantity, l_shipdate], lineitem)) as s19,
     select([l_extendedprice],
       alist(select([l_extendedprice],
               filter(((l_discount = s19.l_discount) &&

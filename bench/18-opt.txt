@@ -1,6 +1,6 @@
 alist(orderby([o_totalprice desc, o_orderdate],
-        select([c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice],
-          dedup(
+        dedup(select([c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice],
+          
             depjoin(select([o_orderkey, o_custkey, o_totalprice, o_orderdate],
                       filter(exists(ascalar(false as d0)), orders)) as s1,
               atuple([ascalar(s1.o_orderkey),
@@ -40,21 +40,21 @@ alist(orderby([o_totalprice desc, o_orderdate],
                 o_orderdate,
                 c_custkey,
                 c_name],
-          filter(exists(aorderedidx(select([sum_l_quantity],
-                                      dedup(
-                                        depjoin(select([l_orderkey],
-                                                  dedup(lineitem)) as s17,
+          filter(exists(aorderedidx(dedup(select([sum_l_quantity],
+                                      
+                                        depjoin(dedup(select([l_orderkey],
+                                                  lineitem)) as s17,
                                           select([sum(l_quantity) as sum_l_quantity],
                                             filter((l_orderkey =
                                                    s17.l_orderkey),
                                               lineitem))))) as s16,
                           ahashidx(dedup(
                                      select([l_orderkey as x256],
-                                       dedup(lineitem))) as s22,
+                                       lineitem)) as s22,
                             alist(select([l_orderkey, sum_l_quantity],
-                                    depjoin(filter((l_orderkey = s22.x256),
+                                    depjoin(dedup(filter((l_orderkey = s22.x256),
                                               select([l_orderkey],
-                                                dedup(lineitem))) as k1,
+                                                lineitem))) as k1,
                                       filter((sum_l_quantity =
                                              s16.sum_l_quantity),
                                         select([l_orderkey,

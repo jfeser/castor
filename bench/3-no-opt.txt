@@ -1,7 +1,7 @@
-ahashidx(select([c_mktsegment as k0], dedup(customer)) as s0,
+ahashidx(dedup(select([c_mktsegment as k0], customer)) as s0,
   select([l_orderkey, revenue, o_orderdate, o_shippriority],
-    alist(select([l_orderkey, o_orderdate, o_shippriority],
-            dedup(
+    alist(dedup(select([l_orderkey, o_orderdate, o_shippriority],
+            
               depjoin(select([o_orderkey, o_orderdate, o_shippriority],
                         orders) as s2,
                 atuple([ascalar(s2.o_orderdate),

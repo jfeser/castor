@@ -1,6 +1,6 @@
-ahashidx(depjoin(select([min(l_shipdate) as lo,
+ahashidx(depjoin(dedup(select([min(l_shipdate) as lo,
                          max((l_shipdate + month(1))) as hi],
-                   dedup(lineitem)) as k1,
+                   lineitem)) as k1,
            select([range as k0], range(k1.lo, k1.hi))) as s0,
   alist(select([((100.0 * sum(agg0)) / sum(agg1)) as promo_revenue],
           depjoin(select([l_partkey, l_extendedprice, l_discount],

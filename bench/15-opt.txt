@@ -8,7 +8,7 @@ select([s_suppkey, s_name, s_address, s_phone, total_revenue],
             alist(dedup(select([l_suppkey as l1_suppkey], lineitem)) as k0,
               filter((total_revenue =
                      (select([max(total_revenue_i) as tot],
-                        alist(select([l_suppkey], dedup(lineitem)) as k1,
+                        alist(dedup(select([l_suppkey], lineitem)) as k1,
                           select([sum(agg0) as total_revenue_i],
                             alist(select([l_extendedprice,
                                           l_discount,
