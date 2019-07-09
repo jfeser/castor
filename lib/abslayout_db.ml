@@ -360,6 +360,7 @@ module Make (Config : Config.S) = struct
         let q = A.ensure_alias r |> Q.of_ralgebra |> Q.hoist_all in
         let r = Q.to_ralgebra q |> simplify in
         let sql = Sql.of_ralgebra r in
+        Logs.debug (fun m -> m "Running SQL: %s" (Sql.to_string_hum sql)) ;
         let tups =
           Db.exec_cursor_lwt_exn ?timeout conn
             (A.schema_exn r |> List.map ~f:Name.type_exn)
