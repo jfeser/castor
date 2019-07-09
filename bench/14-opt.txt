@@ -1,26 +1,23 @@
-select([((100.0 *
-         sum((if (strpos(p_type, "PROMO") = 1) then (l_extendedprice *
-                                                    (1 - l_discount)) else 0.0)))
-        / sum((l_extendedprice * (1 - l_discount)))) as promo_revenue],
-  aorderedidx(select([l_shipdate],
-                dedup(
-                  depjoin(lineitem as s4,
-                    atuple([ascalar(s4.l_shipdate),
-                            filter((s4.l_partkey = p_partkey), part)],
-                      cross)))) as s2,
-    select([l_extendedprice, l_discount, p_type],
-      alist(select([l_extendedprice, l_discount, p_type],
-              filter((l_shipdate = s2.l_shipdate),
-                depjoin(lineitem as s1,
-                  atuple([ascalar(s1.l_extendedprice),
-                          ascalar(s1.l_discount),
-                          ascalar(s1.l_shipdate),
-                          filter((s1.l_partkey = p_partkey), part)],
-                    cross)))) as s0,
-        filter((count0 > 0),
-          select([count() as count0, l_extendedprice, l_discount, p_type],
-            atuple([ascalar(s0.l_extendedprice),
-                    ascalar(s0.l_discount),
-                    ascalar(s0.p_type)],
-              cross))))),
-    >= param1, < (param1 + month(1))))
+ahashidx(depjoin(select([min(l_shipdate) as lo,
+                         max((l_shipdate + month(1))) as hi],
+                   dedup(lineitem)) as k1,
+           select([range as k0], range(k1.lo, k1.hi))) as s0,
+  alist(select([((100.0 * sum(agg0)) / sum(agg1)) as promo_revenue],
+          depjoin(select([l_partkey, l_extendedprice, l_discount],
+                    filter(((l_shipdate >= s0.k0) &&
+                           (l_shipdate < (s0.k0 + month(1)))),
+                      lineitem)) as s1,
+            filter((count0 > 0),
+              select([count() as count0,
+                      sum((l_extendedprice * (1 - l_discount))) as agg1,
+                      sum((if (strpos(p_type, "PROMO") = 1) then (l_extendedprice
+                                                                 *
+                                                                 (1 -
+                                                                 l_discount)) else 0.0)) as agg0],
+                atuple([ascalar(s1.l_extendedprice),
+                        ascalar(s1.l_discount),
+                        select([p_type],
+                          filter((s1.l_partkey = p_partkey), part))],
+                  cross))))) as s3,
+    ascalar(s3.promo_revenue)),
+  param1)

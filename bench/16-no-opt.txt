@@ -1,71 +1,45 @@
 select([p_brand, p_type, p_size, supplier_cnt],
-  alist(select([p_brand, p_type, p_size], dedup(part)) as k0,
+  alist(select([p_brand, p_type, p_size],
+          dedup(
+            depjoin(select([p_partkey, p_brand, p_type, p_size], part) as s1,
+              atuple([ascalar(s1.p_brand),
+                      ascalar(s1.p_type),
+                      ascalar(s1.p_size),
+                      filter((s1.p_partkey = ps_partkey),
+                        filter(not(exists(ascalar(false as d0))), partsupp))],
+                cross)))) as k0,
     select([p_brand, p_type, p_size, supplier_cnt],
-      ahashidx(atuple([dedup(select([p_size as x1140], dedup(part))),
-                       dedup(select([p_size as x1141], dedup(part))),
-                       dedup(select([p_size as x1142], dedup(part))),
-                       dedup(select([p_size as x1143], dedup(part))),
-                       dedup(select([p_size as x1144], dedup(part))),
-                       dedup(select([p_size as x1145], dedup(part))),
-                       dedup(select([p_size as x1146], dedup(part))),
-                       dedup(select([p_size as x1147], dedup(part)))],
-                 cross) as s28,
+      ahashidx(atuple([dedup(select([p_size as x18], dedup(part))),
+                       dedup(select([p_size as x19], dedup(part))),
+                       dedup(select([p_size as x20], dedup(part))),
+                       dedup(select([p_size as x21], dedup(part))),
+                       dedup(select([p_size as x22], dedup(part))),
+                       dedup(select([p_size as x23], dedup(part))),
+                       dedup(select([p_size as x24], dedup(part))),
+                       dedup(select([p_size as x25], dedup(part)))],
+                 cross) as s2,
         filter((count0 > 0),
           select([count() as count0,
                   p_brand,
                   p_type,
                   p_size,
                   count() as supplier_cnt],
-            alist(filter(((p_size = s28.x1141) ||
-                         ((p_size = s28.x1142) ||
-                         ((p_size = s28.x1143) ||
-                         ((p_size = s28.x1144) ||
-                         ((p_size = s28.x1145) ||
-                         ((p_size = s28.x1146) ||
-                         ((p_size = s28.x1147) || (p_size = s28.x1140)))))))),
+            alist(filter(((p_size = s2.x19) ||
+                         ((p_size = s2.x20) ||
+                         ((p_size = s2.x21) ||
+                         ((p_size = s2.x22) ||
+                         ((p_size = s2.x23) ||
+                         ((p_size = s2.x24) ||
+                         ((p_size = s2.x25) || (p_size = s2.x18)))))))),
                     select([p_brand, p_type, p_size],
-                      dedup(
-                        depjoin(filter(((p_brand = k0.p_brand) &&
-                                       ((p_type = k0.p_type) &&
-                                       (p_size = k0.p_size))),
-                                  part) as s27,
-                          atuple([ascalar(s27.p_brand),
-                                  ascalar(s27.p_type),
-                                  ascalar(s27.p_size),
-                                  filter(not(exists(ahashidx(dedup(
-                                                               select(
-                                                                 [s_suppkey as x15],
-                                                                 filter(
-                                                                   ((
-                                                                    strpos(s_comment,
-                                                                    "Customer")
-                                                                    >= 1) &&
-                                                                   (strpos(s_comment,
-                                                                    "Complaints")
-                                                                   >= 1)),
-                                                                   dedup(
-                                                                    supplier)))) as s1,
-                                                      alist(select([],
-                                                              filter(
-                                                                (s1.x15 =
-                                                                s_suppkey),
-                                                                filter(
-                                                                  ((strpos(s_comment,
-                                                                    "Customer")
-                                                                   >= 1) &&
-                                                                  (strpos(s_comment,
-                                                                   "Complaints")
-                                                                  >= 1)),
-                                                                  supplier))) as s0,
-                                                        ascalar(false)),
-                                                      ps_suppkey))),
-                                    filter((s27.p_partkey = ps_partkey),
-                                      partsupp))],
-                            cross))))) as s26,
+                      filter((not(exists(ascalar(false as d1))) &&
+                             ((p_brand = k0.p_brand) &&
+                             ((p_type = k0.p_type) && (p_size = k0.p_size)))),
+                        dedup(part)))) as s0,
               filter((not((p_brand = param1)) &&
                      not((strpos(p_type, param2) = 1))),
-                atuple([ascalar(s26.p_brand),
-                        ascalar(s26.p_type),
-                        ascalar(s26.p_size)],
+                atuple([ascalar(s0.p_brand),
+                        ascalar(s0.p_type),
+                        ascalar(s0.p_size)],
                   cross))))),
         (param10, param3, param4, param5, param6, param7, param8, param9)))))

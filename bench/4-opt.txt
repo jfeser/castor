@@ -1,23 +1,24 @@
-alist(orderby([o_orderpriority], select([o_orderpriority], dedup(orders))) as k0,
-  select([o_orderpriority, sum(agg0) as order_count],
-    aorderedidx(select([o_orderdate], dedup(orders)) as s44,
-      alist(select([agg0, o_orderpriority],
+ahashidx(depjoin(select([min(o_orderdate) as lo,
+                         max((o_orderdate + month(3))) as hi],
+                   dedup(orders)) as k1,
+           select([range as k0], range(k1.lo, k1.hi))) as s0,
+  alist(depjoin(orderby([o_orderpriority],
+                  select([o_orderpriority],
+                    filter(((o_orderdate >= s0.k0) &&
+                           ((o_orderdate < (s0.k0 + month(3))) &&
+                           exists(ascalar(false as d0)))),
+                      dedup(orders)))) as k2,
+          select([o_orderpriority, sum(agg0) as order_count],
+            depjoin(select([o_orderpriority],
+                      filter(((o_orderpriority = k2.o_orderpriority) &&
+                             ((o_orderdate >= s0.k0) &&
+                             ((o_orderdate < (s0.k0 + month(3))) &&
+                             exists(filter(((l_orderkey = o_orderkey) &&
+                                           (l_commitdate < l_receiptdate)),
+                                      lineitem))))),
+                        orders)) as s1,
               filter((count0 > 0),
                 select([count() as count0, count() as agg0, o_orderpriority],
-                  filter((exists(ahashidx(dedup(
-                                            select([l_orderkey as x33],
-                                              filter((l_commitdate <
-                                                     l_receiptdate),
-                                                dedup(lineitem)))) as s1,
-                                   alist(select([],
-                                           filter((l_orderkey = s1.x33),
-                                             filter((l_commitdate <
-                                                    l_receiptdate),
-                                               lineitem))) as s0,
-                                     ascalar(false)),
-                                   o_orderkey)) &&
-                         ((o_orderpriority = k0.o_orderpriority) &&
-                         (o_orderdate = s44.o_orderdate))),
-                    orders)))) as s47,
-        atuple([ascalar(s47.agg0), ascalar(s47.o_orderpriority)], cross)),
-      >= param1, < (param1 + month(3)))))
+                  ascalar(s1.o_orderpriority)))))) as s2,
+    atuple([ascalar(s2.o_orderpriority), ascalar(s2.order_count)], cross)),
+  param1)
