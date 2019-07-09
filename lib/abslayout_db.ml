@@ -359,6 +359,7 @@ module Make (Config : Config.S) = struct
       method run ?timeout r =
         let q = A.ensure_alias r |> Q.of_ralgebra |> Q.hoist_all in
         let r = Q.to_ralgebra q |> simplify in
+        Logs.debug (fun m -> m "Running query: %a" pp r) ;
         let sql = Sql.of_ralgebra r in
         Logs.debug (fun m -> m "Running SQL: %s" (Sql.to_string_hum sql)) ;
         let tups =
