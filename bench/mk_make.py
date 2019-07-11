@@ -142,6 +142,7 @@ for b in bench:
     print('''
 {0}-opt.time: {1}
 \t./{1}/scanner.exe -t $(TIME_PER_BENCH) {1}/data.bin {2} > $@
+\ttime -v ./$</scanner.exe -t $(TIME_PER_BENCH) $</data.bin {1} > {0}-opt.mem
 '''.format(b['name'], out_dir(b), gen_param_values(b)))
 
     print('''
@@ -163,6 +164,7 @@ analysis_{0}-opt.csv.log: {1}
     print('''
 {0}-gold.time: {0}-gold
 \t./$</scanner.exe -t $(TIME_PER_BENCH) $</data.bin {1} > $@
+\ttime -v ./$</scanner.exe -t $(TIME_PER_BENCH) $</data.bin {1} > {0}-gold.mem
 '''.format(b['name'], gen_param_values(b)))
 
     print('''
