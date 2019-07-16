@@ -23,11 +23,10 @@ module T = struct
   [@@deriving compare, hash, sexp]
 
   (* - Visitors doesn't use the special method override syntax that warning 7 checks
-   for.
-   - It uses the Pervasives module directly, which Base doesn't like. *)
+   for. *)
   [@@@warning "-7"]
 
-  module Pervasives = Caml.Pervasives
+  module Pervasives = Stdlib
 
   type pred =
     | Name of (Name.t[@opaque])
