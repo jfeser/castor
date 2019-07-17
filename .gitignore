@@ -32,4 +32,3 @@ config.ini
 _coverage/
 bench/hyper.tar.gz
 bench/hyperdemo
-castor.opam
