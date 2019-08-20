@@ -547,14 +547,16 @@ module Make (C : Config.S) = struct
     let open Option.Let_syntax in
     let%bind p, r = to_filter r in
     let clauses = Pred.disjuncts p in
-    if
-      ( try
-          Tactics_util.all_disjoint
-            (List.map ~f:(Pred.to_static ~params) clauses)
-            r
-        with _ -> false )
-      && List.length clauses > 1
-    then Some (tuple (List.map clauses ~f:(fun p -> filter p r)) Concat)
+    if List.length clauses > 1 then
+      if
+        ( try
+            Tactics_util.all_disjoint
+              (List.map ~f:(Pred.to_static ~params) clauses)
+              r
+          with _ -> false )
+        && List.length clauses > 1
+      then Some (tuple (List.map clauses ~f:(fun p -> filter p r)) Concat)
+      else None
     else None
 
   let elim_disjunct = of_func elim_disjunct ~name:"elim-disjunct"
