@@ -70,6 +70,10 @@ module Make (C : Config.S) = struct
   open C
   include T
   module R = Resolve
+  module M = Abslayout_db.Make(struct
+      include C
+      let simplify = None
+    end)
 
   let trace = false
 
@@ -261,7 +265,9 @@ module Make (C : Config.S) = struct
   let schema_validated tf =
     let f p r =
       Option.map (apply tf p r) ~f:(fun r' ->
-          let s = schema_exn r in
+          let r = M.load_layout ~params r in
+          let r' = M.load_layout ~params r' in
+          let s = schema_exn (r) in
           let s' = schema_exn r' in
           if not( [%compare.equal:Name.t list] s s' )then
             Logs.warn (fun m ->
