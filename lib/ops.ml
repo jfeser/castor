@@ -267,8 +267,8 @@ module Make (C : Config.S) = struct
       Option.map (apply tf p r) ~f:(fun r' ->
           let r = M.load_layout ~params r in
           let r' = M.load_layout ~params r' in
-          let s = schema_exn (r) in
-          let s' = schema_exn r' in
+          let s = schema_exn (r) |> List.dedup_and_sort ~compare:[%compare:Name.t] in
+          let s' = schema_exn r' |> List.dedup_and_sort ~compare:[%compare:Name.t] in
           if not( [%compare.equal:Name.t list] s s' )then
             Logs.warn (fun m ->
                 m "%s is not schema preserving: %a != %a" tf.name Sexp.pp ([%sexp_of:Name.t list] s) Sexp.pp ([%sexp_of:Name.t list] s'))
