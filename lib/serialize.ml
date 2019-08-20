@@ -105,8 +105,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         let keyset =
           Seq.map keys ~f:(fun (k, _) -> k) |> Seq.to_list |> KeySet.create
         in
-        List.find_map_exn [Config.default_chd; `Bdz; `Bmz; `Chm; `Fch]
-          ~f:(fun algo ->
+        List.find_map_exn [Config.default_chd; `Bdz; `Bmz; `Chm] ~f:(fun algo ->
             try
               Some
                 (Config.create ~verbose:true ~seed:0 ~algo keyset |> Hash.of_config)
