@@ -258,6 +258,19 @@ module Make (C : Config.S) = struct
 
   let id = global (fun p r -> Some (Path.get_exn p r)) "id"
 
+  let schema_validated tf =
+    let f p r =
+      Option.map (apply tf p r) ~f:(fun r' ->
+          let s = schema_exn r in
+          let s' = schema_exn r' in
+          if not( [%compare.equal:Name.t list] s s' )then
+            Logs.warn (fun m ->
+                m "%s is not schema preserving: %a != %a" tf.name Sexp.pp ([%sexp_of:Name.t list] s) Sexp.pp ([%sexp_of:Name.t list] s'))
+          ;
+          r')
+    in
+    global f (sprintf "!%s" tf.name)
+
   let validated tf =
     let f p r =
       Option.map (apply tf p r) ~f:(fun r' ->
@@ -309,6 +322,7 @@ module Make (C : Config.S) = struct
           Option.map (f (Path.get_exn p r)) ~f:(Path.set_exn p r))
         name
     in
+    let tf = schema_validated tf in
     let tf = if validate then validated tf else tf in
     if trace then traced tf else tf
 
