@@ -115,13 +115,15 @@ module Make (Config : Config.S) = struct
            (of_list (module Name) (List.filter_map ~f:Pred.to_name ps))))
 
   let all_disjoint ps r =
-    let tup =
-      select [Max (Pred.sum_exn (List.map ps ~f:Pred.pseudo_bool))] r
-      |> Sql.of_ralgebra |> Sql.to_string
-      |> Db.exec_cursor_exn conn [Type.PrimType.int_t]
-      |> Gen.get
-    in
-    match tup with
-    | Some [|Int x|] -> x <= 1
-    | _ -> failwith "Unexpected tuple."
+    if List.length ps <= 1 then true
+    else
+      let tup =
+        select [Max (Pred.sum_exn (List.map ps ~f:Pred.pseudo_bool))] r
+        |> Sql.of_ralgebra |> Sql.to_string
+        |> Db.exec_cursor_exn conn [Type.PrimType.int_t]
+        |> Gen.get
+      in
+      match tup with
+      | Some [|Int x|] -> x <= 1
+      | _ -> failwith "Unexpected tuple."
 end
