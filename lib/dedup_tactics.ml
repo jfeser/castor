@@ -33,10 +33,7 @@ module Make (C : Config.S) = struct
         let rk = strip_scope rk in
         Some (ordered_idx (dedup rk) scope (dedup rv) o)
     | ATuple (ts, Cross) -> Some (tuple (List.map ts ~f:dedup) Cross)
-    | Select (ps, r') ->
-        if List.for_all ps ~f:(function Name _ -> true | _ -> false) then
-          Some (select ps (dedup r'))
-        else None
+    | Select _ -> None
     | _ -> None
 
   let push_dedup = O.of_func push_dedup ~name:"push-dedup"
