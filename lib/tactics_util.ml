@@ -107,6 +107,13 @@ module Make (Config : Config.S) = struct
       |> List.map ~f:(fun n -> Name n) )
       r
 
+  let select_contains names ps r =
+    Set.(
+      is_empty
+        (diff
+           (inter names (of_list (module Name) (schema_exn r)))
+           (of_list (module Name) (List.filter_map ~f:Pred.to_name ps))))
+
   let all_disjoint ps r =
     let tup =
       select [Max (Pred.sum_exn (List.map ps ~f:Pred.pseudo_bool))] r

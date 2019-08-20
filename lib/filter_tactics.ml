@@ -30,18 +30,6 @@ module Make (C : Config.S) = struct
 
   open My_C
 
-  let extend_select ~with_ ps r =
-    let needed_fields =
-      (* These are the fields that are emitted by r, used in with_ and not
-         exposed already by ps. *)
-      Set.diff
-        (Set.inter with_ (Set.of_list (module Name) (schema_exn r)))
-        (Set.of_list (module Name) (List.filter_map ~f:Pred.to_name ps))
-      |> Set.to_list
-      |> List.map ~f:(fun n -> Name n)
-    in
-    ps @ needed_fields
-
   let schema_set_exn r = schema_exn r |> Set.of_list (module Name)
 
   (** Split predicates that sit under a binder into the parts that depend on
@@ -64,13 +52,6 @@ module Make (C : Config.S) = struct
     |> List.dedup_and_sort ~compare:(fun p1 p2 ->
            [%compare: Name.t option] (Schema.to_name p1) (Schema.to_name p2))
 
-  (* let simplify r =
-   *   let open Option.Let_syntax in
-   *   let%map p, r = to_filter r in
-   *   filter (Pred.simplify p) r
-   * 
-   * let hoist_filter = of_func simplify ~name:"simplify" *)
-
   let hoist_filter r =
     let open Option.Let_syntax in
     match r.node with
@@ -92,8 +73,9 @@ module Make (C : Config.S) = struct
         let%bind p, r = to_filter r in
         match select_kind ps with
         | `Scalar ->
-            Some
-              (filter p (select (extend_select ps r ~with_:(pred_free p)) r))
+            if Tactics_util.select_contains (pred_free p) ps r then
+              Some (filter p (select ps r))
+            else None
         | `Agg -> None )
     | Join {pred; r1; r2} -> (
       match (to_filter r1, to_filter r2) with
