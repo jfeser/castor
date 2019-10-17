@@ -19,6 +19,15 @@
  (modules compile))
 
 (executable
+ (name to_cozy)
+ (libraries core castor)
+ (flags
+  (:standard -g -bin-annot))
+ (preprocess
+  (pps ppx_sexp_conv ppx_let))
+ (modules to_cozy))
+
+(executable
  (name sample)
  (libraries core postgresql castor logs)
  (flags

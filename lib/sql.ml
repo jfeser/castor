@@ -4,52 +4,58 @@ open Abslayout
 
 let src =
   let src = Logs.Src.create "sql-test" in
-  Logs.Src.set_level src None ; src
+  Logs.Src.set_level src None;
+  src
 
 module LogT = (val Logs.src_log src : Logs.LOG)
 
-type select_entry = {pred: pred; alias: string; cast: Type.PrimType.t option}
+type select_entry = {
+  pred : pred;
+  alias : string;
+  cast : Type.PrimType.t option;
+}
 [@@deriving compare, sexp_of]
 
-type spj =
-  { select: select_entry list
-  ; distinct: bool
-  ; conds: pred list
-  ; relations:
-      ( [ `Subquery of t * string
-        | `Table of string * string
-        | `Series of Pred.t * Pred.t * string ]
-      * [`Left | `Lateral] )
-      list
-  ; order: (pred * order) list
-  ; group: pred list
-  ; limit: int option }
+type spj = {
+  select : select_entry list;
+  distinct : bool;
+  conds : pred list;
+  relations :
+    ( [ `Subquery of t * string
+      | `Table of relation * string
+      | `Series of Pred.t * Pred.t * string ]
+    * [ `Left | `Lateral ] )
+    list;
+  order : (pred * order) list;
+  group : pred list;
+  limit : int option;
+}
 
 and t = Query of spj | Union_all of spj list [@@deriving compare, sexp_of]
 
-let create_query ?(distinct = false) ?(conds = []) ?(relations = []) ?(order = [])
-    ?(group = []) ?limit select =
-  {select; distinct; conds; relations; order; group; limit}
+let create_query ?(distinct = false) ?(conds = []) ?(relations = [])
+    ?(order = []) ?(group = []) ?limit select =
+  { select; distinct; conds; relations; order; group; limit }
 
 let create_entry ?alias ?cast pred =
   match (alias, Pred.to_name pred) with
-  | Some a, _ -> {pred; alias= a; cast}
+  | Some a, _ -> { pred; alias = a; cast }
   | _, Some n ->
       let fmt = Scanf.format_from_string (Name.to_var n ^ "_%d") "%d" in
       let new_n = Fresh.name Global.fresh fmt in
-      {pred; alias= new_n; cast}
-  | None, None -> {pred; alias= Fresh.name Global.fresh "x%d"; cast}
+      { pred; alias = new_n; cast }
+  | None, None -> { pred; alias = Fresh.name Global.fresh "x%d"; cast }
 
-let select_entry_name {alias; _} = alias
+let select_entry_name { alias; _ } = alias
 
 let to_schema = function
-  | Query {select; _} | Union_all ({select; _} :: _) ->
+  | Query { select; _ } | Union_all ({ select; _ } :: _) ->
       List.map select ~f:select_entry_name
   | Union_all [] -> failwith "No empty unions."
 
 let to_select = function
-  | Union_all qs -> List.concat_map qs ~f:(fun {select; _} -> select)
-  | Query {select; _} -> select
+  | Union_all qs -> List.concat_map qs ~f:(fun { select; _ } -> select)
+  | Query { select; _ } -> select
 
 let to_group = function Union_all _ -> [] | Query q -> q.group
 
@@ -58,7 +64,9 @@ let to_distinct = function Union_all _ -> false | Query q -> q.distinct
 let to_limit = function Union_all _ -> None | Query q -> q.limit
 
 let has_aggregates sql =
-  match to_select sql |> List.map ~f:(fun {pred= p; _} -> p) |> select_kind with
+  match
+    to_select sql |> List.map ~f:(fun { pred = p; _ } -> p) |> select_kind
+  with
   | `Scalar -> false
   | `Agg -> true
 
@@ -69,7 +77,7 @@ let create_subquery ?(extra_select = []) q =
     to_schema q @ extra_select
     |> List.map ~f:(fun n -> create_entry (Name (Name.create n)))
   in
-  create_query ~relations:[(`Subquery (q, alias), `Left)] select_list
+  create_query ~relations:[ (`Subquery (q, alias), `Left) ] select_list
 
 let to_spj = function Query q -> q | Union_all _ as q -> create_subquery q
 
@@ -77,9 +85,9 @@ let make_ctx schema select =
   let pairs, _ = List.zip_with_remainder schema select in
   List.fold pairs
     ~init:(Map.empty (module Name))
-    ~f:(fun m (n, {pred= p; _}) ->
+    ~f:(fun m (n, { pred = p; _ }) ->
       if Map.mem m n then
-        Log.warn (fun m -> m "Duplicate name in schema %a." Name.pp n) ;
+        Log.warn (fun m -> m "Duplicate name in schema %a." Name.pp n);
       Map.set m ~key:n ~data:p)
 
 let join schema1 schema2 sql1 sql2 pred =
@@ -113,10 +121,10 @@ let order_by of_ralgebra key r =
            match p with
            | Name _ | As_pred (Name _, _) -> true
            | _ ->
-               Log.warn (fun m -> m "Non-name in order-by: %a" Pred.pp p) ;
+               Log.warn (fun m -> m "Non-name in order-by: %a" Pred.pp p);
                false)
   in
-  Query {spj with order= key}
+  Query { spj with order = key }
 
 let scoped_names ns p =
   let visitor =
@@ -143,7 +151,10 @@ let select ?groupby of_ralgebra ps r =
     let needs_subquery =
       let for_agg =
         match
-          (kind, to_select sql |> List.map ~f:(fun {pred= p; _} -> p) |> select_kind)
+          ( kind,
+            to_select sql
+            |> List.map ~f:(fun { pred = p; _ } -> p)
+            |> select_kind )
         with
         | `Scalar, _ -> false
         | `Agg, `Scalar | `Agg, `Agg -> true
@@ -169,17 +180,19 @@ let select ?groupby of_ralgebra ps r =
         Set.to_list scoped
         |> List.map ~f:(fun n -> create_entry ~alias:(Name.name n) (Name n))
       in
-      create_subquery (Query {spj with select= spj.select @ extra_fields})
+      create_subquery (Query { spj with select = spj.select @ extra_fields })
     else spj
   in
   let sctx = make_ctx (schema_exn r) spj.select in
-  let fields = List.map ps ~f:(fun p -> p |> Pred.subst sctx |> create_entry) in
-  let spj = {spj with select= fields} in
+  let fields =
+    List.map ps ~f:(fun p -> p |> Pred.subst sctx |> create_entry)
+  in
+  let spj = { spj with select = fields } in
   let spj =
     match groupby with
     | Some key ->
         let group = List.map key ~f:(Pred.subst sctx) in
-        {spj with group}
+        { spj with group }
     | None -> spj
   in
   Query spj
@@ -196,10 +209,10 @@ let filter of_ralgebra pred r =
     let ctx = make_ctx (schema_exn r) spj.select in
     Pred.subst ctx pred
   in
-  Query {spj with conds= pred :: spj.conds}
+  Query { spj with conds = pred :: spj.conds }
 
 let dep_join of_ralgebra q1 scope q2 =
-  let sql1 = Query {(to_spj (of_ralgebra q1)) with order= []} in
+  let sql1 = Query { (to_spj (of_ralgebra q1)) with order = [] } in
   let sql1_names = to_schema sql1 in
   let q2 =
     (* Create a context that maps the names emitted by q1 (scoped) to the
@@ -212,7 +225,7 @@ let dep_join of_ralgebra q1 scope q2 =
     in
     subst ctx q2
   in
-  let sql2 = Query {(of_ralgebra q2 |> to_spj) with order= []} in
+  let sql2 = Query { (of_ralgebra q2 |> to_spj) with order = [] } in
   let sql2_names = to_schema sql2 in
   let select_list =
     List.map sql2_names ~f:(fun n -> create_entry (Name (Name.create n)))
@@ -220,8 +233,10 @@ let dep_join of_ralgebra q1 scope q2 =
   Query
     (create_query
        ~relations:
-         [ (`Subquery (sql1, Fresh.name Global.fresh "t%d"), `Left)
-         ; (`Subquery (sql2, Fresh.name Global.fresh "t%d"), `Lateral) ]
+         [
+           (`Subquery (sql1, Fresh.name Global.fresh "t%d"), `Left);
+           (`Subquery (sql2, Fresh.name Global.fresh "t%d"), `Lateral);
+         ]
        select_list)
 
 let of_ralgebra r =
@@ -232,35 +247,36 @@ let of_ralgebra r =
         let alias = Fresh.name Global.fresh "t%d" in
         Query
           (create_query
-             ~relations:[(`Series (p, p', alias), `Left)]
-             [create_entry (Name (Name.create "range"))])
-    | Dedup r -> Query {(to_spj (f r)) with distinct= true}
-    | Relation {r_name= tbl; _} ->
+             ~relations:[ (`Series (p, p', alias), `Left) ]
+             [ create_entry (Name (Name.create "range")) ])
+    | Dedup r -> Query { (to_spj (f r)) with distinct = true }
+    | Relation ({ r_name = tbl; _ } as rel) ->
         let tbl_alias = tbl ^ Fresh.name Global.fresh "_%d" in
         (* Add table alias to all fields to generate a select list. *)
         let select_list =
           List.map (schema_exn r) ~f:(fun n ->
               create_entry (Name (Name.copy n ~scope:(Some tbl_alias))))
         in
-        let relations = [(`Table (tbl, tbl_alias), `Left)] in
+        let relations = [ (`Table (rel, tbl_alias), `Left) ] in
         Query (create_query ~relations select_list)
     | Filter (pred, r) -> filter f pred r
-    | OrderBy {key; rel= r} -> order_by f key r
+    | OrderBy { key; rel = r } -> order_by f key r
     | Select (fs, r) -> select f fs r
-    | DepJoin {d_lhs; d_rhs; d_alias} -> dep_join f d_lhs d_alias d_rhs
-    | Join {pred; r1; r2} -> join (schema_exn r1) (schema_exn r2) (f r1) (f r2) pred
+    | DepJoin { d_lhs; d_rhs; d_alias } -> dep_join f d_lhs d_alias d_rhs
+    | Join { pred; r1; r2 } ->
+        join (schema_exn r1) (schema_exn r2) (f r1) (f r2) pred
     | GroupBy (ps, key, r) ->
         let key = List.map ~f:(fun n -> Name n) key in
         select ~groupby:key f ps r
     | ATuple ([], _) -> failwith "Empty tuple."
-    | ATuple ([r], (Cross | Concat)) -> f r
+    | ATuple ([ r ], (Cross | Concat)) -> f r
     | ATuple (r :: rs, Cross) ->
         let q1 = r in
         let q2 = tuple rs Cross in
         join (schema_exn q1) (schema_exn q2) (f q1) (f q2) (Bool true)
     | ATuple (rs, Concat) -> Union_all (List.map ~f:(fun r -> to_spj (f r)) rs)
     | AEmpty -> Query (create_query ~limit:0 [])
-    | AScalar p -> Query (create_query [create_entry p])
+    | AScalar p -> Query (create_query [ create_entry p ])
     | ATuple (_, Zip) ->
         Error.(create "Unsupported." r [%sexp_of: Abslayout.t] |> raise)
     | AList (rk, rv) -> f (list_to_depjoin rk rv)
@@ -327,21 +343,24 @@ let rec pred_to_sql p =
   | Max n -> sprintf "max(%s)" (p2s n)
   | Row_number -> "row_number() over ()"
 
-and spj_to_sql {select; distinct; order; group; relations; conds; limit} =
+and spj_to_sql { select; distinct; order; group; relations; conds; limit } =
   let select =
     (* If there is no grouping key and there are aggregates in the select list,
        then we need to deal with any non-aggregates in the select. *)
     if List.is_empty group then
-      match select_kind (List.map select ~f:(fun {pred= p; _} -> p)) with
+      match select_kind (List.map select ~f:(fun { pred = p; _ } -> p)) with
       | `Agg ->
-          List.map select ~f:(fun ({pred= p; _} as entry) ->
-              {entry with pred= (if Pred.kind p = `Scalar then Min p else p)})
+          List.map select ~f:(fun ({ pred = p; _ } as entry) ->
+              {
+                entry with
+                pred = (if Pred.kind p = `Scalar then Min p else p);
+              })
       | `Scalar -> select
     else select
   in
   let select_sql =
     let select_list =
-      List.map select ~f:(fun {pred= p; alias= n; cast= t} ->
+      List.map select ~f:(fun { pred = p; alias = n; cast = t } ->
           let alias_sql =
             match p with
             | Name n' when Name.O.(Name.create n = n') -> ""
@@ -361,12 +380,15 @@ and spj_to_sql {select; distinct; order; group; relations; conds; limit} =
       List.map relations ~f:(fun (rel, join_type) ->
           let rel_str =
             match rel with
-            | `Subquery (q, alias) -> sprintf "(%s) as \"%s\"" (to_string q) alias
+            | `Subquery (q, alias) ->
+                sprintf "(%s) as \"%s\"" (to_string q) alias
             | `Table (t, alias) ->
-                if String.(t = alias) then sprintf "\"%s\"" t
-                else sprintf "\"%s\" as \"%s\"" t alias
+                if String.(t.r_name = alias) then sprintf "\"%s\"" t.r_name
+                else sprintf "\"%s\" as \"%s\"" t.r_name alias
             | `Series (p, p', alias) -> (
-                let t = Type.PrimType.unify (Pred.to_type p) (Pred.to_type p') in
+                let t =
+                  Type.PrimType.unify (Pred.to_type p) (Pred.to_type p')
+                in
                 match t with
                 | DateT _ ->
                     sprintf
@@ -375,8 +397,8 @@ and spj_to_sql {select; distinct; order; group; relations; conds; limit} =
 generate_series(%s :: timestamp, %s :: timestamp, '1 day' :: interval) range) as "%s"|}
                       (pred_to_sql p) (pred_to_sql p') alias
                 | IntT _ ->
-                    sprintf "generate_series(%s, %s) as %s(range)" (pred_to_sql p)
-                      (pred_to_sql p') alias
+                    sprintf "generate_series(%s, %s) as %s(range)"
+                      (pred_to_sql p) (pred_to_sql p') alias
                 | _ -> failwith "Unexpected series type." )
           in
           let join_str =
@@ -394,7 +416,9 @@ generate_series(%s :: timestamp, %s :: timestamp, '1 day' :: interval) range) as
   let group_sql =
     if List.is_empty group then ""
     else
-      let group_keys = List.map group ~f:pred_to_sql |> String.concat ~sep:", " in
+      let group_keys =
+        List.map group ~f:pred_to_sql |> String.concat ~sep:", "
+      in
       sprintf "group by (%s)" group_keys
   in
   let order_sql =
@@ -412,9 +436,11 @@ generate_series(%s :: timestamp, %s :: timestamp, '1 day' :: interval) range) as
       in
       sprintf "order by %s" order_keys
   in
-  let limit_sql = match limit with Some l -> sprintf "limit %d" l | None -> "" in
-  sprintf "%s %s %s %s %s %s" select_sql relation_sql cond_sql group_sql order_sql
-    limit_sql
+  let limit_sql =
+    match limit with Some l -> sprintf "limit %d" l | None -> ""
+  in
+  sprintf "%s %s %s %s %s %s" select_sql relation_sql cond_sql group_sql
+    order_sql limit_sql
   |> String.strip
 
 and to_string = function
@@ -431,5 +457,5 @@ let to_string_hum sql =
   match OS.Cmd.to_string ~trim:true out with
   | Ok sql' -> sql'
   | Error msg ->
-      Log.warn (fun m -> m "Formatting sql failed: %a." Rresult.R.pp_msg msg) ;
+      Log.warn (fun m -> m "Formatting sql failed: %a." Rresult.R.pp_msg msg);
       sql_str
