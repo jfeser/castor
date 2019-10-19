@@ -28,6 +28,10 @@ val src : Logs.Src.t
 
 val of_ralgebra : Abslayout.t -> t
 
+val has_aggregates : t -> bool
+
+val to_schema : t -> string list
+
 val to_string : t -> string
 
 val to_string_hum : t -> string
