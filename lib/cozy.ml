@@ -51,7 +51,7 @@ let rec pred_to_cozy subst p =
   | First r ->
       let sql = of_ralgebra r |> to_string in
       sprintf "(%s)" sql
-  | Substring (p1, p2, p3) -> failwith "Substring unsupported"
+  | Substring _ -> failwith "Substring unsupported"
   | Count -> "count(*)"
   | Sum n -> sprintf "sum(%s)" (p2s n)
   | Avg n -> sprintf "avg(%s)" (p2s n)
@@ -63,31 +63,39 @@ let subst_of_schema bind schema =
   List.mapi schema ~f:(fun i n -> (n, sprintf "%s.%d" bind i))
   |> Map.of_alist_exn (module Name)
 
+let type_to_cozy = function
+  | Type.PrimType.IntT _ | DateT _ -> "Int"
+  | BoolT _ -> "Bool"
+  | StringT _ -> "String"
+  | FixedT _ -> "Float"
+  | _ -> failwith "Unexpected type."
+
 let to_cozy args q =
   let fresh = Fresh.create () in
   let rec to_cozy args q =
     let query_name = Fresh.name fresh "q%d" in
+    let args_decl =
+      List.map args ~f:(fun n ->
+          sprintf "%s:%s" (Name.name n) (type_to_cozy (Name.type_exn n)))
+      |> String.concat ~sep:", "
+    in
+    let args_call = List.map args ~f:Name.name |> String.concat ~sep:", " in
+    let make_query ?(name = query_name) =
+      sprintf "query %s(%s)\n\t%s" name args_decl
+    in
+    let call ?(args = args_call) n = sprintf "%s(%s)" n args in
     match q.node with
     | Relation r ->
         let rel_type =
           Option.value_exn r.r_schema
-          |> List.map ~f:(fun n ->
-                 match Name.type_exn n with
-                 | IntT _ | DateT _ -> "Int"
-                 | BoolT _ -> "Bool"
-                 | StringT _ -> "String"
-                 | FixedT _ -> "Float"
-                 | _ -> failwith "Unexpected type.")
+          |> List.map ~f:(fun n -> type_to_cozy (Name.type_exn n))
           |> String.concat ~sep:"," |> sprintf "(%s)"
         in
         {
           state =
             [ (r.r_name, sprintf "state %s : Bag<%s>" r.r_name rel_type) ];
           queries =
-            [
-              ( query_name,
-                sprintf "query %s()\n\t[t | t <- %s]" query_name r.r_name );
-            ];
+            [ (query_name, make_query (sprintf "[t | t <- %s]" r.r_name)) ];
           top_query = query_name;
         }
     | Dedup q ->
@@ -96,20 +104,20 @@ let to_cozy args q =
           cq with
           top_query = query_name;
           queries =
-            ( query_name,
-              sprintf "query %s()\n\tdistinct %s()" query_name cq.top_query )
+            (query_name, make_query (sprintf "distinct %s" (call cq.top_query)))
             :: cq.queries;
         }
     | Filter (p, q) ->
-        let subst = subst_of_schema "t" (schema_exn q) |> Map.merge_exn args in
+        let subst = subst_of_schema "t" (schema_exn q) in
         let cq = to_cozy args q in
         {
           cq with
           top_query = query_name;
           queries =
             ( query_name,
-              sprintf "query %s()\n\t[t | t <- %s(), %s]" query_name
-                cq.top_query (pred_to_cozy subst p) )
+              make_query
+                (sprintf "[t | t <- %s, %s]" (call cq.top_query)
+                   (pred_to_cozy subst p)) )
             :: cq.queries;
         }
     | Join { pred; r1; r2 } ->
@@ -119,7 +127,6 @@ let to_cozy args q =
           Map.merge_exn
             (subst_of_schema "t1" r1_schema)
             (subst_of_schema "t2" r2_schema)
-          |> Map.merge_exn args
         in
         let c1 = to_cozy args r1 in
         let c2 = to_cozy args r2 in
@@ -132,9 +139,10 @@ let to_cozy args q =
           top_query = query_name;
           queries =
             ( query_name,
-              sprintf "query %s()\n\t[%s | t1 <- %s(), t2 <- %s(), %s]"
-                query_name out_tuple c1.top_query c2.top_query
-                (pred_to_cozy subst pred) )
+              make_query
+                (sprintf "[%s | t1 <- %s, t2 <- %s, %s]" out_tuple
+                   (call c1.top_query) (call c2.top_query)
+                   (pred_to_cozy subst pred)) )
             :: (c1.queries @ c2.queries);
           state = c1.state @ c2.state;
         }
@@ -144,7 +152,7 @@ let to_cozy args q =
         to_cozy args rel
     | Select (sel, q) -> (
         let c = to_cozy args q in
-        let subst = subst_of_schema "t" (schema_exn q) |> Map.merge_exn args in
+        let subst = subst_of_schema "t" (schema_exn q) in
         match select_kind sel with
         | `Scalar ->
             let out_tuple =
@@ -156,25 +164,26 @@ let to_cozy args q =
               top_query = query_name;
               queries =
                 ( query_name,
-                  sprintf "query %s()\n\t [%s | t <- %s()]" query_name
-                    out_tuple c.top_query )
+                  make_query
+                    (sprintf "[%s | t <- %s]" out_tuple (call c.top_query)) )
                 :: c.queries;
             }
         | `Agg ->
             let out_exprs, in_exprs, queries =
               List.map sel ~f:(fun p ->
                   let query_name = Fresh.name fresh "q%d" in
-                  let inner_query = sprintf "t <- %s()" c.top_query in
+                  let inner_query = sprintf "t <- %s" (call c.top_query) in
                   match Pred.kind p with
                   | `Window -> failwith "Windows not implemented"
                   | `Scalar ->
                       let value_name = Fresh.name fresh "x%d" in
                       ( value_name,
-                        [ sprintf "%s <- %s()" value_name query_name ],
+                        [ sprintf "%s <- %s" value_name (call query_name) ],
                         [
                           ( query_name,
-                            sprintf "query %s()\n\t min [%s | %s]" query_name
-                              (pred_to_cozy subst p) inner_query );
+                            make_query
+                              (sprintf "min [%s | %s]" (pred_to_cozy subst p)
+                                 inner_query) );
                         ] )
                   | `Agg ->
                       let outer, inner = Pred.collect_aggs p in
@@ -186,53 +195,57 @@ let to_cozy args q =
                               | Sum p ->
                                   [
                                     ( query_name,
-                                      sprintf "query %s()\n\t sum [%s | %s]"
-                                        query_name (pred_to_cozy subst p)
-                                        inner_query );
+                                      make_query ~name:query_name
+                                        (sprintf "sum [%s | %s]"
+                                           (pred_to_cozy subst p) inner_query)
+                                    );
                                   ]
                               | Min p ->
                                   [
                                     ( query_name,
-                                      sprintf "query %s()\n\t min [%s | %s]"
-                                        query_name (pred_to_cozy subst p)
-                                        inner_query );
+                                      make_query ~name:query_name
+                                        (sprintf "min [%s | %s]"
+                                           (pred_to_cozy subst p) inner_query)
+                                    );
                                   ]
                               | Max p ->
                                   [
                                     ( query_name,
-                                      sprintf "query %s()\n\t max [%s | %s]"
-                                        query_name (pred_to_cozy subst p)
-                                        inner_query );
+                                      make_query ~name:query_name
+                                        (sprintf "max [%s | %s]"
+                                           (pred_to_cozy subst p) inner_query)
+                                    );
                                   ]
                               | Count ->
                                   [
                                     ( query_name,
-                                      sprintf "query %s()\n\t sum [1 | %s]"
-                                        query_name inner_query );
+                                      make_query ~name:query_name
+                                        (sprintf "sum [1 | %s]" inner_query) );
                                   ]
                               | Avg p ->
                                   let qn1 = Fresh.name fresh "q%d" in
                                   let qn2 = Fresh.name fresh "q%d" in
                                   let q1 =
-                                    sprintf "query %s()\n\t sum [%s | %s]\n"
-                                      qn1 (pred_to_cozy subst p) inner_query
+                                    make_query ~name:qn1
+                                      (sprintf "sum [%s | %s]"
+                                         (pred_to_cozy subst p) inner_query)
                                   in
                                   let q2 =
-                                    sprintf "query %s()\n\t sum [1 | %s]\n" qn2
-                                      inner_query
+                                    make_query ~name:qn2
+                                      (sprintf "sum [1 | %s]" inner_query)
                                   in
                                   [
                                     (qn1, q1);
                                     (qn2, q2);
                                     ( query_name,
-                                      sprintf
-                                        "query %s()\n\
-                                         \t [e1 / e2 | e1 <- %s(), e2 <- %s()]"
-                                        query_name qn1 qn2 );
+                                      make_query ~name:query_name
+                                        (sprintf
+                                           "[e1 / e2 | e1 <- %s, e2 <- %s]"
+                                           (call qn1) (call qn2)) );
                                   ]
                               | _ -> failwith "Not an aggregate."
                             in
-                            (sprintf "%s <- %s()" name query_name, queries))
+                            (sprintf "%s <- %s" name (call query_name), queries))
                         |> List.unzip
                       in
                       (pred_to_cozy subst outer, binds, List.concat queries))
@@ -243,18 +256,22 @@ let to_cozy args q =
               top_query = query_name;
               queries =
                 ( query_name,
-                  sprintf "query %s()\n\t [(%s) | %s]" query_name
-                    (out_exprs |> String.concat ~sep:", ")
-                    (in_exprs |> List.concat |> String.concat ~sep:", ") )
+                  make_query
+                    (sprintf "[(%s) | %s]"
+                       (out_exprs |> String.concat ~sep:", ")
+                       (in_exprs |> List.concat |> String.concat ~sep:", ")) )
                 :: (List.concat queries @ c.queries);
             } )
-    | GroupBy (_, key, q) -> failwith ""
+    | GroupBy _ ->
+        failwith ""
+        (* let kc = to_cozy args (dedup (select (List.map ~f:Pred.name key) q)) in
+         * sprintf "query %s()\n\t[t | t1 <- %s(), ]" *)
     | _ -> failwith "Unimplemented"
   in
   to_cozy args q
 
-let to_string bench_name q =
-  let x = to_cozy (Map.empty (module Name)) q in
+let to_string bench_name params q =
+  let x = to_cozy params q in
   let state =
     List.dedup_and_sort x.state ~compare:(fun (n, _) (n', _) ->
         [%compare: string] n n')
