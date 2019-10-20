@@ -5,7 +5,11 @@ let main kind =
     match Config_defaults.llvm_root with
     | Some r -> r
     | None ->
-        let configs = ["llvm-config"; "llvm-config-6.0"] in
+        let configs =
+          [ "llvm-config"
+          ; "llvm-config-6.0"
+          ; "/usr/local/Cellar/llvm@7/7.1.0/bin/llvm-config" ]
+        in
         let dir =
           List.find_map configs ~f:(fun c ->
               try
