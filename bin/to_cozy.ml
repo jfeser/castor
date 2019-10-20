@@ -14,7 +14,7 @@ let main conn params file =
     let params = Set.of_list (module Name) params in
     A.load_string ~params (In_channel.with_file file ~f:In_channel.input_all)
   in
-  Cozy.to_string bench_name ralgebra |> print_string
+  Cozy.to_string bench_name params ralgebra |> print_string
 
 let () =
   (* Set early so we get logs from command parsing code. *)

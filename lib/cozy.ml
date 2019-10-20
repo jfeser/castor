@@ -79,11 +79,13 @@ let to_cozy args q =
           sprintf "%s:%s" (Name.name n) (type_to_cozy (Name.type_exn n)))
       |> String.concat ~sep:", "
     in
-    let args_call = List.map args ~f:Name.name |> String.concat ~sep:", " in
     let make_query ?(name = query_name) =
       sprintf "query %s(%s)\n\t%s" name args_decl
     in
-    let call ?(args = args_call) n = sprintf "%s(%s)" n args in
+    let call ?(args = args) n =
+      let args_str = List.map args ~f:Name.name |> String.concat ~sep:", " in
+      sprintf "%s(%s)" n args_str
+    in
     match q.node with
     | Relation r ->
         let rel_type =
@@ -262,10 +264,35 @@ let to_cozy args q =
                        (in_exprs |> List.concat |> String.concat ~sep:", ")) )
                 :: (List.concat queries @ c.queries);
             } )
-    | GroupBy _ ->
-        failwith ""
-        (* let kc = to_cozy args (dedup (select (List.map ~f:Pred.name key) q)) in
-         * sprintf "query %s()\n\t[t | t1 <- %s(), ]" *)
+    | GroupBy (sel, key, q) ->
+        let kc = to_cozy args (dedup (select (List.map ~f:Pred.name key) q)) in
+        let filter_preds, pred_args =
+          List.map key ~f:(fun k ->
+              let arg =
+                Name.create ~type_:(Name.type_exn k) (Fresh.name fresh "x%d")
+              in
+              (Pred.(binop (Eq, name k, name arg)), arg))
+          |> List.unzip
+        in
+        let vc =
+          to_cozy (args @ pred_args)
+            (select sel (filter (Pred.conjoin filter_preds) q))
+        in
+        let args_str =
+          List.map ~f:Name.name args
+          @ List.init (List.length (schema_exn q)) ~f:(sprintf "k.%d")
+          |> String.concat ~sep:", "
+        in
+        {
+          top_query = query_name;
+          queries =
+            ( query_name,
+              make_query
+                (sprintf "[t | k <- %s, t <- %s(%s)]" (call kc.top_query)
+                   vc.top_query args_str) )
+            :: (kc.queries @ vc.queries);
+          state = kc.state @ vc.state;
+        }
     | _ -> failwith "Unimplemented"
   in
   to_cozy args q
