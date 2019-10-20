@@ -7,7 +7,7 @@ let strip_meta =
     object
       inherit [_] map as super
 
-      method! visit_t () t = {(super#visit_t () t) with meta= Meta.empty ()}
+      method! visit_t () t = { (super#visit_t () t) with meta = Meta.empty () }
     end
   in
   visitor#visit_t ()
@@ -48,33 +48,35 @@ let alpha_scopes r =
   in
   visitor#visit_t () r
 
-let wrap x = {node= x; meta= Meta.empty ()}
+let wrap x = { node = x; meta = Meta.empty () }
 
 let select a b = wrap (Select (a, strip_meta b))
 
 let ensure_no_overlap_2 r1 r2 ss =
   if
-    Set.inter (scopes r1) (Set.union (scopes r2) (Set.of_list (module String) ss))
+    Set.inter (scopes r1)
+      (Set.union (scopes r2) (Set.of_list (module String) ss))
     |> Set.is_empty
   then (r1, r2)
   else (alpha_scopes r1, r2)
 
 let ensure_no_overlap_k rs =
   let all_scopes = List.map ~f:scopes rs in
-  if Set.any_overlap (module String) all_scopes then List.map rs ~f:alpha_scopes
+  if Set.any_overlap (module String) all_scopes then
+    List.map rs ~f:alpha_scopes
   else rs
 
 let range a b = wrap (Range (a, b))
 
 let dep_join a b c =
-  let a, c = ensure_no_overlap_2 a c [b] in
-  wrap (DepJoin {d_lhs= strip_meta a; d_alias= b; d_rhs= strip_meta c})
+  let a, c = ensure_no_overlap_2 a c [ b ] in
+  wrap (DepJoin { d_lhs = strip_meta a; d_alias = b; d_rhs = strip_meta c })
 
 let dep_join' d = dep_join d.d_lhs d.d_alias d.d_rhs
 
 let join a b c =
   let b, c = ensure_no_overlap_2 b c [] in
-  wrap (Join {pred= a; r1= strip_meta b; r2= strip_meta c})
+  wrap (Join { pred = a; r1 = strip_meta b; r2 = strip_meta c })
 
 let filter a b = wrap (Filter (a, strip_meta b))
 
@@ -82,7 +84,7 @@ let group_by a b c = wrap (GroupBy (a, b, strip_meta c))
 
 let dedup a = wrap (Dedup (strip_meta a))
 
-let order_by a b = wrap (OrderBy {key= a; rel= strip_meta b})
+let order_by a b = wrap (OrderBy { key = a; rel = strip_meta b })
 
 let relation r = wrap (Relation r)
 
@@ -94,7 +96,7 @@ let as_ a b = wrap (As (a, strip_meta b))
 
 let list a b c =
   let a = strip_scope a in
-  let a, c = ensure_no_overlap_2 a c [b] in
+  let a, c = ensure_no_overlap_2 a c [ b ] in
   wrap (AList (strip_meta (as_ b a), strip_meta c))
 
 let list' (a, b) = list a (scope_exn a) b
@@ -106,32 +108,35 @@ let tuple a b =
 
 let hash_idx ?key_layout a b c d =
   let a = strip_scope a in
-  let a, c = ensure_no_overlap_2 a c [b] in
+  let a, c = ensure_no_overlap_2 a c [ b ] in
   wrap
     (AHashIdx
-       { hi_keys= strip_meta a
-       ; hi_values= strip_meta c
-       ; hi_scope= b
-       ; hi_lookup= d
-       ; hi_key_layout= key_layout })
+       {
+         hi_keys = strip_meta a;
+         hi_values = strip_meta c;
+         hi_scope = b;
+         hi_lookup = d;
+         hi_key_layout = key_layout;
+       })
 
-let h_key_layout {hi_key_layout; _} =
+let h_key_layout { hi_key_layout; _ } =
   Option.value_exn ~message:"No key layout annotation found." hi_key_layout
 
 let hash_idx' h =
-  hash_idx ?key_layout:h.hi_key_layout h.hi_keys h.hi_scope h.hi_values h.hi_lookup
+  hash_idx ?key_layout:h.hi_key_layout h.hi_keys h.hi_scope h.hi_values
+    h.hi_lookup
 
 let ordered_idx a b c d =
   let a = strip_scope a in
-  let a, c = ensure_no_overlap_2 a c [b] in
+  let a, c = ensure_no_overlap_2 a c [ b ] in
   wrap (AOrderedIdx (strip_meta (as_ b a), strip_meta c, d))
 
-let o_key_layout {oi_key_layout; _} =
+let o_key_layout { oi_key_layout; _ } =
   Option.value_exn ~message:"No key layout annotation found." oi_key_layout
 
 let rec and_ = function
   | [] -> Bool true
-  | [x] -> x
+  | [ x ] -> x
   | x :: xs -> Binop (And, x, and_ xs)
 
 let schema_exn = Schema.schema_exn
@@ -158,7 +163,7 @@ let name r =
 let of_lexbuf_exn lexbuf =
   try Ralgebra_parser.ralgebra_eof Ralgebra_lexer.token lexbuf
   with Parser_utils.ParseError (msg, line, col) as e ->
-    Log.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
+    Log.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col);
     raise e
 
 let of_channel_exn ch = of_lexbuf_exn (Lexing.from_channel ch)
@@ -168,7 +173,7 @@ let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
 let name_of_lexbuf_exn lexbuf =
   try Ralgebra_parser.name_eof Ralgebra_lexer.token lexbuf
   with Parser_utils.ParseError (msg, line, col) as e ->
-    Log.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
+    Log.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col);
     raise e
 
 let name_of_string_exn s = name_of_lexbuf_exn (Lexing.from_string s)
@@ -217,18 +222,22 @@ and free r =
     | Relation _ | AEmpty | Range _ -> empty
     | AScalar p -> pred_free p
     | Select (ps, r') ->
-        Set.O.(free r' || ((List.map ps ~f:pred_free |> union_list) - exposed r'))
-    | Filter (p, r') -> Set.union (free r') (Set.diff (pred_free p) (exposed r'))
+        Set.O.(
+          free r' || ((List.map ps ~f:pred_free |> union_list) - exposed r'))
+    | Filter (p, r') ->
+        Set.union (free r') (Set.diff (pred_free p) (exposed r'))
     | Dedup r' -> free r'
-    | DepJoin {d_lhs; d_alias; d_rhs} ->
+    | DepJoin { d_lhs; d_alias; d_rhs } ->
         Set.O.(free d_lhs || (free d_rhs - (exposed d_lhs |> scope d_alias)))
-    | Join {pred; r1; r2} ->
-        Set.O.(free r1 || free r2 || (pred_free pred - (exposed r1 || exposed r2)))
+    | Join { pred; r1; r2 } ->
+        Set.O.(
+          free r1 || free r2 || (pred_free pred - (exposed r1 || exposed r2)))
     | GroupBy (ps, key, r') ->
         Set.O.(
           free r'
-          || ((List.map ps ~f:pred_free |> union_list || of_list key) - exposed r'))
-    | OrderBy {key; rel} ->
+          || (List.map ps ~f:pred_free |> union_list || of_list key)
+             - exposed r')
+    | OrderBy { key; rel } ->
         Set.O.(
           free rel
           || (List.map key ~f:(fun (p, _) -> pred_free p) |> union_list)
@@ -236,9 +245,11 @@ and free r =
     | AList (r', r'') -> Set.O.(free r' || (free r'' - exposed r'))
     | AHashIdx h ->
         union_list
-          [ free h.hi_keys
-          ; Set.diff (free h.hi_values) (exposed h.hi_keys)
-          ; List.map ~f:pred_free h.hi_lookup |> union_list ]
+          [
+            free h.hi_keys;
+            Set.diff (free h.hi_values) (exposed h.hi_keys);
+            List.map ~f:pred_free h.hi_lookup |> union_list;
+          ]
     | AOrderedIdx (r', r'', m) ->
         let one_bound_free = function
           | Some (p, _) -> pred_free p
@@ -248,7 +259,7 @@ and free r =
           Set.union (one_bound_free b1) (one_bound_free b2)
         in
         union_list
-          ( [free r'; Set.diff (free r'') (exposed r')]
+          ( [ free r'; Set.diff (free r'') (exposed r') ]
           @ List.map ~f:bound_free m.oi_lookup )
     | ATuple (rs, (Zip | Concat)) -> List.map rs ~f:free |> union_list
     | ATuple (rs, Cross) ->
@@ -261,7 +272,7 @@ and free r =
         n
     | As (_, r') -> free r'
   in
-  Meta.(set_m r free free_set) ;
+  Meta.(set_m r free free_set);
   free_set
 
 (** Annotate all subexpressions with its set of free names. *)
@@ -286,7 +297,7 @@ let exists_bare_relations r =
 
       method! visit_t () r =
         match r.node with
-        | As (_, {node= Relation _; _}) -> self#zero
+        | As (_, { node = Relation _; _ }) -> self#zero
         | As (_, r') -> self#visit_t () r'
         | Relation _ -> true
         | _ -> super#visit_t () r
@@ -306,7 +317,7 @@ let annotate_eq r =
       inherit [_] iter as super
 
       method! visit_As m n r =
-        super#visit_As None n r ;
+        super#visit_As None n r;
         let m = Option.value_exn m in
         let schema = schema_exn r in
         let eqs =
@@ -316,14 +327,14 @@ let annotate_eq r =
         Meta.Direct.set_m m Meta.eq eqs
 
       method! visit_Filter m (p, r) =
-        super#visit_Filter None (p, r) ;
+        super#visit_Filter None (p, r);
         let m = Option.value_exn m in
         let r_eqs = Meta.(find_exn r eq) in
         let eqs = Pred.eqs p @ r_eqs |> dedup_pairs in
         Meta.Direct.set_m m Meta.eq eqs
 
       method! visit_Select m (ps, r) =
-        super#visit_Select None (ps, r) ;
+        super#visit_Select None (ps, r);
         let m = Option.value_exn m in
         let eqs =
           Meta.(find_exn r eq)
@@ -333,14 +344,16 @@ let annotate_eq r =
                      (let open Name.O in
                      function
                      | Name n'' when n'' = n' || n'' = n -> Some eq
-                     | As_pred (Name n'', s) when n'' = n -> Some (Name.create s, n')
-                     | As_pred (Name n'', s) when n'' = n' -> Some (n, Name.create s)
+                     | As_pred (Name n'', s) when n'' = n ->
+                         Some (Name.create s, n')
+                     | As_pred (Name n'', s) when n'' = n' ->
+                         Some (n, Name.create s)
                      | _ -> None))
         in
         Meta.Direct.set_m m Meta.eq eqs
 
-      method! visit_Join m ({pred= p; r1; r2} as j) =
-        super#visit_Join None j ;
+      method! visit_Join m ({ pred = p; r1; r2 } as j) =
+        super#visit_Join None j;
         let m = Option.value_exn m in
         let r1_eqs = Meta.(find_exn r1 eq) in
         let r2_eqs = Meta.(find_exn r2 eq) in
@@ -348,40 +361,45 @@ let annotate_eq r =
         Meta.Direct.set_m m Meta.eq eqs
 
       method! visit_AList m (r1, r2) =
-        super#visit_AList None (r1, r2) ;
+        super#visit_AList None (r1, r2);
         let m = Option.value_exn m in
         let r1_eqs = Meta.(find_exn r1 eq) in
         let r2_eqs = Meta.(find_exn r2 eq) in
         let eqs = r1_eqs @ r2_eqs |> dedup_pairs in
         Meta.Direct.set_m m Meta.eq eqs
 
-      method! visit_t _ ({meta; _} as r) =
-        Meta.(set_m r eq []) ;
+      method! visit_t _ ({ meta; _ } as r) =
+        Meta.(set_m r eq []);
         super#visit_t (Some meta) r
     end
   in
   visitor#visit_t None r
 
 let select_kind l =
-  if List.exists l ~f:(fun p -> Poly.(Pred.kind p = `Agg)) then `Agg else `Scalar
+  if List.exists l ~f:(fun p -> Poly.(Pred.kind p = `Agg)) then `Agg
+  else `Scalar
 
 class ['a] stage_iter =
   object (self : 'a)
     inherit [_] iter
 
     method! visit_AList phase (rk, rv) =
-      self#visit_t `Compile rk ;
+      self#visit_t `Compile rk;
       self#visit_t phase rv
 
     method! visit_AHashIdx phase h =
-      List.iter h.hi_lookup ~f:(self#visit_pred phase) ;
-      self#visit_t `Compile h.hi_keys ;
+      List.iter h.hi_lookup ~f:(self#visit_pred phase);
+      self#visit_t `Compile h.hi_keys;
       self#visit_t phase h.hi_values
 
     method! visit_AOrderedIdx phase (rk, rv, m) =
-      let bound_iter = Option.iter ~f:(fun (p, _) -> self#visit_pred phase p) in
-      List.iter m.oi_lookup ~f:(fun (b1, b2) -> bound_iter b1 ; bound_iter b2) ;
-      self#visit_t `Compile rk ;
+      let bound_iter =
+        Option.iter ~f:(fun (p, _) -> self#visit_pred phase p)
+      in
+      List.iter m.oi_lookup ~f:(fun (b1, b2) ->
+          bound_iter b1;
+          bound_iter b2);
+      self#visit_t `Compile rk;
       self#visit_t phase rv
 
     method! visit_AScalar _ p = self#visit_pred `Compile p
@@ -395,14 +413,15 @@ let ops_serializable_exn r =
       inherit [_] stage_iter as super
 
       method! visit_t s r =
-        super#visit_t s r ;
+        super#visit_t s r;
         if s = `Run then
           match r.node with
           | Relation _ | GroupBy (_, _, _) | Join _ | OrderBy _ | Dedup _ ->
               raise
                 (Un_serial
                    (Format.asprintf
-                      "Cannot serialize: Bad operator in run-time position %a" pp r))
+                      "Cannot serialize: Bad operator in run-time position %a"
+                      pp r))
           | _ -> ()
     end
   in
@@ -417,7 +436,9 @@ let names_serializable_exn r =
         match Name.Meta.(find n stage) with
         | Some s' ->
             if s <> s' then
-              let stage = match s with `Compile -> "compile" | `Run -> "run" in
+              let stage =
+                match s with `Compile -> "compile" | `Run -> "run"
+              in
               raise
                 (Un_serial
                    (Format.asprintf
@@ -429,7 +450,10 @@ let names_serializable_exn r =
   visitor#visit_t `Run r
 
 let is_serializeable_msg r =
-  try ops_serializable_exn r ; names_serializable_exn r ; None
+  try
+    ops_serializable_exn r;
+    names_serializable_exn r;
+    None
   with Un_serial msg -> Some msg
 
 (** Return true if `r` is serializable. This function performs two checks:
@@ -438,7 +462,7 @@ let is_serializeable_msg r =
 let is_serializeable r =
   match is_serializeable_msg r with
   | Some msg ->
-      Logs.debug (fun m -> m "%s" msg) ;
+      Logs.debug (fun m -> m "%s" msg);
       false
   | None -> true
 
@@ -454,23 +478,23 @@ let annotate_orders r =
                        Some (Name (Name.create n), d)
                    | p' when [%compare.equal: pred] p p' -> Some (p', d)
                    | _ -> None))
-      | Filter (_, r) | AHashIdx {hi_values= r; _} -> annotate_orders r
-      | DepJoin {d_lhs= r1; d_rhs= r2; _} | Join {r1; r2; _} ->
-          annotate_orders r1 |> ignore ;
-          annotate_orders r2 |> ignore ;
+      | Filter (_, r) | AHashIdx { hi_values = r; _ } -> annotate_orders r
+      | DepJoin { d_lhs = r1; d_rhs = r2; _ } | Join { r1; r2; _ } ->
+          annotate_orders r1 |> ignore;
+          annotate_orders r2 |> ignore;
           []
       | GroupBy (_, _, r) | Dedup r ->
-          annotate_orders r |> ignore ;
+          annotate_orders r |> ignore;
           []
       | Relation _ | AEmpty -> []
-      | OrderBy {key; rel} ->
-          annotate_orders rel |> ignore ;
+      | OrderBy { key; rel } ->
+          annotate_orders rel |> ignore;
           key
       | AScalar _ -> []
       | AList (r, r') ->
           let s' = schema_exn r' in
           let eq' = Meta.(find_exn r' eq) in
-          annotate_orders r' |> ignore ;
+          annotate_orders r' |> ignore;
           let open Name.O in
           annotate_orders r
           |> List.filter_map ~f:(function
@@ -484,27 +508,27 @@ let annotate_orders r =
                | _ -> None)
       | ATuple (rs, Cross) -> List.map ~f:annotate_orders rs |> List.concat
       | ATuple (rs, (Zip | Concat)) ->
-          List.iter ~f:(fun r -> annotate_orders r |> ignore) rs ;
+          List.iter ~f:(fun r -> annotate_orders r |> ignore) rs;
           []
       | AOrderedIdx (r, _, _) ->
           schema_exn r |> List.map ~f:(fun n -> (Name n, Asc))
       | As _ | Range _ -> []
     in
-    Meta.set_m r Meta.order order ;
+    Meta.set_m r Meta.order order;
     order
   in
-  annotate_eq r ;
+  annotate_eq r;
   annotate_orders r |> ignore
 
 let order_of r =
-  annotate_orders r ;
+  annotate_orders r;
   Meta.(find_exn r order)
 
 let annotate_key_layouts r =
   let key_layout schema =
     match List.map schema ~f:(fun n -> scalar (Name n)) with
     | [] -> failwith "empty schema"
-    | [x] -> x
+    | [ x ] -> x
     | xs -> tuple xs Cross
   in
   let annotator =
@@ -517,16 +541,18 @@ let annotate_key_layouts r =
           Option.first_some h.hi_key_layout
             (Some (key_layout (schema_exn h.hi_keys)))
         in
-        AHashIdx {h with hi_key_layout}
+        AHashIdx { h with hi_key_layout }
 
-      method! visit_AOrderedIdx () ((x, y, ({oi_key_layout; _} as m)) as r) =
+      method! visit_AOrderedIdx () ((x, y, ({ oi_key_layout; _ } as m)) as r) =
         let x = self#visit_t () x in
         let y = self#visit_t () y in
         match oi_key_layout with
         | Some _ -> AOrderedIdx r
         | None ->
             AOrderedIdx
-              (x, y, {m with oi_key_layout= Some (key_layout (schema_exn x))})
+              ( x,
+                y,
+                { m with oi_key_layout = Some (key_layout (schema_exn x)) } )
     end
   in
   annotator#visit_t () r
@@ -558,7 +584,7 @@ let strip_unused_as =
         | p -> AScalar (self#visit_pred () p)
 
       method! visit_As () _ _ r =
-        Log.warn (fun m -> m "Removing misplaced as: %a" pp_small r) ;
+        Log.warn (fun m -> m "Removing misplaced as: %a" pp_small r);
         r.node
     end
   in
@@ -572,7 +598,8 @@ let hash_idx_to_depjoin h =
   let rk_schema = schema_exn h.hi_keys |> Schema.scoped h.hi_scope in
   let rv_schema = schema_exn h.hi_values in
   let key_pred =
-    List.map2_exn rk_schema h.hi_lookup ~f:(fun p1 p2 -> Binop (Eq, Name p1, p2))
+    List.map2_exn rk_schema h.hi_lookup ~f:(fun p1 p2 ->
+        Binop (Eq, Name p1, p2))
     |> Pred.conjoin
   in
   let slist = rk_schema @ rv_schema |> List.map ~f:(fun n -> Name n) in
@@ -589,15 +616,15 @@ let ordered_idx_to_depjoin rk rv m =
            let p1 =
              Option.map lb ~f:(fun (p, b) ->
                  match b with
-                 | `Closed -> [Binop (Ge, Name n, p)]
-                 | `Open -> [Binop (Gt, Name n, p)])
+                 | `Closed -> [ Binop (Ge, Name n, p) ]
+                 | `Open -> [ Binop (Gt, Name n, p) ])
              |> Option.value ~default:[]
            in
            let p2 =
              Option.map ub ~f:(fun (p, b) ->
                  match b with
-                 | `Closed -> [Binop (Le, Name n, p)]
-                 | `Open -> [Binop (Lt, Name n, p)])
+                 | `Closed -> [ Binop (Le, Name n, p) ]
+                 | `Open -> [ Binop (Lt, Name n, p) ])
              |> Option.value ~default:[]
            in
            p1 @ p2)
@@ -613,14 +640,16 @@ let ensure_alias r =
 
       method! visit_Select () _ (ps, r) =
         Select
-          ( List.map ps ~f:(fun p -> p |> self#visit_pred () |> Pred.ensure_alias)
-          , self#visit_t () r )
+          ( List.map ps ~f:(fun p ->
+                p |> self#visit_pred () |> Pred.ensure_alias),
+            self#visit_t () r )
 
       method! visit_GroupBy () _ (ps, k, r) =
         GroupBy
-          ( List.map ps ~f:(fun p -> p |> self#visit_pred () |> Pred.ensure_alias)
-          , k
-          , self#visit_t () r )
+          ( List.map ps ~f:(fun p ->
+                p |> self#visit_pred () |> Pred.ensure_alias),
+            k,
+            self#visit_t () r )
 
       method! visit_AScalar () _ p =
         AScalar (self#visit_pred () p |> Pred.ensure_alias)

@@ -51,37 +51,41 @@ type expr = Implang0.expr =
   | Tuple of expr list
   | Slice of expr * int
   | Index of expr * int
-  | Binop of {op: binop; arg1: expr; arg2: expr}
-  | Unop of {op: unop; arg: expr}
+  | Binop of { op : binop; arg1 : expr; arg2 : expr }
+  | Unop of { op : unop; arg : expr }
   | Done of string
   | Ternary of expr * expr * expr
   | TupleHash of Type.PrimType.t list * expr * expr
   | Substr of expr * expr * expr
 [@@deriving compare, sexp]
 
-type local = Implang0.local =
-  {lname: string; type_: (Type.PrimType.t[@opaque]); persistent: bool}
+type local = Implang0.local = {
+  lname : string;
+  type_ : (Type.PrimType.t[@opaque]);
+  persistent : bool;
+}
 [@@deriving compare, sexp]
 
 type stmt = Implang0.stmt =
   | Print of Type.PrimType.t * expr
   | Consume of Type.PrimType.t * expr
-  | Loop of {cond: expr; body: prog}
-  | If of {cond: expr; tcase: prog; fcase: prog}
-  | Iter of {var: string; func: string; args: expr list}
-  | Step of {var: string; iter: string}
-  | Assign of {lhs: string; rhs: expr}
+  | Loop of { cond : expr; body : prog }
+  | If of { cond : expr; tcase : prog; fcase : prog }
+  | Iter of { var : string; func : string; args : expr list }
+  | Step of { var : string; iter : string }
+  | Assign of { lhs : string; rhs : expr }
   | Yield of expr
   | Return of expr
 
 and prog = stmt list [@@deriving compare, sexp]
 
-type func = Implang0.func =
-  { name: string
-  ; args: (string * Type0.PrimType.t) list
-  ; body: prog
-  ; ret_type: Type0.PrimType.t
-  ; locals: local list }
+type func = Implang0.func = {
+  name : string;
+  args : (string * Type0.PrimType.t) list;
+  body : prog;
+  ret_type : Type0.PrimType.t;
+  locals : local list;
+}
 [@@deriving compare, sexp]
 
 val pp_stmt : Formatter.t -> stmt -> unit
@@ -161,7 +165,8 @@ module Builder : sig
 
   val build_step : expr -> func -> t -> unit
 
-  val build_if : cond:expr -> then_:(t -> unit) -> else_:(t -> unit) -> t -> unit
+  val build_if :
+    cond:expr -> then_:(t -> unit) -> else_:(t -> unit) -> t -> unit
 
   val build_var : ?persistent:bool -> string -> Type.PrimType.t -> t -> expr
 
@@ -170,15 +175,15 @@ module Builder : sig
   val build_count_loop : expr -> (t -> unit) -> t -> unit
 
   val build_foreach :
-       ?count:Type.AbsInt.t
-    -> ?header:(expr -> t -> unit)
-    -> ?footer:(expr -> t -> unit)
-    -> ?persistent:bool
-    -> func
-    -> expr list
-    -> (expr -> t -> unit)
-    -> t
-    -> unit
+    ?count:Type.AbsInt.t ->
+    ?header:(expr -> t -> unit) ->
+    ?footer:(expr -> t -> unit) ->
+    ?persistent:bool ->
+    func ->
+    expr list ->
+    (expr -> t -> unit) ->
+    t ->
+    unit
 
   val build_eq : expr -> expr -> t -> expr
 

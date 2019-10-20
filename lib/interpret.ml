@@ -11,7 +11,8 @@ module Tuple = struct
 
     let to_string_hum values =
       sprintf "[%s]"
-        (String.concat ~sep:", " (Array.to_list (Array.map values ~f:Value.to_sql)))
+        (String.concat ~sep:", "
+           (Array.to_list (Array.map values ~f:Value.to_sql)))
   end
 
   include T
@@ -48,18 +49,20 @@ module Ctx = struct
     match ctx with
     | [] -> None
     | Ctx map :: ctx' -> (
-      match Map.find map n with Some v -> Some v | None -> find ctx' n )
+        match Map.find map n with Some v -> Some v | None -> find ctx' n )
     | Tuple (t, schema) :: ctx' -> (
-      match Hashtbl.find schema n with Some i -> Some t.(i) | None -> find ctx' n )
+        match Hashtbl.find schema n with
+        | Some i -> Some t.(i)
+        | None -> find ctx' n )
 
-  let of_map m = [Ctx m]
+  let of_map m = [ Ctx m ]
 end
 
 module GroupKey = struct
   type t = Value.t list [@@deriving compare, hash, sexp]
 end
 
-type ctx = {db: Db.t; params: Value.t Map.M(Name).t}
+type ctx = { db : Db.t; params : Value.t Map.M(Name).t }
 
 let name_exn p =
   match Pred.to_name p with
@@ -68,11 +71,11 @@ let name_exn p =
 
 let extract_key ctx =
   match Map.to_alist ctx with
-  | [(_, v)] -> v
+  | [ (_, v) ] -> v
   | _ -> failwith "Unexpected key context."
 
 let to_single_value t =
-  if Array.length t > 1 then failwith "Expected a single value tuple." ;
+  if Array.length t > 1 then failwith "Expected a single value tuple.";
   t.(0)
 
 type agg =
@@ -88,23 +91,27 @@ module Schema = struct
     let tbl = Hashtbl.create (module Name) in
     schema_exn r
     |> List.iteri ~f:(fun i n ->
-           Hashtbl.add_exn tbl ~key:(Name.copy ~scope n) ~data:i) ;
+           Hashtbl.add_exn tbl ~key:(Name.copy ~scope n) ~data:i);
     tbl
 end
 
-let eval {db; params} r =
+let eval { db; params } r =
   let scan =
     Memo.general ~hashable:String.hashable (fun r ->
         let schema_types =
-          Option.value_exn (Db.relation db r).r_schema |> List.map ~f:Name.type_exn
+          Option.value_exn (Db.relation db r).r_schema
+          |> List.map ~f:Name.type_exn
         in
-        Db.exec_cursor_exn db schema_types (Printf.sprintf "select * from \"%s\"" r)
+        Db.exec_cursor_exn db schema_types
+          (Printf.sprintf "select * from \"%s\"" r)
         |> Gen.to_sequence |> Seq.memoize)
   in
   let rec eval_agg ctx preds schema tups =
     if Seq.is_empty tups then None
     else
-      let preds, named_aggs = List.map preds ~f:Pred.collect_aggs |> List.unzip in
+      let preds, named_aggs =
+        List.map preds ~f:Pred.collect_aggs |> List.unzip
+      in
       let named_aggs = List.concat named_aggs in
       let state =
         Array.of_list named_aggs
@@ -123,7 +130,7 @@ let eval {db; params} r =
       in
       let last_tup = ref [||] in
       Seq.iter tups ~f:(fun t ->
-          last_tup := t ;
+          last_tup := t;
           let ctx = Ctx.merge ctx schema t in
           Array.map_inplace state ~f:(fun (n, s) ->
               let open Value in
@@ -137,7 +144,7 @@ let eval {db; params} r =
                 | Passthru (None, p) -> Passthru (Some (eval_pred ctx p), p)
                 | Passthru (Some _, _) as a -> a
               in
-              (n, s))) ;
+              (n, s)));
       let subst_ctx =
         Array.map state ~f:(fun (n, s) ->
             let open Value in
@@ -161,11 +168,12 @@ let eval {db; params} r =
     match p with
     | A.Int x -> Int x
     | Name n -> (
-      match Ctx.find ctx n with
-      | Some v -> v
-      | None ->
-          Error.(
-            create "Unknown name." (n, ctx) [%sexp_of: Name.t * Ctx.t] |> raise) )
+        match Ctx.find ctx n with
+        | Some v -> v
+        | None ->
+            Error.(
+              create "Unknown name." (n, ctx) [%sexp_of: Name.t * Ctx.t]
+              |> raise) )
     | Fixed x -> Fixed x
     | Date x -> Date x
     | Bool x -> Bool x
@@ -180,50 +188,59 @@ let eval {db; params} r =
     | Substring (p1, p2, p3) ->
         let str = to_string (e p1) in
         String
-          (String.sub str ~pos:Int.(Value.to_int (e p2) - 1) ~len:(to_int (e p3)))
+          (String.sub str
+             ~pos:Int.(Value.to_int (e p2) - 1)
+             ~len:(to_int (e p3)))
     | Unop (op, p) -> (
-      match op with
-      | Not -> Bool (to_bool (e p) |> not)
-      | Strlen -> Int (to_string (e p) |> String.length)
-      | ExtractY -> Int (to_date (e p) |> Date.year)
-      | ExtractM -> Int (to_date (e p) |> Date.month |> Month.to_int)
-      | ExtractD -> Int (to_date (e p) |> Date.day)
-      | _ -> Error.(create "Unexpected operator" op [%sexp_of: unop] |> raise) )
+        match op with
+        | Not -> Bool (to_bool (e p) |> not)
+        | Strlen -> Int (to_string (e p) |> String.length)
+        | ExtractY -> Int (to_date (e p) |> Date.year)
+        | ExtractM -> Int (to_date (e p) |> Date.month |> Month.to_int)
+        | ExtractD -> Int (to_date (e p) |> Date.day)
+        | _ ->
+            Error.(create "Unexpected operator" op [%sexp_of: unop] |> raise) )
     | Binop (op, p1, p2) -> (
-      match op with
-      | Eq -> O.(e p1 = e p2) |> bool
-      | Lt -> O.(e p1 < e p2) |> bool
-      | Le -> O.(e p1 <= e p2) |> bool
-      | Gt -> O.(e p1 > e p2) |> bool
-      | Ge -> O.(e p1 >= e p2) |> bool
-      | And -> (to_bool (e p1) && to_bool (e p2)) |> bool
-      | Or -> (to_bool (e p1) || to_bool (e p2)) |> bool
-      | Add -> (
-        match p2 with
-        | Unop (Day, p2) -> Date.add_days (e p1 |> to_date) (e p2 |> to_int) |> date
-        | Unop (Month, p2) ->
-            Date.add_months (e p1 |> to_date) (e p2 |> to_int) |> date
-        | Unop (Year, p2) ->
-            Date.add_years (e p1 |> to_date) (e p2 |> to_int) |> date
-        | p2 -> e p1 + e p2 )
-      | Sub -> (
-        match p2 with
-        | Unop (Day, p2) ->
-            Date.add_days (e p1 |> to_date) (e p2 |> to_int |> Int.neg) |> date
-        | Unop (Month, p2) ->
-            Date.add_months (e p1 |> to_date) (e p2 |> to_int |> Int.neg) |> date
-        | Unop (Year, p2) ->
-            Date.add_years (e p1 |> to_date) (e p2 |> to_int |> Int.neg) |> date
-        | p2 -> e p1 + e p2 )
-      | Mul -> e p1 * e p2
-      | Div -> e p1 / e p2
-      | Mod -> e p1 % e p2
-      | Strpos -> (
-        match
-          String.substr_index (to_string (e p1)) ~pattern:(to_string (e p2))
-        with
-        | Some x -> int Int.(x + 1)
-        | None -> int 0 ) )
+        match op with
+        | Eq -> O.(e p1 = e p2) |> bool
+        | Lt -> O.(e p1 < e p2) |> bool
+        | Le -> O.(e p1 <= e p2) |> bool
+        | Gt -> O.(e p1 > e p2) |> bool
+        | Ge -> O.(e p1 >= e p2) |> bool
+        | And -> (to_bool (e p1) && to_bool (e p2)) |> bool
+        | Or -> (to_bool (e p1) || to_bool (e p2)) |> bool
+        | Add -> (
+            match p2 with
+            | Unop (Day, p2) ->
+                Date.add_days (e p1 |> to_date) (e p2 |> to_int) |> date
+            | Unop (Month, p2) ->
+                Date.add_months (e p1 |> to_date) (e p2 |> to_int) |> date
+            | Unop (Year, p2) ->
+                Date.add_years (e p1 |> to_date) (e p2 |> to_int) |> date
+            | p2 -> e p1 + e p2 )
+        | Sub -> (
+            match p2 with
+            | Unop (Day, p2) ->
+                Date.add_days (e p1 |> to_date) (e p2 |> to_int |> Int.neg)
+                |> date
+            | Unop (Month, p2) ->
+                Date.add_months (e p1 |> to_date) (e p2 |> to_int |> Int.neg)
+                |> date
+            | Unop (Year, p2) ->
+                Date.add_years (e p1 |> to_date) (e p2 |> to_int |> Int.neg)
+                |> date
+            | p2 -> e p1 + e p2 )
+        | Mul -> e p1 * e p2
+        | Div -> e p1 / e p2
+        | Mod -> e p1 % e p2
+        | Strpos -> (
+            match
+              String.substr_index
+                (to_string (e p1))
+                ~pattern:(to_string (e p2))
+            with
+            | Some x -> int Int.(x + 1)
+            | None -> int 0 ) )
   and eval ctx r : Tuple.t Seq.t =
     match r.node with
     | Relation r -> scan r.r_name
@@ -236,16 +253,17 @@ let eval {db; params} r =
             |> Option.value ~default:Seq.empty
         | `Scalar ->
             Seq.map (eval ctx r) ~f:(fun t ->
-                List.map ps ~f:(eval_pred (Ctx.merge ctx s t)) |> Array.of_list) )
+                List.map ps ~f:(eval_pred (Ctx.merge ctx s t)) |> Array.of_list)
+        )
     | Filter (p, r) ->
         let s = Schema.of_ralgebra r in
         Seq.filter (eval ctx r) ~f:(fun t ->
             eval_pred (Ctx.merge ctx s t) p |> Value.to_bool)
-    | DepJoin {d_lhs; d_alias; d_rhs} ->
+    | DepJoin { d_lhs; d_alias; d_rhs } ->
         let s = Schema.of_ralgebra ~scope:d_alias d_lhs in
         Seq.concat_map (eval ctx d_lhs) ~f:(fun t ->
             Seq.map (eval (Ctx.bind ctx s t) d_rhs) ~f:(fun t' -> t @ t'))
-    | Join {pred; r1; r2} ->
+    | Join { pred; r1; r2 } ->
         let r1s = eval ctx r1 in
         let s1 = Schema.of_ralgebra r1 in
         let r2s = eval ctx r2 in
@@ -257,22 +275,25 @@ let eval {db; params} r =
                 let tup = t1 @ t2 in
                 if eval_pred ctx pred |> Value.to_bool then Some tup else None))
     | AEmpty -> Seq.empty
-    | AScalar p -> Seq.singleton [|eval_pred ctx p|]
+    | AScalar p -> Seq.singleton [| eval_pred ctx p |]
     | AList (rk, rv) ->
         let sk = Schema.of_ralgebra ~scope:(scope_exn rk) rk in
         Seq.concat_map (eval ctx rk) ~f:(fun t -> eval (Ctx.bind ctx sk t) rv)
     | ATuple ([], _) -> failwith "Empty tuple."
     | ATuple (_, Zip) -> failwith "Zip tuples unsupported."
-    | ATuple ([r], Cross) -> eval ctx r
-    | ATuple (({node= AScalar p; _} as r) :: rs, Cross) ->
+    | ATuple ([ r ], Cross) -> eval ctx r
+    | ATuple (({ node = AScalar p; _ } as r) :: rs, Cross) ->
         (* Special case for scalar tuples. Should reduce # of sequences constructed. *)
         let s = Schema.of_ralgebra r in
-        let t = [|eval_pred ctx p|] in
-        eval (Ctx.bind ctx s t) (tuple rs Cross) |> Seq.map ~f:(fun t' -> t @ t')
+        let t = [| eval_pred ctx p |] in
+        eval (Ctx.bind ctx s t) (tuple rs Cross)
+        |> Seq.map ~f:(fun t' -> t @ t')
     | ATuple (r :: rs, Cross) ->
         let s = Schema.of_ralgebra r in
         Seq.concat_map (eval ctx r) ~f:(fun t ->
-            Seq.map (eval (Ctx.bind ctx s t) (tuple rs Cross)) ~f:(fun t' -> t @ t'))
+            Seq.map
+              (eval (Ctx.bind ctx s t) (tuple rs Cross))
+              ~f:(fun t' -> t @ t'))
     | ATuple (rs, Concat) -> Seq.concat_map (Seq.of_list rs) ~f:(eval ctx)
     | AHashIdx h ->
         let vs = List.map h.hi_lookup ~f:(eval_pred ctx) |> Array.of_list in
@@ -290,7 +311,7 @@ let eval {db; params} r =
         eval ctx r |> Seq.to_list
         |> List.dedup_and_sort ~compare:[%compare: Tuple.t]
         |> Seq.of_list
-    | OrderBy {key; rel} ->
+    | OrderBy { key; rel } ->
         let s = Schema.of_ralgebra rel in
         let cmps =
           List.map key ~f:(fun (p, o) t1 t2 ->
@@ -310,8 +331,10 @@ let eval {db; params} r =
         eval ctx r
         |> Seq.iter ~f:(fun t ->
                let c = Ctx.merge ctx s t in
-               let k = List.map ns ~f:(fun n -> Option.value_exn (Ctx.find c n)) in
-               Hashtbl.add_multi tbl ~key:k ~data:t) ;
+               let k =
+                 List.map ns ~f:(fun n -> Option.value_exn (Ctx.find c n))
+               in
+               Hashtbl.add_multi tbl ~key:k ~data:t);
         Hashtbl.data tbl |> Seq.of_list
         |> Seq.filter_map ~f:(fun ts -> eval_agg ctx ps s (Seq.of_list ts))
     | As (_, r) -> eval ctx r
@@ -364,10 +387,12 @@ let equiv ?(ordered = false) ctx r1 r2 =
                         [%sexp_of: string * string])
              | `Left t ->
                  (* printf "L: %s\n" (Tuple.to_string_hum t) ; *)
-                 Some (Error.create "Extra tuple on LHS." t [%sexp_of: Tuple.t])
+                 Some
+                   (Error.create "Extra tuple on LHS." t [%sexp_of: Tuple.t])
              | `Right t ->
                  (* printf "R: %s\n" (Tuple.to_string_hum t) ; *)
-                 Some (Error.create "Extra tuple on RHS." t [%sexp_of: Tuple.t]))
+                 Some
+                   (Error.create "Extra tuple on RHS." t [%sexp_of: Tuple.t]))
       in
       match m_err with Some err -> Error err | None -> Ok ()
     in
@@ -377,5 +402,5 @@ let equiv ?(ordered = false) ctx r1 r2 =
       | Ok () -> fprintf fmt "Ok!"
       | Error err -> fprintf fmt "Failed: %a" Error.pp err
     in
-    Caml.Format.printf "%a\n" ret_pp ret ;
+    Caml.Format.printf "%a\n" ret_pp ret;
     ret

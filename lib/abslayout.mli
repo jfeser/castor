@@ -31,7 +31,8 @@ type unop = Abslayout0.unop =
 type tuple = Abslayout0.tuple = Cross | Zip | Concat
 [@@deriving compare, hash, sexp_of]
 
-type order = Abslayout0.order = Asc | Desc [@@deriving compare, hash, sexp_of]
+type order = Abslayout0.order = Asc | Desc
+[@@deriving compare, hash, sexp_of]
 
 type pred = Abslayout0.pred =
   | Name of Name.t
@@ -56,30 +57,36 @@ type pred = Abslayout0.pred =
   | Substring of pred * pred * pred
 [@@deriving compare, hash, sexp_of]
 
-and hash_idx = Abslayout0.hash_idx =
-  { hi_keys: t
-  ; hi_values: t
-  ; hi_scope: string
-  ; hi_key_layout: t option
-  ; hi_lookup: pred list }
+and hash_idx = Abslayout0.hash_idx = {
+  hi_keys : t;
+  hi_values : t;
+  hi_scope : string;
+  hi_key_layout : t option;
+  hi_lookup : pred list;
+}
 [@@deriving compare, hash, sexp_of]
 
-and bound = pred * ([`Open | `Closed][@opaque])
+and bound = pred * ([ `Open | `Closed ][@opaque])
 
-and ordered_idx = Abslayout0.ordered_idx =
-  {oi_key_layout: t option; oi_lookup: (bound option * bound option) list}
+and ordered_idx = Abslayout0.ordered_idx = {
+  oi_key_layout : t option;
+  oi_lookup : (bound option * bound option) list;
+}
 [@@deriving compare, hash, sexp_of]
 
-and relation = Abslayout0.relation = {r_name: string; r_schema: Name.t list option}
+and relation = Abslayout0.relation = {
+  r_name : string;
+  r_schema : Name.t list option;
+}
 [@@deriving compare, hash, sexp_of]
 
-and depjoin = Abslayout0.depjoin = {d_lhs: t; d_alias: string; d_rhs: t}
+and depjoin = Abslayout0.depjoin = { d_lhs : t; d_alias : string; d_rhs : t }
 [@@deriving compare, hash, sexp_of]
 
-and join = Abslayout0.join = {pred: pred; r1: t; r2: t}
+and join = Abslayout0.join = { pred : pred; r1 : t; r2 : t }
 [@@deriving compare, hash, sexp_of]
 
-and order_by = Abslayout0.order_by = {key: (pred * order) list; rel: t}
+and order_by = Abslayout0.order_by = { key : (pred * order) list; rel : t }
 [@@deriving compare, hash, sexp_of]
 
 and node = Abslayout0.node =
@@ -101,7 +108,7 @@ and node = Abslayout0.node =
   | As of string * t
 [@@deriving compare, hash, sexp_of]
 
-and t = Abslayout0.t = {node: node; meta: Meta.t [@compare.ignore]}
+and t = Abslayout0.t = { node : node; meta : Meta.t [@compare.ignore] }
 [@@deriving compare, hash, sexp_of]
 
 include Comparator.S with type t := t
@@ -117,10 +124,10 @@ val pp_small : Format.formatter -> t -> unit
 val pp_small_str : unit -> t -> string
 
 val mk_pp :
-     ?pp_name:(Format.formatter -> Name.t -> unit)
-  -> ?pp_meta:(Format.formatter -> Univ_map.t -> unit)
-  -> unit
-  -> (Format.formatter -> t -> unit) * (Format.formatter -> pred -> unit)
+  ?pp_name:(Format.formatter -> Name.t -> unit) ->
+  ?pp_meta:(Format.formatter -> Univ_map.t -> unit) ->
+  unit ->
+  (Format.formatter -> t -> unit) * (Format.formatter -> pred -> unit)
 
 val name : t -> string
 
@@ -189,7 +196,7 @@ val of_channel_exn : In_channel.t -> t
 
 val subst : pred Map.M(Name).t -> t -> t
 
-val select_kind : pred list -> [`Agg | `Scalar]
+val select_kind : pred list -> [ `Agg | `Scalar ]
 
 val is_serializeable : t -> bool
 

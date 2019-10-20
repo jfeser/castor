@@ -34,7 +34,7 @@ let make_modules ?layout_file ?(irgen_debug = false) ?(code_only = false) () =
       (I)
       ()
   in
-  ( (module M : Abslayout_db.S)
-  , (module S : Serialize.S)
-  , (module I : Irgen.S)
-  , (module C : Codegen.S) )
+  ( (module M : Abslayout_db.S),
+    (module S : Serialize.S),
+    (module I : Irgen.S),
+    (module C : Codegen.S) )

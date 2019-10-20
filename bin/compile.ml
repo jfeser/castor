@@ -3,7 +3,8 @@ open Castor
 open Collections
 
 let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
-  Logs.info (fun m -> m "%s" (Sys.argv |> Array.to_list |> String.concat ~sep:" ")) ;
+  Logs.info (fun m ->
+      m "%s" (Sys.argv |> Array.to_list |> String.concat ~sep:" "));
   let module CConfig = struct
     let conn = db
 
@@ -14,7 +15,9 @@ let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
     let layout_file =
       if debug then
         let layout_file =
-          match out_dir with Some d -> d ^ "/layout.txt" | None -> "layout.txt"
+          match out_dir with
+          | Some d -> d ^ "/layout.txt"
+          | None -> "layout.txt"
         in
         Some layout_file
       else None
@@ -30,7 +33,7 @@ let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
     let params = Set.of_list (module Name) params in
     A.load_string ~params (In_channel.input_all ch)
   in
-  A.annotate_type ralgebra ;
+  A.annotate_type ralgebra;
   C.compile ~gprof ~params ?out_dir ralgebra |> ignore
 
 let () =
@@ -39,13 +42,13 @@ let () =
     [%map_open
       let () = Log.param
       and db = Db.param
-      and debug = flag "debug" ~aliases:["g"] no_arg ~doc:"enable debug mode"
-      and gprof = flag "prof" ~aliases:["pg"] no_arg ~doc:"enable profiling"
+      and debug = flag "debug" ~aliases:[ "g" ] no_arg ~doc:"enable debug mode"
+      and gprof = flag "prof" ~aliases:[ "pg" ] no_arg ~doc:"enable profiling"
       and out_dir =
-        flag "output" ~aliases:["o"] (optional string)
+        flag "output" ~aliases:[ "o" ] (optional string)
           ~doc:"DIR directory to write compiler output in"
       and params =
-        flag "param" ~aliases:["p"] (listed Util.param)
+        flag "param" ~aliases:[ "p" ] (listed Util.param)
           ~doc:"NAME:TYPE query parameters"
       and code_only = flag "code-only" no_arg ~doc:"only emit code"
       and ch =

@@ -46,8 +46,9 @@ let%expect_test "" =
                      (s0.l_shipinstruct = "DELIVER IN PERSON")))))))))))
 |}
   in
-  Format.printf "@[<h>%a@]@." pp (simplify p) ;
-  [%expect {|
+  Format.printf "@[<h>%a@]@." pp (simplify p);
+  [%expect
+    {|
     (((p_partkey = s0.l_partkey) &&
      ((s0.l_shipinstruct = "DELIVER IN PERSON") &&
      ((p_size >= 1) && ((s0.l_shipmode = "AIR") || (s0.l_shipmode = "AIR REG")))))

@@ -5,7 +5,7 @@ let command_exn ?quiet:_ = function
   | [] -> Error.of_string "Empty command" |> Error.raise
   | cmd ->
       let cmd_str = String.concat cmd ~sep:" " in
-      Log.info (fun m -> m "%s" cmd_str) ;
+      Log.info (fun m -> m "%s" cmd_str);
       let err = Unix.system cmd_str in
       Or_error.(
         tag_arg
@@ -19,14 +19,14 @@ let command_out_exn ?quiet:_ = function
   | cmd ->
       let open Unix in
       let cmd_str = String.concat cmd ~sep:" " in
-      Log.info (fun m -> m "%s" cmd_str) ;
+      Log.info (fun m -> m "%s" cmd_str);
       let ch = open_process_in cmd_str in
       let out = In_channel.input_all ch in
       Or_error.(
         tag_arg
           (Exit_or_signal.or_error (close_process_in ch))
           "Running command failed." cmd_str [%sexp_of: string]
-        |> ok_exn) ;
+        |> ok_exn);
       out
 
 let param_of_string s =

@@ -8,12 +8,12 @@ let project_def refcnt p =
       (* Filter out definitions that have no name *)
       false
   | Some n -> (
-    (* Filter out definitions that are never referenced. *)
-    match Map.(find refcnt n) with
-    | Some c -> c > 0
-    | None ->
-        (* Be conservative if refcount is missing. *)
-        true )
+      (* Filter out definitions that are never referenced. *)
+      match Map.(find refcnt n) with
+      | Some c -> c > 0
+      | None ->
+          (* Be conservative if refcount is missing. *)
+          true )
 
 let project_defs refcnt ps = List.filter ps ~f:(project_def refcnt)
 
@@ -33,9 +33,9 @@ let _pp_with_refcount, _ =
       let open Format in
       match Univ_map.find meta Meta.refcnt with
       | Some r ->
-          fprintf fmt "@[<hv 2>{" ;
+          fprintf fmt "@[<hv 2>{";
           Map.iteri r ~f:(fun ~key:n ~data:c ->
-              if c > 0 then fprintf fmt "%a=%d,@ " Name.pp n c) ;
+              if c > 0 then fprintf fmt "%a=%d,@ " Name.pp n c);
           fprintf fmt "}@]"
       | None -> ())
     ()
@@ -65,11 +65,16 @@ let annotate_count r =
 
       method! visit_AHashIdx c h =
         AHashIdx
-          {(self#visit_hash_idx c h) with hi_keys= self#visit_t AtLeastOne h.hi_keys}
+          {
+            (self#visit_hash_idx c h) with
+            hi_keys = self#visit_t AtLeastOne h.hi_keys;
+          }
 
       method! visit_AOrderedIdx c (rk, rv, m) =
         AOrderedIdx
-          (self#visit_t AtLeastOne rk, self#visit_t c rv, self#visit_ordered_idx c m)
+          ( self#visit_t AtLeastOne rk,
+            self#visit_t c rv,
+            self#visit_ordered_idx c m )
     end
   in
   visitor#visit_t Exact r
@@ -78,7 +83,7 @@ let get_refcnt r =
   match Meta.find r Meta.refcnt with
   | Some c -> Some c
   | None ->
-      Logs.warn (fun m -> m "No refcnt found on %a" pp_small r) ;
+      Logs.warn (fun m -> m "No refcnt found on %a" pp_small r);
       None
 
 class project_visitor =
@@ -97,7 +102,8 @@ class project_visitor =
           if all_unref r && count = AtLeastOne then self#dummy
           else
             match r.node with
-            | Select (ps, r) -> select (project_defs refcnt ps) (self#visit_t () r)
+            | Select (ps, r) ->
+                select (project_defs refcnt ps) (self#visit_t () r)
             | Dedup r -> dedup (self#visit_t () r)
             | GroupBy (ps, ns, r) ->
                 group_by (project_defs refcnt ps) ns (self#visit_t () r)
@@ -115,13 +121,16 @@ class project_visitor =
                           (schema_exn rk |> List.map ~f:(fun n -> Name n))
                       in
                       let new_n = List.length ps in
-                      if old_n > new_n then select ps rk else self#visit_t () rk
+                      if old_n > new_n then select ps rk
+                      else self#visit_t () rk
                 in
                 list rk scope (self#visit_t () rv)
-            | AScalar p -> if project_def refcnt p then scalar p else self#dummy
+            | AScalar p ->
+                if project_def refcnt p then scalar p else self#dummy
             | ATuple ([], _) -> empty
-            | ATuple ([r], _) -> self#visit_t () r
-            | ATuple (rs, Concat) -> tuple (List.map rs ~f:(self#visit_t ())) Concat
+            | ATuple ([ r ], _) -> self#visit_t () r
+            | ATuple (rs, Concat) ->
+                tuple (List.map rs ~f:(self#visit_t ())) Concat
             | ATuple (rs, Cross) ->
                 let rs =
                   (* Remove unreferenced parts of the tuple. *)
@@ -142,27 +151,28 @@ class project_visitor =
                       not should_remove)
                   |> List.map ~f:(self#visit_t ())
                 in
-                let rs = if List.length rs = 0 then [self#dummy] else rs in
+                let rs = if List.length rs = 0 then [ self#dummy ] else rs in
                 tuple rs Cross
-            | Join {r1; r2; pred} -> (
-              match count with
-              | Exact -> join pred (self#visit_t () r1) (self#visit_t () r2)
-              (* If one side of a join is unused then the join can be dropped. *)
-              | AtLeastOne ->
-                  if all_unref_at r1 r then self#visit_t () r2
-                  else if all_unref_at r2 r then self#visit_t () r1
-                  else join pred (self#visit_t () r1) (self#visit_t () r2) )
-            | DepJoin {d_lhs; d_rhs; d_alias} -> (
-              match count with
-              | Exact ->
-                  dep_join (self#visit_t () d_lhs) d_alias (self#visit_t () d_rhs)
-              (* If one side of a join is unused then the join can be dropped. *)
-              | AtLeastOne ->
-                  if all_unref d_lhs then self#visit_t () d_rhs
-                  else if all_unref d_rhs then self#dummy
-                  else
-                    dep_join (self#visit_t () d_lhs) d_alias (self#visit_t () d_rhs)
-              )
+            | Join { r1; r2; pred } -> (
+                match count with
+                | Exact -> join pred (self#visit_t () r1) (self#visit_t () r2)
+                (* If one side of a join is unused then the join can be dropped. *)
+                | AtLeastOne ->
+                    if all_unref_at r1 r then self#visit_t () r2
+                    else if all_unref_at r2 r then self#visit_t () r1
+                    else join pred (self#visit_t () r1) (self#visit_t () r2) )
+            | DepJoin { d_lhs; d_rhs; d_alias } -> (
+                match count with
+                | Exact ->
+                    dep_join (self#visit_t () d_lhs) d_alias
+                      (self#visit_t () d_rhs)
+                (* If one side of a join is unused then the join can be dropped. *)
+                | AtLeastOne ->
+                    if all_unref d_lhs then self#visit_t () d_rhs
+                    else if all_unref d_rhs then self#dummy
+                    else
+                      dep_join (self#visit_t () d_lhs) d_alias
+                        (self#visit_t () d_rhs) )
             | Range (p, p') -> range p p'
             | _ -> super#visit_t () r )
   end

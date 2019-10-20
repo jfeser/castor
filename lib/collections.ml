@@ -18,15 +18,20 @@ module List = struct
     match l with
     | [] -> Or_error.error_string "Empty list."
     | x :: xs -> (
-      match List.find xs ~f:(fun x' -> x <> x') with
-      | Some x' -> Or_error.error "Unequal elements." (x, x') [%sexp_of: t * t]
-      | None -> Or_error.return x )
+        match List.find xs ~f:(fun x' -> x <> x') with
+        | Some x' ->
+            Or_error.error "Unequal elements." (x, x') [%sexp_of: t * t]
+        | None -> Or_error.return x )
 
   let all_equal_exn : 'a list -> 'a = fun l -> Or_error.ok_exn (all_equal l)
 
   let fmerge :
-      cmp:('a -> 'a -> int) -> ('a * 'b) list -> ('a * 'b) list -> ('a * 'b) list =
-   fun ~cmp l1 l2 -> List.merge ~compare:(fun (x1, _) (x2, _) -> cmp x1 x2) l1 l2
+      cmp:('a -> 'a -> int) ->
+      ('a * 'b) list ->
+      ('a * 'b) list ->
+      ('a * 'b) list =
+   fun ~cmp l1 l2 ->
+    List.merge ~compare:(fun (x1, _) (x2, _) -> cmp x1 x2) l1 l2
 
   let scanl1 : 'a t -> f:('a -> 'a -> 'a) -> 'a t =
     let rec scanl1' accv accl f = function
@@ -39,7 +44,7 @@ module List = struct
     fun l ~f ->
       match l with
       | [] -> failwith "Unexpected empty list."
-      | x :: xs -> scanl1' x [x] f xs |> List.rev
+      | x :: xs -> scanl1' x [ x ] f xs |> List.rev
 
   let count_consecutive_duplicates :
       'a t -> equal:('a -> 'a -> bool) -> ('a * int) t =
@@ -67,7 +72,8 @@ module List = struct
     let rec repeat xs n = if n = 0 then xs else repeat (x :: xs) (n - 1) in
     repeat [] n
 
-  let rec unzip3 : ('a * 'b * 'c) list -> 'a list * 'b list * 'c list = function
+  let rec unzip3 : ('a * 'b * 'c) list -> 'a list * 'b list * 'c list =
+    function
     | (x, y, z) :: l ->
         let xs, ys, zs = unzip3 l in
         (x :: xs, y :: ys, z :: zs)
@@ -79,8 +85,8 @@ module Set = struct
 
   let pp pp_elem fmt set =
     let open Caml.Format in
-    fprintf fmt "{" ;
-    Set.iter set ~f:(fprintf fmt "%a; " pp_elem) ;
+    fprintf fmt "{";
+    Set.iter set ~f:(fprintf fmt "%a; " pp_elem);
     fprintf fmt "}"
 
   let any_overlap m ss =
@@ -151,10 +157,10 @@ module Seq = struct
       ~f:(fun (seq, q) ->
         match next seq with
         | Some (x, seq') ->
-            Q.enqueue q x ;
+            Q.enqueue q x;
             Yield (x, (seq', q))
         | None -> (
-          match Q.dequeue q with Some x -> Skip (step x, q) | None -> Done ))
+            match Q.dequeue q with Some x -> Skip (step x, q) | None -> Done ))
 
   let dfs : 'a -> ('a -> 'a t) -> 'a t =
    fun seed step ->
@@ -163,7 +169,8 @@ module Seq = struct
       ~f:(fun (seq, xs) ->
         match next seq with
         | Some (x, seq') -> Yield (x, (seq', x :: xs))
-        | None -> ( match xs with x :: xs' -> Skip (step x, xs') | [] -> Done ))
+        | None -> (
+            match xs with x :: xs' -> Skip (step x, xs') | [] -> Done ))
 
   let all_equal (type a) ?(sexp_of_t = fun _ -> [%sexp_of: string] "unknown")
       (l : a t) =
@@ -201,11 +208,15 @@ module Gen = struct
       match get () with
       | None -> None
       | Some x ->
-          put_back x ;
+          put_back x;
           let group_gen () =
             match get () with
             | None -> None
-            | Some x' -> if eq x x' then Some x' else (put_back x' ; None)
+            | Some x' ->
+                if eq x x' then Some x'
+                else (
+                  put_back x';
+                  None )
           in
           Some (x, group_gen)
 
@@ -215,22 +226,22 @@ module Gen = struct
       match !cur with
       | `Done -> None
       | `Group g -> (
-        match gen () with
-        | None ->
-            cur := `Done ;
-            Some g
-        | Some x -> (
-          match g with
-          | [] ->
-              cur := `Group [x] ;
-              next ()
-          | y :: _ ->
-              if eq x y then (
-                cur := `Group (x :: g) ;
-                next () )
-              else (
-                cur := `Group [x] ;
-                Some g ) ) )
+          match gen () with
+          | None ->
+              cur := `Done;
+              Some g
+          | Some x -> (
+              match g with
+              | [] ->
+                  cur := `Group [ x ];
+                  next ()
+              | y :: _ ->
+                  if eq x y then (
+                    cur := `Group (x :: g);
+                    next () )
+                  else (
+                    cur := `Group [ x ];
+                    Some g ) ) )
     in
     next
 
@@ -243,20 +254,27 @@ module Gen = struct
       else
         match gen () with
         | None ->
-            is_done := true ;
+            is_done := true;
             Some (to_array g)
         | Some x -> (
-          match peek g with
-          | None -> enqueue g x ; next ()
-          | Some y ->
-              if eq x y then (enqueue g x ; next ())
-              else
-                let g' = to_array g in
-                clear g ; enqueue g x ; Some g' )
+            match peek g with
+            | None ->
+                enqueue g x;
+                next ()
+            | Some y ->
+                if eq x y then (
+                  enqueue g x;
+                  next () )
+                else
+                  let g' = to_array g in
+                  clear g;
+                  enqueue g x;
+                  Some g' )
     in
     next
 
-  let rec junk_all g = match Gen.next g with Some _ -> junk_all g | None -> ()
+  let rec junk_all g =
+    match Gen.next g with Some _ -> junk_all g | None -> ()
 
   (** Ensure that `g1` is fully consumed before `g2` is used. *)
   let use_before g1 g2 =
@@ -265,7 +283,7 @@ module Gen = struct
       match Gen.next g1 with
       | Some x -> Some x
       | None ->
-          g1_used := true ;
+          g1_used := true;
           None
     in
     let g2' () =
@@ -279,17 +297,17 @@ module Gen = struct
     let print (i, j) = printf "%d %d, " i j in
     init ~limit:5 (fun i -> init ~limit:3 (fun j -> (i, j)))
     |> flatten |> group_lazy eq
-    |> iter ~f:(fun (_, ts) -> iter ts ~f:print) ;
+    |> iter ~f:(fun (_, ts) -> iter ts ~f:print);
     [%expect
-      {| 0 0, 0 1, 0 2, 1 0, 1 1, 1 2, 2 0, 2 1, 2 2, 3 0, 3 1, 3 2, 4 0, 4 1, 4 2, |}] ;
+      {| 0 0, 0 1, 0 2, 1 0, 1 1, 1 2, 2 0, 2 1, 2 2, 3 0, 3 1, 3 2, 4 0, 4 1, 4 2, |}];
     init ~limit:5 (fun i -> init ~limit:3 (fun j -> (i, j)))
     |> flatten |> group ~eq
-    |> iter ~f:(List.iter ~f:print) ;
+    |> iter ~f:(List.iter ~f:print);
     [%expect
-      {| 0 2, 0 1, 0 0, 1 2, 1 1, 1 0, 2 2, 2 1, 2 0, 3 2, 3 1, 3 0, 4 2, 4 1, 4 0, |}] ;
+      {| 0 2, 0 1, 0 0, 1 2, 1 1, 1 0, 2 2, 2 1, 2 0, 3 2, 3 1, 3 0, 4 2, 4 1, 4 0, |}];
     init ~limit:5 (fun i -> init ~limit:3 (fun j -> (i, j)))
     |> flatten |> group ~eq
-    |> iter ~f:(fun g -> List.rev g |> List.iter ~f:print) ;
+    |> iter ~f:(fun g -> List.rev g |> List.iter ~f:print);
     [%expect
       {| 0 0, 0 1, 0 2, 1 0, 1 1, 1 2, 2 0, 2 1, 2 2, 3 0, 3 1, 3 2, 4 0, 4 1, 4 2, |}]
 end
@@ -310,7 +328,8 @@ module T2 = struct
   type ('a, 'b) t = 'a * 'b
 
   let compare :
-      ('a -> 'a -> int) -> ('b -> 'b -> int) -> ('a, 'b) t -> ('a, 'b) t -> int =
+      ('a -> 'a -> int) -> ('b -> 'b -> int) -> ('a, 'b) t -> ('a, 'b) t -> int
+      =
    fun c1 c2 (x1, y1) (x2, y2) ->
     let k1 = c1 x1 x2 in
     if k1 <> 0 then k1 else c2 y1 y2
@@ -330,7 +349,8 @@ end
 module Buffer = struct
   include Buffer
 
-  let equal : t -> t -> bool = fun x y -> String.equal (contents x) (contents y)
+  let equal : t -> t -> bool =
+   fun x y -> String.equal (contents x) (contents y)
 
   (* let to_string : t -> string = fun x ->
    *   List.init (Buffer.length x) ~f:(Buffer.nth x)
@@ -370,7 +390,9 @@ module Tree = struct
     let iter t ~f =
       let rec iter = function
         | Empty -> ()
-        | Node (v, c) -> f v ; List.iter c ~f:iter
+        | Node (v, c) ->
+            f v;
+            List.iter c ~f:iter
       in
       iter t
 
@@ -417,7 +439,7 @@ end = struct
 
   let is_empty = List.is_empty
 
-  let singleton x = [x]
+  let singleton x = [ x ]
 
   let ( ++ ) l x = x :: l
 
@@ -427,3 +449,60 @@ end = struct
 
   let length = List.length
 end
+
+class ['s] tuple2_monoid m1 m2 =
+  object
+    inherit ['s] VisitorsRuntime.monoid
+
+    method private zero = (m1#zero, m2#zero)
+
+    method private plus (x, y) (x', y') = (m1#plus x x', m2#plus y y')
+  end
+
+class ['s] list_monoid =
+  object
+    inherit ['s] VisitorsRuntime.monoid
+
+    method private zero = []
+
+    method private plus = ( @ )
+  end
+
+class ['s] set_monoid m =
+  object
+    inherit ['s] VisitorsRuntime.monoid
+
+    method private zero = Set.empty m
+
+    method private plus = Set.union
+  end
+
+class ['s] map_monoid m =
+  object
+    inherit ['s] VisitorsRuntime.monoid
+
+    method private zero = Map.empty m
+
+    method private plus =
+      Map.merge ~f:(fun ~key:_ ->
+        function
+        | `Both _ -> failwith "Duplicate key" | `Left x | `Right x -> Some x)
+  end
+
+class ['s] conj_monoid =
+  object
+    inherit ['s] VisitorsRuntime.monoid
+
+    method private zero = true
+
+    method private plus = ( && )
+  end
+
+class ['s] disj_monoid =
+  object
+    inherit ['s] VisitorsRuntime.monoid
+
+    method private zero = false
+
+    method private plus = ( || )
+  end

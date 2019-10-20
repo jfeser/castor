@@ -21,19 +21,25 @@ module Make (Config : Config.S) = struct
   open Config
   module Q = Fold_query
 
-  let simplify = Option.value simplify ~default:(fun r -> R.resolve r |> P.project)
+  let simplify =
+    Option.value simplify ~default:(fun r -> R.resolve r |> P.project)
 
   module Fold = struct
-    type ('a, 'b, 'c) fold = {init: 'b; fold: 'b -> 'a -> 'b; extract: 'b -> 'c}
+    type ('a, 'b, 'c) fold = {
+      init : 'b;
+      fold : 'b -> 'a -> 'b;
+      extract : 'b -> 'c;
+    }
 
     type ('a, 'c) t = Fold : ('a, 'b, 'c) fold -> ('a, 'c) t
 
-    let run (Fold {init; fold; extract}) l =
+    let run (Fold { init; fold; extract }) l =
       List.fold_left l ~init ~f:fold |> extract
 
-    let run_gen (Fold {init; fold; extract}) l = Gen.fold l ~init ~f:fold |> extract
+    let run_gen (Fold { init; fold; extract }) l =
+      Gen.fold l ~init ~f:fold |> extract
 
-    let run_lwt (Fold {init; fold; extract}) l =
+    let run_lwt (Fold { init; fold; extract }) l =
       let%lwt ret = Lwt_stream.fold (fun x y -> fold y x) l init in
       return (extract ret)
   end
@@ -47,9 +53,11 @@ module Make (Config : Config.S) = struct
       else failwith "Unexpected concat size."
     in
     let extract acc =
-      match RevList.to_list acc with [lhs; rhs] -> f lhs rhs | _ -> assert false
+      match RevList.to_list acc with
+      | [ lhs; rhs ] -> f lhs rhs
+      | _ -> assert false
     in
-    Fold {init; fold; extract}
+    Fold { init; fold; extract }
 
   let group_by eq strm =
     let open RevList in
@@ -61,23 +69,25 @@ module Make (Config : Config.S) = struct
           let%lwt tup = Lwt_stream.get strm in
           match tup with
           | None ->
-              cur := `Done ;
+              cur := `Done;
+
               (* Never return empty groups. *)
               if is_empty g then return None else return (Some (to_list g))
           | Some x -> (
-            match last g with
-            | None ->
-                cur := `Group (singleton x) ;
-                next ()
-            | Some y ->
-                if eq x y then (
-                  cur := `Group (g ++ x) ;
-                  next () )
-                else (
-                  cur := `Group (singleton x) ;
-                  (* NOTE: Groups are created back to front, so must be
+              match last g with
+              | None ->
+                  cur := `Group (singleton x);
+                  next ()
+              | Some y ->
+                  if eq x y then (
+                    cur := `Group (g ++ x);
+                    next () )
+                  else (
+                    cur := `Group (singleton x);
+
+                    (* NOTE: Groups are created back to front, so must be
                      reversed. *)
-                  return (Some (to_list g)) ) ) )
+                    return (Some (to_list g)) ) ) )
     in
     Lwt_stream.from next
 
@@ -90,7 +100,9 @@ module Make (Config : Config.S) = struct
       in
       fun tup -> List.take (List.drop tup drop_ct) take_ct
     in
-    let%lwt group = Lwt_stream.get_while (fun t -> extract_counter t = ctr) tups in
+    let%lwt group =
+      Lwt_stream.get_while (fun t -> extract_counter t = ctr) tups
+    in
     List.map group ~f:extract_tuple |> return
 
   class virtual ['a] abslayout_fold =
@@ -128,10 +140,11 @@ module Make (Config : Config.S) = struct
         match a.Q.meta.A.node with
         | Filter ((_, c) as x) -> (self#filter m x, c)
         | Select ((_, c) as x) -> (self#select m x, c)
-        | OrderBy ({rel= c; _} as x) -> (self#order_by m x, c)
+        | OrderBy ({ rel = c; _ } as x) -> (self#order_by m x, c)
         | GroupBy ((_, _, c) as x) -> (self#group_by m x, c)
         | Dedup c -> (self#dedup m, c)
-        | x -> Error.(create "Expected a function." x [%sexp_of: A.node] |> raise)
+        | x ->
+            Error.(create "Expected a function." x [%sexp_of: A.node] |> raise)
 
       method private qempty : (int, A.t) Q.t -> 'a =
         fun a ->
@@ -140,7 +153,7 @@ module Make (Config : Config.S) = struct
           | AEmpty -> self#empty m
           | _ ->
               let f, child = self#func a in
-              f (self#qempty {a with meta= child})
+              f (self#qempty { a with meta = child })
 
       method private scalars : (int, A.t) Q.t -> 't -> 'a =
         fun a ->
@@ -149,11 +162,11 @@ module Make (Config : Config.S) = struct
           | AScalar x -> (
               fun t ->
                 match t with
-                | [v] -> self#scalar m x v
+                | [ v ] -> self#scalar m x v
                 | _ -> failwith "Expected a singleton tuple." )
           | ATuple ((xs, _) as x) ->
               fun t ->
-                let (Fold {init; fold; extract}) = self#tuple m x in
+                let (Fold { init; fold; extract }) = self#tuple m x in
                 List.fold2_exn xs t ~init ~f:(fun acc r v ->
                     let m = r.meta in
                     match r.node with
@@ -162,7 +175,7 @@ module Make (Config : Config.S) = struct
                 |> extract
           | _ ->
               let f, child = self#func a in
-              let g = self#scalars {a with meta= child} in
+              let g = self#scalars { a with meta = child } in
               fun t -> f (g t)
 
       method private for_
@@ -172,21 +185,27 @@ module Make (Config : Config.S) = struct
           match a.Q.meta.A.node with
           | AList x ->
               let (Fold g) = self#list m x in
-              Fold {g with fold= (fun a (x, _, z) -> g.fold a (x, z))}
+              Fold { g with fold = (fun a (x, _, z) -> g.fold a (x, z)) }
           | AHashIdx x ->
               let (Fold g) = self#hash_idx m x in
               Fold
-                { g with
-                  fold= (fun a (x, y, z) -> g.fold a (x, Option.value_exn y, z)) }
+                {
+                  g with
+                  fold =
+                    (fun a (x, y, z) -> g.fold a (x, Option.value_exn y, z));
+                }
           | AOrderedIdx x ->
               let (Fold g) = self#ordered_idx m x in
               Fold
-                { g with
-                  fold= (fun a (x, y, z) -> g.fold a (x, Option.value_exn y, z)) }
+                {
+                  g with
+                  fold =
+                    (fun a (x, y, z) -> g.fold a (x, Option.value_exn y, z));
+                }
           | _ ->
               let f, child = self#func a in
-              let (Fold g) = self#for_ {a with meta= child} in
-              Fold {g with extract= (fun x -> f (g.extract x))}
+              let (Fold g) = self#for_ { a with meta = child } in
+              Fold { g with extract = (fun x -> f (g.extract x)) }
 
       method private concat : (int, A.t) Q.t -> ('a, 'a) Fold.t =
         fun a ->
@@ -197,18 +216,18 @@ module Make (Config : Config.S) = struct
           | Join x -> two_arg_fold (self#join m x)
           | _ ->
               let f, child = self#func a in
-              let (Fold g) = self#concat {a with meta= child} in
-              Fold {g with extract= (fun acc -> f (g.extract acc))}
+              let (Fold g) = self#concat { a with meta = child } in
+              Fold { g with extract = (fun acc -> f (g.extract acc)) }
 
       method private key_layout q =
         match q.node with
         | AHashIdx x -> Some (A.h_key_layout x)
         | AOrderedIdx (_, _, x) -> Some (A.o_key_layout x)
         | Select (_, q')
-         |Filter (_, q')
-         |Dedup q'
-         |OrderBy {rel= q'; _}
-         |GroupBy (_, _, q') ->
+        | Filter (_, q')
+        | Dedup q'
+        | OrderBy { rel = q'; _ }
+        | GroupBy (_, _, q') ->
             self#key_layout q'
         | _ -> None
 
@@ -220,7 +239,7 @@ module Make (Config : Config.S) = struct
           if self#debug then
             Lwt_stream.map
               (fun t ->
-                print_s ([%sexp_of: string * Value.t list] ("for", t)) ;
+                print_s ([%sexp_of: string * Value.t list] ("for", t));
                 t)
               tups
           else tups
@@ -242,10 +261,12 @@ module Make (Config : Config.S) = struct
             tups
             (* Extract the row number from each tuple. *)
             |> Lwt_stream.map (function
-                 | [] -> Error.of_string "Unexpected empty tuple." |> Error.raise
+                 | [] ->
+                     Error.of_string "Unexpected empty tuple." |> Error.raise
                  | rn :: t -> (rn, t))
             (* Group by row numbers *)
-            |> group_by (fun (rn1, _) (rn2, _) -> [%compare.equal: Value.t] rn1 rn2)
+            |> group_by (fun (rn1, _) (rn2, _) ->
+                   [%compare.equal: Value.t] rn1 rn2)
             (* Drop the row number from each group. *)
             |> Lwt_stream.map (fun g -> List.map g ~f:(fun (_, t) -> t))
             (* Split each group into one lhs and many rhs. *)
@@ -259,19 +280,19 @@ module Make (Config : Config.S) = struct
         |> Lwt_stream.map_s (fun (lhs, rhs) ->
                let lval =
                  Option.map (self#key_layout a.Q.meta) ~f:(fun l ->
-                     self#scalars {a with meta= l} lhs)
+                     self#scalars { a with meta = l } lhs)
                in
                let%lwt rval = self#eval lctx (Lwt_stream.of_list rhs) q2 in
                return (lhs, lval, rval))
         |> run_lwt fold
 
       method private eval_concat lctx tups a qs : 'a Lwt.t =
-        let (Fold {init; fold; extract}) = self#concat a in
+        let (Fold { init; fold; extract }) = self#concat a in
         let tups =
           if self#debug then
             Lwt_stream.map
               (fun t ->
-                print_s ([%sexp_of: string * Value.t list] ("concat", t)) ;
+                print_s ([%sexp_of: string * Value.t list] ("concat", t));
                 t)
               tups
           else tups
@@ -291,7 +312,7 @@ module Make (Config : Config.S) = struct
           if self#debug then
             Lwt_stream.map
               (fun t ->
-                print_s ([%sexp_of: string * Value.t list] ("scalar", t)) ;
+                print_s ([%sexp_of: string * Value.t list] ("scalar", t));
                 t)
               tups
           else tups
@@ -315,7 +336,9 @@ module Make (Config : Config.S) = struct
         else failwith "Empty: expected an empty generator."
 
       method private eval_let lctx tups (binds, q) : 'a Lwt.t =
-        let widths = List.map binds ~f:(fun (_, q) -> Q.width q) @ [Q.width q] in
+        let widths =
+          List.map binds ~f:(fun (_, q) -> Q.width q) @ [ Q.width q ]
+        in
         (* The first n groups contain the values for the bound layouts. *)
         let%lwt binds =
           Lwt_list.mapi_s
@@ -345,7 +368,8 @@ module Make (Config : Config.S) = struct
             (fun t ->
               let l = List.length t in
               if l = l' then t
-              else Error.createf "Expected length %d got %d" l' l |> Error.raise)
+              else
+                Error.createf "Expected length %d got %d" l' l |> Error.raise)
             tups
         in
         match a.Q.node with
@@ -359,16 +383,17 @@ module Make (Config : Config.S) = struct
       method run ?timeout r =
         let q = A.ensure_alias r |> Q.of_ralgebra |> Q.hoist_all in
         let r = Q.to_ralgebra q |> simplify in
-        Logs.debug (fun m -> m "Running query: %a" pp r) ;
+        Logs.debug (fun m -> m "Running query: %a" pp r);
         let sql = Sql.of_ralgebra r in
-        Logs.debug (fun m -> m "Running SQL: %s" (Sql.to_string_hum sql)) ;
+        Logs.debug (fun m -> m "Running SQL: %s" (Sql.to_string_hum sql));
         let tups =
           Db.exec_cursor_lwt_exn ?timeout conn
             (A.schema_exn r |> List.map ~f:Name.type_exn)
             (Sql.to_string sql)
           |> Lwt_stream.map (fun r -> Result.ok_exn r |> Array.to_list)
         in
-        self#eval (Map.empty (module String)) tups (Q.to_width q) |> Lwt_main.run
+        self#eval (Map.empty (module String)) tups (Q.to_width q)
+        |> Lwt_main.run
     end
 
   (** Returns the least general type of a layout. *)
@@ -376,28 +401,30 @@ module Make (Config : Config.S) = struct
     match r.Abslayout.node with
     | Range _ -> T.FuncT ([], `Width 1)
     | Select (ps, r') | GroupBy (ps, _, r') ->
-        T.FuncT ([least_general_of_layout r'], `Width (List.length ps))
-    | OrderBy {rel= r'; _} | Filter (_, r') | Dedup r' ->
-        FuncT ([least_general_of_layout r'], `Child_sum)
-    | Join {r1; r2; _} ->
-        FuncT ([least_general_of_layout r1; least_general_of_layout r2], `Child_sum)
+        T.FuncT ([ least_general_of_layout r' ], `Width (List.length ps))
+    | OrderBy { rel = r'; _ } | Filter (_, r') | Dedup r' ->
+        FuncT ([ least_general_of_layout r' ], `Child_sum)
+    | Join { r1; r2; _ } ->
+        FuncT
+          ( [ least_general_of_layout r1; least_general_of_layout r2 ],
+            `Child_sum )
     | AEmpty -> EmptyT
     | AScalar p -> Pred.to_type p |> T.least_general_of_primtype
-    | AList (_, r') -> ListT (least_general_of_layout r', {count= Bottom})
-    | DepJoin {d_lhs; d_rhs; _} ->
+    | AList (_, r') -> ListT (least_general_of_layout r', { count = Bottom })
+    | DepJoin { d_lhs; d_rhs; _ } ->
         FuncT
-          ( [least_general_of_layout d_lhs; least_general_of_layout d_rhs]
-          , `Child_sum )
+          ( [ least_general_of_layout d_lhs; least_general_of_layout d_rhs ],
+            `Child_sum )
     | AHashIdx h ->
         HashIdxT
-          ( least_general_of_layout (A.h_key_layout h)
-          , least_general_of_layout h.hi_values
-          , {key_count= Bottom} )
-    | AOrderedIdx (_, vr, {oi_key_layout= Some kr; _}) ->
+          ( least_general_of_layout (A.h_key_layout h),
+            least_general_of_layout h.hi_values,
+            { key_count = Bottom } )
+    | AOrderedIdx (_, vr, { oi_key_layout = Some kr; _ }) ->
         OrderedIdxT
-          ( least_general_of_layout kr
-          , least_general_of_layout vr
-          , {key_count= Bottom} )
+          ( least_general_of_layout kr,
+            least_general_of_layout vr,
+            { key_count = Bottom } )
     | ATuple (rs, k) ->
         let kind =
           match k with
@@ -405,9 +432,9 @@ module Make (Config : Config.S) = struct
           | Concat -> `Concat
           | _ -> failwith "Unsupported"
         in
-        TupleT (List.map rs ~f:least_general_of_layout, {kind})
+        TupleT (List.map rs ~f:least_general_of_layout, { kind })
     | As (_, r') -> least_general_of_layout r'
-    | AOrderedIdx (_, _, {oi_key_layout= None; _}) | Relation _ ->
+    | AOrderedIdx (_, _, { oi_key_layout = None; _ }) | Relation _ ->
         failwith "Layout is still abstract."
 
   (** Returns a layout type that is general enough to hold all of the data. *)
@@ -415,19 +442,21 @@ module Make (Config : Config.S) = struct
     object
       inherit [_] abslayout_fold
 
-      method! select _ (exprs, _) t = T.FuncT ([t], `Width (List.length exprs))
+      method! select _ (exprs, _) t =
+        T.FuncT ([ t ], `Width (List.length exprs))
 
-      method join _ _ t1 t2 = T.FuncT ([t1; t2], `Child_sum)
+      method join _ _ t1 t2 = T.FuncT ([ t1; t2 ], `Child_sum)
 
-      method depjoin _ _ t1 t2 = T.FuncT ([t1; t2], `Child_sum)
+      method depjoin _ _ t1 t2 = T.FuncT ([ t1; t2 ], `Child_sum)
 
-      method! filter _ _ t = T.FuncT ([t], `Child_sum)
+      method! filter _ _ t = T.FuncT ([ t ], `Child_sum)
 
-      method! order_by _ _ t = T.FuncT ([t], `Child_sum)
+      method! order_by _ _ t = T.FuncT ([ t ], `Child_sum)
 
-      method! dedup _ t = T.FuncT ([t], `Child_sum)
+      method! dedup _ t = T.FuncT ([ t ], `Child_sum)
 
-      method! group_by _ (exprs, _, _) t = FuncT ([t], `Width (List.length exprs))
+      method! group_by _ (exprs, _, _) t =
+        FuncT ([ t ], `Width (List.length exprs))
 
       method empty _ = EmptyT
 
@@ -436,65 +465,75 @@ module Make (Config : Config.S) = struct
         | Value.Date x ->
             let x = Date.to_int x in
             DateT
-              { range= T.AbsInt.of_int x
-              ; nullable= false
-              ; distinct= T.Distinct.singleton (module Int) x 1 }
+              {
+                range = T.AbsInt.of_int x;
+                nullable = false;
+                distinct = T.Distinct.singleton (module Int) x 1;
+              }
         | Int x ->
             IntT
-              { range= T.AbsInt.of_int x
-              ; nullable= false
-              ; distinct= T.Distinct.singleton (module Int) x 1 }
-        | Bool _ -> BoolT {nullable= false}
+              {
+                range = T.AbsInt.of_int x;
+                nullable = false;
+                distinct = T.Distinct.singleton (module Int) x 1;
+              }
+        | Bool _ -> BoolT { nullable = false }
         | String x ->
             StringT
-              { nchars= T.AbsInt.of_int (String.length x)
-              ; nullable= false
-              ; distinct= T.Distinct.singleton (module String) x 1 }
+              {
+                nchars = T.AbsInt.of_int (String.length x);
+                nullable = false;
+                distinct = T.Distinct.singleton (module String) x 1;
+              }
         | Null -> NullT
-        | Fixed x -> FixedT {value= T.AbsFixed.of_fixed x; nullable= false}
+        | Fixed x -> FixedT { value = T.AbsFixed.of_fixed x; nullable = false }
 
       method list _ ((_, elem_l) as l) =
         let init = (least_general_of_layout elem_l, 0) in
         let fold (t, c) (_, t') =
           try (T.unify_exn t t', c + 1)
           with Type.TypeError _ as exn ->
-            Logs.err (fun m -> m "Type checking failed on: %a" A.pp (A.list' l)) ;
+            Logs.err (fun m ->
+                m "Type checking failed on: %a" A.pp (A.list' l));
             Logs.err (fun m ->
                 m "%a does not unify with %a" Sexp.pp_hum
                   ([%sexp_of: T.t] t)
                   Sexp.pp_hum
-                  ([%sexp_of: T.t] t')) ;
+                  ([%sexp_of: T.t] t'));
             raise exn
         in
         let extract (elem_type, num_elems) =
-          T.ListT (elem_type, {count= T.AbsInt.of_int num_elems})
+          T.ListT (elem_type, { count = T.AbsInt.of_int num_elems })
         in
-        Fold {init; fold; extract}
+        Fold { init; fold; extract }
 
       method tuple _ (_, kind) =
         let kind =
-          match kind with Cross -> `Cross | Zip -> failwith "" | Concat -> `Concat
+          match kind with
+          | Cross -> `Cross
+          | Zip -> failwith ""
+          | Concat -> `Concat
         in
         let init = RevList.empty in
         let fold = RevList.( ++ ) in
-        let extract ts = T.TupleT (RevList.to_list ts, {kind}) in
-        Fold {init; fold; extract}
+        let extract ts = T.TupleT (RevList.to_list ts, { kind }) in
+        Fold { init; fold; extract }
 
       method hash_idx _ h =
         let init =
-          ( 0
-          , least_general_of_layout (A.h_key_layout h)
-          , least_general_of_layout h.hi_values )
+          ( 0,
+            least_general_of_layout (A.h_key_layout h),
+            least_general_of_layout h.hi_values )
         in
         let fold (kct, kt, vt) (_, kt', vt') =
           (kct + 1, T.unify_exn kt kt', T.unify_exn vt vt')
         in
         let extract (kct, kt, vt) =
-          T.HashIdxT (kt, vt, {key_count= T.AbsInt.of_int kct})
+          T.HashIdxT (kt, vt, { key_count = T.AbsInt.of_int kct })
         in
-        Fold {init; fold; extract}
+        Fold { init; fold; extract }
 
-      method ordered_idx _ (_, value_l, {oi_key_layout; _}) =
+      method ordered_idx _ (_, value_l, { oi_key_layout; _ }) =
         let key_l = Option.value_exn oi_key_layout in
         let init =
           (least_general_of_layout key_l, least_general_of_layout value_l, 0)
@@ -503,62 +542,65 @@ module Make (Config : Config.S) = struct
           (T.unify_exn kt kt', T.unify_exn vt vt', ct + 1)
         in
         let extract (kt, vt, ct) =
-          T.OrderedIdxT (kt, vt, {key_count= T.AbsInt.of_int ct})
+          T.OrderedIdxT (kt, vt, { key_count = T.AbsInt.of_int ct })
         in
-        Fold {init; fold; extract}
+        Fold { init; fold; extract }
     end
 
   let type_of ?timeout r =
-    Log.info (fun m -> m "Computing type of abstract layout.") ;
+    Log.info (fun m -> m "Computing type of abstract layout.");
     let type_ =
       try (new type_fold)#run ?timeout r
       with exn ->
         let trace = Backtrace.Exn.most_recent () in
         Logs.err (fun m ->
             m "Type computation failed: %a@,%s" Exn.pp exn
-              (Backtrace.to_string trace)) ;
+              (Backtrace.to_string trace));
         raise exn
     in
     Log.info (fun m ->
-        m "The type is: %s" (Sexp.to_string_hum ([%sexp_of: Type.t] type_))) ;
+        m "The type is: %s" (Sexp.to_string_hum ([%sexp_of: Type.t] type_)));
     type_
 
   let annotate_type r =
     let rec annot r t =
       let open Type in
-      Meta.(set_m r type_ t) ;
+      Meta.(set_m r type_ t);
       match (r.node, t) with
-      | ( (AScalar _ | Range _)
-        , (IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | NullT) ) ->
+      | ( (AScalar _ | Range _),
+          (IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | NullT) ) ->
           ()
       | AList (_, r'), ListT (t', _)
-       |(Filter (_, r') | Select (_, r')), FuncT ([t'], _) ->
+      | (Filter (_, r') | Select (_, r')), FuncT ([ t' ], _) ->
           annot r' t'
       | AHashIdx h, HashIdxT (kt, vt, _) ->
-          Option.iter h.hi_key_layout ~f:(fun kr -> annot kr kt) ;
+          Option.iter h.hi_key_layout ~f:(fun kr -> annot kr kt);
           annot h.hi_values vt
       | AOrderedIdx (_, vr, m), OrderedIdxT (kt, vt, _) ->
-          Option.iter m.oi_key_layout ~f:(fun kr -> annot kr kt) ;
+          Option.iter m.oi_key_layout ~f:(fun kr -> annot kr kt);
           annot vr vt
       | ATuple (rs, _), TupleT (ts, _) -> (
-        match List.iter2 rs ts ~f:annot with
-        | Ok () -> ()
-        | Unequal_lengths ->
-            Error.(
-              create "Mismatched tuple type." (r, t) [%sexp_of: Abslayout.t * T.t]
-              |> raise) )
-      | DepJoin {d_lhs; d_rhs; _}, FuncT ([t1; t2], _) ->
-          annot d_lhs t1 ; annot d_rhs t2
+          match List.iter2 rs ts ~f:annot with
+          | Ok () -> ()
+          | Unequal_lengths ->
+              Error.(
+                create "Mismatched tuple type." (r, t)
+                  [%sexp_of: Abslayout.t * T.t]
+                |> raise) )
+      | DepJoin { d_lhs; d_rhs; _ }, FuncT ([ t1; t2 ], _) ->
+          annot d_lhs t1;
+          annot d_rhs t2
       | As (_, r), _ -> annot r t
       | ( ( Select _ | Filter _ | DepJoin _ | Join _ | GroupBy _ | OrderBy _
           | Dedup _ | Relation _ | AEmpty | AScalar _ | AList _ | ATuple _
-          | AHashIdx _ | AOrderedIdx _ | Range _ )
-        , ( NullT | IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | TupleT _
-          | ListT _ | HashIdxT _ | OrderedIdxT _ | FuncT _ | EmptyT ) ) ->
+          | AHashIdx _ | AOrderedIdx _ | Range _ ),
+          ( NullT | IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _
+          | TupleT _ | ListT _ | HashIdxT _ | OrderedIdxT _ | FuncT _ | EmptyT
+            ) ) ->
           Error.create "Unexpected type." (r, t) [%sexp_of: Abslayout.t * t]
           |> Error.raise
     in
-    annot r (type_of r) ;
+    annot r (type_of r);
     let visitor =
       object
         inherit runtime_subquery_visitor
@@ -602,7 +644,7 @@ let%test_module _ =
       let q = Q.of_ralgebra ralgebra in
       let r = Q.to_ralgebra q in
       let sql = Sql.of_ralgebra r in
-      printf "%s" (Sql.to_string_hum sql) ;
+      printf "%s" (Sql.to_string_hum sql);
       [%expect
         {|
       SELECT
@@ -636,7 +678,7 @@ let%test_module _ =
       let q = Q.of_ralgebra ralgebra in
       let r = Q.to_ralgebra q in
       let sql = Sql.of_ralgebra r in
-      printf "%s" (Sql.to_string_hum sql) ;
+      printf "%s" (Sql.to_string_hum sql);
       [%expect
         {|
       SELECT
@@ -685,15 +727,15 @@ let%test_module _ =
       let ralgebra = load_string Test_util.sum_complex in
       let q = Q.of_ralgebra ralgebra in
       let r = Q.to_ralgebra q in
-      Format.printf "%a" pp r ;
+      Format.printf "%a" pp r;
       [%expect
         {|
       orderby([x9, x10, x8],
         depjoin(select([row_number() as rn2, f, g], r1) as k,
           select([k.rn2 as x8, k.f as x9, k.g as x10, f as x11, v as x12],
-            atuple([ascalar(k.f), ascalar((k.g - k.f) as v)], cross)))) |}] ;
+            atuple([ascalar(k.f), ascalar((k.g - k.f) as v)], cross)))) |}];
       let sql = Sql.of_ralgebra r in
-      printf "%s" (Sql.to_string_hum sql) ;
+      printf "%s" (Sql.to_string_hum sql);
       [%expect
         {|
       SELECT
@@ -723,10 +765,12 @@ let%test_module _ =
           "x8_0" |}]
 
     let%expect_test "" =
-      let ralgebra = load_string "alist(r1 as k, alist(r1 as j, ascalar(j.f)))" in
+      let ralgebra =
+        load_string "alist(r1 as k, alist(r1 as j, ascalar(j.f)))"
+      in
       let q = Q.of_ralgebra ralgebra in
       let r = Q.to_ralgebra q in
-      Format.printf "%a" pp r ;
+      Format.printf "%a" pp r;
       [%expect
         {|
         orderby([x18, x19, x17, x21, x22, x20],
@@ -740,9 +784,9 @@ let%test_module _ =
                     x16 as x23],
               depjoin(select([row_number() as rn4, f, g], r1) as j,
                 select([j.rn4 as x13, j.f as x14, j.g as x15, f as x16],
-                  atuple([ascalar(j.f)], cross)))))) |}] ;
+                  atuple([ascalar(j.f)], cross)))))) |}];
       let sql = Sql.of_ralgebra r in
-      printf "%s" (Sql.to_string_hum sql) ;
+      printf "%s" (Sql.to_string_hum sql);
       [%expect
         {|
         SELECT

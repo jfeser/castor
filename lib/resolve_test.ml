@@ -18,9 +18,9 @@ let pp_with_refcount, _ =
       let open Format in
       match Univ_map.find meta Meta.refcnt with
       | Some r ->
-          fprintf fmt "@[<hv 2>{" ;
+          fprintf fmt "@[<hv 2>{";
           Map.iteri r ~f:(fun ~key:n ~data:c ->
-              if c > 0 then fprintf fmt "%a=%d,@ " Name.pp n c) ;
+              if c > 0 then fprintf fmt "%a=%d,@ " Name.pp n c);
           fprintf fmt "}@]"
       | None -> ())
     ()
@@ -40,7 +40,7 @@ let%expect_test "" =
     |}
     |> M.load_string
   in
-  Format.printf "%a@." pp_with_refcount r ;
+  Format.printf "%a@." pp_with_refcount r;
   [%expect
     {|
       select([l_receiptdate@run],
@@ -70,7 +70,8 @@ let%expect_test "" =
     |> M.load_string
   in
   Format.printf "%a@." pp_with_refcount r;
-  [%expect {|
+  [%expect
+    {|
     select([f@run],
       atuple([atuple([ascalar(0 as f)#{f=1, }, ascalar(1 as g)#{}],
                 cross)#{f=1, },

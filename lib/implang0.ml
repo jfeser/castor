@@ -50,8 +50,8 @@ type expr =
   | Tuple of expr list
   | Slice of expr * int
   | Index of expr * int
-  | Binop of {op: (binop[@opaque]); arg1: expr; arg2: expr}
-  | Unop of {op: (unop[@opaque]); arg: expr}
+  | Binop of { op : (binop[@opaque]); arg1 : expr; arg2 : expr }
+  | Unop of { op : (unop[@opaque]); arg : expr }
   | Done of string
   | Ternary of expr * expr * expr
   | TupleHash of (Type.PrimType.t[@opaque]) list * expr * expr
@@ -60,33 +60,38 @@ type expr =
 and stmt =
   | Print of (Type.PrimType.t[@opaque]) * expr
   | Consume of (Type.PrimType.t[@opaque]) * expr
-  | Loop of {cond: expr; body: prog}
-  | If of {cond: expr; tcase: prog; fcase: prog}
-  | Iter of {var: string; func: string; args: expr list}
-  | Step of {var: string; iter: string}
-  | Assign of {lhs: string; rhs: expr}
+  | Loop of { cond : expr; body : prog }
+  | If of { cond : expr; tcase : prog; fcase : prog }
+  | Iter of { var : string; func : string; args : expr list }
+  | Step of { var : string; iter : string }
+  | Assign of { lhs : string; rhs : expr }
   | Yield of expr
   | Return of expr
 
 and prog = stmt list
 
-and local = {lname: string; type_: (Type.PrimType.t[@opaque]); persistent: bool}
+and local = {
+  lname : string;
+  type_ : (Type.PrimType.t[@opaque]);
+  persistent : bool;
+}
 
-and func =
-  { name: string
-  ; args: (string * (Type.PrimType.t[@opaque])) list
-  ; body: prog
-  ; ret_type: (Type.PrimType.t[@opaque])
-  ; locals: local list }
+and func = {
+  name : string;
+  args : (string * (Type.PrimType.t[@opaque])) list;
+  body : prog;
+  ret_type : (Type.PrimType.t[@opaque]);
+  locals : local list;
+}
 [@@deriving
-  compare
-  , sexp
-  , visitors {variety= "endo"}
-  , visitors {variety= "map"}
-  , visitors {variety= "mapreduce"}
-  , visitors {variety= "iter"}
-  , visitors {variety= "reduce"}]
+  compare,
+    sexp,
+    visitors { variety = "endo" },
+    visitors { variety = "map" },
+    visitors { variety = "mapreduce" },
+    visitors { variety = "iter" },
+    visitors { variety = "reduce" }]
 
 let rec conjuncts = function
-  | Binop {op= `And; arg1= p1; arg2= p2} -> conjuncts p1 @ conjuncts p2
-  | p -> [p]
+  | Binop { op = `And; arg1 = p1; arg2 = p2 } -> conjuncts p1 @ conjuncts p2
+  | p -> [ p ]

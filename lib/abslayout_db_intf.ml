@@ -11,7 +11,11 @@ module type S = sig
   val load_string : ?params:Set.M(Name).t -> string -> t
 
   module Fold : sig
-    type ('a, 'b, 'c) fold = {init: 'b; fold: 'b -> 'a -> 'b; extract: 'b -> 'c}
+    type ('a, 'b, 'c) fold = {
+      init : 'b;
+      fold : 'b -> 'a -> 'b;
+      extract : 'b -> 'c;
+    }
 
     type ('a, 'c) t = Fold : ('a, 'b, 'c) fold -> ('a, 'c) t
 

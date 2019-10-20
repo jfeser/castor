@@ -3,7 +3,7 @@ open Sql
 open Test_util
 
 let run_test s =
-  Logs.Src.set_level src (Some Debug) ;
+  Logs.Src.set_level src (Some Debug);
   let module Config = struct
     let conn = Lazy.force test_db_conn
 
@@ -14,11 +14,12 @@ let run_test s =
   let sql_str = of_ralgebra r |> to_string_hum in
   ( match Db.check Config.conn sql_str with
   | Ok () -> ()
-  | Error e -> print_endline (Error.to_string_hum e) ) ;
-  print_endline sql_str ; Logs.Src.set_level src None
+  | Error e -> print_endline (Error.to_string_hum e) );
+  print_endline sql_str;
+  Logs.Src.set_level src None
 
 let%expect_test "select-agg" =
-  run_test "select([(0.2 * avg(f)) as test], r)" ;
+  run_test "select([(0.2 * avg(f)) as test], r)";
   [%expect
     {|
     SELECT
@@ -31,15 +32,16 @@ let%expect_test "select-agg" =
             "r" AS "r_0") AS "t0" |}]
 
 let%expect_test "project" =
-  run_test "Select([f], r)" ;
-  [%expect {|
+  run_test "Select([f], r)";
+  [%expect
+    {|
     SELECT
         r_0. "f" AS "f_1"
     FROM
         "r" AS "r_0" |}]
 
 let%expect_test "filter" =
-  run_test "Filter(f = g, r)" ;
+  run_test "Filter(f = g, r)";
   [%expect
     {|
       SELECT
@@ -51,8 +53,8 @@ let%expect_test "filter" =
 
 let%expect_test "eqjoin" =
   run_test
-    "Join(r_f = s_g, select([f as r_f, g as r_g], r), select([f as s_f, g as s_g], \
-     s))" ;
+    "Join(r_f = s_g, select([f as r_f, g as r_g], r), select([f as s_f, g as \
+     s_g], s))";
   [%expect
     {|
       SELECT
@@ -66,7 +68,7 @@ let%expect_test "eqjoin" =
       WHERE ((r_1. "f") = (s_0. "g")) |}]
 
 let%expect_test "join-select" =
-  run_test "join(true, select([id as p_id], log), select([id as c_id], log))" ;
+  run_test "join(true, select([id as p_id], log), select([id as c_id], log))";
   [%expect
     {|
         SELECT
@@ -78,7 +80,7 @@ let%expect_test "join-select" =
         WHERE (TRUE) |}]
 
 let%expect_test "order-by" =
-  run_test "OrderBy([f desc], Dedup(Select([f], r1)))" ;
+  run_test "OrderBy([f desc], Dedup(Select([f], r1)))";
   [%expect
     {|
     SELECT DISTINCT
@@ -89,7 +91,7 @@ let%expect_test "order-by" =
         r1_0. "f" DESC |}]
 
 let%expect_test "dedup" =
-  run_test "Dedup(Select([f], r1))" ;
+  run_test "Dedup(Select([f], r1))";
   [%expect
     {|
     SELECT DISTINCT
@@ -98,7 +100,7 @@ let%expect_test "dedup" =
         "r1" AS "r1_0" |}]
 
 let%expect_test "select" =
-  run_test "Select([f], r1)" ;
+  run_test "Select([f], r1)";
   [%expect
     {|
     SELECT
@@ -107,7 +109,7 @@ let%expect_test "select" =
         "r1" AS "r1_0" |}]
 
 let%expect_test "scan" =
-  run_test "r1" ;
+  run_test "r1";
   [%expect
     {|
     SELECT
@@ -120,7 +122,7 @@ let%expect_test "join" =
   run_test
     "join(p_counter < c_counter && c_counter < p_succ, \n\
     \          select([counter as p_counter, succ as p_succ], log),\n\
-    \          select([counter as c_counter], log))" ;
+    \          select([counter as c_counter], log))";
   [%expect
     {|
       SELECT
@@ -135,7 +137,7 @@ let%expect_test "join" =
 
 let%expect_test "join-groupby" =
   run_test
-    {|join(f = g || x = y, groupby([f, sum((f * g)) as x], [f], r1), groupby([g, sum((f * g)) as y], [g], r1))|} ;
+    {|join(f = g || x = y, groupby([f, sum((f * g)) as x], [f], r1), groupby([g, sum((f * g)) as y], [g], r1))|};
   [%expect
     {|
     SELECT
@@ -172,7 +174,7 @@ let%expect_test "join-groupby" =
 
 let%expect_test "join-cond" =
   run_test
-    {|filter(true||false, join(true&&false, select([f], r1), select([g], r)))|} ;
+    {|filter(true||false, join(true&&false, select([f], r1), select([g], r)))|};
   [%expect
     {|
     SELECT
@@ -187,7 +189,7 @@ let%expect_test "join-cond" =
         AND (FALSE)) |}]
 
 let%expect_test "select-groupby" =
-  run_test "select([max(x)], groupby([f, sum((f * g)) as x], [f], r1))" ;
+  run_test "select([max(x)], groupby([f, sum((f * g)) as x], [f], r1))";
   [%expect
     {|
       SELECT
@@ -206,7 +208,7 @@ let%expect_test "select-groupby" =
               ("f_0")) AS "t1" |}]
 
 let%expect_test "select-fusion-1" =
-  run_test "select([max(x)], select([min(f) as x], r1))" ;
+  run_test "select([max(x)], select([min(f) as x], r1))";
   [%expect
     {|
       SELECT
@@ -222,7 +224,7 @@ let%expect_test "select-fusion-1" =
                   "r1" AS "r1_0") AS "t0") AS "t1" |}]
 
 let%expect_test "select-fusion-2" =
-  run_test "select([max(x)], select([f as x], r1))" ;
+  run_test "select([max(x)], select([f as x], r1))";
   [%expect
     {|
     SELECT
@@ -234,7 +236,7 @@ let%expect_test "select-fusion-2" =
             "r1" AS "r1_0") AS "t0" |}]
 
 let%expect_test "filter-fusion" =
-  run_test "filter((x = 0), groupby([sum(f) as x], [g], r1))" ;
+  run_test "filter((x = 0), groupby([sum(f) as x], [g], r1))";
   [%expect
     {|
       SELECT
@@ -253,7 +255,7 @@ let%expect_test "filter-fusion" =
       WHERE (("x_0") = (0)) |}]
 
 let%expect_test "groupby-dedup" =
-  run_test "groupby([sum(f) as x], [g], dedup(r1))" ;
+  run_test "groupby([sum(f) as x], [g], dedup(r1))";
   [%expect
     {|
     SELECT
@@ -267,7 +269,8 @@ let%expect_test "groupby-dedup" =
         ("g_0") |}]
 
 let%expect_test "hash-idx" =
-  run_test "ahashidx(select([f], r1) as k, select([g], filter(f = k.f, r1)), null)" ;
+  run_test
+    "ahashidx(select([f], r1) as k, select([g], filter(f = k.f, r1)), null)";
   [%expect
     {|
     SELECT
@@ -289,7 +292,8 @@ let%expect_test "hash-idx" =
 
 let%expect_test "ordered-idx" =
   run_test
-    "aorderedidx(select([f], r1) as k, select([g], filter(f = k.f, r1)), null, null)" ;
+    "aorderedidx(select([f], r1) as k, select([g], filter(f = k.f, r1)), \
+     null, null)";
   [%expect
     {|
     SELECT
@@ -312,7 +316,7 @@ let%expect_test "ordered-idx" =
 
 let%expect_test "depjoin-agg" =
   run_test
-    "depjoin(select([f, g], r) as k, select([min(k.f), max(k.g)], ascalar(0)))" ;
+    "depjoin(select([f, g], r) as k, select([min(k.f), max(k.g)], ascalar(0)))";
   [%expect
     {|
     SELECT
@@ -339,8 +343,10 @@ let%expect_test "depjoin-agg" =
 |}]
 
 let%expect_test "depjoin-agg" =
-  run_test "depjoin(select([f, g], r) as k, select([count(), f], ascalar(k.f)))" ;
-  [%expect {|
+  run_test
+    "depjoin(select([f, g], r) as k, select([count(), f], ascalar(k.f)))";
+  [%expect
+    {|
     SELECT
         "a0_0" AS "a0_0_0",
         "f_3" AS "f_3_0"
@@ -360,7 +366,7 @@ let%expect_test "depjoin-agg" =
 |}]
 
 let%expect_test "select-agg-window" =
-  run_test "select([count(), min(f), row_number()], r)" ;
+  run_test "select([count(), min(f), row_number()], r)";
   [%expect
     {|
     SELECT

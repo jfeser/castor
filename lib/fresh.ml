@@ -11,7 +11,7 @@ let name tbl fmt =
    *   |> Error.raise ; *)
   let ctr = Hashtbl.find tbl key |> Option.value ~default:0 in
   let name = sprintf fmt ctr in
-  Hashtbl.set tbl ~key ~data:(ctr + 1) ;
+  Hashtbl.set tbl ~key ~data:(ctr + 1);
   name
 
 let reset = Hashtbl.clear

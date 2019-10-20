@@ -5,15 +5,18 @@ let less_msb x y = x < y && x < x lxor y
 let compare lhs rhs =
   let msd = ref 0 in
   for i = 1 to Array.length lhs - 1 do
-    if less_msb (lhs.(!msd) lxor rhs.(!msd)) (lhs.(i) lxor rhs.(i)) then msd := i
-  done ;
+    if less_msb (lhs.(!msd) lxor rhs.(!msd)) (lhs.(i) lxor rhs.(i)) then
+      msd := i
+  done;
   Int.compare lhs.(!msd) rhs.(!msd)
 
 let sort tups = List.sort tups ~compare
 
 let%expect_test "" =
-  sort (List.init 7 ~f:(fun i -> List.init 7 ~f:(fun j -> [|i; j|])) |> List.concat)
-  |> [%sexp_of: int array list] |> print_s ;
+  sort
+    ( List.init 7 ~f:(fun i -> List.init 7 ~f:(fun j -> [| i; j |]))
+    |> List.concat )
+  |> [%sexp_of: int array list] |> print_s;
   [%expect
     {|
     ((0 0) (0 1) (1 0) (1 1) (0 2) (0 3) (1 2) (1 3) (2 0) (2 1) (3 0) (3 1)
@@ -23,8 +26,10 @@ let%expect_test "" =
      (6 6)) |}]
 
 let%expect_test "" =
-  sort (List.init 7 ~f:(fun i -> List.init 7 ~f:(fun _ -> [|i; i|])) |> List.concat)
-  |> [%sexp_of: int array list] |> print_s ;
+  sort
+    ( List.init 7 ~f:(fun i -> List.init 7 ~f:(fun _ -> [| i; i |]))
+    |> List.concat )
+  |> [%sexp_of: int array list] |> print_s;
   [%expect
     {|
     ((0 0) (0 0) (0 0) (0 0) (0 0) (0 0) (0 0) (1 1) (1 1) (1 1) (1 1) (1 1)

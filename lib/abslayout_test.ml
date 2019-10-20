@@ -21,27 +21,35 @@ let%test_module _ =
           method collection kind =
             M.Fold.(
               Fold
-                { init= [kind]
-                ; fold=
+                {
+                  init = [ kind ];
+                  fold =
                     (fun msgs (k, _, v) ->
                       msgs
-                      @ [ sprintf "%s key: %s" kind
-                            ([%sexp_of: Value.t list] k |> Sexp.to_string_hum) ]
-                      @ v)
-                ; extract= (fun x -> x) })
+                      @ [
+                          sprintf "%s key: %s" kind
+                            ([%sexp_of: Value.t list] k |> Sexp.to_string_hum);
+                        ]
+                      @ v);
+                  extract = (fun x -> x);
+                })
 
           method list _ _ =
             let kind = "List" in
             M.Fold.(
               Fold
-                { init= [kind]
-                ; fold=
+                {
+                  init = [ kind ];
+                  fold =
                     (fun msgs (k, v) ->
                       msgs
-                      @ [ sprintf "%s key: %s" kind
-                            ([%sexp_of: Value.t list] k |> Sexp.to_string_hum) ]
-                      @ v)
-                ; extract= (fun x -> x) })
+                      @ [
+                          sprintf "%s key: %s" kind
+                            ([%sexp_of: Value.t list] k |> Sexp.to_string_hum);
+                        ]
+                      @ v);
+                  extract = (fun x -> x);
+                })
 
           method hash_idx _ _ = self#collection "HashIdx"
 
@@ -50,14 +58,18 @@ let%test_module _ =
           method tuple _ _ =
             M.Fold.(
               Fold
-                { init= ["Tuple"]
-                ; fold= (fun msgs v -> msgs @ v)
-                ; extract= (fun x -> x) })
+                {
+                  init = [ "Tuple" ];
+                  fold = (fun msgs v -> msgs @ v);
+                  extract = (fun x -> x);
+                })
 
-          method empty _ = ["Empty"]
+          method empty _ = [ "Empty" ]
 
           method scalar _ _ v =
-            [sprintf "Scalar: %s" ([%sexp_of: Value.t] v |> Sexp.to_string_hum)]
+            [
+              sprintf "Scalar: %s" ([%sexp_of: Value.t] v |> Sexp.to_string_hum);
+            ]
 
           method depjoin _ _ = ( @ )
 
@@ -75,7 +87,7 @@ let%test_module _ =
       Exn.handle_uncaught ~exit:false run
 
     let%expect_test "" =
-      run_print_test "alist(r1 as k, alist(r1 as j, ascalar(j.f)))" ;
+      run_print_test "alist(r1 as k, alist(r1 as j, ascalar(j.f)))";
       [%expect
         {|
         List
@@ -142,15 +154,18 @@ let%test_module _ =
 
     let%expect_test "" =
       run_print_test "atuple([filter(false, ascalar(0)), ascalar(1)], cross)";
-      [%expect {|
+      [%expect
+        {|
         Tuple
         Scalar: (Int 0)
         Scalar: (Int 1) |}]
 
     let%expect_test "" =
       run_print_test
-        "alist(r as k, atuple([filter(false, ascalar(k.f)), ascalar(k.f+1)], cross))";
-      [%expect {|
+        "alist(r as k, atuple([filter(false, ascalar(k.f)), ascalar(k.f+1)], \
+         cross))";
+      [%expect
+        {|
         List
         List key: ((Int 0) (Int 5))
         Tuple
@@ -182,7 +197,7 @@ let%test_module _ =
         Scalar: (Int 5) |}]
 
     let%expect_test "sum-complex" =
-      run_print_test sum_complex ;
+      run_print_test sum_complex;
       [%expect
         {|
     List
@@ -209,7 +224,7 @@ let%test_module _ =
 
     let%expect_test "orderby-tuple" =
       run_print_test
-        {|atuple([alist(orderby([f desc], r1) as r1a, atuple([ascalar(r1a.f), ascalar(r1a.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([f asc], r1) as r1b, atuple([ascalar(r1b.f), ascalar(r1b.g)], cross))], concat)|} ;
+        {|atuple([alist(orderby([f desc], r1) as r1a, atuple([ascalar(r1a.f), ascalar(r1a.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([f asc], r1) as r1b, atuple([ascalar(r1b.f), ascalar(r1b.g)], cross))], concat)|};
       [%expect
         {|
     [WARNING] Name does not appear in all concat fields: f
@@ -265,8 +280,8 @@ let%test_module _ =
 
     let%expect_test "ordered-idx-dates" =
       run_print_test
-        "AOrderedIdx(OrderBy([ff desc], Dedup(Select([f as ff], r_date))) as k, \
-         AScalar(k.ff as f), null, null)" ;
+        "AOrderedIdx(OrderBy([ff desc], Dedup(Select([f as ff], r_date))) as \
+         k, AScalar(k.ff as f), null, null)";
       [%expect
         {|
     OrderedIdx
@@ -284,7 +299,7 @@ let%test_module _ =
     let%expect_test "ordered-idx-dates" =
       run_print_test
         "AOrderedIdx(dedup(select([f], r_date)) as k, alist(filter(f = k.f, \
-         select([f], r_date)) as k1, ascalar(k1.f)), null, null)" ;
+         select([f], r_date)) as k1, ascalar(k1.f)), null, null)";
       [%expect
         {|
     OrderedIdx
@@ -314,7 +329,8 @@ let%test_module _ =
     Scalar: (Date 2018-09-01) |}]
 
     let%expect_test "example-1" =
-      Demomatch.(run_print_test ~params:Demomatch.example_params (example1 "log")) ;
+      Demomatch.(
+        run_print_test ~params:Demomatch.example_params (example1 "log"));
       [%expect
         {|
     List
@@ -342,7 +358,7 @@ let%test_module _ =
     Scalar: (Int 5) |}]
 
     let%expect_test "example-2" =
-      Demomatch.(run_print_test ~params:example_params (example2 "log")) ;
+      Demomatch.(run_print_test ~params:example_params (example2 "log"));
       [%expect
         {|
     HashIdx
@@ -364,7 +380,7 @@ let%test_module _ =
     Scalar: (Int 5) |}]
 
     let%expect_test "example-3" =
-      Demomatch.(run_print_test ~params:example_params (example3 "log")) ;
+      Demomatch.(run_print_test ~params:example_params (example3 "log"));
       [%expect
         {|
     HashIdx
@@ -429,9 +445,9 @@ let%test_module _ =
     let%expect_test "subst" =
       let f = Name.create ~scope:"r" "f" in
       let g = Name.create ~scope:"r" "g" in
-      let ctx = Map.of_alist_exn (module Name) [(f, Int 1); (g, Int 2)] in
+      let ctx = Map.of_alist_exn (module Name) [ (f, Int 1); (g, Int 2) ] in
       let r = "Filter(r.f = r.g, Select([r.f, r.g], r))" |> of_string_exn in
-      print_s ([%sexp_of: t] (subst ctx r)) ;
+      print_s ([%sexp_of: t] (subst ctx r));
       [%expect
         {|
     ((node
@@ -481,7 +497,7 @@ let%test_module _ =
 
     let%expect_test "annotate-schema" =
       let r = M.load_string "select([min(f)], r)" in
-      [%sexp_of: t] r |> print_s ;
+      [%sexp_of: t] r |> print_s;
       [%expect
         {|
     ((node
@@ -542,7 +558,7 @@ let%test_module _ =
                                                                     month(3))
                                                                     + day(1))))))))|}
       in
-      Pred.names p |> [%sexp_of: Set.M(Name).t] |> print_s ;
+      Pred.names p |> [%sexp_of: Set.M(Name).t] |> print_s;
       [%expect {| (((scope ()) (name total_revenue))) |}]
 
     (* let%expect_test "" =

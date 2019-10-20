@@ -16,7 +16,7 @@ end
 module Make (Config : Config.S) () = struct
   module M = Abslayout_db.Make (Config)
 
-  type t = {name: string; f: A.t -> A.t list} [@@deriving sexp]
+  type t = { name : string; f : A.t -> A.t list } [@@deriving sexp]
 
   let fresh = Global.fresh
 
@@ -38,10 +38,10 @@ module Make (Config : Config.S) () = struct
              else Seq.empty)
       |> Seq.to_list
     in
-    {tf with f}
+    { tf with f }
 
   let run_unchecked t r =
-    printf "Running %s\n" t.name ;
+    printf "Running %s\n" t.name;
     let rs =
       t.f r
       |> List.dedup_and_sort ~compare:[%compare: Abslayout.t]
@@ -49,8 +49,8 @@ module Make (Config : Config.S) () = struct
     in
     let len = List.length rs in
     if len > 0 then (
-      List.iteri rs ~f:(fun i -> Format.printf "%d\n%a@.\n\n" i A.pp) ;
-      Logs.info (fun m -> m "%d new candidates from running %s." len t.name) ) ;
+      List.iteri rs ~f:(fun i -> Format.printf "%d\n%a@.\n\n" i A.pp);
+      Logs.info (fun m -> m "%d new candidates from running %s." len t.name) );
     rs
 
   let run_checked t r =
@@ -65,13 +65,13 @@ module Make (Config : Config.S) () = struct
               Sexp.pp_hum
               ([%sexp_of: Set.M(Name).t] s)
               Sexp.pp_hum
-              ([%sexp_of: Set.M(Name).t] s')) ;
+              ([%sexp_of: Set.M(Name).t] s'));
       schemas_ok
     in
-    let checks = [check_schema] in
+    let checks = [ check_schema ] in
     List.map rs ~f:(fun r' ->
-        List.for_all checks ~f:(fun c -> c r') |> ignore ;
-        A.validate r' ;
+        List.for_all checks ~f:(fun c -> c r') |> ignore;
+        A.validate r';
         r')
 
   let run = if Config.check_transforms then run_checked else run_unchecked
@@ -83,7 +83,7 @@ module Make (Config : Config.S) () = struct
       object
         inherit [_] Abslayout0.endo
 
-        method! visit_Relation () r' {r_name= rel'; _} =
+        method! visit_Relation () r' { r_name = rel'; _ } =
           if String.(rel = rel') then new_rel.A.node else r'
       end
     in
@@ -91,8 +91,9 @@ module Make (Config : Config.S) () = struct
 
   let tf_row_store _ =
     let open A in
-    { name= "row-store"
-    ; f=
+    {
+      name = "row-store";
+      f =
         (fun r ->
           if no_params r then
             let scope = Fresh.name Global.fresh "s%d" in
@@ -100,16 +101,18 @@ module Make (Config : Config.S) () = struct
               Schema.scoped scope (schema_exn r)
               |> List.map ~f:(fun n -> scalar (Name n))
             in
-            [list r scope (tuple scalars Cross)]
-          else []) }
+            [ list r scope (tuple scalars Cross) ]
+          else []);
+    }
     |> run_everywhere ~stage:`Run
 
   let tf_elim_groupby _ =
     let open A in
-    { name= "elim-groupby"
-    ; f=
+    {
+      name = "elim-groupby";
+      f =
         (function
-        | {node= GroupBy (ps, key, r); _} as rr when no_params rr ->
+        | { node = GroupBy (ps, key, r); _ } as rr when no_params rr ->
             let key_name = Fresh.name fresh "k%d" in
             let key_preds = List.map key ~f:(fun n -> Name n) in
             let filter_pred =
@@ -118,19 +121,23 @@ module Make (Config : Config.S) () = struct
               |> List.fold_left ~init:(Bool true) ~f:(fun acc p ->
                      Binop (And, acc, p))
             in
-            [ list
+            [
+              list
                 (dedup (select key_preds r))
                 key_name
-                (select ps (filter filter_pred r)) ]
-        | _ -> []) }
+                (select ps (filter filter_pred r));
+            ]
+        | _ -> []);
+    }
     |> run_everywhere
 
   let tf_elim_groupby_partial _ =
     let open A in
-    { name= "elim-groupby-partial"
-    ; f=
+    {
+      name = "elim-groupby-partial";
+      f =
         (function
-        | {node= GroupBy (ps, key, r); _} ->
+        | { node = GroupBy (ps, key, r); _ } ->
             List.map key ~f:(fun k ->
                 let key_name = Fresh.name fresh "k%d" in
                 let scope = Fresh.name fresh "s%d" in
@@ -140,9 +147,12 @@ module Make (Config : Config.S) () = struct
                     .r_name
                 in
                 let lhs =
-                  dedup (select [As_pred (Name k, key_name)] (db_relation rel))
+                  dedup
+                    (select [ As_pred (Name k, key_name) ] (db_relation rel))
                 in
-                let new_key = List.filter key ~f:(fun k' -> Name.O.(k <> k')) in
+                let new_key =
+                  List.filter key ~f:(fun k' -> Name.O.(k <> k'))
+                in
                 let new_ps =
                   List.filter ps ~f:(fun p ->
                       not ([%compare.equal: pred] p (Name k)))
@@ -167,20 +177,24 @@ module Make (Config : Config.S) () = struct
                   let s = scalar p in
                   match Name.rel k with Some rel -> as_ rel s | None -> s
                 in
-                list lhs scope (tuple [key_scalar; new_group_by] Cross))
-        | _ -> []) }
+                list lhs scope (tuple [ key_scalar; new_group_by ] Cross))
+        | _ -> []);
+    }
     |> run_everywhere
 
   let tf_elim_groupby_filter _ =
     let open A in
-    { name= "elim-groupby-filter"
-    ; f=
+    {
+      name = "elim-groupby-filter";
+      f =
         (function
-        | {node= GroupBy (ps, key, {node= Filter (p, r); _}); _} when no_params r ->
+        | { node = GroupBy (ps, key, { node = Filter (p, r); _ }); _ }
+          when no_params r ->
             let scope = Fresh.name fresh "s%d" in
             let key_name = Fresh.name fresh "k%d" in
             let new_key =
-              List.map key ~f:(fun n -> sprintf "%s_%s" key_name (Name.to_var n))
+              List.map key ~f:(fun n ->
+                  sprintf "%s_%s" key_name (Name.to_var n))
             in
             let select_list =
               List.map2_exn key new_key ~f:(fun n n' -> As_pred (Name n, n'))
@@ -192,8 +206,9 @@ module Make (Config : Config.S) () = struct
               |> List.reduce_exn ~f:(fun acc p -> Binop (And, acc, p))
               |> Pred.scoped (schema_exn lhs) scope
             in
-            [list lhs scope (select ps (filter p (filter filter_pred r)))]
-        | _ -> []) }
+            [ list lhs scope (select ps (filter p (filter filter_pred r))) ]
+        | _ -> []);
+    }
     |> run_everywhere
 
   (** Groupby eliminator that works when the grouping key is all direct field
@@ -212,12 +227,13 @@ module Make (Config : Config.S) () = struct
       in
       visitor#visit_t ()
     in
-    { name= "elim-groupby-approx"
-    ; f=
+    {
+      name = "elim-groupby-approx";
+      f =
         (fun r ->
           let r = Resolve.resolve ~params:Config.params r in
           match r with
-          | {node= GroupBy (ps, key, r); _}
+          | { node = GroupBy (ps, key, r); _ }
             when List.for_all key ~f:(fun n -> Option.is_some (Name.rel n)) ->
               (* Create an alias for each key. *)
               let key_aliases =
@@ -232,7 +248,9 @@ module Make (Config : Config.S) () = struct
                 List.fold_left key
                   ~init:(Map.empty (module String))
                   ~f:(fun m k ->
-                    Map.add_multi m ~key:(Option.value_exn (Name.rel k)) ~data:k)
+                    Map.add_multi m
+                      ~key:(Option.value_exn (Name.rel k))
+                      ~data:k)
               in
               (* Generate the relation of unique keys for each group. *)
               let key_rels =
@@ -253,9 +271,9 @@ module Make (Config : Config.S) () = struct
                     let filter_pred =
                       List.map ks ~f:(fun n ->
                           Binop
-                            ( Eq
-                            , Name n
-                            , Name
+                            ( Eq,
+                              Name n,
+                              Name
                                 ( Map.find_exn key_aliases (Name.name n)
                                 |> Name.create ) ))
                       |> List.reduce_exn ~f:(fun p p' -> Binop (And, p, p'))
@@ -263,17 +281,21 @@ module Make (Config : Config.S) () = struct
                     wrap_rel rel (fun r -> (filter filter_pred r).node))
               in
               let scope = Fresh.name Global.fresh "s%d" in
-              let ps = List.map ~f:(Pred.scoped (schema_exn key_rel) scope) ps in
-              [list key_rel scope (select ps r)]
-          | _ -> []) }
+              let ps =
+                List.map ~f:(Pred.scoped (schema_exn key_rel) scope) ps
+              in
+              [ list key_rel scope (select ps r) ]
+          | _ -> []);
+    }
     |> run_everywhere
 
   let tf_elim_eq_filter _ =
     let open A in
-    { name= "elim-eq-filter"
-    ; f=
+    {
+      name = "elim-eq-filter";
+      f =
         (function
-        | {node= Filter (p, r); _} ->
+        | { node = Filter (p, r); _ } ->
             let eqs, rest =
               Pred.conjuncts p
               |> List.partition_map ~f:(function
@@ -282,7 +304,9 @@ module Make (Config : Config.S) () = struct
             in
             if List.length eqs = 0 then []
             else
-              let select_list = List.map eqs ~f:(fun (p, k, _) -> As_pred (p, k)) in
+              let select_list =
+                List.map eqs ~f:(fun (p, k, _) -> As_pred (p, k))
+              in
               let inner_filter_pred =
                 List.map eqs ~f:(fun (p, k, _) ->
                     Binop (Eq, Name (Name.create k), p))
@@ -297,8 +321,12 @@ module Make (Config : Config.S) () = struct
               let inner_filter_pred =
                 Pred.scoped (schema_exn lhs) scope inner_filter_pred
               in
-              [outer_filter (hash_idx lhs scope (filter inner_filter_pred r) key)]
-        | _ -> []) }
+              [
+                outer_filter
+                  (hash_idx lhs scope (filter inner_filter_pred r) key);
+              ]
+        | _ -> []);
+    }
     |> run_everywhere
 
   (** Given a restricted parameter range, precompute a filter that depends on a
@@ -319,11 +347,12 @@ module Make (Config : Config.S) () = struct
       | Filter (p, r') ->
           let schema = schema_exn r' in
           let free_vars =
-            Set.diff (pred_free p) (Set.of_list (module Name) schema) |> Set.to_list
+            Set.diff (pred_free p) (Set.of_list (module Name) schema)
+            |> Set.to_list
           in
           let free_var =
             match free_vars with
-            | [v] -> v
+            | [ v ] -> v
             | _ ->
                 let err =
                   Error.of_string
@@ -344,18 +373,21 @@ module Make (Config : Config.S) () = struct
           in
           let fresh_name = Fresh.name fresh "p%d_" ^ Name.name field in
           let select_list =
-            As_pred (encoder, fresh_name) :: List.map schema ~f:(fun n -> Name n)
+            As_pred (encoder, fresh_name)
+            :: List.map schema ~f:(fun n -> Name n)
           in
-          [ filter
+          [
+            filter
               (If
-                 ( Binop (Eq, decoder, Int 0)
-                 , p
-                 , Binop (Eq, decoder, Name (Name.create fresh_name)) ))
-              (select select_list r') ]
+                 ( Binop (Eq, decoder, Int 0),
+                   p,
+                   Binop (Eq, decoder, Name (Name.create fresh_name)) ))
+              (select select_list r');
+          ]
       | _ -> []
     in
     let f r = try run_exn r with Failed _ -> [] in
-    {name= "precompute-filter"; f} |> run_everywhere
+    { name = "precompute-filter"; f } |> run_everywhere
 
   let tf_precompute_filter_bv args =
     let open A in
@@ -366,11 +398,12 @@ module Make (Config : Config.S) () = struct
       | Filter (p, r') ->
           let schema = schema_exn r' in
           let free_vars =
-            Set.diff (pred_free p) (Set.of_list (module Name) schema) |> Set.to_list
+            Set.diff (pred_free p) (Set.of_list (module Name) schema)
+            |> Set.to_list
           in
           let free_var =
             match free_vars with
-            | [v] -> v
+            | [ v ] -> v
             | _ ->
                 let err =
                   Error.of_string
@@ -382,22 +415,22 @@ module Make (Config : Config.S) () = struct
           let witnesses =
             List.mapi values ~f:(fun i v ->
                 As_pred
-                  ( Pred.subst (Map.singleton (module Name) free_var v) p
-                  , sprintf "%s_%d" witness_name i ))
+                  ( Pred.subst (Map.singleton (module Name) free_var v) p,
+                    sprintf "%s_%d" witness_name i ))
           in
           let filter_pred =
             List.foldi values ~init:p ~f:(fun i else_ v ->
                 If
-                  ( Binop (Eq, Name free_var, v)
-                  , Name (Name.create (sprintf "%s_%d" witness_name i))
-                  , else_ ))
+                  ( Binop (Eq, Name free_var, v),
+                    Name (Name.create (sprintf "%s_%d" witness_name i)),
+                    else_ ))
           in
           let select_list = witnesses @ List.map schema ~f:(fun n -> Name n) in
-          [filter filter_pred (select select_list r')]
+          [ filter filter_pred (select select_list r') ]
       | _ -> []
     in
     let f r = try run_exn r with Failed _ -> [] in
-    {name= "precompute-filter-bv"; f} |> run_everywhere
+    { name = "precompute-filter-bv"; f } |> run_everywhere
 
   let gen_ordered_idx ?lb ?ub p r =
     let open A in
@@ -444,40 +477,52 @@ module Make (Config : Config.S) () = struct
     in
     let open Result.Let_syntax in
     let%bind lb =
-      match lb with None -> Ok default_min | Some (b, k) -> fix_lower_bound b k
+      match lb with
+      | None -> Ok default_min
+      | Some (b, k) -> fix_lower_bound b k
     in
     let%map ub =
-      match ub with None -> Ok default_max | Some (b, k) -> fix_upper_bound b k
+      match ub with
+      | None -> Ok default_max
+      | Some (b, k) -> fix_upper_bound b k
     in
     let k = Fresh.name fresh "k%d" in
-    let select_list = [As_pred (p, k)] in
+    let select_list = [ As_pred (p, k) ] in
     let filter_pred = Binop (Eq, Name (Name.create k), p) in
     let scope = Fresh.name Global.fresh "s%d" in
     let lhs = dedup (select select_list r) in
     ordered_idx lhs scope
       (filter (Pred.scoped (schema_exn lhs) scope filter_pred) r)
-      {oi_key_layout= None; oi_lookup= [(Some (lb, `Closed), Some (ub, `Open))]}
+      {
+        oi_key_layout = None;
+        oi_lookup = [ (Some (lb, `Closed), Some (ub, `Open)) ];
+      }
 
   let tf_elim_cmp_filter _ =
-    let result_to_list = function Ok x -> [x] | Error _ -> [] in
+    let result_to_list = function Ok x -> [ x ] | Error _ -> [] in
     let open A in
-    { name= "elim-cmp-filter"
-    ; f=
+    {
+      name = "elim-cmp-filter";
+      f =
         (fun r ->
           match r with
-          | {node= Filter (Binop (And, Binop (Ge, p, lb), Binop (Lt, p', ub)), r); _}
+          | {
+           node = Filter (Binop (And, Binop (Ge, p, lb), Binop (Lt, p', ub)), r);
+           _;
+          }
             when [%compare.equal: pred] p p' ->
               gen_ordered_idx ~lb:(lb, `Closed) ~ub:(ub, `Open) p r
               |> result_to_list
-          | {node= Filter (Binop (Ge, p', p), r); _}
-           |{node= Filter (Binop (Le, p, p'), r); _} ->
+          | { node = Filter (Binop (Ge, p', p), r); _ }
+          | { node = Filter (Binop (Le, p, p'), r); _ } ->
               (gen_ordered_idx ~ub:(p', `Closed) p r |> result_to_list)
               @ (gen_ordered_idx ~lb:(p, `Closed) p' r |> result_to_list)
-          | {node= Filter (Binop (Lt, p, p'), r); _}
-           |{node= Filter (Binop (Gt, p', p), r); _} ->
+          | { node = Filter (Binop (Lt, p, p'), r); _ }
+          | { node = Filter (Binop (Gt, p', p), r); _ } ->
               (gen_ordered_idx ~ub:(p', `Open) p r |> result_to_list)
               @ (gen_ordered_idx ~lb:(p, `Open) p' r |> result_to_list)
-          | _ -> []) }
+          | _ -> []);
+    }
     |> run_everywhere
 
   (* let tf_elim_cmp_filter_simple _ =
@@ -510,23 +555,23 @@ module Make (Config : Config.S) () = struct
 
   let same_orders r1 r2 =
     let open A in
-    annotate_eq r1 ;
-    annotate_orders r1 ;
-    annotate_eq r2 ;
-    annotate_orders r2 ;
+    annotate_eq r1;
+    annotate_orders r1;
+    annotate_eq r2;
+    annotate_orders r2;
     [%compare.equal: (pred * order) list]
       Meta.(find_exn r1 order)
       Meta.(find_exn r2 order)
 
   let orderby_list key r1 r2 =
     let open A in
-    annotate_eq r1 ;
-    annotate_eq r2 ;
+    annotate_eq r1;
+    annotate_eq r2;
     let schema1 = schema_exn r1 |> Schema.scoped (scope_exn r1) in
     let open Core in
     let eqs = Meta.(find_exn r2 eq) in
     let names =
-      List.concat_map eqs ~f:(fun (n, n') -> [n; n'])
+      List.concat_map eqs ~f:(fun (n, n') -> [ n; n' ])
       @ List.filter_map ~f:(fun (p, _) -> Pred.to_name p) key
       @ schema1
     in
@@ -541,7 +586,7 @@ module Make (Config : Config.S) () = struct
     List.iter eqs ~f:(fun (n, n') ->
         let s = Hashtbl.find_exn eq_map n in
         let s' = Hashtbl.find_exn eq_map n' in
-        Union_find.union s s') ;
+        Union_find.union s s');
     let exception No_key in
     try
       let new_key =
@@ -562,7 +607,7 @@ module Make (Config : Config.S) () = struct
             (p', o))
       in
       let scope = Fresh.name Global.fresh "s%d" in
-      [list (order_by new_key r1) scope r2]
+      [ list (order_by new_key r1) scope r2 ]
     with No_key -> []
 
   let orderby_cross_tuple key rs =
@@ -576,30 +621,39 @@ module Make (Config : Config.S) () = struct
             (module Name)
             (List.filter_map ~f:(fun (p, _) -> Pred.to_name p) key)
         in
-        if Set.is_subset skey ~of_:sschema then [tuple (order_by key r :: rs) Cross]
+        if Set.is_subset skey ~of_:sschema then
+          [ tuple (order_by key r :: rs) Cross ]
         else []
     | _ -> []
 
   let tf_push_orderby _ =
     let open A in
-    { name= "push-orderby"
-    ; f=
+    {
+      name = "push-orderby";
+      f =
         (fun r ->
           let rs =
             match r with
-            | {node= OrderBy {key; rel= {node= Select (ps, r); _}}; _} ->
-                [select ps (order_by key r)]
-            | {node= OrderBy {key; rel= {node= Filter (ps, r); _}}; _} ->
-                [filter ps (order_by key r)]
-            | {node= OrderBy {key; rel= {node= AList (r1, r2); _}}; _} ->
+            | { node = OrderBy { key; rel = { node = Select (ps, r); _ } }; _ }
+              ->
+                [ select ps (order_by key r) ]
+            | { node = OrderBy { key; rel = { node = Filter (ps, r); _ } }; _ }
+              ->
+                [ filter ps (order_by key r) ]
+            | { node = OrderBy { key; rel = { node = AList (r1, r2); _ } }; _ }
+              ->
                 (* If we order a lists keys then the keys will be ordered in the
                    list. *)
                 orderby_list key r1 r2
-            | {node= OrderBy {key; rel= {node= ATuple (rs, Cross); _}}; _} ->
+            | {
+             node = OrderBy { key; rel = { node = ATuple (rs, Cross); _ } };
+             _;
+            } ->
                 orderby_cross_tuple key rs
             | _ -> []
           in
-          List.filter rs ~f:(same_orders r)) }
+          List.filter rs ~f:(same_orders r));
+    }
     |> run_everywhere
 
   let tf_push_select _ =
@@ -646,7 +700,7 @@ module Make (Config : Config.S) () = struct
       let outer_aggs, inner_aggs =
         List.fold_left outer_preds ~init:([], []) ~f:(fun (op, ip) p ->
             let p', ip' = visitor#visit_pred ip p in
-            (op @ [p'], ip'))
+            (op @ [ p' ], ip'))
       in
       let inner_aggs =
         List.map inner_aggs ~f:(fun (n, a) -> As_pred (a, Name.name n))
@@ -656,35 +710,45 @@ module Make (Config : Config.S) () = struct
       (outer_aggs, inner_aggs @ inner_fields)
     in
     let open A in
-    { name= "push-select"
-    ; f=
+    {
+      name = "push-select";
+      f =
         (fun r ->
           match r.node with
-          | Select (ps, {node= AHashIdx h; _}) ->
+          | Select (ps, { node = AHashIdx h; _ }) ->
               let outer_preds =
-                List.filter_map ps ~f:Pred.to_name |> List.map ~f:(fun n -> Name n)
+                List.filter_map ps ~f:Pred.to_name
+                |> List.map ~f:(fun n -> Name n)
               in
-              [ select outer_preds
-                  (hash_idx' {h with hi_values= select ps h.hi_values}) ]
-          | Select (ps, {node= AOrderedIdx (r, r', m); _}) ->
+              [
+                select outer_preds
+                  (hash_idx' { h with hi_values = select ps h.hi_values });
+              ]
+          | Select (ps, { node = AOrderedIdx (r, r', m); _ }) ->
               let outer_aggs, inner_aggs =
                 gen_concat_select_list ps (schema_exn r')
               in
               let r, scope = (strip_scope r, scope_exn r) in
-              [select outer_aggs (ordered_idx r scope (select inner_aggs r') m)]
-          | Select (ps, {node= AList (r, r'); _}) ->
+              [
+                select outer_aggs
+                  (ordered_idx r scope (select inner_aggs r') m);
+              ]
+          | Select (ps, { node = AList (r, r'); _ }) ->
               let outer_aggs, inner_aggs =
                 gen_concat_select_list ps (schema_exn r')
               in
               let r, scope = (strip_scope r, scope_exn r) in
-              [select outer_aggs (list r scope (select inner_aggs r'))]
-          | Select (ps, {node= ATuple (r' :: rs', Concat); _}) ->
+              [ select outer_aggs (list r scope (select inner_aggs r')) ]
+          | Select (ps, { node = ATuple (r' :: rs', Concat); _ }) ->
               let outer_aggs, inner_aggs =
                 gen_concat_select_list ps (schema_exn r')
               in
-              [ select outer_aggs
-                  (tuple (List.map (r' :: rs') ~f:(select inner_aggs)) Concat) ]
-          | _ -> []) }
+              [
+                select outer_aggs
+                  (tuple (List.map (r' :: rs') ~f:(select inner_aggs)) Concat);
+              ]
+          | _ -> []);
+    }
     |> run_everywhere
 
   let tf_split_select _ =
@@ -726,23 +790,27 @@ module Make (Config : Config.S) () = struct
       let outer_aggs, inner_aggs =
         List.fold_left outer_preds ~init:([], []) ~f:(fun (op, ip) p ->
             let p', ip' = visitor#visit_pred ip p in
-            (op @ [p'], ip'))
+            (op @ [ p' ], ip'))
       in
       let inner_aggs =
         List.map inner_aggs ~f:(fun (n, a) -> As_pred (a, Name.name n))
       in
       (* Don't want to project out anything that we might need later. *)
-      let inner_fields = schema_exn inner_rel |> List.map ~f:(fun n -> Name n) in
+      let inner_fields =
+        schema_exn inner_rel |> List.map ~f:(fun n -> Name n)
+      in
       (outer_aggs, inner_aggs @ inner_fields)
     in
-    { name= "split-select"
-    ; f=
+    {
+      name = "split-select";
+      f =
         (fun r ->
           match r.node with
           | Select (ps, r') ->
               let outer_aggs, inner_aggs = gen_select_list ps r' in
-              [select outer_aggs (select inner_aggs r')]
-          | _ -> []) }
+              [ select outer_aggs (select inner_aggs r') ]
+          | _ -> []);
+    }
     |> run_everywhere
 
   (** Check that a predicate is applied to a schema that has the right fields. *)
@@ -768,7 +836,8 @@ module Make (Config : Config.S) () = struct
           let in_schema = List.mem s n ~equal:[%compare.equal: Name.t] in
           let is_valid = is_param || in_schema in
           if not is_valid then
-            Logs.debug (fun m -> m "Predicate not valid. %a missing." Name.pp n) ;
+            Logs.debug (fun m ->
+                m "Predicate not valid. %a missing." Name.pp n);
           is_valid
       end
     in
@@ -794,14 +863,18 @@ module Make (Config : Config.S) () = struct
     let open A in
     let ret =
       match r.node with
-      | OrderBy {key; rel= {node= Filter (p, r); _}} -> [(p, order_by key r)]
-      | GroupBy (ps, key, {node= Filter (p, r); _}) -> [(p, group_by ps key r)]
-      | Filter (p, {node= Filter (p', r); _}) -> [(p', filter p r)]
-      | Select (ps, {node= Filter (p, r); _}) ->
-          [(p, select (extend_select ps r ~with_:(pred_free p)) r)]
-      | Join {pred; r1= {node= Filter (p, r); _}; r2} -> [(p, join pred r r2)]
-      | Join {pred; r1; r2= {node= Filter (p, r); _}} -> [(p, join pred r1 r)]
-      | Dedup {node= Filter (p, r); _} -> [(p, dedup r)]
+      | OrderBy { key; rel = { node = Filter (p, r); _ } } ->
+          [ (p, order_by key r) ]
+      | GroupBy (ps, key, { node = Filter (p, r); _ }) ->
+          [ (p, group_by ps key r) ]
+      | Filter (p, { node = Filter (p', r); _ }) -> [ (p', filter p r) ]
+      | Select (ps, { node = Filter (p, r); _ }) ->
+          [ (p, select (extend_select ps r ~with_:(pred_free p)) r) ]
+      | Join { pred; r1 = { node = Filter (p, r); _ }; r2 } ->
+          [ (p, join pred r r2) ]
+      | Join { pred; r1; r2 = { node = Filter (p, r); _ } } ->
+          [ (p, join pred r1 r) ]
+      | Dedup { node = Filter (p, r); _ } -> [ (p, dedup r) ]
       | _ -> []
     in
     List.filter ret ~f
@@ -810,31 +883,36 @@ module Make (Config : Config.S) () = struct
            if predicate_is_valid p schema then Some (filter p r)
            else (
              Logs.debug (fun m ->
-                 m "Cannot hoist: %a" Sexp.pp_hum ([%sexp_of: Name.t list] schema)) ;
+                 m "Cannot hoist: %a" Sexp.pp_hum
+                   ([%sexp_of: Name.t list] schema));
              None ))
 
   let tf_hoist_orderby _ =
     let f r =
       let open A in
       match r.node with
-      | Select (ps, {node= OrderBy {key; rel}; _}) ->
-          [ order_by key
+      | Select (ps, { node = OrderBy { key; rel }; _ }) ->
+          [
+            order_by key
               (select
                  (extend_select ps rel
                     ~with_:
                       ( List.map key ~f:(fun (p, _) -> pred_free p)
                       |> Set.union_list (module Name) ))
-                 rel) ]
+                 rel);
+          ]
       | _ -> []
     in
-    {name= "hoist-orderby"; f} |> run_everywhere
+    { name = "hoist-orderby"; f } |> run_everywhere
 
   let tf_hoist_filter _ =
-    {name= "hoist-filter"; f= hoist_filter_if ~f:(fun _ -> true)} |> run_everywhere
+    { name = "hoist-filter"; f = hoist_filter_if ~f:(fun _ -> true) }
+    |> run_everywhere
 
   let tf_hoist_param_filter _ =
-    { name= "hoist-param-filter"
-    ; f=
+    {
+      name = "hoist-param-filter";
+      f =
         hoist_filter_if ~f:(fun (p, _) ->
             (object
                inherit [_] Abslayout0.reduce
@@ -843,79 +921,98 @@ module Make (Config : Config.S) () = struct
 
                method! visit_Name () n = Set.mem Config.params n
             end)
-              #visit_pred () p) }
+              #visit_pred () p);
+    }
     |> run_everywhere
 
   let tf_elim_join _ =
     let open A in
-    { name= "elim-join"
-    ; f=
+    {
+      name = "elim-join";
+      f =
         (function
-        | {node= Join {pred; r1; r2}; _} -> [tuple [r1; filter pred r2] Cross]
-        | _ -> []) }
+        | { node = Join { pred; r1; r2 }; _ } ->
+            [ tuple [ r1; filter pred r2 ] Cross ]
+        | _ -> []);
+    }
     |> run_everywhere
 
   let tf_push_filter _ =
     let open A in
-    { name= "push-filter"
-    ; f=
+    {
+      name = "push-filter";
+      f =
         (function
-        | {node= Filter (p, {node= Filter (p', r); _}); _} ->
-            [filter p' (filter p r)]
-        | {node= Filter (p, {node= Join {pred; r1; r2}; _}); _} ->
-            [join (Binop (And, p, pred)) r1 r2]
-        | {node= Filter (p, {node= AList (r, r'); _}); _} ->
+        | { node = Filter (p, { node = Filter (p', r); _ }); _ } ->
+            [ filter p' (filter p r) ]
+        | { node = Filter (p, { node = Join { pred; r1; r2 }; _ }); _ } ->
+            [ join (Binop (And, p, pred)) r1 r2 ]
+        | { node = Filter (p, { node = AList (r, r'); _ }); _ } ->
             let scope = scope_exn r in
             let r = strip_scope r in
-            [list (filter p r) scope r'; list r scope (filter p r')]
-        | {node= Filter (p, {node= AHashIdx h; _}); _} ->
-            [hash_idx' {h with hi_values= filter p h.hi_values}]
-        | {node= Filter (p, {node= AOrderedIdx (r, r', m); _}); _} ->
+            [ list (filter p r) scope r'; list r scope (filter p r') ]
+        | { node = Filter (p, { node = AHashIdx h; _ }); _ } ->
+            [ hash_idx' { h with hi_values = filter p h.hi_values } ]
+        | { node = Filter (p, { node = AOrderedIdx (r, r', m); _ }); _ } ->
             let scope = scope_exn r in
             let r = strip_scope r in
-            [ordered_idx r scope (filter p r') m]
-        | _ -> []) }
+            [ ordered_idx r scope (filter p r') m ]
+        | _ -> []);
+    }
     |> run_everywhere
 
   let tf_merge_filter _ =
     let open A in
-    { name= "merge-filter"
-    ; f=
+    {
+      name = "merge-filter";
+      f =
         (function
-        | {node= Filter (p, {node= Filter (p', r); _}); _} ->
-            [filter (Binop (And, p, p')) r]
-        | _ -> []) }
+        | { node = Filter (p, { node = Filter (p', r); _ }); _ } ->
+            [ filter (Binop (And, p, p')) r ]
+        | _ -> []);
+    }
     |> run_everywhere
 
   let tf_split_filter _ =
     let open A in
-    { name= "split-filter"
-    ; f=
+    {
+      name = "split-filter";
+      f =
         (function
-        | {node= Filter (Binop (And, p, p'), r); _} -> [filter p (filter p' r)]
-        | _ -> []) }
+        | { node = Filter (Binop (And, p, p'), r); _ } ->
+            [ filter p (filter p' r) ]
+        | _ -> []);
+    }
     |> run_everywhere
 
   let tf_elim_disj_filter _ =
     let open A in
-    { name= "elim-disj-filter"
-    ; f=
+    {
+      name = "elim-disj-filter";
+      f =
         (function
-        | {node= Filter (Binop (Or, p, p'), r); _} ->
-            [tuple [filter p r; filter p' r] Concat]
-        | _ -> []) }
+        | { node = Filter (Binop (Or, p, p'), r); _ } ->
+            [ tuple [ filter p r; filter p' r ] Concat ]
+        | _ -> []);
+    }
     |> run_everywhere
 
   let tf_project _ =
-    {name= "project"; f= (fun r -> [Project.project ~params:Config.params r])}
+    {
+      name = "project";
+      f = (fun r -> [ Project.project ~params:Config.params r ]);
+    }
 
   let tf_hoist_join_pred _ =
     let open A in
-    { name= "hoist-join-pred"
-    ; f=
+    {
+      name = "hoist-join-pred";
+      f =
         (function
-        | {node= Join {pred; r1; r2}; _} -> [filter pred (join (Bool true) r1 r2)]
-        | _ -> []) }
+        | { node = Join { pred; r1; r2 }; _ } ->
+            [ filter pred (join (Bool true) r1 r2) ]
+        | _ -> []);
+    }
     |> run_everywhere
 
   let eq_preds r =
@@ -936,7 +1033,7 @@ module Make (Config : Config.S) () = struct
     let open A in
     let name =
       match args with
-      | [n] -> A.name_of_string_exn n
+      | [ n ] -> A.name_of_string_exn n
       | _ -> failwith "Unexpected args."
     in
     let fresh_name =
@@ -944,21 +1041,25 @@ module Make (Config : Config.S) () = struct
     in
     let scope = Fresh.name Global.fresh "s%d" in
     let rel = Name.rel_exn name in
-    let lhs = dedup (select [As_pred (Name name, fresh_name)] (db_relation rel)) in
+    let lhs =
+      dedup (select [ As_pred (Name name, fresh_name) ] (db_relation rel))
+    in
     let pred =
       Pred.scoped (schema_exn lhs) scope
         (Binop (Eq, Name name, Name (Name.create fresh_name)))
     in
     let filtered_rel = filter pred (db_relation rel) in
-    { name= "partition"
-    ; f= (fun r -> [list lhs scope (replace_rel rel filtered_rel r)]) }
+    {
+      name = "partition";
+      f = (fun r -> [ list lhs scope (replace_rel rel filtered_rel r) ]);
+    }
     |> run_everywhere ~stage:`Run
 
   let tf_partition_domain args =
     let open A in
     let n_subst, n_domain =
       match args with
-      | [n_subst; n_domain] ->
+      | [ n_subst; n_domain ] ->
           (A.name_of_string_exn n_subst, A.name_of_string_exn n_domain)
       | _ -> failwith "Unexpected args."
     in
@@ -967,20 +1068,24 @@ module Make (Config : Config.S) () = struct
     in
     let rel = Name.rel_exn n_domain in
     let lhs =
-      dedup (select [As_pred (Name n_domain, fresh_name)] (db_relation rel))
+      dedup (select [ As_pred (Name n_domain, fresh_name) ] (db_relation rel))
     in
     let scope = Fresh.name Global.fresh "s%d" in
-    { name= "partition-domain"
-    ; f=
+    {
+      name = "partition-domain";
+      f =
         (fun r ->
-          [ hash_idx lhs scope
+          [
+            hash_idx lhs scope
               (subst
                  (Map.singleton
                     (module Name)
                     n_subst
                     (Name (Name.create fresh_name)))
                  r)
-              [Name n_subst] ]) }
+              [ Name n_subst ];
+          ]);
+    }
     |> run_everywhere ~stage:`Run
 
   let replace_pred r p1 p2 =
@@ -999,15 +1104,16 @@ module Make (Config : Config.S) () = struct
     let open A in
     let name =
       match args with
-      | [n] -> A.name_of_string_exn n
+      | [ n ] -> A.name_of_string_exn n
       | _ -> failwith "Unexpected args."
     in
     let fresh_name =
       Caml.Format.sprintf "%s_%s" (Name.to_var name) (Fresh.name fresh "%d")
     in
     let rel = Name.rel_exn name in
-    { name= "partition-eq"
-    ; f=
+    {
+      name = "partition-eq";
+      f =
         (fun r ->
           let eqs = eq_preds r in
           (* Any predicate that is compared for equality with the partition
@@ -1015,21 +1121,25 @@ module Make (Config : Config.S) () = struct
           let keys =
             List.filter_map eqs ~f:(fun (p1, p2) ->
                 match (p1, p2) with
-                | Name n, _ when String.(Name.name n = Name.name name) -> Some p2
-                | _, Name n when String.(Name.name n = Name.name name) -> Some p1
+                | Name n, _ when String.(Name.name n = Name.name name) ->
+                    Some p2
+                | _, Name n when String.(Name.name n = Name.name name) ->
+                    Some p1
                 | _ -> None)
           in
           let lhs =
             dedup
               (select
-                 [As_pred (Name (Name.copy ~scope:None name), fresh_name)]
+                 [ As_pred (Name (Name.copy ~scope:None name), fresh_name) ]
                  (db_relation rel))
             |> Resolve.resolve ~params:Config.params
           in
           let scope = Fresh.name Global.fresh "s%d" in
           let pred =
             Binop
-              (Eq, Name (Name.copy ~scope:None name), Name (Name.create fresh_name))
+              ( Eq,
+                Name (Name.copy ~scope:None name),
+                Name (Name.create fresh_name) )
             |> Pred.scoped (schema_exn lhs) scope
           in
           let filtered_rel = filter pred (db_relation rel) in
@@ -1041,22 +1151,24 @@ module Make (Config : Config.S) () = struct
                    (replace_rel rel filtered_rel r)
                    k
                    (Name (Name.create ~scope fresh_name)))
-                [k])) }
+                [ k ]));
+    }
     |> run_everywhere ~stage:`Run
 
   let tf_split_out args =
     let open A in
     let rel, pk =
       match args with
-      | [x; y] -> (x, A.name_of_string_exn y)
+      | [ x; y ] -> (x, A.name_of_string_exn y)
       | _ ->
           Error.create "Unexpected args." args [%sexp_of: string list]
           |> Error.raise
     in
     let rel_schema = schema_exn (db_relation rel) in
     let eq = [%compare.equal: Name.t] in
-    { name= "split-out"
-    ; f=
+    {
+      name = "split-out";
+      f =
         (fun r ->
           let schema = schema_exn r in
           if List.mem schema pk ~equal:eq then
@@ -1080,44 +1192,59 @@ module Make (Config : Config.S) () = struct
                 ~f:(fun n -> Name (Name.copy n ~scope:(Some rel_fresh_v)))
                 snd_sel_list
             in
-            [ tuple
-                [ select fst_sel_list r
-                ; hash_idx
+            [
+              tuple
+                [
+                  select fst_sel_list r;
+                  hash_idx
                     (dedup
                        (select
-                          [As_pred (Name pk_k, pk_k_name)]
+                          [ As_pred (Name pk_k, pk_k_name) ]
                           (as_ rel_fresh_k (db_relation rel))))
                     pk_rel
                     (select snd_sel_list
                        (filter
                           (Binop (Eq, Name pk_v, Name (Name.create pk_k_name)))
                           (as_ rel_fresh_v (db_relation rel))))
-                    [Name pk] ]
-                Cross ]
-          else []) }
+                    [ Name pk ];
+                ]
+                Cross;
+            ]
+          else []);
+    }
     |> run_everywhere ~stage:`Run
 
   let tf_partition_size args =
     let open A in
     let field =
       match args with
-      | [x] -> A.name_of_string_exn x
+      | [ x ] -> A.name_of_string_exn x
       | _ -> failwith "Unexpected args."
     in
-    { name= "partition-size"
-    ; f=
+    {
+      name = "partition-size";
+      f =
         (fun r ->
-          [ tuple
+          [
+            tuple
               (List.map
-                 Int.[(2 ** 7) - 1; (2 ** 15) - 1; (2 ** 23) - 1; (2 ** 31) - 1]
+                 Int.
+                   [
+                     (2 ** 7) - 1;
+                     (2 ** 15) - 1;
+                     (2 ** 23) - 1;
+                     (2 ** 31) - 1;
+                   ]
                  ~f:(fun max ->
                    filter
                      (Binop
-                        ( And
-                        , Binop (Lt, Name field, Int max)
-                        , Binop (Gt, Name field, Int (-max)) ))
+                        ( And,
+                          Binop (Lt, Name field, Int max),
+                          Binop (Gt, Name field, Int (-max)) ))
                      r))
-              Concat ]) }
+              Concat;
+          ]);
+    }
     |> run_everywhere ~stage:`Run
 
   (* let tf_hoist_pred_constant _ =
@@ -1148,26 +1275,31 @@ module Make (Config : Config.S) () = struct
       match r.node with
       | AScalar
           (As_pred
-            (First {node= Select ([As_pred (Binop (op, p1, p2), _)], r); _}, n)) ->
+            ( First
+                { node = Select ([ As_pred (Binop (op, p1, p2), _) ], r); _ },
+              n )) ->
           let fresh_id = Fresh.name fresh "const%d" in
-          [ select
-              [As_pred (Binop (op, Name (Name.create fresh_id), p2), n)]
-              (scalar (As_pred (First (select [p1] r), fresh_id))) ]
+          [
+            select
+              [ As_pred (Binop (op, Name (Name.create fresh_id), p2), n) ]
+              (scalar (As_pred (First (select [ p1 ] r), fresh_id)));
+          ]
       | _ -> []
     in
-    {name= "hoist-param"; f} |> run_everywhere ~stage:`Run
+    { name = "hoist-param"; f } |> run_everywhere ~stage:`Run
 
   let tf_approx_dedup _ =
     let open A in
     let f r =
       match r.node with
-      | Dedup {node= Select ([As_pred (Name n, n')], _); _} -> (
-        match Name.rel n with
-        | Some r -> [dedup (select [As_pred (Name n, n')] (db_relation r))]
-        | None -> [] )
+      | Dedup { node = Select ([ As_pred (Name n, n') ], _); _ } -> (
+          match Name.rel n with
+          | Some r ->
+              [ dedup (select [ As_pred (Name n, n') ] (db_relation r)) ]
+          | None -> [] )
       | _ -> []
     in
-    {name= "approx-dedup"; f} |> run_everywhere ~stage:`Both
+    { name = "approx-dedup"; f } |> run_everywhere ~stage:`Both
 
   let is_correlated subquery input_schema =
     not
@@ -1181,7 +1313,7 @@ module Make (Config : Config.S) () = struct
     let f r_main =
       match r_main.node with
       | Filter (pred, r) ->
-          annotate_free r_main ;
+          annotate_free r_main;
           let schema = schema_exn r in
           (* Mapping from uncorrelated subqueries to unique names. *)
           let query_names =
@@ -1195,11 +1327,12 @@ module Make (Config : Config.S) () = struct
                  else
                    let result_type =
                      match schema_exn query with
-                     | [n] -> Name.type_exn n
+                     | [ n ] -> Name.type_exn n
                      | _ -> failwith "Unexpected schema."
                    in
                    let result_name = Fresh.name fresh "x%d" in
-                   self#plus xs [(Name.create ~type_:result_type result_name, query)]
+                   self#plus xs
+                     [ (Name.create ~type_:result_type result_name, query) ]
             end)
               #visit_pred [] pred
           in
@@ -1221,10 +1354,12 @@ module Make (Config : Config.S) () = struct
                 schema_exn q
                 |> List.map ~f:(fun n' -> As_pred (Name n', Name.name n))
               in
-              join (subst_query ~for_:q ~in_:pred (Name n)) r (select select_list q))
+              join
+                (subst_query ~for_:q ~in_:pred (Name n))
+                r (select select_list q))
       | _ -> []
     in
-    {name= "elim-subquery"; f} |> run_everywhere ~stage:`Both
+    { name = "elim-subquery"; f } |> run_everywhere ~stage:`Both
 
   (* let tf_to_cnf _ =
    *   let to_boolean p = match p with
@@ -1236,44 +1371,48 @@ module Make (Config : Config.S) () = struct
    *     | p -> `Atom p *)
 
   let transforms =
-    [ ("hoist-join-pred", tf_hoist_join_pred)
-    ; ("elim-groupby", tf_elim_groupby)
-    ; ("elim-groupby-partial", tf_elim_groupby_partial)
-    ; ("elim-groupby-filter", tf_elim_groupby_filter)
-    ; ("elim-groupby-approx", tf_elim_groupby_approx)
-    ; ("push-orderby", tf_push_orderby)
-    ; ("hoist-filter", tf_hoist_filter)
-    ; ("push-filter", tf_push_filter)
-    ; ("merge-filter", tf_merge_filter)
-    ; ("split-filter", tf_split_filter)
-    ; ("elim-disj-filter", tf_elim_disj_filter)
-    ; ("elim-eq-filter", tf_elim_eq_filter)
-    ; ("elim-cmp-filter", tf_elim_cmp_filter)
-    ; ("elim-join", tf_elim_join)
-    ; ("row-store", tf_row_store)
-    ; ("project", tf_project)
-    ; ("push-select", tf_push_select)
-    ; ("split-select", tf_split_select)
-    ; ("partition", tf_partition)
-    ; ("partition-eq", tf_partition_eq)
-    ; ("partition-size", tf_partition_size)
-    ; ("partition-domain", tf_partition_domain)
-    ; ("split-out", tf_split_out)
-      (* ; ("hoist-pred-const", tf_hoist_pred_constant) *)
-    ; ("hoist-param", tf_hoist_param)
-    ; ("precompute-filter", tf_precompute_filter)
-    ; ("precompute-filter-bv", tf_precompute_filter_bv)
-    ; ("approx-dedup", tf_approx_dedup)
-    ; ("hoist-param-filter", tf_hoist_param_filter)
-    ; ("elim-subquery", tf_elim_subquery)
-    ; ("hoist-orderby", tf_hoist_orderby) ]
+    [
+      ("hoist-join-pred", tf_hoist_join_pred);
+      ("elim-groupby", tf_elim_groupby);
+      ("elim-groupby-partial", tf_elim_groupby_partial);
+      ("elim-groupby-filter", tf_elim_groupby_filter);
+      ("elim-groupby-approx", tf_elim_groupby_approx);
+      ("push-orderby", tf_push_orderby);
+      ("hoist-filter", tf_hoist_filter);
+      ("push-filter", tf_push_filter);
+      ("merge-filter", tf_merge_filter);
+      ("split-filter", tf_split_filter);
+      ("elim-disj-filter", tf_elim_disj_filter);
+      ("elim-eq-filter", tf_elim_eq_filter);
+      ("elim-cmp-filter", tf_elim_cmp_filter);
+      ("elim-join", tf_elim_join);
+      ("row-store", tf_row_store);
+      ("project", tf_project);
+      ("push-select", tf_push_select);
+      ("split-select", tf_split_select);
+      ("partition", tf_partition);
+      ("partition-eq", tf_partition_eq);
+      ("partition-size", tf_partition_size);
+      ("partition-domain", tf_partition_domain);
+      ("split-out", tf_split_out)
+      (* ; ("hoist-pred-const", tf_hoist_pred_constant) *);
+      ("hoist-param", tf_hoist_param);
+      ("precompute-filter", tf_precompute_filter);
+      ("precompute-filter-bv", tf_precompute_filter_bv);
+      ("approx-dedup", tf_approx_dedup);
+      ("hoist-param-filter", tf_hoist_param_filter);
+      ("elim-subquery", tf_elim_subquery);
+      ("hoist-orderby", tf_hoist_orderby);
+    ]
 
   let of_string_exn s =
     let tf_strs =
       try
-        Transform_parser.transforms_eof Transform_lexer.token (Lexing.from_string s)
+        Transform_parser.transforms_eof Transform_lexer.token
+          (Lexing.from_string s)
       with Parser_utils.ParseError (msg, line, col) as e ->
-        Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
+        Logs.err (fun m ->
+            m "Parse error: %s (line: %d, col: %d)" msg line col);
         raise e
     in
     List.map tf_strs ~f:(fun (name, args, index) ->
@@ -1282,6 +1421,6 @@ module Make (Config : Config.S) () = struct
         in
         let tf = tf_gen args in
         match index with
-        | Some i -> {tf with f= (fun r -> [List.nth_exn (run tf r) i])}
-        | None -> {tf with f= (fun r -> run tf r)})
+        | Some i -> { tf with f = (fun r -> [ List.nth_exn (run tf r) i ]) }
+        | None -> { tf with f = (fun r -> run tf r) })
 end

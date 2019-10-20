@@ -19,21 +19,21 @@ val command_ok_exn : Postgresql.result -> unit
 val result_to_strings : Postgresql.result -> string list list
 
 val exec_cursor_exn :
-     ?batch_size:int
-  -> ?params:string list
-  -> t
-  -> Type.PrimType.t list
-  -> string
-  -> Value.t array Gen.t
+  ?batch_size:int ->
+  ?params:string list ->
+  t ->
+  Type.PrimType.t list ->
+  string ->
+  Value.t array Gen.t
 
 val exec_cursor_lwt_exn :
-     ?batch_size:int
-  -> ?params:string list
-  -> ?timeout:float
-  -> t
-  -> Type.PrimType.t list
-  -> string
-  -> (Value.t array, exn) result Lwt_stream.t
+  ?batch_size:int ->
+  ?params:string list ->
+  ?timeout:float ->
+  t ->
+  Type.PrimType.t list ->
+  string ->
+  (Value.t array, exn) result Lwt_stream.t
 
 val check : t -> string -> unit Or_error.t
 

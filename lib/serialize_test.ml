@@ -5,7 +5,9 @@ open Test_util
    true if the log was modified, false otherwise. *)
 let process_layout_log log =
   let map_entry_regex = Str.regexp {|Map entry (\([0-9]+\) => [0-9]+)|} in
-  let log' = Str.global_replace map_entry_regex {|Map entry (\1 => XXX)|} log in
+  let log' =
+    Str.global_replace map_entry_regex {|Map entry (\1 => XXX)|} log
+  in
   (log', not String.(log = log'))
 
 let run_test layout_str =
@@ -15,19 +17,20 @@ let run_test layout_str =
     Setup.make_modules ~layout_file:layout_log_file ()
   in
   let layout = M.load_string layout_str in
-  M.annotate_type layout ;
+  M.annotate_type layout;
   let type_ = Meta.(find_exn layout type_) in
   let _, len = S.serialize layout_file layout in
   let buf_str = In_channel.read_all layout_file |> String.escaped in
   let layout_log, did_modify =
-    In_channel.input_all (In_channel.create layout_log_file) |> process_layout_log
+    In_channel.input_all (In_channel.create layout_log_file)
+    |> process_layout_log
   in
-  print_endline layout_log ;
+  print_endline layout_log;
   if did_modify then [%sexp_of: Type.t * int] (type_, len) |> print_s
   else [%sexp_of: Type.t * int * string] (type_, len, buf_str) |> print_s
 
 let%expect_test "scalar-int" =
-  run_test "AScalar(1)" ;
+  run_test "AScalar(1)";
   [%expect
     {|
     0:1 Scalar (=(Int 1))
@@ -36,7 +39,7 @@ let%expect_test "scalar-int" =
      "\\001") |}]
 
 let%expect_test "scalar-bool" =
-  run_test "AScalar(true)" ;
+  run_test "AScalar(true)";
   [%expect
     {|
     0:1 Scalar (=(Bool true))
@@ -44,7 +47,7 @@ let%expect_test "scalar-bool" =
     ((BoolT ((nullable false))) 1 "\\001") |}]
 
 let%expect_test "scalar-string" =
-  run_test "AScalar(\"test\")" ;
+  run_test "AScalar(\"test\")";
   [%expect
     {|
     0:4 Scalar (=(String test))
@@ -55,7 +58,7 @@ let%expect_test "scalar-string" =
      test) |}]
 
 let%expect_test "tuple" =
-  run_test "ATuple([AScalar(1), AScalar(\"test\")], Cross)" ;
+  run_test "ATuple([AScalar(1), AScalar(\"test\")], Cross)";
   [%expect
     {|
     0:5 Tuple body
@@ -72,7 +75,7 @@ let%expect_test "tuple" =
      5 "\\001test") |}]
 
 let%expect_test "hash-idx" =
-  run_test "AHashIdx(Dedup(Select([f], r1)) as k, AScalar(k.f as v), null)" ;
+  run_test "AHashIdx(Dedup(Select([f], r1)) as k, AScalar(k.f as v), null)";
   [%expect
     {|
     0:1 Table len (=12)
@@ -100,8 +103,8 @@ let%expect_test "hash-idx" =
 
 let%expect_test "ordered-idx" =
   run_test
-    "AOrderedIdx(OrderBy([f desc], Dedup(Select([f], r1))) as k, AScalar(k.f as \
-     v), null, null)" ;
+    "AOrderedIdx(OrderBy([f desc], Dedup(Select([f], r1))) as k, AScalar(k.f \
+     as v), null, null)";
   [%expect
     {|
     0:6 Ordered idx map
@@ -129,8 +132,8 @@ let%expect_test "ordered-idx" =
 
 let%expect_test "ordered-idx-dates" =
   run_test
-    "AOrderedIdx(OrderBy([f desc], Dedup(Select([f], r_date))) as k, AScalar(k.f \
-     as v), null, null)" ;
+    "AOrderedIdx(OrderBy([f desc], Dedup(Select([f], r_date))) as k, \
+     AScalar(k.f as v), null, null)";
   [%expect
     {|
     0:15 Ordered idx map
@@ -167,7 +170,7 @@ let%expect_test "ordered-idx-dates" =
      25 "oE\\000\\146D\\002|D\\004$D\\006\\240B\\boE\\146D|D$D\\240B") |}]
 
 let%expect_test "list-list" =
-  run_test "AList(r1 as k1, AList(r1 as k2, AScalar(k2.f)))" ;
+  run_test "AList(r1 as k1, AList(r1 as k2, AScalar(k2.f)))";
   [%expect
     {|
     0:25 List body
@@ -223,7 +226,7 @@ let%expect_test "list-list" =
      "\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003") |}]
 
 let%expect_test "depjoin" =
-  run_test "depjoin(alist(r1 as k1, ascalar(k1.f)) as k3, ascalar(5))" ;
+  run_test "depjoin(alist(r1 as k1, ascalar(k1.f)) as k3, ascalar(5))";
   [%expect
     {|
     0:6 Tuple body

@@ -1,6 +1,6 @@
 open! Core
 
-type t = {value: int; scale: int} [@@deriving hash, sexp]
+type t = { value : int; scale : int } [@@deriving hash, sexp]
 
 include Comparable.S with type t := t
 

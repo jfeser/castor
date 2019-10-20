@@ -9,8 +9,12 @@ module Config : sig
   end
 end
 
-type ir_module =
-  {iters: func list; funcs: func list; params: Name.t list; buffer_len: int}
+type ir_module = {
+  iters : func list;
+  funcs : func list;
+  params : Name.t list;
+  buffer_len : int;
+}
 [@@deriving compare, sexp]
 
 exception IRGenError of Error.t

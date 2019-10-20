@@ -3,8 +3,12 @@ open Collections
 open Implang
 module A = Abslayout
 
-type ir_module =
-  {iters: func list; funcs: func list; params: Name.t list; buffer_len: int}
+type ir_module = {
+  iters : func list;
+  funcs : func list;
+  params : Name.t list;
+  buffer_len : int;
+}
 [@@deriving compare, sexp]
 
 type callback = Builder.t -> expr list -> unit
@@ -37,7 +41,7 @@ struct
 
   let debug_print msg v b =
     let open Builder in
-    if Config.debug then build_print (Tuple [String msg; v]) b
+    if Config.debug then build_print (Tuple [ String msg; v ]) b
 
   (** Generate an expression for the length of a value at `start` with type
      `type_`. Compensates for restrictions in the Header api. *)
@@ -48,7 +52,7 @@ struct
         Infix.(
           int (Header.size hdr "nchars" |> Or_error.ok_exn)
           + Header.make_access hdr "nchars" start)
-    | FuncT ([t], _) -> len start t
+    | FuncT ([ t ], _) -> len start t
     | _ -> Header.make_access hdr "len" start
 
   (** Add layout start positions to contexts that don't contain them.
@@ -129,14 +133,16 @@ struct
     let print ~key idx =
       debug_print "bin_search"
         (Tuple
-           [ String "lo"
-           ; low
-           ; String "hi"
-           ; high
-           ; String "idx"
-           ; idx
-           ; String "key"
-           ; key ])
+           [
+             String "lo";
+             low;
+             String "hi";
+             high;
+             String "idx";
+             idx;
+             String "key";
+             key;
+           ])
     in
     build_loop
       Infix.(low < high)
@@ -147,7 +153,8 @@ struct
           ~then_:(fun b -> build_assign mid high b)
           ~else_:(fun b -> build_assign Infix.(mid + int 1) low b)
           b)
-      b ;
+      b;
+
     (* Iterate through the keys until one is found that is above the upper bound. *)
     let idx = build_defn "idx" low b in
     build_if
@@ -158,11 +165,15 @@ struct
           Infix.(is_below_upper key b && idx < n)
           (fun b ->
             build_if
-              ~cond:Infix.(is_below_upper_tight key b && is_above_lower_tight key b)
-              ~then_:(fun b -> print ~key idx b ; callback key idx b)
+              ~cond:
+                Infix.(
+                  is_below_upper_tight key b && is_above_lower_tight key b)
+              ~then_:(fun b ->
+                print ~key idx b;
+                callback key idx b)
               ~else_:(fun _ -> ())
-              b ;
-            build_assign Infix.(idx + int 1) idx b ;
+              b;
+            build_assign Infix.(idx + int 1) idx b;
             build_assign (build_key idx b) key b)
           b)
       ~else_:(fun _ -> ())
@@ -220,34 +231,35 @@ struct
                 (A.Unop (op, p))
                 [%sexp_of: A.pred]
               |> Error.raise
-          | A.Strlen -> Unop {op= `StrLen; arg= x}
-          | A.ExtractY -> Unop {op= `ExtractY; arg= x}
-          | A.ExtractM -> Unop {op= `ExtractM; arg= x}
-          | A.ExtractD -> Unop {op= `ExtractD; arg= x} )
+          | A.Strlen -> Unop { op = `StrLen; arg = x }
+          | A.ExtractY -> Unop { op = `ExtractY; arg = x }
+          | A.ExtractM -> Unop { op = `ExtractM; arg = x }
+          | A.ExtractD -> Unop { op = `ExtractD; arg = x } )
       | A.Bool x -> Bool x
       | A.As_pred (x, _) -> gen_pred x b
       | Name n -> (
-        match Ctx.find ctx n b with
-        | Some e -> e
-        | None ->
-            Error.create "Unbound variable." (n, ctx) [%sexp_of: Name.t * Ctx.t]
-            |> Error.raise )
+          match Ctx.find ctx n b with
+          | Some e -> e
+          | None ->
+              Error.create "Unbound variable." (n, ctx)
+                [%sexp_of: Name.t * Ctx.t]
+              |> Error.raise )
       (* Special cases for date intervals. *)
       | A.Binop (A.Add, arg1, Unop (Year, arg2)) ->
-          Binop {op= `AddY; arg1= gen_pred arg1 b; arg2= gen_pred arg2 b}
+          Binop { op = `AddY; arg1 = gen_pred arg1 b; arg2 = gen_pred arg2 b }
       | A.Binop (A.Add, arg1, Unop (Month, arg2)) ->
-          Binop {op= `AddM; arg1= gen_pred arg1 b; arg2= gen_pred arg2 b}
+          Binop { op = `AddM; arg1 = gen_pred arg1 b; arg2 = gen_pred arg2 b }
       | A.Binop (A.Add, arg1, Unop (Day, arg2)) ->
-          Binop {op= `AddD; arg1= gen_pred arg1 b; arg2= gen_pred arg2 b}
+          Binop { op = `AddD; arg1 = gen_pred arg1 b; arg2 = gen_pred arg2 b }
       | A.Binop (A.Sub, arg1, Unop (Year, arg2)) ->
           let e2 = gen_pred (A.Binop (A.Sub, A.Int 0, arg2)) b in
-          Binop {op= `AddY; arg1= gen_pred arg1 b; arg2= e2}
+          Binop { op = `AddY; arg1 = gen_pred arg1 b; arg2 = e2 }
       | A.Binop (A.Sub, arg1, Unop (Month, arg2)) ->
           let e2 = gen_pred (A.Binop (A.Sub, A.Int 0, arg2)) b in
-          Binop {op= `AddM; arg1= gen_pred arg1 b; arg2= e2}
+          Binop { op = `AddM; arg1 = gen_pred arg1 b; arg2 = e2 }
       | A.Binop (A.Sub, arg1, Unop (Day, arg2)) ->
           let e2 = gen_pred (A.Binop (A.Sub, A.Int 0, arg2)) b in
-          Binop {op= `AddD; arg1= gen_pred arg1 b; arg2= e2}
+          Binop { op = `AddD; arg1 = gen_pred arg1 b; arg2 = e2 }
       | A.Binop (op, arg1, arg2) -> (
           let e1 = gen_pred arg1 b in
           let e2 = gen_pred arg2 b in
@@ -264,19 +276,22 @@ struct
           | A.Mul -> build_mul e1 e2 b
           | A.Div -> build_div e1 e2 b
           | A.Mod -> Infix.(e1 % e2)
-          | A.Strpos -> Binop {op= `StrPos; arg1= e1; arg2= e2} )
-      | (A.Count | A.Min _ | A.Max _ | A.Sum _ | A.Avg _ | A.Row_number) as p ->
-          Error.create "Not a scalar predicate." p [%sexp_of: A.pred] |> Error.raise
+          | A.Strpos -> Binop { op = `StrPos; arg1 = e1; arg2 = e2 } )
+      | (A.Count | A.Min _ | A.Max _ | A.Sum _ | A.Avg _ | A.Row_number) as p
+        ->
+          Error.create "Not a scalar predicate." p [%sexp_of: A.pred]
+          |> Error.raise
       | A.If (p1, p2, p3) ->
           let ret_var =
             build_var "ret"
-              (Type.PrimType.unify (type_of_pred ctx p2 b) (type_of_pred ctx p3 b))
+              (Type.PrimType.unify (type_of_pred ctx p2 b)
+                 (type_of_pred ctx p3 b))
               b
           in
           build_if ~cond:(gen_pred p1 b)
             ~then_:(fun b -> build_assign (gen_pred p2 b) ret_var b)
             ~else_:(fun b -> build_assign (gen_pred p3 b) ret_var b)
-            b ;
+            b;
           ret_var
           (* Ternary (gen_pred p1 b, gen_pred p2 b, gen_pred p3 b) *)
       | A.First r ->
@@ -284,14 +299,17 @@ struct
            inline. *)
           let ctx = Map.remove ctx (Name.create "start") in
           let t = Meta.(find_exn r type_) in
-          let ret_var = build_var "first" (List.hd_exn (types_of_layout r)) b in
-          scan ctx b r t (fun b tup -> build_assign (List.hd_exn tup) ret_var b) ;
+          let ret_var =
+            build_var "first" (List.hd_exn (types_of_layout r)) b
+          in
+          scan ctx b r t (fun b tup ->
+              build_assign (List.hd_exn tup) ret_var b);
           ret_var
       | A.Exists r ->
           let ctx = Map.remove ctx (Name.create "start") in
           let t = Meta.(find_exn r type_) in
           let ret_var = build_defn "exists" (Bool false) b in
-          scan ctx b r t (fun b _ -> build_assign (Bool true) ret_var b) ;
+          scan ctx b r t (fun b _ -> build_assign (Bool true) ret_var b);
           ret_var
       | A.Substring (e1, e2, e3) ->
           Substr (gen_pred e1 b, gen_pred e2 b, gen_pred e3 b)
@@ -300,9 +318,9 @@ struct
 
   and scan_empty _ _ _ _ _ = ()
 
-  and scan_null _ b _ _ (cb : callback) = cb b [Null]
+  and scan_null _ b _ _ (cb : callback) = cb b [ Null ]
 
-  and scan_int ctx b _ (Type.({nullable; range; _} as t) : Type.int_)
+  and scan_int ctx b _ (Type.({ nullable; range; _ } as t) : Type.int_)
       (cb : callback) =
     let open Builder in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -313,10 +331,10 @@ struct
         Infix.(build_eq ival (int null_val) b)
       else Bool false
     in
-    debug_print "int" ival b ;
-    cb b [ival]
+    debug_print "int" ival b;
+    cb b [ ival ]
 
-  and scan_date ctx b _ (Type.({nullable; range; _} as t) : Type.date)
+  and scan_date ctx b _ (Type.({ nullable; range; _ } as t) : Type.date)
       (cb : callback) =
     let open Builder in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -327,11 +345,11 @@ struct
         Infix.(build_eq ival (int null_val) b)
       else Bool false
     in
-    let dval = Unop {op= `Int2Date; arg= ival} in
-    debug_print "date" dval b ;
-    cb b [dval]
+    let dval = Unop { op = `Int2Date; arg = ival } in
+    debug_print "date" dval b;
+    cb b [ dval ]
 
-  and scan_fixed ctx b _ Type.({nullable; value= {range; scale}} as t)
+  and scan_fixed ctx b _ Type.({ nullable; value = { range; scale } } as t)
       (cb : callback) =
     let open Builder in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -344,28 +362,28 @@ struct
         Infix.(build_eq ival (int null_val) b)
       else Bool true
     in
-    debug_print "fixed" xval b ;
-    cb b [xval]
+    debug_print "fixed" xval b;
+    cb b [ xval ]
 
   and scan_bool ctx b _ _ (cb : callback) =
     let start = Ctx.find_exn ctx (Name.create "start") b in
-    cb b [Unop {op= `LoadBool; arg= start}]
+    cb b [ Unop { op = `LoadBool; arg = start } ]
 
-  and scan_string ctx b _ (Type.({nullable; _} as st) as t) (cb : callback) =
+  and scan_string ctx b _ (Type.({ nullable; _ } as st) as t) (cb : callback) =
     let open Builder in
     let hdr = Header.make_header (StringT t) in
     let start = Ctx.find_exn ctx (Name.create "start") b in
     let value_ptr = Header.make_position hdr "value" start in
     let nchars = Header.make_access hdr "nchars" start in
-    let xval = Binop {op= `LoadStr; arg1= value_ptr; arg2= nchars} in
+    let xval = Binop { op = `LoadStr; arg1 = value_ptr; arg2 = nchars } in
     let _nval =
       if nullable then
         let null_val = Serialize.string_sentinal st in
         Infix.(build_eq nchars (int null_val) b)
       else Bool true
     in
-    debug_print "string" xval b ;
-    cb b [xval]
+    debug_print "string" xval b;
+    cb b [ xval ]
 
   and scan_crosstuple ctx b (child_layouts, _) ((child_types, _) as t)
       (cb : callback) =
@@ -392,7 +410,7 @@ struct
       in
       RevList.to_list ret
     in
-    debug_print "scanning crosstuple" (Int 0) b ;
+    debug_print "scanning crosstuple" (Int 0) b;
     make_loops ctx [] child_layouts child_types child_starts b
 
   and scan_ziptuple ctx b r t cb =
@@ -405,7 +423,7 @@ struct
     let ctx = Ctx.bind ctx "start" Type.PrimType.int_t cstart in
     let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
     (* Build iterator initializers using the computed start positions. *)
-    build_assign (Header.make_position hdr "value" pstart) cstart b ;
+    build_assign (Header.make_position hdr "value" pstart) cstart b;
     let callee_funcs =
       List.zip_exn child_layouts child_types
       |> List.map ~f:(fun (callee_layout, callee_type) ->
@@ -418,18 +436,18 @@ struct
                  ~ret:(type_of_layout callee_layout)
              in
              scan callee_ctx b' callee_layout callee_type (fun b tup ->
-                 build_yield (Tuple tup) b) ;
+                 build_yield (Tuple tup) b);
              let iter = build_func b' in
-             add_iter iter ;
-             build_iter iter callee_args b ;
-             build_assign Infix.(cstart + len cstart callee_type) cstart b ;
+             add_iter iter;
+             build_iter iter callee_args b;
+             build_assign Infix.(cstart + len cstart callee_type) cstart b;
              iter)
     in
     let child_tuples =
       List.map callee_funcs ~f:(fun f -> build_var "tup" f.ret_type b)
     in
     let build_body b =
-      List.iter2_exn callee_funcs child_tuples ~f:(fun f t -> build_step t f b) ;
+      List.iter2_exn callee_funcs child_tuples ~f:(fun f t -> build_step t f b);
       let tup =
         List.map2_exn child_types child_tuples ~f:(fun in_t child_tup ->
             List.init (Type.width in_t) ~f:(fun i -> Infix.(index child_tup i)))
@@ -441,7 +459,7 @@ struct
     match Type.count (TupleT t) |> Type.AbsInt.to_int with
     | Some x -> build_count_loop Infix.(int x) build_body b
     | None ->
-        build_body b ;
+        build_body b;
         let not_done =
           List.fold_left callee_funcs ~init:(Bool true) ~f:(fun acc f ->
               Infix.(acc && not (Done f.name)))
@@ -460,25 +478,30 @@ struct
     let child_types, _ = t in
     let hdr = Header.make_header (TupleT t) in
     let start = Ctx.find_exn ctx (Name.create "start") b in
-    let cstart = build_defn "cstart" (Header.make_position hdr "value" start) b in
+    let cstart =
+      build_defn "cstart" (Header.make_position hdr "value" start) b
+    in
     let ctx = Ctx.bind ctx "start" Type.PrimType.int_t cstart in
     List.iter2_exn child_layouts child_types ~f:(fun child_layout child_type ->
         let clen = len cstart child_type in
-        scan ctx b child_layout child_type cb ;
+        scan ctx b child_layout child_type cb;
         build_assign Infix.(cstart + clen) cstart b)
 
-  and scan_list ctx b (_, child_layout) ((child_type, _) as t) (cb : callback) =
+  and scan_list ctx b (_, child_layout) ((child_type, _) as t) (cb : callback)
+      =
     let open Builder in
     let hdr = Header.make_header (ListT t) in
     let start = Ctx.find_exn ctx (Name.create "start") b in
-    let cstart = build_defn "cstart" (Header.make_position hdr "value" start) b in
+    let cstart =
+      build_defn "cstart" (Header.make_position hdr "value" start) b
+    in
     let callee_ctx = Ctx.bind ctx "start" Type.PrimType.int_t cstart in
-    debug_print "scanning list" (Int 0) b ;
+    debug_print "scanning list" (Int 0) b;
     build_count_loop
       (Header.make_access hdr "count" start)
       (fun b ->
         let clen = len cstart child_type in
-        scan callee_ctx b child_layout child_type cb ;
+        scan callee_ctx b child_layout child_type cb;
         build_assign Infix.(cstart + clen) cstart b)
       b
 
@@ -506,17 +529,18 @@ struct
     let mapping_len = Header.make_access hdr "hash_map_len" start in
     let hash_ptr_len = Type.hi_ptr_size key_type value_type m in
     let lookup_expr = List.map r.hi_lookup ~f:(fun p -> gen_pred ctx p b) in
-    debug_print "scanning hash idx" start b ;
+    debug_print "scanning hash idx" start b;
+
     (* Compute the index in the mapping table for this key. *)
     let hash_key =
       match (Type.(hash_kind_exn (HashIdxT t)), lookup_expr) with
       | _, [] -> failwith "empty hash key"
-      | `Direct, [x] -> build_to_int x b
+      | `Direct, [ x ] -> build_to_int x b
       | `Direct, _ -> failwith "Unexpected direct hash."
-      | `Cmph, [x] -> build_hash hash_data_start x b
+      | `Cmph, [ x ] -> build_hash hash_data_start x b
       | `Cmph, xs -> build_hash hash_data_start (Tuple xs) b
     in
-    debug_print "hashing key" (Tuple lookup_expr) b ;
+    debug_print "hashing key" (Tuple lookup_expr) b;
     let hash_key = Infix.(hash_key * int hash_ptr_len) in
     (* Get a pointer to the value. *)
     let value_ptr =
@@ -524,7 +548,8 @@ struct
         Slice (mapping_start + hash_key, hash_ptr_len)
         + Header.make_position hdr "data" start)
     in
-    debug_print "value ptr is" value_ptr b ;
+    debug_print "value ptr is" value_ptr b;
+
     (* If the pointer is null, then the key is not present. *)
     build_if
       ~cond:
@@ -533,11 +558,11 @@ struct
           (* || build_eq value_ptr (int 0x0) b *))
       ~then_:(fun b -> debug_print "no values found" value_ptr b)
       ~else_:(fun b ->
-        debug_print "found values" value_ptr b ;
-        build_assign value_ptr kstart b ;
+        debug_print "found values" value_ptr b;
+        build_assign value_ptr kstart b;
         scan key_ctx b key_layout key_type (fun b tup ->
-            build_assign (Tuple tup) key_tuple b) ;
-        build_assign Infix.(value_ptr + len value_ptr key_type) vstart b ;
+            build_assign (Tuple tup) key_tuple b);
+        build_assign Infix.(value_ptr + len value_ptr key_type) vstart b;
         build_if
           ~cond:(build_eq key_tuple (Tuple lookup_expr) b)
           ~then_:(fun b ->
@@ -577,22 +602,24 @@ struct
     let ptr_start i = Infix.(key_start i + key_len) in
     let read_ptr i = Slice (ptr_start i, ptr_size) in
     let key_index i b =
-      build_assign (key_start i) kstart b ;
-      let key = build_var ~persistent:false "key" (type_of_layout key_layout) b in
+      build_assign (key_start i) kstart b;
+      let key =
+        build_var ~persistent:false "key" (type_of_layout key_layout) b
+      in
       scan key_ctx b key_layout key_type (fun b tup ->
-          build_assign (Tuple tup) key b) ;
+          build_assign (Tuple tup) key b);
       key
     in
     let n = Infix.(index_len / kp_len) in
-    debug_print "scanning ordered idx" start b ;
+    debug_print "scanning ordered idx" start b;
     let bounds =
       let mk_bound = Option.map ~f:(fun (p, bnd) -> (gen_pred ctx p b, bnd)) in
       List.map m.oi_lookup ~f:(fun (lb, ub) -> (mk_bound lb, mk_bound ub))
     in
     build_bin_search key_index n bounds
       (fun key idx b ->
-        build_assign Infix.(read_ptr idx + index_len + index_start) vstart b ;
-        build_assign key key_tuple b ;
+        build_assign Infix.(read_ptr idx + index_len + index_start) vstart b;
+        build_assign key key_tuple b;
         scan value_ctx b value_layout value_type (fun b value_tup ->
             cb b (list_of_tuple key_tuple b @ value_tup)))
       b
@@ -601,7 +628,7 @@ struct
     let open Builder in
     let pred, child_layout = r in
     let child_type =
-      match t with [ct], _ -> ct | _ -> failwith "Unexpected type."
+      match t with [ ct ], _ -> ct | _ -> failwith "Unexpected type."
     in
     scan ctx b child_layout child_type (fun b tup ->
         let ctx =
@@ -613,7 +640,7 @@ struct
           ~then_:(fun b ->
             debug_print
               (Format.asprintf "filter %a selected" Pred.pp pred)
-              (Tuple tup) b ;
+              (Tuple tup) b;
             cb b tup)
           ~else_:(fun b ->
             debug_print
@@ -626,22 +653,26 @@ struct
     match Pred.remove_as p with
     | A.Count ->
         `Count
-          (build_defn ~persistent:false "count" (const_int Type.PrimType.int_t 0) b)
+          (build_defn ~persistent:false "count"
+             (const_int Type.PrimType.int_t 0)
+             b)
     | A.Sum f ->
         let t = type_of_pred ctx f b in
         `Sum (f, build_defn ~persistent:false "sum" (const_int t 0) b)
     | A.Min f ->
         let t = type_of_pred ctx f b in
-        `Min (f, build_defn ~persistent:false "min" (const_int t Int.max_value) b)
+        `Min
+          (f, build_defn ~persistent:false "min" (const_int t Int.max_value) b)
     | A.Max f ->
         let t = type_of_pred ctx f b in
-        `Max (f, build_defn ~persistent:false "max" (const_int t Int.min_value) b)
+        `Max
+          (f, build_defn ~persistent:false "max" (const_int t Int.min_value) b)
     | A.Avg f ->
         let t = type_of_pred ctx f b in
         `Avg
-          ( f
-          , build_defn ~persistent:false "avg_num" (const_int t 0) b
-          , build_defn ~persistent:false "avg_dem"
+          ( f,
+            build_defn ~persistent:false "avg_num" (const_int t 0) b,
+            build_defn ~persistent:false "avg_dem"
               (const_int Type.PrimType.int_t 0)
               b )
     | p -> `Passthru p
@@ -660,7 +691,7 @@ struct
         build_assign (Ternary (build_lt v x b, x, v)) x b
     | `Avg (f, n, d) ->
         let v = gen_pred ctx f b in
-        build_assign (build_add n v b) n b ;
+        build_assign (build_add n v b) n b;
         build_assign (build_add d one b) d b
     | `Passthru _ -> ()
 
@@ -675,7 +706,7 @@ struct
     let open Builder in
     let args, child_layout = r in
     let child_type =
-      match t with [ct], _ -> ct | _ -> failwith "Unexpected type."
+      match t with [ ct ], _ -> ct | _ -> failwith "Unexpected type."
     in
     match A.select_kind args with
     | `Scalar ->
@@ -694,10 +725,13 @@ struct
         let last_tup =
           build_var ~persistent:false "tup" (type_of_layout child_layout) b
         in
-        let found_tup = build_defn ~persistent:false "found_tup" (Bool false) b in
+        let found_tup =
+          build_defn ~persistent:false "found_tup" (Bool false) b
+        in
         let pred_ctx =
           let child_schema = A.schema_exn child_layout in
-          Ctx.bind_ctx ctx (Ctx.of_schema child_schema (list_of_tuple last_tup b))
+          Ctx.bind_ctx ctx
+            (Ctx.of_schema child_schema (list_of_tuple last_tup b))
         in
         (* Holds the state for each aggregate. *)
         let agg_temps =
@@ -705,9 +739,10 @@ struct
         in
         (* Compute the aggregates. *)
         scan ctx b child_layout child_type (fun b tup ->
-            build_assign (Tuple tup) last_tup b ;
-            List.iter agg_temps ~f:(fun (_, p) -> agg_step pred_ctx b p) ;
-            build_assign (Bool true) found_tup b) ;
+            build_assign (Tuple tup) last_tup b;
+            List.iter agg_temps ~f:(fun (_, p) -> agg_step pred_ctx b p);
+            build_assign (Bool true) found_tup b);
+
         (* Extract and return aggregates. *)
         build_if ~cond:found_tup
           ~then_:(fun b ->
@@ -721,29 +756,32 @@ struct
             let output =
               List.map ~f:(fun p -> gen_pred output_ctx p b) scalar_preds
             in
-            debug_print "select produced" (Tuple output) b ;
+            debug_print "select produced" (Tuple output) b;
             cb b output)
           ~else_:(fun _ -> ())
           b
 
-  and scan_depjoin ctx b {d_lhs; d_alias; d_rhs} (child_types, _) (cb : callback) =
+  and scan_depjoin ctx b { d_lhs; d_alias; d_rhs } (child_types, _)
+      (cb : callback) =
     let lhs_t, rhs_t =
       match child_types with
-      | [lhs_t; rhs_t] -> (lhs_t, rhs_t)
+      | [ lhs_t; rhs_t ] -> (lhs_t, rhs_t)
       | _ -> failwith "Unexpected type."
     in
-    let hdr = Header.make_header (TupleT ([lhs_t; rhs_t], {kind= `Cross})) in
+    let hdr =
+      Header.make_header (TupleT ([ lhs_t; rhs_t ], { kind = `Cross }))
+    in
     let start = Ctx.find_exn ctx (Name.create "start") b in
     let lhs_start = Header.make_position hdr "value" start in
     let lhs_ctx = Ctx.bind ctx "start" Type.PrimType.int_t lhs_start in
     let rhs_ctx =
       let rhs_start = Infix.(lhs_start + len lhs_start lhs_t) in
-      debug_print "lhs_start" lhs_start b ;
-      debug_print "lhs_len" (len lhs_start lhs_t) b ;
-      debug_print "rhs_start" rhs_start b ;
+      debug_print "lhs_start" lhs_start b;
+      debug_print "lhs_len" (len lhs_start lhs_t) b;
+      debug_print "rhs_start" rhs_start b;
       Ctx.bind ctx "start" Type.PrimType.int_t rhs_start
     in
-    debug_print "scanning depjoin" (Int 0) b ;
+    debug_print "scanning depjoin" (Int 0) b;
     scan lhs_ctx b d_lhs lhs_t (fun b tup ->
         let rhs_ctx =
           let lhs_ctx =
@@ -756,13 +794,13 @@ struct
   let printer ctx r t =
     let open Builder in
     let b = create ~ctx ~name:"printer" ~ret:VoidT in
-    scan ctx b r t (fun b tup -> build_print (Tuple tup) b) ;
+    scan ctx b r t (fun b tup -> build_print (Tuple tup) b);
     build_func b
 
   let consumer ctx r t =
     let open Builder in
     let b = create ~name:"consumer" ~ctx ~ret:VoidT in
-    scan ctx b r t (fun b tup -> build_consume (Tuple tup) b) ;
+    scan ctx b r t (fun b tup -> build_consume (Tuple tup) b);
     build_func b
 
   let irgen ~params ~data_fn r =
@@ -774,15 +812,17 @@ struct
     let r, len =
       if Config.code_only then (r, 0) else Serialize.serialize data_fn r
     in
-    { iters= !iters
-    ; funcs= [printer ctx r type_; consumer ctx r type_]
-    ; params
-    ; buffer_len= len }
+    {
+      iters = !iters;
+      funcs = [ printer ctx r type_; consumer ctx r type_ ];
+      params;
+      buffer_len = len;
+    }
 
-  let pp fmt {funcs; iters; _} =
+  let pp fmt { funcs; iters; _ } =
     let open Caml.Format in
-    pp_open_vbox fmt 0 ;
-    List.iter (iters @ funcs) ~f:(pp_func fmt) ;
-    pp_close_box fmt () ;
+    pp_open_vbox fmt 0;
+    List.iter (iters @ funcs) ~f:(pp_func fmt);
+    pp_close_box fmt ();
     pp_print_flush fmt ()
 end

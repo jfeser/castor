@@ -9,12 +9,12 @@ module O : Comparable.Infix with type t := t
 val create : ?scope:string -> ?type_:Type.PrimType.t -> string -> t
 
 val copy :
-     ?scope:string sexp_option
-  -> ?type_:Type.PrimType.t sexp_option
-  -> ?name:string
-  -> ?meta:Univ_map.t
-  -> t
-  -> t
+  ?scope:string sexp_option ->
+  ?type_:Type.PrimType.t sexp_option ->
+  ?name:string ->
+  ?meta:Univ_map.t ->
+  t ->
+  t
 
 val name : t -> string
 
@@ -51,7 +51,7 @@ val create_table : unit -> (t, 'a) Bounded_int_table.t
 module Meta : sig
   val type_ : Type.PrimType.t Univ_map.Key.t
 
-  val stage : [`Compile | `Run] Univ_map.Key.t
+  val stage : [ `Compile | `Run ] Univ_map.Key.t
 
   val refcnt : int Univ_map.Key.t
 

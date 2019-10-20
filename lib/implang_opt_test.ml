@@ -10,13 +10,13 @@ let run_test ?(params = []) layout_str opt_func =
   let layout =
     M.load_string ~params:(Set.of_list (module Name) param_names) layout_str
   in
-  M.annotate_type layout ;
+  M.annotate_type layout;
   I.irgen ~params:param_names ~data_fn:"/tmp/buf" layout
   |> opt_func
   |> I.pp Caml.Format.std_formatter
 
 let%expect_test "example-1" =
-  Demomatch.(run_test ~params:Demomatch.example_params (example1 "log") opt) ;
+  Demomatch.(run_test ~params:Demomatch.example_params (example1 "log") opt);
   [%expect
     {|
     // Locals:

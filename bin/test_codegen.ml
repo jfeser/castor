@@ -14,34 +14,35 @@ open Db
 module Printexc = Caml.Printexc
 
 let main () =
-  Logs.set_reporter (Logs.format_reporter ()) ;
-  Logs.set_level (Some Logs.Debug) ;
+  Logs.set_reporter (Logs.format_reporter ());
+  Logs.set_level (Some Logs.Debug);
   Printexc.register_printer (function
     | Postgresql.Error e -> Some (Postgresql.string_of_error e)
-    | _ -> None) ;
+    | _ -> None);
   let ir_file, buf_file =
     match Caml.Sys.argv with
-    | [|_; x; y|] -> (x, y)
+    | [| _; x; y |] -> (x, y)
     | _ ->
-        printf "Usage: test_codegen.exe IR BUF" ;
+        printf "Usage: test_codegen.exe IR BUF";
         Caml.exit 1
   in
   let conn = new connection ~dbname:"sam_analytics_small" () in
-  Ctx.global.conn <- Some conn ;
-  Ctx.global.testctx <- Some (PredCtx.of_vars [("xv", `Int 10); ("yv", `Int 10)]) ;
+  Ctx.global.conn <- Some conn;
+  Ctx.global.testctx <-
+    Some (PredCtx.of_vars [ ("xv", `Int 10); ("yv", `Int 10) ]);
   let taxi = Relation.from_db conn "taxi" in
   let layout = Transform.row_layout taxi in
   Logs.debug (fun m ->
       m "Relation schema %a." Sexp.pp_hum
-        ([%sexp_of: Schema.t] (Schema.of_relation taxi))) ;
+        ([%sexp_of: Schema.t] (Schema.of_relation taxi)));
   Logs.debug (fun m ->
       m "Layout schema %a." Sexp.pp_hum
-        ([%sexp_of: Schema.t] (Layout.to_schema_exn layout))) ;
+        ([%sexp_of: Schema.t] (Layout.to_schema_exn layout)));
   let l =
     let open Ralgebra0 in
     Filter
-      ( Binop (Gt, Field (Relation.field_exn taxi "xpos"), Var ("xv", IntT))
-      , Relation layout )
+      ( Binop (Gt, Field (Relation.field_exn taxi "xpos"), Var ("xv", IntT)),
+        Relation layout )
   in
   let module IGen = IRGen.Make () in
   let ir_module = IGen.irgen l in
@@ -59,12 +60,12 @@ let main () =
       end)
       ()
   in
-  CGen.codegen ir_module.buffer ir_module ;
+  CGen.codegen ir_module.buffer ir_module;
   Out_channel.with_file buf_file ~f:(fun ch ->
-      Out_channel.output_bytes ch ir_module.buffer) ;
-  Out_channel.with_file "scanner.h" ~f:CGen.write_header ;
-  Llvm.print_module ir_file module_ ;
-  Caml.Sys.command (sprintf "llc -O0 -filetype=obj \"%s\"" ir_file) |> ignore ;
+      Out_channel.output_bytes ch ir_module.buffer);
+  Out_channel.with_file "scanner.h" ~f:CGen.write_header;
+  Llvm.print_module ir_file module_;
+  Caml.Sys.command (sprintf "llc -O0 -filetype=obj \"%s\"" ir_file) |> ignore;
   Caml.Sys.command (sprintf "clang -g -O0 scanner.o main.c -o scanner.exe")
   |> ignore
 

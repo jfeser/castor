@@ -11,26 +11,26 @@ type ('q, 'm) node =
   | Let of ((string * ('q, 'm) t) list * ('q, 'm) t)
   | Var of string
 
-and ('q, 'm) t = {node: ('q, 'm) node; meta: 'm}
+and ('q, 'm) t = { node : ('q, 'm) node; meta : 'm }
 [@@deriving
-  visitors {variety= "reduce"}
-  , visitors {variety= "mapreduce"}
-  , visitors {variety= "map"}
-  , sexp_of]
+  visitors { variety = "reduce" },
+    visitors { variety = "mapreduce" },
+    visitors { variety = "map" },
+    sexp_of]
 
 [@@@warning "+17"]
 
-let empty c = {node= Empty; meta= c}
+let empty c = { node = Empty; meta = c }
 
-let scalars c p = {node= Scalars p; meta= c}
+let scalars c p = { node = Scalars p; meta = c }
 
-let concat c x = {node= Concat x; meta= c}
+let concat c x = { node = Concat x; meta = c }
 
-let for_ c x = {node= For x; meta= c}
+let for_ c x = { node = For x; meta = c }
 
-let let_ c x = {node= Let x; meta= c}
+let let_ c x = { node = Let x; meta = c }
 
-let var c x = {node= Var x; meta= c}
+let var c x = { node = Var x; meta = c }
 
 let map_meta ~f q =
   let visitor =
@@ -102,7 +102,7 @@ let hoist_invariant ss q =
       method! visit_t ss q =
         if is_invariant ss q then
           let n = Fresh.name Global.fresh "q%d" in
-          (var A.empty n, [(n, q)])
+          (var A.empty n, [ (n, q) ])
         else super#visit_t ss q
     end
   in
@@ -126,7 +126,9 @@ let hoist_all q =
             let q', binds = hoist_invariant ss q' in
             match binds with
             | [] -> for_ q.meta (r, s, self#visit_t ss q', x)
-            | _ -> let_ A.empty (binds, for_ q.meta (r, s, self#visit_t ss q', x)) )
+            | _ ->
+                let_ A.empty (binds, for_ q.meta (r, s, self#visit_t ss q', x))
+            )
         | _ -> super#visit_t ss q
     end
   in
@@ -148,11 +150,14 @@ let to_width q =
 
 let total_order_key q =
   let native_order = Abslayout.order_of q in
-  let total_order = List.map (A.schema_exn q) ~f:(fun n -> (A.Name n, A.Asc)) in
+  let total_order =
+    List.map (A.schema_exn q) ~f:(fun n -> (A.Name n, A.Asc))
+  in
   native_order @ total_order
 
 let to_scalars rs =
-  List.map rs ~f:(fun t -> match t.A.node with A.AScalar p -> Some p | _ -> None)
+  List.map rs ~f:(fun t ->
+      match t.A.node with A.AScalar p -> Some p | _ -> None)
   |> Option.all
 
 let rec of_ralgebra q =
@@ -180,26 +185,26 @@ let rec of_ralgebra q =
       in
       for_ q (q1, scope, of_ralgebra q2, true)
   | AEmpty | Range _ -> empty q
-  | AScalar p -> scalars q [p]
+  | AScalar p -> scalars q [ p ]
   | ATuple (ts, _) -> (
-    match to_scalars ts with
-    | Some ps -> scalars q ps
-    | None -> concat q (List.map ~f:of_ralgebra ts) )
-  | DepJoin {d_lhs= q1; d_rhs= q2; _} | Join {r1= q1; r2= q2; _} ->
-      concat q [of_ralgebra q1; of_ralgebra q2]
+      match to_scalars ts with
+      | Some ps -> scalars q ps
+      | None -> concat q (List.map ~f:of_ralgebra ts) )
+  | DepJoin { d_lhs = q1; d_rhs = q2; _ } | Join { r1 = q1; r2 = q2; _ } ->
+      concat q [ of_ralgebra q1; of_ralgebra q2 ]
   | Select (_, q')
-   |Filter (_, q')
-   |Dedup q'
-   |OrderBy {rel= q'; _}
-   |GroupBy (_, _, q') ->
-      {(of_ralgebra q') with meta= q}
+  | Filter (_, q')
+  | Dedup q'
+  | OrderBy { rel = q'; _ }
+  | GroupBy (_, _, q') ->
+      { (of_ralgebra q') with meta = q }
   | Relation _ -> failwith "Bare relation."
   | As _ -> failwith "Unexpected as."
 
-let to_concat binds q = concat None (List.map binds ~f:Tuple.T2.get2 @ [q])
+let to_concat binds q = concat None (List.map binds ~f:Tuple.T2.get2 @ [ q ])
 
 let unwrap_order r =
-  match r.A.node with A.OrderBy {key; rel} -> (key, rel) | _ -> ([], r)
+  match r.A.node with A.OrderBy { key; rel } -> (key, rel) | _ -> ([], r)
 
 let wrap q = map_meta ~f:Option.some q
 
@@ -219,8 +224,8 @@ let rec to_ralgebra' q =
         let o1, q1 =
           if distinct then (o1, q1)
           else
-            ( o1 @ [(Name (Name.create row_number), Asc)]
-            , A.select
+            ( o1 @ [ (Name (Name.create row_number), Asc) ],
+              A.select
                 ( As_pred (Row_number, row_number)
                 :: (A.schema_exn q1 |> Schema.to_select_list) )
                 q1 )
@@ -245,7 +250,8 @@ let rec to_ralgebra' q =
         (* The renaming refers to the scoped names from q1, so scope before
            renaming. *)
         let o1 =
-          List.map o1 ~f:(fun (p, o) -> (Pred.scoped (A.schema_exn q1) scope p, o))
+          List.map o1 ~f:(fun (p, o) ->
+              (Pred.scoped (A.schema_exn q1) scope p, o))
         in
         List.map (o1 @ o2) ~f:(fun (p, o) -> (Pred.subst sctx p, o))
       in
@@ -271,7 +277,8 @@ let rec to_ralgebra' q =
                      else
                        (* Otherwise emit null. *)
                        List.map ~f:(fun n ->
-                           A.As_pred (Null (Some (Name.type_exn n)), Name.name n)))
+                           A.As_pred
+                             (Null (Some (Name.type_exn n)), Name.name n)))
             in
             A.select select_list q)
       in

@@ -7,7 +7,7 @@ let run_in_fork (type a) (thunk : unit -> a) : a =
   let wr = Unix.out_channel_of_descr wr in
   match Unix.fork () with
   | `In_the_child ->
-      Marshal.(to_channel wr (thunk ()) [Closures]) ;
+      Marshal.(to_channel wr (thunk ()) [ Closures ]);
       exit 0
   | `In_the_parent _ -> Marshal.(from_channel rd)
 
@@ -18,51 +18,54 @@ let run_in_fork_timed (type a) ?time ?(sleep_sec = 0.001) (thunk : unit -> a) :
   let wr = Unix.out_channel_of_descr wr in
   match Unix.fork () with
   | `In_the_child ->
-      Marshal.(to_channel wr (thunk ()) [Closures]) ;
+      Marshal.(to_channel wr (thunk ()) [ Closures ]);
       exit 0
   | `In_the_parent pid -> (
-    match time with
-    | Some span ->
-        let start = Time.now () in
-        let rec sleep () =
-          if Time.Span.(Time.(diff (now ()) start) > span) then (
-            Signal.(send_i kill (`Pid pid)) ;
-            None )
-          else (
-            Unix.nanosleep sleep_sec |> ignore ;
-            match Unix.wait_nohang (`Pid pid) with
-            | None -> sleep ()
-            | Some _ -> Some Marshal.(from_channel rd) )
-        in
-        sleep ()
-    | None -> Some Marshal.(from_channel rd) )
+      match time with
+      | Some span ->
+          let start = Time.now () in
+          let rec sleep () =
+            if Time.Span.(Time.(diff (now ()) start) > span) then (
+              Signal.(send_i kill (`Pid pid));
+              None )
+            else (
+              Unix.nanosleep sleep_sec |> ignore;
+              match Unix.wait_nohang (`Pid pid) with
+              | None -> sleep ()
+              | Some _ -> Some Marshal.(from_channel rd) )
+          in
+          sleep ()
+      | None -> Some Marshal.(from_channel rd) )
 
 module Expect_test_config = struct
   include Expect_test_config
 
   let reporter ppf =
     let report _ level ~over k msgf =
-      let k _ = over () ; k () in
+      let k _ =
+        over ();
+        k ()
+      in
       let with_time h _ k ppf fmt =
         Caml.(Format.kfprintf k ppf ("%a @[" ^^ fmt ^^ "@]@."))
           Logs.pp_header (level, h)
       in
       msgf @@ fun ?header ?tags fmt -> with_time header tags k ppf fmt
     in
-    {Logs.report}
+    { Logs.report }
 
   let run thunk =
-    Fresh.reset Global.fresh ;
-    Logs.set_reporter (reporter Caml.Format.std_formatter) ;
-    Logs.Src.set_level Log.src (Some Logs.Warning) ;
-    thunk () ;
+    Fresh.reset Global.fresh;
+    Logs.set_reporter (reporter Caml.Format.std_formatter);
+    Logs.Src.set_level Log.src (Some Logs.Warning);
+    thunk ();
     ()
 end
 
 let create_test_db () =
   let ch = Unix.open_process_in "pg_tmp" in
   let url = In_channel.input_all ch in
-  Unix.close_process_in ch |> Unix.Exit_or_signal.or_error |> Or_error.ok_exn ;
+  Unix.close_process_in ch |> Unix.Exit_or_signal.or_error |> Or_error.ok_exn;
   Db.create url
 
 (** Create a simple database table that only contains integers. *)
@@ -72,9 +75,11 @@ let create_simple db name fields values =
   in
   Db.(
     exec db (sprintf "create table if not exists %s (%s)" name fields_sql)
-    |> command_ok_exn) ;
+    |> command_ok_exn);
   List.iter values ~f:(fun vs ->
-      let values_sql = List.map vs ~f:Int.to_string |> String.concat ~sep:", " in
+      let values_sql =
+        List.map vs ~f:Int.to_string |> String.concat ~sep:", "
+      in
       Db.(
         exec db (sprintf "insert into %s values (%s)" name values_sql)
         |> command_ok_exn))
@@ -91,9 +96,12 @@ let create db name fields values =
         | _ -> failwith "Unexpected type.")
     |> String.concat ~sep:", "
   in
-  Db.(exec db (sprintf "create table %s (%s)" name fields_sql) |> command_ok_exn) ;
+  Db.(
+    exec db (sprintf "create table %s (%s)" name fields_sql) |> command_ok_exn);
   List.iter values ~f:(fun vs ->
-      let values_sql = List.map vs ~f:Value.to_sql |> String.concat ~sep:", " in
+      let values_sql =
+        List.map vs ~f:Value.to_sql |> String.concat ~sep:", "
+      in
       Db.(
         exec db (sprintf "insert into %s values (%s)" name values_sql)
         |> command_ok_exn))
@@ -101,54 +109,70 @@ let create db name fields values =
 let test_db_conn =
   lazy
     (let conn = create_test_db () in
-     create_simple conn "r" ["f"; "g"]
-       [[0; 5]; [1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]; [4; 6]] ;
+     create_simple conn "r" [ "f"; "g" ]
+       [ [ 0; 5 ]; [ 1; 2 ]; [ 1; 3 ]; [ 2; 1 ]; [ 2; 2 ]; [ 3; 4 ]; [ 4; 6 ] ];
      create conn "r_date"
-       [("f", date_t); ("g", int_t)]
+       [ ("f", date_t); ("g", int_t) ]
        Date.
-         [ [Date (of_string "2018-01-01"); Int 5]
-         ; [Date (of_string "2016-12-01"); Int 2]
-         ; [Date (of_string "2018-01-23"); Int 3]
-         ; [Date (of_string "2017-10-05"); Int 1]
-         ; [Date (of_string "2018-01-01"); Int 2]
-         ; [Date (of_string "2018-09-01"); Int 4]
-         ; [Date (of_string "2018-01-01"); Int 6] ] ;
-     create_simple conn "s" ["f"; "g"]
-       [[0; 5]; [1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]; [4; 6]] ;
-     create_simple conn "log" ["counter"; "succ"; "id"]
-       [[1; 4; 1]; [2; 3; 2]; [3; 4; 3]; [4; 6; 1]; [5; 6; 3]] ;
-     create_simple conn "r1" ["f"; "g"] [[1; 2]; [1; 3]; [2; 1]; [2; 2]; [3; 4]] ;
-     create_simple conn "one" [] [] ;
-     create conn "r2" [("a", fixed_t)]
-       [ [Fixed (Fixed_point.of_string "0.01")]
-       ; [Fixed (Fixed_point.of_string "5")]
-       ; [Fixed (Fixed_point.of_string "34.42")]
-       ; [Fixed (Fixed_point.of_string "0.88")]
-       ; [Fixed (Fixed_point.of_string "-0.42")] ] ;
+         [
+           [ Date (of_string "2018-01-01"); Int 5 ];
+           [ Date (of_string "2016-12-01"); Int 2 ];
+           [ Date (of_string "2018-01-23"); Int 3 ];
+           [ Date (of_string "2017-10-05"); Int 1 ];
+           [ Date (of_string "2018-01-01"); Int 2 ];
+           [ Date (of_string "2018-09-01"); Int 4 ];
+           [ Date (of_string "2018-01-01"); Int 6 ];
+         ];
+     create_simple conn "s" [ "f"; "g" ]
+       [ [ 0; 5 ]; [ 1; 2 ]; [ 1; 3 ]; [ 2; 1 ]; [ 2; 2 ]; [ 3; 4 ]; [ 4; 6 ] ];
+     create_simple conn "log"
+       [ "counter"; "succ"; "id" ]
+       [ [ 1; 4; 1 ]; [ 2; 3; 2 ]; [ 3; 4; 3 ]; [ 4; 6; 1 ]; [ 5; 6; 3 ] ];
+     create_simple conn "r1" [ "f"; "g" ]
+       [ [ 1; 2 ]; [ 1; 3 ]; [ 2; 1 ]; [ 2; 2 ]; [ 3; 4 ] ];
+     create_simple conn "one" [] [];
+     create conn "r2" [ ("a", fixed_t) ]
+       [
+         [ Fixed (Fixed_point.of_string "0.01") ];
+         [ Fixed (Fixed_point.of_string "5") ];
+         [ Fixed (Fixed_point.of_string "34.42") ];
+         [ Fixed (Fixed_point.of_string "0.88") ];
+         [ Fixed (Fixed_point.of_string "-0.42") ];
+       ];
      create conn "log_str"
-       [("counter", int_t); ("succ", int_t); ("id", string_t)]
-       [ [Int 1; Int 4; String "foo"]
-       ; [Int 2; Int 3; String "fizzbuzz"]
-       ; [Int 3; Int 4; String "bar"]
-       ; [Int 4; Int 6; String "foo"]
-       ; [Int 5; Int 6; String "bar"] ] ;
-     create conn "unique_str" [("str_field", string_t)]
-       [[String "a"]; [String "b"]; [String "c"]] ;
-     create conn "ints" [("x", int_t)] (List.init 10 ~f:(fun i -> [Value.Int i])) ;
+       [ ("counter", int_t); ("succ", int_t); ("id", string_t) ]
+       [
+         [ Int 1; Int 4; String "foo" ];
+         [ Int 2; Int 3; String "fizzbuzz" ];
+         [ Int 3; Int 4; String "bar" ];
+         [ Int 4; Int 6; String "foo" ];
+         [ Int 5; Int 6; String "bar" ];
+       ];
+     create conn "unique_str"
+       [ ("str_field", string_t) ]
+       [ [ String "a" ]; [ String "b" ]; [ String "c" ] ];
+     create conn "ints" [ ("x", int_t) ]
+       (List.init 10 ~f:(fun i -> [ Value.Int i ]));
      conn)
 
 module Demomatch = struct
   let example_params =
-    [ (Name.create ~type_:int_t "id_p", Value.Int 1)
-    ; (Name.create ~type_:int_t "id_c", Int 2) ]
+    [
+      (Name.create ~type_:int_t "id_p", Value.Int 1);
+      (Name.create ~type_:int_t "id_c", Int 2);
+    ]
 
   let example_str_params =
-    [ (Name.create ~type_:string_t "id_p", Value.String "foo")
-    ; (Name.create ~type_:string_t "id_c", String "fizzbuzz") ]
+    [
+      (Name.create ~type_:string_t "id_p", Value.String "foo");
+      (Name.create ~type_:string_t "id_c", String "fizzbuzz");
+    ]
 
   let example_db_params =
-    [ (Name.create ~type_:string_t "id_p", Value.String "-1451410871729396224")
-    ; (Name.create ~type_:string_t "id_c", String "8557539814359574196") ]
+    [
+      (Name.create ~type_:string_t "id_p", Value.String "-1451410871729396224");
+      (Name.create ~type_:string_t "id_c", String "8557539814359574196");
+    ]
 
   let example1 log =
     sprintf
@@ -198,5 +222,5 @@ select([p_counter, c_counter],
 end
 
 let sum_complex =
-  "Select([sum(f) + 5, count() + sum(f / 2)], AList(r1 as k, ATuple([AScalar(k.f), \
-   AScalar((k.g - k.f) as v)], cross)))"
+  "Select([sum(f) + 5, count() + sum(f / 2)], AList(r1 as k, \
+   ATuple([AScalar(k.f), AScalar((k.g - k.f) as v)], cross)))"

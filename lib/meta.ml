@@ -7,13 +7,18 @@ type 'a key = 'a Univ_map.Key.t
 
 type pos = Pos of int | Many_pos [@@deriving sexp]
 
-type lexpos = Lexing.position =
-  {pos_fname: string; pos_lnum: int; pos_bol: int; pos_cnum: int}
+type lexpos = Lexing.position = {
+  pos_fname : string;
+  pos_lnum : int;
+  pos_bol : int;
+  pos_cnum : int;
+}
 [@@deriving sexp]
 
 let empty () = ref Univ_map.empty
 
-let defs = Univ_map.Key.create ~name:"defs" [%sexp_of: (Name.t option * pred) list]
+let defs =
+  Univ_map.Key.create ~name:"defs" [%sexp_of: (Name.t option * pred) list]
 
 let pos = Univ_map.Key.create ~name:"pos" [%sexp_of: pos]
 
@@ -46,9 +51,10 @@ let find_exn ralgebra key =
         [%sexp_of: string * Abslayout0.t]
       |> Error.raise
 
-let set ralgebra k v = {ralgebra with meta= ref (Univ_map.set !(ralgebra.meta) k v)}
+let set ralgebra k v =
+  { ralgebra with meta = ref (Univ_map.set !(ralgebra.meta) k v) }
 
-let set_m {meta; _} k v = meta := Univ_map.set !meta k v
+let set_m { meta; _ } k v = meta := Univ_map.set !meta k v
 
 module Direct = struct
   let find m = Univ_map.find !m

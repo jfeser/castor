@@ -20,13 +20,14 @@ let rec to_type =
   | As_pred (p, _) -> to_type p
   | Name n -> Name.Meta.(find_exn n type_)
   | Date _ | Unop ((Year | Month | Day), _) -> date_t
-  | Int _ | Row_number | Unop ((Strlen | ExtractY | ExtractM | ExtractD), _) | Count
-    ->
+  | Int _ | Row_number
+  | Unop ((Strlen | ExtractY | ExtractM | ExtractD), _)
+  | Count ->
       int_t
   | Fixed _ | Avg _ -> fixed_t
   | Bool _ | Exists _
-   |Binop ((Eq | Lt | Le | Gt | Ge | And | Or), _, _)
-   |Unop (Not, _) ->
+  | Binop ((Eq | Lt | Le | Gt | Ge | And | Or), _, _)
+  | Unop (Not, _) ->
       bool_t
   | String _ -> string_t
   | Null None -> failwith "Untyped null."
@@ -42,10 +43,10 @@ let rec to_type =
       let s2 = to_type p2 in
       Type.PrimType.unify s1 s2
   | First r -> (
-    match schema_exn r with
-    | [n] -> Name.Meta.(find_exn n type_)
-    | [] -> failwith "Unexpected empty schema."
-    | _ -> failwith "Too many fields." )
+      match schema_exn r with
+      | [ n ] -> Name.Meta.(find_exn n type_)
+      | [] -> failwith "Unexpected empty schema."
+      | _ -> failwith "Too many fields." )
   | Substring _ -> string_t
 
 and schema_exn r =
@@ -56,27 +57,29 @@ and schema_exn r =
         | Some n -> Name.copy ~type_:(Some t) n
         | None ->
             Log.err (fun m ->
-                m "Tried to get schema of unnamed predicate %a." pp_pred p) ;
+                m "Tried to get schema of unnamed predicate %a." pp_pred p);
             Name.create ~type_:t (Fresh.name Global.fresh "x%d"))
   in
   match r.node with
-  | AList (_, r) | DepJoin {d_rhs= r; _} -> schema_exn r |> unscoped
+  | AList (_, r) | DepJoin { d_rhs = r; _ } -> schema_exn r |> unscoped
   | Select (x, _) | GroupBy (x, _, _) -> of_preds x |> unscoped
-  | Filter (_, r) | Dedup r | OrderBy {rel= r; _} -> schema_exn r |> unscoped
-  | Join {r1; r2; _} -> schema_exn r1 @ schema_exn r2 |> unscoped
-  | AOrderedIdx (r1, r2, _) | AHashIdx {hi_keys= r1; hi_values= r2; _} ->
+  | Filter (_, r) | Dedup r | OrderBy { rel = r; _ } ->
+      schema_exn r |> unscoped
+  | Join { r1; r2; _ } -> schema_exn r1 @ schema_exn r2 |> unscoped
+  | AOrderedIdx (r1, r2, _) | AHashIdx { hi_keys = r1; hi_values = r2; _ } ->
       schema_exn r1 @ schema_exn r2 |> unscoped
   | AEmpty -> []
-  | AScalar e -> of_preds [e] |> unscoped
+  | AScalar e -> of_preds [ e ] |> unscoped
   | ATuple (rs, (Cross | Zip)) -> List.concat_map ~f:schema_exn rs |> unscoped
   | ATuple ([], Concat) -> []
   | ATuple (r :: _, Concat) -> schema_exn r |> unscoped
   | As (n, r) -> scoped n (schema_exn r)
-  | Relation {r_schema= Some schema; _} -> schema |> unscoped
-  | Relation {r_name; r_schema= None; _} ->
-      Error.(create "Missing schema annotation." r_name [%sexp_of: string] |> raise)
+  | Relation { r_schema = Some schema; _ } -> schema |> unscoped
+  | Relation { r_name; r_schema = None; _ } ->
+      Error.(
+        create "Missing schema annotation." r_name [%sexp_of: string] |> raise)
   | Range (p, p') ->
       let t = Type.PrimType.unify (to_type p) (to_type p') in
-      [Name.create ~type_:t "range"]
+      [ Name.create ~type_:t "range" ]
 
 let to_select_list s = List.map s ~f:(fun n -> Name n)

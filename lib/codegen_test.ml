@@ -1,8 +1,8 @@
 open! Core
 open Test_util
 
-let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
-    layout_str =
+let run_test ?(params = []) ?(print_layout = false) ?(fork = false)
+    ?irgen_debug layout_str =
   let layout_file = Filename.temp_file "layout" "txt" in
   let (module M), (module S), (module I), (module C) =
     Setup.make_modules ~layout_file ?irgen_debug ()
@@ -14,18 +14,19 @@ let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
       C.compile ~out_dir ~gprof:false ~params layout
     in
     if print_layout then
-      In_channel.input_all (In_channel.create layout_file) |> print_endline ;
+      In_channel.input_all (In_channel.create layout_file) |> print_endline;
     let cmd =
       let params_str =
-        List.map params ~f:(fun (_, v) -> Value.to_sql v) |> String.concat ~sep:" "
+        List.map params ~f:(fun (_, v) -> Value.to_sql v)
+        |> String.concat ~sep:" "
       in
       sprintf "%s -p %s %s" exe_fn data_fn params_str
     in
     let cmd_ch = Unix.open_process_in cmd in
     let cmd_output = In_channel.input_all cmd_ch in
     let ret = Unix.close_process_in cmd_ch in
-    print_endline cmd_output ;
-    print_endline (Unix.Exit_or_signal.to_string_hum ret) ;
+    print_endline cmd_output;
+    print_endline (Unix.Exit_or_signal.to_string_hum ret);
     Out_channel.flush stdout
   in
   let run () =
@@ -35,7 +36,7 @@ let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
       in
       M.load_string ~params layout_str
     in
-    M.annotate_type layout ;
+    M.annotate_type layout;
     if fork then run_in_fork (fun () -> run_compiler layout)
     else run_compiler layout
   in
@@ -43,8 +44,8 @@ let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
 
 let%expect_test "ordered-idx" =
   run_test
-    "AOrderedIdx(OrderBy([f asc], Dedup(Select([f], r1))) as k, AList(Filter(f = \
-     k.f, r1) as lk, ascalar(lk.g)), 1, 3)" ;
+    "AOrderedIdx(OrderBy([f asc], Dedup(Select([f], r1))) as k, \
+     AList(Filter(f = k.f, r1) as lk, ascalar(lk.g)), 1, 3)";
   [%expect {|
     1|2
     1|3
@@ -55,8 +56,8 @@ let%expect_test "ordered-idx" =
 
 let%expect_test "agg" =
   run_test
-    "select([1.0 + 2.0, avg(a), count(), sum(a), min(a), max(a)], alist(r2 as k, \
-     ascalar(k.a)))" ;
+    "select([1.0 + 2.0, avg(a), count(), sum(a), min(a), max(a)], alist(r2 as \
+     k, ascalar(k.a)))";
   [%expect
     {|
     3.000000|7.978000|5|39.890000|-0.420000|34.420000
@@ -66,7 +67,7 @@ let%expect_test "agg" =
 let%expect_test "hash-idx" =
   run_test
     "AHashIdx(Dedup(Select([f], r1)) as k, AList(Filter(f = k.f, r1) as lk, \
-     ascalar(lk.g)), 2)" ;
+     ascalar(lk.g)), 2)";
   [%expect {|
     2|1
     2|2
@@ -77,7 +78,7 @@ let%expect_test "strops" =
   run_test ~params:[]
     {|
 select([strlen("test"), strpos("testing", "in")], ascalar(0))
-|} ;
+|};
   [%expect
     {|
     [ERROR] Tried to get schema of unnamed predicate 0.
@@ -87,21 +88,21 @@ select([strlen("test"), strpos("testing", "in")], ascalar(0))
     exited normally |}]
 
 let%expect_test "example-1" =
-  Demomatch.(run_test ~params:example_params (example1 "log")) ;
+  Demomatch.(run_test ~params:example_params (example1 "log"));
   [%expect {|
     1|2
 
     exited normally |}]
 
 let%expect_test "example-1-str" =
-  Demomatch.(run_test ~params:example_str_params (example1 "log_str")) ;
+  Demomatch.(run_test ~params:example_str_params (example1 "log_str"));
   [%expect {|
     1|2
 
     exited normally |}]
 
 let%expect_test "example-2" =
-  Demomatch.(run_test ~params:example_params (example2 "log")) ;
+  Demomatch.(run_test ~params:example_params (example2 "log"));
   [%expect {|
     1|2
 
@@ -109,7 +110,7 @@ let%expect_test "example-2" =
 
 let%expect_test "example-2-str" =
   Demomatch.(
-    run_test ~print_layout:true ~params:example_str_params (example2 "log_str")) ;
+    run_test ~print_layout:true ~params:example_str_params (example2 "log_str"));
   [%expect
     {|
     0:2 Table len (=142)
@@ -160,7 +161,7 @@ let%expect_test "example-2-str" =
     exited normally |}]
 
 let%expect_test "example-3" =
-  Demomatch.(run_test ~params:example_params (example3 "log")) ;
+  Demomatch.(run_test ~params:example_params (example3 "log"));
   [%expect {|
     1|2
 
@@ -168,7 +169,7 @@ let%expect_test "example-3" =
 
 let%expect_test "example-3-str" =
   Demomatch.(
-    run_test ~print_layout:true ~params:example_str_params (example3 "log_str")) ;
+    run_test ~print_layout:true ~params:example_str_params (example3 "log_str"));
   [%expect
     {|
     0:2 Tuple len (=198)
@@ -291,7 +292,7 @@ let%expect_test "example-3-str" =
 
 let%expect_test "output-test" =
   run_test
-    {|select([1, 100, 1.0, 0.0001, 1.0001, "this is a test", "test with, commas", date("1994-01-04"), true, false], ascalar(0))|} ;
+    {|select([1, 100, 1.0, 0.0001, 1.0001, "this is a test", "test with, commas", date("1994-01-04"), true, false], ascalar(0))|};
   [%expect
     {|
     [ERROR] Tried to get schema of unnamed predicate 0.
@@ -302,7 +303,7 @@ let%expect_test "output-test" =
 
 let%expect_test "ordering" =
   run_test
-    {|alist(orderby([f desc], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross))|} ;
+    {|alist(orderby([f desc], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross))|};
   [%expect {|
     3|4
     2|1
@@ -310,9 +311,9 @@ let%expect_test "ordering" =
     1|2
     1|3
 
-    exited normally |}] ;
+    exited normally |}];
   run_test
-    {|alist(orderby([f], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross))|} ;
+    {|alist(orderby([f], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross))|};
   [%expect {|
     1|2
     1|3
@@ -320,9 +321,9 @@ let%expect_test "ordering" =
     2|2
     3|4
 
-    exited normally |}] ;
+    exited normally |}];
   run_test
-    {|atuple([alist(orderby([f desc], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([f], r1) as k1, atuple([ascalar(k1.f), ascalar(k1.g)], cross))], concat)|} ;
+    {|atuple([alist(orderby([f desc], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([f], r1) as k1, atuple([ascalar(k1.f), ascalar(k1.g)], cross))], concat)|};
   [%expect
     {|
     [WARNING] Name does not appear in all concat fields: f
@@ -341,9 +342,9 @@ let%expect_test "ordering" =
     2|2
     3|4
 
-    exited normally |}] ;
+    exited normally |}];
   run_test
-    {|atuple([alist(orderby([f], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([f desc], r1) as k1, atuple([ascalar(k1.f), ascalar(k1.g)], cross))], concat)|} ;
+    {|atuple([alist(orderby([f], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([f desc], r1) as k1, atuple([ascalar(k1.f), ascalar(k1.g)], cross))], concat)|};
   [%expect
     {|
     [WARNING] Name does not appear in all concat fields: f
@@ -367,7 +368,7 @@ let%expect_test "ordering" =
 let%expect_test "ordered-idx-dates" =
   run_test
     {|AOrderedIdx(OrderBy([f asc], Dedup(Select([f], r_date))) as k, 
-     AScalar(k.f as v), date("2017-10-05"), date("2018-09-01"))|} ;
+     AScalar(k.f as v), date("2017-10-05"), date("2018-09-01"))|};
   [%expect
     {|
     2017-10-05|2017-10-05
@@ -381,7 +382,7 @@ let%expect_test "ordered-idx-dates" =
     {|
 AOrderedIdx(OrderBy([f asc], Dedup(Select([f], r_date))) as k,
      AScalar(k.f as v), >= date("2017-10-05"), < date("2018-09-01"))
-|} ;
+|};
   [%expect
     {|
     2017-10-05|2017-10-05
@@ -395,7 +396,7 @@ let%expect_test "ordered-idx-dates" =
     {|
 AOrderedIdx(OrderBy([f asc], Dedup(Select([f], r_date))) as k,
      AScalar(k.f as v), > date("2017-10-05"), <= date("2018-09-01"))
-|} ;
+|};
   [%expect
     {|
     2018-01-01|2018-01-01
@@ -409,7 +410,7 @@ let%expect_test "ordered-idx-dates" =
     {|
 AOrderedIdx(OrderBy([f asc], Dedup(Select([f], r_date))) as k,
      AScalar(k.f as v), > date("2017-10-05"), < date("2018-09-01"))
-|} ;
+|};
   [%expect
     {|
     2018-01-01|2018-01-01
@@ -422,7 +423,7 @@ let%expect_test "ordered-idx-dates" =
     {|
 AOrderedIdx(OrderBy([f asc], Dedup(Select([f], r_date))) as k,
      AScalar(k.f as v), >= date("2017-10-05"), <= date("2018-09-01"))
-|} ;
+|};
   [%expect
     {|
     2017-10-05|2017-10-05
@@ -437,7 +438,7 @@ let%expect_test "ordered-idx-dates" =
     {|
 AOrderedIdx(OrderBy([f asc], Dedup(Select([f], r_date))) as k,
      AScalar(k.f as v), >= date("0000-01-01"), <= date("9999-01-01"))
-|} ;
+|};
   [%expect
     {|
     2016-12-01|2016-12-01
@@ -453,7 +454,7 @@ let%expect_test "ordered-idx-dates" =
     {|
 AOrderedIdx(OrderBy([f1 asc, f2 asc], Dedup(Select([f as f1, f as f2], r_date))) as k,
      AScalar(k.f1 as v), >= date("0000-01-01"), <= date("9999-01-01"), >= date("0000-01-01"), < date("2018-09-01"))
-|} ;
+|};
   [%expect
     {|
     2016-12-01|2016-12-01|2016-12-01
@@ -468,7 +469,7 @@ let%expect_test "ordered-idx-dates" =
     {|
 AOrderedIdx(join(true, ints, select([x as y], ints)) as k,
      atuple([ascalar(k.x), ascalar(k.y)], cross), >= 3, <= 5, >= 4, <= 6)
-|} ;
+|};
   [%expect
     {|
     3|4|3|4
@@ -485,7 +486,7 @@ AOrderedIdx(join(true, ints, select([x as y], ints)) as k,
 
 let%expect_test "date-arith" =
   run_test
-    {|select([date("1997-07-01") + month(3), date("1997-07-01") + day(90)], ascalar(0))|} ;
+    {|select([date("1997-07-01") + month(3), date("1997-07-01") + day(90)], ascalar(0))|};
   [%expect
     {|
     [ERROR] Tried to get schema of unnamed predicate 0.
@@ -496,8 +497,8 @@ let%expect_test "date-arith" =
 
 let%expect_test "depjoin" =
   run_test
-    "depjoin(alist(r1 as k1, ascalar(k1.f)) as k3, select([k3.f + g], ascalar(5 as \
-     g)))" ;
+    "depjoin(alist(r1 as k1, ascalar(k1.f)) as k3, select([k3.f + g], \
+     ascalar(5 as g)))";
   [%expect {|
     6
     6

@@ -2,7 +2,8 @@ open! Core
 open Hashcons
 
 module Key = struct
-  type t = {scope: string option; name: string} [@@deriving compare, hash, sexp]
+  type t = { scope : string option; name : string }
+  [@@deriving compare, hash, sexp]
 
   let equal = [%compare.equal: t]
 end
@@ -16,21 +17,21 @@ module Table = struct
 
   let hashcons t k =
     let k' = hashcons t k in
-    max_tag := Int.max !max_tag k'.tag ;
+    max_tag := Int.max !max_tag k'.tag;
     k'
 end
 
 module T = struct
-  type t = {name: Key.t Hashcons.hash_consed; meta: Univ_map.t}
+  type t = { name : Key.t Hashcons.hash_consed; meta : Univ_map.t }
 
   let sexp_of_t x =
-    [%sexp_of: Key.t] {name= x.name.node.name; scope= x.name.node.scope}
+    [%sexp_of: Key.t] { name = x.name.node.name; scope = x.name.node.scope }
 
   let create_consed r n m =
-    {name= Table.(hashcons table Key.{scope= r; name= n}); meta= m}
+    { name = Table.(hashcons table Key.{ scope = r; name = n }); meta = m }
 
   let t_of_sexp x =
-    let Key.{name; scope} = [%of_sexp: Key.t] x in
+    let Key.{ name; scope } = [%of_sexp: Key.t] x in
     create_consed scope name Univ_map.empty
 
   let equal = phys_equal
@@ -39,8 +40,8 @@ module T = struct
     if equal x y then 0
     else
       [%compare: Key.t]
-        {scope= x.name.node.scope; name= x.name.node.name}
-        {scope= y.name.node.scope; name= y.name.node.name}
+        { scope = x.name.node.scope; name = x.name.node.name }
+        { scope = y.name.node.scope; name = y.name.node.name }
 
   let hash x = x.name.hkey
 
@@ -62,13 +63,13 @@ end
 module Meta = struct
   let type_ = Univ_map.Key.create ~name:"type" [%sexp_of: Type.PrimType.t]
 
-  let stage = Univ_map.Key.create ~name:"stage" [%sexp_of: [`Compile | `Run]]
+  let stage = Univ_map.Key.create ~name:"stage" [%sexp_of: [ `Compile | `Run ]]
 
   let refcnt = Univ_map.Key.create ~name:"refcnt" [%sexp_of: int]
 
-  let find {meta; _} = Univ_map.find meta
+  let find { meta; _ } = Univ_map.find meta
 
-  let find_exn ({meta; _} as n) k =
+  let find_exn ({ meta; _ } as n) k =
     match Univ_map.find meta k with
     | Some x -> x
     | None ->
@@ -77,9 +78,10 @@ module Meta = struct
           [%sexp_of: t * string * Univ_map.t]
         |> Error.raise
 
-  let set ({meta; _} as n) k v = {n with meta= Univ_map.set meta k v}
+  let set ({ meta; _ } as n) k v = { n with meta = Univ_map.set meta k v }
 
-  let change ({meta; _} as n) ~f k = {n with meta= Univ_map.change meta ~f k}
+  let change ({ meta; _ } as n) ~f k =
+    { n with meta = Univ_map.change meta ~f k }
 end
 
 let valid_regex = Str.regexp "^[a-zA-Z_][a-zA-Z0-9_]*$"
@@ -89,8 +91,8 @@ let check_name n =
     Error.(create "Invalid name." n [%sexp_of: string] |> raise)
 
 let create ?scope ?type_ name =
-  check_name name ;
-  Option.iter ~f:check_name scope ;
+  check_name name;
+  Option.iter ~f:check_name scope;
   let meta = Univ_map.empty in
   let meta =
     match type_ with Some t -> Univ_map.set meta Meta.type_ t | None -> meta
@@ -104,7 +106,9 @@ let copy ?scope ?type_:t ?name:n ?meta name =
   let t = Option.value t ~default:(type_ name) in
   let n = Option.value n ~default:name.name.node.name in
   let m = Option.value meta ~default:name.meta in
-  let meta = match t with Some t -> Univ_map.set m Meta.type_ t | None -> m in
+  let meta =
+    match t with Some t -> Univ_map.set m Meta.type_ t | None -> m
+  in
   create_consed r n meta
 
 let name n = n.name.node.name
@@ -125,7 +129,9 @@ let rel_exn n =
 
 let to_var n =
   let name = n.name.node.name in
-  match n.name.node.scope with Some r -> sprintf "%s_%s" r name | None -> name
+  match n.name.node.scope with
+  | Some r -> sprintf "%s_%s" r name
+  | None -> name
 
 let to_sql n =
   match n.name.node.scope with

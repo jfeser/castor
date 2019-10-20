@@ -59,12 +59,12 @@ let of_value = Value.to_pred
 
 let rec conjoin = function
   | [] -> Bool true
-  | [p] -> p
+  | [ p ] -> p
   | p :: ps -> Binop (And, p, conjoin ps)
 
 let rec disjoin = function
   | [] -> Bool false
-  | [p] -> p
+  | [ p ] -> p
   | p :: ps -> Binop (Or, p, disjoin ps)
 
 let collect_aggs p =
@@ -76,7 +76,7 @@ let collect_aggs p =
 
       method private visit_Agg kind p =
         let n = kind ^ Fresh.name Global.fresh "%d" in
-        (Name (Name.create n), [(n, p)])
+        (Name (Name.create n), [ (n, p) ])
 
       method! visit_Sum () p = self#visit_Agg "sum" (Sum p)
 
@@ -93,14 +93,14 @@ let collect_aggs p =
 
 let rec conjuncts = function
   | Binop (And, p1, p2) -> conjuncts p1 @ conjuncts p2
-  | p -> [p]
+  | p -> [ p ]
 
 let rec disjuncts = function
   | Binop (Or, p1, p2) -> disjuncts p1 @ disjuncts p2
-  | p -> [p]
+  | p -> [ p ]
 
 let%expect_test "" =
-  conjuncts (Binop (Eq, Int 0, Int 1)) |> [%sexp_of: t list] |> print_s ;
+  conjuncts (Binop (Eq, Int 0, Int 1)) |> [%sexp_of: t list] |> print_s;
   [%expect {| ((Binop (Eq (Int 0) (Int 1)))) |}]
 
 let constants schema p =
@@ -145,11 +145,13 @@ let constants schema p =
 
       method! visit_First () r =
         let free = Meta.(find_exn r free) in
-        if Set.is_empty (Set.inter free schema) then singleton (First r) else empty
+        if Set.is_empty (Set.inter free schema) then singleton (First r)
+        else empty
 
       method! visit_Exists () r =
         let free = Meta.(find_exn r free) in
-        if Set.is_empty (Set.inter free schema) then singleton (Exists r) else empty
+        if Set.is_empty (Set.inter free schema) then singleton (Exists r)
+        else empty
 
       method! visit_If () p1 p2 p3 =
         let ps = super#visit_If () p1 p2 p3 in
@@ -183,8 +185,9 @@ let eqs p =
 
       method! visit_Binop () (op, p1, p2) =
         match (op, p1, p2) with
-        | Eq, Name n1, Name n2 -> [(n1, n2)]
-        | And, p1, p2 -> self#plus (self#visit_pred () p1) (self#visit_pred () p2)
+        | Eq, Name n1, Name n2 -> [ (n1, n2) ]
+        | And, p1, p2 ->
+            self#plus (self#visit_pred () p1) (self#visit_pred () p2)
         | _ -> self#zero
     end
   in
@@ -227,7 +230,7 @@ let%test "" = kind Row_number = `Window
 let of_lexbuf_exn lexbuf =
   try Ralgebra_parser.expr_eof Ralgebra_lexer.token lexbuf
   with Parser_utils.ParseError (msg, line, col) as e ->
-    Log.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
+    Log.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col);
     raise e
 
 let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
@@ -293,7 +296,8 @@ let relations p =
       method visit_'m () _ = ()
     end
   in
-  f#visit_pred () p ; !rels
+  f#visit_pred () p;
+  !rels
 
 let to_type = Schema.to_type
 
@@ -304,9 +308,9 @@ let to_name = Schema.to_name
 let ensure_alias = function
   | As_pred _ as p -> p
   | p -> (
-    match to_name p with
-    | Some n -> As_pred (p, Name.name n)
-    | None -> As_pred (p, Fresh.name Global.fresh "a%d") )
+      match to_name p with
+      | Some n -> As_pred (p, Name.name n)
+      | None -> As_pred (p, Fresh.name Global.fresh "a%d") )
 
 let to_nnf p =
   let visitor =
@@ -320,9 +324,9 @@ let to_nnf p =
               self#visit_pred () (Binop (And, Unop (Not, p1), Unop (Not, p2)))
           | Binop (And, p1, p2) ->
               Binop
-                ( Or
-                , self#visit_pred () (Unop (Not, p1))
-                , self#visit_pred () (Unop (Not, p2)) )
+                ( Or,
+                  self#visit_pred () (Unop (Not, p1)),
+                  self#visit_pred () (Unop (Not, p2)) )
           | Binop (Gt, p1, p2) -> self#visit_Binop () (Le, p1, p2)
           | Binop (Ge, p1, p2) -> self#visit_Binop () (Lt, p1, p2)
           | Binop (Lt, p1, p2) -> self#visit_Binop () (Ge, p1, p2)
@@ -344,7 +348,7 @@ let rec to_cnf = function
       to_cnf (Binop (Or, Unop (Not, p), Unop (Not, q)))
   | Unop (Not, Binop (Or, p, q)) ->
       to_cnf (Binop (And, Unop (Not, p), Unop (Not, q)))
-  | p -> [[p]]
+  | p -> [ [ p ] ]
 
 let simplify p =
   let p = to_nnf p in
@@ -355,11 +359,15 @@ let simplify p =
 
       method! visit_Binop () (op, p1, p2) =
         if op = Or then
-          let clauses = disjuncts (Binop (op, p1, p2)) |> List.map ~f:conjuncts in
+          let clauses =
+            disjuncts (Binop (op, p1, p2)) |> List.map ~f:conjuncts
+          in
           let common =
             List.map clauses ~f:C.Set.of_list |> List.reduce_exn ~f:Set.inter
           in
-          let clauses = List.map ~f:(List.filter ~f:(Set.mem common)) clauses in
+          let clauses =
+            List.map ~f:(List.filter ~f:(Set.mem common)) clauses
+          in
           let common = Set.to_list common in
           let clauses = disjoin (List.map ~f:conjoin clauses) in
           Binop (And, conjoin common, clauses)
@@ -397,21 +405,21 @@ let pseudo_bool p = If (p, Int 1, Int 0)
 
 let sum_exn = List.reduce_exn ~f:(fun p1 p2 -> Binop (Add, p1, p2))
 
-type a = [`Leaf of t | `And of b list]
+type a = [ `Leaf of t | `And of b list ]
 
-and b = [`Leaf of t | `Or of a list]
+and b = [ `Leaf of t | `Or of a list ]
 
-let rec to_and_or : t -> [a | b] = function
+let rec to_and_or : t -> [ a | b ] = function
   | Binop (And, p1, p2) -> (
-    match (to_and_or p1, to_and_or p2) with
-    | `And p1, `And p2 -> `And (p1 @ p2)
-    | `And p1, (#b as p2) | (#b as p2), `And p1 -> `And (p2 :: p1)
-    | (#b as p1), (#b as p2) -> `And [p1; p2] )
+      match (to_and_or p1, to_and_or p2) with
+      | `And p1, `And p2 -> `And (p1 @ p2)
+      | `And p1, (#b as p2) | (#b as p2), `And p1 -> `And (p2 :: p1)
+      | (#b as p1), (#b as p2) -> `And [ p1; p2 ] )
   | Binop (Or, p1, p2) -> (
-    match (to_and_or p1, to_and_or p2) with
-    | `Or p1, `Or p2 -> `Or (p1 @ p2)
-    | `Or p1, (#a as p2) | (#a as p2), `Or p1 -> `Or (p2 :: p1)
-    | (#a as p1), (#a as p2) -> `Or [p1; p2] )
+      match (to_and_or p1, to_and_or p2) with
+      | `Or p1, `Or p2 -> `Or (p1 @ p2)
+      | `Or p1, (#a as p2) | (#a as p2), `Or p1 -> `Or (p2 :: p1)
+      | (#a as p1), (#a as p2) -> `Or [ p1; p2 ] )
   | p -> `Leaf p
 
 let is_static ~params p =
@@ -421,7 +429,7 @@ let is_static ~params p =
 let to_static ~params p =
   let p = to_nnf p in
   let p = to_and_or p in
-  let rec to_static : [a | b] -> _ = function
+  let rec to_static : [ a | b ] -> _ = function
     | `And ps ->
         List.filter_map ps ~f:(function
           | `Leaf p -> if is_static ~params p then Some p else None

@@ -9,19 +9,19 @@ let run_test ?(params = []) ?(print_code = true) layout_str =
     let param_names = List.map params ~f:(fun (n, _) -> n) in
     let sparams = Set.of_list (module Name) param_names in
     let layout = M.load_string ~params:sparams layout_str in
-    M.annotate_type layout ;
+    M.annotate_type layout;
     let type_ = Meta.(find_exn layout type_) in
-    print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] type_)) ;
+    print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] type_));
     let ir = I.irgen ~params:param_names ~data_fn:"/tmp/buf" layout in
     if print_code then I.pp Caml.Format.std_formatter ir
   with exn ->
     Backtrace.(
-      elide := false ;
-      Exn.most_recent () |> to_string |> print_endline) ;
+      elide := false;
+      Exn.most_recent () |> to_string |> print_endline);
     Exn.(to_string exn |> print_endline)
 
 let%expect_test "tuple-simple-cross" =
-  run_test "ATuple([AScalar(1), AScalar(2)], cross)" ;
+  run_test "ATuple([AScalar(1), AScalar(2)], cross)";
   [%expect
     {|
     (TupleT
@@ -48,7 +48,7 @@ let%expect_test "tuple-simple-cross" =
     } |}]
 
 let%expect_test "sum-complex" =
-  run_test sum_complex ;
+  run_test sum_complex;
   [%expect
     {|
     (FuncT
@@ -136,8 +136,8 @@ let%expect_test "sum-complex" =
 
 let%expect_test "sum" =
   run_test
-    "Select([sum(f), count()], AList(r1 as k, ATuple([AScalar(k.f), AScalar(k.g - \
-     k.f)], cross)))" ;
+    "Select([sum(f), count()], AList(r1 as k, ATuple([AScalar(k.f), \
+     AScalar(k.g - k.f)], cross)))";
   [%expect
     {|
     (FuncT
@@ -220,7 +220,7 @@ let%expect_test "sum" =
     } |}]
 
 let%expect_test "cross-tuple" =
-  run_test "AList(r1 as k, ATuple([AScalar(k.f), AScalar(k.g - k.f)], cross))" ;
+  run_test "AList(r1 as k, ATuple([AScalar(k.f), AScalar(k.g - k.f)], cross))";
   [%expect
     {|
     (ListT
@@ -270,8 +270,8 @@ let%expect_test "cross-tuple" =
 
 let%expect_test "hash-idx" =
   run_test
-    "depjoin(AList(r1 as kl, AScalar(kl.f)) as k, AHashIdx(dedup(select([f], r1)) \
-     as kh, ascalar(kh.f + 1), k.f))" ;
+    "depjoin(AList(r1 as kl, AScalar(kl.f)) as k, AHashIdx(dedup(select([f], \
+     r1)) as kh, ascalar(kh.f + 1), k.f))";
   [%expect
     {|
     (FuncT
@@ -346,8 +346,8 @@ let%expect_test "hash-idx" =
 
 let%expect_test "ordered-idx" =
   run_test
-    "depjoin(AList(r1 as kl, AScalar(kl.f)) as k, AOrderedIdx(dedup(select([f as \
-     kf], r1)) as k1, ascalar(k1.kf+1), k.f, k.f+1))" ;
+    "depjoin(AList(r1 as kl, AScalar(kl.f)) as k, AOrderedIdx(dedup(select([f \
+     as kf], r1)) as k1, ascalar(k1.kf+1), k.f, k.f+1))";
   [%expect
     {|
     (FuncT
@@ -480,7 +480,7 @@ let%expect_test "ordered-idx" =
 
 let%expect_test "ordered-idx-date" =
   run_test ~print_code:false
-    {|AOrderedIdx(dedup(select([f], r_date)) as k, ascalar(k.f as ff), date("2018-01-01"), date("2018-01-01"))|} ;
+    {|AOrderedIdx(dedup(select([f], r_date)) as k, ascalar(k.f as ff), date("2018-01-01"), date("2018-01-01"))|};
   [%expect
     {|
     (OrderedIdxT
@@ -491,7 +491,7 @@ let%expect_test "ordered-idx-date" =
       ((key_count (Interval 5 5))))) |}]
 
 let%expect_test "example-1" =
-  Demomatch.(run_test ~params:Demomatch.example_params (example1 "log")) ;
+  Demomatch.(run_test ~params:Demomatch.example_params (example1 "log"));
   [%expect
     {|
     (FuncT
@@ -596,7 +596,7 @@ let%expect_test "example-1" =
     } |}]
 
 let%expect_test "example-2" =
-  Demomatch.(run_test ~params:example_params (example2 "log")) ;
+  Demomatch.(run_test ~params:example_params (example2 "log"));
   [%expect
     {|
     (FuncT
@@ -699,7 +699,7 @@ let%expect_test "example-2" =
     } |}]
 
 let%expect_test "example-3" =
-  Demomatch.(run_test ~params:example_params (example3 "log")) ;
+  Demomatch.(run_test ~params:example_params (example3 "log"));
   [%expect
     {|
     (FuncT
@@ -936,7 +936,7 @@ let%expect_test "subquery-first" =
     {|
     select([id], filter((select([min(counter)],
  alist(log as l, ascalar(l.counter)))) = id, alist(log as ll, ascalar(ll.id))))
-|} ;
+|};
   [%expect
     {|
     (FuncT
@@ -1034,7 +1034,7 @@ let%expect_test "subquery-first" =
     } |}]
 
 let%expect_test "example-3-str" =
-  Demomatch.(run_test ~params:example_db_params (example3 "log_str")) ;
+  Demomatch.(run_test ~params:example_db_params (example3 "log_str"));
   [%expect
     {|
     (FuncT

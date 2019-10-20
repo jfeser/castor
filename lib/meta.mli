@@ -7,8 +7,12 @@ type 'a key = 'a Univ_map.Key.t
 
 type pos = Pos of int | Many_pos
 
-type lexpos = Lexing.position =
-  {pos_fname: string; pos_lnum: int; pos_bol: int; pos_cnum: int}
+type lexpos = Lexing.position = {
+  pos_fname : string;
+  pos_lnum : int;
+  pos_bol : int;
+  pos_cnum : int;
+}
 [@@deriving sexp]
 
 val empty : unit -> t

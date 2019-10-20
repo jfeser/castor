@@ -41,7 +41,8 @@ let define_fresh_global ?(linkage = Linkage.Internal) v n m =
     if Option.is_some (lookup_global n m) then loop (i + 1)
     else
       let glob = define_global n v m in
-      set_linkage linkage glob ; glob
+      set_linkage linkage glob;
+      glob
   in
   loop 0
 
@@ -55,16 +56,17 @@ let build_struct_gep v i n b =
   let open Poly in
   let ptr_t = type_of v in
   if not TypeKind.(classify_type ptr_t = Pointer) then
-    Error.create "Not a pointer." v [%sexp_of: llvalue] |> Error.raise ;
+    Error.create "Not a pointer." v [%sexp_of: llvalue] |> Error.raise;
   let struct_t = element_type ptr_t in
   if not TypeKind.(classify_type struct_t = Struct) then
-    Error.create "Not a pointer to a struct." v [%sexp_of: llvalue] |> Error.raise ;
+    Error.create "Not a pointer to a struct." v [%sexp_of: llvalue]
+    |> Error.raise;
   let elems_t = struct_element_types struct_t in
   if Array.exists elems_t ~f:(fun t -> TypeKind.(classify_type t = Void)) then
-    Error.of_string "Struct contains void type." |> Error.raise ;
+    Error.of_string "Struct contains void type." |> Error.raise;
   if i < 0 || i >= Array.length elems_t then
     Error.createf "Struct index %d out of bounds %d." i (Array.length elems_t)
-    |> Error.raise ;
+    |> Error.raise;
   build_struct_gep v i n b
 
 let build_extractvalue v i n b =
@@ -74,10 +76,11 @@ let build_extractvalue v i n b =
   let kind = classify_type typ in
   if [%compare.equal: TypeKind.t] kind Struct then (
     if i >= Array.length (struct_element_types typ) then
-      Error.create "Tuple index out of bounds." (v, i) [%sexp_of: llvalue * int]
+      Error.create "Tuple index out of bounds." (v, i)
+        [%sexp_of: llvalue * int]
       |> Error.raise )
   else
     Error.create "Expected a tuple." (v, kind, i)
       [%sexp_of: llvalue * TypeKind.t * int]
-    |> Error.raise ;
+    |> Error.raise;
   build_extractvalue v i n b
