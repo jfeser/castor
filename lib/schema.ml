@@ -82,4 +82,6 @@ and schema_exn r =
       let t = Type.PrimType.unify (to_type p) (to_type p') in
       [ Name.create ~type_:t "range" ]
 
+let to_type_opt p = Or_error.try_with (fun () -> to_type p)
+
 let to_select_list s = List.map s ~f:(fun n -> Name n)

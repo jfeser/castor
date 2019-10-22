@@ -33,6 +33,12 @@ module C = Comparable.Make (T)
 
 module O : Comparable.Infix with type t := t = C
 
+let to_type = Schema.to_type
+
+let to_type_opt = Schema.to_type_opt
+
+let to_name = Schema.to_name
+
 let pp = Abslayout0.pp_pred
 
 let names r = Abslayout0.names_visitor#visit_pred () r
@@ -76,7 +82,11 @@ let collect_aggs p =
 
       method private visit_Agg kind p =
         let n = kind ^ Fresh.name Global.fresh "%d" in
-        (Name (Name.create n), [ (n, p) ])
+        let type_ =
+          if kind = "avg" then Some Type.PrimType.fixed_t
+          else to_type_opt p |> Or_error.ok
+        in
+        (Name (Name.create ?type_ n), [ (n, p) ])
 
       method! visit_Sum () p = self#visit_Agg "sum" (Sum p)
 
@@ -298,10 +308,6 @@ let relations p =
   in
   f#visit_pred () p;
   !rels
-
-let to_type = Schema.to_type
-
-let to_name = Schema.to_name
 
 (** Ensure that a predicate is decorated with an alias. If the predicate is
      nameless, then the alias will be fresh. *)
