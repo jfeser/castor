@@ -47,8 +47,11 @@ def in_file(b):
 def out_file(b):
     return '%s.cozy' % b['name']
 
-def out_dir(b):
-    return '%s-opt' % b['name']
+def cozy_in_file(b):
+    return out_file(b)
+
+def cozy_out_file(b):
+    return '%s.log' % b['name']
 
 print('SHELL:=/bin/bash')
 print('DB=postgresql:///tpch_1k')
@@ -56,7 +59,9 @@ print('TO_COZY_PATH=../../bin/to_cozy.exe')
 print('TO_COZY=dune exec $(TO_COZY_PATH) --')
 print('TO_COZY_ARGS=-db $(DB)')
 print('BENCH_DIR=../tpch/')
-print('TIME_PER_BENCH=1')
+print('COZY=')
+print('COZY_TIMEOUT=3600')
+print('COZY_FLAGS=-t $(COZY_TIMEOUT) --allow-big-sets --allow-big-maps')
 print('all: build convert')
 print('''
 build:
@@ -66,12 +71,21 @@ build:
 print('''
 convert: {0}
 '''.format(' '.join(out_file(b) for b in bench)))
+print('''
+run: {0}
+'''.format(' '.join(cozy_out_file(b) for b in bench)))
 
 for b in bench:
     print('''
 {0}: {2}
 \t$(TO_COZY) $(TO_COZY_ARGS) {1} {2} > {0}
 '''.format(out_file(b), gen_param_types(b), in_file(b)))
+
+for b in bench:
+    print('''
+{0}: {1}
+\tcd cozy; python3 -m cozy $(COZY_FLAGS) ../{1} > ../{0}
+'''.format(cozy_out_file(b), cozy_in_file(b)))
 
 print('''
 .PHONY: clean
