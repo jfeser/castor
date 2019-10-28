@@ -18,6 +18,7 @@ type binop =
   | `IntSub
   | `IntMul
   | `IntDiv
+  | `Lsr
   | `Mod
   | `FlAdd
   | `FlSub
@@ -122,6 +123,8 @@ module Infix : sig
   val ( && ) : expr -> expr -> expr
 
   val ( || ) : expr -> expr -> expr
+
+  val ( lsr ) : expr -> expr -> expr
 
   val not : expr -> expr
 

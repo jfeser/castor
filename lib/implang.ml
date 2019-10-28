@@ -28,6 +28,7 @@ let rec pp_expr : Format.formatter -> expr -> unit =
     | `IntSub | `FlSub -> `Infix "-"
     | `IntMul | `FlMul -> `Infix "*"
     | `IntDiv | `FlDiv -> `Infix "/"
+    | `Lsr -> `Infix ">>"
     | `Mod -> `Infix "%"
     | `IntLt | `FlLt -> `Infix "<"
     | `FlLe -> `Infix "<="
@@ -130,6 +131,8 @@ module Infix = struct
   let ( / ) x y = Binop { op = `IntDiv; arg1 = x; arg2 = y }
 
   let ( % ) x y = Binop { op = `Mod; arg1 = x; arg2 = y }
+
+  let ( lsr ) x y = Binop { op = `Lsr; arg1 = x; arg2 = y }
 
   let ( < ) x y = Binop { op = `IntLt; arg1 = x; arg2 = y }
 
@@ -238,7 +241,7 @@ let rec type_of ctx e =
       in
       let c = check_type fail in
       match op with
-      | `IntAdd | `IntSub | `IntMul | `IntDiv | `Mod ->
+      | `IntAdd | `IntSub | `IntMul | `IntDiv | `Mod | `Lsr ->
           c#is_int t1;
           c#is_int t2;
           int_t

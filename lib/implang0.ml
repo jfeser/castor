@@ -17,6 +17,7 @@ type binop =
   | `IntSub
   | `IntMul
   | `IntDiv
+  | `Lsr
   | `Mod
   | `FlAdd
   | `FlSub

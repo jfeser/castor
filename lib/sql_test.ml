@@ -83,12 +83,7 @@ let%expect_test "order-by" =
   run_test "OrderBy([f desc], Dedup(Select([f], r1)))";
   [%expect
     {|
-    SELECT DISTINCT
-        r1_0. "f" AS "f_1"
-    FROM
-        "r1" AS "r1_0"
-    ORDER BY
-        r1_0. "f" DESC |}]
+    select distinct r1_0."f" as "f_1" from  "r1" as "r1_0"   order by r1_0."f" desc |}]
 
 let%expect_test "dedup" =
   run_test "Dedup(Select([f], r1))";

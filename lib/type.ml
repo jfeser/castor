@@ -29,22 +29,28 @@ module AbsInt = struct
     | Bottom -> Error (Error.of_string "Bottom has no supremum.")
     | Interval (_, x) -> Ok x
 
-  let lift f i1 i2 =
+  let lift1 f i =
+    match i with Bottom -> Bottom | Top -> Top | Interval (l, h) -> f l h
+
+  let lift2 f i1 i2 =
     match (i1, i2) with
     | Bottom, _ | _, Bottom -> Bottom
     | Top, _ | _, Top -> Top
-    | Interval (l1, h1), Interval (l2, h2) -> f (l1, h1) (l2, h2)
+    | Interval (l1, h1), Interval (l2, h2) -> f l1 h1 l2 h2
 
-  let ( + ) = lift (fun (l1, h1) (l2, h2) -> Interval (l1 + l2, h1 + h2))
+  let ( + ) = lift2 (fun l1 h1 l2 h2 -> Interval (l1 + l2, h1 + h2))
 
-  let ( - ) = lift (fun (l1, h1) (l2, h2) -> Interval (l1 - h2, l2 - h1))
+  let ( - ) = lift2 (fun l1 h1 l2 h2 -> Interval (l1 - h2, l2 - h1))
 
   let ( * ) =
-    lift (fun (l1, h1) (l2, h2) ->
+    lift2 (fun l1 h1 l2 h2 ->
         let min_many = List.reduce_exn ~f:Int.min in
         let max_many = List.reduce_exn ~f:Int.max in
         let xs = [ l1 * l2; l1 * h2; l2 * h1; h2 * h1 ] in
         Interval (min_many xs, max_many xs))
+
+  let ceil_pow2 =
+    lift1 (fun l h -> Interval (Int.ceil_pow2 l, Int.ceil_pow2 h))
 
   let meet i1 i2 =
     match (i1, i2) with
@@ -326,17 +332,13 @@ let rec count = function
   | ListT (_, { count }) -> count
   | FuncT _ -> AbsInt.top
 
-let hash_kind_of_key_type_exn c = function
-  | IntT { range = r; _ } | DateT { range = r; _ } -> (
-      match (c, r) with
-      | AbsInt.Interval (_, h_count), Interval (l_range, h_range) ->
-          if h_count / (h_range - l_range) < 5 then `Direct else `Cmph
-      | _ -> `Cmph )
+let hash_kind_of_key_type = function
+  | IntT _ | DateT _ -> `Universal
   | _ -> `Cmph
 
 (** Use the type of a hash index to decide what hash method to use. *)
 let hash_kind_exn = function
-  | HashIdxT (kt, _, m) -> hash_kind_of_key_type_exn m.key_count kt
+  | HashIdxT (kt, _, _) -> hash_kind_of_key_type kt
   | _ -> failwith "Unexpected type."
 
 let range_exn = function
@@ -385,8 +387,8 @@ and oi_ptr_size vt m =
 (** Range of hash index hash data lengths. *)
 and hi_hash_len ?(bytes_per_key = AbsInt.of_int 1) kt m =
   let open AbsInt in
-  match hash_kind_of_key_type_exn m.key_count kt with
-  | `Direct -> of_int 0
+  match hash_kind_of_key_type kt with
+  | `Universal -> of_int Int.(8 * 3)
   | `Cmph ->
       (* The interval represents uncertainty about the hash size, and CMPH hashes
        seem to have some fixed overhead ~100B? *)
@@ -395,40 +397,10 @@ and hi_hash_len ?(bytes_per_key = AbsInt.of_int 1) kt m =
 (** Range of hash index map lengths. *)
 and hi_map_len kt vt m =
   let open AbsInt in
-  match hash_kind_of_key_type_exn m.key_count kt with
-  | `Direct -> range_exn kt * of_int (hi_ptr_size kt vt m)
+  match hash_kind_of_key_type kt with
+  | `Universal -> ceil_pow2 m.key_count
   | `Cmph -> m.key_count * Interval (1, 2) * of_int (hi_ptr_size kt vt m)
 
 (** Size of pointers (in bytes) in hash indexes. *)
 and hi_ptr_size kt vt m =
   AbsInt.(byte_width ~nullable:false (m.key_count * (len kt + len vt)))
-
-let%expect_test "" =
-  let type_ =
-    HashIdxT
-      ( IntT
-          {
-            range = Interval (23141, 5989538);
-            distinct = Distinct.empty (module Int);
-            nullable = false;
-          },
-        ListT
-          ( ListT
-              ( FuncT
-                  ( [
-                      IntT
-                        {
-                          range = Interval (1, 50);
-                          distinct = Distinct.empty (module Int);
-                          nullable = false;
-                        };
-                    ],
-                    `Child_sum ),
-                { count = Interval (1, 1) } ),
-            { count = Interval (1, 1) } ),
-        { key_count = Interval (1000, 1000) } )
-  in
-  len type_ |> [%sexp_of: AbsInt.t] |> print_s;
-
-  (* Should be larger than 11983084 *)
-  [%expect "(Interval 47282 11980076)"]

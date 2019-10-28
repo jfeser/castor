@@ -566,6 +566,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | `FlMul -> build_fmul x1 x2 "multmp" builder
       | `FlDiv -> build_fdiv x1 x2 "divtmp" builder
       | `Mod -> build_srem x1 x2 "modtmp" builder
+      | `Lsr -> build_lshr x1 x2 "" builder
       | `IntEq -> build_icmp Icmp.Eq x1 x2 "eqtmp" builder
       | `StrEq ->
           build_call scmp [| x1; x2 |] "eqtmp" builder |> tag string_val
@@ -1118,7 +1119,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       let module_ = codegen ir_module in
       Llvm.print_module module_fn module_
     in
-    let cflags = [ "-g"; "-lcmph" ] in
+    let cflags = [ "$CPPFLAGS"; "-g"; "-lcmph" ] in
     let cflags =
       (if gprof then [ "-pg" ] else [])
       @ (if debug then [ "-O0" ] else [ "-O3" ])

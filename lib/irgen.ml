@@ -533,15 +533,27 @@ struct
 
     (* Compute the index in the mapping table for this key. *)
     let hash_key =
-      match (Type.(hash_kind_exn (HashIdxT t)), lookup_expr) with
-      | _, [] -> failwith "empty hash key"
-      | `Direct, [ x ] -> build_to_int x b
-      | `Direct, _ -> failwith "Unexpected direct hash."
-      | `Cmph, [ x ] -> build_hash hash_data_start x b
-      | `Cmph, xs -> build_hash hash_data_start (Tuple xs) b
+      let hash_func_val =
+        match (Type.(hash_kind_exn (HashIdxT t)), lookup_expr) with
+        | _, [] -> failwith "empty hash key"
+        | `Universal, [ x ] ->
+            let a = Slice (hash_data_start, 8) in
+            let b = Slice (Infix.(hash_data_start + int 8), 8) in
+            let m = Slice (Infix.(hash_data_start + int 16), 8) in
+            Infix.(((a * x) + b) lsr (int 63 - m))
+        | `Universal, _ -> failwith "Unexpected universal hash."
+        | `Cmph, [ x ] -> build_hash hash_data_start x b
+        | `Cmph, xs -> build_hash hash_data_start (Tuple xs) b
+      in
+      let hash_func_var =
+        build_var ~persistent:false "hash" Type.PrimType.int_t b
+      in
+      build_assign Infix.(hash_func_val * int hash_ptr_len) hash_func_var b;
+      hash_func_var
     in
     debug_print "hashing key" (Tuple lookup_expr) b;
-    let hash_key = Infix.(hash_key * int hash_ptr_len) in
+    debug_print "data start" (Header.make_position hdr "data" start) b;
+
     (* Get a pointer to the value. *)
     let value_ptr =
       Infix.(

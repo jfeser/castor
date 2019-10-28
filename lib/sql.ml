@@ -453,9 +453,7 @@ let to_string_hum sql =
   let open Bos in
   let sql_str = to_string sql in
   let inp = OS.Cmd.in_string sql_str in
-  let out = OS.Cmd.run_io Cmd.(v "pg_format") inp in
+  let out = OS.Cmd.run_io ~err:OS.Cmd.err_null Cmd.(v "pg_format") inp in
   match OS.Cmd.to_string ~trim:true out with
   | Ok sql' -> sql'
-  | Error msg ->
-      Log.warn (fun m -> m "Formatting sql failed: %a." Rresult.R.pp_msg msg);
-      sql_str
+  | Error _ -> sql_str

@@ -78,28 +78,28 @@ let%expect_test "hash-idx" =
   run_test "AHashIdx(Dedup(Select([f], r1)) as k, AScalar(k.f as v), null)";
   [%expect
     {|
-    0:1 Table len (=12)
-    1:1 Table map len (=4)
-    1:0 Table hash
-    1:0 Table hash len (=0)
-    2:4 Table key map
-    2:1 Map entry (0 => XXX)
-    3:1 Map entry (1 => XXX)
-    4:1 Map entry (2 => XXX)
-    5:1 Map entry (3 => XXX)
-    6:6 Table values
-    6:1 Scalar (=(Int 1))
-    7:1 Scalar (=(Int 1))
-    8:1 Scalar (=(Int 2))
-    9:1 Scalar (=(Int 2))
-    10:1 Scalar (=(Int 3))
-    11:1 Scalar (=(Int 3))
+    0:24 Table hash
+    0:0 Table hash len (=24)
+    0:0 Table len (=34)
+    24:4 Table key map
+    24:1 Map entry (0 => XXX)
+    24:0 Table map len (=4)
+    25:1 Map entry (1 => XXX)
+    26:1 Map entry (2 => XXX)
+    27:1 Map entry (3 => XXX)
+    28:6 Table values
+    28:1 Scalar (=(Int 1))
+    29:1 Scalar (=(Int 1))
+    30:1 Scalar (=(Int 2))
+    31:1 Scalar (=(Int 2))
+    32:1 Scalar (=(Int 3))
+    33:1 Scalar (=(Int 3))
 
     ((HashIdxT
       ((IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
        (IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
        ((key_count (Interval 3 3)))))
-     12) |}]
+     34) |}]
 
 let%expect_test "ordered-idx" =
   run_test
