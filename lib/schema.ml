@@ -49,16 +49,18 @@ let rec to_type =
       | _ -> failwith "Too many fields." )
   | Substring _ -> string_t
 
-and schema_exn r =
+and to_type_opt p = Or_error.try_with (fun () -> to_type p)
+
+and schema r =
   let of_preds =
     List.map ~f:(fun p ->
-        let t = to_type p in
+        let t = to_type_opt p |> Or_error.ok in
         match to_name p with
-        | Some n -> Name.copy ~type_:(Some t) n
+        | Some n -> Name.copy ~type_:t n
         | None ->
             Log.err (fun m ->
                 m "Tried to get schema of unnamed predicate %a." pp_pred p);
-            Name.create ~type_:t (Fresh.name Global.fresh "x%d"))
+            Name.create ?type_:t (Fresh.name Global.fresh "x%d"))
   in
   match r.node with
   | AList (_, r) | DepJoin { d_rhs = r; _ } -> schema_exn r |> unscoped
@@ -82,6 +84,9 @@ and schema_exn r =
       let t = Type.PrimType.unify (to_type p) (to_type p') in
       [ Name.create ~type_:t "range" ]
 
-let to_type_opt p = Or_error.try_with (fun () -> to_type p)
+and schema_exn r =
+  let s = schema r in
+  List.iter ~f:(fun n -> Name.Meta.(find_exn n type_) |> ignore) s;
+  s
 
 let to_select_list s = List.map s ~f:(fun n -> Name n)

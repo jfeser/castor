@@ -65,7 +65,7 @@
 
 (executable
  (name parse_sql)
- (libraries core sqlgg)
+ (libraries core sqlgg castor)
  (flags
   (:standard -g -bin-annot))
  (preprocess
