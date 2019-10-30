@@ -82,6 +82,16 @@ let rec conv_stmt s =
         | Null -> Null None )
     | Param _ | Choices (_, _) | Inserted _ | Sequence _ ->
         failwith "unsupported"
+    | Case (branches, else_) ->
+        let else_ =
+          Option.map else_ ~f:conv_expr |> Option.value ~default:(Null None)
+        in
+        let rec to_pred = function
+          | [] -> failwith "Empty case"
+          | [ (p, x) ] -> If (conv_expr p, conv_expr x, else_)
+          | (p, x) :: bs -> If (conv_expr p, conv_expr x, to_pred bs)
+        in
+        to_pred branches
     | Fun (op, args) -> (
         let open Pred in
         match (op, args) with
@@ -93,6 +103,7 @@ let rec conv_stmt s =
               | v :: vs -> binop (Or, binop (Eq, x, conv_expr v), to_pred vs)
             in
             to_pred vs
+        | `IsNull, [ x ] -> binop (Eq, conv_expr x, Null None)
         | `In, [ x; Select (s, _) ] ->
             let q = conv_stmt s in
             let f = Schema.schema q |> List.hd_exn in
