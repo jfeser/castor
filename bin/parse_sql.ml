@@ -16,7 +16,7 @@ type castor_binop =
   | `Or
   | `Sub ]
 
-type castor_unop = [ `Not ]
+type castor_unop = [ `Not | `Day | `Year ]
 
 let conv_binop = function
   | `And -> And
@@ -32,7 +32,7 @@ let conv_binop = function
   | `Gt -> Gt
   | `Ge -> Ge
 
-let conv_unop = function `Not -> Not
+let conv_unop = function `Not -> Not | `Day -> Day | `Year -> Year
 
 let rec conv_stmt s =
   let module Sql = Sqlgg.Sql in
@@ -119,6 +119,8 @@ let rec conv_stmt s =
         | `Max, [ e ] -> Max (conv_expr e)
         | `Avg, [ e ] -> Avg (conv_expr e)
         | `Sum, [ e ] -> Sum (conv_expr e)
+        | `Substring, [ e1; e2; e3 ] ->
+            Substring (conv_expr e1, conv_expr e2, conv_expr e3)
         | (`Min | `Max | `Avg | `Sum), _ ->
             failwith "Unexpected aggregate arguments"
         | `Between, [ e1; e2; e3 ] ->
