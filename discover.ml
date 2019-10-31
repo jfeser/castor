@@ -6,17 +6,20 @@ let main kind =
     | Some r -> r
     | None ->
         let configs =
-          [ "llvm-config"
-          ; "llvm-config-6.0"
-          ; "/usr/local/Cellar/llvm@7/7.1.0/bin/llvm-config" ]
+          [
+            "llvm-config";
+            "llvm-config-9";
+            "/usr/local/Cellar/llvm/9*/bin/llvm-config";
+          ]
+        in
+        let cmd =
+          List.find configs ~f:(fun c ->
+              Sys.command (sprintf "which %s > /dev/null 2>&1" c) = 0)
         in
         let dir =
-          List.find_map configs ~f:(fun c ->
-              try
-                Unix.open_process_in (sprintf "%s --prefix" c)
-                |> In_channel.input_all |> String.strip |> Filename.realpath
-                |> Option.some
-              with Unix.Unix_error _ -> None)
+          Option.map cmd ~f:(fun cmd ->
+              Unix.open_process_in (sprintf "%s --prefix" cmd)
+              |> In_channel.input_all |> String.strip |> Filename.realpath)
         in
         Option.value_exn ~message:"No LLVM root found." dir
   in
@@ -39,8 +42,8 @@ let llvm_root = "%s"
 let tpch_db = %s
 let demomatch_db = %s
 let tpcds_db = %s
-|}
-        , option_to_str )
+|},
+          option_to_str )
     | "ENV" ->
         let option_to_str = function Some s -> s | None -> "" in
         ( printf
@@ -51,8 +54,8 @@ llvm_root = %s
 tpch_db = %s
 demomatch_db = %s
 tpcds_db = %s
-|}
-        , option_to_str )
+|},
+          option_to_str )
     | _ -> failwith "Unexpected kind."
   in
   formatter build_root llvm_root

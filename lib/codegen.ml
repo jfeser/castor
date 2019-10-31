@@ -35,7 +35,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     TargetMachine.data_layout machine
 
   let clang =
-    let configs = [ "clang"; "clang-7" ] in
+    let configs =
+      [ "/usr/local/Cellar/llvm/9*/bin/clang"; "clang-9"; "clang" ]
+    in
     let c =
       List.find configs ~f:(fun c ->
           Sys.command (sprintf "which %s > /dev/null 2>&1" c) = 0)
@@ -1009,7 +1011,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
           in
           fprintf fmt "%a *" pp_type elem_t
       | Half | Float | Double | X86fp80 | Fp128 | Ppc_fp128 | Label
-      | Function | Array | Vector | Metadata | X86_mmx ->
+      | Function | Array | Vector | Metadata | X86_mmx | Token ->
           Error.(create "Unknown type." t [%sexp_of: lltype] |> raise)
     and pp_params fmt ts =
       Array.iteri ts ~f:(fun i t ->
@@ -1033,7 +1035,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
           fprintf fmt "%a %s(%a);@," pp_type (return_type t) n pp_params
             (param_types t)
       | Void | Half | Float | Double | X86fp80 | Fp128 | Ppc_fp128 | Label
-      | Integer | Struct | Array | Vector | Metadata | X86_mmx ->
+      | Integer | Struct | Array | Vector | Metadata | X86_mmx | Token ->
           ignore_val ()
     in
     let fmt = Caml.Format.formatter_of_out_channel ch in

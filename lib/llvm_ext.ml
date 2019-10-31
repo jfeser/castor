@@ -28,6 +28,7 @@ module TypeKind = struct
     | Vector
     | Metadata
     | X86_mmx
+    | Token
   [@@deriving compare, sexp]
 end
 
