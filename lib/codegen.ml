@@ -34,7 +34,13 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let machine = TargetMachine.create ~triple Target.(by_triple triple) in
     TargetMachine.data_layout machine
 
-  let clang = Project_config.llvm_root ^ "/bin/clang"
+  let clang =
+    let configs = [ "clang"; "clang-7" ] in
+    let c =
+      List.find configs ~f:(fun c ->
+          Sys.command (sprintf "which %s > /dev/null 2>&1" c) = 0)
+    in
+    Option.value_exn ~message:"Could not find a working clang." c
 
   let opt = Project_config.llvm_root ^ "/bin/opt"
 
