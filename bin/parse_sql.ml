@@ -168,12 +168,10 @@ let () =
         |> Sequence.iter ~f:(fun stmt ->
                match stmt with
                | Sqlgg.Sql.Select s -> (
-                   try
-                     conv_stmt s |> ignore;
-                     printf "Loading %s succeeded.\n" fn
+                   try conv_stmt s |> Format.printf "%a\n@." Abslayout.pp
                    with exn ->
-                     printf "Converting %s failed: %s\n" fn (Exn.to_string exn)
-                   )
+                     eprintf "Converting %s failed: %s\n" fn
+                       (Exn.to_string exn) )
                | _ -> failwith ""))
   with Sqlgg.Parser.Error (_, (x, y, tok, _)) ->
-    printf "Parsing %s failed. Unexpected token %s (%d, %d).\n" fn tok x y
+    eprintf "Parsing %s failed. Unexpected token %s (%d, %d).\n" fn tok x y
