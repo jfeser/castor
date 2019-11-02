@@ -1,0 +1,14 @@
+select([sum(cs_ext_discount_amt) as excess discount amount],
+  filter((((((i_manufact_id = IMID_01) && (i_item_sk = cs_item_sk)) &&
+           ((d_date <= "1998-01-02") &&
+           ("1998-01-02" <= (CSDATE_01 + day(90))))) &&
+          (d_date_sk = cs_sold_date_sk)) &&
+         (cs_ext_discount_amt >
+         (select([(1.3 * avg(cs_ext_discount_amt))],
+            filter((((cs_item_sk = i_item_sk) &&
+                    ((d_date <= "1998-01-02") &&
+                    ("1998-01-02" <= (CSDATE_01 + day(90))))) &&
+                   (d_date_sk = cs_sold_date_sk)),
+              join(true, catalog_sales, date_dim)))))),
+    join(true, catalog_sales, join(true, item, date_dim))))
+

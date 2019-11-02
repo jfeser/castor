@@ -1,0 +1,18 @@
+groupby([channel,
+         col_name,
+         d_year,
+         d_qoy,
+         i_category,
+         count() as sales_cnt,
+         sum(ext_sales_price) as sales_amt],
+  [channel, col_name, d_year, d_qoy, i_category],
+  select(["store" as channel,
+          NULLCOLSS_01 as col_name,
+          d_year,
+          d_qoy,
+          i_category,
+          ss_ext_sales_price as ext_sales_price],
+    filter((((ss_customer_sk = null) && (ss_sold_date_sk = d_date_sk)) &&
+           (ss_item_sk = i_item_sk)),
+      join(true, store_sales, join(true, item, date_dim)))))
+

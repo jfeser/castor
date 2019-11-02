@@ -1,0 +1,54 @@
+select([(if ((select([count()],
+                filter(((ss_quantity <= RC_01) && (RC_01 <= 20)),
+                  store_sales))) > RC_01) then (select([avg(ss_ext_discount_amt)],
+                                                  filter(((ss_quantity <=
+                                                          RC_01) &&
+                                                         (RC_01 <= 20)),
+                                                    store_sales))) else (select(
+                                                                    [avg(ss_net_paid)],
+                                                                    filter(
+                                                                    (
+                                                                    (ss_quantity
+                                                                    <= RC_01)
+                                                                    &&
+                                                                    (RC_01 <=
+                                                                    20)),
+                                                                    store_sales)))) as bucket1,
+        (if ((select([count()],
+                filter(((ss_quantity <= 21) && (21 <= 40)), store_sales))) >
+            RC_02) then (select([avg(ss_ext_discount_amt)],
+                           filter(((ss_quantity <= 21) && (21 <= 40)),
+                             store_sales))) else (select([avg(ss_net_paid)],
+                                                    filter(((ss_quantity <=
+                                                            21) &&
+                                                           (21 <= 40)),
+                                                      store_sales)))) as bucket2,
+        (if ((select([count()],
+                filter(((ss_quantity <= 41) && (41 <= 60)), store_sales))) >
+            RC_03) then (select([avg(ss_ext_discount_amt)],
+                           filter(((ss_quantity <= 41) && (41 <= 60)),
+                             store_sales))) else (select([avg(ss_net_paid)],
+                                                    filter(((ss_quantity <=
+                                                            41) &&
+                                                           (41 <= 60)),
+                                                      store_sales)))) as bucket3,
+        (if ((select([count()],
+                filter(((ss_quantity <= 61) && (61 <= 80)), store_sales))) >
+            RC_04) then (select([avg(ss_ext_discount_amt)],
+                           filter(((ss_quantity <= 61) && (61 <= 80)),
+                             store_sales))) else (select([avg(ss_net_paid)],
+                                                    filter(((ss_quantity <=
+                                                            61) &&
+                                                           (61 <= 80)),
+                                                      store_sales)))) as bucket4,
+        (if ((select([count()],
+                filter(((ss_quantity <= 81) && (81 <= 100)), store_sales))) >
+            RC_05) then (select([avg(ss_ext_discount_amt)],
+                           filter(((ss_quantity <= 81) && (81 <= 100)),
+                             store_sales))) else (select([avg(ss_net_paid)],
+                                                    filter(((ss_quantity <=
+                                                            81) &&
+                                                           (81 <= 100)),
+                                                      store_sales)))) as bucket5],
+  filter((r_reason_sk = RC_01), reason))
+

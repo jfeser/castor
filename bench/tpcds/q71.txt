@@ -1,0 +1,24 @@
+filter(((((sold_item_sk = i_item_sk) && (i_manager_id = 1)) &&
+        (time_sk = t_time_sk)) &&
+       ((t_meal_time = "breakfast") || (t_meal_time = "dinner"))),
+  groupby([i_brand_id as brand_id,
+           i_brand as brand,
+           t_hour,
+           t_minute,
+           sum(ext_price) as ext_price],
+    [i_brand, i_brand_id, t_hour, t_minute],
+    filter(((((sold_item_sk = i_item_sk) && (i_manager_id = 1)) &&
+            (time_sk = t_time_sk)) &&
+           ((t_meal_time = "breakfast") || (t_meal_time = "dinner"))),
+      join(true,
+        item,
+        join(true,
+          select([ws_ext_sales_price as ext_price,
+                  ws_sold_date_sk as sold_date_sk,
+                  ws_item_sk as sold_item_sk,
+                  ws_sold_time_sk as time_sk],
+            filter((((d_date_sk = ws_sold_date_sk) && (d_moy = MONTH_01)) &&
+                   (d_year = YEAR_01)),
+              join(true, web_sales, date_dim))),
+          time_dim)))))
+

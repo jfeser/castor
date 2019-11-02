@@ -1,0 +1,38 @@
+filter(((((((d_week_seq = d_week_seq) &&
+           (inv_quantity_on_hand < cs_quantity)) && (d_date > (d_date + 5)))
+         && (hd_buy_potential = BP_01)) && (d_year = YEAR_01)) &&
+       (cd_marital_status = MS_01)),
+  groupby([i_item_desc,
+           w_warehouse_name,
+           d_week_seq,
+           sum((if (p_promo_sk = null) then 1 else 0)) as no_promo,
+           sum((if not((p_promo_sk = null)) then 1 else 0)) as promo,
+           count() as total_cnt],
+    [i_item_desc, w_warehouse_name, d_week_seq],
+    filter(((((((d_week_seq = d_week_seq) &&
+               (inv_quantity_on_hand < cs_quantity)) &&
+              (d_date > (d_date + 5))) && (hd_buy_potential = BP_01)) &&
+            (d_year = YEAR_01)) && (cd_marital_status = MS_01)),
+      join((cs_item_sk = inv_item_sk),
+        catalog_sales,
+        join((w_warehouse_sk = inv_warehouse_sk),
+          inventory,
+          join((i_item_sk = cs_item_sk),
+            warehouse,
+            join((cs_bill_cdemo_sk = cd_demo_sk),
+              item,
+              join((cs_bill_hdemo_sk = hd_demo_sk),
+                customer_demographics,
+                join((cs_sold_date_sk = d_date_sk),
+                  household_demographics,
+                  join((inv_date_sk = d_date_sk),
+                    date_dim,
+                    join((cs_ship_date_sk = d_date_sk),
+                      date_dim,
+                      join((cs_promo_sk = p_promo_sk),
+                        date_dim,
+                        join(((cr_item_sk = cs_item_sk) &&
+                             (cr_order_number = cs_order_number)),
+                          promotion,
+                          catalog_returns)))))))))))))
+

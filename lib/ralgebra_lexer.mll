@@ -61,8 +61,8 @@ let white = [' ' '\t' '\r']+
 let alpha = ['a'-'z' 'A'-'Z']
 let digit = ['0'-'9']
 let id = (alpha | '_') (alpha | digit | '_')*
-let int = digit+
-let fixed = digit+ ('.' digit+)?
+let int = '-'? digit+
+let fixed = '-'? digit+ ('.' digit+)?
 let str = '"'
 
 rule token = parse

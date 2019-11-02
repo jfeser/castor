@@ -1,0 +1,9 @@
+filter((((((d_date_sk = ss_sold_date_sk) && (ss_item_sk = i_item_sk)) &&
+         (i_manager_id = 1)) && (d_moy = MONTH_01)) && (d_year = YEAR_01)),
+  groupby([d_year, i_category_id, i_category, sum(ss_ext_sales_price)],
+    [d_year, i_category_id, i_category],
+    filter((((((d_date_sk = ss_sold_date_sk) && (ss_item_sk = i_item_sk)) &&
+             (i_manager_id = 1)) && (d_moy = MONTH_01)) &&
+           (d_year = YEAR_01)),
+      join(true, date_dim, join(true, store_sales, item)))))
+

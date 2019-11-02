@@ -1,0 +1,290 @@
+select([product_name,
+        store_name,
+        store_zip,
+        b_street_number,
+        b_street_name,
+        b_city,
+        b_zip,
+        c_street_number,
+        c_street_name,
+        c_city,
+        c_zip,
+        syear,
+        cnt,
+        s1 as s11,
+        s2 as s21,
+        s3 as s31,
+        s1 as s12,
+        s2 as s22,
+        s3 as s32,
+        syear,
+        cnt],
+  filter(((((((item_sk = item_sk) && (syear = YEAR_01)) &&
+            (syear = (YEAR_01 + 1))) && (cnt <= cnt)) &&
+          (store_name = store_name)) && (store_zip = store_zip)),
+    join(true,
+      filter(((((((((((((((((((((((ss_store_sk = s_store_sk) &&
+                                 (ss_sold_date_sk = d_date_sk)) &&
+                                (ss_customer_sk = c_customer_sk)) &&
+                               (ss_cdemo_sk = cd_demo_sk)) &&
+                              (ss_hdemo_sk = hd_demo_sk)) &&
+                             (ss_addr_sk = ca_address_sk)) &&
+                            (ss_item_sk = i_item_sk)) &&
+                           (ss_item_sk = sr_item_sk)) &&
+                          (ss_ticket_number = sr_ticket_number)) &&
+                         (ss_item_sk = cs_item_sk)) &&
+                        (c_current_cdemo_sk = cd_demo_sk)) &&
+                       (c_current_hdemo_sk = hd_demo_sk)) &&
+                      (c_current_addr_sk = ca_address_sk)) &&
+                     (c_first_sales_date_sk = d_date_sk)) &&
+                    (c_first_shipto_date_sk = d_date_sk)) &&
+                   (ss_promo_sk = p_promo_sk)) &&
+                  (hd_income_band_sk = ib_income_band_sk)) &&
+                 (hd_income_band_sk = ib_income_band_sk)) &&
+                not((cd_marital_status = cd_marital_status))) &&
+               ((i_color = COLOR_01) ||
+               ((i_color = COLOR_02) ||
+               ((i_color = COLOR_03) ||
+               ((i_color = COLOR_04) ||
+               ((i_color = COLOR_05) || (i_color = COLOR_06))))))) &&
+              ((i_current_price <= PRICE_01) &&
+              (PRICE_01 <= (PRICE_01 + 10)))) &&
+             ((i_current_price <= (PRICE_01 + 1)) &&
+             ((PRICE_01 + 1) <= (PRICE_01 + 15)))),
+        groupby([i_product_name as product_name,
+                 i_item_sk as item_sk,
+                 s_store_name as store_name,
+                 s_zip as store_zip,
+                 ca_street_number as b_street_number,
+                 ca_street_name as b_street_name,
+                 ca_city as b_city,
+                 ca_zip as b_zip,
+                 ca_street_number as c_street_number,
+                 ca_street_name as c_street_name,
+                 ca_city as c_city,
+                 ca_zip as c_zip,
+                 d_year as syear,
+                 d_year as fsyear,
+                 d_year as s2year,
+                 count() as cnt,
+                 sum(ss_wholesale_cost) as s1,
+                 sum(ss_list_price) as s2,
+                 sum(ss_coupon_amt) as s3],
+          [i_product_name,
+           i_item_sk,
+           s_store_name,
+           s_zip,
+           ca_street_number,
+           ca_street_name,
+           ca_city,
+           ca_zip,
+           ca_street_number,
+           ca_street_name,
+           ca_city,
+           ca_zip,
+           d_year,
+           d_year,
+           d_year],
+          filter(((((((((((((((((((((((ss_store_sk = s_store_sk) &&
+                                     (ss_sold_date_sk = d_date_sk)) &&
+                                    (ss_customer_sk = c_customer_sk)) &&
+                                   (ss_cdemo_sk = cd_demo_sk)) &&
+                                  (ss_hdemo_sk = hd_demo_sk)) &&
+                                 (ss_addr_sk = ca_address_sk)) &&
+                                (ss_item_sk = i_item_sk)) &&
+                               (ss_item_sk = sr_item_sk)) &&
+                              (ss_ticket_number = sr_ticket_number)) &&
+                             (ss_item_sk = cs_item_sk)) &&
+                            (c_current_cdemo_sk = cd_demo_sk)) &&
+                           (c_current_hdemo_sk = hd_demo_sk)) &&
+                          (c_current_addr_sk = ca_address_sk)) &&
+                         (c_first_sales_date_sk = d_date_sk)) &&
+                        (c_first_shipto_date_sk = d_date_sk)) &&
+                       (ss_promo_sk = p_promo_sk)) &&
+                      (hd_income_band_sk = ib_income_band_sk)) &&
+                     (hd_income_band_sk = ib_income_band_sk)) &&
+                    not((cd_marital_status = cd_marital_status))) &&
+                   ((i_color = COLOR_01) ||
+                   ((i_color = COLOR_02) ||
+                   ((i_color = COLOR_03) ||
+                   ((i_color = COLOR_04) ||
+                   ((i_color = COLOR_05) || (i_color = COLOR_06))))))) &&
+                  ((i_current_price <= PRICE_01) &&
+                  (PRICE_01 <= (PRICE_01 + 10)))) &&
+                 ((i_current_price <= (PRICE_01 + 1)) &&
+                 ((PRICE_01 + 1) <= (PRICE_01 + 15)))),
+            join(true,
+              store_sales,
+              join(true,
+                store_returns,
+                join(true,
+                  filter(((cs_item_sk = cr_item_sk) &&
+                         (cs_order_number = cr_order_number)),
+                    groupby([cs_item_sk,
+                             sum(cs_ext_list_price) as sale,
+                             sum(((cr_refunded_cash + cr_reversed_charge) +
+                                 cr_store_credit)) as refund],
+                      [cs_item_sk],
+                      filter(((cs_item_sk = cr_item_sk) &&
+                             (cs_order_number = cr_order_number)),
+                        join(true, catalog_sales, catalog_returns)))),
+                  join(true,
+                    date_dim,
+                    join(true,
+                      date_dim,
+                      join(true,
+                        date_dim,
+                        join(true,
+                          store,
+                          join(true,
+                            customer,
+                            join(true,
+                              customer_demographics,
+                              join(true,
+                                customer_demographics,
+                                join(true,
+                                  promotion,
+                                  join(true,
+                                    household_demographics,
+                                    join(true,
+                                      household_demographics,
+                                      join(true,
+                                        customer_address,
+                                        join(true,
+                                          customer_address,
+                                          join(true,
+                                            income_band,
+                                            join(true, income_band, item)))))))))))))))))))),
+      filter(((((((((((((((((((((((ss_store_sk = s_store_sk) &&
+                                 (ss_sold_date_sk = d_date_sk)) &&
+                                (ss_customer_sk = c_customer_sk)) &&
+                               (ss_cdemo_sk = cd_demo_sk)) &&
+                              (ss_hdemo_sk = hd_demo_sk)) &&
+                             (ss_addr_sk = ca_address_sk)) &&
+                            (ss_item_sk = i_item_sk)) &&
+                           (ss_item_sk = sr_item_sk)) &&
+                          (ss_ticket_number = sr_ticket_number)) &&
+                         (ss_item_sk = cs_item_sk)) &&
+                        (c_current_cdemo_sk = cd_demo_sk)) &&
+                       (c_current_hdemo_sk = hd_demo_sk)) &&
+                      (c_current_addr_sk = ca_address_sk)) &&
+                     (c_first_sales_date_sk = d_date_sk)) &&
+                    (c_first_shipto_date_sk = d_date_sk)) &&
+                   (ss_promo_sk = p_promo_sk)) &&
+                  (hd_income_band_sk = ib_income_band_sk)) &&
+                 (hd_income_band_sk = ib_income_band_sk)) &&
+                not((cd_marital_status = cd_marital_status))) &&
+               ((i_color = COLOR_01) ||
+               ((i_color = COLOR_02) ||
+               ((i_color = COLOR_03) ||
+               ((i_color = COLOR_04) ||
+               ((i_color = COLOR_05) || (i_color = COLOR_06))))))) &&
+              ((i_current_price <= PRICE_01) &&
+              (PRICE_01 <= (PRICE_01 + 10)))) &&
+             ((i_current_price <= (PRICE_01 + 1)) &&
+             ((PRICE_01 + 1) <= (PRICE_01 + 15)))),
+        groupby([i_product_name as product_name,
+                 i_item_sk as item_sk,
+                 s_store_name as store_name,
+                 s_zip as store_zip,
+                 ca_street_number as b_street_number,
+                 ca_street_name as b_street_name,
+                 ca_city as b_city,
+                 ca_zip as b_zip,
+                 ca_street_number as c_street_number,
+                 ca_street_name as c_street_name,
+                 ca_city as c_city,
+                 ca_zip as c_zip,
+                 d_year as syear,
+                 d_year as fsyear,
+                 d_year as s2year,
+                 count() as cnt,
+                 sum(ss_wholesale_cost) as s1,
+                 sum(ss_list_price) as s2,
+                 sum(ss_coupon_amt) as s3],
+          [i_product_name,
+           i_item_sk,
+           s_store_name,
+           s_zip,
+           ca_street_number,
+           ca_street_name,
+           ca_city,
+           ca_zip,
+           ca_street_number,
+           ca_street_name,
+           ca_city,
+           ca_zip,
+           d_year,
+           d_year,
+           d_year],
+          filter(((((((((((((((((((((((ss_store_sk = s_store_sk) &&
+                                     (ss_sold_date_sk = d_date_sk)) &&
+                                    (ss_customer_sk = c_customer_sk)) &&
+                                   (ss_cdemo_sk = cd_demo_sk)) &&
+                                  (ss_hdemo_sk = hd_demo_sk)) &&
+                                 (ss_addr_sk = ca_address_sk)) &&
+                                (ss_item_sk = i_item_sk)) &&
+                               (ss_item_sk = sr_item_sk)) &&
+                              (ss_ticket_number = sr_ticket_number)) &&
+                             (ss_item_sk = cs_item_sk)) &&
+                            (c_current_cdemo_sk = cd_demo_sk)) &&
+                           (c_current_hdemo_sk = hd_demo_sk)) &&
+                          (c_current_addr_sk = ca_address_sk)) &&
+                         (c_first_sales_date_sk = d_date_sk)) &&
+                        (c_first_shipto_date_sk = d_date_sk)) &&
+                       (ss_promo_sk = p_promo_sk)) &&
+                      (hd_income_band_sk = ib_income_band_sk)) &&
+                     (hd_income_band_sk = ib_income_band_sk)) &&
+                    not((cd_marital_status = cd_marital_status))) &&
+                   ((i_color = COLOR_01) ||
+                   ((i_color = COLOR_02) ||
+                   ((i_color = COLOR_03) ||
+                   ((i_color = COLOR_04) ||
+                   ((i_color = COLOR_05) || (i_color = COLOR_06))))))) &&
+                  ((i_current_price <= PRICE_01) &&
+                  (PRICE_01 <= (PRICE_01 + 10)))) &&
+                 ((i_current_price <= (PRICE_01 + 1)) &&
+                 ((PRICE_01 + 1) <= (PRICE_01 + 15)))),
+            join(true,
+              store_sales,
+              join(true,
+                store_returns,
+                join(true,
+                  filter(((cs_item_sk = cr_item_sk) &&
+                         (cs_order_number = cr_order_number)),
+                    groupby([cs_item_sk,
+                             sum(cs_ext_list_price) as sale,
+                             sum(((cr_refunded_cash + cr_reversed_charge) +
+                                 cr_store_credit)) as refund],
+                      [cs_item_sk],
+                      filter(((cs_item_sk = cr_item_sk) &&
+                             (cs_order_number = cr_order_number)),
+                        join(true, catalog_sales, catalog_returns)))),
+                  join(true,
+                    date_dim,
+                    join(true,
+                      date_dim,
+                      join(true,
+                        date_dim,
+                        join(true,
+                          store,
+                          join(true,
+                            customer,
+                            join(true,
+                              customer_demographics,
+                              join(true,
+                                customer_demographics,
+                                join(true,
+                                  promotion,
+                                  join(true,
+                                    household_demographics,
+                                    join(true,
+                                      household_demographics,
+                                      join(true,
+                                        customer_address,
+                                        join(true,
+                                          customer_address,
+                                          join(true,
+                                            income_band,
+                                            join(true, income_band, item)))))))))))))))))))))))
+

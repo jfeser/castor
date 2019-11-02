@@ -1,0 +1,48 @@
+select([c_customer_id,
+        c_salutation,
+        c_first_name,
+        c_last_name,
+        ca_street_number,
+        ca_street_name,
+        ca_street_type,
+        ca_suite_number,
+        ca_city,
+        ca_county,
+        ca_state,
+        ca_zip,
+        ca_country,
+        ca_gmt_offset,
+        ca_location_type,
+        ctr_total_return],
+  filter(((((ctr_total_return >
+            (select([(avg(ctr_total_return) * 1.2)],
+               filter((ctr_state = ctr_state),
+                 filter((((cr_returned_date_sk = d_date_sk) &&
+                         (d_year = YEAR_01)) &&
+                        (cr_returning_addr_sk = ca_address_sk)),
+                   groupby([cr_returning_customer_sk as ctr_customer_sk,
+                            ca_state as ctr_state,
+                            sum(cr_return_amt_inc_tax) as ctr_total_return],
+                     [cr_returning_customer_sk, ca_state],
+                     filter((((cr_returned_date_sk = d_date_sk) &&
+                             (d_year = YEAR_01)) &&
+                            (cr_returning_addr_sk = ca_address_sk)),
+                       join(true,
+                         catalog_returns,
+                         join(true, date_dim, customer_address))))))))) &&
+           (ca_address_sk = c_current_addr_sk)) && (ca_state = STATE_01)) &&
+         (ctr_customer_sk = c_customer_sk)),
+    join(true,
+      filter((((cr_returned_date_sk = d_date_sk) && (d_year = YEAR_01)) &&
+             (cr_returning_addr_sk = ca_address_sk)),
+        groupby([cr_returning_customer_sk as ctr_customer_sk,
+                 ca_state as ctr_state,
+                 sum(cr_return_amt_inc_tax) as ctr_total_return],
+          [cr_returning_customer_sk, ca_state],
+          filter((((cr_returned_date_sk = d_date_sk) && (d_year = YEAR_01))
+                 && (cr_returning_addr_sk = ca_address_sk)),
+            join(true,
+              catalog_returns,
+              join(true, date_dim, customer_address))))),
+      join(true, customer_address, customer))))
+

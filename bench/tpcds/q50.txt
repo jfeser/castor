@@ -1,0 +1,44 @@
+filter(((((((((d_year = YEAR_01) && (d_moy = MONTH_01)) &&
+            (ss_ticket_number = sr_ticket_number)) &&
+           (ss_item_sk = sr_item_sk)) && (ss_sold_date_sk = d_date_sk)) &&
+         (sr_returned_date_sk = d_date_sk)) &&
+        (ss_customer_sk = sr_customer_sk)) && (ss_store_sk = s_store_sk)),
+  groupby([s_store_name,
+           s_company_id,
+           s_street_number,
+           s_street_name,
+           s_street_type,
+           s_suite_number,
+           s_city,
+           s_county,
+           s_state,
+           s_zip,
+           sum((if ((sr_returned_date_sk - ss_sold_date_sk) <= 30) then 1 else 0)) as 30 days,
+           sum((if (((sr_returned_date_sk - ss_sold_date_sk) > 30) &&
+                   ((sr_returned_date_sk - ss_sold_date_sk) <= 60)) then 1 else 0)) as 31-60 days,
+           sum((if (((sr_returned_date_sk - ss_sold_date_sk) > 60) &&
+                   ((sr_returned_date_sk - ss_sold_date_sk) <= 90)) then 1 else 0)) as 61-90 days,
+           sum((if (((sr_returned_date_sk - ss_sold_date_sk) > 90) &&
+                   ((sr_returned_date_sk - ss_sold_date_sk) <= 120)) then 1 else 0)) as 91-120 days,
+           sum((if ((sr_returned_date_sk - ss_sold_date_sk) > 120) then 1 else 0)) as >120 days],
+    [s_store_name,
+     s_company_id,
+     s_street_number,
+     s_street_name,
+     s_street_type,
+     s_suite_number,
+     s_city,
+     s_county,
+     s_state,
+     s_zip],
+    filter(((((((((d_year = YEAR_01) && (d_moy = MONTH_01)) &&
+                (ss_ticket_number = sr_ticket_number)) &&
+               (ss_item_sk = sr_item_sk)) && (ss_sold_date_sk = d_date_sk))
+             && (sr_returned_date_sk = d_date_sk)) &&
+            (ss_customer_sk = sr_customer_sk)) && (ss_store_sk = s_store_sk)),
+      join(true,
+        store_sales,
+        join(true,
+          store_returns,
+          join(true, store, join(true, date_dim, date_dim)))))))
+

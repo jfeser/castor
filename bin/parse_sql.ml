@@ -18,6 +18,66 @@ type castor_binop =
 
 type castor_unop = [ `Not | `Day | `Year ]
 
+let load_params fn query =
+  let open Yojson.Basic in
+  let member_exn ks k' =
+    let out =
+      List.find_map
+        ~f:(fun (k, v) -> if String.(k = k') then Some v else None)
+        ks
+    in
+    Option.value_exn out
+  in
+  let params =
+    from_file fn |> Util.to_list
+    |> List.find_map ~f:(fun q ->
+           let q = Util.to_assoc q in
+           let queries =
+             member_exn q "query" |> Util.(convert_each to_string)
+           in
+           if List.mem queries query ~equal:String.( = ) then
+             let params = member_exn q "params" |> Util.to_assoc in
+             List.map params ~f:(function
+               | p, `String v -> (p, v)
+               | _ -> failwith "Unexpected parameter value")
+             |> Option.some
+           else None)
+  in
+  params
+
+let unsub ps r =
+  let params =
+    List.map ps ~f:(fun (k, v) ->
+        let name, type_, _ = Util.param_of_string k in
+        let v =
+          let open Pred in
+          match type_ with
+          | DateT _ -> Date (Date.of_string v)
+          | StringT _ -> String v
+          | _ -> of_string_exn v
+        in
+        (v, Name (Name.create name), ref false))
+  in
+  let visitor =
+    object
+      inherit [_] map as super
+
+      method! visit_pred () p =
+        let p = super#visit_pred () p in
+        match List.find params ~f:(fun (p', _, _) -> Pred.O.(p = p')) with
+        | Some (_, p', replaced) ->
+            replaced := true;
+            p'
+        | None -> p
+    end
+  in
+  let r' = visitor#visit_t () r in
+  List.iter params ~f:(fun (v, k, replaced) ->
+      if not !replaced then
+        Log.warn (fun m ->
+            m "Param %a not replaced. Could not find %a." Pred.pp k Pred.pp v));
+  r'
+
 let conv_binop = function
   | `And -> And
   | `Or -> Or
@@ -38,20 +98,9 @@ let rec conv_stmt s =
   let module Sql = Sqlgg.Sql in
   if Option.is_some s.Sql.limit then
     Log.warn (fun m -> m "Limit clauses not supported. Dropping.");
-  let rec conv_order o q =
-    if o = [] then q
-    else
-      let order =
-        List.map o ~f:(fun (e, d) ->
-            let dir =
-              match d with
-              | Some `Asc -> Asc
-              | Some `Desc -> Desc
-              | None -> Asc
-            in
-            (conv_expr e, dir))
-      in
-      order_by order q
+  let rec conv_order _ q =
+    Log.warn (fun m -> m "Dropping orderby clause.");
+    q
   and conv_filter f q =
     match f with Some e -> filter (conv_expr e) q | None -> q
   and conv_source (s, _) =
@@ -160,18 +209,44 @@ let rec conv_stmt s =
   in
   conv_order s.Sql.order (conv_select s.select)
 
+let main params fn =
+  Log.info (fun m -> m "Converting %s." fn);
+  let params =
+    let _, query = String.rsplit2_exn ~on:'/' fn in
+    match load_params params query with
+    | Some ps -> ps
+    | None ->
+        Log.warn (fun m -> m "Could not load params for %s" fn);
+        []
+  in
+  let stmts =
+    try In_channel.with_file fn ~f:Sqlgg.Parser.get_statements
+    with Sqlgg.Parser.Error (_, (x, y, tok, _)) ->
+      eprintf "Parsing %s failed. Unexpected token %s (%d, %d).\n" fn tok x y;
+      exit 1
+  in
+  Sequence.iter stmts ~f:(fun stmt ->
+      match stmt with
+      | Sqlgg.Sql.Select s ->
+          let r =
+            try conv_stmt s
+            with exn ->
+              eprintf "Converting %s failed: %s\n" fn (Exn.to_string exn);
+              exit 1
+          in
+          unsub params r |> Format.printf "%a\n@." Abslayout.pp
+      | _ -> failwith "")
+
 let () =
-  let fn = Sys.argv.(1) in
-  try
-    In_channel.with_file fn ~f:(fun ch ->
-        Sqlgg.Parser.get_statements ch
-        |> Sequence.iter ~f:(fun stmt ->
-               match stmt with
-               | Sqlgg.Sql.Select s -> (
-                   try conv_stmt s |> Format.printf "%a\n@." Abslayout.pp
-                   with exn ->
-                     eprintf "Converting %s failed: %s\n" fn
-                       (Exn.to_string exn) )
-               | _ -> failwith ""))
-  with Sqlgg.Parser.Error (_, (x, y, tok, _)) ->
-    eprintf "Parsing %s failed. Unexpected token %s (%d, %d).\n" fn tok x y
+  (* Set early so we get logs from command parsing code. *)
+  Logs.set_reporter (Logs.format_reporter ());
+  Logs.set_level (Some Logs.Info);
+  let open Command in
+  let open Let_syntax in
+  basic ~summary:"Convert a SQL query to a Castor spec."
+    [%map_open
+      let () = Log.param
+      and params = flag ~doc:" parameter file" "p" (required string)
+      and file = anon ("file" %: string) in
+      fun () -> main params file]
+  |> run

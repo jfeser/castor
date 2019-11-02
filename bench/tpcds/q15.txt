@@ -1,0 +1,35 @@
+filter(((((((cs_bill_customer_sk = c_customer_sk) &&
+           (c_current_addr_sk = ca_address_sk)) &&
+          ((((substr(ca_zip, QOY_01, 5) = "85669") ||
+            ((substr(ca_zip, QOY_01, 5) = "86197") ||
+            ((substr(ca_zip, QOY_01, 5) = "88274") ||
+            ((substr(ca_zip, QOY_01, 5) = "83405") ||
+            ((substr(ca_zip, QOY_01, 5) = "86475") ||
+            ((substr(ca_zip, QOY_01, 5) = "85392") ||
+            ((substr(ca_zip, QOY_01, 5) = "85460") ||
+            ((substr(ca_zip, QOY_01, 5) = "80348") ||
+            (substr(ca_zip, QOY_01, 5) = "81792"))))))))) ||
+           ((ca_state = "CA") || ((ca_state = "WA") || (ca_state = "GA"))))
+          || (cs_sales_price > 500))) && (cs_sold_date_sk = d_date_sk)) &&
+        (d_qoy = QOY_01)) && (d_year = YEAR_01)),
+  groupby([ca_zip, sum(cs_sales_price)],
+    [ca_zip],
+    filter(((((((cs_bill_customer_sk = c_customer_sk) &&
+               (c_current_addr_sk = ca_address_sk)) &&
+              ((((substr(ca_zip, QOY_01, 5) = "85669") ||
+                ((substr(ca_zip, QOY_01, 5) = "86197") ||
+                ((substr(ca_zip, QOY_01, 5) = "88274") ||
+                ((substr(ca_zip, QOY_01, 5) = "83405") ||
+                ((substr(ca_zip, QOY_01, 5) = "86475") ||
+                ((substr(ca_zip, QOY_01, 5) = "85392") ||
+                ((substr(ca_zip, QOY_01, 5) = "85460") ||
+                ((substr(ca_zip, QOY_01, 5) = "80348") ||
+                (substr(ca_zip, QOY_01, 5) = "81792"))))))))) ||
+               ((ca_state = "CA") ||
+               ((ca_state = "WA") || (ca_state = "GA")))) ||
+              (cs_sales_price > 500))) && (cs_sold_date_sk = d_date_sk)) &&
+            (d_qoy = QOY_01)) && (d_year = YEAR_01)),
+      join(true,
+        catalog_sales,
+        join(true, customer, join(true, customer_address, date_dim))))))
+

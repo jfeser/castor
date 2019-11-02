@@ -1,0 +1,32 @@
+select([s_store_name,
+        i_item_desc,
+        revenue,
+        i_current_price,
+        i_wholesale_cost,
+        i_brand],
+  filter(((((ss_store_sk = ss_store_sk) && (revenue <= (0.1 * ave))) &&
+          (s_store_sk = ss_store_sk)) && (i_item_sk = ss_item_sk)),
+    join(true,
+      store,
+      join(true,
+        item,
+        join(true,
+          groupby([ss_store_sk, avg(revenue) as ave],
+            [ss_store_sk],
+            filter(((ss_sold_date_sk = d_date_sk) &&
+                   ((d_month_seq <= DMS_01) && (DMS_01 <= (DMS_01 + 11)))),
+              groupby([ss_store_sk,
+                       ss_item_sk,
+                       sum(ss_sales_price) as revenue],
+                [ss_store_sk, ss_item_sk],
+                filter(((ss_sold_date_sk = d_date_sk) &&
+                       ((d_month_seq <= DMS_01) && (DMS_01 <= (DMS_01 + 11)))),
+                  join(true, store_sales, date_dim))))),
+          filter(((ss_sold_date_sk = d_date_sk) &&
+                 ((d_month_seq <= DMS_01) && (DMS_01 <= (DMS_01 + 11)))),
+            groupby([ss_store_sk, ss_item_sk, sum(ss_sales_price) as revenue],
+              [ss_store_sk, ss_item_sk],
+              filter(((ss_sold_date_sk = d_date_sk) &&
+                     ((d_month_seq <= DMS_01) && (DMS_01 <= (DMS_01 + 11)))),
+                join(true, store_sales, date_dim)))))))))
+

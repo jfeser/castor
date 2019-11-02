@@ -1,0 +1,138 @@
+select([],
+  join(true,
+    select([count() as h8_30_to_9],
+      filter((((((((ss_sold_time_sk = t_time_sk) &&
+                  (ss_hdemo_sk = hd_demo_sk)) && (ss_store_sk = s_store_sk))
+                && (t_hour = 8)) && (t_minute >= 30)) &&
+              ((((hd_dep_count = HOUR_03) &&
+                (hd_vehicle_count <= (HOUR_03 + 2))) ||
+               ((hd_dep_count = HOUR_02) &&
+               (hd_vehicle_count <= (HOUR_02 + 2)))) ||
+              ((hd_dep_count = HOUR_03) &&
+              (hd_vehicle_count <= (HOUR_03 + 2))))) &&
+             (s_store_name = "ese")),
+        join(true,
+          store_sales,
+          join(true, household_demographics, join(true, time_dim, store))))),
+    join(true,
+      select([count() as h9_to_9_30],
+        filter((((((((ss_sold_time_sk = t_time_sk) &&
+                    (ss_hdemo_sk = hd_demo_sk)) &&
+                   (ss_store_sk = s_store_sk)) && (t_hour = 9)) &&
+                 (t_minute < 30)) &&
+                ((((hd_dep_count = HOUR_03) &&
+                  (hd_vehicle_count <= (HOUR_03 + 2))) ||
+                 ((hd_dep_count = HOUR_02) &&
+                 (hd_vehicle_count <= (HOUR_02 + 2)))) ||
+                ((hd_dep_count = HOUR_03) &&
+                (hd_vehicle_count <= (HOUR_03 + 2))))) &&
+               (s_store_name = "ese")),
+          join(true,
+            store_sales,
+            join(true, household_demographics, join(true, time_dim, store))))),
+      join(true,
+        select([count() as h9_30_to_10],
+          filter((((((((ss_sold_time_sk = t_time_sk) &&
+                      (ss_hdemo_sk = hd_demo_sk)) &&
+                     (ss_store_sk = s_store_sk)) && (t_hour = 9)) &&
+                   (t_minute >= 30)) &&
+                  ((((hd_dep_count = HOUR_03) &&
+                    (hd_vehicle_count <= (HOUR_03 + 2))) ||
+                   ((hd_dep_count = HOUR_02) &&
+                   (hd_vehicle_count <= (HOUR_02 + 2)))) ||
+                  ((hd_dep_count = HOUR_03) &&
+                  (hd_vehicle_count <= (HOUR_03 + 2))))) &&
+                 (s_store_name = "ese")),
+            join(true,
+              store_sales,
+              join(true, household_demographics, join(true, time_dim, store))))),
+        join(true,
+          select([count() as h10_to_10_30],
+            filter((((((((ss_sold_time_sk = t_time_sk) &&
+                        (ss_hdemo_sk = hd_demo_sk)) &&
+                       (ss_store_sk = s_store_sk)) && (t_hour = 10)) &&
+                     (t_minute < 30)) &&
+                    ((((hd_dep_count = HOUR_03) &&
+                      (hd_vehicle_count <= (HOUR_03 + 2))) ||
+                     ((hd_dep_count = HOUR_02) &&
+                     (hd_vehicle_count <= (HOUR_02 + 2)))) ||
+                    ((hd_dep_count = HOUR_03) &&
+                    (hd_vehicle_count <= (HOUR_03 + 2))))) &&
+                   (s_store_name = "ese")),
+              join(true,
+                store_sales,
+                join(true,
+                  household_demographics,
+                  join(true, time_dim, store))))),
+          join(true,
+            select([count() as h10_30_to_11],
+              filter((((((((ss_sold_time_sk = t_time_sk) &&
+                          (ss_hdemo_sk = hd_demo_sk)) &&
+                         (ss_store_sk = s_store_sk)) && (t_hour = 10)) &&
+                       (t_minute >= 30)) &&
+                      ((((hd_dep_count = HOUR_03) &&
+                        (hd_vehicle_count <= (HOUR_03 + 2))) ||
+                       ((hd_dep_count = HOUR_02) &&
+                       (hd_vehicle_count <= (HOUR_02 + 2)))) ||
+                      ((hd_dep_count = HOUR_03) &&
+                      (hd_vehicle_count <= (HOUR_03 + 2))))) &&
+                     (s_store_name = "ese")),
+                join(true,
+                  store_sales,
+                  join(true,
+                    household_demographics,
+                    join(true, time_dim, store))))),
+            join(true,
+              select([count() as h11_to_11_30],
+                filter((((((((ss_sold_time_sk = t_time_sk) &&
+                            (ss_hdemo_sk = hd_demo_sk)) &&
+                           (ss_store_sk = s_store_sk)) && (t_hour = 11)) &&
+                         (t_minute < 30)) &&
+                        ((((hd_dep_count = HOUR_03) &&
+                          (hd_vehicle_count <= (HOUR_03 + 2))) ||
+                         ((hd_dep_count = HOUR_02) &&
+                         (hd_vehicle_count <= (HOUR_02 + 2)))) ||
+                        ((hd_dep_count = HOUR_03) &&
+                        (hd_vehicle_count <= (HOUR_03 + 2))))) &&
+                       (s_store_name = "ese")),
+                  join(true,
+                    store_sales,
+                    join(true,
+                      household_demographics,
+                      join(true, time_dim, store))))),
+              join(true,
+                select([count() as h11_30_to_12],
+                  filter((((((((ss_sold_time_sk = t_time_sk) &&
+                              (ss_hdemo_sk = hd_demo_sk)) &&
+                             (ss_store_sk = s_store_sk)) && (t_hour = 11)) &&
+                           (t_minute >= 30)) &&
+                          ((((hd_dep_count = HOUR_03) &&
+                            (hd_vehicle_count <= (HOUR_03 + 2))) ||
+                           ((hd_dep_count = HOUR_02) &&
+                           (hd_vehicle_count <= (HOUR_02 + 2)))) ||
+                          ((hd_dep_count = HOUR_03) &&
+                          (hd_vehicle_count <= (HOUR_03 + 2))))) &&
+                         (s_store_name = "ese")),
+                    join(true,
+                      store_sales,
+                      join(true,
+                        household_demographics,
+                        join(true, time_dim, store))))),
+                select([count() as h12_to_12_30],
+                  filter((((((((ss_sold_time_sk = t_time_sk) &&
+                              (ss_hdemo_sk = hd_demo_sk)) &&
+                             (ss_store_sk = s_store_sk)) && (t_hour = 12)) &&
+                           (t_minute < 30)) &&
+                          ((((hd_dep_count = HOUR_03) &&
+                            (hd_vehicle_count <= (HOUR_03 + 2))) ||
+                           ((hd_dep_count = HOUR_02) &&
+                           (hd_vehicle_count <= (HOUR_02 + 2)))) ||
+                          ((hd_dep_count = HOUR_03) &&
+                          (hd_vehicle_count <= (HOUR_03 + 2))))) &&
+                         (s_store_name = "ese")),
+                    join(true,
+                      store_sales,
+                      join(true,
+                        household_demographics,
+                        join(true, time_dim, store)))))))))))))
+

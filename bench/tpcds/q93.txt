@@ -1,0 +1,16 @@
+groupby([ss_customer_sk, sum(act_sales) as sumsales],
+  [ss_customer_sk],
+  select([ss_item_sk,
+          ss_ticket_number,
+          ss_customer_sk,
+          (if not((sr_return_quantity = null)) then ((ss_quantity -
+                                                     sr_return_quantity) *
+                                                    ss_sales_price) else (ss_quantity
+                                                                    *
+                                                                    ss_sales_price)) as act_sales],
+    filter(((sr_reason_sk = r_reason_sk) && (r_reason_desc = REASON_01)),
+      join(((sr_item_sk = ss_item_sk) &&
+           (sr_ticket_number = ss_ticket_number)),
+        store_sales,
+        join(true, store_returns, reason)))))
+
