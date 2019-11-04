@@ -84,15 +84,7 @@ module Meta = struct
     { n with meta = Univ_map.change meta ~f k }
 end
 
-let valid_regex = Str.regexp "^[a-zA-Z_][a-zA-Z0-9_]*$"
-
-let check_name n =
-  if not (Str.string_match valid_regex n 0) then
-    Error.(create "Invalid name." n [%sexp_of: string] |> raise)
-
 let create ?scope ?type_ name =
-  check_name name;
-  Option.iter ~f:check_name scope;
   let meta = Univ_map.empty in
   let meta =
     match type_ with Some t -> Univ_map.set meta Meta.type_ t | None -> meta
