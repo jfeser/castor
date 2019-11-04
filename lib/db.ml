@@ -127,7 +127,7 @@ let relation conn r_name =
                    else StringT { nullable; padded = false }
                  else FixedT { nullable }
              | "real" | "double" -> FixedT { nullable }
-             | "timestamp without time zone" ->
+             | "timestamp without time zone" | "time without time zone" ->
                  StringT { nullable; padded = false }
              | s -> failwith (Printf.sprintf "Unknown dtype %s" s)
            in
