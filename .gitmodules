@@ -1,3 +1,3 @@
 [submodule "bench/cozy/cozy"]
 	path = bench/cozy/cozy
-	url = https://github.com/CozySynthesizer/cozy.git
+	url = git@github.com:jfeser/cozy.git
