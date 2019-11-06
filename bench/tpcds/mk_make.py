@@ -42,7 +42,7 @@ def param_values_sql(b):
     return [v for (_, v) in b['params'].items()]
 
 def in_file(b):
-    return '$(BENCH_DIR)/%s.txt' % b['name']
+    return '$(BENCH_DIR)/q%s.txt' % b['name']
 
 def out_file(b):
     return '%s-opt.txt' % b['name']
@@ -52,7 +52,7 @@ def out_dir(b):
 
 
 print('SHELL:=/bin/bash')
-print('DB=postgresql:///tpcds_1k')
+print('DB=postgresql:///tpcds1')
 print('DBC=postgresql:///tpcds1')
 print('OPT_PATH=../../bin/opt.exe')
 print('CASTOR_PATH=../../../castor/')
@@ -64,7 +64,7 @@ if DEBUG:
     print('CFLAGS=-debug -v')
 else:
     print('CFLAGS=-v')
-print('BENCH_DIR=../../../castor/bench/tpch/')
+print('BENCH_DIR=../../../castor/bench/tpcds/')
 print('TIME_PER_BENCH=1')
 print('all: opt compile run time')
 print('''
