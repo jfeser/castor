@@ -10,13 +10,13 @@ select([c_customer_id,
         c_login,
         c_email_address,
         c_last_review_date_sk,
-        ctr_total_return],
-  filter(((((ctr_total_return >
-            (select([(avg(ctr_total_return) * 1.2)],
-               filter((ctr_state = ctr_state),
-                 filter((((wr_returned_date_sk = d_date_sk) &&
-                         (d_year = YEAR_01)) &&
-                        (wr_returning_addr_sk = ca_address_sk)),
+        ctr2_ctr_total_return],
+  filter(((((ctr1_ctr_total_return >
+            (select([(avg(ctr2_ctr_total_return) * 1.2)],
+               filter((ctr1_ctr_state = ctr2_ctr_state),
+                 select([ctr_customer_sk as ctr2_ctr_customer_sk,
+                         ctr_state as ctr2_ctr_state,
+                         ctr_total_return as ctr2_ctr_total_return],
                    groupby([wr_returning_customer_sk as ctr_customer_sk,
                             ca_state as ctr_state,
                             sum(wr_return_amt) as ctr_total_return],
@@ -28,10 +28,11 @@ select([c_customer_id,
                          web_returns,
                          join(true, date_dim, customer_address))))))))) &&
            (ca_address_sk = c_current_addr_sk)) && (ca_state = STATE_01)) &&
-         (ctr_customer_sk = c_customer_sk)),
+         (ctr1_ctr_customer_sk = c_customer_sk)),
     join(true,
-      filter((((wr_returned_date_sk = d_date_sk) && (d_year = YEAR_01)) &&
-             (wr_returning_addr_sk = ca_address_sk)),
+      select([ctr_customer_sk as ctr1_ctr_customer_sk,
+              ctr_state as ctr1_ctr_state,
+              ctr_total_return as ctr1_ctr_total_return],
         groupby([wr_returning_customer_sk as ctr_customer_sk,
                  ca_state as ctr_state,
                  sum(wr_return_amt) as ctr_total_return],

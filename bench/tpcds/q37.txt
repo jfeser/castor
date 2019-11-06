@@ -1,27 +1,17 @@
-filter(((((((((i_current_price <= PRICE_01) && (PRICE_01 <= (PRICE_01 + 30)))
-            && (inv_item_sk = i_item_sk)) && (d_date_sk = inv_date_sk)) &&
-          ((d_date <= INVDATE_01) && (INVDATE_01 <= (INVDATE_01 + day(60)))))
-         &&
-         ((i_manufact_id = MANUFACT_ID_01) ||
-         ((i_manufact_id = MANUFACT_ID_02) ||
-         ((i_manufact_id = MANUFACT_ID_03) ||
-         (i_manufact_id = MANUFACT_ID_04))))) &&
-        ((inv_quantity_on_hand <= 100) && (100 <= 500))) &&
-       (cs_item_sk = i_item_sk)),
-  groupby([i_item_id, i_item_desc, i_current_price],
-    [i_item_id, i_item_desc, i_current_price],
-    filter(((((((((i_current_price <= PRICE_01) &&
-                 (PRICE_01 <= (PRICE_01 + 30))) && (inv_item_sk = i_item_sk))
-               && (d_date_sk = inv_date_sk)) &&
-              ((d_date <= INVDATE_01) &&
-              (INVDATE_01 <= (INVDATE_01 + day(60))))) &&
-             ((i_manufact_id = MANUFACT_ID_01) ||
-             ((i_manufact_id = MANUFACT_ID_02) ||
-             ((i_manufact_id = MANUFACT_ID_03) ||
-             (i_manufact_id = MANUFACT_ID_04))))) &&
-            ((inv_quantity_on_hand <= 100) && (100 <= 500))) &&
-           (cs_item_sk = i_item_sk)),
-      join(true,
-        item,
-        join(true, inventory, join(true, date_dim, catalog_sales))))))
+groupby([i_item_id, i_item_desc, i_current_price],
+  [i_item_id, i_item_desc, i_current_price],
+  filter(((((((((i_current_price <= PRICE_01) &&
+               (PRICE_01 <= (PRICE_01 + 30))) && (inv_item_sk = i_item_sk))
+             && (d_date_sk = inv_date_sk)) &&
+            ((d_date <= INVDATE_01) &&
+            (INVDATE_01 <= (INVDATE_01 + day(60))))) &&
+           ((i_manufact_id = MANUFACT_ID_01) ||
+           ((i_manufact_id = MANUFACT_ID_02) ||
+           ((i_manufact_id = MANUFACT_ID_03) ||
+           (i_manufact_id = MANUFACT_ID_04))))) &&
+          ((inv_quantity_on_hand <= 100) && (100 <= 500))) &&
+         (cs_item_sk = i_item_sk)),
+    join(true,
+      item,
+      join(true, inventory, join(true, date_dim, catalog_sales)))))
 

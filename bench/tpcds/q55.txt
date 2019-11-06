@@ -1,12 +1,9 @@
-filter((((((d_date_sk = ss_sold_date_sk) && (ss_item_sk = i_item_sk)) &&
-         (i_manager_id = MANAGER_01)) && (d_moy = MONTH_01)) &&
-       (d_year = YEAR_01)),
-  groupby([i_brand_id as brand_id,
-           i_brand as brand,
-           sum(ss_ext_sales_price) as ext_price],
-    [i_brand, i_brand_id],
-    filter((((((d_date_sk = ss_sold_date_sk) && (ss_item_sk = i_item_sk)) &&
-             (i_manager_id = MANAGER_01)) && (d_moy = MONTH_01)) &&
-           (d_year = YEAR_01)),
-      join(true, date_dim, join(true, store_sales, item)))))
+groupby([i_brand_id as brand_id,
+         i_brand as brand,
+         sum(ss_ext_sales_price) as ext_price],
+  [i_brand, i_brand_id],
+  filter((((((d_date_sk = ss_sold_date_sk) && (ss_item_sk = i_item_sk)) &&
+           (i_manager_id = MANAGER_01)) && (d_moy = MONTH_01)) &&
+         (d_year = YEAR_01)),
+    join(true, date_dim, join(true, store_sales, item))))
 

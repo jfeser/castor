@@ -1,41 +1,79 @@
-select([i_product_name],
-  filter((((i_manufact_id <= MANUFACT_01) &&
-          (MANUFACT_01 <= (MANUFACT_01 + 40))) &&
-         ((select([count() as item_cnt],
-             filter((((i_manufact = i_manufact) &&
-                     (((((((i_category = "Women") &&
-                          ((i_color = COLOR_01) || (i_color = COLOR_02))) &&
-                         ((i_units = SIZE_01) || (i_units = UNIT_02))) &&
-                        ((i_size = SIZE_01) || (i_size = SIZE_02))) ||
-                       ((((i_category = "Women") &&
-                         ((i_color = COLOR_03) || (i_color = COLOR_04))) &&
-                        ((i_units = UNIT_03) || (i_units = UNIT_04))) &&
-                       ((i_size = SIZE_03) || (i_size = SIZE_04)))) ||
-                      ((((i_category = "Men") &&
-                        ((i_color = COLOR_05) || (i_color = COLOR_06))) &&
-                       ((i_units = UNIT_05) || (i_units = UNIT_06))) &&
-                      ((i_size = SIZE_05) || (i_size = SIZE_06)))) ||
-                     ((((i_category = "Men") &&
-                       ((i_color = COLOR_07) || (i_color = COLOR_08))) &&
-                      ((i_units = UNIT_07) || (i_units = UNIT_08))) &&
-                     ((i_size = SIZE_01) || (i_size = SIZE_02))))) ||
-                    ((i_manufact = i_manufact) &&
-                    (((((((i_category = "Women") &&
-                         ((i_color = COLOR_09) || (i_color = COLOR_10))) &&
-                        ((i_units = UNIT_09) || (i_units = UNIT_10))) &&
-                       ((i_size = SIZE_01) || (i_size = SIZE_02))) ||
-                      ((((i_category = "Women") &&
-                        ((i_color = COLOR_11) || (i_color = COLOR_12))) &&
-                       ((i_units = UNIT_11) || (i_units = UNIT_12))) &&
-                      ((i_size = SIZE_03) || (i_size = SIZE_04)))) ||
-                     ((((i_category = "Men") &&
-                       ((i_color = COLOR_13) || (i_color = COLOR_14))) &&
-                      ((i_units = UNIT_13) || (i_units = UNIT_14))) &&
-                     ((i_size = SIZE_05) || (i_size = SIZE_06)))) ||
-                    ((((i_category = "Men") &&
-                      ((i_color = COLOR_15) || (i_color = COLOR_16))) &&
-                     ((i_units = UNIT_15) || (i_units = UNIT_16))) &&
-                    ((i_size = SIZE_01) || (i_size = SIZE_02)))))),
-               item))) > 0)),
-    item))
+dedup(
+  select([i1_i_product_name],
+    filter((((i1_i_manufact_id <= MANUFACT_01) &&
+            (MANUFACT_01 <= (MANUFACT_01 + 40))) &&
+           ((select([count() as item_cnt],
+               filter((((i1_i_manufact = i1_i_manufact) &&
+                       (((((((i1_i_category = "Women") &&
+                            ((i1_i_color = COLOR_01) ||
+                            (i1_i_color = COLOR_02))) &&
+                           ((i1_i_units = SIZE_01) || (i1_i_units = UNIT_02)))
+                          &&
+                          ((i1_i_size = SIZE_01) || (i1_i_size = SIZE_02)))
+                         ||
+                         ((((i1_i_category = "Women") &&
+                           ((i1_i_color = COLOR_03) ||
+                           (i1_i_color = COLOR_04))) &&
+                          ((i1_i_units = UNIT_03) || (i1_i_units = UNIT_04)))
+                         && ((i1_i_size = SIZE_03) || (i1_i_size = SIZE_04))))
+                        ||
+                        ((((i1_i_category = "Men") &&
+                          ((i1_i_color = COLOR_05) ||
+                          (i1_i_color = COLOR_06))) &&
+                         ((i1_i_units = UNIT_05) || (i1_i_units = UNIT_06)))
+                        && ((i1_i_size = SIZE_05) || (i1_i_size = SIZE_06))))
+                       ||
+                       ((((i1_i_category = "Men") &&
+                         ((i1_i_color = COLOR_07) || (i1_i_color = COLOR_08)))
+                        &&
+                        ((i1_i_units = UNIT_07) || (i1_i_units = UNIT_08)))
+                       && ((i1_i_size = SIZE_01) || (i1_i_size = SIZE_02)))))
+                      ||
+                      ((i1_i_manufact = i1_i_manufact) &&
+                      (((((((i1_i_category = "Women") &&
+                           ((i1_i_color = COLOR_09) ||
+                           (i1_i_color = COLOR_10))) &&
+                          ((i1_i_units = UNIT_09) || (i1_i_units = UNIT_10)))
+                         && ((i1_i_size = SIZE_01) || (i1_i_size = SIZE_02)))
+                        ||
+                        ((((i1_i_category = "Women") &&
+                          ((i1_i_color = COLOR_11) ||
+                          (i1_i_color = COLOR_12))) &&
+                         ((i1_i_units = UNIT_11) || (i1_i_units = UNIT_12)))
+                        && ((i1_i_size = SIZE_03) || (i1_i_size = SIZE_04))))
+                       ||
+                       ((((i1_i_category = "Men") &&
+                         ((i1_i_color = COLOR_13) || (i1_i_color = COLOR_14)))
+                        &&
+                        ((i1_i_units = UNIT_13) || (i1_i_units = UNIT_14)))
+                       && ((i1_i_size = SIZE_05) || (i1_i_size = SIZE_06))))
+                      ||
+                      ((((i1_i_category = "Men") &&
+                        ((i1_i_color = COLOR_15) || (i1_i_color = COLOR_16)))
+                       && ((i1_i_units = UNIT_15) || (i1_i_units = UNIT_16)))
+                      && ((i1_i_size = SIZE_01) || (i1_i_size = SIZE_02)))))),
+                 item))) > 0)),
+      select([i_item_sk as i1_i_item_sk,
+              i_item_id as i1_i_item_id,
+              i_rec_start_date as i1_i_rec_start_date,
+              i_rec_end_date as i1_i_rec_end_date,
+              i_item_desc as i1_i_item_desc,
+              i_current_price as i1_i_current_price,
+              i_wholesale_cost as i1_i_wholesale_cost,
+              i_brand_id as i1_i_brand_id,
+              i_brand as i1_i_brand,
+              i_class_id as i1_i_class_id,
+              i_class as i1_i_class,
+              i_category_id as i1_i_category_id,
+              i_category as i1_i_category,
+              i_manufact_id as i1_i_manufact_id,
+              i_manufact as i1_i_manufact,
+              i_size as i1_i_size,
+              i_formulation as i1_i_formulation,
+              i_color as i1_i_color,
+              i_units as i1_i_units,
+              i_container as i1_i_container,
+              i_manager_id as i1_i_manager_id,
+              i_product_name as i1_i_product_name],
+        item))))
 

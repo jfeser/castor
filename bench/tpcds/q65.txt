@@ -1,29 +1,34 @@
 select([s_store_name,
         i_item_desc,
-        revenue,
+        sc_revenue,
         i_current_price,
         i_wholesale_cost,
         i_brand],
-  filter(((((ss_store_sk = ss_store_sk) && (revenue <= (0.1 * ave))) &&
-          (s_store_sk = ss_store_sk)) && (i_item_sk = ss_item_sk)),
+  filter(((((sb_ss_store_sk = sc_ss_store_sk) &&
+           (sc_revenue <= (0.1 * sb_ave))) && (s_store_sk = sc_ss_store_sk))
+         && (i_item_sk = sc_ss_item_sk)),
     join(true,
       store,
       join(true,
         item,
         join(true,
-          groupby([ss_store_sk, avg(revenue) as ave],
-            [ss_store_sk],
-            filter(((ss_sold_date_sk = d_date_sk) &&
-                   ((d_month_seq <= DMS_01) && (DMS_01 <= (DMS_01 + 11)))),
-              groupby([ss_store_sk,
-                       ss_item_sk,
-                       sum(ss_sales_price) as revenue],
-                [ss_store_sk, ss_item_sk],
-                filter(((ss_sold_date_sk = d_date_sk) &&
-                       ((d_month_seq <= DMS_01) && (DMS_01 <= (DMS_01 + 11)))),
-                  join(true, store_sales, date_dim))))),
-          filter(((ss_sold_date_sk = d_date_sk) &&
-                 ((d_month_seq <= DMS_01) && (DMS_01 <= (DMS_01 + 11)))),
+          select([sc_ss_store_sk as sb_sc_ss_store_sk, ave as sb_ave],
+            groupby([sc_ss_store_sk, avg(sa_revenue) as ave],
+              [sc_ss_store_sk],
+              select([sc_ss_store_sk as sa_sc_ss_store_sk,
+                      sc_ss_item_sk as sa_sc_ss_item_sk,
+                      revenue as sa_revenue],
+                groupby([sc_ss_store_sk,
+                         sc_ss_item_sk,
+                         sum(ss_sales_price) as revenue],
+                  [sc_ss_store_sk, sc_ss_item_sk],
+                  filter(((ss_sold_date_sk = d_date_sk) &&
+                         ((d_month_seq <= DMS_01) &&
+                         (DMS_01 <= (DMS_01 + 11)))),
+                    join(true, store_sales, date_dim)))))),
+          select([ss_store_sk as sc_ss_store_sk,
+                  ss_item_sk as sc_ss_item_sk,
+                  revenue as sc_revenue],
             groupby([ss_store_sk, ss_item_sk, sum(ss_sales_price) as revenue],
               [ss_store_sk, ss_item_sk],
               filter(((ss_sold_date_sk = d_date_sk) &&

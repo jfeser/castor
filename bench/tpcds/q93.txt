@@ -1,16 +1,20 @@
-groupby([ss_customer_sk, sum(act_sales) as sumsales],
-  [ss_customer_sk],
-  select([ss_item_sk,
-          ss_ticket_number,
-          ss_customer_sk,
-          (if not((sr_return_quantity = null)) then ((ss_quantity -
-                                                     sr_return_quantity) *
-                                                    ss_sales_price) else (ss_quantity
+groupby([t_ss_customer_sk, sum(t_act_sales) as sumsales],
+  [t_ss_customer_sk],
+  select([ss_item_sk as t_ss_item_sk,
+          ss_ticket_number as t_ss_ticket_number,
+          ss_customer_sk as t_ss_customer_sk,
+          act_sales as t_act_sales],
+    select([ss_item_sk,
+            ss_ticket_number,
+            ss_customer_sk,
+            (if not((sr_return_quantity = null)) then ((ss_quantity -
+                                                       sr_return_quantity) *
+                                                      ss_sales_price) else (ss_quantity
                                                                     *
                                                                     ss_sales_price)) as act_sales],
-    filter(((sr_reason_sk = r_reason_sk) && (r_reason_desc = REASON_01)),
-      join(((sr_item_sk = ss_item_sk) &&
-           (sr_ticket_number = ss_ticket_number)),
-        store_sales,
-        join(true, store_returns, reason)))))
+      filter(((sr_reason_sk = r_reason_sk) && (r_reason_desc = REASON_01)),
+        join(((sr_item_sk = ss_item_sk) &&
+             (sr_ticket_number = ss_ticket_number)),
+          store_sales,
+          join(true, store_returns, reason))))))
 

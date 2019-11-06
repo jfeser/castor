@@ -1,24 +1,18 @@
-filter((((((((((ss_sold_date_sk = d_date_sk) && (ss_item_sk = i_item_sk)) &&
-             (ss_cdemo_sk = cd_demo_sk)) && (ss_promo_sk = p_promo_sk)) &&
-           (cd_gender = MS_01)) && (cd_marital_status = MS_01)) &&
-         (cd_education_status = ES_01)) &&
-        ((p_channel_email = "N") || (p_channel_event = "N"))) &&
-       (d_year = YEAR_01)),
-  groupby([i_item_id,
-           avg(ss_quantity) as agg1,
-           avg(ss_list_price) as agg2,
-           avg(ss_coupon_amt) as agg3,
-           avg(ss_sales_price) as agg4],
-    [i_item_id],
-    filter((((((((((ss_sold_date_sk = d_date_sk) && (ss_item_sk = i_item_sk))
-                 && (ss_cdemo_sk = cd_demo_sk)) &&
-                (ss_promo_sk = p_promo_sk)) && (cd_gender = MS_01)) &&
-              (cd_marital_status = MS_01)) && (cd_education_status = ES_01))
-            && ((p_channel_email = "N") || (p_channel_event = "N"))) &&
-           (d_year = YEAR_01)),
+groupby([i_item_id,
+         avg(ss_quantity) as agg1,
+         avg(ss_list_price) as agg2,
+         avg(ss_coupon_amt) as agg3,
+         avg(ss_sales_price) as agg4],
+  [i_item_id],
+  filter((((((((((ss_sold_date_sk = d_date_sk) && (ss_item_sk = i_item_sk))
+               && (ss_cdemo_sk = cd_demo_sk)) && (ss_promo_sk = p_promo_sk))
+             && (cd_gender = MS_01)) && (cd_marital_status = MS_01)) &&
+           (cd_education_status = ES_01)) &&
+          ((p_channel_email = "N") || (p_channel_event = "N"))) &&
+         (d_year = YEAR_01)),
+    join(true,
+      store_sales,
       join(true,
-        store_sales,
-        join(true,
-          customer_demographics,
-          join(true, date_dim, join(true, item, promotion)))))))
+        customer_demographics,
+        join(true, date_dim, join(true, item, promotion))))))
 

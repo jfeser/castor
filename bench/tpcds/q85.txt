@@ -1,87 +1,70 @@
-filter((((((((((((ws_web_page_sk = wp_web_page_sk) &&
-                (ws_item_sk = wr_item_sk)) &&
-               (ws_order_number = wr_order_number)) &&
-              (ws_sold_date_sk = d_date_sk)) && (d_year = YEAR_01)) &&
-            (cd_demo_sk = wr_refunded_cdemo_sk)) &&
-           (cd_demo_sk = wr_returning_cdemo_sk)) &&
-          (ca_address_sk = wr_refunded_addr_sk)) &&
-         (r_reason_sk = wr_reason_sk)) &&
-        (((((((cd_marital_status = MS_01) &&
-             (cd_marital_status = cd_marital_status)) &&
-            (cd_education_status = ES_01)) &&
-           (cd_education_status = cd_education_status)) &&
-          ((ws_sales_price <= 100.0) && (100.0 <= 150.0))) ||
-         (((((cd_marital_status = MS_02) &&
-            (cd_marital_status = cd_marital_status)) &&
-           (cd_education_status = ES_02)) &&
-          (cd_education_status = cd_education_status)) &&
-         ((ws_sales_price <= 50.0) && (50.0 <= 100.0)))) ||
-        (((((cd_marital_status = MS_03) &&
-           (cd_marital_status = cd_marital_status)) &&
-          (cd_education_status = ES_03)) &&
-         (cd_education_status = cd_education_status)) &&
-        ((ws_sales_price <= 150.0) && (150.0 <= 200.0))))) &&
-       (((((ca_country = "United States") &&
-          ((ca_state = STATE_01) ||
-          ((ca_state = STATE_02) || (ca_state = STATE_03)))) &&
-         ((ws_net_profit <= 100) && (100 <= 200))) ||
-        (((ca_country = "United States") &&
-         ((ca_state = STATE_04) ||
-         ((ca_state = STATE_05) || (ca_state = STATE_06)))) &&
-        ((ws_net_profit <= 150) && (150 <= 300)))) ||
-       (((ca_country = "United States") &&
-        ((ca_state = STATE_07) ||
-        ((ca_state = STATE_08) || (ca_state = STATE_09)))) &&
-       ((ws_net_profit <= 50) && (50 <= 250))))),
-  groupby([substr(r_reason_desc, 1, 20),
-           avg(ws_quantity),
-           avg(wr_refunded_cash),
-           avg(wr_fee)],
-    [r_reason_desc],
-    filter((((((((((((ws_web_page_sk = wp_web_page_sk) &&
-                    (ws_item_sk = wr_item_sk)) &&
-                   (ws_order_number = wr_order_number)) &&
-                  (ws_sold_date_sk = d_date_sk)) && (d_year = YEAR_01)) &&
-                (cd_demo_sk = wr_refunded_cdemo_sk)) &&
-               (cd_demo_sk = wr_returning_cdemo_sk)) &&
-              (ca_address_sk = wr_refunded_addr_sk)) &&
-             (r_reason_sk = wr_reason_sk)) &&
-            (((((((cd_marital_status = MS_01) &&
-                 (cd_marital_status = cd_marital_status)) &&
-                (cd_education_status = ES_01)) &&
-               (cd_education_status = cd_education_status)) &&
-              ((ws_sales_price <= 100.0) && (100.0 <= 150.0))) ||
-             (((((cd_marital_status = MS_02) &&
-                (cd_marital_status = cd_marital_status)) &&
-               (cd_education_status = ES_02)) &&
-              (cd_education_status = cd_education_status)) &&
-             ((ws_sales_price <= 50.0) && (50.0 <= 100.0)))) ||
-            (((((cd_marital_status = MS_03) &&
-               (cd_marital_status = cd_marital_status)) &&
-              (cd_education_status = ES_03)) &&
-             (cd_education_status = cd_education_status)) &&
-            ((ws_sales_price <= 150.0) && (150.0 <= 200.0))))) &&
-           (((((ca_country = "United States") &&
-              ((ca_state = STATE_01) ||
-              ((ca_state = STATE_02) || (ca_state = STATE_03)))) &&
-             ((ws_net_profit <= 100) && (100 <= 200))) ||
-            (((ca_country = "United States") &&
-             ((ca_state = STATE_04) ||
-             ((ca_state = STATE_05) || (ca_state = STATE_06)))) &&
-            ((ws_net_profit <= 150) && (150 <= 300)))) ||
-           (((ca_country = "United States") &&
-            ((ca_state = STATE_07) ||
-            ((ca_state = STATE_08) || (ca_state = STATE_09)))) &&
-           ((ws_net_profit <= 50) && (50 <= 250))))),
+groupby([substr(r_reason_desc, 1, 20),
+         avg(ws_quantity),
+         avg(wr_refunded_cash),
+         avg(wr_fee)],
+  [r_reason_desc],
+  filter((((((((((((ws_web_page_sk = wp_web_page_sk) &&
+                  (ws_item_sk = wr_item_sk)) &&
+                 (ws_order_number = wr_order_number)) &&
+                (ws_sold_date_sk = d_date_sk)) && (d_year = YEAR_01)) &&
+              (cd1_cd_demo_sk = wr_refunded_cdemo_sk)) &&
+             (cd2_cd_demo_sk = wr_returning_cdemo_sk)) &&
+            (ca_address_sk = wr_refunded_addr_sk)) &&
+           (r_reason_sk = wr_reason_sk)) &&
+          (((((((cd1_cd_marital_status = MS_01) &&
+               (cd1_cd_marital_status = cd2_cd_marital_status)) &&
+              (cd1_cd_education_status = ES_01)) &&
+             (cd1_cd_education_status = cd2_cd_education_status)) &&
+            ((ws_sales_price <= 100.0) && (100.0 <= 150.0))) ||
+           (((((cd1_cd_marital_status = MS_02) &&
+              (cd1_cd_marital_status = cd2_cd_marital_status)) &&
+             (cd1_cd_education_status = ES_02)) &&
+            (cd1_cd_education_status = cd2_cd_education_status)) &&
+           ((ws_sales_price <= 50.0) && (50.0 <= 100.0)))) ||
+          (((((cd1_cd_marital_status = MS_03) &&
+             (cd1_cd_marital_status = cd2_cd_marital_status)) &&
+            (cd1_cd_education_status = ES_03)) &&
+           (cd1_cd_education_status = cd2_cd_education_status)) &&
+          ((ws_sales_price <= 150.0) && (150.0 <= 200.0))))) &&
+         (((((ca_country = "United States") &&
+            ((ca_state = STATE_01) ||
+            ((ca_state = STATE_02) || (ca_state = STATE_03)))) &&
+           ((ws_net_profit <= 100) && (100 <= 200))) ||
+          (((ca_country = "United States") &&
+           ((ca_state = STATE_04) ||
+           ((ca_state = STATE_05) || (ca_state = STATE_06)))) &&
+          ((ws_net_profit <= 150) && (150 <= 300)))) ||
+         (((ca_country = "United States") &&
+          ((ca_state = STATE_07) ||
+          ((ca_state = STATE_08) || (ca_state = STATE_09)))) &&
+         ((ws_net_profit <= 50) && (50 <= 250))))),
+    join(true,
+      web_sales,
       join(true,
-        web_sales,
+        web_returns,
         join(true,
-          web_returns,
+          web_page,
           join(true,
-            web_page,
+            select([cd_demo_sk as cd1_cd_demo_sk,
+                    cd_gender as cd1_cd_gender,
+                    cd_marital_status as cd1_cd_marital_status,
+                    cd_education_status as cd1_cd_education_status,
+                    cd_purchase_estimate as cd1_cd_purchase_estimate,
+                    cd_credit_rating as cd1_cd_credit_rating,
+                    cd_dep_count as cd1_cd_dep_count,
+                    cd_dep_employed_count as cd1_cd_dep_employed_count,
+                    cd_dep_college_count as cd1_cd_dep_college_count],
+              customer_demographics),
             join(true,
-              customer_demographics,
-              join(true,
-                customer_demographics,
-                join(true, customer_address, join(true, date_dim, reason))))))))))
+              select([cd_demo_sk as cd2_cd_demo_sk,
+                      cd_gender as cd2_cd_gender,
+                      cd_marital_status as cd2_cd_marital_status,
+                      cd_education_status as cd2_cd_education_status,
+                      cd_purchase_estimate as cd2_cd_purchase_estimate,
+                      cd_credit_rating as cd2_cd_credit_rating,
+                      cd_dep_count as cd2_cd_dep_count,
+                      cd_dep_employed_count as cd2_cd_dep_employed_count,
+                      cd_dep_college_count as cd2_cd_dep_college_count],
+                customer_demographics),
+              join(true, customer_address, join(true, date_dim, reason)))))))))
 
