@@ -77,8 +77,6 @@ module T = struct
 
   and order = Asc | Desc
 
-  and relation = { r_name : string; r_schema : (Name.t[@opaque]) list option }
-
   and depjoin = { d_lhs : t; d_alias : scope; d_rhs : t }
 
   and join = { pred : pred; r1 : t; r2 : t }
@@ -95,7 +93,7 @@ module T = struct
     | GroupBy of (pred list * (Name.t[@opaque]) list * t)
     | OrderBy of order_by
     | Dedup of t
-    | Relation of relation
+    | Relation of (Relation.t[@opaque])
     | Range of pred * pred
     | AEmpty
     | AScalar of pred

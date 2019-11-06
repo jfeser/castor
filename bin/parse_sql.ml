@@ -3,18 +3,7 @@ open Castor
 open Abslayout
 
 type castor_binop =
-  [ `Add
-  | `And
-  | `Div
-  | `Eq
-  | `Ge
-  | `Gt
-  | `Le
-  | `Lt
-  | `Mod
-  | `Mul
-  | `Or
-  | `Sub ]
+  [ `Add | `And | `Div | `Eq | `Ge | `Gt | `Le | `Lt | `Mod | `Mul | `Or | `Sub ]
 
 type castor_unop = [ `Not | `Day | `Year ]
 
@@ -78,138 +67,207 @@ let unsub ps r =
             m "Param %a not replaced. Could not find %a." Pred.pp k Pred.pp v));
   r'
 
-let conv_binop = function
-  | `And -> And
-  | `Or -> Or
-  | `Add -> Add
-  | `Sub -> Sub
-  | `Mul -> Mul
-  | `Div -> Div
-  | `Mod -> Mod
-  | `Eq -> Eq
-  | `Lt -> Lt
-  | `Le -> Le
-  | `Gt -> Gt
-  | `Ge -> Ge
+module Sql = Sqlgg.Sql
 
-let conv_unop = function `Not -> Not | `Day -> Day | `Year -> Year
+class conv_sql db =
+  object (self : 'a)
+    val mutable aliases = Set.empty (module String)
 
-let rec conv_stmt s =
-  let module Sql = Sqlgg.Sql in
-  if Option.is_some s.Sql.limit then
-    Log.warn (fun m -> m "Limit clauses not supported. Dropping.");
-  let rec conv_order _ q =
-    Log.warn (fun m -> m "Dropping orderby clause.");
-    q
-  and conv_filter f q =
-    match f with Some e -> filter (conv_expr e) q | None -> q
-  and conv_source (s, _) =
-    match s with
-    | `Select s -> conv_stmt s
-    | `Table t -> relation { r_name = t; r_schema = None }
-    | `Nested n -> conv_nested n
-  and conv_nested ((q, qs) : _ Sql.nested) =
-    let open Pred in
-    match qs with
-    | [] -> conv_source q
-    | (q', j) :: qs' -> (
-        match j with
-        | `Cross | `Default ->
-            join (bool true) (conv_source q) (conv_nested (q', qs'))
-        | `Search e ->
-            join (conv_expr e) (conv_source q) (conv_nested (q', qs'))
-        | `Using _ | `Natural -> failwith "Join type not supported" )
-  and conv_expr e =
-    match e with
-    | Sql.Value v -> (
-        match v with
-        | Int x -> Int x
-        | Date s -> Date (Date.of_string s)
-        | String s -> String s
-        | Bool x -> Bool x
-        | Float x -> Fixed (Fixed_point.of_float x)
-        | Null -> Null None )
-    | Param _ | Choices (_, _) | Inserted _ | Sequence _ ->
-        failwith "unsupported"
-    | Case (branches, else_) ->
-        let else_ =
-          Option.map else_ ~f:conv_expr |> Option.value ~default:(Null None)
-        in
-        let rec to_pred = function
-          | [] -> failwith "Empty case"
-          | [ (p, x) ] -> If (conv_expr p, conv_expr x, else_)
-          | (p, x) :: bs -> If (conv_expr p, conv_expr x, to_pred bs)
-        in
-        to_pred branches
-    | Fun (op, args) -> (
-        let open Pred in
-        match (op, args) with
-        | `In, [ x; Sequence vs ] ->
-            let x = conv_expr x in
-            let rec to_pred = function
-              | [] -> Bool false
-              | [ v ] -> binop (Eq, x, conv_expr v)
-              | v :: vs -> binop (Or, binop (Eq, x, conv_expr v), to_pred vs)
-            in
-            to_pred vs
-        | `IsNull, [ x ] -> binop (Eq, conv_expr x, Null None)
-        | `In, [ x; Select (s, _) ] ->
-            let q = conv_stmt s in
-            let f = Schema.schema q |> List.hd_exn in
-            Exists (filter (binop (Eq, conv_expr x, Name f)) q)
-        | (#castor_binop as op), [ e; e' ] ->
-            binop (conv_binop op, conv_expr e, conv_expr e')
-        | #castor_binop, _ -> failwith "Expected two arguments"
-        | `Neq, [ e; e' ] -> unop (Not, binop (Eq, conv_expr e, conv_expr e'))
-        | (#castor_unop as op), [ e ] -> unop (conv_unop op, conv_expr e)
-        | (`Neq | #castor_unop), _ -> failwith "Expected one argument"
-        | `Count, _ -> Count
-        | `Min, [ e ] -> Min (conv_expr e)
-        | `Max, [ e ] -> Max (conv_expr e)
-        | `Avg, [ e ] -> Avg (conv_expr e)
-        | `Sum, [ e ] -> Sum (conv_expr e)
-        | `Substring, [ e1; e2; e3 ] ->
-            Substring (conv_expr e1, conv_expr e2, conv_expr e3)
-        | (`Min | `Max | `Avg | `Sum), _ ->
-            failwith "Unexpected aggregate arguments"
-        | `Between, [ e1; e2; e3 ] ->
-            let e2 = conv_expr e2 in
-            binop
-              (And, binop (Le, conv_expr e1, e2), binop (Le, e2, conv_expr e3))
-        | #Sql.bit_op, _ -> failwith "Bit ops not supported"
-        | op, _ ->
-            Error.create "Unsupported op" op [%sexp_of: Sql.op] |> Error.raise
-        )
-    | Select (s, `Exists) -> Exists (conv_stmt s)
-    | Select (s, `AsValue) -> First (conv_stmt s)
-    | Column { cname; _ } -> Name (Name.create cname)
-  and conv_select (s, ss) =
-    if ss <> [] then Log.warn (fun m -> m "Unexpected nonempty select list.");
-    let select_list =
-      List.filter_map s.Sql.columns ~f:(function
-        | All | AllOf _ ->
-            Log.warn (fun m -> m "All and AllOf unsupported.");
-            None
-        | Expr (e, None) -> Some (conv_expr e)
-        | Expr (e, Some a) -> Some (As_pred (conv_expr e, a)))
-    in
-    let from =
-      match s.from with
-      | Some from -> conv_filter s.where (conv_nested from)
-      | None -> scalar (Pred.int 0)
-    in
-    if s.group = [] then select select_list from
-    else
-      let group_key =
-        List.map s.group ~f:(function
-          | Sql.Column { cname; _ } -> Name.create cname
-          | _ -> failwith "Unexpected grouping key.")
+    val mutable alias_of_name = Map.empty (module String)
+
+    method alias = sprintf "%s_%s"
+
+    method unop = function `Not -> Not | `Day -> Day | `Year -> Year
+
+    method binop =
+      function
+      | `And -> And
+      | `Or -> Or
+      | `Add -> Add
+      | `Sub -> Sub
+      | `Mul -> Mul
+      | `Div -> Div
+      | `Mod -> Mod
+      | `Eq -> Eq
+      | `Lt -> Lt
+      | `Le -> Le
+      | `Gt -> Gt
+      | `Ge -> Ge
+
+    method order _ q =
+      Log.warn (fun m -> m "Dropping orderby clause.");
+      q
+
+    method limit l q =
+      if Option.is_some l then Log.warn (fun m -> m "Dropping limit clause.");
+      q
+
+    method distinct d q = if d then dedup q else q
+
+    method filter f q =
+      match f with Some e -> filter (self#expr e) q | None -> q
+
+    method source (s, alias) =
+      let q =
+        match s with
+        | `Subquery s -> self#query s
+        | `Table t -> relation (Db.relation ~with_types:false db t)
+        | `Nested n -> self#nested n
       in
-      conv_filter s.where (group_by select_list group_key from)
-  in
-  conv_order s.Sql.order (conv_select s.select)
+      match alias with
+      | Some a ->
+          aliases <- Set.add aliases a;
+          alias_of_name <-
+            List.fold_left (Schema.schema q) ~init:alias_of_name ~f:(fun m n ->
+                Map.set m ~key:(Name.name n) ~data:a);
+          let select_list =
+            Schema.schema q
+            |> List.map ~f:(fun n ->
+                   As_pred (Name n, sprintf "%s_%s" a (Name.name n)))
+          in
+          select select_list q
+      | None -> q
 
-let main params fn =
+    method nested (q, qs) =
+      let open Pred in
+      match qs with
+      | [] -> self#source q
+      | (q', j) :: qs' -> (
+          match j with
+          | `Cross | `Default ->
+              join (bool true) (self#source q) (self#nested (q', qs'))
+          | `Search e ->
+              join (self#expr e) (self#source q) (self#nested (q', qs'))
+          | `Using _ | `Natural -> failwith "Join type not supported" )
+
+    method subquery = self#query
+
+    method column c =
+      let n =
+        match c.Sql.tname with
+        | Some a -> if Set.mem aliases a then self#alias a c.cname else c.cname
+        | None -> (
+            match Map.find alias_of_name c.cname with
+            | Some a -> self#alias a c.cname
+            | None -> c.cname )
+      in
+      Name.create n
+
+    method expr e =
+      match e with
+      | Sql.Value v -> (
+          match v with
+          | Int x -> Int x
+          | Date s -> Date (Date.of_string s)
+          | String s -> String s
+          | Bool x -> Bool x
+          | Float x -> Fixed (Fixed_point.of_float x)
+          | Null -> Null None )
+      | Param _ | Choices (_, _) | Inserted _ | Sequence _ ->
+          failwith "unsupported"
+      | Case (branches, else_) ->
+          let else_ =
+            Option.map else_ ~f:self#expr |> Option.value ~default:(Null None)
+          in
+          let rec to_pred = function
+            | [] -> failwith "Empty case"
+            | [ (p, x) ] -> If (self#expr p, self#expr x, else_)
+            | (p, x) :: bs -> If (self#expr p, self#expr x, to_pred bs)
+          in
+          to_pred branches
+      | Fun (op, args) -> (
+          let open Pred in
+          match (op, args) with
+          | `In, [ x; Sequence vs ] ->
+              let x = self#expr x in
+              let rec to_pred = function
+                | [] -> Bool false
+                | [ v ] -> binop (Eq, x, self#expr v)
+                | v :: vs -> binop (Or, binop (Eq, x, self#expr v), to_pred vs)
+              in
+              to_pred vs
+          | `IsNull, [ x ] -> binop (Eq, self#expr x, Null None)
+          | `In, [ x; Subquery (s, _) ] ->
+              let q = self#subquery s in
+              let f = Schema.schema q |> List.hd_exn in
+              Exists (filter (binop (Eq, self#expr x, Name f)) q)
+          | (#castor_binop as op), [ e; e' ] ->
+              binop (self#binop op, self#expr e, self#expr e')
+          | #castor_binop, _ -> failwith "Expected two arguments"
+          | `Neq, [ e; e' ] -> unop (Not, binop (Eq, self#expr e, self#expr e'))
+          | (#castor_unop as op), [ e ] -> unop (self#unop op, self#expr e)
+          | (`Neq | #castor_unop), _ -> failwith "Expected one argument"
+          | `Count, _ -> Count
+          | `Min, [ e ] -> Min (self#expr e)
+          | `Max, [ e ] -> Max (self#expr e)
+          | `Avg, [ e ] -> Avg (self#expr e)
+          | `Sum, [ e ] -> Sum (self#expr e)
+          | `Substring, [ e1; e2; e3 ] ->
+              Substring (self#expr e1, self#expr e2, self#expr e3)
+          | (`Min | `Max | `Avg | `Sum), _ ->
+              failwith "Unexpected aggregate arguments"
+          | `Between, [ e1; e2; e3 ] ->
+              let e2 = self#expr e2 in
+              binop
+                (And, binop (Le, self#expr e1, e2), binop (Le, e2, self#expr e3))
+          | #Sql.bit_op, _ -> failwith "Bit ops not supported"
+          | op, _ ->
+              Error.create "Unsupported op" op [%sexp_of: Sql.op] |> Error.raise
+          )
+      | Subquery (s, `Exists) -> Exists (self#subquery s)
+      | Subquery (s, `AsValue) -> First (self#subquery s)
+      | Column c -> Name (self#column c)
+
+    method select s =
+      (* Build query in order. First, FROM *)
+      let query =
+        match s.Sql.from with
+        | Some from -> self#nested from
+        | None -> scalar (Pred.int 0)
+      in
+      (* WHERE *)
+      let query = self#filter s.where query in
+      (* GROUP_BY & SELECT *)
+      let select_list =
+        List.filter_map s.Sql.columns ~f:(function
+          | All | AllOf _ ->
+              Log.warn (fun m -> m "All and AllOf unsupported.");
+              None
+          | Expr (e, None) -> Some (self#expr e)
+          | Expr (e, Some a) -> Some (As_pred (self#expr e, a)))
+      in
+      let query =
+        if s.group = [] then select select_list query
+        else
+          let group_key =
+            List.map s.group ~f:(function
+              | Sql.Column c -> self#column c
+              | _ -> failwith "Unexpected grouping key.")
+          in
+          group_by select_list group_key query
+      in
+      (* HAVING *)
+      let query = self#filter s.having query in
+      (* DISTINCT *)
+      let query = self#distinct s.distinct query in
+      query
+
+    method clauses (Sql.Clause (s, ss)) =
+      let q = self#select s in
+      match ss with
+      | None -> q
+      | Some (op, c) -> (
+          match op with
+          | `UnionAll -> tuple [ q; self#clauses c ] Concat
+          | `Union -> dedup (tuple [ q; self#clauses c ] Concat)
+          | `Intersect | `Except -> failwith "Unsupported compound op." )
+
+    method query q =
+      self#clauses q.Sql.clauses |> self#order q.Sql.order
+      |> self#limit q.Sql.limit
+  end
+
+let main params db fn =
   Log.info (fun m -> m "Converting %s." fn);
   let params =
     let _, query = String.rsplit2_exn ~on:'/' fn in
@@ -225,17 +283,9 @@ let main params fn =
       eprintf "Parsing %s failed. Unexpected token %s (%d, %d).\n" fn tok x y;
       exit 1
   in
-  Sequence.iter stmts ~f:(fun stmt ->
-      match stmt with
-      | Sqlgg.Sql.Select s ->
-          let r =
-            try conv_stmt s
-            with exn ->
-              eprintf "Converting %s failed: %s\n" fn (Exn.to_string exn);
-              exit 1
-          in
-          unsub params r |> Format.printf "%a\n@." Abslayout.pp
-      | _ -> failwith "")
+  Sequence.iter stmts ~f:(fun q ->
+      let r = (new conv_sql db)#query q in
+      unsub params r |> Format.printf "%a\n@." Abslayout.pp)
 
 let () =
   (* Set early so we get logs from command parsing code. *)
@@ -247,6 +297,7 @@ let () =
     [%map_open
       let () = Log.param
       and params = flag ~doc:" parameter file" "p" (required string)
+      and db = Db.param
       and file = anon ("file" %: string) in
-      fun () -> main params file]
+      fun () -> main params db file]
   |> run

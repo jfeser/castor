@@ -13,7 +13,7 @@ type spj = {
   conds : Pred.t list;
   relations :
     ( [ `Subquery of t * string
-      | `Table of Abslayout.relation * string
+      | `Table of Relation.t * string
       | `Series of Pred.t * Pred.t * string ]
     * [ `Left | `Lateral ] )
     list;

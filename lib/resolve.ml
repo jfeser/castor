@@ -278,7 +278,8 @@ let resolve_name ctx n =
 
 let resolve_relation stage r =
   let schema =
-    Option.value_exn ~message:"No schema annotation on relation." r.r_schema
+    Option.value_exn ~message:"No schema annotation on relation."
+      r.Relation.r_schema
   in
   let _, ctx = List.map schema ~f:(fun n -> Name n) |> Ctx.of_defs stage in
   ctx

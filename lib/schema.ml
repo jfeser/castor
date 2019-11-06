@@ -63,19 +63,18 @@ and schema r =
             Name.create ?type_:t (Fresh.name Global.fresh "x%d"))
   in
   match r.node with
-  | AList (_, r) | DepJoin { d_rhs = r; _ } -> schema_exn r |> unscoped
+  | AList (_, r) | DepJoin { d_rhs = r; _ } -> schema r |> unscoped
   | Select (x, _) | GroupBy (x, _, _) -> of_preds x |> unscoped
-  | Filter (_, r) | Dedup r | OrderBy { rel = r; _ } ->
-      schema_exn r |> unscoped
-  | Join { r1; r2; _ } -> schema_exn r1 @ schema_exn r2 |> unscoped
+  | Filter (_, r) | Dedup r | OrderBy { rel = r; _ } -> schema r |> unscoped
+  | Join { r1; r2; _ } -> schema r1 @ schema r2 |> unscoped
   | AOrderedIdx (r1, r2, _) | AHashIdx { hi_keys = r1; hi_values = r2; _ } ->
-      schema_exn r1 @ schema_exn r2 |> unscoped
+      schema r1 @ schema r2 |> unscoped
   | AEmpty -> []
   | AScalar e -> of_preds [ e ] |> unscoped
-  | ATuple (rs, (Cross | Zip)) -> List.concat_map ~f:schema_exn rs |> unscoped
+  | ATuple (rs, (Cross | Zip)) -> List.concat_map ~f:schema rs |> unscoped
   | ATuple ([], Concat) -> []
-  | ATuple (r :: _, Concat) -> schema_exn r |> unscoped
-  | As (n, r) -> scoped n (schema_exn r)
+  | ATuple (r :: _, Concat) -> schema r |> unscoped
+  | As (n, r) -> scoped n (schema r)
   | Relation { r_schema = Some schema; _ } -> schema |> unscoped
   | Relation { r_name; r_schema = None; _ } ->
       Error.(

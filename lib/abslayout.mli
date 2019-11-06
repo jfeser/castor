@@ -66,17 +66,11 @@ and hash_idx = Abslayout0.hash_idx = {
 }
 [@@deriving compare, hash, sexp_of]
 
-and bound = pred * ([ `Open | `Closed ][@opaque])
+and bound = pred * [ `Open | `Closed ]
 
 and ordered_idx = Abslayout0.ordered_idx = {
   oi_key_layout : t option;
   oi_lookup : (bound option * bound option) list;
-}
-[@@deriving compare, hash, sexp_of]
-
-and relation = Abslayout0.relation = {
-  r_name : string;
-  r_schema : Name.t list option;
 }
 [@@deriving compare, hash, sexp_of]
 
@@ -97,7 +91,7 @@ and node = Abslayout0.node =
   | GroupBy of (pred list * Name.t list * t)
   | OrderBy of order_by
   | Dedup of t
-  | Relation of relation
+  | Relation of Relation.t
   | Range of pred * pred
   | AEmpty
   | AScalar of pred
@@ -108,7 +102,7 @@ and node = Abslayout0.node =
   | As of string * t
 [@@deriving compare, hash, sexp_of]
 
-and t = Abslayout0.t = { node : node; meta : Meta.t [@compare.ignore] }
+and t = Abslayout0.t = { node : node; meta : Meta.t }
 [@@deriving compare, hash, sexp_of]
 
 include Comparator.S with type t := t
@@ -152,7 +146,7 @@ val dedup : t -> t
 
 val order_by : (pred * order) list -> t -> t
 
-val relation : relation -> t
+val relation : Relation.t -> t
 
 val empty : t
 
@@ -239,3 +233,5 @@ val ordered_idx_to_depjoin : t -> t -> ordered_idx -> t
 val ensure_alias : t -> t
 
 val aliases : t -> Pred.t Map.M(Name).t
+
+val relations : t -> Set.M(Relation).t

@@ -31,12 +31,11 @@ let subst_params params query =
   | [] -> query
   | _ ->
       List.foldi params ~init:query ~f:(fun i q v ->
-          String.substr_replace_all ~pattern:(Printf.sprintf "$%d" i) ~with_:v
-            q)
+          String.substr_replace_all ~pattern:(Printf.sprintf "$%d" i) ~with_:v q)
 
 let rec exec ?(max_retries = 0) ?(params = []) db query =
   let query = subst_params params query in
-  let r = (db.conn)#exec query in
+  let r = db.conn#exec query in
   let fail r =
     Error.(
       create "Postgres error." (r#error, query) [%sexp_of: string * string]
@@ -74,6 +73,14 @@ let exec1 ?params conn query =
            Error.create "Unexpected query results." t [%sexp_of: string list]
            |> Error.raise)
 
+let exec2 ?params conn query =
+  exec ?params conn query |> result_to_strings
+  |> List.map ~f:(function
+       | [ x; y ] -> (x, y)
+       | t ->
+           Error.create "Unexpected query results." t [%sexp_of: string list]
+           |> Error.raise)
+
 let exec3 ?params conn query =
   exec ?params conn query |> result_to_strings
   |> List.map ~f:(function
@@ -82,63 +89,74 @@ let exec3 ?params conn query =
            Error.create "Unexpected query results." t [%sexp_of: string list]
            |> Error.raise)
 
-let relation conn r_name =
+let type_of_field_exn conn fname rname =
+  let open Type.PrimType in
+  let rows =
+    exec2 ~params:[ rname; fname ] conn
+      "select data_type, is_nullable from information_schema.columns where \
+       table_name='$0' and column_name='$1'"
+  in
+  match rows with
+  | [ (type_str, nullable_str) ] -> (
+      let nullable =
+        if String.(strip nullable_str = "YES") then
+          let nulls =
+            exec1 ~params:[ fname; rname ] conn
+              "select \"$0\" from \"$1\" where \"$0\" is null limit 1"
+          in
+          List.length nulls > 0
+        else false
+      in
+      match type_str with
+      | "character" | "char" -> StringT { nullable; padded = true }
+      | "character varying" | "varchar" | "text" ->
+          StringT { nullable; padded = false }
+      | "interval" | "integer" | "smallint" | "bigint" -> IntT { nullable }
+      | "date" -> DateT { nullable }
+      | "boolean" -> BoolT { nullable }
+      | "numeric" ->
+          let min, max, max_scale =
+            exec3 ~params:[ fname; rname ] conn
+              "select min(\"$0\"), max(\"$0\"), max(scale(\"$0\")) from \"$1\""
+            |> List.hd_exn
+          in
+          let is_int = Int.of_string max_scale = 0 in
+          let fits_in_an_int63 =
+            try
+              Int.of_string min |> ignore;
+              Int.of_string max |> ignore;
+              true
+            with Failure _ -> false
+          in
+          if is_int then
+            if fits_in_an_int63 then IntT { nullable }
+            else StringT { nullable; padded = false }
+          else FixedT { nullable }
+      | "real" | "double" -> FixedT { nullable }
+      | "timestamp without time zone" | "time without time zone" ->
+          StringT { nullable; padded = false }
+      | s -> failwith (Printf.sprintf "Unknown dtype %s" s) )
+  | _ -> failwith "Unexpected db results."
+
+let relation with_types conn r_name =
   let r_schema =
-    exec3 ~params:[ r_name ] conn
-      "select column_name, data_type, is_nullable from \
-       information_schema.columns where table_name='$0'"
-    |> List.map ~f:(fun (fname, type_str, nullable_str) ->
-           let open Type.PrimType in
-           let nullable =
-             if String.(strip nullable_str = "YES") then
-               let nulls =
-                 exec1 ~params:[ fname; r_name ] conn
-                   "select \"$0\" from \"$1\" where \"$0\" is null limit 1"
-               in
-               List.length nulls > 0
-             else false
-           in
+    exec1 ~params:[ r_name ] conn
+      "select column_name from information_schema.columns where table_name='$0'"
+    |> List.map ~f:(fun fname ->
            let type_ =
-             match type_str with
-             | "character" | "char" -> StringT { nullable; padded = true }
-             | "character varying" | "varchar" | "text" ->
-                 StringT { nullable; padded = false }
-             | "interval" | "integer" | "smallint" | "bigint" ->
-                 IntT { nullable }
-             | "date" -> DateT { nullable }
-             | "boolean" -> BoolT { nullable }
-             | "numeric" ->
-                 let min, max, max_scale =
-                   exec3 ~params:[ fname; r_name ] conn
-                     "select min(\"$0\"), max(\"$0\"), max(scale(\"$0\")) \
-                      from \"$1\""
-                   |> List.hd_exn
-                 in
-                 let is_int = Int.of_string max_scale = 0 in
-                 let fits_in_an_int63 =
-                   try
-                     Int.of_string min |> ignore;
-                     Int.of_string max |> ignore;
-                     true
-                   with Failure _ -> false
-                 in
-                 if is_int then
-                   if fits_in_an_int63 then IntT { nullable }
-                   else StringT { nullable; padded = false }
-                 else FixedT { nullable }
-             | "real" | "double" -> FixedT { nullable }
-             | "timestamp without time zone" | "time without time zone" ->
-                 StringT { nullable; padded = false }
-             | s -> failwith (Printf.sprintf "Unknown dtype %s" s)
+             if with_types then Some (type_of_field_exn conn fname r_name)
+             else None
            in
-           Name.create ~type_ fname)
+           Name.create ?type_ fname)
     |> Option.some
   in
-  A.{ r_name; r_schema }
+  Relation.{ r_name; r_schema }
 
-let relation_memo = Memo.general (fun (conn, rname) -> relation conn rname)
+let relation_memo =
+  Memo.general (fun (conn, rname, with_types) -> relation with_types conn rname)
 
-let relation conn rname = relation_memo (conn, rname)
+let relation ?(with_types = true) conn rname =
+  relation_memo (conn, rname, with_types)
 
 let all_relations conn =
   let names =
@@ -149,7 +167,8 @@ let all_relations conn =
 
 let relation_has_field conn f =
   List.find (all_relations conn) ~f:(fun r ->
-      List.exists (Option.value_exn r.A.r_schema) ~f:(fun n -> Name.name n = f))
+      List.exists (Option.value_exn r.Relation.r_schema) ~f:(fun n ->
+          Name.name n = f))
 
 let load_value type_ value =
   let open Type.PrimType in
@@ -160,8 +179,8 @@ let load_value type_ value =
       | "f" -> Ok (Bool false)
       | "" when nullable -> Ok Null
       | _ ->
-          Error
-            (Error.create "Unknown boolean value." value [%sexp_of: string]) )
+          Error (Error.create "Unknown boolean value." value [%sexp_of: string])
+      )
   | IntT { nullable } ->
       if String.(value = "") then
         if nullable then Ok Null
@@ -219,7 +238,7 @@ let exec_cursor_exn =
   let fresh = Fresh.create () in
   fun ?(batch_size = 100) ?(params = []) db schema query ->
     let db = create db.uri in
-    Caml.Gc.finalise (fun db -> try (db.conn)#finish with Failure _ -> ()) db;
+    Caml.Gc.finalise (fun db -> try db.conn#finish with Failure _ -> ()) db;
     let query = subst_params params query in
     let cur = Fresh.name fresh "cur%d" in
     let declare_query =
@@ -232,7 +251,7 @@ let exec_cursor_exn =
       Gen.unfold
         (function
           | `Done ->
-              (db.conn)#finish;
+              db.conn#finish;
               None
           | `Not_done idx when idx <> !db_idx ->
               Some
@@ -272,19 +291,19 @@ let exec_cursor_lwt_exn ?(batch_size = 100) ?(params = []) ?timeout db schema
   (* Wait for results from a send_query call. consume_input pulls any available
      input from the database *)
   let rec wait_for_results rs =
-    (cdb.conn)#consume_input;
-    if (cdb.conn)#is_busy then
+    cdb.conn#consume_input;
+    if cdb.conn#is_busy then
       (* TODO: Better not to busy wait here. *)
       let%lwt () = Lwt_unix.sleep 0.01 in
       wait_for_results rs
     else
-      match (cdb.conn)#get_result with
+      match cdb.conn#get_result with
       | Some r -> wait_for_results (r :: rs)
       | None -> return rs
   in
   let stream, push = Lwt_stream.create () in
   let rec read_batch () =
-    (cdb.conn)#send_query fetch_query;
+    cdb.conn#send_query fetch_query;
     let%lwt rs = wait_for_results [] in
     let tups = List.concat_map rs ~f:(load_tuples_list_exn schema) in
     List.iter tups ~f:(fun t -> push (Some (Result.return t)));
@@ -308,19 +327,19 @@ let exec_cursor_lwt_exn ?(batch_size = 100) ?(params = []) ?timeout db schema
                 (fun () -> Lwt_unix.with_timeout t execute_cursor)
                 (fun exn ->
                   push (Some (Result.fail exn));
-                  let pid = (cdb.conn)#backend_pid in
+                  let pid = cdb.conn#backend_pid in
                   exec db (sprintf "select pg_cancel_backend(%d);" pid)
                   |> ignore;
                   return_unit)
           | None -> execute_cursor ())
         (fun () ->
           decr num_conns;
-          (cdb.conn)#finish;
+          cdb.conn#finish;
           return_unit));
   stream
 
 let check db sql =
   let open Or_error.Let_syntax in
   let name = Fresh.name Global.fresh "check%d" in
-  let%bind () = command_ok ((db.conn)#prepare name sql) in
-  command_ok ((db.conn)#exec (sprintf "deallocate %s" name))
+  let%bind () = command_ok (db.conn#prepare name sql) in
+  command_ok (db.conn#exec (sprintf "deallocate %s" name))

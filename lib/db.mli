@@ -37,8 +37,8 @@ val exec_cursor_lwt_exn :
 
 val check : t -> string -> unit Or_error.t
 
-val relation : t -> string -> Abslayout0.relation
+val relation : ?with_types:bool -> t -> string -> Relation.t
 
-val all_relations : t -> Abslayout0.relation list
+val all_relations : t -> Relation.t list
 
-val relation_has_field : t -> string -> Abslayout0.relation option
+val relation_has_field : t -> string -> Relation.t option

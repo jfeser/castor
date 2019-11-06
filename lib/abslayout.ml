@@ -690,3 +690,38 @@ let aliases =
     end
   in
   visitor#visit_t ()
+
+let relations =
+  let visitor =
+    object
+      inherit [_] reduce
+
+      inherit [_] Util.set_monoid (module Relation)
+
+      method! visit_Relation () r = Set.singleton (module Relation) r
+    end
+  in
+  visitor#visit_t ()
+
+(* let rename_relations r =
+ *   let subst =
+ *     relations r |> Set.to_list
+ *     |> List.concat_map ~f:(fun r ->
+ *            Relation.schema_exn r
+ *            |> List.map ~f:(fun n ->
+ *                   let n' = Name.name n ^ Fresh.name Global.fresh "_%d" in
+ *                   (Name.name n, n')))
+ *     |> Map.of_alist_exn (module String)
+ *   in
+ *   let 
+ *   let visitor =
+ *     object
+ *       inherit [_] map
+ * 
+ *       method! visit_Name () n =
+ *         match Map.find subst (Name.name n) with
+ *         | Some n' -> Name (Name.copy n ~name:n')
+ *         | None -> Name n
+ *     end
+ *   in
+ *   visitor#visit_t () r *)
