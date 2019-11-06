@@ -31,7 +31,7 @@ module Make (C : Config.S) = struct
         inherit [_] map
 
         method! visit_Relation () rel =
-          if [%compare.equal: relation] key rel then data.node
+          if [%compare.equal: Relation.t] key rel then data.node
           else Relation rel
       end
     in
@@ -46,22 +46,22 @@ module Make (C : Config.S) = struct
 
         method! visit_Binop () (op, a1, a2) =
           match (op, Pred.to_type a1, Pred.to_type a2) with
-          | Eq, StringT _, StringT _ -> [(a1, a2)]
+          | Eq, StringT _, StringT _ -> [ (a1, a2) ]
           | _ -> []
       end
     in
     preds_v#visit_t () r
     |> List.filter_map ~f:(function
          | Name n1, Name n2 -> (
-           match
-             ( Db.relation_has_field conn (Name.name n1)
-             , Db.relation_has_field conn (Name.name n2) )
-           with
-           | Some rel, None ->
-               if Set.mem params n2 then Some (n1, rel, n2) else None
-           | None, Some rel ->
-               if Set.mem params n1 then Some (n2, rel, n1) else None
-           | _ -> None )
+             match
+               ( Db.relation_has_field conn (Name.name n1),
+                 Db.relation_has_field conn (Name.name n2) )
+             with
+             | Some rel, None ->
+                 if Set.mem params n2 then Some (n1, rel, n2) else None
+             | None, Some rel ->
+                 if Set.mem params n1 then Some (n2, rel, n1) else None
+             | _ -> None )
          | _ -> None)
     |> List.map ~f:(fun (key, rel, lookup) ->
            let count_name = Fresh.name Global.fresh "c%d" in
@@ -70,10 +70,13 @@ module Make (C : Config.S) = struct
            let map_name = Fresh.name Global.fresh "m%d" in
            let mapping =
              select
-               [As_pred (Row_number, encoded_name); Name (Name.create map_name)]
+               [
+                 As_pred (Row_number, encoded_name); Name (Name.create map_name);
+               ]
                (order_by
-                  [(Name (Name.create encoded_name), Desc)]
-                  (dedup (select [As_pred (Name key, map_name)] (relation rel))))
+                  [ (Name (Name.create encoded_name), Desc) ]
+                  (dedup
+                     (select [ As_pred (Name key, map_name) ] (relation rel))))
            in
            let encoded_rel =
              join
@@ -83,27 +86,31 @@ module Make (C : Config.S) = struct
            let encoded_lookup =
              let scope = Fresh.name Global.fresh "s%d" in
              select
-               [ As_pred
+               [
+                 As_pred
                    ( If
-                       ( Binop (Gt, Name (Name.create count_name), Int 0)
-                       , Name (Name.create encoded_name)
-                       , Int (-1) )
-                   , encoded_lookup_name ) ]
+                       ( Binop (Gt, Name (Name.create count_name), Int 0),
+                         Name (Name.create encoded_name),
+                         Int (-1) ),
+                     encoded_lookup_name );
+               ]
                (select
-                  [As_pred (Count, count_name); Name (Name.create encoded_name)]
+                  [
+                    As_pred (Count, count_name); Name (Name.create encoded_name);
+                  ]
                   (hash_idx
                      (dedup
-                        (select [As_pred (Name key, map_name)] (relation rel)))
+                        (select [ As_pred (Name key, map_name) ] (relation rel)))
                      scope
                      (select
-                        [Name (Name.create encoded_name)]
+                        [ Name (Name.create encoded_name) ]
                         (filter
                            (Binop
-                              ( Eq
-                              , Name (Name.create ~scope map_name)
-                              , Name (Name.create map_name) ))
+                              ( Eq,
+                                Name (Name.create ~scope map_name),
+                                Name (Name.create map_name) ))
                            mapping))
-                     [Name lookup]))
+                     [ Name lookup ]))
            in
            let scope = Fresh.name Global.fresh "s%d" in
            dep_join encoded_lookup scope
@@ -111,8 +118,9 @@ module Make (C : Config.S) = struct
                 (subst
                    (Map.of_alist_exn
                       (module Name)
-                      [ (key, Name (Name.create encoded_name))
-                      ; (lookup, Name (Name.create ~scope encoded_lookup_name))
+                      [
+                        (key, Name (Name.create encoded_name));
+                        (lookup, Name (Name.create ~scope encoded_lookup_name));
                       ])
                    r)))
     |> Seq.of_list

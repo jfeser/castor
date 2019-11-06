@@ -59,7 +59,7 @@ module Make (Config : Config.S) = struct
     in
     let joined_rels =
       List.concat rels
-      |> List.map ~f:(fun (r, n) -> (r.r_name, n))
+      |> List.map ~f:(fun (r, n) -> (r.Relation.r_name, n))
       |> Map.of_alist_multi (module String)
       |> Map.to_alist
       |> List.map ~f:(fun (r, ns) ->
@@ -81,7 +81,7 @@ module Make (Config : Config.S) = struct
     | None -> Or_error.errorf "No relations found."
 
   let all_values ps r =
-    Or_error.find_ok [all_values_precise ps r; all_values_approx ps r]
+    Or_error.find_ok [ all_values_precise ps r; all_values_approx ps r ]
 
   (** Check that a predicate is fully supported by a relation (it does not
       depend on anything in the context.) *)
@@ -93,7 +93,7 @@ module Make (Config : Config.S) = struct
         || ( match Name.Meta.(find n stage) with
            | Some s -> s = `Compile
            | None ->
-               Logs.warn (fun m -> m "Missing stage on %a" Name.pp n) ;
+               Logs.warn (fun m -> m "Missing stage on %a" Name.pp n);
                false )
            && Option.is_some (Name.rel n))
 
@@ -118,12 +118,12 @@ module Make (Config : Config.S) = struct
     if List.length ps <= 1 then true
     else
       let tup =
-        select [Max (Pred.sum_exn (List.map ps ~f:Pred.pseudo_bool))] r
+        select [ Max (Pred.sum_exn (List.map ps ~f:Pred.pseudo_bool)) ] r
         |> Sql.of_ralgebra |> Sql.to_string
-        |> Db.exec_cursor_exn conn [Type.PrimType.int_t]
+        |> Db.exec_cursor_exn conn [ Type.PrimType.int_t ]
         |> Gen.get
       in
       match tup with
-      | Some [|Int x|] -> x <= 1
+      | Some [| Int x |] -> x <= 1
       | _ -> failwith "Unexpected tuple."
 end
