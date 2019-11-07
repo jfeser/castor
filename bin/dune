@@ -72,6 +72,15 @@
   (pps ppx_sexp_conv ppx_let))
  (modules parse_sql))
 
+(executable
+ (name parse_cozy)
+ (libraries core castor)
+ (flags
+  (:standard -g -bin-annot))
+ (preprocess
+  (pps ppx_sexp_conv ppx_let))
+ (modules parse_cozy))
+
 ; Local Variables:
 ; mode: tuareg-dune
 ; End:

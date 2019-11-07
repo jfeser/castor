@@ -2,6 +2,53 @@ open! Core
 open Collections
 open Abslayout
 
+type binop = [ `Le | `Lt | `Ge | `Gt | `Add | `Sub | `Mul | `Div | `Eq | `And ]
+[@@deriving sexp]
+
+type expr =
+  [ `Binop of binop * expr * expr
+  | `Call of string * expr list
+  | `Cond of expr * expr * expr
+  | `Int of int
+  | `Len of query
+  | `Sum of query
+  | `The of query
+  | `Tuple of expr list
+  | `TupleGet of expr * int
+  | `Var of string
+  | `Let of string * expr * expr
+  | `String of string ]
+[@@deriving sexp]
+
+and 'a lambda = [ `Lambda of string * 'a ] [@@deriving sexp]
+
+and query =
+  [ `Distinct of query
+  | `Filter of expr lambda * query
+  | `Flatmap of query lambda * query
+  | `Map of expr lambda * query
+  | `Table of string
+  | `Empty ]
+[@@deriving sexp]
+
+let cost_lambda c (`Lambda (_, e)) = c e
+
+let rec cost = function
+  | `Distinct q -> cost q
+  | `Flatmap (l, q) -> Big_o.(cost_lambda cost l * cost q)
+  | `Filter (l, q) | `Map (l, q) -> Big_o.(cost_lambda cost_expr l * cost q)
+  | `Table n -> Big_o.Var n
+  | `Empty -> Big_o.Const
+
+and cost_expr = function
+  | `Binop (_, e, e') -> Big_o.(cost_expr e + cost_expr e')
+  | `Call (_, args) | `Tuple args -> List.map args ~f:cost_expr |> Big_o.sum
+  | `Cond (e1, e2, e3) -> Big_o.(cost_expr e1 + cost_expr e2 + cost_expr e3)
+  | `Len q | `Sum q | `The q -> cost q
+  | `Int _ | `Var _ | `String _ -> Big_o.Const
+  | `TupleGet (e, _) -> cost_expr e
+  | `Let (_, e, e') -> Big_o.(cost_expr e + cost_expr e')
+
 type t = {
   state : (string * string) list;
   queries : (string * string) list;
@@ -116,8 +163,8 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
                       [
                         (let call = call ~args c.top_query in
                          sprintf
-                           "let {t = (len %s == 1) ? (the %s) : %s } in %s"
-                           call call dummy s);
+                           "let {t = (len %s == 1) ? (the %s) : %s } in %s" call
+                           call dummy s);
                       ];
                   ] )
             | `Agg ->

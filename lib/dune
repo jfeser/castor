@@ -16,6 +16,12 @@
 
 (ocamllex transform_lexer)
 
+(menhir
+ (infer false)
+ (modules cozy_parser))
+
+(ocamllex cozy_lexer)
+
 (library
  (public_name castor)
  (libraries core str lwt lwt.unix postgresql llvm llvm.analysis llvm.target
