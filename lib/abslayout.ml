@@ -62,8 +62,7 @@ let ensure_no_overlap_2 r1 r2 ss =
 
 let ensure_no_overlap_k rs =
   let all_scopes = List.map ~f:scopes rs in
-  if Set.any_overlap (module String) all_scopes then
-    List.map rs ~f:alpha_scopes
+  if Set.any_overlap (module String) all_scopes then List.map rs ~f:alpha_scopes
   else rs
 
 let range a b = wrap (Range (a, b))
@@ -78,7 +77,12 @@ let join a b c =
   let b, c = ensure_no_overlap_2 b c [] in
   wrap (Join { pred = a; r1 = strip_meta b; r2 = strip_meta c })
 
-let filter a b = wrap (Filter (a, strip_meta b))
+let filter a b =
+  match Pred.kind a with
+  | `Scalar -> wrap (Filter (a, strip_meta b))
+  | `Agg | `Window ->
+      Error.create "Aggregates not allowed in filter." a [%sexp_of: Pred.t]
+      |> Error.raise
 
 let group_by a b c = wrap (GroupBy (a, b, strip_meta c))
 
@@ -393,9 +397,7 @@ class ['a] stage_iter =
       self#visit_t phase h.hi_values
 
     method! visit_AOrderedIdx phase (rk, rv, m) =
-      let bound_iter =
-        Option.iter ~f:(fun (p, _) -> self#visit_pred phase p)
-      in
+      let bound_iter = Option.iter ~f:(fun (p, _) -> self#visit_pred phase p) in
       List.iter m.oi_lookup ~f:(fun (b1, b2) ->
           bound_iter b1;
           bound_iter b2);
@@ -550,9 +552,7 @@ let annotate_key_layouts r =
         | Some _ -> AOrderedIdx r
         | None ->
             AOrderedIdx
-              ( x,
-                y,
-                { m with oi_key_layout = Some (key_layout (schema_exn x)) } )
+              (x, y, { m with oi_key_layout = Some (key_layout (schema_exn x)) })
     end
   in
   annotator#visit_t () r
