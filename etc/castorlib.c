@@ -2,21 +2,18 @@
 #define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <time.h>
 
 #include "date.h"
 #include "castorlib.h"
 
 long strpos(char* s1, long l1, char* s2, long l2) {
-  if (l1 < l2) { return 0; }
-  for (int i = 0; i < l1; i++) {
-    int eq_cnt = 0;
-    for (int j = 0; j < l2; j++) {
-      eq_cnt += s1[i + j] == s2[j];
-    }
-    if (eq_cnt == l2) {return i + 1;}
+  void* pos = memmem(s1, l1, s2, l2);
+  if (pos == NULL) {
+    return 0;
   }
-  return 0;
+  return ((long)pos - (long)s1) + 1;
 }
 
 long extract_year(long date) {
