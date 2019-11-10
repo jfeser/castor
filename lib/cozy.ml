@@ -423,15 +423,14 @@ let to_string bench_name params q =
     extern imod(x : Int, y : Int) : Int = "{x} % {y}"
     extern fmul(x : Float, y : Float) : Float = "{x} * {y}"
     extern fdiv(x : Float, y : Float) : Float = "{x} / {y}"
-    extern fmod(x : Float, y : Float) : Float = "{x} % {y}"
     extern strpos(x : String, y : String) : Int = "strpos({x}, {y})"
-    extern day(x : Int) : Int = "{x}"
-    extern year(x : Int) : Int = "{x}"
-    extern month(x : Int) : Int = "{x}"
-    extern extracty(x : Int) : Int = "{x}"
-    extern i2f(x : Int) : Float = "{x}"
-    extern strlen(x : String) : Int = "{x}"
-    extern streq(x : String, y : String) : Bool = "0"
+    extern day(x : Int) : Int = "of_day({x})"
+    extern year(x : Int) : Int = "of_year({x})"
+    extern month(x : Int) : Int = "to_month({x})"
+    extern extracty(x : Int) : Int = "to_year({x})"
+    extern i2f(x : Int) : Float = "int_to_float({x})"
+    extern strlen(x : String) : Int = "strlen({x})"
+    extern streq(x : String, y : String) : Bool = "streq({x}, {y})"
 |}
     |> String.strip
   in

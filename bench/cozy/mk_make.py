@@ -50,8 +50,11 @@ def out_file(b):
 def cozy_in_file(b):
     return out_file(b)
 
-def cozy_out_file(b):
+def cozy_out_log(b):
     return '%s.log' % b['name']
+
+def cozy_out_cpp(b):
+    return '%s.cpp' % b['name']
 
 print('SHELL:=/bin/bash')
 print('DB=postgresql:///tpch_1k')
@@ -73,7 +76,7 @@ convert: {0}
 '''.format(' '.join(out_file(b) for b in bench)))
 print('''
 run: {0}
-'''.format(' '.join(cozy_out_file(b) for b in bench)))
+'''.format(' '.join(cozy_out_log(b) for b in bench)))
 
 for b in bench:
     print('''
@@ -84,8 +87,8 @@ for b in bench:
 for b in bench:
     print('''
 {0}: {1}
-\tcd cozy; python3 -m cozy $(COZY_FLAGS) ../{1} > ../{0}
-'''.format(cozy_out_file(b), cozy_in_file(b)))
+\tcd cozy; python3 -m cozy $(COZY_FLAGS) --c++ ../{2} ../{1} > ../{0}
+'''.format(cozy_out_log(b), cozy_in_file(b), cozy_out_cpp(b)))
 
 print('''
 .PHONY: clean
