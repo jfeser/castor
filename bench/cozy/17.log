@@ -1,0 +1,182 @@
+Checking call legality...
+Checking call q0(param0, param1)...
+Checking call q1(param0, param1)...
+Checking call q3(param0, param1, x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11)...
+Checking call q2(param0, param1)...
+Checking call q4(param0, param1, (t).1, (t).0, (t).2, (t).6, (t).11, (t).9, (t).5, (t).4, (t).3, (t).10, (t).8, (t).7)...
+Checking call q5(param0, param1)...
+Checking invariant preservation...
+Done!
+Adding query q6...
+updating with 1 new solutions
+update order:
+  --> q6
+considering update 1/1...
+SOLUTION FOR q6 AT 0:00:00.063626 [size=242]
+----------------------------------------
+  _var335 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+  _var336 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
+  return let q = Map {t -> t} (Filter {t -> (i2f((t).2) < let q = Map {_var44 -> _var44} (Filter {_var43 -> ((_var43).1 == (t).3)} (_var335)) in fmul(0.2, fdiv((sum Map {_var41 -> i2f((_var41).4)} (q)), i2f((sum Map {_var42 -> 1} (q))))))} (FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t2).0, (t2).1, (t2).2, (t2).3, (t2).4, (t2).5, (t2).6, (t2).7, (t2).8)} (Filter {t2 -> ((t2).0 == (t1).0)} (Map {t -> t} (Map {t -> t} (Filter {t -> (streq((t).3, param0) and streq((t).6, param1))} (_var336)))))} (Map {t -> t} (Map {t -> ((t).1, (t).5, (t).4)} (_var335))))) in fdiv((sum Map {t -> (t).1} (q)), 7.0)
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q6
+considering update 1/1...
+SOLUTION FOR q6 AT 0:00:06.338073 [size=244]
+----------------------------------------
+  _var2989 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+  _var2990 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
+  return fdiv((sum Map {t -> (t).1} (Map {t -> t} (Filter {t -> (i2f((t).2) < fmul(0.2, fdiv((sum Map {_var41 -> i2f((_var41).4)} (Map {_var44 -> _var44} (Filter {_var43 -> ((_var43).1 == (t).3)} (_var2989)))), i2f((sum Map {_var42 -> 1} (Map {_var44 -> _var44} (Filter {_var43 -> ((_var43).1 == (t).3)} (_var2989))))))))} (FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t2).0, (t2).1, (t2).2, (t2).3, (t2).4, (t2).5, (t2).6, (t2).7, (t2).8)} (Filter {t2 -> ((t2).0 == (t1).0)} (Map {t -> t} (Map {t -> t} (Filter {t -> (streq((t).3, param0) and streq((t).6, param1))} (_var2990)))))} (Map {t -> ((t).1, (t).5, (t).4)} (_var2989)))))), 7.0)
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q6
+considering update 1/1...
+SOLUTION FOR q6 AT 0:00:10.965632 [size=246]
+----------------------------------------
+  _var4633 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
+  _var4634 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
+  _var4635 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+  return fdiv((sum Map {t -> (t).1} (Map {t -> t} (Filter {t -> (i2f((t).2) < fmul(0.2, fdiv((sum Map {_var41 -> i2f((_var41).4)} (Map {_var44 -> _var44} (Filter {_var43 -> ((_var43).1 == (t).3)} (_var4635)))), i2f((sum Map {_var42 -> 1} (Map {_var44 -> _var44} (Filter {_var43 -> ((_var43).1 == (t).3)} (_var4635))))))))} (FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t2).0, (t2).1, (t2).2, (t2).3, (t2).4, (t2).5, (t2).6, (t2).7, (t2).8)} (Filter {t2 -> ((t2).0 == (t1).0)} (Map {t -> t} (Map {t -> t} (Filter {t -> (streq((t).3, param0) and streq((t).6, param1))} (_var4634)))))} (_var4633))))), 7.0)
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q6
+considering update 1/1...
+SOLUTION FOR q6 AT 0:00:16.996156 [size=240]
+----------------------------------------
+  _var6963 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
+  _var6964 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
+  _var6965 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+  return fdiv((sum Map {t -> (t).1} (Filter {t -> (i2f((t).2) < fmul(0.2, fdiv((sum Map {_var41 -> i2f((_var41).4)} (Map {_var44 -> _var44} (Filter {_var43 -> ((_var43).1 == (t).3)} (_var6965)))), i2f((sum Map {_var42 -> 1} (Map {_var44 -> _var44} (Filter {_var43 -> ((_var43).1 == (t).3)} (_var6965))))))))} (FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t2).0, (t2).1, (t2).2, (t2).3, (t2).4, (t2).5, (t2).6, (t2).7, (t2).8)} (Filter {t2 -> ((t2).0 == (t1).0)} (Map {t -> t} (Map {t -> t} (Filter {t -> (streq((t).3, param0) and streq((t).6, param1))} (_var6964)))))} (_var6963)))), 7.0)
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q6
+considering update 1/1...
+SOLUTION FOR q6 AT 0:00:26.353689 [size=228]
+----------------------------------------
+  _var11822 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
+  _var11823 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
+  _var11824 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+  return fdiv((sum Map {t -> (t).1} (Filter {t -> (i2f((t).2) < fmul(0.2, fdiv((sum Map {_var41 -> i2f((_var41).4)} (Filter {_var43 -> ((_var43).1 == (t).3)} (_var11824))), i2f((sum Map {_var42 -> 1} (Filter {_var43 -> ((_var43).1 == (t).3)} (_var11824)))))))} (FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t2).0, (t2).1, (t2).2, (t2).3, (t2).4, (t2).5, (t2).6, (t2).7, (t2).8)} (Filter {t2 -> ((t2).0 == (t1).0)} (Map {t -> t} (Map {t -> t} (Filter {t -> (streq((t).3, param0) and streq((t).6, param1))} (_var11823)))))} (_var11822)))), 7.0)
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q6
+considering update 1/1...
+SOLUTION FOR q6 AT 0:00:30.663375 [size=236]
+----------------------------------------
+  _var14298 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
+  _var14299 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
+  _var14300 : Map<Int, Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)>> = EMakeMap2(Map {_var43 -> (_var43).1} (lineitem), _var13930 -> Filter {_var43 -> ((_var43).1 == _var13930)} (lineitem))
+  return fdiv((sum Map {t -> (t).1} (Filter {t -> (i2f((t).2) < fmul(0.2, fdiv((sum Map {_var41 -> i2f((_var41).4)} (_var14300[(t).3])), i2f((sum Map {_var42 -> 1} (_var14300[(t).3]))))))} (FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t2).0, (t2).1, (t2).2, (t2).3, (t2).4, (t2).5, (t2).6, (t2).7, (t2).8)} (Filter {t2 -> ((t2).0 == (t1).0)} (Map {t -> t} (Map {t -> t} (Filter {t -> (streq((t).3, param0) and streq((t).6, param1))} (_var14299)))))} (_var14298)))), 7.0)
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q6
+considering update 1/1...
+SOLUTION FOR q6 AT 0:00:37.628030 [size=264]
+----------------------------------------
+  _var18352 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
+  _var18353 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
+  _var18354 : Map<Int, Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)>> = EMakeMap2(Map {_var43 -> (_var43).1} (lineitem), _var13930 -> Filter {_var43 -> ((_var43).1 == _var13930)} (lineitem))
+  _var18355 : Map<Int, Bag<Int>> = EMakeMap2(Map {_var43 -> (_var43).1} (lineitem), _var13930 -> Map {_var42 -> 1} (Filter {_var43 -> ((_var43).1 == _var13930)} (lineitem)))
+  return fdiv((sum Map {t -> (t).1} (Filter {t -> (i2f((t).2) < fmul(0.2, fdiv((sum Map {_var41 -> i2f((_var41).4)} (_var18354[(t).3])), i2f((sum _var18355[(t).3])))))} (FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t2).0, (t2).1, (t2).2, (t2).3, (t2).4, (t2).5, (t2).6, (t2).7, (t2).8)} (Filter {t2 -> ((t2).0 == (t1).0)} (Map {t -> t} (Map {t -> t} (Filter {t -> (streq((t).3, param0) and streq((t).6, param1))} (_var18353)))))} (_var18352)))), 7.0)
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q6
+considering update 1/1...
+SOLUTION FOR q6 AT 0:00:45.444318 [size=264]
+----------------------------------------
+  _var22430 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
+  _var22431 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
+  _var22432 : Map<Int, Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)>> = EMakeMap2(Map {_var43 -> (_var43).1} (lineitem), _var13930 -> Filter {_var43 -> ((_var43).1 == _var13930)} (lineitem))
+  _var22433 : Map<Int, Int> = EMakeMap2(Map {_var43 -> (_var43).1} (lineitem), _var13930 -> (sum Map {_var42 -> 1} (Filter {_var43 -> ((_var43).1 == _var13930)} (lineitem))))
+  return fdiv((sum Map {t -> (t).1} (Filter {t -> (i2f((t).2) < fmul(0.2, fdiv((sum Map {_var41 -> i2f((_var41).4)} (_var22432[(t).3])), i2f(_var22433[(t).3]))))} (FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t2).0, (t2).1, (t2).2, (t2).3, (t2).4, (t2).5, (t2).6, (t2).7, (t2).8)} (Filter {t2 -> ((t2).0 == (t1).0)} (Map {t -> t} (Map {t -> t} (Filter {t -> (streq((t).3, param0) and streq((t).6, param1))} (_var22431)))))} (_var22430)))), 7.0)
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q6
+considering update 1/1...
+SOLUTION FOR q6 AT 0:00:52.482031 [size=264]
+----------------------------------------
+  _var26518 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
+  _var26519 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
+  _var26520 : Map<Int, Bag<Float>> = EMakeMap2(Map {_var43 -> (_var43).1} (lineitem), _var13930 -> Map {_var41 -> i2f((_var41).4)} (Filter {_var43 -> ((_var43).1 == _var13930)} (lineitem)))
+  _var26521 : Map<Int, Int> = EMakeMap2(Map {_var43 -> (_var43).1} (lineitem), _var13930 -> (sum Map {_var42 -> 1} (Filter {_var43 -> ((_var43).1 == _var13930)} (lineitem))))
+  return fdiv((sum Map {t -> (t).1} (Filter {t -> (i2f((t).2) < fmul(0.2, fdiv((sum _var26520[(t).3]), i2f(_var26521[(t).3]))))} (FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t2).0, (t2).1, (t2).2, (t2).3, (t2).4, (t2).5, (t2).6, (t2).7, (t2).8)} (Filter {t2 -> ((t2).0 == (t1).0)} (Map {t -> t} (Map {t -> t} (Filter {t -> (streq((t).3, param0) and streq((t).6, param1))} (_var26519)))))} (_var26518)))), 7.0)
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q6
+considering update 1/1...
+SOLUTION FOR q6 AT 0:01:27.622571 [size=264]
+----------------------------------------
+  _var32052 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
+  _var32053 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
+  _var32054 : Map<Int, Bag<Float>> = EMakeMap2(Map {_var43 -> (_var43).1} (lineitem), _var13930 -> Map {_var41 -> i2f((_var41).4)} (Filter {_var43 -> ((_var43).1 == _var13930)} (lineitem)))
+  _var32055 : Map<Int, Float> = EMakeMap2(Map {_var43 -> (_var43).1} (lineitem), _var13930 -> i2f((sum Map {_var42 -> 1} (Filter {_var43 -> ((_var43).1 == _var13930)} (lineitem)))))
+  return fdiv((sum Map {t -> (t).1} (Filter {t -> (i2f((t).2) < fmul(0.2, fdiv((sum _var32054[(t).3]), _var32055[(t).3])))} (FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t2).0, (t2).1, (t2).2, (t2).3, (t2).4, (t2).5, (t2).6, (t2).7, (t2).8)} (Filter {t2 -> ((t2).0 == (t1).0)} (Map {t -> t} (Map {t -> t} (Filter {t -> (streq((t).3, param0) and streq((t).6, param1))} (_var32053)))))} (_var32052)))), 7.0)
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q6
+considering update 1/1...
+SOLUTION FOR q6 AT 0:01:34.957296 [size=264]
+----------------------------------------
+  _var36184 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
+  _var36185 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
+  _var36186 : Map<Int, Float> = EMakeMap2(Map {_var43 -> (_var43).1} (lineitem), _var13930 -> (sum Map {_var41 -> i2f((_var41).4)} (Filter {_var43 -> ((_var43).1 == _var13930)} (lineitem))))
+  _var36187 : Map<Int, Float> = EMakeMap2(Map {_var43 -> (_var43).1} (lineitem), _var13930 -> i2f((sum Map {_var42 -> 1} (Filter {_var43 -> ((_var43).1 == _var13930)} (lineitem)))))
+  return fdiv((sum Map {t -> (t).1} (Filter {t -> (i2f((t).2) < fmul(0.2, fdiv(_var36186[(t).3], _var36187[(t).3])))} (FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t2).0, (t2).1, (t2).2, (t2).3, (t2).4, (t2).5, (t2).6, (t2).7, (t2).8)} (Filter {t2 -> ((t2).0 == (t1).0)} (Map {t -> t} (Map {t -> t} (Filter {t -> (streq((t).3, param0) and streq((t).6, param1))} (_var36185)))))} (_var36184)))), 7.0)
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q6
+considering update 1/1...
+SOLUTION FOR q6 AT 0:01:57.226438 [size=252]
+----------------------------------------
+  _var49540 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
+  _var49541 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
+  _var49542 : Map<Int, Float> = EMakeMap2(Map {_var43 -> (_var43).1} (lineitem), _var13930 -> (sum Map {_var41 -> i2f((_var41).4)} (Filter {_var43 -> ((_var43).1 == _var13930)} (lineitem))))
+  _var49543 : Map<Int, Float> = EMakeMap2(Map {_var43 -> (_var43).1} (lineitem), _var13930 -> i2f((sum Map {_var42 -> 1} (Filter {_var43 -> ((_var43).1 == _var13930)} (lineitem)))))
+  return fdiv((sum Map {t -> (t).1} (Filter {t -> (i2f((t).2) < fmul(0.2, fdiv(_var49542[(t).3], _var49543[(t).3])))} (FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t2).0, (t2).1, (t2).2, (t2).3, (t2).4, (t2).5, (t2).6, (t2).7, (t2).8)} (Filter {t2 -> ((t2).0 == (t1).0)} (Filter {t -> (streq((t).3, param0) and streq((t).6, param1))} (_var49541)))} (_var49540)))), 7.0)
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q6
+considering update 1/1...
+SOLUTION FOR q6 AT 0:02:08.928292 [size=254]
+----------------------------------------
+  _var59469 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
+  _var59470 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
+  _var59471 : Map<Int, Float> = EMakeMap2(Map {_var43 -> (_var43).1} (lineitem), _var13930 -> (sum Map {_var41 -> i2f((_var41).4)} (Filter {_var43 -> ((_var43).1 == _var13930)} (lineitem))))
+  _var59472 : Map<Int, Float> = EMakeMap2(Map {_var43 -> (_var43).1} (lineitem), _var13930 -> i2f((sum Map {_var42 -> 1} (Filter {_var43 -> ((_var43).1 == _var13930)} (lineitem)))))
+  return fdiv((sum Map {t -> (t).1} (Filter {t -> (i2f((t).2) < fmul(0.2, fdiv(_var59471[(t).3], _var59472[(t).3])))} (FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t2).0, (t2).1, (t2).2, (t2).3, (t2).4, (t2).5, (t2).6, (t2).7, (t2).8)} (Filter {t2 -> ((t2).0 == (t1).0)} (Filter {t -> streq((t).6, param1)} (Filter {t -> streq((t).3, param0)} (_var59470))))} (_var59469)))), 7.0)
+----------------------------------------
+Stopping jobs
+requesting stop for ImproveQueryJob[q6]
+Stopping SafeQueue...
+Done!
+Generating IR...
+Inlining calls...
+Generating code for extension types...
+Concretization functions:
+
+_var198 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
+_var4633 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
+_var32055 : Map<Int, Float> = EMakeMap2(Map {_var43 -> (_var43).1} (lineitem), _var13930 -> i2f((sum Map {_var42 -> 1} (Filter {_var43 -> ((_var43).1 == _var13930)} (lineitem)))))
+_var36186 : Map<Int, Float> = EMakeMap2(Map {_var43 -> (_var43).1} (lineitem), _var13930 -> (sum Map {_var41 -> i2f((_var41).4)} (Filter {_var43 -> ((_var43).1 == _var13930)} (lineitem))))
+
+query17:
+  state _var198 : Bag<(Int, String, String, String, String, Int, String, Float, String)>
+  state _var4633 : Bag<(Int, Float, Int)>
+  state _var32055 : Map<Int, Float>
+  state _var36186 : Map<Int, Float>
+
+  query q6(param0 : String, param1 : String):
+    fdiv((sum Map {t -> (t).1} (Filter {t -> (i2f((t).2) < fmul(0.2, fdiv(_var36186[(t).3], _var32055[(t).3])))} (FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t2).0, (t2).1, (t2).2, (t2).3, (t2).4, (t2).5, (t2).6, (t2).7, (t2).8)} (Filter {t2 -> ((t2).0 == (t1).0)} (Filter {t -> streq((t).6, param1)} (Filter {t -> streq((t).3, param0)} (_var198))))} (_var4633)))), 7.0)
+
+Number of improvements done: 17

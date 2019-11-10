@@ -1,0 +1,107 @@
+Checking call legality...
+Checking call q0(param1, (t).6, (t).8, (t).1, (t).4, (t).0, (t).5, (t).2, (t).7, (t).3)...
+Checking call q1(param1)...
+Checking call q3(param1, x9, (t).6, (t).8, (t).1, (t).4, (t).0, (t).5, (t).2, (t).7, (t).3)...
+Checking call q4(param1, x9)...
+Checking call q5(param1, x9)...
+Checking call q2(param1)...
+Checking call q6(param1, k)...
+Checking invariant preservation...
+Done!
+Adding query q7...
+updating with 1 new solutions
+update order:
+  --> q7
+considering update 1/1...
+SOLUTION FOR q7 AT 0:00:00.048689 [size=226]
+----------------------------------------
+  _var542 : Bag<(Int, Int, String, Float, Int, String, String, Int, String)> = orders
+  _var543 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+  return Map {k -> let q = Map {t -> t} (Filter {t -> streq((t).5, k)} (Map {t -> t} (Filter {t -> (((t).4 >= param1) and (((t).4 < (param1 + month(3))) and (exists Map {_var44 -> _var44} (Filter {_var43 -> (((_var43).0 == (t).0) and ((_var43).11 < (_var43).12))} (_var543)))))} (_var542)))) in ((((len q) == 1) ? let t = (the q) in (t).5 : ""), (sum Map {t -> 1} (q)))} ((distinct Map {t -> (t).5} (Map {t -> t} (Filter {t -> (((t).4 >= param1) and (((t).4 < (param1 + month(3))) and (exists Map {_var42 -> _var42} (Filter {_var41 -> (((_var41).0 == (t).0) and ((_var41).11 < (_var41).12))} (_var543)))))} (_var542)))))
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q7
+considering update 1/1...
+SOLUTION FOR q7 AT 0:00:20.741926 [size=392]
+----------------------------------------
+  _var6722 : Bag<(Int, Int, String, Float, Int, String, String, Int, String)> = orders
+  _var6723 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+  return Map {k -> ((((len Map {t -> t} (Filter {t -> streq((t).5, k)} (Map {t -> t} (Filter {t -> (((t).4 >= param1) and (((t).4 < (param1 + month(3))) and (exists Map {_var44 -> _var44} (Filter {_var43 -> (((_var43).0 == (t).0) and ((_var43).11 < (_var43).12))} (_var6723)))))} (_var6722))))) == 1) ? ((the Map {t -> t} (Filter {t -> streq((t).5, k)} (Map {t -> t} (Filter {t -> (((t).4 >= param1) and (((t).4 < (param1 + month(3))) and (exists Map {_var44 -> _var44} (Filter {_var43 -> (((_var43).0 == (t).0) and ((_var43).11 < (_var43).12))} (_var6723)))))} (_var6722)))))).5 : ""), (sum Map {t -> 1} (Map {t -> t} (Filter {t -> streq((t).5, k)} (Map {t -> t} (Filter {t -> (((t).4 >= param1) and (((t).4 < (param1 + month(3))) and (exists Map {_var44 -> _var44} (Filter {_var43 -> (((_var43).0 == (t).0) and ((_var43).11 < (_var43).12))} (_var6723)))))} (_var6722)))))))} ((distinct Map {t -> (t).5} (Filter {t -> (((t).4 >= param1) and (((t).4 < (param1 + month(3))) and (exists Map {_var42 -> _var42} (Filter {_var41 -> (((_var41).0 == (t).0) and ((_var41).11 < (_var41).12))} (_var6723)))))} (_var6722))))
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q7
+considering update 1/1...
+SOLUTION FOR q7 AT 0:03:15.237903 [size=386]
+----------------------------------------
+  _var51293 : Bag<(Int, Int, String, Float, Int, String, String, Int, String)> = orders
+  _var51294 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+  return Map {k -> ((((len Map {t -> t} (Filter {t -> streq((t).5, k)} (Map {t -> t} (Filter {t -> (((t).4 >= param1) and (((t).4 < (param1 + month(3))) and (exists Map {_var44 -> _var44} (Filter {_var43 -> (((_var43).0 == (t).0) and ((_var43).11 < (_var43).12))} (_var51294)))))} (_var51293))))) == 1) ? ((the Map {t -> t} (Filter {t -> streq((t).5, k)} (Map {t -> t} (Filter {t -> (((t).4 >= param1) and (((t).4 < (param1 + month(3))) and (exists Map {_var44 -> _var44} (Filter {_var43 -> (((_var43).0 == (t).0) and ((_var43).11 < (_var43).12))} (_var51294)))))} (_var51293)))))).5 : ""), (sum Map {t -> 1} (Map {t -> t} (Filter {t -> streq((t).5, k)} (Map {t -> t} (Filter {t -> (((t).4 >= param1) and (((t).4 < (param1 + month(3))) and (exists Map {_var44 -> _var44} (Filter {_var43 -> (((_var43).0 == (t).0) and ((_var43).11 < (_var43).12))} (_var51294)))))} (_var51293)))))))} ((distinct Map {t -> (t).5} (Filter {t -> (((t).4 >= param1) and (((t).4 < (param1 + month(3))) and (exists Filter {_var41 -> (((_var41).0 == (t).0) and ((_var41).11 < (_var41).12))} (_var51294))))} (_var51293))))
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q7
+considering update 1/1...
+SOLUTION FOR q7 AT 0:05:37.817362 [size=350]
+----------------------------------------
+  _var92539 : Bag<(Int, Int, String, Float, Int, String, String, Int, String)> = orders
+  _var92540 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+  return Map {k -> ((((len Map {t -> t} (Filter {t -> streq((t).5, k)} (Filter {t -> (((t).4 >= param1) and (((t).4 < (param1 + month(3))) and (exists Filter {_var41 -> (((_var41).0 == (t).0) and ((_var41).11 < (_var41).12))} (_var92540))))} (_var92539)))) == 1) ? ((the Map {t -> t} (Filter {t -> streq((t).5, k)} (Filter {t -> (((t).4 >= param1) and (((t).4 < (param1 + month(3))) and (exists Filter {_var41 -> (((_var41).0 == (t).0) and ((_var41).11 < (_var41).12))} (_var92540))))} (_var92539))))).5 : ""), (sum Map {t -> 1} (Map {t -> t} (Filter {t -> streq((t).5, k)} (Filter {t -> (((t).4 >= param1) and (((t).4 < (param1 + month(3))) and (exists Filter {_var41 -> (((_var41).0 == (t).0) and ((_var41).11 < (_var41).12))} (_var92540))))} (_var92539))))))} ((distinct Map {t -> (t).5} (Filter {t -> (((t).4 >= param1) and (((t).4 < (param1 + month(3))) and (exists Filter {_var41 -> (((_var41).0 == (t).0) and ((_var41).11 < (_var41).12))} (_var92540))))} (_var92539))))
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q7
+considering update 1/1...
+SOLUTION FOR q7 AT 0:15:11.313609 [size=296]
+----------------------------------------
+  _var237621 : Bag<(Int, Int, String, Float, Int, String, String, Int, String)> = orders
+  _var237622 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+  _var237623 : Bag<(Int, Int, String, Float, Int, String, String, Int, String)> = Filter {t -> (exists Filter {_var41 -> (((_var41).0 == (t).0) and ((_var41).11 < (_var41).12))} (lineitem))} (orders)
+  return Map {k -> ((((len Map {t -> t} (Filter {t -> streq((t).5, k)} (Filter {t -> ((t).4 >= param1)} (Filter {t -> ((t).4 < (param1 + month(3)))} (_var237623))))) == 1) ? ((the Map {t -> t} (Filter {t -> streq((t).5, k)} (Filter {t -> ((t).4 >= param1)} (Filter {t -> ((t).4 < (param1 + month(3)))} (_var237623)))))).5 : ""), (sum Map {t -> 1} (Map {t -> t} (Filter {t -> streq((t).5, k)} (Filter {t -> ((t).4 >= param1)} (Filter {t -> ((t).4 < (param1 + month(3)))} (_var237623)))))))} ((distinct Map {t -> (t).5} (Filter {t -> (((t).4 >= param1) and (((t).4 < (param1 + month(3))) and (exists Filter {_var41 -> (((_var41).0 == (t).0) and ((_var41).11 < (_var41).12))} (_var237622))))} (_var237621))))
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q7
+considering update 1/1...
+SOLUTION FOR q7 AT 0:15:29.352621 [size=262]
+----------------------------------------
+  _var240878 : Bag<(Int, Int, String, Float, Int, String, String, Int, String)> = Filter {t -> (exists Filter {_var41 -> (((_var41).0 == (t).0) and ((_var41).11 < (_var41).12))} (lineitem))} (orders)
+  return Map {k -> ((((len Map {t -> t} (Filter {t -> streq((t).5, k)} (Filter {t -> ((t).4 >= param1)} (Filter {t -> ((t).4 < (param1 + month(3)))} (_var240878))))) == 1) ? ((the Map {t -> t} (Filter {t -> streq((t).5, k)} (Filter {t -> ((t).4 >= param1)} (Filter {t -> ((t).4 < (param1 + month(3)))} (_var240878)))))).5 : ""), (sum Map {t -> 1} (Map {t -> t} (Filter {t -> streq((t).5, k)} (Filter {t -> ((t).4 >= param1)} (Filter {t -> ((t).4 < (param1 + month(3)))} (_var240878)))))))} ((distinct Map {t -> (t).5} (Filter {t -> ((t).4 >= param1)} (Filter {t -> ((t).4 < (param1 + month(3)))} (_var240878)))))
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q7
+considering update 1/1...
+SOLUTION FOR q7 AT 0:15:38.799993 [size=244]
+----------------------------------------
+  _var248748 : Bag<(Int, Int, String, Float, Int, String, String, Int, String)> = Filter {t -> (exists Filter {_var41 -> (((_var41).0 == (t).0) and ((_var41).11 < (_var41).12))} (lineitem))} (orders)
+  return Map {k -> ((((len Filter {t -> streq((t).5, k)} (Filter {t -> ((t).4 >= param1)} (Filter {t -> ((t).4 < (param1 + month(3)))} (_var248748)))) == 1) ? ((the Filter {t -> streq((t).5, k)} (Filter {t -> ((t).4 >= param1)} (Filter {t -> ((t).4 < (param1 + month(3)))} (_var248748))))).5 : ""), (sum Map {t -> 1} (Filter {t -> streq((t).5, k)} (Filter {t -> ((t).4 >= param1)} (Filter {t -> ((t).4 < (param1 + month(3)))} (_var248748))))))} ((distinct Map {t -> (t).5} (Filter {t -> ((t).4 >= param1)} (Filter {t -> ((t).4 < (param1 + month(3)))} (_var248748)))))
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q7
+considering update 1/1...
+SOLUTION FOR q7 AT 0:15:48.148844 [size=238]
+----------------------------------------
+  _var256609 : Bag<(Int, Int, String, Float, Int, String, String, Int, String)> = Filter {t -> (exists Filter {_var41 -> (((_var41).0 == (t).0) and ((_var41).11 < (_var41).12))} (lineitem))} (orders)
+  return Map {k -> ((((len Filter {t -> streq((t).5, k)} (Filter {t -> ((t).4 >= param1)} (Filter {t -> ((t).4 < (param1 + month(3)))} (_var256609)))) == 1) ? ((the Filter {t -> streq((t).5, k)} (Filter {t -> ((t).4 >= param1)} (Filter {t -> ((t).4 < (param1 + month(3)))} (_var256609))))).5 : ""), (len Filter {t -> streq((t).5, k)} (Filter {t -> ((t).4 >= param1)} (Filter {t -> ((t).4 < (param1 + month(3)))} (_var256609)))))} ((distinct Map {t -> (t).5} (Filter {t -> ((t).4 >= param1)} (Filter {t -> ((t).4 < (param1 + month(3)))} (_var256609)))))
+----------------------------------------
+Stopping jobs
+requesting stop for ImproveQueryJob[q7]
+Stopping SafeQueue...
+Done!
+Generating IR...
+Inlining calls...
+Generating code for extension types...
+Concretization functions:
+
+_var237623 : Bag<(Int, Int, String, Float, Int, String, String, Int, String)> = Filter {t -> (exists Filter {_var41 -> (((_var41).0 == (t).0) and ((_var41).11 < (_var41).12))} (lineitem))} (orders)
+
+query4:
+  state _var237623 : Bag<(Int, Int, String, Float, Int, String, String, Int, String)>
+
+  query q7(param1 : Int):
+    Map {k -> ((((len Filter {t -> streq((t).5, k)} (Filter {t -> ((t).4 >= param1)} (Filter {t -> ((t).4 < (param1 + month(3)))} (_var237623)))) == 1) ? ((the Filter {t -> streq((t).5, k)} (Filter {t -> ((t).4 >= param1)} (Filter {t -> ((t).4 < (param1 + month(3)))} (_var237623))))).5 : ""), (len Filter {t -> streq((t).5, k)} (Filter {t -> ((t).4 >= param1)} (Filter {t -> ((t).4 < (param1 + month(3)))} (_var237623)))))} ((distinct Map {t -> (t).5} (Filter {t -> ((t).4 >= param1)} (Filter {t -> ((t).4 < (param1 + month(3)))} (_var237623)))))
+
+Number of improvements done: 32

@@ -1,0 +1,50 @@
+Checking call legality...
+Checking call q0(param0, param1, param2)...
+Checking invariant preservation...
+Done!
+Adding query q1...
+updating with 1 new solutions
+update order:
+  --> q1
+considering update 1/1...
+SOLUTION FOR q1 AT 0:00:00.066408 [size=100]
+----------------------------------------
+  _var202 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+  return let q = Map {t -> t} (Filter {t -> (((t).10 >= param0) and (((t).10 < (param0 + year(1))) and (((t).6 >= (param1 - 0.01)) and (((t).6 <= (param1 + 0.01)) and ((t).4 < param2)))))} (_var202)) in (sum Map {t -> fmul((t).5, (t).6)} (q))
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q1
+considering update 1/1...
+SOLUTION FOR q1 AT 0:00:00.705258 [size=88]
+----------------------------------------
+  _var489 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+  return (sum Map {t -> fmul((t).5, (t).6)} (Filter {t -> (((t).10 >= param0) and (((t).10 < (param0 + year(1))) and (((t).6 >= (param1 - 0.01)) and (((t).6 <= (param1 + 0.01)) and ((t).4 < param2)))))} (_var489)))
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q1
+considering update 1/1...
+SOLUTION FOR q1 AT 0:00:00.961969 [size=96]
+----------------------------------------
+  _var639 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+  return (sum Map {t -> fmul((t).5, (t).6)} (Filter {t -> ((t).4 < param2)} (Filter {t -> ((t).6 <= (param1 + 0.01))} (Filter {t -> ((t).6 >= (param1 - 0.01))} (Filter {t -> ((t).10 < (param0 + year(1)))} (Filter {t -> ((t).10 >= param0)} (_var639)))))))
+----------------------------------------
+Stopping jobs
+requesting stop for ImproveQueryJob[q1]
+Stopping SafeQueue...
+Done!
+Generating IR...
+Inlining calls...
+Generating code for extension types...
+Concretization functions:
+
+_var105 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+
+query6:
+  state _var105 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)>
+
+  query q1(param0 : Int, param1 : Float, param2 : Int):
+    (sum Map {t -> fmul((t).5, (t).6)} (Filter {t -> ((t).4 < param2)} (Filter {t -> ((t).6 <= (param1 + 0.01))} (Filter {t -> ((t).6 >= (param1 - 0.01))} (Filter {t -> ((t).10 < (param0 + year(1)))} (Filter {t -> ((t).10 >= param0)} (_var105)))))))
+
+Number of improvements done: 28
