@@ -91,6 +91,12 @@ for b in bench:
 '''.format(cozy_out_log(b), cozy_in_file(b), cozy_out_cpp(b)))
 
 print('''
+test17:
+\tclang++ -std=c++11 -lpqxx -O2 -o test17 harness17.cpp
+
+test4:
+\tclang++ -std=c++11 -lpqxx -O2 -o test4 harness4.cpp
+
 .PHONY: clean
 clean:
 \trm -rf *.cozy
