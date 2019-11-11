@@ -8,11 +8,11 @@ updating with 1 new solutions
 update order:
   --> q2
 considering update 1/1...
-SOLUTION FOR q2 AT 0:00:00.049578 [size=259]
+SOLUTION FOR q2 AT 0:00:00.064908 [size=259]
 ----------------------------------------
-  _var305 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
-  _var306 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
-  return let q = FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t1).3, (t1).4, (t1).5, (t1).6, (t1).7, (t1).8, (t1).9, (t1).10, (t1).11, (t1).12, (t1).13, (t1).14, (t1).15, (t2).0, (t2).1, (t2).2, (t2).3, (t2).4, (t2).5, (t2).6, (t2).7, (t2).8)} (Filter {t2 -> ((t1).1 == (t2).0)} (Map {t -> t} (_var306)))} (Map {t -> t} (Map {t -> t} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(1))))} (_var305)))) in fdiv(fmul(100.0, (sum Map {t -> ((strpos((t).20, "PROMO") == 1) ? fmul((t).5, (i2f(1) - (t).6)) : 0.0)} (q))), (sum Map {t -> fmul((t).5, (i2f(1) - (t).6))} (q)))
+  _var302 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+  _var303 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
+  return let q = FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t1).3, (t1).4, (t1).5, (t1).6, (t1).7, (t1).8, (t1).9, (t1).10, (t1).11, (t1).12, (t1).13, (t1).14, (t1).15, (t2).0, (t2).1, (t2).2, (t2).3, (t2).4, (t2).5, (t2).6, (t2).7, (t2).8)} (Filter {t2 -> ((t1).1 == (t2).0)} (Map {t -> t} (_var303)))} (Map {t -> t} (Map {t -> t} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(1))))} (_var302)))) in fdiv(fmul(100.0, (sum Map {t -> ((strpos((t).20, "PROMO") == 1) ? fmul((t).5, (i2f(1) - (t).6)) : 0.0)} (q))), (sum Map {t -> fmul((t).5, (i2f(1) - (t).6))} (q)))
 ----------------------------------------
 Stopping jobs
 requesting stop for ImproveQueryJob[q2]
@@ -23,14 +23,18 @@ Inlining calls...
 Generating code for extension types...
 Concretization functions:
 
-_var167 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
-_var168 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
+_var166 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+_var167 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
 
 query14:
-  state _var167 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)>
-  state _var168 : Bag<(Int, String, String, String, String, Int, String, Float, String)>
+  state _var166 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)>
+  state _var167 : Bag<(Int, String, String, String, String, Int, String, Float, String)>
 
   query q2(param1 : Int):
-    let q = FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t1).3, (t1).4, (t1).5, (t1).6, (t1).7, (t1).8, (t1).9, (t1).10, (t1).11, (t1).12, (t1).13, (t1).14, (t1).15, (t2).0, (t2).1, (t2).2, (t2).3, (t2).4, (t2).5, (t2).6, (t2).7, (t2).8)} (Filter {t2 -> ((t1).1 == (t2).0)} (Map {t -> t} (_var168)))} (Map {t -> t} (Map {t -> t} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(1))))} (_var167)))) in fdiv(fmul(100.0, (sum Map {t -> ((strpos((t).20, "PROMO") == 1) ? fmul((t).5, (i2f(1) - (t).6)) : 0.0)} (q))), (sum Map {t -> fmul((t).5, (i2f(1) - (t).6))} (q)))
+    let q = FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t1).3, (t1).4, (t1).5, (t1).6, (t1).7, (t1).8, (t1).9, (t1).10, (t1).11, (t1).12, (t1).13, (t1).14, (t1).15, (t2).0, (t2).1, (t2).2, (t2).3, (t2).4, (t2).5, (t2).6, (t2).7, (t2).8)} (Filter {t2 -> ((t1).1 == (t2).0)} (Map {t -> t} (_var167)))} (Map {t -> t} (Map {t -> t} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(1))))} (_var166)))) in fdiv(fmul(100.0, (sum Map {t -> ((strpos((t).20, "PROMO") == 1) ? fmul((t).5, (i2f(1) - (t).6)) : 0.0)} (q))), (sum Map {t -> fmul((t).5, (i2f(1) - (t).6))} (q)))
 
+Setting up auxiliary types...
+Setting up member variables...
+Generating constructors...
+Generating method q2...
 Number of improvements done: 1
