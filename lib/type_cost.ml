@@ -29,22 +29,22 @@ module Make (Config : Config.S) = struct
       ->
         len t
     | ListT (elem_t, m) -> AbsInt.(read elem_t * m.count)
-    | FuncT ([t], _) -> read t
-    | FuncT ([t1; t2], _) -> AbsInt.(read t1 * read t2)
+    | FuncT ([ t ], _) -> read t
+    | FuncT ([ t1; t2 ], _) -> AbsInt.(read t1 * read t2)
     | FuncT _ -> failwith "Unexpected function."
     | TupleT (elem_ts, _) -> List.sum (module AbsInt) elem_ts ~f:read
     | HashIdxT (_, vt, _) -> AbsInt.(join zero (read vt))
     | OrderedIdxT (_, vt, _) -> AbsInt.(join zero (read vt))
 
-  let cost ?(kind = `Max) p =
+  let cost ?(kind = `Avg) =
     Memo.general
       ~hashable:(Hashtbl.Hashable.of_key (module Abslayout))
       (fun r ->
         let open Result.Let_syntax in
         try
-          Logs.debug (fun m -> m "Computing cost of %a." Abslayout.pp r) ;
+          Logs.debug (fun m -> m "Computing cost of %a." Abslayout.pp r);
           let c =
-            M.load_layout ~params r |> M.type_of ?timeout:cost_timeout |> p
+            M.load_layout ~params r |> M.type_of ?timeout:cost_timeout |> read
           in
           let out =
             match kind with
@@ -58,12 +58,12 @@ module Make (Config : Config.S) = struct
           match out with
           | Ok x ->
               let x = Float.of_int x in
-              Logs.debug (fun m -> m "Found cost %f." x) ;
+              Logs.debug (fun m -> m "Found cost %f." x);
               x
           | Error e ->
-              Logs.warn (fun m -> m "Computing cost failed: %a" Error.pp e) ;
+              Logs.warn (fun m -> m "Computing cost failed: %a" Error.pp e);
               Float.max_value
         with Lwt_unix.Timeout ->
-          Logs.warn (fun m -> m "Computing cost timed out.") ;
+          Logs.warn (fun m -> m "Computing cost timed out.");
           Float.max_value)
 end

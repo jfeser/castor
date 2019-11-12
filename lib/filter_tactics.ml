@@ -44,8 +44,7 @@ module Make (C : Config.S) = struct
     let supported = Set.inter (pred_free pred) orig_bound in
     Set.is_subset supported ~of_:new_bound
 
-  let to_filter r =
-    match r.node with Filter (p, r) -> Some (p, r) | _ -> None
+  let to_filter r = match r.node with Filter (p, r) -> Some (p, r) | _ -> None
 
   let merge_select s1 s2 =
     s1 @ s2
@@ -55,7 +54,7 @@ module Make (C : Config.S) = struct
   let hoist_filter r =
     let open Option.Let_syntax in
     match r.node with
-    | OrderBy {key; rel} ->
+    | OrderBy { key; rel } ->
         let%map p, r = to_filter rel in
         filter p (order_by key r)
     | GroupBy (ps, key, r) ->
@@ -77,32 +76,32 @@ module Make (C : Config.S) = struct
               Some (filter p (select ps r))
             else None
         | `Agg -> None )
-    | Join {pred; r1; r2} -> (
-      match (to_filter r1, to_filter r2) with
-      | Some (p1, r1), Some (p2, r2) ->
-          Some (filter (Pred.conjoin [p1; p2]) (join pred r1 r2))
-      | None, Some (p, r2) -> Some (filter p (join pred r1 r2))
-      | Some (p, r1), None -> Some (filter p (join pred r1 r2))
-      | None, None -> None )
+    | Join { pred; r1; r2 } -> (
+        match (to_filter r1, to_filter r2) with
+        | Some (p1, r1), Some (p2, r2) ->
+            Some (filter (Pred.conjoin [ p1; p2 ]) (join pred r1 r2))
+        | None, Some (p, r2) -> Some (filter p (join pred r1 r2))
+        | Some (p, r1), None -> Some (filter p (join pred r1 r2))
+        | None, None -> None )
     | Dedup r ->
         let%map p, r = to_filter r in
         filter p (dedup r)
     | AList (rk, rv) ->
         let%map p, r = to_filter rv in
         filter (Pred.unscoped (scope_exn rk) p) (list rk (scope_exn rk) r)
-    | AHashIdx ({hi_keys= rk; hi_values= rv; _} as h) ->
+    | AHashIdx ({ hi_keys = rk; hi_values = rv; _ } as h) ->
         let%map p, r = to_filter rv in
         let below, above = split_bound rk p in
         let above = List.map above ~f:(Pred.unscoped h.hi_scope) in
         filter (Pred.conjoin above)
-          (hash_idx' {h with hi_values= filter (Pred.conjoin below) r})
+          (hash_idx' { h with hi_values = filter (Pred.conjoin below) r })
     | AOrderedIdx (rk, rv, m) ->
         let%map p, r = to_filter rv in
         let below, above = split_bound rk p in
         let above = List.map above ~f:(Pred.unscoped (scope_exn rk)) in
         filter (Pred.conjoin above)
           (ordered_idx rk (scope_exn rk) (filter (Pred.conjoin below) r) m)
-    | DepJoin {d_lhs; d_alias; d_rhs} ->
+    | DepJoin { d_lhs; d_alias; d_rhs } ->
         let%map p, r = to_filter d_rhs in
         (* Ensure all the required names are selected. *)
         let select_list =
@@ -146,10 +145,10 @@ module Make (C : Config.S) = struct
     let k = Fresh.name Global.fresh "k%d" in
     let n = Fresh.name Global.fresh "x%d" in
     ordered_idx
-      (dedup (select [Pred.as_pred (p, n)] rk))
+      (dedup (select [ Pred.as_pred (p, n) ] rk))
       k
       (filter (Binop (Eq, Name (Name.create ~scope:k n), p)) rv)
-      {oi_key_layout= None; oi_lookup= [(lb, ub)]}
+      { oi_key_layout = None; oi_lookup = [ (lb, ub) ] }
 
   (** A predicate `p` is a candidate lookup key into a partitioning of `r` if it
      does not depend on any of the fields in `r`.
@@ -205,13 +204,13 @@ module Make (C : Config.S) = struct
                    | true, true -> (None, [])
                    | _, true ->
                        ( Option.map (List.reduce ~f:Pred.max_of open_lb)
-                           ~f:(fun max -> (max, `Open))
-                       , [] )
+                           ~f:(fun max -> (max, `Open)),
+                         [] )
                    | _ ->
                        ( Option.map
                            (List.reduce ~f:Pred.max_of (open_lb @ closed_lb))
-                           ~f:(fun max -> (max, `Closed))
-                       , List.map open_lb ~f:(fun p -> Pred.binop (Gt, key, p))
+                           ~f:(fun max -> (max, `Closed)),
+                         List.map open_lb ~f:(fun p -> Pred.binop (Gt, key, p))
                        )
                  in
                  let ub, rest' =
@@ -229,13 +228,13 @@ module Make (C : Config.S) = struct
                    | true, true -> (None, [])
                    | _, true ->
                        ( Option.map (List.reduce ~f:Pred.min_of open_ub)
-                           ~f:(fun p -> (p, `Open))
-                       , [] )
+                           ~f:(fun p -> (p, `Open)),
+                         [] )
                    | _ ->
                        ( Option.map
                            (List.reduce ~f:Pred.min_of (open_ub @ closed_ub))
-                           ~f:(fun p -> (p, `Closed))
-                       , List.map open_ub ~f:(fun p -> Pred.binop (Gt, key, p))
+                           ~f:(fun p -> (p, `Closed)),
+                         List.map open_ub ~f:(fun p -> Pred.binop (Gt, key, p))
                        )
                  in
                  ((key, (lb, ub)), rest @ rest'))
@@ -257,12 +256,12 @@ module Make (C : Config.S) = struct
                             (Eq, p, Pred.scoped (schema_exn all_keys) scope p))
                     |> Pred.conjoin )
                     r'))
-              {oi_key_layout= None; oi_lookup= cmps}
+              { oi_key_layout = None; oi_lookup = cmps }
         in
         match x with
         | Ok r -> Seq.singleton (filter (Pred.conjoin rest) r)
         | Error err ->
-            Logs.warn (fun m -> m "Elim-cmp: %a" Error.pp err) ;
+            Logs.warn (fun m -> m "Elim-cmp: %a" Error.pp err);
             Seq.empty )
     | _ -> Seq.empty
 
@@ -280,7 +279,7 @@ module Make (C : Config.S) = struct
           List.nth_exn rs i |> schema_exn |> Set.of_list (module Name)
         in
         let pl, up = List.partition_tf ps ~f:(Tactics_util.is_supported bnd) in
-        preds.(i) <- pl ;
+        preds.(i) <- pl;
         place_all up (i + 1)
     in
     let rest = place_all ps 0 in
@@ -344,23 +343,23 @@ module Make (C : Config.S) = struct
     | _ ->
         let%map rk, scope, rv, mk =
           match r.node with
-          | DepJoin {d_lhs= rk; d_rhs= rv; d_alias} ->
+          | DepJoin { d_lhs = rk; d_rhs = rv; d_alias } ->
               Some (rk, d_alias, rv, dep_join)
           | AList (rk, rv) -> Some (strip_scope rk, scope_exn rk, rv, list)
           | AHashIdx h ->
               Some
-                ( h.hi_keys
-                , h.hi_scope
-                , h.hi_values
-                , fun rk s rv ->
-                    hash_idx' {h with hi_keys= rk; hi_scope= s; hi_values= rv}
-                )
+                ( h.hi_keys,
+                  h.hi_scope,
+                  h.hi_values,
+                  fun rk s rv ->
+                    hash_idx'
+                      { h with hi_keys = rk; hi_scope = s; hi_values = rv } )
           | AOrderedIdx (rk, rv, m) ->
               Some
-                ( strip_scope rk
-                , scope_exn rk
-                , rv
-                , fun rk s rv -> ordered_idx rk s rv m )
+                ( strip_scope rk,
+                  scope_exn rk,
+                  rv,
+                  fun rk s rv -> ordered_idx rk s rv m )
           | _ -> None
         in
         let rk_bnd = Set.of_list (module Name) (schema_exn rk) in
@@ -384,7 +383,7 @@ module Make (C : Config.S) = struct
 
   let elim_eq_filter_src =
     let src = Logs.Src.create "elim-eq-filter" in
-    Logs.Src.set_level src (Some Debug) ;
+    Logs.Src.set_level src (Some Debug);
     src
 
   let contains_not p =
@@ -460,17 +459,17 @@ module Make (C : Config.S) = struct
           let%map ds2 = of_pred r p2 in
           union ds1 ds2
       | Binop (Eq, p1, p2) -> (
-        match
-          (Tactics_util.all_values [p1] r, Tactics_util.all_values [p2] r)
-        with
-        | _, Ok vs2 when is_candidate_key p1 r && is_candidate_match p2 r ->
-            Ok (Map.singleton (module Pred) p1 (Domain vs2))
-        | Ok vs1, _ when is_candidate_key p2 r && is_candidate_match p1 r ->
-            Ok (Map.singleton (module Pred) p2 (Domain vs1))
-        | _, Ok _ | Ok _, _ ->
-            Or_error.error "No candidate keys." (p1, p2)
-              [%sexp_of: Pred.t * Pred.t]
-        | Error e1, Error e2 -> Error (Error.of_list [e1; e2]) )
+          match
+            (Tactics_util.all_values [ p1 ] r, Tactics_util.all_values [ p2 ] r)
+          with
+          | _, Ok vs2 when is_candidate_key p1 r && is_candidate_match p2 r ->
+              Ok (Map.singleton (module Pred) p1 (Domain vs2))
+          | Ok vs1, _ when is_candidate_key p2 r && is_candidate_match p1 r ->
+              Ok (Map.singleton (module Pred) p2 (Domain vs1))
+          | _, Ok _ | Ok _, _ ->
+              Or_error.error "No candidate keys." (p1, p2)
+                [%sexp_of: Pred.t * Pred.t]
+          | Error e1, Error e2 -> Error (Error.of_list [ e1; e2 ]) )
       | p ->
           Or_error.error "Not part of an equality predicate." p
             [%sexp_of: Pred.t]
@@ -484,7 +483,7 @@ module Make (C : Config.S) = struct
             let n1 = schema e1 in
             let n2 = schema e2 in
             dedup
-              (select [Name n1] (join (Binop (Eq, Name n1, Name n2)) e1 e2))
+              (select [ Name n1 ] (join (Binop (Eq, Name n1, Name n2)) e1 e2))
         | Or (d1, d2) ->
             let e1 = extract d1 in
             let e2 = extract d2 in
@@ -493,13 +492,15 @@ module Make (C : Config.S) = struct
             let n = Fresh.name Global.fresh "x%d" in
             dedup
               (tuple
-                 [ select [Pred.as_pred (Name n1, n)] e1
-                 ; select [Pred.as_pred (Name n2, n)] e2 ]
+                 [
+                   select [ Pred.as_pred (Name n1, n) ] e1;
+                   select [ Pred.as_pred (Name n2, n) ] e2;
+                 ]
                  Concat)
         | Domain d ->
             let n = schema d in
             let n' = Fresh.name Global.fresh "x%d" in
-            select [Pred.as_pred (Name n, n')] d
+            select [ Pred.as_pred (Name n, n') ] d
       in
       Map.map d ~f:extract
   end
@@ -513,7 +514,7 @@ module Make (C : Config.S) = struct
              match EqDomain.of_pred r p with
              | Ok d -> `Fst (p, d)
              | Error e ->
-                 Logs.info ~src:elim_eq_filter_src (fun m -> m "%a" Error.pp e) ;
+                 Logs.info ~src:elim_eq_filter_src (fun m -> m "%a" Error.pp e);
                  `Snd p)
     in
     let inner, eqs = List.unzip eqs in
@@ -521,7 +522,7 @@ module Make (C : Config.S) = struct
     let inner = Pred.conjoin inner in
     match eqs with
     | None ->
-        Logs.err ~src:elim_eq_filter_src (fun m -> m "Found no equalities.") ;
+        Logs.err ~src:elim_eq_filter_src (fun m -> m "Found no equalities.");
         None
     | Some eqs ->
         let eqs = EqDomain.to_ralgebra eqs in
@@ -632,12 +633,12 @@ module Make (C : Config.S) = struct
         |> Map.to_alist
       in
       match (fields, key_range) with
-      | [(f, aliases)], (Some l, Some h) ->
+      | [ (f, aliases) ], (Some l, Some h) ->
           let key_name = Fresh.name Global.fresh "k%d" in
           let%bind keys =
             match Pred.to_type f with
             | IntT _ | DateT _ ->
-                let%map vals = Tactics_util.all_values [f] r |> Or_error.ok in
+                let%map vals = Tactics_util.all_values [ f ] r |> Or_error.ok in
                 let vals =
                   let val_name = List.hd_exn (schema_exn vals) in
                   let select_list =
@@ -651,17 +652,17 @@ module Make (C : Config.S) = struct
                 in
                 let scope = Fresh.name Global.fresh "k%d" in
                 dep_join
-                  (select [As_pred (Min l, "lo"); As_pred (Max h, "hi")] vals)
+                  (select [ As_pred (Min l, "lo"); As_pred (Max h, "hi") ] vals)
                   scope
                   (select
-                     [As_pred (Name (Name.create "range"), key_name)]
+                     [ As_pred (Name (Name.create "range"), key_name) ]
                      (range
                         (Name (Name.create ~scope "lo"))
                         (Name (Name.create ~scope "hi"))))
             | StringT _ ->
-                let%map keys = Tactics_util.all_values [f] r |> Or_error.ok in
+                let%map keys = Tactics_util.all_values [ f ] r |> Or_error.ok in
                 select
-                  [As_pred (Name (List.hd_exn (schema_exn keys)), key_name)]
+                  [ As_pred (Name (List.hd_exn (schema_exn keys)), key_name) ]
                   keys
             | _ -> None
           in
@@ -675,11 +676,11 @@ module Make (C : Config.S) = struct
               r
           in
           if Set.mem (names r') n then None
-          else Some (hash_idx keys scope r' [Name n])
+          else Some (hash_idx keys scope r' [ Name n ])
       | fs, _ ->
           Logs.debug (fun m ->
               m "Partition: Found too many fields. %a" (Fmt.list Pred.pp)
-                (List.map ~f:Tuple.T2.get1 fs)) ;
+                (List.map ~f:Tuple.T2.get1 fs));
           None
     in
     let r = Resolve.resolve ~params r in
@@ -700,16 +701,16 @@ module Make (C : Config.S) = struct
         method! visit_Exists () r =
           if Set.inter schema_names (names r) |> Set.is_empty then
             let qname = Fresh.name Global.fresh "q%d" in
-            ( Name (Name.create qname)
-            , [select [As_pred (Binop (Gt, Count, Int 0), qname)] r] )
+            ( Name (Name.create qname),
+              [ select [ As_pred (Binop (Gt, Count, Int 0), qname) ] r ] )
           else (Exists r, [])
 
         method! visit_First () r =
           let n = schema_exn r |> List.hd_exn in
           if Set.inter schema_names (names r) |> Set.is_empty then
             let qname = Fresh.name Global.fresh "q%d" in
-            ( Name (Name.create qname)
-            , [select [As_pred (Min (Name n), qname)] r] )
+            ( Name (Name.create qname),
+              [ select [ As_pred (Min (Name n), qname) ] r ] )
           else (Exists r, [])
       end
     in

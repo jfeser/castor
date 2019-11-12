@@ -52,11 +52,11 @@ module Make (Config : Config.S) = struct
     include Config
 
     let simplify =
-      let tf = fix (seq_many [project; Sf.simplify]) in
+      let tf = fix (seq_many [ project; Sf.simplify ]) in
       Some (fun r -> Option.value (apply tf Path.root r) ~default:r)
   end
 
-  module Type_cost = Type_cost.Make (Config)
+  module Cost = Approx_cost.Make (Config)
 
   let is_serializable r p =
     let r' = Path.get_exn p (R.resolve ~params r) in
@@ -94,24 +94,24 @@ module Make (Config : Config.S) = struct
       else None
     in
     match r.node with
-    | OrderBy {key; rel= {node= Select (ps, r); _}} ->
+    | OrderBy { key; rel = { node = Select (ps, r); _ } } ->
         let s = Set.of_list (module Name) (schema_exn r) in
         if List.for_all key ~f:(fun (p, _) -> Tactics_util.is_supported s p)
         then Some (select ps (order_by key r))
         else None
-    | OrderBy {key; rel= {node= Filter (ps, r); _}} ->
+    | OrderBy { key; rel = { node = Filter (ps, r); _ } } ->
         Some (filter ps (order_by key r))
-    | OrderBy {key; rel= {node= AHashIdx h; _}} ->
-        Some (hash_idx' {h with hi_values= order_by key h.hi_values})
-    | OrderBy {key; rel= {node= AList (r1, r2); _}} ->
+    | OrderBy { key; rel = { node = AHashIdx h; _ } } ->
+        Some (hash_idx' { h with hi_values = order_by key h.hi_values })
+    | OrderBy { key; rel = { node = AList (r1, r2); _ } } ->
         (* If we order a lists keys then the keys will be ordered in the
                    list. *)
         orderby_list key r1 r2
-    | OrderBy {key; rel= {node= ATuple (rs, Cross); _}} ->
+    | OrderBy { key; rel = { node = ATuple (rs, Cross); _ } } ->
         orderby_cross_tuple key rs
-    | OrderBy {key; rel= {node= DepJoin d; _}} ->
+    | OrderBy { key; rel = { node = DepJoin d; _ } } ->
         if key_is_supported d.d_lhs key then
-          Some (dep_join' {d with d_lhs= order_by key d.d_lhs})
+          Some (dep_join' { d with d_lhs = order_by key d.d_lhs })
         else None
     | _ -> None
 
@@ -147,115 +147,128 @@ module Make (Config : Config.S) = struct
     (* Eliminate comparison filters. *)
     fix
       (seq_many
-         [ (* Hoist parameterized filters as far up as possible. *)
-           fix
-             (for_all F.hoist_filter (Path.all >>? is_param_filter >> parent))
-         ; Branching.(
+         [
+           (* Hoist parameterized filters as far up as possible. *)
+           fix (for_all F.hoist_filter (Path.all >>? is_param_filter >> parent));
+           Branching.(
              seq_many
-               [ unroll_fix
+               [
+                 unroll_fix
                    (O.at_ F.push_filter
-                      Path.(all >>? test >>? is_run_time >>| shallowest))
-               ; (* Eliminate a comparison filter. *)
-                 choose (for_all tf Path.(all >>? test >>? is_run_time)) id
-               ; lift
+                      Path.(all >>? test >>? is_run_time >>| shallowest));
+                 (* Eliminate a comparison filter. *)
+                 choose (for_all tf Path.(all >>? test >>? is_run_time)) id;
+                 lift
                    (O.seq_many
-                      [ push_all_unparameterized_filters
-                      ; O.for_all S.row_store
-                          Path.(all >>? is_run_time >>? is_relation)
-                      ; push_all_unparameterized_filters
-                      ; fix project
-                      ; Simplify_tactic.simplify ]) ]
-             |> lower (min Type_cost.(cost ~kind:`Avg read))) ])
+                      [
+                        push_all_unparameterized_filters;
+                        O.for_all S.row_store
+                          Path.(all >>? is_run_time >>? is_relation);
+                        push_all_unparameterized_filters;
+                        fix project;
+                        Simplify_tactic.simplify;
+                      ]);
+               ]
+             |> lower (min Cost.cost));
+         ])
 
   let try_partition tf =
     Branching.(
-      seq_many [choose (traced F.partition) id; lift tf]
-      |> lower (min Type_cost.(cost ~kind:`Avg read)))
+      seq_many [ choose (traced F.partition) id; lift tf ]
+      |> lower (min Cost.cost))
 
   let try_ tf rest =
-    Branching.(
-      seq (choose (lift tf) id) (lift rest)
-      |> lower (min Type_cost.(cost ~kind:`Avg read)))
+    Branching.(seq (choose (lift tf) id) (lift rest) |> lower (min Cost.cost))
 
   let opt =
     let open Infix in
     seq_many
-      [ (* Eliminate groupby operators. *)
+      [
+        (* Eliminate groupby operators. *)
         fix
           (at_ Groupby_tactics.elim_groupby
-             (Path.all >>? is_groupby >>| shallowest))
-      ; (* Hoist parameterized filters as far up as possible. *)
+             (Path.all >>? is_groupby >>| shallowest));
+        (* Hoist parameterized filters as far up as possible. *)
         fix
           (at_ F.hoist_filter
              (Path.all >>? is_param_filter >>| deepest >>= parent))
-        (* Eliminate unparameterized join nests. *)
-      ; at_ Join_opt.transform
-          (Path.all >>? is_join >>? not has_free >>| shallowest)
-      ; push_all_unparameterized_filters
-      ; project
-      ; at_ Join_elim_tactics.elim_join_filter
-          (Path.all >>? is_join >>| shallowest)
-      ; try_
+        (* Eliminate unparameterized join nests. *);
+        at_ Join_opt.transform
+          (Path.all >>? is_join >>? not has_free >>| shallowest);
+        push_all_unparameterized_filters;
+        project;
+        at_ Join_elim_tactics.elim_join_filter
+          (Path.all >>? is_join >>| shallowest);
+        try_
           (first (traced F.elim_disjunct) (Path.all >>? is_filter))
           (seq_many
-             [ (* Push constant filters *)
+             [
+               (* Push constant filters *)
                fix
                  (at_ F.push_filter
-                    Castor.Path.(all >>? is_const_filter >>| shallowest))
-             ; (* Push orderby operators into compile time position if possible. *)
+                    Castor.Path.(all >>? is_const_filter >>| shallowest));
+               (* Push orderby operators into compile time position if possible. *)
                fix
                  (at_ push_orderby
-                    Path.(all >>? is_orderby >>? is_run_time >>| shallowest))
-             ; (* Eliminate comparison filters. *)
-               elim_param_filter F.elim_cmp_filter is_param_cmp_filter
-             ; (* Eliminate the deepest equality filter. *)
+                    Path.(all >>? is_orderby >>? is_run_time >>| shallowest));
+               (* Eliminate comparison filters. *)
+               elim_param_filter F.elim_cmp_filter is_param_cmp_filter;
+               (* Eliminate the deepest equality filter. *)
                elim_param_filter
                  (Branching.lift F.elim_eq_filter)
-                 is_param_filter
-             ; push_all_unparameterized_filters
-             ; (* Eliminate all unparameterized relations. *)
+                 is_param_filter;
+               push_all_unparameterized_filters;
+               (* Eliminate all unparameterized relations. *)
                fix
                  (seq_many
-                    [ at_ S.row_store
+                    [
+                      at_ S.row_store
                         Path.(
                           all >>? is_run_time >>? not has_params
                           >>? not is_serializable
                           >>? not (contains is_collection)
-                          >>| shallowest)
-                    ; push_all_unparameterized_filters ])
-             ; push_all_unparameterized_filters
-             ; (* Push selections above collections. *)
+                          >>| shallowest);
+                      push_all_unparameterized_filters;
+                    ]);
+               push_all_unparameterized_filters;
+               (* Push selections above collections. *)
                fix
                  (for_all Select_tactics.push_select
                     Path.(
-                      all >>? is_select >>? is_run_time >>? above is_collection))
-             ; (* Push orderby operators into compile time position if possible. *)
+                      all >>? is_select >>? is_run_time >>? above is_collection));
+               (* Push orderby operators into compile time position if possible. *)
                fix
                  (at_ push_orderby
                     Path.(all >>? is_orderby >>? is_run_time >>| shallowest))
-               (* Last-ditch tactic to eliminate orderby. *)
-             ; for_all S.row_store Path.(all >>? is_orderby >>? is_run_time)
-             ; (* Try throwing away structure if it reduces overall cost. *)
+               (* Last-ditch tactic to eliminate orderby. *);
+               for_all S.row_store Path.(all >>? is_orderby >>? is_run_time);
+               (* Try throwing away structure if it reduces overall cost. *)
                Branching.(
                  seq_many
-                   [ choose id
+                   [
+                     choose id
                        (seq_many
-                          [ for_all (lift S.row_store)
-                              Path.(all >>? is_run_time >>? not has_params)
-                          ; lift push_all_unparameterized_filters ])
-                   ; filter is_serializable ]
-                 |> lower (min Type_cost.(cost ~kind:`Avg read)))
-               (* Cleanup*)
-             ; fix (for_all Dedup_tactics.push_dedup Path.(all >>? is_dedup))
-             ; fix project
-             ; push_all_unparameterized_filters
-             ; Simplify_tactic.simplify ]) ]
+                          [
+                            for_all (lift S.row_store)
+                              Path.(all >>? is_run_time >>? not has_params);
+                            lift push_all_unparameterized_filters;
+                          ]);
+                     filter is_serializable;
+                   ]
+                 |> lower (min Cost.cost))
+               (* Cleanup*);
+               fix (for_all Dedup_tactics.push_dedup Path.(all >>? is_dedup));
+               fix project;
+               push_all_unparameterized_filters;
+               Simplify_tactic.simplify;
+             ]);
+      ]
 
-  let opt_toplevel = seq_many [try_partition opt; apply_to_subqueries opt]
+  let opt_toplevel = seq_many [ try_partition opt; apply_to_subqueries opt ]
 
   let is_serializable r =
     let r = R.resolve ~params r in
-    annotate_free r ;
+    annotate_free r;
     let bad_runtime_op =
       Path.(
         all >>? is_run_time
@@ -279,7 +292,7 @@ end
 let optimize (module C : Config.S) r =
   let open Option.Let_syntax in
   (* Annotate query with free variables. *)
-  annotate_free r ;
+  annotate_free r;
   (* Optimize outer query. *)
   let%map r =
     let module T = Make (C) in
@@ -313,7 +326,7 @@ let optimize (module C : Config.S) r =
           AOrderedIdx (rk, self#visit_t () rv, m)
 
         method! visit_AHashIdx () h =
-          AHashIdx {h with hi_values= self#visit_t () h.hi_values}
+          AHashIdx { h with hi_values = self#visit_t () h.hi_values }
 
         method! visit_AScalar () v = AScalar v
       end

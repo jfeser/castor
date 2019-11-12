@@ -114,6 +114,8 @@ module Make (Config : Config.S) = struct
            (inter names (of_list (module Name) (schema_exn r)))
            (of_list (module Name) (List.filter_map ~f:Pred.to_name ps))))
 
+  (** For a set of predicates, check whether more than one predicate is true at
+     any time. *)
   let all_disjoint ps r =
     if List.length ps <= 1 then true
     else
