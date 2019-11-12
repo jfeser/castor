@@ -11,51 +11,59 @@ typedef query4::_Type1418949 orders_t;
 typedef query4::_Type1418950 param_t;
 
 int main() {
-  pqxx::connection conn("postgres:///tpch");
-  pqxx::work txn(conn);
-
-  // Build the part bag.
-  cout << "Loading orders..." << flush;
   vector<orders_t> orders_input;
-  for (const auto &r : txn.exec("select * from orders")) {
-    auto tuple =
-      orders_t(r[0].as<int>(),
-               r[1].as<int>(),
-               r[2].as<string>(),
-               r[3].as<float>(),
-               parse_date(r[4].as<string>()),
-               r[5].as<string>(),
-               r[6].as<string>(),
-               r[7].as<int>(),
-               r[8].as<string>());
-    orders_input.push_back(tuple);
-  }
-  cout << " done." << endl;
-
-  // Build the lineitem bag.
-  cout << "Loading lineitem..." << flush;
   vector<lineitem_t> lineitem_input;
-  for (const auto &r : txn.exec("select * from lineitem")) {
-    auto tuple =
-      lineitem_t(r[0].as<int>(),
+
+  try {
+    pqxx::connection conn("postgres:///tpch");
+    pqxx::work txn(conn);
+
+    // Build the part bag.
+    cout << "Loading orders..." << flush;
+    for (const auto &r : txn.exec("select * from orders")) {
+      auto tuple =
+        orders_t(r[0].as<int>(),
                  r[1].as<int>(),
-                 r[2].as<int>(),
-                 r[3].as<int>(),
-                 r[4].as<int>(),
-                 r[5].as<float>(),
-                 r[6].as<float>(),
-                 r[7].as<float>(),
-                 r[8].as<string>(),
-                 r[9].as<string>(),
-                 parse_date(r[10].as<string>()),
-                 parse_date(r[11].as<string>()),
-                 parse_date(r[12].as<string>()),
-                 r[13].as<string>(),
-                 r[14].as<string>(),
-                 r[15].as<string>());
-    lineitem_input.push_back(tuple);
+                 r[2].as<string>(),
+                 r[3].as<float>(),
+                 parse_date(r[4].as<string>()),
+                 r[5].as<string>(),
+                 r[6].as<string>(),
+                 r[7].as<int>(),
+                 r[8].as<string>());
+      orders_input.push_back(tuple);
+    }
+    cout << " done." << endl;
+
+    // Build the lineitem bag.
+    cout << "Loading lineitem..." << flush;
+    for (const auto &r : txn.exec("select * from lineitem")) {
+      auto tuple =
+        lineitem_t(r[0].as<int>(),
+                   r[1].as<int>(),
+                   r[2].as<int>(),
+                   r[3].as<int>(),
+                   r[4].as<int>(),
+                   r[5].as<float>(),
+                   r[6].as<float>(),
+                   r[7].as<float>(),
+                   r[8].as<string>(),
+                   r[9].as<string>(),
+                   parse_date(r[10].as<string>()),
+                   parse_date(r[11].as<string>()),
+                   parse_date(r[12].as<string>()),
+                   r[13].as<string>(),
+                   r[14].as<string>(),
+                   r[15].as<string>());
+      lineitem_input.push_back(tuple);
+    }
+    cout << " done." << endl;
+
+    txn.commit();
+  } catch (const exception &e) {
+    cerr << e.what() << endl;
+    return 1;
   }
-  cout << " done." << endl;
 
   // Build the query structure.
   cout << "Building query structure..." << flush;
