@@ -112,3 +112,21 @@ class ['s] disj_monoid =
 
     method private plus = ( || )
   end
+
+class ['s] int_sum_monoid =
+  object
+    inherit ['s] VisitorsRuntime.monoid
+
+    method private zero = 0
+
+    method private plus = ( + )
+  end
+
+class ['s] float_sum_monoid =
+  object
+    inherit ['s] VisitorsRuntime.monoid
+
+    method private zero = 0.0
+
+    method private plus = ( +. )
+  end

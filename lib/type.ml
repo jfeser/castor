@@ -49,8 +49,7 @@ module AbsInt = struct
         let xs = [ l1 * l2; l1 * h2; l2 * h1; h2 * h1 ] in
         Interval (min_many xs, max_many xs))
 
-  let ceil_pow2 =
-    lift1 (fun l h -> Interval (Int.ceil_pow2 l, Int.ceil_pow2 h))
+  let ceil_pow2 = lift1 (fun l h -> Interval (Int.ceil_pow2 l, Int.ceil_pow2 h))
 
   let meet i1 i2 =
     match (i1, i2) with
@@ -200,19 +199,11 @@ let bind2 : f:('a -> 'b -> 'c option) -> 'a option -> 'b option -> 'c option =
 let least_general_of_primtype = function
   | PrimType.IntT { nullable } ->
       IntT
-        {
-          range = AbsInt.bot;
-          nullable;
-          distinct = Distinct.empty (module Int);
-        }
+        { range = AbsInt.bot; nullable; distinct = Distinct.empty (module Int) }
   | NullT -> NullT
   | DateT { nullable } ->
       DateT
-        {
-          range = AbsInt.bot;
-          nullable;
-          distinct = Distinct.empty (module Int);
-        }
+        { range = AbsInt.bot; nullable; distinct = Distinct.empty (module Int) }
   | FixedT { nullable } -> FixedT { value = AbsFixed.bot; nullable }
   | StringT { nullable; _ } ->
       StringT
@@ -320,8 +311,7 @@ let rec width = function
 
 let rec count = function
   | EmptyT -> AbsInt.of_int 0
-  | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ | DateT _ ->
-      AbsInt.of_int 1
+  | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ | DateT _ -> AbsInt.of_int 1
   | TupleT (ts, { kind = `Concat }) -> List.sum (module AbsInt) ts ~f:count
   | TupleT (ts, { kind = `Cross }) ->
       List.map ts ~f:count

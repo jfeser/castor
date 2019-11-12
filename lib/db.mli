@@ -12,6 +12,13 @@ val param : t Command.Spec.param
 val exec :
   ?max_retries:int -> ?params:string list -> t -> string -> Postgresql.result
 
+val exec1 : ?params:string list -> t -> string -> string list
+
+val exec2 : ?params:string list -> t -> string -> (string * string) list
+
+val exec3 :
+  ?params:string list -> t -> string -> (string * string * string) list
+
 val command_ok : Postgresql.result -> unit Or_error.t
 
 val command_ok_exn : Postgresql.result -> unit

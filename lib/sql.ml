@@ -184,9 +184,7 @@ let select ?groupby of_ralgebra ps r =
     else spj
   in
   let sctx = make_ctx (schema_exn r) spj.select in
-  let fields =
-    List.map ps ~f:(fun p -> p |> Pred.subst sctx |> create_entry)
-  in
+  let fields = List.map ps ~f:(fun p -> p |> Pred.subst sctx |> create_entry) in
   let spj = { spj with select = fields } in
   let spj =
     match groupby with
@@ -351,10 +349,7 @@ and spj_to_sql { select; distinct; order; group; relations; conds; limit } =
       match select_kind (List.map select ~f:(fun { pred = p; _ } -> p)) with
       | `Agg ->
           List.map select ~f:(fun ({ pred = p; _ } as entry) ->
-              {
-                entry with
-                pred = (if Pred.kind p = `Scalar then Min p else p);
-              })
+              { entry with pred = (if Pred.kind p = `Scalar then Min p else p) })
       | `Scalar -> select
     else select
   in
@@ -457,3 +452,6 @@ let to_string_hum sql =
   match OS.Cmd.to_string ~trim:true out with
   | Ok sql' -> sql'
   | Error _ -> sql_str
+
+let sample n s =
+  sprintf "select * from (%s) as w order by random() limit %d" s n

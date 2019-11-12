@@ -72,8 +72,7 @@ module List = struct
     let rec repeat xs n = if n = 0 then xs else repeat (x :: xs) (n - 1) in
     repeat [] n
 
-  let rec unzip3 : ('a * 'b * 'c) list -> 'a list * 'b list * 'c list =
-    function
+  let rec unzip3 : ('a * 'b * 'c) list -> 'a list * 'b list * 'c list = function
     | (x, y, z) :: l ->
         let xs, ys, zs = unzip3 l in
         (x :: xs, y :: ys, z :: zs)
@@ -273,8 +272,7 @@ module Gen = struct
     in
     next
 
-  let rec junk_all g =
-    match Gen.next g with Some _ -> junk_all g | None -> ()
+  let rec junk_all g = match Gen.next g with Some _ -> junk_all g | None -> ()
 
   (** Ensure that `g1` is fully consumed before `g2` is used. *)
   let use_before g1 g2 =
@@ -349,8 +347,7 @@ end
 module Buffer = struct
   include Buffer
 
-  let equal : t -> t -> bool =
-   fun x y -> String.equal (contents x) (contents y)
+  let equal : t -> t -> bool = fun x y -> String.equal (contents x) (contents y)
 
   (* let to_string : t -> string = fun x ->
    *   List.init (Buffer.length x) ~f:(Buffer.nth x)

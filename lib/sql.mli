@@ -32,6 +32,8 @@ val has_aggregates : t -> bool
 
 val to_schema : t -> string list
 
+val sample : int -> string -> string
+
 val to_string : t -> string
 
 val to_string_hum : t -> string
