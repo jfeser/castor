@@ -31,8 +31,7 @@ type unop = Abslayout0.unop =
 type tuple = Abslayout0.tuple = Cross | Zip | Concat
 [@@deriving compare, hash, sexp_of]
 
-type order = Abslayout0.order = Asc | Desc
-[@@deriving compare, hash, sexp_of]
+type order = Abslayout0.order = Asc | Desc [@@deriving compare, hash, sexp_of]
 
 type pred = Abslayout0.pred =
   | Name of Name.t
@@ -192,7 +191,7 @@ val subst : pred Map.M(Name).t -> t -> t
 
 val select_kind : pred list -> [ `Agg | `Scalar ]
 
-val is_serializeable : t -> bool
+val is_serializeable : t -> (unit, string) result
 
 val pred_free : pred -> Set.M(Name).t
 
