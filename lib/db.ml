@@ -4,17 +4,41 @@ open Collections
 module Psql = Postgresql
 module A = Abslayout0
 
+let default_pool_size = 5
+
 let () =
   Caml.Printexc.register_printer (function
     | Postgresql.Error e -> Some (Postgresql.string_of_error e)
     | _ -> None)
 
-type t = { uri : string; conn : Psql.connection sexp_opaque [@compare.ignore] }
+type t = {
+  uri : string;
+  conn : Psql.connection sexp_opaque; [@compare.ignore]
+  pool : Psql.connection Lwt_pool.t sexp_opaque; [@compare.ignore]
+}
 [@@deriving compare, sexp]
 
-let num_conns = ref 0
+let connect uri = new Psql.connection ~conninfo:uri ()
 
-let create uri = { uri; conn = new Psql.connection ~conninfo:uri () }
+let create ?(pool_size = default_pool_size) uri =
+  let valid c =
+    match c#status with
+    | Psql.Ok -> true
+    | Bad -> false
+    | _ -> failwith "Unexpected connection status."
+  in
+  {
+    uri;
+    conn = connect uri;
+    pool =
+      Lwt_pool.create pool_size
+        ~dispose:(fun c ->
+          if valid c then c#finish;
+          return_unit)
+        ~validate:(fun c -> valid c |> return)
+        ~check:(fun c is_ok -> is_ok (valid c))
+        (fun () -> connect uri |> return);
+  }
 
 let conn { conn; _ } = conn
 
@@ -278,69 +302,68 @@ let exec_cursor_exn =
     in
     seq
 
-let exec_cursor_lwt_exn ?(batch_size = 100) ?(params = []) ?timeout db schema
-    query =
-  (* Create a new database connection. *)
-  let cdb = create db.uri in
-  incr num_conns;
+let exec_lwt db query =
+  Lwt_pool.use db.pool (fun conn -> conn#exec query |> return)
 
-  (* Prepare the query. *)
-  let begin_query, fetch_query, end_query =
-    let cur = Fresh.name Global.fresh "cur%d" in
-    let query = subst_params params query in
-    ( sprintf "begin transaction; declare %s cursor for %s;" cur query,
-      sprintf "fetch %d from %s;" batch_size cur,
-      "end transaction;" )
-  in
-  (* Wait for results from a send_query call. consume_input pulls any available
-     input from the database *)
-  let rec wait_for_results rs =
-    cdb.conn#consume_input;
-    if cdb.conn#is_busy then
-      (* TODO: Better not to busy wait here. *)
-      let%lwt () = Lwt_unix.sleep 0.01 in
-      wait_for_results rs
-    else
-      match cdb.conn#get_result with
-      | Some r -> wait_for_results (r :: rs)
-      | None -> return rs
-  in
-  let stream, push = Lwt_stream.create () in
-  let rec read_batch () =
-    cdb.conn#send_query fetch_query;
-    let%lwt rs = wait_for_results [] in
-    let tups = List.concat_map rs ~f:(load_tuples_list_exn schema) in
-    List.iter tups ~f:(fun t -> push (Some (Result.return t)));
-    if List.length tups < batch_size then (
-      push None;
-      return_unit )
-    else read_batch ()
-  in
-  let execute_cursor () =
-    exec cdb begin_query |> command_ok_exn;
-    let%lwt () = read_batch () in
-    exec cdb end_query |> command_ok_exn;
-    return_unit
-  in
-  async (fun () ->
-      finalize
-        (fun () ->
-          match timeout with
-          | Some t ->
-              catch
-                (fun () -> Lwt_unix.with_timeout t execute_cursor)
-                (fun exn ->
-                  push (Some (Result.fail exn));
-                  let pid = cdb.conn#backend_pid in
-                  exec db (sprintf "select pg_cancel_backend(%d);" pid)
-                  |> ignore;
-                  return_unit)
-          | None -> execute_cursor ())
-        (fun () ->
-          decr num_conns;
-          cdb.conn#finish;
-          return_unit));
-  stream
+let exec_cursor_lwt_exn ?(batch_size = 100) ?(params = []) ?timeout db schema
+    query callback =
+  (* Create a new database connection. *)
+  Lwt_pool.use db.pool (fun conn ->
+      (* Prepare the query. *)
+      let begin_query, fetch_query, end_query =
+        let cur = Fresh.name Global.fresh "cur%d" in
+        let query = subst_params params query in
+        ( sprintf "begin transaction; declare %s cursor for %s;" cur query,
+          sprintf "fetch %d from %s;" batch_size cur,
+          "end transaction;" )
+      in
+      (* Wait for results from a send_query call. consume_input pulls any
+         available input from the database *)
+      let rec wait_for_results rs =
+        conn#consume_input;
+        if conn#is_busy then
+          (* TODO: Better not to busy wait here. *)
+          let%lwt () = Lwt_unix.sleep 0.01 in
+          wait_for_results rs
+        else
+          match conn#get_result with
+          | Some r -> wait_for_results (r :: rs)
+          | None -> return rs
+      in
+      let stream, push = Lwt_stream.create () in
+      let rec read_batch () =
+        conn#send_query fetch_query;
+        let%lwt rs = wait_for_results [] in
+        let tups = List.concat_map rs ~f:(load_tuples_list_exn schema) in
+        List.iter tups ~f:(fun t -> push (Some (Result.return t)));
+        if List.length tups < batch_size then (
+          push None;
+          return_unit )
+        else read_batch ()
+      in
+      let execute_cursor () =
+        conn#exec begin_query |> command_ok_exn;
+        let%lwt () = read_batch () in
+        conn#exec end_query |> command_ok_exn;
+        return_unit
+      in
+      let execute_with_timeout t =
+        try%lwt Lwt_unix.with_timeout t execute_cursor
+        with exn ->
+          push (Some (Result.fail exn));
+          let%lwt _ =
+            exec_lwt db
+              (sprintf "select pg_cancel_backend(%d);" conn#backend_pid)
+          in
+          return_unit
+      in
+      let execute () =
+        match timeout with
+        | Some t -> execute_with_timeout t
+        | None -> execute_cursor ()
+      in
+      let%lwt ret = callback stream and () = execute () in
+      return ret)
 
 let check db sql =
   let open Or_error.Let_syntax in

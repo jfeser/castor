@@ -3,7 +3,7 @@ open Collections
 
 type t
 
-val create : string -> t
+val create : ?pool_size:int -> string -> t
 
 val conn : t -> Postgresql.connection
 
@@ -40,7 +40,8 @@ val exec_cursor_lwt_exn :
   t ->
   Type.PrimType.t list ->
   string ->
-  (Value.t array, exn) result Lwt_stream.t
+  ((Value.t array, exn) result Lwt_stream.t -> 'a Lwt.t) ->
+  'a Lwt.t
 
 val check : t -> string -> unit Or_error.t
 

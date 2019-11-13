@@ -368,8 +368,7 @@ module Make (Config : Config.S) = struct
             (fun t ->
               let l = List.length t in
               if l = l' then t
-              else
-                Error.createf "Expected length %d got %d" l' l |> Error.raise)
+              else Error.createf "Expected length %d got %d" l' l |> Error.raise)
             tups
         in
         match a.Q.node with
@@ -386,13 +385,14 @@ module Make (Config : Config.S) = struct
         Logs.debug (fun m -> m "Running query: %a" pp r);
         let sql = Sql.of_ralgebra r in
         Logs.debug (fun m -> m "Running SQL: %s" (Sql.to_string_hum sql));
-        let tups =
-          Db.exec_cursor_lwt_exn ?timeout conn
-            (A.schema_exn r |> List.map ~f:Name.type_exn)
-            (Sql.to_string sql)
-          |> Lwt_stream.map (fun r -> Result.ok_exn r |> Array.to_list)
-        in
-        self#eval (Map.empty (module String)) tups (Q.to_width q)
+        Db.exec_cursor_lwt_exn ?timeout conn
+          (A.schema_exn r |> List.map ~f:Name.type_exn)
+          (Sql.to_string sql)
+          (fun tups ->
+            let tups =
+              Lwt_stream.map (fun r -> Result.ok_exn r |> Array.to_list) tups
+            in
+            self#eval (Map.empty (module String)) tups (Q.to_width q))
         |> Lwt_main.run
     end
 
@@ -442,8 +442,7 @@ module Make (Config : Config.S) = struct
     object
       inherit [_] abslayout_fold
 
-      method! select _ (exprs, _) t =
-        T.FuncT ([ t ], `Width (List.length exprs))
+      method! select _ (exprs, _) t = T.FuncT ([ t ], `Width (List.length exprs))
 
       method join _ _ t1 t2 = T.FuncT ([ t1; t2 ], `Child_sum)
 
@@ -493,8 +492,7 @@ module Make (Config : Config.S) = struct
         let fold (t, c) (_, t') =
           try (T.unify_exn t t', c + 1)
           with Type.TypeError _ as exn ->
-            Logs.err (fun m ->
-                m "Type checking failed on: %a" A.pp (A.list' l));
+            Logs.err (fun m -> m "Type checking failed on: %a" A.pp (A.list' l));
             Logs.err (fun m ->
                 m "%a does not unify with %a" Sexp.pp_hum
                   ([%sexp_of: T.t] t)
@@ -594,9 +592,8 @@ module Make (Config : Config.S) = struct
       | ( ( Select _ | Filter _ | DepJoin _ | Join _ | GroupBy _ | OrderBy _
           | Dedup _ | Relation _ | AEmpty | AScalar _ | AList _ | ATuple _
           | AHashIdx _ | AOrderedIdx _ | Range _ ),
-          ( NullT | IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _
-          | TupleT _ | ListT _ | HashIdxT _ | OrderedIdxT _ | FuncT _ | EmptyT
-            ) ) ->
+          ( NullT | IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | TupleT _
+          | ListT _ | HashIdxT _ | OrderedIdxT _ | FuncT _ | EmptyT ) ) ->
           Error.create "Unexpected type." (r, t) [%sexp_of: Abslayout.t * t]
           |> Error.raise
     in
