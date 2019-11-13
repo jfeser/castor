@@ -8,7 +8,7 @@
 using namespace std;
 
 typedef query17::_Type89930 part_t;
-typedef query17::_Type89933 lineitem_t;
+typedef query17::_Type89931 lineitem_t;
 
 int main(int argc, char **argv) {
   char* db = argv[1];
@@ -42,22 +42,9 @@ int main(int argc, char **argv) {
     cout << "Loading lineitem..." << flush;
     for (const auto &r : txn.exec("select * from lineitem")) {
       auto tuple =
-        lineitem_t(r[0].as<int>(),
-                   r[1].as<int>(),
-                   r[2].as<int>(),
-                   r[3].as<int>(),
-                   r[4].as<int>(),
+        lineitem_t(r[1].as<int>(),
                    r[5].as<float>(),
-                   r[6].as<float>(),
-                   r[7].as<float>(),
-                   r[8].as<string>(),
-                   r[9].as<string>(),
-                   parse_date(r[10].as<string>()),
-                   parse_date(r[11].as<string>()),
-                   parse_date(r[12].as<string>()),
-                   r[13].as<string>(),
-                   r[14].as<string>(),
-                   r[15].as<string>());
+                   r[4].as<int>());
       lineitem_input.push_back(tuple);
     }
     cout << " done." << endl;
@@ -83,17 +70,17 @@ int main(int argc, char **argv) {
 
   // Build the query structure.
   cout << "Building query structure..." << flush;
-  query17 q(lineitem_input, part_input);
+  query17 q(part_input, lineitem_input, map1, map2);
   cout << "done." << endl;
 
   // Run the query.
   auto start = chrono::high_resolution_clock::now();
-  for (int i = 0; i < 100; i++) {
+  for (int i = 0; i < 1; i++) {
     sink(q.q6("Brand#23", "MED BOX"));
   }
   auto end = chrono::high_resolution_clock::now();
   chrono::duration<double> diff = end - start;
-  cout << "Runtime: " << diff.count() / 100.0 << " s" << endl;
+  cout << "Runtime: " << diff.count() / 1.0 << " s" << endl;
 
   return 0;
 }
