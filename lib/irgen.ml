@@ -534,7 +534,8 @@ struct
             let a_param = Slice (hash_data_start, 8) in
             let b_param = Slice (Infix.(hash_data_start + int 8), 8) in
             let m = Slice (Infix.(hash_data_start + int 16), 8) in
-            Infix.((build_mul a_param x b + b_param) lsr (int 63 - m))
+            Infix.(
+              (build_mul a_param (build_to_int x b) b + b_param) lsr (int 63 - m))
         | `Universal, _ -> failwith "Unexpected universal hash."
         | `Cmph, [ x ] -> build_hash hash_data_start x b
         | `Cmph, xs -> build_hash hash_data_start (Tuple xs) b
