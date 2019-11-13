@@ -220,6 +220,10 @@ let kind p =
 
       inherit [_] Util.disj_monoid
 
+      method! visit_Exists () _ = false
+
+      method! visit_First () _ = false
+
       method! visit_Sum () _ = true
 
       method! visit_Avg () _ = true
@@ -371,9 +375,7 @@ let simplify p =
           let common =
             List.map clauses ~f:C.Set.of_list |> List.reduce_exn ~f:Set.inter
           in
-          let clauses =
-            List.map ~f:(List.filter ~f:(Set.mem common)) clauses
-          in
+          let clauses = List.map ~f:(List.filter ~f:(Set.mem common)) clauses in
           let common = Set.to_list common in
           let clauses = disjoin (List.map ~f:conjoin clauses) in
           Binop (And, conjoin common, clauses)
