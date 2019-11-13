@@ -10,12 +10,13 @@ using namespace std;
 typedef query17::_Type89930 part_t;
 typedef query17::_Type89933 lineitem_t;
 
-int main() {
+int main(int argc, char **argv) {
+  char* db = argv[1];
   vector<part_t> part_input;
   vector<lineitem_t> lineitem_input;
 
   try {
-    pqxx::connection conn("postgres:///tpch");
+    pqxx::connection conn(db);
     pqxx::work txn(conn);
 
     // Build the part bag.

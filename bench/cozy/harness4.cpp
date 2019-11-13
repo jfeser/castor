@@ -11,12 +11,14 @@ typedef query4::_Type1418951 lineitem_t;
 typedef query4::_Type1418949 orders_t;
 typedef query4::_Type1418950 param_t;
 
-int main() {
+int main(int argc, char **argv) {
+  char* db = argv[1];
+
   vector<orders_t> orders_input;
   vector<lineitem_t> lineitem_input;
 
   try {
-    pqxx::connection conn("postgres:///tpch");
+    pqxx::connection conn(db);
     pqxx::work txn(conn);
 
     // Build the part bag.
