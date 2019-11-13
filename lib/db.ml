@@ -4,7 +4,7 @@ open Collections
 module Psql = Postgresql
 module A = Abslayout0
 
-let default_pool_size = 9
+let default_pool_size = 7
 
 let () =
   Caml.Printexc.register_printer (function
