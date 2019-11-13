@@ -48,4 +48,6 @@ val relation : ?with_types:bool -> t -> string -> Relation.t
 
 val all_relations : t -> Relation.t list
 
+val relation_count : t -> string -> int
+
 val relation_has_field : t -> string -> Relation.t option

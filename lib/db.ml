@@ -158,6 +158,10 @@ let relation_memo =
 let relation ?(with_types = true) conn rname =
   relation_memo (conn, rname, with_types)
 
+let relation_count conn r_name =
+  exec1 ~params:[ r_name ] conn "select count(*) from $0"
+  |> List.hd_exn |> Int.of_string
+
 let all_relations conn =
   let names =
     exec1 conn
