@@ -7,7 +7,6 @@
 
 using namespace std;
 
-typedef query4::_Type1418951 lineitem_t;
 typedef query4::_Type1418949 orders_t;
 typedef query4::_Type1418950 param_t;
 
@@ -15,15 +14,16 @@ int main(int argc, char **argv) {
   char* db = argv[1];
 
   vector<orders_t> orders_input;
-  vector<lineitem_t> lineitem_input;
 
   try {
     pqxx::connection conn(db);
     pqxx::work txn(conn);
 
-    // Build the part bag.
-    cout << "Loading orders..." << flush;
-    for (const auto &r : txn.exec("select * from orders")) {
+    // Build the internal structure.
+    cout << "Loading data..." << flush;
+    auto rows =
+      txn.exec("select o_orderkey, o_custkey, o_orderstatus, o_totalprice, o_orderdate, o_orderpriority, o_clerk, o_shippriority, o_comment from orders, lineitem where o_orderkey = l_orderkey and l_commitdate < l_receiptdate");
+    for (const auto &r : rows) {
       auto tuple =
         orders_t(r[0].as<int>(),
                  r[1].as<int>(),
@@ -38,30 +38,6 @@ int main(int argc, char **argv) {
     }
     cout << " done." << endl;
 
-    // Build the lineitem bag.
-    cout << "Loading lineitem..." << flush;
-    for (const auto &r : txn.exec("select * from lineitem")) {
-      auto tuple =
-        lineitem_t(r[0].as<int>(),
-                   r[1].as<int>(),
-                   r[2].as<int>(),
-                   r[3].as<int>(),
-                   r[4].as<int>(),
-                   r[5].as<float>(),
-                   r[6].as<float>(),
-                   r[7].as<float>(),
-                   r[8].as<string>(),
-                   r[9].as<string>(),
-                   parse_date(r[10].as<string>()),
-                   parse_date(r[11].as<string>()),
-                   parse_date(r[12].as<string>()),
-                   r[13].as<string>(),
-                   r[14].as<string>(),
-                   r[15].as<string>());
-      lineitem_input.push_back(tuple);
-    }
-    cout << " done." << endl;
-
     txn.commit();
   } catch (const exception &e) {
     cerr << e.what() << endl;
@@ -70,17 +46,17 @@ int main(int argc, char **argv) {
 
   // Build the query structure.
   cout << "Building query structure..." << flush;
-  query4 q(lineitem_input, orders_input);
+  query4 q(orders_input);
   cout << "done." << endl;
 
   // Run the query.
   auto start = chrono::high_resolution_clock::now();
-  for (int i = 0; i < 100; i++) {
+  for (int i = 0; i < 1; i++) {
     q.q7(parse_date("1993-07-01"), [](param_t x) { sink(x); });
   }
   auto end = chrono::high_resolution_clock::now();
   chrono::duration<double> diff = end - start;
-  cout << "Runtime: " << diff.count() / 100.0 << " s" << endl;
+  cout << "Runtime: " << diff.count() / 1.0 << " s" << endl;
 
   return 0;
 }

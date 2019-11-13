@@ -14,6 +14,8 @@ int main(int argc, char **argv) {
   char* db = argv[1];
   vector<part_t> part_input;
   vector<lineitem_t> lineitem_input;
+  std::unordered_map< int , float , std::hash<int > > map1;
+  std::unordered_map< int , float , std::hash<int > > map2;
 
   try {
     pqxx::connection conn(db);
@@ -59,6 +61,21 @@ int main(int argc, char **argv) {
       lineitem_input.push_back(tuple);
     }
     cout << " done." << endl;
+
+    // Build map1
+    cout << "Loading map1..." << flush;
+    for (const auto &r : txn.exec("select l_partkey, count(*) from lineitem group by l_partkey")) {
+      map1[r[0].as<int>()] = r[1].as<float>();
+    }
+    cout << " done." << endl;
+
+    // Build map2
+    cout << "Loading map2..." << flush;
+    for (const auto &r : txn.exec("select l_partkey, sum(l_quantity) from lineitem group by l_partkey")) {
+      map2[r[0].as<int>()] = r[1].as<float>();
+    }
+    cout << " done." << endl;
+
   } catch (const exception &e) {
     cerr << e.what() << endl;
     return 1;

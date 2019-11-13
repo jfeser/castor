@@ -415,14 +415,14 @@ protected:
   std::unordered_map< int , float , std::hash<int > > _var32063;
   std::unordered_map< int , float , std::hash<int > > _var36197;
 public:
-  inline query17() {
-    _var197 = (std::vector< _Type89930  > ());
-    std::vector< _Type89931  > _var89978 = (std::vector< _Type89931  > ());
-    _var4629 = std::move(_var89978);
-    std::unordered_map< int , float , std::hash<int > > _map89981 = (std::unordered_map< int , float , std::hash<int > > ());
-    _var32063 = std::move(_map89981);
-    std::unordered_map< int , float , std::hash<int > > _map89988 = (std::unordered_map< int , float , std::hash<int > > ());
-    _var36197 = std::move(_map89988);
+  inline query17(std::vector< _Type89930  > i1,
+                 std::vector< _Type89931  > i2,
+                 std::unordered_map< int , float , std::hash<int > > i3,
+                 std::unordered_map< int , float , std::hash<int > > i4) {
+    _var197 = std::move(i1);
+    _var4629 = std::move(i2);
+    _var32063 = std::move(i3);
+    _var36197 = std::move(i4);
   }
   explicit inline query17(std::vector< _Type89933  > lineitem, std::vector< _Type89930  > part) {
     _var197 = part;

@@ -285,9 +285,8 @@ public:
 protected:
   std::vector< _Type1418949  > _var250829;
 public:
-  inline query4() {
-    std::vector< _Type1418949  > _var1418982 = (std::vector< _Type1418949  > ());
-    _var250829 = std::move(_var1418982);
+  inline query4(std::vector< _Type1418949  > data) {
+    _var250829 = std::move(data);
   }
   explicit inline query4(std::vector< _Type1418951  > lineitem, std::vector< _Type1418949  > orders) {
     std::vector< _Type1418949  > _var1418989 = (std::vector< _Type1418949  > ());
