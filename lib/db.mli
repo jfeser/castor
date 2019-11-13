@@ -33,15 +33,13 @@ val exec_cursor_exn :
   string ->
   Value.t array Gen.t
 
-val exec_cursor_lwt_exn :
-  ?batch_size:int ->
+val exec_lwt_exn :
   ?params:string list ->
   ?timeout:float ->
   t ->
   Type.PrimType.t list ->
   string ->
-  ((Value.t array, exn) result Lwt_stream.t -> 'a Lwt.t) ->
-  'a Lwt.t
+  (Value.t array, exn) result Lwt_stream.t
 
 val check : t -> string -> unit Or_error.t
 

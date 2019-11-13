@@ -385,14 +385,13 @@ module Make (Config : Config.S) = struct
         Logs.debug (fun m -> m "Running query: %a" pp r);
         let sql = Sql.of_ralgebra r in
         Logs.debug (fun m -> m "Running SQL: %s" (Sql.to_string_hum sql));
-        Db.exec_cursor_lwt_exn ?timeout conn
-          (A.schema_exn r |> List.map ~f:Name.type_exn)
-          (Sql.to_string sql)
-          (fun tups ->
-            let tups =
-              Lwt_stream.map (fun r -> Result.ok_exn r |> Array.to_list) tups
-            in
-            self#eval (Map.empty (module String)) tups (Q.to_width q))
+        let tups =
+          Db.exec_lwt_exn ?timeout conn
+            (A.schema_exn r |> List.map ~f:Name.type_exn)
+            (Sql.to_string sql)
+          |> Lwt_stream.map (fun r -> Result.ok_exn r |> Array.to_list)
+        in
+        self#eval (Map.empty (module String)) tups (Q.to_width q)
         |> Lwt_main.run
     end
 
