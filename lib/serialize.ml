@@ -137,9 +137,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
       let hash =
         Seq.map keys ~f:(fun (k, _) -> k)
         |> Seq.to_list
-        |> Genhash.gen_multiply_shift ~max_time:Time.Span.minute
+        |> Genhash.search_hash ~max_time:Time.Span.minute
       in
-      let hash = Option.value_exn hash in
       (* Populate hash table with CMPH hash values. *)
       ( Seq.map keys ~f:(fun (k, p) -> (Genhash.hash hash k, p)),
         of_int ~byte_width:8 hash.Genhash.a
@@ -215,11 +214,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
             let start = self#pos in
             let ret = f () in
             let m =
-              {
-                pos = start;
-                len = self#pos - start;
-                msg = msgf Format.sprintf;
-              }
+              { pos = start; len = self#pos - start; msg = msgf Format.sprintf }
             in
             msgs <- m :: msgs;
             ret )
@@ -270,8 +265,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           let main = new logged_serializer () in
           main#logf
             (fun m -> m "List count (=%d)" count)
-            ~f:(fun () ->
-              main#write_string (serialize_field hdr "count" count));
+            ~f:(fun () -> main#write_string (serialize_field hdr "count" count));
           main#logf
             (fun m -> m "List len (=%d)" len)
             ~f:(fun () -> main#write_string (serialize_field hdr "len" len));
@@ -481,8 +475,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
             | BoolT _, false -> 0
             | t, _ ->
                 Error.(
-                  create "Unexpected layout type." t [%sexp_of: Type.t]
-                  |> raise)
+                  create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
           in
           serialize_field hdr "value" value
         in

@@ -166,8 +166,7 @@ struct
           (fun b ->
             build_if
               ~cond:
-                Infix.(
-                  is_below_upper_tight key b && is_above_lower_tight key b)
+                Infix.(is_below_upper_tight key b && is_above_lower_tight key b)
               ~then_:(fun b ->
                 print ~key idx b;
                 callback key idx b)
@@ -277,8 +276,7 @@ struct
           | A.Div -> build_div e1 e2 b
           | A.Mod -> Infix.(e1 % e2)
           | A.Strpos -> Binop { op = `StrPos; arg1 = e1; arg2 = e2 } )
-      | (A.Count | A.Min _ | A.Max _ | A.Sum _ | A.Avg _ | A.Row_number) as p
-        ->
+      | (A.Count | A.Min _ | A.Max _ | A.Sum _ | A.Avg _ | A.Row_number) as p ->
           Error.create "Not a scalar predicate." p [%sexp_of: A.pred]
           |> Error.raise
       | A.If (p1, p2, p3) ->
@@ -299,11 +297,8 @@ struct
            inline. *)
           let ctx = Map.remove ctx (Name.create "start") in
           let t = Meta.(find_exn r type_) in
-          let ret_var =
-            build_var "first" (List.hd_exn (types_of_layout r)) b
-          in
-          scan ctx b r t (fun b tup ->
-              build_assign (List.hd_exn tup) ret_var b);
+          let ret_var = build_var "first" (List.hd_exn (types_of_layout r)) b in
+          scan ctx b r t (fun b tup -> build_assign (List.hd_exn tup) ret_var b);
           ret_var
       | A.Exists r ->
           let ctx = Map.remove ctx (Name.create "start") in
@@ -487,8 +482,7 @@ struct
         scan ctx b child_layout child_type cb;
         build_assign Infix.(cstart + clen) cstart b)
 
-  and scan_list ctx b (_, child_layout) ((child_type, _) as t) (cb : callback)
-      =
+  and scan_list ctx b (_, child_layout) ((child_type, _) as t) (cb : callback) =
     let open Builder in
     let hdr = Header.make_header (ListT t) in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -537,10 +531,10 @@ struct
         match (Type.(hash_kind_exn (HashIdxT t)), lookup_expr) with
         | _, [] -> failwith "empty hash key"
         | `Universal, [ x ] ->
-            let a = Slice (hash_data_start, 8) in
-            let b = Slice (Infix.(hash_data_start + int 8), 8) in
+            let a_param = Slice (hash_data_start, 8) in
+            let b_param = Slice (Infix.(hash_data_start + int 8), 8) in
             let m = Slice (Infix.(hash_data_start + int 16), 8) in
-            Infix.(((a * x) + b) lsr (int 63 - m))
+            Infix.((build_mul a_param x b + b_param) lsr (int 63 - m))
         | `Universal, _ -> failwith "Unexpected universal hash."
         | `Cmph, [ x ] -> build_hash hash_data_start x b
         | `Cmph, xs -> build_hash hash_data_start (Tuple xs) b
