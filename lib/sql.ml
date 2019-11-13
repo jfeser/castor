@@ -116,13 +116,14 @@ let order_by of_ralgebra key r =
   let spj = to_spj (of_ralgebra r) in
   let key =
     let ctx = make_ctx (schema_exn r) spj.select in
-    List.map key ~f:(fun (p, o) -> (Pred.subst ctx p, o))
-    |> List.filter ~f:(fun (p, _) ->
-           match p with
-           | Name _ | As_pred (Name _, _) -> true
-           | _ ->
-               Log.warn (fun m -> m "Non-name in order-by: %a" Pred.pp p);
-               false)
+    let preds = List.map key ~f:(fun (p, o) -> (Pred.subst ctx p, o)) in
+    (* Check that all predicates are scalar *)
+    let non_scalar =
+      List.find preds ~f:(fun (p, _) -> Pred.kind p <> `Scalar)
+    in
+    Option.iter non_scalar ~f:(fun (p, _) ->
+        Log.err (fun m -> m "Non-scalar predicate in order-by: %a" Pred.pp p));
+    preds
   in
   Query { spj with order = key }
 
