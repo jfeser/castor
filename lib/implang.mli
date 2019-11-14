@@ -82,9 +82,9 @@ and prog = stmt list [@@deriving compare, sexp]
 
 type func = Implang0.func = {
   name : string;
-  args : (string * Type0.PrimType.t) list;
+  args : (string * Type.PrimType.t) list;
   body : prog;
-  ret_type : Type0.PrimType.t;
+  ret_type : Type.PrimType.t;
   locals : local list;
 }
 [@@deriving compare, sexp]
@@ -229,9 +229,9 @@ module Ctx : sig
 
   val of_schema : Name.t list -> expr list -> t
 
-  val make_caller_args : t -> (string * Type0.PrimType.t) list
+  val make_caller_args : t -> (string * Type.PrimType.t) list
 
-  val bind : t -> string -> Type0.PrimType.t -> expr -> t
+  val bind : t -> string -> Type.PrimType.t -> expr -> t
 
   val var_to_expr : var -> Builder.t -> expr
 

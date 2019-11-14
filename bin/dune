@@ -19,7 +19,7 @@
  (modules compile))
 
 (executable
- (name to_cozy)
+ (public_name to_cozy)
  (libraries core castor)
  (flags
   (:standard -g -bin-annot))
@@ -28,25 +28,7 @@
  (modules to_cozy))
 
 (executable
- (name sample)
- (libraries core postgresql castor logs)
- (flags
-  (:standard -g -bin-annot))
- (preprocess
-  (pps ppx_sexp_conv ppx_let))
- (modules sample))
-
-(executable
- (name transform)
- (libraries core postgresql castor logs)
- (flags
-  (:standard -g -bin-annot))
- (preprocess
-  (pps ppx_sexp_conv ppx_let))
- (modules transform))
-
-(executable
- (name sample_tpch)
+ (public_name sample_tpch)
  (libraries core postgresql castor logs)
  (flags
   (:standard -g -bin-annot))
@@ -64,7 +46,7 @@
  (modules bench_gen))
 
 (executable
- (name parse_sql)
+ (public_name parse_sql)
  (libraries core sqlgg castor yojson)
  (flags
   (:standard -g -bin-annot))
@@ -73,7 +55,7 @@
  (modules parse_sql))
 
 (executable
- (name parse_cozy)
+ (public_name parse_cozy)
  (libraries core castor)
  (flags
   (:standard -g -bin-annot))

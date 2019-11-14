@@ -61,8 +61,6 @@ let normalize p =
 
 let as_pred x = normalize (as_pred x)
 
-let of_value = Value.to_pred
-
 let rec conjoin = function
   | [] -> Bool true
   | [ p ] -> p
@@ -112,75 +110,6 @@ let rec disjuncts = function
 let%expect_test "" =
   conjuncts (Binop (Eq, Int 0, Int 1)) |> [%sexp_of: t list] |> print_s;
   [%expect {| ((Binop (Eq (Int 0) (Int 1)))) |}]
-
-let constants schema p =
-  let module M = struct
-    include T
-    include C
-  end in
-  let schema = Set.of_list (module Name) schema in
-  let empty = Set.empty (module M) in
-  let singleton = Set.singleton (module M) in
-  let visitor =
-    object
-      inherit [_] Abslayout0.reduce as super
-
-      inherit [_] Util.set_monoid (module M)
-
-      method! visit_Name () n =
-        if Set.mem schema n then empty else singleton (Name n)
-
-      method! visit_Int () x = singleton (Int x)
-
-      method! visit_Fixed () x = singleton (Fixed x)
-
-      method! visit_Date () x = singleton (Date x)
-
-      method! visit_Bool () x = singleton (Bool x)
-
-      method! visit_String () x = singleton (String x)
-
-      method! visit_Null () x = singleton (Null x)
-
-      method! visit_As_pred () args =
-        let p, _ = args in
-        let ps = super#visit_As_pred () args in
-        if Set.mem ps p then Set.add ps (As_pred args) else ps
-
-      method! visit_Substring () p1 p2 p3 =
-        let ps = super#visit_Substring () p1 p2 p3 in
-        if Set.mem ps p1 && Set.mem ps p2 && Set.mem ps p3 then
-          Set.add ps (Substring (p1, p2, p3))
-        else ps
-
-      method! visit_First () r =
-        let free = Meta.(find_exn r free) in
-        if Set.is_empty (Set.inter free schema) then singleton (First r)
-        else empty
-
-      method! visit_Exists () r =
-        let free = Meta.(find_exn r free) in
-        if Set.is_empty (Set.inter free schema) then singleton (Exists r)
-        else empty
-
-      method! visit_If () p1 p2 p3 =
-        let ps = super#visit_If () p1 p2 p3 in
-        if Set.mem ps p1 && Set.mem ps p2 && Set.mem ps p3 then
-          Set.add ps (If (p1, p2, p3))
-        else ps
-
-      method! visit_Binop () args =
-        let ps = super#visit_Binop () args in
-        let _, p1, p2 = args in
-        if Set.mem ps p1 && Set.mem ps p2 then Set.add ps (Binop args) else ps
-
-      method! visit_Unop () args =
-        let ps = super#visit_Unop () args in
-        let _, p = args in
-        if Set.mem ps p then Set.add ps (Unop args) else ps
-    end
-  in
-  visitor#visit_pred () p |> Set.to_list
 
 let dedup_pairs = List.dedup_and_sort ~compare:[%compare: Name.t * Name.t]
 
@@ -294,27 +223,6 @@ let unscoped scope p =
   in
   v#visit_pred () p
 
-(** Return the set of relations which have fields in the tuple produced by
-     this expression. *)
-let relations p =
-  let rels = ref [] in
-  let f =
-    object
-      inherit [_] Abslayout0.iter
-
-      method! visit_Name () n =
-        match Name.rel n with Some r -> rels := r :: !rels | None -> ()
-
-      method visit_name () _ = ()
-
-      method visit_'m () _ = ()
-    end
-  in
-  f#visit_pred () p;
-  !rels
-
-(** Ensure that a predicate is decorated with an alias. If the predicate is
-     nameless, then the alias will be fresh. *)
 let ensure_alias = function
   | As_pred _ as p -> p
   | p -> (
@@ -347,18 +255,6 @@ let to_nnf p =
     end
   in
   visitor#visit_pred () p
-
-let rec to_cnf = function
-  | Binop (And, p, q) -> to_cnf p @ to_cnf q
-  | Binop (Or, p, q) ->
-      List.cartesian_product (to_cnf p) (to_cnf q)
-      |> List.map ~f:(fun (l1, l2) -> List.append l1 l2)
-  | Unop (Not, Unop (Not, p)) -> to_cnf p
-  | Unop (Not, Binop (And, p, q)) ->
-      to_cnf (Binop (Or, Unop (Not, p), Unop (Not, q)))
-  | Unop (Not, Binop (Or, p, q)) ->
-      to_cnf (Binop (And, Unop (Not, p), Unop (Not, q)))
-  | p -> [ [ p ] ]
 
 let simplify p =
   let p = to_nnf p in
@@ -402,8 +298,6 @@ let simplify p =
     end
   in
   p |> to_nnf |> common_visitor#visit_pred ()
-
-(* |> dup_visitor#visit_pred () *)
 
 let max_of p1 p2 = if_ (binop (Lt, p1, p2)) p2 p1
 

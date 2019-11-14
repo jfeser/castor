@@ -150,9 +150,7 @@ let to_width q =
 
 let total_order_key q =
   let native_order = Abslayout.order_of q in
-  let total_order =
-    List.map (A.schema_exn q) ~f:(fun n -> (A.Name n, A.Asc))
-  in
+  let total_order = List.map (A.schema_exn q) ~f:(fun n -> (A.Name n, A.Asc)) in
   native_order @ total_order
 
 let to_scalars rs =
@@ -277,8 +275,7 @@ let rec to_ralgebra' q =
                      else
                        (* Otherwise emit null. *)
                        List.map ~f:(fun n ->
-                           A.As_pred
-                             (Null (Some (Name.type_exn n)), Name.name n)))
+                           A.As_pred (Null (Some (Name.type_exn n)), Name.name n)))
             in
             A.select select_list q)
       in
@@ -289,7 +286,17 @@ let rec to_ralgebra' q =
   | Empty -> A.empty
   | Scalars ps -> A.tuple (List.map ps ~f:A.scalar) Cross
 
-let to_ralgebra q = wrap q |> to_ralgebra'
+let rec n_parallel q =
+  match q.node with
+  | Empty -> 0
+  | For _ | Scalars _ | Var _ -> 1
+  | Let (binds, q) ->
+      List.sum (module Int) binds ~f:(fun (_, q) -> n_parallel q) + n_parallel q
+  | Concat qs -> List.sum (module Int) qs ~f:n_parallel
+
+let to_ralgebra q =
+  Log.info (fun m -> m "Potential parallelism: %d queries" (n_parallel q));
+  wrap q |> to_ralgebra'
 
 let rec width' q =
   match q.node with

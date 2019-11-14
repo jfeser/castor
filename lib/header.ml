@@ -34,12 +34,7 @@ let size hdr name =
   let ret = size_to_int field.Field.size in
   Or_error.tag_arg ret "size" (hdr, name) [%sexp_of: t * string]
 
-let round_up value align =
-  assert (Int.is_pow2 align);
-  if align = 1 then value
-  else Infix.((value + int Int.(align - 1)) && int Int.(-align))
-
-let rec _make_position hdr name start =
+let rec make_position' hdr name start =
   match hdr with
   | _, _, [] -> failwith "Field not found."
   | prev_hdr, ptr, (Field.{ name = n; size; _ } as f) :: next_hdr -> (
@@ -47,20 +42,20 @@ let rec _make_position hdr name start =
       else
         match size with
         | `Fixed x ->
-            _make_position
+            make_position'
               (prev_hdr @ [ f ], Infix.(ptr + int x), next_hdr)
               name start
         | `DescribedBy n' ->
-            _make_position
+            make_position'
               ( prev_hdr @ [ f ],
                 Infix.(ptr + make_access prev_hdr n' start),
                 next_hdr )
               name start
         | `Variable -> failwith "Cannot read field."
         | `Empty _ ->
-            _make_position (prev_hdr @ [ f ], ptr, next_hdr) name start )
+            make_position' (prev_hdr @ [ f ], ptr, next_hdr) name start )
 
-and make_position hdr name start = _make_position ([], start, hdr) name start
+and make_position hdr name start = make_position' ([], start, hdr) name start
 
 and make_access hdr name start =
   let field = field_exn hdr name in

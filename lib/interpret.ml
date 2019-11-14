@@ -7,8 +7,6 @@ module Tuple = struct
   module T = struct
     type t = Value.t array [@@deriving compare, sexp]
 
-    let to_map schema values = Map.map schema ~f:(fun i -> values.(i))
-
     let to_string_hum values =
       sprintf "[%s]"
         (String.concat ~sep:", "
@@ -21,14 +19,6 @@ module Tuple = struct
   module O : Comparable.Infix with type t := t = C
 
   let ( @ ) = Array.append
-
-  let to_ctx schema values =
-    Map.map schema ~f:(fun i ->
-        try values.(i)
-        with Invalid_argument _ ->
-          Error.create "Schema mismatch." (schema, values, i)
-            [%sexp_of: int Map.M(Name).t * Value.t array * int]
-          |> Error.raise)
 end
 
 open Tuple
@@ -63,16 +53,6 @@ module GroupKey = struct
 end
 
 type ctx = { db : Db.t; params : Value.t Map.M(Name).t }
-
-let name_exn p =
-  match Pred.to_name p with
-  | Some n -> n
-  | None -> failwith "Expected a named predicate."
-
-let extract_key ctx =
-  match Map.to_alist ctx with
-  | [ (_, v) ] -> v
-  | _ -> failwith "Unexpected key context."
 
 let to_single_value t =
   if Array.length t > 1 then failwith "Expected a single value tuple.";
@@ -198,8 +178,8 @@ let eval { db; params } r =
         | ExtractY -> Int (to_date (e p) |> Date.year)
         | ExtractM -> Int (to_date (e p) |> Date.month |> Month.to_int)
         | ExtractD -> Int (to_date (e p) |> Date.day)
-        | _ ->
-            Error.(create "Unexpected operator" op [%sexp_of: unop] |> raise) )
+        | _ -> Error.(create "Unexpected operator" op [%sexp_of: unop] |> raise)
+        )
     | Binop (op, p1, p2) -> (
         match op with
         | Eq -> O.(e p1 = e p2) |> bool
@@ -235,9 +215,7 @@ let eval { db; params } r =
         | Mod -> e p1 % e p2
         | Strpos -> (
             match
-              String.substr_index
-                (to_string (e p1))
-                ~pattern:(to_string (e p2))
+              String.substr_index (to_string (e p1)) ~pattern:(to_string (e p2))
             with
             | Some x -> int Int.(x + 1)
             | None -> int 0 ) )
@@ -387,12 +365,10 @@ let equiv ?(ordered = false) ctx r1 r2 =
                         [%sexp_of: string * string])
              | `Left t ->
                  (* printf "L: %s\n" (Tuple.to_string_hum t) ; *)
-                 Some
-                   (Error.create "Extra tuple on LHS." t [%sexp_of: Tuple.t])
+                 Some (Error.create "Extra tuple on LHS." t [%sexp_of: Tuple.t])
              | `Right t ->
                  (* printf "R: %s\n" (Tuple.to_string_hum t) ; *)
-                 Some
-                   (Error.create "Extra tuple on RHS." t [%sexp_of: Tuple.t]))
+                 Some (Error.create "Extra tuple on RHS." t [%sexp_of: Tuple.t]))
       in
       match m_err with Some err -> Error err | None -> Ok ()
     in

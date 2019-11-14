@@ -84,9 +84,6 @@ module Make (Config : Config.S) = struct
                     next () )
                   else (
                     cur := `Group (singleton x);
-
-                    (* NOTE: Groups are created back to front, so must be
-                     reversed. *)
                     return (Some (to_list g)) ) ) )
     in
     Lwt_stream.from next

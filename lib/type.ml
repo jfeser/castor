@@ -4,7 +4,6 @@ include Type0
 
 exception TypeError of Error.t [@@deriving sexp]
 
-(** Range abstraction for integers. *)
 module AbsInt = struct
   type t = Bottom | Interval of int * int | Top [@@deriving compare, sexp]
 
@@ -76,11 +75,6 @@ module AbsInt = struct
     | Interval (l, h) -> if l = h then Some l else None
     | _ -> None
 
-  let size = function
-    | Interval (l, h) -> Int.(h - l)
-    | Top -> Int.max_value
-    | Bottom -> 0
-
   let byte_width ~nullable = function
     | Bottom -> 1
     | Top -> 8
@@ -144,7 +138,7 @@ module T = struct
         [@compare.ignore]
     nullable : (bool[@sexp.bool]);
   }
-  [@@deriving compare, sexp_of]
+  [@@deriving compare, sexp]
 
   type date = {
     range : AbsInt.t;
@@ -152,9 +146,9 @@ module T = struct
         [@compare.ignore]
     nullable : (bool[@sexp.bool]);
   }
-  [@@deriving compare, sexp_of]
+  [@@deriving compare, sexp]
 
-  type bool_ = { nullable : (bool[@sexp.bool]) } [@@deriving compare, sexp_of]
+  type bool_ = { nullable : (bool[@sexp.bool]) } [@@deriving compare, sexp]
 
   type string_ = {
     nchars : AbsInt.t;
@@ -162,18 +156,18 @@ module T = struct
         [@compare.ignore]
     nullable : (bool[@sexp.bool]);
   }
-  [@@deriving compare, sexp_of]
+  [@@deriving compare, sexp]
 
-  type list_ = { count : AbsInt.t } [@@deriving compare, sexp_of]
+  type list_ = { count : AbsInt.t } [@@deriving compare, sexp]
 
-  type tuple = { kind : [ `Cross | `Concat ] } [@@deriving compare, sexp_of]
+  type tuple = { kind : [ `Cross | `Concat ] } [@@deriving compare, sexp]
 
-  type hash_idx = { key_count : AbsInt.t } [@@deriving compare, sexp_of]
+  type hash_idx = { key_count : AbsInt.t } [@@deriving compare, sexp]
 
-  type ordered_idx = { key_count : AbsInt.t } [@@deriving compare, sexp_of]
+  type ordered_idx = { key_count : AbsInt.t } [@@deriving compare, sexp]
 
   type fixed = { value : AbsFixed.t; nullable : (bool[@sexp.bool]) }
-  [@@deriving compare, sexp_of]
+  [@@deriving compare, sexp]
 
   type t =
     | NullT
@@ -188,13 +182,10 @@ module T = struct
     | OrderedIdxT of (t * t * ordered_idx)
     | FuncT of (t list * [ `Child_sum | `Width of int ])
     | EmptyT
-  [@@deriving compare, sexp_of]
+  [@@deriving compare, sexp]
 end
 
 include T
-
-let bind2 : f:('a -> 'b -> 'c option) -> 'a option -> 'b option -> 'c option =
- fun ~f x y -> match (x, y) with Some a, Some b -> f a b | _ -> None
 
 let least_general_of_primtype = function
   | PrimType.IntT { nullable } ->
@@ -296,8 +287,6 @@ let rec unify_exn t1 t2 =
   | FuncT _, _ ->
       fail "Unexpected types."
 
-(** Returns the width of the tuples produced by reading a layout with this type.
-   *)
 let rec width = function
   | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ | DateT _ -> 1
   | TupleT (ts, _) ->
@@ -326,15 +315,9 @@ let hash_kind_of_key_type = function
   | IntT _ | DateT _ -> `Universal
   | _ -> `Cmph
 
-(** Use the type of a hash index to decide what hash method to use. *)
 let hash_kind_exn = function
   | HashIdxT (kt, _, _) -> hash_kind_of_key_type kt
   | _ -> failwith "Unexpected type."
-
-let range_exn = function
-  | IntT x -> x.range
-  | DateT x -> x.range
-  | _ -> failwith "Has no range."
 
 let rec len =
   let open AbsInt in
@@ -366,15 +349,12 @@ let rec len =
   | FuncT (ts, _) -> List.sum (module AbsInt) ts ~f:len
   | NullT as t -> Error.(create "Unexpected type." t [%sexp_of: T.t] |> raise)
 
-(** Range of ordered index map lengths. *)
 and oi_map_len kt vt m =
   AbsInt.(m.key_count * (len kt + of_int (oi_ptr_size vt m)))
 
-(** Size of pointers (in bytes) in ordered indexes. *)
 and oi_ptr_size vt m =
   AbsInt.(byte_width ~nullable:false (m.key_count * len vt))
 
-(** Range of hash index hash data lengths. *)
 and hi_hash_len ?(bytes_per_key = AbsInt.of_int 1) kt m =
   let open AbsInt in
   match hash_kind_of_key_type kt with
@@ -384,13 +364,11 @@ and hi_hash_len ?(bytes_per_key = AbsInt.of_int 1) kt m =
        seem to have some fixed overhead ~100B? *)
       (m.key_count * bytes_per_key * Interval (1, 2)) + of_int 128
 
-(** Range of hash index map lengths. *)
 and hi_map_len kt vt m =
   let open AbsInt in
   match hash_kind_of_key_type kt with
   | `Universal -> ceil_pow2 m.key_count
   | `Cmph -> m.key_count * Interval (1, 2) * of_int (hi_ptr_size kt vt m)
 
-(** Size of pointers (in bytes) in hash indexes. *)
 and hi_ptr_size kt vt m =
   AbsInt.(byte_width ~nullable:false (m.key_count * (len kt + len vt)))
