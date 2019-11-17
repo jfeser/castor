@@ -326,6 +326,13 @@ let exec_lwt_exn ?(params = []) ?timeout db schema query =
   (* Create a new database connection. *)
   let exec () =
     Lwt_pool.use db.pool (fun conn ->
+        let fail msg =
+          push (Some (Result.fail msg));
+          push None;
+          conn#reset;
+          return_unit
+        in
+
         (* OCaml can't convert integers to fds for reasons, so magic is required. *)
         let fd = conn#socket |> Obj.magic |> Lwt_unix.of_unix_file_descr in
         (* Wait for results from a send_query call. consume_input pulls any
@@ -337,10 +344,14 @@ let exec_lwt_exn ?(params = []) ?timeout db schema query =
             wait_for_results ()
           else
             match conn#get_result with
-            | Some r ->
-                load_tuples_list_exn schema r
-                |> List.iter ~f:(fun t -> push (Some (Result.return t)));
-                wait_for_results ()
+            | Some r -> (
+                match r#status with
+                | Tuples_ok ->
+                    load_tuples_list_exn schema r
+                    |> List.iter ~f:(fun t -> push (Some (Result.return t)));
+                    wait_for_results ()
+                | Fatal_error -> fail (`Exn (Failure r#error))
+                | _ -> fail (`Exn (Failure "Unexpected status")) )
             | None ->
                 push None;
                 return_unit
@@ -353,22 +364,15 @@ let exec_lwt_exn ?(params = []) ?timeout db schema query =
           try%lwt Lwt_unix.with_timeout t execute_query
           with Lwt_unix.Timeout ->
             Log.debug (fun m -> m "Query timeout: %s" query);
-            push (Some (Result.fail `Timeout));
-            push None;
             exec db (sprintf "select pg_cancel_backend(%d);" conn#backend_pid)
             |> ignore;
-            conn#reset;
-            return_unit
+            fail `Timeout
         in
         try%lwt
           match timeout with
           | Some t -> execute_with_timeout t
           | None -> execute_query ()
-        with exn ->
-          push (Some (Result.fail (`Exn exn)));
-          push None;
-          conn#reset;
-          return_unit)
+        with exn -> fail (`Exn exn))
   in
   async exec;
   stream
