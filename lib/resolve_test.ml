@@ -89,9 +89,7 @@ let%expect_test "" =
   Format.printf "%a@." pp_with_refcount r;
   [%expect
     {|
-    select([f@run],
-      atuple([atuple([ascalar(0 as f)#{f=1, }, ascalar(1 as g)#{}],
-                cross)#{f=1, },
-              atuple([ascalar(2 as g)#{}, ascalar(3 as f)#{f=1, }],
-                cross)#{f=1, }],
-        concat)#{f=1, })#{f=1, } |}]
+    alist(lineitem#{l_shipmode=1, } as k2#{k2.l_shipmode=1, },
+      select([l_shipmode@run],
+        atuple([ascalar(k2.l_shipmode@comp)#{l_shipmode=1, }, ascalar(0)#{}],
+          cross)#{l_shipmode=1, })#{l_shipmode=1, })#{l_shipmode=1, } |}]

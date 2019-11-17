@@ -20,20 +20,28 @@ type t = {
 
 let connect uri = new Psql.connection ~conninfo:uri ()
 
+let valid c =
+  match c#status with
+  | Psql.Ok -> true
+  | Bad -> false
+  | _ -> failwith "Unexpected connection status."
+
+[@@@warning "-52"]
+
+let ensure_finish c =
+  try c#finish
+  with Failure "Postgresql.check_null: connection already finished" -> ()
+
+[@@@warning "+52"]
+
 let create ?(pool_size = default_pool_size) uri =
-  let valid c =
-    match c#status with
-    | Psql.Ok -> true
-    | Bad -> false
-    | _ -> failwith "Unexpected connection status."
-  in
   {
     uri;
     conn = connect uri;
     pool =
       Lwt_pool.create pool_size
         ~dispose:(fun c ->
-          if valid c then c#finish;
+          ensure_finish c;
           return_unit)
         ~validate:(fun c -> valid c |> return)
         ~check:(fun c is_ok -> is_ok (valid c))
@@ -343,17 +351,24 @@ let exec_lwt_exn ?(params = []) ?timeout db schema query =
         in
         let execute_with_timeout t =
           try%lwt Lwt_unix.with_timeout t execute_query
-          with exn ->
+          with Lwt_unix.Timeout ->
             Log.debug (fun m -> m "Query timeout: %s" query);
-            push (Some (Result.fail exn));
+            push (Some (Result.fail `Timeout));
             push None;
             exec db (sprintf "select pg_cancel_backend(%d);" conn#backend_pid)
             |> ignore;
+            conn#reset;
             return_unit
         in
-        match timeout with
-        | Some t -> execute_with_timeout t
-        | None -> execute_query ())
+        try%lwt
+          match timeout with
+          | Some t -> execute_with_timeout t
+          | None -> execute_query ()
+        with exn ->
+          push (Some (Result.fail (`Exn exn)));
+          push None;
+          conn#reset;
+          return_unit)
   in
   async exec;
   stream

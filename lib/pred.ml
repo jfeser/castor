@@ -178,15 +178,16 @@ let of_lexbuf_exn lexbuf =
 
 let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
 
-let subst ctx p =
-  let v =
-    object
-      inherit [_] Abslayout0.endo
+class ['c] subst_visitor ctx =
+  object
+    inherit [_] Abslayout0.endo
 
-      method! visit_Name _ this v =
-        match Map.find ctx v with Some x -> x | None -> this
-    end
-  in
+    method! visit_Name (_ : 'c) this v =
+      match Map.find ctx v with Some x -> x | None -> this
+  end
+
+let subst ctx p =
+  let v = new subst_visitor ctx in
   v#visit_pred () p |> normalize
 
 let subst_tree ctx p =
@@ -207,7 +208,16 @@ let scoped names scope p =
     List.map names ~f:(fun n -> (n, Name (Name.scoped scope n)))
     |> Map.of_alist_exn (module Name)
   in
-  subst ctx p
+  let visitor =
+    object
+      inherit [_] subst_visitor ctx
+
+      method! visit_Exists _ r _ = r
+
+      method! visit_First _ r _ = r
+    end
+  in
+  visitor#visit_pred () p
 
 let unscoped scope p =
   let v =

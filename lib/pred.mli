@@ -48,6 +48,8 @@ val collect_aggs : t -> t * (string * t) List.t
 val simplify : t -> t
 
 val scoped : Name.t List.t -> string -> t -> t
+(** Apply a scope to each occurrence of a name in the list. Does not descend into
+   subqueries. *)
 
 val unscoped : String.t -> t -> t
 
