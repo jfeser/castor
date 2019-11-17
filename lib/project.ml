@@ -121,12 +121,10 @@ class project_visitor =
                           (schema_exn rk |> List.map ~f:(fun n -> Name n))
                       in
                       let new_n = List.length ps in
-                      if old_n > new_n then select ps rk
-                      else self#visit_t () rk
+                      if old_n > new_n then select ps rk else self#visit_t () rk
                 in
                 list rk scope (self#visit_t () rv)
-            | AScalar p ->
-                if project_def refcnt p then scalar p else self#dummy
+            | AScalar p -> if project_def refcnt p then scalar p else self#dummy
             | ATuple ([], _) -> empty
             | ATuple ([ r ], _) -> self#visit_t () r
             | ATuple (rs, Concat) ->

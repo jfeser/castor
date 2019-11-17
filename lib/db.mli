@@ -50,3 +50,6 @@ val all_relations : t -> Relation.t list
 val relation_count : t -> string -> int
 
 val relation_has_field : t -> string -> Relation.t option
+
+val eq_join_type :
+  t -> string -> string -> [ `Left | `Right | `Both | `Neither ] Or_error.t

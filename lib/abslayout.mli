@@ -219,6 +219,8 @@ class virtual ['a] reduce : ['a] Abslayout0.reduce
 
 class virtual ['a] mapreduce : ['a] Abslayout0.mapreduce
 
+class virtual ['a] fold : ['a] Abslayout0.fold
+
 val annotate_key_layouts : t -> t
 
 val strip_unused_as : t -> t

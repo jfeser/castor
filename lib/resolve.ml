@@ -49,8 +49,7 @@ let shadow_check r =
           Error.(create "Duplicate alias." n [%sexp_of: string] |> raise)
         else if Set.mem relations n then
           Error.(
-            create "Alias overlaps with relation." n [%sexp_of: string]
-            |> raise)
+            create "Alias overlaps with relation." n [%sexp_of: string] |> raise)
         else Hash_set.add aliases n
 
       method check_alias () r =
@@ -115,8 +114,7 @@ module Ctx = struct
       let dups = List.find_all_dups l ~compare:compare_row in
       if List.length dups > 0 then (
         List.iter dups ~f:(fun r ->
-            Log.err (fun m ->
-                m "Ambiguous name %a." Name.pp_with_stage r.rname));
+            Log.err (fun m -> m "Ambiguous name %a." Name.pp_with_stage r.rname));
         Error.(of_string "Ambiguous names." |> raise) );
       l
   end
@@ -175,8 +173,7 @@ module Ctx = struct
                 { r with rrefs = r.rrefs @ r'.rrefs }))
     |> of_list
 
-  let merge (c1 : t) (c2 : t) : t =
-    of_list ((c1 :> row list) @ (c2 :> row list))
+  let merge (c1 : t) (c2 : t) : t = of_list ((c1 :> row list) @ (c2 :> row list))
 
   (** This compensates for the overloaded hashidx and orderedidx key fields *)
   let merge_forgiving (c1 : t) (c2 : t) =
@@ -236,8 +233,7 @@ module Ctx = struct
     in
     let ctx =
       List.filter_map metas
-        ~f:
-          (Option.map ~f:(fun (n, _) -> { rname = n; rrefs = []; rstage = s }))
+        ~f:(Option.map ~f:(fun (n, _) -> { rname = n; rrefs = []; rstage = s }))
     in
     (defs, of_list ctx)
 
@@ -430,7 +426,7 @@ and resolve stage outer_ctx ({ node; meta } as r) =
   let ctx = Ctx.unscoped ctx in
   let ctx, refcnts = Ctx.add_refcnts ctx in
   (* Log.debug (fun m ->
-     *     m "%a@ %a" Abslayout.pp r Sexp.pp_hum ([%sexp_of: Ctx.t] ctx) ) ; *)
+   *     m "%a@ %a" Abslayout.pp r Sexp.pp_hum ([%sexp_of: Ctx.t] ctx)); *)
   meta := Univ_map.set !meta mut_refcnt refcnts;
   ({ node; meta }, ctx)
 

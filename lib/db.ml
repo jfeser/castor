@@ -4,7 +4,7 @@ open Collections
 module Psql = Postgresql
 module A = Abslayout0
 
-let default_pool_size = 7
+let default_pool_size = 3
 
 let () =
   Caml.Printexc.register_printer (function
@@ -113,54 +113,59 @@ let exec3 ?params conn query =
            Error.create "Unexpected query results." t [%sexp_of: string list]
            |> Error.raise)
 
-let type_of_field_exn conn fname rname =
-  let open Type.PrimType in
-  let rows =
-    exec2 ~params:[ rname; fname ] conn
-      "select data_type, is_nullable from information_schema.columns where \
-       table_name='$0' and column_name='$1'"
+let type_of_field_exn =
+  let f conn fname rname =
+    let open Type.PrimType in
+    let rows =
+      exec2 ~params:[ rname; fname ] conn
+        "select data_type, is_nullable from information_schema.columns where \
+         table_name='$0' and column_name='$1'"
+    in
+    match rows with
+    | [ (type_str, nullable_str) ] -> (
+        let nullable =
+          if String.(strip nullable_str = "YES") then
+            let nulls =
+              exec1 ~params:[ fname; rname ] conn
+                "select \"$0\" from \"$1\" where \"$0\" is null limit 1"
+            in
+            List.length nulls > 0
+          else false
+        in
+        match type_str with
+        | "character" | "char" -> StringT { nullable; padded = true }
+        | "character varying" | "varchar" | "text" ->
+            StringT { nullable; padded = false }
+        | "interval" | "integer" | "smallint" | "bigint" -> IntT { nullable }
+        | "date" -> DateT { nullable }
+        | "boolean" -> BoolT { nullable }
+        | "numeric" ->
+            let min, max, max_scale =
+              exec3 ~params:[ fname; rname ] conn
+                "select min(\"$0\"), max(\"$0\"), max(scale(\"$0\")) from \
+                 \"$1\""
+              |> List.hd_exn
+            in
+            let is_int = Int.of_string max_scale = 0 in
+            let fits_in_an_int63 =
+              try
+                Int.of_string min |> ignore;
+                Int.of_string max |> ignore;
+                true
+              with Failure _ -> false
+            in
+            if is_int then
+              if fits_in_an_int63 then IntT { nullable }
+              else StringT { nullable; padded = false }
+            else FixedT { nullable }
+        | "real" | "double" -> FixedT { nullable }
+        | "timestamp without time zone" | "time without time zone" ->
+            StringT { nullable; padded = false }
+        | s -> failwith (Printf.sprintf "Unknown dtype %s" s) )
+    | _ -> failwith "Unexpected db results."
   in
-  match rows with
-  | [ (type_str, nullable_str) ] -> (
-      let nullable =
-        if String.(strip nullable_str = "YES") then
-          let nulls =
-            exec1 ~params:[ fname; rname ] conn
-              "select \"$0\" from \"$1\" where \"$0\" is null limit 1"
-          in
-          List.length nulls > 0
-        else false
-      in
-      match type_str with
-      | "character" | "char" -> StringT { nullable; padded = true }
-      | "character varying" | "varchar" | "text" ->
-          StringT { nullable; padded = false }
-      | "interval" | "integer" | "smallint" | "bigint" -> IntT { nullable }
-      | "date" -> DateT { nullable }
-      | "boolean" -> BoolT { nullable }
-      | "numeric" ->
-          let min, max, max_scale =
-            exec3 ~params:[ fname; rname ] conn
-              "select min(\"$0\"), max(\"$0\"), max(scale(\"$0\")) from \"$1\""
-            |> List.hd_exn
-          in
-          let is_int = Int.of_string max_scale = 0 in
-          let fits_in_an_int63 =
-            try
-              Int.of_string min |> ignore;
-              Int.of_string max |> ignore;
-              true
-            with Failure _ -> false
-          in
-          if is_int then
-            if fits_in_an_int63 then IntT { nullable }
-            else StringT { nullable; padded = false }
-          else FixedT { nullable }
-      | "real" | "double" -> FixedT { nullable }
-      | "timestamp without time zone" | "time without time zone" ->
-          StringT { nullable; padded = false }
-      | s -> failwith (Printf.sprintf "Unknown dtype %s" s) )
-  | _ -> failwith "Unexpected db results."
+  let memo = Memo.general (fun (conn, n1, n2) -> f conn n1 n2) in
+  fun conn fname rname -> memo (conn, fname, rname)
 
 let relation with_types conn r_name =
   let r_schema =
@@ -182,9 +187,13 @@ let relation_memo =
 let relation ?(with_types = true) conn rname =
   relation_memo (conn, rname, with_types)
 
-let relation_count conn r_name =
-  exec1 ~params:[ r_name ] conn "select count(*) from $0"
-  |> List.hd_exn |> Int.of_string
+let relation_count =
+  let f conn r_name =
+    exec1 ~params:[ r_name ] conn "select count(*) from $0"
+    |> List.hd_exn |> Int.of_string
+  in
+  let memo = Memo.general (fun (c, n) -> f c n) in
+  fun c n -> memo (c, n)
 
 let all_relations conn =
   let names =
@@ -302,9 +311,6 @@ let exec_cursor_exn =
     in
     seq
 
-let exec_lwt db query =
-  Lwt_pool.use db.pool (fun conn -> conn#exec query |> return)
-
 let exec_lwt_exn ?(params = []) ?timeout db schema query =
   let query = subst_params params query in
   let stream, push = Lwt_stream.create () in
@@ -338,12 +344,11 @@ let exec_lwt_exn ?(params = []) ?timeout db schema query =
         let execute_with_timeout t =
           try%lwt Lwt_unix.with_timeout t execute_query
           with exn ->
+            Log.debug (fun m -> m "Query timeout: %s" query);
             push (Some (Result.fail exn));
             push None;
-            let%lwt _ =
-              exec_lwt db
-                (sprintf "select pg_cancel_backend(%d);" conn#backend_pid)
-            in
+            exec db (sprintf "select pg_cancel_backend(%d);" conn#backend_pid)
+            |> ignore;
             return_unit
         in
         match timeout with
@@ -358,3 +363,24 @@ let check db sql =
   let name = Fresh.name Global.fresh "check%d" in
   let%bind () = command_ok (db.conn#prepare name sql) in
   command_ok (db.conn#exec (sprintf "deallocate %s" name))
+
+let eq_join_type =
+  let f db n1 n2 =
+    match (relation_has_field db n1, relation_has_field db n2) with
+    | Some r1, Some r2 ->
+        let c1 = relation_count db r1.r_name in
+        let c2 = relation_count db r2.r_name in
+        let c3 =
+          exec1 db
+          @@ sprintf "select count(*) from %s, %s where %s = %s" r1.r_name
+               r2.r_name n1 n2
+          |> List.hd_exn |> Int.of_string
+        in
+        if c1 = c3 && c2 = c3 then Ok `Both
+        else if c1 = c3 then Ok `Left
+        else if c2 = c3 then Ok `Right
+        else Ok `Neither
+    | _ -> Error (Error.of_string "Not a join between base fields.")
+  in
+  let memo = Memo.general (fun (c, n1, n2) -> f c n1 n2) in
+  fun c n1 n2 -> memo (c, n1, n2)

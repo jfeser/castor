@@ -456,3 +456,5 @@ let to_string_hum sql =
 
 let sample n s =
   sprintf "select * from (%s) as w order by random() limit %d" s n
+
+let trash_sample n s = sprintf "select * from (%s) as w limit %d" s n
