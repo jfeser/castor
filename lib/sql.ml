@@ -267,14 +267,13 @@ let of_ralgebra r =
     | GroupBy (ps, key, r) ->
         let key = List.map ~f:(fun n -> Name n) key in
         select ~groupby:key f ps r
-    | ATuple ([], _) -> failwith "Empty tuple."
     | ATuple ([ r ], (Cross | Concat)) -> f r
     | ATuple (r :: rs, Cross) ->
         let q1 = r in
         let q2 = tuple rs Cross in
         join (schema_exn q1) (schema_exn q2) (f q1) (f q2) (Bool true)
     | ATuple (rs, Concat) -> Union_all (List.map ~f:(fun r -> to_spj (f r)) rs)
-    | AEmpty -> Query (create_query ~limit:0 [])
+    | ATuple ([], _) | AEmpty -> Query (create_query ~limit:0 [])
     | AScalar p -> Query (create_query [ create_entry p ])
     | ATuple (_, Zip) ->
         Error.(create "Unsupported." r [%sexp_of: Abslayout.t] |> raise)
