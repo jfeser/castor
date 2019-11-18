@@ -86,7 +86,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
                 create "Unexpected key value." v [%sexp_of: Value.t] |> raise))
         |> String.concat ~sep:"|"
 
-  let _make_direct_hash keys =
+  let make_direct_hash keys =
     let hash =
       Seq.map keys ~f:(fun (k, p) ->
           let h =
@@ -122,7 +122,8 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
         Cmph.Hash.to_packed cmph_hash )
 
   let make_ms_hash keys =
-    if Seq.length keys = 0 then (Seq.empty, "")
+    let nkeys = Seq.length keys in
+    if nkeys = 0 then (Seq.empty, "")
     else
       let keys =
         Seq.map keys ~f:(fun (k, p) ->
@@ -134,12 +135,15 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
             in
             (h, p))
       in
+      Log.debug (fun m -> m "Generating hash for %d keys." nkeys);
       let hash =
         Seq.map keys ~f:(fun (k, _) -> k)
         |> Seq.to_list
         |> Genhash.search_hash ~max_time:Time.Span.minute
       in
-      (* Populate hash table with CMPH hash values. *)
+      Log.debug (fun m ->
+          m "Generated hash with %d bins for %d keys." (Int.pow 2 hash.log_bins)
+            nkeys);
       ( Seq.map keys ~f:(fun (k, p) -> (Genhash.hash hash k, p)),
         of_int ~byte_width:8 hash.Genhash.a
         ^ of_int ~byte_width:8 hash.b
@@ -148,6 +152,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
   let make_hash type_ keys =
     let hash, body =
       match Type.hash_kind_exn type_ with
+      | `Direct -> make_direct_hash keys
       | `Universal -> make_ms_hash keys
       | `Cmph -> make_cmph_hash keys
     in

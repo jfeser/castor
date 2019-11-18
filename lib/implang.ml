@@ -36,7 +36,7 @@ let rec pp_expr : Format.formatter -> expr -> unit =
     | `Not -> `Infix "not"
     | `IntEq | `StrEq | `FlEq -> `Infix "=="
     | `Or -> `Infix "||"
-    | `IntHash | `StrHash -> `Prefix "hash"
+    | `IntHash | `StrHash | `UnivHash -> `Prefix "hash"
     | `LoadStr -> `Prefix "load_str"
     | `LoadBool -> `Prefix "load_bool"
     | `Int2Fl -> `Prefix "int2fl"
@@ -269,6 +269,10 @@ let rec type_of ctx e =
           c#is_int t1;
           c#is_int t2;
           int_t
+      | `UnivHash ->
+          c#is_int t1;
+          c#is_int t2;
+          int_t
       | `StrHash ->
           c#is_int t1;
           c#is_string t2;
@@ -390,8 +394,7 @@ module Builder = struct
     match List.nth args i with
     | Some (n, _) -> Var n
     | None ->
-        Error.create "Not an argument index." (i, b) [%sexp_of: int * t]
-        |> fail
+        Error.create "Not an argument index." (i, b) [%sexp_of: int * t] |> fail
 
   let build_yield e b = b.body := RevList.(!(b.body) ++ Yield e)
 
@@ -672,8 +675,7 @@ module Builder = struct
   let build_concat vs b =
     List.concat_map vs ~f:(fun v ->
         match type_of v b with
-        | TupleT ts ->
-            List.length ts |> List.init ~f:(fun i -> Infix.index v i)
+        | TupleT ts -> List.length ts |> List.init ~f:(fun i -> Infix.index v i)
         | t ->
             Error.create "Not a tuple." (v, t)
               [%sexp_of: expr * Type.PrimType.t]
@@ -732,8 +734,7 @@ module Ctx = struct
            | Arg _ | Field _ ->
                (* Pass caller arguments and fields in as arguments to the callee. *)
                let callee_var = Arg (List.length args) in
-               ( Map.set ~key ~data:callee_var cctx,
-                 args @ [ var_to_expr var b ] ))
+               (Map.set ~key ~data:callee_var cctx, args @ [ var_to_expr var b ]))
 
   let find (ctx : t) name builder =
     Option.map (Map.find ctx name) ~f:(fun v -> var_to_expr v builder)

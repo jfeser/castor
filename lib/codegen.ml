@@ -215,9 +215,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
   let _debug_printf fmt args =
     if debug then
-      let fmt_str =
-        define_fresh_global (const_stringz ctx fmt) "fmt" module_
-      in
+      let fmt_str = define_fresh_global (const_stringz ctx fmt) "fmt" module_ in
       call_printf fmt_str args
 
   let int_type = i64_type ctx
@@ -242,8 +240,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     | IntT _ | DateT _ -> int_type
     | BoolT _ -> bool_type
     | StringT _ -> str_type
-    | TupleT ts ->
-        struct_type ctx (List.map ts ~f:codegen_type |> Array.of_list)
+    | TupleT ts -> struct_type ctx (List.map ts ~f:codegen_type |> Array.of_list)
     | VoidT | NullT -> void_type ctx
     | FixedT _ -> fixed_type
 
@@ -422,6 +419,12 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     in
     build_intcast hash_val (i64_type ctx) "hash_val_cast" builder
 
+  let codegen_univ_hash _ a b m key =
+    build_lshr
+      (build_add (build_mul a key "" builder) b "" builder)
+      (build_sub (const_int (i64_type ctx) 64) m "" builder)
+      "" builder
+
   let codegen_int_hash fctx hash_ptr key =
     let key_ptr = build_entry_alloca ctx (type_of key) "key_ptr" builder in
     let key_ptr_cast =
@@ -462,9 +465,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
               build_add (size_of int_type) size "" builder
           | StringT _ ->
               let str_struct = build_extractvalue key idx "" builder in
-              let Llstring.{ len = str_size; _ } =
-                Llstring.unpack str_struct
-              in
+              let Llstring.{ len = str_size; _ } = Llstring.unpack str_struct in
               let str_size =
                 build_intcast str_size int_type "key_size" builder
               in
@@ -511,9 +512,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
               let i32_str_size =
                 build_intcast str_size (i32_type ctx) "" builder
               in
-              build_call strncpy
-                [| key_ptr; str_ptr; i32_str_size |]
-                "" builder
+              build_call strncpy [| key_ptr; str_ptr; i32_str_size |] "" builder
               |> ignore;
               let key_ptr = build_ptrtoint key_ptr (i64_type ctx) "" builder in
               build_add key_ptr str_size "" builder
@@ -531,9 +530,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
               (const_int (i8_type ctx) (Char.to_int '|'))
               key_ptr builder
             |> tag runtime_val |> ignore;
-            let key_offset =
-              build_ptrtoint key_ptr (i64_type ctx) "" builder
-            in
+            let key_offset = build_ptrtoint key_ptr (i64_type ctx) "" builder in
             build_add key_offset (size_of (i8_type ctx)) "" builder )
           else key_offset
         in
@@ -576,8 +573,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | `Mod -> build_srem x1 x2 "modtmp" builder
       | `Lsr -> build_lshr x1 x2 "" builder
       | `IntEq -> build_icmp Icmp.Eq x1 x2 "eqtmp" builder
-      | `StrEq ->
-          build_call scmp [| x1; x2 |] "eqtmp" builder |> tag string_val
+      | `StrEq -> build_call scmp [| x1; x2 |] "eqtmp" builder |> tag string_val
       | `IntLt -> build_icmp Icmp.Slt x1 x2 "lttmp" builder
       | `FlLt -> build_fcmp Fcmp.Olt x1 x2 "lttmp" builder
       | `FlLe -> build_fcmp Fcmp.Ole x1 x2 "letmp" builder
@@ -586,6 +582,19 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | `Or -> build_or x1 x2 "ortmp" builder
       | `IntHash -> codegen_int_hash fctx x1 x2
       | `StrHash -> codegen_string_hash fctx x1 x2
+      | `UnivHash ->
+          let a = codegen_slice codegen_expr fctx arg1 8 in
+          let b =
+            codegen_slice codegen_expr fctx
+              (Implang.Binop { op = `IntAdd; arg1; arg2 = Int 8 })
+              8
+          in
+          let m =
+            codegen_slice codegen_expr fctx
+              (Implang.Binop { op = `IntAdd; arg1; arg2 = Int 16 })
+              8
+          in
+          codegen_univ_hash fctx a b m x2
       | `LoadStr -> codegen_load_str fctx x1 x2
       | `StrPos -> codegen_strpos fctx x1 x2
       | `AddY -> build_call add_y [| x1; x2 |] "" builder
@@ -635,8 +644,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     | Tuple es -> codegen_tuple (codegen_expr fctx) es
     | Ternary (e1, e2, e3) -> codegen_ternary (codegen_expr fctx) e1 e2 e3
     | TupleHash (ts, e1, e2) ->
-        codegen_tuple_hash fctx ts (codegen_expr fctx e1)
-          (codegen_expr fctx e2)
+        codegen_tuple_hash fctx ts (codegen_expr fctx e1) (codegen_expr fctx e2)
     | Substr (e1, e2, e3) ->
         let v1 = codegen_expr fctx e1 in
         let v2 = codegen_expr fctx e2 in
@@ -806,16 +814,13 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
               build_load (get_val ~params:params_ptr ictx name) "" builder
             in
             let param_type = type_of param in
-            let param_alloca =
-              build_entry_alloca ctx param_type name builder
-            in
+            let param_alloca = build_entry_alloca ctx param_type name builder in
             build_store param param_alloca builder |> ignore;
             Param { idx; alloca = Some param_alloca })
 
   let rec codegen_stmt fctx = function
     | I.Loop { cond; body } -> codegen_loop fctx codegen_prog cond body
-    | If { cond; tcase; fcase } ->
-        codegen_if fctx codegen_prog cond tcase fcase
+    | If { cond; tcase; fcase } -> codegen_if fctx codegen_prog cond tcase fcase
     | Assign { lhs; rhs } -> codegen_assign fctx lhs rhs
     | Print (type_, expr) -> codegen_print fctx type_ expr
     | Consume (type_, expr) -> codegen_consume fctx type_ expr
@@ -975,9 +980,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     List.iter typed_params ~f:(fun (n, t) ->
         let lltype = codegen_type t in
         SB.build_global sb n lltype);
-    let fctxs =
-      List.map ir_funcs ~f:(fun func -> new fctx func typed_params)
-    in
+    let fctxs = List.map ir_funcs ~f:(fun func -> new fctx func typed_params) in
     params_struct_t := SB.build_param_struct sb "params";
     List.iter fctxs ~f:codegen_func;
     codegen_create ();
@@ -1010,8 +1013,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
             else elem_t
           in
           fprintf fmt "%a *" pp_type elem_t
-      | Half | Float | Double | X86fp80 | Fp128 | Ppc_fp128 | Label
-      | Function | Array | Vector | Metadata | X86_mmx | Token ->
+      | Half | Float | Double | X86fp80 | Fp128 | Ppc_fp128 | Label | Function
+      | Array | Vector | Metadata | X86_mmx | Token ->
           Error.(create "Unknown type." t [%sexp_of: lltype] |> raise)
     and pp_params fmt ts =
       Array.iteri ts ~f:(fun i t ->

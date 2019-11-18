@@ -33,6 +33,7 @@ type binop =
   | `Or
   | `IntHash
   | `StrHash
+  | `UnivHash
   | `LoadStr
   | `StrPos
   | `AddY

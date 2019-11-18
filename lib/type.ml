@@ -311,13 +311,22 @@ let rec count = function
   | ListT (_, { count }) -> count
   | FuncT _ -> AbsInt.top
 
-let hash_kind_of_key_type = function
-  | IntT _ | DateT _ -> `Universal
+let hash_kind_of_key_type c = function
+  | IntT { range = r; _ } | DateT { range = r; _ } -> (
+      match (c, r) with
+      | AbsInt.Interval (_, h_count), Interval (l_range, h_range) ->
+          if h_count / (h_range - l_range) < 5 then `Direct else `Cmph
+      | _ -> `Cmph )
   | _ -> `Cmph
 
 let hash_kind_exn = function
-  | HashIdxT (kt, _, _) -> hash_kind_of_key_type kt
+  | HashIdxT (kt, _, m) -> hash_kind_of_key_type m.key_count kt
   | _ -> failwith "Unexpected type."
+
+let range_exn = function
+  | IntT x -> x.range
+  | DateT x -> x.range
+  | _ -> failwith "Has no range."
 
 let rec len =
   let open AbsInt in
@@ -357,8 +366,9 @@ and oi_ptr_size vt m =
 
 and hi_hash_len ?(bytes_per_key = AbsInt.of_int 1) kt m =
   let open AbsInt in
-  match hash_kind_of_key_type kt with
+  match hash_kind_of_key_type m.key_count kt with
   | `Universal -> of_int Int.(8 * 3)
+  | `Direct -> AbsInt.of_int 0
   | `Cmph ->
       (* The interval represents uncertainty about the hash size, and CMPH hashes
        seem to have some fixed overhead ~100B? *)
@@ -366,8 +376,9 @@ and hi_hash_len ?(bytes_per_key = AbsInt.of_int 1) kt m =
 
 and hi_map_len kt vt m =
   let open AbsInt in
-  match hash_kind_of_key_type kt with
+  match hash_kind_of_key_type m.key_count kt with
   | `Universal -> ceil_pow2 m.key_count
+  | `Direct -> range_exn kt * of_int (hi_ptr_size kt vt m)
   | `Cmph -> m.key_count * Interval (1, 2) * of_int (hi_ptr_size kt vt m)
 
 and hi_ptr_size kt vt m =

@@ -155,7 +155,7 @@ val width : t -> int
 (** Returns the width of the tuples produced by reading a layout with this type.
    *)
 
-val hash_kind_exn : t -> [> `Cmph | `Universal ]
+val hash_kind_exn : t -> [ `Cmph | `Universal | `Direct ]
 (** Use the type of a hash index to decide what hash method to use. *)
 
 val hi_hash_len : ?bytes_per_key:AbsInt.t -> t -> hash_idx -> AbsInt.t

@@ -499,6 +499,8 @@ struct
         build_assign Infix.(cstart + clen) cstart b)
       b
 
+  and universal_hash ptr x _ = Binop { op = `UnivHash; arg1 = ptr; arg2 = x }
+
   and scan_hash_idx ctx b r t cb =
     let open Builder in
     let key_layout = A.h_key_layout r in
@@ -530,12 +532,9 @@ struct
       let hash_func_val =
         match (Type.(hash_kind_exn (HashIdxT t)), lookup_expr) with
         | _, [] -> failwith "empty hash key"
-        | `Universal, [ x ] ->
-            let a_param = Slice (hash_data_start, 8) in
-            let b_param = Slice (Infix.(hash_data_start + int 8), 8) in
-            let m = Slice (Infix.(hash_data_start + int 16), 8) in
-            Infix.(
-              (build_mul a_param (build_to_int x b) b + b_param) lsr (int 63 - m))
+        | `Direct, [ x ] -> build_to_int x b
+        | `Direct, _ -> failwith "Unexpected direct hash."
+        | `Universal, [ x ] -> universal_hash hash_data_start x b
         | `Universal, _ -> failwith "Unexpected universal hash."
         | `Cmph, [ x ] -> build_hash hash_data_start x b
         | `Cmph, xs -> build_hash hash_data_start (Tuple xs) b
@@ -549,22 +548,20 @@ struct
     debug_print "hashing key" (Tuple lookup_expr) b;
     debug_print "data start" (Header.make_position hdr "data" start) b;
 
-    (* Get a pointer to the value. *)
-    let value_ptr =
-      Infix.(
-        Slice (mapping_start + hash_key, hash_ptr_len)
-        + Header.make_position hdr "data" start)
-    in
-    debug_print "value ptr is" value_ptr b;
-
     (* If the pointer is null, then the key is not present. *)
     build_if
       ~cond:
         Infix.(
           hash_key < int 0 || hash_key >= mapping_len
           (* || build_eq value_ptr (int 0x0) b *))
-      ~then_:(fun b -> debug_print "no values found" value_ptr b)
+      ~then_:(fun b -> debug_print "no values found" hash_key b)
       ~else_:(fun b ->
+        (* Get a pointer to the value. *)
+        let value_ptr =
+          Infix.(
+            Slice (mapping_start + hash_key, hash_ptr_len)
+            + Header.make_position hdr "data" start)
+        in
         debug_print "found values" value_ptr b;
         build_assign value_ptr kstart b;
         scan key_ctx b key_layout key_type (fun b tup ->
