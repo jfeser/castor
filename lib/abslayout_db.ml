@@ -388,7 +388,7 @@ module Make (Config : Config.S) = struct
             (Sql.to_string sql)
           |> Lwt_stream.map (function
                | Ok x -> Array.to_list x
-               | Error `Timeout -> failwith "Query timed out."
+               | Error `Timeout -> raise Lwt_unix.Timeout
                | Error (`Exn e) -> raise e)
         in
         self#eval (Map.empty (module String)) tups (Q.to_width q)
