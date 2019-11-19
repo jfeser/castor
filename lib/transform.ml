@@ -60,12 +60,7 @@ module Make (Config : Config.S) = struct
 
   let is_serializable r p =
     let r' = Path.get_exn p (R.resolve ~params r) in
-    if is_serializeable r' then
-      (* Logs.debug (fun m -> m "Is serializable: %a" Abslayout.pp r') ; *)
-      true
-    else
-      (* Logs.debug (fun m -> m "Is not serializable: %a" Abslayout.pp r') ; *)
-      false
+    is_serializeable r' |> Result.is_ok
 
   let has_params r p =
     let r' = R.resolve ~params r in
