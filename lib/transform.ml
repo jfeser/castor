@@ -56,7 +56,7 @@ module Make (Config : Config.S) = struct
       Some (fun r -> Option.value (apply tf Path.root r) ~default:r)
   end
 
-  module Cost = Approx_cost.Make (Config)
+  module Cost = Type_cost.Make (Config)
 
   let is_serializable r p =
     let r' = Path.get_exn p (R.resolve ~params r) in
