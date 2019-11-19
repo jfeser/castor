@@ -219,7 +219,7 @@ module Make (Config : Config.S) = struct
       method private key_layout q =
         match q.node with
         | AHashIdx x -> Some (A.h_key_layout x)
-        | AOrderedIdx (_, _, x) -> Some (A.o_key_layout x)
+        | AOrderedIdx x -> Some (A.o_key_layout x)
         | Select (_, q')
         | Filter (_, q')
         | Dedup q'

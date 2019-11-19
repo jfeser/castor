@@ -123,9 +123,6 @@ let hash_idx ?key_layout a b c d =
          hi_key_layout = key_layout;
        })
 
-let h_key_layout { hi_key_layout; _ } =
-  Option.value_exn ~message:"No key layout annotation found." hi_key_layout
-
 let hash_idx' h =
   hash_idx ?key_layout:h.hi_key_layout h.hi_keys h.hi_scope h.hi_values
     h.hi_lookup
@@ -134,9 +131,6 @@ let ordered_idx a b c d =
   let a = strip_scope a in
   let a, c = ensure_no_overlap_2 a c [ b ] in
   wrap (AOrderedIdx (strip_meta (as_ b a), strip_meta c, d))
-
-let o_key_layout { oi_key_layout; _ } =
-  Option.value_exn ~message:"No key layout annotation found." oi_key_layout
 
 let rec and_ = function
   | [] -> Bool true
@@ -718,3 +712,21 @@ let relations =
  *     end
  *   in
  *   visitor#visit_t () r *)
+
+let h_key_layout { hi_key_layout; hi_keys; _ } =
+  match hi_key_layout with
+  | Some l -> l
+  | None -> (
+      match List.map (schema_exn hi_keys) ~f:(fun n -> scalar (Name n)) with
+      | [] -> failwith "empty schema"
+      | [ x ] -> x
+      | xs -> tuple xs Cross )
+
+let o_key_layout (oi_keys, _, { oi_key_layout; _ }) =
+  match oi_key_layout with
+  | Some l -> l
+  | None -> (
+      match List.map (schema_exn oi_keys) ~f:(fun n -> scalar (Name n)) with
+      | [] -> failwith "empty schema"
+      | [ x ] -> x
+      | xs -> tuple xs Cross )

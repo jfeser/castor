@@ -165,7 +165,7 @@ val h_key_layout : hash_idx -> t
 
 val ordered_idx : t -> string -> t -> ordered_idx -> t
 
-val o_key_layout : ordered_idx -> t
+val o_key_layout : t * t * ordered_idx -> t
 
 val as_ : string -> t -> t
 

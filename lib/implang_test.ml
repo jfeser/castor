@@ -292,18 +292,17 @@ let%expect_test "hash-idx" =
     // vstart11 : Int[nonnull] (persists=false)
     // hash13 : Int[nonnull] (persists=false)
     fun printer () : Void {
-        cstart7 = 0;
+        cstart7 = 1;
         i8 = 0;
         count9 = 5;
         loop (i8 < count9) {
-            hash13 =
-            buf[5 : 8] * buf[cstart7 : 1] + buf[13 : 8] >> 63 - buf[21 : 8] * 1;
-            if (hash13 < 0 || 4 - 1 < hash13) {
+            hash13 = buf[cstart7 : 1] * 1;
+            if (hash13 < 0 || buf[7 : 1] - 1 < hash13) {
 
             } else {
-                 kstart10 = buf[29 + hash13 : 1] + 33;
+                 kstart10 = buf[8 + hash13 : 1] + 8 + buf[7 : 1];
                  key12 = (buf[kstart10 : 1]);
-                 vstart11 = buf[29 + hash13 : 1] + 33 + 1;
+                 vstart11 = buf[8 + hash13 : 1] + 8 + buf[7 : 1] + 1;
                  if (true && key12[0] == buf[cstart7 : 1]) {
                      print(Tuple[Int[nonnull], Int[nonnull]],
                      (key12[0], buf[vstart11 : 1]));
@@ -324,18 +323,17 @@ let%expect_test "hash-idx" =
     // count2 : Int[nonnull] (persists=true)
     // hash6 : Int[nonnull] (persists=false)
     fun consumer () : Void {
-        cstart0 = 0;
+        cstart0 = 1;
         i1 = 0;
         count2 = 5;
         loop (i1 < count2) {
-            hash6 =
-            buf[5 : 8] * buf[cstart0 : 1] + buf[13 : 8] >> 63 - buf[21 : 8] * 1;
-            if (hash6 < 0 || 4 - 1 < hash6) {
+            hash6 = buf[cstart0 : 1] * 1;
+            if (hash6 < 0 || buf[7 : 1] - 1 < hash6) {
 
             } else {
-                 kstart3 = buf[29 + hash6 : 1] + 33;
+                 kstart3 = buf[8 + hash6 : 1] + 8 + buf[7 : 1];
                  key5 = (buf[kstart3 : 1]);
-                 vstart4 = buf[29 + hash6 : 1] + 33 + 1;
+                 vstart4 = buf[8 + hash6 : 1] + 8 + buf[7 : 1] + 1;
                  if (true && key5[0] == buf[cstart0 : 1]) {
                      consume(Tuple[Int[nonnull], Int[nonnull]],
                      (key5[0], buf[vstart4 : 1]));
@@ -770,13 +768,13 @@ let%expect_test "example-3" =
     // key40 : Tuple[Int[nonnull]] (persists=false)
     // cstart32 : Int[nonnull] (persists=true)
     fun printer () : Void {
-        hash28 = buf[2 : 8] * id_p + buf[10 : 8] >> 63 - buf[18 : 8] * 1;
-        if (hash28 < 0 || 4 - 1 < hash28) {
+        hash28 = id_p * 1;
+        if (hash28 < 0 || buf[2 : 1] - 1 < hash28) {
 
         } else {
-             kstart25 = buf[26 + hash28 : 1] + 30;
+             kstart25 = buf[3 + hash28 : 1] + 3 + buf[2 : 1];
              key27 = (buf[kstart25 : 1]);
-             vstart26 = buf[26 + hash28 : 1] + 30 + 1;
+             vstart26 = buf[3 + hash28 : 1] + 3 + buf[2 : 1] + 1;
              if (true && key27[0] == id_p) {
                  cstart29 = vstart26 + 1 + 1;
                  i30 = 0;
@@ -869,13 +867,13 @@ let%expect_test "example-3" =
     // low12 : Int[nonnull] (persists=true)
     // kstart9 : Int[nonnull] (persists=true)
     fun consumer () : Void {
-        hash3 = buf[2 : 8] * id_p + buf[10 : 8] >> 63 - buf[18 : 8] * 1;
-        if (hash3 < 0 || 4 - 1 < hash3) {
+        hash3 = id_p * 1;
+        if (hash3 < 0 || buf[2 : 1] - 1 < hash3) {
 
         } else {
-             kstart0 = buf[26 + hash3 : 1] + 30;
+             kstart0 = buf[3 + hash3 : 1] + 3 + buf[2 : 1];
              key2 = (buf[kstart0 : 1]);
-             vstart1 = buf[26 + hash3 : 1] + 30 + 1;
+             vstart1 = buf[3 + hash3 : 1] + 3 + buf[2 : 1] + 1;
              if (true && key2[0] == id_p) {
                  cstart4 = vstart1 + 1 + 1;
                  i5 = 0;
