@@ -46,7 +46,9 @@ let count = Univ_map.Key.create ~name:"count" [%sexp_of: count]
 
 let annotate_count r =
   let count_matters =
-    List.exists ~f:(function Count | Sum _ | Avg _ -> true | _ -> false)
+    List.exists ~f:(function
+      | Count | Sum _ | Avg _ | As_pred ((Count | Sum _ | Avg _), _) -> true
+      | _ -> false)
   in
   let visitor =
     object (self)
@@ -55,13 +57,14 @@ let annotate_count r =
       method! visit_t c r =
         let c =
           match r.node with
-          | Dedup _ -> AtLeastOne
           | Select (s, _) | GroupBy (s, _, _) ->
               if count_matters s then Exact else c
           | AHashIdx _ | ATuple _ -> Exact
           | _ -> c
         in
         Meta.set (super#visit_t c r) count c
+
+      method! visit_Dedup _ r = Dedup (self#visit_t AtLeastOne r)
 
       method! visit_AHashIdx c h =
         AHashIdx
@@ -104,7 +107,10 @@ class project_visitor =
             match r.node with
             | Select (ps, r) ->
                 select (project_defs refcnt ps) (self#visit_t () r)
-            | Dedup r -> dedup (self#visit_t () r)
+            | Dedup r -> (
+                match count with
+                | Exact -> dedup r
+                | AtLeastOne -> dedup (self#visit_t () r) )
             | GroupBy (ps, ns, r) ->
                 group_by (project_defs refcnt ps) ns (self#visit_t () r)
             | AList (rk, rv) ->
