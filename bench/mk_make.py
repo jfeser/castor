@@ -165,7 +165,7 @@ analysis_{0}-opt.csv.log: {1}
     print('''
 {0}-gold.time: {0}-gold
 \t./$</scanner.exe -t $(TIME_PER_BENCH) $</data.bin {1} > $@
-\t$(TIME_CMD) -v ./$</scanner.exe -t $(TIME_PER_BENCH) {1}/data.bin {2} 2> {0}-gold.mem > /dev/null
+\t$(TIME_CMD) -v ./$</scanner.exe -t $(TIME_PER_BENCH) $</data.bin {1} 2> {0}-gold.mem > /dev/null
 '''.format(b['name'], gen_param_values(b)))
 
     print('''
