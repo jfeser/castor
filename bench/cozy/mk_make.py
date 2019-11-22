@@ -63,7 +63,7 @@ print('TO_COZY=dune exec $(TO_COZY_PATH) --')
 print('TO_COZY_ARGS=-db $(DB)')
 print('BENCH_DIR=../tpch/')
 print('COZY=')
-print('COZY_TIMEOUT=3600')
+print('COZY_TIMEOUT=21600')
 print('COZY_FLAGS=-t $(COZY_TIMEOUT) --allow-big-sets --allow-big-maps')
 print('all: build convert')
 print('''
