@@ -7,7 +7,7 @@ val create : ?pool_size:int -> string -> t
 
 val conn : t -> Postgresql.connection
 
-val param : t Command.Spec.param
+val param : t Command.Param.t
 
 val exec :
   ?max_retries:int -> ?params:string list -> t -> string -> Postgresql.result

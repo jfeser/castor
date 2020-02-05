@@ -410,15 +410,15 @@ let ops_serializable_exn r =
 
       method! visit_t s r =
         super#visit_t s r;
-        if s = `Run then
-          match r.node with
-          | Relation _ | GroupBy (_, _, _) | Join _ | OrderBy _ | Dedup _ ->
-              raise
-                (Un_serial
-                   (Format.asprintf
-                      "Cannot serialize: Bad operator in run-time position %a"
-                      pp r))
-          | _ -> ()
+        match (s, r.node) with
+        | `Run, (Relation _ | GroupBy (_, _, _) | Join _ | OrderBy _ | Dedup _)
+          ->
+            raise
+            @@ Un_serial
+                 (Format.asprintf
+                    "Cannot serialize: Bad operator in run-time position %a" pp
+                    r)
+        | _ -> ()
     end
   in
   visitor#visit_t `Run r
@@ -431,7 +431,7 @@ let names_serializable_exn r =
       method! visit_Name s n =
         match Name.Meta.(find n stage) with
         | Some s' ->
-            if s <> s' then
+            if Poly.(s <> s') then
               let stage =
                 match s with `Compile -> "compile" | `Run -> "run"
               in

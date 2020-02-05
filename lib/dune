@@ -25,7 +25,7 @@
 (library
  (public_name castor)
  (libraries core str lwt lwt.unix postgresql llvm llvm.analysis llvm.target
-   llvm.all_backends logs cmph expect_test_helpers_kernel visitors.runtime
+   llvm.all_backends logs cmph visitors.runtime
    gen bos hashcons fmt fmt.tty genhash)
  (inline_tests)
  (preprocess

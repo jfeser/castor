@@ -434,5 +434,5 @@ let to_string bench_name params q =
 |}
     |> String.strip
   in
-  let name = String.filter bench_name ~f:(fun ch -> ch <> '-') in
+  let name = String.filter bench_name ~f:(fun ch -> Char.(ch <> '-')) in
   sprintf "query%s:\n%s\n%s\n%s" name lib state queries

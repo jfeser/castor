@@ -119,7 +119,7 @@ let order_by of_ralgebra key r =
     let preds = List.map key ~f:(fun (p, o) -> (Pred.subst ctx p, o)) in
     (* Check that all predicates are scalar *)
     let non_scalar =
-      List.find preds ~f:(fun (p, _) -> Pred.kind p <> `Scalar)
+      List.find preds ~f:(fun (p, _) -> Poly.(Pred.kind p <> `Scalar))
     in
     Option.iter non_scalar ~f:(fun (p, _) ->
         Log.err (fun m -> m "Non-scalar predicate in order-by: %a" Pred.pp p));
@@ -176,7 +176,7 @@ let select ?groupby of_ralgebra ps r =
       List.map ps ~f:(scoped_names (schema_exn r |> Set.of_list (module Name)))
       |> Set.union_list (module Name)
     in
-    if kind = `Agg && not (Set.is_empty scoped) then
+    if Poly.(kind = `Agg) && not (Set.is_empty scoped) then
       let extra_fields =
         Set.to_list scoped
         |> List.map ~f:(fun n -> create_entry ~alias:(Name.name n) (Name n))
@@ -349,7 +349,10 @@ and spj_to_sql { select; distinct; order; group; relations; conds; limit } =
       match select_kind (List.map select ~f:(fun { pred = p; _ } -> p)) with
       | `Agg ->
           List.map select ~f:(fun ({ pred = p; _ } as entry) ->
-              { entry with pred = (if Pred.kind p = `Scalar then Min p else p) })
+              {
+                entry with
+                pred = (match Pred.kind p with `Scalar -> Min p | _ -> p);
+              })
       | `Scalar -> select
     else select
   in

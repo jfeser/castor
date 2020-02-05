@@ -40,7 +40,7 @@ let _pp_with_refcount, _ =
       | None -> ())
     ()
 
-type count = AtLeastOne | Exact [@@deriving sexp]
+type count = AtLeastOne | Exact [@@deriving compare, sexp]
 
 let count = Univ_map.Key.create ~name:"count" [%sexp_of: count]
 
@@ -102,7 +102,8 @@ class project_visitor =
       | None -> r
       | Some refcnt -> (
           let count = Meta.find_exn r count in
-          if all_unref r && count = AtLeastOne then self#dummy
+          if all_unref r && [%compare.equal: count] count AtLeastOne then
+            self#dummy
           else
             match r.node with
             | Select (ps, r) ->

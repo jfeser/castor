@@ -29,7 +29,7 @@ module Make (Config : Config.S) () = struct
              let right_stage =
                match stage with
                | `Both -> true
-               | (`Compile | `Run) as s -> Path.stage_exn p r = s
+               | (`Compile | `Run) as s -> Poly.(Path.stage_exn p r = s)
              in
              if right_stage then
                tf.f (Path.get_exn p r)
@@ -150,9 +150,7 @@ module Make (Config : Config.S) () = struct
                   dedup
                     (select [ As_pred (Name k, key_name) ] (db_relation rel))
                 in
-                let new_key =
-                  List.filter key ~f:(fun k' -> Name.O.(k <> k'))
-                in
+                let new_key = List.filter key ~f:(fun k' -> Name.O.(k <> k')) in
                 let new_ps =
                   List.filter ps ~f:(fun p ->
                       not ([%compare.equal: pred] p (Name k)))
@@ -248,9 +246,7 @@ module Make (Config : Config.S) () = struct
                 List.fold_left key
                   ~init:(Map.empty (module String))
                   ~f:(fun m k ->
-                    Map.add_multi m
-                      ~key:(Option.value_exn (Name.rel k))
-                      ~data:k)
+                    Map.add_multi m ~key:(Option.value_exn (Name.rel k)) ~data:k)
               in
               (* Generate the relation of unique keys for each group. *)
               let key_rels =
@@ -730,8 +726,7 @@ module Make (Config : Config.S) () = struct
               in
               let r, scope = (strip_scope r, scope_exn r) in
               [
-                select outer_aggs
-                  (ordered_idx r scope (select inner_aggs r') m);
+                select outer_aggs (ordered_idx r scope (select inner_aggs r') m);
               ]
           | Select (ps, { node = AList (r, r'); _ }) ->
               let outer_aggs, inner_aggs =
@@ -836,8 +831,7 @@ module Make (Config : Config.S) () = struct
           let in_schema = List.mem s n ~equal:[%compare.equal: Name.t] in
           let is_valid = is_param || in_schema in
           if not is_valid then
-            Logs.debug (fun m ->
-                m "Predicate not valid. %a missing." Name.pp n);
+            Logs.debug (fun m -> m "Predicate not valid. %a missing." Name.pp n);
           is_valid
       end
     in
@@ -1229,12 +1223,7 @@ module Make (Config : Config.S) () = struct
             tuple
               (List.map
                  Int.
-                   [
-                     (2 ** 7) - 1;
-                     (2 ** 15) - 1;
-                     (2 ** 23) - 1;
-                     (2 ** 31) - 1;
-                   ]
+                   [ (2 ** 7) - 1; (2 ** 15) - 1; (2 ** 23) - 1; (2 ** 31) - 1 ]
                  ~f:(fun max ->
                    filter
                      (Binop
@@ -1275,8 +1264,7 @@ module Make (Config : Config.S) () = struct
       match r.node with
       | AScalar
           (As_pred
-            ( First
-                { node = Select ([ As_pred (Binop (op, p1, p2), _) ], r); _ },
+            ( First { node = Select ([ As_pred (Binop (op, p1, p2), _) ], r); _ },
               n )) ->
           let fresh_id = Fresh.name fresh "const%d" in
           [
@@ -1411,8 +1399,7 @@ module Make (Config : Config.S) () = struct
         Transform_parser.transforms_eof Transform_lexer.token
           (Lexing.from_string s)
       with Parser_utils.ParseError (msg, line, col) as e ->
-        Logs.err (fun m ->
-            m "Parse error: %s (line: %d, col: %d)" msg line col);
+        Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col);
         raise e
     in
     List.map tf_strs ~f:(fun (name, args, index) ->

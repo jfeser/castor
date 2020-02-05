@@ -9,8 +9,8 @@ module O : Comparable.Infix with type t := t
 val create : ?scope:string -> ?type_:Type.PrimType.t -> string -> t
 
 val copy :
-  ?scope:string sexp_option ->
-  ?type_:Type.PrimType.t sexp_option ->
+  ?scope:string option ->
+  ?type_:Type.PrimType.t option ->
   ?name:string ->
   ?meta:Univ_map.t ->
   t ->
