@@ -4,7 +4,7 @@ open Collections
 
 let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
   Logs.info (fun m ->
-      m "%s" (Sys.argv |> Array.to_list |> String.concat ~sep:" "));
+      m "%s" (Sys.get_argv () |> Array.to_list |> String.concat ~sep:" "));
   let module CConfig = struct
     let conn = db
 
