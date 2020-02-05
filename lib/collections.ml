@@ -18,7 +18,7 @@ module List = struct
     match l with
     | [] -> Or_error.error_string "Empty list."
     | x :: xs -> (
-        match List.find xs ~f:(fun x' -> x <> x') with
+        match List.find xs ~f:(fun x' -> Poly.(x <> x')) with
         | Some x' ->
             Or_error.error "Unequal elements." (x, x') [%sexp_of: t * t]
         | None -> Or_error.return x )
@@ -177,7 +177,7 @@ module Seq = struct
       fold l ~init:`Empty ~f:(fun s v ->
           match s with
           | `Empty -> `Equal v
-          | `Equal v' -> if v = v' then s else `Unequal (v, v')
+          | `Equal v' -> if Poly.(v = v') then s else `Unequal (v, v')
           | `Unequal _ -> s)
     in
     match s with

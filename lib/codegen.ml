@@ -1068,7 +1068,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let out_dir =
       match out_dir with Some x -> x | None -> Filename.temp_dir "bin" ""
     in
-    if Sys.is_directory out_dir = `No then Unix.mkdir out_dir;
+    (match Sys.is_directory out_dir with `No -> Unix.mkdir out_dir | _ -> ());
     let stdlib_fn = Project_config.build_root ^ "/etc/castorlib.c" in
     let date_fn = Project_config.build_root ^ "/etc/date.c" in
     let main_fn = out_dir ^ "/main.c" in

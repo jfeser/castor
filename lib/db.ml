@@ -13,8 +13,8 @@ let () =
 
 type t = {
   uri : string;
-  conn : Psql.connection sexp_opaque; [@compare.ignore]
-  pool : Psql.connection Lwt_pool.t sexp_opaque; [@compare.ignore]
+  conn : (Psql.connection[@sexp.opaque]); [@compare.ignore]
+  pool : (Psql.connection Lwt_pool.t[@sexp.opaque]); [@compare.ignore]
 }
 [@@deriving compare, sexp]
 
@@ -213,7 +213,7 @@ let all_relations conn =
 let relation_has_field conn f =
   List.find (all_relations conn) ~f:(fun r ->
       List.exists (Option.value_exn r.Relation.r_schema) ~f:(fun n ->
-          Name.name n = f))
+          String.(Name.name n = f)))
 
 let load_value type_ value =
   let open Type.PrimType in
@@ -232,7 +232,7 @@ let load_value type_ value =
         else Error (Error.of_string "Unexpected null integer.")
       else Ok (Int (Int.of_string value))
   | StringT { padded = true; _ } ->
-      Ok (String (String.rstrip ~drop:(fun c -> c = ' ') value))
+      Ok (String (String.rstrip ~drop:(fun c -> Char.(c = ' ')) value))
   | StringT { padded = false; _ } -> Ok (String value)
   | FixedT { nullable } ->
       if String.(value = "") then

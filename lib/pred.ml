@@ -81,7 +81,7 @@ let collect_aggs p =
       method private visit_Agg kind p =
         let n = kind ^ Fresh.name Global.fresh "%d" in
         let type_ =
-          if kind = "avg" then Some Type.PrimType.fixed_t
+          if String.(kind = "avg") then Some Type.PrimType.fixed_t
           else to_type_opt p |> Or_error.ok
         in
         (Name (Name.create ?type_ n), [ (n, p) ])
@@ -168,7 +168,7 @@ let kind p =
   | Row_number -> `Window
   | _ -> if visitor#visit_pred () p then `Agg else `Scalar
 
-let%test "" = kind Row_number = `Window
+let%test "" = Poly.(kind Row_number = `Window)
 
 let of_lexbuf_exn lexbuf =
   try Ralgebra_parser.expr_eof Ralgebra_lexer.token lexbuf
@@ -246,7 +246,7 @@ let to_nnf p =
       inherit [_] Abslayout0.map as super
 
       method! visit_Unop () (op, arg) =
-        if op = Not then
+        if Poly.(op = Not) then
           match arg with
           | Binop (Or, p1, p2) ->
               self#visit_pred () (Binop (And, Unop (Not, p1), Unop (Not, p2)))
@@ -274,7 +274,7 @@ let simplify p =
       inherit [_] Abslayout0.map
 
       method! visit_Binop () (op, p1, p2) =
-        if op = Or then
+        if Poly.(op = Or) then
           let clauses =
             disjuncts (Binop (op, p1, p2)) |> List.map ~f:conjuncts
           in
@@ -294,12 +294,12 @@ let simplify p =
       inherit [_] Abslayout0.map as super
 
       method! visit_Binop () (op, p1, p2) =
-        if op = Or then
+        if Poly.(op = Or) then
           disjuncts (Binop (op, p1, p2))
           |> List.dedup_and_sort ~compare:[%compare: t]
           |> List.map ~f:(self#visit_pred ())
           |> disjoin
-        else if op = And then
+        else if Poly.(op = And) then
           conjuncts (Binop (op, p1, p2))
           |> List.dedup_and_sort ~compare:[%compare: t]
           |> List.map ~f:(self#visit_pred ())

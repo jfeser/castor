@@ -172,7 +172,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
       method write_string s = Buffer.add_string buf s
 
       method write_into (s : 'self) =
-        if s = self then failwith "Cannot write into self.";
+        if phys_equal s self then failwith "Cannot write into self.";
         Buffer.add_buffer s#buf self#buf
 
       method write_into_channel ch = Out_channel.output_buffer ch self#buf
@@ -189,7 +189,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
       method write_string s = Bigbuffer.add_string buf s
 
       method write_into (s : 'self) =
-        if s = self then failwith "Cannot write into self.";
+        if phys_equal s self then failwith "Cannot write into self.";
         Bigbuffer.add_buffer s#buf self#buf
 
       method write_into_channel ch =

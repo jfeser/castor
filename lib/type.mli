@@ -47,7 +47,7 @@ module AbsInt : sig
 
   val zero : t
 
-  val byte_width : nullable:sexp_bool -> t -> int
+  val byte_width : nullable:bool -> t -> int
 
   val of_int : int -> t
 

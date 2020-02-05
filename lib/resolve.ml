@@ -42,7 +42,7 @@ let shadow_check r =
     object (self)
       inherit [_] iter
 
-      val aliases = Hash_set.create (module String) ()
+      val aliases = Hash_set.create (module String)
 
       method check_name n =
         if Hash_set.mem aliases n then
@@ -301,7 +301,7 @@ let rec resolve_pred stage (ctx : Ctx.t) =
 
 and resolve stage outer_ctx ({ node; meta } as r) =
   let all_has_stage (ctx : Ctx.t) s =
-    List.for_all (ctx :> Ctx.row list) ~f:(fun r -> r.Ctx.rstage = s)
+    List.for_all (ctx :> Ctx.row list) ~f:(fun r -> Poly.(r.Ctx.rstage = s))
   in
   let rsame = resolve stage in
   let as_ s r =

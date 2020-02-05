@@ -237,7 +237,7 @@ class conv_sql db =
           | Expr (e, Some a) -> Some (As_pred (self#expr e, a)))
       in
       let query =
-        if s.group = [] then select select_list query
+        if List.is_empty s.group then select select_list query
         else
           let group_key =
             List.map s.group ~f:(function

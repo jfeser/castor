@@ -134,7 +134,7 @@ end
 module T = struct
   type int_ = {
     range : AbsInt.t;
-    distinct : (int, Int.comparator_witness) Distinct.t sexp_opaque;
+    distinct : ((int, Int.comparator_witness) Distinct.t[@sexp.opaque]);
         [@compare.ignore]
     nullable : (bool[@sexp.bool]);
   }
@@ -142,7 +142,7 @@ module T = struct
 
   type date = {
     range : AbsInt.t;
-    distinct : (int, Int.comparator_witness) Distinct.t sexp_opaque;
+    distinct : ((int, Int.comparator_witness) Distinct.t[@sexp.opaque]);
         [@compare.ignore]
     nullable : (bool[@sexp.bool]);
   }
@@ -152,7 +152,7 @@ module T = struct
 
   type string_ = {
     nchars : AbsInt.t;
-    distinct : (string, String.comparator_witness) Distinct.t sexp_opaque;
+    distinct : ((string, String.comparator_witness) Distinct.t[@sexp.opaque]);
         [@compare.ignore]
     nullable : (bool[@sexp.bool]);
   }
@@ -251,7 +251,8 @@ let rec unify_exn t1 t2 =
           distinct = Distinct.join d1 d2;
         }
   | StringT x, NullT | NullT, StringT x -> StringT { x with nullable = true }
-  | TupleT (e1s, { kind = k1 }), TupleT (e2s, { kind = k2 }) when k1 = k2 ->
+  | TupleT (e1s, { kind = k1 }), TupleT (e2s, { kind = k2 }) when Poly.(k1 = k2)
+    ->
       let elem_ts =
         match List.map2 e1s e2s ~f:unify_exn with
         | Ok ts -> ts
