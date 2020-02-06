@@ -1,155 +1,5 @@
 open! Core
-
-module T = struct
-  type meta = Univ_map.t ref [@@deriving sexp_of]
-
-  type binop =
-    | Eq
-    | Lt
-    | Le
-    | Gt
-    | Ge
-    | And
-    | Or
-    | Add
-    | Sub
-    | Mul
-    | Div
-    | Mod
-    | Strpos
-  [@@deriving compare, hash, sexp]
-
-  type unop =
-    | Not
-    | Day
-    | Month
-    | Year
-    | Strlen
-    | ExtractY
-    | ExtractM
-    | ExtractD
-  [@@deriving compare, hash, sexp]
-
-  (* - Visitors doesn't use the special method override syntax that warning 7 checks
-   for. *)
-  [@@@warning "-7"]
-
-  type pred =
-    | Name of (Name.t[@opaque])
-    | Int of (int[@opaque])
-    | Fixed of (Fixed_point.t[@opaque])
-    | Date of (Date.t[@opaque])
-    | Bool of (bool[@opaque])
-    | String of (string[@opaque])
-    | Null of (Type.PrimType.t option[@opaque])
-    | Unop of ((unop[@opaque]) * pred)
-    | Binop of ((binop[@opaque]) * pred * pred)
-    | As_pred of (pred * string)
-    | Count
-    | Row_number
-    | Sum of pred
-    | Avg of pred
-    | Min of pred
-    | Max of pred
-    | If of pred * pred * pred
-    | First of t
-    | Exists of t
-    | Substring of pred * pred * pred
-
-  and scope = string
-
-  and hash_idx = {
-    hi_keys : t;
-    hi_values : t;
-    hi_scope : scope;
-    hi_key_layout : t option; [@opaque]
-    hi_lookup : pred list;
-  }
-
-  and bound = pred * ([ `Open | `Closed ][@opaque])
-
-  and ordered_idx = {
-    oi_key_layout : t option;
-    oi_lookup : (bound option * bound option) list;
-  }
-
-  and tuple = Cross | Zip | Concat
-
-  and order = Asc | Desc
-
-  and depjoin = { d_lhs : t; d_alias : scope; d_rhs : t }
-
-  and join = { pred : pred; r1 : t; r2 : t }
-
-  and order_by = { key : (pred * order) list; rel : t }
-
-  and t = { node : node; meta : meta [@opaque] [@compare.ignore] }
-
-  and node =
-    | Select of (pred list * t)
-    | Filter of (pred * t)
-    | Join of join
-    | DepJoin of depjoin
-    | GroupBy of (pred list * (Name.t[@opaque]) list * t)
-    | OrderBy of order_by
-    | Dedup of t
-    | Relation of (Relation.t[@opaque])
-    | Range of pred * pred
-    | AEmpty
-    | AScalar of pred
-    | AList of (t * t)
-    | ATuple of (t list * tuple)
-    | AHashIdx of hash_idx
-    | AOrderedIdx of (t * t * ordered_idx)
-    | As of scope * t
-  [@@deriving
-    visitors { variety = "endo" },
-      visitors { variety = "map" },
-      visitors { variety = "iter" },
-      visitors { variety = "reduce" },
-      visitors { variety = "fold"; ancestors = [ "map" ] },
-      visitors { variety = "mapreduce" },
-      sexp_of,
-      hash,
-      compare]
-
-  [@@@warning "+7"]
-
-  let t_of_sexp _ = failwith "Unimplemented"
-
-  type param = string * Type.PrimType.t * pred option
-end
-
-include T
-module C = Comparable.Make (T)
-
-module O : Comparable.Infix with type t := t = C
-
-include Comparator.Make (T)
-
-class virtual runtime_subquery_visitor =
-  object (self : 'a)
-    inherit [_] iter as super
-
-    method virtual visit_Subquery : t -> unit
-
-    (* Don't annotate subqueries that run at compile time. *)
-    method! visit_AScalar () _ = ()
-
-    method! visit_AList () (_, r) = super#visit_t () r
-
-    method! visit_AHashIdx () { hi_values = r; _ } = super#visit_t () r
-
-    method! visit_AOrderedIdx () (_, r, _) = super#visit_t () r
-
-    method! visit_Exists () r =
-      super#visit_t () r;
-      self#visit_Subquery r
-
-    method! visit_First () r =
-      super#visit_t () r;
-      self#visit_Subquery r
-  end
+open Ast
 
 let pp_option pp fmt =
   let open Format in
@@ -175,7 +25,9 @@ let pp_list ?(bracket = ("[", "]")) pp fmt ls =
   pp_close_box fmt ();
   fprintf fmt "%s" closeb
 
-let op_to_str = function
+let op_to_str =
+  let open Binop in
+  function
   | Eq -> `Infix "="
   | Lt -> `Infix "<"
   | Le -> `Infix "<="
@@ -190,7 +42,9 @@ let op_to_str = function
   | Mod -> `Infix "%"
   | Strpos -> `Prefix "strpos"
 
-let unop_to_str = function
+let unop_to_str =
+  let open Unop in
+  function
   | Not -> "not"
   | Day -> "day"
   | Month -> "month"
@@ -250,10 +104,10 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
     | Asc -> fprintf fmt "@[<hov>%a@]" pp_pred p
     | Desc -> fprintf fmt "@[<hov>%a@ desc@]" pp_pred p
   and pp_lower_bound fmt (p, b) =
-    let op = match b with `Closed -> Ge | `Open -> Gt in
+    let op = match b with `Closed -> Binop.Ge | `Open -> Binop.Gt in
     fprintf fmt "%a %a" pp_op (op_to_str op) pp_pred p
   and pp_upper_bound fmt (p, b) =
-    let op = match b with `Closed -> Le | `Open -> Lt in
+    let op = match b with `Closed -> Binop.Le | `Open -> Binop.Lt in
     fprintf fmt "%a %a" pp_op (op_to_str op) pp_pred p
   and pp fmt { node; meta } =
     fprintf fmt "@[<hv 2>";
@@ -303,28 +157,3 @@ let pp_small fmt x =
 let pp_small_str () x =
   Format.(pp_small str_formatter x);
   Format.flush_str_formatter ()
-
-let names_visitor =
-  object (self : 'a)
-    inherit [_] reduce as super
-
-    method zero = Set.empty (module Name)
-
-    method plus = Set.union
-
-    method! visit_Name () n = Set.singleton (module Name) n
-
-    method! visit_pred () p =
-      match p with
-      | Exists _ | First _ -> self#zero
-      | _ -> super#visit_pred () p
-  end
-
-let scope r = match r.node with As (n, _) -> Some n | _ -> None
-
-let scope_exn r =
-  Option.value_exn
-    ~error:(Error.createf "Expected a scope on %a." pp_small_str r)
-    (scope r)
-
-let strip_scope r = match r.node with As (_, r) -> r | _ -> r

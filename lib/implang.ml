@@ -92,9 +92,9 @@ and pp_stmt : Format.formatter -> stmt -> unit =
     | Yield e -> fprintf fmt "@[<hov>yield@ %a;@]" pp_expr e
     | Return e -> fprintf fmt "@[<hov>return@ %a;@]" pp_expr e
     | Print (t, e) ->
-        fprintf fmt "@[<hov>print(%a,@ %a);@]" Type.PrimType.pp t pp_expr e
+        fprintf fmt "@[<hov>print(%a,@ %a);@]" Prim_type.pp t pp_expr e
     | Consume (t, e) ->
-        fprintf fmt "@[<hov>consume(%a,@ %a);@]" Type.PrimType.pp t pp_expr e
+        fprintf fmt "@[<hov>consume(%a,@ %a);@]" Prim_type.pp t pp_expr e
 
 and pp_prog : Format.formatter -> prog -> unit =
   let open Format in
@@ -107,14 +107,14 @@ and pp_locals fmt locals =
   let open Format in
   fprintf fmt "@[<v>// Locals:@,";
   List.iter locals ~f:(fun { lname = n; type_ = t; persistent = p } ->
-      fprintf fmt "// @[<h>%s : %a (persists=%b)@]@," n Type.PrimType.pp t p);
+      fprintf fmt "// @[<h>%s : %a (persists=%b)@]@," n Prim_type.pp t p);
   fprintf fmt "@]"
 
 and pp_func fmt { name; args; body; locals; ret_type } =
   let open Format in
   pp_locals fmt locals;
   fprintf fmt "@[<v 4>fun %s (%a) : %a {@,%a@]@,}@," name pp_args args
-    Type.PrimType.pp ret_type pp_prog body
+    Prim_type.pp ret_type pp_prog body
 
 module Infix = struct
   let int x = Int x
@@ -202,7 +202,7 @@ let int2fl x = Unop { op = `Int2Fl; arg = x }
 let date2int x = Unop { op = `Date2Int; arg = x }
 
 let check_type fail =
-  let open Type.PrimType in
+  let open Prim_type in
   object
     method is_int = function IntT _ -> () | _ -> fail ()
 
@@ -216,7 +216,7 @@ let check_type fail =
   end
 
 let rec type_of ctx e =
-  let open Type.PrimType in
+  let open Prim_type in
   match e with
   | Null -> NullT
   | Int _ -> int_t
@@ -343,13 +343,13 @@ let rec type_of ctx e =
 module Builder = struct
   type t = {
     name : string;
-    args : (string * Type.PrimType.t) list;
-    ret : Type.PrimType.t;
+    args : (string * Prim_type.t) list;
+    ret : Prim_type.t;
         (** The locals are variables that are scoped to the function. *)
     locals : local Hashtbl.M(String).t;
         (** The type context is separate from the locals because it also includes
        global variables. *)
-    type_ctx : Type.PrimType.t Hashtbl.M(String).t;
+    type_ctx : Prim_type.t Hashtbl.M(String).t;
     body : stmt RevList.t ref;
   }
   [@@deriving sexp]
@@ -410,7 +410,7 @@ module Builder = struct
   let build_assign e v b =
     let lhs_t = type_of v b in
     let rhs_t = type_of e b in
-    ignore (Type.PrimType.unify lhs_t rhs_t);
+    ignore (Prim_type.unify lhs_t rhs_t);
     b.body := RevList.(!(b.body) ++ Assign { lhs = name_of_var v; rhs = e })
 
   let build_unchecked_assign e v b =
@@ -507,7 +507,7 @@ module Builder = struct
   let rec build_eq x y b =
     let t1 = type_of x b in
     let t2 = type_of y b in
-    let open Type.PrimType in
+    let open Prim_type in
     match (t1, t2) with
     | IntT { nullable = false }, IntT { nullable = false } ->
         Binop { op = `IntEq; arg1 = x; arg2 = y }
@@ -534,7 +534,7 @@ module Builder = struct
 
   let build_hash x y b =
     let t = type_of y b in
-    let open Type.PrimType in
+    let open Prim_type in
     match t with
     | IntT { nullable = false } | BoolT { nullable = false } ->
         Binop { op = `IntHash; arg1 = x; arg2 = y }
@@ -557,7 +557,7 @@ module Builder = struct
     in
     let t1 = type_of x b in
     let t2 = type_of y b in
-    let open Type.PrimType in
+    let open Prim_type in
     match (t1, t2) with
     | IntT { nullable = false }, IntT { nullable = false } ->
         Binop { op = `IntLt; arg1 = x; arg2 = y }
@@ -586,7 +586,7 @@ module Builder = struct
     in
     let t1 = type_of x b in
     let t2 = type_of y b in
-    let open Type.PrimType in
+    let open Prim_type in
     match (t1, t2) with
     | IntT { nullable = false }, IntT { nullable = false }
     | DateT { nullable = false }, DateT { nullable = false } ->
@@ -617,9 +617,9 @@ module Builder = struct
 
   let build_numeric0 f t x =
     let type_err msg t =
-      Error.create msg t [%sexp_of: Type.PrimType.t] |> Error.raise
+      Error.create msg t [%sexp_of: Prim_type.t] |> Error.raise
     in
-    let open Type.PrimType in
+    let open Prim_type in
     match t with
     | IntT { nullable = false } -> f (`Int x)
     | FixedT { nullable = false } -> f (`Fixed x)
@@ -677,8 +677,7 @@ module Builder = struct
         match type_of v b with
         | TupleT ts -> List.length ts |> List.init ~f:(fun i -> Infix.index v i)
         | t ->
-            Error.create "Not a tuple." (v, t)
-              [%sexp_of: expr * Type.PrimType.t]
+            Error.create "Not a tuple." (v, t) [%sexp_of: expr * Prim_type.t]
             |> Error.raise)
     |> fun x -> Tuple x
 
@@ -687,7 +686,7 @@ module Builder = struct
   let _ = build_printstr
 
   module Test = struct
-    open Type.PrimType
+    open Prim_type
 
     let%expect_test "" =
       let b = create ~ctx:(Map.empty (module Name)) ~name:"" ~ret:int_t in

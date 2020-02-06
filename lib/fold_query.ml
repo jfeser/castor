@@ -51,7 +51,7 @@ let map_meta ~f q =
 let is_invariant ss q =
   let names_visitor =
     object
-      inherit [_] Abslayout0.reduce
+      inherit [_] A.reduce
 
       inherit [_] Util.conj_monoid
 

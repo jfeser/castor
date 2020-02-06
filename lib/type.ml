@@ -1,6 +1,5 @@
 open! Core
 open Collections
-include Type0
 
 exception TypeError of Error.t [@@deriving sexp]
 
@@ -188,7 +187,7 @@ end
 include T
 
 let least_general_of_primtype = function
-  | PrimType.IntT { nullable } ->
+  | Prim_type.IntT { nullable } ->
       IntT
         { range = AbsInt.bot; nullable; distinct = Distinct.empty (module Int) }
   | NullT -> NullT

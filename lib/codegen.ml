@@ -179,8 +179,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         | `Ok x -> x
         | `Duplicate_key k ->
             Error.create "Duplicate key." (k, func.I.locals, params)
-              [%sexp_of:
-                string * I.local list * (string * Type.PrimType.t) list]
+              [%sexp_of: string * I.local list * (string * Prim_type.t) list]
             |> Error.raise
 
       method values : var Hashtbl.M(String).t = values
@@ -189,7 +188,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
       method func : I.func = func
 
-      method tctx : Type.PrimType.t Hashtbl.M(String).t = tctx
+      method tctx : Prim_type.t Hashtbl.M(String).t = tctx
 
       val mutable llfunc = None
 
@@ -235,7 +234,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
   let fixed_type = double_type ctx
 
   let rec codegen_type t =
-    let open Type.PrimType in
+    let open Prim_type in
     match t with
     | IntT _ | DateT _ -> int_type
     | BoolT _ -> bool_type
@@ -453,7 +452,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       List.foldi types
         ~init:(const_int (i64_type ctx) 0)
         ~f:(fun idx size ->
-          let open Type.PrimType in
+          let open Prim_type in
           function
           | (NullT | VoidT | TupleT _) as t ->
               Error.create "Not supported as part of a composite key." t
@@ -480,7 +479,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let key_ptr = build_array_alloca (i8_type ctx) key_size "" builder in
     let key_offset = build_ptrtoint key_ptr (i64_type ctx) "" builder in
     List.foldi ~init:key_offset types ~f:(fun idx key_offset type_ ->
-        let open Type.PrimType in
+        let open Prim_type in
         let key_offset =
           match type_ with
           | IntT _ | DateT _ ->
@@ -740,7 +739,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
   let date_fmt = build_global_stringptr "%04d-%02d-%02d" "date_fmt" builder
 
   let codegen_print fctx type_ expr =
-    let open Type.PrimType in
+    let open Prim_type in
     let val_ = codegen_expr fctx expr in
     let rec gen val_ = function
       | NullT -> call_printf null_str []
@@ -775,7 +774,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
   (** Generate an argument list from a tuple and a type. *)
   let rec codegen_consume_args type_ tup =
-    let open Type.PrimType in
+    let open Prim_type in
     match type_ with
     | IntT _ | DateT _ | BoolT _ | FixedT _ -> [ tup ]
     | StringT _ ->
@@ -1079,7 +1078,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let remarks_fn = out_dir ^ "/remarks.yml" in
     let header_fn = out_dir ^ "/scanner.h" in
     let data_fn = out_dir ^ "/data.bin" in
-    let open Type.PrimType in
+    let open Prim_type in
     (* Generate IR module. *)
     let ir_module =
       let unopt = IG.irgen ~params ~data_fn layout in

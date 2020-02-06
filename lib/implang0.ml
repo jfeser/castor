@@ -56,12 +56,12 @@ type expr =
   | Unop of { op : (unop[@opaque]); arg : expr }
   | Done of string
   | Ternary of expr * expr * expr
-  | TupleHash of (Type.PrimType.t[@opaque]) list * expr * expr
+  | TupleHash of (Prim_type.t[@opaque]) list * expr * expr
   | Substr of expr * expr * expr
 
 and stmt =
-  | Print of (Type.PrimType.t[@opaque]) * expr
-  | Consume of (Type.PrimType.t[@opaque]) * expr
+  | Print of (Prim_type.t[@opaque]) * expr
+  | Consume of (Prim_type.t[@opaque]) * expr
   | Loop of { cond : expr; body : prog }
   | If of { cond : expr; tcase : prog; fcase : prog }
   | Iter of { var : string; func : string; args : expr list }
@@ -74,15 +74,15 @@ and prog = stmt list
 
 and local = {
   lname : string;
-  type_ : (Type.PrimType.t[@opaque]);
+  type_ : (Prim_type.t[@opaque]);
   persistent : bool;
 }
 
 and func = {
   name : string;
-  args : (string * (Type.PrimType.t[@opaque])) list;
+  args : (string * (Prim_type.t[@opaque])) list;
   body : prog;
-  ret_type : (Type.PrimType.t[@opaque]);
+  ret_type : (Prim_type.t[@opaque]);
   locals : local list;
 }
 [@@deriving

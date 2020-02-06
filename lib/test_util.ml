@@ -1,5 +1,5 @@
 open! Core
-open Type.PrimType
+open Prim_type
 
 let run_in_fork (type a) (thunk : unit -> a) : a =
   let rd, wr = Unix.pipe () in
@@ -99,9 +99,7 @@ let create db name fields values =
   Db.(
     exec db (sprintf "create table %s (%s)" name fields_sql) |> command_ok_exn);
   List.iter values ~f:(fun vs ->
-      let values_sql =
-        List.map vs ~f:Value.to_sql |> String.concat ~sep:", "
-      in
+      let values_sql = List.map vs ~f:Value.to_sql |> String.concat ~sep:", " in
       Db.(
         exec db (sprintf "insert into %s values (%s)" name values_sql)
         |> command_ok_exn))

@@ -1,8 +1,7 @@
 open! Core
 open! Lwt
 open Collections
-open Abslayout0
-module A = Abslayout
+open Abslayout
 module T = Type
 
 module type S = Abslayout_db_intf.S
@@ -11,7 +10,7 @@ module Config = struct
   module type S = sig
     val conn : Db.t
 
-    val simplify : (A.t -> A.t) option
+    val simplify : (t -> t) option
   end
 end
 
@@ -44,8 +43,6 @@ module Make (Config : Config.S) = struct
       return (extract ret)
   end
 
-  open Fold
-
   let two_arg_fold f =
     let init = RevList.empty in
     let fold acc x =
@@ -57,7 +54,7 @@ module Make (Config : Config.S) = struct
       | [ lhs; rhs ] -> f lhs rhs
       | _ -> assert false
     in
-    Fold { init; fold; extract }
+    Fold.Fold { init; fold; extract }
 
   let group_by eq strm =
     let open RevList in
@@ -133,29 +130,28 @@ module Make (Config : Config.S) = struct
       method private debug = false
 
       method private func a =
-        let m = a.Q.meta.A.meta in
-        match a.Q.meta.A.node with
+        let m = a.Q.meta.meta in
+        match a.Q.meta.node with
         | Filter ((_, c) as x) -> (self#filter m x, c)
         | Select ((_, c) as x) -> (self#select m x, c)
         | OrderBy ({ rel = c; _ } as x) -> (self#order_by m x, c)
         | GroupBy ((_, _, c) as x) -> (self#group_by m x, c)
         | Dedup c -> (self#dedup m, c)
-        | x ->
-            Error.(create "Expected a function." x [%sexp_of: A.node] |> raise)
+        | x -> Error.(create "Expected a function." x [%sexp_of: node] |> raise)
 
-      method private qempty : (int, A.t) Q.t -> 'a =
+      method private qempty : (int, t) Q.t -> 'a =
         fun a ->
-          let m = a.Q.meta.A.meta in
-          match a.Q.meta.A.node with
+          let m = a.Q.meta.meta in
+          match a.Q.meta.node with
           | AEmpty -> self#empty m
           | _ ->
               let f, child = self#func a in
               f (self#qempty { a with meta = child })
 
-      method private scalars : (int, A.t) Q.t -> 't -> 'a =
+      method private scalars : (int, t) Q.t -> 't -> 'a =
         fun a ->
-          let m = a.Q.meta.A.meta in
-          match a.Q.meta.A.node with
+          let m = a.Q.meta.meta in
+          match a.Q.meta.node with
           | AScalar x -> (
               fun t ->
                 match t with
@@ -163,7 +159,7 @@ module Make (Config : Config.S) = struct
                 | _ -> failwith "Expected a singleton tuple." )
           | ATuple ((xs, _) as x) ->
               fun t ->
-                let (Fold { init; fold; extract }) = self#tuple m x in
+                let (Fold.Fold { init; fold; extract }) = self#tuple m x in
                 List.fold2_exn xs t ~init ~f:(fun acc r v ->
                     let m = r.meta in
                     match r.node with
@@ -176,15 +172,15 @@ module Make (Config : Config.S) = struct
               fun t -> f (g t)
 
       method private for_
-          : (int, A.t) Q.t -> (Value.t list * 'a option * 'a, 'a) Fold.t =
+          : (int, t) Q.t -> (Value.t list * 'a option * 'a, 'a) Fold.t =
         fun a ->
-          let m = a.Q.meta.A.meta in
-          match a.Q.meta.A.node with
+          let m = a.Q.meta.meta in
+          match a.Q.meta.node with
           | AList x ->
-              let (Fold g) = self#list m x in
+              let (Fold.Fold g) = self#list m x in
               Fold { g with fold = (fun a (x, _, z) -> g.fold a (x, z)) }
           | AHashIdx x ->
-              let (Fold g) = self#hash_idx m x in
+              let (Fold.Fold g) = self#hash_idx m x in
               Fold
                 {
                   g with
@@ -192,7 +188,7 @@ module Make (Config : Config.S) = struct
                     (fun a (x, y, z) -> g.fold a (x, Option.value_exn y, z));
                 }
           | AOrderedIdx x ->
-              let (Fold g) = self#ordered_idx m x in
+              let (Fold.Fold g) = self#ordered_idx m x in
               Fold
                 {
                   g with
@@ -204,10 +200,10 @@ module Make (Config : Config.S) = struct
               let (Fold g) = self#for_ { a with meta = child } in
               Fold { g with extract = (fun x -> f (g.extract x)) }
 
-      method private concat : (int, A.t) Q.t -> ('a, 'a) Fold.t =
+      method private concat : (int, t) Q.t -> ('a, 'a) Fold.t =
         fun a ->
-          let m = a.Q.meta.A.meta in
-          match a.Q.meta.A.node with
+          let m = a.Q.meta.meta in
+          match a.Q.meta.node with
           | ATuple x -> self#tuple m x
           | DepJoin x -> two_arg_fold (self#depjoin m x)
           | Join x -> two_arg_fold (self#join m x)
@@ -218,8 +214,8 @@ module Make (Config : Config.S) = struct
 
       method private key_layout q =
         match q.node with
-        | AHashIdx x -> Some (A.h_key_layout x)
-        | AOrderedIdx x -> Some (A.o_key_layout x)
+        | AHashIdx x -> Some (h_key_layout x)
+        | AOrderedIdx x -> Some (o_key_layout x)
         | Select (_, q')
         | Filter (_, q')
         | Dedup q'
@@ -281,7 +277,7 @@ module Make (Config : Config.S) = struct
                in
                let%lwt rval = self#eval lctx (Lwt_stream.of_list rhs) q2 in
                return (lhs, lval, rval))
-        |> run_lwt fold
+        |> Fold.run_lwt fold
 
       method private eval_concat lctx tups a qs : 'a Lwt.t =
         let (Fold { init; fold; extract }) = self#concat a in
@@ -377,14 +373,14 @@ module Make (Config : Config.S) = struct
         | Q.Scalars x -> self#eval_scalars lctx tups a x
 
       method run ?timeout r =
-        let q = A.ensure_alias r |> Q.of_ralgebra |> Q.hoist_all in
+        let q = ensure_alias r |> Q.of_ralgebra |> Q.hoist_all in
         let r = Q.to_ralgebra q |> simplify in
         Logs.debug (fun m -> m "Running query: %a" pp r);
         let sql = Sql.of_ralgebra r in
         Logs.debug (fun m -> m "Running SQL: %s" (Sql.to_string_hum sql));
         let tups =
           Db.exec_lwt_exn ?timeout conn
-            (A.schema_exn r |> List.map ~f:Name.type_exn)
+            (schema_exn r |> List.map ~f:Name.type_exn)
             (Sql.to_string sql)
           |> Lwt_stream.map (function
                | Ok x -> Array.to_list x
@@ -416,7 +412,7 @@ module Make (Config : Config.S) = struct
             `Child_sum )
     | AHashIdx h ->
         HashIdxT
-          ( least_general_of_layout (A.h_key_layout h),
+          ( least_general_of_layout (h_key_layout h),
             least_general_of_layout h.hi_values,
             { key_count = Bottom } )
     | AOrderedIdx (_, vr, { oi_key_layout = Some kr; _ }) ->
@@ -491,7 +487,7 @@ module Make (Config : Config.S) = struct
         let fold (t, c) (_, t') =
           try (T.unify_exn t t', c + 1)
           with Type.TypeError _ as exn ->
-            Logs.err (fun m -> m "Type checking failed on: %a" A.pp (A.list' l));
+            Logs.err (fun m -> m "Type checking failed on: %a" pp (list' l));
             Logs.err (fun m ->
                 m "%a does not unify with %a" Sexp.pp_hum
                   ([%sexp_of: T.t] t)
@@ -519,7 +515,7 @@ module Make (Config : Config.S) = struct
       method hash_idx _ h =
         let init =
           ( 0,
-            least_general_of_layout (A.h_key_layout h),
+            least_general_of_layout (h_key_layout h),
             least_general_of_layout h.hi_values )
         in
         let fold (kct, kt, vt) (_, kt', vt') =
@@ -599,7 +595,7 @@ module Make (Config : Config.S) = struct
     annot r (type_of r);
     let visitor =
       object
-        inherit runtime_subquery_visitor
+        inherit Abslayout_visitors.runtime_subquery_visitor
 
         method visit_Subquery r = annot r (type_of r)
       end
@@ -617,10 +613,10 @@ module Make (Config : Config.S) = struct
     visitor#visit_t ()
 
   let load_layout ?(params = Set.empty (module Name)) l =
-    l |> A.strip_unused_as |> annotate_relations |> R.resolve ~params
-    |> A.annotate_key_layouts
+    l |> strip_unused_as |> annotate_relations |> R.resolve ~params
+    |> annotate_key_layouts
 
-  let load_string ?params s = A.of_string_exn s |> load_layout ?params
+  let load_string ?params s = of_string_exn s |> load_layout ?params
 end
 
 let%test_module _ =

@@ -1,10 +1,6 @@
 open! Core
 
-type select_entry = {
-  pred : Pred.t;
-  alias : string;
-  cast : Type.PrimType.t option;
-}
+type select_entry = { pred : Pred.t; alias : string; cast : Prim_type.t option }
 [@@deriving compare, sexp_of]
 
 type spj = {

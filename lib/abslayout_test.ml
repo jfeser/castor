@@ -570,7 +570,7 @@ let%test_module _ =
      *   let r =
      *     M.load_string
      *       ~params:
-     *         (let open Type.PrimType in
+     *         (let open Prim_type in
      *         Set.of_list
      *           (module Name)
      *           [ Name.create ~type_:string_t "param1"

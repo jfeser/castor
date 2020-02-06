@@ -1,6 +1,6 @@
 %{
     open! Core
-    module A = Abslayout0
+    module A = Ast
     open Parser_utils
          %}
 
@@ -9,20 +9,20 @@
 %token <Fixed_point.t> FIXED
 %token <bool> BOOL
 %token <string> STR
-%token <Abslayout0.order> ORDER
-%token <Abslayout0.tuple> KIND
-%token <Type0.PrimType.t> PRIMTYPE
-%token <Abslayout0.binop> EQ LT GT LE GE AND OR ADD SUB MUL DIV MOD STRPOS
-%token <Abslayout0.unop> MONTH DAY YEAR NOT STRLEN EXTRACTY EXTRACTM EXTRACTD
+%token <Ast.order> ORDER
+%token <Ast.tuple> KIND
+%token <Prim_type.t> PRIMTYPE
+%token <Ast.Binop.t> EQ LT GT LE GE AND OR ADD SUB MUL DIV MOD STRPOS
+%token <Ast.Unop.t> MONTH DAY YEAR NOT STRLEN EXTRACTY EXTRACTM EXTRACTD
 %token AS DEPJOIN JOIN SELECT DEDUP FILTER COUNT GROUPBY MIN MAX AVG SUM LPAREN
 RPAREN LSBRAC RSBRAC COLON DOT COMMA EOF AEMPTY ASCALAR ATUPLE ALIST AHASHIDX
 AORDEREDIDX NULL ORDERBY IF THEN ELSE DATEKW EXISTS SUBSTRING ROW_NUMBER RANGE
 
-%start <Abslayout0.t> ralgebra_eof
-%start <Abslayout0.pred> expr_eof
+%start <Ast.t> ralgebra_eof
+%start <Ast.pred> expr_eof
 %start <Name.t> name_eof
-%start <Abslayout0.pred> value_eof
-%start <Abslayout0.param> param_eof
+%start <Ast.pred> value_eof
+%start <Ast.Param.t> param_eof
 %%
 
 ralgebra_eof:
@@ -49,7 +49,7 @@ param:
 
 primtype:
   | x = PRIMTYPE { x }
-  | DATEKW { Type0.PrimType.DateT {nullable=false} }
+  | DATEKW { Prim_type.DateT {nullable=false} }
 
 bracket_list(X):
   | LSBRAC; l = separated_list(COMMA, X); RSBRAC { l }

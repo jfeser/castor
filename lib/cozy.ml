@@ -72,7 +72,7 @@ let subst_of_schema bind schema =
       |> Map.of_alist_exn (module Name)
 
 let type_to_cozy = function
-  | Type.PrimType.IntT _ | DateT _ -> "Int"
+  | Prim_type.IntT _ | DateT _ -> "Int"
   | BoolT _ -> "Bool"
   | StringT _ -> "String"
   | FixedT _ -> "Float"
@@ -81,14 +81,14 @@ let type_to_cozy = function
 let numeric float_fmt int_fmt t1 t2 n1 n2 =
   let p1, p2, t =
     match (t1, t2) with
-    | Type.PrimType.FixedT _, Type.PrimType.FixedT _ -> (n1, n2, `Float)
+    | Prim_type.FixedT _, Prim_type.FixedT _ -> (n1, n2, `Float)
     | IntT _, IntT _ | IntT _, DateT _ | DateT _, IntT _ | DateT _, DateT _ ->
         (n1, n2, `Int)
     | IntT _, FixedT _ -> (sprintf "i2f(%s)" n1, n2, `Float)
     | FixedT _, IntT _ -> (n1, sprintf "i2f(%s)" n2, `Float)
     | t, t' ->
         Error.create "Not a numeric type" (t, t')
-          [%sexp_of: Type.PrimType.t * Type.PrimType.t]
+          [%sexp_of: Prim_type.t * Prim_type.t]
         |> Error.raise
   in
   let fmt = match t with `Float -> float_fmt | `Int -> int_fmt in
@@ -96,8 +96,7 @@ let numeric float_fmt int_fmt t1 t2 n1 n2 =
 
 let eq t1 t2 v1 v2 =
   match (t1, t2) with
-  | Type.PrimType.StringT _, Type.PrimType.StringT _ ->
-      sprintf "streq(%s, %s)" v1 v2
+  | Prim_type.StringT _, Prim_type.StringT _ -> sprintf "streq(%s, %s)" v1 v2
   | _, _ -> sprintf "%s == %s" v1 v2
 
 let call' ~args n =
@@ -358,7 +357,7 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
             | Month -> sprintf "month(%s)" pred
             | ExtractY -> sprintf "extracty(%s)" pred
             | _ ->
-                Error.create "Unimplemented unop" op [%sexp_of: unop]
+                Error.create "Unimplemented unop" op [%sexp_of: Unop.t]
                 |> Error.raise
           in
           (queries, pred)

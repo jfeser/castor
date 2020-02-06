@@ -1,15 +1,15 @@
 open! Core
 
-type t = Abslayout0.pred =
+type t = Ast.pred =
   | Name of Name.t
   | Int of int
   | Fixed of Fixed_point.t
-  | Date of Core.Date.t
+  | Date of Date.t
   | Bool of bool
   | String of string
-  | Null of Type.PrimType.t option
-  | Unop of (Abslayout0.unop * t)
-  | Binop of (Abslayout0.binop * t * t)
+  | Null of Prim_type.t option
+  | Unop of (Ast.Unop.t * t)
+  | Binop of (Ast.Binop.t * t * t)
   | As_pred of (t * string)
   | Count
   | Row_number
@@ -18,10 +18,10 @@ type t = Abslayout0.pred =
   | Min of t
   | Max of t
   | If of t * t * t
-  | First of Abslayout0.t
-  | Exists of Abslayout0.t
+  | First of Ast.t
+  | Exists of Ast.t
   | Substring of t * t * t
-[@@deriving compare, hash, variants, sexp_of]
+[@@deriving compare, hash, sexp_of, variants]
 
 include Comparator.S with type t := t
 
@@ -35,7 +35,7 @@ val of_string_exn : string -> t
 
 val kind : t -> [ `Agg | `Scalar | `Window ]
 
-val to_type : t -> Type.PrimType.t
+val to_type : t -> Prim_type.t
 
 val to_name : t -> Name.t option
 

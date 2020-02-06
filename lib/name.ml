@@ -61,7 +61,7 @@ module O : Comparable.Infix with type t := t = struct
 end
 
 module Meta = struct
-  let type_ = Univ_map.Key.create ~name:"type" [%sexp_of: Type.PrimType.t]
+  let type_ = Univ_map.Key.create ~name:"type" [%sexp_of: Prim_type.t]
 
   let stage = Univ_map.Key.create ~name:"stage" [%sexp_of: [ `Compile | `Run ]]
 
@@ -98,9 +98,7 @@ let copy ?scope ?type_:t ?name:n ?meta name =
   let t = Option.value t ~default:(type_ name) in
   let n = Option.value n ~default:name.name.node.name in
   let m = Option.value meta ~default:name.meta in
-  let meta =
-    match t with Some t -> Univ_map.set m Meta.type_ t | None -> m
-  in
+  let meta = match t with Some t -> Univ_map.set m Meta.type_ t | None -> m in
   create_consed r n meta
 
 let name n = n.name.node.name
@@ -121,9 +119,7 @@ let rel_exn n =
 
 let to_var n =
   let name = n.name.node.name in
-  match n.name.node.scope with
-  | Some r -> sprintf "%s_%s" r name
-  | None -> name
+  match n.name.node.scope with Some r -> sprintf "%s_%s" r name | None -> name
 
 let to_sql n =
   match n.name.node.scope with
@@ -171,7 +167,7 @@ let pp_with_stage_and_type fmt n =
   in
   let type_ =
     match Meta.(find n type_) with
-    | Some t -> Type.PrimType.to_string t
+    | Some t -> Prim_type.to_string t
     | None -> "unk"
   in
   fprintf fmt "%a@@%s:%s" pp n stage type_

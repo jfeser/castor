@@ -60,7 +60,7 @@ struct
        fixed and known by the layout. *)
   let add_layout_start ctx r =
     let ctx =
-      let start_name = Name.create ~type_:Type.PrimType.int_t "start" in
+      let start_name = Name.create ~type_:Prim_type.int_t "start" in
       if Config.code_only then
         Map.update ctx start_name ~f:(function
           | Some x -> x
@@ -79,7 +79,7 @@ struct
 
   let types_of_schema s = List.map s ~f:Name.type_exn
 
-  let type_of_schema s = Type.PrimType.TupleT (types_of_schema s)
+  let type_of_schema s = Prim_type.TupleT (types_of_schema s)
 
   let type_of_layout l = A.schema_exn l |> type_of_schema
 
@@ -215,6 +215,8 @@ struct
   and gen_pred ctx pred b =
     let open Builder in
     let rec gen_pred p b =
+      let open A.Binop in
+      let open A.Unop in
       match p with
       | A.Null _ -> Null
       | A.Int x -> Int x
@@ -224,16 +226,16 @@ struct
       | Unop (op, p) -> (
           let x = gen_pred p b in
           match op with
-          | A.Not -> Infix.(not x)
-          | A.Year | A.Month | A.Day ->
+          | Not -> Infix.(not x)
+          | Year | Month | Day ->
               Error.create "Found interval in unexpected position."
                 (A.Unop (op, p))
                 [%sexp_of: A.pred]
               |> Error.raise
-          | A.Strlen -> Unop { op = `StrLen; arg = x }
-          | A.ExtractY -> Unop { op = `ExtractY; arg = x }
-          | A.ExtractM -> Unop { op = `ExtractM; arg = x }
-          | A.ExtractD -> Unop { op = `ExtractD; arg = x } )
+          | Strlen -> Unop { op = `StrLen; arg = x }
+          | ExtractY -> Unop { op = `ExtractY; arg = x }
+          | ExtractM -> Unop { op = `ExtractM; arg = x }
+          | ExtractD -> Unop { op = `ExtractD; arg = x } )
       | A.Bool x -> Bool x
       | A.As_pred (x, _) -> gen_pred x b
       | Name n -> (
@@ -244,46 +246,45 @@ struct
                 [%sexp_of: Name.t * Ctx.t]
               |> Error.raise )
       (* Special cases for date intervals. *)
-      | A.Binop (A.Add, arg1, Unop (Year, arg2)) ->
+      | A.Binop (Add, arg1, Unop (Year, arg2)) ->
           Binop { op = `AddY; arg1 = gen_pred arg1 b; arg2 = gen_pred arg2 b }
-      | A.Binop (A.Add, arg1, Unop (Month, arg2)) ->
+      | A.Binop (Add, arg1, Unop (Month, arg2)) ->
           Binop { op = `AddM; arg1 = gen_pred arg1 b; arg2 = gen_pred arg2 b }
-      | A.Binop (A.Add, arg1, Unop (Day, arg2)) ->
+      | A.Binop (Add, arg1, Unop (Day, arg2)) ->
           Binop { op = `AddD; arg1 = gen_pred arg1 b; arg2 = gen_pred arg2 b }
-      | A.Binop (A.Sub, arg1, Unop (Year, arg2)) ->
-          let e2 = gen_pred (A.Binop (A.Sub, A.Int 0, arg2)) b in
+      | A.Binop (Sub, arg1, Unop (Year, arg2)) ->
+          let e2 = gen_pred (A.Binop (Sub, A.Int 0, arg2)) b in
           Binop { op = `AddY; arg1 = gen_pred arg1 b; arg2 = e2 }
-      | A.Binop (A.Sub, arg1, Unop (Month, arg2)) ->
-          let e2 = gen_pred (A.Binop (A.Sub, A.Int 0, arg2)) b in
+      | A.Binop (Sub, arg1, Unop (Month, arg2)) ->
+          let e2 = gen_pred (A.Binop (Sub, A.Int 0, arg2)) b in
           Binop { op = `AddM; arg1 = gen_pred arg1 b; arg2 = e2 }
-      | A.Binop (A.Sub, arg1, Unop (Day, arg2)) ->
-          let e2 = gen_pred (A.Binop (A.Sub, A.Int 0, arg2)) b in
+      | A.Binop (Sub, arg1, Unop (Day, arg2)) ->
+          let e2 = gen_pred (A.Binop (Sub, A.Int 0, arg2)) b in
           Binop { op = `AddD; arg1 = gen_pred arg1 b; arg2 = e2 }
       | A.Binop (op, arg1, arg2) -> (
           let e1 = gen_pred arg1 b in
           let e2 = gen_pred arg2 b in
           match op with
-          | A.Eq -> build_eq e1 e2 b
-          | A.Lt -> build_lt e1 e2 b
-          | A.Le -> build_le e1 e2 b
-          | A.Gt -> build_gt e1 e2 b
-          | A.Ge -> build_ge e1 e2 b
-          | A.And -> Infix.(e1 && e2)
-          | A.Or -> Infix.(e1 || e2)
-          | A.Add -> build_add e1 e2 b
-          | A.Sub -> build_sub e1 e2 b
-          | A.Mul -> build_mul e1 e2 b
-          | A.Div -> build_div e1 e2 b
-          | A.Mod -> Infix.(e1 % e2)
-          | A.Strpos -> Binop { op = `StrPos; arg1 = e1; arg2 = e2 } )
+          | Eq -> build_eq e1 e2 b
+          | Lt -> build_lt e1 e2 b
+          | Le -> build_le e1 e2 b
+          | Gt -> build_gt e1 e2 b
+          | Ge -> build_ge e1 e2 b
+          | And -> Infix.(e1 && e2)
+          | Or -> Infix.(e1 || e2)
+          | Add -> build_add e1 e2 b
+          | Sub -> build_sub e1 e2 b
+          | Mul -> build_mul e1 e2 b
+          | Div -> build_div e1 e2 b
+          | Mod -> Infix.(e1 % e2)
+          | Strpos -> Binop { op = `StrPos; arg1 = e1; arg2 = e2 } )
       | (A.Count | A.Min _ | A.Max _ | A.Sum _ | A.Avg _ | A.Row_number) as p ->
           Error.create "Not a scalar predicate." p [%sexp_of: A.pred]
           |> Error.raise
       | A.If (p1, p2, p3) ->
           let ret_var =
             build_var "ret"
-              (Type.PrimType.unify (type_of_pred ctx p2 b)
-                 (type_of_pred ctx p3 b))
+              (Prim_type.unify (type_of_pred ctx p2 b) (type_of_pred ctx p3 b))
               b
           in
           build_if ~cond:(gen_pred p1 b)
@@ -387,7 +388,7 @@ struct
       match (clayouts, ctypes, cstarts) with
       | [], [], [] -> cb b fields
       | clayout :: clayouts, ctype :: ctypes, cstart :: cstarts ->
-          let ctx = Ctx.bind ctx "start" Type.PrimType.int_t cstart in
+          let ctx = Ctx.bind ctx "start" Prim_type.int_t cstart in
           scan ctx b clayout ctype (fun b tup ->
               make_loops ctx (fields @ tup) clayouts ctypes cstarts b)
       | _ -> failwith ""
@@ -415,7 +416,7 @@ struct
     let hdr = Header.make_header (TupleT t) in
     let pstart = Ctx.find_exn ctx (Name.create "start") b in
     let cstart = build_defn "cstart" pstart b in
-    let ctx = Ctx.bind ctx "start" Type.PrimType.int_t cstart in
+    let ctx = Ctx.bind ctx "start" Prim_type.int_t cstart in
     let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
     (* Build iterator initializers using the computed start positions. *)
     build_assign (Header.make_position hdr "value" pstart) cstart b;
@@ -476,7 +477,7 @@ struct
     let cstart =
       build_defn "cstart" (Header.make_position hdr "value" start) b
     in
-    let ctx = Ctx.bind ctx "start" Type.PrimType.int_t cstart in
+    let ctx = Ctx.bind ctx "start" Prim_type.int_t cstart in
     List.iter2_exn child_layouts child_types ~f:(fun child_layout child_type ->
         let clen = len cstart child_type in
         scan ctx b child_layout child_type cb;
@@ -489,7 +490,7 @@ struct
     let cstart =
       build_defn "cstart" (Header.make_position hdr "value" start) b
     in
-    let callee_ctx = Ctx.bind ctx "start" Type.PrimType.int_t cstart in
+    let callee_ctx = Ctx.bind ctx "start" Prim_type.int_t cstart in
     debug_print "scanning list" (Int 0) b;
     build_count_loop
       (Header.make_access hdr "count" start)
@@ -507,18 +508,18 @@ struct
     let key_type, value_type, m = t in
     let hdr = Header.make_header (HashIdxT t) in
     let start = Ctx.find_exn ctx (Name.create "start") b in
-    let kstart = build_var ~persistent:false "kstart" Type.PrimType.int_t b in
-    let vstart = build_var ~persistent:false "vstart" Type.PrimType.int_t b in
+    let kstart = build_var ~persistent:false "kstart" Prim_type.int_t b in
+    let vstart = build_var ~persistent:false "vstart" Prim_type.int_t b in
     let key_tuple =
       build_var ~persistent:false "key" (type_of_layout key_layout) b
     in
-    let key_ctx = Ctx.bind ctx "start" Type.PrimType.int_t kstart in
+    let key_ctx = Ctx.bind ctx "start" Prim_type.int_t kstart in
     let value_ctx =
       let key_schema = A.schema_exn key_layout |> Schema.scoped r.A.hi_scope in
       let ctx =
         Ctx.bind_ctx ctx (Ctx.of_schema key_schema (list_of_tuple key_tuple b))
       in
-      Ctx.bind ctx "start" Type.PrimType.int_t vstart
+      Ctx.bind ctx "start" Prim_type.int_t vstart
     in
     let hash_data_start = Header.make_position hdr "hash_data" start in
     let mapping_start = Header.make_position hdr "hash_map" start in
@@ -540,7 +541,7 @@ struct
         | `Cmph, xs -> build_hash hash_data_start (Tuple xs) b
       in
       let hash_func_var =
-        build_var ~persistent:false "hash" Type.PrimType.int_t b
+        build_var ~persistent:false "hash" Prim_type.int_t b
       in
       build_assign Infix.(hash_func_val * int hash_ptr_len) hash_func_var b;
       hash_func_var
@@ -585,16 +586,16 @@ struct
     in
     let hdr = Header.make_header (OrderedIdxT t) in
     let start = Ctx.find_exn ctx (Name.create "start") b in
-    let kstart = build_var "kstart" Type.PrimType.int_t b in
-    let vstart = build_var "vstart" Type.PrimType.int_t b in
+    let kstart = build_var "kstart" Prim_type.int_t b in
+    let vstart = build_var "vstart" Prim_type.int_t b in
     let key_tuple = build_var "key" (type_of_layout key_layout) b in
-    let key_ctx = Ctx.bind ctx "start" Type.PrimType.int_t kstart in
+    let key_ctx = Ctx.bind ctx "start" Prim_type.int_t kstart in
     let value_ctx =
       let key_schema = A.schema_exn key_layout in
       let ctx =
         Ctx.bind_ctx ctx (Ctx.of_schema key_schema (list_of_tuple key_tuple b))
       in
-      Ctx.bind ctx "start" Type.PrimType.int_t vstart
+      Ctx.bind ctx "start" Prim_type.int_t vstart
     in
     let index_len = Header.make_access hdr "idx_len" start in
     let index_start = Header.make_position hdr "idx" start in
@@ -657,9 +658,7 @@ struct
     match Pred.remove_as p with
     | A.Count ->
         `Count
-          (build_defn ~persistent:false "count"
-             (const_int Type.PrimType.int_t 0)
-             b)
+          (build_defn ~persistent:false "count" (const_int Prim_type.int_t 0) b)
     | A.Sum f ->
         let t = type_of_pred ctx f b in
         `Sum (f, build_defn ~persistent:false "sum" (const_int t 0) b)
@@ -677,13 +676,13 @@ struct
           ( f,
             build_defn ~persistent:false "avg_num" (const_int t 0) b,
             build_defn ~persistent:false "avg_dem"
-              (const_int Type.PrimType.int_t 0)
+              (const_int Prim_type.int_t 0)
               b )
     | p -> `Passthru p
 
   and agg_step ctx b acc =
     let open Builder in
-    let one = const_int Type.PrimType.int_t 1 in
+    let one = const_int Prim_type.int_t 1 in
     match acc with
     | `Count x -> build_assign (build_add x one b) x b
     | `Sum (f, x) -> build_assign (build_add x (gen_pred ctx f b) b) x b
@@ -777,13 +776,13 @@ struct
     in
     let start = Ctx.find_exn ctx (Name.create "start") b in
     let lhs_start = Header.make_position hdr "value" start in
-    let lhs_ctx = Ctx.bind ctx "start" Type.PrimType.int_t lhs_start in
+    let lhs_ctx = Ctx.bind ctx "start" Prim_type.int_t lhs_start in
     let rhs_ctx =
       let rhs_start = Infix.(lhs_start + len lhs_start lhs_t) in
       debug_print "lhs_start" lhs_start b;
       debug_print "lhs_len" (len lhs_start lhs_t) b;
       debug_print "rhs_start" rhs_start b;
-      Ctx.bind ctx "start" Type.PrimType.int_t rhs_start
+      Ctx.bind ctx "start" Prim_type.int_t rhs_start
     in
     debug_print "scanning depjoin" (Int 0) b;
     scan lhs_ctx b d_lhs lhs_t (fun b tup ->

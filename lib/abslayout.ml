@@ -1,13 +1,28 @@
 open! Core
 open Collections
-include Abslayout0
+module M = Meta
+include Ast
+include Comparator.Make (Ast)
+include Abslayout_pp
+include Abslayout_visitors
+
+module O : Comparable.Infix with type t := t = Comparable.Make (Ast)
+
+let scope r = match r.node with As (n, _) -> Some n | _ -> None
+
+let scope_exn r =
+  Option.value_exn
+    ~error:(Error.createf "Expected a scope on %a." pp_small_str r)
+    (scope r)
+
+let strip_scope r = match r.node with As (_, r) -> r | _ -> r
 
 let strip_meta =
   let visitor =
     object
       inherit [_] map as super
 
-      method! visit_t () t = { (super#visit_t () t) with meta = Meta.empty () }
+      method! visit_t () t = { (super#visit_t () t) with meta = M.empty () }
     end
   in
   visitor#visit_t ()
@@ -48,7 +63,7 @@ let alpha_scopes r =
   in
   visitor#visit_t () r
 
-let wrap x = { node = x; meta = Meta.empty () }
+let wrap x = { node = x; meta = M.empty () }
 
 let select a b = wrap (Select (a, strip_meta b))
 
@@ -270,7 +285,7 @@ and free r =
         n
     | As (_, r') -> free r'
   in
-  Meta.(set_m r free free_set);
+  M.(set_m r free free_set);
   free_set
 
 (** Annotate all subexpressions with its set of free names. *)
@@ -281,7 +296,7 @@ let annotate_free r =
 
       method! visit_t () r =
         let fs = free r in
-        Meta.(set_m r free fs)
+        M.(set_m r free fs)
     end
   in
   visitor#visit_t () r
@@ -322,20 +337,20 @@ let annotate_eq r =
           List.map schema ~f:(fun n' -> (n', Name.(create ~scope:n (name n'))))
           |> dedup_pairs
         in
-        Meta.Direct.set_m m Meta.eq eqs
+        M.Direct.set_m m M.eq eqs
 
       method! visit_Filter m (p, r) =
         super#visit_Filter None (p, r);
         let m = Option.value_exn m in
-        let r_eqs = Meta.(find_exn r eq) in
+        let r_eqs = M.(find_exn r eq) in
         let eqs = Pred.eqs p @ r_eqs |> dedup_pairs in
-        Meta.Direct.set_m m Meta.eq eqs
+        M.Direct.set_m m M.eq eqs
 
       method! visit_Select m (ps, r) =
         super#visit_Select None (ps, r);
         let m = Option.value_exn m in
         let eqs =
-          Meta.(find_exn r eq)
+          M.(find_exn r eq)
           |> List.filter_map ~f:(fun ((n, n') as eq) ->
                  List.find_map ps
                    ~f:
@@ -348,26 +363,26 @@ let annotate_eq r =
                          Some (n, Name.create s)
                      | _ -> None))
         in
-        Meta.Direct.set_m m Meta.eq eqs
+        M.Direct.set_m m M.eq eqs
 
       method! visit_Join m ({ pred = p; r1; r2 } as j) =
         super#visit_Join None j;
         let m = Option.value_exn m in
-        let r1_eqs = Meta.(find_exn r1 eq) in
-        let r2_eqs = Meta.(find_exn r2 eq) in
+        let r1_eqs = M.(find_exn r1 eq) in
+        let r2_eqs = M.(find_exn r2 eq) in
         let eqs = Pred.eqs p @ r1_eqs @ r2_eqs |> dedup_pairs in
-        Meta.Direct.set_m m Meta.eq eqs
+        M.Direct.set_m m M.eq eqs
 
       method! visit_AList m (r1, r2) =
         super#visit_AList None (r1, r2);
         let m = Option.value_exn m in
-        let r1_eqs = Meta.(find_exn r1 eq) in
-        let r2_eqs = Meta.(find_exn r2 eq) in
+        let r1_eqs = M.(find_exn r1 eq) in
+        let r2_eqs = M.(find_exn r2 eq) in
         let eqs = r1_eqs @ r2_eqs |> dedup_pairs in
-        Meta.Direct.set_m m Meta.eq eqs
+        M.Direct.set_m m M.eq eqs
 
       method! visit_t _ ({ meta; _ } as r) =
-        Meta.(set_m r eq []);
+        M.(set_m r eq []);
         super#visit_t (Some meta) r
     end
   in
@@ -482,7 +497,7 @@ let annotate_orders r =
       | AScalar _ -> []
       | AList (r, r') ->
           let s' = schema_exn r' in
-          let eq' = Meta.(find_exn r' eq) in
+          let eq' = M.(find_exn r' eq) in
           annotate_orders r' |> ignore;
           let open Name.O in
           annotate_orders r
@@ -503,7 +518,7 @@ let annotate_orders r =
           schema_exn r |> List.map ~f:(fun n -> (Name n, Asc))
       | As _ | Range _ -> []
     in
-    Meta.set_m r Meta.order order;
+    M.set_m r M.order order;
     order
   in
   annotate_eq r;
@@ -511,7 +526,7 @@ let annotate_orders r =
 
 let order_of r =
   annotate_orders r;
-  Meta.(find_exn r order)
+  M.(find_exn r order)
 
 let annotate_key_layouts r =
   let key_layout schema =

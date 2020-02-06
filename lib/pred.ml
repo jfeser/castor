@@ -1,16 +1,16 @@
 open! Core
 
 module T = struct
-  type t = Abslayout0.pred =
+  type t = Ast.pred =
     | Name of Name.t
     | Int of int
     | Fixed of Fixed_point.t
     | Date of Date.t
     | Bool of bool
     | String of string
-    | Null of Type.PrimType.t option
-    | Unop of (Abslayout0.unop * t)
-    | Binop of (Abslayout0.binop * t * t)
+    | Null of Prim_type.t option
+    | Unop of (Ast.Unop.t * t)
+    | Binop of (Ast.Binop.t * t * t)
     | As_pred of (t * string)
     | Count
     | Row_number
@@ -19,8 +19,8 @@ module T = struct
     | Min of t
     | Max of t
     | If of t * t * t
-    | First of Abslayout0.t
-    | Exists of Abslayout0.t
+    | First of Ast.t
+    | Exists of Ast.t
     | Substring of t * t * t
   [@@deriving compare, hash, sexp_of, variants]
 
@@ -39,14 +39,14 @@ let to_type_opt = Schema.to_type_opt
 
 let to_name = Schema.to_name
 
-let pp = Abslayout0.pp_pred
+let pp = Abslayout_pp.pp_pred
 
-let names r = Abslayout0.names_visitor#visit_pred () r
+let names r = Abslayout_visitors.names_visitor#visit_pred () r
 
 let normalize p =
   let visitor =
     object (self)
-      inherit [_] Abslayout0.endo
+      inherit [_] Ast.endo
 
       method! visit_As_pred () _ (p, _) = self#visit_pred () p
 
@@ -74,14 +74,14 @@ let rec disjoin = function
 let collect_aggs p =
   let visitor =
     object (self : 'a)
-      inherit [_] Abslayout0.mapreduce
+      inherit [_] Ast.mapreduce
 
       inherit [_] Util.list_monoid
 
       method private visit_Agg kind p =
         let n = kind ^ Fresh.name Global.fresh "%d" in
         let type_ =
-          if String.(kind = "avg") then Some Type.PrimType.fixed_t
+          if String.(kind = "avg") then Some Prim_type.fixed_t
           else to_type_opt p |> Or_error.ok
         in
         (Name (Name.create ?type_ n), [ (n, p) ])
@@ -116,7 +116,7 @@ let dedup_pairs = List.dedup_and_sort ~compare:[%compare: Name.t * Name.t]
 let eqs p =
   let visitor =
     object (self : 'a)
-      inherit [_] Abslayout0.reduce
+      inherit [_] Ast.reduce
 
       method zero = []
 
@@ -135,7 +135,7 @@ let eqs p =
 let remove_as p =
   let visitor =
     object
-      inherit [_] Abslayout0.map
+      inherit [_] Ast.map
 
       method! visit_As_pred () (p, _) = p
     end
@@ -145,7 +145,7 @@ let remove_as p =
 let kind p =
   let visitor =
     object
-      inherit [_] Abslayout0.reduce
+      inherit [_] Ast.reduce
 
       inherit [_] Util.disj_monoid
 
@@ -180,7 +180,7 @@ let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
 
 class ['c] subst_visitor ctx =
   object
-    inherit [_] Abslayout0.endo
+    inherit [_] Ast.endo
 
     method! visit_Name (_ : 'c) this v =
       match Map.find ctx v with Some x -> x | None -> this
@@ -193,7 +193,7 @@ let subst ctx p =
 let subst_tree ctx p =
   let v =
     object
-      inherit [_] Abslayout0.endo as super
+      inherit [_] Ast.endo as super
 
       method! visit_pred () this =
         match Map.find ctx this with
@@ -222,7 +222,7 @@ let scoped names scope p =
 let unscoped scope p =
   let v =
     object
-      inherit [_] Abslayout0.endo
+      inherit [_] Ast.endo
 
       method! visit_Name _ this n =
         match Name.rel n with
@@ -243,7 +243,7 @@ let ensure_alias = function
 let to_nnf p =
   let visitor =
     object (self : 'self)
-      inherit [_] Abslayout0.map as super
+      inherit [_] Ast.map as super
 
       method! visit_Unop () (op, arg) =
         if Poly.(op = Not) then
@@ -271,7 +271,7 @@ let simplify p =
   (* Extract common clauses from disjunctions. *)
   let common_visitor =
     object
-      inherit [_] Abslayout0.map
+      inherit [_] Ast.map
 
       method! visit_Binop () (op, p1, p2) =
         if Poly.(op = Or) then
@@ -291,7 +291,7 @@ let simplify p =
   (* Remove duplicate clauses from conjunctions and disjunctions. *)
   let _dup_visitor =
     object (self : 'self)
-      inherit [_] Abslayout0.map as super
+      inherit [_] Ast.map as super
 
       method! visit_Binop () (op, p1, p2) =
         if Poly.(op = Or) then

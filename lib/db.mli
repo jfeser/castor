@@ -29,7 +29,7 @@ val exec_cursor_exn :
   ?batch_size:int ->
   ?params:string list ->
   t ->
-  Type.PrimType.t list ->
+  Prim_type.t list ->
   string ->
   Value.t array Gen.t
 
@@ -37,7 +37,7 @@ val exec_lwt_exn :
   ?params:string list ->
   ?timeout:float ->
   t ->
-  Type.PrimType.t list ->
+  Prim_type.t list ->
   string ->
   (Value.t array, [ `Timeout | `Exn of exn ]) result Lwt_stream.t
 

@@ -548,7 +548,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
     (* Serialize subquery layouts. *)
     let subquery_visitor =
       object
-        inherit Abslayout0.runtime_subquery_visitor
+        inherit Abslayout_visitors.runtime_subquery_visitor
 
         method visit_Subquery r =
           set_pos r serializer#pos;

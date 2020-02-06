@@ -9,7 +9,7 @@ module C = struct
   let validate = false
 
   let params =
-    let open Type.PrimType in
+    let open Prim_type in
     Set.of_list
       (module Name)
       [

@@ -81,7 +81,7 @@ module Make (Config : Config.S) () = struct
   let replace_rel rel new_rel r =
     let visitor =
       object
-        inherit [_] Abslayout0.endo
+        inherit [_] A.endo
 
         method! visit_Relation () r' { r_name = rel'; _ } =
           if String.(rel = rel') then new_rel.A.node else r'
@@ -217,7 +217,7 @@ module Make (Config : Config.S) () = struct
     let wrap_rel r wrapper =
       let visitor =
         object
-          inherit [_] Abslayout0.endo
+          inherit [_] A.endo
 
           method! visit_Relation () old r' =
             if String.(r = r'.r_name) then wrapper (relation r') else old
@@ -432,7 +432,7 @@ module Make (Config : Config.S) () = struct
     let open A in
     let t = Pred.to_type p in
     let default_min =
-      let open Type.PrimType in
+      let open Prim_type in
       match t with
       | IntT _ -> Int (Int.min_value + 1)
       | FixedT _ -> Fixed Fixed_point.(min_value + of_int 1)
@@ -440,7 +440,7 @@ module Make (Config : Config.S) () = struct
       | _ -> failwith "Unexpected type."
     in
     let default_max =
-      let open Type.PrimType in
+      let open Prim_type in
       match t with
       | IntT _ -> Int Int.max_value
       | FixedT _ -> Fixed Fixed_point.max_value
@@ -451,7 +451,7 @@ module Make (Config : Config.S) () = struct
       match kind with
       | `Open -> Ok bound
       | `Closed -> (
-          let open Type.PrimType in
+          let open Prim_type in
           match t with
           | IntT _ -> Ok (Binop (Add, bound, Int 1))
           | DateT _ -> Ok (Binop (Add, bound, Unop (Day, Int 1)))
@@ -463,7 +463,7 @@ module Make (Config : Config.S) () = struct
       match kind with
       | `Closed -> Ok bound
       | `Open -> (
-          let open Type.PrimType in
+          let open Prim_type in
           match t with
           | IntT _ -> Ok (Binop (Add, bound, Int 1))
           | DateT _ -> Ok (Binop (Add, bound, Unop (Day, Int 1)))
@@ -658,7 +658,7 @@ module Make (Config : Config.S) () = struct
       let open Abslayout in
       let visitor =
         object (self : 'a)
-          inherit [_] Abslayout0.mapreduce
+          inherit [_] A.mapreduce
 
           inherit [_] Util.list_monoid
 
@@ -752,7 +752,7 @@ module Make (Config : Config.S) () = struct
       let open Abslayout in
       let visitor =
         object (self : 'a)
-          inherit [_] Abslayout0.mapreduce
+          inherit [_] A.mapreduce
 
           inherit [_] Util.list_monoid
 
@@ -812,7 +812,7 @@ module Make (Config : Config.S) () = struct
   let predicate_is_valid p s =
     let visitor =
       object
-        inherit [_] Abslayout0.reduce
+        inherit [_] A.reduce
 
         method zero = true
 
@@ -909,7 +909,7 @@ module Make (Config : Config.S) () = struct
       f =
         hoist_filter_if ~f:(fun (p, _) ->
             (object
-               inherit [_] Abslayout0.reduce
+               inherit [_] A.reduce
 
                inherit [_] Util.disj_monoid
 
@@ -1012,13 +1012,13 @@ module Make (Config : Config.S) () = struct
   let eq_preds r =
     let visitor =
       object
-        inherit [_] Abslayout0.reduce
+        inherit [_] A.reduce
 
         inherit [_] Util.list_monoid
 
         method! visit_Binop ps p =
           let op, arg1, arg2 = p in
-          if [%compare.equal: A.binop] op Eq then (arg1, arg2) :: ps else ps
+          if [%compare.equal: A.Binop.t] op Eq then (arg1, arg2) :: ps else ps
       end
     in
     visitor#visit_t [] r
@@ -1085,7 +1085,7 @@ module Make (Config : Config.S) () = struct
   let replace_pred r p1 p2 =
     let visitor =
       object
-        inherit [_] Abslayout0.endo as super
+        inherit [_] A.endo as super
 
         method! visit_pred () p =
           let p = super#visit_pred () p in
@@ -1306,7 +1306,7 @@ module Make (Config : Config.S) () = struct
           (* Mapping from uncorrelated subqueries to unique names. *)
           let query_names =
             (object (self)
-               inherit [_] Abslayout0.reduce
+               inherit [_] A.reduce
 
                inherit [_] Util.list_monoid
 
@@ -1326,7 +1326,7 @@ module Make (Config : Config.S) () = struct
           in
           let subst_query ~for_:r ~in_:outer_pred new_pred =
             (object
-               inherit [_] Abslayout0.endo
+               inherit [_] A.endo
 
                method! visit_Exists () p' r' =
                  if [%compare.equal: A.t] r r' then new_pred else p'

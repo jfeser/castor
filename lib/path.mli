@@ -13,11 +13,11 @@ val root : t
 
 val length : t -> int
 
-val set_exn : t -> Abslayout0.t -> Abslayout0.t -> Abslayout0.t
+val set_exn : t -> Abslayout.t -> Abslayout.t -> Abslayout.t
 
-val get_exn : t -> Abslayout0.t -> Abslayout0.t
+val get_exn : t -> Abslayout.t -> Abslayout.t
 
-val stage_exn : t -> Abslayout0.t -> [ `Compile | `Run ]
+val stage_exn : t -> Abslayout.t -> [ `Compile | `Run ]
 
 val all : Abslayout.t -> t Seq.t
 

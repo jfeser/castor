@@ -9,11 +9,7 @@ let src =
 
 module LogT = (val Logs.src_log src : Logs.LOG)
 
-type select_entry = {
-  pred : pred;
-  alias : string;
-  cast : Type.PrimType.t option;
-}
+type select_entry = { pred : pred; alias : string; cast : Prim_type.t option }
 [@@deriving compare, sexp_of]
 
 type spj = {
@@ -295,7 +291,7 @@ let rec pred_to_sql p =
   | Bool false -> "false"
   | String s -> sprintf "'%s'" s
   | Null None -> "null"
-  | Null (Some t) -> sprintf "(null::%s)" (Type.PrimType.to_sql t)
+  | Null (Some t) -> sprintf "(null::%s)" (Prim_type.to_sql t)
   | Unop (op, p) -> (
       let s = sprintf "(%s)" (p2s p) in
       match op with
@@ -364,7 +360,7 @@ and spj_to_sql { select; distinct; order; group; relations; conds; limit } =
             | Name n' when Name.O.(Name.create n = n') -> ""
             | _ -> sprintf "as \"%s\"" n
           in
-          match Option.map t ~f:Type.PrimType.to_sql with
+          match Option.map t ~f:Prim_type.to_sql with
           | Some t_sql -> sprintf "%s::%s %s" (pred_to_sql p) t_sql alias_sql
           | None -> sprintf "%s %s" (pred_to_sql p) alias_sql)
       |> String.concat ~sep:", "
@@ -384,9 +380,7 @@ and spj_to_sql { select; distinct; order; group; relations; conds; limit } =
                 if String.(t.r_name = alias) then sprintf "\"%s\"" t.r_name
                 else sprintf "\"%s\" as \"%s\"" t.r_name alias
             | `Series (p, p', alias) -> (
-                let t =
-                  Type.PrimType.unify (Pred.to_type p) (Pred.to_type p')
-                in
+                let t = Prim_type.unify (Pred.to_type p) (Pred.to_type p') in
                 match t with
                 | DateT _ ->
                     sprintf

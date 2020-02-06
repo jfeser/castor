@@ -1,3 +1,3 @@
 open! Core
 
-val resolve : ?params:Set.M(Name).t -> Abslayout0.t -> Abslayout0.t
+val resolve : ?params:Set.M(Name).t -> Abslayout.t -> Abslayout.t

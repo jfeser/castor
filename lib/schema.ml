@@ -1,5 +1,5 @@
 open! Core
-open Abslayout0
+open Ast
 
 type t = Name.t list [@@deriving sexp]
 
@@ -15,7 +15,7 @@ let to_name = function
   | _ -> None
 
 let rec to_type =
-  let open Type.PrimType in
+  let open Prim_type in
   function
   | As_pred (p, _) -> to_type p
   | Name n -> Name.Meta.(find_exn n type_)
@@ -35,13 +35,13 @@ let rec to_type =
   | Binop ((Add | Sub | Mul | Div | Mod), p1, p2) ->
       let s1 = to_type p1 in
       let s2 = to_type p2 in
-      Type.PrimType.unify s1 s2
+      Prim_type.unify s1 s2
   | Binop (Strpos, _, _) -> int_t
   | Sum p | Min p | Max p -> to_type p
   | If (_, p1, p2) ->
       let s1 = to_type p1 in
       let s2 = to_type p2 in
-      Type.PrimType.unify s1 s2
+      Prim_type.unify s1 s2
   | First r -> (
       match schema_exn r with
       | [ n ] -> Name.Meta.(find_exn n type_)
@@ -59,7 +59,8 @@ and schema r =
         | Some n -> Name.copy ~type_:t n
         | None ->
             Log.err (fun m ->
-                m "Tried to get schema of unnamed predicate %a." pp_pred p);
+                m "Tried to get schema of unnamed predicate %a."
+                  Abslayout_pp.pp_pred p);
             Name.create ?type_:t (Fresh.name Global.fresh "x%d"))
   in
   match r.node with
@@ -80,7 +81,7 @@ and schema r =
       Error.(
         create "Missing schema annotation." r_name [%sexp_of: string] |> raise)
   | Range (p, p') ->
-      let t = Type.PrimType.unify (to_type p) (to_type p') in
+      let t = Prim_type.unify (to_type p) (to_type p') in
       [ Name.create ~type_:t "range" ]
 
 and schema_exn r =

@@ -77,9 +77,12 @@ class conv_sql db =
 
     method alias = sprintf "%s_%s"
 
-    method unop = function `Not -> Not | `Day -> Day | `Year -> Year
+    method unop =
+      let open Unop in
+      function `Not -> Not | `Day -> Day | `Year -> Year
 
     method binop =
+      let open Binop in
       function
       | `And -> And
       | `Or -> Or

@@ -1,48 +1,23 @@
 open! Core
 open Collections
+module Binop = Ast.Binop
+module Unop = Ast.Unop
 
-type binop = Abslayout0.binop =
-  | Eq
-  | Lt
-  | Le
-  | Gt
-  | Ge
-  | And
-  | Or
-  | Add
-  | Sub
-  | Mul
-  | Div
-  | Mod
-  | Strpos
-[@@deriving compare, hash, sexp]
-
-type unop = Abslayout0.unop =
-  | Not
-  | Day
-  | Month
-  | Year
-  | Strlen
-  | ExtractY
-  | ExtractM
-  | ExtractD
-[@@deriving compare, hash, sexp]
-
-type tuple = Abslayout0.tuple = Cross | Zip | Concat
+type tuple = Ast.tuple = Cross | Zip | Concat
 [@@deriving compare, hash, sexp_of]
 
-type order = Abslayout0.order = Asc | Desc [@@deriving compare, hash, sexp_of]
+type order = Ast.order = Asc | Desc [@@deriving compare, hash, sexp_of]
 
-type pred = Abslayout0.pred =
+type pred = Ast.pred =
   | Name of Name.t
   | Int of int
   | Fixed of Fixed_point.t
   | Date of Date.t
   | Bool of bool
   | String of string
-  | Null of Type.PrimType.t option
-  | Unop of (unop * pred)
-  | Binop of (binop * pred * pred)
+  | Null of Prim_type.t option
+  | Unop of (Unop.t * pred)
+  | Binop of (Binop.t * pred * pred)
   | As_pred of (pred * string)
   | Count
   | Row_number
@@ -56,7 +31,7 @@ type pred = Abslayout0.pred =
   | Substring of pred * pred * pred
 [@@deriving compare, hash, sexp_of]
 
-and hash_idx = Abslayout0.hash_idx = {
+and hash_idx = Ast.hash_idx = {
   hi_keys : t;
   hi_values : t;
   hi_scope : string;
@@ -67,22 +42,22 @@ and hash_idx = Abslayout0.hash_idx = {
 
 and bound = pred * [ `Open | `Closed ]
 
-and ordered_idx = Abslayout0.ordered_idx = {
+and ordered_idx = Ast.ordered_idx = {
   oi_key_layout : t option;
   oi_lookup : (bound option * bound option) list;
 }
 [@@deriving compare, hash, sexp_of]
 
-and depjoin = Abslayout0.depjoin = { d_lhs : t; d_alias : string; d_rhs : t }
+and depjoin = Ast.depjoin = { d_lhs : t; d_alias : string; d_rhs : t }
 [@@deriving compare, hash, sexp_of]
 
-and join = Abslayout0.join = { pred : pred; r1 : t; r2 : t }
+and join = Ast.join = { pred : pred; r1 : t; r2 : t }
 [@@deriving compare, hash, sexp_of]
 
-and order_by = Abslayout0.order_by = { key : (pred * order) list; rel : t }
+and order_by = Ast.order_by = { key : (pred * order) list; rel : t }
 [@@deriving compare, hash, sexp_of]
 
-and node = Abslayout0.node =
+and node = Ast.node =
   | Select of (pred list * t)
   | Filter of (pred * t)
   | Join of join
@@ -101,7 +76,7 @@ and node = Abslayout0.node =
   | As of string * t
 [@@deriving compare, hash, sexp_of]
 
-and t = Abslayout0.t = { node : node; meta : Meta.t }
+and t = Ast.t = { node : node; meta : Meta.t }
 [@@deriving compare, hash, sexp_of]
 
 include Comparator.S with type t := t
@@ -209,17 +184,17 @@ val validate : t -> unit
 
 val strip_meta : t -> t
 
-class virtual ['a] iter : ['a] Abslayout0.iter
+class virtual ['a] iter : ['a] Ast.iter
 
-class virtual ['a] map : ['a] Abslayout0.map
+class virtual ['a] map : ['a] Ast.map
 
-class virtual ['a] endo : ['a] Abslayout0.endo
+class virtual ['a] endo : ['a] Ast.endo
 
-class virtual ['a] reduce : ['a] Abslayout0.reduce
+class virtual ['a] reduce : ['a] Ast.reduce
 
-class virtual ['a] mapreduce : ['a] Abslayout0.mapreduce
+class virtual ['a] mapreduce : ['a] Ast.mapreduce
 
-class virtual ['a] fold : ['a] Abslayout0.fold
+class virtual ['a] fold : ['a] Ast.fold
 
 val annotate_key_layouts : t -> t
 

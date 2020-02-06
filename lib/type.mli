@@ -1,42 +1,5 @@
 open! Core
 
-module PrimType : sig
-  type t = Type0.PrimType.t =
-    | NullT
-    | IntT of { nullable : bool }
-    | DateT of { nullable : bool }
-    | FixedT of { nullable : bool }
-    | StringT of { nullable : bool; padded : bool }
-    | BoolT of { nullable : bool }
-    | TupleT of t list
-    | VoidT
-  [@@deriving compare, hash, sexp]
-
-  val pp : Format.formatter -> t -> unit
-
-  val null_t : t
-
-  val int_t : t
-
-  val date_t : t
-
-  val fixed_t : t
-
-  val string_t : t
-
-  val bool_t : t
-
-  val to_sql : t -> string
-
-  val to_string : t -> string
-
-  val is_nullable : t -> bool
-
-  val unify : t -> t -> t
-
-  val width : t -> int
-end
-
 exception TypeError of Core.Error.t
 
 (** Range abstraction for integers. *)
@@ -173,4 +136,4 @@ val oi_map_len : t -> t -> ordered_idx -> AbsInt.t
 val oi_ptr_size : t -> ordered_idx -> int
 (** Size of pointers (in bytes) in ordered indexes. *)
 
-val least_general_of_primtype : PrimType.t -> t
+val least_general_of_primtype : Prim_type.t -> t

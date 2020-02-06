@@ -1,5 +1,5 @@
 open! Core
-open Abslayout0
+open Ast
 
 type t = Univ_map.t ref [@@deriving sexp_of]
 
@@ -48,7 +48,7 @@ let find_exn ralgebra key =
   | None ->
       Error.create "Missing metadata."
         (Univ_map.Key.name key, ralgebra)
-        [%sexp_of: string * Abslayout0.t]
+        [%sexp_of: string * Ast.t]
       |> Error.raise
 
 let set ralgebra k v =

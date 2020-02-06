@@ -2,7 +2,6 @@ open! Core
 open! Lwt
 open Collections
 module Psql = Postgresql
-module A = Abslayout0
 
 let default_pool_size = 3
 
@@ -123,7 +122,7 @@ let exec3 ?params conn query =
 
 let type_of_field_exn =
   let f conn fname rname =
-    let open Type.PrimType in
+    let open Prim_type in
     let rows =
       exec2 ~params:[ rname; fname ] conn
         "select data_type, is_nullable from information_schema.columns where \
@@ -216,7 +215,7 @@ let relation_has_field conn f =
           String.(Name.name n = f)))
 
 let load_value type_ value =
-  let open Type.PrimType in
+  let open Prim_type in
   match type_ with
   | BoolT { nullable } -> (
       match value with
@@ -255,7 +254,7 @@ let load_tuples_exn s (r : Postgresql.result) =
   if nfields <> r#nfields then
     Error.(
       create "Unexpected tuple width." (r#get_fnames_lst, s)
-        [%sexp_of: string list * Type.PrimType.t list]
+        [%sexp_of: string list * Prim_type.t list]
       |> raise)
   else
     let gen =
@@ -271,7 +270,7 @@ let load_tuples_list_exn s (r : Postgresql.result) =
   if nfields <> r#nfields then
     Error.(
       create "Unexpected tuple width." (r#get_fnames_lst, s)
-        [%sexp_of: string list * Type.PrimType.t list]
+        [%sexp_of: string list * Prim_type.t list]
       |> raise)
   else
     List.init r#ntuples ~f:(fun tidx ->
