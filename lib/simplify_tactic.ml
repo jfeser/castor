@@ -34,32 +34,34 @@ module Make (C : Config.S) = struct
     let ps' =
       List.filter ps' ~f:(fun p ->
           Option.map (Pred.to_name p) ~f:(fun n -> not (Set.mem ns n))
-          |> Option.value ~default:true )
+          |> Option.value ~default:true)
     in
     ps @ ps'
 
   let elim_depjoin r =
     match r.node with
-    | DepJoin {d_lhs; d_alias; d_rhs= {node= AScalar p; _}} ->
-        Some (select [Pred.unscoped d_alias p] (strip_scope d_lhs))
-    | DepJoin {d_lhs; d_alias; d_rhs= {node= ATuple (rs, Cross); _}} ->
+    | DepJoin { d_lhs; d_alias; d_rhs = { node = AScalar p; _ } } ->
+        Some (select [ Pred.unscoped d_alias p ] (strip_scope d_lhs))
+    | DepJoin { d_lhs; d_alias; d_rhs = { node = ATuple (rs, Cross); _ } } ->
         let open Option.Let_syntax in
         let%bind s =
           List.map rs ~f:(fun r ->
-              match r.node with AScalar p -> Some p | _ -> None )
+              match r.node with AScalar p -> Some p | _ -> None)
           |> Option.all
         in
         let s = List.map ~f:(Pred.unscoped d_alias) s in
         Some (select s (strip_scope d_lhs))
     (* depjoin(r, select(ps, atuple(ps'))) -> select(ps, select(ps', r)) *)
     | DepJoin
-        { d_lhs
-        ; d_alias
-        ; d_rhs= {node= Select (ps, {node= ATuple (rs, Cross); _}); _} } ->
+        {
+          d_lhs;
+          d_alias;
+          d_rhs = { node = Select (ps, { node = ATuple (rs, Cross); _ }); _ };
+        } ->
         let open Option.Let_syntax in
         let%bind ps' =
           List.map rs ~f:(fun r ->
-              match r.node with AScalar p -> Some p | _ -> None )
+              match r.node with AScalar p -> Some p | _ -> None)
           |> Option.all
         in
         let ps' = List.map ~f:(Pred.unscoped d_alias) ps' in
@@ -70,9 +72,11 @@ module Make (C : Config.S) = struct
         let ps = List.map ~f:(Pred.unscoped d_alias) ps in
         Some (select ps (select ps' (strip_scope d_lhs)))
     | DepJoin
-        { d_lhs
-        ; d_alias
-        ; d_rhs= {node= Select (ps, {node= AScalar (Null None); _}); _} } ->
+        {
+          d_lhs;
+          d_alias;
+          d_rhs = { node = Select (ps, { node = AScalar (Null None); _ }); _ };
+        } ->
         Some
           (select (List.map ~f:(Pred.unscoped d_alias) ps) (strip_scope d_lhs))
     | _ -> None
@@ -81,10 +85,10 @@ module Make (C : Config.S) = struct
 
   let flatten_select r =
     match r.node with
-    | Select (ps, {node= Select (ps', r); _}) ->
+    | Select (ps, { node = Select (ps', r); _ }) ->
         let ctx =
           List.filter_map ps' ~f:(fun p ->
-              Option.map (Pred.to_name p) ~f:(fun n -> (n, p)) )
+              Option.map (Pred.to_name p) ~f:(fun n -> (n, p)))
           |> Map.of_alist_exn (module Name)
         in
         let ps = List.map ps ~f:(Pred.subst ctx) in
@@ -94,7 +98,7 @@ module Make (C : Config.S) = struct
   let flatten_select = of_func flatten_select ~name:"flatten-select"
 
   let flatten_dedup r =
-    match r.node with Dedup {node= Dedup r'; _} -> Some r' | _ -> None
+    match r.node with Dedup { node = Dedup r'; _ } -> Some r' | _ -> None
 
   let flatten_dedup = of_func flatten_dedup ~name:"flatten-dedup"
 
@@ -104,8 +108,8 @@ module Make (C : Config.S) = struct
         let ts =
           List.concat_map ts ~f:(fun r' ->
               match r'.node with
-              | ATuple (ts', k') when k = k' -> ts'
-              | _ -> [r'] )
+              | ATuple (ts', k') when Poly.(k = k') -> ts'
+              | _ -> [ r' ])
         in
         Some (tuple ts k)
     | _ -> None
@@ -114,17 +118,19 @@ module Make (C : Config.S) = struct
 
   let simplify =
     seq_many
-      [ (* Drop constant filters if possible. *)
-        for_all filter_const Path.(all >>? is_filter)
-      ; (* Eliminate complex structures in compile time position. *)
+      [
+        (* Drop constant filters if possible. *)
+        for_all filter_const Path.(all >>? is_filter);
+        (* Eliminate complex structures in compile time position. *)
         fix
           (at_ elim_structure
              Path.(
                all >>? is_compile_time
                >>? Infix.(is_list || is_hash_idx || is_ordered_idx)
-               >>| shallowest))
-      ; for_all elim_depjoin Path.(all >>? is_depjoin)
-      ; for_all flatten_select Path.(all >>? is_select)
-      ; for_all flatten_dedup Path.(all >>? is_dedup)
-      ; for_all flatten_tuple Path.(all >>? is_tuple) ]
+               >>| shallowest));
+        for_all elim_depjoin Path.(all >>? is_depjoin);
+        for_all flatten_select Path.(all >>? is_select);
+        for_all flatten_dedup Path.(all >>? is_dedup);
+        for_all flatten_tuple Path.(all >>? is_tuple);
+      ]
 end

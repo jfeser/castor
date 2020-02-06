@@ -7,9 +7,7 @@ open Test_util
 
 module C = struct
   let params =
-    Set.singleton
-      (module Name)
-      (Name.create ~type_:Type.PrimType.int_t "param")
+    Set.singleton (module Name) (Name.create ~type_:Prim_type.int_t "param")
 
   let fresh = Fresh.create ()
 
@@ -41,7 +39,7 @@ let%expect_test "push-filter-comptime" =
     (apply
        (at_ push_filter Path.(all >>? is_filter >>| shallowest))
        Path.root r)
-    ~f:(Format.printf "%a\n" pp) ;
+    ~f:(Format.printf "%a\n" pp);
   [%expect
     {| alist(r as r1, alist(filter((r1.f = f), r) as r2, ascalar(r2.f))) |}]
 
@@ -54,7 +52,7 @@ let%expect_test "push-filter-runtime" =
     (apply
        (at_ push_filter Path.(all >>? is_filter >>| shallowest))
        Path.root r)
-    ~f:(Format.printf "%a\n" pp) ;
+    ~f:(Format.printf "%a\n" pp);
   [%expect
     {| depjoin(r as r1, alist(r as r2, filter((r1.f = f), ascalar(r2.f)))) |}]
 
@@ -67,7 +65,7 @@ let%expect_test "push-filter-support" =
     (apply
        (at_ push_filter Path.(all >>? is_filter >>| shallowest))
        Path.root r)
-    ~f:(Format.printf "%a\n" pp) ;
+    ~f:(Format.printf "%a\n" pp);
   [%expect
     {| ahashidx(select([f], r) as k, filter((k.f > param), ascalar(0)), 0) |}]
 
@@ -85,7 +83,7 @@ alist(filter((0 = g),
     (apply
        (at_ push_filter Path.(all >>? is_filter >>| shallowest))
        Path.root r)
-    ~f:(Format.printf "%a\n" pp) ;
+    ~f:(Format.printf "%a\n" pp);
   [%expect
     {|
       alist(depjoin(ascalar(0 as f) as k,
@@ -96,7 +94,7 @@ let%expect_test "push-filter-select" =
   let r =
     M.load_string "filter(test > 0, select([x as test], ascalar(0 as x)))"
   in
-  Option.iter (apply push_filter Path.root r) ~f:(Format.printf "%a\n" pp) ;
+  Option.iter (apply push_filter Path.root r) ~f:(Format.printf "%a\n" pp);
   [%expect {| select([x as test], filter((x > 0), ascalar(0 as x))) |}]
 
 let%expect_test "push-filter-select" =
@@ -104,14 +102,14 @@ let%expect_test "push-filter-select" =
     M.load_string
       "filter(a = b, select([(x - 1) as a, (x + 1) as b], ascalar(0 as x)))"
   in
-  Option.iter (apply push_filter Path.root r) ~f:(Format.printf "%a\n" pp) ;
+  Option.iter (apply push_filter Path.root r) ~f:(Format.printf "%a\n" pp);
   [%expect
     {|
       select([(x - 1) as a, (x + 1) as b],
         filter(((x - 1) = (x + 1)), ascalar(0 as x))) |}]
 
 let with_log src f =
-  Logs.Src.set_level src (Some Debug) ;
+  Logs.Src.set_level src (Some Debug);
   Exn.protect ~f ~finally:(fun () -> Logs.Src.set_level src None)
 
 let%expect_test "elim-eq-filter" =
@@ -122,7 +120,7 @@ let%expect_test "elim-eq-filter" =
   with_log elim_eq_filter_src (fun () ->
       Option.iter
         (apply elim_eq_filter Path.root r)
-        ~f:(Format.printf "%a\n" pp) ;
+        ~f:(Format.printf "%a\n" pp);
       [%expect
         {|
           ahashidx(dedup(
@@ -140,7 +138,7 @@ let%expect_test "elim-eq-filter-approx" =
   with_log elim_eq_filter_src (fun () ->
       Option.iter
         (apply elim_eq_filter Path.root r)
-        ~f:(Format.printf "%a\n" pp) ;
+        ~f:(Format.printf "%a\n" pp);
       [%expect
         {|
           ahashidx(dedup(
@@ -158,7 +156,7 @@ let%expect_test "elim-eq-filter" =
   with_log elim_eq_filter_src (fun () ->
       Option.iter
         (apply elim_eq_filter Path.root r)
-        ~f:(Format.printf "%a\n" pp) ;
+        ~f:(Format.printf "%a\n" pp);
       [%expect
         {|
         [INFO] ("Not part of an equality predicate." (Bool true))
@@ -178,7 +176,7 @@ let%expect_test "elim-eq-filter" =
   with_log elim_eq_filter_src (fun () ->
       Option.iter
         (apply elim_eq_filter Path.root r)
-        ~f:(Format.printf "%a\n" pp) ;
+        ~f:(Format.printf "%a\n" pp);
       [%expect
         {|
         ahashidx(dedup(
@@ -221,7 +219,7 @@ let%expect_test "elim-eq-filter" =
         (apply
            (at_ elim_eq_filter Path.(all >>? is_filter >>| shallowest))
            Path.root r)
-        ~f:(Format.printf "%a\n" pp) ;
+        ~f:(Format.printf "%a\n" pp);
       [%expect
         {|
         [INFO] ("No candidate keys."
@@ -231,7 +229,7 @@ let%expect_test "elim-eq-filter" =
 
 let%expect_test "partition" =
   let r = M.load_string ~params:C.params "filter(f = param, r)" in
-  Seq.iter (Branching.apply partition Path.root r) ~f:(Format.printf "%a\n" pp) ;
+  Seq.iter (Branching.apply partition Path.root r) ~f:(Format.printf "%a\n" pp);
   [%expect
     {|
         ahashidx(depjoin(select([min(f) as lo, max(f) as hi],

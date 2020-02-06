@@ -244,7 +244,8 @@ module Make (C : Config.S) = struct
         let key, cmps = List.unzip cmps in
         let x =
           let open Or_error.Let_syntax in
-          if key = [] then Or_error.error_string "No candidate keys found."
+          if List.is_empty key then
+            Or_error.error_string "No candidate keys found."
           else
             let%map all_keys = Tactics_util.all_values key r' in
             let scope = Fresh.name Global.fresh "s%d" in
@@ -312,7 +313,7 @@ module Make (C : Config.S) = struct
     | `Agg ->
         let scalar_ctx =
           List.filter_map ps ~f:(fun p ->
-              if Pred.kind p = `Scalar then
+              if Poly.(Pred.kind p = `Scalar) then
                 Option.map (Pred.to_name p) ~f:(fun n -> (n, Pred.remove_as p))
               else None)
           |> Map.of_alist_exn (module Name)
@@ -394,7 +395,7 @@ module Make (C : Config.S) = struct
         inherit [_] Util.disj_monoid
 
         method! visit_Unop () (op, p) =
-          if op = Not then true else self#visit_pred () p
+          match op with Not -> true | _ -> self#visit_pred () p
       end
     in
     visitor#visit_pred () p
@@ -407,11 +408,13 @@ module Make (C : Config.S) = struct
         inherit [_] Util.conj_monoid
 
         method! visit_Binop () (op, p1, p2) =
-          (op = And || op = Or)
-          && self#visit_pred () p1 && self#visit_pred () p2
-          || op = Eq
+          match op with
+          | And | Or -> self#visit_pred () p1 && self#visit_pred () p2
+          | Eq -> true
+          | _ -> false
 
-        method! visit_Unop () (op, p) = op <> Not && self#visit_pred () p
+        method! visit_Unop () (op, p) =
+          match op with Not -> false | _ -> self#visit_pred () p
       end
     in
     visitor#visit_pred () p

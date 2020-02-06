@@ -17,34 +17,36 @@ module Config = struct
 end
 
 module T : sig
-  type t = private
-    { f: Path.t -> Abslayout.t -> [`Result of Abslayout.t | `Tf of t] option
-    ; name: string }
+  type t = private {
+    f : Path.t -> Abslayout.t -> [ `Result of Abslayout.t | `Tf of t ] option;
+    name : string;
+  }
 
   val global :
-       ?short_name:string
-    -> ?reraise:bool
-    -> (Path.t -> Abslayout.t -> Abslayout.t option)
-    -> string
-    -> t
+    ?short_name:string ->
+    ?reraise:bool ->
+    (Path.t -> Abslayout.t -> Abslayout.t option) ->
+    string ->
+    t
 
   val local :
-       ?short_name:string
-    -> ?reraise:bool
-    -> (Abslayout.t -> Abslayout.t option)
-    -> string
-    -> t
+    ?short_name:string ->
+    ?reraise:bool ->
+    (Abslayout.t -> Abslayout.t option) ->
+    string ->
+    t
 end = struct
-  type t =
-    { f: Path.t -> Abslayout.t -> [`Result of Abslayout.t | `Tf of t] option
-    ; name: string }
+  type t = {
+    f : Path.t -> Abslayout.t -> [ `Result of Abslayout.t | `Tf of t ] option;
+    name : string;
+  }
 
   let trace reraise name thunk r =
     try thunk r
     with exn ->
       if reraise then
         Logs.err (fun m ->
-            m "@[Transform %s failed on: %a@,@]\n" name Abslayout.pp r) ;
+            m "@[Transform %s failed on: %a@,@]\n" name Abslayout.pp r);
       raise exn
 
   let global ?short_name ?(reraise = true) f name =
@@ -52,7 +54,7 @@ end = struct
     let f p r =
       Option.map (trace reraise name (f p) r) ~f:(fun r -> `Result r)
     in
-    {name; f}
+    { name; f }
 
   let local ?short_name ?(reraise = true) f name =
     let name = Option.value short_name ~default:name in
@@ -61,7 +63,7 @@ end = struct
         (trace reraise name f (Path.get_exn p r))
         ~f:(fun r' -> `Result (Path.set_exn p r r'))
     in
-    {name; f}
+    { name; f }
 end
 
 include T
@@ -70,10 +72,12 @@ module Make (C : Config.S) = struct
   open C
   include T
   module R = Resolve
-  module M = Abslayout_db.Make(struct
-      include C
-      let simplify = None
-    end)
+
+  module M = Abslayout_db.Make (struct
+    include C
+
+    let simplify = None
+  end)
 
   let trace = false
 
@@ -257,7 +261,7 @@ module Make (C : Config.S) = struct
 
   let rec seq_many = function
     | [] -> failwith "Empty transform list."
-    | [t] -> t
+    | [ t ] -> t
     | t :: ts -> seq t (seq_many ts)
 
   let id = global (fun p r -> Some (Path.get_exn p r)) "id"
@@ -267,12 +271,18 @@ module Make (C : Config.S) = struct
       Option.map (apply tf p r) ~f:(fun r' ->
           let r = M.load_layout ~params r in
           let r' = M.load_layout ~params r' in
-          let s = schema_exn (r) |> List.dedup_and_sort ~compare:[%compare:Name.t] in
-          let s' = schema_exn r' |> List.dedup_and_sort ~compare:[%compare:Name.t] in
-          if not( [%compare.equal:Name.t list] s s' )then
+          let s =
+            schema_exn r |> List.dedup_and_sort ~compare:[%compare: Name.t]
+          in
+          let s' =
+            schema_exn r' |> List.dedup_and_sort ~compare:[%compare: Name.t]
+          in
+          if not ([%compare.equal: Name.t list] s s') then
             Logs.warn (fun m ->
-                m "%s is not schema preserving: %a != %a" tf.name Sexp.pp ([%sexp_of:Name.t list] s) Sexp.pp ([%sexp_of:Name.t list] s'))
-          ;
+                m "%s is not schema preserving: %a != %a" tf.name Sexp.pp
+                  ([%sexp_of: Name.t list] s)
+                  Sexp.pp
+                  ([%sexp_of: Name.t list] s'));
           r')
     in
     global f (sprintf "!%s" tf.name)
@@ -284,18 +294,18 @@ module Make (C : Config.S) = struct
             let ret =
               Test_util.run_in_fork_timed ~time:(Time.Span.of_sec 10.0)
                 (fun () ->
-                  Interpret.(equiv {db= conn; params= param_ctx} r r'))
+                  Interpret.(equiv { db = conn; params = param_ctx } r r'))
             in
             match ret with
             | Some r -> r
             | None ->
                 Logs.warn (fun m ->
-                    m "Failed to check transform %s: Timed out." tf.name) ;
+                    m "Failed to check transform %s: Timed out." tf.name);
                 Ok ()
           in
           Or_error.iter_error err ~f:(fun err ->
               Logs.err (fun m ->
-                  m "%s is not semantics preserving: %a" tf.name Error.pp err)) ;
+                  m "%s is not semantics preserving: %a" tf.name Error.pp err));
           r')
     in
     global f (sprintf "!%s" tf.name)
@@ -303,7 +313,7 @@ module Make (C : Config.S) = struct
   let traced tf =
     let f p r =
       Logs.debug (fun m ->
-          m "@[Running %s on:@,%a@]\n" tf.name Abslayout.pp (Path.get_exn p r)) ;
+          m "@[Running %s on:@,%a@]\n" tf.name Abslayout.pp (Path.get_exn p r));
       match apply tf p r with
       | Some r' ->
           if Abslayout.O.(r = r') then
@@ -312,10 +322,10 @@ module Make (C : Config.S) = struct
             Logs.debug (fun m ->
                 m "@[%s transformed:@,%a@,===== to ======@,%a@]@.\n" tf.name
                   Abslayout.pp (Path.get_exn p r) Abslayout.pp
-                  (Path.get_exn p r')) ;
+                  (Path.get_exn p r'));
           Some r'
       | None ->
-          Logs.debug (fun m -> m "@[Transform %s does not apply.\n" tf.name) ;
+          Logs.debug (fun m -> m "@[Transform %s does not apply.\n" tf.name);
           None
     in
     global f tf.name
@@ -333,43 +343,55 @@ module Make (C : Config.S) = struct
     if trace then traced tf else tf
 
   module Branching = struct
-    type t = {b_f: Path.t -> Abslayout.t -> Abslayout.t Seq.t; b_name: string}
+    type t = {
+      b_f : Path.t -> Abslayout.t -> Abslayout.t Seq.t;
+      b_name : string;
+    }
 
     let local ~name b_f =
       let b_f p r = Seq.map ~f:(Path.set_exn p r) (b_f (Path.get_exn p r)) in
-      {b_f; b_name= name}
+      { b_f; b_name = name }
 
     let lift tf =
-      { b_f=
+      {
+        b_f =
           (fun p r ->
             match apply tf p r with
             | Some r' -> Seq.singleton r'
-            | None -> Seq.empty)
-      ; b_name= tf.name }
+            | None -> Seq.empty);
+        b_name = tf.name;
+      }
 
     let lower elim tf = global (fun p r -> elim (tf.b_f p r)) tf.b_name
 
     let unroll_fix tf_branch =
-      { b_f=
+      {
+        b_f =
           (fun p r ->
             Seq.append (Seq.singleton r)
               (Seq.unfold ~init:r ~f:(fun r ->
                    Option.bind (apply tf_branch p r) ~f:(fun r' ->
-                       if Abslayout.O.(r = r') then None else Some (r', r')))))
-      ; b_name= "unfold" }
+                       if Abslayout.O.(r = r') then None else Some (r', r')))));
+        b_name = "unfold";
+      }
 
     let seq t1 t2 =
-      { b_f= (fun p r -> t1.b_f p r |> Seq.concat_map ~f:(t2.b_f p))
-      ; b_name= "seq" }
+      {
+        b_f = (fun p r -> t1.b_f p r |> Seq.concat_map ~f:(t2.b_f p));
+        b_name = "seq";
+      }
 
     let choose t1 t2 =
-      {b_f= (fun p r -> Seq.append (t1.b_f p r) (t2.b_f p r)); b_name= "choose"}
+      {
+        b_f = (fun p r -> Seq.append (t1.b_f p r) (t2.b_f p r));
+        b_name = "choose";
+      }
 
-    let id = {b_f= (fun _ r -> Seq.singleton r); b_name= "id"}
+    let id = { b_f = (fun _ r -> Seq.singleton r); b_name = "id" }
 
     let rec seq_many = function
       | [] -> failwith "No transforms."
-      | [t] -> t
+      | [ t ] -> t
       | t :: ts -> seq t (seq_many ts)
 
     let at_ tf pspec =
@@ -378,23 +400,25 @@ module Make (C : Config.S) = struct
         | Some p' -> tf.b_f Path.(p @ p') r
         | None -> Seq.empty
       in
-      {b_f= f; b_name= sprintf "(%s @ <path>)" tf.b_name}
+      { b_f = f; b_name = sprintf "(%s @ <path>)" tf.b_name }
 
     let filter f =
-      { b_f= (fun p r -> if f r p then Seq.singleton r else Seq.empty)
-      ; b_name= "filter" }
+      {
+        b_f = (fun p r -> if f r p then Seq.singleton r else Seq.empty);
+        b_name = "filter";
+      }
 
     let for_all tf pspec =
       let f p r =
         Seq.concat_map (pspec r) ~f:(fun p' -> tf.b_f Path.(p @ p') r)
       in
-      {b_f= f; b_name= sprintf "(%s @ <path>)" tf.b_name}
+      { b_f = f; b_name = sprintf "(%s @ <path>)" tf.b_name }
 
     let min cost rs =
       Seq.fold rs ~init:(None, Float.max_value) ~f:(fun (rb, cb) r ->
           let c = cost r in
           match rb with
-          | Some _ -> if c < cb then (Some r, c) else (rb, cb)
+          | Some _ -> if Float.(c < cb) then (Some r, c) else (rb, cb)
           | None -> (Some r, c))
       |> Tuple.T2.get1
 
@@ -404,18 +428,18 @@ module Make (C : Config.S) = struct
       let b_f p r =
         Logs.debug (fun m ->
             m "@[Running %s on:@,%a@]\n" tf.b_name Abslayout.pp
-              (Path.get_exn p r)) ;
+              (Path.get_exn p r));
         tf.b_f p r
         |> Seq.map ~f:(fun r' ->
                Logs.debug (fun m ->
                    m "@[%s transformed:@,%a@,===== to ======@,%a@]@.\n"
                      tf.b_name Abslayout.pp (Path.get_exn p r) Abslayout.pp
-                     (Path.get_exn p r')) ;
+                     (Path.get_exn p r'));
                r')
       in
-      {tf with b_f}
+      { tf with b_f }
 
-    let global ~name b_f = {b_f; b_name= name}
+    let global ~name b_f = { b_f; b_name = name }
 
     let apply tf p r = tf.b_f p r
   end

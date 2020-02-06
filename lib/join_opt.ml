@@ -98,8 +98,7 @@ module Make (C : Config.S) = struct
   end
 
   let source_relation leaves n =
-    List.find_map leaves ~f:(fun (r, s) ->
-        if Set.mem s n then Some r else None)
+    List.find_map leaves ~f:(fun (r, s) -> if Set.mem s n then Some r else None)
     |> Result.of_option
          ~error:
            Error.(
@@ -109,8 +108,10 @@ module Make (C : Config.S) = struct
 
   module JoinSpace = struct
     module T = struct
-      type t =
-        {graph: JoinGraph.t; filters: Set.M(Pred).t Map.M(JoinGraph.Vertex).t}
+      type t = {
+        graph : JoinGraph.t;
+        filters : Set.M(Pred).t Map.M(JoinGraph.Vertex).t;
+      }
       [@@deriving compare, sexp_of]
 
       let t_of_sexp _ = failwith "unimplemented"
@@ -121,22 +122,24 @@ module Make (C : Config.S) = struct
 
     module O : Comparable.Infix with type t := t = C
 
-    let to_string {graph; _} = JoinGraph.to_string graph
+    let to_string { graph; _ } = JoinGraph.to_string graph
 
     let empty =
-      {graph= JoinGraph.empty; filters= Map.empty (module JoinGraph.Vertex)}
+      { graph = JoinGraph.empty; filters = Map.empty (module JoinGraph.Vertex) }
 
     let union s1 s2 =
       let merger ~key:_ = function
         | `Left x | `Right x -> Some x
         | `Both (x, y) -> Some (Set.union x y)
       in
-      { graph= JoinGraph.union s1.graph s2.graph
-      ; filters= Map.merge ~f:merger s1.filters s2.filters }
+      {
+        graph = JoinGraph.union s1.graph s2.graph;
+        filters = Map.merge ~f:merger s1.filters s2.filters;
+      }
 
-    let length {graph; _} = JoinGraph.nb_vertex graph
+    let length { graph; _ } = JoinGraph.nb_vertex graph
 
-    let choose {graph; _} = JoinGraph.choose_vertex graph
+    let choose { graph; _ } = JoinGraph.choose_vertex graph
 
     let contract join g =
       let open JoinGraph in
@@ -163,7 +166,7 @@ module Make (C : Config.S) = struct
       in
       G.fold_edges_e f g m |> Map.data |> List.hd_exn |> fun (_, j) -> j
 
-    let to_ralgebra {graph; _} =
+    let to_ralgebra { graph; _ } =
       if JoinGraph.nb_vertex graph = 1 then JoinGraph.choose_vertex graph
       else contract (fun ~label:p j1 j2 -> A.join p j1 j2) graph
 
@@ -171,13 +174,13 @@ module Make (C : Config.S) = struct
     let rec to_leaves r =
       let open A in
       match r.node with
-      | Join {r1; r2; _} -> Set.union (to_leaves r1) (to_leaves r2)
+      | Join { r1; r2; _ } -> Set.union (to_leaves r1) (to_leaves r2)
       | _ -> Set.singleton (module A) r
 
     (** Convert a join tree to a join graph. *)
     let rec to_graph leaves r =
       match r.A.node with
-      | Join {r1; r2; pred= p} ->
+      | Join { r1; r2; pred = p } ->
           let s = union (to_graph leaves r1) (to_graph leaves r2) in
           (* Collect the set of relations that this join depends on. *)
           List.fold_left (Pred.conjuncts p) ~init:s ~f:(fun s p ->
@@ -191,31 +194,35 @@ module Make (C : Config.S) = struct
               | Ok [] ->
                   Logs.warn (fun m ->
                       m "Join-opt: Unhandled predicate %a. Constant predicate."
-                        A.pp_pred p) ;
+                        A.pp_pred p);
                   s
-              | Ok [r] ->
-                  { s with
-                    filters=
+              | Ok [ r ] ->
+                  {
+                    s with
+                    filters =
                       Map.update s.filters r ~f:(function
                         | Some fs -> Set.add fs p
-                        | None -> Set.singleton (module Pred) p) }
-              | Ok [r1; r2] ->
-                  { s with
-                    graph= JoinGraph.add_or_update_edge s.graph (r1, p, r2) }
+                        | None -> Set.singleton (module Pred) p);
+                  }
+              | Ok [ r1; r2 ] ->
+                  {
+                    s with
+                    graph = JoinGraph.add_or_update_edge s.graph (r1, p, r2);
+                  }
               | Ok _ ->
                   Logs.warn (fun m ->
                       m "Join-opt: Unhandled predicate %a. Too many relations."
-                        A.pp_pred p) ;
+                        A.pp_pred p);
                   s
               | Error e ->
                   Logs.warn (fun m ->
                       m "Join opt: Unhandled predicate %a. %a" A.pp_pred p
-                        Error.pp e) ;
+                        Error.pp e);
                   s)
       | _ -> empty
 
     let of_abslayout r =
-      Logs.debug (fun m -> m "Join-opt: Planning join for %a." A.pp r) ;
+      Logs.debug (fun m -> m "Join-opt: Planning join for %a." A.pp r);
       let leaves =
         to_leaves r |> Set.to_list
         |> List.map ~f:(fun r ->
@@ -231,17 +238,20 @@ module Make (C : Config.S) = struct
         if k >= n then acc
         else
           let acc =
-            Combinat.Combination.fold (k, n) ~init:acc ~f:(fun acc vs ->
-                let g1, g2, es =
-                  JoinGraph.partition s.graph
-                    ( List.init k ~f:(fun i -> vertices.(vs.{i}))
-                    |> Set.of_list (module JoinGraph.Vertex) )
-                in
-                if JoinGraph.is_connected g1 && JoinGraph.is_connected g2 then
-                  let s1 = {s with graph= g1} in
-                  let s2 = {s with graph= g2} in
-                  f acc (s1, s2, es)
-                else acc)
+            let open Combinat.Combination in
+            create ~n ~k
+            |> fold ~init:acc ~f:(fun acc vs ->
+                   let g1, g2, es =
+                     JoinGraph.partition s.graph
+                       ( List.init k ~f:(fun i -> vertices.(vs.{i}))
+                       |> Set.of_list (module JoinGraph.Vertex) )
+                   in
+                   if JoinGraph.is_connected g1 && JoinGraph.is_connected g2
+                   then
+                     let s1 = { s with graph = g1 } in
+                     let s2 = { s with graph = g2 } in
+                     f acc (s1, s2, es)
+                   else acc)
           in
           loop acc (k + 1)
       in
@@ -250,29 +260,29 @@ module Make (C : Config.S) = struct
 
   type t =
     | Flat of A.t
-    | Hash of {lkey: A.pred; lhs: t; rkey: A.pred; rhs: t}
-    | Nest of {lhs: t; rhs: t; pred: A.pred}
+    | Hash of { lkey : A.pred; lhs : t; rkey : A.pred; rhs : t }
+    | Nest of { lhs : t; rhs : t; pred : A.pred }
   [@@deriving sexp_of]
 
   let rec to_ralgebra = function
     | Flat r -> r
-    | Nest {lhs; rhs; pred} -> A.join pred (to_ralgebra lhs) (to_ralgebra rhs)
-    | Hash {lkey; rkey; lhs; rhs} ->
+    | Nest { lhs; rhs; pred } -> A.join pred (to_ralgebra lhs) (to_ralgebra rhs)
+    | Hash { lkey; rkey; lhs; rhs } ->
         A.join (Binop (Eq, lkey, rkey)) (to_ralgebra lhs) (to_ralgebra rhs)
 
   module Cost = struct
     let read = function
-      | Type.PrimType.(IntT _ | DateT _ | FixedT _ | StringT _) -> 4.0
+      | Prim_type.(IntT _ | DateT _ | FixedT _ | StringT _) -> 4.0
       | BoolT _ -> 1.0
       | _ -> failwith "Unexpected type."
 
     let hash = function
-      | Type.PrimType.(IntT _ | DateT _ | FixedT _ | BoolT _) -> 1.0
+      | Prim_type.(IntT _ | DateT _ | FixedT _ | BoolT _) -> 1.0
       | StringT _ -> 100.0
       | _ -> failwith "Unexpected type."
 
     let size = function
-      | Type.PrimType.(IntT _ | DateT _ | FixedT _) -> 4.0
+      | Prim_type.(IntT _ | DateT _ | FixedT _) -> 4.0
       | StringT _ -> 25.0
       | BoolT _ -> 1.0
       | _ -> failwith "Unexpected type."
@@ -291,9 +301,9 @@ module Make (C : Config.S) = struct
 
   let rec to_abslayout = function
     | Flat r -> r
-    | Nest {lhs; rhs; pred} ->
+    | Nest { lhs; rhs; pred } ->
         A.join pred (to_abslayout lhs) (to_abslayout rhs)
-    | Hash {lkey; rkey; lhs; rhs} ->
+    | Hash { lkey; rkey; lhs; rhs } ->
         A.(join (Binop (Eq, lkey, rkey)) (to_abslayout lhs) (to_abslayout rhs))
 
   let estimate_ntuples_parted parts r =
@@ -302,25 +312,27 @@ module Make (C : Config.S) = struct
     let part_counts =
       A.(
         group_by
-          [Pred.as_pred (Count, "c")]
+          [ Pred.as_pred (Count, "c") ]
           (Set.to_list parts) (to_abslayout r))
     in
     let part_aggs =
       let c = A.(Name (Name.create "c")) in
-      A.(select [Min c; Max c; Avg c] part_counts)
+      A.(select [ Min c; Max c; Avg c ] part_counts)
     in
     let part_aggs = R.resolve ~params part_aggs in
     let sql = Sql.of_ralgebra part_aggs in
     let tups =
       Db.exec_cursor_exn cost_conn
-        Type.PrimType.
-          [ IntT {nullable= false}
-          ; IntT {nullable= false}
-          ; FixedT {nullable= false} ]
+        Prim_type.
+          [
+            IntT { nullable = false };
+            IntT { nullable = false };
+            FixedT { nullable = false };
+          ]
         (Sql.to_string sql)
     in
     match Gen.to_list tups with
-    | [|Int min; Int max; Fixed avg|] :: _ ->
+    | [| Int min; Int max; Fixed avg |] :: _ ->
         (min, max, Fixed_point.to_float avg)
     | _ -> failwith "Unexpected tuples."
 
@@ -335,13 +347,13 @@ module Make (C : Config.S) = struct
         let _, _, nt = estimate_ntuples_parted parts r in
         (sum (schema_types (to_ralgebra r)) ~f:Cost.size *. nt)
         +. Cost.list_size
-    | Nest {lhs; rhs; pred} ->
+    | Nest { lhs; rhs; pred } ->
         let _, _, lhs_nt = estimate_ntuples_parted parts lhs in
         let rhs_per_partition_cost =
           size_cost (Set.union (to_parts (to_ralgebra rhs) pred) parts) rhs
         in
         size_cost parts lhs +. (lhs_nt *. rhs_per_partition_cost)
-    | Hash {lhs; rhs; _} -> size_cost parts lhs +. size_cost parts rhs
+    | Hash { lhs; rhs; _ } -> size_cost parts lhs +. size_cost parts rhs
 
   let rec scan_cost parts r =
     let sum = List.sum (module Float) in
@@ -349,13 +361,13 @@ module Make (C : Config.S) = struct
     | Flat _ ->
         let _, _, nt = estimate_ntuples_parted parts r in
         sum (schema_types (to_ralgebra r)) ~f:Cost.read *. nt
-    | Nest {lhs; rhs; pred} ->
+    | Nest { lhs; rhs; pred } ->
         let _, _, lhs_nt = estimate_ntuples_parted parts lhs in
         let rhs_per_partition_cost =
           scan_cost (Set.union (to_parts (to_ralgebra rhs) pred) parts) rhs
         in
         scan_cost parts lhs +. (lhs_nt *. rhs_per_partition_cost)
-    | Hash {lkey; lhs; rhs; rkey} ->
+    | Hash { lkey; lhs; rhs; rkey } ->
         let _, _, nt_lhs = estimate_ntuples_parted parts lhs in
         let rhs_per_partition_cost =
           let pred = A.(Binop (Eq, lkey, rkey)) in
@@ -369,10 +381,10 @@ module Make (C : Config.S) = struct
 
     let empty = []
 
-    let singleton c v = [(c, v)]
+    let singleton c v = [ (c, v) ]
 
     let dominates x y =
-      assert (Array.length x = Array.length y) ;
+      assert (Array.length x = Array.length y);
       let n = Array.length x in
       let rec loop i le lt =
         if i = n then le && lt
@@ -383,7 +395,7 @@ module Make (C : Config.S) = struct
 
     let rec add s c v =
       match s with
-      | [] -> [(c, v)]
+      | [] -> [ (c, v) ]
       | (c', v') :: s' ->
           if Array.equal Float.( = ) c c' || dominates c' c then s
           else if dominates c c' then add s' c v
@@ -401,10 +413,10 @@ module Make (C : Config.S) = struct
 
   let opt_nonrec opt parts s =
     Logs.debug (fun m ->
-        m "Choosing join for space %s." (JoinSpace.to_string s)) ;
+        m "Choosing join for space %s." (JoinSpace.to_string s));
     if JoinSpace.length s = 1 then
       let j = Flat (JoinSpace.choose s) in
-      ParetoSet.singleton [|scan_cost parts j|] j
+      ParetoSet.singleton [| scan_cost parts j |] j
     else
       JoinSpace.partition_fold s ~init:ParetoSet.empty
         ~f:(fun cs (s1, s2, es) ->
@@ -418,7 +430,7 @@ module Make (C : Config.S) = struct
             List.cartesian_product (select_flat s1) (select_flat s2)
             |> List.map ~f:(fun (r1, r2) ->
                    let j = Flat (A.join pred r1 r2) in
-                   ([|scan_cost parts j|], j))
+                   ([| scan_cost parts j |], j))
             |> ParetoSet.of_list
           in
           (* Add nest joins to pareto set. *)
@@ -463,19 +475,17 @@ module Make (C : Config.S) = struct
                   if JoinSpace.O.(s1 = s2) then []
                   else
                     let rhs_parts =
-                      Set.union
-                        (to_parts (JoinSpace.to_ralgebra s2) pred)
-                        parts
+                      Set.union (to_parts (JoinSpace.to_ralgebra s2) pred) parts
                     in
                     List.cartesian_product (opt parts s1) (opt rhs_parts s2)
                     |> List.map ~f:(fun ((_, r1), (_, r2)) ->
-                           Hash {lkey= k1; rkey= k2; lhs= r1; rhs= r2})
+                           Hash { lkey = k1; rkey = k2; lhs = r1; rhs = r2 })
               | _ -> None
             in
             Option.value m_s ~default:[]
-            |> List.map ~f:(fun j -> ([|scan_cost parts j|], j))
+            |> List.map ~f:(fun j -> ([| scan_cost parts j |], j))
           in
-          ParetoSet.union_all [cs; flat_joins; (* nest_joins; *) hash_joins])
+          ParetoSet.union_all [ cs; flat_joins; (* nest_joins; *) hash_joins ])
 
   let opt =
     let module Key = struct
@@ -483,8 +493,8 @@ module Make (C : Config.S) = struct
       [@@deriving compare, hash, sexp_of]
 
       let create p s =
-        ( p
-        , JoinGraph.fold_vertex
+        ( p,
+          JoinGraph.fold_vertex
             (fun v vs -> Set.add vs v)
             s.JoinSpace.graph
             (Set.empty (module JoinGraph.Vertex)) )
@@ -496,7 +506,7 @@ module Make (C : Config.S) = struct
       | Some v -> v
       | None ->
           let v = opt_nonrec opt p s in
-          Hashtbl.add_exn tbl ~key ~data:v ;
+          Hashtbl.add_exn tbl ~key ~data:v;
           v
     in
     opt
@@ -510,16 +520,20 @@ module Make (C : Config.S) = struct
     let open J in
     function
     | Flat _ -> row_store
-    | Hash {lhs; rhs; _} ->
+    | Hash { lhs; rhs; _ } ->
         seq_many
-          [ at_ (emit_joins lhs) (child 0)
-          ; at_ (emit_joins rhs) (child 1)
-          ; elim_join_hash ]
-    | Nest {lhs; rhs; _} ->
+          [
+            at_ (emit_joins lhs) (child 0);
+            at_ (emit_joins rhs) (child 1);
+            elim_join_hash;
+          ]
+    | Nest { lhs; rhs; _ } ->
         seq_many
-          [ at_ (emit_joins lhs) (child 0)
-          ; at_ (emit_joins rhs) (child 1)
-          ; elim_join_nest ]
+          [
+            at_ (emit_joins lhs) (child 0);
+            at_ (emit_joins rhs) (child 1);
+            elim_join_nest;
+          ]
 
   let transform =
     let f r =

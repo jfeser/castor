@@ -7,9 +7,7 @@ open Test_util
 
 module C = struct
   let params =
-    Set.singleton
-      (module Name)
-      (Name.create ~type_:Type.PrimType.string_t "param")
+    Set.singleton (module Name) (Name.create ~type_:Prim_type.string_t "param")
 
   let fresh = Fresh.create ()
 
@@ -35,7 +33,8 @@ let%expect_test "" =
   M.load_string ~params:C.params "filter(str_field = param, unique_str)"
   |> O.Branching.apply dictionary_encode Path.root
   |> Seq.iter ~f:(Format.printf "%a.@\n" pp);
-  [%expect {|
+  [%expect
+    {|
     depjoin(select([(if (c0 > 0) then x0 else (0 - 1)) as x1],
               select([count() as c0, x0],
                 ahashidx(dedup(select([str_field as m0], unique_str)) as s0,

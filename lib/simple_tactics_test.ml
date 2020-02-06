@@ -6,9 +6,7 @@ open Test_util
 
 module C = struct
   let params =
-    Set.singleton
-      (module Name)
-      (Name.create ~type_:Type.PrimType.int_t "param")
+    Set.singleton (module Name) (Name.create ~type_:Prim_type.int_t "param")
 
   let fresh = Fresh.create ()
 
@@ -32,7 +30,7 @@ let%expect_test "row-store-comptime" =
   let r = M.load_string "alist(r as r1, filter(r1.f = f, r))" in
   Option.iter
     (apply (at_ row_store Path.(all >>? is_filter >>| shallowest)) Path.root r)
-    ~f:(Format.printf "%a\n" pp) ;
+    ~f:(Format.printf "%a\n" pp);
   [%expect
     {|
     alist(r as r1,
@@ -43,5 +41,5 @@ let%expect_test "row-store-runtime" =
   let r = M.load_string "depjoin(r as r1, filter(r1.f = f, r))" in
   Option.iter
     (apply (at_ row_store Path.(all >>? is_filter >>| shallowest)) Path.root r)
-    ~f:(Format.printf "%a\n" pp) ;
+    ~f:(Format.printf "%a\n" pp);
   [%expect {| |}]

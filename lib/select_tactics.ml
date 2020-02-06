@@ -21,21 +21,19 @@ module Make (C : Config.S) = struct
   let extend_aggs aggs p =
     let aggs = ref aggs in
     let add_agg a =
-      match
-        List.find !aggs ~f:(fun (_, a') -> [%compare.equal: pred] a a')
-      with
+      match List.find !aggs ~f:(fun (_, a') -> [%compare.equal: pred] a a') with
       | Some (n, _) -> Name n
       | None ->
           let n =
             Fresh.name Global.fresh "agg%d"
             |> Name.create ~type_:(Pred.to_type a)
           in
-          aggs := (n, a) :: !aggs ;
+          aggs := (n, a) :: !aggs;
           Name n
     in
     let visitor =
       object
-        inherit [_] Abslayout0.map
+        inherit [_] map
 
         method! visit_Sum () p = Sum (add_agg (Sum p))
 
@@ -57,7 +55,7 @@ module Make (C : Config.S) = struct
     let outer_aggs, inner_aggs =
       List.fold_left outer_preds ~init:([], []) ~f:(fun (op, ip) p ->
           let ip, p = extend_aggs ip p in
-          (op @ [p], ip) )
+          (op @ [ p ], ip))
     in
     let inner_aggs =
       List.map inner_aggs ~f:(fun (n, a) -> Pred.as_pred (a, Name.name n))
@@ -70,7 +68,7 @@ module Make (C : Config.S) = struct
   let already_pushed r' =
     try
       match Path.get_exn (Path.child Path.root 1) r' with
-      | {node= Filter (_, {node= Select _; _}); _} -> true
+      | { node = Filter (_, { node = Select _; _ }); _ } -> true
       | _ -> false
     with _ -> false
 
@@ -95,7 +93,7 @@ module Make (C : Config.S) = struct
                   in
                   List.filter ps ~f:(function
                     | Name n -> not (List.mem ~equal:Name.O.( = ) kschema n)
-                    | _ -> true )
+                    | _ -> true)
                 in
                 Some (o, i)
             | AOrderedIdx (_, rv, _) | AList (_, rv) | ATuple (rv :: _, Concat)
@@ -109,17 +107,17 @@ module Make (C : Config.S) = struct
             | AHashIdx h ->
                 Some
                   (fun mk_select ->
-                    hash_idx' {h with hi_values= mk_select h.hi_values} )
+                    hash_idx' { h with hi_values = mk_select h.hi_values })
             | AOrderedIdx (rk, rv, m) ->
                 Some
                   (fun mk_select ->
-                    ordered_idx rk (scope_exn rk) (mk_select rv) m )
+                    ordered_idx rk (scope_exn rk) (mk_select rv) m)
             | AList (rk, rv) ->
                 Some (fun mk_select -> list rk (scope_exn rk) (mk_select rv))
             | ATuple (r' :: rs', Concat) ->
                 Some
                   (fun mk_select ->
-                    tuple (List.map (r' :: rs') ~f:mk_select) Concat )
+                    tuple (List.map (r' :: rs') ~f:mk_select) Concat)
             | _ -> None
           in
           let count_n = Fresh.name Global.fresh "count%d" in
@@ -128,7 +126,7 @@ module Make (C : Config.S) = struct
             (mk_collection (fun rv ->
                  filter
                    (Binop (Gt, Name (Name.create count_n), Int 0))
-                   (select inner_preds rv) ))
+                   (select inner_preds rv)))
     | _ -> None
 
   let push_select = of_func push_select ~name:"push-select"

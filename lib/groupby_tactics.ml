@@ -46,7 +46,7 @@ module Make (C : Config.S) = struct
         [%sexp_of: Set.M(Name).t]
 
   let elim_groupby r =
-    annotate_free r ;
+    annotate_free r;
     match r.node with
     | GroupBy (ps, key, r) -> (
         let key_name = Fresh.name Global.fresh "k%d" in
@@ -62,7 +62,7 @@ module Make (C : Config.S) = struct
         | Ok keys ->
             Some (list keys key_name (select ps (filter filter_pred r)))
         | Error err ->
-            Logs.info ~src (fun m -> m "elim-groupby: %a" Error.pp err) ;
+            Logs.info ~src (fun m -> m "elim-groupby: %a" Error.pp err);
             None )
     (* Otherwise, if some keys are computed, fail. *)
     | _ -> None
@@ -79,12 +79,14 @@ module Test = struct
     let validate = false
 
     let params =
-      let open Type.PrimType in
+      let open Prim_type in
       Set.of_list
         (module Name)
-        [ Name.create ~type_:string_t "param1"
-        ; Name.create ~type_:string_t "param2"
-        ; Name.create ~type_:string_t "param3" ]
+        [
+          Name.create ~type_:string_t "param1";
+          Name.create ~type_:string_t "param2";
+          Name.create ~type_:string_t "param3";
+        ]
 
     let param_ctx = Map.empty (module Name)
 
@@ -99,11 +101,11 @@ module Test = struct
   open Ops
 
   let with_logs f =
-    Logs.(set_reporter (format_reporter ())) ;
-    Logs.Src.set_level src (Some Debug) ;
+    Logs.(set_reporter (format_reporter ()));
+    Logs.Src.set_level src (Some Debug);
     let ret = f () in
-    Logs.Src.set_level src (Some Error) ;
-    Logs.(set_reporter nop_reporter) ;
+    Logs.Src.set_level src (Some Error);
+    Logs.(set_reporter nop_reporter);
     ret
 
   let%expect_test "" =
@@ -140,7 +142,7 @@ groupby([o_year,
     in
     with_logs (fun () ->
         apply elim_groupby Path.root r
-        |> Option.iter ~f:(Format.printf "%a@." Abslayout.pp)) ;
+        |> Option.iter ~f:(Format.printf "%a@." Abslayout.pp));
     [%expect
       {|
       alist(dedup(

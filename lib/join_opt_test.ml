@@ -24,7 +24,7 @@ module Join_opt = Join_opt.Make (Config)
 open Join_opt
 module M = Abslayout_db.Make (Config)
 
-let type_ = Type.PrimType.IntT {nullable= false}
+let type_ = Prim_type.IntT { nullable = false }
 
 let c_custkey = Name.create ~type_ "c_custkey"
 
@@ -42,24 +42,24 @@ let nation = Db.relation Config.cost_conn "nation"
 
 let%expect_test "parted-cost" =
   estimate_ntuples_parted (Set.empty (module Name)) (Flat (A.relation orders))
-  |> [%sexp_of: int * int * float] |> print_s ;
+  |> [%sexp_of: int * int * float] |> print_s;
   [%expect {| (1000 1000 1000) |}]
 
 let%expect_test "parted-cost" =
   estimate_ntuples_parted
     (Set.singleton (module Name) o_custkey)
     (Flat (A.relation orders))
-  |> [%sexp_of: int * int * float] |> print_s ;
+  |> [%sexp_of: int * int * float] |> print_s;
   [%expect {| (1 2 1.002004008016032) |}]
 
 let%expect_test "parted-cost" =
   estimate_ntuples_parted
     (Set.singleton (module Name) c_custkey)
     (Flat (A.relation customer))
-  |> [%sexp_of: int * int * float] |> print_s ;
+  |> [%sexp_of: int * int * float] |> print_s;
   [%expect {| (1 1 1) |}]
 
-let estimate_cost p r = [|size_cost p r; scan_cost p r|]
+let estimate_cost p r = [| size_cost p r; scan_cost p r |]
 
 let%expect_test "cost" =
   estimate_cost
@@ -69,7 +69,7 @@ let%expect_test "cost" =
          join
            (Binop (Eq, Name c_custkey, Name o_custkey))
            (relation orders) (relation customer)))
-  |> [%sexp_of: float array] |> print_s ;
+  |> [%sexp_of: float array] |> print_s;
   [%expect {| (257016 68000) |}]
 
 let%expect_test "cost" =
@@ -77,10 +77,12 @@ let%expect_test "cost" =
     (Set.empty (module Name))
     A.(
       Nest
-        { pred= Binop (Eq, Name c_custkey, Name o_custkey)
-        ; lhs= Flat (relation customer)
-        ; rhs= Flat (relation orders) })
-  |> [%sexp_of: float array] |> print_s ;
+        {
+          pred = Binop (Eq, Name c_custkey, Name o_custkey);
+          lhs = Flat (relation customer);
+          rhs = Flat (relation orders);
+        })
+  |> [%sexp_of: float array] |> print_s;
   [%expect {| (272710 67936) |}]
 
 let%expect_test "cost" =
@@ -91,24 +93,28 @@ let%expect_test "cost" =
         (join
            (Binop (Eq, Name c_nationkey, Name n_nationkey))
            (relation nation) (relation customer)))
-  |> [%sexp_of: float array] |> print_s ;
+  |> [%sexp_of: float array] |> print_s;
   estimate_cost
     (Set.empty (module Name))
     A.(
       Nest
-        { pred= Binop (Eq, Name c_nationkey, Name n_nationkey)
-        ; lhs= Flat (relation nation)
-        ; rhs= Flat (relation customer) })
-  |> [%sexp_of: float array] |> print_s ;
+        {
+          pred = Binop (Eq, Name c_nationkey, Name n_nationkey);
+          lhs = Flat (relation nation);
+          rhs = Flat (relation customer);
+        })
+  |> [%sexp_of: float array] |> print_s;
   estimate_cost
     (Set.empty (module Name))
     A.(
       Hash
-        { lkey= Name c_nationkey
-        ; rkey= Name n_nationkey
-        ; lhs= Flat (relation nation)
-        ; rhs= Flat (relation customer) })
-  |> [%sexp_of: float array] |> print_s ;
+        {
+          lkey = Name c_nationkey;
+          rkey = Name n_nationkey;
+          lhs = Flat (relation nation);
+          rhs = Flat (relation customer);
+        })
+  |> [%sexp_of: float array] |> print_s;
   [%expect {|
     (194626 47904)
     (138592 32336)
@@ -122,7 +128,7 @@ let%expect_test "to-from-ralgebra" =
         (relation nation) (relation customer))
   in
   JoinSpace.of_abslayout r |> JoinSpace.to_ralgebra
-  |> Format.printf "%a" Abslayout.pp ;
+  |> Format.printf "%a" Abslayout.pp;
   [%expect {|
     join((c_nationkey = n_nationkey), nation, customer) |}]
 
@@ -137,7 +143,7 @@ let%expect_test "to-from-ralgebra" =
            (relation nation) (relation customer)))
   in
   JoinSpace.of_abslayout r |> JoinSpace.to_ralgebra
-  |> Format.printf "%a" Abslayout.pp ;
+  |> Format.printf "%a" Abslayout.pp;
   [%expect
     {|
     join((c_custkey = o_custkey),
@@ -158,7 +164,7 @@ let%expect_test "part-fold" =
   of_abslayout r
   |> partition_fold ~init:() ~f:(fun () (s1, s2, _) ->
          Format.printf "%a@.%a@.---\n" Abslayout.pp (to_ralgebra s1)
-           Abslayout.pp (to_ralgebra s2)) ;
+           Abslayout.pp (to_ralgebra s2));
   [%expect
     {|
     join((c_nationkey = n_nationkey), nation, customer)
@@ -180,7 +186,7 @@ let%expect_test "join-opt" =
       join
         (Binop (Eq, Name c_nationkey, Name n_nationkey))
         (relation nation) (relation customer))
-  |> [%sexp_of: (float array * t) list] |> print_s ;
+  |> [%sexp_of: (float array * t) list] |> print_s;
   [%expect
     {|
     (((47904)
@@ -221,7 +227,7 @@ let%expect_test "join-opt" =
         (join
            (Binop (Eq, Name c_nationkey, Name n_nationkey))
            (relation nation) (relation customer)))
-  |> [%sexp_of: (float array * t) list] |> print_s ;
+  |> [%sexp_of: (float array * t) list] |> print_s;
   [%expect
     {|
     (((84000)

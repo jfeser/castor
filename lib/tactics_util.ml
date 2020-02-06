@@ -91,7 +91,7 @@ module Make (Config : Config.S) = struct
         (* TODO: We assume that compile time names that are bound in the context
            are ok, but this might not be true? *)
         || ( match Name.Meta.(find n stage) with
-           | Some s -> s = `Compile
+           | Some s -> Poly.(s = `Compile)
            | None ->
                Logs.warn (fun m -> m "Missing stage on %a" Name.pp n);
                false )
@@ -122,7 +122,7 @@ module Make (Config : Config.S) = struct
       let tup =
         select [ Max (Pred.sum_exn (List.map ps ~f:Pred.pseudo_bool)) ] r
         |> Sql.of_ralgebra |> Sql.to_string
-        |> Db.exec_cursor_exn conn [ Type.PrimType.int_t ]
+        |> Db.exec_cursor_exn conn [ Prim_type.int_t ]
         |> Gen.get
       in
       match tup with

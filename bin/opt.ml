@@ -4,9 +4,9 @@ open Collections
 open Castor_opt
 
 let main ~params:all_params ~db ~cost_db ~validate ~cost_timeout ch =
-  Logs.Src.set_level Log.src (Some Debug) ;
+  Logs.Src.set_level Log.src (Some Debug);
   Logs.info (fun m ->
-      m "%s" (Sys.argv |> Array.to_list |> String.concat ~sep:" ")) ;
+      m "%s" (Sys.get_argv () |> Array.to_list |> String.concat ~sep:" "));
   let params =
     List.map all_params ~f:(fun (n, t, _) -> Name.create ~type_:t n)
     |> Set.of_list (module Name)
@@ -39,7 +39,7 @@ let main ~params:all_params ~db ~cost_db ~validate ~cost_timeout ch =
   match Transform.optimize (module Config) query with
   | Some query' ->
       Or_error.iter_error (T.is_serializable query') ~f:(fun err ->
-          Logs.warn (fun m -> m "Query is not serializable: %a" Error.pp err)) ;
+          Logs.warn (fun m -> m "Query is not serializable: %a" Error.pp err));
       Format.printf "%a" Abslayout.pp query'
   | None -> Logs.warn (fun m -> m "Optimization failed.")
 
@@ -49,7 +49,7 @@ let () =
     [%map_open
       let () = Log.param
       and validate =
-        flag "validate" ~aliases:["c"] no_arg ~doc:"validate transforms"
+        flag "validate" ~aliases:[ "c" ] no_arg ~doc:"validate transforms"
       and db = flag "db" (required string) ~doc:"CONNINFO the main database"
       and cost_db =
         flag "cost-db" (optional string)
@@ -58,7 +58,7 @@ let () =
         flag "cost-timeout" (optional float)
           ~doc:"terminate cost function after n seconds"
       and params =
-        flag "param" ~aliases:["p"]
+        flag "param" ~aliases:[ "p" ]
           (listed Util.param_and_value)
           ~doc:"NAME:TYPE query parameters"
       and ch =
