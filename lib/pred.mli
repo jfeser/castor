@@ -8,8 +8,8 @@ type t = Ast.pred =
   | Bool of bool
   | String of string
   | Null of Prim_type.t option
-  | Unop of (Ast.Unop.t * t)
-  | Binop of (Ast.Binop.t * t * t)
+  | Unop of Ast.Unop.t * t
+  | Binop of Ast.Binop.t * t * t
   | As_pred of (t * string)
   | Count
   | Row_number
@@ -26,6 +26,64 @@ type t = Ast.pred =
 include Comparator.S with type t := t
 
 module O : Comparable.Infix with type t := t
+
+module Infix : sig
+  val name : Name.t -> t
+
+  val int : int -> t
+
+  val fixed : Fixed_point.t -> t
+
+  val date : Date.t -> t
+
+  val bool : bool -> t
+
+  val string : string -> t
+
+  val null : Prim_type.t option -> t
+
+  val not : t -> t
+
+  val day : t -> t
+
+  val month : t -> t
+
+  val year : t -> t
+
+  val strlen : t -> t
+
+  val extract_y : t -> t
+
+  val extract_m : t -> t
+
+  val extract_d : t -> t
+
+  val ( + ) : t -> t -> t
+
+  val ( - ) : t -> t -> t
+
+  val ( / ) : t -> t -> t
+
+  val ( * ) : t -> t -> t
+
+  val ( = ) : t -> t -> t
+
+  val ( < ) : t -> t -> t
+
+  val ( <= ) : t -> t -> t
+
+  val ( > ) : t -> t -> t
+
+  val ( >= ) : t -> t -> t
+
+  val ( && ) : t -> t -> t
+
+  val ( || ) : t -> t -> t
+
+  val ( mod ) : t -> t -> t
+
+  val strpos : t -> t -> t
+end
 
 val pp : Format.formatter -> t -> unit
 

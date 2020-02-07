@@ -8,28 +8,7 @@ type tuple = Ast.tuple = Cross | Zip | Concat
 
 type order = Ast.order = Asc | Desc [@@deriving compare, hash, sexp_of]
 
-type pred = Ast.pred =
-  | Name of Name.t
-  | Int of int
-  | Fixed of Fixed_point.t
-  | Date of Date.t
-  | Bool of bool
-  | String of string
-  | Null of Prim_type.t option
-  | Unop of (Unop.t * pred)
-  | Binop of (Binop.t * pred * pred)
-  | As_pred of (pred * string)
-  | Count
-  | Row_number
-  | Sum of pred
-  | Avg of pred
-  | Min of pred
-  | Max of pred
-  | If of pred * pred * pred
-  | First of t
-  | Exists of t
-  | Substring of pred * pred * pred
-[@@deriving compare, hash, sexp_of]
+type pred = Pred.t [@@deriving compare, hash, sexp_of]
 
 and hash_idx = Ast.hash_idx = {
   hi_keys : t;

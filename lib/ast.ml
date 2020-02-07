@@ -39,8 +39,8 @@ type pred =
   | Bool of (bool[@opaque])
   | String of (string[@opaque])
   | Null of (Prim_type.t option[@opaque])
-  | Unop of ((Unop.t[@opaque]) * pred)
-  | Binop of ((Binop.t[@opaque]) * pred * pred)
+  | Unop of (Unop.t[@opaque]) * pred
+  | Binop of (Binop.t[@opaque]) * pred * pred
   | As_pred of (pred * string)
   | Count
   | Row_number

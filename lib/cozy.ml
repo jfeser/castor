@@ -150,7 +150,7 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
                   | [ n ] ->
                       let lit =
                         match Name.type_exn n with
-                        | IntT _ -> Int 0
+                        | IntT _ -> Pred.Int 0
                         | FixedT _ -> Fixed (Fixed_point.of_int 0)
                         | StringT _ -> String ""
                         | BoolT _ -> Bool false
@@ -298,7 +298,7 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
                 let arg =
                   Name.create ~type_:(Name.type_exn k) (Fresh.name fresh "x%d")
                 in
-                (Pred.(binop (Eq, name k, name arg)), arg))
+                (Pred.Infix.(name k = name arg), arg))
             |> List.unzip
           in
           let vc =

@@ -151,7 +151,7 @@ let eval { db; params } r =
     let open Value in
     let e = eval_pred ctx in
     match p with
-    | A.Int x -> Int x
+    | Pred.Int x -> Int x
     | Name n -> (
         match Ctx.find ctx n with
         | Some v -> v

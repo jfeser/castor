@@ -215,7 +215,7 @@ let dep_join of_ralgebra q1 scope q2 =
     let ctx =
       List.zip_exn (schema_exn q1 |> Schema.scoped scope) sql1_names
       |> List.map ~f:(fun (n, n') ->
-             (n, Name Name.(create ?type_:(Name.type_ n) n')))
+             (n, Pred.name Name.(create ?type_:(Name.type_ n) n')))
       |> Map.of_alist_exn (module Name)
     in
     subst ctx q2
@@ -261,7 +261,7 @@ let of_ralgebra r =
     | Join { pred; r1; r2 } ->
         join (schema_exn r1) (schema_exn r2) (f r1) (f r2) pred
     | GroupBy (ps, key, r) ->
-        let key = List.map ~f:(fun n -> Name n) key in
+        let key = List.map ~f:Pred.name key in
         select ~groupby:key f ps r
     | ATuple ([ r ], (Cross | Concat)) -> f r
     | ATuple (r :: rs, Cross) ->
@@ -280,6 +280,7 @@ let of_ralgebra r =
   ensure_alias r |> f
 
 let rec pred_to_sql p =
+  let open Pred in
   let p2s = pred_to_sql in
   match p with
   | As_pred (p, _) -> p2s p

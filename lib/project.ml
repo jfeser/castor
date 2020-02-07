@@ -47,7 +47,8 @@ let count = Univ_map.Key.create ~name:"count" [%sexp_of: count]
 let annotate_count r =
   let count_matters =
     List.exists ~f:(function
-      | Count | Sum _ | Avg _ | As_pred ((Count | Sum _ | Avg _), _) -> true
+      | Pred.Count | Sum _ | Avg _ | As_pred ((Count | Sum _ | Avg _), _) ->
+          true
       | _ -> false)
   in
   let visitor =
@@ -125,7 +126,7 @@ class project_visitor =
                       let old_n = List.length schema in
                       let ps =
                         project_defs refcnt
-                          (schema_exn rk |> List.map ~f:(fun n -> Name n))
+                          (schema_exn rk |> List.map ~f:Pred.name)
                       in
                       let new_n = List.length ps in
                       if old_n > new_n then select ps rk else self#visit_t () rk

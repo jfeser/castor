@@ -277,7 +277,7 @@ let resolve_relation stage r =
     Option.value_exn ~message:"No schema annotation on relation."
       r.Relation.r_schema
   in
-  let _, ctx = List.map schema ~f:(fun n -> Name n) |> Ctx.of_defs stage in
+  let _, ctx = List.map schema ~f:Pred.name |> Ctx.of_defs stage in
   ctx
 
 let rec resolve_pred stage (ctx : Ctx.t) =
@@ -433,9 +433,7 @@ and resolve stage outer_ctx ({ node; meta } as r) =
 (** Annotate names in an algebra expression with types. *)
 let resolve ?(params = Set.empty (module Name)) r =
   shadow_check r;
-  let _, ctx =
-    Ctx.of_defs `Run (Set.to_list params |> List.map ~f:(fun n -> Name n))
-  in
+  let _, ctx = Ctx.of_defs `Run (Set.to_list params |> List.map ~f:Pred.name) in
   let r, ctx = resolve `Run ctx r in
   (* Ensure that all the outputs are referenced. *)
   Ctx.incr_refs `Run ctx;

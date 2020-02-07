@@ -2,6 +2,7 @@ open! Core
 open Printf
 open Collections
 module A = Abslayout
+open Pred
 
 module Config = struct
   module type S = sig
@@ -112,11 +113,12 @@ module Make (Config : Config.S) () = struct
         (function
         | { node = GroupBy (ps, key, r); _ } as rr when no_params rr ->
             let key_name = Fresh.name fresh "k%d" in
-            let key_preds = List.map key ~f:(fun n -> Name n) in
+            let key_preds = List.map key ~f:Pred.name in
             let filter_pred =
               List.map key ~f:(fun n ->
-                  Binop (Eq, Name n, Name (Name.copy n ~scope:(Some key_name))))
-              |> List.fold_left ~init:(Bool true) ~f:(fun acc p ->
+                  Pred.Binop
+                    (Eq, Name n, Name (Name.copy n ~scope:(Some key_name))))
+              |> List.fold_left ~init:(Pred.Bool true) ~f:(fun acc p ->
                      Binop (And, acc, p))
             in
             [
@@ -155,7 +157,7 @@ module Make (Config : Config.S) () = struct
                   |> List.map ~f:(Pred.scoped (schema_exn lhs) scope)
                 in
                 let filter_pred =
-                  Binop (Eq, Name k, Name (Name.create key_name))
+                  Pred.Binop (Eq, Name k, Name (Name.create key_name))
                   |> Pred.scoped (schema_exn lhs) scope
                 in
                 let new_r =
@@ -193,13 +195,14 @@ module Make (Config : Config.S) () = struct
                   sprintf "%s_%s" key_name (Name.to_var n))
             in
             let select_list =
-              List.map2_exn key new_key ~f:(fun n n' -> As_pred (Name n, n'))
+              List.map2_exn key new_key ~f:(fun n n' ->
+                  Pred.As_pred (Name n, n'))
             in
             let lhs = dedup (select select_list r) in
             let filter_pred =
               List.map2_exn key new_key ~f:(fun n n' ->
-                  Binop (Eq, Name n, Name (Name.create n')))
-              |> List.reduce_exn ~f:(fun acc p -> Binop (And, acc, p))
+                  Pred.Binop (Eq, Name n, Name (Name.create n')))
+              |> List.reduce_exn ~f:(fun acc p -> Pred.Binop (And, acc, p))
               |> Pred.scoped (schema_exn lhs) scope
             in
             [ list lhs scope (select ps (filter p (filter filter_pred r))) ]
@@ -252,7 +255,7 @@ module Make (Config : Config.S) () = struct
                     dedup
                       (select
                          (List.map ks ~f:(fun n ->
-                              As_pred
+                              Pred.As_pred
                                 (Name n, Map.find_exn key_aliases (Name.name n))))
                          (db_relation rel)))
                 |> Map.data
@@ -1014,8 +1017,7 @@ module Make (Config : Config.S) () = struct
 
         inherit [_] Util.list_monoid
 
-        method! visit_Binop ps p =
-          let op, arg1, arg2 = p in
+        method! visit_Binop ps op arg1 arg2 =
           if [%compare.equal: A.Binop.t] op Eq then (arg1, arg2) :: ps else ps
       end
     in

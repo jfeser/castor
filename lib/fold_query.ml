@@ -1,5 +1,6 @@
 open! Core
 module A = Abslayout
+module P = Pred
 
 [@@@warning "-17"]
 
@@ -150,7 +151,7 @@ let to_width q =
 
 let total_order_key q =
   let native_order = Abslayout.order_of q in
-  let total_order = List.map (A.schema_exn q) ~f:(fun n -> (A.Name n, A.Asc)) in
+  let total_order = List.map (A.schema_exn q) ~f:(fun n -> (P.Name n, A.Asc)) in
   native_order @ total_order
 
 let to_scalars rs =
@@ -238,11 +239,11 @@ let rec to_ralgebra' q =
                let n' = Fresh.name Global.fresh "x%d" in
                (n, n'))
       in
-      let slist = List.map sctx ~f:(fun (n, n') -> A.As_pred (Name n, n')) in
+      let slist = List.map sctx ~f:(fun (n, n') -> P.as_pred (Name n, n')) in
       (* Stick together the orders from the lhs and rhs queries. *)
       let order =
         let sctx =
-          List.map sctx ~f:(fun (n, n') -> (n, A.Name (Name.create n')))
+          List.map sctx ~f:(fun (n, n') -> (n, P.name @@ Name.create n'))
           |> Map.of_alist_exn (module Name)
         in
         (* The renaming refers to the scoped names from q1, so scope before
@@ -266,21 +267,21 @@ let rec to_ralgebra' q =
         List.mapi qs ~f:(fun i q ->
             let select_list =
               (* Add a counter so we know which query we're on. *)
-              A.As_pred (Int i, counter_name)
+              P.as_pred (Int i, counter_name)
               :: List.concat_mapi qs ~f:(fun j q' ->
                      A.schema_exn q'
                      |>
                      (* Take the names from this query's schema. *)
-                     if i = j then List.map ~f:(fun n -> A.Name n)
+                     if i = j then List.map ~f:P.name
                      else
                        (* Otherwise emit null. *)
                        List.map ~f:(fun n ->
-                           A.As_pred (Null (Some (Name.type_exn n)), Name.name n)))
+                           P.as_pred (Null (Some (Name.type_exn n)), Name.name n)))
             in
             A.select select_list q)
       in
       let order =
-        (A.Name (Name.create counter_name), A.Asc) :: List.concat orders
+        (P.name (Name.create counter_name), A.Asc) :: List.concat orders
       in
       A.order_by order (A.tuple queries_norm A.Concat)
   | Empty -> A.empty

@@ -9,8 +9,8 @@ module T = struct
     | Bool of bool
     | String of string
     | Null of Prim_type.t option
-    | Unop of (Ast.Unop.t * t)
-    | Binop of (Ast.Binop.t * t * t)
+    | Unop of Ast.Unop.t * t
+    | Binop of Ast.Binop.t * t * t
     | As_pred of (t * string)
     | Count
     | Row_number
@@ -32,6 +32,67 @@ include Comparator.Make (T)
 module C = Comparable.Make (T)
 
 module O : Comparable.Infix with type t := t = C
+
+module Infix = struct
+  open Ast.Unop
+  open Ast.Binop
+
+  let name = name
+
+  let int = int
+
+  let fixed = fixed
+
+  let date = date
+
+  let bool = bool
+
+  let string = string
+
+  let null = null
+
+  let not = unop Not
+
+  let day = unop Day
+
+  let month = unop Month
+
+  let year = unop Year
+
+  let strlen = unop Strlen
+
+  let extract_y = unop ExtractY
+
+  let extract_m = unop ExtractM
+
+  let extract_d = unop ExtractD
+
+  let ( + ) = binop Add
+
+  let ( - ) = binop Sub
+
+  let ( / ) = binop Div
+
+  let ( * ) = binop Mul
+
+  let ( = ) = binop Eq
+
+  let ( < ) = binop Lt
+
+  let ( <= ) = binop Le
+
+  let ( > ) = binop Gt
+
+  let ( >= ) = binop Ge
+
+  let ( && ) = binop And
+
+  let ( || ) = binop Or
+
+  let ( mod ) = binop Mod
+
+  let strpos = binop Strpos
+end
 
 let to_type = Schema.to_type
 
@@ -122,7 +183,7 @@ let eqs p =
 
       method plus = ( @ )
 
-      method! visit_Binop () (op, p1, p2) =
+      method! visit_Binop () op p1 p2 =
         match (op, p1, p2) with
         | Eq, Name n1, Name n2 -> [ (n1, n2) ]
         | And, p1, p2 ->
@@ -245,7 +306,7 @@ let to_nnf p =
     object (self : 'self)
       inherit [_] Ast.map as super
 
-      method! visit_Unop () (op, arg) =
+      method! visit_Unop () op arg =
         if Poly.(op = Not) then
           match arg with
           | Binop (Or, p1, p2) ->
@@ -255,13 +316,13 @@ let to_nnf p =
                 ( Or,
                   self#visit_pred () (Unop (Not, p1)),
                   self#visit_pred () (Unop (Not, p2)) )
-          | Binop (Gt, p1, p2) -> self#visit_Binop () (Le, p1, p2)
-          | Binop (Ge, p1, p2) -> self#visit_Binop () (Lt, p1, p2)
-          | Binop (Lt, p1, p2) -> self#visit_Binop () (Ge, p1, p2)
-          | Binop (Le, p1, p2) -> self#visit_Binop () (Gt, p1, p2)
+          | Binop (Gt, p1, p2) -> self#visit_Binop () Le p1 p2
+          | Binop (Ge, p1, p2) -> self#visit_Binop () Lt p1 p2
+          | Binop (Lt, p1, p2) -> self#visit_Binop () Ge p1 p2
+          | Binop (Le, p1, p2) -> self#visit_Binop () Gt p1 p2
           | Unop (Not, p) -> self#visit_pred () p
           | p -> Unop (op, self#visit_pred () p)
-        else super#visit_Unop () (op, arg)
+        else super#visit_Unop () op arg
     end
   in
   visitor#visit_pred () p
@@ -273,7 +334,7 @@ let simplify p =
     object
       inherit [_] Ast.map
 
-      method! visit_Binop () (op, p1, p2) =
+      method! visit_Binop () op p1 p2 =
         if Poly.(op = Or) then
           let clauses =
             disjuncts (Binop (op, p1, p2)) |> List.map ~f:conjuncts
@@ -293,29 +354,29 @@ let simplify p =
     object (self : 'self)
       inherit [_] Ast.map as super
 
-      method! visit_Binop () (op, p1, p2) =
+      method! visit_Binop () op p1 p2 =
         if Poly.(op = Or) then
-          disjuncts (Binop (op, p1, p2))
+          disjuncts (binop op p1 p2)
           |> List.dedup_and_sort ~compare:[%compare: t]
           |> List.map ~f:(self#visit_pred ())
           |> disjoin
         else if Poly.(op = And) then
-          conjuncts (Binop (op, p1, p2))
+          conjuncts (binop op p1 p2)
           |> List.dedup_and_sort ~compare:[%compare: t]
           |> List.map ~f:(self#visit_pred ())
           |> conjoin
-        else super#visit_Binop () (op, p1, p2)
+        else super#visit_Binop () op p1 p2
     end
   in
   p |> to_nnf |> common_visitor#visit_pred ()
 
-let max_of p1 p2 = if_ (binop (Lt, p1, p2)) p2 p1
+let max_of p1 p2 = Infix.(if_ (p1 < p2) p2 p1)
 
-let min_of p1 p2 = if_ (binop (Lt, p1, p2)) p1 p2
+let min_of p1 p2 = Infix.(if_ (p1 < p2) p1 p2)
 
-let pseudo_bool p = If (p, Int 1, Int 0)
+let pseudo_bool p = if_ p (Int 1) (Int 0)
 
-let sum_exn = List.reduce_exn ~f:(fun p1 p2 -> Binop (Add, p1, p2))
+let sum_exn = Infix.(List.reduce_exn ~f:( + ))
 
 type a = [ `Leaf of t | `And of b list ]
 
