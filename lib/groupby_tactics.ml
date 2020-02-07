@@ -6,15 +6,12 @@ open Collections
 module Config = struct
   module type S = sig
     include Ops.Config.S
-
-    include Abslayout_db.Config.S
   end
 end
 
 module Make (C : Config.S) = struct
   module Ops = Ops.Make (C)
   open Ops
-  module M = Abslayout_db.Make (C)
 
   let src = Logs.Src.create "groupby-tactics"
 
@@ -110,7 +107,7 @@ module Test = struct
 
   let%expect_test "" =
     let r =
-      M.load_string ~params
+      Abslayout_load.load_string ~params conn
         {|
 groupby([o_year,
          (sum((if (nation_name = param1) then volume else 0.0)) /

@@ -22,7 +22,6 @@ end
 
 module Join_opt = Join_opt.Make (Config)
 open Join_opt
-module M = Abslayout_db.Make (Config)
 
 let type_ = Prim_type.IntT { nullable = false }
 

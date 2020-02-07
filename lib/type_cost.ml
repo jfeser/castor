@@ -1,5 +1,7 @@
 open! Core
 open Castor
+open Abslayout_load
+open Abslayout_type
 
 module Config = struct
   module type S = sig
@@ -8,20 +10,11 @@ module Config = struct
     val cost_timeout : float option
 
     val cost_conn : Db.t
-
-    val simplify : (Abslayout.t -> Abslayout.t) option
   end
 end
 
 module Make (Config : Config.S) = struct
   open Config
-
-  module M = Abslayout_db.Make (struct
-    include Config
-
-    let conn = cost_conn
-  end)
-
   open Type
 
   let rec read = function
@@ -44,7 +37,9 @@ module Make (Config : Config.S) = struct
         try
           Logs.debug (fun m -> m "Computing cost of %a." Abslayout.pp r);
           let c =
-            M.load_layout ~params r |> M.type_of ?timeout:cost_timeout |> read
+            load_layout ~params cost_conn r
+            |> type_of ?timeout:cost_timeout cost_conn
+            |> read
           in
           let out =
             match kind with

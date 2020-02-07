@@ -5,17 +5,14 @@ open Collections
 
 module Config = struct
   module type S = sig
-    include Abslayout_db.Config.S
-
     include Ops.Config.S
   end
 end
 
 module Make (Config : Config.S) = struct
   open Config
-  module M = Abslayout_db.Make (Config)
-  module Ops = Ops.Make (Config)
-  open Ops
+
+  open Ops.Make (Config)
 
   let no_params r = Set.is_empty (Set.inter (names r) params)
 
@@ -27,7 +24,7 @@ module Make (Config : Config.S) = struct
           | Some `Compile -> true
           | Some `Run -> false
           | None ->
-              Logs.warn (fun m -> m "Missing stage on %a." Name.pp n) ;
+              Logs.warn (fun m -> m "Missing stage on %a." Name.pp n);
               false)
     then
       let scope = Fresh.name Global.fresh "s%d" in

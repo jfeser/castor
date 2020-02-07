@@ -2,6 +2,7 @@ open! Core
 open Castor
 open Collections
 open Castor_opt
+open Abslayout_load
 
 let main ~params:all_params ~db ~cost_db ~validate ~cost_timeout ch =
   Logs.Src.set_level Log.src (Some Debug);
@@ -15,8 +16,9 @@ let main ~params:all_params ~db ~cost_db ~validate ~cost_timeout ch =
     List.map all_params ~f:(fun (n, t, v) -> (Name.create ~type_:t n, v))
     |> Map.of_alist_exn (module Name)
   in
+  let conn = Db.create db in
   let module Config = struct
-    let conn = Db.create db
+    let conn = conn
 
     let cost_conn =
       Option.map cost_db ~f:Db.create |> Option.value ~default:conn
@@ -27,15 +29,12 @@ let main ~params:all_params ~db ~cost_db ~validate ~cost_timeout ch =
 
     let validate = validate
 
-    let simplify = None
-
     let cost_timeout = cost_timeout
   end in
-  let module A = Abslayout_db.Make (Config) in
   let module T = Transform.Make (Config) in
   let module O = Ops.Make (Config) in
   let query_str = In_channel.input_all ch in
-  let query = A.load_string ~params query_str in
+  let query = load_string ~params conn query_str in
   match Transform.optimize (module Config) query with
   | Some query' ->
       Or_error.iter_error (T.is_serializable query') ~f:(fun err ->

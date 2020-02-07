@@ -6,15 +6,11 @@ open Collections
 module Config = struct
   module type S = sig
     include Ops.Config.S
-
-    include Abslayout_db.Config.S
   end
 end
 
 module Make (C : Config.S) = struct
-  module Ops = Ops.Make (C)
-  open Ops
-  module M = Abslayout_db.Make (C)
+  open Ops.Make (C)
 
   (** Extend a list of predicates to include those needed by aggregate `p`.
      Returns a name to use in the aggregate. *)

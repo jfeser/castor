@@ -14,14 +14,15 @@ module Config = struct
   let simplify = None
 end
 
-module T = Make (Config)
-open T
-module M = Abslayout_db.Make (Config)
+open Make (Config)
+
 open Ops
+
+let load_string ?params s = Abslayout_load.load_string ?params Config.conn s
 
 let%expect_test "" =
   let r =
-    M.load_string
+    load_string
       {|
       depjoin(select([l_quantity as l_quantity,
                 l_extendedprice as l_extendedprice,
@@ -39,7 +40,7 @@ let%expect_test "" =
   in
   Option.iter
     (apply elim_depjoin Path.root r)
-    ~f:(Format.printf "%a" Abslayout.pp) ;
+    ~f:(Format.printf "%a" Abslayout.pp);
   [%expect
     {|
     select([l_quantity as x77,
@@ -60,12 +61,12 @@ let%expect_test "" =
 
 let%expect_test "" =
   let r =
-    M.load_string
+    load_string
       {| depjoin(ascalar(0 as f) as k, select([f], select([k.f], ascalar(0 as g)))) |}
   in
   Option.iter
     (apply
        (at_ flatten_select (Path.all >>? is_select >>| shallowest))
        Path.root r)
-    ~f:(Format.printf "%a" Abslayout.pp) ;
+    ~f:(Format.printf "%a" Abslayout.pp);
   [%expect {| depjoin(ascalar(0 as f) as k, select([k.f], ascalar(0 as g))) |}]

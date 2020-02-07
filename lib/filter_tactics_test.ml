@@ -28,11 +28,12 @@ module T = Make (C)
 open T
 module O = Ops.Make (C)
 open O
-module M = Abslayout_db.Make (C)
+
+let load_string ?params s = Abslayout_load.load_string ?params C.conn s
 
 let%expect_test "push-filter-comptime" =
   let r =
-    M.load_string
+    load_string
       "alist(r as r1, filter(r1.f = f, alist(r as r2, ascalar(r2.f))))"
   in
   Option.iter
@@ -45,7 +46,7 @@ let%expect_test "push-filter-comptime" =
 
 let%expect_test "push-filter-runtime" =
   let r =
-    M.load_string
+    load_string
       "depjoin(r as r1, filter(r1.f = f, alist(r as r2, ascalar(r2.f))))"
   in
   Option.iter
@@ -58,7 +59,7 @@ let%expect_test "push-filter-runtime" =
 
 let%expect_test "push-filter-support" =
   let r =
-    M.load_string ~params:C.params
+    load_string ~params:C.params
       "filter(f > param, ahashidx(select([f], r) as k, ascalar(0), 0))"
   in
   Option.iter
@@ -71,7 +72,7 @@ let%expect_test "push-filter-support" =
 
 let%expect_test "push-filter-support" =
   let r =
-    M.load_string
+    load_string
       {|
 alist(filter((0 = g),
         depjoin(ascalar(0 as f) as k,
@@ -92,14 +93,14 @@ alist(filter((0 = g),
 
 let%expect_test "push-filter-select" =
   let r =
-    M.load_string "filter(test > 0, select([x as test], ascalar(0 as x)))"
+    load_string "filter(test > 0, select([x as test], ascalar(0 as x)))"
   in
   Option.iter (apply push_filter Path.root r) ~f:(Format.printf "%a\n" pp);
   [%expect {| select([x as test], filter((x > 0), ascalar(0 as x))) |}]
 
 let%expect_test "push-filter-select" =
   let r =
-    M.load_string
+    load_string
       "filter(a = b, select([(x - 1) as a, (x + 1) as b], ascalar(0 as x)))"
   in
   Option.iter (apply push_filter Path.root r) ~f:(Format.printf "%a\n" pp);
@@ -114,7 +115,7 @@ let with_log src f =
 
 let%expect_test "elim-eq-filter" =
   let r =
-    M.load_string ~params:C.params
+    load_string ~params:C.params
       "filter(fresh = param, select([f as fresh], r))"
   in
   with_log elim_eq_filter_src (fun () ->
@@ -132,7 +133,7 @@ let%expect_test "elim-eq-filter" =
 
 let%expect_test "elim-eq-filter-approx" =
   let r =
-    M.load_string ~params:C.params
+    load_string ~params:C.params
       "filter(fresh = param, select([f as fresh], filter(g = param, r)))"
   in
   with_log elim_eq_filter_src (fun () ->
@@ -150,7 +151,7 @@ let%expect_test "elim-eq-filter-approx" =
 
 let%expect_test "elim-eq-filter" =
   let r =
-    M.load_string ~params:C.params
+    load_string ~params:C.params
       "filter((fresh = param) && true, select([f as fresh, g], r))"
   in
   with_log elim_eq_filter_src (fun () ->
@@ -169,7 +170,7 @@ let%expect_test "elim-eq-filter" =
 
 let%expect_test "elim-eq-filter" =
   let r =
-    M.load_string ~params:C.params
+    load_string ~params:C.params
       "filter((fresh1 = param && fresh2 = (param +1)) || (fresh2 = param && \
        fresh1 = (param +1)), select([f as fresh1, g as fresh2], r))"
   in
@@ -212,7 +213,7 @@ let%expect_test "elim-eq-filter" =
 
 let%expect_test "elim-eq-filter" =
   let r =
-    M.load_string ~params:C.params "depjoin(r as k, filter(k.f = param, r))"
+    load_string ~params:C.params "depjoin(r as k, filter(k.f = param, r))"
   in
   with_log elim_eq_filter_src (fun () ->
       Option.iter
@@ -228,7 +229,7 @@ let%expect_test "elim-eq-filter" =
  |}])
 
 let%expect_test "partition" =
-  let r = M.load_string ~params:C.params "filter(f = param, r)" in
+  let r = load_string ~params:C.params "filter(f = param, r)" in
   Seq.iter (Branching.apply partition Path.root r) ~f:(Format.printf "%a\n" pp);
   [%expect
     {|

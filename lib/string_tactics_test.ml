@@ -24,14 +24,15 @@ module C = struct
   let simplify = None
 end
 
-module M = Abslayout_db.Make (C)
-module T = Make (C)
-module O = Ops.Make (C)
-open T
+open Ops.Make (C)
+
+open Make (C)
+
+let load_string ?params s = Abslayout_load.load_string ?params C.conn s
 
 let%expect_test "" =
-  M.load_string ~params:C.params "filter(str_field = param, unique_str)"
-  |> O.Branching.apply dictionary_encode Path.root
+  load_string ~params:C.params "filter(str_field = param, unique_str)"
+  |> Branching.apply dictionary_encode Path.root
   |> Seq.iter ~f:(Format.printf "%a.@\n" pp);
   [%expect
     {|

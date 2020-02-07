@@ -33,7 +33,6 @@ module Make (Config : Config.S) = struct
   module O = Ops.Make (Config)
   open O
   module Sf = Simplify_tactic.Make (Config)
-  module M0 = Abslayout_db.Make (Config)
   module F = Filter_tactics.Make (Config)
   module S = Simple_tactics.Make (Config)
   module Join_opt = Join_opt.Make (Config)
