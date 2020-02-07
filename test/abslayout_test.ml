@@ -375,14 +375,16 @@ let%expect_test "example-3" =
 let%expect_test "subst" =
   let f = Name.create ~scope:"r" "f" in
   let g = Name.create ~scope:"r" "g" in
-  let ctx = Map.of_alist_exn (module Name) [ (f, Int 1); (g, Int 2) ] in
+  let ctx =
+    Map.of_alist_exn (module Name) [ (f, Pred.Int 1); (g, Pred.Int 2) ]
+  in
   let r = "Filter(r.f = r.g, Select([r.f, r.g], r))" |> of_string_exn in
   print_s ([%sexp_of: t] (subst ctx r));
   [%expect
     {|
     ((node
       (Filter
-       ((Binop (Eq (Int 1) (Int 2)))
+       ((Binop Eq (Int 1) (Int 2))
         ((node
           (Select
            (((Int 1) (Int 2))
@@ -533,3 +535,20 @@ let%expect_test "pred_names" =
  * |}
  *   in
  *   M.type_of r |> [%sexp_of: Type.t] |> print_s *)
+
+let%expect_test "" =
+  let conn = Lazy.force Test_util.test_db_conn in
+  let n s =
+    let name =
+      match String.split s ~on:'.' with
+      | [ f ] -> Name.create f
+      | [ a; f ] -> Name.create ~scope:a f
+      | _ -> failwith ("Unexpected name: " ^ s)
+    in
+    Pred.name name
+  in
+  let r s = Db.relation conn s |> relation in
+
+  select [ n "g" ] (filter Pred.Infix.(n "k.f" = n "f") (r "r1"))
+  |> free |> [%sexp_of: Set.M(Name).t] |> print_s;
+  [%expect {| (((scope (k)) (name f))) |}]

@@ -27,20 +27,22 @@ module Unop = struct
   [@@deriving compare, hash, sexp]
 end
 
-(* Visitors doesn't use the special method override syntax that warning 7 checks
-   for. *)
-[@@@warning "-7"]
+type scope = string [@@deriving compare, hash, sexp]
+
+type tuple = Cross | Zip | Concat [@@deriving compare, hash, sexp]
+
+type order = Asc | Desc [@@deriving compare, hash, sexp]
 
 type pred =
-  | Name of (Name.t[@opaque])
-  | Int of (int[@opaque])
-  | Fixed of (Fixed_point.t[@opaque])
-  | Date of (Date.t[@opaque])
-  | Bool of (bool[@opaque])
-  | String of (string[@opaque])
-  | Null of (Prim_type.t option[@opaque])
-  | Unop of (Unop.t[@opaque]) * pred
-  | Binop of (Binop.t[@opaque]) * pred * pred
+  | Name of Name.t
+  | Int of int
+  | Fixed of Fixed_point.t
+  | Date of Date.t
+  | Bool of bool
+  | String of string
+  | Null of Prim_type.t option
+  | Unop of Unop.t * pred
+  | Binop of Binop.t * pred * pred
   | As_pred of (pred * string)
   | Count
   | Row_number
@@ -53,26 +55,20 @@ type pred =
   | Exists of t
   | Substring of pred * pred * pred
 
-and scope = string
-
 and hash_idx = {
   hi_keys : t;
   hi_values : t;
   hi_scope : scope;
-  hi_key_layout : t option; [@opaque]
+  hi_key_layout : t option;
   hi_lookup : pred list;
 }
 
-and bound = pred * ([ `Open | `Closed ][@opaque])
+and bound = pred * [ `Open | `Closed ]
 
 and ordered_idx = {
   oi_key_layout : t option;
   oi_lookup : (bound option * bound option) list;
 }
-
-and tuple = Cross | Zip | Concat
-
-and order = Asc | Desc
 
 and depjoin = { d_lhs : t; d_alias : scope; d_rhs : t }
 
@@ -80,17 +76,17 @@ and join = { pred : pred; r1 : t; r2 : t }
 
 and order_by = { key : (pred * order) list; rel : t }
 
-and t = { node : node; meta : Meta.t [@opaque] [@compare.ignore] }
+and t = { node : node; meta : Meta.t [@compare.ignore] }
 
 and node =
   | Select of (pred list * t)
   | Filter of (pred * t)
   | Join of join
   | DepJoin of depjoin
-  | GroupBy of (pred list * (Name.t[@opaque]) list * t)
+  | GroupBy of (pred list * Name.t list * t)
   | OrderBy of order_by
   | Dedup of t
-  | Relation of (Relation.t[@opaque])
+  | Relation of Relation.t
   | Range of pred * pred
   | AEmpty
   | AScalar of pred
@@ -99,25 +95,10 @@ and node =
   | AHashIdx of hash_idx
   | AOrderedIdx of (t * t * ordered_idx)
   | As of scope * t
-[@@deriving
-  visitors { variety = "endo" },
-    visitors { variety = "map" },
-    visitors { variety = "iter" },
-    visitors { variety = "reduce" },
-    visitors { variety = "fold"; ancestors = [ "map" ] },
-    visitors { variety = "mapreduce" },
-    sexp_of,
-    hash,
-    compare]
-
-[@@@warning "+7"]
+[@@deriving sexp_of, hash, compare]
 
 let t_of_sexp _ = assert false
 
 module Param = struct
   type t = string * Prim_type.t * pred option
 end
-
-(* Visitors doesn't use the special method override syntax that warning 7 checks
-   for. *)
-[@@@warning "-7"]

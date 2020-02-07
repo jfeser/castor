@@ -85,6 +85,8 @@ module Infix : sig
   val ( mod ) : t -> t -> t
 
   val strpos : t -> t -> t
+
+  val as_ : t -> string -> t
 end
 
 val pp : Format.formatter -> t -> unit

@@ -161,17 +161,17 @@ val validate : t -> unit
 
 val strip_meta : t -> t
 
-class virtual ['a] iter : ['a] Ast.iter
+class virtual ['a] iter : ['a] Abslayout_visitors.iter
 
-class virtual ['a] map : ['a] Ast.map
+class virtual ['a] map : ['a] Abslayout_visitors.map
 
-class virtual ['a] endo : ['a] Ast.endo
+class virtual ['a] endo : ['a] Abslayout_visitors.endo
 
-class virtual ['a] reduce : ['a] Ast.reduce
+class virtual ['a] reduce : ['a] Abslayout_visitors.reduce
 
-class virtual ['a] mapreduce : ['a] Ast.mapreduce
+class virtual ['a] mapreduce : ['a] Abslayout_visitors.mapreduce
 
-class virtual ['a] fold : ['a] Ast.fold
+class virtual ['a] fold : ['a] Abslayout_visitors.fold
 
 val annotate_key_layouts : t -> t
 

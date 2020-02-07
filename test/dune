@@ -2,6 +2,7 @@
  (name castor_test)
  (libraries
    castor
+   str
    core
  )
  (flags -open Castor)
