@@ -1063,7 +1063,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let call = sprintf "set_%s(params, input_%s(argv, optind));" n n in
     (func, call)
 
-  let compile ?out_dir ~gprof ~params layout =
+  let compile ?out_dir ?layout_log ~gprof ~params conn layout =
     let out_dir =
       match out_dir with Some x -> x | None -> Filename.temp_dir "bin" ""
     in
@@ -1079,9 +1079,14 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let header_fn = out_dir ^ "/scanner.h" in
     let data_fn = out_dir ^ "/data.bin" in
     let open Prim_type in
+    (* Serialize layout. *)
+    let layout, len =
+      Serialize.serialize ?layout_file:layout_log conn data_fn layout
+    in
+
     (* Generate IR module. *)
     let ir_module =
-      let unopt = IG.irgen ~params ~data_fn layout in
+      let unopt = IG.irgen ~params ~len layout in
       Log.info (fun m -> m "Optimizing intermediate language.");
       Implang_opt.opt unopt
     in

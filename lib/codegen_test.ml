@@ -7,14 +7,13 @@ let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
   let open Abslayout_load in
   let open Abslayout_type in
   let conn = Lazy.force test_db_conn in
-  let (module S), (module I), (module C) =
-    Setup.make_modules ~layout_file ?irgen_debug ()
-  in
+  let (module I), (module C) = Setup.make_modules ?irgen_debug () in
   let run_compiler layout =
     let out_dir = Filename.temp_dir "bin" "" in
     let exe_fn, data_fn =
       let params = List.map ~f:Tuple.T2.get1 params in
-      C.compile ~out_dir ~gprof:false ~params layout
+      C.compile ~out_dir ~layout_log:layout_file ~gprof:false ~params conn
+        layout
     in
     if print_layout then
       In_channel.input_all (In_channel.create layout_file) |> print_endline;

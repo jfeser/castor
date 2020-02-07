@@ -6,13 +6,14 @@ let run_test ?(params = []) layout_str opt_func =
   let open Abslayout_load in
   let open Abslayout_type in
   let conn = Lazy.force test_db_conn in
-  let (module S), (module I), _ = Setup.make_modules ~code_only:true () in
+  let (module I), _ = Setup.make_modules ~code_only:true () in
   let param_names = List.map params ~f:(fun (n, _) -> n) in
   let layout =
     load_string conn ~params:(Set.of_list (module Name) param_names) layout_str
   in
   annotate_type conn layout;
-  I.irgen ~params:param_names ~data_fn:"/tmp/buf" layout
+  let layout, len = Serialize.serialize conn "/tmp/buf" layout in
+  I.irgen ~params:param_names ~len layout
   |> opt_func
   |> I.pp Caml.Format.std_formatter
 

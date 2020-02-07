@@ -13,19 +13,16 @@ let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
     let debug = debug
 
     let code_only = code_only
-
-    let layout_file =
-      if debug then
-        let layout_file =
-          match out_dir with
-          | Some d -> d ^ "/layout.txt"
-          | None -> "layout.txt"
-        in
-        Some layout_file
-      else None
   end in
-  let module S = Serialize.Make (CConfig) in
-  let module I = Irgen.Make (CConfig) (S) () in
+  let layout_file =
+    if debug then
+      let layout_file =
+        match out_dir with Some d -> d ^ "/layout.txt" | None -> "layout.txt"
+      in
+      Some layout_file
+    else None
+  in
+  let module I = Irgen.Make (CConfig) () in
   let module C = Codegen.Make (CConfig) (I) () in
   let params = List.map params ~f:(fun (n, t) -> Name.create ~type_:t n) in
   let ralgebra =
@@ -33,7 +30,9 @@ let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
     load_string ~params db (In_channel.input_all ch)
   in
   annotate_type db ralgebra;
-  C.compile ~gprof ~params ?out_dir ralgebra |> ignore
+  C.compile ~gprof ~params ?out_dir ?layout_log:layout_file CConfig.conn
+    ralgebra
+  |> ignore
 
 let () =
   let open Command.Let_syntax in

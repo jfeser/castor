@@ -326,12 +326,6 @@ let%test_module _ =
 
     let conn = Lazy.force Test_util.test_db_conn
 
-    module S = Serialize.Make (struct
-      let conn = conn
-
-      let layout_file = None
-    end)
-
     module I =
       Irgen.Make
         (struct
@@ -339,7 +333,6 @@ let%test_module _ =
 
           let code_only = true
         end)
-        (S)
         ()
 
     let%expect_test "" =
@@ -347,7 +340,7 @@ let%test_module _ =
         load_string conn "filter(c > 0, select([count() as c], ascalar(0)))"
       in
       annotate_type conn r;
-      let ir = I.irgen ~params:[] ~data_fn:"" r in
+      let ir = I.irgen ~params:[] ~len:0 r in
       Format.printf "%a" I.pp ir;
       [%expect
         {|

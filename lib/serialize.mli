@@ -1,13 +1,20 @@
 open! Core
+open Abslayout
 
-module Config : sig
-  module type S = sig
-    val layout_file : string option
+val serialize : ?layout_file:string -> Db.t -> string -> t -> t * int
+(** Serialize a layout to a binary format.
 
-    val conn : Db.t
-  end
-end
+      @return The layout, annotated with the byte position of each
+      single-appearing sub-layout. Also returns the number of bytes written. *)
 
-module type S = Serialize_intf.S
+(** Sentinal values for use when a value is null. *)
 
-module Make (Config : Config.S) : S
+val string_sentinal : Type.string_ -> int
+
+val int_sentinal : Type.int_ -> int
+
+val date_sentinal : Type.date -> int
+
+val fixed_sentinal : Type.fixed -> int
+
+val bool_sentinal : int

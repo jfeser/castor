@@ -24,12 +24,12 @@ module Config = struct
 end
 
 module type S = sig
-  val irgen : params:Name.t list -> data_fn:string -> Abslayout.t -> ir_module
+  val irgen : params:Name.t list -> len:int -> Abslayout.t -> ir_module
 
   val pp : Formatter.t -> ir_module -> unit
 end
 
-module Make (Config : Config.S) (Serialize : Serialize.S) () = struct
+module Make (Config : Config.S) () = struct
   let iters = ref []
 
   let add_iter i = iters := i :: !iters
@@ -801,15 +801,12 @@ module Make (Config : Config.S) (Serialize : Serialize.S) () = struct
     scan ctx b r t (fun b tup -> build_consume (Tuple tup) b);
     build_func b
 
-  let irgen ~params ~data_fn r =
+  let irgen ~params ~len r =
     let ctx =
       List.map params ~f:(fun n -> (n, Ctx.Global (Var (Name.name n))))
       |> Ctx.of_alist_exn
     in
     let type_ = Meta.(find_exn r type_) in
-    let r, len =
-      if Config.code_only then (r, 0) else Serialize.serialize data_fn r
-    in
     {
       iters = !iters;
       funcs = [ printer ctx r type_; consumer ctx r type_ ];

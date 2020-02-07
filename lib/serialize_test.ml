@@ -15,11 +15,12 @@ let run_test layout_str =
 
   let layout_file = Filename.temp_file "layout" "bin" in
   let layout_log_file = Filename.temp_file "layout" "txt" in
-  let (module S), _, _ = Setup.make_modules ~layout_file:layout_log_file () in
   let layout = load_string conn layout_str in
   annotate_type conn layout;
   let type_ = Meta.(find_exn layout type_) in
-  let _, len = S.serialize layout_file layout in
+  let _, len =
+    Serialize.serialize ~layout_file:layout_log_file conn layout_file layout
+  in
   let buf_str = In_channel.read_all layout_file |> String.escaped in
   let layout_log, did_modify =
     In_channel.input_all (In_channel.create layout_log_file)
