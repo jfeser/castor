@@ -1,5 +1,4 @@
 open! Core
-open Collections
 
 type t
 

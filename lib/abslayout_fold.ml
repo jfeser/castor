@@ -16,9 +16,6 @@ module Fold = struct
   let run (Fold { init; fold; extract }) l =
     List.fold_left l ~init ~f:fold |> extract
 
-  let run_gen (Fold { init; fold; extract }) l =
-    Gen.fold l ~init ~f:fold |> extract
-
   let run_lwt (Fold { init; fold; extract }) l =
     let%lwt ret = Lwt_stream.fold (fun x y -> fold y x) l init in
     return (extract ret)
