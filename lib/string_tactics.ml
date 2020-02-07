@@ -44,7 +44,7 @@ module Make (C : Config.S) = struct
 
         inherit [_] Util.list_monoid
 
-        method! visit_Binop () (op, a1, a2) =
+        method! visit_Binop () op a1 a2 =
           match (op, Pred.to_type a1, Pred.to_type a2) with
           | Eq, StringT _, StringT _ -> [ (a1, a2) ]
           | _ -> []
@@ -52,7 +52,7 @@ module Make (C : Config.S) = struct
     in
     preds_v#visit_t () r
     |> List.filter_map ~f:(function
-         | Name n1, Name n2 -> (
+         | Pred.Name n1, Pred.Name n2 -> (
              match
                ( Db.relation_has_field conn (Name.name n1),
                  Db.relation_has_field conn (Name.name n2) )
@@ -119,8 +119,9 @@ module Make (C : Config.S) = struct
                    (Map.of_alist_exn
                       (module Name)
                       [
-                        (key, Name (Name.create encoded_name));
-                        (lookup, Name (Name.create ~scope encoded_lookup_name));
+                        (key, Pred.name @@ Name.create encoded_name);
+                        ( lookup,
+                          Pred.name @@ Name.create ~scope encoded_lookup_name );
                       ])
                    r)))
     |> Seq.of_list

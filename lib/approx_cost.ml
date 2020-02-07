@@ -35,15 +35,13 @@ module Make (C : Config.S) = struct
               let rec query ss = function
                 | [] -> assert false
                 | [ (q, _) ] ->
-                    A.select
-                      (ss @ List.map (A.schema_exn q) ~f:(fun n -> A.Name n))
-                      q
+                    A.select (ss @ List.map (A.schema_exn q) ~f:Pred.name) q
                 | (q, s) :: qs ->
                     A.dep_join q s
                       (query
                          ( ss
                          @ List.map (A.schema_exn q) ~f:(fun n ->
-                               A.Name (Name.copy ~scope:(Some s) n)) )
+                               Pred.name (Name.copy ~scope:(Some s) n)) )
                          qs)
               in
               let schema =

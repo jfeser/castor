@@ -18,7 +18,7 @@ module Make (C : Config.S) = struct
     let aggs = ref aggs in
     let add_agg a =
       match List.find !aggs ~f:(fun (_, a') -> [%compare.equal: pred] a a') with
-      | Some (n, _) -> Name n
+      | Some (n, _) -> Pred.name n
       | None ->
           let n =
             Fresh.name Global.fresh "agg%d"
@@ -57,7 +57,7 @@ module Make (C : Config.S) = struct
       List.map inner_aggs ~f:(fun (n, a) -> Pred.as_pred (a, Name.name n))
     in
     (* Don't want to project out anything that we might need later. *)
-    let inner_fields = inner_schema |> List.map ~f:(fun n -> Name n) in
+    let inner_fields = inner_schema |> List.map ~f:Pred.name in
     (outer_aggs, inner_aggs @ inner_fields)
 
   (* Look for evidence of a previous pushed select. *)
@@ -78,8 +78,7 @@ module Make (C : Config.S) = struct
             match r'.node with
             | AHashIdx h ->
                 let o =
-                  List.filter_map ps ~f:Pred.to_name
-                  |> List.map ~f:(fun n -> Name n)
+                  List.filter_map ps ~f:Pred.to_name |> List.map ~f:Pred.name
                 in
                 let i =
                   (* TODO: This hack works around problems with sql conversion and

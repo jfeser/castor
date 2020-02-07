@@ -47,11 +47,11 @@ module Make (C : Config.S) = struct
     match r.node with
     | GroupBy (ps, key, r) -> (
         let key_name = Fresh.name Global.fresh "k%d" in
-        let key_preds = List.map key ~f:(fun n -> Name n) in
+        let key_preds = List.map key ~f:Pred.name in
         let filter_pred =
           List.map key ~f:(fun n ->
-              Binop (Eq, Name n, Name (Name.copy n ~scope:(Some key_name))))
-          |> List.reduce_exn ~f:(fun acc p -> Binop (And, acc, p))
+              Pred.Infix.(name n = name (Name.copy n ~scope:(Some key_name))))
+          |> Pred.conjoin
         in
         let keys = dedup (select key_preds r) in
         (* Try to remove any remaining parameters from the keys relation. *)

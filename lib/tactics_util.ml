@@ -64,9 +64,8 @@ module Make (Config : Config.S) = struct
       |> Map.to_alist
       |> List.map ~f:(fun (r, ns) ->
              dedup
-               (select
-                  (List.map ns ~f:(fun n -> Name n))
-                  (relation (Db.relation cost_conn r))))
+             @@ select (List.map ns ~f:Pred.name)
+             @@ relation (Db.relation cost_conn r))
       |> List.reduce ~f:(join (Bool true))
     in
     match joined_rels with
@@ -104,7 +103,7 @@ module Make (Config : Config.S) = struct
       ( schema_exn r
       |> List.filter ~f:(fun n' ->
              not (List.mem ~equal:Name.O.( = ) ns (Name.unscoped n')))
-      |> List.map ~f:(fun n -> Name n) )
+      |> List.map ~f:Pred.name )
       r
 
   let select_contains names ps r =

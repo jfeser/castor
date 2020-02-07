@@ -43,7 +43,7 @@ module Make (C : Config.S) = struct
     module Edge = struct
       include Pred
 
-      let default = A.Bool true
+      let default = Pred.bool true
     end
 
     module G = Persistent.Graph.ConcreteLabeled (Vertex) (Edge)
@@ -316,7 +316,7 @@ module Make (C : Config.S) = struct
           (Set.to_list parts) (to_abslayout r))
     in
     let part_aggs =
-      let c = A.(Name (Name.create "c")) in
+      let c = Pred.name (Name.create "c") in
       A.(select [ Min c; Max c; Avg c ] part_counts)
     in
     let part_aggs = R.resolve ~params part_aggs in
@@ -370,7 +370,7 @@ module Make (C : Config.S) = struct
     | Hash { lkey; lhs; rhs; rkey } ->
         let _, _, nt_lhs = estimate_ntuples_parted parts lhs in
         let rhs_per_partition_cost =
-          let pred = A.(Binop (Eq, lkey, rkey)) in
+          let pred = Pred.Infix.(lkey = rkey) in
           scan_cost (Set.union (to_parts (to_ralgebra rhs) pred) parts) rhs
         in
         scan_cost parts lhs
@@ -468,7 +468,7 @@ module Make (C : Config.S) = struct
             in
             let m_s =
               match pred with
-              | A.Binop (Eq, k1, k2) ->
+              | Pred.Binop (Eq, k1, k2) ->
                   let open Option.Let_syntax in
                   let%bind s1 = key_side k1 in
                   let%map s2 = key_side k2 in
