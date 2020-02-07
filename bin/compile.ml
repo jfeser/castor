@@ -1,6 +1,8 @@
 open! Core
 open Castor
 open Collections
+open Abslayout_load
+open Abslayout_type
 
 let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
   Logs.info (fun m ->
@@ -21,19 +23,16 @@ let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
         in
         Some layout_file
       else None
-
-    let simplify = None
   end in
-  let module A = Abslayout_db.Make (CConfig) in
-  let module S = Serialize.Make (CConfig) (A) in
-  let module I = Irgen.Make (CConfig) (A) (S) () in
+  let module S = Serialize.Make (CConfig) in
+  let module I = Irgen.Make (CConfig) (S) () in
   let module C = Codegen.Make (CConfig) (I) () in
   let params = List.map params ~f:(fun (n, t) -> Name.create ~type_:t n) in
   let ralgebra =
     let params = Set.of_list (module Name) params in
-    A.load_string ~params (In_channel.input_all ch)
+    load_string ~params db (In_channel.input_all ch)
   in
-  A.annotate_type ralgebra;
+  annotate_type db ralgebra;
   C.compile ~gprof ~params ?out_dir ralgebra |> ignore
 
 let () =

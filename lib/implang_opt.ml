@@ -58,8 +58,7 @@ let prune_args m =
 
         method! visit_Iter () _ var func args =
           let args' =
-            Hashtbl.find_exn needed_args func
-            |> List.map ~f:(List.nth_exn args)
+            Hashtbl.find_exn needed_args func |> List.map ~f:(List.nth_exn args)
           in
           Iter { var; func; args = args' }
       end
@@ -77,8 +76,7 @@ let prune_locals m =
     List.map m.Irgen.iters ~f:(fun f ->
         let ns =
           Set.union (written_names f)
-            ( List.map f.args ~f:(fun (n, _) -> n)
-            |> Set.of_list (module String) )
+            (List.map f.args ~f:(fun (n, _) -> n) |> Set.of_list (module String))
         in
         let locals' =
           List.filter f.locals ~f:(fun { lname; _ } ->
@@ -149,10 +147,7 @@ let inline sl_iters func =
     end
   in
   let func' = visitor#visit_func () func in
-  {
-    func' with
-    locals = List.dedup_and_sort ~compare:[%compare: local] !locals;
-  }
+  { func' with locals = List.dedup_and_sort ~compare:[%compare: local] !locals }
 
 let inline_sl_iter m =
   let sl_iters = Hashtbl.create (module String) in
@@ -326,18 +321,16 @@ let opt m =
 
 let%test_module _ =
   ( module struct
-    module M = Abslayout_db.Make (struct
-      let conn = Lazy.force Test_util.test_db_conn
+    open Abslayout_load
+    open Abslayout_type
 
-      let simplify = None
+    let conn = Lazy.force Test_util.test_db_conn
+
+    module S = Serialize.Make (struct
+      let conn = conn
+
+      let layout_file = None
     end)
-
-    module S =
-      Serialize.Make
-        (struct
-          let layout_file = None
-        end)
-        (M)
 
     module I =
       Irgen.Make
@@ -346,15 +339,14 @@ let%test_module _ =
 
           let code_only = true
         end)
-        (M)
         (S)
         ()
 
     let%expect_test "" =
       let r =
-        M.load_string "filter(c > 0, select([count() as c], ascalar(0)))"
+        load_string conn "filter(c > 0, select([count() as c], ascalar(0)))"
       in
-      M.annotate_type r;
+      annotate_type conn r;
       let ir = I.irgen ~params:[] ~data_fn:"" r in
       Format.printf "%a" I.pp ir;
       [%expect

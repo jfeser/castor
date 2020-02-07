@@ -1,14 +1,9 @@
 open! Core
 open Abslayout
+open Abslayout_load
 open Test_util
 
-module C = struct
-  let conn = Db.create "postgresql:///tpch_1k"
-
-  let simplify = None
-end
-
-module M = Abslayout_db.Make (C)
+let conn = Db.create "postgresql:///tpch_1k"
 
 let pp, _ = mk_pp ~pp_name:Name.pp_with_stage ()
 
@@ -38,7 +33,7 @@ let%expect_test "" =
                                    ascalar(k.o_comment)],
                              cross)))
     |}
-    |> M.load_string
+    |> load_string conn
   in
   Format.printf "%a@." pp_with_refcount r;
   [%expect
@@ -67,7 +62,7 @@ let%expect_test "" =
       select([f], atuple([atuple([ascalar(0 as f), ascalar(1 as g)], cross),
                           atuple([ascalar(2 as g), ascalar(3 as f)], cross)], concat))
     |}
-    |> M.load_string
+    |> load_string conn
   in
   Format.printf "%a@." pp_with_refcount r;
   [%expect
@@ -84,7 +79,7 @@ let%expect_test "" =
     {|
       alist(lineitem as k2, select([l_shipmode], atuple([ascalar(k2.l_shipmode), ascalar(0)], cross)))
     |}
-    |> M.load_string
+    |> load_string conn
   in
   Format.printf "%a@." pp_with_refcount r;
   [%expect

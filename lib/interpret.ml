@@ -319,11 +319,6 @@ let eval { db; params } r =
     | As (_, r) -> eval ctx r
     | _ -> failwith ""
   in
-  let module M = Abslayout_db.Make (struct
-    let conn = db
-
-    let simplify = None
-  end) in
   (* Or_error.try_with ~backtrace:true (
    *   fun () -> *)
   Ok (eval (Ctx.of_map params) r)

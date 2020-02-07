@@ -5,19 +5,19 @@ open Test_util
    true if the log was modified, false otherwise. *)
 let process_layout_log log =
   let map_entry_regex = Str.regexp {|Map entry (\([0-9]+\) => [0-9]+)|} in
-  let log' =
-    Str.global_replace map_entry_regex {|Map entry (\1 => XXX)|} log
-  in
+  let log' = Str.global_replace map_entry_regex {|Map entry (\1 => XXX)|} log in
   (log', not String.(log = log'))
 
 let run_test layout_str =
+  let open Abslayout_load in
+  let open Abslayout_type in
+  let conn = Lazy.force test_db_conn in
+
   let layout_file = Filename.temp_file "layout" "bin" in
   let layout_log_file = Filename.temp_file "layout" "txt" in
-  let (module M), (module S), _, _ =
-    Setup.make_modules ~layout_file:layout_log_file ()
-  in
-  let layout = M.load_string layout_str in
-  M.annotate_type layout;
+  let (module S), _, _ = Setup.make_modules ~layout_file:layout_log_file () in
+  let layout = load_string conn layout_str in
+  annotate_type conn layout;
   let type_ = Meta.(find_exn layout type_) in
   let _, len = S.serialize layout_file layout in
   let buf_str = In_channel.read_all layout_file |> String.escaped in

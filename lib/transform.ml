@@ -5,7 +5,7 @@ module A = Abslayout
 
 module Config = struct
   module type S = sig
-    include Abslayout_db.Config.S
+    val conn : Db.t
 
     val check_transforms : bool
 
@@ -14,8 +14,6 @@ module Config = struct
 end
 
 module Make (Config : Config.S) () = struct
-  module M = Abslayout_db.Make (Config)
-
   type t = { name : string; f : A.t -> A.t list } [@@deriving sexp]
 
   let fresh = Global.fresh

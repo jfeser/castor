@@ -29,12 +29,7 @@ module type S = sig
   val pp : Formatter.t -> ir_module -> unit
 end
 
-module Make
-    (Config : Config.S)
-    (Abslayout_db : Abslayout_db.S)
-    (Serialize : Serialize.S)
-    () =
-struct
+module Make (Config : Config.S) (Serialize : Serialize.S) () = struct
   let iters = ref []
 
   let add_iter i = iters := i :: !iters

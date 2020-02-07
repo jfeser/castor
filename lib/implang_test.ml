@@ -2,14 +2,18 @@ open! Core
 open Test_util
 
 let run_test ?(params = []) ?(print_code = true) layout_str =
-  let (module M), (module S), (module I), (module C) =
+  let (module S), (module I), (module C) =
     Setup.make_modules ~code_only:true ()
   in
+  let open Abslayout_load in
+  let open Abslayout_type in
+  let conn = Lazy.force test_db_conn in
+
   try
     let param_names = List.map params ~f:(fun (n, _) -> n) in
     let sparams = Set.of_list (module Name) param_names in
-    let layout = M.load_string ~params:sparams layout_str in
-    M.annotate_type layout;
+    let layout = load_string conn ~params:sparams layout_str in
+    annotate_type conn layout;
     let type_ = Meta.(find_exn layout type_) in
     print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] type_));
     let ir = I.irgen ~params:param_names ~data_fn:"/tmp/buf" layout in

@@ -1,18 +1,14 @@
 open! Core
 open Sql
 open Test_util
+open Abslayout_load
 
 let run_test s =
   Logs.Src.set_level src (Some Debug);
-  let module Config = struct
-    let conn = Lazy.force test_db_conn
-
-    let simplify = None
-  end in
-  let module M = Abslayout_db.Make (Config) in
-  let r = M.load_string s in
+  let conn = Lazy.force test_db_conn in
+  let r = load_string conn s in
   let sql_str = of_ralgebra r |> to_string_hum in
-  ( match Db.check Config.conn sql_str with
+  ( match Db.check conn sql_str with
   | Ok () -> ()
   | Error e -> print_endline (Error.to_string_hum e) );
   print_endline sql_str;
@@ -287,8 +283,8 @@ let%expect_test "hash-idx" =
 
 let%expect_test "ordered-idx" =
   run_test
-    "aorderedidx(select([f], r1) as k, select([g], filter(f = k.f, r1)), \
-     null, null)";
+    "aorderedidx(select([f], r1) as k, select([g], filter(f = k.f, r1)), null, \
+     null)";
   [%expect
     {|
     SELECT
@@ -338,8 +334,7 @@ let%expect_test "depjoin-agg" =
 |}]
 
 let%expect_test "depjoin-agg" =
-  run_test
-    "depjoin(select([f, g], r) as k, select([count(), f], ascalar(k.f)))";
+  run_test "depjoin(select([f, g], r) as k, select([count(), f], ascalar(k.f)))";
   [%expect
     {|
     SELECT

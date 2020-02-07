@@ -3,14 +3,15 @@ open Test_util
 open Implang_opt
 
 let run_test ?(params = []) layout_str opt_func =
-  let (module M), (module S), (module I), _ =
-    Setup.make_modules ~code_only:true ()
-  in
+  let open Abslayout_load in
+  let open Abslayout_type in
+  let conn = Lazy.force test_db_conn in
+  let (module S), (module I), _ = Setup.make_modules ~code_only:true () in
   let param_names = List.map params ~f:(fun (n, _) -> n) in
   let layout =
-    M.load_string ~params:(Set.of_list (module Name) param_names) layout_str
+    load_string conn ~params:(Set.of_list (module Name) param_names) layout_str
   in
-  M.annotate_type layout;
+  annotate_type conn layout;
   I.irgen ~params:param_names ~data_fn:"/tmp/buf" layout
   |> opt_func
   |> I.pp Caml.Format.std_formatter

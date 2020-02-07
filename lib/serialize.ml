@@ -1,16 +1,19 @@
 open! Core
 open Collections
 module A = Abslayout
+open Abslayout_fold
 
 module Config = struct
   module type S = sig
     val layout_file : string option
+
+    val conn : Db.t
   end
 end
 
 module type S = Serialize_intf.S
 
-module Make (Config : Config.S) (M : Abslayout_db.S) = struct
+module Make (Config : Config.S) = struct
   open Config
 
   let debug = Option.is_some layout_file
@@ -247,7 +250,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
 
   class serialize_fold =
     object (self : 'self)
-      inherit [_] M.abslayout_fold
+      inherit [_] abslayout_fold
 
       method empty _ = new logged_serializer ()
 
@@ -277,7 +280,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           main#log "List body" ~f:(fun () -> body#write_into main);
           main
         in
-        M.Fold.(Fold { init; fold; extract })
+        Fold.(Fold { init; fold; extract })
 
       method tuple' t =
         let init = new logged_serializer () in
@@ -303,7 +306,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           main#log "Tuple body" ~f:(fun () -> body#write_into main);
           main
         in
-        M.Fold.(Fold { init; fold; extract })
+        Fold.(Fold { init; fold; extract })
 
       method tuple meta _ =
         let t = Meta.Direct.find_exn meta Meta.type_ in
@@ -316,7 +319,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           | FuncT ([ lhs_t; rhs_t ], _) -> (lhs_t, rhs_t)
           | _ -> assert false
         in
-        M.Fold.run
+        Fold.run
           (self#tuple' (TupleT ([ lhs_t; rhs_t ], { kind = `Cross })))
           [ lhs; rhs ]
 
@@ -379,7 +382,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           main#log "Table values" ~f:(fun () -> vs#write_into main);
           main
         in
-        M.Fold.(Fold { init; fold; extract })
+        Fold.(Fold { init; fold; extract })
 
       method ordered_idx meta _ =
         let t = Meta.Direct.(find_exn meta Meta.type_) in
@@ -443,7 +446,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
           main#log "Ordered idx body" ~f:(fun () -> vals#write_into main);
           main
         in
-        M.Fold.(Fold { init; fold; extract })
+        Fold.(Fold { init; fold; extract })
 
       method serialize_null (s : logged_serializer) t =
         let hdr = make_header t in
@@ -542,7 +545,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
     let serializer = new logged_serializer () in
     (* Serialize the main layout. *)
     set_pos l serializer#pos;
-    let w = (new serialize_fold)#run l in
+    let w = (new serialize_fold)#run conn l in
     w#write_into serializer;
 
     (* Serialize subquery layouts. *)
@@ -552,7 +555,7 @@ module Make (Config : Config.S) (M : Abslayout_db.S) = struct
 
         method visit_Subquery r =
           set_pos r serializer#pos;
-          let w = (new serialize_fold)#run r in
+          let w = (new serialize_fold)#run conn r in
           w#write_into serializer
       end
     in
