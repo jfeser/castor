@@ -1,0 +1,14 @@
+(library
+ (name castor_test)
+ (libraries
+   castor
+   core
+ )
+ (flags -open Castor)
+ (inline_tests)
+ (preprocess
+  (pps
+    ppx_sexp_conv
+    ppx_compare
+    ppx_expect
+)))

@@ -31,5 +31,6 @@
  (preprocess
   (pps ppx_sexp_conv ppx_compare ppx_hash ppx_expect ppx_let visitors.ppx
     ppx_variants_conv lwt_ppx))
- (private_modules abslayout_test codegen_test implang_opt_test implang_test
-   serialize_test type_tests sql_test))
+ ; (private_modules abslayout_test codegen_test implang_opt_test implang_test
+ ;                  serialize_test type_tests sql_test)
+)
