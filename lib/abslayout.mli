@@ -1,7 +1,5 @@
 open! Core
 open Collections
-module Binop = Ast.Binop
-module Unop = Ast.Unop
 
 type tuple = Ast.tuple = Cross | Zip | Concat
 [@@deriving compare, hash, sexp_of]

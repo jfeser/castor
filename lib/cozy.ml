@@ -357,7 +357,7 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
             | Month -> sprintf "month(%s)" pred
             | ExtractY -> sprintf "extracty(%s)" pred
             | _ ->
-                Error.create "Unimplemented unop" op [%sexp_of: Unop.t]
+                Error.create "Unimplemented unop" op [%sexp_of: Pred.Unop.t]
                 |> Error.raise
           in
           (queries, pred)

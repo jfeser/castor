@@ -1018,7 +1018,8 @@ module Make (Config : Config.S) () = struct
         inherit [_] Util.list_monoid
 
         method! visit_Binop ps op arg1 arg2 =
-          if [%compare.equal: A.Binop.t] op Eq then (arg1, arg2) :: ps else ps
+          if [%compare.equal: Pred.Binop.t] op Eq then (arg1, arg2) :: ps
+          else ps
       end
     in
     visitor#visit_t [] r

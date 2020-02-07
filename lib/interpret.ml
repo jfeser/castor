@@ -184,7 +184,8 @@ let eval { db; params } r =
         | ExtractM -> Int (to_date (e p) |> Date.month |> Month.to_int)
         | ExtractD -> Int (to_date (e p) |> Date.day)
         | _ ->
-            Error.(create "Unexpected operator" op [%sexp_of: Unop.t] |> raise)
+            Error.(
+              create "Unexpected operator" op [%sexp_of: Pred.Unop.t] |> raise)
         )
     | Binop (op, p1, p2) -> (
         match op with

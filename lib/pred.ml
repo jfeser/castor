@@ -1,4 +1,6 @@
 open! Core
+module Binop = Ast.Binop
+module Unop = Ast.Unop
 
 module T = struct
   type t = Ast.pred =
@@ -9,8 +11,8 @@ module T = struct
     | Bool of bool
     | String of string
     | Null of Prim_type.t option
-    | Unop of Ast.Unop.t * t
-    | Binop of Ast.Binop.t * t * t
+    | Unop of Unop.t * t
+    | Binop of Binop.t * t * t
     | As_pred of (t * string)
     | Count
     | Row_number

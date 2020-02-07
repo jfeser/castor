@@ -35,11 +35,11 @@ let load_params fn query =
   params
 
 let unsub ps r =
+  let open Pred in
   let params =
     List.map ps ~f:(fun (k, v) ->
         let name, type_, _ = Util.param_of_string k in
         let v =
-          let open Pred in
           match type_ with
           | DateT _ -> Date (Date.of_string v)
           | StringT _ -> String v
@@ -78,11 +78,11 @@ class conv_sql db =
     method alias = sprintf "%s_%s"
 
     method unop =
-      let open Unop in
+      let open Pred.Unop in
       function `Not -> Not | `Day -> Day | `Year -> Year
 
     method binop =
-      let open Binop in
+      let open Pred.Binop in
       function
       | `And -> And
       | `Or -> Or
@@ -111,6 +111,7 @@ class conv_sql db =
       match f with Some e -> filter (self#expr e) q | None -> q
 
     method source (s, alias) =
+      let open Pred in
       let q =
         match s with
         | `Subquery s -> self#query s
@@ -126,7 +127,7 @@ class conv_sql db =
           let select_list =
             Schema.schema q
             |> List.map ~f:(fun n ->
-                   As_pred (Name n, sprintf "%s_%s" a (Name.name n)))
+                   as_pred (name n, sprintf "%s_%s" a (Name.name n)))
           in
           select select_list q
       | None -> q
@@ -157,6 +158,7 @@ class conv_sql db =
       Name.create n
 
     method expr e =
+      let open Pred in
       match e with
       | Sql.Value v -> (
           match v with
@@ -179,26 +181,25 @@ class conv_sql db =
           in
           to_pred branches
       | Fun (op, args) -> (
-          let open Pred in
           match (op, args) with
           | `In, [ x; Sequence vs ] ->
               let x = self#expr x in
               let rec to_pred = function
                 | [] -> Bool false
-                | [ v ] -> binop (Eq, x, self#expr v)
-                | v :: vs -> binop (Or, binop (Eq, x, self#expr v), to_pred vs)
+                | [ v ] -> Infix.(x = self#expr v)
+                | v :: vs -> Infix.(x = self#expr v || to_pred vs)
               in
               to_pred vs
-          | `IsNull, [ x ] -> binop (Eq, self#expr x, Null None)
+          | `IsNull, [ x ] -> Infix.(self#expr x = null None)
           | `In, [ x; Subquery (s, _) ] ->
               let q = self#subquery s in
               let f = Schema.schema q |> List.hd_exn in
-              Exists (filter (binop (Eq, self#expr x, Name f)) q)
+              exists @@ filter Infix.(self#expr x = name f) q
           | (#castor_binop as op), [ e; e' ] ->
-              binop (self#binop op, self#expr e, self#expr e')
+              binop (self#binop op) (self#expr e) (self#expr e')
           | #castor_binop, _ -> failwith "Expected two arguments"
-          | `Neq, [ e; e' ] -> unop (Not, binop (Eq, self#expr e, self#expr e'))
-          | (#castor_unop as op), [ e ] -> unop (self#unop op, self#expr e)
+          | `Neq, [ e; e' ] -> Infix.(not (self#expr e = self#expr e'))
+          | (#castor_unop as op), [ e ] -> unop (self#unop op) (self#expr e)
           | (`Neq | #castor_unop), _ -> failwith "Expected one argument"
           | `Count, _ -> Count
           | `Min, [ e ] -> Min (self#expr e)
@@ -211,8 +212,7 @@ class conv_sql db =
               failwith "Unexpected aggregate arguments"
           | `Between, [ e1; e2; e3 ] ->
               let e2 = self#expr e2 in
-              binop
-                (And, binop (Le, self#expr e1, e2), binop (Le, e2, self#expr e3))
+              Infix.(self#expr e1 <= e2 && e2 <= self#expr e3)
           | #Sql.bit_op, _ -> failwith "Bit ops not supported"
           | op, _ ->
               Error.create "Unsupported op" op [%sexp_of: Sql.op] |> Error.raise

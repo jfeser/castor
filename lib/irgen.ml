@@ -210,8 +210,8 @@ module Make (Config : Config.S) () = struct
   and gen_pred ctx pred b =
     let open Builder in
     let rec gen_pred p b =
-      let open A.Binop in
-      let open A.Unop in
+      let open Pred.Binop in
+      let open Pred.Unop in
       match p with
       | Pred.Null _ -> Implang.Null
       | Int x -> Int x
