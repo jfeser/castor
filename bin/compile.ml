@@ -3,6 +3,7 @@ open Castor
 open Collections
 open Abslayout_load
 open Abslayout_type
+open Abslayout_visitors
 
 let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
   Logs.info (fun m ->
@@ -28,6 +29,7 @@ let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
   let ralgebra =
     let params = Set.of_list (module Name) params in
     load_string ~params db (In_channel.input_all ch)
+    |> map_meta (fun _ -> Meta.empty ())
   in
   annotate_type db ralgebra;
   C.compile ~gprof ~params ?out_dir ?layout_log:layout_file CConfig.conn

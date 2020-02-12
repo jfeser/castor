@@ -10,7 +10,10 @@ let run_test ?(params = []) ?(print_code = true) layout_str =
   try
     let param_names = List.map params ~f:(fun (n, _) -> n) in
     let sparams = Set.of_list (module Name) param_names in
-    let layout = load_string conn ~params:sparams layout_str in
+    let layout =
+      load_string conn ~params:sparams layout_str
+      |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ())
+    in
     annotate_type conn layout;
     let type_ = Meta.(find_exn layout type_) in
     print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] type_));

@@ -1,8 +1,10 @@
 open! Core
 open Printf
 open Collections
+open Ast
+open Abslayout_visitors
 module A = Abslayout
-open Pred
+module P = Pred.Infix
 
 module Config = struct
   module type S = sig
@@ -15,7 +17,7 @@ module Config = struct
 end
 
 module Make (Config : Config.S) () = struct
-  type t = { name : string; f : A.t -> A.t list } [@@deriving sexp]
+  type t = { name : string; f : Ast.t -> Ast.t list } [@@deriving sexp]
 
   let fresh = Global.fresh
 
@@ -43,8 +45,8 @@ module Make (Config : Config.S) () = struct
     printf "Running %s\n" t.name;
     let rs =
       t.f r
-      |> List.dedup_and_sort ~compare:[%compare: Abslayout.t]
-      |> List.filter ~f:(fun r' -> not ([%compare.equal: Abslayout.t] r r'))
+      |> List.dedup_and_sort ~compare:[%compare: Ast.t]
+      |> List.filter ~f:(fun r' -> not ([%compare.equal: Ast.t] r r'))
     in
     let len = List.length rs in
     if len > 0 then (
@@ -80,10 +82,10 @@ module Make (Config : Config.S) () = struct
   let replace_rel rel new_rel r =
     let visitor =
       object
-        inherit [_] A.endo
+        inherit [_] endo
 
         method! visit_Relation () r' { r_name = rel'; _ } =
-          if String.(rel = rel') then new_rel.A.node else r'
+          if String.(rel = rel') then new_rel.node else r'
       end
     in
     visitor#visit_t () r
@@ -113,12 +115,11 @@ module Make (Config : Config.S) () = struct
         (function
         | { node = GroupBy (ps, key, r); _ } as rr when no_params rr ->
             let key_name = Fresh.name fresh "k%d" in
-            let key_preds = List.map key ~f:Pred.name in
+            let key_preds = List.map key ~f:P.name in
             let filter_pred =
               List.map key ~f:(fun n ->
-                  Pred.Binop
-                    (Eq, Name n, Name (Name.copy n ~scope:(Some key_name))))
-              |> List.fold_left ~init:(Pred.Bool true) ~f:(fun acc p ->
+                  Binop (Eq, Name n, Name (Name.copy n ~scope:(Some key_name))))
+              |> List.fold_left ~init:(Bool true) ~f:(fun acc p ->
                      Binop (And, acc, p))
             in
             [
@@ -153,11 +154,11 @@ module Make (Config : Config.S) () = struct
                 let new_key = List.filter key ~f:(fun k' -> Name.O.(k <> k')) in
                 let new_ps =
                   List.filter ps ~f:(fun p ->
-                      not ([%compare.equal: pred] p (Name k)))
+                      not ([%compare.equal: Pred.t] p (Name k)))
                   |> List.map ~f:(Pred.scoped (schema_exn lhs) scope)
                 in
                 let filter_pred =
-                  Pred.Binop (Eq, Name k, Name (Name.create key_name))
+                  Binop (Eq, Name k, Name (Name.create key_name))
                   |> Pred.scoped (schema_exn lhs) scope
                 in
                 let new_r =
@@ -195,20 +196,21 @@ module Make (Config : Config.S) () = struct
                   sprintf "%s_%s" key_name (Name.to_var n))
             in
             let select_list =
-              List.map2_exn key new_key ~f:(fun n n' ->
-                  Pred.As_pred (Name n, n'))
+              List.map2_exn key new_key ~f:(fun n n' -> As_pred (Name n, n'))
             in
             let lhs = dedup (select select_list r) in
             let filter_pred =
               List.map2_exn key new_key ~f:(fun n n' ->
-                  Pred.Binop (Eq, Name n, Name (Name.create n')))
-              |> List.reduce_exn ~f:(fun acc p -> Pred.Binop (And, acc, p))
+                  Binop (Eq, Name n, Name (Name.create n')))
+              |> List.reduce_exn ~f:(fun acc p -> Binop (And, acc, p))
               |> Pred.scoped (schema_exn lhs) scope
             in
             [ list lhs scope (select ps (filter p (filter filter_pred r))) ]
         | _ -> []);
     }
     |> run_everywhere
+
+  let normal_meta q = map_meta (fun _ -> Meta.empty ()) q
 
   (** Groupby eliminator that works when the grouping key is all direct field
      references. It computes the set of all possible keys, which is often
@@ -230,7 +232,7 @@ module Make (Config : Config.S) () = struct
       name = "elim-groupby-approx";
       f =
         (fun r ->
-          let r = Resolve.resolve ~params:Config.params r in
+          let r = Resolve.resolve ~params:Config.params r |> normal_meta in
           match r with
           | { node = GroupBy (ps, key, r); _ }
             when List.for_all key ~f:(fun n -> Option.is_some (Name.rel n)) ->
@@ -255,7 +257,7 @@ module Make (Config : Config.S) () = struct
                     dedup
                       (select
                          (List.map ks ~f:(fun n ->
-                              Pred.As_pred
+                              As_pred
                                 (Name n, Map.find_exn key_aliases (Name.name n))))
                          (db_relation rel)))
                 |> Map.data
@@ -497,7 +499,6 @@ module Make (Config : Config.S) () = struct
 
   let tf_elim_cmp_filter _ =
     let result_to_list = function Ok x -> [ x ] | Error _ -> [] in
-    let open A in
     {
       name = "elim-cmp-filter";
       f =
@@ -507,7 +508,7 @@ module Make (Config : Config.S) () = struct
            node = Filter (Binop (And, Binop (Ge, p, lb), Binop (Lt, p', ub)), r);
            _;
           }
-            when [%compare.equal: pred] p p' ->
+            when [%compare.equal: Pred.t] p p' ->
               gen_ordered_idx ~lb:(lb, `Closed) ~ub:(ub, `Open) p r
               |> result_to_list
           | { node = Filter (Binop (Ge, p', p), r); _ }
@@ -556,7 +557,7 @@ module Make (Config : Config.S) () = struct
     annotate_orders r1;
     annotate_eq r2;
     annotate_orders r2;
-    [%compare.equal: (pred * order) list]
+    [%compare.equal: (Pred.t * order) list]
       Meta.(find_exn r1 order)
       Meta.(find_exn r2 order)
 
@@ -656,7 +657,6 @@ module Make (Config : Config.S) () = struct
   let tf_push_select _ =
     (* Generate aggregates for collections that act by concatenating their children. *)
     let gen_concat_select_list outer_preds inner_schema =
-      let open Abslayout in
       let visitor =
         object (self : 'a)
           inherit [_] A.mapreduce
@@ -665,7 +665,7 @@ module Make (Config : Config.S) () = struct
 
           method add_agg aggs a =
             match
-              List.find aggs ~f:(fun (_, a') -> [%compare.equal: pred] a a')
+              List.find aggs ~f:(fun (_, a') -> [%compare.equal: Pred.t] a a')
             with
             | Some (n, _) -> (Name n, aggs)
             | None ->
@@ -759,7 +759,7 @@ module Make (Config : Config.S) () = struct
 
           method add_agg aggs a =
             match
-              List.find aggs ~f:(fun (_, a') -> [%compare.equal: pred] a a')
+              List.find aggs ~f:(fun (_, a') -> [%compare.equal: Pred.t] a a')
             with
             | Some (n, _) -> (Name n, aggs)
             | None ->
@@ -995,7 +995,7 @@ module Make (Config : Config.S) () = struct
   let tf_project _ =
     {
       name = "project";
-      f = (fun r -> [ Project.project ~params:Config.params r ]);
+      f = (fun r -> [ Project.project ~params:Config.params r |> normal_meta ]);
     }
 
   let tf_hoist_join_pred _ =
@@ -1090,7 +1090,7 @@ module Make (Config : Config.S) () = struct
 
         method! visit_pred () p =
           let p = super#visit_pred () p in
-          if [%compare.equal: A.pred] p p1 then p2 else p
+          if [%compare.equal: Pred.t] p p1 then p2 else p
       end
     in
     visitor#visit_t () r
@@ -1128,6 +1128,7 @@ module Make (Config : Config.S) () = struct
                  [ As_pred (Name (Name.copy ~scope:None name), fresh_name) ]
                  (db_relation rel))
             |> Resolve.resolve ~params:Config.params
+            |> normal_meta
           in
           let scope = Fresh.name Global.fresh "s%d" in
           let pred =
@@ -1330,10 +1331,10 @@ module Make (Config : Config.S) () = struct
                inherit [_] A.endo
 
                method! visit_Exists () p' r' =
-                 if [%compare.equal: A.t] r r' then new_pred else p'
+                 if [%compare.equal: Ast.t] r r' then new_pred else p'
 
                method! visit_First () p' r' =
-                 if [%compare.equal: A.t] r r' then new_pred else p'
+                 if [%compare.equal: Ast.t] r r' then new_pred else p'
             end)
               #visit_pred () outer_pred
           in

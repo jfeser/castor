@@ -141,12 +141,18 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
                  (pp_option pp_upper_bound) ub))
           oi_lookup
     | As (n, r) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp r n );
-    Option.iter pp_meta ~f:(fun ppm -> fprintf fmt "#@[<hv 2>%a@]" ppm !meta);
+    Option.iter pp_meta ~f:(fun ppm -> fprintf fmt "#@[<hv 2>%a@]" ppm meta);
     fprintf fmt "@]"
   in
   (pp, pp_pred)
 
-let pp, pp_pred = mk_pp ()
+let pp fmt r =
+  let f, _ = mk_pp () in
+  f fmt r
+
+let pp_pred fmt r =
+  let _, f = mk_pp () in
+  f fmt r
 
 let pp_small fmt x =
   let max = Format.pp_get_max_boxes fmt () in

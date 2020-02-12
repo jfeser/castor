@@ -1,6 +1,13 @@
 open! Core
 open Collections
-open Abslayout
+open Ast
+open Schema
+open Abslayout_visitors
+open Abslayout_infix
+module A = Abslayout
+module P = Pred.Infix
+
+module C = (val constructors (fun () -> ()))
 
 let src =
   let src = Logs.Src.create "sql-test" in
@@ -9,21 +16,27 @@ let src =
 
 module LogT = (val Logs.src_log src : Logs.LOG)
 
-type select_entry = { pred : pred; alias : string; cast : Prim_type.t option }
+type sql_pred = unit annot pred [@@deriving compare, sexp_of]
+
+type select_entry = {
+  pred : sql_pred;
+  alias : string;
+  cast : Prim_type.t option;
+}
 [@@deriving compare, sexp_of]
 
 type spj = {
   select : select_entry list;
   distinct : bool;
-  conds : pred list;
+  conds : sql_pred list;
   relations :
     ( [ `Subquery of t * string
       | `Table of Relation.t * string
-      | `Series of Pred.t * Pred.t * string ]
+      | `Series of sql_pred * sql_pred * string ]
     * [ `Left | `Lateral ] )
     list;
-  order : (pred * order) list;
-  group : pred list;
+  order : (sql_pred * order) list;
+  group : sql_pred list;
   limit : int option;
 }
 
@@ -61,7 +74,7 @@ let to_limit = function Union_all _ -> None | Query q -> q.limit
 
 let has_aggregates sql =
   match
-    to_select sql |> List.map ~f:(fun { pred = p; _ } -> p) |> select_kind
+    to_select sql |> List.map ~f:(fun { pred = p; _ } -> p) |> A.select_kind
   with
   | `Scalar -> false
   | `Agg -> true
@@ -111,7 +124,7 @@ let join schema1 schema2 sql1 sql2 pred =
 let order_by of_ralgebra key r =
   let spj = to_spj (of_ralgebra r) in
   let key =
-    let ctx = make_ctx (schema_exn r) spj.select in
+    let ctx = make_ctx (schema r) spj.select in
     let preds = List.map key ~f:(fun (p, o) -> (Pred.subst ctx p, o)) in
     (* Check that all predicates are scalar *)
     let non_scalar =
@@ -139,7 +152,7 @@ let scoped_names ns p =
 
 let select ?groupby of_ralgebra ps r =
   let sql = of_ralgebra r in
-  let kind = select_kind ps in
+  let kind = A.select_kind ps in
   let spj =
     (* Creating a subquery is always safe, but we want to avoid it if possible. We
        don't need a subquery if:
@@ -151,7 +164,7 @@ let select ?groupby of_ralgebra ps r =
           ( kind,
             to_select sql
             |> List.map ~f:(fun { pred = p; _ } -> p)
-            |> select_kind )
+            |> A.select_kind )
         with
         | `Scalar, _ -> false
         | `Agg, `Scalar | `Agg, `Agg -> true
@@ -169,7 +182,7 @@ let select ?groupby of_ralgebra ps r =
     (* Names that must have come from an outer scope because they are not in the
        schema of the child. *)
     let scoped =
-      List.map ps ~f:(scoped_names (schema_exn r |> Set.of_list (module Name)))
+      List.map ps ~f:(scoped_names (schema r |> Set.of_list (module Name)))
       |> Set.union_list (module Name)
     in
     if Poly.(kind = `Agg) && not (Set.is_empty scoped) then
@@ -180,7 +193,7 @@ let select ?groupby of_ralgebra ps r =
       create_subquery (Query { spj with select = spj.select @ extra_fields })
     else spj
   in
-  let sctx = make_ctx (schema_exn r) spj.select in
+  let sctx = make_ctx (schema r) spj.select in
   let fields = List.map ps ~f:(fun p -> p |> Pred.subst sctx |> create_entry) in
   let spj = { spj with select = fields } in
   let spj =
@@ -201,7 +214,7 @@ let filter of_ralgebra pred r =
   (* The where clause is evaluated before the select clause so we can't use the
      aliases in the select clause here. *)
   let pred =
-    let ctx = make_ctx (schema_exn r) spj.select in
+    let ctx = make_ctx (schema r) spj.select in
     Pred.subst ctx pred
   in
   Query { spj with conds = pred :: spj.conds }
@@ -213,12 +226,12 @@ let dep_join of_ralgebra q1 scope q2 =
     (* Create a context that maps the names emitted by q1 (scoped) to the
        names emitted by the q1 sql. *)
     let ctx =
-      List.zip_exn (schema_exn q1 |> Schema.scoped scope) sql1_names
+      List.zip_exn (schema q1 |> Schema.scoped scope) sql1_names
       |> List.map ~f:(fun (n, n') ->
-             (n, Pred.name Name.(create ?type_:(Name.type_ n) n')))
+             (n, P.name Name.(create ?type_:(Name.type_ n) n')))
       |> Map.of_alist_exn (module Name)
     in
-    subst ctx q2
+    A.subst ctx q2
   in
   let sql2 = Query { (of_ralgebra q2 |> to_spj) with order = [] } in
   let sql2_names = to_schema sql2 in
@@ -235,7 +248,7 @@ let dep_join of_ralgebra q1 scope q2 =
        select_list)
 
 let of_ralgebra r =
-  let rec f r =
+  let rec f (r : unit annot) =
     match r.node with
     | As _ -> failwith "Unexpected as."
     | Range (p, p') ->
@@ -249,7 +262,7 @@ let of_ralgebra r =
         let tbl_alias = tbl ^ Fresh.name Global.fresh "_%d" in
         (* Add table alias to all fields to generate a select list. *)
         let select_list =
-          List.map (schema_exn r) ~f:(fun n ->
+          List.map (schema r) ~f:(fun n ->
               create_entry (Name (Name.copy n ~scope:(Some tbl_alias))))
         in
         let relations = [ (`Table (rel, tbl_alias), `Left) ] in
@@ -258,29 +271,29 @@ let of_ralgebra r =
     | OrderBy { key; rel = r } -> order_by f key r
     | Select (fs, r) -> select f fs r
     | DepJoin { d_lhs; d_rhs; d_alias } -> dep_join f d_lhs d_alias d_rhs
-    | Join { pred; r1; r2 } ->
-        join (schema_exn r1) (schema_exn r2) (f r1) (f r2) pred
+    | Join { pred; r1; r2 } -> join (schema r1) (schema r2) (f r1) (f r2) pred
     | GroupBy (ps, key, r) ->
-        let key = List.map ~f:Pred.name key in
+        let key = List.map ~f:P.name key in
         select ~groupby:key f ps r
     | ATuple ([ r ], (Cross | Concat)) -> f r
     | ATuple (r :: rs, Cross) ->
         let q1 = r in
-        let q2 = tuple rs Cross in
-        join (schema_exn q1) (schema_exn q2) (f q1) (f q2) (Bool true)
+        let q2 = C.tuple rs Cross in
+        join (schema q1) (schema q2) (f q1) (f q2) (Bool true)
     | ATuple (rs, Concat) -> Union_all (List.map ~f:(fun r -> to_spj (f r)) rs)
     | ATuple ([], _) | AEmpty -> Query (create_query ~limit:0 [])
     | AScalar p -> Query (create_query [ create_entry p ])
     | ATuple (_, Zip) ->
-        Error.(create "Unsupported." r [%sexp_of: Abslayout.t] |> raise)
-    | AList (rk, rv) -> f (list_to_depjoin rk rv)
-    | AHashIdx h -> f (hash_idx_to_depjoin h)
-    | AOrderedIdx (rk, rv, m) -> f (ordered_idx_to_depjoin rk rv m)
+        Error.(create "Unsupported." r [%sexp_of: _ annot] |> raise)
+    | AList (rk, rv) -> f @@ C.dep_join' (A.list_to_depjoin rk rv)
+    | AHashIdx h -> f @@ C.dep_join' (A.hash_idx_to_depjoin h)
+    | AOrderedIdx (rk, rv, m) ->
+        f @@ C.dep_join' (A.ordered_idx_to_depjoin rk rv m)
   in
-  ensure_alias r |> f
+  let r = A.ensure_alias r |> map_meta (fun _ -> ()) in
+  f r
 
 let rec pred_to_sql p =
-  let open Pred in
   let p2s = pred_to_sql in
   match p with
   | As_pred (p, _) -> p2s p
@@ -343,7 +356,7 @@ and spj_to_sql { select; distinct; order; group; relations; conds; limit } =
     (* If there is no grouping key and there are aggregates in the select list,
        then we need to deal with any non-aggregates in the select. *)
     if List.is_empty group then
-      match select_kind (List.map select ~f:(fun { pred = p; _ } -> p)) with
+      match A.select_kind (List.map select ~f:(fun { pred = p; _ } -> p)) with
       | `Agg ->
           List.map select ~f:(fun ({ pred = p; _ } as entry) ->
               {

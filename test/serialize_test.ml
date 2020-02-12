@@ -15,7 +15,10 @@ let run_test layout_str =
 
   let layout_file = Filename.temp_file "layout" "bin" in
   let layout_log_file = Filename.temp_file "layout" "txt" in
-  let layout = load_string conn layout_str in
+  let layout =
+    load_string conn layout_str
+    |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ())
+  in
   annotate_type conn layout;
   let type_ = Meta.(find_exn layout type_) in
   let _, len =

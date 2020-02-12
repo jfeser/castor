@@ -19,9 +19,9 @@ RPAREN LSBRAC RSBRAC COLON DOT COMMA EOF AEMPTY ASCALAR ATUPLE ALIST AHASHIDX
 AORDEREDIDX NULL ORDERBY IF THEN ELSE DATEKW EXISTS SUBSTRING ROW_NUMBER RANGE
 
 %start <Ast.t> ralgebra_eof
-%start <Ast.pred> expr_eof
+%start <Ast.t Ast.pred> expr_eof
 %start <Name.t> name_eof
-%start <Ast.pred> value_eof
+%start <Ast.t Ast.pred> value_eof
 %start <Ast.Param.t> param_eof
 %%
 

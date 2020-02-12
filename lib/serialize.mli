@@ -1,5 +1,5 @@
 open! Core
-open Abslayout
+open Ast
 
 val serialize : ?layout_file:string -> Db.t -> string -> t -> t * int
 (** Serialize a layout to a binary format.

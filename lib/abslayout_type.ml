@@ -1,12 +1,15 @@
 open! Core
 open Collections
+open Ast
 open Abslayout
 open Abslayout_fold
 module T = Type
 
+let drop_meta q = Abslayout_visitors.map_meta (fun _ -> ()) q
+
 (** Returns the least general type of a layout. *)
 let rec least_general_of_layout r =
-  match r.Abslayout.node with
+  match r.node with
   | Range _ -> T.FuncT ([], `Width 1)
   | Select (ps, r') | GroupBy (ps, _, r') ->
       T.FuncT ([ least_general_of_layout r' ], `Width (List.length ps))
@@ -44,9 +47,11 @@ let rec least_general_of_layout r =
   | AOrderedIdx (_, _, { oi_key_layout = None; _ }) | Relation _ ->
       failwith "Layout is still abstract."
 
+let least_general_of_layout r = least_general_of_layout @@ drop_meta r
+
 (** Returns a layout type that is general enough to hold all of the data. *)
-class type_fold =
-  object
+class ['self] type_fold =
+  object (_ : 'self)
     inherit [_] abslayout_fold
 
     method! select _ (exprs, _) t = T.FuncT ([ t ], `Width (List.length exprs))
@@ -154,15 +159,7 @@ class type_fold =
 
 let type_of ?timeout conn r =
   Log.info (fun m -> m "Computing type of abstract layout.");
-  let type_ =
-    try (new type_fold)#run ?timeout conn r
-    with exn ->
-      let trace = Backtrace.Exn.most_recent () in
-      Logs.err (fun m ->
-          m "Type computation failed: %a@,%s" Exn.pp exn
-            (Backtrace.to_string trace));
-      raise exn
-  in
+  let type_ = (new type_fold)#run ?timeout conn r in
   Log.info (fun m ->
       m "The type is: %s" (Sexp.to_string_hum ([%sexp_of: Type.t] type_)));
   type_
@@ -188,10 +185,8 @@ let annotate_type conn r =
         match List.iter2 rs ts ~f:annot with
         | Ok () -> ()
         | Unequal_lengths ->
-            Error.(
-              create "Mismatched tuple type." (r, t)
-                [%sexp_of: Abslayout.t * T.t]
-              |> raise) )
+            Error.create "Mismatched tuple type." (r, t) [%sexp_of: Ast.t * T.t]
+            |> Error.raise )
     | DepJoin { d_lhs; d_rhs; _ }, FuncT ([ t1; t2 ], _) ->
         annot d_lhs t1;
         annot d_rhs t2
@@ -201,7 +196,7 @@ let annotate_type conn r =
         | AHashIdx _ | AOrderedIdx _ | Range _ ),
         ( NullT | IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | TupleT _
         | ListT _ | HashIdxT _ | OrderedIdxT _ | FuncT _ | EmptyT ) ) ->
-        Error.create "Unexpected type." (r, t) [%sexp_of: Abslayout.t * t]
+        Error.create "Unexpected type." (r, t) [%sexp_of: Ast.t * t]
         |> Error.raise
   in
   annot r (type_of conn r);

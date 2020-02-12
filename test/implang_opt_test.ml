@@ -10,6 +10,7 @@ let run_test ?(params = []) layout_str opt_func =
   let param_names = List.map params ~f:(fun (n, _) -> n) in
   let layout =
     load_string conn ~params:(Set.of_list (module Name) param_names) layout_str
+    |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ())
   in
   annotate_type conn layout;
   let layout, len = Serialize.serialize conn "/tmp/buf" layout in
@@ -119,7 +120,9 @@ let%test_module _ =
     let%expect_test "" =
       let r =
         load_string conn "filter(c > 0, select([count() as c], ascalar(0)))"
+        |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ())
       in
+
       annotate_type conn r;
       let ir = I.irgen ~params:[] ~len:0 r in
       Format.printf "%a" I.pp ir;

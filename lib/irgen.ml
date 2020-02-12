@@ -1,6 +1,8 @@
 open! Core
+open Ast
 open Collections
 open Implang
+open Schema
 module A = Abslayout
 
 type ir_module = {
@@ -24,7 +26,7 @@ module Config = struct
 end
 
 module type S = sig
-  val irgen : params:Name.t list -> len:int -> Abslayout.t -> ir_module
+  val irgen : params:Name.t list -> len:int -> Ast.t -> ir_module
 
   val pp : Formatter.t -> ir_module -> unit
 end
@@ -76,9 +78,9 @@ module Make (Config : Config.S) () = struct
 
   let type_of_schema s = Prim_type.TupleT (types_of_schema s)
 
-  let type_of_layout l = A.schema_exn l |> type_of_schema
+  let type_of_layout l = schema l |> type_of_schema
 
-  let types_of_layout l = A.schema_exn l |> types_of_schema
+  let types_of_layout l = schema l |> types_of_schema
 
   let list_of_tuple t b =
     match Builder.type_of t b with
@@ -174,15 +176,13 @@ module Make (Config : Config.S) () = struct
       b
 
   let rec scan ctx b r t (cb : callback) =
-    match r.Abslayout.node with
-    | As (_, r) -> scan ctx b r t cb
-    | _ -> scan' ctx b r t cb
+    match r.node with As (_, r) -> scan ctx b r t cb | _ -> scan' ctx b r t cb
 
   and scan' ctx b r t (cb : callback) =
     let ctx = add_layout_start ctx r in
     match (r.node, t) with
-    | Abslayout.AScalar r', Type.IntT t' -> scan_int ctx b r' t' cb
-    | Abslayout.AScalar r', Type.DateT t' -> scan_date ctx b r' t' cb
+    | AScalar r', Type.IntT t' -> scan_int ctx b r' t' cb
+    | AScalar r', Type.DateT t' -> scan_date ctx b r' t' cb
     | AScalar r', FixedT t' -> scan_fixed ctx b r' t' cb
     | AScalar r', BoolT t' -> scan_bool ctx b r' t' cb
     | AScalar r', StringT t' -> scan_string ctx b r' t' cb
@@ -196,9 +196,10 @@ module Make (Config : Config.S) () = struct
     | Select r', FuncT t' -> scan_select ctx b r' t' cb
     | DepJoin r', FuncT t' -> scan_depjoin ctx b r' t' cb
     | (Join _ | GroupBy _ | OrderBy _ | Dedup _ | Relation _ | As _), _ ->
-        Error.create "Unsupported at runtime." r [%sexp_of: A.t] |> Error.raise
+        Error.create "Unsupported at runtime." r [%sexp_of: _ annot]
+        |> Error.raise
     | _, _ ->
-        Error.create "Mismatched type." (r, t) [%sexp_of: A.t * Type.t]
+        Error.create "Mismatched type." (r, t) [%sexp_of: _ annot * Type.t]
         |> Error.raise
 
   and type_of_pred ctx p b =
@@ -213,7 +214,7 @@ module Make (Config : Config.S) () = struct
       let open Pred.Binop in
       let open Pred.Unop in
       match p with
-      | Pred.Null _ -> Implang.Null
+      | Ast.Null _ -> Implang.Null
       | Int x -> Int x
       | String x -> String x
       | Fixed x -> Fixed x
@@ -458,7 +459,7 @@ module Make (Config : Config.S) () = struct
 
   and scan_tuple ctx b ((_, kind) as r) t (cb : callback) =
     match kind with
-    | Abslayout.Cross -> scan_crosstuple ctx b r t cb
+    | Cross -> scan_crosstuple ctx b r t cb
     | Zip -> scan_ziptuple ctx b r t cb
     | Concat -> scan_concattuple ctx b r t cb
 
@@ -498,7 +499,11 @@ module Make (Config : Config.S) () = struct
 
   and scan_hash_idx ctx b r t cb =
     let open Builder in
-    let key_layout = A.h_key_layout r in
+    let key_layout =
+      (* FIXME: The key layout doesn't actually have metadata attached. But we
+         never ask for it, so it's ok for now. *)
+      A.h_key_layout r |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ())
+    in
     let key_type, value_type, m = t in
     let hdr = Header.make_header (HashIdxT t) in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -509,7 +514,7 @@ module Make (Config : Config.S) () = struct
     in
     let key_ctx = Ctx.bind ctx "start" Prim_type.int_t kstart in
     let value_ctx =
-      let key_schema = A.schema_exn key_layout |> Schema.scoped r.A.hi_scope in
+      let key_schema = schema key_layout |> scoped r.hi_scope in
       let ctx =
         Ctx.bind_ctx ctx (Ctx.of_schema key_schema (list_of_tuple key_tuple b))
       in
@@ -585,7 +590,7 @@ module Make (Config : Config.S) () = struct
     let key_tuple = build_var "key" (type_of_layout key_layout) b in
     let key_ctx = Ctx.bind ctx "start" Prim_type.int_t kstart in
     let value_ctx =
-      let key_schema = A.schema_exn key_layout in
+      let key_schema = schema key_layout in
       let ctx =
         Ctx.bind_ctx ctx (Ctx.of_schema key_schema (list_of_tuple key_tuple b))
       in
@@ -631,7 +636,7 @@ module Make (Config : Config.S) () = struct
     in
     scan ctx b child_layout child_type (fun b tup ->
         let ctx =
-          let child_schema = A.schema_exn child_layout in
+          let child_schema = schema child_layout in
           Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
         in
         let cond = gen_pred ctx pred b in
@@ -710,7 +715,7 @@ module Make (Config : Config.S) () = struct
     | `Scalar ->
         scan ctx b child_layout child_type (fun b tup ->
             let ctx =
-              let child_schema = A.schema_exn child_layout in
+              let child_schema = schema child_layout in
               Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
             in
             cb b (List.map args ~f:(fun p -> gen_pred ctx p b)))
@@ -727,7 +732,7 @@ module Make (Config : Config.S) () = struct
           build_defn ~persistent:false "found_tup" (Bool false) b
         in
         let pred_ctx =
-          let child_schema = A.schema_exn child_layout in
+          let child_schema = schema child_layout in
           Ctx.bind_ctx ctx
             (Ctx.of_schema child_schema (list_of_tuple last_tup b))
         in
@@ -782,9 +787,7 @@ module Make (Config : Config.S) () = struct
     debug_print "scanning depjoin" (Int 0) b;
     scan lhs_ctx b d_lhs lhs_t (fun b tup ->
         let rhs_ctx =
-          let lhs_ctx =
-            Ctx.of_schema (A.schema_exn d_lhs |> Schema.scoped d_alias) tup
-          in
+          let lhs_ctx = Ctx.of_schema (schema d_lhs |> scoped d_alias) tup in
           Ctx.bind_ctx rhs_ctx lhs_ctx
         in
         scan rhs_ctx b d_rhs rhs_t cb)

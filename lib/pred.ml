@@ -1,33 +1,13 @@
 open! Core
+open Ast
 open Abslayout_visitors
 module Binop = Ast.Binop
 module Unop = Ast.Unop
 
 module T = struct
-  type t = Ast.pred =
-    | Name of Name.t
-    | Int of int
-    | Fixed of Fixed_point.t
-    | Date of Date.t
-    | Bool of bool
-    | String of string
-    | Null of Prim_type.t option
-    | Unop of Unop.t * t
-    | Binop of Binop.t * t * t
-    | As_pred of (t * string)
-    | Count
-    | Row_number
-    | Sum of t
-    | Avg of t
-    | Min of t
-    | Max of t
-    | If of t * t * t
-    | First of Ast.t
-    | Exists of Ast.t
-    | Substring of t * t * t
-  [@@deriving compare, hash, sexp_of, variants]
+  type t = Ast.t Ast.pred [@@deriving compare, hash, sexp_of]
 
-  let t_of_sexp _ = failwith "Unimplemented"
+  let t_of_sexp _ = assert false
 end
 
 include T
@@ -54,65 +34,65 @@ module Infix = struct
 
   let null = null
 
-  let not = unop Not
+  let not p = unop Not p
 
-  let day = unop Day
+  let day p = unop Day p
 
-  let month = unop Month
+  let month p = unop Month p
 
-  let year = unop Year
+  let year p = unop Year p
 
-  let strlen = unop Strlen
+  let strlen p = unop Strlen p
 
-  let extract_y = unop ExtractY
+  let extract_y p = unop ExtractY p
 
-  let extract_m = unop ExtractM
+  let extract_m p = unop ExtractM p
 
-  let extract_d = unop ExtractD
+  let extract_d p = unop ExtractD p
 
-  let ( + ) = binop Add
+  let ( + ) p p' = binop Add p p'
 
-  let ( - ) = binop Sub
+  let ( - ) p p' = binop Sub p p'
 
-  let ( / ) = binop Div
+  let ( / ) p p' = binop Div p p'
 
-  let ( * ) = binop Mul
+  let ( * ) p p' = binop Mul p p'
 
-  let ( = ) = binop Eq
+  let ( = ) p p' = binop Eq p p'
 
-  let ( < ) = binop Lt
+  let ( < ) p p' = binop Lt p p'
 
-  let ( <= ) = binop Le
+  let ( <= ) p p' = binop Le p p'
 
-  let ( > ) = binop Gt
+  let ( > ) p p' = binop Gt p p'
 
-  let ( >= ) = binop Ge
+  let ( >= ) p p' = binop Ge p p'
 
-  let ( && ) = binop And
+  let ( && ) p p' = binop And p p'
 
-  let ( || ) = binop Or
+  let ( || ) p p' = binop Or p p'
 
-  let ( mod ) = binop Mod
+  let ( mod ) p p' = binop Mod p p'
 
-  let strpos = binop Strpos
+  let strpos p p' = binop Strpos p p'
 
   let as_ a b = As_pred (a, b)
 end
 
-let to_type = Schema.to_type
+let to_type p = Schema.to_type p
 
-let to_type_opt = Schema.to_type_opt
+let to_type_opt p = Schema.to_type_opt p
 
-let to_name = Schema.to_name
+let to_name p = Schema.to_name p
 
-let pp = Abslayout_pp.pp_pred
+let pp fmt p = Abslayout_pp.pp_pred fmt p
 
-let names r = Abslayout_visitors.names_visitor#visit_pred () r
+let names r = (new names_visitor)#visit_pred () r
 
 let normalize p =
   let visitor =
     object (self)
-      inherit [_] Abslayout_visitors.endo
+      inherit [_] endo
 
       method! visit_As_pred () _ (p, _) = self#visit_pred () p
 
@@ -124,8 +104,6 @@ let normalize p =
   match p with
   | As_pred (p', n) -> As_pred (visitor#visit_pred () p', n)
   | p -> visitor#visit_pred () p
-
-let as_pred x = normalize (as_pred x)
 
 let rec conjoin = function
   | [] -> Bool true
@@ -244,9 +222,9 @@ let of_lexbuf_exn lexbuf =
 
 let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
 
-class ['c] subst_visitor ctx =
+class ['s, 'c] subst_visitor ctx =
   object
-    inherit [_] endo
+    inherit ['s] endo
 
     method! visit_Name (_ : 'c) this v =
       match Map.find ctx v with Some x -> x | None -> this
@@ -276,7 +254,7 @@ let scoped names scope p =
   in
   let visitor =
     object
-      inherit [_] subst_visitor ctx
+      inherit [_, _] subst_visitor ctx
 
       method! visit_Exists _ r _ = r
 
@@ -362,12 +340,12 @@ let simplify p =
       method! visit_Binop () op p1 p2 =
         if Poly.(op = Or) then
           disjuncts (binop op p1 p2)
-          |> List.dedup_and_sort ~compare:[%compare: t]
+          |> List.dedup_and_sort ~compare:[%compare: _ annot pred]
           |> List.map ~f:(self#visit_pred ())
           |> disjoin
         else if Poly.(op = And) then
           conjuncts (binop op p1 p2)
-          |> List.dedup_and_sort ~compare:[%compare: t]
+          |> List.dedup_and_sort ~compare:[%compare: _ annot pred]
           |> List.map ~f:(self#visit_pred ())
           |> conjoin
         else super#visit_Binop () op p1 p2
@@ -381,7 +359,7 @@ let min_of p1 p2 = Infix.(if_ (p1 < p2) p1 p2)
 
 let pseudo_bool p = if_ p (Int 1) (Int 0)
 
-let sum_exn = Infix.(List.reduce_exn ~f:( + ))
+let sum_exn ps = List.reduce_exn ~f:Infix.( + ) ps
 
 type a = [ `Leaf of t | `And of b list ]
 

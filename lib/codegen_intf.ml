@@ -1,4 +1,5 @@
 open! Core
+open Ast
 
 module type S = sig
   val codegen : Irgen.ir_module -> Llvm.llmodule
@@ -11,6 +12,6 @@ module type S = sig
     gprof:bool ->
     params:Name.t list ->
     Db.t ->
-    Abslayout.t ->
+    t ->
     string * string
 end

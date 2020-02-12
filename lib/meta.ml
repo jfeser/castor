@@ -1,7 +1,7 @@
 open! Core
 open Ast
 
-type t = Univ_map.t ref [@@deriving sexp_of]
+type t = meta [@@deriving sexp_of]
 
 type 'a key = 'a Univ_map.Key.t
 
@@ -18,7 +18,7 @@ type lexpos = Lexing.position = {
 let empty () = ref Univ_map.empty
 
 let defs =
-  Univ_map.Key.create ~name:"defs" [%sexp_of: (Name.t option * pred) list]
+  Univ_map.Key.create ~name:"defs" [%sexp_of: (Name.t option * Ast.t pred) list]
 
 let pos = Univ_map.Key.create ~name:"pos" [%sexp_of: pos]
 
@@ -30,7 +30,8 @@ let align = Univ_map.Key.create ~name:"align" [%sexp_of: int]
 
 let eq = Univ_map.Key.create ~name:"eq" [%sexp_of: (Name.t * Name.t) list]
 
-let order = Univ_map.Key.create ~name:"order" [%sexp_of: (pred * order) list]
+let order =
+  Univ_map.Key.create ~name:"order" [%sexp_of: (Ast.t pred * order) list]
 
 let type_ = Univ_map.Key.create ~name:"type" [%sexp_of: Type.t]
 

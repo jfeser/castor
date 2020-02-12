@@ -1,9 +1,11 @@
 open! Core
 open Collections
+open Ast
 open Abslayout
 open Abslayout_load
 open Abslayout_fold
 open Test_util
+module P = Pred.Infix
 
 let conn = Lazy.force test_db_conn
 
@@ -13,8 +15,11 @@ let run_print_test ?params query =
       Option.map params ~f:(fun p ->
           List.map p ~f:(fun (n, _) -> n) |> Set.of_list (module Name))
     in
-    let layout = load_string ?params:sparams conn query in
-    print_fold#run conn layout |> List.iter ~f:print_endline
+    let layout =
+      load_string ?params:sparams conn query
+      |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ())
+    in
+    (new print_fold)#run conn layout |> List.iter ~f:print_endline
   in
   Exn.handle_uncaught ~exit:false run
 
@@ -375,9 +380,7 @@ let%expect_test "example-3" =
 let%expect_test "subst" =
   let f = Name.create ~scope:"r" "f" in
   let g = Name.create ~scope:"r" "g" in
-  let ctx =
-    Map.of_alist_exn (module Name) [ (f, Pred.Int 1); (g, Pred.Int 2) ]
-  in
+  let ctx = Map.of_alist_exn (module Name) [ (f, Int 1); (g, Int 2) ] in
   let r = "Filter(r.f = r.g, Select([r.f, r.g], r))" |> of_string_exn in
   print_s ([%sexp_of: t] (subst ctx r));
   [%expect
@@ -429,7 +432,7 @@ let%expect_test "subst" =
 
 let%expect_test "annotate-schema" =
   let r = load_string conn "select([min(f)], r)" in
-  [%sexp_of: t] r |> print_s;
+  [%sexp_of: int Map.M(Name).t annot] r |> print_s;
   [%expect
     {|
     ((node
@@ -439,8 +442,8 @@ let%expect_test "annotate-schema" =
           (Relation
            ((r_name r)
             (r_schema ((((scope ()) (name f)) ((scope ()) (name g))))))))
-         (meta ((refcnt ((((scope ()) (name f)) 1) (((scope ()) (name g)) 0)))))))))
-     (meta ((refcnt ())))) |}]
+         (meta ((((scope ()) (name f)) 1) (((scope ()) (name g)) 0)))))))
+     (meta ())) |}]
 
 let%expect_test "pred_names" =
   let p =
@@ -545,7 +548,7 @@ let%expect_test "" =
       | [ a; f ] -> Name.create ~scope:a f
       | _ -> failwith ("Unexpected name: " ^ s)
     in
-    Pred.name name
+    P.name name
   in
   let r s = Db.relation conn s |> relation in
 

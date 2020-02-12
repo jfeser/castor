@@ -229,7 +229,7 @@ let size_exn hdr name = Or_error.ok_exn (size hdr name)
 let serialize_field hdr name value =
   of_int ~byte_width:(size_exn hdr name) value
 
-class serialize_fold ?debug () =
+class ['self] serialize_fold ?debug () =
   object (self : 'self)
     inherit [_] abslayout_fold
 

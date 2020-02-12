@@ -1,8 +1,6 @@
 open! Core
 
-module Meta = struct
-  type t = Univ_map.t ref [@@deriving sexp_of]
-end
+type meta = Univ_map.t ref [@@deriving sexp_of]
 
 module Binop = struct
   type t =
@@ -33,7 +31,7 @@ type tuple = Cross | Zip | Concat [@@deriving compare, hash, sexp]
 
 type order = Asc | Desc [@@deriving compare, hash, sexp]
 
-type pred =
+type 'r pred =
   | Name of Name.t
   | Int of int
   | Fixed of Fixed_point.t
@@ -41,64 +39,73 @@ type pred =
   | Bool of bool
   | String of string
   | Null of Prim_type.t option
-  | Unop of Unop.t * pred
-  | Binop of Binop.t * pred * pred
-  | As_pred of (pred * string)
+  | Unop of Unop.t * 'r pred
+  | Binop of Binop.t * 'r pred * 'r pred
+  | As_pred of ('r pred * string)
   | Count
   | Row_number
-  | Sum of pred
-  | Avg of pred
-  | Min of pred
-  | Max of pred
-  | If of pred * pred * pred
-  | First of t
-  | Exists of t
-  | Substring of pred * pred * pred
+  | Sum of 'r pred
+  | Avg of 'r pred
+  | Min of 'r pred
+  | Max of 'r pred
+  | If of 'r pred * 'r pred * 'r pred
+  | First of 'r
+  | Exists of 'r
+  | Substring of 'r pred * 'r pred * 'r pred
+[@@deriving compare, hash, sexp, variants]
 
-and hash_idx = {
-  hi_keys : t;
-  hi_values : t;
+type ('p, 'r) hash_idx = {
+  hi_keys : 'r;
+  hi_values : 'r;
   hi_scope : scope;
-  hi_key_layout : t option;
-  hi_lookup : pred list;
+  hi_key_layout : 'r option;
+  hi_lookup : 'p list;
 }
+[@@deriving compare, hash, sexp]
 
-and bound = pred * [ `Open | `Closed ]
+type 'p bound = 'p * [ `Open | `Closed ] [@@deriving compare, hash, sexp]
 
-and ordered_idx = {
-  oi_key_layout : t option;
-  oi_lookup : (bound option * bound option) list;
+type ('p, 'r) ordered_idx = {
+  oi_key_layout : 'r option;
+  oi_lookup : ('p bound option * 'p bound option) list;
 }
+[@@deriving compare, hash, sexp]
 
-and depjoin = { d_lhs : t; d_alias : scope; d_rhs : t }
+type 'r depjoin = { d_lhs : 'r; d_alias : scope; d_rhs : 'r }
+[@@deriving compare, hash, sexp]
 
-and join = { pred : pred; r1 : t; r2 : t }
+type ('p, 'r) join = { pred : 'p; r1 : 'r; r2 : 'r }
+[@@deriving compare, hash, sexp]
 
-and order_by = { key : (pred * order) list; rel : t }
+type ('p, 'r) order_by = { key : ('p * order) list; rel : 'r }
+[@@deriving compare, hash, sexp]
 
-and t = { node : node; meta : Meta.t [@compare.ignore] }
-
-and node =
-  | Select of (pred list * t)
-  | Filter of (pred * t)
-  | Join of join
-  | DepJoin of depjoin
-  | GroupBy of (pred list * Name.t list * t)
-  | OrderBy of order_by
-  | Dedup of t
+type ('p, 'r) query =
+  | Select of ('p list * 'r)
+  | Filter of ('p * 'r)
+  | Join of ('p, 'r) join
+  | DepJoin of 'r depjoin
+  | GroupBy of ('p list * Name.t list * 'r)
+  | OrderBy of ('p, 'r) order_by
+  | Dedup of 'r
   | Relation of Relation.t
-  | Range of pred * pred
+  | Range of 'p * 'p
   | AEmpty
-  | AScalar of pred
-  | AList of (t * t)
-  | ATuple of (t list * tuple)
-  | AHashIdx of hash_idx
-  | AOrderedIdx of (t * t * ordered_idx)
-  | As of scope * t
-[@@deriving sexp_of, hash, compare]
+  | AScalar of 'p
+  | AList of ('r * 'r)
+  | ATuple of ('r list * tuple)
+  | AHashIdx of ('p, 'r) hash_idx
+  | AOrderedIdx of ('r * 'r * ('p, 'r) ordered_idx)
+  | As of scope * 'r
+[@@deriving compare, hash, sexp, variants]
+
+type 'm annot = { node : ('m annot pred, 'm annot) query; meta : 'm }
+[@@deriving compare, hash, sexp]
+
+type t = (meta[@compare.ignore]) annot [@@deriving compare, hash, sexp_of]
 
 let t_of_sexp _ = assert false
 
 module Param = struct
-  type t = string * Prim_type.t * pred option
+  type nonrec t = string * Prim_type.t * t pred option
 end

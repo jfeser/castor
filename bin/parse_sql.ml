@@ -1,6 +1,8 @@
 open Core
 open Castor
+open Ast
 open Abslayout
+module P = Pred.Infix
 
 type castor_binop =
   [ `Add | `And | `Div | `Eq | `Ge | `Gt | `Le | `Lt | `Mod | `Mul | `Or | `Sub ]
@@ -111,7 +113,6 @@ class conv_sql db =
       match f with Some e -> filter (self#expr e) q | None -> q
 
     method source (s, alias) =
-      let open Pred in
       let q =
         match s with
         | `Subquery s -> self#query s
@@ -127,13 +128,12 @@ class conv_sql db =
           let select_list =
             Schema.schema q
             |> List.map ~f:(fun n ->
-                   as_pred (name n, sprintf "%s_%s" a (Name.name n)))
+                   P.(as_ (name n) (sprintf "%s_%s" a (Name.name n))))
           in
           select select_list q
       | None -> q
 
     method nested (q, qs) =
-      let open Pred in
       match qs with
       | [] -> self#source q
       | (q', j) :: qs' -> (
@@ -226,7 +226,7 @@ class conv_sql db =
       let query =
         match s.Sql.from with
         | Some from -> self#nested from
-        | None -> scalar (Pred.int 0)
+        | None -> scalar (P.int 0)
       in
       (* WHERE *)
       let query = self#filter s.where query in

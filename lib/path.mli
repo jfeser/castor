@@ -13,17 +13,17 @@ val root : t
 
 val length : t -> int
 
-val set_exn : t -> Abslayout.t -> Abslayout.t -> Abslayout.t
+val set_exn : t -> Ast.t -> Ast.t -> Ast.t
 
-val get_exn : t -> Abslayout.t -> Abslayout.t
+val get_exn : t -> Ast.t -> Ast.t
 
-val stage_exn : t -> Abslayout.t -> [ `Compile | `Run ]
+val stage_exn : t -> Ast.t -> [ `Compile | `Run ]
 
-val all : Abslayout.t -> t Seq.t
+val all : Ast.t -> t Seq.t
 
-val is_run_time : Abslayout.t -> t -> bool
+val is_run_time : Ast.t -> t -> bool
 
-val is_compile_time : Abslayout.t -> t -> bool
+val is_compile_time : Ast.t -> t -> bool
 
 val parent : t -> t option
 

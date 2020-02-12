@@ -5,19 +5,18 @@ open Test_util
 
 let conn = Db.create "postgresql:///tpch_1k"
 
-let pp, _ = mk_pp ~pp_name:Name.pp_with_stage ()
+let pp x =
+  let pp, _ = mk_pp ~pp_name:Name.pp_with_stage () in
+  pp x
 
 let pp_with_refcount, _ =
   mk_pp ~pp_name:Name.pp_with_stage
-    ~pp_meta:(fun fmt meta ->
+    ~pp_meta:(fun fmt r ->
       let open Format in
-      match Univ_map.find meta Meta.refcnt with
-      | Some r ->
-          fprintf fmt "@[<hv 2>{";
-          Map.iteri r ~f:(fun ~key:n ~data:c ->
-              if c > 0 then fprintf fmt "%a=%d,@ " Name.pp n c);
-          fprintf fmt "}@]"
-      | None -> ())
+      fprintf fmt "@[<hv 2>{";
+      Map.iteri r ~f:(fun ~key:n ~data:c ->
+          if c > 0 then fprintf fmt "%a=%d,@ " Name.pp n c);
+      fprintf fmt "}@]")
     ()
 
 let%expect_test "" =

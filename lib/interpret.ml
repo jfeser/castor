@@ -59,12 +59,12 @@ let to_single_value t =
   t.(0)
 
 type agg =
-  | Sum of (Value.t * pred)
-  | Min of (Value.t * pred)
-  | Max of (Value.t * pred)
-  | Avg of (Value.t * int * pred)
+  | Sum of (Value.t * Pred.t)
+  | Min of (Value.t * Pred.t)
+  | Max of (Value.t * Pred.t)
+  | Avg of (Value.t * int * Pred.t)
   | Count of int
-  | Passthru of (Value.t option * pred)
+  | Passthru of (Value.t option * Pred.t)
 
 module Schema = struct
   let of_ralgebra ?scope r =
@@ -151,7 +151,7 @@ let eval { db; params } r =
     let open Value in
     let e = eval_pred ctx in
     match p with
-    | Pred.Int x -> Int x
+    | Int x -> Int x
     | Name n -> (
         match Ctx.find ctx n with
         | Some v -> v
@@ -166,7 +166,7 @@ let eval { db; params } r =
     | Null _ -> Null
     | As_pred (p, _) -> e p
     | Count | Sum _ | Avg _ | Min _ | Max _ | Row_number ->
-        Error.(create "Unexpected aggregate." p [%sexp_of: pred] |> raise)
+        Error.(create "Unexpected aggregate." p [%sexp_of: Pred.t] |> raise)
     | If (p1, p2, p3) -> if to_bool (e p1) then e p2 else e p3
     | First r -> eval ctx r |> Seq.hd_exn |> to_single_value
     | Exists r -> Bool (eval ctx r |> Seq.is_empty |> not)

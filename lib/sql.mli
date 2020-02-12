@@ -1,20 +1,27 @@
 open! Core
+open Ast
 
-type select_entry = { pred : Pred.t; alias : string; cast : Prim_type.t option }
+type sql_pred = unit annot pred [@@deriving compare, sexp_of]
+
+type select_entry = {
+  pred : sql_pred;
+  alias : string;
+  cast : Prim_type.t option;
+}
 [@@deriving compare, sexp_of]
 
 type spj = {
   select : select_entry list;
   distinct : bool;
-  conds : Pred.t list;
+  conds : sql_pred list;
   relations :
     ( [ `Subquery of t * string
       | `Table of Relation.t * string
-      | `Series of Pred.t * Pred.t * string ]
+      | `Series of sql_pred * sql_pred * string ]
     * [ `Left | `Lateral ] )
     list;
-  order : (Pred.t * Abslayout.order) list;
-  group : Pred.t list;
+  order : (sql_pred * order) list;
+  group : sql_pred list;
   limit : int option;
 }
 
@@ -22,7 +29,7 @@ and t = Query of spj | Union_all of spj list [@@deriving compare, sexp_of]
 
 val src : Logs.Src.t
 
-val of_ralgebra : Abslayout.t -> t
+val of_ralgebra : 'a annot -> t
 
 val has_aggregates : t -> bool
 

@@ -1,6 +1,7 @@
 open! Core
-open Collections
+open Ast
 open Abslayout
+open Collections
 
 type elem = int [@@deriving compare, sexp]
 
@@ -28,7 +29,7 @@ let root = []
 let length = List.length
 
 let rec set_exn p r s =
-  match (p, r.Abslayout.node) with
+  match (p, r.node) with
   | [], _ -> s
   | 0 :: p', Select (ps, r') -> select ps (set_exn p' r' s)
   | 0 :: p', Filter (p, r') -> filter p (set_exn p' r' s)
@@ -51,8 +52,7 @@ let rec set_exn p r s =
       tuple
         (List.mapi rs ~f:(fun i' r' -> if i = i' then set_exn p' r' s else r'))
         t
-  | 0 :: p', AHashIdx h ->
-      hash_idx' { h with hi_keys = set_exn p' h.hi_keys s }
+  | 0 :: p', AHashIdx h -> hash_idx' { h with hi_keys = set_exn p' h.hi_keys s }
   | 1 :: p', AHashIdx h ->
       hash_idx' { h with hi_values = set_exn p' h.hi_values s }
   | 0 :: p', AOrderedIdx (r', r2, h) ->
@@ -62,7 +62,7 @@ let rec set_exn p r s =
       ordered_idx r1 (scope_exn r1) (set_exn p' r' s) h
   | 0 :: p', As (n, r') -> as_ n (set_exn p' r' s)
   | p, _ ->
-      Error.create "Invalid path in set." (p, r) [%sexp_of: t * Abslayout.t]
+      Error.create "Invalid path in set." (p, r) [%sexp_of: t * Ast.t]
       |> Error.raise
 
 let stage_exn p r =
@@ -102,13 +102,13 @@ let stage_exn p r =
     | _, AHashIdx _
     | _, AOrderedIdx _
     | _, As (_, _) ->
-        Error.create "Invalid path in get." (p, r) [%sexp_of: t * Abslayout.t]
+        Error.create "Invalid path in get." (p, r) [%sexp_of: t * Ast.t]
         |> Error.raise
   in
   stage p r `Run
 
 let rec get_exn p r =
-  match (p, r.Abslayout.node) with
+  match (p, r.node) with
   | [], _ -> r
   | _, ATuple ([], _) -> failwith "Empty tuple."
   | ( 0 :: p',
@@ -145,7 +145,7 @@ let rec get_exn p r =
   | _, AHashIdx _
   | _, AOrderedIdx _
   | _, As (_, _) ->
-      Error.create "Invalid path in get." (p, r) [%sexp_of: t * Abslayout.t]
+      Error.create "Invalid path in get." (p, r) [%sexp_of: t * Ast.t]
       |> Error.raise
 
 let all r =
@@ -187,7 +187,7 @@ let%test_unit "all-valid" =
   Seq.iter (all q) ~f:(fun p -> get_exn p q |> ignore)
 
 let rec is_run_time r p =
-  match (p, r.Abslayout.node) with
+  match (p, r.node) with
   | [], _ -> true
   | ( 0 :: p',
       ( Select (_, r')
@@ -210,16 +210,13 @@ let rec is_run_time r p =
   | i :: p', ATuple (rs, _) when i >= 0 && i < List.length rs ->
       is_run_time (List.nth_exn rs i) p'
   | _, ATuple ([], _) ->
-      Error.create "Invalid path. No children." (p, r)
-        [%sexp_of: t * Abslayout.t]
+      Error.create "Invalid path. No children." (p, r) [%sexp_of: t * Ast.t]
       |> Error.raise
   | p, (AEmpty | AScalar _ | Relation _) ->
-      Error.create "Invalid path. No children." (p, r)
-        [%sexp_of: t * Abslayout.t]
+      Error.create "Invalid path. No children." (p, r) [%sexp_of: t * Ast.t]
       |> Error.raise
   | _ :: _, _ ->
-      Error.create "Invalid path: Bad index." (p, r)
-        [%sexp_of: t * Abslayout.t]
+      Error.create "Invalid path: Bad index." (p, r) [%sexp_of: t * Ast.t]
       |> Error.raise
 
 let is_compile_time p r = not (is_run_time p r)

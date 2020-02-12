@@ -2,7 +2,7 @@ open! Core
 open Ast
 open Prim_type
 
-type t = Name.t list [@@deriving sexp]
+type t = Name.t list [@@deriving compare, sexp]
 
 let scoped s = List.map ~f:(Name.scoped s)
 
@@ -91,8 +91,8 @@ let schema_exn r =
   List.iter ~f:(fun n -> Name.Meta.(find_exn n type_) |> ignore) s;
   s
 
-let to_type = to_type_open schema
+let to_type q = to_type_open schema q
 
-let to_type_opt = to_type_opt_open schema
+let to_type_opt q = to_type_opt_open schema q
 
 let to_select_list s = List.map s ~f:(fun n -> Name n)

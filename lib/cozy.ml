@@ -1,6 +1,7 @@
 open! Core
 open Collections
 open Abslayout
+module P = Pred.Infix
 
 type binop = [ `Le | `Lt | `Ge | `Gt | `Add | `Sub | `Mul | `Div | `Eq | `And ]
 [@@deriving sexp]
@@ -150,7 +151,7 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
                   | [ n ] ->
                       let lit =
                         match Name.type_exn n with
-                        | IntT _ -> Pred.Int 0
+                        | IntT _ -> Ast.Int 0
                         | FixedT _ -> Fixed (Fixed_point.of_int 0)
                         | StringT _ -> String ""
                         | BoolT _ -> Bool false
@@ -292,13 +293,13 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
                 { empty with top_query = `Query name; queries = [ query ] }
           | `Agg -> self#agg_select sel q )
       | GroupBy (sel, key, q) ->
-          let kc = self#query (dedup (select (List.map ~f:Pred.name key) q)) in
+          let kc = self#query (dedup (select (List.map ~f:P.name key) q)) in
           let filter_preds, pred_args =
             List.map key ~f:(fun k ->
                 let arg =
                   Name.create ~type_:(Name.type_exn k) (Fresh.name fresh "x%d")
                 in
-                (Pred.Infix.(name k = name arg), arg))
+                (P.(name k = name arg), arg))
             |> List.unzip
           in
           let vc =

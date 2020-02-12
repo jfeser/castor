@@ -1,4 +1,5 @@
 open! Core
+open Ast
 open Implang
 
 module Config : sig
@@ -20,7 +21,7 @@ type ir_module = {
 exception IRGenError of Error.t
 
 module type S = sig
-  val irgen : params:Name.t list -> len:int -> Abslayout.t -> ir_module
+  val irgen : params:Name.t list -> len:int -> t -> ir_module
 
   val pp : Formatter.t -> ir_module -> unit
 end

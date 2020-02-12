@@ -1,8 +1,9 @@
 open! Core
+open Ast
 open Lwt
 open Collections
+module A = Abslayout
 module Q = Fold_query
-open Abslayout
 
 module Fold = struct
   type ('a, 'b, 'c) fold = {
@@ -79,8 +80,8 @@ let extract_group widths ctr tups =
 
 let default_simplify r = Resolve.resolve r |> Project.project
 
-class virtual ['a] abslayout_fold =
-  object (self)
+class virtual ['self] abslayout_fold =
+  object (self : 'self)
     method virtual list : _
 
     method virtual hash_idx : _
@@ -110,16 +111,19 @@ class virtual ['a] abslayout_fold =
     method private debug = false
 
     method private func a =
-      let m = a.Q.meta.meta in
+      let m = a.Q.meta.Ast.meta in
       match a.Q.meta.node with
       | Filter ((_, c) as x) -> (self#filter m x, c)
       | Select ((_, c) as x) -> (self#select m x, c)
       | OrderBy ({ rel = c; _ } as x) -> (self#order_by m x, c)
       | GroupBy ((_, _, c) as x) -> (self#group_by m x, c)
       | Dedup c -> (self#dedup m, c)
-      | x -> Error.(create "Expected a function." x [%sexp_of: node] |> raise)
+      | x ->
+          Error.create "Expected a function." x
+            [%sexp_of: (Ast.t Ast.pred, Ast.t) Ast.query]
+          |> Error.raise
 
-    method private qempty : (int, t) Q.t -> 'a =
+    method private qempty : (int, Ast.t) Q.t -> 'a =
       fun a ->
         let m = a.Q.meta.meta in
         match a.Q.meta.node with
@@ -128,7 +132,7 @@ class virtual ['a] abslayout_fold =
             let f, child = self#func a in
             f (self#qempty { a with meta = child })
 
-    method private scalars : (int, t) Q.t -> 't -> 'a =
+    method private scalars : (int, Ast.t) Q.t -> 't -> 'a =
       fun a ->
         let m = a.Q.meta.meta in
         match a.Q.meta.node with
@@ -152,7 +156,7 @@ class virtual ['a] abslayout_fold =
             fun t -> f (g t)
 
     method private for_
-        : (int, t) Q.t -> (Value.t list * 'a option * 'a, 'a) Fold.t =
+        : (int, Ast.t) Q.t -> (Value.t list * 'a option * 'a, 'a) Fold.t =
       fun a ->
         let m = a.Q.meta.meta in
         match a.Q.meta.node with
@@ -178,7 +182,7 @@ class virtual ['a] abslayout_fold =
             let (Fold g) = self#for_ { a with meta = child } in
             Fold { g with extract = (fun x -> f (g.extract x)) }
 
-    method private concat : (int, t) Q.t -> ('a, 'a) Fold.t =
+    method private concat : (int, Ast.t) Q.t -> ('a, 'a) Fold.t =
       fun a ->
         let m = a.Q.meta.meta in
         match a.Q.meta.node with
@@ -191,9 +195,9 @@ class virtual ['a] abslayout_fold =
             Fold { g with extract = (fun acc -> f (g.extract acc)) }
 
     method private key_layout q =
-      match q.node with
-      | AHashIdx x -> Some (h_key_layout x)
-      | AOrderedIdx x -> Some (o_key_layout x)
+      match q.Ast.node with
+      | AHashIdx x -> x.hi_key_layout
+      | AOrderedIdx (_, _, x) -> x.oi_key_layout
       | Select (_, q')
       | Filter (_, q')
       | Dedup q'
@@ -294,7 +298,7 @@ class virtual ['a] abslayout_fold =
         | Some t ->
             Error.(
               create "Scalar: unexpected tuple width." (ps, t)
-                [%sexp_of: pred list * Value.t list]
+                [%sexp_of: _ annot pred list * Value.t list]
               |> raise)
         | None -> failwith "Expected a tuple."
       in
@@ -350,14 +354,14 @@ class virtual ['a] abslayout_fold =
       | Q.Scalars x -> self#eval_scalars lctx tups a x
 
     method run ?timeout ?(simplify = default_simplify) conn r =
-      let q = ensure_alias r |> Q.of_ralgebra |> Q.hoist_all in
+      let q = A.ensure_alias r |> Q.of_ralgebra |> Q.hoist_all in
       let r = Q.to_ralgebra q |> simplify in
-      Logs.debug (fun m -> m "Running query: %a" pp r);
+      Logs.debug (fun m -> m "Running query: %a" A.pp r);
       let sql = Sql.of_ralgebra r in
       Logs.debug (fun m -> m "Running SQL: %s" (Sql.to_string_hum sql));
       let tups =
         Db.exec_lwt_exn ?timeout conn
-          (schema_exn r |> List.map ~f:Name.type_exn)
+          (Schema.schema r |> List.map ~f:Name.type_exn)
           (Sql.to_string sql)
         |> Lwt_stream.map (function
              | Ok x -> Array.to_list x
@@ -367,8 +371,8 @@ class virtual ['a] abslayout_fold =
       self#eval (Map.empty (module String)) tups (Q.to_width q) |> Lwt_main.run
   end
 
-let print_fold =
-  object (self)
+class ['self] print_fold =
+  object (self : 'self)
     inherit [_] abslayout_fold
 
     method collection kind =
