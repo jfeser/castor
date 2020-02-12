@@ -97,13 +97,13 @@ val pred_free : 'a annot pred -> Set.M(Name).t
 
 val free : 'a annot -> Set.M(Name).t
 
-val annotate_free : t -> unit
+val annotate_free : 'a annot -> Set.M(Name).t annot
 
-val annotate_eq : t -> unit
+val annotate_eq : 'a annot -> (Name.t * Name.t) list annot
 
-val annotate_orders : t -> unit
+val annotate_orders : 'a annot -> t
 
-val order_of : t -> (Pred.t * order) list
+val order_of : 'a annot -> (Pred.t * order) list
 
 val validate : t -> unit
 

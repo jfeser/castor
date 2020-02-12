@@ -16,6 +16,10 @@ module Config = struct
   end
 end
 
+let normal_meta q = map_meta (fun _ -> Meta.empty ()) q
+
+let rec normal_meta_pred p = map_pred normal_meta normal_meta_pred p
+
 module Make (Config : Config.S) () = struct
   type t = { name : string; f : Ast.t -> Ast.t list } [@@deriving sexp]
 
@@ -209,8 +213,6 @@ module Make (Config : Config.S) () = struct
         | _ -> []);
     }
     |> run_everywhere
-
-  let normal_meta q = map_meta (fun _ -> Meta.empty ()) q
 
   (** Groupby eliminator that works when the grouping key is all direct field
      references. It computes the set of all possible keys, which is often
@@ -552,22 +554,15 @@ module Make (Config : Config.S) () = struct
    *   |> run_everywhere *)
 
   let same_orders r1 r2 =
-    let open A in
-    annotate_eq r1;
-    annotate_orders r1;
-    annotate_eq r2;
-    annotate_orders r2;
-    [%compare.equal: (Pred.t * order) list]
-      Meta.(find_exn r1 order)
-      Meta.(find_exn r2 order)
+    [%compare.equal: (Pred.t * order) list] (A.order_of r1) (A.order_of r2)
 
   let orderby_list key r1 r2 =
     let open A in
-    annotate_eq r1;
-    annotate_eq r2;
-    let schema1 = schema_exn r1 |> Schema.scoped (scope_exn r1) in
+    let r1 = annotate_eq r1 in
+    let r2 = annotate_eq r2 in
+    let schema1 = Schema.schema r1 |> Schema.scoped (scope_exn r1) in
     let open Core in
-    let eqs = Meta.(find_exn r2 eq) in
+    let eqs = r2.meta in
     let names =
       List.concat_map eqs ~f:(fun (n, n') -> [ n; n' ])
       @ List.filter_map ~f:(fun (p, _) -> Pred.to_name p) key
@@ -605,7 +600,7 @@ module Make (Config : Config.S) () = struct
             (p', o))
       in
       let scope = Fresh.name Global.fresh "s%d" in
-      [ list (order_by new_key r1) scope r2 ]
+      [ list (order_by new_key (normal_meta r1)) scope (normal_meta r2) ]
     with No_key -> []
 
   let orderby_cross_tuple key rs =
@@ -1294,17 +1289,15 @@ module Make (Config : Config.S) () = struct
   let is_correlated subquery input_schema =
     not
       (Set.is_empty
-         (Set.inter
-            Meta.(find_exn subquery free)
-            (Set.of_list (module Name) input_schema)))
+         (Set.inter subquery.meta (Set.of_list (module Name) input_schema)))
 
   let tf_elim_subquery _ =
     let open A in
     let f r_main =
+      let r_main = annotate_free r_main in
       match r_main.node with
       | Filter (pred, r) ->
-          annotate_free r_main;
-          let schema = schema_exn r in
+          let schema = Schema.schema r in
           (* Mapping from uncorrelated subqueries to unique names. *)
           let query_names =
             (object (self)
@@ -1316,7 +1309,7 @@ module Make (Config : Config.S) () = struct
                  if is_correlated query schema then xs
                  else
                    let result_type =
-                     match schema_exn query with
+                     match Schema.schema query with
                      | [ n ] -> Name.type_exn n
                      | _ -> failwith "Unexpected schema."
                    in
@@ -1338,10 +1331,13 @@ module Make (Config : Config.S) () = struct
             end)
               #visit_pred () outer_pred
           in
+          let pred = normal_meta_pred pred in
+          let r = normal_meta r in
           (* For each subquery, generate a join *)
           List.map query_names ~f:(fun (n, q) ->
+              let q = normal_meta q in
               let select_list =
-                schema_exn q
+                Schema.schema q
                 |> List.map ~f:(fun n' -> As_pred (Name n', Name.name n))
               in
               join

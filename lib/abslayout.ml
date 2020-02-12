@@ -207,7 +207,13 @@ let subst ctx =
   in
   v#visit_t ()
 
-let rec pred_free p =
+let rec annotate f r =
+  let node = (map_query (annotate f) (annotate_pred f)) r.node in
+  { node; meta = f (fun r' -> r'.meta) node }
+
+and annotate_pred f p = map_pred (annotate f) (annotate_pred f) p
+
+let pred_free_open free p =
   let singleton = Set.singleton (module Name) in
   let visitor =
     object (self : 'a)
@@ -227,14 +233,15 @@ let rec pred_free p =
   in
   visitor#visit_pred () p
 
-and free r =
+let free_open free r =
+  let pred_free = pred_free_open free in
   let empty = Set.empty (module Name) in
   let of_list = Set.of_list (module Name) in
   let union_list = Set.union_list (module Name) in
   let exposed r = of_list (schema r) in
   let scope r s = Set.map (module Name) s ~f:(Name.copy ~scope:(Some r)) in
   let free_set =
-    match r.node with
+    match r with
     | Relation _ | AEmpty | Range _ -> empty
     | AScalar p -> pred_free p
     | Select (ps, r') ->
@@ -290,18 +297,11 @@ and free r =
   in
   free_set
 
-(** Annotate all subexpressions with its set of free names. *)
-let annotate_free r =
-  let visitor =
-    object
-      inherit [_] iter
+let rec free r = free_open free r.node
 
-      method! visit_t () r =
-        let fs = free r in
-        M.(set_m r free fs)
-    end
-  in
-  visitor#visit_t () r
+let pred_free p = pred_free_open free p
+
+let annotate_free r = annotate free_open r
 
 let exists_bare_relations r =
   let visitor =
@@ -327,7 +327,7 @@ let validate r =
 (** Return the set of equivalent attributes in the output of a query. *)
 let eqs eqs r =
   let dedup_pairs = List.dedup_and_sort ~compare:[%compare: Name.t * Name.t] in
-  match r.node with
+  match r with
   | As (n, r) ->
       let schema = schema r in
       List.map schema ~f:(fun n' -> (n', Name.(create ~scope:n (name n'))))
@@ -348,17 +348,7 @@ let eqs eqs r =
   | AList (r1, r2) -> eqs r1 @ eqs r2 |> dedup_pairs
   | _ -> []
 
-let annotate_eq r =
-  let visitor =
-    object
-      inherit [_] iter as super
-
-      method! visit_t () r =
-        super#visit_t () r;
-        Meta.(set_m r eq (eqs (fun r' -> Meta.(find_exn r' eq)) r))
-    end
-  in
-  visitor#visit_t () r
+let annotate_eq r = annotate eqs r
 
 let select_kind l =
   if List.exists l ~f:(fun p -> Poly.(Pred.kind p = `Agg)) then `Agg
@@ -493,12 +483,14 @@ let annotate_orders r =
     M.set_m r M.order order;
     order
   in
-  annotate_eq r;
-  annotate_orders r |> ignore
+  let r =
+    annotate_eq r
+    |> map_meta (fun eq -> ref (Univ_map.set Univ_map.empty Meta.eq eq))
+  in
+  annotate_orders r |> ignore;
+  r
 
-let order_of r =
-  annotate_orders r;
-  M.(find_exn r order)
+let order_of r = M.(find_exn (annotate_orders r) order)
 
 let annotate_key_layouts r =
   let key_layout schema =
