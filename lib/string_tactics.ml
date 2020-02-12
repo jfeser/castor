@@ -1,7 +1,9 @@
 open! Core
 open Castor
+open Ast
 open Abslayout
 open Collections
+module P = Pred.Infix
 
 module Config = struct
   module type My_s = sig
@@ -52,7 +54,7 @@ module Make (C : Config.S) = struct
     in
     preds_v#visit_t () r
     |> List.filter_map ~f:(function
-         | Pred.Name n1, Pred.Name n2 -> (
+         | Name n1, Name n2 -> (
              match
                ( Db.relation_has_field conn (Name.name n1),
                  Db.relation_has_field conn (Name.name n2) )
@@ -119,9 +121,9 @@ module Make (C : Config.S) = struct
                    (Map.of_alist_exn
                       (module Name)
                       [
-                        (key, Pred.name @@ Name.create encoded_name);
+                        (key, P.name @@ Name.create encoded_name);
                         ( lookup,
-                          Pred.name @@ Name.create ~scope encoded_lookup_name );
+                          P.name @@ Name.create ~scope encoded_lookup_name );
                       ])
                    r)))
     |> Seq.of_list

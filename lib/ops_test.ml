@@ -28,7 +28,11 @@ let%expect_test "at" =
   ( match apply op Path.root r with
   | Some r -> Format.printf "%a" pp r
   | None -> print_endline "Transform failed." );
-  [%expect {| filter(true, select([false], filter(false, test2))) |}]
+  [%expect {|
+    [ERROR] Tried to get schema of unnamed predicate false.
+    [ERROR] Tried to get schema of unnamed predicate false.
+    [WARNING] <unknown> is not schema preserving: (((scope())(name x0))) != (((scope())(name x1)))
+    filter(true, select([false], filter(false, test2))) |}]
 
 let%expect_test "at" =
   let r =

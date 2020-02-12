@@ -3,7 +3,9 @@ open Graph
 open Printf
 open Castor
 open Collections
+open Ast
 module A = Abslayout
+module P = Pred.Infix
 
 module Config = struct
   module type My_S = sig
@@ -35,7 +37,12 @@ module Make (C : Config.S) = struct
 
   module JoinGraph = struct
     module Vertex = struct
-      include Abslayout
+      module T = struct
+        type t = Ast.t [@@deriving compare, hash, sexp_of]
+      end
+
+      include T
+      include Comparator.Make (T)
 
       let equal = [%compare.equal: t]
     end
@@ -43,7 +50,7 @@ module Make (C : Config.S) = struct
     module Edge = struct
       include Pred
 
-      let default = Pred.bool true
+      let default = Bool true
     end
 
     module G = Persistent.Graph.ConcreteLabeled (Vertex) (Edge)
@@ -172,14 +179,14 @@ module Make (C : Config.S) = struct
 
     (** Collect the leaves of the join tree rooted at r. *)
     let rec to_leaves r =
-      let open A in
+      let open JoinGraph in
       match r.node with
       | Join { r1; r2; _ } -> Set.union (to_leaves r1) (to_leaves r2)
-      | _ -> Set.singleton (module A) r
+      | _ -> Set.singleton (module Vertex) r
 
     (** Convert a join tree to a join graph. *)
     let rec to_graph leaves r =
-      match r.A.node with
+      match r.node with
       | Join { r1; r2; pred = p } ->
           let s = union (to_graph leaves r1) (to_graph leaves r2) in
           (* Collect the set of relations that this join depends on. *)
@@ -259,9 +266,9 @@ module Make (C : Config.S) = struct
   end
 
   type t =
-    | Flat of A.t
-    | Hash of { lkey : A.pred; lhs : t; rkey : A.pred; rhs : t }
-    | Nest of { lhs : t; rhs : t; pred : A.pred }
+    | Flat of Ast.t
+    | Hash of { lkey : Pred.t; lhs : t; rkey : Pred.t; rhs : t }
+    | Nest of { lhs : t; rhs : t; pred : Pred.t }
   [@@deriving sexp_of]
 
   let rec to_ralgebra = function
@@ -310,13 +317,10 @@ module Make (C : Config.S) = struct
     let s = A.schema_exn (to_ralgebra r) |> Set.of_list (module Name) in
     let parts = Set.filter parts ~f:(Set.mem s) in
     let part_counts =
-      A.(
-        group_by
-          [ Pred.as_pred (Count, "c") ]
-          (Set.to_list parts) (to_abslayout r))
+      A.(group_by [ P.as_ Count "c" ] (Set.to_list parts) (to_abslayout r))
     in
     let part_aggs =
-      let c = Pred.name (Name.create "c") in
+      let c = P.name (Name.create "c") in
       A.(select [ Min c; Max c; Avg c ] part_counts)
     in
     let part_aggs = R.resolve ~params part_aggs in
@@ -468,7 +472,7 @@ module Make (C : Config.S) = struct
             in
             let m_s =
               match pred with
-              | Pred.Binop (Eq, k1, k2) ->
+              | Binop (Eq, k1, k2) ->
                   let open Option.Let_syntax in
                   let%bind s1 = key_side k1 in
                   let%map s2 = key_side k2 in

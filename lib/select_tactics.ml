@@ -1,7 +1,9 @@
 open Core
 open Castor
+open Ast
 open Abslayout
 open Collections
+module P = Pred.Infix
 
 module Config = struct
   module type S = sig
@@ -17,8 +19,10 @@ module Make (C : Config.S) = struct
   let extend_aggs aggs p =
     let aggs = ref aggs in
     let add_agg a =
-      match List.find !aggs ~f:(fun (_, a') -> [%compare.equal: pred] a a') with
-      | Some (n, _) -> Pred.name n
+      match
+        List.find !aggs ~f:(fun (_, a') -> [%compare.equal: _ pred] a a')
+      with
+      | Some (n, _) -> P.name n
       | None ->
           let n =
             Fresh.name Global.fresh "agg%d"
@@ -54,10 +58,10 @@ module Make (C : Config.S) = struct
           (op @ [ p ], ip))
     in
     let inner_aggs =
-      List.map inner_aggs ~f:(fun (n, a) -> Pred.as_pred (a, Name.name n))
+      List.map inner_aggs ~f:(fun (n, a) -> P.as_ a @@ Name.name n)
     in
     (* Don't want to project out anything that we might need later. *)
-    let inner_fields = inner_schema |> List.map ~f:Pred.name in
+    let inner_fields = inner_schema |> List.map ~f:P.name in
     (outer_aggs, inner_aggs @ inner_fields)
 
   (* Look for evidence of a previous pushed select. *)
@@ -78,7 +82,7 @@ module Make (C : Config.S) = struct
             match r'.node with
             | AHashIdx h ->
                 let o =
-                  List.filter_map ps ~f:Pred.to_name |> List.map ~f:Pred.name
+                  List.filter_map ps ~f:Pred.to_name |> List.map ~f:P.name
                 in
                 let i =
                   (* TODO: This hack works around problems with sql conversion and
@@ -116,7 +120,7 @@ module Make (C : Config.S) = struct
             | _ -> None
           in
           let count_n = Fresh.name Global.fresh "count%d" in
-          let inner_preds = Pred.as_pred (Count, count_n) :: inner_preds in
+          let inner_preds = P.as_ Count count_n :: inner_preds in
           select outer_preds
             (mk_collection (fun rv ->
                  filter

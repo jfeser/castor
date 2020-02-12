@@ -1,6 +1,10 @@
 open! Core
 open Castor
-open Abslayout
+open Ast
+open Abslayout_infix
+module P = Pred.Infix
+
+module A = (val constructors (fun () -> Meta.empty ()))
 
 module Config = struct
   module type S = sig
@@ -17,20 +21,21 @@ module Make (C : Config.S) = struct
   let to_dedup r = match r.node with Dedup r -> Some r | _ -> None
 
   let push_dedup r =
+    let open A in
     let open Option.Let_syntax in
     let%bind r = to_dedup r in
     match r.node with
     | Filter (p, r') -> Some (filter p (dedup r'))
     | Dedup r' -> Some (dedup r')
     | AScalar _ | AEmpty -> Some r
-    | AHashIdx h -> Some (hash_idx' {h with hi_values= dedup h.hi_values})
+    | AHashIdx h -> Some (hash_idx' { h with hi_values = dedup h.hi_values })
     | AList (rk, rv) ->
-        let scope = scope_exn rk in
-        let rk = strip_scope rk in
+        let scope = Abslayout.scope_exn rk in
+        let rk = Abslayout.strip_scope rk in
         Some (list (dedup rk) scope (dedup rv))
     | AOrderedIdx (rk, rv, o) ->
-        let scope = scope_exn rk in
-        let rk = strip_scope rk in
+        let scope = Abslayout.scope_exn rk in
+        let rk = Abslayout.strip_scope rk in
         Some (ordered_idx (dedup rk) scope (dedup rv) o)
     | ATuple (ts, Cross) -> Some (tuple (List.map ts ~f:dedup) Cross)
     | Select _ -> None

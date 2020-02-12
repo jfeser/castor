@@ -1,6 +1,8 @@
 open Core
 open Castor
+open Ast
 open Abslayout
+open Abslayout_visitors
 
 module Config = struct
   module type S = sig
@@ -21,11 +23,17 @@ module Make (C : Config.S) = struct
   let filter_const = of_func filter_const ~name:"filter-const"
 
   let elim_structure r =
-    match r.node with
-    | AHashIdx h -> Some (hash_idx_to_depjoin h)
-    | AOrderedIdx (rk, rv, m) -> Some (ordered_idx_to_depjoin rk rv m)
-    | AList (rk, rv) -> Some (list_to_depjoin rk rv)
-    | _ -> None
+    let r = map_meta (fun _ -> ()) r in
+    let r' =
+      match r.node with
+      | AHashIdx h -> Some (hash_idx_to_depjoin h)
+      | AOrderedIdx (rk, rv, m) -> Some (ordered_idx_to_depjoin rk rv m)
+      | AList (rk, rv) -> Some (list_to_depjoin rk rv)
+      | _ -> None
+    in
+    Option.map r' ~f:(fun d ->
+        let module C = (val Abslayout_infix.constructors (fun () -> ())) in
+        C.dep_join' d |> map_meta (fun _ -> Meta.empty ()))
 
   let elim_structure = of_func elim_structure ~name:"elim-structure"
 

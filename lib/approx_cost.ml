@@ -1,5 +1,7 @@
 open! Core
 open! Castor
+open Ast
+module P = Pred.Infix
 module A = Abslayout
 
 module Config = struct
@@ -13,7 +15,7 @@ module Make (C : Config.S) = struct
 
   module Scope = struct
     module T = struct
-      type t = (A.t * string) list [@@deriving compare, hash, sexp_of]
+      type nonrec t = (t * string) list [@@deriving compare, hash, sexp_of]
     end
 
     include T
@@ -35,13 +37,13 @@ module Make (C : Config.S) = struct
               let rec query ss = function
                 | [] -> assert false
                 | [ (q, _) ] ->
-                    A.select (ss @ List.map (A.schema_exn q) ~f:Pred.name) q
+                    A.select (ss @ List.map (A.schema_exn q) ~f:P.name) q
                 | (q, s) :: qs ->
                     A.dep_join q s
                       (query
                          ( ss
                          @ List.map (A.schema_exn q) ~f:(fun n ->
-                               Pred.name (Name.copy ~scope:(Some s) n)) )
+                               P.name (Name.copy ~scope:(Some s) n)) )
                          qs)
               in
               let schema =

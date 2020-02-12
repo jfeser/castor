@@ -1,7 +1,9 @@
 open Core
 open Castor
 open Abslayout
+open Abslayout_visitors
 open Collections
+module P = Pred.Infix
 
 module Config = struct
   module type S = sig
@@ -43,11 +45,10 @@ module Make (C : Config.S) = struct
         [%sexp_of: Set.M(Name).t]
 
   let elim_groupby r =
-    annotate_free r;
     match r.node with
     | GroupBy (ps, key, r) -> (
         let key_name = Fresh.name Global.fresh "k%d" in
-        let key_preds = List.map key ~f:Pred.name in
+        let key_preds = List.map key ~f:P.name in
         let filter_pred =
           List.map key ~f:(fun n ->
               Pred.Infix.(name n = name (Name.copy n ~scope:(Some key_name))))
@@ -136,6 +137,7 @@ groupby([o_year,
           supplier)),
       filter((p_type = param3), part))))
 |}
+      |> map_meta (fun _ -> Meta.empty ())
     in
     with_logs (fun () ->
         apply elim_groupby Path.root r

@@ -2,6 +2,7 @@ open! Core
 open Castor
 open Abslayout
 open Collections
+module P = Pred.Infix
 
 module Config = struct
   module type S = sig
@@ -64,7 +65,7 @@ module Make (Config : Config.S) = struct
       |> Map.to_alist
       |> List.map ~f:(fun (r, ns) ->
              dedup
-             @@ select (List.map ns ~f:Pred.name)
+             @@ select (List.map ns ~f:P.name)
              @@ relation (Db.relation cost_conn r))
       |> List.reduce ~f:(join (Bool true))
     in
@@ -73,9 +74,7 @@ module Make (Config : Config.S) = struct
         Ok
           (select
              (List.map2_exn orig_names preds ~f:(fun n p ->
-                  match n with
-                  | Some n -> Pred.as_pred (p, Name.name n)
-                  | None -> p))
+                  match n with Some n -> P.as_ p (Name.name n) | None -> p))
              r)
     | None -> Or_error.errorf "No relations found."
 
@@ -103,7 +102,7 @@ module Make (Config : Config.S) = struct
       ( schema_exn r
       |> List.filter ~f:(fun n' ->
              not (List.mem ~equal:Name.O.( = ) ns (Name.unscoped n')))
-      |> List.map ~f:Pred.name )
+      |> List.map ~f:P.name )
       r
 
   let select_contains names ps r =

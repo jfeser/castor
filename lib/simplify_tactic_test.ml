@@ -18,7 +18,9 @@ open Make (Config)
 
 open Ops
 
-let load_string ?params s = Abslayout_load.load_string ?params Config.conn s
+let load_string ?params s =
+  Abslayout_load.load_string ?params Config.conn s
+  |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ())
 
 let%expect_test "" =
   let r =

@@ -2,8 +2,11 @@ open! Core
 open Printf
 open Castor
 open Collections
-open Abslayout
 open Abslayout_load
+open Abslayout_visitors
+open Ast
+open Schema
+module A = Abslayout
 
 module Config = struct
   module type S = sig
@@ -19,26 +22,26 @@ end
 
 module T : sig
   type t = private {
-    f : Path.t -> Abslayout.t -> [ `Result of Abslayout.t | `Tf of t ] option;
+    f : Path.t -> Ast.t -> [ `Result of Ast.t | `Tf of t ] option;
     name : string;
   }
 
   val global :
     ?short_name:string ->
     ?reraise:bool ->
-    (Path.t -> Abslayout.t -> Abslayout.t option) ->
+    (Path.t -> Ast.t -> Ast.t option) ->
     string ->
     t
 
   val local :
     ?short_name:string ->
     ?reraise:bool ->
-    (Abslayout.t -> Abslayout.t option) ->
+    (Ast.t -> Ast.t option) ->
     string ->
     t
 end = struct
   type t = {
-    f : Path.t -> Abslayout.t -> [ `Result of Abslayout.t | `Tf of t ] option;
+    f : Path.t -> Ast.t -> [ `Result of Ast.t | `Tf of t ] option;
     name : string;
   }
 
@@ -46,8 +49,7 @@ end = struct
     try thunk r
     with exn ->
       if reraise then
-        Logs.err (fun m ->
-            m "@[Transform %s failed on: %a@,@]\n" name Abslayout.pp r);
+        Logs.err (fun m -> m "@[Transform %s failed on: %a@,@]\n" name A.pp r);
       raise exn
 
   let global ?short_name ?(reraise = true) f name =
@@ -155,7 +157,7 @@ module Make (C : Config.S) = struct
 
   let is_param_filter r p =
     match (Path.get_exn p r).node with
-    | Filter (pred, _) -> overlaps (pred_free pred) params
+    | Filter (pred, _) -> overlaps (A.pred_free pred) params
     | _ -> false
 
   let contains f r p =
@@ -169,8 +171,8 @@ module Make (C : Config.S) = struct
     | Filter (pred, _) ->
         List.exists (Pred.conjuncts pred) ~f:(function
           | Binop (Eq, p1, p2) ->
-              let x1 = overlaps (pred_free p1) params in
-              let x2 = overlaps (pred_free p2) params in
+              let x1 = overlaps (A.pred_free p1) params in
+              let x2 = overlaps (A.pred_free p2) params in
               Bool.(x1 <> x2)
           | _ -> false)
     | _ -> false
@@ -180,8 +182,8 @@ module Make (C : Config.S) = struct
     | Filter (pred, _) ->
         List.exists (Pred.conjuncts pred) ~f:(function
           | Binop ((Lt | Gt | Ge | Le), p1, p2) ->
-              let x1 = overlaps (pred_free p1) params in
-              let x2 = overlaps (pred_free p2) params in
+              let x1 = overlaps (A.pred_free p1) params in
+              let x2 = overlaps (A.pred_free p2) params in
               Bool.(x1 <> x2)
           | _ -> false)
     | _ -> false
@@ -222,7 +224,7 @@ module Make (C : Config.S) = struct
         ~f:(fun p' ->
           Option.bind
             (apply (at_ tf (fun _ -> Some p')) p r)
-            ~f:(fun r' -> if Abslayout.O.(r = r') then None else Some r'))
+            ~f:(fun r' -> if A.O.(r = r') then None else Some r'))
     in
     global ~reraise:false ~short_name:"first" f
       (sprintf "first %s in <path set>" tf.name)
@@ -231,7 +233,7 @@ module Make (C : Config.S) = struct
     let f p r =
       let rec fix r_in =
         match apply tf p r_in with
-        | Some r_out -> if Abslayout.O.(r_in = r_out) then r_in else fix r_out
+        | Some r_out -> if A.O.(r_in = r_out) then r_in else fix r_out
         | None -> r_in
       in
       Some (fix r)
@@ -264,13 +266,15 @@ module Make (C : Config.S) = struct
   let schema_validated tf =
     let f p r =
       Option.map (apply tf p r) ~f:(fun r' ->
-          let r = load_layout ~params conn r in
-          let r' = load_layout ~params conn r' in
-          let s =
-            schema_exn r |> List.dedup_and_sort ~compare:[%compare: Name.t]
+          let r =
+            load_layout ~params conn r |> map_meta (fun _ -> Meta.empty ())
           in
+          let r' =
+            load_layout ~params conn r' |> map_meta (fun _ -> Meta.empty ())
+          in
+          let s = schema r |> List.dedup_and_sort ~compare:[%compare: Name.t] in
           let s' =
-            schema_exn r' |> List.dedup_and_sort ~compare:[%compare: Name.t]
+            schema r' |> List.dedup_and_sort ~compare:[%compare: Name.t]
           in
           if not ([%compare.equal: Name.t list] s s') then
             Logs.warn (fun m ->
@@ -308,16 +312,15 @@ module Make (C : Config.S) = struct
   let traced tf =
     let f p r =
       Logs.debug (fun m ->
-          m "@[Running %s on:@,%a@]\n" tf.name Abslayout.pp (Path.get_exn p r));
+          m "@[Running %s on:@,%a@]\n" tf.name A.pp (Path.get_exn p r));
       match apply tf p r with
       | Some r' ->
-          if Abslayout.O.(r = r') then
+          if A.O.(r = r') then
             Logs.warn (fun m -> m "Invariant transformation %s." tf.name)
           else
             Logs.debug (fun m ->
                 m "@[%s transformed:@,%a@,===== to ======@,%a@]@.\n" tf.name
-                  Abslayout.pp (Path.get_exn p r) Abslayout.pp
-                  (Path.get_exn p r'));
+                  A.pp (Path.get_exn p r) A.pp (Path.get_exn p r'));
           Some r'
       | None ->
           Logs.debug (fun m -> m "@[Transform %s does not apply.\n" tf.name);
@@ -328,9 +331,7 @@ module Make (C : Config.S) = struct
   let of_func ?(name = "<unknown>") f =
     let tf =
       global
-        (fun p r ->
-          let r = R.resolve ~params r in
-          Option.map (f (Path.get_exn p r)) ~f:(Path.set_exn p r))
+        (fun p r -> Option.map (f (Path.get_exn p r)) ~f:(Path.set_exn p r))
         name
     in
     let tf = schema_validated tf in
@@ -338,10 +339,7 @@ module Make (C : Config.S) = struct
     if trace then traced tf else tf
 
   module Branching = struct
-    type t = {
-      b_f : Path.t -> Abslayout.t -> Abslayout.t Seq.t;
-      b_name : string;
-    }
+    type t = { b_f : Path.t -> Ast.t -> Ast.t Seq.t; b_name : string }
 
     let local ~name b_f =
       let b_f p r = Seq.map ~f:(Path.set_exn p r) (b_f (Path.get_exn p r)) in
@@ -366,7 +364,7 @@ module Make (C : Config.S) = struct
             Seq.append (Seq.singleton r)
               (Seq.unfold ~init:r ~f:(fun r ->
                    Option.bind (apply tf_branch p r) ~f:(fun r' ->
-                       if Abslayout.O.(r = r') then None else Some (r', r')))));
+                       if A.O.(r = r') then None else Some (r', r')))));
         b_name = "unfold";
       }
 
@@ -422,14 +420,12 @@ module Make (C : Config.S) = struct
     let traced tf =
       let b_f p r =
         Logs.debug (fun m ->
-            m "@[Running %s on:@,%a@]\n" tf.b_name Abslayout.pp
-              (Path.get_exn p r));
+            m "@[Running %s on:@,%a@]\n" tf.b_name A.pp (Path.get_exn p r));
         tf.b_f p r
         |> Seq.map ~f:(fun r' ->
                Logs.debug (fun m ->
                    m "@[%s transformed:@,%a@,===== to ======@,%a@]@.\n"
-                     tf.b_name Abslayout.pp (Path.get_exn p r) Abslayout.pp
-                     (Path.get_exn p r'));
+                     tf.b_name A.pp (Path.get_exn p r) A.pp (Path.get_exn p r'));
                r')
       in
       { tf with b_f }

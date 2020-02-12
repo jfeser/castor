@@ -1,6 +1,7 @@
 open Core
 open Castor
 open Collections
+open Ast
 open Abslayout
 module R = Resolve
 
@@ -43,7 +44,10 @@ module Make (Config : Config.S) = struct
   module Tactics_util = Tactics_util.Make (Config)
   module Dedup_tactics = Dedup_tactics.Make (Config)
 
-  let project r = Some (Project.project_once r)
+  let project r =
+    Some
+      ( r |> Resolve.resolve ~params |> Project.project_once
+      |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ()) )
 
   let project = of_func project ~name:"project"
 
@@ -57,14 +61,9 @@ module Make (Config : Config.S) = struct
 
   module Cost = Type_cost.Make (Config)
 
-  let is_serializable r p =
-    let r' = Path.get_exn p (R.resolve ~params r) in
-    is_serializeable r' |> Result.is_ok
+  let is_serializable r p = Path.get_exn p r |> is_serializeable |> Result.is_ok
 
-  let has_params r p =
-    let r' = R.resolve ~params r in
-    let r' = Path.get_exn p r' in
-    overlaps (free r') params
+  let has_params r p = Path.get_exn p r |> free |> overlaps params
 
   let has_free r p = not (Set.is_empty (free (Path.get_exn p r)))
 
@@ -261,8 +260,6 @@ module Make (Config : Config.S) = struct
   let opt_toplevel = seq_many [ try_partition opt; apply_to_subqueries opt ]
 
   let is_serializable r =
-    let r = R.resolve ~params r in
-    annotate_free r;
     let bad_runtime_op =
       Path.(
         all >>? is_run_time
@@ -285,8 +282,6 @@ end
 
 let optimize (module C : Config.S) r =
   let open Option.Let_syntax in
-  (* Annotate query with free variables. *)
-  annotate_free r;
   (* Optimize outer query. *)
   let%map r =
     let module T = Make (C) in

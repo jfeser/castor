@@ -49,7 +49,7 @@ let%expect_test "parted-cost" =
     (Set.singleton (module Name) o_custkey)
     (Flat (A.relation orders))
   |> [%sexp_of: int * int * float] |> print_s;
-  [%expect {| (1 2 1.002004008016032) |}]
+  [%expect {| (1 2 1.0060362173038229) |}]
 
 let%expect_test "parted-cost" =
   estimate_ntuples_parted
@@ -82,7 +82,7 @@ let%expect_test "cost" =
           rhs = Flat (relation orders);
         })
   |> [%sexp_of: float array] |> print_s;
-  [%expect {| (272710 67936) |}]
+  [%expect {| (272098 67808) |}]
 
 let%expect_test "cost" =
   estimate_cost
@@ -115,9 +115,9 @@ let%expect_test "cost" =
         })
   |> [%sexp_of: float array] |> print_s;
   [%expect {|
-    (194626 47904)
-    (138592 32336)
-    (138208 32361) |}]
+    (193846 47712)
+    (138044 32208)
+    (137660 32233) |}]
 
 let%expect_test "to-from-ralgebra" =
   let r =
@@ -188,14 +188,13 @@ let%expect_test "join-opt" =
   |> [%sexp_of: (float array * t) list] |> print_s;
   [%expect
     {|
-    (((47904)
+    (((47712)
       (Flat
        ((node
          (Join
           ((pred
-            (Binop
-             (Eq (Name ((scope ()) (name c_nationkey)))
-              (Name ((scope ()) (name n_nationkey))))))
+            (Binop Eq (Name ((scope ()) (name c_nationkey)))
+             (Name ((scope ()) (name n_nationkey)))))
            (r1
             ((node
               (Relation
@@ -234,16 +233,14 @@ let%expect_test "join-opt" =
        ((node
          (Join
           ((pred
-            (Binop
-             (Eq (Name ((scope ()) (name c_custkey)))
-              (Name ((scope ()) (name o_custkey))))))
+            (Binop Eq (Name ((scope ()) (name c_custkey)))
+             (Name ((scope ()) (name o_custkey)))))
            (r1
             ((node
               (Join
                ((pred
-                 (Binop
-                  (Eq (Name ((scope ()) (name c_nationkey)))
-                   (Name ((scope ()) (name n_nationkey))))))
+                 (Binop Eq (Name ((scope ()) (name c_nationkey)))
+                  (Name ((scope ()) (name n_nationkey)))))
                 (r1
                  ((node
                    (Relation

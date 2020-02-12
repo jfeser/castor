@@ -31,7 +31,7 @@ module Make (Config : Config.S) = struct
 
   let cost ?(kind = `Avg) =
     Memo.general
-      ~hashable:(Hashtbl.Hashable.of_key (module Abslayout))
+      ~hashable:(Hashtbl.Hashable.of_key (module Ast))
       (fun r ->
         let open Result.Let_syntax in
         try

@@ -29,7 +29,9 @@ open T
 module O = Ops.Make (C)
 open O
 
-let load_string ?params s = Abslayout_load.load_string ?params C.conn s
+let load_string ?params s =
+  Abslayout_load.load_string ?params C.conn s
+  |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ())
 
 let%expect_test "push-filter-comptime" =
   let r =
@@ -68,7 +70,14 @@ let%expect_test "push-filter-support" =
        Path.root r)
     ~f:(Format.printf "%a\n" pp);
   [%expect
-    {| ahashidx(select([f], r) as k, filter((k.f > param), ascalar(0)), 0) |}]
+    {|
+      [ERROR] Tried to get schema of unnamed predicate 0.
+      [ERROR] Tried to get schema of unnamed predicate 0.
+      [WARNING] push-filter is not schema preserving: (((scope())(name f))((scope())(name x0))) != (((scope())(name f))((scope())(name x1)))
+      [ERROR] Tried to get schema of unnamed predicate 0.
+      [ERROR] Tried to get schema of unnamed predicate 0.
+      [WARNING] filter-const is not schema preserving: (((scope())(name f))((scope())(name x2))) != (((scope())(name f))((scope())(name x3)))
+      ahashidx(select([f], r) as k, filter((k.f > param), ascalar(0)), 0) |}]
 
 let%expect_test "push-filter-support" =
   let r =
@@ -87,6 +96,12 @@ alist(filter((0 = g),
     ~f:(Format.printf "%a\n" pp);
   [%expect
     {|
+      [ERROR] Tried to get schema of unnamed predicate 0.
+      [ERROR] Tried to get schema of unnamed predicate 0.
+      [WARNING] push-filter is not schema preserving: (((scope())(name x0))) != (((scope())(name x1)))
+      [ERROR] Tried to get schema of unnamed predicate 0.
+      [ERROR] Tried to get schema of unnamed predicate 0.
+      [WARNING] filter-const is not schema preserving: (((scope())(name x2))) != (((scope())(name x3)))
       alist(depjoin(ascalar(0 as f) as k,
               filter((0 = g), select([k.f, g], ascalar(0 as g)))) as k1,
         ascalar(0)) |}]
@@ -124,6 +139,7 @@ let%expect_test "elim-eq-filter" =
         ~f:(Format.printf "%a\n" pp);
       [%expect
         {|
+          [WARNING] elim-eq-filter is not schema preserving: (((scope())(name fresh))) != (((scope())(name fresh))((scope())(name x0)))
           ahashidx(dedup(
                      atuple([select([fresh as x0],
                                dedup(select([fresh], select([f as fresh], r))))],
@@ -142,6 +158,7 @@ let%expect_test "elim-eq-filter-approx" =
         ~f:(Format.printf "%a\n" pp);
       [%expect
         {|
+          [WARNING] elim-eq-filter is not schema preserving: (((scope())(name fresh))) != (((scope())(name fresh))((scope())(name x0)))
           ahashidx(dedup(
                      atuple([select([fresh as x0],
                                select([f as fresh], dedup(select([f], r))))],
@@ -161,6 +178,7 @@ let%expect_test "elim-eq-filter" =
       [%expect
         {|
         [INFO] ("Not part of an equality predicate." (Bool true))
+        [WARNING] elim-eq-filter is not schema preserving: (((scope())(name fresh))((scope())(name g))) != (((scope())(name fresh))((scope())(name g))((scope())(name x0)))
         ahashidx(dedup(
                    atuple([select([fresh as x0],
                              dedup(select([fresh], select([f as fresh, g], r))))],
@@ -180,6 +198,7 @@ let%expect_test "elim-eq-filter" =
         ~f:(Format.printf "%a\n" pp);
       [%expect
         {|
+        [WARNING] elim-eq-filter is not schema preserving: (((scope())(name fresh1))((scope())(name fresh2))) != (((scope())(name fresh1))((scope())(name fresh2))((scope())(name x2))((scope())(name x5)))
         ahashidx(dedup(
                    atuple([dedup(
                              atuple([select([x0 as x2],
@@ -234,8 +253,8 @@ let%expect_test "partition" =
   [%expect
     {|
         ahashidx(depjoin(select([min(f) as lo, max(f) as hi],
-                           select([f as f], dedup(select([f], r)))) as k1,
-                   select([range as k0], range(k1.l, k1.h))) as s0,
+                           select([f], select([f as f], dedup(select([f], r))))) as k1,
+                   select([range as k0], range(k1.lo, k1.hi))) as s0,
           filter((f = s0.k0), r),
           param)
  |}]

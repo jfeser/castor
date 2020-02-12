@@ -1,7 +1,9 @@
 open Core
 open Castor
+open Ast
 open Abslayout
 open Collections
+module P = Pred.Infix
 
 module Config = struct
   module type My_S = sig
@@ -145,7 +147,7 @@ module Make (C : Config.S) = struct
     let k = Fresh.name Global.fresh "k%d" in
     let n = Fresh.name Global.fresh "x%d" in
     ordered_idx
-      (dedup (select [ Pred.as_pred (p, n) ] rk))
+      (dedup (select [ P.as_ p n ] rk))
       k
       (filter (Binop (Eq, Name (Name.create ~scope:k n), p)) rv)
       { oi_key_layout = None; oi_lookup = [ (lb, ub) ] }
@@ -171,7 +173,7 @@ module Make (C : Config.S) = struct
         let cmps, rest =
           Pred.conjuncts p
           |> List.partition_map ~f:(function
-               | (Pred.Binop (Gt, p1, p2) | Binop (Lt, p2, p1)) as p ->
+               | (Binop (Gt, p1, p2) | Binop (Lt, p2, p1)) as p ->
                    if is_candidate_key p1 r' && is_candidate_match p2 r' then
                      `Fst (p2, (`Lt, p1))
                    else if is_candidate_key p2 r' && is_candidate_match p1 r'
@@ -210,7 +212,7 @@ module Make (C : Config.S) = struct
                        ( Option.map
                            (List.reduce ~f:Pred.max_of (open_lb @ closed_lb))
                            ~f:(fun max -> (max, `Closed)),
-                         List.map open_lb ~f:(Pred.binop Gt key) )
+                         List.map open_lb ~f:(fun v -> P.(key > v)) )
                  in
                  let ub, rest' =
                    let open_ub =
@@ -233,7 +235,7 @@ module Make (C : Config.S) = struct
                        ( Option.map
                            (List.reduce ~f:Pred.min_of (open_ub @ closed_ub))
                            ~f:(fun p -> (p, `Closed)),
-                         List.map open_ub ~f:(Pred.binop Gt key) )
+                         List.map open_ub ~f:(fun v -> P.(key > v)) )
                  in
                  ((key, (lb, ub)), rest @ rest'))
           |> List.unzip
@@ -423,7 +425,7 @@ module Make (C : Config.S) = struct
     type domain =
       | And of domain * domain
       | Or of domain * domain
-      | Domain of Abslayout.t
+      | Domain of Ast.t
     [@@deriving compare]
 
     type t = domain Map.M(Pred).t
@@ -451,7 +453,7 @@ module Make (C : Config.S) = struct
     let rec of_pred r =
       let open Or_error.Let_syntax in
       function
-      | Pred.Binop (And, p1, p2) ->
+      | Binop (And, p1, p2) ->
           let%bind ds1 = of_pred r p1 in
           let%map ds2 = of_pred r p2 in
           intersect ds1 ds2
@@ -494,14 +496,14 @@ module Make (C : Config.S) = struct
             dedup
               (tuple
                  [
-                   select [ Pred.as_pred (Name n1, n) ] e1;
-                   select [ Pred.as_pred (Name n2, n) ] e2;
+                   select [ P.as_ (Name n1) n ] e1;
+                   select [ P.as_ (Name n2) n ] e2;
                  ]
                  Concat)
         | Domain d ->
             let n = schema d in
             let n' = Fresh.name Global.fresh "x%d" in
-            select [ Pred.as_pred (Name n, n') ] d
+            select [ P.as_ (Name n) n' ] d
       in
       Map.map d ~f:extract
   end
@@ -533,7 +535,7 @@ module Make (C : Config.S) = struct
         let inner_filter_pred =
           let ctx =
             Map.map eqs ~f:(fun r ->
-                Pred.name (List.hd_exn (schema_exn r) |> Name.scoped scope))
+                schema_exn r |> List.hd_exn |> Name.scoped scope |> P.name)
           in
           Pred.subst_tree ctx inner
         in
@@ -565,7 +567,7 @@ module Make (C : Config.S) = struct
 
   let to_lower_bound n =
     List.find_map ~f:(function
-      | Pred.Binop (Eq, Name n', p) when Name.O.(n' = n) -> Some p
+      | Binop (Eq, Name n', p) when Name.O.(n' = n) -> Some p
       | Binop (Eq, p, Name n') when Name.O.(n' = n) -> Some p
       | Binop (Lt, Name n', p) when Name.O.(n' = n) -> Some p
       | Binop (Le, Name n', p) when Name.O.(n' = n) -> Some p
@@ -583,7 +585,7 @@ module Make (C : Config.S) = struct
 
   let to_upper_bound n =
     List.find_map ~f:(function
-      | Pred.Binop (Eq, Name n', p) when Name.O.(n' = n) -> Some p
+      | Binop (Eq, Name n', p) when Name.O.(n' = n) -> Some p
       | Binop (Eq, p, Name n') when Name.O.(n' = n) -> Some p
       | Binop (Lt, p, Name n') when Name.O.(n' = n) -> Some p
       | Binop (Le, p, Name n') when Name.O.(n' = n) -> Some p
@@ -643,11 +645,11 @@ module Make (C : Config.S) = struct
                 let vals =
                   let val_name = List.hd_exn (schema_exn vals) in
                   let select_list =
-                    Pred.name val_name
+                    P.name val_name
                     :: List.filter_map aliases
                          ~f:
                            (Option.map ~f:(fun n ->
-                                Pred.as_pred (Name val_name, Name.name n)))
+                                P.as_ (Name val_name) @@ Name.name n))
                   in
                   select select_list vals
                 in
@@ -673,7 +675,7 @@ module Make (C : Config.S) = struct
               (Map.singleton
                  (module Name)
                  n
-                 (Pred.name @@ Name.scoped scope @@ Name.create key_name))
+                 (P.name @@ Name.scoped scope @@ Name.create key_name))
               r
           in
           if Set.mem (names r') n then None
@@ -684,7 +686,6 @@ module Make (C : Config.S) = struct
                 (List.map ~f:Tuple.T2.get1 fs));
           None
     in
-    let r = Resolve.resolve ~params r in
     Set.to_sequence params |> Seq.filter_map ~f:(part_on r)
 
   let partition = Branching.global partition ~name:"partition"
