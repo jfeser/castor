@@ -1,12 +1,10 @@
 open! Core
 open Ast
+open Abslayout
 open Abslayout_visitors
-open Abslayout_infix
 open Schema
 module A = Abslayout
 module P = Pred.Infix
-
-module C = (val constructors (fun () -> ()))
 
 [@@@warning "-17"]
 
@@ -146,32 +144,27 @@ let total_order_key q =
   let native_order = A.order_of q in
   let total_order = List.map (schema q) ~f:(fun n -> (Name n, Asc)) in
   native_order @ total_order
-  |> List.map ~f:(fun (p, o) -> (map_meta_pred (fun _ -> ()) p, o))
 
 let to_scalars rs =
   List.map rs ~f:(fun t ->
       match t.Ast.node with AScalar p -> Some p | _ -> None)
   |> Option.all
 
-let strip_meta q = map_meta (fun _ -> ()) q
-
 let strip_meta_pred p = map_meta_pred (fun _ -> ()) p
-
-module U = (val constructors (fun () -> ()))
 
 let of_list of_ralgebra q (q1, q2) =
   let scope = A.scope_exn q1 in
   let q1 = A.strip_scope q1 in
   let q1 =
     let order_key = total_order_key q1 in
-    U.order_by order_key (strip_meta q1)
+    order_by order_key (strip_meta q1)
   in
   for_ q (q1, scope, of_ralgebra q2, false)
 
 let of_hash_idx of_ralgebra q h =
   let q1 =
     let order_key = total_order_key h.hi_keys in
-    U.order_by order_key (U.dedup @@ strip_meta h.hi_keys)
+    order_by order_key (dedup @@ strip_meta h.hi_keys)
   in
   for_ q (q1, h.hi_scope, of_ralgebra h.hi_values, true)
 
@@ -180,7 +173,7 @@ let of_ordered_idx of_ralgebra q (q1, q2, _) =
   let q1 = A.strip_scope q1 in
   let q1 =
     let order_key = total_order_key q1 in
-    U.order_by order_key (U.dedup @@ strip_meta q1)
+    order_by order_key (dedup @@ strip_meta q1)
   in
   for_ q (q1, scope, of_ralgebra q2, true)
 
@@ -235,7 +228,7 @@ let unwrap q = map_meta ~f:(fun m -> Option.value_exn m) q
    fold acts on. *)
 let rec to_ralgebra q =
   match q.node with
-  | Var _ -> C.scalar (As_pred (Int 0, Fresh.name Global.fresh "var%d"))
+  | Var _ -> scalar (As_pred (Int 0, Fresh.name Global.fresh "var%d"))
   | Let (binds, q) -> to_ralgebra (to_concat binds q)
   | For (q1, scope, q2, distinct) ->
       (* Extend the lhs query with a row number. Even if this query emits
@@ -248,7 +241,7 @@ let rec to_ralgebra q =
           if distinct then (o1, q1)
           else
             ( o1 @ [ (Name (Name.create row_number), Asc) ],
-              C.select
+              select
                 ( As_pred (Row_number, row_number)
                 :: (schema q1 |> Schema.to_select_list) )
                 q1 )
@@ -277,7 +270,7 @@ let rec to_ralgebra q =
         in
         List.map (o1 @ o2) ~f:(fun (p, o) -> (Pred.subst sctx p, o))
       in
-      C.order_by order (C.dep_join q1 scope (C.select slist q2))
+      order_by order (dep_join q1 scope (select slist q2))
   | Concat qs ->
       let counter_name = Fresh.name Global.fresh "counter%d" in
       let orders, qs =
@@ -301,14 +294,14 @@ let rec to_ralgebra q =
                        List.map ~f:(fun n ->
                            P.as_ (Null (Some (Name.type_exn n))) (Name.name n)))
             in
-            C.select select_list q)
+            select select_list q)
       in
       let order =
         (P.name (Name.create counter_name), Asc) :: List.concat orders
       in
-      C.order_by order (C.tuple queries_norm Concat)
-  | Empty -> C.empty
-  | Scalars ps -> C.tuple (List.map ps ~f:C.scalar) Cross
+      order_by order (tuple queries_norm Concat)
+  | Empty -> A.empty
+  | Scalars ps -> tuple (List.map ps ~f:scalar) Cross
 
 let rec n_parallel q =
   match q.node with

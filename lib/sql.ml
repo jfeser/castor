@@ -2,12 +2,10 @@ open! Core
 open Collections
 open Ast
 open Schema
+open Abslayout
 open Abslayout_visitors
-open Abslayout_infix
 module A = Abslayout
 module P = Pred.Infix
-
-module C = (val constructors (fun () -> ()))
 
 let src =
   let src = Logs.Src.create "sql-test" in
@@ -278,20 +276,19 @@ let of_ralgebra r =
     | ATuple ([ r ], (Cross | Concat)) -> f r
     | ATuple (r :: rs, Cross) ->
         let q1 = r in
-        let q2 = C.tuple rs Cross in
+        let q2 = tuple rs Cross in
         join (schema q1) (schema q2) (f q1) (f q2) (Bool true)
     | ATuple (rs, Concat) -> Union_all (List.map ~f:(fun r -> to_spj (f r)) rs)
     | ATuple ([], _) | AEmpty -> Query (create_query ~limit:0 [])
     | AScalar p -> Query (create_query [ create_entry p ])
     | ATuple (_, Zip) ->
         Error.(create "Unsupported." r [%sexp_of: _ annot] |> raise)
-    | AList (rk, rv) -> f @@ C.dep_join' (A.list_to_depjoin rk rv)
-    | AHashIdx h -> f @@ C.dep_join' (A.hash_idx_to_depjoin h)
+    | AList (rk, rv) -> f @@ dep_join' (A.list_to_depjoin rk rv)
+    | AHashIdx h -> f @@ dep_join' (A.hash_idx_to_depjoin h)
     | AOrderedIdx (rk, rv, m) ->
-        f @@ C.dep_join' (A.ordered_idx_to_depjoin rk rv m)
+        f @@ dep_join' (A.ordered_idx_to_depjoin rk rv m)
   in
-  let r = A.ensure_alias r |> map_meta (fun _ -> ()) in
-  f r
+  strip_meta r |> A.ensure_alias |> f
 
 let rec pred_to_sql p =
   let p2s = pred_to_sql in

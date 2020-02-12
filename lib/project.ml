@@ -83,9 +83,7 @@ let rec annotate_count c r =
 and annotate_count_pred c p =
   map_pred (annotate_count c) (annotate_count_pred c) p
 
-let c = new Infix.constructors ()
-
-let dummy () = c#scalar (As_pred (Bool false, Fresh.name Global.fresh "d%d"))
+let dummy () = A.scalar (As_pred (Bool false, Fresh.name Global.fresh "d%d"))
 
 let rec project r =
   let refcnt = r.meta.refcount in
@@ -94,17 +92,17 @@ let rec project r =
   else
     match r.node with
     | Select (ps, r) ->
-        c#select
+        A.select
           (project_defs refcnt ps |> List.map ~f:project_pred)
           (project r)
     | GroupBy (ps, ns, r) ->
-        c#group_by
+        A.group_by
           (project_defs refcnt ps |> List.map ~f:project_pred)
           ns (project r)
     | Dedup r -> (
         match count with
-        | Exact -> c#dedup @@ no_project r
-        | AtLeastOne -> c#dedup @@ project r )
+        | Exact -> A.dedup @@ no_project r
+        | AtLeastOne -> A.dedup @@ project r )
     | AList (rk, rv) ->
         let scope = A.scope_exn rk in
         let rk = A.strip_scope rk in
@@ -116,14 +114,14 @@ let rec project r =
             |> List.map ~f:project_pred
           in
           let new_n = List.length ps in
-          if old_n > new_n then c#select ps (no_project rk) else project rk
+          if old_n > new_n then A.select ps (no_project rk) else project rk
         in
-        c#list rk scope (project rv)
+        A.list rk scope (project rv)
     | AScalar p ->
-        if project_def refcnt p then c#scalar (project_pred p) else dummy ()
-    | ATuple ([], _) -> c#empty
+        if project_def refcnt p then A.scalar (project_pred p) else dummy ()
+    | ATuple ([], _) -> A.empty
     | ATuple ([ r ], _) -> project r
-    | ATuple (rs, Concat) -> c#tuple (List.map rs ~f:project) Concat
+    | ATuple (rs, Concat) -> A.tuple (List.map rs ~f:project) Concat
     | ATuple (rs, Cross) ->
         let rs =
           (* Remove unreferenced parts of the tuple. *)
@@ -145,24 +143,24 @@ let rec project r =
           |> List.map ~f:project
         in
         let rs = if List.length rs = 0 then [ dummy () ] else rs in
-        c#tuple rs Cross
+        A.tuple rs Cross
     | Join { r1; r2; pred } -> (
         match count with
-        | Exact -> c#join (project_pred pred) (project r1) (project r2)
+        | Exact -> A.join (project_pred pred) (project r1) (project r2)
         (* If one side of a join is unused then the join can be dropped. *)
         | AtLeastOne ->
             if all_unref_at r1 r then project r2
             else if all_unref_at r2 r then project r1
-            else c#join (project_pred pred) (project r1) (project r2) )
+            else A.join (project_pred pred) (project r1) (project r2) )
     | DepJoin { d_lhs; d_rhs; d_alias } -> (
         match count with
-        | Exact -> c#dep_join (project d_lhs) d_alias (project d_rhs)
+        | Exact -> A.dep_join (project d_lhs) d_alias (project d_rhs)
         (* If one side of a join is unused then the join can be dropped. *)
         | AtLeastOne ->
             if all_unref d_lhs then project d_rhs
             else if all_unref d_rhs then dummy ()
-            else c#dep_join (project d_lhs) d_alias (project d_rhs) )
-    | Range (p, p') -> c#range (project_pred p) (project_pred p')
+            else A.dep_join (project d_lhs) d_alias (project d_rhs) )
+    | Range (p, p') -> A.range (project_pred p) (project_pred p')
     | q -> { node = map_query project project_pred q; meta = () }
 
 and project_pred p = map_pred project project_pred p
@@ -172,11 +170,9 @@ and no_project r =
 
 let project_once r = annotate_count Exact r |> project
 
-let strip_meta q = map_meta (fun _ -> ()) q
-
 let project ?(params = Set.empty (module Name)) r =
   let rec loop r =
     let r' = Resolve.resolve r ~params |> project_once in
-    if [%compare.equal: unit annot] (strip_meta r) r' then r' else loop r'
+    if [%compare.equal: unit annot] (A.strip_meta r) r' then r' else loop r'
   in
-  loop (strip_meta r)
+  loop (A.strip_meta r)

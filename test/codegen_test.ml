@@ -36,11 +36,9 @@ let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
       let params =
         List.map params ~f:(fun (n, _) -> n) |> Set.of_list (module Name)
       in
-      load_string conn ~params layout_str
-      |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ())
+      load_string conn ~params layout_str |> annotate_type conn
     in
 
-    let layout = annotate_type conn layout in
     if fork then run_in_fork (fun () -> run_compiler layout)
     else run_compiler layout
   in

@@ -6,49 +6,39 @@ open Abslayout_fold
 open Abslayout_visitors
 module T = Type
 
-let drop_meta q = map_meta (fun _ -> ()) q
-
 (** Returns the least general type of a layout. *)
-let rec least_general_of_layout r =
-  match r.node with
-  | Range _ -> T.FuncT ([], `Width 1)
-  | Select (ps, r') | GroupBy (ps, _, r') ->
-      T.FuncT ([ least_general_of_layout r' ], `Width (List.length ps))
-  | OrderBy { rel = r'; _ } | Filter (_, r') | Dedup r' ->
-      FuncT ([ least_general_of_layout r' ], `Child_sum)
-  | Join { r1; r2; _ } ->
-      FuncT
-        ([ least_general_of_layout r1; least_general_of_layout r2 ], `Child_sum)
-  | AEmpty -> EmptyT
-  | AScalar p -> Pred.to_type p |> T.least_general_of_primtype
-  | AList (_, r') -> ListT (least_general_of_layout r', { count = Bottom })
-  | DepJoin { d_lhs; d_rhs; _ } ->
-      FuncT
-        ( [ least_general_of_layout d_lhs; least_general_of_layout d_rhs ],
-          `Child_sum )
-  | AHashIdx h ->
-      HashIdxT
-        ( least_general_of_layout (h_key_layout h),
-          least_general_of_layout h.hi_values,
-          { key_count = Bottom } )
-  | AOrderedIdx (_, vr, { oi_key_layout = Some kr; _ }) ->
-      OrderedIdxT
-        ( least_general_of_layout kr,
-          least_general_of_layout vr,
-          { key_count = Bottom } )
-  | ATuple (rs, k) ->
-      let kind =
-        match k with
-        | Cross -> `Cross
-        | Concat -> `Concat
-        | _ -> failwith "Unsupported"
-      in
-      TupleT (List.map rs ~f:least_general_of_layout, { kind })
-  | As (_, r') -> least_general_of_layout r'
-  | AOrderedIdx (_, _, { oi_key_layout = None; _ }) | Relation _ ->
-      failwith "Layout is still abstract."
-
-let least_general_of_layout r = least_general_of_layout @@ drop_meta r
+let least_general_of_layout r =
+  let rec f r =
+    match r.node with
+    | Range _ -> T.FuncT ([], `Width 1)
+    | Select (ps, r') | GroupBy (ps, _, r') ->
+        T.FuncT ([ f r' ], `Width (List.length ps))
+    | OrderBy { rel = r'; _ } | Filter (_, r') | Dedup r' ->
+        FuncT ([ f r' ], `Child_sum)
+    | Join { r1; r2; _ } -> FuncT ([ f r1; f r2 ], `Child_sum)
+    | AEmpty -> EmptyT
+    | AScalar p -> Pred.to_type p |> T.least_general_of_primtype
+    | AList (_, r') -> ListT (f r', { count = Bottom })
+    | DepJoin { d_lhs; d_rhs; _ } -> FuncT ([ f d_lhs; f d_rhs ], `Child_sum)
+    | AHashIdx { hi_key_layout = Some kr; hi_values = vr; _ } ->
+        HashIdxT (f kr, f vr, { key_count = Bottom })
+    | AOrderedIdx (_, vr, { oi_key_layout = Some kr; _ }) ->
+        OrderedIdxT (f kr, f vr, { key_count = Bottom })
+    | ATuple (rs, k) ->
+        let kind =
+          match k with
+          | Cross -> `Cross
+          | Concat -> `Concat
+          | _ -> failwith "Unsupported"
+        in
+        TupleT (List.map rs ~f, { kind })
+    | As (_, r') -> f r'
+    | AOrderedIdx (_, _, { oi_key_layout = None; _ })
+    | AHashIdx { hi_key_layout = None; _ } ->
+        failwith "Missing key layout."
+    | Relation _ -> failwith "Layout is still abstract."
+  in
+  f r
 
 (** Returns a layout type that is general enough to hold all of the data. *)
 class ['self] type_fold =
@@ -100,19 +90,9 @@ class ['self] type_fold =
       | Null -> NullT
       | Fixed x -> FixedT { value = T.AbsFixed.of_fixed x; nullable = false }
 
-    method list _ ((_, elem_l) as l) =
+    method list _ (_, elem_l) =
       let init = (least_general_of_layout elem_l, 0) in
-      let fold (t, c) (_, t') =
-        try (T.unify_exn t t', c + 1)
-        with Type.TypeError _ as exn ->
-          Logs.err (fun m -> m "Type checking failed on: %a" pp (list' l));
-          Logs.err (fun m ->
-              m "%a does not unify with %a" Sexp.pp_hum
-                ([%sexp_of: T.t] t)
-                Sexp.pp_hum
-                ([%sexp_of: T.t] t'));
-          raise exn
-      in
+      let fold (t, c) (_, t') = (T.unify_exn t t', c + 1) in
       let extract (elem_type, num_elems) =
         T.ListT (elem_type, { count = T.AbsInt.of_int num_elems })
       in
@@ -202,6 +182,7 @@ let annotate_type conn r =
         Error.create "Unexpected type." (r, t) [%sexp_of: _ annot * t]
         |> Error.raise
   in
+  let r = map_meta (fun _ -> Meta.empty ()) r in
   annot r (type_of conn r);
   let visitor =
     object

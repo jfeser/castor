@@ -15,11 +15,7 @@ let run_test layout_str =
 
   let layout_file = Filename.temp_file "layout" "bin" in
   let layout_log_file = Filename.temp_file "layout" "txt" in
-  let layout =
-    load_string conn layout_str
-    |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ())
-    |> annotate_type conn
-  in
+  let layout = load_string conn layout_str |> annotate_type conn in
   let type_ = layout.meta#type_ in
   let _, len =
     Serialize.serialize ~layout_file:layout_log_file conn layout_file layout

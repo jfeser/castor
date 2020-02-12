@@ -1,6 +1,7 @@
 open! Core
+open Ast
 
-type t = Ast.meta [@@deriving sexp_of]
+type t = Univ_map.t ref [@@deriving sexp_of]
 
 type 'a key = 'a Univ_map.Key.t
 
@@ -32,15 +33,15 @@ val empty : unit -> t
  * 
  * val refcnt : int Map.M(Name).t key *)
 
-val find : Ast.t -> 'a key -> 'a option
+val find : t annot -> 'a key -> 'a option
 
-val find_exn : Ast.t -> 'a key -> 'a
+val find_exn : t annot -> 'a key -> 'a
 
-val set : Ast.t -> 'a key -> 'a -> Ast.t
+val set : t annot -> 'a key -> 'a -> t annot
 
-val set_m : Ast.t -> 'a key -> 'a -> unit
+val set_m : t annot -> 'a key -> 'a -> unit
 
-val update : Ast.t -> 'a key -> f:('a option -> 'a) -> unit
+val update : t annot -> 'a key -> f:('a option -> 'a) -> unit
 
 module Direct : sig
   val find : t -> 'a key -> 'a option

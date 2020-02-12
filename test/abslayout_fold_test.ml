@@ -8,7 +8,6 @@ let test_conn = Test_util.test_db_conn |> Lazy.force
 let%expect_test "" =
   let ralgebra =
     "alist(r1 as k, filter(k.f = g, ascalar(k.g)))" |> load_string test_conn
-    |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ())
   in
   let q = Q.of_ralgebra ralgebra in
   let r = Q.to_ralgebra q in
@@ -43,7 +42,6 @@ let%expect_test "" =
   let ralgebra =
     "depjoin(ascalar(0 as f) as k, select([k.f + g], alist(r1 as k1, \
      ascalar(k1.g))))" |> load_string test_conn
-    |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ())
   in
   let q = Q.of_ralgebra ralgebra in
   let r = Q.to_ralgebra q in
@@ -94,10 +92,7 @@ let%expect_test "" =
           "x4_0" |}]
 
 let%expect_test "" =
-  let ralgebra =
-    load_string test_conn Test_util.sum_complex
-    |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ())
-  in
+  let ralgebra = load_string test_conn Test_util.sum_complex in
   let q = Q.of_ralgebra ralgebra in
   let r = Q.to_ralgebra q in
   Format.printf "%a" pp r;
@@ -140,7 +135,6 @@ let%expect_test "" =
 let%expect_test "" =
   let ralgebra =
     load_string test_conn "alist(r1 as k, alist(r1 as j, ascalar(j.f)))"
-    |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ())
   in
   let q = Q.of_ralgebra ralgebra in
 

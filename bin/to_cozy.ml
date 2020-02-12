@@ -1,7 +1,6 @@
 open! Core
 open Castor
 open Abslayout_load
-open Abslayout_visitors
 
 let main conn params file =
   let bench_name = Filename.(basename file |> chop_extension) in
@@ -9,7 +8,6 @@ let main conn params file =
   let ralgebra =
     let params = Set.of_list (module Name) params in
     load_string ~params conn (In_channel.with_file file ~f:In_channel.input_all)
-    |> map_meta (fun _ -> Meta.empty ())
   in
   Cozy.to_string bench_name params ralgebra |> print_string
 

@@ -5,9 +5,8 @@ include Ast
 include Comparator.Make (Ast)
 include Abslayout_pp
 include Abslayout_visitors
-open Abslayout_infix
 
-module O : Comparable.Infix with type t := t = Comparable.Make (Ast)
+module O : Comparable.Infix with type t := Ast.t = Comparable.Make (Ast)
 
 open Schema
 
@@ -20,15 +19,7 @@ let scope_exn r =
 
 let strip_scope r = match r.node with As (_, r) -> r | _ -> r
 
-let strip_meta =
-  let visitor =
-    object
-      inherit [_] map as super
-
-      method! visit_t () t = { (super#visit_t () t) with meta = M.empty () }
-    end
-  in
-  visitor#visit_t ()
+let strip_meta r = map_meta (fun _ -> ()) r
 
 let scopes r =
   let visitor =
@@ -66,7 +57,7 @@ let alpha_scopes r =
   in
   visitor#visit_t () r
 
-let wrap x = { node = x; meta = M.empty () }
+let wrap x = { node = x; meta = () }
 
 let select a b = wrap (Select (a, strip_meta b))
 
@@ -325,7 +316,7 @@ let validate r =
     Error.of_string "Program contains bare relation references." |> Error.raise
 
 (** Return the set of equivalent attributes in the output of a query. *)
-let eqs eqs r =
+let eqs_open eqs r =
   let dedup_pairs = List.dedup_and_sort ~compare:[%compare: Name.t * Name.t] in
   match r with
   | As (n, r) ->
@@ -348,7 +339,9 @@ let eqs eqs r =
   | AList (r1, r2) -> eqs r1 @ eqs r2 |> dedup_pairs
   | _ -> []
 
-let annotate_eq r = annotate eqs r
+let annotate_eq r = annotate eqs_open r
+
+let rec eqs r = eqs_open eqs r.node
 
 let select_kind l =
   if List.exists l ~f:(fun p -> Poly.(Pred.kind p = `Agg)) then `Agg
@@ -439,16 +432,16 @@ let annotate_orders r =
   let eq_k =
     Univ_map.Key.create ~name:"eq" [%sexp_of: (Name.t * Name.t) list]
   in
-  let rec annotate_orders r =
+  let rec annotate_orders (r : Univ_map.t ref annot) =
     let order =
       match r.node with
       | Select (ps, r) ->
           annotate_orders r
           |> List.filter_map ~f:(fun (p, d) ->
                  List.find_map ps ~f:(function
-                   | As_pred (p', n) when [%compare.equal: Pred.t] p p' ->
+                   | As_pred (p', n) when [%compare.equal: _ pred] p p' ->
                        Some (Name (Name.create n), d)
-                   | p' when [%compare.equal: Pred.t] p p' -> Some (p', d)
+                   | p' when [%compare.equal: _ pred] p p' -> Some (p', d)
                    | _ -> None))
       | Filter (_, r) | AHashIdx { hi_values = r; _ } -> annotate_orders r
       | DepJoin { d_lhs = r1; d_rhs = r2; _ } | Join { r1; r2; _ } ->
@@ -486,7 +479,8 @@ let annotate_orders r =
           schema r |> List.map ~f:(fun n -> (Name n, Asc))
       | As _ | Range _ -> []
     in
-    M.set_m r order_k order;
+    M.set_m r order_k
+      (List.map order ~f:(fun (p, o) -> (map_meta_pred (fun _ -> ()) p, o)));
     order
   in
   let r =
@@ -561,34 +555,31 @@ let strip_unused_as q =
   in
   visitor#visit_t () q
 
-let drop_meta q = map_meta (fun _ -> ()) q
-
-let drop_meta_pred q = map_meta_pred (fun _ -> ()) q
+let strip_meta_pred q = map_meta_pred (fun _ -> ()) q
 
 let list_to_depjoin rk rv =
   let scope = scope_exn rk in
   { d_lhs = strip_scope rk; d_alias = scope; d_rhs = rv }
 
 let hash_idx_to_depjoin h =
-  let open (val constructors (fun () -> ())) in
   let rk_schema = schema h.hi_keys |> scoped h.hi_scope in
   let rv_schema = schema h.hi_values in
   let key_pred =
     List.map2_exn rk_schema h.hi_lookup ~f:(fun p1 p2 ->
-        Binop (Eq, Name p1, drop_meta_pred p2))
+        Binop (Eq, Name p1, strip_meta_pred p2))
     |> Pred.conjoin
   in
   let slist = rk_schema @ rv_schema |> List.map ~f:(fun n -> Name n) in
   {
-    d_lhs = drop_meta h.hi_keys;
+    d_lhs = strip_meta h.hi_keys;
     d_alias = h.hi_scope;
-    d_rhs = drop_meta @@ select slist (filter key_pred @@ drop_meta h.hi_values);
+    d_rhs =
+      strip_meta @@ select slist (filter key_pred @@ strip_meta h.hi_values);
   }
 
 let ordered_idx_to_depjoin rk rv m =
-  let open (val constructors (fun () -> ())) in
-  let rk = drop_meta rk in
-  let rv = drop_meta rv in
+  let rk = strip_meta rk in
+  let rv = strip_meta rv in
   let scope = scope_exn rk in
   let rk_schema = schema rk in
   let rv_schema = schema rv in
@@ -599,15 +590,15 @@ let ordered_idx_to_depjoin rk rv m =
            let p1 =
              Option.map lb ~f:(fun (p, b) ->
                  match b with
-                 | `Closed -> [ Binop (Ge, Name n, drop_meta_pred p) ]
-                 | `Open -> [ Binop (Gt, Name n, drop_meta_pred p) ])
+                 | `Closed -> [ Binop (Ge, Name n, strip_meta_pred p) ]
+                 | `Open -> [ Binop (Gt, Name n, strip_meta_pred p) ])
              |> Option.value ~default:[]
            in
            let p2 =
              Option.map ub ~f:(fun (p, b) ->
                  match b with
-                 | `Closed -> [ Binop (Le, Name n, drop_meta_pred p) ]
-                 | `Open -> [ Binop (Lt, Name n, drop_meta_pred p) ])
+                 | `Closed -> [ Binop (Le, Name n, strip_meta_pred p) ]
+                 | `Open -> [ Binop (Lt, Name n, strip_meta_pred p) ])
              |> Option.value ~default:[]
            in
            p1 @ p2)
@@ -690,22 +681,20 @@ let relations =
   in
   visitor#visit_t ()
 
-module C = (val constructors (fun () -> ()))
-
 let h_key_layout { hi_key_layout; hi_keys; _ } =
   match hi_key_layout with
-  | Some l -> drop_meta l
+  | Some l -> strip_meta l
   | None -> (
-      match List.map (schema hi_keys) ~f:(fun n -> C.scalar (Name n)) with
+      match List.map (schema hi_keys) ~f:(fun n -> scalar (Name n)) with
       | [] -> failwith "empty schema"
       | [ x ] -> x
-      | xs -> C.tuple xs Cross )
+      | xs -> tuple xs Cross )
 
 let o_key_layout (oi_keys, _, { oi_key_layout; _ }) =
   match oi_key_layout with
-  | Some l -> drop_meta l
+  | Some l -> strip_meta l
   | None -> (
-      match List.map (schema oi_keys) ~f:(fun n -> C.scalar (Name n)) with
+      match List.map (schema oi_keys) ~f:(fun n -> scalar (Name n)) with
       | [] -> failwith "empty schema"
       | [ x ] -> x
-      | xs -> C.tuple xs Cross )
+      | xs -> tuple xs Cross )

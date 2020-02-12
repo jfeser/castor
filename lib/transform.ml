@@ -16,9 +16,7 @@ module Config = struct
   end
 end
 
-let normal_meta q = map_meta (fun _ -> Meta.empty ()) q
-
-let rec normal_meta_pred p = map_pred normal_meta normal_meta_pred p
+let rec normal_meta_pred p = map_pred A.strip_meta normal_meta_pred p
 
 module Make (Config : Config.S) () = struct
   type t = { name : string; f : Ast.t -> Ast.t list } [@@deriving sexp]
@@ -233,60 +231,56 @@ module Make (Config : Config.S) () = struct
     {
       name = "elim-groupby-approx";
       f =
-        (fun r ->
-          let r = Resolve.resolve ~params:Config.params r |> normal_meta in
-          match r with
-          | { node = GroupBy (ps, key, r); _ }
-            when List.for_all key ~f:(fun n -> Option.is_some (Name.rel n)) ->
-              (* Create an alias for each key. *)
-              let key_aliases =
-                List.fold_left key
-                  ~init:(Map.empty (module String))
-                  ~f:(fun m k ->
-                    let k' = Name.name k ^ Fresh.name fresh "k%d" in
-                    Map.add_exn m ~key:(Name.name k) ~data:k')
-              in
-              (* First, group keys by their relation. *)
-              let key_groups =
-                List.fold_left key
-                  ~init:(Map.empty (module String))
-                  ~f:(fun m k ->
-                    Map.add_multi m ~key:(Option.value_exn (Name.rel k)) ~data:k)
-              in
-              (* Generate the relation of unique keys for each group. *)
-              let key_rels =
-                Map.mapi key_groups ~f:(fun ~key:rel ~data:ks ->
-                    dedup
-                      (select
-                         (List.map ks ~f:(fun n ->
-                              As_pred
-                                (Name n, Map.find_exn key_aliases (Name.name n))))
-                         (db_relation rel)))
-                |> Map.data
-              in
-              (* Join the key relations. *)
-              let key_rel = List.reduce_exn key_rels ~f:(join (Bool true)) in
-              (* Wrap each reference to the original relation in a filter. *)
-              let r =
-                Map.fold key_groups ~init:r ~f:(fun ~key:rel ~data:ks ->
-                    let filter_pred =
-                      List.map ks ~f:(fun n ->
-                          Binop
-                            ( Eq,
-                              Name n,
-                              Name
-                                ( Map.find_exn key_aliases (Name.name n)
-                                |> Name.create ) ))
-                      |> List.reduce_exn ~f:(fun p p' -> Binop (And, p, p'))
-                    in
-                    wrap_rel rel (fun r -> (filter filter_pred r).node))
-              in
-              let scope = Fresh.name Global.fresh "s%d" in
-              let ps =
-                List.map ~f:(Pred.scoped (schema_exn key_rel) scope) ps
-              in
-              [ list key_rel scope (select ps r) ]
-          | _ -> []);
+        (function
+        | { node = GroupBy (ps, key, r); _ }
+          when List.for_all key ~f:(fun n -> Option.is_some (Name.rel n)) ->
+            (* Create an alias for each key. *)
+            let key_aliases =
+              List.fold_left key
+                ~init:(Map.empty (module String))
+                ~f:(fun m k ->
+                  let k' = Name.name k ^ Fresh.name fresh "k%d" in
+                  Map.add_exn m ~key:(Name.name k) ~data:k')
+            in
+            (* First, group keys by their relation. *)
+            let key_groups =
+              List.fold_left key
+                ~init:(Map.empty (module String))
+                ~f:(fun m k ->
+                  Map.add_multi m ~key:(Option.value_exn (Name.rel k)) ~data:k)
+            in
+            (* Generate the relation of unique keys for each group. *)
+            let key_rels =
+              Map.mapi key_groups ~f:(fun ~key:rel ~data:ks ->
+                  dedup
+                    (select
+                       (List.map ks ~f:(fun n ->
+                            As_pred
+                              (Name n, Map.find_exn key_aliases (Name.name n))))
+                       (db_relation rel)))
+              |> Map.data
+            in
+            (* Join the key relations. *)
+            let key_rel = List.reduce_exn key_rels ~f:(join (Bool true)) in
+            (* Wrap each reference to the original relation in a filter. *)
+            let r =
+              Map.fold key_groups ~init:r ~f:(fun ~key:rel ~data:ks ->
+                  let filter_pred =
+                    List.map ks ~f:(fun n ->
+                        Binop
+                          ( Eq,
+                            Name n,
+                            Name
+                              ( Map.find_exn key_aliases (Name.name n)
+                              |> Name.create ) ))
+                    |> List.reduce_exn ~f:(fun p p' -> Binop (And, p, p'))
+                  in
+                  wrap_rel rel (fun r -> (filter filter_pred r).node))
+            in
+            let scope = Fresh.name Global.fresh "s%d" in
+            let ps = List.map ~f:(Pred.scoped (schema_exn key_rel) scope) ps in
+            [ list key_rel scope (select ps r) ]
+        | _ -> []);
     }
     |> run_everywhere
 
@@ -558,11 +552,9 @@ module Make (Config : Config.S) () = struct
 
   let orderby_list key r1 r2 =
     let open A in
-    let r1 = annotate_eq r1 in
-    let r2 = annotate_eq r2 in
     let schema1 = Schema.schema r1 |> Schema.scoped (scope_exn r1) in
     let open Core in
-    let eqs = r2.meta in
+    let eqs = eqs r2 in
     let names =
       List.concat_map eqs ~f:(fun (n, n') -> [ n; n' ])
       @ List.filter_map ~f:(fun (p, _) -> Pred.to_name p) key
@@ -600,7 +592,7 @@ module Make (Config : Config.S) () = struct
             (p', o))
       in
       let scope = Fresh.name Global.fresh "s%d" in
-      [ list (order_by new_key (normal_meta r1)) scope (normal_meta r2) ]
+      [ list (order_by new_key r1) scope r2 ]
     with No_key -> []
 
   let orderby_cross_tuple key rs =
@@ -990,7 +982,7 @@ module Make (Config : Config.S) () = struct
   let tf_project _ =
     {
       name = "project";
-      f = (fun r -> [ Project.project ~params:Config.params r |> normal_meta ]);
+      f = (fun r -> [ Project.project ~params:Config.params r ]);
     }
 
   let tf_hoist_join_pred _ =
@@ -1122,8 +1114,6 @@ module Make (Config : Config.S) () = struct
               (select
                  [ As_pred (Name (Name.copy ~scope:None name), fresh_name) ]
                  (db_relation rel))
-            |> Resolve.resolve ~params:Config.params
-            |> normal_meta
           in
           let scope = Fresh.name Global.fresh "s%d" in
           let pred =
@@ -1332,10 +1322,10 @@ module Make (Config : Config.S) () = struct
               #visit_pred () outer_pred
           in
           let pred = normal_meta_pred pred in
-          let r = normal_meta r in
+          let r = strip_meta r in
           (* For each subquery, generate a join *)
           List.map query_names ~f:(fun (n, q) ->
-              let q = normal_meta q in
+              let q = strip_meta q in
               let select_list =
                 Schema.schema q
                 |> List.map ~f:(fun n' -> As_pred (Name n', Name.name n))

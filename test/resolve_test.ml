@@ -19,6 +19,8 @@ let pp_with_refcount, _ =
       fprintf fmt "}@]")
     ()
 
+let load s = load_string conn s |> Resolve.resolve
+
 let%expect_test "" =
   let r =
     {|
@@ -32,7 +34,7 @@ let%expect_test "" =
                                    ascalar(k.o_comment)],
                              cross)))
     |}
-    |> load_string conn
+    |> load
   in
   Format.printf "%a@." pp_with_refcount r;
   [%expect
@@ -61,7 +63,7 @@ let%expect_test "" =
       select([f], atuple([atuple([ascalar(0 as f), ascalar(1 as g)], cross),
                           atuple([ascalar(2 as g), ascalar(3 as f)], cross)], concat))
     |}
-    |> load_string conn
+    |> load
   in
   Format.printf "%a@." pp_with_refcount r;
   [%expect
@@ -78,7 +80,7 @@ let%expect_test "" =
     {|
       alist(lineitem as k2, select([l_shipmode], atuple([ascalar(k2.l_shipmode), ascalar(0)], cross)))
     |}
-    |> load_string conn
+    |> load
   in
   Format.printf "%a@." pp_with_refcount r;
   [%expect

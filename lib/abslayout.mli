@@ -101,13 +101,13 @@ val annotate_free : 'a annot -> Set.M(Name).t annot
 
 val annotate_eq : 'a annot -> (Name.t * Name.t) list annot
 
-val annotate_orders : 'a annot -> t
+val eqs : 'a annot -> (Name.t * Name.t) list
 
 val order_of : 'a annot -> (Pred.t * order) list
 
 val validate : t -> unit
 
-val strip_meta : t -> t
+val strip_meta : 'a annot -> t
 
 class virtual ['a] iter : ['a] Abslayout_visitors.iter
 

@@ -1,6 +1,6 @@
 open! Core
 
-type meta = Univ_map.t ref [@@deriving sexp_of]
+type meta = unit [@@deriving sexp_of]
 
 module Binop = struct
   type t =

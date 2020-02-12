@@ -15,10 +15,7 @@ let run_print_test ?params query =
       Option.map params ~f:(fun p ->
           List.map p ~f:(fun (n, _) -> n) |> Set.of_list (module Name))
     in
-    let layout =
-      load_string ?params:sparams conn query
-      |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ())
-    in
+    let layout = load_string ?params:sparams conn query in
     (new print_fold)#run conn layout |> List.iter ~f:print_endline
   in
   Exn.handle_uncaught ~exit:false run
@@ -429,21 +426,6 @@ let%expect_test "subst" =
  *           ((schema (((relation (r)) (name f) (type_ ((IntT (nullable false)))))))))))))
  *      (meta
  *       ((schema (((relation (r)) (name f) (type_ ((IntT (nullable false)))))))))) |}] *)
-
-let%expect_test "annotate-schema" =
-  let r = load_string conn "select([min(f)], r)" in
-  [%sexp_of: int Map.M(Name).t annot] r |> print_s;
-  [%expect
-    {|
-    ((node
-      (Select
-       (((Min (Name ((scope ()) (name f)))))
-        ((node
-          (Relation
-           ((r_name r)
-            (r_schema ((((scope ()) (name f)) ((scope ()) (name g))))))))
-         (meta ((((scope ()) (name f)) 1) (((scope ()) (name g)) 0)))))))
-     (meta ())) |}]
 
 let%expect_test "pred_names" =
   let p =
