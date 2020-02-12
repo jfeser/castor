@@ -137,7 +137,6 @@ groupby([o_year,
           supplier)),
       filter((p_type = param3), part))))
 |}
-      |> map_meta (fun _ -> Meta.empty ())
     in
     with_logs (fun () ->
         apply elim_groupby Path.root r

@@ -1,10 +1,8 @@
 open! Core
 open Castor
 open Ast
-open Abslayout_infix
+open Abslayout
 module P = Pred.Infix
-
-module A = (val constructors (fun () -> Meta.empty ()))
 
 module Config = struct
   module type S = sig
@@ -21,7 +19,6 @@ module Make (C : Config.S) = struct
   let to_dedup r = match r.node with Dedup r -> Some r | _ -> None
 
   let push_dedup r =
-    let open A in
     let open Option.Let_syntax in
     let%bind r = to_dedup r in
     match r.node with

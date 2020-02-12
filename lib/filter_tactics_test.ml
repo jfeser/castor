@@ -29,9 +29,7 @@ open T
 module O = Ops.Make (C)
 open O
 
-let load_string ?params s =
-  Abslayout_load.load_string ?params C.conn s
-  |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ())
+let load_string ?params s = Abslayout_load.load_string ?params C.conn s
 
 let%expect_test "push-filter-comptime" =
   let r =

@@ -31,9 +31,7 @@ module Make (C : Config.S) = struct
       | AList (rk, rv) -> Some (list_to_depjoin rk rv)
       | _ -> None
     in
-    Option.map r' ~f:(fun d ->
-        let module C = (val Abslayout_infix.constructors (fun () -> ())) in
-        C.dep_join' d |> map_meta (fun _ -> Meta.empty ()))
+    Option.map r' ~f:dep_join'
 
   let elim_structure = of_func elim_structure ~name:"elim-structure"
 

@@ -44,10 +44,7 @@ module Make (Config : Config.S) = struct
   module Tactics_util = Tactics_util.Make (Config)
   module Dedup_tactics = Dedup_tactics.Make (Config)
 
-  let project r =
-    Some
-      ( r |> Resolve.resolve ~params |> Project.project_once
-      |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ()) )
+  let project r = Some (r |> Resolve.resolve ~params |> Project.project_once)
 
   let project = of_func project ~name:"project"
 

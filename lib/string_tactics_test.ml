@@ -1,7 +1,6 @@
 open! Core
 open Castor
 open Abslayout
-open Abslayout_visitors
 open Collections
 open String_tactics
 open Test_util
@@ -33,7 +32,6 @@ let load_string ?params s = Abslayout_load.load_string ?params C.conn s
 
 let%expect_test "" =
   load_string ~params:C.params "filter(str_field = param, unique_str)"
-  |> map_meta (fun _ -> Meta.empty ())
   |> Branching.apply dictionary_encode Path.root
   |> Seq.iter ~f:(Format.printf "%a.@\n" pp);
   [%expect

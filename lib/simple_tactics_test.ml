@@ -1,7 +1,6 @@
 open! Core
 open Castor
 open Abslayout
-open Abslayout_visitors
 open Simple_tactics
 open Test_util
 
@@ -29,10 +28,7 @@ open Ops.Make (C)
 let load_string ?params s = Abslayout_load.load_string ?params C.conn s
 
 let%expect_test "row-store-comptime" =
-  let r =
-    load_string "alist(r as r1, filter(r1.f = f, r))"
-    |> map_meta (fun _ -> Meta.empty ())
-  in
+  let r = load_string "alist(r as r1, filter(r1.f = f, r))" in
   Option.iter
     (apply (at_ row_store Path.(all >>? is_filter >>| shallowest)) Path.root r)
     ~f:(Format.printf "%a\n" pp);
@@ -43,10 +39,7 @@ let%expect_test "row-store-comptime" =
         atuple([ascalar(s0.f), ascalar(s0.g)], cross))) |}]
 
 let%expect_test "row-store-runtime" =
-  let r =
-    load_string "depjoin(r as r1, filter(r1.f = f, r))"
-    |> map_meta (fun _ -> Meta.empty ())
-  in
+  let r = load_string "depjoin(r as r1, filter(r1.f = f, r))" in
   Option.iter
     (apply (at_ row_store Path.(all >>? is_filter >>| shallowest)) Path.root r)
     ~f:(Format.printf "%a\n" pp);

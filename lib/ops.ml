@@ -3,7 +3,6 @@ open Printf
 open Castor
 open Collections
 open Abslayout_load
-open Abslayout_visitors
 open Ast
 open Schema
 module A = Abslayout
@@ -266,12 +265,8 @@ module Make (C : Config.S) = struct
   let schema_validated tf =
     let f p r =
       Option.map (apply tf p r) ~f:(fun r' ->
-          let r =
-            load_layout ~params conn r |> map_meta (fun _ -> Meta.empty ())
-          in
-          let r' =
-            load_layout ~params conn r' |> map_meta (fun _ -> Meta.empty ())
-          in
+          let r = load_layout ~params conn r |> A.strip_meta in
+          let r' = load_layout ~params conn r' |> A.strip_meta in
           let s = schema r |> List.dedup_and_sort ~compare:[%compare: Name.t] in
           let s' =
             schema r' |> List.dedup_and_sort ~compare:[%compare: Name.t]

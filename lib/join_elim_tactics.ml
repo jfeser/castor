@@ -3,10 +3,8 @@ open Castor
 open Ast
 open Schema
 open Collections
-open Abslayout_infix
 module P = Pred.Infix
-
-module A = (val constructors (fun () -> Meta.empty ()))
+module A = Abslayout
 
 module Config = struct
   module type S = sig
