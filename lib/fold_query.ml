@@ -6,13 +6,15 @@ open Schema
 module A = Abslayout
 module P = Pred.Infix
 
-module C = (val constructors Meta.empty)
+module C = (val constructors (fun () -> ()))
 
 [@@@warning "-17"]
 
+type scalar = unit annot pred [@@deriving sexp_of]
+
 type ('q, 'm) node =
   | Empty
-  | Scalars of (Pred.t[@name "pred"]) list
+  | Scalars of (scalar[@name "pred"]) list
   | Concat of ('q, 'm) t list
   | For of ('q * string * ('q, 'm) t * bool)
   | Let of ((string * ('q, 'm) t) list * ('q, 'm) t)
@@ -95,7 +97,7 @@ let hoist_invariant ss q =
       method! visit_t ss q =
         if is_invariant ss q then
           let n = Fresh.name Global.fresh "q%d" in
-          (var C.empty n, [ (n, q) ])
+          (var None n, [ (n, q) ])
         else super#visit_t ss q
     end
   in
@@ -119,8 +121,7 @@ let hoist_all q =
             let q', binds = hoist_invariant ss q' in
             match binds with
             | [] -> for_ q.meta (r, s, self#visit_t ss q', x)
-            | _ ->
-                let_ C.empty (binds, for_ q.meta (r, s, self#visit_t ss q', x))
+            | _ -> let_ None (binds, for_ q.meta (r, s, self#visit_t ss q', x))
             )
         | _ -> super#visit_t ss q
     end
@@ -145,6 +146,7 @@ let total_order_key q =
   let native_order = A.order_of q in
   let total_order = List.map (schema q) ~f:(fun n -> (Name n, Asc)) in
   native_order @ total_order
+  |> List.map ~f:(fun (p, o) -> (map_meta_pred (fun _ -> ()) p, o))
 
 let to_scalars rs =
   List.map rs ~f:(fun t ->
@@ -153,36 +155,47 @@ let to_scalars rs =
 
 let strip_meta q = map_meta (fun _ -> ()) q
 
-let rec of_ralgebra q =
-  let module C = (val constructors Meta.empty) in
+let strip_meta_pred p = map_meta_pred (fun _ -> ()) p
+
+module U = (val constructors (fun () -> ()))
+
+let of_list of_ralgebra q (q1, q2) =
+  let scope = A.scope_exn q1 in
+  let q1 = A.strip_scope q1 in
+  let q1 =
+    let order_key = total_order_key q1 in
+    U.order_by order_key (strip_meta q1)
+  in
+  for_ q (q1, scope, of_ralgebra q2, false)
+
+let of_hash_idx of_ralgebra q h =
+  let q1 =
+    let order_key = total_order_key h.hi_keys in
+    U.order_by order_key (U.dedup @@ strip_meta h.hi_keys)
+  in
+  for_ q (q1, h.hi_scope, of_ralgebra h.hi_values, true)
+
+let of_ordered_idx of_ralgebra q (q1, q2, _) =
+  let scope = A.scope_exn q1 in
+  let q1 = A.strip_scope q1 in
+  let q1 =
+    let order_key = total_order_key q1 in
+    U.order_by order_key (U.dedup @@ strip_meta q1)
+  in
+  for_ q (q1, scope, of_ralgebra q2, true)
+
+(** Convert a query to the simplified fold query AST. *)
+let rec of_ralgebra : 'a. 'a annot -> (unit annot, 'a annot) t =
+ fun q ->
   match q.Ast.node with
-  | AList (q1, q2) ->
-      let scope = A.scope_exn q1 in
-      let q1 = A.strip_scope q1 in
-      let q1 =
-        let order_key = total_order_key q1 in
-        C.order_by order_key q1
-      in
-      for_ q (q1, scope, of_ralgebra q2, false)
-  | AHashIdx h ->
-      let q1 =
-        let order_key = total_order_key h.hi_keys in
-        C.order_by order_key (C.dedup h.hi_keys)
-      in
-      for_ q (q1, h.hi_scope, of_ralgebra h.hi_values, true)
-  | AOrderedIdx (q1, q2, _) ->
-      let scope = A.scope_exn q1 in
-      let q1 = A.strip_scope q1 in
-      let q1 =
-        let order_key = total_order_key q1 in
-        C.order_by order_key (C.dedup q1)
-      in
-      for_ q (q1, scope, of_ralgebra q2, true)
+  | AList x -> of_list of_ralgebra q x
+  | AHashIdx h -> of_hash_idx of_ralgebra q h
+  | AOrderedIdx x -> of_ordered_idx of_ralgebra q x
   | AEmpty | Range _ -> empty q
-  | AScalar p -> scalars q [ p ]
+  | AScalar p -> scalars q [ strip_meta_pred p ]
   | ATuple (ts, _) -> (
       match to_scalars ts with
-      | Some ps -> scalars q ps
+      | Some ps -> scalars q (List.map ~f:strip_meta_pred ps)
       | None -> concat q (List.map ~f:of_ralgebra ts) )
   | DepJoin { d_lhs = q1; d_rhs = q2; _ } | Join { r1 = q1; r2 = q2; _ } ->
       concat q [ of_ralgebra q1; of_ralgebra q2 ]
@@ -218,10 +231,12 @@ let wrap q = map_meta ~f:Option.some q
 
 let unwrap q = map_meta ~f:(fun m -> Option.value_exn m) q
 
-let rec to_ralgebra' q =
+(** Convert a fold query into a ralgebra query that produces the stream that the
+   fold acts on. *)
+let rec to_ralgebra q =
   match q.node with
   | Var _ -> C.scalar (As_pred (Int 0, Fresh.name Global.fresh "var%d"))
-  | Let (binds, q) -> to_ralgebra' (to_concat binds q)
+  | Let (binds, q) -> to_ralgebra (to_concat binds q)
   | For (q1, scope, q2, distinct) ->
       (* Extend the lhs query with a row number. Even if this query emits
          duplicate results, the row number will ensure that the duplicates
@@ -240,7 +255,7 @@ let rec to_ralgebra' q =
         in
         (o1, q1)
       in
-      let o2, q2 = to_ralgebra' q2 |> unwrap_order in
+      let o2, q2 = to_ralgebra q2 |> unwrap_order in
       (* Generate a renaming so that the upward exposed names are fresh. *)
       let sctx =
         (schema q1 |> Schema.scoped scope) @ schema q2
@@ -266,7 +281,7 @@ let rec to_ralgebra' q =
   | Concat qs ->
       let counter_name = Fresh.name Global.fresh "counter%d" in
       let orders, qs =
-        List.map qs ~f:(fun q -> unwrap_order (to_ralgebra' q)) |> List.unzip
+        List.map qs ~f:(fun q -> unwrap_order (to_ralgebra q)) |> List.unzip
       in
       (* The queries in qs can have different schemas, so we need to normalize
          them. This means creating a select list that has the union of the
@@ -305,7 +320,7 @@ let rec n_parallel q =
 
 let to_ralgebra q =
   Log.info (fun m -> m "Potential parallelism: %d queries" (n_parallel q));
-  wrap q |> to_ralgebra'
+  wrap q |> to_ralgebra
 
 let rec width' q =
   match q.node with

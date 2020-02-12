@@ -1,5 +1,6 @@
 open! Core
 open Test_util
+open Abslayout_visitors
 open Implang_opt
 
 let run_test ?(params = []) layout_str opt_func =
@@ -11,8 +12,8 @@ let run_test ?(params = []) layout_str opt_func =
   let layout =
     load_string conn ~params:(Set.of_list (module Name) param_names) layout_str
     |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ())
+    |> annotate_type conn
   in
-  annotate_type conn layout;
   let layout, len = Serialize.serialize conn "/tmp/buf" layout in
   I.irgen ~params:param_names ~len layout
   |> opt_func
@@ -121,9 +122,14 @@ let%test_module _ =
       let r =
         load_string conn "filter(c > 0, select([count() as c], ascalar(0)))"
         |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ())
-      in
+        |> annotate_type conn
+        |> map_meta (fun m ->
+               object
+                 method type_ = m#type_
 
-      annotate_type conn r;
+                 method pos = None
+               end)
+      in
       let ir = I.irgen ~params:[] ~len:0 r in
       Format.printf "%a" I.pp ir;
       [%expect

@@ -18,9 +18,9 @@ let run_test layout_str =
   let layout =
     load_string conn layout_str
     |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ())
+    |> annotate_type conn
   in
-  annotate_type conn layout;
-  let type_ = Meta.(find_exn layout type_) in
+  let type_ = layout.meta#type_ in
   let _, len =
     Serialize.serialize ~layout_file:layout_log_file conn layout_file layout
   in

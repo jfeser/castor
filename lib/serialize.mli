@@ -1,7 +1,14 @@
 open! Core
 open Ast
 
-val serialize : ?layout_file:string -> Db.t -> string -> t -> t * int
+type meta = < type_ : Type.t ; pos : int option >
+
+val serialize :
+  ?layout_file:string ->
+  Db.t ->
+  string ->
+  < type_ : Type.t ; .. > annot ->
+  meta annot * int
 (** Serialize a layout to a binary format.
 
       @return The layout, annotated with the byte position of each

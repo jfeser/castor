@@ -249,3 +249,27 @@ class virtual runtime_subquery_visitor =
       super#visit_t () r;
       self#visit_Subquery r
   end
+
+class virtual ['self] runtime_subquery_map =
+  object (self : 'self)
+    inherit [_] map as super
+
+    method virtual visit_Subquery : _
+
+    (* Don't annotate subqueries that run at compile time. *)
+    method! visit_AScalar _ x = AScalar x
+
+    method! visit_AList acc (x, r) = AList (x, super#visit_t acc r)
+
+    method! visit_AHashIdx acc ({ hi_values = r; _ } as h) =
+      AHashIdx { h with hi_values = super#visit_t acc r }
+
+    method! visit_AOrderedIdx acc (x, r, y) =
+      AOrderedIdx (x, super#visit_t acc r, y)
+
+    method! visit_Exists acc r =
+      Exists (self#visit_Subquery (super#visit_t acc r))
+
+    method! visit_First acc r =
+      First (self#visit_Subquery (super#visit_t acc r))
+  end

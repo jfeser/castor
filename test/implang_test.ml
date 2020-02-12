@@ -13,10 +13,9 @@ let run_test ?(params = []) ?(print_code = true) layout_str =
     let layout =
       load_string conn ~params:sparams layout_str
       |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ())
+      |> annotate_type conn
     in
-    annotate_type conn layout;
-    let type_ = Meta.(find_exn layout type_) in
-    print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] type_));
+    print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] layout.meta#type_));
     let layout, len = Serialize.serialize conn "/tmp/buf" layout in
     let ir = I.irgen ~params:param_names ~len layout in
     if print_code then I.pp Caml.Format.std_formatter ir

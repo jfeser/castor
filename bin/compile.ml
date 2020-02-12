@@ -26,14 +26,12 @@ let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
   let module I = Irgen.Make (CConfig) () in
   let module C = Codegen.Make (CConfig) (I) () in
   let params = List.map params ~f:(fun (n, t) -> Name.create ~type_:t n) in
-  let ralgebra =
-    let params = Set.of_list (module Name) params in
-    load_string ~params db (In_channel.input_all ch)
-    |> map_meta (fun _ -> Meta.empty ())
-  in
-  annotate_type db ralgebra;
-  C.compile ~gprof ~params ?out_dir ?layout_log:layout_file CConfig.conn
-    ralgebra
+  load_string
+    ~params:(Set.of_list (module Name) params)
+    db (In_channel.input_all ch)
+  |> map_meta (fun _ -> Meta.empty ())
+  |> annotate_type db
+  |> C.compile ~gprof ~params ?out_dir ?layout_log:layout_file CConfig.conn
   |> ignore
 
 let () =

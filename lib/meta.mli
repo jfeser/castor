@@ -4,8 +4,6 @@ type t = Ast.meta [@@deriving sexp_of]
 
 type 'a key = 'a Univ_map.Key.t
 
-type pos = Pos of int | Many_pos
-
 type lexpos = Lexing.position = {
   pos_fname : string;
   pos_lnum : int;
@@ -16,25 +14,23 @@ type lexpos = Lexing.position = {
 
 val empty : unit -> t
 
-val defs : (Name.t option * Ast.t Ast.pred) list key
-
-val pos : pos key
-
-val align : int key
-
-val start_pos : lexpos key
-
-val end_pos : lexpos key
-
-val free : Set.M(Name).t key
-
-val eq : (Name.t * Name.t) list key
-
-val order : (Ast.t Ast.pred * Ast.order) list key
-
-val type_ : Type.t key
-
-val refcnt : int Map.M(Name).t key
+(* val defs : (Name.t option * Ast.t Ast.pred) list key
+ * 
+ * val align : int key
+ * 
+ * val start_pos : lexpos key
+ * 
+ * val end_pos : lexpos key
+ * 
+ * val free : Set.M(Name).t key
+ * 
+ * val eq : (Name.t * Name.t) list key
+ * 
+ * val order : (Ast.t Ast.pred * Ast.order) list key
+ * 
+ * val type_ : Type.t key
+ * 
+ * val refcnt : int Map.M(Name).t key *)
 
 val find : Ast.t -> 'a key -> 'a option
 

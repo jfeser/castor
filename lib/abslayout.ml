@@ -432,7 +432,13 @@ let is_serializeable r =
     Ok ()
   with Un_serial msg -> Error msg
 
+let order_k =
+  Univ_map.Key.create ~name:"order" [%sexp_of: (Ast.t pred * order) list]
+
 let annotate_orders r =
+  let eq_k =
+    Univ_map.Key.create ~name:"eq" [%sexp_of: (Name.t * Name.t) list]
+  in
   let rec annotate_orders r =
     let order =
       match r.node with
@@ -459,7 +465,7 @@ let annotate_orders r =
       | AScalar _ -> []
       | AList (r, r') ->
           let s' = schema r' in
-          let eq' = M.(find_exn r' eq) in
+          let eq' = M.(find_exn r' eq_k) in
           annotate_orders r' |> ignore;
           let open Name.O in
           annotate_orders r
@@ -480,17 +486,17 @@ let annotate_orders r =
           schema r |> List.map ~f:(fun n -> (Name n, Asc))
       | As _ | Range _ -> []
     in
-    M.set_m r M.order order;
+    M.set_m r order_k order;
     order
   in
   let r =
     annotate_eq r
-    |> map_meta (fun eq -> ref (Univ_map.set Univ_map.empty Meta.eq eq))
+    |> map_meta (fun eq -> ref (Univ_map.set Univ_map.empty eq_k eq))
   in
   annotate_orders r |> ignore;
   r
 
-let order_of r = M.(find_exn (annotate_orders r) order)
+let order_of r = M.(find_exn (annotate_orders r) order_k)
 
 let annotate_key_layouts r =
   let key_layout schema =

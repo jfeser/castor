@@ -3,9 +3,10 @@ open Collections
 open Ast
 open Abslayout
 open Abslayout_fold
+open Abslayout_visitors
 module T = Type
 
-let drop_meta q = Abslayout_visitors.map_meta (fun _ -> ()) q
+let drop_meta q = map_meta (fun _ -> ()) q
 
 (** Returns the least general type of a layout. *)
 let rec least_general_of_layout r =
@@ -165,6 +166,7 @@ let type_of ?timeout conn r =
   type_
 
 let annotate_type conn r =
+  let type_ = Univ_map.Key.create ~name:"type" [%sexp_of: Type.t] in
   let rec annot r t =
     let open Type in
     Meta.(set_m r type_ t);
@@ -185,7 +187,8 @@ let annotate_type conn r =
         match List.iter2 rs ts ~f:annot with
         | Ok () -> ()
         | Unequal_lengths ->
-            Error.create "Mismatched tuple type." (r, t) [%sexp_of: Ast.t * T.t]
+            Error.create "Mismatched tuple type." (r, t)
+              [%sexp_of: _ annot * T.t]
             |> Error.raise )
     | DepJoin { d_lhs; d_rhs; _ }, FuncT ([ t1; t2 ], _) ->
         annot d_lhs t1;
@@ -196,7 +199,7 @@ let annotate_type conn r =
         | AHashIdx _ | AOrderedIdx _ | Range _ ),
         ( NullT | IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | TupleT _
         | ListT _ | HashIdxT _ | OrderedIdxT _ | FuncT _ | EmptyT ) ) ->
-        Error.create "Unexpected type." (r, t) [%sexp_of: Ast.t * t]
+        Error.create "Unexpected type." (r, t) [%sexp_of: _ annot * t]
         |> Error.raise
   in
   annot r (type_of conn r);
@@ -207,4 +210,10 @@ let annotate_type conn r =
       method visit_Subquery r = annot r (type_of conn r)
     end
   in
-  visitor#visit_t () r
+  visitor#visit_t () r;
+  map_meta
+    (fun m ->
+      object
+        method type_ = Univ_map.find_exn !m type_
+      end)
+    r

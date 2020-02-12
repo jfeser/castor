@@ -5,8 +5,6 @@ type t = meta [@@deriving sexp_of]
 
 type 'a key = 'a Univ_map.Key.t
 
-type pos = Pos of int | Many_pos [@@deriving sexp]
-
 type lexpos = Lexing.position = {
   pos_fname : string;
   pos_lnum : int;
@@ -17,27 +15,25 @@ type lexpos = Lexing.position = {
 
 let empty () = ref Univ_map.empty
 
-let defs =
-  Univ_map.Key.create ~name:"defs" [%sexp_of: (Name.t option * Ast.t pred) list]
-
-let pos = Univ_map.Key.create ~name:"pos" [%sexp_of: pos]
-
-let start_pos = Univ_map.Key.create ~name:"start_pos" [%sexp_of: lexpos]
-
-let end_pos = Univ_map.Key.create ~name:"end_pos" [%sexp_of: lexpos]
-
-let align = Univ_map.Key.create ~name:"align" [%sexp_of: int]
-
-let eq = Univ_map.Key.create ~name:"eq" [%sexp_of: (Name.t * Name.t) list]
-
-let order =
-  Univ_map.Key.create ~name:"order" [%sexp_of: (Ast.t pred * order) list]
-
-let type_ = Univ_map.Key.create ~name:"type" [%sexp_of: Type.t]
-
-let free = Univ_map.Key.create ~name:"free" [%sexp_of: Set.M(Name).t]
-
-let refcnt = Univ_map.Key.create ~name:"refcnt" [%sexp_of: int Map.M(Name).t]
+(* let defs =
+ *   Univ_map.Key.create ~name:"defs" [%sexp_of: (Name.t option * Ast.t pred) list]
+ * 
+ * let start_pos = Univ_map.Key.create ~name:"start_pos" [%sexp_of: lexpos]
+ * 
+ * let end_pos = Univ_map.Key.create ~name:"end_pos" [%sexp_of: lexpos]
+ * 
+ * let align = Univ_map.Key.create ~name:"align" [%sexp_of: int]
+ * 
+ * let eq = Univ_map.Key.create ~name:"eq" [%sexp_of: (Name.t * Name.t) list]
+ * 
+ * let order =
+ *   Univ_map.Key.create ~name:"order" [%sexp_of: (Ast.t pred * order) list]
+ * 
+ * let type_ = Univ_map.Key.create ~name:"type" [%sexp_of: Type.t]
+ * 
+ * let free = Univ_map.Key.create ~name:"free" [%sexp_of: Set.M(Name).t]
+ * 
+ * let refcnt = Univ_map.Key.create ~name:"refcnt" [%sexp_of: int Map.M(Name).t] *)
 
 let update r key ~f = r.meta := Univ_map.update !(r.meta) key ~f
 

@@ -1,7 +1,10 @@
 open! Core
 open Collections
 open Abslayout_fold
+open Abslayout_visitors
 open Header
+
+type meta = < type_ : Type.t ; pos : int option >
 
 let int_of_string bs =
   if String.length bs > 4 then failwith "Too many bytes.";
@@ -233,12 +236,14 @@ class ['self] serialize_fold ?debug () =
   object (self : 'self)
     inherit [_] abslayout_fold
 
+    method type_ meta = meta#type_
+
     method serializer = new logged_serializer ?debug ()
 
     method empty _ = self#serializer
 
     method list meta _ =
-      let t = Meta.Direct.find_exn meta Meta.type_ in
+      let t = self#type_ meta in
       let init = (self#serializer, 0) in
       let fold acc (_, vp) =
         let body, count = acc and v = vp in
@@ -292,11 +297,11 @@ class ['self] serialize_fold ?debug () =
       Fold.(Fold { init; fold; extract })
 
     method tuple meta _ =
-      let t = Meta.Direct.find_exn meta Meta.type_ in
+      let t = self#type_ meta in
       self#tuple' t
 
     method join' meta lhs rhs =
-      let t = Meta.Direct.find_exn meta Meta.type_ in
+      let t = self#type_ meta in
       let lhs_t, rhs_t =
         match t with
         | FuncT ([ lhs_t; rhs_t ], _) -> (lhs_t, rhs_t)
@@ -311,7 +316,7 @@ class ['self] serialize_fold ?debug () =
     method depjoin meta _ lhs rhs = self#join' meta lhs rhs
 
     method hash_idx meta _ =
-      let type_ = Meta.Direct.find_exn meta Meta.type_ in
+      let type_ = self#type_ meta in
       let kt, vt, m =
         match type_ with
         | HashIdxT (kt, vt, m) -> (kt, vt, m)
@@ -367,7 +372,7 @@ class ['self] serialize_fold ?debug () =
       Fold.(Fold { init; fold; extract })
 
     method ordered_idx meta _ =
-      let t = Meta.Direct.(find_exn meta Meta.type_) in
+      let t = self#type_ meta in
       let kt, vt, m =
         match t with
         | OrderedIdxT (kt, vt, m) -> (kt, vt, m)
@@ -503,7 +508,7 @@ class ['self] serialize_fold ?debug () =
       | String x -> self#serialize_string s type_ x
 
     method scalar meta _ value =
-      let type_ = Meta.Direct.(find_exn meta Meta.type_) in
+      let type_ = self#type_ meta in
       let main = self#serializer in
       main#logf
         (fun m ->
@@ -512,33 +517,54 @@ class ['self] serialize_fold ?debug () =
       main
   end
 
-let set_pos r pos =
-  Meta.update r Meta.pos ~f:(function
-    | Some (Pos pos' as p) -> if pos = pos' then p else Many_pos
-    | Some Many_pos -> Many_pos
-    | None -> Pos pos)
+let set_pos (r : meta annot) (pos : int) =
+  {
+    r with
+    meta =
+      object
+        method type_ = r.meta#type_
+
+        method pos =
+          match r.meta#pos with
+          | Some pos' -> if pos = pos' then Some pos else None
+          | None -> Some pos
+      end;
+  }
 
 let serialize ?layout_file conn fn l =
+  let l =
+    map_meta
+      (fun t ->
+        object
+          method type_ = t#type_
+
+          method pos = None
+        end)
+      l
+  in
   let debug = Option.is_some layout_file in
   Log.info (fun m -> m "Serializing abstract layout.");
   let serializer = new logged_serializer ~debug () in
+
   (* Serialize the main layout. *)
-  set_pos l serializer#pos;
+  let l = set_pos l serializer#pos in
   let w = (new serialize_fold ~debug ())#run conn l in
   w#write_into serializer;
 
   (* Serialize subquery layouts. *)
   let subquery_visitor =
     object
-      inherit Abslayout_visitors.runtime_subquery_visitor
+      inherit [_] runtime_subquery_map
 
       method visit_Subquery r =
-        set_pos r serializer#pos;
+        let r = set_pos r serializer#pos in
         let w = (new serialize_fold ~debug ())#run conn r in
-        w#write_into serializer
+        w#write_into serializer;
+        r
     end
   in
-  subquery_visitor#visit_t () l;
+  let l = subquery_visitor#visit_t () l in
+
   let len = serializer#pos in
   Out_channel.with_file fn ~f:serializer#write_into_channel;
   Option.iter layout_file ~f:(fun fn ->

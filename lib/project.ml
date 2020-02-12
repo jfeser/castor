@@ -36,19 +36,6 @@ let all_unref_at r r' =
 (** True if all fields emitted by r are unreferenced. *)
 let all_unref r = all_unref_at r r
 
-let _pp_with_refcount, _ =
-  A.mk_pp
-    ~pp_meta:(fun fmt meta ->
-      let open Format in
-      match Univ_map.find !meta Meta.refcnt with
-      | Some r ->
-          fprintf fmt "@[<hv 2>{";
-          Map.iteri r ~f:(fun ~key:n ~data:c ->
-              if c > 0 then fprintf fmt "%a=%d,@ " Name.pp n c);
-          fprintf fmt "}@]"
-      | None -> ())
-    ()
-
 let count_matters ps =
   List.exists ps ~f:(function
     | Count | Sum _ | Avg _ | As_pred ((Count | Sum _ | Avg _), _) -> true

@@ -40,7 +40,7 @@ let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
       |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ())
     in
 
-    annotate_type conn layout;
+    let layout = annotate_type conn layout in
     if fork then run_in_fork (fun () -> run_compiler layout)
     else run_compiler layout
   in

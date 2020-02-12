@@ -2,6 +2,7 @@ open! Core
 open Ast
 open Lwt
 open Collections
+open Abslayout_visitors
 module A = Abslayout
 module Q = Fold_query
 
@@ -111,39 +112,39 @@ class virtual ['self] abslayout_fold =
     method private debug = false
 
     method private func a =
-      let m = a.Q.meta.Ast.meta in
-      match a.Q.meta.node with
-      | Filter ((_, c) as x) -> (self#filter m x, c)
-      | Select ((_, c) as x) -> (self#select m x, c)
-      | OrderBy ({ rel = c; _ } as x) -> (self#order_by m x, c)
-      | GroupBy ((_, _, c) as x) -> (self#group_by m x, c)
-      | Dedup c -> (self#dedup m, c)
+      let r = Option.value_exn a.Q.meta in
+      match r.node with
+      | Filter ((_, c) as x) -> (self#filter r.meta x, c)
+      | Select ((_, c) as x) -> (self#select r.meta x, c)
+      | OrderBy ({ rel = c; _ } as x) -> (self#order_by r.meta x, c)
+      | GroupBy ((_, _, c) as x) -> (self#group_by r.meta x, c)
+      | Dedup c -> (self#dedup r.meta, c)
       | x ->
           Error.create "Expected a function." x
-            [%sexp_of: (Ast.t Ast.pred, Ast.t) Ast.query]
+            [%sexp_of: (_ annot pred, _ annot) query]
           |> Error.raise
 
-    method private qempty : (int, Ast.t) Q.t -> 'a =
+    method private qempty : (int, _) Q.t -> 'a =
       fun a ->
-        let m = a.Q.meta.meta in
-        match a.Q.meta.node with
-        | AEmpty -> self#empty m
+        let r = Option.value_exn a.Q.meta in
+        match r.node with
+        | AEmpty -> self#empty r.meta
         | _ ->
             let f, child = self#func a in
-            f (self#qempty { a with meta = child })
+            f (self#qempty { a with meta = Some child })
 
-    method private scalars : (int, Ast.t) Q.t -> 't -> 'a =
+    method private scalars : (int, _) Q.t -> 't -> 'a =
       fun a ->
-        let m = a.Q.meta.meta in
-        match a.Q.meta.node with
+        let r = Option.value_exn a.Q.meta in
+        match r.node with
         | AScalar x -> (
             fun t ->
               match t with
-              | [ v ] -> self#scalar m x v
+              | [ v ] -> self#scalar r.meta x v
               | _ -> failwith "Expected a singleton tuple." )
         | ATuple ((xs, _) as x) ->
             fun t ->
-              let (Fold.Fold { init; fold; extract }) = self#tuple m x in
+              let (Fold.Fold { init; fold; extract }) = self#tuple r.meta x in
               List.fold2_exn xs t ~init ~f:(fun acc r v ->
                   let m = r.meta in
                   match r.node with
@@ -152,26 +153,26 @@ class virtual ['self] abslayout_fold =
               |> extract
         | _ ->
             let f, child = self#func a in
-            let g = self#scalars { a with meta = child } in
+            let g = self#scalars { a with meta = Some child } in
             fun t -> f (g t)
 
     method private for_
-        : (int, Ast.t) Q.t -> (Value.t list * 'a option * 'a, 'a) Fold.t =
+        : (int, _) Q.t -> (Value.t list * 'a option * 'a, 'a) Fold.t =
       fun a ->
-        let m = a.Q.meta.meta in
-        match a.Q.meta.node with
+        let r = Option.value_exn a.Q.meta in
+        match r.node with
         | AList x ->
-            let (Fold.Fold g) = self#list m x in
+            let (Fold.Fold g) = self#list r.meta x in
             Fold { g with fold = (fun a (x, _, z) -> g.fold a (x, z)) }
         | AHashIdx x ->
-            let (Fold.Fold g) = self#hash_idx m x in
+            let (Fold.Fold g) = self#hash_idx r.meta x in
             Fold
               {
                 g with
                 fold = (fun a (x, y, z) -> g.fold a (x, Option.value_exn y, z));
               }
         | AOrderedIdx x ->
-            let (Fold.Fold g) = self#ordered_idx m x in
+            let (Fold.Fold g) = self#ordered_idx r.meta x in
             Fold
               {
                 g with
@@ -179,19 +180,19 @@ class virtual ['self] abslayout_fold =
               }
         | _ ->
             let f, child = self#func a in
-            let (Fold g) = self#for_ { a with meta = child } in
+            let (Fold g) = self#for_ { a with meta = Some child } in
             Fold { g with extract = (fun x -> f (g.extract x)) }
 
-    method private concat : (int, Ast.t) Q.t -> ('a, 'a) Fold.t =
+    method private concat : (int, _) Q.t -> ('a, 'a) Fold.t =
       fun a ->
-        let m = a.Q.meta.meta in
-        match a.Q.meta.node with
-        | ATuple x -> self#tuple m x
-        | DepJoin x -> two_arg_fold (self#depjoin m x)
-        | Join x -> two_arg_fold (self#join m x)
+        let r = Option.value_exn a.Q.meta in
+        match r.node with
+        | ATuple x -> self#tuple r.meta x
+        | DepJoin x -> two_arg_fold (self#depjoin r.meta x)
+        | Join x -> two_arg_fold (self#join r.meta x)
         | _ ->
             let f, child = self#func a in
-            let (Fold g) = self#concat { a with meta = child } in
+            let (Fold g) = self#concat { a with meta = Some child } in
             Fold { g with extract = (fun acc -> f (g.extract acc)) }
 
     method private key_layout q =
@@ -206,7 +207,8 @@ class virtual ['self] abslayout_fold =
           self#key_layout q'
       | _ -> None
 
-    method private eval_for lctx tups a (n, _, q2, distinct) : 'a Lwt.t =
+    method private eval_for lctx tups (a : (_, _ option) Q.t)
+        (n, _, q2, distinct) : 'a Lwt.t =
       let fold = self#for_ a in
       let extract_lhs t = List.take t n in
       let extract_rhs t = List.drop t n in
@@ -253,8 +255,10 @@ class virtual ['self] abslayout_fold =
       groups
       |> Lwt_stream.map_s (fun (lhs, rhs) ->
              let lval =
-               Option.map (self#key_layout a.Q.meta) ~f:(fun l ->
-                   self#scalars { a with meta = l } lhs)
+               let open Option.Let_syntax in
+               let%bind r = a.Q.meta in
+               let%map l = self#key_layout r in
+               self#scalars { a with meta = Some l } lhs
              in
              let%lwt rval = self#eval lctx (Lwt_stream.of_list rhs) q2 in
              return (lhs, lval, rval))
@@ -335,7 +339,7 @@ class virtual ['self] abslayout_fold =
       let%lwt () = Lwt_stream.junk tups in
       return (Map.find_exn lctx n)
 
-    method private eval lctx tups a : 'a Lwt.t =
+    method private eval lctx tups (a : (int, _ option) Q.t) : 'a Lwt.t =
       let tups =
         let l' = Q.width a in
         Lwt_stream.map
@@ -354,11 +358,18 @@ class virtual ['self] abslayout_fold =
       | Q.Scalars x -> self#eval_scalars lctx tups a x
 
     method run ?timeout ?(simplify = default_simplify) conn r =
-      let q = A.ensure_alias r |> Q.of_ralgebra |> Q.hoist_all in
+      (* Generate a query that enumerates the stream to fold over. *)
+      let q =
+        A.ensure_alias r |> Q.of_ralgebra |> Q.map_meta ~f:Option.some
+        |> Q.hoist_all
+      in
+      (* Convert that query to a ralgebra and simplify it. *)
       let r = Q.to_ralgebra q |> simplify in
       Logs.debug (fun m -> m "Running query: %a" A.pp r);
+      (* Convert the ralgebra to sql. *)
       let sql = Sql.of_ralgebra r in
       Logs.debug (fun m -> m "Running SQL: %s" (Sql.to_string_hum sql));
+      (* Run the sql to get a stream of tuples. *)
       let tups =
         Db.exec_lwt_exn ?timeout conn
           (Schema.schema r |> List.map ~f:Name.type_exn)
@@ -368,7 +379,11 @@ class virtual ['self] abslayout_fold =
              | Error `Timeout -> raise Lwt_unix.Timeout
              | Error (`Exn e) -> raise e)
       in
-      self#eval (Map.empty (module String)) tups (Q.to_width q) |> Lwt_main.run
+      (* Replace the ralgebra queries at the leaves of the fold query with their
+         output widths. *)
+      let q = Q.to_width q in
+      (* Run the fold on the tuple stream. *)
+      self#eval (Map.empty (module String)) tups q |> Lwt_main.run
   end
 
 class ['self] print_fold =

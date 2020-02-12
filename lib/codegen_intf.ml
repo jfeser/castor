@@ -12,6 +12,6 @@ module type S = sig
     gprof:bool ->
     params:Name.t list ->
     Db.t ->
-    t ->
+    < type_ : Type.t ; .. > annot ->
     string * string
 end

@@ -26,7 +26,7 @@ module Config = struct
 end
 
 module type S = sig
-  val irgen : params:Name.t list -> len:int -> Ast.t -> ir_module
+  val irgen : params:Name.t list -> len:int -> Serialize.meta annot -> ir_module
 
   val pp : Formatter.t -> ir_module -> unit
 end
@@ -52,9 +52,9 @@ module Make (Config : Config.S) () = struct
     | FuncT ([ t ], _) -> len start t
     | _ -> Header.make_access hdr "len" start
 
-  (** Add layout start positions to contexts that don't contain them.
-       Sometimes the start is passed in by the parent layout and sometimes it is
-       fixed and known by the layout. *)
+  (** Add layout start positions to contexts that don't contain them. Sometimes
+     the start is passed in by the parent layout and sometimes it is fixed and
+     known by the layout. *)
   let add_layout_start ctx r =
     let ctx =
       let start_name = Name.create ~type_:Prim_type.int_t "start" in
@@ -63,14 +63,14 @@ module Make (Config : Config.S) () = struct
           | Some x -> x
           | None -> Ctx.(Global Infix.(int 0)))
       else
-        match Meta.(find r pos) with
-        | Some (Pos start) ->
+        match r.meta#pos with
+        | Some start ->
             (* We don't want to bind over a start parameter that's already being
                passed in. *)
             Map.update ctx start_name ~f:(function
               | Some x -> x
               | None -> Ctx.(Global Infix.(int start)))
-        | Some Many_pos | None -> ctx
+        | None -> ctx
     in
     ctx
 
@@ -225,7 +225,7 @@ module Make (Config : Config.S) () = struct
           | Not -> Infix.(not x)
           | Year | Month | Day ->
               Error.create "Found interval in unexpected position." pred
-                [%sexp_of: Pred.t]
+                [%sexp_of: _ pred]
               |> Error.raise
           | Strlen -> Unop { op = `StrLen; arg = x }
           | ExtractY -> Unop { op = `ExtractY; arg = x }
@@ -274,7 +274,7 @@ module Make (Config : Config.S) () = struct
           | Mod -> Infix.(e1 % e2)
           | Strpos -> Binop { op = `StrPos; arg1 = e1; arg2 = e2 } )
       | (Count | Min _ | Max _ | Sum _ | Avg _ | Row_number) as p ->
-          Error.create "Not a scalar predicate." p [%sexp_of: Pred.t]
+          Error.create "Not a scalar predicate." p [%sexp_of: _ pred]
           |> Error.raise
       | If (p1, p2, p3) ->
           let ret_var =
@@ -292,15 +292,15 @@ module Make (Config : Config.S) () = struct
           (* Don't use the passed in start value. Subquery layouts are not stored
            inline. *)
           let ctx = Map.remove ctx (Name.create "start") in
-          let t = Meta.(find_exn r type_) in
           let ret_var = build_var "first" (List.hd_exn (types_of_layout r)) b in
-          scan ctx b r t (fun b tup -> build_assign (List.hd_exn tup) ret_var b);
+          scan ctx b r r.meta#type_ (fun b tup ->
+              build_assign (List.hd_exn tup) ret_var b);
           ret_var
       | Exists r ->
           let ctx = Map.remove ctx (Name.create "start") in
-          let t = Meta.(find_exn r type_) in
           let ret_var = build_defn "exists" (Bool false) b in
-          scan ctx b r t (fun b _ -> build_assign (Bool true) ret_var b);
+          scan ctx b r r.meta#type_ (fun b _ ->
+              build_assign (Bool true) ret_var b);
           ret_var
       | Substring (e1, e2, e3) ->
           Substr (gen_pred e1 b, gen_pred e2 b, gen_pred e3 b)
@@ -500,9 +500,14 @@ module Make (Config : Config.S) () = struct
   and scan_hash_idx ctx b r t cb =
     let open Builder in
     let key_layout =
-      (* FIXME: The key layout doesn't actually have metadata attached. But we
-         never ask for it, so it's ok for now. *)
-      A.h_key_layout r |> Abslayout_visitors.map_meta (fun _ -> Meta.empty ())
+      A.h_key_layout r
+      |> Abslayout_visitors.map_meta (fun _ ->
+             let msg = "Tried to get metadata from key layout" in
+             object
+               method pos = None
+
+               method type_ = failwith (msg ^ ": type_")
+             end)
     in
     let key_type, value_type, m = t in
     let hdr = Header.make_header (HashIdxT t) in
@@ -809,7 +814,7 @@ module Make (Config : Config.S) () = struct
       List.map params ~f:(fun n -> (n, Ctx.Global (Var (Name.name n))))
       |> Ctx.of_alist_exn
     in
-    let type_ = Meta.(find_exn r type_) in
+    let type_ = r.meta#type_ in
     {
       iters = !iters;
       funcs = [ printer ctx r type_; consumer ctx r type_ ];
