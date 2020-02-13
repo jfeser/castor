@@ -3,7 +3,7 @@ open Abslayout
 open Abslayout_load
 open Test_util
 
-let conn = Db.create "postgresql:///tpch_1k"
+let conn = Lazy.force tpch_conn
 
 let pp x =
   let pp, _ = mk_pp ~pp_name:Name.pp_with_stage () in

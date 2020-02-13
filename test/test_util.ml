@@ -222,3 +222,5 @@ end
 let sum_complex =
   "Select([sum(f) + 5, count() + sum(f / 2)], AList(r1 as k, \
    ATuple([AScalar(k.f), AScalar((k.g - k.f) as v)], cross)))"
+
+let tpch_conn = lazy (Db.create @@ Sys.getenv_exn "CASTOR_TPCH_TEST_DB")

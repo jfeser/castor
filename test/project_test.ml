@@ -1,8 +1,9 @@
 open! Core
 open Project
 open Abslayout_load
+open Test_util
 
-let conn = Db.create "postgresql:///tpch_1k"
+let conn = Lazy.force tpch_conn
 
 let params =
   let open Prim_type in

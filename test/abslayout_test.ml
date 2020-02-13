@@ -392,41 +392,6 @@ let%expect_test "subst" =
          (meta ())))))
      (meta ())) |}]
 
-(* TODO: This test has a staging error. *)
-(* let%expect_test "annotate-orders" =
- *   let r =
- *     "alist(select([r.f as k], orderby([r.f asc], dedup(r))), select([r.f, r.g], \
- *      filter(r.f = k, r)))" |> of_string_exn |> M.resolve
- *   in
- *   M.annotate_schema r ;
- *   annotate_eq r ;
- *   annotate_orders r ;
- *   Meta.(find_exn r order) |> [%sexp_of: (pred * order) list] |> print_s ;
- *   [%expect {| (((Name ((relation (r)) (name f))) Asc)) |}] *)
-
-(* let%expect_test "annotate-schema" =
- *   let r = "ascalar((select([min(r.f)], r)))" |> of_string_exn |> M.resolve in
- *   M.annotate_schema r ;
- *   [%sexp_of: t] r |> print_s ;
- *   [%expect
- *     {|
- *     ((node
- *       (AScalar
- *        (First
- *         ((node
- *           (Select
- *            (((Min
- *               (Name ((relation (r)) (name f) (type_ ((IntT (nullable false))))))))
- *             ((node (Relation r))
- *              (meta
- *               ((schema
- *                 (((relation (r)) (name f) (type_ ((IntT (nullable false)))))
- *                  ((relation (r)) (name g) (type_ ((IntT (nullable false)))))))))))))
- *          (meta
- *           ((schema (((relation (r)) (name f) (type_ ((IntT (nullable false)))))))))))))
- *      (meta
- *       ((schema (((relation (r)) (name f) (type_ ((IntT (nullable false)))))))))) |}] *)
-
 let%expect_test "pred_names" =
   let p =
     Pred.of_string_exn
@@ -477,49 +442,6 @@ let%expect_test "pred_names" =
   in
   Pred.names p |> [%sexp_of: Set.M(Name).t] |> print_s;
   [%expect {| (((scope ()) (name total_revenue))) |}]
-
-(* let%expect_test "" =
- *   let module M = Abslayout_db.Make (struct
- *     let conn = Db.create "postgresql:///tpch_1k"
- * 
- *     let simplify = None
- *   end) in
- *   let r =
- *     M.load_string
- *       ~params:
- *         (let open Prim_type in
- *         Set.of_list
- *           (module Name)
- *           [ Name.create ~type_:string_t "param1"
- *           ; Name.create ~type_:string_t "param2"
- *           ; Name.create ~type_:date_t "param3" ])
- *       {|
- *     ahashidx(depjoin(select([min(l_receiptdate) as lo, max((l_receiptdate + year(1))) as hi],
- *                                      dedup(select([l_receiptdate], lineitem))) as k1,
- *                              select([range as k0], range(k1.lo, k1.hi))) as s0,
- *                     alist(orderby([l_shipmode], dedup(select([l_shipmode], lineitem))) as k2,
- *                       select([l_shipmode,
- *                               sum((if ((o_orderpriority = "1-URGENT") || (o_orderpriority = "2-HIGH")) then 1 else 0)) as high_line_count,
- *                               sum((if (not((o_orderpriority = "1-URGENT")) && not((o_orderpriority = "2-HIGH"))) then 1 else 0)) as low_line_count],
- *                         alist(select([l_shipmode, o_orderpriority],
- *                                 depjoin(filter(((l_commitdate < l_receiptdate) &&
- *                                                ((l_shipdate < l_commitdate) &&
- *                                                ((l_receiptdate >= s0.k0) &&
- *                                                ((l_receiptdate < (s0.k0 + year(1))) && (l_shipmode = k2.l_shipmode))))),
- *                                           lineitem) as s2,
- *                                   atuple([ascalar(s2.l_shipmode), filter((o_orderkey = s2.l_orderkey), orders)], cross))) as s1,
- *                           ahashidx(dedup(
- *                                      atuple([select([l_shipmode as x73], dedup(select([l_shipmode], lineitem))),
- *                                              select([l_shipmode as x74], dedup(select([l_shipmode], lineitem)))],
- *                                        cross)) as s4,
- *                             atuple([filter(((l_shipmode = s4.x73) || (l_shipmode = s4.x74)), ascalar(s1.l_shipmode)),
- *                                     ascalar(s1.o_orderpriority)],
- *                               cross),
- *                             (param1, param2))))),
- *                     param3)
- * |}
- *   in
- *   M.type_of r |> [%sexp_of: Type.t] |> print_s *)
 
 let%expect_test "" =
   let conn = Lazy.force Test_util.test_db_conn in
