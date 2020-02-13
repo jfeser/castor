@@ -1,6 +1,7 @@
 open! Core
 open Ast
 open Abslayout
+open Schema
 module P = Pred.Infix
 
 (** In this module, we assume that dep_join returns attributes from both its lhs
@@ -84,10 +85,10 @@ let to_nice_depjoin { d_lhs = t1; d_rhs = t2; d_alias } =
   (* Create a relation of the unique values of the attributes that come from t1
      and are bound in t2. *)
   let d =
-    dedup
-    @@ select
-         (Set.inter t2_free t1_attr |> Set.to_list |> List.map ~f:P.name)
-         t1
+    let attrs =
+      Set.inter t2_free t1_attr |> Set.to_list |> List.map ~f:P.name
+    in
+    dedup @@ select attrs t1
   in
 
   (* Create a renaming of the attribute names in d. This will ensure that we can
@@ -189,15 +190,17 @@ let push_select d (preds, q) =
 
 let push_concat_tuple d qs = tuple (List.map qs ~f:(dep_join d)) Concat
 
-let stuck _ = failwith "Stuck depjoin"
+let stuck d =
+  Error.create "Stuck depjoin" d [%sexp_of: _ annot depjoin] |> Error.raise
 
 let push_cross_tuple d qs =
   let select_list =
-    List.map qs ~f:(fun q ->
-        match q.node with AScalar p -> Some p | _ -> None)
-    |> Option.all
+    List.map qs ~f:(fun q -> match q.node with AScalar p -> p | _ -> stuck d)
+    @ (schema d.d_lhs |> to_select_list)
   in
-  match select_list with Some l -> select l d.d_lhs | None -> stuck d
+  select select_list d.d_lhs
+
+let push_scalar d p = select (p :: (schema d.d_lhs |> to_select_list)) d.d_lhs
 
 class push_depjoin_visitor =
   object
@@ -215,9 +218,8 @@ class push_depjoin_visitor =
           | Select x -> push_select lhs x
           | ATuple (qs, Concat) -> push_concat_tuple lhs qs
           | ATuple (qs, Cross) -> push_cross_tuple d qs
-          | _ ->
-              Error.create "Stuck depjoin" d_rhs [%sexp_of: _ annot]
-              |> Error.raise
+          | AScalar p -> push_scalar d p
+          | _ -> stuck d
       in
       (super#visit_t () q).node
   end
