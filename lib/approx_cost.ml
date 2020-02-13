@@ -1,6 +1,7 @@
 open! Core
 open! Castor
 open Ast
+open Schema
 module P = Pred.Infix
 module A = Abslayout
 
@@ -15,7 +16,7 @@ module Make (C : Config.S) = struct
 
   module Scope = struct
     module T = struct
-      type nonrec t = (t * string) list [@@deriving compare, hash, sexp_of]
+      type t = (Ast.t * string) list [@@deriving compare, hash, sexp_of]
     end
 
     include T
@@ -36,24 +37,23 @@ module Make (C : Config.S) = struct
           | _ ->
               let rec query ss = function
                 | [] -> assert false
-                | [ (q, _) ] ->
-                    A.select (ss @ List.map (A.schema_exn q) ~f:P.name) q
+                | [ (q, _) ] -> A.select (ss @ List.map (schema q) ~f:P.name) q
                 | (q, s) :: qs ->
                     A.dep_join q s
                       (query
                          ( ss
-                         @ List.map (A.schema_exn q) ~f:(fun n ->
+                         @ List.map (schema q) ~f:(fun n ->
                                P.name (Name.copy ~scope:(Some s) n)) )
                          qs)
               in
               let schema =
                 List.concat_map ctx ~f:(fun (q, s) ->
-                    List.map (A.schema_exn q) ~f:(Name.copy ~scope:(Some s)))
+                    List.map (schema q) ~f:(Name.copy ~scope:(Some s)))
               in
               let q = query [] ctx in
               Sql.sample 10 (Sql.of_ralgebra q |> Sql.to_string)
               |> Db.exec_cursor_exn conn
-                   (Schema.schema_exn q |> List.map ~f:Name.type_exn)
+                   (Schema.schema q |> List.map ~f:Name.type_exn)
               |> Gen.to_list
               |> List.map ~f:(fun vs ->
                      Array.to_list vs |> List.map ~f:Value.to_pred

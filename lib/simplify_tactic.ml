@@ -3,6 +3,7 @@ open Castor
 open Ast
 open Abslayout
 open Abslayout_visitors
+open Schema
 
 module Config = struct
   module type S = sig
@@ -72,9 +73,7 @@ module Make (C : Config.S) = struct
         in
         let ps' = List.map ~f:(Pred.unscoped d_alias) ps' in
         (* Ensure that no fields are dropped by the first select. *)
-        let ps' =
-          concat_select ps' (schema_exn d_lhs |> Schema.to_select_list)
-        in
+        let ps' = concat_select ps' (schema d_lhs |> to_select_list) in
         let ps = List.map ~f:(Pred.unscoped d_alias) ps in
         Some (select ps (select ps' (strip_scope d_lhs)))
     | DepJoin

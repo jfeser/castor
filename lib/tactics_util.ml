@@ -2,6 +2,7 @@ open! Core
 open Castor
 open Abslayout
 open Collections
+open Schema
 module P = Pred.Infix
 
 module Config = struct
@@ -99,7 +100,7 @@ module Make (Config : Config.S) = struct
   let select_out ns r =
     let ns = List.map ns ~f:Name.unscoped in
     select
-      ( schema_exn r
+      ( schema r
       |> List.filter ~f:(fun n' ->
              not (List.mem ~equal:Name.O.( = ) ns (Name.unscoped n')))
       |> List.map ~f:P.name )
@@ -109,7 +110,7 @@ module Make (Config : Config.S) = struct
     Set.(
       is_empty
         (diff
-           (inter names (of_list (module Name) (schema_exn r)))
+           (inter names (of_list (module Name) (schema r)))
            (of_list (module Name) (List.filter_map ~f:Pred.to_name ps))))
 
   (** For a set of predicates, check whether more than one predicate is true at

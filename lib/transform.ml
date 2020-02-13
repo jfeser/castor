@@ -3,6 +3,7 @@ open Castor
 open Collections
 open Ast
 open Abslayout
+open Schema
 module R = Resolve
 
 module Config = struct
@@ -66,7 +67,7 @@ module Make (Config : Config.S) = struct
 
   let push_orderby r =
     let key_is_supported r key =
-      let s = Set.of_list (module Name) (schema_exn r) in
+      let s = Set.of_list (module Name) (schema r) in
       List.for_all key ~f:(fun (p, _) -> Tactics_util.is_supported s p)
     in
     let orderby_cross_tuple key rs =
@@ -85,7 +86,7 @@ module Make (Config : Config.S) = struct
     in
     match r.node with
     | OrderBy { key; rel = { node = Select (ps, r); _ } } ->
-        let s = Set.of_list (module Name) (schema_exn r) in
+        let s = Set.of_list (module Name) (schema r) in
         if List.for_all key ~f:(fun (p, _) -> Tactics_util.is_supported s p)
         then Some (select ps (order_by key r))
         else None

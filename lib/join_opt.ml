@@ -4,6 +4,7 @@ open Printf
 open Castor
 open Collections
 open Ast
+open Schema
 module A = Abslayout
 module P = Pred.Infix
 
@@ -233,7 +234,7 @@ module Make (C : Config.S) = struct
       let leaves =
         to_leaves r |> Set.to_list
         |> List.map ~f:(fun r ->
-               let s = A.schema_exn r |> Set.of_list (module Name) in
+               let s = schema r |> Set.of_list (module Name) in
                (r, s))
       in
       to_graph leaves r
@@ -304,7 +305,7 @@ module Make (C : Config.S) = struct
     |> Or_error.ok_exn )
       .nrows |> Float.of_int
 
-  let schema_types r = A.schema_exn r |> List.map ~f:Name.type_exn
+  let schema_types r = schema r |> List.map ~f:Name.type_exn
 
   let rec to_abslayout = function
     | Flat r -> r
@@ -314,7 +315,7 @@ module Make (C : Config.S) = struct
         A.(join (Binop (Eq, lkey, rkey)) (to_abslayout lhs) (to_abslayout rhs))
 
   let estimate_ntuples_parted parts r =
-    let s = A.schema_exn (to_ralgebra r) |> Set.of_list (module Name) in
+    let s = schema (to_ralgebra r) |> Set.of_list (module Name) in
     let parts = Set.filter parts ~f:(Set.mem s) in
     let part_counts =
       A.(group_by [ P.as_ Count "c" ] (Set.to_list parts) (to_abslayout r))
@@ -341,7 +342,7 @@ module Make (C : Config.S) = struct
     | _ -> failwith "Unexpected tuples."
 
   let to_parts rhs pred =
-    let rhs_schema = A.schema_exn rhs |> Set.of_list (module Name) in
+    let rhs_schema = schema rhs |> Set.of_list (module Name) in
     Pred.names pred |> Set.filter ~f:(Set.mem rhs_schema)
 
   let rec size_cost parts r =
@@ -456,12 +457,10 @@ module Make (C : Config.S) = struct
           (* Add hash joins to pareto set. *)
           let hash_joins =
             let lhs_schema =
-              A.schema_exn (JoinSpace.to_ralgebra s1)
-              |> Set.of_list (module Name)
+              schema (JoinSpace.to_ralgebra s1) |> Set.of_list (module Name)
             in
             let rhs_schema =
-              A.schema_exn (JoinSpace.to_ralgebra s2)
-              |> Set.of_list (module Name)
+              schema (JoinSpace.to_ralgebra s2) |> Set.of_list (module Name)
             in
             (* Figure out which partition a key comes from. *)
             let key_side k =

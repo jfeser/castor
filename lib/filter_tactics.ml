@@ -4,6 +4,7 @@ open Ast
 open Abslayout
 open Collections
 module P = Pred.Infix
+open Schema
 
 module Config = struct
   module type My_S = sig
@@ -32,7 +33,7 @@ module Make (C : Config.S) = struct
 
   open My_C
 
-  let schema_set_exn r = schema_exn r |> Set.of_list (module Name)
+  let schema_set_exn r = schema r |> Set.of_list (module Name)
 
   (** Split predicates that sit under a binder into the parts that depend on
        bound variables and the parts that do not. *)
@@ -51,7 +52,7 @@ module Make (C : Config.S) = struct
   let merge_select s1 s2 =
     s1 @ s2
     |> List.dedup_and_sort ~compare:(fun p1 p2 ->
-           [%compare: Name.t option] (Schema.to_name p1) (Schema.to_name p2))
+           [%compare: Name.t option] (to_name p1) (to_name p2))
 
   let hoist_filter r =
     let open Option.Let_syntax in
@@ -107,12 +108,12 @@ module Make (C : Config.S) = struct
         let%map p, r = to_filter d_rhs in
         (* Ensure all the required names are selected. *)
         let select_list =
-          let lhs_schema = schema_exn d_lhs in
+          let lhs_schema = schema d_lhs in
           let lhs_select =
-            lhs_schema |> Schema.to_select_list
+            lhs_schema |> to_select_list
             |> List.map ~f:(Pred.scoped lhs_schema d_alias)
           in
-          let rhs_select = schema_exn d_rhs |> Schema.to_select_list in
+          let rhs_select = schema d_rhs |> to_select_list in
           merge_select lhs_select rhs_select
         in
         filter (Pred.unscoped d_alias p)
@@ -250,11 +251,10 @@ module Make (C : Config.S) = struct
             let%map all_keys = Tactics_util.all_values key r' in
             let scope = Fresh.name Global.fresh "s%d" in
             ordered_idx all_keys scope
-              (Tactics_util.select_out (schema_exn all_keys)
+              (Tactics_util.select_out (schema all_keys)
                  (filter
                     ( List.map key ~f:(fun p ->
-                          Pred.Infix.(
-                            p = Pred.scoped (schema_exn all_keys) scope p))
+                          Pred.Infix.(p = Pred.scoped (schema all_keys) scope p))
                     |> Pred.conjoin )
                     r'))
               { oi_key_layout = None; oi_lookup = cmps }
@@ -276,9 +276,7 @@ module Make (C : Config.S) = struct
     let rec place_all ps i =
       if i >= List.length rs then ps
       else
-        let bnd =
-          List.nth_exn rs i |> schema_exn |> Set.of_list (module Name)
-        in
+        let bnd = List.nth_exn rs i |> schema |> Set.of_list (module Name) in
         let pl, up = List.partition_tf ps ~f:(Tactics_util.is_supported bnd) in
         preds.(i) <- pl;
         place_all up (i + 1)
@@ -290,7 +288,7 @@ module Make (C : Config.S) = struct
   let push_filter_list p rk rv =
     let scope = scope_exn rk in
     let rk = strip_scope rk in
-    let rk_bnd = Set.of_list (module Name) (schema_exn rk) in
+    let rk_bnd = Set.of_list (module Name) (schema rk) in
     let pushed_key, pushed_val =
       Pred.conjuncts p
       |> List.partition_map ~f:(fun p ->
@@ -363,7 +361,7 @@ module Make (C : Config.S) = struct
                   fun rk s rv -> ordered_idx rk s rv m )
           | _ -> None
         in
-        let rk_bnd = Set.of_list (module Name) (schema_exn rk) in
+        let rk_bnd = Set.of_list (module Name) (schema rk) in
         let pushed_key, pushed_val =
           Pred.conjuncts p
           |> List.partition_map ~f:(fun p ->
@@ -478,7 +476,7 @@ module Make (C : Config.S) = struct
             [%sexp_of: Pred.t]
 
     let to_ralgebra d =
-      let schema r = List.hd_exn (schema_exn r) in
+      let schema r = List.hd_exn (schema r) in
       let rec extract = function
         | And (d1, d2) ->
             let e1 = extract d1 in
@@ -535,7 +533,7 @@ module Make (C : Config.S) = struct
         let inner_filter_pred =
           let ctx =
             Map.map eqs ~f:(fun r ->
-                schema_exn r |> List.hd_exn |> Name.scoped scope |> P.name)
+                schema r |> List.hd_exn |> Name.scoped scope |> P.name)
           in
           Pred.subst_tree ctx inner
         in
@@ -643,7 +641,7 @@ module Make (C : Config.S) = struct
             | IntT _ | DateT _ ->
                 let%map vals = Tactics_util.all_values [ f ] r |> Or_error.ok in
                 let vals =
-                  let val_name = List.hd_exn (schema_exn vals) in
+                  let val_name = List.hd_exn (schema vals) in
                   let select_list =
                     P.name val_name
                     :: List.filter_map aliases
@@ -665,7 +663,7 @@ module Make (C : Config.S) = struct
             | StringT _ ->
                 let%map keys = Tactics_util.all_values [ f ] r |> Or_error.ok in
                 select
-                  [ As_pred (Name (List.hd_exn (schema_exn keys)), key_name) ]
+                  [ As_pred (Name (List.hd_exn (schema keys)), key_name) ]
                   keys
             | _ -> None
           in
@@ -693,7 +691,7 @@ module Make (C : Config.S) = struct
   let elim_subquery _ r =
     let open Option.Let_syntax in
     let%bind p, r = to_filter r in
-    let schema_names = schema_exn r |> Set.of_list (module Name) in
+    let schema_names = schema r |> Set.of_list (module Name) in
     let visitor =
       object
         inherit [_] mapreduce
@@ -708,7 +706,7 @@ module Make (C : Config.S) = struct
           else (Exists r, [])
 
         method! visit_First () r =
-          let n = schema_exn r |> List.hd_exn in
+          let n = schema r |> List.hd_exn in
           if Set.inter schema_names (names r) |> Set.is_empty then
             let qname = Fresh.name Global.fresh "q%d" in
             ( Name (Name.create qname),
@@ -722,7 +720,7 @@ module Make (C : Config.S) = struct
       let sq_tuple = tuple subqueries Cross in
       Some
         (dep_join sq_tuple scope
-           (filter (Pred.scoped (schema_exn sq_tuple) scope p) r))
+           (filter (Pred.scoped (schema sq_tuple) scope p) r))
     else None
 
   (* let precompute_filter n =

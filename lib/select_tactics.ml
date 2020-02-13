@@ -3,6 +3,7 @@ open Castor
 open Ast
 open Abslayout
 open Collections
+open Schema
 module P = Pred.Infix
 
 module Config = struct
@@ -87,9 +88,7 @@ module Make (C : Config.S) = struct
                 let i =
                   (* TODO: This hack works around problems with sql conversion and
                lateral joins. *)
-                  let kschema =
-                    schema_exn h.hi_keys |> Schema.scoped h.hi_scope
-                  in
+                  let kschema = schema h.hi_keys |> scoped h.hi_scope in
                   List.filter ps ~f:(function
                     | Name n -> not (List.mem ~equal:Name.O.( = ) kschema n)
                     | _ -> true)
@@ -97,7 +96,7 @@ module Make (C : Config.S) = struct
                 Some (o, i)
             | AOrderedIdx (_, rv, _) | AList (_, rv) | ATuple (rv :: _, Concat)
               ->
-                let o, i = gen_concat_select_list ps (schema_exn rv) in
+                let o, i = gen_concat_select_list ps (schema rv) in
                 Some (o, i)
             | _ -> None
           in
