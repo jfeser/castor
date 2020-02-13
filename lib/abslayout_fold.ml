@@ -364,11 +364,11 @@ class virtual ['self] abslayout_fold =
         |> Q.hoist_all
       in
       (* Convert that query to a ralgebra and simplify it. *)
-      let r = Q.to_ralgebra q |> simplify in
-      Logs.debug (fun m -> m "Running query: %a" A.pp r);
+      let r = Q.to_ralgebra q |> simplify |> Unnest.unnest in
+      (* Format.printf "Running query: %a" A.pp r; *)
       (* Convert the ralgebra to sql. *)
       let sql = Sql.of_ralgebra r in
-      Logs.debug (fun m -> m "Running SQL: %s" (Sql.to_string_hum sql));
+      (* printf "Running SQL: %s" (Sql.to_string_hum sql); *)
       (* Run the sql to get a stream of tuples. *)
       let tups =
         Db.exec_lwt_exn ?timeout conn

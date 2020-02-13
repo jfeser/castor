@@ -23,16 +23,20 @@ let%expect_test "" =
       FROM (
           SELECT
               row_number() OVER () AS "rn0_0",
-              r1_0. "f" AS "f_1",
-              r1_0. "g" AS "g_1"
-          FROM
-              "r1" AS "r1_0") AS "t1",
+              "f_0" AS "f_1",
+              "g_0" AS "g_1"
+          FROM (
+              SELECT
+                  r1_0. "f" AS "f_0",
+                  r1_0. "g" AS "g_0"
+              FROM
+                  "r1" AS "r1_0") AS "t0") AS "t2",
           LATERAL (
               SELECT
                   "rn0_0" AS "x0_0",
                   "f_1" AS "x1_0",
                   "g_1" AS "x2_0",
-                  "g_1" AS "x3_0") AS "t0"
+                  "g_1" AS "x3_0") AS "t1"
       ORDER BY
           "x1_0",
           "x2_0",
@@ -75,16 +79,20 @@ let%expect_test "" =
               FROM (
                   SELECT
                       row_number() OVER () AS "rn1_0",
-                      r1_1. "f" AS "f_5",
-                      r1_1. "g" AS "g_4"
-                  FROM
-                      "r1" AS "r1_1") AS "t3",
+                      "f_4" AS "f_5",
+                      "g_3" AS "g_4"
+                  FROM (
+                      SELECT
+                          r1_1. "f" AS "f_4",
+                          r1_1. "g" AS "g_3"
+                      FROM
+                          "r1" AS "r1_1") AS "t3") AS "t5",
                   LATERAL (
                       SELECT
                           "rn1_0" AS "x4_1",
                           "f_5" AS "x5_1",
                           "g_4" AS "x6_1",
-                          "g_4" AS "x7_1") AS "t2")) AS "t4"
+                          "g_4" AS "x7_1") AS "t4")) AS "t6"
       ORDER BY
           "counter0_0",
           "x5_0",
@@ -115,10 +123,14 @@ let%expect_test "" =
       FROM (
           SELECT
               row_number() OVER () AS "rn2_0",
-              r1_2. "f" AS "f_8",
-              r1_2. "g" AS "g_7"
-          FROM
-              "r1" AS "r1_2") AS "t6",
+              "f_7" AS "f_8",
+              "g_6" AS "g_7"
+          FROM (
+              SELECT
+                  r1_2. "f" AS "f_7",
+                  r1_2. "g" AS "g_6"
+              FROM
+                  "r1" AS "r1_2") AS "t7") AS "t9",
           LATERAL (
               SELECT
                   "rn2_0" AS "x8_0",
@@ -126,7 +138,7 @@ let%expect_test "" =
                   "g_7" AS "x10_0",
                   "f_8" AS "x11_0",
                   ("g_7") - ("f_8") AS "x12_0"
-              WHERE (TRUE)) AS "t5"
+              WHERE (TRUE)) AS "t8"
       ORDER BY
           "x9_0",
           "x10_0",
@@ -169,10 +181,14 @@ let%expect_test "" =
         FROM (
             SELECT
                 row_number() OVER () AS "rn3_0",
-                r1_3. "f" AS "f_11",
-                r1_3. "g" AS "g_9"
-            FROM
-                "r1" AS "r1_3") AS "t10",
+                "f_10" AS "f_11",
+                "g_8" AS "g_9"
+            FROM (
+                SELECT
+                    r1_3. "f" AS "f_10",
+                    r1_3. "g" AS "g_8"
+                FROM
+                    "r1" AS "r1_3") AS "t10") AS "t15",
             LATERAL (
                 SELECT
                     "rn3_0" AS "x17_0",
@@ -185,16 +201,20 @@ let%expect_test "" =
                 FROM (
                     SELECT
                         row_number() OVER () AS "rn4_0",
-                        r1_4. "f" AS "f_13",
-                        r1_4. "g" AS "g_11"
-                    FROM
-                        "r1" AS "r1_4") AS "t8",
+                        "f_12" AS "f_13",
+                        "g_10" AS "g_11"
+                    FROM (
+                        SELECT
+                            r1_4. "f" AS "f_12",
+                            r1_4. "g" AS "g_10"
+                        FROM
+                            "r1" AS "r1_4") AS "t11") AS "t13",
                     LATERAL (
                         SELECT
                             "rn4_0" AS "x13_0",
                             "f_13" AS "x14_0",
                             "g_11" AS "x15_0",
-                            "f_13" AS "x16_0") AS "t7") AS "t9"
+                            "f_13" AS "x16_0") AS "t12") AS "t14"
         ORDER BY
             "x18_0",
             "x19_0",

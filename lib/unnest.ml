@@ -1,6 +1,7 @@
 open! Core
 open Ast
 open Abslayout
+open Abslayout_visitors
 open Schema
 module P = Pred.Infix
 
@@ -202,27 +203,32 @@ let push_cross_tuple d qs =
 
 let push_scalar d p = select (p :: (schema d.d_lhs |> to_select_list)) d.d_lhs
 
-class push_depjoin_visitor =
-  object
-    inherit [_] map as super
+let rec push_depjoin r =
+  match r.node with
+  | DepJoin ({ d_lhs; d_rhs; _ } as d) ->
+      let d_lhs = push_depjoin d_lhs in
+      let d_rhs = push_depjoin d_rhs in
 
-    method! visit_DepJoin () ({ d_lhs = lhs; d_rhs; _ } as d) =
-      let q =
-        if Set.inter (free d_rhs) (attrs lhs) |> Set.is_empty then
-          join (P.bool true) lhs d_rhs
-        else
+      (* If the join is not really dependent, then replace with a regular join.
+         *)
+      if Set.inter (free d_rhs) (attrs d_lhs) |> Set.is_empty then
+        join (P.bool true) d_lhs d_rhs
+      else
+        let r' =
           match d_rhs.node with
-          | Filter x -> push_filter lhs x
-          | Join x -> push_join lhs x
-          | GroupBy x -> push_groupby lhs x
-          | Select x -> push_select lhs x
-          | ATuple (qs, Concat) -> push_concat_tuple lhs qs
+          | Filter x -> push_filter d_lhs x
+          | Join x -> push_join d_lhs x
+          | GroupBy x -> push_groupby d_lhs x
+          | Select x -> push_select d_lhs x
+          | ATuple (qs, Concat) -> push_concat_tuple d_lhs qs
           | ATuple (qs, Cross) -> push_cross_tuple d qs
           | AScalar p -> push_scalar d p
           | _ -> stuck d
-      in
-      (super#visit_t () q).node
-  end
+        in
+        push_depjoin r'
+  | q -> { r with node = map_query push_depjoin push_depjoin_pred q }
+
+and push_depjoin_pred p = map_pred push_depjoin push_depjoin_pred p
 
 let unnest q =
   let nice_visitor =
@@ -234,7 +240,7 @@ let unnest q =
   in
   let q' =
     q |> strip_meta |> to_visible_depjoin |> nice_visitor#visit_t ()
-    |> (new push_depjoin_visitor)#visit_t ()
+    |> push_depjoin
   in
   schema_invariant q q';
   resolve_invariant q q';
