@@ -52,8 +52,11 @@ let conn { conn; _ } = conn
 let param =
   let open Command.Let_syntax in
   [%map_open
+    let m_uri =
+      flag "db" (optional string) ~doc:"CONNINFO the database to connect to"
+    in
     let uri =
-      flag "db" (required string) ~doc:"CONNINFO the database to connect to"
+      match m_uri with Some uri -> uri | None -> Sys.getenv_exn "CASTOR_DB"
     in
     create uri]
 
