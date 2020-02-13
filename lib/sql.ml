@@ -70,12 +70,23 @@ let to_distinct = function Union_all _ -> false | Query q -> q.distinct
 
 let to_limit = function Union_all _ -> None | Query q -> q.limit
 
-let has_aggregates sql =
-  match
-    to_select sql |> List.map ~f:(fun { pred = p; _ } -> p) |> A.select_kind
-  with
-  | `Scalar -> false
-  | `Agg -> true
+let preds_has_aggregates ps =
+  List.exists ps ~f:(fun p ->
+      match Pred.kind p with `Agg -> true | `Window | `Scalar -> false)
+
+let select_has_aggregates s =
+  List.map s ~f:(fun { pred = p; _ } -> p) |> preds_has_aggregates
+
+let has_aggregates sql = to_select sql |> select_has_aggregates
+
+let preds_has_windows ps =
+  List.exists ps ~f:(fun p ->
+      match Pred.kind p with `Window -> true | `Agg | `Scalar -> false)
+
+let select_has_windows s =
+  List.map s ~f:(fun { pred = p; _ } -> p) |> preds_has_windows
+
+let has_windows sql = to_select sql |> select_has_windows
 
 (** Convert a query to an SPJ by introducing a subquery. *)
 let create_subquery ?(extra_select = []) q =
@@ -104,7 +115,8 @@ let join schema1 schema2 sql1 sql2 pred =
     || List.length (to_group sql2) > 0
     || Option.is_some (to_limit sql1)
     || Option.is_some (to_limit sql2)
-    || has_aggregates sql1 || has_aggregates sql2
+    || has_aggregates sql1 || has_aggregates sql2 || has_windows sql1
+    || has_windows sql2
   in
   let spj1 = if needs_subquery then create_subquery sql1 else to_spj sql1 in
   let spj2 = if needs_subquery then create_subquery sql2 else to_spj sql2 in
@@ -150,26 +162,17 @@ let scoped_names ns p =
 
 let select ?groupby of_ralgebra ps r =
   let sql = of_ralgebra r in
-  let kind = A.select_kind ps in
+  let has_aggs = preds_has_aggregates ps in
   let spj =
-    (* Creating a subquery is always safe, but we want to avoid it if possible. We
-       don't need a subquery if:
-       - This select is aggregation free
-       - This select has aggregates but the inner select is aggregation free *)
     let needs_subquery =
-      let for_agg =
-        match
-          ( kind,
-            to_select sql
-            |> List.map ~f:(fun { pred = p; _ } -> p)
-            |> A.select_kind )
-        with
-        | `Scalar, _ -> false
-        | `Agg, `Scalar | `Agg, `Agg -> true
-      in
-      (* If the inner query is distinct then it must be wrapped. *)
-      let for_distinct = to_distinct sql in
-      for_agg || for_distinct
+      (* Creating a subquery is always safe, but we want to avoid it if
+         possible.
+
+         We conservatively create a subquery whenever this selection list has
+         aggregates.
+
+         If the inner query is distinct then it must be wrapped. *)
+      has_aggs || preds_has_windows ps || to_distinct sql
     in
     if needs_subquery then create_subquery sql else to_spj sql
   in
@@ -183,7 +186,7 @@ let select ?groupby of_ralgebra ps r =
       List.map ps ~f:(scoped_names (schema r |> Set.of_list (module Name)))
       |> Set.union_list (module Name)
     in
-    if Poly.(kind = `Agg) && not (Set.is_empty scoped) then
+    if has_aggs && not (Set.is_empty scoped) then
       let extra_fields =
         Set.to_list scoped
         |> List.map ~f:(fun n -> create_entry ~alias:(Name.name n) (Name n))
@@ -207,7 +210,7 @@ let filter of_ralgebra pred r =
   let sql = of_ralgebra r in
   (* If the inner query
      contains aggregates, then it must be put in a subquery. *)
-  let needs_subquery = has_aggregates sql in
+  let needs_subquery = has_aggregates sql || has_windows sql in
   let spj = if needs_subquery then create_subquery sql else to_spj sql in
   (* The where clause is evaluated before the select clause so we can't use the
      aliases in the select clause here. *)
@@ -352,15 +355,10 @@ and spj_to_sql { select; distinct; order; group; relations; conds; limit } =
   let select =
     (* If there is no grouping key and there are aggregates in the select list,
        then we need to deal with any non-aggregates in the select. *)
-    if List.is_empty group then
-      match A.select_kind (List.map select ~f:(fun { pred = p; _ } -> p)) with
-      | `Agg ->
-          List.map select ~f:(fun ({ pred = p; _ } as entry) ->
-              {
-                entry with
-                pred = (match Pred.kind p with `Scalar -> Min p | _ -> p);
-              })
-      | `Scalar -> select
+    if List.is_empty group && select_has_aggregates select then
+      List.map select ~f:(fun ({ pred = p; _ } as entry) ->
+          let pred = match Pred.kind p with `Scalar -> Min p | _ -> p in
+          { entry with pred })
     else select
   in
   let select_sql =

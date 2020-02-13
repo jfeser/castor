@@ -375,3 +375,75 @@ let%expect_test "select-agg-window" =
         FROM
             "r" AS "r_0") AS "t0"
 |}]
+
+let%expect_test "select-fusion-window" =
+  run_test
+    {|
+    join(((k1_f = bnd0) &&
+                              ((k1_g = bnd1) && (k1_rn0 = bnd2))),
+                           select([k1_rn0 as bnd2,
+                                   k1_f as bnd0,
+                                   k1_g as bnd1],
+                             select([rn0 as k1_rn0, f as k1_f, g as k1_g],
+                               select([row_number() as rn0, f, g], r1))),
+                           select([k1_rn0 as x0,
+                                   k1_f as x1,
+                                   k1_g as x2,
+                                   f as x3,
+                                   k1_f,
+                                   k1_g,
+                                   k1_rn0],
+                             select([k1_f as f, k1_f, k1_g, k1_rn0],
+                               dedup(
+                                 select([k1_f, k1_g, k1_rn0],
+                                   select([rn0 as k1_rn0,
+                                           f as k1_f,
+                                           g as k1_g],
+                                     select([row_number() as rn0, f, g],
+                                       r1)))))))
+|};
+  [%expect {|
+    SELECT
+        "bnd2_0" AS "bnd2_0_0",
+        "bnd0_0" AS "bnd0_0_0",
+        "bnd1_0" AS "bnd1_0_0",
+        "x0_0" AS "x0_0_0",
+        "x1_0" AS "x1_0_0",
+        "x2_0" AS "x2_0_0",
+        "x3_0" AS "x3_0_0",
+        "k1_f_3" AS "k1_f_3_0",
+        "k1_g_3" AS "k1_g_3_0",
+        "k1_rn0_3" AS "k1_rn0_3_0"
+    FROM (
+        SELECT
+            row_number() OVER () AS "bnd2_0",
+            "f_3" AS "bnd0_0",
+            "g_2" AS "bnd1_0"
+        FROM (
+            SELECT
+                r1_1. "f" AS "f_3",
+                r1_1. "g" AS "g_2"
+            FROM
+                "r1" AS "r1_1") AS "t2") AS "t3",
+        (
+            SELECT
+                "k1_rn0_1" AS "x0_0",
+                "k1_f_1" AS "x1_0",
+                "k1_g_1" AS "x2_0",
+                "k1_f_1" AS "x3_0",
+                "k1_f_1" AS "k1_f_3",
+                "k1_g_1" AS "k1_g_3",
+                "k1_rn0_1" AS "k1_rn0_3"
+            FROM ( SELECT DISTINCT
+                    "f_0" AS "k1_f_1",
+                    "g_0" AS "k1_g_1",
+                    row_number() OVER () AS "k1_rn0_1"
+                FROM (
+                    SELECT
+                        r1_0. "f" AS "f_0",
+                        r1_0. "g" AS "g_0"
+                    FROM
+                        "r1" AS "r1_0") AS "t0") AS "t1") AS "t4"
+    WHERE ((("k1_f_3") = ("bnd0_0"))
+        AND ((("k1_g_3") = ("bnd1_0"))
+            AND (("k1_rn0_3") = ("bnd2_0")))) |}]
