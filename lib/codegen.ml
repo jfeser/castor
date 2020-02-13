@@ -16,8 +16,6 @@ let () =
       print_endline err);
   Llvm_all_backends.initialize ()
 
-module Project_config = Config
-
 module Config = struct
   module type S = sig
     val debug : bool
@@ -44,7 +42,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     in
     Option.value_exn ~message:"Could not find a working clang." c
 
-  let opt = Project_config.llvm_root ^ "/bin/opt"
+  let opt = Global.llvm_root () ^ "/bin/opt"
 
   let ctx = create_context ()
 
@@ -1056,7 +1054,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     Util.command_out_exn ([ clang; "-E" ] @ args_strs @ [ fn ])
 
   let from_fn fn n i =
-    let template = Project_config.build_root ^ "/etc/" ^ fn in
+    let template = Global.build_root () ^ "/etc/" ^ fn in
     let func =
       c_template template [ ("PARAM_NAME", n); ("PARAM_IDX", Int.to_string i) ]
     in
@@ -1068,8 +1066,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       match out_dir with Some x -> x | None -> Filename.temp_dir "bin" ""
     in
     (match Sys.is_directory out_dir with `No -> Unix.mkdir out_dir | _ -> ());
-    let stdlib_fn = Project_config.build_root ^ "/etc/castorlib.c" in
-    let date_fn = Project_config.build_root ^ "/etc/date.c" in
+    let stdlib_fn = Global.build_root () ^ "/etc/castorlib.c" in
+    let date_fn = Global.build_root () ^ "/etc/date.c" in
     let main_fn = out_dir ^ "/main.c" in
     let ir_fn = out_dir ^ "/scanner.ir" in
     let module_fn = out_dir ^ "/scanner.ll" in
@@ -1121,7 +1119,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       let header_str = "#include \"scanner.h\"" in
       let funcs_str = String.concat (header_str :: funcs) ~sep:"\n" in
       let calls_str = String.concat calls ~sep:"\n" in
-      let perf_template = Project_config.build_root ^ "/etc/perf.c" in
+      let perf_template = Global.build_root () ^ "/etc/perf.c" in
       let perf_c =
         let open In_channel in
         with_file perf_template ~f:(fun ch ->

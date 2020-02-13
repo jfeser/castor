@@ -6,11 +6,6 @@
  (modules discover config_defaults))
 
 (rule
- (with-stdout-to
-  config.ml
-  (run ./discover.exe -kind ML)))
-
-(rule
  (deps
   (file discover.exe))
  (targets config.ini)
