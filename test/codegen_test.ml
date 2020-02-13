@@ -1,4 +1,5 @@
 open! Core
+open Util
 open Test_util
 
 let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
