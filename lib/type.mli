@@ -1,5 +1,3 @@
-open! Core
-
 exception TypeError of Core.Error.t
 
 (** Range abstraction for integers. *)

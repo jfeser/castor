@@ -1,4 +1,3 @@
-open! Core
 open Printf
 open Collections
 open Ast
@@ -554,7 +553,7 @@ module Make (Config : Config.S) () = struct
   let orderby_list key r1 r2 =
     let open A in
     let schema1 = Schema.schema r1 |> Schema.scoped (scope_exn r1) in
-    let open Core in
+
     let eqs = eqs r2 in
     let names =
       List.concat_map eqs ~f:(fun (n, n') -> [ n; n' ])

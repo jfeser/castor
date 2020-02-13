@@ -1,4 +1,3 @@
-open! Core
 open Collections
 open Abslayout_fold
 open Abslayout_visitors

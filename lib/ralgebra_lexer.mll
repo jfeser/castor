@@ -1,5 +1,5 @@
 {
-open! Core
+
 open Ralgebra_parser
 open Parser_utils
 

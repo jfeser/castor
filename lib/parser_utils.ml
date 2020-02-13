@@ -1,4 +1,3 @@
-open! Core
 open Ast
 
 exception ParseError of string * int * int

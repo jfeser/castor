@@ -1,5 +1,3 @@
-open! Core
-
 type meta = unit [@@deriving sexp_of]
 
 module Binop = struct

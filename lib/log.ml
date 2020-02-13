@@ -1,5 +1,3 @@
-open! Core
-
 let src = Logs.Src.create ~doc:"Main logging source for Castor." "castor"
 
 let setup_log level =

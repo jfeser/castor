@@ -1,4 +1,3 @@
-open! Core
 open Project
 open Abslayout_load
 open Test_util

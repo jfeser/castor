@@ -1,5 +1,3 @@
-open! Core
-
 module Field : sig
   type t = {
     name : string;

@@ -1,4 +1,3 @@
-open! Core
 open Ast
 
 type meta = < type_ : Type.t ; pos : int option >

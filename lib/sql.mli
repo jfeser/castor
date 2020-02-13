@@ -1,4 +1,3 @@
-open! Core
 open Ast
 
 type sql_pred = unit annot pred [@@deriving compare, sexp_of]

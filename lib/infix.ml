@@ -1,4 +1,3 @@
-open! Core
 module A = Abslayout
 
 let range = A.range

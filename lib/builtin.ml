@@ -106,9 +106,7 @@ let create module_ =
       (function_type
          (pointer_type (i8_type ctx))
          [|
-           pointer_type (i8_type ctx);
-           pointer_type (i8_type ctx);
-           i32_type ctx;
+           pointer_type (i8_type ctx); pointer_type (i8_type ctx); i32_type ctx;
          |])
       module_
   in

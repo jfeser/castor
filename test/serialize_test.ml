@@ -1,4 +1,3 @@
-open! Core
 open Test_util
 
 (** Remove nondeterministic parts of the layout log. Returns the new log and

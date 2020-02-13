@@ -1,5 +1,3 @@
-open! Core
-
 module Field = struct
   type t = {
     name : string;

@@ -5,7 +5,7 @@
    str
    core
  )
- (flags -open Castor)
+ (flags -open Core -open Castor)
  (inline_tests)
  (preprocess
   (pps

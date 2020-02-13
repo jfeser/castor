@@ -1,4 +1,3 @@
-open! Core
 open Ast
 
 val project_once : int Map.M(Name).t annot -> unit annot

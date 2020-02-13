@@ -1,4 +1,3 @@
-open! Core
 open Abslayout
 open Abslayout_visitors
 

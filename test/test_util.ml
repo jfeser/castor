@@ -1,4 +1,3 @@
-open! Core
 open Prim_type
 
 module Expect_test_config = struct

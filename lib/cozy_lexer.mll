@@ -1,5 +1,5 @@
 {
-open! Core
+
 open Cozy_parser
 open Parser_utils
 

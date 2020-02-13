@@ -1,4 +1,3 @@
-open! Core
 open Collections
 
 exception TypeError of Error.t [@@deriving sexp]

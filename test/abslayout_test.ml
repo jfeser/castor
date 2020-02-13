@@ -1,4 +1,3 @@
-open! Core
 open Collections
 open Ast
 open Abslayout

@@ -1,4 +1,3 @@
-open! Core
 open Hashcons
 
 module Key = struct

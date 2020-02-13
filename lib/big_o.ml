@@ -1,5 +1,3 @@
-open! Core
-
 type t =
   | Const
   | Var of string

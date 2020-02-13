@@ -1,4 +1,3 @@
-open! Core
 open Test_util
 
 let run_test ?(params = []) ?(print_code = true) layout_str =

@@ -1,4 +1,3 @@
-open! Core
 open Sql
 open Test_util
 open Abslayout_load
@@ -402,7 +401,8 @@ let%expect_test "select-fusion-window" =
                                      select([row_number() as rn0, f, g],
                                        r1)))))))
 |};
-  [%expect {|
+  [%expect
+    {|
     SELECT
         "bnd2_0" AS "bnd2_0_0",
         "bnd0_0" AS "bnd0_0_0",

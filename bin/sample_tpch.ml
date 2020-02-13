@@ -5,8 +5,7 @@ let subst_params params query =
   | [] -> query
   | _ ->
       List.foldi params ~init:query ~f:(fun i q v ->
-          String.substr_replace_all ~pattern:(Printf.sprintf "$%d" i) ~with_:v
-            q)
+          String.substr_replace_all ~pattern:(Printf.sprintf "$%d" i) ~with_:v q)
 
 let exec ?(params = []) _ query = printf "%s;\n" (subst_params params query)
 

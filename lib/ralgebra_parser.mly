@@ -1,5 +1,5 @@
 %{
-    open! Core
+
     module A = Ast
     open Parser_utils
          %}

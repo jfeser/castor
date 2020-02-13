@@ -1,4 +1,3 @@
-open! Core
 open Test_util
 open Abslayout_visitors
 open Implang_opt

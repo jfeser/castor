@@ -1,5 +1,3 @@
-open! Core
-
 type t [@@deriving compare, hash, sexp]
 
 include Comparator.S with type t := t

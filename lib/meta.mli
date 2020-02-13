@@ -1,4 +1,3 @@
-open! Core
 open Ast
 
 type t = Univ_map.t ref [@@deriving sexp_of]

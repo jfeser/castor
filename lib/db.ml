@@ -1,4 +1,3 @@
-open! Core
 open! Lwt
 open Collections
 module Psql = Postgresql

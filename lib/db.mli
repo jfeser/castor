@@ -1,5 +1,3 @@
-open! Core
-
 type t
 
 val create : ?pool_size:int -> string -> t

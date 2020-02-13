@@ -1,4 +1,3 @@
-open! Core
 open Collections
 open Llvm_analysis
 open Llvm_target

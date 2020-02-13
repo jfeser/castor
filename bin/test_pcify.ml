@@ -67,8 +67,7 @@ let main () =
                 [
                   ite (Var pprog.is_yield_var)
                     [
-                      Yield (Var pprog.yield_val_var);
-                      pprog.is_yield_var := fls;
+                      Yield (Var pprog.yield_val_var); pprog.is_yield_var := fls;
                     ]
                     [];
                 ] );

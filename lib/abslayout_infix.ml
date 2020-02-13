@@ -1,4 +1,3 @@
-open! Core
 open Ast
 
 module type INFIX = sig

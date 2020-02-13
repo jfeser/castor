@@ -152,9 +152,7 @@ let benchmark : ?sample:int -> db:string -> Bench.t -> unit =
     let testctx = Layout.PredCtx.of_vars test_params
   end in
   let module Transform = Transform.Make (Config) in
-  let ralgebra =
-    Ralgebra.of_string_exn query |> Ralgebra.resolve Config.conn
-  in
+  let ralgebra = Ralgebra.of_string_exn query |> Ralgebra.resolve Config.conn in
   (* If we need to sample, generate sample tables and swap them in the
        expression. *)
   ( match sample with

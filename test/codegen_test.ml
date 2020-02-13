@@ -1,4 +1,3 @@
-open! Core
 open Util
 open Test_util
 

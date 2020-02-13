@@ -1,4 +1,3 @@
-open! Core
 open Ast
 
 type binop = [ `Le | `Lt | `Ge | `Gt | `Add | `Sub | `Mul | `Div | `Eq | `And ]

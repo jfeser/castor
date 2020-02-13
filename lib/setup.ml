@@ -1,5 +1,3 @@
-open! Core
-
 let make_modules ?(irgen_debug = false) ?(code_only = false) () =
   let module I =
     Irgen.Make

@@ -1,5 +1,3 @@
-open! Core
-
 type t = int Hashtbl.M(String).t
 
 let create () = Hashtbl.create (module String)

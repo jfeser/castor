@@ -1,4 +1,3 @@
-open! Core
 open Ast
 
 let pp_option pp fmt =

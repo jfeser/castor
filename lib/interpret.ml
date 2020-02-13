@@ -1,4 +1,3 @@
-open! Core
 open Abslayout
 open Collections
 module A = Abslayout

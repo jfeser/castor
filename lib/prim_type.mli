@@ -1,5 +1,3 @@
-open! Core
-
 type t =
   | NullT
   | IntT of { nullable : bool }
