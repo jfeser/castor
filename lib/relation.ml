@@ -8,4 +8,4 @@ end
 include T
 include Comparator.Make (T)
 
-let schema_exn { r_schema; _ } = Option.value_exn r_schema
+let schema { r_schema; _ } = Option.value_exn r_schema

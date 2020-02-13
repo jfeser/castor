@@ -1,6 +1,7 @@
 open! Core
 open Collections
 open Abslayout
+open Schema
 module P = Pred.Infix
 
 type binop = [ `Le | `Lt | `Ge | `Gt | `Add | `Sub | `Mul | `Div | `Eq | `And ]
@@ -139,7 +140,7 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
 
     method agg_select sel q =
       let c = self#query q in
-      let subst = subst_of_schema "t" (schema_exn q) in
+      let subst = subst_of_schema "t" (schema q) in
       let out_exprs, queries =
         List.map sel ~f:(fun p ->
             match Pred.kind p with
@@ -147,7 +148,7 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
             | `Scalar ->
                 let c', s = self#pred subst p in
                 let c'', dummy =
-                  match schema_exn (select [ p ] q) with
+                  match schema (select [ p ] q) with
                   | [ n ] ->
                       let lit =
                         match Name.type_exn n with
@@ -214,7 +215,7 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
       @@ { empty with top_query = `Query name; queries = [ query ] }
 
     method filter p q =
-      let subst = subst_of_schema "t" (schema_exn q) in
+      let subst = subst_of_schema "t" (schema q) in
       let cq = self#query q in
       let cqp, cp = self#pred subst p in
       let ((name, _) as query) =
@@ -248,8 +249,8 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
             }
       | Filter (p, q) -> self#filter p q
       | Join { pred; r1; r2 } ->
-          let r1_schema = schema_exn r1 in
-          let r2_schema = schema_exn r2 in
+          let r1_schema = schema r1 in
+          let r2_schema = schema r2 in
           let subst =
             Map.merge_exn
               (subst_of_schema "t1" r1_schema)
@@ -278,7 +279,7 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
       | Select (sel, q) -> (
           match select_kind sel with
           | `Scalar ->
-              let subst = subst_of_schema "t" (schema_exn q) in
+              let subst = subst_of_schema "t" (schema q) in
               let c = self#query q in
               let queries, preds =
                 List.map sel ~f:(self#pred subst) |> List.unzip

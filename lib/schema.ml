@@ -86,11 +86,6 @@ let schema_open schema r =
 
 let rec schema r = schema_open schema r
 
-let schema_exn r =
-  let s = schema r in
-  List.iter ~f:(fun n -> Name.Meta.(find_exn n type_) |> ignore) s;
-  s
-
 let to_type q = to_type_open schema q
 
 let to_type_opt q = to_type_opt_open schema q

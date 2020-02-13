@@ -3,6 +3,7 @@ open Printf
 open Collections
 open Ast
 open Abslayout_visitors
+open Schema
 module A = Abslayout
 module P = Pred.Infix
 
@@ -59,8 +60,8 @@ module Make (Config : Config.S) () = struct
   let run_checked t r =
     let rs = run_unchecked t r in
     let check_schema r' =
-      let s = A.schema_exn r |> Set.of_list (module Name) in
-      let s' = A.schema_exn r' |> Set.of_list (module Name) in
+      let s = schema r |> Set.of_list (module Name) in
+      let s' = schema r' |> Set.of_list (module Name) in
       let schemas_ok = Set.is_subset s ~of_:s' in
       if not schemas_ok then
         Logs.warn (fun m ->
@@ -101,7 +102,7 @@ module Make (Config : Config.S) () = struct
           if no_params r then
             let scope = Fresh.name Global.fresh "s%d" in
             let scalars =
-              Schema.scoped scope (schema_exn r)
+              Schema.scoped scope (schema r)
               |> List.map ~f:(fun n -> scalar (Name n))
             in
             [ list r scope (tuple scalars Cross) ]
@@ -157,11 +158,11 @@ module Make (Config : Config.S) () = struct
                 let new_ps =
                   List.filter ps ~f:(fun p ->
                       not ([%compare.equal: Pred.t] p (Name k)))
-                  |> List.map ~f:(Pred.scoped (schema_exn lhs) scope)
+                  |> List.map ~f:(Pred.scoped (schema lhs) scope)
                 in
                 let filter_pred =
                   Binop (Eq, Name k, Name (Name.create key_name))
-                  |> Pred.scoped (schema_exn lhs) scope
+                  |> Pred.scoped (schema lhs) scope
                 in
                 let new_r =
                   replace_rel rel (filter filter_pred (db_relation rel)) r
@@ -172,7 +173,7 @@ module Make (Config : Config.S) () = struct
                 in
                 let key_scalar =
                   let p =
-                    Pred.scoped (schema_exn lhs) scope
+                    Pred.scoped (schema lhs) scope
                       (As_pred (Name (Name.create key_name), Name.name k))
                   in
                   let s = scalar p in
@@ -205,7 +206,7 @@ module Make (Config : Config.S) () = struct
               List.map2_exn key new_key ~f:(fun n n' ->
                   Binop (Eq, Name n, Name (Name.create n')))
               |> List.reduce_exn ~f:(fun acc p -> Binop (And, acc, p))
-              |> Pred.scoped (schema_exn lhs) scope
+              |> Pred.scoped (schema lhs) scope
             in
             [ list lhs scope (select ps (filter p (filter filter_pred r))) ]
         | _ -> []);
@@ -278,7 +279,7 @@ module Make (Config : Config.S) () = struct
                   wrap_rel rel (fun r -> (filter filter_pred r).node))
             in
             let scope = Fresh.name Global.fresh "s%d" in
-            let ps = List.map ~f:(Pred.scoped (schema_exn key_rel) scope) ps in
+            let ps = List.map ~f:(Pred.scoped (schema key_rel) scope) ps in
             [ list key_rel scope (select ps r) ]
         | _ -> []);
     }
@@ -314,7 +315,7 @@ module Make (Config : Config.S) () = struct
               let scope = Fresh.name Global.fresh "s%d" in
               let lhs = dedup (select select_list r) in
               let inner_filter_pred =
-                Pred.scoped (schema_exn lhs) scope inner_filter_pred
+                Pred.scoped (schema lhs) scope inner_filter_pred
               in
               [
                 outer_filter
@@ -340,7 +341,7 @@ module Make (Config : Config.S) () = struct
     let run_exn r =
       match r.node with
       | Filter (p, r') ->
-          let schema = schema_exn r' in
+          let schema = schema r' in
           let free_vars =
             Set.diff (pred_free p) (Set.of_list (module Name) schema)
             |> Set.to_list
@@ -391,7 +392,7 @@ module Make (Config : Config.S) () = struct
     let run_exn r =
       match r.node with
       | Filter (p, r') ->
-          let schema = schema_exn r' in
+          let schema = schema r' in
           let free_vars =
             Set.diff (pred_free p) (Set.of_list (module Name) schema)
             |> Set.to_list
@@ -487,7 +488,7 @@ module Make (Config : Config.S) () = struct
     let scope = Fresh.name Global.fresh "s%d" in
     let lhs = dedup (select select_list r) in
     ordered_idx lhs scope
-      (filter (Pred.scoped (schema_exn lhs) scope filter_pred) r)
+      (filter (Pred.scoped (schema lhs) scope filter_pred) r)
       {
         oi_key_layout = None;
         oi_lookup = [ (Some (lb, `Closed), Some (ub, `Open)) ];
@@ -599,7 +600,7 @@ module Make (Config : Config.S) () = struct
     let open A in
     match rs with
     | r :: rs ->
-        let schema = schema_exn r in
+        let schema = schema r in
         let sschema = Set.of_list (module Name) schema in
         let skey =
           Set.of_list
@@ -710,7 +711,7 @@ module Make (Config : Config.S) () = struct
               ]
           | Select (ps, { node = AOrderedIdx (r, r', m); _ }) ->
               let outer_aggs, inner_aggs =
-                gen_concat_select_list ps (schema_exn r')
+                gen_concat_select_list ps (schema r')
               in
               let r, scope = (strip_scope r, scope_exn r) in
               [
@@ -718,13 +719,13 @@ module Make (Config : Config.S) () = struct
               ]
           | Select (ps, { node = AList (r, r'); _ }) ->
               let outer_aggs, inner_aggs =
-                gen_concat_select_list ps (schema_exn r')
+                gen_concat_select_list ps (schema r')
               in
               let r, scope = (strip_scope r, scope_exn r) in
               [ select outer_aggs (list r scope (select inner_aggs r')) ]
           | Select (ps, { node = ATuple (r' :: rs', Concat); _ }) ->
               let outer_aggs, inner_aggs =
-                gen_concat_select_list ps (schema_exn r')
+                gen_concat_select_list ps (schema r')
               in
               [
                 select outer_aggs
@@ -737,7 +738,6 @@ module Make (Config : Config.S) () = struct
   let tf_split_select _ =
     let open A in
     let gen_select_list outer_preds inner_rel =
-      let open Abslayout in
       let visitor =
         object (self : 'a)
           inherit [_] A.mapreduce
@@ -779,9 +779,7 @@ module Make (Config : Config.S) () = struct
         List.map inner_aggs ~f:(fun (n, a) -> As_pred (a, Name.name n))
       in
       (* Don't want to project out anything that we might need later. *)
-      let inner_fields =
-        schema_exn inner_rel |> List.map ~f:(fun n -> Name n)
-      in
+      let inner_fields = schema inner_rel |> List.map ~f:(fun n -> Name n) in
       (outer_aggs, inner_aggs @ inner_fields)
     in
     {
@@ -828,13 +826,12 @@ module Make (Config : Config.S) () = struct
   (** Extend a select operator to emit all of the fields in with_. Returns the
      new select list. *)
   let extend_select ~with_ ps r =
-    let open A in
     let needed_fields =
       let of_list = Set.of_list (module Name) in
       (* These are the fields that are emitted by r, used in with_ and not
          exposed already by ps. *)
       Set.diff
-        (Set.inter with_ (of_list (schema_exn r)))
+        (Set.inter with_ (of_list (schema r)))
         (of_list (List.filter_map ~f:Pred.to_name ps))
       |> Set.to_list
       |> List.map ~f:(fun n -> Name n)
@@ -861,7 +858,7 @@ module Make (Config : Config.S) () = struct
     in
     List.filter ret ~f
     |> List.filter_map ~f:(fun (p, r) ->
-           let schema = schema_exn r in
+           let schema = schema r in
            if predicate_is_valid p schema then Some (filter p r)
            else (
              Logs.debug (fun m ->
@@ -1027,7 +1024,7 @@ module Make (Config : Config.S) () = struct
       dedup (select [ As_pred (Name name, fresh_name) ] (db_relation rel))
     in
     let pred =
-      Pred.scoped (schema_exn lhs) scope
+      Pred.scoped (schema lhs) scope
         (Binop (Eq, Name name, Name (Name.create fresh_name)))
     in
     let filtered_rel = filter pred (db_relation rel) in
@@ -1121,7 +1118,7 @@ module Make (Config : Config.S) () = struct
               ( Eq,
                 Name (Name.copy ~scope:None name),
                 Name (Name.create fresh_name) )
-            |> Pred.scoped (schema_exn lhs) scope
+            |> Pred.scoped (schema lhs) scope
           in
           let filtered_rel = filter pred (db_relation rel) in
           List.map keys ~f:(fun k ->
@@ -1145,13 +1142,13 @@ module Make (Config : Config.S) () = struct
           Error.create "Unexpected args." args [%sexp_of: string list]
           |> Error.raise
     in
-    let rel_schema = schema_exn (db_relation rel) in
+    let rel_schema = schema (db_relation rel) in
     let eq = [%compare.equal: Name.t] in
     {
       name = "split-out";
       f =
         (fun r ->
-          let schema = schema_exn r in
+          let schema = schema r in
           if List.mem schema pk ~equal:eq then
             let pk_rel = Option.value_exn (Name.rel pk) in
             let rel_fresh_k = sprintf "%s_%s" pk_rel (Fresh.name fresh "%d") in

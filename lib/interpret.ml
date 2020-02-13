@@ -69,7 +69,7 @@ type agg =
 module Schema = struct
   let of_ralgebra ?scope r =
     let tbl = Hashtbl.create (module Name) in
-    schema_exn r
+    Schema.schema r
     |> List.iteri ~f:(fun i n ->
            Hashtbl.add_exn tbl ~key:(Name.copy ~scope n) ~data:i);
     tbl

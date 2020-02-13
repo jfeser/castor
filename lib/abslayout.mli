@@ -79,8 +79,6 @@ val alpha_scopes : 'a annot -> 'a annot
 
 val and_ : Pred.t list -> Pred.t
 
-val schema_exn : t -> Name.t list
-
 val of_string_exn : string -> t
 
 val name_of_string_exn : string -> Name.t

@@ -146,8 +146,6 @@ let rec and_ = function
   | [ x ] -> x
   | x :: xs -> Binop (And, x, and_ xs)
 
-let schema_exn = schema_exn
-
 let name r =
   match r.node with
   | Select _ -> "select"
