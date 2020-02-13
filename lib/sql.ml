@@ -451,13 +451,13 @@ and to_string = function
       |> String.concat ~sep:" union all "
 
 let to_string_hum sql =
-  let open Bos in
-  let sql_str = to_string sql in
-  let inp = OS.Cmd.in_string sql_str in
-  let out = OS.Cmd.run_io ~err:OS.Cmd.err_null Cmd.(v "pg_format") inp in
-  match OS.Cmd.to_string ~trim:true out with
-  | Ok sql' -> sql'
-  | Error _ -> sql_str
+  let proc = Unix.open_process "pg_format" in
+  let stdout, stdin = proc in
+  to_string sql |> Out_channel.output_string stdin;
+  Out_channel.close stdin;
+  let out = In_channel.input_all stdout in
+  Unix.close_process proc |> Unix.Exit_or_signal.or_error |> Or_error.ok_exn;
+  String.strip out
 
 let sample n s =
   sprintf "select * from (%s) as w order by random() limit %d" s n

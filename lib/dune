@@ -37,7 +37,6 @@
    cmph
    visitors.runtime
    gen
-   bos
    hashcons
    fmt
    fmt.tty
