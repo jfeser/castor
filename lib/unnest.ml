@@ -78,7 +78,19 @@ let to_visible_depjoin q =
   schema_invariant q q';
   q'
 
-let to_nice_depjoin { d_lhs = t1; d_rhs = t2; d_alias } =
+(** Check that the LHS of a dependent join satisfies its no-duplicates requirement. *)
+let check_lhs lhs =
+  match lhs.node with
+  | Dedup _ -> ()
+  | _ ->
+      Error.create "Expected LHS to be distinct" lhs [%sexp_of: _ annot]
+      |> Error.raise
+
+let dep_join lhs rhs =
+  check_lhs lhs;
+  dep_join lhs "x" rhs
+
+let to_nice_depjoin t1 t2 =
   let t1_attr = attrs t1 in
   let t2_free = free t2 in
 
@@ -118,9 +130,17 @@ let to_nice_depjoin { d_lhs = t1; d_rhs = t2; d_alias } =
     |> Pred.conjoin
   in
 
-  join join_pred t1 (dep_join d d_alias t2)
+  join join_pred t1 (dep_join d t2)
 
-let dep_join lhs rhs = dep_join lhs "x" rhs
+let rec to_nice r =
+  match r.node with
+  | DepJoin d ->
+      let d_lhs = to_nice d.d_lhs in
+      let d_rhs = to_nice d.d_rhs in
+      to_nice_depjoin d_lhs d_rhs
+  | q -> { r with node = map_query to_nice to_nice_pred q }
+
+and to_nice_pred p = map_pred to_nice to_nice_pred p
 
 let push_join d { pred = p; r1 = t1; r2 = t2 } =
   let d_attr = attrs d in
@@ -171,11 +191,14 @@ let push_cross_tuple d qs =
   in
   select select_list d.d_lhs
 
-let push_scalar d p = select (p :: (schema d.d_lhs |> to_select_list)) d.d_lhs
+let push_scalar d p = select (p :: (schema d |> to_select_list)) d
+
+let push_dedup d q = dedup (dep_join d q)
 
 let rec push_depjoin r =
   match r.node with
   | DepJoin ({ d_lhs; d_rhs; _ } as d) ->
+      check_lhs d_lhs;
       let d_lhs = push_depjoin d_lhs in
       let d_rhs = push_depjoin d_rhs in
 
@@ -192,7 +215,8 @@ let rec push_depjoin r =
           | Select x -> push_select d_lhs x
           | ATuple (qs, Concat) -> push_concat_tuple d_lhs qs
           | ATuple (qs, Cross) -> push_cross_tuple d qs
-          | AScalar p -> push_scalar d p
+          | AScalar p -> push_scalar d_lhs p
+          | Dedup x -> push_dedup d_lhs x
           | _ -> stuck d
         in
         push_depjoin r'
@@ -201,17 +225,7 @@ let rec push_depjoin r =
 and push_depjoin_pred p = map_pred push_depjoin push_depjoin_pred p
 
 let unnest q =
-  let nice_visitor =
-    object
-      inherit [_] map
-
-      method! visit_DepJoin () d = (to_nice_depjoin d).node
-    end
-  in
-  let q' =
-    q |> strip_meta |> to_visible_depjoin |> nice_visitor#visit_t ()
-    |> push_depjoin
-  in
+  let q' = q |> strip_meta |> to_visible_depjoin |> to_nice |> push_depjoin in
   schema_invariant q q';
   resolve_invariant q q';
   q'
