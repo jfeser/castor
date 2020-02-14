@@ -155,13 +155,8 @@ let%expect_test "" =
     {|
         orderby([x18, x19, x17, x21, x22, x20],
           depjoin(select([row_number() as rn3, f, g], r1) as k,
-            select([k.rn3 as x17,
-                    k.f as x18,
-                    k.g as x19,
-                    x13 as x20,
-                    x14 as x21,
-                    x15 as x22,
-                    x16 as x23],
+            select([k.rn3 as x17, k.f as x18, k.g as x19, x13 as x20, x14 as x21,
+                    x15 as x22, x16 as x23],
               depjoin(select([row_number() as rn4, f, g], r1) as j,
                 select([j.rn4 as x13, j.f as x14, j.g as x15, f as x16],
                   atuple([ascalar(j.f)], cross)))))) |}];

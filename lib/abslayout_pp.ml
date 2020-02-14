@@ -11,13 +11,13 @@ let pp_tuple ?(sep = ", ") pp fmt (x, y) =
 let pp_list ?(bracket = ("[", "]")) pp fmt ls =
   let openb, closeb = bracket in
   let open Format in
-  pp_open_hvbox fmt 1;
+  pp_open_hovbox fmt 1;
   fprintf fmt "%s" openb;
   let rec loop = function
     | [] -> ()
-    | [ x ] -> fprintf fmt "%a" pp x
+    | [ x ] -> fprintf fmt "@[<hov>%a@]" pp x
     | x :: xs ->
-        fprintf fmt "%a,@ " pp x;
+        fprintf fmt "@[<hov>%a@],@ " pp x;
         loop xs
   in
   loop ls;
