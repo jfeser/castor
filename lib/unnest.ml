@@ -176,8 +176,22 @@ let push_groupby d (aggs, keys, q) =
   group_by aggs keys (dep_join d q)
 
 let push_select d (preds, q) =
-  let preds = preds @ (schema d |> List.map ~f:P.name) in
-  select preds (dep_join d q)
+  let d_schema = schema d in
+  let preds = preds @ (d_schema |> List.map ~f:P.name) in
+  match select_kind preds with
+  | `Scalar -> select preds (dep_join d q)
+  | `Agg ->
+      let preds =
+        List.map preds ~f:(fun p ->
+            match Pred.kind p with
+            | `Agg -> p
+            | `Scalar -> (
+                match Pred.to_name p with
+                | Some n -> As_pred (Min p, Name.name n)
+                | None -> Min p )
+            | `Window -> p)
+      in
+      group_by preds d_schema (dep_join d q)
 
 let push_concat_tuple d qs = tuple (List.map qs ~f:(dep_join d)) Concat
 
