@@ -149,13 +149,17 @@ let type_of_field_exn =
         | "date" -> DateT { nullable }
         | "boolean" -> BoolT { nullable }
         | "numeric" ->
-            let min, max, max_scale =
+            let min, max, is_int =
               exec3 ~params:[ fname; rname ] conn
-                "select min(\"$0\"), max(\"$0\"), max(scale(\"$0\")) from \
-                 \"$1\""
+                {|
+select
+  min("$0"), max("$0"),
+  min(case when round("$0") = "$0" then 1 else 0 end)
+from "$1"
+|}
               |> List.hd_exn
             in
-            let is_int = Int.of_string max_scale = 0 in
+            let is_int = Int.of_string is_int = 1 in
             let fits_in_an_int63 =
               try
                 Int.of_string min |> ignore;
