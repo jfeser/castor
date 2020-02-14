@@ -5,6 +5,12 @@ open Abslayout_visitors
 module A = Abslayout
 module Q = Fold_query
 
+let src = Logs.Src.create "castor.abslayout_fold"
+
+module Log = (val Logs.src_log src : Logs.LOG)
+
+let () = Logs.Src.set_level src None
+
 module Fold = struct
   type ('a, 'b, 'c) fold = {
     init : 'b;
@@ -78,7 +84,7 @@ let extract_group widths ctr tups =
   in
   List.map group ~f:extract_tuple |> return
 
-let default_simplify r = Resolve.resolve r |> Project.project
+let default_simplify r = Project.project r
 
 class virtual ['self] abslayout_fold =
   object (self : 'self)
@@ -363,11 +369,14 @@ class virtual ['self] abslayout_fold =
         |> Q.hoist_all
       in
       (* Convert that query to a ralgebra and simplify it. *)
-      let r = Q.to_ralgebra q |> simplify |> Unnest.unnest in
+      let r = q |> Q.to_ralgebra |> simplify in
+      Log.info (fun m -> m "Pre-unnest ralgebra:@ %a" Abslayout.pp r);
+      let r = Unnest.unnest r in
+      Log.info (fun m -> m "Post-unnest ralgebra:@ %a" Abslayout.pp r);
       (* Format.printf "Running query: %a" A.pp r; *)
       (* Convert the ralgebra to sql. *)
       let sql = Sql.of_ralgebra r in
-      (* printf "Running SQL: %s" (Sql.to_string_hum sql); *)
+      Log.info (fun m -> m "Running SQL: %s" (Sql.to_string_hum sql));
       (* Run the sql to get a stream of tuples. *)
       let tups =
         Db.exec_lwt_exn ?timeout conn
@@ -377,6 +386,10 @@ class virtual ['self] abslayout_fold =
              | Ok x -> Array.to_list x
              | Error `Timeout -> raise Lwt_unix.Timeout
              | Error (`Exn e) -> raise e)
+        |> Lwt_stream.map (fun t ->
+               Log.debug (fun m ->
+                   m "%a" Sexp.pp_hum ([%sexp_of: Value.t list] t));
+               t)
       in
       (* Replace the ralgebra queries at the leaves of the fold query with their
          output widths. *)
