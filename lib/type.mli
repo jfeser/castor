@@ -67,11 +67,7 @@ type int_ = {
   nullable : bool;
 }
 
-type date = {
-  range : AbsInt.t;
-  distinct : (int, Core_kernel.Int.comparator_witness) Distinct.t;
-  nullable : bool;
-}
+type date = int_
 
 type bool_ = { nullable : bool }
 

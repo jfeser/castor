@@ -34,8 +34,7 @@ let%expect_test "scalar-int" =
     {|
     0:1 Scalar (=(Int 1))
 
-    ((IntT ((range (Interval 1 1)) (distinct <opaque>) (nullable false))) 1
-     "\\001") |}]
+    ((IntT ((range (Interval 1 1)) (distinct <opaque>))) 1 "\\001") |}]
 
 let%expect_test "scalar-bool" =
   run_test "AScalar(true)";
@@ -43,7 +42,7 @@ let%expect_test "scalar-bool" =
     {|
     0:1 Scalar (=(Bool true))
 
-    ((BoolT ((nullable false))) 1 "\\001") |}]
+    ((BoolT ()) 1 "\\001") |}]
 
 let%expect_test "scalar-string" =
   run_test "AScalar(\"test\")";
@@ -53,8 +52,7 @@ let%expect_test "scalar-string" =
     0:4 String body
     0:0 String length (=4)
 
-    ((StringT ((nchars (Interval 4 4)) (distinct <opaque>) (nullable false))) 4
-     test) |}]
+    ((StringT ((nchars (Interval 4 4)) (distinct <opaque>))) 4 test) |}]
 
 let%expect_test "tuple" =
   run_test "ATuple([AScalar(1), AScalar(\"test\")], Cross)";
@@ -68,8 +66,8 @@ let%expect_test "tuple" =
     1:0 String length (=4)
 
     ((TupleT
-      (((IntT ((range (Interval 1 1)) (distinct <opaque>) (nullable false)))
-        (StringT ((nchars (Interval 4 4)) (distinct <opaque>) (nullable false))))
+      (((IntT ((range (Interval 1 1)) (distinct <opaque>)))
+        (StringT ((nchars (Interval 4 4)) (distinct <opaque>))))
        ((kind Cross))))
      5 "\\001test") |}]
 
@@ -95,8 +93,8 @@ let%expect_test "hash-idx" =
     11:1 Scalar (=(Int 3))
 
     ((HashIdxT
-      ((IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
-       (IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
+      ((IntT ((range (Interval 1 3)) (distinct <opaque>)))
+       (IntT ((range (Interval 1 3)) (distinct <opaque>)))
        ((key_count (Interval 3 3)))))
      12) |}]
 
@@ -124,8 +122,8 @@ let%expect_test "ordered-idx" =
     8:1 Scalar (=(Int 1))
 
     ((OrderedIdxT
-      ((IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
-       (IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
+      ((IntT ((range (Interval 1 3)) (distinct <opaque>)))
+       (IntT ((range (Interval 1 3)) (distinct <opaque>)))
        ((key_count (Interval 3 3)))))
      9 "\\003\\000\\002\\001\\001\\002\\003\\002\\001") |}]
 
@@ -161,10 +159,8 @@ let%expect_test "ordered-idx-dates" =
     23:2 Scalar (=(Date 2016-12-01))
 
     ((OrderedIdxT
-      ((DateT
-        ((range (Interval 17136 17775)) (distinct <opaque>) (nullable false)))
-       (DateT
-        ((range (Interval 17136 17775)) (distinct <opaque>) (nullable false)))
+      ((DateT ((range (Interval 17136 17775)) (distinct <opaque>)))
+       (DateT ((range (Interval 17136 17775)) (distinct <opaque>)))
        ((key_count (Interval 5 5)))))
      25 "oE\\000\\146D\\002|D\\004$D\\006\\240B\\boE\\146D|D$D\\240B") |}]
 
@@ -218,7 +214,7 @@ let%expect_test "list-list" =
 
     ((ListT
       ((ListT
-        ((IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
+        ((IntT ((range (Interval 1 3)) (distinct <opaque>)))
          ((count (Interval 5 5)))))
        ((count (Interval 5 5)))))
      25
@@ -242,8 +238,8 @@ let%expect_test "depjoin" =
 
     ((FuncT
       (((ListT
-         ((IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
+         ((IntT ((range (Interval 1 3)) (distinct <opaque>)))
           ((count (Interval 5 5)))))
-        (IntT ((range (Interval 5 5)) (distinct <opaque>) (nullable false))))
+        (IntT ((range (Interval 5 5)) (distinct <opaque>))))
        Child_sum))
      6 "\\001\\001\\002\\002\\003\\005") |}]

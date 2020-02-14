@@ -50,8 +50,7 @@ let%expect_test "" =
                                                                  k.l_receiptdate=1,
                                                                  k.o_comment=1,
                                                                  },
-          atuple([ascalar(k.l_orderkey@comp)#{},
-                  ascalar(k.l_commitdate@comp)#{},
+          atuple([ascalar(k.l_orderkey@comp)#{}, ascalar(k.l_commitdate@comp)#{},
                   ascalar(k.l_receiptdate@comp)#{l_receiptdate=1, },
                   ascalar(k.o_comment@comp)#{}],
             cross)#{l_receiptdate=1, })#{l_receiptdate=1, })#{l_receiptdate=1, } |}]
