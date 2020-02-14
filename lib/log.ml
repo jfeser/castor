@@ -28,7 +28,7 @@ let setup_log level =
   in
   let ppf = Fmt_tty.setup Out_channel.stderr in
   Format.pp_set_margin ppf 120;
-  Logs.set_level (Some level);
+  Logs.Src.set_level src (Some level);
   Logs.set_reporter (format_reporter ppf)
 
 let param =
