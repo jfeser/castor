@@ -1,4 +1,5 @@
 (executable
+ (package castor)
  (public_name castor-pretty)
  (name pretty)
  (libraries core castor)
@@ -7,6 +8,7 @@
  (modules pretty))
 
 (executable
+ (package castor)
  (public_name castor-compile)
  (name compile)
  (libraries core castor logs)
@@ -15,6 +17,7 @@
  (modules compile))
 
 (executable
+ (package castor)
  (public_name castor-to-cozy)
  (name to_cozy)
  (libraries core castor)
@@ -23,6 +26,7 @@
  (modules to_cozy))
 
 (executable
+ (package castor)
  (public_name sample-tpch)
  (name sample_tpch)
  (libraries core postgresql castor logs)
@@ -31,6 +35,7 @@
  (modules sample_tpch))
 
 (executable
+ (package castor)
  (public_name sql-to-castor)
  (name parse_sql)
  (libraries core sqlgg castor yojson)
@@ -39,6 +44,7 @@
  (modules parse_sql))
 
 (executable
+ (package castor)
  (public_name cozy-to-castor)
  (name parse_cozy)
  (libraries core castor)

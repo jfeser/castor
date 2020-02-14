@@ -1,5 +1,5 @@
 (library
- (name castor_test)
+ (public_name castor_test)
  (libraries
    castor
    str
