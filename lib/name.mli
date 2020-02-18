@@ -16,13 +16,13 @@ val copy :
 
 val name : t -> string
 
-val type_ : t -> Prim_type.t option [@@deprecated]
+val type_ : t -> Prim_type.t option
 
 val rel : t -> string option
 
 val meta : t -> Univ_map.t [@@deprecated]
 
-val type_exn : t -> Prim_type.t [@@deprecated]
+val type_exn : t -> Prim_type.t
 
 val rel_exn : t -> string
 

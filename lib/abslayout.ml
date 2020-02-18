@@ -348,24 +348,26 @@ class ['a] stage_iter =
   object (self : 'a)
     inherit [_] iter
 
-    method! visit_AList phase (rk, rv) =
-      self#visit_t `Compile rk;
-      self#visit_t phase rv
+    method! visit_AList (ctx, phase) (rk, rv) =
+      self#visit_t (ctx, `Compile) rk;
+      self#visit_t (ctx, phase) rv
 
-    method! visit_AHashIdx phase h =
-      List.iter h.hi_lookup ~f:(self#visit_pred phase);
-      self#visit_t `Compile h.hi_keys;
-      self#visit_t phase h.hi_values
+    method! visit_AHashIdx (ctx, phase) h =
+      List.iter h.hi_lookup ~f:(self#visit_pred (ctx, phase));
+      self#visit_t (ctx, `Compile) h.hi_keys;
+      self#visit_t (ctx, phase) h.hi_values
 
-    method! visit_AOrderedIdx phase (rk, rv, m) =
-      let bound_iter = Option.iter ~f:(fun (p, _) -> self#visit_pred phase p) in
+    method! visit_AOrderedIdx (ctx, phase) (rk, rv, m) =
+      let bound_iter =
+        Option.iter ~f:(fun (p, _) -> self#visit_pred (ctx, phase) p)
+      in
       List.iter m.oi_lookup ~f:(fun (b1, b2) ->
           bound_iter b1;
           bound_iter b2);
-      self#visit_t `Compile rk;
-      self#visit_t phase rv
+      self#visit_t (ctx, `Compile) rk;
+      self#visit_t (ctx, phase) rv
 
-    method! visit_AScalar _ p = self#visit_pred `Compile p
+    method! visit_AScalar (ctx, _) p = self#visit_pred (ctx, `Compile) p
   end
 
 exception Un_serial of string
@@ -375,8 +377,8 @@ let ops_serializable_exn r =
     object
       inherit [_] stage_iter as super
 
-      method! visit_t s r =
-        super#visit_t s r;
+      method! visit_t ((), s) r =
+        super#visit_t ((), s) r;
         match (s, r.node) with
         | `Run, (Relation _ | GroupBy (_, _, _) | Join _ | OrderBy _ | Dedup _)
           ->
@@ -388,15 +390,15 @@ let ops_serializable_exn r =
         | _ -> ()
     end
   in
-  visitor#visit_t `Run r
+  visitor#visit_t ((), `Run) r
 
 let names_serializable_exn r =
   let visitor =
     object
-      inherit [_] stage_iter
+      inherit [_] stage_iter as super
 
-      method! visit_Name s n =
-        match Name.Meta.(find n stage) with
+      method! visit_Name (meta, s) n =
+        match Map.find meta n with
         | Some s' ->
             if Poly.(s <> s') then
               let stage =
@@ -408,9 +410,11 @@ let names_serializable_exn r =
                       "Cannot serialize: Found %a in %s time position."
                       Name.pp_with_stage n stage))
         | None -> Logs.warn (fun m -> m "Missing stage on %a" Name.pp n)
+
+      method! visit_t (_, s) = super#visit_t (r.meta#stage, s)
     end
   in
-  visitor#visit_t `Run r
+  visitor#visit_t (Map.empty (module Name), `Run) r
 
 (** Return true if `r` is serializable. This function performs two checks:
     - `r` must not contain any compile time only operations in run time position.

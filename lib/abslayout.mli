@@ -88,7 +88,9 @@ val subst : 'a annot pred Map.M(Name).t -> 'a annot -> 'a annot
 
 val select_kind : 'a annot pred list -> [ `Agg | `Scalar ]
 
-val is_serializeable : t -> (unit, string) result
+val is_serializeable :
+  < stage : [ `Compile | `Run ] Map.M(Name).t ; .. > annot ->
+  (unit, string) result
 
 val pred_free : 'a annot pred -> Set.M(Name).t
 

@@ -18,7 +18,7 @@ let rec to_type_open schema p =
   let to_type = to_type_open schema in
   match p with
   | As_pred (p, _) | Sum p | Min p | Max p -> to_type p
-  | Name n -> Name.Meta.(find_exn n type_)
+  | Name n -> Name.type_exn n
   | Date _ | Unop ((Year | Month | Day), _) -> date_t
   | Int _ | Row_number
   | Unop ((Strlen | ExtractY | ExtractM | ExtractD), _)
@@ -37,7 +37,7 @@ let rec to_type_open schema p =
       unify (to_type p1) (to_type p2)
   | First r -> (
       match schema r with
-      | [ n ] -> Name.Meta.(find_exn n type_)
+      | [ n ] -> Name.type_exn n
       | [] -> failwith "Unexpected empty schema."
       | _ -> failwith "Too many fields." )
 
