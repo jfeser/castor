@@ -38,8 +38,7 @@ let%expect_test "scalar-int" =
 
 let%expect_test "scalar-bool" =
   run_test "AScalar(true)";
-  [%expect
-    {|
+  [%expect {|
     0:1 Scalar (=(Bool true))
 
     ((BoolT ()) 1 "\\001") |}]

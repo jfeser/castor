@@ -7,7 +7,7 @@ module P = Pred.Infix
 
 type count = AtLeastOne | Exact [@@deriving compare, sexp]
 
-type meta = { refcount : int Map.M(Name).t; count : count }
+type meta = { refs : bool Map.M(Name).t; count : count }
 
 let project_def refcnt p =
   match Pred.to_name p with
@@ -16,8 +16,8 @@ let project_def refcnt p =
       false
   | Some n -> (
       (* Filter out definitions that are never referenced. *)
-      match Map.(find refcnt n) with
-      | Some c -> c > 0
+      match Map.find refcnt n with
+      | Some c -> c
       | None ->
           (* Be conservative if refcount is missing. *)
           true )
@@ -28,9 +28,7 @@ let project_defs refcnt ps = List.filter ps ~f:(project_def refcnt)
 let all_unref_at r r' =
   Schema.schema r |> Schema.unscoped
   |> List.for_all ~f:(fun n ->
-         match Map.(find r'.meta.refcount n) with
-         | Some c -> c = 0
-         | None -> false)
+         match Map.find r'.meta.refs n with Some c -> not c | None -> false)
 
 (** True if all fields emitted by r are unreferenced. *)
 let all_unref r = all_unref_at r r
@@ -77,7 +75,7 @@ let rec annotate_count c r =
     | q -> map_query (annotate_count c) (annotate_count_pred c) q
   in
 
-  { node; meta = { refcount = r.meta; count } }
+  { node; meta = { refs = r.meta#refs; count } }
 
 and annotate_count_pred c p =
   map_pred (annotate_count c) (annotate_count_pred c) p
@@ -85,18 +83,16 @@ and annotate_count_pred c p =
 let dummy () = A.scalar (As_pred (Bool false, Fresh.name Global.fresh "d%d"))
 
 let rec project r =
-  let refcnt = r.meta.refcount in
+  let refs = r.meta.refs in
   let count = r.meta.count in
   if all_unref r && [%compare.equal: count] count AtLeastOne then dummy ()
   else
     match r.node with
     | Select (ps, r) ->
-        A.select
-          (project_defs refcnt ps |> List.map ~f:project_pred)
-          (project r)
+        A.select (project_defs refs ps |> List.map ~f:project_pred) (project r)
     | GroupBy (ps, ns, r) ->
         A.group_by
-          (project_defs refcnt ps |> List.map ~f:project_pred)
+          (project_defs refs ps |> List.map ~f:project_pred)
           ns (project r)
     | Dedup r -> (
         match count with
@@ -106,10 +102,9 @@ let rec project r =
         let scope = A.scope_exn rk in
         let rk = A.strip_scope rk in
         let rk =
-          let refcnt = rk.meta.refcount in
           let old_n = schema rk |> List.length in
           let ps =
-            project_defs refcnt (schema rk |> List.map ~f:P.name)
+            project_defs rk.meta.refs (schema rk |> List.map ~f:P.name)
             |> List.map ~f:project_pred
           in
           let new_n = List.length ps in
@@ -117,7 +112,7 @@ let rec project r =
         in
         A.list rk scope (project rv)
     | AScalar p ->
-        if project_def refcnt p then A.scalar (project_pred p) else dummy ()
+        if project_def refs p then A.scalar (project_pred p) else dummy ()
     | ATuple ([], _) -> A.empty
     | ATuple ([ r ], _) -> project r
     | ATuple (rs, Concat) -> A.tuple (List.map rs ~f:project) Concat
