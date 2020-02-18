@@ -64,8 +64,6 @@ module Meta = struct
 
   let stage = Univ_map.Key.create ~name:"stage" [%sexp_of: [ `Compile | `Run ]]
 
-  let refcnt = Univ_map.Key.create ~name:"refcnt" [%sexp_of: int]
-
   let find { meta; _ } = Univ_map.find meta
 
   let find_exn ({ meta; _ } as n) k =
@@ -142,19 +140,6 @@ let pp_with_stage fmt n =
   | Some `Compile -> fprintf fmt "%a@@comp" pp n
   | Some `Run -> fprintf fmt "%a@@run" pp n
   | None -> fprintf fmt "%a@@unk" pp n
-
-let pp_with_stage_and_refcnt fmt n =
-  let open Format in
-  let stage =
-    match Meta.(find n stage) with
-    | Some `Compile -> "comp"
-    | Some `Run -> "run"
-    | None -> "unk"
-  in
-  let refcnt =
-    match Meta.(find n refcnt) with Some x -> Int.to_string x | None -> "?"
-  in
-  fprintf fmt "%a@@%s#%s" pp n stage refcnt
 
 let pp_with_stage_and_type fmt n =
   let open Format in

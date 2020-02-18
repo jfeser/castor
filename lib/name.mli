@@ -16,13 +16,13 @@ val copy :
 
 val name : t -> string
 
-val type_ : t -> Prim_type.t option
+val type_ : t -> Prim_type.t option [@@deprecated]
 
 val rel : t -> string option
 
-val meta : t -> Univ_map.t
+val meta : t -> Univ_map.t [@@deprecated]
 
-val type_exn : t -> Prim_type.t
+val type_exn : t -> Prim_type.t [@@deprecated]
 
 val rel_exn : t -> string
 
@@ -38,8 +38,6 @@ val pp : Formatter.t -> t -> unit
 
 val pp_with_stage : Formatter.t -> t -> unit
 
-val pp_with_stage_and_refcnt : Formatter.t -> t -> unit
-
 val pp_with_stage_and_type : Formatter.t -> t -> unit
 
 val fresh : (int -> string, unit, string) format -> t
@@ -51,8 +49,6 @@ module Meta : sig
 
   val stage : [ `Compile | `Run ] Univ_map.Key.t
 
-  val refcnt : int Univ_map.Key.t
-
   val find : t -> 'a Univ_map.Key.t -> 'a option
 
   val find_exn : t -> 'a Univ_map.Key.t -> 'a
@@ -61,3 +57,4 @@ module Meta : sig
 
   val change : t -> f:('a option -> 'a option) -> 'a Univ_map.Key.t -> t
 end
+[@@deprecated]
