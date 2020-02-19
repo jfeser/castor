@@ -1,11 +1,11 @@
 type t =
   | NullT
-  | IntT of { nullable : bool }
-  | DateT of { nullable : bool }
-  | FixedT of { nullable : bool }
-  | StringT of { nullable : bool; padded : bool }
-  | BoolT of { nullable : bool }
-  | TupleT of t list
+  | IntT of { nullable : bool [@sexp.bool] }
+  | DateT of { nullable : bool [@sexp.bool] }
+  | FixedT of { nullable : bool [@sexp.bool] }
+  | StringT of { nullable : bool; [@sexp.bool] padded : bool [@sexp.bool] }
+  | BoolT of { nullable : bool [@sexp.bool] }
+  | TupleT of t list [@sexp.list]
   | VoidT
 [@@deriving compare, hash, sexp]
 

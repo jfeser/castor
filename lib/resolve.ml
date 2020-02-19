@@ -101,10 +101,6 @@ module Ctx = struct
     let compare_row r1 r2 = [%compare: N.t] r1.rname r2.rname
 
     let of_list l =
-      (* let l =
-       *   List.map l ~f:(fun r ->
-       *       { r with rname = N.Meta.(set r.rname stage r.rstage) })
-       * in *)
       let dups = List.find_all_dups l ~compare:compare_row in
       if List.length dups > 0 then (
         List.iter dups ~f:(fun r ->
@@ -372,8 +368,9 @@ exception Resolve_error of unit annot * unit annot * exn [@@deriving sexp]
 
 let rec resolve stage outer_ctx r =
   let node, ctx =
-    try resolve_open resolve stage outer_ctx r.node
-    with exn -> raise (Inner_resolve_error (A.strip_meta r, exn))
+    try resolve_open resolve stage outer_ctx r.node with
+    | Inner_resolve_error _ as exn -> raise exn
+    | exn -> raise (Inner_resolve_error (A.strip_meta r, exn))
   in
   let ctx = Ctx.unscoped ctx in
   ( {

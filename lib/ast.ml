@@ -56,7 +56,7 @@ type ('p, 'r) hash_idx = {
   hi_keys : 'r;
   hi_values : 'r;
   hi_scope : scope;
-  hi_key_layout : 'r option;
+  hi_key_layout : 'r option; [@sexp.option]
   hi_lookup : 'p list;
 }
 [@@deriving compare, hash, sexp]
@@ -64,7 +64,7 @@ type ('p, 'r) hash_idx = {
 type 'p bound = 'p * [ `Open | `Closed ] [@@deriving compare, hash, sexp]
 
 type ('p, 'r) ordered_idx = {
-  oi_key_layout : 'r option;
+  oi_key_layout : 'r option; [@sexp.option]
   oi_lookup : ('p bound option * 'p bound option) list;
 }
 [@@deriving compare, hash, sexp]

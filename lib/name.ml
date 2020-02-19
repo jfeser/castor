@@ -1,7 +1,7 @@
 open Hashcons
 
 module Key = struct
-  type t = { scope : string option; name : string }
+  type t = { scope : string option; [@sexp.option] name : string }
   [@@deriving compare, hash, sexp]
 
   let equal = [%compare.equal: t]

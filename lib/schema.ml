@@ -14,9 +14,7 @@ let to_name = function
   | As_pred (_, n) -> Some (Name.create n)
   | _ -> None
 
-let rec to_type_open schema p =
-  let to_type = to_type_open schema in
-  match p with
+let to_type_open schema to_type = function
   | As_pred (p, _) | Sum p | Min p | Max p -> to_type p
   | Name n -> Name.type_exn n
   | Date _ | Unop ((Year | Month | Day), _) -> date_t
@@ -41,15 +39,11 @@ let rec to_type_open schema p =
       | [] -> failwith "Unexpected empty schema."
       | _ -> failwith "Too many fields." )
 
-let to_type_opt_open schema p =
-  Or_error.try_with (fun () -> to_type_open schema p)
-
 let schema_open schema r =
-  let to_type_opt = to_type_opt_open schema in
-  let to_type = to_type_open schema in
+  let rec to_type p = to_type_open schema to_type p in
   let of_preds =
     List.map ~f:(fun p ->
-        let t = to_type_opt p |> Or_error.ok in
+        let t = Or_error.try_with (fun () -> to_type p) |> Or_error.ok in
         match to_name p with
         | Some n -> Name.copy ~type_:t n
         | None ->
@@ -85,8 +79,14 @@ let schema_open schema r =
 
 let rec schema r = schema_open schema r
 
-let to_type q = to_type_open schema q
+let rec to_type q =
+  let rec to_type q = to_type_open schema to_type q in
+  try to_type q
+  with exn ->
+    Error.create "Failed to compute type." (q, exn)
+      [%sexp_of: _ annot pred * exn]
+    |> Error.raise
 
-let to_type_opt q = to_type_opt_open schema q
+let to_type_opt q = Or_error.try_with (fun () -> to_type q)
 
 let to_select_list s = List.map s ~f:(fun n -> Name n)
