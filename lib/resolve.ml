@@ -108,7 +108,7 @@ module Ctx = struct
       let dups = List.find_all_dups l ~compare:compare_row in
       if List.length dups > 0 then (
         List.iter dups ~f:(fun r ->
-            Log.err (fun m -> m "Ambiguous name %a." N.pp_with_stage r.rname));
+            Log.err (fun m -> m "Ambiguous name %a." N.pp r.rname));
         Error.(of_string "Ambiguous names." |> raise) );
       l
   end
@@ -134,7 +134,7 @@ module Ctx = struct
         (c1 :> row list)
         ~f:(fun r ->
           if List.mem c2 ~equal:[%compare.equal: row] r then (
-            Log.warn (fun m -> m "Shadowing of %a." N.pp_with_stage r.rname);
+            Log.warn (fun m -> m "Shadowing of %a." N.pp r.rname);
             false )
           else true)
     in

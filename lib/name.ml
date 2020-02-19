@@ -59,43 +59,23 @@ module O : Comparable.Infix with type t := t = struct
   let ( <> ) x y = not (equal x y)
 end
 
-module Meta = struct
-  let type_ = Univ_map.Key.create ~name:"type" [%sexp_of: Prim_type.t]
-
-  let stage = Univ_map.Key.create ~name:"stage" [%sexp_of: [ `Compile | `Run ]]
-
-  let find { meta; _ } = Univ_map.find meta
-
-  let find_exn ({ meta; _ } as n) k =
-    match Univ_map.find meta k with
-    | Some x -> x
-    | None ->
-        Error.create "Missing metadata."
-          (n, Univ_map.Key.name k, meta)
-          [%sexp_of: t * string * Univ_map.t]
-        |> Error.raise
-
-  let set ({ meta; _ } as n) k v = { n with meta = Univ_map.set meta k v }
-
-  let change ({ meta; _ } as n) ~f k =
-    { n with meta = Univ_map.change meta ~f k }
-end
+let type_k = Univ_map.Key.create ~name:"type" [%sexp_of: Prim_type.t]
 
 let create ?scope ?type_ name =
   let meta = Univ_map.empty in
   let meta =
-    match type_ with Some t -> Univ_map.set meta Meta.type_ t | None -> meta
+    match type_ with Some t -> Univ_map.set meta type_k t | None -> meta
   in
   create_consed scope name meta
 
-let type_ n = Univ_map.find n.meta Meta.type_
+let type_ n = Univ_map.find n.meta type_k
 
 let copy ?scope ?type_:t ?name:n ?meta name =
   let r = Option.value scope ~default:name.name.node.scope in
   let t = Option.value t ~default:(type_ name) in
   let n = Option.value n ~default:name.name.node.name in
   let m = Option.value meta ~default:name.meta in
-  let meta = match t with Some t -> Univ_map.set m Meta.type_ t | None -> m in
+  let meta = match t with Some t -> Univ_map.set m type_k t | None -> m in
   create_consed r n meta
 
 let name n = n.name.node.name
@@ -133,28 +113,6 @@ let pp fmt n =
   match n.name.node.scope with
   | Some r -> fprintf fmt "%s.%s" r name
   | None -> fprintf fmt "%s" name
-
-let pp_with_stage fmt n =
-  let open Format in
-  match Meta.(find n stage) with
-  | Some `Compile -> fprintf fmt "%a@@comp" pp n
-  | Some `Run -> fprintf fmt "%a@@run" pp n
-  | None -> fprintf fmt "%a@@unk" pp n
-
-let pp_with_stage_and_type fmt n =
-  let open Format in
-  let stage =
-    match Meta.(find n stage) with
-    | Some `Compile -> "comp"
-    | Some `Run -> "run"
-    | None -> "unk"
-  in
-  let type_ =
-    match Meta.(find n type_) with
-    | Some t -> Prim_type.to_string t
-    | None -> "unk"
-  in
-  fprintf fmt "%a@@%s:%s" pp n stage type_
 
 let fresh fmt = create (Fresh.name Global.fresh fmt)
 

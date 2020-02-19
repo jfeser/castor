@@ -61,7 +61,7 @@ let rec set_exn p r s =
       ordered_idx r1 (scope_exn r1) (set_exn p' r' s) h
   | 0 :: p', As (n, r') -> as_ n (set_exn p' r' s)
   | p, _ ->
-      Error.create "Invalid path in set." (p, r) [%sexp_of: t * Ast.t]
+      Error.create "Invalid path in set." (p, r) [%sexp_of: t * _ annot]
       |> Error.raise
 
 let stage_exn p r =
@@ -101,7 +101,7 @@ let stage_exn p r =
     | _, AHashIdx _
     | _, AOrderedIdx _
     | _, As (_, _) ->
-        Error.create "Invalid path in get." (p, r) [%sexp_of: t * Ast.t]
+        Error.create "Invalid path in get." (p, r) [%sexp_of: t * _ annot]
         |> Error.raise
   in
   stage p r `Run
@@ -144,7 +144,7 @@ let rec get_exn p r =
   | _, AHashIdx _
   | _, AOrderedIdx _
   | _, As (_, _) ->
-      Error.create "Invalid path in get." (p, r) [%sexp_of: t * Ast.t]
+      Error.create "Invalid path in get." (p, r) [%sexp_of: t * _ annot]
       |> Error.raise
 
 let all r =
@@ -209,13 +209,13 @@ let rec is_run_time r p =
   | i :: p', ATuple (rs, _) when i >= 0 && i < List.length rs ->
       is_run_time (List.nth_exn rs i) p'
   | _, ATuple ([], _) ->
-      Error.create "Invalid path. No children." (p, r) [%sexp_of: t * Ast.t]
+      Error.create "Invalid path. No children." (p, r) [%sexp_of: t * _ annot]
       |> Error.raise
   | p, (AEmpty | AScalar _ | Relation _) ->
-      Error.create "Invalid path. No children." (p, r) [%sexp_of: t * Ast.t]
+      Error.create "Invalid path. No children." (p, r) [%sexp_of: t * _ annot]
       |> Error.raise
   | _ :: _, _ ->
-      Error.create "Invalid path: Bad index." (p, r) [%sexp_of: t * Ast.t]
+      Error.create "Invalid path: Bad index." (p, r) [%sexp_of: t * _ annot]
       |> Error.raise
 
 let is_compile_time p r = not (is_run_time p r)

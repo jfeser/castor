@@ -107,6 +107,15 @@ let map_pred map_query map_pred = function
   | Exists q -> Exists (map_query q)
   | Substring (p, p', p'') -> Substring (map_pred p, map_pred p', map_pred p'')
 
+let map_ordered_idx map_query map_pred { oi_key_layout; oi_lookup } =
+  {
+    oi_key_layout = Option.map oi_key_layout ~f:map_query;
+    oi_lookup =
+      List.map oi_lookup ~f:(fun (b, b') ->
+          ( Option.map ~f:(map_bound map_pred) b,
+            Option.map ~f:(map_bound map_pred) b' ));
+  }
+
 let map_query map_query map_pred = function
   | Select (ps, q) -> Select (List.map ~f:map_pred ps, map_query q)
   | Filter (p, q) -> Filter (map_pred p, map_query q)
@@ -136,21 +145,15 @@ let map_query map_query map_pred = function
           hi_key_layout = Option.map hi_key_layout ~f:map_query;
           hi_lookup = List.map hi_lookup ~f:map_pred;
         }
-  | AOrderedIdx (q, q', { oi_key_layout; oi_lookup }) ->
+  | AOrderedIdx (q, q', o) ->
       AOrderedIdx
-        ( map_query q,
-          map_query q',
-          {
-            oi_key_layout = Option.map oi_key_layout ~f:map_query;
-            oi_lookup =
-              List.map oi_lookup ~f:(fun (b, b') ->
-                  ( Option.map ~f:(map_bound map_pred) b,
-                    Option.map ~f:(map_bound map_pred) b' ));
-          } )
+        (map_query q, map_query q', map_ordered_idx map_query map_pred o)
   | As (s, q) -> As (s, map_query q)
 
 let rec map_meta f { node; meta } =
-  { node = map_query (map_meta f) (map_meta_pred f) node; meta = f meta }
+  { node = map_meta_query f node; meta = f meta }
+
+and map_meta_query f q = map_query (map_meta f) (map_meta_pred f) q
 
 and map_meta_pred f p = map_pred (map_meta f) (map_meta_pred f) p
 

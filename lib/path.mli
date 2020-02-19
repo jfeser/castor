@@ -1,3 +1,4 @@
+open Ast
 open Collections
 
 type t [@@deriving compare, sexp]
@@ -14,15 +15,16 @@ val length : t -> int
 
 val set_exn : t -> Ast.t -> Ast.t -> Ast.t
 
-val get_exn : t -> Ast.t -> Ast.t
+val get_exn : t -> 'a annot -> 'a annot
+(** Return a subtree rooted at the end of a path. *)
 
-val stage_exn : t -> Ast.t -> [ `Compile | `Run ]
+val stage_exn : t -> 'a annot -> [ `Compile | `Run ]
 
-val all : Ast.t -> t Seq.t
+val all : 'a annot -> t Seq.t
 
-val is_run_time : Ast.t -> t -> bool
+val is_run_time : 'a annot -> t -> bool
 
-val is_compile_time : Ast.t -> t -> bool
+val is_compile_time : 'a annot -> t -> bool
 
 val parent : t -> t option
 

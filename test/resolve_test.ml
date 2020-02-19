@@ -5,7 +5,7 @@ open Test_util
 let conn = Lazy.force tpch_conn
 
 let pp x =
-  let pp, _ = mk_pp ~pp_name:Name.pp_with_stage () in
+  let pp, _ = mk_pp ~pp_name:Name.pp () in
   pp x
 
 let pp_with_refcount, _ =

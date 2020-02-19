@@ -407,8 +407,8 @@ let names_serializable_exn r =
               raise
                 (Un_serial
                    (Format.asprintf
-                      "Cannot serialize: Found %a in %s time position."
-                      Name.pp_with_stage n stage))
+                      "Cannot serialize: Found %a in %s time position." Name.pp
+                      n stage))
         | None -> Logs.warn (fun m -> m "Missing stage on %a" Name.pp n)
 
       method! visit_t (_, s) = super#visit_t (r.meta#stage, s)
