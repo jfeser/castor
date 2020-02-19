@@ -76,6 +76,7 @@ let rec exec ?(max_retries = 0) ?(params = []) db query =
   in
   match r#status with
   | Nonfatal_error -> (
+      Log.warn (fun m -> m "Db: Received nonfatal error. Retrying.");
       match r#error_code with
       | SERIALIZATION_FAILURE | DEADLOCK_DETECTED ->
           if
@@ -223,6 +224,10 @@ let relation_has_field conn f =
       List.exists (Option.value_exn r.Relation.r_schema) ~f:(fun n ->
           String.(Name.name n = f)))
 
+let load_int s = Scanf.sscanf s "%d" Fun.id
+
+let load_padded_string v = String.rstrip ~drop:(fun c -> Char.(c = ' ')) v
+
 let load_value type_ value =
   let open Prim_type in
   match type_ with
@@ -238,9 +243,8 @@ let load_value type_ value =
       if String.(value = "") then
         if nullable then Ok Null
         else Error (Error.of_string "Unexpected null integer.")
-      else Ok (Int (Int.of_string value))
-  | StringT { padded = true; _ } ->
-      Ok (String (String.rstrip ~drop:(fun c -> Char.(c = ' ')) value))
+      else Ok (Int (load_int value))
+  | StringT { padded = true; _ } -> Ok (String (load_padded_string value))
   | StringT { padded = false; _ } -> Ok (String value)
   | FixedT { nullable } ->
       if String.(value = "") then
@@ -327,6 +331,15 @@ let exec_cursor_exn =
     in
     seq
 
+let to_error (query, err) =
+  let err =
+    match err with
+    | `Timeout -> Error.createf "Timed out."
+    | `Exn e -> Error.of_exn e
+    | `Msg m -> Error.of_string m
+  in
+  Error.tag_arg err "query" query [%sexp_of: string]
+
 let exec_lwt_exn ?(params = []) ?timeout db schema query =
   let query = subst_params params query in
   let stream, push = Lwt_stream.create () in
@@ -335,16 +348,17 @@ let exec_lwt_exn ?(params = []) ?timeout db schema query =
   let exec () =
     Lwt_pool.use db.pool (fun conn ->
         let fail msg =
-          push (Some (Result.fail msg));
+          push (Some (Result.fail (query, msg)));
           push None;
           conn#reset;
           return_unit
         in
 
-        (* OCaml can't convert integers to fds for reasons, so magic is required. *)
+        (* OCaml can't convert integers to fds for reasons, so magic is
+           required. *)
         let fd = conn#socket |> Obj.magic |> Lwt_unix.of_unix_file_descr in
         (* Wait for results from a send_query call. consume_input pulls any
-         available input from the database *)
+           available input from the database *)
         let rec wait_for_results () =
           conn#consume_input;
           if conn#is_busy then
@@ -358,8 +372,8 @@ let exec_lwt_exn ?(params = []) ?timeout db schema query =
                     load_tuples_list_exn schema r
                     |> List.iter ~f:(fun t -> push (Some (Result.return t)));
                     wait_for_results ()
-                | Fatal_error -> fail (`Exn (Failure r#error))
-                | _ -> fail (`Exn (Failure "Unexpected status")) )
+                | Fatal_error -> fail (`Msg r#error)
+                | _ -> fail (`Msg "Unexpected status") )
             | None ->
                 push None;
                 return_unit

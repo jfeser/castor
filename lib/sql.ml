@@ -419,7 +419,7 @@ generate_series(%s :: timestamp, %s :: timestamp, '1 day' :: interval) range) as
       let group_keys =
         List.map group ~f:pred_to_sql |> String.concat ~sep:", "
       in
-      sprintf "group by (%s)" group_keys
+      sprintf "group by %s" group_keys
   in
   let order_sql =
     if List.is_empty order then ""
@@ -449,14 +449,16 @@ and to_string = function
       List.map qs ~f:(fun q -> sprintf "(%s)" (spj_to_sql q))
       |> String.concat ~sep:" union all "
 
-let to_string_hum sql =
+let format sql =
   let proc = Unix.open_process "pg_format" in
   let stdout, stdin = proc in
-  to_string sql |> Out_channel.output_string stdin;
+  Out_channel.output_string stdin sql;
   Out_channel.close stdin;
   let out = In_channel.input_all stdout in
   Unix.close_process proc |> Unix.Exit_or_signal.or_error |> Or_error.ok_exn;
   String.strip out
+
+let to_string_hum sql = to_string sql |> format
 
 let sample n s =
   sprintf "select * from (%s) as w order by random() limit %d" s n

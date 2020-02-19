@@ -40,5 +40,7 @@ val trash_sample : int -> string -> string
 
 val to_string : t -> string
 
+val format : string -> string
+
 val to_string_hum : t -> string
 (** Pretty print a SQL string if a sql formatter is available. *)

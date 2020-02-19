@@ -151,7 +151,7 @@ let%expect_test "join-groupby" =
             FROM
                 "r1" AS "r1_1") AS "t1"
         GROUP BY
-            ("f_1")) AS "t2",
+            "f_1") AS "t2",
         (
             SELECT
                 "g_0" AS "g_1",
@@ -163,7 +163,7 @@ let%expect_test "join-groupby" =
                 FROM
                     "r1" AS "r1_0") AS "t0"
             GROUP BY
-                ("g_0")) AS "t3"
+                "g_0") AS "t3"
     WHERE ((("f_2") = ("g_1"))
         OR (("x_0") = ("y_0"))) |}]
 
@@ -200,7 +200,7 @@ let%expect_test "select-groupby" =
               FROM
                   "r1" AS "r1_0") AS "t0"
           GROUP BY
-              ("f_0")) AS "t1" |}]
+              "f_0") AS "t1" |}]
 
 let%expect_test "select-fusion-1" =
   run_test "select([max(x)], select([min(f) as x], r1))";
@@ -246,7 +246,7 @@ let%expect_test "filter-fusion" =
               FROM
                   "r1" AS "r1_0") AS "t0"
           GROUP BY
-              ("g_0")) AS "t1"
+              "g_0") AS "t1"
       WHERE (("x_0") = (0)) |}]
 
 let%expect_test "groupby-dedup" =
@@ -261,7 +261,7 @@ let%expect_test "groupby-dedup" =
         FROM
             "r1" AS "r1_0") AS "t0"
     GROUP BY
-        ("g_0") |}]
+        "g_0" |}]
 
 let%expect_test "hash-idx" =
   run_test

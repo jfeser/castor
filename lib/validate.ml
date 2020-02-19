@@ -11,13 +11,10 @@ let exec conn r =
 
 type tuple = Value.t array [@@deriving compare, sexp]
 
-let to_err t =
-  Result.map_error t ~f:(function
-    | `Timeout -> Error.createf "Timed out."
-    | `Exn e -> Error.of_exn e)
-
 let normal_order r =
   order_by (List.map (schema r) ~f:(fun n -> (Name n, Desc))) r
+
+let to_err = Result.map_error ~f:Db.to_error
 
 let compare t1 t2 =
   match (to_err t1, to_err t2) with

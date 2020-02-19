@@ -9,7 +9,7 @@ let src = Logs.Src.create "castor.abslayout_fold"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
-let () = Logs.Src.set_level src None
+let () = Logs.Src.set_level src (Some Error)
 
 module Fold = struct
   type ('a, 'b, 'c) fold = {
@@ -384,8 +384,11 @@ class virtual ['self] abslayout_fold =
           (Sql.to_string sql)
         |> Lwt_stream.map (function
              | Ok x -> Array.to_list x
-             | Error `Timeout -> raise Lwt_unix.Timeout
-             | Error (`Exn e) -> raise e)
+             | Error (_, `Timeout) -> raise Lwt_unix.Timeout
+             | Error ((query, _) as e) ->
+                 Log.err (fun m ->
+                     m "Running SQL failed: %s" (Sql.format query));
+                 Db.to_error e |> Error.raise)
         |> Lwt_stream.map (fun t ->
                Log.debug (fun m ->
                    m "%a" Sexp.pp_hum ([%sexp_of: Value.t list] t));
