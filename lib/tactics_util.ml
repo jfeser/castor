@@ -84,13 +84,14 @@ module Make (Config : Config.S) = struct
 
   (** Check that a predicate is fully supported by a relation (it does not
       depend on anything in the context.) *)
-  let is_supported bound pred =
+  let is_supported stage bound pred =
     Set.for_all (pred_free pred) ~f:(fun n ->
         Set.mem bound n
         (* TODO: We assume that compile time names that are bound in the context
            are ok, but this might not be true? *)
-        || ( match Name.Meta.(find n stage) with
-           | Some s -> Poly.(s = `Compile)
+        || ( match Map.find stage n with
+           | Some `Compile -> true
+           | Some `Run -> false
            | None ->
                Logs.warn (fun m -> m "Missing stage on %a" Name.pp n);
                false )

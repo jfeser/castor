@@ -59,22 +59,27 @@ module Make (Config : Config.S) = struct
 
   module Cost = Type_cost.Make (Config)
 
-  let is_serializable r p = Path.get_exn p r |> is_serializeable |> Result.is_ok
+  let is_serializable r p =
+    let r = Resolve.resolve ~params r in
+    Path.get_exn p r |> is_serializeable |> Result.is_ok
 
   let has_params r p = Path.get_exn p r |> free |> overlaps params
 
   let has_free r p = not (Set.is_empty (free (Path.get_exn p r)))
 
+  let key_is_supported r key =
+    let s = Set.of_list (module Name) (schema r) in
+    List.for_all key ~f:(fun (p, _) ->
+        Tactics_util.is_supported r.meta#stage s p)
+
   let push_orderby r =
-    let key_is_supported r key =
-      let s = Set.of_list (module Name) (schema r) in
-      List.for_all key ~f:(fun (p, _) -> Tactics_util.is_supported s p)
-    in
+    let module C = (val Abslayout_infix.constructors (fun () -> ())) in
+    let open C in
     let orderby_cross_tuple key rs =
       match rs with
       | r :: rs ->
           if key_is_supported r key then
-            Some (tuple (order_by key r :: rs) Cross)
+            Some (tuple (order_by key r :: List.map ~f:strip_meta rs) Cross)
           else None
       | _ -> None
     in
@@ -86,27 +91,27 @@ module Make (Config : Config.S) = struct
     in
     match r.node with
     | OrderBy { key; rel = { node = Select (ps, r); _ } } ->
-        let s = Set.of_list (module Name) (schema r) in
-        if List.for_all key ~f:(fun (p, _) -> Tactics_util.is_supported s p)
-        then Some (select ps (order_by key r))
+        if key_is_supported r key then Some (select ps (order_by key r))
         else None
     | OrderBy { key; rel = { node = Filter (ps, r); _ } } ->
         Some (filter ps (order_by key r))
     | OrderBy { key; rel = { node = AHashIdx h; _ } } ->
-        Some (hash_idx' { h with hi_values = order_by key h.hi_values })
+        Some
+          (hash_idx ?key_layout:h.hi_key_layout h.hi_keys h.hi_scope
+             (order_by key h.hi_values) h.hi_lookup)
     | OrderBy { key; rel = { node = AList (r1, r2); _ } } ->
-        (* If we order a lists keys then the keys will be ordered in the
-                   list. *)
+        (* If we order a list's keys then the keys will be ordered in the list. *)
         orderby_list key r1 r2
     | OrderBy { key; rel = { node = ATuple (rs, Cross); _ } } ->
         orderby_cross_tuple key rs
     | OrderBy { key; rel = { node = DepJoin d; _ } } ->
         if key_is_supported d.d_lhs key then
-          Some (dep_join' { d with d_lhs = order_by key d.d_lhs })
+          Some (dep_join (order_by key d.d_lhs) d.d_alias d.d_rhs)
         else None
     | _ -> None
 
-  let push_orderby = of_func push_orderby ~name:"push-orderby"
+  let push_orderby =
+    of_func_pre push_orderby ~name:"push-orderby" ~pre:(Resolve.resolve ~params)
 
   (* Recursively optimize subqueries. *)
   let apply_to_subqueries tf =

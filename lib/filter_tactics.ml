@@ -269,7 +269,7 @@ module Make (C : Config.S) = struct
   let elim_cmp_filter =
     Branching.(local elim_cmp_filter ~name:"elim-cmp-filter")
 
-  let push_filter_cross_tuple p rs =
+  let push_filter_cross_tuple stage p rs =
     let ps = Pred.conjuncts p in
     (* Find the earliest placement for each predicate. *)
     let preds = Array.create ~len:(List.length rs) [] in
@@ -277,7 +277,9 @@ module Make (C : Config.S) = struct
       if i >= List.length rs then ps
       else
         let bnd = List.nth_exn rs i |> schema |> Set.of_list (module Name) in
-        let pl, up = List.partition_tf ps ~f:(Tactics_util.is_supported bnd) in
+        let pl, up =
+          List.partition_tf ps ~f:(Tactics_util.is_supported stage bnd)
+        in
         preds.(i) <- pl;
         place_all up (i + 1)
     in
@@ -285,20 +287,20 @@ module Make (C : Config.S) = struct
     let rs = List.mapi rs ~f:(fun i -> filter (Pred.conjoin preds.(i))) in
     filter (Pred.conjoin rest) (tuple rs Cross)
 
-  let push_filter_list p rk rv =
+  let push_filter_list stage p rk rv =
     let scope = scope_exn rk in
     let rk = strip_scope rk in
     let rk_bnd = Set.of_list (module Name) (schema rk) in
     let pushed_key, pushed_val =
       Pred.conjuncts p
       |> List.partition_map ~f:(fun p ->
-             if Tactics_util.is_supported rk_bnd p then `Fst p else `Snd p)
+             if Tactics_util.is_supported stage rk_bnd p then `Fst p else `Snd p)
     in
     let inner_key_pred = Pred.conjoin pushed_key in
     let inner_val_pred = Pred.conjoin pushed_val in
     list (filter inner_key_pred rk) scope (filter inner_val_pred rv)
 
-  let push_filter_select p ps r =
+  let push_filter_select stage p ps r =
     match select_kind ps with
     | `Scalar ->
         let ctx =
@@ -320,7 +322,7 @@ module Make (C : Config.S) = struct
         let pushed, unpushed =
           Pred.conjuncts p
           |> List.partition_map ~f:(fun p ->
-                 if Tactics_util.is_supported names p then
+                 if Tactics_util.is_supported stage names p then
                    `Fst (Pred.subst scalar_ctx p)
                  else `Snd p)
         in
@@ -329,16 +331,18 @@ module Make (C : Config.S) = struct
 
   let push_filter r =
     let open Option.Let_syntax in
+    let stage = r.meta#stage in
+    let r = strip_meta r in
     let%bind p, r = to_filter r in
     match r.node with
     | Filter (p', r') -> Some (filter (Binop (And, p, p')) r')
     | Dedup r' -> Some (dedup (filter p r'))
-    | Select (ps, r) -> Some (push_filter_select p ps r)
+    | Select (ps, r') -> Some (push_filter_select stage p ps r')
     | ATuple (rs, Concat) -> Some (tuple (List.map rs ~f:(filter p)) Concat)
-    | ATuple (rs, Cross) -> Some (push_filter_cross_tuple p rs)
+    | ATuple (rs, Cross) -> Some (push_filter_cross_tuple stage p rs)
     (* Lists are a special case because their keys are bound at compile time and
        are not available at runtime. *)
-    | AList (rk, rv) -> Some (push_filter_list p rk rv)
+    | AList (rk, rv) -> Some (push_filter_list stage p rk rv)
     | _ ->
         let%map rk, scope, rv, mk =
           match r.node with
@@ -365,7 +369,8 @@ module Make (C : Config.S) = struct
         let pushed_key, pushed_val =
           Pred.conjuncts p
           |> List.partition_map ~f:(fun p ->
-                 if Tactics_util.is_supported rk_bnd p then `Fst p else `Snd p)
+                 if Tactics_util.is_supported stage rk_bnd p then `Fst p
+                 else `Snd p)
         in
         let inner_key_pred = Pred.conjoin pushed_key in
         let inner_val_pred =
@@ -378,7 +383,10 @@ module Make (C : Config.S) = struct
 
   let push_filter =
     (* NOTE: Simplify is necessary to make push-filter safe under fixpoints. *)
-    seq' (of_func push_filter ~name:"push-filter") simplify
+    seq'
+      (of_func_pre push_filter ~name:"push-filter"
+         ~pre:(Resolve.resolve ~params))
+      simplify
 
   let elim_eq_filter_src =
     let src = Logs.Src.create "elim-eq-filter" in

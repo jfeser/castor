@@ -43,20 +43,12 @@ let%expect_test "" =
     ~f:(Format.printf "%a" Abslayout.pp);
   [%expect
     {|
-    select([l_quantity as x77,
-            l_extendedprice as x78,
-            l_discount as x79,
-            l_shipdate as x80,
-            l_extendedprice as x81,
-            l_discount as x82],
-      select([l_extendedprice as l_extendedprice,
-              l_discount as l_discount,
-              l_quantity,
-              l_shipdate],
-        select([l_quantity as l_quantity,
-                l_extendedprice as l_extendedprice,
-                l_discount as l_discount,
-                l_shipdate as l_shipdate],
+    select([l_quantity as x77, l_extendedprice as x78, l_discount as x79,
+            l_shipdate as x80, l_extendedprice as x81, l_discount as x82],
+      select([l_extendedprice as l_extendedprice, l_discount as l_discount,
+              l_quantity, l_shipdate],
+        select([l_quantity as l_quantity, l_extendedprice as l_extendedprice,
+                l_discount as l_discount, l_shipdate as l_shipdate],
           lineitem))) |}]
 
 let%expect_test "" =

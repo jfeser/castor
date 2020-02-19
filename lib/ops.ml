@@ -73,7 +73,6 @@ include T
 module Make (C : Config.S) = struct
   open C
   include T
-  module R = Resolve
 
   let trace = false
 
@@ -163,7 +162,7 @@ module Make (C : Config.S) = struct
     let r' = Path.get_exn p r in
     Seq.exists Path.(all r') ~f:(fun p -> f r' p)
 
-  let is_const_filter = Infix.(is_filter && not is_param_filter)
+  let is_const_filter r p = is_filter r p && not (is_param_filter r p)
 
   let is_param_eq_filter r p =
     match (Path.get_exn p r).node with
@@ -192,8 +191,8 @@ module Make (C : Config.S) = struct
   let above f r p =
     Option.map (Path.parent p) ~f:(f r) |> Option.value ~default:false
 
-  let is_collection =
-    Infix.(is_hash_idx || is_ordered_idx || is_list || is_tuple)
+  let is_collection r p =
+    is_hash_idx r p || is_ordered_idx r p || is_list r p || is_tuple r p
 
   let child i _ = Some (Path.child Path.root i)
 
@@ -286,8 +285,7 @@ module Make (C : Config.S) = struct
       Option.map (apply tf p r) ~f:(fun r' ->
           let err =
             let ret =
-              Test_util.run_in_fork_timed ~time:(Time.Span.of_sec 10.0)
-                (fun () ->
+              Util.run_in_fork_timed ~time:(Time.Span.of_sec 10.0) (fun () ->
                   Interpret.(equiv { db = conn; params = param_ctx } r r'))
             in
             match ret with
@@ -323,15 +321,18 @@ module Make (C : Config.S) = struct
     in
     global f tf.name
 
-  let of_func ?(name = "<unknown>") f =
+  let of_func_pre ?(name = "<unknown>") ~pre f =
     let tf =
       global
-        (fun p r -> Option.map (f (Path.get_exn p r)) ~f:(Path.set_exn p r))
+        (fun p r ->
+          Option.map (f (Path.get_exn p (pre r))) ~f:(Path.set_exn p r))
         name
     in
     let tf = schema_validated tf in
     let tf = if validate then validated tf else tf in
     if trace then traced tf else tf
+
+  let of_func ?name f = of_func_pre ?name ~pre:Fun.id f
 
   module Branching = struct
     type t = { b_f : Path.t -> Ast.t -> Ast.t Seq.t; b_name : string }

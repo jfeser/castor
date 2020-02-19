@@ -3,7 +3,7 @@ open Castor
 open Abslayout
 open Collections
 open String_tactics
-open Test_util
+open Castor_test.Test_util
 
 module C = struct
   let params =

@@ -2,7 +2,6 @@ open Core
 open Castor
 open Collections
 module A = Abslayout
-open Test_util
 
 module Config = struct
   let cost_conn = Db.create "postgresql:///tpch_1k"

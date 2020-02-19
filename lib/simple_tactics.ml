@@ -21,7 +21,7 @@ module Make (Config : Config.S) = struct
     if
       (* Relation has no free variables that are bound at runtime. *)
       Set.for_all (free r) ~f:(fun n ->
-          match Name.Meta.(find n stage) with
+          match Map.find r.meta#stage n with
           | Some `Compile -> true
           | Some `Run -> false
           | None ->
@@ -32,8 +32,9 @@ module Make (Config : Config.S) = struct
       let scalars =
         scoped scope (schema r) |> List.map ~f:(fun n -> scalar (Name n))
       in
-      Some (list r scope (tuple scalars Cross))
+      Some (list (strip_meta r) scope (tuple scalars Cross))
     else None
 
-  let row_store = of_func row_store ~name:"to-row-store"
+  let row_store =
+    of_func_pre row_store ~pre:(Resolve.resolve ~params) ~name:"to-row-store"
 end
