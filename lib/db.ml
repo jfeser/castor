@@ -153,7 +153,7 @@ let type_of_field_exn =
               exec3 ~params:[ fname; rname ] conn
                 {|
 select
-  min("$0"), max("$0"),
+  min(round("$0")), max(round("$0")),
   min(case when round("$0") = "$0" then 1 else 0 end)
 from "$1"
 |}
@@ -169,7 +169,10 @@ from "$1"
             in
             if is_int then
               if fits_in_an_int63 then IntT { nullable }
-              else StringT { nullable; padded = false }
+              else (
+                Log.warn (fun m ->
+                    m "Numeric column loaded as string: %s.%s" rname fname);
+                StringT { nullable; padded = false } )
             else FixedT { nullable }
         | "real" | "double" -> FixedT { nullable }
         | "timestamp without time zone" | "time without time zone" ->

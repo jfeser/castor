@@ -187,3 +187,5 @@ let sum_complex =
    ATuple([AScalar(k.f), AScalar((k.g - k.f) as v)], cross)))"
 
 let tpch_conn = lazy (Db.create @@ Sys.getenv_exn "CASTOR_TPCH_TEST_DB")
+
+let tpch_full_conn = lazy (Db.create @@ Sys.getenv_exn "CASTOR_TPCH_DB")
