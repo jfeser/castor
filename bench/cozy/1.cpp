@@ -9,7 +9,7 @@
 
 class query1 {
 public:
-  struct _Type1124928 {
+  struct _Type7274456 {
     int _0;
     int _1;
     int _2;
@@ -26,172 +26,172 @@ public:
     std::string _13;
     std::string _14;
     std::string _15;
-    inline _Type1124928() { }
-    inline _Type1124928(int __0, int __1, int __2, int __3, int __4, float __5, float __6, float __7, std::string __8, std::string __9, int __10, int __11, int __12, std::string __13, std::string __14, std::string __15) : _0(::std::move(__0)), _1(::std::move(__1)), _2(::std::move(__2)), _3(::std::move(__3)), _4(::std::move(__4)), _5(::std::move(__5)), _6(::std::move(__6)), _7(::std::move(__7)), _8(::std::move(__8)), _9(::std::move(__9)), _10(::std::move(__10)), _11(::std::move(__11)), _12(::std::move(__12)), _13(::std::move(__13)), _14(::std::move(__14)), _15(::std::move(__15)) { }
-    inline bool operator==(const _Type1124928& other) const {
-      bool _v1124931;
-      bool _v1124932;
-      bool _v1124933;
-      bool _v1124934;
+    inline _Type7274456() { }
+    inline _Type7274456(int __0, int __1, int __2, int __3, int __4, float __5, float __6, float __7, std::string __8, std::string __9, int __10, int __11, int __12, std::string __13, std::string __14, std::string __15) : _0(::std::move(__0)), _1(::std::move(__1)), _2(::std::move(__2)), _3(::std::move(__3)), _4(::std::move(__4)), _5(::std::move(__5)), _6(::std::move(__6)), _7(::std::move(__7)), _8(::std::move(__8)), _9(::std::move(__9)), _10(::std::move(__10)), _11(::std::move(__11)), _12(::std::move(__12)), _13(::std::move(__13)), _14(::std::move(__14)), _15(::std::move(__15)) { }
+    inline bool operator==(const _Type7274456& other) const {
+      bool _v7274459;
+      bool _v7274460;
+      bool _v7274461;
+      bool _v7274462;
       if (((((*this)._0) == (other._0)))) {
-        _v1124934 = ((((*this)._1) == (other._1)));
+        _v7274462 = ((((*this)._1) == (other._1)));
       } else {
-        _v1124934 = false;
+        _v7274462 = false;
       }
-      if (_v1124934) {
-        bool _v1124935;
+      if (_v7274462) {
+        bool _v7274463;
         if (((((*this)._2) == (other._2)))) {
-          _v1124935 = ((((*this)._3) == (other._3)));
+          _v7274463 = ((((*this)._3) == (other._3)));
         } else {
-          _v1124935 = false;
+          _v7274463 = false;
         }
-        _v1124933 = _v1124935;
+        _v7274461 = _v7274463;
       } else {
-        _v1124933 = false;
+        _v7274461 = false;
       }
-      if (_v1124933) {
-        bool _v1124936;
-        bool _v1124937;
+      if (_v7274461) {
+        bool _v7274464;
+        bool _v7274465;
         if (((((*this)._4) == (other._4)))) {
-          _v1124937 = ((((*this)._5) == (other._5)));
+          _v7274465 = ((((*this)._5) == (other._5)));
         } else {
-          _v1124937 = false;
+          _v7274465 = false;
         }
-        if (_v1124937) {
-          bool _v1124938;
+        if (_v7274465) {
+          bool _v7274466;
           if (((((*this)._6) == (other._6)))) {
-            _v1124938 = ((((*this)._7) == (other._7)));
+            _v7274466 = ((((*this)._7) == (other._7)));
           } else {
-            _v1124938 = false;
+            _v7274466 = false;
           }
-          _v1124936 = _v1124938;
+          _v7274464 = _v7274466;
         } else {
-          _v1124936 = false;
+          _v7274464 = false;
         }
-        _v1124932 = _v1124936;
+        _v7274460 = _v7274464;
       } else {
-        _v1124932 = false;
+        _v7274460 = false;
       }
-      if (_v1124932) {
-        bool _v1124939;
-        bool _v1124940;
-        bool _v1124941;
+      if (_v7274460) {
+        bool _v7274467;
+        bool _v7274468;
+        bool _v7274469;
         if (((((*this)._8) == (other._8)))) {
-          _v1124941 = ((((*this)._9) == (other._9)));
+          _v7274469 = ((((*this)._9) == (other._9)));
         } else {
-          _v1124941 = false;
+          _v7274469 = false;
         }
-        if (_v1124941) {
-          bool _v1124942;
+        if (_v7274469) {
+          bool _v7274470;
           if (((((*this)._10) == (other._10)))) {
-            _v1124942 = ((((*this)._11) == (other._11)));
+            _v7274470 = ((((*this)._11) == (other._11)));
           } else {
-            _v1124942 = false;
+            _v7274470 = false;
           }
-          _v1124940 = _v1124942;
+          _v7274468 = _v7274470;
         } else {
-          _v1124940 = false;
+          _v7274468 = false;
         }
-        if (_v1124940) {
-          bool _v1124943;
-          bool _v1124944;
+        if (_v7274468) {
+          bool _v7274471;
+          bool _v7274472;
           if (((((*this)._12) == (other._12)))) {
-            _v1124944 = ((((*this)._13) == (other._13)));
+            _v7274472 = ((((*this)._13) == (other._13)));
           } else {
-            _v1124944 = false;
+            _v7274472 = false;
           }
-          if (_v1124944) {
-            bool _v1124945;
+          if (_v7274472) {
+            bool _v7274473;
             if (((((*this)._14) == (other._14)))) {
-              _v1124945 = ((((*this)._15) == (other._15)));
+              _v7274473 = ((((*this)._15) == (other._15)));
             } else {
-              _v1124945 = false;
+              _v7274473 = false;
             }
-            _v1124943 = _v1124945;
+            _v7274471 = _v7274473;
           } else {
-            _v1124943 = false;
+            _v7274471 = false;
           }
-          _v1124939 = _v1124943;
+          _v7274467 = _v7274471;
         } else {
-          _v1124939 = false;
+          _v7274467 = false;
         }
-        _v1124931 = _v1124939;
+        _v7274459 = _v7274467;
       } else {
-        _v1124931 = false;
+        _v7274459 = false;
       }
-      return _v1124931;
+      return _v7274459;
     }
   };
-  struct _Hash_Type1124928 {
-    typedef query1::_Type1124928 argument_type;
+  struct _Hash_Type7274456 {
+    typedef query1::_Type7274456 argument_type;
     typedef std::size_t result_type;
     result_type operator()(const argument_type& x) const noexcept {
-      int _hash_code1124946 = 0;
-      int _hash_code1124947 = 0;
-      _hash_code1124947 = (std::hash<int >()((x._0)));
-      _hash_code1124946 = ((_hash_code1124946 * 31) ^ (_hash_code1124947));
-      _hash_code1124947 = (std::hash<int >()((x._1)));
-      _hash_code1124946 = ((_hash_code1124946 * 31) ^ (_hash_code1124947));
-      _hash_code1124947 = (std::hash<int >()((x._2)));
-      _hash_code1124946 = ((_hash_code1124946 * 31) ^ (_hash_code1124947));
-      _hash_code1124947 = (std::hash<int >()((x._3)));
-      _hash_code1124946 = ((_hash_code1124946 * 31) ^ (_hash_code1124947));
-      _hash_code1124947 = (std::hash<int >()((x._4)));
-      _hash_code1124946 = ((_hash_code1124946 * 31) ^ (_hash_code1124947));
-      _hash_code1124947 = (std::hash<float >()((x._5)));
-      _hash_code1124946 = ((_hash_code1124946 * 31) ^ (_hash_code1124947));
-      _hash_code1124947 = (std::hash<float >()((x._6)));
-      _hash_code1124946 = ((_hash_code1124946 * 31) ^ (_hash_code1124947));
-      _hash_code1124947 = (std::hash<float >()((x._7)));
-      _hash_code1124946 = ((_hash_code1124946 * 31) ^ (_hash_code1124947));
-      _hash_code1124947 = (std::hash<std::string >()((x._8)));
-      _hash_code1124946 = ((_hash_code1124946 * 31) ^ (_hash_code1124947));
-      _hash_code1124947 = (std::hash<std::string >()((x._9)));
-      _hash_code1124946 = ((_hash_code1124946 * 31) ^ (_hash_code1124947));
-      _hash_code1124947 = (std::hash<int >()((x._10)));
-      _hash_code1124946 = ((_hash_code1124946 * 31) ^ (_hash_code1124947));
-      _hash_code1124947 = (std::hash<int >()((x._11)));
-      _hash_code1124946 = ((_hash_code1124946 * 31) ^ (_hash_code1124947));
-      _hash_code1124947 = (std::hash<int >()((x._12)));
-      _hash_code1124946 = ((_hash_code1124946 * 31) ^ (_hash_code1124947));
-      _hash_code1124947 = (std::hash<std::string >()((x._13)));
-      _hash_code1124946 = ((_hash_code1124946 * 31) ^ (_hash_code1124947));
-      _hash_code1124947 = (std::hash<std::string >()((x._14)));
-      _hash_code1124946 = ((_hash_code1124946 * 31) ^ (_hash_code1124947));
-      _hash_code1124947 = (std::hash<std::string >()((x._15)));
-      _hash_code1124946 = ((_hash_code1124946 * 31) ^ (_hash_code1124947));
-      return _hash_code1124946;
+      int _hash_code7274474 = 0;
+      int _hash_code7274475 = 0;
+      _hash_code7274475 = (std::hash<int >()((x._0)));
+      _hash_code7274474 = ((_hash_code7274474 * 31) ^ (_hash_code7274475));
+      _hash_code7274475 = (std::hash<int >()((x._1)));
+      _hash_code7274474 = ((_hash_code7274474 * 31) ^ (_hash_code7274475));
+      _hash_code7274475 = (std::hash<int >()((x._2)));
+      _hash_code7274474 = ((_hash_code7274474 * 31) ^ (_hash_code7274475));
+      _hash_code7274475 = (std::hash<int >()((x._3)));
+      _hash_code7274474 = ((_hash_code7274474 * 31) ^ (_hash_code7274475));
+      _hash_code7274475 = (std::hash<int >()((x._4)));
+      _hash_code7274474 = ((_hash_code7274474 * 31) ^ (_hash_code7274475));
+      _hash_code7274475 = (std::hash<float >()((x._5)));
+      _hash_code7274474 = ((_hash_code7274474 * 31) ^ (_hash_code7274475));
+      _hash_code7274475 = (std::hash<float >()((x._6)));
+      _hash_code7274474 = ((_hash_code7274474 * 31) ^ (_hash_code7274475));
+      _hash_code7274475 = (std::hash<float >()((x._7)));
+      _hash_code7274474 = ((_hash_code7274474 * 31) ^ (_hash_code7274475));
+      _hash_code7274475 = (std::hash<std::string >()((x._8)));
+      _hash_code7274474 = ((_hash_code7274474 * 31) ^ (_hash_code7274475));
+      _hash_code7274475 = (std::hash<std::string >()((x._9)));
+      _hash_code7274474 = ((_hash_code7274474 * 31) ^ (_hash_code7274475));
+      _hash_code7274475 = (std::hash<int >()((x._10)));
+      _hash_code7274474 = ((_hash_code7274474 * 31) ^ (_hash_code7274475));
+      _hash_code7274475 = (std::hash<int >()((x._11)));
+      _hash_code7274474 = ((_hash_code7274474 * 31) ^ (_hash_code7274475));
+      _hash_code7274475 = (std::hash<int >()((x._12)));
+      _hash_code7274474 = ((_hash_code7274474 * 31) ^ (_hash_code7274475));
+      _hash_code7274475 = (std::hash<std::string >()((x._13)));
+      _hash_code7274474 = ((_hash_code7274474 * 31) ^ (_hash_code7274475));
+      _hash_code7274475 = (std::hash<std::string >()((x._14)));
+      _hash_code7274474 = ((_hash_code7274474 * 31) ^ (_hash_code7274475));
+      _hash_code7274475 = (std::hash<std::string >()((x._15)));
+      _hash_code7274474 = ((_hash_code7274474 * 31) ^ (_hash_code7274475));
+      return _hash_code7274474;
     }
   };
-  struct _Type1124929 {
+  struct _Type7274457 {
     std::string _0;
     std::string _1;
-    inline _Type1124929() { }
-    inline _Type1124929(std::string __0, std::string __1) : _0(::std::move(__0)), _1(::std::move(__1)) { }
-    inline bool operator==(const _Type1124929& other) const {
-      bool _v1124948;
+    inline _Type7274457() { }
+    inline _Type7274457(std::string __0, std::string __1) : _0(::std::move(__0)), _1(::std::move(__1)) { }
+    inline bool operator==(const _Type7274457& other) const {
+      bool _v7274476;
       if (((((*this)._0) == (other._0)))) {
-        _v1124948 = ((((*this)._1) == (other._1)));
+        _v7274476 = ((((*this)._1) == (other._1)));
       } else {
-        _v1124948 = false;
+        _v7274476 = false;
       }
-      return _v1124948;
+      return _v7274476;
     }
   };
-  struct _Hash_Type1124929 {
-    typedef query1::_Type1124929 argument_type;
+  struct _Hash_Type7274457 {
+    typedef query1::_Type7274457 argument_type;
     typedef std::size_t result_type;
     result_type operator()(const argument_type& x) const noexcept {
-      int _hash_code1124949 = 0;
-      int _hash_code1124950 = 0;
-      _hash_code1124950 = (std::hash<std::string >()((x._0)));
-      _hash_code1124949 = ((_hash_code1124949 * 31) ^ (_hash_code1124950));
-      _hash_code1124950 = (std::hash<std::string >()((x._1)));
-      _hash_code1124949 = ((_hash_code1124949 * 31) ^ (_hash_code1124950));
-      return _hash_code1124949;
+      int _hash_code7274477 = 0;
+      int _hash_code7274478 = 0;
+      _hash_code7274478 = (std::hash<std::string >()((x._0)));
+      _hash_code7274477 = ((_hash_code7274477 * 31) ^ (_hash_code7274478));
+      _hash_code7274478 = (std::hash<std::string >()((x._1)));
+      _hash_code7274477 = ((_hash_code7274477 * 31) ^ (_hash_code7274478));
+      return _hash_code7274477;
     }
   };
-  struct _Type1124930 {
+  struct _Type7274458 {
     std::string _0;
     std::string _1;
     int _2;
@@ -202,125 +202,125 @@ public:
     float _7;
     float _8;
     int _9;
-    inline _Type1124930() { }
-    inline _Type1124930(std::string __0, std::string __1, int __2, float __3, float __4, float __5, float __6, float __7, float __8, int __9) : _0(::std::move(__0)), _1(::std::move(__1)), _2(::std::move(__2)), _3(::std::move(__3)), _4(::std::move(__4)), _5(::std::move(__5)), _6(::std::move(__6)), _7(::std::move(__7)), _8(::std::move(__8)), _9(::std::move(__9)) { }
-    inline bool operator==(const _Type1124930& other) const {
-      bool _v1124951;
-      bool _v1124952;
-      bool _v1124953;
+    inline _Type7274458() { }
+    inline _Type7274458(std::string __0, std::string __1, int __2, float __3, float __4, float __5, float __6, float __7, float __8, int __9) : _0(::std::move(__0)), _1(::std::move(__1)), _2(::std::move(__2)), _3(::std::move(__3)), _4(::std::move(__4)), _5(::std::move(__5)), _6(::std::move(__6)), _7(::std::move(__7)), _8(::std::move(__8)), _9(::std::move(__9)) { }
+    inline bool operator==(const _Type7274458& other) const {
+      bool _v7274479;
+      bool _v7274480;
+      bool _v7274481;
       if (((((*this)._0) == (other._0)))) {
-        _v1124953 = ((((*this)._1) == (other._1)));
+        _v7274481 = ((((*this)._1) == (other._1)));
       } else {
-        _v1124953 = false;
+        _v7274481 = false;
       }
-      if (_v1124953) {
-        bool _v1124954;
+      if (_v7274481) {
+        bool _v7274482;
         if (((((*this)._2) == (other._2)))) {
-          bool _v1124955;
+          bool _v7274483;
           if (((((*this)._3) == (other._3)))) {
-            _v1124955 = ((((*this)._4) == (other._4)));
+            _v7274483 = ((((*this)._4) == (other._4)));
           } else {
-            _v1124955 = false;
+            _v7274483 = false;
           }
-          _v1124954 = _v1124955;
+          _v7274482 = _v7274483;
         } else {
-          _v1124954 = false;
+          _v7274482 = false;
         }
-        _v1124952 = _v1124954;
+        _v7274480 = _v7274482;
       } else {
-        _v1124952 = false;
+        _v7274480 = false;
       }
-      if (_v1124952) {
-        bool _v1124956;
-        bool _v1124957;
+      if (_v7274480) {
+        bool _v7274484;
+        bool _v7274485;
         if (((((*this)._5) == (other._5)))) {
-          _v1124957 = ((((*this)._6) == (other._6)));
+          _v7274485 = ((((*this)._6) == (other._6)));
         } else {
-          _v1124957 = false;
+          _v7274485 = false;
         }
-        if (_v1124957) {
-          bool _v1124958;
+        if (_v7274485) {
+          bool _v7274486;
           if (((((*this)._7) == (other._7)))) {
-            bool _v1124959;
+            bool _v7274487;
             if (((((*this)._8) == (other._8)))) {
-              _v1124959 = ((((*this)._9) == (other._9)));
+              _v7274487 = ((((*this)._9) == (other._9)));
             } else {
-              _v1124959 = false;
+              _v7274487 = false;
             }
-            _v1124958 = _v1124959;
+            _v7274486 = _v7274487;
           } else {
-            _v1124958 = false;
+            _v7274486 = false;
           }
-          _v1124956 = _v1124958;
+          _v7274484 = _v7274486;
         } else {
-          _v1124956 = false;
+          _v7274484 = false;
         }
-        _v1124951 = _v1124956;
+        _v7274479 = _v7274484;
       } else {
-        _v1124951 = false;
+        _v7274479 = false;
       }
-      return _v1124951;
+      return _v7274479;
     }
   };
-  struct _Hash_Type1124930 {
-    typedef query1::_Type1124930 argument_type;
+  struct _Hash_Type7274458 {
+    typedef query1::_Type7274458 argument_type;
     typedef std::size_t result_type;
     result_type operator()(const argument_type& x) const noexcept {
-      int _hash_code1124960 = 0;
-      int _hash_code1124961 = 0;
-      _hash_code1124961 = (std::hash<std::string >()((x._0)));
-      _hash_code1124960 = ((_hash_code1124960 * 31) ^ (_hash_code1124961));
-      _hash_code1124961 = (std::hash<std::string >()((x._1)));
-      _hash_code1124960 = ((_hash_code1124960 * 31) ^ (_hash_code1124961));
-      _hash_code1124961 = (std::hash<int >()((x._2)));
-      _hash_code1124960 = ((_hash_code1124960 * 31) ^ (_hash_code1124961));
-      _hash_code1124961 = (std::hash<float >()((x._3)));
-      _hash_code1124960 = ((_hash_code1124960 * 31) ^ (_hash_code1124961));
-      _hash_code1124961 = (std::hash<float >()((x._4)));
-      _hash_code1124960 = ((_hash_code1124960 * 31) ^ (_hash_code1124961));
-      _hash_code1124961 = (std::hash<float >()((x._5)));
-      _hash_code1124960 = ((_hash_code1124960 * 31) ^ (_hash_code1124961));
-      _hash_code1124961 = (std::hash<float >()((x._6)));
-      _hash_code1124960 = ((_hash_code1124960 * 31) ^ (_hash_code1124961));
-      _hash_code1124961 = (std::hash<float >()((x._7)));
-      _hash_code1124960 = ((_hash_code1124960 * 31) ^ (_hash_code1124961));
-      _hash_code1124961 = (std::hash<float >()((x._8)));
-      _hash_code1124960 = ((_hash_code1124960 * 31) ^ (_hash_code1124961));
-      _hash_code1124961 = (std::hash<int >()((x._9)));
-      _hash_code1124960 = ((_hash_code1124960 * 31) ^ (_hash_code1124961));
-      return _hash_code1124960;
+      int _hash_code7274488 = 0;
+      int _hash_code7274489 = 0;
+      _hash_code7274489 = (std::hash<std::string >()((x._0)));
+      _hash_code7274488 = ((_hash_code7274488 * 31) ^ (_hash_code7274489));
+      _hash_code7274489 = (std::hash<std::string >()((x._1)));
+      _hash_code7274488 = ((_hash_code7274488 * 31) ^ (_hash_code7274489));
+      _hash_code7274489 = (std::hash<int >()((x._2)));
+      _hash_code7274488 = ((_hash_code7274488 * 31) ^ (_hash_code7274489));
+      _hash_code7274489 = (std::hash<float >()((x._3)));
+      _hash_code7274488 = ((_hash_code7274488 * 31) ^ (_hash_code7274489));
+      _hash_code7274489 = (std::hash<float >()((x._4)));
+      _hash_code7274488 = ((_hash_code7274488 * 31) ^ (_hash_code7274489));
+      _hash_code7274489 = (std::hash<float >()((x._5)));
+      _hash_code7274488 = ((_hash_code7274488 * 31) ^ (_hash_code7274489));
+      _hash_code7274489 = (std::hash<float >()((x._6)));
+      _hash_code7274488 = ((_hash_code7274488 * 31) ^ (_hash_code7274489));
+      _hash_code7274489 = (std::hash<float >()((x._7)));
+      _hash_code7274488 = ((_hash_code7274488 * 31) ^ (_hash_code7274489));
+      _hash_code7274489 = (std::hash<float >()((x._8)));
+      _hash_code7274488 = ((_hash_code7274488 * 31) ^ (_hash_code7274489));
+      _hash_code7274489 = (std::hash<int >()((x._9)));
+      _hash_code7274488 = ((_hash_code7274488 * 31) ^ (_hash_code7274489));
+      return _hash_code7274488;
     }
   };
 protected:
-  std::vector< _Type1124928  > _var514;
+  std::vector< _Type7274456  > _var514;
 public:
   inline query1() {
-    _var514 = (std::vector< _Type1124928  > ());
+    _var514 = (std::vector< _Type7274456  > ());
   }
-  explicit inline query1(std::vector< _Type1124928  > lineitem) {
+  explicit inline query1(std::vector< _Type7274456  > lineitem) {
     _var514 = lineitem;
   }
   query1(const query1& other) = delete;
   template <class F>
   inline void q5(int param0, const F& _callback) {
-    std::unordered_set< _Type1124929 , _Hash_Type1124929 > _distinct_elems1125056 = (std::unordered_set< _Type1124929 , _Hash_Type1124929 > ());
-    for (_Type1124928 _t1125058 : _var514) {
-      if (((_t1125058._10) <= (10561 - (of_day((param0)))))) {
+    std::unordered_set< _Type7274457 , _Hash_Type7274457 > _distinct_elems7274584 = (std::unordered_set< _Type7274457 , _Hash_Type7274457 > ());
+    for (_Type7274456 _t7274586 : _var514) {
+      if (((_t7274586._10) <= (10561 - (of_day((param0)))))) {
         {
           {
-            _Type1124929 _k1124963 = (_Type1124929((_t1125058._8), (_t1125058._9)));
-            if ((!((_distinct_elems1125056.find(_k1124963) != _distinct_elems1125056.end())))) {
-              std::string _conditional_result1124964 = "";
-              int _sum1124965 = 0;
-              for (_Type1124928 _t1124970 : _var514) {
-                if (((_t1124970._10) <= (10561 - (of_day((param0)))))) {
+            _Type7274457 _k7274491 = (_Type7274457((_t7274586._8), (_t7274586._9)));
+            if ((!((_distinct_elems7274584.find(_k7274491) != _distinct_elems7274584.end())))) {
+              std::string _conditional_result7274492 = "";
+              int _sum7274493 = 0;
+              for (_Type7274456 _t7274498 : _var514) {
+                if (((_t7274498._10) <= (10561 - (of_day((param0)))))) {
                   {
-                    if ((streq(((_t1124970._8)), ((_k1124963._0))))) {
+                    if ((streq(((_t7274498._8)), ((_k7274491._0))))) {
                       {
-                        if ((streq(((_t1124970._9)), ((_k1124963._1))))) {
+                        if ((streq(((_t7274498._9)), ((_k7274491._1))))) {
                           {
                             {
-                              _sum1124965 = (_sum1124965 + 1);
+                              _sum7274493 = (_sum7274493 + 1);
                             }
                           }
                         }
@@ -329,18 +329,18 @@ public:
                   }
                 }
               }
-              if (((_sum1124965 == 1))) {
-                _Type1124928 _v1124971 = (_Type1124928(0, 0, 0, 0, 0, 0.0f, 0.0f, 0.0f, "", "", 0, 0, 0, "", "", ""));
+              if (((_sum7274493 == 1))) {
+                _Type7274456 _v7274499 = (_Type7274456(0, 0, 0, 0, 0, 0.0f, 0.0f, 0.0f, "", "", 0, 0, 0, "", "", ""));
                 {
-                  for (_Type1124928 _t1124976 : _var514) {
-                    if (((_t1124976._10) <= (10561 - (of_day((param0)))))) {
+                  for (_Type7274456 _t7274504 : _var514) {
+                    if (((_t7274504._10) <= (10561 - (of_day((param0)))))) {
                       {
-                        if ((streq(((_t1124976._8)), ((_k1124963._0))))) {
+                        if ((streq(((_t7274504._8)), ((_k7274491._0))))) {
                           {
-                            if ((streq(((_t1124976._9)), ((_k1124963._1))))) {
+                            if ((streq(((_t7274504._9)), ((_k7274491._1))))) {
                               {
-                                _v1124971 = _t1124976;
-                                goto _label1125059;
+                                _v7274499 = _t7274504;
+                                goto _label7274587;
                               }
                             }
                           }
@@ -349,22 +349,22 @@ public:
                     }
                   }
                 }
-_label1125059:
-                _conditional_result1124964 = (_v1124971._8);
+_label7274587:
+                _conditional_result7274492 = (_v7274499._8);
               } else {
-                _conditional_result1124964 = "";
+                _conditional_result7274492 = "";
               }
-              std::string _conditional_result1124977 = "";
-              int _sum1124978 = 0;
-              for (_Type1124928 _t1124983 : _var514) {
-                if (((_t1124983._10) <= (10561 - (of_day((param0)))))) {
+              std::string _conditional_result7274505 = "";
+              int _sum7274506 = 0;
+              for (_Type7274456 _t7274511 : _var514) {
+                if (((_t7274511._10) <= (10561 - (of_day((param0)))))) {
                   {
-                    if ((streq(((_t1124983._8)), ((_k1124963._0))))) {
+                    if ((streq(((_t7274511._8)), ((_k7274491._0))))) {
                       {
-                        if ((streq(((_t1124983._9)), ((_k1124963._1))))) {
+                        if ((streq(((_t7274511._9)), ((_k7274491._1))))) {
                           {
                             {
-                              _sum1124978 = (_sum1124978 + 1);
+                              _sum7274506 = (_sum7274506 + 1);
                             }
                           }
                         }
@@ -373,18 +373,18 @@ _label1125059:
                   }
                 }
               }
-              if (((_sum1124978 == 1))) {
-                _Type1124928 _v1124984 = (_Type1124928(0, 0, 0, 0, 0, 0.0f, 0.0f, 0.0f, "", "", 0, 0, 0, "", "", ""));
+              if (((_sum7274506 == 1))) {
+                _Type7274456 _v7274512 = (_Type7274456(0, 0, 0, 0, 0, 0.0f, 0.0f, 0.0f, "", "", 0, 0, 0, "", "", ""));
                 {
-                  for (_Type1124928 _t1124989 : _var514) {
-                    if (((_t1124989._10) <= (10561 - (of_day((param0)))))) {
+                  for (_Type7274456 _t7274517 : _var514) {
+                    if (((_t7274517._10) <= (10561 - (of_day((param0)))))) {
                       {
-                        if ((streq(((_t1124989._8)), ((_k1124963._0))))) {
+                        if ((streq(((_t7274517._8)), ((_k7274491._0))))) {
                           {
-                            if ((streq(((_t1124989._9)), ((_k1124963._1))))) {
+                            if ((streq(((_t7274517._9)), ((_k7274491._1))))) {
                               {
-                                _v1124984 = _t1124989;
-                                goto _label1125060;
+                                _v7274512 = _t7274517;
+                                goto _label7274588;
                               }
                             }
                           }
@@ -393,21 +393,21 @@ _label1125059:
                     }
                   }
                 }
-_label1125060:
-                _conditional_result1124977 = (_v1124984._9);
+_label7274588:
+                _conditional_result7274505 = (_v7274512._9);
               } else {
-                _conditional_result1124977 = "";
+                _conditional_result7274505 = "";
               }
-              int _sum1124990 = 0;
-              for (_Type1124928 _t1124995 : _var514) {
-                if (((_t1124995._10) <= (10561 - (of_day((param0)))))) {
+              int _sum7274518 = 0;
+              for (_Type7274456 _t7274523 : _var514) {
+                if (((_t7274523._10) <= (10561 - (of_day((param0)))))) {
                   {
-                    if ((streq(((_t1124995._8)), ((_k1124963._0))))) {
+                    if ((streq(((_t7274523._8)), ((_k7274491._0))))) {
                       {
-                        if ((streq(((_t1124995._9)), ((_k1124963._1))))) {
+                        if ((streq(((_t7274523._9)), ((_k7274491._1))))) {
                           {
                             {
-                              _sum1124990 = (_sum1124990 + (_t1124995._4));
+                              _sum7274518 = (_sum7274518 + (_t7274523._4));
                             }
                           }
                         }
@@ -416,16 +416,16 @@ _label1125060:
                   }
                 }
               }
-              float _sum1124996 = 0.0f;
-              for (_Type1124928 _t1125001 : _var514) {
-                if (((_t1125001._10) <= (10561 - (of_day((param0)))))) {
+              float _sum7274524 = 0.0f;
+              for (_Type7274456 _t7274529 : _var514) {
+                if (((_t7274529._10) <= (10561 - (of_day((param0)))))) {
                   {
-                    if ((streq(((_t1125001._8)), ((_k1124963._0))))) {
+                    if ((streq(((_t7274529._8)), ((_k7274491._0))))) {
                       {
-                        if ((streq(((_t1125001._9)), ((_k1124963._1))))) {
+                        if ((streq(((_t7274529._9)), ((_k7274491._1))))) {
                           {
                             {
-                              _sum1124996 = (_sum1124996 + (_t1125001._5));
+                              _sum7274524 = (_sum7274524 + (_t7274529._5));
                             }
                           }
                         }
@@ -434,16 +434,16 @@ _label1125060:
                   }
                 }
               }
-              float _sum1125002 = 0.0f;
-              for (_Type1124928 _t1125007 : _var514) {
-                if (((_t1125007._10) <= (10561 - (of_day((param0)))))) {
+              float _sum7274530 = 0.0f;
+              for (_Type7274456 _t7274535 : _var514) {
+                if (((_t7274535._10) <= (10561 - (of_day((param0)))))) {
                   {
-                    if ((streq(((_t1125007._8)), ((_k1124963._0))))) {
+                    if ((streq(((_t7274535._8)), ((_k7274491._0))))) {
                       {
-                        if ((streq(((_t1125007._9)), ((_k1124963._1))))) {
+                        if ((streq(((_t7274535._9)), ((_k7274491._1))))) {
                           {
                             {
-                              _sum1125002 = (_sum1125002 + (((_t1125007._5)) * (((int_to_float((1))) - (_t1125007._6)))));
+                              _sum7274530 = (_sum7274530 + (((_t7274535._5)) * (((int_to_float((1))) - (_t7274535._6)))));
                             }
                           }
                         }
@@ -452,16 +452,16 @@ _label1125060:
                   }
                 }
               }
-              float _sum1125008 = 0.0f;
-              for (_Type1124928 _t1125013 : _var514) {
-                if (((_t1125013._10) <= (10561 - (of_day((param0)))))) {
+              float _sum7274536 = 0.0f;
+              for (_Type7274456 _t7274541 : _var514) {
+                if (((_t7274541._10) <= (10561 - (of_day((param0)))))) {
                   {
-                    if ((streq(((_t1125013._8)), ((_k1124963._0))))) {
+                    if ((streq(((_t7274541._8)), ((_k7274491._0))))) {
                       {
-                        if ((streq(((_t1125013._9)), ((_k1124963._1))))) {
+                        if ((streq(((_t7274541._9)), ((_k7274491._1))))) {
                           {
                             {
-                              _sum1125008 = (_sum1125008 + (((((_t1125013._5)) * (((int_to_float((1))) - (_t1125013._6))))) * (((int_to_float((1))) + (_t1125013._7)))));
+                              _sum7274536 = (_sum7274536 + (((((_t7274541._5)) * (((int_to_float((1))) - (_t7274541._6))))) * (((int_to_float((1))) + (_t7274541._7)))));
                             }
                           }
                         }
@@ -470,16 +470,16 @@ _label1125060:
                   }
                 }
               }
-              float _sum1125014 = 0.0f;
-              for (_Type1124928 _t1125019 : _var514) {
-                if (((_t1125019._10) <= (10561 - (of_day((param0)))))) {
+              float _sum7274542 = 0.0f;
+              for (_Type7274456 _t7274547 : _var514) {
+                if (((_t7274547._10) <= (10561 - (of_day((param0)))))) {
                   {
-                    if ((streq(((_t1125019._8)), ((_k1124963._0))))) {
+                    if ((streq(((_t7274547._8)), ((_k7274491._0))))) {
                       {
-                        if ((streq(((_t1125019._9)), ((_k1124963._1))))) {
+                        if ((streq(((_t7274547._9)), ((_k7274491._1))))) {
                           {
                             {
-                              _sum1125014 = (_sum1125014 + (int_to_float(((_t1125019._4)))));
+                              _sum7274542 = (_sum7274542 + (int_to_float(((_t7274547._4)))));
                             }
                           }
                         }
@@ -488,16 +488,16 @@ _label1125060:
                   }
                 }
               }
-              int _sum1125020 = 0;
-              for (_Type1124928 _t1125025 : _var514) {
-                if (((_t1125025._10) <= (10561 - (of_day((param0)))))) {
+              int _sum7274548 = 0;
+              for (_Type7274456 _t7274553 : _var514) {
+                if (((_t7274553._10) <= (10561 - (of_day((param0)))))) {
                   {
-                    if ((streq(((_t1125025._8)), ((_k1124963._0))))) {
+                    if ((streq(((_t7274553._8)), ((_k7274491._0))))) {
                       {
-                        if ((streq(((_t1125025._9)), ((_k1124963._1))))) {
+                        if ((streq(((_t7274553._9)), ((_k7274491._1))))) {
                           {
                             {
-                              _sum1125020 = (_sum1125020 + 1);
+                              _sum7274548 = (_sum7274548 + 1);
                             }
                           }
                         }
@@ -506,16 +506,16 @@ _label1125060:
                   }
                 }
               }
-              float _sum1125026 = 0.0f;
-              for (_Type1124928 _t1125031 : _var514) {
-                if (((_t1125031._10) <= (10561 - (of_day((param0)))))) {
+              float _sum7274554 = 0.0f;
+              for (_Type7274456 _t7274559 : _var514) {
+                if (((_t7274559._10) <= (10561 - (of_day((param0)))))) {
                   {
-                    if ((streq(((_t1125031._8)), ((_k1124963._0))))) {
+                    if ((streq(((_t7274559._8)), ((_k7274491._0))))) {
                       {
-                        if ((streq(((_t1125031._9)), ((_k1124963._1))))) {
+                        if ((streq(((_t7274559._9)), ((_k7274491._1))))) {
                           {
                             {
-                              _sum1125026 = (_sum1125026 + (_t1125031._5));
+                              _sum7274554 = (_sum7274554 + (_t7274559._5));
                             }
                           }
                         }
@@ -524,16 +524,16 @@ _label1125060:
                   }
                 }
               }
-              int _sum1125032 = 0;
-              for (_Type1124928 _t1125037 : _var514) {
-                if (((_t1125037._10) <= (10561 - (of_day((param0)))))) {
+              int _sum7274560 = 0;
+              for (_Type7274456 _t7274565 : _var514) {
+                if (((_t7274565._10) <= (10561 - (of_day((param0)))))) {
                   {
-                    if ((streq(((_t1125037._8)), ((_k1124963._0))))) {
+                    if ((streq(((_t7274565._8)), ((_k7274491._0))))) {
                       {
-                        if ((streq(((_t1125037._9)), ((_k1124963._1))))) {
+                        if ((streq(((_t7274565._9)), ((_k7274491._1))))) {
                           {
                             {
-                              _sum1125032 = (_sum1125032 + 1);
+                              _sum7274560 = (_sum7274560 + 1);
                             }
                           }
                         }
@@ -542,16 +542,16 @@ _label1125060:
                   }
                 }
               }
-              float _sum1125038 = 0.0f;
-              for (_Type1124928 _t1125043 : _var514) {
-                if (((_t1125043._10) <= (10561 - (of_day((param0)))))) {
+              float _sum7274566 = 0.0f;
+              for (_Type7274456 _t7274571 : _var514) {
+                if (((_t7274571._10) <= (10561 - (of_day((param0)))))) {
                   {
-                    if ((streq(((_t1125043._8)), ((_k1124963._0))))) {
+                    if ((streq(((_t7274571._8)), ((_k7274491._0))))) {
                       {
-                        if ((streq(((_t1125043._9)), ((_k1124963._1))))) {
+                        if ((streq(((_t7274571._9)), ((_k7274491._1))))) {
                           {
                             {
-                              _sum1125038 = (_sum1125038 + (_t1125043._6));
+                              _sum7274566 = (_sum7274566 + (_t7274571._6));
                             }
                           }
                         }
@@ -560,16 +560,16 @@ _label1125060:
                   }
                 }
               }
-              int _sum1125044 = 0;
-              for (_Type1124928 _t1125049 : _var514) {
-                if (((_t1125049._10) <= (10561 - (of_day((param0)))))) {
+              int _sum7274572 = 0;
+              for (_Type7274456 _t7274577 : _var514) {
+                if (((_t7274577._10) <= (10561 - (of_day((param0)))))) {
                   {
-                    if ((streq(((_t1125049._8)), ((_k1124963._0))))) {
+                    if ((streq(((_t7274577._8)), ((_k7274491._0))))) {
                       {
-                        if ((streq(((_t1125049._9)), ((_k1124963._1))))) {
+                        if ((streq(((_t7274577._9)), ((_k7274491._1))))) {
                           {
                             {
-                              _sum1125044 = (_sum1125044 + 1);
+                              _sum7274572 = (_sum7274572 + 1);
                             }
                           }
                         }
@@ -578,16 +578,16 @@ _label1125060:
                   }
                 }
               }
-              int _sum1125050 = 0;
-              for (_Type1124928 _t1125055 : _var514) {
-                if (((_t1125055._10) <= (10561 - (of_day((param0)))))) {
+              int _sum7274578 = 0;
+              for (_Type7274456 _t7274583 : _var514) {
+                if (((_t7274583._10) <= (10561 - (of_day((param0)))))) {
                   {
-                    if ((streq(((_t1125055._8)), ((_k1124963._0))))) {
+                    if ((streq(((_t7274583._8)), ((_k7274491._0))))) {
                       {
-                        if ((streq(((_t1125055._9)), ((_k1124963._1))))) {
+                        if ((streq(((_t7274583._9)), ((_k7274491._1))))) {
                           {
                             {
-                              _sum1125050 = (_sum1125050 + 1);
+                              _sum7274578 = (_sum7274578 + 1);
                             }
                           }
                         }
@@ -597,9 +597,9 @@ _label1125060:
                 }
               }
               {
-                _callback((_Type1124930(_conditional_result1124964, _conditional_result1124977, _sum1124990, _sum1124996, _sum1125002, _sum1125008, ((_sum1125014) / ((int_to_float((_sum1125020))))), ((_sum1125026) / ((int_to_float((_sum1125032))))), ((_sum1125038) / ((int_to_float((_sum1125044))))), _sum1125050)));
+                _callback((_Type7274458(_conditional_result7274492, _conditional_result7274505, _sum7274518, _sum7274524, _sum7274530, _sum7274536, ((_sum7274542) / ((int_to_float((_sum7274548))))), ((_sum7274554) / ((int_to_float((_sum7274560))))), ((_sum7274566) / ((int_to_float((_sum7274572))))), _sum7274578)));
               }
-              _distinct_elems1125056.insert(_k1124963);
+              _distinct_elems7274584.insert(_k7274491);
             }
           }
         }

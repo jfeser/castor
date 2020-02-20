@@ -13,7 +13,7 @@ updating with 1 new solutions
 update order:
   --> q7
 considering update 1/1...
-SOLUTION FOR q7 AT 0:00:00.080518 [size=578]
+SOLUTION FOR q7 AT 0:00:00.078750 [size=578]
 ----------------------------------------
   _var687 : Bag<(Int, Int, String, Float, Int, String, String, Int, String)> = orders
   _var688 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem

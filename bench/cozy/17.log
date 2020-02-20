@@ -12,7 +12,7 @@ updating with 1 new solutions
 update order:
   --> q6
 considering update 1/1...
-SOLUTION FOR q6 AT 0:00:00.049369 [size=242]
+SOLUTION FOR q6 AT 0:00:00.085681 [size=242]
 ----------------------------------------
   _var332 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
   _var333 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
@@ -22,7 +22,7 @@ updating with 1 new solutions
 update order:
   --> q6
 considering update 1/1...
-SOLUTION FOR q6 AT 0:00:06.228816 [size=244]
+SOLUTION FOR q6 AT 0:00:07.333359 [size=244]
 ----------------------------------------
   _var2985 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
   _var2986 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
@@ -32,7 +32,7 @@ updating with 1 new solutions
 update order:
   --> q6
 considering update 1/1...
-SOLUTION FOR q6 AT 0:00:10.793432 [size=246]
+SOLUTION FOR q6 AT 0:00:12.103775 [size=246]
 ----------------------------------------
   _var4629 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
   _var4630 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
@@ -43,7 +43,7 @@ updating with 1 new solutions
 update order:
   --> q6
 considering update 1/1...
-SOLUTION FOR q6 AT 0:00:17.021106 [size=240]
+SOLUTION FOR q6 AT 0:00:18.623122 [size=240]
 ----------------------------------------
   _var6960 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
   _var6961 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
@@ -54,7 +54,7 @@ updating with 1 new solutions
 update order:
   --> q6
 considering update 1/1...
-SOLUTION FOR q6 AT 0:00:26.557200 [size=228]
+SOLUTION FOR q6 AT 0:00:28.592477 [size=228]
 ----------------------------------------
   _var11820 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
   _var11821 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
@@ -65,7 +65,7 @@ updating with 1 new solutions
 update order:
   --> q6
 considering update 1/1...
-SOLUTION FOR q6 AT 0:00:31.044748 [size=236]
+SOLUTION FOR q6 AT 0:00:33.260094 [size=236]
 ----------------------------------------
   _var14298 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
   _var14299 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
@@ -76,7 +76,7 @@ updating with 1 new solutions
 update order:
   --> q6
 considering update 1/1...
-SOLUTION FOR q6 AT 0:00:38.261941 [size=264]
+SOLUTION FOR q6 AT 0:00:40.711385 [size=264]
 ----------------------------------------
   _var18353 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
   _var18354 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
@@ -88,7 +88,7 @@ updating with 1 new solutions
 update order:
   --> q6
 considering update 1/1...
-SOLUTION FOR q6 AT 0:00:46.883920 [size=264]
+SOLUTION FOR q6 AT 0:00:49.228802 [size=264]
 ----------------------------------------
   _var22433 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
   _var22434 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
@@ -100,7 +100,7 @@ updating with 1 new solutions
 update order:
   --> q6
 considering update 1/1...
-SOLUTION FOR q6 AT 0:00:54.773855 [size=264]
+SOLUTION FOR q6 AT 0:00:56.798287 [size=264]
 ----------------------------------------
   _var26523 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
   _var26524 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
@@ -112,7 +112,7 @@ updating with 1 new solutions
 update order:
   --> q6
 considering update 1/1...
-SOLUTION FOR q6 AT 0:01:31.250898 [size=264]
+SOLUTION FOR q6 AT 0:01:29.866449 [size=264]
 ----------------------------------------
   _var32060 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
   _var32061 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
@@ -124,7 +124,7 @@ updating with 1 new solutions
 update order:
   --> q6
 considering update 1/1...
-SOLUTION FOR q6 AT 0:01:39.645120 [size=264]
+SOLUTION FOR q6 AT 0:01:37.676811 [size=264]
 ----------------------------------------
   _var36195 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
   _var36196 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
@@ -136,7 +136,7 @@ updating with 1 new solutions
 update order:
   --> q6
 considering update 1/1...
-SOLUTION FOR q6 AT 0:02:05.405905 [size=252]
+SOLUTION FOR q6 AT 0:02:02.645644 [size=252]
 ----------------------------------------
   _var49453 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
   _var49454 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part
@@ -148,7 +148,7 @@ updating with 1 new solutions
 update order:
   --> q6
 considering update 1/1...
-SOLUTION FOR q6 AT 0:02:18.815838 [size=254]
+SOLUTION FOR q6 AT 0:02:15.944768 [size=254]
 ----------------------------------------
   _var59379 : Bag<(Int, Float, Int)> = Map {t -> ((t).1, (t).5, (t).4)} (lineitem)
   _var59380 : Bag<(Int, String, String, String, String, Int, String, Float, String)> = part

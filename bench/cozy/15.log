@@ -23,7 +23,7 @@ updating with 1 new solutions
 update order:
   --> q17
 considering update 1/1...
-SOLUTION FOR q17 AT 0:00:00.054874 [size=497]
+SOLUTION FOR q17 AT 0:00:00.075542 [size=497]
 ----------------------------------------
   _var797 : Bag<(Int, String, String, Int, String, Float, String)> = supplier
   _var798 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
@@ -33,7 +33,7 @@ updating with 1 new solutions
 update order:
   --> q17
 considering update 1/1...
-SOLUTION FOR q17 AT 0:01:10.403384 [size=617]
+SOLUTION FOR q17 AT 0:01:07.702453 [size=617]
 ----------------------------------------
   _var9790 : Bag<(Int, String, String, Int, String, Float, String)> = supplier
   _var9791 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
@@ -43,7 +43,7 @@ updating with 1 new solutions
 update order:
   --> q17
 considering update 1/1...
-SOLUTION FOR q17 AT 0:02:25.585876 [size=591]
+SOLUTION FOR q17 AT 0:02:14.420357 [size=591]
 ----------------------------------------
   _var21673 : Bag<(Int, String, String, Int, String, Float, String)> = supplier
   _var21674 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
@@ -53,7 +53,7 @@ updating with 1 new solutions
 update order:
   --> q17
 considering update 1/1...
-SOLUTION FOR q17 AT 0:07:33.230853 [size=593]
+SOLUTION FOR q17 AT 0:07:07.961113 [size=593]
 ----------------------------------------
   _var68666 : Bag<(Int, String, String, Int, String, Float, String)> = supplier
   _var68667 : Bag<(Int, Int, Float, Float)> = Map {t -> ((t).10, (t).2, (t).5, (t).6)} (lineitem)
@@ -64,7 +64,7 @@ updating with 1 new solutions
 update order:
   --> q17
 considering update 1/1...
-SOLUTION FOR q17 AT 0:11:58.219080 [size=569]
+SOLUTION FOR q17 AT 0:11:21.966133 [size=569]
 ----------------------------------------
   _var110370 : Bag<(Int, String, String, Int, String, Float, String)> = supplier
   _var110371 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
@@ -74,7 +74,7 @@ updating with 1 new solutions
 update order:
   --> q17
 considering update 1/1...
-SOLUTION FOR q17 AT 0:15:18.573458 [size=563]
+SOLUTION FOR q17 AT 0:14:35.846662 [size=563]
 ----------------------------------------
   _var144008 : Bag<(Int, String, String, Int, String, Float, String)> = supplier
   _var144009 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
@@ -84,7 +84,7 @@ updating with 1 new solutions
 update order:
   --> q17
 considering update 1/1...
-SOLUTION FOR q17 AT 0:25:34.535933 [size=557]
+SOLUTION FOR q17 AT 0:25:00.112817 [size=557]
 ----------------------------------------
   _var261914 : Bag<(Int, String, String, Int, String, Float, String)> = supplier
   _var261915 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
@@ -92,16 +92,6 @@ SOLUTION FOR q17 AT 0:25:34.535933 [size=557]
 ----------------------------------------
 Stopping jobs
 requesting stop for ImproveQueryJob[q17]
-Waiting on 1 jobs...
-  --> ImproveQueryJob[q17] [pid=39323]
-Waiting on 1 jobs...
-  --> ImproveQueryJob[q17] [pid=39323]
-Waiting on 1 jobs...
-  --> ImproveQueryJob[q17] [pid=39323]
-Waiting on 1 jobs...
-  --> ImproveQueryJob[q17] [pid=39323]
-Waiting on 1 jobs...
-  --> ImproveQueryJob[q17] [pid=39323]
 Stopping SafeQueue...
 Done!
 Generating IR...
