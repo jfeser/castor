@@ -2,6 +2,8 @@
 *-opt/
 *.time
 *.log
-gold/
+*.mem
+*-gold/
+*-gold.csv
 hashes.txt
 Makefile
