@@ -324,7 +324,6 @@ module Make (C : Config.S) = struct
       let c = P.name (Name.create "c") in
       A.(select [ Min c; Max c; Avg c ] part_counts)
     in
-    let part_aggs = R.resolve ~params part_aggs in
     let sql = Sql.of_ralgebra part_aggs in
     let tups =
       Db.exec_cursor_exn cost_conn

@@ -328,7 +328,7 @@ module Make (C : Config.S) = struct
           Option.map (f (Path.get_exn p (pre r))) ~f:(Path.set_exn p r))
         name
     in
-    let tf = schema_validated tf in
+    let tf = if validate then schema_validated tf else tf in
     let tf = if validate then validated tf else tf in
     if trace then traced tf else tf
 
