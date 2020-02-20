@@ -25,8 +25,10 @@ module Expect_test_config = struct
     ()
 end
 
+let pg_tmp = Sys.getenv_exn "CASTOR_ROOT" ^ "/vendor/ephemeralpg/pg_tmp"
+
 let create_test_db () =
-  let ch = Unix.open_process_in "pg_tmp" in
+  let ch = Unix.open_process_in pg_tmp in
   let url = In_channel.input_all ch in
   Unix.close_process_in ch |> Unix.Exit_or_signal.or_error |> Or_error.ok_exn;
   Db.create url
