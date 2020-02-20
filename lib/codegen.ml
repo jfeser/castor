@@ -1,4 +1,3 @@
-open! Core
 open Collections
 open Llvm_analysis
 open Llvm_target
@@ -15,8 +14,6 @@ let () =
       print_endline "";
       print_endline err);
   Llvm_all_backends.initialize ()
-
-module Project_config = Config
 
 module Config = struct
   module type S = sig
@@ -44,7 +41,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     in
     Option.value_exn ~message:"Could not find a working clang." c
 
-  let opt = Project_config.llvm_root ^ "/bin/opt"
+  let opt = Global.llvm_root () ^ "/bin/opt"
 
   let ctx = create_context ()
 
@@ -179,8 +176,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         | `Ok x -> x
         | `Duplicate_key k ->
             Error.create "Duplicate key." (k, func.I.locals, params)
-              [%sexp_of:
-                string * I.local list * (string * Type.PrimType.t) list]
+              [%sexp_of: string * I.local list * (string * Prim_type.t) list]
             |> Error.raise
 
       method values : var Hashtbl.M(String).t = values
@@ -189,7 +185,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
       method func : I.func = func
 
-      method tctx : Type.PrimType.t Hashtbl.M(String).t = tctx
+      method tctx : Prim_type.t Hashtbl.M(String).t = tctx
 
       val mutable llfunc = None
 
@@ -235,7 +231,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
   let fixed_type = double_type ctx
 
   let rec codegen_type t =
-    let open Type.PrimType in
+    let open Prim_type in
     match t with
     | IntT _ | DateT _ -> int_type
     | BoolT _ -> bool_type
@@ -453,7 +449,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       List.foldi types
         ~init:(const_int (i64_type ctx) 0)
         ~f:(fun idx size ->
-          let open Type.PrimType in
+          let open Prim_type in
           function
           | (NullT | VoidT | TupleT _) as t ->
               Error.create "Not supported as part of a composite key." t
@@ -480,7 +476,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let key_ptr = build_array_alloca (i8_type ctx) key_size "" builder in
     let key_offset = build_ptrtoint key_ptr (i64_type ctx) "" builder in
     List.foldi ~init:key_offset types ~f:(fun idx key_offset type_ ->
-        let open Type.PrimType in
+        let open Prim_type in
         let key_offset =
           match type_ with
           | IntT _ | DateT _ ->
@@ -740,7 +736,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
   let date_fmt = build_global_stringptr "%04d-%02d-%02d" "date_fmt" builder
 
   let codegen_print fctx type_ expr =
-    let open Type.PrimType in
+    let open Prim_type in
     let val_ = codegen_expr fctx expr in
     let rec gen val_ = function
       | NullT -> call_printf null_str []
@@ -775,7 +771,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
   (** Generate an argument list from a tuple and a type. *)
   let rec codegen_consume_args type_ tup =
-    let open Type.PrimType in
+    let open Prim_type in
     match type_ with
     | IntT _ | DateT _ | BoolT _ | FixedT _ -> [ tup ]
     | StringT _ ->
@@ -1057,20 +1053,20 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     Util.command_out_exn ([ clang; "-E" ] @ args_strs @ [ fn ])
 
   let from_fn fn n i =
-    let template = Project_config.build_root ^ "/etc/" ^ fn in
+    let template = Global.build_root () ^ "/etc/" ^ fn in
     let func =
       c_template template [ ("PARAM_NAME", n); ("PARAM_IDX", Int.to_string i) ]
     in
     let call = sprintf "set_%s(params, input_%s(argv, optind));" n n in
     (func, call)
 
-  let compile ?out_dir ~gprof ~params layout =
+  let compile ?out_dir ?layout_log ~gprof ~params conn layout =
     let out_dir =
       match out_dir with Some x -> x | None -> Filename.temp_dir "bin" ""
     in
     (match Sys.is_directory out_dir with `No -> Unix.mkdir out_dir | _ -> ());
-    let stdlib_fn = Project_config.build_root ^ "/etc/castorlib.c" in
-    let date_fn = Project_config.build_root ^ "/etc/date.c" in
+    let stdlib_fn = Global.build_root () ^ "/etc/castorlib.c" in
+    let date_fn = Global.build_root () ^ "/etc/date.c" in
     let main_fn = out_dir ^ "/main.c" in
     let ir_fn = out_dir ^ "/scanner.ir" in
     let module_fn = out_dir ^ "/scanner.ll" in
@@ -1079,10 +1075,15 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let remarks_fn = out_dir ^ "/remarks.yml" in
     let header_fn = out_dir ^ "/scanner.h" in
     let data_fn = out_dir ^ "/data.bin" in
-    let open Type.PrimType in
+    let open Prim_type in
+    (* Serialize layout. *)
+    let layout, len =
+      Serialize.serialize ?layout_file:layout_log conn data_fn layout
+    in
+
     (* Generate IR module. *)
     let ir_module =
-      let unopt = IG.irgen ~params ~data_fn layout in
+      let unopt = IG.irgen ~params ~len layout in
       Log.info (fun m -> m "Optimizing intermediate language.");
       Implang_opt.opt unopt
     in
@@ -1117,7 +1118,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       let header_str = "#include \"scanner.h\"" in
       let funcs_str = String.concat (header_str :: funcs) ~sep:"\n" in
       let calls_str = String.concat calls ~sep:"\n" in
-      let perf_template = Project_config.build_root ^ "/etc/perf.c" in
+      let perf_template = Global.build_root () ^ "/etc/perf.c" in
       let perf_c =
         let open In_channel in
         with_file perf_template ~f:(fun ch ->

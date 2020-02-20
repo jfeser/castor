@@ -22,10 +22,8 @@ let () =
         Filter
           ( Varop
               ( And,
-                [
-                  Binop (Eq, Field x, Var "xv");
-                  Binop (Eq, Field y, Var "yv");
-                ] ),
+                [ Binop (Eq, Field x, Var "xv"); Binop (Eq, Field y, Var "yv") ]
+              ),
             Relation taxi ) )
   in
   Seq.iter (search conn ralgebra) ~f:(fun r ->

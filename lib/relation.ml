@@ -1,11 +1,9 @@
-open! Core
-
 module T = struct
-  type t = { r_name : string; r_schema : (Name.t[@opaque]) list option }
+  type t = { r_name : string; r_schema : Name.t list option [@opaque] }
   [@@deriving compare, hash, sexp]
 end
 
 include T
 include Comparator.Make (T)
 
-let schema_exn { r_schema; _ } = Option.value_exn r_schema
+let schema { r_schema; _ } = Option.value_exn r_schema

@@ -1,17 +1,19 @@
-open! Core
+open Util
 open Test_util
 
-let run_test ?(params = []) ?(print_layout = false) ?(fork = false)
-    ?irgen_debug layout_str =
+let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
+    layout_str =
   let layout_file = Filename.temp_file "layout" "txt" in
-  let (module M), (module S), (module I), (module C) =
-    Setup.make_modules ~layout_file ?irgen_debug ()
-  in
+  let open Abslayout_load in
+  let open Abslayout_type in
+  let conn = Lazy.force test_db_conn in
+  let (module I), (module C) = Setup.make_modules ?irgen_debug () in
   let run_compiler layout =
     let out_dir = Filename.temp_dir "bin" "" in
     let exe_fn, data_fn =
       let params = List.map ~f:Tuple.T2.get1 params in
-      C.compile ~out_dir ~gprof:false ~params layout
+      C.compile ~out_dir ~layout_log:layout_file ~gprof:false ~params conn
+        layout
     in
     if print_layout then
       In_channel.input_all (In_channel.create layout_file) |> print_endline;
@@ -34,9 +36,9 @@ let run_test ?(params = []) ?(print_layout = false) ?(fork = false)
       let params =
         List.map params ~f:(fun (n, _) -> n) |> Set.of_list (module Name)
       in
-      M.load_string ~params layout_str
+      load_string conn ~params layout_str |> annotate_type conn
     in
-    M.annotate_type layout;
+
     if fork then run_in_fork (fun () -> run_compiler layout)
     else run_compiler layout
   in
@@ -44,8 +46,8 @@ let run_test ?(params = []) ?(print_layout = false) ?(fork = false)
 
 let%expect_test "ordered-idx" =
   run_test
-    "AOrderedIdx(OrderBy([f asc], Dedup(Select([f], r1))) as k, \
-     AList(Filter(f = k.f, r1) as lk, ascalar(lk.g)), 1, 3)";
+    "AOrderedIdx(OrderBy([f asc], Dedup(Select([f], r1))) as k, AList(Filter(f \
+     = k.f, r1) as lk, ascalar(lk.g)), 1, 3)";
   [%expect {|
     1|2
     1|3

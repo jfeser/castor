@@ -1,64 +1,53 @@
 (executable
+ (package castor)
  (public_name castor-pretty)
  (name pretty)
  (libraries core castor)
- (flags
-  (:standard -g -bin-annot))
  (preprocess
   (pps ppx_sexp_conv ppx_let))
  (modules pretty))
 
 (executable
+ (package castor)
  (public_name castor-compile)
  (name compile)
  (libraries core castor logs)
- (flags
-  (:standard -g -bin-annot))
  (preprocess
   (pps ppx_sexp_conv ppx_let))
  (modules compile))
 
 (executable
- (public_name to_cozy)
+ (package castor)
+ (public_name castor-to-cozy)
+ (name to_cozy)
  (libraries core castor)
- (flags
-  (:standard -g -bin-annot))
  (preprocess
   (pps ppx_sexp_conv ppx_let))
  (modules to_cozy))
 
 (executable
- (public_name sample_tpch)
+ (package castor)
+ (public_name sample-tpch)
+ (name sample_tpch)
  (libraries core postgresql castor logs)
- (flags
-  (:standard -g -bin-annot))
  (preprocess
   (pps ppx_sexp_conv ppx_let))
  (modules sample_tpch))
 
 (executable
- (name bench_gen)
- (libraries core core_bench castor)
- (flags
-  (:standard -g -bin-annot))
- (preprocess
-  (pps ppx_sexp_conv ppx_let))
- (modules bench_gen))
-
-(executable
- (public_name parse_sql)
+ (package castor)
+ (public_name sql-to-castor)
+ (name parse_sql)
  (libraries core sqlgg castor yojson)
- (flags
-  (:standard -g -bin-annot))
  (preprocess
   (pps ppx_sexp_conv ppx_let))
  (modules parse_sql))
 
 (executable
- (public_name parse_cozy)
+ (package castor)
+ (public_name cozy-to-castor)
+ (name parse_cozy)
  (libraries core castor)
- (flags
-  (:standard -g -bin-annot))
  (preprocess
   (pps ppx_sexp_conv ppx_let))
  (modules parse_cozy))

@@ -1,4 +1,3 @@
-open! Core
 open Collections
 
 type unop =
@@ -57,20 +56,20 @@ type expr = Implang0.expr =
   | Unop of { op : unop; arg : expr }
   | Done of string
   | Ternary of expr * expr * expr
-  | TupleHash of Type.PrimType.t list * expr * expr
+  | TupleHash of Prim_type.t list * expr * expr
   | Substr of expr * expr * expr
 [@@deriving compare, sexp]
 
 type local = Implang0.local = {
   lname : string;
-  type_ : (Type.PrimType.t[@opaque]);
+  type_ : (Prim_type.t[@opaque]);
   persistent : bool;
 }
 [@@deriving compare, sexp]
 
 type stmt = Implang0.stmt =
-  | Print of Type.PrimType.t * expr
-  | Consume of Type.PrimType.t * expr
+  | Print of Prim_type.t * expr
+  | Consume of Prim_type.t * expr
   | Loop of { cond : expr; body : prog }
   | If of { cond : expr; tcase : prog; fcase : prog }
   | Iter of { var : string; func : string; args : expr list }
@@ -83,9 +82,9 @@ and prog = stmt list [@@deriving compare, sexp]
 
 type func = Implang0.func = {
   name : string;
-  args : (string * Type.PrimType.t) list;
+  args : (string * Prim_type.t) list;
   body : prog;
-  ret_type : Type.PrimType.t;
+  ret_type : Prim_type.t;
   locals : local list;
 }
 [@@deriving compare, sexp]
@@ -136,14 +135,14 @@ type _var = Global of expr | Arg of int | Field of expr
 
 type _ctx = _var Map.M(Name).t
 
-val type_of : Type.PrimType.t Hashtbl.M(String).t -> expr -> Type.PrimType.t
+val type_of : Prim_type.t Hashtbl.M(String).t -> expr -> Prim_type.t
 
 module Builder : sig
   type t
 
-  val type_of : expr -> t -> Type.PrimType.t
+  val type_of : expr -> t -> Prim_type.t
 
-  val create : ctx:_ctx -> name:string -> ret:Type.PrimType.t -> t
+  val create : ctx:_ctx -> name:string -> ret:Prim_type.t -> t
 
   val new_scope : t -> t
 
@@ -172,7 +171,7 @@ module Builder : sig
   val build_if :
     cond:expr -> then_:(t -> unit) -> else_:(t -> unit) -> t -> unit
 
-  val build_var : ?persistent:bool -> string -> Type.PrimType.t -> t -> expr
+  val build_var : ?persistent:bool -> string -> Prim_type.t -> t -> expr
 
   val build_defn : ?persistent:bool -> string -> expr -> t -> expr
 
@@ -215,7 +214,7 @@ module Builder : sig
 
   val build_to_int : expr -> t -> expr
 
-  val const_int : Type.PrimType.t -> int -> expr
+  val const_int : Prim_type.t -> int -> expr
 end
 
 module Ctx : sig
@@ -230,9 +229,9 @@ module Ctx : sig
 
   val of_schema : Name.t list -> expr list -> t
 
-  val make_caller_args : t -> (string * Type.PrimType.t) list
+  val make_caller_args : t -> (string * Prim_type.t) list
 
-  val bind : t -> string -> Type.PrimType.t -> expr -> t
+  val bind : t -> string -> Prim_type.t -> expr -> t
 
   val var_to_expr : var -> Builder.t -> expr
 

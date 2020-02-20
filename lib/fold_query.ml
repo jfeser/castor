@@ -1,11 +1,17 @@
-open! Core
+open Ast
+open Abslayout
+open Abslayout_visitors
+open Schema
 module A = Abslayout
+module P = Pred.Infix
 
 [@@@warning "-17"]
 
+type scalar = unit annot pred [@@deriving sexp_of]
+
 type ('q, 'm) node =
   | Empty
-  | Scalars of (Pred.t[@name "pred"]) list
+  | Scalars of (scalar[@name "pred"]) list
   | Concat of ('q, 'm) t list
   | For of ('q * string * ('q, 'm) t * bool)
   | Let of ((string * ('q, 'm) t) list * ('q, 'm) t)
@@ -32,26 +38,12 @@ let let_ c x = { node = Let x; meta = c }
 
 let var c x = { node = Var x; meta = c }
 
-let map_meta ~f q =
-  let visitor =
-    object
-      inherit [_] map
-
-      method visit_'m () = f
-
-      method visit_'q () x = x
-
-      method visit_pred () x = x
-    end
-  in
-  visitor#visit_t () q
-
 (** A query is invariant in a set of scopes if it doesn't refer to any name in
    one of the scopes. *)
 let is_invariant ss q =
   let names_visitor =
     object
-      inherit [_] Abslayout0.reduce
+      inherit [_] A.reduce
 
       inherit [_] Util.conj_monoid
 
@@ -102,7 +94,7 @@ let hoist_invariant ss q =
       method! visit_t ss q =
         if is_invariant ss q then
           let n = Fresh.name Global.fresh "q%d" in
-          (var A.empty n, [ (n, q) ])
+          (var None n, [ (n, q) ])
         else super#visit_t ss q
     end
   in
@@ -126,8 +118,7 @@ let hoist_all q =
             let q', binds = hoist_invariant ss q' in
             match binds with
             | [] -> for_ q.meta (r, s, self#visit_t ss q', x)
-            | _ ->
-                let_ A.empty (binds, for_ q.meta (r, s, self#visit_t ss q', x))
+            | _ -> let_ None (binds, for_ q.meta (r, s, self#visit_t ss q', x))
             )
         | _ -> super#visit_t ss q
     end
@@ -139,7 +130,7 @@ let to_width q =
     object
       inherit [_] map
 
-      method visit_'q () q = List.length (A.schema_exn q)
+      method visit_'q () q = List.length (schema q)
 
       method visit_'m () x = x
 
@@ -149,44 +140,54 @@ let to_width q =
   visitor#visit_t () q
 
 let total_order_key q =
-  let native_order = Abslayout.order_of q in
-  let total_order = List.map (A.schema_exn q) ~f:(fun n -> (A.Name n, A.Asc)) in
+  let native_order = A.order_of q in
+  let total_order = List.map (schema q) ~f:(fun n -> (Name n, Asc)) in
   native_order @ total_order
 
 let to_scalars rs =
   List.map rs ~f:(fun t ->
-      match t.A.node with A.AScalar p -> Some p | _ -> None)
+      match t.Ast.node with AScalar p -> Some p | _ -> None)
   |> Option.all
 
-let rec of_ralgebra q =
-  match q.A.node with
-  | AList (q1, q2) ->
-      let scope = A.scope_exn q1 in
-      let q1 = A.strip_scope q1 in
-      let q1 =
-        let order_key = total_order_key q1 in
-        A.order_by order_key q1
-      in
-      for_ q (q1, scope, of_ralgebra q2, false)
-  | AHashIdx h ->
-      let q1 =
-        let order_key = total_order_key h.hi_keys in
-        A.order_by order_key (A.dedup h.hi_keys)
-      in
-      for_ q (q1, h.hi_scope, of_ralgebra h.hi_values, true)
-  | AOrderedIdx (q1, q2, _) ->
-      let scope = A.scope_exn q1 in
-      let q1 = A.strip_scope q1 in
-      let q1 =
-        let order_key = total_order_key q1 in
-        A.order_by order_key (A.dedup q1)
-      in
-      for_ q (q1, scope, of_ralgebra q2, true)
+let strip_meta_pred p = map_meta_pred (fun _ -> ()) p
+
+let of_list of_ralgebra q (q1, q2) =
+  let scope = A.scope_exn q1 in
+  let q1 = A.strip_scope q1 in
+  let q1 =
+    let order_key = total_order_key q1 in
+    order_by order_key (strip_meta q1)
+  in
+  for_ q (q1, scope, of_ralgebra q2, false)
+
+let of_hash_idx of_ralgebra q h =
+  let q1 =
+    let order_key = total_order_key h.hi_keys in
+    order_by order_key (dedup @@ strip_meta h.hi_keys)
+  in
+  for_ q (q1, h.hi_scope, of_ralgebra h.hi_values, true)
+
+let of_ordered_idx of_ralgebra q (q1, q2, _) =
+  let scope = A.scope_exn q1 in
+  let q1 = A.strip_scope q1 in
+  let q1 =
+    let order_key = total_order_key q1 in
+    order_by order_key (dedup @@ strip_meta q1)
+  in
+  for_ q (q1, scope, of_ralgebra q2, true)
+
+(** Convert a query to the simplified fold query AST. *)
+let rec of_ralgebra : 'a. 'a annot -> (unit annot, 'a annot) t =
+ fun q ->
+  match q.Ast.node with
+  | AList x -> of_list of_ralgebra q x
+  | AHashIdx h -> of_hash_idx of_ralgebra q h
+  | AOrderedIdx x -> of_ordered_idx of_ralgebra q x
   | AEmpty | Range _ -> empty q
-  | AScalar p -> scalars q [ p ]
+  | AScalar p -> scalars q [ strip_meta_pred p ]
   | ATuple (ts, _) -> (
       match to_scalars ts with
-      | Some ps -> scalars q ps
+      | Some ps -> scalars q (List.map ~f:strip_meta_pred ps)
       | None -> concat q (List.map ~f:of_ralgebra ts) )
   | DepJoin { d_lhs = q1; d_rhs = q2; _ } | Join { r1 = q1; r2 = q2; _ } ->
       concat q [ of_ralgebra q1; of_ralgebra q2 ]
@@ -202,62 +203,76 @@ let rec of_ralgebra q =
 let to_concat binds q = concat None (List.map binds ~f:Tuple.T2.get2 @ [ q ])
 
 let unwrap_order r =
-  match r.A.node with A.OrderBy { key; rel } -> (key, rel) | _ -> ([], r)
+  match r.Ast.node with OrderBy { key; rel } -> (key, rel) | _ -> ([], r)
+
+let map_meta ~f q =
+  let visitor =
+    object
+      inherit [_] map
+
+      method visit_'m () = f
+
+      method visit_'q () x = x
+
+      method visit_pred () x = x
+    end
+  in
+  visitor#visit_t () q
 
 let wrap q = map_meta ~f:Option.some q
 
 let unwrap q = map_meta ~f:(fun m -> Option.value_exn m) q
 
-let rec to_ralgebra' q =
+(** Convert a fold query into a ralgebra query that produces the stream that the
+   fold acts on. *)
+let rec to_ralgebra q =
   match q.node with
-  | Var _ -> A.scalar (As_pred (Int 0, Fresh.name Global.fresh "var%d"))
-  | Let (binds, q) -> to_ralgebra' (to_concat binds q)
+  | Var _ -> scalar (As_pred (Int 0, Fresh.name Global.fresh "var%d"))
+  | Let (binds, q) -> to_ralgebra (to_concat binds q)
   | For (q1, scope, q2, distinct) ->
       (* Extend the lhs query with a row number. Even if this query emits
          duplicate results, the row number will ensure that the duplicates
          remain distinct. *)
       let o1, q1 =
         let o1, q1 = unwrap_order q1 in
-        let row_number = Fresh.name Global.fresh "rn%d" in
+        let count = Fresh.name Global.fresh "ct%d" in
         let o1, q1 =
           if distinct then (o1, q1)
           else
-            ( o1 @ [ (Name (Name.create row_number), Asc) ],
-              A.select
-                ( As_pred (Row_number, row_number)
-                :: (A.schema_exn q1 |> Schema.to_select_list) )
-                q1 )
+            ( o1,
+              group_by
+                (As_pred (Count, count) :: (schema q1 |> Schema.to_select_list))
+                (schema q1) q1 )
         in
         (o1, q1)
       in
-      let o2, q2 = to_ralgebra' q2 |> unwrap_order in
+      let o2, q2 = to_ralgebra q2 |> unwrap_order in
       (* Generate a renaming so that the upward exposed names are fresh. *)
       let sctx =
-        (A.schema_exn q1 |> Schema.scoped scope) @ A.schema_exn q2
+        (schema q1 |> Schema.scoped scope) @ schema q2
         |> List.map ~f:(fun n ->
                let n' = Fresh.name Global.fresh "x%d" in
                (n, n'))
       in
-      let slist = List.map sctx ~f:(fun (n, n') -> A.As_pred (Name n, n')) in
+      let slist = List.map sctx ~f:(fun (n, n') -> P.as_ (P.name n) n') in
       (* Stick together the orders from the lhs and rhs queries. *)
       let order =
         let sctx =
-          List.map sctx ~f:(fun (n, n') -> (n, A.Name (Name.create n')))
+          List.map sctx ~f:(fun (n, n') -> (n, P.name @@ Name.create n'))
           |> Map.of_alist_exn (module Name)
         in
         (* The renaming refers to the scoped names from q1, so scope before
            renaming. *)
         let o1 =
-          List.map o1 ~f:(fun (p, o) ->
-              (Pred.scoped (A.schema_exn q1) scope p, o))
+          List.map o1 ~f:(fun (p, o) -> (Pred.scoped (schema q1) scope p, o))
         in
         List.map (o1 @ o2) ~f:(fun (p, o) -> (Pred.subst sctx p, o))
       in
-      A.order_by order (A.dep_join q1 scope (A.select slist q2))
+      order_by order (dep_join q1 scope (select slist q2))
   | Concat qs ->
       let counter_name = Fresh.name Global.fresh "counter%d" in
       let orders, qs =
-        List.map qs ~f:(fun q -> unwrap_order (to_ralgebra' q)) |> List.unzip
+        List.map qs ~f:(fun q -> unwrap_order (to_ralgebra q)) |> List.unzip
       in
       (* The queries in qs can have different schemas, so we need to normalize
          them. This means creating a select list that has the union of the
@@ -266,25 +281,25 @@ let rec to_ralgebra' q =
         List.mapi qs ~f:(fun i q ->
             let select_list =
               (* Add a counter so we know which query we're on. *)
-              A.As_pred (Int i, counter_name)
+              P.(as_ (int i) counter_name)
               :: List.concat_mapi qs ~f:(fun j q' ->
-                     A.schema_exn q'
+                     schema q'
                      |>
                      (* Take the names from this query's schema. *)
-                     if i = j then List.map ~f:(fun n -> A.Name n)
+                     if i = j then List.map ~f:P.name
                      else
                        (* Otherwise emit null. *)
                        List.map ~f:(fun n ->
-                           A.As_pred (Null (Some (Name.type_exn n)), Name.name n)))
+                           P.as_ (Null (Some (Name.type_exn n))) (Name.name n)))
             in
-            A.select select_list q)
+            select select_list q)
       in
       let order =
-        (A.Name (Name.create counter_name), A.Asc) :: List.concat orders
+        (P.name (Name.create counter_name), Asc) :: List.concat orders
       in
-      A.order_by order (A.tuple queries_norm A.Concat)
+      order_by order (tuple queries_norm Concat)
   | Empty -> A.empty
-  | Scalars ps -> A.tuple (List.map ps ~f:A.scalar) Cross
+  | Scalars ps -> tuple (List.map ps ~f:scalar) Cross
 
 let rec n_parallel q =
   match q.node with
@@ -296,7 +311,7 @@ let rec n_parallel q =
 
 let to_ralgebra q =
   Log.info (fun m -> m "Potential parallelism: %d queries" (n_parallel q));
-  wrap q |> to_ralgebra'
+  wrap q |> to_ralgebra
 
 let rec width' q =
   match q.node with

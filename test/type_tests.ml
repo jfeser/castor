@@ -1,4 +1,3 @@
-open! Core
 open Type
 open Collections
 

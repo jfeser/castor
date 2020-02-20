@@ -1,3 +1,7 @@
-open! Core
+open Ast
 
-val resolve : ?params:Set.M(Name).t -> Abslayout0.t -> Abslayout0.t
+val resolve :
+  ?params:Set.M(Name).t ->
+  'a annot ->
+  < refs : bool Map.M(Name).t ; stage : [ `Compile | `Run ] Map.M(Name).t >
+  annot

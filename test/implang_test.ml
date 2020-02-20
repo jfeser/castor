@@ -1,18 +1,20 @@
-open! Core
 open Test_util
 
 let run_test ?(params = []) ?(print_code = true) layout_str =
-  let (module M), (module S), (module I), (module C) =
-    Setup.make_modules ~code_only:true ()
-  in
+  let (module I), (module C) = Setup.make_modules ~code_only:true () in
+  let open Abslayout_load in
+  let open Abslayout_type in
+  let conn = Lazy.force test_db_conn in
+
   try
     let param_names = List.map params ~f:(fun (n, _) -> n) in
     let sparams = Set.of_list (module Name) param_names in
-    let layout = M.load_string ~params:sparams layout_str in
-    M.annotate_type layout;
-    let type_ = Meta.(find_exn layout type_) in
-    print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] type_));
-    let ir = I.irgen ~params:param_names ~data_fn:"/tmp/buf" layout in
+    let layout =
+      load_string conn ~params:sparams layout_str |> annotate_type conn
+    in
+    print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] layout.meta#type_));
+    let layout, len = Serialize.serialize conn "/tmp/buf" layout in
+    let ir = I.irgen ~params:param_names ~len layout in
     if print_code then I.pp Caml.Format.std_formatter ir
   with exn ->
     Backtrace.(
@@ -25,8 +27,8 @@ let%expect_test "tuple-simple-cross" =
   [%expect
     {|
     (TupleT
-     (((IntT ((range (Interval 1 1)) (distinct <opaque>) (nullable false)))
-       (IntT ((range (Interval 2 2)) (distinct <opaque>) (nullable false))))
+     (((IntT ((range (Interval 1 1)) (distinct <opaque>)))
+       (IntT ((range (Interval 2 2)) (distinct <opaque>))))
       ((kind Cross))))
     // Locals:
     // cstart3 : Int[nonnull] (persists=true)
@@ -54,8 +56,8 @@ let%expect_test "sum-complex" =
     (FuncT
      (((ListT
         ((TupleT
-          (((IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
-            (IntT ((range (Interval -1 2)) (distinct <opaque>) (nullable false))))
+          (((IntT ((range (Interval 1 3)) (distinct <opaque>)))
+            (IntT ((range (Interval -1 2)) (distinct <opaque>))))
            ((kind Cross))))
          ((count (Interval 5 5))))))
       (Width 2)))
@@ -143,8 +145,8 @@ let%expect_test "sum" =
     (FuncT
      (((ListT
         ((TupleT
-          (((IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
-            (IntT ((range (Interval -1 2)) (distinct <opaque>) (nullable false))))
+          (((IntT ((range (Interval 1 3)) (distinct <opaque>)))
+            (IntT ((range (Interval -1 2)) (distinct <opaque>))))
            ((kind Cross))))
          ((count (Interval 5 5))))))
       (Width 2)))
@@ -225,8 +227,8 @@ let%expect_test "cross-tuple" =
     {|
     (ListT
      ((TupleT
-       (((IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
-         (IntT ((range (Interval -1 2)) (distinct <opaque>) (nullable false))))
+       (((IntT ((range (Interval 1 3)) (distinct <opaque>)))
+         (IntT ((range (Interval -1 2)) (distinct <opaque>))))
         ((kind Cross))))
       ((count (Interval 5 5)))))
     // Locals:
@@ -276,11 +278,11 @@ let%expect_test "hash-idx" =
     {|
     (FuncT
      (((ListT
-        ((IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
+        ((IntT ((range (Interval 1 3)) (distinct <opaque>)))
          ((count (Interval 5 5)))))
        (HashIdxT
-        ((IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
-         (IntT ((range (Interval 2 4)) (distinct <opaque>) (nullable false)))
+        ((IntT ((range (Interval 1 3)) (distinct <opaque>)))
+         (IntT ((range (Interval 2 4)) (distinct <opaque>)))
          ((key_count (Interval 3 3))))))
       Child_sum))
     // Locals:
@@ -354,11 +356,11 @@ let%expect_test "ordered-idx" =
     {|
     (FuncT
      (((ListT
-        ((IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
+        ((IntT ((range (Interval 1 3)) (distinct <opaque>)))
          ((count (Interval 5 5)))))
        (OrderedIdxT
-        ((IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
-         (IntT ((range (Interval 2 4)) (distinct <opaque>) (nullable false)))
+        ((IntT ((range (Interval 1 3)) (distinct <opaque>)))
+         (IntT ((range (Interval 2 4)) (distinct <opaque>)))
          ((key_count (Interval 3 3))))))
       Child_sum))
     // Locals:
@@ -486,10 +488,8 @@ let%expect_test "ordered-idx-date" =
   [%expect
     {|
     (OrderedIdxT
-     ((DateT
-       ((range (Interval 17136 17775)) (distinct <opaque>) (nullable false)))
-      (DateT
-       ((range (Interval 17136 17775)) (distinct <opaque>) (nullable false)))
+     ((DateT ((range (Interval 17136 17775)) (distinct <opaque>)))
+      (DateT ((range (Interval 17136 17775)) (distinct <opaque>)))
       ((key_count (Interval 5 5))))) |}]
 
 let%expect_test "example-1" =
@@ -500,18 +500,12 @@ let%expect_test "example-1" =
      (((FuncT
         (((ListT
            ((TupleT
-             (((IntT
-                ((range (Interval 1 1)) (distinct <opaque>) (nullable false)))
-               (IntT
-                ((range (Interval 1 4)) (distinct <opaque>) (nullable false)))
+             (((IntT ((range (Interval 1 1)) (distinct <opaque>)))
+               (IntT ((range (Interval 1 4)) (distinct <opaque>)))
                (ListT
                 ((TupleT
-                  (((IntT
-                     ((range (Interval 2 3)) (distinct <opaque>)
-                      (nullable false)))
-                    (IntT
-                     ((range (Interval 2 5)) (distinct <opaque>)
-                      (nullable false))))
+                  (((IntT ((range (Interval 2 3)) (distinct <opaque>)))
+                    (IntT ((range (Interval 2 5)) (distinct <opaque>))))
                    ((kind Cross))))
                  ((count (Interval 1 2))))))
               ((kind Cross))))
@@ -604,15 +598,13 @@ let%expect_test "example-2" =
     (FuncT
      (((HashIdxT
         ((TupleT
-          (((IntT ((range (Interval 1 1)) (distinct <opaque>) (nullable false)))
-            (IntT ((range (Interval 2 3)) (distinct <opaque>) (nullable false))))
+          (((IntT ((range (Interval 1 1)) (distinct <opaque>)))
+            (IntT ((range (Interval 2 3)) (distinct <opaque>))))
            ((kind Cross))))
          (ListT
           ((TupleT
-            (((IntT
-               ((range (Interval 1 4)) (distinct <opaque>) (nullable false)))
-              (IntT
-               ((range (Interval 2 5)) (distinct <opaque>) (nullable false))))
+            (((IntT ((range (Interval 1 4)) (distinct <opaque>)))
+              (IntT ((range (Interval 2 5)) (distinct <opaque>))))
              ((kind Cross))))
            ((count (Interval 1 2)))))
          ((key_count (Interval 2 2))))))
@@ -711,29 +703,22 @@ let%expect_test "example-3" =
     (FuncT
      (((FuncT
         (((HashIdxT
-           ((IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
+           ((IntT ((range (Interval 1 3)) (distinct <opaque>)))
             (ListT
              ((TupleT
-               (((IntT
-                  ((range (Interval 1 5)) (distinct <opaque>) (nullable false)))
-                 (IntT
-                  ((range (Interval 3 6)) (distinct <opaque>) (nullable false))))
+               (((IntT ((range (Interval 1 5)) (distinct <opaque>)))
+                 (IntT ((range (Interval 3 6)) (distinct <opaque>))))
                 ((kind Cross))))
               ((count (Interval 1 2)))))
             ((key_count (Interval 3 3)))))
           (FuncT
            (((FuncT
               (((OrderedIdxT
-                 ((IntT
-                   ((range (Interval 1 5)) (distinct <opaque>) (nullable false)))
+                 ((IntT ((range (Interval 1 5)) (distinct <opaque>)))
                   (ListT
                    ((TupleT
-                     (((IntT
-                        ((range (Interval 1 3)) (distinct <opaque>)
-                         (nullable false)))
-                       (IntT
-                        ((range (Interval 1 5)) (distinct <opaque>)
-                         (nullable false))))
+                     (((IntT ((range (Interval 1 3)) (distinct <opaque>)))
+                       (IntT ((range (Interval 1 5)) (distinct <opaque>))))
                       ((kind Cross))))
                     ((count (Interval 1 1)))))
                   ((key_count (Interval 5 5))))))
@@ -952,7 +937,7 @@ let%expect_test "subquery-first" =
     (FuncT
      (((FuncT
         (((ListT
-           ((IntT ((range (Interval 1 3)) (distinct <opaque>) (nullable false)))
+           ((IntT ((range (Interval 1 3)) (distinct <opaque>)))
             ((count (Interval 5 5))))))
          Child_sum)))
       (Width 1)))
@@ -1050,30 +1035,22 @@ let%expect_test "example-3-str" =
     (FuncT
      (((FuncT
         (((HashIdxT
-           ((StringT
-             ((nchars (Interval 3 8)) (distinct <opaque>) (nullable false)))
+           ((StringT ((nchars (Interval 3 8)) (distinct <opaque>)))
             (ListT
              ((TupleT
-               (((IntT
-                  ((range (Interval 1 5)) (distinct <opaque>) (nullable false)))
-                 (IntT
-                  ((range (Interval 3 6)) (distinct <opaque>) (nullable false))))
+               (((IntT ((range (Interval 1 5)) (distinct <opaque>)))
+                 (IntT ((range (Interval 3 6)) (distinct <opaque>))))
                 ((kind Cross))))
               ((count (Interval 1 2)))))
             ((key_count (Interval 3 3)))))
           (FuncT
            (((FuncT
               (((OrderedIdxT
-                 ((IntT
-                   ((range (Interval 1 5)) (distinct <opaque>) (nullable false)))
+                 ((IntT ((range (Interval 1 5)) (distinct <opaque>)))
                   (ListT
                    ((TupleT
-                     (((StringT
-                        ((nchars (Interval 3 8)) (distinct <opaque>)
-                         (nullable false)))
-                       (IntT
-                        ((range (Interval 1 5)) (distinct <opaque>)
-                         (nullable false))))
+                     (((StringT ((nchars (Interval 3 8)) (distinct <opaque>)))
+                       (IntT ((range (Interval 1 5)) (distinct <opaque>))))
                       ((kind Cross))))
                     ((count (Interval 1 1)))))
                   ((key_count (Interval 5 5))))))

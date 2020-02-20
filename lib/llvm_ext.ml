@@ -1,5 +1,3 @@
-open! Core
-
 include (
   Llvm :
     module type of Llvm
@@ -77,8 +75,7 @@ let build_extractvalue v i n b =
   let kind = classify_type typ in
   if [%compare.equal: TypeKind.t] kind Struct then (
     if i >= Array.length (struct_element_types typ) then
-      Error.create "Tuple index out of bounds." (v, i)
-        [%sexp_of: llvalue * int]
+      Error.create "Tuple index out of bounds." (v, i) [%sexp_of: llvalue * int]
       |> Error.raise )
   else
     Error.create "Expected a tuple." (v, kind, i)

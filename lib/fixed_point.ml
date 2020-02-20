@@ -1,5 +1,3 @@
-open! Core
-
 module T = struct
   type t = { value : int; scale : int } [@@deriving hash, sexp]
 

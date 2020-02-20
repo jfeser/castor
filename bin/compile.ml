@@ -1,6 +1,8 @@
 open! Core
 open Castor
 open Collections
+open Abslayout_load
+open Abslayout_type
 
 let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
   Logs.info (fun m ->
@@ -11,30 +13,24 @@ let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
     let debug = debug
 
     let code_only = code_only
-
-    let layout_file =
-      if debug then
-        let layout_file =
-          match out_dir with
-          | Some d -> d ^ "/layout.txt"
-          | None -> "layout.txt"
-        in
-        Some layout_file
-      else None
-
-    let simplify = None
   end in
-  let module A = Abslayout_db.Make (CConfig) in
-  let module S = Serialize.Make (CConfig) (A) in
-  let module I = Irgen.Make (CConfig) (A) (S) () in
+  let layout_file =
+    if debug then
+      let layout_file =
+        match out_dir with Some d -> d ^ "/layout.txt" | None -> "layout.txt"
+      in
+      Some layout_file
+    else None
+  in
+  let module I = Irgen.Make (CConfig) () in
   let module C = Codegen.Make (CConfig) (I) () in
   let params = List.map params ~f:(fun (n, t) -> Name.create ~type_:t n) in
-  let ralgebra =
-    let params = Set.of_list (module Name) params in
-    A.load_string ~params (In_channel.input_all ch)
-  in
-  A.annotate_type ralgebra;
-  C.compile ~gprof ~params ?out_dir ralgebra |> ignore
+  load_string
+    ~params:(Set.of_list (module Name) params)
+    db (In_channel.input_all ch)
+  |> annotate_type db
+  |> C.compile ~gprof ~params ?out_dir ?layout_log:layout_file CConfig.conn
+  |> ignore
 
 let () =
   let open Command.Let_syntax in

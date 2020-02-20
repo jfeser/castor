@@ -1,5 +1,4 @@
-open! Core
-open Abslayout0
+open Ast
 
 exception ParseError of string * int * int
 
@@ -12,9 +11,4 @@ let lex_error lexbuf msg =
   let col = pos.pos_cnum - pos.pos_bol in
   raise (ParseError (msg, pos.pos_lnum, col))
 
-let node _spos _epos r =
-  let node = { node = r; meta = ref Univ_map.empty } in
-  node
-
-(* let node = Meta.set node Meta.start_pos spos in
-   * Meta.set node Meta.end_pos epos *)
+let node _spos _epos r = { node = r; meta = () }

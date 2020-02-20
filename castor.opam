@@ -30,6 +30,4 @@ depends: [
   "ppx_hash" {>= "v0.12"}
   "ppx_let" {>= "v0.12"}
   "visitors" {>= "20180513"}
-  "ounit" {with-test}
-  "expect_test_helpers_kernel" {with-test & >= "v0.12"}
 ]

@@ -1,4 +1,3 @@
-open! Core
 open Abslayout
 open Collections
 module A = Abslayout
@@ -59,21 +58,26 @@ let to_single_value t =
   t.(0)
 
 type agg =
-  | Sum of (Value.t * pred)
-  | Min of (Value.t * pred)
-  | Max of (Value.t * pred)
-  | Avg of (Value.t * int * pred)
+  | Sum of (Value.t * Pred.t)
+  | Min of (Value.t * Pred.t)
+  | Max of (Value.t * Pred.t)
+  | Avg of (Value.t * int * Pred.t)
   | Count of int
-  | Passthru of (Value.t option * pred)
+  | Passthru of (Value.t option * Pred.t)
 
 module Schema = struct
   let of_ralgebra ?scope r =
     let tbl = Hashtbl.create (module Name) in
-    schema_exn r
+    Schema.schema r
     |> List.iteri ~f:(fun i n ->
            Hashtbl.add_exn tbl ~key:(Name.copy ~scope n) ~data:i);
     tbl
 end
+
+let to_sequence g =
+  Sequence.unfold ~init:() ~f:(fun () ->
+      match Gen.get g with Some x -> Some (x, ()) | None -> None)
+  |> Sequence.memoize
 
 let eval { db; params } r =
   let scan =
@@ -84,7 +88,7 @@ let eval { db; params } r =
         in
         Db.exec_cursor_exn db schema_types
           (Printf.sprintf "select * from \"%s\"" r)
-        |> Gen.to_sequence |> Seq.memoize)
+        |> to_sequence |> Seq.memoize)
   in
   let rec eval_agg ctx preds schema tups =
     if Seq.is_empty tups then None
@@ -146,7 +150,7 @@ let eval { db; params } r =
     let open Value in
     let e = eval_pred ctx in
     match p with
-    | A.Int x -> Int x
+    | Int x -> Int x
     | Name n -> (
         match Ctx.find ctx n with
         | Some v -> v
@@ -161,7 +165,7 @@ let eval { db; params } r =
     | Null _ -> Null
     | As_pred (p, _) -> e p
     | Count | Sum _ | Avg _ | Min _ | Max _ | Row_number ->
-        Error.(create "Unexpected aggregate." p [%sexp_of: pred] |> raise)
+        Error.(create "Unexpected aggregate." p [%sexp_of: Pred.t] |> raise)
     | If (p1, p2, p3) -> if to_bool (e p1) then e p2 else e p3
     | First r -> eval ctx r |> Seq.hd_exn |> to_single_value
     | Exists r -> Bool (eval ctx r |> Seq.is_empty |> not)
@@ -178,7 +182,9 @@ let eval { db; params } r =
         | ExtractY -> Int (to_date (e p) |> Date.year)
         | ExtractM -> Int (to_date (e p) |> Date.month |> Month.to_int)
         | ExtractD -> Int (to_date (e p) |> Date.day)
-        | _ -> Error.(create "Unexpected operator" op [%sexp_of: unop] |> raise)
+        | _ ->
+            Error.(
+              create "Unexpected operator" op [%sexp_of: Pred.Unop.t] |> raise)
         )
     | Binop (op, p1, p2) -> (
         match op with
@@ -318,11 +324,6 @@ let eval { db; params } r =
     | As (_, r) -> eval ctx r
     | _ -> failwith ""
   in
-  let module M = Abslayout_db.Make (struct
-    let conn = db
-
-    let simplify = None
-  end) in
   (* Or_error.try_with ~backtrace:true (
    *   fun () -> *)
   Ok (eval (Ctx.of_map params) r)

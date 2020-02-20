@@ -1,6 +1,3 @@
-open! Core
-open Collections
-
 type t
 
 val create : ?pool_size:int -> string -> t
@@ -29,17 +26,20 @@ val exec_cursor_exn :
   ?batch_size:int ->
   ?params:string list ->
   t ->
-  Type.PrimType.t list ->
+  Prim_type.t list ->
   string ->
   Value.t array Gen.t
+
+val to_error : string * [ `Timeout | `Exn of exn | `Msg of string ] -> Error.t
 
 val exec_lwt_exn :
   ?params:string list ->
   ?timeout:float ->
   t ->
-  Type.PrimType.t list ->
+  Prim_type.t list ->
   string ->
-  (Value.t array, [ `Timeout | `Exn of exn ]) result Lwt_stream.t
+  (Value.t array, string * [ `Timeout | `Exn of exn | `Msg of string ]) result
+  Lwt_stream.t
 
 val check : t -> string -> unit Or_error.t
 

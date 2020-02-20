@@ -1,6 +1,7 @@
-open! Core
 open Collections
 open Abslayout
+open Schema
+module P = Pred.Infix
 
 type binop = [ `Le | `Lt | `Ge | `Gt | `Add | `Sub | `Mul | `Div | `Eq | `And ]
 [@@deriving sexp]
@@ -72,7 +73,7 @@ let subst_of_schema bind schema =
       |> Map.of_alist_exn (module Name)
 
 let type_to_cozy = function
-  | Type.PrimType.IntT _ | DateT _ -> "Int"
+  | Prim_type.IntT _ | DateT _ -> "Int"
   | BoolT _ -> "Bool"
   | StringT _ -> "String"
   | FixedT _ -> "Float"
@@ -81,14 +82,14 @@ let type_to_cozy = function
 let numeric float_fmt int_fmt t1 t2 n1 n2 =
   let p1, p2, t =
     match (t1, t2) with
-    | Type.PrimType.FixedT _, Type.PrimType.FixedT _ -> (n1, n2, `Float)
+    | Prim_type.FixedT _, Prim_type.FixedT _ -> (n1, n2, `Float)
     | IntT _, IntT _ | IntT _, DateT _ | DateT _, IntT _ | DateT _, DateT _ ->
         (n1, n2, `Int)
     | IntT _, FixedT _ -> (sprintf "i2f(%s)" n1, n2, `Float)
     | FixedT _, IntT _ -> (n1, sprintf "i2f(%s)" n2, `Float)
     | t, t' ->
         Error.create "Not a numeric type" (t, t')
-          [%sexp_of: Type.PrimType.t * Type.PrimType.t]
+          [%sexp_of: Prim_type.t * Prim_type.t]
         |> Error.raise
   in
   let fmt = match t with `Float -> float_fmt | `Int -> int_fmt in
@@ -96,8 +97,7 @@ let numeric float_fmt int_fmt t1 t2 n1 n2 =
 
 let eq t1 t2 v1 v2 =
   match (t1, t2) with
-  | Type.PrimType.StringT _, Type.PrimType.StringT _ ->
-      sprintf "streq(%s, %s)" v1 v2
+  | Prim_type.StringT _, Prim_type.StringT _ -> sprintf "streq(%s, %s)" v1 v2
   | _, _ -> sprintf "%s == %s" v1 v2
 
 let call' ~args n =
@@ -139,7 +139,7 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
 
     method agg_select sel q =
       let c = self#query q in
-      let subst = subst_of_schema "t" (schema_exn q) in
+      let subst = subst_of_schema "t" (schema q) in
       let out_exprs, queries =
         List.map sel ~f:(fun p ->
             match Pred.kind p with
@@ -147,11 +147,11 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
             | `Scalar ->
                 let c', s = self#pred subst p in
                 let c'', dummy =
-                  match schema_exn (select [ p ] q) with
+                  match schema (select [ p ] q) with
                   | [ n ] ->
                       let lit =
                         match Name.type_exn n with
-                        | IntT _ -> Int 0
+                        | IntT _ -> Ast.Int 0
                         | FixedT _ -> Fixed (Fixed_point.of_int 0)
                         | StringT _ -> String ""
                         | BoolT _ -> Bool false
@@ -214,7 +214,7 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
       @@ { empty with top_query = `Query name; queries = [ query ] }
 
     method filter p q =
-      let subst = subst_of_schema "t" (schema_exn q) in
+      let subst = subst_of_schema "t" (schema q) in
       let cq = self#query q in
       let cqp, cp = self#pred subst p in
       let ((name, _) as query) =
@@ -248,8 +248,8 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
             }
       | Filter (p, q) -> self#filter p q
       | Join { pred; r1; r2 } ->
-          let r1_schema = schema_exn r1 in
-          let r2_schema = schema_exn r2 in
+          let r1_schema = schema r1 in
+          let r2_schema = schema r2 in
           let subst =
             Map.merge_exn
               (subst_of_schema "t1" r1_schema)
@@ -278,7 +278,7 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
       | Select (sel, q) -> (
           match select_kind sel with
           | `Scalar ->
-              let subst = subst_of_schema "t" (schema_exn q) in
+              let subst = subst_of_schema "t" (schema q) in
               let c = self#query q in
               let queries, preds =
                 List.map sel ~f:(self#pred subst) |> List.unzip
@@ -293,13 +293,13 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
                 { empty with top_query = `Query name; queries = [ query ] }
           | `Agg -> self#agg_select sel q )
       | GroupBy (sel, key, q) ->
-          let kc = self#query (dedup (select (List.map ~f:Pred.name key) q)) in
+          let kc = self#query (dedup (select (List.map ~f:P.name key) q)) in
           let filter_preds, pred_args =
             List.map key ~f:(fun k ->
                 let arg =
                   Name.create ~type_:(Name.type_exn k) (Fresh.name fresh "x%d")
                 in
-                (Pred.(binop (Eq, name k, name arg)), arg))
+                (P.(name k = name arg), arg))
             |> List.unzip
           in
           let vc =
@@ -358,7 +358,7 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
             | Month -> sprintf "month(%s)" pred
             | ExtractY -> sprintf "extracty(%s)" pred
             | _ ->
-                Error.create "Unimplemented unop" op [%sexp_of: unop]
+                Error.create "Unimplemented unop" op [%sexp_of: Pred.Unop.t]
                 |> Error.raise
           in
           (queries, pred)

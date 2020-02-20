@@ -1,36 +1,22 @@
-open! Core
 open Project
+open Abslayout_load
+open Test_util
 
-module C = struct
-  let conn = Db.create "postgresql:///tpch_1k"
+let conn = Lazy.force tpch_conn
 
-  let verbose = false
-
-  let validate = false
-
-  let params =
-    let open Type.PrimType in
-    Set.of_list
-      (module Name)
-      [
-        Name.create ~type_:string_t "param1";
-        Name.create ~type_:string_t "param2";
-        Name.create ~type_:string_t "param3";
-      ]
-
-  let param_ctx = Map.empty (module Name)
-
-  let fresh = Fresh.create ()
-
-  let simplify = None
-end
-
-open C
-module M = Abslayout_db.Make (C)
+let params =
+  let open Prim_type in
+  Set.of_list
+    (module Name)
+    [
+      Name.create ~type_:string_t "param1";
+      Name.create ~type_:string_t "param2";
+      Name.create ~type_:string_t "param3";
+    ]
 
 let%expect_test "" =
   let r =
-    M.load_string ~params
+    load_string ~params conn
       {|
       alist(dedup(
               select([o_year],
@@ -152,7 +138,7 @@ let%expect_test "" =
 
 let%expect_test "" =
   let r =
-    M.load_string ~params
+    load_string ~params conn
       {|groupby([count() as c], [o_orderdate], dedup(select([o_orderdate, o_orderkey], orders)))|}
   in
   project ~params r |> Format.printf "%a@." Abslayout.pp;

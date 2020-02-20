@@ -1,5 +1,5 @@
 %{
-    open! Core
+
     open Parser_utils
 %}
 

@@ -1,11 +1,14 @@
-open! Core
 open Printf
 open Collections
+open Ast
+open Abslayout_visitors
+open Schema
 module A = Abslayout
+module P = Pred.Infix
 
 module Config = struct
   module type S = sig
-    include Abslayout_db.Config.S
+    val conn : Db.t
 
     val check_transforms : bool
 
@@ -13,10 +16,10 @@ module Config = struct
   end
 end
 
-module Make (Config : Config.S) () = struct
-  module M = Abslayout_db.Make (Config)
+let rec normal_meta_pred p = map_pred A.strip_meta normal_meta_pred p
 
-  type t = { name : string; f : A.t -> A.t list } [@@deriving sexp]
+module Make (Config : Config.S) () = struct
+  type t = { name : string; f : Ast.t -> Ast.t list } [@@deriving sexp]
 
   let fresh = Global.fresh
 
@@ -44,8 +47,8 @@ module Make (Config : Config.S) () = struct
     printf "Running %s\n" t.name;
     let rs =
       t.f r
-      |> List.dedup_and_sort ~compare:[%compare: Abslayout.t]
-      |> List.filter ~f:(fun r' -> not ([%compare.equal: Abslayout.t] r r'))
+      |> List.dedup_and_sort ~compare:[%compare: Ast.t]
+      |> List.filter ~f:(fun r' -> not ([%compare.equal: Ast.t] r r'))
     in
     let len = List.length rs in
     if len > 0 then (
@@ -56,8 +59,8 @@ module Make (Config : Config.S) () = struct
   let run_checked t r =
     let rs = run_unchecked t r in
     let check_schema r' =
-      let s = A.schema_exn r |> Set.of_list (module Name) in
-      let s' = A.schema_exn r' |> Set.of_list (module Name) in
+      let s = schema r |> Set.of_list (module Name) in
+      let s' = schema r' |> Set.of_list (module Name) in
       let schemas_ok = Set.is_subset s ~of_:s' in
       if not schemas_ok then
         Logs.warn (fun m ->
@@ -81,10 +84,10 @@ module Make (Config : Config.S) () = struct
   let replace_rel rel new_rel r =
     let visitor =
       object
-        inherit [_] Abslayout0.endo
+        inherit [_] endo
 
         method! visit_Relation () r' { r_name = rel'; _ } =
-          if String.(rel = rel') then new_rel.A.node else r'
+          if String.(rel = rel') then new_rel.node else r'
       end
     in
     visitor#visit_t () r
@@ -98,7 +101,7 @@ module Make (Config : Config.S) () = struct
           if no_params r then
             let scope = Fresh.name Global.fresh "s%d" in
             let scalars =
-              Schema.scoped scope (schema_exn r)
+              Schema.scoped scope (schema r)
               |> List.map ~f:(fun n -> scalar (Name n))
             in
             [ list r scope (tuple scalars Cross) ]
@@ -114,7 +117,7 @@ module Make (Config : Config.S) () = struct
         (function
         | { node = GroupBy (ps, key, r); _ } as rr when no_params rr ->
             let key_name = Fresh.name fresh "k%d" in
-            let key_preds = List.map key ~f:(fun n -> Name n) in
+            let key_preds = List.map key ~f:P.name in
             let filter_pred =
               List.map key ~f:(fun n ->
                   Binop (Eq, Name n, Name (Name.copy n ~scope:(Some key_name))))
@@ -153,12 +156,12 @@ module Make (Config : Config.S) () = struct
                 let new_key = List.filter key ~f:(fun k' -> Name.O.(k <> k')) in
                 let new_ps =
                   List.filter ps ~f:(fun p ->
-                      not ([%compare.equal: pred] p (Name k)))
-                  |> List.map ~f:(Pred.scoped (schema_exn lhs) scope)
+                      not ([%compare.equal: Pred.t] p (Name k)))
+                  |> List.map ~f:(Pred.scoped (schema lhs) scope)
                 in
                 let filter_pred =
                   Binop (Eq, Name k, Name (Name.create key_name))
-                  |> Pred.scoped (schema_exn lhs) scope
+                  |> Pred.scoped (schema lhs) scope
                 in
                 let new_r =
                   replace_rel rel (filter filter_pred (db_relation rel)) r
@@ -169,7 +172,7 @@ module Make (Config : Config.S) () = struct
                 in
                 let key_scalar =
                   let p =
-                    Pred.scoped (schema_exn lhs) scope
+                    Pred.scoped (schema lhs) scope
                       (As_pred (Name (Name.create key_name), Name.name k))
                   in
                   let s = scalar p in
@@ -202,7 +205,7 @@ module Make (Config : Config.S) () = struct
               List.map2_exn key new_key ~f:(fun n n' ->
                   Binop (Eq, Name n, Name (Name.create n')))
               |> List.reduce_exn ~f:(fun acc p -> Binop (And, acc, p))
-              |> Pred.scoped (schema_exn lhs) scope
+              |> Pred.scoped (schema lhs) scope
             in
             [ list lhs scope (select ps (filter p (filter filter_pred r))) ]
         | _ -> []);
@@ -217,7 +220,7 @@ module Make (Config : Config.S) () = struct
     let wrap_rel r wrapper =
       let visitor =
         object
-          inherit [_] Abslayout0.endo
+          inherit [_] A.endo
 
           method! visit_Relation () old r' =
             if String.(r = r'.r_name) then wrapper (relation r') else old
@@ -228,60 +231,56 @@ module Make (Config : Config.S) () = struct
     {
       name = "elim-groupby-approx";
       f =
-        (fun r ->
-          let r = Resolve.resolve ~params:Config.params r in
-          match r with
-          | { node = GroupBy (ps, key, r); _ }
-            when List.for_all key ~f:(fun n -> Option.is_some (Name.rel n)) ->
-              (* Create an alias for each key. *)
-              let key_aliases =
-                List.fold_left key
-                  ~init:(Map.empty (module String))
-                  ~f:(fun m k ->
-                    let k' = Name.name k ^ Fresh.name fresh "k%d" in
-                    Map.add_exn m ~key:(Name.name k) ~data:k')
-              in
-              (* First, group keys by their relation. *)
-              let key_groups =
-                List.fold_left key
-                  ~init:(Map.empty (module String))
-                  ~f:(fun m k ->
-                    Map.add_multi m ~key:(Option.value_exn (Name.rel k)) ~data:k)
-              in
-              (* Generate the relation of unique keys for each group. *)
-              let key_rels =
-                Map.mapi key_groups ~f:(fun ~key:rel ~data:ks ->
-                    dedup
-                      (select
-                         (List.map ks ~f:(fun n ->
-                              As_pred
-                                (Name n, Map.find_exn key_aliases (Name.name n))))
-                         (db_relation rel)))
-                |> Map.data
-              in
-              (* Join the key relations. *)
-              let key_rel = List.reduce_exn key_rels ~f:(join (Bool true)) in
-              (* Wrap each reference to the original relation in a filter. *)
-              let r =
-                Map.fold key_groups ~init:r ~f:(fun ~key:rel ~data:ks ->
-                    let filter_pred =
-                      List.map ks ~f:(fun n ->
-                          Binop
-                            ( Eq,
-                              Name n,
-                              Name
-                                ( Map.find_exn key_aliases (Name.name n)
-                                |> Name.create ) ))
-                      |> List.reduce_exn ~f:(fun p p' -> Binop (And, p, p'))
-                    in
-                    wrap_rel rel (fun r -> (filter filter_pred r).node))
-              in
-              let scope = Fresh.name Global.fresh "s%d" in
-              let ps =
-                List.map ~f:(Pred.scoped (schema_exn key_rel) scope) ps
-              in
-              [ list key_rel scope (select ps r) ]
-          | _ -> []);
+        (function
+        | { node = GroupBy (ps, key, r); _ }
+          when List.for_all key ~f:(fun n -> Option.is_some (Name.rel n)) ->
+            (* Create an alias for each key. *)
+            let key_aliases =
+              List.fold_left key
+                ~init:(Map.empty (module String))
+                ~f:(fun m k ->
+                  let k' = Name.name k ^ Fresh.name fresh "k%d" in
+                  Map.add_exn m ~key:(Name.name k) ~data:k')
+            in
+            (* First, group keys by their relation. *)
+            let key_groups =
+              List.fold_left key
+                ~init:(Map.empty (module String))
+                ~f:(fun m k ->
+                  Map.add_multi m ~key:(Option.value_exn (Name.rel k)) ~data:k)
+            in
+            (* Generate the relation of unique keys for each group. *)
+            let key_rels =
+              Map.mapi key_groups ~f:(fun ~key:rel ~data:ks ->
+                  dedup
+                    (select
+                       (List.map ks ~f:(fun n ->
+                            As_pred
+                              (Name n, Map.find_exn key_aliases (Name.name n))))
+                       (db_relation rel)))
+              |> Map.data
+            in
+            (* Join the key relations. *)
+            let key_rel = List.reduce_exn key_rels ~f:(join (Bool true)) in
+            (* Wrap each reference to the original relation in a filter. *)
+            let r =
+              Map.fold key_groups ~init:r ~f:(fun ~key:rel ~data:ks ->
+                  let filter_pred =
+                    List.map ks ~f:(fun n ->
+                        Binop
+                          ( Eq,
+                            Name n,
+                            Name
+                              ( Map.find_exn key_aliases (Name.name n)
+                              |> Name.create ) ))
+                    |> List.reduce_exn ~f:(fun p p' -> Binop (And, p, p'))
+                  in
+                  wrap_rel rel (fun r -> (filter filter_pred r).node))
+            in
+            let scope = Fresh.name Global.fresh "s%d" in
+            let ps = List.map ~f:(Pred.scoped (schema key_rel) scope) ps in
+            [ list key_rel scope (select ps r) ]
+        | _ -> []);
     }
     |> run_everywhere
 
@@ -315,7 +314,7 @@ module Make (Config : Config.S) () = struct
               let scope = Fresh.name Global.fresh "s%d" in
               let lhs = dedup (select select_list r) in
               let inner_filter_pred =
-                Pred.scoped (schema_exn lhs) scope inner_filter_pred
+                Pred.scoped (schema lhs) scope inner_filter_pred
               in
               [
                 outer_filter
@@ -341,7 +340,7 @@ module Make (Config : Config.S) () = struct
     let run_exn r =
       match r.node with
       | Filter (p, r') ->
-          let schema = schema_exn r' in
+          let schema = schema r' in
           let free_vars =
             Set.diff (pred_free p) (Set.of_list (module Name) schema)
             |> Set.to_list
@@ -392,7 +391,7 @@ module Make (Config : Config.S) () = struct
     let run_exn r =
       match r.node with
       | Filter (p, r') ->
-          let schema = schema_exn r' in
+          let schema = schema r' in
           let free_vars =
             Set.diff (pred_free p) (Set.of_list (module Name) schema)
             |> Set.to_list
@@ -432,7 +431,7 @@ module Make (Config : Config.S) () = struct
     let open A in
     let t = Pred.to_type p in
     let default_min =
-      let open Type.PrimType in
+      let open Prim_type in
       match t with
       | IntT _ -> Int (Int.min_value + 1)
       | FixedT _ -> Fixed Fixed_point.(min_value + of_int 1)
@@ -440,7 +439,7 @@ module Make (Config : Config.S) () = struct
       | _ -> failwith "Unexpected type."
     in
     let default_max =
-      let open Type.PrimType in
+      let open Prim_type in
       match t with
       | IntT _ -> Int Int.max_value
       | FixedT _ -> Fixed Fixed_point.max_value
@@ -451,7 +450,7 @@ module Make (Config : Config.S) () = struct
       match kind with
       | `Open -> Ok bound
       | `Closed -> (
-          let open Type.PrimType in
+          let open Prim_type in
           match t with
           | IntT _ -> Ok (Binop (Add, bound, Int 1))
           | DateT _ -> Ok (Binop (Add, bound, Unop (Day, Int 1)))
@@ -463,7 +462,7 @@ module Make (Config : Config.S) () = struct
       match kind with
       | `Closed -> Ok bound
       | `Open -> (
-          let open Type.PrimType in
+          let open Prim_type in
           match t with
           | IntT _ -> Ok (Binop (Add, bound, Int 1))
           | DateT _ -> Ok (Binop (Add, bound, Unop (Day, Int 1)))
@@ -488,7 +487,7 @@ module Make (Config : Config.S) () = struct
     let scope = Fresh.name Global.fresh "s%d" in
     let lhs = dedup (select select_list r) in
     ordered_idx lhs scope
-      (filter (Pred.scoped (schema_exn lhs) scope filter_pred) r)
+      (filter (Pred.scoped (schema lhs) scope filter_pred) r)
       {
         oi_key_layout = None;
         oi_lookup = [ (Some (lb, `Closed), Some (ub, `Open)) ];
@@ -496,7 +495,6 @@ module Make (Config : Config.S) () = struct
 
   let tf_elim_cmp_filter _ =
     let result_to_list = function Ok x -> [ x ] | Error _ -> [] in
-    let open A in
     {
       name = "elim-cmp-filter";
       f =
@@ -506,7 +504,7 @@ module Make (Config : Config.S) () = struct
            node = Filter (Binop (And, Binop (Ge, p, lb), Binop (Lt, p', ub)), r);
            _;
           }
-            when [%compare.equal: pred] p p' ->
+            when [%compare.equal: Pred.t] p p' ->
               gen_ordered_idx ~lb:(lb, `Closed) ~ub:(ub, `Open) p r
               |> result_to_list
           | { node = Filter (Binop (Ge, p', p), r); _ }
@@ -550,22 +548,13 @@ module Make (Config : Config.S) () = struct
    *   |> run_everywhere *)
 
   let same_orders r1 r2 =
-    let open A in
-    annotate_eq r1;
-    annotate_orders r1;
-    annotate_eq r2;
-    annotate_orders r2;
-    [%compare.equal: (pred * order) list]
-      Meta.(find_exn r1 order)
-      Meta.(find_exn r2 order)
+    [%compare.equal: (Pred.t * order) list] (A.order_of r1) (A.order_of r2)
 
   let orderby_list key r1 r2 =
     let open A in
-    annotate_eq r1;
-    annotate_eq r2;
-    let schema1 = schema_exn r1 |> Schema.scoped (scope_exn r1) in
-    let open Core in
-    let eqs = Meta.(find_exn r2 eq) in
+    let schema1 = Schema.schema r1 |> Schema.scoped (scope_exn r1) in
+
+    let eqs = eqs r2 in
     let names =
       List.concat_map eqs ~f:(fun (n, n') -> [ n; n' ])
       @ List.filter_map ~f:(fun (p, _) -> Pred.to_name p) key
@@ -610,7 +599,7 @@ module Make (Config : Config.S) () = struct
     let open A in
     match rs with
     | r :: rs ->
-        let schema = schema_exn r in
+        let schema = schema r in
         let sschema = Set.of_list (module Name) schema in
         let skey =
           Set.of_list
@@ -655,16 +644,15 @@ module Make (Config : Config.S) () = struct
   let tf_push_select _ =
     (* Generate aggregates for collections that act by concatenating their children. *)
     let gen_concat_select_list outer_preds inner_schema =
-      let open Abslayout in
       let visitor =
         object (self : 'a)
-          inherit [_] Abslayout0.mapreduce
+          inherit [_] A.mapreduce
 
           inherit [_] Util.list_monoid
 
           method add_agg aggs a =
             match
-              List.find aggs ~f:(fun (_, a') -> [%compare.equal: pred] a a')
+              List.find aggs ~f:(fun (_, a') -> [%compare.equal: Pred.t] a a')
             with
             | Some (n, _) -> (Name n, aggs)
             | None ->
@@ -722,7 +710,7 @@ module Make (Config : Config.S) () = struct
               ]
           | Select (ps, { node = AOrderedIdx (r, r', m); _ }) ->
               let outer_aggs, inner_aggs =
-                gen_concat_select_list ps (schema_exn r')
+                gen_concat_select_list ps (schema r')
               in
               let r, scope = (strip_scope r, scope_exn r) in
               [
@@ -730,13 +718,13 @@ module Make (Config : Config.S) () = struct
               ]
           | Select (ps, { node = AList (r, r'); _ }) ->
               let outer_aggs, inner_aggs =
-                gen_concat_select_list ps (schema_exn r')
+                gen_concat_select_list ps (schema r')
               in
               let r, scope = (strip_scope r, scope_exn r) in
               [ select outer_aggs (list r scope (select inner_aggs r')) ]
           | Select (ps, { node = ATuple (r' :: rs', Concat); _ }) ->
               let outer_aggs, inner_aggs =
-                gen_concat_select_list ps (schema_exn r')
+                gen_concat_select_list ps (schema r')
               in
               [
                 select outer_aggs
@@ -749,16 +737,15 @@ module Make (Config : Config.S) () = struct
   let tf_split_select _ =
     let open A in
     let gen_select_list outer_preds inner_rel =
-      let open Abslayout in
       let visitor =
         object (self : 'a)
-          inherit [_] Abslayout0.mapreduce
+          inherit [_] A.mapreduce
 
           inherit [_] Util.list_monoid
 
           method add_agg aggs a =
             match
-              List.find aggs ~f:(fun (_, a') -> [%compare.equal: pred] a a')
+              List.find aggs ~f:(fun (_, a') -> [%compare.equal: Pred.t] a a')
             with
             | Some (n, _) -> (Name n, aggs)
             | None ->
@@ -791,9 +778,7 @@ module Make (Config : Config.S) () = struct
         List.map inner_aggs ~f:(fun (n, a) -> As_pred (a, Name.name n))
       in
       (* Don't want to project out anything that we might need later. *)
-      let inner_fields =
-        schema_exn inner_rel |> List.map ~f:(fun n -> Name n)
-      in
+      let inner_fields = schema inner_rel |> List.map ~f:(fun n -> Name n) in
       (outer_aggs, inner_aggs @ inner_fields)
     in
     {
@@ -812,7 +797,7 @@ module Make (Config : Config.S) () = struct
   let predicate_is_valid p s =
     let visitor =
       object
-        inherit [_] Abslayout0.reduce
+        inherit [_] A.reduce
 
         method zero = true
 
@@ -840,13 +825,12 @@ module Make (Config : Config.S) () = struct
   (** Extend a select operator to emit all of the fields in with_. Returns the
      new select list. *)
   let extend_select ~with_ ps r =
-    let open A in
     let needed_fields =
       let of_list = Set.of_list (module Name) in
       (* These are the fields that are emitted by r, used in with_ and not
          exposed already by ps. *)
       Set.diff
-        (Set.inter with_ (of_list (schema_exn r)))
+        (Set.inter with_ (of_list (schema r)))
         (of_list (List.filter_map ~f:Pred.to_name ps))
       |> Set.to_list
       |> List.map ~f:(fun n -> Name n)
@@ -873,7 +857,7 @@ module Make (Config : Config.S) () = struct
     in
     List.filter ret ~f
     |> List.filter_map ~f:(fun (p, r) ->
-           let schema = schema_exn r in
+           let schema = schema r in
            if predicate_is_valid p schema then Some (filter p r)
            else (
              Logs.debug (fun m ->
@@ -909,7 +893,7 @@ module Make (Config : Config.S) () = struct
       f =
         hoist_filter_if ~f:(fun (p, _) ->
             (object
-               inherit [_] Abslayout0.reduce
+               inherit [_] A.reduce
 
                inherit [_] Util.disj_monoid
 
@@ -1012,13 +996,13 @@ module Make (Config : Config.S) () = struct
   let eq_preds r =
     let visitor =
       object
-        inherit [_] Abslayout0.reduce
+        inherit [_] A.reduce
 
         inherit [_] Util.list_monoid
 
-        method! visit_Binop ps p =
-          let op, arg1, arg2 = p in
-          if [%compare.equal: A.binop] op Eq then (arg1, arg2) :: ps else ps
+        method! visit_Binop ps op arg1 arg2 =
+          if [%compare.equal: Pred.Binop.t] op Eq then (arg1, arg2) :: ps
+          else ps
       end
     in
     visitor#visit_t [] r
@@ -1039,7 +1023,7 @@ module Make (Config : Config.S) () = struct
       dedup (select [ As_pred (Name name, fresh_name) ] (db_relation rel))
     in
     let pred =
-      Pred.scoped (schema_exn lhs) scope
+      Pred.scoped (schema lhs) scope
         (Binop (Eq, Name name, Name (Name.create fresh_name)))
     in
     let filtered_rel = filter pred (db_relation rel) in
@@ -1085,11 +1069,11 @@ module Make (Config : Config.S) () = struct
   let replace_pred r p1 p2 =
     let visitor =
       object
-        inherit [_] Abslayout0.endo as super
+        inherit [_] A.endo as super
 
         method! visit_pred () p =
           let p = super#visit_pred () p in
-          if [%compare.equal: A.pred] p p1 then p2 else p
+          if [%compare.equal: Pred.t] p p1 then p2 else p
       end
     in
     visitor#visit_t () r
@@ -1126,7 +1110,6 @@ module Make (Config : Config.S) () = struct
               (select
                  [ As_pred (Name (Name.copy ~scope:None name), fresh_name) ]
                  (db_relation rel))
-            |> Resolve.resolve ~params:Config.params
           in
           let scope = Fresh.name Global.fresh "s%d" in
           let pred =
@@ -1134,7 +1117,7 @@ module Make (Config : Config.S) () = struct
               ( Eq,
                 Name (Name.copy ~scope:None name),
                 Name (Name.create fresh_name) )
-            |> Pred.scoped (schema_exn lhs) scope
+            |> Pred.scoped (schema lhs) scope
           in
           let filtered_rel = filter pred (db_relation rel) in
           List.map keys ~f:(fun k ->
@@ -1158,13 +1141,13 @@ module Make (Config : Config.S) () = struct
           Error.create "Unexpected args." args [%sexp_of: string list]
           |> Error.raise
     in
-    let rel_schema = schema_exn (db_relation rel) in
+    let rel_schema = schema (db_relation rel) in
     let eq = [%compare.equal: Name.t] in
     {
       name = "split-out";
       f =
         (fun r ->
-          let schema = schema_exn r in
+          let schema = schema r in
           if List.mem schema pk ~equal:eq then
             let pk_rel = Option.value_exn (Name.rel pk) in
             let rel_fresh_k = sprintf "%s_%s" pk_rel (Fresh.name fresh "%d") in
@@ -1292,21 +1275,19 @@ module Make (Config : Config.S) () = struct
   let is_correlated subquery input_schema =
     not
       (Set.is_empty
-         (Set.inter
-            Meta.(find_exn subquery free)
-            (Set.of_list (module Name) input_schema)))
+         (Set.inter subquery.meta (Set.of_list (module Name) input_schema)))
 
   let tf_elim_subquery _ =
     let open A in
     let f r_main =
+      let r_main = annotate_free r_main in
       match r_main.node with
       | Filter (pred, r) ->
-          annotate_free r_main;
-          let schema = schema_exn r in
+          let schema = Schema.schema r in
           (* Mapping from uncorrelated subqueries to unique names. *)
           let query_names =
             (object (self)
-               inherit [_] Abslayout0.reduce
+               inherit [_] A.reduce
 
                inherit [_] Util.list_monoid
 
@@ -1314,7 +1295,7 @@ module Make (Config : Config.S) () = struct
                  if is_correlated query schema then xs
                  else
                    let result_type =
-                     match schema_exn query with
+                     match Schema.schema query with
                      | [ n ] -> Name.type_exn n
                      | _ -> failwith "Unexpected schema."
                    in
@@ -1326,20 +1307,23 @@ module Make (Config : Config.S) () = struct
           in
           let subst_query ~for_:r ~in_:outer_pred new_pred =
             (object
-               inherit [_] Abslayout0.endo
+               inherit [_] A.endo
 
                method! visit_Exists () p' r' =
-                 if [%compare.equal: A.t] r r' then new_pred else p'
+                 if [%compare.equal: Ast.t] r r' then new_pred else p'
 
                method! visit_First () p' r' =
-                 if [%compare.equal: A.t] r r' then new_pred else p'
+                 if [%compare.equal: Ast.t] r r' then new_pred else p'
             end)
               #visit_pred () outer_pred
           in
+          let pred = normal_meta_pred pred in
+          let r = strip_meta r in
           (* For each subquery, generate a join *)
           List.map query_names ~f:(fun (n, q) ->
+              let q = strip_meta q in
               let select_list =
-                schema_exn q
+                Schema.schema q
                 |> List.map ~f:(fun n' -> As_pred (Name n', Name.name n))
               in
               join

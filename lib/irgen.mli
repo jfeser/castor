@@ -1,4 +1,4 @@
-open! Core
+open Ast
 open Implang
 
 module Config : sig
@@ -20,13 +20,9 @@ type ir_module = {
 exception IRGenError of Error.t
 
 module type S = sig
-  val irgen : params:Name.t list -> data_fn:string -> Abslayout.t -> ir_module
+  val irgen : params:Name.t list -> len:int -> Serialize.meta annot -> ir_module
 
   val pp : Formatter.t -> ir_module -> unit
 end
 
-module Make
-    (Config : Config.S)
-    (Abslayout_db : Abslayout_db.S)
-    (Serialize : Serialize.S)
-    () : S
+module Make (Config : Config.S) () : S

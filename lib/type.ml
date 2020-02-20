@@ -1,6 +1,4 @@
-open! Core
 open Collections
-include Type0
 
 exception TypeError of Error.t [@@deriving sexp]
 
@@ -136,25 +134,19 @@ module T = struct
     range : AbsInt.t;
     distinct : ((int, Int.comparator_witness) Distinct.t[@sexp.opaque]);
         [@compare.ignore]
-    nullable : (bool[@sexp.bool]);
+    nullable : bool; [@sexp.bool]
   }
   [@@deriving compare, sexp]
 
-  type date = {
-    range : AbsInt.t;
-    distinct : ((int, Int.comparator_witness) Distinct.t[@sexp.opaque]);
-        [@compare.ignore]
-    nullable : (bool[@sexp.bool]);
-  }
-  [@@deriving compare, sexp]
+  type date = int_ [@@deriving compare, sexp]
 
-  type bool_ = { nullable : (bool[@sexp.bool]) } [@@deriving compare, sexp]
+  type bool_ = { nullable : bool [@sexp.bool] } [@@deriving compare, sexp]
 
   type string_ = {
     nchars : AbsInt.t;
     distinct : ((string, String.comparator_witness) Distinct.t[@sexp.opaque]);
         [@compare.ignore]
-    nullable : (bool[@sexp.bool]);
+    nullable : bool; [@sexp.bool]
   }
   [@@deriving compare, sexp]
 
@@ -166,7 +158,7 @@ module T = struct
 
   type ordered_idx = { key_count : AbsInt.t } [@@deriving compare, sexp]
 
-  type fixed = { value : AbsFixed.t; nullable : (bool[@sexp.bool]) }
+  type fixed = { value : AbsFixed.t; nullable : bool [@sexp.bool] }
   [@@deriving compare, sexp]
 
   type t =
@@ -188,7 +180,7 @@ end
 include T
 
 let least_general_of_primtype = function
-  | PrimType.IntT { nullable } ->
+  | Prim_type.IntT { nullable } ->
       IntT
         { range = AbsInt.bot; nullable; distinct = Distinct.empty (module Int) }
   | NullT -> NullT

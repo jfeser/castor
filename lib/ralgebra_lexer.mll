@@ -1,9 +1,9 @@
 {
-open! Core
+
 open Ralgebra_parser
 open Parser_utils
 
-module A = Abslayout0
+module A = Ast
 
 let keyword_tbl = Hashtbl.of_alist_exn (module String) [
 "select", SELECT;
@@ -25,10 +25,10 @@ let keyword_tbl = Hashtbl.of_alist_exn (module String) [
 "max", MAX;
 "avg", AVG;
 "sum", SUM;
-"int", PRIMTYPE (Type0.PrimType.int_t);
-"bool", PRIMTYPE (Type0.PrimType.bool_t);
-"string", PRIMTYPE (Type0.PrimType.string_t);
-"fixed", PRIMTYPE (Type0.PrimType.fixed_t);
+"int", PRIMTYPE (Prim_type.int_t);
+"bool", PRIMTYPE (Prim_type.bool_t);
+"string", PRIMTYPE (Prim_type.string_t);
+"fixed", PRIMTYPE (Prim_type.fixed_t);
 "as", AS;
 "null", NULL;
 "true", BOOL true;
@@ -39,19 +39,19 @@ let keyword_tbl = Hashtbl.of_alist_exn (module String) [
 "if", IF;
 "then", THEN;
 "else", ELSE;
-"month", MONTH A.Month;
-"day", DAY A.Day;
-"year", YEAR A.Year;
+"month", MONTH A.Unop.Month;
+"day", DAY A.Unop.Day;
+"year", YEAR A.Unop.Year;
 "date", DATEKW;
 "exists", EXISTS;
-"not", NOT A.Not;
+"not", NOT A.Unop.Not;
 "substring", SUBSTRING;
-"strpos", STRPOS A.Strpos;
-"strlen", STRLEN A.Strlen;
+"strpos", STRPOS A.Binop.Strpos;
+"strlen", STRLEN A.Unop.Strlen;
 "concat", KIND A.Concat;
-"to_year", EXTRACTY A.ExtractY;
-"to_mon", EXTRACTM A.ExtractM;
-"to_day", EXTRACTD A.ExtractD;
+"to_year", EXTRACTY A.Unop.ExtractY;
+"to_mon", EXTRACTM A.Unop.ExtractM;
+"to_day", EXTRACTD A.Unop.ExtractD;
 "row_number", ROW_NUMBER;
 "range", RANGE;
   ]
@@ -75,18 +75,18 @@ rule token = parse
   | ":"        { COLON }
   | "."        { DOT }
   | ","        { COMMA }
-  | "<="       { LE A.Le }
-  | ">="       { GE A.Ge }
-  | "<"        { LT A.Lt }
-  | ">"        { GT A.Gt }
-  | "="        { EQ A.Eq }
-  | "&&"       { AND A.And }
-  | "||"       { OR A.Or }
-  | "+"        { ADD A.Add }
-  | "-"        { SUB A.Sub }
-  | "*"        { MUL A.Mul }
-  | "/"        { DIV A.Div }
-  | "%"        { MOD A.Mod }
+  | "<="       { LE A.Binop.Le }
+  | ">="       { GE A.Binop.Ge }
+  | "<"        { LT A.Binop.Lt }
+  | ">"        { GT A.Binop.Gt }
+  | "="        { EQ A.Binop.Eq }
+  | "&&"       { AND A.Binop.And }
+  | "||"       { OR A.Binop.Or }
+  | "+"        { ADD A.Binop.Add }
+  | "-"        { SUB A.Binop.Sub }
+  | "*"        { MUL A.Binop.Mul }
+  | "/"        { DIV A.Binop.Div }
+  | "%"        { MOD A.Binop.Mod }
   | int as x   { INT (Int.of_string x) }
   | fixed as x { FIXED (Fixed_point.of_string x) }
   | '"'        { STR (string (Buffer.create 10) lexbuf) }

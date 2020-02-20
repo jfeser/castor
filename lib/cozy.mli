@@ -1,4 +1,4 @@
-open! Core
+open Ast
 
 type binop = [ `Le | `Lt | `Ge | `Gt | `Add | `Sub | `Mul | `Div | `Eq | `And ]
 [@@deriving sexp]
@@ -31,6 +31,6 @@ and query =
 
 val cost : query -> Big_o.t
 
-val to_string : string -> Name.t List.t -> Abslayout.t -> string
+val to_string : string -> Name.t List.t -> t -> string
 (** Convert a layout to a cozy query. Takes the name for the benchmark, a list
    of parameters, and a layout. *)

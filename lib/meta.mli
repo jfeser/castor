@@ -1,11 +1,8 @@
-open! Core
-open Abslayout0
+open Ast
 
-type t = Abslayout0.meta [@@deriving sexp_of]
+type t = Univ_map.t ref [@@deriving sexp_of]
 
 type 'a key = 'a Univ_map.Key.t
-
-type pos = Pos of int | Many_pos
 
 type lexpos = Lexing.position = {
   pos_fname : string;
@@ -17,35 +14,33 @@ type lexpos = Lexing.position = {
 
 val empty : unit -> t
 
-val defs : (Name.t option * pred) list key
+(* val defs : (Name.t option * Ast.t Ast.pred) list key
+ * 
+ * val align : int key
+ * 
+ * val start_pos : lexpos key
+ * 
+ * val end_pos : lexpos key
+ * 
+ * val free : Set.M(Name).t key
+ * 
+ * val eq : (Name.t * Name.t) list key
+ * 
+ * val order : (Ast.t Ast.pred * Ast.order) list key
+ * 
+ * val type_ : Type.t key
+ * 
+ * val refcnt : int Map.M(Name).t key *)
 
-val pos : pos key
+val find : t annot -> 'a key -> 'a option
 
-val align : int key
+val find_exn : t annot -> 'a key -> 'a
 
-val start_pos : lexpos key
+val set : t annot -> 'a key -> 'a -> t annot
 
-val end_pos : lexpos key
+val set_m : t annot -> 'a key -> 'a -> unit
 
-val free : Set.M(Name).t key
-
-val eq : (Name.t * Name.t) list key
-
-val order : (Abslayout0.pred * order) list key
-
-val type_ : Type.t key
-
-val refcnt : int Map.M(Name).t key
-
-val find : Abslayout0.t -> 'a key -> 'a option
-
-val find_exn : Abslayout0.t -> 'a key -> 'a
-
-val set : Abslayout0.t -> 'a key -> 'a -> Abslayout0.t
-
-val set_m : Abslayout0.t -> 'a key -> 'a -> unit
-
-val update : Abslayout0.t -> 'a key -> f:('a option -> 'a) -> unit
+val update : t annot -> 'a key -> f:('a option -> 'a) -> unit
 
 module Direct : sig
   val find : t -> 'a key -> 'a option

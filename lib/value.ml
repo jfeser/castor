@@ -1,4 +1,3 @@
-open! Core
 open Collections
 
 module T = struct
@@ -18,7 +17,7 @@ module C = Comparable.Make (T)
 module O : Comparable.Infix with type t := t = C
 
 let of_pred =
-  let module A = Abslayout0 in
+  let module A = Ast in
   function
   | A.Int x -> Int x
   | A.String x -> String x
@@ -48,7 +47,7 @@ let to_bool = function Bool x -> x | _ -> failwith "Not a bool."
 let to_string = function String x -> x | _ -> failwith "Not a string."
 
 let to_pred =
-  let module A = Abslayout0 in
+  let module A = Ast in
   function
   | Int x -> A.Int x
   | String x -> A.String x

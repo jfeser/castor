@@ -1,5 +1,3 @@
-open! Core
-
 let less_msb x y = x < y && x < x lxor y
 
 let compare lhs rhs =

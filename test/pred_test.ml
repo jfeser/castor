@@ -1,4 +1,3 @@
-open! Core
 open Pred
 
 let%expect_test "" =

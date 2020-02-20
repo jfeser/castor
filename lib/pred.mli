@@ -1,82 +1,125 @@
-open! Core
+open Ast
+module Binop = Ast.Binop
+module Unop = Ast.Unop
 
-type t = Abslayout0.pred =
-  | Name of Name.t
-  | Int of int
-  | Fixed of Fixed_point.t
-  | Date of Core.Date.t
-  | Bool of bool
-  | String of string
-  | Null of Type.PrimType.t option
-  | Unop of (Abslayout0.unop * t)
-  | Binop of (Abslayout0.binop * t * t)
-  | As_pred of (t * string)
-  | Count
-  | Row_number
-  | Sum of t
-  | Avg of t
-  | Min of t
-  | Max of t
-  | If of t * t * t
-  | First of Abslayout0.t
-  | Exists of Abslayout0.t
-  | Substring of t * t * t
-[@@deriving compare, hash, variants, sexp_of]
+type t = Ast.t Ast.pred [@@deriving compare, hash, sexp]
 
 include Comparator.S with type t := t
 
 module O : Comparable.Infix with type t := t
 
-val pp : Format.formatter -> t -> unit
+module Infix : sig
+  val name : Name.t -> 'a annot pred
+
+  val int : int -> 'a annot pred
+
+  val fixed : Fixed_point.t -> 'a annot pred
+
+  val date : Date.t -> 'a annot pred
+
+  val bool : bool -> 'a annot pred
+
+  val string : string -> 'a annot pred
+
+  val null : Prim_type.t option -> 'a annot pred
+
+  val not : 'a annot pred -> 'a annot pred
+
+  val day : 'a annot pred -> 'a annot pred
+
+  val month : 'a annot pred -> 'a annot pred
+
+  val year : 'a annot pred -> 'a annot pred
+
+  val strlen : 'a annot pred -> 'a annot pred
+
+  val extract_y : 'a annot pred -> 'a annot pred
+
+  val extract_m : 'a annot pred -> 'a annot pred
+
+  val extract_d : 'a annot pred -> 'a annot pred
+
+  val ( + ) : 'a annot pred -> 'a annot pred -> 'a annot pred
+
+  val ( - ) : 'a annot pred -> 'a annot pred -> 'a annot pred
+
+  val ( / ) : 'a annot pred -> 'a annot pred -> 'a annot pred
+
+  val ( * ) : 'a annot pred -> 'a annot pred -> 'a annot pred
+
+  val ( = ) : 'a annot pred -> 'a annot pred -> 'a annot pred
+
+  val ( < ) : 'a annot pred -> 'a annot pred -> 'a annot pred
+
+  val ( <= ) : 'a annot pred -> 'a annot pred -> 'a annot pred
+
+  val ( > ) : 'a annot pred -> 'a annot pred -> 'a annot pred
+
+  val ( >= ) : 'a annot pred -> 'a annot pred -> 'a annot pred
+
+  val ( && ) : 'a annot pred -> 'a annot pred -> 'a annot pred
+
+  val ( || ) : 'a annot pred -> 'a annot pred -> 'a annot pred
+
+  val ( mod ) : 'a annot pred -> 'a annot pred -> 'a annot pred
+
+  val strpos : 'a annot pred -> 'a annot pred -> 'a annot pred
+
+  val as_ : 'a annot pred -> string -> 'a annot pred
+end
+
+val pp : Format.formatter -> 'a annot pred -> unit
 
 val of_lexbuf_exn : Lexing.lexbuf -> t
 
 val of_string_exn : string -> t
 
-val kind : t -> [ `Agg | `Scalar | `Window ]
+val kind : 'a annot pred -> [ `Agg | `Scalar | `Window ]
 
-val to_type : t -> Type.PrimType.t
+val to_type : 'a annot pred -> Prim_type.t
 
-val to_name : t -> Name.t option
+val to_name : 'a annot pred -> Name.t option
 
-val eqs : t -> (Name.t * Name.t) List.t
+val eqs : 'a annot pred -> (Name.t * Name.t) List.t
 
-val names : t -> Set.M(Name).t
+val names : 'a annot pred -> Set.M(Name).t
 
-val collect_aggs : t -> t * (string * t) List.t
+val collect_aggs :
+  'a annot pred -> 'a annot pred * (string * 'a annot pred) List.t
 
 val simplify : t -> t
 
-val scoped : Name.t List.t -> string -> t -> t
+val scoped : Name.t List.t -> string -> 'a annot pred -> 'a annot pred
 (** Apply a scope to each occurrence of a name in the list. Does not descend into
    subqueries. *)
 
-val unscoped : String.t -> t -> t
+val unscoped : String.t -> 'a annot pred -> 'a annot pred
 
-val remove_as : t -> t
+val remove_as : 'a annot pred -> 'a annot pred
 
-val ensure_alias : t -> t
+val ensure_alias : 'a annot pred -> 'a annot pred
 (** Ensure that a predicate is decorated with an alias. If the predicate is
    nameless, then the alias will be fresh. *)
 
-val subst : t Map.M(Name).t -> t -> t
+val subst : 'a annot pred Map.M(Name).t -> 'a annot pred -> 'a annot pred
 
-val subst_tree : (t, t, 'a) Map.t -> t -> t
+val subst_tree :
+  ('a annot pred, 'a annot pred, _) Map.t -> 'a annot pred -> 'a annot pred
 
-val conjoin : t list -> t
+val conjoin : 'a annot pred list -> 'a annot pred
 
-val conjuncts : t -> t List.t
+val conjuncts : 'a annot pred -> 'a annot pred List.t
 
-val disjuncts : t -> t List.t
+val disjuncts : 'a annot pred -> 'a annot pred List.t
 
-val sum_exn : t List.t -> t
+val sum_exn : 'a annot pred List.t -> 'a annot pred
 
-val pseudo_bool : t -> t
+val pseudo_bool : 'a annot pred -> 'a annot pred
 
-val min_of : t -> t -> t
+val min_of : 'a annot pred -> 'a annot pred -> 'a annot pred
 
-val max_of : t -> t -> t
+val max_of : 'a annot pred -> 'a annot pred -> 'a annot pred
 
-val to_nnf : t -> t
+val to_nnf : 'a annot pred -> 'a annot pred
 
 val to_static : params:Set.M(Name).t -> t -> t

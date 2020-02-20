@@ -1,41 +1,4 @@
-open! Core
-open Type.PrimType
-
-let run_in_fork (type a) (thunk : unit -> a) : a =
-  let rd, wr = Unix.pipe () in
-  let rd = Unix.in_channel_of_descr rd in
-  let wr = Unix.out_channel_of_descr wr in
-  match Unix.fork () with
-  | `In_the_child ->
-      Marshal.(to_channel wr (thunk ()) [ Closures ]);
-      exit 0
-  | `In_the_parent _ -> Marshal.(from_channel rd)
-
-let run_in_fork_timed (type a) ?time ?(sleep_sec = 0.001) (thunk : unit -> a) :
-    a option =
-  let rd, wr = Unix.pipe () in
-  let rd = Unix.in_channel_of_descr rd in
-  let wr = Unix.out_channel_of_descr wr in
-  match Unix.fork () with
-  | `In_the_child ->
-      Marshal.(to_channel wr (thunk ()) [ Closures ]);
-      exit 0
-  | `In_the_parent pid -> (
-      match time with
-      | Some span ->
-          let start = Time.now () in
-          let rec sleep () =
-            if Time.Span.(Time.(diff (now ()) start) > span) then (
-              Signal.(send_i kill (`Pid pid));
-              None )
-            else (
-              Unix.nanosleep sleep_sec |> ignore;
-              match Unix.wait_nohang (`Pid pid) with
-              | None -> sleep ()
-              | Some _ -> Some Marshal.(from_channel rd) )
-          in
-          sleep ()
-      | None -> Some Marshal.(from_channel rd) )
+open Prim_type
 
 module Expect_test_config = struct
   include Expect_test_config
@@ -99,9 +62,7 @@ let create db name fields values =
   Db.(
     exec db (sprintf "create table %s (%s)" name fields_sql) |> command_ok_exn);
   List.iter values ~f:(fun vs ->
-      let values_sql =
-        List.map vs ~f:Value.to_sql |> String.concat ~sep:", "
-      in
+      let values_sql = List.map vs ~f:Value.to_sql |> String.concat ~sep:", " in
       Db.(
         exec db (sprintf "insert into %s values (%s)" name values_sql)
         |> command_ok_exn))
@@ -224,3 +185,7 @@ end
 let sum_complex =
   "Select([sum(f) + 5, count() + sum(f / 2)], AList(r1 as k, \
    ATuple([AScalar(k.f), AScalar((k.g - k.f) as v)], cross)))"
+
+let tpch_conn = lazy (Db.create @@ Sys.getenv_exn "CASTOR_TPCH_TEST_DB")
+
+let tpch_full_conn = lazy (Db.create @@ Sys.getenv_exn "CASTOR_TPCH_DB")

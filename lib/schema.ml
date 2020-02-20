@@ -1,7 +1,7 @@
-open! Core
-open Abslayout0
+open Ast
+open Prim_type
 
-type t = Name.t list [@@deriving sexp]
+type t = Name.t list [@@deriving compare, sexp]
 
 let scoped s = List.map ~f:(Name.scoped s)
 
@@ -14,58 +14,52 @@ let to_name = function
   | As_pred (_, n) -> Some (Name.create n)
   | _ -> None
 
-let rec to_type =
-  let open Type.PrimType in
-  function
-  | As_pred (p, _) -> to_type p
-  | Name n -> Name.Meta.(find_exn n type_)
+let to_type_open schema to_type = function
+  | As_pred (p, _) | Sum p | Min p | Max p -> to_type p
+  | Name n -> Name.type_exn n
   | Date _ | Unop ((Year | Month | Day), _) -> date_t
   | Int _ | Row_number
   | Unop ((Strlen | ExtractY | ExtractM | ExtractD), _)
-  | Count ->
+  | Count
+  | Binop (Strpos, _, _) ->
       int_t
   | Fixed _ | Avg _ -> fixed_t
   | Bool _ | Exists _
   | Binop ((Eq | Lt | Le | Gt | Ge | And | Or), _, _)
   | Unop (Not, _) ->
       bool_t
-  | String _ -> string_t
+  | String _ | Substring _ -> string_t
   | Null None -> failwith "Untyped null."
   | Null (Some t) -> t
-  | Binop ((Add | Sub | Mul | Div | Mod), p1, p2) ->
-      let s1 = to_type p1 in
-      let s2 = to_type p2 in
-      Type.PrimType.unify s1 s2
-  | Binop (Strpos, _, _) -> int_t
-  | Sum p | Min p | Max p -> to_type p
-  | If (_, p1, p2) ->
-      let s1 = to_type p1 in
-      let s2 = to_type p2 in
-      Type.PrimType.unify s1 s2
+  | Binop ((Add | Sub | Mul | Div | Mod), p1, p2) | If (_, p1, p2) ->
+      unify (to_type p1) (to_type p2)
   | First r -> (
-      match schema_exn r with
-      | [ n ] -> Name.Meta.(find_exn n type_)
+      match schema r with
+      | [ n ] -> Name.type_exn n
       | [] -> failwith "Unexpected empty schema."
       | _ -> failwith "Too many fields." )
-  | Substring _ -> string_t
 
-and to_type_opt p = Or_error.try_with (fun () -> to_type p)
-
-and schema r =
+let schema_open schema r =
+  let rec to_type p = to_type_open schema to_type p in
   let of_preds =
     List.map ~f:(fun p ->
-        let t = to_type_opt p |> Or_error.ok in
+        let t = Or_error.try_with (fun () -> to_type p) |> Or_error.ok in
         match to_name p with
         | Some n -> Name.copy ~type_:t n
         | None ->
             Log.err (fun m ->
-                m "Tried to get schema of unnamed predicate %a." pp_pred p);
+                m "Tried to get schema of unnamed predicate %a."
+                  Abslayout_pp.pp_pred p);
             Name.create ?type_:t (Fresh.name Global.fresh "x%d"))
   in
   match r.node with
-  | AList (_, r) | DepJoin { d_rhs = r; _ } -> schema r |> unscoped
+  | AList (_, r)
+  | DepJoin { d_rhs = r; _ }
+  | Filter (_, r)
+  | Dedup r
+  | OrderBy { rel = r; _ } ->
+      schema r |> unscoped
   | Select (x, _) | GroupBy (x, _, _) -> of_preds x |> unscoped
-  | Filter (_, r) | Dedup r | OrderBy { rel = r; _ } -> schema r |> unscoped
   | Join { r1; r2; _ } -> schema r1 @ schema r2 |> unscoped
   | AOrderedIdx (r1, r2, _) | AHashIdx { hi_keys = r1; hi_values = r2; _ } ->
       schema r1 @ schema r2 |> unscoped
@@ -80,12 +74,19 @@ and schema r =
       Error.(
         create "Missing schema annotation." r_name [%sexp_of: string] |> raise)
   | Range (p, p') ->
-      let t = Type.PrimType.unify (to_type p) (to_type p') in
+      let t = Prim_type.unify (to_type p) (to_type p') in
       [ Name.create ~type_:t "range" ]
 
-and schema_exn r =
-  let s = schema r in
-  List.iter ~f:(fun n -> Name.Meta.(find_exn n type_) |> ignore) s;
-  s
+let rec schema r = schema_open schema r
+
+let rec to_type q =
+  let rec to_type q = to_type_open schema to_type q in
+  try to_type q
+  with exn ->
+    Error.create "Failed to compute type." (q, exn)
+      [%sexp_of: _ annot pred * exn]
+    |> Error.raise
+
+let to_type_opt q = Or_error.try_with (fun () -> to_type q)
 
 let to_select_list s = List.map s ~f:(fun n -> Name n)

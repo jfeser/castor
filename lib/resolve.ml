@@ -1,32 +1,9 @@
-open! Core
-open Abslayout0
 open Collections
+open Ast
+open Abslayout_visitors
+module A = Abslayout
+module P = Pred.Infix
 module N = Name
-
-let meta_ref = Univ_map.Key.create ~name:"meta-ref" [%sexp_of: Univ_map.t ref]
-
-let mut_refcnt =
-  Univ_map.Key.create ~name:"mut-refcnt" [%sexp_of: int ref Map.M(Name).t]
-
-let fix_meta_visitor =
-  object
-    inherit [_] map as super
-
-    method! visit_Name () n =
-      match N.Meta.find n meta_ref with
-      | Some m -> Name (N.copy n ~meta:!m)
-      | None -> Name n
-
-    method! visit_t () ({ meta = _; _ } as r) =
-      let ({ meta; _ } as r) = super#visit_t () r in
-      (* Replace mutable refcounts with immutable refcounts. *)
-      ( match Univ_map.find !meta mut_refcnt with
-      | Some defs ->
-          meta := Map.map defs ~f:( ! ) |> Univ_map.set !meta Meta.refcnt;
-          meta := Univ_map.remove !meta mut_refcnt
-      | None -> () );
-      r
-  end
 
 let shadow_check r =
   let relations_visitor =
@@ -58,9 +35,9 @@ let shadow_check r =
             self#check_name n;
             self#visit_t () r'
         | Relation r -> self#check_name r.r_name
-        | r' ->
-            self#visit_node () r';
-            Log.err (fun m -> m "Missing as: %a" pp_small r)
+        | _ ->
+            self#visit_t () r;
+            Log.err (fun m -> m "Missing as: %a" A.pp_small r)
 
       method! visit_AList () (rk, rv) =
         self#check_alias () rk;
@@ -75,64 +52,74 @@ let shadow_check r =
         self#visit_t () rv
 
       method! visit_As () _ r =
-        Log.err (fun m -> m "Unexpected as: %a" pp_small r);
+        Log.err (fun m -> m "Unexpected as: %a" A.pp_small r);
         self#visit_t () r
     end
   in
   let rels = relations_visitor#visit_t () r in
   (alias_visitor rels)#visit_t () r
 
+module Flag : sig
+  type t [@@deriving sexp]
+
+  val of_bool : bool -> t
+
+  val bool_of : t -> bool
+
+  val all : t list -> t
+  (** If `t` is set, then all of `ts` will be set as well. *)
+
+  val set : t -> unit
+end = struct
+  type t = { this : bool ref; deps : t list } [@@deriving sexp]
+
+  let of_bool x = { this = ref x; deps = [] }
+
+  let bool_of x = !(x.this)
+
+  let rec set x =
+    x.this := true;
+    List.iter x.deps ~f:set
+
+  let all xs = { this = ref false; deps = xs }
+end
+
 module Ctx = struct
   module T : sig
-    type row = {
-      rname : Name.t;
-      rstage : [ `Run | `Compile ];
-      rrefs : int ref list;
-    }
+    type row = { rname : N.t; rstage : [ `Run | `Compile ]; rref : Flag.t }
     [@@deriving compare]
 
     type t = private row list [@@deriving sexp_of]
 
     val of_list : row list -> t
   end = struct
-    type row = {
-      rname : Name.t;
-      rstage : [ `Run | `Compile ];
-      rrefs : int ref list;
-    }
+    type row = { rname : N.t; rstage : [ `Run | `Compile ]; rref : Flag.t }
     [@@deriving sexp_of]
 
     type t = row list [@@deriving sexp_of]
 
-    let compare_row r1 r2 = [%compare: Name.t] r1.rname r2.rname
+    let compare_row r1 r2 = [%compare: N.t] r1.rname r2.rname
 
     let of_list l =
-      let l =
-        List.map l ~f:(fun r ->
-            { r with rname = Name.Meta.(set r.rname stage r.rstage) })
-      in
       let dups = List.find_all_dups l ~compare:compare_row in
       if List.length dups > 0 then (
         List.iter dups ~f:(fun r ->
-            Log.err (fun m -> m "Ambiguous name %a." Name.pp_with_stage r.rname));
+            Log.err (fun m -> m "Ambiguous name %a." N.pp r.rname));
         Error.(of_string "Ambiguous names." |> raise) );
       l
   end
 
   include T
 
-  let singleton n s = of_list [ { rname = n; rstage = s; rrefs = [] } ]
+  let singleton n s =
+    of_list [ { rname = n; rstage = s; rref = Flag.of_bool false } ]
 
   let unscoped (c : t) =
-    List.map
-      (c :> row list)
-      ~f:(fun r -> { r with rname = Name.unscoped r.rname })
+    List.map (c :> row list) ~f:(fun r -> { r with rname = N.unscoped r.rname })
     |> of_list
 
   let scoped s (c : t) =
-    List.map
-      (c :> row list)
-      ~f:(fun r -> { r with rname = Name.scoped s r.rname })
+    List.map (c :> row list) ~f:(fun r -> { r with rname = N.scoped s r.rname })
     |> of_list
 
   (** Bind c2 over c1. *)
@@ -143,7 +130,7 @@ module Ctx = struct
         (c1 :> row list)
         ~f:(fun r ->
           if List.mem c2 ~equal:[%compare.equal: row] r then (
-            Log.warn (fun m -> m "Shadowing of %a." Name.pp_with_stage r.rname);
+            Log.warn (fun m -> m "Shadowing of %a." N.pp r.rname);
             false )
           else true)
     in
@@ -162,7 +149,7 @@ module Ctx = struct
              if Set.mem inter_names r.rname then true
              else (
                Logs.warn (fun m ->
-                   m "Name does not appear in all concat fields: %a" Name.pp
+                   m "Name does not appear in all concat fields: %a" N.pp
                      r.rname);
                false )))
     |> List.map ~f:(List.sort ~compare:[%compare: row])
@@ -170,7 +157,7 @@ module Ctx = struct
     |> List.map
          ~f:
            (List.reduce_exn ~f:(fun r r' ->
-                { r with rrefs = r.rrefs @ r'.rrefs }))
+                { r with rref = Flag.all [ r.rref; r'.rref ] }))
     |> of_list
 
   let merge (c1 : t) (c2 : t) : t = of_list ((c1 :> row list) @ (c2 :> row list))
@@ -184,8 +171,7 @@ module Ctx = struct
   let merge_list (ls : t list) : t =
     List.concat (ls :> row list list) |> of_list
 
-  let find (m : t) f =
-    List.find (m :> row list) ~f:(fun r -> Name.O.(r.rname = f))
+  let find (m : t) f = List.find (m :> row list) ~f:(fun r -> N.O.(r.rname = f))
 
   let in_stage (c : t) s =
     List.filter
@@ -193,250 +179,266 @@ module Ctx = struct
       ~f:(fun r -> [%compare.equal: [ `Run | `Compile ]] r.rstage s)
 
   let incr_refs s (m : t) =
-    let incr_ref { rrefs; _ } = List.iter rrefs ~f:incr in
-    in_stage m s |> List.iter ~f:incr_ref
+    in_stage m s |> List.iter ~f:(fun { rref; _ } -> Flag.set rref)
 
   let to_schema p =
-    let t =
-      (* NOTE: Must first put type metadata back into names. *)
-      Pred.to_type (fix_meta_visitor#visit_pred () p)
-    in
-    Option.map (Pred.to_name p) ~f:(Name.copy ~type_:(Some t))
+    Option.map (Pred.to_name p) ~f:(N.copy ~type_:(Some (Pred.to_type p)))
 
-  let of_defs s ps : _ * t =
-    let visitor def meta =
-      object
-        inherit [_] map
+  let to_stage_map (c : t) =
+    List.map (c :> row list) ~f:(fun r -> (r.rname, r.rstage))
+    |> Map.of_alist_exn (module Name)
 
-        method! visit_Name () n =
-          if Name.O.(n = def) then Name Name.Meta.(set n meta_ref meta)
-          else Name n
-      end
-    in
-    (* Create a list of definitions with fresh metadata refs. *)
-    let metas, defs =
-      List.map ps ~f:(fun p ->
-          match to_schema p with
-          | Some n ->
-              (* If this is a definition point, annotate it with fresh metadata
-                 and expose it in the context. *)
-              let meta =
-                match N.Meta.find n meta_ref with
-                | Some m -> !m
-                | None -> Name.meta n
-              in
-              let meta = ref meta in
-              let p = (visitor n meta)#visit_pred () p in
-              (Some (n, meta), p)
-          | None -> (None, p))
-      |> List.unzip
-    in
-    let ctx =
-      List.filter_map metas
-        ~f:(Option.map ~f:(fun (n, _) -> { rname = n; rrefs = []; rstage = s }))
-    in
-    (defs, of_list ctx)
+  (** Create a context from a selection list. *)
+  let of_defs rstage (ps : 'a annot pred list) =
+    List.filter_map ps ~f:to_schema
+    |> List.map ~f:(fun n -> { rname = n; rref = Flag.of_bool false; rstage })
+    |> of_list
 
-  let add_refcnts (ctx : t) : t * _ =
-    let ctx, refcounts =
-      List.map
-        (ctx :> row list)
-        ~f:(fun r ->
-          let rc = ref 0 in
-          ({ r with rrefs = rc :: r.rrefs }, (r.rname, rc)))
-      |> List.unzip
-    in
-    let refcounts =
-      Map.of_alist_multi (module Name) refcounts
-      |> Map.mapi ~f:(fun ~key:n ~data ->
-             match data with
-             | [ x ] -> x
-             | x :: _ ->
-                 Log.warn (fun m -> m "Output shadowing of %a." Name.pp n);
-                 x
-             | _ -> assert false)
-    in
-    (of_list ctx, refcounts)
+  let refs (ctx : t) =
+    List.map (ctx :> row list) ~f:(fun r -> (r.rname, Flag.bool_of r.rref))
+    |> Map.of_alist_multi (module Name)
+    |> Map.mapi ~f:(fun ~key:n ~data ->
+           match data with
+           | [ x ] -> x
+           | x :: _ ->
+               Log.warn (fun m -> m "Output shadowing of %a." N.pp n);
+               x
+           | _ -> assert false)
 end
 
 (** Given a context containing names and a new name, determine which of the
-     existing names corresponds and annotate the new name with the same type. *)
+   existing names corresponds and annotate the new name with the same type. *)
 let resolve_name ctx n =
-  let m =
-    match Ctx.find ctx n with
-    | Some m -> m
-    | None ->
-        Error.raise
-          (Error.create "Could not resolve." (n, ctx) [%sexp_of: N.t * Ctx.t])
-  in
-  List.iter m.rrefs ~f:incr;
-  m.rname
+  match Ctx.find ctx n with
+  | Some m ->
+      Flag.set m.rref;
+      m.rname
+  | None ->
+      Error.raise
+        (Error.create "Could not resolve." (n, ctx) [%sexp_of: N.t * Ctx.t])
 
 let resolve_relation stage r =
-  let schema =
-    Option.value_exn ~message:"No schema annotation on relation."
-      r.Relation.r_schema
+  Option.value_exn ~message:"No schema annotation on relation."
+    r.Relation.r_schema
+  |> List.map ~f:P.name |> Ctx.of_defs stage
+
+let as_ s r =
+  {
+    node = As (s, r);
+    meta =
+      object
+        method outer = r.meta#outer
+
+        method inner = Ctx.scoped s r.meta#inner
+      end;
+  }
+
+let all_has_stage (ctx : Ctx.t) s =
+  List.for_all (ctx :> Ctx.row list) ~f:(fun r -> Poly.(r.Ctx.rstage = s))
+
+let rec resolve_pred resolve stage ctx =
+  let resolve_noctx q =
+    let q', _ = resolve stage ctx q in
+    q'
   in
-  let _, ctx = List.map schema ~f:(fun n -> Name n) |> Ctx.of_defs stage in
-  ctx
+  function
+  | Name n -> Name (resolve_name ctx n)
+  | Exists r -> Exists (resolve_noctx r)
+  | First r ->
+      let r', ctx = resolve stage ctx r in
+      Ctx.incr_refs stage ctx;
+      First r'
+  | p -> map_pred resolve_noctx (resolve_pred resolve stage ctx) p
 
-let rec resolve_pred stage (ctx : Ctx.t) =
-  let visitor =
-    object
-      inherit [_] endo
-
-      method! visit_Name ctx _ n = Name (resolve_name ctx n)
-
-      method! visit_Exists ctx _ r =
-        let r', _ = resolve stage ctx r in
-        Exists r'
-
-      method! visit_First ctx _ r =
-        let r', ctx = resolve stage ctx r in
-        Ctx.incr_refs stage ctx;
-        First r'
-    end
+let resolve_hash_idx resolve stage outer_ctx h =
+  let r, kctx = resolve `Compile outer_ctx h.hi_keys in
+  assert (all_has_stage kctx `Compile);
+  let inner_ctx = Ctx.bind outer_ctx (Ctx.scoped h.hi_scope kctx) in
+  let vl, vctx = resolve stage inner_ctx h.hi_values in
+  let h =
+    {
+      h with
+      hi_keys = r;
+      hi_values = vl;
+      hi_key_layout =
+        Option.map h.hi_key_layout ~f:(fun q ->
+            let q', _ = resolve `Compile inner_ctx q in
+            q');
+      hi_lookup = List.map h.hi_lookup ~f:(resolve_pred resolve stage outer_ctx);
+    }
   in
-  visitor#visit_pred ctx
+  (AHashIdx h, Ctx.(merge_forgiving kctx vctx))
 
-and resolve stage outer_ctx ({ node; meta } as r) =
-  let all_has_stage (ctx : Ctx.t) s =
-    List.for_all (ctx :> Ctx.row list) ~f:(fun r -> Poly.(r.Ctx.rstage = s))
+let resolve_ordered_idx resolve stage outer_ctx (r, l, m) =
+  let scope = A.scope_exn r in
+  let r = A.strip_scope r in
+  let r, kctx = resolve `Compile outer_ctx r in
+  assert (all_has_stage kctx `Compile);
+  let inner_ctx = Ctx.bind outer_ctx (Ctx.scoped scope kctx) in
+  let vl, vctx = resolve stage inner_ctx l in
+  let resolve_bound b =
+    Option.map ~f:(fun (p, b) -> (resolve_pred resolve stage outer_ctx p, b)) b
   in
-  let rsame = resolve stage in
-  let as_ s r =
-    let rc =
-      Meta.find_exn r mut_refcnt |> Map.to_alist
-      |> List.map ~f:(fun (n, c) -> (Name.scoped s n, c))
-      |> Map.of_alist_exn (module Name)
-    in
-    Meta.set { node = As (s, r); meta = Meta.empty () } mut_refcnt rc
+  let m =
+    {
+      oi_key_layout =
+        Option.map m.oi_key_layout ~f:(fun q ->
+            let q', _ = resolve `Compile inner_ctx q in
+            q');
+      oi_lookup =
+        List.map m.oi_lookup ~f:(fun (lb, ub) ->
+            (resolve_bound lb, resolve_bound ub));
+    }
   in
-  let resolve' = function
-    | Select (preds, r) ->
-        let r, preds =
-          let r, inner_ctx = rsame outer_ctx r in
-          let ctx = Ctx.merge outer_ctx inner_ctx in
-          (r, List.map preds ~f:(resolve_pred stage ctx))
-        in
-        let defs, ctx = Ctx.of_defs stage preds in
-        (Select (defs, r), ctx)
-    | Filter (pred, r) ->
-        let r, value_ctx = rsame outer_ctx r in
-        let pred = resolve_pred stage (Ctx.merge outer_ctx value_ctx) pred in
-        (Filter (pred, r), value_ctx)
-    | DepJoin ({ d_lhs; d_rhs; d_alias } as d) ->
-        let d_lhs, lctx = rsame outer_ctx d_lhs in
-        let lctx = Ctx.scoped d_alias lctx in
-        let d_rhs, rctx = rsame (Ctx.bind outer_ctx lctx) d_rhs in
-        (DepJoin { d with d_lhs; d_rhs }, rctx)
-    | Join { pred; r1; r2 } ->
-        let r1, inner_ctx1 = rsame outer_ctx r1 in
-        let r2, inner_ctx2 = rsame outer_ctx r2 in
-        let ctx = Ctx.merge_list [ inner_ctx1; inner_ctx2; outer_ctx ] in
-        let pred = resolve_pred stage ctx pred in
-        (Join { pred; r1; r2 }, Ctx.merge inner_ctx1 inner_ctx2)
-    | Relation r -> (Relation r, resolve_relation stage r)
-    | Range (p, p') ->
-        let p = resolve_pred stage outer_ctx p in
-        let p' = resolve_pred stage outer_ctx p' in
-        ( Range (p, p'),
-          Ctx.singleton (Name.create ~type_:(Pred.to_type p) "range") stage )
-    | GroupBy (aggs, key, r) ->
+  (AOrderedIdx (as_ scope r, vl, m), Ctx.(merge_forgiving kctx vctx))
+
+let resolve_open resolve stage outer_ctx =
+  let rsame r = resolve stage r in
+  let resolve_pred p = resolve_pred resolve p in
+  function
+  | Select (preds, r) ->
+      let r, preds =
         let r, inner_ctx = rsame outer_ctx r in
         let ctx = Ctx.merge outer_ctx inner_ctx in
-        let aggs = List.map ~f:(resolve_pred stage ctx) aggs in
-        let key = List.map key ~f:(resolve_name ctx) in
-        let defs, ctx = Ctx.of_defs stage aggs in
-        (GroupBy (defs, key, r), ctx)
-    | Dedup r ->
-        let r, inner_ctx = rsame outer_ctx r in
-        (Dedup r, inner_ctx)
-    | AEmpty -> (AEmpty, Ctx.of_list [])
-    | AScalar p ->
-        let p = resolve_pred stage outer_ctx p in
-        let def, ctx =
-          match Ctx.of_defs stage [ p ] with
-          | [ def ], ctx -> (def, ctx)
-          | _ -> assert false
-        in
-        (AScalar def, ctx)
-    | AList (rk, rv) ->
-        let scope = scope_exn rk in
-        let rk = strip_scope rk in
-        let rk, kctx = resolve `Compile outer_ctx rk in
-        let rv, vctx = rsame (Ctx.bind outer_ctx (Ctx.scoped scope kctx)) rv in
-        (AList (as_ scope rk, rv), vctx)
-    | ATuple (ls, (Concat as t)) ->
-        let ls, ctxs = List.map ls ~f:(rsame outer_ctx) |> List.unzip in
-        (ATuple (ls, t), Ctx.concat ctxs)
-    | ATuple (ls, ((Cross | Zip) as t)) ->
-        let ls, ctxs = List.map ls ~f:(rsame outer_ctx) |> List.unzip in
-        (ATuple (ls, t), Ctx.merge_list ctxs)
-    | AHashIdx h ->
-        let r, kctx = resolve `Compile outer_ctx h.hi_keys in
-        assert (all_has_stage kctx `Compile);
-        let inner_ctx = Ctx.bind outer_ctx (Ctx.scoped h.hi_scope kctx) in
-        let vl, vctx = rsame inner_ctx h.hi_values in
-        let h =
-          {
-            h with
-            hi_keys = r;
-            hi_values = vl;
-            hi_lookup = List.map h.hi_lookup ~f:(resolve_pred stage outer_ctx);
-          }
-        in
-        (AHashIdx h, Ctx.(merge_forgiving kctx vctx))
-    | AOrderedIdx (r, l, m) ->
-        let scope = scope_exn r in
-        let r = strip_scope r in
-        let r, kctx = resolve `Compile outer_ctx r in
-        assert (all_has_stage kctx `Compile);
-        let inner_ctx = Ctx.bind outer_ctx (Ctx.scoped scope kctx) in
-        let vl, vctx = rsame inner_ctx l in
-        let resolve_bound =
-          Option.map ~f:(fun (p, b) -> (resolve_pred stage outer_ctx p, b))
-        in
-        let m =
-          {
-            m with
-            oi_lookup =
-              List.map m.oi_lookup ~f:(fun (lb, ub) ->
-                  (resolve_bound lb, resolve_bound ub));
-          }
-        in
-        (AOrderedIdx (as_ scope r, vl, m), Ctx.(merge_forgiving kctx vctx))
-    | As _ -> Error.(createf "Unexpected as." |> raise)
-    | OrderBy { key; rel } ->
-        let rel, inner_ctx = rsame outer_ctx rel in
-        let key =
-          List.map key ~f:(fun (p, o) -> (resolve_pred stage inner_ctx p, o))
-        in
-        (OrderBy { key; rel }, inner_ctx)
-  in
-  let node, ctx =
-    try resolve' node
-    with exn ->
-      let pp () x =
-        pp Format.str_formatter x;
-        Format.flush_str_formatter ()
+        (r, List.map preds ~f:(resolve_pred stage ctx))
       in
-      Exn.reraisef exn "Resolving: %a" pp r ()
+      let ctx = Ctx.of_defs stage preds in
+      (Select (preds, r), ctx)
+  | Filter (pred, r) ->
+      let r, value_ctx = rsame outer_ctx r in
+      let pred = resolve_pred stage (Ctx.merge outer_ctx value_ctx) pred in
+      (Filter (pred, r), value_ctx)
+  | DepJoin ({ d_lhs; d_rhs; d_alias } as d) ->
+      let d_lhs, lctx = rsame outer_ctx d_lhs in
+      let lctx = Ctx.scoped d_alias lctx in
+      let d_rhs, rctx = rsame (Ctx.bind outer_ctx lctx) d_rhs in
+      (DepJoin { d with d_lhs; d_rhs }, rctx)
+  | Join { pred; r1; r2 } ->
+      let r1, inner_ctx1 = rsame outer_ctx r1 in
+      let r2, inner_ctx2 = rsame outer_ctx r2 in
+      let ctx = Ctx.merge_list [ inner_ctx1; inner_ctx2; outer_ctx ] in
+      let pred = resolve_pred stage ctx pred in
+      (Join { pred; r1; r2 }, Ctx.merge inner_ctx1 inner_ctx2)
+  | Relation r -> (Relation r, resolve_relation stage r)
+  | Range (p, p') ->
+      let p = resolve_pred stage outer_ctx p in
+      let p' = resolve_pred stage outer_ctx p' in
+      ( Range (p, p'),
+        Ctx.singleton (N.create ~type_:(Pred.to_type p) "range") stage )
+  | GroupBy (aggs, key, r) ->
+      let r, inner_ctx = rsame outer_ctx r in
+      let ctx = Ctx.merge outer_ctx inner_ctx in
+      let aggs = List.map ~f:(resolve_pred stage ctx) aggs in
+      let key = List.map key ~f:(resolve_name ctx) in
+      let ctx = Ctx.of_defs stage aggs in
+      (GroupBy (aggs, key, r), ctx)
+  | Dedup r ->
+      let r, inner_ctx = rsame outer_ctx r in
+      (Dedup r, inner_ctx)
+  | AEmpty -> (AEmpty, Ctx.of_list [])
+  | AScalar p ->
+      let p = resolve_pred stage outer_ctx p in
+      let ctx = Ctx.of_defs stage [ p ] in
+      (AScalar p, ctx)
+  | AList (rk, rv) ->
+      let scope = A.scope_exn rk in
+      let rk = A.strip_scope rk in
+      let rk, kctx = resolve `Compile outer_ctx rk in
+      let rv, vctx = rsame (Ctx.bind outer_ctx (Ctx.scoped scope kctx)) rv in
+      (AList (as_ scope rk, rv), vctx)
+  | ATuple (ls, (Concat as t)) ->
+      let ls, ctxs = List.map ls ~f:(rsame outer_ctx) |> List.unzip in
+      (ATuple (ls, t), Ctx.concat ctxs)
+  | ATuple (ls, ((Cross | Zip) as t)) ->
+      let ls, ctxs = List.map ls ~f:(rsame outer_ctx) |> List.unzip in
+      (ATuple (ls, t), Ctx.merge_list ctxs)
+  | As _ -> Error.(createf "Unexpected as." |> raise)
+  | OrderBy { key; rel } ->
+      let rel, inner_ctx = rsame outer_ctx rel in
+      let key =
+        List.map key ~f:(fun (p, o) -> (resolve_pred stage inner_ctx p, o))
+      in
+      (OrderBy { key; rel }, inner_ctx)
+  | AOrderedIdx o -> resolve_ordered_idx resolve stage outer_ctx o
+  | AHashIdx h -> resolve_hash_idx resolve stage outer_ctx h
+
+exception Inner_resolve_error of unit annot * exn
+
+exception Resolve_error of unit annot * unit annot * exn [@@deriving sexp]
+
+let rec resolve stage outer_ctx r =
+  let node, ctx =
+    try resolve_open resolve stage outer_ctx r.node with
+    | Inner_resolve_error _ as exn -> raise exn
+    | exn -> raise (Inner_resolve_error (A.strip_meta r, exn))
   in
   let ctx = Ctx.unscoped ctx in
-  let ctx, refcnts = Ctx.add_refcnts ctx in
-  (* Log.debug (fun m ->
-   *     m "%a@ %a" Abslayout.pp r Sexp.pp_hum ([%sexp_of: Ctx.t] ctx)); *)
-  meta := Univ_map.set !meta mut_refcnt refcnts;
-  ({ node; meta }, ctx)
+  ( {
+      node;
+      meta =
+        object
+          method outer = outer_ctx
+
+          method inner = ctx
+        end;
+    },
+    ctx )
+
+let stage =
+  let merge =
+    Map.merge ~f:(fun ~key ->
+      function
+      | `Left x | `Right x -> Some x
+      | `Both (x, x') when Poly.(x = x') -> Some x
+      | `Both (x, x') ->
+          Error.create "Ambiguous stage" key [%sexp_of: Name.t] |> Error.raise)
+  in
+  let rec annot r =
+    {
+      node = query r.node;
+      meta =
+        object
+          method stage =
+            merge
+              (Ctx.to_stage_map r.meta#outer)
+              (Ctx.to_stage_map r.meta#inner)
+
+          method inner = r.meta#inner
+        end;
+    }
+  and query q = map_query annot pred q
+  and pred p = map_pred annot pred p in
+  annot
+
+let refs =
+  let rec annot r =
+    {
+      node = query r.node;
+      meta =
+        object
+          method stage = r.meta#stage
+
+          method refs = Ctx.refs r.meta#inner
+        end;
+    }
+  and query q = map_query annot pred q
+  and pred p = map_pred annot pred p in
+  annot
 
 (** Annotate names in an algebra expression with types. *)
 let resolve ?(params = Set.empty (module Name)) r =
+  let r = A.strip_meta r in
   shadow_check r;
-  let _, ctx =
-    Ctx.of_defs `Run (Set.to_list params |> List.map ~f:(fun n -> Name n))
+  let r, ctx =
+    let param_ctx =
+      Ctx.of_defs `Run (Set.to_list params |> List.map ~f:P.name)
+    in
+    try resolve `Run param_ctx r
+    with Inner_resolve_error (r', exn) -> raise (Resolve_error (r, r', exn))
   in
-  let r, ctx = resolve `Run ctx r in
+
   (* Ensure that all the outputs are referenced. *)
   Ctx.incr_refs `Run ctx;
-  fix_meta_visitor#visit_t () r
+
+  (* Add metadata *)
+  stage r |> refs
