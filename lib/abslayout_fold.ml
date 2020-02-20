@@ -266,6 +266,7 @@ class virtual ['self] abslayout_fold =
                  let lhs = List.hd_exn g |> Tuple.T3.get2 in
                  let rhs = List.map g ~f:Tuple.T3.get3 in
                  (count, lhs, rhs))
+          (* Replicate each group by the group count. *)
           |> Lwt_stream.map (fun (count, lhs, rhs) -> repeat count (lhs, rhs))
           |> Lwt_stream.concat
       in
