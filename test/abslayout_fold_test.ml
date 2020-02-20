@@ -21,7 +21,7 @@ let%expect_test "" =
           "x3_0" AS "x3_0_0"
       FROM (
           SELECT
-              row_number() OVER () AS "rn0_0",
+              count(*) AS "ct0_0",
               "f_0" AS "f_1",
               "g_0" AS "g_1"
           FROM (
@@ -29,17 +29,19 @@ let%expect_test "" =
                   r1_0. "f" AS "f_0",
                   r1_0. "g" AS "g_0"
               FROM
-                  "r1" AS "r1_0") AS "t0") AS "t2",
+                  "r1" AS "r1_0") AS "t0"
+          GROUP BY
+              "f_0",
+              "g_0") AS "t2",
           LATERAL (
               SELECT
-                  "rn0_0" AS "x0_0",
+                  "ct0_0" AS "x0_0",
                   "f_1" AS "x1_0",
                   "g_1" AS "x2_0",
                   "g_1" AS "x3_0") AS "t1"
       ORDER BY
           "x1_0",
-          "x2_0",
-          "x0_0" |}]
+          "x2_0" |}]
 
 let%expect_test "" =
   let ralgebra =
@@ -77,7 +79,7 @@ let%expect_test "" =
                   "x7_1" AS "x7_2"
               FROM (
                   SELECT
-                      row_number() OVER () AS "rn1_0",
+                      count(*) AS "ct1_0",
                       "f_4" AS "f_5",
                       "g_3" AS "g_4"
                   FROM (
@@ -85,18 +87,20 @@ let%expect_test "" =
                           r1_1. "f" AS "f_4",
                           r1_1. "g" AS "g_3"
                       FROM
-                          "r1" AS "r1_1") AS "t3") AS "t5",
+                          "r1" AS "r1_1") AS "t3"
+                  GROUP BY
+                      "f_4",
+                      "g_3") AS "t5",
                   LATERAL (
                       SELECT
-                          "rn1_0" AS "x4_1",
+                          "ct1_0" AS "x4_1",
                           "f_5" AS "x5_1",
                           "g_4" AS "x6_1",
                           "g_4" AS "x7_1") AS "t4")) AS "t6"
       ORDER BY
           "counter0_0",
           "x5_0",
-          "x6_0",
-          "x4_0" |}]
+          "x6_0" |}]
 
 let%expect_test "" =
   let ralgebra = load_string test_conn Test_util.sum_complex in
@@ -105,9 +109,9 @@ let%expect_test "" =
   Format.printf "%a" pp r;
   [%expect
     {|
-      orderby([x9, x10, x8],
-        depjoin(select([row_number() as rn2, f, g], r1) as k,
-          select([k.rn2 as x8, k.f as x9, k.g as x10, f as x11, v as x12],
+      orderby([x9, x10],
+        depjoin(groupby([count() as ct2, f, g], [f, g], r1) as k,
+          select([k.ct2 as x8, k.f as x9, k.g as x10, f as x11, v as x12],
             atuple([ascalar(k.f), ascalar((k.g - k.f) as v)], cross)))) |}];
   let sql = Sql.of_ralgebra r in
   printf "%s" (Sql.to_string_hum sql);
@@ -121,7 +125,7 @@ let%expect_test "" =
           "x12_0" AS "x12_0_0"
       FROM (
           SELECT
-              row_number() OVER () AS "rn2_0",
+              count(*) AS "ct2_0",
               "f_7" AS "f_8",
               "g_6" AS "g_7"
           FROM (
@@ -129,10 +133,13 @@ let%expect_test "" =
                   r1_2. "f" AS "f_7",
                   r1_2. "g" AS "g_6"
               FROM
-                  "r1" AS "r1_2") AS "t7") AS "t9",
+                  "r1" AS "r1_2") AS "t7"
+          GROUP BY
+              "f_7",
+              "g_6") AS "t9",
           LATERAL (
               SELECT
-                  "rn2_0" AS "x8_0",
+                  "ct2_0" AS "x8_0",
                   "f_8" AS "x9_0",
                   "g_7" AS "x10_0",
                   "f_8" AS "x11_0",
@@ -140,8 +147,7 @@ let%expect_test "" =
               WHERE (TRUE)) AS "t8"
       ORDER BY
           "x9_0",
-          "x10_0",
-          "x8_0" |}]
+          "x10_0" |}]
 
 let%expect_test "" =
   let ralgebra =
@@ -153,12 +159,12 @@ let%expect_test "" =
   Format.printf "%a" pp r;
   [%expect
     {|
-        orderby([x18, x19, x17, x21, x22, x20],
-          depjoin(select([row_number() as rn3, f, g], r1) as k,
-            select([k.rn3 as x17, k.f as x18, k.g as x19, x13 as x20, x14 as x21,
+        orderby([x18, x19, x21, x22],
+          depjoin(groupby([count() as ct3, f, g], [f, g], r1) as k,
+            select([k.ct3 as x17, k.f as x18, k.g as x19, x13 as x20, x14 as x21,
                     x15 as x22, x16 as x23],
-              depjoin(select([row_number() as rn4, f, g], r1) as j,
-                select([j.rn4 as x13, j.f as x14, j.g as x15, f as x16],
+              depjoin(groupby([count() as ct4, f, g], [f, g], r1) as j,
+                select([j.ct4 as x13, j.f as x14, j.g as x15, f as x16],
                   atuple([ascalar(j.f)], cross)))))) |}];
   let sql = Sql.of_ralgebra r in
   printf "%s" (Sql.to_string_hum sql);
@@ -174,7 +180,7 @@ let%expect_test "" =
             "x23_0" AS "x23_0_0"
         FROM (
             SELECT
-                row_number() OVER () AS "rn3_0",
+                count(*) AS "ct3_0",
                 "f_10" AS "f_11",
                 "g_8" AS "g_9"
             FROM (
@@ -182,10 +188,13 @@ let%expect_test "" =
                     r1_3. "f" AS "f_10",
                     r1_3. "g" AS "g_8"
                 FROM
-                    "r1" AS "r1_3") AS "t10") AS "t15",
+                    "r1" AS "r1_3") AS "t10"
+            GROUP BY
+                "f_10",
+                "g_8") AS "t15",
             LATERAL (
                 SELECT
-                    "rn3_0" AS "x17_0",
+                    "ct3_0" AS "x17_0",
                     "f_11" AS "x18_0",
                     "g_9" AS "x19_0",
                     "x13_0" AS "x20_0",
@@ -194,7 +203,7 @@ let%expect_test "" =
                     "x16_0" AS "x23_0"
                 FROM (
                     SELECT
-                        row_number() OVER () AS "rn4_0",
+                        count(*) AS "ct4_0",
                         "f_12" AS "f_13",
                         "g_10" AS "g_11"
                     FROM (
@@ -202,17 +211,18 @@ let%expect_test "" =
                             r1_4. "f" AS "f_12",
                             r1_4. "g" AS "g_10"
                         FROM
-                            "r1" AS "r1_4") AS "t11") AS "t13",
+                            "r1" AS "r1_4") AS "t11"
+                    GROUP BY
+                        "f_12",
+                        "g_10") AS "t13",
                     LATERAL (
                         SELECT
-                            "rn4_0" AS "x13_0",
+                            "ct4_0" AS "x13_0",
                             "f_13" AS "x14_0",
                             "g_11" AS "x15_0",
                             "f_13" AS "x16_0") AS "t12") AS "t14"
         ORDER BY
             "x18_0",
             "x19_0",
-            "x17_0",
             "x21_0",
-            "x22_0",
-            "x20_0" |}]
+            "x22_0" |}]

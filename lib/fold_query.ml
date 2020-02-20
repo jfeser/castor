@@ -235,15 +235,14 @@ let rec to_ralgebra q =
          remain distinct. *)
       let o1, q1 =
         let o1, q1 = unwrap_order q1 in
-        let row_number = Fresh.name Global.fresh "rn%d" in
+        let count = Fresh.name Global.fresh "ct%d" in
         let o1, q1 =
           if distinct then (o1, q1)
           else
-            ( o1 @ [ (Name (Name.create row_number), Asc) ],
-              select
-                ( As_pred (Row_number, row_number)
-                :: (schema q1 |> Schema.to_select_list) )
-                q1 )
+            ( o1,
+              group_by
+                (As_pred (Count, count) :: (schema q1 |> Schema.to_select_list))
+                (schema q1) q1 )
         in
         (o1, q1)
       in

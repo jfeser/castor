@@ -70,6 +70,16 @@ let group_by eq strm =
   in
   Lwt_stream.from next
 
+let repeat n x =
+  let i = ref 0 in
+  let rec next () =
+    if !i >= n then None
+    else (
+      incr i;
+      Some x )
+  in
+  Lwt_stream.from_direct next
+
 let extract_group widths ctr tups =
   let extract_counter tup = List.hd_exn tup |> Value.to_int in
   let extract_tuple =
@@ -241,20 +251,23 @@ class virtual ['self] abslayout_fold =
                  (lhs, rhs))
         else
           tups
-          (* Extract the row number from each tuple. *)
+          (* Extract the count from each tuple. *)
           |> Lwt_stream.map (function
                | [] -> Error.of_string "Unexpected empty tuple." |> Error.raise
-               | rn :: t -> (rn, t))
-          (* Group by row numbers *)
-          |> group_by (fun (rn1, _) (rn2, _) ->
-                 [%compare.equal: Value.t] rn1 rn2)
-          (* Drop the row number from each group. *)
-          |> Lwt_stream.map (fun g -> List.map g ~f:(fun (_, t) -> t))
+               | ct :: t -> (Value.to_int ct, t))
+          (* Split each tuple into lhs and rhs. *)
+          |> Lwt_stream.map (fun (ct, t) -> (ct, extract_lhs t, extract_rhs t))
+          (* Group by lhs *)
+          |> group_by (fun (_, t1, _) (_, t2, _) ->
+                 [%compare.equal: Value.t list] t1 t2)
           (* Split each group into one lhs and many rhs. *)
           |> Lwt_stream.map (fun g ->
-                 let lhs = List.hd_exn g |> extract_lhs in
-                 let rhs = List.map g ~f:extract_rhs in
-                 (lhs, rhs))
+                 let count = List.hd_exn g |> Tuple.T3.get1 in
+                 let lhs = List.hd_exn g |> Tuple.T3.get2 in
+                 let rhs = List.map g ~f:Tuple.T3.get3 in
+                 (count, lhs, rhs))
+          |> Lwt_stream.map (fun (count, lhs, rhs) -> repeat count (lhs, rhs))
+          |> Lwt_stream.concat
       in
       (* Process each group. *)
       groups
