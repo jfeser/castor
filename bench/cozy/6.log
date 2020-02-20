@@ -7,7 +7,7 @@ updating with 1 new solutions
 update order:
   --> q1
 considering update 1/1...
-SOLUTION FOR q1 AT 0:00:00.067927 [size=100]
+SOLUTION FOR q1 AT 0:00:00.151762 [size=100]
 ----------------------------------------
   _var199 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
   return let q = Map {t -> t} (Filter {t -> (((t).10 >= param0) and (((t).10 < (param0 + year(1))) and (((t).6 >= (param1 - 0.01)) and (((t).6 <= (param1 + 0.01)) and ((t).4 < param2)))))} (_var199)) in (sum Map {t -> fmul((t).5, (t).6)} (q))
@@ -16,7 +16,7 @@ updating with 1 new solutions
 update order:
   --> q1
 considering update 1/1...
-SOLUTION FOR q1 AT 0:00:00.568630 [size=88]
+SOLUTION FOR q1 AT 0:00:00.586859 [size=88]
 ----------------------------------------
   _var485 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
   return (sum Map {t -> fmul((t).5, (t).6)} (Filter {t -> (((t).10 >= param0) and (((t).10 < (param0 + year(1))) and (((t).6 >= (param1 - 0.01)) and (((t).6 <= (param1 + 0.01)) and ((t).4 < param2)))))} (_var485)))
@@ -25,7 +25,7 @@ updating with 1 new solutions
 update order:
   --> q1
 considering update 1/1...
-SOLUTION FOR q1 AT 0:00:00.822605 [size=96]
+SOLUTION FOR q1 AT 0:00:00.835695 [size=96]
 ----------------------------------------
   _var635 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
   return (sum Map {t -> fmul((t).5, (t).6)} (Filter {t -> ((t).4 < param2)} (Filter {t -> ((t).6 <= (param1 + 0.01))} (Filter {t -> ((t).6 >= (param1 - 0.01))} (Filter {t -> ((t).10 < (param0 + year(1)))} (Filter {t -> ((t).10 >= param0)} (_var635)))))))
@@ -33,7 +33,15 @@ SOLUTION FOR q1 AT 0:00:00.822605 [size=96]
 Stopping jobs
 requesting stop for ImproveQueryJob[q1]
 Waiting on 1 jobs...
-  --> ImproveQueryJob[q1] [pid=39303]
+  --> ImproveQueryJob[q1] [pid=43133]
+Waiting on 1 jobs...
+  --> ImproveQueryJob[q1] [pid=43133]
+Waiting on 1 jobs...
+  --> ImproveQueryJob[q1] [pid=43133]
+Waiting on 1 jobs...
+  --> ImproveQueryJob[q1] [pid=43133]
+Waiting on 1 jobs...
+  --> ImproveQueryJob[q1] [pid=43133]
 Stopping SafeQueue...
 Done!
 Generating IR...
@@ -53,4 +61,4 @@ Setting up auxiliary types...
 Setting up member variables...
 Generating constructors...
 Generating method q1...
-Number of improvements done: 30
+Number of improvements done: 31
