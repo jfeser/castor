@@ -56,7 +56,7 @@ print('DB=postgresql:///tpch_1k')
 print('OPT_PATH=../bin/opt.exe')
 print('COMPILE_PATH=../../castor/bin/compile.exe')
 print('OPT=dune exec --no-build $(OPT_PATH) -- ')
-print('OPT_FLAGS=-cost-db $(DB) -cost-timeout 60.0 -db $(DBC) -v')
+print('OPT_FLAGS=-cost-timeout 60.0 -v')
 print('COMPILE=dune exec $(COMPILE_PATH) -- ')
 if DEBUG:
     print('CFLAGS=-debug -v')

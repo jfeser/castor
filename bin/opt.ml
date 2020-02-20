@@ -4,7 +4,7 @@ open Collections
 open Castor_opt
 open Abslayout_load
 
-let main ~params:all_params ~db ~cost_db ~validate ~cost_timeout ch =
+let main ~params:all_params ~validate ~cost_timeout ch =
   Logs.Src.set_level Log.src (Some Debug);
   Logs.info (fun m ->
       m "%s" (Sys.get_argv () |> Array.to_list |> String.concat ~sep:" "));
@@ -16,12 +16,13 @@ let main ~params:all_params ~db ~cost_db ~validate ~cost_timeout ch =
     List.map all_params ~f:(fun (n, t, v) -> (Name.create ~type_:t n, v))
     |> Map.of_alist_exn (module Name)
   in
-  let conn = Db.create db in
+  let conn = Db.create (Sys.getenv_exn "CASTOR_DB") in
   let module Config = struct
     let conn = conn
 
     let cost_conn =
-      Option.map cost_db ~f:Db.create |> Option.value ~default:conn
+      Sys.getenv "CASTOR_COST_DB"
+      |> Option.map ~f:Db.create |> Option.value ~default:conn
 
     let params = params
 
@@ -49,10 +50,6 @@ let () =
       let () = Log.param
       and validate =
         flag "validate" ~aliases:[ "c" ] no_arg ~doc:"validate transforms"
-      and db = flag "db" (required string) ~doc:"CONNINFO the main database"
-      and cost_db =
-        flag "cost-db" (optional string)
-          ~doc:"CONNINFO the database to use for computing costs"
       and cost_timeout =
         flag "cost-timeout" (optional float)
           ~doc:"terminate cost function after n seconds"
@@ -63,5 +60,5 @@ let () =
       and ch =
         anon (maybe_with_default In_channel.stdin ("query" %: Util.channel))
       in
-      fun () -> main ~params ~db ~cost_db ~cost_timeout ~validate ch]
+      fun () -> main ~params ~cost_timeout ~validate ch]
   |> Command.run
