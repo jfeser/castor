@@ -7,12 +7,7 @@ module O : Comparable.Infix with type t := t
 val create : ?scope:string -> ?type_:Prim_type.t -> string -> t
 
 val copy :
-  ?scope:string option ->
-  ?type_:Prim_type.t option ->
-  ?name:string ->
-  ?meta:Univ_map.t ->
-  t ->
-  t
+  ?scope:string option -> ?type_:Prim_type.t option -> ?name:string -> t -> t
 
 val name : t -> string
 
@@ -35,5 +30,3 @@ val to_var : t -> string
 val pp : Formatter.t -> t -> unit
 
 val fresh : (int -> string, unit, string) format -> t
-
-val create_table : unit -> (t, 'a) Bounded_int_table.t
