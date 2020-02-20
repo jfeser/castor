@@ -53,13 +53,11 @@ def out_dir(b):
 
 print('SHELL:=/bin/bash')
 print('DB=postgresql:///tpch_1k')
-print('DBC=postgresql:///tpch')
 print('OPT_PATH=../bin/opt.exe')
-print('CASTOR_PATH=../../castor/')
-print('COMPILE_PATH=$(CASTOR_PATH)/bin/compile.exe')
+print('COMPILE_PATH=../../castor/bin/compile.exe')
 print('OPT=dune exec --no-build $(OPT_PATH) -- ')
 print('OPT_FLAGS=-cost-db $(DB) -cost-timeout 60.0 -db $(DBC) -v')
-print('COMPILE=dune exec --no-build $(COMPILE_PATH) -- ')
+print('COMPILE=dune exec $(COMPILE_PATH) -- ')
 if DEBUG:
     print('CFLAGS=-debug -v')
 else:
@@ -127,12 +125,15 @@ for b in bench:
     print('''
 {0}: {2}
 \t$(OPT) $(OPT_FLAGS) {1} {2} >$@ 2> >(tee {3} >&2)
-    '''.format(out_file(b), gen_params(b), in_file(b), '%s-opt.log' % b['name']))
+    '''.format(out_file(b),
+               gen_params(b),
+               in_file(b),
+               '%s-opt.log' % b['name']))
 
     print('''
 {0}: {1}
 \tmkdir -p $@
-\t$(COMPILE) $(CFLAGS) -o $@ -db $(DBC) {2} {1} > $@/compile.log 2>&1
+\t$(COMPILE) $(CFLAGS) -o $@ {2} {1} > $@/compile.log 2>&1
 '''.format(out_dir(b), out_file(b), gen_param_types(b)))
 
     print('''
@@ -152,9 +153,9 @@ analysis_{0}-opt.csv.log: {1}
     '''.format(b['name'], out_dir(b), str(b['ordered'])))
 
     print('''
-{0}-gold: $(CASTOR_PATH)/bench/tpch/{0}-gold.txt
+{0}-gold: ../../castor/bench/tpch/{0}-gold.txt
 \tmkdir -p $@
-\t$(COMPILE) $(CFLAGS) -o $@ -db $(DBC) {1} $< > $@/compile.log 2>&1
+\t$(COMPILE) $(CFLAGS) -o $@ {1} $< > $@/compile.log 2>&1
 '''.format(b['name'], gen_param_types(b)))
 
     print('''
@@ -182,5 +183,6 @@ gold/{0}.csv:
 print('''
 .PHONY: clean
 clean:
-\trm -rf *-opt.txt *-opt *-opt.csv *-opt.log *-opt.time analysis_*.log hashes.txt
+\trm -rf *-opt.txt *-opt *-opt.csv *-opt.log *-opt.time analysis_*.log \
+         hashes.txt
 ''')
