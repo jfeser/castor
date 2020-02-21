@@ -66,9 +66,7 @@ let%expect_test "" =
     select([g],
       join((k_f = bnd0),
         select([k_f as bnd0, k_g], select([f as k_f, g as k_g], r)),
-        select([g, k_f],
-          filter((k_f = f),
-            join(true, dedup(select([k_f], select([f as k_f, g as k_g], r))), r1))))) |}]
+        select([g, k_f], filter((k_f = f), select([f as k_f, f, g], r1))))) |}]
 
 let%test_unit "" =
   let conn = Lazy.force tpch_conn in

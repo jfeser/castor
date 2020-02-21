@@ -90,6 +90,38 @@ let dep_join lhs rhs =
   check_lhs lhs;
   dep_join lhs "x" rhs
 
+let simple_join lhs rhs =
+  let eqs = Equiv.eqs lhs @ Equiv.eqs rhs
+  and schema_lhs = schema lhs
+  and schema_rhs = schema rhs in
+
+  let classes =
+    schema_lhs @ schema_rhs @ List.concat_map eqs ~f:(fun (n, n') -> [ n; n' ])
+    |> List.dedup_and_sort ~compare:[%compare: Name.t]
+    |> List.map ~f:(fun n -> (n, Union_find.create n))
+    |> Map.of_alist_exn (module Name)
+  in
+  List.iter eqs ~f:(fun (n, n') ->
+      Union_find.union (Map.find_exn classes n) (Map.find_exn classes n'));
+
+  let extension =
+    List.map schema_lhs ~f:(fun n ->
+        let c = Map.find_exn classes n in
+        let n' =
+          List.find schema_rhs ~f:(fun n' ->
+              let c' = Map.find_exn classes n' in
+              Union_find.same_class c c')
+        in
+        Option.map n' ~f:(fun n' -> As_pred (Name n', Name.name n)))
+    |> Option.all
+  in
+
+  match extension with
+  | Some ex ->
+      let sl = ex @ Schema.to_select_list schema_rhs in
+      select sl rhs
+  | None -> join (Bool true) lhs rhs
+
 let to_nice_depjoin t1 t2 =
   let t1_attr = attrs t1 in
   let t2_free = free t2 in
@@ -219,7 +251,7 @@ let rec push_depjoin r =
       (* If the join is not really dependent, then replace with a regular join.
          *)
       if Set.inter (free d_rhs) (attrs d_lhs) |> Set.is_empty then
-        join (P.bool true) d_lhs d_rhs
+        simple_join d_lhs d_rhs
       else
         let r' =
           match d_rhs.node with
@@ -241,5 +273,5 @@ and push_depjoin_pred p = map_pred push_depjoin push_depjoin_pred p
 let unnest q =
   let q' = q |> strip_meta |> to_visible_depjoin |> to_nice |> push_depjoin in
   schema_invariant q q';
-  resolve_invariant q q';
+  (* resolve_invariant q q'; *)
   q'

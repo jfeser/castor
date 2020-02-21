@@ -98,10 +98,6 @@ val free : 'a annot -> Set.M(Name).t
 
 val annotate_free : 'a annot -> Set.M(Name).t annot
 
-val annotate_eq : 'a annot -> (Name.t * Name.t) list annot
-
-val eqs : 'a annot -> (Name.t * Name.t) list
-
 val order_of : 'a annot -> (Pred.t * order) list
 
 val validate : t -> unit

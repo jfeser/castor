@@ -210,6 +210,12 @@ module Annotate = struct
   and pred f p = map_pred (annot f) (pred f) p
 end
 
+let rec annotate f r =
+  let node = (map_query (annotate f) (annotate_pred f)) r.node in
+  { node; meta = f (fun r' -> r'.meta) node }
+
+and annotate_pred f p = map_pred (annotate f) (annotate_pred f) p
+
 class virtual ['self] endo =
   object (self : 'self)
     inherit [_] base_endo

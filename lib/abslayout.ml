@@ -197,12 +197,6 @@ let subst ctx =
   in
   v#visit_t ()
 
-let rec annotate f r =
-  let node = (map_query (annotate f) (annotate_pred f)) r.node in
-  { node; meta = f (fun r' -> r'.meta) node }
-
-and annotate_pred f p = map_pred (annotate f) (annotate_pred f) p
-
 let pred_free_open free p =
   let singleton = Set.singleton (module Name) in
   let visitor =
@@ -313,34 +307,6 @@ let exists_bare_relations r =
 let validate r =
   if exists_bare_relations r then
     Error.of_string "Program contains bare relation references." |> Error.raise
-
-(** Return the set of equivalent attributes in the output of a query. *)
-let eqs_open eqs r =
-  let dedup_pairs = List.dedup_and_sort ~compare:[%compare: Name.t * Name.t] in
-  match r with
-  | As (n, r) ->
-      let schema = schema r in
-      List.map schema ~f:(fun n' -> (n', Name.(create ~scope:n (name n'))))
-      |> dedup_pairs
-  | Filter (p, r) -> Pred.eqs p @ eqs r |> dedup_pairs
-  | Select (ps, r) ->
-      eqs r
-      |> List.filter_map ~f:(fun ((n, n') as eq) ->
-             List.find_map ps
-               ~f:
-                 (let open Name.O in
-                 function
-                 | Name n'' when n'' = n' || n'' = n -> Some eq
-                 | As_pred (Name n'', s) when n'' = n -> Some (Name.create s, n')
-                 | As_pred (Name n'', s) when n'' = n' -> Some (n, Name.create s)
-                 | _ -> None))
-  | Join { pred = p; r1; r2 } -> Pred.eqs p @ eqs r1 @ eqs r2 |> dedup_pairs
-  | AList (r1, r2) -> eqs r1 @ eqs r2 |> dedup_pairs
-  | _ -> []
-
-let annotate_eq r = annotate eqs_open r
-
-let rec eqs r = eqs_open eqs r.node
 
 let select_kind l =
   if List.exists l ~f:(fun p -> Poly.(Pred.kind p = `Agg)) then `Agg
@@ -487,7 +453,7 @@ let annotate_orders r =
     order
   in
   let r =
-    annotate_eq r
+    Equiv.annotate r
     |> map_meta (fun eq -> ref (Univ_map.set Univ_map.empty eq_k eq))
   in
   annotate_orders r |> ignore;

@@ -554,7 +554,7 @@ module Make (Config : Config.S) () = struct
     let open A in
     let schema1 = Schema.schema r1 |> Schema.scoped (scope_exn r1) in
 
-    let eqs = eqs r2 in
+    let eqs = Equiv.eqs r2 in
     let names =
       List.concat_map eqs ~f:(fun (n, n') -> [ n; n' ])
       @ List.filter_map ~f:(fun (p, _) -> Pred.to_name p) key
