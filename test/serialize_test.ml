@@ -9,12 +9,11 @@ let process_layout_log log =
 
 let run_test layout_str =
   let open Abslayout_load in
-  let open Abslayout_type in
   let conn = Lazy.force test_db_conn in
 
   let layout_file = Filename.temp_file "layout" "bin" in
   let layout_log_file = Filename.temp_file "layout" "txt" in
-  let layout = load_string conn layout_str |> annotate_type conn in
+  let layout = load_string conn layout_str |> Type.annotate conn in
   let type_ = layout.meta#type_ in
   let _, len =
     Serialize.serialize ~layout_file:layout_log_file conn layout_file layout

@@ -1,8 +1,12 @@
+open Ast
+
 exception TypeError of Core.Error.t
 
 (** Range abstraction for integers. *)
 module AbsInt : sig
   type t = Bottom | Interval of int * int | Top [@@deriving compare, sexp]
+
+  include Container.Summable with type t := t
 
   val pp : Format.formatter -> t -> unit
 
@@ -13,12 +17,6 @@ module AbsInt : sig
   val of_int : int -> t
 
   val to_int : t -> int option
-
-  val ( + ) : t -> t -> t
-
-  val ( - ) : t -> t -> t
-
-  val ( * ) : t -> t -> t
 
   val inf : t -> (int, Error.t) result
 
@@ -31,6 +29,24 @@ module AbsInt : sig
   val ( && ) : t -> t -> t
 
   val ( || ) : t -> t -> t
+
+  val ( + ) : t -> t -> t
+
+  val ( - ) : t -> t -> t
+
+  val ( * ) : t -> t -> t
+
+  module O : sig
+    val ( && ) : t -> t -> t
+
+    val ( || ) : t -> t -> t
+
+    val ( + ) : t -> t -> t
+
+    val ( - ) : t -> t -> t
+
+    val ( * ) : t -> t -> t
+  end
 end
 
 module AbsFixed : sig
@@ -131,3 +147,5 @@ val oi_ptr_size : t -> ordered_idx -> int
 (** Size of pointers (in bytes) in ordered indexes. *)
 
 val least_general_of_primtype : Prim_type.t -> t
+
+val annotate : Db.t -> 'a annot -> < type_ : t > annot

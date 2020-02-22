@@ -5,7 +5,6 @@ let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
     layout_str =
   let layout_file = Filename.temp_file "layout" "txt" in
   let open Abslayout_load in
-  let open Abslayout_type in
   let conn = Lazy.force test_db_conn in
   let (module I), (module C) = Setup.make_modules ?irgen_debug () in
   let run_compiler layout =
@@ -36,7 +35,7 @@ let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
       let params =
         List.map params ~f:(fun (n, _) -> n) |> Set.of_list (module Name)
       in
-      load_string conn ~params layout_str |> annotate_type conn
+      load_string conn ~params layout_str |> Type.annotate conn
     in
 
     if fork then run_in_fork (fun () -> run_compiler layout)

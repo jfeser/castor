@@ -4,13 +4,12 @@ open Implang_opt
 
 let run_test ?(params = []) layout_str opt_func =
   let open Abslayout_load in
-  let open Abslayout_type in
   let conn = Lazy.force test_db_conn in
   let (module I), _ = Setup.make_modules ~code_only:true () in
   let param_names = List.map params ~f:(fun (n, _) -> n) in
   let layout =
     load_string conn ~params:(Set.of_list (module Name) param_names) layout_str
-    |> annotate_type conn
+    |> Type.annotate conn
   in
   let layout, len = Serialize.serialize conn "/tmp/buf" layout in
   I.irgen ~params:param_names ~len layout
@@ -103,7 +102,6 @@ let%expect_test "example-1" =
 let%test_module _ =
   ( module struct
     open Abslayout_load
-    open Abslayout_type
 
     let conn = Lazy.force Test_util.test_db_conn
 
@@ -119,7 +117,7 @@ let%test_module _ =
     let%expect_test "" =
       let r =
         load_string conn "filter(c > 0, select([count() as c], ascalar(0)))"
-        |> annotate_type conn
+        |> Type.annotate conn
         |> map_meta (fun m ->
                object
                  method type_ = m#type_

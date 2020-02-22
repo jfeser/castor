@@ -3,14 +3,13 @@ open Test_util
 let run_test ?(params = []) ?(print_code = true) layout_str =
   let (module I), (module C) = Setup.make_modules ~code_only:true () in
   let open Abslayout_load in
-  let open Abslayout_type in
   let conn = Lazy.force test_db_conn in
 
   try
     let param_names = List.map params ~f:(fun (n, _) -> n) in
     let sparams = Set.of_list (module Name) param_names in
     let layout =
-      load_string conn ~params:sparams layout_str |> annotate_type conn
+      load_string conn ~params:sparams layout_str |> Type.annotate conn
     in
     print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] layout.meta#type_));
     let layout, len = Serialize.serialize conn "/tmp/buf" layout in

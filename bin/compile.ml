@@ -2,7 +2,6 @@ open! Core
 open Castor
 open Collections
 open Abslayout_load
-open Abslayout_type
 
 let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
   Logs.info (fun m ->
@@ -28,7 +27,7 @@ let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
   load_string
     ~params:(Set.of_list (module Name) params)
     db (In_channel.input_all ch)
-  |> annotate_type db
+  |> Type.annotate db
   |> C.compile ~gprof ~params ?out_dir ?layout_log:layout_file CConfig.conn
   |> ignore
 
