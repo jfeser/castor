@@ -77,21 +77,13 @@ module Distinct : sig
   val join : ('a, 'b) t -> ('a, 'b) t -> ('a, 'b) t
 end
 
-type int_ = {
-  range : AbsInt.t;
-  distinct : (int, Core_kernel__.Int.comparator_witness) Distinct.t;
-  nullable : bool;
-}
+type int_ = { range : AbsInt.t; nullable : bool }
 
 type date = int_
 
 type bool_ = { nullable : bool }
 
-type string_ = {
-  nchars : AbsInt.t;
-  distinct : (string, Collections.String.comparator_witness) Distinct.t;
-  nullable : bool;
-}
+type string_ = { nchars : AbsInt.t; nullable : bool }
 
 type list_ = { count : AbsInt.t }
 
@@ -149,3 +141,5 @@ val oi_ptr_size : t -> ordered_idx -> int
 val least_general_of_primtype : Prim_type.t -> t
 
 val annotate : Db.t -> 'a annot -> < type_ : t > annot
+
+val agg_type_of : Db.t -> unit annot -> t Lwt.t

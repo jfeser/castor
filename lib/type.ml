@@ -2,6 +2,7 @@ open Ast
 open Abslayout_fold
 open Abslayout_visitors
 open Collections
+module A = Abslayout
 
 exception TypeError of Error.t [@@deriving sexp]
 
@@ -139,24 +140,14 @@ end = struct
   let join _m1 _m2 = ()
 end
 
-type int_ = {
-  range : AbsInt.t;
-  distinct : ((int, Int.comparator_witness) Distinct.t[@sexp.opaque]);
-      [@compare.ignore]
-  nullable : bool; [@sexp.bool]
-}
+type int_ = { range : AbsInt.t; nullable : bool [@sexp.bool] }
 [@@deriving compare, sexp]
 
 type date = int_ [@@deriving compare, sexp]
 
 type bool_ = { nullable : bool [@sexp.bool] } [@@deriving compare, sexp]
 
-type string_ = {
-  nchars : AbsInt.t;
-  distinct : ((string, String.comparator_witness) Distinct.t[@sexp.opaque]);
-      [@compare.ignore]
-  nullable : bool; [@sexp.bool]
-}
+type string_ = { nchars : AbsInt.t; nullable : bool [@sexp.bool] }
 [@@deriving compare, sexp]
 
 type list_ = { count : AbsInt.t } [@@deriving compare, sexp]
@@ -186,21 +177,11 @@ type t =
 [@@deriving compare, sexp]
 
 let least_general_of_primtype = function
-  | Prim_type.IntT { nullable } ->
-      IntT
-        { range = AbsInt.bot; nullable; distinct = Distinct.empty (module Int) }
+  | Prim_type.IntT { nullable } -> IntT { range = AbsInt.bot; nullable }
   | NullT -> NullT
-  | DateT { nullable } ->
-      DateT
-        { range = AbsInt.bot; nullable; distinct = Distinct.empty (module Int) }
+  | DateT { nullable } -> DateT { range = AbsInt.bot; nullable }
   | FixedT { nullable } -> FixedT { value = AbsFixed.bot; nullable }
-  | StringT { nullable; _ } ->
-      StringT
-        {
-          nchars = AbsInt.bot;
-          nullable;
-          distinct = Distinct.empty (module String);
-        }
+  | StringT { nullable; _ } -> StringT { nchars = AbsInt.bot; nullable }
   | BoolT { nullable } -> BoolT { nullable }
   | TupleT _ | VoidT -> failwith "Not a layout type."
 
@@ -216,22 +197,10 @@ let rec unify_exn t1 t2 =
   in
   match (t1, t2) with
   | NullT, NullT -> NullT
-  | ( IntT { range = b1; nullable = n1; distinct = d1 },
-      IntT { range = b2; nullable = n2; distinct = d2 } ) ->
-      IntT
-        {
-          range = I.O.(b1 || b2);
-          nullable = n1 || n2;
-          distinct = Distinct.join d1 d2;
-        }
-  | ( DateT { range = b1; nullable = n1; distinct = d1 },
-      DateT { range = b2; nullable = n2; distinct = d2 } ) ->
-      DateT
-        {
-          range = I.O.(b1 || b2);
-          nullable = n1 || n2;
-          distinct = Distinct.join d1 d2;
-        }
+  | IntT { range = b1; nullable = n1 }, IntT { range = b2; nullable = n2 } ->
+      IntT { range = I.O.(b1 || b2); nullable = n1 || n2 }
+  | DateT { range = b1; nullable = n1 }, DateT { range = b2; nullable = n2 } ->
+      DateT { range = I.O.(b1 || b2); nullable = n1 || n2 }
   | FixedT { value = v1; nullable = n1 }, FixedT { value = v2; nullable = n2 }
     ->
       FixedT { value = AbsFixed.join v1 v2; nullable = n1 || n2 }
@@ -241,14 +210,9 @@ let rec unify_exn t1 t2 =
   | BoolT { nullable = n1 }, BoolT { nullable = n2 } ->
       BoolT { nullable = n1 || n2 }
   | BoolT _, NullT | NullT, BoolT _ -> BoolT { nullable = true }
-  | ( StringT { nchars = b1; nullable = n1; distinct = d1 },
-      StringT { nchars = b2; nullable = n2; distinct = d2 } ) ->
-      StringT
-        {
-          nchars = I.O.(b1 || b2);
-          nullable = n1 || n2;
-          distinct = Distinct.join d1 d2;
-        }
+  | ( StringT { nchars = b1; nullable = n1 },
+      StringT { nchars = b2; nullable = n2 } ) ->
+      StringT { nchars = I.O.(b1 || b2); nullable = n1 || n2 }
   | StringT x, NullT | NullT, StringT x -> StringT { x with nullable = true }
   | TupleT (e1s, { kind = k1 }), TupleT (e2s, { kind = k2 }) when Poly.(k1 = k2)
     ->
@@ -422,26 +386,246 @@ let least_general_of_layout r =
   in
   f r
 
-(* let contexts r =
- *   let split_scope r =
- *     match r.node with As (s, r') -> (r', s) | _ -> failwith "Expected as"
- *   in
- *   let plus = ( @ ) in
- *   let zero = [] in
- *   let empty_context q = [ ([], q) ] in
- *   let add_context ctx = List.map ~f:(fun (ctxs, q) -> (ctx :: ctxs, q)) in
- *   let rec annot r = Reduce.annot zero plus query meta r
- *   and query q =
- *     match q with
- *     | AOrderedIdx (qk, qv, _) | AList (qk, qv) ->
- *         plus (empty_context q) @@ add_context (split_scope qk) (annot qv)
- *     | AHashIdx h ->
- *         plus (empty_context q)
- *         @@ add_context (h.hi_keys, h.hi_scope) (annot h.hi_values)
- *     | _ -> Reduce.query (empty_context q) plus query pred q
- *   and pred _ = zero
- *   and meta _ = zero in
- *   annot r *)
+module Type_builder = struct
+  type type_ = t
+
+  type nonrec t = {
+    aggs : Pred.t list;
+    build : Value.t Map.M(String).t -> t list -> t option;
+  }
+
+  let eval ctx p =
+    Map.find_exn ctx (Name.name @@ Option.value_exn (Pred.to_name p))
+
+  let wrap p = As_pred (p, Fresh.name Global.fresh "x%d")
+
+  let func_t t =
+    { aggs = []; build = (fun _ ts -> Option.some @@ FuncT (ts, t)) }
+
+  let empty_t = { aggs = []; build = (fun _ _ -> Some EmptyT) }
+
+  let null_t = { aggs = []; build = (fun _ _ -> Some NullT) }
+
+  let int_t p =
+    let min = wrap @@ Min p and max = wrap @@ Max p in
+    let build ctx _ =
+      Option.some
+      @@ IntT
+           {
+             range =
+               AbsInt.Interval
+                 (Value.to_int @@ eval ctx min, Value.to_int @@ eval ctx max);
+             nullable = false (* TODO *);
+           }
+    in
+    { aggs = [ min; max ]; build }
+
+  let bool_t =
+    {
+      aggs = [];
+      build =
+        (fun ctx _ -> Option.some @@ BoolT { nullable = false (* TODO *) });
+    }
+
+  let date_t p =
+    let min = wrap @@ Min p and max = wrap @@ Max p in
+    let build ctx _ =
+      Option.some
+      @@ DateT
+           {
+             range =
+               AbsInt.Interval
+                 ( Date.to_int @@ Value.to_date @@ eval ctx min,
+                   Date.to_int @@ Value.to_date @@ eval ctx max );
+             nullable = false (* TODO *);
+           }
+    in
+    { aggs = [ min; max ]; build }
+
+  let fixed_t _ =
+    {
+      aggs = [];
+      build =
+        (fun ctx _ ->
+          Option.some
+          @@ FixedT { value = AbsFixed.top; nullable = false (* TODO *) });
+    }
+
+  let string_t _ =
+    {
+      aggs = [];
+      build =
+        (fun ctx _ ->
+          Option.some
+          @@ StringT { nchars = AbsInt.top; nullable = false (* TODO *) });
+    }
+
+  let scalar_t p =
+    match Pred.to_type p with
+    | NullT -> null_t
+    | IntT _ -> int_t p
+    | BoolT _ -> bool_t
+    | DateT _ -> date_t p
+    | FixedT _ -> fixed_t p
+    | StringT _ -> string_t p
+    | VoidT | TupleT _ -> failwith "Invalid scalar types."
+
+  let list_t q =
+    let qs =
+      First (Abslayout.group_by [ As_pred (Count, "c") ] [] (A.strip_scope q))
+    in
+    let min = wrap @@ Min qs in
+    let max = wrap @@ Max qs in
+    let eval ctx v = eval ctx min |> Value.to_int in
+    {
+      aggs = [ min; max ];
+      build =
+        (fun ctx ts ->
+          match ts with
+          | [ t ] ->
+              Option.some
+              @@ ListT
+                   (t, { count = AbsInt.Interval (eval ctx min, eval ctx max) })
+          | _ -> failwith "Unexpected types");
+    }
+
+  let no_type_t = { aggs = []; build = (fun _ _ -> None) }
+
+  let rec of_ralgebra = function
+    | Select (ps, _) | GroupBy (ps, _, _) -> func_t (`Width (List.length ps))
+    | Join _ | DepJoin _ | Filter _ | OrderBy _ | Dedup _ -> func_t `Child_sum
+    | AEmpty -> empty_t
+    | AScalar p -> scalar_t p
+    | AList (q, _) -> list_t q
+    | _ -> no_type_t
+
+  let rec annot r = { node = query r.node; meta = of_ralgebra r.node }
+
+  and query q = map_query annot pred q
+
+  and pred p = map_pred annot pred p
+
+  let type_of ctx r : type_ =
+    let zero = [] and plus = ( @ ) in
+    let rec annot (r : t annot) : type_ list =
+      let ts = Reduce.annot zero plus query meta r in
+      r.meta.build ctx ts |> Option.to_list
+    and query (q : (t annot pred, t annot) query) : type_ list =
+      Reduce.query zero plus annot pred q
+    and meta _ = zero
+    and pred (_ : t annot pred) : type_ list = zero in
+    annot r |> List.hd_exn
+end
+
+let unscope n =
+  match Name.rel n with
+  | Some s -> Name.copy ~scope:None ~name:(sprintf "%s_%s" s (Name.name n)) n
+  | None -> n
+
+module Context = struct
+  module T = struct
+    type t = (unit annot * string) list [@@deriving compare, sexp]
+  end
+
+  include T
+  include Comparator.Make (T)
+
+  (** Convert a context to a query that selects the bindings produced by the
+     context. Also produce a renaming from the original bindings to the bindings
+     selected by the query. *)
+  let to_ralgebra ctxs =
+    let renaming =
+      List.concat_map ctxs ~f:(fun (r, s) ->
+          Schema.schema r
+          |> List.map ~f:(fun n ->
+                 let n = Name.scoped s n in
+                 (n, unscope n)))
+    in
+    let select_list =
+      List.map renaming ~f:(fun (n, n') -> As_pred (Name n, Name.name n'))
+    in
+    let bindings =
+      if List.is_empty select_list then A.scalar (Int 0)
+      else
+        let select = A.select select_list (A.scalar (Int 0)) in
+        let rec to_dep_join = function
+          | [] -> select
+          | (r, s) :: ctxs -> A.dep_join r s (to_dep_join ctxs)
+        in
+        to_dep_join ctxs
+    in
+    (renaming, bindings)
+end
+
+let contexts r =
+  let split_scope r =
+    match r.node with As (s, r') -> (r', s) | _ -> failwith "Expected as"
+  in
+  let strip q = map_meta (fun _ -> ()) q in
+  let empty q = [ ([], q) ]
+  and wrap (r, s) = List.map ~f:(fun (ctxs, q) -> ((strip r, s) :: ctxs, q)) in
+
+  let plus = ( @ ) and zero = [] in
+  let rec annot r =
+    let this_ctx = empty r.meta in
+    let child_ctxs =
+      match r.node with
+      | AOrderedIdx (qk, qv, _) | AList (qk, qv) ->
+          wrap (split_scope qk) (annot qv)
+      | AHashIdx h -> wrap (h.hi_keys, h.hi_scope) (annot h.hi_values)
+      | q -> Reduce.query zero plus annot pred q
+    in
+    plus this_ctx child_ctxs
+  and pred _ = zero in
+
+  annot r
+  |> List.map ~f:(fun (k, v) -> (k, [ v ]))
+  |> Map.of_alist_reduce (module Context) ~f:( @ )
+
+let agg_type_of conn r =
+  let open Lwt in
+  let r = Type_builder.annot r in
+  let queries =
+    contexts r |> Map.to_alist
+    |> List.map ~f:(fun (ctx, builders) ->
+           let renaming, bindings = Context.to_ralgebra ctx in
+           let aggs =
+             let subst =
+               List.map renaming ~f:(fun (n, n') -> (n, Name n'))
+               |> Map.of_alist_exn (module Name)
+             in
+             List.concat_map builders ~f:(fun b -> b.Type_builder.aggs)
+             |> List.map ~f:(Pred.subst subst)
+           in
+           A.group_by aggs [] bindings)
+  in
+  let sql_queries =
+    List.map queries ~f:(fun r ->
+        let schema = Schema.schema r in
+        let names = List.map schema ~f:Name.name
+        and types = List.map schema ~f:Name.type_exn
+        and sql = Sql.of_ralgebra r |> Sql.to_string in
+        Format.printf "%a@,%s\n\n@." A.pp r sql;
+        (sql, names, types))
+  in
+  let%lwt results =
+    Lwt_list.map_p
+      (fun (sql, schema, types) ->
+        let strm = Db.exec_lwt_exn conn types sql in
+        let%lwt tup = Lwt_stream.get strm in
+        match tup with
+        | Some (Ok t) ->
+            Array.to_list t
+            |> List.map2_exn schema ~f:(fun n v -> (n, v))
+            |> return
+        | Some (Error (_, `Timeout)) -> failwith "Unexpected timeout."
+        | Some (Error (_, `Msg m)) -> failwith m
+        | Some (Error _) -> failwith ""
+        | None -> failwith "Expected a tuple.")
+      sql_queries
+  in
+  let ctx = List.concat results |> Map.of_alist_exn (module String) in
+  return @@ Type_builder.type_of ctx r
 
 (** Returns a layout type that is general enough to hold all of the data. *)
 class ['self] type_fold =
@@ -469,27 +653,11 @@ class ['self] type_fold =
       function
       | Value.Date x ->
           let x = Date.to_int x in
-          DateT
-            {
-              range = AbsInt.of_int x;
-              nullable = false;
-              distinct = Distinct.singleton (module Int) x 1;
-            }
-      | Int x ->
-          IntT
-            {
-              range = AbsInt.of_int x;
-              nullable = false;
-              distinct = Distinct.singleton (module Int) x 1;
-            }
+          DateT { range = AbsInt.of_int x; nullable = false }
+      | Int x -> IntT { range = AbsInt.of_int x; nullable = false }
       | Bool _ -> BoolT { nullable = false }
       | String x ->
-          StringT
-            {
-              nchars = AbsInt.of_int (String.length x);
-              nullable = false;
-              distinct = Distinct.singleton (module String) x 1;
-            }
+          StringT { nchars = AbsInt.of_int (String.length x); nullable = false }
       | Null -> NullT
       | Fixed x -> FixedT { value = AbsFixed.of_fixed x; nullable = false }
 

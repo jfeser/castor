@@ -4,6 +4,7 @@
    castor
    str
    core
+   lwt
  )
  (flags -open Core -open Castor)
  (inline_tests)
@@ -12,4 +13,5 @@
     ppx_sexp_conv
     ppx_compare
     ppx_expect
+    lwt_ppx
 )))

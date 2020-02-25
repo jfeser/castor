@@ -163,34 +163,34 @@ module Reduce = struct
 
   let option zero f = function Some x -> f x | None -> zero
 
-  let pred zero ( + ) query pred = function
+  let pred zero ( + ) annot pred = function
     | Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null _ | Count
     | Row_number ->
         zero
     | Unop (_, p) | As_pred (p, _) | Sum p | Avg p | Max p | Min p -> pred p
     | Binop (_, p, p') -> pred p + pred p'
     | If (p, p', p'') | Substring (p, p', p'') -> pred p + pred p' + pred p''
-    | First q | Exists q -> query q
+    | First q | Exists q -> annot q
 
-  let query zero ( + ) query pred = function
+  let query zero ( + ) annot pred = function
     | Relation _ | AEmpty -> zero
-    | Select (ps, q) | GroupBy (ps, _, q) -> list zero ( + ) pred ps + query q
-    | Filter (p, q) -> pred p + query q
-    | Join { pred = p; r1; r2 } -> pred p + query r1 + query r2
-    | DepJoin { d_lhs = q; d_rhs = q'; _ } | AList (q, q') -> query q + query q'
+    | Select (ps, q) | GroupBy (ps, _, q) -> list zero ( + ) pred ps + annot q
+    | Filter (p, q) -> pred p + annot q
+    | Join { pred = p; r1; r2 } -> pred p + annot r1 + annot r2
+    | DepJoin { d_lhs = q; d_rhs = q'; _ } | AList (q, q') -> annot q + annot q'
     | OrderBy { key; rel } ->
-        list zero ( + ) (fun (p, _) -> pred p) key + query rel
-    | Dedup q | As (_, q) -> query q
+        list zero ( + ) (fun (p, _) -> pred p) key + annot rel
+    | Dedup q | As (_, q) -> annot q
     | Range (p, p') -> pred p + pred p'
     | AScalar p -> pred p
-    | ATuple (qs, _) -> list zero ( + ) query qs
+    | ATuple (qs, _) -> list zero ( + ) annot qs
     | AHashIdx { hi_keys; hi_values; hi_key_layout; hi_lookup; _ } ->
-        query hi_keys + query hi_values
-        + option zero query hi_key_layout
+        annot hi_keys + annot hi_values
+        + option zero annot hi_key_layout
         + list zero ( + ) pred hi_lookup
     | AOrderedIdx (q, q', { oi_key_layout; oi_lookup }) ->
-        query q + query q'
-        + option zero query oi_key_layout
+        annot q + annot q'
+        + option zero annot oi_key_layout
         + list zero ( + )
             (fun (b, b') ->
               option zero (fun (p, _) -> pred p) b
@@ -198,6 +198,16 @@ module Reduce = struct
             oi_lookup
 
   let annot zero ( + ) query meta { node; meta = m } = query node + meta m
+end
+
+module Annotate = struct
+  let rec annot f r =
+    let node = query f r.node in
+    { node; meta = f (fun r' -> r'.meta) node }
+
+  and query f q = (map_query (annot f) (pred f)) q
+
+  and pred f p = map_pred (annot f) (pred f) p
 end
 
 class virtual ['self] endo =

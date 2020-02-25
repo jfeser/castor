@@ -147,7 +147,7 @@ let order_by of_ralgebra key r =
 
 let scoped_names ns p =
   let visitor =
-    object
+    object (self)
       inherit [_] reduce
 
       inherit [_] Util.set_monoid (module Name)
@@ -155,6 +155,10 @@ let scoped_names ns p =
       method! visit_Name () n =
         if Set.mem ns n then Set.empty (module Name)
         else Set.singleton (module Name) n
+
+      method! visit_Exists () _ = self#zero
+
+      method! visit_First () _ = self#zero
     end
   in
   visitor#visit_pred () p
