@@ -12,4 +12,6 @@ let name tbl fmt =
   Hashtbl.set tbl ~key ~data:(ctr + 1);
   name
 
+let int tbl = name tbl "%d" |> Int.of_string
+
 let reset = Hashtbl.clear

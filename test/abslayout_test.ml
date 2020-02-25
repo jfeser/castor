@@ -440,7 +440,7 @@ let%expect_test "pred_names" =
                                                                     + day(1))))))))|}
   in
   Pred.names p |> [%sexp_of: Set.M(Name).t] |> print_s;
-  [%expect {| (((name total_revenue))) |}]
+  [%expect {| (((name total_revenue) (meta <opaque>))) |}]
 
 let%expect_test "" =
   let conn = Lazy.force Test_util.test_db_conn in
@@ -457,4 +457,4 @@ let%expect_test "" =
 
   select [ n "g" ] (filter Pred.Infix.(n "k.f" = n "f") (r "r1"))
   |> free |> [%sexp_of: Set.M(Name).t] |> print_s;
-  [%expect {| (((scope k) (name f))) |}]
+  [%expect {| (((scope k) (name f) (meta <opaque>))) |}]

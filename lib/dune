@@ -36,7 +36,7 @@
    fmt.tty
    genhash
  )
- (flags -open Core)
+ (flags -open Core -unboxed-types)
  (inline_tests)
  (preprocess
   (pps
