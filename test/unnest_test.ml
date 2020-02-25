@@ -19,11 +19,11 @@ let%expect_test "" =
   let t1_attr = attrs d.d_lhs in
   let t2_free = free d.d_rhs in
   t2_free |> [%sexp_of: Set.M(Name).t] |> print_s;
-  [%expect "(((name k_f)))"];
+  [%expect "(((name k_f) (meta <opaque>)))"];
   t1_attr |> [%sexp_of: Set.M(Name).t] |> print_s;
-  [%expect "(((name k_f)))"];
+  [%expect "(((name k_f) (meta <opaque>)))"];
   Set.inter t1_attr t2_free |> [%sexp_of: Set.M(Name).t] |> print_s;
-  [%expect "(((name k_f)))"];
+  [%expect "(((name k_f) (meta <opaque>)))"];
   to_nice_depjoin d.d_lhs d.d_rhs |> Format.printf "%a" pp;
   [%expect
     {|
