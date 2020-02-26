@@ -88,6 +88,19 @@ module Make (C : Config.S) = struct
 
   let elim_depjoin = of_func elim_depjoin ~name:"elim-depjoin"
 
+  let dealias_select r =
+    match r.node with
+    | Select (ps, r') ->
+        let ps' =
+          List.map ps ~f:(function
+            | As_pred (Name n, a) when String.(Name.name n = a) -> Name n
+            | p -> p)
+        in
+        Some (select ps' r')
+    | _ -> None
+
+  let dealias_select = of_func dealias_select ~name:"de-alias-select"
+
   let flatten_select r =
     match r.node with
     | Select (ps, { node = Select (ps', r); _ }) ->
@@ -137,5 +150,6 @@ module Make (C : Config.S) = struct
         for_all flatten_select Path.(all >>? is_select);
         for_all flatten_dedup Path.(all >>? is_dedup);
         for_all flatten_tuple Path.(all >>? is_tuple);
+        for_all dealias_select Path.(all >>? is_select);
       ]
 end

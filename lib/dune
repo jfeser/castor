@@ -1,7 +1,21 @@
 (library
  (name castor_opt)
  (public_name castor-opt)
- (libraries castor castor_test core postgresql yojson combinat ocamlgraph)
+ (libraries
+   castor
+   castor_test
+   core
+   postgresql
+   yojson
+   combinat
+   ocamlgraph
+ )
  (inline_tests)
  (preprocess
-  (pps ppx_sexp_conv ppx_compare ppx_hash ppx_expect ppx_let)))
+  (pps
+    ppx_sexp_conv
+    ppx_compare
+    ppx_hash
+    ppx_expect
+    ppx_let
+)))

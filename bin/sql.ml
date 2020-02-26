@@ -4,7 +4,7 @@ open Collections
 open Castor_opt
 open Abslayout_load
 
-let main ~params:all_params ~simplify ~sql ch =
+let main ~params:all_params ~simplify ~unnest ~sql ch =
   Logs.set_level (Some Debug);
   Logs.Src.set_level Log.src (Some Debug);
   let params =
@@ -28,6 +28,7 @@ let main ~params:all_params ~simplify ~sql ch =
   let module O = Ops.Make (Config) in
   let query_str = In_channel.input_all ch in
   let query = load_string ~params Config.conn query_str in
+  let query = if unnest then Unnest.unnest query else query in
   let query =
     if simplify then Option.value_exn (O.apply S.simplify Path.root query)
     else query
@@ -43,6 +44,8 @@ let () =
       and sql = flag "sql" no_arg ~doc:"dump sql"
       and simplify =
         flag "simplify" ~aliases:[ "s" ] no_arg ~doc:"simplify the query"
+      and unnest =
+        flag "unnest" ~aliases:[ "u" ] no_arg ~doc:"unnest before simplifying"
       and params =
         flag "param" ~aliases:[ "p" ]
           (listed Util.param_and_value)
@@ -50,5 +53,5 @@ let () =
       and ch =
         anon (maybe_with_default In_channel.stdin ("query" %: Util.channel))
       in
-      fun () -> main ~params ~simplify ~sql ch]
+      fun () -> main ~params ~simplify ~unnest ~sql ch]
   |> Command.run
