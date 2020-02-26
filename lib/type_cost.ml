@@ -1,7 +1,7 @@
 open! Core
 open Castor
 open Abslayout_load
-open Abslayout_type
+open Type
 
 module Config = struct
   module type S = sig
@@ -15,9 +15,10 @@ end
 
 module Make (Config : Config.S) = struct
   open Config
-  open Type
 
   let rec read = function
+    | StringT { nchars = Top; _ } ->
+        (* TODO: Fix this... *) AbsInt.Interval (5, 50)
     | (NullT | EmptyT | IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _) as t
       ->
         len t
@@ -33,32 +34,34 @@ module Make (Config : Config.S) = struct
     Memo.general
       ~hashable:(Hashtbl.Hashable.of_key (module Ast))
       (fun r ->
-        let open Result.Let_syntax in
-        try
-          Logs.debug (fun m -> m "Computing cost of %a." Abslayout.pp r);
-          let c =
-            load_layout ~params cost_conn r
-            |> type_of ?timeout:cost_timeout cost_conn
-            |> read
-          in
-          let out =
-            match kind with
-            | `Min -> AbsInt.inf c
-            | `Max -> AbsInt.sup c
-            | `Avg ->
-                let%bind l = AbsInt.inf c in
-                let%map h = AbsInt.sup c in
-                l + ((h - l) / 2)
-          in
-          match out with
-          | Ok x ->
-              let x = Float.of_int x in
-              Logs.debug (fun m -> m "Found cost %f." x);
-              x
-          | Error e ->
-              Logs.warn (fun m -> m "Computing cost failed: %a" Error.pp e);
-              Float.max_value
-        with Lwt_unix.Timeout ->
-          Logs.warn (fun m -> m "Computing cost timed out.");
-          Float.max_value)
+        Logs.debug (fun m -> m "Computing cost of:@, %a." Abslayout.pp r);
+        let type_ =
+          load_layout ~params cost_conn r
+          |> Abslayout.strip_meta
+          |> Parallel.type_of ?timeout:cost_timeout cost_conn
+        in
+        match type_ with
+        | Some t -> (
+            let c = read t in
+            let out =
+              match kind with
+              | `Min -> AbsInt.inf c
+              | `Max -> AbsInt.sup c
+              | `Avg ->
+                  let open Result.Let_syntax in
+                  let%bind l = AbsInt.inf c in
+                  let%map h = AbsInt.sup c in
+                  l + ((h - l) / 2)
+            in
+            match out with
+            | Ok x ->
+                let x = Float.of_int x in
+                Logs.debug (fun m -> m "Found cost %f." x);
+                x
+            | Error e ->
+                Logs.warn (fun m -> m "Computing cost failed: %a" Error.pp e);
+                Float.max_value )
+        | None ->
+            Logs.warn (fun m -> m "Computing cost timed out.");
+            Float.max_value)
 end
