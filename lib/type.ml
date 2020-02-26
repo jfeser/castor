@@ -520,8 +520,10 @@ module Parallel = struct
   module Type_builder = struct
     type type_ = t
 
+    type agg = Simple of Pred.t | Subquery of (Ast.t * Pred.t list)
+
     type nonrec t = {
-      aggs : Pred.t list;
+      aggs : agg list;
       build : Value.t Map.M(String).t -> t list -> t option;
     }
 
@@ -549,7 +551,7 @@ module Parallel = struct
                nullable = false (* TODO *);
              }
       in
-      { aggs = [ min; max ]; build }
+      { aggs = [ Simple min; Simple max ]; build }
 
     let bool_t =
       {
@@ -571,7 +573,7 @@ module Parallel = struct
                nullable = false (* TODO *);
              }
       in
-      { aggs = [ min; max ]; build }
+      { aggs = [ Simple min; Simple max ]; build }
 
     let fixed_t _ =
       {
@@ -602,14 +604,16 @@ module Parallel = struct
       | VoidT | TupleT _ -> failwith "Invalid scalar types."
 
     let count_t f q =
-      let qs =
-        First (Abslayout.group_by [ As_pred (Count, "c") ] [] (A.strip_scope q))
+      let agg_name = Fresh.name Global.fresh "ct%d" in
+      let counts =
+        Abslayout.group_by [ As_pred (Count, agg_name) ] [] (A.strip_scope q)
       in
-      let min = wrap @@ Min qs in
-      let max = wrap @@ Max qs in
+      let count = Name (Name.create agg_name) in
+      let min = wrap @@ Min count in
+      let max = wrap @@ Max count in
       let eval ctx v = eval ctx min |> Value.to_int in
       {
-        aggs = [ min; max ];
+        aggs = [ Subquery (counts, [ min; max ]) ];
         build =
           (fun ctx ts -> f ts (AbsInt.Interval (eval ctx min, eval ctx max)));
       }
@@ -695,32 +699,56 @@ module Parallel = struct
     include T
     include Comparator.Make (T)
 
-    (** Convert a context to a query that selects the bindings produced by the
-     context. Also produce a renaming from the original bindings to the bindings
-     selected by the query. *)
-    let to_ralgebra ctxs =
-      let renaming =
-        List.concat_map ctxs ~f:(fun (r, s) ->
-            Schema.schema r
-            |> List.map ~f:(fun n ->
-                   let n = Name.scoped s n in
-                   (n, unscope n)))
-      in
-      let select_list =
-        List.map renaming ~f:(fun (n, n') -> As_pred (Name n, Name.name n'))
-      in
-      let bindings =
-        let one = A.scalar (As_pred (Int 0, Fresh.name Global.fresh "x%d")) in
-        if List.is_empty select_list then one
-        else
-          let select = A.select select_list one in
-          let rec to_dep_join = function
-            | [] -> select
-            | (r, s) :: ctxs -> A.dep_join r s (to_dep_join ctxs)
+    let to_ralgebra_simple ctxs aggs =
+      if List.is_empty aggs then []
+      else
+        let renaming =
+          List.concat_map ctxs ~f:(fun (r, s) ->
+              Schema.schema r
+              |> List.map ~f:(fun n ->
+                     let n = Name.scoped s n in
+                     (n, unscope n)))
+        in
+        let select_list =
+          List.map renaming ~f:(fun (n, n') -> As_pred (Name n, Name.name n'))
+        in
+        let bindings =
+          let one = A.scalar (As_pred (Int 0, Fresh.name Global.fresh "x%d")) in
+          if List.is_empty select_list then one
+          else
+            let select = A.select select_list one in
+            let rec to_dep_join = function
+              | [] -> select
+              | (r, s) :: ctxs -> A.dep_join r s (to_dep_join ctxs)
+            in
+            to_dep_join ctxs
+        in
+        let aggs =
+          let subst =
+            List.map renaming ~f:(fun (n, n') -> (n, Name n'))
+            |> Map.of_alist_exn (module Name)
           in
-          to_dep_join ctxs
+          List.map aggs ~f:(Pred.subst subst)
+        in
+        [ A.group_by aggs [] bindings ]
+
+    let to_ralgebra_subquery ctxs (subquery, aggs) =
+      let rec to_dep_join = function
+        | [] -> subquery
+        | (r, s) :: ctxs -> A.dep_join r s (to_dep_join ctxs)
       in
-      (renaming, bindings)
+      A.group_by aggs [] (to_dep_join ctxs)
+
+    let to_ralgebra ctxs builders =
+      let simple, subquery =
+        List.map builders ~f:(fun b -> b.Type_builder.aggs)
+        |> List.concat
+        |> List.partition_map ~f:(function
+             | Type_builder.Simple ps -> `Fst ps
+             | Subquery p -> `Snd p)
+      in
+      to_ralgebra_simple ctxs simple
+      @ List.map subquery ~f:(to_ralgebra_subquery ctxs)
   end
 
   let contexts r =
@@ -762,35 +790,21 @@ module Parallel = struct
     let r = Type_builder.annot r in
     let queries =
       contexts r |> Map.to_alist
-      |> List.map ~f:(fun (ctx, builders) ->
-             let renaming, bindings = Context.to_ralgebra ctx in
-             let aggs =
-               let subst =
-                 List.map renaming ~f:(fun (n, n') -> (n, Name n'))
-                 |> Map.of_alist_exn (module Name)
-               in
-               List.concat_map builders ~f:(fun b -> b.Type_builder.aggs)
-               |> List.map ~f:(Pred.subst subst)
-             in
-             A.group_by aggs [] bindings)
+      |> List.concat_map ~f:(fun (ctx, builders) ->
+             Context.to_ralgebra ctx builders)
     in
     List.iter queries ~f:(fun r -> Log.debug (fun m -> m "%a" A.pp r));
-    let queries =
-      List.map queries ~f:(fun r ->
-          let names = Schema.schema r |> List.map ~f:Name.name
-          and r = Unnest.unnest r in
-          (r, names))
-    in
 
     let%lwt results =
       Lwt_list.map_p
-        (fun (r, names) ->
+        (fun r ->
+          let r = Unnest.unnest r |> Resolve.resolve in
           let strm = Db.Async.exec ?timeout conn r in
           let%lwt tup = Lwt_stream.get strm in
           match tup with
           | Some (Ok t) ->
               Array.to_list t
-              |> List.map2_exn names ~f:(fun n v -> (n, v))
+              |> List.map2_exn (Schema.names r) ~f:(fun n v -> (n, v))
               |> Option.return |> return
           | Some (Error { info = `Timeout; _ }) -> return None
           | Some (Error e) -> Error.raise @@ Db.Async.to_error e

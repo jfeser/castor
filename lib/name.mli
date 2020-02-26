@@ -11,9 +11,9 @@ val copy :
 
 val name : t -> string
 
-val type_ : t -> Prim_type.t option
+val type_ : t -> Prim_type.t option [@@deprecated]
 
-val type_exn : t -> Prim_type.t
+val type_exn : t -> Prim_type.t [@@deprecated]
 
 val rel : t -> string option
 

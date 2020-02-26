@@ -468,6 +468,5 @@ module Async = struct
 
   let exec ?timeout ?cancel db r =
     exec_sql ?timeout ?cancel db
-      ( Schema.schema r |> List.map ~f:Name.type_exn,
-        Sql.of_ralgebra r |> Sql.to_string )
+      (Schema.types r, Sql.of_ralgebra r |> Sql.to_string)
 end

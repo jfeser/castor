@@ -79,6 +79,10 @@ let schema_open schema r =
 
 let rec schema r = schema_open schema r
 
+let names r = schema r |> List.map ~f:Name.name
+
+let types r = schema r |> List.map ~f:Name.type_exn
+
 let rec to_type q =
   let rec to_type q = to_type_open schema to_type q in
   try to_type q
