@@ -393,16 +393,14 @@ class virtual ['self] abslayout_fold =
       Log.info (fun m -> m "Running SQL: %s" (Sql.to_string_hum sql));
       (* Run the sql to get a stream of tuples. *)
       let tups =
-        Db.exec_lwt_exn ?timeout conn
-          (Schema.schema r |> List.map ~f:Name.type_exn)
-          (Sql.to_string sql)
+        Db.Async.exec ?timeout conn r
         |> Lwt_stream.map (function
              | Ok x -> Array.to_list x
-             | Error (_, `Timeout) -> raise Lwt_unix.Timeout
-             | Error ((query, _) as e) ->
+             | Error Db.Async.{ info = `Timeout; _ } -> raise Lwt_unix.Timeout
+             | Error ({ query; _ } as e) ->
                  Log.err (fun m ->
                      m "Running SQL failed: %s" (Sql.format query));
-                 Db.to_error e |> Error.raise)
+                 Db.Async.to_error e |> Error.raise)
         |> Lwt_stream.map (fun t ->
                Log.debug (fun m ->
                    m "%a" Sexp.pp_hum ([%sexp_of: Value.t list] t));

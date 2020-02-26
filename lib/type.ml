@@ -660,8 +660,9 @@ module Parallel = struct
       let rec annot (r : t annot) : type_ list =
         let ts =
           match r.node with
-          | AHashIdx h ->
-              annot (Option.value_exn h.hi_key_layout) @ annot h.hi_values
+          | AHashIdx { hi_key_layout = qk; hi_values = qv; _ }
+          | AOrderedIdx (_, qv, { oi_key_layout = qk; _ }) ->
+              annot (Option.value_exn qk) @ annot qv
           | _ -> Reduce.annot zero plus query meta r
         in
         r.meta.build ctx ts |> Option.to_list
@@ -731,8 +732,11 @@ module Parallel = struct
       let this_ctx = empty r.meta in
       let child_ctxs =
         match r.node with
-        | AOrderedIdx (qk, qv, _) | AList (qk, qv) ->
-            wrap (split_scope qk) (annot qv)
+        | AList (qk, qv) -> wrap (split_scope qk) (annot qv)
+        | AOrderedIdx (qk, qv, o) ->
+            let wrap = wrap (split_scope qk) in
+            let qk = Option.value_exn o.oi_key_layout in
+            plus (wrap (annot qv)) (wrap (empty qk.meta))
         | AHashIdx h ->
             let wrap = wrap (h.hi_keys, h.hi_scope) in
             let qk = Option.value_exn h.hi_key_layout in
@@ -747,7 +751,7 @@ module Parallel = struct
     |> List.map ~f:(fun (k, v) -> (k, [ v ]))
     |> Map.of_alist_reduce (module Context) ~f:( @ )
 
-  let type_of conn r =
+  let type_of ?timeout conn r =
     let open Lwt in
     let r = Type_builder.annot r in
     let queries =
@@ -764,30 +768,37 @@ module Parallel = struct
              in
              A.group_by aggs [] bindings)
     in
-    let sql_queries =
+    let queries =
       List.map queries ~f:(fun r ->
-          let schema = Schema.schema r in
-          let names = List.map schema ~f:Name.name
-          and types = List.map schema ~f:Name.type_exn
-          and sql = r |> Unnest.unnest |> Sql.of_ralgebra |> Sql.to_string in
-          (sql, names, types))
+          let names = Schema.schema r |> List.map ~f:Name.name
+          and r = Unnest.unnest r in
+          (r, names))
     in
+
     let%lwt results =
       Lwt_list.map_p
-        (fun (sql, schema, types) ->
-          let strm = Db.exec_lwt_exn conn types sql in
+        (fun (r, names) ->
+          let strm = Db.Async.exec ?timeout conn r in
           let%lwt tup = Lwt_stream.get strm in
           match tup with
           | Some (Ok t) ->
               Array.to_list t
-              |> List.map2_exn schema ~f:(fun n v -> (n, v))
-              |> return
-          | Some (Error (_, `Timeout)) -> failwith "Unexpected timeout."
-          | Some (Error (_, `Msg m)) -> failwith m
-          | Some (Error _) -> failwith ""
+              |> List.map2_exn names ~f:(fun n v -> (n, v))
+              |> Option.return |> return
+          | Some (Error { info = `Timeout; _ }) -> return None
+          | Some (Error e) -> Error.raise @@ Db.Async.to_error e
           | None -> failwith "Expected a tuple.")
-        sql_queries
+        queries
     in
-    let ctx = List.concat results |> Map.of_alist_exn (module String) in
-    return @@ Type_builder.type_of ctx r
+    let type_ =
+      Option.all results
+      |> Option.map ~f:(fun results ->
+             let ctx =
+               List.concat results |> Map.of_alist_exn (module String)
+             in
+             Type_builder.type_of ctx r)
+    in
+    return type_
+
+  let type_of ?timeout conn r = Lwt_main.run (type_of ?timeout conn r)
 end

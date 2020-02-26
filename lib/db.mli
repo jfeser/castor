@@ -30,17 +30,6 @@ val exec_cursor_exn :
   string ->
   Value.t array Gen.t
 
-val to_error : string * [ `Timeout | `Exn of exn | `Msg of string ] -> Error.t
-
-val exec_lwt_exn :
-  ?params:string list ->
-  ?timeout:float ->
-  t ->
-  Prim_type.t list ->
-  string ->
-  (Value.t array, string * [ `Timeout | `Exn of exn | `Msg of string ]) result
-  Lwt_stream.t
-
 val check : t -> string -> unit Or_error.t
 
 val relation : ?with_types:bool -> t -> string -> Relation.t
@@ -53,3 +42,24 @@ val relation_has_field : t -> string -> Relation.t option
 
 val eq_join_type :
   t -> string -> string -> [ `Left | `Right | `Both | `Neither ] Or_error.t
+
+module Async : sig
+  type error = {
+    query : string;
+    info : [ `Timeout | `Exn of Exn.t | `Msg of string ];
+  }
+  [@@deriving sexp_of]
+
+  val to_error : error -> Error.t
+
+  type 'a exec =
+    ?timeout:float ->
+    ?cancel:unit Lwt.t ->
+    t ->
+    'a ->
+    (Value.t array, error) result Lwt_stream.t
+
+  val exec_sql : (Prim_type.t list * string) exec
+
+  val exec : Ast.t exec
+end

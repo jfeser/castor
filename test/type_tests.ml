@@ -37,13 +37,8 @@ let%expect_test "len-1" =
   [%expect {| (Interval 3 203) |}]
 
 let type_test conn q =
-  let open Lwt in
-  let p =
-    let%lwt type_ = Type.Parallel.type_of conn q in
-    [%sexp_of: Type.t] type_ |> print_s;
-    return_unit
-  in
-  Lwt_main.run p
+  let type_ = Type.Parallel.type_of conn q in
+  [%sexp_of: Type.t option] type_ |> print_s
 
 let%expect_test "" =
   let conn = Lazy.force Test_util.test_db_conn in
@@ -54,7 +49,7 @@ let%expect_test "" =
   type_test conn q;
   [%expect
     {|
-    (ListT ((IntT ((range (Interval 1 3)))) ((count (Interval 5 5))))) |}]
+    ((ListT ((IntT ((range (Interval 1 3)))) ((count (Interval 5 5)))))) |}]
 
 let%expect_test "" =
   let conn = Lazy.force Test_util.test_db_conn in
@@ -65,9 +60,9 @@ let%expect_test "" =
   type_test conn q;
   [%expect
     {|
-    (HashIdxT
-     ((IntT ((range (Interval 1 3)))) (IntT ((range (Interval 1 3))))
-      ((key_count (Interval 5 5))))) |}]
+    ((HashIdxT
+      ((IntT ((range (Interval 1 3)))) (IntT ((range (Interval 1 3))))
+       ((key_count (Interval 5 5)))))) |}]
 
 let%expect_test "" =
   let conn = Lazy.force Test_util.test_db_conn in
@@ -79,7 +74,58 @@ let%expect_test "" =
   type_test conn q;
   [%expect
     {|
-    (HashIdxT
-     ((IntT ((range (Interval 1 3))))
-      (ListT ((IntT ((range (Interval 1 4)))) ((count (Interval 1 1)))))
-      ((key_count (Interval 5 5))))) |}]
+    ((HashIdxT
+      ((IntT ((range (Interval 1 3))))
+       (ListT ((IntT ((range (Interval 1 4)))) ((count (Interval 1 1)))))
+       ((key_count (Interval 5 5)))))) |}]
+
+let%expect_test "" =
+  let conn = Lazy.force Test_util.tpch_conn in
+  let q =
+    {|
+    alist(orderby([l_returnflag, l_linestatus], dedup(select([l_returnflag, l_linestatus], lineitem))) as k0,
+                    select([l_returnflag, l_linestatus, sum(l_quantity) as sum_qty,
+                            sum(l_extendedprice) as sum_base_price,
+                            sum((l_extendedprice * (1 - l_discount))) as sum_disc_price,
+                            sum(((l_extendedprice * (1 - l_discount)) * (1 + l_tax))) as sum_charge,
+                            avg(l_quantity) as avg_qty, avg(l_extendedprice) as avg_price, 
+                            avg(l_discount) as avg_disc, count() as count_order],
+                      aorderedidx(dedup(select([l_shipdate], lineitem)) as s0,
+                        select([l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus],
+                          alist(select([l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus],
+                                  filter(((l_returnflag = k0.l_returnflag) &&
+                                         ((l_linestatus = k0.l_linestatus) && (l_shipdate = s0.l_shipdate))),
+                                    lineitem)) as s1,
+                            atuple([ascalar(s1.l_quantity), ascalar(s1.l_extendedprice), 
+                                    ascalar(s1.l_discount), ascalar(s1.l_tax), 
+                                    ascalar(s1.l_returnflag), ascalar(s1.l_linestatus)],
+                              cross))),
+                        , <= (date("1998-12-01") - day(param0)))))
+|}
+    |> Abslayout_load.load_string
+         ~params:
+           (Set.of_list
+              (module Name)
+              [ Name.create ~type_:Prim_type.int_t "param0" ])
+         conn
+  in
+  type_test conn q;
+  [%expect {|
+    ((ListT
+      ((FuncT
+        (((OrderedIdxT
+           ((DateT ((range (Interval 8037 10552))))
+            (FuncT
+             (((ListT
+                ((TupleT
+                  (((IntT ((range (Interval 1 50))))
+                    (FixedT ((value ((range Top) (scale 1)))))
+                    (FixedT ((value ((range Top) (scale 1)))))
+                    (FixedT ((value ((range Top) (scale 1)))))
+                    (StringT ((nchars Top))) (StringT ((nchars Top))))
+                   ((kind Cross))))
+                 ((count (Interval 0 0))))))
+              (Width 6)))
+            ((key_count (Interval 812 812))))))
+         (Width 10)))
+       ((count (Interval 4 4)))))) |}]

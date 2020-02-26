@@ -4,17 +4,12 @@ open Abslayout
 open Collections
 open Schema
 
-let exec conn r =
-  Db.exec_lwt_exn conn
-    (schema r |> List.map ~f:Name.type_exn)
-    (Sql.of_ralgebra r |> Sql.to_string)
-
 type tuple = Value.t array [@@deriving compare, sexp]
 
 let normal_order r =
   order_by (List.map (schema r) ~f:(fun n -> (Name n, Desc))) r
 
-let to_err = Result.map_error ~f:Db.to_error
+let to_err = Result.map_error ~f:Db.Async.to_error
 
 let compare t1 t2 =
   match (to_err t1, to_err t2) with
@@ -35,8 +30,8 @@ let equiv conn r1 r2 =
     else
       let r1 = normal_order r1 in
       let r2 = normal_order r2 in
-      let ts1 = exec conn r1 in
-      let ts2 = exec conn r2 in
+      let ts1 = Db.Async.exec conn r1 in
+      let ts2 = Db.Async.exec conn r2 in
       let rec check () =
         let%lwt t1 = Lwt_stream.get ts1 in
         let%lwt t2 = Lwt_stream.get ts2 in

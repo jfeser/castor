@@ -331,74 +331,6 @@ let exec_cursor_exn =
     in
     seq
 
-let to_error (query, err) =
-  let err =
-    match err with
-    | `Timeout -> Error.createf "Timed out."
-    | `Exn e -> Error.of_exn e
-    | `Msg m -> Error.of_string m
-  in
-  Error.tag_arg err "query" query [%sexp_of: string]
-
-let exec_lwt_exn ?(params = []) ?timeout db schema query =
-  let query = subst_params params query in
-  let stream, push = Lwt_stream.create () in
-
-  (* Create a new database connection. *)
-  let exec () =
-    Lwt_pool.use db.pool (fun conn ->
-        let fail msg =
-          push (Some (Result.fail (query, msg)));
-          push None;
-          conn#reset;
-          return_unit
-        in
-
-        (* OCaml can't convert integers to fds for reasons, so magic is
-           required. *)
-        let fd = conn#socket |> Obj.magic |> Lwt_unix.of_unix_file_descr in
-        (* Wait for results from a send_query call. consume_input pulls any
-           available input from the database *)
-        let rec wait_for_results () =
-          conn#consume_input;
-          if conn#is_busy then
-            let%lwt () = Lwt_unix.wait_read fd in
-            wait_for_results ()
-          else
-            match conn#get_result with
-            | Some r -> (
-                match r#status with
-                | Tuples_ok ->
-                    load_tuples_list_exn schema r
-                    |> List.iter ~f:(fun t -> push (Some (Result.return t)));
-                    wait_for_results ()
-                | Fatal_error -> fail (`Msg r#error)
-                | _ -> fail (`Msg "Unexpected status") )
-            | None ->
-                push None;
-                return_unit
-        in
-        let execute_query () =
-          conn#send_query query;
-          wait_for_results ()
-        in
-        let execute_with_timeout t =
-          try%lwt Lwt_unix.with_timeout t execute_query
-          with Lwt_unix.Timeout ->
-            Log.debug (fun m -> m "Query timeout: %s" query);
-            exec db (sprintf "select pg_cancel_backend(%d);" conn#backend_pid)
-            |> ignore;
-            fail `Timeout
-        in
-        try%lwt
-          match timeout with
-          | Some t -> execute_with_timeout t
-          | None -> execute_query ()
-        with exn -> fail (`Exn exn))
-  in
-  async exec;
-  stream
-
 let check db sql =
   let open Or_error.Let_syntax in
   let name = Fresh.name Global.fresh "check%d" in
@@ -425,3 +357,117 @@ let eq_join_type =
   in
   let memo = Memo.general (fun (c, n1, n2) -> f c n1 n2) in
   fun c n1 n2 -> memo (c, n1, n2)
+
+module Async = struct
+  type db = t
+
+  open Lwt
+
+  type error = {
+    query : string;
+    info : [ `Timeout | `Exn of Exn.t | `Msg of string ];
+  }
+  [@@deriving sexp_of]
+
+  type 'a exec =
+    ?timeout:float ->
+    ?cancel:unit Lwt.t ->
+    db ->
+    'a ->
+    (Value.t array, error) Result.t Lwt_stream.t
+
+  let return_never =
+    let p, _ = wait () in
+    p
+
+  let return_unit_timeout t =
+    let p, r = wait () in
+    Lwt_timeout.(create (Int.of_float t) (wakeup_later r) |> start);
+    p
+
+  let to_error { query; info = err } =
+    let err =
+      match err with
+      | `Timeout -> Error.createf "Timed out."
+      | `Exn e -> Error.of_exn e
+      | `Msg m -> Error.of_string m
+    in
+    Error.tag_arg err "query" query [%sexp_of: string]
+
+  let exec_sql ?timeout ?(cancel = return_never) db (schema, query) =
+    let stream, push = Lwt_stream.create () in
+
+    (* We cancel if the caller asks for a cancellation or if the query times
+       out. *)
+    let cancel =
+      let timeout =
+        let%lwt () =
+          Option.map timeout ~f:return_unit_timeout
+          |> Option.value ~default:return_never
+        in
+        Log.debug (fun m -> m "Query timeout: %s" query);
+        return_unit
+      in
+      choose [ cancel; timeout ]
+    in
+
+    (* Create a new database connection. *)
+    let exec () =
+      Lwt_pool.use db.pool (fun conn ->
+          let fail msg =
+            push (Some (Result.fail { query; info = msg }));
+            push None;
+            conn#reset;
+            return_unit
+          in
+
+          (* OCaml can't convert integers to fds for reasons, so magic is
+           required. *)
+          let fd = conn#socket |> Obj.magic |> Lwt_unix.of_unix_file_descr in
+
+          let wait_for_cancel () =
+            let%lwt () = protected cancel in
+            exec db (sprintf "select pg_cancel_backend(%d);" conn#backend_pid)
+            |> ignore;
+            fail `Timeout
+          in
+
+          let read_results k =
+            match conn#get_result with
+            | Some r -> (
+                match r#status with
+                | Tuples_ok ->
+                    load_tuples_list_exn schema r
+                    |> List.iter ~f:(fun t -> push (Some (Result.return t)));
+                    k ()
+                | Fatal_error -> fail (`Msg r#error)
+                | _ -> fail (`Msg "Unexpected status") )
+            | None ->
+                push None;
+                return_unit
+          in
+
+          (* Wait for results from a send_query call. consume_input pulls any
+           available input from the database *)
+          let rec wait_for_results () =
+            conn#consume_input;
+            if conn#is_busy then
+              pick
+                [
+                  Lwt_unix.wait_read fd >>= wait_for_results; wait_for_cancel ();
+                ]
+            else read_results wait_for_results
+          in
+          try%lwt
+            conn#send_query query;
+            wait_for_results ()
+          with exn -> fail (`Exn exn))
+    in
+    async exec;
+    stream
+
+  let exec ?timeout ?cancel db r =
+    exec_sql ?timeout ?cancel db
+      ( Schema.schema r |> List.map ~f:Name.type_exn,
+        Sql.of_ralgebra r |> Sql.to_string )
+end
