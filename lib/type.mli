@@ -1,5 +1,7 @@
 open Ast
 
+val src : Logs.Src.t
+
 exception TypeError of Core.Error.t
 
 (** Range abstraction for integers. *)

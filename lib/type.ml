@@ -4,6 +4,12 @@ open Abslayout_visitors
 open Collections
 module A = Abslayout
 
+let src = Logs.Src.create "castor.abslayout_fold"
+
+module Log = (val Logs.src_log src : Logs.LOG)
+
+let () = Logs.Src.set_level src (Some Debug)
+
 exception TypeError of Error.t [@@deriving sexp]
 
 module AbsInt = struct
@@ -768,6 +774,7 @@ module Parallel = struct
              in
              A.group_by aggs [] bindings)
     in
+    List.iter queries ~f:(fun r -> Log.debug (fun m -> m "%a" A.pp r));
     let queries =
       List.map queries ~f:(fun r ->
           let names = Schema.schema r |> List.map ~f:Name.name
