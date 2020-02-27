@@ -9,7 +9,7 @@ let src = Logs.Src.create "castor.abslayout_fold"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
-let () = Logs.Src.set_level src (Some Error)
+let () = Logs.Src.set_level src None
 
 module Fold = struct
   type ('a, 'b, 'c) fold = {

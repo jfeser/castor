@@ -1,6 +1,8 @@
 open Type
 open Collections
 
+let () = Logs.Src.set_level src None
+
 let%expect_test "byte-width-1" =
   [%sexp_of: int] (AbsInt.byte_width ~nullable:false (Interval (0, 149)))
   |> print_s;
@@ -110,7 +112,8 @@ let%expect_test "" =
          conn
   in
   type_test conn q;
-  [%expect {|
+  [%expect
+    {|
     ((ListT
       ((FuncT
         (((OrderedIdxT
@@ -124,7 +127,7 @@ let%expect_test "" =
                     (FixedT ((value ((range Top) (scale 1)))))
                     (StringT ((nchars Top))) (StringT ((nchars Top))))
                    ((kind Cross))))
-                 ((count (Interval 0 0))))))
+                 ((count (Interval 1 1))))))
               (Width 6)))
             ((key_count (Interval 812 812))))))
          (Width 10)))

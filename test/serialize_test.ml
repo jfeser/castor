@@ -7,13 +7,17 @@ let process_layout_log log =
   let log' = Str.global_replace map_entry_regex {|Map entry (\1 => XXX)|} log in
   (log', not String.(log = log'))
 
-let run_test layout_str =
+let run_test ?params layout_str =
   let open Abslayout_load in
+  let params =
+    Option.map params ~f:(fun ps ->
+        List.map ps ~f:(fun (n, _) -> n) |> Set.of_list (module Name))
+  in
   let conn = Lazy.force test_db_conn in
 
   let layout_file = Filename.temp_file "layout" "bin" in
   let layout_log_file = Filename.temp_file "layout" "txt" in
-  let layout = load_string conn layout_str |> Type.annotate conn in
+  let layout = load_string ?params conn layout_str |> Type.annotate conn in
   let type_ = layout.meta#type_ in
   let _, len =
     Serialize.serialize ~layout_file:layout_log_file conn layout_file layout
@@ -233,3 +237,55 @@ let%expect_test "depjoin" =
         (IntT ((range (Interval 5 5)))))
        Child_sum))
      6 "\\001\\001\\002\\002\\003\\005") |}]
+
+let%expect_test "demomatch-example2" =
+  run_test ~params:Demomatch.example_params (Demomatch.example2 "log");
+  [%expect {|
+    0:2 Table len (=125)
+    2:2 Table hash len (=104)
+    4:104 Table hash
+    108:1 Table map len (=2)
+    109:2 Table key map
+    109:1 Map entry (0 => XXX)
+    110:1 Map entry (1 => XXX)
+    111:14 Table values
+    111:2 Tuple body
+    111:1 Scalar (=(Int 1))
+    111:0 Tuple len (=2)
+    112:1 Scalar (=(Int 2))
+    113:1 List count (=1)
+    114:1 List len (=4)
+    115:2 List body
+    115:2 Tuple body
+    115:1 Scalar (=(Int 1))
+    115:0 Tuple len (=2)
+    116:1 Scalar (=(Int 2))
+    117:2 Tuple body
+    117:1 Scalar (=(Int 1))
+    117:0 Tuple len (=2)
+    118:1 Scalar (=(Int 3))
+    119:1 List count (=2)
+    120:1 List len (=6)
+    121:4 List body
+    121:2 Tuple body
+    121:1 Scalar (=(Int 1))
+    121:0 Tuple len (=2)
+    122:1 Scalar (=(Int 3))
+    123:2 Tuple body
+    123:1 Scalar (=(Int 4))
+    123:0 Tuple len (=2)
+    124:1 Scalar (=(Int 5))
+
+    ((FuncT
+      (((HashIdxT
+         ((TupleT
+           (((IntT ((range (Interval 1 1)))) (IntT ((range (Interval 2 3)))))
+            ((kind Cross))))
+          (ListT
+           ((TupleT
+             (((IntT ((range (Interval 1 4)))) (IntT ((range (Interval 2 5)))))
+              ((kind Cross))))
+            ((count (Interval 1 2)))))
+          ((key_count (Interval 2 2))))))
+       (Width 2)))
+     125) |}]

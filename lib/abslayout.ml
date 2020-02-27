@@ -398,9 +398,7 @@ let order_k =
   Univ_map.Key.create ~name:"order" [%sexp_of: (Ast.t pred * order) list]
 
 let annotate_orders r =
-  let eq_k =
-    Univ_map.Key.create ~name:"eq" [%sexp_of: (Name.t * Name.t) list]
-  in
+  let eq_k = Univ_map.Key.create ~name:"eq" [%sexp_of: Equiv.t] in
   let rec annotate_orders (r : Univ_map.t ref annot) =
     let order =
       match r.node with
@@ -435,7 +433,7 @@ let annotate_orders r =
                | Name n, dir ->
                    if List.mem ~equal:( = ) s' n then Some (Name n, dir)
                    else
-                     List.find_map eq' ~f:(fun (n', n'') ->
+                     Set.find_map eq' ~f:(fun (n', n'') ->
                          if n = n' then Some (Name n'', dir)
                          else if n = n'' then Some (Name n', dir)
                          else None)

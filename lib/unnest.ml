@@ -4,6 +4,12 @@ open Abslayout_visitors
 open Schema
 module P = Pred.Infix
 
+let src = Logs.Src.create "castor.unnest"
+
+module Log = (val Logs.src_log src : Logs.LOG)
+
+let () = Logs.Src.set_level src None
+
 (** In this module, we assume that dep_join returns attributes from both its lhs
    and rhs. This assumption is safe because we first wrap depjoins in selects
    that project out their lhs attributes. The queries returned by the main
@@ -91,7 +97,7 @@ let dep_join lhs rhs =
   dep_join lhs "x" rhs
 
 let simple_join lhs rhs =
-  let eqs = Equiv.eqs lhs @ Equiv.eqs rhs
+  let eqs = Equiv.(eqs lhs || eqs rhs) |> Set.to_list
   and schema_lhs = schema lhs
   and schema_rhs = schema rhs in
 
@@ -104,6 +110,8 @@ let simple_join lhs rhs =
   List.iter eqs ~f:(fun (n, n') ->
       Union_find.union (Map.find_exn classes n) (Map.find_exn classes n'));
 
+  (* Try to compute an extension of the rhs that covers the attributes from the
+     lhs. *)
   let extension =
     List.map schema_lhs ~f:(fun n ->
         let c = Map.find_exn classes n in
@@ -119,6 +127,9 @@ let simple_join lhs rhs =
   match extension with
   | Some ex ->
       let sl = ex @ Schema.to_select_list schema_rhs in
+      Log.debug (fun m ->
+          m "Extending with:@ %a@ to avoid join of:@ %a@ with:@ %a"
+            (Fmt.Dump.list Pred.pp) sl pp lhs pp rhs);
       select sl rhs
   | None -> join (Bool true) lhs rhs
 
