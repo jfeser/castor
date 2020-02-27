@@ -1,31 +1,31 @@
 let src = Logs.Src.create ~doc:"Main logging source for Castor." "castor"
 
-let setup_log level =
-  let format_reporter ppf =
-    let open Logs in
-    let report src level ~over k msgf =
-      let style =
-        match level with
-        | Logs.App -> `White
-        | Debug -> `Green
-        | Info -> `Blue
-        | Warning -> `Yellow
-        | Error -> `Red
-      in
-      let k _ =
-        over ();
-        k ()
-      in
-      let format ?header:_ ?tags:_ fmt =
-        Fmt.kpf k ppf
-          ("@[[%a] [%a] [%s]@ " ^^ fmt ^^ "@]@.")
-          Fmt.(styled style Logs.pp_level)
-          level Time.pp (Time.now ()) (Src.name src)
-      in
-      msgf format
+let format_reporter ppf =
+  let open Logs in
+  let report src level ~over k msgf =
+    let style =
+      match level with
+      | Logs.App -> `White
+      | Debug -> `Green
+      | Info -> `Blue
+      | Warning -> `Yellow
+      | Error -> `Red
     in
-    { report }
+    let k _ =
+      over ();
+      k ()
+    in
+    let format ?header:_ ?tags:_ fmt =
+      Fmt.kpf k ppf
+        ("@[[%a] [%a] [%s]@ " ^^ fmt ^^ "@]@.")
+        Fmt.(styled style Logs.pp_level)
+        level Time.pp (Time.now ()) (Src.name src)
+    in
+    msgf format
   in
+  { report }
+
+let setup_log level =
   let ppf = Fmt_tty.setup Out_channel.stderr in
   Format.pp_set_margin ppf 120;
   Logs.Src.set_level src (Some level);
@@ -45,3 +45,15 @@ let param =
     setup_log level]
 
 include (val Logs.src_log src : Logs.LOG)
+
+let with_level src level f =
+  let old_level = Logs.Src.level src in
+  protect
+    ~f:(fun () ->
+      Logs.Src.set_level src old_level;
+      let ppf = Fmt_tty.setup Out_channel.stderr in
+      Format.pp_set_margin ppf 120;
+      Logs.Src.set_level src (Some level);
+      Logs.set_reporter (format_reporter ppf);
+      f ())
+    ~finally:(fun () -> Logs.Src.set_level src old_level)
