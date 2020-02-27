@@ -397,23 +397,22 @@ module Async = struct
   let exec_sql ?timeout ?(cancel = return_never) db (schema, query) =
     let stream, push = Lwt_stream.create () in
 
-    (* We cancel if the caller asks for a cancellation or if the query times
-       out. *)
-    let cancel =
-      let timeout =
-        let%lwt () =
-          Option.map timeout ~f:return_unit_timeout
-          |> Option.value ~default:return_never
-        in
-        Log.debug (fun m -> m "Query timeout: %s" query);
-        return_unit
-      in
-      choose [ cancel; timeout ]
-    in
-
     (* Create a new database connection. *)
     let exec () =
       Lwt_pool.use db.pool (fun conn ->
+          (* We cancel if the caller asks for a cancellation or if the query times
+             out. *)
+          let cancel =
+            let timeout =
+              let%lwt () =
+                Option.map timeout ~f:return_unit_timeout
+                |> Option.value ~default:return_never
+              in
+              return_unit
+            in
+            choose [ cancel; timeout ]
+          in
+
           let fail msg =
             push (Some (Result.fail { query; info = msg }));
             push None;
@@ -427,6 +426,7 @@ module Async = struct
 
           let wait_for_cancel () =
             let%lwt () = protected cancel in
+            Log.debug (fun m -> m "Query timeout: %s" query);
             exec db (sprintf "select pg_cancel_backend(%d);" conn#backend_pid)
             |> ignore;
             fail `Timeout
