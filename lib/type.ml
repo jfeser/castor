@@ -770,12 +770,12 @@ module Parallel = struct
         | AOrderedIdx (qk, qv, o) ->
             let wrap = wrap (split_scope qk) in
             let qk = Option.value_exn o.oi_key_layout in
-            plus (wrap (annot qv)) (wrap (empty qk.meta))
+            plus (wrap (annot qv)) (wrap (annot qk))
         | AHashIdx h ->
             let wrap = wrap (h.hi_keys, h.hi_scope) in
             let qk = Option.value_exn h.hi_key_layout in
             let qv = h.hi_values in
-            plus (wrap (annot qv)) (wrap (empty qk.meta))
+            plus (wrap (annot qv)) (wrap (annot qk))
         | q -> Reduce.query zero plus annot pred q
       in
       plus this_ctx child_ctxs
