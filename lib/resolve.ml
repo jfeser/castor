@@ -218,9 +218,7 @@ let resolve_name ctx n =
         (Error.create "Could not resolve." (n, ctx) [%sexp_of: N.t * Ctx.t])
 
 let resolve_relation stage r =
-  Option.value_exn ~message:"No schema annotation on relation."
-    r.Relation.r_schema
-  |> List.map ~f:P.name |> Ctx.of_defs stage
+  Relation.schema r |> List.map ~f:P.name |> Ctx.of_defs stage
 
 let as_ s r =
   {

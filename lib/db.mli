@@ -32,7 +32,7 @@ val exec_cursor_exn :
 
 val check : t -> string -> unit Or_error.t
 
-val relation : ?with_types:bool -> t -> string -> Relation.t
+val relation : t -> string -> Relation.t
 
 val all_relations : t -> Relation.t list
 

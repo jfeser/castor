@@ -82,10 +82,7 @@ let to_sequence g =
 let eval { db; params } r =
   let scan =
     Memo.general ~hashable:String.hashable (fun r ->
-        let schema_types =
-          Option.value_exn (Db.relation db r).r_schema
-          |> List.map ~f:Name.type_exn
-        in
+        let schema_types = Db.relation db r |> Relation.types_exn in
         Db.exec_cursor_exn db schema_types
           (Printf.sprintf "select * from \"%s\"" r)
         |> to_sequence |> Seq.memoize)

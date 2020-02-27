@@ -69,10 +69,7 @@ let schema_open schema r =
   | ATuple ([], Concat) -> []
   | ATuple (r :: _, Concat) -> schema r |> unscoped
   | As (n, r) -> scoped n (schema r)
-  | Relation { r_schema = Some schema; _ } -> schema |> unscoped
-  | Relation { r_name; r_schema = None; _ } ->
-      Error.(
-        create "Missing schema annotation." r_name [%sexp_of: string] |> raise)
+  | Relation r -> Relation.schema r |> unscoped
   | Range (p, p') ->
       let t = Prim_type.unify (to_type p) (to_type p') in
       [ Name.create ~type_:t "range" ]

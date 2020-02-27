@@ -228,9 +228,7 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
       match q.node with
       | Relation r ->
           let rel_type =
-            Option.value_exn r.r_schema
-            |> List.map ~f:(fun n -> type_to_cozy (Name.type_exn n))
-            |> mk_tuple
+            Relation.types_exn r |> List.map ~f:type_to_cozy |> mk_tuple
           in
           {
             empty with

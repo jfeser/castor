@@ -7,8 +7,7 @@ let%expect_test "" =
   Db.all_relations conn
   |> List.iter ~f:(fun r ->
          Option.iter r.r_schema ~f:(fun s ->
-             List.map s ~f:(fun n -> (n, Name.type_exn n))
-             |> [%sexp_of: (Name.t * Prim_type.t) list] |> print_s));
+             [%sexp_of: (Name.t * Prim_type.t) list] s |> print_s));
   [%expect
     {|
     ((((name r_regionkey) (meta <opaque>)) (IntT))

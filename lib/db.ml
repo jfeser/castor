@@ -184,25 +184,20 @@ from "$1"
   let memo = Memo.general (fun (conn, n1, n2) -> f conn n1 n2) in
   fun conn fname rname -> memo (conn, fname, rname)
 
-let relation with_types conn r_name =
+let relation conn r_name =
   let r_schema =
     exec1 ~params:[ r_name ] conn
       "select column_name from information_schema.columns where table_name='$0'"
     |> List.map ~f:(fun fname ->
-           let type_ =
-             if with_types then Some (type_of_field_exn conn fname r_name)
-             else None
-           in
-           Name.create ?type_ fname)
+           let type_ = type_of_field_exn conn fname r_name in
+           (Name.create fname, type_))
     |> Option.some
   in
   Relation.{ r_name; r_schema }
 
-let relation_memo =
-  Memo.general (fun (conn, rname, with_types) -> relation with_types conn rname)
+let relation_memo = Memo.general (fun (conn, rname) -> relation conn rname)
 
-let relation ?(with_types = true) conn rname =
-  relation_memo (conn, rname, with_types)
+let relation conn rname = relation_memo (conn, rname)
 
 let relation_count =
   let f conn r_name =
@@ -221,7 +216,7 @@ let all_relations conn =
 
 let relation_has_field conn f =
   List.find (all_relations conn) ~f:(fun r ->
-      List.exists (Option.value_exn r.Relation.r_schema) ~f:(fun n ->
+      List.exists (Option.value_exn r.Relation.r_schema) ~f:(fun (n, _) ->
           String.(Name.name n = f)))
 
 let load_int s = Scanf.sscanf s "%d" Fun.id

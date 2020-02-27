@@ -116,7 +116,7 @@ class conv_sql db =
       let q =
         match s with
         | `Subquery s -> self#query s
-        | `Table t -> relation (Db.relation ~with_types:false db t)
+        | `Table t -> relation (Db.relation db t)
         | `Nested n -> self#nested n
       in
       match alias with
