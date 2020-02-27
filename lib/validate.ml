@@ -21,6 +21,8 @@ let compare t1 t2 =
   | Error e1, Error e2 -> Error (Error.of_list [ e1; e2 ])
 
 let equiv conn r1 r2 =
+  let r1 = strip_meta r1 in
+  let r2 = strip_meta r2 in
   if Abslayout.O.(r1 = r2) then Ok ()
   else
     let s1 = schema r1 in

@@ -12,6 +12,8 @@ end
 
 type t = Set.M(Eq).t [@@deriving compare, sexp]
 
+let empty = Set.empty (module Eq)
+
 let ( || ) l1 l2 = Set.union l1 l2
 
 let ( && ) l1 l2 = Set.inter l1 l2
@@ -39,7 +41,7 @@ let eqs_open (eqs : 'a annot -> Set.M(Eq).t) r : Set.M(Eq).t =
   | Dedup r | OrderBy { rel = r; _ } | DepJoin { d_rhs = r; _ } | AList (_, r)
     ->
       eqs r
-  | _ -> Set.empty (module Eq)
+  | _ -> empty
 
 let annotate r = annotate eqs_open r
 
@@ -73,5 +75,31 @@ let all_equiv eqs n =
          if Union_find.same_class c c' then Some n' else None)
   |> Set.of_list (module Name)
 
-module Context = struct end
 (** Two attributes are equivalent in a context if they can be substituted without changing the final relation. *)
+module Context = struct
+  let rec annot eqs r =
+    {
+      node = query eqs r.node;
+      meta =
+        object
+          method eqs = eqs
+
+          method meta = r.meta
+        end;
+    }
+
+  and query eqs = function
+    | Filter (p, r) ->
+        let eqs = Pred.eqs p |> Set.of_list (module Eq) || eqs in
+        Filter (pred eqs p, annot eqs r)
+    | Join { pred = p; r1; r2 } ->
+        let eqs = Pred.eqs p |> Set.of_list (module Eq) || eqs in
+        Join { pred = pred eqs p; r1 = annot eqs r1; r2 = annot eqs r2 }
+    | q ->
+        let eqs = empty in
+        map_query (annot eqs) (pred eqs) q
+
+  and pred eqs p = map_pred (annot eqs) (pred eqs) p
+
+  let annotate r = annot empty r
+end

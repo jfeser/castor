@@ -4,6 +4,13 @@ open Abslayout_visitors
 open Schema
 module P = Pred.Infix
 
+let default_meta =
+  object
+    method was_depjoin = false
+  end
+
+module C = (val Abslayout_infix.constructors (fun () -> default_meta))
+
 let src = Logs.Src.create "castor.unnest"
 
 module Log = (val Logs.src_log src : Logs.LOG)
@@ -94,12 +101,22 @@ let check_lhs lhs =
 
 let dep_join lhs rhs =
   check_lhs lhs;
-  dep_join lhs "x" rhs
+  C.dep_join lhs "x" rhs
 
 let simple_join lhs rhs =
-  let eqs = Equiv.(eqs lhs || eqs rhs) |> Set.to_list
-  and schema_lhs = schema lhs
-  and schema_rhs = schema rhs in
+  {
+    (C.join (Bool true) lhs rhs) with
+    meta =
+      object
+        method was_depjoin = true
+      end;
+  }
+
+(** Compute an extension of the rhs that covers the attributes from the lhs. *)
+let extension eqs lhs rhs =
+  let schema_lhs = schema lhs
+  and schema_rhs = schema rhs
+  and eqs = Set.to_list eqs in
 
   let classes =
     schema_lhs @ schema_rhs @ List.concat_map eqs ~f:(fun (n, n') -> [ n; n' ])
@@ -110,28 +127,35 @@ let simple_join lhs rhs =
   List.iter eqs ~f:(fun (n, n') ->
       Union_find.union (Map.find_exn classes n) (Map.find_exn classes n'));
 
-  (* Try to compute an extension of the rhs that covers the attributes from the
-     lhs. *)
-  let extension =
-    List.map schema_lhs ~f:(fun n ->
-        let c = Map.find_exn classes n in
-        let n' =
-          List.find schema_rhs ~f:(fun n' ->
-              let c' = Map.find_exn classes n' in
-              Union_find.same_class c c')
-        in
-        Option.map n' ~f:(fun n' -> As_pred (Name n', Name.name n)))
-    |> Option.all
-  in
+  List.map schema_lhs ~f:(fun n ->
+      let c = Map.find_exn classes n in
+      let n' =
+        List.find schema_rhs ~f:(fun n' ->
+            let c' = Map.find_exn classes n' in
+            Union_find.same_class c c')
+      in
+      Option.map n' ~f:(fun n' -> As_pred (Name n', Name.name n)))
+  |> Option.all
 
-  match extension with
+let try_extend eqs lhs rhs =
+  match extension eqs lhs rhs with
   | Some ex ->
-      let sl = ex @ Schema.to_select_list schema_rhs in
+      let sl = ex @ Schema.to_select_list @@ Schema.schema rhs in
       Log.debug (fun m ->
           m "Extending with:@ %a@ to avoid join of:@ %a@ with:@ %a"
             (Fmt.Dump.list Pred.pp) sl pp lhs pp rhs);
-      select sl rhs
-  | None -> join (Bool true) lhs rhs
+      Select (sl, rhs)
+  | None -> Join { pred = Bool true; r1 = lhs; r2 = rhs }
+
+let remove_joins r =
+  let rec annot r = map_annot (query r.meta) r
+  and query meta = function
+    | Join { r1; r2; _ } when meta#meta#was_depjoin ->
+        let r1 = annot r1 and r2 = annot r2 in
+        try_extend meta#eqs r1 r2
+    | q -> map_query annot pred q
+  and pred p = map_pred annot pred p in
+  Equiv.Context.annotate r |> annot
 
 let to_nice_depjoin t1 t2 =
   let t1_attr = attrs t1 in
@@ -143,7 +167,7 @@ let to_nice_depjoin t1 t2 =
     let attrs =
       Set.inter t2_free t1_attr |> Set.to_list |> List.map ~f:P.name
     in
-    dedup @@ select attrs t1
+    C.dedup @@ C.select attrs t1
   in
 
   (* Create a renaming of the attribute names in d. This will ensure that we can
@@ -163,7 +187,7 @@ let to_nice_depjoin t1 t2 =
              | Some alias -> Pred.Infix.(as_ (name n) alias)
              | None -> P.name n)
     in
-    select select_list t1
+    C.select select_list t1
   in
 
   (* Create a predicate that joins t1 and d. *)
@@ -173,7 +197,7 @@ let to_nice_depjoin t1 t2 =
     |> Pred.conjoin
   in
 
-  join join_pred t1 (dep_join d t2)
+  C.join join_pred t1 (dep_join d t2)
 
 let rec to_nice r =
   match r.node with
@@ -187,9 +211,9 @@ and to_nice_pred p = map_pred to_nice to_nice_pred p
 
 let push_join d { pred = p; r1 = t1; r2 = t2 } =
   let d_attr = attrs d in
-  if Set.inter (free t2) d_attr |> Set.is_empty then join p (dep_join d t1) t2
+  if Set.inter (free t2) d_attr |> Set.is_empty then C.join p (dep_join d t1) t2
   else if Set.inter (free t1) d_attr |> Set.is_empty then
-    join p t1 (dep_join d t2)
+    C.join p t1 (dep_join d t2)
   else
     (* Rename the d relation in the rhs of the join *)
     let d_rhs =
@@ -205,24 +229,24 @@ let push_join d { pred = p; r1 = t1; r2 = t2 } =
     let d_pred =
       List.map d_rhs ~f:(fun (x, x') -> Infix.(name x = n x')) |> Pred.conjoin
     in
-    select outer_select
-    @@ join
+    C.select outer_select
+    @@ C.join
          Infix.(p && d_pred)
          (dep_join d t1)
-         (select rhs_select @@ dep_join d t2)
+         (C.select rhs_select @@ dep_join d t2)
 
-let push_filter d (p, t2) = filter p (dep_join d t2)
+let push_filter d (p, t2) = C.filter p (dep_join d t2)
 
 let push_groupby d (aggs, keys, q) =
   let aggs = aggs @ (schema d |> List.map ~f:P.name) in
   let keys = keys @ schema d in
-  group_by aggs keys (dep_join d q)
+  C.group_by aggs keys (dep_join d q)
 
 let push_select d (preds, q) =
   let d_schema = schema d in
   let preds = preds @ (d_schema |> List.map ~f:P.name) in
   match select_kind preds with
-  | `Scalar -> select preds (dep_join d q)
+  | `Scalar -> C.select preds (dep_join d q)
   | `Agg ->
       let preds =
         List.map preds ~f:(fun p ->
@@ -234,9 +258,9 @@ let push_select d (preds, q) =
                 | None -> Min p )
             | `Window -> p)
       in
-      group_by preds d_schema (dep_join d q)
+      C.group_by preds d_schema (dep_join d q)
 
-let push_concat_tuple d qs = tuple (List.map qs ~f:(dep_join d)) Concat
+let push_concat_tuple d qs = C.tuple (List.map qs ~f:(dep_join d)) Concat
 
 let stuck d =
   Error.create "Stuck depjoin" d [%sexp_of: _ annot depjoin] |> Error.raise
@@ -246,11 +270,11 @@ let push_cross_tuple d qs =
     List.map qs ~f:(fun q -> match q.node with AScalar p -> p | _ -> stuck d)
     @ (schema d.d_lhs |> to_select_list)
   in
-  select select_list d.d_lhs
+  C.select select_list d.d_lhs
 
-let push_scalar d p = select (p :: (schema d |> to_select_list)) d
+let push_scalar d p = C.select (p :: (schema d |> to_select_list)) d
 
-let push_dedup d q = dedup (dep_join d q)
+let push_dedup d q = C.dedup (dep_join d q)
 
 let rec push_depjoin r =
   match r.node with
@@ -264,6 +288,7 @@ let rec push_depjoin r =
       if Set.inter (free d_rhs) (attrs d_lhs) |> Set.is_empty then
         simple_join d_lhs d_rhs
       else
+        (* Otherwise, push the depjoin further down the tree. *)
         let r' =
           match d_rhs.node with
           | Filter x -> push_filter d_lhs x
@@ -282,7 +307,11 @@ let rec push_depjoin r =
 and push_depjoin_pred p = map_pred push_depjoin push_depjoin_pred p
 
 let unnest q =
-  let q' = q |> strip_meta |> to_visible_depjoin |> to_nice |> push_depjoin in
+  let q' =
+    q |> strip_meta |> to_visible_depjoin
+    |> map_meta (fun _ -> default_meta)
+    |> to_nice |> push_depjoin |> remove_joins
+  in
   schema_invariant q q';
-  (* resolve_invariant q q'; *)
+  resolve_invariant q q';
   q'
