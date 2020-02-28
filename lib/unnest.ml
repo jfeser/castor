@@ -1,7 +1,7 @@
 open Ast
-open Abslayout
 open Abslayout_visitors
 open Schema
+module A = Abslayout
 module P = Pred.Infix
 
 let default_meta =
@@ -9,7 +9,9 @@ let default_meta =
     method was_depjoin = false
   end
 
-module C = (val Abslayout_infix.constructors (fun () -> default_meta))
+module Q = Constructors.Query
+
+module C = (val Constructors.Annot.with_strip_meta (fun () -> default_meta))
 
 let src = Logs.Src.create "castor.unnest"
 
@@ -58,7 +60,8 @@ class to_lhs_visible_depjoin =
         |> List.map ~f:(fun n ->
                P.(as_ (name n) (sprintf "%s_%s" d.d_alias (Name.name n))))
       in
-      Select (projection, dep_join' { d with d_lhs = select renaming d.d_lhs })
+      Q.select projection
+        (A.dep_join' { d with d_lhs = A.select renaming d.d_lhs })
   end
 
 let schema_invariant q q' =
@@ -114,7 +117,7 @@ let simple_join lhs rhs =
 
 let to_nice_depjoin t1 t2 =
   let t1_attr = attrs t1 in
-  let t2_free = free t2 in
+  let t2_free = A.free t2 in
 
   (* Create a relation of the unique values of the attributes that come from t1
      and are bound in t2. *)
@@ -166,8 +169,9 @@ and to_nice_pred p = map_pred to_nice to_nice_pred p
 
 let push_join d { pred = p; r1 = t1; r2 = t2 } =
   let d_attr = attrs d in
-  if Set.inter (free t2) d_attr |> Set.is_empty then C.join p (dep_join d t1) t2
-  else if Set.inter (free t1) d_attr |> Set.is_empty then
+  if Set.inter (A.free t2) d_attr |> Set.is_empty then
+    C.join p (dep_join d t1) t2
+  else if Set.inter (A.free t1) d_attr |> Set.is_empty then
     C.join p t1 (dep_join d t2)
   else
     (* Rename the d relation in the rhs of the join *)
@@ -200,7 +204,7 @@ let push_groupby d (aggs, keys, q) =
 let push_select d (preds, q) =
   let d_schema = schema d in
   let preds = preds @ (d_schema |> List.map ~f:P.name) in
-  match select_kind preds with
+  match A.select_kind preds with
   | `Scalar -> C.select preds (dep_join d q)
   | `Agg ->
       let preds =
@@ -240,7 +244,7 @@ let rec push_depjoin r =
 
       (* If the join is not really dependent, then replace with a regular join.
          *)
-      if Set.inter (free d_rhs) (attrs d_lhs) |> Set.is_empty then
+      if Set.inter (A.free d_rhs) (attrs d_lhs) |> Set.is_empty then
         simple_join d_lhs d_rhs
       else
         (* Otherwise, push the depjoin further down the tree. *)
@@ -263,7 +267,7 @@ and push_depjoin_pred p = map_pred push_depjoin push_depjoin_pred p
 
 let unnest q =
   let q' =
-    q |> strip_meta |> to_visible_depjoin
+    q |> A.strip_meta |> to_visible_depjoin
     |> map_meta (fun _ -> default_meta)
     |> to_nice |> push_depjoin |> Cardinality.annotate
     (* We can remove the results of an eliminated depjoin regardless of the

@@ -60,7 +60,16 @@ let alpha_scopes r =
 
 let wrap x = { node = x; meta = () }
 
-let select a b = wrap (Select (a, strip_meta b))
+let select a b =
+  (* Check that the names in the select list are unique. *)
+  List.filter_map a ~f:Pred.to_name
+  |> List.find_a_dup ~compare:[%compare: Name.t]
+  |> Option.iter ~f:(fun dup ->
+         Error.create "Select list contains duplicate names" dup
+           [%sexp_of: Name.t]
+         |> Error.raise);
+
+  wrap (Select (a, strip_meta b))
 
 let ensure_no_overlap_2 r1 r2 ss =
   if
