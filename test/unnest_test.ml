@@ -108,3 +108,20 @@ depjoin(dedup(select([l_shipdate as k2], lineitem)) as s2,
   in
   let r' = unnest r in
   Validate.equiv conn r r' |> Or_error.ok_exn
+
+let%expect_test "" =
+  let conn = Lazy.force tpch_conn in
+  {|
+  select([n_name as nation],
+    depjoin(nation as s2,
+      select([s2.n_name], ascalar(0 as x))))
+|}
+  |> Abslayout_load.load_string conn
+  |> strip_meta |> to_visible_depjoin |> Format.printf "%a" pp;
+  [%expect {|
+    select([n_name as nation],
+      select([s2_n_name as n_name],
+        depjoin(select([n_nationkey as s2_n_nationkey, n_name as s2_n_name,
+                        n_regionkey as s2_n_regionkey, n_comment as s2_n_comment],
+                  nation) as s2,
+          select([s2_n_name], ascalar(0 as x))))) |}]

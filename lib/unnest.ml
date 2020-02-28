@@ -24,6 +24,7 @@ let () = Logs.Src.set_level src None
    that project out their lhs attributes. The queries returned by the main
    function no longer contain depjoins. *)
 
+(** Schemas work differently when the lhs of a depjoin is visible in its output. *)
 let rec schema q =
   match q.node with
   | DepJoin { d_lhs; d_rhs; d_alias } ->
@@ -47,13 +48,16 @@ class to_lhs_visible_depjoin =
     method! visit_Name () n = Name (unscope n)
 
     method! visit_DepJoin () d =
+      (* Ensure that the output attributes are the same under the modified
+         depjoin semantics. Note that we use Schema.schema on the unprocessed
+         rhs and schema on the processed rhs to account for the difference in
+         semantics. *)
+      let old_rhs_schema = Schema.schema d.d_rhs in
       let d = super#visit_depjoin () d in
       let projection =
-        schema d.d_rhs
-        |> List.map ~f:(fun n ->
-               if Option.is_some (Name.rel n) then
-                 P.(as_ (name @@ unscope n) (Name.name n))
-               else P.name n)
+        List.map2_exn (schema d.d_rhs) old_rhs_schema ~f:(fun n n' ->
+            if [%compare.equal: Name.t] n n' then P.name n
+            else P.(as_ (name n) (Name.name n')))
       in
       let renaming =
         schema d.d_lhs
