@@ -201,9 +201,25 @@ let push_groupby d (aggs, keys, q) =
   let keys = keys @ schema d in
   C.group_by aggs keys (dep_join d q)
 
+(** Convert a list of predicates into a select list that contains no duplicate
+   attributes. *)
+let select_list_of_preds ps =
+  let named, unnamed =
+    List.partition_map ps ~f:(fun p ->
+        match Pred.to_name p with Some n -> `Fst (n, p) | None -> `Snd p)
+  in
+  let named =
+    List.dedup_and_sort named ~compare:(fun (n, _) (n', _) ->
+        [%compare: Name.t] n n')
+    |> List.map ~f:(fun (_, p) -> p)
+  in
+  unnamed @ named
+
 let push_select d (preds, q) =
   let d_schema = schema d in
-  let preds = preds @ (d_schema |> List.map ~f:P.name) in
+  let preds =
+    preds @ (d_schema |> List.map ~f:P.name) |> select_list_of_preds
+  in
   match A.select_kind preds with
   | `Scalar -> C.select preds (dep_join d q)
   | `Agg ->
