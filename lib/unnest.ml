@@ -17,7 +17,7 @@ let src = Logs.Src.create "castor.unnest"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
-let () = Logs.Src.set_level src None
+let () = Logs.Src.set_level src (Some Warning)
 
 (** In this module, we assume that dep_join returns attributes from both its lhs
    and rhs. This assumption is safe because we first wrap depjoins in selects
@@ -84,13 +84,11 @@ let resolve_invariant q q' =
       true
     with _ -> false
   in
-  if r then
+  if r then (
     try Resolve.resolve q' |> ignore
     with exn ->
-      let err = Error.of_exn exn in
-      Error.tag_arg err "Not resolution invariant" (q, q')
-        [%sexp_of: _ annot * _ annot]
-      |> Error.raise
+      Log.err (fun m -> m "Not resolution invariant:@ %a@ %a" A.pp q A.pp q');
+      Error.(of_exn exn |> tag ~tag:"Not resolution invariant" |> raise) )
   else ()
 
 let to_visible_depjoin q =
@@ -257,6 +255,24 @@ let push_dedup d q = C.dedup (dep_join d q)
 
 let rec push_depjoin r =
   match r.node with
+  (* dejoin(..., range(...)) can't be further reduced, but we can eliminate the
+     depjoin during the conversion to SQL. *)
+  | DepJoin ({ d_rhs = { node = Range (p, p'); _ } } as d) ->
+      let scope = Fresh.name Global.fresh "x%d" in
+      let pred p = push_depjoin_pred p |> Pred.scoped (schema d.d_lhs) scope in
+      let select_list =
+        Name (Name.create "range") :: (Schema.to_select_list @@ schema d.d_lhs)
+        |> List.map ~f:pred
+      in
+      let d =
+        {
+          d_alias = scope;
+          d_lhs = push_depjoin d.d_lhs;
+          d_rhs =
+            C.select select_list { d.d_rhs with node = Range (pred p, pred p') };
+        }
+      in
+      { r with node = DepJoin d }
   | DepJoin ({ d_lhs; d_rhs; _ } as d) ->
       check_lhs d_lhs;
       let d_lhs = push_depjoin d_lhs in

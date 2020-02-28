@@ -118,10 +118,34 @@ let%expect_test "" =
 |}
   |> Abslayout_load.load_string conn
   |> strip_meta |> to_visible_depjoin |> Format.printf "%a" pp;
-  [%expect {|
+  [%expect
+    {|
     select([n_name as nation],
       select([s2_n_name as n_name],
         depjoin(select([n_nationkey as s2_n_nationkey, n_name as s2_n_name,
                         n_regionkey as s2_n_regionkey, n_comment as s2_n_comment],
                   nation) as s2,
           select([s2_n_name], ascalar(0 as x))))) |}]
+
+let%expect_test "" =
+  let conn = Lazy.force tpch_conn in
+  {|
+    depjoin(select([min(o_orderdate) as lo, max((o_orderdate + month(3))) as hi], orders) as k1,
+      range(k1.lo, k1.hi))
+|}
+  |> Abslayout_load.load_string conn
+  |> unnest |> Format.printf "%a" pp;
+  [%expect {|
+    select([range],
+      join(((k1_hi = bnd0) && (k1_lo = bnd1)),
+        select([k1_lo as bnd1, k1_hi as bnd0],
+          select([lo as k1_lo, hi as k1_hi],
+            select([min(o_orderdate) as lo, max((o_orderdate + month(3))) as hi],
+              orders))),
+        depjoin(dedup(
+                  select([k1_hi, k1_lo],
+                    select([lo as k1_lo, hi as k1_hi],
+                      select([min(o_orderdate) as lo,
+                              max((o_orderdate + month(3))) as hi],
+                        orders)))) as x0,
+          select([range, x0.k1_hi, x0.k1_lo], range(x0.k1_lo, x0.k1_hi))))) |}]

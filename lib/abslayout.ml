@@ -235,7 +235,8 @@ let free_open free r =
   let scope r s = Set.map (module Name) s ~f:(Name.copy ~scope:(Some r)) in
   let free_set =
     match r with
-    | Relation _ | AEmpty | Range _ -> empty
+    | Relation _ | AEmpty -> empty
+    | Range (p, p') -> Set.O.(pred_free p || pred_free p')
     | AScalar p -> pred_free p
     | Select (ps, r') ->
         Set.O.(
