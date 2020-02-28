@@ -282,10 +282,18 @@ let rec push_depjoin r =
 and push_depjoin_pred p = map_pred push_depjoin push_depjoin_pred p
 
 let unnest q =
+  let check q' =
+    schema_invariant q q';
+    resolve_invariant q q'
+  in
   let q' =
     q |> A.strip_meta |> to_visible_depjoin
     |> map_meta (fun _ -> default_meta)
-    |> to_nice |> push_depjoin |> Cardinality.annotate
+    |> to_nice |> push_depjoin
+  in
+  check q';
+  let q' =
+    q' |> Cardinality.annotate
     (* We can remove the results of an eliminated depjoin regardless of the
        usual rules around cardinality preservation. *)
     |> map_meta (fun m ->
@@ -295,6 +303,5 @@ let unnest q =
            end)
     |> Join_elim.remove_joins
   in
-  schema_invariant q q';
-  resolve_invariant q q';
+  check q';
   q'
