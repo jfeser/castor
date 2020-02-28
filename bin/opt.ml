@@ -22,8 +22,11 @@ let main ~params:all_params ~validate ~cost_timeout ch =
     let conn = conn
 
     let cost_conn =
-      Sys.getenv "CASTOR_COST_DB"
-      |> Option.map ~f:Db.create |> Option.value ~default:conn
+      match Sys.getenv "CASTOR_COST_DB" with
+      | Some db -> Db.create db
+      | None ->
+          Logs.warn (fun m -> m "Using main db to estimate costs.");
+          conn
 
     let params = params
 

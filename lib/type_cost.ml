@@ -40,28 +40,23 @@ module Make (Config : Config.S) = struct
           |> Abslayout.strip_meta
           |> Parallel.type_of ?timeout:cost_timeout cost_conn
         in
-        match type_ with
-        | Some t -> (
-            let c = read t in
-            let out =
-              match kind with
-              | `Min -> AbsInt.inf c
-              | `Max -> AbsInt.sup c
-              | `Avg ->
-                  let open Result.Let_syntax in
-                  let%bind l = AbsInt.inf c in
-                  let%map h = AbsInt.sup c in
-                  l + ((h - l) / 2)
-            in
-            match out with
-            | Ok x ->
-                let x = Float.of_int x in
-                Logs.debug (fun m -> m "Found cost %f." x);
-                x
-            | Error e ->
-                Logs.warn (fun m -> m "Computing cost failed: %a" Error.pp e);
-                Float.max_value )
-        | None ->
-            Logs.warn (fun m -> m "Computing cost timed out.");
+        let c = read type_ in
+        let out =
+          match kind with
+          | `Min -> AbsInt.inf c
+          | `Max -> AbsInt.sup c
+          | `Avg ->
+              let open Result.Let_syntax in
+              let%bind l = AbsInt.inf c in
+              let%map h = AbsInt.sup c in
+              l + ((h - l) / 2)
+        in
+        match out with
+        | Ok x ->
+            let x = Float.of_int x in
+            Logs.debug (fun m -> m "Found cost %f." x);
+            x
+        | Error e ->
+            Logs.warn (fun m -> m "Computing cost failed: %a" Error.pp e);
             Float.max_value)
 end

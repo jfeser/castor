@@ -305,8 +305,6 @@ module Make (C : Config.S) = struct
     |> Or_error.ok_exn )
       .nrows |> Float.of_int
 
-  let schema_types r = schema r |> List.map ~f:Name.type_exn
-
   let rec to_abslayout = function
     | Flat r -> r
     | Nest { lhs; rhs; pred } ->
@@ -349,7 +347,7 @@ module Make (C : Config.S) = struct
     match r with
     | Flat _ ->
         let _, _, nt = estimate_ntuples_parted parts r in
-        (sum (schema_types (to_ralgebra r)) ~f:Cost.size *. nt)
+        (sum (Schema.types (to_ralgebra r)) ~f:Cost.size *. nt)
         +. Cost.list_size
     | Nest { lhs; rhs; pred } ->
         let _, _, lhs_nt = estimate_ntuples_parted parts lhs in
@@ -364,7 +362,7 @@ module Make (C : Config.S) = struct
     match r with
     | Flat _ ->
         let _, _, nt = estimate_ntuples_parted parts r in
-        sum (schema_types (to_ralgebra r)) ~f:Cost.read *. nt
+        sum (Schema.types (to_ralgebra r)) ~f:Cost.read *. nt
     | Nest { lhs; rhs; pred } ->
         let _, _, lhs_nt = estimate_ntuples_parted parts lhs in
         let rhs_per_partition_cost =

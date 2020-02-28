@@ -1,7 +1,6 @@
 open! Core
 open Castor
 open Abslayout
-open Schema
 open Collections
 
 module Config = struct
@@ -30,7 +29,8 @@ module Make (Config : Config.S) = struct
     then
       let scope = Fresh.name Global.fresh "s%d" in
       let scalars =
-        scoped scope (schema r) |> List.map ~f:(fun n -> scalar (Name n))
+        Schema.schema r |> Schema.scoped scope
+        |> List.map ~f:(fun n -> scalar (Name n))
       in
       Some (list (strip_meta r) scope (tuple scalars Cross))
     else None

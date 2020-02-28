@@ -3,8 +3,9 @@ open Castor
 open Collections
 open Castor_opt
 open Abslayout_load
+module A = Abslayout
 
-let main ~params:all_params ~simplify ~unnest ~sql ch =
+let main ~params:all_params ~simplify ~project ~unnest ~sql ch =
   Logs.set_level (Some Debug);
   Logs.Src.set_level Log.src (Some Debug);
   let params =
@@ -28,11 +29,12 @@ let main ~params:all_params ~simplify ~unnest ~sql ch =
   let module O = Ops.Make (Config) in
   let query_str = In_channel.input_all ch in
   let query = load_string ~params Config.conn query_str in
-  let query = if unnest then Unnest.unnest query else query in
+  let query = if unnest then Unnest.unnest query |> A.strip_meta else query in
   let query =
     if simplify then Option.value_exn (O.apply S.simplify Path.root query)
     else query
   in
+  let query = if project then Project.project query else query in
   if sql then Sql.of_ralgebra query |> Sql.to_string_hum |> print_endline
   else Format.printf "%a@." Abslayout.pp query
 
@@ -46,6 +48,8 @@ let () =
         flag "simplify" ~aliases:[ "s" ] no_arg ~doc:"simplify the query"
       and unnest =
         flag "unnest" ~aliases:[ "u" ] no_arg ~doc:"unnest before simplifying"
+      and project =
+        flag "project" ~aliases:[ "r" ] no_arg ~doc:"project the query"
       and params =
         flag "param" ~aliases:[ "p" ]
           (listed Util.param_and_value)
@@ -53,5 +57,5 @@ let () =
       and ch =
         anon (maybe_with_default In_channel.stdin ("query" %: Util.channel))
       in
-      fun () -> main ~params ~simplify ~unnest ~sql ch]
+      fun () -> main ~params ~simplify ~project ~unnest ~sql ch]
   |> Command.run
