@@ -806,7 +806,10 @@ module Parallel = struct
       Lwt_list.map_p
         (fun r ->
           Log.debug (fun m -> m "Pre-opt:@ %a" A.pp r);
-          let r = Unnest.unnest r |> Resolve.resolve |> Project.project in
+          let%lwt r =
+            Lwt.wrap (fun () ->
+                Unnest.unnest r |> Resolve.resolve |> Project.project)
+          in
           Log.debug (fun m -> m "Post-opt:@ %a" A.pp r);
           let strm = Db.Async.exec ?timeout conn r in
           let%lwt tup = Lwt_stream.get strm in
