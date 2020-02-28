@@ -806,9 +806,9 @@ module Parallel = struct
       Lwt_list.map_p
         (fun r ->
           Log.debug (fun m -> m "Pre-opt:@ %a" A.pp r);
-          let%lwt r =
-            Lwt.wrap (fun () ->
-                Unnest.unnest r |> Resolve.resolve |> Project.project)
+          let r =
+            try Unnest.unnest r |> Resolve.resolve |> Project.project
+            with e -> Error.of_exn ~backtrace:`Get e |> Error.raise
           in
           Log.debug (fun m -> m "Post-opt:@ %a" A.pp r);
           let strm = Db.Async.exec ?timeout conn r in
