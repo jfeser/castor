@@ -112,51 +112,6 @@ let simple_join lhs rhs =
       end;
   }
 
-(** Compute an extension of the rhs that covers the attributes from the lhs. *)
-let extension eqs lhs rhs =
-  let schema_lhs = schema lhs
-  and schema_rhs = schema rhs
-  and eqs = Set.to_list eqs in
-
-  let classes =
-    schema_lhs @ schema_rhs @ List.concat_map eqs ~f:(fun (n, n') -> [ n; n' ])
-    |> List.dedup_and_sort ~compare:[%compare: Name.t]
-    |> List.map ~f:(fun n -> (n, Union_find.create n))
-    |> Map.of_alist_exn (module Name)
-  in
-  List.iter eqs ~f:(fun (n, n') ->
-      Union_find.union (Map.find_exn classes n) (Map.find_exn classes n'));
-
-  List.map schema_lhs ~f:(fun n ->
-      let c = Map.find_exn classes n in
-      let n' =
-        List.find schema_rhs ~f:(fun n' ->
-            let c' = Map.find_exn classes n' in
-            Union_find.same_class c c')
-      in
-      Option.map n' ~f:(fun n' -> As_pred (Name n', Name.name n)))
-  |> Option.all
-
-let try_extend eqs lhs rhs =
-  match extension eqs lhs rhs with
-  | Some ex ->
-      let sl = ex @ Schema.to_select_list @@ Schema.schema rhs in
-      Log.debug (fun m ->
-          m "Extending with:@ %a@ to avoid join of:@ %a@ with:@ %a"
-            (Fmt.Dump.list Pred.pp) sl pp lhs pp rhs);
-      Select (sl, rhs)
-  | None -> Join { pred = Bool true; r1 = lhs; r2 = rhs }
-
-let remove_joins r =
-  let rec annot r = map_annot (query r.meta) r
-  and query meta = function
-    | Join { r1; r2; _ } when meta#meta#was_depjoin ->
-        let r1 = annot r1 and r2 = annot r2 in
-        try_extend meta#eqs r1 r2
-    | q -> map_query annot pred q
-  and pred p = map_pred annot pred p in
-  Equiv.Context.annotate r |> annot
-
 let to_nice_depjoin t1 t2 =
   let t1_attr = attrs t1 in
   let t2_free = free t2 in
@@ -310,7 +265,15 @@ let unnest q =
   let q' =
     q |> strip_meta |> to_visible_depjoin
     |> map_meta (fun _ -> default_meta)
-    |> to_nice |> push_depjoin |> remove_joins
+    |> to_nice |> push_depjoin |> Cardinality.annotate
+    (* We can remove the results of an eliminated depjoin regardless of the
+       usual rules around cardinality preservation. *)
+    |> map_meta (fun m ->
+           object
+             method cardinality_matters =
+               (not m#meta#was_depjoin) && m#cardinality_matters
+           end)
+    |> Join_elim.remove_joins
   in
   schema_invariant q q';
   resolve_invariant q q';

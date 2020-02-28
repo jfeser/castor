@@ -1,6 +1,12 @@
 open Ast
 open Abslayout_visitors
 
+let src = Logs.Src.create "castor.equiv"
+
+module Log = (val Logs.src_log src : Logs.LOG)
+
+let () = Logs.Src.set_level src None
+
 module Eq = struct
   module T = struct
     type t = Name.t * Name.t [@@deriving compare, sexp]
@@ -18,6 +24,8 @@ let ( || ) l1 l2 = Set.union l1 l2
 
 let ( && ) l1 l2 = Set.inter l1 l2
 
+let of_list = Set.of_list (module Eq)
+
 (** Return the set of equivalent attributes in the output of a query.
 
     Two attributes are equivalent in a relation if in every tuple of that
@@ -28,16 +36,15 @@ let eqs_open (eqs : 'a annot -> Set.M(Eq).t) r : Set.M(Eq).t =
       eqs r
       || Schema.schema r
          |> List.map ~f:(fun n -> (n, Name.(scoped scope n)))
-         |> Set.of_list (module Eq)
-  | Filter (p, r) -> Pred.eqs p |> Set.of_list (module Eq) || eqs r
+         |> of_list
+  | Filter (p, r) -> Pred.eqs p |> of_list || eqs r
   | Select (ps, r) | GroupBy (ps, _, r) ->
       eqs r
       || List.filter_map ps ~f:(function
            | As_pred (Name n, s) -> Some (n, Name.create s)
            | _ -> None)
-         |> Set.of_list (module Eq)
-  | Join { pred = p; r1; r2 } ->
-      Pred.eqs p |> Set.of_list (module Eq) || (eqs r1 && eqs r2)
+         |> of_list
+  | Join { pred = p; r1; r2 } -> Pred.eqs p |> of_list || (eqs r1 && eqs r2)
   | Dedup r | OrderBy { rel = r; _ } | DepJoin { d_rhs = r; _ } | AList (_, r)
     ->
       eqs r
@@ -75,7 +82,8 @@ let all_equiv eqs n =
          if Union_find.same_class c c' then Some n' else None)
   |> Set.of_list (module Name)
 
-(** Two attributes are equivalent in a context if they can be substituted without changing the final relation. *)
+(** Two attributes are equivalent in a context if they can be substituted
+   without changing the final relation. *)
 module Context = struct
   let rec annot eqs r =
     {
@@ -90,10 +98,10 @@ module Context = struct
 
   and query eqs = function
     | Filter (p, r) ->
-        let eqs = Pred.eqs p |> Set.of_list (module Eq) || eqs in
+        let eqs = Pred.eqs p |> of_list || eqs in
         Filter (pred eqs p, annot eqs r)
     | Join { pred = p; r1; r2 } ->
-        let eqs = Pred.eqs p |> Set.of_list (module Eq) || eqs in
+        let eqs = Pred.eqs p |> of_list || eqs in
         Join { pred = pred eqs p; r1 = annot eqs r1; r2 = annot eqs r2 }
     | q ->
         let eqs = empty in

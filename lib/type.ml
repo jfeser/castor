@@ -8,7 +8,7 @@ let src = Logs.Src.create "castor.abslayout_fold"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
-let () = Logs.Src.set_level src (Some Debug)
+let () = Logs.Src.set_level src None
 
 exception TypeError of Error.t [@@deriving sexp]
 
@@ -546,8 +546,11 @@ module Parallel = struct
         @@ IntT
              {
                range =
-                 AbsInt.Interval
-                   (Value.to_int @@ eval ctx min, Value.to_int @@ eval ctx max);
+                 ( try
+                     AbsInt.Interval
+                       ( Value.to_int @@ eval ctx min,
+                         Value.to_int @@ eval ctx max )
+                   with _ -> AbsInt.Top );
                nullable = false (* TODO *);
              }
       in
@@ -567,9 +570,11 @@ module Parallel = struct
         @@ DateT
              {
                range =
-                 AbsInt.Interval
-                   ( Date.to_int @@ Value.to_date @@ eval ctx min,
-                     Date.to_int @@ Value.to_date @@ eval ctx max );
+                 ( try
+                     AbsInt.Interval
+                       ( Date.to_int @@ Value.to_date @@ eval ctx min,
+                         Date.to_int @@ Value.to_date @@ eval ctx max )
+                   with _ -> AbsInt.top );
                nullable = false (* TODO *);
              }
       in
@@ -611,11 +616,14 @@ module Parallel = struct
       let count = Name (Name.create agg_name) in
       let min = wrap @@ Min count in
       let max = wrap @@ Max count in
-      let eval ctx v = eval ctx min |> Value.to_int in
+      let eval ctx v = eval ctx v |> Value.to_int in
       {
         aggs = [ Subquery (counts, [ min; max ]) ];
         build =
-          (fun ctx ts -> f ts (AbsInt.Interval (eval ctx min, eval ctx max)));
+          (fun ctx ts ->
+            f ts
+              ( try AbsInt.Interval (eval ctx min, eval ctx max)
+                with _ -> AbsInt.top ));
       }
 
     let list_t q =
@@ -793,12 +801,13 @@ module Parallel = struct
       |> List.concat_map ~f:(fun (ctx, builders) ->
              Context.to_ralgebra ctx builders)
     in
-    List.iter queries ~f:(fun r -> Log.debug (fun m -> m "%a" A.pp r));
 
     let%lwt results =
       Lwt_list.map_p
         (fun r ->
-          let r = Unnest.unnest r |> Resolve.resolve in
+          Log.debug (fun m -> m "Pre-opt:@ %a" A.pp r);
+          let r = Unnest.unnest r |> Resolve.resolve |> Project.project in
+          Log.debug (fun m -> m "Post-opt:@ %a" A.pp r);
           let strm = Db.Async.exec ?timeout conn r in
           let%lwt tup = Lwt_stream.get strm in
           match tup with
@@ -812,12 +821,9 @@ module Parallel = struct
         queries
     in
     let type_ =
-      Option.all results
-      |> Option.map ~f:(fun results ->
-             let ctx =
-               List.concat results |> Map.of_alist_exn (module String)
-             in
-             Type_builder.type_of ctx r)
+      let results = List.filter_map results ~f:Fun.id in
+      let ctx = List.concat results |> Map.of_alist_exn (module String) in
+      Type_builder.type_of ctx r
     in
     return type_
 

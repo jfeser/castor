@@ -147,3 +147,19 @@ let%expect_test "" =
       groupby([count() as c],
         [o_orderdate],
         dedup(select([o_orderdate, o_orderkey], orders))) |}]
+
+let run_test ?params conn s =
+  load_string ?params conn s |> project ?params
+  |> Format.printf "%a@." Abslayout.pp
+
+let%expect_test "" =
+  run_test
+    (Lazy.force Test_util.test_db_conn)
+    {|
+groupby([min(ct2) as x12, max(ct2) as x13], [],
+ groupby([count() as ct2], [], select([f], r1)))
+|};
+  [%expect {|
+    groupby([min(ct2) as x12, max(ct2) as x13],
+      [],
+      groupby([count() as ct2], [], select([], r1))) |}]

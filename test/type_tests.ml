@@ -1,8 +1,6 @@
 open Type
 open Collections
 
-let () = Logs.Src.set_level src None
-
 let%expect_test "byte-width-1" =
   [%sexp_of: int] (AbsInt.byte_width ~nullable:false (Interval (0, 149)))
   |> print_s;
@@ -40,7 +38,7 @@ let%expect_test "len-1" =
 
 let type_test conn q =
   let type_ = Type.Parallel.type_of conn q in
-  [%sexp_of: Type.t option] type_ |> print_s
+  [%sexp_of: Type.t] type_ |> print_s
 
 let%expect_test "" =
   let conn = Lazy.force Test_util.test_db_conn in
@@ -51,7 +49,7 @@ let%expect_test "" =
   type_test conn q;
   [%expect
     {|
-    ((ListT ((IntT ((range (Interval 1 3)))) ((count (Interval 5 5)))))) |}]
+    (ListT ((IntT ((range (Interval 1 3)))) ((count (Interval 5 5))))) |}]
 
 let%expect_test "" =
   let conn = Lazy.force Test_util.test_db_conn in
@@ -62,9 +60,9 @@ let%expect_test "" =
   type_test conn q;
   [%expect
     {|
-    ((HashIdxT
-      ((IntT ((range (Interval 1 3)))) (IntT ((range (Interval 1 3))))
-       ((key_count (Interval 5 5)))))) |}]
+    (HashIdxT
+     ((IntT ((range (Interval 1 3)))) (IntT ((range (Interval 1 3))))
+      ((key_count (Interval 5 5))))) |}]
 
 let%expect_test "" =
   let conn = Lazy.force Test_util.test_db_conn in
@@ -76,10 +74,10 @@ let%expect_test "" =
   type_test conn q;
   [%expect
     {|
-    ((HashIdxT
-      ((IntT ((range (Interval 1 3))))
-       (ListT ((IntT ((range (Interval 1 4)))) ((count (Interval 1 1)))))
-       ((key_count (Interval 5 5)))))) |}]
+    (HashIdxT
+     ((IntT ((range (Interval 1 3))))
+      (ListT ((IntT ((range (Interval 1 4)))) ((count (Interval 1 2)))))
+      ((key_count (Interval 5 5))))) |}]
 
 let%expect_test "" =
   let conn = Lazy.force Test_util.tpch_conn in
@@ -114,21 +112,21 @@ let%expect_test "" =
   type_test conn q;
   [%expect
     {|
-    ((ListT
-      ((FuncT
-        (((OrderedIdxT
-           ((DateT ((range (Interval 8037 10552))))
-            (FuncT
-             (((ListT
-                ((TupleT
-                  (((IntT ((range (Interval 1 50))))
-                    (FixedT ((value ((range Top) (scale 1)))))
-                    (FixedT ((value ((range Top) (scale 1)))))
-                    (FixedT ((value ((range Top) (scale 1)))))
-                    (StringT ((nchars Top))) (StringT ((nchars Top))))
-                   ((kind Cross))))
-                 ((count (Interval 1 1))))))
-              (Width 6)))
-            ((key_count (Interval 812 812))))))
-         (Width 10)))
-       ((count (Interval 4 4)))))) |}]
+    (ListT
+     ((FuncT
+       (((OrderedIdxT
+          ((DateT ((range (Interval 8037 10552))))
+           (FuncT
+            (((ListT
+               ((TupleT
+                 (((IntT ((range (Interval 1 50))))
+                   (FixedT ((value ((range Top) (scale 1)))))
+                   (FixedT ((value ((range Top) (scale 1)))))
+                   (FixedT ((value ((range Top) (scale 1)))))
+                   (StringT ((nchars Top))) (StringT ((nchars Top))))
+                  ((kind Cross))))
+                ((count (Interval 1 5))))))
+             (Width 6)))
+           ((key_count (Interval 812 812))))))
+        (Width 10)))
+      ((count (Interval 4 4))))) |}]
