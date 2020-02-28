@@ -73,7 +73,7 @@ module Make (Config : Config.S) = struct
         Tactics_util.is_supported r.meta#stage s p)
 
   let push_orderby r =
-    let module C = (val Abslayout_infix.constructors (fun () -> ())) in
+    let module C = (val Constructors.Annot.with_strip_meta (fun () -> ())) in
     let open C in
     let orderby_cross_tuple key rs =
       match rs with
