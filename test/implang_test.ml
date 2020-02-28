@@ -6,14 +6,17 @@ let run_test ?(params = []) ?(print_code = true) layout_str =
   let conn = Lazy.force test_db_conn in
 
   try
-    let param_names = List.map params ~f:(fun (n, _) -> n) in
-    let sparams = Set.of_list (module Name) param_names in
     let layout =
-      load_string conn ~params:sparams layout_str |> Type.annotate conn
+      let params =
+        List.map params ~f:(fun (n, t, _) -> Name.copy ~type_:(Some t) n)
+        |> Set.of_list (module Name)
+      in
+      load_string conn ~params layout_str |> Type.annotate conn
     in
     print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] layout.meta#type_));
     let layout, len = Serialize.serialize conn "/tmp/buf" layout in
-    let ir = I.irgen ~params:param_names ~len layout in
+    let params = List.map params ~f:(fun (n, t, _) -> (n, t)) in
+    let ir = I.irgen ~params ~len layout in
     if print_code then I.pp Caml.Format.std_formatter ir
   with exn ->
     Backtrace.(

@@ -9,7 +9,7 @@ module type S = sig
     ?out_dir:string ->
     ?layout_log:string ->
     gprof:bool ->
-    params:Name.t list ->
+    params:(Name.t * Prim_type.t) list ->
     Db.t ->
     < type_ : Type.t ; .. > annot ->
     string * string

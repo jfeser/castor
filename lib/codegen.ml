@@ -969,9 +969,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     (* Generate global constant for buffer. *)
     let buf_t = pointer_type (array_type int_type (buffer_len / 8)) in
     SB.build_global sb "buf" buf_t;
-    let typed_params =
-      List.map params ~f:(fun n -> Name.(name n, type_exn n))
-    in
+    let typed_params = List.map params ~f:(fun (n, t) -> Name.(name n, t)) in
     (* Generate global constants for parameters. *)
     List.iter typed_params ~f:(fun (n, t) ->
         let lltype = codegen_type t in
@@ -1098,12 +1096,13 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let () =
       Log.debug (fun m -> m "Creating main file.");
       let funcs, calls =
-        List.filter params ~f:(fun n ->
-            List.exists ir_module.Irgen.params ~f:(fun n' -> Name.O.(n = n')))
-        |> List.mapi ~f:(fun i n ->
+        List.filter params ~f:(fun (n, _) ->
+            List.exists ir_module.Irgen.params ~f:(fun (n', _) ->
+                Name.O.(n = n')))
+        |> List.mapi ~f:(fun i (n, t) ->
                Log.debug (fun m -> m "Creating loader for %a." Name.pp n);
                let loader_fn =
-                 match Name.type_exn n with
+                 match t with
                  | NullT -> failwith "No null parameters."
                  | IntT _ -> "load_int.c"
                  | DateT _ -> "load_date.c"

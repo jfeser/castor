@@ -7,17 +7,19 @@ let process_layout_log log =
   let log' = Str.global_replace map_entry_regex {|Map entry (\1 => XXX)|} log in
   (log', not String.(log = log'))
 
-let run_test ?params layout_str =
+let run_test ?(params = []) layout_str =
   let open Abslayout_load in
-  let params =
-    Option.map params ~f:(fun ps ->
-        List.map ps ~f:(fun (n, _) -> n) |> Set.of_list (module Name))
-  in
   let conn = Lazy.force test_db_conn in
 
   let layout_file = Filename.temp_file "layout" "bin" in
   let layout_log_file = Filename.temp_file "layout" "txt" in
-  let layout = load_string ?params conn layout_str |> Type.annotate conn in
+  let layout =
+    let params =
+      List.map params ~f:(fun (n, t, _) -> Name.copy ~type_:(Some t) n)
+      |> Set.of_list (module Name)
+    in
+    load_string ~params conn layout_str |> Type.annotate conn
+  in
   let type_ = layout.meta#type_ in
   let _, len =
     Serialize.serialize ~layout_file:layout_log_file conn layout_file layout
@@ -240,7 +242,8 @@ let%expect_test "depjoin" =
 
 let%expect_test "demomatch-example2" =
   run_test ~params:Demomatch.example_params (Demomatch.example2 "log");
-  [%expect {|
+  [%expect
+    {|
     0:2 Table len (=125)
     2:2 Table hash len (=104)
     4:104 Table hash

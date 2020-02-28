@@ -23,10 +23,12 @@ let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
   in
   let module I = Irgen.Make (CConfig) () in
   let module C = Codegen.Make (CConfig) (I) () in
-  let params = List.map params ~f:(fun (n, t) -> Name.create ~type_:t n) in
-  load_string
-    ~params:(Set.of_list (module Name) params)
-    db (In_channel.input_all ch)
+  let load_params =
+    List.map params ~f:(fun (n, t) -> Name.create ~type_:t n)
+    |> Set.of_list (module Name)
+  in
+  let params = List.map params ~f:(fun (n, t) -> (Name.create n, t)) in
+  load_string ~params:load_params db (In_channel.input_all ch)
   |> Type.annotate db
   |> C.compile ~gprof ~params ?out_dir ?layout_log:layout_file CConfig.conn
   |> ignore

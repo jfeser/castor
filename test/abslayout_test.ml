@@ -12,7 +12,8 @@ let run_print_test ?params query =
   let run () =
     let sparams =
       Option.map params ~f:(fun p ->
-          List.map p ~f:(fun (n, _) -> n) |> Set.of_list (module Name))
+          List.map ~f:(fun (n, t, _) -> Name.copy ~type_:(Some t) n) p
+          |> Set.of_list (module Name))
     in
     let layout = load_string ?params:sparams conn query in
     (new print_fold)#run conn layout |> List.iter ~f:print_endline

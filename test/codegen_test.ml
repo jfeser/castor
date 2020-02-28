@@ -10,7 +10,7 @@ let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
   let run_compiler layout =
     let out_dir = Filename.temp_dir "bin" "" in
     let exe_fn, data_fn =
-      let params = List.map ~f:Tuple.T2.get1 params in
+      let params = List.map ~f:(fun (n, t, _) -> (n, t)) params in
       C.compile ~out_dir ~layout_log:layout_file ~gprof:false ~params conn
         layout
     in
@@ -18,7 +18,7 @@ let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
       In_channel.input_all (In_channel.create layout_file) |> print_endline;
     let cmd =
       let params_str =
-        List.map params ~f:(fun (_, v) -> Value.to_sql v)
+        List.map params ~f:(fun (_, _, v) -> Value.to_sql v)
         |> String.concat ~sep:" "
       in
       sprintf "%s -p %s %s" exe_fn data_fn params_str
@@ -33,7 +33,8 @@ let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
   let run () =
     let layout =
       let params =
-        List.map params ~f:(fun (n, _) -> n) |> Set.of_list (module Name)
+        List.map params ~f:(fun (n, t, _) -> Name.copy ~type_:(Some t) n)
+        |> Set.of_list (module Name)
       in
       load_string conn ~params layout_str |> Type.annotate conn
     in
