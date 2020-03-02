@@ -15,6 +15,8 @@ end
 module Make (C : Config.S) = struct
   open Ops.Make (C)
 
+  let to_select r = match r.node with Select (p, r) -> Some (p, r) | _ -> None
+
   (** Extend a list of predicates to include those needed by aggregate `p`.
      Returns a name to use in the aggregate. *)
   let extend_aggs aggs p =
@@ -51,7 +53,8 @@ module Make (C : Config.S) = struct
     let p' = visitor#visit_pred () p in
     (!aggs, p')
 
-  (* Generate aggregates for collections that act by concatenating their children. *)
+  (* Generate aggregates for collections that act by concatenating their
+     children. *)
   let gen_concat_select_list outer_preds inner_schema =
     let outer_aggs, inner_aggs =
       List.fold_left outer_preds ~init:([], []) ~f:(fun (op, ip) p ->
@@ -74,182 +77,44 @@ module Make (C : Config.S) = struct
     with _ -> false
 
   let push_select r =
-    match r.node with
-    | Select (ps, r') ->
-        if already_pushed r' then None
-        else
-          let open Option.Let_syntax in
-          let%bind outer_preds, inner_preds =
-            match r'.node with
-            | AHashIdx h ->
-                let o =
-                  List.filter_map ps ~f:Pred.to_name |> List.map ~f:P.name
-                in
-                let i =
-                  (* TODO: This hack works around problems with sql conversion and
-               lateral joins. *)
-                  let kschema = schema h.hi_keys |> scoped h.hi_scope in
-                  List.filter ps ~f:(function
-                    | Name n -> not (List.mem ~equal:Name.O.( = ) kschema n)
-                    | _ -> true)
-                in
-                Some (o, i)
-            | AOrderedIdx (_, rv, _) | AList (_, rv) | ATuple (rv :: _, Concat)
-              ->
-                let o, i = gen_concat_select_list ps (schema rv) in
-                Some (o, i)
-            | _ -> None
-          in
-          let%map mk_collection =
-            match r'.node with
-            | AHashIdx h ->
-                Some
-                  (fun mk_select ->
-                    hash_idx' { h with hi_values = mk_select h.hi_values })
-            | AOrderedIdx (rk, rv, m) ->
-                Some
-                  (fun mk_select ->
-                    ordered_idx rk (scope_exn rk) (mk_select rv) m)
-            | AList (rk, rv) ->
-                Some (fun mk_select -> list rk (scope_exn rk) (mk_select rv))
-            | ATuple (r' :: rs', Concat) ->
-                Some
-                  (fun mk_select ->
-                    tuple (List.map (r' :: rs') ~f:mk_select) Concat)
-            | _ -> None
-          in
-          let count_n = Fresh.name Global.fresh "count%d" in
-          let inner_preds = P.as_ Count count_n :: inner_preds in
-          select outer_preds
-            (mk_collection (fun rv ->
-                 filter
-                   (Binop (Gt, Name (Name.create count_n), Int 0))
-                   (select inner_preds rv)))
-    | _ -> None
+    let open Option.Let_syntax in
+    let%bind ps, r' = to_select r in
+    if already_pushed r' then None
+    else
+      let%map outer_preds, inner_preds =
+        match r'.node with
+        | AHashIdx h ->
+            let o = List.filter_map ps ~f:Pred.to_name |> List.map ~f:P.name
+            and i =
+              (* TODO: This hack works around problems with sql conversion
+                 and lateral joins. *)
+              let kschema = schema h.hi_keys |> scoped h.hi_scope in
+              List.filter ps ~f:(function
+                | Name n -> not (List.mem ~equal:Name.O.( = ) kschema n)
+                | _ -> true)
+            in
+            return (o, i)
+        | AOrderedIdx (_, rv, _) | AList (_, rv) | ATuple (rv :: _, Concat) ->
+            return @@ gen_concat_select_list ps (schema rv)
+        | _ -> None
+      and mk_collection =
+        match r'.node with
+        | AHashIdx h ->
+            return @@ fun mk -> hash_idx' { h with hi_values = mk h.hi_values }
+        | AOrderedIdx (rk, rv, m) ->
+            return @@ fun mk -> ordered_idx rk (scope_exn rk) (mk rv) m
+        | AList (rk, rv) -> return @@ fun mk -> list rk (scope_exn rk) (mk rv)
+        | ATuple (r' :: rs', Concat) ->
+            return @@ fun mk -> tuple (List.map (r' :: rs') ~f:mk) Concat
+        | _ -> None
+      in
+      let count_n = Fresh.name Global.fresh "count%d" in
+      let inner_preds = P.as_ Count count_n :: inner_preds in
+      select outer_preds
+        (mk_collection (fun rv ->
+             filter
+               (Binop (Gt, Name (Name.create count_n), Int 0))
+               (select inner_preds rv)))
 
   let push_select = of_func push_select ~name:"push-select"
 end
-
-(* module Test = struct
- *   module C = struct
- *     let params =
- *       Set.of_list
- *         (module Name)
- *         [Name.create ~type_:(DateT {nullable= false}) "param0"]
- * 
- *     let fresh = Fresh.create ()
- * 
- *     let verbose = false
- * 
- *     let validate = false
- * 
- *     let param_ctx = Map.empty (module Name)
- * 
- *     let conn = Db.create "postgresql:///tpch_1k"
- *   end
- * 
- *   module T = Make (C)
- *   module O = Ops.Make (C)
- *   open T
- *   open O
- *   open C
- * 
- *   let%expect_test "" =
- *     let r =
- *       of_string_exn
- *         {|
- * select([customer.c_custkey,
- *          customer.c_name,
- *          sum((lineitem.l_extendedprice * (1 - lineitem.l_discount))) as revenue,
- *          customer.c_acctbal,
- *          nation.n_name,
- *          customer.c_address,
- *          customer.c_phone,
- *          customer.c_comment],
- *    aorderedidx(dedup(
- *                  select([orders.o_orderdate as k1],
- *                    dedup(
- *                      select([orders.o_orderdate],
- *                        join((customer.c_custkey = orders.o_custkey),
- *                          join((customer.c_nationkey = nation.n_nationkey),
- *                            customer,
- *                            nation),
- *                          join((lineitem.l_orderkey = orders.o_orderkey),
- *                            lineitem,
- *                            orders)))))),
- *        join((customer.c_custkey = orders.o_custkey),
- *          join((customer.c_nationkey = nation.n_nationkey), customer, nation),
- *          join((lineitem.l_orderkey = orders.o_orderkey), lineitem, orders)),
- *      (param0 + day(1)),
- *      ((param0 + month(3)) + day(1))))
- * |}
- *     in
- *     let r = M.resolve ~params r in
- *     apply push_select r |> Option.iter ~f:(Format.printf "%a@." pp) ;
- *     [%expect
- *       {|
- *       select([customer.c_custkey,
- *               customer.c_name,
- *               sum(agg0) as revenue,
- *               customer.c_acctbal,
- *               nation.n_name,
- *               customer.c_address,
- *               customer.c_phone,
- *               customer.c_comment],
- *         aorderedidx(dedup(
- *                       select([orders.o_orderdate as k1],
- *                         dedup(
- *                           select([orders.o_orderdate],
- *                             join((customer.c_custkey = orders.o_custkey),
- *                               join((customer.c_nationkey = nation.n_nationkey),
- *                                 customer,
- *                                 nation),
- *                               join((lineitem.l_orderkey = orders.o_orderkey),
- *                                 lineitem,
- *                                 orders)))))),
- *           filter((count1 > 0),
- *             select([count() as count1,
- *                     sum((lineitem.l_extendedprice * (1 - lineitem.l_discount))) as agg0,
- *                     customer.c_custkey,
- *                     customer.c_name,
- *                     customer.c_address,
- *                     customer.c_nationkey,
- *                     customer.c_phone,
- *                     customer.c_acctbal,
- *                     customer.c_mktsegment,
- *                     customer.c_comment,
- *                     nation.n_nationkey,
- *                     nation.n_name,
- *                     nation.n_regionkey,
- *                     nation.n_comment,
- *                     lineitem.l_orderkey,
- *                     lineitem.l_partkey,
- *                     lineitem.l_suppkey,
- *                     lineitem.l_linenumber,
- *                     lineitem.l_quantity,
- *                     lineitem.l_extendedprice,
- *                     lineitem.l_discount,
- *                     lineitem.l_tax,
- *                     lineitem.l_returnflag,
- *                     lineitem.l_linestatus,
- *                     lineitem.l_shipdate,
- *                     lineitem.l_commitdate,
- *                     lineitem.l_receiptdate,
- *                     lineitem.l_shipinstruct,
- *                     lineitem.l_shipmode,
- *                     lineitem.l_comment,
- *                     orders.o_orderkey,
- *                     orders.o_custkey,
- *                     orders.o_orderstatus,
- *                     orders.o_totalprice,
- *                     orders.o_orderdate,
- *                     orders.o_orderpriority,
- *                     orders.o_clerk,
- *                     orders.o_shippriority,
- *                     orders.o_comment],
- *               join((customer.c_custkey = orders.o_custkey),
- *                 join((customer.c_nationkey = nation.n_nationkey), customer, nation),
- *                 join((lineitem.l_orderkey = orders.o_orderkey), lineitem, orders)))),
- *           (param0 + day(1)),
- *           ((param0 + month(3)) + day(1)))) |}]
- * end *)
