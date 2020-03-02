@@ -62,7 +62,7 @@ and ('p, 'r) query = ('p, 'r) Ast.query =
   | OrderBy of ('p, 'r) order_by
   | Dedup of 'r
   | Relation of (Relation.t[@opaque])
-  | Range of 'p * 'p
+  | Range of ('p * 'p)
   | AEmpty
   | AScalar of 'p
   | AList of ('r * 'r)

@@ -87,7 +87,7 @@ type ('p, 'r) query =
   | OrderBy of ('p, 'r) order_by
   | Dedup of 'r
   | Relation of Relation.t
-  | Range of 'p * 'p
+  | Range of ('p * 'p)
   | AEmpty
   | AScalar of 'p
   | AList of ('r * 'r)

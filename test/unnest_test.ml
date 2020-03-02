@@ -142,10 +142,26 @@ let%expect_test "" =
           select([lo as k1_lo, hi as k1_hi],
             select([min(o_orderdate) as lo, max((o_orderdate + month(3))) as hi],
               orders))),
-        depjoin(dedup(
-                  select([k1_hi, k1_lo],
-                    select([lo as k1_lo, hi as k1_hi],
-                      select([min(o_orderdate) as lo,
-                              max((o_orderdate + month(3))) as hi],
-                        orders)))) as x0,
-          select([range, x0.k1_hi, x0.k1_lo], range(x0.k1_lo, x0.k1_hi))))) |}]
+        join(((k1_lo <= range) && (range <= k1_hi)),
+          dedup(
+            select([k1_hi, k1_lo],
+              select([lo as k1_lo, hi as k1_hi],
+                select([min(o_orderdate) as lo,
+                        max((o_orderdate + month(3))) as hi],
+                  orders)))),
+          range((groupby([min(k1_lo) as min0],
+                   [],
+                   dedup(
+                     select([k1_hi, k1_lo],
+                       select([lo as k1_lo, hi as k1_hi],
+                         select([min(o_orderdate) as lo,
+                                 max((o_orderdate + month(3))) as hi],
+                           orders)))))), (groupby([max(k1_hi) as max0],
+                                            [],
+                                            dedup(
+                                              select([k1_hi, k1_lo],
+                                                select([lo as k1_lo, hi as k1_hi],
+                                                  select([min(o_orderdate) as lo,
+                                                          max((o_orderdate +
+                                                              month(3))) as hi],
+                                                    orders)))))))))) |}]

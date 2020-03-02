@@ -259,26 +259,20 @@ let push_scalar d p = C.select (p :: (schema d |> to_select_list)) d
 
 let push_dedup d q = C.dedup (dep_join d q)
 
+let push_range d (lo, hi) =
+  let fresh_name f = Fresh.name Global.fresh f in
+  let rhs =
+    C.range
+      (First (C.group_by [ As_pred (Min lo, fresh_name "min%d") ] [] d))
+      (First (C.group_by [ As_pred (Max hi, fresh_name "max%d") ] [] d))
+  and join_pred =
+    let v = Name (Name.create "range") in
+    P.(lo <= v && v <= hi)
+  in
+  C.join join_pred d rhs
+
 let rec push_depjoin r =
   match r.node with
-  (* dejoin(..., range(...)) can't be further reduced, but we can eliminate the
-     depjoin during the conversion to SQL. *)
-  | DepJoin ({ d_rhs = { node = Range (p, p'); _ } } as d) ->
-      let scope = Fresh.name Global.fresh "x%d" in
-      let pred p = push_depjoin_pred p |> Pred.scoped (schema d.d_lhs) scope in
-      let select_list =
-        Name (Name.create "range") :: (Schema.to_select_list @@ schema d.d_lhs)
-        |> List.map ~f:pred
-      in
-      let d =
-        {
-          d_alias = scope;
-          d_lhs = push_depjoin d.d_lhs;
-          d_rhs =
-            C.select select_list { d.d_rhs with node = Range (pred p, pred p') };
-        }
-      in
-      { r with node = DepJoin d }
   | DepJoin ({ d_lhs; d_rhs; _ } as d) ->
       check_lhs d_lhs;
       let d_lhs = push_depjoin d_lhs in
@@ -301,6 +295,7 @@ let rec push_depjoin r =
           | AScalar p -> push_scalar d_lhs p
           | Dedup x -> push_dedup d_lhs x
           | OrderBy x -> push_orderby d_lhs x
+          | Range x -> push_range d_lhs x
           | _ -> stuck d
         in
         push_depjoin r'
