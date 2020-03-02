@@ -251,16 +251,7 @@ let scoped names scope p =
     List.map names ~f:(fun n -> (n, Name (Name.scoped scope n)))
     |> Map.of_alist_exn (module Name)
   in
-  let visitor =
-    object
-      inherit [_, _] subst_visitor ctx
-
-      method! visit_Exists _ r _ = r
-
-      method! visit_First _ r _ = r
-    end
-  in
-  visitor#visit_pred () p
+  (new subst_visitor ctx)#visit_pred () p
 
 let unscoped scope p =
   let v =

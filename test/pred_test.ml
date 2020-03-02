@@ -1,4 +1,31 @@
+open Format
 open Pred
+
+let scoped_test s ns x = of_string_exn s |> scoped ns x |> printf "%a" pp
+
+let%expect_test "" =
+  scoped_test "(select([f + g], r)) = 0" [ Name.create "g" ] "x";
+  [%expect {| ((select([(f + x.g)], r)) = 0) |}]
+
+let%expect_test "" =
+  scoped_test
+    {|
+(value >
+  (select([(sum((ps_supplycost * ps_availqty)) * param2) as v],
+     join((ps_suppkey = s_suppkey),
+       join((s_nationkey = n_nationkey), supplier,
+         filter((n_name = k0), nation)),
+       partsupp))))
+|}
+    [ Name.create "k0" ] "s0";
+  [%expect {|
+    (value >
+    (select([(sum((ps_supplycost * ps_availqty)) * param2) as v],
+       join((ps_suppkey = s_suppkey),
+         join((s_nationkey = n_nationkey),
+           supplier,
+           filter((n_name = s0.k0), nation)),
+         partsupp)))) |}]
 
 let%expect_test "" =
   let p =
