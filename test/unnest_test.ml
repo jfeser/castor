@@ -179,7 +179,8 @@ let%expect_test "" =
     |> Abslayout_load.load_string conn
   in
   r |> strip_meta |> to_visible_depjoin |> Format.printf "%a" pp;
-  [%expect {|
+  [%expect
+    {|
     select([ps_availqty],
       depjoin(select([ps_availqty as s41_ps_availqty],
                 select([ps_availqty], partsupp)) as s41,
@@ -188,7 +189,8 @@ let%expect_test "" =
                     select([s41_ps_availqty], ascalar(0 as y))) as s46,
             select([s46_ps_availqty], ascalar(0 as x)))))) |}];
   r |> unnest |> Format.printf "%a" pp;
-  [%expect {|
+  [%expect
+    {|
     select([ps_availqty],
       join((s41_ps_availqty = bnd1),
         select([s41_ps_availqty as bnd1],
@@ -221,3 +223,50 @@ let%expect_test "" =
                                     select([ps_availqty], partsupp)))),
                               ascalar(0 as y)))))),
                     ascalar(0 as x))))))))) |}]
+
+let%expect_test "" =
+  let conn = Lazy.force tpch_conn in
+  let r =
+    {|
+        alist(select([l_extendedprice, l_discount, p_type],
+               join(true, lineitem, part)) as s15,
+            select([count() as count0, l_extendedprice, l_discount, p_type],
+              atuple([ascalar(s15.l_extendedprice), ascalar(s15.l_discount), ascalar(s15.p_type)], cross)))
+    |}
+    |> Abslayout_load.load_string conn
+  in
+  r |> strip_meta |> to_visible_depjoin |> Format.printf "%a" pp;
+  [%expect {|
+    alist(select([l_extendedprice, l_discount, p_type],
+            join(true, lineitem, part)) as s15,
+      select([count() as count0, l_extendedprice, l_discount, p_type],
+        atuple([ascalar(s15_l_extendedprice as l_extendedprice),
+                ascalar(s15_l_discount as l_discount),
+                ascalar(s15_p_type as p_type)],
+          cross))) |}];
+  r |> unnest |> Format.printf "%a" pp;
+  [%expect {|
+    select([count0, l_extendedprice, l_discount, p_type],
+      join(((s15_l_discount = bnd0) &&
+           ((s15_l_extendedprice = bnd1) && (s15_p_type = bnd2))),
+        select([s15_l_extendedprice as bnd1, s15_l_discount as bnd0,
+                s15_p_type as bnd2],
+          select([l_extendedprice as s15_l_extendedprice,
+                  l_discount as s15_l_discount, p_type as s15_p_type],
+            select([l_extendedprice, l_discount, p_type],
+              join(true, lineitem, part)))),
+        groupby([count() as count0, min(l_discount) as l_discount,
+                 min(l_extendedprice) as l_extendedprice, min(p_type) as p_type,
+                 min(s15_l_discount) as s15_l_discount,
+                 min(s15_l_extendedprice) as s15_l_extendedprice,
+                 min(s15_p_type) as s15_p_type],
+          [s15_l_discount, s15_l_extendedprice, s15_p_type],
+          select([s15_l_discount as l_discount,
+                  s15_l_extendedprice as l_extendedprice, s15_p_type as p_type,
+                  s15_l_discount, s15_l_extendedprice, s15_p_type],
+            dedup(
+              select([s15_l_discount, s15_l_extendedprice, s15_p_type],
+                select([l_extendedprice as s15_l_extendedprice,
+                        l_discount as s15_l_discount, p_type as s15_p_type],
+                  select([l_extendedprice, l_discount, p_type],
+                    join(true, lineitem, part))))))))) |}]

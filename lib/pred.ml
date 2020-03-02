@@ -15,6 +15,8 @@ module C = Comparable.Make (T)
 
 module O : Comparable.Infix with type t := t = C
 
+let to_name p = Schema.to_name p
+
 module Infix = struct
   open Ast.Unop
   open Ast.Binop
@@ -75,14 +77,16 @@ module Infix = struct
 
   let strpos p p' = binop Strpos p p'
 
-  let as_ a b = As_pred (a, b)
+  let as_ a b =
+    match to_name a with
+    | Some n when String.(Name.name n <> b) -> As_pred (a, b)
+    | None -> As_pred (a, b)
+    | _ -> a
 end
 
 let to_type p = Schema.to_type p
 
 let to_type_opt p = Schema.to_type_opt p
-
-let to_name p = Schema.to_name p
 
 let pp fmt p = Abslayout_pp.pp_pred fmt p
 

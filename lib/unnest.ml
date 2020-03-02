@@ -56,10 +56,15 @@ let unscope n =
   | None -> n
 
 class to_lhs_visible_depjoin =
-  object
+  object (self)
     inherit [_] map as super
 
     method! visit_Name () n = Name (unscope n)
+
+    method! visit_AScalar () p =
+      match Pred.to_name p with
+      | None -> AScalar (self#visit_pred () p)
+      | Some n -> AScalar (P.as_ (self#visit_pred () p) (Name.name n))
 
     method! visit_DepJoin () d =
       (* Ensure that the output attributes are the same under the modified
@@ -235,7 +240,7 @@ let push_select d (preds, q) =
             | `Agg -> p
             | `Scalar -> (
                 match Pred.to_name p with
-                | Some n -> As_pred (Min p, Name.name n)
+                | Some n -> P.as_ (Min p) (Name.name n)
                 | None -> Min p )
             | `Window -> p)
       in
@@ -270,8 +275,8 @@ let push_range d (lo, hi) =
   let fresh_name f = Fresh.name Global.fresh f in
   let rhs =
     C.range
-      (First (C.group_by [ As_pred (Min lo, fresh_name "min%d") ] [] d))
-      (First (C.group_by [ As_pred (Max hi, fresh_name "max%d") ] [] d))
+      (First (C.group_by [ P.as_ (Min lo) (fresh_name "min%d") ] [] d))
+      (First (C.group_by [ P.as_ (Max hi) (fresh_name "max%d") ] [] d))
   and join_pred =
     let v = Name (Name.create "range") in
     P.(lo <= v && v <= hi)
