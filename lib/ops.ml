@@ -4,7 +4,6 @@ open Castor
 open Collections
 open Abslayout_load
 open Ast
-open Schema
 module A = Abslayout
 
 module Config = struct
@@ -264,23 +263,28 @@ module Make (C : Config.S) = struct
   let schema_validated tf =
     let f p r =
       Option.map (apply tf p r) ~f:(fun r' ->
-          let r = load_layout ~params conn r |> A.strip_meta in
-          let r' = load_layout ~params conn r' |> A.strip_meta in
-          let s = schema r |> List.dedup_and_sort ~compare:[%compare: Name.t] in
-          let s' =
-            schema r' |> List.dedup_and_sort ~compare:[%compare: Name.t]
+          let () =
+            let r = load_layout ~params conn r
+            and r' = load_layout ~params conn r' in
+            Inv.schema r r'
           in
-          if not ([%compare.equal: Name.t list] s s') then
-            Logs.warn (fun m ->
-                m "%s is not schema preserving: %a != %a" tf.name Sexp.pp
-                  ([%sexp_of: Name.t list] s)
-                  Sexp.pp
-                  ([%sexp_of: Name.t list] s'));
           r')
     in
-    global f (sprintf "!%s" tf.name)
+    global f (sprintf "%s" tf.name)
 
-  let validated tf =
+  let resolve_validated tf =
+    let f p r =
+      Option.map (apply tf p r) ~f:(fun r' ->
+          let () =
+            let r = load_layout ~params conn r
+            and r' = load_layout ~params conn r' in
+            Inv.resolve r r'
+          in
+          r')
+    in
+    global f (sprintf "%s" tf.name)
+
+  let run_validated tf =
     let f p r =
       Option.map (apply tf p r) ~f:(fun r' ->
           let err =
@@ -329,7 +333,7 @@ module Make (C : Config.S) = struct
         name
     in
     let tf = if validate then schema_validated tf else tf in
-    let tf = if validate then validated tf else tf in
+    let tf = if validate then resolve_validated tf else tf in
     if trace then traced tf else tf
 
   let of_func ?name f = of_func_pre ?name ~pre:Fun.id f
