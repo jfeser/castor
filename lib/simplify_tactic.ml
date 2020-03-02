@@ -27,9 +27,9 @@ module Make (C : Config.S) = struct
     let r = map_meta (fun _ -> ()) r in
     let r' =
       match r.node with
-      | AHashIdx h -> Some (hash_idx_to_depjoin h)
-      | AOrderedIdx (rk, rv, m) -> Some (ordered_idx_to_depjoin rk rv m)
-      | AList (rk, rv) -> Some (list_to_depjoin rk rv)
+      | AHashIdx h -> Some (Layout_to_depjoin.hash_idx h)
+      | AOrderedIdx (rk, rv, m) -> Some (Layout_to_depjoin.ordered_idx rk rv m)
+      | AList (rk, rv) -> Some (Layout_to_depjoin.list rk rv)
       | _ -> None
     in
     Option.map r' ~f:dep_join'
