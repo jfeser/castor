@@ -116,6 +116,16 @@ let map_ordered_idx map_query map_pred { oi_key_layout; oi_lookup } =
             Option.map ~f:(map_bound map_pred) b' ));
   }
 
+let map_hash_idx map_query map_pred
+    ({ hi_keys; hi_values; hi_key_layout; hi_lookup; _ } as h) =
+  {
+    h with
+    hi_keys = map_query hi_keys;
+    hi_values = map_query hi_values;
+    hi_key_layout = Option.map hi_key_layout ~f:map_query;
+    hi_lookup = List.map hi_lookup ~f:map_pred;
+  }
+
 let map_query map_query map_pred = function
   | Select (ps, q) -> Select (List.map ~f:map_pred ps, map_query q)
   | Filter (p, q) -> Filter (map_pred p, map_query q)
@@ -136,15 +146,7 @@ let map_query map_query map_pred = function
   | AScalar p -> AScalar (map_pred p)
   | AList (q, q') -> AList (map_query q, map_query q')
   | ATuple (qs, t) -> ATuple (List.map qs ~f:map_query, t)
-  | AHashIdx ({ hi_keys; hi_values; hi_key_layout; hi_lookup; _ } as h) ->
-      AHashIdx
-        {
-          h with
-          hi_keys = map_query hi_keys;
-          hi_values = map_query hi_values;
-          hi_key_layout = Option.map hi_key_layout ~f:map_query;
-          hi_lookup = List.map hi_lookup ~f:map_pred;
-        }
+  | AHashIdx h -> AHashIdx (map_hash_idx map_query map_pred h)
   | AOrderedIdx (q, q', o) ->
       AOrderedIdx
         (map_query q, map_query q', map_ordered_idx map_query map_pred o)

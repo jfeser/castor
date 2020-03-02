@@ -118,17 +118,6 @@ val annotate_key_layouts : t -> t
 
 val strip_unused_as : t -> t
 
-val list_to_depjoin : 'a annot -> 'a annot -> 'a annot depjoin
-
-val hash_idx_to_depjoin :
-  ('a annot pred, 'a annot) hash_idx -> unit annot depjoin
-
-val ordered_idx_to_depjoin :
-  'a annot ->
-  'a annot ->
-  ('a annot pred, 'a annot) ordered_idx ->
-  unit annot depjoin
-
 val ensure_alias : 'a annot -> 'a annot
 
 val aliases : t -> Pred.t Map.M(Name).t

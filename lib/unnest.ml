@@ -237,6 +237,12 @@ let push_select d (preds, q) =
       in
       C.group_by preds d_schema (dep_join d q)
 
+(** Push a dependent join with an orderby on the rhs. Preserves the order of the
+   lhs and the rhs. *)
+let push_orderby d { key; rel } =
+  let d_order = A.order_of d |> List.map ~f:(fun (p, o) -> (C.pred p, o)) in
+  C.order_by (d_order @ key) (dep_join d rel)
+
 let push_concat_tuple d qs = C.tuple (List.map qs ~f:(dep_join d)) Concat
 
 let stuck d =
@@ -294,6 +300,7 @@ let rec push_depjoin r =
           | ATuple (qs, Cross) -> push_cross_tuple d qs
           | AScalar p -> push_scalar d_lhs p
           | Dedup x -> push_dedup d_lhs x
+          | OrderBy x -> push_orderby d_lhs x
           | _ -> stuck d
         in
         push_depjoin r'
@@ -307,7 +314,7 @@ let unnest q =
     resolve_invariant q q'
   in
   let q' =
-    q |> A.strip_meta |> to_visible_depjoin
+    q |> A.strip_meta |> Layout_to_depjoin.annot |> to_visible_depjoin
     |> map_meta (fun _ -> default_meta)
     |> to_nice |> push_depjoin
   in

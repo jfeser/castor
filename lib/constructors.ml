@@ -114,6 +114,8 @@ module Annot = struct
       'b annot ->
       ('c annot pred, 'c annot) ordered_idx ->
       t annot
+
+    val pred : 'a annot pred -> t annot pred
   end
 
   let with_strip_meta (type t) (default : unit -> t) =
@@ -129,6 +131,8 @@ module Annot = struct
       and strip_query q = map_query strip strip_pred q
 
       and strip_pred p = map_pred strip strip_pred p
+
+      let pred = strip_pred
 
       let strips = List.map ~f:strip
 

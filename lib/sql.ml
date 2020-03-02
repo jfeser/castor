@@ -289,10 +289,10 @@ let of_ralgebra r =
     | AScalar p -> Query (create_query [ create_entry p ])
     | ATuple (_, Zip) ->
         Error.(create "Unsupported." r [%sexp_of: _ annot] |> raise)
-    | AList (rk, rv) -> f @@ dep_join' (A.list_to_depjoin rk rv)
-    | AHashIdx h -> f @@ dep_join' (A.hash_idx_to_depjoin h)
+    | AList (rk, rv) -> f @@ dep_join' (Layout_to_depjoin.list rk rv)
+    | AHashIdx h -> f @@ dep_join' (Layout_to_depjoin.hash_idx h)
     | AOrderedIdx (rk, rv, m) ->
-        f @@ dep_join' (A.ordered_idx_to_depjoin rk rv m)
+        f @@ dep_join' (Layout_to_depjoin.ordered_idx rk rv m)
   in
   strip_meta r |> A.ensure_alias |> f
 
