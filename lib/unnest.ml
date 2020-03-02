@@ -19,6 +19,20 @@ module Log = (val Logs.src_log src : Logs.LOG)
 
 let () = Logs.Src.set_level src (Some Warning)
 
+(** Convert a list of predicates into a select list that contains no duplicate
+    attributes. *)
+let select_list_of_preds ps =
+  let named, unnamed =
+    List.partition_map ps ~f:(fun p ->
+        match Pred.to_name p with Some n -> `Fst (n, p) | None -> `Snd p)
+  in
+  let named =
+    List.dedup_and_sort named ~compare:(fun (n, _) (n', _) ->
+        [%compare: Name.t] n n')
+    |> List.map ~f:(fun (_, p) -> p)
+  in
+  unnamed @ named
+
 (** In this module, we assume that dep_join returns attributes from both its lhs
    and rhs. This assumption is safe because we first wrap depjoins in selects
    that project out their lhs attributes. The queries returned by the main
@@ -183,9 +197,13 @@ let push_join d { pred = p; r1 = t1; r2 = t2 } =
     let rhs_select =
       List.map d_rhs ~f:(fun (x, x') -> Infix.(as_ (name x) x'))
       @ (schema t2 |> List.map ~f:P.name)
+      |> select_list_of_preds
     in
     (* Select out the duplicate d attributes *)
-    let outer_select = schema t1 @ schema t2 @ schema d |> List.map ~f:P.name in
+    let outer_select =
+      schema t1 @ schema t2 @ schema d
+      |> List.map ~f:P.name |> select_list_of_preds
+    in
     (* Perform a natural join on the two copies of d *)
     let d_pred =
       List.map d_rhs ~f:(fun (x, x') -> Infix.(name x = n x')) |> Pred.conjoin
@@ -202,20 +220,6 @@ let push_groupby d (aggs, keys, q) =
   let aggs = aggs @ (schema d |> List.map ~f:P.name) in
   let keys = keys @ schema d in
   C.group_by aggs keys (dep_join d q)
-
-(** Convert a list of predicates into a select list that contains no duplicate
-   attributes. *)
-let select_list_of_preds ps =
-  let named, unnamed =
-    List.partition_map ps ~f:(fun p ->
-        match Pred.to_name p with Some n -> `Fst (n, p) | None -> `Snd p)
-  in
-  let named =
-    List.dedup_and_sort named ~compare:(fun (n, _) (n', _) ->
-        [%compare: Name.t] n n')
-    |> List.map ~f:(fun (_, p) -> p)
-  in
-  unnamed @ named
 
 let push_select d (preds, q) =
   let d_schema = schema d in
@@ -252,10 +256,13 @@ let push_cross_tuple d qs =
   let select_list =
     List.map qs ~f:(fun q -> match q.node with AScalar p -> p | _ -> stuck d)
     @ (schema d.d_lhs |> to_select_list)
+    |> select_list_of_preds
   in
   C.select select_list d.d_lhs
 
-let push_scalar d p = C.select (p :: (schema d |> to_select_list)) d
+let push_scalar d p =
+  let select_list = p :: (schema d |> to_select_list) |> select_list_of_preds in
+  C.select select_list d
 
 let push_dedup d q = C.dedup (dep_join d q)
 
