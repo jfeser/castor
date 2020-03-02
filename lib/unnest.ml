@@ -67,6 +67,7 @@ class to_lhs_visible_depjoin =
          rhs and schema on the processed rhs to account for the difference in
          semantics. *)
       let old_rhs_schema = Schema.schema d.d_rhs in
+      let old_lhs_schema = Schema.schema d.d_lhs in
       let d = super#visit_depjoin () d in
       let projection =
         List.map2_exn (schema d.d_rhs) old_rhs_schema ~f:(fun n n' ->
@@ -74,9 +75,8 @@ class to_lhs_visible_depjoin =
             else P.(as_ (name n) (Name.name n')))
       in
       let renaming =
-        schema d.d_lhs
-        |> List.map ~f:(fun n ->
-               P.(as_ (name n) (sprintf "%s_%s" d.d_alias (Name.name n))))
+        List.map2_exn (schema d.d_lhs) old_lhs_schema ~f:(fun n n' ->
+            P.(as_ (name n) (sprintf "%s_%s" d.d_alias (Name.name n'))))
       in
       Q.select projection
         (A.dep_join' { d with d_lhs = A.select renaming d.d_lhs })

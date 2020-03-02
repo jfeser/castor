@@ -135,7 +135,8 @@ let%expect_test "" =
 |}
   |> Abslayout_load.load_string conn
   |> unnest |> Format.printf "%a" pp;
-  [%expect {|
+  [%expect
+    {|
     select([range],
       join(((k1_hi = bnd0) && (k1_lo = bnd1)),
         select([k1_lo as bnd1, k1_hi as bnd0],
@@ -165,3 +166,58 @@ let%expect_test "" =
                                                           max((o_orderdate +
                                                               month(3))) as hi],
                                                     orders)))))))))) |}]
+
+let%expect_test "" =
+  let conn = Lazy.force tpch_conn in
+  let r =
+    {|
+    depjoin(select([ps_availqty], partsupp) as s41,
+      depjoin(select([s41.ps_availqty], ascalar(0 as y)) as s46,
+          select([s46.ps_availqty], ascalar(0 as x))))
+
+|}
+    |> Abslayout_load.load_string conn
+  in
+  r |> strip_meta |> to_visible_depjoin |> Format.printf "%a" pp;
+  [%expect {|
+    select([ps_availqty],
+      depjoin(select([ps_availqty as s41_ps_availqty],
+                select([ps_availqty], partsupp)) as s41,
+        select([s46_ps_availqty as ps_availqty],
+          depjoin(select([s41_ps_availqty as s46_ps_availqty],
+                    select([s41_ps_availqty], ascalar(0 as y))) as s46,
+            select([s46_ps_availqty], ascalar(0 as x)))))) |}];
+  r |> unnest |> Format.printf "%a" pp;
+  [%expect {|
+    select([ps_availqty],
+      join((s41_ps_availqty = bnd1),
+        select([s41_ps_availqty as bnd1],
+          select([ps_availqty as s41_ps_availqty],
+            select([ps_availqty], partsupp))),
+        select([s46_ps_availqty as ps_availqty, s41_ps_availqty],
+          select([bnd0, s41_ps_availqty, s46_ps_availqty],
+            join(((s46_ps_availqty = bnd0) && (s41_ps_availqty = d0)),
+              select([s46_ps_availqty as bnd0, s41_ps_availqty],
+                select([s41_ps_availqty, s41_ps_availqty as s46_ps_availqty],
+                  select([s41_ps_availqty],
+                    join(true,
+                      dedup(
+                        select([s41_ps_availqty],
+                          select([ps_availqty as s41_ps_availqty],
+                            select([ps_availqty], partsupp)))),
+                      ascalar(0 as y))))),
+              select([s41_ps_availqty as d0, s46_ps_availqty],
+                select([s41_ps_availqty, s46_ps_availqty],
+                  join(true,
+                    dedup(
+                      select([s41_ps_availqty, s46_ps_availqty],
+                        select([s41_ps_availqty,
+                                s41_ps_availqty as s46_ps_availqty],
+                          select([s41_ps_availqty],
+                            join(true,
+                              dedup(
+                                select([s41_ps_availqty],
+                                  select([ps_availqty as s41_ps_availqty],
+                                    select([ps_availqty], partsupp)))),
+                              ascalar(0 as y)))))),
+                    ascalar(0 as x))))))))) |}]
