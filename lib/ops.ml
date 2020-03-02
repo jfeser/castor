@@ -332,18 +332,16 @@ module Make (C : Config.S) = struct
           Option.map (f (Path.get_exn p (pre r))) ~f:(Path.set_exn p r))
         name
     in
-    let tf = if validate then schema_validated tf else tf in
-    let tf = if validate then resolve_validated tf else tf in
+    let tf =
+      if validate then resolve_validated @@ schema_validated tf else tf
+    in
+    let tf = if validate then tf else tf in
     if trace then traced tf else tf
 
   let of_func ?name f = of_func_pre ?name ~pre:Fun.id f
 
   module Branching = struct
     type t = { b_f : Path.t -> Ast.t -> Ast.t Seq.t; b_name : string }
-
-    let local ~name b_f =
-      let b_f p r = Seq.map ~f:(Path.set_exn p r) (b_f (Path.get_exn p r)) in
-      { b_f; b_name = name }
 
     let lift tf =
       {
@@ -367,6 +365,52 @@ module Make (C : Config.S) = struct
                        if A.O.(r = r') then None else Some (r', r')))));
         b_name = "unfold";
       }
+
+    let ( *> ) x y = global (fun r -> y (x r)) ""
+
+    let apply tf p r = tf.b_f p r
+
+    let name tf = tf.b_name
+
+    let local ~name b_f =
+      let b_f p r = Seq.map ~f:(Path.set_exn p r) (b_f (Path.get_exn p r)) in
+      { b_f; b_name = name }
+
+    let global ~name b_f = { b_f; b_name = name }
+
+    let schema_validated tf =
+      let f p r =
+        Seq.map (apply tf p r) ~f:(fun r' ->
+            let () =
+              let r = load_layout ~params conn r
+              and r' = load_layout ~params conn r' in
+              Inv.schema r r'
+            in
+            r')
+      in
+      global ~name:(sprintf "%s" @@ name tf) f
+
+    let resolve_validated tf =
+      let f p r =
+        Seq.map (apply tf p r) ~f:(fun r' ->
+            let () =
+              let r = load_layout ~params conn r
+              and r' = load_layout ~params conn r' in
+              Inv.resolve r r'
+            in
+            r')
+      in
+      global ~name:(sprintf "%s" @@ name tf) f
+
+    let validated tf = resolve_validated @@ schema_validated @@ tf
+
+    let local ~name b_f =
+      let tf = local ~name b_f in
+      if validate then validated tf else tf
+
+    let global ~name b_f =
+      let tf = global ~name b_f in
+      if validate then validated tf else tf
 
     let seq t1 t2 =
       {
@@ -415,8 +459,6 @@ module Make (C : Config.S) = struct
           | None -> (Some r, c))
       |> Tuple.T2.get1
 
-    let ( *> ) x y = global (fun r -> y (x r)) ""
-
     let traced tf =
       let b_f p r =
         Logs.debug (fun m ->
@@ -429,9 +471,5 @@ module Make (C : Config.S) = struct
                r')
       in
       { tf with b_f }
-
-    let global ~name b_f = { b_f; b_name = name }
-
-    let apply tf p r = tf.b_f p r
   end
 end
