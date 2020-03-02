@@ -48,6 +48,15 @@ let rec schema q =
       @ schema d_rhs
   | _ -> Schema.schema_open schema q
 
+let schema_invariant q q' =
+  let s = Schema.schema q in
+  let s' = schema q' in
+  if [%compare.equal: Schema.t] s s' then ()
+  else
+    Error.create "Schema mismatch" (s, s', q, q')
+      [%sexp_of: Schema.t * Schema.t * _ annot * _ annot]
+    |> Error.raise
+
 let attrs q = schema q |> Set.of_list (module Name)
 
 let unscope n =
@@ -86,29 +95,6 @@ class to_lhs_visible_depjoin =
       Q.select projection
         (A.dep_join' { d with d_lhs = A.select renaming d.d_lhs })
   end
-
-let schema_invariant q q' =
-  let s = Schema.schema q in
-  let s' = schema q' in
-  if [%compare.equal: Schema.t] s s' then ()
-  else
-    Error.create "Schema mismatch" (s, s', q, q')
-      [%sexp_of: Schema.t * Schema.t * _ annot * _ annot]
-    |> Error.raise
-
-let resolve_invariant q q' =
-  let r =
-    try
-      Resolve.resolve q |> ignore;
-      true
-    with _ -> false
-  in
-  if r then (
-    try Resolve.resolve q' |> ignore
-    with exn ->
-      Log.err (fun m -> m "Not resolution invariant:@ %a@ %a" A.pp q A.pp q');
-      Error.(of_exn exn |> tag ~tag:"Not resolution invariant" |> raise) )
-  else ()
 
 let to_visible_depjoin q =
   let q' = (new to_lhs_visible_depjoin)#visit_t () q in
@@ -318,7 +304,7 @@ and push_depjoin_pred p = map_pred push_depjoin push_depjoin_pred p
 let unnest q =
   let check q' =
     schema_invariant q q';
-    resolve_invariant q q'
+    Inv.resolve q q'
   in
   let q' =
     q |> A.strip_meta |> Layout_to_depjoin.annot |> to_visible_depjoin

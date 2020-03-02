@@ -112,7 +112,11 @@ and project_pred p = map_pred project project_pred p
 and no_project r =
   { node = map_query no_project project_pred r.node; meta = () }
 
-let project_once r = Cardinality.annotate r |> project
+let project_once r =
+  let r' = Cardinality.annotate r |> project in
+  Inv.schema r r';
+  Inv.resolve r r';
+  r'
 
 let project ?(params = Set.empty (module Name)) ?(max_iters = 10) r =
   let rec loop ct r =
