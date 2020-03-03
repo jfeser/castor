@@ -74,6 +74,9 @@ module Make (C : Config.S) = struct
       | _ -> false
     with _ -> false
 
+  let extend_with_tuple ns r =
+    tuple (List.map ns ~f:(fun n -> scalar @@ P.name n) @ [ r ]) Cross
+
   let push_select r =
     let open Option.Let_syntax in
     let%bind ps, r' = to_select r in
@@ -98,8 +101,11 @@ module Make (C : Config.S) = struct
       and mk_collection =
         match r'.node with
         | AHashIdx h ->
-            return @@ fun mk -> hash_idx' { h with hi_values = mk h.hi_values }
+            let rk = h.hi_keys and rv = h.hi_values in
+            let rv = extend_with_tuple (schema rk) rv in
+            return @@ fun mk -> hash_idx' { h with hi_values = mk rv }
         | AOrderedIdx (rk, rv, m) ->
+            let rv = extend_with_tuple (schema rk) rv in
             return @@ fun mk -> ordered_idx rk (scope_exn rk) (mk rv) m
         | AList (rk, rv) -> return @@ fun mk -> list rk (scope_exn rk) (mk rv)
         | ATuple (r' :: rs', Concat) ->
