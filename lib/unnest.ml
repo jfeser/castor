@@ -70,10 +70,15 @@ class to_lhs_visible_depjoin =
 
     method! visit_Name () n = Name (unscope n)
 
-    method! visit_AScalar () p =
+    method visit_output_pred p =
       match Pred.to_name p with
-      | None -> AScalar (self#visit_pred () p)
-      | Some n -> AScalar (P.as_ (self#visit_pred () p) (Name.name n))
+      | None -> self#visit_pred () p
+      | Some n -> P.as_ (self#visit_pred () p) (Name.name n)
+
+    method! visit_AScalar () p = AScalar (self#visit_output_pred p)
+
+    method! visit_Select () (ps, r) =
+      Select (List.map ~f:self#visit_output_pred ps, self#visit_t () r)
 
     method! visit_DepJoin () d =
       (* Ensure that the output attributes are the same under the modified

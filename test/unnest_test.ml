@@ -121,11 +121,11 @@ let%expect_test "" =
   [%expect
     {|
     select([n_name as nation],
-      select([s2_n_name as n_name],
+      select([n_name],
         depjoin(select([n_nationkey as s2_n_nationkey, n_name as s2_n_name,
                         n_regionkey as s2_n_regionkey, n_comment as s2_n_comment],
                   nation) as s2,
-          select([s2_n_name], ascalar(0 as x))))) |}]
+          select([s2_n_name as n_name], ascalar(0 as x))))) |}]
 
 let%expect_test "" =
   let conn = Lazy.force tpch_conn in
@@ -184,10 +184,10 @@ let%expect_test "" =
     select([ps_availqty],
       depjoin(select([ps_availqty as s41_ps_availqty],
                 select([ps_availqty], partsupp)) as s41,
-        select([s46_ps_availqty as ps_availqty],
-          depjoin(select([s41_ps_availqty as s46_ps_availqty],
-                    select([s41_ps_availqty], ascalar(0 as y))) as s46,
-            select([s46_ps_availqty], ascalar(0 as x)))))) |}];
+        select([ps_availqty],
+          depjoin(select([ps_availqty as s46_ps_availqty],
+                    select([s41_ps_availqty as ps_availqty], ascalar(0 as y))) as s46,
+            select([s46_ps_availqty as ps_availqty], ascalar(0 as x)))))) |}];
   r |> unnest |> Format.printf "%a" pp;
   [%expect
     {|
@@ -196,26 +196,26 @@ let%expect_test "" =
         select([s41_ps_availqty as bnd1],
           select([ps_availqty as s41_ps_availqty],
             select([ps_availqty], partsupp))),
-        select([s46_ps_availqty as ps_availqty, s41_ps_availqty],
-          select([bnd0, s41_ps_availqty, s46_ps_availqty],
+        select([ps_availqty, s41_ps_availqty],
+          select([bnd0, ps_availqty, s41_ps_availqty, s46_ps_availqty],
             join(((s46_ps_availqty = bnd0) && (s41_ps_availqty = d0)),
               select([s46_ps_availqty as bnd0, s41_ps_availqty],
-                select([s41_ps_availqty, s41_ps_availqty as s46_ps_availqty],
-                  select([s41_ps_availqty],
+                select([s41_ps_availqty, ps_availqty as s46_ps_availqty],
+                  select([s41_ps_availqty as ps_availqty, s41_ps_availqty],
                     join(true,
                       dedup(
                         select([s41_ps_availqty],
                           select([ps_availqty as s41_ps_availqty],
                             select([ps_availqty], partsupp)))),
                       ascalar(0 as y))))),
-              select([s41_ps_availqty as d0, s46_ps_availqty],
-                select([s41_ps_availqty, s46_ps_availqty],
+              select([s41_ps_availqty as d0, ps_availqty, s46_ps_availqty],
+                select([s46_ps_availqty as ps_availqty, s41_ps_availqty,
+                        s46_ps_availqty],
                   join(true,
                     dedup(
                       select([s41_ps_availqty, s46_ps_availqty],
-                        select([s41_ps_availqty,
-                                s41_ps_availqty as s46_ps_availqty],
-                          select([s41_ps_availqty],
+                        select([s41_ps_availqty, ps_availqty as s46_ps_availqty],
+                          select([s41_ps_availqty as ps_availqty, s41_ps_availqty],
                             join(true,
                               dedup(
                                 select([s41_ps_availqty],
@@ -236,7 +236,8 @@ let%expect_test "" =
     |> Abslayout_load.load_string conn
   in
   r |> strip_meta |> to_visible_depjoin |> Format.printf "%a" pp;
-  [%expect {|
+  [%expect
+    {|
     alist(select([l_extendedprice, l_discount, p_type],
             join(true, lineitem, part)) as s15,
       select([count() as count0, l_extendedprice, l_discount, p_type],
@@ -245,7 +246,8 @@ let%expect_test "" =
                 ascalar(s15_p_type as p_type)],
           cross))) |}];
   r |> unnest |> Format.printf "%a" pp;
-  [%expect {|
+  [%expect
+    {|
     select([count0, l_extendedprice, l_discount, p_type],
       join(((s15_l_discount = bnd0) &&
            ((s15_l_extendedprice = bnd1) && (s15_p_type = bnd2))),
@@ -264,9 +266,11 @@ let%expect_test "" =
           select([s15_l_discount as l_discount,
                   s15_l_extendedprice as l_extendedprice, s15_p_type as p_type,
                   s15_l_discount, s15_l_extendedprice, s15_p_type],
-            dedup(
-              select([s15_l_discount, s15_l_extendedprice, s15_p_type],
-                select([l_extendedprice as s15_l_extendedprice,
-                        l_discount as s15_l_discount, p_type as s15_p_type],
-                  select([l_extendedprice, l_discount, p_type],
-                    join(true, lineitem, part))))))))) |}]
+            join(true,
+              dedup(
+                select([s15_l_discount, s15_l_extendedprice, s15_p_type],
+                  select([l_extendedprice as s15_l_extendedprice,
+                          l_discount as s15_l_discount, p_type as s15_p_type],
+                    select([l_extendedprice, l_discount, p_type],
+                      join(true, lineitem, part))))),
+              ascalar(0 as x0)))))) |}]

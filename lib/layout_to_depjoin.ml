@@ -59,9 +59,9 @@ let cross_tuple ts =
         match r.node with AScalar p -> `Fst p | _ -> `Snd r)
   in
   let base_relation, base_schema =
-    match List.reduce others ~f:(fun r r' -> join (Bool true) r r') with
+    match List.reduce others ~f:(join (Bool true)) with
     | Some r -> (r, S.schema r)
-    | None -> (scalar (Int 0), [])
+    | None -> (scalar (As_pred (Int 0, Fresh.name Global.fresh "x%d")), [])
   in
   let select_list = scalars @ S.to_select_list base_schema in
   Select (select_list, base_relation)
@@ -73,7 +73,7 @@ and query = function
       DepJoin (ordered_idx (annot rk) (annot rv) (map_ordered_idx annot pred m))
   | AHashIdx h -> DepJoin (hash_idx (map_hash_idx annot pred h))
   | AList (rk, rv) -> DepJoin (list (annot rk) (annot rv))
-  | ATuple (ts, Cross) -> cross_tuple ts
+  | ATuple (ts, Cross) -> cross_tuple (List.map ~f:annot ts)
   | q -> map_query annot pred q
 
 and pred p = map_pred annot pred p
