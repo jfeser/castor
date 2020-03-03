@@ -2,7 +2,6 @@ open! Core
 open Printf
 open Castor
 open Collections
-open Abslayout_load
 open Ast
 module A = Abslayout
 
@@ -264,9 +263,8 @@ module Make (C : Config.S) = struct
     let f p r =
       Option.map (apply tf p r) ~f:(fun r' ->
           let () =
-            let r = load_layout ~params conn r
-            and r' = load_layout ~params conn r' in
-            Inv.schema r r'
+            let prep r = Abslayout_load.annotate conn r in
+            Inv.schema (prep r) (prep r')
           in
           r')
     in
@@ -276,9 +274,8 @@ module Make (C : Config.S) = struct
     let f p r =
       Option.map (apply tf p r) ~f:(fun r' ->
           let () =
-            let r = load_layout ~params conn r
-            and r' = load_layout ~params conn r' in
-            Inv.resolve r r'
+            let prep r = Abslayout_load.annotate conn r in
+            Inv.resolve ~params (prep r) (prep r')
           in
           r')
     in
@@ -382,9 +379,8 @@ module Make (C : Config.S) = struct
       let f p r =
         Seq.map (apply tf p r) ~f:(fun r' ->
             let () =
-              let r = load_layout ~params conn r
-              and r' = load_layout ~params conn r' in
-              Inv.schema r r'
+              let prep r = Abslayout_load.annotate conn r in
+              Inv.schema (prep r) (prep r')
             in
             r')
       in
@@ -394,9 +390,8 @@ module Make (C : Config.S) = struct
       let f p r =
         Seq.map (apply tf p r) ~f:(fun r' ->
             let () =
-              let r = load_layout ~params conn r
-              and r' = load_layout ~params conn r' in
-              Inv.resolve r r'
+              let prep r = Abslayout_load.annotate conn r in
+              Inv.resolve ~params (prep r) (prep r')
             in
             r')
       in
