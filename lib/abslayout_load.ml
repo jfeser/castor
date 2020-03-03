@@ -11,9 +11,11 @@ let annotate_relations conn =
   in
   visitor#visit_t ()
 
-let load_layout ?(params = Set.empty (module Name)) conn l =
+let annotate conn l =
   l |> strip_unused_as |> annotate_relations conn |> annotate_key_layouts
-  |> Resolve.resolve ~params
+
+let load_layout ?(params = Set.empty (module Name)) conn l =
+  Resolve.resolve ~params (annotate conn l)
 
 let load_string ?params conn s =
   of_string_exn s |> load_layout conn ?params |> map_meta (fun _ -> ())

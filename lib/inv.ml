@@ -12,15 +12,15 @@ let schema q q' =
     log_err "schema" q q';
     failwith "Not schema invariant" )
 
-let resolve q q' =
+let resolve ?params q q' =
   let r =
     try
-      Resolve.resolve q |> ignore;
+      Resolve.resolve ?params q |> ignore;
       true
     with _ -> false
   in
   if r then (
-    try Resolve.resolve q' |> ignore
+    try Resolve.resolve ?params q' |> ignore
     with exn ->
       log_err "resolution" q q';
       Error.(of_exn exn |> tag ~tag:"Not resolution invariant" |> raise) )
