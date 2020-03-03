@@ -32,6 +32,8 @@ module Make (C : Config.S) = struct
 
   open My_C
 
+  let fresh_name = Fresh.name Global.fresh
+
   let schema_set_exn r = Schema.schema r |> Set.of_list (module Name)
 
   (** Split predicates that sit under a binder into the parts that depend on
@@ -143,8 +145,8 @@ module Make (C : Config.S) = struct
     visitor#visit_pred () p
 
   let gen_ordered_idx ?lb ?ub p rk rv =
-    let k = Fresh.name Global.fresh "k%d" in
-    let n = Fresh.name Global.fresh "x%d" in
+    let k = fresh_name "k%d" in
+    let n = fresh_name "x%d" in
     ordered_idx
       (dedup (select [ P.as_ p n ] rk))
       k
@@ -247,7 +249,7 @@ module Make (C : Config.S) = struct
             Or_error.error_string "No candidate keys found."
           else
             let%map all_keys = Tactics_util.all_values key r' in
-            let scope = Fresh.name Global.fresh "s%d" in
+            let scope = fresh_name "s%d" in
             let schema = Schema.schema all_keys in
             ordered_idx all_keys scope
               ( Tactics_util.select_out schema
@@ -499,7 +501,7 @@ module Make (C : Config.S) = struct
             let e2 = extract d2 in
             let n1 = schema e1 in
             let n2 = schema e2 in
-            let n = Fresh.name Global.fresh "x%d" in
+            let n = fresh_name "x%d" in
             dedup
               (tuple
                  [
@@ -509,7 +511,7 @@ module Make (C : Config.S) = struct
                  Concat)
         | Domain d ->
             let n = schema d in
-            let n' = Fresh.name Global.fresh "x%d" in
+            let n' = fresh_name "x%d" in
             select [ P.as_ (Name n) n' ] d
       in
       Map.map d ~f:extract
@@ -536,7 +538,7 @@ module Make (C : Config.S) = struct
         None
     | Some eqs ->
         let eqs = EqDomain.to_ralgebra eqs in
-        let scope = Fresh.name Global.fresh "s%d" in
+        let scope = fresh_name "s%d" in
         let key, rels = Map.to_alist eqs |> List.unzip in
         let r_keys = dedup (tuple rels Cross) in
         let inner_filter_pred =
@@ -610,92 +612,99 @@ module Make (C : Config.S) = struct
 
   let to_range n ps = (to_lower_bound n ps, to_upper_bound n ps)
 
-  let partition _ r =
-    let open Option.Let_syntax in
-    let part_on r n =
-      let visitor =
-        object
-          inherit [_] reduce as super
+  let relevant_conjuncts r n =
+    let visitor =
+      object
+        inherit [_] reduce as super
 
-          inherit [_] Util.list_monoid
+        inherit [_] Util.list_monoid
 
-          method! visit_Filter () (p, r) =
-            super#visit_Filter () (p, r)
-            @ ( Pred.conjuncts p
-              |> List.filter ~f:(fun p -> Set.mem (Pred.names p) n) )
-        end
-      in
-      let preds = visitor#visit_t () r in
-      let key_range = to_range n preds in
-      let%bind fields =
-        List.map preds ~f:(fun p -> Set.remove (Pred.names p) n)
-        |> List.reduce ~f:Set.union |> Option.map ~f:Set.to_list
-      in
-      let fields =
-        let m = Tactics_util.alias_map r in
-        List.map fields ~f:(fun n ->
-            (* If n is an alias for a field in a base relation, find the name of
-               that field. *)
-            match Map.find m n with
-            | Some n' -> (n', Some n)
-            | None -> (Name n, None))
-        |> Map.of_alist_multi (module Pred)
-        |> Map.to_alist
-      in
-      match (fields, key_range) with
-      | [ (f, aliases) ], (Some l, Some h) ->
-          let key_name = Fresh.name Global.fresh "k%d" in
-          let%bind keys =
-            match Pred.to_type f with
-            | IntT _ | DateT _ ->
-                let%map vals = Tactics_util.all_values [ f ] r |> Or_error.ok in
-                let vals =
-                  let val_name = List.hd_exn (Schema.schema vals) in
-                  let select_list =
-                    P.name val_name
-                    :: List.filter_map aliases
-                         ~f:
-                           (Option.map ~f:(fun n ->
-                                P.as_ (Name val_name) @@ Name.name n))
-                  in
-                  select select_list vals
-                in
-                let scope = Fresh.name Global.fresh "k%d" in
-                dep_join
-                  (select [ As_pred (Min l, "lo"); As_pred (Max h, "hi") ] vals)
-                  scope
-                  (select
-                     [ As_pred (Name (Name.create "range"), key_name) ]
-                     (range
-                        (Name (Name.create ~scope "lo"))
-                        (Name (Name.create ~scope "hi"))))
-            | StringT _ ->
-                let%map keys = Tactics_util.all_values [ f ] r |> Or_error.ok in
-                select
-                  [
-                    As_pred (Name (List.hd_exn (Schema.schema keys)), key_name);
-                  ]
-                  keys
-            | _ -> None
-          in
-          let scope = Fresh.name Global.fresh "s%d" in
-          let r' =
-            subst
-              (Map.singleton
-                 (module Name)
-                 n
-                 (P.name @@ Name.scoped scope @@ Name.create key_name))
-              r
-          in
-          if Set.mem (names r') n then None
-          else Some (hash_idx keys scope r' [ Name n ])
-      | fs, _ ->
-          Logs.debug (fun m ->
-              m "Partition: Found too many fields. %a" (Fmt.list Pred.pp)
-                (List.map ~f:Tuple.T2.get1 fs));
-          None
+        method! visit_Filter () (p, r) =
+          super#visit_Filter () (p, r)
+          @ ( Pred.conjuncts p
+            |> List.filter ~f:(fun p -> Set.mem (Pred.names p) n) )
+      end
     in
-    Set.to_sequence params |> Seq.filter_map ~f:(part_on r)
+    visitor#visit_t () r
+
+  (** Try to partition a layout on values of an attribute. *)
+  let partition_on r n =
+    let open Option.Let_syntax in
+    let preds = relevant_conjuncts r n in
+    let key_range = to_range n preds in
+    let%bind fields =
+      List.map preds ~f:(fun p -> Set.remove (Pred.names p) n)
+      |> List.reduce ~f:Set.union |> Option.map ~f:Set.to_list
+    in
+    let fields =
+      let m = Tactics_util.alias_map r in
+      List.map fields ~f:(fun n ->
+          (* If n is an alias for a field in a base relation, find the name of
+             that field. *)
+          match Map.find m n with
+          | Some n' -> (n', Some n)
+          | None -> (Name n, None))
+      |> Map.of_alist_multi (module Pred)
+      |> Map.to_alist
+    in
+    match (fields, key_range) with
+    | [ (f, aliases) ], (Some l, Some h) ->
+        let key_name = fresh_name "k%d" in
+        let%bind keys =
+          match Pred.to_type f with
+          | IntT _ | DateT _ ->
+              let%map vals = Tactics_util.all_values [ f ] r |> Or_error.ok in
+              let vals =
+                let val_name = List.hd_exn (Schema.schema vals) in
+                let select_list =
+                  let alias_binds =
+                    List.filter_map aliases ~f:Fun.id
+                    |> List.map ~f:(fun n ->
+                           P.as_ (Name val_name) @@ Name.name n)
+                  in
+                  P.name val_name :: alias_binds
+                in
+                select select_list vals
+              and scope = fresh_name "k%d" in
+              let open P in
+              dep_join
+                (select [ as_ (Min l) "lo"; as_ (Max h) "hi" ] vals)
+                scope
+              @@ select [ as_ (name (Name.create "range")) key_name ]
+              @@ range
+                   (name (Name.create ~scope "lo"))
+                   (name (Name.create ~scope "hi"))
+          | StringT _ ->
+              let%map keys = Tactics_util.all_values [ f ] r |> Or_error.ok in
+              let select_list =
+                [ P.(as_ (name (List.hd_exn (Schema.schema keys))) key_name) ]
+              in
+              select select_list keys
+          | _ -> None
+        in
+        let scope = fresh_name "s%d" in
+        let r' =
+          let ctx =
+            Map.singleton
+              (module Name)
+              n
+              (P.name @@ Name.scoped scope @@ Name.create key_name)
+          in
+          subst ctx r
+        in
+        if Set.mem (names r') n then None
+        else
+          return
+          @@ select Schema.(schema r' |> to_select_list)
+          @@ hash_idx keys scope r' [ Name n ]
+    | fs, _ ->
+        Logs.debug (fun m ->
+            m "Partition: Found too many fields. %a" (Fmt.list Pred.pp)
+              (List.map ~f:Tuple.T2.get1 fs));
+        None
+
+  let partition _ r =
+    Set.to_sequence params |> Seq.filter_map ~f:(partition_on r)
 
   let partition = Branching.global partition ~name:"partition"
 
@@ -711,7 +720,7 @@ module Make (C : Config.S) = struct
 
         method! visit_Exists () r =
           if Set.inter schema_names (names r) |> Set.is_empty then
-            let qname = Fresh.name Global.fresh "q%d" in
+            let qname = fresh_name "q%d" in
             ( Name (Name.create qname),
               [ select [ As_pred (Binop (Gt, Count, Int 0), qname) ] r ] )
           else (Exists r, [])
@@ -719,7 +728,7 @@ module Make (C : Config.S) = struct
         method! visit_First () r =
           let n = Schema.schema r |> List.hd_exn in
           if Set.inter schema_names (names r) |> Set.is_empty then
-            let qname = Fresh.name Global.fresh "q%d" in
+            let qname = fresh_name "q%d" in
             ( Name (Name.create qname),
               [ select [ As_pred (Min (Name n), qname) ] r ] )
           else (Exists r, [])
@@ -727,7 +736,7 @@ module Make (C : Config.S) = struct
     in
     let p, subqueries = visitor#visit_pred () p in
     if List.length subqueries > 0 then
-      let scope = Fresh.name Global.fresh "s%d" in
+      let scope = fresh_name "s%d" in
       let sq_tuple = tuple subqueries Cross in
       Some
         (dep_join sq_tuple scope
@@ -737,7 +746,7 @@ module Make (C : Config.S) = struct
   (* let precompute_filter n =
    *   let exception Failed of Error.t in
    *   let run_exn r =
-   *     M.annotate_schema r ;
+   *     M.annotate_schema r;
    *     match r.node with
    *     | Filter (p, r') ->
    *         let schema = Meta.(find_exn r' schema) in
@@ -747,7 +756,7 @@ module Make (C : Config.S) = struct
    *         in
    *         let free_var =
    *           match free_vars with
-   *           | [v] -> v
+   *           | [ v ] -> v
    *           | _ ->
    *               let err =
    *                 Error.of_string
@@ -759,15 +768,15 @@ module Make (C : Config.S) = struct
    *         let witnesses =
    *           List.mapi values ~f:(fun i v ->
    *               As_pred
-   *                 ( subst_pred (Map.singleton (module Name) free_var v) p
-   *                 , sprintf "%s_%d" witness_name i ) )
+   *                 ( subst_pred (Map.singleton (module Name) free_var v) p,
+   *                   sprintf "%s_%d" witness_name i ))
    *         in
    *         let filter_pred =
    *           List.foldi values ~init:p ~f:(fun i else_ v ->
    *               If
-   *                 ( Binop (Eq, Name free_var, v)
-   *                 , Name (Name.create (sprintf "%s_%d" witness_name i))
-   *                 , else_ ) )
+   *                 ( Binop (Eq, Name free_var, v),
+   *                   Name (Name.create (sprintf "%s_%d" witness_name i)),
+   *                   else_ ))
    *         in
    *         let select_list = witnesses @ List.map schema ~f:(fun n -> Name n) in
    *         Some (filter filter_pred (select select_list r'))

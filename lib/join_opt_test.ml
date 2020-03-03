@@ -192,26 +192,31 @@ let%expect_test "join-opt" =
        ((node
          (Join
           ((pred
-            (Binop Eq (Name ((scope ()) (name c_nationkey)))
-             (Name ((scope ()) (name n_nationkey)))))
+            (Binop Eq (Name ((name c_nationkey) (meta <opaque>)))
+             (Name ((name n_nationkey) (meta <opaque>)))))
            (r1
             ((node
               (Relation
                ((r_name customer)
                 (r_schema
-                 ((((scope ()) (name c_custkey)) ((scope ()) (name c_name))
-                   ((scope ()) (name c_address)) ((scope ()) (name c_nationkey))
-                   ((scope ()) (name c_phone)) ((scope ()) (name c_acctbal))
-                   ((scope ()) (name c_mktsegment))
-                   ((scope ()) (name c_comment))))))))
+                 (((((name c_custkey) (meta <opaque>)) (IntT))
+                   (((name c_name) (meta <opaque>)) (StringT))
+                   (((name c_address) (meta <opaque>)) (StringT))
+                   (((name c_nationkey) (meta <opaque>)) (IntT))
+                   (((name c_phone) (meta <opaque>)) (StringT (padded)))
+                   (((name c_acctbal) (meta <opaque>)) (FixedT))
+                   (((name c_mktsegment) (meta <opaque>)) (StringT (padded)))
+                   (((name c_comment) (meta <opaque>)) (StringT))))))))
              (meta ())))
            (r2
             ((node
               (Relation
                ((r_name nation)
                 (r_schema
-                 ((((scope ()) (name n_nationkey)) ((scope ()) (name n_name))
-                   ((scope ()) (name n_regionkey)) ((scope ()) (name n_comment))))))))
+                 (((((name n_nationkey) (meta <opaque>)) (IntT))
+                   (((name n_name) (meta <opaque>)) (StringT (padded)))
+                   (((name n_regionkey) (meta <opaque>)) (IntT))
+                   (((name n_comment) (meta <opaque>)) (StringT))))))))
              (meta ()))))))
         (meta ()))))) |}]
 
@@ -232,35 +237,38 @@ let%expect_test "join-opt" =
        ((node
          (Join
           ((pred
-            (Binop Eq (Name ((scope ()) (name c_custkey)))
-             (Name ((scope ()) (name o_custkey)))))
+            (Binop Eq (Name ((name c_custkey) (meta <opaque>)))
+             (Name ((name o_custkey) (meta <opaque>)))))
            (r1
             ((node
               (Join
                ((pred
-                 (Binop Eq (Name ((scope ()) (name c_nationkey)))
-                  (Name ((scope ()) (name n_nationkey)))))
+                 (Binop Eq (Name ((name c_nationkey) (meta <opaque>)))
+                  (Name ((name n_nationkey) (meta <opaque>)))))
                 (r1
                  ((node
                    (Relation
                     ((r_name customer)
                      (r_schema
-                      ((((scope ()) (name c_custkey)) ((scope ()) (name c_name))
-                        ((scope ()) (name c_address))
-                        ((scope ()) (name c_nationkey))
-                        ((scope ()) (name c_phone)) ((scope ()) (name c_acctbal))
-                        ((scope ()) (name c_mktsegment))
-                        ((scope ()) (name c_comment))))))))
+                      (((((name c_custkey) (meta <opaque>)) (IntT))
+                        (((name c_name) (meta <opaque>)) (StringT))
+                        (((name c_address) (meta <opaque>)) (StringT))
+                        (((name c_nationkey) (meta <opaque>)) (IntT))
+                        (((name c_phone) (meta <opaque>)) (StringT (padded)))
+                        (((name c_acctbal) (meta <opaque>)) (FixedT))
+                        (((name c_mktsegment) (meta <opaque>))
+                         (StringT (padded)))
+                        (((name c_comment) (meta <opaque>)) (StringT))))))))
                   (meta ())))
                 (r2
                  ((node
                    (Relation
                     ((r_name nation)
                      (r_schema
-                      ((((scope ()) (name n_nationkey))
-                        ((scope ()) (name n_name))
-                        ((scope ()) (name n_regionkey))
-                        ((scope ()) (name n_comment))))))))
+                      (((((name n_nationkey) (meta <opaque>)) (IntT))
+                        (((name n_name) (meta <opaque>)) (StringT (padded)))
+                        (((name n_regionkey) (meta <opaque>)) (IntT))
+                        (((name n_comment) (meta <opaque>)) (StringT))))))))
                   (meta ()))))))
              (meta ())))
            (r2
@@ -268,12 +276,14 @@ let%expect_test "join-opt" =
               (Relation
                ((r_name orders)
                 (r_schema
-                 ((((scope ()) (name o_orderkey)) ((scope ()) (name o_custkey))
-                   ((scope ()) (name o_orderstatus))
-                   ((scope ()) (name o_totalprice))
-                   ((scope ()) (name o_orderdate))
-                   ((scope ()) (name o_orderpriority))
-                   ((scope ()) (name o_clerk)) ((scope ()) (name o_shippriority))
-                   ((scope ()) (name o_comment))))))))
+                 (((((name o_orderkey) (meta <opaque>)) (IntT))
+                   (((name o_custkey) (meta <opaque>)) (IntT))
+                   (((name o_orderstatus) (meta <opaque>)) (StringT (padded)))
+                   (((name o_totalprice) (meta <opaque>)) (FixedT))
+                   (((name o_orderdate) (meta <opaque>)) (DateT))
+                   (((name o_orderpriority) (meta <opaque>)) (StringT (padded)))
+                   (((name o_clerk) (meta <opaque>)) (StringT (padded)))
+                   (((name o_shippriority) (meta <opaque>)) (IntT))
+                   (((name o_comment) (meta <opaque>)) (StringT))))))))
              (meta ()))))))
         (meta ()))))) |}]

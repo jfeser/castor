@@ -29,9 +29,6 @@ let%expect_test "at" =
   | Some r -> Format.printf "%a" pp r
   | None -> print_endline "Transform failed." );
   [%expect {|
-    [ERROR] Tried to get schema of unnamed predicate false.
-    [ERROR] Tried to get schema of unnamed predicate false.
-    [WARNING] <unknown> is not schema preserving: (((scope())(name x0))) != (((scope())(name x1)))
     filter(true, select([false], filter(false, test2))) |}]
 
 let%expect_test "at" =
