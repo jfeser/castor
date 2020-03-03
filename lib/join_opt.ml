@@ -537,7 +537,8 @@ module Make (C : Config.S) = struct
     let f r =
       opt r
       |> ParetoSet.min_elt (fun a -> a.(0))
-      |> Option.map ~f:(fun j -> seq (of_func (reshape j)) (emit_joins j))
+      |> Option.map ~f:(fun j ->
+             seq (local (reshape j) "reshape") (emit_joins j))
       |> Option.bind ~f:(fun tf -> apply tf Castor.Path.root r)
     in
     local f "join-opt"
