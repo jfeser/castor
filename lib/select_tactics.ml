@@ -101,11 +101,12 @@ module Make (C : Config.S) = struct
       and mk_collection =
         match r'.node with
         | AHashIdx h ->
-            let rk = h.hi_keys and rv = h.hi_values in
-            let rv = extend_with_tuple (schema rk) rv in
+            let rk = h.hi_keys and rv = h.hi_values and scope = h.hi_scope in
+            let rv = extend_with_tuple (schema rk |> scoped scope) rv in
             return @@ fun mk -> hash_idx' { h with hi_values = mk rv }
         | AOrderedIdx (rk, rv, m) ->
-            let rv = extend_with_tuple (schema rk) rv in
+            let scope = scope_exn rk in
+            let rv = extend_with_tuple (schema rk |> scoped scope) rv in
             return @@ fun mk -> ordered_idx rk (scope_exn rk) (mk rv) m
         | AList (rk, rv) -> return @@ fun mk -> list rk (scope_exn rk) (mk rv)
         | ATuple (r' :: rs', Concat) ->
