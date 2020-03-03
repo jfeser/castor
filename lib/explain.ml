@@ -1,9 +1,7 @@
-open Core
-open Castor
 open Yojson.Basic
 open Postgresql
 
-type t = {nrows: int; cost: float}
+type t = { nrows : int; cost : float }
 
 let explain (conn : Db.t) query =
   let open Result.Let_syntax in
@@ -25,6 +23,6 @@ let explain (conn : Db.t) query =
     let plan = Util.to_list json |> List.hd_exn |> Util.member "Plan" in
     let nrows = Util.member "Plan Rows" plan |> Util.to_int in
     let cost = Util.member "Total Cost" plan |> Util.to_number in
-    Ok {nrows; cost}
+    Ok { nrows; cost }
   with Util.Type_error _ as e ->
     Result.fail Error.(of_exn e |> tag ~tag:json_str)

@@ -1,5 +1,3 @@
-open Core
-open Castor
 open Abslayout
 
 module Ops = Ops.Make (struct

@@ -1,5 +1,3 @@
-open Core
-open Castor
 open Abslayout
 open Abslayout_visitors
 open Collections

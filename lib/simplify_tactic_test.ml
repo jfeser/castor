@@ -1,5 +1,3 @@
-open! Core
-open! Castor
 open Simplify_tactic
 
 module Config = struct

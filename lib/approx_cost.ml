@@ -1,5 +1,3 @@
-open! Core
-open! Castor
 open Ast
 open Schema
 module P = Pred.Infix

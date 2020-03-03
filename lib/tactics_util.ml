@@ -1,5 +1,3 @@
-open! Core
-open Castor
 open Abslayout
 open Collections
 open Schema
@@ -39,7 +37,7 @@ module Make (Config : Config.S) = struct
   let all_values_approx ps r =
     let open Or_error.Let_syntax in
     (* Otherwise, if all grouping keys are from named relations, select all
-     possible grouping keys. *)
+       possible grouping keys. *)
     let alias_map = alias_map r in
     (* Find the definition of each key and collect all the names in that
        definition. If they all come from base relations, then we can enumerate

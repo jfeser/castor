@@ -1,7 +1,5 @@
-open Core
 open Graph
 open Printf
-open Castor
 open Collections
 open Ast
 open Schema
@@ -152,8 +150,8 @@ module Make (C : Config.S) = struct
     let contract join g =
       let open JoinGraph in
       (* if the edge is to be removed (property = true):
-     * make a union of the two union-sets of start and end node;
-     * put this set in the map for all nodes in this set *)
+         * make a union of the two union-sets of start and end node;
+         * put this set in the map for all nodes in this set *)
       let f edge m =
         let s_src, j_src = Map.find_exn m (E.src edge) in
         let s_dst, j_dst = Map.find_exn m (E.dst edge) in
@@ -540,7 +538,7 @@ module Make (C : Config.S) = struct
       opt r
       |> ParetoSet.min_elt (fun a -> a.(0))
       |> Option.map ~f:(fun j -> seq (of_func (reshape j)) (emit_joins j))
-      |> Option.bind ~f:(fun tf -> apply tf Path.root r)
+      |> Option.bind ~f:(fun tf -> apply tf Castor.Path.root r)
     in
     local f "join-opt"
 end
