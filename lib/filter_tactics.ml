@@ -515,9 +515,21 @@ module Make (C : Config.S) = struct
       Map.map d ~f:extract
   end
 
+  let elim_eq_filter_limit = 3
+
+  let elim_eq_check_limit n =
+    if n > elim_eq_filter_limit then (
+      Logs.info ~src:elim_eq_filter_src (fun m ->
+          m "Would need to join too many relations (%d > %d)" n
+            elim_eq_filter_limit);
+      None )
+    else Some ()
+
   let elim_eq_filter r =
     let open Option.Let_syntax in
     let%bind p, r = to_filter r in
+
+    (* Extract equalities from the filter predicate. *)
     let eqs, rest =
       Pred.to_nnf p |> Pred.conjuncts
       |> List.partition_map ~f:(fun p ->
@@ -527,29 +539,31 @@ module Make (C : Config.S) = struct
                  Logs.info ~src:elim_eq_filter_src (fun m -> m "%a" Error.pp e);
                  `Snd p)
     in
+
     let inner, eqs = List.unzip eqs in
-    let eqs = List.reduce ~f:EqDomain.intersect eqs in
-    let inner = Pred.conjoin inner in
+    let eqs = List.reduce ~f:EqDomain.intersect eqs
+    and inner = Pred.conjoin inner in
     match eqs with
     | None ->
-        Logs.err ~src:elim_eq_filter_src (fun m -> m "Found no equalities.");
+        Logs.info ~src:elim_eq_filter_src (fun m -> m "Found no equalities.");
         None
     | Some eqs ->
         let eqs = EqDomain.to_ralgebra eqs in
-        let scope = fresh_name "s%d" in
         let key, rels = Map.to_alist eqs |> List.unzip in
+
+        let%map () = elim_eq_check_limit (List.length rels) in
+
         let r_keys = dedup (tuple rels Cross) in
+        let scope = fresh_name "s%d" in
         let inner_filter_pred =
           let ctx =
             Map.map eqs ~f:(fun r ->
                 Schema.schema r |> List.hd_exn |> Name.scoped scope |> P.name)
           in
           Pred.subst_tree ctx inner
-        in
-        let outer_filter_pred = Pred.conjoin rest in
-        Some
-          (filter outer_filter_pred
-             (hash_idx r_keys scope (filter inner_filter_pred r) key))
+        and outer_filter_pred = Pred.conjoin rest in
+        filter outer_filter_pred
+        @@ hash_idx r_keys scope (filter inner_filter_pred r) key
 
   let elim_eq_filter =
     seq' (of_func elim_eq_filter ~name:"elim-eq-filter") (try_ filter_const)
