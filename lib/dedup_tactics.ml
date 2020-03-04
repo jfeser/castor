@@ -16,6 +16,15 @@ module Make (C : Config.S) = struct
 
   let to_dedup r = match r.node with Dedup r -> Some r | _ -> None
 
+  let elim_dedup r =
+    let open Option.Let_syntax in
+    let%bind r = to_dedup r in
+    match Cardinality.estimate r with
+    | Abs_int.Interval (l, h) when h <= 1 -> Some r
+    | _ -> None
+
+  let elim_dedup = O.of_func elim_dedup ~name:"elim-dedup"
+
   let push_dedup r =
     let open Option.Let_syntax in
     let%bind r = to_dedup r in

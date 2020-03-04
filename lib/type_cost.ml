@@ -1,5 +1,6 @@
 open Abslayout_load
 open Type
+module I = Abs_int
 
 module Config = struct
   module type S = sig
@@ -15,18 +16,17 @@ module Make (Config : Config.S) = struct
   open Config
 
   let rec read = function
-    | StringT { nchars = Top; _ } ->
-        (* TODO: Fix this... *) AbsInt.Interval (5, 50)
+    | StringT { nchars = Top; _ } -> (* TODO: Fix this... *) I.Interval (5, 50)
     | (NullT | EmptyT | IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _) as t
       ->
         len t
-    | ListT (elem_t, m) -> AbsInt.(read elem_t * m.count)
+    | ListT (elem_t, m) -> I.(read elem_t * m.count)
     | FuncT ([ t ], _) -> read t
-    | FuncT ([ t1; t2 ], _) -> AbsInt.(read t1 * read t2)
+    | FuncT ([ t1; t2 ], _) -> I.(read t1 * read t2)
     | FuncT _ -> failwith "Unexpected function."
-    | TupleT (elem_ts, _) -> List.sum (module AbsInt) elem_ts ~f:read
-    | HashIdxT (_, vt, _) -> AbsInt.(join zero (read vt))
-    | OrderedIdxT (_, vt, _) -> AbsInt.(join zero (read vt))
+    | TupleT (elem_ts, _) -> List.sum (module I) elem_ts ~f:read
+    | HashIdxT (_, vt, _) -> I.(join zero (read vt))
+    | OrderedIdxT (_, vt, _) -> I.(join zero (read vt))
 
   let cost ?(kind = `Avg) =
     Memo.general
@@ -41,12 +41,12 @@ module Make (Config : Config.S) = struct
         let c = read type_ in
         let out =
           match kind with
-          | `Min -> AbsInt.inf c
-          | `Max -> AbsInt.sup c
+          | `Min -> I.inf c
+          | `Max -> I.sup c
           | `Avg ->
               let open Result.Let_syntax in
-              let%bind l = AbsInt.inf c in
-              let%map h = AbsInt.sup c in
+              let%bind l = I.inf c in
+              let%map h = I.sup c in
               l + ((h - l) / 2)
         in
         match out with
