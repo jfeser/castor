@@ -53,10 +53,7 @@ let annotate : 'a. 'a annot -> < cardinality_matters : bool ; meta : 'a > annot
     =
  fun r -> annot true r
 
-let rec annot r =
-  Reduce.annot I.top I.O.( + ) query
-    (fun _ -> failwith "Metadata has no cardinality")
-    r
+let rec annot r = query r.node
 
 and query = function
   | AEmpty -> I.of_int 0
