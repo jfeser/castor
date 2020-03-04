@@ -92,6 +92,7 @@ module Make (C : Config.S) = struct
   let push_select r =
     let open Option.Let_syntax in
     let%bind ps, r' = to_select r in
+    let%bind () = match select_kind ps with `Agg -> Some () | _ -> None in
     if already_pushed r' then None
     else
       let%map outer_preds, inner_preds =
