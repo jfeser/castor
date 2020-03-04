@@ -31,7 +31,7 @@ let all_unref_at r r' =
 (** True if all fields emitted by r are unreferenced. *)
 let all_unref r = all_unref_at r r
 
-let dummy () = A.scalar (As_pred (Bool false, Fresh.name Global.fresh "d%d"))
+let dummy () = A.scalar (As_pred (Bool false, "dummy"))
 
 let rec project r =
   let refs = r.meta#meta#refs in
@@ -107,7 +107,10 @@ let rec project r =
     | Range (p, p') -> A.range (project_pred p) (project_pred p')
     | q -> { node = map_query project project_pred q; meta = () }
 
-and project_pred p = map_pred project project_pred p
+and project_pred p =
+  match p with
+  | Exists _ | First _ -> map_meta_pred (fun _ -> ()) p
+  | p -> map_pred project project_pred p
 
 and no_project r =
   { node = map_query no_project project_pred r.node; meta = () }
