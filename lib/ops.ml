@@ -44,7 +44,7 @@ end = struct
     try thunk r
     with exn ->
       if reraise then
-        Logs.err (fun m -> m "@[Transform %s failed on: %a@,@]\n" name A.pp r);
+        Logs.err (fun m -> m "Transform %s failed on:@ %a" name A.pp r);
       raise exn
 
   let global ?short_name ?(reraise = true) f name =
@@ -330,7 +330,6 @@ module Make (C : Config.S) = struct
     let tf =
       if validate then resolve_validated @@ schema_validated tf else tf
     in
-    let tf = if validate then tf else tf in
     if trace then traced tf else tf
 
   let of_func ?name f = of_func_pre ?name ~pre:Fun.id f
@@ -415,6 +414,14 @@ module Make (C : Config.S) = struct
       {
         b_f = (fun p r -> Seq.append (t1.b_f p r) (t2.b_f p r));
         b_name = "choose";
+      }
+
+    let choose_many ts =
+      {
+        b_f =
+          (fun p r ->
+            List.map ts ~f:(fun tf -> tf.b_f p r) |> Seq.of_list |> Seq.concat);
+        b_name = "choose-many";
       }
 
     let id = { b_f = (fun _ r -> Seq.singleton r); b_name = "id" }
