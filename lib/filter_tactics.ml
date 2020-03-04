@@ -530,6 +530,7 @@ module Make (C : Config.S) = struct
   let elim_eq_filter r =
     let open Option.Let_syntax in
     let%bind p, r = to_filter r in
+    let orig_schema = Schema.schema r in
 
     (* Extract equalities from the filter predicate. *)
     let eqs, rest =
@@ -564,7 +565,8 @@ module Make (C : Config.S) = struct
           in
           Pred.subst_tree ctx inner
         and outer_filter_pred = Pred.conjoin rest in
-        filter outer_filter_pred
+        select (Schema.to_select_list orig_schema)
+        @@ filter outer_filter_pred
         @@ hash_idx r_keys scope (filter inner_filter_pred r) key
 
   let elim_eq_filter =
