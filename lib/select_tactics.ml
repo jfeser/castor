@@ -126,20 +126,32 @@ module Make (C : Config.S) = struct
         | AHashIdx h ->
             let rk = h.hi_keys and rv = h.hi_values and scope = h.hi_scope in
             let rv = extend rk rv scope in
-            return @@ fun mk -> hash_idx' { h with hi_values = mk rv }
+            return @@ fun mk ->
+            hash_idx' { h with hi_values = mk (schema rk) rv }
         | AOrderedIdx (rk, rv, m) ->
             let scope = scope_exn rk in
             let rv = extend rk rv scope in
-            return @@ fun mk -> ordered_idx rk scope (mk rv) m
-        | AList (rk, rv) -> return @@ fun mk -> list rk (scope_exn rk) (mk rv)
+            return @@ fun mk -> ordered_idx rk scope (mk (schema rk) rv) m
+        | AList (rk, rv) ->
+            return @@ fun mk -> list rk (scope_exn rk) (mk [] rv)
         | ATuple (r' :: rs', Concat) ->
-            return @@ fun mk -> tuple (List.map (r' :: rs') ~f:mk) Concat
+            return @@ fun mk -> tuple (List.map (r' :: rs') ~f:(mk [])) Concat
         | _ -> None
       in
       let count_n = Fresh.name Global.fresh "count%d" in
-      let inner_preds = P.as_ Count count_n :: inner_preds in
       select outer_preds
-        (mk_collection (fun rv ->
+        (mk_collection (fun rk_schema rv ->
+             let inner_preds =
+               P.as_ Count count_n :: inner_preds
+               |> List.filter ~f:(fun p ->
+                      Pred.to_name p
+                      |> Option.map ~f:(fun n ->
+                             not
+                               (List.mem rk_schema n
+                                  ~equal:[%compare.equal: Name.t]))
+                      |> Option.value ~default:true)
+             in
+
              filter
                (Binop (Gt, Name (Name.create count_n), Int 0))
                (select inner_preds rv)))
