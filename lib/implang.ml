@@ -477,7 +477,7 @@ module Builder = struct
     build_iter iter_ args b;
     Option.iter header ~f:(fun f -> f tup b);
     let add_footer b = Option.iter footer ~f:(fun f -> f tup b) in
-    match Option.bind count ~f:Type.AbsInt.to_int with
+    match Option.bind count ~f:Abs_int.to_int with
     | Some 0 -> add_footer b
     | Some 1 ->
         build_step tup iter_ b;

@@ -178,7 +178,7 @@ module Builder : sig
   val build_count_loop : expr -> (t -> unit) -> t -> unit
 
   val build_foreach :
-    ?count:Type.AbsInt.t ->
+    ?count:Abs_int.t ->
     ?header:(expr -> t -> unit) ->
     ?footer:(expr -> t -> unit) ->
     ?persistent:bool ->

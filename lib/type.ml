@@ -3,6 +3,7 @@ open Abslayout_fold
 open Abslayout_visitors
 open Collections
 module A = Abslayout
+module I = Abs_int
 
 let src = Logs.Src.create "castor.abslayout_fold"
 
@@ -12,98 +13,8 @@ let () = Logs.Src.set_level src None
 
 exception TypeError of Error.t [@@deriving sexp]
 
-module AbsInt = struct
-  type t = Bottom | Interval of int * int | Top [@@deriving compare, sexp]
-
-  let pp fmt = function
-    | Top -> Format.fprintf fmt "⊤"
-    | Bottom -> Format.fprintf fmt "⊥"
-    | Interval (l, h) -> Format.fprintf fmt "[%d, %d]" l h
-
-  let top = Top
-
-  let bot = Bottom
-
-  let zero = Interval (0, 0)
-
-  let inf = function
-    | Top -> Ok Int.min_value
-    | Bottom -> Error (Error.of_string "Bottom has no infimum.")
-    | Interval (x, _) -> Ok x
-
-  let sup = function
-    | Top -> Ok Int.max_value
-    | Bottom -> Error (Error.of_string "Bottom has no supremum.")
-    | Interval (_, x) -> Ok x
-
-  let lift1 f i =
-    match i with Bottom -> Bottom | Top -> Top | Interval (l, h) -> f l h
-
-  let lift2 f i1 i2 =
-    match (i1, i2) with
-    | Bottom, _ | _, Bottom -> Bottom
-    | Top, _ | _, Top -> Top
-    | Interval (l1, h1), Interval (l2, h2) -> f l1 h1 l2 h2
-
-  let ceil_pow2 = lift1 (fun l h -> Interval (Int.ceil_pow2 l, Int.ceil_pow2 h))
-
-  let meet i1 i2 =
-    match (i1, i2) with
-    | Bottom, _ | _, Bottom -> Bottom
-    | Top, x | x, Top -> x
-    | Interval (l1, h1), Interval (l2, h2) ->
-        if h1 < l2 || h2 < l1 then Bottom
-        else Interval (Int.max l1 l2, Int.min h1 h2)
-
-  let join i1 i2 =
-    match (i1, i2) with
-    | Bottom, x | x, Bottom -> x
-    | Top, _ | _, Top -> Top
-    | Interval (l1, h1), Interval (l2, h2) ->
-        Interval (Int.min l1 l2, Int.max h1 h2)
-
-  let of_int x = Interval (x, x)
-
-  let to_int = function
-    | Interval (l, h) -> if l = h then Some l else None
-    | _ -> None
-
-  let byte_width ~nullable = function
-    | Bottom -> 1
-    | Top -> 8
-    | Interval (l, h) ->
-        let open Int in
-        let maxval = Int.max (Int.abs l) (Int.abs h) in
-        let maxval = if nullable then maxval + 1 else maxval in
-        if maxval = 0 then 1
-        else
-          let bit_width = Float.((log (of_int maxval) /. log 2.0) + 1.0) in
-          bit_width /. 8.0 |> Float.iround_exn ~dir:`Up
-
-  module O = struct
-    let ( + ) = lift2 (fun l1 h1 l2 h2 -> Interval (l1 + l2, h1 + h2))
-
-    let ( - ) = lift2 (fun l1 h1 l2 h2 -> Interval (l1 - h2, l2 - h1))
-
-    let ( * ) =
-      lift2 (fun l1 h1 l2 h2 ->
-          let min_many = List.reduce_exn ~f:Int.min in
-          let max_many = List.reduce_exn ~f:Int.max in
-          let xs = [ l1 * l2; l1 * h2; l2 * h1; h2 * h1 ] in
-          Interval (min_many xs, max_many xs))
-
-    let ( && ) = meet
-
-    let ( || ) = join
-  end
-
-  include O
-end
-
-module Test_absint_summable : Container.Summable with type t = AbsInt.t = AbsInt
-
 module AbsFixed = struct
-  module I = AbsInt
+  module I = Abs_int
 
   type t = { range : I.t; scale : int } [@@deriving compare, sexp]
 
@@ -128,23 +39,23 @@ module AbsFixed = struct
   let join = unify I.join
 end
 
-type int_ = { range : AbsInt.t; nullable : bool [@sexp.bool] }
+type int_ = { range : I.t; nullable : bool [@sexp.bool] }
 [@@deriving compare, sexp]
 
 type date = int_ [@@deriving compare, sexp]
 
 type bool_ = { nullable : bool [@sexp.bool] } [@@deriving compare, sexp]
 
-type string_ = { nchars : AbsInt.t; nullable : bool [@sexp.bool] }
+type string_ = { nchars : I.t; nullable : bool [@sexp.bool] }
 [@@deriving compare, sexp]
 
-type list_ = { count : AbsInt.t } [@@deriving compare, sexp]
+type list_ = { count : I.t } [@@deriving compare, sexp]
 
 type tuple = { kind : [ `Cross | `Concat ] } [@@deriving compare, sexp]
 
-type hash_idx = { key_count : AbsInt.t } [@@deriving compare, sexp]
+type hash_idx = { key_count : I.t } [@@deriving compare, sexp]
 
-type ordered_idx = { key_count : AbsInt.t } [@@deriving compare, sexp]
+type ordered_idx = { key_count : I.t } [@@deriving compare, sexp]
 
 type fixed = { value : AbsFixed.t; nullable : bool [@sexp.bool] }
 [@@deriving compare, sexp]
@@ -165,16 +76,15 @@ type t =
 [@@deriving compare, sexp]
 
 let least_general_of_primtype = function
-  | Prim_type.IntT { nullable } -> IntT { range = AbsInt.bot; nullable }
+  | Prim_type.IntT { nullable } -> IntT { range = I.bot; nullable }
   | NullT -> NullT
-  | DateT { nullable } -> DateT { range = AbsInt.bot; nullable }
+  | DateT { nullable } -> DateT { range = I.bot; nullable }
   | FixedT { nullable } -> FixedT { value = AbsFixed.bot; nullable }
-  | StringT { nullable; _ } -> StringT { nchars = AbsInt.bot; nullable }
+  | StringT { nullable; _ } -> StringT { nchars = I.bot; nullable }
   | BoolT { nullable } -> BoolT { nullable }
   | TupleT _ | VoidT -> failwith "Not a layout type."
 
 let rec unify_exn t1 t2 =
-  let module I = AbsInt in
   let fail m =
     let err =
       Error.create
@@ -251,22 +161,20 @@ let rec width = function
   | FuncT (_, `Width w) -> w
 
 let rec count = function
-  | EmptyT -> AbsInt.of_int 0
-  | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ | DateT _ -> AbsInt.of_int 1
-  | TupleT (ts, { kind = `Concat }) -> List.sum (module AbsInt) ts ~f:count
+  | EmptyT -> I.of_int 0
+  | NullT | IntT _ | BoolT _ | StringT _ | FixedT _ | DateT _ -> I.of_int 1
+  | TupleT (ts, { kind = `Concat }) -> List.sum (module Abs_int) ts ~f:count
   | TupleT (ts, { kind = `Cross }) ->
-      List.map ts ~f:count
-      |> List.fold_left ~init:(AbsInt.of_int 1) ~f:AbsInt.( * )
-  | OrderedIdxT (_, vt, { key_count }) ->
-      AbsInt.(count vt || (key_count * count vt))
+      List.map ts ~f:count |> List.fold_left ~init:(I.of_int 1) ~f:I.( * )
+  | OrderedIdxT (_, vt, { key_count }) -> I.(count vt || (key_count * count vt))
   | HashIdxT (_, vt, _) -> count vt
   | ListT (_, { count }) -> count
-  | FuncT _ -> AbsInt.top
+  | FuncT _ -> I.top
 
 let hash_kind_of_key_type c = function
   | IntT { range = r; _ } | DateT { range = r; _ } -> (
       match (c, r) with
-      | AbsInt.Interval (_, h_count), Interval (l_range, h_range) ->
+      | I.Interval (_, h_count), Interval (l_range, h_range) ->
           if h_count / (h_range - l_range) < 5 then `Direct else `Cmph
       | _ -> `Cmph )
   | _ -> `Cmph
@@ -281,14 +189,12 @@ let range_exn = function
   | _ -> failwith "Has no range."
 
 let header_len field_len =
-  let module I = AbsInt in
   match I.to_int field_len with
   | Some _ -> I.of_int 0
   | None -> I.byte_width ~nullable:false field_len |> I.of_int
 
 let rec len =
-  let module I = AbsInt in
-  let open AbsInt.O in
+  let open I.O in
   function
   | EmptyT -> I.zero
   | IntT x -> I.byte_width ~nullable:x.nullable x.range |> I.of_int
@@ -297,7 +203,7 @@ let rec len =
   | BoolT _ -> I.of_int 1
   | StringT x -> header_len x.nchars + x.nchars
   | TupleT (ts, _) ->
-      let body_len = List.sum (module AbsInt) ts ~f:len in
+      let body_len = List.sum (module Abs_int) ts ~f:len in
       body_len + header_len body_len
   | ListT (t, x) ->
       let count_len = header_len x.count in
@@ -309,36 +215,32 @@ let rec len =
       oi_map_len kt vt m + values
   | HashIdxT (kt, vt, m) ->
       hi_hash_len kt m + hi_map_len kt vt m + (m.key_count * len vt)
-  | FuncT (ts, _) -> List.sum (module AbsInt) ts ~f:len
+  | FuncT (ts, _) -> List.sum (module Abs_int) ts ~f:len
   | NullT as t -> Error.create "Unexpected type." t [%sexp_of: t] |> Error.raise
 
-and oi_map_len kt vt m =
-  AbsInt.(m.key_count * (len kt + of_int (oi_ptr_size vt m)))
+and oi_map_len kt vt m = I.(m.key_count * (len kt + of_int (oi_ptr_size vt m)))
 
-and oi_ptr_size vt m =
-  AbsInt.(byte_width ~nullable:false (m.key_count * len vt))
+and oi_ptr_size vt m = I.(byte_width ~nullable:false (m.key_count * len vt))
 
-and hi_hash_len ?(bytes_per_key = AbsInt.of_int 1) kt m =
-  let module I = AbsInt in
-  let open AbsInt.O in
+and hi_hash_len ?(bytes_per_key = I.of_int 1) kt m =
+  let open I.O in
   match hash_kind_of_key_type m.key_count kt with
   | `Universal -> I.of_int Int.(8 * 3)
   | `Direct -> I.of_int 0
   | `Cmph ->
       (* The interval represents uncertainty about the hash size, and CMPH hashes
-       seem to have some fixed overhead ~100B? *)
+         seem to have some fixed overhead ~100B? *)
       (m.key_count * bytes_per_key * Interval (1, 2)) + I.of_int 128
 
 and hi_map_len kt vt m =
-  let module I = AbsInt in
-  let open AbsInt.O in
+  let open I.O in
   match hash_kind_of_key_type m.key_count kt with
   | `Universal -> I.ceil_pow2 m.key_count
   | `Direct -> range_exn kt * I.of_int (hi_ptr_size kt vt m)
   | `Cmph -> m.key_count * Interval (1, 2) * I.of_int (hi_ptr_size kt vt m)
 
 and hi_ptr_size kt vt m =
-  AbsInt.(byte_width ~nullable:false (m.key_count * (len kt + len vt)))
+  I.(byte_width ~nullable:false (m.key_count * (len kt + len vt)))
 
 (** Returns the least general type of a layout. *)
 let least_general_of_layout r =
@@ -400,11 +302,11 @@ class ['self] type_fold =
       function
       | Value.Date x ->
           let x = Date.to_int x in
-          DateT { range = AbsInt.of_int x; nullable = false }
-      | Int x -> IntT { range = AbsInt.of_int x; nullable = false }
+          DateT { range = I.of_int x; nullable = false }
+      | Int x -> IntT { range = I.of_int x; nullable = false }
       | Bool _ -> BoolT { nullable = false }
       | String x ->
-          StringT { nchars = AbsInt.of_int (String.length x); nullable = false }
+          StringT { nchars = I.of_int (String.length x); nullable = false }
       | Null -> NullT
       | Fixed x -> FixedT { value = AbsFixed.of_fixed x; nullable = false }
 
@@ -412,7 +314,7 @@ class ['self] type_fold =
       let init = (least_general_of_layout elem_l, 0) in
       let fold (t, c) (_, t') = (unify_exn t t', c + 1) in
       let extract (elem_type, num_elems) =
-        ListT (elem_type, { count = AbsInt.of_int num_elems })
+        ListT (elem_type, { count = I.of_int num_elems })
       in
       Fold { init; fold; extract }
 
@@ -438,7 +340,7 @@ class ['self] type_fold =
         (kct + 1, unify_exn kt kt', unify_exn vt vt')
       in
       let extract (kct, kt, vt) =
-        HashIdxT (kt, vt, { key_count = AbsInt.of_int kct })
+        HashIdxT (kt, vt, { key_count = I.of_int kct })
       in
       Fold { init; fold; extract }
 
@@ -451,7 +353,7 @@ class ['self] type_fold =
         (unify_exn kt kt', unify_exn vt vt', ct + 1)
       in
       let extract (kt, vt, ct) =
-        OrderedIdxT (kt, vt, { key_count = AbsInt.of_int ct })
+        OrderedIdxT (kt, vt, { key_count = I.of_int ct })
       in
       Fold { init; fold; extract }
   end
@@ -547,10 +449,10 @@ module Parallel = struct
              {
                range =
                  ( try
-                     AbsInt.Interval
+                     I.Interval
                        ( Value.to_int @@ eval ctx min,
                          Value.to_int @@ eval ctx max )
-                   with _ -> AbsInt.Top );
+                   with _ -> I.Top );
                nullable = false (* TODO *);
              }
       in
@@ -571,10 +473,10 @@ module Parallel = struct
              {
                range =
                  ( try
-                     AbsInt.Interval
+                     I.Interval
                        ( Date.to_int @@ Value.to_date @@ eval ctx min,
                          Date.to_int @@ Value.to_date @@ eval ctx max )
-                   with _ -> AbsInt.top );
+                   with _ -> I.top );
                nullable = false (* TODO *);
              }
       in
@@ -595,7 +497,7 @@ module Parallel = struct
         build =
           (fun ctx _ ->
             Option.some
-            @@ StringT { nchars = AbsInt.top; nullable = false (* TODO *) });
+            @@ StringT { nchars = I.top; nullable = false (* TODO *) });
       }
 
     let scalar_t p =
@@ -608,42 +510,34 @@ module Parallel = struct
       | StringT _ -> string_t p
       | VoidT | TupleT _ -> failwith "Invalid scalar types."
 
-    let count_t f q =
+    let count_t q f =
       let agg_name = Fresh.name Global.fresh "ct%d" in
       let counts =
-        Abslayout.group_by [ As_pred (Count, agg_name) ] [] (A.strip_scope q)
+        A.group_by [ As_pred (Count, agg_name) ] [] (A.strip_scope q)
       in
       let count = Name (Name.create agg_name) in
-      let min = wrap @@ Min count in
-      let max = wrap @@ Max count in
+      let min = wrap @@ Min count and max = wrap @@ Max count in
       let eval ctx v = eval ctx v |> Value.to_int in
       {
         aggs = [ Subquery (counts, [ min; max ]) ];
         build =
           (fun ctx ts ->
-            f ts
-              ( try AbsInt.Interval (eval ctx min, eval ctx max)
-                with _ -> AbsInt.top ));
+            f ts (try I.Interval (eval ctx min, eval ctx max) with _ -> I.top));
       }
 
     let list_t q =
-      count_t
-        (fun ts count -> Option.some @@ ListT (List.hd_exn ts, { count }))
-        q
+      count_t q @@ fun ts count ->
+      Option.some @@ ListT (List.hd_exn ts, { count })
 
     let hash_idx_t q =
-      count_t
-        (fun ts key_count ->
-          Option.some
-          @@ HashIdxT (List.nth_exn ts 0, List.nth_exn ts 1, { key_count }))
-        q
+      count_t q @@ fun ts key_count ->
+      Option.some
+      @@ HashIdxT (List.nth_exn ts 0, List.nth_exn ts 1, { key_count })
 
     let ordered_idx_t q =
-      count_t
-        (fun ts key_count ->
-          Option.some
-          @@ OrderedIdxT (List.nth_exn ts 0, List.nth_exn ts 1, { key_count }))
-        q
+      count_t q @@ fun ts key_count ->
+      Option.some
+      @@ OrderedIdxT (List.nth_exn ts 0, List.nth_exn ts 1, { key_count })
 
     let tuple_t kind =
       let kind =

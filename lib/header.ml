@@ -70,28 +70,28 @@ and make_access hdr name start =
 
 let rec make_header t =
   let make_size range =
-    match Type.AbsInt.to_int range with
+    match Abs_int.to_int range with
     | Some x -> `Empty x
-    | None -> `Fixed (Type.AbsInt.byte_width ~nullable:false range)
+    | None -> `Fixed (Abs_int.byte_width ~nullable:false range)
   in
   let open Field in
   match t with
   | Type.IntT { range; nullable; _ } ->
-      let len = Type.AbsInt.byte_width ~nullable range in
+      let len = Abs_int.byte_width ~nullable range in
       [
         { name = "len"; size = `Empty len; align = 1 };
         { name = "count"; size = `Empty 1; align = 1 };
         { name = "value"; size = `Fixed len; align = 1 };
       ]
   | Type.DateT { range; nullable; _ } ->
-      let len = Type.AbsInt.byte_width ~nullable range in
+      let len = Abs_int.byte_width ~nullable range in
       [
         { name = "len"; size = `Empty len; align = 1 };
         { name = "count"; size = `Empty 1; align = 1 };
         { name = "value"; size = `Fixed len; align = 1 };
       ]
   | FixedT { value = { range; scale }; nullable } ->
-      let len = Type.AbsInt.byte_width ~nullable range in
+      let len = Abs_int.byte_width ~nullable range in
       [
         { name = "len"; size = `Empty len; align = 1 };
         { name = "scale"; size = `Empty scale; align = 1 };

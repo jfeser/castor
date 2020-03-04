@@ -287,7 +287,7 @@ module Make (Config : Config.S) () = struct
           (* Ternary (gen_pred p1 b, gen_pred p2 b, gen_pred p3 b) *)
       | First r ->
           (* Don't use the passed in start value. Subquery layouts are not stored
-           inline. *)
+             inline. *)
           let ctx = Map.remove ctx (Name.create "start") in
           let ret_var = build_var "first" (List.hd_exn (Schema.types r)) b in
           scan ctx b r r.meta#type_ (fun b tup ->
@@ -312,7 +312,7 @@ module Make (Config : Config.S) () = struct
       (cb : callback) =
     let open Builder in
     let start = Ctx.find_exn ctx (Name.create "start") b in
-    let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
+    let ival = Slice (start, Abs_int.byte_width ~nullable range) in
     let _nval =
       if nullable then
         let null_val = Serialize.int_sentinal t in
@@ -326,7 +326,7 @@ module Make (Config : Config.S) () = struct
       (cb : callback) =
     let open Builder in
     let start = Ctx.find_exn ctx (Name.create "start") b in
-    let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
+    let ival = Slice (start, Abs_int.byte_width ~nullable range) in
     let _nval =
       if nullable then
         let null_val = Serialize.date_sentinal t in
@@ -341,7 +341,7 @@ module Make (Config : Config.S) () = struct
       (cb : callback) =
     let open Builder in
     let start = Ctx.find_exn ctx (Name.create "start") b in
-    let ival = Slice (start, Type.AbsInt.byte_width ~nullable range) in
+    let ival = Slice (start, Abs_int.byte_width ~nullable range) in
     let sval = Infix.(int scale) in
     let xval = build_div (int2fl ival) (int2fl sval) b in
     let _nval =
@@ -416,8 +416,8 @@ module Make (Config : Config.S) () = struct
       List.zip_exn child_layouts child_types
       |> List.map ~f:(fun (callee_layout, callee_type) ->
              (* Construct a pull based iterator for each column in the zip tuple.
-             This loop also initializes the iterator and computes the next start
-             position. *)
+                This loop also initializes the iterator and computes the next start
+                position. *)
              let b' =
                create ~ctx:callee_ctx
                  ~name:(Fresh.name Global.fresh "zt_%d")
@@ -444,7 +444,7 @@ module Make (Config : Config.S) () = struct
       in
       cb b (list_of_tuple tup b)
     in
-    match Type.count (TupleT t) |> Type.AbsInt.to_int with
+    match Type.count (TupleT t) |> Abs_int.to_int with
     | Some x -> build_count_loop Infix.(int x) build_body b
     | None ->
         build_body b;
