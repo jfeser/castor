@@ -115,7 +115,7 @@ module Make (C : Config.S) = struct
         let extend rk rv scope =
           let rk_schema = schema rk and rv_schema = schema rv in
           let ext =
-            rk_schema
+            rk_schema |> unscoped
             |> List.filter ~f:(fun n ->
                    not (List.mem rv_schema n ~equal:[%compare.equal: Name.t]))
             |> scoped scope
