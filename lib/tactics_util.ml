@@ -112,18 +112,29 @@ module Make (Config : Config.S) = struct
            (inter names (of_list (module Name) (schema r)))
            (of_list (module Name) (List.filter_map ~f:Pred.to_name ps))))
 
+  let rec all_pairs = function
+    | [] -> []
+    | x :: xs -> List.map xs ~f:(fun x' -> (x, x')) @ all_pairs xs
+
+  let rec disjoin =
+    let open Ast in
+    function
+    | [] -> Bool false | [ p ] -> p | p :: ps -> Binop (Or, p, disjoin ps)
+
   (** For a set of predicates, check whether more than one predicate is true at
      any time. *)
   let all_disjoint ps r =
     if List.length ps <= 1 then true
     else
-      let tup =
-        select [ Max (Pred.sum_exn (List.map ps ~f:Pred.pseudo_bool)) ] r
-        |> Sql.of_ralgebra |> Sql.to_string
-        |> Db.exec_cursor_exn conn [ Prim_type.int_t ]
-        |> Gen.get
+      let tups =
+        let sql =
+          let pred =
+            all_pairs ps |> List.map ~f:(fun (p, p') -> P.(p && p')) |> disjoin
+          in
+          filter pred @@ r |> Unnest.unnest |> Sql.of_ralgebra |> Sql.to_string
+        in
+        Log.debug (fun m -> m "All disjoint sql: %s" sql);
+        Db.exec1 conn sql
       in
-      match tup with
-      | Some [| Int x |] -> x <= 1
-      | _ -> failwith "Unexpected tuple."
+      List.length tups = 0
 end
