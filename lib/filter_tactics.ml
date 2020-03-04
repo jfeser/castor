@@ -565,7 +565,9 @@ module Make (C : Config.S) = struct
           in
           Pred.subst_tree ctx inner
         and outer_filter_pred = Pred.conjoin rest in
-        select (Schema.to_select_list orig_schema)
+        select
+          ( Schema.to_select_list
+          @@ List.dedup_and_sort ~compare:[%compare: Name.t] orig_schema )
         @@ filter outer_filter_pred
         @@ hash_idx r_keys scope (filter inner_filter_pred r) key
 
