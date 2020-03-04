@@ -188,7 +188,7 @@ module Make (Config : Config.S) = struct
              (Path.all >>? is_param_filter >>| deepest >>= parent))
         (* Eliminate unparameterized join nests. *);
         at_ Join_opt.transform
-          (Path.all >>? is_join >>? not has_free >>| shallowest);
+          Path.(all >>? is_join >>? is_run_time >>? not has_free >>| shallowest);
         push_all_unparameterized_filters;
         project;
         at_ Join_elim_tactics.elim_join_filter

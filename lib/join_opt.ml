@@ -408,6 +408,8 @@ module Make (C : Config.S) = struct
 
     let of_list l = List.fold_left l ~init:[] ~f:(fun s (c, v) -> add s c v)
 
+    let length = List.length
+
     let union_all ss = List.concat ss |> of_list
   end
 
@@ -535,8 +537,9 @@ module Make (C : Config.S) = struct
 
   let transform =
     let f r =
-      opt r
-      |> ParetoSet.min_elt (fun a -> a.(0))
+      let joins = opt r in
+      Log.debug (fun m -> m "Found %d join options." (ParetoSet.length joins));
+      ParetoSet.min_elt (fun a -> a.(0)) joins
       |> Option.map ~f:(fun j ->
              seq (local (reshape j) "reshape") (emit_joins j))
       |> Option.bind ~f:(fun tf -> apply tf Castor.Path.root r)
