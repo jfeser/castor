@@ -251,7 +251,14 @@ module Make (Config : Config.S) = struct
                    ]
                  |> lower (min Cost.cost))
                (* Cleanup*);
-               fix (for_all Dedup_tactics.push_dedup Path.(all >>? is_dedup));
+               fix
+                 (seq_many
+                    [
+                      for_all Select_tactics.push_simple_select
+                        Path.(all >>? is_select);
+                      for_all Dedup_tactics.push_dedup Path.(all >>? is_dedup);
+                      for_all Dedup_tactics.elim_dedup Path.(all >>? is_dedup);
+                    ]);
                fix project;
                push_all_unparameterized_filters;
                Simplify_tactic.simplify;

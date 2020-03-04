@@ -15,6 +15,18 @@ module Make (C : Config.S) = struct
 
   let to_select r = match r.node with Select (p, r) -> Some (p, r) | _ -> None
 
+  (** Push a select that doesn't contain aggregates. *)
+  let push_simple_select r =
+    let open Option.Let_syntax in
+    let%bind ps, r' = to_select r in
+    let%bind () = match select_kind ps with `Scalar -> Some () | _ -> None in
+    match r'.node with
+    | AList (rk, rv) -> return @@ list' (rk, select ps rv)
+    | DepJoin d -> return @@ dep_join' { d with d_rhs = select ps d.d_rhs }
+    | _ -> None
+
+  let push_simple_select = of_func push_simple_select ~name:"push-simple-select"
+
   (** Extend a list of predicates to include those needed by aggregate `p`.
      Returns a name to use in the aggregate. *)
   let extend_aggs aggs p =
