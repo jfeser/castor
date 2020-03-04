@@ -111,15 +111,25 @@ module Make (C : Config.S) = struct
             return @@ gen_concat_select_list ps (schema rv)
         | _ -> None
       and mk_collection =
+        let extend rk rv scope =
+          let rk_schema = schema rk and rv_schema = schema rv in
+          let ext =
+            rk_schema
+            |> List.filter ~f:(fun n ->
+                   not (List.mem rv_schema n ~equal:[%compare.equal: Name.t]))
+            |> scoped scope
+          in
+          extend_with_tuple ext rv
+        in
         match r'.node with
         | AHashIdx h ->
             let rk = h.hi_keys and rv = h.hi_values and scope = h.hi_scope in
-            let rv = extend_with_tuple (schema rk |> scoped scope) rv in
+            let rv = extend rk rv scope in
             return @@ fun mk -> hash_idx' { h with hi_values = mk rv }
         | AOrderedIdx (rk, rv, m) ->
             let scope = scope_exn rk in
-            let rv = extend_with_tuple (schema rk |> scoped scope) rv in
-            return @@ fun mk -> ordered_idx rk (scope_exn rk) (mk rv) m
+            let rv = extend rk rv scope in
+            return @@ fun mk -> ordered_idx rk scope (mk rv) m
         | AList (rk, rv) -> return @@ fun mk -> list rk (scope_exn rk) (mk rv)
         | ATuple (r' :: rs', Concat) ->
             return @@ fun mk -> tuple (List.map (r' :: rs') ~f:mk) Concat
