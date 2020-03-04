@@ -167,6 +167,8 @@ module Make (C : Config.S) = struct
   let elim_cmp_filter r =
     match r.node with
     | Filter (p, r') -> (
+        let orig_schema = Schema.schema r' in
+
         (* Select the comparisons which have a parameter on exactly one side and
            partition by the unparameterized side of the comparison. *)
         let cmps, rest =
@@ -248,15 +250,15 @@ module Make (C : Config.S) = struct
           else
             let%map all_keys = Tactics_util.all_values key r' in
             let scope = fresh_name "s%d" in
-            let schema = Schema.schema all_keys in
-            ordered_idx all_keys scope
-              ( Tactics_util.select_out schema
-              @@ filter
-                   ( List.map key ~f:(fun p ->
-                         P.(p = Pred.scoped schema scope p))
-                   |> Pred.conjoin )
-                   r' )
-              { oi_key_layout = None; oi_lookup = cmps }
+            let keys_schema = Schema.schema all_keys in
+            select (Schema.to_select_list orig_schema)
+            @@ ordered_idx all_keys scope
+                 (filter
+                    ( List.map key ~f:(fun p ->
+                          P.(p = Pred.scoped keys_schema scope p))
+                    |> Pred.conjoin )
+                    r')
+                 { oi_key_layout = None; oi_lookup = cmps }
         in
         match x with
         | Ok r -> Seq.singleton (filter (Pred.conjoin rest) r)
