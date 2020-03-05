@@ -195,12 +195,16 @@ module Make (Config : Config.S) = struct
            using a simple row store. *);
         try_many
           [
-            at_ Join_opt.transform
-              Path.(
-                all >>? is_join >>? is_run_time >>? not has_free >>| shallowest);
-            at_ S.row_store
-              Path.(
-                all >>? is_join >>? is_run_time >>? not has_free >>| shallowest);
+            traced
+            @@ at_ Join_opt.transform
+                 Path.(
+                   all >>? is_join >>? is_run_time >>? not has_free
+                   >>| shallowest);
+            traced
+            @@ at_ S.row_store
+                 Path.(
+                   all >>? is_join >>? is_run_time >>? not has_free
+                   >>| shallowest);
           ]
           (seq_many
              [
