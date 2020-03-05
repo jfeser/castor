@@ -1,0 +1,45 @@
+select([sum((l_extendedprice * (1 - l_discount))) as revenue],
+  alist(join(true,
+          select([l_partkey, l_quantity, l_extendedprice, l_discount,
+                  l_shipinstruct, l_shipmode],
+            lineitem),
+          select([p_partkey, p_brand, p_size, p_container], part)) as s118,
+    filter((((p_partkey = l_partkey) &&
+            ((p_brand = param0) &&
+            (((p_container = "SM CASE") ||
+             ((p_container = "SM BOX") ||
+             ((p_container = "SM PACK") || (p_container = "SM PKG")))) &&
+            ((l_quantity >= param3) &&
+            ((l_quantity <= (param3 + 10)) &&
+            ((p_size >= 1) &&
+            ((p_size <= 5) &&
+            (((l_shipmode = "AIR") || (l_shipmode = "AIR REG")) &&
+            (l_shipinstruct = "DELIVER IN PERSON"))))))))) ||
+           (((p_partkey = l_partkey) &&
+            ((p_brand = param1) &&
+            (((p_container = "MED BAG") ||
+             ((p_container = "MED BOX") ||
+             ((p_container = "MED PKG") || (p_container = "MED PACK")))) &&
+            ((l_quantity >= param4) &&
+            ((l_quantity <= (param4 + 10)) &&
+            ((p_size >= 1) &&
+            ((p_size <= 10) &&
+            (((l_shipmode = "AIR") || (l_shipmode = "AIR REG")) &&
+            (l_shipinstruct = "DELIVER IN PERSON"))))))))) ||
+           ((p_partkey = l_partkey) &&
+           ((p_brand = param2) &&
+           (((p_container = "LG CASE") ||
+            ((p_container = "LG BOX") ||
+            ((p_container = "LG PACK") || (p_container = "LG PKG")))) &&
+           ((l_quantity >= param5) &&
+           ((l_quantity <= (param5 + 10)) &&
+           ((p_size >= 1) &&
+           ((p_size <= 15) &&
+           (((l_shipmode = "AIR") || (l_shipmode = "AIR REG")) &&
+           (l_shipinstruct = "DELIVER IN PERSON"))))))))))),
+      atuple([ascalar(s118.l_partkey), ascalar(s118.l_quantity),
+              ascalar(s118.l_extendedprice), ascalar(s118.l_discount),
+              ascalar(s118.l_shipinstruct), ascalar(s118.l_shipmode),
+              ascalar(s118.p_partkey), ascalar(s118.p_brand),
+              ascalar(s118.p_size), ascalar(s118.p_container)],
+        cross))))

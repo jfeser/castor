@@ -1,23 +1,20 @@
-ahashidx(depjoin(dedup(select([min(l_shipdate) as lo,
-                         max((l_shipdate + month(1))) as hi],
-                   lineitem)) as k1,
-           select([range as k0], range(k1.lo, k1.hi))) as s0,
-  alist(select([((100.0 * sum(agg0)) / sum(agg1)) as promo_revenue],
-          depjoin(select([l_partkey, l_extendedprice, l_discount],
-                    filter(((l_shipdate >= s0.k0) &&
-                           (l_shipdate < (s0.k0 + month(1)))),
-                      lineitem)) as s1,
-            filter((count0 > 0),
-              select([count() as count0,
-                      sum((l_extendedprice * (1 - l_discount))) as agg1,
-                      sum((if (strpos(p_type, "PROMO") = 1) then (l_extendedprice
-                                                                 *
-                                                                 (1 -
-                                                                 l_discount)) else 0.0)) as agg0],
-                atuple([ascalar(s1.l_extendedprice),
-                        ascalar(s1.l_discount),
-                        select([p_type],
-                          filter((s1.l_partkey = p_partkey), part))],
-                  cross))))) as s3,
-    ascalar(s3.promo_revenue)),
-  param1)
+select([promo_revenue],
+  ahashidx(depjoin(select([min(l_shipdate) as lo,
+                           max((l_shipdate + month(1))) as hi],
+                     dedup(select([l_shipdate], lineitem))) as k1,
+             select([range as k0], range(k1.lo, k1.hi))) as s0,
+    alist(select([((100.0 *
+                   sum((if (strpos(p_type, "PROMO") = 1) then (l_extendedprice
+                                                              *
+                                                              (1 -
+                                                              l_discount)) else 0.0)))
+                  / sum((l_extendedprice * (1 - l_discount)))) as promo_revenue],
+            filter((l_partkey = p_partkey),
+              join(true,
+                select([l_partkey, l_extendedprice, l_discount],
+                  filter(((l_shipdate >= s0.k0) &&
+                         (l_shipdate < (s0.k0 + month(1)))),
+                    lineitem)),
+                select([p_partkey, p_type], part)))) as s3,
+      ascalar(s3.promo_revenue)),
+    param1))
