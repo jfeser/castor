@@ -380,7 +380,23 @@ let%expect_test "orderby-filter" =
     {|
 select([p_partkey],
   dedup(select([p_partkey], orderby([p_partkey, p_type], filter(0 = 0, part)))))
-|}
+|};
+  [%expect {|
+    ("Unexpected query response."
+      "ERROR:  for SELECT DISTINCT, ORDER BY expressions must appear in select list\
+     \nLINE 10:     part_0. \"p_type\") AS \"t0\"\
+     \n             ^\
+     \n")
+    SELECT
+        "p_partkey_1" AS "p_partkey_2"
+    FROM ( SELECT DISTINCT
+            part_0. "p_partkey" AS "p_partkey_1"
+        FROM
+            "part" AS "part_0"
+        WHERE ((0) = (0))
+    ORDER BY
+        part_0. "p_partkey",
+        part_0. "p_type") AS "t0" |}]
 
 let%expect_test "select-fusion-window" =
   run_test

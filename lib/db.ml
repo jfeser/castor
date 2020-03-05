@@ -2,6 +2,8 @@ open! Lwt
 open Collections
 module Psql = Postgresql
 
+module Log = (val Log.make "castor.db")
+
 let default_pool_size = 3
 
 let () =
@@ -76,13 +78,13 @@ let rec exec ?(max_retries = 0) ?(params = []) db query =
   in
   match r#status with
   | Nonfatal_error -> (
-      Log.warn (fun m -> m "Db: Received nonfatal error. Retrying.");
+      Log.warn (fun m -> m "Received nonfatal error. Retrying.");
       match r#error_code with
       | SERIALIZATION_FAILURE | DEADLOCK_DETECTED ->
           if
             (* See:
-             https://www.postgresql.org/message-id/1368066680.60649.YahooMailNeo%40web162902.mail.bf1.yahoo.com
-          *)
+               https://www.postgresql.org/message-id/1368066680.60649.YahooMailNeo%40web162902.mail.bf1.yahoo.com
+            *)
             max_retries > 0
           then exec ~max_retries:(max_retries - 1) db query
           else fail r
@@ -416,12 +418,12 @@ module Async = struct
           in
 
           (* OCaml can't convert integers to fds for reasons, so magic is
-           required. *)
+             required. *)
           let fd = conn#socket |> Obj.magic |> Lwt_unix.of_unix_file_descr in
 
           let wait_for_cancel () =
             let%lwt () = protected cancel in
-            Log.debug (fun m -> m "Query timeout: %s" query);
+            Log.info (fun m -> m "Query timeout: %s" query);
             exec db (sprintf "select pg_cancel_backend(%d);" conn#backend_pid)
             |> ignore;
             fail `Timeout
@@ -443,7 +445,7 @@ module Async = struct
           in
 
           (* Wait for results from a send_query call. consume_input pulls any
-           available input from the database *)
+             available input from the database *)
           let rec wait_for_results () =
             conn#consume_input;
             if conn#is_busy then
@@ -462,6 +464,7 @@ module Async = struct
     stream
 
   let exec ?timeout ?cancel db r =
+    Log.info (fun m -> m "Running query:@ %a" Abslayout_pp.pp r);
     exec_sql ?timeout ?cancel db
       (Schema.types r, Sql.of_ralgebra r |> Sql.to_string)
 end

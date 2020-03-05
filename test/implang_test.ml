@@ -149,10 +149,6 @@ let%expect_test "sum" =
            ((kind Cross))))
          ((count (Interval 5 5))))))
       (Width 2)))
-    [ERROR] Tried to get schema of unnamed predicate (k.g - k.f).
-    [ERROR] Tried to get schema of unnamed predicate (k.g - k.f).
-    [ERROR] Tried to get schema of unnamed predicate (k.g - k.f).
-    [ERROR] Tried to get schema of unnamed predicate (k.g - k.f).
     // Locals:
     // i18 : Int[nonnull] (persists=true)
     // count16 : Int[nonnull] (persists=false)
@@ -926,8 +922,6 @@ let%expect_test "subquery-first" =
         (((ListT ((IntT ((range (Interval 1 3)))) ((count (Interval 5 5))))))
          Child_sum)))
       (Width 1)))
-    [ERROR] Tried to get schema of unnamed predicate min(counter).
-    [ERROR] Tried to get schema of unnamed predicate min(counter).
     // Locals:
     // found_tup17 : Bool[nonnull] (persists=false)
     // tup16 : Tuple[Int[nonnull]] (persists=false)

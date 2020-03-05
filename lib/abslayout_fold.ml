@@ -5,11 +5,7 @@ open Abslayout_visitors
 module A = Abslayout
 module Q = Fold_query
 
-let src = Logs.Src.create "castor.abslayout_fold"
-
-module Log = (val Logs.src_log src : Logs.LOG)
-
-let () = Logs.Src.set_level src None
+module Log = (val Log.make "castor.abslayout_fold")
 
 module Fold = struct
   type ('a, 'b, 'c) fold = {

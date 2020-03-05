@@ -83,8 +83,6 @@ select([strlen("test"), strpos("testing", "in")], ascalar(0))
 |};
   [%expect
     {|
-    [ERROR] Tried to get schema of unnamed predicate 0.
-    [ERROR] Tried to get schema of unnamed predicate 0.
     4|5
 
     exited normally |}]
@@ -297,8 +295,6 @@ let%expect_test "output-test" =
     {|select([1, 100, 1.0, 0.0001, 1.0001, "this is a test", "test with, commas", date("1994-01-04"), true, false], ascalar(0))|};
   [%expect
     {|
-    [ERROR] Tried to get schema of unnamed predicate 0.
-    [ERROR] Tried to get schema of unnamed predicate 0.
     1|100|1.000000|0.000100|1.000100|this is a test|test with, commas|1994-01-04|t|f
 
     exited normally |}]
@@ -328,10 +324,6 @@ let%expect_test "ordering" =
     {|atuple([alist(orderby([f desc], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([f], r1) as k1, atuple([ascalar(k1.f), ascalar(k1.g)], cross))], concat)|};
   [%expect
     {|
-    [WARNING] Name does not appear in all concat fields: f
-    [WARNING] Name does not appear in all concat fields: g
-    [WARNING] Name does not appear in all concat fields: f
-    [WARNING] Name does not appear in all concat fields: g
     3|4
     2|1
     2|2
@@ -349,10 +341,6 @@ let%expect_test "ordering" =
     {|atuple([alist(orderby([f], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([f desc], r1) as k1, atuple([ascalar(k1.f), ascalar(k1.g)], cross))], concat)|};
   [%expect
     {|
-    [WARNING] Name does not appear in all concat fields: f
-    [WARNING] Name does not appear in all concat fields: g
-    [WARNING] Name does not appear in all concat fields: f
-    [WARNING] Name does not appear in all concat fields: g
     1|2
     1|3
     2|1
@@ -491,8 +479,6 @@ let%expect_test "date-arith" =
     {|select([date("1997-07-01") + month(3), date("1997-07-01") + day(90)], ascalar(0))|};
   [%expect
     {|
-    [ERROR] Tried to get schema of unnamed predicate 0.
-    [ERROR] Tried to get schema of unnamed predicate 0.
     1997-10-01|1997-09-29
 
     exited normally |}]

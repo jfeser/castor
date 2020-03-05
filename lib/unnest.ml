@@ -17,7 +17,7 @@ let src = Logs.Src.create "castor.unnest"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
-let () = Logs.Src.set_level src (Some Warning)
+let () = Logs.Src.set_level src (Some Info)
 
 (** Convert a list of predicates into a select list that contains no duplicate
     attributes. *)

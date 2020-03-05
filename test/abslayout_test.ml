@@ -160,10 +160,6 @@ let%expect_test "orderby-tuple" =
     {|atuple([alist(orderby([f desc], r1) as r1a, atuple([ascalar(r1a.f), ascalar(r1a.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([f asc], r1) as r1b, atuple([ascalar(r1b.f), ascalar(r1b.g)], cross))], concat)|};
   [%expect
     {|
-    [WARNING] Name does not appear in all concat fields: f
-    [WARNING] Name does not appear in all concat fields: g
-    [WARNING] Name does not appear in all concat fields: f
-    [WARNING] Name does not appear in all concat fields: g
     Tuple
     List
     List key: ((Int 3) (Int 4))

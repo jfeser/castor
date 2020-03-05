@@ -5,7 +5,7 @@ let src = Logs.Src.create "castor.inv"
 
 module Log = (val Logs.src_log src)
 
-let () = Logs.Src.set_level src (Some Error)
+let () = Logs.Src.set_level src (Some Info)
 
 let log_err kind r r' =
   Log.err (fun m -> m "Not %s invariant:@ %a@ %a" kind A.pp r A.pp r')

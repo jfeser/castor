@@ -3,24 +3,8 @@ open Prim_type
 module Expect_test_config = struct
   include Expect_test_config
 
-  let reporter ppf =
-    let report _ level ~over k msgf =
-      let k _ =
-        over ();
-        k ()
-      in
-      let with_time h _ k ppf fmt =
-        Caml.(Format.kfprintf k ppf ("%a @[" ^^ fmt ^^ "@]@."))
-          Logs.pp_header (level, h)
-      in
-      msgf @@ fun ?header ?tags fmt -> with_time header tags k ppf fmt
-    in
-    { Logs.report }
-
   let run thunk =
     Fresh.reset Global.fresh;
-    Logs.set_reporter (reporter Caml.Format.std_formatter);
-    Logs.Src.set_level Log.src (Some Logs.Warning);
     thunk ();
     ()
 end

@@ -130,10 +130,6 @@ let%test_module _ =
       Format.printf "%a" I.pp ir;
       [%expect
         {|
-        [ERROR] Tried to get schema of unnamed predicate 0.
-        [ERROR] Tried to get schema of unnamed predicate 0.
-        [ERROR] Tried to get schema of unnamed predicate 0.
-        [ERROR] Tried to get schema of unnamed predicate 0.
         // Locals:
         // count7 : Int[nonnull] (persists=false)
         // found_tup6 : Bool[nonnull] (persists=false)

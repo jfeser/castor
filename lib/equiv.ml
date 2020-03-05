@@ -5,7 +5,7 @@ let src = Logs.Src.create "castor.equiv"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
-let () = Logs.Src.set_level src None
+let () = Logs.Src.set_level src (Some Info)
 
 module Eq = struct
   module T = struct

@@ -5,7 +5,7 @@ let src = Logs.Src.create "castor.join_elim"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
-let () = Logs.Src.set_level src None
+let () = Logs.Src.set_level src (Some Info)
 
 (** Compute an extension of the rhs that covers the attributes from the lhs. *)
 let extension eqs lhs rhs =
