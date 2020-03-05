@@ -5,11 +5,11 @@ open Collections
 module A = Abslayout
 module I = Abs_int
 
-let src = Logs.Src.create "castor.abslayout_fold"
+let src = Logs.Src.create "castor.type"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
-let () = Logs.Src.set_level src None
+let () = Logs.Src.set_level src (Some Info)
 
 exception TypeError of Error.t [@@deriving sexp]
 
