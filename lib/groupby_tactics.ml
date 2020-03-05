@@ -1,6 +1,6 @@
-open Abslayout
 open Abslayout_visitors
 open Collections
+module A = Abslayout
 module P = Pred.Infix
 
 module Config = struct
@@ -28,7 +28,7 @@ module Make (C : Config.S) = struct
           else (self#visit_t () r).node
 
         method! visit_Select () (ps, r) =
-          match select_kind ps with
+          match A.select_kind ps with
           | `Agg -> Select (ps, r)
           | `Scalar -> Select (ps, self#visit_t () r)
 
@@ -36,7 +36,7 @@ module Make (C : Config.S) = struct
       end
     in
     let r = visitor#visit_t () r in
-    let remains = Set.inter (free r) params in
+    let remains = Set.inter (A.free r) params in
     if Set.is_empty remains then Ok r
     else
       Or_error.error "Failed to remove all parameters." remains
@@ -52,11 +52,11 @@ module Make (C : Config.S) = struct
               Pred.Infix.(name n = name (Name.copy n ~scope:(Some key_name))))
           |> Pred.conjoin
         in
-        let keys = dedup (select key_preds r) in
+        let keys = A.dedup (A.select key_preds r) in
         (* Try to remove any remaining parameters from the keys relation. *)
         match over_approx C.params keys with
         | Ok keys ->
-            Some (list keys key_name (select ps (filter filter_pred r)))
+            Some (A.list keys key_name (A.select ps (A.filter filter_pred r)))
         | Error err ->
             Logs.info ~src (fun m -> m "elim-groupby: %a" Error.pp err);
             None )

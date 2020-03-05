@@ -288,6 +288,7 @@ module Make (Config : Config.S) = struct
                       fix project;
                       push_all_unparameterized_filters;
                       Simplify_tactic.simplify;
+                      filter (fun r -> is_serializable r Path.root);
                     ]);
              ]);
       ]

@@ -1,4 +1,5 @@
 open Abslayout
+module A = Abslayout
 
 module Ops = Ops.Make (struct
   let conn = Db.create "postgresql:///tpch_1k"
@@ -18,8 +19,8 @@ let test2 = Relation.{ r_name = "test2"; r_schema = Some [] }
 
 let%expect_test "at" =
   let r =
-    filter (Bool true)
-      (select [ Bool false ] (filter (Bool false) (relation test1)))
+    A.filter (Bool true)
+      (select [ Bool false ] (A.filter (Bool false) (relation test1)))
   in
   let tf = of_func (fun _ -> Some (relation test2)) in
   let op = at_ tf Path.(all >>? is_relation >>| shallowest) in
@@ -31,8 +32,8 @@ let%expect_test "at" =
 
 let%expect_test "at" =
   let r =
-    filter (Bool true)
-      (select [ Bool false ] (filter (Bool false) (relation test1)))
+    A.filter (Bool true)
+      (select [ Bool false ] (A.filter (Bool false) (relation test1)))
   in
   let tf = local (fun _ -> Some (relation test2)) "tf" in
   let op =

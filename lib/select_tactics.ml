@@ -2,6 +2,7 @@ open Ast
 open Abslayout
 open Collections
 open Schema
+module A = Abslayout
 module P = Pred.Infix
 
 module Config = struct
@@ -152,7 +153,7 @@ module Make (C : Config.S) = struct
                       |> Option.value ~default:true)
              in
 
-             filter
+             A.filter
                (Binop (Gt, Name (Name.create count_n), Int 0))
                (select inner_preds rv)))
 

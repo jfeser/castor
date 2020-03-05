@@ -1,6 +1,7 @@
 open Ast
 open Abslayout
 open Collections
+module A = Abslayout
 module P = Pred.Infix
 
 module Config = struct
@@ -104,11 +105,10 @@ module Make (C : Config.S) = struct
                      scope
                      (select
                         [ Name (Name.create encoded_name) ]
-                        (filter
-                           (Binop
-                              ( Eq,
-                                Name (Name.create ~scope map_name),
-                                Name (Name.create map_name) ))
+                        (A.filter
+                           P.(
+                             Name (Name.create ~scope map_name)
+                             = Name (Name.create map_name))
                            mapping))
                      [ Name lookup ]))
            in

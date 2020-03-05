@@ -1,6 +1,7 @@
 open Ast
 open Abslayout
 open Collections
+module A = Abslayout
 module P = Pred.Infix
 
 module Config = struct
@@ -58,51 +59,51 @@ module Make (C : Config.S) = struct
     match r.node with
     | OrderBy { key; rel } ->
         let%map p, r = to_filter rel in
-        filter p (order_by key r)
+        A.filter p (order_by key r)
     | GroupBy (ps, key, r) ->
         let%bind p, r = to_filter r in
         if
           invariant_support (schema_set_exn r)
             (schema_set_exn (group_by ps key r))
             p
-        then Some (filter p (group_by ps key r))
+        then Some (A.filter p (group_by ps key r))
         else None
     | Filter (p', r) ->
         let%map p, r = to_filter r in
-        filter (Binop (And, p, p')) r
+        A.filter (Binop (And, p, p')) r
     | Select (ps, r) -> (
         let%bind p, r = to_filter r in
         match select_kind ps with
         | `Scalar ->
             if Tactics_util.select_contains (pred_free p) ps r then
-              Some (filter p (select ps r))
+              Some (A.filter p (select ps r))
             else None
         | `Agg -> None )
     | Join { pred; r1; r2 } -> (
         match (to_filter r1, to_filter r2) with
         | Some (p1, r1), Some (p2, r2) ->
-            Some (filter (Pred.conjoin [ p1; p2 ]) (join pred r1 r2))
-        | None, Some (p, r2) -> Some (filter p (join pred r1 r2))
-        | Some (p, r1), None -> Some (filter p (join pred r1 r2))
+            Some (A.filter (Pred.conjoin [ p1; p2 ]) (join pred r1 r2))
+        | None, Some (p, r2) -> Some (A.filter p (join pred r1 r2))
+        | Some (p, r1), None -> Some (A.filter p (join pred r1 r2))
         | None, None -> None )
     | Dedup r ->
         let%map p, r = to_filter r in
-        filter p (dedup r)
+        A.filter p (dedup r)
     | AList (rk, rv) ->
         let%map p, r = to_filter rv in
-        filter (Pred.unscoped (scope_exn rk) p) (list rk (scope_exn rk) r)
+        A.filter (Pred.unscoped (scope_exn rk) p) (list rk (scope_exn rk) r)
     | AHashIdx ({ hi_keys = rk; hi_values = rv; _ } as h) ->
         let%map p, r = to_filter rv in
         let below, above = split_bound rk p in
         let above = List.map above ~f:(Pred.unscoped h.hi_scope) in
-        filter (Pred.conjoin above)
-          (hash_idx' { h with hi_values = filter (Pred.conjoin below) r })
+        A.filter (Pred.conjoin above)
+          (hash_idx' { h with hi_values = A.filter (Pred.conjoin below) r })
     | AOrderedIdx (rk, rv, m) ->
         let%map p, r = to_filter rv in
         let below, above = split_bound rk p in
         let above = List.map above ~f:(Pred.unscoped (scope_exn rk)) in
-        filter (Pred.conjoin above)
-          (ordered_idx rk (scope_exn rk) (filter (Pred.conjoin below) r) m)
+        A.filter (Pred.conjoin above)
+          (ordered_idx rk (scope_exn rk) (A.filter (Pred.conjoin below) r) m)
     | DepJoin { d_lhs; d_alias; d_rhs } ->
         let%map p, r = to_filter d_rhs in
         (* Ensure all the required names are selected. *)
@@ -114,7 +115,7 @@ module Make (C : Config.S) = struct
           and rhs_select = Schema.(schema d_rhs |> to_select_list) in
           merge_select lhs_select rhs_select
         in
-        filter (Pred.unscoped d_alias p)
+        A.filter (Pred.unscoped d_alias p)
           (dep_join d_lhs d_alias (select select_list r))
     | Relation _ | AEmpty | AScalar _ | ATuple _ | As (_, _) | Range _ -> None
 
@@ -122,7 +123,7 @@ module Make (C : Config.S) = struct
 
   let split_filter r =
     match r.node with
-    | Filter (Binop (And, p, p'), r) -> Some (filter p (filter p' r))
+    | Filter (Binop (And, p, p'), r) -> Some (A.filter p (A.filter p' r))
     | _ -> None
 
   let split_filter = of_func split_filter ~name:"split-filter"
@@ -148,7 +149,7 @@ module Make (C : Config.S) = struct
     ordered_idx
       (dedup (select [ P.as_ p n ] rk))
       k
-      (filter (Binop (Eq, Name (Name.create ~scope:k n), p)) rv)
+      (A.filter (Binop (Eq, Name (Name.create ~scope:k n), p)) rv)
       { oi_key_layout = None; oi_lookup = [ (lb, ub) ] }
 
   (** A predicate `p` is a candidate lookup key into a partitioning of `r` if it
@@ -253,7 +254,7 @@ module Make (C : Config.S) = struct
             let keys_schema = Schema.schema all_keys in
             select (Schema.to_select_list orig_schema)
             @@ ordered_idx all_keys scope
-                 (filter
+                 (A.filter
                     ( List.map key ~f:(fun p ->
                           P.(p = Pred.scoped keys_schema scope p))
                     |> Pred.conjoin )
@@ -261,7 +262,7 @@ module Make (C : Config.S) = struct
                  { oi_key_layout = None; oi_lookup = cmps }
         in
         match x with
-        | Ok r -> Seq.singleton (filter (Pred.conjoin rest) r)
+        | Ok r -> Seq.singleton (A.filter (Pred.conjoin rest) r)
         | Error err ->
             Logs.warn (fun m -> m "Elim-cmp: %a" Error.pp err);
             Seq.empty )
@@ -287,8 +288,8 @@ module Make (C : Config.S) = struct
         place_all up (i + 1)
     in
     let rest = place_all ps 0 in
-    let rs = List.mapi rs ~f:(fun i -> filter (Pred.conjoin preds.(i))) in
-    filter (Pred.conjoin rest) (tuple rs Cross)
+    let rs = List.mapi rs ~f:(fun i -> A.filter (Pred.conjoin preds.(i))) in
+    A.filter (Pred.conjoin rest) (tuple rs Cross)
 
   let push_filter_list stage p rk rv =
     let scope = scope_exn rk in
@@ -301,7 +302,7 @@ module Make (C : Config.S) = struct
     in
     let inner_key_pred = Pred.conjoin pushed_key in
     let inner_val_pred = Pred.conjoin pushed_val in
-    list (filter inner_key_pred rk) scope (filter inner_val_pred rv)
+    list (A.filter inner_key_pred rk) scope (A.filter inner_val_pred rv)
 
   let push_filter_select stage p ps r =
     match select_kind ps with
@@ -312,7 +313,7 @@ module Make (C : Config.S) = struct
           |> Map.of_alist_exn (module Name)
         in
         let p' = Pred.subst ctx p in
-        select ps (filter p' r)
+        select ps (A.filter p' r)
     | `Agg ->
         let scalar_ctx =
           List.filter_map ps ~f:(fun p ->
@@ -329,8 +330,8 @@ module Make (C : Config.S) = struct
                    `Fst (Pred.subst scalar_ctx p)
                  else `Snd p)
         in
-        filter (Pred.conjoin unpushed)
-          (select ps (filter (Pred.conjoin pushed) r))
+        A.filter (Pred.conjoin unpushed)
+          (select ps (A.filter (Pred.conjoin pushed) r))
 
   let push_filter r =
     let open Option.Let_syntax in
@@ -338,10 +339,10 @@ module Make (C : Config.S) = struct
     let r = strip_meta r in
     let%bind p, r = to_filter r in
     match r.node with
-    | Filter (p', r') -> Some (filter (Binop (And, p, p')) r')
-    | Dedup r' -> Some (dedup (filter p r'))
+    | Filter (p', r') -> Some (A.filter (Binop (And, p, p')) r')
+    | Dedup r' -> Some (dedup (A.filter p r'))
     | Select (ps, r') -> Some (push_filter_select stage p ps r')
-    | ATuple (rs, Concat) -> Some (tuple (List.map rs ~f:(filter p)) Concat)
+    | ATuple (rs, Concat) -> Some (tuple (List.map rs ~f:(A.filter p)) Concat)
     | ATuple (rs, Cross) -> Some (push_filter_cross_tuple stage p rs)
     (* Lists are a special case because their keys are bound at compile time and
        are not available at runtime. *)
@@ -382,7 +383,7 @@ module Make (C : Config.S) = struct
           in
           Pred.conjoin pushed_val
         in
-        mk (filter inner_key_pred rk) scope (filter inner_val_pred rv)
+        mk (A.filter inner_key_pred rk) scope (A.filter inner_val_pred rv)
 
   let push_filter =
     (* NOTE: Simplify is necessary to make push-filter safe under fixpoints. *)
@@ -568,8 +569,8 @@ module Make (C : Config.S) = struct
         select
           ( Schema.to_select_list
           @@ List.dedup_and_sort ~compare:[%compare: Name.t] orig_schema )
-        @@ filter outer_filter_pred
-        @@ hash_idx r_keys scope (filter inner_filter_pred r) key
+        @@ A.filter outer_filter_pred
+        @@ hash_idx r_keys scope (A.filter inner_filter_pred r) key
 
   let elim_eq_filter =
     seq' (of_func elim_eq_filter ~name:"elim-eq-filter") (try_ filter_const)
@@ -586,7 +587,7 @@ module Make (C : Config.S) = struct
               r
           with _ -> false )
         && List.length clauses > 1
-      then Some (tuple (List.map clauses ~f:(fun p -> filter p r)) Concat)
+      then Some (tuple (List.map clauses ~f:(fun p -> A.filter p r)) Concat)
       else None
     else None
 
@@ -758,7 +759,7 @@ module Make (C : Config.S) = struct
       let sq_tuple = tuple subqueries Cross in
       Some
         (dep_join sq_tuple scope
-           (filter (Pred.scoped (Schema.schema sq_tuple) scope p) r))
+           (A.filter (Pred.scoped (Schema.schema sq_tuple) scope p) r))
     else None
 
   (* let precompute_filter n =

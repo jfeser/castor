@@ -250,6 +250,9 @@ module Make (C : Config.S) = struct
     let f p r = Some (Option.value (apply tf p r) ~default:r) in
     global f (sprintf "try(%s)" tf.name)
 
+  let filter f =
+    global (fun p r -> if f @@ Path.get_exn p r then Some r else None) "filter"
+
   let rec seq_many = function
     | [] -> failwith "Empty transform list."
     | [ t ] -> t
