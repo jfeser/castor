@@ -179,6 +179,28 @@ module Make (Config : Config.S) = struct
       seq (choose_many (List.map ~f:lift tfs)) (lift rest)
       |> lower (min Cost.cost))
 
+  let is_serializable' r =
+    let bad_runtime_op =
+      Path.(
+        all >>? is_run_time
+        >>? Infix.(
+              is_join || is_groupby || is_orderby || is_dedup || is_relation))
+        r
+      |> Seq.is_empty |> not
+    in
+    let mis_bound_params =
+      Path.(all >>? is_compile_time) r
+      |> Seq.for_all ~f:(fun p ->
+             not (overlaps (free (Path.get_exn p r)) params))
+      |> not
+    in
+    if bad_runtime_op then Error (Error.of_string "Bad runtime operation.")
+    else if mis_bound_params then
+      Error (Error.of_string "Parameters referenced at compile time.")
+    else Ok ()
+
+  let is_serializable'' r = Result.is_ok @@ is_serializable' r
+
   let opt =
     let open Infix in
     seq_many
@@ -205,6 +227,7 @@ module Make (Config : Config.S) = struct
                  Path.(
                    all >>? is_join >>? is_run_time >>? not has_free
                    >>| shallowest);
+            id;
           ]
           (seq_many
              [
@@ -288,32 +311,14 @@ module Make (Config : Config.S) = struct
                       fix project;
                       push_all_unparameterized_filters;
                       Simplify_tactic.simplify;
-                      filter (fun r -> is_serializable r Path.root);
+                      traced @@ filter is_serializable'';
                     ]);
              ]);
       ]
 
   let opt_toplevel = seq_many [ try_partition opt; apply_to_subqueries opt ]
 
-  let is_serializable r =
-    let bad_runtime_op =
-      Path.(
-        all >>? is_run_time
-        >>? Infix.(
-              is_join || is_groupby || is_orderby || is_dedup || is_relation))
-        r
-      |> Seq.is_empty |> not
-    in
-    let mis_bound_params =
-      Path.(all >>? is_compile_time) r
-      |> Seq.for_all ~f:(fun p ->
-             not (overlaps (free (Path.get_exn p r)) params))
-      |> not
-    in
-    if bad_runtime_op then Error (Error.of_string "Bad runtime operation.")
-    else if mis_bound_params then
-      Error (Error.of_string "Parameters referenced at compile time.")
-    else Ok ()
+  let is_serializable = is_serializable'
 end
 
 let optimize (module C : Config.S) r =
