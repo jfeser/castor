@@ -641,6 +641,17 @@ module Parallel = struct
       in
       A.group_by aggs [] (to_dep_join ctxs)
 
+    let drop_orderby r =
+      let rec annot r =
+        match r.node with
+        | OrderBy { rel; _ } -> annot rel
+        | _ -> map_annot query r
+      and query q = map_query annot pred q
+      and pred p = map_pred annot pred p in
+      annot r
+
+    (** Convert a context to a query that selects all bindings in the context.
+       We don't care about the order that these bindings appear in. *)
     let to_ralgebra ctxs builders =
       let simple, subquery =
         List.map builders ~f:(fun b -> b.Type_builder.aggs)
@@ -651,6 +662,7 @@ module Parallel = struct
       in
       to_ralgebra_simple ctxs simple
       @ List.map subquery ~f:(to_ralgebra_subquery ctxs)
+      |> List.map ~f:drop_orderby
   end
 
   let contexts r =

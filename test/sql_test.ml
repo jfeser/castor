@@ -2,9 +2,9 @@ open Sql
 open Test_util
 open Abslayout_load
 
-let run_test s =
+let run_test ?(conn = Test_util.test_db_conn) s =
   Logs.Src.set_level src (Some Debug);
-  let conn = Lazy.force test_db_conn in
+  let conn = Lazy.force conn in
   let r = load_string conn s in
   let sql_str = of_ralgebra r |> to_string_hum in
   ( match Db.check conn sql_str with
@@ -374,6 +374,13 @@ let%expect_test "select-agg-window" =
         FROM
             "r" AS "r_0") AS "t0"
 |}]
+
+let%expect_test "orderby-filter" =
+  run_test ~conn:Test_util.tpch_conn
+    {|
+select([p_partkey],
+  dedup(select([p_partkey], orderby([p_partkey, p_type], filter(0 = 0, part)))))
+|}
 
 let%expect_test "select-fusion-window" =
   run_test
