@@ -5,6 +5,9 @@ module A = Abslayout
 module P = Pred.Infix
 open Match
 
+(** Enable partitioning when a parameter is used in a range predicate. *)
+let enable_partition_cmp = ref false
+
 module Config = struct
   module type My_S = sig
     val params : Set.M(Name).t
@@ -592,41 +595,59 @@ module Make (C : Config.S) = struct
 
   let elim_disjunct = of_func elim_disjunct ~name:"elim-disjunct"
 
-  let to_lower_bound n =
-    List.find_map ~f:(function
-      | Binop (Eq, Name n', p) when Name.O.(n' = n) -> Some p
-      | Binop (Eq, p, Name n') when Name.O.(n' = n) -> Some p
-      | Binop (Lt, Name n', p) when Name.O.(n' = n) -> Some p
-      | Binop (Le, Name n', p) when Name.O.(n' = n) -> Some p
-      | Binop (Gt, p, Name n') when Name.O.(n' = n) -> Some p
-      | Binop (Ge, p, Name n') when Name.O.(n' = n) -> Some p
-      | Binop (Lt, Binop (Add, Name n', p'), p) when Name.O.(n' = n) ->
-          Some (Binop (Sub, p, p'))
-      | Binop (Le, Binop (Add, Name n', p'), p) when Name.O.(n' = n) ->
-          Some (Binop (Sub, p, p'))
-      | Binop (Gt, p, Binop (Add, Name n', p')) when Name.O.(n' = n) ->
-          Some (Binop (Sub, p, p'))
-      | Binop (Ge, p, Binop (Add, Name n', p')) when Name.O.(n' = n) ->
-          Some (Binop (Sub, p, p'))
-      | _ -> None)
+  let eq_bound n ps =
+    List.find_map
+      ~f:(function
+        | Binop (Eq, Name n', p) when Name.O.(n' = n) -> Some p
+        | Binop (Eq, p, Name n') when Name.O.(n' = n) -> Some p
+        | _ -> None)
+      ps
 
-  let to_upper_bound n =
-    List.find_map ~f:(function
-      | Binop (Eq, Name n', p) when Name.O.(n' = n) -> Some p
-      | Binop (Eq, p, Name n') when Name.O.(n' = n) -> Some p
-      | Binop (Lt, p, Name n') when Name.O.(n' = n) -> Some p
-      | Binop (Le, p, Name n') when Name.O.(n' = n) -> Some p
-      | Binop (Gt, Name n', p) when Name.O.(n' = n) -> Some p
-      | Binop (Ge, Name n', p) when Name.O.(n' = n) -> Some p
-      | Binop (Lt, p, Binop (Add, Name n', p')) when Name.O.(n' = n) ->
-          Some (Binop (Add, p, p'))
-      | Binop (Le, p, Binop (Add, Name n', p')) when Name.O.(n' = n) ->
-          Some (Binop (Add, p, p'))
-      | Binop (Gt, Binop (Add, Name n', p'), p) when Name.O.(n' = n) ->
-          Some (Binop (Add, p, p'))
-      | Binop (Ge, Binop (Add, Name n', p'), p) when Name.O.(n' = n) ->
-          Some (Binop (Add, p, p'))
-      | _ -> None)
+  let to_lower_bound n ps =
+    let cmp =
+      if !enable_partition_cmp then
+        List.find_map
+          ~f:(function
+            | Binop (Lt, Name n', p) when Name.O.(n' = n) -> Some p
+            | Binop (Le, Name n', p) when Name.O.(n' = n) -> Some p
+            | Binop (Gt, p, Name n') when Name.O.(n' = n) -> Some p
+            | Binop (Ge, p, Name n') when Name.O.(n' = n) -> Some p
+            | Binop (Lt, Binop (Add, Name n', p'), p) when Name.O.(n' = n) ->
+                Some (Binop (Sub, p, p'))
+            | Binop (Le, Binop (Add, Name n', p'), p) when Name.O.(n' = n) ->
+                Some (Binop (Sub, p, p'))
+            | Binop (Gt, p, Binop (Add, Name n', p')) when Name.O.(n' = n) ->
+                Some (Binop (Sub, p, p'))
+            | Binop (Ge, p, Binop (Add, Name n', p')) when Name.O.(n' = n) ->
+                Some (Binop (Sub, p, p'))
+            | _ -> None)
+          ps
+      else None
+    in
+    Option.first_some (eq_bound n ps) cmp
+
+  let to_upper_bound n ps =
+    let cmp =
+      if !enable_partition_cmp then
+        List.find_map
+          ~f:(function
+            | Binop (Lt, p, Name n') when Name.O.(n' = n) -> Some p
+            | Binop (Le, p, Name n') when Name.O.(n' = n) -> Some p
+            | Binop (Gt, Name n', p) when Name.O.(n' = n) -> Some p
+            | Binop (Ge, Name n', p) when Name.O.(n' = n) -> Some p
+            | Binop (Lt, p, Binop (Add, Name n', p')) when Name.O.(n' = n) ->
+                Some (Binop (Add, p, p'))
+            | Binop (Le, p, Binop (Add, Name n', p')) when Name.O.(n' = n) ->
+                Some (Binop (Add, p, p'))
+            | Binop (Gt, Binop (Add, Name n', p'), p) when Name.O.(n' = n) ->
+                Some (Binop (Add, p, p'))
+            | Binop (Ge, Binop (Add, Name n', p'), p) when Name.O.(n' = n) ->
+                Some (Binop (Add, p, p'))
+            | _ -> None)
+          ps
+      else None
+    in
+    Option.first_some (eq_bound n ps) cmp
 
   let to_range n ps = (to_lower_bound n ps, to_upper_bound n ps)
 
