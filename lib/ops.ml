@@ -307,19 +307,19 @@ module Make (C : Config.S) = struct
   let traced ?name tf =
     let name = Option.value name ~default:tf.name in
     let f p r =
-      Logs.debug (fun m ->
+      Logs.info (fun m ->
           m "@[Running %s on:@,%a@]\n" name A.pp (Path.get_exn p r));
       match apply tf p r with
       | Some r' ->
           if A.O.(r = r') then
             Logs.warn (fun m -> m "Invariant transformation %s." name)
           else
-            Logs.debug (fun m ->
+            Logs.info (fun m ->
                 m "@[%s transformed:@,%a@,===== to ======@,%a@]@.\n" name A.pp
                   (Path.get_exn p r) A.pp (Path.get_exn p r'));
           Some r'
       | None ->
-          Logs.debug (fun m -> m "@[Transform %s does not apply.\n" name);
+          Logs.info (fun m -> m "@[Transform %s does not apply.\n" name);
           None
     in
     global f tf.name
