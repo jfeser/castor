@@ -228,6 +228,8 @@ let as_ s r =
         method outer = r.meta#outer
 
         method inner = Ctx.scoped s r.meta#inner
+
+        method meta = r.meta#meta
       end;
   }
 
@@ -362,7 +364,7 @@ let resolve_open resolve stage outer_ctx =
 
 exception Inner_resolve_error of unit annot * exn
 
-exception Resolve_error of unit annot * unit annot * exn [@@deriving sexp]
+exception Resolve_error of exn [@@deriving sexp]
 
 let rec resolve stage outer_ctx r =
   let node, ctx =
@@ -371,16 +373,16 @@ let rec resolve stage outer_ctx r =
     | exn -> raise (Inner_resolve_error (A.strip_meta r, exn))
   in
   let ctx = Ctx.unscoped ctx in
-  ( {
-      node;
-      meta =
-        object
-          method outer = outer_ctx
+  let meta =
+    object
+      method outer = outer_ctx
 
-          method inner = ctx
-        end;
-    },
-    ctx )
+      method inner = ctx
+
+      method meta = r.meta
+    end
+  in
+  ({ node; meta }, ctx)
 
 let stage =
   let merge =
@@ -402,6 +404,8 @@ let stage =
               (Ctx.to_stage_map r.meta#inner)
 
           method inner = r.meta#inner
+
+          method meta = r.meta#meta
         end;
     }
   and query q = map_query annot pred q
@@ -417,6 +421,8 @@ let refs =
           method stage = r.meta#stage
 
           method refs = Ctx.refs r.meta#inner
+
+          method meta = r.meta#meta
         end;
     }
   and query q = map_query annot pred q
@@ -425,14 +431,13 @@ let refs =
 
 (** Annotate names in an algebra expression with types. *)
 let resolve ?(params = Set.empty (module Name)) r =
-  let r = A.strip_meta r in
   shadow_check r;
   let r, ctx =
     let param_ctx =
       Ctx.of_defs `Run (Set.to_list params |> List.map ~f:P.name)
     in
     try resolve `Run param_ctx r
-    with Inner_resolve_error (r', exn) -> raise (Resolve_error (r, r', exn))
+    with Inner_resolve_error (r', exn) -> raise (Resolve_error exn)
   in
 
   (* Ensure that all the outputs are referenced. *)

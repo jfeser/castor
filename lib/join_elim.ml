@@ -3,14 +3,17 @@ open Abslayout_visitors
 
 include (val Log.make "castor.join_elim")
 
-(** Compute an extension of the rhs that covers the attributes from the lhs. *)
-let extension eqs lhs rhs =
-  let schema_lhs = Schema.schema lhs
-  and schema_rhs = Schema.schema rhs
-  and eqs = Set.to_list eqs in
+(** Given two sets of names and an equivalence relation, return a translation
+   from one set to the other. *)
+let translate eqs ~from ~to_ =
+  let open Option.Let_syntax in
+  let eqs = Set.to_list eqs in
+  debug (fun m -> m "Eqs: %a" Fmt.Dump.(list @@ pair Name.pp Name.pp) eqs);
+  debug (fun m -> m "From: %a" Fmt.Dump.(list @@ Name.pp) from);
+  debug (fun m -> m "To: %a" Fmt.Dump.(list @@ Name.pp) to_);
 
   let classes =
-    schema_lhs @ schema_rhs @ List.concat_map eqs ~f:(fun (n, n') -> [ n; n' ])
+    from @ to_ @ List.concat_map eqs ~f:(fun (n, n') -> [ n; n' ])
     |> List.dedup_and_sort ~compare:[%compare: Name.t]
     |> List.map ~f:(fun n -> (n, Union_find.create n))
     |> Map.of_alist_exn (module Name)
@@ -18,20 +21,28 @@ let extension eqs lhs rhs =
   List.iter eqs ~f:(fun (n, n') ->
       Union_find.union (Map.find_exn classes n) (Map.find_exn classes n'));
 
-  List.map schema_lhs ~f:(fun n ->
+  List.map from ~f:(fun n ->
       let c = Map.find_exn classes n in
       let n' =
-        List.find schema_rhs ~f:(fun n' ->
+        List.find to_ ~f:(fun n' ->
             let c' = Map.find_exn classes n' in
             Union_find.same_class c c')
       in
       if Option.is_none n' then
         debug (fun m -> m "Failed to find replacement for %a." Name.pp n);
-      Option.map n' ~f:(fun n' -> As_pred (Name n', Name.name n)))
+      let%map n' = n' in
+      (n, n'))
   |> Option.all
 
+(** Compute an extension of the rhs that covers the attributes from the lhs. *)
+let extension eqs schema_lhs schema_rhs =
+  let open Option.Let_syntax in
+  let%map ext = translate eqs ~from:schema_lhs ~to_:schema_rhs in
+  List.map ext ~f:(fun (n, n') -> As_pred (Name n', Name.name n))
+
 let try_extend eqs pred lhs rhs =
-  match extension eqs lhs rhs with
+  let schema_lhs = Schema.schema lhs and schema_rhs = Schema.schema rhs in
+  match extension eqs schema_lhs schema_rhs with
   | Some ex ->
       let sl = ex @ Schema.to_select_list @@ Schema.schema rhs in
       debug (fun m ->

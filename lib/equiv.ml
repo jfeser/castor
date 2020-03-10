@@ -41,9 +41,17 @@ let eqs_open (eqs : 'a annot -> Set.M(Eq).t) r : Set.M(Eq).t =
            | _ -> None)
          |> of_list
   | Join { pred = p; r1; r2 } -> Pred.eqs p |> of_list || (eqs r1 && eqs r2)
-  | Dedup r | OrderBy { rel = r; _ } | DepJoin { d_rhs = r; _ } | AList (_, r)
-    ->
-      eqs r
+  | Dedup r | OrderBy { rel = r; _ } | DepJoin { d_rhs = r; _ } -> eqs r
+  | AList (rk, rv) -> eqs rk || eqs rv
+  | AHashIdx h -> (
+      match List.zip (Schema.schema h.hi_keys) h.hi_lookup with
+      | Ok ls ->
+          List.filter_map ls ~f:(fun (n, p) ->
+              match p with Name n' -> Some (n, n') | _ -> None)
+          |> of_list
+      | Unequal_lengths -> empty )
+  | ATuple (ts, Cross) ->
+      List.map ts ~f:eqs |> List.reduce ~f:( || ) |> Option.value ~default:empty
   | _ -> empty
 
 let annotate r = annotate eqs_open r
