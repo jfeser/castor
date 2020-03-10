@@ -4,6 +4,8 @@ open Schema
 module A = Abslayout
 module P = Pred.Infix
 
+include (val Log.make "castor.unnest")
+
 let default_meta =
   object
     method was_depjoin = false
@@ -12,12 +14,6 @@ let default_meta =
 module Q = Constructors.Query
 
 module C = (val Constructors.Annot.with_strip_meta (fun () -> default_meta))
-
-let src = Logs.Src.create "castor.unnest"
-
-module Log = (val Logs.src_log src : Logs.LOG)
-
-let () = Logs.Src.set_level src (Some Info)
 
 (** Convert a list of predicates into a select list that contains no duplicate
     attributes. *)

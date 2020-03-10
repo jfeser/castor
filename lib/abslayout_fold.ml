@@ -5,7 +5,7 @@ open Abslayout_visitors
 module A = Abslayout
 module Q = Fold_query
 
-module Log = (val Log.make "castor.abslayout_fold")
+include (val Log.make "castor.abslayout_fold")
 
 module Fold = struct
   type ('a, 'b, 'c) fold = {
@@ -380,13 +380,13 @@ class virtual ['self] abslayout_fold =
       in
       (* Convert that query to a ralgebra and simplify it. *)
       let r = q |> Q.to_ralgebra |> simplify in
-      Log.info (fun m -> m "Pre-unnest ralgebra:@ %a" Abslayout.pp r);
+      info (fun m -> m "Pre-unnest ralgebra:@ %a" Abslayout.pp r);
       let r = Unnest.unnest r in
-      Log.info (fun m -> m "Post-unnest ralgebra:@ %a" Abslayout.pp r);
+      info (fun m -> m "Post-unnest ralgebra:@ %a" Abslayout.pp r);
       (* Format.printf "Running query: %a" A.pp r; *)
       (* Convert the ralgebra to sql. *)
       let sql = Sql.of_ralgebra r in
-      Log.info (fun m -> m "Running SQL: %s" (Sql.to_string_hum sql));
+      info (fun m -> m "Running SQL: %s" (Sql.to_string_hum sql));
       (* Run the sql to get a stream of tuples. *)
       let tups =
         Db.Async.exec ?timeout conn r
@@ -394,12 +394,10 @@ class virtual ['self] abslayout_fold =
              | Ok x -> Array.to_list x
              | Error Db.Async.{ info = `Timeout; _ } -> raise Lwt_unix.Timeout
              | Error ({ query; _ } as e) ->
-                 Log.err (fun m ->
-                     m "Running SQL failed: %s" (Sql.format query));
+                 err (fun m -> m "Running SQL failed: %s" (Sql.format query));
                  Db.Async.to_error e |> Error.raise)
         |> Lwt_stream.map (fun t ->
-               Log.debug (fun m ->
-                   m "%a" Sexp.pp_hum ([%sexp_of: Value.t list] t));
+               debug (fun m -> m "%a" Sexp.pp_hum ([%sexp_of: Value.t list] t));
                t)
       in
       (* Replace the ralgebra queries at the leaves of the fold query with their

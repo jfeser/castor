@@ -61,7 +61,18 @@ let with_level src level f =
       f ())
     ~finally:(fun () -> Logs.Src.set_level src old_level)
 
+module type LOG = sig
+  include Logs.LOG
+
+  val src : Logs.Src.t
+end
+
 let make ?(level = Some Logs.Info) name =
-  let src = Logs.Src.create name in
-  Logs.Src.set_level src level;
-  Logs.src_log src
+  ( module struct
+    let src =
+      let s = Logs.Src.create name in
+      Logs.Src.set_level s level;
+      s
+
+    include (val Logs.src_log src)
+  end : LOG )

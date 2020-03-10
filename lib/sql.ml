@@ -6,12 +6,7 @@ open Abslayout_visitors
 module A = Abslayout
 module P = Pred.Infix
 
-let src =
-  let src = Logs.Src.create "sql-test" in
-  Logs.Src.set_level src None;
-  src
-
-module LogT = (val Logs.src_log src : Logs.LOG)
+include (val Log.make "castor.sql")
 
 type sql_pred = unit annot pred [@@deriving compare, sexp_of]
 
@@ -104,7 +99,7 @@ let make_ctx schema select =
     ~init:(Map.empty (module Name))
     ~f:(fun m (n, { pred = p; _ }) ->
       if Map.mem m n then
-        Log.warn (fun m -> m "Duplicate name in schema %a." Name.pp n);
+        warn (fun m -> m "Duplicate name in schema %a." Name.pp n);
       Map.set m ~key:n ~data:p)
 
 let join schema1 schema2 sql1 sql2 pred =
@@ -140,7 +135,7 @@ let order_by of_ralgebra key r =
       List.find preds ~f:(fun (p, _) -> Poly.(Pred.kind p <> `Scalar))
     in
     Option.iter non_scalar ~f:(fun (p, _) ->
-        Log.err (fun m -> m "Non-scalar predicate in order-by: %a" Pred.pp p));
+        err (fun m -> m "Non-scalar predicate in order-by: %a" Pred.pp p));
     preds
   in
   Query { spj with order = key }

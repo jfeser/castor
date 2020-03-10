@@ -1,11 +1,7 @@
 module A = Abslayout
 open Abslayout_visitors
 
-let src = Logs.Src.create "castor.join_elim"
-
-module Log = (val Logs.src_log src : Logs.LOG)
-
-let () = Logs.Src.set_level src (Some Info)
+include (val Log.make "castor.join_elim")
 
 (** Compute an extension of the rhs that covers the attributes from the lhs. *)
 let extension eqs lhs rhs =
@@ -30,7 +26,7 @@ let extension eqs lhs rhs =
             Union_find.same_class c c')
       in
       if Option.is_none n' then
-        Log.debug (fun m -> m "Failed to find replacement for %a." Name.pp n);
+        debug (fun m -> m "Failed to find replacement for %a." Name.pp n);
       Option.map n' ~f:(fun n' -> As_pred (Name n', Name.name n)))
   |> Option.all
 
@@ -38,12 +34,12 @@ let try_extend eqs pred lhs rhs =
   match extension eqs lhs rhs with
   | Some ex ->
       let sl = ex @ Schema.to_select_list @@ Schema.schema rhs in
-      Log.debug (fun m ->
+      debug (fun m ->
           m "Extending with:@ %a@ to avoid join of:@ %a@ with:@ %a"
             (Fmt.Dump.list Pred.pp) sl A.pp lhs A.pp rhs);
       Select (sl, rhs)
   | None ->
-      Log.debug (fun m ->
+      debug (fun m ->
           m "Failed to remove join of:@ %a@ with:@ %a" A.pp lhs A.pp rhs);
       Join { pred; r1 = lhs; r2 = rhs }
 
@@ -54,7 +50,7 @@ let remove_joins r =
         let r1 = annot r1 and r2 = annot r2 in
         try_extend r1.meta#eqs p r1 r2
     | Join { pred = p; _ } as q ->
-        Log.debug (fun m ->
+        debug (fun m ->
             m "Join cardinality matters for@ %a@ %s" Pred.pp p
               meta#meta#why_card_matters);
         map_query annot pred q
@@ -67,8 +63,7 @@ let remove_dedup r =
   and query meta = function
     | Dedup r' when not meta#cardinality_matters -> (annot r').node
     | Dedup r' ->
-        Log.debug (fun m ->
-            m "Dedup cardinality matters: %s" meta#why_card_matters);
+        debug (fun m -> m "Dedup cardinality matters: %s" meta#why_card_matters);
         Dedup (annot r')
     | q -> map_query annot pred q
   and pred p = map_pred annot pred p in

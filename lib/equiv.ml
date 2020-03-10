@@ -1,11 +1,7 @@
 open Ast
 open Abslayout_visitors
 
-let src = Logs.Src.create "castor.equiv"
-
-module Log = (val Logs.src_log src : Logs.LOG)
-
-let () = Logs.Src.set_level src (Some Info)
+include (val Log.make "castor.equiv")
 
 module Eq = struct
   module T = struct

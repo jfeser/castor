@@ -5,11 +5,7 @@ open Collections
 module A = Abslayout
 module I = Abs_int
 
-let src = Logs.Src.create "castor.type"
-
-module Log = (val Logs.src_log src : Logs.LOG)
-
-let () = Logs.Src.set_level src (Some Info)
+include (val Log.make "castor.type")
 
 exception TypeError of Error.t [@@deriving sexp]
 
@@ -359,10 +355,9 @@ class ['self] type_fold =
   end
 
 let type_of ?timeout conn r =
-  Log.info (fun m -> m "Computing type of abstract layout.");
+  info (fun m -> m "Computing type of abstract layout.");
   let type_ = (new type_fold)#run ?timeout conn r in
-  Log.info (fun m ->
-      m "The type is: %s" (Sexp.to_string_hum ([%sexp_of: t] type_)));
+  info (fun m -> m "The type is: %s" (Sexp.to_string_hum ([%sexp_of: t] type_)));
   type_
 
 let annotate conn r =
@@ -711,12 +706,12 @@ module Parallel = struct
     let%lwt results =
       Lwt_list.map_p
         (fun r ->
-          Log.debug (fun m -> m "Pre-opt:@ %a" A.pp r);
+          debug (fun m -> m "Pre-opt:@ %a" A.pp r);
           let r =
             try Unnest.unnest r |> Resolve.resolve |> Project.project
             with e -> Error.of_exn ~backtrace:`Get e |> Error.raise
           in
-          Log.debug (fun m -> m "Post-opt:@ %a" A.pp r);
+          debug (fun m -> m "Post-opt:@ %a" A.pp r);
           let strm = Db.Async.exec ?timeout conn r in
           let%lwt tup = Lwt_stream.get strm in
           match tup with

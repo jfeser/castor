@@ -2,7 +2,7 @@ open! Lwt
 open Collections
 module Psql = Postgresql
 
-module Log = (val Log.make "castor.db")
+include (val Log.make ~level:(Some Warning) "castor.db")
 
 let default_pool_size = 3
 
@@ -78,7 +78,7 @@ let rec exec ?(max_retries = 0) ?(params = []) db query =
   in
   match r#status with
   | Nonfatal_error -> (
-      Log.warn (fun m -> m "Received nonfatal error. Retrying.");
+      warn (fun m -> m "Received nonfatal error. Retrying.");
       match r#error_code with
       | SERIALIZATION_FAILURE | DEADLOCK_DETECTED ->
           if
@@ -173,7 +173,7 @@ from "$1"
             if is_int then
               if fits_in_an_int63 then IntT { nullable }
               else (
-                Log.warn (fun m ->
+                warn (fun m ->
                     m "Numeric column loaded as string: %s.%s" rname fname);
                 StringT { nullable; padded = false } )
             else FixedT { nullable }
@@ -423,7 +423,7 @@ module Async = struct
 
           let wait_for_cancel () =
             let%lwt () = protected cancel in
-            Log.info (fun m -> m "Query timeout: %s" query);
+            info (fun m -> m "Query timeout: %s" query);
             exec db (sprintf "select pg_cancel_backend(%d);" conn#backend_pid)
             |> ignore;
             fail `Timeout
@@ -464,7 +464,7 @@ module Async = struct
     stream
 
   let exec ?timeout ?cancel db r =
-    Log.info (fun m -> m "Running query:@ %a" Abslayout_pp.pp r);
+    info (fun m -> m "Running query:@ %a" Abslayout_pp.pp r);
     exec_sql ?timeout ?cancel db
       (Schema.types r, Sql.of_ralgebra r |> Sql.to_string)
 end
