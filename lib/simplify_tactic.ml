@@ -133,6 +133,15 @@ module Make (C : Config.S) = struct
 
   let flatten_tuple = of_func flatten_tuple ~name:"flatten-tuple"
 
+  let elim_filter_above_join r =
+    let open Option.Let_syntax in
+    let%bind p, r = to_filter r in
+    let%map p', r1, r2 = to_join r in
+    join P.(p && p') r1 r2
+
+  let elim_filter_above_join =
+    of_func elim_filter_above_join ~name:"elim-filter-above-join"
+
   let simplify =
     seq_many
       [
@@ -151,5 +160,6 @@ module Make (C : Config.S) = struct
         for_all flatten_tuple Path.(all >>? is_tuple);
         for_all dealias_select Path.(all >>? is_select);
         for_all flatten_select Path.(all >>? is_select);
+        for_all elim_filter_above_join Path.(all >>? is_filter);
       ]
 end
