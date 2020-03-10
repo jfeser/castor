@@ -5,6 +5,7 @@ open Castor_opt
 open Abslayout_load
 
 let main ~params:all_params ~validate ~cost_timeout ch =
+  Logs.set_level (Some Info);
   Logs.info (fun m ->
       m "%s" (Sys.get_argv () |> Array.to_list |> String.concat ~sep:" "));
   let params =
