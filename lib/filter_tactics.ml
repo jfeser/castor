@@ -666,6 +666,55 @@ module Make (C : Config.S) = struct
     in
     visitor#visit_t () r
 
+  let partition_with_bounds field aliases lo hi r n =
+    let open Option.Let_syntax in
+    let key_name = fresh_name "k%d" in
+    let%bind keys =
+      match Pred.to_type field with
+      | IntT _ | DateT _ ->
+          let%map vals = Tactics_util.all_values [ field ] r |> Or_error.ok in
+          let vals =
+            let val_name = List.hd_exn (Schema.schema vals) in
+            let select_list =
+              let alias_binds =
+                List.filter_map aliases ~f:Fun.id
+                |> List.map ~f:(fun n -> P.as_ (Name val_name) @@ Name.name n)
+              in
+              P.name val_name :: alias_binds
+            in
+            select select_list vals
+          and scope = fresh_name "k%d" in
+
+          let open P in
+          dep_join (select [ as_ (Min lo) "lo"; as_ (Max hi) "hi" ] vals) scope
+          @@ select [ as_ (name (Name.create "range")) key_name ]
+          @@ range
+               (name (Name.create ~scope "lo"))
+               (name (Name.create ~scope "hi"))
+      | StringT _ ->
+          let%map keys = Tactics_util.all_values [ field ] r |> Or_error.ok in
+          let select_list =
+            [ P.(as_ (name (List.hd_exn (Schema.schema keys))) key_name) ]
+          in
+          select select_list keys
+      | _ -> None
+    in
+    let scope = fresh_name "s%d" in
+    let r' =
+      let ctx =
+        Map.singleton
+          (module Name)
+          n
+          (P.name @@ Name.scoped scope @@ Name.create key_name)
+      in
+      subst ctx r
+    in
+    if Set.mem (names r') n then None
+    else
+      return
+      @@ select Schema.(schema r' |> to_select_list)
+      @@ hash_idx keys scope r' [ Name n ]
+
   (** Try to partition a layout on values of an attribute. *)
   let partition_on r n =
     let open Option.Let_syntax in
@@ -686,60 +735,20 @@ module Make (C : Config.S) = struct
       |> Map.of_alist_multi (module Pred)
       |> Map.to_alist
     in
+
+    let fail msg =
+      Logs.debug (fun m ->
+          m "Partition: %s %a" msg (Fmt.Dump.list Pred.pp)
+            (List.map ~f:Tuple.T2.get1 fields))
+    in
     match (fields, key_range) with
     | [ (f, aliases) ], (Some l, Some h) ->
-        let key_name = fresh_name "k%d" in
-        let%bind keys =
-          match Pred.to_type f with
-          | IntT _ | DateT _ ->
-              let%map vals = Tactics_util.all_values [ f ] r |> Or_error.ok in
-              let vals =
-                let val_name = List.hd_exn (Schema.schema vals) in
-                let select_list =
-                  let alias_binds =
-                    List.filter_map aliases ~f:Fun.id
-                    |> List.map ~f:(fun n ->
-                           P.as_ (Name val_name) @@ Name.name n)
-                  in
-                  P.name val_name :: alias_binds
-                in
-                select select_list vals
-              and scope = fresh_name "k%d" in
-              let open P in
-              dep_join
-                (select [ as_ (Min l) "lo"; as_ (Max h) "hi" ] vals)
-                scope
-              @@ select [ as_ (name (Name.create "range")) key_name ]
-              @@ range
-                   (name (Name.create ~scope "lo"))
-                   (name (Name.create ~scope "hi"))
-          | StringT _ ->
-              let%map keys = Tactics_util.all_values [ f ] r |> Or_error.ok in
-              let select_list =
-                [ P.(as_ (name (List.hd_exn (Schema.schema keys))) key_name) ]
-              in
-              select select_list keys
-          | _ -> None
-        in
-        let scope = fresh_name "s%d" in
-        let r' =
-          let ctx =
-            Map.singleton
-              (module Name)
-              n
-              (P.name @@ Name.scoped scope @@ Name.create key_name)
-          in
-          subst ctx r
-        in
-        if Set.mem (names r') n then None
-        else
-          return
-          @@ select Schema.(schema r' |> to_select_list)
-          @@ hash_idx keys scope r' [ Name n ]
+        partition_with_bounds f aliases l h r n
+    | fs, (None, _ | _, None) ->
+        fail "Could not find bounds for fields";
+        None
     | fs, _ ->
-        Logs.debug (fun m ->
-            m "Partition: Found too many fields. %a" (Fmt.list Pred.pp)
-              (List.map ~f:Tuple.T2.get1 fs));
+        fail "Found too many fields";
         None
 
   let partition _ r =

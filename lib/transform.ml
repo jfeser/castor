@@ -168,8 +168,7 @@ module Make (Config : Config.S) = struct
 
   let try_partition tf =
     Branching.(
-      seq_many [ choose (traced F.partition) id; lift tf ]
-      |> lower (min Cost.cost))
+      seq_many [ choose F.partition id; lift tf ] |> lower (min Cost.cost))
 
   let try_ tf rest =
     Branching.(seq (choose (lift tf) id) (lift rest) |> lower (min Cost.cost))
@@ -206,117 +205,140 @@ module Make (Config : Config.S) = struct
     seq_many
       [
         (* Eliminate groupby operators. *)
-        fix
-          (at_ Groupby_tactics.elim_groupby
-             (Path.all >>? is_groupby >>| shallowest));
+        traced ~name:"elim-groupby"
+        @@ fix
+        @@ at_ Groupby_tactics.elim_groupby
+             (Path.all >>? is_groupby >>| shallowest);
         (* Hoist parameterized filters as far up as possible. *)
-        fix
-          (at_ F.hoist_filter
-             (Path.all >>? is_param_filter >>| deepest >>= parent))
+        traced ~name:"hoist-param-filters"
+        @@ fix
+        @@ at_ F.hoist_filter
+             (Path.all >>? is_param_filter >>| deepest >>= parent)
         (* Eliminate unparameterized join nests. Try using join optimization and
            using a simple row store. *);
-        try_many
-          [
-            traced
-            @@ at_ Join_opt.transform
-                 Path.(
-                   all >>? is_join >>? is_run_time >>? not has_free
-                   >>| shallowest);
-            traced
-            @@ at_ S.row_store
-                 Path.(
-                   all >>? is_join >>? is_run_time >>? not has_free
-                   >>| shallowest);
-            id;
-          ]
-          (seq_many
+        traced ~name:"elim-join-nests"
+        @@ try_many
              [
-               push_all_unparameterized_filters;
-               project;
-               at_ Join_elim_tactics.elim_join_filter
-                 (Path.all >>? is_join >>| shallowest);
-               try_
-                 (first (traced F.elim_disjunct) (Path.all >>? is_filter))
-                 (seq_many
-                    [
-                      (* Push constant filters *)
-                      fix
-                        (at_ F.push_filter
-                           Castor.Path.(all >>? is_const_filter >>| shallowest));
-                      (* Push orderby operators into compile time position if possible. *)
-                      fix
-                        (at_ push_orderby
-                           Path.(
-                             all >>? is_orderby >>? is_run_time >>| shallowest));
-                      (* Eliminate comparison filters. *)
-                      elim_param_filter F.elim_cmp_filter is_param_cmp_filter;
-                      (* Eliminate the deepest equality filter. *)
-                      elim_param_filter
-                        (Branching.lift F.elim_eq_filter)
-                        is_param_filter;
-                      push_all_unparameterized_filters;
-                      (* Eliminate all unparameterized relations. *)
-                      fix
-                        (seq_many
-                           [
-                             at_ S.row_store
-                               Path.(
-                                 all >>? is_run_time >>? not has_params
-                                 >>? not is_serializable
-                                 >>? not (contains is_collection)
-                                 >>| shallowest);
-                             push_all_unparameterized_filters;
-                           ]);
-                      push_all_unparameterized_filters;
-                      (* Push selections above collections. *)
-                      fix
-                        (for_all Select_tactics.push_select
-                           Path.(
-                             all >>? is_select >>? is_run_time
-                             >>? above is_collection));
-                      (* Push orderby operators into compile time position if possible. *)
-                      fix
-                        (at_ push_orderby
-                           Path.(
-                             all >>? is_orderby >>? is_run_time >>| shallowest))
-                      (* Last-ditch tactic to eliminate orderby. *);
-                      for_all S.row_store
-                        Path.(all >>? is_orderby >>? is_run_time);
-                      (* Try throwing away structure if it reduces overall cost. *)
-                      Branching.(
-                        seq_many
-                          [
-                            choose id
-                              (seq_many
-                                 [
-                                   for_all (lift S.row_store)
-                                     Path.(
-                                       all >>? is_run_time >>? not has_params);
-                                   lift push_all_unparameterized_filters;
-                                 ]);
-                            filter is_serializable;
-                          ]
-                        |> lower (min Cost.cost))
-                      (* Cleanup*);
-                      fix
-                        (seq_many
-                           [
-                             for_all Select_tactics.push_simple_select
-                               Path.(all >>? is_select);
-                             for_all Dedup_tactics.push_dedup
-                               Path.(all >>? is_dedup);
-                             for_all Dedup_tactics.elim_dedup
-                               Path.(all >>? is_dedup);
-                           ]);
-                      fix project;
-                      push_all_unparameterized_filters;
-                      Simplify_tactic.simplify;
-                      traced @@ filter is_serializable'';
-                    ]);
-             ]);
+               at_ Join_opt.transform
+                 Path.(
+                   all >>? is_join >>? is_run_time >>? not has_free
+                   >>| shallowest);
+               at_ S.row_store
+                 Path.(
+                   all >>? is_join >>? is_run_time >>? not has_free
+                   >>| shallowest);
+               id;
+             ]
+             (seq_many
+                [
+                  push_all_unparameterized_filters;
+                  project;
+                  traced ~name:"elim-join-filter"
+                  @@ at_ Join_elim_tactics.elim_join_filter
+                       (Path.all >>? is_join >>| shallowest);
+                  try_
+                    (traced (first F.elim_disjunct (Path.all >>? is_filter)))
+                    (seq_many
+                       [
+                         (* Push constant filters *)
+                         traced ~name:"push-constant-filters"
+                         @@ fix
+                         @@ at_ F.push_filter
+                              Castor.Path.(
+                                all >>? is_const_filter >>| shallowest);
+                         (* Push orderby operators into compile time position if possible. *)
+                         traced ~name:"push-orderby"
+                         @@ fix
+                         @@ at_ push_orderby
+                              Path.(
+                                all >>? is_orderby >>? is_run_time
+                                >>| shallowest);
+                         (* Eliminate comparison filters. *)
+                         traced ~name:"elim-cmp-filters"
+                         @@ elim_param_filter F.elim_cmp_filter
+                              is_param_cmp_filter;
+                         (* Eliminate the deepest equality filter. *)
+                         traced ~name:"elim-deepest-eq-filter"
+                         @@ elim_param_filter
+                              (Branching.lift F.elim_eq_filter)
+                              is_param_filter;
+                         traced ~name:"push-all-unparam-filters"
+                         @@ push_all_unparameterized_filters;
+                         (* Eliminate all unparameterized relations. *)
+                         traced ~name:"elim-unparam-relations"
+                         @@ fix
+                         @@ seq_many
+                              [
+                                at_ S.row_store
+                                  Path.(
+                                    all >>? is_run_time >>? not has_params
+                                    >>? not is_serializable
+                                    >>? not (contains is_collection)
+                                    >>| shallowest);
+                                push_all_unparameterized_filters;
+                              ];
+                         traced ~name:"push-all-unparam-filters"
+                         @@ push_all_unparameterized_filters;
+                         (* Push selections above collections. *)
+                         traced ~name:"push-select-above-collection"
+                         @@ fix
+                         @@ for_all Select_tactics.push_select
+                              Path.(
+                                all >>? is_select >>? is_run_time
+                                >>? above is_collection);
+                         (* Push orderby operators into compile time position if possible. *)
+                         traced ~name:"push-orderby-into-ctime"
+                         @@ fix
+                         @@ at_ push_orderby
+                              Path.(
+                                all >>? is_orderby >>? is_run_time
+                                >>| shallowest)
+                         (* Last-ditch tactic to eliminate orderby. *);
+                         traced ~name:"final-orderby-elim"
+                         @@ for_all S.row_store
+                              Path.(all >>? is_orderby >>? is_run_time);
+                         (* Try throwing away structure if it reduces overall cost. *)
+                         ( traced ~name:"drop-structure"
+                         @@ Branching.(
+                              seq_many
+                                [
+                                  choose id
+                                    (seq_many
+                                       [
+                                         for_all (lift S.row_store)
+                                           Path.(
+                                             all >>? is_run_time
+                                             >>? not has_params);
+                                         lift push_all_unparameterized_filters;
+                                       ]);
+                                  filter is_serializable;
+                                ]
+                              |> lower (min Cost.cost)) )
+                         (* Cleanup*);
+                         traced ~name:"cleanup" @@ fix
+                         @@ seq_many
+                              [
+                                for_all Select_tactics.push_simple_select
+                                  Path.(all >>? is_select);
+                                for_all Dedup_tactics.push_dedup
+                                  Path.(all >>? is_dedup);
+                                for_all Dedup_tactics.elim_dedup
+                                  Path.(all >>? is_dedup);
+                              ];
+                         fix project;
+                         push_all_unparameterized_filters;
+                         Simplify_tactic.simplify;
+                         traced @@ filter is_serializable'';
+                       ]);
+                ]);
       ]
 
-  let opt_toplevel = seq_many [ try_partition opt; apply_to_subqueries opt ]
+  let opt_toplevel =
+    seq_many
+      [
+        traced ~name:"opt-main" @@ try_partition opt;
+        traced ~name:"opt-subqueries" @@ apply_to_subqueries opt;
+      ]
 
   let is_serializable = is_serializable'
 end
