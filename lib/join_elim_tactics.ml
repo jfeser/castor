@@ -8,6 +8,8 @@ open Match
 
 module Config = struct
   module type S = sig
+    val params : Set.M(Name).t
+
     include Ops.Config.S
   end
 end
@@ -62,4 +64,20 @@ module Make (C : Config.S) = struct
     A.filter pred (A.join (Bool true) r1 r2)
 
   let elim_join_filter = of_func elim_join_filter ~name:"elim-join-filter"
+
+  let hoist_join_param_filter r =
+    let open Option.Let_syntax in
+    let%bind pred, r1, r2 = to_join r in
+    let has_params p =
+      not (Set.is_empty @@ Set.inter (Pred.names p) C.params)
+    in
+    let hoist, keep = Pred.conjuncts pred |> List.partition_tf ~f:has_params in
+    if List.is_empty hoist then None
+    else
+      return
+      @@ A.filter (Pred.conjoin hoist)
+      @@ A.join (Pred.conjoin keep) r1 r2
+
+  let hoist_join_param_filter =
+    of_func hoist_join_param_filter ~name:"hoist-join-param-filter"
 end

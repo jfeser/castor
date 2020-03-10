@@ -212,10 +212,15 @@ module Make (Config : Config.S) = struct
         (* Hoist parameterized filters as far up as possible. *)
         traced ~name:"hoist-param-filters"
         @@ fix
-        @@ at_ F.hoist_filter
-             (Path.all >>? is_param_filter >>| deepest >>= parent)
+        @@ seq_many
+             [
+               at_ F.hoist_filter
+                 (Path.all >>? is_param_filter >>| deepest >>= parent);
+               at_ Join_elim_tactics.hoist_join_param_filter
+                 (Path.all >>? is_join >>| deepest);
+             ];
         (* Eliminate unparameterized join nests. Try using join optimization and
-           using a simple row store. *);
+           using a simple row store. *)
         traced ~name:"elim-join-nests"
         @@ try_many
              [
