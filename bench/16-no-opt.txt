@@ -1,45 +1,36 @@
-select([p_brand, p_type, p_size, supplier_cnt],
-  alist(dedup(select([p_brand, p_type, p_size],
-          
-            depjoin(select([p_partkey, p_brand, p_type, p_size], part) as s1,
-              atuple([ascalar(s1.p_brand),
-                      ascalar(s1.p_type),
-                      ascalar(s1.p_size),
-                      filter((s1.p_partkey = ps_partkey),
-                        filter(not(exists(ascalar(false as d0))), partsupp))],
-                cross)))) as k0,
-    select([p_brand, p_type, p_size, supplier_cnt],
-      ahashidx(atuple([dedup(select([p_size as x18], part)),
-                       dedup(select([p_size as x19], part)),
-                       dedup(select([p_size as x20], part)),
-                       dedup(select([p_size as x21], part)),
-                       dedup(select([p_size as x22], part)),
-                       dedup(select([p_size as x23], part)),
-                       dedup(select([p_size as x24], part)),
-                       dedup(select([p_size as x25], part))],
-                 cross) as s2,
-        filter((count0 > 0),
-          select([count() as count0,
-                  p_brand,
-                  p_type,
-                  p_size,
-                  count() as supplier_cnt],
-            alist(filter(((p_size = s2.x19) ||
-                         ((p_size = s2.x20) ||
-                         ((p_size = s2.x21) ||
-                         ((p_size = s2.x22) ||
-                         ((p_size = s2.x23) ||
-                         ((p_size = s2.x24) ||
-                         ((p_size = s2.x25) || (p_size = s2.x18)))))))),
-                    dedup(select([p_brand, p_type, p_size],
-                      filter((not(exists(ascalar(false as d1))) &&
-                             ((p_brand = k0.p_brand) &&
-                             ((p_type = k0.p_type) && (p_size = k0.p_size)))),
-                        part)))) as s0,
-              filter((not((p_brand = param1)) &&
-                     not((strpos(p_type, param2) = 1))),
-                atuple([ascalar(s0.p_brand),
-                        ascalar(s0.p_type),
-                        ascalar(s0.p_size)],
-                  cross))))),
-        (param10, param3, param4, param5, param6, param7, param8, param9)))))
+alist(dedup(
+        select([p_brand, p_type, p_size],
+          dedup(
+            select([p_type, p_brand, p_size, ps_suppkey],
+              filter((p_partkey = ps_partkey),
+                join(true,
+                  part,
+                  filter(not(exists(filter(((ps_suppkey = s_suppkey) &&
+                                           ((strpos(s_comment, "Customer") >=
+                                            1) &&
+                                           (strpos(s_comment, "Complaints")
+                                           >= 1))),
+                                      supplier))),
+                    partsupp))))))) as k0,
+  select([p_brand, p_type, p_size, count() as supplier_cnt],
+    alist(select([p_brand, p_type, p_size],
+            filter((not(exists(filter(((ps_suppkey = s_suppkey) &&
+                                      ((strpos(s_comment, "Customer") >= 1)
+                                      &&
+                                      (strpos(s_comment, "Complaints") >= 1))),
+                                 supplier))) &&
+                   ((p_brand = k0.p_brand) &&
+                   ((p_type = k0.p_type) && (p_size = k0.p_size)))),
+              dedup(join((p_partkey = ps_partkey), part, partsupp)))) as s0,
+      select([p_type, p_brand, p_size],
+        filter((not((p_brand = param1)) &&
+               (not((strpos(p_type, param2) = 1)) &&
+               ((p_size = param3) ||
+               ((p_size = param4) ||
+               ((p_size = param5) ||
+               ((p_size = param6) ||
+               ((p_size = param7) ||
+               ((p_size = param8) ||
+               ((p_size = param9) || (p_size = param10)))))))))),
+          atuple([ascalar(s0.p_brand), ascalar(s0.p_type), ascalar(s0.p_size)],
+            cross))))))
