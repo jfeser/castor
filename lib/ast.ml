@@ -100,9 +100,14 @@ type ('p, 'r) query =
 type 'm annot = { node : ('m annot pred, 'm annot) query; meta : 'm }
 [@@deriving compare, hash, sexp]
 
-type t = (meta[@compare.ignore]) annot [@@deriving compare, hash, sexp_of]
+module T = struct
+  type t = (meta[@compare.ignore]) annot [@@deriving compare, hash, sexp_of]
 
-let t_of_sexp _ = assert false
+  let t_of_sexp _ = assert false
+end
+
+include T
+include Comparator.Make (T)
 
 module Param = struct
   type nonrec t = string * Prim_type.t * t pred option

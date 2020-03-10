@@ -306,6 +306,8 @@ let rec push_depjoin r =
 
 and push_depjoin_pred p = map_pred push_depjoin push_depjoin_pred p
 
+let hoist_meta r = map_meta (fun m -> m#meta) r
+
 let unnest q =
   let check q' =
     schema_invariant q q';
@@ -325,6 +327,8 @@ let unnest q =
            object
              method cardinality_matters =
                (not m#meta#was_depjoin) && m#cardinality_matters
+
+             method why_card_matters = m#why_card_matters
            end)
     |> Join_elim.remove_joins
   in

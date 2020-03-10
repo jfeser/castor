@@ -85,6 +85,14 @@ let%expect_test "order-by" =
     ORDER BY
         r1_0. "f" DESC |}]
 
+let%expect_test "dedup" = run_test "dedup(r)";
+  [%expect {|
+    SELECT DISTINCT
+        r_0. "f" AS "f_0",
+        r_0. "g" AS "g_0"
+    FROM
+        "r" AS "r_0" |}]
+
 let%expect_test "dedup" =
   run_test "Dedup(Select([f], r1))";
   [%expect
@@ -381,7 +389,8 @@ let%expect_test "orderby-filter" =
 select([p_partkey],
   dedup(select([p_partkey], orderby([p_partkey, p_type], filter(0 = 0, part)))))
 |};
-  [%expect {|
+  [%expect
+    {|
     ("Unexpected query response."
       "ERROR:  for SELECT DISTINCT, ORDER BY expressions must appear in select list\
      \nLINE 10:     part_0. \"p_type\") AS \"t0\"\

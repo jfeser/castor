@@ -42,7 +42,10 @@ let try_extend eqs pred lhs rhs =
           m "Extending with:@ %a@ to avoid join of:@ %a@ with:@ %a"
             (Fmt.Dump.list Pred.pp) sl A.pp lhs A.pp rhs);
       Select (sl, rhs)
-  | None -> Join { pred; r1 = lhs; r2 = rhs }
+  | None ->
+      Log.debug (fun m ->
+          m "Failed to remove join of:@ %a@ with:@ %a" A.pp lhs A.pp rhs);
+      Join { pred; r1 = lhs; r2 = rhs }
 
 let remove_joins r =
   let rec annot r = map_annot (query r.meta) r
@@ -50,6 +53,23 @@ let remove_joins r =
     | Join { r1; r2; pred = p } when not meta#meta#cardinality_matters ->
         let r1 = annot r1 and r2 = annot r2 in
         try_extend r1.meta#eqs p r1 r2
+    | Join { pred = p; _ } as q ->
+        Log.debug (fun m ->
+            m "Join cardinality matters for@ %a@ %s" Pred.pp p
+              meta#meta#why_card_matters);
+        map_query annot pred q
     | q -> map_query annot pred q
   and pred p = map_pred annot pred p in
   Equiv.Context.annotate r |> annot
+
+let remove_dedup r =
+  let rec annot r = map_annot (query r.meta) r
+  and query meta = function
+    | Dedup r' when not meta#cardinality_matters -> (annot r').node
+    | Dedup r' ->
+        Log.debug (fun m ->
+            m "Dedup cardinality matters: %s" meta#why_card_matters);
+        Dedup (annot r')
+    | q -> map_query annot pred q
+  and pred p = map_pred annot pred p in
+  annot r

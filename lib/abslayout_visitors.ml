@@ -202,6 +202,18 @@ module Reduce = struct
   let annot zero ( + ) query meta { node; meta = m } = query node + meta m
 end
 
+module Iter = struct
+  let zero = ()
+
+  let plus () () = ()
+
+  let annot query meta r = Reduce.annot zero plus query meta r
+
+  let query annot pred q = Reduce.query zero plus annot pred q
+
+  let pred annot pred p = Reduce.pred zero plus annot pred p
+end
+
 module Annotate = struct
   let rec annot f r =
     let node = query f r.node in
