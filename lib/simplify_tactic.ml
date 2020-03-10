@@ -2,6 +2,8 @@ open Ast
 open Abslayout
 open Abslayout_visitors
 open Schema
+open Match
+module P = Pred.Infix
 
 module Config = struct
   module type S = sig
@@ -10,8 +12,7 @@ module Config = struct
 end
 
 module Make (C : Config.S) = struct
-  module Ops = Ops.Make (C)
-  open Ops
+  open Ops.Make (C)
 
   let filter_const r =
     match r.node with

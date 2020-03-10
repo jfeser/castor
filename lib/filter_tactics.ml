@@ -3,6 +3,7 @@ open Abslayout
 open Collections
 module A = Abslayout
 module P = Pred.Infix
+open Match
 
 module Config = struct
   module type My_S = sig
@@ -21,10 +22,10 @@ module Config = struct
 end
 
 module Make (C : Config.S) = struct
-  module O = Ops.Make (C)
-  module S = Simplify_tactic.Make (C)
-  open O
-  open S
+  open Ops.Make (C)
+
+  open Simplify_tactic.Make (C)
+
   module Tactics_util = Tactics_util.Make (C)
 
   module My_C : Config.My_S = C
@@ -46,8 +47,6 @@ module Make (C : Config.S) = struct
   let invariant_support orig_bound new_bound pred =
     let supported = Set.inter (pred_free pred) orig_bound in
     Set.is_subset supported ~of_:new_bound
-
-  let to_filter r = match r.node with Filter (p, r) -> Some (p, r) | _ -> None
 
   let merge_select s1 s2 =
     s1 @ s2

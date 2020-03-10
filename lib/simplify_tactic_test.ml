@@ -14,7 +14,7 @@ end
 
 open Make (Config)
 
-open Ops
+open Ops.Make (Config)
 
 let load_string ?params s = Abslayout_load.load_string ?params Config.conn s
 

@@ -4,6 +4,7 @@ open Schema
 open Collections
 module P = Pred.Infix
 module A = Abslayout
+open Match
 
 module Config = struct
   module type S = sig
@@ -12,11 +13,7 @@ module Config = struct
 end
 
 module Make (C : Config.S) = struct
-  module O = Ops.Make (C)
-  open O
-
-  let to_join r =
-    match r.node with Join { pred; r1; r2 } -> Some (pred, r1, r2) | _ -> None
+  open Ops.Make (C)
 
   let elim_join_nest r =
     let open Option.Let_syntax in
