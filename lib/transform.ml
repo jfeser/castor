@@ -211,13 +211,13 @@ module Make (Config : Config.S) = struct
              (Path.all >>? is_groupby >>| shallowest);
         (* Hoist parameterized filters as far up as possible. *)
         traced ~name:"hoist-param-filters"
-        @@ fix
         @@ seq_many
              [
-               at_ F.hoist_filter
-                 (Path.all >>? is_param_filter >>| deepest >>= parent);
-               at_ Join_elim_tactics.hoist_join_param_filter
-                 (Path.all >>? is_join >>| deepest);
+               for_all Join_elim_tactics.hoist_join_param_filter
+                 (Path.all >>? is_join);
+               fix
+               @@ at_ F.hoist_filter
+                    (Path.all >>? is_param_filter >>| deepest >>= parent);
              ];
         (* Eliminate unparameterized join nests. Try using join optimization and
            using a simple row store. *)
