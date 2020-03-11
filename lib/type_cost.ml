@@ -32,7 +32,7 @@ module Make (Config : Config.S) = struct
     Memo.general
       ~hashable:(Hashtbl.Hashable.of_key (module Ast))
       (fun r ->
-        Log.debug (fun m -> m "Computing cost of:@, %a." Abslayout.pp r);
+        Log.info (fun m -> m "Computing cost of:@, %a." Abslayout.pp r);
         let type_ =
           load_layout ~params cost_conn r
           |> Abslayout.strip_meta
@@ -52,7 +52,7 @@ module Make (Config : Config.S) = struct
         match out with
         | Ok x ->
             let x = Float.of_int x in
-            Log.debug (fun m -> m "Found cost %f." x);
+            Log.info (fun m -> m "Found cost %f." x);
             x
         | Error e ->
             Log.warn (fun m -> m "Computing cost failed: %a" Error.pp e);

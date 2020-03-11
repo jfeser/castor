@@ -2,7 +2,6 @@ open Graph
 open Printf
 open Collections
 open Ast
-open Schema
 module A = Abslayout
 module P = Pred.Infix
 
@@ -28,10 +27,11 @@ module Make (C : Config.S) = struct
   module My_C : Config.My_S = C
 
   open My_C
-  module O = Ops.Make (C)
-  open O
-  module S = Simple_tactics.Make (C)
-  open S
+
+  open Ops.Make (C)
+
+  open Simple_tactics.Make (C)
+
   module R = Resolve
 
   module JoinGraph = struct
@@ -232,7 +232,7 @@ module Make (C : Config.S) = struct
       let leaves =
         to_leaves r |> Set.to_list
         |> List.map ~f:(fun r ->
-               let s = schema r |> Set.of_list (module Name) in
+               let s = Schema.schema r |> Set.of_list (module Name) in
                (r, s))
       in
       to_graph leaves r
@@ -268,10 +268,11 @@ module Make (C : Config.S) = struct
     | Flat of Ast.t
     | Hash of { lkey : Pred.t; lhs : t; rkey : Pred.t; rhs : t }
     | Nest of { lhs : t; rhs : t; pred : Pred.t }
+    | Id of Ast.t
   [@@deriving sexp_of]
 
   let rec to_ralgebra = function
-    | Flat r -> r
+    | Flat r | Id r -> r
     | Nest { lhs; rhs; pred } -> A.join pred (to_ralgebra lhs) (to_ralgebra rhs)
     | Hash { lkey; rkey; lhs; rhs } ->
         A.join (Binop (Eq, lkey, rkey)) (to_ralgebra lhs) (to_ralgebra rhs)
@@ -303,47 +304,46 @@ module Make (C : Config.S) = struct
     |> Or_error.ok_exn )
       .nrows |> Float.of_int
 
-  let rec to_abslayout = function
-    | Flat r -> r
-    | Nest { lhs; rhs; pred } ->
-        A.join pred (to_abslayout lhs) (to_abslayout rhs)
-    | Hash { lkey; rkey; lhs; rhs } ->
-        A.(join (Binop (Eq, lkey, rkey)) (to_abslayout lhs) (to_abslayout rhs))
+  let estimate_ntuples_parted parts join =
+    let r = to_ralgebra join in
+    let s = Schema.schema r |> Set.of_list (module Name) in
 
-  let estimate_ntuples_parted parts r =
-    let s = schema (to_ralgebra r) |> Set.of_list (module Name) in
+    (* Remove parameters from the join nest where possible. *)
+    let static_r =
+      let open Abslayout_visitors in
+      let rec annot r = map_annot query r
+      and query q = map_query annot pred q
+      and pred p = Pred.to_static ~params p in
+      annot r
+    in
+
+    (* Generate a group-by using the partition fields. *)
     let parts = Set.filter parts ~f:(Set.mem s) in
-    let part_counts =
-      A.(group_by [ P.as_ Count "c" ] (Set.to_list parts) (to_abslayout r))
-    in
-    let part_aggs =
+    let parted_r =
       let c = P.name (Name.create "c") in
-      A.(select [ Min c; Max c; Avg c ] part_counts)
+      A.(
+        select [ Min c; Max c; Avg c ]
+        @@ group_by [ P.as_ Count "c" ] (Set.to_list parts) static_r)
     in
-    let sql = Sql.of_ralgebra part_aggs in
     let tups =
-      Db.exec_cursor_exn cost_conn
-        Prim_type.
-          [
-            IntT { nullable = false };
-            IntT { nullable = false };
-            FixedT { nullable = false };
-          ]
-        (Sql.to_string sql)
+      let sql = Sql.of_ralgebra parted_r |> Sql.to_string
+      and schema = Prim_type.[ int_t; int_t; fixed_t ] in
+      Db.exec_cursor_exn cost_conn schema sql |> Gen.get
     in
-    match Gen.to_list tups with
-    | [| Int min; Int max; Fixed avg |] :: _ ->
+
+    match tups with
+    | Some [| Int min; Int max; Fixed avg |] ->
         (min, max, Fixed_point.to_float avg)
     | _ -> failwith "Unexpected tuples."
 
   let to_parts rhs pred =
-    let rhs_schema = schema rhs |> Set.of_list (module Name) in
+    let rhs_schema = Schema.schema rhs |> Set.of_list (module Name) in
     Pred.names pred |> Set.filter ~f:(Set.mem rhs_schema)
 
   let rec size_cost parts r =
     let sum = List.sum (module Float) in
     match r with
-    | Flat _ ->
+    | Flat _ | Id _ ->
         let _, _, nt = estimate_ntuples_parted parts r in
         (sum (Schema.types (to_ralgebra r)) ~f:Cost.size *. nt)
         +. Cost.list_size
@@ -358,7 +358,7 @@ module Make (C : Config.S) = struct
   let rec scan_cost parts r =
     let sum = List.sum (module Float) in
     match r with
-    | Flat _ ->
+    | Flat _ | Id _ ->
         let _, _, nt = estimate_ntuples_parted parts r in
         sum (Schema.types (to_ralgebra r)) ~f:Cost.read *. nt
     | Nest { lhs; rhs; pred } ->
@@ -413,92 +413,122 @@ module Make (C : Config.S) = struct
     let union_all ss = List.concat ss |> of_list
   end
 
+  let leaf_flat r =
+    let open Option.Let_syntax in
+    if Set.is_empty @@ Set.inter (A.free r) params then return @@ Flat r
+    else (
+      Logs.info (fun m -> m "Flat join does not apply to@ %a." A.pp r);
+      None )
+
+  let leaf_id r =
+    let open Option.Let_syntax in
+    return @@ Id r
+
+  let enum_flat_join opt parts pred s1 s2 =
+    let select_flat s =
+      List.filter_map (opt parts s) ~f:(fun (_, j) ->
+          match j with Flat r -> Some r | _ -> None)
+    in
+    List.cartesian_product (select_flat s1) (select_flat s2)
+    |> List.map ~f:(fun (r1, r2) ->
+           let j = Flat (A.join pred r1 r2) in
+           ([| scan_cost parts j |], j))
+
+  let enum_hash_join opt parts pred s1 s2 =
+    let open List.Let_syntax in
+    let lhs = JoinSpace.to_ralgebra s1 and rhs = JoinSpace.to_ralgebra s2 in
+    let lhs_schema = Schema.schema lhs and rhs_schema = Schema.schema rhs in
+    Log.info (fun m ->
+        m "LHS schema %a, RHS schema %a"
+          Fmt.Dump.(list Name.pp)
+          lhs_schema
+          Fmt.Dump.(list Name.pp)
+          rhs_schema);
+    (* Figure out which partition a key comes from. *)
+    let key_side k =
+      let rs = Pred.names k in
+      let all_in s =
+        Set.for_all rs ~f:(List.mem ~equal:[%compare.equal: Name.t] s)
+      in
+      if all_in lhs_schema then return (`Lhs (s1, k))
+      else if all_in rhs_schema then return (`Rhs (s2, k))
+      else (
+        Log.info (fun m -> m "Unknown key %a" Pred.pp k);
+        [] )
+    in
+    let%bind k1, k2 =
+      match pred with
+      | Binop (Eq, k1, k2) -> return (k1, k2)
+      | _ ->
+          Log.info (fun m -> m "Adding hash join failed.");
+          []
+    in
+    let%bind s1 = key_side k1 in
+    let%bind s2 = key_side k2 in
+    let joins =
+      match (s1, s2) with
+      | `Lhs (s1, k1), `Rhs (s2, k2) | `Rhs (s2, k2), `Lhs (s1, k1) ->
+          let rhs_parts = Set.union (to_parts rhs pred) parts in
+          List.cartesian_product (opt parts s1) (opt rhs_parts s2)
+          |> List.map ~f:(fun ((_, r1), (_, r2)) ->
+                 Hash { lkey = k1; rkey = k2; lhs = r1; rhs = r2 })
+      | _ ->
+          Logs.info (fun m ->
+              m "Keys come from same partition %a %a" Pred.pp k1 Pred.pp k2);
+          []
+    in
+    List.map joins ~f:(fun j -> ([| scan_cost parts j |], j))
+
+  let enum_nest_join opt parts pred s1 s2 =
+    let lhs_parts =
+      Set.union (to_parts (JoinSpace.to_ralgebra s1) pred) parts
+    in
+    let rhs_parts =
+      Set.union (to_parts (JoinSpace.to_ralgebra s2) pred) parts
+    in
+    let lhs_set = List.map (opt lhs_parts s1) ~f:(fun (_, j) -> j) in
+    let rhs_set = List.map (opt rhs_parts s2) ~f:(fun (_, j) -> j) in
+    List.cartesian_product lhs_set rhs_set
+    |> List.map ~f:(fun (j1, j2) ->
+           let j = Nest { lhs = j1; rhs = j2; pred } in
+           ([| scan_cost parts j |], j))
+
   let opt_nonrec opt parts s =
-    Logs.debug (fun m ->
-        m "Choosing join for space %s." (JoinSpace.to_string s));
-    if JoinSpace.length s = 1 then
-      let j = Flat (JoinSpace.choose s) in
-      ParetoSet.singleton [| scan_cost parts j |] j
-    else
-      JoinSpace.partition_fold s ~init:ParetoSet.empty
-        ~f:(fun cs (s1, s2, es) ->
-          let pred = Pred.conjoin (List.map es ~f:(fun (_, p, _) -> p)) in
-          (* Add flat joins to pareto set. *)
-          let flat_joins =
-            let select_flat s =
-              List.filter_map (opt parts s) ~f:(fun (_, j) ->
-                  match j with Flat r -> Some r | _ -> None)
-            in
-            List.cartesian_product (select_flat s1) (select_flat s2)
-            |> List.map ~f:(fun (r1, r2) ->
-                   let j = Flat (A.join pred r1 r2) in
-                   ([| scan_cost parts j |], j))
-            |> ParetoSet.of_list
-          in
-          (* Add nest joins to pareto set. *)
-          (* let nest_joins =
-           *   let lhs_parts =
-           *     Set.union (to_parts (JoinSpace.to_ralgebra s1) pred) parts
-           *   in
-           *   let rhs_parts =
-           *     Set.union (to_parts (JoinSpace.to_ralgebra s2) pred) parts
-           *   in
-           *   let lhs_set = List.map (opt lhs_parts s1) ~f:(fun (_, j) -> j) in
-           *   let rhs_set = List.map (opt rhs_parts s2) ~f:(fun (_, j) -> j) in
-           *   List.cartesian_product lhs_set rhs_set
-           *   |> List.map ~f:(fun (j1, j2) ->
-           *          let j = Nest {lhs= j1; rhs= j2; pred} in
-           *          ([|scan_cost parts j|], j) )
-           *   |> ParetoSet.of_list
-           * in *)
-          (* Add hash joins to pareto set. *)
-          let hash_joins =
-            let lhs_schema =
-              schema (JoinSpace.to_ralgebra s1) |> Set.of_list (module Name)
-            in
-            let rhs_schema =
-              schema (JoinSpace.to_ralgebra s2) |> Set.of_list (module Name)
-            in
-            (* Figure out which partition a key comes from. *)
-            let key_side k =
-              let rs = Pred.names k |> Set.to_list in
-              if List.for_all rs ~f:(Set.mem lhs_schema) then Some s1
-              else if List.for_all rs ~f:(Set.mem rhs_schema) then Some s2
-              else None
-            in
-            let m_s =
-              match pred with
-              | Binop (Eq, k1, k2) ->
-                  let open Option.Let_syntax in
-                  let%bind s1 = key_side k1 in
-                  let%map s2 = key_side k2 in
-                  if JoinSpace.O.(s1 = s2) then []
-                  else
-                    let rhs_parts =
-                      Set.union (to_parts (JoinSpace.to_ralgebra s2) pred) parts
-                    in
-                    List.cartesian_product (opt parts s1) (opt rhs_parts s2)
-                    |> List.map ~f:(fun ((_, r1), (_, r2)) ->
-                           Hash { lkey = k1; rkey = k2; lhs = r1; rhs = r2 })
-              | _ -> None
-            in
-            Option.value m_s ~default:[]
-            |> List.map ~f:(fun j -> ([| scan_cost parts j |], j))
-          in
-          ParetoSet.union_all [ cs; flat_joins; (* nest_joins; *) hash_joins ])
+    Logs.info (fun m -> m "Choosing join for space %s." (JoinSpace.to_string s));
+    Logs.info (fun m -> m "%a" Sexp.pp_hum ([%sexp_of: JoinSpace.t] s));
+    let joins =
+      if JoinSpace.length s = 1 then
+        (* Select strategy for the leaves of the join tree. *)
+        let r = JoinSpace.choose s in
+        [ leaf_flat r; leaf_id r ] |> List.filter_map ~f:Fun.id
+        |> List.map ~f:(fun j -> ([| scan_cost parts j |], j))
+        |> ParetoSet.of_list
+      else
+        JoinSpace.partition_fold s ~init:ParetoSet.empty
+          ~f:(fun cs (s1, s2, es) ->
+            let pred = Pred.conjoin (List.map es ~f:(fun (_, p, _) -> p)) in
+            let _nest_joins = enum_nest_join opt parts pred s1 s2
+            and flat_joins = enum_flat_join opt parts pred s1 s2
+            and hash_joins = enum_hash_join opt parts pred s1 s2 in
+            ParetoSet.(union_all [ cs; of_list (flat_joins @ hash_joins) ]))
+    in
+    Logs.info (fun m ->
+        m "Found %d pareto-optimal joins." (ParetoSet.length joins));
+    joins
+
+  module Key = struct
+    type t = Set.M(Name).t * Set.M(JoinGraph.Vertex).t
+    [@@deriving compare, hash, sexp_of]
+
+    let create p s =
+      ( p,
+        JoinGraph.fold_vertex
+          (fun v vs -> Set.add vs v)
+          s.JoinSpace.graph
+          (Set.empty (module JoinGraph.Vertex)) )
+  end
 
   let opt =
-    let module Key = struct
-      type t = Set.M(Name).t * Set.M(JoinGraph.Vertex).t
-      [@@deriving compare, hash, sexp_of]
-
-      let create p s =
-        ( p,
-          JoinGraph.fold_vertex
-            (fun v vs -> Set.add vs v)
-            s.JoinSpace.graph
-            (Set.empty (module JoinGraph.Vertex)) )
-    end in
     let tbl = Hashtbl.create (module Key) in
     let rec opt p s =
       let key = Key.create p s in
@@ -515,17 +545,20 @@ module Make (C : Config.S) = struct
 
   let reshape j _ = Some (to_ralgebra j)
 
+  let reshape j = local (reshape j) "reshape"
+
+  (** Generate a transformation sequence from a join strategy. *)
   let rec emit_joins =
-    let module J = Join_elim_tactics.Make (C) in
-    let open J in
+    let open Join_elim_tactics.Make (C) in
     function
     | Flat _ -> row_store
+    | Id _ -> traced id
     | Hash { lhs; rhs; _ } ->
         seq_many
           [
-            at_ (emit_joins lhs) (child 0);
-            at_ (emit_joins rhs) (child 1);
-            elim_join_hash;
+            traced @@ at_ (traced @@ emit_joins lhs) (child 0);
+            traced @@ at_ (traced @@ emit_joins rhs) (child 1);
+            traced elim_join_hash;
           ]
     | Nest { lhs; rhs; _ } ->
         seq_many
@@ -536,13 +569,14 @@ module Make (C : Config.S) = struct
           ]
 
   let transform =
+    let open Option.Let_syntax in
     let f r =
       let joins = opt r in
-      Log.debug (fun m -> m "Found %d join options." (ParetoSet.length joins));
-      ParetoSet.min_elt (fun a -> a.(0)) joins
-      |> Option.map ~f:(fun j ->
-             seq (local (reshape j) "reshape") (emit_joins j))
-      |> Option.bind ~f:(fun tf -> apply tf Castor.Path.root r)
+      Log.info (fun m -> m "Found %d join options." (ParetoSet.length joins));
+      let%bind j = ParetoSet.min_elt (fun a -> a.(0)) joins in
+      Log.info (fun m -> m "Chose %a." Sexp.pp_hum ([%sexp_of: t] j));
+      let tf = seq (reshape j) (emit_joins j) in
+      apply (traced tf) Castor.Path.root r
     in
     local f "join-opt"
 end

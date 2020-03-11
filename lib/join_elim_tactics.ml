@@ -36,23 +36,24 @@ module Make (C : Config.S) = struct
     let%bind pred, r1, r2 = to_join r in
     match pred with
     | Binop (Eq, kl, kr) ->
-        let join_scope = Fresh.name Global.fresh "s%d" in
-        let hash_scope = Fresh.name Global.fresh "s%d" in
-        let slist =
-          let r1_schema = Schema.scoped join_scope (schema r1) in
-          r1_schema @ schema r2 |> List.map ~f:P.name
-        in
-        let r1_scoped = Pred.scoped (schema r1) in
+        let join_scope = Fresh.name Global.fresh "s%d"
+        and hash_scope = Fresh.name Global.fresh "s%d"
+        and r1_schema = schema r1
+        and r2_schema = schema r2 in
         let layout =
-          A.dep_join r1 join_scope
-            (A.select slist
-               (A.hash_idx
-                  (A.dedup (A.select [ kl ] r1))
-                  hash_scope
-                  (A.filter (r1_scoped hash_scope (Binop (Eq, kl, kr))) r2)
-                  [ r1_scoped join_scope kl ]))
+          let slist =
+            let r1_schema = Schema.scoped join_scope r1_schema in
+            r1_schema @ schema r2 |> List.map ~f:P.name
+          in
+          A.dep_join r1 join_scope @@ A.select slist
+          @@ A.hash_idx
+               (A.dedup @@ A.select [ kr ] r2)
+               hash_scope
+               (A.filter
+                  (Binop (Eq, Pred.scoped r2_schema hash_scope kr, kr))
+                  r2)
+               [ Pred.scoped r1_schema join_scope kl ]
         in
-        Logs.debug (fun m -> m "%a" Abslayout.pp layout);
         Some layout
     | _ -> None
 
@@ -69,7 +70,7 @@ module Make (C : Config.S) = struct
     let open Option.Let_syntax in
     let%bind pred, r1, r2 = to_join r in
     let has_params p =
-      not (Set.is_empty @@ Set.inter (Pred.names p) C.params)
+      not (Set.is_empty @@ Set.inter (Abslayout.pred_free p) C.params)
     in
     let hoist, keep = Pred.conjuncts pred |> List.partition_tf ~f:has_params in
     if List.is_empty hoist then None

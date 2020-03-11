@@ -42,6 +42,7 @@ module Make (Config : Config.S) = struct
   module Join_elim_tactics = Join_elim_tactics.Make (Config)
   module Tactics_util = Tactics_util.Make (Config)
   module Dedup_tactics = Dedup_tactics.Make (Config)
+  module Orderby_tactics = Orderby_tactics.Make (Config)
 
   let project r = Some (r |> Resolve.resolve ~params |> Project.project_once)
 
@@ -64,52 +65,6 @@ module Make (Config : Config.S) = struct
   let has_params r p = Path.get_exn p r |> free |> overlaps params
 
   let has_free r p = not (Set.is_empty (free (Path.get_exn p r)))
-
-  let key_is_supported r key =
-    let s = Set.of_list (module Name) (schema r) in
-    List.for_all key ~f:(fun (p, _) ->
-        Tactics_util.is_supported r.meta#stage s p)
-
-  let push_orderby r =
-    let module C = (val Constructors.Annot.with_strip_meta (fun () -> ())) in
-    let open C in
-    let orderby_cross_tuple key rs =
-      match rs with
-      | r :: rs ->
-          if key_is_supported r key then
-            Some (tuple (order_by key r :: List.map ~f:strip_meta rs) Cross)
-          else None
-      | _ -> None
-    in
-    let orderby_list key r1 r2 =
-      let scope = scope_exn r1 in
-      let r1 = strip_scope r1 in
-      if key_is_supported r1 key then Some (list (order_by key r1) scope r2)
-      else None
-    in
-    match r.node with
-    | OrderBy { key; rel = { node = Select (ps, r); _ } } ->
-        if key_is_supported r key then Some (select ps (order_by key r))
-        else None
-    | OrderBy { key; rel = { node = Filter (ps, r); _ } } ->
-        Some (filter ps (order_by key r))
-    | OrderBy { key; rel = { node = AHashIdx h; _ } } ->
-        Some
-          (hash_idx ?key_layout:h.hi_key_layout h.hi_keys h.hi_scope
-             (order_by key h.hi_values) h.hi_lookup)
-    | OrderBy { key; rel = { node = AList (r1, r2); _ } } ->
-        (* If we order a list's keys then the keys will be ordered in the list. *)
-        orderby_list key r1 r2
-    | OrderBy { key; rel = { node = ATuple (rs, Cross); _ } } ->
-        orderby_cross_tuple key rs
-    | OrderBy { key; rel = { node = DepJoin d; _ } } ->
-        if key_is_supported d.d_lhs key then
-          Some (dep_join (order_by key d.d_lhs) d.d_alias d.d_rhs)
-        else None
-    | _ -> None
-
-  let push_orderby =
-    of_func_pre push_orderby ~name:"push-orderby" ~pre:(Resolve.resolve ~params)
 
   (* Recursively optimize subqueries. *)
   let apply_to_subqueries tf =
@@ -174,9 +129,10 @@ module Make (Config : Config.S) = struct
     Branching.(seq (choose (lift tf) id) (lift rest) |> lower (min Cost.cost))
 
   let try_many tfs rest =
-    Branching.(
-      seq (choose_many (List.map ~f:lift tfs)) (lift rest)
-      |> lower (min Cost.cost))
+    traced
+    @@ Branching.(
+         seq (choose_many (List.map ~f:lift tfs)) (lift rest)
+         |> lower (min Cost.cost))
 
   let is_serializable' r =
     let bad_runtime_op =
@@ -224,14 +180,14 @@ module Make (Config : Config.S) = struct
         traced ~name:"elim-join-nests"
         @@ try_many
              [
-               at_ Join_opt.transform
-                 Path.(
-                   all >>? is_join >>? is_run_time >>? not has_free
-                   >>| shallowest);
-               at_ S.row_store
-                 Path.(
-                   all >>? is_join >>? is_run_time >>? not has_free
-                   >>| shallowest);
+               traced ~name:"elim-join-nests-opt"
+               @@ at_ Join_opt.transform
+                    Path.(all >>? is_join >>? is_run_time >>| shallowest);
+               traced ~name:"elim-join-nests-flat"
+               @@ at_ S.row_store
+                    Path.(
+                      all >>? is_join >>? is_run_time >>? not has_free
+                      >>| shallowest);
                id;
              ]
              (seq_many
@@ -254,7 +210,7 @@ module Make (Config : Config.S) = struct
                          (* Push orderby operators into compile time position if possible. *)
                          traced ~name:"push-orderby"
                          @@ fix
-                         @@ at_ push_orderby
+                         @@ at_ Orderby_tactics.push_orderby
                               Path.(
                                 all >>? is_orderby >>? is_run_time
                                 >>| shallowest);
@@ -294,7 +250,7 @@ module Make (Config : Config.S) = struct
                          (* Push orderby operators into compile time position if possible. *)
                          traced ~name:"push-orderby-into-ctime"
                          @@ fix
-                         @@ at_ push_orderby
+                         @@ at_ Orderby_tactics.push_orderby
                               Path.(
                                 all >>? is_orderby >>? is_run_time
                                 >>| shallowest)

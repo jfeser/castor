@@ -258,7 +258,7 @@ module Make (C : Config.S) = struct
     | [ t ] -> t
     | t :: ts -> seq t (seq_many ts)
 
-  let id = global (fun p r -> Some (Path.get_exn p r)) "id"
+  let id = local (fun r -> Some r) "id"
 
   let schema_validated tf =
     let f p r =
