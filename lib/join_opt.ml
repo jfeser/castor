@@ -568,13 +568,13 @@ module Make (C : Config.S) = struct
 
   let transform =
     let open Option.Let_syntax in
-    let f r =
+    let f p r =
       let joins = opt r in
       Log.info (fun m -> m "Found %d join options." (ParetoSet.length joins));
       let%bind j = ParetoSet.min_elt (fun a -> a.(0)) joins in
       Log.info (fun m -> m "Chose %a." Sexp.pp_hum ([%sexp_of: t] j));
       let tf = seq (local (reshape j) "reshape") (emit_joins j) in
-      apply (traced tf) Castor.Path.root r
+      apply (traced tf) p r
     in
-    local f "join-opt"
+    global f "join-opt"
 end
