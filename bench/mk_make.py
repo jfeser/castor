@@ -177,7 +177,7 @@ analysis_{0}-gold.csv.log: {0}-gold.csv
     print('''
 gold/{0}.csv:
 \tmkdir -p gold
-\t../bin/run_psql.py $(DBC) {0}.sql {1} > $@
+\t../bin/run_psql.py $(CASTOR_DB) {0}.sql {1} > $@
     '''.format(b['name'], shlex.quote(json.dumps(param_values_sql(b)))))
 
 print('''
