@@ -2,26 +2,28 @@ alist(dedup(
         select([p_brand, p_type, p_size],
           dedup(
             select([p_type, p_brand, p_size, ps_suppkey],
-              filter((p_partkey = ps_partkey),
-                join(true,
-                  part,
-                  filter(not(exists(filter(((ps_suppkey = s_suppkey) &&
-                                           ((strpos(s_comment, "Customer") >=
-                                            1) &&
-                                           (strpos(s_comment, "Complaints")
-                                           >= 1))),
-                                      supplier))),
-                    partsupp))))))) as k0,
+              join(((p_partkey = ps_partkey) && true),
+                part,
+                filter(not(exists(filter(((ps_suppkey = s_suppkey) &&
+                                         ((strpos(s_comment, "Customer") >=
+                                          1) &&
+                                         (strpos(s_comment, "Complaints") >=
+                                         1))),
+                                    supplier))),
+                  partsupp)))))) as k0,
   select([p_brand, p_type, p_size, count() as supplier_cnt],
     alist(select([p_brand, p_type, p_size],
-            filter((not(exists(filter(((ps_suppkey = s_suppkey) &&
-                                      ((strpos(s_comment, "Customer") >= 1)
-                                      &&
-                                      (strpos(s_comment, "Complaints") >= 1))),
-                                 supplier))) &&
-                   ((p_brand = k0.p_brand) &&
-                   ((p_type = k0.p_type) && (p_size = k0.p_size)))),
-              dedup(join((p_partkey = ps_partkey), part, partsupp)))) as s0,
+            dedup(
+              join(((not(exists(filter(((ps_suppkey = s_suppkey) &&
+                                       ((strpos(s_comment, "Customer") >= 1)
+                                       &&
+                                       (strpos(s_comment, "Complaints") >= 1))),
+                                  supplier))) &&
+                    ((p_brand = k0.p_brand) &&
+                    ((p_type = k0.p_type) && (p_size = k0.p_size)))) &&
+                   (p_partkey = ps_partkey)),
+                part,
+                partsupp))) as s5,
       select([p_type, p_brand, p_size],
         filter((not((p_brand = param1)) &&
                (not((strpos(p_type, param2) = 1)) &&
@@ -32,5 +34,5 @@ alist(dedup(
                ((p_size = param7) ||
                ((p_size = param8) ||
                ((p_size = param9) || (p_size = param10)))))))))),
-          atuple([ascalar(s0.p_brand), ascalar(s0.p_type), ascalar(s0.p_size)],
+          atuple([ascalar(s5.p_brand), ascalar(s5.p_type), ascalar(s5.p_size)],
             cross))))))

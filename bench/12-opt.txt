@@ -1,31 +1,33 @@
 alist(orderby([l_shipmode],
         dedup(
           select([l_shipmode],
-            filter((o_orderkey = l_orderkey), join(true, orders, lineitem))))) as k3,
+            join(((o_orderkey = l_orderkey) && true), orders, lineitem)))) as k0,
   select([l_shipmode, high_line_count, low_line_count],
     ahashidx(atuple([dedup(
-                       select([l_shipmode as x367],
+                       select([l_shipmode as x43],
                          dedup(select([l_shipmode], lineitem)))),
                      dedup(
-                       select([l_shipmode as x368],
+                       select([l_shipmode as x44],
                          dedup(select([l_shipmode], lineitem))))],
-               cross) as s54,
-      filter((count3 > 0),
-        select([count() as count3, l_shipmode,
+               cross) as s4,
+      filter((count0 > 0),
+        select([count() as count0, l_shipmode,
                 sum((if ((o_orderpriority = "1-URGENT") ||
                         (o_orderpriority = "2-HIGH")) then 1 else 0)) as high_line_count,
                 sum((if (not((o_orderpriority = "1-URGENT")) &&
                         not((o_orderpriority = "2-HIGH"))) then 1 else 0)) as low_line_count],
           aorderedidx(select([l_receiptdate],
-                        dedup(select([l_receiptdate], lineitem))) as s52,
-            alist(filter(((l_shipmode = s54.x367) || (l_shipmode = s54.x368)),
+                        dedup(select([l_receiptdate], lineitem))) as s2,
+            alist(filter(((l_shipmode = s4.x43) || (l_shipmode = s4.x44)),
                     select([l_shipmode, o_orderpriority],
-                      filter((l_receiptdate = s52.l_receiptdate),
-                        filter(((l_commitdate < l_receiptdate) &&
-                               ((l_shipdate < l_commitdate) &&
-                               (l_shipmode = k3.l_shipmode))),
-                          join((o_orderkey = l_orderkey), lineitem, orders))))) as s50,
-              atuple([ascalar(s50.l_shipmode), ascalar(s50.o_orderpriority)],
+                      join(((l_receiptdate = s2.l_receiptdate) &&
+                           (((l_commitdate < l_receiptdate) &&
+                            ((l_shipdate < l_commitdate) &&
+                            (l_shipmode = k0.l_shipmode))) &&
+                           (o_orderkey = l_orderkey))),
+                        lineitem,
+                        orders))) as s0,
+              atuple([ascalar(s0.l_shipmode), ascalar(s0.o_orderpriority)],
                 cross)),
             >= param3, < (param3 + year(1))))),
       (param1, param2))))
