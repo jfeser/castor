@@ -381,7 +381,7 @@ class virtual ['self] abslayout_fold =
       (* Convert that query to a ralgebra and simplify it. *)
       let r = q |> Q.to_ralgebra in
       info (fun m -> m "Pre-simplify ralgebra:@ %a" Abslayout.pp r);
-      let r = Simplify_tactic.simplify conn r in
+      let r = Simplify_tactic.simplify ~dedup:true conn r in
       info (fun m -> m "Post-simplify ralgebra:@ %a" Abslayout.pp r);
       (* Convert the ralgebra to sql. *)
       let sql = Sql.of_ralgebra r in
@@ -404,54 +404,38 @@ class virtual ['self] abslayout_fold =
   end
 
 class ['self] print_fold =
+  let extract = Fun.id in
   object (self : 'self)
     inherit [_] abslayout_fold
 
     method collection kind =
-      Fold.(
-        Fold
-          {
-            init = [ kind ];
-            fold =
-              (fun msgs (k, _, v) ->
-                msgs
-                @ [
-                    sprintf "%s key: %s" kind
-                      ([%sexp_of: Value.t list] k |> Sexp.to_string_hum);
-                  ]
-                @ v);
-            extract = (fun x -> x);
-          })
+      let fold msgs (k, _, v) =
+        msgs
+        @ [
+            sprintf "%s key: %s" kind
+              ([%sexp_of: Value.t list] k |> Sexp.to_string_hum);
+          ]
+        @ v
+      in
+      Fold.Fold { init = [ kind ]; fold; extract }
 
     method list _ _ =
       let kind = "List" in
-      Fold.(
-        Fold
-          {
-            init = [ kind ];
-            fold =
-              (fun msgs (k, v) ->
-                msgs
-                @ [
-                    sprintf "%s key: %s" kind
-                      ([%sexp_of: Value.t list] k |> Sexp.to_string_hum);
-                  ]
-                @ v);
-            extract = (fun x -> x);
-          })
+      let fold msgs (k, v) =
+        msgs
+        @ [
+            sprintf "%s key: %s" kind
+              ([%sexp_of: Value.t list] k |> Sexp.to_string_hum);
+          ]
+        @ v
+      in
+      Fold.Fold { init = [ kind ]; fold; extract }
 
     method hash_idx _ _ = self#collection "HashIdx"
 
     method ordered_idx _ _ = self#collection "OrderedIdx"
 
-    method tuple _ _ =
-      Fold.(
-        Fold
-          {
-            init = [ "Tuple" ];
-            fold = (fun msgs v -> msgs @ v);
-            extract = (fun x -> x);
-          })
+    method tuple _ _ = Fold.Fold { init = [ "Tuple" ]; fold = ( @ ); extract }
 
     method empty _ = [ "Empty" ]
 
