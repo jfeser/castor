@@ -328,11 +328,11 @@ module Make (C : Config.S) = struct
     let tups =
       let sql = Sql.of_ralgebra parted_r |> Sql.to_string
       and schema = Prim_type.[ int_t; int_t; fixed_t ] in
-      Db.exec_cursor_exn cost_conn schema sql |> Gen.get
+      Db.exec_exn cost_conn schema sql
     in
 
     match tups with
-    | Some [| Int min; Int max; Fixed avg |] ->
+    | [| Int min; Int max; Fixed avg |] :: _ ->
         (min, max, Fixed_point.to_float avg)
     | _ -> failwith "Unexpected tuples."
 

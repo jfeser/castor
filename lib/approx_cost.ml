@@ -50,8 +50,7 @@ module Make (C : Config.S) = struct
               in
               let q = query [] ctx in
               Sql.sample 10 (Sql.of_ralgebra q |> Sql.to_string)
-              |> Db.exec_cursor_exn conn (Schema.types q)
-              |> Gen.to_list
+              |> Db.exec_exn conn (Schema.types q)
               |> List.map ~f:(fun vs ->
                      Array.to_list vs |> List.map ~f:Value.to_pred
                      |> List.zip_exn schema
