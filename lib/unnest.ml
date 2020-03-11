@@ -326,7 +326,7 @@ let unnest q =
 
              method why_card_matters = m#why_card_matters
            end)
-    |> Join_elim.remove_joins
+    |> Join_elim.remove_joins |> hoist_meta
   in
   check q';
   q'

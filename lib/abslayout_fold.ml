@@ -372,18 +372,17 @@ class virtual ['self] abslayout_fold =
       | Q.Empty -> self#eval_empty lctx tups a
       | Q.Scalars x -> self#eval_scalars lctx tups a x
 
-    method run ?timeout ?(simplify = default_simplify) conn r =
+    method run ?timeout conn r =
       (* Generate a query that enumerates the stream to fold over. *)
       let q =
         A.ensure_alias r |> Q.of_ralgebra |> Q.map_meta ~f:Option.some
         |> Q.hoist_all
       in
       (* Convert that query to a ralgebra and simplify it. *)
-      let r = q |> Q.to_ralgebra |> simplify in
-      info (fun m -> m "Pre-unnest ralgebra:@ %a" Abslayout.pp r);
-      let r = Unnest.unnest r in
-      info (fun m -> m "Post-unnest ralgebra:@ %a" Abslayout.pp r);
-      (* Format.printf "Running query: %a" A.pp r; *)
+      let r = q |> Q.to_ralgebra in
+      info (fun m -> m "Pre-simplify ralgebra:@ %a" Abslayout.pp r);
+      let r = Simplify_tactic.simplify conn r in
+      info (fun m -> m "Post-simplify ralgebra:@ %a" Abslayout.pp r);
       (* Convert the ralgebra to sql. *)
       let sql = Sql.of_ralgebra r in
       info (fun m -> m "Running SQL: %s" (Sql.to_string_hum sql));
@@ -396,9 +395,6 @@ class virtual ['self] abslayout_fold =
              | Error ({ query; _ } as e) ->
                  err (fun m -> m "Running SQL failed: %s" (Sql.format query));
                  Db.Async.to_error e |> Error.raise)
-        |> Lwt_stream.map (fun t ->
-               debug (fun m -> m "%a" Sexp.pp_hum ([%sexp_of: Value.t list] t));
-               t)
       in
       (* Replace the ralgebra queries at the leaves of the fold query with their
          output widths. *)
