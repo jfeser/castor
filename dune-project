@@ -7,27 +7,27 @@
 (maintainers "Jack Feser <feser@csail.mit.edu>")
 
 (package
-  (name castor)
-  (synopsis "A deductive database synthesizer")
-  (depends
-    (dune (and :build (>= 1.10)))
-    (menhir :build)
+ (name castor)
+ (synopsis "A deductive database synthesizer")
+ (depends
+  (dune (and :build (>= 1.10)))
+  (menhir :build)
 
-    (core (>= v0.12))
-    (postgresql (>= 4.4))
-    (bos (>= 0.2))
-    (logs (>= 0.6))
-    (llvm (and (>= 7.0.0) (< 8.0.0)))
-     cmph
-     genhash
-    (hashcons (>= 1.3))
-    (lwt (>= 4.2.1))
-    (lwt_ppx (>= 1.2.2))
-    (ppx_compare (>= v0.12))
-    (ppx_sexp_conv (>= v0.12))
-    (ppx_hash (>= v0.12))
-    (ppx_let (>= v0.12))
-    (visitors (>= 20180513))))
+  (core (>= v0.12))
+  (postgresql (>= 4.4))
+  (bos (>= 0.2))
+  (logs (>= 0.6))
+   llvm
+   cmph
+   genhash
+  (hashcons (>= 1.3))
+  (lwt (>= 4.2.1))
+  (lwt_ppx (>= 1.2.2))
+  (ppx_compare (>= v0.12))
+  (ppx_sexp_conv (>= v0.12))
+  (ppx_hash (>= v0.12))
+  (ppx_let (>= v0.12))
+  (visitors (>= 20180513))))
 
 (package
  (name castor_test)
@@ -39,7 +39,6 @@
   (postgresql (>= 4.4))
   (bos (>= 0.2))
   (logs (>= 0.6))
-  (llvm (and (>= 7.0.0) (< 8.0.0)))
    cmph
    genhash
   (hashcons (>= 1.3))

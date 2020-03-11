@@ -20,7 +20,7 @@ depends: [
   "postgresql" {>= "4.4"}
   "bos" {>= "0.2"}
   "logs" {>= "0.6"}
-  "llvm" {>= "7.0.0" & < "8.0.0"}
+  "llvm"
   "cmph"
   "genhash"
   "hashcons" {>= "1.3"}
