@@ -62,7 +62,14 @@ let schema_open schema r =
   | Select (x, _) | GroupBy (x, _, _) -> of_preds x |> unscoped
   | Join { r1; r2; _ } -> schema r1 @ schema r2 |> unscoped
   | AOrderedIdx (r1, r2, _) | AHashIdx { hi_keys = r1; hi_values = r2; _ } ->
-      schema r1 @ schema r2 |> unscoped
+      let schema_r2 = schema r2 in
+      let schema_r1 =
+        List.filter (schema r1) ~f:(fun n ->
+            not
+              (List.mem ~equal:[%compare.equal: Name.t] schema_r2
+                 (Name.unscoped n)))
+      in
+      schema_r1 @ schema_r2 |> unscoped
   | AEmpty -> []
   | AScalar e -> of_preds [ e ] |> unscoped
   | ATuple (rs, (Cross | Zip)) -> List.concat_map ~f:schema rs |> unscoped
