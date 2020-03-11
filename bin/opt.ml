@@ -4,17 +4,13 @@ open Collections
 open Castor_opt
 open Abslayout_load
 
-let main ~params:all_params ~validate ~cost_timeout ch =
+let main ~params:all_params ~cost_timeout ch =
   Logs.set_level (Some Info);
   Logs.info (fun m ->
       m "%s" (Sys.get_argv () |> Array.to_list |> String.concat ~sep:" "));
   let params =
     List.map all_params ~f:(fun (n, t, _) -> Name.create ~type_:t n)
     |> Set.of_list (module Name)
-  in
-  let param_ctx =
-    List.map all_params ~f:(fun (n, t, v) -> (Name.create ~type_:t n, v))
-    |> Map.of_alist_exn (module Name)
   in
   let conn = Db.create (Sys.getenv_exn "CASTOR_DB") in
   let module Config = struct
@@ -28,10 +24,6 @@ let main ~params:all_params ~validate ~cost_timeout ch =
           conn
 
     let params = params
-
-    let param_ctx = param_ctx
-
-    let validate = validate
 
     let cost_timeout = cost_timeout
   end in
@@ -51,8 +43,6 @@ let () =
   Command.basic ~summary:"Optimize a query."
     [%map_open
       let () = Log.param
-      and validate =
-        flag "validate" ~aliases:[ "c" ] no_arg ~doc:"validate transforms"
       and cost_timeout =
         flag "cost-timeout" (optional float)
           ~doc:"terminate cost function after n seconds"
@@ -63,5 +53,5 @@ let () =
       and ch =
         anon (maybe_with_default In_channel.stdin ("query" %: Util.channel))
       in
-      fun () -> main ~params ~cost_timeout ~validate ch]
+      fun () -> main ~params ~cost_timeout ch]
   |> Command.run
