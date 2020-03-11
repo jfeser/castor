@@ -325,16 +325,17 @@ module Make (C : Config.S) = struct
         select [ Min c; Max c; Avg c ]
         @@ group_by [ P.as_ Count "c" ] (Set.to_list parts) static_r)
     in
-    let tups =
-      let sql = Sql.of_ralgebra parted_r |> Sql.to_string
-      and schema = Prim_type.[ int_t; int_t; fixed_t ] in
-      Db.exec_exn cost_conn schema sql
-    in
+    let sql = Sql.of_ralgebra parted_r |> Sql.to_string
+    and schema = Prim_type.[ int_t; int_t; fixed_t ] in
+    let tups = Db.exec_exn cost_conn schema sql in
 
     match tups with
     | [| Int min; Int max; Fixed avg |] :: _ ->
         (min, max, Fixed_point.to_float avg)
-    | _ -> failwith "Unexpected tuples."
+    | [| Null; Null; Null |] :: _ -> (0, 0, 0.0)
+    | _ ->
+        Logs.err (fun m -> m "Unexpected tuples: %s" sql);
+        failwith "Unexpected tuples."
 
   let to_parts rhs pred =
     let rhs_schema = Schema.schema rhs |> Set.of_list (module Name) in
@@ -438,12 +439,6 @@ module Make (C : Config.S) = struct
     let open List.Let_syntax in
     let lhs = JoinSpace.to_ralgebra s1 and rhs = JoinSpace.to_ralgebra s2 in
     let lhs_schema = Schema.schema lhs and rhs_schema = Schema.schema rhs in
-    Log.info (fun m ->
-        m "LHS schema %a, RHS schema %a"
-          Fmt.Dump.(list Name.pp)
-          lhs_schema
-          Fmt.Dump.(list Name.pp)
-          rhs_schema);
     (* Figure out which partition a key comes from. *)
     let key_side k =
       let rs = Pred.names k in
@@ -453,14 +448,14 @@ module Make (C : Config.S) = struct
       if all_in lhs_schema then return (`Lhs (s1, k))
       else if all_in rhs_schema then return (`Rhs (s2, k))
       else (
-        Log.info (fun m -> m "Unknown key %a" Pred.pp k);
+        Log.debug (fun m -> m "Unknown key %a" Pred.pp k);
         [] )
     in
     let%bind k1, k2 =
       match pred with
       | Binop (Eq, k1, k2) -> return (k1, k2)
       | _ ->
-          Log.info (fun m -> m "Adding hash join failed.");
+          Log.debug (fun m -> m "Adding hash join failed.");
           []
     in
     let%bind s1 = key_side k1 in
@@ -473,7 +468,7 @@ module Make (C : Config.S) = struct
           |> List.map ~f:(fun ((_, r1), (_, r2)) ->
                  Hash { lkey = k1; rkey = k2; lhs = r1; rhs = r2 })
       | _ ->
-          Logs.info (fun m ->
+          Logs.debug (fun m ->
               m "Keys come from same partition %a %a" Pred.pp k1 Pred.pp k2);
           []
     in
@@ -495,7 +490,6 @@ module Make (C : Config.S) = struct
 
   let opt_nonrec opt parts s =
     Logs.info (fun m -> m "Choosing join for space %s." (JoinSpace.to_string s));
-    Logs.info (fun m -> m "%a" Sexp.pp_hum ([%sexp_of: JoinSpace.t] s));
     let joins =
       if JoinSpace.length s = 1 then
         (* Select strategy for the leaves of the join tree. *)
