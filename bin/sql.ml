@@ -1,7 +1,6 @@
 open! Core
 open Castor
 open Collections
-open Castor_opt
 open Abslayout_load
 module A = Abslayout
 
@@ -13,19 +12,11 @@ let main ~params:all_params ~simplify ~project ~unnest ~sql ~cse ch =
   let params =
     List.map all_params ~f:(fun (n, t, _) -> Name.create ~type_:t n)
     |> Set.of_list (module Name)
-  and param_ctx =
-    List.map all_params ~f:(fun (n, t, v) -> (Name.create ~type_:t n, v))
-    |> Map.of_alist_exn (module Name)
   in
-
   let module Config = struct
     let conn = Db.create (Sys.getenv_exn "CASTOR_DB")
 
     let params = params
-
-    let param_ctx = param_ctx
-
-    let validate = false
   end in
   let module S = Simplify_tactic.Make (Config) in
   let module O = Ops.Make (Config) in
