@@ -18,7 +18,6 @@
     (bos (>= 0.2))
     (logs (>= 0.6))
     (llvm (and (>= 7.0.0) (< 8.0.0)))
-    (gen (>= 0.5))
      cmph
      genhash
     (hashcons (>= 1.3))
@@ -41,7 +40,6 @@
   (bos (>= 0.2))
   (logs (>= 0.6))
   (llvm (and (>= 7.0.0) (< 8.0.0)))
-  (gen (>= 0.5))
    cmph
    genhash
   (hashcons (>= 1.3))

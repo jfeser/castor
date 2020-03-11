@@ -22,13 +22,7 @@ val command_ok_exn : Postgresql.result -> unit
 
 val result_to_strings : Postgresql.result -> string list list
 
-val exec_cursor_exn :
-  ?batch_size:int ->
-  ?params:string list ->
-  t ->
-  Prim_type.t list ->
-  string ->
-  Value.t array Gen.t
+val exec_exn : t -> Prim_type.t list -> string -> Value.t array list
 
 val check : t -> string -> unit Or_error.t
 

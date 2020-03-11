@@ -259,22 +259,6 @@ let load_value type_ value =
         Error (Error.create "Expected a null value." value [%sexp_of: string])
   | VoidT | TupleT _ -> Error (Error.of_string "Not a value type.")
 
-let load_tuples_exn s (r : Postgresql.result) =
-  let nfields = List.length s in
-  if nfields <> r#nfields then
-    Error.(
-      create "Unexpected tuple width." (r#get_fnames_lst, s)
-        [%sexp_of: string list * Prim_type.t list]
-      |> raise)
-  else
-    let gen =
-      Gen.init ~limit:r#ntuples (fun tidx ->
-          Array.of_list_mapi s ~f:(fun fidx type_ ->
-              if r#getisnull tidx fidx then Value.Null
-              else load_value type_ (r#getvalue tidx fidx) |> Or_error.ok_exn))
-    in
-    gen
-
 let load_tuples_list_exn s (r : Postgresql.result) =
   let nfields = List.length s in
   if nfields <> r#nfields then
@@ -288,45 +272,7 @@ let load_tuples_list_exn s (r : Postgresql.result) =
             if r#getisnull tidx fidx then Value.Null
             else load_value type_ (r#getvalue tidx fidx) |> Or_error.ok_exn))
 
-let exec_cursor_exn =
-  let fresh = Fresh.create () in
-  fun ?(batch_size = 100) ?(params = []) db schema query ->
-    let db = create db.uri in
-    Caml.Gc.finalise (fun db -> try db.conn#finish with Failure _ -> ()) db;
-    let query = subst_params params query in
-    let cur = Fresh.name fresh "cur%d" in
-    let declare_query =
-      sprintf "begin transaction; declare %s cursor for %s;" cur query
-    in
-    let fetch_query = sprintf "fetch %d from %s;" batch_size cur in
-    exec db declare_query |> command_ok_exn;
-    let db_idx = ref 1 in
-    let seq =
-      Gen.unfold
-        (function
-          | `Done ->
-              db.conn#finish;
-              None
-          | `Not_done idx when idx <> !db_idx ->
-              Some
-                ( Error.(
-                    create "Out of sync with underlying cursor." (idx, !db_idx)
-                      [%sexp_of: int * int]
-                    |> raise),
-                  `Done )
-          | `Not_done idx ->
-              let r = exec db fetch_query in
-              let tups = load_tuples_exn schema r in
-              db_idx := !db_idx + r#ntuples;
-              let idx = idx + r#ntuples in
-              let state =
-                if r#ntuples < batch_size then `Done else `Not_done idx
-              in
-              Some (tups, state))
-        (`Not_done 1)
-      |> Gen.flatten
-    in
-    seq
+let exec_exn db schema query = exec db query |> load_tuples_list_exn schema
 
 let check db sql =
   let open Or_error.Let_syntax in

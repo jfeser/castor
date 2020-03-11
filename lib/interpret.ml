@@ -74,18 +74,12 @@ module Schema = struct
     tbl
 end
 
-let to_sequence g =
-  Sequence.unfold ~init:() ~f:(fun () ->
-      match Gen.get g with Some x -> Some (x, ()) | None -> None)
-  |> Sequence.memoize
-
 let eval { db; params } r =
   let scan =
     Memo.general ~hashable:String.hashable (fun r ->
         let schema_types = Db.relation db r |> Relation.types_exn in
-        Db.exec_cursor_exn db schema_types
-          (Printf.sprintf "select * from \"%s\"" r)
-        |> to_sequence |> Seq.memoize)
+        Db.exec_exn db schema_types (Printf.sprintf "select * from \"%s\"" r)
+        |> Seq.of_list |> Seq.memoize)
   in
   let rec eval_agg ctx preds schema tups =
     if Seq.is_empty tups then None

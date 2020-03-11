@@ -30,7 +30,6 @@
    logs
    cmph
    visitors.runtime
-   gen
    hashcons
    fmt
    fmt.tty
