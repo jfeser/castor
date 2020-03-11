@@ -545,20 +545,18 @@ module Make (C : Config.S) = struct
 
   let reshape j _ = Some (to_ralgebra j)
 
-  let reshape j = local (reshape j) "reshape"
-
-  (** Generate a transformation sequence from a join strategy. *)
   let rec emit_joins =
-    let open Join_elim_tactics.Make (C) in
+    let module J = Join_elim_tactics.Make (C) in
+    let open J in
     function
     | Flat _ -> row_store
-    | Id _ -> traced id
+    | Id _ -> id
     | Hash { lhs; rhs; _ } ->
         seq_many
           [
-            traced @@ at_ (traced @@ emit_joins lhs) (child 0);
-            traced @@ at_ (traced @@ emit_joins rhs) (child 1);
-            traced elim_join_hash;
+            at_ (emit_joins lhs) (child 0);
+            at_ (emit_joins rhs) (child 1);
+            elim_join_hash;
           ]
     | Nest { lhs; rhs; _ } ->
         seq_many
@@ -575,7 +573,7 @@ module Make (C : Config.S) = struct
       Log.info (fun m -> m "Found %d join options." (ParetoSet.length joins));
       let%bind j = ParetoSet.min_elt (fun a -> a.(0)) joins in
       Log.info (fun m -> m "Chose %a." Sexp.pp_hum ([%sexp_of: t] j));
-      let tf = seq (reshape j) (emit_joins j) in
+      let tf = seq (local (reshape j) "reshape") (emit_joins j) in
       apply (traced tf) Castor.Path.root r
     in
     local f "join-opt"
