@@ -9,17 +9,16 @@ select([avg_yearly],
                   (sum(l1_extendedprice) / 7.0) as avg_yearly],
             alist(filter((p_container = s3.x8),
                     select([l1_extendedprice, p_container],
-                      filter((((p_brand = s0.k0) &&
-                              (l1_quantity <
-                              (select([(0.2 * avg(l_quantity)) as l_avgquantity],
-                                 filter((l_partkey = p_partkey), lineitem)))))
-                             && (p_partkey = l1_partkey)),
-                        join(true,
-                          select([l_partkey as l1_partkey,
-                                  l_extendedprice as l1_extendedprice,
-                                  l_quantity as l1_quantity],
-                            lineitem),
-                          part)))) as s1,
+                      join(((((p_brand = s0.k0) &&
+                             (l1_quantity <
+                             (select([(0.2 * avg(l_quantity)) as l_avgquantity],
+                                filter((l_partkey = p_partkey), lineitem)))))
+                            && (p_partkey = l1_partkey)) && true),
+                        select([l_partkey as l1_partkey,
+                                l_extendedprice as l1_extendedprice,
+                                l_quantity as l1_quantity],
+                          lineitem),
+                        part))) as s1,
               ascalar(s1.l1_extendedprice)))),
         param1)),
     param0))
