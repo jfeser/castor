@@ -569,7 +569,7 @@ module Make (C : Config.S) = struct
   let transform =
     let open Option.Let_syntax in
     let f p r =
-      let joins = opt r in
+      let joins = opt (Castor.Path.get_exn p r) in
       Log.info (fun m -> m "Found %d join options." (ParetoSet.length joins));
       let%bind j = ParetoSet.min_elt (fun a -> a.(0)) joins in
       Log.info (fun m -> m "Chose %a." Sexp.pp_hum ([%sexp_of: t] j));
