@@ -791,6 +791,15 @@ module Make (C : Config.S) = struct
            (A.filter (Pred.scoped (Schema.schema sq_tuple) scope p) r))
     else None
 
+  let simplify r =
+    let open Option.Let_syntax in
+    match r.node with
+    | Filter (p, r) -> return @@ A.filter (Pred.simplify p) r
+    | Join { pred; r1; r2 } -> return @@ A.join (Pred.simplify pred) r1 r2
+    | _ -> None
+
+  let simplify = of_func ~name:"simplify" simplify
+
   (* let precompute_filter n =
    *   let exception Failed of Error.t in
    *   let run_exn r =

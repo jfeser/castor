@@ -160,6 +160,8 @@ module Make (Config : Config.S) = struct
     let open Infix in
     seq_many
       [
+        (* Simplify filter predicates. *)
+        traced @@ for_all F.simplify Path.(all);
         (* Eliminate groupby operators. *)
         traced ~name:"elim-groupby"
         @@ fix
