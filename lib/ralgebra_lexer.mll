@@ -6,6 +6,7 @@ open Parser_utils
 module A = Ast
 
 let keyword_tbl = Hashtbl.of_alist_exn (module String) [
+"query", QUERY;
 "select", SELECT;
 "dedup", DEDUP;
 "filter", FILTER;
@@ -72,6 +73,8 @@ rule token = parse
   | ")"        { RPAREN }
   | "["        { LSBRAC }
   | "]"        { RSBRAC }
+  | "{"        { LCURLY }
+  | "}"        { RCURLY }
   | ":"        { COLON }
   | "."        { DOT }
   | ","        { COMMA }

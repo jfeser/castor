@@ -17,12 +17,14 @@
 %token AS DEPJOIN JOIN SELECT DEDUP FILTER COUNT GROUPBY MIN MAX AVG SUM LPAREN
 RPAREN LSBRAC RSBRAC COLON DOT COMMA EOF AEMPTY ASCALAR ATUPLE ALIST AHASHIDX
 AORDEREDIDX NULL ORDERBY IF THEN ELSE DATEKW EXISTS SUBSTRING ROW_NUMBER RANGE
+LCURLY RCURLY QUERY
 
 %start <Ast.t> ralgebra_eof
 %start <Ast.t Ast.pred> expr_eof
 %start <Name.t> name_eof
 %start <Ast.t Ast.pred> value_eof
 %start <Ast.Param.t> param_eof
+%start <unit Ast.Query.t> query_eof
 %%
 
 ralgebra_eof:
@@ -40,6 +42,13 @@ value_eof:
 param_eof:
   | x = param; EOF { x }
   | error; EOF { error "Expected a parameter." $startpos }
+
+query_eof:
+  | x = query; EOF { x }
+
+arg:
+  | k=ID; COLON; t=primtype; { (k, t) }
+  | ID; COLON; error { error "Expected a type." $startpos }
 
 param:
   | k=ID; COLON; t=primtype; { (k, t, None) }
@@ -63,6 +72,10 @@ parens(X):
 key:
   | p = expr; { [p] }
   | LPAREN; ps = separated_nonunit_list(COMMA, expr); RPAREN { ps }
+
+query:
+  | QUERY; name=ID; LPAREN; args=separated_list(COMMA, arg); RPAREN;
+    LCURLY; body = ralgebra; RCURLY { A.Query.{ name; args; body } }
 
 ralgebra:
   | r = ralgebra_subquery { r }

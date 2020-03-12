@@ -112,3 +112,12 @@ include Comparator.Make (T)
 module Param = struct
   type nonrec t = string * Prim_type.t * t pred option
 end
+
+module Query = struct
+  type 'a t = {
+    name : string;
+    args : (string * Prim_type.t) list;
+    body : 'a annot;
+  }
+  [@@deriving compare, hash, sexp_of]
+end

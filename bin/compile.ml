@@ -3,7 +3,7 @@ open Castor
 open Collections
 open Abslayout_load
 
-let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
+let main ~debug ~gprof ~params ~db ~code_only ~query ?out_dir ch =
   Logs.info (fun m ->
       m "%s" (Sys.get_argv () |> Array.to_list |> String.concat ~sep:" "));
   let module CConfig = struct
@@ -23,13 +23,21 @@ let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
   in
   let module I = Irgen.Make (CConfig) () in
   let module C = Codegen.Make (CConfig) (I) () in
-  let load_params =
-    List.map params ~f:(fun (n, t) -> Name.create ~type_:t n)
-    |> Set.of_list (module Name)
+  let ralgebra, params =
+    if query then
+      let Query.{ body; args; _ } = Query.of_channel_exn ch in
+      (body, args)
+    else (Abslayout.of_channel_exn ch, params)
+  in
+  let ralgebra =
+    let load_params =
+      List.map params ~f:(fun (n, t) -> Name.create ~type_:t n)
+      |> Set.of_list (module Name)
+    in
+    load_layout ~params:load_params db ralgebra
   in
   let params = List.map params ~f:(fun (n, t) -> (Name.create n, t)) in
-  load_string ~params:load_params db (In_channel.input_all ch)
-  |> Type.annotate db
+  Type.annotate db ralgebra
   |> C.compile ~gprof ~params ?out_dir ?layout_log:layout_file CConfig.conn
   |> ignore
 
@@ -48,8 +56,10 @@ let () =
         flag "param" ~aliases:[ "p" ] (listed Util.param)
           ~doc:"NAME:TYPE query parameters"
       and code_only = flag "code-only" no_arg ~doc:"only emit code"
+      and query =
+        flag "query" ~aliases:[ "q" ] no_arg ~doc:"parse input as a query"
       and ch =
         anon (maybe_with_default In_channel.stdin ("query" %: Util.channel))
       in
-      fun () -> main ~debug ~gprof ~params ~db ~code_only ?out_dir ch]
+      fun () -> main ~debug ~gprof ~params ~db ~code_only ~query ?out_dir ch]
   |> Command.run

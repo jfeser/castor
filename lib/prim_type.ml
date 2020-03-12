@@ -46,22 +46,17 @@ let rec pp_tuple pp_v fmt =
   | [ x ] -> fprintf fmt "%a" pp_v x
   | x :: xs -> fprintf fmt "%a,@ %a" pp_v x (pp_tuple pp_v) xs
 
-let rec pp =
+let rec pp fmt =
   let open Format in
-  fun fmt -> function
-    | NullT -> fprintf fmt "Null"
-    | IntT { nullable = true } -> fprintf fmt "Int"
-    | IntT { nullable = false } -> fprintf fmt "Int[nonnull]"
-    | StringT { nullable = true; _ } -> fprintf fmt "String"
-    | StringT { nullable = false; _ } -> fprintf fmt "String[nonnull]"
-    | BoolT { nullable = true } -> fprintf fmt "Bool"
-    | BoolT { nullable = false } -> fprintf fmt "Bool[nonnull]"
-    | TupleT ts -> fprintf fmt "Tuple[%a]" (pp_tuple pp) ts
-    | VoidT -> fprintf fmt "Void"
-    | FixedT { nullable = true } -> fprintf fmt "Fixed"
-    | FixedT { nullable = false } -> fprintf fmt "Fixed[nonnull]"
-    | DateT { nullable = true } -> fprintf fmt "Date"
-    | DateT { nullable = false } -> fprintf fmt "Date[nonnull]"
+  function
+  | NullT -> fprintf fmt "null"
+  | IntT _ -> fprintf fmt "int"
+  | StringT _ -> fprintf fmt "string"
+  | BoolT _ -> fprintf fmt "bool"
+  | TupleT ts -> fprintf fmt "tuple[%a]" (pp_tuple pp) ts
+  | VoidT -> fprintf fmt "void"
+  | FixedT _ -> fprintf fmt "fixed"
+  | DateT _ -> fprintf fmt "date"
 
 let is_nullable = function
   | NullT -> true
