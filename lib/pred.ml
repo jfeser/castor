@@ -313,16 +313,21 @@ let simplify p =
 
       method! visit_Binop () op p1 p2 =
         if Poly.(op = Or) then
-          let clauses =
-            disjuncts (Binop (op, p1, p2)) |> List.map ~f:conjuncts
-          in
+          let clauses = disjuncts p1 @ disjuncts p2 |> List.map ~f:conjuncts in
           let common =
-            List.map clauses ~f:C.Set.of_list |> List.reduce_exn ~f:Set.inter
+            List.map clauses ~f:C.Set.of_list
+            |> List.reduce ~f:Set.inter
+            |> Option.value ~default:C.Set.empty
           in
-          let clauses = List.map ~f:(List.filter ~f:(Set.mem common)) clauses in
-          let common = Set.to_list common in
-          let clauses = disjoin (List.map ~f:conjoin clauses) in
-          Binop (And, conjoin common, clauses)
+          let distinct =
+            List.map
+              ~f:(List.filter ~f:(fun p -> not (Set.mem common p)))
+              clauses
+          in
+          Binop
+            ( And,
+              conjoin @@ Set.to_list common,
+              disjoin @@ List.map ~f:conjoin distinct )
         else Binop (op, p1, p2)
     end
   in
@@ -345,7 +350,7 @@ let simplify p =
         else super#visit_Binop () op p1 p2
     end
   in
-  p |> to_nnf |> common_visitor#visit_pred ()
+  p |> common_visitor#visit_pred ()
 
 let max_of p1 p2 = Infix.(if_ (p1 < p2) p2 p1)
 
