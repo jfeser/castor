@@ -1,0 +1,16 @@
+query q4(param1 : date) {
+alist(orderby([o_orderpriority], dedup(select([o_orderpriority], orders))) as k0,
+  select([o_orderpriority, sum(agg0) as order_count],
+    aorderedidx(dedup(select([o_orderdate], orders)) as s0,
+      filter((count0 > 0),
+        select([count() as count0, count() as agg0, o_orderpriority],
+          alist(select([o_orderpriority],
+                  filter((exists(filter(((l_orderkey = o_orderkey) &&
+                                        (l_commitdate < l_receiptdate)),
+                                   lineitem)) &&
+                         ((o_orderpriority = k0.o_orderpriority) &&
+                         (o_orderdate = s0.o_orderdate))),
+                    orders)) as s1,
+            ascalar(s1.o_orderpriority)))),
+      >= param1, < (param1 + month(3)))))
+}

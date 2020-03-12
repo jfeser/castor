@@ -1,0 +1,54 @@
+query q5(param0 : string, param1 : date) {
+select([n_name, revenue],
+  ahashidx(select([r_name as k0], dedup(select([r_name], region))) as s0,
+    alist(dedup(
+            select([n_name],
+              join((((l_orderkey = o_orderkey) && (l_suppkey = s_suppkey)) &&
+                   true),
+                join((c_custkey = o_custkey),
+                  join((c_nationkey = s_nationkey),
+                    join((s_nationkey = n_nationkey),
+                      join((n_regionkey = r_regionkey),
+                        filter((r_name = s0.k0), region),
+                        nation),
+                      supplier),
+                    customer),
+                  orders),
+                lineitem))) as k1,
+      select([n_name, sum((l_extendedprice * (1 - l_discount))) as revenue],
+        depjoin(alist(select([r_regionkey], filter((r_name = s0.k0), region)) as s1,
+                  ascalar(s1.r_regionkey)) as s3,
+          select([n_name, l_extendedprice, l_discount],
+            aorderedidx(select([o_orderdate],
+                          dedup(select([o_orderdate], orders))) as s6,
+              ahashidx(dedup(
+                         select([n_regionkey],
+                           join((s_nationkey = n_nationkey),
+                             nation,
+                             join(((l_suppkey = s_suppkey) &&
+                                  (c_nationkey = s_nationkey)),
+                               join((l_orderkey = o_orderkey),
+                                 join((c_custkey = o_custkey),
+                                   customer,
+                                   orders),
+                                 lineitem),
+                               supplier)))) as s4,
+                alist(select([n_name, l_extendedprice, l_discount],
+                        join(((o_orderdate = s6.o_orderdate) &&
+                             (((n_name = k1.n_name) &&
+                              (s4.n_regionkey = n_regionkey)) &&
+                             (s_nationkey = n_nationkey))),
+                          nation,
+                          join(((l_suppkey = s_suppkey) &&
+                               (c_nationkey = s_nationkey)),
+                            join((l_orderkey = o_orderkey),
+                              join((c_custkey = o_custkey), customer, orders),
+                              lineitem),
+                            supplier))) as s2,
+                  atuple([ascalar(s2.n_name), ascalar(s2.l_extendedprice),
+                          ascalar(s2.l_discount)],
+                    cross)),
+                s3.r_regionkey),
+              >= param1, < (param1 + year(1))))))),
+    param0))
+}

@@ -1,0 +1,27 @@
+query q1(param0 : date) {
+alist(orderby([l_returnflag, l_linestatus],
+        dedup(select([l_returnflag, l_linestatus], lineitem))) as k0,
+  select([l_returnflag, l_linestatus, sum(agg0) as sum_qty,
+          sum(agg1) as sum_base_price, sum(agg2) as sum_disc_price,
+          sum(agg3) as sum_charge, (sum(agg0) / sum(agg4)) as avg_qty,
+          (sum(agg1) / sum(agg4)) as avg_price,
+          (sum(agg5) / sum(agg4)) as avg_disc, sum(agg4) as count_order],
+    aorderedidx(dedup(select([l_shipdate], lineitem)) as s0,
+      filter((count0 > 0),
+        select([count() as count0, sum(l_discount) as agg5, count() as agg4,
+                sum(((l_extendedprice * (1 - l_discount)) * (1 + l_tax))) as agg3,
+                sum((l_extendedprice * (1 - l_discount))) as agg2,
+                sum(l_extendedprice) as agg1, sum(l_quantity) as agg0,
+                l_returnflag, l_linestatus],
+          alist(select([l_quantity, l_extendedprice, l_discount, l_tax,
+                        l_returnflag, l_linestatus],
+                  filter(((l_returnflag = k0.l_returnflag) &&
+                         ((l_linestatus = k0.l_linestatus) &&
+                         (l_shipdate = s0.l_shipdate))),
+                    lineitem)) as s1,
+            atuple([ascalar(s1.l_quantity), ascalar(s1.l_extendedprice),
+                    ascalar(s1.l_discount), ascalar(s1.l_tax),
+                    ascalar(s1.l_returnflag), ascalar(s1.l_linestatus)],
+              cross)))),
+      , <= (date("1998-12-01") - day(param0)))))
+}

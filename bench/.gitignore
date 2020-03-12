@@ -6,4 +6,4 @@
 *-gold/
 *-gold.csv
 hashes.txt
-Makefile
+./Makefile
