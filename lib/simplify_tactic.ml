@@ -173,6 +173,11 @@ let simplify ?(dedup = false) ?(params = Set.empty (module Name)) conn r =
   let module O = Ops.Make (C) in
   let module S = Make (C) in
   let simplify q = Option.value_exn (O.apply S.simplify Path.root q) in
+  let remove_dedup q =
+    if false then
+      q |> Unnest.hoist_meta |> Cardinality.extend ~dedup
+      |> Join_elim.remove_dedup |> strip_meta
+    else q |> strip_meta
+  in
   strip_meta r |> simplify |> Unnest.unnest |> Cardinality.extend ~dedup
-  |> Join_elim.remove_joins |> Unnest.hoist_meta |> Cardinality.extend ~dedup
-  |> Join_elim.remove_dedup |> strip_meta |> simplify
+  |> Join_elim.remove_joins |> remove_dedup |> simplify
