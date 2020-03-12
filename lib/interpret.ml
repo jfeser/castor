@@ -79,7 +79,7 @@ let eval { db; params } r =
     Memo.general ~hashable:String.hashable (fun r ->
         let schema_types = Db.relation db r |> Relation.types_exn in
         Db.exec_exn db schema_types (Printf.sprintf "select * from \"%s\"" r)
-        |> Seq.of_list |> Seq.memoize)
+        |> Seq.of_list |> Seq.map ~f:Array.of_list |> Seq.memoize)
   in
   let rec eval_agg ctx preds schema tups =
     if Seq.is_empty tups then None

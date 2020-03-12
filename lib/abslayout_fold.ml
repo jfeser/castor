@@ -1,5 +1,4 @@
 open Ast
-open Lwt
 open Collections
 open Abslayout_visitors
 module A = Abslayout
@@ -19,9 +18,9 @@ module Fold = struct
   let run (Fold { init; fold; extract }) l =
     List.fold_left l ~init ~f:fold |> extract
 
-  let run_lwt (Fold { init; fold; extract }) l =
-    let%lwt ret = Lwt_stream.fold (fun x y -> fold y x) l init in
-    return (extract ret)
+  let run_seq (Fold { init; fold; extract }) l =
+    let ret = Seq.fold ~f:(fun y x -> fold y x) l ~init in
+    extract ret
 end
 
 let two_arg_fold f =
@@ -37,44 +36,54 @@ let two_arg_fold f =
   in
   Fold.Fold { init; fold; extract }
 
-let group_by eq strm =
-  let open RevList in
-  let cur = ref (`Group empty) in
-  let rec next () =
-    match !cur with
-    | `Done -> return None
-    | `Group g -> (
-        let%lwt tup = Lwt_stream.get strm in
-        match tup with
-        | None ->
-            cur := `Done;
+(* let group_by eq strm =
+ *   let open RevList in
+ *   let cur = ref (`Group empty) in
+ *   let rec next () =
+ *     match !cur with
+ *     | `Done -> return None
+ *     | `Group g -> (
+ *         Seq.get strm >>= function
+ *         | None ->
+ *             cur := `Done;
+ * 
+ *             (\* Never return empty groups. *\)
+ *             if is_empty g then return None else return (Some (to_list g))
+ *         | Some x -> (
+ *             match last g with
+ *             | None ->
+ *                 cur := `Group (singleton x);
+ *                 next ()
+ *             | Some y ->
+ *                 if eq x y then (
+ *                   cur := `Group (g ++ x);
+ *                   next () )
+ *                 else (
+ *                   cur := `Group (singleton x);
+ *                   return (Some (to_list g)) ) ) )
+ *   in
+ *   Stream.from next *)
 
-            (* Never return empty groups. *)
-            if is_empty g then return None else return (Some (to_list g))
-        | Some x -> (
-            match last g with
-            | None ->
-                cur := `Group (singleton x);
-                next ()
-            | Some y ->
-                if eq x y then (
-                  cur := `Group (g ++ x);
-                  next () )
-                else (
-                  cur := `Group (singleton x);
-                  return (Some (to_list g)) ) ) )
-  in
-  Lwt_stream.from next
+let group_by eq x = Seq.group ~break:(fun x x' -> not (eq x x')) x
 
-let repeat n x =
-  let i = ref 0 in
-  let rec next () =
-    if !i >= n then None
-    else (
-      incr i;
-      Some x )
+let repeat n x = Seq.take (Seq.repeat x) n
+
+let view ~f s =
+  Seq.map
+    ~f:(fun x ->
+      f x;
+      x)
+    s
+
+let split_while ~f s =
+  let rec g acc s =
+    match Seq.next s with
+    | Some (x, xs) ->
+        if f x then g RevList.(acc ++ x) xs else (acc, Seq.shift_right xs x)
+    | None -> (acc, Seq.empty)
   in
-  Lwt_stream.from_direct next
+  let acc, s' = g RevList.empty s in
+  (RevList.to_list acc, s')
 
 let extract_group widths ctr tups =
   let extract_counter tup = List.hd_exn tup |> Value.to_int in
@@ -85,10 +94,18 @@ let extract_group widths ctr tups =
     in
     fun tup -> List.take (List.drop tup drop_ct) take_ct
   in
-  let%lwt group =
-    Lwt_stream.get_while (fun t -> extract_counter t = ctr) tups
+  let group, tups = split_while ~f:(fun t -> extract_counter t = ctr) tups in
+  let group = Seq.of_list group in
+  (Seq.map group ~f:extract_tuple, tups)
+
+let rec map_accum ~f ~init l =
+  let rec m accum acc = function
+    | [] -> (accum, RevList.to_list acc)
+    | x :: xs ->
+        let accum', x' = f accum x in
+        m accum' RevList.(acc ++ x') xs
   in
-  List.map group ~f:extract_tuple |> return
+  m init RevList.empty l
 
 let default_simplify r = Project.project r
 
@@ -219,16 +236,14 @@ class virtual ['self] abslayout_fold =
       | _ -> None
 
     method private eval_for lctx tups (a : (_, _ option) Q.t)
-        (n, _, q2, distinct) : 'a Lwt.t =
+        (n, _, q2, distinct) : 'a =
       let fold = self#for_ a in
       let extract_lhs t = List.take t n in
       let extract_rhs t = List.drop t n in
       let tups =
         if self#debug then
-          Lwt_stream.map
-            (fun t ->
-              print_s ([%sexp_of: string * Value.t list] ("for", t));
-              t)
+          view
+            ~f:(fun t -> print_s ([%sexp_of: string * Value.t list] ("for", t)))
             tups
         else tups
       in
@@ -236,83 +251,83 @@ class virtual ['self] abslayout_fold =
         if distinct then
           tups
           (* Split each tuple into lhs and rhs. *)
-          |> Lwt_stream.map (fun t -> (extract_lhs t, extract_rhs t))
+          |> Seq.map ~f:(fun t -> (extract_lhs t, extract_rhs t))
           (* Group by lhs *)
           |> group_by (fun (t1, _) (t2, _) ->
                  [%compare.equal: Value.t list] t1 t2)
           (* Split each group into one lhs and many rhs. *)
-          |> Lwt_stream.map (fun g ->
-                 let lhs = List.hd_exn g |> Tuple.T2.get1 in
-                 let rhs = List.map g ~f:Tuple.T2.get2 in
+          |> Seq.map ~f:(fun g ->
+                 let lhs = List.hd_exn g |> Tuple.T2.get1
+                 and rhs = List.map g ~f:Tuple.T2.get2 in
                  (lhs, rhs))
         else
           tups
-          (* Extract the count from each tuple. *)
-          |> Lwt_stream.map (function
-               | [] -> Error.of_string "Unexpected empty tuple." |> Error.raise
-               | ct :: t -> (Value.to_int ct, t))
-          (* Split each tuple into lhs and rhs. *)
-          |> Lwt_stream.map (fun (ct, t) -> (ct, extract_lhs t, extract_rhs t))
+          |> Seq.map ~f:(fun t ->
+                 (* Extract the count from each tuple. *)
+                 let ct, t =
+                   match t with
+                   | [] ->
+                       Error.of_string "Unexpected empty tuple." |> Error.raise
+                   | ct :: t -> (Value.to_int ct, t)
+                 in
+                 (* Split each tuple into lhs and rhs. *)
+                 let lhs = extract_lhs t and rhs = extract_rhs t in
+                 (ct, lhs, rhs))
           (* Group by lhs *)
           |> group_by (fun (_, t1, _) (_, t2, _) ->
                  [%compare.equal: Value.t list] t1 t2)
-          (* Split each group into one lhs and many rhs. *)
-          |> Lwt_stream.map (fun g ->
-                 let count = List.hd_exn g |> Tuple.T3.get1 in
-                 let lhs = List.hd_exn g |> Tuple.T3.get2 in
-                 let rhs = List.map g ~f:Tuple.T3.get3 in
-                 (count, lhs, rhs))
-          (* Replicate each group by the group count. *)
-          |> Lwt_stream.map (fun (count, lhs, rhs) -> repeat count (lhs, rhs))
-          |> Lwt_stream.concat
+          |> Seq.concat_map ~f:(fun g ->
+                 (* Split each group into one lhs and many rhs. *)
+                 let count = List.hd_exn g |> Tuple.T3.get1
+                 and lhs = List.hd_exn g |> Tuple.T3.get2
+                 and rhs = List.map g ~f:Tuple.T3.get3 in
+
+                 (* Replicate each group by the group count. *)
+                 repeat count (lhs, rhs))
       in
       (* Process each group. *)
       groups
-      |> Lwt_stream.map_s (fun (lhs, rhs) ->
+      |> Seq.map ~f:(fun (lhs, rhs) ->
              let lval =
                let open Option.Let_syntax in
                let%bind r = a.Q.meta in
                let%map l = self#key_layout r in
                self#scalars { a with meta = Some l } lhs
              in
-             let%lwt rval = self#eval lctx (Lwt_stream.of_list rhs) q2 in
-             return (lhs, lval, rval))
-      |> Fold.run_lwt fold
+             let rval = self#eval lctx (Seq.of_list rhs) q2 in
+             (lhs, lval, rval))
+      |> Fold.run_seq fold
 
-    method private eval_concat lctx tups a qs : 'a Lwt.t =
+    method private eval_concat lctx tups a qs : 'a =
       let (Fold { init; fold; extract }) = self#concat a in
       let tups =
         if self#debug then
-          Lwt_stream.map
-            (fun t ->
-              print_s ([%sexp_of: string * Value.t list] ("concat", t));
-              t)
+          view
+            ~f:(fun t ->
+              print_s ([%sexp_of: string * Value.t list] ("concat", t)))
             tups
         else tups
       in
       let widths = List.map qs ~f:Q.width in
-      let%lwt acc =
-        List.foldi ~init:(return init) qs ~f:(fun oidx acc q ->
-            let%lwt acc = acc in
-            let%lwt group = extract_group widths oidx tups in
-            let%lwt v = self#eval lctx (Lwt_stream.of_list group) q in
-            return (fold acc v))
+      let v, tups =
+        List.foldi ~init:(init, tups) qs ~f:(fun oidx (acc, tups) q ->
+            let group, tups = extract_group widths oidx tups in
+            let v = self#eval lctx group q in
+            (fold acc v, tups))
       in
-      return (extract acc)
+      extract v
 
-    method private eval_scalars _ tups a ps : 'a Lwt.t =
+    method private eval_scalars _ tups a ps : 'a =
       let tups =
         if self#debug then
-          Lwt_stream.map
-            (fun t ->
-              print_s ([%sexp_of: string * Value.t list] ("scalar", t));
-              t)
+          view
+            ~f:(fun t ->
+              print_s ([%sexp_of: string * Value.t list] ("scalar", t)))
             tups
         else tups
       in
-      let%lwt tup = Lwt_stream.get tups in
       let values =
-        match tup with
+        match Seq.hd tups with
         | Some xs when List.length xs = List.length ps -> xs
         | Some t ->
             Error.(
@@ -321,24 +336,23 @@ class virtual ['self] abslayout_fold =
               |> raise)
         | None -> failwith "Expected a tuple."
       in
-      return (self#scalars a values)
+      self#scalars a values
 
-    method private eval_empty _ tups a : 'a Lwt.t =
-      let%lwt is_empty = Lwt_stream.is_empty tups in
-      if is_empty then return (self#qempty a)
+    method private eval_empty _ tups a : 'a =
+      if Seq.is_empty tups then self#qempty a
       else failwith "Empty: expected an empty generator."
 
-    method private eval_let lctx tups (binds, q) : 'a Lwt.t =
+    method private eval_let lctx tups (binds, q) : 'a =
       let widths =
         List.map binds ~f:(fun (_, q) -> Q.width q) @ [ Q.width q ]
       in
       (* The first n groups contain the values for the bound layouts. *)
-      let%lwt binds =
-        Lwt_list.mapi_s
-          (fun oidx (n, q) ->
-            let%lwt strm = extract_group widths oidx tups in
-            let%lwt v = self#eval lctx (Lwt_stream.of_list strm) q in
-            return (n, v))
+      let (_, tups), binds =
+        map_accum ~init:(0, tups)
+          ~f:(fun (oidx, tups) (n, q) ->
+            let strm, tups = extract_group widths oidx tups in
+            let v = self#eval lctx strm q in
+            ((oidx + 1, tups), (n, v)))
           binds
       in
       let lctx =
@@ -347,18 +361,16 @@ class virtual ['self] abslayout_fold =
           binds
       in
       (* The n+1 group contains values for the layout in the body of the let. *)
-      let%lwt strm = extract_group widths (List.length binds) tups in
-      self#eval lctx (Lwt_stream.of_list strm) q
+      let strm, tups = extract_group widths (List.length binds) tups in
+      self#eval lctx strm q
 
-    method private eval_var lctx tups n : 'a Lwt.t =
-      let%lwt () = Lwt_stream.junk tups in
-      return (Map.find_exn lctx n)
+    method private eval_var lctx tups n : 'a = Map.find_exn lctx n
 
-    method private eval lctx tups (a : (int, _ option) Q.t) : 'a Lwt.t =
+    method private eval lctx tups (a : (int, _ option) Q.t) : 'a =
       let tups =
         let l' = Q.width a in
-        Lwt_stream.map
-          (fun t ->
+        Seq.map
+          ~f:(fun t ->
             let l = List.length t in
             if l = l' then t
             else Error.createf "Expected length %d got %d" l' l |> Error.raise)
@@ -388,19 +400,29 @@ class virtual ['self] abslayout_fold =
       info (fun m -> m "Running SQL: %s" (Sql.to_string_hum sql));
       (* Run the sql to get a stream of tuples. *)
       let tups =
-        Db.Async.exec ?timeout conn r
-        |> Lwt_stream.map (function
-             | Ok x -> Array.to_list x
-             | Error Db.Async.{ info = `Timeout; _ } -> raise Lwt_unix.Timeout
-             | Error ({ query; _ } as e) ->
-                 err (fun m -> m "Running SQL failed: %s" (Sql.format query));
-                 Db.Async.to_error e |> Error.raise)
+        match timeout with
+        | Some timeout ->
+            Db.Async.exec ~timeout conn r
+            |> Lwt_stream.map (function
+                 | Ok x -> x
+                 | Error Db.Async.{ info = `Timeout; _ } ->
+                     raise Lwt_unix.Timeout
+                 | Error ({ query; _ } as e) ->
+                     err (fun m ->
+                         m "Running SQL failed: %s" (Sql.format query));
+                     Db.Async.to_error e |> Error.raise)
+            |> Lwt_stream.to_list |> Lwt_main.run |> Seq.of_list
+            |> Seq.concat_map ~f:Seq.of_list
+        | None ->
+            Db.exec_exn conn (Schema.types r)
+              (Sql.of_ralgebra r |> Sql.to_string)
+            |> Seq.of_list
       in
       (* Replace the ralgebra queries at the leaves of the fold query with their
          output widths. *)
       let q = Q.to_width q in
       (* Run the fold on the tuple stream. *)
-      self#eval (Map.empty (module String)) tups q |> Lwt_main.run
+      self#eval (Map.empty (module String)) tups q
   end
 
 class ['self] print_fold =

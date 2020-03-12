@@ -259,7 +259,7 @@ let load_tuples_list_exn s =
         |> raise)
     else
       List.init r#ntuples ~f:(fun tidx ->
-          Array.init nfields ~f:(fun fidx ->
+          List.init nfields ~f:(fun fidx ->
               if r#getisnull tidx fidx then Value.Null
               else loaders.(fidx) (r#getvalue tidx fidx) |> Or_error.ok_exn))
 
@@ -308,7 +308,7 @@ module Async = struct
     ?bound:int ->
     db ->
     'a ->
-    (Value.t array, error) Result.t Lwt_stream.t
+    (Value.t list list, error) Result.t Lwt_stream.t
 
   let return_never =
     let p, _ = wait () in
@@ -369,11 +369,7 @@ module Async = struct
                 match r#status with
                 | Tuples_ok ->
                     info (fun m -> m "Got a %d tuple batch" r#ntuples);
-                    let%lwt () =
-                      Lwt_list.iter_s
-                        (fun t -> strm#push (Result.return t))
-                        (load_tuples r)
-                    in
+                    let%lwt () = strm#push (Result.return (load_tuples r)) in
                     k ()
                 | Fatal_error -> fail (`Msg r#error)
                 | _ -> fail (`Msg "Unexpected status") )

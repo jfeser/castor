@@ -716,7 +716,7 @@ module Parallel = struct
           let%lwt tup = Lwt_stream.get strm in
           match tup with
           | Some (Ok t) ->
-              Array.to_list t
+              List.hd_exn t
               |> List.map2_exn (Schema.names r) ~f:(fun n v -> (n, v))
               |> Option.return |> return
           | Some (Error { info = `Timeout; _ }) -> return None

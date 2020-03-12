@@ -22,7 +22,7 @@ val command_ok_exn : Postgresql.result -> unit
 
 val result_to_strings : Postgresql.result -> string list list
 
-val exec_exn : t -> Prim_type.t list -> string -> Value.t array list
+val exec_exn : t -> Prim_type.t list -> string -> Value.t list list
 
 val check : t -> string -> unit Or_error.t
 
@@ -51,7 +51,7 @@ module Async : sig
     ?bound:int ->
     t ->
     'a ->
-    (Value.t array, error) result Lwt_stream.t
+    (Value.t list list, error) result Lwt_stream.t
 
   val exec_sql : (Prim_type.t list * string) exec
 

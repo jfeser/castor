@@ -4,7 +4,7 @@ open Abslayout
 open Collections
 open Schema
 
-type tuple = Value.t array [@@deriving compare, sexp]
+type tuple = Value.t list [@@deriving compare, sexp]
 
 let normal_order r =
   order_by (List.map (schema r) ~f:(fun n -> (Name n, Desc))) r
@@ -14,9 +14,10 @@ let to_err = Result.map_error ~f:Db.Async.to_error
 let compare t1 t2 =
   match (to_err t1, to_err t2) with
   | Ok t1, Ok t2 ->
-      if [%compare.equal: tuple] t1 t2 then Ok ()
+      if [%compare.equal: tuple list] t1 t2 then Ok ()
       else
-        Or_error.error "Mismatched tuples." (t1, t2) [%sexp_of: tuple * tuple]
+        Or_error.error "Mismatched tuples." (t1, t2)
+          [%sexp_of: tuple list * tuple list]
   | (Error _ as e), Ok _ | Ok _, (Error _ as e) -> e
   | Error e1, Error e2 -> Error (Error.of_list [ e1; e2 ])
 
@@ -45,12 +46,12 @@ let equiv conn r1 r2 =
             return
             @@ Or_error.(
                  to_err t >>= fun t ->
-                 Or_error.error "Extra tuple on LHS." t [%sexp_of: tuple])
+                 Or_error.error "Extra tuple on LHS." t [%sexp_of: tuple list])
         | None, Some t ->
             return
             @@ Or_error.(
                  to_err t >>= fun t ->
-                 Or_error.error "Extra tuple on RHS." t [%sexp_of: tuple])
+                 Or_error.error "Extra tuple on RHS." t [%sexp_of: tuple list])
         | None, None -> return @@ Ok ()
       in
       Lwt_main.run (check ())
