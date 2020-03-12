@@ -48,7 +48,7 @@ module Async : sig
 
   type 'a exec =
     ?timeout:float ->
-    ?cancel:unit Lwt.t ->
+    ?bound:int ->
     t ->
     'a ->
     (Value.t array, error) result Lwt_stream.t

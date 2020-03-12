@@ -2,7 +2,7 @@ open! Lwt
 open Collections
 module Psql = Postgresql
 
-include (val Log.make ~level:(Some Warning) "castor.db")
+include (val Log.make ~level:(Some Info) "castor.db")
 
 let default_pool_size = 3
 
@@ -221,56 +221,47 @@ let relation_has_field conn f =
       List.exists (Option.value_exn r.Relation.r_schema) ~f:(fun (n, _) ->
           String.(Name.name n = f)))
 
-let load_int s = Scanf.sscanf s "%d" Fun.id
+let is_null = String.is_empty
+
+let load_int = Int.of_string
 
 let load_padded_string v = String.rstrip ~drop:(fun c -> Char.(c = ' ')) v
 
-let load_value type_ value =
+let load_value type_ =
   let open Prim_type in
   match type_ with
-  | BoolT { nullable } -> (
-      match value with
-      | "t" -> Ok (Value.Bool true)
-      | "f" -> Ok (Bool false)
-      | "" when nullable -> Ok Null
-      | _ ->
-          Error (Error.create "Unknown boolean value." value [%sexp_of: string])
-      )
-  | IntT { nullable } ->
-      if String.(value = "") then
-        if nullable then Ok Null
-        else Error (Error.of_string "Unexpected null integer.")
-      else Ok (Int (load_int value))
-  | StringT { padded = true; _ } -> Ok (String (load_padded_string value))
-  | StringT { padded = false; _ } -> Ok (String value)
-  | FixedT { nullable } ->
-      if String.(value = "") then
-        if nullable then Ok Null
-        else Error (Error.of_string "Unexpected null fixed.")
-      else Ok (Fixed (Fixed_point.of_string value))
-  | DateT { nullable } ->
-      if String.(value = "") then
-        if nullable then Ok Null
-        else Error (Error.of_string "Unexpected null integer.")
-      else Ok (Date (Date.of_string value))
-  | NullT ->
-      if String.(value = "") then Ok Null
-      else
-        Error (Error.create "Expected a null value." value [%sexp_of: string])
-  | VoidT | TupleT _ -> Error (Error.of_string "Not a value type.")
+  | BoolT _ -> (
+      fun value ->
+        match value with
+        | "t" -> Ok (Value.Bool true)
+        | "f" -> Ok (Bool false)
+        | _ ->
+            Error
+              (Error.create "Unknown boolean value." value [%sexp_of: string]) )
+  | IntT _ -> fun value -> Ok (Int (load_int value))
+  | StringT { padded = true; _ } ->
+      fun value -> Ok (String (load_padded_string value))
+  | StringT { padded = false; _ } -> fun value -> Ok (String value)
+  | FixedT _ -> fun value -> Ok (Fixed (Fixed_point.of_string value))
+  | DateT _ -> fun value -> Ok (Date (Date.of_string value))
+  | NullT -> fun _ -> Ok Null
+  | VoidT | TupleT _ -> fun _ -> Error (Error.of_string "Not a value type.")
 
-let load_tuples_list_exn s (r : Postgresql.result) =
+let load_tuples_list_exn s =
+  let loaders = List.map s ~f:load_value |> Array.of_list in
   let nfields = List.length s in
-  if nfields <> r#nfields then
-    Error.(
-      create "Unexpected tuple width." (r#get_fnames_lst, s)
-        [%sexp_of: string list * Prim_type.t list]
-      |> raise)
-  else
-    List.init r#ntuples ~f:(fun tidx ->
-        Array.of_list_mapi s ~f:(fun fidx type_ ->
-            if r#getisnull tidx fidx then Value.Null
-            else load_value type_ (r#getvalue tidx fidx) |> Or_error.ok_exn))
+
+  fun (r : Postgresql.result) ->
+    if nfields <> r#nfields then
+      Error.(
+        create "Unexpected tuple width." (r#get_fnames_lst, s)
+          [%sexp_of: string list * Prim_type.t list]
+        |> raise)
+    else
+      List.init r#ntuples ~f:(fun tidx ->
+          Array.init nfields ~f:(fun fidx ->
+              if r#getisnull tidx fidx then Value.Null
+              else loaders.(fidx) (r#getvalue tidx fidx) |> Or_error.ok_exn))
 
 let exec_exn db schema query = exec db query |> load_tuples_list_exn schema
 
@@ -314,7 +305,7 @@ module Async = struct
 
   type 'a exec =
     ?timeout:float ->
-    ?cancel:unit Lwt.t ->
+    ?bound:int ->
     db ->
     'a ->
     (Value.t array, error) Result.t Lwt_stream.t
@@ -337,28 +328,25 @@ module Async = struct
     in
     Error.tag_arg err "query" query [%sexp_of: string]
 
-  let exec_sql ?timeout ?(cancel = return_never) db (schema, query) =
-    let stream, push = Lwt_stream.create () in
+  let exec_sql ?timeout ?(bound = 4096) db (schema, query) =
+    let stream, strm = Lwt_stream.create_bounded bound in
+
+    let load_tuples = load_tuples_list_exn schema in
 
     (* Create a new database connection. *)
     let exec () =
       Lwt_pool.use db.pool (fun conn ->
-          (* We cancel if the caller asks for a cancellation or if the query times
-             out. *)
-          let cancel =
-            let timeout =
-              let%lwt () =
-                Option.map timeout ~f:return_unit_timeout
-                |> Option.value ~default:return_never
-              in
-              return_unit
-            in
-            choose [ cancel; timeout ]
+          (* We cancel if the query times out. It's important that this run
+             inside the call to Lwt_use so we don't start the timer before we
+             get a connection. *)
+          let timeout =
+            Option.map timeout ~f:return_unit_timeout
+            |> Option.value ~default:return_never
           in
 
           let fail msg =
-            push (Some (Result.fail { query; info = msg }));
-            push None;
+            let%lwt () = strm#push (Result.fail { query; info = msg }) in
+            strm#close;
             conn#reset;
             return_unit
           in
@@ -368,7 +356,7 @@ module Async = struct
           let fd = conn#socket |> Obj.magic |> Lwt_unix.of_unix_file_descr in
 
           let wait_for_cancel () =
-            let%lwt () = protected cancel in
+            let%lwt () = protected timeout in
             info (fun m -> m "Query timeout: %s" query);
             exec db (sprintf "select pg_cancel_backend(%d);" conn#backend_pid)
             |> ignore;
@@ -380,13 +368,17 @@ module Async = struct
             | Some r -> (
                 match r#status with
                 | Tuples_ok ->
-                    load_tuples_list_exn schema r
-                    |> List.iter ~f:(fun t -> push (Some (Result.return t)));
+                    info (fun m -> m "Got a %d tuple batch" r#ntuples);
+                    let%lwt () =
+                      Lwt_list.iter_s
+                        (fun t -> strm#push (Result.return t))
+                        (load_tuples r)
+                    in
                     k ()
                 | Fatal_error -> fail (`Msg r#error)
                 | _ -> fail (`Msg "Unexpected status") )
             | None ->
-                push None;
+                strm#close;
                 return_unit
           in
 
@@ -409,8 +401,8 @@ module Async = struct
     async exec;
     stream
 
-  let exec ?timeout ?cancel db r =
+  let exec ?timeout ?bound db r =
     info (fun m -> m "Running query:@ %a" Abslayout_pp.pp r);
-    exec_sql ?timeout ?cancel db
+    exec_sql ?timeout ?bound db
       (Schema.types r, Sql.of_ralgebra r |> Sql.to_string)
 end
