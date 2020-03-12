@@ -81,11 +81,22 @@ let schema_open schema r =
       let t = Prim_type.unify (to_type p) (to_type p') in
       [ Name.create ~type_:t "range" ]
 
+let schema_open_full schema r =
+  match r.node with
+  | AOrderedIdx (r1, r2, _) | AHashIdx { hi_keys = r1; hi_values = r2; _ } ->
+      schema r1 @ schema r2 |> unscoped
+  | _ -> schema_open schema r
+
 let rec schema r = schema_open schema r
+
+let rec schema_full r = schema_open_full schema_full r
 
 let names r = schema r |> List.map ~f:Name.name
 
 let types r = schema r |> List.map ~f:Name.type_exn
+
+let names_and_types r =
+  schema r |> List.map ~f:(fun n -> (Name.name n, Name.type_exn n))
 
 let rec to_type q =
   let rec to_type q = to_type_open schema to_type q in

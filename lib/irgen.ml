@@ -1,7 +1,6 @@
 open Ast
 open Collections
 open Implang
-open Schema
 module A = Abslayout
 
 type ir_module = {
@@ -36,6 +35,8 @@ end
 
 module Make (Config : Config.S) () = struct
   let iters = ref []
+
+  let schema = Schema.schema_full
 
   let add_iter i = iters := i :: !iters
 
@@ -516,7 +517,7 @@ module Make (Config : Config.S) () = struct
     in
     let key_ctx = Ctx.bind ctx "start" Prim_type.int_t kstart in
     let value_ctx =
-      let key_schema = schema key_layout |> scoped r.hi_scope in
+      let key_schema = schema key_layout |> Schema.scoped r.hi_scope in
       let ctx =
         Ctx.bind_ctx ctx (Ctx.of_schema key_schema (list_of_tuple key_tuple b))
       in
