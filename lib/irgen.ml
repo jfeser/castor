@@ -790,7 +790,9 @@ module Make (Config : Config.S) () = struct
     debug_print "scanning depjoin" (Int 0) b;
     scan lhs_ctx b d_lhs lhs_t (fun b tup ->
         let rhs_ctx =
-          let lhs_ctx = Ctx.of_schema (schema d_lhs |> scoped d_alias) tup in
+          let lhs_ctx =
+            Ctx.of_schema (schema d_lhs |> Schema.scoped d_alias) tup
+          in
           Ctx.bind_ctx rhs_ctx lhs_ctx
         in
         scan rhs_ctx b d_rhs rhs_t cb)
