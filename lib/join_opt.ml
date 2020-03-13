@@ -330,9 +330,9 @@ module Make (C : Config.S) = struct
     let tups = Db.exec_exn cost_conn schema sql in
 
     match tups with
-    | [| Int min; Int max; Fixed avg |] :: _ ->
+    | [ Int min; Int max; Fixed avg ] :: _ ->
         (min, max, Fixed_point.to_float avg)
-    | [| Null; Null; Null |] :: _ -> (0, 0, 0.0)
+    | [ Null; Null; Null ] :: _ -> (0, 0, 0.0)
     | _ ->
         Logs.err (fun m -> m "Unexpected tuples: %s" sql);
         failwith "Unexpected tuples."

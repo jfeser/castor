@@ -52,7 +52,7 @@ module Make (C : Config.S) = struct
               Sql.sample 10 (Sql.of_ralgebra q |> Sql.to_string)
               |> Db.exec_exn conn (Schema.types q)
               |> List.map ~f:(fun vs ->
-                     Array.to_list vs |> List.map ~f:Value.to_pred
+                     List.map vs ~f:Value.to_pred
                      |> List.zip_exn schema
                      |> Map.of_alist_exn (module Name))
         in
