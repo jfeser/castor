@@ -95,6 +95,8 @@ let names r = schema r |> List.map ~f:Name.name
 
 let types r = schema r |> List.map ~f:Name.type_exn
 
+let types_full r = schema_full r |> List.map ~f:Name.type_exn
+
 let names_and_types r =
   schema r |> List.map ~f:(fun n -> (Name.name n, Name.type_exn n))
 

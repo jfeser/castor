@@ -38,6 +38,8 @@ module Make (Config : Config.S) () = struct
 
   let schema = Schema.schema_full
 
+  let types = Schema.types_full
+
   let add_iter i = iters := i :: !iters
 
   let debug_print msg v b =
@@ -78,7 +80,7 @@ module Make (Config : Config.S) () = struct
     in
     ctx
 
-  let type_of_layout l = Prim_type.TupleT (Schema.types l)
+  let type_of_layout l = Prim_type.TupleT (types l)
 
   let list_of_tuple t b =
     match Builder.type_of t b with
@@ -290,7 +292,7 @@ module Make (Config : Config.S) () = struct
           (* Don't use the passed in start value. Subquery layouts are not stored
              inline. *)
           let ctx = Map.remove ctx (Name.create "start") in
-          let ret_var = build_var "first" (List.hd_exn (Schema.types r)) b in
+          let ret_var = build_var "first" (List.hd_exn (types r)) b in
           scan ctx b r r.meta#type_ (fun b tup ->
               build_assign (List.hd_exn tup) ret_var b);
           ret_var
