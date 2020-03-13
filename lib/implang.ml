@@ -168,12 +168,12 @@ module Ctx0 = struct
   let empty = Map.empty (module Name)
 
   let of_alist_exn l =
-    Map.of_alist (module Name) l |> function
-    | `Duplicate_key n ->
-        Error.create "Cannot create context with duplicate name." n
-          [%sexp_of: Name.t]
-        |> Error.raise
-    | `Ok x -> x
+    let compare = [%compare: Name.t * _] in
+    List.find_all_dups l ~compare
+    |> List.iter ~f:(fun (n, _) ->
+           Log.warn (fun m ->
+               m "Creating context with duplicate name %a" Name.pp n));
+    List.dedup_and_sort ~compare l |> Map.of_alist_exn (module Name)
 
   let of_schema schema tup =
     List.map2_exn schema tup ~f:(fun n e -> (n, Field e)) |> of_alist_exn
