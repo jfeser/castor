@@ -22,18 +22,18 @@ let%expect_test "example-1" =
   [%expect
     {|
     // Locals:
-    // i18 : Int[nonnull] (persists=true)
-    // cstart21 : Int[nonnull] (persists=true)
-    // cstart16 : Int[nonnull] (persists=true)
-    // count13 : Int[nonnull] (persists=true)
-    // cstart17 : Int[nonnull] (persists=true)
-    // cstart15 : Int[nonnull] (persists=true)
-    // cstart11 : Int[nonnull] (persists=true)
-    // i12 : Int[nonnull] (persists=true)
-    // cstart14 : Int[nonnull] (persists=true)
-    // count19 : Int[nonnull] (persists=true)
-    // cstart20 : Int[nonnull] (persists=true)
-    fun printer () : Void {
+    // i18 : int (persists=true)
+    // cstart21 : int (persists=true)
+    // cstart16 : int (persists=true)
+    // count13 : int (persists=true)
+    // cstart17 : int (persists=true)
+    // cstart15 : int (persists=true)
+    // cstart11 : int (persists=true)
+    // i12 : int (persists=true)
+    // cstart14 : int (persists=true)
+    // count19 : int (persists=true)
+    // cstart20 : int (persists=true)
+    fun printer () : void {
         cstart11 = 1;
         i12 = 0;
         count13 = 2;
@@ -48,7 +48,7 @@ let%expect_test "example-1" =
                 cstart20 = cstart17;
                 cstart21 = cstart20 + 1;
                 if (buf[cstart20 : 1] == id_c && buf[cstart14 : 1] == id_p) {
-                    print(Tuple[Int[nonnull], Int[nonnull]],
+                    print(tuple[int, int],
                     (buf[cstart15 : 1], buf[cstart21 : 1]));
                 } else {
 
@@ -61,18 +61,18 @@ let%expect_test "example-1" =
         }
     }
     // Locals:
-    // i1 : Int[nonnull] (persists=true)
-    // count8 : Int[nonnull] (persists=true)
-    // i7 : Int[nonnull] (persists=true)
-    // cstart9 : Int[nonnull] (persists=true)
-    // count2 : Int[nonnull] (persists=true)
-    // cstart4 : Int[nonnull] (persists=true)
-    // cstart3 : Int[nonnull] (persists=true)
-    // cstart10 : Int[nonnull] (persists=true)
-    // cstart0 : Int[nonnull] (persists=true)
-    // cstart6 : Int[nonnull] (persists=true)
-    // cstart5 : Int[nonnull] (persists=true)
-    fun consumer () : Void {
+    // i1 : int (persists=true)
+    // count8 : int (persists=true)
+    // i7 : int (persists=true)
+    // cstart9 : int (persists=true)
+    // count2 : int (persists=true)
+    // cstart4 : int (persists=true)
+    // cstart3 : int (persists=true)
+    // cstart10 : int (persists=true)
+    // cstart0 : int (persists=true)
+    // cstart6 : int (persists=true)
+    // cstart5 : int (persists=true)
+    fun consumer () : void {
         cstart0 = 1;
         i1 = 0;
         count2 = 2;
@@ -87,7 +87,7 @@ let%expect_test "example-1" =
                 cstart9 = cstart6;
                 cstart10 = cstart9 + 1;
                 if (buf[cstart9 : 1] == id_c && buf[cstart3 : 1] == id_p) {
-                    consume(Tuple[Int[nonnull], Int[nonnull]],
+                    consume(tuple[int, int],
                     (buf[cstart4 : 1], buf[cstart10 : 1]));
                 } else {
 
@@ -131,10 +131,10 @@ let%test_module _ =
       [%expect
         {|
         // Locals:
-        // count7 : Int[nonnull] (persists=false)
-        // found_tup6 : Bool[nonnull] (persists=false)
-        // tup5 : Tuple[Int[nonnull]] (persists=false)
-        fun printer () : Void {
+        // count7 : int (persists=false)
+        // found_tup6 : bool (persists=false)
+        // tup5 : tuple[int] (persists=false)
+        fun printer () : void {
             found_tup6 = false;
             count7 = 0;
             tup5 = (buf[0 : 1]);
@@ -142,7 +142,7 @@ let%test_module _ =
             found_tup6 = true;
             if (found_tup6) {
                 if (not(count7 < 0 || count7 == 0)) {
-                    print(Tuple[Int[nonnull]], (count7));
+                    print(tuple[int], (count7));
                 } else {
 
                 }
@@ -151,10 +151,10 @@ let%test_module _ =
             }
         }
         // Locals:
-        // found_tup2 : Bool[nonnull] (persists=false)
-        // tup1 : Tuple[Int[nonnull]] (persists=false)
-        // count3 : Int[nonnull] (persists=false)
-        fun consumer () : Void {
+        // found_tup2 : bool (persists=false)
+        // tup1 : tuple[int] (persists=false)
+        // count3 : int (persists=false)
+        fun consumer () : void {
             found_tup2 = false;
             count3 = 0;
             tup1 = (buf[0 : 1]);
@@ -162,7 +162,7 @@ let%test_module _ =
             found_tup2 = true;
             if (found_tup2) {
                 if (not(count3 < 0 || count3 == 0)) {
-                    consume(Tuple[Int[nonnull]], (count3));
+                    consume(tuple[int], (count3));
                 } else {
 
                 }
@@ -175,12 +175,12 @@ let%test_module _ =
       [%expect
         {|
         // Locals:
-        // hoisted0 : Int[nonnull] (persists=false)
-        // hoisted1 : Tuple[Int[nonnull]] (persists=false)
-        // count7 : Int[nonnull] (persists=false)
-        // found_tup6 : Bool[nonnull] (persists=false)
-        // tup5 : Tuple[Int[nonnull]] (persists=false)
-        fun printer () : Void {
+        // hoisted0 : int (persists=false)
+        // hoisted1 : tuple[int] (persists=false)
+        // count7 : int (persists=false)
+        // found_tup6 : bool (persists=false)
+        // tup5 : tuple[int] (persists=false)
+        fun printer () : void {
             hoisted0 = buf[0 : 1];
             hoisted1 = (hoisted0);
             found_tup6 = false;
@@ -190,7 +190,7 @@ let%test_module _ =
             found_tup6 = true;
             if (found_tup6) {
                 if (not(count7 < 0 || count7 == 0)) {
-                    print(Tuple[Int[nonnull]], (count7));
+                    print(tuple[int], (count7));
                 } else {
 
                 }
@@ -199,12 +199,12 @@ let%test_module _ =
             }
         }
         // Locals:
-        // hoisted2 : Int[nonnull] (persists=false)
-        // hoisted3 : Tuple[Int[nonnull]] (persists=false)
-        // found_tup2 : Bool[nonnull] (persists=false)
-        // tup1 : Tuple[Int[nonnull]] (persists=false)
-        // count3 : Int[nonnull] (persists=false)
-        fun consumer () : Void {
+        // hoisted2 : int (persists=false)
+        // hoisted3 : tuple[int] (persists=false)
+        // found_tup2 : bool (persists=false)
+        // tup1 : tuple[int] (persists=false)
+        // count3 : int (persists=false)
+        fun consumer () : void {
             hoisted2 = buf[0 : 1];
             hoisted3 = (hoisted2);
             found_tup2 = false;
@@ -214,7 +214,7 @@ let%test_module _ =
             found_tup2 = true;
             if (found_tup2) {
                 if (not(count3 < 0 || count3 == 0)) {
-                    consume(Tuple[Int[nonnull]], (count3));
+                    consume(tuple[int], (count3));
                 } else {
 
                 }

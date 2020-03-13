@@ -32,22 +32,20 @@ let%expect_test "tuple-simple-cross" =
      (((IntT ((range (Interval 1 1)))) (IntT ((range (Interval 2 2)))))
       ((kind Cross))))
     // Locals:
-    // cstart3 : Int[nonnull] (persists=true)
-    // cstart2 : Int[nonnull] (persists=true)
-    fun printer () : Void {
+    // cstart3 : int (persists=true)
+    // cstart2 : int (persists=true)
+    fun printer () : void {
         cstart2 = 0;
         cstart3 = cstart2 + 1;
-        print(Tuple[Int[nonnull], Int[nonnull]],
-        (buf[cstart2 : 1], buf[cstart3 : 1]));
+        print(tuple[int, int], (buf[cstart2 : 1], buf[cstart3 : 1]));
     }
     // Locals:
-    // cstart1 : Int[nonnull] (persists=true)
-    // cstart0 : Int[nonnull] (persists=true)
-    fun consumer () : Void {
+    // cstart1 : int (persists=true)
+    // cstart0 : int (persists=true)
+    fun consumer () : void {
         cstart0 = 0;
         cstart1 = cstart0 + 1;
-        consume(Tuple[Int[nonnull], Int[nonnull]],
-        (buf[cstart0 : 1], buf[cstart1 : 1]));
+        consume(tuple[int, int], (buf[cstart0 : 1], buf[cstart1 : 1]));
     } |}]
 
 let%expect_test "sum-complex" =
@@ -62,17 +60,17 @@ let%expect_test "sum-complex" =
          ((count (Interval 5 5))))))
       (Width 2)))
     // Locals:
-    // found_tup17 : Bool[nonnull] (persists=false)
-    // cstart24 : Int[nonnull] (persists=true)
-    // cstart25 : Int[nonnull] (persists=true)
-    // cstart21 : Int[nonnull] (persists=true)
-    // tup16 : Tuple[Int[nonnull], Int[nonnull]] (persists=false)
-    // i22 : Int[nonnull] (persists=true)
-    // count23 : Int[nonnull] (persists=true)
-    // sum20 : Fixed[nonnull] (persists=false)
-    // sum18 : Int[nonnull] (persists=false)
-    // count19 : Int[nonnull] (persists=false)
-    fun printer () : Void {
+    // found_tup17 : bool (persists=false)
+    // cstart24 : int (persists=true)
+    // cstart25 : int (persists=true)
+    // cstart21 : int (persists=true)
+    // tup16 : tuple[int, int] (persists=false)
+    // i22 : int (persists=true)
+    // count23 : int (persists=true)
+    // sum20 : fixed (persists=false)
+    // sum18 : int (persists=false)
+    // count19 : int (persists=false)
+    fun printer () : void {
         found_tup17 = false;
         sum18 = 0;
         count19 = 0;
@@ -92,24 +90,23 @@ let%expect_test "sum-complex" =
             i22 = i22 + 1;
         }
         if (found_tup17) {
-            print(Tuple[Int[nonnull], Fixed[nonnull]],
-            (sum18 + 5, int2fl(count19) + sum20));
+            print(tuple[int, fixed], (sum18 + 5, int2fl(count19) + sum20));
         } else {
 
         }
     }
     // Locals:
-    // tup3 : Tuple[Int[nonnull], Int[nonnull]] (persists=false)
-    // cstart12 : Int[nonnull] (persists=true)
-    // count6 : Int[nonnull] (persists=false)
-    // sum5 : Int[nonnull] (persists=false)
-    // cstart8 : Int[nonnull] (persists=true)
-    // cstart11 : Int[nonnull] (persists=true)
-    // count10 : Int[nonnull] (persists=true)
-    // sum7 : Fixed[nonnull] (persists=false)
-    // i9 : Int[nonnull] (persists=true)
-    // found_tup4 : Bool[nonnull] (persists=false)
-    fun consumer () : Void {
+    // tup3 : tuple[int, int] (persists=false)
+    // cstart12 : int (persists=true)
+    // count6 : int (persists=false)
+    // sum5 : int (persists=false)
+    // cstart8 : int (persists=true)
+    // cstart11 : int (persists=true)
+    // count10 : int (persists=true)
+    // sum7 : fixed (persists=false)
+    // i9 : int (persists=true)
+    // found_tup4 : bool (persists=false)
+    fun consumer () : void {
         found_tup4 = false;
         sum5 = 0;
         count6 = 0;
@@ -129,8 +126,7 @@ let%expect_test "sum-complex" =
             i9 = i9 + 1;
         }
         if (found_tup4) {
-            consume(Tuple[Int[nonnull], Fixed[nonnull]],
-            (sum5 + 5, int2fl(count6) + sum7));
+            consume(tuple[int, fixed], (sum5 + 5, int2fl(count6) + sum7));
         } else {
 
         }
@@ -150,16 +146,16 @@ let%expect_test "sum" =
          ((count (Interval 5 5))))))
       (Width 2)))
     // Locals:
-    // i18 : Int[nonnull] (persists=true)
-    // count16 : Int[nonnull] (persists=false)
-    // cstart21 : Int[nonnull] (persists=true)
-    // found_tup14 : Bool[nonnull] (persists=false)
-    // cstart17 : Int[nonnull] (persists=true)
-    // tup13 : Tuple[Int[nonnull], Int[nonnull]] (persists=false)
-    // sum15 : Int[nonnull] (persists=false)
-    // count19 : Int[nonnull] (persists=true)
-    // cstart20 : Int[nonnull] (persists=true)
-    fun printer () : Void {
+    // i18 : int (persists=true)
+    // count16 : int (persists=false)
+    // cstart21 : int (persists=true)
+    // found_tup14 : bool (persists=false)
+    // cstart17 : int (persists=true)
+    // tup13 : tuple[int, int] (persists=false)
+    // sum15 : int (persists=false)
+    // count19 : int (persists=true)
+    // cstart20 : int (persists=true)
+    fun printer () : void {
         found_tup14 = false;
         sum15 = 0;
         count16 = 0;
@@ -177,22 +173,22 @@ let%expect_test "sum" =
             i18 = i18 + 1;
         }
         if (found_tup14) {
-            print(Tuple[Int[nonnull], Int[nonnull]], (sum15, count16));
+            print(tuple[int, int], (sum15, count16));
         } else {
 
         }
     }
     // Locals:
-    // count8 : Int[nonnull] (persists=true)
-    // i7 : Int[nonnull] (persists=true)
-    // cstart9 : Int[nonnull] (persists=true)
-    // sum4 : Int[nonnull] (persists=false)
-    // count5 : Int[nonnull] (persists=false)
-    // tup2 : Tuple[Int[nonnull], Int[nonnull]] (persists=false)
-    // found_tup3 : Bool[nonnull] (persists=false)
-    // cstart10 : Int[nonnull] (persists=true)
-    // cstart6 : Int[nonnull] (persists=true)
-    fun consumer () : Void {
+    // count8 : int (persists=true)
+    // i7 : int (persists=true)
+    // cstart9 : int (persists=true)
+    // sum4 : int (persists=false)
+    // count5 : int (persists=false)
+    // tup2 : tuple[int, int] (persists=false)
+    // found_tup3 : bool (persists=false)
+    // cstart10 : int (persists=true)
+    // cstart6 : int (persists=true)
+    fun consumer () : void {
         found_tup3 = false;
         sum4 = 0;
         count5 = 0;
@@ -210,7 +206,7 @@ let%expect_test "sum" =
             i7 = i7 + 1;
         }
         if (found_tup3) {
-            consume(Tuple[Int[nonnull], Int[nonnull]], (sum4, count5));
+            consume(tuple[int, int], (sum4, count5));
         } else {
 
         }
@@ -226,39 +222,37 @@ let%expect_test "cross-tuple" =
         ((kind Cross))))
       ((count (Interval 5 5)))))
     // Locals:
-    // cstart8 : Int[nonnull] (persists=true)
-    // cstart9 : Int[nonnull] (persists=true)
-    // count7 : Int[nonnull] (persists=true)
-    // cstart5 : Int[nonnull] (persists=true)
-    // i6 : Int[nonnull] (persists=true)
-    fun printer () : Void {
+    // cstart8 : int (persists=true)
+    // cstart9 : int (persists=true)
+    // count7 : int (persists=true)
+    // cstart5 : int (persists=true)
+    // i6 : int (persists=true)
+    fun printer () : void {
         cstart5 = 0;
         i6 = 0;
         count7 = 5;
         loop (i6 < count7) {
             cstart8 = cstart5;
             cstart9 = cstart8 + 1;
-            print(Tuple[Int[nonnull], Int[nonnull]],
-            (buf[cstart8 : 1], buf[cstart9 : 1]));
+            print(tuple[int, int], (buf[cstart8 : 1], buf[cstart9 : 1]));
             cstart5 = cstart5 + 2;
             i6 = i6 + 1;
         }
     }
     // Locals:
-    // i1 : Int[nonnull] (persists=true)
-    // cstart4 : Int[nonnull] (persists=true)
-    // cstart3 : Int[nonnull] (persists=true)
-    // cstart0 : Int[nonnull] (persists=true)
-    // count2 : Int[nonnull] (persists=true)
-    fun consumer () : Void {
+    // i1 : int (persists=true)
+    // cstart4 : int (persists=true)
+    // cstart3 : int (persists=true)
+    // cstart0 : int (persists=true)
+    // count2 : int (persists=true)
+    fun consumer () : void {
         cstart0 = 0;
         i1 = 0;
         count2 = 5;
         loop (i1 < count2) {
             cstart3 = cstart0;
             cstart4 = cstart3 + 1;
-            consume(Tuple[Int[nonnull], Int[nonnull]],
-            (buf[cstart3 : 1], buf[cstart4 : 1]));
+            consume(tuple[int, int], (buf[cstart3 : 1], buf[cstart4 : 1]));
             cstart0 = cstart0 + 2;
             i1 = i1 + 1;
         }
@@ -277,14 +271,14 @@ let%expect_test "hash-idx" =
          ((key_count (Interval 3 3))))))
       Child_sum))
     // Locals:
-    // kstart10 : Int[nonnull] (persists=false)
-    // i8 : Int[nonnull] (persists=true)
-    // cstart7 : Int[nonnull] (persists=true)
-    // count9 : Int[nonnull] (persists=true)
-    // key12 : Tuple[Int[nonnull]] (persists=false)
-    // vstart11 : Int[nonnull] (persists=false)
-    // hash13 : Int[nonnull] (persists=false)
-    fun printer () : Void {
+    // kstart10 : int (persists=false)
+    // i8 : int (persists=true)
+    // cstart7 : int (persists=true)
+    // count9 : int (persists=true)
+    // key12 : tuple[int] (persists=false)
+    // vstart11 : int (persists=false)
+    // hash13 : int (persists=false)
+    fun printer () : void {
         cstart7 = 1;
         i8 = 0;
         count9 = 5;
@@ -297,8 +291,7 @@ let%expect_test "hash-idx" =
                  key12 = (buf[kstart10 : 1]);
                  vstart11 = buf[8 + hash13 : 1] + 8 + buf[7 : 1] + 1;
                  if (true && key12[0] == buf[cstart7 : 1]) {
-                     print(Tuple[Int[nonnull], Int[nonnull]],
-                     (key12[0], buf[vstart11 : 1]));
+                     print(tuple[int, int], (key12[0], buf[vstart11 : 1]));
                  } else {
 
                  }
@@ -308,14 +301,14 @@ let%expect_test "hash-idx" =
         }
     }
     // Locals:
-    // kstart3 : Int[nonnull] (persists=false)
-    // key5 : Tuple[Int[nonnull]] (persists=false)
-    // i1 : Int[nonnull] (persists=true)
-    // vstart4 : Int[nonnull] (persists=false)
-    // cstart0 : Int[nonnull] (persists=true)
-    // count2 : Int[nonnull] (persists=true)
-    // hash6 : Int[nonnull] (persists=false)
-    fun consumer () : Void {
+    // kstart3 : int (persists=false)
+    // key5 : tuple[int] (persists=false)
+    // i1 : int (persists=true)
+    // vstart4 : int (persists=false)
+    // cstart0 : int (persists=true)
+    // count2 : int (persists=true)
+    // hash6 : int (persists=false)
+    fun consumer () : void {
         cstart0 = 1;
         i1 = 0;
         count2 = 5;
@@ -328,8 +321,7 @@ let%expect_test "hash-idx" =
                  key5 = (buf[kstart3 : 1]);
                  vstart4 = buf[8 + hash6 : 1] + 8 + buf[7 : 1] + 1;
                  if (true && key5[0] == buf[cstart0 : 1]) {
-                     consume(Tuple[Int[nonnull], Int[nonnull]],
-                     (key5[0], buf[vstart4 : 1]));
+                     consume(tuple[int, int], (key5[0], buf[vstart4 : 1]));
                  } else {
 
                  }
@@ -352,21 +344,21 @@ let%expect_test "ordered-idx" =
          ((key_count (Interval 3 3))))))
       Child_sum))
     // Locals:
-    // count16 : Int[nonnull] (persists=true)
-    // mid22 : Int[nonnull] (persists=true)
-    // key23 : Tuple[Int[nonnull]] (persists=false)
-    // key19 : Tuple[Int[nonnull]] (persists=true)
-    // kstart17 : Int[nonnull] (persists=true)
-    // key27 : Tuple[Int[nonnull]] (persists=false)
-    // key25 : Tuple[Int[nonnull]] (persists=false)
-    // key26 : Tuple[Int[nonnull]] (persists=true)
-    // idx24 : Int[nonnull] (persists=true)
-    // vstart18 : Int[nonnull] (persists=true)
-    // i15 : Int[nonnull] (persists=true)
-    // cstart14 : Int[nonnull] (persists=true)
-    // low20 : Int[nonnull] (persists=true)
-    // high21 : Int[nonnull] (persists=true)
-    fun printer () : Void {
+    // count16 : int (persists=true)
+    // mid22 : int (persists=true)
+    // key23 : tuple[int] (persists=false)
+    // key19 : tuple[int] (persists=true)
+    // kstart17 : int (persists=true)
+    // key27 : tuple[int] (persists=false)
+    // key25 : tuple[int] (persists=false)
+    // key26 : tuple[int] (persists=true)
+    // idx24 : int (persists=true)
+    // vstart18 : int (persists=true)
+    // i15 : int (persists=true)
+    // cstart14 : int (persists=true)
+    // low20 : int (persists=true)
+    // high21 : int (persists=true)
+    fun printer () : void {
         cstart14 = 0;
         i15 = 0;
         count16 = 5;
@@ -393,8 +385,7 @@ let%expect_test "ordered-idx" =
                         not(key26[0] < buf[cstart14 : 1])) {
                         vstart18 = buf[5 + idx24 * 2 + 1 : 1] + 6 + 5;
                         key19 = key26;
-                        print(Tuple[Int[nonnull], Int[nonnull]],
-                        (key19[0], buf[vstart18 : 1]));
+                        print(tuple[int, int], (key19[0], buf[vstart18 : 1]));
                     } else {
 
                     }
@@ -411,21 +402,21 @@ let%expect_test "ordered-idx" =
         }
     }
     // Locals:
-    // idx10 : Int[nonnull] (persists=true)
-    // i1 : Int[nonnull] (persists=true)
-    // key13 : Tuple[Int[nonnull]] (persists=false)
-    // vstart4 : Int[nonnull] (persists=true)
-    // mid8 : Int[nonnull] (persists=true)
-    // key9 : Tuple[Int[nonnull]] (persists=false)
-    // key11 : Tuple[Int[nonnull]] (persists=false)
-    // count2 : Int[nonnull] (persists=true)
-    // high7 : Int[nonnull] (persists=true)
-    // kstart3 : Int[nonnull] (persists=true)
-    // key5 : Tuple[Int[nonnull]] (persists=true)
-    // low6 : Int[nonnull] (persists=true)
-    // key12 : Tuple[Int[nonnull]] (persists=true)
-    // cstart0 : Int[nonnull] (persists=true)
-    fun consumer () : Void {
+    // idx10 : int (persists=true)
+    // i1 : int (persists=true)
+    // key13 : tuple[int] (persists=false)
+    // vstart4 : int (persists=true)
+    // mid8 : int (persists=true)
+    // key9 : tuple[int] (persists=false)
+    // key11 : tuple[int] (persists=false)
+    // count2 : int (persists=true)
+    // high7 : int (persists=true)
+    // kstart3 : int (persists=true)
+    // key5 : tuple[int] (persists=true)
+    // low6 : int (persists=true)
+    // key12 : tuple[int] (persists=true)
+    // cstart0 : int (persists=true)
+    fun consumer () : void {
         cstart0 = 0;
         i1 = 0;
         count2 = 5;
@@ -452,8 +443,7 @@ let%expect_test "ordered-idx" =
                         not(key12[0] < buf[cstart0 : 1])) {
                         vstart4 = buf[5 + idx10 * 2 + 1 : 1] + 6 + 5;
                         key5 = key12;
-                        consume(Tuple[Int[nonnull], Int[nonnull]],
-                        (key5[0], buf[vstart4 : 1]));
+                        consume(tuple[int, int], (key5[0], buf[vstart4 : 1]));
                     } else {
 
                     }
@@ -499,18 +489,18 @@ let%expect_test "example-1" =
          Child_sum)))
       (Width 2)))
     // Locals:
-    // i18 : Int[nonnull] (persists=true)
-    // cstart21 : Int[nonnull] (persists=true)
-    // cstart16 : Int[nonnull] (persists=true)
-    // count13 : Int[nonnull] (persists=true)
-    // cstart17 : Int[nonnull] (persists=true)
-    // cstart15 : Int[nonnull] (persists=true)
-    // cstart11 : Int[nonnull] (persists=true)
-    // i12 : Int[nonnull] (persists=true)
-    // cstart14 : Int[nonnull] (persists=true)
-    // count19 : Int[nonnull] (persists=true)
-    // cstart20 : Int[nonnull] (persists=true)
-    fun printer () : Void {
+    // i18 : int (persists=true)
+    // cstart21 : int (persists=true)
+    // cstart16 : int (persists=true)
+    // count13 : int (persists=true)
+    // cstart17 : int (persists=true)
+    // cstart15 : int (persists=true)
+    // cstart11 : int (persists=true)
+    // i12 : int (persists=true)
+    // cstart14 : int (persists=true)
+    // count19 : int (persists=true)
+    // cstart20 : int (persists=true)
+    fun printer () : void {
         cstart11 = 1;
         i12 = 0;
         count13 = 2;
@@ -525,7 +515,7 @@ let%expect_test "example-1" =
                 cstart20 = cstart17;
                 cstart21 = cstart20 + 1;
                 if (buf[cstart20 : 1] == id_c && buf[cstart14 : 1] == id_p) {
-                    print(Tuple[Int[nonnull], Int[nonnull]],
+                    print(tuple[int, int],
                     (buf[cstart15 : 1], buf[cstart21 : 1]));
                 } else {
 
@@ -538,18 +528,18 @@ let%expect_test "example-1" =
         }
     }
     // Locals:
-    // i1 : Int[nonnull] (persists=true)
-    // count8 : Int[nonnull] (persists=true)
-    // i7 : Int[nonnull] (persists=true)
-    // cstart9 : Int[nonnull] (persists=true)
-    // count2 : Int[nonnull] (persists=true)
-    // cstart4 : Int[nonnull] (persists=true)
-    // cstart3 : Int[nonnull] (persists=true)
-    // cstart10 : Int[nonnull] (persists=true)
-    // cstart0 : Int[nonnull] (persists=true)
-    // cstart6 : Int[nonnull] (persists=true)
-    // cstart5 : Int[nonnull] (persists=true)
-    fun consumer () : Void {
+    // i1 : int (persists=true)
+    // count8 : int (persists=true)
+    // i7 : int (persists=true)
+    // cstart9 : int (persists=true)
+    // count2 : int (persists=true)
+    // cstart4 : int (persists=true)
+    // cstart3 : int (persists=true)
+    // cstart10 : int (persists=true)
+    // cstart0 : int (persists=true)
+    // cstart6 : int (persists=true)
+    // cstart5 : int (persists=true)
+    fun consumer () : void {
         cstart0 = 1;
         i1 = 0;
         count2 = 2;
@@ -564,7 +554,7 @@ let%expect_test "example-1" =
                 cstart9 = cstart6;
                 cstart10 = cstart9 + 1;
                 if (buf[cstart9 : 1] == id_c && buf[cstart3 : 1] == id_p) {
-                    consume(Tuple[Int[nonnull], Int[nonnull]],
+                    consume(tuple[int, int],
                     (buf[cstart4 : 1], buf[cstart10 : 1]));
                 } else {
 
@@ -594,18 +584,18 @@ let%expect_test "example-2" =
          ((key_count (Interval 2 2))))))
       (Width 2)))
     // Locals:
-    // i18 : Int[nonnull] (persists=true)
-    // key13 : Tuple[Int[nonnull], Int[nonnull]] (persists=false)
-    // cstart21 : Int[nonnull] (persists=true)
-    // cstart16 : Int[nonnull] (persists=true)
-    // hash14 : Int[nonnull] (persists=false)
-    // cstart17 : Int[nonnull] (persists=true)
-    // kstart11 : Int[nonnull] (persists=false)
-    // cstart15 : Int[nonnull] (persists=true)
-    // vstart12 : Int[nonnull] (persists=false)
-    // count19 : Int[nonnull] (persists=true)
-    // cstart20 : Int[nonnull] (persists=true)
-    fun printer () : Void {
+    // i18 : int (persists=true)
+    // key13 : tuple[int, int] (persists=false)
+    // cstart21 : int (persists=true)
+    // cstart16 : int (persists=true)
+    // hash14 : int (persists=false)
+    // cstart17 : int (persists=true)
+    // kstart11 : int (persists=false)
+    // cstart15 : int (persists=true)
+    // vstart12 : int (persists=false)
+    // count19 : int (persists=true)
+    // cstart20 : int (persists=true)
+    fun printer () : void {
         hash14 = <tuplehash> * 1;
         if (hash14 < 0 || buf[4 + buf[2 : 2] : 1] - 1 < hash14) {
 
@@ -626,7 +616,7 @@ let%expect_test "example-2" =
                  loop (i18 < count19) {
                      cstart20 = cstart17;
                      cstart21 = cstart20 + 1;
-                     print(Tuple[Int[nonnull], Int[nonnull]],
+                     print(tuple[int, int],
                      (buf[cstart20 : 1], buf[cstart21 : 1]));
                      cstart17 = cstart17 + 2;
                      i18 = i18 + 1;
@@ -637,18 +627,18 @@ let%expect_test "example-2" =
         }
     }
     // Locals:
-    // count8 : Int[nonnull] (persists=true)
-    // i7 : Int[nonnull] (persists=true)
-    // cstart9 : Int[nonnull] (persists=true)
-    // kstart0 : Int[nonnull] (persists=false)
-    // hash3 : Int[nonnull] (persists=false)
-    // vstart1 : Int[nonnull] (persists=false)
-    // key2 : Tuple[Int[nonnull], Int[nonnull]] (persists=false)
-    // cstart4 : Int[nonnull] (persists=true)
-    // cstart10 : Int[nonnull] (persists=true)
-    // cstart6 : Int[nonnull] (persists=true)
-    // cstart5 : Int[nonnull] (persists=true)
-    fun consumer () : Void {
+    // count8 : int (persists=true)
+    // i7 : int (persists=true)
+    // cstart9 : int (persists=true)
+    // kstart0 : int (persists=false)
+    // hash3 : int (persists=false)
+    // vstart1 : int (persists=false)
+    // key2 : tuple[int, int] (persists=false)
+    // cstart4 : int (persists=true)
+    // cstart10 : int (persists=true)
+    // cstart6 : int (persists=true)
+    // cstart5 : int (persists=true)
+    fun consumer () : void {
         hash3 = <tuplehash> * 1;
         if (hash3 < 0 || buf[4 + buf[2 : 2] : 1] - 1 < hash3) {
 
@@ -669,7 +659,7 @@ let%expect_test "example-2" =
                  loop (i7 < count8) {
                      cstart9 = cstart6;
                      cstart10 = cstart9 + 1;
-                     consume(Tuple[Int[nonnull], Int[nonnull]],
+                     consume(tuple[int, int],
                      (buf[cstart9 : 1], buf[cstart10 : 1]));
                      cstart6 = cstart6 + 2;
                      i7 = i7 + 1;
@@ -710,32 +700,32 @@ let%expect_test "example-3" =
          Child_sum)))
       (Width 2)))
     // Locals:
-    // i30 : Int[nonnull] (persists=true)
-    // cstart29 : Int[nonnull] (persists=true)
-    // vstart35 : Int[nonnull] (persists=true)
-    // cstart47 : Int[nonnull] (persists=true)
-    // i45 : Int[nonnull] (persists=true)
-    // cstart44 : Int[nonnull] (persists=true)
-    // vstart26 : Int[nonnull] (persists=false)
-    // key42 : Tuple[Int[nonnull]] (persists=false)
-    // cstart48 : Int[nonnull] (persists=true)
-    // low37 : Int[nonnull] (persists=true)
-    // key36 : Tuple[Int[nonnull]] (persists=true)
-    // kstart25 : Int[nonnull] (persists=false)
-    // key43 : Tuple[Int[nonnull]] (persists=true)
-    // count31 : Int[nonnull] (persists=true)
-    // idx41 : Int[nonnull] (persists=true)
-    // cstart33 : Int[nonnull] (persists=true)
-    // mid39 : Int[nonnull] (persists=true)
-    // key27 : Tuple[Int[nonnull]] (persists=false)
-    // key49 : Tuple[Int[nonnull]] (persists=false)
-    // count46 : Int[nonnull] (persists=true)
-    // hash28 : Int[nonnull] (persists=false)
-    // kstart34 : Int[nonnull] (persists=true)
-    // high38 : Int[nonnull] (persists=true)
-    // key40 : Tuple[Int[nonnull]] (persists=false)
-    // cstart32 : Int[nonnull] (persists=true)
-    fun printer () : Void {
+    // i30 : int (persists=true)
+    // cstart29 : int (persists=true)
+    // vstart35 : int (persists=true)
+    // cstart47 : int (persists=true)
+    // i45 : int (persists=true)
+    // cstart44 : int (persists=true)
+    // vstart26 : int (persists=false)
+    // key42 : tuple[int] (persists=false)
+    // cstart48 : int (persists=true)
+    // low37 : int (persists=true)
+    // key36 : tuple[int] (persists=true)
+    // kstart25 : int (persists=false)
+    // key43 : tuple[int] (persists=true)
+    // count31 : int (persists=true)
+    // idx41 : int (persists=true)
+    // cstart33 : int (persists=true)
+    // mid39 : int (persists=true)
+    // key27 : tuple[int] (persists=false)
+    // key49 : tuple[int] (persists=false)
+    // count46 : int (persists=true)
+    // hash28 : int (persists=false)
+    // kstart34 : int (persists=true)
+    // high38 : int (persists=true)
+    // key40 : tuple[int] (persists=false)
+    // cstart32 : int (persists=true)
+    fun printer () : void {
         hash28 = id_p * 1;
         if (hash28 < 0 || buf[2 : 1] - 1 < hash28) {
 
@@ -781,7 +771,7 @@ let%expect_test "example-3" =
                                      cstart47 = cstart44;
                                      cstart48 = cstart47 + 1;
                                      if (buf[cstart47 : 1] == id_c) {
-                                         print(Tuple[Int[nonnull], Int[nonnull]],
+                                         print(tuple[int, int],
                                          (buf[cstart32 : 1], buf[cstart48 : 1]));
                                      } else {
 
@@ -809,32 +799,32 @@ let%expect_test "example-3" =
         }
     }
     // Locals:
-    // i5 : Int[nonnull] (persists=true)
-    // vstart10 : Int[nonnull] (persists=true)
-    // key17 : Tuple[Int[nonnull]] (persists=false)
-    // key11 : Tuple[Int[nonnull]] (persists=true)
-    // cstart22 : Int[nonnull] (persists=true)
-    // cstart8 : Int[nonnull] (persists=true)
-    // key24 : Tuple[Int[nonnull]] (persists=false)
-    // key2 : Tuple[Int[nonnull]] (persists=false)
-    // cstart4 : Int[nonnull] (persists=true)
-    // cstart23 : Int[nonnull] (persists=true)
-    // cstart19 : Int[nonnull] (persists=true)
-    // cstart7 : Int[nonnull] (persists=true)
-    // mid14 : Int[nonnull] (persists=true)
-    // count6 : Int[nonnull] (persists=true)
-    // key15 : Tuple[Int[nonnull]] (persists=false)
-    // kstart0 : Int[nonnull] (persists=false)
-    // i20 : Int[nonnull] (persists=true)
-    // hash3 : Int[nonnull] (persists=false)
-    // count21 : Int[nonnull] (persists=true)
-    // vstart1 : Int[nonnull] (persists=false)
-    // idx16 : Int[nonnull] (persists=true)
-    // high13 : Int[nonnull] (persists=true)
-    // key18 : Tuple[Int[nonnull]] (persists=true)
-    // low12 : Int[nonnull] (persists=true)
-    // kstart9 : Int[nonnull] (persists=true)
-    fun consumer () : Void {
+    // i5 : int (persists=true)
+    // vstart10 : int (persists=true)
+    // key17 : tuple[int] (persists=false)
+    // key11 : tuple[int] (persists=true)
+    // cstart22 : int (persists=true)
+    // cstart8 : int (persists=true)
+    // key24 : tuple[int] (persists=false)
+    // key2 : tuple[int] (persists=false)
+    // cstart4 : int (persists=true)
+    // cstart23 : int (persists=true)
+    // cstart19 : int (persists=true)
+    // cstart7 : int (persists=true)
+    // mid14 : int (persists=true)
+    // count6 : int (persists=true)
+    // key15 : tuple[int] (persists=false)
+    // kstart0 : int (persists=false)
+    // i20 : int (persists=true)
+    // hash3 : int (persists=false)
+    // count21 : int (persists=true)
+    // vstart1 : int (persists=false)
+    // idx16 : int (persists=true)
+    // high13 : int (persists=true)
+    // key18 : tuple[int] (persists=true)
+    // low12 : int (persists=true)
+    // kstart9 : int (persists=true)
+    fun consumer () : void {
         hash3 = id_p * 1;
         if (hash3 < 0 || buf[2 : 1] - 1 < hash3) {
 
@@ -880,8 +870,7 @@ let%expect_test "example-3" =
                                      cstart22 = cstart19;
                                      cstart23 = cstart22 + 1;
                                      if (buf[cstart22 : 1] == id_c) {
-                                         consume(Tuple[Int[nonnull],
-                                         Int[nonnull]],
+                                         consume(tuple[int, int],
                                          (buf[cstart7 : 1], buf[cstart23 : 1]));
                                      } else {
 
@@ -923,17 +912,17 @@ let%expect_test "subquery-first" =
          Child_sum)))
       (Width 1)))
     // Locals:
-    // found_tup17 : Bool[nonnull] (persists=false)
-    // tup16 : Tuple[Int[nonnull]] (persists=false)
-    // count13 : Int[nonnull] (persists=true)
-    // min18 : Int[nonnull] (persists=false)
-    // first14 : Int[nonnull] (persists=true)
-    // i20 : Int[nonnull] (persists=true)
-    // cstart11 : Int[nonnull] (persists=true)
-    // i12 : Int[nonnull] (persists=true)
-    // count21 : Int[nonnull] (persists=true)
-    // cstart19 : Int[nonnull] (persists=true)
-    fun printer () : Void {
+    // found_tup17 : bool (persists=false)
+    // tup16 : tuple[int] (persists=false)
+    // count13 : int (persists=true)
+    // min18 : int (persists=false)
+    // first14 : int (persists=true)
+    // i20 : int (persists=true)
+    // cstart11 : int (persists=true)
+    // i12 : int (persists=true)
+    // count21 : int (persists=true)
+    // cstart19 : int (persists=true)
+    fun printer () : void {
         cstart11 = 0;
         i12 = 0;
         count13 = 5;
@@ -956,7 +945,7 @@ let%expect_test "subquery-first" =
 
             }
             if (first14 == buf[cstart11 : 1]) {
-                print(Tuple[Int[nonnull]], (buf[cstart11 : 1]));
+                print(tuple[int], (buf[cstart11 : 1]));
             } else {
 
             }
@@ -965,17 +954,17 @@ let%expect_test "subquery-first" =
         }
     }
     // Locals:
-    // i1 : Int[nonnull] (persists=true)
-    // first3 : Int[nonnull] (persists=true)
-    // count2 : Int[nonnull] (persists=true)
-    // min7 : Int[nonnull] (persists=false)
-    // cstart8 : Int[nonnull] (persists=true)
-    // count10 : Int[nonnull] (persists=true)
-    // tup5 : Tuple[Int[nonnull]] (persists=false)
-    // i9 : Int[nonnull] (persists=true)
-    // found_tup6 : Bool[nonnull] (persists=false)
-    // cstart0 : Int[nonnull] (persists=true)
-    fun consumer () : Void {
+    // i1 : int (persists=true)
+    // first3 : int (persists=true)
+    // count2 : int (persists=true)
+    // min7 : int (persists=false)
+    // cstart8 : int (persists=true)
+    // count10 : int (persists=true)
+    // tup5 : tuple[int] (persists=false)
+    // i9 : int (persists=true)
+    // found_tup6 : bool (persists=false)
+    // cstart0 : int (persists=true)
+    fun consumer () : void {
         cstart0 = 0;
         i1 = 0;
         count2 = 5;
@@ -998,7 +987,7 @@ let%expect_test "subquery-first" =
 
             }
             if (first3 == buf[cstart0 : 1]) {
-                consume(Tuple[Int[nonnull]], (buf[cstart0 : 1]));
+                consume(tuple[int], (buf[cstart0 : 1]));
             } else {
 
             }
@@ -1037,32 +1026,32 @@ let%expect_test "example-3-str" =
          Child_sum)))
       (Width 2)))
     // Locals:
-    // i30 : Int[nonnull] (persists=true)
-    // cstart29 : Int[nonnull] (persists=true)
-    // vstart35 : Int[nonnull] (persists=true)
-    // cstart47 : Int[nonnull] (persists=true)
-    // i45 : Int[nonnull] (persists=true)
-    // cstart44 : Int[nonnull] (persists=true)
-    // vstart26 : Int[nonnull] (persists=false)
-    // key42 : Tuple[Int[nonnull]] (persists=false)
-    // cstart48 : Int[nonnull] (persists=true)
-    // low37 : Int[nonnull] (persists=true)
-    // key36 : Tuple[Int[nonnull]] (persists=true)
-    // kstart25 : Int[nonnull] (persists=false)
-    // key43 : Tuple[Int[nonnull]] (persists=true)
-    // count31 : Int[nonnull] (persists=true)
-    // idx41 : Int[nonnull] (persists=true)
-    // cstart33 : Int[nonnull] (persists=true)
-    // mid39 : Int[nonnull] (persists=true)
-    // key27 : Tuple[String[nonnull]] (persists=false)
-    // key49 : Tuple[Int[nonnull]] (persists=false)
-    // count46 : Int[nonnull] (persists=true)
-    // hash28 : Int[nonnull] (persists=false)
-    // kstart34 : Int[nonnull] (persists=true)
-    // high38 : Int[nonnull] (persists=true)
-    // key40 : Tuple[Int[nonnull]] (persists=false)
-    // cstart32 : Int[nonnull] (persists=true)
-    fun printer () : Void {
+    // i30 : int (persists=true)
+    // cstart29 : int (persists=true)
+    // vstart35 : int (persists=true)
+    // cstart47 : int (persists=true)
+    // i45 : int (persists=true)
+    // cstart44 : int (persists=true)
+    // vstart26 : int (persists=false)
+    // key42 : tuple[int] (persists=false)
+    // cstart48 : int (persists=true)
+    // low37 : int (persists=true)
+    // key36 : tuple[int] (persists=true)
+    // kstart25 : int (persists=false)
+    // key43 : tuple[int] (persists=true)
+    // count31 : int (persists=true)
+    // idx41 : int (persists=true)
+    // cstart33 : int (persists=true)
+    // mid39 : int (persists=true)
+    // key27 : tuple[string] (persists=false)
+    // key49 : tuple[int] (persists=false)
+    // count46 : int (persists=true)
+    // hash28 : int (persists=false)
+    // kstart34 : int (persists=true)
+    // high38 : int (persists=true)
+    // key40 : tuple[int] (persists=false)
+    // cstart32 : int (persists=true)
+    fun printer () : void {
         hash28 = hash(6, id_p) * 1;
         if (hash28 < 0 || buf[6 + buf[4 : 2] : 1] - 1 < hash28) {
 
@@ -1116,7 +1105,7 @@ let%expect_test "example-3-str" =
                                      cstart48 = cstart47 + 1 + buf[cstart47 : 1];
                                      if (load_str(cstart47 + 1, buf[cstart47 :
                                          1]) == id_c) {
-                                         print(Tuple[Int[nonnull], Int[nonnull]],
+                                         print(tuple[int, int],
                                          (buf[cstart32 : 1], buf[cstart48 : 1]));
                                      } else {
 
@@ -1144,32 +1133,32 @@ let%expect_test "example-3-str" =
         }
     }
     // Locals:
-    // i5 : Int[nonnull] (persists=true)
-    // vstart10 : Int[nonnull] (persists=true)
-    // key17 : Tuple[Int[nonnull]] (persists=false)
-    // key11 : Tuple[Int[nonnull]] (persists=true)
-    // cstart22 : Int[nonnull] (persists=true)
-    // cstart8 : Int[nonnull] (persists=true)
-    // key24 : Tuple[Int[nonnull]] (persists=false)
-    // key2 : Tuple[String[nonnull]] (persists=false)
-    // cstart4 : Int[nonnull] (persists=true)
-    // cstart23 : Int[nonnull] (persists=true)
-    // cstart19 : Int[nonnull] (persists=true)
-    // cstart7 : Int[nonnull] (persists=true)
-    // mid14 : Int[nonnull] (persists=true)
-    // count6 : Int[nonnull] (persists=true)
-    // key15 : Tuple[Int[nonnull]] (persists=false)
-    // kstart0 : Int[nonnull] (persists=false)
-    // i20 : Int[nonnull] (persists=true)
-    // hash3 : Int[nonnull] (persists=false)
-    // count21 : Int[nonnull] (persists=true)
-    // vstart1 : Int[nonnull] (persists=false)
-    // idx16 : Int[nonnull] (persists=true)
-    // high13 : Int[nonnull] (persists=true)
-    // key18 : Tuple[Int[nonnull]] (persists=true)
-    // low12 : Int[nonnull] (persists=true)
-    // kstart9 : Int[nonnull] (persists=true)
-    fun consumer () : Void {
+    // i5 : int (persists=true)
+    // vstart10 : int (persists=true)
+    // key17 : tuple[int] (persists=false)
+    // key11 : tuple[int] (persists=true)
+    // cstart22 : int (persists=true)
+    // cstart8 : int (persists=true)
+    // key24 : tuple[int] (persists=false)
+    // key2 : tuple[string] (persists=false)
+    // cstart4 : int (persists=true)
+    // cstart23 : int (persists=true)
+    // cstart19 : int (persists=true)
+    // cstart7 : int (persists=true)
+    // mid14 : int (persists=true)
+    // count6 : int (persists=true)
+    // key15 : tuple[int] (persists=false)
+    // kstart0 : int (persists=false)
+    // i20 : int (persists=true)
+    // hash3 : int (persists=false)
+    // count21 : int (persists=true)
+    // vstart1 : int (persists=false)
+    // idx16 : int (persists=true)
+    // high13 : int (persists=true)
+    // key18 : tuple[int] (persists=true)
+    // low12 : int (persists=true)
+    // kstart9 : int (persists=true)
+    fun consumer () : void {
         hash3 = hash(6, id_p) * 1;
         if (hash3 < 0 || buf[6 + buf[4 : 2] : 1] - 1 < hash3) {
 
@@ -1223,8 +1212,7 @@ let%expect_test "example-3-str" =
                                      cstart23 = cstart22 + 1 + buf[cstart22 : 1];
                                      if (load_str(cstart22 + 1, buf[cstart22 :
                                          1]) == id_c) {
-                                         consume(Tuple[Int[nonnull],
-                                         Int[nonnull]],
+                                         consume(tuple[int, int],
                                          (buf[cstart7 : 1], buf[cstart23 : 1]));
                                      } else {
 
