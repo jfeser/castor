@@ -57,7 +57,7 @@ let () =
           ~doc:"NAME:TYPE query parameters"
       and code_only = flag "code-only" no_arg ~doc:"only emit code"
       and query =
-        flag "query" ~aliases:[ "q" ] no_arg ~doc:"parse input as a query"
+        flag "query" ~aliases:[ "r" ] no_arg ~doc:"parse input as a query"
       and ch =
         anon (maybe_with_default In_channel.stdin ("query" %: Util.channel))
       in
