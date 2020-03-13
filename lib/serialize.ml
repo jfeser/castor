@@ -214,16 +214,18 @@ class logged_serializer ?(debug = false) ?size () =
     method! write_into (s : 'self) =
       let pos = s#pos in
       super#write_into s;
-      s#set_msgs
-        (s#msgs @ List.map msgs ~f:(fun m -> { m with pos = m.pos + pos }))
+      if debug then
+        s#set_msgs
+          (s#msgs @ List.map msgs ~f:(fun m -> { m with pos = m.pos + pos }))
 
     method render ch =
-      msgs
-      |> List.sort ~compare:(fun m1 m2 ->
-             [%compare: int * int] (m1.pos, -m1.len) (m2.pos, -m2.len))
-      |> List.iter ~f:(fun m ->
-             Out_channel.fprintf ch "%d:%d %s\n" m.pos m.len m.msg);
-      Out_channel.flush ch
+      if debug then (
+        msgs
+        |> List.sort ~compare:(fun m1 m2 ->
+               [%compare: int * int] (m1.pos, -m1.len) (m2.pos, -m2.len))
+        |> List.iter ~f:(fun m ->
+               Out_channel.fprintf ch "%d:%d %s\n" m.pos m.len m.msg);
+        Out_channel.flush ch )
   end
 
 let size_exn hdr name = Or_error.ok_exn (size hdr name)
@@ -371,40 +373,46 @@ class ['self] serialize_fold ?debug () =
       Fold.(Fold { init; fold; extract })
 
     method ordered_idx meta _ =
-      let t = self#type_ meta in
-      let kt, vt, m =
-        match t with
+      let type_ = self#type_ meta in
+      let key_type, value_type, m =
+        match type_ with
         | OrderedIdxT (kt, vt, m) -> (kt, vt, m)
         | _ -> assert false
       in
-      let init = ([], self#serializer) in
-      let fold acc (ks, kp, vp) =
+
+      let keys_queue = Queue.create ()
+      and values_serial = self#serializer
+      and key_serial = self#serializer in
+      let fold () (ks, kp, vp) =
         let ks =
-          match kt with
+          match key_type with
           | Type.TupleT (ts, _) ->
               List.map2_exn ks ts ~f:(fun v t ->
-                  let s = self#serializer in
-                  self#serialize_scalar s t v;
-                  let bytes = Bigbuffer.contents s#buf in
-                  int_of_string bytes)
+                  self#serialize_scalar key_serial t v;
+                  let int_key =
+                    int_of_string @@ Bigbuffer.contents key_serial#buf
+                  in
+                  Bigbuffer.clear key_serial#buf;
+                  int_key)
               |> Array.of_list |> Option.some
           | _ -> None
         in
-        let keys, vals = acc and k = kp and v = vp in
-        let keys = keys @ [ (k, ks, vals#pos) ] in
-        v#write_into vals;
-        (keys, vals)
+        let k = kp and v = vp in
+        Queue.enqueue keys_queue (k, ks, values_serial#pos);
+        v#write_into values_serial
       in
-      let extract acc =
-        let keys, vals = acc in
+      let extract () =
         (* Serialize keys and value pointers. *)
-        let ptr_size = Type.oi_ptr_size vt m in
+        let ptr_size = Type.oi_ptr_size value_type m in
         let idxs = self#serializer in
+        let keys = Queue.to_list keys_queue in
         let keys =
-          match kt with
+          match key_type with
           | Type.TupleT _ ->
-              List.sort keys ~compare:(fun (_, k1, _) (_, k2, _) ->
-                  Zorder.compare (Option.value_exn k1) (Option.value_exn k2))
+              let compare (_, k1, _) (_, k2, _) =
+                Zorder.compare (Option.value_exn k1) (Option.value_exn k2)
+              in
+              List.sort keys ~compare
           | _ -> keys
         in
         List.iter keys ~f:(fun (keyf, _, vptr) ->
@@ -412,14 +420,15 @@ class ['self] serialize_fold ?debug () =
             idxs#logf
               (fun m -> m "Ordered idx ptr (=%d)" vptr)
               ~f:(fun () ->
-                idxs#write_string (of_int ~byte_width:ptr_size vptr)));
-        let hdr = make_header t in
-        let idx_len = idxs#pos in
-        let val_len = vals#pos in
+                idxs#write_string @@ of_int ~byte_width:ptr_size vptr));
+
+        (* Write header. *)
+        let hdr = make_header type_
+        and idx_len = idxs#pos
+        and val_len = values_serial#pos in
         let len =
           size_exn hdr "len" + size_exn hdr "idx_len" + idx_len + val_len
         in
-        (* Write header. *)
         let main = self#serializer in
         main#logf
           (fun m -> m "Ordered idx len (=%d)" len)
@@ -429,10 +438,10 @@ class ['self] serialize_fold ?debug () =
           ~f:(fun () ->
             main#write_string (serialize_field hdr "idx_len" idx_len));
         main#log "Ordered idx map" ~f:(fun () -> idxs#write_into main);
-        main#log "Ordered idx body" ~f:(fun () -> vals#write_into main);
+        main#log "Ordered idx body" ~f:(fun () -> values_serial#write_into main);
         main
       in
-      Fold.(Fold { init; fold; extract })
+      Fold.(Fold { init = (); fold; extract })
 
     method serialize_null (s : logged_serializer) t =
       let hdr = make_header t in
