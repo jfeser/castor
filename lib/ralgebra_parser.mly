@@ -45,6 +45,7 @@ param_eof:
 
 query_eof:
   | x = query; EOF { x }
+  | error; EOF { error "Expected a query." $startpos }
 
 arg:
   | k=ID; COLON; t=primtype; { (k, t) }
@@ -74,6 +75,7 @@ key:
   | LPAREN; ps = separated_nonunit_list(COMMA, expr); RPAREN { ps }
 
 query:
+  | QUERY; error { error "Expected a query name." $startpos }
   | QUERY; name=ID; LPAREN; args=separated_list(COMMA, arg); RPAREN;
     LCURLY; body = ralgebra; RCURLY { A.Query.{ name; args; body } }
 
@@ -168,13 +170,17 @@ name:
 e0_binop: x = STRPOS { x }
 e0_unop: x = DAY | x = MONTH | x = YEAR | x = STRLEN | x = EXTRACTY | x = EXTRACTM | x = EXTRACTD { x }
 
+null:
+  | NULL; COLON; t = primtype { A.Null (Some t) }
+  | NULL { A.Null None }
+
 value:
   | x = INT { A.Int x }
   | DATEKW; x = parens(STR); { A.Date (Date.of_string x) }
   | x = FIXED { A.Fixed x }
   | x = BOOL { A.Bool x }
   | x = STR { A.String x }
-  | NULL { A.Null None }
+  | x = null { x }
 
 e0:
   | x = value { x }

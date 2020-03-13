@@ -70,7 +70,8 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
     | ps -> pp_list ~bracket:("(", ")") pp_pred fmt ps
   and pp_pred fmt = function
     | As_pred (p, n) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp_pred p n
-    | Null _ -> fprintf fmt "null"
+    | Null None -> fprintf fmt "null"
+    | Null (Some t) -> fprintf fmt "null:%a" Prim_type.pp t
     | Int x ->
         if x >= 0 then fprintf fmt "%d" x else fprintf fmt "(0 - %d)" (-x)
     | Fixed x -> fprintf fmt "%s" (Fixed_point.to_string x)

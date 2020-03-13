@@ -53,7 +53,8 @@ let of_many qs =
   in
   let name = List.map queries ~f:(fun q -> q.name) |> String.concat ~sep:"_" in
   let args =
-    ("query", Prim_type.int_t) :: List.concat_map queries ~f:(fun q -> q.args)
+    ("query_id", Prim_type.int_t)
+    :: List.concat_map queries ~f:(fun q -> q.args)
   in
   let bodies = List.map queries ~f:(fun q -> q.body) in
   let all_attrs =
@@ -73,7 +74,8 @@ let of_many qs =
         select (mk_select r)
         @@ tuple
              [
-               filter P.(name (Name.create "query") = int i) @@ scalar (Int i);
+               filter P.(name (Name.create "query_id") = int i)
+               @@ scalar (Int i);
                r;
              ]
              Cross)
