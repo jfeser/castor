@@ -175,143 +175,112 @@ module Make (Config : Config.S) () = struct
       ~else_:(fun _ -> ())
       b
 
-  let rec scan ctx b r t (cb : callback) =
-    match r.node with As (_, r) -> scan ctx b r t cb | _ -> scan' ctx b r t cb
-
-  and scan' ctx b r t (cb : callback) =
-    let ctx = add_layout_start ctx r in
-    match (r.node, t) with
-    | AScalar r', Type.IntT t' -> scan_int ctx b r' t' cb
-    | AScalar r', Type.DateT t' -> scan_date ctx b r' t' cb
-    | AScalar r', FixedT t' -> scan_fixed ctx b r' t' cb
-    | AScalar r', BoolT t' -> scan_bool ctx b r' t' cb
-    | AScalar r', StringT t' -> scan_string ctx b r' t' cb
-    | _, EmptyT -> scan_empty ctx b () () cb
-    | AScalar r', NullT -> scan_null ctx b r' () cb
-    | ATuple r', TupleT t' -> scan_tuple ctx b r' t' cb
-    | AList r', ListT t' -> scan_list ctx b r' t' cb
-    | AHashIdx r', HashIdxT t' -> scan_hash_idx ctx b r' t' cb
-    | AOrderedIdx r', OrderedIdxT t' -> scan_ordered_idx ctx b r' t' cb
-    | Filter r', FuncT t' -> scan_filter ctx b r' t' cb
-    | Select r', FuncT t' -> scan_select ctx b r' t' cb
-    | DepJoin r', FuncT t' -> scan_depjoin ctx b r' t' cb
-    | (Join _ | GroupBy _ | OrderBy _ | Dedup _ | Relation _ | As _), _ ->
-        Error.create "Unsupported at runtime." r [%sexp_of: _ annot]
-        |> Error.raise
-    | _, _ ->
-        Error.create "Mismatched type." (r, t) [%sexp_of: _ annot * Type.t]
-        |> Error.raise
-
-  and type_of_pred ctx p b =
+  let type_of_pred pred ctx p b =
     let open Builder in
     let b' = new_scope b in
-    let ret = gen_pred ctx p b' in
+    let ret = pred ctx p b' in
     type_of ret b'
 
-  and gen_pred ctx pred b =
+  let of_pred_open scan of_pred ctx pred b =
     let open Builder in
-    let rec gen_pred p b =
-      let open Pred.Binop in
-      let open Pred.Unop in
-      match p with
-      | Ast.Null _ -> Implang.Null
-      | Int x -> Int x
-      | String x -> String x
-      | Fixed x -> Fixed x
-      | Date x -> Date x
-      | Unop (op, p) as pred -> (
-          let x = gen_pred p b in
-          match op with
-          | Not -> Infix.(not x)
-          | Year | Month | Day ->
-              Error.create "Found interval in unexpected position." pred
-                [%sexp_of: _ pred]
-              |> Error.raise
-          | Strlen -> Unop { op = `StrLen; arg = x }
-          | ExtractY -> Unop { op = `ExtractY; arg = x }
-          | ExtractM -> Unop { op = `ExtractM; arg = x }
-          | ExtractD -> Unop { op = `ExtractD; arg = x } )
-      | Bool x -> Bool x
-      | As_pred (x, _) -> gen_pred x b
-      | Name n -> (
-          match Ctx.find ctx n b with
-          | Some e -> e
-          | None ->
-              Error.create "Unbound variable." (n, ctx)
-                [%sexp_of: Name.t * Ctx.t]
-              |> Error.raise )
-      (* Special cases for date intervals. *)
-      | Binop (Add, arg1, Unop (Year, arg2)) ->
-          Binop { op = `AddY; arg1 = gen_pred arg1 b; arg2 = gen_pred arg2 b }
-      | Binop (Add, arg1, Unop (Month, arg2)) ->
-          Binop { op = `AddM; arg1 = gen_pred arg1 b; arg2 = gen_pred arg2 b }
-      | Binop (Add, arg1, Unop (Day, arg2)) ->
-          Binop { op = `AddD; arg1 = gen_pred arg1 b; arg2 = gen_pred arg2 b }
-      | Binop (Sub, arg1, Unop (Year, arg2)) ->
-          let e2 = gen_pred (Binop (Sub, Int 0, arg2)) b in
-          Binop { op = `AddY; arg1 = gen_pred arg1 b; arg2 = e2 }
-      | Binop (Sub, arg1, Unop (Month, arg2)) ->
-          let e2 = gen_pred (Binop (Sub, Int 0, arg2)) b in
-          Binop { op = `AddM; arg1 = gen_pred arg1 b; arg2 = e2 }
-      | Binop (Sub, arg1, Unop (Day, arg2)) ->
-          let e2 = gen_pred (Binop (Sub, Int 0, arg2)) b in
-          Binop { op = `AddD; arg1 = gen_pred arg1 b; arg2 = e2 }
-      | Binop (op, arg1, arg2) -> (
-          let e1 = gen_pred arg1 b in
-          let e2 = gen_pred arg2 b in
-          match op with
-          | Eq -> build_eq e1 e2 b
-          | Lt -> build_lt e1 e2 b
-          | Le -> build_le e1 e2 b
-          | Gt -> build_gt e1 e2 b
-          | Ge -> build_ge e1 e2 b
-          | And -> Infix.(e1 && e2)
-          | Or -> Infix.(e1 || e2)
-          | Add -> build_add e1 e2 b
-          | Sub -> build_sub e1 e2 b
-          | Mul -> build_mul e1 e2 b
-          | Div -> build_div e1 e2 b
-          | Mod -> Infix.(e1 % e2)
-          | Strpos -> Binop { op = `StrPos; arg1 = e1; arg2 = e2 } )
-      | (Count | Min _ | Max _ | Sum _ | Avg _ | Row_number) as p ->
-          Error.create "Not a scalar predicate." p [%sexp_of: _ pred]
-          |> Error.raise
-      | If (p1, p2, p3) ->
-          let ret_var =
-            build_var "ret"
-              (Prim_type.unify (type_of_pred ctx p2 b) (type_of_pred ctx p3 b))
-              b
-          in
-          build_if ~cond:(gen_pred p1 b)
-            ~then_:(fun b -> build_assign (gen_pred p2 b) ret_var b)
-            ~else_:(fun b -> build_assign (gen_pred p3 b) ret_var b)
-            b;
-          ret_var
-          (* Ternary (gen_pred p1 b, gen_pred p2 b, gen_pred p3 b) *)
-      | First r ->
-          (* Don't use the passed in start value. Subquery layouts are not stored
-             inline. *)
-          let ctx = Map.remove ctx (Name.create "start") in
-          let ret_var = build_var "first" (List.hd_exn (types r)) b in
-          scan ctx b r r.meta#type_ (fun b tup ->
-              build_assign (List.hd_exn tup) ret_var b);
-          ret_var
-      | Exists r ->
-          let ctx = Map.remove ctx (Name.create "start") in
-          let ret_var = build_defn "exists" (Bool false) b in
-          scan ctx b r r.meta#type_ (fun b _ ->
-              build_assign (Bool true) ret_var b);
-          ret_var
-      | Substring (e1, e2, e3) ->
-          Substr (gen_pred e1 b, gen_pred e2 b, gen_pred e3 b)
-    in
-    gen_pred pred b
+    let open Pred.Binop in
+    let open Pred.Unop in
+    let gen p b = of_pred ctx p b in
+    match pred with
+    | Ast.Null _ -> Implang.Null
+    | Int x -> Int x
+    | String x -> String x
+    | Fixed x -> Fixed x
+    | Date x -> Date x
+    | Unop (op, p) as pred -> (
+        let x = gen p b in
+        match op with
+        | Not -> Infix.(not x)
+        | Year | Month | Day ->
+            Error.create "Found interval in unexpected position." pred
+              [%sexp_of: _ pred]
+            |> Error.raise
+        | Strlen -> Unop { op = `StrLen; arg = x }
+        | ExtractY -> Unop { op = `ExtractY; arg = x }
+        | ExtractM -> Unop { op = `ExtractM; arg = x }
+        | ExtractD -> Unop { op = `ExtractD; arg = x } )
+    | Bool x -> Bool x
+    | As_pred (x, _) -> gen x b
+    | Name n -> (
+        match Ctx.find ctx n b with
+        | Some e -> e
+        | None ->
+            Error.create "Unbound variable." (n, ctx) [%sexp_of: Name.t * Ctx.t]
+            |> Error.raise )
+    (* Special cases for date intervals. *)
+    | Binop (Add, arg1, Unop (Year, arg2)) ->
+        Binop { op = `AddY; arg1 = gen arg1 b; arg2 = gen arg2 b }
+    | Binop (Add, arg1, Unop (Month, arg2)) ->
+        Binop { op = `AddM; arg1 = gen arg1 b; arg2 = gen arg2 b }
+    | Binop (Add, arg1, Unop (Day, arg2)) ->
+        Binop { op = `AddD; arg1 = gen arg1 b; arg2 = gen arg2 b }
+    | Binop (Sub, arg1, Unop (Year, arg2)) ->
+        let e2 = gen (Binop (Sub, Int 0, arg2)) b in
+        Binop { op = `AddY; arg1 = gen arg1 b; arg2 = e2 }
+    | Binop (Sub, arg1, Unop (Month, arg2)) ->
+        let e2 = gen (Binop (Sub, Int 0, arg2)) b in
+        Binop { op = `AddM; arg1 = gen arg1 b; arg2 = e2 }
+    | Binop (Sub, arg1, Unop (Day, arg2)) ->
+        let e2 = gen (Binop (Sub, Int 0, arg2)) b in
+        Binop { op = `AddD; arg1 = gen arg1 b; arg2 = e2 }
+    | Binop (op, arg1, arg2) -> (
+        let e1 = gen arg1 b in
+        let e2 = gen arg2 b in
+        match op with
+        | Eq -> build_eq e1 e2 b
+        | Lt -> build_lt e1 e2 b
+        | Le -> build_le e1 e2 b
+        | Gt -> build_gt e1 e2 b
+        | Ge -> build_ge e1 e2 b
+        | And -> Infix.(e1 && e2)
+        | Or -> Infix.(e1 || e2)
+        | Add -> build_add e1 e2 b
+        | Sub -> build_sub e1 e2 b
+        | Mul -> build_mul e1 e2 b
+        | Div -> build_div e1 e2 b
+        | Mod -> Infix.(e1 % e2)
+        | Strpos -> Binop { op = `StrPos; arg1 = e1; arg2 = e2 } )
+    | (Count | Min _ | Max _ | Sum _ | Avg _ | Row_number) as p ->
+        Error.create "Not a scalar predicate." p [%sexp_of: _ pred]
+        |> Error.raise
+    | If (p1, p2, p3) ->
+        let ret_var =
+          build_var "ret"
+            (Prim_type.unify
+               (type_of_pred of_pred ctx p2 b)
+               (type_of_pred of_pred ctx p3 b))
+            b
+        in
+        build_if ~cond:(gen p1 b)
+          ~then_:(fun b -> build_assign (gen p2 b) ret_var b)
+          ~else_:(fun b -> build_assign (gen p3 b) ret_var b)
+          b;
+        ret_var
+        (* Ternary (gen p1 b, gen p2 b, gen p3 b) *)
+    | First r ->
+        (* Don't use the passed in start value. Subquery layouts are not stored
+           inline. *)
+        let ctx = Map.remove ctx (Name.create "start") in
+        let ret_var = build_var "first" (List.hd_exn (types r)) b in
+        scan ctx b r r.meta#type_ (fun b tup ->
+            build_assign (List.hd_exn tup) ret_var b);
+        ret_var
+    | Exists r ->
+        let ctx = Map.remove ctx (Name.create "start") in
+        let ret_var = build_defn "exists" (Bool false) b in
+        scan ctx b r r.meta#type_ (fun b _ ->
+            build_assign (Bool true) ret_var b);
+        ret_var
+    | Substring (e1, e2, e3) -> Substr (gen e1 b, gen e2 b, gen e3 b)
 
-  and scan_empty _ _ _ _ _ = ()
+  let scan_null b (cb : callback) = cb b [ Null ]
 
-  and scan_null _ b _ _ (cb : callback) = cb b [ Null ]
-
-  and scan_int ctx b _ (Type.({ nullable; range; _ } as t) : Type.int_)
+  let scan_int ctx b (Type.({ nullable; range; _ } as t) : Type.int_)
       (cb : callback) =
     let open Builder in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -325,7 +294,7 @@ module Make (Config : Config.S) () = struct
     debug_print "int" ival b;
     cb b [ ival ]
 
-  and scan_date ctx b _ (Type.({ nullable; range; _ } as t) : Type.date)
+  let scan_date ctx b (Type.({ nullable; range; _ } as t) : Type.date)
       (cb : callback) =
     let open Builder in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -340,7 +309,7 @@ module Make (Config : Config.S) () = struct
     debug_print "date" dval b;
     cb b [ dval ]
 
-  and scan_fixed ctx b _ Type.({ nullable; value = { range; scale } } as t)
+  let scan_fixed ctx b Type.({ nullable; value = { range; scale } } as t)
       (cb : callback) =
     let open Builder in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -356,11 +325,12 @@ module Make (Config : Config.S) () = struct
     debug_print "fixed" xval b;
     cb b [ xval ]
 
-  and scan_bool ctx b _ _ (cb : callback) =
+  let scan_bool ctx b (cb : callback) =
     let start = Ctx.find_exn ctx (Name.create "start") b in
     cb b [ Unop { op = `LoadBool; arg = start } ]
 
-  and scan_string ctx b _ (Type.({ nullable; _ } as st) as t) (cb : callback) =
+  let scan_string ctx b (Type.({ nullable; _ } as st) as t : Type.string_)
+      (cb : callback) =
     let open Builder in
     let hdr = Header.make_header (StringT t) in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -376,7 +346,7 @@ module Make (Config : Config.S) () = struct
     debug_print "string" xval b;
     cb b [ xval ]
 
-  and scan_crosstuple ctx b (child_layouts, _) ((child_types, _) as t)
+  let scan_crosstuple scan ctx b (child_layouts, _) ((child_types, _) as t)
       (cb : callback) =
     let open Builder in
     let rec make_loops ctx fields clayouts ctypes cstarts b =
@@ -404,7 +374,7 @@ module Make (Config : Config.S) () = struct
     debug_print "scanning crosstuple" (Int 0) b;
     make_loops ctx [] child_layouts child_types child_starts b
 
-  and scan_ziptuple ctx b r t cb =
+  let scan_ziptuple scan ctx b r t cb =
     let open Builder in
     let child_layouts, _ = r in
     let child_types, _ = t in
@@ -457,13 +427,7 @@ module Make (Config : Config.S) () = struct
         in
         build_loop not_done build_body b
 
-  and scan_tuple ctx b ((_, kind) as r) t (cb : callback) =
-    match kind with
-    | Cross -> scan_crosstuple ctx b r t cb
-    | Zip -> scan_ziptuple ctx b r t cb
-    | Concat -> scan_concattuple ctx b r t cb
-
-  and scan_concattuple ctx b r t cb =
+  let scan_concattuple scan ctx b r t cb =
     let open Builder in
     let child_layouts, _ = r in
     let child_types, _ = t in
@@ -478,7 +442,14 @@ module Make (Config : Config.S) () = struct
         scan ctx b child_layout child_type cb;
         build_assign Infix.(cstart + clen) cstart b)
 
-  and scan_list ctx b (_, child_layout) ((child_type, _) as t) (cb : callback) =
+  let scan_tuple scan ctx b ((_, kind) as r) t (cb : callback) =
+    match kind with
+    | Cross -> scan_crosstuple scan ctx b r t cb
+    | Zip -> scan_ziptuple scan ctx b r t cb
+    | Concat -> scan_concattuple scan ctx b r t cb
+
+  let scan_list scan ctx b (_, child_layout) ((child_type, _) as t)
+      (cb : callback) =
     let open Builder in
     let hdr = Header.make_header (ListT t) in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -495,9 +466,9 @@ module Make (Config : Config.S) () = struct
         build_assign Infix.(cstart + clen) cstart b)
       b
 
-  and universal_hash ptr x _ = Binop { op = `UnivHash; arg1 = ptr; arg2 = x }
+  let universal_hash ptr x = Binop { op = `UnivHash; arg1 = ptr; arg2 = x }
 
-  and scan_hash_idx ctx b r t cb =
+  let scan_hash_idx scan of_pred ctx b r t cb =
     let open Builder in
     let key_layout =
       A.h_key_layout r
@@ -529,7 +500,7 @@ module Make (Config : Config.S) () = struct
     let mapping_start = Header.make_position hdr "hash_map" start in
     let mapping_len = Header.make_access hdr "hash_map_len" start in
     let hash_ptr_len = Type.hi_ptr_size key_type value_type m in
-    let lookup_expr = List.map r.hi_lookup ~f:(fun p -> gen_pred ctx p b) in
+    let lookup_expr = List.map r.hi_lookup ~f:(fun p -> of_pred ctx p b) in
     debug_print "scanning hash idx" start b;
 
     (* Compute the index in the mapping table for this key. *)
@@ -539,7 +510,7 @@ module Make (Config : Config.S) () = struct
         | _, [] -> failwith "empty hash key"
         | `Direct, [ x ] -> build_to_int x b
         | `Direct, _ -> failwith "Unexpected direct hash."
-        | `Universal, [ x ] -> universal_hash hash_data_start x b
+        | `Universal, [ x ] -> universal_hash hash_data_start x
         | `Universal, _ -> failwith "Unexpected universal hash."
         | `Cmph, [ x ] -> build_hash hash_data_start x b
         | `Cmph, xs -> build_hash hash_data_start (Tuple xs) b
@@ -581,7 +552,7 @@ module Make (Config : Config.S) () = struct
           b)
       b
 
-  and scan_ordered_idx ctx b r t cb =
+  let scan_ordered_idx scan of_pred ctx b r t cb =
     let open Builder in
     let _, value_layout, m = r in
     let key_type, value_type, mt = t in
@@ -622,7 +593,7 @@ module Make (Config : Config.S) () = struct
     let n = Infix.(index_len / kp_len) in
     debug_print "scanning ordered idx" start b;
     let bounds =
-      let mk_bound = Option.map ~f:(fun (p, bnd) -> (gen_pred ctx p b, bnd)) in
+      let mk_bound = Option.map ~f:(fun (p, bnd) -> (of_pred ctx p b, bnd)) in
       List.map m.oi_lookup ~f:(fun (lb, ub) -> (mk_bound lb, mk_bound ub))
     in
     build_bin_search key_index n bounds
@@ -633,7 +604,7 @@ module Make (Config : Config.S) () = struct
             cb b (list_of_tuple key_tuple b @ value_tup)))
       b
 
-  and scan_filter ctx b r t cb =
+  let scan_filter scan of_pred ctx b r t cb =
     let open Builder in
     let pred, child_layout = r in
     let child_type =
@@ -644,7 +615,7 @@ module Make (Config : Config.S) () = struct
           let child_schema = schema child_layout in
           Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
         in
-        let cond = gen_pred ctx pred b in
+        let cond = of_pred ctx pred b in
         build_if ~cond
           ~then_:(fun b ->
             debug_print
@@ -657,7 +628,7 @@ module Make (Config : Config.S) () = struct
               (Tuple tup) b)
           b)
 
-  and agg_init ctx p b =
+  let agg_init of_pred ctx p b =
     let open Builder in
     let open Pred in
     match remove_as p with
@@ -665,18 +636,18 @@ module Make (Config : Config.S) () = struct
         `Count
           (build_defn ~persistent:false "count" (const_int Prim_type.int_t 0) b)
     | Sum f ->
-        let t = type_of_pred ctx f b in
+        let t = type_of_pred of_pred ctx f b in
         `Sum (f, build_defn ~persistent:false "sum" (const_int t 0) b)
     | Min f ->
-        let t = type_of_pred ctx f b in
+        let t = type_of_pred of_pred ctx f b in
         `Min
           (f, build_defn ~persistent:false "min" (const_int t Int.max_value) b)
     | Max f ->
-        let t = type_of_pred ctx f b in
+        let t = type_of_pred of_pred ctx f b in
         `Max
           (f, build_defn ~persistent:false "max" (const_int t Int.min_value) b)
     | Avg f ->
-        let t = type_of_pred ctx f b in
+        let t = type_of_pred of_pred ctx f b in
         `Avg
           ( f,
             build_defn ~persistent:false "avg_num" (const_int t 0) b,
@@ -685,32 +656,32 @@ module Make (Config : Config.S) () = struct
               b )
     | p -> `Passthru p
 
-  and agg_step ctx b acc =
+  let agg_step of_pred ctx b acc =
     let open Builder in
     let one = const_int Prim_type.int_t 1 in
     match acc with
     | `Count x -> build_assign (build_add x one b) x b
-    | `Sum (f, x) -> build_assign (build_add x (gen_pred ctx f b) b) x b
+    | `Sum (f, x) -> build_assign (build_add x (of_pred ctx f b) b) x b
     | `Min (f, x) ->
-        let v = gen_pred ctx f b in
+        let v = of_pred ctx f b in
         build_assign (Ternary (build_lt v x b, v, x)) x b
     | `Max (f, x) ->
-        let v = gen_pred ctx f b in
+        let v = of_pred ctx f b in
         build_assign (Ternary (build_lt v x b, x, v)) x b
     | `Avg (f, n, d) ->
-        let v = gen_pred ctx f b in
+        let v = of_pred ctx f b in
         build_assign (build_add n v b) n b;
         build_assign (build_add d one b) d b
     | `Passthru _ -> ()
 
-  and agg_extract ctx b =
+  let agg_extract of_pred ctx b =
     let open Builder in
     function
     | `Count x | `Sum (_, x) | `Min (_, x) | `Max (_, x) -> x
     | `Avg (_, n, d) -> build_div n d b
-    | `Passthru p -> gen_pred ctx p b
+    | `Passthru p -> of_pred ctx p b
 
-  and scan_select ctx b r t cb =
+  let scan_select scan of_pred ctx b r t cb =
     let open Builder in
     let args, child_layout = r in
     let child_type =
@@ -723,7 +694,7 @@ module Make (Config : Config.S) () = struct
               let child_schema = schema child_layout in
               Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
             in
-            cb b (List.map args ~f:(fun p -> gen_pred ctx p b)))
+            cb b (List.map args ~f:(fun p -> of_pred ctx p b)))
     | `Agg ->
         (* Extract all the aggregates from the arguments. *)
         let scalar_preds, agg_preds =
@@ -743,33 +714,35 @@ module Make (Config : Config.S) () = struct
         in
         (* Holds the state for each aggregate. *)
         let agg_temps =
-          List.map agg_preds ~f:(fun (n, p) -> (n, agg_init pred_ctx p b))
+          List.map agg_preds ~f:(fun (n, p) ->
+              (n, agg_init of_pred pred_ctx p b))
         in
         (* Compute the aggregates. *)
         scan ctx b child_layout child_type (fun b tup ->
             build_assign (Tuple tup) last_tup b;
-            List.iter agg_temps ~f:(fun (_, p) -> agg_step pred_ctx b p);
+            List.iter agg_temps ~f:(fun (_, p) -> agg_step of_pred pred_ctx b p);
             build_assign (Bool true) found_tup b);
 
         (* Extract and return aggregates. *)
         build_if ~cond:found_tup
           ~then_:(fun b ->
             let agg_temps =
-              List.map agg_temps ~f:(fun (n, p) -> (n, agg_extract ctx b p))
+              List.map agg_temps ~f:(fun (n, p) ->
+                  (n, agg_extract of_pred ctx b p))
             in
             let output_ctx =
               List.fold_left agg_temps ~init:pred_ctx ~f:(fun ctx (n, v) ->
                   Ctx.bind ctx n (type_of v b) v)
             in
             let output =
-              List.map ~f:(fun p -> gen_pred output_ctx p b) scalar_preds
+              List.map ~f:(fun p -> of_pred output_ctx p b) scalar_preds
             in
             debug_print "select produced" (Tuple output) b;
             cb b output)
           ~else_:(fun _ -> ())
           b
 
-  and scan_depjoin ctx b { d_lhs; d_alias; d_rhs } (child_types, _)
+  let scan_depjoin scan ctx b { d_lhs; d_alias; d_rhs } (child_types, _)
       (cb : callback) =
     let lhs_t, rhs_t =
       match child_types with
@@ -799,13 +772,38 @@ module Make (Config : Config.S) () = struct
         in
         scan rhs_ctx b d_rhs rhs_t cb)
 
-  let printer ctx r t =
+  let scan_open scan of_pred ctx b r t (cb : callback) =
+    let ctx = add_layout_start ctx r in
+    match (r.node, t) with
+    | _, Type.EmptyT -> ()
+    | AScalar r', IntT t' -> scan_int ctx b t' cb
+    | AScalar r', DateT t' -> scan_date ctx b t' cb
+    | AScalar r', FixedT t' -> scan_fixed ctx b t' cb
+    | AScalar r', BoolT t' -> scan_bool ctx b cb
+    | AScalar r', StringT t' -> scan_string ctx b t' cb
+    | AScalar r', NullT -> scan_null b cb
+    | ATuple r', TupleT t' -> scan_tuple scan ctx b r' t' cb
+    | AList r', ListT t' -> scan_list scan ctx b r' t' cb
+    | AHashIdx r', HashIdxT t' -> scan_hash_idx scan of_pred ctx b r' t' cb
+    | AOrderedIdx r', OrderedIdxT t' ->
+        scan_ordered_idx scan of_pred ctx b r' t' cb
+    | Filter r', FuncT t' -> scan_filter scan of_pred ctx b r' t' cb
+    | Select r', FuncT t' -> scan_select scan of_pred ctx b r' t' cb
+    | DepJoin r', FuncT t' -> scan_depjoin scan ctx b r' t' cb
+    | (Join _ | GroupBy _ | OrderBy _ | Dedup _ | Relation _ | As _), _ ->
+        Error.create "Unsupported at runtime." r [%sexp_of: _ annot]
+        |> Error.raise
+    | _ ->
+        Error.create "Mismatched type." (r, t) [%sexp_of: _ annot * Type.t]
+        |> Error.raise
+
+  let printer scan ctx r t =
     let open Builder in
     let b = create ~ctx ~name:"printer" ~ret:VoidT in
     scan ctx b r t (fun b tup -> build_print (Tuple tup) b);
     build_func b
 
-  let consumer ctx r t =
+  let consumer scan ctx r t =
     let open Builder in
     let b = create ~name:"consumer" ~ctx ~ret:VoidT in
     scan ctx b r t (fun b tup -> build_consume (Tuple tup) b);
@@ -818,9 +816,11 @@ module Make (Config : Config.S) () = struct
       |> Ctx.of_alist_exn
     in
     let type_ = r.meta#type_ in
+    let rec scan ctx b r t cb = scan_open scan of_pred ctx b r t cb
+    and of_pred ctx p b = of_pred_open scan of_pred ctx p b in
     {
       iters = !iters;
-      funcs = [ printer ctx r type_; consumer ctx r type_ ];
+      funcs = [ printer scan ctx r type_; consumer scan ctx r type_ ];
       params;
       buffer_len = len;
     }
