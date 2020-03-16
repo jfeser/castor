@@ -66,7 +66,16 @@ let of_many qs =
     List.map all_attrs ~f:(fun (n, t) ->
         let nn = Name.create n in
         if List.mem s nn ~equal:[%compare.equal: Name.t] then Name nn
-        else As_pred (Null (Some t), n))
+        else
+          let dummy =
+            match t with
+            | IntT _ -> Int 0
+            | FixedT _ -> Fixed (Fixed_point.of_int 0)
+            | DateT _ -> Date (Date.of_string "0000-01-01")
+            | StringT _ -> String ""
+            | _ -> failwith "Unexpected type"
+          in
+          As_pred (dummy, n))
   in
   let bodies =
     List.mapi bodies ~f:(fun i r ->
