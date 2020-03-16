@@ -1,4 +1,4 @@
-query q1(param0 : date) {
+query q1(param0 : int) {
 alist(orderby([l_returnflag, l_linestatus],
         dedup(select([l_returnflag, l_linestatus], lineitem))) as k0,
   select([l_returnflag, l_linestatus, sum(agg0) as sum_qty,
