@@ -414,9 +414,9 @@ class virtual ['self] abslayout_fold =
             |> Lwt_stream.to_list |> Lwt_main.run |> Seq.of_list
             |> Seq.concat_map ~f:Seq.of_list
         | None ->
-            Db.exec_exn conn (Schema.types r)
+            Db.exec_cursor_exn conn (Schema.types r)
               (Sql.of_ralgebra r |> Sql.to_string)
-            |> Seq.of_list
+            |> Seq.concat_map ~f:Seq.of_list
       in
       (* Replace the ralgebra queries at the leaves of the fold query with their
          output widths. *)

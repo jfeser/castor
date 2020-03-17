@@ -48,6 +48,8 @@ let create ?(pool_size = default_pool_size) uri =
         (fun () -> connect uri |> return);
   }
 
+let close { conn; _ } = ensure_finish conn
+
 let conn { conn; _ } = conn
 
 let param =
@@ -271,6 +273,24 @@ let load_tuples_list_exn s =
               else loaders.(fidx) (r#getvalue tidx fidx) |> Or_error.ok_exn))
 
 let exec_exn db schema query = exec db query |> load_tuples_list_exn schema
+
+let exec_cursor_exn ?(count = 4096) db schema query =
+  let declare_query = sprintf "declare cur cursor for %s" query
+  and fetch_query = sprintf "fetch %d from cur" count
+  and open_trans = "begin"
+  and close_trans = "commit" in
+
+  let db = create db.uri in
+  exec db open_trans |> command_ok_exn;
+  exec db declare_query |> command_ok_exn;
+  let loader = load_tuples_list_exn schema in
+  Seq.unfold ~init:() ~f:(fun () ->
+      let tups = exec db fetch_query |> loader in
+      if List.length tups > 0 then Some (tups, ())
+      else (
+        exec db close_trans |> command_ok_exn;
+        close db;
+        None ))
 
 let check db sql =
   let open Or_error.Let_syntax in

@@ -24,6 +24,9 @@ val result_to_strings : Postgresql.result -> string list list
 
 val exec_exn : t -> Prim_type.t list -> string -> Value.t list list
 
+val exec_cursor_exn :
+  ?count:int -> t -> Prim_type.t list -> string -> Value.t list list Sequence.t
+
 val check : t -> string -> unit Or_error.t
 
 val relation : t -> string -> Relation.t
