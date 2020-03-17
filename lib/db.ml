@@ -223,7 +223,13 @@ let relation_has_field conn f =
 
 let is_null = String.is_empty
 
-let load_int = Int.of_string
+let load_int s =
+  try Ok (Int.of_string s)
+  with Failure _ -> (
+    try
+      (* Try loading 'ints' of the form x.00 *)
+      Ok (Int.of_string (String.drop_suffix s 3))
+    with Failure e -> Or_error.error_string e )
 
 let load_padded_string v = String.rstrip ~drop:(fun c -> Char.(c = ' ')) v
 
@@ -238,7 +244,8 @@ let load_value type_ =
         | _ ->
             Error
               (Error.create "Unknown boolean value." value [%sexp_of: string]) )
-  | IntT _ -> fun value -> Ok (Int (load_int value))
+  | IntT _ ->
+      fun value -> Or_error.map (load_int value) ~f:(fun x -> Value.Int x)
   | StringT { padded = true; _ } ->
       fun value -> Ok (String (load_padded_string value))
   | StringT { padded = false; _ } -> fun value -> Ok (String value)
