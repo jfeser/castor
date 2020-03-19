@@ -2,6 +2,8 @@ open Abslayout_load
 open Type
 module I = Abs_int
 
+include (val Log.make ~level:(Some Info) "castor-opt.type-cost")
+
 module Config = struct
   module type S = sig
     val params : Set.M(Name).t
@@ -32,7 +34,7 @@ module Make (Config : Config.S) = struct
     Memo.general
       ~hashable:(Hashtbl.Hashable.of_key (module Ast))
       (fun r ->
-        Log.info (fun m -> m "Computing cost of:@, %a." Abslayout.pp r);
+        info (fun m -> m "Computing cost of:@, %a." Abslayout.pp r);
         let type_ =
           load_layout ~params cost_conn r
           |> Abslayout.strip_meta
@@ -52,9 +54,9 @@ module Make (Config : Config.S) = struct
         match out with
         | Ok x ->
             let x = Float.of_int x in
-            Log.info (fun m -> m "Found cost %f." x);
+            info (fun m -> m "Found cost %f." x);
             x
         | Error e ->
-            Log.warn (fun m -> m "Computing cost failed: %a" Error.pp e);
+            warn (fun m -> m "Computing cost failed: %a" Error.pp e);
             Float.max_value)
 end

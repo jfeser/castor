@@ -396,7 +396,7 @@ module Make (C : Config.S) = struct
 
   let elim_eq_filter_src =
     let src = Logs.Src.create "elim-eq-filter" in
-    Logs.Src.set_level src (Some Debug);
+    Logs.Src.set_level src (Some Warning);
     src
 
   let contains_not p =

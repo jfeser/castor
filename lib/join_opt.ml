@@ -5,11 +5,15 @@ open Ast
 module A = Abslayout
 module P = Pred.Infix
 
+include (val Log.make ~level:(Some Info) "castor-opt.join-opt")
+
 module Config = struct
   module type My_S = sig
     val cost_conn : Db.t
 
     val params : Set.M(Name).t
+
+    val random : Mcmc.Random_choice.t
   end
 
   module type S = sig
@@ -198,9 +202,7 @@ module Make (C : Config.S) = struct
               in
               match pred_rels with
               | Ok [] ->
-                  Logs.warn (fun m ->
-                      m "Join-opt: Unhandled predicate %a. Constant predicate."
-                        A.pp_pred p);
+                  warn (fun m -> m "Unhandled predicate %a: constant" Pred.pp p);
                   s
               | Ok [ r ] ->
                   {
@@ -216,19 +218,17 @@ module Make (C : Config.S) = struct
                     graph = JoinGraph.add_or_update_edge s.graph (r1, p, r2);
                   }
               | Ok _ ->
-                  Logs.warn (fun m ->
-                      m "Join-opt: Unhandled predicate %a. Too many relations."
-                        A.pp_pred p);
+                  warn (fun m ->
+                      m "Unhandled predicate %a: too many relations" Pred.pp p);
                   s
               | Error e ->
-                  Logs.warn (fun m ->
-                      m "Join opt: Unhandled predicate %a. %a" A.pp_pred p
-                        Error.pp e);
+                  warn (fun m ->
+                      m "Unhandled predicate %a: %a" Pred.pp p Error.pp e);
                   s)
       | _ -> empty
 
     let of_abslayout r =
-      Logs.debug (fun m -> m "Join-opt: Planning join for %a." A.pp r);
+      debug (fun m -> m "Planning join for %a." A.pp r);
       let leaves =
         to_leaves r |> Set.to_list
         |> List.map ~f:(fun r ->
@@ -334,7 +334,7 @@ module Make (C : Config.S) = struct
         (min, max, Fixed_point.to_float avg)
     | [ Null; Null; Null ] :: _ -> (0, 0, 0.0)
     | _ ->
-        Logs.err (fun m -> m "Unexpected tuples: %s" sql);
+        err (fun m -> m "Unexpected tuples: %s" sql);
         failwith "Unexpected tuples."
 
   let to_parts rhs pred =
@@ -418,7 +418,7 @@ module Make (C : Config.S) = struct
     let open Option.Let_syntax in
     if Set.is_empty @@ Set.inter (A.free r) params then return @@ Flat r
     else (
-      Logs.info (fun m -> m "Flat join does not apply to@ %a." A.pp r);
+      info (fun m -> m "Flat join does not apply to@ %a." A.pp r);
       None )
 
   let leaf_id r =
@@ -468,7 +468,7 @@ module Make (C : Config.S) = struct
           |> List.map ~f:(fun ((_, r1), (_, r2)) ->
                  Hash { lkey = k1; rkey = k2; lhs = r1; rhs = r2 })
       | _ ->
-          Logs.debug (fun m ->
+          debug (fun m ->
               m "Keys come from same partition %a %a" Pred.pp k1 Pred.pp k2);
           []
     in
@@ -489,7 +489,7 @@ module Make (C : Config.S) = struct
            ([| scan_cost parts j |], j))
 
   let opt_nonrec opt parts s =
-    Logs.info (fun m -> m "Choosing join for space %s." (JoinSpace.to_string s));
+    info (fun m -> m "Choosing join for space %s." (JoinSpace.to_string s));
     let joins =
       if JoinSpace.length s = 1 then
         (* Select strategy for the leaves of the join tree. *)
@@ -501,13 +501,24 @@ module Make (C : Config.S) = struct
         JoinSpace.partition_fold s ~init:ParetoSet.empty
           ~f:(fun cs (s1, s2, es) ->
             let pred = Pred.conjoin (List.map es ~f:(fun (_, p, _) -> p)) in
-            let _nest_joins = enum_nest_join opt parts pred s1 s2
-            and flat_joins = enum_flat_join opt parts pred s1 s2
-            and hash_joins = enum_hash_join opt parts pred s1 s2 in
+            let _nest_joins = enum_nest_join opt parts pred s1 s2 in
+
+            let r =
+              A.join pred (JoinSpace.to_ralgebra s1) (JoinSpace.to_ralgebra s2)
+            in
+            let flat_joins =
+              if Mcmc.Random_choice.rand random "flat-join" r then
+                enum_flat_join opt parts pred s1 s2
+              else []
+            and hash_joins =
+              if Mcmc.Random_choice.rand random "hash-join" r then
+                enum_hash_join opt parts pred s1 s2
+              else []
+            in
+
             ParetoSet.(union_all [ cs; of_list (flat_joins @ hash_joins) ]))
     in
-    Logs.info (fun m ->
-        m "Found %d pareto-optimal joins." (ParetoSet.length joins));
+    info (fun m -> m "Found %d pareto-optimal joins." (ParetoSet.length joins));
     joins
 
   module Key = struct
@@ -564,9 +575,9 @@ module Make (C : Config.S) = struct
     let open Option.Let_syntax in
     let f p r =
       let joins = opt (Castor.Path.get_exn p r) in
-      Log.info (fun m -> m "Found %d join options." (ParetoSet.length joins));
+      info (fun m -> m "Found %d join options." (ParetoSet.length joins));
       let%bind j = ParetoSet.min_elt (fun a -> a.(0)) joins in
-      Log.info (fun m -> m "Chose %a." Sexp.pp_hum ([%sexp_of: t] j));
+      debug (fun m -> m "Chose %a." Sexp.pp_hum ([%sexp_of: t] j));
       let tf = seq (local (reshape j) "reshape") (emit_joins j) in
       apply (traced tf) p r
     in

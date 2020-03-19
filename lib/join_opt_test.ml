@@ -15,6 +15,8 @@ module Config = struct
   let verbose = false
 
   let simplify = None
+
+  let random = Mcmc.Random_choice.create ()
 end
 
 module Join_opt = Join_opt.Make (Config)

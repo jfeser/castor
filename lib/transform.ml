@@ -25,6 +25,8 @@ module Config = struct
     include Type_cost.Config.S
 
     val cost_timeout : float option
+
+    val random : Mcmc.Random_choice.t
   end
 end
 
@@ -43,6 +45,20 @@ module Make (Config : Config.S) = struct
   module Tactics_util = Tactics_util.Make (Config)
   module Dedup_tactics = Dedup_tactics.Make (Config)
   module Orderby_tactics = Orderby_tactics.Make (Config)
+
+  let try_random tf =
+    global
+      (fun p r ->
+        if Mcmc.Random_choice.rand random tf.name (Path.get_exn p r) then
+          apply tf p r
+        else Some r)
+      "try-random"
+
+  let try_random_branch tf =
+    Branching.global ~name:"try-random" (fun p r ->
+        if Mcmc.Random_choice.rand random (Branching.name tf) (Path.get_exn p r)
+        then Branching.apply tf p r
+        else Seq.singleton r)
 
   let project r = Some (r |> Resolve.resolve ~params |> Project.project_once)
 
@@ -106,7 +122,10 @@ module Make (Config : Config.S) = struct
                    (O.at_ F.push_filter
                       Path.(all >>? test >>? is_run_time >>| shallowest));
                  (* Eliminate a comparison filter. *)
-                 choose (for_all tf Path.(all >>? test >>? is_run_time)) id;
+                 choose
+                   (for_all (try_random_branch tf)
+                      Path.(all >>? test >>? is_run_time))
+                   id;
                  lift
                    (O.seq_many
                       [
@@ -123,16 +142,16 @@ module Make (Config : Config.S) = struct
 
   let try_partition tf =
     Branching.(
-      seq_many [ choose F.partition id; lift tf ] |> lower (min Cost.cost))
+      seq_many [ choose (try_random_branch F.partition) id; lift tf ]
+      |> lower (min Cost.cost))
 
   let try_ tf rest =
     Branching.(seq (choose (lift tf) id) (lift rest) |> lower (min Cost.cost))
 
   let try_many tfs rest =
-    traced
-    @@ Branching.(
-         seq (choose_many (List.map ~f:lift tfs)) (lift rest)
-         |> lower (min Cost.cost))
+    Branching.(
+      seq (choose_many (List.map ~f:lift tfs)) (lift rest)
+      |> lower (min Cost.cost))
 
   let is_serializable' r =
     let bad_runtime_op =
@@ -160,8 +179,8 @@ module Make (Config : Config.S) = struct
     let open Infix in
     seq_many
       [
-        (* Simplify filter predicates. *)
-        traced @@ for_all F.simplify Path.(all);
+        (* Simplify predicates. *)
+        traced ~name:"simplify-preds" @@ for_all F.simplify Path.(all);
         (* Eliminate groupby operators. *)
         traced ~name:"elim-groupby"
         @@ fix
@@ -169,6 +188,7 @@ module Make (Config : Config.S) = struct
              (Path.all >>? is_groupby >>| shallowest);
         (* Hoist parameterized filters as far up as possible. *)
         traced ~name:"hoist-param-filters"
+        @@ try_random
         @@ seq_many
              [
                for_all Join_elim_tactics.hoist_join_param_filter
@@ -183,9 +203,11 @@ module Make (Config : Config.S) = struct
         @@ try_many
              [
                traced ~name:"elim-join-nests-opt"
+               @@ try_random
                @@ at_ Join_opt.transform
                     Path.(all >>? is_join >>? is_run_time >>| shallowest);
                traced ~name:"elim-join-nests-flat"
+               @@ try_random
                @@ at_ S.row_store
                     Path.(
                       all >>? is_join >>? is_run_time >>? not has_free
@@ -194,13 +216,14 @@ module Make (Config : Config.S) = struct
              ]
              (seq_many
                 [
-                  push_all_unparameterized_filters;
+                  try_random @@ push_all_unparameterized_filters;
                   project;
                   traced ~name:"elim-join-filter"
                   @@ at_ Join_elim_tactics.elim_join_filter
                        (Path.all >>? is_join >>| shallowest);
                   try_
-                    (traced (first F.elim_disjunct (Path.all >>? is_filter)))
+                    (traced ~name:"elim-disjunct"
+                       (first F.elim_disjunct (Path.all >>? is_filter)))
                     (seq_many
                        [
                          (* Push constant filters *)
@@ -220,8 +243,8 @@ module Make (Config : Config.S) = struct
                          traced ~name:"elim-cmp-filters"
                          @@ elim_param_filter F.elim_cmp_filter
                               is_param_cmp_filter;
-                         (* Eliminate the deepest equality filter. *)
-                         traced ~name:"elim-deepest-eq-filter"
+                         (* Eliminate equality filters. *)
+                         traced ~name:"elim-eq-filters"
                          @@ elim_param_filter
                               (Branching.lift F.elim_eq_filter)
                               is_param_filter;
