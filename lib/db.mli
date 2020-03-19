@@ -1,5 +1,7 @@
 type t
 
+val src : Logs.Src.t
+
 val create : ?pool_size:int -> string -> t
 
 val conn : t -> Postgresql.connection

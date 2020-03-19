@@ -3,6 +3,8 @@ open Collections
 open Ast
 module A = Abslayout
 
+include (val Log.make ~level:(Some Info) "castor.ops")
+
 module Config = struct
   module type S = sig
     val conn : Db.t
@@ -39,8 +41,7 @@ end = struct
   let trace reraise name thunk r =
     try thunk r
     with exn ->
-      if reraise then
-        Logs.err (fun m -> m "Transform %s failed on:@ %a" name A.pp r);
+      if reraise then err (fun m -> m "Transform %s failed on:@ %a" name A.pp r);
       raise exn
 
   let global ?short_name ?(reraise = true) f name =
@@ -281,19 +282,18 @@ module Make (C : Config.S) = struct
   let traced ?name tf =
     let name = Option.value name ~default:tf.name in
     let f p r =
-      Logs.info (fun m ->
-          m "@[Running %s on:@,%a@]\n" name A.pp (Path.get_exn p r));
+      info (fun m -> m "@[Running %s on:@,%a@]\n" name A.pp (Path.get_exn p r));
       match apply tf p r with
       | Some r' ->
           if A.O.(r = r') then
-            Logs.warn (fun m -> m "Invariant transformation %s." name)
+            info (fun m -> m "Invariant transformation %s." name)
           else
-            Logs.info (fun m ->
+            info (fun m ->
                 m "@[%s transformed:@,%a@,===== to ======@,%a@]@.\n" name A.pp
                   (Path.get_exn p r) A.pp (Path.get_exn p r'));
           Some r'
       | None ->
-          Logs.info (fun m -> m "@[Transform %s does not apply.\n" name);
+          info (fun m -> m "@[Transform %s does not apply.\n" name);
           None
     in
     global f tf.name
@@ -437,11 +437,11 @@ module Make (C : Config.S) = struct
 
     let traced tf =
       let b_f p r =
-        Logs.debug (fun m ->
+        info (fun m ->
             m "@[Running %s on:@,%a@]\n" tf.b_name A.pp (Path.get_exn p r));
         tf.b_f p r
         |> Seq.map ~f:(fun r' ->
-               Logs.debug (fun m ->
+               info (fun m ->
                    m "@[%s transformed:@,%a@,===== to ======@,%a@]@.\n"
                      tf.b_name A.pp (Path.get_exn p r) A.pp (Path.get_exn p r'));
                r')

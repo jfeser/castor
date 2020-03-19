@@ -36,6 +36,15 @@ let to_sql = function
   | String s -> sprintf "'%s'" s
   | Null -> "null"
 
+let to_param = function
+  | Int x -> Int.to_string x
+  | Fixed x -> Fixed_point.to_string x
+  | Date x -> Date.to_string x
+  | Bool true -> "true"
+  | Bool false -> "false"
+  | String s -> s
+  | Null -> "null"
+
 let pp fmt v = Format.fprintf fmt "%s" (to_sql v)
 
 let to_int = function Int x -> x | _ -> failwith "Not an int."
