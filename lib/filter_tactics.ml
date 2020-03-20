@@ -758,8 +758,9 @@ module Make (C : Config.S) = struct
 
   let elim_subquery _ r =
     let open Option.Let_syntax in
-    let%bind p, r = to_filter r in
-    let schema_names = Schema.schema r |> Set.of_list (module Name) in
+    let can_hoist r = Set.is_subset (A.free r) ~of_:params in
+
+    let scope = fresh_name "s%d" in
     let visitor =
       object
         inherit [_] mapreduce
@@ -767,29 +768,38 @@ module Make (C : Config.S) = struct
         inherit [_] Util.list_monoid
 
         method! visit_Exists () r =
-          if Set.inter schema_names (names r) |> Set.is_empty then
+          if can_hoist r then
             let qname = fresh_name "q%d" in
-            ( Name (Name.create qname),
-              [ select [ As_pred (Binop (Gt, Count, Int 0), qname) ] r ] )
+            ( Name (Name.create ~scope qname),
+              [
+                A.select
+                  [ As_pred (Exists r, qname) ]
+                  (A.scalar (As_pred (Int 0, "dummy")));
+              ] )
           else (Exists r, [])
 
         method! visit_First () r =
-          let n = Schema.schema r |> List.hd_exn in
-          if Set.inter schema_names (names r) |> Set.is_empty then
+          if can_hoist r then
             let qname = fresh_name "q%d" in
-            ( Name (Name.create qname),
-              [ select [ As_pred (Min (Name n), qname) ] r ] )
-          else (Exists r, [])
+            ( Name (Name.create ~scope qname),
+              [
+                A.select
+                  [ As_pred (First r, qname) ]
+                  (A.scalar (As_pred (Int 0, "dummy")));
+              ] )
+          else (First r, [])
       end
     in
-    let p, subqueries = visitor#visit_pred () p in
-    if List.length subqueries > 0 then
-      let scope = fresh_name "s%d" in
-      let sq_tuple = tuple subqueries Cross in
-      Some
-        (dep_join sq_tuple scope
-           (A.filter (Pred.scoped (Schema.schema sq_tuple) scope p) r))
-    else None
+    let rhs, subqueries = visitor#visit_t () r in
+    let%map lhs =
+      match subqueries with
+      | [] -> None
+      | [ x ] -> Some x
+      | xs -> Some (tuple subqueries Cross)
+    in
+    dep_join lhs scope rhs
+
+  let elim_subquery = global elim_subquery "elim-subquery"
 
   let simplify r =
     let open Option.Let_syntax in

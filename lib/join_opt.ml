@@ -475,6 +475,7 @@ module Make (C : Config.S) = struct
     List.map joins ~f:(fun j -> ([| scan_cost parts j |], j))
 
   let enum_nest_join opt parts pred s1 s2 =
+    let open Option.Let_syntax in
     let lhs_parts =
       Set.union (to_parts (JoinSpace.to_ralgebra s1) pred) parts
     in
@@ -484,7 +485,8 @@ module Make (C : Config.S) = struct
     let lhs_set = List.map (opt lhs_parts s1) ~f:(fun (_, j) -> j) in
     let rhs_set = List.map (opt rhs_parts s2) ~f:(fun (_, j) -> j) in
     List.cartesian_product lhs_set rhs_set
-    |> List.map ~f:(fun (j1, j2) ->
+    |> List.filter_map ~f:(fun (j1, j2) ->
+           let%map j1 = match j1 with Flat _ -> Some j1 | _ -> None in
            let j = Nest { lhs = j1; rhs = j2; pred } in
            ([| scan_cost parts j |], j))
 
@@ -501,7 +503,6 @@ module Make (C : Config.S) = struct
         JoinSpace.partition_fold s ~init:ParetoSet.empty
           ~f:(fun cs (s1, s2, es) ->
             let pred = Pred.conjoin (List.map es ~f:(fun (_, p, _) -> p)) in
-            let _nest_joins = enum_nest_join opt parts pred s1 s2 in
 
             let r =
               A.join pred (JoinSpace.to_ralgebra s1) (JoinSpace.to_ralgebra s2)
@@ -514,9 +515,14 @@ module Make (C : Config.S) = struct
               if Mcmc.Random_choice.rand random "hash-join" r then
                 enum_hash_join opt parts pred s1 s2
               else []
+            and nest_joins =
+              if Mcmc.Random_choice.rand random "nest-join" r then
+                enum_nest_join opt parts pred s1 s2
+              else []
             in
 
-            ParetoSet.(union_all [ cs; of_list (flat_joins @ hash_joins) ]))
+            ParetoSet.(
+              union_all [ cs; of_list (flat_joins @ hash_joins @ nest_joins) ]))
     in
     info (fun m -> m "Found %d pareto-optimal joins." (ParetoSet.length joins));
     joins

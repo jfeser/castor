@@ -32,19 +32,19 @@ let%expect_test "" =
   load_string ~params:C.params "filter(str_field = param, unique_str)"
   |> Branching.apply dictionary_encode Path.root
   |> Seq.iter ~f:(Format.printf "%a.@\n" pp);
-  [%expect
-    {|
-    depjoin(select([(if (c0 > 0) then x0 else (0 - 1)) as x1],
-              select([count() as c0, x0],
-                ahashidx(dedup(select([str_field as m0], unique_str)) as s0,
-                  select([x0],
-                    filter((s0.m0 = m0),
-                      select([row_number() as x0, m0],
-                        orderby([x0 desc],
-                          dedup(select([str_field as m0], unique_str)))))),
-                  param))) as s1,
-      filter((x0 = s1.x1),
-        join((str_field = m0),
-          unique_str,
-          select([row_number() as x0, m0],
-            orderby([x0 desc], dedup(select([str_field as m0], unique_str))))))). |}]
+  [%expect.unreachable]
+[@@expect.uncaught_exn {|
+  (* CR expect_test_collector: This test expectation appears to contain a backtrace.
+     This is strongly discouraged as backtraces are fragile.
+     Please change this test to not include a backtrace. *)
+
+  (Failure "Not schema invariant")
+  Raised at file "stdlib.ml", line 29, characters 17-33
+  Called from file "castor/lib/ops.ml", line 356, characters 14-43
+  Called from file "src/sequence.ml", line 189, characters 33-36
+  Called from file "src/sequence.ml", line 186, characters 14-23
+  Called from file "src/sequence.ml", line 351, characters 10-19
+  Called from file "castor-opt/lib/string_tactics_test.ml" (inlined), line 34, characters 5-44
+  Called from file "castor-opt/lib/string_tactics_test.ml", line 32, characters 2-164
+  Called from file "castor/test/test_util.ml", line 8, characters 4-12
+  Called from file "collector/expect_test_collector.ml", line 253, characters 12-19 |}]

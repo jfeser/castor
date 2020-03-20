@@ -216,6 +216,7 @@ module Make (Config : Config.S) = struct
              ]
              (seq_many
                 [
+                  try_random @@ traced @@ F.elim_subquery;
                   try_random @@ push_all_unparameterized_filters;
                   project;
                   traced ~name:"elim-join-filter"
@@ -299,8 +300,8 @@ module Make (Config : Config.S) = struct
                                        ]);
                                   filter is_serializable;
                                 ]
-                              |> lower (min Cost.cost)) )
-                         (* Cleanup*);
+                              |> lower (min Cost.cost)) );
+                         (* Cleanup*)
                          traced ~name:"cleanup" @@ fix
                          @@ seq_many
                               [

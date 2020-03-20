@@ -1,6 +1,8 @@
 open Collections
 module A = Abslayout
 
+let () = Logs.Src.set_level Join_opt.src (Some Warning)
+
 module Config = struct
   let cost_conn = Db.create "postgresql:///tpch_1k"
 
