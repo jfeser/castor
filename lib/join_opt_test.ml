@@ -21,8 +21,7 @@ module Config = struct
   let random = Mcmc.Random_choice.create ()
 end
 
-module Join_opt = Join_opt.Make (Config)
-open Join_opt
+open Join_opt.Make (Config)
 
 let type_ = Prim_type.IntT { nullable = false }
 
@@ -127,8 +126,9 @@ let%expect_test "to-from-ralgebra" =
         (Binop (Eq, Name c_nationkey, Name n_nationkey))
         (relation nation) (relation customer))
   in
-  JoinSpace.of_abslayout r |> JoinSpace.to_ralgebra
-  |> Format.printf "%a" Abslayout.pp;
+  G.of_abslayout r
+  |> Option.iter ~f:(fun s ->
+         G.to_ralgebra s |> Format.printf "%a" Abslayout.pp);
   [%expect {|
     join((c_nationkey = n_nationkey), nation, customer) |}]
 
@@ -142,8 +142,9 @@ let%expect_test "to-from-ralgebra" =
            (Binop (Eq, Name c_nationkey, Name n_nationkey))
            (relation nation) (relation customer)))
   in
-  JoinSpace.of_abslayout r |> JoinSpace.to_ralgebra
-  |> Format.printf "%a" Abslayout.pp;
+  G.of_abslayout r
+  |> Option.iter ~f:(fun s ->
+         G.to_ralgebra s |> Format.printf "%a" Abslayout.pp);
   [%expect
     {|
     join((c_custkey = o_custkey),
@@ -160,11 +161,11 @@ let%expect_test "part-fold" =
            (Binop (Eq, Name c_nationkey, Name n_nationkey))
            (relation nation) (relation customer)))
   in
-  let open JoinSpace in
-  of_abslayout r
-  |> partition_fold ~init:() ~f:(fun () (s1, s2, _) ->
-         Format.printf "%a@.%a@.---\n" Abslayout.pp (to_ralgebra s1)
-           Abslayout.pp (to_ralgebra s2));
+  G.of_abslayout r
+  |> Option.iter ~f:(fun s ->
+         G.partition_fold s ~init:() ~f:(fun () (s1, s2, _) ->
+             Format.printf "%a@.%a@.---\n" Abslayout.pp (G.to_ralgebra s1)
+               Abslayout.pp (G.to_ralgebra s2)));
   [%expect
     {|
     join((c_nationkey = n_nationkey), nation, customer)
@@ -186,38 +187,40 @@ let%expect_test "join-opt" =
       join
         (Binop (Eq, Name c_nationkey, Name n_nationkey))
         (relation nation) (relation customer))
-  |> [%sexp_of: (float array * t) list] |> print_s;
+  |> [%sexp_of: (float array * t) list option] |> print_s;
   [%expect
     {|
-    (((32233)
-      (Hash (lkey (Name ((name n_nationkey) (meta <opaque>))))
-       (lhs
-        (Flat
-         ((node
-           (Relation
-            ((r_name nation)
-             (r_schema
-              (((((name n_nationkey) (meta <opaque>)) (IntT))
-                (((name n_name) (meta <opaque>)) (StringT (padded)))
-                (((name n_regionkey) (meta <opaque>)) (IntT))
-                (((name n_comment) (meta <opaque>)) (StringT))))))))
-          (meta ()))))
-       (rkey (Name ((name c_nationkey) (meta <opaque>))))
-       (rhs
-        (Flat
-         ((node
-           (Relation
-            ((r_name customer)
-             (r_schema
-              (((((name c_custkey) (meta <opaque>)) (IntT))
-                (((name c_name) (meta <opaque>)) (StringT))
-                (((name c_address) (meta <opaque>)) (StringT))
-                (((name c_nationkey) (meta <opaque>)) (IntT))
-                (((name c_phone) (meta <opaque>)) (StringT (padded)))
-                (((name c_acctbal) (meta <opaque>)) (FixedT))
-                (((name c_mktsegment) (meta <opaque>)) (StringT (padded)))
-                (((name c_comment) (meta <opaque>)) (StringT))))))))
-          (meta ()))))))) |}]
+    ((((32208)
+       (Nest
+        (lhs
+         (Flat
+          ((node
+            (Relation
+             ((r_name nation)
+              (r_schema
+               (((((name n_nationkey) (meta <opaque>)) (IntT))
+                 (((name n_name) (meta <opaque>)) (StringT (padded)))
+                 (((name n_regionkey) (meta <opaque>)) (IntT))
+                 (((name n_comment) (meta <opaque>)) (StringT))))))))
+           (meta ()))))
+        (rhs
+         (Flat
+          ((node
+            (Relation
+             ((r_name customer)
+              (r_schema
+               (((((name c_custkey) (meta <opaque>)) (IntT))
+                 (((name c_name) (meta <opaque>)) (StringT))
+                 (((name c_address) (meta <opaque>)) (StringT))
+                 (((name c_nationkey) (meta <opaque>)) (IntT))
+                 (((name c_phone) (meta <opaque>)) (StringT (padded)))
+                 (((name c_acctbal) (meta <opaque>)) (FixedT))
+                 (((name c_mktsegment) (meta <opaque>)) (StringT (padded)))
+                 (((name c_comment) (meta <opaque>)) (StringT))))))))
+           (meta ()))))
+        (pred
+         (Binop Eq (Name ((name c_nationkey) (meta <opaque>)))
+          (Name ((name n_nationkey) (meta <opaque>))))))))) |}]
 
 let%expect_test "join-opt" =
   opt
@@ -228,58 +231,58 @@ let%expect_test "join-opt" =
         (join
            (Binop (Eq, Name c_nationkey, Name n_nationkey))
            (relation nation) (relation customer)))
-  |> [%sexp_of: (float array * t) list] |> print_s;
+  |> [%sexp_of: (float array * t) list option] |> print_s;
   [%expect
     {|
-    (((68425)
-      (Hash (lkey (Name ((name n_nationkey) (meta <opaque>))))
-       (lhs
-        (Flat
-         ((node
-           (Relation
-            ((r_name nation)
-             (r_schema
-              (((((name n_nationkey) (meta <opaque>)) (IntT))
-                (((name n_name) (meta <opaque>)) (StringT (padded)))
-                (((name n_regionkey) (meta <opaque>)) (IntT))
-                (((name n_comment) (meta <opaque>)) (StringT))))))))
-          (meta ()))))
-       (rkey (Name ((name c_nationkey) (meta <opaque>))))
-       (rhs
-        (Flat
-         ((node
-           (Join
-            ((pred
-              (Binop Eq (Name ((name c_custkey) (meta <opaque>)))
-               (Name ((name o_custkey) (meta <opaque>)))))
-             (r1
-              ((node
-                (Relation
-                 ((r_name customer)
-                  (r_schema
-                   (((((name c_custkey) (meta <opaque>)) (IntT))
-                     (((name c_name) (meta <opaque>)) (StringT))
-                     (((name c_address) (meta <opaque>)) (StringT))
-                     (((name c_nationkey) (meta <opaque>)) (IntT))
-                     (((name c_phone) (meta <opaque>)) (StringT (padded)))
-                     (((name c_acctbal) (meta <opaque>)) (FixedT))
-                     (((name c_mktsegment) (meta <opaque>)) (StringT (padded)))
-                     (((name c_comment) (meta <opaque>)) (StringT))))))))
-               (meta ())))
-             (r2
-              ((node
-                (Relation
-                 ((r_name orders)
-                  (r_schema
-                   (((((name o_orderkey) (meta <opaque>)) (IntT))
-                     (((name o_custkey) (meta <opaque>)) (IntT))
-                     (((name o_orderstatus) (meta <opaque>)) (StringT (padded)))
-                     (((name o_totalprice) (meta <opaque>)) (FixedT))
-                     (((name o_orderdate) (meta <opaque>)) (DateT))
-                     (((name o_orderpriority) (meta <opaque>))
-                      (StringT (padded)))
-                     (((name o_clerk) (meta <opaque>)) (StringT (padded)))
-                     (((name o_shippriority) (meta <opaque>)) (IntT))
-                     (((name o_comment) (meta <opaque>)) (StringT))))))))
-               (meta ()))))))
-          (meta ()))))))) |}]
+    ((((68208)
+       (Nest
+        (lhs
+         (Flat
+          ((node
+            (Relation
+             ((r_name nation)
+              (r_schema
+               (((((name n_nationkey) (meta <opaque>)) (IntT))
+                 (((name n_name) (meta <opaque>)) (StringT (padded)))
+                 (((name n_regionkey) (meta <opaque>)) (IntT))
+                 (((name n_comment) (meta <opaque>)) (StringT))))))))
+           (meta ()))))
+        (rhs
+         (Nest
+          (lhs
+           (Flat
+            ((node
+              (Relation
+               ((r_name customer)
+                (r_schema
+                 (((((name c_custkey) (meta <opaque>)) (IntT))
+                   (((name c_name) (meta <opaque>)) (StringT))
+                   (((name c_address) (meta <opaque>)) (StringT))
+                   (((name c_nationkey) (meta <opaque>)) (IntT))
+                   (((name c_phone) (meta <opaque>)) (StringT (padded)))
+                   (((name c_acctbal) (meta <opaque>)) (FixedT))
+                   (((name c_mktsegment) (meta <opaque>)) (StringT (padded)))
+                   (((name c_comment) (meta <opaque>)) (StringT))))))))
+             (meta ()))))
+          (rhs
+           (Flat
+            ((node
+              (Relation
+               ((r_name orders)
+                (r_schema
+                 (((((name o_orderkey) (meta <opaque>)) (IntT))
+                   (((name o_custkey) (meta <opaque>)) (IntT))
+                   (((name o_orderstatus) (meta <opaque>)) (StringT (padded)))
+                   (((name o_totalprice) (meta <opaque>)) (FixedT))
+                   (((name o_orderdate) (meta <opaque>)) (DateT))
+                   (((name o_orderpriority) (meta <opaque>)) (StringT (padded)))
+                   (((name o_clerk) (meta <opaque>)) (StringT (padded)))
+                   (((name o_shippriority) (meta <opaque>)) (IntT))
+                   (((name o_comment) (meta <opaque>)) (StringT))))))))
+             (meta ()))))
+          (pred
+           (Binop Eq (Name ((name c_custkey) (meta <opaque>)))
+            (Name ((name o_custkey) (meta <opaque>)))))))
+        (pred
+         (Binop Eq (Name ((name c_nationkey) (meta <opaque>)))
+          (Name ((name n_nationkey) (meta <opaque>))))))))) |}]

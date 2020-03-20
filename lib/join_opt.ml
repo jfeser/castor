@@ -19,8 +19,6 @@ module Config = struct
   module type S = sig
     include Ops.Config.S
 
-    include Filter_tactics.Config.S
-
     include Simple_tactics.Config.S
 
     include My_S
@@ -36,16 +34,17 @@ module Make (C : Config.S) = struct
 
   open Simple_tactics.Make (C)
 
-  module R = Resolve
+  let source_relation leaves n =
+    List.find_map leaves ~f:(fun (r, s) -> if Set.mem s n then Some r else None)
+    |> Result.of_option
+         ~error:
+           (Error.create "No source found for name."
+              (n, List.map leaves ~f:(fun (_, ns) -> ns))
+              [%sexp_of: Name.t * Set.M(Name).t list])
 
-  module JoinGraph = struct
+  module Join_graph = struct
     module Vertex = struct
-      module T = struct
-        type t = Ast.t [@@deriving compare, hash, sexp_of]
-      end
-
-      include T
-      include Comparator.Make (T)
+      include Ast
 
       let equal = [%compare.equal: t]
     end
@@ -59,8 +58,8 @@ module Make (C : Config.S) = struct
     module G = Persistent.Graph.ConcreteLabeled (Vertex) (Edge)
     include G
     include Oper.P (G)
-    module Dfs = Traverse.Dfs (G)
     include Oper.Choose (G)
+    module Dfs = Traverse.Dfs (G)
 
     let to_string g =
       sprintf "graph (|V|=%d) (|E|=%d)" (nb_vertex g) (nb_edges g)
@@ -81,23 +80,20 @@ module Make (C : Config.S) = struct
 
     let partition g vs =
       let g1, g2 =
-        fold_vertex
-          (fun v (lhs, rhs) ->
-            let in_set = Set.mem vs v in
-            let lhs = if in_set then remove_vertex lhs v else lhs in
-            let rhs = if in_set then rhs else remove_vertex rhs v in
-            (lhs, rhs))
-          g (g, g)
+        let f v (lhs, rhs) =
+          let in_set = Set.mem vs v in
+          let lhs = if in_set then remove_vertex lhs v else lhs
+          and rhs = if in_set then rhs else remove_vertex rhs v in
+          (lhs, rhs)
+        in
+        fold_vertex f g (g, g)
       in
       let es =
-        fold_edges_e
-          (fun ((v1, _, v2) as e) es ->
-            if
-              (Set.mem vs v1 && not (Set.mem vs v2))
-              || ((not (Set.mem vs v1)) && Set.mem vs v2)
-            then e :: es
-            else es)
-          g []
+        let f ((v1, _, v2) as e) es =
+          let v1_in = Set.mem vs v1 and v2_in = Set.mem vs v2 in
+          if (v1_in && not v2_in) || ((not v1_in) && v2_in) then e :: es else es
+        in
+        fold_edges_e f g []
       in
       (g1, g2, es)
 
@@ -105,54 +101,8 @@ module Make (C : Config.S) = struct
       let n = nb_vertex g in
       let n = Dfs.fold_component (fun _ i -> i - 1) n g (choose_vertex g) in
       n = 0
-  end
-
-  let source_relation leaves n =
-    List.find_map leaves ~f:(fun (r, s) -> if Set.mem s n then Some r else None)
-    |> Result.of_option
-         ~error:
-           Error.(
-             create "No source found for name."
-               (n, List.map leaves ~f:(fun (_, ns) -> ns))
-               [%sexp_of: Name.t * Set.M(Name).t list])
-
-  module JoinSpace = struct
-    module T = struct
-      type t = {
-        graph : JoinGraph.t;
-        filters : Set.M(Pred).t Map.M(JoinGraph.Vertex).t;
-      }
-      [@@deriving compare, sexp_of]
-
-      let t_of_sexp _ = failwith "unimplemented"
-    end
-
-    include T
-    module C = Comparable.Make (T)
-
-    module O : Comparable.Infix with type t := t = C
-
-    let to_string { graph; _ } = JoinGraph.to_string graph
-
-    let empty =
-      { graph = JoinGraph.empty; filters = Map.empty (module JoinGraph.Vertex) }
-
-    let union s1 s2 =
-      let merger ~key:_ = function
-        | `Left x | `Right x -> Some x
-        | `Both (x, y) -> Some (Set.union x y)
-      in
-      {
-        graph = JoinGraph.union s1.graph s2.graph;
-        filters = Map.merge ~f:merger s1.filters s2.filters;
-      }
-
-    let length { graph; _ } = JoinGraph.nb_vertex graph
-
-    let choose { graph; _ } = JoinGraph.choose_vertex graph
 
     let contract join g =
-      let open JoinGraph in
       (* if the edge is to be removed (property = true):
          * make a union of the two union-sets of start and end node;
          * put this set in the map for all nodes in this set *)
@@ -175,33 +125,37 @@ module Make (C : Config.S) = struct
       in
       G.fold_edges_e f g m |> Map.data |> List.hd_exn |> Tuple.T2.get2
 
-    let to_ralgebra { graph; filters } =
-      if JoinGraph.nb_vertex graph = 1 then JoinGraph.choose_vertex graph
-      else
-        let graph =
-          JoinGraph.map_vertex
-            (fun r ->
-              match Map.find filters r with
-              | Some preds -> A.filter (Set.to_list preds |> Pred.conjoin) r
-              | None -> r)
-            graph
-        in
-        contract (fun ~label:p j1 j2 -> A.join p j1 j2) graph
+    let to_ralgebra graph =
+      if nb_vertex graph = 1 then choose_vertex graph
+      else contract (fun ~label:p j1 j2 -> A.join p j1 j2) graph
 
     (** Collect the leaves of the join tree rooted at r. *)
     let rec to_leaves r =
-      let open JoinGraph in
       match r.node with
       | Join { r1; r2; _ } -> Set.union (to_leaves r1) (to_leaves r2)
       | _ -> Set.singleton (module Vertex) r
 
     (** Convert a join tree to a join graph. *)
     let rec to_graph leaves r =
+      let open Option.Let_syntax in
+      let union_filters f1 f2 =
+        let merger ~key:_ = function
+          | `Left x | `Right x -> Some x
+          | `Both (x, y) -> Some (Set.union x y)
+        in
+        Map.merge ~f:merger f1 f2
+      in
       match r.node with
       | Join { r1; r2; pred = p } ->
-          let s = union (to_graph leaves r1) (to_graph leaves r2) in
+          let%bind g1, f1 = to_graph leaves r1
+          and g2, f2 = to_graph leaves r2 in
+          let graph = union g1 g2 and filters = union_filters f1 f2 in
+
           (* Collect the set of relations that this join depends on. *)
-          List.fold_left (Pred.conjuncts p) ~init:s ~f:(fun s p ->
+          List.fold_left (Pred.conjuncts p)
+            ~init:(Some (graph, filters))
+            ~f:(fun acc p ->
+              let%bind graph, filters = acc in
               let pred_rels =
                 Pred.names p |> Set.to_list
                 |> List.map ~f:(source_relation leaves)
@@ -210,42 +164,46 @@ module Make (C : Config.S) = struct
               match pred_rels with
               | Ok [] ->
                   warn (fun m -> m "Unhandled predicate %a: constant" Pred.pp p);
-                  s
+                  None
               | Ok [ r ] ->
-                  {
-                    s with
-                    filters =
-                      Map.update s.filters r ~f:(function
-                        | Some fs -> Set.add fs p
-                        | None -> Set.singleton (module Pred) p);
-                  }
+                  let filters =
+                    Map.update filters r ~f:(function
+                      | Some fs -> Set.add fs p
+                      | None -> Set.singleton (module Pred) p)
+                  in
+                  return (graph, filters)
               | Ok [ r1; r2 ] ->
-                  {
-                    s with
-                    graph = JoinGraph.add_or_update_edge s.graph (r1, p, r2);
-                  }
+                  let graph = add_or_update_edge graph (r1, p, r2) in
+                  return (graph, filters)
               | Ok _ ->
                   warn (fun m ->
                       m "Unhandled predicate %a: too many relations" Pred.pp p);
-                  s
+                  None
               | Error e ->
                   warn (fun m ->
                       m "Unhandled predicate %a: %a" Pred.pp p Error.pp e);
-                  s)
-      | _ -> empty
+                  None)
+      | _ -> Some (empty, Map.empty (module Ast))
 
     let of_abslayout r =
+      let open Option.Let_syntax in
       debug (fun m -> m "Planning join for %a." A.pp r);
       let leaves =
         to_leaves r |> Set.to_list
         |> List.map ~f:(fun r ->
-               let s = Schema.schema r |> Set.of_list (module Name) in
-               (r, s))
+               (r, Schema.schema r |> Set.of_list (module Name)))
       in
-      to_graph leaves r
+      let%map graph, filters = to_graph leaves r in
+      (* Put the filters back onto the leaves of the graph. *)
+      map_vertex
+        (fun r ->
+          match Map.find filters r with
+          | Some preds -> A.filter (Set.to_list preds |> Pred.conjoin) r
+          | None -> r)
+        graph
 
-    let partition_fold ~init ~f s =
-      let vertices = JoinGraph.vertices s.graph |> Array.of_list in
+    let partition_fold ~init ~f graph =
+      let vertices = vertices graph |> Array.of_list in
       let n = Array.length vertices in
       let rec loop acc k =
         if k >= n then acc
@@ -255,21 +213,19 @@ module Make (C : Config.S) = struct
             create ~n ~k
             |> fold ~init:acc ~f:(fun acc vs ->
                    let g1, g2, es =
-                     JoinGraph.partition s.graph
+                     partition graph
                        ( List.init k ~f:(fun i -> vertices.(vs.{i}))
-                       |> Set.of_list (module JoinGraph.Vertex) )
+                       |> Set.of_list (module Vertex) )
                    in
-                   if JoinGraph.is_connected g1 && JoinGraph.is_connected g2
-                   then
-                     let s1 = { s with graph = g1 } in
-                     let s2 = { s with graph = g2 } in
-                     f acc (s1, s2, es)
+                   if is_connected g1 && is_connected g2 then f acc (g1, g2, es)
                    else acc)
           in
           loop acc (k + 1)
       in
       loop init 1
   end
+
+  module G = Join_graph
 
   type t =
     | Flat of Ast.t
@@ -384,7 +340,7 @@ module Make (C : Config.S) = struct
         scan_cost parts lhs
         +. (nt_lhs *. (Cost.hash (Pred.to_type lkey) +. rhs_per_partition_cost))
 
-  module ParetoSet = struct
+  module Pareto_set = struct
     type 'a t = (float array * 'a) list
 
     let empty = []
@@ -447,7 +403,7 @@ module Make (C : Config.S) = struct
 
   let enum_hash_join opt parts pred s1 s2 =
     let open List.Let_syntax in
-    let lhs = JoinSpace.to_ralgebra s1 and rhs = JoinSpace.to_ralgebra s2 in
+    let lhs = G.to_ralgebra s1 and rhs = G.to_ralgebra s2 in
     let lhs_schema = Schema.schema lhs and rhs_schema = Schema.schema rhs in
     (* Figure out which partition a key comes from. *)
     let key_side k =
@@ -468,8 +424,7 @@ module Make (C : Config.S) = struct
           Log.debug (fun m -> m "Adding hash join failed.");
           []
     in
-    let%bind s1 = key_side k1 in
-    let%bind s2 = key_side k2 in
+    let%bind s1 = key_side k1 and s2 = key_side k2 in
     let joins =
       match (s1, s2) with
       | `Lhs (s1, k1), `Rhs (s2, k2) | `Rhs (s2, k2), `Lhs (s1, k1) ->
@@ -488,14 +443,10 @@ module Make (C : Config.S) = struct
 
   let enum_nest_join opt parts pred s1 s2 =
     let open Option.Let_syntax in
-    let lhs_parts =
-      Set.union (to_parts (JoinSpace.to_ralgebra s1) pred) parts
-    in
-    let rhs_parts =
-      Set.union (to_parts (JoinSpace.to_ralgebra s2) pred) parts
-    in
-    let lhs_set = List.map (opt lhs_parts s1) ~f:(fun (_, j) -> j) in
-    let rhs_set = List.map (opt rhs_parts s2) ~f:(fun (_, j) -> j) in
+    let lhs_parts = Set.union (to_parts (G.to_ralgebra s1) pred) parts
+    and rhs_parts = Set.union (to_parts (G.to_ralgebra s2) pred) parts in
+    let lhs_set = List.map (opt lhs_parts s1) ~f:(fun (_, j) -> j)
+    and rhs_set = List.map (opt rhs_parts s2) ~f:(fun (_, j) -> j) in
     List.cartesian_product lhs_set rhs_set
     |> List.filter_map ~f:(fun (j1, j2) ->
            if no_params @@ to_ralgebra j1 then
@@ -504,55 +455,52 @@ module Make (C : Config.S) = struct
            else None)
 
   let opt_nonrec opt parts s =
-    info (fun m -> m "Choosing join for space %s." (JoinSpace.to_string s));
+    info (fun m -> m "Choosing join for space %s." (G.to_string s));
     let joins =
-      if JoinSpace.length s = 1 then
+      if G.nb_vertex s = 1 then
         (* Select strategy for the leaves of the join tree. *)
-        let r = JoinSpace.choose s in
+        let r = G.choose_vertex s in
         [ leaf_flat r; leaf_id r ] |> List.filter_map ~f:Fun.id
         |> List.map ~f:(fun j -> ([| scan_cost parts j |], j))
-        |> ParetoSet.of_list
+        |> Pareto_set.of_list
       else
-        JoinSpace.partition_fold s ~init:ParetoSet.empty
-          ~f:(fun cs (s1, s2, es) ->
+        G.partition_fold s ~init:Pareto_set.empty ~f:(fun cs (s1, s2, es) ->
             let pred = Pred.conjoin (List.map es ~f:(fun (_, p, _) -> p)) in
+            let r = A.join pred (G.to_ralgebra s1) (G.to_ralgebra s2) in
 
-            let r =
-              A.join pred (JoinSpace.to_ralgebra s1) (JoinSpace.to_ralgebra s2)
-            in
+            let open Mcmc.Random_choice in
             let flat_joins =
-              if Mcmc.Random_choice.rand random "flat-join" r then
+              if rand random "flat-join" r then
                 enum_flat_join opt parts pred s1 s2
               else []
             and hash_joins =
-              if Mcmc.Random_choice.rand random "hash-join" r then
+              if rand random "hash-join" r then
                 enum_hash_join opt parts pred s1 s2
               else []
             and nest_joins =
-              if Mcmc.Random_choice.rand random "nest-join" r then
+              if rand random "nest-join" r then
                 enum_nest_join opt parts pred s1 s2
               else []
             in
 
-            ParetoSet.(
+            Pareto_set.(
               union_all [ cs; of_list (flat_joins @ hash_joins @ nest_joins) ]))
     in
-    info (fun m -> m "Found %d pareto-optimal joins." (ParetoSet.length joins));
+    info (fun m -> m "Found %d pareto-optimal joins." (Pareto_set.length joins));
     joins
 
-  module Key = struct
-    type t = Set.M(Name).t * Set.M(JoinGraph.Vertex).t
-    [@@deriving compare, hash, sexp_of]
-
-    let create p s =
-      ( p,
-        JoinGraph.fold_vertex
-          (fun v vs -> Set.add vs v)
-          s.JoinSpace.graph
-          (Set.empty (module JoinGraph.Vertex)) )
-  end
-
   let opt =
+    let module Key = struct
+      type t = Set.M(Name).t * Set.M(G.Vertex).t
+      [@@deriving compare, hash, sexp_of]
+
+      let create p graph =
+        ( p,
+          G.fold_vertex
+            (fun v vs -> Set.add vs v)
+            graph
+            (Set.empty (module G.Vertex)) )
+    end in
     let tbl = Hashtbl.create (module Key) in
     let rec opt p s =
       let key = Key.create p s in
@@ -565,13 +513,15 @@ module Make (C : Config.S) = struct
     in
     opt
 
-  let opt r = opt (Set.empty (module Name)) (JoinSpace.of_abslayout r)
+  let opt r =
+    let open Option.Let_syntax in
+    let%map s = G.of_abslayout r in
+    opt (Set.empty (module Name)) s
 
   let reshape j _ = Some (to_ralgebra j)
 
   let rec emit_joins =
-    let module J = Join_elim_tactics.Make (C) in
-    let open J in
+    let open Join_elim_tactics.Make (C) in
     function
     | Flat _ -> row_store
     | Id _ -> id
@@ -593,9 +543,9 @@ module Make (C : Config.S) = struct
   let transform =
     let open Option.Let_syntax in
     let f p r =
-      let joins = opt (Castor.Path.get_exn p r) in
-      info (fun m -> m "Found %d join options." (ParetoSet.length joins));
-      let%bind j = ParetoSet.min_elt (fun a -> a.(0)) joins in
+      let%bind joins = opt (Castor.Path.get_exn p r) in
+      info (fun m -> m "Found %d join options." (Pareto_set.length joins));
+      let%bind j = Pareto_set.min_elt (fun a -> a.(0)) joins in
       debug (fun m -> m "Chose %a." Sexp.pp_hum ([%sexp_of: t] j));
       let tf = seq (local (reshape j) "reshape") (emit_joins j) in
       apply (traced tf) p r

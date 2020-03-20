@@ -259,21 +259,22 @@ filter((0 =
   Option.iter (apply elim_subquery Path.root r) ~f:(Format.printf "%a\n" pp);
   [%expect
     {|
-        depjoin(select([min(tot) as q0],
-                  select([max(total_revenue_i) as tot],
-                    alist(dedup(select([l_suppkey], lineitem)) as k1,
-                      select([sum(agg2) as total_revenue_i],
-                        aorderedidx(dedup(select([l_shipdate], lineitem)) as s41,
-                          filter((count2 > 0),
-                            select([count() as count2,
-                                    sum((l_extendedprice * (1 - l_discount))) as agg2],
-                              alist(select([l_extendedprice, l_discount],
-                                      filter(((l_suppkey = k1.l_suppkey) &&
-                                             (l_shipdate = s41.l_shipdate)),
-                                        lineitem)) as s42,
-                                atuple([ascalar(s42.l_extendedprice),
-                                        ascalar(s42.l_discount)],
-                                  cross)))),
-                          >= date("0000-01-01"), < (date("0000-01-01") + month(3))))))) as s0,
+        depjoin(select([(select([max(total_revenue_i) as tot],
+                           alist(dedup(select([l_suppkey], lineitem)) as k1,
+                             select([sum(agg2) as total_revenue_i],
+                               aorderedidx(dedup(select([l_shipdate], lineitem)) as s41,
+                                 filter((count2 > 0),
+                                   select([count() as count2,
+                                           sum((l_extendedprice * (1 - l_discount))) as agg2],
+                                     alist(select([l_extendedprice, l_discount],
+                                             filter(((l_suppkey = k1.l_suppkey) &&
+                                                    (l_shipdate = s41.l_shipdate)),
+                                               lineitem)) as s42,
+                                       atuple([ascalar(s42.l_extendedprice),
+                                               ascalar(s42.l_discount)],
+                                         cross)))),
+                                 >= date("0000-01-01"), < (date("0000-01-01") +
+                                                          month(3))))))) as q0],
+                  ascalar(0 as dummy)) as s0,
           filter((0 = s0.q0), ascalar(0 as x)))
  |}]
