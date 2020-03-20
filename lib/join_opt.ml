@@ -161,9 +161,8 @@ module Make (C : Config.S) = struct
         let s_dst, j_dst = Map.find_exn m (E.dst edge) in
         let s = Set.union s_src s_dst in
         let j = join ~label:(G.E.label edge) j_src j_dst in
-        Set.fold
-          ~f:(fun m vertex -> Map.set m ~key:vertex ~data:(s, j))
-          s ~init:m
+        Set.fold s ~init:m ~f:(fun m vertex ->
+            Map.set m ~key:vertex ~data:(s, j))
       in
       (* initialize map with singleton-sets for every node (of itself) *)
       let m =
@@ -174,11 +173,20 @@ module Make (C : Config.S) = struct
           g
           (Map.empty (module Vertex))
       in
-      G.fold_edges_e f g m |> Map.data |> List.hd_exn |> fun (_, j) -> j
+      G.fold_edges_e f g m |> Map.data |> List.hd_exn |> Tuple.T2.get2
 
-    let to_ralgebra { graph; _ } =
+    let to_ralgebra { graph; filters } =
       if JoinGraph.nb_vertex graph = 1 then JoinGraph.choose_vertex graph
-      else contract (fun ~label:p j1 j2 -> A.join p j1 j2) graph
+      else
+        let graph =
+          JoinGraph.map_vertex
+            (fun r ->
+              match Map.find filters r with
+              | Some preds -> A.filter (Set.to_list preds |> Pred.conjoin) r
+              | None -> r)
+            graph
+        in
+        contract (fun ~label:p j1 j2 -> A.join p j1 j2) graph
 
     (** Collect the leaves of the join tree rooted at r. *)
     let rec to_leaves r =
@@ -195,9 +203,8 @@ module Make (C : Config.S) = struct
           (* Collect the set of relations that this join depends on. *)
           List.fold_left (Pred.conjuncts p) ~init:s ~f:(fun s p ->
               let pred_rels =
-                List.map
-                  (Pred.names p |> Set.to_list)
-                  ~f:(source_relation leaves)
+                Pred.names p |> Set.to_list
+                |> List.map ~f:(source_relation leaves)
                 |> Or_error.all
               in
               match pred_rels with
@@ -414,9 +421,11 @@ module Make (C : Config.S) = struct
     let union_all ss = List.concat ss |> of_list
   end
 
+  let no_params r = Set.is_empty @@ Set.inter (A.free r) params
+
   let leaf_flat r =
     let open Option.Let_syntax in
-    if Set.is_empty @@ Set.inter (A.free r) params then return @@ Flat r
+    if no_params r then return @@ Flat r
     else (
       info (fun m -> m "Flat join does not apply to@ %a." A.pp r);
       None )
@@ -428,7 +437,8 @@ module Make (C : Config.S) = struct
   let enum_flat_join opt parts pred s1 s2 =
     let select_flat s =
       List.filter_map (opt parts s) ~f:(fun (_, j) ->
-          match j with Flat r -> Some r | _ -> None)
+          let r = to_ralgebra j in
+          if no_params r then Some r else None)
     in
     List.cartesian_product (select_flat s1) (select_flat s2)
     |> List.map ~f:(fun (r1, r2) ->
@@ -465,8 +475,10 @@ module Make (C : Config.S) = struct
       | `Lhs (s1, k1), `Rhs (s2, k2) | `Rhs (s2, k2), `Lhs (s1, k1) ->
           let rhs_parts = Set.union (to_parts rhs pred) parts in
           List.cartesian_product (opt parts s1) (opt rhs_parts s2)
-          |> List.map ~f:(fun ((_, r1), (_, r2)) ->
-                 Hash { lkey = k1; rkey = k2; lhs = r1; rhs = r2 })
+          |> List.filter_map ~f:(fun ((_, lhs), (_, rhs)) ->
+                 if no_params @@ to_ralgebra rhs then
+                   Some (Hash { lkey = k1; rkey = k2; lhs; rhs })
+                 else None)
       | _ ->
           debug (fun m ->
               m "Keys come from same partition %a %a" Pred.pp k1 Pred.pp k2);
@@ -486,9 +498,10 @@ module Make (C : Config.S) = struct
     let rhs_set = List.map (opt rhs_parts s2) ~f:(fun (_, j) -> j) in
     List.cartesian_product lhs_set rhs_set
     |> List.filter_map ~f:(fun (j1, j2) ->
-           let%map j1 = match j1 with Flat _ -> Some j1 | _ -> None in
-           let j = Nest { lhs = j1; rhs = j2; pred } in
-           ([| scan_cost parts j |], j))
+           if no_params @@ to_ralgebra j1 then
+             let j = Nest { lhs = j1; rhs = j2; pred } in
+             Some ([| scan_cost parts j |], j)
+           else None)
 
   let opt_nonrec opt parts s =
     info (fun m -> m "Choosing join for space %s." (JoinSpace.to_string s));
