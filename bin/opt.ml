@@ -4,6 +4,10 @@ open Collections
 open Castor_opt
 open Abslayout_load
 
+let dump fn r =
+  Out_channel.with_file fn ~f:(fun ch ->
+      Fmt.pf (Format.formatter_of_out_channel ch) "%a" Abslayout.pp r)
+
 (** Run a command and return its output on stdout, logging it if it fails. *)
 let command_out cmd =
   let open Or_error.Let_syntax in
@@ -45,10 +49,7 @@ let eval out_dir params query =
   system_exn @@ sprintf "rm -rf %s" out_dir;
   system_exn @@ sprintf "mkdir -p %s" out_dir;
   let query_fn = sprintf "%s/query.txt" out_dir in
-  Out_channel.with_file query_fn ~f:(fun ch ->
-      Format.fprintf
-        (Format.formatter_of_out_channel ch)
-        "%a" Abslayout.pp query);
+  dump query_fn query;
 
   (* Try to build the query. *)
   let%bind () =
@@ -83,7 +84,7 @@ let eval out_dir params query =
 
   run_time
 
-let main ~params ~cost_timeout ~timeout ~out_dir ch =
+let main ~params ~cost_timeout ~timeout ~out_dir ~out_file ch =
   (* Set up logging. *)
   Logs.set_level (Some Info);
   Logs.Src.set_level Db.src (Some Warning);
@@ -101,15 +102,21 @@ let main ~params ~cost_timeout ~timeout ~out_dir ch =
   in
   let query = load_string ~params:params_set conn @@ In_channel.input_all ch in
 
+  let best_cost = ref Float.infinity in
   let cost state =
     Fresh.reset Global.fresh;
     match opt conn cost_conn params_set cost_timeout state query with
     | Some (query', serializable) when serializable -> (
         match eval out_dir params query' with
-        | Ok cost -> cost
+        | Ok cost ->
+            if Float.(cost < !best_cost) then (
+              dump out_file query';
+              best_cost := cost );
+            cost
         | _ -> Float.infinity )
     | _ -> Float.infinity
   in
+
   let cost = Memo.of_comparable (module Mcmc.Random_choice.C) cost in
   let max_time = Option.map ~f:Time.Span.of_sec timeout in
   Mcmc.run ?max_time cost |> ignore
@@ -132,8 +139,11 @@ let () =
       and out_dir =
         flag "out-dir" (required string) ~aliases:[ "o" ]
           ~doc:"output directory"
+      and out_file =
+        flag "out-file" (required string) ~aliases:[ "f" ]
+          ~doc:"output directory"
       and ch =
         anon (maybe_with_default In_channel.stdin ("query" %: Util.channel))
       in
-      fun () -> main ~params ~cost_timeout ~timeout ~out_dir ch]
+      fun () -> main ~params ~cost_timeout ~timeout ~out_dir ~out_file ch]
   |> Command.run

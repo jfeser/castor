@@ -124,7 +124,7 @@ validate: %s
 for b in bench:
     print('''
 {out_file}: {in_file}
-\t$(OPT) $(OPT_FLAGS) -o {out_dir} {params} {in_file} >$@ 2> >(tee {log} >&2)
+\t$(OPT) $(OPT_FLAGS) -o {out_dir} -f {out_file} {params} {in_file} 2> >(tee {log} >&2)
     '''.format(
         out_file=out_file(b),
         out_dir=out_dir(b),
