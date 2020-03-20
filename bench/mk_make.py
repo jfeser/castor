@@ -123,12 +123,14 @@ validate: %s
 
 for b in bench:
     print('''
-{0}: {2}
-\t$(OPT) $(OPT_FLAGS) {1} {2} >$@ 2> >(tee {3} >&2)
-    '''.format(out_file(b),
-               gen_params(b),
-               in_file(b),
-               '%s-opt.log' % b['name']))
+{out_file}: {in_file}
+\t$(OPT) $(OPT_FLAGS) -o {out_dir} {params} {in_file} >$@ 2> >(tee {log} >&2)
+    '''.format(
+        out_file=out_file(b),
+        out_dir=out_dir(b),
+        params=gen_params(b),
+        in_file=in_file(b),
+        log='%s-opt.log' % b['name']))
 
     print('''
 {0}: {1}
