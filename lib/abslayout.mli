@@ -88,10 +88,6 @@ val subst : 'a annot pred Map.M(Name).t -> 'a annot -> 'a annot
 
 val select_kind : 'a annot pred list -> [ `Agg | `Scalar ]
 
-val is_serializeable :
-  < stage : [ `Compile | `Run ] Map.M(Name).t ; .. > annot ->
-  (unit, string) result
-
 val order_of : 'a annot -> (Pred.t * order) list
 
 val validate : t -> unit
