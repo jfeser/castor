@@ -394,37 +394,33 @@ let stage =
           Error.create "Ambiguous stage" key [%sexp_of: Name.t] |> Error.raise)
   in
   let rec annot r =
-    {
-      node = query r.node;
-      meta =
-        object
-          method stage =
-            merge
-              (Ctx.to_stage_map r.meta#outer)
-              (Ctx.to_stage_map r.meta#inner)
+    let meta =
+      object
+        method stage =
+          merge (Ctx.to_stage_map r.meta#outer) (Ctx.to_stage_map r.meta#inner)
 
-          method inner = r.meta#inner
+        method inner = r.meta#inner
 
-          method meta = r.meta#meta
-        end;
-    }
+        method meta = r.meta#meta
+      end
+    in
+    { node = query r.node; meta }
   and query q = map_query annot pred q
   and pred p = map_pred annot pred p in
   annot
 
 let refs =
   let rec annot r =
-    {
-      node = query r.node;
-      meta =
-        object
-          method stage = r.meta#stage
+    let meta =
+      object
+        method stage = r.meta#stage
 
-          method refs = Ctx.refs r.meta#inner
+        method refs = Ctx.refs r.meta#inner
 
-          method meta = r.meta#meta
-        end;
-    }
+        method meta = r.meta#meta
+      end
+    in
+    { node = query r.node; meta }
   and query q = map_query annot pred q
   and pred p = map_pred annot pred p in
   annot
