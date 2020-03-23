@@ -125,7 +125,7 @@ let simple_join lhs rhs =
 
 let to_nice_depjoin t1 t2 =
   let t1_attr = attrs t1 in
-  let t2_free = A.free t2 in
+  let t2_free = Free.free t2 in
 
   (* Create a relation of the unique values of the attributes that come from t1
      and are bound in t2. *)
@@ -177,9 +177,9 @@ and to_nice_pred p = map_pred to_nice to_nice_pred p
 
 let push_join d { pred = p; r1 = t1; r2 = t2 } =
   let d_attr = attrs d in
-  if Set.inter (A.free t2) d_attr |> Set.is_empty then
+  if Set.inter (Free.free t2) d_attr |> Set.is_empty then
     C.join p (dep_join d t1) t2
-  else if Set.inter (A.free t1) d_attr |> Set.is_empty then
+  else if Set.inter (Free.free t1) d_attr |> Set.is_empty then
     C.join p t1 (dep_join d t2)
   else
     (* Rename the d relation in the rhs of the join *)
@@ -279,7 +279,7 @@ let rec push_depjoin r =
 
       (* If the join is not really dependent, then replace with a regular join.
          *)
-      if Set.inter (A.free d_rhs) (attrs d_lhs) |> Set.is_empty then
+      if Set.inter (Free.free d_rhs) (attrs d_lhs) |> Set.is_empty then
         simple_join d_lhs d_rhs
       else
         (* Otherwise, push the depjoin further down the tree. *)

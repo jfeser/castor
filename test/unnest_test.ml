@@ -17,7 +17,7 @@ let%expect_test "" =
 
   let d = match q.node with DepJoin d -> d | _ -> assert false in
   let t1_attr = attrs d.d_lhs in
-  let t2_free = free d.d_rhs in
+  let t2_free = Free.free d.d_rhs in
   t2_free |> [%sexp_of: Set.M(Name).t] |> print_s;
   [%expect "(((name k_f) (meta <opaque>)))"];
   t1_attr |> [%sexp_of: Set.M(Name).t] |> print_s;

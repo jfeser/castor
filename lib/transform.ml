@@ -342,7 +342,7 @@ module Make (Config : Config.S) () = struct
       | Filter (p, r') ->
           let schema = schema r' in
           let free_vars =
-            Set.diff (pred_free p) (Set.of_list (module Name) schema)
+            Set.diff (Free.pred_free p) (Set.of_list (module Name) schema)
             |> Set.to_list
           in
           let free_var =
@@ -393,7 +393,7 @@ module Make (Config : Config.S) () = struct
       | Filter (p, r') ->
           let schema = schema r' in
           let free_vars =
-            Set.diff (pred_free p) (Set.of_list (module Name) schema)
+            Set.diff (Free.pred_free p) (Set.of_list (module Name) schema)
             |> Set.to_list
           in
           let free_var =
@@ -847,7 +847,7 @@ module Make (Config : Config.S) () = struct
           [ (p, group_by ps key r) ]
       | Filter (p, { node = Filter (p', r); _ }) -> [ (p', filter p r) ]
       | Select (ps, { node = Filter (p, r); _ }) ->
-          [ (p, select (extend_select ps r ~with_:(pred_free p)) r) ]
+          [ (p, select (extend_select ps r ~with_:(Free.pred_free p)) r) ]
       | Join { pred; r1 = { node = Filter (p, r); _ }; r2 } ->
           [ (p, join pred r r2) ]
       | Join { pred; r1; r2 = { node = Filter (p, r); _ } } ->
@@ -875,7 +875,7 @@ module Make (Config : Config.S) () = struct
               (select
                  (extend_select ps rel
                     ~with_:
-                      ( List.map key ~f:(fun (p, _) -> pred_free p)
+                      ( List.map key ~f:(fun (p, _) -> Free.pred_free p)
                       |> Set.union_list (module Name) ))
                  rel);
           ]
@@ -1280,7 +1280,7 @@ module Make (Config : Config.S) () = struct
   let tf_elim_subquery _ =
     let open A in
     let f r_main =
-      let r_main = annotate_free r_main in
+      let r_main = Free.annotate r_main in
       match r_main.node with
       | Filter (pred, r) ->
           let schema = Schema.schema r in

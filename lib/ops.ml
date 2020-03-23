@@ -148,7 +148,7 @@ module Make (C : Config.S) = struct
 
   let is_param_filter r p =
     match (Path.get_exn p r).node with
-    | Filter (pred, _) -> overlaps (A.pred_free pred) params
+    | Filter (pred, _) -> overlaps (Free.pred_free pred) params
     | _ -> false
 
   let contains f r p =
@@ -162,8 +162,8 @@ module Make (C : Config.S) = struct
     | Filter (pred, _) ->
         List.exists (Pred.conjuncts pred) ~f:(function
           | Binop (Eq, p1, p2) ->
-              let x1 = overlaps (A.pred_free p1) params in
-              let x2 = overlaps (A.pred_free p2) params in
+              let x1 = overlaps (Free.pred_free p1) params in
+              let x2 = overlaps (Free.pred_free p2) params in
               Bool.(x1 <> x2)
           | _ -> false)
     | _ -> false
@@ -173,8 +173,8 @@ module Make (C : Config.S) = struct
     | Filter (pred, _) ->
         List.exists (Pred.conjuncts pred) ~f:(function
           | Binop ((Lt | Gt | Ge | Le), p1, p2) ->
-              let x1 = overlaps (A.pred_free p1) params in
-              let x2 = overlaps (A.pred_free p2) params in
+              let x1 = overlaps (Free.pred_free p1) params in
+              let x2 = overlaps (Free.pred_free p2) params in
               Bool.(x1 <> x2)
           | _ -> false)
     | _ -> false

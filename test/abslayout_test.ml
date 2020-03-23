@@ -438,20 +438,3 @@ let%expect_test "pred_names" =
   in
   Pred.names p |> [%sexp_of: Set.M(Name).t] |> print_s;
   [%expect {| (((name total_revenue) (meta <opaque>))) |}]
-
-let%expect_test "" =
-  let conn = Lazy.force Test_util.test_db_conn in
-  let n s =
-    let name =
-      match String.split s ~on:'.' with
-      | [ f ] -> Name.create f
-      | [ a; f ] -> Name.create ~scope:a f
-      | _ -> failwith ("Unexpected name: " ^ s)
-    in
-    P.name name
-  in
-  let r s = Db.relation conn s |> relation in
-
-  select [ n "g" ] (filter Pred.Infix.(n "k.f" = n "f") (r "r1"))
-  |> free |> [%sexp_of: Set.M(Name).t] |> print_s;
-  [%expect {| (((scope k) (name f) (meta <opaque>))) |}]

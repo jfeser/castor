@@ -92,12 +92,6 @@ val is_serializeable :
   < stage : [ `Compile | `Run ] Map.M(Name).t ; .. > annot ->
   (unit, string) result
 
-val pred_free : 'a annot pred -> Set.M(Name).t
-
-val free : 'a annot -> Set.M(Name).t
-
-val annotate_free : 'a annot -> Set.M(Name).t annot
-
 val order_of : 'a annot -> (Pred.t * order) list
 
 val validate : t -> unit
