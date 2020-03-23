@@ -7,6 +7,230 @@ module P = Pred.Infix
 
 include (val Log.make ~level:(Some Info) "castor-opt.join-opt")
 
+module Join_graph = struct
+  module Vertex = struct
+    include Ast
+
+    let equal = [%compare.equal: t]
+  end
+
+  module Edge = struct
+    include Pred
+
+    let default = Bool true
+  end
+
+  module G = Persistent.Graph.ConcreteLabeled (Vertex) (Edge)
+  include G
+  include Oper.P (G)
+  include Oper.Choose (G)
+  module Dfs = Traverse.Dfs (G)
+
+  let source_relation leaves n =
+    List.find_map leaves ~f:(fun (r, s) -> if Set.mem s n then Some r else None)
+    |> Result.of_option
+         ~error:
+           (Error.create "No source found for name."
+              (n, List.map leaves ~f:(fun (_, ns) -> ns))
+              [%sexp_of: Name.t * Set.M(Name).t list])
+
+  let to_string g = sprintf "graph (|V|=%d) (|E|=%d)" (nb_vertex g) (nb_edges g)
+
+  let sexp_of_t g =
+    fold_edges_e (fun e l -> e :: l) g []
+    |> [%sexp_of: (Vertex.t * Edge.t * Vertex.t) list]
+
+  let compare g1 g2 = Sexp.compare ([%sexp_of: t] g1) ([%sexp_of: t] g2)
+
+  let add_or_update_edge g ((v1, l, v2) as e) =
+    try
+      let _, l', _ = find_edge g v1 v2 in
+      add_edge_e g (v1, Binop (And, l, l'), v2)
+    with Caml.Not_found -> add_edge_e g e
+
+  let vertices g = fold_vertex (fun v l -> v :: l) g []
+
+  let partition g vs =
+    let g1, g2 =
+      let f v (lhs, rhs) =
+        let in_set = Set.mem vs v in
+        let lhs = if in_set then remove_vertex lhs v else lhs
+        and rhs = if in_set then rhs else remove_vertex rhs v in
+        (lhs, rhs)
+      in
+      fold_vertex f g (g, g)
+    in
+    let es =
+      let f ((v1, _, v2) as e) es =
+        let v1_in = Set.mem vs v1 and v2_in = Set.mem vs v2 in
+        if (v1_in && not v2_in) || ((not v1_in) && v2_in) then e :: es else es
+      in
+      fold_edges_e f g []
+    in
+    (g1, g2, es)
+
+  let is_connected g =
+    let n = nb_vertex g in
+    let n = Dfs.fold_component (fun _ i -> i - 1) n g (choose_vertex g) in
+    n = 0
+
+  let contract join g =
+    (* if the edge is to be removed (property = true):
+       * make a union of the two union-sets of start and end node;
+       * put this set in the map for all nodes in this set *)
+    let f edge m =
+      let s_src, j_src = Map.find_exn m (E.src edge) in
+      let s_dst, j_dst = Map.find_exn m (E.dst edge) in
+      let s = Set.union s_src s_dst in
+      let j = join ~label:(G.E.label edge) j_src j_dst in
+      Set.fold s ~init:m ~f:(fun m vertex -> Map.set m ~key:vertex ~data:(s, j))
+    in
+    (* initialize map with singleton-sets for every node (of itself) *)
+    let m =
+      G.fold_vertex
+        (fun vertex m ->
+          Map.set m ~key:vertex
+            ~data:(Set.singleton (module Vertex) vertex, vertex))
+        g
+        (Map.empty (module Vertex))
+    in
+    G.fold_edges_e f g m |> Map.data |> List.hd_exn |> Tuple.T2.get2
+
+  let to_ralgebra graph =
+    if nb_vertex graph = 1 then choose_vertex graph
+    else contract (fun ~label:p j1 j2 -> A.join p j1 j2) graph
+
+  (** Collect the leaves of the join tree rooted at r. *)
+  let rec to_leaves r =
+    match r.node with
+    | Join { r1; r2; _ } -> Set.union (to_leaves r1) (to_leaves r2)
+    | _ -> Set.singleton (module Vertex) r
+
+  (** Convert a join tree to a join graph. *)
+  let rec to_graph leaves r =
+    let open Option.Let_syntax in
+    let union_filters f1 f2 =
+      let merger ~key:_ = function
+        | `Left x | `Right x -> Some x
+        | `Both (x, y) -> Some (Set.union x y)
+      in
+      Map.merge ~f:merger f1 f2
+    in
+    match r.node with
+    | Join { r1; r2; pred = p } ->
+        let%bind g1, f1 = to_graph leaves r1 and g2, f2 = to_graph leaves r2 in
+        let graph = union g1 g2 and filters = union_filters f1 f2 in
+
+        (* Collect the set of relations that this join depends on. *)
+        List.fold_left (Pred.conjuncts p)
+          ~init:(Some (graph, filters))
+          ~f:(fun acc p ->
+            let%bind graph, filters = acc in
+            let pred_rels =
+              Pred.names p |> Set.to_list
+              |> List.map ~f:(source_relation leaves)
+              |> Or_error.all
+            in
+            match pred_rels with
+            | Ok [] ->
+                warn (fun m -> m "Unhandled predicate %a: constant" Pred.pp p);
+                None
+            | Ok [ r ] ->
+                let filters =
+                  Map.update filters r ~f:(function
+                    | Some fs -> Set.add fs p
+                    | None -> Set.singleton (module Pred) p)
+                in
+                return (graph, filters)
+            | Ok [ r1; r2 ] ->
+                let graph = add_or_update_edge graph (r1, p, r2) in
+                return (graph, filters)
+            | Ok _ ->
+                warn (fun m ->
+                    m "Unhandled predicate %a: too many relations" Pred.pp p);
+                None
+            | Error e ->
+                warn (fun m ->
+                    m "Unhandled predicate %a: %a" Pred.pp p Error.pp e);
+                None)
+    | _ -> Some (empty, Map.empty (module Ast))
+
+  let of_abslayout r =
+    let open Option.Let_syntax in
+    debug (fun m -> m "Planning join for %a." A.pp r);
+    let leaves =
+      to_leaves r |> Set.to_list
+      |> List.map ~f:(fun r ->
+             (r, Schema.schema r |> Set.of_list (module Name)))
+    in
+    let%map graph, filters = to_graph leaves r in
+    (* Put the filters back onto the leaves of the graph. *)
+    map_vertex
+      (fun r ->
+        match Map.find filters r with
+        | Some preds -> A.filter (Set.to_list preds |> Pred.conjoin) r
+        | None -> r)
+      graph
+
+  let partition_fold ~init ~f graph =
+    let vertices = vertices graph |> Array.of_list in
+    let n = Array.length vertices in
+    let rec loop acc k =
+      if k >= n then acc
+      else
+        let acc =
+          let open Combinat.Combination in
+          create ~n ~k
+          |> fold ~init:acc ~f:(fun acc vs ->
+                 let g1, g2, es =
+                   partition graph
+                     ( List.init k ~f:(fun i -> vertices.(vs.{i}))
+                     |> Set.of_list (module Vertex) )
+                 in
+                 if is_connected g1 && is_connected g2 then f acc (g1, g2, es)
+                 else acc)
+        in
+        loop acc (k + 1)
+    in
+    loop init 1
+end
+
+module Pareto_set = struct
+  type 'a t = (float array * 'a) list
+
+  let empty = []
+
+  let singleton c v = [ (c, v) ]
+
+  let dominates x y =
+    assert (Array.length x = Array.length y);
+    let n = Array.length x in
+    let rec loop i le lt =
+      if i = n then le && lt
+      else loop (i + 1) Float.(le && x.(i) <= y.(i)) Float.(lt || x.(i) < y.(i))
+    in
+    loop 0 true false
+
+  let rec add s c v =
+    match s with
+    | [] -> [ (c, v) ]
+    | (c', v') :: s' ->
+        if Array.equal Float.( = ) c c' || dominates c' c then s
+        else if dominates c c' then add s' c v
+        else (c', v') :: add s' c v
+
+  let min_elt f s =
+    List.map s ~f:(fun (c, x) -> (f c, x))
+    |> List.min_elt ~compare:(fun (c1, _) (c2, _) -> Float.compare c1 c2)
+    |> Option.map ~f:(fun (_, x) -> x)
+
+  let of_list l = List.fold_left l ~init:[] ~f:(fun s (c, v) -> add s c v)
+
+  let length = List.length
+
+  let union_all ss = List.concat ss |> of_list
+end
+
 module Config = struct
   module type My_S = sig
     val cost_conn : Db.t
@@ -33,197 +257,6 @@ module Make (C : Config.S) = struct
   open Ops.Make (C)
 
   open Simple_tactics.Make (C)
-
-  let source_relation leaves n =
-    List.find_map leaves ~f:(fun (r, s) -> if Set.mem s n then Some r else None)
-    |> Result.of_option
-         ~error:
-           (Error.create "No source found for name."
-              (n, List.map leaves ~f:(fun (_, ns) -> ns))
-              [%sexp_of: Name.t * Set.M(Name).t list])
-
-  module Join_graph = struct
-    module Vertex = struct
-      include Ast
-
-      let equal = [%compare.equal: t]
-    end
-
-    module Edge = struct
-      include Pred
-
-      let default = Bool true
-    end
-
-    module G = Persistent.Graph.ConcreteLabeled (Vertex) (Edge)
-    include G
-    include Oper.P (G)
-    include Oper.Choose (G)
-    module Dfs = Traverse.Dfs (G)
-
-    let to_string g =
-      sprintf "graph (|V|=%d) (|E|=%d)" (nb_vertex g) (nb_edges g)
-
-    let sexp_of_t g =
-      fold_edges_e (fun e l -> e :: l) g []
-      |> [%sexp_of: (Vertex.t * Edge.t * Vertex.t) list]
-
-    let compare g1 g2 = Sexp.compare ([%sexp_of: t] g1) ([%sexp_of: t] g2)
-
-    let add_or_update_edge g ((v1, l, v2) as e) =
-      try
-        let _, l', _ = find_edge g v1 v2 in
-        add_edge_e g (v1, Binop (And, l, l'), v2)
-      with Caml.Not_found -> add_edge_e g e
-
-    let vertices g = fold_vertex (fun v l -> v :: l) g []
-
-    let partition g vs =
-      let g1, g2 =
-        let f v (lhs, rhs) =
-          let in_set = Set.mem vs v in
-          let lhs = if in_set then remove_vertex lhs v else lhs
-          and rhs = if in_set then rhs else remove_vertex rhs v in
-          (lhs, rhs)
-        in
-        fold_vertex f g (g, g)
-      in
-      let es =
-        let f ((v1, _, v2) as e) es =
-          let v1_in = Set.mem vs v1 and v2_in = Set.mem vs v2 in
-          if (v1_in && not v2_in) || ((not v1_in) && v2_in) then e :: es else es
-        in
-        fold_edges_e f g []
-      in
-      (g1, g2, es)
-
-    let is_connected g =
-      let n = nb_vertex g in
-      let n = Dfs.fold_component (fun _ i -> i - 1) n g (choose_vertex g) in
-      n = 0
-
-    let contract join g =
-      (* if the edge is to be removed (property = true):
-         * make a union of the two union-sets of start and end node;
-         * put this set in the map for all nodes in this set *)
-      let f edge m =
-        let s_src, j_src = Map.find_exn m (E.src edge) in
-        let s_dst, j_dst = Map.find_exn m (E.dst edge) in
-        let s = Set.union s_src s_dst in
-        let j = join ~label:(G.E.label edge) j_src j_dst in
-        Set.fold s ~init:m ~f:(fun m vertex ->
-            Map.set m ~key:vertex ~data:(s, j))
-      in
-      (* initialize map with singleton-sets for every node (of itself) *)
-      let m =
-        G.fold_vertex
-          (fun vertex m ->
-            Map.set m ~key:vertex
-              ~data:(Set.singleton (module Vertex) vertex, vertex))
-          g
-          (Map.empty (module Vertex))
-      in
-      G.fold_edges_e f g m |> Map.data |> List.hd_exn |> Tuple.T2.get2
-
-    let to_ralgebra graph =
-      if nb_vertex graph = 1 then choose_vertex graph
-      else contract (fun ~label:p j1 j2 -> A.join p j1 j2) graph
-
-    (** Collect the leaves of the join tree rooted at r. *)
-    let rec to_leaves r =
-      match r.node with
-      | Join { r1; r2; _ } -> Set.union (to_leaves r1) (to_leaves r2)
-      | _ -> Set.singleton (module Vertex) r
-
-    (** Convert a join tree to a join graph. *)
-    let rec to_graph leaves r =
-      let open Option.Let_syntax in
-      let union_filters f1 f2 =
-        let merger ~key:_ = function
-          | `Left x | `Right x -> Some x
-          | `Both (x, y) -> Some (Set.union x y)
-        in
-        Map.merge ~f:merger f1 f2
-      in
-      match r.node with
-      | Join { r1; r2; pred = p } ->
-          let%bind g1, f1 = to_graph leaves r1
-          and g2, f2 = to_graph leaves r2 in
-          let graph = union g1 g2 and filters = union_filters f1 f2 in
-
-          (* Collect the set of relations that this join depends on. *)
-          List.fold_left (Pred.conjuncts p)
-            ~init:(Some (graph, filters))
-            ~f:(fun acc p ->
-              let%bind graph, filters = acc in
-              let pred_rels =
-                Pred.names p |> Set.to_list
-                |> List.map ~f:(source_relation leaves)
-                |> Or_error.all
-              in
-              match pred_rels with
-              | Ok [] ->
-                  warn (fun m -> m "Unhandled predicate %a: constant" Pred.pp p);
-                  None
-              | Ok [ r ] ->
-                  let filters =
-                    Map.update filters r ~f:(function
-                      | Some fs -> Set.add fs p
-                      | None -> Set.singleton (module Pred) p)
-                  in
-                  return (graph, filters)
-              | Ok [ r1; r2 ] ->
-                  let graph = add_or_update_edge graph (r1, p, r2) in
-                  return (graph, filters)
-              | Ok _ ->
-                  warn (fun m ->
-                      m "Unhandled predicate %a: too many relations" Pred.pp p);
-                  None
-              | Error e ->
-                  warn (fun m ->
-                      m "Unhandled predicate %a: %a" Pred.pp p Error.pp e);
-                  None)
-      | _ -> Some (empty, Map.empty (module Ast))
-
-    let of_abslayout r =
-      let open Option.Let_syntax in
-      debug (fun m -> m "Planning join for %a." A.pp r);
-      let leaves =
-        to_leaves r |> Set.to_list
-        |> List.map ~f:(fun r ->
-               (r, Schema.schema r |> Set.of_list (module Name)))
-      in
-      let%map graph, filters = to_graph leaves r in
-      (* Put the filters back onto the leaves of the graph. *)
-      map_vertex
-        (fun r ->
-          match Map.find filters r with
-          | Some preds -> A.filter (Set.to_list preds |> Pred.conjoin) r
-          | None -> r)
-        graph
-
-    let partition_fold ~init ~f graph =
-      let vertices = vertices graph |> Array.of_list in
-      let n = Array.length vertices in
-      let rec loop acc k =
-        if k >= n then acc
-        else
-          let acc =
-            let open Combinat.Combination in
-            create ~n ~k
-            |> fold ~init:acc ~f:(fun acc vs ->
-                   let g1, g2, es =
-                     partition graph
-                       ( List.init k ~f:(fun i -> vertices.(vs.{i}))
-                       |> Set.of_list (module Vertex) )
-                   in
-                   if is_connected g1 && is_connected g2 then f acc (g1, g2, es)
-                   else acc)
-          in
-          loop acc (k + 1)
-      in
-      loop init 1
-  end
 
   module G = Join_graph
 
@@ -339,43 +372,6 @@ module Make (C : Config.S) = struct
         in
         scan_cost parts lhs
         +. (nt_lhs *. (Cost.hash (Pred.to_type lkey) +. rhs_per_partition_cost))
-
-  module Pareto_set = struct
-    type 'a t = (float array * 'a) list
-
-    let empty = []
-
-    let singleton c v = [ (c, v) ]
-
-    let dominates x y =
-      assert (Array.length x = Array.length y);
-      let n = Array.length x in
-      let rec loop i le lt =
-        if i = n then le && lt
-        else
-          loop (i + 1) Float.(le && x.(i) <= y.(i)) Float.(lt || x.(i) < y.(i))
-      in
-      loop 0 true false
-
-    let rec add s c v =
-      match s with
-      | [] -> [ (c, v) ]
-      | (c', v') :: s' ->
-          if Array.equal Float.( = ) c c' || dominates c' c then s
-          else if dominates c c' then add s' c v
-          else (c', v') :: add s' c v
-
-    let min_elt f s =
-      List.map s ~f:(fun (c, x) -> (f c, x))
-      |> List.min_elt ~compare:(fun (c1, _) (c2, _) -> Float.compare c1 c2)
-      |> Option.map ~f:(fun (_, x) -> x)
-
-    let of_list l = List.fold_left l ~init:[] ~f:(fun s (c, v) -> add s c v)
-
-    let length = List.length
-
-    let union_all ss = List.concat ss |> of_list
-  end
 
   let no_params r = Set.is_empty @@ Set.inter (Free.free r) params
 
@@ -495,11 +491,13 @@ module Make (C : Config.S) = struct
       [@@deriving compare, hash, sexp_of]
 
       let create p graph =
-        ( p,
+        let vertices =
           G.fold_vertex
             (fun v vs -> Set.add vs v)
             graph
-            (Set.empty (module G.Vertex)) )
+            (Set.empty (module G.Vertex))
+        in
+        (p, vertices)
     end in
     let tbl = Hashtbl.create (module Key) in
     let rec opt p s =
