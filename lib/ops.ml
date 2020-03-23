@@ -201,15 +201,15 @@ module Make (C : Config.S) = struct
     ret
 
   let at_ tf pspec =
-    let f p r =
+    let at_ p r =
       Option.bind
         (pspec (Path.get_exn p r))
         ~f:(fun p' -> apply tf Path.(p @ p') r)
     in
-    global ~reraise:false ~short_name:"@" f (sprintf "(%s @ <path>)" tf.name)
+    global ~reraise:false ~short_name:"@" at_ (sprintf "(%s @ <path>)" tf.name)
 
   let first tf pset =
-    let f p r =
+    let first p r =
       Seq.find_map
         (pset (Path.get_exn p r))
         ~f:(fun p' ->
@@ -217,11 +217,11 @@ module Make (C : Config.S) = struct
             (apply (at_ tf (fun _ -> Some p')) p r)
             ~f:(fun r' -> if A.O.(r = r') then None else Some r'))
     in
-    global ~reraise:false ~short_name:"first" f
+    global ~reraise:false ~short_name:"first" first
       (sprintf "first %s in <path set>" tf.name)
 
   let fix tf =
-    let f p r =
+    let fix p r =
       let rec fix r_in =
         match apply tf p r_in with
         | Some r_out -> if A.O.(r_in = r_out) then r_in else fix r_out
@@ -229,26 +229,27 @@ module Make (C : Config.S) = struct
       in
       Some (fix r)
     in
-    global ~reraise:false ~short_name:"fix" f (sprintf "fix(%s)" tf.name)
+    global ~reraise:false ~short_name:"fix" fix (sprintf "fix(%s)" tf.name)
 
   let for_all tf pset = fix (first tf pset)
 
   let seq t1 t2 =
-    let f p r =
+    let seq p r =
       match apply t1 p r with Some r' -> apply t2 p r' | None -> apply t2 p r
     in
-    global ~reraise:false f (sprintf "%s ; %s" t1.name t2.name)
+    global ~reraise:false seq (sprintf "%s ; %s" t1.name t2.name)
 
   let seq' t1 t2 =
-    let f p r = Option.bind (apply t1 p r) ~f:(apply t2 p) in
-    global ~reraise:false f (sprintf "%s ; %s" t1.name t2.name)
+    let seq' p r = Option.bind (apply t1 p r) ~f:(apply t2 p) in
+    global ~reraise:false seq' (sprintf "%s ; %s" t1.name t2.name)
 
   let try_ tf =
-    let f p r = Some (Option.value (apply tf p r) ~default:r) in
-    global f (sprintf "try(%s)" tf.name)
+    let try_ p r = Some (Option.value (apply tf p r) ~default:r) in
+    global try_ (sprintf "try(%s)" tf.name)
 
   let filter f =
-    global (fun p r -> if f @@ Path.get_exn p r then Some r else None) "filter"
+    let filter p r = if f @@ Path.get_exn p r then Some r else None in
+    global filter "filter"
 
   let rec seq_many = function
     | [] -> failwith "Empty transform list."
@@ -258,7 +259,7 @@ module Make (C : Config.S) = struct
   let id = local (fun r -> Some r) "id"
 
   let schema_validated tf =
-    let f p r =
+    let schema_validated p r =
       Option.map (apply tf p r) ~f:(fun r' ->
           let () =
             let prep r = Abslayout_load.annotate conn r in
@@ -266,10 +267,10 @@ module Make (C : Config.S) = struct
           in
           r')
     in
-    global f (sprintf "%s" tf.name)
+    global schema_validated (sprintf "%s" tf.name)
 
   let resolve_validated tf =
-    let f p r =
+    let resolve_validated p r =
       Option.map (apply tf p r) ~f:(fun r' ->
           let () =
             let prep r = Abslayout_load.annotate conn r in
@@ -277,11 +278,11 @@ module Make (C : Config.S) = struct
           in
           r')
     in
-    global f (sprintf "%s" tf.name)
+    global resolve_validated (sprintf "%s" tf.name)
 
   let traced ?name tf =
     let name = Option.value name ~default:tf.name in
-    let f p r =
+    let traced p r =
       info (fun m -> m "@[Running %s on:@,%a@]\n" name A.pp (Path.get_exn p r));
       match apply tf p r with
       | Some r' ->
@@ -296,7 +297,7 @@ module Make (C : Config.S) = struct
           info (fun m -> m "@[Transform %s does not apply.\n" name);
           None
     in
-    global f tf.name
+    global traced tf.name
 
   let of_func_pre ?(name = "<unknown>") ~pre f =
     let tf =
@@ -349,7 +350,7 @@ module Make (C : Config.S) = struct
     let global ~name b_f = { b_f; b_name = name }
 
     let schema_validated tf =
-      let f p r =
+      let schema_validated p r =
         Seq.map (apply tf p r) ~f:(fun r' ->
             let () =
               let prep r = Abslayout_load.annotate conn r in
@@ -357,10 +358,10 @@ module Make (C : Config.S) = struct
             in
             r')
       in
-      global ~name:(sprintf "%s" @@ name tf) f
+      global ~name:(sprintf "%s" @@ name tf) schema_validated
 
     let resolve_validated tf =
-      let f p r =
+      let resolve_validated p r =
         Seq.map (apply tf p r) ~f:(fun r' ->
             let () =
               let prep r = Abslayout_load.annotate conn r in
@@ -368,7 +369,7 @@ module Make (C : Config.S) = struct
             in
             r')
       in
-      global ~name:(sprintf "%s" @@ name tf) f
+      global ~name:(sprintf "%s" @@ name tf) resolve_validated
 
     let validated tf = resolve_validated @@ schema_validated @@ tf
 
@@ -381,26 +382,22 @@ module Make (C : Config.S) = struct
       validated tf
 
     let seq t1 t2 =
-      {
-        b_f = (fun p r -> t1.b_f p r |> Seq.concat_map ~f:(t2.b_f p));
-        b_name = "seq";
-      }
+      let seq p r = t1.b_f p r |> Seq.concat_map ~f:(t2.b_f p) in
+      { b_f = seq; b_name = "seq" }
 
     let choose t1 t2 =
-      {
-        b_f = (fun p r -> Seq.append (t1.b_f p r) (t2.b_f p r));
-        b_name = "choose";
-      }
+      let choose p r = Seq.append (t1.b_f p r) (t2.b_f p r) in
+      { b_f = choose; b_name = "choose" }
 
     let choose_many ts =
-      {
-        b_f =
-          (fun p r ->
-            List.map ts ~f:(fun tf -> tf.b_f p r) |> Seq.of_list |> Seq.concat);
-        b_name = "choose-many";
-      }
+      let choose_many p r =
+        List.map ts ~f:(fun tf -> tf.b_f p r) |> Seq.of_list |> Seq.concat
+      in
+      { b_f = choose_many; b_name = "choose-many" }
 
-    let id = { b_f = (fun _ r -> Seq.singleton r); b_name = "id" }
+    let id =
+      let id _ r = Seq.singleton r in
+      { b_f = id; b_name = "id" }
 
     let rec seq_many = function
       | [] -> failwith "No transforms."
@@ -408,24 +405,22 @@ module Make (C : Config.S) = struct
       | t :: ts -> seq t (seq_many ts)
 
     let at_ tf pspec =
-      let f p r =
+      let at_ p r =
         match pspec r with
         | Some p' -> tf.b_f Path.(p @ p') r
         | None -> Seq.empty
       in
-      { b_f = f; b_name = sprintf "(%s @ <path>)" tf.b_name }
+      { b_f = at_; b_name = sprintf "(%s @ <path>)" tf.b_name }
 
     let filter f =
-      {
-        b_f = (fun p r -> if f r p then Seq.singleton r else Seq.empty);
-        b_name = "filter";
-      }
+      let filter p r = if f r p then Seq.singleton r else Seq.empty in
+      { b_f = filter; b_name = "filter" }
 
     let for_all tf pspec =
-      let f p r =
+      let for_all p r =
         Seq.concat_map (pspec r) ~f:(fun p' -> tf.b_f Path.(p @ p') r)
       in
-      { b_f = f; b_name = sprintf "(%s @ <path>)" tf.b_name }
+      { b_f = for_all; b_name = sprintf "(%s @ <path>)" tf.b_name }
 
     let min cost rs =
       Seq.fold rs ~init:(None, Float.max_value) ~f:(fun (rb, cb) r ->
