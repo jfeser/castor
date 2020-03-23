@@ -108,6 +108,4 @@ let is_serializeable ?(path = Path.root) r =
     ops_serializable_exn r';
     names_serializable_exn path r;
     Ok ()
-  with Un_serial msg ->
-    Fmt.pr "Not serializable:@ %a@ in@ %a" A.pp r' A.pp r;
-    Error msg
+  with Un_serial msg -> Error msg
