@@ -111,6 +111,7 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
     fprintf fmt "%a %a" pp_op (op_to_str op) pp_pred p
   and pp fmt { node; meta } =
     fprintf fmt "@[<hv 2>";
+    Option.iter pp_meta ~f:(fun ppm -> fprintf fmt "@[<hv 2>%a@]#@," ppm meta);
     ( match node with
     | Select (ps, r) -> fprintf fmt "select(%a,@ %a)" (pp_list pp_pred) ps pp r
     | Filter (p, r) -> fprintf fmt "filter(%a,@ %a)" pp_pred p pp r
@@ -141,7 +142,6 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
                  (pp_option pp_upper_bound) ub))
           oi_lookup
     | As (n, r) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp r n );
-    Option.iter pp_meta ~f:(fun ppm -> fprintf fmt "#@[<hv 2>%a@]" ppm meta);
     fprintf fmt "@]"
   in
   (pp, pp_pred)
