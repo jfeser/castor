@@ -24,9 +24,7 @@ let main ~params:all_params ~simplify ~project ~unnest ~sql ~cse ch =
     if simplify then
       let q =
         Cardinality.annotate ~dedup:true q
-        |> Join_elim.remove_joins |> Unnest.hoist_meta
-        |> Cardinality.extend ~dedup:true
-        |> Join_elim.remove_dedup |> A.strip_meta
+        |> Join_elim.remove_joins |> Unnest.hoist_meta |> A.strip_meta
       in
       Option.value_exn (O.apply S.simplify Path.root q)
     else q
@@ -44,9 +42,7 @@ let main ~params:all_params ~simplify ~project ~unnest ~sql ~cse ch =
              Ast.annot )
     in
     Cardinality.extend ~dedup:true q
-    |> Join_elim.remove_joins |> Unnest.hoist_meta
-    |> Cardinality.extend ~dedup:true
-    |> Join_elim.remove_dedup |> A.strip_meta
+    |> Join_elim.remove_joins |> Unnest.hoist_meta |> A.strip_meta
   in
   let query = simplify query in
   let query = if project then Project.project query else query in
