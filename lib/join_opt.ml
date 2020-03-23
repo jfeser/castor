@@ -377,7 +377,7 @@ module Make (C : Config.S) = struct
     let union_all ss = List.concat ss |> of_list
   end
 
-  let no_params r = Set.is_empty @@ Set.inter (A.free r) params
+  let no_params r = Set.is_empty @@ Set.inter (Free.free r) params
 
   let leaf_flat r =
     let open Option.Let_syntax in

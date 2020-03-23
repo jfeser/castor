@@ -70,7 +70,7 @@ module Make (C : Config.S) = struct
     let open Option.Let_syntax in
     let%bind pred, r1, r2 = to_join r in
     let has_params p =
-      not (Set.is_empty @@ Set.inter (Abslayout.pred_free p) C.params)
+      not (Set.is_empty @@ Set.inter (Free.pred_free p) C.params)
     in
     let hoist, keep = Pred.conjuncts pred |> List.partition_tf ~f:has_params in
     if List.is_empty hoist then None

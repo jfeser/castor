@@ -36,7 +36,7 @@ module Make (C : Config.S) = struct
       end
     in
     let r = visitor#visit_t () r in
-    let remains = Set.inter (A.free r) params in
+    let remains = Set.inter (Free.free r) params in
     if Set.is_empty remains then Ok r
     else
       Or_error.error "Failed to remove all parameters." remains

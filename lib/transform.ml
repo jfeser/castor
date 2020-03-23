@@ -78,9 +78,9 @@ module Make (Config : Config.S) = struct
     let r = Resolve.resolve ~params r in
     Path.get_exn p r |> is_serializeable |> Result.is_ok
 
-  let has_params r p = Path.get_exn p r |> free |> overlaps params
+  let has_params r p = Path.get_exn p r |> Free.free |> overlaps params
 
-  let has_free r p = not (Set.is_empty (free (Path.get_exn p r)))
+  let has_free r p = not (Set.is_empty (Free.free (Path.get_exn p r)))
 
   (* Recursively optimize subqueries. *)
   let apply_to_subqueries tf =
@@ -165,7 +165,7 @@ module Make (Config : Config.S) = struct
     let mis_bound_params =
       Path.(all >>? is_compile_time) r
       |> Seq.for_all ~f:(fun p ->
-             not (overlaps (free (Path.get_exn p r)) params))
+             not (overlaps (Free.free (Path.get_exn p r)) params))
       |> not
     in
     if bad_runtime_op then Error (Error.of_string "Bad runtime operation.")
@@ -348,7 +348,7 @@ let optimize (module C : Config.S) r =
           let module C = struct
             include C
 
-            let params = Set.union params (free r)
+            let params = Set.union params (Free.free r)
           end in
           let module O = Ops.Make (C) in
           let module T = Make (C) in

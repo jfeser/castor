@@ -27,7 +27,7 @@ module Make (Config : Config.S) = struct
     let open Option.Let_syntax in
     let used_names =
       let schema_rhs = Schema.schema rhs |> Set.of_list (module Name) in
-      List.map key ~f:(fun (p, _) -> A.pred_free p)
+      List.map key ~f:(fun (p, _) -> Free.pred_free p)
       |> Set.union_list (module Name)
       |> Set.inter schema_rhs |> Set.to_list
     in

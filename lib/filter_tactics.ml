@@ -43,12 +43,12 @@ module Make (C : Config.S) = struct
        bound variables and the parts that do not. *)
   let split_bound binder p =
     List.partition_tf (Pred.conjuncts p) ~f:(fun p' ->
-        overlaps (pred_free p') (schema_set_exn binder))
+        overlaps (Free.pred_free p') (schema_set_exn binder))
 
   (** Check that a predicate is supported by a relation (it does not depend on
      anything in the context that it did not previously depend on.) *)
   let invariant_support orig_bound new_bound pred =
-    let supported = Set.inter (pred_free pred) orig_bound in
+    let supported = Set.inter (Free.pred_free pred) orig_bound in
     Set.is_subset supported ~of_:new_bound
 
   let merge_select s1 s2 =
@@ -77,7 +77,7 @@ module Make (C : Config.S) = struct
         let%bind p, r = to_filter r in
         match select_kind ps with
         | `Scalar ->
-            if Tactics_util.select_contains (pred_free p) ps r then
+            if Tactics_util.select_contains (Free.pred_free p) ps r then
               Some (A.filter p (select ps r))
             else None
         | `Agg -> None )
@@ -159,13 +159,13 @@ module Make (C : Config.S) = struct
 
       TODO: In practice we also want it to have a parameter in it. Is this correct? *)
   let is_candidate_key p r =
-    let pfree = pred_free p in
+    let pfree = Free.pred_free p in
     (not (overlaps (schema_set_exn r) pfree)) && overlaps params pfree
 
   (** A predicate is a candidate to be matched if all its free variables are
      bound by the relation that it is above. *)
   let is_candidate_match p r =
-    Set.is_subset (pred_free p) ~of_:(schema_set_exn r)
+    Set.is_subset (Free.pred_free p) ~of_:(schema_set_exn r)
 
   let elim_cmp_filter r =
     match r.node with
@@ -758,7 +758,7 @@ module Make (C : Config.S) = struct
 
   let elim_subquery _ r =
     let open Option.Let_syntax in
-    let can_hoist r = Set.is_subset (A.free r) ~of_:params in
+    let can_hoist r = Set.is_subset (Free.free r) ~of_:params in
 
     let scope = fresh_name "s%d" in
     let visitor =

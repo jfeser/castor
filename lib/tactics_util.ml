@@ -17,7 +17,7 @@ module Make (Config : Config.S) = struct
   (** Precise selection of all valuations of a list of predicates from a relation.
    *)
   let all_values_precise ps r =
-    if Set.is_empty (free r) then Ok (dedup (select ps r))
+    if Set.is_empty (Free.free r) then Ok (dedup (select ps r))
     else Or_error.errorf "Predicate contains free variables."
 
   let rec closure m =
@@ -83,7 +83,7 @@ module Make (Config : Config.S) = struct
   (** Check that a predicate is fully supported by a relation (it does not
       depend on anything in the context.) *)
   let is_supported stage bound pred =
-    Set.for_all (pred_free pred) ~f:(fun n ->
+    Set.for_all (Free.pred_free pred) ~f:(fun n ->
         Set.mem bound n
         (* TODO: We assume that compile time names that are bound in the context
            are ok, but this might not be true? *)
