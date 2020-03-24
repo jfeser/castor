@@ -66,7 +66,7 @@ let%expect_test "" =
     select([g],
       join((k_f = bnd0),
         select([k_f as bnd0, k_g], select([f as k_f, g as k_g], r)),
-        select([g, k_f], filter((k_f = f), select([f as k_f, f, g], r1))))) |}]
+        select([k_f, g], filter((k_f = f), select([f as k_f, f, g], r1))))) |}]
 
 let%test_unit "" =
   let conn = Lazy.force tpch_conn in
@@ -196,26 +196,26 @@ let%expect_test "" =
         select([s41_ps_availqty as bnd1],
           select([ps_availqty as s41_ps_availqty],
             select([ps_availqty], partsupp))),
-        select([ps_availqty, s41_ps_availqty],
-          select([bnd0, ps_availqty, s41_ps_availqty, s46_ps_availqty],
+        select([s41_ps_availqty, ps_availqty],
+          select([s41_ps_availqty, bnd0, s46_ps_availqty, ps_availqty],
             join(((s46_ps_availqty = bnd0) && (s41_ps_availqty = d0)),
-              select([s46_ps_availqty as bnd0, s41_ps_availqty],
+              select([s41_ps_availqty, s46_ps_availqty as bnd0],
                 select([s41_ps_availqty, ps_availqty as s46_ps_availqty],
-                  select([s41_ps_availqty as ps_availqty, s41_ps_availqty],
+                  select([s41_ps_availqty, s41_ps_availqty as ps_availqty],
                     join(true,
                       dedup(
                         select([s41_ps_availqty],
                           select([ps_availqty as s41_ps_availqty],
                             select([ps_availqty], partsupp)))),
                       ascalar(0 as y))))),
-              select([s41_ps_availqty as d0, ps_availqty, s46_ps_availqty],
-                select([s46_ps_availqty as ps_availqty, s41_ps_availqty,
-                        s46_ps_availqty],
+              select([s41_ps_availqty as d0, s46_ps_availqty, ps_availqty],
+                select([s41_ps_availqty, s46_ps_availqty,
+                        s46_ps_availqty as ps_availqty],
                   join(true,
                     dedup(
                       select([s41_ps_availqty, s46_ps_availqty],
                         select([s41_ps_availqty, ps_availqty as s46_ps_availqty],
-                          select([s41_ps_availqty as ps_availqty, s41_ps_availqty],
+                          select([s41_ps_availqty, s41_ps_availqty as ps_availqty],
                             join(true,
                               dedup(
                                 select([s41_ps_availqty],
@@ -257,15 +257,15 @@ let%expect_test "" =
                   l_discount as s15_l_discount, p_type as s15_p_type],
             select([l_extendedprice, l_discount, p_type],
               join(true, lineitem, part)))),
-        groupby([count() as count0, min(l_discount) as l_discount,
-                 min(l_extendedprice) as l_extendedprice, min(p_type) as p_type,
-                 min(s15_l_discount) as s15_l_discount,
+        groupby([min(s15_l_discount) as s15_l_discount,
                  min(s15_l_extendedprice) as s15_l_extendedprice,
-                 min(s15_p_type) as s15_p_type],
+                 min(s15_p_type) as s15_p_type, count() as count0,
+                 min(l_extendedprice) as l_extendedprice,
+                 min(l_discount) as l_discount, min(p_type) as p_type],
           [s15_l_discount, s15_l_extendedprice, s15_p_type],
-          select([s15_l_discount as l_discount,
-                  s15_l_extendedprice as l_extendedprice, s15_p_type as p_type,
-                  s15_l_discount, s15_l_extendedprice, s15_p_type],
+          select([s15_l_discount, s15_l_extendedprice, s15_p_type,
+                  s15_l_extendedprice as l_extendedprice,
+                  s15_l_discount as l_discount, s15_p_type as p_type],
             join(true,
               dedup(
                 select([s15_l_discount, s15_l_extendedprice, s15_p_type],
@@ -274,3 +274,153 @@ let%expect_test "" =
                     select([l_extendedprice, l_discount, p_type],
                       join(true, lineitem, part))))),
               ascalar(0 as x0)))))) |}]
+
+let%expect_test "" =
+  let conn = Lazy.force tpch_conn in
+  let r =
+    {|
+
+                              depjoin(dedup(
+                                        select([o_orderdate as o_orderdate],
+                                          dedup(
+                                            select([o_orderdate as o_orderdate],
+                                              orders)))) as s7,
+                                select([s7.o_orderdate as x122,
+                                        counter2 as x123, var0 as x124,
+                                        x118 as x125, x119 as x126,
+                                        x120 as x127, x121 as x128],
+                                  atuple([select([0 as counter2, var0,
+                                                  null:int as x118,
+                                                  null:fixed as x119,
+                                                  null:fixed as x120,
+                                                  null:fixed as x121],
+                                            ascalar(0 as var0)),
+                                          select([1 as counter2,
+                                                  null:int as var0, x118,
+                                                  x119, x120, x121],
+                                            depjoin(groupby([count() as ct21,
+                                                             l_extendedprice,
+                                                             l_discount],
+                                                      [l_extendedprice,
+                                                       l_discount],
+                                                      select([l_extendedprice as l_extendedprice,
+                                                              l_discount as l_discount],
+                                                        join(((o_orderdate =
+                                                              s7.o_orderdate)
+                                                             &&
+                                                             ((l_returnflag =
+                                                              "R") &&
+                                                             (l_orderkey =
+                                                             o_orderkey))),
+                                                          lineitem,
+                                                          orders))) as s2,
+                                              select([s2.ct21 as x118,
+                                                      s2.l_extendedprice as x119,
+                                                      s2.l_discount as x120,
+                                                      l_discount as x121],
+                                                atuple([ascalar(s2.l_discount as l_discount)],
+                                                  cross))))],
+                                    concat)))
+|}
+    |> Abslayout_load.load_string conn
+  in
+  unnest r |> Fmt.pr "%a" pp;
+  [%expect
+    {|
+    select([x122, x123, x124, x125, x126, x127, x128],
+      join((s7_o_orderdate = bnd3),
+        select([s7_o_orderdate as bnd3],
+          select([o_orderdate as s7_o_orderdate],
+            dedup(
+              select([o_orderdate as o_orderdate],
+                dedup(select([o_orderdate as o_orderdate], orders)))))),
+        select([s7_o_orderdate, s7_o_orderdate as x122, counter2 as x123,
+                var0 as x124, x118 as x125, x119 as x126, x120 as x127,
+                x121 as x128],
+          atuple([join(true,
+                    dedup(
+                      select([s7_o_orderdate],
+                        select([o_orderdate as s7_o_orderdate],
+                          dedup(
+                            select([o_orderdate as o_orderdate],
+                              dedup(select([o_orderdate as o_orderdate], orders))))))),
+                    select([0 as counter2, var0, null:int as x118,
+                            null:fixed as x119, null:fixed as x120,
+                            null:fixed as x121],
+                      ascalar(0 as var0))),
+                  select([s7_o_orderdate, 1 as counter2, null:int as var0,
+                          x118, x119, x120, x121],
+                    select([s7_o_orderdate, x118, x119, x120, x121],
+                      select([s7_o_orderdate, bnd0, bnd2, bnd1, s2_ct21,
+                              s2_l_discount, s2_l_extendedprice, x118, x119,
+                              x120, x121],
+                        join((((s2_ct21 = bnd0) &&
+                              ((s2_l_discount = bnd1) &&
+                              (s2_l_extendedprice = bnd2))) &&
+                             (s7_o_orderdate = d0)),
+                          select([s7_o_orderdate, s2_ct21 as bnd0,
+                                  s2_l_extendedprice as bnd2,
+                                  s2_l_discount as bnd1],
+                            select([s7_o_orderdate, ct21 as s2_ct21,
+                                    l_extendedprice as s2_l_extendedprice,
+                                    l_discount as s2_l_discount],
+                              groupby([s7_o_orderdate, count() as ct21,
+                                       l_extendedprice, l_discount],
+                                [l_extendedprice, l_discount, s7_o_orderdate],
+                                select([s7_o_orderdate,
+                                        l_extendedprice as l_extendedprice,
+                                        l_discount as l_discount],
+                                  join(((o_orderdate = s7_o_orderdate) &&
+                                       ((l_returnflag = "R") &&
+                                       (l_orderkey = o_orderkey))),
+                                    join(true,
+                                      dedup(
+                                        select([s7_o_orderdate],
+                                          select([o_orderdate as s7_o_orderdate],
+                                            dedup(
+                                              select([o_orderdate as o_orderdate],
+                                                dedup(
+                                                  select([o_orderdate as o_orderdate],
+                                                    orders))))))),
+                                      lineitem),
+                                    orders))))),
+                          select([s7_o_orderdate as d0, s2_ct21, s2_l_discount,
+                                  s2_l_extendedprice, x118, x119, x120, x121],
+                            select([s7_o_orderdate, s2_ct21, s2_l_discount,
+                                    s2_l_extendedprice, s2_ct21 as x118,
+                                    s2_l_extendedprice as x119,
+                                    s2_l_discount as x120, l_discount as x121],
+                              select([s7_o_orderdate, s2_ct21, s2_l_discount,
+                                      s2_l_extendedprice,
+                                      s2_l_discount as l_discount],
+                                join(true,
+                                  dedup(
+                                    select([s7_o_orderdate, s2_ct21,
+                                            s2_l_discount, s2_l_extendedprice],
+                                      select([s7_o_orderdate, ct21 as s2_ct21,
+                                              l_extendedprice as s2_l_extendedprice,
+                                              l_discount as s2_l_discount],
+                                        groupby([s7_o_orderdate, count() as ct21,
+                                                 l_extendedprice, l_discount],
+                                          [l_extendedprice, l_discount,
+                                           s7_o_orderdate],
+                                          select([s7_o_orderdate,
+                                                  l_extendedprice as l_extendedprice,
+                                                  l_discount as l_discount],
+                                            join(((o_orderdate = s7_o_orderdate)
+                                                 &&
+                                                 ((l_returnflag = "R") &&
+                                                 (l_orderkey = o_orderkey))),
+                                              join(true,
+                                                dedup(
+                                                  select([s7_o_orderdate],
+                                                    select([o_orderdate as s7_o_orderdate],
+                                                      dedup(
+                                                        select([o_orderdate as o_orderdate],
+                                                          dedup(
+                                                            select([o_orderdate as o_orderdate],
+                                                              orders))))))),
+                                                lineitem),
+                                              orders)))))),
+                                  ascalar(0 as x0)))))))))],
+            concat)))) |}]

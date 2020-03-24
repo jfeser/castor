@@ -3,6 +3,7 @@ open Ast
 open Abslayout
 open Collections
 open Schema
+open Abslayout_visitors
 
 type tuple = Value.t list [@@deriving compare, sexp]
 
@@ -55,3 +56,38 @@ let equiv conn r1 r2 =
         | None, None -> return @@ Ok ()
       in
       Lwt_main.run (check ())
+
+let duplicate_preds ps =
+  List.filter_map ps ~f:Pred.to_name
+  |> List.find_a_dup ~compare:[%compare: Name.t]
+  |> Option.iter ~f:(fun n ->
+         failwith
+         @@ Fmt.str "Found two expressions with the same name: %a" Name.pp n)
+
+let duplicate_names ns =
+  List.find_a_dup ~compare:[%compare: Name.t] ns
+  |> Option.iter ~f:(fun n ->
+         failwith @@ Fmt.str "Found duplicate names: %a" Name.pp n)
+
+let rec annot r = Iter.annot query meta r
+
+and meta _ = ()
+
+and query q =
+  ( match q with
+  | OrderBy { key; _ } -> List.map key ~f:(fun (p, _) -> p) |> duplicate_preds
+  | Select (ps, _) -> duplicate_preds ps
+  | GroupBy (ps, ns, _) ->
+      duplicate_preds ps;
+      duplicate_names ns
+  | ATuple (r :: rs, Concat) ->
+      let s = schema r in
+      List.iter rs ~f:(fun r' ->
+          let s' = schema r' in
+          if not ([%compare.equal: Schema.t] s s') then
+            failwith
+            @@ Fmt.str "Mismatched schemas in concat tuple:@ %a@ %a" pp s pp s')
+  | q -> Iter.query annot pred q );
+  Iter.query annot pred q
+
+and pred p = Iter.pred annot pred p

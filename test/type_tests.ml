@@ -38,6 +38,10 @@ let%expect_test "len-1" =
 
 let type_test conn q =
   let type_ = Type.Parallel.type_of conn q in
+  print_endline "Parallel type (imprecise):";
+  [%sexp_of: Type.t] type_ |> print_s;
+  let type_ = Type.type_of conn q in
+  print_endline "Serial type (precise):";
   [%sexp_of: Type.t] type_ |> print_s
 
 let%expect_test "" =
@@ -130,3 +134,56 @@ let%expect_test "" =
            ((key_count (Interval 812 812))))))
         (Width 10)))
       ((count (Interval 4 4))))) |}]
+
+let%expect_test "" =
+  let conn = Lazy.force Test_util.tpch_conn in
+  let q =
+    {|
+    aorderedidx(select([o_orderdate], dedup(select([o_orderdate], orders))) as s7,
+                      atuple([alist(select([l_extendedprice, l_discount],
+                                      join(((o_orderdate = s7.o_orderdate) &&
+                                           (((l_returnflag = "R")) &&
+                                           (l_orderkey = o_orderkey))),
+                                        lineitem,
+                                        orders)) as s2,
+                                atuple([ascalar(s2.l_extendedprice),
+                                        ascalar(s2.l_discount)],
+                                  cross))],
+                        cross),
+      >= param0, < (param0 + month(3)))
+|}
+    |> Abslayout_load.load_string
+         ~params:
+           (Set.of_list
+              (module Name)
+              [ Name.create ~type_:Prim_type.date_t "param0" ])
+         conn
+  in
+  type_test conn q
+
+let%expect_test "" =
+  Logs.set_reporter (Logs.format_reporter ());
+  Logs.Src.set_level Unnest.src (Some Info);
+  let conn = Lazy.force Test_util.tpch_conn in
+  let q =
+    {|
+    aorderedidx(select([o_orderdate], dedup(select([o_orderdate], orders))) as s7,
+                      atuple([ascalar(0),
+                              alist(select([l_extendedprice, l_discount],
+                                      join(((o_orderdate = s7.o_orderdate) &&
+                                           (((l_returnflag = "R")) &&
+                                           (l_orderkey = o_orderkey))),
+                                        lineitem,
+                                        orders)) as s2,
+                                ascalar(s2.l_discount))],
+                        cross),
+      >= param0, < (param0 + month(3)))
+|}
+    |> Abslayout_load.load_string
+         ~params:
+           (Set.of_list
+              (module Name)
+              [ Name.create ~type_:Prim_type.date_t "param0" ])
+         conn
+  in
+  type_test conn q

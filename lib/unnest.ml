@@ -17,17 +17,25 @@ module C = (val Constructors.Annot.with_strip_meta (fun () -> default_meta))
 
 (** Convert a list of predicates into a select list that contains no duplicate
     attributes. *)
-let select_list_of_preds ps =
-  let named, unnamed =
-    List.partition_map ps ~f:(fun p ->
-        match Pred.to_name p with Some n -> `Fst (n, p) | None -> `Snd p)
-  in
-  let named =
-    List.dedup_and_sort named ~compare:(fun (n, _) (n', _) ->
-        [%compare: Name.t] n n')
-    |> List.map ~f:(fun (_, p) -> p)
-  in
-  unnamed @ named
+let select_list_of_preds ps = ps
+
+(* let named, unnamed =
+ *   List.partition_map ps ~f:(fun p ->
+ *       match Pred.to_name p with Some n -> `Fst (n, p) | None -> `Snd p)
+ * in
+ * let compare (n, _) (n', _) = [%compare: Name.t] n n' in
+ * if List.contains_dup ~compare named then
+ *   let ps_rev, _ =
+ *     List.fold_left ps ~init:([], []) ~f:(fun (ps, names) p ->
+ *         match Pred.to_name p with
+ *         | Some n ->
+ *             if List.mem names n ~equal:[%compare.equal: Name.t] then
+ *               (ps, names)
+ *             else (p :: ps, n :: names)
+ *         | None -> (p :: ps, names))
+ *   in
+ *   List.rev ps_rev
+ * else ps *)
 
 (** In this module, we assume that dep_join returns attributes from both its lhs
    and rhs. This assumption is safe because we first wrap depjoins in selects
@@ -177,10 +185,21 @@ and to_nice_pred p = map_pred to_nice to_nice_pred p
 
 let push_join d { pred = p; r1 = t1; r2 = t2 } =
   let d_attr = attrs d in
-  if Set.inter (Free.free t2) d_attr |> Set.is_empty then
-    C.join p (dep_join d t1) t2
-  else if Set.inter (Free.free t1) d_attr |> Set.is_empty then
-    C.join p t1 (dep_join d t2)
+  (* A selection list that maintains the original schema. *)
+  let orig_select =
+    schema d @ schema t1 @ schema t2
+    |> List.map ~f:P.name |> select_list_of_preds
+  in
+  if
+    (* The rhs of the join is not dependent. *)
+    Set.inter (Free.free t2) d_attr |> Set.is_empty
+  then C.join p (dep_join d t1) t2
+  else if
+    (* The lhs of the join is not dependent. *)
+    Set.inter (Free.free t1) d_attr |> Set.is_empty
+  then
+    (* Pushing the depjoin to the right will change the schema. *)
+    C.select orig_select @@ C.join p t1 @@ dep_join d t2
   else
     (* Rename the d relation in the rhs of the join *)
     let d_rhs =
@@ -191,16 +210,11 @@ let push_join d { pred = p; r1 = t1; r2 = t2 } =
       @ (schema t2 |> List.map ~f:P.name)
       |> select_list_of_preds
     in
-    (* Select out the duplicate d attributes *)
-    let outer_select =
-      schema t1 @ schema t2 @ schema d
-      |> List.map ~f:P.name |> select_list_of_preds
-    in
     (* Perform a natural join on the two copies of d *)
     let d_pred =
       List.map d_rhs ~f:(fun (x, x') -> Infix.(name x = n x')) |> Pred.conjoin
     in
-    C.select outer_select
+    C.select orig_select
     @@ C.join
          Infix.(p && d_pred)
          (dep_join d t1)
@@ -209,14 +223,14 @@ let push_join d { pred = p; r1 = t1; r2 = t2 } =
 let push_filter d (p, t2) = C.filter p (dep_join d t2)
 
 let push_groupby d (aggs, keys, q) =
-  let aggs = aggs @ (schema d |> List.map ~f:P.name) in
+  let aggs = (schema d |> List.map ~f:P.name) @ aggs in
   let keys = keys @ schema d in
   C.group_by aggs keys (dep_join d q)
 
 let push_select d (preds, q) =
   let d_schema = schema d in
   let preds =
-    preds @ (d_schema |> List.map ~f:P.name) |> select_list_of_preds
+    (d_schema |> List.map ~f:P.name) @ preds |> select_list_of_preds
   in
   match A.select_kind preds with
   | `Scalar -> C.select preds (dep_join d q)
@@ -246,14 +260,17 @@ let stuck d =
 
 let push_cross_tuple d qs =
   let select_list =
-    List.map qs ~f:(fun q -> match q.node with AScalar p -> p | _ -> stuck d)
-    @ (schema d.d_lhs |> to_select_list)
+    (schema d.d_lhs |> to_select_list)
+    @ List.map qs ~f:(fun q ->
+          match q.node with AScalar p -> p | _ -> stuck d)
     |> select_list_of_preds
   in
   C.select select_list d.d_lhs
 
 let push_scalar d p =
-  let select_list = p :: (schema d |> to_select_list) |> select_list_of_preds in
+  let select_list =
+    (schema d |> to_select_list) @ [ p ] |> select_list_of_preds
+  in
   C.select select_list d
 
 let push_dedup d q = C.dedup (dep_join d q)
@@ -307,16 +324,18 @@ let hoist_meta r = map_meta (fun m -> m#meta) r
 let unnest q =
   let check q' =
     schema_invariant q q';
-    Inv.resolve q q'
+    Validate.annot q'
   in
-  let q' =
+  let q_visible =
     q |> A.strip_meta |> Layout_to_depjoin.annot |> to_visible_depjoin
     |> map_meta (fun _ -> default_meta)
-    |> to_nice |> push_depjoin
   in
-  check q';
+  let q_nice = to_nice q_visible in
+  check q_nice;
+  let q_pushed = push_depjoin q_nice in
+  check q_pushed;
   let q' =
-    q' |> Cardinality.annotate
+    q_pushed |> Cardinality.annotate
     (* We can remove the results of an eliminated depjoin regardless of the
        usual rules around cardinality preservation. *)
     |> map_meta (fun m ->
@@ -329,4 +348,5 @@ let unnest q =
     |> Join_elim.remove_joins |> hoist_meta
   in
   check q';
+  Inv.resolve q q';
   q'
