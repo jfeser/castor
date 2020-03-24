@@ -7,15 +7,34 @@ module P = Pred.Infix
 
 include (val Log.make ~level:(Some Info) "castor-opt.join-opt")
 
+let filter p r = { node = Filter (p, r); meta = r.meta }
+
+let join pred r1 r2 = { node = Join { pred; r1; r2 }; meta = r1.meta }
+
 module Join_graph = struct
   module Vertex = struct
-    include Ast
+    module T = struct
+      type t =
+        (< stage : Name.t -> [ `Compile | `Run ] >[@ignore] [@opaque]) annot
+      [@@deriving compare, hash, sexp]
 
-    let equal = [%compare.equal: t]
+      let equal = [%compare.equal: t]
+    end
+
+    include T
+    include Comparator.Make (T)
   end
 
   module Edge = struct
-    include Pred
+    module T = struct
+      type t =
+        (< stage : Name.t -> [ `Compile | `Run ] >[@ignore] [@opaque]) annot
+        pred
+      [@@deriving compare, sexp]
+    end
+
+    include T
+    include Comparator.Make (T)
 
     let default = Bool true
   end
@@ -98,7 +117,7 @@ module Join_graph = struct
 
   let to_ralgebra graph =
     if nb_vertex graph = 1 then choose_vertex graph
-    else contract (fun ~label:p j1 j2 -> A.join p j1 j2) graph
+    else contract (fun ~label:p j1 j2 -> join p j1 j2) graph
 
   (** Collect the leaves of the join tree rooted at r. *)
   let rec to_leaves r =
@@ -139,7 +158,7 @@ module Join_graph = struct
                 let filters =
                   Map.update filters r ~f:(function
                     | Some fs -> Set.add fs p
-                    | None -> Set.singleton (module Pred) p)
+                    | None -> Set.singleton (module Edge) p)
                 in
                 return (graph, filters)
             | Ok [ r1; r2 ] ->
@@ -153,7 +172,7 @@ module Join_graph = struct
                 warn (fun m ->
                     m "Unhandled predicate %a: %a" Pred.pp p Error.pp e);
                 None)
-    | _ -> Some (empty, Map.empty (module Ast))
+    | _ -> Some (empty, Map.empty (module Vertex))
 
   let of_abslayout r =
     let open Option.Let_syntax in
@@ -168,7 +187,7 @@ module Join_graph = struct
     map_vertex
       (fun r ->
         match Map.find filters r with
-        | Some preds -> A.filter (Set.to_list preds |> Pred.conjoin) r
+        | Some preds -> filter (Set.to_list preds |> Pred.conjoin) r
         | None -> r)
       graph
 
@@ -249,29 +268,25 @@ module Config = struct
   end
 end
 
-module Make (C : Config.S) = struct
-  module My_C : Config.My_S = C
+module Make (Config : Config.S) = struct
+  open Config
 
-  open My_C
-
-  open Ops.Make (C)
-
-  open Simple_tactics.Make (C)
+  open Ops.Make (Config)
 
   module G = Join_graph
 
   type t =
-    | Flat of Ast.t
-    | Hash of { lkey : Pred.t; lhs : t; rkey : Pred.t; rhs : t }
-    | Nest of { lhs : t; rhs : t; pred : Pred.t }
-    | Id of Ast.t
+    | Flat of G.Vertex.t
+    | Id of G.Vertex.t
+    | Hash of { lkey : G.Edge.t; lhs : t; rkey : G.Edge.t; rhs : t }
+    | Nest of { lhs : t; rhs : t; pred : G.Edge.t }
   [@@deriving sexp_of]
 
   let rec to_ralgebra = function
     | Flat r | Id r -> r
-    | Nest { lhs; rhs; pred } -> A.join pred (to_ralgebra lhs) (to_ralgebra rhs)
+    | Nest { lhs; rhs; pred } -> join pred (to_ralgebra lhs) (to_ralgebra rhs)
     | Hash { lkey; rkey; lhs; rhs } ->
-        A.join (Binop (Eq, lkey, rkey)) (to_ralgebra lhs) (to_ralgebra rhs)
+        join (Binop (Eq, lkey, rkey)) (to_ralgebra lhs) (to_ralgebra rhs)
 
   module Cost = struct
     let read = function
@@ -310,7 +325,7 @@ module Make (C : Config.S) = struct
       let rec annot r = map_annot query r
       and query q = map_query annot pred q
       and pred p = Pred.to_static ~params p in
-      annot r
+      annot @@ A.strip_meta r
     in
 
     (* Generate a group-by using the partition fields. *)
@@ -373,11 +388,15 @@ module Make (C : Config.S) = struct
         scan_cost parts lhs
         +. (nt_lhs *. (Cost.hash (Pred.to_type lkey) +. rhs_per_partition_cost))
 
-  let no_params r = Set.is_empty @@ Set.inter (Free.free r) params
+  let rec is_static_join = function
+    | Id r -> Is_serializable.is_static r
+    | Flat _ -> true
+    | Hash { lhs; rhs; _ } | Nest { lhs; rhs; _ } ->
+        is_static_join lhs && is_static_join rhs
 
   let leaf_flat r =
     let open Option.Let_syntax in
-    if no_params r then return @@ Flat r
+    if Is_serializable.is_static r then return @@ Flat r
     else (
       info (fun m -> m "Flat join does not apply to@ %a." A.pp r);
       None )
@@ -389,12 +408,11 @@ module Make (C : Config.S) = struct
   let enum_flat_join opt parts pred s1 s2 =
     let select_flat s =
       List.filter_map (opt parts s) ~f:(fun (_, j) ->
-          let r = to_ralgebra j in
-          if no_params r then Some r else None)
+          if is_static_join j then Some (to_ralgebra j) else None)
     in
     List.cartesian_product (select_flat s1) (select_flat s2)
     |> List.map ~f:(fun (r1, r2) ->
-           let j = Flat (A.join pred r1 r2) in
+           let j = Flat (join pred r1 r2) in
            ([| scan_cost parts j |], j))
 
   let enum_hash_join opt parts pred s1 s2 =
@@ -427,7 +445,7 @@ module Make (C : Config.S) = struct
           let rhs_parts = Set.union (to_parts rhs pred) parts in
           List.cartesian_product (opt parts s1) (opt rhs_parts s2)
           |> List.filter_map ~f:(fun ((_, lhs), (_, rhs)) ->
-                 if no_params @@ to_ralgebra rhs then
+                 if is_static_join rhs then
                    Some (Hash { lkey = k1; rkey = k2; lhs; rhs })
                  else None)
       | _ ->
@@ -445,7 +463,7 @@ module Make (C : Config.S) = struct
     and rhs_set = List.map (opt rhs_parts s2) ~f:(fun (_, j) -> j) in
     List.cartesian_product lhs_set rhs_set
     |> List.filter_map ~f:(fun (j1, j2) ->
-           if no_params @@ to_ralgebra j1 then
+           if is_static_join j1 then
              let j = Nest { lhs = j1; rhs = j2; pred } in
              Some ([| scan_cost parts j |], j)
            else None)
@@ -462,19 +480,19 @@ module Make (C : Config.S) = struct
       else
         G.partition_fold s ~init:Pareto_set.empty ~f:(fun cs (s1, s2, es) ->
             let pred = Pred.conjoin (List.map es ~f:(fun (_, p, _) -> p)) in
-            let r = A.join pred (G.to_ralgebra s1) (G.to_ralgebra s2) in
+            let r = join pred (G.to_ralgebra s1) (G.to_ralgebra s2) in
 
             let open Mcmc.Random_choice in
             let flat_joins =
-              if rand random "flat-join" r then
+              if rand random "flat-join" (A.strip_meta r) then
                 enum_flat_join opt parts pred s1 s2
               else []
             and hash_joins =
-              if rand random "hash-join" r then
+              if rand random "hash-join" (A.strip_meta r) then
                 enum_hash_join opt parts pred s1 s2
               else []
             and nest_joins =
-              if rand random "nest-join" r then
+              if rand random "nest-join" (A.strip_meta r) then
                 enum_nest_join opt parts pred s1 s2
               else []
             in
@@ -516,10 +534,11 @@ module Make (C : Config.S) = struct
     let%map s = G.of_abslayout r in
     opt (Set.empty (module Name)) s
 
-  let reshape j _ = Some (to_ralgebra j)
+  let reshape j _ = Some (to_ralgebra j |> A.strip_meta)
 
   let rec emit_joins =
-    let open Join_elim_tactics.Make (C) in
+    let open Join_elim_tactics.Make (Config) in
+    let open Simple_tactics.Make (Config) in
     function
     | Flat _ -> row_store
     | Id _ -> id
@@ -541,12 +560,19 @@ module Make (C : Config.S) = struct
   let transform =
     let open Option.Let_syntax in
     let f p r =
+      let r =
+        Is_serializable.annotate_stage r
+        |> Abslayout_visitors.map_meta (fun meta ->
+               object
+                 method stage = meta#stage
+               end)
+      in
       let%bind joins = opt (Castor.Path.get_exn p r) in
       info (fun m -> m "Found %d join options." (Pareto_set.length joins));
       let%bind j = Pareto_set.min_elt (fun a -> a.(0)) joins in
-      debug (fun m -> m "Chose %a." Sexp.pp_hum ([%sexp_of: t] j));
+      info (fun m -> m "Chose %a." Sexp.pp_hum ([%sexp_of: t] j));
       let tf = seq (local (reshape j) "reshape") (emit_joins j) in
-      apply (traced tf) p r
+      apply (traced tf) p (A.strip_meta r)
     in
     global f "join-opt"
 end

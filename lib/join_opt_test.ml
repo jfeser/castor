@@ -23,6 +23,12 @@ end
 
 open Join_opt.Make (Config)
 
+module C =
+( val Constructors.Annot.with_default
+        (object
+           method stage : Name.t -> [ `Compile | `Run ] = assert false
+        end) )
+
 let type_ = Prim_type.IntT { nullable = false }
 
 let c_custkey = Name.create ~type_ "c_custkey"
@@ -40,21 +46,21 @@ let customer = Db.relation Config.cost_conn "customer"
 let nation = Db.relation Config.cost_conn "nation"
 
 let%expect_test "parted-cost" =
-  estimate_ntuples_parted (Set.empty (module Name)) (Flat (A.relation orders))
+  estimate_ntuples_parted (Set.empty (module Name)) (Flat (C.relation orders))
   |> [%sexp_of: int * int * float] |> print_s;
   [%expect {| (1000 1000 1000) |}]
 
 let%expect_test "parted-cost" =
   estimate_ntuples_parted
     (Set.singleton (module Name) o_custkey)
-    (Flat (A.relation orders))
+    (Flat (C.relation orders))
   |> [%sexp_of: int * int * float] |> print_s;
   [%expect {| (1 2 1.0060362173038229) |}]
 
 let%expect_test "parted-cost" =
   estimate_ntuples_parted
     (Set.singleton (module Name) c_custkey)
-    (Flat (A.relation customer))
+    (Flat (C.relation customer))
   |> [%sexp_of: int * int * float] |> print_s;
   [%expect {| (1 1 1) |}]
 
@@ -64,7 +70,7 @@ let%expect_test "cost" =
   estimate_cost
     (Set.empty (module Name))
     (Flat
-       A.(
+       C.(
          join
            (Binop (Eq, Name c_custkey, Name o_custkey))
            (relation orders) (relation customer)))
@@ -74,7 +80,7 @@ let%expect_test "cost" =
 let%expect_test "cost" =
   estimate_cost
     (Set.empty (module Name))
-    A.(
+    C.(
       Nest
         {
           pred = Binop (Eq, Name c_custkey, Name o_custkey);
@@ -87,7 +93,7 @@ let%expect_test "cost" =
 let%expect_test "cost" =
   estimate_cost
     (Set.empty (module Name))
-    A.(
+    C.(
       Flat
         (join
            (Binop (Eq, Name c_nationkey, Name n_nationkey))
@@ -95,7 +101,7 @@ let%expect_test "cost" =
   |> [%sexp_of: float array] |> print_s;
   estimate_cost
     (Set.empty (module Name))
-    A.(
+    C.(
       Nest
         {
           pred = Binop (Eq, Name c_nationkey, Name n_nationkey);
@@ -105,7 +111,7 @@ let%expect_test "cost" =
   |> [%sexp_of: float array] |> print_s;
   estimate_cost
     (Set.empty (module Name))
-    A.(
+    C.(
       Hash
         {
           lkey = Name c_nationkey;
@@ -121,7 +127,7 @@ let%expect_test "cost" =
 
 let%expect_test "to-from-ralgebra" =
   let r =
-    A.(
+    C.(
       join
         (Binop (Eq, Name c_nationkey, Name n_nationkey))
         (relation nation) (relation customer))
@@ -134,7 +140,7 @@ let%expect_test "to-from-ralgebra" =
 
 let%expect_test "to-from-ralgebra" =
   let r =
-    A.(
+    C.(
       join
         (Binop (Eq, Name c_custkey, Name o_custkey))
         (relation orders)
@@ -153,7 +159,7 @@ let%expect_test "to-from-ralgebra" =
 
 let%expect_test "part-fold" =
   let r =
-    A.(
+    C.(
       join
         (Binop (Eq, Name c_custkey, Name o_custkey))
         (relation orders)
@@ -183,7 +189,7 @@ let%expect_test "part-fold" =
 
 let%expect_test "join-opt" =
   opt
-    A.(
+    C.(
       join
         (Binop (Eq, Name c_nationkey, Name n_nationkey))
         (relation nation) (relation customer))
@@ -202,7 +208,7 @@ let%expect_test "join-opt" =
                  (((name n_name) (meta <opaque>)) (StringT (padded)))
                  (((name n_regionkey) (meta <opaque>)) (IntT))
                  (((name n_comment) (meta <opaque>)) (StringT))))))))
-           (meta ()))))
+           (meta <opaque>))))
         (rhs
          (Flat
           ((node
@@ -217,14 +223,14 @@ let%expect_test "join-opt" =
                  (((name c_acctbal) (meta <opaque>)) (FixedT))
                  (((name c_mktsegment) (meta <opaque>)) (StringT (padded)))
                  (((name c_comment) (meta <opaque>)) (StringT))))))))
-           (meta ()))))
+           (meta <opaque>))))
         (pred
          (Binop Eq (Name ((name c_nationkey) (meta <opaque>)))
           (Name ((name n_nationkey) (meta <opaque>))))))))) |}]
 
 let%expect_test "join-opt" =
   opt
-    A.(
+    C.(
       join
         (Binop (Eq, Name c_custkey, Name o_custkey))
         (relation orders)
@@ -246,7 +252,7 @@ let%expect_test "join-opt" =
                  (((name n_name) (meta <opaque>)) (StringT (padded)))
                  (((name n_regionkey) (meta <opaque>)) (IntT))
                  (((name n_comment) (meta <opaque>)) (StringT))))))))
-           (meta ()))))
+           (meta <opaque>))))
         (rhs
          (Nest
           (lhs
@@ -263,7 +269,7 @@ let%expect_test "join-opt" =
                    (((name c_acctbal) (meta <opaque>)) (FixedT))
                    (((name c_mktsegment) (meta <opaque>)) (StringT (padded)))
                    (((name c_comment) (meta <opaque>)) (StringT))))))))
-             (meta ()))))
+             (meta <opaque>))))
           (rhs
            (Flat
             ((node
@@ -279,7 +285,7 @@ let%expect_test "join-opt" =
                    (((name o_clerk) (meta <opaque>)) (StringT (padded)))
                    (((name o_shippriority) (meta <opaque>)) (IntT))
                    (((name o_comment) (meta <opaque>)) (StringT))))))))
-             (meta ()))))
+             (meta <opaque>))))
           (pred
            (Binop Eq (Name ((name c_custkey) (meta <opaque>)))
             (Name ((name o_custkey) (meta <opaque>)))))))

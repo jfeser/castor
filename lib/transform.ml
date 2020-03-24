@@ -74,7 +74,8 @@ module Make (Config : Config.S) = struct
 
   module Cost = Type_cost.Make (Config)
 
-  let is_serializable r p = Path.get_exn p r |> is_serializeable |> Result.is_ok
+  let is_serializable r p =
+    Is_serializable.is_serializeable ~path:p r |> Result.is_ok
 
   let has_params r p = Path.get_exn p r |> Free.free |> overlaps params
 

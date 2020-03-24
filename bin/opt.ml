@@ -13,7 +13,10 @@ let command_out cmd =
   let open Or_error.Let_syntax in
   let ch = Unix.open_process_in cmd in
   let out = In_channel.input_all ch in
-  let%map () = Unix.Exit_or_signal.or_error (Unix.close_process_in ch) in
+  let%map () =
+    Unix.Exit_or_signal.or_error (Unix.close_process_in ch)
+    |> Or_error.tag ~tag:cmd
+  in
   out
 
 let system_exn cmd =
@@ -106,15 +109,22 @@ let main ~params ~cost_timeout ~timeout ~out_dir ~out_file ch =
   let cost state =
     Fresh.reset Global.fresh;
     match opt conn cost_conn params_set cost_timeout state query with
-    | Some (query', serializable) when serializable -> (
+    | Some (query', true) -> (
         match eval out_dir params query' with
         | Ok cost ->
             if Float.(cost < !best_cost) then (
               dump out_file query';
               best_cost := cost );
             cost
-        | _ -> Float.infinity )
-    | _ -> Float.infinity
+        | Error err ->
+            Logs.info (fun m -> m "Evaluation failed: %a" Error.pp err);
+            Float.infinity )
+    | Some (query', false) ->
+        Logs.info (fun m -> m "Not serializable:@ %a" Abslayout.pp query');
+        Float.infinity
+    | None ->
+        Logs.info (fun m -> m "No candidate found.");
+        Float.infinity
   in
 
   let cost = Memo.of_comparable (module Mcmc.Random_choice.C) cost in

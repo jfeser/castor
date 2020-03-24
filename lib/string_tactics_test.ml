@@ -40,7 +40,7 @@ let%expect_test "" =
 
   (Failure "Not schema invariant")
   Raised at file "stdlib.ml", line 29, characters 17-33
-  Called from file "castor/lib/ops.ml", line 356, characters 14-43
+  Called from file "castor/lib/ops.ml", line 357, characters 14-43
   Called from file "src/sequence.ml", line 189, characters 33-36
   Called from file "src/sequence.ml", line 186, characters 14-23
   Called from file "src/sequence.ml", line 351, characters 10-19
