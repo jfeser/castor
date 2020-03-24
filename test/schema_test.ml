@@ -202,13 +202,13 @@ select([1 as counter2, s7_o_orderdate, null:int as var0,
     |> Abslayout_load.load_string (Lazy.force Test_util.tpch_conn)
   in
   schema r |> Fmt.pr "%a" pp;
-  [%expect {||}];
+  [%expect {| [x122; x123; x124; x125; x126; x127; x128] |}];
   let s1 = schema r1 and s2 = schema r2 in
   Fmt.pr "%a" pp s1;
-  [%expect {||}];
+  [%expect {| [s7_o_orderdate; counter2; var0; x118; x119; x120; x121] |}];
   Fmt.pr "%a" pp s2;
-  [%expect {||}];
+  [%expect {| [counter2; s7_o_orderdate; var0; x118; x119; x120; x121] |}];
   [%compare.equal: Schema.t] s1 s2 |> Fmt.pr "%b";
-  [%expect ""];
+  [%expect "false"];
   [%compare.equal: Name.t list] s1 s2 |> Fmt.pr "%b";
-  [%expect ""]
+  [%expect "false"]

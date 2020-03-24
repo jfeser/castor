@@ -85,8 +85,28 @@ let%expect_test "order-by" =
     ORDER BY
         r1_0. "f" DESC |}]
 
-let%expect_test "dedup" = run_test "dedup(r)";
-  [%expect {|
+let%expect_test "order-by" =
+  run_test "OrderBy([0 desc], Dedup(Select([f], r1)))";
+  [%expect
+    {|
+    SELECT DISTINCT
+        r1_0. "f" AS "f_1"
+    FROM
+        "r1" AS "r1_0" |}]
+
+let%expect_test "order-by" =
+  run_test "OrderBy([0 as x desc], Dedup(Select([f], r1)))";
+  [%expect
+    {|
+    SELECT DISTINCT
+        r1_0. "f" AS "f_1"
+    FROM
+        "r1" AS "r1_0" |}]
+
+let%expect_test "dedup" =
+  run_test "dedup(r)";
+  [%expect
+    {|
     SELECT DISTINCT
         r_0. "f" AS "f_0",
         r_0. "g" AS "g_0"

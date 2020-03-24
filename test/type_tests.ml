@@ -53,6 +53,9 @@ let%expect_test "" =
   type_test conn q;
   [%expect
     {|
+    Parallel type (imprecise):
+    (ListT ((IntT ((range (Interval 1 3)))) ((count (Interval 5 5)))))
+    Serial type (precise):
     (ListT ((IntT ((range (Interval 1 3)))) ((count (Interval 5 5))))) |}]
 
 let%expect_test "" =
@@ -64,9 +67,14 @@ let%expect_test "" =
   type_test conn q;
   [%expect
     {|
+    Parallel type (imprecise):
     (HashIdxT
      ((IntT ((range (Interval 1 3)))) (IntT ((range (Interval 1 3))))
-      ((key_count (Interval 5 5))))) |}]
+      ((key_count (Interval 5 5)))))
+    Serial type (precise):
+    (HashIdxT
+     ((IntT ((range (Interval 1 3)))) (IntT ((range (Interval 1 3))))
+      ((key_count (Interval 3 3))))) |}]
 
 let%expect_test "" =
   let conn = Lazy.force Test_util.test_db_conn in
@@ -78,10 +86,16 @@ let%expect_test "" =
   type_test conn q;
   [%expect
     {|
+    Parallel type (imprecise):
     (HashIdxT
      ((IntT ((range (Interval 1 3))))
       (ListT ((IntT ((range (Interval 1 4)))) ((count (Interval 1 2)))))
-      ((key_count (Interval 5 5))))) |}]
+      ((key_count (Interval 5 5)))))
+    Serial type (precise):
+    (HashIdxT
+     ((IntT ((range (Interval 1 3))))
+      (ListT ((IntT ((range (Interval 1 4)))) ((count (Interval 1 2)))))
+      ((key_count (Interval 3 3))))) |}]
 
 let%expect_test "" =
   let conn = Lazy.force Test_util.tpch_conn in
@@ -116,6 +130,7 @@ let%expect_test "" =
   type_test conn q;
   [%expect
     {|
+    Parallel type (imprecise):
     (ListT
      ((FuncT
        (((OrderedIdxT
@@ -132,6 +147,27 @@ let%expect_test "" =
                 ((count (Interval 1 5))))))
              (Width 6)))
            ((key_count (Interval 812 812))))))
+        (Width 10)))
+      ((count (Interval 4 4)))))
+    Serial type (precise):
+    (ListT
+     ((FuncT
+       (((OrderedIdxT
+          ((DateT ((range (Interval 8037 10552))))
+           (FuncT
+            (((ListT
+               ((TupleT
+                 (((IntT ((range (Interval 1 50))))
+                   (FixedT
+                    ((value ((range (Interval 98606 10084102)) (scale 100)))))
+                   (FixedT ((value ((range (Interval 0 10)) (scale 100)))))
+                   (FixedT ((value ((range (Interval 0 8)) (scale 100)))))
+                   (StringT ((nchars (Interval 1 1))))
+                   (StringT ((nchars (Interval 1 1)))))
+                  ((kind Cross))))
+                ((count (Interval 1 5))))))
+             (Width 6)))
+           ((key_count (Interval 3 412))))))
         (Width 10)))
       ((count (Interval 4 4))))) |}]
 
@@ -159,11 +195,34 @@ let%expect_test "" =
               [ Name.create ~type_:Prim_type.date_t "param0" ])
          conn
   in
-  type_test conn q
+  type_test conn q;
+  [%expect {|
+    Parallel type (imprecise):
+    (OrderedIdxT
+     ((DateT ((range (Interval 8036 10437))))
+      (TupleT
+       (((ListT
+          ((TupleT
+            (((FixedT ((value ((range Top) (scale 1)))))
+              (FixedT ((value ((range Top) (scale 1))))))
+             ((kind Cross))))
+           ((count (Interval 1 3))))))
+        ((kind Cross))))
+      ((key_count (Interval 822 822)))))
+    Serial type (precise):
+    (OrderedIdxT
+     ((DateT ((range (Interval 8036 9239))))
+      (TupleT
+       (((ListT
+          ((TupleT
+            (((FixedT ((value ((range (Interval 98606 9479520)) (scale 100)))))
+              (FixedT ((value ((range (Interval 0 10)) (scale 100))))))
+             ((kind Cross))))
+           ((count (Interval 1 3))))))
+        ((kind Cross))))
+      ((key_count (Interval 230 230))))) |}]
 
 let%expect_test "" =
-  Logs.set_reporter (Logs.format_reporter ());
-  Logs.Src.set_level Unnest.src (Some Info);
   let conn = Lazy.force Test_util.tpch_conn in
   let q =
     {|
@@ -186,4 +245,24 @@ let%expect_test "" =
               [ Name.create ~type_:Prim_type.date_t "param0" ])
          conn
   in
-  type_test conn q
+  type_test conn q;
+  [%expect {|
+    Parallel type (imprecise):
+    (OrderedIdxT
+     ((DateT ((range (Interval 8036 10437))))
+      (TupleT
+       (((IntT ((range (Interval 0 0))))
+         (ListT
+          ((FixedT ((value ((range Top) (scale 1))))) ((count (Interval 1 3))))))
+        ((kind Cross))))
+      ((key_count (Interval 822 822)))))
+    Serial type (precise):
+    (OrderedIdxT
+     ((DateT ((range (Interval 8036 10437))))
+      (TupleT
+       (((IntT ((range (Interval 0 0))))
+         (ListT
+          ((FixedT ((value ((range (Interval 0 10)) (scale 100)))))
+           ((count (Interval 0 3))))))
+        ((kind Cross))))
+      ((key_count (Interval 822 822))))) |}]
