@@ -75,7 +75,6 @@ and meta _ = ()
 
 and query q =
   ( match q with
-  | OrderBy { key; _ } -> List.map key ~f:(fun (p, _) -> p) |> duplicate_preds
   | Select (ps, _) -> duplicate_preds ps
   | GroupBy (ps, ns, _) ->
       duplicate_preds ps;
