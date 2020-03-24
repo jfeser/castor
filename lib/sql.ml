@@ -138,6 +138,11 @@ let order_by of_ralgebra key r =
         err (fun m -> m "Non-scalar predicate in order-by: %a" Pred.pp p));
     preds
   in
+  (* Remove constant integer predicates (sql interprets these specially). *)
+  let key =
+    List.filter key ~f:(fun (p, o) ->
+        match Pred.remove_as p with Int _ -> false | _ -> true)
+  in
   Query { spj with order = key }
 
 let scoped_names ns p =
