@@ -1,0 +1,109 @@
+select([ss1_ca_county,
+        ss1_d_year,
+        (ws2_web_sales / ws1_web_sales) as web_q1_q2_increase,
+        (ss2_store_sales / ss1_store_sales) as store_q1_q2_increase,
+        (ws3_web_sales / ws2_web_sales) as web_q2_q3_increase,
+        (ss3_store_sales / ss2_store_sales) as store_q2_q3_increase],
+  filter((((((((((((((((((((ss1_d_qoy = 1) && (ss1_d_year = YEAR_01)) &&
+                         (ss1_ca_county = ss2_ca_county)) && (ss2_d_qoy = 2))
+                       && (ss2_d_year = YEAR_01)) &&
+                      (ss2_ca_county = ss3_ca_county)) && (ss3_d_qoy = 3)) &&
+                    (ss3_d_year = YEAR_01)) &&
+                   (ss1_ca_county = ws1_ca_county)) && (ws1_d_qoy = 1)) &&
+                 (ws1_d_year = YEAR_01)) && (ws1_ca_county = ws2_ca_county))
+               && (ws2_d_qoy = 2)) && (ws2_d_year = YEAR_01)) &&
+             (ws1_ca_county = ws3_ca_county)) && (ws3_d_qoy = 3)) &&
+           (ws3_d_year = YEAR_01)) &&
+          ((if (ws1_web_sales > 0) then (ws2_web_sales / ws1_web_sales) else null)
+          >
+          (if (ss1_store_sales > 0) then (ss2_store_sales / ss1_store_sales) else null)))
+         &&
+         ((if (ws2_web_sales > 0) then (ws3_web_sales / ws2_web_sales) else null)
+         >
+         (if (ss2_store_sales > 0) then (ss3_store_sales / ss2_store_sales) else null))),
+    join(true,
+      select([ws3_ca_county as ss1_ws3_ca_county,
+              ws3_d_qoy as ss1_ws3_d_qoy,
+              ws3_d_year as ss1_ws3_d_year,
+              store_sales as ss1_store_sales],
+        groupby([ws3_ca_county,
+                 ws3_d_qoy,
+                 ws3_d_year,
+                 sum(ss_ext_sales_price) as store_sales],
+          [ws3_ca_county, ws3_d_qoy, ws3_d_year],
+          filter(((ss_sold_date_sk = d_date_sk) &&
+                 (ss_addr_sk = ca_address_sk)),
+            join(true, store_sales, join(true, date_dim, customer_address))))),
+      join(true,
+        select([ws3_ca_county as ss2_ws3_ca_county,
+                ws3_d_qoy as ss2_ws3_d_qoy,
+                ws3_d_year as ss2_ws3_d_year,
+                store_sales as ss2_store_sales],
+          groupby([ws3_ca_county,
+                   ws3_d_qoy,
+                   ws3_d_year,
+                   sum(ss_ext_sales_price) as store_sales],
+            [ws3_ca_county, ws3_d_qoy, ws3_d_year],
+            filter(((ss_sold_date_sk = d_date_sk) &&
+                   (ss_addr_sk = ca_address_sk)),
+              join(true, store_sales, join(true, date_dim, customer_address))))),
+        join(true,
+          select([ws3_ca_county as ss3_ws3_ca_county,
+                  ws3_d_qoy as ss3_ws3_d_qoy,
+                  ws3_d_year as ss3_ws3_d_year,
+                  store_sales as ss3_store_sales],
+            groupby([ws3_ca_county,
+                     ws3_d_qoy,
+                     ws3_d_year,
+                     sum(ss_ext_sales_price) as store_sales],
+              [ws3_ca_county, ws3_d_qoy, ws3_d_year],
+              filter(((ss_sold_date_sk = d_date_sk) &&
+                     (ss_addr_sk = ca_address_sk)),
+                join(true,
+                  store_sales,
+                  join(true, date_dim, customer_address))))),
+          join(true,
+            select([ws3_ca_county as ws1_ws3_ca_county,
+                    ws3_d_qoy as ws1_ws3_d_qoy,
+                    ws3_d_year as ws1_ws3_d_year,
+                    web_sales as ws1_web_sales],
+              groupby([ws3_ca_county,
+                       ws3_d_qoy,
+                       ws3_d_year,
+                       sum(ws_ext_sales_price) as web_sales],
+                [ws3_ca_county, ws3_d_qoy, ws3_d_year],
+                filter(((ws_sold_date_sk = d_date_sk) &&
+                       (ws_bill_addr_sk = ca_address_sk)),
+                  join(true,
+                    web_sales,
+                    join(true, date_dim, customer_address))))),
+            join(true,
+              select([ws3_ca_county as ws2_ws3_ca_county,
+                      ws3_d_qoy as ws2_ws3_d_qoy,
+                      ws3_d_year as ws2_ws3_d_year,
+                      web_sales as ws2_web_sales],
+                groupby([ws3_ca_county,
+                         ws3_d_qoy,
+                         ws3_d_year,
+                         sum(ws_ext_sales_price) as web_sales],
+                  [ws3_ca_county, ws3_d_qoy, ws3_d_year],
+                  filter(((ws_sold_date_sk = d_date_sk) &&
+                         (ws_bill_addr_sk = ca_address_sk)),
+                    join(true,
+                      web_sales,
+                      join(true, date_dim, customer_address))))),
+              select([ca_county as ws3_ca_county,
+                      d_qoy as ws3_d_qoy,
+                      d_year as ws3_d_year,
+                      web_sales as ws3_web_sales],
+                groupby([ca_county,
+                         d_qoy,
+                         d_year,
+                         sum(ws_ext_sales_price) as web_sales],
+                  [ca_county, d_qoy, d_year],
+                  filter(((ws_sold_date_sk = d_date_sk) &&
+                         (ws_bill_addr_sk = ca_address_sk)),
+                    join(true,
+                      web_sales,
+                      join(true, date_dim, customer_address))))))))))))
+

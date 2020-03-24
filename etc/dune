@@ -1,16 +1,21 @@
 (install
-  (section etc)
-  (files date.c stdlib.c load_bool.c load_date.c load_float.c load_int.c load_string.c perf.c date.h shared.h))
+ (package castor)
+ (section etc)
+ (files date.c date.h castorlib.c castorlib.h load_bool.c load_date.c
+   load_float.c load_int.c load_string.c perf.c))
 
 (rule
-  (deps stdlib.c stdlib_test.c date.h)
-  (targets stdlib_test.exe)
-  (action (run %{cc} date.c stdlib_test.c -o stdlib_test.exe)))
+ (deps castorlib.c castorlib.h castorlib_test.c date.c date.h)
+ (targets castorlib_test.exe)
+ (action
+  (run %{cc} date.c castorlib.c castorlib_test.c -o castorlib_test.exe)))
 
 (rule
-  (with-stdout-to stdlib_test.output (run ./stdlib_test.exe)))
+ (with-stdout-to
+  castorlib_test.output
+  (run ./castorlib_test.exe)))
 
 (alias
-  (name runtest)
-  (action (diff stdlib_test.expected stdlib_test.output)))
-
+ (name runtest)
+ (action
+  (diff castorlib_test.expected castorlib_test.output)))

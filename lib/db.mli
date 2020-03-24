@@ -1,37 +1,64 @@
-open Base
-open Collections
-
 type t
 
-val create : string -> t
+val src : Logs.Src.t
+
+val create : ?pool_size:int -> string -> t
+
+val conn : t -> Postgresql.connection
+
+val param : t Command.Param.t
 
 val exec :
   ?max_retries:int -> ?params:string list -> t -> string -> Postgresql.result
 
-val command_ok : Postgresql.result -> unit
+val exec1 : ?params:string list -> t -> string -> string list
+
+val exec2 : ?params:string list -> t -> string -> (string * string) list
+
+val exec3 :
+  ?params:string list -> t -> string -> (string * string * string) list
+
+val command_ok : Postgresql.result -> unit Or_error.t
+
+val command_ok_exn : Postgresql.result -> unit
 
 val result_to_strings : Postgresql.result -> string list list
 
-val exec_cursor :
-     ?batch_size:int
-  -> ?params:string list
-  -> t
-  -> Type.PrimType.t list
-  -> string
-  -> Value.t list Gen.t
+val exec_exn : t -> Prim_type.t list -> string -> Value.t list list
+
+val exec_cursor_exn :
+  ?count:int -> t -> Prim_type.t list -> string -> Value.t list list Sequence.t
 
 val check : t -> string -> unit Or_error.t
 
-module Field : sig
-  type t = {fname: string; type_: Type.PrimType.t} [@@deriving compare, sexp]
-end
+val relation : t -> string -> Relation.t
 
-module Relation : sig
-  type db = t
+val all_relations : t -> Relation.t list
 
-  type t = {rname: string; fields: Field.t list} [@@deriving compare, hash, sexp]
+val relation_count : t -> string -> int
 
-  val from_db : db -> string -> t
+val relation_has_field : t -> string -> Relation.t option
 
-  val all_from_db : db -> t list
+val eq_join_type :
+  t -> string -> string -> [ `Left | `Right | `Both | `Neither ] Or_error.t
+
+module Async : sig
+  type error = {
+    query : string;
+    info : [ `Timeout | `Exn of Exn.t | `Msg of string ];
+  }
+  [@@deriving sexp_of]
+
+  val to_error : error -> Error.t
+
+  type 'a exec =
+    ?timeout:float ->
+    ?bound:int ->
+    t ->
+    'a ->
+    (Value.t list list, error) result Lwt_stream.t
+
+  val exec_sql : (Prim_type.t list * string) exec
+
+  val exec : 'a Ast.annot exec
 end

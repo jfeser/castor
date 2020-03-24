@@ -1,0 +1,116 @@
+Checking call legality...
+Checking call q0(param1)...
+Checking call q1(param1)...
+Checking call q3(param1, x0)...
+Checking call q4(param1, x0)...
+Checking call q5(param1, x0)...
+Checking call q2(param1)...
+Checking call q6(param1, k)...
+Checking call q8(param1, x1, x2, x3, x4, x5, x6, x7, x8, x9)...
+Checking call q10(param1, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10)...
+Checking call q11(param1, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10)...
+Checking call q9(param1, x1, x2, x3, x4, x5, x6, x7, x8, x9)...
+Checking call q12(param1, x1, x2, x3, x4, x5, x6, x7, x8, x9, k)...
+Checking call q13(param1, x1, x2, x3, x4, x5, x6, x7, x8, x9)...
+Checking call q7(param1)...
+Checking call q14(param1, (t1).5, (t1).2, (t1).6, (t1).1, (t1).3, (t1).4, (t1).0, (t2).0, (t2).1)...
+Checking call q15(param1)...
+Checking call q16(param1)...
+Checking invariant preservation...
+Done!
+Adding query q17...
+updating with 1 new solutions
+update order:
+  --> q17
+considering update 1/1...
+SOLUTION FOR q17 AT 0:00:00.075542 [size=497]
+----------------------------------------
+  _var797 : Bag<(Int, String, String, Int, String, Float, String)> = supplier
+  _var798 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+  return Map {t -> ((t).0, (t).1, (t).2, (t).3, (t).4)} (Map {t -> ((t).0, (t).1, (t).2, (t).4, (t).8)} (FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t1).3, (t1).4, (t1).5, (t1).6, (t2).0, (t2).1)} (Filter {t2 -> (((t1).0 == (t2).0) and ((t2).1 == let q = Map {k -> let q = Map {t -> t} (Filter {t -> ((t).2 == k)} (Map {t -> t} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(3))))} (_var798)))) in (sum Map {t -> fmul((t).5, (i2f(1) - (t).6))} (q))} ((distinct Map {t -> (t).2} (Map {t -> t} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(3))))} (_var798))))) in max Map {t -> t} (q)))} (Map {t -> t} (Map {k -> let q = Map {t -> t} (Filter {t -> ((t).1 == k)} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var798))))) in ((((len q) == 1) ? let t = (the q) in (t).1 : 0), (sum Map {t -> fmul((t).2, (i2f(1) - (t).3))} (q)))} ((distinct Map {t -> (t).1} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var798)))))))))} (Map {t -> t} (_var797))))
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q17
+considering update 1/1...
+SOLUTION FOR q17 AT 0:01:07.702453 [size=617]
+----------------------------------------
+  _var9790 : Bag<(Int, String, String, Int, String, Float, String)> = supplier
+  _var9791 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+  return Map {t -> ((t).0, (t).1, (t).2, (t).3, (t).4)} (Map {t -> ((t).0, (t).1, (t).2, (t).4, (t).8)} (FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t1).3, (t1).4, (t1).5, (t1).6, (t2).0, (t2).1)} (Filter {t2 -> (((t1).0 == (t2).0) and ((t2).1 == max Map {t -> t} (Map {k -> (sum Map {t -> fmul((t).5, (i2f(1) - (t).6))} (Map {t -> t} (Filter {t -> ((t).2 == k)} (Map {t -> t} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(3))))} (_var9791))))))} ((distinct Map {t -> (t).2} (Map {t -> t} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(3))))} (_var9791))))))))} (Map {t -> t} (Map {k -> ((((len Map {t -> t} (Filter {t -> ((t).1 == k)} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var9791)))))) == 1) ? ((the Map {t -> t} (Filter {t -> ((t).1 == k)} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var9791))))))).1 : 0), (sum Map {t -> fmul((t).2, (i2f(1) - (t).3))} (Map {t -> t} (Filter {t -> ((t).1 == k)} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var9791))))))))} ((distinct Map {t -> (t).1} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var9791)))))))))} (_var9790)))
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q17
+considering update 1/1...
+SOLUTION FOR q17 AT 0:02:14.420357 [size=591]
+----------------------------------------
+  _var21673 : Bag<(Int, String, String, Int, String, Float, String)> = supplier
+  _var21674 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+  return Map {t -> ((t).0, (t).1, (t).2, (t).4, (t).8)} (FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t1).3, (t1).4, (t1).5, (t1).6, (t2).0, (t2).1)} (Filter {t2 -> (((t1).0 == (t2).0) and ((t2).1 == max Map {t -> t} (Map {k -> (sum Map {t -> fmul((t).5, (i2f(1) - (t).6))} (Map {t -> t} (Filter {t -> ((t).2 == k)} (Map {t -> t} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(3))))} (_var21674))))))} ((distinct Map {t -> (t).2} (Map {t -> t} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(3))))} (_var21674))))))))} (Map {t -> t} (Map {k -> ((((len Map {t -> t} (Filter {t -> ((t).1 == k)} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var21674)))))) == 1) ? ((the Map {t -> t} (Filter {t -> ((t).1 == k)} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var21674))))))).1 : 0), (sum Map {t -> fmul((t).2, (i2f(1) - (t).3))} (Map {t -> t} (Filter {t -> ((t).1 == k)} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var21674))))))))} ((distinct Map {t -> (t).1} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var21674)))))))))} (_var21673))
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q17
+considering update 1/1...
+SOLUTION FOR q17 AT 0:07:07.961113 [size=593]
+----------------------------------------
+  _var68666 : Bag<(Int, String, String, Int, String, Float, String)> = supplier
+  _var68667 : Bag<(Int, Int, Float, Float)> = Map {t -> ((t).10, (t).2, (t).5, (t).6)} (lineitem)
+  _var68668 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+  return Map {t -> ((t).0, (t).1, (t).2, (t).4, (t).8)} (FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t1).3, (t1).4, (t1).5, (t1).6, (t2).0, (t2).1)} (Filter {t2 -> (((t1).0 == (t2).0) and ((t2).1 == max Map {t -> t} (Map {k -> (sum Map {t -> fmul((t).5, (i2f(1) - (t).6))} (Map {t -> t} (Filter {t -> ((t).2 == k)} (Map {t -> t} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(3))))} (_var68668))))))} ((distinct Map {t -> (t).2} (Map {t -> t} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(3))))} (_var68668))))))))} (Map {t -> t} (Map {k -> ((((len Map {t -> t} (Filter {t -> ((t).1 == k)} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var68668)))))) == 1) ? ((the Map {t -> t} (Filter {t -> ((t).1 == k)} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var68668))))))).1 : 0), (sum Map {t -> fmul((t).2, (i2f(1) - (t).3))} (Map {t -> t} (Filter {t -> ((t).1 == k)} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var68668))))))))} ((distinct Map {t -> (t).1} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (_var68667))))))))} (_var68666))
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q17
+considering update 1/1...
+SOLUTION FOR q17 AT 0:11:21.966133 [size=569]
+----------------------------------------
+  _var110370 : Bag<(Int, String, String, Int, String, Float, String)> = supplier
+  _var110371 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+  return Map {t -> ((t).0, (t).1, (t).2, (t).4, (t).8)} (FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t1).3, (t1).4, (t1).5, (t1).6, (t2).0, (t2).1)} (Filter {t2 -> (((t1).0 == (t2).0) and ((t2).1 == max Map {t -> t} (Map {k -> (sum Map {t -> fmul((t).5, (i2f(1) - (t).6))} (Map {t -> t} (Filter {t -> ((t).2 == k)} (Map {t -> t} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(3))))} (_var110371))))))} ((distinct Map {t -> (t).2} (Map {t -> t} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(3))))} (_var110371))))))))} (Map {t -> t} (Map {k -> ((((len Map {t -> t} (Filter {t -> ((t).1 == k)} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var110371)))))) == 1) ? ((the Map {t -> t} (Filter {t -> ((t).1 == k)} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var110371))))))).1 : 0), (sum Map {t -> fmul((t).2, (i2f(1) - (t).3))} (Map {t -> t} (Filter {t -> ((t).1 == k)} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var110371))))))))} ((distinct Map {t -> (t).2} (Map {t -> t} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(3))))} (_var110371))))))))} (_var110370))
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q17
+considering update 1/1...
+SOLUTION FOR q17 AT 0:14:35.846662 [size=563]
+----------------------------------------
+  _var144008 : Bag<(Int, String, String, Int, String, Float, String)> = supplier
+  _var144009 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+  return Map {t -> ((t).0, (t).1, (t).2, (t).4, (t).8)} (FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t1).3, (t1).4, (t1).5, (t1).6, (t2).0, (t2).1)} (Filter {t2 -> (((t1).0 == (t2).0) and ((t2).1 == max Map {t -> t} (Map {k -> (sum Map {t -> fmul((t).5, (i2f(1) - (t).6))} (Map {t -> t} (Filter {t -> ((t).2 == k)} (Map {t -> t} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(3))))} (_var144009))))))} ((distinct Map {t -> (t).2} (Map {t -> t} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(3))))} (_var144009))))))))} (Map {t -> t} (Map {k -> ((((len Map {t -> t} (Filter {t -> ((t).1 == k)} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var144009)))))) == 1) ? ((the Map {t -> t} (Filter {t -> ((t).1 == k)} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var144009))))))).1 : 0), (sum Map {t -> fmul((t).2, (i2f(1) - (t).3))} (Map {t -> t} (Filter {t -> ((t).1 == k)} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var144009))))))))} ((distinct Map {t -> (t).2} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(3))))} (_var144009)))))))} (_var144008))
+----------------------------------------
+updating with 1 new solutions
+update order:
+  --> q17
+considering update 1/1...
+SOLUTION FOR q17 AT 0:25:00.112817 [size=557]
+----------------------------------------
+  _var261914 : Bag<(Int, String, String, Int, String, Float, String)> = supplier
+  _var261915 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+  return Map {t -> ((t).0, (t).1, (t).2, (t).4, (t).8)} (FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t1).3, (t1).4, (t1).5, (t1).6, (t2).0, (t2).1)} (Filter {t2 -> (((t1).0 == (t2).0) and ((t2).1 == max Map {t -> t} (Map {k -> (sum Map {t -> fmul((t).5, (i2f(1) - (t).6))} (Map {t -> t} (Filter {t -> ((t).2 == k)} (Map {t -> t} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(3))))} (_var261915))))))} ((distinct Map {t -> (t).2} (Map {t -> t} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(3))))} (_var261915))))))))} (Map {k -> ((((len Map {t -> t} (Filter {t -> ((t).1 == k)} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var261915)))))) == 1) ? ((the Map {t -> t} (Filter {t -> ((t).1 == k)} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var261915))))))).1 : 0), (sum Map {t -> fmul((t).2, (i2f(1) - (t).3))} (Map {t -> t} (Filter {t -> ((t).1 == k)} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var261915))))))))} ((distinct Map {t -> (t).2} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(3))))} (_var261915))))))} (_var261914))
+----------------------------------------
+Stopping jobs
+requesting stop for ImproveQueryJob[q17]
+Stopping SafeQueue...
+Done!
+Generating IR...
+Inlining calls...
+Generating code for extension types...
+Concretization functions:
+
+_var669 : Bag<(Int, String, String, Int, String, Float, String)> = supplier
+_var670 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)> = lineitem
+
+query15:
+  state _var669 : Bag<(Int, String, String, Int, String, Float, String)>
+  state _var670 : Bag<(Int, Int, Int, Int, Int, Float, Float, Float, String, String, Int, Int, Int, String, String, String)>
+
+  query q17(param1 : Int):
+    Map {t -> ((t).0, (t).1, (t).2, (t).4, (t).8)} (FlatMap {t1 -> Map {t2 -> ((t1).0, (t1).1, (t1).2, (t1).3, (t1).4, (t1).5, (t1).6, (t2).0, (t2).1)} (Filter {t2 -> (((t1).0 == (t2).0) and ((t2).1 == max Map {t -> t} (Map {k -> (sum Map {t -> fmul((t).5, (i2f(1) - (t).6))} (Map {t -> t} (Filter {t -> ((t).2 == k)} (Map {t -> t} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(3))))} (_var670))))))} ((distinct Map {t -> (t).2} (Map {t -> t} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(3))))} (_var670))))))))} (Map {k -> ((((len Map {t -> t} (Filter {t -> ((t).1 == k)} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var670)))))) == 1) ? ((the Map {t -> t} (Filter {t -> ((t).1 == k)} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var670))))))).1 : 0), (sum Map {t -> fmul((t).2, (i2f(1) - (t).3))} (Map {t -> t} (Filter {t -> ((t).1 == k)} (Map {t -> t} (Filter {t -> (((t).0 >= param1) and ((t).0 < (param1 + month(3))))} (Map {t -> ((t).10, (t).2, (t).5, (t).6)} (_var670))))))))} ((distinct Map {t -> (t).2} (Filter {t -> (((t).10 >= param1) and ((t).10 < (param1 + month(3))))} (_var670))))))} (_var669))
+
+Setting up auxiliary types...
+Setting up member variables...
+Generating constructors...
+Generating method q17...
+Number of improvements done: 16

@@ -1,0 +1,15 @@
+select([sum((if (not((customer_sk = null)) && (customer_sk = null)) then 1 else 0)) as store_only,
+        sum((if ((customer_sk = null) && not((customer_sk = null))) then 1 else 0)) as catalog_only,
+        sum((if (not((customer_sk = null)) && not((customer_sk = null))) then 1 else 0)) as store_and_catalog],
+  join(((customer_sk = customer_sk) && (item_sk = item_sk)),
+    groupby([ss_customer_sk as customer_sk, ss_item_sk as item_sk],
+      [ss_customer_sk, ss_item_sk],
+      filter(((ss_sold_date_sk = d_date_sk) &&
+             ((d_month_seq <= DMS_01) && (DMS_01 <= (DMS_01 + 11)))),
+        join(true, store_sales, date_dim))),
+    groupby([cs_bill_customer_sk as customer_sk, cs_item_sk as item_sk],
+      [cs_bill_customer_sk, cs_item_sk],
+      filter(((cs_sold_date_sk = d_date_sk) &&
+             ((d_month_seq <= DMS_01) && (DMS_01 <= (DMS_01 + 11)))),
+        join(true, catalog_sales, date_dim)))))
+

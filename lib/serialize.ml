@@ -1,430 +1,584 @@
-open Base
-open Stdio
-open Printf
 open Collections
-open Abslayout
+open Abslayout_fold
+open Abslayout_visitors
+open Header
 
-module Config = struct
-  module type S = sig
-    val layout_map_channel : Out_channel.t option
-  end
-end
+type meta = < type_ : Type.t ; pos : int option >
 
-module type S = Serialize_intf.S
+let int_of_string bs =
+  if String.length bs > 4 then failwith "Too many bytes.";
+  let ret = ref 0 in
+  for i = 0 to String.length bs - 1 do
+    ret := !ret lor (int_of_char bs.[i] lsl (i * 8))
+  done;
+  !ret
 
-module Make (Config : Config.S) (M : Abslayout_db.S) = struct
-  type serialize_ctx =
-    {writer: Bitstring.Writer.t sexp_opaque; log_ch: Out_channel.t sexp_opaque}
-  [@@deriving sexp]
+(** Serialize an integer. Little endian. Width is the number of bits to use. *)
+let of_int ~byte_width x =
+  if
+    (* Note that integers are stored signed. *)
+    byte_width > 0
+    && Float.(of_int x >= 2.0 ** ((of_int byte_width * 8.0) - 1.0))
+  then
+    Error.create "Integer too large." (x, byte_width) [%sexp_of: int * int]
+    |> Error.raise;
+  let buf = Bytes.make byte_width '\x00' in
+  for i = 0 to byte_width - 1 do
+    Bytes.set buf i ((x lsr (i * 8)) land 0xFF |> char_of_int)
+  done;
+  Bytes.to_string buf
 
-  module Log = struct
-    open Bitstring.Writer
+let string_sentinal : Type.string_ -> _ = function
+  | { nchars = Bottom; _ } -> 0
+  | { nchars = Interval (_, max); _ } -> max + 1
+  | { nchars = Top; _ } -> failwith "No available sentinal values."
 
-    type insert =
-      {pos: int64; parent_id: Core.Uuid.Unstable.t; id: Core.Uuid.Unstable.t}
-    [@@deriving sexp]
+let int_sentinal : Type.int_ -> _ = function
+  | { range = Bottom; _ } -> 0
+  | { range = Interval (_, max); _ } -> max + 1
+  | { range = Top; _ } -> failwith "No available sentinal values."
 
-    type entry = {msg: string; pos: int64; len: int64; id: Core.Uuid.Unstable.t}
-    [@@deriving sexp]
+let date_sentinal : Type.date -> _ = function
+  | { range = Bottom; _ } -> 0
+  | { range = Interval (_, max); _ } -> max + 1
+  | { range = Top; _ } -> failwith "No available sentinal values."
 
-    type msg = Entry of entry | Insert of insert [@@deriving sexp]
+let fixed_sentinal : Type.fixed -> _ = function
+  | { value = { range = Bottom; _ }; _ } -> 0
+  | { value = { range = Interval (_, max); _ }; _ } -> max + 1
+  | { value = { range = Top; _ }; _ } ->
+      failwith "No available sentinal values."
 
-    let write_msg sctx msg =
-      Out_channel.output_string sctx.log_ch
-        ([%sexp_of: msg] msg |> Sexp.to_string_mach) ;
-      Out_channel.newline sctx.log_ch ;
-      Out_channel.flush sctx.log_ch
+let bool_sentinal = 2
 
-    let with_msg sctx msg f =
-      let start = pos sctx.writer in
-      let ret = f () in
-      let len = Pos.(pos sctx.writer - start) in
-      write_msg sctx
-        (Entry {pos= Pos.to_bytes_exn start; len; id= id sctx.writer; msg}) ;
-      ret
+let null_sentinal = function
+  | Type.IntT x -> int_sentinal x
+  | BoolT _ -> bool_sentinal
+  | StringT x -> string_sentinal x
+  | DateT x -> date_sentinal x
+  | FixedT x -> fixed_sentinal x
+  | t -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
 
-    let render fn out_ch =
-      let msgs = Sexplib.Sexp.load_sexps_conv_exn fn [%of_sexp: msg] in
-      let inserts =
-        List.filter_map msgs ~f:(function Entry _ -> None | Insert m -> Some m)
-        |> List.map ~f:(fun (m : insert) -> (m.id, m))
-        |> Map.of_alist_exn (module Core.Uuid)
-      in
-      let rec offset id =
-        match Map.find inserts id with
-        | None -> 0L
-        | Some m -> Int64.(offset m.parent_id + m.pos)
-      in
-      List.filter_map msgs ~f:(function
-        | Entry m -> Some {m with pos= Int64.(m.pos + offset m.id)}
-        | Insert _ -> None )
-      |> List.sort ~compare:(fun m1 m2 ->
-             [%compare: int64 * int64]
-               (m1.pos, Int64.(-m1.len))
-               (m2.pos, Int64.(-m2.len)) )
-      |> List.iter ~f:(fun m ->
-             Out_channel.fprintf out_ch "%Ld:%Ld %s\n" m.pos m.len m.msg ) ;
-      Out_channel.flush out_ch
-  end
+let serialize_key = function
+  | [ Value.String s ] -> s
+  | vs ->
+      List.map vs ~f:(function
+        | Int x -> of_int ~byte_width:8 x
+        | Date x -> Date.to_int x |> of_int ~byte_width:8
+        | Bool true -> of_int 1 ~byte_width:1
+        | Bool false -> of_int 1 ~byte_width:1
+        | String s -> s
+        | v ->
+            Error.(
+              create "Unexpected key value." v [%sexp_of: Value.t] |> raise))
+      |> String.concat ~sep:"|"
 
-  open Bitstring
-  open Writer
-  open Header
-
-  let string_sentinal : Type.string_ -> _ = function
-    | {nchars= Bottom; _} -> 0
-    | {nchars= Interval (_, max); _} -> max + 1
-    | {nchars= Top; _} -> failwith "No available sentinal values."
-
-  let int_sentinal : Type.int_ -> _ = function
-    | {range= Bottom; _} -> 0
-    | {range= Interval (_, max); _} -> max + 1
-    | {range= Top; _} -> failwith "No available sentinal values."
-
-  let date_sentinal : Type.date -> _ = function
-    | {range= Bottom; _} -> 0
-    | {range= Interval (_, max); _} -> max + 1
-    | {range= Top; _} -> failwith "No available sentinal values."
-
-  let fixed_sentinal : Type.fixed -> _ = function
-    | {value= {range= Bottom; _}; _} -> 0
-    | {value= {range= Interval (_, max); _}; _} -> max + 1
-    | {value= {range= Top; _}; _} -> failwith "No available sentinal values."
-
-  let bool_sentinal = 2
-
-  let null_sentinal = function
-    | Type.IntT x -> int_sentinal x
-    | BoolT _ -> bool_sentinal
-    | StringT x -> string_sentinal x
-    | DateT x -> date_sentinal x
-    | FixedT x -> fixed_sentinal x
-    | t -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
-
-  let serialize_null sctx t =
-    let hdr = make_header t in
-    let str =
-      match t with
-      | NullT -> ""
-      | _ -> null_sentinal t |> of_int ~byte_width:(size_exn hdr "value")
-    in
-    Log.with_msg sctx "Null" (fun () -> write_string sctx.writer str)
-
-  let serialize_int sctx t x =
-    let hdr = make_header t in
-    let sval = of_int ~byte_width:(size_exn hdr "value") x in
-    write_string sctx.writer sval
-
-  let serialize_fixed sctx t x =
-    match t with
-    | Type.FixedT {value= {scale; _}; _} ->
-        let hdr = make_header t in
-        let sval =
-          of_int ~byte_width:(size_exn hdr "value")
-            Fixed_point.((convert x scale).value)
+let make_direct_hash keys =
+  let hash =
+    Seq.map keys ~f:(fun (k, p) ->
+        let h =
+          match k with
+          | [ Value.Int x ] -> x
+          | [ Date x ] -> Date.to_int x
+          | _ -> failwith "Unexpected key."
         in
-        write_string sctx.writer sval
-    | _ -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
+        (h, p))
+  in
+  (hash, "")
 
-  let serialize_bool sctx t x =
-    let hdr = make_header t in
-    let str =
-      match (t, x) with
-      | BoolT _, true -> of_int ~byte_width:(size_exn hdr "value") 1
-      | BoolT _, false -> of_int ~byte_width:(size_exn hdr "value") 0
-      | t, _ ->
-          Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
+let make_cmph_hash keys =
+  if Seq.length keys = 0 then (Seq.empty, "")
+  else
+    let keys = Seq.map keys ~f:(fun (k, p) -> (serialize_key k, p)) in
+    (* Create a CMPH hash from the keyset. *)
+    let cmph_hash =
+      let open Cmph in
+      let keyset =
+        Seq.map keys ~f:(fun (k, _) -> k) |> Seq.to_list |> KeySet.create
+      in
+      List.find_map_exn [ Config.default_chd; `Bdz; `Bmz; `Chm ] ~f:(fun algo ->
+          try
+            Some
+              ( Config.create ~verbose:true ~seed:0 ~algo keyset
+              |> Hash.of_config )
+          with Error _ -> None)
     in
-    write_string sctx.writer str
+    (* Populate hash table with CMPH hash values. *)
+    ( Seq.map keys ~f:(fun (k, p) -> (Cmph.Hash.hash cmph_hash k, p)),
+      Cmph.Hash.to_packed cmph_hash )
 
-  let serialize_string sctx t body =
-    let hdr = make_header t in
-    match t with
-    | StringT _ ->
-        let len = String.length body in
-        Log.with_msg sctx (sprintf "String length (=%d)" len) (fun () ->
-            of_int ~byte_width:(size_exn hdr "nchars") len
-            |> write_string sctx.writer ) ;
-        Log.with_msg sctx "String body" (fun () -> write_string sctx.writer body)
-    | t -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
+let make_ms_hash keys =
+  let nkeys = Seq.length keys in
+  if nkeys = 0 then (Seq.empty, "")
+  else
+    let keys =
+      Seq.map keys ~f:(fun (k, p) ->
+          let h =
+            match k with
+            | [ Value.Int x ] -> x
+            | [ Date x ] -> Date.to_int x
+            | _ -> failwith "Unexpected key."
+          in
+          (h, p))
+    in
+    Log.debug (fun m -> m "Generating hash for %d keys." nkeys);
+    let hash =
+      Seq.map keys ~f:(fun (k, _) -> k)
+      |> Seq.to_list
+      |> Genhash.search_hash ~max_time:Time.Span.minute
+    in
+    Log.debug (fun m ->
+        m "Generated hash with %d bins for %d keys." (Int.pow 2 hash.log_bins)
+          nkeys);
+    ( Seq.map keys ~f:(fun (k, p) -> (Genhash.hash hash k, p)),
+      of_int ~byte_width:8 hash.Genhash.a
+      ^ of_int ~byte_width:8 hash.b
+      ^ of_int ~byte_width:8 hash.log_bins )
 
-  class serialize_fold =
-    object (self)
-      inherit [_, _] M.unsafe_material_fold as super
+let make_hash type_ keys =
+  let hash, body =
+    match Type.hash_kind_exn type_ with
+    | `Direct -> make_direct_hash keys
+    | `Universal -> make_ms_hash keys
+    | `Cmph -> make_cmph_hash keys
+  in
+  let max_key = Seq.fold hash ~init:0 ~f:(fun m (h, _) -> Int.max h m) in
+  let hash_array = Array.create ~len:(max_key + 1) 0 in
+  Seq.iter hash ~f:(fun (h, p) -> hash_array.(h) <- p);
+  (hash_array, body)
 
-      method build_AEmpty _ _ = ()
+class _buffer_serializer ?(size = 1024) () =
+  object (self : 'self)
+    val buf = Buffer.create size
 
-      method build_AList sctx meta (_, elem_layout) gen =
-        let t = Meta.Direct.(find_exn meta Meta.type_) in
-        (* Reserve space for list header. *)
-        let hdr = make_header t in
-        let header_pos = pos sctx.writer in
-        write_bytes sctx.writer (Bytes.make (size_exn hdr "count") '\x00') ;
-        write_bytes sctx.writer (Bytes.make (size_exn hdr "len") '\x00') ;
-        (* Serialize list body. *)
-        let count = ref 0 in
-        Log.with_msg sctx "List body" (fun () ->
-            Gen.iter gen ~f:(fun (_, vctx) ->
-                count := !count + 1 ;
-                self#visit_t sctx vctx elem_layout ) ) ;
-        let end_pos = pos sctx.writer in
-        (* Serialize list header. *)
-        let len = Pos.(end_pos - header_pos) |> Int64.to_int_exn in
-        seek sctx.writer header_pos ;
-        Log.with_msg sctx (sprintf "List count (=%d)" !count) (fun () ->
-            write_string sctx.writer
-              (of_int ~byte_width:(size_exn hdr "count") !count) ) ;
-        Log.with_msg sctx (sprintf "List len (=%d)" len) (fun () ->
-            write_string sctx.writer (of_int ~byte_width:(size_exn hdr "len") len)
-        ) ;
-        seek sctx.writer end_pos
+    method buf = buf
 
-      method build_ATuple sctx meta (elem_layouts, _) ctxs =
-        let t = Meta.Direct.find_exn meta Meta.type_ in
-        (* Reserve space for header. *)
-        let hdr = make_header t in
-        let header_pos = pos sctx.writer in
-        write_bytes sctx.writer (Bytes.make (size_exn hdr "len") '\x00') ;
-        (* Serialize body *)
-        Log.with_msg sctx "Tuple body" (fun () ->
-            List.iter2_exn ctxs elem_layouts ~f:(self#visit_t sctx) ) ;
-        let end_pos = pos sctx.writer in
+    method pos = Buffer.length buf
+
+    method write_string s = Buffer.add_string buf s
+
+    method write_into (s : 'self) =
+      if phys_equal s self then failwith "Cannot write into self.";
+      Buffer.add_buffer s#buf self#buf
+
+    method write_into_channel ch = Out_channel.output_buffer ch self#buf
+  end
+
+class bigbuffer_serializer ?(size = 8) () =
+  object (self : 'self)
+    val buf = Bigbuffer.create size
+
+    method buf = buf
+
+    method pos = Bigbuffer.length buf
+
+    method write_string s = Bigbuffer.add_string buf s
+
+    method write_into (s : 'self) =
+      if phys_equal s self then failwith "Cannot write into self.";
+      Bigbuffer.add_buffer s#buf self#buf
+
+    method write_into_channel ch =
+      Bigstring.really_output ch (Bigbuffer.big_contents self#buf)
+  end
+
+type msg = { msg : string; pos : int; len : int }
+
+class logged_serializer ?(debug = false) ?size () =
+  object (self : 'self)
+    inherit bigbuffer_serializer ?size () as super
+
+    val mutable msgs = []
+
+    method msgs = msgs
+
+    method set_msgs m = msgs <- m
+
+    method log : 'a. string -> f:(unit -> 'a) -> 'a =
+      fun msg ~f -> self#logf (fun m -> m "%s" msg) ~f
+
+    method logf
+        : 'a 'b. ((('a, unit, string) format -> 'a) -> string) ->
+          f:(unit -> 'b) -> 'b =
+      fun msgf ~f ->
+        if debug then (
+          let start = self#pos in
+          let ret = f () in
+          let m =
+            { pos = start; len = self#pos - start; msg = msgf Format.sprintf }
+          in
+          msgs <- m :: msgs;
+          ret )
+        else f ()
+
+    method! write_into (s : 'self) =
+      let pos = s#pos in
+      super#write_into s;
+      if debug then
+        s#set_msgs
+          (s#msgs @ List.map msgs ~f:(fun m -> { m with pos = m.pos + pos }))
+
+    method render ch =
+      if debug then (
+        msgs
+        |> List.sort ~compare:(fun m1 m2 ->
+               [%compare: int * int] (m1.pos, -m1.len) (m2.pos, -m2.len))
+        |> List.iter ~f:(fun m ->
+               Out_channel.fprintf ch "%d:%d %s\n" m.pos m.len m.msg);
+        Out_channel.flush ch )
+  end
+
+let size_exn hdr name = Or_error.ok_exn (size hdr name)
+
+let serialize_field hdr name value =
+  of_int ~byte_width:(size_exn hdr name) value
+
+class ['self] serialize_fold ?debug () =
+  object (self : 'self)
+    inherit [_] abslayout_fold
+
+    method type_ meta = meta#type_
+
+    method serializer = new logged_serializer ?debug ()
+
+    method empty _ = self#serializer
+
+    method list meta _ =
+      let t = self#type_ meta in
+      let init = (self#serializer, 0) in
+      let fold acc (_, vp) =
+        let body, count = acc and v = vp in
+        v#write_into body;
+        (body, count + 1)
+      in
+      let extract acc =
+        let body, count = acc in
         (* Serialize header. *)
-        seek sctx.writer header_pos ;
-        let len = Pos.(end_pos - header_pos) |> Int64.to_int_exn in
-        Log.with_msg sctx (sprintf "Tuple len (=%d)" len) (fun () ->
-            write_string sctx.writer (of_int ~byte_width:(size_exn hdr "len") len)
-        ) ;
-        seek sctx.writer end_pos
+        let hdr = make_header t in
+        let len =
+          let body_len = body#pos in
+          size_exn hdr "count" + size_exn hdr "len" + body_len
+        in
+        let main = self#serializer in
+        main#logf
+          (fun m -> m "List count (=%d)" count)
+          ~f:(fun () -> main#write_string (serialize_field hdr "count" count));
+        main#logf
+          (fun m -> m "List len (=%d)" len)
+          ~f:(fun () -> main#write_string (serialize_field hdr "len" len));
+        main#log "List body" ~f:(fun () -> body#write_into main);
+        main
+      in
+      Fold.(Fold { init; fold; extract })
 
-      method build_AHashIdx sctx meta (_, value_l, hmeta) keys gen =
-        let type_ = Meta.Direct.find_exn meta Meta.type_ in
-        let key_l =
-          Option.value_exn
-            ~error:(Error.create "Missing key layout." hmeta [%sexp_of: hash_idx])
-            hmeta.hi_key_layout
+    method tuple' t =
+      let init = self#serializer in
+      let fold acc vp =
+        let body = acc and v = vp in
+        v#write_into body;
+        body
+      in
+      let extract acc =
+        let body = acc in
+        (* Serialize header. *)
+        let main = self#serializer in
+        let hdr = make_header t in
+        let len =
+          let body_len = body#pos in
+          size_exn hdr "len" + body_len
         in
-        let serialize_key = function
-          | [Value.String s] -> s
-          | vs ->
-              List.map vs ~f:(function
-                | Int x -> Bitstring.of_int ~byte_width:8 x
-                | Date x -> Date.to_int x |> Bitstring.of_int ~byte_width:8
-                | Bool true -> Bitstring.of_int 1 ~byte_width:1
-                | Bool false -> Bitstring.of_int 1 ~byte_width:1
-                | String s -> s
-                | v ->
-                    Error.(
-                      create "Unexpected key value." v [%sexp_of: Value.t] |> raise) )
-              |> String.concat ~sep:"|"
-        in
-        Logs.debug (fun m -> m "Generating hash.") ;
-        let hash, hash_body, hash_len =
-          match Type.hash_kind_exn type_ with
-          | `Direct ->
-              let hash = Hashtbl.create (module String) in
-              Gen.iter keys ~f:(fun k ->
-                  let key = serialize_key k in
-                  let data =
-                    match k with
-                    | [Value.Int x] -> x
-                    | [Date x] -> Date.to_int x
-                    | _ -> failwith "Unexpected key."
-                  in
-                  Hashtbl.set hash ~key ~data ) ;
-              (hash, "", 0)
-          | `Cmph ->
-              let keys = Gen.map keys ~f:serialize_key |> Gen.to_list in
-              let hash = Hashtbl.create (module String) in
-              let hash_body =
-                if List.length keys = 0 then ""
-                else
-                  (* Create a CMPH hash from the keyset. *)
-                  let cmph_hash =
-                    let open Cmph in
-                    let keyset = KeySet.create keys in
-                    List.find_map_exn [Config.default_chd; `Bdz; `Bmz; `Chm; `Fch]
-                      ~f:(fun algo ->
-                        try
-                          Some
-                            ( Config.create ~verbose:true ~seed:0 ~algo keyset
-                            |> Hash.of_config )
-                        with Error _ as err ->
-                          Logs.warn (fun m ->
-                              m "Creating CMPH hash failed: %a" Sexp.pp_hum
-                                ([%sexp_of: exn] err) ) ;
-                          None )
-                  in
-                  (* Populate hash table with CMPH hash values. *)
-                  List.iter keys ~f:(fun k ->
-                      Hashtbl.set hash ~key:k ~data:(Cmph.Hash.hash cmph_hash k) ) ;
-                  Cmph.Hash.to_packed cmph_hash
-              in
-              let hash_len = String.length hash_body in
-              (hash, hash_body, hash_len)
-        in
-        (* Write the hashes to a file. *)
-        Out_channel.(
-          with_file "hashes.txt" ~f:(fun ch ->
-              fprintf ch "%s"
-                (Sexp.to_string_hum ([%sexp_of: int Hashtbl.M(String).t] hash)) )) ;
-        let table_size =
-          Hashtbl.fold hash ~f:(fun ~key:_ ~data:v m -> Int.max m v) ~init:0
-          |> fun m -> m + 1
+        main#logf
+          (fun m -> m "Tuple len (=%d)" len)
+          ~f:(fun () -> main#write_string (serialize_field hdr "len" len));
+
+        (* Serialize body *)
+        main#log "Tuple body" ~f:(fun () -> body#write_into main);
+        main
+      in
+      Fold.(Fold { init; fold; extract })
+
+    method tuple meta _ =
+      let t = self#type_ meta in
+      self#tuple' t
+
+    method join' meta lhs rhs =
+      let t = self#type_ meta in
+      let lhs_t, rhs_t =
+        match t with
+        | FuncT ([ lhs_t; rhs_t ], _) -> (lhs_t, rhs_t)
+        | _ -> assert false
+      in
+      Fold.run
+        (self#tuple' (TupleT ([ lhs_t; rhs_t ], { kind = `Cross })))
+        [ lhs; rhs ]
+
+    method join meta _ lhs rhs = self#join' meta lhs rhs
+
+    method depjoin meta _ lhs rhs = self#join' meta lhs rhs
+
+    method hash_idx meta _ =
+      let type_ = self#type_ meta in
+      let kt, vt, m =
+        match type_ with
+        | HashIdxT (kt, vt, m) -> (kt, vt, m)
+        | _ -> assert false
+      in
+      (* Collect keys and write values to a child buffer. *)
+      let init = (Queue.create (), self#serializer) in
+      let fold acc (key, kp, vp) =
+        let kq, vs = acc and k = kp and v = vp in
+        let vptr = vs#pos in
+        Queue.enqueue kq (key, vptr);
+        k#write_into vs;
+        v#write_into vs;
+        (kq, vs)
+      in
+      let extract acc =
+        let kq, vs = acc in
+        let hash, hash_body =
+          make_hash type_ (Queue.to_array kq |> Array.to_sequence)
         in
         let hdr = make_header type_ in
-        let header_pos = pos sctx.writer in
-        Log.with_msg sctx "Table len" (fun () ->
-            write_bytes sctx.writer (Bytes.make (size_exn hdr "len") '\x00') ) ;
-        Log.with_msg sctx "Table hash len" (fun () ->
-            write_bytes sctx.writer (Bytes.make (size_exn hdr "hash_len") '\x00') ) ;
-        Log.with_msg sctx "Table hash" (fun () ->
-            write_bytes sctx.writer (Bytes.make hash_len '\x00') ) ;
-        Log.with_msg sctx "Table map len" (fun () ->
-            write_bytes sctx.writer
-              (Bytes.make (size_exn hdr "hash_map_len") '\x00') ) ;
-        Log.with_msg sctx "Table key map" (fun () ->
-            write_bytes sctx.writer (Bytes.make (8 * table_size) '\x00') ) ;
-        let hash_table = Array.create ~len:table_size 0x0 in
-        Log.with_msg sctx "Table values" (fun () ->
-            Gen.iter gen ~f:(fun (key, vctx) ->
-                let value_pos = pos sctx.writer in
-                let skey = serialize_key key in
-                let hash_val =
-                  match Hashtbl.find hash skey with
-                  | Some v -> v
-                  | None ->
-                      Error.(
-                        create "BUG: Missing key." skey [%sexp_of: string] |> raise)
-                in
-                hash_table.(hash_val)
-                <- Pos.(value_pos |> to_bytes_exn |> Int64.to_int_exn) ;
-                self#visit_t sctx (M.to_ctx key) key_l ;
-                self#visit_t sctx vctx value_l ) ) ;
-        let end_pos = pos sctx.writer in
-        seek sctx.writer header_pos ;
-        let len = Pos.(end_pos - header_pos) in
-        write_string sctx.writer
-          (of_int ~byte_width:(size_exn hdr "len") (Int64.to_int_exn len)) ;
-        write_string sctx.writer
-          (of_int ~byte_width:(size_exn hdr "hash_len") hash_len) ;
-        write_string sctx.writer hash_body ;
-        write_string sctx.writer
-          (of_int ~byte_width:(size_exn hdr "hash_map_len") (8 * table_size)) ;
-        Array.iteri hash_table ~f:(fun i x ->
-            Log.with_msg sctx (sprintf "Map entry (%d => %d)" i x) (fun () ->
-                write_string sctx.writer (of_int ~byte_width:8 x) ) ) ;
-        seek sctx.writer end_pos
-
-      method build_AOrderedIdx sctx meta (_, value_l, ometa) keys gen =
-        let t = Meta.Direct.(find_exn meta Meta.type_) in
-        let hdr = make_header t in
-        let key_l =
-          Option.value_exn
-            ~error:
-              (Error.create "Missing key layout." ometa [%sexp_of: ordered_idx])
-            ometa.oi_key_layout
+        let hash_len = String.length hash_body in
+        let ptr_size = Type.hi_ptr_size kt vt m in
+        let hash_map_len = Array.length hash * ptr_size in
+        let value_len = vs#pos in
+        let len =
+          size_exn hdr "len" + size_exn hdr "hash_len" + hash_len
+          + size_exn hdr "hash_map_len"
+          + hash_map_len + value_len
         in
-        (* Write a dummy header. *)
-        let len_pos = pos sctx.writer in
-        write_bytes sctx.writer (Bytes.make (size_exn hdr "len") '\x00') ;
-        write_bytes sctx.writer (Bytes.make (size_exn hdr "idx_len") '\x00') ;
-        let index_start_pos = pos sctx.writer in
-        (* Make a first pass to get the keys and value pointers set up. *)
-        Gen.iter keys ~f:(fun key ->
-            (* Serialize key. *)
-            self#visit_t sctx (M.to_ctx key) key_l ;
-            (* Save space for value pointer. *)
-            write_bytes sctx.writer (Bytes.make 8 '\x00') ) ;
-        let index_end_pos = pos sctx.writer in
-        (* Pass over again to get values in the right places. *)
-        let index_pos = ref index_start_pos in
-        let value_pos = ref (pos sctx.writer) in
-        Gen.iter gen ~f:(fun (key, vctx) ->
-            seek sctx.writer !index_pos ;
-            (* Serialize key. *)
-            Log.with_msg sctx "Ordered idx key" (fun () ->
-                self#visit_t sctx (M.to_ctx key) key_l ) ;
-            (* Serialize value ptr. *)
-            let ptr = !value_pos |> Pos.to_bytes_exn |> Int64.to_int_exn in
-            Log.with_msg sctx (sprintf "Ordered idx value ptr (=%d)" ptr) (fun () ->
-                write_string sctx.writer (ptr |> of_int ~byte_width:8) ) ;
-            index_pos := pos sctx.writer ;
-            seek sctx.writer !value_pos ;
-            (* Serialize value. *)
-            self#visit_t sctx vctx value_l ;
-            value_pos := pos sctx.writer ) ;
-        let end_pos = pos sctx.writer in
-        seek sctx.writer len_pos ;
-        let len = Pos.(end_pos - len_pos) in
-        let index_len = Pos.(index_end_pos - index_start_pos) in
-        Log.with_msg sctx (sprintf "Ordered idx len (=%Ld)" len) (fun () ->
-            write_string sctx.writer (of_int64 ~byte_width:(size_exn hdr "len") len)
-        ) ;
-        Log.with_msg sctx (sprintf "Ordered idx index len (=%Ld)" index_len)
-          (fun () ->
-            write_string sctx.writer
-              (of_int64 ~byte_width:(size_exn hdr "idx_len") index_len) ) ;
-        seek sctx.writer end_pos
+        let main = self#serializer in
+        main#logf
+          (fun m -> m "Table len (=%d)" len)
+          ~f:(fun () -> main#write_string (serialize_field hdr "len" len));
+        main#logf
+          (fun m -> m "Table hash len (=%d)" hash_len)
+          ~f:(fun () ->
+            main#write_string (serialize_field hdr "hash_len" hash_len));
+        main#log "Table hash" ~f:(fun () -> main#write_string hash_body);
+        main#logf
+          (fun m -> m "Table map len (=%d)" hash_map_len)
+          ~f:(fun () ->
+            main#write_string (serialize_field hdr "hash_map_len" hash_map_len));
+        main#log "Table key map" ~f:(fun () ->
+            Array.iteri hash ~f:(fun h p ->
+                main#logf
+                  (fun m -> m "Map entry (%d => %d)" h p)
+                  ~f:(fun () ->
+                    main#write_string (of_int ~byte_width:ptr_size p))));
+        main#log "Table values" ~f:(fun () -> vs#write_into main);
+        main
+      in
+      Fold.(Fold { init; fold; extract })
 
-      method build_AScalar sctx meta _ value =
-        let type_ = Meta.Direct.(find_exn meta Meta.type_) in
-        Log.with_msg sctx
-          (sprintf "Scalar (=%s)"
-             ([%sexp_of: Value.t] (Lazy.force value) |> Sexp.to_string_hum))
-          (fun () ->
-            match Lazy.force value with
-            | Null -> serialize_null sctx type_
-            | Date x -> serialize_int sctx type_ (Date.to_int x)
-            | Int x -> serialize_int sctx type_ x
-            | Fixed x -> serialize_fixed sctx type_ x
-            | Bool x -> serialize_bool sctx type_ x
-            | String x -> serialize_string sctx type_ x )
+    method ordered_idx meta _ =
+      let type_ = self#type_ meta in
+      let key_type, value_type, m =
+        match type_ with
+        | OrderedIdxT (kt, vt, m) -> (kt, vt, m)
+        | _ -> assert false
+      in
 
-      method build_Select sctx _ (_, r) ectx = self#visit_t sctx ectx r
+      let keys_queue = Queue.create ()
+      and values_serial = self#serializer
+      and key_serial = self#serializer in
+      let fold () (ks, kp, vp) =
+        let ks =
+          match key_type with
+          | Type.TupleT (ts, _) ->
+              List.map2_exn ks ts ~f:(fun v t ->
+                  self#serialize_scalar key_serial t v;
+                  let int_key =
+                    int_of_string @@ Bigbuffer.contents key_serial#buf
+                  in
+                  Bigbuffer.clear key_serial#buf;
+                  int_key)
+              |> Array.of_list |> Option.some
+          | _ -> None
+        in
+        let k = kp and v = vp in
+        Queue.enqueue keys_queue (k, ks, values_serial#pos);
+        v#write_into values_serial
+      in
+      let extract () =
+        (* Serialize keys and value pointers. *)
+        let ptr_size = Type.oi_ptr_size value_type m in
+        let idxs = self#serializer in
+        let keys = Queue.to_list keys_queue in
+        let keys =
+          match key_type with
+          | Type.TupleT _ ->
+              let compare (_, k1, _) (_, k2, _) =
+                Zorder.compare (Option.value_exn k1) (Option.value_exn k2)
+              in
+              List.sort keys ~compare
+          | _ -> keys
+        in
+        List.iter keys ~f:(fun (keyf, _, vptr) ->
+            idxs#log "Ordered idx key" ~f:(fun () -> keyf#write_into idxs);
+            idxs#logf
+              (fun m -> m "Ordered idx ptr (=%d)" vptr)
+              ~f:(fun () ->
+                idxs#write_string @@ of_int ~byte_width:ptr_size vptr));
 
-      method build_Filter sctx _ (_, r) ectx = self#visit_t sctx ectx r
+        (* Write header. *)
+        let hdr = make_header type_
+        and idx_len = idxs#pos
+        and val_len = values_serial#pos in
+        let len =
+          size_exn hdr "len" + size_exn hdr "idx_len" + idx_len + val_len
+        in
+        let main = self#serializer in
+        main#logf
+          (fun m -> m "Ordered idx len (=%d)" len)
+          ~f:(fun () -> main#write_string (serialize_field hdr "len" len));
+        main#logf
+          (fun m -> m "Ordered idx index len (=%d)" idx_len)
+          ~f:(fun () ->
+            main#write_string (serialize_field hdr "idx_len" idx_len));
+        main#log "Ordered idx map" ~f:(fun () -> idxs#write_into main);
+        main#log "Ordered idx body" ~f:(fun () -> values_serial#write_into main);
+        main
+      in
+      Fold.(Fold { init = (); fold; extract })
 
-      method! visit_t sctx ectx layout =
-        (* Update position metadata in layout. *)
-        let pos = pos sctx.writer |> Pos.to_bytes_exn in
-        Meta.update layout Meta.pos ~f:(function
-          | Some (Pos pos' as p) -> if Int64.(pos = pos') then p else Many_pos
-          | Some Many_pos -> Many_pos
-          | None -> Pos pos ) ;
-        super#visit_t sctx ectx layout
-    end
+    method serialize_null (s : logged_serializer) t =
+      let hdr = make_header t in
+      match t with
+      | NullT -> s#log "Null" ~f:(fun () -> s#write_string "")
+      | StringT _ -> self#serialize_null_string s t
+      | _ ->
+          s#log "Null" ~f:(fun () ->
+              s#write_string (serialize_field hdr "value" (null_sentinal t)))
 
-  let serialize writer l t =
-    Logs.info (fun m -> m "Serializing abstract layout.") ;
-    let begin_pos = pos writer in
-    let log_tmp_file =
-      if Option.is_some Config.layout_map_channel then
-        Core.Filename.temp_file "serialize" "log"
-      else "/dev/null"
-    in
-    let log_ch = Out_channel.create log_tmp_file in
-    (* Serialize the main layout. *)
-    let sctx = {writer; log_ch} in
-    let serializer = new serialize_fold in
-    M.annotate_type l t ;
-    serializer#run sctx l ;
-    (* Serialize subquery layouts. *)
-    let subquery_visitor =
+    method serialize_int s t x =
+      let hdr = make_header t in
+      let sval = serialize_field hdr "value" x in
+      s#write_string sval
+
+    method serialize_fixed s t x =
+      match t with
+      | Type.FixedT { value = { scale; _ }; _ } ->
+          let hdr = make_header t in
+          let sval =
+            serialize_field hdr "value" Fixed_point.((convert x scale).value)
+          in
+          s#write_string sval
+      | _ ->
+          Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
+
+    method serialize_bool s t x =
+      let hdr = make_header t in
+      let str =
+        let value =
+          match (t, x) with
+          | BoolT _, true -> 1
+          | BoolT _, false -> 0
+          | t, _ ->
+              Error.(
+                create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
+        in
+        serialize_field hdr "value" value
+      in
+      s#write_string str
+
+    method serialize_null_string (s : logged_serializer) t =
+      let hdr = make_header t in
+      match t with
+      | StringT t ->
+          s#logf
+            (fun m -> m "Null string")
+            ~f:(fun () ->
+              serialize_field hdr "nchars" (string_sentinal t) |> s#write_string)
+      | t ->
+          Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
+
+    method serialize_string (s : logged_serializer) t body =
+      let hdr = make_header t in
+      match t with
+      | StringT _ ->
+          let len = String.length body in
+          s#logf
+            (fun m -> m "String length (=%d)" len)
+            ~f:(fun () -> serialize_field hdr "nchars" len |> s#write_string);
+          s#log "String body" ~f:(fun () -> s#write_string body)
+      | t ->
+          Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
+
+    method private serialize_scalar s type_ value =
+      match value with
+      | Value.Null -> self#serialize_null s type_
+      | Date x -> self#serialize_int s type_ (Date.to_int x)
+      | Int x -> self#serialize_int s type_ x
+      | Fixed x -> self#serialize_fixed s type_ x
+      | Bool x -> self#serialize_bool s type_ x
+      | String x -> self#serialize_string s type_ x
+
+    method scalar meta _ value =
+      let type_ = self#type_ meta in
+      let main = self#serializer in
+      main#logf
+        (fun m ->
+          m "Scalar (=%s)" ([%sexp_of: Value.t] value |> Sexp.to_string_hum))
+        ~f:(fun () -> self#serialize_scalar main type_ value);
+      main
+  end
+
+let set_pos (r : meta annot) (pos : int) =
+  {
+    r with
+    meta =
       object
-        inherit Abslayout0.runtime_subquery_visitor
+        method type_ = r.meta#type_
 
-        method visit_Subquery r =
-          M.annotate_type r (M.to_type r) ;
-          serializer#run sctx r
-      end
-    in
-    subquery_visitor#visit_t () l ;
-    let end_pos = pos writer in
-    let len = Pos.(end_pos - begin_pos) |> Int64.to_int_exn in
-    flush writer ;
-    ( match Config.layout_map_channel with
-    | Some ch -> Log.render log_tmp_file ch
-    | None -> () ) ;
-    (l, len)
-end
+        method pos =
+          match r.meta#pos with
+          | Some pos' -> if pos = pos' then Some pos else None
+          | None -> Some pos
+      end;
+  }
+
+let serialize ?layout_file conn fn l =
+  let l =
+    map_meta
+      (fun t ->
+        object
+          method type_ = t#type_
+
+          method pos = None
+        end)
+      l
+  in
+  let debug = Option.is_some layout_file in
+  Log.info (fun m -> m "Serializing abstract layout.");
+  let serializer = new logged_serializer ~debug () in
+
+  (* Serialize the main layout. *)
+  let l = set_pos l serializer#pos in
+  let w = (new serialize_fold ~debug ())#run conn l in
+  w#write_into serializer;
+
+  (* Serialize subquery layouts. *)
+  let subquery_visitor =
+    object
+      inherit [_] runtime_subquery_map
+
+      method visit_Subquery r =
+        let r = set_pos r serializer#pos in
+        let w = (new serialize_fold ~debug ())#run conn r in
+        w#write_into serializer;
+        r
+    end
+  in
+  let l = subquery_visitor#visit_t () l in
+
+  let len = serializer#pos in
+  Out_channel.with_file fn ~f:serializer#write_into_channel;
+  Option.iter layout_file ~f:(fun fn ->
+      let layout_fn, layout_ch = Filename.open_temp_file "layout" "txt" in
+      serializer#render layout_ch;
+      (Unix.create_process ~prog:"mv" ~args:[ layout_fn; fn ]).pid
+      |> Unix.waitpid |> ignore;
+      Out_channel.close layout_ch);
+  (l, len)

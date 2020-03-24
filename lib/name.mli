@@ -1,33 +1,27 @@
-open Base
-open Collections
+type t [@@deriving compare, hash, sexp]
 
-type t = Abslayout0.name =
-  {relation: string option; name: string; type_: Type.PrimType.t option}
-[@@deriving sexp]
+include Comparator.S with type t := t
 
-module Compare : sig
-  type t = Abslayout0.name [@@deriving compare, hash, sexp]
+module O : Comparable.Infix with type t := t
 
-  include Comparable.S with type t := t
-end
+val create : ?scope:string -> ?type_:Prim_type.t -> string -> t
 
-module Compare_no_type : sig
-  type t = Abslayout0.name [@@deriving compare, hash, sexp]
+val copy :
+  ?scope:string option -> ?type_:Prim_type.t option -> ?name:string -> t -> t
 
-  include Comparable.S with type t := t
-end
+val name : t -> string
 
-module Compare_name_only : sig
-  type t = Abslayout0.name [@@deriving compare, hash, sexp]
+val type_ : t -> Prim_type.t option [@@deprecated]
 
-  include Comparable.S with type t := t
-end
+val type_exn : t -> Prim_type.t [@@deprecated]
 
-val create : ?relation:string -> ?type_:Type.PrimType.t -> string -> t
-
-val type_exn : t -> Type.PrimType.t
+val rel : t -> string option
 
 val rel_exn : t -> string
+
+val scoped : string -> t -> t
+
+val unscoped : t -> t
 
 val to_sql : t -> string
 
@@ -35,6 +29,4 @@ val to_var : t -> string
 
 val pp : Formatter.t -> t -> unit
 
-val of_string_exn : string -> t
-
-val fresh : Fresh.t -> (int -> string, unit, string) format -> t
+val fresh : (int -> string, unit, string) format -> t

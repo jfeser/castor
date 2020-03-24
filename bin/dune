@@ -1,46 +1,65 @@
-(install
- (section bin)
- (files compile.exe pretty.exe transform.exe))
-
-(rule
- (targets config.ml)
- (deps    ../config.ml)
- (action  (copy %{deps} %{targets})))
-
 (executable
+ (package castor)
+ (public_name castor-pretty)
  (name pretty)
  (libraries core castor)
- (flags (:standard -g -bin-annot))
- (preprocess (pps ppx_sexp_conv ppx_let))
+ (preprocess
+  (pps ppx_sexp_conv ppx_let))
  (modules pretty))
 
 (executable
+ (package castor)
+ (public_name castor-compile)
  (name compile)
  (libraries core castor logs)
- (flags (:standard -g -bin-annot))
- (preprocess (pps ppx_sexp_conv ppx_let))
- (modules compile config))
+ (preprocess
+  (pps ppx_sexp_conv ppx_let))
+ (modules compile))
 
 (executable
- (name transform)
- (libraries core castor logs)
- (flags (:standard -g -bin-annot))
- (preprocess (pps ppx_sexp_conv ppx_let))
- (modules transform))
+ (package castor)
+ (public_name castor-to-cozy)
+ (name to_cozy)
+ (libraries core castor)
+ (preprocess
+  (pps ppx_sexp_conv ppx_let))
+ (modules to_cozy))
 
 (executable
- (name sample)
- (libraries core postgresql castor logs)
- (flags (:standard -g -bin-annot))
- (preprocess (pps ppx_sexp_conv ppx_let))
- (modules sample))
-
-(executable
+ (package castor)
+ (public_name sample-tpch)
  (name sample_tpch)
  (libraries core postgresql castor logs)
- (flags (:standard -g -bin-annot))
- (preprocess (pps ppx_sexp_conv ppx_let))
+ (preprocess
+  (pps ppx_sexp_conv ppx_let))
  (modules sample_tpch))
+
+(executable
+ (package castor)
+ (public_name sql-to-castor)
+ (name parse_sql)
+ (libraries core sqlgg castor yojson)
+ (preprocess
+  (pps ppx_sexp_conv ppx_let))
+ (modules parse_sql))
+
+(executable
+ (package castor)
+ (public_name cozy-to-castor)
+ (name parse_cozy)
+ (libraries core castor)
+ (preprocess
+  (pps ppx_sexp_conv ppx_let))
+ (modules parse_cozy))
+
+(executable
+ (package castor)
+ (public_name castor-combine)
+ (name combine)
+ (libraries core castor)
+ (preprocess
+  (pps ppx_sexp_conv ppx_let))
+ (modules combine))
 
 ; Local Variables:
 ; mode: tuareg-dune

@@ -1,4 +1,5 @@
-open Base
+module A = Abslayout
+open Collections
 open Implang0
 
 let read_names func =
@@ -39,15 +40,15 @@ let prune_args m =
         List.filter_mapi f.args ~f:(fun i (n, _) ->
             if Set.mem ns n then Some i
             else (
-              Logs.debug (fun m -> m "Removing parameter %s from %s." n f.name) ;
-              None ) )
+              Log.debug (fun m -> m "Removing parameter %s from %s." n f.name);
+              None ))
       in
-      Hashtbl.set needed_args ~key:f.name ~data:args ) ;
+      Hashtbl.set needed_args ~key:f.name ~data:args);
   let prune_func f =
     let args' =
       Hashtbl.find_exn needed_args f.name |> List.map ~f:(List.nth_exn f.args)
     in
-    {f with args= args'}
+    { f with args = args' }
   in
   let prune_calls f =
     let visitor =
@@ -58,14 +59,14 @@ let prune_args m =
           let args' =
             Hashtbl.find_exn needed_args func |> List.map ~f:(List.nth_exn args)
           in
-          Iter {var; func; args= args'}
+          Iter { var; func; args = args' }
       end
     in
     visitor#visit_func () f
   in
   let funcs' = List.map m.funcs ~f:(fun f -> f |> prune_func |> prune_calls) in
   let iters' = List.map m.iters ~f:(fun f -> f |> prune_func |> prune_calls) in
-  {m with funcs= funcs'; iters= iters'}
+  { m with funcs = funcs'; iters = iters' }
 
 let prune_args = to_fixed_point prune_args
 
@@ -77,15 +78,15 @@ let prune_locals m =
             (List.map f.args ~f:(fun (n, _) -> n) |> Set.of_list (module String))
         in
         let locals' =
-          List.filter f.locals ~f:(fun {lname; _} ->
+          List.filter f.locals ~f:(fun { lname; _ } ->
               let should_prune = not (Set.mem ns lname) in
               if should_prune then
-                Logs.debug (fun m -> m "Dropping local %s in %s." lname f.name) ;
-              not should_prune )
+                Log.debug (fun m -> m "Dropping local %s in %s." lname f.name);
+              not should_prune)
         in
-        {f with locals= locals'} )
+        { f with locals = locals' })
   in
-  {m with iters= iters'}
+  { m with iters = iters' }
 
 (* let alpha_rename_visitor  *)
 
@@ -106,10 +107,11 @@ let inline sl_iters func =
       method! visit_prog () stmts =
         let rec visit_stmts = function
           | [] -> []
-          | [s] -> [self#visit_stmt () s]
-          | Iter {func= iter'; args; _} :: Step {var; iter} :: ss
-            when [%compare.equal: string] iter' iter && Hashtbl.mem sl_iters iter ->
-              Logs.debug (fun m -> m "Inlining %s into %s." iter func.name) ;
+          | [ s ] -> [ self#visit_stmt () s ]
+          | Iter { func = iter'; args; _ } :: Step { var; iter } :: ss
+            when [%compare.equal: string] iter' iter
+                 && Hashtbl.mem sl_iters iter ->
+              Log.debug (fun m -> m "Inlining %s into %s." iter func.name);
               let func = Hashtbl.find_exn sl_iters iter in
               (* Substitute arguments into the inlinee. *)
               let ctx =
@@ -122,17 +124,19 @@ let inline sl_iters func =
                 object
                   inherit [_] endo
 
-                  method! visit_Yield () _ e = Assign {lhs= var; rhs= e}
+                  method! visit_Yield () _ e = Assign { lhs = var; rhs = e }
                 end
               in
               (* Add the locals (but not the arguments). None of these variables
                  needs to be persistent. *)
               locals :=
                 List.filter_map func.locals ~f:(fun l ->
-                    if List.exists func.args ~f:(fun (n, _) -> String.(n = l.lname))
+                    if
+                      List.exists func.args ~f:(fun (n, _) ->
+                          String.(n = l.lname))
                     then None
-                    else Some {l with persistent= false} )
-                @ !locals ;
+                    else Some { l with persistent = false })
+                @ !locals;
               let func'' = yield_visitor#visit_func () func' in
               let body = func''.body in
               body @ visit_stmts ss
@@ -142,7 +146,7 @@ let inline sl_iters func =
     end
   in
   let func' = visitor#visit_func () func in
-  {func' with locals= List.dedup_and_sort ~compare:[%compare: local] !locals}
+  { func' with locals = List.dedup_and_sort ~compare:[%compare: local] !locals }
 
 let inline_sl_iter m =
   let sl_iters = Hashtbl.create (module String) in
@@ -164,9 +168,9 @@ let inline_sl_iter m =
       in
       let has_loop, yield_ct = visitor#visit_func () f in
       if (not has_loop) && yield_ct = 1 then
-        Hashtbl.set sl_iters ~key:f.name ~data:f ) ;
+        Hashtbl.set sl_iters ~key:f.name ~data:f);
   let iters' = List.map m.iters ~f:(inline sl_iters) in
-  {m with iters= iters'}
+  { m with iters = iters' }
 
 let inline_sl_iter = to_fixed_point inline_sl_iter
 
@@ -185,10 +189,133 @@ let calls f f' =
 let prune_funcs m =
   let iters' =
     List.filter m.Irgen.iters ~f:(fun f ->
-        List.exists (m.iters @ m.funcs) ~f:(fun f' -> calls f' f) )
+        List.exists (m.iters @ m.funcs) ~f:(fun f' -> calls f' f))
   in
-  {m with iters= iters'}
+  { m with iters = iters' }
 
 let prune_funcs = to_fixed_point prune_funcs
 
-let opt m = m |> prune_args |> prune_locals |> inline_sl_iter |> prune_funcs
+class is_const_expr_visitor const_names =
+  object
+    inherit [_] reduce
+
+    inherit [_] Util.conj_monoid
+
+    method! visit_Var (_ : bool) n = Set.mem const_names n
+  end
+
+let is_trivial_expr = function
+  | Int _ | Bool _ | String _ | Fixed _ | Var _ -> true
+  | _ -> false
+
+class hoist_visitor const_names const_types =
+  object
+    inherit [_] map as super
+
+    inherit [_] Util.list_monoid
+
+    val mutable hoisted = []
+
+    val mutable const_names = const_names
+
+    val tctx = Hashtbl.of_alist_exn (module String) const_types
+
+    method hoisted = List.rev hoisted
+
+    method! visit_expr () expr =
+      let expr = super#visit_expr () expr in
+      let is_const = new is_const_expr_visitor const_names in
+      if is_const#visit_expr true expr && not (is_trivial_expr expr) then (
+        let name = Fresh.name Global.fresh "hoisted%d" in
+        let type_ = Implang.type_of tctx expr in
+        hoisted <- (name, expr, type_) :: hoisted;
+        const_names <- Set.add const_names name;
+        Hashtbl.add_exn tctx ~key:name ~data:type_;
+        Var name )
+      else expr
+  end
+
+let hoist_const_exprs m =
+  let const_names =
+    Set.of_list
+      (module String)
+      ("buf" :: List.map m.Irgen.params ~f:(fun (n, _) -> Name.name n))
+  in
+  let const_types =
+    List.map m.Irgen.params ~f:(fun (n, t) -> (Name.name n, t))
+  in
+  let funcs' =
+    List.map m.Irgen.funcs ~f:(fun func ->
+        let const_types = func.args @ const_types in
+        let const_names =
+          Set.union const_names
+            ( List.map func.args ~f:(fun (n, _) -> n)
+            |> Set.of_list (module String) )
+        in
+        let hoister = new hoist_visitor const_names const_types in
+        let func' = hoister#visit_func () func in
+        let body' =
+          List.map hoister#hoisted ~f:(fun (n, e, _) ->
+              Assign { lhs = n; rhs = e })
+          @ func'.body
+        in
+        let locals' =
+          List.map hoister#hoisted ~f:(fun (n, _, t) ->
+              { lname = n; type_ = t; persistent = false })
+          @ func.locals
+        in
+        { func' with body = body'; locals = locals' })
+  in
+  { m with funcs = funcs' }
+
+let rec conj = function
+  | [] -> failwith "Empty"
+  | [ x ] -> x
+  | x :: xs -> Binop { op = `And; arg1 = x; arg2 = conj xs }
+
+let split_expensive_predicates f =
+  let is_expensive_visitor =
+    object
+      inherit [_] reduce as super
+
+      inherit [_] Util.disj_monoid
+
+      method! visit_Unop () op p =
+        let ret = super#visit_Unop () op p in
+        match op with `StrLen -> true | _ -> ret
+
+      method! visit_Binop _ op p1 p2 =
+        let ret = super#visit_Binop () op p1 p2 in
+        match op with `StrPos | `StrEq | `StrHash -> true | _ -> ret
+    end
+  in
+  let visitor =
+    object (self)
+      inherit [_] map
+
+      method! visit_If () cond then_ else_ =
+        let tcase = self#visit_prog () then_ in
+        let fcase = self#visit_prog () else_ in
+        let preds = conjuncts cond in
+        let costly, cheap =
+          List.partition_tf preds ~f:(is_expensive_visitor#visit_expr ())
+        in
+        match (costly, cheap) with
+        | [], xs | xs, [] -> If { cond = conj xs; tcase; fcase }
+        | xs, ys ->
+            If
+              {
+                cond = conj ys;
+                tcase = [ If { cond = conj xs; tcase; fcase } ];
+                fcase;
+              }
+    end
+  in
+  visitor#visit_func () f
+
+let for_all_funcs ~f m = { m with Irgen.funcs = List.map m.Irgen.funcs ~f }
+
+let opt m =
+  m |> prune_args |> prune_locals |> inline_sl_iter |> prune_funcs
+  |> hoist_const_exprs
+  |> for_all_funcs ~f:split_expensive_predicates

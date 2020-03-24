@@ -1,188 +1,115 @@
-open Base
+open Ast
 open Collections
 
-type binop = Abslayout0.binop =
-  | Eq
-  | Lt
-  | Le
-  | Gt
-  | Ge
-  | And
-  | Or
-  | Add
-  | Sub
-  | Mul
-  | Div
-  | Mod
-  | Strpos
-[@@deriving compare, sexp]
+include Comparator.S with type t := t
 
-type unop = Abslayout0.unop =
-  | Not
-  | Day
-  | Month
-  | Year
-  | Strlen
-  | ExtractY
-  | ExtractM
-  | ExtractD
-[@@deriving compare, sexp]
+module O : Comparable.Infix with type t := t
 
-type tuple = Abslayout0.tuple = Cross | Zip | Concat [@@deriving compare, sexp_of]
+val pp_pred : Format.formatter -> Pred.t -> unit
 
-type order = Abslayout0.order = Asc | Desc [@@deriving compare, sexp_of]
+val pp : Format.formatter -> 'a annot -> unit
 
-type pred = Abslayout0.pred =
-  | Name of Name.t
-  | Int of int
-  | Fixed of Fixed_point.t
-  | Date of Core.Date.t
-  | Bool of bool
-  | String of string
-  | Null
-  | Unop of (unop * pred)
-  | Binop of (binop * pred * pred)
-  | As_pred of (pred * string)
-  | Count
-  | Sum of pred
-  | Avg of pred
-  | Min of pred
-  | Max of pred
-  | If of pred * pred * pred
-  | First of t
-  | Exists of t
-  | Substring of pred * pred * pred
-[@@deriving compare, sexp_of]
+val pp_small : Format.formatter -> 'a annot -> unit
 
-and hash_idx = Abslayout0.hash_idx =
-  {hi_key_layout: Abslayout0.t option; lookup: pred list}
-[@@deriving sexp_of]
+val pp_small_str : unit -> 'a annot -> string
 
-and ordered_idx = Abslayout0.ordered_idx =
-  { oi_key_layout: Abslayout0.t option
-  ; lookup_low: pred
-  ; lookup_high: pred
-  ; order: [`Asc | `Desc] }
-[@@deriving sexp_of]
-
-and node = Abslayout0.node =
-  | Select of (pred list * t)
-  | Filter of (pred * t)
-  | Join of {pred: pred; r1: t; r2: t}
-  | GroupBy of pred list * Name.t list * t
-  | OrderBy of {key: (pred * order) list; rel: t}
-  | Dedup of t
-  | Scan of string
-  | AEmpty
-  | AScalar of pred
-  | AList of (t * t)
-  | ATuple of (t list * tuple)
-  | AHashIdx of (t * t * hash_idx)
-  | AOrderedIdx of (t * t * ordered_idx)
-  | As of string * t
-[@@deriving sexp_of]
-
-and t = Abslayout0.t = {node: node; meta: Meta.t} [@@deriving sexp_of]
-
-val pp : Formatter.t -> t -> unit
+val mk_pp :
+  ?pp_name:(Format.formatter -> Name.t -> unit) ->
+  ?pp_meta:(Format.formatter -> 'a -> unit) ->
+  unit ->
+  (Format.formatter -> 'a annot -> unit)
+  * (Format.formatter -> 'a annot pred -> unit)
 
 val name : t -> string
 
-val names : t -> Set.M(Name.Compare_no_type).t
+val names : t -> Set.M(Name).t
 (** The set of names in a `t`. *)
 
-val select : pred list -> t -> t
+val range : Pred.t -> Pred.t -> t
 
-val join : pred -> t -> t -> t
+val select : Pred.t list -> t -> t
 
-val filter : pred -> t -> t
+val dep_join : t -> string -> t -> t
 
-val group_by : pred list -> Name.t list -> t -> t
+val dep_join' : t depjoin -> t
+
+val join : Pred.t -> t -> t -> t
+
+val filter : Pred.t -> t -> t
+
+val group_by : Pred.t list -> Name.t list -> t -> t
 
 val dedup : t -> t
 
-val order_by : (pred * order) list -> t -> t
+val order_by : (Pred.t * order) list -> t -> t
 
-val scan : string -> t
+val relation : Relation.t -> t
 
 val empty : t
 
-val scalar : pred -> t
+val scalar : Pred.t -> t
 
-val list : t -> t -> t
+val list : t -> string -> t -> t
+
+val list' : t * t -> t
 
 val tuple : t list -> tuple -> t
 
-val hash_idx : t -> t -> pred list -> t
+val hash_idx : ?key_layout:t -> t -> string -> t -> Pred.t list -> t
 
-val hash_idx' : t -> t -> hash_idx -> t
+val hash_idx' : (Pred.t, t) hash_idx -> t
 
-val ordered_idx : t -> t -> ordered_idx -> t
+val h_key_layout : ('a annot pred, 'a annot) hash_idx -> unit annot
+
+val ordered_idx : t -> string -> t -> (Pred.t, t) ordered_idx -> t
+
+val o_key_layout :
+  'a annot * 'a annot * ('a annot pred, 'a annot) ordered_idx -> unit annot
 
 val as_ : string -> t -> t
 
-val and_ : pred list -> pred
+val strip_scope : 'a annot -> 'a annot
 
-module Ctx : sig
-  type t = Value.t Map.M(Name.Compare_no_type).t [@@deriving compare, sexp]
+val scope : 'a annot -> string option
 
-  include Comparable.S with type t := t
+val scope_exn : 'a annot -> string
 
-  val empty : t
-end
+val alpha_scopes : 'a annot -> 'a annot
 
-val pred_relations : pred -> string list
+val and_ : Pred.t list -> Pred.t
 
 val of_string_exn : string -> t
 
-val pred_of_string_exn : string -> pred
+val name_of_string_exn : string -> Name.t
 
-val of_channel_exn : Stdio.In_channel.t -> t
+val of_channel_exn : In_channel.t -> t
 
-val subst : pred Map.M(Name.Compare_no_type).t -> t -> t
+val subst : 'a annot pred Map.M(Name).t -> 'a annot -> 'a annot
 
-val subst_pred : pred Map.M(Name.Compare_no_type).t -> pred -> pred
+val select_kind : 'a annot pred list -> [ `Agg | `Scalar ]
 
-val subst_single : pred -> pred -> t -> t
-
-val pred_to_schema : pred -> Name.t
-
-val pred_to_name : pred -> Name.t option
-
-val annotate_align : t -> unit
-
-val pred_of_value : Value.t -> pred
-
-val annotate_foreach : t -> unit
-
-val next_inner_loop : t -> (t * t) option
-
-val pred_kind : pred -> [`Agg | `Scalar]
-
-val select_kind : pred list -> [`Agg | `Scalar]
-
-val is_serializeable : t -> bool
-
-val pred_free : pred -> Set.M(Name.Compare_no_type).t
-
-val free : t -> Set.M(Name.Compare_no_type).t
-
-val annotate_free : t -> unit
-
-val annotate_needed : t -> unit
-
-val project : t -> t
-
-val pred_remove_as : pred -> pred
-
-val annotate_eq : t -> unit
-
-val annotate_orders : t -> unit
-
-val order_of : t -> (pred * order) list
+val order_of : 'a annot -> (Pred.t * order) list
 
 val validate : t -> unit
 
-val pred_constants : Name.t list -> pred -> pred list
+val strip_meta : 'a annot -> t
 
-val conjuncts : pred -> pred list
+class virtual ['a] iter : ['a] Abslayout_visitors.iter
+
+class virtual ['a] map : ['a] Abslayout_visitors.map
+
+class virtual ['a] endo : ['a] Abslayout_visitors.endo
+
+class virtual ['a] reduce : ['a] Abslayout_visitors.reduce
+
+class virtual ['a] mapreduce : ['a] Abslayout_visitors.mapreduce
+
+val annotate_key_layouts : t -> t
+
+val strip_unused_as : t -> t
+
+val ensure_alias : 'a annot -> 'a annot
+
+val aliases : t -> Pred.t Map.M(Name).t
+
+val relations : t -> Set.M(Relation).t

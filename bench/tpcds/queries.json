@@ -1,0 +1,1788 @@
+[
+    {
+        "name": "1",
+        "ordered": true,
+        "query": [
+            "q1"
+        ],
+        "params": {
+            "AGG_FIELD_01:string": "SR_RETURN_AMT",
+            "YEAR_01:int": "1998",
+            "STATE_01:string": "TN",
+            "COUNTY_01:int": "1"
+        }
+    },
+    {
+        "name": "2",
+        "ordered": true,
+        "query": [
+            "q2"
+        ],
+        "params": {
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "3",
+        "ordered": true,
+        "query": [
+            "q3"
+        ],
+        "params": {
+            "MANUFACT_01:int": "1",
+            "MONTH_01:int": "11",
+            "AGGC_01:string": "ss_ext_sales_price"
+        }
+    },
+    {
+        "name": "4",
+        "ordered": true,
+        "query": [
+            "q4"
+        ],
+        "params": {
+            "SELECTONE_01:string": "t_s_secyear.customer_preferred_cust_flag",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "5",
+        "ordered": true,
+        "query": [
+            "q5"
+        ],
+        "params": {
+            "SALES_DATE_01:date": "1998-08-02",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "6",
+        "ordered": true,
+        "query": [
+            "q6"
+        ],
+        "params": {
+            "MONTH_01:int": "1",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "7",
+        "ordered": true,
+        "query": [
+            "q7"
+        ],
+        "params": {
+            "YEAR_01:int": "1998",
+            "ES_01:string": "Primary",
+            "MS_01:string": "M",
+            "GEN_01:string": "M"
+        }
+    },
+    {
+        "name": "8",
+        "ordered": true,
+        "query": [
+            "q8"
+        ],
+        "params": {
+            "ZIP_01:int": "10000",
+            "ZIP_02:int": "10001",
+            "ZIP_03:int": "10002",
+            "ZIP_04:int": "10003",
+            "ZIP_05:int": "10004",
+            "ZIP_06:int": "10005",
+            "ZIP_07:int": "10006",
+            "ZIP_08:int": "10007",
+            "ZIP_09:int": "10008",
+            "ZIP_10:int": "10009",
+            "ZIP_11:int": "10010",
+            "ZIP_12:int": "10011",
+            "ZIP_13:int": "10012",
+            "ZIP_14:int": "10013",
+            "ZIP_15:int": "10014",
+            "ZIP_16:int": "10015",
+            "ZIP_17:int": "10016",
+            "ZIP_18:int": "10017",
+            "ZIP_19:int": "10018",
+            "ZIP_20:int": "10019",
+            "ZIP_21:int": "10020",
+            "ZIP_22:int": "10021",
+            "ZIP_23:int": "10022",
+            "ZIP_24:int": "10023",
+            "ZIP_25:int": "10024",
+            "ZIP_26:int": "10025",
+            "ZIP_27:int": "10026",
+            "ZIP_28:int": "10027",
+            "ZIP_29:int": "10028",
+            "ZIP_30:int": "10029",
+            "ZIP_31:int": "10030",
+            "ZIP_32:int": "10031",
+            "ZIP_33:int": "10032",
+            "ZIP_34:int": "10033",
+            "ZIP_35:int": "10034",
+            "ZIP_36:int": "10035",
+            "ZIP_37:int": "10036",
+            "ZIP_38:int": "10037",
+            "ZIP_39:int": "10038",
+            "ZIP_40:int": "10039",
+            "ZIP_41:int": "10040",
+            "ZIP_42:int": "10041",
+            "ZIP_43:int": "10042",
+            "ZIP_44:int": "10043",
+            "ZIP_45:int": "10044",
+            "ZIP_46:int": "10045",
+            "ZIP_47:int": "10046",
+            "ZIP_48:int": "10047",
+            "ZIP_49:int": "10048",
+            "ZIP_50:int": "10049",
+            "ZIP_51:int": "10050",
+            "ZIP_52:int": "10051",
+            "ZIP_53:int": "10052",
+            "ZIP_54:int": "10053",
+            "ZIP_55:int": "10054",
+            "ZIP_56:int": "10055",
+            "ZIP_57:int": "10056",
+            "ZIP_58:int": "10057",
+            "ZIP_59:int": "10058",
+            "ZIP_60:int": "10059",
+            "ZIP_61:int": "10060",
+            "ZIP_62:int": "10061",
+            "ZIP_63:int": "10062",
+            "ZIP_64:int": "10063",
+            "ZIP_65:int": "10064",
+            "ZIP_66:int": "10065",
+            "ZIP_67:int": "10066",
+            "ZIP_68:int": "10067",
+            "ZIP_69:int": "10068",
+            "ZIP_70:int": "10069",
+            "ZIP_71:int": "10070",
+            "ZIP_72:int": "10071",
+            "ZIP_73:int": "10072",
+            "ZIP_74:int": "10073",
+            "ZIP_75:int": "10074",
+            "ZIP_76:int": "10075",
+            "ZIP_77:int": "10076",
+            "ZIP_78:int": "10077",
+            "ZIP_79:int": "10078",
+            "ZIP_80:int": "10079",
+            "ZIP_81:int": "10080",
+            "ZIP_82:int": "10081",
+            "ZIP_83:int": "10082",
+            "ZIP_84:int": "10083",
+            "ZIP_85:int": "10084",
+            "ZIP_86:int": "10085",
+            "ZIP_87:int": "10086",
+            "ZIP_88:int": "10087",
+            "ZIP_89:int": "10088",
+            "ZIP_90:int": "10089",
+            "ZIP_91:int": "10090",
+            "ZIP_92:int": "10091",
+            "ZIP_93:int": "10092",
+            "ZIP_94:int": "10093",
+            "ZIP_95:int": "10094",
+            "ZIP_96:int": "10095",
+            "ZIP_97:int": "10096",
+            "ZIP_98:int": "10097",
+            "ZIP_99:int": "10098",
+            "ZIP_100:int": "10099",
+            "ZIP_101:int": "10100",
+            "ZIP_102:int": "10101",
+            "ZIP_103:int": "10102",
+            "ZIP_104:int": "10103",
+            "ZIP_105:int": "10104",
+            "ZIP_106:int": "10105",
+            "ZIP_107:int": "10106",
+            "ZIP_108:int": "10107",
+            "ZIP_109:int": "10108",
+            "ZIP_110:int": "10109",
+            "ZIP_111:int": "10110",
+            "ZIP_112:int": "10111",
+            "ZIP_113:int": "10112",
+            "ZIP_114:int": "10113",
+            "ZIP_115:int": "10114",
+            "ZIP_116:int": "10115",
+            "ZIP_117:int": "10116",
+            "ZIP_118:int": "10117",
+            "ZIP_119:int": "10118",
+            "ZIP_120:int": "10119",
+            "ZIP_121:int": "10120",
+            "ZIP_122:int": "10121",
+            "ZIP_123:int": "10122",
+            "ZIP_124:int": "10123",
+            "ZIP_125:int": "10124",
+            "ZIP_126:int": "10125",
+            "ZIP_127:int": "10126",
+            "ZIP_128:int": "10127",
+            "ZIP_129:int": "10128",
+            "ZIP_130:int": "10129",
+            "ZIP_131:int": "10130",
+            "ZIP_132:int": "10131",
+            "ZIP_133:int": "10132",
+            "ZIP_134:int": "10133",
+            "ZIP_135:int": "10134",
+            "ZIP_136:int": "10135",
+            "ZIP_137:int": "10136",
+            "ZIP_138:int": "10137",
+            "ZIP_139:int": "10138",
+            "ZIP_140:int": "10139",
+            "ZIP_141:int": "10140",
+            "ZIP_142:int": "10141",
+            "ZIP_143:int": "10142",
+            "ZIP_144:int": "10143",
+            "ZIP_145:int": "10144",
+            "ZIP_146:int": "10145",
+            "ZIP_147:int": "10146",
+            "ZIP_148:int": "10147",
+            "ZIP_149:int": "10148",
+            "ZIP_150:int": "10149",
+            "ZIP_151:int": "10150",
+            "ZIP_152:int": "10151",
+            "ZIP_153:int": "10152",
+            "ZIP_154:int": "10153",
+            "ZIP_155:int": "10154",
+            "ZIP_156:int": "10155",
+            "ZIP_157:int": "10156",
+            "ZIP_158:int": "10157",
+            "ZIP_159:int": "10158",
+            "ZIP_160:int": "10159",
+            "ZIP_161:int": "10160",
+            "ZIP_162:int": "10161",
+            "ZIP_163:int": "10162",
+            "ZIP_164:int": "10163",
+            "ZIP_165:int": "10164",
+            "ZIP_166:int": "10165",
+            "ZIP_167:int": "10166",
+            "ZIP_168:int": "10167",
+            "ZIP_169:int": "10168",
+            "ZIP_170:int": "10169",
+            "ZIP_171:int": "10170",
+            "ZIP_172:int": "10171",
+            "ZIP_173:int": "10172",
+            "ZIP_174:int": "10173",
+            "ZIP_175:int": "10174",
+            "ZIP_176:int": "10175",
+            "ZIP_177:int": "10176",
+            "ZIP_178:int": "10177",
+            "ZIP_179:int": "10178",
+            "ZIP_180:int": "10179",
+            "ZIP_181:int": "10180",
+            "ZIP_182:int": "10181",
+            "ZIP_183:int": "10182",
+            "ZIP_184:int": "10183",
+            "ZIP_185:int": "10184",
+            "ZIP_186:int": "10185",
+            "ZIP_187:int": "10186",
+            "ZIP_188:int": "10187",
+            "ZIP_189:int": "10188",
+            "ZIP_190:int": "10189",
+            "ZIP_191:int": "10190",
+            "ZIP_192:int": "10191",
+            "ZIP_193:int": "10192",
+            "ZIP_194:int": "10193",
+            "ZIP_195:int": "10194",
+            "ZIP_196:int": "10195",
+            "ZIP_197:int": "10196",
+            "ZIP_198:int": "10197",
+            "ZIP_199:int": "10198",
+            "ZIP_200:int": "10199",
+            "ZIP_201:int": "10200",
+            "ZIP_202:int": "10201",
+            "ZIP_203:int": "10202",
+            "ZIP_204:int": "10203",
+            "ZIP_205:int": "10204",
+            "ZIP_206:int": "10205",
+            "ZIP_207:int": "10206",
+            "ZIP_208:int": "10207",
+            "ZIP_209:int": "10208",
+            "ZIP_210:int": "10209",
+            "ZIP_211:int": "10210",
+            "ZIP_212:int": "10211",
+            "ZIP_213:int": "10212",
+            "ZIP_214:int": "10213",
+            "ZIP_215:int": "10214",
+            "ZIP_216:int": "10215",
+            "ZIP_217:int": "10216",
+            "ZIP_218:int": "10217",
+            "ZIP_219:int": "10218",
+            "ZIP_220:int": "10219",
+            "ZIP_221:int": "10220",
+            "ZIP_222:int": "10221",
+            "ZIP_223:int": "10222",
+            "ZIP_224:int": "10223",
+            "ZIP_225:int": "10224",
+            "ZIP_226:int": "10225",
+            "ZIP_227:int": "10226",
+            "ZIP_228:int": "10227",
+            "ZIP_229:int": "10228",
+            "ZIP_230:int": "10229",
+            "ZIP_231:int": "10230",
+            "ZIP_232:int": "10231",
+            "ZIP_233:int": "10232",
+            "ZIP_234:int": "10233",
+            "ZIP_235:int": "10234",
+            "ZIP_236:int": "10235",
+            "ZIP_237:int": "10236",
+            "ZIP_238:int": "10237",
+            "ZIP_239:int": "10238",
+            "ZIP_240:int": "10239",
+            "ZIP_241:int": "10240",
+            "ZIP_242:int": "10241",
+            "ZIP_243:int": "10242",
+            "ZIP_244:int": "10243",
+            "ZIP_245:int": "10244",
+            "ZIP_246:int": "10245",
+            "ZIP_247:int": "10246",
+            "ZIP_248:int": "10247",
+            "ZIP_249:int": "10248",
+            "ZIP_250:int": "10249",
+            "ZIP_251:int": "10250",
+            "ZIP_252:int": "10251",
+            "ZIP_253:int": "10252",
+            "ZIP_254:int": "10253",
+            "ZIP_255:int": "10254",
+            "ZIP_256:int": "10255",
+            "ZIP_257:int": "10256",
+            "ZIP_258:int": "10257",
+            "ZIP_259:int": "10258",
+            "ZIP_260:int": "10259",
+            "ZIP_261:int": "10260",
+            "ZIP_262:int": "10261",
+            "ZIP_263:int": "10262",
+            "ZIP_264:int": "10263",
+            "ZIP_265:int": "10264",
+            "ZIP_266:int": "10265",
+            "ZIP_267:int": "10266",
+            "ZIP_268:int": "10267",
+            "ZIP_269:int": "10268",
+            "ZIP_270:int": "10269",
+            "ZIP_271:int": "10270",
+            "ZIP_272:int": "10271",
+            "ZIP_273:int": "10272",
+            "ZIP_274:int": "10273",
+            "ZIP_275:int": "10274",
+            "ZIP_276:int": "10275",
+            "ZIP_277:int": "10276",
+            "ZIP_278:int": "10277",
+            "ZIP_279:int": "10278",
+            "ZIP_280:int": "10279",
+            "ZIP_281:int": "10280",
+            "ZIP_282:int": "10281",
+            "ZIP_283:int": "10282",
+            "ZIP_284:int": "10283",
+            "ZIP_285:int": "10284",
+            "ZIP_286:int": "10285",
+            "ZIP_287:int": "10286",
+            "ZIP_288:int": "10287",
+            "ZIP_289:int": "10288",
+            "ZIP_290:int": "10289",
+            "ZIP_291:int": "10290",
+            "ZIP_292:int": "10291",
+            "ZIP_293:int": "10292",
+            "ZIP_294:int": "10293",
+            "ZIP_295:int": "10294",
+            "ZIP_296:int": "10295",
+            "ZIP_297:int": "10296",
+            "ZIP_298:int": "10297",
+            "ZIP_299:int": "10298",
+            "ZIP_300:int": "10299",
+            "ZIP_301:int": "10300",
+            "ZIP_302:int": "10301",
+            "ZIP_303:int": "10302",
+            "ZIP_304:int": "10303",
+            "ZIP_305:int": "10304",
+            "ZIP_306:int": "10305",
+            "ZIP_307:int": "10306",
+            "ZIP_308:int": "10307",
+            "ZIP_309:int": "10308",
+            "ZIP_310:int": "10309",
+            "ZIP_311:int": "10310",
+            "ZIP_312:int": "10311",
+            "ZIP_313:int": "10312",
+            "ZIP_314:int": "10313",
+            "ZIP_315:int": "10314",
+            "ZIP_316:int": "10315",
+            "ZIP_317:int": "10316",
+            "ZIP_318:int": "10317",
+            "ZIP_319:int": "10318",
+            "ZIP_320:int": "10319",
+            "ZIP_321:int": "10320",
+            "ZIP_322:int": "10321",
+            "ZIP_323:int": "10322",
+            "ZIP_324:int": "10323",
+            "ZIP_325:int": "10324",
+            "ZIP_326:int": "10325",
+            "ZIP_327:int": "10326",
+            "ZIP_328:int": "10327",
+            "ZIP_329:int": "10328",
+            "ZIP_330:int": "10329",
+            "ZIP_331:int": "10330",
+            "ZIP_332:int": "10331",
+            "ZIP_333:int": "10332",
+            "ZIP_334:int": "10333",
+            "ZIP_335:int": "10334",
+            "ZIP_336:int": "10335",
+            "ZIP_337:int": "10336",
+            "ZIP_338:int": "10337",
+            "ZIP_339:int": "10338",
+            "ZIP_340:int": "10339",
+            "ZIP_341:int": "10340",
+            "ZIP_342:int": "10341",
+            "ZIP_343:int": "10342",
+            "ZIP_344:int": "10343",
+            "ZIP_345:int": "10344",
+            "ZIP_346:int": "10345",
+            "ZIP_347:int": "10346",
+            "ZIP_348:int": "10347",
+            "ZIP_349:int": "10348",
+            "ZIP_350:int": "10349",
+            "ZIP_351:int": "10350",
+            "ZIP_352:int": "10351",
+            "ZIP_353:int": "10352",
+            "ZIP_354:int": "10353",
+            "ZIP_355:int": "10354",
+            "ZIP_356:int": "10355",
+            "ZIP_357:int": "10356",
+            "ZIP_358:int": "10357",
+            "ZIP_359:int": "10358",
+            "ZIP_360:int": "10359",
+            "ZIP_361:int": "10360",
+            "ZIP_362:int": "10361",
+            "ZIP_363:int": "10362",
+            "ZIP_364:int": "10363",
+            "ZIP_365:int": "10364",
+            "ZIP_366:int": "10365",
+            "ZIP_367:int": "10366",
+            "ZIP_368:int": "10367",
+            "ZIP_369:int": "10368",
+            "ZIP_370:int": "10369",
+            "ZIP_371:int": "10370",
+            "ZIP_372:int": "10371",
+            "ZIP_373:int": "10372",
+            "ZIP_374:int": "10373",
+            "ZIP_375:int": "10374",
+            "ZIP_376:int": "10375",
+            "ZIP_377:int": "10376",
+            "ZIP_378:int": "10377",
+            "ZIP_379:int": "10378",
+            "ZIP_380:int": "10379",
+            "ZIP_381:int": "10380",
+            "ZIP_382:int": "10381",
+            "ZIP_383:int": "10382",
+            "ZIP_384:int": "10383",
+            "ZIP_385:int": "10384",
+            "ZIP_386:int": "10385",
+            "ZIP_387:int": "10386",
+            "ZIP_388:int": "10387",
+            "ZIP_389:int": "10388",
+            "ZIP_390:int": "10389",
+            "ZIP_391:int": "10390",
+            "ZIP_392:int": "10391",
+            "ZIP_393:int": "10392",
+            "ZIP_394:int": "10393",
+            "ZIP_395:int": "10394",
+            "ZIP_396:int": "10395",
+            "ZIP_397:int": "10396",
+            "ZIP_398:int": "10397",
+            "ZIP_399:int": "10398",
+            "ZIP_400:int": "10399",
+            "QOY_01:int": "1",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "9",
+        "ordered": true,
+        "query": [
+            "q9"
+        ],
+        "params": {
+            "RC_01:int": "1",
+            "RC_02:int": "2",
+            "RC_03:int": "3",
+            "RC_04:int": "4",
+            "RC_05:int": "5",
+            "AGGCELSE_01:string": "ss_net_paid",
+            "AGGCTHEN_01:string": "ss_ext_discount_amt"
+        }
+    },
+    {
+        "name": "10",
+        "ordered": true,
+        "query": [
+            "q10"
+        ],
+        "params": {
+            "YEAR_01:int": "1999",
+            "MONTH_01:int": "1",
+            "COUNTY_01:string": "Washington County",
+            "COUNTY_02:string": "Williamson County",
+            "COUNTY_03:string": "Ziebach County",
+            "COUNTY_04:string": "Walker County",
+            "COUNTY_05:string": "Fairfield County",
+            "COUNTY_06:string": "Richland County",
+            "COUNTY_07:string": "Franklin Parish",
+            "COUNTY_08:string": "Daviess County",
+            "COUNTY_09:string": "Barrow County",
+            "COUNTY_10:string": "Luce County"
+        }
+    },
+    {
+        "name": "11",
+        "ordered": true,
+        "query": [
+            "q11"
+        ],
+        "params": {
+            "SELECTONE_01:string": "t_s_secyear.customer_preferred_cust_flag",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "12",
+        "ordered": true,
+        "query": [
+            "q12"
+        ],
+        "params": {
+            "CATEGORY_01:string": "Electronics",
+            "CATEGORY_02:string": "Women",
+            "CATEGORY_03:string": "Men",
+            "SDATE_01:date": "1998-01-02",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "13",
+        "ordered": true,
+        "query": [
+            "q13"
+        ],
+        "params": {
+            "STATE_01:string": "ID",
+            "STATE_02:string": "TN",
+            "STATE_03:string": "SD",
+            "STATE_04:string": "AL",
+            "STATE_05:string": "SC",
+            "STATE_06:string": "OH",
+            "STATE_07:string": "LA",
+            "STATE_08:string": "MO",
+            "STATE_09:string": "GA",
+            "ES_01:string": "Unknown",
+            "ES_02:string": "Primary",
+            "ES_03:string": "Secondary",
+            "MS_01:string": "U",
+            "MS_02:string": "M",
+            "MS_03:string": "S"
+        }
+    },
+    {
+        "name": "14",
+        "ordered": true,
+        "query": [
+            "q14"
+        ],
+        "params": {
+            "DAY_01:int": "1",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "15",
+        "ordered": true,
+        "query": [
+            "q15"
+        ],
+        "params": {
+            "QOY_01:int": "1",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "16",
+        "ordered": true,
+        "query": [
+            "q16"
+        ],
+        "params": {
+            "COUNTY_E_01:string": "Williamson County",
+            "COUNTY_D_01:string": "Williamson County",
+            "COUNTY_C_01:string": "Williamson County",
+            "COUNTY_B_01:string": "Williamson County",
+            "COUNTY_A_01:string": "Williamson County",
+            "COUNTYNUMBER_01:int": "1",
+            "COUNTYNUMBER_02:int": "1",
+            "COUNTYNUMBER_03:int": "1",
+            "COUNTYNUMBER_04:int": "1",
+            "COUNTYNUMBER_05:int": "1",
+            "STATE_01:string": "TN",
+            "MONTH_01:int": "2",
+            "YEAR_01:int": "1999"
+        }
+    },
+    {
+        "name": "17",
+        "ordered": true,
+        "query": [
+            "q17"
+        ],
+        "params": {
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "18",
+        "ordered": true,
+        "query": [
+            "q18"
+        ],
+        "params": {
+            "MONTH_01:int": "1",
+            "MONTH_02:int": "2",
+            "MONTH_03:int": "3",
+            "MONTH_04:int": "4",
+            "MONTH_05:int": "5",
+            "MONTH_06:int": "6",
+            "STATE_01:string": "ID",
+            "STATE_02:string": "TN",
+            "STATE_03:string": "SD",
+            "STATE_04:string": "AL",
+            "STATE_05:string": "SC",
+            "STATE_06:string": "OH",
+            "STATE_07:string": "LA",
+            "ES_01:string": "Primary",
+            "GEN_01:string": "M",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "19",
+        "ordered": true,
+        "query": [
+            "q19"
+        ],
+        "params": {
+            "MANAGER_01:int": "1",
+            "MGR_IDX_01:int": "1",
+            "MONTH_01:int": "11",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "20",
+        "ordered": true,
+        "query": [
+            "q20"
+        ],
+        "params": {
+            "CATEGORY_01:string": "Electronics",
+            "CATEGORY_02:string": "Women",
+            "CATEGORY_03:string": "Men",
+            "SDATE_01:date": "1998-01-02",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "21",
+        "ordered": true,
+        "query": [
+            "q21"
+        ],
+        "params": {
+            "SALES_DATE_01:date": "1998-02-01",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "22",
+        "ordered": true,
+        "query": [
+            "q22"
+        ],
+        "params": {
+            "DMS_01:int": "1176"
+        }
+    },
+    {
+        "name": "23",
+        "ordered": true,
+        "query": [
+            "q23"
+        ],
+        "params": {
+            "TOPPERCENT_01:int": "95",
+            "MONTH_01:int": "1",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "24",
+        "ordered": true,
+        "query": [
+            "q24"
+        ],
+        "params": {
+            "COLOR_01:string": "yellow",
+            "COLOR_02:string": "almond",
+            "AMOUNTONE_01:string": "ss_net_paid",
+            "MARKET_01:int": "5"
+        }
+    },
+    {
+        "name": "25",
+        "ordered": true,
+        "query": [
+            "q25"
+        ],
+        "params": {
+            "AGG_01:string": "sum",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "26",
+        "ordered": true,
+        "query": [
+            "q26"
+        ],
+        "params": {
+            "YEAR_01:int": "1998",
+            "ES_01:string": "Primary",
+            "MS_01:string": "M",
+            "GEN_01:string": "M"
+        }
+    },
+    {
+        "name": "27",
+        "ordered": true,
+        "query": [
+            "q27"
+        ],
+        "params": {
+            "STATE_F_01:string": "TN",
+            "STATE_E_01:string": "TN",
+            "STATE_D_01:string": "TN",
+            "STATE_C_01:string": "TN",
+            "STATE_B_01:string": "TN",
+            "STATE_A_01:string": "TN",
+            "STATENUMBER_01:int": "1",
+            "STATENUMBER_02:int": "1",
+            "STATENUMBER_03:int": "1",
+            "STATENUMBER_04:int": "1",
+            "STATENUMBER_05:int": "1",
+            "STATENUMBER_06:int": "1",
+            "ES_01:string": "Primary",
+            "MS_01:string": "M",
+            "GEN_01:string": "M",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "28",
+        "ordered": true,
+        "query": [
+            "q28"
+        ],
+        "params": {
+            "WHOLESALECOST_01:int": "0",
+            "WHOLESALECOST_02:int": "1",
+            "WHOLESALECOST_03:int": "2",
+            "WHOLESALECOST_04:int": "3",
+            "WHOLESALECOST_05:int": "4",
+            "WHOLESALECOST_06:int": "5",
+            "COUPONAMT_01:int": "0",
+            "COUPONAMT_02:int": "1",
+            "COUPONAMT_03:int": "2",
+            "COUPONAMT_04:int": "3",
+            "COUPONAMT_05:int": "4",
+            "COUPONAMT_06:int": "5",
+            "LISTPRICE_01:int": "0",
+            "LISTPRICE_02:int": "1",
+            "LISTPRICE_03:int": "2",
+            "LISTPRICE_04:int": "3",
+            "LISTPRICE_05:int": "4",
+            "LISTPRICE_06:int": "5"
+        }
+    },
+    {
+        "name": "29",
+        "ordered": true,
+        "query": [
+            "q29"
+        ],
+        "params": {
+            "AGG_01:string": "sum",
+            "MONTH_01:int": "4",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "30",
+        "ordered": true,
+        "query": [
+            "q30"
+        ],
+        "params": {
+            "YEAR_01:int": "1999",
+            "STATE_01:string": "TN"
+        }
+    },
+    {
+        "name": "31",
+        "ordered": true,
+        "query": [
+            "q31"
+        ],
+        "params": {
+            "AGG_01:string": "ss1.ca_county",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "32",
+        "ordered": true,
+        "query": [
+            "q32"
+        ],
+        "params": {
+            "CSDATE_01:date": "1998-01-02",
+            "YEAR_01:int": "1998",
+            "IMID_01:int": "1"
+        }
+    },
+    {
+        "name": "33",
+        "ordered": true,
+        "query": [
+            "q33"
+        ],
+        "params": {
+            "CATEGORY_01:string": "Books",
+            "GMT_01:int": "-5",
+            "COUNTY_01:int": "1",
+            "MONTH_01:int": "1",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "34",
+        "ordered": true,
+        "query": [
+            "q34"
+        ],
+        "params": {
+            "COUNTY_H_01:string": "Williamson County",
+            "COUNTY_G_01:string": "Williamson County",
+            "COUNTY_F_01:string": "Williamson County",
+            "COUNTY_E_01:string": "Williamson County",
+            "COUNTY_D_01:string": "Williamson County",
+            "COUNTY_C_01:string": "Williamson County",
+            "COUNTY_B_01:string": "Williamson County",
+            "COUNTY_A_01:string": "Williamson County",
+            "COUNTYNUMBER_01:int": "1",
+            "COUNTYNUMBER_02:int": "1",
+            "COUNTYNUMBER_03:int": "1",
+            "COUNTYNUMBER_04:int": "1",
+            "COUNTYNUMBER_05:int": "1",
+            "COUNTYNUMBER_06:int": "1",
+            "COUNTYNUMBER_07:int": "1",
+            "COUNTYNUMBER_08:int": "1",
+            "YEAR_01:int": "1998",
+            "BPTWO_01:string": "0-500",
+            "BPONE_01:string": "1001-5000"
+        }
+    },
+    {
+        "name": "35",
+        "ordered": true,
+        "query": [
+            "q35"
+        ],
+        "params": {
+            "AGGTHREE_01:string": "sum",
+            "AGGTWO_01:string": "sum",
+            "AGGONE_01:string": "sum",
+            "YEAR_01:int": "1999"
+        }
+    },
+    {
+        "name": "36",
+        "ordered": true,
+        "query": [
+            "q36"
+        ],
+        "params": {
+            "STATE_H_01:string": "TN",
+            "STATE_G_01:string": "TN",
+            "STATE_F_01:string": "TN",
+            "STATE_E_01:string": "TN",
+            "STATE_D_01:string": "TN",
+            "STATE_C_01:string": "TN",
+            "STATE_B_01:string": "TN",
+            "STATE_A_01:string": "TN",
+            "STATENUMBER_01:int": "1",
+            "STATENUMBER_02:int": "1",
+            "STATENUMBER_03:int": "1",
+            "STATENUMBER_04:int": "1",
+            "STATENUMBER_05:int": "1",
+            "STATENUMBER_06:int": "1",
+            "STATENUMBER_07:int": "1",
+            "STATENUMBER_08:int": "1",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "37",
+        "ordered": true,
+        "query": [
+            "q37"
+        ],
+        "params": {
+            "PRICE_01:int": "10",
+            "MANUFACT_ID_01:int": "667",
+            "MANUFACT_ID_02:int": "668",
+            "MANUFACT_ID_03:int": "669",
+            "MANUFACT_ID_04:int": "670",
+            "INVDATE_01:date": "1998-01-02",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "38",
+        "ordered": true,
+        "query": [
+            "q38"
+        ],
+        "params": {
+            "DMS_01:int": "1176"
+        }
+    },
+    {
+        "name": "39",
+        "ordered": true,
+        "query": [
+            "q39"
+        ],
+        "params": {
+            "YEAR_01:int": "1998",
+            "MONTH_01:int": "1"
+        }
+    },
+    {
+        "name": "40",
+        "ordered": true,
+        "query": [
+            "q40"
+        ],
+        "params": {
+            "SALES_DATE_01:date": "1998-02-01",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "41",
+        "ordered": true,
+        "query": [
+            "q41"
+        ],
+        "params": {
+            "MANUFACT_01:int": "667",
+            "SIZE_01:string": "N/A",
+            "SIZE_02:string": "petite",
+            "SIZE_03:string": "small",
+            "SIZE_04:string": "medium",
+            "SIZE_05:string": "large",
+            "SIZE_06:string": "extra large",
+            "UNIT_01:string": "N/A",
+            "UNIT_02:string": "Unknown",
+            "UNIT_03:string": "Each",
+            "UNIT_04:string": "Dozen",
+            "UNIT_05:string": "Case",
+            "UNIT_06:string": "Pallet",
+            "UNIT_07:string": "Gross",
+            "UNIT_08:string": "Carton",
+            "UNIT_09:string": "Box",
+            "UNIT_10:string": "Bunch",
+            "UNIT_11:string": "Bundle",
+            "UNIT_12:string": "Oz",
+            "UNIT_13:string": "Lb",
+            "UNIT_14:string": "Ton",
+            "UNIT_15:string": "Ounce",
+            "UNIT_16:string": "Pound",
+            "COLOR_01:string": "yellow",
+            "COLOR_02:string": "almond",
+            "COLOR_03:string": "antique",
+            "COLOR_04:string": "aquamarine",
+            "COLOR_05:string": "azure",
+            "COLOR_06:string": "beige",
+            "COLOR_07:string": "bisque",
+            "COLOR_08:string": "black",
+            "COLOR_09:string": "blanched",
+            "COLOR_10:string": "blue",
+            "COLOR_11:string": "blush",
+            "COLOR_12:string": "brown",
+            "COLOR_13:string": "burlywood",
+            "COLOR_14:string": "burnished",
+            "COLOR_15:string": "chartreuse",
+            "COLOR_16:string": "chiffon"
+        }
+    },
+    {
+        "name": "42",
+        "ordered": true,
+        "query": [
+            "q42"
+        ],
+        "params": {
+            "YEAR_01:int": "1998",
+            "MONTH_01:int": "11"
+        }
+    },
+    {
+        "name": "43",
+        "ordered": true,
+        "query": [
+            "q43"
+        ],
+        "params": {
+            "YEAR_01:int": "1998",
+            "GMT_01:int": "-5",
+            "COUNTY_01:int": "1"
+        }
+    },
+    {
+        "name": "44",
+        "ordered": true,
+        "query": [
+            "q44"
+        ],
+        "params": {
+            "STORE_01:int": "1",
+            "NULLCOLSS_01:string": "ss_customer_sk"
+        }
+    },
+    {
+        "name": "45",
+        "ordered": true,
+        "query": [
+            "q45"
+        ],
+        "params": {
+            "QOY_01:int": "1",
+            "YEAR_01:int": "1998",
+            "GBOBC_01:string": "ca_city"
+        }
+    },
+    {
+        "name": "46",
+        "ordered": true,
+        "query": [
+            "q46"
+        ],
+        "params": {
+            "CITY_E_01:string": "Fairview",
+            "CITY_D_01:string": "Fairview",
+            "CITY_C_01:string": "Fairview",
+            "CITY_B_01:string": "Fairview",
+            "CITY_A_01:string": "Midway",
+            "CITYNUMBER_01:int": "1",
+            "CITYNUMBER_02:int": "2",
+            "CITYNUMBER_03:int": "2",
+            "CITYNUMBER_04:int": "2",
+            "CITYNUMBER_05:int": "2",
+            "VEHCNT_01:int": "-1",
+            "YEAR_01:int": "1998",
+            "DEPCNT_01:int": "0"
+        }
+    },
+    {
+        "name": "47",
+        "ordered": true,
+        "query": [
+            "q47"
+        ],
+        "params": {
+            "ORDERBY_01:string": "avg_monthly_sales",
+            "SELECTTWO_01:string": ",v1.d_year",
+            "SELECTONE_01:string": "v1.i_category",
+            "YEAR_01:int": "1999"
+        }
+    },
+    {
+        "name": "48",
+        "ordered": true,
+        "query": [
+            "q48"
+        ],
+        "params": {
+            "YEAR_01:int": "1998",
+            "STATE_01:string": "ID",
+            "STATE_02:string": "TN",
+            "STATE_03:string": "SD",
+            "STATE_04:string": "AL",
+            "STATE_05:string": "SC",
+            "STATE_06:string": "OH",
+            "STATE_07:string": "LA",
+            "STATE_08:string": "MO",
+            "STATE_09:string": "GA",
+            "ES_01:string": "Unknown",
+            "ES_02:string": "Primary",
+            "ES_03:string": "Secondary",
+            "MS_01:string": "U",
+            "MS_02:string": "M",
+            "MS_03:string": "S"
+        }
+    },
+    {
+        "name": "49",
+        "ordered": true,
+        "query": [
+            "q49"
+        ],
+        "params": {
+            "MONTH_01:int": "11",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "50",
+        "ordered": true,
+        "query": [
+            "q50"
+        ],
+        "params": {
+            "MONTH_01:int": "8",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "51",
+        "ordered": true,
+        "query": [
+            "q51"
+        ],
+        "params": {
+            "DMS_01:int": "1176"
+        }
+    },
+    {
+        "name": "52",
+        "ordered": true,
+        "query": [
+            "q52"
+        ],
+        "params": {
+            "YEAR_01:int": "1998",
+            "MONTH_01:int": "11"
+        }
+    },
+    {
+        "name": "53",
+        "ordered": true,
+        "query": [
+            "q53"
+        ],
+        "params": {
+            "DMS_01:int": "1176"
+        }
+    },
+    {
+        "name": "54",
+        "ordered": true,
+        "query": [
+            "q54"
+        ],
+        "params": {
+            "CLASS_01:string": "dresses",
+            "CATEGORY_01:string": "Women",
+            "CINDX_01:int": "1",
+            "MONTH_01:int": "1",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "55",
+        "ordered": true,
+        "query": [
+            "q55"
+        ],
+        "params": {
+            "MANAGER_01:int": "1",
+            "MONTH_01:int": "11",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "56",
+        "ordered": true,
+        "query": [
+            "q56"
+        ],
+        "params": {
+            "COLOR_01:string": "yellow",
+            "COLOR_02:string": "almond",
+            "COLOR_03:string": "antique",
+            "GMT_01:int": "-5",
+            "MONTH_01:int": "1",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "57",
+        "ordered": true,
+        "query": [
+            "q57"
+        ],
+        "params": {
+            "ORDERBY_01:string": "avg_monthly_sales",
+            "SELECTTWO_01:string": ",v1.d_year",
+            "SELECTONE_01:string": "v1.i_category",
+            "YEAR_01:int": "1999"
+        }
+    },
+    {
+        "name": "58",
+        "ordered": true,
+        "query": [
+            "q58"
+        ],
+        "params": {
+            "SALES_DATE_01:date": "1998-01-02",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "59",
+        "ordered": true,
+        "query": [
+            "q59"
+        ],
+        "params": {
+            "DMS_01:int": "1176"
+        }
+    },
+    {
+        "name": "60",
+        "ordered": true,
+        "query": [
+            "q60"
+        ],
+        "params": {
+            "CATEGORY_01:string": "Children",
+            "GMT_01:int": "-5",
+            "MONTH_01:int": "8",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "61",
+        "ordered": true,
+        "query": [
+            "q61"
+        ],
+        "params": {
+            "CATEGORY_01:string": "Books",
+            "GMT_01:int": "-6",
+            "MONTH_01:int": "11",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "62",
+        "ordered": true,
+        "query": [
+            "q62"
+        ],
+        "params": {
+            "DMS_01:int": "1176"
+        }
+    },
+    {
+        "name": "63",
+        "ordered": true,
+        "query": [
+            "q63"
+        ],
+        "params": {
+            "DMS_01:int": "1176"
+        }
+    },
+    {
+        "name": "64",
+        "ordered": true,
+        "query": [
+            "q64"
+        ],
+        "params": {
+            "YEAR_01:int": "1999",
+            "PRICE_01:int": "0",
+            "COLOR_01:string": "yellow",
+            "COLOR_02:string": "almond",
+            "COLOR_03:string": "antique",
+            "COLOR_04:string": "aquamarine",
+            "COLOR_05:string": "azure",
+            "COLOR_06:string": "beige"
+        }
+    },
+    {
+        "name": "65",
+        "ordered": true,
+        "query": [
+            "q65"
+        ],
+        "params": {
+            "DMS_01:int": "1176"
+        }
+    },
+    {
+        "name": "66",
+        "ordered": true,
+        "query": [
+            "q66"
+        ],
+        "params": {
+            "SALESTWO_01:string": "cs_sales_price",
+            "SALESONE_01:string": "ws_sales_price",
+            "NETTWO_01:string": "cs_net_paid",
+            "NETONE_01:string": "ws_net_paid",
+            "SMC_01:string": "PRIVATECARRIER",
+            "SMC_02:string": "UPS",
+            "TIMEONE_01:int": "1",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "67",
+        "ordered": true,
+        "query": [
+            "q67"
+        ],
+        "params": {
+            "DMS_01:int": "1176"
+        }
+    },
+    {
+        "name": "68",
+        "ordered": true,
+        "query": [
+            "q68"
+        ],
+        "params": {
+            "CITY_B_01:string": "Fairview",
+            "CITY_A_01:string": "Midway",
+            "CITYNUMBER_01:int": "1",
+            "CITYNUMBER_02:int": "2",
+            "VEHCNT_01:int": "-1",
+            "YEAR_01:int": "1998",
+            "DEPCNT_01:int": "0"
+        }
+    },
+    {
+        "name": "69",
+        "ordered": true,
+        "query": [
+            "q69"
+        ],
+        "params": {
+            "STATE_01:string": "ID",
+            "STATE_02:string": "TN",
+            "STATE_03:string": "SD",
+            "YEAR_01:int": "1999",
+            "MONTH_01:int": "1"
+        }
+    },
+    {
+        "name": "70",
+        "ordered": true,
+        "query": [
+            "q70"
+        ],
+        "params": {
+            "DMS_01:int": "1176"
+        }
+    },
+    {
+        "name": "71",
+        "ordered": true,
+        "query": [
+            "q71"
+        ],
+        "params": {
+            "MONTH_01:int": "11",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "72",
+        "ordered": true,
+        "query": [
+            "q72"
+        ],
+        "params": {
+            "MS_01:string": "M",
+            "BP_01:string": "1001-5000",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "73",
+        "ordered": true,
+        "query": [
+            "q73"
+        ],
+        "params": {
+            "COUNTY_D_01:string": "Williamson County",
+            "COUNTY_C_01:string": "Williamson County",
+            "COUNTY_B_01:string": "Williamson County",
+            "COUNTY_A_01:string": "Williamson County",
+            "COUNTYNUMBER_01:int": "1",
+            "COUNTYNUMBER_02:int": "1",
+            "COUNTYNUMBER_03:int": "1",
+            "COUNTYNUMBER_04:int": "1",
+            "COUNTYNUMBER_05:int": "1",
+            "COUNTYNUMBER_06:int": "1",
+            "COUNTYNUMBER_07:int": "1",
+            "COUNTYNUMBER_08:int": "1",
+            "YEAR_01:int": "1998",
+            "BPTWO_01:string": "0-500",
+            "BPONE_01:string": "1001-5000"
+        }
+    },
+    {
+        "name": "74",
+        "ordered": true,
+        "query": [
+            "q74"
+        ],
+        "params": {
+            "ORDERC_01:int": "1",
+            "ORDERC_02:int": "2",
+            "ORDERC_03:int": "3",
+            "AGGONE_01:string": "sum",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "75",
+        "ordered": true,
+        "query": [
+            "q75"
+        ],
+        "params": {
+            "YEAR_01:int": "1999",
+            "CATEGORY_01:string": "Women",
+            "CINDX_01:int": "1"
+        }
+    },
+    {
+        "name": "76",
+        "ordered": true,
+        "query": [
+            "q76"
+        ],
+        "params": {
+            "NULLCOLWS_01:string": "ws_bill_customer_sk",
+            "NULLCOLSS_01:string": "ss_customer_sk",
+            "NULLCOLCS_01:string": "cs_bill_customer_sk"
+        }
+    },
+    {
+        "name": "77",
+        "ordered": true,
+        "query": [
+            "q77"
+        ],
+        "params": {
+            "SALES_DATE_01:date": "1998-08-02",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "78",
+        "ordered": true,
+        "query": [
+            "q78"
+        ],
+        "params": {
+            "SELECTONE_01:string": "ss_sold_year",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "79",
+        "ordered": true,
+        "query": [
+            "q79"
+        ],
+        "params": {
+            "VEHCNT_01:int": "-1",
+            "YEAR_01:int": "1998",
+            "DEPCNT_01:int": "0"
+        }
+    },
+    {
+        "name": "80",
+        "ordered": true,
+        "query": [
+            "q80"
+        ],
+        "params": {
+            "SALES_DATE_01:date": "1998-08-02",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "81",
+        "ordered": true,
+        "query": [
+            "q81"
+        ],
+        "params": {
+            "YEAR_01:int": "1998",
+            "STATE_01:string": "TN"
+        }
+    },
+    {
+        "name": "82",
+        "ordered": true,
+        "query": [
+            "q82"
+        ],
+        "params": {
+            "MANUFACT_ID_01:int": "1",
+            "MANUFACT_ID_02:int": "2",
+            "MANUFACT_ID_03:int": "3",
+            "MANUFACT_ID_04:int": "4",
+            "INVDATE_01:date": "1998-01-02",
+            "PRICE_01:int": "0",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "83",
+        "ordered": true,
+        "query": [
+            "q83"
+        ],
+        "params": {
+            "RETURNED_DATE_THREE_01:date": "1998-11-02",
+            "RETURNED_DATE_TWO_01:date": "1998-08-02",
+            "RETURNED_DATE_ONE_01:date": "1998-01-02",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "84",
+        "ordered": true,
+        "query": [
+            "q84"
+        ],
+        "params": {
+            "INCOME_01:int": "0",
+            "CITY_01:string": "Midway"
+        }
+    },
+    {
+        "name": "85",
+        "ordered": true,
+        "query": [
+            "q85"
+        ],
+        "params": {
+            "YEAR_01:int": "1998",
+            "STATE_01:string": "ID",
+            "STATE_02:string": "TN",
+            "STATE_03:string": "SD",
+            "STATE_04:string": "AL",
+            "STATE_05:string": "SC",
+            "STATE_06:string": "OH",
+            "STATE_07:string": "LA",
+            "STATE_08:string": "MO",
+            "STATE_09:string": "GA",
+            "ES_01:string": "Unknown",
+            "ES_02:string": "Primary",
+            "ES_03:string": "Secondary",
+            "MS_01:string": "U",
+            "MS_02:string": "M",
+            "MS_03:string": "S"
+        }
+    },
+    {
+        "name": "86",
+        "ordered": true,
+        "query": [
+            "q86"
+        ],
+        "params": {
+            "DMS_01:int": "1176"
+        }
+    },
+    {
+        "name": "87",
+        "ordered": true,
+        "query": [
+            "q87"
+        ],
+        "params": {
+            "DMS_01:int": "1176"
+        }
+    },
+    {
+        "name": "88",
+        "ordered": true,
+        "query": [
+            "q88"
+        ],
+        "params": {
+            "STORE_01:string": "Unknown",
+            "HOUR_01:int": "-1",
+            "HOUR_02:int": "0",
+            "HOUR_03:int": "1"
+        }
+    },
+    {
+        "name": "89",
+        "ordered": true,
+        "query": [
+            "q89"
+        ],
+        "params": {
+            "CLASS_F_01:string": "birdal",
+            "CAT_F_01:string": "Jewelry",
+            "CLASS_E_01:string": "rock",
+            "CAT_E_01:string": "Music",
+            "CLASS_D_01:string": "womens",
+            "CAT_D_01:string": "Shoes",
+            "CLASS_C_01:string": "newborn",
+            "CAT_C_01:string": "Children",
+            "CLASS_B_01:string": "accessories",
+            "CAT_B_01:string": "Men",
+            "CLASS_A_01:string": "dresses",
+            "CAT_A_01:string": "Women",
+            "IDX_01:int": "1",
+            "IDX_02:int": "2",
+            "IDX_03:int": "3",
+            "IDX_04:int": "4",
+            "IDX_05:int": "5",
+            "IDX_06:int": "6",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "90",
+        "ordered": true,
+        "query": [
+            "q90"
+        ],
+        "params": {
+            "HOUR_PM_01:int": "13",
+            "HOUR_AM_01:int": "6",
+            "DEPCNT_01:int": "0"
+        }
+    },
+    {
+        "name": "91",
+        "ordered": true,
+        "query": [
+            "q91"
+        ],
+        "params": {
+            "GMT_01:int": "-6",
+            "BUY_POTENTIAL_01:string": "1001-5000",
+            "MONTH_01:int": "11",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "92",
+        "ordered": true,
+        "query": [
+            "q92"
+        ],
+        "params": {
+            "WSDATE_01:date": "1998-01-02",
+            "YEAR_01:int": "1998",
+            "IMID_01:int": "1"
+        }
+    },
+    {
+        "name": "93",
+        "ordered": true,
+        "query": [
+            "q93"
+        ],
+        "params": {
+            "REASON_01:string": "Package was damaged"
+        }
+    },
+    {
+        "name": "94",
+        "ordered": true,
+        "query": [
+            "q94"
+        ],
+        "params": {
+            "STATE_01:string": "TN",
+            "MONTH_01:int": "2",
+            "YEAR_01:int": "1999"
+        }
+    },
+    {
+        "name": "95",
+        "ordered": true,
+        "query": [
+            "q95"
+        ],
+        "params": {
+            "STATE_01:string": "TN",
+            "MONTH_01:int": "2",
+            "YEAR_01:int": "1999"
+        }
+    },
+    {
+        "name": "96",
+        "ordered": true,
+        "query": [
+            "q96"
+        ],
+        "params": {
+            "DEPCNT_01:int": "0",
+            "HOUR_01:int": "20"
+        }
+    },
+    {
+        "name": "97",
+        "ordered": true,
+        "query": [
+            "q97"
+        ],
+        "params": {
+            "DMS_01:int": "1176"
+        }
+    },
+    {
+        "name": "98",
+        "ordered": true,
+        "query": [
+            "q98"
+        ],
+        "params": {
+            "CATEGORY_01:string": "Electronics",
+            "CATEGORY_02:string": "Women",
+            "CATEGORY_03:string": "Men",
+            "SDATE_01:date": "1998-01-02",
+            "YEAR_01:int": "1998"
+        }
+    },
+    {
+        "name": "99",
+        "ordered": true,
+        "query": [
+            "q99"
+        ],
+        "params": {
+            "DMS_01:int": "1176"
+        }
+    }
+]

@@ -1,84 +1,78 @@
-open Base
-open Printf
-open Collections
-
 module T = struct
-  type t = Abslayout0.name =
-    {relation: string option; name: string; type_: Type0.PrimType.t option}
-  [@@deriving sexp]
-end
-
-module Compare = struct
-  module T = struct
-    type t = T.t =
-      {relation: string option; name: string; type_: Type0.PrimType.t option}
-    [@@deriving compare, hash, sexp]
-  end
-
-  include T
-  include Comparable.Make (T)
-end
-
-module Compare_no_type = struct
-  module T = struct
-    type t = T.t =
-      { relation: string option
-      ; name: string
-      ; type_: Type0.PrimType.t option [@compare.ignore] }
-    [@@deriving compare, hash, sexp]
-  end
-
-  include T
-  include Comparable.Make (T)
-end
-
-module Compare_name_only = struct
-  module T = struct
-    type t = T.t =
-      { relation: string option [@compare.ignore]
-      ; name: string
-      ; type_: Type0.PrimType.t option [@compare.ignore] }
-    [@@deriving compare, hash, sexp]
-  end
-
-  include T
-  include Comparable.Make (T)
+  type t = {
+    scope : string option; [@sexp.option]
+    name : string;
+    meta : (Univ_map.t[@sexp.opaque]); [@compare.ignore]
+  }
+  [@@deriving compare, hash, sexp]
 end
 
 include T
 
-let create ?relation ?type_ name = {relation; name; type_}
+let name n = n.name
 
-let type_exn ({type_; _} as n) =
-  match type_ with
+let rel n = n.scope
+
+let scope n = n.scope
+
+let meta n = n.meta
+
+include Comparator.Make (T)
+module C = Comparable.Make (T)
+
+module O : Comparable.Infix with type t := t = struct
+  include Comparable.Make (T)
+
+  let ( = ) = equal
+
+  let ( <> ) x y = not (equal x y)
+end
+
+let type_k = Univ_map.Key.create ~name:"type" [%sexp_of: Prim_type.t]
+
+let create ?scope ?type_ name =
+  let meta = Univ_map.empty in
+  let meta =
+    match type_ with Some t -> Univ_map.set meta type_k t | None -> meta
+  in
+  { scope; name; meta }
+
+let type_ n = Univ_map.find n.meta type_k
+
+let copy ?scope:s ?type_:t ?name:n nm =
+  let s = Option.value s ~default:(scope nm) in
+  let t = Option.value t ~default:(type_ nm) in
+  let n = Option.value n ~default:(name nm) in
+  create ?scope:s ?type_:t n
+
+let type_exn n =
+  match type_ n with
   | Some t -> t
   | None -> Error.create "Missing type." n [%sexp_of: t] |> Error.raise
 
-let rel_exn ({relation; _} as n) =
-  match relation with
+let rel_exn n =
+  match rel n with
   | Some t -> t
-  | None -> Error.create "Missing relation." n [%sexp_of: t] |> Error.raise
+  | None -> Error.create "Missing scope." n [%sexp_of: t] |> Error.raise
 
-let to_var {relation; name; _} =
-  match relation with Some r -> sprintf "%s_%s" r name | None -> name
+let to_var n =
+  let name = name n in
+  match rel n with Some r -> sprintf "%s_%s" r name | None -> name
 
-let to_sql {relation; name; _} =
-  match relation with
-  | Some r -> sprintf "%s.\"%s\"" r name
-  | None -> sprintf "\"%s\"" name
+let to_sql n =
+  match rel n with
+  | Some r -> sprintf "%s.\"%s\"" r (name n)
+  | None -> sprintf "\"%s\"" (name n)
 
-let pp fmt =
-  let open Caml.Format in
-  function
-  | {relation= Some r; name; _} -> fprintf fmt "%s.%s" r name
-  | {relation= None; name; _} -> fprintf fmt "%s" name
+let scoped s n = copy ~scope:(Some s) n
 
-let of_lexbuf_exn lexbuf =
-  try Ralgebra_parser.name_eof Ralgebra_lexer.token lexbuf
-  with Parser_utils.ParseError (msg, line, col) as e ->
-    Logs.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) ;
-    raise e
+let unscoped n = copy ~scope:None n
 
-let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
+let pp fmt n =
+  let open Format in
+  let name = name n in
+  match rel n with
+  | Some r -> fprintf fmt "%s.%s" r name
+  | None -> fprintf fmt "%s" name
 
-let fresh f fmt = create (Fresh.name f fmt)
+let fresh fmt = create (Fresh.name Global.fresh fmt)

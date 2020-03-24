@@ -1,0 +1,43 @@
+select([avg(ss_quantity),
+        avg(ss_ext_sales_price),
+        avg(ss_ext_wholesale_cost),
+        sum(ss_ext_wholesale_cost)],
+  filter((((((s_store_sk = ss_store_sk) && (ss_sold_date_sk = d_date_sk)) &&
+           (d_year = 2001)) &&
+          ((((((((ss_hdemo_sk = hd_demo_sk) && (cd_demo_sk = ss_cdemo_sk)) &&
+               (cd_marital_status = MS_01)) && (cd_education_status = ES_01))
+             && ((ss_sales_price <= 100.0) && (100.0 <= 150.0))) &&
+            (hd_dep_count = 3)) ||
+           ((((((ss_hdemo_sk = hd_demo_sk) && (cd_demo_sk = ss_cdemo_sk)) &&
+              (cd_marital_status = MS_02)) && (cd_education_status = ES_02))
+            && ((ss_sales_price <= 50.0) && (50.0 <= 100.0))) &&
+           (hd_dep_count = 1))) ||
+          ((((((ss_hdemo_sk = hd_demo_sk) && (cd_demo_sk = ss_cdemo_sk)) &&
+             (cd_marital_status = MS_03)) && (cd_education_status = ES_03))
+           && ((ss_sales_price <= 150.0) && (150.0 <= 200.0))) &&
+          (hd_dep_count = 1)))) &&
+         ((((((ss_addr_sk = ca_address_sk) && (ca_country = "United States"))
+            &&
+            ((ca_state = STATE_01) ||
+            ((ca_state = STATE_02) || (ca_state = STATE_03)))) &&
+           ((ss_net_profit <= 100) && (100 <= 200))) ||
+          ((((ss_addr_sk = ca_address_sk) && (ca_country = "United States"))
+           &&
+           ((ca_state = STATE_04) ||
+           ((ca_state = STATE_05) || (ca_state = STATE_06)))) &&
+          ((ss_net_profit <= 150) && (150 <= 300)))) ||
+         ((((ss_addr_sk = ca_address_sk) && (ca_country = "United States"))
+          &&
+          ((ca_state = STATE_07) ||
+          ((ca_state = STATE_08) || (ca_state = STATE_09)))) &&
+         ((ss_net_profit <= 50) && (50 <= 250))))),
+    join(true,
+      store_sales,
+      join(true,
+        store,
+        join(true,
+          customer_demographics,
+          join(true,
+            household_demographics,
+            join(true, customer_address, date_dim)))))))
+

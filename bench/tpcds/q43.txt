@@ -1,0 +1,14 @@
+groupby([s_store_name,
+         s_store_id,
+         sum((if (d_day_name = "Sunday") then ss_sales_price else null)) as sun_sales,
+         sum((if (d_day_name = "Monday") then ss_sales_price else null)) as mon_sales,
+         sum((if (d_day_name = "Tuesday") then ss_sales_price else null)) as tue_sales,
+         sum((if (d_day_name = "Wednesday") then ss_sales_price else null)) as wed_sales,
+         sum((if (d_day_name = "Thursday") then ss_sales_price else null)) as thu_sales,
+         sum((if (d_day_name = "Friday") then ss_sales_price else null)) as fri_sales,
+         sum((if (d_day_name = "Saturday") then ss_sales_price else null)) as sat_sales],
+  [s_store_name, s_store_id],
+  filter(((((d_date_sk = ss_sold_date_sk) && (s_store_sk = ss_store_sk)) &&
+          (s_gmt_offset = 5)) && (d_year = YEAR_01)),
+    join(true, date_dim, join(true, store_sales, store))))
+

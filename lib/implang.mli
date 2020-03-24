@@ -1,45 +1,50 @@
-open Base
 open Collections
 
-type op = Implang0.op =
-  | Int2Fl
-  | Int2Date
-  | Date2Int
-  | IntAdd
-  | IntSub
-  | IntMul
-  | IntDiv
-  | Mod
-  | FlAdd
-  | FlSub
-  | FlMul
-  | FlDiv
-  | IntLt
-  | FlLt
-  | FlLe
-  | FlEq
-  | IntEq
-  | StrEq
-  | And
-  | Or
-  | Not
-  | IntHash
-  | StrHash
-  | LoadStr
-  | LoadBool
-  | StrLen
-  | StrPos
-  | ExtractY
-  | ExtractM
-  | ExtractD
-  | AddY
-  | AddM
+type unop =
+  [ `Int2Fl
+  | `Int2Date
+  | `Date2Int
+  | `ExtractY
+  | `ExtractM
+  | `ExtractD
+  | `Not
+  | `StrLen
+  | `LoadBool ]
+[@@deriving compare, sexp]
+
+type binop =
+  [ `IntAdd
+  | `IntSub
+  | `IntMul
+  | `IntDiv
+  | `Lsr
+  | `Mod
+  | `FlAdd
+  | `FlSub
+  | `FlMul
+  | `FlDiv
+  | `IntLt
+  | `FlLt
+  | `FlLe
+  | `FlEq
+  | `IntEq
+  | `StrEq
+  | `And
+  | `Or
+  | `IntHash
+  | `StrHash
+  | `UnivHash
+  | `LoadStr
+  | `StrPos
+  | `AddY
+  | `AddM
+  | `AddD ]
 [@@deriving compare, sexp]
 
 type expr = Implang0.expr =
   | Null
   | Int of int
-  | Date of Core.Date.t
+  | Date of Date.t
   | Fixed of Fixed_point.t
   | Bool of bool
   | String of string
@@ -47,37 +52,41 @@ type expr = Implang0.expr =
   | Tuple of expr list
   | Slice of expr * int
   | Index of expr * int
-  | Binop of {op: op; arg1: expr; arg2: expr}
-  | Unop of {op: op; arg: expr}
+  | Binop of { op : binop; arg1 : expr; arg2 : expr }
+  | Unop of { op : unop; arg : expr }
   | Done of string
   | Ternary of expr * expr * expr
-  | TupleHash of Type.PrimType.t list * expr * expr
+  | TupleHash of Prim_type.t list * expr * expr
   | Substr of expr * expr * expr
 [@@deriving compare, sexp]
 
-type local = Implang0.local =
-  {lname: string; type_: (Type.PrimType.t[@opaque]); persistent: bool}
+type local = Implang0.local = {
+  lname : string;
+  type_ : (Prim_type.t[@opaque]);
+  persistent : bool;
+}
 [@@deriving compare, sexp]
 
 type stmt = Implang0.stmt =
-  | Print of Type.PrimType.t * expr
-  | Consume of Type.PrimType.t * expr
-  | Loop of {cond: expr; body: prog}
-  | If of {cond: expr; tcase: prog; fcase: prog}
-  | Iter of {var: string; func: string; args: expr list}
-  | Step of {var: string; iter: string}
-  | Assign of {lhs: string; rhs: expr}
+  | Print of Prim_type.t * expr
+  | Consume of Prim_type.t * expr
+  | Loop of { cond : expr; body : prog }
+  | If of { cond : expr; tcase : prog; fcase : prog }
+  | Iter of { var : string; func : string; args : expr list }
+  | Step of { var : string; iter : string }
+  | Assign of { lhs : string; rhs : expr }
   | Yield of expr
   | Return of expr
 
 and prog = stmt list [@@deriving compare, sexp]
 
-type func = Implang0.func =
-  { name: string
-  ; args: (string * Type0.PrimType.t) list
-  ; body: prog
-  ; ret_type: Type0.PrimType.t
-  ; locals: local list }
+type func = Implang0.func = {
+  name : string;
+  args : (string * Prim_type.t) list;
+  body : prog;
+  ret_type : Prim_type.t;
+  locals : local list;
+}
 [@@deriving compare, sexp]
 
 val pp_stmt : Formatter.t -> stmt -> unit
@@ -115,6 +124,8 @@ module Infix : sig
 
   val ( || ) : expr -> expr -> expr
 
+  val ( lsr ) : expr -> expr -> expr
+
   val not : expr -> expr
 
   val index : expr -> int -> expr
@@ -122,14 +133,16 @@ end
 
 type _var = Global of expr | Arg of int | Field of expr
 
-type _ctx = _var Map.M(Name.Compare_no_type).t
+type _ctx = _var Map.M(Name).t
+
+val type_of : Prim_type.t Hashtbl.M(String).t -> expr -> Prim_type.t
 
 module Builder : sig
   type t
 
-  val type_of : expr -> t -> Type.PrimType.t
+  val type_of : expr -> t -> Prim_type.t
 
-  val create : ctx:_ctx -> name:string -> ret:Type.PrimType.t -> fresh:Fresh.t -> t
+  val create : ctx:_ctx -> name:string -> ret:Prim_type.t -> t
 
   val new_scope : t -> t
 
@@ -155,24 +168,25 @@ module Builder : sig
 
   val build_step : expr -> func -> t -> unit
 
-  val build_if : cond:expr -> then_:(t -> unit) -> else_:(t -> unit) -> t -> unit
+  val build_if :
+    cond:expr -> then_:(t -> unit) -> else_:(t -> unit) -> t -> unit
 
-  val build_var : ?persistent:bool -> string -> Type.PrimType.t -> t -> expr
+  val build_var : ?persistent:bool -> string -> Prim_type.t -> t -> expr
 
   val build_defn : ?persistent:bool -> string -> expr -> t -> expr
 
   val build_count_loop : expr -> (t -> unit) -> t -> unit
 
   val build_foreach :
-       ?count:Type.AbsInt.t
-    -> ?header:(expr -> t -> unit)
-    -> ?footer:(expr -> t -> unit)
-    -> ?persistent:bool
-    -> func
-    -> expr list
-    -> (expr -> t -> unit)
-    -> t
-    -> unit
+    ?count:Abs_int.t ->
+    ?header:(expr -> t -> unit) ->
+    ?footer:(expr -> t -> unit) ->
+    ?persistent:bool ->
+    func ->
+    expr list ->
+    (expr -> t -> unit) ->
+    t ->
+    unit
 
   val build_eq : expr -> expr -> t -> expr
 
@@ -200,7 +214,7 @@ module Builder : sig
 
   val build_to_int : expr -> t -> expr
 
-  val const_int : Type.PrimType.t -> int -> expr
+  val const_int : Prim_type.t -> int -> expr
 end
 
 module Ctx : sig
@@ -211,11 +225,13 @@ module Ctx : sig
 
   val empty : t
 
+  val of_alist_exn : (Name.t * var) list -> t
+
   val of_schema : Name.t list -> expr list -> t
 
-  val make_caller_args : t -> (string * Type0.PrimType.t) list
+  val make_caller_args : t -> (string * Prim_type.t) list
 
-  val bind : t -> string -> Type0.PrimType.t -> expr -> t
+  val bind : t -> string -> Prim_type.t -> expr -> t
 
   val var_to_expr : var -> Builder.t -> expr
 

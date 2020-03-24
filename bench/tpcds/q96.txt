@@ -1,0 +1,9 @@
+select([count()],
+  filter((((((((ss_sold_time_sk = t_time_sk) && (ss_hdemo_sk = hd_demo_sk))
+             && (ss_store_sk = s_store_sk)) && (t_hour = HOUR_01)) &&
+           (t_minute >= 30)) && (hd_dep_count = DEPCNT_01)) &&
+         (s_store_name = "ese")),
+    join(true,
+      store_sales,
+      join(true, household_demographics, join(true, time_dim, store)))))
+

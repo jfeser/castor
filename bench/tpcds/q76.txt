@@ -1,0 +1,47 @@
+groupby([foo_channel,
+         foo_col_name,
+         foo_d_year,
+         foo_d_qoy,
+         foo_i_category,
+         count() as sales_cnt,
+         sum(foo_ext_sales_price) as sales_amt],
+  [foo_channel, foo_col_name, foo_d_year, foo_d_qoy, foo_i_category],
+  select([channel as foo_channel,
+          col_name as foo_col_name,
+          d_year as foo_d_year,
+          d_qoy as foo_d_qoy,
+          i_category as foo_i_category,
+          ext_sales_price as foo_ext_sales_price],
+    atuple([select(["store" as channel,
+                    NULLCOLSS_01 as col_name,
+                    d_year,
+                    d_qoy,
+                    i_category,
+                    ss_ext_sales_price as ext_sales_price],
+              filter((((ss_customer_sk = null) &&
+                      (ss_sold_date_sk = d_date_sk)) &&
+                     (ss_item_sk = i_item_sk)),
+                join(true, store_sales, join(true, item, date_dim)))),
+            atuple([select(["web" as channel,
+                            NULLCOLWS_01 as col_name,
+                            d_year,
+                            d_qoy,
+                            i_category,
+                            ws_ext_sales_price as ext_sales_price],
+                      filter((((ws_bill_customer_sk = null) &&
+                              (ws_sold_date_sk = d_date_sk)) &&
+                             (ws_item_sk = i_item_sk)),
+                        join(true, web_sales, join(true, item, date_dim)))),
+                    select(["catalog" as channel,
+                            NULLCOLCS_01 as col_name,
+                            d_year,
+                            d_qoy,
+                            i_category,
+                            cs_ext_sales_price as ext_sales_price],
+                      filter((((cs_bill_customer_sk = null) &&
+                              (cs_sold_date_sk = d_date_sk)) &&
+                             (cs_item_sk = i_item_sk)),
+                        join(true, catalog_sales, join(true, item, date_dim))))],
+              concat)],
+      concat)))
+

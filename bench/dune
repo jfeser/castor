@@ -1,1 +1,1 @@
-(ignored_subdirs (activity cozy demomatch hyperdemo tpcds tpch-hyper))
+(dirs tpch)

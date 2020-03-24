@@ -1,0 +1,36 @@
+select([c_last_name,
+        c_first_name,
+        c_salutation,
+        c_preferred_cust_flag,
+        dj_ss_ticket_number,
+        dj_cnt],
+  filter(((dj_ss_customer_sk = c_customer_sk) &&
+         ((dj_cnt <= COUNTYNUMBER_01) && (COUNTYNUMBER_01 <= 5))),
+    join(true,
+      select([ss_ticket_number as dj_ss_ticket_number,
+              ss_customer_sk as dj_ss_customer_sk,
+              cnt as dj_cnt],
+        groupby([ss_ticket_number, ss_customer_sk, count() as cnt],
+          [ss_ticket_number, ss_customer_sk],
+          filter((((((((((ss_sold_date_sk = d_date_sk) &&
+                        (ss_store_sk = s_store_sk)) &&
+                       (ss_hdemo_sk = hd_demo_sk)) &&
+                      ((d_dom <= COUNTYNUMBER_01) && (COUNTYNUMBER_01 <= 2)))
+                     &&
+                     ((hd_buy_potential = BPONE_01) ||
+                     (hd_buy_potential = BPTWO_01))) &&
+                    (hd_vehicle_count > 0)) &&
+                   ((if (hd_vehicle_count > 0) then (hd_dep_count /
+                                                    hd_vehicle_count) else null)
+                   > COUNTYNUMBER_01)) &&
+                  ((d_year = YEAR_01) ||
+                  ((d_year = (YEAR_01 + COUNTYNUMBER_01)) ||
+                  (d_year = (YEAR_01 + 2))))) &&
+                 ((s_county = COUNTY_D_01) ||
+                 ((s_county = COUNTY_D_01) ||
+                 ((s_county = COUNTY_D_01) || (s_county = COUNTY_D_01))))),
+            join(true,
+              store_sales,
+              join(true, date_dim, join(true, store, household_demographics)))))),
+      customer)))
+

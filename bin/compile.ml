@@ -1,79 +1,65 @@
-open Core
+open! Core
 open Castor
 open Collections
+open Abslayout_load
 
-let main ~debug ~gprof ~params ~db ~code_only ?out_dir ch =
+let main ~debug ~gprof ~params ~db ~code_only ~query ?out_dir ch =
+  Logs.info (fun m ->
+      m "%s" (Sys.get_argv () |> Array.to_list |> String.concat ~sep:" "));
   let module CConfig = struct
-    let conn = Db.create db
+    let conn = db
 
     let debug = debug
 
     let code_only = code_only
-
-    let layout_map_channel =
-      if debug then
-        let layout_file =
-          match out_dir with Some d -> d ^ "/layout.txt" | None -> "layout.txt"
-        in
-        Some (Out_channel.create layout_file)
-      else None
   end in
-  let module A = Abslayout_db.Make (CConfig) in
-  let module S = Serialize.Make (CConfig) (A) in
-  let module I = Irgen.Make (CConfig) (A) (S) () in
+  let layout_file =
+    if debug then
+      let layout_file =
+        match out_dir with Some d -> d ^ "/layout.txt" | None -> "layout.txt"
+      in
+      Some layout_file
+    else None
+  in
+  let module I = Irgen.Make (CConfig) () in
   let module C = Codegen.Make (CConfig) (I) () in
-  let params = List.map params ~f:(fun (n, t) -> Name.create ~type_:t n) in
-  (* Codegen *)
-  Logs.debug (fun m -> m "Codegen.") ;
+  let ralgebra, params =
+    if query then
+      let Query.{ body; args; _ } = Query.of_channel_exn ch in
+      (body, args)
+    else (Abslayout.of_channel_exn ch, params)
+  in
   let ralgebra =
-    let params = Set.of_list (module Name.Compare_no_type) params in
-    let r = Abslayout.of_channel_exn ch |> A.resolve ~params in
-    A.annotate_schema r ; A.annotate_key_layouts r
-  in
-  A.annotate_subquery_types ralgebra ;
-  C.compile ~gprof ~params ?out_dir ralgebra |> ignore
-
-let reporter ppf =
-  let report _ level ~over k msgf =
-    let k _ = over () ; k () in
-    let with_time h _ k ppf fmt =
-      let time = Core.Time.now () in
-      Format.kfprintf k ppf
-        ("%a [%s] @[" ^^ fmt ^^ "@]@.")
-        Logs.pp_header (level, h) (Core.Time.to_string time)
+    let load_params =
+      List.map params ~f:(fun (n, t) -> Name.create ~type_:t n)
+      |> Set.of_list (module Name)
     in
-    msgf @@ fun ?header ?tags fmt -> with_time header tags k ppf fmt
+    load_layout ~params:load_params db ralgebra
   in
-  {Logs.report}
+  let params = List.map params ~f:(fun (n, t) -> (Name.create n, t)) in
+  Type.annotate db ralgebra
+  |> C.compile ~gprof ~params ?out_dir ?layout_log:layout_file CConfig.conn
+  |> ignore
 
 let () =
-  (* Set early so we get logs from command parsing code. *)
-  Logs.set_reporter (reporter Format.std_formatter) ;
-  let open Command in
-  let open Let_syntax in
-  Logs.info (fun m -> m "%s" (Sys.argv |> Array.to_list |> String.concat ~sep:" ")) ;
-  basic ~summary:"Compile a query."
-    (let%map_open verbose =
-       flag "verbose" ~aliases:["v"] no_arg ~doc:"increase verbosity"
-     and db = flag "db" (required string) ~doc:"CONNINFO the database to connect to"
-     and quiet = flag "quiet" ~aliases:["q"] no_arg ~doc:"decrease verbosity"
-     and debug = flag "debug" ~aliases:["g"] no_arg ~doc:"enable debug mode"
-     and gprof = flag "prof" ~aliases:["pg"] no_arg ~doc:"enable profiling"
-     and out_dir =
-       flag "output" ~aliases:["o"] (optional string)
-         ~doc:"DIR directory to write compiler output in"
-     and params =
-       flag "param" ~aliases:["p"] (listed Util.param)
-         ~doc:"NAME:TYPE query parameters"
-     and code_only = flag "code-only" no_arg ~doc:"only emit code"
-     and ch =
-       anon (maybe_with_default In_channel.stdin ("query" %: Util.channel))
-     in
-     fun () ->
-       if verbose then Logs.set_level (Some Logs.Debug)
-       else if quiet then Logs.set_level (Some Logs.Error)
-       else Logs.set_level (Some Logs.Info) ;
-       Logs.info (fun m ->
-           m "%s" (Sys.argv |> Array.to_list |> String.concat ~sep:" ") ) ;
-       main ~debug ~gprof ~params ~db ~code_only ?out_dir ch)
-  |> run
+  let open Command.Let_syntax in
+  Command.basic ~summary:"Compile a query."
+    [%map_open
+      let () = Log.param
+      and db = Db.param
+      and debug = flag "debug" ~aliases:[ "g" ] no_arg ~doc:"enable debug mode"
+      and gprof = flag "prof" ~aliases:[ "pg" ] no_arg ~doc:"enable profiling"
+      and out_dir =
+        flag "output" ~aliases:[ "o" ] (optional string)
+          ~doc:"DIR directory to write compiler output in"
+      and params =
+        flag "param" ~aliases:[ "p" ] (listed Util.param)
+          ~doc:"NAME:TYPE query parameters"
+      and code_only = flag "code-only" no_arg ~doc:"only emit code"
+      and query =
+        flag "query" ~aliases:[ "r" ] no_arg ~doc:"parse input as a query"
+      and ch =
+        anon (maybe_with_default In_channel.stdin ("query" %: Util.channel))
+      in
+      fun () -> main ~debug ~gprof ~params ~db ~code_only ~query ?out_dir ch]
+  |> Command.run

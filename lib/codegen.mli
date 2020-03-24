@@ -1,5 +1,3 @@
-open Base
-
 module Config : sig
   module type S = sig
     val debug : bool

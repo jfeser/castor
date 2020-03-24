@@ -1,0 +1,63 @@
+select([item_id,
+        sr_item_qty,
+        (sr_item_qty /
+        (((sr_item_qty + cr_item_qty) + wr_item_qty) / (3.0 * 100))) as sr_dev,
+        cr_item_qty,
+        (cr_item_qty /
+        (((sr_item_qty + cr_item_qty) + wr_item_qty) / (3.0 * 100))) as cr_dev,
+        wr_item_qty,
+        (wr_item_qty /
+        (((sr_item_qty + cr_item_qty) + wr_item_qty) / (3.0 * 100))) as wr_dev,
+        (((sr_item_qty + cr_item_qty) + wr_item_qty) / 3.0) as average],
+  filter(((item_id = item_id) && (item_id = item_id)),
+    join(true,
+      groupby([i_item_id as item_id, sum(sr_return_quantity) as sr_item_qty],
+        [i_item_id],
+        filter((((sr_item_sk = i_item_sk) &&
+                exists(filter((d_date = d_date),
+                         select([d_date],
+                           filter(exists(filter((d_week_seq = d_week_seq),
+                                           select([d_week_seq],
+                                             filter(((d_date = "1998-01-02")
+                                                    ||
+                                                    ((d_date = "1998-08-02")
+                                                    ||
+                                                    (d_date = "1998-11-02"))),
+                                               date_dim)))),
+                             date_dim))))) &&
+               (sr_returned_date_sk = d_date_sk)),
+          join(true, store_returns, join(true, item, date_dim)))),
+      join(true,
+        groupby([i_item_id as item_id, sum(cr_return_quantity) as cr_item_qty],
+          [i_item_id],
+          filter((((cr_item_sk = i_item_sk) &&
+                  exists(filter((d_date = d_date),
+                           select([d_date],
+                             filter(exists(filter((d_week_seq = d_week_seq),
+                                             select([d_week_seq],
+                                               filter(((d_date =
+                                                       "1998-01-02") ||
+                                                      ((d_date =
+                                                       "1998-08-02") ||
+                                                      (d_date = "1998-11-02"))),
+                                                 date_dim)))),
+                               date_dim))))) &&
+                 (cr_returned_date_sk = d_date_sk)),
+            join(true, catalog_returns, join(true, item, date_dim)))),
+        groupby([i_item_id as item_id, sum(wr_return_quantity) as wr_item_qty],
+          [i_item_id],
+          filter((((wr_item_sk = i_item_sk) &&
+                  exists(filter((d_date = d_date),
+                           select([d_date],
+                             filter(exists(filter((d_week_seq = d_week_seq),
+                                             select([d_week_seq],
+                                               filter(((d_date =
+                                                       "1998-01-02") ||
+                                                      ((d_date =
+                                                       "1998-08-02") ||
+                                                      (d_date = "1998-11-02"))),
+                                                 date_dim)))),
+                               date_dim))))) &&
+                 (wr_returned_date_sk = d_date_sk)),
+            join(true, web_returns, join(true, item, date_dim))))))))
+

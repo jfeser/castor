@@ -1,0 +1,18 @@
+groupby([i_item_id,
+         avg(cs_quantity) as agg1,
+         avg(cs_list_price) as agg2,
+         avg(cs_coupon_amt) as agg3,
+         avg(cs_sales_price) as agg4],
+  [i_item_id],
+  filter((((((((((cs_sold_date_sk = d_date_sk) && (cs_item_sk = i_item_sk))
+               && (cs_bill_cdemo_sk = cd_demo_sk)) &&
+              (cs_promo_sk = p_promo_sk)) && (cd_gender = MS_01)) &&
+            (cd_marital_status = MS_01)) && (cd_education_status = ES_01)) &&
+          ((p_channel_email = "N") || (p_channel_event = "N"))) &&
+         (d_year = YEAR_01)),
+    join(true,
+      catalog_sales,
+      join(true,
+        customer_demographics,
+        join(true, date_dim, join(true, item, promotion))))))
+

@@ -1,59 +1,46 @@
-open Base
-open Collections
-open Abslayout
+open Ast
 
-type ctx
+type sql_pred = unit annot pred [@@deriving compare, sexp_of]
 
-type select_entry = {pred: pred; alias: string; cast: Type.PrimType.t option}
+type select_entry = {
+  pred : sql_pred;
+  alias : string;
+  cast : Prim_type.t option;
+}
 [@@deriving compare, sexp_of]
 
-type spj =
-  { select: select_entry list
-  ; distinct: bool
-  ; conds: pred list
-  ; relations:
-      ([`Subquery of t * string | `Table of string * string] * [`Left | `Lateral])
-      list
-  ; order: (pred * order) list
-  ; group: pred list
-  ; limit: int option }
+type spj = {
+  select : select_entry list;
+  distinct : bool;
+  conds : sql_pred list;
+  relations :
+    ( [ `Subquery of t * string
+      | `Table of Relation.t * string
+      | `Series of sql_pred * sql_pred * string ]
+    * [ `Left | `Lateral ] )
+    list;
+  order : (sql_pred * order) list;
+  group : sql_pred list;
+  limit : int option;
+}
 
 and t = Query of spj | Union_all of spj list [@@deriving compare, sexp_of]
 
-val create_ctx : ?fresh:Fresh.t -> unit -> ctx
+val src : Logs.Src.t
 
-val of_ralgebra : ctx -> Abslayout.t -> t
+val of_ralgebra : 'a annot -> t
 
-val create_query :
-     ?distinct:bool
-  -> ?conds:pred list
-  -> ?relations:( [`Subquery of t * string | `Table of string * string]
-                * [`Lateral | `Left] )
-                list
-  -> ?order:(pred * order) list
-  -> ?group:pred list
-  -> ?limit:int
-  -> select_entry list
-  -> spj
-
-val create_entry :
-  ctx:ctx -> ?alias:string -> ?cast:Type.PrimType.t -> pred -> select_entry
-
-val to_spj : ctx -> t -> spj
+val has_aggregates : t -> bool
 
 val to_schema : t -> string list
 
-val to_order : t -> (pred * order) list Or_error.t
+val sample : int -> string -> string
 
-val join : ctx -> Name.t list -> Name.t list -> t -> t -> pred -> t
+val trash_sample : int -> string -> string
 
-val order_by : ctx -> Name.t list -> t -> (pred * order) list -> t
+val to_string : t -> string
 
-val select : ?groupby:pred list -> ctx -> Name.t list -> t -> pred list -> t
+val format : string -> string
 
-val pred_to_sql : ctx -> pred -> string
-
-val to_string : ctx -> t -> string
-
-val to_string_hum : ctx -> t -> string
+val to_string_hum : t -> string
 (** Pretty print a SQL string if a sql formatter is available. *)

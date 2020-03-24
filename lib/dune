@@ -1,8 +1,3 @@
-(rule
- (targets config.ml)
- (deps    ../config.ml)
- (action  (copy %{deps} %{targets})))
-
 (menhir
  (infer false)
  (modules ralgebra_parser))
@@ -15,13 +10,42 @@
 
 (ocamllex transform_lexer)
 
+(menhir
+ (infer false)
+ (modules cozy_parser))
+
+(ocamllex cozy_lexer)
+
 (library
  (public_name castor)
- (libraries base core stdio str postgresql llvm llvm.analysis llvm.target llvm.all_backends logs cmph expect_test_helpers_kernel visitors.runtime gen bos oUnit)
+ (libraries
+   core
+   lwt
+   lwt.unix
+   postgresql
+   llvm
+   llvm.analysis
+   llvm.target
+   llvm.all_backends
+   logs
+   cmph
+   visitors.runtime
+   hashcons
+   fmt
+   fmt.tty
+   genhash
+ )
+ (flags -open Core -unboxed-types)
  (inline_tests)
- (preprocess (pps ppx_sexp_conv ppx_compare ppx_hash ppx_expect ppx_let visitors.ppx bisect_ppx -conditional))
+ (preprocess
+  (pps
+    ppx_sexp_conv
+    ppx_compare
+    ppx_hash
+    ppx_expect
+    ppx_let
+    visitors.ppx
+    ppx_variants_conv
+    lwt_ppx
+ ))
 )
-
-; Local Variables:
-; mode: tuareg-dune
-; End:

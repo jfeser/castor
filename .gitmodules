@@ -1,0 +1,6 @@
+[submodule "bench/cozy/cozy"]
+	path = bench/cozy/cozy
+	url = git@github.com:jfeser/cozy.git
+[submodule "chestnut"]
+	path = bench/chestnut/chestnut
+	url = git@github.com:congy/chestnut.git
