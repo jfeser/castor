@@ -3,6 +3,8 @@ open Prim_type
 
 type t = Name.t list [@@deriving compare, sexp]
 
+let pp = Fmt.Dump.list Name.pp
+
 let scoped s = List.map ~f:(Name.scoped s)
 
 let unscoped = List.map ~f:Name.unscoped
@@ -66,8 +68,8 @@ let schema_open schema r =
       let schema_r1 =
         List.filter (schema r1) ~f:(fun n ->
             not
-              (List.mem ~equal:[%compare.equal: Name.t] schema_r2
-                 (Name.unscoped n)))
+              ( List.mem ~equal:[%compare.equal: Name.t] schema_r2
+              @@ Name.unscoped n ))
       in
       schema_r1 @ schema_r2 |> unscoped
   | AEmpty -> []

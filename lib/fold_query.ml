@@ -283,18 +283,15 @@ let rec to_ralgebra q =
               (* Add a counter so we know which query we're on. *)
               P.(as_ (int i) counter_name)
               :: List.concat_mapi qs ~f:(fun j q' ->
-                     schema q'
-                     |>
-                     (* Take the names from this query's schema. *)
-                     if i = j then List.map ~f:P.name
-                     else
-                       (* Otherwise emit null. *)
-                       List.map ~f:(fun n ->
-                           P.as_ (Null (Some (Name.type_exn n))) (Name.name n)))
+                     let f n =
+                       (* Take the names from this query's schema. *)
+                       if i = j then P.name n (* Otherwise emit null. *)
+                       else P.as_ (Null (Some (Name.type_exn n))) (Name.name n)
+                     in
+                     List.map (schema q') ~f)
             in
             select select_list q)
-      in
-      let order =
+      and order =
         (P.name (Name.create counter_name), Asc) :: List.concat orders
       in
       order_by order (tuple queries_norm Concat)
