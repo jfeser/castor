@@ -55,6 +55,27 @@ let stage r =
         else failwith (sprintf "Scope not found: %s" s)
     | None -> `Run
 
+let annotate_stage r =
+  let stage = stage r in
+  let rec annot r =
+    let node = query r.node
+    and meta =
+      object
+        method meta = r.meta
+
+        method stage = stage
+      end
+    in
+    { node; meta }
+  and query q = map_query annot pred q
+  and pred p = map_pred annot pred p in
+  annot r
+
+let is_static r =
+  Free.free r
+  |> Set.for_all ~f:(fun n ->
+         match r.meta#stage n with `Compile -> true | `Run -> false)
+
 exception Un_serial of string
 
 let ops_serializable_exn r =
