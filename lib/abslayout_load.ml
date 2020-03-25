@@ -1,5 +1,5 @@
 open Abslayout
-open Abslayout_visitors
+open Visitors
 
 let annotate_relations conn =
   let visitor =

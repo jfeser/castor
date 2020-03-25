@@ -1,6 +1,6 @@
 open Ast
 open Abslayout_fold
-open Abslayout_visitors
+open Visitors
 open Collections
 module A = Abslayout
 module I = Abs_int
@@ -400,7 +400,7 @@ let annotate conn r =
   annot r (type_of conn r);
   let visitor =
     object
-      inherit Abslayout_visitors.runtime_subquery_visitor
+      inherit Visitors.runtime_subquery_visitor
 
       method visit_Subquery r = annot r (type_of conn r)
     end

@@ -1,7 +1,7 @@
 module A = Abslayout
 open Collections
 open Ast
-open Abslayout_visitors
+open Visitors
 
 let pred_free_open free p =
   let singleton = Set.singleton (module Name) in

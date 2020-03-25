@@ -1,6 +1,6 @@
 open Collections
 open Abslayout_fold
-open Abslayout_visitors
+open Visitors
 open Header
 
 type meta = < type_ : Type.t ; pos : int option >

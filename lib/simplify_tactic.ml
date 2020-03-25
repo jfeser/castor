@@ -1,6 +1,6 @@
 open Ast
 open Abslayout
-open Abslayout_visitors
+open Visitors
 open Schema
 open Match
 module P = Pred.Infix

@@ -1,5 +1,5 @@
 open Ast
-open Abslayout_visitors
+open Visitors
 
 include (val Log.make "castor.equiv")
 

@@ -1,5 +1,5 @@
 open Ast
-open Abslayout_visitors
+open Visitors
 module A = Abslayout
 
 type 'a t = { views : (string * 'a annot) list; main : 'a annot }

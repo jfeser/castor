@@ -3,7 +3,7 @@ open Ast
 open Abslayout
 open Collections
 open Schema
-open Abslayout_visitors
+open Visitors
 
 type tuple = Value.t list [@@deriving compare, sexp]
 

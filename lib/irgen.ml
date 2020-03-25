@@ -472,7 +472,7 @@ module Make (Config : Config.S) () = struct
     let open Builder in
     let key_layout =
       A.h_key_layout r
-      |> Abslayout_visitors.map_meta (fun _ ->
+      |> Visitors.map_meta (fun _ ->
              let msg = "Tried to get metadata from key layout" in
              object
                method pos = None

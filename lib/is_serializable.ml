@@ -1,4 +1,4 @@
-open Abslayout_visitors
+open Visitors
 module A = Abslayout
 
 class ['a] stage_iter =
@@ -53,7 +53,7 @@ let stage r =
         if Set.mem compile_scopes s then `Compile
         else if Set.mem run_scopes s then `Run
         else failwith (sprintf "Scope not found: %s" s)
-    | None -> `Run
+    | None -> `No_scope
 
 let annotate_stage r =
   let stage = stage r in

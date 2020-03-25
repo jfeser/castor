@@ -94,15 +94,15 @@ val validate : t -> unit
 
 val strip_meta : 'a annot -> t
 
-class virtual ['a] iter : ['a] Abslayout_visitors.iter
+class virtual ['a] iter : ['a] Visitors.iter
 
-class virtual ['a] map : ['a] Abslayout_visitors.map
+class virtual ['a] map : ['a] Visitors.map
 
-class virtual ['a] endo : ['a] Abslayout_visitors.endo
+class virtual ['a] endo : ['a] Visitors.endo
 
-class virtual ['a] reduce : ['a] Abslayout_visitors.reduce
+class virtual ['a] reduce : ['a] Visitors.reduce
 
-class virtual ['a] mapreduce : ['a] Abslayout_visitors.mapreduce
+class virtual ['a] mapreduce : ['a] Visitors.mapreduce
 
 val annotate_key_layouts : t -> t
 

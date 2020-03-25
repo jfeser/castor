@@ -3,7 +3,7 @@ module M = Meta
 include Ast
 include Comparator.Make (Ast)
 include Abslayout_pp
-include Abslayout_visitors
+include Visitors
 
 module O : Comparable.Infix with type t := Ast.t = Comparable.Make (Ast)
 

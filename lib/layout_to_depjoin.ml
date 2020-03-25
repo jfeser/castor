@@ -1,4 +1,4 @@
-open Abslayout_visitors
+open Visitors
 open Abslayout
 module S = Schema
 

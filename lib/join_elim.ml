@@ -1,5 +1,5 @@
 module A = Abslayout
-open Abslayout_visitors
+open Visitors
 
 include (val Log.make "castor.join_elim")
 

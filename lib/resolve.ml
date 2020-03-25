@@ -1,6 +1,6 @@
 open Collections
 open Ast
-open Abslayout_visitors
+open Visitors
 module A = Abslayout
 module P = Pred.Infix
 module N = Name

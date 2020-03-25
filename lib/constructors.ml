@@ -1,5 +1,5 @@
 open Ast
-open Abslayout_visitors
+open Visitors
 
 module Query = struct
   (** Check that the names in a select list are unique. *)

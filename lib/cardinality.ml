@@ -1,5 +1,5 @@
 open Ast
-open Abslayout_visitors
+open Visitors
 module A = Abslayout
 module I = Abs_int
 

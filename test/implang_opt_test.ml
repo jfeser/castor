@@ -1,5 +1,5 @@
 open Test_util
-open Abslayout_visitors
+open Visitors
 open Implang_opt
 
 let run_test ?(params = []) layout_str opt_func =
