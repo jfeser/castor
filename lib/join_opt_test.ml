@@ -26,7 +26,8 @@ open Join_opt.Make (Config)
 module C =
 ( val Constructors.Annot.with_default
         (object
-           method stage : Name.t -> [ `Compile | `Run ] = assert false
+           method stage : Name.t -> [ `Compile | `Run | `No_scope ] =
+             assert false
         end) )
 
 let type_ = Prim_type.IntT { nullable = false }

@@ -762,10 +762,24 @@ module Make (C : Config.S) = struct
 
     let scope = fresh_name "s%d" in
     let visitor =
-      object
+      object (self : 'self)
         inherit [_] mapreduce
 
         inherit [_] Util.list_monoid
+
+        method! visit_AList () (rk, rv) =
+          let rv, ret = self#visit_t () rv in
+          (AList (rk, rv), ret)
+
+        method! visit_AHashIdx () h =
+          let hi_values, ret = self#visit_t () h.hi_values in
+          (AHashIdx { h with hi_values }, ret)
+
+        method! visit_AOrderedIdx () (rk, rv, m) =
+          let rv, ret = self#visit_t () rv in
+          (AOrderedIdx (rk, rv, m), ret)
+
+        method! visit_AScalar () x = (AScalar x, [])
 
         method! visit_Exists () r =
           if can_hoist r then

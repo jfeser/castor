@@ -1,4 +1,4 @@
-open Abslayout_visitors
+open Visitors
 open Collections
 module A = Abslayout
 module P = Pred.Infix

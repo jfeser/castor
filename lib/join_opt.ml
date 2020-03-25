@@ -15,7 +15,9 @@ module Join_graph = struct
   module Vertex = struct
     module T = struct
       type t =
-        (< stage : Name.t -> [ `Compile | `Run ] >[@ignore] [@opaque]) annot
+        (< stage : Name.t -> [ `Compile | `Run | `No_scope ] >
+        [@ignore] [@opaque])
+        annot
       [@@deriving compare, hash, sexp]
 
       let equal = [%compare.equal: t]
@@ -28,7 +30,9 @@ module Join_graph = struct
   module Edge = struct
     module T = struct
       type t =
-        (< stage : Name.t -> [ `Compile | `Run ] >[@ignore] [@opaque]) annot
+        (< stage : Name.t -> [ `Compile | `Run | `No_scope ] >
+        [@ignore] [@opaque])
+        annot
         pred
       [@@deriving compare, sexp]
     end
@@ -321,7 +325,7 @@ module Make (Config : Config.S) = struct
 
     (* Remove parameters from the join nest where possible. *)
     let static_r =
-      let open Abslayout_visitors in
+      let open Visitors in
       let rec annot r = map_annot query r
       and query q = map_query annot pred q
       and pred p = Pred.to_static ~params p in
@@ -562,7 +566,7 @@ module Make (Config : Config.S) = struct
     let f p r =
       let r =
         Is_serializable.annotate_stage r
-        |> Abslayout_visitors.map_meta (fun meta ->
+        |> Visitors.map_meta (fun meta ->
                object
                  method stage = meta#stage
                end)
