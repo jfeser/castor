@@ -495,14 +495,14 @@ module Make (Config : Config.S) = struct
               if rand random "hash-join" (A.strip_meta r) then
                 enum_hash_join opt parts pred s1 s2
               else []
-            and nest_joins =
+            and _nest_joins =
               if rand random "nest-join" (A.strip_meta r) then
                 enum_nest_join opt parts pred s1 s2
               else []
             in
 
             Pareto_set.(
-              union_all [ cs; of_list (flat_joins @ hash_joins @ nest_joins) ]))
+              union_all [ cs; of_list (flat_joins @ hash_joins @ _nest_joins) ]))
     in
     info (fun m -> m "Found %d pareto-optimal joins." (Pareto_set.length joins));
     joins
