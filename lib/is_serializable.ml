@@ -33,19 +33,22 @@ let stage r =
     and single = Set.singleton (module String) in
     let zero = (empty, empty)
     and plus (c, r) (c', r') = (Set.union c c', Set.union r r') in
-    let rec annot r = Reduce.annot zero plus query meta r
-    and query q =
+    let rec annot stage r = Stage_reduce.annot zero plus query meta stage r
+    and query stage q =
       let this =
         match q with
         | AHashIdx { hi_scope; _ } -> (single hi_scope, empty)
         | AOrderedIdx (r, _, _) | AList (r, _) -> (single (A.scope_exn r), empty)
-        | DepJoin { d_alias; _ } -> (empty, single d_alias)
+        | DepJoin { d_alias; _ } -> (
+            match stage with
+            | `Compile -> (single d_alias, empty)
+            | `Run -> (empty, single d_alias) )
         | _ -> zero
-      and rest = Reduce.query zero plus annot pred q in
+      and rest = Stage_reduce.query zero plus annot pred stage q in
       plus this rest
-    and pred p = Reduce.pred zero plus annot pred p
-    and meta _ = zero in
-    annot r
+    and pred stage p = Stage_reduce.pred zero plus annot pred stage p
+    and meta _ _ = zero in
+    annot `Run r
   in
   fun n ->
     match Name.rel n with
@@ -74,7 +77,9 @@ let annotate_stage r =
 let is_static r =
   Free.free r
   |> Set.for_all ~f:(fun n ->
-         match r.meta#stage n with `Compile -> true | `Run -> false)
+         match r.meta#stage n with
+         | `Compile | `No_scope -> true
+         | `Run -> false)
 
 exception Un_serial of string
 

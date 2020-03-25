@@ -202,6 +202,35 @@ module Reduce = struct
   let annot zero ( + ) query meta { node; meta = m } = query node + meta m
 end
 
+module Stage_reduce = struct
+  open Reduce
+
+  let query zero ( + ) annot pred stage = function
+    | AList (q, q') -> annot `Compile q + annot stage q'
+    | AScalar p -> pred `Compile p
+    | AHashIdx { hi_keys; hi_values; hi_key_layout; hi_lookup; _ } ->
+        annot `Compile hi_keys
+        + annot stage hi_values
+        + option zero (annot stage) hi_key_layout
+        + list zero ( + ) (pred stage) hi_lookup
+    | AOrderedIdx (q, q', { oi_key_layout; oi_lookup }) ->
+        annot `Compile q
+        + annot stage q'
+        + option zero (annot stage) oi_key_layout
+        + list zero ( + )
+            (fun (b, b') ->
+              option zero (fun (p, _) -> pred stage p) b
+              + option zero (fun (p, _) -> pred stage p) b')
+            oi_lookup
+    | q -> Reduce.query zero ( + ) (annot stage) (pred stage) q
+
+  let pred zero ( + ) annot pred stage p =
+    Reduce.pred zero ( + ) (annot stage) (pred stage) p
+
+  let annot zero ( + ) query meta stage r =
+    Reduce.annot zero ( + ) (query stage) (meta stage) r
+end
+
 module Iter = struct
   let zero = ()
 
