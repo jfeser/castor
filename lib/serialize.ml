@@ -147,6 +147,8 @@ let make_ms_hash keys =
       ^ of_int ~byte_width:8 hash.log_bins )
 
 let make_hash type_ keys =
+  let nkeys = Seq.length keys in
+  Log.debug (fun m -> m "Generating hash for %d keys." nkeys);
   let hash, body =
     match Type.hash_kind_exn type_ with
     | `Direct -> make_direct_hash keys
