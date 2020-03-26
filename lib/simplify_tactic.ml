@@ -23,7 +23,7 @@ module Make (C : Config.S) = struct
   let filter_const = of_func filter_const ~name:"filter-const"
 
   let elim_structure r =
-    let r = map_meta (fun _ -> object end) r in
+    let r = strip_meta r in
     let r' =
       match r.node with
       | AHashIdx h -> Some (Layout_to_depjoin.hash_idx h)

@@ -398,3 +398,5 @@ let to_static ~params p =
     | `Leaf p -> if is_static ~params p then p else Bool true
   in
   to_static p
+
+let strip_meta p = (p :> t)

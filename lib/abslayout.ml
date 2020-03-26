@@ -1,5 +1,3 @@
-open Collections
-module M = Meta
 include Ast
 include Comparator.Make (Ast)
 include Abslayout_pp
@@ -78,6 +76,7 @@ let ensure_no_overlap_2 r1 r2 ss =
   else (alpha_scopes r1, r2)
 
 let ensure_no_overlap_k rs =
+  let open Collections in
   let all_scopes = List.map ~f:scopes rs in
   if Set.any_overlap (module String) all_scopes then List.map rs ~f:alpha_scopes
   else rs
@@ -229,71 +228,47 @@ let select_kind l =
   if List.exists l ~f:(fun p -> Poly.(Pred.kind p = `Agg)) then `Agg
   else `Scalar
 
-let order_k =
-  Univ_map.Key.create ~name:"order" [%sexp_of: (Ast.t pred * order) list]
+let order_open order r =
+  match r.node with
+  | OrderBy { key; _ } -> key
+  | AOrderedIdx (r, _, _) -> schema r |> List.map ~f:(fun n -> (Name n, Asc))
+  | Filter (_, r) | AHashIdx { hi_values = r; _ } -> order r
+  | ATuple (rs, Cross) -> List.map ~f:order rs |> List.concat
+  | Select (ps, r) ->
+      List.filter_map (order r) ~f:(fun (p, d) ->
+          List.find_map ps ~f:(function
+            | As_pred (p', n) when [%compare.equal: _ pred] p p' ->
+                Some (Name (Name.create n), d)
+            | p' when [%compare.equal: _ pred] p p' -> Some (p', d)
+            | _ -> None))
+  | AList (r, r') ->
+      let open Name.O in
+      let s' = schema r' and eq' = r'.meta#eq in
+      List.filter_map (order r) ~f:(function
+        | Name n, dir ->
+            if List.mem ~equal:( = ) s' n then Some (Name n, dir)
+            else
+              Set.find_map eq' ~f:(fun (n', n'') ->
+                  if n = n' then Some (Name n'', dir)
+                  else if n = n'' then Some (Name n', dir)
+                  else None)
+        | _ -> None)
+  | DepJoin _ | Join _ | GroupBy _ | Dedup _ | Relation _ | AEmpty
+  | ATuple (_, (Zip | Concat))
+  | AScalar _ | As _ | Range _ ->
+      []
 
-let annotate_orders r =
-  let eq_k = Univ_map.Key.create ~name:"eq" [%sexp_of: Equiv.t] in
-  let rec annotate_orders (r : Univ_map.t ref annot) =
-    let order =
-      match r.node with
-      | Select (ps, r) ->
-          annotate_orders r
-          |> List.filter_map ~f:(fun (p, d) ->
-                 List.find_map ps ~f:(function
-                   | As_pred (p', n) when [%compare.equal: _ pred] p p' ->
-                       Some (Name (Name.create n), d)
-                   | p' when [%compare.equal: _ pred] p p' -> Some (p', d)
-                   | _ -> None))
-      | Filter (_, r) | AHashIdx { hi_values = r; _ } -> annotate_orders r
-      | DepJoin { d_lhs = r1; d_rhs = r2; _ } | Join { r1; r2; _ } ->
-          annotate_orders r1 |> ignore;
-          annotate_orders r2 |> ignore;
-          []
-      | GroupBy (_, _, r) | Dedup r ->
-          annotate_orders r |> ignore;
-          []
-      | Relation _ | AEmpty -> []
-      | OrderBy { key; rel } ->
-          annotate_orders rel |> ignore;
-          key
-      | AScalar _ -> []
-      | AList (r, r') ->
-          let s' = schema r' in
-          let eq' = M.(find_exn r' eq_k) in
-          annotate_orders r' |> ignore;
-          let open Name.O in
-          annotate_orders r
-          |> List.filter_map ~f:(function
-               | Name n, dir ->
-                   if List.mem ~equal:( = ) s' n then Some (Name n, dir)
-                   else
-                     Set.find_map eq' ~f:(fun (n', n'') ->
-                         if n = n' then Some (Name n'', dir)
-                         else if n = n'' then Some (Name n', dir)
-                         else None)
-               | _ -> None)
-      | ATuple (rs, Cross) -> List.map ~f:annotate_orders rs |> List.concat
-      | ATuple (rs, (Zip | Concat)) ->
-          List.iter ~f:(fun r -> annotate_orders r |> ignore) rs;
-          []
-      | AOrderedIdx (r, _, _) ->
-          schema r |> List.map ~f:(fun n -> (Name n, Asc))
-      | As _ | Range _ -> []
-    in
-    M.set_m r order_k
-      (List.map order ~f:(fun (p, o) ->
-           (map_meta_pred (fun _ -> object end) p, o)));
-    order
-  in
+let rec order_of r = order_open order_of r
+
+let order_of r =
   let r =
     Equiv.annotate r
-    |> map_meta (fun eq -> ref (Univ_map.set Univ_map.empty eq_k eq))
+    |> map_meta (fun eq ->
+           object
+             method eq = eq
+           end)
   in
-  annotate_orders r |> ignore;
-  r
-
-let order_of r = M.(find_exn (annotate_orders r) order_k)
+  (order_of r :> (< > annot pred * order) list)
 
 let annotate_key_layouts r =
   let key_layout schema =

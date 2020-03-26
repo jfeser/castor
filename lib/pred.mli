@@ -123,3 +123,5 @@ val max_of : 'a annot pred -> 'a annot pred -> 'a annot pred
 val to_nnf : 'a annot pred -> 'a annot pred
 
 val to_static : params:Set.M(Name).t -> t -> t
+
+val strip_meta : < .. > annot pred -> t

@@ -1,3 +1,4 @@
+open Ast
 open Abslayout
 open Visitors
 
@@ -18,4 +19,4 @@ let load_layout ?(params = Set.empty (module Name)) conn l =
   Resolve.resolve ~params (annotate conn l)
 
 let load_string ?params conn s =
-  of_string_exn s |> load_layout conn ?params |> map_meta (fun _ -> object end)
+  of_string_exn s |> load_layout conn ?params |> strip_meta

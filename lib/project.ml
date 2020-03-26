@@ -109,7 +109,7 @@ let rec project r =
 
 and project_pred p =
   match p with
-  | Exists _ | First _ -> map_meta_pred (fun _ -> object end) p
+  | Exists _ | First _ -> Pred.strip_meta p
   | p -> map_pred project project_pred p
 
 and no_project r =

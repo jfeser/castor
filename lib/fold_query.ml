@@ -149,8 +149,6 @@ let to_scalars rs =
       match t.Ast.node with AScalar p -> Some p | _ -> None)
   |> Option.all
 
-let strip_meta_pred p = map_meta_pred (fun _ -> object end) p
-
 let of_list of_ralgebra q (q1, q2) =
   let scope = A.scope_exn q1 in
   let q1 = A.strip_scope q1 in
@@ -184,10 +182,10 @@ let rec of_ralgebra : 'a. (< .. > as 'a) annot -> (< > annot, 'a annot) t =
   | AHashIdx h -> of_hash_idx of_ralgebra q h
   | AOrderedIdx x -> of_ordered_idx of_ralgebra q x
   | AEmpty | Range _ -> empty q
-  | AScalar p -> scalars q [ strip_meta_pred p ]
+  | AScalar p -> scalars q [ Pred.strip_meta p ]
   | ATuple (ts, _) -> (
       match to_scalars ts with
-      | Some ps -> scalars q (List.map ~f:strip_meta_pred ps)
+      | Some ps -> scalars q (List.map ~f:Pred.strip_meta ps)
       | None -> concat q (List.map ~f:of_ralgebra ts) )
   | DepJoin { d_lhs = q1; d_rhs = q2; _ } | Join { r1 = q1; r2 = q2; _ } ->
       concat q [ of_ralgebra q1; of_ralgebra q2 ]

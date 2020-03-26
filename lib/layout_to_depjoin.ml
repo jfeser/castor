@@ -3,8 +3,6 @@ open Visitors
 open Abslayout
 module S = Schema
 
-let strip_meta_pred q = map_meta_pred (fun _ -> object end) q
-
 let list rk rv =
   let scope = scope_exn rk in
   { d_lhs = strip_scope rk; d_alias = scope; d_rhs = rv }
@@ -14,7 +12,7 @@ let hash_idx h =
   and rv_schema = S.schema h.hi_values in
   let key_pred =
     List.map2_exn rk_schema h.hi_lookup ~f:(fun p1 p2 ->
-        Binop (Eq, Name p1, strip_meta_pred p2))
+        Binop (Eq, Name p1, Pred.strip_meta p2))
     |> Pred.conjoin
   and slist = rk_schema @ rv_schema |> List.map ~f:(fun n -> Name n) in
   {
@@ -34,15 +32,15 @@ let ordered_idx rk rv m =
            let p1 =
              Option.map lb ~f:(fun (p, b) ->
                  match b with
-                 | `Closed -> [ Binop (Ge, Name n, strip_meta_pred p) ]
-                 | `Open -> [ Binop (Gt, Name n, strip_meta_pred p) ])
+                 | `Closed -> [ Binop (Ge, Name n, Pred.strip_meta p) ]
+                 | `Open -> [ Binop (Gt, Name n, Pred.strip_meta p) ])
              |> Option.value ~default:[]
            in
            let p2 =
              Option.map ub ~f:(fun (p, b) ->
                  match b with
-                 | `Closed -> [ Binop (Le, Name n, strip_meta_pred p) ]
-                 | `Open -> [ Binop (Lt, Name n, strip_meta_pred p) ])
+                 | `Closed -> [ Binop (Le, Name n, Pred.strip_meta p) ]
+                 | `Open -> [ Binop (Lt, Name n, Pred.strip_meta p) ])
              |> Option.value ~default:[]
            in
            p1 @ p2)
