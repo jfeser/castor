@@ -27,7 +27,7 @@ class ['a] stage_iter =
     method! visit_AScalar (ctx, _) p = self#visit_pred (ctx, `Compile) p
   end
 
-let stage r =
+let stage ?(params = Set.empty (module Name)) r =
   let compile_scopes, run_scopes =
     let empty = Set.empty (module String)
     and single = Set.singleton (module String) in
@@ -56,7 +56,7 @@ let stage r =
         if Set.mem compile_scopes s then `Compile
         else if Set.mem run_scopes s then `Run
         else failwith (sprintf "Scope not found: %s" s)
-    | None -> `No_scope
+    | None -> if Set.mem params n then `Run else `No_scope
 
 let annotate_stage r =
   let stage = stage r in
@@ -74,11 +74,12 @@ let annotate_stage r =
   and pred p = map_pred annot pred p in
   annot r
 
-let is_static r =
+let is_static ?(params = Set.empty (module Name)) r =
   Free.free r
   |> Set.for_all ~f:(fun n ->
          match r.meta#stage n with
-         | `Compile | `No_scope -> true
+         | `Compile -> true
+         | `No_scope -> not (Set.mem params n)
          | `Run -> false)
 
 exception Un_serial of string
@@ -103,8 +104,8 @@ let ops_serializable_exn r =
   in
   visitor#visit_t ((), `Run) r
 
-let names_serializable_exn p r =
-  let stage = stage r in
+let names_serializable_exn ?params p r =
+  let stage = stage ?params r in
   let visitor =
     object
       inherit [_] stage_iter as super
@@ -128,10 +129,10 @@ let names_serializable_exn p r =
 (** Return true if `r` is serializable. This function performs two checks:
     - `r` must not contain any compile time only operations in run time position.
     - Run-time names may only appear in run-time position and vice versa. *)
-let is_serializeable ?(path = Path.root) r =
+let is_serializeable ?(path = Path.root) ?params r =
   let r' = Path.get_exn path r in
   try
     ops_serializable_exn r';
-    names_serializable_exn path r;
+    names_serializable_exn ?params path r;
     Ok ()
   with Un_serial msg -> Error msg
