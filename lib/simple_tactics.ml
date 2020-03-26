@@ -3,6 +3,8 @@ open Collections
 
 module Config = struct
   module type S = sig
+    val params : Set.M(Name).t
+
     include Ops.Config.S
   end
 end
@@ -14,7 +16,7 @@ module Make (Config : Config.S) = struct
 
   let row_store r =
     (* Relation has no free variables that are bound at runtime. *)
-    if Is_serializable.is_static r then
+    if Is_serializable.is_static ~params r then
       let scope = Fresh.name Global.fresh "s%d" in
       let scalars =
         Schema.schema r |> Schema.scoped scope

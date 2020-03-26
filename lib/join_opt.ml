@@ -393,14 +393,14 @@ module Make (Config : Config.S) = struct
         +. (nt_lhs *. (Cost.hash (Pred.to_type lkey) +. rhs_per_partition_cost))
 
   let rec is_static_join = function
-    | Id r -> Is_serializable.is_static r
+    | Id r -> Is_serializable.is_static ~params r
     | Flat _ -> true
     | Hash { lhs; rhs; _ } | Nest { lhs; rhs; _ } ->
         is_static_join lhs && is_static_join rhs
 
   let leaf_flat r =
     let open Option.Let_syntax in
-    if Is_serializable.is_static r then return @@ Flat r
+    if Is_serializable.is_static ~params r then return @@ Flat r
     else (
       info (fun m -> m "Flat join does not apply to@ %a." A.pp r);
       None )
