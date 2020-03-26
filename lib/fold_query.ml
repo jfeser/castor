@@ -1,6 +1,6 @@
 open Ast
 open Abslayout
-open Visitors
+module V = Visitors
 open Schema
 module A = Abslayout
 module P = Pred.Infix
@@ -43,7 +43,7 @@ let var c x = { node = Var x; meta = c }
 let is_invariant ss q =
   let names_visitor =
     object
-      inherit [_] A.reduce
+      inherit [_] V.reduce
 
       inherit [_] Util.conj_monoid
 

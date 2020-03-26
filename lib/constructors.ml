@@ -1,5 +1,5 @@
 open Ast
-open Visitors
+module V = Visitors
 
 module Query = struct
   (** Check that the names in a select list are unique. *)
@@ -135,9 +135,9 @@ module Annot = struct
       let rec strip { node; meta } =
         { node = strip_query node; meta = default () }
 
-      and strip_query q = map_query strip strip_pred q
+      and strip_query q = V.Map.query strip strip_pred q
 
-      and strip_pred p = map_pred strip strip_pred p
+      and strip_pred p = V.Map.pred strip strip_pred p
 
       let pred = strip_pred
 
@@ -145,7 +145,7 @@ module Annot = struct
 
       let strip_preds = List.map ~f:strip_pred
 
-      let strip_ordered_idx o = map_ordered_idx strip strip_pred o
+      let strip_ordered_idx o = V.Map.ordered_idx strip strip_pred o
 
       let strip_order = List.map ~f:(fun (p, o) -> (strip_pred p, o))
 

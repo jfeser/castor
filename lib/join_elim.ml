@@ -1,5 +1,6 @@
+open Ast
 module A = Abslayout
-open Visitors
+module V = Visitors
 
 include (val Log.make "castor.join_elim")
 
@@ -55,7 +56,7 @@ let try_extend eqs pred lhs rhs =
       Join { pred; r1 = lhs; r2 = rhs }
 
 let remove_joins r =
-  let rec annot r = map_annot (query r.meta) r
+  let rec annot r = V.Map.annot (query r.meta) r
   and query meta = function
     | Join { r1; r2; pred = p } when not meta#meta#cardinality_matters ->
         let r1 = annot r1 and r2 = annot r2 in
@@ -64,18 +65,18 @@ let remove_joins r =
         debug (fun m ->
             m "Join cardinality matters for@ %a@ %s" Pred.pp p
               meta#meta#why_card_matters);
-        map_query annot pred q
-    | q -> map_query annot pred q
-  and pred p = map_pred annot pred p in
+        V.Map.query annot pred q
+    | q -> V.Map.query annot pred q
+  and pred p = V.Map.pred annot pred p in
   Equiv.Context.annotate r |> annot
 
 let remove_dedup r =
-  let rec annot r = map_annot (query r.meta) r
+  let rec annot r = V.Map.annot (query r.meta) r
   and query meta = function
     | Dedup r' when not meta#cardinality_matters -> (annot r').node
     | Dedup r' ->
         debug (fun m -> m "Dedup cardinality matters: %s" meta#why_card_matters);
         Dedup (annot r')
-    | q -> map_query annot pred q
-  and pred p = map_pred annot pred p in
+    | q -> V.Map.query annot pred q
+  and pred p = V.Map.pred annot pred p in
   annot r

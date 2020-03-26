@@ -1,5 +1,5 @@
 open Ast
-open Visitors
+module V = Visitors
 open Abslayout
 module S = Schema
 
@@ -69,10 +69,11 @@ let rec annot r = { r with node = query r.node }
 
 and query = function
   | AOrderedIdx (rk, rv, m) ->
-      DepJoin (ordered_idx (annot rk) (annot rv) (map_ordered_idx annot pred m))
-  | AHashIdx h -> DepJoin (hash_idx (map_hash_idx annot pred h))
+      DepJoin
+        (ordered_idx (annot rk) (annot rv) (V.Map.ordered_idx annot pred m))
+  | AHashIdx h -> DepJoin (hash_idx (V.Map.hash_idx annot pred h))
   | AList (rk, rv) -> DepJoin (list (annot rk) (annot rv))
   | ATuple (ts, Cross) -> cross_tuple (List.map ~f:annot ts)
-  | q -> map_query annot pred q
+  | q -> V.Map.query annot pred q
 
-and pred p = map_pred annot pred p
+and pred p = V.Map.pred annot pred p

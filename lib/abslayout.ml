@@ -1,7 +1,7 @@
 include Ast
 include Comparator.Make (Ast)
 include Abslayout_pp
-include Visitors
+module V = Visitors
 
 module O : Comparable.Infix with type t := Ast.t = Comparable.Make (Ast)
 
@@ -21,7 +21,7 @@ let strip_scope r = match r.node with As (_, r) -> r | _ -> r
 let scopes r =
   let visitor =
     object
-      inherit [_] reduce
+      inherit [_] V.reduce
 
       inherit [_] Util.set_monoid (module String)
 
@@ -38,7 +38,7 @@ let alpha_scopes r =
   in
   let visitor =
     object
-      inherit [_] endo
+      inherit [_] V.endo
 
       method! visit_Name () p n =
         let open Option.Let_syntax in
@@ -190,12 +190,12 @@ let name_of_lexbuf_exn lexbuf =
 
 let name_of_string_exn s = name_of_lexbuf_exn (Lexing.from_string s)
 
-let names r = (new names_visitor)#visit_t () r
+let names r = (new V.names_visitor)#visit_t () r
 
 let subst ctx =
   let v =
     object
-      inherit [_] endo
+      inherit [_] V.endo
 
       method! visit_Name _ this v =
         match Map.find ctx v with Some x -> x | None -> this
@@ -206,7 +206,7 @@ let subst ctx =
 let exists_bare_relations r =
   let visitor =
     object (self : 'a)
-      inherit [_] reduce as super
+      inherit [_] V.reduce as super
 
       inherit [_] Util.disj_monoid
 
@@ -263,7 +263,7 @@ let rec order_of r = order_open order_of r
 let order_of r =
   let r =
     Equiv.annotate r
-    |> map_meta (fun eq ->
+    |> V.map_meta (fun eq ->
            object
              method eq = eq
            end)
@@ -279,7 +279,7 @@ let annotate_key_layouts r =
   in
   let annotator =
     object (self : 'a)
-      inherit [_] map
+      inherit [_] V.map
 
       method! visit_AHashIdx () h =
         let h = self#visit_hash_idx () h in
@@ -303,7 +303,7 @@ let annotate_key_layouts r =
 let strip_unused_as q =
   let visitor =
     object (self)
-      inherit [_] endo
+      inherit [_] V.endo
 
       method skip_as r =
         match r.node with
@@ -336,7 +336,7 @@ let strip_unused_as q =
 let ensure_alias r =
   let visitor =
     object (self)
-      inherit [_] endo
+      inherit [_] V.endo
 
       method! visit_Select () _ (ps, r) =
         Select
@@ -361,7 +361,7 @@ let ensure_alias r =
 let aliases =
   let visitor =
     object (self : 'a)
-      inherit [_] reduce
+      inherit [_] V.reduce
 
       method zero = Map.empty (module Name)
 
@@ -394,7 +394,7 @@ let aliases =
 let relations =
   let visitor =
     object
-      inherit [_] reduce
+      inherit [_] V.reduce
 
       inherit [_] Util.set_monoid (module Relation)
 

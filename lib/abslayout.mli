@@ -93,16 +93,6 @@ val order_of : 'a annot -> (Pred.t * order) list
 
 val validate : t -> unit
 
-class virtual ['a] iter : ['a] Visitors.iter
-
-class virtual ['a] map : ['a] Visitors.map
-
-class virtual ['a] endo : ['a] Visitors.endo
-
-class virtual ['a] reduce : ['a] Visitors.reduce
-
-class virtual ['a] mapreduce : ['a] Visitors.mapreduce
-
 val annotate_key_layouts : t -> t
 
 val strip_unused_as : t -> t

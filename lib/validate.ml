@@ -3,7 +3,7 @@ open Ast
 open Abslayout
 open Collections
 open Schema
-open Visitors
+module V = Visitors
 
 type tuple = Value.t list [@@deriving compare, sexp]
 
@@ -69,7 +69,7 @@ let duplicate_names ns =
   |> Option.iter ~f:(fun n ->
          failwith @@ Fmt.str "Found duplicate names: %a" Name.pp n)
 
-let rec annot r = Iter.annot query meta r
+let rec annot r = V.Iter.annot query meta r
 
 and meta _ = ()
 
@@ -86,7 +86,7 @@ and query q =
           if not ([%compare.equal: Schema.t] s s') then
             failwith
             @@ Fmt.str "Mismatched schemas in concat tuple:@ %a@ %a" pp s pp s')
-  | q -> Iter.query annot pred q );
-  Iter.query annot pred q
+  | q -> V.Iter.query annot pred q );
+  V.Iter.query annot pred q
 
-and pred p = Iter.pred annot pred p
+and pred p = V.Iter.pred annot pred p

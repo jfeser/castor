@@ -1,5 +1,5 @@
 open Ast
-open Visitors
+module V = Visitors
 module Binop = Ast.Binop
 module Unop = Ast.Unop
 
@@ -90,12 +90,12 @@ let to_type_opt p = Schema.to_type_opt p
 
 let pp fmt p = Abslayout_pp.pp_pred fmt p
 
-let names r = (new names_visitor)#visit_pred () r
+let names r = (new V.names_visitor)#visit_pred () r
 
 let normalize p =
   let visitor =
     object (self)
-      inherit [_] endo
+      inherit [_] V.endo
 
       method! visit_As_pred () _ (p, _) = self#visit_pred () p
 
@@ -121,7 +121,7 @@ let rec disjoin = function
 let collect_aggs p =
   let visitor =
     object (self : 'a)
-      inherit [_] mapreduce
+      inherit [_] V.mapreduce
 
       inherit [_] Util.list_monoid
 
@@ -163,7 +163,7 @@ let dedup_pairs = List.dedup_and_sort ~compare:[%compare: Name.t * Name.t]
 let eqs p =
   let visitor =
     object (self : 'a)
-      inherit [_] reduce
+      inherit [_] V.reduce
 
       method zero = []
 
@@ -182,7 +182,7 @@ let eqs p =
 let remove_as p =
   let visitor =
     object
-      inherit [_] map
+      inherit [_] V.map
 
       method! visit_As_pred () (p, _) = p
     end
@@ -192,7 +192,7 @@ let remove_as p =
 let kind p =
   let visitor =
     object
-      inherit [_] reduce
+      inherit [_] V.reduce
 
       inherit [_] Util.disj_monoid
 
@@ -227,7 +227,7 @@ let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
 
 class ['s, 'c] subst_visitor ctx =
   object
-    inherit ['s] endo
+    inherit ['s] V.endo
 
     method! visit_Name (_ : 'c) this v =
       match Map.find ctx v with Some x -> x | None -> this
@@ -240,7 +240,7 @@ let subst ctx p =
 let subst_tree ctx p =
   let v =
     object
-      inherit [_] endo as super
+      inherit [_] V.endo as super
 
       method! visit_pred () this =
         match Map.find ctx this with
@@ -260,7 +260,7 @@ let scoped names scope p =
 let unscoped scope p =
   let v =
     object
-      inherit [_] endo
+      inherit [_] V.endo
 
       method! visit_Name _ this n =
         match Name.rel n with
@@ -281,7 +281,7 @@ let ensure_alias = function
 let to_nnf p =
   let visitor =
     object (self : 'self)
-      inherit [_] map as super
+      inherit [_] V.map as super
 
       method! visit_Unop () op arg =
         if Poly.(op = Not) then
@@ -309,7 +309,7 @@ let simplify p =
   (* Extract common clauses from disjunctions. *)
   let common_visitor =
     object
-      inherit [_] map
+      inherit [_] V.map
 
       method! visit_Binop () op p1 p2 =
         if Poly.(op = Or) then
@@ -334,7 +334,7 @@ let simplify p =
   (* Remove duplicate clauses from conjunctions and disjunctions. *)
   let _dup_visitor =
     object (self : 'self)
-      inherit [_] map as super
+      inherit [_] V.map as super
 
       method! visit_Binop () op p1 p2 =
         if Poly.(op = Or) then

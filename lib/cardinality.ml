@@ -1,5 +1,5 @@
 open Ast
-open Visitors
+module V = Visitors
 module A = Abslayout
 module I = Abs_int
 
@@ -24,7 +24,7 @@ let rec pred_card_matters =
   function
   | Count | Sum _ | Avg _ -> t `Counting_agg
   | p ->
-      Reduce.pred
+      V.Reduce.pred
         (f `No_counting_agg)
         ( || )
         (fun _ -> f `Meta)
@@ -84,10 +84,10 @@ and query c =
       AOrderedIdx
         ( annot (f `In_index_keys) rk,
           annot c rv,
-          map_ordered_idx (annot (f `In_index_keys)) pred o )
-  | q -> map_query (annot c) pred q
+          V.Map.ordered_idx (annot (f `In_index_keys)) pred o )
+  | q -> V.Map.query (annot c) pred q
 
-and pred p = map_pred (annot (Bool_exp.f `In_pred)) pred p
+and pred p = V.Map.pred (annot (Bool_exp.f `In_pred)) pred p
 
 (** Annotate a query with whether changing the cardinality (as long as the same
    set of values is emitted) of its child queries will change its output. For
@@ -99,7 +99,7 @@ let annotate ?(dedup = false) r =
 
 let extend ?dedup r =
   annotate ?dedup r
-  |> map_meta (fun m ->
+  |> V.map_meta (fun m ->
          object
            method cardinality_matters =
              m#cardinality_matters && m#meta#cardinality_matters

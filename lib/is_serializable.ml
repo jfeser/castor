@@ -1,9 +1,10 @@
-open Visitors
+open Ast
+module V = Visitors
 module A = Abslayout
 
 class ['a] stage_iter =
   object (self : 'a)
-    inherit [_] iter
+    inherit [_] V.iter
 
     method! visit_AList (ctx, phase) (rk, rv) =
       self#visit_t (ctx, `Compile) rk;
@@ -33,7 +34,7 @@ let stage ?(params = Set.empty (module Name)) r =
     and single = Set.singleton (module String) in
     let zero = (empty, empty)
     and plus (c, r) (c', r') = (Set.union c c', Set.union r r') in
-    let rec annot stage r = Stage_reduce.annot zero plus query meta stage r
+    let rec annot stage r = V.Stage_reduce.annot zero plus query meta stage r
     and query stage q =
       let this =
         match q with
@@ -44,9 +45,9 @@ let stage ?(params = Set.empty (module Name)) r =
             | `Compile -> (single d_alias, empty)
             | `Run -> (empty, single d_alias) )
         | _ -> zero
-      and rest = Stage_reduce.query zero plus annot pred stage q in
+      and rest = V.Stage_reduce.query zero plus annot pred stage q in
       plus this rest
-    and pred stage p = Stage_reduce.pred zero plus annot pred stage p
+    and pred stage p = V.Stage_reduce.pred zero plus annot pred stage p
     and meta _ _ = zero in
     annot `Run r
   in
@@ -70,8 +71,8 @@ let annotate_stage r =
       end
     in
     { node; meta }
-  and query q = map_query annot pred q
-  and pred p = map_pred annot pred p in
+  and query q = V.Map.query annot pred q
+  and pred p = V.Map.pred annot pred p in
   annot r
 
 let is_static ?(params = Set.empty (module Name)) r =

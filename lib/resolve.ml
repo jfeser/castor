@@ -1,6 +1,6 @@
 open Collections
 open Ast
-open Visitors
+module V = Visitors
 module A = Abslayout
 module P = Pred.Infix
 module N = Name
@@ -8,7 +8,7 @@ module N = Name
 let shadow_check r =
   let relations_visitor =
     object
-      inherit [_] reduce
+      inherit [_] V.reduce
 
       inherit [_] Util.set_monoid (module String)
 
@@ -17,7 +17,7 @@ let shadow_check r =
   in
   let alias_visitor relations =
     object (self)
-      inherit [_] iter
+      inherit [_] V.iter
 
       val aliases = Hash_set.create (module String)
 
@@ -248,7 +248,7 @@ let rec resolve_pred resolve stage ctx =
       let r', ctx = resolve stage ctx r in
       Ctx.incr_refs stage ctx;
       First r'
-  | p -> map_pred resolve_noctx (resolve_pred resolve stage ctx) p
+  | p -> V.Map.pred resolve_noctx (resolve_pred resolve stage ctx) p
 
 let resolve_hash_idx resolve stage outer_ctx h =
   let r, kctx = resolve `Compile outer_ctx h.hi_keys in
@@ -405,8 +405,8 @@ let stage =
       end
     in
     { node = query r.node; meta }
-  and query q = map_query annot pred q
-  and pred p = map_pred annot pred p in
+  and query q = V.Map.query annot pred q
+  and pred p = V.Map.pred annot pred p in
   annot
 
 let refs =
@@ -421,8 +421,8 @@ let refs =
       end
     in
     { node = query r.node; meta }
-  and query q = map_query annot pred q
-  and pred p = map_pred annot pred p in
+  and query q = V.Map.query annot pred q
+  and pred p = V.Map.pred annot pred p in
   annot
 
 (** Annotate names in an algebra expression with types. *)

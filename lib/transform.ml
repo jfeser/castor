@@ -1,7 +1,7 @@
 open Printf
 open Collections
 open Ast
-open Visitors
+module V = Visitors
 open Schema
 module A = Abslayout
 module P = Pred.Infix
@@ -16,7 +16,7 @@ module Config = struct
   end
 end
 
-let rec normal_meta_pred p = map_pred strip_meta normal_meta_pred p
+let rec normal_meta_pred p = V.Map.pred strip_meta normal_meta_pred p
 
 module Make (Config : Config.S) () = struct
   type t = { name : string; f : Ast.t -> Ast.t list } [@@deriving sexp]
@@ -84,7 +84,7 @@ module Make (Config : Config.S) () = struct
   let replace_rel rel new_rel r =
     let visitor =
       object
-        inherit [_] endo
+        inherit [_] V.endo
 
         method! visit_Relation () r' { r_name = rel'; _ } =
           if String.(rel = rel') then new_rel.node else r'
@@ -220,7 +220,7 @@ module Make (Config : Config.S) () = struct
     let wrap_rel r wrapper =
       let visitor =
         object
-          inherit [_] A.endo
+          inherit [_] V.endo
 
           method! visit_Relation () old r' =
             if String.(r = r'.r_name) then wrapper (relation r') else old
@@ -646,7 +646,7 @@ module Make (Config : Config.S) () = struct
     let gen_concat_select_list outer_preds inner_schema =
       let visitor =
         object (self : 'a)
-          inherit [_] A.mapreduce
+          inherit [_] V.mapreduce
 
           inherit [_] Util.list_monoid
 
@@ -739,7 +739,7 @@ module Make (Config : Config.S) () = struct
     let gen_select_list outer_preds inner_rel =
       let visitor =
         object (self : 'a)
-          inherit [_] A.mapreduce
+          inherit [_] V.mapreduce
 
           inherit [_] Util.list_monoid
 
@@ -797,7 +797,7 @@ module Make (Config : Config.S) () = struct
   let predicate_is_valid p s =
     let visitor =
       object
-        inherit [_] A.reduce
+        inherit [_] V.reduce
 
         method zero = true
 
@@ -893,7 +893,7 @@ module Make (Config : Config.S) () = struct
       f =
         hoist_filter_if ~f:(fun (p, _) ->
             (object
-               inherit [_] A.reduce
+               inherit [_] V.reduce
 
                inherit [_] Util.disj_monoid
 
@@ -996,7 +996,7 @@ module Make (Config : Config.S) () = struct
   let eq_preds r =
     let visitor =
       object
-        inherit [_] A.reduce
+        inherit [_] V.reduce
 
         inherit [_] Util.list_monoid
 
@@ -1069,7 +1069,7 @@ module Make (Config : Config.S) () = struct
   let replace_pred r p1 p2 =
     let visitor =
       object
-        inherit [_] A.endo as super
+        inherit [_] V.endo as super
 
         method! visit_pred () p =
           let p = super#visit_pred () p in
@@ -1288,7 +1288,7 @@ module Make (Config : Config.S) () = struct
           (* Mapping from uncorrelated subqueries to unique names. *)
           let query_names =
             (object (self)
-               inherit [_] A.reduce
+               inherit [_] V.reduce
 
                inherit [_] Util.list_monoid
 
@@ -1308,7 +1308,7 @@ module Make (Config : Config.S) () = struct
           in
           let subst_query ~for_:r ~in_:outer_pred new_pred =
             (object
-               inherit [_] A.endo
+               inherit [_] V.endo
 
                method! visit_Exists () p' r' =
                  if [%compare.equal: Ast.t] r r' then new_pred else p'

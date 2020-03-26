@@ -1,5 +1,5 @@
 open Ast
-open Visitors
+module V = Visitors
 open Schema
 module A = Abslayout
 module P = Pred.Infix
@@ -70,7 +70,7 @@ let unscope n =
 
 class to_lhs_visible_depjoin =
   object (self)
-    inherit [_] map as super
+    inherit [_] V.map as super
 
     method! visit_Name () n = Name (unscope n)
 
@@ -179,9 +179,9 @@ let rec to_nice r =
       let d_lhs = to_nice d.d_lhs in
       let d_rhs = to_nice d.d_rhs in
       to_nice_depjoin d_lhs d_rhs
-  | q -> { r with node = map_query to_nice to_nice_pred q }
+  | q -> { r with node = V.Map.query to_nice to_nice_pred q }
 
-and to_nice_pred p = map_pred to_nice to_nice_pred p
+and to_nice_pred p = V.Map.pred to_nice to_nice_pred p
 
 let push_join d { pred = p; r1 = t1; r2 = t2 } =
   let d_attr = attrs d in
@@ -315,11 +315,11 @@ let rec push_depjoin r =
           | _ -> stuck d
         in
         push_depjoin r'
-  | q -> { r with node = map_query push_depjoin push_depjoin_pred q }
+  | q -> { r with node = V.Map.query push_depjoin push_depjoin_pred q }
 
-and push_depjoin_pred p = map_pred push_depjoin push_depjoin_pred p
+and push_depjoin_pred p = V.Map.pred push_depjoin push_depjoin_pred p
 
-let hoist_meta r = map_meta (fun m -> m#meta) r
+let hoist_meta r = V.map_meta (fun m -> m#meta) r
 
 let unnest q =
   let check q' =
@@ -328,7 +328,7 @@ let unnest q =
   in
   let q_visible =
     q |> strip_meta |> Layout_to_depjoin.annot |> to_visible_depjoin
-    |> map_meta (fun _ -> default_meta)
+    |> V.map_meta (fun _ -> default_meta)
   in
   let q_nice = to_nice q_visible in
   check q_nice;
@@ -338,7 +338,7 @@ let unnest q =
     q_pushed |> Cardinality.annotate
     (* We can remove the results of an eliminated depjoin regardless of the
        usual rules around cardinality preservation. *)
-    |> map_meta (fun m ->
+    |> V.map_meta (fun m ->
            object
              method cardinality_matters =
                (not m#meta#was_depjoin) && m#cardinality_matters

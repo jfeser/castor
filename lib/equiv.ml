@@ -1,5 +1,5 @@
 open Ast
-open Visitors
+module V = Visitors
 
 include (val Log.make "castor.equiv")
 
@@ -54,7 +54,7 @@ let eqs_open (eqs : 'a annot -> Set.M(Eq).t) r : Set.M(Eq).t =
       List.map ts ~f:eqs |> List.reduce ~f:( || ) |> Option.value ~default:empty
   | _ -> empty
 
-let annotate r = annotate eqs_open r
+let annotate r = V.annotate eqs_open r
 
 let rec eqs r = eqs_open eqs r.node
 
@@ -109,9 +109,9 @@ module Context = struct
         Join { pred = pred eqs p; r1 = annot eqs r1; r2 = annot eqs r2 }
     | q ->
         let eqs = empty in
-        map_query (annot eqs) (pred eqs) q
+        V.Map.query (annot eqs) (pred eqs) q
 
-  and pred eqs p = map_pred (annot eqs) (pred eqs) p
+  and pred eqs p = V.Map.pred (annot eqs) (pred eqs) p
 
   let annotate r = annot empty r
 end

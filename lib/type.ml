@@ -1,6 +1,6 @@
 open Ast
 open Abslayout_fold
-open Visitors
+module V = Visitors
 open Collections
 module A = Abslayout
 module I = Abs_int
@@ -396,7 +396,7 @@ let annotate conn r =
         |> Error.raise
   in
   let r =
-    map_meta
+    V.map_meta
       (fun _ ->
         object
           val mutable type_ = None
@@ -562,9 +562,9 @@ module Parallel = struct
            end);
       }
 
-    and query q = map_query annot pred q
+    and query q = V.Map.query annot pred q
 
-    and pred p = map_pred annot pred p
+    and pred p = V.Map.pred annot pred p
 
     let type_of ctx r =
       let zero = [] and plus = ( @ ) in
@@ -574,11 +574,11 @@ module Parallel = struct
           | AHashIdx { hi_key_layout = qk; hi_values = qv; _ }
           | AOrderedIdx (_, qv, { oi_key_layout = qk; _ }) ->
               annot (Option.value_exn qk) @ annot qv
-          | _ -> Reduce.annot zero plus query meta r
+          | _ -> V.Reduce.annot zero plus query meta r
         in
         r.meta#builder.build ctx ts |> Option.to_list
       and query (q : (_ annot pred, _ annot) query) =
-        Reduce.query zero plus annot pred q
+        V.Reduce.query zero plus annot pred q
       and meta _ = zero
       and pred (_ : _ annot pred) = zero in
       annot r |> List.hd_exn
@@ -644,9 +644,9 @@ module Parallel = struct
       let rec annot r =
         match r.node with
         | OrderBy { rel; _ } -> annot rel
-        | _ -> map_annot query r
-      and query q = map_query annot pred q
-      and pred p = map_pred annot pred p in
+        | _ -> V.Map.annot query r
+      and query q = V.Map.query annot pred q
+      and pred p = V.Map.pred annot pred p in
       annot r
 
     (** Convert a context to a query that selects all bindings in the context.
@@ -688,7 +688,7 @@ module Parallel = struct
             let qk = Option.value_exn h.hi_key_layout in
             let qv = h.hi_values in
             plus (wrap (annot qv)) (wrap (annot qk))
-        | q -> Reduce.query zero plus annot pred q
+        | q -> V.Reduce.query zero plus annot pred q
       in
       plus this_ctx child_ctxs
     and pred _ = zero in

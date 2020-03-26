@@ -87,77 +87,74 @@ and t = (meta[@opaque]) annot
 
 [@@@warning "+7+17"]
 
-let map_annot map_query { node; meta } = { node = map_query node; meta }
+module Map = struct
+  let annot query { node; meta } = { node = query node; meta }
 
-let map_bound map_pred (p, b) = (map_pred p, b)
+  let bound pred (p, b) = (pred p, b)
 
-let map_pred map_query map_pred = function
-  | ( Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null _ | Count
-    | Row_number ) as p ->
-      p
-  | Unop (o, p) -> Unop (o, map_pred p)
-  | Binop (o, p, p') -> Binop (o, map_pred p, map_pred p')
-  | As_pred (p, s) -> As_pred (map_pred p, s)
-  | Sum p -> Sum (map_pred p)
-  | Avg p -> Avg (map_pred p)
-  | Max p -> Max (map_pred p)
-  | Min p -> Min (map_pred p)
-  | If (p, p', p'') -> If (map_pred p, map_pred p', map_pred p'')
-  | First q -> First (map_query q)
-  | Exists q -> Exists (map_query q)
-  | Substring (p, p', p'') -> Substring (map_pred p, map_pred p', map_pred p'')
+  let pred query pred = function
+    | ( Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null _ | Count
+      | Row_number ) as p ->
+        p
+    | Unop (o, p) -> Unop (o, pred p)
+    | Binop (o, p, p') -> Binop (o, pred p, pred p')
+    | As_pred (p, s) -> As_pred (pred p, s)
+    | Sum p -> Sum (pred p)
+    | Avg p -> Avg (pred p)
+    | Max p -> Max (pred p)
+    | Min p -> Min (pred p)
+    | If (p, p', p'') -> If (pred p, pred p', pred p'')
+    | First q -> First (query q)
+    | Exists q -> Exists (query q)
+    | Substring (p, p', p'') -> Substring (pred p, pred p', pred p'')
 
-let map_ordered_idx map_query map_pred { oi_key_layout; oi_lookup } =
-  {
-    oi_key_layout = Option.map oi_key_layout ~f:map_query;
-    oi_lookup =
-      List.map oi_lookup ~f:(fun (b, b') ->
-          ( Option.map ~f:(map_bound map_pred) b,
-            Option.map ~f:(map_bound map_pred) b' ));
-  }
+  let ordered_idx query pred { oi_key_layout; oi_lookup } =
+    {
+      oi_key_layout = Option.map oi_key_layout ~f:query;
+      oi_lookup =
+        List.map oi_lookup ~f:(fun (b, b') ->
+            (Option.map ~f:(bound pred) b, Option.map ~f:(bound pred) b'));
+    }
 
-let map_hash_idx map_query map_pred
-    ({ hi_keys; hi_values; hi_key_layout; hi_lookup; _ } as h) =
-  {
-    h with
-    hi_keys = map_query hi_keys;
-    hi_values = map_query hi_values;
-    hi_key_layout = Option.map hi_key_layout ~f:map_query;
-    hi_lookup = List.map hi_lookup ~f:map_pred;
-  }
+  let hash_idx query pred
+      ({ hi_keys; hi_values; hi_key_layout; hi_lookup; _ } as h) =
+    {
+      h with
+      hi_keys = query hi_keys;
+      hi_values = query hi_values;
+      hi_key_layout = Option.map hi_key_layout ~f:query;
+      hi_lookup = List.map hi_lookup ~f:pred;
+    }
 
-let map_query map_query map_pred = function
-  | Select (ps, q) -> Select (List.map ~f:map_pred ps, map_query q)
-  | Filter (p, q) -> Filter (map_pred p, map_query q)
-  | Join { pred; r1; r2 } ->
-      Join { pred = map_pred pred; r1 = map_query r1; r2 = map_query r2 }
-  | DepJoin ({ d_lhs; d_rhs; _ } as d) ->
-      DepJoin { d with d_lhs = map_query d_lhs; d_rhs = map_query d_rhs }
-  | GroupBy (ps, ns, q) -> GroupBy (List.map ~f:map_pred ps, ns, map_query q)
-  | OrderBy { key; rel } ->
-      OrderBy
-        {
-          key = List.map key ~f:(fun (p, o) -> (map_pred p, o));
-          rel = map_query rel;
-        }
-  | Dedup q -> Dedup (map_query q)
-  | (Relation _ | AEmpty) as q -> q
-  | Range (p, p') -> Range (map_pred p, map_pred p')
-  | AScalar p -> AScalar (map_pred p)
-  | AList (q, q') -> AList (map_query q, map_query q')
-  | ATuple (qs, t) -> ATuple (List.map qs ~f:map_query, t)
-  | AHashIdx h -> AHashIdx (map_hash_idx map_query map_pred h)
-  | AOrderedIdx (q, q', o) ->
-      AOrderedIdx
-        (map_query q, map_query q', map_ordered_idx map_query map_pred o)
-  | As (s, q) -> As (s, map_query q)
+  let query annot pred = function
+    | Select (ps, q) -> Select (List.map ~f:pred ps, annot q)
+    | Filter (p, q) -> Filter (pred p, annot q)
+    | Join { pred = p; r1; r2 } ->
+        Join { pred = pred p; r1 = annot r1; r2 = annot r2 }
+    | DepJoin ({ d_lhs; d_rhs; _ } as d) ->
+        DepJoin { d with d_lhs = annot d_lhs; d_rhs = annot d_rhs }
+    | GroupBy (ps, ns, q) -> GroupBy (List.map ~f:pred ps, ns, annot q)
+    | OrderBy { key; rel } ->
+        OrderBy
+          { key = List.map key ~f:(fun (p, o) -> (pred p, o)); rel = annot rel }
+    | Dedup q -> Dedup (annot q)
+    | (Relation _ | AEmpty) as q -> q
+    | Range (p, p') -> Range (pred p, pred p')
+    | AScalar p -> AScalar (pred p)
+    | AList (q, q') -> AList (annot q, annot q')
+    | ATuple (qs, t) -> ATuple (List.map qs ~f:annot, t)
+    | AHashIdx h -> AHashIdx (hash_idx annot pred h)
+    | AOrderedIdx (q, q', o) ->
+        AOrderedIdx (annot q, annot q', ordered_idx annot pred o)
+    | As (s, q) -> As (s, annot q)
+end
 
 let rec map_meta f { node; meta } =
   { node = map_meta_query f node; meta = f meta }
 
-and map_meta_query f q = map_query (map_meta f) (map_meta_pred f) q
+and map_meta_query f q = Map.query (map_meta f) (map_meta_pred f) q
 
-and map_meta_pred f p = map_pred (map_meta f) (map_meta_pred f) p
+and map_meta_pred f p = Map.pred (map_meta f) (map_meta_pred f) p
 
 module Reduce = struct
   let rec list zero ( + ) f l =
@@ -248,9 +245,9 @@ module Annotate = struct
     let node = query f r.node in
     { node; meta = f (fun r' -> r'.meta) node }
 
-  and query f q = (map_query (annot f) (pred f)) q
+  and query f q = (Map.query (annot f) (pred f)) q
 
-  and pred f p = map_pred (annot f) (pred f) p
+  and pred f p = Map.pred (annot f) (pred f) p
 end
 
 module Annotate_obj = struct
@@ -258,16 +255,16 @@ module Annotate_obj = struct
     let node = query get set f r.node in
     { node; meta = set r.meta @@ f (fun r' -> get r'.meta) node }
 
-  and query get set f q = (map_query (annot get set f) (pred get set f)) q
+  and query get set f q = (Map.query (annot get set f) (pred get set f)) q
 
-  and pred get set f p = map_pred (annot get set f) (pred get set f) p
+  and pred get set f p = Map.pred (annot get set f) (pred get set f) p
 end
 
 let rec annotate f r =
-  let node = (map_query (annotate f) (annotate_pred f)) r.node in
+  let node = (Map.query (annotate f) (annotate_pred f)) r.node in
   { node; meta = f (fun r' -> r'.meta) node }
 
-and annotate_pred f p = map_pred (annotate f) (annotate_pred f) p
+and annotate_pred f p = Map.pred (annotate f) (annotate_pred f) p
 
 class virtual ['self] endo =
   object (self : 'self)

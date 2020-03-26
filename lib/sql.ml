@@ -2,7 +2,7 @@ open Collections
 open Ast
 open Schema
 open Abslayout
-open Visitors
+module V = Visitors
 module A = Abslayout
 module P = Pred.Infix
 
@@ -142,7 +142,7 @@ let order_by of_ralgebra key r =
 let scoped_names ns p =
   let visitor =
     object (self)
-      inherit [_] reduce
+      inherit [_] V.reduce
 
       inherit [_] Util.set_monoid (module Name)
 

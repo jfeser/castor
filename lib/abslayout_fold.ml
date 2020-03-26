@@ -1,6 +1,6 @@
 open Ast
 open Collections
-open Visitors
+module V = Visitors
 module A = Abslayout
 module Q = Fold_query
 

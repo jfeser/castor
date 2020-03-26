@@ -1,13 +1,13 @@
 module A = Abslayout
 open Collections
 open Ast
-open Visitors
+module V = Visitors
 
 let pred_free_open free p =
   let singleton = Set.singleton (module Name) in
   let visitor =
     object (self : 'a)
-      inherit [_] reduce as super
+      inherit [_] V.reduce as super
 
       inherit [_] Util.set_monoid (module Name)
 
@@ -94,7 +94,7 @@ let rec free r = free_open free r.node
 let pred_free p = pred_free_open free p
 
 let annotate r =
-  Annotate_obj.annot
+  V.Annotate_obj.annot
     (fun m -> m#free)
     (fun m x ->
       object

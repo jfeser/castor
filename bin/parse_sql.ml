@@ -3,6 +3,7 @@ open Castor
 open Ast
 open Abslayout
 module P = Pred.Infix
+module V = Visitors
 
 type castor_binop =
   [ `Add | `And | `Div | `Eq | `Ge | `Gt | `Le | `Lt | `Mod | `Mul | `Or | `Sub ]
@@ -51,7 +52,7 @@ let unsub ps r =
   in
   let visitor =
     object
-      inherit [_] map as super
+      inherit [_] V.map as super
 
       method! visit_pred () p =
         let p = super#visit_pred () p in

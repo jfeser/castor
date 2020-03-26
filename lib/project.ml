@@ -1,6 +1,6 @@
 open Ast
 open Schema
-open Visitors
+module V = Visitors
 open Collections
 module A = Abslayout
 module P = Pred.Infix
@@ -105,15 +105,15 @@ let rec project r =
         else if all_unref d_rhs then dummy ()
         else A.dep_join (project d_lhs) d_alias (project d_rhs)
     | Range (p, p') -> A.range (project_pred p) (project_pred p')
-    | q -> { node = map_query project project_pred q; meta = object end }
+    | q -> { node = V.Map.query project project_pred q; meta = object end }
 
 and project_pred p =
   match p with
   | Exists _ | First _ -> Pred.strip_meta p
-  | p -> map_pred project project_pred p
+  | p -> V.Map.pred project project_pred p
 
 and no_project r =
-  { node = map_query no_project project_pred r.node; meta = object end }
+  { node = V.Map.query no_project project_pred r.node; meta = object end }
 
 let project_once r =
   let r' = Cardinality.annotate r |> project in

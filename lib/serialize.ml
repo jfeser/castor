@@ -1,6 +1,7 @@
+open Ast
 open Collections
 open Abslayout_fold
-open Visitors
+module V = Visitors
 open Header
 
 type meta = < type_ : Type.t ; pos : int option >
@@ -554,7 +555,7 @@ let set_pos (r : meta annot) (pos : int) =
 
 let serialize ?layout_file conn fn l =
   let l =
-    map_meta
+    V.map_meta
       (fun t ->
         object
           method type_ = t#type_
@@ -575,7 +576,7 @@ let serialize ?layout_file conn fn l =
   (* Serialize subquery layouts. *)
   let subquery_visitor =
     object
-      inherit [_] runtime_subquery_map
+      inherit [_] V.runtime_subquery_map
 
       method visit_Subquery r =
         let r = set_pos r serializer#pos in

@@ -1,5 +1,5 @@
 open Ast
-open Visitors
+module V = Visitors
 module A = Abslayout
 
 type 'a t = { views : (string * 'a annot) list; main : 'a annot }
@@ -10,9 +10,9 @@ let subst r ~pat ~with_ =
     if [%compare.equal: _ annot] r pat then (
       success := true;
       with_ )
-    else map_annot query r
-  and query q = map_query annot pred q
-  and pred p = map_pred annot pred p in
+    else V.Map.annot query r
+  and query q = V.Map.query annot pred q
+  and pred p = V.Map.pred annot pred p in
   let r' = annot r in
   if !success then Some r' else None
 
@@ -20,16 +20,16 @@ let to_table r =
   let tbl = Hashtbl.create (module Ast) in
   let rec annot r =
     Hashtbl.update tbl ~f:(function Some ct -> ct + 1 | None -> 1) r;
-    Iter.annot query (fun _ -> ()) r
-  and query q = Iter.query annot pred q
-  and pred p = Iter.pred annot pred p in
+    V.Iter.annot query (fun _ -> ()) r
+  and query q = V.Iter.query annot pred q
+  and pred p = V.Iter.pred annot pred p in
   annot r;
   tbl
 
 let size r =
-  let rec annot r = 1 + Reduce.annot 0 ( + ) query (fun _ -> 0) r
-  and query q = Reduce.query 0 ( + ) annot pred q
-  and pred p = Reduce.pred 0 ( + ) annot pred p in
+  let rec annot r = 1 + V.Reduce.annot 0 ( + ) query (fun _ -> 0) r
+  and query q = V.Reduce.query 0 ( + ) annot pred q
+  and pred p = V.Reduce.pred 0 ( + ) annot pred p in
   annot r
 
 let extract_common r =
