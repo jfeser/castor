@@ -86,6 +86,15 @@ let make_direct_hash keys =
   in
   (hash, "")
 
+let log_count ?(batch = 1000) ~name f =
+  let count = ref 0 in
+  fun args ->
+    let ret = f args in
+    incr count;
+    if !count mod batch = 0 then
+      Log.info (fun m -> m "Run %s %d times." name !count);
+    ret
+
 let make_cmph_hash keys =
   if Seq.length keys = 0 then (Seq.empty, "")
   else
@@ -106,6 +115,8 @@ let make_cmph_hash keys =
           in
           Some (hash_vals, Hash.to_packed hash)
         with Error _ -> None)
+
+let make_cmph_hash = log_count ~name:"make-cmph-hash" make_cmph_hash
 
 let make_ms_hash keys =
   let nkeys = Seq.length keys in
