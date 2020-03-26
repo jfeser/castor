@@ -89,23 +89,23 @@ let make_direct_hash keys =
 let make_cmph_hash keys =
   if Seq.length keys = 0 then (Seq.empty, "")
   else
-    let keys = Seq.map keys ~f:(fun (k, p) -> (serialize_key k, p)) in
-    (* Create a CMPH hash from the keyset. *)
-    let cmph_hash =
-      let open Cmph in
-      let keyset =
-        Seq.map keys ~f:(fun (k, _) -> k) |> Seq.to_list |> KeySet.create
-      in
-      List.find_map_exn [ Config.default_chd; `Bdz; `Bmz; `Chm ] ~f:(fun algo ->
-          try
-            Some
-              ( Config.create ~verbose:true ~seed:0 ~algo keyset
-              |> Hash.of_config )
-          with Error _ -> None)
+    let open Cmph in
+    let keys =
+      Seq.map keys ~f:(fun (k, p) -> (serialize_key k, p)) |> Seq.to_list
     in
-    (* Populate hash table with CMPH hash values. *)
-    ( Seq.map keys ~f:(fun (k, p) -> (Cmph.Hash.hash cmph_hash k, p)),
-      Cmph.Hash.to_packed cmph_hash )
+    (* Create a CMPH hash from the keyset. *)
+    List.find_map_exn [ Config.default_chd; `Bdz; `Bmz; `Chm ] ~f:(fun algo ->
+        try
+          let keyset = List.map keys ~f:(fun (k, _) -> k) |> KeySet.create in
+          Config.with_config ~verbose:true ~seed:0 ~algo keyset @@ fun config ->
+          Hash.with_hash config @@ fun hash ->
+          (* Populate hash table with CMPH hash values. *)
+          let hash_vals =
+            List.map keys ~f:(fun (k, p) -> (Hash.hash hash k, p))
+            |> Seq.of_list
+          in
+          Some (hash_vals, Hash.to_packed hash)
+        with Error _ -> None)
 
 let make_ms_hash keys =
   let nkeys = Seq.length keys in
