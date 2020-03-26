@@ -384,9 +384,9 @@ let%expect_test "subst" =
         ((node
           (Select
            (((Int 1) (Int 2))
-            ((node (Relation ((r_name r) (r_schema ())))) (meta ())))))
-         (meta ())))))
-     (meta ())) |}]
+            ((node (Relation ((r_name r) (r_schema ())))) (meta <opaque>)))))
+         (meta <opaque>)))))
+     (meta <opaque>)) |}]
 
 let%expect_test "pred_names" =
   let p =

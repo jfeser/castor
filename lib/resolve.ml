@@ -362,7 +362,7 @@ let resolve_open resolve stage outer_ctx =
   | AOrderedIdx o -> resolve_ordered_idx resolve stage outer_ctx o
   | AHashIdx h -> resolve_hash_idx resolve stage outer_ctx h
 
-exception Inner_resolve_error of unit annot * exn
+exception Inner_resolve_error of < > annot * exn
 
 exception Resolve_error of exn [@@deriving sexp]
 
@@ -370,7 +370,7 @@ let rec resolve stage outer_ctx r =
   let node, ctx =
     try resolve_open resolve stage outer_ctx r.node with
     | Inner_resolve_error _ as exn -> raise exn
-    | exn -> raise (Inner_resolve_error (A.strip_meta r, exn))
+    | exn -> raise (Inner_resolve_error (strip_meta r, exn))
   in
   let ctx = Ctx.unscoped ctx in
   let meta =

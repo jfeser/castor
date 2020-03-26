@@ -1,8 +1,7 @@
 %{
-
-    module A = Ast
-    open Parser_utils
-         %}
+module A = Ast
+open Parser_utils
+%}
 
 %token <string> ID
 %token <int> INT
@@ -24,20 +23,16 @@ LCURLY RCURLY QUERY
 %start <Name.t> name_eof
 %start <Ast.t Ast.pred> value_eof
 %start <Ast.Param.t> param_eof
-%start <unit Ast.Query.t> query_eof
+%start <Ast.meta Ast.Query.t> query_eof
 %%
 
-ralgebra_eof:
-  | x = ralgebra; EOF { x }
+ralgebra_eof: x = ralgebra; EOF { x }
 
-expr_eof:
-  | x = expr; EOF { x }
+expr_eof: x = expr; EOF { x }
 
-name_eof:
-  | x = name; EOF { x }
+name_eof: x = name; EOF { x }
 
-value_eof:
-  | x = value; EOF { x }
+value_eof: x = value; EOF { x }
 
 param_eof:
   | x = param; EOF { x }
@@ -61,14 +56,12 @@ primtype:
   | x = PRIMTYPE { x }
   | DATEKW { Prim_type.DateT {nullable=false} }
 
-bracket_list(X):
-  | LSBRAC; l = separated_list(COMMA, X); RSBRAC { l }
+bracket_list(X): LSBRAC; l = separated_list(COMMA, X); RSBRAC { l }
 
 separated_nonunit_list(sep, X):
   | x = X; sep; xs = separated_nonempty_list(sep, X) { x::xs }
 
-parens(X):
-  | LPAREN; x = X; RPAREN { x }
+parens(X): LPAREN; x = X; RPAREN { x }
 
 key:
   | p = expr; { [p] }
@@ -88,10 +81,8 @@ ub_op: LT { `Open } | LE { `Closed }
 lb_op: GT { `Open } | GE { `Closed }
 
 ralgebra_subquery:
-  | SELECT; LPAREN;
-x = bracket_list(expr); COMMA;
-r = ralgebra;
-RPAREN { A.Select (x, r) |> node $symbolstartpos $endpos }
+  | SELECT; LPAREN; x = bracket_list(expr); COMMA; r = ralgebra; RPAREN
+    { A.Select (x, r) |> node $symbolstartpos $endpos }
 
   | GROUPBY; LPAREN;
 x = bracket_list(expr); COMMA;
@@ -99,23 +90,17 @@ k = bracket_list(name); COMMA;
 r = ralgebra;
 RPAREN { A.GroupBy (x, k, r) |> node $symbolstartpos $endpos }
 
-  | FILTER; LPAREN;
-x = expr; COMMA;
-r = ralgebra;
-RPAREN { A.Filter (x, r) |> node $symbolstartpos $endpos }
+  | FILTER; LPAREN; x = expr; COMMA; r = ralgebra; RPAREN
+    { A.Filter (x, r) |> node $symbolstartpos $endpos }
 
   | DEPJOIN; LPAREN; d_lhs = ralgebra; AS; d_alias = ID; COMMA; d_rhs = ralgebra; RPAREN
     { A.DepJoin {d_lhs; d_alias; d_rhs} |> node $symbolstartpos $endpos }
 
-  | JOIN; LPAREN;
-p = expr; COMMA;
-r1 = ralgebra; COMMA;
-r2 = ralgebra;
-RPAREN { A.Join({pred = p; r1; r2}) |> node $symbolstartpos $endpos }
+  | JOIN; LPAREN; p = expr; COMMA; r1 = ralgebra; COMMA; r2 = ralgebra; RPAREN
+    { A.Join({pred = p; r1; r2}) |> node $symbolstartpos $endpos }
 
-  | DEDUP; LPAREN;
-r = ralgebra;
-RPAREN { A.Dedup r |> node $symbolstartpos $endpos }
+  | DEDUP; LPAREN; r = ralgebra; RPAREN
+    { A.Dedup r |> node $symbolstartpos $endpos }
 
   | ORDERBY; LPAREN;
 key = bracket_list(pair(expr, option(ORDER))); COMMA;
@@ -129,15 +114,11 @@ RPAREN { A.OrderBy { key = List.map ~f:(fun (e, o) -> match o with
 
   | ASCALAR; e = parens(expr) { A.AScalar e |> node $symbolstartpos $endpos }
 
-  | ALIST; LPAREN;
-r = ralgebra; COMMA;
-x = ralgebra;
-RPAREN { A.AList (r, x) |> node $symbolstartpos $endpos }
+  | ALIST; LPAREN; r = ralgebra; COMMA; x = ralgebra; RPAREN
+    { A.AList (r, x) |> node $symbolstartpos $endpos }
 
-  | ATUPLE; LPAREN;
-ls = bracket_list(ralgebra); COMMA;
-k = KIND;
-RPAREN { A.ATuple (ls, k) |> node $symbolstartpos $endpos }
+  | ATUPLE; LPAREN; ls = bracket_list(ralgebra); COMMA; k = KIND; RPAREN
+    { A.ATuple (ls, k) |> node $symbolstartpos $endpos }
 
   | AHASHIDX; LPAREN;
 r = ralgebra; AS; s = ID; COMMA;

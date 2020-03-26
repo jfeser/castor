@@ -76,7 +76,7 @@ and 'm annot = 'm Ast.annot = {
   meta : 'm;
 }
 
-and t = (Meta.t[@opaque]) annot
+and t = (meta[@opaque]) annot
 [@@deriving
   visitors { variety = "endo"; name = "base_endo"; irregular = true },
     visitors { variety = "map"; name = "base_map"; irregular = true },
@@ -253,6 +253,16 @@ module Annotate = struct
   and pred f p = map_pred (annot f) (pred f) p
 end
 
+module Annotate_obj = struct
+  let rec annot get set f r =
+    let node = query get set f r.node in
+    { node; meta = set r.meta @@ f (fun r' -> get r'.meta) node }
+
+  and query get set f q = (map_query (annot get set f) (pred get set f)) q
+
+  and pred get set f p = map_pred (annot get set f) (pred get set f) p
+end
+
 let rec annotate f r =
   let node = (map_query (annotate f) (annotate_pred f)) r.node in
   { node; meta = f (fun r' -> r'.meta) node }
@@ -330,11 +340,11 @@ class ['a] names_visitor =
       | _ -> super#visit_pred () p
   end
 
-class virtual runtime_subquery_visitor =
+class virtual ['m] runtime_subquery_visitor =
   object (self : 'a)
     inherit [_] iter as super
 
-    method virtual visit_Subquery : t -> unit
+    method virtual visit_Subquery : 'm annot -> unit
 
     (* Don't annotate subqueries that run at compile time. *)
     method! visit_AScalar () _ = ()

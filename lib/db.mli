@@ -60,5 +60,5 @@ module Async : sig
 
   val exec_sql : (Prim_type.t list * string) exec
 
-  val exec : 'a Ast.annot exec
+  val exec : < .. > Ast.annot exec
 end

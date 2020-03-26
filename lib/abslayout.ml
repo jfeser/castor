@@ -20,8 +20,6 @@ let scope_exn r =
 
 let strip_scope r = match r.node with As (_, r) -> r | _ -> r
 
-let strip_meta r = map_meta (fun _ -> ()) r
-
 let scopes r =
   let visitor =
     object
@@ -58,7 +56,7 @@ let alpha_scopes r =
   in
   visitor#visit_t () r
 
-let wrap x = { node = x; meta = () }
+let wrap x = { node = x; meta = object end }
 
 let select a b =
   (* Check that the names in the select list are unique. *)
@@ -284,7 +282,8 @@ let annotate_orders r =
       | As _ | Range _ -> []
     in
     M.set_m r order_k
-      (List.map order ~f:(fun (p, o) -> (map_meta_pred (fun _ -> ()) p, o)));
+      (List.map order ~f:(fun (p, o) ->
+           (map_meta_pred (fun _ -> object end) p, o)));
     order
   in
   let r =

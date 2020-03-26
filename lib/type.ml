@@ -361,9 +361,8 @@ let type_of ?timeout conn r =
   type_
 
 let annotate conn r =
-  let type_ = Univ_map.Key.create ~name:"type" [%sexp_of: t] in
   let rec annot r t =
-    Meta.(set_m r type_ t);
+    r.meta#set_type t;
     match (r.node, t) with
     | ( (AScalar _ | Range _),
         (IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | NullT) ) ->
@@ -396,27 +395,31 @@ let annotate conn r =
         Error.create "Unexpected type." (r, t) [%sexp_of: _ annot * t]
         |> Error.raise
   in
-  let r = map_meta (fun _ -> Meta.empty ()) r in
+  let r =
+    map_meta
+      (fun _ ->
+        object
+          val mutable type_ = None
+
+          method type_ = Option.value_exn type_
+
+          method set_type t = type_ <- Some t
+        end)
+      r
+  in
   annot r (type_of conn r);
   let visitor =
     object
-      inherit Visitors.runtime_subquery_visitor
+      inherit [_] Visitors.runtime_subquery_visitor
 
       method visit_Subquery r = annot r (type_of conn r)
     end
   in
   visitor#visit_t () r;
-  map_meta
-    (fun m ->
-      object
-        method type_ = Univ_map.find_exn !m type_
-      end)
-    r
+  (r :> < type_ : t > annot)
 
 module Parallel = struct
   module Type_builder = struct
-    type type_ = t
-
     type agg = Simple of Pred.t | Subquery of (Ast.t * Pred.t list)
 
     type nonrec t = {
@@ -443,11 +446,8 @@ module Parallel = struct
         @@ IntT
              {
                range =
-                 ( try
-                     I.Interval
-                       ( Value.to_int @@ eval ctx min,
-                         Value.to_int @@ eval ctx max )
-                   with _ -> I.Top );
+                 I.Interval
+                   (Value.to_int @@ eval ctx min, Value.to_int @@ eval ctx max);
                nullable = false (* TODO *);
              }
       in
@@ -467,11 +467,9 @@ module Parallel = struct
         @@ DateT
              {
                range =
-                 ( try
-                     I.Interval
-                       ( Date.to_int @@ Value.to_date @@ eval ctx min,
-                         Date.to_int @@ Value.to_date @@ eval ctx max )
-                   with _ -> I.top );
+                 I.Interval
+                   ( Date.to_int @@ Value.to_date @@ eval ctx min,
+                     Date.to_int @@ Value.to_date @@ eval ctx max );
                nullable = false (* TODO *);
              }
       in
@@ -515,9 +513,7 @@ module Parallel = struct
       let eval ctx v = eval ctx v |> Value.to_int in
       {
         aggs = [ Subquery (counts, [ min; max ]) ];
-        build =
-          (fun ctx ts ->
-            f ts (try I.Interval (eval ctx min, eval ctx max) with _ -> I.top));
+        build = (fun ctx ts -> f ts (I.Interval (eval ctx min, eval ctx max)));
       }
 
     let list_t q =
@@ -556,15 +552,23 @@ module Parallel = struct
       | ATuple (_, kind) -> tuple_t kind
       | _ -> no_type_t
 
-    let rec annot r = { node = query r.node; meta = of_ralgebra r.node }
+    let rec annot r =
+      {
+        node = query r.node;
+        meta =
+          (let builder = of_ralgebra r.node in
+           object
+             method builder = builder
+           end);
+      }
 
     and query q = map_query annot pred q
 
     and pred p = map_pred annot pred p
 
-    let type_of ctx r : type_ =
+    let type_of ctx r =
       let zero = [] and plus = ( @ ) in
-      let rec annot (r : t annot) : type_ list =
+      let rec annot r =
         let ts =
           match r.node with
           | AHashIdx { hi_key_layout = qk; hi_values = qv; _ }
@@ -572,11 +576,11 @@ module Parallel = struct
               annot (Option.value_exn qk) @ annot qv
           | _ -> Reduce.annot zero plus query meta r
         in
-        r.meta.build ctx ts |> Option.to_list
-      and query (q : (t annot pred, t annot) query) : type_ list =
+        r.meta#builder.build ctx ts |> Option.to_list
+      and query (q : (_ annot pred, _ annot) query) =
         Reduce.query zero plus annot pred q
       and meta _ = zero
-      and pred (_ : t annot pred) : type_ list = zero in
+      and pred (_ : _ annot pred) = zero in
       annot r |> List.hd_exn
   end
 
@@ -590,7 +594,7 @@ module Parallel = struct
 
   module Context = struct
     module T = struct
-      type t = (unit annot * string) list [@@deriving compare, sexp]
+      type t = (Ast.t * string) list [@@deriving compare, sexp]
     end
 
     include T
@@ -664,10 +668,9 @@ module Parallel = struct
     let split_scope r =
       match r.node with As (s, r') -> (r', s) | _ -> failwith "Expected as"
     in
-    let strip q = map_meta (fun _ -> ()) q in
     let empty q = [ ([], q) ]
     and wrap (r, s) =
-      List.map ~f:(fun (ctxs, q) -> ((strip r, s) :: ctxs, q))
+      List.map ~f:(fun (ctxs, q) -> ((strip_meta r, s) :: ctxs, q))
     in
 
     let plus = ( @ ) and zero = [] in
@@ -700,6 +703,7 @@ module Parallel = struct
     let queries =
       contexts r |> Map.to_alist
       |> List.concat_map ~f:(fun (ctx, builders) ->
+             let builders = List.map ~f:(fun b -> b#builder) builders in
              Context.to_ralgebra ctx builders)
     in
 

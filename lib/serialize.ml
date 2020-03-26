@@ -149,7 +149,6 @@ let make_ms_hash keys =
 let make_hash type_ keys =
   let nkeys = Seq.length keys in
   Log.debug (fun m -> m "Generating hash for %d keys." nkeys);
-  Seq.iter ~f:(fun (k, _) -> Log.debug (fun m -> m "%s" k)) keys;
   let hash, body =
     match Type.hash_kind_exn type_ with
     | `Direct -> make_direct_hash keys

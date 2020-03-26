@@ -14,24 +14,6 @@ type lexpos = Lexing.position = {
 
 val empty : unit -> t
 
-(* val defs : (Name.t option * Ast.t Ast.pred) list key
- * 
- * val align : int key
- * 
- * val start_pos : lexpos key
- * 
- * val end_pos : lexpos key
- * 
- * val free : Set.M(Name).t key
- * 
- * val eq : (Name.t * Name.t) list key
- * 
- * val order : (Ast.t Ast.pred * Ast.order) list key
- * 
- * val type_ : Type.t key
- * 
- * val refcnt : int Map.M(Name).t key *)
-
 val find : t annot -> 'a key -> 'a option
 
 val find_exn : t annot -> 'a key -> 'a

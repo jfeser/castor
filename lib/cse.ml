@@ -34,7 +34,7 @@ let size r =
 
 let extract_common r =
   let common =
-    A.strip_meta r |> to_table |> Hashtbl.to_alist
+    strip_meta r |> to_table |> Hashtbl.to_alist
     |> List.filter ~f:(fun (r, ct) -> ct > 1 && size r > 1)
     |> List.map ~f:(fun (r, _) -> r)
     |> List.sort ~compare:(fun r r' ->

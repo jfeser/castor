@@ -16,7 +16,7 @@ module Config = struct
   end
 end
 
-let rec normal_meta_pred p = map_pred A.strip_meta normal_meta_pred p
+let rec normal_meta_pred p = map_pred strip_meta normal_meta_pred p
 
 module Make (Config : Config.S) () = struct
   type t = { name : string; f : Ast.t -> Ast.t list } [@@deriving sexp]
@@ -1274,8 +1274,9 @@ module Make (Config : Config.S) () = struct
 
   let is_correlated subquery input_schema =
     not
-      (Set.is_empty
-         (Set.inter subquery.meta (Set.of_list (module Name) input_schema)))
+      ( Set.is_empty
+      @@ Set.inter subquery.meta#free (Set.of_list (module Name) input_schema)
+      )
 
   let tf_elim_subquery _ =
     let open A in

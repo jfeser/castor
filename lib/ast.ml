@@ -1,4 +1,4 @@
-type meta = unit [@@deriving sexp_of]
+type meta = < >
 
 module Binop = struct
   type t =
@@ -101,9 +101,8 @@ type 'm annot = { node : ('m annot pred, 'm annot) query; meta : 'm }
 [@@deriving compare, hash, sexp]
 
 module T = struct
-  type t = (meta[@compare.ignore]) annot [@@deriving compare, hash, sexp_of]
-
-  let t_of_sexp _ = assert false
+  type t = (meta[@compare.ignore] [@sexp.opaque]) annot
+  [@@deriving compare, hash, sexp]
 end
 
 include T
@@ -121,3 +120,5 @@ module Query = struct
   }
   [@@deriving compare, hash, sexp_of]
 end
+
+let strip_meta r = (r :> t)

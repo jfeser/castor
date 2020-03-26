@@ -59,12 +59,13 @@ val hash_idx : ?key_layout:t -> t -> string -> t -> Pred.t list -> t
 
 val hash_idx' : (Pred.t, t) hash_idx -> t
 
-val h_key_layout : ('a annot pred, 'a annot) hash_idx -> unit annot
+val h_key_layout : ((< .. > as 'a) annot pred, 'a annot) hash_idx -> < > annot
 
 val ordered_idx : t -> string -> t -> (Pred.t, t) ordered_idx -> t
 
 val o_key_layout :
-  'a annot * 'a annot * ('a annot pred, 'a annot) ordered_idx -> unit annot
+  (< .. > as 'a) annot * 'a annot * ('a annot pred, 'a annot) ordered_idx ->
+  < > annot
 
 val as_ : string -> t -> t
 
@@ -91,8 +92,6 @@ val select_kind : 'a annot pred list -> [ `Agg | `Scalar ]
 val order_of : 'a annot -> (Pred.t * order) list
 
 val validate : t -> unit
-
-val strip_meta : 'a annot -> t
 
 class virtual ['a] iter : ['a] Visitors.iter
 

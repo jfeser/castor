@@ -105,15 +105,15 @@ let rec project r =
         else if all_unref d_rhs then dummy ()
         else A.dep_join (project d_lhs) d_alias (project d_rhs)
     | Range (p, p') -> A.range (project_pred p) (project_pred p')
-    | q -> { node = map_query project project_pred q; meta = () }
+    | q -> { node = map_query project project_pred q; meta = object end }
 
 and project_pred p =
   match p with
-  | Exists _ | First _ -> map_meta_pred (fun _ -> ()) p
+  | Exists _ | First _ -> map_meta_pred (fun _ -> object end) p
   | p -> map_pred project project_pred p
 
 and no_project r =
-  { node = map_query no_project project_pred r.node; meta = () }
+  { node = map_query no_project project_pred r.node; meta = object end }
 
 let project_once r =
   let r' = Cardinality.annotate r |> project in
@@ -128,4 +128,4 @@ let project ?(params = Set.empty (module Name)) ?(max_iters = 10) r =
       let r' = Resolve.resolve r ~params |> project_once in
       if [%compare.equal: _ annot] r r' then r' else loop (ct + 1) r'
   in
-  loop 0 (A.strip_meta r)
+  loop 0 (strip_meta r)

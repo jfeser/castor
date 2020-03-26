@@ -39,7 +39,7 @@ let annotate conn q =
   }
 
 let of_many qs =
-  let qs = List.map ~f:(fun q -> { q with body = A.strip_meta q.body }) qs in
+  let qs = List.map ~f:(fun q -> { q with body = strip_meta q.body }) qs in
   let queries =
     List.map qs ~f:(fun q ->
         let args, ctx =

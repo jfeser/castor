@@ -85,10 +85,10 @@ val oi_ptr_size : t -> ordered_idx -> int
 
 val least_general_of_primtype : Prim_type.t -> t
 
-val type_of : ?timeout:float -> Db.t -> 'a annot -> t
+val type_of : ?timeout:float -> Db.t -> < .. > annot -> t
 
 val annotate : Db.t -> 'a annot -> < type_ : t > annot
 
 module Parallel : sig
-  val type_of : ?timeout:float -> Db.t -> unit annot -> t
+  val type_of : ?timeout:float -> Db.t -> < > annot -> t
 end

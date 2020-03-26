@@ -93,4 +93,13 @@ let rec free r = free_open free r.node
 
 let pred_free p = pred_free_open free p
 
-let annotate r = annotate free_open r
+let annotate r =
+  Annotate_obj.annot
+    (fun m -> m#free)
+    (fun m x ->
+      object
+        method meta = m
+
+        method free = x
+      end)
+    free_open r

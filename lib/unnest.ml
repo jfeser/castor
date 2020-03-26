@@ -327,7 +327,7 @@ let unnest q =
     Validate.annot q'
   in
   let q_visible =
-    q |> A.strip_meta |> Layout_to_depjoin.annot |> to_visible_depjoin
+    q |> strip_meta |> Layout_to_depjoin.annot |> to_visible_depjoin
     |> map_meta (fun _ -> default_meta)
   in
   let q_nice = to_nice q_visible in

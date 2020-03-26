@@ -7,7 +7,7 @@ module P = Pred.Infix
 
 [@@@warning "-17"]
 
-type scalar = unit annot pred [@@deriving sexp_of]
+type scalar = (< >[@opaque]) annot pred [@@deriving sexp_of]
 
 type ('q, 'm) node =
   | Empty
@@ -149,7 +149,7 @@ let to_scalars rs =
       match t.Ast.node with AScalar p -> Some p | _ -> None)
   |> Option.all
 
-let strip_meta_pred p = map_meta_pred (fun _ -> ()) p
+let strip_meta_pred p = map_meta_pred (fun _ -> object end) p
 
 let of_list of_ralgebra q (q1, q2) =
   let scope = A.scope_exn q1 in
@@ -177,7 +177,7 @@ let of_ordered_idx of_ralgebra q (q1, q2, _) =
   for_ q (q1, scope, of_ralgebra q2, true)
 
 (** Convert a query to the simplified fold query AST. *)
-let rec of_ralgebra : 'a. 'a annot -> (unit annot, 'a annot) t =
+let rec of_ralgebra : 'a. (< .. > as 'a) annot -> (< > annot, 'a annot) t =
  fun q ->
   match q.Ast.node with
   | AList x -> of_list of_ralgebra q x

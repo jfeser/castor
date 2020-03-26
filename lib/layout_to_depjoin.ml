@@ -1,8 +1,9 @@
+open Ast
 open Visitors
 open Abslayout
 module S = Schema
 
-let strip_meta_pred q = map_meta_pred (fun _ -> ()) q
+let strip_meta_pred q = map_meta_pred (fun _ -> object end) q
 
 let list rk rv =
   let scope = scope_exn rk in
