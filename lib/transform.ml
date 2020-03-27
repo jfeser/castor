@@ -3,6 +3,7 @@ open Ast
 open Abslayout
 open Schema
 module R = Resolve
+module V = Visitors
 
 module Config = struct
   module type S = sig
@@ -86,7 +87,7 @@ module Make (Config : Config.S) = struct
     let f r =
       let visitor =
         object (self : 'a)
-          inherit [_] map
+          inherit [_] V.map
 
           method visit_subquery r =
             Option.value_exn ~message:"Transforming subquery failed."
@@ -341,7 +342,7 @@ let optimize (module C : Config.S) r =
   let apply_to_subqueries r =
     let visitor =
       object (self : 'a)
-        inherit [_] map
+        inherit [_] V.map
 
         method visit_subquery r =
           let module C = struct
@@ -358,10 +359,11 @@ let optimize (module C : Config.S) r =
 
         method! visit_First () r = First (self#visit_subquery r)
 
-        method! visit_AList () (rk, rv) = AList (rk, self#visit_t () rv)
+        method! visit_AList () l =
+          AList { l with l_values = self#visit_t () l.l_values }
 
-        method! visit_AOrderedIdx () (rk, rv, m) =
-          AOrderedIdx (rk, self#visit_t () rv, m)
+        method! visit_AOrderedIdx () o =
+          AOrderedIdx { o with oi_values = self#visit_t () o.oi_values }
 
         method! visit_AHashIdx () h =
           AHashIdx { h with hi_values = self#visit_t () h.hi_values }

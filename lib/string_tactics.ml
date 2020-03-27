@@ -1,6 +1,7 @@
 open Ast
 open Abslayout
 open Collections
+module V = Visitors
 module A = Abslayout
 module P = Pred.Infix
 
@@ -29,7 +30,7 @@ module Make (C : Config.S) = struct
   let subst_rel ~key ~data r =
     let visitor =
       object
-        inherit [_] map
+        inherit [_] V.map
 
         method! visit_Relation () rel =
           if [%compare.equal: Relation.t] key rel then data.node
@@ -41,7 +42,7 @@ module Make (C : Config.S) = struct
   let dictionary_encode _ r =
     let preds_v =
       object
-        inherit [_] reduce
+        inherit [_] V.reduce
 
         inherit [_] Util.list_monoid
 

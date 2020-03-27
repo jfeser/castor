@@ -1,5 +1,6 @@
-open Abslayout
+open Ast
 open Collections
+module A = Abslayout
 
 module Config = struct
   module type S = sig
@@ -20,9 +21,9 @@ module Make (Config : Config.S) = struct
       let scope = Fresh.name Global.fresh "s%d" in
       let scalars =
         Schema.schema r |> Schema.scoped scope
-        |> List.map ~f:(fun n -> scalar (Name n))
+        |> List.map ~f:(fun n -> A.scalar (Name n))
       in
-      Some (list (strip_meta r) scope (tuple scalars Cross))
+      Some (A.list (strip_meta r) scope (A.tuple scalars Cross))
     else None
 
   let row_store =

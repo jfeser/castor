@@ -1,3 +1,4 @@
+open Ast
 open Abslayout_load
 open Type
 module I = Abs_int
@@ -37,7 +38,7 @@ module Make (Config : Config.S) = struct
         info (fun m -> m "Computing cost of:@, %a." Abslayout.pp r);
         let type_ =
           load_layout ~params cost_conn r
-          |> Abslayout.strip_meta
+          |> strip_meta
           |> Parallel.type_of ?timeout:cost_timeout cost_conn
         in
         let c = read type_ in

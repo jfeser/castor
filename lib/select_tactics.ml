@@ -4,6 +4,7 @@ open Collections
 open Schema
 module A = Abslayout
 module P = Pred.Infix
+module V = Visitors
 
 module Config = struct
   module type S = sig
@@ -22,7 +23,7 @@ module Make (C : Config.S) = struct
     let%bind ps, r' = to_select r in
     let%bind () = match select_kind ps with `Scalar -> Some () | _ -> None in
     match r'.node with
-    | AList (rk, rv) -> return @@ list' (rk, select ps rv)
+    | AList x -> return @@ list' { x with l_values = select ps x.l_values }
     | DepJoin d -> return @@ dep_join' { d with d_rhs = select ps d.d_rhs }
     | _ -> None
 
@@ -47,7 +48,7 @@ module Make (C : Config.S) = struct
     in
     let visitor =
       object
-        inherit [_] map
+        inherit [_] V.map
 
         method! visit_Sum () p = Sum (add_agg (Sum p))
 
@@ -109,7 +110,9 @@ module Make (C : Config.S) = struct
                 | _ -> true)
             in
             return (o, i)
-        | AOrderedIdx (_, rv, _) | AList (_, rv) | ATuple (rv :: _, Concat) ->
+        | AOrderedIdx { oi_values = rv }
+        | AList { l_values = rv }
+        | ATuple (rv :: _, Concat) ->
             return @@ gen_concat_select_list ps (schema rv)
         | _ -> None
       and mk_collection =
@@ -129,12 +132,13 @@ module Make (C : Config.S) = struct
             let rv = extend rk rv scope in
             return @@ fun mk ->
             hash_idx' { h with hi_values = mk (schema rk) rv }
-        | AOrderedIdx (rk, rv, m) ->
-            let scope = scope_exn rk in
-            let rv = extend rk rv scope in
-            return @@ fun mk -> ordered_idx rk scope (mk (schema rk) rv) m
-        | AList (rk, rv) ->
-            return @@ fun mk -> list rk (scope_exn rk) (mk [] rv)
+        | AOrderedIdx o ->
+            let rk = o.oi_keys
+            and rv = extend o.oi_keys o.oi_values o.oi_scope in
+            return @@ fun mk ->
+            ordered_idx' { o with oi_values = mk (schema rk) rv }
+        | AList l ->
+            return @@ fun mk -> list' { l with l_values = mk [] l.l_values }
         | ATuple (r' :: rs', Concat) ->
             return @@ fun mk -> tuple (List.map (r' :: rs') ~f:(mk [])) Concat
         | _ -> None

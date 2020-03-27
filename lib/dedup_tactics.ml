@@ -33,14 +33,15 @@ module Make (C : Config.S) = struct
     | Dedup r' -> Some (dedup r')
     | AScalar _ | AEmpty -> Some r
     | AHashIdx h -> Some (hash_idx' { h with hi_values = dedup h.hi_values })
-    | AList (rk, rv) ->
-        let scope = Abslayout.scope_exn rk in
-        let rk = Abslayout.strip_scope rk in
-        Some (list (dedup rk) scope (dedup rv))
-    | AOrderedIdx (rk, rv, o) ->
-        let scope = Abslayout.scope_exn rk in
-        let rk = Abslayout.strip_scope rk in
-        Some (ordered_idx (dedup rk) scope (dedup rv) o)
+    | AList l ->
+        return
+        @@ list' { l with l_keys = dedup l.l_keys; l_values = dedup l.l_values }
+    | AOrderedIdx o ->
+        (* TODO: This transform isn't correct unless the right hand sides are
+           non-overlapping. *)
+        return
+        @@ ordered_idx'
+             { o with oi_keys = dedup o.oi_keys; oi_values = dedup o.oi_values }
     | ATuple (ts, Cross) -> Some (tuple (List.map ts ~f:dedup) Cross)
     | Select _ -> None
     | _ -> None

@@ -2,6 +2,7 @@ open Ast
 open Schema
 module P = Pred.Infix
 module A = Abslayout
+module V = Visitors
 
 module Config = struct
   module type S = sig
@@ -62,7 +63,7 @@ module Make (C : Config.S) = struct
   let cost =
     let visitor =
       object (self : 'a)
-        inherit [_] A.reduce
+        inherit [_] V.reduce
 
         inherit [_] Util.float_sum_monoid
 
@@ -96,16 +97,15 @@ module Make (C : Config.S) = struct
                 ~f:(fun x q -> Float.max x (self#visit_t ctx q))
                 ts
 
-        method! visit_AList ctx (lk, lv) =
-          let lk, s = (A.strip_scope lk, A.scope_exn lk) in
-          self#ntuples ctx lk *. self#visit_t (ctx @ [ (lk, s) ]) lv
+        method! visit_AList ctx l =
+          self#ntuples ctx l.l_keys
+          *. self#visit_t (ctx @ [ (l.l_keys, l.l_scope) ]) l.l_values
 
         method! visit_AHashIdx ctx h =
           self#visit_t (ctx @ [ (h.hi_keys, h.hi_scope) ]) h.hi_values
 
-        method! visit_AOrderedIdx ctx (lk, lv, _) =
-          let lk, s = (A.strip_scope lk, A.scope_exn lk) in
-          self#visit_t (ctx @ [ (lk, s) ]) lv
+        method! visit_AOrderedIdx ctx o =
+          self#visit_t (ctx @ [ (o.oi_keys, o.oi_scope) ]) o.oi_values
 
         method! visit_Join ctx j =
           self#visit_t ctx j.r1 *. self#visit_t ctx j.r2

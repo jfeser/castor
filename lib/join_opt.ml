@@ -4,6 +4,7 @@ open Collections
 open Ast
 module A = Abslayout
 module P = Pred.Infix
+module V = Visitors
 
 include (val Log.make ~level:(Some Info) "castor-opt.join-opt")
 
@@ -326,10 +327,10 @@ module Make (Config : Config.S) = struct
     (* Remove parameters from the join nest where possible. *)
     let static_r =
       let open Visitors in
-      let rec annot r = map_annot query r
-      and query q = map_query annot pred q
+      let rec annot r = V.Map.annot query r
+      and query q = V.Map.query annot pred q
       and pred p = Pred.to_static ~params p in
-      annot @@ A.strip_meta r
+      annot @@ strip_meta r
     in
 
     (* Generate a group-by using the partition fields. *)
@@ -488,15 +489,15 @@ module Make (Config : Config.S) = struct
 
             let open Mcmc.Random_choice in
             let flat_joins =
-              if rand random "flat-join" (A.strip_meta r) then
+              if rand random "flat-join" (strip_meta r) then
                 enum_flat_join opt parts pred s1 s2
               else []
             and hash_joins =
-              if rand random "hash-join" (A.strip_meta r) then
+              if rand random "hash-join" (strip_meta r) then
                 enum_hash_join opt parts pred s1 s2
               else []
             and _nest_joins =
-              if rand random "nest-join" (A.strip_meta r) then
+              if rand random "nest-join" (strip_meta r) then
                 enum_nest_join opt parts pred s1 s2
               else []
             in
@@ -538,7 +539,7 @@ module Make (Config : Config.S) = struct
     let%map s = G.of_abslayout r in
     opt (Set.empty (module Name)) s
 
-  let reshape j _ = Some (to_ralgebra j |> A.strip_meta)
+  let reshape j _ = Some (to_ralgebra j |> strip_meta)
 
   let rec emit_joins =
     let open Join_elim_tactics.Make (Config) in
@@ -576,7 +577,7 @@ module Make (Config : Config.S) = struct
       let%bind j = Pareto_set.min_elt (fun a -> a.(0)) joins in
       info (fun m -> m "Chose %a." Sexp.pp_hum ([%sexp_of: t] j));
       let tf = seq (local (reshape j) "reshape") (emit_joins j) in
-      apply (traced tf) p (A.strip_meta r)
+      apply (traced tf) p (strip_meta r)
     in
     global f "join-opt"
 end

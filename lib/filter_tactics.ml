@@ -3,6 +3,7 @@ open Abslayout
 open Collections
 module A = Abslayout
 module P = Pred.Infix
+module V = Visitors
 open Match
 
 (** Enable partitioning when a parameter is used in a range predicate. *)
@@ -91,21 +92,22 @@ module Make (C : Config.S) = struct
     | Dedup r ->
         let%map p, r = to_filter r in
         A.filter p (dedup r)
-    | AList (rk, rv) ->
-        let%map p, r = to_filter rv in
-        A.filter (Pred.unscoped (scope_exn rk) p) (list rk (scope_exn rk) r)
+    | AList l ->
+        let%map p, r = to_filter l.l_values in
+        A.filter (Pred.unscoped l.l_scope p) (list' { l with l_values = r })
     | AHashIdx ({ hi_keys = rk; hi_values = rv; _ } as h) ->
         let%map p, r = to_filter rv in
         let below, above = split_bound rk p in
         let above = List.map above ~f:(Pred.unscoped h.hi_scope) in
         A.filter (Pred.conjoin above)
           (hash_idx' { h with hi_values = A.filter (Pred.conjoin below) r })
-    | AOrderedIdx (rk, rv, m) ->
-        let%map p, r = to_filter rv in
-        let below, above = split_bound rk p in
-        let above = List.map above ~f:(Pred.unscoped (scope_exn rk)) in
+    | AOrderedIdx o ->
+        let%map p, r = to_filter o.oi_values in
+        let below, above = split_bound o.oi_keys p in
+        let above = List.map above ~f:(Pred.unscoped o.oi_scope) in
         A.filter (Pred.conjoin above)
-          (ordered_idx rk (scope_exn rk) (A.filter (Pred.conjoin below) r) m)
+          (ordered_idx'
+             { o with oi_values = A.filter (Pred.conjoin below) o.oi_values })
     | DepJoin { d_lhs; d_alias; d_rhs } ->
         let%map p, r = to_filter d_rhs in
         (* Ensure all the required names are selected. *)
@@ -119,7 +121,7 @@ module Make (C : Config.S) = struct
         in
         A.filter (Pred.unscoped d_alias p)
           (dep_join d_lhs d_alias (select select_list r))
-    | Relation _ | AEmpty | AScalar _ | ATuple _ | As (_, _) | Range _ -> None
+    | Relation _ | AEmpty | AScalar _ | ATuple _ | Range _ -> None
 
   let hoist_filter = of_func hoist_filter ~name:"hoist-filter"
 
@@ -138,7 +140,7 @@ module Make (C : Config.S) = struct
   let qualify rn p =
     let visitor =
       object
-        inherit [_] Abslayout.endo
+        inherit [_] V.endo
 
         method! visit_Name () _ n = Name (Name.copy ~scope:(Some rn) n)
       end
@@ -152,7 +154,7 @@ module Make (C : Config.S) = struct
       (dedup (select [ P.as_ p n ] rk))
       k
       (A.filter (Binop (Eq, Name (Name.create ~scope:k n), p)) rv)
-      { oi_key_layout = None; oi_lookup = [ (lb, ub) ] }
+      [ (lb, ub) ]
 
   (** A predicate `p` is a candidate lookup key into a partitioning of `r` if it
      does not depend on any of the fields in `r`.
@@ -261,7 +263,7 @@ module Make (C : Config.S) = struct
                           P.(p = Pred.scoped keys_schema scope p))
                     |> Pred.conjoin )
                     r')
-                 { oi_key_layout = None; oi_lookup = cmps }
+                 cmps
         in
         match x with
         | Ok r -> Seq.singleton (A.filter (Pred.conjoin rest) r)
@@ -293,10 +295,8 @@ module Make (C : Config.S) = struct
     let rs = List.mapi rs ~f:(fun i -> A.filter (Pred.conjoin preds.(i))) in
     A.filter (Pred.conjoin rest) (tuple rs Cross)
 
-  let push_filter_list stage p rk rv =
-    let scope = scope_exn rk in
-    let rk = strip_scope rk in
-    let rk_bnd = Set.of_list (module Name) (Schema.schema rk) in
+  let push_filter_list stage p l =
+    let rk_bnd = Set.of_list (module Name) (Schema.schema l.l_keys) in
     let pushed_key, pushed_val =
       Pred.conjuncts p
       |> List.partition_map ~f:(fun p ->
@@ -304,7 +304,10 @@ module Make (C : Config.S) = struct
     in
     let inner_key_pred = Pred.conjoin pushed_key in
     let inner_val_pred = Pred.conjoin pushed_val in
-    list (A.filter inner_key_pred rk) scope (A.filter inner_val_pred rv)
+    list
+      (A.filter inner_key_pred l.l_keys)
+      l.l_scope
+      (A.filter inner_val_pred l.l_values)
 
   let push_filter_select stage p ps r =
     match select_kind ps with
@@ -348,13 +351,13 @@ module Make (C : Config.S) = struct
     | ATuple (rs, Cross) -> Some (push_filter_cross_tuple stage p rs)
     (* Lists are a special case because their keys are bound at compile time and
        are not available at runtime. *)
-    | AList (rk, rv) -> Some (push_filter_list stage p rk rv)
+    | AList l -> Some (push_filter_list stage p l)
     | _ ->
         let%map rk, scope, rv, mk =
           match r.node with
           | DepJoin { d_lhs = rk; d_rhs = rv; d_alias } ->
               Some (rk, d_alias, rv, dep_join)
-          | AList (rk, rv) -> Some (strip_scope rk, scope_exn rk, rv, list)
+          | AList l -> Some (l.l_keys, l.l_scope, l.l_values, list)
           | AHashIdx h ->
               Some
                 ( h.hi_keys,
@@ -363,12 +366,14 @@ module Make (C : Config.S) = struct
                   fun rk s rv ->
                     hash_idx'
                       { h with hi_keys = rk; hi_scope = s; hi_values = rv } )
-          | AOrderedIdx (rk, rv, m) ->
+          | AOrderedIdx o ->
               Some
-                ( strip_scope rk,
-                  scope_exn rk,
-                  rv,
-                  fun rk s rv -> ordered_idx rk s rv m )
+                ( o.oi_keys,
+                  o.oi_scope,
+                  o.oi_values,
+                  fun rk s rv ->
+                    ordered_idx'
+                      { o with oi_keys = rk; oi_scope = s; oi_values = rv } )
           | _ -> None
         in
         let rk_bnd = Set.of_list (module Name) (Schema.schema rk) in
@@ -402,7 +407,7 @@ module Make (C : Config.S) = struct
   let contains_not p =
     let visitor =
       object (self)
-        inherit [_] reduce
+        inherit [_] V.reduce
 
         inherit [_] Util.disj_monoid
 
@@ -415,7 +420,7 @@ module Make (C : Config.S) = struct
   let is_eq_subtree p =
     let visitor =
       object (self)
-        inherit [_] reduce
+        inherit [_] V.reduce
 
         inherit [_] Util.conj_monoid
 
@@ -654,7 +659,7 @@ module Make (C : Config.S) = struct
   let relevant_conjuncts r n =
     let visitor =
       object
-        inherit [_] reduce as super
+        inherit [_] V.reduce as super
 
         inherit [_] Util.list_monoid
 
@@ -763,21 +768,21 @@ module Make (C : Config.S) = struct
     let scope = fresh_name "s%d" in
     let visitor =
       object (self : 'self)
-        inherit [_] mapreduce
+        inherit [_] V.mapreduce
 
         inherit [_] Util.list_monoid
 
-        method! visit_AList () (rk, rv) =
-          let rv, ret = self#visit_t () rv in
-          (AList (rk, rv), ret)
+        method! visit_AList () l =
+          let rv, ret = self#visit_t () l.l_values in
+          (AList { l with l_values = rv }, ret)
 
         method! visit_AHashIdx () h =
           let hi_values, ret = self#visit_t () h.hi_values in
           (AHashIdx { h with hi_values }, ret)
 
-        method! visit_AOrderedIdx () (rk, rv, m) =
-          let rv, ret = self#visit_t () rv in
-          (AOrderedIdx (rk, rv, m), ret)
+        method! visit_AOrderedIdx () o =
+          let rv, ret = self#visit_t () o.oi_values in
+          (AOrderedIdx { o with oi_values = rv }, ret)
 
         method! visit_AScalar () x = (AScalar x, [])
 

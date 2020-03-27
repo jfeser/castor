@@ -21,7 +21,7 @@ module Make (Config : Config.S) = struct
     List.for_all key ~f:(fun (p, _) ->
         Tactics_util.is_supported r.meta#stage s p)
 
-  module C = (val Constructors.Annot.with_strip_meta (fun () -> ()))
+  module C = (val Constructors.Annot.with_strip_meta (fun () -> object end))
 
   let push_orderby_depjoin key mk lhs scope rhs meta =
     let open Option.Let_syntax in
@@ -39,7 +39,7 @@ module Make (Config : Config.S) = struct
       in
       Set.map
         (module Equiv.Eq)
-        meta#meta
+        meta#meta#eq
         ~f:(fun (n, n') -> (unscope n, unscope n'))
     in
     let%map ctx =
@@ -59,7 +59,7 @@ module Make (Config : Config.S) = struct
       match rs with
       | r :: rs ->
           if key_is_supported r key then
-            Some (tuple (order_by key r :: List.map ~f:A.strip_meta rs) Cross)
+            Some (tuple (order_by key r :: List.map ~f:strip_meta rs) Cross)
           else None
       | _ -> None
     in
@@ -77,9 +77,8 @@ module Make (Config : Config.S) = struct
         orderby_cross_tuple key rs
     | OrderBy { key; rel = { node = DepJoin d; meta } } ->
         push_orderby_depjoin key dep_join d.d_lhs d.d_alias d.d_rhs meta
-    | OrderBy { key; rel = { node = AList (rk, rv); meta } } ->
-        push_orderby_depjoin key list (A.strip_scope rk) (A.scope_exn rk) rv
-          meta
+    | OrderBy { key; rel = { node = AList l; meta } } ->
+        push_orderby_depjoin key list l.l_keys l.l_scope l.l_values meta
     | _ -> None
 
   let push_orderby =
