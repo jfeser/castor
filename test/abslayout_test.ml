@@ -404,11 +404,11 @@ let%expect_test "pred_names" =
                                                                   aorderedidx(
                                                                     dedup(
                                                                     select(
-                                                                    [lineitem.l_shipdate as k1],
+                                                                    [lineitem.l_shipdate],
                                                                     dedup(
                                                                     select(
                                                                     [lineitem.l_shipdate],
-                                                                    lineitem)))),
+                                                                    lineitem)))) as k1,
                                                                     alist(
                                                                     filter(
                                                                     (count3 >
@@ -425,7 +425,7 @@ let%expect_test "pred_names" =
                                                                     =
                                                                     k0.l_suppkey)
                                                                     &&
-                                                                    (k1 =
+                                                                    (k1.l_shipdate =
                                                                     lineitem.l_shipdate)),
                                                                     lineitem))),
                                                                     ascalar(agg2)),

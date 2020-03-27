@@ -126,9 +126,12 @@ x = ralgebra; COMMA;
 e = key;
 RPAREN { A.(AHashIdx {hi_keys= r; hi_values= x; hi_key_layout = None; hi_lookup=e; hi_scope=s}) |> node $symbolstartpos $endpos }
 
-  | AORDEREDIDX; LPAREN; r = ralgebra; COMMA; x = ralgebra; COMMA; b = separated_list(COMMA, bound) RPAREN
+  | AORDEREDIDX; LPAREN;
+r = ralgebra; AS; s = ID; COMMA;
+x = ralgebra; COMMA;
+b = separated_list(COMMA, bound) RPAREN
     {
-      A.(AOrderedIdx (r, x, { oi_lookup = b; oi_key_layout = None }))
+      A.(AOrderedIdx ({ oi_keys = r; oi_scope = s; oi_values = x; oi_lookup = b; oi_key_layout = None }))
       |> node $symbolstartpos $endpos
     }
 

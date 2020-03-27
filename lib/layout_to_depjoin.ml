@@ -22,12 +22,12 @@ let hash_idx h =
       strip_meta @@ select slist (filter key_pred @@ strip_meta h.hi_values);
   }
 
-let ordered_idx rk rv m =
+let ordered_idx { oi_keys = rk; oi_values = rv; oi_scope = scope; oi_lookup; _ }
+    =
   let rk = strip_meta rk and rv = strip_meta rv in
   let rk_schema = S.schema rk and rv_schema = S.schema rv in
-  let scope = scope_exn rk
-  and key_pred =
-    List.zip_exn rk_schema m.oi_lookup
+  let key_pred =
+    List.zip_exn rk_schema oi_lookup
     |> List.concat_map ~f:(fun (n, (lb, ub)) ->
            let p1 =
              Option.map lb ~f:(fun (p, b) ->
@@ -46,11 +46,7 @@ let ordered_idx rk rv m =
            p1 @ p2)
     |> Pred.conjoin
   and slist = rk_schema @ rv_schema |> List.map ~f:(fun n -> Name n) in
-  {
-    d_lhs = strip_scope rk;
-    d_alias = scope;
-    d_rhs = select slist (filter key_pred rv);
-  }
+  { d_lhs = rk; d_alias = scope; d_rhs = select slist (filter key_pred rv) }
 
 let cross_tuple ts =
   let scalars, others =
@@ -68,9 +64,7 @@ let cross_tuple ts =
 let rec annot r = { r with node = query r.node }
 
 and query = function
-  | AOrderedIdx (rk, rv, m) ->
-      DepJoin
-        (ordered_idx (annot rk) (annot rv) (V.Map.ordered_idx annot pred m))
+  | AOrderedIdx o -> DepJoin (ordered_idx (V.Map.ordered_idx annot pred o))
   | AHashIdx h -> DepJoin (hash_idx (V.Map.hash_idx annot pred h))
   | AList (rk, rv) -> DepJoin (list (annot rk) (annot rv))
   | ATuple (ts, Cross) -> cross_tuple (List.map ~f:annot ts)

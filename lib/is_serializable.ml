@@ -15,11 +15,12 @@ class ['a] stage_iter =
       self#visit_t (ctx, `Compile) h.hi_keys;
       self#visit_t (ctx, phase) h.hi_values
 
-    method! visit_AOrderedIdx (ctx, phase) (rk, rv, m) =
+    method! visit_AOrderedIdx (ctx, phase)
+        { oi_keys = rk; oi_values = rv; oi_lookup; _ } =
       let bound_iter =
         Option.iter ~f:(fun (p, _) -> self#visit_pred (ctx, phase) p)
       in
-      List.iter m.oi_lookup ~f:(fun (b1, b2) ->
+      List.iter oi_lookup ~f:(fun (b1, b2) ->
           bound_iter b1;
           bound_iter b2);
       self#visit_t (ctx, `Compile) rk;
@@ -38,8 +39,9 @@ let stage ?(params = Set.empty (module Name)) r =
     and query stage q =
       let this =
         match q with
-        | AHashIdx { hi_scope; _ } -> (single hi_scope, empty)
-        | AOrderedIdx (r, _, _) | AList (r, _) -> (single (A.scope_exn r), empty)
+        | AHashIdx { hi_scope = r; _ } | AOrderedIdx { oi_scope = r; _ } ->
+            (single r, empty)
+        | AList (r, _) -> (single (A.scope_exn r), empty)
         | DepJoin { d_alias; _ } -> (
             match stage with
             | `Compile -> (single d_alias, empty)

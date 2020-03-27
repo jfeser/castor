@@ -254,7 +254,7 @@ let least_general_of_layout r =
     | DepJoin { d_lhs; d_rhs; _ } -> FuncT ([ f d_lhs; f d_rhs ], `Child_sum)
     | AHashIdx { hi_key_layout = Some kr; hi_values = vr; _ } ->
         HashIdxT (f kr, f vr, { key_count = Bottom })
-    | AOrderedIdx (_, vr, { oi_key_layout = Some kr; _ }) ->
+    | AOrderedIdx { oi_key_layout = Some kr; oi_values = vr; _ } ->
         OrderedIdxT (f kr, f vr, { key_count = Bottom })
     | ATuple (rs, k) ->
         let kind =
@@ -265,7 +265,7 @@ let least_general_of_layout r =
         in
         TupleT (List.map rs ~f, { kind })
     | As (_, r') -> f r'
-    | AOrderedIdx (_, _, { oi_key_layout = None; _ })
+    | AOrderedIdx { oi_key_layout = None; _ }
     | AHashIdx { hi_key_layout = None; _ } ->
         failwith "Missing key layout."
     | Relation _ -> failwith "Layout is still abstract."
@@ -340,7 +340,7 @@ class ['self] type_fold =
       in
       Fold { init; fold; extract }
 
-    method ordered_idx _ (_, value_l, { oi_key_layout; _ }) =
+    method ordered_idx _ { oi_values = value_l; oi_key_layout; _ } =
       let key_l = Option.value_exn oi_key_layout in
       let init =
         (least_general_of_layout key_l, least_general_of_layout value_l, 0)
@@ -373,8 +373,8 @@ let annotate conn r =
     | AHashIdx h, HashIdxT (kt, vt, _) ->
         Option.iter h.hi_key_layout ~f:(fun kr -> annot kr kt);
         annot h.hi_values vt
-    | AOrderedIdx (_, vr, m), OrderedIdxT (kt, vt, _) ->
-        Option.iter m.oi_key_layout ~f:(fun kr -> annot kr kt);
+    | AOrderedIdx { oi_values = vr; oi_key_layout }, OrderedIdxT (kt, vt, _) ->
+        Option.iter oi_key_layout ~f:(fun kr -> annot kr kt);
         annot vr vt
     | ATuple (rs, _), TupleT (ts, _) -> (
         match List.iter2 rs ts ~f:annot with
@@ -548,7 +548,7 @@ module Parallel = struct
       | AScalar p -> scalar_t p
       | AList (q, _) -> list_t q
       | AHashIdx { hi_keys; _ } -> hash_idx_t hi_keys
-      | AOrderedIdx (q, _, _) -> ordered_idx_t q
+      | AOrderedIdx { oi_keys = q; _ } -> ordered_idx_t q
       | ATuple (_, kind) -> tuple_t kind
       | _ -> no_type_t
 
@@ -572,7 +572,7 @@ module Parallel = struct
         let ts =
           match r.node with
           | AHashIdx { hi_key_layout = qk; hi_values = qv; _ }
-          | AOrderedIdx (_, qv, { oi_key_layout = qk; _ }) ->
+          | AOrderedIdx { oi_values = qv; oi_key_layout = qk; _ } ->
               annot (Option.value_exn qk) @ annot qv
           | _ -> V.Reduce.annot zero plus query meta r
         in
@@ -679,9 +679,10 @@ module Parallel = struct
       let child_ctxs =
         match r.node with
         | AList (qk, qv) -> wrap (split_scope qk) (annot qv)
-        | AOrderedIdx (qk, qv, o) ->
-            let wrap = wrap (split_scope qk) in
-            let qk = Option.value_exn o.oi_key_layout in
+        | AOrderedIdx { oi_keys = qk; oi_values = qv; oi_scope; oi_key_layout }
+          ->
+            let wrap = wrap (qk, oi_scope) in
+            let qk = Option.value_exn oi_key_layout in
             plus (wrap (annot qv)) (wrap (annot qk))
         | AHashIdx h ->
             let wrap = wrap (h.hi_keys, h.hi_scope) in

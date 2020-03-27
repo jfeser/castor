@@ -69,7 +69,7 @@ let free_open free r =
               free h.hi_values - exposed ~scope:h.hi_scope h.hi_keys;
               List.map ~f:pred_free h.hi_lookup |> union_list;
             ])
-    | AOrderedIdx (r', r'', m) ->
+    | AOrderedIdx { oi_keys = r'; oi_values = r''; oi_lookup; _ } ->
         let one_bound_free = function
           | Some (p, _) -> pred_free p
           | None -> empty
@@ -83,7 +83,7 @@ let free_open free r =
                 free r' - exposed r';
                 free r'' - exposed ~scope:(A.scope_exn r') r';
               ]
-            @ List.map ~f:bound_free m.oi_lookup ))
+            @ List.map ~f:bound_free oi_lookup ))
     | ATuple (rs, (Zip | Concat | Cross)) -> List.map rs ~f:free |> union_list
     | As (_, r') -> free r'
   in

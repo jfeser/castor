@@ -554,10 +554,10 @@ module Make (Config : Config.S) () = struct
 
   let scan_ordered_idx scan of_pred ctx b r t cb =
     let open Builder in
-    let _, value_layout, m = r in
+    let { oi_values = value_layout; oi_key_layout; oi_lookup; _ } = r in
     let key_type, value_type, mt = t in
     let key_layout =
-      Option.value_exn ~message:"No ordered idx key layout." m.oi_key_layout
+      Option.value_exn ~message:"No ordered idx key layout." oi_key_layout
     in
     let hdr = Header.make_header (OrderedIdxT t) in
     let start = Ctx.find_exn ctx (Name.create "start") b in
@@ -594,7 +594,7 @@ module Make (Config : Config.S) () = struct
     debug_print "scanning ordered idx" start b;
     let bounds =
       let mk_bound = Option.map ~f:(fun (p, bnd) -> (of_pred ctx p b, bnd)) in
-      List.map m.oi_lookup ~f:(fun (lb, ub) -> (mk_bound lb, mk_bound ub))
+      List.map oi_lookup ~f:(fun (lb, ub) -> (mk_bound lb, mk_bound ub))
     in
     build_bin_search key_index n bounds
       (fun key idx b ->

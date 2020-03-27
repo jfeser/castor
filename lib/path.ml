@@ -54,11 +54,10 @@ let rec set_exn p r s =
   | 0 :: p', AHashIdx h -> hash_idx' { h with hi_keys = set_exn p' h.hi_keys s }
   | 1 :: p', AHashIdx h ->
       hash_idx' { h with hi_values = set_exn p' h.hi_values s }
-  | 0 :: p', AOrderedIdx (r', r2, h) ->
-      let rk = set_exn p' r' s in
-      ordered_idx rk (scope_exn rk) r2 h
-  | 1 :: p', AOrderedIdx (r1, r', h) ->
-      ordered_idx r1 (scope_exn r1) (set_exn p' r' s) h
+  | 0 :: p', AOrderedIdx o ->
+      ordered_idx' { o with oi_keys = set_exn p' o.oi_keys s }
+  | 1 :: p', AOrderedIdx o ->
+      ordered_idx' { o with oi_values = set_exn p' o.oi_values s }
   | 0 :: p', As (n, r') -> as_ n (set_exn p' r' s)
   | p, _ ->
       Error.create "Invalid path in set." (p, r) [%sexp_of: t * _ annot]
@@ -83,7 +82,7 @@ let stage_exn p r =
         | Join { r2 = r'; _ }
         | AList (_, r')
         | AHashIdx { hi_values = r'; _ }
-        | AOrderedIdx (_, r', _) ) ) ->
+        | AOrderedIdx { oi_values = r'; _ } ) ) ->
         stage p' r' s
     | 0 :: _, (AList _ | AHashIdx _ | AOrderedIdx _) -> `Compile
     | i :: p', ATuple (rs, _) ->
@@ -121,13 +120,13 @@ let rec get_exn p r =
       | Join { r1 = r'; _ }
       | AList (r', _)
       | AHashIdx { hi_keys = r'; _ }
-      | AOrderedIdx (r', _, _) ) )
+      | AOrderedIdx { oi_keys = r'; _ } ) )
   | ( 1 :: p',
       ( DepJoin { d_rhs = r'; _ }
       | Join { r2 = r'; _ }
       | AList (_, r')
       | AHashIdx { hi_values = r'; _ }
-      | AOrderedIdx (_, r', _) ) ) ->
+      | AOrderedIdx { oi_values = r'; _ } ) ) ->
       get_exn p' r'
   | i :: p', ATuple (rs, _) ->
       assert (i >= 0 && i < List.length rs);
@@ -167,7 +166,7 @@ let all r =
             | Join { r1; r2; _ }
             | AList (r1, r2)
             | AHashIdx { hi_keys = r1; hi_values = r2; _ }
-            | AOrderedIdx (r1, r2, _)
+            | AOrderedIdx { oi_keys = r1; oi_values = r2; _ }
             | DepJoin { d_lhs = r1; d_rhs = r2; _ } ->
                 let q = Fqueue.enqueue q (r1, p ++ 0) in
                 Fqueue.enqueue q (r2, p ++ 1)
@@ -202,7 +201,7 @@ let rec is_run_time r p =
       ( Join { r2 = r'; _ }
       | AList (_, r')
       | AHashIdx { hi_values = r'; _ }
-      | AOrderedIdx (_, r', _)
+      | AOrderedIdx { oi_values = r'; _ }
       | DepJoin { d_rhs = r'; _ } ) ) ->
       is_run_time r' p'
   | 0 :: _, (AList _ | AHashIdx _ | AOrderedIdx _) -> false

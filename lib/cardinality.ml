@@ -71,7 +71,7 @@ and query c =
       match A.select_kind ps with
       | `Scalar -> Select (List.map ~f:pred ps, annot c r)
       | `Agg -> Select (List.map ~f:pred ps, annot (select_card_matters ps) r) )
-  | AHashIdx ({ hi_keys; hi_values; hi_key_layout; hi_lookup } as h) ->
+  | AHashIdx ({ hi_keys; hi_values; hi_key_layout; hi_lookup; _ } as h) ->
       AHashIdx
         {
           h with
@@ -80,11 +80,18 @@ and query c =
           hi_key_layout = Option.map hi_key_layout ~f:(annot (f `In_index_keys));
           hi_lookup = List.map hi_lookup ~f:pred;
         }
-  | AOrderedIdx (rk, rv, o) ->
+  | AOrderedIdx ({ oi_keys; oi_values; oi_key_layout; oi_lookup; _ } as o) ->
       AOrderedIdx
-        ( annot (f `In_index_keys) rk,
-          annot c rv,
-          V.Map.ordered_idx (annot (f `In_index_keys)) pred o )
+        {
+          o with
+          oi_keys = annot (f `In_index_keys) oi_keys;
+          oi_values = annot c oi_values;
+          oi_key_layout = Option.map oi_key_layout ~f:(annot (f `In_index_keys));
+          oi_lookup =
+            List.map oi_lookup ~f:(fun (b, b') ->
+                ( Option.map ~f:(V.Map.bound pred) b,
+                  Option.map ~f:(V.Map.bound pred) b' ));
+        }
   | q -> V.Map.query (annot c) pred q
 
 and pred p = V.Map.pred (annot (Bool_exp.f `In_pred)) pred p

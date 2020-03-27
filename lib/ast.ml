@@ -64,6 +64,9 @@ type ('p, 'r) hash_idx = {
 type 'p bound = 'p * [ `Open | `Closed ] [@@deriving compare, hash, sexp]
 
 type ('p, 'r) ordered_idx = {
+  oi_keys : 'r;
+  oi_values : 'r;
+  oi_scope : scope;
   oi_key_layout : 'r option; [@sexp.option]
   oi_lookup : ('p bound option * 'p bound option) list;
 }
@@ -93,7 +96,7 @@ type ('p, 'r) query =
   | AList of ('r * 'r)
   | ATuple of ('r list * tuple)
   | AHashIdx of ('p, 'r) hash_idx
-  | AOrderedIdx of ('r * 'r * ('p, 'r) ordered_idx)
+  | AOrderedIdx of ('p, 'r) ordered_idx
   | As of scope * 'r
 [@@deriving compare, hash, sexp, variants]
 

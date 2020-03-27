@@ -60,6 +60,20 @@ module Query = struct
   let hash_idx' h =
     hash_idx ?key_layout:h.hi_key_layout h.hi_keys h.hi_scope h.hi_values
       h.hi_lookup
+
+  let ordered_idx ?key_layout a b c d =
+    AOrderedIdx
+      {
+        oi_keys = a;
+        oi_values = c;
+        oi_scope = b;
+        oi_lookup = d;
+        oi_key_layout = key_layout;
+      }
+
+  let ordered_idx' h =
+    ordered_idx ?key_layout:h.oi_key_layout h.oi_keys h.oi_scope h.oi_values
+      h.oi_lookup
 end
 
 module Annot = struct
@@ -112,11 +126,14 @@ module Annot = struct
     val hash_idx' : (_ meta annot pred, _ meta annot) hash_idx -> t annot
 
     val ordered_idx :
+      ?key_layout:_ meta annot ->
       _ meta annot ->
       scope ->
       _ meta annot ->
-      (_ meta annot pred, _ meta annot) ordered_idx ->
+      (_ meta annot pred bound option * _ meta annot pred bound option) list ->
       t annot
+
+    val ordered_idx' : (_ meta annot pred, _ meta annot) ordered_idx -> t annot
 
     val pred : _ meta annot pred -> t annot pred
   end
@@ -145,7 +162,10 @@ module Annot = struct
 
       let strip_preds = List.map ~f:strip_pred
 
-      let strip_ordered_idx o = V.Map.ordered_idx strip strip_pred o
+      let strip_bounds =
+        List.map ~f:(fun (b, b') ->
+            ( Option.map ~f:(V.Map.bound strip_pred) b,
+              Option.map ~f:(V.Map.bound strip_pred) b' ))
 
       let strip_order = List.map ~f:(fun (p, o) -> (strip_pred p, o))
 
@@ -195,8 +215,15 @@ module Annot = struct
         hash_idx ?key_layout:h.hi_key_layout h.hi_keys h.hi_scope h.hi_values
           h.hi_lookup
 
-      let ordered_idx a b c d =
-        wrap @@ AOrderedIdx (as_ b a, strip c, strip_ordered_idx d)
+      let ordered_idx ?key_layout a b c d =
+        wrap
+        @@ Query.ordered_idx
+             ?key_layout:(Option.map ~f:strip key_layout)
+             (strip a) b (strip c) (strip_bounds d)
+
+      let ordered_idx' o =
+        ordered_idx ?key_layout:o.oi_key_layout o.oi_keys o.oi_scope o.oi_values
+          o.oi_lookup
     end : S_strip
       with type t = t )
 
@@ -257,7 +284,12 @@ module Annot = struct
         hash_idx ?key_layout:h.hi_key_layout h.hi_keys h.hi_scope h.hi_values
           h.hi_lookup
 
-      let ordered_idx a b c d = wrap @@ AOrderedIdx (as_ b a, c, d)
+      let ordered_idx ?key_layout a b c d =
+        wrap @@ Query.ordered_idx ?key_layout a b c d
+
+      let ordered_idx' o =
+        ordered_idx ?key_layout:o.oi_key_layout o.oi_keys o.oi_scope o.oi_values
+          o.oi_lookup
     end : S_default
       with type t = t )
 

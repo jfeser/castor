@@ -143,10 +143,22 @@ let hash_idx' h =
   hash_idx ?key_layout:h.hi_key_layout h.hi_keys h.hi_scope h.hi_values
     h.hi_lookup
 
-let ordered_idx a b c d =
+let ordered_idx ?key_layout a b c d =
   let a = strip_scope a in
   let a, c = ensure_no_overlap_2 a c [ b ] in
-  wrap (AOrderedIdx (strip_meta (as_ b a), strip_meta c, d))
+  wrap
+    (AOrderedIdx
+       {
+         oi_keys = strip_meta a;
+         oi_values = strip_meta c;
+         oi_scope = b;
+         oi_lookup = d;
+         oi_key_layout = key_layout;
+       })
+
+let ordered_idx' o =
+  ordered_idx ?key_layout:o.oi_key_layout o.oi_keys o.oi_scope o.oi_values
+    o.oi_lookup
 
 let rec and_ = function
   | [] -> Bool true
@@ -231,7 +243,8 @@ let select_kind l =
 let order_open order r =
   match r.node with
   | OrderBy { key; _ } -> key
-  | AOrderedIdx (r, _, _) -> schema r |> List.map ~f:(fun n -> (Name n, Asc))
+  | AOrderedIdx { oi_keys = r; _ } ->
+      schema r |> List.map ~f:(fun n -> (Name n, Asc))
   | Filter (_, r) | AHashIdx { hi_values = r; _ } -> order r
   | ATuple (rs, Cross) -> List.map ~f:order rs |> List.concat
   | Select (ps, r) ->
@@ -289,13 +302,13 @@ let annotate_key_layouts r =
         in
         AHashIdx { h with hi_key_layout }
 
-      method! visit_AOrderedIdx () (x, y, o) =
-        let x = self#visit_t () x in
-        let y = self#visit_t () y in
+      method! visit_AOrderedIdx () o =
+        let o = self#visit_ordered_idx () o in
         let oi_key_layout =
-          Option.first_some o.oi_key_layout (Some (key_layout @@ schema x))
+          Option.first_some o.oi_key_layout
+            (Some (key_layout @@ scoped o.oi_scope @@ schema o.oi_keys))
         in
-        AOrderedIdx (x, y, { o with oi_key_layout })
+        AOrderedIdx { o with oi_key_layout }
     end
   in
   annotator#visit_t () r
@@ -314,12 +327,6 @@ let strip_unused_as q =
         let rk = self#skip_as rk in
         let rv = self#visit_t () rv in
         AList (rk, rv)
-
-      method! visit_AOrderedIdx () _ (rk, rv, m) =
-        let rk = self#skip_as rk in
-        let rv = self#visit_t () rv in
-        let m = self#visit_ordered_idx () m in
-        AOrderedIdx (rk, rv, m)
 
       method! visit_AScalar () _ =
         function

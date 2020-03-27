@@ -40,6 +40,9 @@ and ('p, 'r) hash_idx = ('p, 'r) Ast.hash_idx = {
 and 'p bound = 'p * ([ `Open | `Closed ][@opaque])
 
 and ('p, 'r) ordered_idx = ('p, 'r) Ast.ordered_idx = {
+  oi_keys : 'r;
+  oi_values : 'r;
+  oi_scope : scope;
   oi_key_layout : 'r option;
   oi_lookup : ('p bound option * 'p bound option) list;
 }
@@ -68,7 +71,7 @@ and ('p, 'r) query = ('p, 'r) Ast.query =
   | AList of ('r * 'r)
   | ATuple of ('r list * (Ast.tuple[@opaque]))
   | AHashIdx of ('p, 'r) hash_idx
-  | AOrderedIdx of ('r * 'r * ('p, 'r) ordered_idx)
+  | AOrderedIdx of ('p, 'r) ordered_idx
   | As of scope * 'r
 
 and 'm annot = 'm Ast.annot = {
@@ -108,8 +111,12 @@ module Map = struct
     | Exists q -> Exists (query q)
     | Substring (p, p', p'') -> Substring (pred p, pred p', pred p'')
 
-  let ordered_idx query pred { oi_key_layout; oi_lookup } =
+  let ordered_idx query pred
+      ({ oi_keys; oi_values; oi_key_layout; oi_lookup; _ } as o) =
     {
+      o with
+      oi_keys = query oi_keys;
+      oi_values = query oi_values;
       oi_key_layout = Option.map oi_key_layout ~f:query;
       oi_lookup =
         List.map oi_lookup ~f:(fun (b, b') ->
@@ -144,8 +151,7 @@ module Map = struct
     | AList (q, q') -> AList (annot q, annot q')
     | ATuple (qs, t) -> ATuple (List.map qs ~f:annot, t)
     | AHashIdx h -> AHashIdx (hash_idx annot pred h)
-    | AOrderedIdx (q, q', o) ->
-        AOrderedIdx (annot q, annot q', ordered_idx annot pred o)
+    | AOrderedIdx o -> AOrderedIdx (ordered_idx annot pred o)
     | As (s, q) -> As (s, annot q)
 end
 
@@ -187,8 +193,8 @@ module Reduce = struct
         annot hi_keys + annot hi_values
         + option zero annot hi_key_layout
         + list zero ( + ) pred hi_lookup
-    | AOrderedIdx (q, q', { oi_key_layout; oi_lookup }) ->
-        annot q + annot q'
+    | AOrderedIdx { oi_keys; oi_values; oi_key_layout; oi_lookup; _ } ->
+        annot oi_keys + annot oi_values
         + option zero annot oi_key_layout
         + list zero ( + )
             (fun (b, b') ->
@@ -210,9 +216,9 @@ module Stage_reduce = struct
         + annot stage hi_values
         + option zero (annot stage) hi_key_layout
         + list zero ( + ) (pred stage) hi_lookup
-    | AOrderedIdx (q, q', { oi_key_layout; oi_lookup }) ->
-        annot `Compile q
-        + annot stage q'
+    | AOrderedIdx { oi_keys; oi_values; oi_key_layout; oi_lookup } ->
+        annot `Compile oi_keys
+        + annot stage oi_values
         + option zero (annot stage) oi_key_layout
         + list zero ( + )
             (fun (b, b') ->
@@ -350,7 +356,7 @@ class virtual ['m] runtime_subquery_visitor =
 
     method! visit_AHashIdx () { hi_values = r; _ } = super#visit_t () r
 
-    method! visit_AOrderedIdx () (_, r, _) = super#visit_t () r
+    method! visit_AOrderedIdx () { oi_values = r; _ } = super#visit_t () r
 
     method! visit_Exists () r =
       super#visit_t () r;
@@ -375,8 +381,8 @@ class virtual ['self] runtime_subquery_map =
     method! visit_AHashIdx acc ({ hi_values = r; _ } as h) =
       AHashIdx { h with hi_values = super#visit_t acc r }
 
-    method! visit_AOrderedIdx acc (x, r, y) =
-      AOrderedIdx (x, super#visit_t acc r, y)
+    method! visit_AOrderedIdx acc ({ oi_values = r; _ } as o) =
+      AOrderedIdx { o with oi_values = super#visit_t acc r }
 
     method! visit_Exists acc r =
       Exists (self#visit_Subquery (super#visit_t acc r))

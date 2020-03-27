@@ -488,10 +488,7 @@ module Make (Config : Config.S) () = struct
     let lhs = dedup (select select_list r) in
     ordered_idx lhs scope
       (filter (Pred.scoped (schema lhs) scope filter_pred) r)
-      {
-        oi_key_layout = None;
-        oi_lookup = [ (Some (lb, `Closed), Some (ub, `Open)) ];
-      }
+      [ (Some (lb, `Closed), Some (ub, `Open)) ]
 
   let tf_elim_cmp_filter _ =
     let result_to_list = function Ok x -> [ x ] | Error _ -> [] in
@@ -708,13 +705,14 @@ module Make (Config : Config.S) () = struct
                 select outer_preds
                   (hash_idx' { h with hi_values = select ps h.hi_values });
               ]
-          | Select (ps, { node = AOrderedIdx (r, r', m); _ }) ->
+          | Select (ps, { node = AOrderedIdx o; _ }) ->
               let outer_aggs, inner_aggs =
-                gen_concat_select_list ps (schema r')
+                gen_concat_select_list ps (schema o.oi_values)
               in
-              let r, scope = (strip_scope r, scope_exn r) in
               [
-                select outer_aggs (ordered_idx r scope (select inner_aggs r') m);
+                select outer_aggs
+                  (ordered_idx'
+                     { o with oi_values = select inner_aggs o.oi_values });
               ]
           | Select (ps, { node = AList (r, r'); _ }) ->
               let outer_aggs, inner_aggs =
@@ -931,10 +929,8 @@ module Make (Config : Config.S) () = struct
             [ list (filter p r) scope r'; list r scope (filter p r') ]
         | { node = Filter (p, { node = AHashIdx h; _ }); _ } ->
             [ hash_idx' { h with hi_values = filter p h.hi_values } ]
-        | { node = Filter (p, { node = AOrderedIdx (r, r', m); _ }); _ } ->
-            let scope = scope_exn r in
-            let r = strip_scope r in
-            [ ordered_idx r scope (filter p r') m ]
+        | { node = Filter (p, { node = AOrderedIdx o; _ }); _ } ->
+            [ ordered_idx' { o with oi_values = filter p o.oi_values } ]
         | _ -> []);
     }
     |> run_everywhere

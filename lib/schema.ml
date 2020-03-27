@@ -63,7 +63,8 @@ let schema_open schema r =
       schema r |> unscoped
   | Select (x, _) | GroupBy (x, _, _) -> of_preds x |> unscoped
   | Join { r1; r2; _ } -> schema r1 @ schema r2 |> unscoped
-  | AOrderedIdx (r1, r2, _) | AHashIdx { hi_keys = r1; hi_values = r2; _ } ->
+  | AOrderedIdx { oi_keys = r1; oi_values = r2; _ }
+  | AHashIdx { hi_keys = r1; hi_values = r2; _ } ->
       let schema_r2 = schema r2 in
       let schema_r1 =
         List.filter (schema r1) ~f:(fun n ->
@@ -85,7 +86,8 @@ let schema_open schema r =
 
 let schema_open_full schema r =
   match r.node with
-  | AOrderedIdx (r1, r2, _) | AHashIdx { hi_keys = r1; hi_values = r2; _ } ->
+  | AOrderedIdx { oi_keys = r1; oi_values = r2; _ }
+  | AHashIdx { hi_keys = r1; hi_values = r2; _ } ->
       schema r1 @ schema r2 |> unscoped
   | _ -> schema_open schema r
 

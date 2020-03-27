@@ -320,7 +320,7 @@ let%expect_test "ordered-idx" =
   [%expect
     {|
     SELECT
-        "f_1_0" AS "f_1_0_0",
+        "f_3" AS "f_3_0",
         "g_3" AS "g_3_0"
     FROM (
         SELECT
@@ -329,12 +329,12 @@ let%expect_test "ordered-idx" =
             "r1" AS "r1_0") AS "t1",
         LATERAL (
             SELECT
-                "f_1" AS "f_1_0",
+                "f" AS "f_3",
                 r1_1. "g" AS "g_3"
             FROM
                 "r1" AS "r1_1"
-            WHERE ((("f_1") >= (NULL))
-                AND (("f_1") < (NULL)))
+            WHERE ((("f") >= (NULL))
+                AND (("f") < (NULL)))
             AND ((r1_1. "f") = ("f_1"))) AS "t0" |}]
 
 let%expect_test "depjoin-agg" =

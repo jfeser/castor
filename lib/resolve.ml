@@ -47,9 +47,9 @@ let shadow_check r =
         self#check_name h.hi_scope;
         self#visit_hash_idx () h
 
-      method! visit_AOrderedIdx () (rk, rv, _) =
-        self#check_alias () rk;
-        self#visit_t () rv
+      method! visit_AOrderedIdx () o =
+        self#check_name o.oi_scope;
+        self#visit_ordered_idx () o
 
       method! visit_As () _ r =
         Log.err (fun m -> m "Unexpected as: %a" A.pp_small r);
@@ -269,28 +269,29 @@ let resolve_hash_idx resolve stage outer_ctx h =
   in
   (AHashIdx h, Ctx.(merge_forgiving kctx vctx))
 
-let resolve_ordered_idx resolve stage outer_ctx (r, l, m) =
-  let scope = A.scope_exn r in
-  let r = A.strip_scope r in
-  let r, kctx = resolve `Compile outer_ctx r in
+let resolve_ordered_idx resolve stage outer_ctx o =
+  let r, kctx = resolve `Compile outer_ctx o.oi_keys in
   assert (all_has_stage kctx `Compile);
-  let inner_ctx = Ctx.bind outer_ctx (Ctx.scoped scope kctx) in
-  let vl, vctx = resolve stage inner_ctx l in
+  let inner_ctx = Ctx.bind outer_ctx (Ctx.scoped o.oi_scope kctx) in
+  let vl, vctx = resolve stage inner_ctx o.oi_values in
   let resolve_bound b =
     Option.map ~f:(fun (p, b) -> (resolve_pred resolve stage outer_ctx p, b)) b
   in
-  let m =
+  let o =
     {
+      o with
+      oi_keys = r;
+      oi_values = vl;
       oi_key_layout =
-        Option.map m.oi_key_layout ~f:(fun q ->
+        Option.map o.oi_key_layout ~f:(fun q ->
             let q', _ = resolve `Compile inner_ctx q in
             q');
       oi_lookup =
-        List.map m.oi_lookup ~f:(fun (lb, ub) ->
+        List.map o.oi_lookup ~f:(fun (lb, ub) ->
             (resolve_bound lb, resolve_bound ub));
     }
   in
-  (AOrderedIdx (as_ scope r, vl, m), Ctx.(merge_forgiving kctx vctx))
+  (AOrderedIdx o, Ctx.(merge_forgiving kctx vctx))
 
 let resolve_open resolve stage outer_ctx =
   let rsame r = resolve stage r in

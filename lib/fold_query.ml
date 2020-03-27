@@ -165,9 +165,8 @@ let of_hash_idx of_ralgebra q h =
   in
   for_ q (q1, h.hi_scope, of_ralgebra h.hi_values, true)
 
-let of_ordered_idx of_ralgebra q (q1, q2, _) =
-  let scope = A.scope_exn q1 in
-  let q1 = A.strip_scope q1 in
+let of_ordered_idx of_ralgebra q
+    { oi_keys = q1; oi_values = q2; oi_scope = scope; _ } =
   let q1 =
     let order_key = total_order_key q1 in
     order_by order_key (dedup @@ strip_meta q1)

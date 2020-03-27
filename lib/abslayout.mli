@@ -61,7 +61,15 @@ val hash_idx' : (Pred.t, t) hash_idx -> t
 
 val h_key_layout : ((< .. > as 'a) annot pred, 'a annot) hash_idx -> < > annot
 
-val ordered_idx : t -> string -> t -> (Pred.t, t) ordered_idx -> t
+val ordered_idx :
+  ?key_layout:t ->
+  t ->
+  string ->
+  t ->
+  (Pred.t bound option * Pred.t bound option) list ->
+  t
+
+val ordered_idx' : (Pred.t, t) ordered_idx -> t
 
 val o_key_layout :
   (< .. > as 'a) annot * 'a annot * ('a annot pred, 'a annot) ordered_idx ->

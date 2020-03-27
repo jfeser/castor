@@ -226,7 +226,7 @@ class virtual ['self] abslayout_fold =
     method private key_layout q =
       match q.Ast.node with
       | AHashIdx x -> x.hi_key_layout
-      | AOrderedIdx (_, _, x) -> x.oi_key_layout
+      | AOrderedIdx x -> x.oi_key_layout
       | Select (_, q')
       | Filter (_, q')
       | Dedup q'

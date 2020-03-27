@@ -135,8 +135,9 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
     | AHashIdx { hi_keys = r1; hi_scope = s; hi_values = r2; hi_lookup; _ } ->
         fprintf fmt "ahashidx(%a as %s,@ %a,@ %a)" pp r1 s pp r2 pp_key
           hi_lookup
-    | AOrderedIdx (r1, r2, { oi_lookup; _ }) ->
-        fprintf fmt "aorderedidx(%a,@ %a,@ %a)" pp r1 pp r2
+    | AOrderedIdx { oi_keys = r1; oi_scope = s; oi_values = r2; oi_lookup; _ }
+      ->
+        fprintf fmt "aorderedidx(%a as %s,@ %a,@ %a)" pp r1 s pp r2
           (pp_list ~bracket:("", "") (fun fmt (lb, ub) ->
                fprintf fmt "%a, %a" (pp_option pp_lower_bound) lb
                  (pp_option pp_upper_bound) ub))
