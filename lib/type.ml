@@ -250,7 +250,7 @@ let least_general_of_layout r =
     | Join { r1; r2; _ } -> FuncT ([ f r1; f r2 ], `Child_sum)
     | AEmpty -> EmptyT
     | AScalar p -> Pred.to_type p |> least_general_of_primtype
-    | AList (_, r') -> ListT (f r', { count = Bottom })
+    | AList { l_values = r'; _ } -> ListT (f r', { count = Bottom })
     | DepJoin { d_lhs; d_rhs; _ } -> FuncT ([ f d_lhs; f d_rhs ], `Child_sum)
     | AHashIdx { hi_key_layout = Some kr; hi_values = vr; _ } ->
         HashIdxT (f kr, f vr, { key_count = Bottom })
@@ -306,7 +306,7 @@ class ['self] type_fold =
       | Null -> NullT
       | Fixed x -> FixedT { value = AbsFixed.of_fixed x; nullable = false }
 
-    method list _ (_, elem_l) =
+    method list _ { l_values = elem_l; _ } =
       let init = (least_general_of_layout elem_l, 0) in
       let fold (t, c) (_, t') = (unify_exn t t', c + 1) in
       let extract (elem_type, num_elems) =
@@ -367,7 +367,7 @@ let annotate conn r =
     | ( (AScalar _ | Range _),
         (IntT _ | DateT _ | FixedT _ | BoolT _ | StringT _ | NullT) ) ->
         ()
-    | AList (_, r'), ListT (t', _)
+    | AList { l_values = r'; _ }, ListT (t', _)
     | (Filter (_, r') | Select (_, r')), FuncT ([ t' ], _) ->
         annot r' t'
     | AHashIdx h, HashIdxT (kt, vt, _) ->
@@ -518,7 +518,7 @@ module Parallel = struct
 
     let list_t q =
       count_t q @@ fun ts count ->
-      Option.some @@ ListT (List.hd_exn ts, { count })
+      Option.some @@ ListT (List.nth_exn ts 1, { count })
 
     let hash_idx_t q =
       count_t q @@ fun ts key_count ->
@@ -541,12 +541,12 @@ module Parallel = struct
 
     let no_type_t = { aggs = []; build = (fun _ _ -> None) }
 
-    let rec of_ralgebra = function
+    let of_ralgebra = function
       | Select (ps, _) | GroupBy (ps, _, _) -> func_t (`Width (List.length ps))
       | Join _ | DepJoin _ | Filter _ | OrderBy _ | Dedup _ -> func_t `Child_sum
       | AEmpty -> empty_t
       | AScalar p -> scalar_t p
-      | AList (q, _) -> list_t q
+      | AList { l_keys = q; _ } -> list_t q
       | AHashIdx { hi_keys; _ } -> hash_idx_t hi_keys
       | AOrderedIdx { oi_keys = q; _ } -> ordered_idx_t q
       | ATuple (_, kind) -> tuple_t kind
@@ -665,9 +665,6 @@ module Parallel = struct
   end
 
   let contexts r =
-    let split_scope r =
-      match r.node with As (s, r') -> (r', s) | _ -> failwith "Expected as"
-    in
     let empty q = [ ([], q) ]
     and wrap (r, s) =
       List.map ~f:(fun (ctxs, q) -> ((strip_meta r, s) :: ctxs, q))
@@ -678,7 +675,8 @@ module Parallel = struct
       let this_ctx = empty r.meta in
       let child_ctxs =
         match r.node with
-        | AList (qk, qv) -> wrap (split_scope qk) (annot qv)
+        | AList { l_keys = qk; l_scope; l_values = qv } ->
+            wrap (qk, l_scope) (annot qv)
         | AOrderedIdx { oi_keys = qk; oi_values = qv; oi_scope; oi_key_layout }
           ->
             let wrap = wrap (qk, oi_scope) in

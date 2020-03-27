@@ -392,49 +392,15 @@ let%expect_test "pred_names" =
   let p =
     Pred.of_string_exn
       {|(total_revenue =
-                                                           (select([max(total_revenue_i) as tot],
-                                                              alist(select(
-                                                                    [lineitem.l_suppkey],
-                                                                    dedup(
-                                                                    select(
-                                                                    [lineitem.l_suppkey],
-                                                                    lineitem))) as k0,
-                                                                select(
-                                                                  [sum(agg2) as total_revenue_i],
-                                                                  aorderedidx(
-                                                                    dedup(
-                                                                    select(
-                                                                    [lineitem.l_shipdate],
-                                                                    dedup(
-                                                                    select(
-                                                                    [lineitem.l_shipdate],
-                                                                    lineitem)))) as k1,
-                                                                    alist(
-                                                                    filter(
-                                                                    (count3 >
-                                                                    0),
-                                                                    select(
-                                                                    [count() as count3,
-                                                                    sum((lineitem.l_extendedprice
-                                                                    *
-                                                                    (1 -
-                                                                    lineitem.l_discount))) as agg2],
-                                                                    filter(
-                                                                    (
-                                                                    (lineitem.l_suppkey
-                                                                    =
-                                                                    k0.l_suppkey)
-                                                                    &&
-                                                                    (k1.l_shipdate =
-                                                                    lineitem.l_shipdate)),
-                                                                    lineitem))),
-                                                                    ascalar(agg2)),
-                                                                    (param1 +
-                                                                    day(1)),
-                                                                    (
-                                                                    (param1 +
-                                                                    month(3))
-                                                                    + day(1))))))))|}
+         (select([max(total_revenue_i) as tot],
+           alist(select([lineitem.l_suppkey], dedup(select([lineitem.l_suppkey], lineitem))) as k0,
+                 select([sum(agg2) as total_revenue_i],
+                   aorderedidx(dedup(select([lineitem.l_shipdate],dedup(select([lineitem.l_shipdate], lineitem)))) as k1,
+                     alist(filter((count3 > 0),
+                             select([count() as count3, sum((lineitem.l_extendedprice * (1 - lineitem.l_discount))) as agg2],
+                               filter(((lineitem.l_suppkey = k0.l_suppkey) && (k1.l_shipdate = lineitem.l_shipdate)), lineitem))) as k2,
+                           ascalar(k2.agg2)),
+                   (param1 + day(1)), ((param1 + month(3)) + day(1))))))))|}
   in
   Pred.names p |> [%sexp_of: Set.M(Name).t] |> print_s;
   [%expect {| (((name total_revenue) (meta <opaque>))) |}]

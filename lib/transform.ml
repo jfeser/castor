@@ -547,9 +547,9 @@ module Make (Config : Config.S) () = struct
   let same_orders r1 r2 =
     [%compare.equal: (Pred.t * order) list] (A.order_of r1) (A.order_of r2)
 
-  let orderby_list key r1 r2 =
+  let orderby_list key { l_keys = r1; l_scope; l_values = r2 } =
     let open A in
-    let schema1 = Schema.schema r1 |> Schema.scoped (scope_exn r1) in
+    let schema1 = Schema.schema r1 |> Schema.scoped l_scope in
 
     let eqs = Equiv.eqs r2 |> Set.to_list in
     let names =
@@ -622,11 +622,10 @@ module Make (Config : Config.S) () = struct
             | { node = OrderBy { key; rel = { node = Filter (ps, r); _ } }; _ }
               ->
                 [ filter ps (order_by key r) ]
-            | { node = OrderBy { key; rel = { node = AList (r1, r2); _ } }; _ }
-              ->
+            | { node = OrderBy { key; rel = { node = AList l; _ } }; _ } ->
                 (* If we order a lists keys then the keys will be ordered in the
                    list. *)
-                orderby_list key r1 r2
+                orderby_list key l
             | {
              node = OrderBy { key; rel = { node = ATuple (rs, Cross); _ } };
              _;
@@ -714,12 +713,14 @@ module Make (Config : Config.S) () = struct
                   (ordered_idx'
                      { o with oi_values = select inner_aggs o.oi_values });
               ]
-          | Select (ps, { node = AList (r, r'); _ }) ->
+          | Select (ps, { node = AList l; _ }) ->
               let outer_aggs, inner_aggs =
-                gen_concat_select_list ps (schema r')
+                gen_concat_select_list ps (schema l.l_values)
               in
-              let r, scope = (strip_scope r, scope_exn r) in
-              [ select outer_aggs (list r scope (select inner_aggs r')) ]
+              [
+                select outer_aggs
+                  (list' { l with l_values = select inner_aggs l.l_values });
+              ]
           | Select (ps, { node = ATuple (r' :: rs', Concat); _ }) ->
               let outer_aggs, inner_aggs =
                 gen_concat_select_list ps (schema r')
@@ -923,10 +924,11 @@ module Make (Config : Config.S) () = struct
             [ filter p' (filter p r) ]
         | { node = Filter (p, { node = Join { pred; r1; r2 }; _ }); _ } ->
             [ join (Binop (And, p, pred)) r1 r2 ]
-        | { node = Filter (p, { node = AList (r, r'); _ }); _ } ->
-            let scope = scope_exn r in
-            let r = strip_scope r in
-            [ list (filter p r) scope r'; list r scope (filter p r') ]
+        | { node = Filter (p, { node = AList l; _ }); _ } ->
+            [
+              list' { l with l_keys = filter p l.l_keys };
+              list' { l with l_values = filter p l.l_values };
+            ]
         | { node = Filter (p, { node = AHashIdx h; _ }); _ } ->
             [ hash_idx' { h with hi_values = filter p h.hi_values } ]
         | { node = Filter (p, { node = AOrderedIdx o; _ }); _ } ->

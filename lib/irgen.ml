@@ -448,7 +448,7 @@ module Make (Config : Config.S) () = struct
     | Zip -> scan_ziptuple scan ctx b r t cb
     | Concat -> scan_concattuple scan ctx b r t cb
 
-  let scan_list scan ctx b (_, child_layout) ((child_type, _) as t)
+  let scan_list scan ctx b { l_values = child_layout; _ } ((child_type, _) as t)
       (cb : callback) =
     let open Builder in
     let hdr = Header.make_header (ListT t) in

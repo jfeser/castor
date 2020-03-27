@@ -55,7 +55,7 @@ let schema_open schema r =
             Name.create ?type_:t (Fresh.name Global.fresh "x%d"))
   in
   match r.node with
-  | AList (_, r)
+  | AList { l_values = r; _ }
   | DepJoin { d_rhs = r; _ }
   | Filter (_, r)
   | Dedup r

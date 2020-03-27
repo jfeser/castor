@@ -115,11 +115,10 @@ let scalar a = wrap (AScalar a)
 let as_ a b = wrap (As (a, strip_meta b))
 
 let list a b c =
-  let a = strip_scope a in
   let a, c = ensure_no_overlap_2 a c [ b ] in
-  wrap (AList (strip_meta (as_ b a), strip_meta c))
+  wrap (AList { l_keys = strip_meta a; l_scope = b; l_values = strip_meta c })
 
-let list' (a, b) = list a (scope_exn a) b
+let list' l = list l.l_keys l.l_scope l.l_values
 
 let tuple a b =
   let a = List.map ~f:strip_meta a in
@@ -254,7 +253,7 @@ let order_open order r =
                 Some (Name (Name.create n), d)
             | p' when [%compare.equal: _ pred] p p' -> Some (p', d)
             | _ -> None))
-  | AList (r, r') ->
+  | AList { l_keys = r; l_values = r' } ->
       let open Name.O in
       let s' = schema r' and eq' = r'.meta#eq in
       List.filter_map (order r) ~f:(function
@@ -322,11 +321,6 @@ let strip_unused_as q =
         match r.node with
         | As (n, r) -> as_ n (self#visit_t () r)
         | _ -> self#visit_t () r
-
-      method! visit_AList () _ (rk, rv) =
-        let rk = self#skip_as rk in
-        let rv = self#visit_t () rv in
-        AList (rk, rv)
 
       method! visit_AScalar () _ =
         function

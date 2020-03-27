@@ -55,13 +55,10 @@ let%expect_test "" =
       {l_receiptdate, }#
         select([l_receiptdate],
         {l_receiptdate, }#
-          alist({k.l_commitdate, k.l_orderkey, k.l_receiptdate, k.o_comment,
-                  k.o_orderkey, }#
-                  {l_commitdate, l_orderkey, l_receiptdate, o_comment, o_orderkey,
-                    }#
-                    join((o_orderkey = l_orderkey),
-                    {l_commitdate, l_orderkey, l_receiptdate, }#lineitem,
-                    {o_comment, o_orderkey, }#orders) as k,
+          alist({l_commitdate, l_orderkey, l_receiptdate, o_comment, o_orderkey, }#
+                  join((o_orderkey = l_orderkey),
+                  {l_commitdate, l_orderkey, l_receiptdate, }#lineitem,
+                  {o_comment, o_orderkey, }#orders) as k,
           {l_receiptdate, }#
             atuple([{}#ascalar(k.l_orderkey), {}#ascalar(k.l_commitdate),
                     {l_receiptdate, }#ascalar(k.l_receiptdate),
@@ -97,7 +94,7 @@ let%expect_test "" =
   [%expect
     {|
     {l_shipmode, }#
-      alist({k2.l_shipmode, }#{l_shipmode, }#lineitem as k2,
+      alist({l_shipmode, }#lineitem as k2,
       {l_shipmode, }#
         select([l_shipmode],
         {l_shipmode, }#

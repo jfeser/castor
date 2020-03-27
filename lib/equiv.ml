@@ -42,7 +42,7 @@ let eqs_open (eqs : 'a annot -> Set.M(Eq).t) r : Set.M(Eq).t =
          |> of_list
   | Join { pred = p; r1; r2 } -> Pred.eqs p |> of_list || (eqs r1 && eqs r2)
   | Dedup r | OrderBy { rel = r; _ } | DepJoin { d_rhs = r; _ } -> eqs r
-  | AList (rk, rv) -> eqs rk || eqs rv
+  | AList { l_keys = rk; l_values = rv; _ } -> eqs rk || eqs rv
   | AHashIdx h -> (
       match List.zip (Schema.schema h.hi_keys) h.hi_lookup with
       | Ok ls ->

@@ -6,7 +6,7 @@ class ['a] stage_iter =
   object (self : 'a)
     inherit [_] V.iter
 
-    method! visit_AList (ctx, phase) (rk, rv) =
+    method! visit_AList (ctx, phase) { l_keys = rk; l_values = rv; _ } =
       self#visit_t (ctx, `Compile) rk;
       self#visit_t (ctx, phase) rv
 
@@ -39,9 +39,10 @@ let stage ?(params = Set.empty (module Name)) r =
     and query stage q =
       let this =
         match q with
-        | AHashIdx { hi_scope = r; _ } | AOrderedIdx { oi_scope = r; _ } ->
+        | AHashIdx { hi_scope = r; _ }
+        | AOrderedIdx { oi_scope = r; _ }
+        | AList { l_scope = r; _ } ->
             (single r, empty)
-        | AList (r, _) -> (single (A.scope_exn r), empty)
         | DepJoin { d_alias; _ } -> (
             match stage with
             | `Compile -> (single d_alias, empty)

@@ -28,7 +28,7 @@ module Make (C : Config.S) = struct
       match r.node with
       | AHashIdx h -> Some (Layout_to_depjoin.hash_idx h)
       | AOrderedIdx o -> Some (Layout_to_depjoin.ordered_idx o)
-      | AList (rk, rv) -> Some (Layout_to_depjoin.list rk rv)
+      | AList l -> Some (Layout_to_depjoin.list l)
       | _ -> None
     in
     Option.map r' ~f:dep_join'

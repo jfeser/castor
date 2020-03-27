@@ -74,6 +74,8 @@ module Query = struct
   let ordered_idx' h =
     ordered_idx ?key_layout:h.oi_key_layout h.oi_keys h.oi_scope h.oi_values
       h.oi_lookup
+
+  let list a b c = AList { l_keys = a; l_scope = b; l_values = c }
 end
 
 module Annot = struct
@@ -111,7 +113,7 @@ module Annot = struct
 
     val list : _ meta annot -> scope -> _ meta annot -> t annot
 
-    val list' : _ meta annot * _ meta annot -> t annot
+    val list' : (_ meta annot pred, _ meta annot) list_ -> t annot
 
     val tuple : _ meta annot list -> tuple -> t annot
 
@@ -199,9 +201,9 @@ module Annot = struct
 
       let as_ a b = wrap @@ Query.as_ a (strip b)
 
-      let list a b c = wrap @@ AList (as_ b a, strip c)
+      let list a b c = wrap @@ Query.list (strip a) b (strip c)
 
-      let list' (a, b) = list a (scope_exn a) b
+      let list' l = list l.l_keys l.l_scope l.l_values
 
       let tuple a b = wrap @@ Query.tuple (strips a) b
 
@@ -271,9 +273,9 @@ module Annot = struct
 
       let as_ a b = wrap @@ Query.as_ a b
 
-      let list a b c = wrap @@ AList (as_ b a, c)
+      let list a b c = wrap @@ Query.list a b c
 
-      let list' (a, b) = list a (scope_exn a) b
+      let list' l = list l.l_keys l.l_scope l.l_values
 
       let tuple a b = wrap @@ Query.tuple a b
 

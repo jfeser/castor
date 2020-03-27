@@ -129,7 +129,8 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
     | Range (pl, ph) -> fprintf fmt "range(%a, %a)" pp_pred pl pp_pred ph
     | AEmpty -> fprintf fmt "aempty"
     | AScalar p -> fprintf fmt "ascalar(%a)" pp_pred p
-    | AList (r1, r2) -> fprintf fmt "alist(%a,@ %a)" pp r1 pp r2
+    | AList { l_keys = r1; l_scope; l_values = r2 } ->
+        fprintf fmt "alist(%a as %s,@ %a)" pp r1 l_scope pp r2
     | ATuple (rs, kind) ->
         fprintf fmt "atuple(%a,@ %a)" (pp_list pp) rs pp_kind kind
     | AHashIdx { hi_keys = r1; hi_scope = s; hi_values = r2; hi_lookup; _ } ->

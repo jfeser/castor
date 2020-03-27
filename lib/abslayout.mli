@@ -51,7 +51,7 @@ val scalar : Pred.t -> t
 
 val list : t -> string -> t -> t
 
-val list' : t * t -> t
+val list' : (Pred.t, t) list_ -> t
 
 val tuple : t list -> tuple -> t
 

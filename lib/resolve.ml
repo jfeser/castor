@@ -39,9 +39,9 @@ let shadow_check r =
             self#visit_t () r;
             Log.err (fun m -> m "Missing as: %a" A.pp_small r)
 
-      method! visit_AList () (rk, rv) =
-        self#check_alias () rk;
-        self#visit_t () rv
+      method! visit_AList () l =
+        self#check_name l.l_scope;
+        self#visit_list_ () l
 
       method! visit_AHashIdx () h =
         self#check_name h.hi_scope;
@@ -341,12 +341,10 @@ let resolve_open resolve stage outer_ctx =
       let p = resolve_pred stage outer_ctx p in
       let ctx = Ctx.of_defs stage [ p ] in
       (AScalar p, ctx)
-  | AList (rk, rv) ->
-      let scope = A.scope_exn rk in
-      let rk = A.strip_scope rk in
+  | AList ({ l_keys = rk; l_scope = scope; l_values = rv } as l) ->
       let rk, kctx = resolve `Compile outer_ctx rk in
       let rv, vctx = rsame (Ctx.bind outer_ctx (Ctx.scoped scope kctx)) rv in
-      (AList (as_ scope rk, rv), vctx)
+      (AList { l with l_keys = rk; l_values = rv }, vctx)
   | ATuple (ls, (Concat as t)) ->
       let ls, ctxs = List.map ls ~f:(rsame outer_ctx) |> List.unzip in
       (ATuple (ls, t), Ctx.concat ctxs)

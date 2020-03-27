@@ -57,10 +57,8 @@ let free_open free r =
           free rel
           || (List.map key ~f:(fun (p, _) -> pred_free p) |> union_list)
              - exposed rel)
-    | AList (r', r'') ->
-        Set.O.(
-          (free r' - exposed r')
-          || (free r'' - exposed ~scope:(A.scope_exn r') r'))
+    | AList { l_keys = r'; l_values = r''; l_scope = scope } ->
+        Set.O.((free r' - exposed r') || (free r'' - exposed ~scope r'))
     | AHashIdx h ->
         Set.O.(
           union_list

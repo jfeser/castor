@@ -251,8 +251,8 @@ let eval { db; params } r =
                 if eval_pred ctx pred |> Value.to_bool then Some tup else None))
     | AEmpty -> Seq.empty
     | AScalar p -> Seq.singleton [| eval_pred ctx p |]
-    | AList (rk, rv) ->
-        let sk = Schema.of_ralgebra ~scope:(scope_exn rk) rk in
+    | AList { l_keys = rk; l_scope = scope; l_values = rv } ->
+        let sk = Schema.of_ralgebra ~scope rk in
         Seq.concat_map (eval ctx rk) ~f:(fun t -> eval (Ctx.bind ctx sk t) rv)
     | ATuple ([], _) -> failwith "Empty tuple."
     | ATuple (_, Zip) -> failwith "Zip tuples unsupported."

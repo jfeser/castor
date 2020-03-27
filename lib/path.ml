@@ -41,10 +41,8 @@ let rec set_exn p r s =
   | 0 :: p', GroupBy (ps, ns, r') -> group_by ps ns (set_exn p' r' s)
   | 0 :: p', OrderBy { key; rel = r' } -> order_by key (set_exn p' r' s)
   | 0 :: p', Dedup r' -> dedup (set_exn p' r' s)
-  | 0 :: p', AList (r', r2) ->
-      let rk = set_exn p' r' s in
-      list rk (scope_exn rk) r2
-  | 1 :: p', AList (r1, r') -> list r1 (scope_exn r1) (set_exn p' r' s)
+  | 0 :: p', AList l -> list' { l with l_keys = set_exn p' l.l_keys s }
+  | 1 :: p', AList l -> list' { l with l_values = set_exn p' l.l_values s }
   | _, ATuple ([], _) -> failwith "Empty tuple."
   | i :: p', ATuple (rs, t) ->
       assert (i >= 0 && i < List.length rs);
@@ -80,7 +78,7 @@ let stage_exn p r =
     | ( 1 :: p',
         ( DepJoin { d_rhs = r'; _ }
         | Join { r2 = r'; _ }
-        | AList (_, r')
+        | AList { l_values = r'; _ }
         | AHashIdx { hi_values = r'; _ }
         | AOrderedIdx { oi_values = r'; _ } ) ) ->
         stage p' r' s
@@ -118,13 +116,13 @@ let rec get_exn p r =
       | As (_, r')
       | DepJoin { d_lhs = r'; _ }
       | Join { r1 = r'; _ }
-      | AList (r', _)
+      | AList { l_keys = r'; _ }
       | AHashIdx { hi_keys = r'; _ }
       | AOrderedIdx { oi_keys = r'; _ } ) )
   | ( 1 :: p',
       ( DepJoin { d_rhs = r'; _ }
       | Join { r2 = r'; _ }
-      | AList (_, r')
+      | AList { l_values = r'; _ }
       | AHashIdx { hi_values = r'; _ }
       | AOrderedIdx { oi_values = r'; _ } ) ) ->
       get_exn p' r'
@@ -164,7 +162,7 @@ let all r =
             | As (_, r') ->
                 Fqueue.enqueue q (r', p ++ 0)
             | Join { r1; r2; _ }
-            | AList (r1, r2)
+            | AList { l_keys = r1; l_values = r2; _ }
             | AHashIdx { hi_keys = r1; hi_values = r2; _ }
             | AOrderedIdx { oi_keys = r1; oi_values = r2; _ }
             | DepJoin { d_lhs = r1; d_rhs = r2; _ } ->
@@ -179,7 +177,7 @@ let all r =
 
 let%test_unit "all-valid" =
   let q =
-    {|atuple([alist(orderby([r1.f desc], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f asc], r1), atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|}
+    {|atuple([alist(orderby([r1.f desc], r1) as r1, atuple([ascalar(r1.f), ascalar(r1.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([r1.f asc], r1) as r1, atuple([ascalar(r1.f), ascalar(r1.g)], cross))], concat)|}
     |> of_string_exn
   in
   Seq.iter (all q) ~f:(fun p -> get_exn p q |> ignore)
@@ -199,7 +197,7 @@ let rec is_run_time r p =
       | DepJoin { d_lhs = r'; _ } ) )
   | ( 1 :: p',
       ( Join { r2 = r'; _ }
-      | AList (_, r')
+      | AList { l_values = r'; _ }
       | AHashIdx { hi_values = r'; _ }
       | AOrderedIdx { oi_values = r'; _ }
       | DepJoin { d_rhs = r'; _ } ) ) ->

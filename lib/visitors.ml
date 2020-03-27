@@ -47,6 +47,12 @@ and ('p, 'r) ordered_idx = ('p, 'r) Ast.ordered_idx = {
   oi_lookup : ('p bound option * 'p bound option) list;
 }
 
+and ('p, 'r) list_ = ('p, 'r) Ast.list_ = {
+  l_keys : 'r;
+  l_values : 'r;
+  l_scope : scope;
+}
+
 and 'r depjoin = 'r Ast.depjoin = { d_lhs : 'r; d_alias : scope; d_rhs : 'r }
 
 and ('p, 'r) join = ('p, 'r) Ast.join = { pred : 'p; r1 : 'r; r2 : 'r }
@@ -68,7 +74,7 @@ and ('p, 'r) query = ('p, 'r) Ast.query =
   | Range of ('p * 'p)
   | AEmpty
   | AScalar of 'p
-  | AList of ('r * 'r)
+  | AList of ('p, 'r) list_
   | ATuple of ('r list * (Ast.tuple[@opaque]))
   | AHashIdx of ('p, 'r) hash_idx
   | AOrderedIdx of ('p, 'r) ordered_idx
@@ -133,6 +139,9 @@ module Map = struct
       hi_lookup = List.map hi_lookup ~f:pred;
     }
 
+  let list query pred l =
+    { l with l_keys = query l.l_keys; l_values = query l.l_values }
+
   let query annot pred = function
     | Select (ps, q) -> Select (List.map ~f:pred ps, annot q)
     | Filter (p, q) -> Filter (pred p, annot q)
@@ -148,7 +157,7 @@ module Map = struct
     | (Relation _ | AEmpty) as q -> q
     | Range (p, p') -> Range (pred p, pred p')
     | AScalar p -> AScalar (pred p)
-    | AList (q, q') -> AList (annot q, annot q')
+    | AList l -> AList (list annot pred l)
     | ATuple (qs, t) -> ATuple (List.map qs ~f:annot, t)
     | AHashIdx h -> AHashIdx (hash_idx annot pred h)
     | AOrderedIdx o -> AOrderedIdx (ordered_idx annot pred o)
@@ -182,7 +191,9 @@ module Reduce = struct
     | Select (ps, q) | GroupBy (ps, _, q) -> list zero ( + ) pred ps + annot q
     | Filter (p, q) -> pred p + annot q
     | Join { pred = p; r1; r2 } -> pred p + annot r1 + annot r2
-    | DepJoin { d_lhs = q; d_rhs = q'; _ } | AList (q, q') -> annot q + annot q'
+    | DepJoin { d_lhs = q; d_rhs = q'; _ }
+    | AList { l_keys = q; l_values = q'; _ } ->
+        annot q + annot q'
     | OrderBy { key; rel } ->
         list zero ( + ) (fun (p, _) -> pred p) key + annot rel
     | Dedup q | As (_, q) -> annot q
@@ -209,7 +220,8 @@ module Stage_reduce = struct
   open Reduce
 
   let query zero ( + ) annot pred stage = function
-    | AList (q, q') -> annot `Compile q + annot stage q'
+    | AList { l_keys = q; l_values = q'; _ } ->
+        annot `Compile q + annot stage q'
     | AScalar p -> pred `Compile p
     | AHashIdx { hi_keys; hi_values; hi_key_layout; hi_lookup; _ } ->
         annot `Compile hi_keys
@@ -352,7 +364,7 @@ class virtual ['m] runtime_subquery_visitor =
     (* Don't annotate subqueries that run at compile time. *)
     method! visit_AScalar () _ = ()
 
-    method! visit_AList () (_, r) = super#visit_t () r
+    method! visit_AList () { l_values = r; _ } = super#visit_t () r
 
     method! visit_AHashIdx () { hi_values = r; _ } = super#visit_t () r
 
@@ -376,7 +388,8 @@ class virtual ['self] runtime_subquery_map =
     (* Don't annotate subqueries that run at compile time. *)
     method! visit_AScalar _ x = AScalar x
 
-    method! visit_AList acc (x, r) = AList (x, super#visit_t acc r)
+    method! visit_AList acc ({ l_values = r; _ } as l) =
+      AList { l with l_values = super#visit_t acc r }
 
     method! visit_AHashIdx acc ({ hi_values = r; _ } as h) =
       AHashIdx { h with hi_values = super#visit_t acc r }

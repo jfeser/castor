@@ -149,9 +149,7 @@ let to_scalars rs =
       match t.Ast.node with AScalar p -> Some p | _ -> None)
   |> Option.all
 
-let of_list of_ralgebra q (q1, q2) =
-  let scope = A.scope_exn q1 in
-  let q1 = A.strip_scope q1 in
+let of_list of_ralgebra q { l_keys = q1; l_scope = scope; l_values = q2 } =
   let q1 =
     let order_key = total_order_key q1 in
     order_by order_key (strip_meta q1)

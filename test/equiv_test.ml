@@ -34,5 +34,4 @@ alist(dedup(select([l_suppkey as l1_suppkey], lineitem)) as k0,
                       >= date("0000-01-01"), < (date("0000-01-01") + month(3)))))
 |};
   [%expect {|
-    [(l1_suppkey, k0.l1_suppkey); (l_suppkey, l1_suppkey);
-     (l_suppkey, supplier_no)] |}]
+    [(l_suppkey, l1_suppkey); (l_suppkey, supplier_no)] |}]

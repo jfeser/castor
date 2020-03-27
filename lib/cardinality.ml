@@ -127,7 +127,9 @@ and query = function
   | OrderBy { rel = r; _ }
   | As (_, r) ->
       annot r
-  | Join { r1; r2 } | AList (r1, r2) | DepJoin { d_lhs = r1; d_rhs = r2; _ } ->
+  | Join { r1; r2 }
+  | AList { l_keys = r1; l_values = r2; _ }
+  | DepJoin { d_lhs = r1; d_rhs = r2; _ } ->
       I.(O.(of_int 0 || (annot r1 * annot r2)))
   | ATuple (ts, Concat) -> List.sum (module I) ~f:annot ts
   | ATuple (ts, Cross) ->

@@ -114,8 +114,10 @@ RPAREN { A.OrderBy { key = List.map ~f:(fun (e, o) -> match o with
 
   | ASCALAR; e = parens(expr) { A.AScalar e |> node $symbolstartpos $endpos }
 
-  | ALIST; LPAREN; r = ralgebra; COMMA; x = ralgebra; RPAREN
-    { A.AList (r, x) |> node $symbolstartpos $endpos }
+  | ALIST; LPAREN; k = ralgebra; AS; s = ID; COMMA; v = ralgebra; RPAREN
+    {
+      A.AList { l_keys = k; l_scope = s; l_values = v } |> node $symbolstartpos $endpos
+    }
 
   | ATUPLE; LPAREN; ls = bracket_list(ralgebra); COMMA; k = KIND; RPAREN
     { A.ATuple (ls, k) |> node $symbolstartpos $endpos }

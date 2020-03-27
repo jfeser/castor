@@ -47,9 +47,7 @@ let rec project r =
           ns (project r)
     | Dedup r ->
         if card_matters then A.dedup @@ no_project r else A.dedup @@ project r
-    | AList (rk, rv) ->
-        let scope = A.scope_exn rk in
-        let rk = A.strip_scope rk in
+    | AList { l_keys = rk; l_values = rv; l_scope = scope } ->
         let rk =
           let old_n = schema rk |> List.length in
           let ps =

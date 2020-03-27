@@ -3,9 +3,7 @@ module V = Visitors
 open Abslayout
 module S = Schema
 
-let list rk rv =
-  let scope = scope_exn rk in
-  { d_lhs = strip_scope rk; d_alias = scope; d_rhs = rv }
+let list l = { d_lhs = l.l_keys; d_alias = l.l_scope; d_rhs = l.l_values }
 
 let hash_idx h =
   let rk_schema = S.schema h.hi_keys |> S.scoped h.hi_scope
@@ -66,7 +64,7 @@ let rec annot r = { r with node = query r.node }
 and query = function
   | AOrderedIdx o -> DepJoin (ordered_idx (V.Map.ordered_idx annot pred o))
   | AHashIdx h -> DepJoin (hash_idx (V.Map.hash_idx annot pred h))
-  | AList (rk, rv) -> DepJoin (list (annot rk) (annot rv))
+  | AList l -> DepJoin (list @@ V.Map.list annot pred l)
   | ATuple (ts, Cross) -> cross_tuple (List.map ~f:annot ts)
   | q -> V.Map.query annot pred q
 
