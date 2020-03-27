@@ -505,9 +505,7 @@ module Parallel = struct
 
     let count_t q f =
       let agg_name = Fresh.name Global.fresh "ct%d" in
-      let counts =
-        A.group_by [ As_pred (Count, agg_name) ] [] (A.strip_scope q)
-      in
+      let counts = A.group_by [ As_pred (Count, agg_name) ] [] q in
       let count = Name (Name.create agg_name) in
       let min = wrap @@ Min count and max = wrap @@ Max count in
       let eval ctx v = eval ctx v |> Value.to_int in

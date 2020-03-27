@@ -148,9 +148,6 @@ module Annot = struct
 
       type nonrec t = t
 
-      let scope_exn r =
-        match r.node with As (n, _) -> n | _ -> failwith "Expected a scope"
-
       let rec strip { node; meta } =
         { node = strip_query node; meta = default () }
 
@@ -238,9 +235,6 @@ module Annot = struct
   let with_default (type t) default =
     ( module struct
       type nonrec t = t
-
-      let scope_exn r =
-        match r.node with As (n, _) -> n | _ -> failwith "Expected a scope"
 
       let pred = Fun.id
 

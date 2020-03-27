@@ -7,17 +7,6 @@ module O : Comparable.Infix with type t := Ast.t = Comparable.Make (Ast)
 
 open Schema
 
-let scope r = match r.node with As (n, _) -> Some n | _ -> None
-
-let scope_exn r =
-  Option.value_exn
-    ~error:
-      ( Error.of_lazy_t
-      @@ lazy (Error.createf "Expected a scope on %a." pp_small_str r) )
-    (scope r)
-
-let strip_scope r = match r.node with As (_, r) -> r | _ -> r
-
 let scopes r =
   let visitor =
     object
@@ -126,7 +115,6 @@ let tuple a b =
   wrap (ATuple (a, b))
 
 let hash_idx ?key_layout a b c d =
-  let a = strip_scope a in
   let a, c = ensure_no_overlap_2 a c [ b ] in
   wrap
     (AHashIdx
@@ -143,7 +131,6 @@ let hash_idx' h =
     h.hi_lookup
 
 let ordered_idx ?key_layout a b c d =
-  let a = strip_scope a in
   let a, c = ensure_no_overlap_2 a c [ b ] in
   wrap
     (AOrderedIdx

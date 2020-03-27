@@ -47,7 +47,7 @@ module Make (C : Config.S) = struct
   let elim_depjoin r =
     match r.node with
     | DepJoin { d_lhs; d_alias; d_rhs = { node = AScalar p; _ } } ->
-        Some (select [ Pred.unscoped d_alias p ] (strip_scope d_lhs))
+        Some (select [ Pred.unscoped d_alias p ] d_lhs)
     | DepJoin { d_lhs; d_alias; d_rhs = { node = ATuple (rs, Cross); _ } } ->
         let open Option.Let_syntax in
         let%bind s =
@@ -56,7 +56,7 @@ module Make (C : Config.S) = struct
           |> Option.all
         in
         let s = List.map ~f:(Pred.unscoped d_alias) s in
-        Some (select s (strip_scope d_lhs))
+        Some (select s d_lhs)
     (* depjoin(r, select(ps, atuple(ps'))) -> select(ps, select(ps', r)) *)
     | DepJoin
         {
@@ -74,15 +74,14 @@ module Make (C : Config.S) = struct
         (* Ensure that no fields are dropped by the first select. *)
         let ps' = concat_select ps' (schema d_lhs |> to_select_list) in
         let ps = List.map ~f:(Pred.unscoped d_alias) ps in
-        Some (select ps (select ps' (strip_scope d_lhs)))
+        Some (select ps (select ps' d_lhs))
     | DepJoin
         {
           d_lhs;
           d_alias;
           d_rhs = { node = Select (ps, { node = AScalar (Null None); _ }); _ };
         } ->
-        Some
-          (select (List.map ~f:(Pred.unscoped d_alias) ps) (strip_scope d_lhs))
+        Some (select (List.map ~f:(Pred.unscoped d_alias) ps) d_lhs)
     | _ -> None
 
   let elim_depjoin = of_func elim_depjoin ~name:"elim-depjoin"

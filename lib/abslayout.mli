@@ -77,12 +77,6 @@ val o_key_layout :
 
 val as_ : string -> t -> t
 
-val strip_scope : 'a annot -> 'a annot
-
-val scope : 'a annot -> string option
-
-val scope_exn : 'a annot -> string
-
 val alpha_scopes : 'a annot -> 'a annot
 
 val and_ : Pred.t list -> Pred.t
