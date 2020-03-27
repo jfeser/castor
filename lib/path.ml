@@ -56,7 +56,6 @@ let rec set_exn p r s =
       ordered_idx' { o with oi_keys = set_exn p' o.oi_keys s }
   | 1 :: p', AOrderedIdx o ->
       ordered_idx' { o with oi_values = set_exn p' o.oi_values s }
-  | 0 :: p', As (n, r') -> as_ n (set_exn p' r' s)
   | p, _ ->
       Error.create "Invalid path in set." (p, r) [%sexp_of: t * _ annot]
       |> Error.raise
@@ -72,7 +71,6 @@ let stage_exn p r =
         | GroupBy (_, _, r')
         | OrderBy { rel = r'; _ }
         | Dedup r'
-        | As (_, r')
         | DepJoin { d_lhs = r'; _ }
         | Join { r1 = r'; _ } ) )
     | ( 1 :: p',
@@ -96,8 +94,7 @@ let stage_exn p r =
     | _, Dedup _
     | _, AList _
     | _, AHashIdx _
-    | _, AOrderedIdx _
-    | _, As (_, _) ->
+    | _, AOrderedIdx _ ->
         Error.create "Invalid path in get." (p, r) [%sexp_of: t * _ annot]
         |> Error.raise
   in
@@ -113,7 +110,6 @@ let rec get_exn p r =
       | GroupBy (_, _, r')
       | OrderBy { rel = r'; _ }
       | Dedup r'
-      | As (_, r')
       | DepJoin { d_lhs = r'; _ }
       | Join { r1 = r'; _ }
       | AList { l_keys = r'; _ }
@@ -139,8 +135,7 @@ let rec get_exn p r =
   | _, Dedup _
   | _, AList _
   | _, AHashIdx _
-  | _, AOrderedIdx _
-  | _, As (_, _) ->
+  | _, AOrderedIdx _ ->
       Error.create "Invalid path in get." (p, r) [%sexp_of: t * _ annot]
       |> Error.raise
 
@@ -158,8 +153,7 @@ let all r =
             | Filter (_, r')
             | GroupBy (_, _, r')
             | OrderBy { rel = r'; _ }
-            | Dedup r'
-            | As (_, r') ->
+            | Dedup r' ->
                 Fqueue.enqueue q (r', p ++ 0)
             | Join { r1; r2; _ }
             | AList { l_keys = r1; l_values = r2; _ }
@@ -191,7 +185,6 @@ let rec is_run_time r p =
       | GroupBy (_, _, r')
       | OrderBy { rel = r'; _ }
       | Dedup r'
-      | As (_, r')
       | Join { r1 = r'; _ }
       | ATuple (r' :: _, _)
       | DepJoin { d_lhs = r'; _ } ) )

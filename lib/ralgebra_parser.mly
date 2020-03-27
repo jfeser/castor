@@ -75,7 +75,6 @@ query:
 ralgebra:
   | r = ralgebra_subquery { r }
   | name = ID { A.Relation {r_name=name; r_schema=None} |> node $symbolstartpos $endpos }
-  | r = ralgebra; AS; n = ID; { A.As (n, r) |> node $symbolstartpos $endpos }
 
 ub_op: LT { `Open } | LE { `Closed }
 lb_op: GT { `Open } | GE { `Closed }

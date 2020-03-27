@@ -193,7 +193,6 @@ let rec of_ralgebra : 'a. (< .. > as 'a) annot -> (< > annot, 'a annot) t =
   | GroupBy (_, _, q') ->
       { (of_ralgebra q') with meta = q }
   | Relation _ -> failwith "Bare relation."
-  | As _ -> failwith "Unexpected as."
 
 let to_concat binds q = concat None (List.map binds ~f:Tuple.T2.get2 @ [ q ])
 

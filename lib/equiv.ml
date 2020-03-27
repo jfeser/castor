@@ -28,11 +28,6 @@ let of_list = Set.of_list (module Eq)
    relation, they have the same value. *)
 let eqs_open (eqs : 'a annot -> Set.M(Eq).t) r : Set.M(Eq).t =
   match r with
-  | As (scope, r) ->
-      eqs r
-      || Schema.schema r
-         |> List.map ~f:(fun n -> (n, Name.(scoped scope n)))
-         |> of_list
   | Filter (p, r) -> Pred.eqs p |> of_list || eqs r
   | Select (ps, r) | GroupBy (ps, _, r) ->
       eqs r

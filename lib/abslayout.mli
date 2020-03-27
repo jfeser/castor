@@ -75,8 +75,6 @@ val o_key_layout :
   (< .. > as 'a) annot * 'a annot * ('a annot pred, 'a annot) ordered_idx ->
   < > annot
 
-val as_ : string -> t -> t
-
 val alpha_scopes : 'a annot -> 'a annot
 
 val and_ : Pred.t list -> Pred.t
@@ -93,11 +91,7 @@ val select_kind : 'a annot pred list -> [ `Agg | `Scalar ]
 
 val order_of : 'a annot -> (Pred.t * order) list
 
-val validate : t -> unit
-
 val annotate_key_layouts : t -> t
-
-val strip_unused_as : t -> t
 
 val ensure_alias : 'a annot -> 'a annot
 

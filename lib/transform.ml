@@ -74,7 +74,6 @@ module Make (Config : Config.S) () = struct
     let checks = [ check_schema ] in
     List.map rs ~f:(fun r' ->
         List.for_all checks ~f:(fun c -> c r') |> ignore;
-        A.validate r';
         r')
 
   let run = if Config.check_transforms then run_checked else run_unchecked
@@ -175,8 +174,7 @@ module Make (Config : Config.S) () = struct
                     Pred.scoped (schema lhs) scope
                       (As_pred (Name (Name.create key_name), Name.name k))
                   in
-                  let s = scalar p in
-                  match Name.rel k with Some rel -> as_ rel s | None -> s
+                  scalar p
                 in
                 list lhs scope (tuple [ key_scalar; new_group_by ] Cross))
         | _ -> []);
@@ -1175,12 +1173,12 @@ module Make (Config : Config.S) () = struct
                     (dedup
                        (select
                           [ As_pred (Name pk_k, pk_k_name) ]
-                          (as_ rel_fresh_k (db_relation rel))))
+                          (db_relation rel)))
                     pk_rel
                     (select snd_sel_list
                        (filter
                           (Binop (Eq, Name pk_v, Name (Name.create pk_k_name)))
-                          (as_ rel_fresh_v (db_relation rel))))
+                          (db_relation rel)))
                     [ Name pk ];
                 ]
                 Cross;

@@ -248,7 +248,6 @@ let dep_join of_ralgebra q1 scope q2 =
 let of_ralgebra r =
   let rec f r =
     match r.node with
-    | As _ -> failwith "Unexpected as."
     | Range (p, p') ->
         let alias = Fresh.name Global.fresh "t%d" in
         Query

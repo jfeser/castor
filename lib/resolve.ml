@@ -29,16 +29,6 @@ let shadow_check r =
             create "Alias overlaps with relation." n [%sexp_of: string] |> raise)
         else Hash_set.add aliases n
 
-      method check_alias () r =
-        match r.node with
-        | As (n, r') ->
-            self#check_name n;
-            self#visit_t () r'
-        | Relation r -> self#check_name r.r_name
-        | _ ->
-            self#visit_t () r;
-            Log.err (fun m -> m "Missing as: %a" A.pp_small r)
-
       method! visit_AList () l =
         self#check_name l.l_scope;
         self#visit_list_ () l
@@ -50,10 +40,6 @@ let shadow_check r =
       method! visit_AOrderedIdx () o =
         self#check_name o.oi_scope;
         self#visit_ordered_idx () o
-
-      method! visit_As () _ r =
-        Log.err (fun m -> m "Unexpected as: %a" A.pp_small r);
-        self#visit_t () r
     end
   in
   let rels = relations_visitor#visit_t () r in
@@ -220,19 +206,6 @@ let resolve_name ctx n =
 let resolve_relation stage r =
   Relation.schema r |> List.map ~f:P.name |> Ctx.of_defs stage
 
-let as_ s r =
-  {
-    node = As (s, r);
-    meta =
-      object
-        method outer = r.meta#outer
-
-        method inner = Ctx.scoped s r.meta#inner
-
-        method meta = r.meta#meta
-      end;
-  }
-
 let all_has_stage (ctx : Ctx.t) s =
   List.for_all (ctx :> Ctx.row list) ~f:(fun r -> Poly.(r.Ctx.rstage = s))
 
@@ -351,7 +324,6 @@ let resolve_open resolve stage outer_ctx =
   | ATuple (ls, ((Cross | Zip) as t)) ->
       let ls, ctxs = List.map ls ~f:(rsame outer_ctx) |> List.unzip in
       (ATuple (ls, t), Ctx.merge_list ctxs)
-  | As _ -> Error.(createf "Unexpected as." |> raise)
   | OrderBy { key; rel } ->
       let rel, inner_ctx = rsame outer_ctx rel in
       let key =

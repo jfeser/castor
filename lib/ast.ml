@@ -100,7 +100,6 @@ type ('p, 'r) query =
   | ATuple of ('r list * tuple)
   | AHashIdx of ('p, 'r) hash_idx
   | AOrderedIdx of ('p, 'r) ordered_idx
-  | As of scope * 'r
 [@@deriving compare, hash, sexp, variants]
 
 type 'm annot = { node : ('m annot pred, 'm annot) query; meta : 'm }

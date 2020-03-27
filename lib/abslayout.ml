@@ -101,8 +101,6 @@ let empty = wrap AEmpty
 
 let scalar a = wrap (AScalar a)
 
-let as_ a b = wrap (As (a, strip_meta b))
-
 let list a b c =
   let a, c = ensure_no_overlap_2 a c [ b ] in
   wrap (AList { l_keys = strip_meta a; l_scope = b; l_values = strip_meta c })
@@ -167,7 +165,6 @@ let name r =
   | ATuple _ -> "tuple"
   | AHashIdx _ -> "hash_idx"
   | AOrderedIdx _ -> "ordered_idx"
-  | As _ -> "as"
   | Range _ -> "range"
 
 let of_lexbuf_exn lexbuf =
@@ -201,27 +198,6 @@ let subst ctx =
   in
   v#visit_t ()
 
-let exists_bare_relations r =
-  let visitor =
-    object (self : 'a)
-      inherit [_] V.reduce as super
-
-      inherit [_] Util.disj_monoid
-
-      method! visit_t () r =
-        match r.node with
-        | As (_, { node = Relation _; _ }) -> self#zero
-        | As (_, r') -> self#visit_t () r'
-        | Relation _ -> true
-        | _ -> super#visit_t () r
-    end
-  in
-  visitor#visit_t () r
-
-let validate r =
-  if exists_bare_relations r then
-    Error.of_string "Program contains bare relation references." |> Error.raise
-
 let select_kind l =
   if List.exists l ~f:(fun p -> Poly.(Pred.kind p = `Agg)) then `Agg
   else `Scalar
@@ -254,7 +230,7 @@ let order_open order r =
         | _ -> None)
   | DepJoin _ | Join _ | GroupBy _ | Dedup _ | Relation _ | AEmpty
   | ATuple (_, (Zip | Concat))
-  | AScalar _ | As _ | Range _ ->
+  | AScalar _ | Range _ ->
       []
 
 let rec order_of r = order_open order_of r
@@ -298,28 +274,6 @@ let annotate_key_layouts r =
     end
   in
   annotator#visit_t () r
-
-let strip_unused_as q =
-  let visitor =
-    object (self)
-      inherit [_] V.endo
-
-      method skip_as r =
-        match r.node with
-        | As (n, r) -> as_ n (self#visit_t () r)
-        | _ -> self#visit_t () r
-
-      method! visit_AScalar () _ =
-        function
-        | As_pred (p, n) -> AScalar (As_pred (self#visit_pred () p, n))
-        | p -> AScalar (self#visit_pred () p)
-
-      method! visit_As () _ _ r =
-        Log.warn (fun m -> m "Removing misplaced as: %a" pp_small r);
-        r.node
-    end
-  in
-  visitor#visit_t () q
 
 let ensure_alias r =
   let visitor =

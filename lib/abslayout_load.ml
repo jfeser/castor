@@ -12,8 +12,7 @@ let annotate_relations conn =
   in
   visitor#visit_t ()
 
-let annotate conn l =
-  l |> strip_unused_as |> annotate_relations conn |> annotate_key_layouts
+let annotate conn l = l |> annotate_relations conn |> annotate_key_layouts
 
 let load_layout ?(params = Set.empty (module Name)) conn l =
   Resolve.resolve ~params (annotate conn l)

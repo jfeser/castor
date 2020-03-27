@@ -124,8 +124,7 @@ and query = function
   | Dedup r
   | Filter (_, r)
   | AHashIdx { hi_values = r }
-  | OrderBy { rel = r; _ }
-  | As (_, r) ->
+  | OrderBy { rel = r; _ } ->
       annot r
   | Join { r1; r2 }
   | AList { l_keys = r1; l_values = r2; _ }

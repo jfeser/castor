@@ -790,7 +790,7 @@ module Make (Config : Config.S) () = struct
     | Filter r', FuncT t' -> scan_filter scan of_pred ctx b r' t' cb
     | Select r', FuncT t' -> scan_select scan of_pred ctx b r' t' cb
     | DepJoin r', FuncT t' -> scan_depjoin scan ctx b r' t' cb
-    | (Join _ | GroupBy _ | OrderBy _ | Dedup _ | Relation _ | As _), _ ->
+    | (Join _ | GroupBy _ | OrderBy _ | Dedup _ | Relation _), _ ->
         Error.create "Unsupported at runtime." r [%sexp_of: _ annot]
         |> Error.raise
     | _ ->

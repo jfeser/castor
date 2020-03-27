@@ -312,8 +312,7 @@ let eval { db; params } r =
                Hashtbl.add_multi tbl ~key:k ~data:t);
         Hashtbl.data tbl |> Seq.of_list
         |> Seq.filter_map ~f:(fun ts -> eval_agg ctx ps s (Seq.of_list ts))
-    | As (_, r) -> eval ctx r
-    | _ -> failwith ""
+    | Range _ -> failwith "Unsupported"
   in
   (* Or_error.try_with ~backtrace:true (
    *   fun () -> *)

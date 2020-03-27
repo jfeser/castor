@@ -78,7 +78,6 @@ let schema_open schema r =
   | ATuple (rs, (Cross | Zip)) -> List.concat_map ~f:schema rs |> unscoped
   | ATuple ([], Concat) -> []
   | ATuple (r :: _, Concat) -> schema r |> unscoped
-  | As (n, r) -> scoped n (schema r)
   | Relation r -> Relation.schema r |> unscoped
   | Range (p, p') ->
       let t = Prim_type.unify (to_type p) (to_type p') in

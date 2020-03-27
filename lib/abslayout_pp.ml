@@ -142,8 +142,7 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
           (pp_list ~bracket:("", "") (fun fmt (lb, ub) ->
                fprintf fmt "%a, %a" (pp_option pp_lower_bound) lb
                  (pp_option pp_upper_bound) ub))
-          oi_lookup
-    | As (n, r) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp r n );
+          oi_lookup );
     fprintf fmt "@]"
   in
   (pp, pp_pred)

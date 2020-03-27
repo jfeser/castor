@@ -264,7 +264,6 @@ let least_general_of_layout r =
           | _ -> failwith "Unsupported"
         in
         TupleT (List.map rs ~f, { kind })
-    | As (_, r') -> f r'
     | AOrderedIdx { oi_key_layout = None; _ }
     | AHashIdx { hi_key_layout = None; _ } ->
         failwith "Missing key layout."
@@ -386,7 +385,6 @@ let annotate conn r =
     | DepJoin { d_lhs; d_rhs; _ }, FuncT ([ t1; t2 ], _) ->
         annot d_lhs t1;
         annot d_rhs t2
-    | As (_, r), _ -> annot r t
     | ( ( Select _ | Filter _ | DepJoin _ | Join _ | GroupBy _ | OrderBy _
         | Dedup _ | Relation _ | AEmpty | AScalar _ | AList _ | ATuple _
         | AHashIdx _ | AOrderedIdx _ | Range _ ),

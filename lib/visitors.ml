@@ -78,7 +78,6 @@ and ('p, 'r) query = ('p, 'r) Ast.query =
   | ATuple of ('r list * (Ast.tuple[@opaque]))
   | AHashIdx of ('p, 'r) hash_idx
   | AOrderedIdx of ('p, 'r) ordered_idx
-  | As of scope * 'r
 
 and 'm annot = 'm Ast.annot = {
   node : ('m annot pred, 'm annot) query;
@@ -161,7 +160,6 @@ module Map = struct
     | ATuple (qs, t) -> ATuple (List.map qs ~f:annot, t)
     | AHashIdx h -> AHashIdx (hash_idx annot pred h)
     | AOrderedIdx o -> AOrderedIdx (ordered_idx annot pred o)
-    | As (s, q) -> As (s, annot q)
 end
 
 let rec map_meta f { node; meta } =
@@ -196,7 +194,7 @@ module Reduce = struct
         annot q + annot q'
     | OrderBy { key; rel } ->
         list zero ( + ) (fun (p, _) -> pred p) key + annot rel
-    | Dedup q | As (_, q) -> annot q
+    | Dedup q -> annot q
     | Range (p, p') -> pred p + pred p'
     | AScalar p -> pred p
     | ATuple (qs, _) -> list zero ( + ) annot qs

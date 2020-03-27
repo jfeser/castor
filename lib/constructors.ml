@@ -43,8 +43,6 @@ module Query = struct
 
   let scalar a = AScalar a
 
-  let as_ a b = As (a, b)
-
   let tuple a b = ATuple (a, b)
 
   let hash_idx ?key_layout a b c d =
@@ -108,8 +106,6 @@ module Annot = struct
     val empty : t annot
 
     val scalar : _ meta annot pred -> t annot
-
-    val as_ : scope -> _ meta annot -> t annot
 
     val list : _ meta annot -> scope -> _ meta annot -> t annot
 
@@ -196,8 +192,6 @@ module Annot = struct
 
       let scalar a = wrap @@ Query.scalar @@ strip_pred a
 
-      let as_ a b = wrap @@ Query.as_ a (strip b)
-
       let list a b c = wrap @@ Query.list (strip a) b (strip c)
 
       let list' l = list l.l_keys l.l_scope l.l_values
@@ -264,8 +258,6 @@ module Annot = struct
       let empty = wrap @@ Query.empty
 
       let scalar a = wrap @@ Query.scalar a
-
-      let as_ a b = wrap @@ Query.as_ a b
 
       let list a b c = wrap @@ Query.list a b c
 
