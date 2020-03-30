@@ -156,7 +156,6 @@ module Make (C : Config.S) = struct
         for_all elim_depjoin Path.(all >>? is_depjoin);
         for_all flatten_select Path.(all >>? is_select);
         for_all flatten_dedup Path.(all >>? is_dedup);
-        for_all flatten_tuple Path.(all >>? is_tuple);
         for_all dealias_select Path.(all >>? is_select);
         for_all flatten_select Path.(all >>? is_select);
         for_all elim_filter_above_join Path.(all >>? is_filter);
