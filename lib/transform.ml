@@ -110,17 +110,17 @@ module Make (Config : Config.S) = struct
 
   let elim_param_filter tf test =
     (* Eliminate comparison filters. *)
-    fix
-      (seq_many
+    fix @@ traced
+    @@ seq_many
          [
            (* Hoist parameterized filters as far up as possible. *)
            fix (for_all F.hoist_filter (Path.all >>? is_param_filter >> parent));
            Branching.(
              seq_many
                [
-                 unroll_fix
-                   (O.at_ F.push_filter
-                      Path.(all >>? test >>? is_run_time >>| shallowest));
+                 unroll_fix @@ O.traced
+                 @@ O.at_ F.push_filter
+                      Path.(all >>? test >>? is_run_time >>| shallowest);
                  (* Eliminate a comparison filter. *)
                  choose
                    (for_all (try_random_branch tf)
@@ -138,7 +138,7 @@ module Make (Config : Config.S) = struct
                       ]);
                ]
              |> lower (min Cost.cost));
-         ])
+         ]
 
   let try_partition tf =
     Branching.(
