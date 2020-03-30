@@ -88,15 +88,6 @@ let eval out_dir params query =
   run_time
 
 let main ~params ~cost_timeout ~timeout ~out_dir ~out_file ch =
-  (* Set up logging. *)
-  Logs.set_level (Some Info);
-  Logs.Src.set_level Db.src (Some Warning);
-  Logs.Src.set_level Ops.src (Some Warning);
-  Logs.Src.set_level Type_cost.src (Some Warning);
-  Logs.Src.set_level Join_opt.src (Some Warning);
-  Logs.info (fun m ->
-      m "%s" (Sys.get_argv () |> Array.to_list |> String.concat ~sep:" "));
-
   let conn = Db.create (Sys.getenv_exn "CASTOR_DB")
   and cost_conn = Db.create (Sys.getenv_exn "CASTOR_COST_DB") in
   let params_set =
@@ -136,22 +127,25 @@ let () =
   Command.basic ~summary:"Optimize a query."
     [%map_open
       let () = Log.param
+      and () = Ops.param
+      and () = Db.param
+      and () = Type_cost.param
+      and () = Join_opt.param
       and cost_timeout =
         flag "cost-timeout" (optional float)
-          ~doc:"terminate cost function after n seconds"
+          ~doc:"SEC time to run cost estimation"
       and timeout =
-        flag "timeout" (optional float)
-          ~doc:"terminate optimization after n seconds"
+        flag "timeout" (optional float) ~doc:"SEC time to run optimizer"
       and params =
         flag "param" ~aliases:[ "p" ]
           (listed Util.param_and_value)
           ~doc:"NAME:TYPE query parameters"
       and out_dir =
         flag "out-dir" (required string) ~aliases:[ "o" ]
-          ~doc:"output directory"
+          ~doc:"DIR output directory"
       and out_file =
         flag "out-file" (required string) ~aliases:[ "f" ]
-          ~doc:"output directory"
+          ~doc:"FILE output directory"
       and ch =
         anon (maybe_with_default In_channel.stdin ("query" %: Util.channel))
       in

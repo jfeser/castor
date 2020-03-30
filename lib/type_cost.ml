@@ -3,7 +3,7 @@ open Abslayout_load
 open Type
 module I = Abs_int
 
-include (val Log.make ~level:(Some Info) "castor-opt.type-cost")
+include (val Log.make ~level:(Some Warning) "castor-opt.type-cost")
 
 module Config = struct
   module type S = sig

@@ -6,7 +6,7 @@ module A = Abslayout
 module P = Pred.Infix
 module V = Visitors
 
-include (val Log.make ~level:(Some Info) "castor-opt.join-opt")
+include (val Log.make ~level:(Some Warning) "castor-opt.join-opt")
 
 let filter p r = { node = Filter (p, r); meta = r.meta }
 
