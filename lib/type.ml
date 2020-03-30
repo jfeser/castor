@@ -717,18 +717,21 @@ module Parallel = struct
           | Some (Ok t) ->
               List.hd_exn t
               |> List.map2_exn (Schema.names r) ~f:(fun n v -> (n, v))
-              |> Option.return |> return
-          | Some (Error { info = `Timeout; _ }) -> return None
-          | Some (Error e) -> Error.raise @@ Db.Async.to_error e
-          | None -> failwith "Expected a tuple.")
+              |> Option.return |> Result.return |> return
+          | Some (Error { info = `Timeout; _ }) -> return (Result.return None)
+          | Some (Error e) -> Result.fail (`Db_error e) |> return
+          | None -> failwith "BUG: expected a tuple.")
         queries
     in
-    let type_ =
-      let results = List.filter_map results ~f:Fun.id in
-      let ctx = List.concat results |> Map.of_alist_exn (module String) in
-      Type_builder.type_of ctx r
-    in
-    return type_
+    Result.(
+      all results >>| fun results ->
+      let ctx =
+        List.filter_map results ~f:Fun.id
+        |> List.concat
+        |> Map.of_alist_exn (module String)
+      in
+      Type_builder.type_of ctx r)
+    |> return
 
-  let type_of ?timeout conn r = Lwt_main.run (type_of ?timeout conn r)
+  let type_of ?timeout conn r = type_of ?timeout conn r |> Lwt_main.run
 end

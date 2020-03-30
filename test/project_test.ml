@@ -163,7 +163,7 @@ groupby([min(ct2) as x12, max(ct2) as x13], [],
     {|
     groupby([min(ct2) as x12, max(ct2) as x13],
       [],
-      groupby([count() as ct2], [], select([], r1))) |}]
+      groupby([count() as ct2], [], select([false as dummy], r1))) |}]
 
 let%expect_test "filter-exists" =
   run_test
@@ -172,8 +172,24 @@ let%expect_test "filter-exists" =
     filter(exists(groupby([l_orderkey, sum(l_quantity) as sum_l_quantity], [l_orderkey], lineitem)),
                   orders)
 |};
-  [%expect {|
+  [%expect
+    {|
     filter(exists(groupby([l_orderkey, sum(l_quantity) as sum_l_quantity],
                     [l_orderkey],
                     lineitem)),
       orders) |}]
+
+let%expect_test "" =
+  run_test
+    (Lazy.force Test_util.tpch_conn)
+    {|
+groupby([min(ct0) as x0, max(ct0) as x1],
+  [],
+  groupby([count() as ct0], [], select([c_mktsegment as k0], dedup(select([c_mktsegment], customer)))))
+|};
+  [%expect {|
+    groupby([min(ct0) as x0, max(ct0) as x1],
+      [],
+      groupby([count() as ct0],
+        [],
+        select([false as dummy], dedup(select([c_mktsegment], customer))))) |}]

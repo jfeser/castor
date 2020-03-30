@@ -37,7 +37,11 @@ let%expect_test "len-1" =
   [%expect {| (Interval 3 203) |}]
 
 let type_test conn q =
-  let type_ = Type.Parallel.type_of conn q in
+  let type_ =
+    Type.Parallel.type_of conn q
+    |> Result.map_error ~f:(fun _ -> Failure "")
+    |> Result.ok_exn
+  in
   print_endline "Parallel type (imprecise):";
   [%sexp_of: Type.t] type_ |> print_s;
   let type_ = Type.type_of conn q in
@@ -196,7 +200,8 @@ let%expect_test "" =
          conn
   in
   type_test conn q;
-  [%expect {|
+  [%expect
+    {|
     Parallel type (imprecise):
     (OrderedIdxT
      ((DateT ((range (Interval 8036 10437))))
@@ -246,7 +251,8 @@ let%expect_test "" =
          conn
   in
   type_test conn q;
-  [%expect {|
+  [%expect
+    {|
     Parallel type (imprecise):
     (OrderedIdxT
      ((DateT ((range (Interval 8036 10437))))

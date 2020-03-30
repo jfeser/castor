@@ -90,5 +90,9 @@ val type_of : ?timeout:float -> Db.t -> < .. > annot -> t
 val annotate : Db.t -> 'a annot -> < type_ : t > annot
 
 module Parallel : sig
-  val type_of : ?timeout:float -> Db.t -> < > annot -> t
+  val type_of :
+    ?timeout:float ->
+    Db.t ->
+    < > annot ->
+    (t, [> `Db_error of Db.Async.error ]) Result.t
 end

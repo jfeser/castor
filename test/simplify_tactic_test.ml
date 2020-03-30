@@ -1,3 +1,4 @@
+open Abslayout
 open Simplify_tactic
 
 module Config = struct
@@ -60,3 +61,20 @@ let%expect_test "" =
        Path.root r)
     ~f:(Format.printf "%a" Abslayout.pp);
   [%expect {| depjoin(ascalar(0 as f) as k, select([k.f], ascalar(0 as g))) |}]
+
+let%expect_test "" =
+  let r =
+    load_string
+      {|
+groupby([min(ct0) as x0, max(ct0) as x1],
+  [],
+  groupby([count() as ct0], [], select([c_mktsegment as k0], dedup(select([c_mktsegment], customer)))))
+|}
+  in
+  Simplify_tactic.simplify (Lazy.force Test_util.tpch_conn) r |> Fmt.pr "%a" pp;
+  [%expect {|
+    groupby([min(ct0) as x0, max(ct0) as x1],
+      [],
+      groupby([count() as ct0],
+        [],
+        select([c_mktsegment as k0], dedup(select([c_mktsegment], customer))))) |}]
