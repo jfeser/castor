@@ -36,18 +36,19 @@ module Make (Config : Config.S) = struct
       ~hashable:(Hashtbl.Hashable.of_key (module Ast))
       (fun r ->
         info (fun m -> m "Computing cost of:@, %a." Abslayout.pp r);
-        let type_ =
-          load_layout ~params cost_conn r
-          |> strip_meta
-          |> Parallel.type_of ?timeout:cost_timeout cost_conn
-        in
-        let c = read type_ in
         let out =
+          let open Result.Let_syntax in
+          let%bind type_ =
+            load_layout ~params cost_conn r
+            |> strip_meta
+            |> Parallel.type_of ?timeout:cost_timeout cost_conn
+            |> Result.map_error ~f:(fun (`Db_error e) -> Db.Async.to_error e)
+          in
+          let c = read type_ in
           match kind with
           | `Min -> I.inf c
           | `Max -> I.sup c
           | `Avg ->
-              let open Result.Let_syntax in
               let%bind l = I.inf c in
               let%map h = I.sup c in
               l + ((h - l) / 2)
