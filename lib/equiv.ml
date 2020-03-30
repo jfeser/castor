@@ -49,7 +49,16 @@ let eqs_open (eqs : 'a annot -> Set.M(Eq).t) r : Set.M(Eq).t =
       List.map ts ~f:eqs |> List.reduce ~f:( || ) |> Option.value ~default:empty
   | _ -> empty
 
-let annotate r = V.annotate eqs_open r
+let annotate r =
+  V.Annotate_obj.annot
+    (fun m -> m#eq)
+    (fun m eq ->
+      object
+        method meta = m
+
+        method eq = eq
+      end)
+    eqs_open r
 
 let rec eqs r = eqs_open eqs r.node
 

@@ -236,13 +236,7 @@ let order_open order r =
 let rec order_of r = order_open order_of r
 
 let order_of r =
-  let r =
-    Equiv.annotate r
-    |> V.map_meta (fun eq ->
-           object
-             method eq = eq
-           end)
-  in
+  let r = Equiv.annotate r in
   (order_of r :> (< > annot pred * order) list)
 
 let annotate_key_layouts r =
