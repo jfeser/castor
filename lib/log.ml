@@ -34,6 +34,16 @@ let setup_log level =
   setup_stderr ();
   Logs.Src.set_level src (Some level)
 
+let level_type =
+  let levels = [ "debug"; "info"; "warning"; "error" ] in
+  Command.Arg_type.create
+    ~complete:(fun _ ~part ->
+      List.filter levels ~f:(String.is_prefix ~prefix:part))
+    (fun l ->
+      match Logs.level_of_string l with
+      | Ok l -> l
+      | Error (`Msg m) -> failwith m)
+
 let param =
   let open Command.Let_syntax in
   [%map_open
@@ -65,6 +75,8 @@ module type LOG = sig
   include Logs.LOG
 
   val src : Logs.Src.t
+
+  val param : unit Command.Param.t
 end
 
 let make ?(level = Some Logs.Info) name =
@@ -73,6 +85,16 @@ let make ?(level = Some Logs.Info) name =
       let s = Logs.Src.create name in
       Logs.Src.set_level s level;
       s
+
+    let param =
+      let open Command.Let_syntax in
+      [%map_open
+        let level =
+          flag
+            (sprintf "set-log-level-%s" name)
+            (optional level_type) ~doc:"LEVEL set verbosity"
+        in
+        Option.iter level ~f:(Logs.Src.set_level src)]
 
     include (val Logs.src_log src)
   end : LOG )

@@ -2,7 +2,7 @@ open Ast
 module A = Abslayout
 module V = Visitors
 
-include (val Log.make "castor.join_elim")
+include (val Log.make "castor.join-elim")
 
 (** Given two sets of names and an equivalence relation, return a translation
    from one set to the other. *)

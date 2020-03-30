@@ -4,7 +4,7 @@ module V = Visitors
 module A = Abslayout
 module Q = Fold_query
 
-include (val Log.make "castor.abslayout_fold")
+include (val Log.make "castor.abslayout-fold")
 
 module Fold = struct
   type ('a, 'b, 'c) fold = {

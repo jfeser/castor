@@ -3,7 +3,25 @@ open Collections
 open Ast
 module A = Abslayout
 
-include (val Log.make ~level:(Some Info) "castor.ops")
+let trace = ref false
+
+let validate = ref true
+
+let param =
+  let open Command.Let_syntax in
+  [%map_open
+    let trace_ = flag "trace" no_arg ~doc:"enable transform tracing"
+    and no_validate =
+      flag "disable-validation" no_arg ~doc:"disable transform validation"
+    in
+    trace := trace_;
+    validate := not no_validate]
+
+module Log = (val Log.make ~level:(Some Warning) "castor.ops")
+
+let param = Command.Param.all_unit [ param; Log.param ]
+
+include Log
 
 module Config = struct
   module type S = sig
@@ -66,8 +84,6 @@ include T
 module Make (C : Config.S) = struct
   open C
   include T
-
-  let trace = false
 
   type ('r, 'p) path_set = 'r -> 'p Seq.t
 
@@ -307,7 +323,7 @@ module Make (C : Config.S) = struct
         name
     in
     let tf = resolve_validated @@ schema_validated tf in
-    if trace then traced tf else tf
+    if !trace then traced tf else tf
 
   let of_func ?name f = of_func_pre ?name ~pre:Fun.id f
 

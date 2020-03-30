@@ -2,7 +2,7 @@ open! Lwt
 open Collections
 module Psql = Postgresql
 
-include (val Log.make ~level:(Some Info) "castor.db")
+include (val Log.make ~level:(Some Warning) "castor.db")
 
 let default_pool_size = 3
 
@@ -51,17 +51,6 @@ let create ?(pool_size = default_pool_size) uri =
 let close { conn; _ } = ensure_finish conn
 
 let conn { conn; _ } = conn
-
-let param =
-  let open Command.Let_syntax in
-  [%map_open
-    let m_uri =
-      flag "db" (optional string) ~doc:"CONNINFO the database to connect to"
-    in
-    let uri =
-      match m_uri with Some uri -> uri | None -> Sys.getenv_exn "CASTOR_DB"
-    in
-    create uri]
 
 let subst_params params query =
   match params with
