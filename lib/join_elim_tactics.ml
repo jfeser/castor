@@ -22,12 +22,14 @@ module Make (C : Config.S) = struct
     let%bind pred, r1, r2 = to_join r in
     let scope = Fresh.name Global.fresh "s%d" in
     let pred = Pred.scoped (schema r1) scope pred in
-    let tuple_elems =
-      ( schema r1 |> Schema.scoped scope |> Schema.to_select_list
-      |> List.map ~f:A.scalar )
-      @ [ A.filter pred r2 ]
-    in
-    Some (A.list r1 scope (A.tuple tuple_elems Cross))
+    let lhs =
+      let scalars =
+        schema r1 |> Schema.scoped scope |> Schema.to_select_list
+        |> List.map ~f:A.scalar
+      in
+      A.tuple scalars Cross
+    and rhs = A.filter pred r2 in
+    return @@ A.list r1 scope @@ A.tuple [ lhs; rhs ] Cross
 
   let elim_join_nest = of_func elim_join_nest ~name:"elim-join-nest"
 
