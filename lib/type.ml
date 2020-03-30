@@ -418,6 +418,8 @@ let annotate conn r =
 
 module Parallel = struct
   module Type_builder = struct
+    open Option.Let_syntax
+
     type agg = Simple of Pred.t | Subquery of (Ast.t * Pred.t list)
 
     type nonrec t = {
@@ -426,7 +428,7 @@ module Parallel = struct
     }
 
     let eval ctx p =
-      Map.find_exn ctx (Name.name @@ Option.value_exn (Pred.to_name p))
+      Map.find ctx (Name.name @@ Option.value_exn (Pred.to_name p))
 
     let wrap p = As_pred (p, Fresh.name Global.fresh "x%d")
 
@@ -437,39 +439,36 @@ module Parallel = struct
 
     let null_t = { aggs = []; build = (fun _ _ -> Some NullT) }
 
+    let eval_interval ~to_int ctx lo hi =
+      let range =
+        let%map lo = eval ctx lo and hi = eval ctx hi in
+        I.Interval (to_int lo, to_int hi)
+      in
+      Option.value range ~default:I.top
+
     let int_t p =
       let min = wrap @@ Min p and max = wrap @@ Max p in
       let build ctx _ =
-        Option.some
-        @@ IntT
-             {
-               range =
-                 I.Interval
-                   (Value.to_int @@ eval ctx min, Value.to_int @@ eval ctx max);
-               nullable = false (* TODO *);
-             }
+        let range = eval_interval ~to_int:Value.to_int ctx min max in
+        return @@ IntT { range; nullable = false (* TODO *) }
       in
       { aggs = [ Simple min; Simple max ]; build }
 
     let bool_t =
       {
         aggs = [];
-        build =
-          (fun ctx _ -> Option.some @@ BoolT { nullable = false (* TODO *) });
+        build = (fun ctx _ -> return @@ BoolT { nullable = false (* TODO *) });
       }
 
     let date_t p =
       let min = wrap @@ Min p and max = wrap @@ Max p in
       let build ctx _ =
-        Option.some
-        @@ DateT
-             {
-               range =
-                 I.Interval
-                   ( Date.to_int @@ Value.to_date @@ eval ctx min,
-                     Date.to_int @@ Value.to_date @@ eval ctx max );
-               nullable = false (* TODO *);
-             }
+        let range =
+          eval_interval
+            ~to_int:(fun x -> Date.to_int @@ Value.to_date x)
+            ctx min max
+        in
+        return @@ DateT { range; nullable = false (* TODO *) }
       in
       { aggs = [ Simple min; Simple max ]; build }
 
@@ -478,7 +477,7 @@ module Parallel = struct
         aggs = [];
         build =
           (fun ctx _ ->
-            Option.some
+            return
             @@ FixedT { value = AbsFixed.top; nullable = false (* TODO *) });
       }
 
@@ -487,8 +486,7 @@ module Parallel = struct
         aggs = [];
         build =
           (fun ctx _ ->
-            Option.some
-            @@ StringT { nchars = I.top; nullable = false (* TODO *) });
+            return @@ StringT { nchars = I.top; nullable = false (* TODO *) });
       }
 
     let scalar_t p =
@@ -506,25 +504,22 @@ module Parallel = struct
       let counts = A.group_by [ As_pred (Count, agg_name) ] [] q in
       let count = Name (Name.create agg_name) in
       let min = wrap @@ Min count and max = wrap @@ Max count in
-      let eval ctx v = eval ctx v |> Value.to_int in
-      {
-        aggs = [ Subquery (counts, [ min; max ]) ];
-        build = (fun ctx ts -> f ts (I.Interval (eval ctx min, eval ctx max)));
-      }
+      let build ctx ts =
+        let range = eval_interval ~to_int:Value.to_int ctx min max in
+        f ts range
+      in
+      { aggs = [ Subquery (counts, [ min; max ]) ]; build }
 
     let list_t q =
-      count_t q @@ fun ts count ->
-      Option.some @@ ListT (List.nth_exn ts 1, { count })
+      count_t q @@ fun ts count -> return @@ ListT (List.nth_exn ts 1, { count })
 
     let hash_idx_t q =
       count_t q @@ fun ts key_count ->
-      Option.some
-      @@ HashIdxT (List.nth_exn ts 0, List.nth_exn ts 1, { key_count })
+      return @@ HashIdxT (List.nth_exn ts 0, List.nth_exn ts 1, { key_count })
 
     let ordered_idx_t q =
       count_t q @@ fun ts key_count ->
-      Option.some
-      @@ OrderedIdxT (List.nth_exn ts 0, List.nth_exn ts 1, { key_count })
+      return @@ OrderedIdxT (List.nth_exn ts 0, List.nth_exn ts 1, { key_count })
 
     let tuple_t kind =
       let kind =
@@ -533,7 +528,7 @@ module Parallel = struct
         | Concat -> `Concat
         | _ -> failwith "Unexpected tuple kind."
       in
-      { aggs = []; build = (fun _ ts -> Option.some @@ TupleT (ts, { kind })) }
+      { aggs = []; build = (fun _ ts -> return @@ TupleT (ts, { kind })) }
 
     let no_type_t = { aggs = []; build = (fun _ _ -> None) }
 
