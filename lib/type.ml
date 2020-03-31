@@ -510,16 +510,26 @@ module Parallel = struct
       in
       { aggs = [ Subquery (counts, [ min; max ]) ]; build }
 
+    let list_error l =
+      Error.create "Unexpected list." l [%sexp_of: t list] |> Error.raise
+
     let list_t q =
-      count_t q @@ fun ts count -> return @@ ListT (List.nth_exn ts 1, { count })
+      count_t q @@ fun ts count ->
+      match ts with
+      | [ t ] -> return @@ ListT (t, { count })
+      | _ -> list_error ts
 
     let hash_idx_t q =
       count_t q @@ fun ts key_count ->
-      return @@ HashIdxT (List.nth_exn ts 0, List.nth_exn ts 1, { key_count })
+      match ts with
+      | [ tk; tv ] -> return @@ HashIdxT (tk, tv, { key_count })
+      | _ -> list_error ts
 
     let ordered_idx_t q =
       count_t q @@ fun ts key_count ->
-      return @@ OrderedIdxT (List.nth_exn ts 0, List.nth_exn ts 1, { key_count })
+      match ts with
+      | [ tk; tv ] -> return @@ OrderedIdxT (tk, tv, { key_count })
+      | _ -> list_error ts
 
     let tuple_t kind =
       let kind =
@@ -572,7 +582,8 @@ module Parallel = struct
         V.Reduce.query zero plus annot pred q
       and meta _ = zero
       and pred (_ : _ annot pred) = zero in
-      annot r |> List.hd_exn
+      try annot r |> List.hd_exn
+      with exn -> Exn.reraise exn (Fmt.str "type_of failed on:@ %a" A.pp r)
   end
 
   let unscope n =
@@ -702,7 +713,7 @@ module Parallel = struct
         (fun r ->
           debug (fun m -> m "Pre-opt:@ %a" A.pp r);
           let r =
-            try Unnest.unnest r |> Resolve.resolve |> Project.project
+            try Simplify_tactic.simplify conn r
             with e -> Error.of_exn ~backtrace:`Get e |> Error.raise
           in
           debug (fun m -> m "Post-opt:@ %a" A.pp r);
