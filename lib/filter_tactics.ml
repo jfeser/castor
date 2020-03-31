@@ -38,13 +38,13 @@ module Make (C : Config.S) = struct
 
   let fresh_name = Fresh.name Global.fresh
 
-  let schema_set_exn r = Schema.schema r |> Set.of_list (module Name)
+  let schema_set r = Schema.schema r |> Set.of_list (module Name)
 
   (** Split predicates that sit under a binder into the parts that depend on
-       bound variables and the parts that do not. *)
+       bound variables and the parts that don't. *)
   let split_bound binder p =
     List.partition_tf (Pred.conjuncts p) ~f:(fun p' ->
-        overlaps (Free.pred_free p') (schema_set_exn binder))
+        overlaps (Free.pred_free p') (schema_set binder))
 
   (** Check that a predicate is supported by a relation (it does not depend on
      anything in the context that it did not previously depend on.) *)
@@ -57,6 +57,9 @@ module Make (C : Config.S) = struct
     |> List.dedup_and_sort ~compare:(fun p1 p2 ->
            [%compare: Name.t option] (Schema.to_name p1) (Schema.to_name p2))
 
+  let filter_many ps r =
+    if List.is_empty ps then r else A.filter (Pred.conjoin ps) r
+
   let hoist_filter r =
     let open Option.Let_syntax in
     match r.node with
@@ -65,10 +68,7 @@ module Make (C : Config.S) = struct
         A.filter p (order_by key r)
     | GroupBy (ps, key, r) ->
         let%bind p, r = to_filter r in
-        if
-          invariant_support (schema_set_exn r)
-            (schema_set_exn (group_by ps key r))
-            p
+        if invariant_support (schema_set r) (schema_set (group_by ps key r)) p
         then Some (A.filter p (group_by ps key r))
         else None
     | Filter (p', r) ->
@@ -85,7 +85,7 @@ module Make (C : Config.S) = struct
     | Join { pred; r1; r2 } -> (
         match (to_filter r1, to_filter r2) with
         | Some (p1, r1), Some (p2, r2) ->
-            Some (A.filter (Pred.conjoin [ p1; p2 ]) (join pred r1 r2))
+            Some (filter_many [ p1; p2 ] (join pred r1 r2))
         | None, Some (p, r2) -> Some (A.filter p (join pred r1 r2))
         | Some (p, r1), None -> Some (A.filter p (join pred r1 r2))
         | None, None -> None )
@@ -99,15 +99,14 @@ module Make (C : Config.S) = struct
         let%map p, r = to_filter rv in
         let below, above = split_bound rk p in
         let above = List.map above ~f:(Pred.unscoped h.hi_scope) in
-        A.filter (Pred.conjoin above)
-          (hash_idx' { h with hi_values = A.filter (Pred.conjoin below) r })
+        filter_many above
+        @@ hash_idx' { h with hi_values = filter_many below r }
     | AOrderedIdx o ->
         let%map p, r = to_filter o.oi_values in
         let below, above = split_bound o.oi_keys p in
         let above = List.map above ~f:(Pred.unscoped o.oi_scope) in
-        A.filter (Pred.conjoin above)
-          (ordered_idx'
-             { o with oi_values = A.filter (Pred.conjoin below) o.oi_values })
+        filter_many above
+        @@ ordered_idx' { o with oi_values = filter_many below r }
     | DepJoin { d_lhs; d_alias; d_rhs } ->
         let%map p, r = to_filter d_rhs in
         (* Ensure all the required names are selected. *)
@@ -162,12 +161,12 @@ module Make (C : Config.S) = struct
       TODO: In practice we also want it to have a parameter in it. Is this correct? *)
   let is_candidate_key p r =
     let pfree = Free.pred_free p in
-    (not (overlaps (schema_set_exn r) pfree)) && overlaps params pfree
+    (not (overlaps (schema_set r) pfree)) && overlaps params pfree
 
   (** A predicate is a candidate to be matched if all its free variables are
      bound by the relation that it is above. *)
   let is_candidate_match p r =
-    Set.is_subset (Free.pred_free p) ~of_:(schema_set_exn r)
+    Set.is_subset (Free.pred_free p) ~of_:(schema_set r)
 
   let elim_cmp_filter r =
     match r.node with
@@ -258,15 +257,14 @@ module Make (C : Config.S) = struct
             let keys_schema = Schema.schema all_keys in
             select (Schema.to_select_list orig_schema)
             @@ ordered_idx all_keys scope
-                 (A.filter
-                    ( List.map key ~f:(fun p ->
-                          P.(p = Pred.scoped keys_schema scope p))
-                    |> Pred.conjoin )
+                 (filter_many
+                    (List.map key ~f:(fun p ->
+                         P.(p = Pred.scoped keys_schema scope p)))
                     r')
                  cmps
         in
         match x with
-        | Ok r -> Seq.singleton (A.filter (Pred.conjoin rest) r)
+        | Ok r -> Seq.singleton (filter_many rest r)
         | Error err ->
             Logs.warn (fun m -> m "Elim-cmp: %a" Error.pp err);
             Seq.empty )
@@ -292,8 +290,8 @@ module Make (C : Config.S) = struct
         place_all up (i + 1)
     in
     let rest = place_all ps 0 in
-    let rs = List.mapi rs ~f:(fun i -> A.filter (Pred.conjoin preds.(i))) in
-    A.filter (Pred.conjoin rest) (tuple rs Cross)
+    let rs = List.mapi rs ~f:(fun i -> filter_many preds.(i)) in
+    filter_many rest (tuple rs Cross)
 
   let push_filter_list stage p l =
     let rk_bnd = Set.of_list (module Name) (Schema.schema l.l_keys) in
@@ -302,12 +300,10 @@ module Make (C : Config.S) = struct
       |> List.partition_map ~f:(fun p ->
              if Tactics_util.is_supported stage rk_bnd p then `Fst p else `Snd p)
     in
-    let inner_key_pred = Pred.conjoin pushed_key in
-    let inner_val_pred = Pred.conjoin pushed_val in
     list
-      (A.filter inner_key_pred l.l_keys)
+      (filter_many pushed_key l.l_keys)
       l.l_scope
-      (A.filter inner_val_pred l.l_values)
+      (filter_many pushed_val l.l_values)
 
   let push_filter_select stage p ps r =
     match select_kind ps with
@@ -335,8 +331,7 @@ module Make (C : Config.S) = struct
                    `Fst (Pred.subst scalar_ctx p)
                  else `Snd p)
         in
-        A.filter (Pred.conjoin unpushed)
-          (select ps (A.filter (Pred.conjoin pushed) r))
+        filter_many unpushed @@ select ps @@ filter_many pushed r
 
   let push_filter r =
     let open Option.Let_syntax in
@@ -383,14 +378,10 @@ module Make (C : Config.S) = struct
                  if Tactics_util.is_supported stage rk_bnd p then `Fst p
                  else `Snd p)
         in
-        let inner_key_pred = Pred.conjoin pushed_key in
-        let inner_val_pred =
-          let pushed_val =
-            List.map pushed_val ~f:(Pred.scoped (Set.to_list rk_bnd) scope)
-          in
-          Pred.conjoin pushed_val
+        let pushed_val =
+          List.map pushed_val ~f:(Pred.scoped (Set.to_list rk_bnd) scope)
         in
-        mk (A.filter inner_key_pred rk) scope (A.filter inner_val_pred rv)
+        mk (filter_many pushed_key rk) scope (filter_many pushed_val rv)
 
   let push_filter =
     (* NOTE: Simplify is necessary to make push-filter safe under fixpoints. *)
@@ -572,11 +563,11 @@ module Make (C : Config.S) = struct
                 Schema.schema r |> List.hd_exn |> Name.scoped scope |> P.name)
           in
           Pred.subst_tree ctx inner
-        and outer_filter_pred = Pred.conjoin rest in
-        select
-          ( Schema.to_select_list
-          @@ List.dedup_and_sort ~compare:[%compare: Name.t] orig_schema )
-        @@ A.filter outer_filter_pred
+        and select_list =
+          Schema.to_select_list
+          @@ List.dedup_and_sort ~compare:[%compare: Name.t] orig_schema
+        in
+        select select_list @@ filter_many rest
         @@ hash_idx r_keys scope (A.filter inner_filter_pred r) key
 
   let elim_eq_filter =

@@ -120,13 +120,12 @@ let%expect_test "elim-eq-filter" =
   [%expect
     {|
           select([fresh],
-            filter(true,
-              ahashidx(dedup(
-                         atuple([select([fresh as x0],
-                                   dedup(select([fresh], select([f as fresh], r))))],
-                           cross)) as s0,
-                filter((fresh = s0.x0), select([f as fresh], r)),
-                param))) |}]
+            ahashidx(dedup(
+                       atuple([select([fresh as x0],
+                                 dedup(select([fresh], select([f as fresh], r))))],
+                         cross)) as s0,
+              filter((fresh = s0.x0), select([f as fresh], r)),
+              param)) |}]
 
 let%expect_test "elim-eq-filter-approx" =
   let r =
@@ -137,13 +136,12 @@ let%expect_test "elim-eq-filter-approx" =
   [%expect
     {|
           select([fresh],
-            filter(true,
-              ahashidx(dedup(
-                         atuple([select([fresh as x0],
-                                   select([f as fresh], dedup(select([f], r))))],
-                           cross)) as s0,
-                filter((fresh = s0.x0), select([f as fresh], filter((g = param), r))),
-                param))) |}]
+            ahashidx(dedup(
+                       atuple([select([fresh as x0],
+                                 select([f as fresh], dedup(select([f], r))))],
+                         cross)) as s0,
+              filter((fresh = s0.x0), select([f as fresh], filter((g = param), r))),
+              param)) |}]
 
 let%expect_test "elim-eq-filter" =
   let r =
@@ -172,41 +170,36 @@ let%expect_test "elim-eq-filter" =
   [%expect
     {|
         select([fresh1, fresh2],
-          filter(true,
-            ahashidx(dedup(
-                       atuple([dedup(
-                                 atuple([select([x0 as x2],
-                                           select([fresh1 as x0],
-                                             dedup(
-                                               select([fresh1],
-                                                 select([f as fresh1, g as fresh2],
-                                                   r))))),
-                                         select([x1 as x2],
-                                           select([fresh2 as x1],
-                                             dedup(
-                                               select([fresh2],
-                                                 select([f as fresh1, g as fresh2],
-                                                   r)))))],
-                                   concat)),
-                               dedup(
-                                 atuple([select([x3 as x5],
-                                           select([fresh2 as x3],
-                                             dedup(
-                                               select([fresh2],
-                                                 select([f as fresh1, g as fresh2],
-                                                   r))))),
-                                         select([x4 as x5],
-                                           select([fresh1 as x4],
-                                             dedup(
-                                               select([fresh1],
-                                                 select([f as fresh1, g as fresh2],
-                                                   r)))))],
-                                   concat))],
-                         cross)) as s0,
-              filter((((fresh1 = s0.x2) && (fresh2 = s0.x5)) ||
-                     ((fresh2 = s0.x2) && (fresh1 = s0.x5))),
-                select([f as fresh1, g as fresh2], r)),
-              (param, (param + 1))))) |}]
+          ahashidx(dedup(
+                     atuple([dedup(
+                               atuple([select([x0 as x2],
+                                         select([fresh1 as x0],
+                                           dedup(
+                                             select([fresh1],
+                                               select([f as fresh1, g as fresh2], r))))),
+                                       select([x1 as x2],
+                                         select([fresh2 as x1],
+                                           dedup(
+                                             select([fresh2],
+                                               select([f as fresh1, g as fresh2], r)))))],
+                                 concat)),
+                             dedup(
+                               atuple([select([x3 as x5],
+                                         select([fresh2 as x3],
+                                           dedup(
+                                             select([fresh2],
+                                               select([f as fresh1, g as fresh2], r))))),
+                                       select([x4 as x5],
+                                         select([fresh1 as x4],
+                                           dedup(
+                                             select([fresh1],
+                                               select([f as fresh1, g as fresh2], r)))))],
+                                 concat))],
+                       cross)) as s0,
+            filter((((fresh1 = s0.x2) && (fresh2 = s0.x5)) ||
+                   ((fresh2 = s0.x2) && (fresh1 = s0.x5))),
+              select([f as fresh1, g as fresh2], r)),
+            (param, (param + 1)))) |}]
 
 let%expect_test "elim-eq-filter" =
   let r =
@@ -217,8 +210,7 @@ let%expect_test "elim-eq-filter" =
        (at_ elim_eq_filter Path.(all >>? is_filter >>| shallowest))
        Path.root r)
     ~f:(Format.printf "%a\n" pp);
-  [%expect
-    {| |}]
+  [%expect {| |}]
 
 let%expect_test "partition" =
   let r = load_string ~params:C.params "filter(f = param, r)" in
@@ -278,3 +270,43 @@ filter((0 =
                   ascalar(0 as dummy)) as s0,
           filter((0 = s0.q0), ascalar(0 as x)))
  |}]
+
+let%expect_test "hoist-filter" =
+  let r =
+    Abslayout_load.load_string (Lazy.force tpch_conn)
+      {|
+aorderedidx(select([l_shipdate, o_orderdate],
+              join(true, dedup(select([l_shipdate], lineitem)), dedup(select([o_orderdate], orders)))) as s68,
+  filter((c_mktsegment = ""),
+    alist(select([c_custkey, c_mktsegment], customer) as s65,
+      atuple([ascalar(s65.c_mktsegment),
+              alist(select([l_orderkey, l_discount, l_extendedprice, o_shippriority, o_orderdate],
+                      join(true,
+                        lineitem,
+                        orders)) as s64,
+                atuple([ascalar(s64.l_orderkey), ascalar(s64.l_discount), 
+                        ascalar(s64.l_extendedprice), ascalar(s64.o_shippriority), 
+                        ascalar(s64.o_orderdate)],
+                  cross))],
+        cross))),
+  > date("0000-01-01"), , , < date("0000-01-01"))
+|}
+  in
+  Option.iter (apply hoist_filter Path.root r) ~f:(Fmt.pr "%a" pp);
+  [%expect {|
+    filter((c_mktsegment = ""),
+      aorderedidx(select([l_shipdate, o_orderdate],
+                    join(true,
+                      dedup(select([l_shipdate], lineitem)),
+                      dedup(select([o_orderdate], orders)))) as s68,
+        alist(select([c_custkey, c_mktsegment], customer) as s65,
+          atuple([ascalar(s65.c_mktsegment),
+                  alist(select([l_orderkey, l_discount, l_extendedprice,
+                                o_shippriority, o_orderdate],
+                          join(true, lineitem, orders)) as s64,
+                    atuple([ascalar(s64.l_orderkey), ascalar(s64.l_discount),
+                            ascalar(s64.l_extendedprice),
+                            ascalar(s64.o_shippriority), ascalar(s64.o_orderdate)],
+                      cross))],
+            cross)),
+        > date("0000-01-01"), , , < date("0000-01-01"))) |}]
