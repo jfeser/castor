@@ -271,7 +271,8 @@ class conv_sql db =
       |> self#limit q.Sql.limit
   end
 
-let main params db fn =
+let main params fn =
+  let conn = Db.create (Sys.getenv_exn "CASTOR_DB") in
   Log.info (fun m -> m "Converting %s." fn);
   let params =
     let _, query = String.rsplit2_exn ~on:'/' fn in
@@ -288,7 +289,7 @@ let main params db fn =
       exit 1
   in
   Sequence.iter stmts ~f:(fun q ->
-      let r = (new conv_sql db)#query q in
+      let r = (new conv_sql conn)#query q in
       unsub params r |> Format.printf "%a\n@." Abslayout.pp)
 
 let () =
@@ -300,8 +301,8 @@ let () =
   basic ~summary:"Convert a SQL query to a Castor spec."
     [%map_open
       let () = Log.param
+      and () = Db.param
       and params = flag ~doc:" parameter file" "p" (required string)
-      and db = Db.param
       and file = anon ("file" %: string) in
-      fun () -> main params db file]
+      fun () -> main params file]
   |> run

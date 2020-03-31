@@ -2,7 +2,8 @@ open! Core
 open Castor
 open Abslayout_load
 
-let main conn params file =
+let main params file =
+  let conn = Db.create (Sys.getenv_exn "CASTOR_DB") in
   let bench_name = Filename.(basename file |> chop_extension) in
   let params = List.map params ~f:(fun (n, t) -> Name.create ~type_:t n) in
   let ralgebra =
@@ -16,10 +17,10 @@ let () =
   let open Let_syntax in
   basic ~summary:"Convert a relational algebra spec to a Cozy spec."
     (let%map_open () = Log.param
-     and db = Db.param
+     and () = Db.param
      and params =
        flag "param" ~aliases:[ "p" ] (listed Util.param)
          ~doc:"NAME:TYPE query parameters"
      and file = anon ("file" %: string) in
-     fun () -> main db params file)
+     fun () -> main params file)
   |> run

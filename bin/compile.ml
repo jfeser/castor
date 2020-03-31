@@ -3,11 +3,11 @@ open Castor
 open Collections
 open Abslayout_load
 
-let main ~debug ~gprof ~params ~db ~code_only ~query ?out_dir ch =
+let main ~debug ~gprof ~params ~code_only ~query ?out_dir ch =
   Logs.info (fun m ->
       m "%s" (Sys.get_argv () |> Array.to_list |> String.concat ~sep:" "));
-  let module CConfig = struct
-    let conn = db
+  let module Config = struct
+    let conn = Db.create (Sys.getenv_exn "CASTOR_DB")
 
     let debug = debug
 
@@ -21,8 +21,8 @@ let main ~debug ~gprof ~params ~db ~code_only ~query ?out_dir ch =
       Some layout_file
     else None
   in
-  let module I = Irgen.Make (CConfig) () in
-  let module C = Codegen.Make (CConfig) (I) () in
+  let module I = Irgen.Make (Config) () in
+  let module C = Codegen.Make (Config) (I) () in
   let ralgebra, params =
     if query then
       let Query.{ body; args; _ } = Query.of_channel_exn ch in
@@ -34,11 +34,11 @@ let main ~debug ~gprof ~params ~db ~code_only ~query ?out_dir ch =
       List.map params ~f:(fun (n, t) -> Name.create ~type_:t n)
       |> Set.of_list (module Name)
     in
-    load_layout ~params:load_params db ralgebra
+    load_layout ~params:load_params Config.conn ralgebra
   in
   let params = List.map params ~f:(fun (n, t) -> (Name.create n, t)) in
-  Type.annotate db ralgebra
-  |> C.compile ~gprof ~params ?out_dir ?layout_log:layout_file CConfig.conn
+  Type.annotate Config.conn ralgebra
+  |> C.compile ~gprof ~params ?out_dir ?layout_log:layout_file Config.conn
   |> ignore
 
 let () =
@@ -46,7 +46,7 @@ let () =
   Command.basic ~summary:"Compile a query."
     [%map_open
       let () = Log.param
-      and db = Db.param
+      and () = Db.param
       and debug = flag "debug" ~aliases:[ "g" ] no_arg ~doc:"enable debug mode"
       and gprof = flag "prof" ~aliases:[ "pg" ] no_arg ~doc:"enable profiling"
       and out_dir =
@@ -61,5 +61,5 @@ let () =
       and ch =
         anon (maybe_with_default In_channel.stdin ("query" %: Util.channel))
       in
-      fun () -> main ~debug ~gprof ~params ~db ~code_only ~query ?out_dir ch]
+      fun () -> main ~debug ~gprof ~params ~code_only ~query ?out_dir ch]
   |> Command.run
