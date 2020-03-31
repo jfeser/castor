@@ -516,7 +516,7 @@ module Parallel = struct
     let list_t q =
       count_t q @@ fun ts count ->
       match ts with
-      | [ t ] -> return @@ ListT (t, { count })
+      | [ _; tv ] -> return @@ ListT (tv, { count })
       | _ -> list_error ts
 
     let hash_idx_t q =
@@ -699,36 +699,37 @@ module Parallel = struct
     |> Map.of_alist_reduce (module Context) ~f:( @ )
 
   let type_of ?timeout conn r =
-    let open Lwt in
     let r = Type_builder.annot r in
     let queries =
       contexts r |> Map.to_alist
       |> List.concat_map ~f:(fun (ctx, builders) ->
              let builders = List.map ~f:(fun b -> b#builder) builders in
              Context.to_ralgebra ctx builders)
+      |> List.map ~f:(fun r ->
+             debug (fun m -> m "Pre-opt:@ %a" A.pp r);
+             let r = Simplify_tactic.simplify conn r |> Resolve.resolve in
+             debug (fun m -> m "Post-opt:@ %a" A.pp r);
+             r)
     in
 
-    let%lwt results =
+    let results =
+      let open Lwt in
       Lwt_list.map_p
         (fun r ->
-          debug (fun m -> m "Pre-opt:@ %a" A.pp r);
-          let r =
-            try Simplify_tactic.simplify conn r
-            with e -> Error.of_exn ~backtrace:`Get e |> Error.raise
-          in
-          debug (fun m -> m "Post-opt:@ %a" A.pp r);
-          let strm = Db.Async.exec ?timeout conn r in
-          let%lwt tup = Lwt_stream.get strm in
+          let%lwt tup = Lwt_stream.get @@ Db.Async.exec ?timeout conn r in
           match tup with
           | Some (Ok t) ->
-              List.hd_exn t
-              |> List.map2_exn (Schema.names r) ~f:(fun n v -> (n, v))
-              |> Option.return |> Result.return |> return
-          | Some (Error { info = `Timeout; _ }) -> return (Result.return None)
-          | Some (Error e) -> Result.fail (`Db_error e) |> return
+              return
+                ( List.hd_exn t
+                |> List.map2_exn (Schema.names r) ~f:(fun n v -> (n, v))
+                |> Option.return |> Result.return )
+          | Some (Error { info = `Timeout; _ }) -> return @@ Result.return None
+          | Some (Error e) -> return @@ Result.fail (`Db_error e)
           | None -> failwith "BUG: expected a tuple.")
         queries
+      |> Lwt_main.run
     in
+
     Result.(
       all results >>| fun results ->
       let ctx =
@@ -737,7 +738,4 @@ module Parallel = struct
         |> Map.of_alist_exn (module String)
       in
       Type_builder.type_of ctx r)
-    |> return
-
-  let type_of ?timeout conn r = type_of ?timeout conn r |> Lwt_main.run
 end
