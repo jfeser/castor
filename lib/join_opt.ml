@@ -340,6 +340,7 @@ module Make (Config : Config.S) = struct
       A.(
         select [ Min c; Max c; Avg c ]
         @@ group_by [ P.as_ Count "c" ] (Set.to_list parts) static_r)
+      |> Simplify_tactic.simplify ~dedup:true cost_conn
     in
     let sql = Sql.of_ralgebra parted_r |> Sql.to_string
     and schema = Prim_type.[ int_t; int_t; fixed_t ] in
