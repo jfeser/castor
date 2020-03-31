@@ -73,8 +73,7 @@ let rec annot r = V.Iter.annot query meta r
 
 and meta _ = ()
 
-and query q =
-  ( match q with
+and query q = function
   | Select (ps, _) -> duplicate_preds ps
   | GroupBy (ps, ns, _) ->
       duplicate_preds ps;
@@ -86,7 +85,6 @@ and query q =
           if not ([%compare.equal: Schema.t] s s') then
             failwith
             @@ Fmt.str "Mismatched schemas in concat tuple:@ %a@ %a" pp s pp s')
-  | q -> V.Iter.query annot pred q );
-  V.Iter.query annot pred q
+  | q -> V.Iter.query annot pred q
 
 and pred p = V.Iter.pred annot pred p
