@@ -440,8 +440,9 @@ module Parallel = struct
 
     let eval_interval ~to_int ctx lo hi =
       let range =
-        let%map lo = eval ctx lo and hi = eval ctx hi in
-        I.Interval (to_int lo, to_int hi)
+        let%bind lo = eval ctx lo and hi = eval ctx hi in
+        let%map lo = to_int lo and hi = to_int hi in
+        I.Interval (lo, hi)
       in
       Option.value range ~default:I.top
 
@@ -464,7 +465,7 @@ module Parallel = struct
       let build ctx _ =
         let range =
           eval_interval
-            ~to_int:(fun x -> Date.to_int @@ Value.to_date x)
+            ~to_int:(fun x -> Option.map ~f:Date.to_int @@ Value.to_date x)
             ctx min max
         in
         DateT { range; nullable = false (* TODO *) }

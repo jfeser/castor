@@ -47,13 +47,25 @@ let to_param = function
 
 let pp fmt v = Format.fprintf fmt "%s" (to_sql v)
 
-let to_int = function Int x -> x | _ -> failwith "Not an int."
+let to_int = function Int x -> Some x | _ -> None
 
-let to_date = function Date x -> x | _ -> failwith "Not an date."
+let to_date = function Date x -> Some x | _ -> None
 
-let to_bool = function Bool x -> x | _ -> failwith "Not a bool."
+let to_bool = function Bool x -> Some x | _ -> None
 
-let to_string = function String x -> x | _ -> failwith "Not a string."
+let to_string = function String x -> Some x | _ -> None
+
+let type_error expected v =
+  Error.create (sprintf "Expected a %s." expected) v [%sexp_of: t]
+  |> Error.raise
+
+let to_int_exn = function Int x -> x | v -> type_error "int" v
+
+let to_date_exn = function Date x -> x | v -> type_error "date" v
+
+let to_bool_exn = function Bool x -> x | v -> type_error "bool" v
+
+let to_string_exn = function String x -> x | v -> type_error "string" v
 
 let to_pred =
   let module A = Ast in
@@ -95,4 +107,4 @@ let ( / ) x y =
   | Int a, Fixed b -> Fixed Fixed_point.(of_int a / b)
   | _ -> Error.create "Cannot /" (x, y) [%sexp_of: t * t] |> Error.raise
 
-let ( % ) x y = to_int x % to_int y |> int
+let ( % ) x y = to_int_exn x % to_int_exn y |> int

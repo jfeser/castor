@@ -568,3 +568,112 @@ select([s1_acctbal, s1_name, n1_name, p1_partkey, p1_mfgr, s1_address,
            (Width 8)))
          ((key_count (Interval 50 50))))))
       (Width 8))) |}]
+
+let%expect_test "" =
+  let conn = Lazy.force tpch_conn in
+  let r =
+    Abslayout_load.load_string conn
+      {|
+select([sum((l_extendedprice * (1 - l_discount))) as revenue],
+     atuple([select([l_extendedprice, l_discount],
+               aorderedidx(dedup(
+                             select([l_quantity],
+                               join(((p_partkey = l_partkey) && true),
+                                 filter(((l_shipinstruct = "DELIVER IN PERSON")
+                                        &&
+                                        ((l_shipmode = "AIR") ||
+                                        (l_shipmode = "AIR REG"))),
+                                   lineitem),
+                                 filter((p_size >= 1), part)))) as s6,
+                 alist(select([l_extendedprice, l_discount, p_brand],
+                         join(((((p_container = "SM CASE") ||
+                                ((p_container = "SM BOX") ||
+                                ((p_container = "SM PACK") ||
+                                (p_container = "SM PKG")))) &&
+                               ((p_size <= 5) && (l_quantity = s6.l_quantity)))
+                              && ((p_partkey = l_partkey) && true)),
+                           filter(((l_shipinstruct = "DELIVER IN PERSON") &&
+                                  ((l_shipmode = "AIR") ||
+                                  (l_shipmode = "AIR REG"))),
+                             lineitem),
+                           filter((p_size >= 1), part))) as s3,
+                   filter((p_brand = ""),
+                     atuple([ascalar(s3.l_extendedprice),
+                             ascalar(s3.l_discount), ascalar(s3.p_brand)],
+                       cross))),
+                 >= 0, <= (0 + 10))),
+             alist(select([l_quantity, l_extendedprice, l_discount, p_brand],
+                     join(((((p_container = "MED BAG") ||
+                            ((p_container = "MED BOX") ||
+                            ((p_container = "MED PKG") ||
+                            (p_container = "MED PACK")))) && (p_size <= 10)) &&
+                          ((p_partkey = l_partkey) && true)),
+                       filter(((l_shipinstruct = "DELIVER IN PERSON") &&
+                              ((l_shipmode = "AIR") || (l_shipmode = "AIR REG"))),
+                         lineitem),
+                       filter((p_size >= 1), part))) as s4,
+               filter(((p_brand = "") &&
+                      ((l_quantity >= 0) && (l_quantity <= (0 + 10)))),
+                 atuple([ascalar(s4.l_quantity), ascalar(s4.l_extendedprice),
+                         ascalar(s4.l_discount), ascalar(s4.p_brand)],
+                   cross))),
+             alist(select([l_quantity, l_extendedprice, l_discount, p_brand],
+                     join(((((p_container = "LG CASE") ||
+                            ((p_container = "LG BOX") ||
+                            ((p_container = "LG PACK") ||
+                            (p_container = "LG PKG")))) && (p_size <= 15)) &&
+                          ((p_partkey = l_partkey) && true)),
+                       filter(((l_shipinstruct = "DELIVER IN PERSON") &&
+                              ((l_shipmode = "AIR") || (l_shipmode = "AIR REG"))),
+                         lineitem),
+                       filter((p_size >= 1), part))) as s5,
+               filter(((p_brand = "") &&
+                      ((l_quantity >= 0) && (l_quantity <= (0 + 10)))),
+                 atuple([ascalar(s5.l_quantity), ascalar(s5.l_extendedprice),
+                         ascalar(s5.l_discount), ascalar(s5.p_brand)],
+                   cross)))],
+       concat))
+|}
+  in
+  ( match Parallel.type_of conn r with
+  | Ok t -> [%sexp_of: Type.t] t |> print_s
+  | _ -> () );
+  [%expect
+    {|
+    (FuncT
+     (((TupleT
+        (((FuncT
+           (((OrderedIdxT
+              ((IntT ((range (Interval 1 50))))
+               (ListT
+                ((FuncT
+                  (((TupleT
+                     (((FixedT ((value ((range Top) (scale 1)))))
+                       (FixedT ((value ((range Top) (scale 1)))))
+                       (StringT ((nchars Top))))
+                      ((kind Cross)))))
+                   Child_sum))
+                 ((count Top))))
+               ((key_count (Interval 23 23))))))
+            (Width 2)))
+          (ListT
+           ((FuncT
+             (((TupleT
+                (((IntT ((range Top))) (FixedT ((value ((range Top) (scale 1)))))
+                  (FixedT ((value ((range Top) (scale 1)))))
+                  (StringT ((nchars Top))))
+                 ((kind Cross)))))
+              Child_sum))
+            ((count (Interval 0 0)))))
+          (ListT
+           ((FuncT
+             (((TupleT
+                (((IntT ((range (Interval 22 42))))
+                  (FixedT ((value ((range Top) (scale 1)))))
+                  (FixedT ((value ((range Top) (scale 1)))))
+                  (StringT ((nchars Top))))
+                 ((kind Cross)))))
+              Child_sum))
+            ((count (Interval 2 2))))))
+         ((kind Concat)))))
+      (Width 1))) |}]

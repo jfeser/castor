@@ -86,7 +86,7 @@ let split_while ~f s =
   (RevList.to_list acc, s')
 
 let extract_group widths ctr tups =
-  let extract_counter tup = List.hd_exn tup |> Value.to_int in
+  let extract_counter tup = List.hd_exn tup |> Value.to_int_exn in
   let extract_tuple =
     let take_ct = List.nth_exn widths ctr in
     let drop_ct =
@@ -268,7 +268,7 @@ class virtual ['self] abslayout_fold =
                    match t with
                    | [] ->
                        Error.of_string "Unexpected empty tuple." |> Error.raise
-                   | ct :: t -> (Value.to_int ct, t)
+                   | ct :: t -> (Value.to_int_exn ct, t)
                  in
                  (* Split each tuple into lhs and rhs. *)
                  let lhs = extract_lhs t and rhs = extract_rhs t in

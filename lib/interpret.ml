@@ -157,22 +157,22 @@ let eval { db; params } r =
     | As_pred (p, _) -> e p
     | Count | Sum _ | Avg _ | Min _ | Max _ | Row_number ->
         Error.(create "Unexpected aggregate." p [%sexp_of: Pred.t] |> raise)
-    | If (p1, p2, p3) -> if to_bool (e p1) then e p2 else e p3
+    | If (p1, p2, p3) -> if to_bool_exn (e p1) then e p2 else e p3
     | First r -> eval ctx r |> Seq.hd_exn |> to_single_value
     | Exists r -> Bool (eval ctx r |> Seq.is_empty |> not)
     | Substring (p1, p2, p3) ->
-        let str = to_string (e p1) in
+        let str = to_string_exn (e p1) in
         String
           (String.sub str
-             ~pos:Int.(Value.to_int (e p2) - 1)
-             ~len:(to_int (e p3)))
+             ~pos:Int.(Value.to_int_exn (e p2) - 1)
+             ~len:(to_int_exn (e p3)))
     | Unop (op, p) -> (
         match op with
-        | Not -> Bool (to_bool (e p) |> not)
-        | Strlen -> Int (to_string (e p) |> String.length)
-        | ExtractY -> Int (to_date (e p) |> Date.year)
-        | ExtractM -> Int (to_date (e p) |> Date.month |> Month.to_int)
-        | ExtractD -> Int (to_date (e p) |> Date.day)
+        | Not -> Bool (to_bool_exn (e p) |> not)
+        | Strlen -> Int (to_string_exn (e p) |> String.length)
+        | ExtractY -> Int (to_date_exn (e p) |> Date.year)
+        | ExtractM -> Int (to_date_exn (e p) |> Date.month |> Month.to_int)
+        | ExtractD -> Int (to_date_exn (e p) |> Date.day)
         | _ ->
             Error.(
               create "Unexpected operator" op [%sexp_of: Pred.Unop.t] |> raise)
@@ -184,27 +184,35 @@ let eval { db; params } r =
         | Le -> O.(e p1 <= e p2) |> bool
         | Gt -> O.(e p1 > e p2) |> bool
         | Ge -> O.(e p1 >= e p2) |> bool
-        | And -> (to_bool (e p1) && to_bool (e p2)) |> bool
-        | Or -> (to_bool (e p1) || to_bool (e p2)) |> bool
+        | And -> (to_bool_exn (e p1) && to_bool_exn (e p2)) |> bool
+        | Or -> (to_bool_exn (e p1) || to_bool_exn (e p2)) |> bool
         | Add -> (
             match p2 with
             | Unop (Day, p2) ->
-                Date.add_days (e p1 |> to_date) (e p2 |> to_int) |> date
+                Date.add_days (e p1 |> to_date_exn) (e p2 |> to_int_exn) |> date
             | Unop (Month, p2) ->
-                Date.add_months (e p1 |> to_date) (e p2 |> to_int) |> date
+                Date.add_months (e p1 |> to_date_exn) (e p2 |> to_int_exn)
+                |> date
             | Unop (Year, p2) ->
-                Date.add_years (e p1 |> to_date) (e p2 |> to_int) |> date
+                Date.add_years (e p1 |> to_date_exn) (e p2 |> to_int_exn)
+                |> date
             | p2 -> e p1 + e p2 )
         | Sub -> (
             match p2 with
             | Unop (Day, p2) ->
-                Date.add_days (e p1 |> to_date) (e p2 |> to_int |> Int.neg)
+                Date.add_days
+                  (e p1 |> to_date_exn)
+                  (e p2 |> to_int_exn |> Int.neg)
                 |> date
             | Unop (Month, p2) ->
-                Date.add_months (e p1 |> to_date) (e p2 |> to_int |> Int.neg)
+                Date.add_months
+                  (e p1 |> to_date_exn)
+                  (e p2 |> to_int_exn |> Int.neg)
                 |> date
             | Unop (Year, p2) ->
-                Date.add_years (e p1 |> to_date) (e p2 |> to_int |> Int.neg)
+                Date.add_years
+                  (e p1 |> to_date_exn)
+                  (e p2 |> to_int_exn |> Int.neg)
                 |> date
             | p2 -> e p1 + e p2 )
         | Mul -> e p1 * e p2
@@ -212,7 +220,9 @@ let eval { db; params } r =
         | Mod -> e p1 % e p2
         | Strpos -> (
             match
-              String.substr_index (to_string (e p1)) ~pattern:(to_string (e p2))
+              String.substr_index
+                (to_string_exn (e p1))
+                ~pattern:(to_string_exn (e p2))
             with
             | Some x -> int Int.(x + 1)
             | None -> int 0 ) )
@@ -233,7 +243,7 @@ let eval { db; params } r =
     | Filter (p, r) ->
         let s = Schema.of_ralgebra r in
         Seq.filter (eval ctx r) ~f:(fun t ->
-            eval_pred (Ctx.merge ctx s t) p |> Value.to_bool)
+            eval_pred (Ctx.merge ctx s t) p |> Value.to_bool_exn)
     | DepJoin { d_lhs; d_alias; d_rhs } ->
         let s = Schema.of_ralgebra ~scope:d_alias d_lhs in
         Seq.concat_map (eval ctx d_lhs) ~f:(fun t ->
@@ -248,7 +258,8 @@ let eval { db; params } r =
             Seq.filter_map r2s ~f:(fun t2 ->
                 let ctx = Ctx.merge ctx s2 t2 in
                 let tup = t1 @ t2 in
-                if eval_pred ctx pred |> Value.to_bool then Some tup else None))
+                if eval_pred ctx pred |> Value.to_bool_exn then Some tup
+                else None))
     | AEmpty -> Seq.empty
     | AScalar p -> Seq.singleton [| eval_pred ctx p |]
     | AList { l_keys = rk; l_scope = scope; l_values = rv } ->
