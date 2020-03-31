@@ -5,9 +5,9 @@ open Collections
 module A = Abslayout
 module P = Pred.Infix
 
-let dummy_pred = As_pred (Bool false, "dummy")
+let dummy_pred () = As_pred (Bool false, Fresh.name Global.fresh "dummy%d")
 
-let dummy () = A.scalar dummy_pred
+let dummy () = A.scalar (dummy_pred ())
 
 let project_def refcnt p =
   match Pred.to_name p with
@@ -24,7 +24,7 @@ let project_def refcnt p =
 
 let project_defs refcnt ps =
   let ps = List.filter ps ~f:(project_def refcnt) in
-  if List.is_empty ps then [ dummy_pred ] else ps
+  if List.is_empty ps then [ dummy_pred () ] else ps
 
 (** True if all fields emitted by r are unreferenced when emitted by r'. *)
 let all_unref_at r r' =
