@@ -15,28 +15,6 @@ module Q = Constructors.Query
 
 module C = (val Constructors.Annot.with_strip_meta (fun () -> default_meta))
 
-(** Convert a list of predicates into a select list that contains no duplicate
-    attributes. *)
-let select_list_of_preds ps = ps
-
-(* let named, unnamed =
- *   List.partition_map ps ~f:(fun p ->
- *       match Pred.to_name p with Some n -> `Fst (n, p) | None -> `Snd p)
- * in
- * let compare (n, _) (n', _) = [%compare: Name.t] n n' in
- * if List.contains_dup ~compare named then
- *   let ps_rev, _ =
- *     List.fold_left ps ~init:([], []) ~f:(fun (ps, names) p ->
- *         match Pred.to_name p with
- *         | Some n ->
- *             if List.mem names n ~equal:[%compare.equal: Name.t] then
- *               (ps, names)
- *             else (p :: ps, n :: names)
- *         | None -> (p :: ps, names))
- *   in
- *   List.rev ps_rev
- * else ps *)
-
 (** In this module, we assume that dep_join returns attributes from both its lhs
    and rhs. This assumption is safe because we first wrap depjoins in selects
    that project out their lhs attributes. The queries returned by the main
@@ -186,10 +164,7 @@ and to_nice_pred p = V.Map.pred to_nice to_nice_pred p
 let push_join d { pred = p; r1 = t1; r2 = t2 } =
   let d_attr = attrs d in
   (* A selection list that maintains the original schema. *)
-  let orig_select =
-    schema d @ schema t1 @ schema t2
-    |> List.map ~f:P.name |> select_list_of_preds
-  in
+  let orig_select = schema d @ schema t1 @ schema t2 |> List.map ~f:P.name in
   if
     (* The rhs of the join is not dependent. *)
     Set.inter (Free.free t2) d_attr |> Set.is_empty
@@ -208,8 +183,8 @@ let push_join d { pred = p; r1 = t1; r2 = t2 } =
     let rhs_select =
       List.map d_rhs ~f:(fun (x, x') -> Infix.(as_ (name x) x'))
       @ (schema t2 |> List.map ~f:P.name)
-      |> select_list_of_preds
     in
+
     (* Perform a natural join on the two copies of d *)
     let d_pred =
       List.map d_rhs ~f:(fun (x, x') -> Infix.(name x = n x')) |> Pred.conjoin
@@ -223,15 +198,13 @@ let push_join d { pred = p; r1 = t1; r2 = t2 } =
 let push_filter d (p, t2) = C.filter p (dep_join d t2)
 
 let push_groupby d (aggs, keys, q) =
-  let aggs = (schema d |> List.map ~f:P.name) @ aggs in
-  let keys = keys @ schema d in
+  let aggs = (schema d |> List.map ~f:P.name) @ aggs
+  and keys = keys @ schema d in
   C.group_by aggs keys (dep_join d q)
 
 let push_select d (preds, q) =
   let d_schema = schema d in
-  let preds =
-    (d_schema |> List.map ~f:P.name) @ preds |> select_list_of_preds
-  in
+  let preds = (d_schema |> List.map ~f:P.name) @ preds in
   match A.select_kind preds with
   | `Scalar -> C.select preds (dep_join d q)
   | `Agg ->
@@ -263,14 +236,11 @@ let push_cross_tuple d qs =
     (schema d.d_lhs |> to_select_list)
     @ List.map qs ~f:(fun q ->
           match q.node with AScalar p -> p | _ -> stuck d)
-    |> select_list_of_preds
   in
   C.select select_list d.d_lhs
 
 let push_scalar d p =
-  let select_list =
-    (schema d |> to_select_list) @ [ p ] |> select_list_of_preds
-  in
+  let select_list = (schema d |> to_select_list) @ [ p ] in
   C.select select_list d
 
 let push_dedup d q = C.dedup (dep_join d q)
