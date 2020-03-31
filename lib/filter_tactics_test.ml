@@ -107,6 +107,68 @@ let%expect_test "push-filter-select" =
       select([(x - 1) as a, (x + 1) as b],
         filter(((x - 1) = (x + 1)), ascalar(0 as x))) |}]
 
+let%expect_test "push-filter-tuple" =
+  let r =
+    Abslayout_load.load_string (Lazy.force tpch_conn)
+      {|
+filter((strpos(p_name, "") > 0),
+            atuple([ascalar(0 as x),
+                    alist(select([s_suppkey],
+                              select([s_suppkey, s_nationkey], supplier)) as s5,
+                      alist(select([l_partkey, l_suppkey, l_quantity,
+                                    l_extendedprice, l_discount, o_orderdate,
+                                    p_name],
+                              filter(((s5.s_suppkey = l_suppkey)),
+                                select([l_partkey, l_suppkey, l_quantity,
+                                        l_extendedprice, l_discount,
+                                        o_orderdate, p_name],
+                                  join((p_partkey = l_partkey),
+                                    join((o_orderkey = l_orderkey),
+                                      lineitem,
+                                      orders),
+                                    part)))) as s4,
+                        atuple([ascalar(s4.l_quantity),
+                                ascalar(s4.l_extendedprice),
+                                ascalar(s4.l_discount),
+                                ascalar(s4.o_orderdate), ascalar(s4.p_name),
+                                alist(select([ps_supplycost],
+                                        filter(((ps_partkey = s4.l_partkey)
+                                               &&
+                                               ((ps_suppkey = s4.l_suppkey)
+                                               &&
+                                               (ps_suppkey = s4.l_suppkey))),
+                                          partsupp)) as s3,
+                                  ascalar(s3.ps_supplycost))],
+                          cross)))],
+              cross))
+|}
+  in
+  Option.iter (apply push_filter Path.root r) ~f:(Format.printf "%a\n" pp);
+  [%expect {|
+    atuple([ascalar(0 as x),
+            filter((strpos(p_name, "") > 0),
+              alist(select([s_suppkey], supplier) as s5,
+                alist(select([l_partkey, l_suppkey, l_quantity, l_extendedprice,
+                              l_discount, o_orderdate, p_name],
+                        filter((s5.s_suppkey = l_suppkey),
+                          select([l_partkey, l_suppkey, l_quantity,
+                                  l_extendedprice, l_discount, o_orderdate,
+                                  p_name],
+                            join((p_partkey = l_partkey),
+                              join((o_orderkey = l_orderkey), lineitem, orders),
+                              part)))) as s4,
+                  atuple([ascalar(s4.l_quantity), ascalar(s4.l_extendedprice),
+                          ascalar(s4.l_discount), ascalar(s4.o_orderdate),
+                          ascalar(s4.p_name),
+                          alist(select([ps_supplycost],
+                                  filter(((ps_partkey = s4.l_partkey) &&
+                                         ((ps_suppkey = s4.l_suppkey) &&
+                                         (ps_suppkey = s4.l_suppkey))),
+                                    partsupp)) as s3,
+                            ascalar(s3.ps_supplycost))],
+                    cross))))],
+      cross) |}]
+
 let with_log src f =
   Logs.Src.set_level src (Some Debug);
   Exn.protect ~f ~finally:(fun () -> Logs.Src.set_level src None)
@@ -293,7 +355,8 @@ aorderedidx(select([l_shipdate, o_orderdate],
 |}
   in
   Option.iter (apply hoist_filter Path.root r) ~f:(Fmt.pr "%a" pp);
-  [%expect {|
+  [%expect
+    {|
     filter((c_mktsegment = ""),
       aorderedidx(select([l_shipdate, o_orderdate],
                     join(true,
