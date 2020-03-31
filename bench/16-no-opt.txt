@@ -23,7 +23,7 @@ alist(dedup(
                     ((p_type = k0.p_type) && (p_size = k0.p_size)))) &&
                    (p_partkey = ps_partkey)),
                 part,
-                partsupp))) as s5,
+                partsupp))) as s3,
       select([p_type, p_brand, p_size],
         filter((not((p_brand = param1)) &&
                (not((strpos(p_type, param2) = 1)) &&
@@ -34,5 +34,5 @@ alist(dedup(
                ((p_size = param7) ||
                ((p_size = param8) ||
                ((p_size = param9) || (p_size = param10)))))))))),
-          atuple([ascalar(s5.p_brand), ascalar(s5.p_type), ascalar(s5.p_size)],
+          atuple([ascalar(s3.p_brand), ascalar(s3.p_type), ascalar(s3.p_size)],
             cross))))))
