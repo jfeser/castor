@@ -3,6 +3,7 @@ open Castor
 open Collections
 open Castor_opt
 open Abslayout_load
+module A = Abslayout
 
 let dump fn r =
   Out_channel.with_file fn ~f:(fun ch ->
@@ -48,6 +49,8 @@ let opt conn cost_conn params cost_timeout state query =
 
 let eval out_dir params query =
   let open Result.Let_syntax in
+  Logs.info (fun m -> m "Evaluating:@ %a" A.pp query);
+
   (* Set up the output directory. *)
   system_exn @@ sprintf "rm -rf %s" out_dir;
   system_exn @@ sprintf "mkdir -p %s" out_dir;
@@ -88,8 +91,8 @@ let eval out_dir params query =
   run_time
 
 let main ~params ~cost_timeout ~timeout ~out_dir ~out_file ch =
-  let conn = Db.create (Sys.getenv_exn "CASTOR_DB")
-  and cost_conn = Db.create (Sys.getenv_exn "CASTOR_COST_DB") in
+  let conn = Db.create (Sys.getenv_exn "CASTOR_OPT_DB") in
+  let cost_conn = conn in
   let params_set =
     List.map params ~f:(fun (n, t, _) -> Name.create ~type_:t n)
     |> Set.of_list (module Name)
@@ -108,13 +111,13 @@ let main ~params ~cost_timeout ~timeout ~out_dir ~out_file ch =
               best_cost := cost );
             cost
         | Error err ->
-            Logs.info (fun m -> m "Evaluation failed: %a" Error.pp err);
+            Logs.warn (fun m -> m "Evaluation failed: %a" Error.pp err);
             Float.infinity )
     | Some (query', false) ->
-        Logs.info (fun m -> m "Not serializable:@ %a" Abslayout.pp query');
+        Logs.warn (fun m -> m "Not serializable:@ %a" A.pp query');
         Float.infinity
     | None ->
-        Logs.info (fun m -> m "No candidate found.");
+        Logs.warn (fun m -> m "No candidate found.");
         Float.infinity
   in
 
