@@ -446,7 +446,7 @@ module Make (Config : Config.S) = struct
       match pred with
       | Binop (Eq, k1, k2) -> return (k1, k2)
       | _ ->
-          Log.debug (fun m -> m "Adding hash join failed.");
+          debug (fun m -> m "Adding hash join failed.");
           []
     in
     let%bind s1 = key_side k1 and s2 = key_side k2 in
