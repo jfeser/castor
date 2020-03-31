@@ -5,9 +5,18 @@ open Collections
 module A = Abslayout
 module P = Pred.Infix
 
-let dummy_pred () = As_pred (Bool false, Fresh.name Global.fresh "dummy%d")
+module Ctx = struct
+  type t = { mutable dummy_ctr : int }
 
-let dummy () = A.scalar (dummy_pred ())
+  let create () = { dummy_ctr = 0 }
+end
+
+let dummy_pred ctx =
+  let name = sprintf "dummy%d" ctx.Ctx.dummy_ctr in
+  ctx.Ctx.dummy_ctr <- ctx.Ctx.dummy_ctr + 1;
+  As_pred (Bool false, name)
+
+let dummy ctx = A.scalar (dummy_pred ctx)
 
 let project_def refcnt p =
   match Pred.to_name p with
@@ -22,9 +31,9 @@ let project_def refcnt p =
           (* Be conservative if refcount is missing. *)
           true )
 
-let project_defs refcnt ps =
+let project_defs ctx refcnt ps =
   let ps = List.filter ps ~f:(project_def refcnt) in
-  if List.is_empty ps then [ dummy_pred () ] else ps
+  if List.is_empty ps then [ dummy_pred ctx ] else ps
 
 (** True if all fields emitted by r are unreferenced when emitted by r'. *)
 let all_unref_at r r' =
@@ -37,17 +46,19 @@ let all_unref_at r r' =
 (** True if all fields emitted by r are unreferenced. *)
 let all_unref r = all_unref_at r r
 
-let rec project r =
+let project_open project no_project project_pred ctx r =
   let refs = r.meta#meta#refs in
   let card_matters = r.meta#cardinality_matters in
-  if all_unref r && not card_matters then dummy ()
+  if all_unref r && not card_matters then dummy ctx
   else
     match r.node with
     | Select (ps, r) ->
-        A.select (project_defs refs ps |> List.map ~f:project_pred) (project r)
+        A.select
+          (project_defs ctx refs ps |> List.map ~f:project_pred)
+          (project r)
     | GroupBy (ps, ns, r) ->
         A.group_by
-          (project_defs refs ps |> List.map ~f:project_pred)
+          (project_defs ctx refs ps |> List.map ~f:project_pred)
           ns (project r)
     | Dedup r ->
         if card_matters then A.dedup @@ no_project r else A.dedup @@ project r
@@ -55,7 +66,7 @@ let rec project r =
         let rk =
           let old_n = schema rk |> List.length in
           let ps =
-            project_defs rk.meta#meta#refs (schema rk |> List.map ~f:P.name)
+            project_defs ctx rk.meta#meta#refs (schema rk |> List.map ~f:P.name)
             |> List.map ~f:project_pred
           in
           let new_n = List.length ps in
@@ -63,7 +74,7 @@ let rec project r =
         in
         A.list rk scope (project rv)
     | AScalar p ->
-        if project_def refs p then A.scalar (project_pred p) else dummy ()
+        if project_def refs p then A.scalar (project_pred p) else dummy ctx
     | ATuple ([], _) -> A.empty
     | ATuple ([ r ], _) -> project r
     | ATuple (rs, Concat) -> A.tuple (List.map rs ~f:project) Concat
@@ -71,23 +82,14 @@ let rec project r =
         let rs =
           (* Remove unreferenced parts of the tuple. *)
           List.filter rs ~f:(fun r ->
-              let is_unref = all_unref r in
-              let is_scalar =
+              let is_unref = all_unref r
+              and is_scalar =
                 match r.node with AScalar _ -> true | _ -> false
               in
-              let should_remove =
-                is_unref && is_scalar
-                (* match count with
-                 * (\* If the count matters, then we can only remove
-                 *        unreferenced scalars. *\)
-                 * | Exact -> is_unref && is_scalar
-                 * (\* Otherwise we can remove anything unreferenced. *\)
-                 * | AtLeastOne -> is_unref *)
-              in
-              not should_remove)
+              not (is_unref && is_scalar))
           |> List.map ~f:project
         in
-        let rs = if List.length rs = 0 then [ dummy () ] else rs in
+        let rs = if List.length rs = 0 then [ dummy ctx ] else rs in
         A.tuple rs Cross
     | Join { r1; r2; pred } ->
         if card_matters then
@@ -104,20 +106,24 @@ let rec project r =
           (* If one side of a join is unused then the join can be dropped. *)
           all_unref d_lhs
         then project d_rhs
-        else if all_unref d_rhs then dummy ()
+        else if all_unref d_rhs then dummy ctx
         else A.dep_join (project d_lhs) d_alias (project d_rhs)
     | Range (p, p') -> A.range (project_pred p) (project_pred p')
     | q -> { node = V.Map.query project project_pred q; meta = object end }
 
-and project_pred p =
+let project_pred_open project project_pred p =
   match p with
   | Exists _ | First _ -> Pred.strip_meta p
   | p -> V.Map.pred project project_pred p
 
-and no_project r =
+let no_project_open no_project project_pred r =
   { node = V.Map.query no_project project_pred r.node; meta = object end }
 
 let project_once r =
+  let ctx = Ctx.create () in
+  let rec project r = project_open project no_project project_pred ctx r
+  and project_pred p = project_pred_open project project_pred p
+  and no_project r = no_project_open no_project project_pred r in
   let r' = Cardinality.annotate r |> project in
   Inv.schema r r';
   Inv.resolve r r';
