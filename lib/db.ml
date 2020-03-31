@@ -217,10 +217,17 @@ let is_null = String.is_empty
 let load_int s =
   try Ok (Int.of_string s)
   with Failure _ -> (
-    try
-      (* Try loading 'ints' of the form x.00 *)
-      Ok (Int.of_string (String.drop_suffix s 3))
-    with Failure e -> Or_error.error_string e )
+    (* Try loading 'ints' of the form x.00 *)
+    match String.chop_suffix s ~suffix:".00" with
+    | Some s' -> (
+        try Ok (Int.of_string s') with Failure e -> Or_error.error_string e )
+    | None -> Or_error.error_string "Not an integer." )
+
+let%test "" = Poly.(load_int "5" = Ok 5)
+
+let%test "" = Poly.(load_int "5.00" = Ok 5)
+
+let%test "" = Result.is_error @@ load_int "5.01"
 
 let load_padded_string v = String.rstrip ~drop:(fun c -> Char.(c = ' ')) v
 
