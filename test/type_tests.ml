@@ -369,3 +369,202 @@ select([s1_acctbal, s1_name, n1_name, p1_partkey, p1_mfgr, s1_address,
            (Width 8)))
          ((key_count (Interval 50 50))))))
       (Width 8))) |}]
+
+let%expect_test "" =
+  let conn = Lazy.force tpch_conn in
+  let r =
+    Abslayout_load.load_string conn
+      {|
+select([s1_acctbal, s1_name, n1_name, p1_partkey, p1_mfgr, s1_address,
+           s1_phone, s1_comment],
+     ahashidx(depjoin(select([min(p_size) as lo, max(p_size) as hi],
+                        dedup(select([p_size], part))) as k1,
+                select([range as k0], range(k1.lo, k1.hi))) as s0,
+       select([s1_acctbal, s1_name, n1_name, p1_partkey, p1_mfgr, s1_address,
+               s1_phone, s1_comment],
+         filter((((r1_name = "") &&
+                 ((p1_size = s0.k0) &&
+                 (strpos(p1_type, "") =
+                 ((strlen(p1_type) - strlen("")) + 1)))) &&
+                ((ps1_supplycost = min_cost) &&
+                ((r1_name = r_name) && (ps_partkey = ps1_partkey)))),
+           orderby([s1_acctbal desc, n1_name, s1_name, p1_partkey],
+             join(true,
+               alist(dedup(
+                       select([r_name, ps_partkey],
+                         join((s_suppkey = ps_suppkey),
+                           join((s_nationkey = n_nationkey),
+                             join((n_regionkey = r_regionkey), nation, region),
+                             supplier),
+                           partsupp))) as k2,
+                 select([r_name, ps_partkey, min(ps_supplycost) as min_cost],
+                   join((((r_name = k2.r_name) && (ps_partkey = k2.ps_partkey))
+                        && (s_suppkey = ps_suppkey)),
+                     join((s_nationkey = n_nationkey),
+                       join((n_regionkey = r_regionkey),
+                         alist(select([n_nationkey, n_regionkey], nation) as s33,
+                           atuple([ascalar(s33.n_nationkey),
+                                   ascalar(s33.n_regionkey)],
+                             cross)),
+                         alist(select([r_regionkey, r_name], region) as s34,
+                           atuple([ascalar(s34.r_regionkey), ascalar(s34.r_name)],
+                             cross))),
+                       alist(select([s_suppkey, s_nationkey], supplier) as s31,
+                         atuple([ascalar(s31.s_suppkey),
+                                 ascalar(s31.s_nationkey)],
+                           cross))),
+                     alist(select([ps_partkey, ps_suppkey, ps_supplycost],
+                             partsupp) as s29,
+                       atuple([ascalar(s29.ps_partkey), ascalar(s29.ps_suppkey),
+                               ascalar(s29.ps_supplycost)],
+                         cross))))),
+               join((p1_partkey = ps1_partkey),
+                 join((s1_suppkey = ps1_suppkey),
+                   join((s1_nationkey = n1_nationkey),
+                     join((n1_regionkey = r1_regionkey),
+                       select([n_name as n1_name, n_nationkey as n1_nationkey,
+                               n_regionkey as n1_regionkey],
+                         alist(select([n_nationkey, n_name, n_regionkey],
+                                 nation) as s35,
+                           atuple([ascalar(s35.n_nationkey),
+                                   ascalar(s35.n_name), ascalar(s35.n_regionkey)],
+                             cross))),
+                       select([r_name as r1_name, r_regionkey as r1_regionkey],
+                         alist(select([r_regionkey, r_name], region) as s36,
+                           atuple([ascalar(s36.r_regionkey), ascalar(s36.r_name)],
+                             cross)))),
+                     select([s_nationkey as s1_nationkey,
+                             s_suppkey as s1_suppkey, s_acctbal as s1_acctbal,
+                             s_name as s1_name, s_address as s1_address,
+                             s_phone as s1_phone, s_comment as s1_comment],
+                       alist(supplier as s32,
+                         atuple([ascalar(s32.s_suppkey), ascalar(s32.s_name),
+                                 ascalar(s32.s_address),
+                                 ascalar(s32.s_nationkey), ascalar(s32.s_phone),
+                                 ascalar(s32.s_acctbal), ascalar(s32.s_comment)],
+                           cross)))),
+                   select([ps_supplycost as ps1_supplycost,
+                           ps_partkey as ps1_partkey, ps_suppkey as ps1_suppkey],
+                     alist(select([ps_partkey, ps_suppkey, ps_supplycost],
+                             partsupp) as s30,
+                       atuple([ascalar(s30.ps_partkey), ascalar(s30.ps_suppkey),
+                               ascalar(s30.ps_supplycost)],
+                         cross)))),
+                 select([p_size as p1_size, p_type as p1_type,
+                         p_partkey as p1_partkey, p_mfgr as p1_mfgr],
+                   alist(select([p_partkey, p_mfgr, p_type, p_size], part) as s28,
+                     atuple([ascalar(s28.p_partkey), ascalar(s28.p_mfgr),
+                             ascalar(s28.p_type), ascalar(s28.p_size)],
+                       cross)))))))),
+       0))
+|}
+  in
+  ( match Parallel.type_of conn r with
+  | Ok t -> [%sexp_of: Type.t] t |> print_s
+  | _ -> () );
+  [%expect
+    {|
+    (FuncT
+     (((HashIdxT
+        ((IntT ((range (Interval 1 50))))
+         (FuncT
+          (((FuncT
+             (((FuncT
+                (((FuncT
+                   (((ListT
+                      ((FuncT
+                        (((FuncT
+                           (((FuncT
+                              (((FuncT
+                                 (((ListT
+                                    ((TupleT
+                                      (((IntT ((range (Interval 0 24))))
+                                        (IntT ((range (Interval 0 4)))))
+                                       ((kind Cross))))
+                                     ((count (Interval 25 25)))))
+                                   (ListT
+                                    ((TupleT
+                                      (((IntT ((range (Interval 0 4))))
+                                        (StringT ((nchars Top))))
+                                       ((kind Cross))))
+                                     ((count (Interval 5 5))))))
+                                  Child_sum))
+                                (ListT
+                                 ((TupleT
+                                   (((IntT ((range (Interval 8 9997))))
+                                     (IntT ((range (Interval 0 24)))))
+                                    ((kind Cross))))
+                                  ((count (Interval 946 946))))))
+                               Child_sum))
+                             (ListT
+                              ((TupleT
+                                (((IntT ((range (Interval 71 199682))))
+                                  (IntT ((range (Interval 8 9997))))
+                                  (FixedT ((value ((range Top) (scale 1))))))
+                                 ((kind Cross))))
+                               ((count (Interval 1252 1252))))))
+                            Child_sum)))
+                         (Width 3)))
+                       ((count (Interval 1203 1203)))))
+                     (FuncT
+                      (((FuncT
+                         (((FuncT
+                            (((FuncT
+                               (((FuncT
+                                  (((ListT
+                                     ((TupleT
+                                       (((IntT ((range (Interval 0 24))))
+                                         (StringT ((nchars Top)))
+                                         (IntT ((range (Interval 0 4)))))
+                                        ((kind Cross))))
+                                      ((count (Interval 25 25))))))
+                                   (Width 3)))
+                                 (FuncT
+                                  (((ListT
+                                     ((TupleT
+                                       (((IntT ((range (Interval 0 4))))
+                                         (StringT ((nchars Top))))
+                                        ((kind Cross))))
+                                      ((count (Interval 5 5))))))
+                                   (Width 2))))
+                                Child_sum))
+                              (FuncT
+                               (((ListT
+                                  ((TupleT
+                                    (((IntT ((range (Interval 8 9997))))
+                                      (StringT ((nchars Top)))
+                                      (StringT ((nchars Top)))
+                                      (IntT ((range (Interval 0 24))))
+                                      (StringT ((nchars Top)))
+                                      (FixedT ((value ((range Top) (scale 1)))))
+                                      (StringT ((nchars Top))))
+                                     ((kind Cross))))
+                                   ((count (Interval 946 946))))))
+                                (Width 7))))
+                             Child_sum))
+                           (FuncT
+                            (((ListT
+                               ((TupleT
+                                 (((IntT ((range (Interval 71 199682))))
+                                   (IntT ((range (Interval 8 9997))))
+                                   (FixedT ((value ((range Top) (scale 1))))))
+                                  ((kind Cross))))
+                                ((count (Interval 1252 1252))))))
+                             (Width 3))))
+                          Child_sum))
+                        (FuncT
+                         (((ListT
+                            ((TupleT
+                              (((IntT ((range (Interval 71 199682))))
+                                (StringT ((nchars Top))) (StringT ((nchars Top)))
+                                (IntT ((range (Interval 1 50)))))
+                               ((kind Cross))))
+                             ((count (Interval 998 998))))))
+                          (Width 4))))
+                       Child_sum)))
+                    Child_sum)))
+                 Child_sum)))
+              Child_sum)))
+           (Width 8)))
+         ((key_count (Interval 50 50))))))
+      (Width 8))) |}]

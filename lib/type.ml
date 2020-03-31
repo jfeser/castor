@@ -424,7 +424,7 @@ module Parallel = struct
 
     type nonrec t = {
       aggs : agg list;
-      build : Value.t Map.M(String).t -> t list -> t option;
+      build : Value.t Map.M(String).t -> t list -> t;
     }
 
     let eval ctx p =
@@ -432,12 +432,11 @@ module Parallel = struct
 
     let wrap p = As_pred (p, Fresh.name Global.fresh "x%d")
 
-    let func_t t =
-      { aggs = []; build = (fun _ ts -> Option.some @@ FuncT (ts, t)) }
+    let func_t t = { aggs = []; build = (fun _ ts -> FuncT (ts, t)) }
 
-    let empty_t = { aggs = []; build = (fun _ _ -> Some EmptyT) }
+    let empty_t = { aggs = []; build = (fun _ _ -> EmptyT) }
 
-    let null_t = { aggs = []; build = (fun _ _ -> Some NullT) }
+    let null_t = { aggs = []; build = (fun _ _ -> NullT) }
 
     let eval_interval ~to_int ctx lo hi =
       let range =
@@ -450,14 +449,14 @@ module Parallel = struct
       let min = wrap @@ Min p and max = wrap @@ Max p in
       let build ctx _ =
         let range = eval_interval ~to_int:Value.to_int ctx min max in
-        return @@ IntT { range; nullable = false (* TODO *) }
+        IntT { range; nullable = false (* TODO *) }
       in
       { aggs = [ Simple min; Simple max ]; build }
 
     let bool_t =
       {
         aggs = [];
-        build = (fun ctx _ -> return @@ BoolT { nullable = false (* TODO *) });
+        build = (fun ctx _ -> BoolT { nullable = false (* TODO *) });
       }
 
     let date_t p =
@@ -468,7 +467,7 @@ module Parallel = struct
             ~to_int:(fun x -> Date.to_int @@ Value.to_date x)
             ctx min max
         in
-        return @@ DateT { range; nullable = false (* TODO *) }
+        DateT { range; nullable = false (* TODO *) }
       in
       { aggs = [ Simple min; Simple max ]; build }
 
@@ -477,16 +476,14 @@ module Parallel = struct
         aggs = [];
         build =
           (fun ctx _ ->
-            return
-            @@ FixedT { value = AbsFixed.top; nullable = false (* TODO *) });
+            FixedT { value = AbsFixed.top; nullable = false (* TODO *) });
       }
 
     let string_t _ =
       {
         aggs = [];
         build =
-          (fun ctx _ ->
-            return @@ StringT { nchars = I.top; nullable = false (* TODO *) });
+          (fun ctx _ -> StringT { nchars = I.top; nullable = false (* TODO *) });
       }
 
     let scalar_t p =
@@ -513,22 +510,20 @@ module Parallel = struct
     let list_error l =
       Error.create "Unexpected list." l [%sexp_of: t list] |> Error.raise
 
-    let list_t q =
-      count_t q @@ fun ts count ->
+    let list_t x =
+      count_t x.l_keys @@ fun ts count ->
+      match ts with [ tv ] -> ListT (tv, { count }) | _ -> list_error ts
+
+    let hash_idx_t x =
+      count_t x.hi_keys @@ fun ts key_count ->
       match ts with
-      | [ _; tv ] -> return @@ ListT (tv, { count })
+      | [ tk; tv ] -> HashIdxT (tk, tv, { key_count })
       | _ -> list_error ts
 
-    let hash_idx_t q =
-      count_t q @@ fun ts key_count ->
+    let ordered_idx_t x =
+      count_t x.oi_keys @@ fun ts key_count ->
       match ts with
-      | [ tk; tv ] -> return @@ HashIdxT (tk, tv, { key_count })
-      | _ -> list_error ts
-
-    let ordered_idx_t q =
-      count_t q @@ fun ts key_count ->
-      match ts with
-      | [ tk; tv ] -> return @@ OrderedIdxT (tk, tv, { key_count })
+      | [ tk; tv ] -> OrderedIdxT (tk, tv, { key_count })
       | _ -> list_error ts
 
     let tuple_t kind =
@@ -538,20 +533,21 @@ module Parallel = struct
         | Concat -> `Concat
         | _ -> failwith "Unexpected tuple kind."
       in
-      { aggs = []; build = (fun _ ts -> return @@ TupleT (ts, { kind })) }
+      { aggs = []; build = (fun _ ts -> TupleT (ts, { kind })) }
 
-    let no_type_t = { aggs = []; build = (fun _ _ -> None) }
+    let no_type_t =
+      { aggs = []; build = (fun _ _ -> failwith "Cannot build type.") }
 
     let of_ralgebra = function
       | Select (ps, _) | GroupBy (ps, _, _) -> func_t (`Width (List.length ps))
       | Join _ | DepJoin _ | Filter _ | OrderBy _ | Dedup _ -> func_t `Child_sum
       | AEmpty -> empty_t
       | AScalar p -> scalar_t p
-      | AList { l_keys = q; _ } -> list_t q
-      | AHashIdx { hi_keys; _ } -> hash_idx_t hi_keys
-      | AOrderedIdx { oi_keys = q; _ } -> ordered_idx_t q
+      | AList x -> list_t x
+      | AHashIdx x -> hash_idx_t x
+      | AOrderedIdx x -> ordered_idx_t x
       | ATuple (_, kind) -> tuple_t kind
-      | _ -> no_type_t
+      | Relation _ | Range _ -> null_t
 
     let rec annot r =
       {
@@ -568,21 +564,30 @@ module Parallel = struct
     and pred p = V.Map.pred annot pred p
 
     let type_of ctx r =
-      let zero = [] and plus = ( @ ) in
       let rec annot r =
         let ts =
           match r.node with
-          | AHashIdx { hi_key_layout = qk; hi_values = qv; _ }
-          | AOrderedIdx { oi_values = qv; oi_key_layout = qk; _ } ->
-              annot (Option.value_exn qk) @ annot qv
-          | _ -> V.Reduce.annot zero plus query meta r
+          | Select (_, r)
+          | GroupBy (_, _, r)
+          | Filter (_, r)
+          | OrderBy { rel = r; _ }
+          | Dedup r
+          | AList { l_values = r; _ } ->
+              [ annot r ]
+          | Join { r1; r2; _ }
+          | DepJoin { d_lhs = r1; d_rhs = r2; _ }
+          | AHashIdx { hi_key_layout = Some r1; hi_values = r2; _ }
+          | AOrderedIdx { oi_key_layout = Some r1; oi_values = r2; _ } ->
+              [ annot r1; annot r2 ]
+          | ATuple (rs, _) -> List.map rs ~f:annot
+          | AEmpty | AScalar _ | Relation _ | Range _ -> []
+          | AOrderedIdx { oi_key_layout = None }
+          | AHashIdx { hi_key_layout = None } ->
+              failwith "Missing key layout."
         in
-        r.meta#builder.build ctx ts |> Option.to_list
-      and query (q : (_ annot pred, _ annot) query) =
-        V.Reduce.query zero plus annot pred q
-      and meta _ = zero
-      and pred (_ : _ annot pred) = zero in
-      try annot r |> List.hd_exn
+        r.meta#builder.build ctx ts
+      in
+      try annot r
       with exn -> Exn.reraise exn (Fmt.str "type_of failed on:@ %a" A.pp r)
   end
 
