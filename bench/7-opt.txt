@@ -18,29 +18,30 @@ alist(orderby([n1_name, n2_name, l_year],
                 supplier))))) as k0,
   select([n1_name, n2_name, l_year, revenue],
     ahashidx(atuple([dedup(
-                       atuple([select([n_name as x219],
+                       atuple([select([n_name as x200],
                                  dedup(select([n_name], nation))),
-                               select([n_name as x219],
+                               select([n_name as x200],
                                  dedup(select([n_name], nation)))],
                          concat)),
                      dedup(
-                       atuple([select([n_name as x222],
+                       atuple([select([n_name as x203],
                                  dedup(select([n_name], nation))),
-                               select([n_name as x222],
+                               select([n_name as x203],
                                  dedup(select([n_name], nation)))],
                          concat))],
-               cross) as s18,
-      filter((count1 > 0),
-        select([count() as count1, n1_name, n2_name,
-                to_year(l_shipdate) as l_year,
-                sum((l_extendedprice * (1 - l_discount))) as revenue],
-          alist(filter((((n1_name = s18.x219) && (n2_name = s18.x222)) ||
-                       ((n1_name = s18.x222) && (n2_name = s18.x219))),
+               cross) as s25,
+      alist(filter((count1 > 0),
+              select([count() as count1, n1_name, n2_name,
+                      to_year(l_shipdate) as l_year,
+                      sum((l_extendedprice * (1 - l_discount))) as revenue],
+                filter((((n1_name = s25.x200) && (n2_name = s25.x203)) ||
+                       ((n1_name = s25.x203) && (n2_name = s25.x200))),
                   select([n2_name, l_extendedprice, l_discount, l_shipdate,
                           n1_name],
-                    join((((n1_name = k0.n1_name) &&
+                    join(((true &&
+                          ((n1_name = k0.n1_name) &&
                           ((n2_name = k0.n2_name) &&
-                          (to_year(l_shipdate) = k0.l_year))) &&
+                          (to_year(l_shipdate) = k0.l_year)))) &&
                          (s_suppkey = l_suppkey)),
                       join((o_orderkey = l_orderkey),
                         join((c_custkey = o_custkey),
@@ -57,9 +58,8 @@ alist(orderby([n1_name, n2_name, l_year],
                         select([n_name as n1_name,
                                 n_nationkey as n1_nationkey],
                           nation),
-                        supplier)))) as s5,
-            atuple([ascalar(s5.n2_name), ascalar(s5.l_extendedprice),
-                    ascalar(s5.l_discount), ascalar(s5.l_shipdate),
-                    ascalar(s5.n1_name)],
-              cross)))),
+                        supplier)))))) as s26,
+        atuple([ascalar(s26.n1_name), ascalar(s26.n2_name),
+                ascalar(s26.l_year), ascalar(s26.revenue)],
+          cross)),
       (param0, param1))))

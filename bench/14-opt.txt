@@ -3,14 +3,16 @@ select([((100.0 *
                                                     (1 - l_discount)) else 0.0)))
         / sum((l_extendedprice * (1 - l_discount)))) as promo_revenue],
   aorderedidx(dedup(
-                select([l_shipdate],
-                  join(((l_partkey = p_partkey) && true), lineitem, part))) as s2,
-    alist(select([l_extendedprice, l_discount, p_type],
-            join(((l_shipdate = s2.l_shipdate) &&
-                 ((l_partkey = p_partkey) && true)),
-              lineitem,
-              part)) as s0,
-      atuple([ascalar(s0.l_extendedprice), ascalar(s0.l_discount),
-              ascalar(s0.p_type)],
+                depjoin(select([p_partkey], part) as s7,
+                  select([l_shipdate],
+                    filter((l_partkey = s7.p_partkey), lineitem)))) as s5,
+    alist(depjoin(select([p_partkey, p_type], part) as s2,
+            atuple([ascalar(s2.p_type),
+                    select([l_extendedprice, l_discount],
+                      filter((l_shipdate = s5.l_shipdate),
+                        filter((l_partkey = s2.p_partkey), lineitem)))],
+              cross)) as s9,
+      atuple([ascalar(s9.p_type), ascalar(s9.l_extendedprice),
+              ascalar(s9.l_discount)],
         cross)),
     >= param1, < (param1 + month(1))))

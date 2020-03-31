@@ -13,51 +13,57 @@ alist(orderby([o_totalprice desc, o_orderdate],
               customer)))) as k0,
   select([c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice,
           sum(agg0) as tot_quantity],
-    alist(select([l1_quantity, o_orderkey, o_totalprice, o_orderdate,
-                  c_custkey, c_name],
-            join((((c_name = k0.c_name) &&
-                  ((c_custkey = k0.c_custkey) &&
-                  ((o_orderkey = k0.o_orderkey) &&
-                  ((o_orderdate = k0.o_orderdate) &&
-                  (o_totalprice = k0.o_totalprice))))) &&
-                 (c_custkey = o_custkey)),
-              join((o_orderkey = l1_orderkey),
-                select([l_orderkey as l1_orderkey, l_quantity as l1_quantity],
-                  lineitem),
-                orders),
-              customer)) as s0,
+    alist(select([c_custkey, c_name],
+            filter(((c_name = k0.c_name) && (c_custkey = k0.c_custkey)),
+              select([c_custkey, c_name], customer))) as s2,
       filter((count0 > 0),
-        select([count() as count0, sum(l1_quantity) as agg0, o_orderkey,
-                o_totalprice, o_orderdate, c_custkey, c_name],
+        select([count() as count0, sum(l1_quantity) as agg0, c_custkey,
+                c_name, o_orderkey, o_orderdate, o_totalprice],
           filter(exists(select([l_orderkey, sum_l_quantity],
                           ahashidx(dedup(
-                                     select([l_orderkey as x284],
-                                       dedup(select([l_orderkey], lineitem)))) as s40,
+                                     select([l_orderkey as x337],
+                                       dedup(select([l_orderkey], lineitem)))) as s49,
                             select([l_orderkey, sum_l_quantity],
                               aorderedidx(dedup(
                                             depjoin(dedup(
                                                       select([l_orderkey],
-                                                        lineitem)) as s36,
+                                                        lineitem)) as s45,
                                               select([sum(l_quantity) as sum_l_quantity],
                                                 filter((l_orderkey =
-                                                       s36.l_orderkey),
-                                                  lineitem)))) as s35,
-                                alist(filter((l_orderkey = s40.x284),
-                                        dedup(select([l_orderkey], lineitem))) as k1,
-                                  filter((sum_l_quantity =
-                                         s35.sum_l_quantity),
-                                    select([l_orderkey,
-                                            sum(l_quantity) as sum_l_quantity],
-                                      alist(select([l_orderkey, l_quantity],
-                                              filter((l_orderkey =
-                                                     k1.l_orderkey),
-                                                lineitem)) as s37,
-                                        atuple([ascalar(s37.l_orderkey),
-                                                ascalar(s37.l_quantity)],
-                                          cross))))),
+                                                       s45.l_orderkey),
+                                                  lineitem)))) as s44,
+                                alist(depjoin(filter((l_orderkey = s49.x337),
+                                                dedup(
+                                                  select([l_orderkey],
+                                                    lineitem))) as k1,
+                                        filter((sum_l_quantity =
+                                               s44.sum_l_quantity),
+                                          select([l_orderkey,
+                                                  sum(l_quantity) as sum_l_quantity],
+                                            filter((l_orderkey =
+                                                   k1.l_orderkey),
+                                              lineitem)))) as s56,
+                                  atuple([ascalar(s56.l_orderkey),
+                                          ascalar(s56.sum_l_quantity)],
+                                    cross)),
                                 > param1, )),
                             o_orderkey))),
-            atuple([ascalar(s0.l1_quantity), ascalar(s0.o_orderkey),
-                    ascalar(s0.o_totalprice), ascalar(s0.o_orderdate),
-                    ascalar(s0.c_custkey), ascalar(s0.c_name)],
+            atuple([atuple([ascalar(s2.c_custkey), ascalar(s2.c_name)],
+                      cross),
+                    alist(select([l1_quantity, o_orderkey, o_orderdate,
+                                  o_totalprice],
+                            join((((o_orderkey = k0.o_orderkey) &&
+                                  ((o_orderdate = k0.o_orderdate) &&
+                                  ((o_totalprice = k0.o_totalprice) &&
+                                  (s2.c_custkey = o_custkey)))) &&
+                                 (o_orderkey = l1_orderkey)),
+                              select([l_orderkey as l1_orderkey,
+                                      l_quantity as l1_quantity],
+                                lineitem),
+                              orders)) as s1,
+                      atuple([ascalar(s1.l1_quantity),
+                              ascalar(s1.o_orderkey),
+                              ascalar(s1.o_orderdate),
+                              ascalar(s1.o_totalprice)],
+                        cross))],
               cross)))))))
