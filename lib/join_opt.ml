@@ -338,7 +338,12 @@ module Make (Config : Config.S) = struct
     let parted_r =
       let c = P.name (Name.create "c") in
       A.(
-        select [ Min c; Max c; Avg c ]
+        select
+          [
+            As_pred (Min c, "min");
+            As_pred (Max c, "max");
+            As_pred (Avg c, "avg");
+          ]
         @@ group_by [ P.as_ Count "c" ] (Set.to_list parts) static_r)
       |> Simplify_tactic.simplify ~dedup:true cost_conn
     in
