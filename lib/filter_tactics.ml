@@ -1,5 +1,4 @@
 open Ast
-open Abslayout
 open Collections
 module A = Abslayout
 module P = Pred.Infix
@@ -65,48 +64,48 @@ module Make (C : Config.S) = struct
     match r.node with
     | OrderBy { key; rel } ->
         let%map p, r = to_filter rel in
-        A.filter p (order_by key r)
+        A.filter p (A.order_by key r)
     | GroupBy (ps, key, r) ->
         let%bind p, r = to_filter r in
-        if invariant_support (schema_set r) (schema_set (group_by ps key r)) p
-        then Some (A.filter p (group_by ps key r))
+        if invariant_support (schema_set r) (schema_set (A.group_by ps key r)) p
+        then Some (A.filter p (A.group_by ps key r))
         else None
     | Filter (p', r) ->
         let%map p, r = to_filter r in
         A.filter (Binop (And, p, p')) r
     | Select (ps, r) -> (
         let%bind p, r = to_filter r in
-        match select_kind ps with
+        match A.select_kind ps with
         | `Scalar ->
             if Tactics_util.select_contains (Free.pred_free p) ps r then
-              Some (A.filter p (select ps r))
+              Some (A.filter p (A.select ps r))
             else None
         | `Agg -> None )
     | Join { pred; r1; r2 } -> (
         match (to_filter r1, to_filter r2) with
         | Some (p1, r1), Some (p2, r2) ->
-            Some (filter_many [ p1; p2 ] (join pred r1 r2))
-        | None, Some (p, r2) -> Some (A.filter p (join pred r1 r2))
-        | Some (p, r1), None -> Some (A.filter p (join pred r1 r2))
+            Some (filter_many [ p1; p2 ] (A.join pred r1 r2))
+        | None, Some (p, r2) -> Some (A.filter p (A.join pred r1 r2))
+        | Some (p, r1), None -> Some (A.filter p (A.join pred r1 r2))
         | None, None -> None )
     | Dedup r ->
         let%map p, r = to_filter r in
-        A.filter p (dedup r)
+        A.filter p (A.dedup r)
     | AList l ->
         let%map p, r = to_filter l.l_values in
-        A.filter (Pred.unscoped l.l_scope p) (list' { l with l_values = r })
+        A.filter (Pred.unscoped l.l_scope p) (A.list' { l with l_values = r })
     | AHashIdx ({ hi_keys = rk; hi_values = rv; _ } as h) ->
         let%map p, r = to_filter rv in
         let below, above = split_bound rk p in
         let above = List.map above ~f:(Pred.unscoped h.hi_scope) in
         filter_many above
-        @@ hash_idx' { h with hi_values = filter_many below r }
+        @@ A.hash_idx' { h with hi_values = filter_many below r }
     | AOrderedIdx o ->
         let%map p, r = to_filter o.oi_values in
         let below, above = split_bound o.oi_keys p in
         let above = List.map above ~f:(Pred.unscoped o.oi_scope) in
         filter_many above
-        @@ ordered_idx' { o with oi_values = filter_many below r }
+        @@ A.ordered_idx' { o with oi_values = filter_many below r }
     | DepJoin { d_lhs; d_alias; d_rhs } ->
         let%map p, r = to_filter d_rhs in
         (* Ensure all the required names are selected. *)
@@ -119,7 +118,7 @@ module Make (C : Config.S) = struct
           merge_select lhs_select rhs_select
         in
         A.filter (Pred.unscoped d_alias p)
-          (dep_join d_lhs d_alias (select select_list r))
+          (A.dep_join d_lhs d_alias (A.select select_list r))
     | Relation _ | AEmpty | AScalar _ | ATuple _ | Range _ -> None
 
   let hoist_filter = of_func hoist_filter ~name:"hoist-filter"
@@ -149,8 +148,8 @@ module Make (C : Config.S) = struct
   let gen_ordered_idx ?lb ?ub p rk rv =
     let k = fresh_name "k%d" in
     let n = fresh_name "x%d" in
-    ordered_idx
-      (dedup (select [ P.as_ p n ] rk))
+    A.ordered_idx
+      (A.dedup (A.select [ P.as_ p n ] rk))
       k
       (A.filter (Binop (Eq, Name (Name.create ~scope:k n), p)) rv)
       [ (lb, ub) ]
@@ -255,8 +254,8 @@ module Make (C : Config.S) = struct
             let%map all_keys = Tactics_util.all_values key r' in
             let scope = fresh_name "s%d" in
             let keys_schema = Schema.schema all_keys in
-            select (Schema.to_select_list orig_schema)
-            @@ ordered_idx all_keys scope
+            A.select (Schema.to_select_list orig_schema)
+            @@ A.ordered_idx all_keys scope
                  (filter_many
                     (List.map key ~f:(fun p ->
                          P.(p = Pred.scoped keys_schema scope p)))
@@ -291,7 +290,7 @@ module Make (C : Config.S) = struct
     in
     let rest = place_all ps 0 in
     let rs = List.mapi rs ~f:(fun i -> filter_many preds.(i)) in
-    filter_many rest (tuple rs Cross)
+    filter_many rest (A.tuple rs Cross)
 
   let push_filter_list stage p l =
     let rk_bnd = Set.of_list (module Name) (Schema.schema l.l_keys) in
@@ -300,13 +299,13 @@ module Make (C : Config.S) = struct
       |> List.partition_map ~f:(fun p ->
              if Tactics_util.is_supported stage rk_bnd p then `Fst p else `Snd p)
     in
-    list
+    A.list
       (filter_many pushed_key l.l_keys)
       l.l_scope
       (filter_many pushed_val l.l_values)
 
   let push_filter_select stage p ps r =
-    match select_kind ps with
+    match A.select_kind ps with
     | `Scalar ->
         let ctx =
           List.filter_map ps ~f:(fun p ->
@@ -314,7 +313,7 @@ module Make (C : Config.S) = struct
           |> Map.of_alist_exn (module Name)
         in
         let p' = Pred.subst ctx p in
-        select ps (A.filter p' r)
+        A.select ps (A.filter p' r)
     | `Agg ->
         let scalar_ctx =
           List.filter_map ps ~f:(fun p ->
@@ -331,7 +330,7 @@ module Make (C : Config.S) = struct
                    `Fst (Pred.subst scalar_ctx p)
                  else `Snd p)
         in
-        filter_many unpushed @@ select ps @@ filter_many pushed r
+        filter_many unpushed @@ A.select ps @@ filter_many pushed r
 
   let push_filter r =
     let open Option.Let_syntax in
@@ -340,9 +339,9 @@ module Make (C : Config.S) = struct
     let%bind p, r = to_filter r in
     match r.node with
     | Filter (p', r') -> Some (A.filter (Binop (And, p, p')) r')
-    | Dedup r' -> Some (dedup (A.filter p r'))
+    | Dedup r' -> Some (A.dedup (A.filter p r'))
     | Select (ps, r') -> Some (push_filter_select stage p ps r')
-    | ATuple (rs, Concat) -> Some (tuple (List.map rs ~f:(A.filter p)) Concat)
+    | ATuple (rs, Concat) -> Some (A.tuple (List.map rs ~f:(A.filter p)) Concat)
     | ATuple (rs, Cross) -> Some (push_filter_cross_tuple stage p rs)
     (* Lists are a special case because their keys are bound at compile time and
        are not available at runtime. *)
@@ -351,15 +350,15 @@ module Make (C : Config.S) = struct
         let%map rk, scope, rv, mk =
           match r.node with
           | DepJoin { d_lhs = rk; d_rhs = rv; d_alias } ->
-              Some (rk, d_alias, rv, dep_join)
-          | AList l -> Some (l.l_keys, l.l_scope, l.l_values, list)
+              Some (rk, d_alias, rv, A.dep_join)
+          | AList l -> Some (l.l_keys, l.l_scope, l.l_values, A.list)
           | AHashIdx h ->
               Some
                 ( h.hi_keys,
                   h.hi_scope,
                   h.hi_values,
                   fun rk s rv ->
-                    hash_idx'
+                    A.hash_idx'
                       { h with hi_keys = rk; hi_scope = s; hi_values = rv } )
           | AOrderedIdx o ->
               Some
@@ -367,7 +366,7 @@ module Make (C : Config.S) = struct
                   o.oi_scope,
                   o.oi_values,
                   fun rk s rv ->
-                    ordered_idx'
+                    A.ordered_idx'
                       { o with oi_keys = rk; oi_scope = s; oi_values = rv } )
           | _ -> None
         in
@@ -489,29 +488,24 @@ module Make (C : Config.S) = struct
       let schema r = List.hd_exn (Schema.schema r) in
       let rec extract = function
         | And (d1, d2) ->
-            let e1 = extract d1 in
-            let e2 = extract d2 in
-            let n1 = schema e1 in
-            let n2 = schema e2 in
-            dedup
-              (select [ Name n1 ] (join (Binop (Eq, Name n1, Name n2)) e1 e2))
+            let e1 = extract d1 and e2 = extract d2 in
+            let n1 = schema e1 and n2 = schema e2 in
+            A.dedup
+            @@ A.select [ Name n1 ]
+            @@ A.join (Binop (Eq, Name n1, Name n2)) e1 e2
         | Or (d1, d2) ->
-            let e1 = extract d1 in
-            let e2 = extract d2 in
-            let n1 = schema e1 in
-            let n2 = schema e2 in
-            let n = fresh_name "x%d" in
-            dedup
-              (tuple
+            let e1 = extract d1 and e2 = extract d2 in
+            let n1 = schema e1 and n2 = schema e2 and n = fresh_name "x%d" in
+            A.dedup
+            @@ A.tuple
                  [
-                   select [ P.as_ (Name n1) n ] e1;
-                   select [ P.as_ (Name n2) n ] e2;
+                   A.select [ P.as_ (Name n1) n ] e1;
+                   A.select [ P.as_ (Name n2) n ] e2;
                  ]
-                 Concat)
+                 Concat
         | Domain d ->
-            let n = schema d in
-            let n' = fresh_name "x%d" in
-            select [ P.as_ (Name n) n' ] d
+            let n = schema d and n' = fresh_name "x%d" in
+            A.select [ P.as_ (Name n) n' ] d
       in
       Map.map d ~f:extract
   end
@@ -555,7 +549,7 @@ module Make (C : Config.S) = struct
 
         let%map () = elim_eq_check_limit (List.length rels) in
 
-        let r_keys = dedup (tuple rels Cross) in
+        let r_keys = A.dedup (A.tuple rels Cross) in
         let scope = fresh_name "s%d" in
         let inner_filter_pred =
           let ctx =
@@ -567,8 +561,8 @@ module Make (C : Config.S) = struct
           Schema.to_select_list
           @@ List.dedup_and_sort ~compare:[%compare: Name.t] orig_schema
         in
-        select select_list @@ filter_many rest
-        @@ hash_idx r_keys scope (A.filter inner_filter_pred r) key
+        A.select select_list @@ filter_many rest
+        @@ A.hash_idx r_keys scope (A.filter inner_filter_pred r) key
 
   let elim_eq_filter =
     seq' (of_func elim_eq_filter ~name:"elim-eq-filter") (try_ filter_const)
@@ -585,7 +579,7 @@ module Make (C : Config.S) = struct
               r
           with _ -> false )
         && List.length clauses > 1
-      then Some (tuple (List.map clauses ~f:(fun p -> A.filter p r)) Concat)
+      then Some (A.tuple (List.map clauses ~f:(fun p -> A.filter p r)) Concat)
       else None
     else None
 
@@ -678,13 +672,15 @@ module Make (C : Config.S) = struct
               in
               P.name val_name :: alias_binds
             in
-            select select_list vals
+            A.select select_list vals
           and scope = fresh_name "k%d" in
 
           let open P in
-          dep_join (select [ as_ (Min lo) "lo"; as_ (Max hi) "hi" ] vals) scope
-          @@ select [ as_ (name (Name.create "range")) key_name ]
-          @@ range
+          A.dep_join
+            (A.select [ as_ (Min lo) "lo"; as_ (Max hi) "hi" ] vals)
+            scope
+          @@ A.select [ as_ (name (Name.create "range")) key_name ]
+          @@ A.range
                (name (Name.create ~scope "lo"))
                (name (Name.create ~scope "hi"))
       | StringT _ ->
@@ -692,7 +688,7 @@ module Make (C : Config.S) = struct
           let select_list =
             [ P.(as_ (name (List.hd_exn (Schema.schema keys))) key_name) ]
           in
-          select select_list keys
+          A.select select_list keys
       | _ -> None
     in
     let scope = fresh_name "s%d" in
@@ -703,13 +699,13 @@ module Make (C : Config.S) = struct
           n
           (P.name @@ Name.scoped scope @@ Name.create key_name)
       in
-      subst ctx r
+      A.subst ctx r
     in
-    if Set.mem (names r') n then None
+    if Set.mem (A.names r') n then None
     else
       return
-      @@ select Schema.(schema r' |> to_select_list)
-      @@ hash_idx keys scope r' [ Name n ]
+      @@ A.select Schema.(schema r' |> to_select_list)
+      @@ A.hash_idx keys scope r' [ Name n ]
 
   (** Try to partition a layout on values of an attribute. *)
   let partition_on r n =
@@ -782,9 +778,8 @@ module Make (C : Config.S) = struct
             let qname = fresh_name "q%d" in
             ( Name (Name.create ~scope qname),
               [
-                A.select
-                  [ As_pred (Exists r, qname) ]
-                  (A.scalar (As_pred (Int 0, "dummy")));
+                A.select [ As_pred (Exists r, qname) ]
+                @@ A.scalar (As_pred (Int 0, "dummy"));
               ] )
           else (Exists r, [])
 
@@ -793,9 +788,8 @@ module Make (C : Config.S) = struct
             let qname = fresh_name "q%d" in
             ( Name (Name.create ~scope qname),
               [
-                A.select
-                  [ As_pred (First r, qname) ]
-                  (A.scalar (As_pred (Int 0, "dummy")));
+                A.select [ As_pred (First r, qname) ]
+                @@ A.scalar (As_pred (Int 0, "dummy"));
               ] )
           else (First r, [])
       end
@@ -805,9 +799,9 @@ module Make (C : Config.S) = struct
       match subqueries with
       | [] -> None
       | [ x ] -> Some x
-      | xs -> Some (tuple subqueries Cross)
+      | xs -> Some (A.tuple subqueries Cross)
     in
-    dep_join lhs scope rhs
+    A.dep_join lhs scope rhs
 
   let elim_subquery = global elim_subquery "elim-subquery"
 
