@@ -102,7 +102,7 @@ module Make (Config : Config.S) = struct
     in
     of_func f ~name:"apply-to-subqueries"
 
-  let push_all_unparameterized_filters =
+  let push_all_runtime_filters =
     fix (for_all F.push_filter Path.(all >>? is_run_time >>? is_filter))
 
   let hoist_all_filters =
@@ -129,10 +129,10 @@ module Make (Config : Config.S) = struct
                  lift
                    (O.seq_many
                       [
-                        push_all_unparameterized_filters;
+                        push_all_runtime_filters;
                         O.for_all S.row_store
                           Path.(all >>? is_run_time >>? is_relation);
-                        push_all_unparameterized_filters;
+                        push_all_runtime_filters;
                         fix project;
                         Simplify_tactic.simplify;
                       ]);
@@ -217,14 +217,20 @@ module Make (Config : Config.S) = struct
              (seq_many
                 [
                   try_random @@ traced @@ F.elim_subquery;
-                  try_random @@ push_all_unparameterized_filters;
+                  try_random @@ push_all_runtime_filters;
                   project;
                   traced ~name:"elim-join-filter"
                   @@ at_ Join_elim_tactics.elim_join_filter
                        (Path.all >>? is_join >>| shallowest);
                   try_
                     (traced ~name:"elim-disjunct"
-                       (first F.elim_disjunct (Path.all >>? is_filter)))
+                       (seq_many
+                          [
+                            hoist_all_filters;
+                            first F.elim_disjunct
+                              Path.(all >>? is_filter >>? is_run_time);
+                            push_all_runtime_filters;
+                          ]))
                     (seq_many
                        [
                          (* Push constant filters *)
@@ -250,7 +256,7 @@ module Make (Config : Config.S) = struct
                               (Branching.lift F.elim_eq_filter)
                               is_param_filter;
                          traced ~name:"push-all-unparam-filters"
-                         @@ push_all_unparameterized_filters;
+                         @@ push_all_runtime_filters;
                          (* Eliminate all unparameterized relations. *)
                          traced ~name:"elim-unparam-relations"
                          @@ fix
@@ -262,10 +268,10 @@ module Make (Config : Config.S) = struct
                                     >>? not is_serializable
                                     >>? not (contains is_collection)
                                     >>| shallowest);
-                                push_all_unparameterized_filters;
+                                push_all_runtime_filters;
                               ];
                          traced ~name:"push-all-unparam-filters"
-                         @@ push_all_unparameterized_filters;
+                         @@ push_all_runtime_filters;
                          (* Push selections above collections. *)
                          traced ~name:"push-select-above-collection"
                          @@ fix
@@ -296,7 +302,7 @@ module Make (Config : Config.S) = struct
                                            Path.(
                                              all >>? is_run_time
                                              >>? not has_params);
-                                         lift push_all_unparameterized_filters;
+                                         lift push_all_runtime_filters;
                                        ]);
                                   filter is_serializable;
                                 ]
@@ -313,7 +319,7 @@ module Make (Config : Config.S) = struct
                                   Path.(all >>? is_dedup);
                               ];
                          fix project;
-                         push_all_unparameterized_filters;
+                         push_all_runtime_filters;
                          Simplify_tactic.simplify;
                          traced @@ filter is_serializable'';
                        ]);
