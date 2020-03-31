@@ -106,20 +106,7 @@ module Make (C : Config.S) = struct
         let above = List.map above ~f:(Pred.unscoped o.oi_scope) in
         filter_many above
         @@ A.ordered_idx' { o with oi_values = filter_many below r }
-    | DepJoin { d_lhs; d_alias; d_rhs } ->
-        let%map p, r = to_filter d_rhs in
-        (* Ensure all the required names are selected. *)
-        let select_list =
-          let lhs_schema = Schema.schema d_lhs in
-          let lhs_select =
-            lhs_schema |> Schema.to_select_list
-            |> List.map ~f:(Pred.scoped lhs_schema d_alias)
-          and rhs_select = Schema.(schema d_rhs |> to_select_list) in
-          merge_select lhs_select rhs_select
-        in
-        A.filter (Pred.unscoped d_alias p)
-          (A.dep_join d_lhs d_alias (A.select select_list r))
-    | Relation _ | AEmpty | AScalar _ | ATuple _ | Range _ -> None
+    | DepJoin _ | Relation _ | AEmpty | AScalar _ | ATuple _ | Range _ -> None
 
   let hoist_filter = of_func hoist_filter ~name:"hoist-filter"
 
