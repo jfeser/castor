@@ -245,15 +245,63 @@ module Stage_reduce = struct
 end
 
 module Iter = struct
-  let zero = ()
+  let pred annot pred = function
+    | Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null _ | Count
+    | Row_number ->
+        ()
+    | Unop (_, p) | As_pred (p, _) | Sum p | Avg p | Max p | Min p -> pred p
+    | Binop (_, p, p') ->
+        pred p;
+        pred p'
+    | If (p, p', p'') | Substring (p, p', p'') ->
+        pred p;
+        pred p';
+        pred p''
+    | First q | Exists q -> annot q
 
-  let plus () () = ()
+  let query annot pred = function
+    | Relation _ | AEmpty -> ()
+    | Select (ps, q) | GroupBy (ps, _, q) ->
+        List.iter ~f:pred ps;
+        annot q
+    | Filter (p, q) ->
+        pred p;
+        annot q
+    | Join { pred = p; r1; r2 } ->
+        pred p;
+        annot r1;
+        annot r2
+    | DepJoin { d_lhs = q; d_rhs = q'; _ }
+    | AList { l_keys = q; l_values = q'; _ } ->
+        annot q;
+        annot q'
+    | OrderBy { key; rel } ->
+        List.iter ~f:(fun (p, _) -> pred p) key;
+        annot rel
+    | Dedup q -> annot q
+    | Range (p, p') ->
+        pred p;
+        pred p'
+    | AScalar p -> pred p
+    | ATuple (qs, _) -> List.iter ~f:annot qs
+    | AHashIdx { hi_keys; hi_values; hi_key_layout; hi_lookup; _ } ->
+        annot hi_keys;
+        annot hi_values;
+        Option.iter ~f:annot hi_key_layout;
+        List.iter ~f:pred hi_lookup
+    | AOrderedIdx { oi_keys; oi_values; oi_key_layout; oi_lookup; _ } ->
+        annot oi_keys;
+        annot oi_values;
+        Option.iter ~f:annot oi_key_layout;
+        List.iter
+          ~f:(fun (b, b') ->
+            Option.iter ~f:(fun (p, _) -> pred p) b;
+            Option.iter ~f:(fun (p, _) -> pred p) b')
+          oi_lookup
 
-  let annot query meta r = Reduce.annot zero plus query meta r
-
-  let query annot pred q = Reduce.query zero plus annot pred q
-
-  let pred annot pred p = Reduce.pred zero plus annot pred p
+  let annot query meta { node; meta = m } =
+    query node;
+    meta m
 end
 
 module Annotate = struct
