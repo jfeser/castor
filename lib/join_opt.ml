@@ -468,11 +468,12 @@ module Make (Config : Config.S) = struct
     match (s1, s2) with
     | `Lhs (s1, k1), `Rhs (s2, k2) | `Rhs (s2, k2), `Lhs (s1, k1) ->
         let rhs_parts = Set.union (to_parts rhs pred) parts in
-        let lhs_set =
-          opt parts s1
+        let lhs_set = opt parts s1 |> List.map ~f:(fun (_, j) -> j)
+        and rhs_set =
+          opt rhs_parts s2
           |> List.map ~f:(fun (_, j) -> j)
           |> List.filter ~f:is_static_join
-        and rhs_set = opt rhs_parts s2 |> List.map ~f:(fun (_, j) -> j) in
+        in
         List.cartesian_product lhs_set rhs_set
         |> List.map ~f:(fun (lhs, rhs) ->
                Hash { lkey = k1; rkey = k2; lhs; rhs })
