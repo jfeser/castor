@@ -23,7 +23,7 @@ let bool_t = BoolT { nullable = false }
 
 let to_sql = function
   | BoolT _ -> "boolean"
-  | IntT _ -> "integer"
+  | IntT _ -> "numeric"
   | FixedT _ -> "numeric"
   | StringT _ -> "varchar"
   | DateT _ -> "date"

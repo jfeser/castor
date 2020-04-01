@@ -292,3 +292,42 @@ let%expect_test "demomatch-example2" =
           ((key_count (Interval 2 2))))))
        (Width 2)))
      125) |}]
+
+let%expect_test "depjoin" =
+  run_test
+    {|
+atuple([
+    alist(r as k, ascalar(k.f)),
+    alist(r2 as k1, ascalar(k1.a))
+], cross)
+|};
+  [%expect {|
+    0:17 Tuple body
+    0:7 List body
+    0:1 Scalar (=(Int 0))
+    0:0 Tuple len (=17)
+    0:0 List len (=7)
+    0:0 List count (=7)
+    1:1 Scalar (=(Int 1))
+    2:1 Scalar (=(Int 1))
+    3:1 Scalar (=(Int 2))
+    4:1 Scalar (=(Int 2))
+    5:1 Scalar (=(Int 3))
+    6:1 Scalar (=(Int 4))
+    7:10 List body
+    7:2 Scalar (=(Fixed ((value -42) (scale 100))))
+    7:0 List len (=10)
+    7:0 List count (=5)
+    9:2 Scalar (=(Fixed ((value 1) (scale 100))))
+    11:2 Scalar (=(Fixed ((value 88) (scale 100))))
+    13:2 Scalar (=(Fixed ((value 5) (scale 1))))
+    15:2 Scalar (=(Fixed ((value 3442) (scale 100))))
+
+    ((TupleT
+      (((ListT ((IntT ((range (Interval 0 4)))) ((count (Interval 7 7)))))
+        (ListT
+         ((FixedT ((value ((range (Interval -42 3442)) (scale 100)))))
+          ((count (Interval 5 5))))))
+       ((kind Cross))))
+     17
+     "\\000\\001\\001\\002\\002\\003\\004\\214\\255\\001\\000X\\000\\244\\001r\\r") |}]

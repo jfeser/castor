@@ -65,14 +65,14 @@ let%expect_test "" =
               SELECT
                   0 AS "counter0_0",
                   0 AS "f_3",
-                  (NULL::integer) AS "x4_0",
-                  (NULL::integer) AS "x5_0",
-                  (NULL::integer) AS "x6_0",
-                  (NULL::integer) AS "x7_0")
+                  (NULL::numeric) AS "x4_0",
+                  (NULL::numeric) AS "x5_0",
+                  (NULL::numeric) AS "x6_0",
+                  (NULL::numeric) AS "x7_0")
           UNION ALL (
               SELECT
                   1 AS "counter0_1",
-                  (NULL::integer) AS "f_6",
+                  (NULL::numeric) AS "f_6",
                   "x4_1" AS "x4_2",
                   "x5_1" AS "x5_2",
                   "x6_1" AS "x6_2",
