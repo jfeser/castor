@@ -8,6 +8,18 @@ module V = Visitors
 
 include (val Log.make ~level:(Some Warning) "castor-opt.join-opt")
 
+let max_nest_joins = ref 0
+
+let param =
+  let open Command.Let_syntax in
+  [%map_open
+    let () = param
+    and nest_joins =
+      flag "max-nest-joins" (optional int)
+        ~doc:"N maximum number of nested layout joins"
+    in
+    Option.iter nest_joins ~f:(fun x -> max_nest_joins := x)]
+
 let filter p r = { node = Filter (p, r); meta = r.meta }
 
 let join pred r1 r2 = { node = Join { pred; r1; r2 }; meta = r1.meta }
@@ -287,6 +299,11 @@ module Make (Config : Config.S) = struct
     | Nest of { lhs : t; rhs : t; pred : G.Edge.t }
   [@@deriving sexp_of]
 
+  let rec num_nest = function
+    | Flat _ | Id _ -> 0
+    | Hash { lhs; rhs } -> num_nest lhs + num_nest rhs
+    | Nest { lhs; rhs } -> 1 + num_nest lhs + num_nest rhs
+
   let rec to_ralgebra = function
     | Flat r | Id r -> r
     | Nest { lhs; rhs; pred } -> join pred (to_ralgebra lhs) (to_ralgebra rhs)
@@ -474,7 +491,8 @@ module Make (Config : Config.S) = struct
     and rhs_set = List.map (opt rhs_parts s2) ~f:(fun (_, j) -> j) in
     List.cartesian_product lhs_set rhs_set
     |> List.filter_map ~f:(fun (j1, j2) ->
-           if is_static_join j1 then
+           if is_static_join j1 && num_nest j1 + num_nest j2 <= !max_nest_joins
+           then
              let j = Nest { lhs = j1; rhs = j2; pred } in
              Some ([| scan_cost parts j |], j)
            else None)
@@ -502,14 +520,14 @@ module Make (Config : Config.S) = struct
               if rand random "hash-join" (strip_meta r) then
                 enum_hash_join opt parts pred s1 s2
               else []
-            and _nest_joins =
+            and nest_joins =
               if rand random "nest-join" (strip_meta r) then
                 enum_nest_join opt parts pred s1 s2
               else []
             in
 
             Pareto_set.(
-              union_all [ cs; of_list (flat_joins @ hash_joins @ _nest_joins) ]))
+              union_all [ cs; of_list (flat_joins @ hash_joins @ nest_joins) ]))
     in
     info (fun m -> m "Found %d pareto-optimal joins." (Pareto_set.length joins));
     joins
