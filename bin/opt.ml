@@ -94,7 +94,7 @@ let trial_dir = sprintf "%s-trial"
 
 let copy_out out_file out_dir query =
   dump out_file query;
-  system_exn @@ sprintf "mv %s %s" (trial_dir out_dir) out_dir
+  system_exn @@ sprintf "mv -f %s %s" (trial_dir out_dir) out_dir
 
 let main ~params ~cost_timeout ~timeout ~out_dir ~out_file ch =
   let conn = Db.create (Sys.getenv_exn "CASTOR_OPT_DB") in
