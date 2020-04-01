@@ -5,46 +5,6 @@ module A = Abslayout
 module P = Pred.Infix
 module N = Name
 
-let shadow_check r =
-  let relations_visitor =
-    object
-      inherit [_] V.reduce
-
-      inherit [_] Util.set_monoid (module String)
-
-      method! visit_Relation () r = Set.singleton (module String) r.r_name
-    end
-  in
-  let alias_visitor relations =
-    object (self)
-      inherit [_] V.iter
-
-      val aliases = Hash_set.create (module String)
-
-      method check_name n =
-        if Hash_set.mem aliases n then
-          Error.(create "Duplicate alias." n [%sexp_of: string] |> raise)
-        else if Set.mem relations n then
-          Error.(
-            create "Alias overlaps with relation." n [%sexp_of: string] |> raise)
-        else Hash_set.add aliases n
-
-      method! visit_AList () l =
-        self#check_name l.l_scope;
-        self#visit_list_ () l
-
-      method! visit_AHashIdx () h =
-        self#check_name h.hi_scope;
-        self#visit_hash_idx () h
-
-      method! visit_AOrderedIdx () o =
-        self#check_name o.oi_scope;
-        self#visit_ordered_idx () o
-    end
-  in
-  let rels = relations_visitor#visit_t () r in
-  (alias_visitor rels)#visit_t () r
-
 module Flag : sig
   type t [@@deriving sexp]
 
@@ -398,7 +358,6 @@ let refs =
 
 (** Annotate names in an algebra expression with types. *)
 let resolve ?(params = Set.empty (module Name)) r =
-  shadow_check r;
   let r, ctx =
     let param_ctx =
       Ctx.of_defs `Run (Set.to_list params |> List.map ~f:P.name)

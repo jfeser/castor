@@ -57,6 +57,46 @@ let equiv conn r1 r2 =
       in
       Lwt_main.run (check ())
 
+let shadow_check r =
+  let relations_visitor =
+    object
+      inherit [_] V.reduce
+
+      inherit [_] Util.set_monoid (module String)
+
+      method! visit_Relation () r = Set.singleton (module String) r.r_name
+    end
+  in
+  let alias_visitor relations =
+    object (self)
+      inherit [_] V.iter
+
+      val aliases = Hash_set.create (module String)
+
+      method check_name n =
+        if Hash_set.mem aliases n then
+          Error.(create "Duplicate alias." n [%sexp_of: string] |> raise)
+        else if Set.mem relations n then
+          Error.(
+            create "Alias overlaps with relation." n [%sexp_of: string] |> raise)
+        else Hash_set.add aliases n
+
+      method! visit_AList () l =
+        self#check_name l.l_scope;
+        self#visit_list_ () l
+
+      method! visit_AHashIdx () h =
+        self#check_name h.hi_scope;
+        self#visit_hash_idx () h
+
+      method! visit_AOrderedIdx () o =
+        self#check_name o.oi_scope;
+        self#visit_ordered_idx () o
+    end
+  in
+  let rels = relations_visitor#visit_t () r in
+  (alias_visitor rels)#visit_t () r
+
 let duplicate_preds ps =
   List.filter_map ps ~f:Pred.to_name
   |> List.find_a_dup ~compare:[%compare: Name.t]
