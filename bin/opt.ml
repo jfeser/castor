@@ -47,14 +47,14 @@ let opt conn cost_conn params cost_timeout state query =
   let%map query' = Transform.optimize (module Config) query in
   (query', Or_error.is_ok @@ T.is_serializable query')
 
-let eval out_dir params query =
+let eval dir params query =
   let open Result.Let_syntax in
   Logs.info (fun m -> m "Evaluating:@ %a" A.pp query);
 
   (* Set up the output directory. *)
-  system_exn @@ sprintf "rm -rf %s" out_dir;
-  system_exn @@ sprintf "mkdir -p %s" out_dir;
-  let query_fn = sprintf "%s/query.txt" out_dir in
+  system_exn @@ sprintf "rm -rf %s" dir;
+  system_exn @@ sprintf "mkdir -p %s" dir;
+  let query_fn = sprintf "%s/query.txt" dir in
   dump query_fn query;
 
   (* Try to build the query. *)
@@ -68,7 +68,7 @@ let eval out_dir params query =
       sprintf
         "$CASTOR_ROOT/../_build/default/castor/bin/compile.exe -o %s %s %s > \
          %s/compile.log 2>&1"
-        out_dir params query_fn out_dir
+        dir params query_fn dir
     in
     let%map out = command_out compile_cmd in
     Logs.info (fun m -> m "Compile output: %s" out)
@@ -81,7 +81,7 @@ let eval out_dir params query =
         List.map params ~f:(fun (_, _, v) -> sprintf "'%s'" @@ Value.to_param v)
         |> String.concat ~sep:" "
       in
-      sprintf "%s/scanner.exe -t 1 %s/data.bin %s" out_dir out_dir params
+      sprintf "%s/scanner.exe -t 1 %s/data.bin %s" dir dir params
     in
     let%map out = command_out run_cmd in
     let time, _ = String.lsplit2_exn ~on:' ' out in
@@ -89,6 +89,12 @@ let eval out_dir params query =
   in
 
   run_time
+
+let trial_dir = sprintf "%s-trial"
+
+let copy_out out_file out_dir query =
+  dump out_file query;
+  system_exn @@ sprintf "mv -r %s %s" (trial_dir out_dir) out_dir
 
 let main ~params ~cost_timeout ~timeout ~out_dir ~out_file ch =
   let conn = Db.create (Sys.getenv_exn "CASTOR_OPT_DB") in
@@ -104,10 +110,10 @@ let main ~params ~cost_timeout ~timeout ~out_dir ~out_file ch =
     Fresh.reset Global.fresh;
     match opt conn cost_conn params_set cost_timeout state query with
     | Some (query', true) -> (
-        match eval out_dir params query' with
+        match eval (trial_dir out_dir) params query' with
         | Ok cost ->
             if Float.(cost < !best_cost) then (
-              dump out_file query';
+              copy_out out_file out_dir query';
               best_cost := cost );
             cost
         | Error err ->
