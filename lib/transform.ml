@@ -106,7 +106,7 @@ module Make (Config : Config.S) = struct
     fix (for_all F.push_filter Path.(all >>? is_run_time >>? is_filter))
 
   let hoist_all_filters =
-    fix (for_all F.hoist_filter (Path.all >>? is_filter >> parent))
+    fix (for_all F.hoist_filter Path.(all >>? is_filter >> O.parent))
 
   let elim_param_filter tf test =
     (* Eliminate comparison filters. *)
@@ -185,17 +185,17 @@ module Make (Config : Config.S) = struct
         traced ~name:"elim-groupby"
         @@ fix
         @@ at_ Groupby_tactics.elim_groupby
-             (Path.all >>? is_groupby >>| shallowest);
+             Path.(all >>? is_groupby >>| shallowest);
         (* Hoist parameterized filters as far up as possible. *)
         traced ~name:"hoist-param-filters"
         @@ try_random
         @@ seq_many
              [
                for_all Join_elim_tactics.hoist_join_param_filter
-                 (Path.all >>? is_join);
+                 Path.(all >>? is_join);
                fix
                @@ at_ F.hoist_filter
-                    (Path.all >>? is_param_filter >>| deepest >>= parent);
+                    Path.(all >>? is_param_filter >>| deepest >>= O.parent);
              ];
         (* Eliminate unparameterized join nests. Try using join optimization and
            using a simple row store. *)
@@ -221,7 +221,7 @@ module Make (Config : Config.S) = struct
                   project;
                   traced ~name:"elim-join-filter"
                   @@ at_ Join_elim_tactics.elim_join_filter
-                       (Path.all >>? is_join >>| shallowest);
+                       Path.(all >>? is_join >>| shallowest);
                   try_
                     (traced ~name:"elim-disjunct"
                        (seq_many
@@ -301,7 +301,8 @@ module Make (Config : Config.S) = struct
                                          for_all (lift S.row_store)
                                            Path.(
                                              all >>? is_run_time
-                                             >>? not has_params);
+                                             >>? not has_params
+                                             >>? not is_scalar);
                                          lift push_all_runtime_filters;
                                        ]);
                                   filter is_serializable;
