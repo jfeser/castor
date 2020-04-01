@@ -439,9 +439,7 @@ module Make (Config : Config.S) = struct
           if is_static_join j then Some (to_ralgebra j) else None)
     in
     List.cartesian_product (select_flat s1) (select_flat s2)
-    |> List.map ~f:(fun (r1, r2) ->
-           let j = Flat (join pred r1 r2) in
-           ([| scan_cost parts j |], j))
+    |> List.map ~f:(fun (r1, r2) -> Flat (join pred r1 r2))
 
   let enum_hash_join opt parts pred s1 s2 =
     let open List.Let_syntax in
@@ -467,45 +465,47 @@ module Make (Config : Config.S) = struct
           []
     in
     let%bind s1 = key_side k1 and s2 = key_side k2 in
-    let joins =
-      match (s1, s2) with
-      | `Lhs (s1, k1), `Rhs (s2, k2) | `Rhs (s2, k2), `Lhs (s1, k1) ->
-          let rhs_parts = Set.union (to_parts rhs pred) parts in
-          List.cartesian_product (opt parts s1) (opt rhs_parts s2)
-          |> List.filter_map ~f:(fun ((_, lhs), (_, rhs)) ->
-                 if is_static_join rhs then
-                   Some (Hash { lkey = k1; rkey = k2; lhs; rhs })
-                 else None)
-      | _ ->
-          debug (fun m ->
-              m "Keys come from same partition %a %a" Pred.pp k1 Pred.pp k2);
-          []
-    in
-    List.map joins ~f:(fun j -> ([| scan_cost parts j |], j))
+    match (s1, s2) with
+    | `Lhs (s1, k1), `Rhs (s2, k2) | `Rhs (s2, k2), `Lhs (s1, k1) ->
+        let rhs_parts = Set.union (to_parts rhs pred) parts in
+        let lhs_set =
+          opt parts s1
+          |> List.map ~f:(fun (_, j) -> j)
+          |> List.filter ~f:is_static_join
+        and rhs_set = opt rhs_parts s2 |> List.map ~f:(fun (_, j) -> j) in
+        List.cartesian_product lhs_set rhs_set
+        |> List.map ~f:(fun (lhs, rhs) ->
+               Hash { lkey = k1; rkey = k2; lhs; rhs })
+    | _ ->
+        debug (fun m ->
+            m "Keys come from same partition %a %a" Pred.pp k1 Pred.pp k2);
+        []
 
   let enum_nest_join opt parts pred s1 s2 =
-    let open Option.Let_syntax in
     let lhs_parts = Set.union (to_parts (G.to_ralgebra s1) pred) parts
     and rhs_parts = Set.union (to_parts (G.to_ralgebra s2) pred) parts in
-    let lhs_set = List.map (opt lhs_parts s1) ~f:(fun (_, j) -> j)
-    and rhs_set = List.map (opt rhs_parts s2) ~f:(fun (_, j) -> j) in
+    let lhs_set =
+      opt lhs_parts s1
+      |> List.map ~f:(fun (_, j) -> j)
+      |> List.filter ~f:is_static_join
+    and rhs_set = opt rhs_parts s2 |> List.map ~f:(fun (_, j) -> j) in
     List.cartesian_product lhs_set rhs_set
-    |> List.filter_map ~f:(fun (j1, j2) ->
-           if is_static_join j1 && num_nest j1 + num_nest j2 <= !max_nest_joins
-           then
-             let j = Nest { lhs = j1; rhs = j2; pred } in
-             Some ([| scan_cost parts j |], j)
-           else None)
+    |> List.map ~f:(fun (j1, j2) -> Nest { lhs = j1; rhs = j2; pred })
 
   let opt_nonrec opt parts s =
     info (fun m -> m "Choosing join for space %s." (G.to_string s));
+
+    let filter_nest_joins =
+      List.filter ~f:(fun j -> num_nest j <= !max_nest_joins)
+    in
+    let add_cost = List.map ~f:(fun j -> ([| scan_cost parts j |], j)) in
+
     let joins =
       if G.nb_vertex s = 1 then
         (* Select strategy for the leaves of the join tree. *)
         let r = G.choose_vertex s in
         [ leaf_flat r; leaf_id r ] |> List.filter_map ~f:Fun.id
-        |> List.map ~f:(fun j -> ([| scan_cost parts j |], j))
-        |> Pareto_set.of_list
+        |> filter_nest_joins |> add_cost |> Pareto_set.of_list
       else
         G.partition_fold s ~init:Pareto_set.empty ~f:(fun cs (s1, s2, es) ->
             let pred = Pred.conjoin (List.map es ~f:(fun (_, p, _) -> p)) in
@@ -525,9 +525,12 @@ module Make (Config : Config.S) = struct
                 enum_nest_join opt parts pred s1 s2
               else []
             in
+            let all_joins =
+              flat_joins @ hash_joins @ nest_joins
+              |> filter_nest_joins |> add_cost
+            in
 
-            Pareto_set.(
-              union_all [ cs; of_list (flat_joins @ hash_joins @ nest_joins) ]))
+            Pareto_set.(union_all [ cs; of_list all_joins ]))
     in
     info (fun m -> m "Found %d pareto-optimal joins." (Pareto_set.length joins));
     joins
