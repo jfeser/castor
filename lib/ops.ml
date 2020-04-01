@@ -205,13 +205,9 @@ module Make (C : Config.S) = struct
   let parent _ p = Path.parent p
 
   let rec apply tf p r =
-    let ret =
-      tf.f p r
-      |> Option.bind ~f:(function
-           | `Result r -> Some r
-           | `Tf tf' -> apply tf' p r)
-    in
-    ret
+    Option.bind (tf.f p r) ~f:(function
+      | `Result r -> Some r
+      | `Tf tf' -> apply tf' p r)
 
   let at_ tf pspec =
     let at_ p r =
@@ -223,12 +219,11 @@ module Make (C : Config.S) = struct
 
   let first tf pset =
     let first p r =
-      Seq.find_map
-        (pset (Path.get_exn p r))
-        ~f:(fun p' ->
-          Option.bind
-            (apply (at_ tf (fun _ -> Some p')) p r)
-            ~f:(fun r' -> if A.O.(r = r') then None else Some r'))
+      pset (Path.get_exn p r)
+      |> Seq.find_map ~f:(fun p' ->
+             apply (at_ tf (fun _ -> Some p')) p r
+             |> Option.bind ~f:(fun r' ->
+                    if A.O.(r = r') then None else Some r'))
     in
     global ~reraise:false ~short_name:"first" first
       (sprintf "first %s in <path set>" tf.name)
@@ -296,18 +291,19 @@ module Make (C : Config.S) = struct
   let traced ?name tf =
     let name = Option.value name ~default:tf.name in
     let traced p r =
-      info (fun m -> m "@[Running %s on:@,%a@]\n" name A.pp (Path.get_exn p r));
+      info (fun m -> m "Running %s on:@ %a" name A.pp (Path.get_exn p r));
       match apply tf p r with
       | Some r' ->
           if A.O.(r = r') then
-            info (fun m -> m "Invariant transformation %s." name)
+            info (fun m -> m "Invariant transformation %s" name)
           else
+            let local_r = Path.get_exn p r and local_r' = Path.get_exn p r' in
             info (fun m ->
-                m "@[%s transformed:@,%a@,===== to ======@,%a@]@.\n" name A.pp
-                  (Path.get_exn p r) A.pp (Path.get_exn p r'));
-          Some r'
+                m "%s transformed:@ %a@ ===== to ======@ %a" name A.pp local_r
+                  A.pp local_r');
+            Some r'
       | None ->
-          info (fun m -> m "@[Transform %s does not apply.\n" name);
+          info (fun m -> m "Transform %s does not apply" name);
           None
     in
     global traced tf.name
@@ -365,10 +361,8 @@ module Make (C : Config.S) = struct
     let schema_validated tf =
       let schema_validated p r =
         Seq.map (apply tf p r) ~f:(fun r' ->
-            let () =
-              let prep r = Abslayout_load.annotate conn r in
-              Inv.schema (prep r) (prep r')
-            in
+            let prep r = Abslayout_load.annotate conn r in
+            Inv.schema (prep r) (prep r');
             r')
       in
       global ~name:(sprintf "%s" @@ name tf) schema_validated
@@ -376,10 +370,8 @@ module Make (C : Config.S) = struct
     let resolve_validated tf =
       let resolve_validated p r =
         Seq.map (apply tf p r) ~f:(fun r' ->
-            let () =
-              let prep r = Abslayout_load.annotate conn r in
-              Inv.resolve ~params (prep r) (prep r')
-            in
+            let prep r = Abslayout_load.annotate conn r in
+            Inv.resolve ~params (prep r) (prep r');
             r')
       in
       global ~name:(sprintf "%s" @@ name tf) resolve_validated
