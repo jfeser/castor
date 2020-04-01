@@ -340,12 +340,13 @@ end
 let optimize (module C : Config.S) r =
   let open Option.Let_syntax in
   (* Optimize outer query. *)
-  let%map r =
+  let%bind r =
     let module T = Make (C) in
     let module O = Ops.Make (C) in
     O.apply T.(try_partition opt) Path.root r
   in
   (* Recursively optimize subqueries. *)
+  let exception Subquery_failed in
   let apply_to_subqueries r =
     let visitor =
       object (self : 'a)
@@ -359,8 +360,9 @@ let optimize (module C : Config.S) r =
           end in
           let module O = Ops.Make (C) in
           let module T = Make (C) in
-          Option.value_exn ~message:"Transforming subquery failed."
-            (O.apply T.opt Path.root r)
+          match O.apply T.opt Path.root r with
+          | Some r' -> r'
+          | None -> raise Subquery_failed
 
         method! visit_Exists () r = Exists (self#visit_subquery r)
 
@@ -380,4 +382,4 @@ let optimize (module C : Config.S) r =
     in
     visitor#visit_t () r
   in
-  apply_to_subqueries r
+  try Some (apply_to_subqueries r) with Subquery_failed -> None
