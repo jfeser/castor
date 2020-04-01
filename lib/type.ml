@@ -722,14 +722,22 @@ module Parallel = struct
       let open Lwt in
       Lwt_list.map_p
         (fun r ->
+          let start_time = Time.now () in
           let%lwt tup = Lwt_stream.get @@ Db.Async.exec ?timeout conn r in
+          let end_time = Time.now () in
+          let total_time = Time.diff end_time start_time in
           match tup with
           | Some (Ok t) ->
+              info (fun m ->
+                  m "Query succeeded after %a." Time.Span.pp total_time);
               return
                 ( List.hd_exn t
                 |> List.map2_exn (Schema.names r) ~f:(fun n v -> (n, v))
                 |> Option.return |> Result.return )
-          | Some (Error { info = `Timeout; _ }) -> return @@ Result.return None
+          | Some (Error { info = `Timeout; _ }) ->
+              info (fun m ->
+                  m "Query timed out after %a." Time.Span.pp total_time);
+              return @@ Result.return None
           | Some (Error e) -> return @@ Result.fail (`Db_error e)
           | None -> failwith "BUG: expected a tuple.")
         queries
