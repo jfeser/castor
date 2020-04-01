@@ -57,7 +57,7 @@ let%expect_test "" =
   in
   Option.iter
     (apply
-       (at_ flatten_select (Path.all >>? is_select >>| shallowest))
+       (at_ flatten_select Path.(all >>? is_select >>| shallowest))
        Path.root r)
     ~f:(Format.printf "%a" Abslayout.pp);
   [%expect {| depjoin(ascalar(0 as f) as k, select([k.f], ascalar(0 as g))) |}]
@@ -72,7 +72,8 @@ groupby([min(ct0) as x0, max(ct0) as x1],
 |}
   in
   Simplify_tactic.simplify (Lazy.force Test_util.tpch_conn) r |> Fmt.pr "%a" pp;
-  [%expect {|
+  [%expect
+    {|
     groupby([min(ct0) as x0, max(ct0) as x1],
       [],
       groupby([count() as ct0],

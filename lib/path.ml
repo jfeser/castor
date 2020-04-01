@@ -218,3 +218,50 @@ let child p i = p @ [ i ]
 let%expect_test "parent" =
   parent [ 0; 1 ] |> [%sexp_of: t option] |> print_s;
   [%expect {| ((0)) |}]
+
+let deepest ps r =
+  Seq.fold (ps r) ~init:None ~f:(fun p_max_m p ->
+      match p_max_m with
+      | None -> Some p
+      | Some p_max -> Some (if length p > length p_max then p else p_max))
+
+let shallowest ps r =
+  Seq.fold (ps r) ~init:None ~f:(fun p_min_m p ->
+      match p_min_m with
+      | None -> Some p
+      | Some p_min -> Some (if length p < length p_min then p else p_min))
+
+let is_join r p = match (get_exn p r).node with Join _ -> true | _ -> false
+
+let is_groupby r p =
+  match (get_exn p r).node with GroupBy _ -> true | _ -> false
+
+let is_orderby r p =
+  match (get_exn p r).node with OrderBy _ -> true | _ -> false
+
+let is_filter r p =
+  match (get_exn p r).node with Filter _ -> true | _ -> false
+
+let is_dedup r p = match (get_exn p r).node with Dedup _ -> true | _ -> false
+
+let is_relation r p =
+  match (get_exn p r).node with Relation _ -> true | _ -> false
+
+let is_select r p =
+  match (get_exn p r).node with Select _ -> true | _ -> false
+
+let is_hash_idx r p =
+  match (get_exn p r).node with AHashIdx _ -> true | _ -> false
+
+let is_ordered_idx r p =
+  match (get_exn p r).node with AOrderedIdx _ -> true | _ -> false
+
+let is_scalar r p =
+  match (get_exn p r).node with AScalar _ -> true | _ -> false
+
+let is_list r p = match (get_exn p r).node with AList _ -> true | _ -> false
+
+let is_tuple r p = match (get_exn p r).node with ATuple _ -> true | _ -> false
+
+let is_depjoin r p =
+  match (get_exn p r).node with DepJoin _ -> true | _ -> false

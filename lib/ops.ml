@@ -109,56 +109,6 @@ module Make (C : Config.S) = struct
 
   let any ps r = Seq.hd (ps r)
 
-  let deepest ps r =
-    Seq.fold (ps r) ~init:None ~f:(fun p_max_m p ->
-        match p_max_m with
-        | None -> Some p
-        | Some p_max ->
-            Some (if Path.length p > Path.length p_max then p else p_max))
-
-  let shallowest ps r =
-    Seq.fold (ps r) ~init:None ~f:(fun p_min_m p ->
-        match p_min_m with
-        | None -> Some p
-        | Some p_min ->
-            Some (if Path.length p < Path.length p_min then p else p_min))
-
-  let is_join r p =
-    match (Path.get_exn p r).node with Join _ -> true | _ -> false
-
-  let is_groupby r p =
-    match (Path.get_exn p r).node with GroupBy _ -> true | _ -> false
-
-  let is_orderby r p =
-    match (Path.get_exn p r).node with OrderBy _ -> true | _ -> false
-
-  let is_filter r p =
-    match (Path.get_exn p r).node with Filter _ -> true | _ -> false
-
-  let is_dedup r p =
-    match (Path.get_exn p r).node with Dedup _ -> true | _ -> false
-
-  let is_relation r p =
-    match (Path.get_exn p r).node with Relation _ -> true | _ -> false
-
-  let is_select r p =
-    match (Path.get_exn p r).node with Select _ -> true | _ -> false
-
-  let is_hash_idx r p =
-    match (Path.get_exn p r).node with AHashIdx _ -> true | _ -> false
-
-  let is_ordered_idx r p =
-    match (Path.get_exn p r).node with AOrderedIdx _ -> true | _ -> false
-
-  let is_list r p =
-    match (Path.get_exn p r).node with AList _ -> true | _ -> false
-
-  let is_tuple r p =
-    match (Path.get_exn p r).node with ATuple _ -> true | _ -> false
-
-  let is_depjoin r p =
-    match (Path.get_exn p r).node with DepJoin _ -> true | _ -> false
-
   let is_param_filter r p =
     match (Path.get_exn p r).node with
     | Filter (pred, _) -> overlaps (Free.pred_free pred) params
@@ -168,7 +118,7 @@ module Make (C : Config.S) = struct
     let r' = Path.get_exn p r in
     Seq.exists Path.(all r') ~f:(fun p -> f r' p)
 
-  let is_const_filter r p = is_filter r p && not (is_param_filter r p)
+  let is_const_filter r p = Path.(is_filter r p && not (is_param_filter r p))
 
   let is_param_eq_filter r p =
     match (Path.get_exn p r).node with
@@ -198,7 +148,7 @@ module Make (C : Config.S) = struct
     Option.map (Path.parent p) ~f:(f r) |> Option.value ~default:false
 
   let is_collection r p =
-    is_hash_idx r p || is_ordered_idx r p || is_list r p || is_tuple r p
+    Path.(is_hash_idx r p || is_ordered_idx r p || is_list r p || is_tuple r p)
 
   let child i _ = Some (Path.child Path.root i)
 

@@ -29,3 +29,33 @@ val is_compile_time : 'a annot -> t -> bool
 val parent : t -> t option
 
 val child : t -> int -> t
+
+val deepest : ('a -> t Seq.t) -> 'a -> t option
+
+val shallowest : ('a -> t Seq.t) -> 'a -> t option
+
+val is_join : 'a annot -> t -> bool
+
+val is_groupby : 'a annot -> t -> bool
+
+val is_orderby : 'a annot -> t -> bool
+
+val is_filter : 'a annot -> t -> bool
+
+val is_dedup : 'a annot -> t -> bool
+
+val is_relation : 'a annot -> t -> bool
+
+val is_select : 'a annot -> t -> bool
+
+val is_hash_idx : 'a annot -> t -> bool
+
+val is_ordered_idx : 'a annot -> t -> bool
+
+val is_scalar : 'a annot -> t -> bool
+
+val is_list : 'a annot -> t -> bool
+
+val is_tuple : 'a annot -> t -> bool
+
+val is_depjoin : 'a annot -> t -> bool

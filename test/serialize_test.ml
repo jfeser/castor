@@ -301,7 +301,8 @@ atuple([
     alist(r2 as k1, ascalar(k1.a))
 ], cross)
 |};
-  [%expect {|
+  [%expect
+    {|
     0:17 Tuple body
     0:7 List body
     0:1 Scalar (=(Int 0))
