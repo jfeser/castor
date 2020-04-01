@@ -134,6 +134,7 @@ let () =
       and () = Db.param
       and () = Type_cost.param
       and () = Join_opt.param
+      and () = Type.param
       and cost_timeout =
         flag "cost-timeout" (optional float)
           ~doc:"SEC time to run cost estimation"
