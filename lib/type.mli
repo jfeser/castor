@@ -1,5 +1,7 @@
 open Ast
 
+val param : unit Command.Param.t
+
 val src : Logs.Src.t
 
 exception TypeError of Core.Error.t
