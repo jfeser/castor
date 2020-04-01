@@ -294,14 +294,14 @@ module Make (C : Config.S) = struct
       info (fun m -> m "Running %s on:@ %a" name A.pp (Path.get_exn p r));
       match apply tf p r with
       | Some r' ->
-          if A.O.(r = r') then
+          ( if A.O.(r = r') then
             info (fun m -> m "Invariant transformation %s" name)
           else
             let local_r = Path.get_exn p r and local_r' = Path.get_exn p r' in
             info (fun m ->
                 m "%s transformed:@ %a@ ===== to ======@ %a" name A.pp local_r
-                  A.pp local_r');
-            Some r'
+                  A.pp local_r') );
+          Some r'
       | None ->
           info (fun m -> m "Transform %s does not apply" name);
           None
