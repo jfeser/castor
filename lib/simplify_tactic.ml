@@ -5,6 +5,8 @@ open Schema
 open Match
 module P = Pred.Infix
 
+include (val Log.make ~level:(Some Warning) "castor.simplify-tactic")
+
 module Config = struct
   module type S = sig
     include Ops.Config.S
@@ -177,5 +179,13 @@ let simplify ?(dedup = false) ?(params = Set.empty (module Name)) conn r =
       |> Join_elim.remove_dedup |> strip_meta
     else q |> strip_meta
   in
-  strip_meta r |> simplify |> Unnest.unnest |> Cardinality.extend ~dedup
-  |> Join_elim.remove_joins |> remove_dedup |> simplify
+  let start_time = Time.now () in
+  let ret =
+    (r :> Ast.t)
+    |> simplify |> Unnest.unnest |> Cardinality.extend ~dedup
+    |> Join_elim.remove_joins |> remove_dedup |> simplify
+  in
+  let end_time = Time.now () in
+  info (fun m ->
+      m "Simplify ran in %a" Time.Span.pp (Time.diff end_time start_time));
+  ret
