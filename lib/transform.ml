@@ -78,6 +78,9 @@ module Make (Config : Config.S) = struct
   let is_serializable r p =
     Is_serializable.is_serializeable ~params ~path:p r |> Result.is_ok
 
+  let is_spine_serializable r p =
+    Is_serializable.is_spine_serializeable ~params ~path:p r |> Result.is_ok
+
   let has_params r p = Path.get_exn p r |> Free.free |> overlaps params
 
   let has_free r p = not (Set.is_empty (Free.free (Path.get_exn p r)))
@@ -141,9 +144,11 @@ module Make (Config : Config.S) = struct
          ]
 
   let try_partition tf =
-    Branching.(
-      seq_many [ choose (try_random_branch F.partition) id; lift tf ]
-      |> lower (min Cost.cost))
+    traced ~name:"try-partition"
+    @@ Branching.(
+         seq_many
+           [ choose (try_random_branch @@ traced F.partition) id; lift tf ]
+         |> lower (min Cost.cost))
 
   let try_ tf rest =
     Branching.(seq (choose (lift tf) id) (lift rest) |> lower (min Cost.cost))
@@ -305,7 +310,7 @@ module Make (Config : Config.S) = struct
                                              >>? not is_scalar);
                                          lift push_all_runtime_filters;
                                        ]);
-                                  filter is_serializable;
+                                  filter is_spine_serializable;
                                 ]
                               |> lower (min Cost.cost)) );
                          (* Cleanup*)
