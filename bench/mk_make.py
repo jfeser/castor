@@ -143,10 +143,12 @@ for b in bench:
 '''.format(b['name'], out_dir(b), gen_param_values(b)))
 
     print('''
-{0}-opt.time:
-\t./{1}/scanner.exe -t $(TIME_PER_BENCH) {1}/data.bin {2} > $@
-\t$(TIME_CMD) -v ./$</scanner.exe -t $(TIME_PER_BENCH) {1}/data.bin {2} 2> {0}-opt.mem > /dev/null
-'''.format(b['name'], out_dir(b), gen_param_values(b)))
+{name}-opt.time:
+\t./{build_dir}/scanner.exe -t $(TIME_PER_BENCH) {build_dir}/data.bin {params} > $@
+\t$(TIME_CMD) -v ./{0}/scanner.exe -t $(TIME_PER_BENCH) {build_dir}/data.bin {params} 2> {name}-opt.mem > /dev/null
+'''.format(name=b['name'],
+           build_dir=out_dir(b),
+           params=gen_param_values(b)))
 
     print('''
 analysis_{0}-opt.csv.log:
