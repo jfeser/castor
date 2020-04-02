@@ -88,55 +88,78 @@ let is_static ?(params = Set.empty (module Name)) r =
 
 exception Un_serial of string
 
-let ops_serializable_exn r =
-  let visitor =
-    object
-      inherit [_] stage_iter as super
+class ['a] ops_serializable_visitor =
+  object
+    inherit ['a] stage_iter as super
 
-      method! visit_t ((), s) r =
-        super#visit_t ((), s) r;
-        match (s, r.node) with
-        | `Run, (Relation _ | GroupBy (_, _, _) | Join _ | OrderBy _ | Dedup _)
-          ->
-            raise
-            @@ Un_serial
-                 (Format.asprintf
-                    "Cannot serialize: Bad operator in run-time position %a"
-                    A.pp r)
-        | _ -> ()
-    end
-  in
-  visitor#visit_t ((), `Run) r
+    method! visit_t ((), s) r =
+      super#visit_t ((), s) r;
+      match (s, r.node) with
+      | `Run, (Relation _ | GroupBy (_, _, _) | Join _ | OrderBy _ | Dedup _) ->
+          raise
+          @@ Un_serial
+               (Format.asprintf
+                  "Cannot serialize: Bad operator in run-time position %a" A.pp
+                  r)
+      | _ -> ()
+  end
 
-let names_serializable_exn ?params p r =
-  let stage = stage ?params r in
-  let visitor =
-    object
-      inherit [_] stage_iter as super
+class ['a] names_serializable_visitor stage =
+  object
+    inherit ['a] stage_iter as super
 
-      method! visit_Name (_, s) n =
-        match (stage n, s) with
-        | `Compile, `Run | `Run, `Compile ->
-            let stage = match s with `Compile -> "compile" | `Run -> "run" in
-            let msg =
-              Fmt.str "Cannot serialize: Found %a in %s time position." Name.pp
-                n stage
-            in
-            raise @@ Un_serial msg
-        | _ -> ()
+    method! visit_Name (_, s) n =
+      match (stage n, s) with
+      | `Compile, `Run | `Run, `Compile ->
+          let stage = match s with `Compile -> "compile" | `Run -> "run" in
+          let msg =
+            Fmt.str "Cannot serialize: Found %a in %s time position." Name.pp n
+              stage
+          in
+          raise @@ Un_serial msg
+      | _ -> ()
 
-      method! visit_t (_, s) = super#visit_t ((), s)
-    end
-  in
-  visitor#visit_t ((), `Run) @@ Path.get_exn p r
+    method! visit_t (_, s) = super#visit_t ((), s)
+  end
 
 (** Return true if `r` is serializable. This function performs two checks:
     - `r` must not contain any compile time only operations in run time position.
     - Run-time names may only appear in run-time position and vice versa. *)
 let is_serializeable ?(path = Path.root) ?params r =
-  let r' = Path.get_exn path r in
   try
-    ops_serializable_exn r';
-    names_serializable_exn ?params path r;
+    (new ops_serializable_visitor)#visit_t ((), `Run) @@ Path.get_exn path r;
+    let stage = stage ?params r in
+    (new names_serializable_visitor stage)#visit_t ((), `Run)
+    @@ Path.get_exn path r;
+    Ok ()
+  with Un_serial msg -> Error msg
+
+class ['a] ops_spine_serializable_visitor =
+  object
+    inherit ['a] ops_serializable_visitor as super
+
+    method! visit_Exists _ _ = ()
+
+    method! visit_First _ _ = ()
+  end
+
+class ['a] names_spine_serializable_visitor stage =
+  object
+    inherit ['a] names_serializable_visitor stage as super
+
+    method! visit_Exists _ _ = ()
+
+    method! visit_First _ _ = ()
+  end
+
+(** Return true if the spine of r (the part of the query with no subqueries) is
+   serializable. *)
+let is_spine_serializeable ?(path = Path.root) ?params r =
+  try
+    (new ops_spine_serializable_visitor)#visit_t ((), `Run)
+    @@ Path.get_exn path r;
+    let stage = stage ?params r in
+    (new names_spine_serializable_visitor stage)#visit_t ((), `Run)
+    @@ Path.get_exn path r;
     Ok ()
   with Un_serial msg -> Error msg
