@@ -25,7 +25,7 @@ open Make (C)
 
 open Ops.Make (C)
 
-let load_string ?params s = Abslayout_load.load_string ?params C.conn s
+let load_string ?params s = Abslayout_load.load_string_exn ?params C.conn s
 
 let%expect_test "row-store-comptime" =
   let r = load_string "alist(r as r1, filter(r1.f = f, r))" in

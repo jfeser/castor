@@ -32,7 +32,7 @@ let main ~params:all_params ~simplify ~project ~unnest ~sql ~cse ch =
   in
 
   let query_str = In_channel.input_all ch in
-  let query = load_string ~params Config.conn query_str in
+  let query = load_string_exn ~params Config.conn query_str in
   let query = simplify query in
   let query =
     let q =

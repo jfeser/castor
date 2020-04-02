@@ -26,7 +26,7 @@ open Make (C)
 
 open Ops.Make (C)
 
-let load_string ?params s = Abslayout_load.load_string ?params C.conn s
+let load_string ?params s = Abslayout_load.load_string_exn ?params C.conn s
 
 let%expect_test "push-filter-comptime" =
   let r =
@@ -109,7 +109,7 @@ let%expect_test "push-filter-select" =
 
 let%expect_test "push-filter-tuple" =
   let r =
-    Abslayout_load.load_string (Lazy.force tpch_conn)
+    Abslayout_load.load_string_exn (Lazy.force tpch_conn)
       {|
 filter((strpos(p_name, "") > 0),
             atuple([ascalar(0 as x),
@@ -144,7 +144,8 @@ filter((strpos(p_name, "") > 0),
 |}
   in
   Option.iter (apply push_filter Path.root r) ~f:(Format.printf "%a\n" pp);
-  [%expect {|
+  [%expect
+    {|
     atuple([ascalar(0 as x),
             filter((strpos(p_name, "") > 0),
               alist(select([s_suppkey], supplier) as s5,
@@ -289,7 +290,7 @@ let%expect_test "partition" =
 
 let%expect_test "elim-subquery" =
   let r =
-    Abslayout_load.load_string (Lazy.force tpch_conn)
+    Abslayout_load.load_string_exn (Lazy.force tpch_conn)
       {|
 filter((0 =
                (select([max(total_revenue_i) as tot],
@@ -335,7 +336,7 @@ filter((0 =
 
 let%expect_test "hoist-filter" =
   let r =
-    Abslayout_load.load_string (Lazy.force tpch_conn)
+    Abslayout_load.load_string_exn (Lazy.force tpch_conn)
       {|
 aorderedidx(select([l_shipdate, o_orderdate],
               join(true, dedup(select([l_shipdate], lineitem)), dedup(select([o_orderdate], orders)))) as s68,

@@ -83,5 +83,5 @@ module Make (Config : Config.S) = struct
 
   let push_orderby =
     of_func_pre push_orderby ~name:"push-orderby" ~pre:(fun r ->
-        r |> Equiv.annotate |> Resolve.resolve ~params:Config.params)
+        r |> Equiv.annotate |> Resolve.resolve_exn ~params:Config.params)
 end

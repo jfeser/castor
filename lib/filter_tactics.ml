@@ -373,7 +373,7 @@ module Make (C : Config.S) = struct
     (* NOTE: Simplify is necessary to make push-filter safe under fixpoints. *)
     seq'
       (of_func_pre push_filter ~name:"push-filter"
-         ~pre:(Resolve.resolve ~params))
+         ~pre:(Resolve.resolve_exn ~params))
       simplify
 
   let elim_eq_filter_src =

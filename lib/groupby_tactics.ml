@@ -106,7 +106,7 @@ module Test = struct
 
   let%expect_test "" =
     let r =
-      Abslayout_load.load_string ~params conn
+      Abslayout_load.load_string_exn ~params conn
         {|
 groupby([o_year,
          (sum((if (nation_name = param1) then volume else 0.0)) /

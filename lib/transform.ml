@@ -61,7 +61,7 @@ module Make (Config : Config.S) = struct
         then Branching.apply tf p r
         else Seq.singleton r)
 
-  let project r = Some (r |> Resolve.resolve ~params |> Project.project_once)
+  let project r = Some (r |> Resolve.resolve_exn ~params |> Project.project_once)
 
   let project = of_func project ~name:"project"
 

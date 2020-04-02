@@ -38,11 +38,10 @@ module Make (Config : Config.S) = struct
         info (fun m -> m "Computing cost of:@, %a." Abslayout.pp r);
         let out =
           let open Result.Let_syntax in
+          let%bind layout = load_layout ~params cost_conn r in
           let%bind type_ =
-            load_layout ~params cost_conn r
-            |> strip_meta
+            strip_meta layout
             |> Parallel.type_of ?timeout:cost_timeout cost_conn
-            |> Result.map_error ~f:(fun (`Db_error e) -> Db.Async.to_error e)
           in
           let c = read type_ in
           match kind with
@@ -59,6 +58,9 @@ module Make (Config : Config.S) = struct
             info (fun m -> m "Found cost %f." x);
             x
         | Error e ->
-            warn (fun m -> m "Computing cost failed: %a" Error.pp e);
+            warn (fun m ->
+                m "Computing cost failed: %a"
+                  (Resolve.pp_err @@ Parallel.pp_err @@ Fmt.nop)
+                  e);
             Float.max_value)
 end

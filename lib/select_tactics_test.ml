@@ -28,7 +28,7 @@ let () =
 
 let%expect_test "push-select-index" =
   let r =
-    Abslayout_load.load_string (Lazy.force tpch_conn)
+    Abslayout_load.load_string_exn (Lazy.force tpch_conn)
       {|
 select([sum(o_totalprice) as revenue],
   aorderedidx(select([o_orderdate], dedup(select([o_orderdate], orders))) as s1,
@@ -39,7 +39,8 @@ select([sum(o_totalprice) as revenue],
   let r' = Option.value_exn (apply push_select Path.root r) in
   Inv.resolve r r';
   Format.printf "%a\n" pp r';
-  [%expect {|
+  [%expect
+    {|
     select([sum(agg0) as revenue],
       aorderedidx(select([o_orderdate], dedup(select([o_orderdate], orders))) as s1,
         filter((count0 > 0),

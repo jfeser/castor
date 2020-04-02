@@ -104,7 +104,9 @@ let main ~params ~cost_timeout ~timeout ~out_dir ~out_file ch =
     List.map params ~f:(fun (n, t, _) -> Name.create ~type_:t n)
     |> Set.of_list (module Name)
   in
-  let query = load_string ~params:params_set conn @@ In_channel.input_all ch in
+  let query =
+    load_string_exn ~params:params_set conn @@ In_channel.input_all ch
+  in
 
   let best_cost = ref Float.infinity in
   let cost state =

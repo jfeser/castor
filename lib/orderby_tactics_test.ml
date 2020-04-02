@@ -44,10 +44,11 @@ let%expect_test "" =
               atuple([ascalar(s0.s_suppkey), ascalar(s0.s_name), ascalar(s0.s_address), ascalar(s0.s_phone)], cross)),
             s1.supplier_no))))
 |}
-    |> Abslayout_load.load_string (Lazy.force tpch_conn)
+    |> Abslayout_load.load_string_exn (Lazy.force tpch_conn)
   in
   Format.printf "%a" (Fmt.Dump.option A.pp) @@ O.apply push_orderby Path.root r;
-  [%expect {|
+  [%expect
+    {|
     Some
       depjoin(orderby([supplier_no desc],
                 alist(dedup(select([l_suppkey as l1_suppkey], lineitem)) as k0,
@@ -101,10 +102,11 @@ orderby([supplier_no desc],
                                       cross))],
                             cross))),
                       >= date("0000-01-01"), < (date("0000-01-01") + month(3))))))|}
-    |> Abslayout_load.load_string (Lazy.force tpch_conn)
+    |> Abslayout_load.load_string_exn (Lazy.force tpch_conn)
   in
   Format.printf "%a" (Fmt.Dump.option A.pp) @@ O.apply push_orderby Path.root r;
-  [%expect {|
+  [%expect
+    {|
     Some
       alist(orderby([l1_suppkey desc],
               dedup(select([l_suppkey as l1_suppkey], lineitem))) as k0,
