@@ -145,7 +145,7 @@ for b in bench:
     print('''
 {name}-opt.time:
 \t./{build_dir}/scanner.exe -t $(TIME_PER_BENCH) {build_dir}/data.bin {params} > $@
-\t$(TIME_CMD) -v ./{0}/scanner.exe -t $(TIME_PER_BENCH) {build_dir}/data.bin {params} 2> {name}-opt.mem > /dev/null
+\t$(TIME_CMD) -v ./{build_dir}/scanner.exe -t $(TIME_PER_BENCH) {build_dir}/data.bin {params} 2> {name}-opt.mem > /dev/null
 '''.format(name=b['name'],
            build_dir=out_dir(b),
            params=gen_param_values(b)))
