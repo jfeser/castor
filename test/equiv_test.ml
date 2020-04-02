@@ -1,7 +1,7 @@
 open Test_util
 
 let run_test conn str =
-  Abslayout_load.load_string conn str
+  Abslayout_load.load_string_exn conn str
   |> Equiv.eqs |> Set.to_list
   |> Format.printf "%a" Fmt.Dump.(list @@ pair Name.pp Name.pp)
 

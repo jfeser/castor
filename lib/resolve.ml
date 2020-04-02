@@ -1,9 +1,23 @@
-open Collections
 open Ast
 module V = Visitors
 module A = Abslayout
 module P = Pred.Infix
 module N = Name
+
+type error =
+  [ `Ambiguous_names of Name.t list
+  | `Ambiguous_stage of Name.t
+  | `Unbound of Name.t ]
+[@@deriving sexp]
+
+let pp_err f fmt = function
+  | `Ambiguous_names ns ->
+      Fmt.pf fmt "Ambiguous names: %a" (Fmt.Dump.list Name.pp) ns
+  | `Ambiguous_stage n -> Fmt.pf fmt "Ambiguous stage: %a" Name.pp n
+  | `Unbound n -> Fmt.pf fmt "Unbound name: %a" Name.pp n
+  | x -> f fmt x
+
+exception Resolve_error of error [@@deriving sexp]
 
 module Flag : sig
   type t [@@deriving sexp]
@@ -47,11 +61,14 @@ module Ctx = struct
     let compare_row r1 r2 = [%compare: N.t] r1.rname r2.rname
 
     let of_list l =
-      let dups = List.find_all_dups l ~compare:compare_row in
+      let dups =
+        List.find_all_dups l ~compare:compare_row
+        |> List.map ~f:(fun r -> r.rname)
+      in
       if List.length dups > 0 then (
-        List.iter dups ~f:(fun r ->
-            Log.err (fun m -> m "Ambiguous name %a." N.pp r.rname));
-        Error.(of_string "Ambiguous names." |> raise) );
+        List.iter dups ~f:(fun n ->
+            Log.err (fun m -> m "Ambiguous name %a." N.pp n));
+        raise @@ Resolve_error (`Ambiguous_names dups) );
       l
   end
 
@@ -159,9 +176,7 @@ let resolve_name ctx n =
   | Some m ->
       Flag.set m.rref;
       m.rname
-  | None ->
-      Error.raise
-        (Error.create "Could not resolve." (n, ctx) [%sexp_of: N.t * Ctx.t])
+  | None -> raise @@ Resolve_error (`Unbound n)
 
 let resolve_relation stage r =
   Relation.schema r |> List.map ~f:P.name |> Ctx.of_defs stage
@@ -293,16 +308,8 @@ let resolve_open resolve stage outer_ctx =
   | AOrderedIdx o -> resolve_ordered_idx resolve stage outer_ctx o
   | AHashIdx h -> resolve_hash_idx resolve stage outer_ctx h
 
-exception Inner_resolve_error of < > annot * exn
-
-exception Resolve_error of exn [@@deriving sexp]
-
 let rec resolve stage outer_ctx r =
-  let node, ctx =
-    try resolve_open resolve stage outer_ctx r.node with
-    | Inner_resolve_error _ as exn -> raise exn
-    | exn -> raise (Inner_resolve_error (strip_meta r, exn))
-  in
+  let node, ctx = resolve_open resolve stage outer_ctx r.node in
   let ctx = Ctx.unscoped ctx in
   let meta =
     object
@@ -321,8 +328,7 @@ let stage =
       function
       | `Left x | `Right x -> Some x
       | `Both (x, x') when Poly.(x = x') -> Some x
-      | `Both (x, x') ->
-          Error.create "Ambiguous stage" key [%sexp_of: Name.t] |> Error.raise)
+      | `Both (x, x') -> raise (Resolve_error (`Ambiguous_stage key)))
   in
   let rec annot r =
     let meta =
@@ -357,17 +363,15 @@ let refs =
   annot
 
 (** Annotate names in an algebra expression with types. *)
-let resolve ?(params = Set.empty (module Name)) r =
-  let r, ctx =
-    let param_ctx =
-      Ctx.of_defs `Run (Set.to_list params |> List.map ~f:P.name)
-    in
-    try resolve `Run param_ctx r
-    with Inner_resolve_error (r', exn) -> raise (Resolve_error exn)
-  in
+let resolve_exn ?(params = Set.empty (module Name)) r =
+  let param_ctx = Ctx.of_defs `Run (Set.to_list params |> List.map ~f:P.name) in
+  let r, ctx = resolve `Run param_ctx r in
 
   (* Ensure that all the outputs are referenced. *)
   Ctx.incr_refs `Run ctx;
 
   (* Add metadata *)
   stage r |> refs
+
+let resolve ?params r =
+  try Ok (resolve_exn ?params r) with Resolve_error (#error as x) -> Error x

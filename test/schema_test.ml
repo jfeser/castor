@@ -102,7 +102,7 @@ select([x122, x123, x124, x125, x126, x127, x128],
                                   ascalar(0 as x0)))))))))],
             concat))))
 |}
-    |> Abslayout_load.load_string (Lazy.force Test_util.tpch_conn)
+    |> Abslayout_load.load_string_exn (Lazy.force Test_util.tpch_conn)
   in
   let r1 =
     {|
@@ -118,7 +118,7 @@ select([x122, x123, x124, x125, x126, x127, x128],
                             null:fixed as x121],
                       ascalar(0 as var0)))
 |}
-    |> Abslayout_load.load_string (Lazy.force Test_util.tpch_conn)
+    |> Abslayout_load.load_string_exn (Lazy.force Test_util.tpch_conn)
   in
   let r2 =
     {|
@@ -199,7 +199,7 @@ select([1 as counter2, s7_o_orderdate, null:int as var0,
                                               orders)))))),
                                   ascalar(0 as x0)))))))))
   |}
-    |> Abslayout_load.load_string (Lazy.force Test_util.tpch_conn)
+    |> Abslayout_load.load_string_exn (Lazy.force Test_util.tpch_conn)
   in
   schema r |> Fmt.pr "%a" pp;
   [%expect {| [x122; x123; x124; x125; x126; x127; x128] |}];

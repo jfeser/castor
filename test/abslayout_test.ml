@@ -15,7 +15,7 @@ let run_print_test ?params query =
           List.map ~f:(fun (n, t, _) -> Name.copy ~type_:(Some t) n) p
           |> Set.of_list (module Name))
     in
-    let layout = load_string ?params:sparams conn query in
+    let layout = load_string_exn ?params:sparams conn query in
     (new print_fold)#run conn layout |> List.iter ~f:print_endline
   in
   Exn.handle_uncaught ~exit:false run

@@ -34,7 +34,7 @@ let main ~debug ~gprof ~params ~code_only ~query ?out_dir ch =
       List.map params ~f:(fun (n, t) -> Name.create ~type_:t n)
       |> Set.of_list (module Name)
     in
-    load_layout ~params:load_params Config.conn ralgebra
+    load_layout_exn ~params:load_params Config.conn ralgebra
   in
   let params = List.map params ~f:(fun (n, t) -> (Name.create n, t)) in
   Type.annotate Config.conn ralgebra

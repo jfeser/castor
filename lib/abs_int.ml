@@ -13,12 +13,12 @@ let zero = Interval (0, 0)
 
 let inf = function
   | Top -> Ok Int.min_value
-  | Bottom -> Error (Error.of_string "Bottom has no infimum.")
+  | Bottom -> Error `No_infimum
   | Interval (x, _) -> Ok x
 
 let sup = function
   | Top -> Ok Int.max_value
-  | Bottom -> Error (Error.of_string "Bottom has no supremum.")
+  | Bottom -> Error `No_supremum
   | Interval (_, x) -> Ok x
 
 let lift1 f i =

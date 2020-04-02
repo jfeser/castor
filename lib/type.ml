@@ -417,6 +417,13 @@ let annotate conn r =
   (r :> < type_ : t > annot)
 
 module Parallel = struct
+  type error = [ `Db_error of Db.Async.error ]
+
+  let pp_err f fmt = function
+    | `Db_error e ->
+        Fmt.pf fmt "Database error: %a" Error.pp (Db.Async.to_error e)
+    | x -> f fmt x
+
   module Type_builder = struct
     open Option.Let_syntax
 
@@ -535,9 +542,6 @@ module Parallel = struct
         | _ -> failwith "Unexpected tuple kind."
       in
       { aggs = []; build = (fun _ ts -> TupleT (ts, { kind })) }
-
-    let no_type_t =
-      { aggs = []; build = (fun _ _ -> failwith "Cannot build type.") }
 
     let of_ralgebra = function
       | Select (ps, _) | GroupBy (ps, _, _) -> func_t (`Width (List.length ps))
@@ -705,17 +709,19 @@ module Parallel = struct
     |> Map.of_alist_reduce (module Context) ~f:( @ )
 
   let type_of ?timeout conn r =
+    let open Result.Let_syntax in
     let r = Type_builder.annot r in
-    let queries =
+    let%bind queries =
       contexts r |> Map.to_alist
       |> List.concat_map ~f:(fun (ctx, builders) ->
              let builders = List.map ~f:(fun b -> b#builder) builders in
              Context.to_ralgebra ctx builders)
       |> List.map ~f:(fun r ->
              debug (fun m -> m "Pre-opt:@ %a" A.pp r);
-             let r = Simplify_tactic.simplify conn r |> Resolve.resolve in
+             let%map r = Simplify_tactic.simplify conn r |> Resolve.resolve in
              debug (fun m -> m "Post-opt:@ %a" A.pp r);
              r)
+      |> Result.all
     in
 
     let results =

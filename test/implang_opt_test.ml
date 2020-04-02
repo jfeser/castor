@@ -11,7 +11,7 @@ let run_test ?(params = []) layout_str opt_func =
       List.map params ~f:(fun (n, t, _) -> Name.copy ~type_:(Some t) n)
       |> Set.of_list (module Name)
     in
-    load_string conn ~params layout_str |> Type.annotate conn
+    load_string_exn conn ~params layout_str |> Type.annotate conn
   in
   let layout, len = Serialize.serialize conn "/tmp/buf" layout in
   let params = List.map params ~f:(fun (n, t, _) -> (n, t)) in
@@ -117,7 +117,7 @@ let%test_module _ =
 
     let%expect_test "" =
       let r =
-        load_string conn "filter(c > 0, select([count() as c], ascalar(0)))"
+        load_string_exn conn "filter(c > 0, select([count() as c], ascalar(0)))"
         |> Type.annotate conn
         |> map_meta (fun m ->
                object

@@ -18,9 +18,9 @@ val top : t
 
 val bot : t
 
-val inf : t -> (int, Error.t) result
+val inf : t -> (int, [> `No_infimum ]) result
 
-val sup : t -> (int, Error.t) result
+val sup : t -> (int, [> `No_supremum ]) result
 
 val meet : t -> t -> t
 

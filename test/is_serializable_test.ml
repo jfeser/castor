@@ -19,7 +19,7 @@ select([l_orderkey, sum_l_quantity],
         > param1, )),
     o_orderkey))
 |}
-    |> Abslayout_load.load_string
+    |> Abslayout_load.load_string_exn
          ~params:
            (Set.of_list
               (module Name)

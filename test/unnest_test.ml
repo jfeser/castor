@@ -40,7 +40,7 @@ let%expect_test "" =
     Infix.(
       dep_join (r "r") "k"
         (select [ n "g" ] (filter (n "k.f" = n "f") (r "r1"))))
-    |> Abslayout_load.load_layout conn
+    |> Abslayout_load.load_layout_exn conn
     |> strip_meta |> to_visible_depjoin
   in
 
@@ -58,7 +58,7 @@ let%expect_test "" =
     Infix.(
       dep_join (r "r") "k"
         (select [ n "g" ] (filter (n "k.f" = n "f") (r "r1"))))
-    |> Abslayout_load.load_layout conn
+    |> Abslayout_load.load_layout_exn conn
   in
 
   unnest q |> Format.printf "%a" pp;
@@ -91,7 +91,7 @@ depjoin(select([row_number() as rn2, agg5, agg4, agg3, agg2, agg1, agg0, l_retur
                       ascalar(s3.l_returnflag as l_returnflag), ascalar(s3.l_linestatus as l_linestatus)],
                 cross)))
     |}
-    |> Abslayout_load.load_string conn
+    |> Abslayout_load.load_string_exn conn
   in
   let r' = unnest r in
   Validate.equiv conn r r' |> Or_error.ok_exn
@@ -105,7 +105,7 @@ depjoin(dedup(select([l_shipdate as k2], lineitem)) as s2,
               filter((s2.k2 = l_shipdate), lineitem)) as s3,
                 atuple([ascalar(s3.agg5 as agg5)], cross)))
     |}
-    |> Abslayout_load.load_string conn
+    |> Abslayout_load.load_string_exn conn
   in
   let r' = unnest r in
   Validate.equiv conn r r' |> Or_error.ok_exn
@@ -117,7 +117,7 @@ let%expect_test "" =
     depjoin(nation as s2,
       select([s2.n_name], ascalar(0 as x))))
 |}
-  |> Abslayout_load.load_string conn
+  |> Abslayout_load.load_string_exn conn
   |> strip_meta |> to_visible_depjoin |> Format.printf "%a" pp;
   [%expect
     {|
@@ -134,7 +134,7 @@ let%expect_test "" =
     depjoin(select([min(o_orderdate) as lo, max((o_orderdate + month(3))) as hi], orders) as k1,
       range(k1.lo, k1.hi))
 |}
-  |> Abslayout_load.load_string conn
+  |> Abslayout_load.load_string_exn conn
   |> unnest |> Format.printf "%a" pp;
   [%expect
     {|
@@ -177,7 +177,7 @@ let%expect_test "" =
           select([s46.ps_availqty], ascalar(0 as x))))
 
 |}
-    |> Abslayout_load.load_string conn
+    |> Abslayout_load.load_string_exn conn
   in
   r |> strip_meta |> to_visible_depjoin |> Format.printf "%a" pp;
   [%expect
@@ -234,7 +234,7 @@ let%expect_test "" =
             select([count() as count0, l_extendedprice, l_discount, p_type],
               atuple([ascalar(s15.l_extendedprice), ascalar(s15.l_discount), ascalar(s15.p_type)], cross)))
     |}
-    |> Abslayout_load.load_string conn
+    |> Abslayout_load.load_string_exn conn
   in
   r |> strip_meta |> to_visible_depjoin |> Format.printf "%a" pp;
   [%expect
@@ -323,7 +323,7 @@ let%expect_test "" =
                                                   cross))))],
                                     concat)))
 |}
-    |> Abslayout_load.load_string conn
+    |> Abslayout_load.load_string_exn conn
   in
   unnest r |> Fmt.pr "%a" pp;
   [%expect

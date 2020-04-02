@@ -11,7 +11,7 @@ let run_test ?(params = []) ?(print_code = true) layout_str =
         List.map params ~f:(fun (n, t, _) -> Name.copy ~type_:(Some t) n)
         |> Set.of_list (module Name)
       in
-      load_string conn ~params layout_str |> Type.annotate conn
+      load_string_exn conn ~params layout_str |> Type.annotate conn
     in
     print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] layout.meta#type_));
     let layout, len = Serialize.serialize conn "/tmp/buf" layout in

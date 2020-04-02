@@ -16,7 +16,7 @@ let params =
 
 let%expect_test "" =
   let r =
-    load_string ~params conn
+    load_string_exn ~params conn
       {|
       alist(dedup(
               select([o_year],
@@ -138,7 +138,7 @@ let%expect_test "" =
 
 let%expect_test "" =
   let r =
-    load_string ~params conn
+    load_string_exn ~params conn
       {|groupby([count() as c], [o_orderdate], dedup(select([o_orderdate, o_orderkey], orders)))|}
   in
   project ~params r |> Format.printf "%a@." Abslayout.pp;
@@ -149,7 +149,8 @@ let%expect_test "" =
         dedup(select([o_orderdate, o_orderkey], orders))) |}]
 
 let run_test ?params conn s =
-  load_string ?params conn s |> project ?params
+  load_string_exn ?params conn s
+  |> project ?params
   |> Format.printf "%a@." Abslayout.pp
 
 let%expect_test "" =

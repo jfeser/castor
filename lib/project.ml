@@ -133,7 +133,7 @@ let project ?(params = Set.empty (module Name)) ?(max_iters = 10) r =
   let rec loop ct r =
     if ct >= max_iters then r
     else
-      let r' = Resolve.resolve r ~params |> project_once in
+      let r' = Resolve.resolve_exn r ~params |> project_once in
       if [%compare.equal: _ annot] r r' then r' else loop (ct + 1) r'
   in
   loop 0 (strip_meta r)

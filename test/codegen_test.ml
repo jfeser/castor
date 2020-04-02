@@ -36,7 +36,7 @@ let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
         List.map params ~f:(fun (n, t, _) -> Name.copy ~type_:(Some t) n)
         |> Set.of_list (module Name)
       in
-      load_string conn ~params layout_str |> Type.annotate conn
+      load_string_exn conn ~params layout_str |> Type.annotate conn
     in
 
     if fork then run_in_fork (fun () -> run_compiler layout)
@@ -81,8 +81,7 @@ let%expect_test "strops" =
     {|
 select([strlen("test"), strpos("testing", "in")], ascalar(0))
 |};
-  [%expect
-    {|
+  [%expect {|
     4|5
 
     exited normally |}]
@@ -477,8 +476,7 @@ AOrderedIdx(join(true, ints, select([x as y], ints)) as k,
 let%expect_test "date-arith" =
   run_test
     {|select([date("1997-07-01") + month(3), date("1997-07-01") + day(90)], ascalar(0))|};
-  [%expect
-    {|
+  [%expect {|
     1997-10-01|1997-09-29
 
     exited normally |}]

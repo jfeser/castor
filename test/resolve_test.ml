@@ -32,7 +32,7 @@ let pp_with_refcount, _ =
  *         run)
  *     () *)
 
-let load s = load_string conn s |> Resolve.resolve
+let load s = load_string_exn conn s |> Resolve.resolve_exn
 
 let%expect_test "" =
   let r =

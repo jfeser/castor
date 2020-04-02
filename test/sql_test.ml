@@ -5,7 +5,7 @@ open Abslayout_load
 let run_test ?(conn = Test_util.test_db_conn) s =
   Logs.Src.set_level src (Some Debug);
   let conn = Lazy.force conn in
-  let r = load_string conn s in
+  let r = load_string_exn conn s in
   let sql_str = of_ralgebra r |> to_string_hum in
   ( match Db.check conn sql_str with
   | Ok () -> ()

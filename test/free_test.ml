@@ -30,7 +30,7 @@ let%expect_test "free" =
               atuple([ascalar(s0.s_suppkey), ascalar(s0.s_name), ascalar(s0.s_address), ascalar(s0.s_phone)], cross))),
           ""))
 |}
-    |> load_string (Lazy.force Test_util.tpch_conn)
+    |> load_string_exn (Lazy.force Test_util.tpch_conn)
   in
   free r |> Set.to_list |> Fmt.pr "%a" (Fmt.Dump.list Name.pp);
   [%expect {| [] |}]
@@ -44,7 +44,7 @@ let%expect_test "free" =
               atuple([ascalar(s0.s_suppkey), ascalar(s0.s_name), ascalar(s0.s_address), ascalar(s0.s_phone)], cross))),
           "")
 |}
-    |> load_string (Lazy.force Test_util.tpch_conn)
+    |> load_string_exn (Lazy.force Test_util.tpch_conn)
   in
   free r |> Set.to_list |> Fmt.pr "%a" (Fmt.Dump.list Name.pp);
   [%expect {| [] |}]

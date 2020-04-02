@@ -8,7 +8,8 @@ let main params file =
   let params = List.map params ~f:(fun (n, t) -> Name.create ~type_:t n) in
   let ralgebra =
     let params = Set.of_list (module Name) params in
-    load_string ~params conn (In_channel.with_file file ~f:In_channel.input_all)
+    load_string_exn ~params conn
+      (In_channel.with_file file ~f:In_channel.input_all)
   in
   Cozy.to_string bench_name params ralgebra |> print_string
 

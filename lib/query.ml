@@ -32,7 +32,7 @@ let annotate conn q =
     q with
     body =
       Abslayout_load.annotate_relations conn q.body
-      |> Resolve.resolve
+      |> Resolve.resolve_exn
            ~params:
              ( List.map q.args ~f:(fun (n, t) -> Name.create n ~type_:t)
              |> Set.of_list (module Name) );

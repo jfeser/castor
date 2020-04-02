@@ -17,7 +17,7 @@ open Make (Config)
 
 open Ops.Make (Config)
 
-let load_string ?params s = Abslayout_load.load_string ?params Config.conn s
+let load_string ?params s = Abslayout_load.load_string_exn ?params Config.conn s
 
 let%expect_test "" =
   let r =

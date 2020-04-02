@@ -53,7 +53,7 @@ let%expect_test "" =
   let conn = Lazy.force test_db_conn in
   let q =
     "alist(select([f], r1) as k, ascalar(k.f))"
-    |> Abslayout_load.load_string conn
+    |> Abslayout_load.load_string_exn conn
   in
   type_test conn q;
   [%expect
@@ -67,7 +67,7 @@ let%expect_test "" =
   let conn = Lazy.force test_db_conn in
   let q =
     "ahashidx(select([f], r1) as k, ascalar(k.f), 0)"
-    |> Abslayout_load.load_string conn
+    |> Abslayout_load.load_string_exn conn
   in
   type_test conn q;
   [%expect
@@ -86,7 +86,7 @@ let%expect_test "" =
   let q =
     "ahashidx(select([f], r1) as k, alist(select([g], filter(k.f = f, r1)) as \
      k1, ascalar(k1.g)), 0)"
-    |> Abslayout_load.load_string conn
+    |> Abslayout_load.load_string_exn conn
   in
   type_test conn q;
   [%expect
@@ -125,7 +125,7 @@ let%expect_test "" =
                               cross))),
                         , <= (date("1998-12-01") - day(param0)))))
 |}
-    |> Abslayout_load.load_string
+    |> Abslayout_load.load_string_exn
          ~params:
            (Set.of_list
               (module Name)
@@ -193,7 +193,7 @@ let%expect_test "" =
                         cross),
       >= param0, < (param0 + month(3)))
 |}
-    |> Abslayout_load.load_string
+    |> Abslayout_load.load_string_exn
          ~params:
            (Set.of_list
               (module Name)
@@ -244,7 +244,7 @@ let%expect_test "" =
                         cross),
       >= param0, < (param0 + month(3)))
 |}
-    |> Abslayout_load.load_string
+    |> Abslayout_load.load_string_exn
          ~params:
            (Set.of_list
               (module Name)
@@ -277,7 +277,7 @@ let%expect_test "" =
 let%expect_test "" =
   let conn = Lazy.force tpch_conn in
   let r =
-    Abslayout_load.load_string conn
+    Abslayout_load.load_string_exn conn
       {|
 select([s1_acctbal, s1_name, n1_name, p1_partkey, p1_mfgr, s1_address,
            s1_phone, s1_comment],
@@ -373,7 +373,7 @@ select([s1_acctbal, s1_name, n1_name, p1_partkey, p1_mfgr, s1_address,
 let%expect_test "" =
   let conn = Lazy.force tpch_conn in
   let r =
-    Abslayout_load.load_string conn
+    Abslayout_load.load_string_exn conn
       {|
 select([s1_acctbal, s1_name, n1_name, p1_partkey, p1_mfgr, s1_address,
            s1_phone, s1_comment],
@@ -572,7 +572,7 @@ select([s1_acctbal, s1_name, n1_name, p1_partkey, p1_mfgr, s1_address,
 let%expect_test "" =
   let conn = Lazy.force tpch_conn in
   let r =
-    Abslayout_load.load_string conn
+    Abslayout_load.load_string_exn conn
       {|
 select([sum((l_extendedprice * (1 - l_discount))) as revenue],
      atuple([select([l_extendedprice, l_discount],

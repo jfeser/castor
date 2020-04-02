@@ -14,8 +14,11 @@ let annotate_relations conn =
 
 let annotate conn l = l |> annotate_relations conn |> annotate_key_layouts
 
-let load_layout ?(params = Set.empty (module Name)) conn l =
-  Resolve.resolve ~params (annotate conn l)
+let load_layout_exn ?(params = Set.empty (module Name)) conn l =
+  annotate conn l |> Resolve.resolve_exn ~params
 
-let load_string ?params conn s =
-  of_string_exn s |> load_layout conn ?params |> strip_meta
+let load_layout ?(params = Set.empty (module Name)) conn l =
+  annotate conn l |> Resolve.resolve ~params
+
+let load_string_exn ?params conn s =
+  of_string_exn s |> load_layout_exn conn ?params |> strip_meta
