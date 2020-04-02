@@ -6,8 +6,6 @@ import shlex
 
 DEBUG = False
 
-with open('queries.json', 'r') as f:
-    bench = json.loads(jsmin(f.read()))
 
 def value_to_castor(type_, value):
     if type_ == 'int' or type_ == 'fixed' or type_ == 'bool':
@@ -19,6 +17,7 @@ def value_to_castor(type_, value):
     else:
         raise RuntimeError('Unexpected type %s.' % type_)
 
+
 def gen_params(b):
     params = []
     for [p, v] in b['params']:
@@ -26,11 +25,13 @@ def gen_params(b):
         params.append('-p \'%s=%s\'' % (p, value_to_castor(type_, v)))
     return ' '.join(params)
 
+
 def gen_param_types(b):
     params = []
     for [p, v] in b['params']:
         params.append('-p \'%s\'' % p)
     return ' '.join(params)
+
 
 def gen_param_values(b):
     params = []
@@ -38,25 +39,32 @@ def gen_param_values(b):
         params.append('\'%s\'' % v)
     return ' '.join(params)
 
+
 def param_values_sql(b):
     return [v for [_, v] in b['params']]
+
 
 def in_file(b):
     return '$(BENCH_DIR)/%s.txt' % b['name']
 
+
 def out_file(b):
     return '%s-opt.txt' % b['name']
+
 
 def out_dir(b):
     return '%s-opt' % b['name']
 
+
+with open('queries.json', 'r') as f:
+    bench = json.loads(jsmin(f.read()))
 
 print('SHELL:=/bin/bash')
 print('DB=postgresql:///tpch_1k')
 print('OPT_PATH=../bin/opt.exe')
 print('COMPILE_PATH=../../castor/bin/compile.exe')
 print('OPT=dune exec --no-build $(OPT_PATH) -- ')
-print('OPT_FLAGS=-cost-timeout 60.0 -v')
+print('OPT_FLAGS=-cost-timeout 5.0 -v -set-log-level-castor.ops info -set-log-level-castor.type info -timeout 3600')
 print('COMPILE=dune exec $(COMPILE_PATH) -- ')
 if DEBUG:
     print('CFLAGS=-debug -v')
@@ -66,29 +74,20 @@ print('BENCH_DIR=../../castor/bench/tpch/')
 print('TIME_CMD=/usr/bin/time')
 print('TIME_PER_BENCH=1')
 print('all: opt compile run time')
-print('''
-obuild:
-\tdune build $(OPT_PATH)
-.PHONY: obuild
-
-cbuild:
-\tdune build $(COMPILE_PATH)
-.PHONY: cbuild
-''')
 
 print('''
-opt: obuild %s
+opt: %s
 .PHONY: opt
 ''' % (' '.join([out_file(b) for b in bench])))
 
 print('''
-compile: cbuild %s
+compile: %s
 .PHONY: compile
 ''' % (' '.join([out_dir(b) for b in bench])))
 
 print('''
-compile-gold: cbuild %s
-.PHONY: compile
+compile-gold: %s
+.PHONY: compile-gold
 ''' % (' '.join(['%s-gold' % b['name'] for b in bench])))
 
 print('''
@@ -139,18 +138,18 @@ for b in bench:
 '''.format(out_dir(b), out_file(b), gen_param_types(b)))
 
     print('''
-{0}-opt.csv: {1}
+{0}-opt.csv:
 \t./{1}/scanner.exe -p {1}/data.bin {2} > $@
 '''.format(b['name'], out_dir(b), gen_param_values(b)))
 
     print('''
-{0}-opt.time: {1}
+{0}-opt.time:
 \t./{1}/scanner.exe -t $(TIME_PER_BENCH) {1}/data.bin {2} > $@
 \t$(TIME_CMD) -v ./$</scanner.exe -t $(TIME_PER_BENCH) {1}/data.bin {2} 2> {0}-opt.mem > /dev/null
 '''.format(b['name'], out_dir(b), gen_param_values(b)))
 
     print('''
-analysis_{0}-opt.csv.log: {1}
+analysis_{0}-opt.csv.log:
 \t../bin/validate.py {0} {2} {0}-opt.csv
     '''.format(b['name'], out_dir(b), str(b['ordered'])))
 
