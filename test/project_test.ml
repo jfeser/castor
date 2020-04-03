@@ -211,3 +211,13 @@ groupby([min(ct0) as x0, max(ct0) as x1],
       groupby([count() as ct0],
         [],
         select([false as dummy0], dedup(select([c_mktsegment], customer))))) |}]
+
+let%expect_test "" =
+  run_test
+    (Lazy.force Test_util.tpch_conn)
+    {|
+select([p_brand, p_type, p_size, count() as supplier_cnt],
+dedup(select([p_type, p_brand, p_size, ps_suppkey], join((p_partkey = ps_partkey), part, partsupp))))
+|};
+  [%expect {|
+    |}]
