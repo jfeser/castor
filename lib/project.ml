@@ -46,6 +46,19 @@ let all_unref_at r r' =
 (** True if all fields emitted by r are unreferenced. *)
 let all_unref r = all_unref_at r r
 
+let project_list project no_project project_pred ctx
+    { l_keys = rk; l_values = rv; l_scope = scope } =
+  let rk =
+    let old_n = schema rk |> List.length in
+    let ps =
+      project_defs ctx rk.meta#meta#refs (schema rk |> List.map ~f:P.name)
+      |> List.map ~f:project_pred
+    in
+    let new_n = List.length ps in
+    if old_n > new_n then A.select ps (no_project rk) else project rk
+  in
+  A.list rk scope (project rv)
+
 let project_open project no_project project_pred ctx r =
   let refs = r.meta#meta#refs in
   let card_matters = r.meta#cardinality_matters in
@@ -62,17 +75,7 @@ let project_open project no_project project_pred ctx r =
           ns (project r)
     | Dedup r ->
         if card_matters then A.dedup @@ no_project r else A.dedup @@ project r
-    | AList { l_keys = rk; l_values = rv; l_scope = scope } ->
-        let rk =
-          let old_n = schema rk |> List.length in
-          let ps =
-            project_defs ctx rk.meta#meta#refs (schema rk |> List.map ~f:P.name)
-            |> List.map ~f:project_pred
-          in
-          let new_n = List.length ps in
-          if old_n > new_n then A.select ps (no_project rk) else project rk
-        in
-        A.list rk scope (project rv)
+    | AList l -> project_list project no_project project_pred ctx l
     | AScalar p ->
         if project_def refs p then A.scalar (project_pred p) else dummy ctx
     | ATuple ([], _) -> A.empty
@@ -116,20 +119,25 @@ let project_pred_open project project_pred p =
   | Exists _ | First _ -> Pred.strip_meta p
   | p -> V.Map.pred project project_pred p
 
-let no_project_open no_project project_pred r =
-  { node = V.Map.query no_project project_pred r.node; meta = object end }
+(** Apply no projection until a select is reached, under which projection resumes. *)
+let no_project_open project no_project project_pred ctx r =
+  match r.node with
+  | Select (ps, r) -> A.select (ps :> Pred.t list) (project r)
+  | AList l -> project_list no_project no_project project_pred ctx l
+  | _ ->
+      { node = V.Map.query no_project project_pred r.node; meta = object end }
 
 let project_once r =
   let ctx = Ctx.create () in
   let rec project r = project_open project no_project project_pred ctx r
   and project_pred p = project_pred_open project project_pred p
-  and no_project r = no_project_open no_project project_pred r in
+  and no_project r = no_project_open project no_project project_pred ctx r in
   let r' = Cardinality.annotate r |> project in
   Inv.schema r r';
   Inv.resolve r r';
   r'
 
-let project ?(params = Set.empty (module Name)) ?(max_iters = 10) r =
+let project ?(params = Set.empty (module Name)) ?(max_iters = 100) r =
   let rec loop ct r =
     if ct >= max_iters then r
     else
