@@ -1,32 +1,26 @@
 open Abslayout
-open Collections
-open Filter_tactics
+open Abslayout_load
 open Castor_test.Test_util
 
 module C = struct
   let params =
-    Set.singleton (module Name) (Name.create ~type_:Prim_type.int_t "param")
-
-  let fresh = Fresh.create ()
-
-  let verbose = false
-
-  let validate = false
-
-  let param_ctx = Map.empty (module Name)
+    Set.of_list
+      (module Name)
+      [
+        Name.create ~type_:Prim_type.int_t "param";
+        Name.create ~type_:Prim_type.string_t "param1";
+      ]
 
   let conn = Lazy.force test_db_conn
 
   let cost_conn = Lazy.force test_db_conn
-
-  let simplify = None
 end
 
-open Make (C)
+open Filter_tactics.Make (C)
 
 open Ops.Make (C)
 
-let load_string ?params s = Abslayout_load.load_string_exn ?params C.conn s
+let load_string ?params s = load_string_exn ?params C.conn s
 
 let%expect_test "push-filter-comptime" =
   let r =
@@ -277,7 +271,9 @@ let%expect_test "elim-eq-filter" =
 
 let%expect_test "partition" =
   let r = load_string ~params:C.params "filter(f = param, r)" in
-  Seq.iter (Branching.apply partition Path.root r) ~f:(Format.printf "%a\n" pp);
+  Sequence.iter
+    (Branching.apply partition Path.root r)
+    ~f:(Format.printf "%a\n" pp);
   [%expect
     {|
         select([f, g],
@@ -374,3 +370,60 @@ aorderedidx(select([l_shipdate, o_orderdate],
                       cross))],
             cross)),
         > date("0000-01-01"), , , < date("0000-01-01"))) |}]
+
+let%expect_test "partition" =
+  let param1 = Name.create ~type_:Prim_type.string_t "param1" in
+  let params = Set.of_list (module Name) [ param1 ] in
+  let r =
+    load_string_exn (Lazy.force tpch_conn) ~params
+      {|
+orderby([nation, o_year desc],
+  groupby([nation, o_year, sum(amount) as sum_profit],
+    [nation, o_year],
+    select([n_name as nation, to_year(o_orderdate) as o_year,
+            ((l_extendedprice * (1 - l_discount)) - (ps_supplycost * l_quantity)) as amount],
+      join((s_suppkey = l_suppkey),
+        join(((ps_suppkey = l_suppkey) && (ps_partkey = l_partkey)),
+          join((p_partkey = l_partkey),
+            filter((strpos(p_name, param1) > 0), part),
+            join((o_orderkey = l_orderkey), orders, lineitem)),
+          partsupp),
+        join((s_nationkey = n_nationkey), supplier, nation)))))
+|}
+  in
+  Option.iter (partition_on r param1) ~f:(Fmt.pr "%a" pp)
+
+let%expect_test "elim-filter-simple" =
+  let module C = struct
+    let params =
+      Set.of_list
+        (module Name)
+        [ Name.create ~type_:Prim_type.string_t "param1" ]
+
+    let conn = Lazy.force tpch_conn
+
+    let cost_conn = Lazy.force tpch_conn
+  end in
+  let open Filter_tactics.Make (C) in
+  let r =
+    load_string_exn (Lazy.force tpch_conn) ~params:C.params
+      {|
+filter((strpos(p_name, param1) > 0),
+            join((s_suppkey = l_suppkey),
+              join(((ps_suppkey = l_suppkey) && (ps_partkey = l_partkey)),
+                join((p_partkey = l_partkey), part, join((o_orderkey = l_orderkey), orders, lineitem)),
+                partsupp),
+              join((s_nationkey = n_nationkey), supplier, nation)))      
+    |}
+  in
+  apply elim_simple_filter Path.root r |> Option.iter ~f:(Fmt.pr "%a" pp);
+  [%expect {|
+    alist(select([p_name], part) as s0,
+      filter((strpos(s0.p_name, param1) > 0),
+        join((s_suppkey = l_suppkey),
+          join(((ps_suppkey = l_suppkey) && (ps_partkey = l_partkey)),
+            join((p_partkey = l_partkey),
+              part,
+              join((o_orderkey = l_orderkey), orders, lineitem)),
+            partsupp),
+          join((s_nationkey = n_nationkey), supplier, nation)))) |}]

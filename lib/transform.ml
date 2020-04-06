@@ -202,6 +202,9 @@ module Make (Config : Config.S) = struct
                @@ at_ F.hoist_filter
                     Path.(all >>? is_param_filter >>| deepest >>= O.parent);
              ];
+        try_random
+        @@ at_ F.elim_simple_filter
+             Path.(all >>? is_expensive_filter >>| shallowest);
         (* Eliminate unparameterized join nests. Try using join optimization and
            using a simple row store. *)
         traced ~name:"elim-join-nests"

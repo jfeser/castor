@@ -1,6 +1,7 @@
 open Abslayout
 open Collections
 open Schema
+module A = Abslayout
 module P = Pred.Infix
 
 module Config = struct
@@ -30,6 +31,11 @@ module Make (Config : Config.S) = struct
       l
 
   let alias_map r = aliases r |> closure
+
+  let all_values_attr n =
+    let open Option.Let_syntax in
+    let%bind rel = Db.relation_has_field cost_conn (Name.name n) in
+    return @@ A.select [ Name n ] @@ A.relation rel
 
   (** Approximate selection of all valuations of a list of predicates from a
    relation. Works if the relation is parameterized, but only when the

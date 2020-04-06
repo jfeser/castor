@@ -254,6 +254,28 @@ module Make (C : Config.S) = struct
   let elim_cmp_filter =
     Branching.(local elim_cmp_filter ~name:"elim-cmp-filter")
 
+  (** Eliminate a filter with one parameter and one attribute. *)
+  let elim_simple_filter r =
+    let open Option.Let_syntax in
+    let%bind p, r = to_filter r in
+    let names = Pred.names p |> Set.to_list in
+
+    let is_param = Set.mem params in
+    let is_field n =
+      Db.relation_has_field C.conn (Name.name n) |> Option.is_some
+    in
+    let%bind param, attr =
+      match names with
+      | [ n1; n2 ] when is_param n1 && is_field n2 -> return (n1, n2)
+      | [ n2; n1 ] when is_param n1 && is_field n2 -> return (n1, n2)
+      | _ -> None
+    in
+    let scope = Fresh.name Global.fresh "s%d" in
+    let%bind values = Tactics_util.all_values_attr attr in
+    return @@ A.list values scope (A.filter (Pred.scoped [ attr ] scope p) r)
+
+  let elim_simple_filter = local elim_simple_filter "elim-cmp-filter"
+
   let push_filter_cross_tuple stage p rs =
     let ps = Pred.conjuncts p in
     (* Find the earliest placement for each predicate. *)
