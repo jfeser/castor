@@ -42,6 +42,8 @@ val is_orderby : 'a annot -> t -> bool
 
 val is_filter : 'a annot -> t -> bool
 
+val is_expensive_filter : 'a annot -> t -> bool
+
 val is_dedup : 'a annot -> t -> bool
 
 val is_relation : 'a annot -> t -> bool

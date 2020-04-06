@@ -400,3 +400,10 @@ let to_static ~params p =
   to_static p
 
 let strip_meta p = (p :> t)
+
+let is_expensive p =
+  let rec pred = function
+    | Binop (Strpos, _, _) -> true
+    | p -> V.Reduce.pred false ( || ) (fun _ -> false) pred p
+  in
+  pred p

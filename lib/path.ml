@@ -242,6 +242,11 @@ let is_orderby r p =
 let is_filter r p =
   match (get_exn p r).node with Filter _ -> true | _ -> false
 
+let is_expensive_filter r p =
+  match (get_exn p r).node with
+  | Filter (p, _) -> Pred.is_expensive p
+  | _ -> false
+
 let is_dedup r p = match (get_exn p r).node with Dedup _ -> true | _ -> false
 
 let is_relation r p =
