@@ -73,14 +73,13 @@ module Make (C : Config.S) = struct
     | Filter (p', r) ->
         let%map p, r = to_filter r in
         A.filter (Binop (And, p, p')) r
-    | Select (ps, r) -> (
+    | Select (ps, r) ->
         let%bind p, r = to_filter r in
-        match A.select_kind ps with
-        | `Scalar ->
-            if Tactics_util.select_contains (Free.pred_free p) ps r then
-              Some (A.filter p (A.select ps r))
-            else None
-        | `Agg -> None )
+        let above, below =
+          List.partition_tf (Pred.conjuncts p) ~f:(fun p ->
+              Tactics_util.select_contains (Free.pred_free p) ps r)
+        in
+        return @@ filter_many above @@ A.select ps @@ filter_many below r
     | Join { pred; r1; r2 } -> (
         match (to_filter r1, to_filter r2) with
         | Some (p1, r1), Some (p2, r2) ->
