@@ -643,6 +643,21 @@ module Make (C : Config.S) = struct
     in
     visitor#visit_t () r
 
+  let subst_no_subquery ctx =
+    let v =
+      object
+        inherit [_] V.endo
+
+        method! visit_Name _ this v =
+          match Map.find ctx v with Some x -> x | None -> this
+
+        method! visit_Exists _ this _ = this
+
+        method visit_First _ this _ = this
+      end
+    in
+    v#visit_t ()
+
   let partition_with_bounds field aliases lo hi r n =
     let open Option.Let_syntax in
     let key_name = fresh_name "k%d" in
@@ -686,7 +701,7 @@ module Make (C : Config.S) = struct
           n
           (P.name @@ Name.scoped scope @@ Name.create key_name)
       in
-      A.subst ctx r
+      subst_no_subquery ctx r
     in
     if Set.mem (A.names r') n then None
     else
