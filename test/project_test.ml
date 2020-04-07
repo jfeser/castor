@@ -161,7 +161,7 @@ groupby([min(ct2) as x12, max(ct2) as x13], [],
     {|
     groupby([min(ct2) as x12, max(ct2) as x13],
       [],
-      groupby([count() as ct2], [], select([false as dummy0], r1))) |}]
+      groupby([count() as ct2], [], select([false as dummy], r1))) |}]
 
 let%expect_test "filter-exists" =
   run_test
@@ -191,7 +191,7 @@ groupby([min(ct0) as x0, max(ct0) as x1],
       [],
       groupby([count() as ct0],
         [],
-        select([false as dummy0], dedup(select([c_mktsegment], customer))))) |}]
+        select([false as dummy], dedup(select([c_mktsegment], customer))))) |}]
 
 let%expect_test "" =
   run_test
@@ -207,7 +207,7 @@ groupby([min(ct0) as x0, max(ct0) as x1],
       [],
       groupby([count() as ct0],
         [],
-        select([false as dummy0], dedup(select([c_mktsegment], customer))))) |}]
+        select([false as dummy], dedup(select([c_mktsegment], customer))))) |}]
 
 let%expect_test "" =
   run_test

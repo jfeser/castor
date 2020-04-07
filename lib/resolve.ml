@@ -65,7 +65,10 @@ module Ctx = struct
         List.find_all_dups l ~compare:compare_row
         |> List.map ~f:(fun r -> r.rname)
       in
-      if List.length dups > 0 then (
+      if
+        List.length dups > 0
+        && List.exists dups ~f:(fun n -> String.(Name.name n <> "dummy"))
+      then (
         List.iter dups ~f:(fun n ->
             Log.err (fun m -> m "Ambiguous name %a." N.pp n));
         raise @@ Resolve_error (`Ambiguous_names dups) );

@@ -99,6 +99,7 @@ let shadow_check r =
 
 let duplicate_preds ps =
   List.filter_map ps ~f:Pred.to_name
+  |> List.filter ~f:(fun n -> String.(Name.name n <> "dummy"))
   |> List.find_a_dup ~compare:[%compare: Name.t]
   |> Option.iter ~f:(fun n ->
          failwith
