@@ -7,7 +7,7 @@ module N = Name
 type error =
   [ `Ambiguous_names of Name.t list
   | `Ambiguous_stage of Name.t
-  | `Unbound of Name.t ]
+  | `Unbound of Name.t * Name.t list ]
 [@@deriving sexp]
 
 let pp_err f fmt = function
@@ -73,6 +73,8 @@ module Ctx = struct
   end
 
   include T
+
+  let names (c : t) = List.map (c :> row list) ~f:(fun r -> r.rname)
 
   let singleton n s =
     of_list [ { rname = n; rstage = s; rref = Flag.of_bool false } ]
@@ -176,7 +178,7 @@ let resolve_name ctx n =
   | Some m ->
       Flag.set m.rref;
       m.rname
-  | None -> raise @@ Resolve_error (`Unbound n)
+  | None -> raise @@ Resolve_error (`Unbound (n, Ctx.names ctx))
 
 let resolve_relation stage r =
   Relation.schema r |> List.map ~f:P.name |> Ctx.of_defs stage

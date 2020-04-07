@@ -1,10 +1,11 @@
+open Test_util
 module A = Abslayout
 module P = Pred.Infix
 open Abslayout_load
 open Free
 
 let%expect_test "" =
-  let conn = Lazy.force Test_util.test_db_conn in
+  let conn = Lazy.force test_db_conn in
   let n s =
     let name =
       match String.split s ~on:'.' with
@@ -30,7 +31,7 @@ let%expect_test "free" =
               atuple([ascalar(s0.s_suppkey), ascalar(s0.s_name), ascalar(s0.s_address), ascalar(s0.s_phone)], cross))),
           ""))
 |}
-    |> load_string_exn (Lazy.force Test_util.tpch_conn)
+    |> load_string_exn (Lazy.force tpch_conn)
   in
   free r |> Set.to_list |> Fmt.pr "%a" (Fmt.Dump.list Name.pp);
   [%expect {| [] |}]
@@ -44,7 +45,22 @@ let%expect_test "free" =
               atuple([ascalar(s0.s_suppkey), ascalar(s0.s_name), ascalar(s0.s_address), ascalar(s0.s_phone)], cross))),
           "")
 |}
-    |> load_string_exn (Lazy.force Test_util.tpch_conn)
+    |> load_string_exn (Lazy.force tpch_conn)
   in
   free r |> Set.to_list |> Fmt.pr "%a" (Fmt.Dump.list Name.pp);
   [%expect {| [] |}]
+
+let%expect_test "free" =
+  let r =
+    {|
+select([(sum((ps_supplycost * ps_availqty)) * 0) as v],
+                join((ps_suppkey = s_suppkey),
+                  join((s_nationkey = n_nationkey), supplier, filter((n_name = s0.k0), nation)),
+                  partsupp))
+|}
+    |> A.of_string_exn
+    |> Abslayout_load.annotate (Lazy.force tpch_conn)
+  in
+
+  free r |> Set.to_list |> Fmt.pr "%a" (Fmt.Dump.list Name.pp);
+  [%expect {| [s0.k0] |}]
