@@ -312,6 +312,7 @@ module Make (C : Config.S) = struct
       let schema_validated p r =
         Seq.map (apply tf p r) ~f:(fun r' ->
             let prep r = Abslayout_load.annotate conn r in
+            Validate.annot r';
             Validate.schema (prep r) (prep r');
             r')
       in
