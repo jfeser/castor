@@ -221,7 +221,7 @@ module Make (C : Config.S) = struct
       Option.map (apply tf p r) ~f:(fun r' ->
           let () =
             let prep r = Abslayout_load.annotate conn r in
-            Inv.schema (prep r) (prep r')
+            Validate.schema (prep r) (prep r')
           in
           r')
     in
@@ -232,7 +232,7 @@ module Make (C : Config.S) = struct
       Option.map (apply tf p r) ~f:(fun r' ->
           let () =
             let prep r = Abslayout_load.annotate conn r in
-            Inv.resolve ~params (prep r) (prep r')
+            Validate.resolve ~params (prep r) (prep r')
           in
           r')
     in
@@ -312,7 +312,7 @@ module Make (C : Config.S) = struct
       let schema_validated p r =
         Seq.map (apply tf p r) ~f:(fun r' ->
             let prep r = Abslayout_load.annotate conn r in
-            Inv.schema (prep r) (prep r');
+            Validate.schema (prep r) (prep r');
             r')
       in
       global ~name:(sprintf "%s" @@ name tf) schema_validated
@@ -321,7 +321,7 @@ module Make (C : Config.S) = struct
       let resolve_validated p r =
         Seq.map (apply tf p r) ~f:(fun r' ->
             let prep r = Abslayout_load.annotate conn r in
-            Inv.resolve ~params (prep r) (prep r');
+            Validate.resolve ~params (prep r) (prep r');
             r')
       in
       global ~name:(sprintf "%s" @@ name tf) resolve_validated

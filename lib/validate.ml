@@ -1,14 +1,14 @@
 open! Lwt
 open Ast
-open Abslayout
 open Collections
 open Schema
+module A = Abslayout
 module V = Visitors
 
 type tuple = Value.t list [@@deriving compare, sexp]
 
 let normal_order r =
-  order_by (List.map (schema r) ~f:(fun n -> (Name n, Desc))) r
+  A.order_by (List.map (schema r) ~f:(fun n -> (Name n, Desc))) r
 
 let to_err = Result.map_error ~f:Db.Async.to_error
 
@@ -129,3 +129,29 @@ and query q = function
   | q -> V.Iter.query annot pred q
 
 and pred p = V.Iter.pred annot pred p
+
+include (val Log.make "castor.validate")
+
+let log_err kind r r' =
+  err (fun m -> m "Not %s invariant:@ %a@ %a" kind A.pp r A.pp r')
+
+let schema q q' =
+  let open Schema in
+  let s = schema q in
+  let s' = schema q' in
+  if not ([%compare.equal: t] s s') then (
+    log_err "schema" q q';
+    failwith "Not schema invariant" )
+
+let resolve ?params q q' =
+  let r =
+    try
+      Resolve.resolve ?params q |> ignore;
+      true
+    with _ -> false
+  in
+  if r then (
+    try Resolve.resolve ?params q' |> ignore
+    with exn ->
+      log_err "resolution" q q';
+      Error.(of_exn exn |> tag ~tag:"Not resolution invariant" |> raise) )

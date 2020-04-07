@@ -121,8 +121,8 @@ let project_once r =
   and project_pred p = project_pred_open project project_pred p
   and no_project r = no_project_open project no_project project_pred r in
   let r' = Cardinality.annotate r |> project in
-  Inv.schema r r';
-  Inv.resolve r r';
+  Validate.schema r r';
+  Validate.resolve r r';
   r'
 
 let project ?(params = Set.empty (module Name)) ?(max_iters = 100) r =

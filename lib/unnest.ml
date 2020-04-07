@@ -318,5 +318,5 @@ let unnest q =
     |> Join_elim.remove_joins |> hoist_meta
   in
   check q';
-  Inv.resolve q q';
+  Validate.resolve q q';
   q'
