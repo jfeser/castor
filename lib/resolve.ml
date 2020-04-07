@@ -14,7 +14,7 @@ let pp_err f fmt = function
   | `Ambiguous_names ns ->
       Fmt.pf fmt "Ambiguous names: %a" (Fmt.Dump.list Name.pp) ns
   | `Ambiguous_stage n -> Fmt.pf fmt "Ambiguous stage: %a" Name.pp n
-  | `Unbound n -> Fmt.pf fmt "Unbound name: %a" Name.pp n
+  | `Unbound (n, _) -> Fmt.pf fmt "Unbound name: %a" Name.pp n
   | x -> f fmt x
 
 exception Resolve_error of error [@@deriving sexp]

@@ -3,7 +3,7 @@ open Ast
 type error =
   [ `Ambiguous_names of Name.t list
   | `Ambiguous_stage of Name.t
-  | `Unbound of Name.t ]
+  | `Unbound of Name.t * Name.t list ]
 
 val pp_err : ([> error ] as 'a) Fmt.t -> 'a Fmt.t
 
