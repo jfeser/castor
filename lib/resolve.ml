@@ -76,6 +76,10 @@ module Ctx = struct
 
   let names (c : t) = List.map (c :> row list) ~f:(fun r -> r.rname)
 
+  let of_names rstage ns =
+    List.map ns ~f:(fun n -> { rname = n; rref = Flag.of_bool false; rstage })
+    |> of_list
+
   let singleton n s =
     of_list [ { rname = n; rstage = s; rref = Flag.of_bool false } ]
 
@@ -155,9 +159,7 @@ module Ctx = struct
 
   (** Create a context from a selection list. *)
   let of_defs rstage (ps : 'a annot pred list) =
-    List.filter_map ps ~f:to_schema
-    |> List.map ~f:(fun n -> { rname = n; rref = Flag.of_bool false; rstage })
-    |> of_list
+    List.filter_map ps ~f:to_schema |> of_names rstage
 
   let refs (ctx : t) =
     List.map (ctx :> row list) ~f:(fun r -> (r.rname, Flag.bool_of r.rref))
@@ -180,8 +182,7 @@ let resolve_name ctx n =
       m.rname
   | None -> raise @@ Resolve_error (`Unbound (n, Ctx.names ctx))
 
-let resolve_relation stage r =
-  Relation.schema r |> List.map ~f:P.name |> Ctx.of_defs stage
+let resolve_relation stage r = Relation.schema r |> Ctx.of_names stage
 
 let all_has_stage (ctx : Ctx.t) s =
   List.for_all (ctx :> Ctx.row list) ~f:(fun r -> Poly.(r.Ctx.rstage = s))
@@ -366,7 +367,7 @@ let refs =
 
 (** Annotate names in an algebra expression with types. *)
 let resolve_exn ?(params = Set.empty (module Name)) r =
-  let param_ctx = Ctx.of_defs `Run (Set.to_list params |> List.map ~f:P.name) in
+  let param_ctx = Ctx.of_names `Run @@ Set.to_list params in
   let r, ctx = resolve `Run param_ctx r in
 
   (* Ensure that all the outputs are referenced. *)
