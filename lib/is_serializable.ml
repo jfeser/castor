@@ -55,12 +55,14 @@ let stage ?(params = Set.empty (module Name)) r =
     annot `Run r
   in
   fun n ->
-    match Name.rel n with
-    | Some s ->
-        if Set.mem compile_scopes s then `Compile
-        else if Set.mem run_scopes s then `Run
-        else failwith (sprintf "Scope not found: %s" s)
-    | None -> if Set.mem params n then `Run else `No_scope
+    if Set.mem params n then `Run
+    else
+      match Name.rel n with
+      | Some s ->
+          if Set.mem compile_scopes s then `Compile
+          else if Set.mem run_scopes s then `Run
+          else failwith (sprintf "Scope not found: %s" s)
+      | None -> `No_scope
 
 let annotate_stage r =
   let stage = stage r in
