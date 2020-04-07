@@ -26,8 +26,7 @@ setup.log
 
 *.install
 
-config
-config.ml
+config-*sh
 config.ini
 _coverage/
 bench/hyper.tar.gz
