@@ -272,7 +272,15 @@ module Make (C : Config.S) = struct
     in
     let scope = Fresh.name Global.fresh "s%d" in
     let%bind values = Tactics_util.all_values_attr attr in
-    return @@ A.list values scope (A.filter (Pred.scoped [ attr ] scope p) r)
+    let sattr = Name.scoped scope attr in
+    return
+    @@ A.list values scope
+         (A.tuple
+            [
+              A.filter p @@ A.scalar (Name sattr);
+              A.filter P.(Name attr = Name sattr) r;
+            ]
+            Cross)
 
   let elim_simple_filter = local elim_simple_filter "elim-cmp-filter"
 
