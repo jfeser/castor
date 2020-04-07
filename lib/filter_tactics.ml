@@ -51,11 +51,6 @@ module Make (C : Config.S) = struct
     let supported = Set.inter (Free.pred_free pred) orig_bound in
     Set.is_subset supported ~of_:new_bound
 
-  let merge_select s1 s2 =
-    s1 @ s2
-    |> List.dedup_and_sort ~compare:(fun p1 p2 ->
-           [%compare: Name.t option] (Schema.to_name p1) (Schema.to_name p2))
-
   let filter_many ps r =
     if List.is_empty ps then r else A.filter (Pred.conjoin ps) r
 
@@ -543,10 +538,7 @@ module Make (C : Config.S) = struct
                 Schema.schema r |> List.hd_exn |> Name.scoped scope |> P.name)
           in
           Pred.subst_tree ctx inner
-        and select_list =
-          Schema.to_select_list
-          @@ List.dedup_and_sort ~compare:[%compare: Name.t] orig_schema
-        in
+        and select_list = Schema.to_select_list orig_schema in
         A.select select_list @@ filter_many rest
         @@ A.hash_idx r_keys scope (A.filter inner_filter_pred r) key
 
