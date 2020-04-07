@@ -1,24 +1,3 @@
-(executable
- (name discover)
- (libraries core)
- (preprocess
-  (pps ppx_let))
- (modules discover config_defaults))
-
-(rule
- (deps
-  (file discover.exe))
- (targets config.ini)
- (mode promote-until-clean)
- (action
-  (with-stdout-to
-   config.ini
-   (run ./discover.exe -kind ENV))))
-
-(alias
- (name config)
- (deps config.ini))
-
 (alias
  (name runtest)
  (deps
