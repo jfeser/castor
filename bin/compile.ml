@@ -3,7 +3,8 @@ open Castor
 open Collections
 open Abslayout_load
 
-let main ~debug ~gprof ~params ~code_only ~query ?out_dir ch =
+let main ~debug ~gprof ~params ~code_only ~query ?out_dir fn =
+  let open Result.Let_syntax in
   Logs.info (fun m ->
       m "%s" (Sys.get_argv () |> Array.to_list |> String.concat ~sep:" "));
   let module Config = struct
@@ -23,12 +24,27 @@ let main ~debug ~gprof ~params ~code_only ~query ?out_dir ch =
   in
   let module I = Irgen.Make (Config) () in
   let module C = Codegen.Make (Config) (I) () in
-  let ralgebra, params =
-    if query then
-      let Query.{ body; args; _ } = Query.of_channel_exn ch in
-      (body, args)
-    else (Abslayout.of_channel_exn ch, params)
+  let ch =
+    match fn with Some fn -> In_channel.create fn | None -> In_channel.stdin
   in
+  let filename = match fn with Some fn -> fn | None -> "<stdin>" in
+  let ralgebra, params =
+    let out =
+      if query then
+        let%map Query.{ body; args; _ } = Query.of_channel ch in
+        (body, args)
+      else
+        let%map body = Abslayout.of_channel ch in
+        (body, params)
+    in
+    match out with
+    | Ok x -> x
+    | Error e ->
+        failwith
+        @@ Fmt.str "Failed to parse %s: %a" filename (Abslayout.pp_err Fmt.nop)
+             e
+  in
+
   let ralgebra =
     let load_params =
       List.map params ~f:(fun (n, t) -> Name.create ~type_:t n)
@@ -58,8 +74,6 @@ let () =
       and code_only = flag "code-only" no_arg ~doc:"only emit code"
       and query =
         flag "query" ~aliases:[ "r" ] no_arg ~doc:"parse input as a query"
-      and ch =
-        anon (maybe_with_default In_channel.stdin ("query" %: Util.channel))
-      in
-      fun () -> main ~debug ~gprof ~params ~code_only ~query ?out_dir ch]
+      and fn = anon (maybe ("query" %: string)) in
+      fun () -> main ~debug ~gprof ~params ~code_only ~query ?out_dir fn]
   |> Command.run

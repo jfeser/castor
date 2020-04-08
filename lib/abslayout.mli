@@ -1,6 +1,10 @@
 open Ast
 open Collections
 
+type error = [ `Parse_error of string * int * int ] [@@deriving sexp]
+
+val pp_err : ([> error ] as 'a) Fmt.t -> 'a Fmt.t
+
 include Comparator.S with type t := t
 
 module O : Comparable.Infix with type t := t
@@ -84,6 +88,12 @@ val of_string_exn : string -> t
 val name_of_string_exn : string -> Name.t
 
 val of_channel_exn : In_channel.t -> t
+
+val of_string : string -> (t, [> error ]) result
+
+val name_of_string : string -> (Name.t, [> error ]) result
+
+val of_channel : In_channel.t -> (t, [> error ]) result
 
 val subst : 'a annot pred Map.M(Name).t -> 'a annot -> 'a annot
 

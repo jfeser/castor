@@ -4,8 +4,11 @@ open Castor
 let main queries =
   let conn = Db.create (Sys.getenv_exn "CASTOR_DB") in
   List.map queries ~f:(fun fn ->
-      let q = In_channel.with_file fn ~f:Query.of_channel_exn in
-      Query.annotate conn q)
+      match In_channel.with_file fn ~f:Query.of_channel with
+      | Ok q -> Query.annotate conn q
+      | Error e ->
+          failwith
+          @@ Fmt.str "Failed to parse %s: %a" fn (Abslayout.pp_err Fmt.nop) e)
   |> Query.of_many
   |> Format.printf "%a" Query.pp
 

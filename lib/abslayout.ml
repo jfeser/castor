@@ -167,23 +167,39 @@ let name r =
   | AOrderedIdx _ -> "ordered_idx"
   | Range _ -> "range"
 
-let of_lexbuf_exn lexbuf =
-  try Ralgebra_parser.ralgebra_eof Ralgebra_lexer.token lexbuf
-  with Parser_utils.ParseError (msg, line, col) as e ->
-    Log.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col);
-    raise e
+type error = [ `Parse_error of string * int * int ] [@@deriving sexp]
 
-let of_channel_exn ch = of_lexbuf_exn (Lexing.from_channel ch)
+let pp_err f fmt = function
+  | `Parse_error (msg, line, col) ->
+      Fmt.pf fmt "Parse error: %s (line: %d, col: %d)" msg line col
+  | e -> f fmt e
 
-let of_string_exn s = of_lexbuf_exn (Lexing.from_string s)
+let ok_exn x =
+  Result.map_error ~f:(Fmt.str "%a" (pp_err Fmt.nop)) x |> Result.ok_or_failwith
 
-let name_of_lexbuf_exn lexbuf =
-  try Ralgebra_parser.name_eof Ralgebra_lexer.token lexbuf
-  with Parser_utils.ParseError (msg, line, col) as e ->
-    Log.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col);
-    raise e
+let of_lexbuf lexbuf =
+  try Ok (Ralgebra_parser.ralgebra_eof Ralgebra_lexer.token lexbuf)
+  with Parser_utils.ParseError (msg, line, col) ->
+    Error (`Parse_error (msg, line, col))
 
-let name_of_string_exn s = name_of_lexbuf_exn (Lexing.from_string s)
+let of_lexbuf_exn x = of_lexbuf x |> ok_exn
+
+let of_channel ch = of_lexbuf (Lexing.from_channel ch)
+
+let of_channel_exn x = of_channel x |> ok_exn
+
+let of_string s = of_lexbuf (Lexing.from_string s)
+
+let of_string_exn x = of_string x |> ok_exn
+
+let name_of_lexbuf lexbuf =
+  try Ok (Ralgebra_parser.name_eof Ralgebra_lexer.token lexbuf)
+  with Parser_utils.ParseError (msg, line, col) ->
+    Error (`Parse_error (msg, line, col))
+
+let name_of_string s = name_of_lexbuf (Lexing.from_string s)
+
+let name_of_string_exn s = name_of_string s |> ok_exn
 
 let names r = (new V.names_visitor)#visit_t () r
 
