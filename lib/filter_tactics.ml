@@ -258,10 +258,8 @@ module Make (C : Config.S) = struct
   let elim_simple_filter r =
     let open Option.Let_syntax in
     let%bind p, r = to_filter r in
-    let%bind r =
-      if Is_serializable.(is_static ~params @@ annotate_stage r) then Some r
-      else None
-    in
+    let%bind r = if Is_serializable.is_static ~params r then Some r else None in
+    let p = (p :> Pred.t) and r = (r :> Ast.t) in
     let names = Pred.names p |> Set.to_list in
 
     let is_param = Set.mem params in
@@ -290,7 +288,9 @@ module Make (C : Config.S) = struct
          ]
          Cross
 
-  let elim_simple_filter = local elim_simple_filter "elim-simple-filter"
+  let elim_simple_filter =
+    of_func_pre ~pre:Is_serializable.annotate_stage elim_simple_filter
+      ~name:"elim-simple-filter"
 
   let push_filter_cross_tuple stage p rs =
     let ps = Pred.conjuncts p in
