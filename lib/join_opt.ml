@@ -187,33 +187,33 @@ module Join_graph = struct
             match pred_rels with
             | Ok [ r ] ->
                 let leaf_filters =
-                  Map.update x#leaf_filters r ~f:(function
+                  Map.update acc#leaf_filters r ~f:(function
                     | Some fs -> Set.add fs p
                     | None -> Set.singleton (module Edge) p)
                 in
                 object
-                  method graph = x#graph
+                  method graph = acc#graph
 
                   method leaf_filters = leaf_filters
 
-                  method top_filters = x#top_filters
+                  method top_filters = acc#top_filters
                 end
             | Ok [ r1; r2 ] ->
-                let graph = add_or_update_edge x#graph (r1, p, r2) in
+                let graph = add_or_update_edge acc#graph (r1, p, r2) in
                 object
                   method graph = graph
 
-                  method leaf_filters = x#leaf_filters
+                  method leaf_filters = acc#leaf_filters
 
-                  method top_filters = x#top_filters
+                  method top_filters = acc#top_filters
                 end
             | _ ->
                 object
-                  method graph = x#graph
+                  method graph = acc#graph
 
-                  method leaf_filters = x#leaf_filters
+                  method leaf_filters = acc#leaf_filters
 
-                  method top_filters = p :: x#top_filters
+                  method top_filters = p :: acc#top_filters
                 end)
     | _ ->
         object
