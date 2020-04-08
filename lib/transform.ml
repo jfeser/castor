@@ -108,6 +108,11 @@ module Make (Config : Config.S) = struct
   let push_all_runtime_filters =
     fix (for_all F.push_filter Path.(all >>? is_run_time >>? is_filter))
 
+  let push_static_filters =
+    fix
+      (for_all F.push_filter
+         Path.(all >>? is_run_time >>? is_filter >>? Infix.not is_param_filter))
+
   let hoist_all_filters =
     fix (for_all F.hoist_filter Path.(all >>? is_filter >> O.parent))
 
@@ -189,8 +194,12 @@ module Make (Config : Config.S) = struct
         (* Eliminate groupby operators. *)
         traced ~name:"elim-groupby"
         @@ fix
-        @@ at_ Groupby_tactics.elim_groupby
-             Path.(all >>? is_groupby >>| shallowest);
+        @@ seq_many
+             [
+               at_ Groupby_tactics.elim_groupby
+                 Path.(all >>? is_groupby >>| shallowest);
+               fix push_static_filters;
+             ];
         (* Hoist parameterized filters as far up as possible. *)
         traced ~name:"hoist-param-filters"
         @@ try_random
