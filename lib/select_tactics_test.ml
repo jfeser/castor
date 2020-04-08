@@ -24,7 +24,7 @@ open Ops.Make (C)
 
 let () =
   Log.setup_stderr ();
-  Logs.Src.set_level Inv.src (Some Error)
+  Logs.Src.set_level Validate.src (Some Error)
 
 let%expect_test "push-select-index" =
   let r =
@@ -37,7 +37,7 @@ select([sum(o_totalprice) as revenue],
 |}
   in
   let r' = Option.value_exn (apply push_select Path.root r) in
-  Inv.resolve r r';
+  Validate.resolve r r';
   Format.printf "%a\n" pp r';
   [%expect
     {|
