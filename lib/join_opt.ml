@@ -142,7 +142,16 @@ module Join_graph = struct
     | Join { r1; r2; _ } -> Set.union (to_leaves r1) (to_leaves r2)
     | _ -> Set.singleton (module Vertex) r
 
-  (** Convert a join tree to a join graph. *)
+  type graph_filters = {
+    graph : t;
+    leaf_filters : Set.M(Edge).t Map.M(Vertex).t;
+    top_filters : Edge.t list;
+  }
+
+  (** Convert a join tree to a join graph.
+
+      Returns a graph where the nodes are the queries at the leaves of the join
+     tree and the edges are join predicates. *)
   let rec to_graph leaves r =
     let open Option.Let_syntax in
     let union_filters f1 f2 =
@@ -154,42 +163,66 @@ module Join_graph = struct
     in
     match r.node with
     | Join { r1; r2; pred = p } ->
-        let%bind g1, f1 = to_graph leaves r1 and g2, f2 = to_graph leaves r2 in
-        let graph = union g1 g2 and filters = union_filters f1 f2 in
+        let x1 = to_graph leaves r1 and x2 = to_graph leaves r2 in
+        let graph = union x1#graph x2#graph
+        and leaf_filters = union_filters x1#leaf_filters x2#leaf_filters
+        and top_filters = x1#top_filters @ x2#top_filters in
+        let x =
+          object
+            method graph = graph
+
+            method leaf_filters = leaf_filters
+
+            method top_filters = top_filters
+          end
+        in
 
         (* Collect the set of relations that this join depends on. *)
-        List.fold_left (Pred.conjuncts p)
-          ~init:(Some (graph, filters))
-          ~f:(fun acc p ->
-            let%bind graph, filters = acc in
+        List.fold_left (Pred.conjuncts p) ~init:x ~f:(fun acc p ->
             let pred_rels =
               Pred.names p |> Set.to_list
               |> List.map ~f:(source_relation leaves)
               |> Or_error.all
             in
             match pred_rels with
-            | Ok [] ->
-                warn (fun m -> m "Unhandled predicate %a: constant" Pred.pp p);
-                None
             | Ok [ r ] ->
-                let filters =
-                  Map.update filters r ~f:(function
+                let leaf_filters =
+                  Map.update x#leaf_filters r ~f:(function
                     | Some fs -> Set.add fs p
                     | None -> Set.singleton (module Edge) p)
                 in
-                return (graph, filters)
+                object
+                  method graph = x#graph
+
+                  method leaf_filters = leaf_filters
+
+                  method top_filters = x#top_filters
+                end
             | Ok [ r1; r2 ] ->
-                let graph = add_or_update_edge graph (r1, p, r2) in
-                return (graph, filters)
-            | Ok _ ->
-                warn (fun m ->
-                    m "Unhandled predicate %a: too many relations" Pred.pp p);
-                None
-            | Error e ->
-                warn (fun m ->
-                    m "Unhandled predicate %a: %a" Pred.pp p Error.pp e);
-                None)
-    | _ -> Some (empty, Map.empty (module Vertex))
+                let graph = add_or_update_edge x#graph (r1, p, r2) in
+                object
+                  method graph = graph
+
+                  method leaf_filters = x#leaf_filters
+
+                  method top_filters = x#top_filters
+                end
+            | _ ->
+                object
+                  method graph = x#graph
+
+                  method leaf_filters = x#leaf_filters
+
+                  method top_filters = p :: x#top_filters
+                end)
+    | _ ->
+        object
+          method graph = empty
+
+          method leaf_filters = Map.empty (module Vertex)
+
+          method top_filters = []
+        end
 
   let of_abslayout r =
     let open Option.Let_syntax in
@@ -199,14 +232,21 @@ module Join_graph = struct
       |> List.map ~f:(fun r ->
              (r, Schema.schema r |> Set.of_list (module Name)))
     in
-    let%map graph, filters = to_graph leaves r in
+    let x = to_graph leaves r in
     (* Put the filters back onto the leaves of the graph. *)
-    map_vertex
-      (fun r ->
-        match Map.find filters r with
-        | Some preds -> filter (Set.to_list preds |> Pred.conjoin) r
-        | None -> r)
-      graph
+    let graph =
+      map_vertex
+        (fun r ->
+          match Map.find x#leaf_filters r with
+          | Some preds -> filter (Set.to_list preds |> Pred.conjoin) r
+          | None -> r)
+        x#graph
+    in
+    object
+      method graph = graph
+
+      method top_filters = x#top_filters
+    end
 
   let partition_fold ~init ~f graph =
     let vertices = vertices graph |> Array.of_list in
@@ -564,10 +604,18 @@ module Make (Config : Config.S) = struct
 
   let opt r =
     let open Option.Let_syntax in
-    let%map s = G.of_abslayout r in
-    opt (Set.empty (module Name)) s
+    let s = G.of_abslayout r in
+    let joins = opt (Set.empty (module Name)) s#graph in
+    object
+      method joins = joins
 
-  let reshape j _ = Some (to_ralgebra j |> strip_meta)
+      method top_filters = s#top_filters
+    end
+
+  let reshape top_filters j _ =
+    Some
+      ( A.filter (Pred.conjoin (top_filters :> Pred.t list))
+      @@ (to_ralgebra j :> Ast.t) )
 
   let rec emit_joins =
     let open Join_elim_tactics.Make (Config) in
@@ -600,11 +648,11 @@ module Make (Config : Config.S) = struct
                  method stage = meta#stage
                end)
       in
-      let%bind joins = opt (Castor.Path.get_exn p r) in
-      info (fun m -> m "Found %d join options." (Pareto_set.length joins));
-      let%bind j = Pareto_set.min_elt (fun a -> a.(0)) joins in
+      let x = opt (Castor.Path.get_exn p r) in
+      info (fun m -> m "Found %d join options." (Pareto_set.length x#joins));
+      let%bind j = Pareto_set.min_elt (fun a -> a.(0)) x#joins in
       info (fun m -> m "Chose %a." Sexp.pp_hum ([%sexp_of: t] j));
-      let tf = seq (local (reshape j) "reshape") (emit_joins j) in
+      let tf = seq (local (reshape x#top_filters j) "reshape") (emit_joins j) in
       apply (traced tf) p (strip_meta r)
     in
     global f "join-opt"
