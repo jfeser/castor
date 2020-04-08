@@ -276,12 +276,17 @@ module Make (C : Config.S) = struct
     in
     let scope = Fresh.name Global.fresh "s%d" in
     let sattr = Name.scoped scope attr in
+    let select_list =
+      Schema.schema r
+      |> List.filter ~f:(fun n -> Name.O.(n <> attr))
+      |> Schema.to_select_list
+    in
     return
     @@ A.list (A.dedup @@ A.select [ Name attr ] r) scope
     @@ A.tuple
          [
            A.filter p @@ A.scalar (Name sattr);
-           A.filter P.(Name attr = Name sattr) r;
+           A.select select_list @@ A.filter P.(Name attr = Name sattr) r;
          ]
          Cross
 
