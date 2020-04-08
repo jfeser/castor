@@ -652,7 +652,11 @@ module Make (Config : Config.S) = struct
       info (fun m -> m "Found %d join options." (Pareto_set.length x#joins));
       let%bind j = Pareto_set.min_elt (fun a -> a.(0)) x#joins in
       info (fun m -> m "Chose %a." Sexp.pp_hum ([%sexp_of: t] j));
-      let tf = seq (local (reshape x#top_filters j) "reshape") (emit_joins j) in
+      let tf =
+        seq
+          (local (reshape x#top_filters j) "reshape")
+          (at_ (emit_joins j) (child 0))
+      in
       apply (traced tf) p (strip_meta r)
     in
     global f "join-opt"
