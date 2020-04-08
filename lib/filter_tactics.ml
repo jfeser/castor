@@ -258,6 +258,10 @@ module Make (C : Config.S) = struct
   let elim_simple_filter r =
     let open Option.Let_syntax in
     let%bind p, r = to_filter r in
+    let%bind r =
+      if Is_serializable.(is_static ~params @@ annotate_stage r) then Some r
+      else None
+    in
     let names = Pred.names p |> Set.to_list in
 
     let is_param = Set.mem params in
@@ -271,18 +275,17 @@ module Make (C : Config.S) = struct
       | _ -> None
     in
     let scope = Fresh.name Global.fresh "s%d" in
-    let%bind values = Tactics_util.all_values_attr attr in
     let sattr = Name.scoped scope attr in
     return
-    @@ A.list values scope
-         (A.tuple
-            [
-              A.filter p @@ A.scalar (Name sattr);
-              A.filter P.(Name attr = Name sattr) r;
-            ]
-            Cross)
+    @@ A.list (A.dedup @@ A.select [ Name attr ] r) scope
+    @@ A.tuple
+         [
+           A.filter p @@ A.scalar (Name sattr);
+           A.filter P.(Name attr = Name sattr) r;
+         ]
+         Cross
 
-  let elim_simple_filter = local elim_simple_filter "elim-cmp-filter"
+  let elim_simple_filter = local elim_simple_filter "elim-simple-filter"
 
   let push_filter_cross_tuple stage p rs =
     let ps = Pred.conjuncts p in

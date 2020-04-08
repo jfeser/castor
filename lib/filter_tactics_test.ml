@@ -418,12 +418,22 @@ filter((strpos(p_name, param1) > 0),
   in
   apply elim_simple_filter Path.root r |> Option.iter ~f:(Fmt.pr "%a" pp);
   [%expect {|
-    alist(select([p_name], part) as s0,
-      filter((strpos(s0.p_name, param1) > 0),
-        join((s_suppkey = l_suppkey),
-          join(((ps_suppkey = l_suppkey) && (ps_partkey = l_partkey)),
-            join((p_partkey = l_partkey),
-              part,
-              join((o_orderkey = l_orderkey), orders, lineitem)),
-            partsupp),
-          join((s_nationkey = n_nationkey), supplier, nation)))) |}]
+    alist(dedup(
+            select([p_name],
+              join((s_suppkey = l_suppkey),
+                join(((ps_suppkey = l_suppkey) && (ps_partkey = l_partkey)),
+                  join((p_partkey = l_partkey),
+                    part,
+                    join((o_orderkey = l_orderkey), orders, lineitem)),
+                  partsupp),
+                join((s_nationkey = n_nationkey), supplier, nation)))) as s0,
+      atuple([filter((strpos(p_name, param1) > 0), ascalar(s0.p_name)),
+              filter((p_name = s0.p_name),
+                join((s_suppkey = l_suppkey),
+                  join(((ps_suppkey = l_suppkey) && (ps_partkey = l_partkey)),
+                    join((p_partkey = l_partkey),
+                      part,
+                      join((o_orderkey = l_orderkey), orders, lineitem)),
+                    partsupp),
+                  join((s_nationkey = n_nationkey), supplier, nation)))],
+        cross)) |}]
