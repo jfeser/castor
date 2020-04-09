@@ -58,7 +58,7 @@ queries:
 run: {csv_outputs}
 time: {time_outputs}
 clean:
-    rm -rf *.csv *.time *.mem
+\trm -rf *.csv *.time *.mem
     '''.format(csv_outputs=' '.join('%s.csv' % b['name'] for b in bench),
                time_outputs=' '.join('%s.time' % b['name'] for b in bench)))
 
