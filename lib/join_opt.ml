@@ -357,7 +357,7 @@ module Make (Config : Config.S) = struct
       | _ -> failwith "Unexpected type."
 
     let hash = function
-      | Prim_type.(IntT _ | DateT _ | FixedT _ | BoolT _) -> 1.0
+      | Prim_type.(IntT _ | DateT _ | FixedT _ | BoolT _) -> 40.0
       | StringT _ -> 100.0
       | _ -> failwith "Unexpected type."
 
