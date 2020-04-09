@@ -57,10 +57,13 @@ queries:
 .PHONY: run time clean
 run: {csv_outputs}
 time: {time_outputs}
+compile: {builds}
 clean:
-\trm -rf *.csv *.time *.mem
+\trm -rf *.csv *.time *.mem {input_queries} {builds}
     '''.format(csv_outputs=' '.join('%s.csv' % b['name'] for b in bench),
-               time_outputs=' '.join('%s.time' % b['name'] for b in bench)))
+               time_outputs=' '.join('%s.time' % b['name'] for b in bench),
+               input_queries=' '.join(set('%s.txt' % b['query'] for b in bench)),
+               builds=' '.join(set(b['query'] for b in bench))))
 
 
 if __name__ == '__main__':
