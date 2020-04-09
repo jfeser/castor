@@ -1,7 +1,7 @@
 [
   {
     "name": "1_2-q1",
-    "query": "1_2.txt",
+    "query": "1_2",
     "ordered": true,
     "params": [
       [ "query_id:int", "0" ],
@@ -13,7 +13,7 @@
   },
   {
     "name": "1_2-q2",
-    "query": "1_2.txt",
+    "query": "1_2",
     "ordered": true,
     "params": [
       [ "query_id:int", "1" ],
@@ -25,7 +25,7 @@
   },
   {
     "name": "2_3-q1",
-    "query": "2_3.txt",
+    "query": "2_3",
     "ordered": true,
     "params": [
       [ "query_id:int", "0" ],
@@ -38,7 +38,7 @@
   },
   {
     "name": "2_3-q2",
-    "query": "2_3.txt",
+    "query": "2_3",
     "ordered": false,
     "params": [
       [ "query_id:int", "1" ],
@@ -51,7 +51,7 @@
   },
   {
     "name": "3_4-q1",
-    "query": "3_4.txt",
+    "query": "3_4",
     "ordered": false,
     "params": [
       [ "query_id:int", "0" ],
@@ -62,7 +62,7 @@
   },
   {
     "name": "3_4-q2",
-    "query": "3_4.txt",
+    "query": "3_4",
     "ordered": true,
     "params": [
       [ "query_id:int", "1" ],
@@ -73,7 +73,7 @@
   },
   {
     "name": "4_5-q1",
-    "query": "4_5.txt",
+    "query": "4_5",
     "ordered": true,
     "params": [
       [ "query_id:int", "0" ],
@@ -84,7 +84,7 @@
   },
   {
     "name": "4_5-q2",
-    "query": "4_5.txt",
+    "query": "4_5",
     "ordered": false,
     "params": [
       [ "query_id:int", "1" ],
