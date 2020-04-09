@@ -191,6 +191,15 @@ module Make (Config : Config.S) = struct
       [
         (* Simplify predicates. *)
         traced ~name:"simplify-preds" @@ for_all F.simplify Path.(all);
+        (* Eliminate groupby operators. *)
+        traced ~name:"elim-groupby"
+        @@ fix
+        @@ seq_many
+             [
+               at_ Groupby_tactics.elim_groupby
+                 Path.(all >>? is_groupby >>| shallowest);
+               fix push_static_filters;
+             ];
         (* Hoist parameterized filters as far up as possible. *)
         traced ~name:"hoist-param-filters"
         @@ try_random
@@ -201,15 +210,6 @@ module Make (Config : Config.S) = struct
                fix
                @@ at_ F.hoist_filter
                     Path.(all >>? is_param_filter >>| deepest >>= O.parent);
-             ];
-        (* Eliminate groupby operators. *)
-        traced ~name:"elim-groupby"
-        @@ fix
-        @@ seq_many
-             [
-               at_ Groupby_tactics.elim_groupby
-                 Path.(all >>? is_groupby >>| shallowest);
-               fix push_static_filters;
              ];
         try_random
         @@ at_ F.elim_simple_filter
