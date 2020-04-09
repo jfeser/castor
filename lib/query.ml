@@ -60,10 +60,12 @@ let of_many qs =
     :: List.concat_map queries ~f:(fun q -> q.args)
   in
   let bodies = List.map queries ~f:(fun q -> q.body) in
-  let all_attrs =
-    List.concat_map bodies ~f:Schema.names_and_types
-    |> List.dedup_and_sort ~compare:[%compare: string * Prim_type.t]
-  in
+  let all_attrs = List.concat_map bodies ~f:Schema.names_and_types in
+  List.map all_attrs ~f:(fun (n, _) -> n)
+  |> List.find_a_dup ~compare:[%compare: string]
+  |> Option.iter ~f:(fun n ->
+         failwith @@ sprintf "Found a duplicate attribute: %s" n);
+
   let mk_select r =
     let s = Schema.schema r in
     List.map all_attrs ~f:(fun (n, t) ->
