@@ -53,6 +53,15 @@ queries:
                query_name=b['query'],
                params=gen_param_values(b)))
 
+    print('''
+.PHONY: run time clean
+run: {csv_outputs}
+time: {time_outputs}
+clean:
+    rm -rf *.csv *.time *.mem
+    '''.format(csv_outputs=' '.join('%s.csv' % b['name'] for b in bench),
+               time_outputs=' '.join('%s.time' % b['name'] for b in bench)))
+
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
