@@ -141,6 +141,10 @@ for b in bench:
 {0}-opt.csv:
 \t./{1}/scanner.exe -p {1}/data.bin {2} > $@
 '''.format(b['name'], out_dir(b), gen_param_values(b)))
+    if not b['ordered']:
+        print('''
+\tsort -o $@ $@
+        ''')
 
     print('''
 {name}-opt.time:
