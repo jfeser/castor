@@ -1,0 +1,12 @@
+INSERT INTO public.customer VALUES (134045, 'Customer#000134045', 'RptouEGFhE4FCvuIWlC1sBKL2s5l emj', 24, '34-175-646-1915', 2105.49, 'AUTOMOBILE', 'e, final packages along the carefully final accounts cajole blithely along the slyly pending accounts. furiously i');
+INSERT INTO public.customer VALUES (79030, 'Customer#000079030', 'FQsIBJPdLE6GcZPKq6NUBskOjcxtZ9b NUMNCTd,', 2, '12-127-542-9342', 2007.26, 'AUTOMOBILE', 'ing to the blithely final depo');
+INSERT INTO public.customer VALUES (101140, 'Customer#000101140', 'Rl9tAau409Yv7mM7Jnb', 8, '18-146-308-4402', -685.25, 'HOUSEHOLD ', 'sly with the blithely final accounts. special, special packages');
+INSERT INTO public.customer VALUES (31132, 'Customer#000031132', 'Gemu,8YBvVBPYJ2aBVHWi3V', 4, '14-393-390-7430', 7435.66, 'FURNITURE ', 'ess requests sleep. final, bold packages mold. even req');
+INSERT INTO public.customer VALUES (146293, 'Customer#000146293', 'W6tItkB1SbWvL', 23, '33-850-436-8394', 3630.67, 'MACHINERY ', 'equests are furiously. express, enticing packag');
+INSERT INTO public.customer VALUES (128752, 'Customer#000128752', 'Uxben5HKQc6HuZQO3', 14, '24-771-903-4510', 4066.10, 'MACHINERY ', 'even requests sleep unusual theodolites. furiously even requests use blithely. sl');
+INSERT INTO public.customer VALUES (88018, 'Customer#000088018', 'gA0 uS4Ok2H5YLzBDtVc', 19, '29-477-217-6234', 9058.50, 'HOUSEHOLD ', 'sentiments haggle slyly fluffily express ideas. bold');
+INSERT INTO public.customer VALUES (15371, 'Customer#000015371', 's4gfh8QW4XQ', 20, '30-958-252-1307', -165.54, 'FURNITURE ', 'deposits. carefully unusual requests use carefully instructions. foxes engage c');
+INSERT INTO public.customer VALUES (141730, 'Customer#000141730', ' xsnaV6L3j9d eZSNR5zVaz', 11, '21-624-501-1172', 4129.84, 'HOUSEHOLD ', 'ts wake fluffily even deposits-- furiously i');
+INSERT INTO public.customer VALUES (136585, 'Customer#000136585', 'zsfS7aTfUWG1 TRwLNX,q', 17, '27-391-975-6786', 6647.81, 'MACHINERY ', 'inal packages. even, ironic deposits acro');
+INSERT INTO public.customer VALUES (76333, 'Customer#000076333', 'bBkIrg8OWqJlVKdETp', 8, '18-755-317-8218', 7604.49, 'MACHINERY ', 'nding theodolites must integrate quickly special, even multipliers: regul');
+INSERT INTO public.customer VALUES (41029, 'Customer#000041029', 'oYNEWJwj5t65', 13, '23-864-704-5280', 6115.33, 'BUILDING  ', 'ans. quickly unusual deposits cajole slyly. fluffily regular foxes across the ');

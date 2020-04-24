@@ -1,0 +1,10 @@
+INSERT INTO public.orders VALUES (5976353, 61631, 'O', 233218.64, '1997-05-02', '4-NOT SPECIFIED', 'Clerk#000000336', 0, 'uffily unusual epitaphs. furiously even packages among ');
+INSERT INTO public.orders VALUES (5561633, 45304, 'O', 265278.21, '1997-11-23', '5-LOW          ', 'Clerk#000000414', 0, 'equests according to the unusual, pending acc');
+INSERT INTO public.orders VALUES (4057315, 17056, 'O', 243005.80, '1997-03-15', '2-HIGH         ', 'Clerk#000000535', 0, 'lets. ironic pinto beans b');
+INSERT INTO public.orders VALUES (1615429, 79595, 'O', 173074.11, '1995-11-28', '1-URGENT       ', 'Clerk#000000659', 0, ' the packages. carefully ironic accounts along ');
+INSERT INTO public.orders VALUES (5417127, 100532, 'F', 168996.79, '1994-11-06', '4-NOT SPECIFIED', 'Clerk#000000345', 0, 'ironic packages cajole. slyly final requests after the');
+INSERT INTO public.orders VALUES (4223971, 148913, 'O', 270055.39, '1996-11-13', '3-MEDIUM       ', 'Clerk#000000955', 0, 'ptotes are furiously. carefully regular p');
+INSERT INTO public.orders VALUES (3683298, 57664, 'F', 96922.62, '1995-02-10', '4-NOT SPECIFIED', 'Clerk#000000085', 0, 'ongside of the furiously regular packages. slyly final dolphins cajole abo');
+INSERT INTO public.orders VALUES (3845251, 101716, 'O', 192902.09, '1996-03-24', '2-HIGH         ', 'Clerk#000000745', 0, ' carefully final instructions. fluffily unusual ');
+INSERT INTO public.orders VALUES (5907172, 126364, 'O', 252332.56, '1997-05-24', '4-NOT SPECIFIED', 'Clerk#000000032', 0, ' express courts promise quickly. accounts haggle among the sp');
+INSERT INTO public.orders VALUES (1229478, 31090, 'F', 43619.43, '1995-03-25', '2-HIGH         ', 'Clerk#000000245', 0, 'ss asymptotes. idly even ideas are express realms. final accoun');

@@ -1,0 +1,8 @@
+INSERT INTO public.lineitem VALUES (1462054, 66859, 6860, 1, 47, 85814.95, 0.00, 0.02, 'N', 'O', '1998-08-09', '1998-09-03', '1998-09-06', 'COLLECT COD              ', 'SHIP      ', 's run alongside of the sly');
+INSERT INTO public.lineitem VALUES (5613254, 66182, 3701, 1, 39, 44779.02, 0.01, 0.04, 'A', 'F', '1994-01-31', '1993-12-24', '1994-02-04', 'DELIVER IN PERSON        ', 'SHIP      ', 'even instructions integrate among the fur');
+INSERT INTO public.lineitem VALUES (2556388, 91613, 6632, 6, 24, 38510.64, 0.06, 0.04, 'R', 'F', '1992-11-06', '1992-11-16', '1992-12-03', 'NONE                     ', 'REG AIR   ', ' carefully slow dolphins ');
+INSERT INTO public.lineitem VALUES (1493060, 164257, 4258, 1, 33, 43601.25, 0.05, 0.02, 'N', 'O', '1995-12-06', '1995-12-02', '1995-12-31', 'TAKE BACK RETURN         ', 'AIR       ', 'leep slyly carefully busy theodolites');
+INSERT INTO public.lineitem VALUES (4193987, 68435, 8436, 2, 21, 29472.03, 0.07, 0.02, 'N', 'O', '1995-09-06', '1995-07-02', '1995-09-20', 'TAKE BACK RETURN         ', 'RAIL      ', 'romise about t');
+INSERT INTO public.lineitem VALUES (4310944, 143421, 8450, 4, 46, 67363.32, 0.06, 0.01, 'N', 'O', '1996-03-01', '1996-04-27', '1996-03-18', 'DELIVER IN PERSON        ', 'MAIL      ', 'ajole across the carefully pend');
+INSERT INTO public.lineitem VALUES (854178, 115282, 7794, 1, 20, 25945.60, 0.02, 0.00, 'A', 'F', '1992-02-14', '1992-03-14', '1992-03-08', 'NONE                     ', 'FOB       ', ' among the carefully bol');
+INSERT INTO public.lineitem VALUES (2421350, 61620, 6633, 3, 21, 33214.02, 0.09, 0.01, 'R', 'F', '1993-05-26', '1993-06-12', '1993-06-07', 'COLLECT COD              ', 'MAIL      ', 'ke. regular, ironic id');

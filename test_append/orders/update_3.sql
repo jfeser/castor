@@ -1,0 +1,11 @@
+INSERT INTO public.orders VALUES (5344231, 69580, 'O', 297368.34, '1998-01-16', '1-URGENT       ', 'Clerk#000000333', 0, 'ckly. express, final pinto beans cajole quickly about the special pinto bean');
+INSERT INTO public.orders VALUES (4994885, 94250, 'O', 233778.09, '1996-03-24', '5-LOW          ', 'Clerk#000000935', 0, 'usily express requests haggle furiously blithely fi');
+INSERT INTO public.orders VALUES (4129184, 101555, 'O', 167789.68, '1997-05-01', '1-URGENT       ', 'Clerk#000000795', 0, 'nstructions doubt about the blithely express ');
+INSERT INTO public.orders VALUES (3811300, 10177, 'F', 206097.62, '1994-01-28', '5-LOW          ', 'Clerk#000000415', 0, 'fully quickly regular platelets. quickly special pinto beans wa');
+INSERT INTO public.orders VALUES (4095717, 11384, 'F', 133241.77, '1992-10-12', '4-NOT SPECIFIED', 'Clerk#000000731', 0, 'unts detect carefully');
+INSERT INTO public.orders VALUES (1428130, 141200, 'O', 141808.94, '1996-01-20', '4-NOT SPECIFIED', 'Clerk#000000979', 0, 'ntly ironic ideas sleep quickly ');
+INSERT INTO public.orders VALUES (2050887, 19663, 'O', 155584.53, '1997-06-17', '3-MEDIUM       ', 'Clerk#000000355', 0, ' express packages. accounts daz');
+INSERT INTO public.orders VALUES (3123457, 39769, 'F', 173895.36, '1992-04-17', '1-URGENT       ', 'Clerk#000000850', 0, 'unts. silent packages integrate carefully pains. quie');
+INSERT INTO public.orders VALUES (1622144, 107494, 'O', 58121.81, '1997-03-17', '1-URGENT       ', 'Clerk#000000789', 0, 'c packages haggle instructions. regular deposits between the furiously final ');
+INSERT INTO public.orders VALUES (3848514, 118613, 'F', 136181.49, '1992-10-22', '4-NOT SPECIFIED', 'Clerk#000000525', 0, 'l theodolites sleep ');
+INSERT INTO public.orders VALUES (2310784, 135652, 'F', 133713.16, '1995-01-12', '1-URGENT       ', 'Clerk#000000387', 0, 'ithely regular deposits. slyly ironic requests cajole always ');

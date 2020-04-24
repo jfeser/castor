@@ -1,0 +1,16 @@
+INSERT INTO public.supplier VALUES (6454, 'Supplier#000006454       ', 'komDCUR7dlXquaEJj', 15, '25-948-574-9647', 8520.51, '. furiously ironic foxes haggle quickly. furiously unusual re');
+INSERT INTO public.supplier VALUES (6455, 'Supplier#000006455       ', 'oZZWxYiImfoIahkVvgjDK7', 4, '14-336-801-9381', 4221.06, 'blithely ironic instructions above the q');
+INSERT INTO public.supplier VALUES (6462, 'Supplier#000006462       ', 'SxQBQUpcOEd', 23, '33-810-638-2473', -97.18, 'ly at the blithely regular requests. slowly regular asymptotes sleep quickly slyly special realm');
+INSERT INTO public.supplier VALUES (6470, 'Supplier#000006470       ', 'QVFuSQyZonHQDgwpMCkM8ZqouVxKivg3L,NN0z', 7, '17-615-255-5151', 8509.91, 'lets. bold instructions sleep above the slyly final accounts-- pinto beans sleep quic');
+INSERT INTO public.supplier VALUES (6481, 'Supplier#000006481       ', 'i7o5TKSv,bYHzagKxJA4M3rtfZhRHSMvDyy8Y', 15, '25-746-155-1214', 8504.71, ' deposits impress. furiously bold accounts again');
+INSERT INTO public.supplier VALUES (6497, 'Supplier#000006497       ', 'KwLq9nzwUhse jlv3ae506lN8KTo1poG', 20, '30-489-991-7455', 585.26, 'lly even instructions affix furiously. blithely final packages at the regular depe');
+INSERT INTO public.supplier VALUES (6498, 'Supplier#000006498       ', 'QgR rA3XAEiTcZEv', 6, '16-802-671-1709', 326.68, 'sly quiet asymptotes boost always. furiously express ');
+INSERT INTO public.supplier VALUES (6502, 'Supplier#000006502       ', 'rRm19GWGn3x', 17, '27-336-540-8414', 4367.71, 'ependencies use fluffily regular packages. foxes boost carefully blithely final packages. bli');
+INSERT INTO public.supplier VALUES (6511, 'Supplier#000006511       ', 'MwdvL34nlkXi rQUPDoqhkm9XaMx3WF', 8, '18-355-691-7466', 7520.19, ' the blithely final requests. packages su');
+INSERT INTO public.supplier VALUES (6519, 'Supplier#000006519       ', 'rvFp1JCtAVXlE54m1XGBv44vs', 19, '29-607-892-5392', 7096.75, 'ace of the quickly regular ideas haggle carefully regular');
+INSERT INTO public.supplier VALUES (6530, 'Supplier#000006530       ', 'QyKRu05w,UoOZ0jm7 HBdG101ouPSI98iQt6Fk', 24, '34-362-259-1264', 9411.49, 'd packages. slyly regular deposits wake furiously above the grouches. r');
+INSERT INTO public.supplier VALUES (6547, 'Supplier#000006547       ', 'MM3qyaZ0mEk20pkJTtoM3qpggUC5', 20, '30-768-643-9197', 5093.95, 'lly quiet accounts. pending, regular realms wake carefully special d');
+INSERT INTO public.supplier VALUES (6552, 'Supplier#000006552       ', 'zA5d8 k3R WZ9yJ8kFGbzl9QRe4SBZoNN6fl', 8, '18-628-594-1404', 2380.15, ' to the even instructions. fluffily ');
+INSERT INTO public.supplier VALUES (6582, 'Supplier#000006582       ', 'OK0BWKI5eWR7IZLOj ', 12, '22-269-943-1304', 4898.12, ' hockey players against the slyly sly accounts wake quietly slyly re');
+INSERT INTO public.supplier VALUES (6607, 'Supplier#000006607       ', '3F 2e2gqD5u5B', 3, '13-743-119-2349', 6301.22, 'ayers wake among the unusual');
+INSERT INTO public.supplier VALUES (6616, 'Supplier#000006616       ', 'VuVCB,p7KWmzR1i68', 23, '33-315-825-7545', 32.21, 'ructions; furiously special dinos haggle furiously. accounts doze furiously qui');
