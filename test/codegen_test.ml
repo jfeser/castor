@@ -178,9 +178,9 @@ let%expect_test "example-3-str" =
     6:104 Table hash
     110:1 Table map len (=3)
     111:3 Table key map
-    111:1 Map entry (0 => 23)
-    112:1 Map entry (1 => 10)
-    113:1 Map entry (2 => 0)
+    111:1 Map entry (0 => 0)
+    112:1 Map entry (1 => 23)
+    113:1 Map entry (2 => 10)
     114:33 Table values
     114:4 Scalar (=(String bar))
     114:1 String length (=3)
