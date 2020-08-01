@@ -49,7 +49,7 @@ let ordered_idx { oi_keys = rk; oi_values = rv; oi_scope = scope; oi_lookup; _ }
 let cross_tuple ts =
   let scalars, others =
     List.partition_map ts ~f:(fun r ->
-        match r.node with AScalar p -> `Fst p | _ -> `Snd r)
+        match r.node with AScalar p -> First p | _ -> Second r)
   in
   let base_relation, base_schema =
     match List.reduce others ~f:(join (Bool true)) with

@@ -668,8 +668,8 @@ module Parallel = struct
         List.map builders ~f:(fun b -> b.Type_builder.aggs)
         |> List.concat
         |> List.partition_map ~f:(function
-             | Type_builder.Simple ps -> `Fst ps
-             | Subquery p -> `Snd p)
+             | Type_builder.Simple ps -> First ps
+             | Subquery p -> Second p)
       in
       to_ralgebra_simple ctxs simple
       @ List.map subquery ~f:(to_ralgebra_subquery ctxs)

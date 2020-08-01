@@ -292,8 +292,8 @@ module Make (Config : Config.S) () = struct
             let eqs, rest =
               Pred.conjuncts p
               |> List.partition_map ~f:(function
-                   | Binop (Eq, p1, p2) -> `Fst (p1, Fresh.name fresh "k%d", p2)
-                   | p -> `Snd p)
+                   | Binop (Eq, p1, p2) -> First (p1, Fresh.name fresh "k%d", p2)
+                   | p -> Second p)
             in
             if List.length eqs = 0 then []
             else

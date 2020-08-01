@@ -34,6 +34,7 @@
    fmt
    fmt.tty
    genhash
+   core.bigstring_unix
  )
  (flags -open Core -unboxed-types)
  (inline_tests)

@@ -193,7 +193,7 @@ class bigbuffer_serializer ?(size = 8) () =
       Bigbuffer.add_buffer s#buf self#buf
 
     method write_into_channel ch =
-      Bigstring.really_output ch (Bigbuffer.big_contents self#buf)
+      Bigstring_unix.really_output ch (Bigbuffer.big_contents self#buf)
   end
 
 type msg = { msg : string; pos : int; len : int }
