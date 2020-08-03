@@ -161,17 +161,17 @@ module Make (C : Config.S) = struct
           |> List.partition_map ~f:(function
                | (Binop (Gt, p1, p2) | Binop (Lt, p2, p1)) as p ->
                    if is_candidate_key p1 r' && is_candidate_match p2 r' then
-                     `Fst (p2, (`Lt, p1))
+                     First (p2, (`Lt, p1))
                    else if is_candidate_key p2 r' && is_candidate_match p1 r'
-                   then `Fst (p1, (`Gt, p2))
-                   else `Snd p
+                   then First (p1, (`Gt, p2))
+                   else Second p
                | (Binop (Ge, p1, p2) | Binop (Le, p2, p1)) as p ->
                    if is_candidate_key p1 r' && is_candidate_match p2 r' then
-                     `Fst (p2, (`Le, p1))
+                     First (p2, (`Le, p1))
                    else if is_candidate_key p2 r' && is_candidate_match p1 r'
-                   then `Fst (p1, (`Ge, p2))
-                   else `Snd p
-               | p -> `Snd p)
+                   then First (p1, (`Ge, p2))
+                   else Second p
+               | p -> Second p)
         in
         let cmps, rest' =
           Map.of_alist_multi (module Pred) cmps
@@ -317,7 +317,8 @@ module Make (C : Config.S) = struct
     let pushed_key, pushed_val =
       Pred.conjuncts p
       |> List.partition_map ~f:(fun p ->
-             if Tactics_util.is_supported stage rk_bnd p then `Fst p else `Snd p)
+             if Tactics_util.is_supported stage rk_bnd p then First p
+             else Second p)
     in
     A.list
       (filter_many pushed_key l.l_keys)
@@ -347,8 +348,8 @@ module Make (C : Config.S) = struct
           Pred.conjuncts p
           |> List.partition_map ~f:(fun p ->
                  if Tactics_util.is_supported stage names p then
-                   `Fst (Pred.subst scalar_ctx p)
-                 else `Snd p)
+                   First (Pred.subst scalar_ctx p)
+                 else Second p)
         in
         filter_many unpushed @@ A.select ps @@ filter_many pushed r
 
@@ -394,8 +395,8 @@ module Make (C : Config.S) = struct
         let pushed_key, pushed_val =
           Pred.conjuncts p
           |> List.partition_map ~f:(fun p ->
-                 if Tactics_util.is_supported stage rk_bnd p then `Fst p
-                 else `Snd p)
+                 if Tactics_util.is_supported stage rk_bnd p then First p
+                 else Second p)
         in
         let pushed_val =
           List.map pushed_val ~f:(Pred.scoped (Set.to_list rk_bnd) scope)
@@ -550,10 +551,10 @@ module Make (C : Config.S) = struct
       Pred.to_nnf p |> Pred.conjuncts
       |> List.partition_map ~f:(fun p ->
              match EqDomain.of_pred r p with
-             | Ok d -> `Fst (p, d)
+             | Ok d -> First (p, d)
              | Error e ->
                  Logs.info ~src:elim_eq_filter_src (fun m -> m "%a" Error.pp e);
-                 `Snd p)
+                 Second p)
     in
 
     let inner, eqs = List.unzip eqs in
