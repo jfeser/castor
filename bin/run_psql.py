@@ -14,7 +14,7 @@ def run_sql(db, sql_file, params):
         sql_query = re.sub(":%d(?![0-9]+)" % (i + 1), str(param_value), sql_query)
 
     # Run query and write results.
-    p = Popen(["psql", "-t", "-A", "-F", "|", db], stdin=PIPE)
+    p = Popen(["psql", "--quiet", "-t", "-A", "-F", "|", db], stdin=PIPE)
     p.communicate(input=(sql_query).encode())
     p.wait()
 
