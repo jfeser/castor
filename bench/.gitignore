@@ -1,9 +1,0 @@
-*-opt.csv
-*-opt/
-*.time
-*.log
-*.mem
-*-gold/
-*-gold.csv
-hashes.txt
-./Makefile
