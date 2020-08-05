@@ -35,9 +35,8 @@ module Make (Config : Config.S) = struct
   open Config
   module O = Ops.Make (Config)
   open O
-  module Sf = Simplify_tactic.Make (Config)
-  module F = Filter_tactics.Make (Config)
-  module S = Simple_tactics.Make (Config)
+  module Filter_tactics = Filter_tactics.Make (Config)
+  module Simple_tactics = Simple_tactics.Make (Config)
   module Join_opt = Join_opt.Make (Config)
   module Simplify_tactic = Simplify_tactic.Make (Config)
   module Select_tactics = Select_tactics.Make (Config)
@@ -69,7 +68,7 @@ module Make (Config : Config.S) = struct
     include Config
 
     let simplify =
-      let tf = fix (seq_many [ project; Sf.simplify ]) in
+      let tf = fix (seq_many [ project; Simplify_tactic.simplify ]) in
       Some (fun r -> Option.value (apply tf Path.root r) ~default:r)
   end
 
@@ -106,15 +105,18 @@ module Make (Config : Config.S) = struct
     of_func f ~name:"apply-to-subqueries"
 
   let push_all_runtime_filters =
-    fix (for_all F.push_filter Path.(all >>? is_run_time >>? is_filter))
+    fix
+      (for_all Filter_tactics.push_filter
+         Path.(all >>? is_run_time >>? is_filter))
 
   let push_static_filters =
     fix
-      (for_all F.push_filter
+      (for_all Filter_tactics.push_filter
          Path.(all >>? is_run_time >>? is_filter >>? Infix.not is_param_filter))
 
   let hoist_all_filters =
-    fix (for_all F.hoist_filter Path.(all >>? is_filter >> O.parent))
+    fix
+      (for_all Filter_tactics.hoist_filter Path.(all >>? is_filter >> O.parent))
 
   let elim_param_filter tf test =
     (* Eliminate comparison filters. *)
@@ -122,12 +124,14 @@ module Make (Config : Config.S) = struct
     @@ seq_many
          [
            (* Hoist parameterized filters as far up as possible. *)
-           fix (for_all F.hoist_filter (Path.all >>? is_param_filter >> parent));
+           fix
+             (for_all Filter_tactics.hoist_filter
+                (Path.all >>? is_param_filter >> parent));
            Branching.(
              seq_many
                [
                  unroll_fix @@ O.traced
-                 @@ O.at_ F.push_filter
+                 @@ O.at_ Filter_tactics.push_filter
                       Path.(all >>? test >>? is_run_time >>| shallowest);
                  (* Eliminate a comparison filter. *)
                  choose
@@ -138,7 +142,7 @@ module Make (Config : Config.S) = struct
                    (O.seq_many
                       [
                         push_all_runtime_filters;
-                        O.for_all S.row_store
+                        O.for_all Simple_tactics.row_store
                           Path.(all >>? is_run_time >>? is_relation);
                         push_all_runtime_filters;
                         fix project;
@@ -152,7 +156,10 @@ module Make (Config : Config.S) = struct
     traced ~name:"try-partition"
     @@ Branching.(
          seq_many
-           [ choose (try_random_branch @@ traced F.partition) id; lift tf ]
+           [
+             choose (try_random_branch @@ traced Filter_tactics.partition) id;
+             lift tf;
+           ]
          |> lower (min Cost.cost))
 
   let try_ tf rest =
@@ -190,7 +197,8 @@ module Make (Config : Config.S) = struct
     seq_many
       [
         (* Simplify predicates. *)
-        traced ~name:"simplify-preds" @@ for_all F.simplify Path.(all);
+        traced ~name:"simplify-preds"
+        @@ for_all Filter_tactics.simplify Path.(all);
         (* Eliminate groupby operators. *)
         traced ~name:"elim-groupby"
         @@ fix
@@ -208,11 +216,11 @@ module Make (Config : Config.S) = struct
                for_all Join_elim_tactics.hoist_join_param_filter
                  Path.(all >>? is_join);
                fix
-               @@ at_ F.hoist_filter
+               @@ at_ Filter_tactics.hoist_filter
                     Path.(all >>? is_param_filter >>| deepest >>= O.parent);
              ];
         try_random
-        @@ at_ F.elim_simple_filter
+        @@ at_ Filter_tactics.elim_simple_filter
              Path.(all >>? is_expensive_filter >>| shallowest);
         (* Eliminate unparameterized join nests. Try using join optimization and
            using a simple row store. *)
@@ -225,7 +233,7 @@ module Make (Config : Config.S) = struct
                     Path.(all >>? is_join >>? is_run_time >>| shallowest);
                traced ~name:"elim-join-nests-flat"
                @@ try_random
-               @@ at_ S.row_store
+               @@ at_ Simple_tactics.row_store
                     Path.(
                       all >>? is_join >>? is_run_time >>? not has_free
                       >>| shallowest);
@@ -233,7 +241,7 @@ module Make (Config : Config.S) = struct
              ]
              (seq_many
                 [
-                  try_random @@ traced @@ F.elim_subquery;
+                  try_random @@ traced @@ Filter_tactics.elim_subquery;
                   try_random @@ push_all_runtime_filters;
                   project;
                   traced ~name:"elim-join-filter"
@@ -244,7 +252,7 @@ module Make (Config : Config.S) = struct
                        (seq_many
                           [
                             hoist_all_filters;
-                            first F.elim_disjunct
+                            first Filter_tactics.elim_disjunct
                               Path.(all >>? is_filter >>? is_run_time);
                             push_all_runtime_filters;
                           ]))
@@ -253,7 +261,7 @@ module Make (Config : Config.S) = struct
                          (* Push constant filters *)
                          traced ~name:"push-constant-filters"
                          @@ fix
-                         @@ at_ F.push_filter
+                         @@ at_ Filter_tactics.push_filter
                               Castor.Path.(
                                 all >>? is_const_filter >>| shallowest);
                          (* Push orderby operators into compile time position if possible. *)
@@ -265,12 +273,12 @@ module Make (Config : Config.S) = struct
                                 >>| shallowest);
                          (* Eliminate comparison filters. *)
                          traced ~name:"elim-cmp-filters"
-                         @@ elim_param_filter F.elim_cmp_filter
+                         @@ elim_param_filter Filter_tactics.elim_cmp_filter
                               is_param_cmp_filter;
                          (* Eliminate equality filters. *)
                          traced ~name:"elim-eq-filters"
                          @@ elim_param_filter
-                              (Branching.lift F.elim_eq_filter)
+                              (Branching.lift Filter_tactics.elim_eq_filter)
                               is_param_filter;
                          traced ~name:"push-all-unparam-filters"
                          @@ push_all_runtime_filters;
@@ -279,7 +287,7 @@ module Make (Config : Config.S) = struct
                          @@ fix
                          @@ seq_many
                               [
-                                at_ S.row_store
+                                at_ Simple_tactics.row_store
                                   Path.(
                                     all >>? is_run_time >>? not has_params
                                     >>? not is_serializable
@@ -305,7 +313,7 @@ module Make (Config : Config.S) = struct
                                 >>| shallowest)
                          (* Last-ditch tactic to eliminate orderby. *);
                          traced ~name:"final-orderby-elim"
-                         @@ for_all S.row_store
+                         @@ for_all Simple_tactics.row_store
                               Path.(all >>? is_orderby >>? is_run_time);
                          (* Try throwing away structure if it reduces overall cost. *)
                          ( traced ~name:"drop-structure"
@@ -315,7 +323,8 @@ module Make (Config : Config.S) = struct
                                   choose id
                                     (seq_many
                                        [
-                                         for_all (lift S.row_store)
+                                         for_all
+                                           (lift Simple_tactics.row_store)
                                            Path.(
                                              all >>? is_run_time
                                              >>? not has_params

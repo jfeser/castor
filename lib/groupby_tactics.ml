@@ -6,11 +6,16 @@ module P = Pred.Infix
 module Config = struct
   module type S = sig
     include Ops.Config.S
+
+    include Tactics_util.Config.S
   end
 end
 
 module Make (C : Config.S) = struct
   module Ops = Ops.Make (C)
+
+  open Tactics_util.Make (C)
+
   open Ops
 
   let src = Logs.Src.create "groupby-tactics"
@@ -64,50 +69,124 @@ module Make (C : Config.S) = struct
     | _ -> None
 
   let elim_groupby = of_func elim_groupby ~name:"elim-groupby"
+
+  let elim_groupby_approx r =
+    match r.node with
+    | GroupBy (ps, key, r) -> (
+        let key_name = Fresh.name Global.fresh "k%d" in
+        let key_preds = List.map key ~f:P.name in
+        let filter_pred =
+          List.map key ~f:(fun n ->
+              Pred.Infix.(name n = name (Name.copy n ~scope:(Some key_name))))
+          |> Pred.conjoin
+        in
+        (* Try to remove any remaining parameters from the keys relation. *)
+        match all_values_approx key_preds r with
+        | Ok keys ->
+            Some (A.list keys key_name (A.select ps (A.filter filter_pred r)))
+        | Error err ->
+            Logs.info ~src (fun m -> m "elim-groupby-approx: %a" Error.pp err);
+            None )
+    (* Otherwise, if some keys are computed, fail. *)
+    | _ -> None
+
+  let elim_groupby_approx =
+    of_func elim_groupby_approx ~name:"elim-groupby-approx"
+
+  let db_relation n = A.relation (Db.relation C.conn n)
+
+  let elim_groupby_partial =
+    let open A in
+    Branching.local ~name:"elim-groupby-partial" (function
+      | { node = GroupBy (ps, key, r); _ } ->
+          Seq.of_list key
+          |> Seq.map ~f:(fun k ->
+                 let key_name = Fresh.name Global.fresh "k%d" in
+                 let scope = Fresh.name Global.fresh "s%d" in
+                 let rel =
+                   (Option.value_exn
+                      (Db.relation_has_field C.conn (Name.name k)))
+                     .r_name
+                 in
+                 let lhs =
+                   dedup
+                     (select [ As_pred (Name k, key_name) ] (db_relation rel))
+                 in
+                 let new_key =
+                   List.filter key ~f:(fun k' -> Name.O.(k <> k'))
+                 in
+                 let new_ps =
+                   List.filter ps ~f:(fun p ->
+                       not ([%compare.equal: Pred.t] p (Name k)))
+                   |> List.map ~f:(Pred.scoped (Schema.schema lhs) scope)
+                 in
+                 let filter_pred =
+                   Binop (Eq, Name k, Name (Name.create key_name))
+                   |> Pred.scoped (Schema.schema lhs) scope
+                 in
+                 let new_r =
+                   replace_rel rel (filter filter_pred (db_relation rel)) r
+                 in
+                 let new_group_by =
+                   if List.is_empty new_key then select new_ps new_r
+                   else group_by new_ps new_key new_r
+                 in
+                 let key_scalar =
+                   let p =
+                     Pred.scoped (Schema.schema lhs) scope
+                       (As_pred (Name (Name.create key_name), Name.name k))
+                   in
+                   scalar p
+                 in
+                 list lhs scope (tuple [ key_scalar; new_group_by ] Cross))
+      | _ -> Seq.empty)
 end
 
-module Test = struct
-  module C = struct
-    let conn = Db.create "postgresql:///tpch_1k"
+let%test_module _ =
+  ( module struct
+    module C = struct
+      let conn = Db.create "postgresql:///tpch_1k"
 
-    let verbose = false
+      let cost_conn = conn
 
-    let validate = false
+      let verbose = false
 
-    let params =
-      let open Prim_type in
-      Set.of_list
-        (module Name)
-        [
-          Name.create ~type_:string_t "param1";
-          Name.create ~type_:string_t "param2";
-          Name.create ~type_:string_t "param3";
-        ]
+      let validate = false
 
-    let param_ctx = Map.empty (module Name)
+      let params =
+        let open Prim_type in
+        Set.of_list
+          (module Name)
+          [
+            Name.create ~type_:string_t "param1";
+            Name.create ~type_:string_t "param2";
+            Name.create ~type_:string_t "param3";
+          ]
 
-    let fresh = Fresh.create ()
+      let param_ctx = Map.empty (module Name)
 
-    let simplify = None
-  end
+      let fresh = Fresh.create ()
 
-  module T = Make (C)
-  open C
-  open T
-  open Ops
+      let simplify = None
+    end
 
-  let with_logs f =
-    Logs.(set_reporter (format_reporter ()));
-    Logs.Src.set_level src (Some Debug);
-    let ret = f () in
-    Logs.Src.set_level src (Some Error);
-    Logs.(set_reporter nop_reporter);
-    ret
+    module T = Make (C)
+    open C
+    open T
+    open Ops
 
-  let%expect_test "" =
-    let r =
-      Abslayout_load.load_string_exn ~params conn
-        {|
+    let with_logs f =
+      Logs.(set_reporter (format_reporter ()));
+      Logs.Src.set_level src (Some Debug);
+      let ret = f () in
+      Logs.Src.set_level src (Some Error);
+      Logs.(set_reporter nop_reporter);
+      ret
+
+    let%expect_test "" =
+      let r =
+        Abslayout_load.load_string_exn ~params conn
+          {|
 groupby([o_year,
          (sum((if (nation_name = param1) then volume else 0.0)) /
          sum(volume)) as mkt_share],
@@ -135,12 +214,12 @@ groupby([o_year,
           supplier)),
       filter((p_type = param3), part))))
 |}
-    in
-    with_logs (fun () ->
-        apply elim_groupby Path.root r
-        |> Option.iter ~f:(Format.printf "%a@." Abslayout.pp));
-    [%expect
-      {|
+      in
+      with_logs (fun () ->
+          apply elim_groupby Path.root r
+          |> Option.iter ~f:(Format.printf "%a@." Abslayout.pp));
+      [%expect
+        {|
       alist(dedup(
               select([o_year],
                 select([to_year(o_orderdate) as o_year,
@@ -193,4 +272,4 @@ groupby([o_year,
                       nation),
                     supplier)),
                 filter((p_type = param3), part)))))) |}]
-end
+  end )

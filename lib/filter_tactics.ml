@@ -105,6 +105,62 @@ module Make (C : Config.S) = struct
 
   let hoist_filter = of_func hoist_filter ~name:"hoist-filter"
 
+  let hoist_filter_agg r =
+    let open Option.Let_syntax in
+    match r.node with
+    | Select (ps, r) -> (
+        let%bind p, r = to_filter r in
+        match A.select_kind ps with
+        | `Scalar -> None
+        | `Agg ->
+            if
+              Tactics_util.select_contains
+                (Set.diff (Free.pred_free p) params)
+                ps r
+            then Some (A.filter p (A.select ps r))
+            else None )
+    | _ -> None
+
+  let hoist_filter_agg = of_func hoist_filter_agg ~name:"hoist-filter-agg"
+
+  let hoist_filter_extend r =
+    let open Option.Let_syntax in
+    match r.node with
+    | Select (ps, r) -> (
+        let%bind p, r = to_filter r in
+        match A.select_kind ps with
+        | `Scalar ->
+            let ext =
+              Free.pred_free p |> Set.to_list
+              |> List.filter ~f:(fun f ->
+                     not
+                       (Tactics_util.select_contains
+                          (Set.singleton (module Name) f)
+                          ps r))
+              |> List.map ~f:(fun n -> Name n)
+            in
+            Some (A.filter p @@ A.select (ps @ ext) r)
+        | `Agg -> None )
+    | GroupBy (ps, key, r) ->
+        let%bind p, r = to_filter r in
+        let ext =
+          let key_preds = List.map ~f:(fun n -> Name n) key in
+          Free.pred_free p |> Set.to_list
+          |> List.filter ~f:(fun f ->
+                 (not (Set.mem params f))
+                 && (not
+                       (Tactics_util.select_contains
+                          (Set.singleton (module Name) f)
+                          key_preds r))
+                 && List.mem key ~equal:[%compare.equal: Name.t] f)
+          |> List.map ~f:(fun n -> Name n)
+        in
+        Some (A.filter p @@ A.group_by (ps @ ext) key r)
+    | _ -> None
+
+  let hoist_filter_extend =
+    of_func hoist_filter_extend ~name:"hoist-filter-extend"
+
   let split_filter r =
     match r.node with
     | Filter (Binop (And, p, p'), r) -> Some (A.filter p (A.filter p' r))
@@ -781,9 +837,120 @@ module Make (C : Config.S) = struct
 
   let partition = Branching.global partition ~name:"partition"
 
-  let elim_subquery _ r =
+  let db_relation n = A.relation (Db.relation C.conn n)
+
+  let partition_eq n =
+    let eq_preds r =
+      let visitor =
+        object
+          inherit [_] V.reduce
+
+          inherit [_] Util.list_monoid
+
+          method! visit_Binop ps op arg1 arg2 =
+            if [%compare.equal: Pred.Binop.t] op Eq then (arg1, arg2) :: ps
+            else ps
+        end
+      in
+      visitor#visit_t [] r
+    in
+
+    let replace_pred r p1 p2 =
+      let visitor =
+        object
+          inherit [_] V.endo as super
+
+          method! visit_pred () p =
+            let p = super#visit_pred () p in
+            if [%compare.equal: Pred.t] p p1 then p2 else p
+        end
+      in
+      visitor#visit_t () r
+    in
+
+    let open A in
+    let name = A.name_of_string_exn n in
+    let fresh_name =
+      Caml.Format.sprintf "%s_%s" (Name.to_var name)
+        (Fresh.name Global.fresh "%d")
+    in
+    let rel = Name.rel_exn name in
+    Branching.local ~name:"partition-eq" (fun r ->
+        let eqs = eq_preds r in
+        (* Any predicate that is compared for equality with the partition
+            field is a candidate for the hash table key. *)
+        let keys =
+          List.filter_map eqs ~f:(fun (p1, p2) ->
+              match (p1, p2) with
+              | Name n, _ when String.(Name.name n = Name.name name) -> Some p2
+              | _, Name n when String.(Name.name n = Name.name name) -> Some p1
+              | _ -> None)
+        in
+        let lhs =
+          dedup
+            (select
+               [ As_pred (Name (Name.copy ~scope:None name), fresh_name) ]
+               (db_relation rel))
+        in
+        let scope = Fresh.name Global.fresh "s%d" in
+        let pred =
+          Binop
+            ( Eq,
+              Name (Name.copy ~scope:None name),
+              Name (Name.create fresh_name) )
+          |> Pred.scoped (Schema.schema lhs) scope
+        in
+        let filtered_rel = filter pred (db_relation rel) in
+        List.map keys ~f:(fun k ->
+            (* The predicate that we chose as the key can be replaced by
+               `fresh_name`. *)
+            A.select Schema.(schema r |> to_select_list)
+            @@ hash_idx lhs scope
+                 (replace_pred
+                    (Tactics_util.replace_rel rel filtered_rel r)
+                    k
+                    (Name (Name.create ~scope fresh_name)))
+                 [ k ])
+        |> Seq.of_list)
+
+  let partition_domain n_subst n_domain =
+    let open A in
+    let n_subst, n_domain =
+      (name_of_string_exn n_subst, name_of_string_exn n_domain)
+    in
+    let fresh_name =
+      Caml.Format.sprintf "%s_%s" (Name.to_var n_subst)
+        (Fresh.name Global.fresh "%d")
+    in
+    let rel = Name.rel_exn n_domain in
+    let lhs =
+      dedup
+        (select
+           [ As_pred (Name (Name.unscoped n_domain), fresh_name) ]
+           (db_relation rel))
+    in
+    let scope = Fresh.name Global.fresh "s%d" in
+    of_func ~name:"partition-domain" @@ fun r ->
+    Option.return
+    @@ A.select Schema.(schema r |> to_select_list)
+    @@ hash_idx lhs scope
+         (subst
+            (Map.singleton
+               (module Name)
+               n_subst
+               (Name (Name.create ~scope fresh_name)))
+            r)
+         [ Name n_subst ]
+
+  let elim_subquery p r =
     let open Option.Let_syntax in
-    let can_hoist r = Set.is_subset (Free.free r) ~of_:params in
+    let stage = Is_serializable.stage ~params r in
+    let can_hoist r =
+      Free.free r
+      |> Set.for_all ~f:(fun n ->
+             Set.mem params n
+             || match stage n with `Compile -> true | _ -> false)
+    in
 
     let scope = fresh_name "s%d" in
     let visitor =
@@ -827,14 +994,14 @@ module Make (C : Config.S) = struct
           else (First r, [])
       end
     in
-    let rhs, subqueries = visitor#visit_t () r in
+    let rhs, subqueries = visitor#visit_t () @@ Path.get_exn p r in
     let%map lhs =
       match subqueries with
       | [] -> None
       | [ x ] -> Some x
       | xs -> Some (A.tuple subqueries Cross)
     in
-    A.dep_join lhs scope rhs
+    Path.set_exn p r (A.dep_join lhs scope rhs)
 
   let elim_subquery = global elim_subquery "elim-subquery"
 
@@ -846,6 +1013,49 @@ module Make (C : Config.S) = struct
     | _ -> None
 
   let simplify = of_func ~name:"simplify" simplify
+
+  let precompute_filter_bv args =
+    let open A in
+    let values = List.map args ~f:Pred.of_string_exn in
+    let exception Failed of Error.t in
+    let run_exn r =
+      match r.node with
+      | Filter (p, r') ->
+          let schema = Schema.schema r' in
+          let free_vars =
+            Set.diff (Free.pred_free p) (Set.of_list (module Name) schema)
+            |> Set.to_list
+          in
+          let free_var =
+            match free_vars with
+            | [ v ] -> v
+            | _ ->
+                let err =
+                  Error.of_string
+                    "Unexpected number of free variables in predicate."
+                in
+                raise (Failed err)
+          in
+          let witness_name = Fresh.name Global.fresh "wit%d_" in
+          let witnesses =
+            List.mapi values ~f:(fun i v ->
+                As_pred
+                  ( Pred.subst (Map.singleton (module Name) free_var v) p,
+                    sprintf "%s_%d" witness_name i ))
+          in
+          let filter_pred =
+            List.foldi values ~init:p ~f:(fun i else_ v ->
+                If
+                  ( Binop (Eq, Name free_var, v),
+                    Name (Name.create (sprintf "%s_%d" witness_name i)),
+                    else_ ))
+          in
+          let select_list = witnesses @ List.map schema ~f:(fun n -> Name n) in
+          Some (filter filter_pred (select select_list r'))
+      | _ -> None
+    in
+    of_func ~name:"precompute-filter-bv" @@ fun r ->
+    try run_exn r with Failed _ -> None
 
   (* let precompute_filter n =
    *   let exception Failed of Error.t in

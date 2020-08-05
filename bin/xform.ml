@@ -31,6 +31,7 @@ let main ~name ~params ~ch =
   let open T.Orderby_tactics in
   let open T.Simple_tactics in
   let open T.Join_elim_tactics in
+  let open T.Select_tactics in
   let xform_1 =
     seq_many
       [
@@ -40,6 +41,10 @@ let main ~name ~params ~ch =
         |> Branching.lower Seq.hd;
         at_ push_filter Path.(all >>? is_filter >>| shallowest);
         at_ push_filter Path.(all >>? is_filter >>| shallowest);
+        T.project;
+        T.Simplify_tactic.simplify;
+        at_ push_select Path.(all >>? is_select >>| shallowest);
+        at_ row_store Path.(all >>? is_filter >>| shallowest);
         T.project;
       ]
   in
@@ -62,6 +67,26 @@ let main ~name ~params ~ch =
         at_ hoist_filter Path.(all >>? is_orderby >>| shallowest);
         at_ elim_eq_filter Path.(all >>? is_filter >>| shallowest);
         at_ push_orderby Path.(all >>? is_orderby >>| shallowest);
+        T.Simplify_tactic.simplify;
+        at_ push_filter Path.(all >>? is_filter >>| shallowest);
+        (* at_
+         *   ( precompute_filter_bv
+         *   @@ List.map ~f:(sprintf "\"%s\"")
+         *        [
+         *          "black";
+         *          "blue";
+         *          "brown";
+         *          "green";
+         *          "grey";
+         *          "navy";
+         *          "orange";
+         *          "pink";
+         *          "purple";
+         *          "red";
+         *          "white";
+         *          "yellow";
+         *        ] )
+         *   Path.(all >>? is_param_filter >>| shallowest); *)
       ]
   in
 
@@ -102,6 +127,10 @@ let main ~name ~params ~ch =
         Branching.at_ elim_cmp_filter Path.(all >>? is_filter >>| shallowest)
         |> Branching.lower Seq.hd;
         fix @@ at_ push_filter Path.(all >>? is_filter >>| shallowest);
+        T.Simplify_tactic.simplify;
+        at_ push_select Path.(all >>? is_select >>| shallowest);
+        at_ row_store Path.(all >>? is_filter >>| shallowest);
+        T.project;
       ]
   in
 
@@ -122,8 +151,9 @@ let main ~name ~params ~ch =
         Branching.at_ elim_cmp_filter
           Path.(all >>? is_param_filter >>| shallowest)
         |> Branching.lower Seq.hd;
-        at_ row_store Path.(all >>? is_filter >>| shallowest);
-        T.project;
+        T.Simplify_tactic.simplify;
+        at_ push_select Path.(all >>? is_select >>? is_run_time >>| deepest);
+        at_ row_store Path.(all >>? is_filter >>? is_run_time >>| shallowest);
         T.project;
       ]
   in
@@ -230,7 +260,7 @@ let main ~name ~params ~ch =
         at_ elim_groupby Path.(all >>? is_groupby >>| shallowest);
         at_ elim_join_nest Path.(all >>? is_join >>? is_run_time >>| shallowest);
         fix @@ at_ push_filter Path.(all >>? is_filter >>| shallowest);
-        at_ hoist_filter Path.(all >>? is_param_filter >>| deepest);
+        (* at_ hoist_filter Path.(all >>? is_param_filter >>| deepest); *)
       ]
   in
 
@@ -249,8 +279,36 @@ let main ~name ~params ~ch =
   let xform_12 =
     seq_many
       [
+        at_ elim_groupby Path.(all >>? is_groupby >>| shallowest);
+        push_orderby;
         at_ split_filter Path.(all >>? is_param_filter >>| shallowest);
-        at_ hoist_filter Path.(all >>? is_param_filter >>| shallowest);
+        fix
+        @@ at_ hoist_filter
+             (Path.(all >>? is_param_filter >>| shallowest) >>= parent);
+        at_ split_filter Path.(all >>? is_param_filter >>| shallowest);
+        fix
+        @@ at_ hoist_filter
+             (Path.(all >>? is_param_filter >>| shallowest) >>= parent);
+        at_ hoist_filter_agg
+          (Path.(all >>? is_param_filter >>| shallowest) >>= parent);
+        fix
+        @@ at_ hoist_filter
+             (Path.(all >>? is_param_filter >>| deepest) >>= parent);
+        at_ split_filter Path.(all >>? is_param_filter >>| deepest);
+        at_ split_filter Path.(all >>? is_param_filter >>| deepest);
+        at_ split_filter Path.(all >>? is_param_filter >>| deepest);
+        at_ hoist_filter (Path.(all >>? is_param_filter >>| deepest) >>= parent);
+        at_ split_filter Path.(all >>? is_param_filter >>| deepest);
+        at_ hoist_filter (Path.(all >>? is_param_filter >>| deepest) >>= parent);
+        at_ split_filter Path.(all >>? is_param_filter >>| deepest);
+        Branching.at_ elim_cmp_filter Path.(all >>? is_param_filter >>| deepest)
+        |> Branching.lower Seq.hd;
+        T.Simplify_tactic.simplify;
+        at_ push_select Path.(all >>? is_select >>? is_run_time >>| shallowest);
+        at_ row_store
+          Infix.(
+            Path.(all >>? is_filter >>? not is_param_filter >>| shallowest));
+        T.project;
       ]
   in
 
@@ -275,16 +333,72 @@ let main ~name ~params ~ch =
           (partition_domain "param1" "lineitem.l_shipdate")
           Path.(all >>? is_orderby >>| shallowest);
         at_ row_store Path.(all >>? is_orderby >>| shallowest);
+        T.Simplify_tactic.simplify;
       ]
   in
 
   let xform_16 =
     seq_many
       [
-        at_
-          (partition_domain "param1" "lineitem.l_shipdate")
-          Path.(all >>? is_orderby >>| shallowest);
+        fix
+        @@ at_ hoist_filter
+             (Path.(all >>? is_param_filter >>| shallowest) >>= parent);
+        at_ split_filter Path.(all >>? is_filter >>| shallowest);
+        at_ hoist_filter_extend
+          (Path.(all >>? is_param_filter >>| shallowest) >>= parent);
+        Branching.at_ elim_groupby_partial
+          Path.(all >>? is_groupby >>| shallowest)
+        |> Branching.lower (fun s -> Seq.nth s 2);
+        at_ row_store Path.(all >>? is_groupby >>| shallowest);
+      ]
+  in
+
+  let xform_17 =
+    seq_many
+      [
+        at_ hoist_filter
+          (Path.(all >>? is_param_filter >>| shallowest) >>= parent);
+        at_ elim_eq_filter Path.(all >>? is_param_filter >>| shallowest);
+        T.apply_to_subqueries
+          (at_
+             (partition_domain "p1_partkey" "part.p_partkey")
+             Path.(all >>? is_select >>| shallowest));
+        at_ row_store Path.(all >>? is_filter >>| deepest);
+        T.Simplify_tactic.simplify;
+        T.project;
+        T.project;
+      ]
+  in
+
+  let xform_18 =
+    seq_many
+      [
+        fix
+        @@ at_ hoist_filter (Path.(all >>? is_filter >>| shallowest) >>= parent);
+        T.apply_to_subqueries
+          (seq_many
+             [
+               split_filter;
+               at_ hoist_filter
+                 (Path.(all >>? is_param_filter >>| shallowest) >>= parent);
+               split_filter;
+               at_
+                 (partition_domain "o1_orderkey" "lineitem.l_orderkey")
+                 (Path.(all >>? is_param_filter >>| shallowest) >>= child' 0);
+               at_ row_store
+                 (Path.(all >>? is_collection >>| shallowest) >>= child' 1);
+             ]);
+        T.project;
         at_ row_store Path.(all >>? is_orderby >>| shallowest);
+        T.project;
+      ]
+  in
+
+  let xform_19 =
+    seq_many
+      [
+        at_ hoist_join_param_filter Path.(all >>? is_join >>| shallowest);
+        at_ elim_disjunct Path.(all >>? is_filter >>| shallowest);
       ]
   in
 
@@ -305,6 +419,9 @@ let main ~name ~params ~ch =
     | "14" -> xform_14
     | "15" -> xform_15
     | "16" -> xform_16
+    | "17" -> xform_17
+    | "18" -> xform_18
+    | "19" -> xform_19
     | _ -> failwith "unknown query name"
   in
   let query' = apply xform Path.root query in

@@ -143,4 +143,15 @@ module Make (Config : Config.S) = struct
         Db.exec1 conn sql
       in
       List.length tups = 0
+
+  let replace_rel rel new_rel r =
+    let visitor =
+      object
+        inherit [_] Visitors.endo
+
+        method! visit_Relation () r' { r_name = rel'; _ } =
+          if String.(rel = rel') then new_rel.Ast.node else r'
+      end
+    in
+    visitor#visit_t () r
 end
