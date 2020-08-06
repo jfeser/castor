@@ -2,7 +2,10 @@ include (val Log.make ~level:(Some Info) "castor-opt.mcmc")
 
 module Random_choice = struct
   module T = struct
-    type t = { mutable pairs : ((string * Ast.t) * bool) list }
+    type t = {
+      mutable pairs : ((string * Ast.t) * bool) list;
+      state : (Random.State.t[@sexp.opaque]); [@compare.ignore]
+    }
     [@@deriving compare, sexp]
   end
 
@@ -13,7 +16,8 @@ module Random_choice = struct
     include Comparable.Make (T)
   end
 
-  let create () = { pairs = [] }
+  let create ?(seed = 0) () =
+    { pairs = []; state = Random.State.make [| seed |] }
 
   let rand rand n r =
     match
@@ -25,8 +29,9 @@ module Random_choice = struct
         true
 
   let rec perturb rand =
-    let i' = Random.int @@ List.length rand.pairs in
+    let i' = Random.State.int rand.state @@ List.length rand.pairs in
     {
+      rand with
       pairs =
         List.mapi rand.pairs ~f:(fun i (k, v) ->
             if i = i' then (k, false) else (k, v));
