@@ -127,7 +127,7 @@ let%expect_test "cost" =
   [%expect {|
     (193846 47712)
     (138044 32208)
-    (137660 32233) |}]
+    (137660 33208) |}]
 
 let%expect_test "to-from-ralgebra" =
   let r =
@@ -197,7 +197,7 @@ let%expect_test "join-opt" =
        (C.relation nation) (C.relation customer);
   [%expect
     {|
-    (((32233)
+    (((33208)
       (Hash (lkey (Name ((name n_nationkey) (meta <opaque>))))
        (lhs
         (Flat
@@ -234,7 +234,7 @@ let%expect_test "join-opt" =
   @@ C.relation customer;
   [%expect
     {|
-    (((68425)
+    (((69400)
       (Hash (lkey (Name ((name n_nationkey) (meta <opaque>))))
        (lhs
         (Flat
@@ -433,7 +433,6 @@ join(((n1_name = k0.n1_name) &&
  *   apply transform Path.root r |> Option.iter ~f:(Fmt.pr "%a" A.pp) *)
 
 let%expect_test "" =
-  Logs.Src.set_level Join_opt.src (Some Info);
   let r =
     Abslayout_load.load_string_exn
       (Lazy.force Test_util.tpch_conn)
@@ -445,4 +444,49 @@ let%expect_test "" =
           customer)
 |}
   in
-  apply transform Path.root r |> Option.iter ~f:(Fmt.pr "%a" A.pp)
+  apply transform Path.root r |> Option.iter ~f:(Fmt.pr "%a" A.pp);
+  [%expect {|
+    filter(true,
+      depjoin(depjoin(alist(filter(true, region) as s5,
+                        atuple([ascalar(s5.r_regionkey), ascalar(s5.r_name),
+                                ascalar(s5.r_comment)],
+                          cross)) as s7,
+                select([s7.r_regionkey, s7.r_name, s7.r_comment, n1_regionkey,
+                        n1_nationkey],
+                  ahashidx(dedup(
+                             select([n1_regionkey],
+                               alist(select([n_regionkey as n1_regionkey,
+                                             n_nationkey as n1_nationkey],
+                                       nation) as s9,
+                                 atuple([ascalar(s9.n1_regionkey),
+                                         ascalar(s9.n1_nationkey)],
+                                   cross)))) as s8,
+                    filter((s8.n1_regionkey = n1_regionkey),
+                      alist(select([n_regionkey as n1_regionkey,
+                                    n_nationkey as n1_nationkey],
+                              nation) as s6,
+                        atuple([ascalar(s6.n1_regionkey),
+                                ascalar(s6.n1_nationkey)],
+                          cross))),
+                    s7.r_regionkey))) as s11,
+        select([s11.r_regionkey, s11.r_name, s11.r_comment, s11.n1_regionkey,
+                s11.n1_nationkey, c_custkey, c_name, c_address, c_nationkey,
+                c_phone, c_acctbal, c_mktsegment, c_comment],
+          ahashidx(dedup(
+                     select([c_nationkey],
+                       alist(customer as s13,
+                         atuple([ascalar(s13.c_custkey), ascalar(s13.c_name),
+                                 ascalar(s13.c_address),
+                                 ascalar(s13.c_nationkey), ascalar(s13.c_phone),
+                                 ascalar(s13.c_acctbal),
+                                 ascalar(s13.c_mktsegment),
+                                 ascalar(s13.c_comment)],
+                           cross)))) as s12,
+            filter((s12.c_nationkey = c_nationkey),
+              alist(customer as s10,
+                atuple([ascalar(s10.c_custkey), ascalar(s10.c_name),
+                        ascalar(s10.c_address), ascalar(s10.c_nationkey),
+                        ascalar(s10.c_phone), ascalar(s10.c_acctbal),
+                        ascalar(s10.c_mktsegment), ascalar(s10.c_comment)],
+                  cross))),
+            s11.n1_nationkey)))) |}]
