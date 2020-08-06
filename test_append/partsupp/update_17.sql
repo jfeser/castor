@@ -1,0 +1,17 @@
+INSERT INTO public.partsupp VALUES (45249, 258, 4755, 371.51, ' the blithely ironic instructions haggle about the pinto beans. warhorses haggl');
+INSERT INTO public.partsupp VALUES (113071, 605, 6029, 264.64, 'ptotes sleep finally. carefully special deposits haggle slyl');
+INSERT INTO public.partsupp VALUES (113071, 3072, 7868, 704.70, 'uests are furiously furiously express asymptotes. unusual, regular ideas after the furiously express requests cajole furiously into the sly');
+INSERT INTO public.partsupp VALUES (53489, 8500, 1055, 357.85, ' among the quickly express theodolites. carefully regular pinto beans are q');
+INSERT INTO public.partsupp VALUES (109292, 1803, 6305, 3.71, 'regular accounts do are furiously regular deposits. blithely ironic foxes sleep. unusual foxes affix fluffily bold, regular courts. special packages among the even dependencies sleep fluffil');
+INSERT INTO public.partsupp VALUES (86394, 3919, 123, 450.16, 's against the slyly pending orbits boost blithely after the permanently regular packages. blithely final pinto beans grow finally regular asymptotes. regular');
+INSERT INTO public.partsupp VALUES (86394, 8903, 332, 744.95, ' carefully ironic courts are carefully above the even ideas. requests cajole. carefully final pinto beans along the carefully bold requests are blithely fluffily bold theodolites. final');
+INSERT INTO public.partsupp VALUES (52051, 9567, 9513, 965.43, 'eodolites haggle fluffily according to the furiously bo');
+INSERT INTO public.partsupp VALUES (155013, 2559, 4524, 571.84, 'engage foxes. depths against the bravely final deposits boost furiously across the fluffily regular requests. blithely special asymptotes hinder slyly. blithely unusual ideas hang');
+INSERT INTO public.partsupp VALUES (146700, 1729, 8471, 521.47, '. quickly regular dependencies wake. final theodolites sleep quickly final deposits. regu');
+INSERT INTO public.partsupp VALUES (146700, 9215, 5354, 357.79, 'requests. fluffily unusual hockey players integrate slyly among the slyly even requests! furiously unusual deposits are carefully. ');
+INSERT INTO public.partsupp VALUES (168013, 3046, 4872, 787.58, 's, unusual pinto beans wake slyly permanently even packages. express theodol');
+INSERT INTO public.partsupp VALUES (92218, 4728, 4372, 550.56, ' quickly daring ideas. bold deposits nod furiously ironic courts! fluffily even excuses impress alongside of the blithely slow deposits. ironic, even instructions after the doggedly ');
+INSERT INTO public.partsupp VALUES (102064, 9595, 8138, 588.19, 'egular deposits. quietly pending requests wake slyly even requests. carefully regular depende');
+INSERT INTO public.partsupp VALUES (75327, 2849, 5871, 396.35, 'e the slyly stealthy warthogs. furiously final requests above the quickly ruthless t');
+INSERT INTO public.partsupp VALUES (4201, 9202, 6845, 885.53, 'ily ironic packages wake furiously regular accounts? furiously express pinto beans acros');
+INSERT INTO public.partsupp VALUES (146688, 6689, 4763, 38.95, 'osely ironic packages sleep slyly. slyly regular instructions according to the carefully bold');

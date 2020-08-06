@@ -1,0 +1,10 @@
+INSERT INTO public.partsupp VALUES (88996, 8997, 7965, 946.21, 'lets. pinto beans sleep slyly. quickly ironic pinto beans haggle slyly. slyly special requ');
+INSERT INTO public.partsupp VALUES (93774, 3775, 3105, 377.53, 'riously final accounts. regular, regular theodolites x-ray. slyly final pinto beans use regular requests. bold forges are carefully. furiously bold pac');
+INSERT INTO public.partsupp VALUES (193417, 975, 2708, 783.78, 'quickly unusual orbits. dinos detect instructions. fluffily bold ideas boost along the furiously r');
+INSERT INTO public.partsupp VALUES (193417, 3418, 8887, 855.17, 'ts cajole. bold pinto beans unwind fluffily regular pack');
+INSERT INTO public.partsupp VALUES (164039, 1588, 3021, 716.84, ' even theodolites. final pinto beans cajole slyly at the permanently ironic grouches. slyly regular foxes cajole according to the blith');
+INSERT INTO public.partsupp VALUES (164039, 9072, 501, 11.56, 'pecial ideas. slyly ironic theodolites nag blithely against the speci');
+INSERT INTO public.partsupp VALUES (17001, 7002, 5765, 477.84, 'to beans. unusual ideas sleep furiously against the slyly');
+INSERT INTO public.partsupp VALUES (154689, 2235, 3195, 27.26, 'usly express dependencies. slyly dogged dependencies are. permanently fin');
+INSERT INTO public.partsupp VALUES (155190, 2736, 6703, 455.89, 'ole carefully. requests are slyly even sauternes. slyly unus');
+INSERT INTO public.partsupp VALUES (155190, 7706, 6157, 719.17, 'al deposits? silent requests are furiously. express, unusual courts are above the special accounts. ideas at the brave grouches a');

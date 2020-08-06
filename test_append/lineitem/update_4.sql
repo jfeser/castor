@@ -1,0 +1,14 @@
+INSERT INTO public.lineitem VALUES (881895, 99723, 2233, 1, 34, 58572.48, 0.03, 0.06, 'N', 'O', '1996-04-10', '1996-04-25', '1996-04-20', 'TAKE BACK RETURN         ', 'MAIL      ', 'posits haggl');
+INSERT INTO public.lineitem VALUES (324231, 176396, 3948, 7, 22, 32392.58, 0.05, 0.06, 'R', 'F', '1994-06-26', '1994-07-27', '1994-07-02', 'DELIVER IN PERSON        ', 'REG AIR   ', 'ial dugouts are carefully a');
+INSERT INTO public.lineitem VALUES (5301189, 170409, 2927, 5, 45, 66573.00, 0.07, 0.06, 'R', 'F', '1994-10-27', '1994-09-30', '1994-10-29', 'TAKE BACK RETURN         ', 'RAIL      ', ' ironic deposits');
+INSERT INTO public.lineitem VALUES (2171683, 50768, 8284, 3, 14, 24062.64, 0.10, 0.05, 'N', 'O', '1997-12-07', '1997-12-28', '1997-12-11', 'TAKE BACK RETURN         ', 'SHIP      ', 'ithely regular excuse');
+INSERT INTO public.lineitem VALUES (5035650, 82554, 7571, 3, 9, 13828.95, 0.01, 0.04, 'N', 'O', '1998-05-12', '1998-04-15', '1998-05-17', 'COLLECT COD              ', 'REG AIR   ', ' instructions cajole slyly about');
+INSERT INTO public.lineitem VALUES (4435780, 163275, 824, 5, 28, 37471.56, 0.06, 0.04, 'R', 'F', '1994-06-17', '1994-09-01', '1994-07-06', 'COLLECT COD              ', 'AIR       ', 'inal deposits are carefully careful de');
+INSERT INTO public.lineitem VALUES (3407524, 193332, 890, 1, 48, 68415.84, 0.03, 0.05, 'R', 'F', '1992-06-03', '1992-05-21', '1992-06-15', 'COLLECT COD              ', 'TRUCK     ', 'ccounts cajol');
+INSERT INTO public.lineitem VALUES (3226021, 30678, 3182, 2, 44, 70781.48, 0.03, 0.05, 'A', 'F', '1993-10-01', '1993-11-05', '1993-10-10', 'TAKE BACK RETURN         ', 'FOB       ', 'y players wake after the pinto ');
+INSERT INTO public.lineitem VALUES (695845, 176452, 1487, 7, 45, 68780.25, 0.01, 0.05, 'A', 'F', '1993-04-21', '1993-02-28', '1993-04-23', 'COLLECT COD              ', 'TRUCK     ', '. braids us');
+INSERT INTO public.lineitem VALUES (5678753, 157401, 7402, 1, 34, 49585.60, 0.08, 0.08, 'A', 'F', '1995-04-14', '1995-05-27', '1995-04-26', 'TAKE BACK RETURN         ', 'RAIL      ', 'eas doze pending, regular somas');
+INSERT INTO public.lineitem VALUES (5198947, 98765, 1275, 1, 26, 45857.76, 0.01, 0.00, 'N', 'O', '1998-04-05', '1998-02-11', '1998-04-25', 'COLLECT COD              ', 'RAIL      ', ' are furiously blithely ironic sheaves');
+INSERT INTO public.lineitem VALUES (3294565, 7672, 5173, 2, 26, 41071.42, 0.04, 0.06, 'N', 'O', '1997-09-21', '1997-08-01', '1997-10-20', 'DELIVER IN PERSON        ', 'FOB       ', 'lar, final accounts. furi');
+INSERT INTO public.lineitem VALUES (1347941, 36420, 1427, 2, 49, 66464.58, 0.01, 0.08, 'N', 'O', '1998-08-01', '1998-07-21', '1998-08-13', 'TAKE BACK RETURN         ', 'MAIL      ', 's sleep ca');
+INSERT INTO public.lineitem VALUES (5733987, 923, 924, 1, 38, 69308.96, 0.07, 0.01, 'N', 'O', '1998-08-19', '1998-08-17', '1998-08-23', 'DELIVER IN PERSON        ', 'FOB       ', 'he unusual, pending packages are blith');

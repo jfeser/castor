@@ -1,0 +1,5 @@
+INSERT INTO public.lineitem VALUES (775776, 104987, 8, 4, 46, 91631.08, 0.02, 0.01, 'R', 'F', '1992-12-12', '1993-01-10', '1992-12-17', 'NONE                     ', 'SHIP      ', ' requests ');
+INSERT INTO public.lineitem VALUES (916192, 132108, 4622, 4, 9, 10260.90, 0.04, 0.07, 'R', 'F', '1992-12-06', '1992-12-07', '1992-12-24', 'NONE                     ', 'MAIL      ', 'ial foxes. unusual foxes ');
+INSERT INTO public.lineitem VALUES (1236419, 33546, 8553, 3, 5, 7397.70, 0.08, 0.03, 'N', 'O', '1997-07-18', '1997-08-26', '1997-08-05', 'TAKE BACK RETURN         ', 'FOB       ', 'fully final accounts nag. silent th');
+INSERT INTO public.lineitem VALUES (2464679, 193245, 3246, 5, 19, 25426.56, 0.04, 0.00, 'A', 'F', '1995-05-07', '1995-06-05', '1995-05-12', 'COLLECT COD              ', 'FOB       ', ' platelets wake final i');
+INSERT INTO public.lineitem VALUES (386752, 12574, 5076, 6, 12, 17838.84, 0.09, 0.03, 'N', 'O', '1996-02-27', '1996-05-09', '1996-03-17', 'TAKE BACK RETURN         ', 'AIR       ', 'lets. even dolphins play ');

@@ -1,0 +1,14 @@
+INSERT INTO public.supplier VALUES (6257, 'Supplier#000006257       ', 'NvNMxu5S3qtWWRG3gSOCdimN 6s5VxWIj', 15, '25-472-947-9532', 3324.64, 'press requests. idly even foxes cajole alongside of the accounts. depos');
+INSERT INTO public.supplier VALUES (6291, 'Supplier#000006291       ', 'IOfsCKTfWFqjW8IaF d3pGTlx', 6, '16-409-523-5659', 6584.60, 'se, special deposits grow-- bold ideas haggle about the carefully quiet');
+INSERT INTO public.supplier VALUES (6296, 'Supplier#000006296       ', 'baByf,CQi60rl0YSmAUyQ9l10KR3q', 23, '33-577-460-4392', 7774.48, 'ously after the theodolites. furiously ');
+INSERT INTO public.supplier VALUES (6325, 'Supplier#000006325       ', 'VEAbBo9vdI5nmJLJ26NrsLLg003XOMBkQtZJ0Mtc', 11, '21-665-388-7326', -90.03, 'egular accounts are furiously final, bold packages-- silently regular foxes sleep after');
+INSERT INTO public.supplier VALUES (6337, 'Supplier#000006337       ', 'ilQgNOdCAysclt3SgODb6LeJ7d4RzYD', 10, '20-950-345-8173', 9343.35, 'quickly ironic packages affix aft');
+INSERT INTO public.supplier VALUES (6343, 'Supplier#000006343       ', 'UIRkduD9Iv2sxX9ly6MPt', 4, '14-617-999-2300', 9998.20, 'odolites. unusual packages was carefully reg');
+INSERT INTO public.supplier VALUES (6349, 'Supplier#000006349       ', 'pzREPFv5Qqm2WQFILxyRJyVfARzLmR8B', 17, '27-232-385-8198', 4360.68, 'ckly ironic requests x-ray. ironic deposits believe carefully across the requests. expr');
+INSERT INTO public.supplier VALUES (6373, 'Supplier#000006373       ', 'J8fcXWsTqM', 7, '17-813-485-8637', 9871.22, 'etect blithely bold asymptotes. fluffily ironic platelets wake furiously; blit');
+INSERT INTO public.supplier VALUES (6391, 'Supplier#000006391       ', 'lIWTJp,U7E', 12, '22-173-912-2217', 2604.56, 'onic ideas. regular accounts nag quietly. slyly ');
+INSERT INTO public.supplier VALUES (6397, 'Supplier#000006397       ', 'h3rp6cKPeZpMhWBwAZSoXyBkk', 21, '31-941-870-7526', -518.45, 'bold instructions hang blithely across the carefully brave de');
+INSERT INTO public.supplier VALUES (6400, 'Supplier#000006400       ', 'ifM8MbuxVQ16VGr7B0ACb6n,C9Zi', 10, '20-360-877-2726', 4683.83, ' unusual requests nag slyly about the express dependencies. quickly bold theodoli');
+INSERT INTO public.supplier VALUES (6402, 'Supplier#000006402       ', 'GvjuIUGvhMyCZnE0wXXnRdRO5yDG', 21, '31-149-118-4122', 3938.52, 'olites wake boldly instructions? qu');
+INSERT INTO public.supplier VALUES (6425, 'Supplier#000006425       ', 'M40,4vzvHXPnti8pBmvCYXVC', 24, '34-173-377-3598', 4466.03, 'to beans boost slyly regular deposits. ruthless foxes eat slyly unusual sentiments. carefully ir');
+INSERT INTO public.supplier VALUES (6426, 'Supplier#000006426       ', 'uyJ7mouse7RTDny8LBNIesAu4rBjVWMLcMcMFoec', 8, '18-465-419-6121', 5532.41, 'st the regular, ironic ide');

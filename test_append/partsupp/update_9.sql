@@ -1,0 +1,4 @@
+INSERT INTO public.partsupp VALUES (69893, 4906, 30, 933.87, 'ding to the carefully regular deposits. regular, express dependencies above the accounts wake carefully alongside of the blithely ironic theodolites. quickly express asym');
+INSERT INTO public.partsupp VALUES (134750, 4751, 7776, 309.39, ' furiously. ironically pending deposits nag requests. special, special platelets use carefully-- regular accounts detect furiously. slyly bold instructions sleep instructions. furiously careful requ');
+INSERT INTO public.partsupp VALUES (64428, 1947, 4702, 11.17, 'tes are slyly regular grouches. furiously final instructions are carefully at the pending, regular asymptotes. quickly special reques');
+INSERT INTO public.partsupp VALUES (23425, 932, 1597, 742.93, ' fluffily even tithes alongside of the blithely bold dependencies wake carefully pending, unusual p');
