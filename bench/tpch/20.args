@@ -1,1 +1,0 @@
--p param1:string -p param2:date -p param3:string -t push-orderby,hoist-filter:0,hoist-filter:1,push-orderby,hoist-filter:0,elim-eq-filter:2,split-filter:0,push-filter:0,elim-cmp-filter,push-select

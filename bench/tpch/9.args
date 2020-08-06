@@ -1,1 +1,0 @@
--p param1:string -t "hoist-filter,hoist-filter,hoist-filter,hoist-filter,elim-groupby-filter,push-orderby,precompute-filter-bv(\"black\",\"blue\",\"brown\",\"green\",\"grey\",\"navy\",\"orange\",\"pink\",\"purple\",\"red\",\"white\",\"yellow\"):0,row-store:13"

@@ -1,1 +1,0 @@
--p param1:date -t elim-groupby-filter,push-orderby,split-filter:0,split-filter:0,merge-filter:2,elim-cmp-filter,push-select,row-store:6,project,project

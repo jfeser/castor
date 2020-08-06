@@ -1,1 +1,0 @@
--p param1:int -t hoist-filter:0,hoist-filter:0,hoist-filter:0,hoist-filter:0,split-filter:0,hoist-filter:0,merge-filter:0,row-store:6,split-filter:0,elim-eq-filter:1,row-store:11,project
