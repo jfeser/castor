@@ -154,4 +154,46 @@ module Make (Config : Config.S) = struct
       end
     in
     visitor#visit_t () r
+
+  (** Visitor for extracting subqueries from a query, leaving behind names so
+     that the subqueries can later be bound to the names.
+
+      can_hoist should be overwritten to determine whether the subquery can be
+     removed *)
+  class virtual extract_subquery_visitor =
+    object (self : 'self)
+      inherit [_] Visitors.mapreduce
+
+      inherit [_] Util.list_monoid
+
+      method virtual can_hoist : Ast.t -> bool
+
+      method virtual fresh_name : unit -> Name.t
+
+      method! visit_AList () l =
+        let rv, ret = self#visit_t () l.l_values in
+        (AList { l with l_values = rv }, ret)
+
+      method! visit_AHashIdx () h =
+        let hi_values, ret = self#visit_t () h.hi_values in
+        (AHashIdx { h with hi_values }, ret)
+
+      method! visit_AOrderedIdx () o =
+        let rv, ret = self#visit_t () o.oi_values in
+        (AOrderedIdx { o with oi_values = rv }, ret)
+
+      method! visit_AScalar () x = (AScalar x, [])
+
+      method! visit_Exists () r =
+        if self#can_hoist r then
+          let name = self#fresh_name () in
+          (Name name, [ (name, Ast.Exists r) ])
+        else (Exists r, [])
+
+      method! visit_First () r =
+        if self#can_hoist r then
+          let name = self#fresh_name () in
+          (Name name, [ (name, First r) ])
+        else (First r, [])
+    end
 end

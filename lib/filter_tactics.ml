@@ -168,6 +168,24 @@ module Make (C : Config.S) = struct
 
   let split_filter = of_func split_filter ~name:"split-filter"
 
+  let split_filter_params r =
+    match r.node with
+    | Filter (p, r) ->
+        let has_params, no_params =
+          Pred.conjuncts p
+          |> List.partition_tf ~f:(fun p ->
+                 Set.inter (Free.pred_free p) params |> Set.is_empty |> not)
+        in
+        if List.is_empty has_params || List.is_empty no_params then None
+        else
+          Some
+            ( A.filter (Pred.conjoin has_params)
+            @@ A.filter (Pred.conjoin no_params) r )
+    | _ -> None
+
+  let split_filter_params =
+    of_func split_filter_params ~name:"split-filter-params"
+
   let rec first_ok = function
     | Ok x :: _ -> Some x
     | _ :: xs -> first_ok xs
@@ -942,6 +960,9 @@ module Make (C : Config.S) = struct
             r)
          [ Name n_subst ]
 
+  (** Hoist subqueries out of the filter predicate and make them available by a
+     depjoin. Allows expensive subqueries to be computed once instead of many
+     times. *)
   let elim_subquery p r =
     let open Option.Let_syntax in
     let stage = Is_serializable.stage ~params r in
@@ -951,50 +972,23 @@ module Make (C : Config.S) = struct
              Set.mem params n
              || match stage n with `Compile -> true | _ -> false)
     in
-
     let scope = fresh_name "s%d" in
     let visitor =
       object (self : 'self)
-        inherit [_] V.mapreduce
+        inherit Tactics_util.extract_subquery_visitor
 
-        inherit [_] Util.list_monoid
+        method can_hoist = can_hoist
 
-        method! visit_AList () l =
-          let rv, ret = self#visit_t () l.l_values in
-          (AList { l with l_values = rv }, ret)
-
-        method! visit_AHashIdx () h =
-          let hi_values, ret = self#visit_t () h.hi_values in
-          (AHashIdx { h with hi_values }, ret)
-
-        method! visit_AOrderedIdx () o =
-          let rv, ret = self#visit_t () o.oi_values in
-          (AOrderedIdx { o with oi_values = rv }, ret)
-
-        method! visit_AScalar () x = (AScalar x, [])
-
-        method! visit_Exists () r =
-          if can_hoist r then
-            let qname = fresh_name "q%d" in
-            ( Name (Name.create ~scope qname),
-              [
-                A.select [ As_pred (Exists r, qname) ]
-                @@ A.scalar (As_pred (Int 0, "dummy"));
-              ] )
-          else (Exists r, [])
-
-        method! visit_First () r =
-          if can_hoist r then
-            let qname = fresh_name "q%d" in
-            ( Name (Name.create ~scope qname),
-              [
-                A.select [ As_pred (First r, qname) ]
-                @@ A.scalar (As_pred (Int 0, "dummy"));
-              ] )
-          else (First r, [])
+        method fresh_name () =
+          Name.create ~scope @@ Fresh.name Global.fresh "q%d"
       end
     in
     let rhs, subqueries = visitor#visit_t () @@ Path.get_exn p r in
+    let subqueries =
+      List.map subqueries ~f:(fun (n, p) ->
+          A.select [ As_pred (p, Name.name n) ]
+          @@ A.scalar (As_pred (Int 0, "dummy")))
+    in
     let%map lhs =
       match subqueries with
       | [] -> None
@@ -1056,6 +1050,61 @@ module Make (C : Config.S) = struct
     in
     of_func ~name:"precompute-filter-bv" @@ fun r ->
     try run_exn r with Failed _ -> None
+
+  (** Given a restricted parameter range, precompute a filter that depends on a
+     single table field. If the parameter is outside the range, then run the
+     original filter. Otherwise, check the precomputed evidence. *)
+  let precompute_filter field values =
+    let open A in
+    let field, values =
+      (A.name_of_string_exn field, List.map values ~f:Pred.of_string_exn)
+    in
+    let exception Failed of Error.t in
+    let run_exn r =
+      match r.node with
+      | Filter (p, r') ->
+          let schema = Schema.schema r' in
+          let free_vars =
+            Set.diff (Free.pred_free p) (Set.of_list (module Name) schema)
+            |> Set.to_list
+          in
+          let free_var =
+            match free_vars with
+            | [ v ] -> v
+            | _ ->
+                let err =
+                  Error.of_string
+                    "Unexpected number of free variables in predicate."
+                in
+                raise (Failed err)
+          in
+          let encoder =
+            List.foldi values ~init:(Int 0) ~f:(fun i else_ v ->
+                let witness =
+                  Pred.subst (Map.singleton (module Name) free_var v) p
+                in
+                If (witness, Int (i + 1), else_))
+          in
+          let decoder =
+            List.foldi values ~init:(Int 0) ~f:(fun i else_ v ->
+                If (Binop (Eq, Name free_var, v), Int (i + 1), else_))
+          in
+          let fresh_name = Fresh.name Global.fresh "p%d_" ^ Name.name field in
+          let select_list =
+            As_pred (encoder, fresh_name)
+            :: List.map schema ~f:(fun n -> Name n)
+          in
+          Option.return
+          @@ filter
+               (If
+                  ( Binop (Eq, decoder, Int 0),
+                    p,
+                    Binop (Eq, decoder, Name (Name.create fresh_name)) ))
+          @@ select select_list r'
+      | _ -> None
+    in
+    let f r = try run_exn r with Failed _ -> None in
+    of_func ~name:"precompute-filter" f
 
   (* let precompute_filter n =
    *   let exception Failed of Error.t in

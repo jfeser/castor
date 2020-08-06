@@ -70,6 +70,44 @@ module Make (C : Config.S) = struct
 
   let elim_groupby = of_func elim_groupby ~name:"elim-groupby"
 
+  (** Eliminate a group by operator without representing duplicate key values. *)
+  let elim_groupby_flat r =
+    match r.node with
+    | GroupBy (ps, key, r) -> (
+        let key_name = Fresh.name Global.fresh "k%d" in
+        let key_preds = List.map key ~f:P.name in
+        let filter_pred =
+          List.map key ~f:(fun n ->
+              Pred.Infix.(name n = name (Name.copy n ~scope:(Some key_name))))
+          |> Pred.conjoin
+        in
+        let keys = A.dedup (A.select key_preds r) in
+        (* Try to remove any remaining parameters from the keys relation. *)
+        match over_approx C.params keys with
+        | Ok keys ->
+            let scalars, rest =
+              let schema = Schema.schema r in
+              List.partition_tf ps ~f:(fun p ->
+                  match Pred.to_name p with
+                  | Some n -> List.mem schema n ~equal:[%compare.equal: Name.t]
+                  | None -> false)
+            in
+            let scalars =
+              List.map scalars ~f:(fun p ->
+                  A.scalar @@ Pred.scoped key key_name p)
+            in
+            Option.return @@ A.list keys key_name
+            @@ A.tuple
+                 (scalars @ [ A.select rest (A.filter filter_pred r) ])
+                 Cross
+        | Error err ->
+            Logs.info ~src (fun m -> m "elim-groupby: %a" Error.pp err);
+            None )
+    (* Otherwise, if some keys are computed, fail. *)
+    | _ -> None
+
+  let elim_groupby_flat = of_func elim_groupby_flat ~name:"elim-groupby-flat"
+
   let elim_groupby_approx r =
     match r.node with
     | GroupBy (ps, key, r) -> (

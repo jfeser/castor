@@ -9,11 +9,15 @@ module V = Visitors
 module Config = struct
   module type S = sig
     include Ops.Config.S
+
+    include Tactics_util.Config.S
   end
 end
 
 module Make (C : Config.S) = struct
   open Ops.Make (C)
+
+  open Tactics_util.Make (C)
 
   let to_select r = match r.node with Select (p, r) -> Some (p, r) | _ -> None
 
@@ -162,4 +166,68 @@ module Make (C : Config.S) = struct
                (select inner_preds rv)))
 
   let push_select = of_func push_select ~name:"push-select"
+
+  let push_subqueries r =
+    let open Option.Let_syntax in
+    let%bind ps, r = to_select r in
+    let visitor =
+      object (self : 'self)
+        inherit extract_subquery_visitor
+
+        method can_hoist _ = true
+
+        method fresh_name () = Name.create @@ Fresh.name Global.fresh "q%d"
+      end
+    in
+    let ps, subqueries = List.map ps ~f:(visitor#visit_pred ()) |> List.unzip in
+    let subqueries =
+      List.concat subqueries
+      |> List.map ~f:(fun (n, p) -> As_pred (p, Name.name n))
+    in
+    return @@ A.select ps
+    @@ A.select ((Schema.schema r |> Schema.to_select_list) @ subqueries) r
+
+  let push_subqueries = of_func push_subqueries ~name:"push-subqueries"
+
+  let split_pred_left r =
+    let open Option.Let_syntax in
+    let%bind ps, r = to_select r in
+    let name = Name.fresh "x%d" in
+    match ps with
+    | [ Binop (op, p, p') ] ->
+        return
+        @@ A.select [ Binop (op, Name name, p') ]
+        @@ A.select [ As_pred (p, Name.name name) ]
+        @@ r
+    | [ As_pred (Binop (op, p, p'), n) ] ->
+        return
+        @@ A.select [ As_pred (Binop (op, Name name, p'), n) ]
+        @@ A.select [ As_pred (p, Name.name name) ]
+        @@ r
+    | _ -> None
+
+  let split_pred_left = of_func split_pred_left ~name:"split-pred-left"
+
+  let hoist_param =
+    let open A in
+    let f r =
+      match r.node with
+      | Select
+          ( [
+              As_pred
+                ( First
+                    {
+                      node = Select ([ As_pred (Binop (op, p1, p2), _) ], r');
+                      _;
+                    },
+                  n );
+            ],
+            r ) ->
+          let fresh_id = Fresh.name Global.fresh "const%d" in
+          Option.return
+          @@ select [ As_pred (Binop (op, Name (Name.create fresh_id), p2), n) ]
+          @@ select [ As_pred (First (select [ p1 ] r'), fresh_id) ] r
+      | _ -> None
+    in
+    of_func ~name:"hoist-param" f
 end

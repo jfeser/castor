@@ -15,6 +15,8 @@ module C = struct
 
   let conn = Lazy.force test_db_conn
 
+  let cost_conn = conn
+
   let simplify = None
 end
 

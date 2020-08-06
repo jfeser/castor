@@ -311,7 +311,8 @@ join(((n1_name = k0.n1_name) &&
 |}
   in
   apply transform Path.root r |> Option.iter ~f:(Fmt.pr "%a" A.pp);
-  [%expect {|
+  [%expect
+    {|
     filter((true &&
            ((to_year(l_shipdate) = k0.l_year) &&
            ((n2_name = k0.n2_name) && (n1_name = k0.n1_name)))),
@@ -407,3 +408,41 @@ join(((n1_name = k0.n1_name) &&
                         ascalar(s1.s_acctbal), ascalar(s1.s_comment)],
                   cross))),
             s2.n1_nationkey)))) |}]
+
+(* let%expect_test "" =
+ *   Logs.Src.set_level Join_opt.src (Some Info);
+ *   let r =
+ *     Abslayout_load.load_string_exn
+ *       (Lazy.force Test_util.tpch_conn)
+ *       {|
+ * join((((p_partkey = l_partkey))),
+ *   join((s_suppkey = l_suppkey),
+ *     join((l_orderkey = o_orderkey),
+ *       join((o_custkey = c_custkey),
+ *         join((c_nationkey = n1_nationkey),
+ *           join((n1_regionkey = r_regionkey),
+ *             select([n_regionkey as n1_regionkey, n_nationkey as n1_nationkey], nation),
+ *             filter(true, region)),
+ *           customer),
+ *         filter(((o_orderdate >= date("1995-01-01")) && (o_orderdate <= date("1996-12-31"))), orders)),
+ *       lineitem),
+ *     join((s_nationkey = n2_nationkey), select([n_nationkey as n2_nationkey, n_name as n2_name], nation), supplier)),
+ *   part)
+ * |}
+ *   in
+ *   apply transform Path.root r |> Option.iter ~f:(Fmt.pr "%a" A.pp) *)
+
+let%expect_test "" =
+  Logs.Src.set_level Join_opt.src (Some Info);
+  let r =
+    Abslayout_load.load_string_exn
+      (Lazy.force Test_util.tpch_conn)
+      {|
+        join((c_nationkey = n1_nationkey),
+          join((n1_regionkey = r_regionkey),
+            select([n_regionkey as n1_regionkey, n_nationkey as n1_nationkey], nation),
+            filter(true, region)),
+          customer)
+|}
+  in
+  apply transform Path.root r |> Option.iter ~f:(Fmt.pr "%a" A.pp)

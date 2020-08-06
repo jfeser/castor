@@ -46,6 +46,7 @@ let main ~name ~params ~ch =
         at_ push_select Path.(all >>? is_select >>| shallowest);
         at_ row_store Path.(all >>? is_filter >>| shallowest);
         T.project;
+        T.Simplify_tactic.simplify;
       ]
   in
 
@@ -69,24 +70,29 @@ let main ~name ~params ~ch =
         at_ push_orderby Path.(all >>? is_orderby >>| shallowest);
         T.Simplify_tactic.simplify;
         at_ push_filter Path.(all >>? is_filter >>| shallowest);
-        (* at_
-         *   ( precompute_filter_bv
-         *   @@ List.map ~f:(sprintf "\"%s\"")
-         *        [
-         *          "black";
-         *          "blue";
-         *          "brown";
-         *          "green";
-         *          "grey";
-         *          "navy";
-         *          "orange";
-         *          "pink";
-         *          "purple";
-         *          "red";
-         *          "white";
-         *          "yellow";
-         *        ] )
-         *   Path.(all >>? is_param_filter >>| shallowest); *)
+        at_
+          (split_out
+             ( Path.(
+                 all >>? is_relation
+                 >>? matches (function
+                       | Relation r -> String.(r.r_name = "supplier")
+                       | _ -> false)
+                 >>| deepest)
+             >>= parent )
+             "s1_suppkey")
+          Path.(all >>? is_filter >>| shallowest);
+        at_ split_filter Path.(all >>? is_filter >>| shallowest);
+        at_ hoist_filter Path.(all >>? is_filter >>| shallowest);
+        at_ split_filter Path.(all >>? is_filter >>| shallowest);
+        at_ split_filter Path.(all >>? is_filter >>| shallowest);
+        at_
+          ( precompute_filter "p_type"
+          @@ List.map ~f:(sprintf "\"%s\"")
+               [ "TIN"; "COPPER"; "NICKEL"; "BRASS"; "STEEL" ] )
+          (Path.(all >>? is_param_filter >>| shallowest) >>= child' 0);
+        at_ row_store (Path.(all >>? is_param_filter >>| deepest) >>= child' 0);
+        T.project;
+        T.Simplify_tactic.simplify;
       ]
   in
 
@@ -115,6 +121,7 @@ let main ~name ~params ~ch =
           Infix.(
             Path.(all >>? is_filter >>? not is_param_filter >>| shallowest));
         T.project;
+        T.Simplify_tactic.simplify;
       ]
   in
 
@@ -131,6 +138,7 @@ let main ~name ~params ~ch =
         at_ push_select Path.(all >>? is_select >>| shallowest);
         at_ row_store Path.(all >>? is_filter >>| shallowest);
         T.project;
+        T.Simplify_tactic.simplify;
       ]
   in
 
@@ -155,6 +163,7 @@ let main ~name ~params ~ch =
         at_ push_select Path.(all >>? is_select >>? is_run_time >>| deepest);
         at_ row_store Path.(all >>? is_filter >>? is_run_time >>| shallowest);
         T.project;
+        T.Simplify_tactic.simplify;
       ]
   in
 
@@ -182,6 +191,7 @@ let main ~name ~params ~ch =
         push_no_param_filter;
         at_ row_store Path.(all >>? is_filter >>| deepest);
         fix T.project;
+        T.Simplify_tactic.simplify;
       ]
   in
 
@@ -195,6 +205,8 @@ let main ~name ~params ~ch =
           (partition_domain "param1" "nation.n_name")
           Path.(all >>? is_collection >>| shallowest);
         at_ row_store Path.(all >>? is_orderby >>| shallowest);
+        T.project;
+        T.Simplify_tactic.simplify;
       ]
   in
 
@@ -214,6 +226,7 @@ let main ~name ~params ~ch =
         at_ hoist_join_param_filter Path.(all >>? is_join >>| shallowest);
         at_ row_store Path.(all >>? is_join >>| shallowest);
         T.project;
+        T.Simplify_tactic.simplify;
       ]
   in
 
@@ -251,16 +264,26 @@ let main ~name ~params ~ch =
         at_ row_store
           (Path.(all >>? is_param_filter >>| shallowest) >>= child' 0);
         T.project;
+        T.Simplify_tactic.simplify;
       ]
   in
 
   let xform_10 =
     seq_many
       [
-        at_ elim_groupby Path.(all >>? is_groupby >>| shallowest);
-        at_ elim_join_nest Path.(all >>? is_join >>? is_run_time >>| shallowest);
-        fix @@ at_ push_filter Path.(all >>? is_filter >>| shallowest);
-        (* at_ hoist_filter Path.(all >>? is_param_filter >>| deepest); *)
+        at_ elim_groupby_flat Path.(all >>? is_groupby >>| shallowest);
+        fix
+        @@ at_ hoist_filter
+             (Path.(all >>? is_param_filter >>| shallowest) >>= parent);
+        at_ split_filter Path.(all >>? is_param_filter >>| shallowest);
+        at_ split_filter Path.(all >>? is_param_filter >>| shallowest);
+        at_ hoist_filter
+          (Path.(all >>? is_param_filter >>| shallowest) >>= parent);
+        at_ split_filter Path.(all >>? is_param_filter >>| shallowest);
+        at_ row_store
+          (Path.(all >>? is_param_filter >>| shallowest) >>= child' 0);
+        T.project;
+        T.Simplify_tactic.simplify;
       ]
   in
 
@@ -273,6 +296,11 @@ let main ~name ~params ~ch =
         at_ elim_groupby Path.(all >>? is_groupby >>| shallowest);
         at_ elim_subquery Path.(all >>? is_filter >>| shallowest);
         at_ row_store (Path.(all >>? is_list >>| shallowest) >>= child' 1);
+        at_ hoist_param (Path.(all >>? is_depjoin >>| shallowest) >>= child' 0);
+        at_ row_store
+          (Path.(all >>? is_depjoin >>| shallowest) >>= child' 0 >>= child' 0);
+        T.project;
+        T.Simplify_tactic.simplify;
       ]
   in
 
@@ -309,6 +337,7 @@ let main ~name ~params ~ch =
           Infix.(
             Path.(all >>? is_filter >>? not is_param_filter >>| shallowest));
         T.project;
+        T.Simplify_tactic.simplify;
       ]
   in
 
@@ -323,6 +352,7 @@ let main ~name ~params ~ch =
         T.Select_tactics.push_select;
         at_ row_store Path.(all >>? is_filter >>| shallowest);
         T.project;
+        T.Simplify_tactic.simplify;
       ]
   in
 
@@ -333,6 +363,7 @@ let main ~name ~params ~ch =
           (partition_domain "param1" "lineitem.l_shipdate")
           Path.(all >>? is_orderby >>| shallowest);
         at_ row_store Path.(all >>? is_orderby >>| shallowest);
+        T.project;
         T.Simplify_tactic.simplify;
       ]
   in
@@ -350,6 +381,8 @@ let main ~name ~params ~ch =
           Path.(all >>? is_groupby >>| shallowest)
         |> Branching.lower (fun s -> Seq.nth s 2);
         at_ row_store Path.(all >>? is_groupby >>| shallowest);
+        T.project;
+        T.Simplify_tactic.simplify;
       ]
   in
 
@@ -391,6 +424,7 @@ let main ~name ~params ~ch =
         T.project;
         at_ row_store Path.(all >>? is_orderby >>| shallowest);
         T.project;
+        T.Simplify_tactic.simplify;
       ]
   in
 
@@ -399,6 +433,18 @@ let main ~name ~params ~ch =
       [
         at_ hoist_join_param_filter Path.(all >>? is_join >>| shallowest);
         at_ elim_disjunct Path.(all >>? is_filter >>| shallowest);
+        fix
+        @@ at_ split_filter_params
+             ( Path.(all >>? above is_param_filter >>? is_join >>| deepest)
+             >>= parent );
+        fix
+        @@ at_ row_store
+             Infix.(
+               Path.(
+                 all >>? is_filter >>? not is_param_filter >>? is_run_time
+                 >>| shallowest));
+        T.project;
+        T.Simplify_tactic.simplify;
       ]
   in
 
@@ -406,19 +452,19 @@ let main ~name ~params ~ch =
     match name with
     | "1" -> xform_1
     | "2" -> xform_2
-    | "3" -> xform_3
+    | "3-no" -> xform_3
     | "4" -> xform_4
-    | "5" -> xform_5
+    | "5-no" -> xform_5
     | "6" -> xform_6
     | "7" -> xform_7
     | "8" -> xform_8
     | "9" -> xform_9
-    | "10" -> xform_10
-    | "11" -> xform_11
+    | "10-no" -> xform_10
+    | "11-no" -> xform_11
     | "12" -> xform_12
     | "14" -> xform_14
     | "15" -> xform_15
-    | "16" -> xform_16
+    | "16-no" -> xform_16
     | "17" -> xform_17
     | "18" -> xform_18
     | "19" -> xform_19
