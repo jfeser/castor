@@ -12,7 +12,9 @@ let hash_idx h =
     List.map2_exn rk_schema h.hi_lookup ~f:(fun p1 p2 ->
         Binop (Eq, Name p1, Pred.strip_meta p2))
     |> Pred.conjoin
-  and slist = rk_schema @ rv_schema |> List.map ~f:(fun n -> Name n) in
+  and slist =
+    rk_schema @ rv_schema |> List.stable_dedup |> List.map ~f:(fun n -> Name n)
+  in
   {
     d_lhs = strip_meta h.hi_keys;
     d_alias = h.hi_scope;
