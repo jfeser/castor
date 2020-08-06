@@ -270,3 +270,7 @@ let is_tuple r p = match (get_exn p r).node with ATuple _ -> true | _ -> false
 
 let is_depjoin r p =
   match (get_exn p r).node with DepJoin _ -> true | _ -> false
+
+let has_child f r p =
+  List.range 0 10
+  |> List.exists ~f:(fun i -> try f r (child p i) with _ -> false)

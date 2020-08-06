@@ -61,3 +61,5 @@ val is_list : 'a annot -> t -> bool
 val is_tuple : 'a annot -> t -> bool
 
 val is_depjoin : 'a annot -> t -> bool
+
+val has_child : ('a annot -> t -> bool) -> 'a annot -> t -> bool

@@ -78,6 +78,10 @@ end
 
 include T
 
+module Branching = struct
+  type t = { b_f : Path.t -> Ast.t -> Ast.t Seq.t; b_name : string }
+end
+
 module Make (C : Config.S) = struct
   open C
   include T
@@ -151,6 +155,8 @@ module Make (C : Config.S) = struct
     Path.(is_hash_idx r p || is_ordered_idx r p || is_list r p || is_tuple r p)
 
   let child i _ = Some (Path.child Path.root i)
+
+  let child' i _ p = Some (Path.child p i)
 
   let parent _ p = Path.parent p
 
@@ -271,7 +277,7 @@ module Make (C : Config.S) = struct
   let of_func ?name f = of_func_pre ?name ~pre:Fun.id f
 
   module Branching = struct
-    type t = { b_f : Path.t -> Ast.t -> Ast.t Seq.t; b_name : string }
+    include Branching
 
     let lift tf =
       {
