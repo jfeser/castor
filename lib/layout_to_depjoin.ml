@@ -5,6 +5,11 @@ module S = Schema
 
 let list l = { d_lhs = l.l_keys; d_alias = l.l_scope; d_rhs = l.l_values }
 
+let dedup_names =
+  List.stable_dedup_staged ~compare:(fun n n' ->
+      [%compare: String.t] (Name.name n) (Name.name n'))
+  |> Staged.unstage
+
 let hash_idx h =
   let rk_schema = S.schema h.hi_keys |> S.scoped h.hi_scope
   and rv_schema = S.schema h.hi_values in
@@ -13,7 +18,7 @@ let hash_idx h =
         Binop (Eq, Name p1, Pred.strip_meta p2))
     |> Pred.conjoin
   and slist =
-    rk_schema @ rv_schema |> List.stable_dedup |> List.map ~f:(fun n -> Name n)
+    rk_schema @ rv_schema |> dedup_names |> List.map ~f:(fun n -> Name n)
   in
   {
     d_lhs = strip_meta h.hi_keys;
@@ -45,7 +50,9 @@ let ordered_idx { oi_keys = rk; oi_values = rv; oi_scope = scope; oi_lookup; _ }
            in
            p1 @ p2)
     |> Pred.conjoin
-  and slist = rk_schema @ rv_schema |> List.map ~f:(fun n -> Name n) in
+  and slist =
+    rk_schema @ rv_schema |> dedup_names |> List.map ~f:(fun n -> Name n)
+  in
   { d_lhs = rk; d_alias = scope; d_rhs = select slist (filter key_pred rv) }
 
 let cross_tuple ts =
