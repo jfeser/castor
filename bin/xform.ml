@@ -81,6 +81,7 @@ let main ~name ~params ~ch =
              >>= parent )
              "s1_suppkey")
           Path.(all >>? is_filter >>| shallowest);
+        fix T.project;
         at_ split_filter Path.(all >>? is_filter >>| shallowest);
         at_ hoist_filter Path.(all >>? is_filter >>| shallowest);
         at_ split_filter Path.(all >>? is_filter >>| shallowest);
@@ -91,6 +92,8 @@ let main ~name ~params ~ch =
                [ "TIN"; "COPPER"; "NICKEL"; "BRASS"; "STEEL" ] )
           (Path.(all >>? is_param_filter >>| shallowest) >>= child' 0);
         at_ row_store (Path.(all >>? is_param_filter >>| deepest) >>= child' 0);
+        at_ row_store
+          (Path.(all >>? is_hash_idx >>| deepest) >>= child' 1 >>= child' 0);
         T.project;
         T.Simplify_tactic.simplify;
       ]
@@ -393,9 +396,14 @@ let main ~name ~params ~ch =
           (Path.(all >>? is_param_filter >>| shallowest) >>= parent);
         at_ elim_eq_filter Path.(all >>? is_param_filter >>| shallowest);
         T.apply_to_subqueries
-          (at_
-             (partition_domain "p1_partkey" "part.p_partkey")
-             Path.(all >>? is_select >>| shallowest));
+          (seq_many
+             [
+               at_
+                 (partition_domain "p1_partkey" "part.p_partkey")
+                 Path.(all >>? is_select >>| shallowest);
+               at_ row_store
+                 Path.(all >>? is_select >>? is_run_time >>| deepest);
+             ]);
         at_ row_store Path.(all >>? is_filter >>| deepest);
         T.Simplify_tactic.simplify;
         T.project;
@@ -420,6 +428,7 @@ let main ~name ~params ~ch =
                  (Path.(all >>? is_param_filter >>| shallowest) >>= child' 0);
                at_ row_store
                  (Path.(all >>? is_collection >>| shallowest) >>= child' 1);
+               T.Simplify_tactic.simplify;
              ]);
         T.project;
         at_ row_store Path.(all >>? is_orderby >>| shallowest);

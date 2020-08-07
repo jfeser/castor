@@ -393,47 +393,47 @@ orderby([nation, o_year desc],
   in
   Option.iter (partition_on r param1) ~f:(Fmt.pr "%a" pp)
 
-let%expect_test "elim-filter-simple" =
-  let module C = struct
-    let params =
-      Set.of_list
-        (module Name)
-        [ Name.create ~type_:Prim_type.string_t "param1" ]
-
-    let conn = Lazy.force tpch_conn
-
-    let cost_conn = Lazy.force tpch_conn
-  end in
-  let open Filter_tactics.Make (C) in
-  let r =
-    load_string_exn (Lazy.force tpch_conn) ~params:C.params
-      {|
-filter((strpos(p_name, param1) > 0),
-            join((s_suppkey = l_suppkey),
-              join(((ps_suppkey = l_suppkey) && (ps_partkey = l_partkey)),
-                join((p_partkey = l_partkey), part, join((o_orderkey = l_orderkey), orders, lineitem)),
-                partsupp),
-              join((s_nationkey = n_nationkey), supplier, nation)))      
-    |}
-  in
-  apply elim_simple_filter Path.root r |> Option.iter ~f:(Fmt.pr "%a" pp);
-  [%expect {|
-    alist(dedup(
-            select([p_name],
-              join((s_suppkey = l_suppkey),
-                join(((ps_suppkey = l_suppkey) && (ps_partkey = l_partkey)),
-                  join((p_partkey = l_partkey),
-                    part,
-                    join((o_orderkey = l_orderkey), orders, lineitem)),
-                  partsupp),
-                join((s_nationkey = n_nationkey), supplier, nation)))) as s0,
-      atuple([filter((strpos(p_name, param1) > 0), ascalar(s0.p_name)),
-              filter((p_name = s0.p_name),
-                join((s_suppkey = l_suppkey),
-                  join(((ps_suppkey = l_suppkey) && (ps_partkey = l_partkey)),
-                    join((p_partkey = l_partkey),
-                      part,
-                      join((o_orderkey = l_orderkey), orders, lineitem)),
-                    partsupp),
-                  join((s_nationkey = n_nationkey), supplier, nation)))],
-        cross)) |}]
+(* let%expect_test "elim-filter-simple" =
+ *   let module C = struct
+ *     let params =
+ *       Set.of_list
+ *         (module Name)
+ *         [ Name.create ~type_:Prim_type.string_t "param1" ]
+ * 
+ *     let conn = Lazy.force tpch_conn
+ * 
+ *     let cost_conn = Lazy.force tpch_conn
+ *   end in
+ *   let open Filter_tactics.Make (C) in
+ *   let r =
+ *     load_string_exn (Lazy.force tpch_conn) ~params:C.params
+ *       {|
+ * filter((strpos(p_name, param1) > 0),
+ *             join((s_suppkey = l_suppkey),
+ *               join(((ps_suppkey = l_suppkey) && (ps_partkey = l_partkey)),
+ *                 join((p_partkey = l_partkey), part, join((o_orderkey = l_orderkey), orders, lineitem)),
+ *                 partsupp),
+ *               join((s_nationkey = n_nationkey), supplier, nation)))      
+ *     |}
+ *   in
+ *   apply elim_simple_filter Path.root r |> Option.iter ~f:(Fmt.pr "%a" pp);
+ *   [%expect {|
+ *     alist(dedup(
+ *             select([p_name],
+ *               join((s_suppkey = l_suppkey),
+ *                 join(((ps_suppkey = l_suppkey) && (ps_partkey = l_partkey)),
+ *                   join((p_partkey = l_partkey),
+ *                     part,
+ *                     join((o_orderkey = l_orderkey), orders, lineitem)),
+ *                   partsupp),
+ *                 join((s_nationkey = n_nationkey), supplier, nation)))) as s0,
+ *       atuple([filter((strpos(p_name, param1) > 0), ascalar(s0.p_name)),
+ *               filter((p_name = s0.p_name),
+ *                 join((s_suppkey = l_suppkey),
+ *                   join(((ps_suppkey = l_suppkey) && (ps_partkey = l_partkey)),
+ *                     join((p_partkey = l_partkey),
+ *                       part,
+ *                       join((o_orderkey = l_orderkey), orders, lineitem)),
+ *                     partsupp),
+ *                   join((s_nationkey = n_nationkey), supplier, nation)))],
+ *         cross)) |}] *)

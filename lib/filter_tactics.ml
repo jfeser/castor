@@ -936,28 +936,29 @@ module Make (C : Config.S) = struct
     let n_subst, n_domain =
       (name_of_string_exn n_subst, name_of_string_exn n_domain)
     in
-    let fresh_name =
-      Caml.Format.sprintf "%s_%s" (Name.to_var n_subst)
-        (Fresh.name Global.fresh "%d")
-    in
     let rel = Name.rel_exn n_domain in
     let lhs =
-      dedup
-        (select
-           [ As_pred (Name (Name.unscoped n_domain), fresh_name) ]
-           (db_relation rel))
+      dedup (select [ Name (Name.unscoped n_domain) ] (db_relation rel))
     in
     let scope = Fresh.name Global.fresh "s%d" in
     of_func ~name:"partition-domain" @@ fun r ->
+    let inner_select =
+      let lhs_schema = Schema.schema lhs in
+      Schema.schema r
+      |> List.filter ~f:(fun n ->
+             not (List.mem lhs_schema ~equal:[%compare.equal: Name.t] n))
+      |> Schema.to_select_list
+    in
     Option.return
     @@ A.select Schema.(schema r |> to_select_list)
     @@ hash_idx lhs scope
-         (subst
-            (Map.singleton
-               (module Name)
-               n_subst
-               (Name (Name.create ~scope fresh_name)))
-            r)
+         (select inner_select
+            (subst
+               (Map.singleton
+                  (module Name)
+                  n_subst
+                  (Name (Name.scoped scope n_domain)))
+               r))
          [ Name n_subst ]
 
   (** Hoist subqueries out of the filter predicate and make them available by a
