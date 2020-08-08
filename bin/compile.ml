@@ -3,8 +3,10 @@ open Castor
 open Collections
 open Abslayout_load
 
-let main ~debug ~gprof ~params ~code_only ~query ?out_dir fn =
+let main ~debug ~gprof ~params ~code_only ~query ~enable_redshift_dates ?out_dir
+    fn =
   let open Result.Let_syntax in
+  Global.enable_redshift_dates := enable_redshift_dates;
   Logs.info (fun m ->
       m "%s" (Sys.get_argv () |> Array.to_list |> String.concat ~sep:" "));
   let module Config = struct
@@ -65,6 +67,8 @@ let () =
       and () = Db.param
       and debug = flag "debug" ~aliases:[ "g" ] no_arg ~doc:"enable debug mode"
       and gprof = flag "prof" ~aliases:[ "pg" ] no_arg ~doc:"enable profiling"
+      and enable_redshift_dates =
+        flag "enable-redshift-dates" no_arg ~doc:"enable redshift date syntax"
       and out_dir =
         flag "output" ~aliases:[ "o" ] (optional string)
           ~doc:"DIR directory to write compiler output in"
@@ -75,5 +79,7 @@ let () =
       and query =
         flag "query" ~aliases:[ "r" ] no_arg ~doc:"parse input as a query"
       and fn = anon (maybe ("query" %: string)) in
-      fun () -> main ~debug ~gprof ~params ~code_only ~query ?out_dir fn]
+      fun () ->
+        main ~debug ~gprof ~params ~code_only ~query ~enable_redshift_dates
+          ?out_dir fn]
   |> Command.run

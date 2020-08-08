@@ -3,3 +3,5 @@ let fresh = Fresh.create ()
 let llvm_root () = Sys.getenv_exn "LLVM_ROOT"
 
 let build_root () = Sys.getenv_exn "CASTOR_ROOT"
+
+let enable_redshift_dates = ref false

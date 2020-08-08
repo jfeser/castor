@@ -312,6 +312,8 @@ let rec pred_to_sql p =
       | ExtractY -> sprintf "cast(date_part('year', %s) as integer)" s
       | ExtractM -> sprintf "cast(date_part('month', %s) as integer)" s
       | ExtractD -> sprintf "cast(date_part('day', %s) as integer)" s )
+  | Binop (Add, p, Unop (Month, p')) when !Global.enable_redshift_dates ->
+      sprintf "dateadd(month, %s, %s)" (p2s p') (p2s p)
   | Binop (op, p1, p2) -> (
       let s1 = sprintf "(%s)" (p2s p1) in
       let s2 = sprintf "(%s)" (p2s p2) in
