@@ -1000,6 +1000,47 @@ module Make (C : Config.S) = struct
 
   let elim_subquery = global elim_subquery "elim-subquery"
 
+  (** Hoist subqueries out of the filter predicate and make them available by a
+     join. *)
+  let elim_subquery_join p r =
+    let open Option.Let_syntax in
+    let stage = Is_serializable.stage ~params r in
+    let can_hoist r =
+      Free.free r
+      |> Set.for_all ~f:(fun n ->
+             Set.mem params n
+             || match stage n with `Compile -> true | _ -> false)
+    in
+    let visitor =
+      object (self : 'self)
+        inherit Tactics_util.extract_subquery_visitor
+
+        method can_hoist = can_hoist
+
+        method fresh_name () = Name.create @@ Fresh.name Global.fresh "q%d"
+      end
+    in
+
+    let%bind pred, r' = to_filter @@ Path.get_exn p r in
+    let pred', subqueries = visitor#visit_pred () pred in
+    let subqueries =
+      List.filter_map subqueries ~f:(function
+        | n, First r -> (
+            match Schema.schema r with
+            | [ n' ] -> return @@ A.select [ As_pred (Name n', Name.name n) ] r
+            | _ -> None )
+        | _ -> None)
+    in
+    let%map rhs =
+      match subqueries with
+      | [] -> None
+      | [ x ] -> Some x
+      | xs -> Some (A.tuple subqueries Cross)
+    in
+    Path.set_exn p r (A.join pred' r' rhs)
+
+  let elim_subquery_join = global elim_subquery_join "elim-subquery-join"
+
   let simplify r =
     let open Option.Let_syntax in
     match r.node with

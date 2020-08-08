@@ -84,6 +84,13 @@ module Make (C : Config.S) = struct
   let hoist_join_param_filter =
     of_func hoist_join_param_filter ~name:"hoist-join-param-filter"
 
+  let hoist_join_filter r =
+    let open Option.Let_syntax in
+    let%bind pred, r1, r2 = to_join r in
+    return @@ A.filter pred @@ A.join (Bool true) r1 r2
+
+  let hoist_join_filter = of_func hoist_join_filter ~name:"hoist-join-filter"
+
   let split_out path pk =
     let open A in
     let pk = A.name_of_string_exn pk in

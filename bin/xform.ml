@@ -366,6 +366,8 @@ let main ~name ~params ~ch =
           (partition_domain "param1" "lineitem.l_shipdate")
           Path.(all >>? is_orderby >>| shallowest);
         at_ row_store Path.(all >>? is_orderby >>| shallowest);
+        at_ hoist_join_filter Path.(all >>? is_join >>| shallowest);
+        at_ elim_subquery_join Path.(all >>? is_filter >>| shallowest);
         T.project;
         T.Simplify_tactic.simplify;
       ]
