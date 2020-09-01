@@ -31,7 +31,6 @@ let system_exn cmd =
            (Signal.to_string signal)
 
 let opt conn cost_conn params cost_timeout state query =
-  let open Option.Let_syntax in
   let module Config = struct
     let conn = conn
 
@@ -44,8 +43,16 @@ let opt conn cost_conn params cost_timeout state query =
     let random = state
   end in
   let module T = Transform.Make (Config) in
-  let%map query' = Transform.optimize (module Config) query in
-  (query', Or_error.is_ok @@ T.is_serializable query')
+  match Transform.optimize (module Config) query with
+  | First opt_query ->
+      if is_ok @@ T.is_serializable opt_query then Some opt_query
+      else (
+        Logs.warn (fun m -> m "Not serializable:@ %a" A.pp opt_query);
+        None )
+  | Second failed_subquery ->
+      Logs.warn (fun m ->
+          m "Optimization failed for subquery:@ %a" A.pp failed_subquery);
+      None
 
 let eval dir params query =
   let open Result.Let_syntax in
@@ -112,7 +119,7 @@ let main ~params ~cost_timeout ~timeout ~out_dir ~out_file ch =
   let cost state =
     Fresh.reset Global.fresh;
     match opt conn cost_conn params_set cost_timeout state query with
-    | Some (query', true) -> (
+    | Some query' -> (
         match eval (trial_dir out_dir) params query' with
         | Ok cost ->
             if Float.(cost < !best_cost) then (
@@ -122,12 +129,7 @@ let main ~params ~cost_timeout ~timeout ~out_dir ~out_file ch =
         | Error err ->
             Logs.warn (fun m -> m "Evaluation failed: %a" Error.pp err);
             Float.infinity )
-    | Some (query', false) ->
-        Logs.warn (fun m -> m "Not serializable:@ %a" A.pp query');
-        Float.infinity
-    | None ->
-        Logs.warn (fun m -> m "No candidate found.");
-        Float.infinity
+    | None -> Float.infinity
   in
 
   let cost = Memo.of_comparable (module Mcmc.Random_choice.C) cost in
