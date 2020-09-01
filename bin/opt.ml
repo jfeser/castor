@@ -132,7 +132,9 @@ let main ~params ~cost_timeout ~timeout ~out_dir ~out_file ch =
 
   let cost = Memo.of_comparable (module Mcmc.Random_choice.C) cost in
   let max_time = Option.map ~f:Time.Span.of_sec timeout in
-  Mcmc.run ?max_time cost |> ignore
+
+  try Mcmc.run ?max_time cost |> ignore
+  with Resolve.Resolve_error r -> Fmt.epr "%a@." (Resolve.pp_err Fmt.nop) r
 
 let () =
   let open Command.Let_syntax in
