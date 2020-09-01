@@ -480,8 +480,10 @@ module Make (C : Config.S) = struct
   let push_filter =
     (* NOTE: Simplify is necessary to make push-filter safe under fixpoints. *)
     seq'
-      (of_func_pre push_filter ~name:"push-filter"
-         ~pre:(Resolve.resolve_exn ~params))
+      (of_func_cond ~name:"push-filter"
+         ~pre:(fun r -> Some (Resolve.resolve_exn ~params r))
+         push_filter
+         ~post:(fun r -> Resolve.resolve ~params r |> Result.ok))
       simplify
 
   let elim_eq_filter_src =
