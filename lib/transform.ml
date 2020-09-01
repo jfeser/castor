@@ -363,49 +363,51 @@ module Make (Config : Config.S) = struct
   let is_serializable = is_serializable'
 end
 
-let optimize (module C : Config.S) r =
-  let open Option.Let_syntax in
+exception Optimize_failure of Ast.t
+
+let rec optimize_exn (module C : Config.S) r =
   (* Optimize outer query. *)
-  let%bind r =
-    let module T = Make (C) in
-    let module O = Ops.Make (C) in
-    O.apply T.(try_partition opt) Path.root r
+  let module T = Make (C) in
+  let module O = Ops.Make (C) in
+  let r =
+    match O.apply T.(try_partition opt) Path.root r with
+    | Some r -> r
+    | None -> raise (Optimize_failure r)
   in
-  (* Recursively optimize subqueries. *)
-  let exception Subquery_failed in
-  let apply_to_subqueries r =
-    let visitor =
-      object (self : 'a)
-        inherit [_] V.map
+  optimize_subqueries (module C : Config.S) r
 
-        method visit_subquery r =
-          let module C = struct
-            include C
+(* Recursively optimize subqueries. *)
+and optimize_subqueries (module C : Config.S) r =
+  let visitor =
+    object (self : 'a)
+      inherit [_] V.map
 
-            let params = Set.union params (Free.free r)
-          end in
-          let module O = Ops.Make (C) in
-          let module T = Make (C) in
-          match O.apply T.opt Path.root r with
-          | Some r' -> r'
-          | None -> raise Subquery_failed
+      method visit_subquery r =
+        let module C = struct
+          include C
 
-        method! visit_Exists () r = Exists (self#visit_subquery r)
+          let params = Set.union params (Free.free r)
+        end in
+        optimize_exn (module C) r
 
-        method! visit_First () r = First (self#visit_subquery r)
+      method! visit_Exists () r = Exists (self#visit_subquery r)
 
-        method! visit_AList () l =
-          AList { l with l_values = self#visit_t () l.l_values }
+      method! visit_First () r = First (self#visit_subquery r)
 
-        method! visit_AOrderedIdx () o =
-          AOrderedIdx { o with oi_values = self#visit_t () o.oi_values }
+      method! visit_AList () l =
+        AList { l with l_values = self#visit_t () l.l_values }
 
-        method! visit_AHashIdx () h =
-          AHashIdx { h with hi_values = self#visit_t () h.hi_values }
+      method! visit_AOrderedIdx () o =
+        AOrderedIdx { o with oi_values = self#visit_t () o.oi_values }
 
-        method! visit_AScalar () v = AScalar v
-      end
-    in
-    visitor#visit_t () r
+      method! visit_AHashIdx () h =
+        AHashIdx { h with hi_values = self#visit_t () h.hi_values }
+
+      method! visit_AScalar () v = AScalar v
+    end
   in
-  try Some (apply_to_subqueries r) with Subquery_failed -> None
+  visitor#visit_t () r
+
+let optimize (module C : Config.S) r =
+  try Either.First (optimize_exn (module C) r)
+  with Optimize_failure r' -> Second r'
