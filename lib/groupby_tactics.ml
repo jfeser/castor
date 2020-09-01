@@ -47,29 +47,6 @@ module Make (C : Config.S) = struct
       Or_error.error "Failed to remove all parameters." remains
         [%sexp_of: Set.M(Name).t]
 
-  let elim_groupby r =
-    match r.node with
-    | GroupBy (ps, key, r) -> (
-        let key_name = Fresh.name Global.fresh "k%d" in
-        let key_preds = List.map key ~f:P.name in
-        let filter_pred =
-          List.map key ~f:(fun n ->
-              Pred.Infix.(name n = name (Name.copy n ~scope:(Some key_name))))
-          |> Pred.conjoin
-        in
-        let keys = A.dedup (A.select key_preds r) in
-        (* Try to remove any remaining parameters from the keys relation. *)
-        match over_approx C.params keys with
-        | Ok keys ->
-            Some (A.list keys key_name (A.select ps (A.filter filter_pred r)))
-        | Error err ->
-            Logs.info ~src (fun m -> m "elim-groupby: %a" Error.pp err);
-            None )
-    (* Otherwise, if some keys are computed, fail. *)
-    | _ -> None
-
-  let elim_groupby = of_func elim_groupby ~name:"elim-groupby"
-
   (** Eliminate a group by operator without representing duplicate key values. *)
   let elim_groupby_flat r =
     match r.node with
@@ -130,6 +107,8 @@ module Make (C : Config.S) = struct
 
   let elim_groupby_approx =
     of_func elim_groupby_approx ~name:"elim-groupby-approx"
+
+  let elim_groupby = elim_groupby_approx
 
   let db_relation n = A.relation (Db.relation C.conn n)
 
