@@ -97,7 +97,7 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
     | First r -> fprintf fmt "(%a)" pp r
     | Exists r -> fprintf fmt "@[<hv 2>exists(%a)@]" pp r
     | Substring (p1, p2, p3) ->
-        fprintf fmt "@[<hov>substr(%a,@ %a,@ %a)@]" pp_pred p1 pp_pred p2
+        fprintf fmt "@[<hov>substring(%a,@ %a,@ %a)@]" pp_pred p1 pp_pred p2
           pp_pred p3
   and pp_order fmt (p, o) =
     match o with
