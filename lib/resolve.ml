@@ -4,18 +4,27 @@ module A = Abslayout
 module P = Pred.Infix
 module N = Name
 
-type error =
+type inner_error =
   [ `Ambiguous_names of Name.t list
   | `Ambiguous_stage of Name.t
   | `Unbound of Name.t * Name.t list ]
 [@@deriving sexp]
 
-let pp_err f fmt = function
+type error = [ `Resolve of Ast.t * inner_error ] [@@deriving sexp]
+
+let pp_inner_err fmt = function
   | `Ambiguous_names ns ->
       Fmt.pf fmt "Ambiguous names: %a" (Fmt.Dump.list Name.pp) ns
   | `Ambiguous_stage n -> Fmt.pf fmt "Ambiguous stage: %a" Name.pp n
   | `Unbound (n, _) -> Fmt.pf fmt "Unbound name: %a" Name.pp n
+
+let pp_err f fmt = function
+  | `Resolve (r, err) ->
+      Fmt.pf fmt "Resolving failed:@ %a@ with error:@ %a@." Abslayout_pp.pp r
+        pp_inner_err err
   | x -> f fmt x
+
+exception Inner_resolve_error of inner_error [@@deriving sexp]
 
 exception Resolve_error of error [@@deriving sexp]
 
@@ -68,10 +77,7 @@ module Ctx = struct
       if
         List.length dups > 0
         && List.exists dups ~f:(fun n -> String.(Name.name n <> "dummy"))
-      then (
-        List.iter dups ~f:(fun n ->
-            Log.err (fun m -> m "Ambiguous name %a." N.pp n));
-        raise @@ Resolve_error (`Ambiguous_names dups) );
+      then raise @@ Inner_resolve_error (`Ambiguous_names dups);
       l
   end
 
@@ -183,7 +189,7 @@ let resolve_name ctx n =
   | Some m ->
       Flag.set m.rref;
       m.rname
-  | None -> raise @@ Resolve_error (`Unbound (n, Ctx.names ctx))
+  | None -> raise @@ Inner_resolve_error (`Unbound (n, Ctx.names ctx))
 
 let resolve_relation stage r = Relation.schema r |> Ctx.of_names stage
 
@@ -330,11 +336,10 @@ let rec resolve stage outer_ctx r =
 
 let stage =
   let merge =
-    Map.merge ~f:(fun ~key ->
-      function
+    Map.merge ~f:(fun ~key -> function
       | `Left x | `Right x -> Some x
       | `Both (x, x') when Poly.(x = x') -> Some x
-      | `Both (x, x') -> raise (Resolve_error (`Ambiguous_stage key)))
+      | `Both (x, x') -> raise (Inner_resolve_error (`Ambiguous_stage key)))
   in
   let rec annot r =
     let meta =
@@ -371,7 +376,11 @@ let refs =
 (** Annotate names in an algebra expression with types. *)
 let resolve_exn ?(params = Set.empty (module Name)) r =
   let param_ctx = Ctx.of_names `Run @@ Set.to_list params in
-  let r, ctx = resolve `Run param_ctx r in
+  let r, ctx =
+    try resolve `Run param_ctx r
+    with Inner_resolve_error x ->
+      raise (Resolve_error (`Resolve (Ast.strip_meta r, x)))
+  in
 
   (* Ensure that all the outputs are referenced. *)
   Ctx.incr_refs `Run ctx;
