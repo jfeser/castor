@@ -48,11 +48,7 @@ let schema_open schema r =
         let t = Or_error.try_with (fun () -> to_type p) |> Or_error.ok in
         match to_name p with
         | Some n -> Name.copy ~type_:t n
-        | None ->
-            Log.err (fun m ->
-                m "Tried to get schema of unnamed predicate %a."
-                  Abslayout_pp.pp_pred p);
-            Name.create ?type_:t (Fresh.name Global.fresh "x%d"))
+        | None -> Name.create ?type_:t (Fresh.name Global.fresh "x%d"))
   in
   match r.node with
   | AList { l_values = r; _ }
