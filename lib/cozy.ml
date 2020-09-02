@@ -270,7 +270,7 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
           extend c1 @@ extend c2 @@ extend cqp
           @@ { empty with top_query = `Query name; queries = [ query ] }
       | OrderBy { rel; _ } ->
-          Logs.warn (fun m ->
+          Log.warn (fun m ->
               m "Cozy does not support ordering. Ignoring order.");
           self#query rel
       | Select (sel, q) -> (

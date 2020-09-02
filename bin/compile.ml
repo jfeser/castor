@@ -7,8 +7,8 @@ let main ~debug ~gprof ~params ~code_only ~query ~enable_redshift_dates ?out_dir
     fn =
   let open Result.Let_syntax in
   Global.enable_redshift_dates := enable_redshift_dates;
-  Logs.info (fun m ->
-      m "%s" (Sys.get_argv () |> Array.to_list |> String.concat ~sep:" "));
+  Log.info (fun m ->
+      m "Command: %a" Fmt.(array ~sep:sp string) (Sys.get_argv ()));
   let module Config = struct
     let conn = Db.create (Sys.getenv_exn "CASTOR_DB")
 

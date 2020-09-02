@@ -120,7 +120,7 @@ module Ctx = struct
         (List.filter ~f:(fun r ->
              if Set.mem inter_names r.rname then true
              else (
-               Logs.warn (fun m ->
+               Log.warn (fun m ->
                    m "Name does not appear in all concat fields: %a" N.pp
                      r.rname);
                false )))
