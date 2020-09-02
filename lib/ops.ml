@@ -274,6 +274,19 @@ module Make (C : Config.S) = struct
     let tf = resolve_validated @@ schema_validated tf in
     if !trace then traced tf else tf
 
+  let of_func_cond ?(name = "<unknown>") ~pre ~post func =
+    let xf p r =
+      let open Option.Let_syntax in
+      let%bind r_pre = pre r in
+      let%bind r' = func (Path.get_exn p r_pre) in
+      let r = Path.set_exn p r @@ Ast.strip_meta r' in
+      let%bind r = post r in
+      return @@ Ast.strip_meta r
+    in
+    let tf = global xf name in
+    let tf = resolve_validated @@ schema_validated tf in
+    if !trace then traced tf else tf
+
   let of_func ?name f = of_func_pre ?name ~pre:Fun.id f
 
   module Branching = struct
