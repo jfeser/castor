@@ -1043,6 +1043,68 @@ module Make (C : Config.S) = struct
 
   let elim_subquery_join = global elim_subquery_join "elim-subquery-join"
 
+  let elim_correlated_subquery r =
+    let open Option.Let_syntax in
+    let visitor =
+      object (self : 'self)
+        inherit Tactics_util.extract_subquery_visitor
+
+        val mutable is_first = true
+
+        method can_hoist _ =
+          if is_first then (
+            is_first <- false;
+            true )
+          else false
+
+        method fresh_name () = Name.create @@ Fresh.name Global.fresh "q%d"
+      end
+    in
+    let%bind p, r' = to_filter r in
+    let p', subqueries = visitor#visit_pred () p in
+    let%bind subquery_name, subquery =
+      match subqueries with
+      | [ s ] -> return s
+      | [] -> None
+      | _ -> failwith "expected one subquery"
+    in
+    let scope = Fresh.name Global.fresh "s%d" in
+    let schema = Schema.schema r' in
+    let ctx =
+      List.map schema ~f:(fun n -> (n, Name (Name.scoped scope n)))
+      |> Map.of_alist_exn (module Name)
+    in
+    let schema = Schema.scoped scope schema in
+    match subquery with
+    | Exists r ->
+        return @@ A.dep_join r' scope
+        @@ A.select (Schema.to_select_list schema)
+        @@ A.filter p'
+        @@ A.select [ P.(as_ (count > int 0) (Name.name subquery_name)) ]
+        @@ A.subst ctx r
+    | First r ->
+        return @@ A.dep_join r' scope
+        @@ A.select (Schema.to_select_list schema)
+        @@ A.filter p'
+        @@ A.select
+             [
+               P.as_
+                 (P.name @@ List.hd_exn @@ Schema.schema r)
+                 (Name.name subquery_name);
+             ]
+        @@ A.subst ctx r
+    | _ -> failwith "not a subquery"
+
+  let elim_correlated_subquery =
+    of_func elim_correlated_subquery ~name:"elim-correlated-subquery"
+
+  let elim_all_correlated_subqueries =
+    fix
+      (first elim_correlated_subquery Path.(all >>? is_filter >>? is_run_time))
+
+  let unnest =
+    global (fun _ r -> Some (Unnest.unnest r |> Ast.strip_meta)) "unnest"
+
   let simplify r =
     let open Option.Let_syntax in
     match r.node with
