@@ -101,22 +101,12 @@ let%expect_test "" =
           atuple([{l_shipmode, }#ascalar(k2.l_shipmode), {}#ascalar(0)],
           cross))) |}]
 
-(* let%expect_test "" =
- *   let r =
- *     {|
- * select([max(total_revenue_i) as tot],
- *   alist(dedup(select([l_suppkey], lineitem)) as k1,
- *     select([sum(agg2) as total_revenue_i],
- *       aorderedidx(dedup(select([l_shipdate], lineitem)) as s46,
- *         filter((count2 > 0),
- *           select([count() as count2, sum((l_extendedprice * (1 - l_discount))) as agg2, l_extendedprice, l_discount],
- *             atuple([ascalar(s46.l_shipdate),
- *                     alist(select([l_extendedprice, l_discount],
- *                             filter(((l_suppkey = k1.l_suppkey) && (l_shipdate = s46.l_shipdate)), lineitem)) as s47,
- *                       atuple([ascalar(s47.l_extendedprice), ascalar(s47.l_discount)], cross))],
- *               cross))),
- *         >= date("0000-01-01"), < (date("0000-01-01") + month(3))))))
- * |}
- *     |> load
- *   in
- *   Format.printf "%a@." pp_with_stage r *)
+let%test_unit "" =
+  {|
+          filter(not(exists(filter(l3_orderkey = l1_orderkey,
+                              select([l_orderkey as l3_orderkey],
+                                lineitem)))),
+            select([l_orderkey as l1_orderkey],
+              lineitem))
+|}
+  |> load |> ignore

@@ -75,10 +75,10 @@ let%expect_test "" =
   Format.printf "@[<h>%a@]@." pp (simplify p);
   [%expect
     {|
-    (((p_partkey = s0.l_partkey) &&
-     ((s0.l_shipinstruct = "DELIVER IN PERSON") &&
-     ((p_size >= 1) && ((s0.l_shipmode = "AIR") || (s0.l_shipmode = "AIR REG")))))
-    &&
+    ((p_partkey = s0.l_partkey) &&
+    ((s0.l_shipinstruct = "DELIVER IN PERSON") &&
+    ((p_size >= 1) &&
+    (((s0.l_shipmode = "AIR") || (s0.l_shipmode = "AIR REG")) &&
     (((p_brand = param0) &&
      (((p_container = "SM CASE") ||
       ((p_container = "SM BOX") ||
@@ -96,5 +96,5 @@ let%expect_test "" =
      ((p_container = "LG BOX") ||
      ((p_container = "LG PACK") || (p_container = "LG PKG")))) &&
     ((s0.l_quantity >= param5) &&
-    ((s0.l_quantity <= (param5 + 10)) && (p_size <= 15))))))))
+    ((s0.l_quantity <= (param5 + 10)) && (p_size <= 15)))))))))))
  |}]

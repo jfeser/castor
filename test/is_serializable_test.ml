@@ -30,3 +30,53 @@ select([l_orderkey, sum_l_quantity],
          (Lazy.force Test_util.tpch_conn)
   in
   match is_serializeable r with Ok () -> () | Error str -> print_endline str
+
+let%expect_test "" =
+  let r =
+    {|
+select([s_name, s_address],
+  ahashidx(select([n_name as k0], dedup(select([n_name], nation))) as s0,
+    alist(filter((n_name = s0.k0),
+            select([n_name, s_suppkey, s_name, s_address],
+              orderby([s_name],
+                depjoin(select([n_nationkey, n_name], nation) as s3,
+                  depjoin(dedup(select([s_nationkey], supplier)) as s4,
+                    select([s3.n_name, s_suppkey, s_name, s_address],
+                      filter((s4.s_nationkey = s3.n_nationkey),
+                        select([s_suppkey, s_name, s_address],
+                          filter((s4.s_nationkey = s_nationkey), supplier))))))))) as s9,
+      select([s_name, s_address],
+        filter(exists(select([ps_partkey, ps_suppkey, ps_availqty,
+                              ps_supplycost, ps_comment],
+                        ahashidx(dedup(
+                                   select([ps_suppkey as x1228],
+                                     dedup(select([ps_suppkey], partsupp)))) as s80,
+                          alist(filter((s80.x1228 = ps_suppkey), partsupp) as s78,
+                            filter(((ps_availqty >
+                                    (select([(0.5 * sum(l_quantity))],
+                                       filter(((l_partkey = ps_partkey) &&
+                                              ((l_suppkey = ps_suppkey) &&
+                                              ((l_shipdate >= date("2020-01-01")) &&
+                                              (l_shipdate <
+                                              (date("2020-01-01") + year(1)))))),
+                                         lineitem)))) &&
+                                   exists(filter((ps_partkey = p_partkey),
+                                            filter((strpos(p_name, "") =
+                                                   1),
+                                              part)))),
+                              atuple([ascalar(s78.ps_partkey),
+                                      ascalar(s78.ps_suppkey),
+                                      ascalar(s78.ps_availqty),
+                                      ascalar(s78.ps_supplycost),
+                                      ascalar(s78.ps_comment)],
+                                cross))),
+                          s_suppkey))),
+          atuple([ascalar(s9.s_suppkey), ascalar(s9.s_name),
+                  ascalar(s9.s_address)],
+            cross)))),
+    ""))
+|}
+    |> Abslayout_load.load_string_exn @@ Lazy.force Test_util.tpch_conn
+  in
+  match is_serializeable r with Ok () -> () | Error str -> print_endline str;
+  [%expect {| Cannot serialize: Bad operator in run-time position lineitem |}]

@@ -1,4 +1,6 @@
 open Schema
+open Abslayout_load
+open Test_util
 
 let%expect_test "" =
   let r =
@@ -199,7 +201,7 @@ select([1 as counter2, s7_o_orderdate, null:int as var0,
                                               orders)))))),
                                   ascalar(0 as x0)))))))))
   |}
-    |> Abslayout_load.load_string_exn (Lazy.force Test_util.tpch_conn)
+    |> load_string_exn @@ Lazy.force tpch_conn
   in
   schema r |> Fmt.pr "%a" pp;
   [%expect {| [x122; x123; x124; x125; x126; x127; x128] |}];
@@ -212,3 +214,18 @@ select([1 as counter2, s7_o_orderdate, null:int as var0,
   [%expect "false"];
   [%compare.equal: Name.t list] s1 s2 |> Fmt.pr "%b";
   [%expect "false"]
+
+let%expect_test "" =
+  let r =
+    load_string_exn (Lazy.force tpch_conn)
+      {|
+filter((ps_availqty >
+  (select([(0.5 * sum(l_quantity)) as tot],
+     filter(((l_partkey = ps_partkey) &&
+            ((l_suppkey = ps_suppkey))),
+       lineitem)))),
+  partsupp)
+|}
+  in
+  Fmt.pr "%a@." pp (schema r);
+  [%expect {| [ps_partkey; ps_suppkey; ps_availqty; ps_supplycost; ps_comment] |}]
