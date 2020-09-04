@@ -118,8 +118,8 @@ module Map = struct
 
   let merge_right : ('k, 'v, _) t -> ('k, 'v, _) t -> ('k, 'v, _) t =
    fun m1 m2 ->
-    merge m1 m2 ~f:(fun ~key:_ ->
-      function `Right x | `Left x -> Some x | `Both (_, y) -> Some y)
+    merge m1 m2 ~f:(fun ~key:_ -> function
+      | `Right x | `Left x -> Some x | `Both (_, y) -> Some y)
 end
 
 module Seq = struct
@@ -356,8 +356,7 @@ class ['s] map_monoid m =
     method private zero = Map.empty m
 
     method private plus =
-      Map.merge ~f:(fun ~key:_ ->
-        function
+      Map.merge ~f:(fun ~key:_ -> function
         | `Both _ -> failwith "Duplicate key" | `Left x | `Right x -> Some x)
   end
 
