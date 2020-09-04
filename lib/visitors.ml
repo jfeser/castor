@@ -3,7 +3,7 @@ open Collections
 
 (* Visitors doesn't use the special method override syntax that warning 7 checks
    for. *)
-[@@@warning "-7-17"]
+[@@@warning "-deprecated-7-17"]
 
 type 'r pred = 'r Ast.pred =
   | Name of (Name.t[@opaque])
@@ -93,7 +93,7 @@ and t = (meta[@opaque]) annot
     visitors
       { variety = "mapreduce"; name = "base_mapreduce"; irregular = true }]
 
-[@@@warning "+7+17"]
+[@@@warning "+deprecated+7+17"]
 
 module Map = struct
   let annot query { node; meta } = { node = query node; meta }
