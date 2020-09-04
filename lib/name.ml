@@ -11,11 +11,11 @@ include T
 
 let name n = n.name
 
-let rel n = n.scope
-
 let scope n = n.scope
 
 let meta n = n.meta
+
+let rel = scope
 
 include Comparator.Make (T)
 module C = Comparable.Make (T)
@@ -50,10 +50,12 @@ let type_exn n =
   | Some t -> t
   | None -> Error.create "Missing type." n [%sexp_of: t] |> Error.raise
 
-let rel_exn n =
+let scope_exn n =
   match rel n with
   | Some t -> t
   | None -> Error.create "Missing scope." n [%sexp_of: t] |> Error.raise
+
+let rel_exn = scope_exn
 
 let to_var n =
   let name = name n in

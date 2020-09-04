@@ -11,13 +11,17 @@ val copy :
 
 val name : t -> string
 
-val type_ : t -> Prim_type.t option [@@deprecated]
+val type_ : t -> Prim_type.t option
 
-val type_exn : t -> Prim_type.t [@@deprecated]
+val type_exn : t -> Prim_type.t
 
 val rel : t -> string option
 
 val rel_exn : t -> string
+
+val scope : t -> string option
+
+val scope_exn : t -> string
 
 val scoped : string -> t -> t
 
