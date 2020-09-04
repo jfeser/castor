@@ -141,7 +141,8 @@ let schema q q' =
   let s' = schema q' in
   if not ([%compare.equal: t] s s') then (
     log_err "schema" q q';
-    failwith "Not schema invariant" )
+    failwith
+      (Fmt.str "Not schema invariant:@ %a@ %a@." Schema.pp s Schema.pp s') )
 
 let resolve ?params q q' =
   let r =
