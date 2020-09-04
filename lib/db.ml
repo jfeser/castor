@@ -178,6 +178,16 @@ from "$1"
   fun conn fname rname -> memo (conn, fname, rname)
 
 let relation conn r_name =
+  (* Ensure that table exists in the db. *)
+  let table_exists =
+    exec1 ~params:[ r_name ] conn
+      "select table_name from information_schema.tables where table_name='$0'"
+    |> List.is_empty |> not
+  in
+  if not table_exists then
+    Error.create "Table does not exist." r_name [%sexp_of: string]
+    |> Error.raise;
+
   let r_schema =
     exec1 ~params:[ r_name ] conn
       "select column_name from information_schema.columns where table_name='$0'"
