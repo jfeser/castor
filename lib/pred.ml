@@ -350,7 +350,27 @@ let simplify p =
         else super#visit_Binop () op p1 p2
     end
   in
-  p |> common_visitor#visit_pred ()
+  (* Remove trivial clauses from conjunctions and disjunctions. *)
+  let trivial_visitor =
+    object (self : 'self)
+      inherit [_] V.map as super
+
+      method! visit_Binop () op p1 p2 =
+        match op with
+        | Or ->
+            disjuncts (binop op p1 p2)
+            |> List.filter ~f:(function Bool true -> false | _ -> true)
+            |> List.map ~f:(self#visit_pred ())
+            |> disjoin
+        | And ->
+            conjuncts (binop op p1 p2)
+            |> List.filter ~f:(function Bool false -> false | _ -> true)
+            |> List.map ~f:(self#visit_pred ())
+            |> conjoin
+        | _ -> super#visit_Binop () op p1 p2
+    end
+  in
+  p |> common_visitor#visit_pred () |> trivial_visitor#visit_pred ()
 
 let max_of p1 p2 = Infix.(if_ (p1 < p2) p2 p1)
 
