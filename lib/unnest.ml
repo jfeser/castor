@@ -198,8 +198,9 @@ let push_join d { pred = p; r1 = t1; r2 = t2 } =
 let push_filter d (p, t2) = C.filter p (dep_join d t2)
 
 let push_groupby d (aggs, keys, q) =
-  let aggs = (schema d |> List.map ~f:P.name) @ aggs
-  and keys = keys @ schema d in
+  let schema = schema d in
+  let aggs = Select_list.(Schema.to_select_list schema @ aggs)
+  and keys = keys @ schema in
   C.group_by aggs keys (dep_join d q)
 
 let push_select d (preds, q) =

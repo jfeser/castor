@@ -277,6 +277,42 @@ let%expect_test "" =
               ascalar(0 as x0)))))) |}]
 
 let%expect_test "" =
+  let r =
+    {|
+dedup(
+depjoin(partsupp as s1,
+  groupby([ps_partkey, ps_suppkey, ps_availqty, ps_supplycost, ps_comment],
+          [ps_partkey, ps_suppkey, ps_availqty, ps_supplycost, ps_comment],
+    select([s1.ps_partkey, s1.ps_suppkey, s1.ps_availqty, s1.ps_supplycost, s1.ps_comment],
+      filter((s1.ps_partkey = p_partkey),
+        filter((strpos(p_name, "test") = 1), part))))))
+|}
+    |> Abslayout_load.load_string_exn (Lazy.force tpch_conn)
+  in
+  Simplify_tactic.simplify (Lazy.force tpch_conn) r |> Fmt.pr "%a@." pp;
+  [%expect {|
+    dedup(
+      select([ps_partkey, ps_suppkey, ps_availqty, ps_supplycost, ps_comment],
+        groupby([s1_ps_availqty, s1_ps_comment, s1_ps_partkey, s1_ps_suppkey,
+                 s1_ps_supplycost, ps_partkey, ps_suppkey, ps_availqty,
+                 ps_supplycost, ps_comment],
+          [ps_partkey, ps_suppkey, ps_availqty, ps_supplycost, ps_comment,
+           s1_ps_availqty, s1_ps_comment, s1_ps_partkey, s1_ps_suppkey,
+           s1_ps_supplycost],
+          select([s1_ps_availqty, s1_ps_comment, s1_ps_partkey, s1_ps_suppkey,
+                  s1_ps_supplycost, s1_ps_partkey as ps_partkey,
+                  s1_ps_suppkey as ps_suppkey, s1_ps_availqty as ps_availqty,
+                  s1_ps_supplycost as ps_supplycost, s1_ps_comment as ps_comment],
+            join(((s1_ps_partkey = p_partkey) && true),
+              dedup(
+                select([ps_availqty as s1_ps_availqty,
+                        ps_comment as s1_ps_comment, ps_partkey as s1_ps_partkey,
+                        ps_suppkey as s1_ps_suppkey,
+                        ps_supplycost as s1_ps_supplycost],
+                  partsupp)),
+              filter((strpos(p_name, "test") = 1), part)))))) |}]
+
+let%expect_test "" =
   let conn = Lazy.force tpch_conn in
   let r =
     {|
