@@ -35,3 +35,23 @@ alist(dedup(select([l_suppkey as l1_suppkey], lineitem)) as k0,
 |};
   [%expect {|
     [(l_suppkey, l1_suppkey); (l_suppkey, supplier_no)] |}]
+
+let%expect_test "" =
+  run_test (Lazy.force tpch_conn)
+    {|
+join(((l_partkey = s3_ps_partkey) &&
+     ((l_suppkey = s3_ps_suppkey) &&
+     ((l_shipdate >= date("1995-01-02")) && ((l_shipdate < (date("1995-01-02") + year(1))) && true)))),
+  dedup(
+    select([ps_availqty as s3_ps_availqty, 
+            ps_comment as s3_ps_comment, 
+            ps_partkey as s3_ps_partkey, 
+            ps_suppkey as s3_ps_suppkey, 
+            ps_supplycost as s3_ps_supplycost], partsupp)),
+  lineitem)
+|};
+  [%expect {|
+    [(l_partkey, s3_ps_partkey); (l_suppkey, s3_ps_suppkey);
+     (ps_availqty, s3_ps_availqty); (ps_comment, s3_ps_comment);
+     (ps_partkey, s3_ps_partkey); (ps_suppkey, s3_ps_suppkey);
+     (ps_supplycost, s3_ps_supplycost)] |}]

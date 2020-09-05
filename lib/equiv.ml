@@ -22,6 +22,12 @@ let ( && ) l1 l2 = Set.inter l1 l2
 
 let of_list = Set.of_list (module Eq)
 
+let names eq =
+  Set.to_sequence eq
+  |> Sequence.fold
+       ~init:(Set.empty (module Name))
+       ~f:(fun s (n, n') -> Set.add (Set.add s n') n)
+
 (** Return the set of equivalent attributes in the output of a query.
 
     Two attributes are equivalent in a relation if in every tuple of that
@@ -35,7 +41,15 @@ let eqs_open (eqs : 'a annot -> Set.M(Eq).t) r : Set.M(Eq).t =
            | As_pred (Name n, s) -> Some (n, Name.create s)
            | _ -> None)
          |> of_list
-  | Join { pred = p; r1; r2 } -> Pred.eqs p |> of_list || (eqs r1 && eqs r2)
+  | Join { pred = p; r1; r2 } ->
+      let e1 = eqs r1 and e2 = eqs r2 in
+      let peqs = Pred.eqs p |> of_list in
+      (* If the equalities don't overlap, both sets continue to hold after the join. *)
+      let jeqs =
+        if Set.inter (names e1) (names e2) |> Set.is_empty then e1 || e2
+        else e1 && e2
+      in
+      peqs || jeqs
   | Dedup r | OrderBy { rel = r; _ } | DepJoin { d_rhs = r; _ } -> eqs r
   | AList { l_keys = rk; l_values = rv; _ } -> eqs rk || eqs rv
   | AHashIdx h -> (
