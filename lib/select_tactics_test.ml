@@ -13,7 +13,7 @@ module C = struct
 
   let param_ctx = Map.empty (module Name)
 
-  let conn = Lazy.force test_db_conn
+  let conn = Lazy.force tpch_conn
 
   let cost_conn = conn
 

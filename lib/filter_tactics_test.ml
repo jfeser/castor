@@ -236,6 +236,8 @@ module Tpch = struct
 
   open Filter_tactics.Make (C)
 
+  open Simplify_tactic.Make (C)
+
   open Ops.Make (C)
 
   let load_string ?params s = load_string_exn ?params C.conn s
@@ -304,6 +306,7 @@ filter((strpos(p_name, "") > 0),
       cross) |}]
 
   let with_log src f =
+    Log.setup_log Error;
     Logs.Src.set_level src (Some Debug);
     Exn.protect ~f ~finally:(fun () -> Logs.Src.set_level src None)
 
@@ -434,7 +437,7 @@ filter((ps_availqty >
       depjoin(partsupp as s0,
         select([s0.ps_partkey, s0.ps_suppkey, s0.ps_availqty, s0.ps_supplycost,
                 s0.ps_comment],
-          filter((ps_availqty > q0),
+          filter((s0.ps_availqty > q0),
             select([tot as q0],
               select([(0.5 * sum(l_quantity)) as tot],
                 filter(((l_partkey = s0.ps_partkey) && (l_suppkey = s0.ps_suppkey)),
@@ -453,10 +456,11 @@ filter(exists(filter((ps_partkey = p_partkey),
     [%expect
       {|
       depjoin(partsupp as s0,
-        select([s0.ps_partkey, s0.ps_suppkey, s0.ps_availqty, s0.ps_supplycost,
-                s0.ps_comment],
-          filter(q0,
-            select([(count() > 0) as q0],
+        dedup(
+          groupby([ps_partkey, ps_suppkey, ps_availqty, ps_supplycost, ps_comment],
+            [ps_partkey, ps_suppkey, ps_availqty, ps_supplycost, ps_comment],
+            select([s0.ps_partkey, s0.ps_suppkey, s0.ps_availqty, s0.ps_supplycost,
+                    s0.ps_comment],
               filter((s0.ps_partkey = p_partkey),
                 filter((strpos(p_name, "test") = 1), part)))))) |}]
 
@@ -464,7 +468,7 @@ filter(exists(filter((ps_partkey = p_partkey),
     let r =
       load_string_exn (Lazy.force tpch_conn)
         {|
-select([s_name, s_address],
+dedup(select([s_name, s_address],
   orderby([s_name],
     join((s_nationkey = n_nationkey),
       filter((n_name = "test"), nation),
@@ -478,39 +482,85 @@ select([s_name, s_address],
                                          ((l_suppkey = ps_suppkey))),
                                     lineitem)))),
                           partsupp)))),
-        supplier))))
+        supplier)))))
 |}
     in
-    apply (seq_many [ elim_all_correlated_subqueries; unnest ]) Path.root r
-    |> Option.map ~f:(Simplify_tactic.simplify @@ Lazy.force tpch_conn)
+    apply
+      (seq_many [ elim_all_correlated_subqueries; unnest_and_simplify ])
+      Path.root r
     |> Fmt.pr "%a@." Fmt.(option pp);
     [%expect
       {|
-      select([s_name, s_address],
-        orderby([s_name],
-          join((s_nationkey = n_nationkey),
-            filter((n_name = "test"), nation),
-            depjoin(supplier as s0,
-              select([s0.s_suppkey, s0.s_name, s0.s_address, s0.s_nationkey,
-                      s0.s_phone, s0.s_acctbal, s0.s_comment],
-                filter(q0,
-                  select([(count() > 0) as q0],
-                    filter((s0.s_suppkey = ps_suppkey),
-                      depjoin(depjoin(partsupp as s2,
-                                select([s2.ps_partkey, s2.ps_suppkey,
-                                        s2.ps_availqty, s2.ps_supplycost,
-                                        s2.ps_comment],
-                                  filter((ps_availqty > q2),
-                                    select([tot as q2],
-                                      select([(0.5 * sum(l_quantity)) as tot],
-                                        filter(((l_partkey = s2.ps_partkey) &&
-                                               (l_suppkey = s2.ps_suppkey)),
-                                          lineitem)))))) as s1,
-                        select([s1.ps_partkey, s1.ps_suppkey, s1.ps_availqty,
-                                s1.ps_supplycost, s1.ps_comment],
-                          filter(q1,
-                            select([(count() > 0) as q1],
-                              filter((s1.ps_partkey = p_partkey),
-                                filter((strpos(p_name, "test") = 1), part))))))))))))))
+      dedup(
+        select([s_name, s_address],
+          orderby([s_name],
+            join((s_nationkey = n_nationkey),
+              filter((n_name = "test"), nation),
+              select([s_suppkey, s_name, s_address, s_nationkey, s_phone,
+                      s_acctbal, s_comment],
+                groupby([s0_s_acctbal, s0_s_address, s0_s_comment, s0_s_name,
+                         s0_s_nationkey, s0_s_phone, s0_s_suppkey, s_suppkey,
+                         s_name, s_address, s_nationkey, s_phone, s_acctbal,
+                         s_comment],
+                  [s_suppkey, s_name, s_address, s_nationkey, s_phone, s_acctbal,
+                   s_comment, s0_s_acctbal, s0_s_address, s0_s_comment, s0_s_name,
+                   s0_s_nationkey, s0_s_phone, s0_s_suppkey],
+                  select([s0_s_acctbal, s0_s_address, s0_s_comment, s0_s_name,
+                          s0_s_nationkey, s0_s_phone, s0_s_suppkey,
+                          s0_s_suppkey as s_suppkey, s0_s_name as s_name,
+                          s0_s_address as s_address, s0_s_nationkey as s_nationkey,
+                          s0_s_phone as s_phone, s0_s_acctbal as s_acctbal,
+                          s0_s_comment as s_comment],
+                    join(((s0_s_suppkey = ps_suppkey) && true),
+                      dedup(
+                        select([s_acctbal as s0_s_acctbal,
+                                s_address as s0_s_address,
+                                s_comment as s0_s_comment, s_name as s0_s_name,
+                                s_nationkey as s0_s_nationkey,
+                                s_phone as s0_s_phone, s_suppkey as s0_s_suppkey],
+                          supplier)),
+                      select([ps_partkey, ps_suppkey, ps_availqty, ps_supplycost,
+                              ps_comment],
+                        groupby([s1_ps_availqty, s1_ps_comment, s1_ps_partkey,
+                                 s1_ps_suppkey, s1_ps_supplycost, ps_partkey,
+                                 ps_suppkey, ps_availqty, ps_supplycost, ps_comment],
+                          [ps_partkey, ps_suppkey, ps_availqty, ps_supplycost,
+                           ps_comment, s1_ps_availqty, s1_ps_comment,
+                           s1_ps_partkey, s1_ps_suppkey, s1_ps_supplycost],
+                          select([s1_ps_availqty, s1_ps_comment, s1_ps_partkey,
+                                  s1_ps_suppkey, s1_ps_supplycost,
+                                  s1_ps_partkey as ps_partkey,
+                                  s1_ps_suppkey as ps_suppkey,
+                                  s1_ps_availqty as ps_availqty,
+                                  s1_ps_supplycost as ps_supplycost,
+                                  s1_ps_comment as ps_comment],
+                            join(((s1_ps_partkey = p_partkey) && true),
+                              dedup(
+                                select([s2_ps_availqty as s1_ps_availqty,
+                                        s2_ps_comment as s1_ps_comment,
+                                        s2_ps_partkey as s1_ps_partkey,
+                                        s2_ps_suppkey as s1_ps_suppkey,
+                                        s2_ps_supplycost as s1_ps_supplycost],
+                                  filter((s2_ps_availqty > q2),
+                                    groupby([min(s2_ps_availqty) as s2_ps_availqty,
+                                             min(s2_ps_comment) as s2_ps_comment,
+                                             min(s2_ps_partkey) as s2_ps_partkey,
+                                             min(s2_ps_suppkey) as s2_ps_suppkey,
+                                             min(s2_ps_supplycost) as s2_ps_supplycost,
+                                             (0.5 * sum(l_quantity)) as q2],
+                                      [s2_ps_availqty, s2_ps_comment,
+                                       s2_ps_partkey, s2_ps_suppkey,
+                                       s2_ps_supplycost],
+                                      join((((l_partkey = s2_ps_partkey) &&
+                                            (l_suppkey = s2_ps_suppkey)) && true),
+                                        dedup(
+                                          select([ps_availqty as s2_ps_availqty,
+                                                  ps_comment as s2_ps_comment,
+                                                  ps_partkey as s2_ps_partkey,
+                                                  ps_suppkey as s2_ps_suppkey,
+                                                  ps_supplycost as s2_ps_supplycost],
+                                            partsupp)),
+                                        lineitem))))),
+                              filter((strpos(p_name, "test") = 1), part)))))))))))))
 |}]
 end
