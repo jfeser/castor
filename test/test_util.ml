@@ -23,15 +23,15 @@ let create_simple db name fields values =
     List.map fields ~f:(sprintf "%s integer") |> String.concat ~sep:", "
   in
   Db.(
-    exec db (sprintf "create table if not exists %s (%s)" name fields_sql)
-    |> command_ok_exn);
+    psql_exec db (sprintf "create table if not exists %s (%s)" name fields_sql)
+    |> Or_error.ok_exn |> command_ok_exn);
   List.iter values ~f:(fun vs ->
       let values_sql =
         List.map vs ~f:Int.to_string |> String.concat ~sep:", "
       in
       Db.(
-        exec db (sprintf "insert into %s values (%s)" name values_sql)
-        |> command_ok_exn))
+        psql_exec db (sprintf "insert into %s values (%s)" name values_sql)
+        |> Or_error.ok_exn |> command_ok_exn))
 
 let create db name fields values =
   let fields_sql =
@@ -46,12 +46,13 @@ let create db name fields values =
     |> String.concat ~sep:", "
   in
   Db.(
-    exec db (sprintf "create table %s (%s)" name fields_sql) |> command_ok_exn);
+    psql_exec db (sprintf "create table %s (%s)" name fields_sql)
+    |> Or_error.ok_exn |> command_ok_exn);
   List.iter values ~f:(fun vs ->
       let values_sql = List.map vs ~f:Value.to_sql |> String.concat ~sep:", " in
       Db.(
-        exec db (sprintf "insert into %s values (%s)" name values_sql)
-        |> command_ok_exn))
+        psql_exec db (sprintf "insert into %s values (%s)" name values_sql)
+        |> Or_error.ok_exn |> command_ok_exn))
 
 let test_db_conn =
   lazy

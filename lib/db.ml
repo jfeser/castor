@@ -52,20 +52,11 @@ let close { conn; _ } = ensure_finish conn
 
 let conn { conn; _ } = conn
 
-let subst_params params query =
-  match params with
-  | [] -> query
-  | _ ->
-      List.foldi params ~init:query ~f:(fun i q v ->
-          String.substr_replace_all ~pattern:(Printf.sprintf "$%d" i) ~with_:v q)
-
-let rec exec ?(max_retries = 0) ?(params = []) db query =
-  let query = subst_params params query in
+let rec psql_exec ?(max_retries = 0) db query =
   let r = db.conn#exec query in
   let fail r =
-    Error.(
-      create "Postgres error." (r#error, query) [%sexp_of: string * string]
-      |> raise)
+    Or_error.error "Postgres error." (r#error, query)
+      [%sexp_of: string * string]
   in
   match r#status with
   | Nonfatal_error -> (
@@ -77,10 +68,10 @@ let rec exec ?(max_retries = 0) ?(params = []) db query =
                https://www.postgresql.org/message-id/1368066680.60649.YahooMailNeo%40web162902.mail.bf1.yahoo.com
             *)
             max_retries > 0
-          then exec ~max_retries:(max_retries - 1) db query
+          then psql_exec ~max_retries:(max_retries - 1) db query
           else fail r
       | _ -> fail r )
-  | Single_tuple | Tuples_ok | Command_ok -> r
+  | Single_tuple | Tuples_ok | Command_ok -> Ok r
   | _ -> fail r
 
 let result_to_strings (r : Psql.result) = r#get_all_lst
@@ -92,66 +83,76 @@ let command_ok (r : Psql.result) =
 
 let command_ok_exn (r : Psql.result) = command_ok r |> Or_error.ok_exn
 
-let exec1 ?params conn query =
-  exec ?params conn query |> result_to_strings
-  |> List.map ~f:(function
-       | [ x ] -> x
-       | t ->
-           Error.create "Unexpected query results." t [%sexp_of: string list]
-           |> Error.raise)
+let run conn query =
+  let open Or_error.Let_syntax in
+  let%map result = psql_exec conn query in
+  result_to_strings result
 
-let exec2 ?params conn query =
-  exec ?params conn query |> result_to_strings
-  |> List.map ~f:(function
-       | [ x; y ] -> (x, y)
-       | t ->
-           Error.create "Unexpected query results." t [%sexp_of: string list]
-           |> Error.raise)
+let run1 conn query =
+  let open Or_error.Let_syntax in
+  let%map results = run conn query in
+  List.map results ~f:(function [ x ] -> x | _ -> assert false)
 
-let exec3 ?params conn query =
-  exec ?params conn query |> result_to_strings
-  |> List.map ~f:(function
-       | [ x; y; z ] -> (x, y, z)
-       | t ->
-           Error.create "Unexpected query results." t [%sexp_of: string list]
-           |> Error.raise)
+let run2 conn query =
+  let open Or_error.Let_syntax in
+  let%map results = run conn query in
+  List.map results ~f:(function [ x; x' ] -> (x, x') | _ -> assert false)
 
-let type_of_field_exn =
+let run3 conn query =
+  let open Or_error.Let_syntax in
+  let%map results = run conn query in
+  List.map results ~f:(function
+    | [ x; x'; x'' ] -> (x, x', x'')
+    | _ -> assert false)
+
+let type_of_field =
+  let open Or_error.Let_syntax in
   let f conn fname rname =
     let open Prim_type in
-    let rows =
-      exec2 ~params:[ rname; fname ] conn
-        "select data_type, is_nullable from information_schema.columns where \
-         table_name='$0' and column_name='$1'"
+    let%bind rows =
+      run2 conn
+      @@ sprintf
+           "select data_type, is_nullable from information_schema.columns \
+            where table_name='%s' and column_name='%s'"
+           rname fname
     in
     match rows with
     | [ (type_str, nullable_str) ] -> (
-        let nullable =
+        let%bind nullable =
           if String.(strip nullable_str = "YES") then
-            let nulls =
-              exec1 ~params:[ fname; rname ] conn
-                "select \"$0\" from \"$1\" where \"$0\" is null limit 1"
+            let%map nulls =
+              run1 conn
+              @@ sprintf
+                   "select \"%s\" from \"%s\" where \"%s\" is null limit 1"
+                   fname rname fname
             in
             List.length nulls > 0
-          else false
+          else Ok false
         in
         match type_str with
-        | "character" | "char" -> StringT { nullable; padded = true }
+        | "character" | "char" -> return @@ StringT { nullable; padded = true }
         | "character varying" | "varchar" | "text" ->
-            StringT { nullable; padded = false }
-        | "interval" | "integer" | "smallint" | "bigint" -> IntT { nullable }
-        | "date" -> DateT { nullable }
-        | "boolean" -> BoolT { nullable }
+            return @@ StringT { nullable; padded = false }
+        | "interval" | "integer" | "smallint" | "bigint" ->
+            return @@ IntT { nullable }
+        | "date" -> return @@ DateT { nullable }
+        | "boolean" -> return @@ BoolT { nullable }
         | "numeric" ->
-            let min, max, is_int =
-              exec3 ~params:[ fname; rname ] conn
-                {|
+            let%bind min, max, is_int =
+              let%bind result =
+                run3 conn
+                @@ sprintf
+                     {|
 select
-  min(round("$0")), max(round("$0")),
-  min(case when round("$0") = "$0" then 1 else 0 end)
-from "$1"
+  min(round("%s")), max(round("%s")),
+  min(case when round("%s") = "%s" then 1 else 0 end)
+from "%s"
 |}
-              |> List.hd_exn
+                     fname fname fname fname rname
+              in
+              match List.hd result with
+              | Some t -> return t
+              | None -> Or_error.error_string "unexpected query result"
             in
             let is_int = Int.of_string is_int = 1 in
             let fits_in_an_int63 =
@@ -161,6 +162,8 @@ from "$1"
                 true
               with Failure _ -> false
             in
+            return
+            @@
             if is_int then
               if fits_in_an_int63 then IntT { nullable }
               else (
@@ -168,11 +171,11 @@ from "$1"
                     m "Numeric column loaded as string: %s.%s" rname fname);
                 StringT { nullable; padded = false } )
             else FixedT { nullable }
-        | "real" | "double" -> FixedT { nullable }
+        | "real" | "double" -> return @@ FixedT { nullable }
         | "timestamp without time zone" | "time without time zone" ->
-            StringT { nullable; padded = false }
-        | s -> failwith (Printf.sprintf "Unknown dtype %s" s) )
-    | _ -> failwith "Unexpected db results."
+            return @@ StringT { nullable; padded = false }
+        | s -> Or_error.error "Unknown dtype" s [%sexp_of: string] )
+    | _ -> Or_error.error_string "unexpected query result"
   in
   let memo = Memo.general (fun (conn, n1, n2) -> f conn n1 n2) in
   fun conn fname rname -> memo (conn, fname, rname)
@@ -180,19 +183,26 @@ from "$1"
 let relation conn r_name =
   (* Ensure that table exists in the db. *)
   let table_exists =
-    exec1 ~params:[ r_name ] conn
-      "select table_name from information_schema.tables where table_name='$0'"
-    |> List.is_empty |> not
+    run1 conn
+    @@ sprintf
+         "select table_name from information_schema.tables where \
+          table_name='%s'"
+         r_name
+    |> Or_error.ok_exn |> List.is_empty |> not
   in
   if not table_exists then
     Error.create "Table does not exist." r_name [%sexp_of: string]
     |> Error.raise;
 
   let r_schema =
-    exec1 ~params:[ r_name ] conn
-      "select column_name from information_schema.columns where table_name='$0'"
+    run1 conn
+    @@ sprintf
+         "select column_name from information_schema.columns where \
+          table_name='%s'"
+         r_name
+    |> Or_error.ok_exn
     |> List.map ~f:(fun fname ->
-           let type_ = type_of_field_exn conn fname r_name in
+           let type_ = type_of_field conn fname r_name |> Or_error.ok_exn in
            (Name.create fname, type_))
     |> Option.some
   in
@@ -201,28 +211,6 @@ let relation conn r_name =
 let relation_memo = Memo.general (fun (conn, rname) -> relation conn rname)
 
 let relation conn rname = relation_memo (conn, rname)
-
-let relation_count =
-  let f conn r_name =
-    exec1 ~params:[ r_name ] conn "select count(*) from $0"
-    |> List.hd_exn |> Int.of_string
-  in
-  let memo = Memo.general (fun (c, n) -> f c n) in
-  fun c n -> memo (c, n)
-
-let all_relations conn =
-  let names =
-    exec1 conn
-      "select tablename from pg_catalog.pg_tables where schemaname='public'"
-  in
-  List.map names ~f:(relation conn)
-
-let relation_has_field conn f =
-  List.find (all_relations conn) ~f:(fun r ->
-      List.exists (Option.value_exn r.Relation.r_schema) ~f:(fun (n, _) ->
-          String.(Name.name n = f)))
-
-let is_null = String.is_empty
 
 let load_int s =
   try Ok (Int.of_string s)
@@ -249,9 +237,8 @@ let load_value type_ =
         match value with
         | "t" -> Ok (Value.Bool true)
         | "f" -> Ok (Bool false)
-        | _ ->
-            Error
-              (Error.create "Unknown boolean value." value [%sexp_of: string]) )
+        | _ -> Or_error.error "Unknown boolean value." value [%sexp_of: string]
+      )
   | IntT _ ->
       fun value -> Or_error.map (load_int value) ~f:(fun x -> Value.Int x)
   | StringT { padded = true; _ } ->
@@ -260,25 +247,45 @@ let load_value type_ =
   | FixedT _ -> fun value -> Ok (Fixed (Fixed_point.of_string value))
   | DateT _ -> fun value -> Ok (Date (Date.of_string value))
   | NullT -> fun _ -> Ok Null
-  | VoidT | TupleT _ -> fun _ -> Error (Error.of_string "Not a value type.")
+  | VoidT | TupleT _ -> fun _ -> Or_error.error_string "Not a value type."
 
-let load_tuples_list_exn s =
+let load_tuples_list s =
+  let open Or_error.Let_syntax in
   let loaders = List.map s ~f:load_value |> Array.of_list in
   let nfields = List.length s in
 
   fun (r : Postgresql.result) ->
     if nfields <> r#nfields then
-      Error.(
-        create "Unexpected tuple width." (r#get_fnames_lst, s)
-          [%sexp_of: string list * Prim_type.t list]
-        |> raise)
+      Or_error.error "Unexpected tuple width." (r#get_fnames_lst, s)
+        [%sexp_of: string list * Prim_type.t list]
     else
       List.init r#ntuples ~f:(fun tidx ->
           List.init nfields ~f:(fun fidx ->
-              if r#getisnull tidx fidx then Value.Null
-              else loaders.(fidx) (r#getvalue tidx fidx) |> Or_error.ok_exn))
+              if r#getisnull tidx fidx then return Value.Null
+              else loaders.(fidx) (r#getvalue tidx fidx))
+          |> Or_error.all)
+      |> Or_error.all
 
-let exec_exn db schema query = exec db query |> load_tuples_list_exn schema
+let exec db schema query =
+  let open Or_error.Let_syntax in
+  let%bind result = psql_exec db query in
+  load_tuples_list schema result
+
+let exec_exn db schema query = exec db schema query |> Or_error.ok_exn
+
+let all_relations conn =
+  let names =
+    run1 conn
+      "select tablename from pg_catalog.pg_tables where schemaname='public'"
+    |> Or_error.ok_exn
+  in
+  List.map names ~f:(relation conn)
+
+let relation_has_field conn f =
+  let rels = all_relations conn in
+  List.find rels ~f:(fun r ->
+      List.exists (Option.value_exn r.Relation.r_schema) ~f:(fun (n, _) ->
+          String.(Name.name n = f)))
 
 let exec_cursor_exn ?(count = 4096) db schema query =
   let declare_query = sprintf "declare cur cursor for %s" query
@@ -287,14 +294,16 @@ let exec_cursor_exn ?(count = 4096) db schema query =
   and close_trans = "commit" in
 
   let db = create db.uri in
-  exec db open_trans |> command_ok_exn;
-  exec db declare_query |> command_ok_exn;
-  let loader = load_tuples_list_exn schema in
+  psql_exec db open_trans |> Or_error.ok_exn |> command_ok_exn;
+  psql_exec db declare_query |> Or_error.ok_exn |> command_ok_exn;
+  let loader = load_tuples_list schema in
   Seq.unfold ~init:() ~f:(fun () ->
-      let tups = exec db fetch_query |> loader in
+      let tups =
+        psql_exec db fetch_query |> Or_error.ok_exn |> loader |> Or_error.ok_exn
+      in
       if List.length tups > 0 then Some (tups, ())
       else (
-        exec db close_trans |> command_ok_exn;
+        psql_exec db close_trans |> Or_error.ok_exn |> command_ok_exn;
         close db;
         None ))
 
@@ -303,27 +312,6 @@ let check db sql =
   let name = Fresh.name Global.fresh "check%d" in
   let%bind () = command_ok (db.conn#prepare name sql) in
   command_ok (db.conn#exec (sprintf "deallocate %s" name))
-
-let eq_join_type =
-  let f db n1 n2 =
-    match (relation_has_field db n1, relation_has_field db n2) with
-    | Some r1, Some r2 ->
-        let c1 = relation_count db r1.r_name in
-        let c2 = relation_count db r2.r_name in
-        let c3 =
-          exec1 db
-          @@ sprintf "select count(*) from %s, %s where %s = %s" r1.r_name
-               r2.r_name n1 n2
-          |> List.hd_exn |> Int.of_string
-        in
-        if c1 = c3 && c2 = c3 then Ok `Both
-        else if c1 = c3 then Ok `Left
-        else if c2 = c3 then Ok `Right
-        else Ok `Neither
-    | _ -> Error (Error.of_string "Not a join between base fields.")
-  in
-  let memo = Memo.general (fun (c, n1, n2) -> f c n1 n2) in
-  fun c n1 n2 -> memo (c, n1, n2)
 
 module Async = struct
   type db = t
@@ -364,7 +352,7 @@ module Async = struct
   let exec_sql ?timeout ?(bound = 4096) db (schema, query) =
     let stream, strm = Lwt_stream.create_bounded bound in
 
-    let load_tuples = load_tuples_list_exn schema in
+    let load_tuples = load_tuples_list schema in
 
     (* Create a new database connection. *)
     let exec () =
@@ -391,7 +379,8 @@ module Async = struct
           let wait_for_cancel () =
             let%lwt () = protected timeout in
             info (fun m -> m "Query timeout: %s" query);
-            exec db (sprintf "select pg_cancel_backend(%d);" conn#backend_pid)
+            psql_exec db
+            @@ sprintf "select pg_cancel_backend(%d);" conn#backend_pid
             |> ignore;
             fail `Timeout
           in
@@ -402,7 +391,10 @@ module Async = struct
                 match r#status with
                 | Tuples_ok ->
                     info (fun m -> m "Got a %d tuple batch" r#ntuples);
-                    let%lwt () = strm#push (Result.return (load_tuples r)) in
+                    let%lwt () =
+                      strm#push
+                        (Result.return (load_tuples r |> Or_error.ok_exn))
+                    in
                     k ()
                 | Fatal_error -> fail (`Msg r#error)
                 | _ -> fail (`Msg "Unexpected status") )

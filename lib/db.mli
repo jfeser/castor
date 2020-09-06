@@ -8,21 +8,15 @@ val conn : t -> Postgresql.connection
 
 val param : unit Command.Param.t
 
-val exec :
-  ?max_retries:int -> ?params:string list -> t -> string -> Postgresql.result
-
-val exec1 : ?params:string list -> t -> string -> string list
-
-val exec2 : ?params:string list -> t -> string -> (string * string) list
-
-val exec3 :
-  ?params:string list -> t -> string -> (string * string * string) list
+val psql_exec : ?max_retries:int -> t -> string -> Postgresql.result Or_error.t
 
 val command_ok : Postgresql.result -> unit Or_error.t
 
 val command_ok_exn : Postgresql.result -> unit
 
-val result_to_strings : Postgresql.result -> string list list
+val run : t -> string -> string list list Or_error.t
+
+val exec : t -> Prim_type.t list -> string -> Value.t list list Or_error.t
 
 val exec_exn : t -> Prim_type.t list -> string -> Value.t list list
 
@@ -35,12 +29,7 @@ val relation : t -> string -> Relation.t
 
 val all_relations : t -> Relation.t list
 
-val relation_count : t -> string -> int
-
 val relation_has_field : t -> string -> Relation.t option
-
-val eq_join_type :
-  t -> string -> string -> [ `Left | `Right | `Both | `Neither ] Or_error.t
 
 module Async : sig
   type error = {
