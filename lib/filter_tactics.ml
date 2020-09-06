@@ -1212,6 +1212,20 @@ module Make (C : Config.S) = struct
     let f r = try run_exn r with Failed _ -> None in
     of_func ~name:"precompute-filter" f
 
+  let cse_filter r =
+    let open Option.Let_syntax in
+    let%bind p, r = to_filter r in
+    let p', binds = Pred.cse p in
+    if List.is_empty binds then None
+    else
+      return @@ A.filter p'
+      @@ A.select
+           ( List.map binds ~f:(fun (n, p) -> P.as_ p (Name.name n))
+           @ Schema.(schema r |> to_select_list) )
+      @@ r
+
+  let cse_filter = of_func ~name:"cse-filter" cse_filter
+
   (* let precompute_filter n =
    *   let exception Failed of Error.t in
    *   let run_exn r =

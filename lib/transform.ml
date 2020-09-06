@@ -199,6 +199,15 @@ module Make (Config : Config.S) = struct
         Simplify_tactic.unnest_and_simplify;
       ]
 
+  let cse =
+    traced ~name:"cse"
+    @@ seq_many
+         [
+           fix
+           @@ first Join_elim_tactics.push_join_filter Path.(all >>? is_join);
+           fix @@ first Filter_tactics.cse_filter Path.(all >>? is_filter);
+         ]
+
   let opt =
     let open Infix in
     seq_many
@@ -209,6 +218,8 @@ module Make (Config : Config.S) = struct
                (* Simplify predicates. *)
                traced ~name:"simplify-preds"
                @@ for_all Filter_tactics.simplify Path.(all);
+               (* CSE *)
+               cse;
                (* Eliminate groupby operators. *)
                traced ~name:"elim-groupby"
                @@ fix
@@ -298,6 +309,7 @@ module Make (Config : Config.S) = struct
                                      is_param_filter;
                                 traced ~name:"push-all-unparam-filters"
                                 @@ push_all_runtime_filters;
+                                cse;
                                 (* Eliminate all unparameterized relations. *)
                                 traced ~name:"elim-unparam-relations"
                                 @@ fix
