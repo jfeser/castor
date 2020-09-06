@@ -1,3 +1,4 @@
+open Ast
 open Abslayout
 open Collections
 open Schema
@@ -18,7 +19,7 @@ module Make (Config : Config.S) = struct
   (** Precise selection of all valuations of a list of predicates from a relation.
    *)
   let all_values_precise ps r =
-    if Set.is_empty (Free.free r) then Ok (dedup (select ps r))
+    if Set.is_empty (Free.free r) then Ok (A.dedup (A.select ps r))
     else Or_error.errorf "Predicate contains free variables."
 
   let rec closure m =
@@ -32,6 +33,28 @@ module Make (Config : Config.S) = struct
 
   let alias_map r = aliases r |> closure
 
+  (** Collect a map from names to defining expressions from a relation. *)
+  let rec aliases r =
+    let plus =
+      Map.merge ~f:(fun ~key:_ -> function
+        | `Left r | `Right r -> Some r
+        | `Both (r1, r2) ->
+            if Pred.O.(r1 = r2) then Some r1
+            else failwith "Multiple relations with same alias")
+    and zero = Map.empty (module Name)
+    and one k v = Map.singleton (module Name) k v in
+    match r.node with
+    | Select (ps, r) -> (
+        match select_kind ps with
+        | `Scalar ->
+            List.fold_left ps ~init:(aliases r) ~f:(fun m p ->
+                match p with
+                | As_pred (p, n) -> plus (one (Name.create n) p) m
+                | _ -> m)
+        | `Agg -> zero )
+    | Filter (_, r) | Dedup r -> aliases r
+    | _ -> zero
+
   let all_values_attr n =
     let open Option.Let_syntax in
     let%bind rel = Db.relation_has_field cost_conn (Name.name n) in
@@ -44,12 +67,31 @@ module Make (Config : Config.S) = struct
     let open Or_error.Let_syntax in
     (* Otherwise, if all grouping keys are from named relations, select all
        possible grouping keys. *)
-    let alias_map = alias_map r in
+    let alias_map = aliases r in
     (* Find the definition of each key and collect all the names in that
        definition. If they all come from base relations, then we can enumerate
        the keys. *)
     let orig_names = List.map ps ~f:Pred.to_name in
-    let preds = List.map ps ~f:(Pred.subst alias_map) in
+    let ps = List.map ps ~f:(Pred.subst alias_map) in
+
+    (* Try to substitute names that don't come from base relations with equivalent names that do. *)
+    let subst =
+      Equiv.eqs r |> Set.to_list
+      |> List.filter_map ~f:(fun (n, n') ->
+             match
+               ( Db.relation_has_field cost_conn (Name.name n),
+                 Db.relation_has_field cost_conn (Name.name n') )
+             with
+             | None, None | Some _, Some _ -> None
+             | Some _, None -> Some (n', n)
+             | None, Some _ -> Some (n, n'))
+      |> Map.of_alist_reduce (module Name) ~f:(fun n _ -> n)
+      |> Map.map ~f:P.name
+    in
+
+    let preds = List.map ps ~f:(Pred.subst subst) in
+
+    (* Collect the relations referred to by the predicate list. *)
     let%bind rels =
       List.map preds ~f:(fun p ->
           List.map
@@ -63,6 +105,7 @@ module Make (Config : Config.S) = struct
           |> Or_error.all)
       |> Or_error.all
     in
+
     let joined_rels =
       List.concat rels
       |> List.map ~f:(fun (r, n) -> (r.Relation.r_name, n))
@@ -70,17 +113,18 @@ module Make (Config : Config.S) = struct
       |> Map.to_alist
       |> List.map ~f:(fun (r, ns) ->
              dedup
-             @@ select (List.map ns ~f:P.name)
+             @@ select (Select_list.of_list @@ List.map ns ~f:P.name)
              @@ relation (Db.relation cost_conn r))
       |> List.reduce ~f:(join (Bool true))
     in
+
+    let sel_list =
+      List.map2_exn orig_names preds ~f:(fun n p ->
+          match n with Some n -> P.as_ p (Name.name n) | None -> p)
+      |> Select_list.of_list
+    in
     match joined_rels with
-    | Some r ->
-        Ok
-          (select
-             (List.map2_exn orig_names preds ~f:(fun n p ->
-                  match n with Some n -> P.as_ p (Name.name n) | None -> p))
-             r)
+    | Some r -> Ok (select sel_list r)
     | None -> Or_error.errorf "No relations found."
 
   let all_values ps r =
