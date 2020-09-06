@@ -82,6 +82,8 @@ module Infix = struct
     | Some n when String.(Name.name n <> b) -> As_pred (a, b)
     | None -> As_pred (a, b)
     | _ -> a
+
+  let exists r = Exists r
 end
 
 let to_type p = Schema.to_type p
