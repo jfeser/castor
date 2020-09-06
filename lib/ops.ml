@@ -211,6 +211,15 @@ module Make (C : Config.S) = struct
     let try_ p r = Some (Option.value (apply tf p r) ~default:r) in
     global try_ (sprintf "try(%s)" tf.name)
 
+  let first_success tfs =
+    let rec f tfs p r =
+      match tfs with
+      | tf :: tfs -> (
+          match apply tf p r with Some r' -> Some r' | None -> f tfs p r )
+      | [] -> None
+    in
+    global (f tfs) "first-success"
+
   let filter f =
     let filter p r = if f @@ Path.get_exn p r then Some r else None in
     global filter "filter"
