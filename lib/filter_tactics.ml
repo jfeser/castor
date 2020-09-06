@@ -1077,22 +1077,22 @@ module Make (C : Config.S) = struct
     let schema = Schema.scoped scope schema in
     match subquery with
     | Exists r ->
-        return @@ A.dep_join r' scope
+        let unscoped_schema = Schema.unscoped schema in
+        return @@ A.dep_join r' scope @@ A.dedup
+        @@ A.group_by (Schema.to_select_list unscoped_schema) unscoped_schema
         @@ A.select (Schema.to_select_list schema)
-        @@ A.filter p'
-        @@ A.select [ P.(as_ (count > int 0) (Name.name subquery_name)) ]
         @@ A.subst ctx r
     | First r ->
         return @@ A.dep_join r' scope
         @@ A.select (Schema.to_select_list schema)
-        @@ A.filter p'
+        @@ A.subst ctx @@ A.filter p'
         @@ A.select
              [
                P.as_
                  (P.name @@ List.hd_exn @@ Schema.schema r)
                  (Name.name subquery_name);
              ]
-        @@ A.subst ctx r
+             r
     | _ -> failwith "not a subquery"
 
   let elim_correlated_subquery =
