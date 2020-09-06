@@ -215,7 +215,10 @@ let push_select d (preds, q) =
             | `Agg -> p
             | `Scalar -> (
                 match Pred.to_name p with
-                | Some n -> P.as_ (Min p) (Name.name n)
+                | Some n ->
+                    if List.mem d_schema ~equal:[%compare.equal: Name.t] n then
+                      P.name n
+                    else P.as_ (Min p) (Name.name n)
                 | None -> Min p )
             | `Window -> p)
       in
