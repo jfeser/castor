@@ -28,6 +28,24 @@ let names eq =
        ~init:(Set.empty (module Name))
        ~f:(fun s (n, n') -> Set.add (Set.add s n') n)
 
+let closure eq =
+  let keys =
+    names eq |> Set.to_sequence
+    |> Sequence.map ~f:(fun n -> (n, Union_find.create n))
+    |> Sequence.to_list
+    |> Map.of_alist_exn (module Name)
+  in
+  Set.iter eq ~f:(fun (n, n') ->
+      Union_find.union (Map.find_exn keys n) (Map.find_exn keys n'));
+  Map.to_alist keys
+  |> List.concat_map ~f:(fun (n, k) ->
+         Map.to_alist keys
+         |> List.concat_map ~f:(fun (n', k') ->
+                if [%compare.equal: Name.t] n n' then []
+                else if Union_find.same_class k k' then [ (n, n'); (n', n) ]
+                else []))
+  |> Set.of_list (module Eq)
+
 (** Return the set of equivalent attributes in the output of a query.
 
     Two attributes are equivalent in a relation if in every tuple of that
@@ -74,7 +92,7 @@ let annotate r =
       end)
     eqs_open r
 
-let rec eqs r = eqs_open eqs r.node
+let rec eqs r = closure @@ eqs_open eqs r.node
 
 let is_equiv eqs n n' =
   let eqs = Set.to_list eqs in

@@ -34,7 +34,9 @@ alist(dedup(select([l_suppkey as l1_suppkey], lineitem)) as k0,
                       >= date("0000-01-01"), < (date("0000-01-01") + month(3)))))
 |};
   [%expect {|
-    [(l_suppkey, l1_suppkey); (l_suppkey, supplier_no)] |}]
+    [(l1_suppkey, l_suppkey); (l1_suppkey, supplier_no); (l_suppkey, l1_suppkey);
+     (l_suppkey, supplier_no); (supplier_no, l1_suppkey);
+     (supplier_no, l_suppkey)] |}]
 
 let%expect_test "" =
   run_test (Lazy.force tpch_conn)
@@ -50,8 +52,107 @@ join(((l_partkey = s3_ps_partkey) &&
             ps_supplycost as s3_ps_supplycost], partsupp)),
   lineitem)
 |};
-  [%expect {|
-    [(l_partkey, s3_ps_partkey); (l_suppkey, s3_ps_suppkey);
+  [%expect
+    {|
+    [(l_partkey, ps_partkey); (l_partkey, s3_ps_partkey);
+     (l_suppkey, ps_suppkey); (l_suppkey, s3_ps_suppkey);
      (ps_availqty, s3_ps_availqty); (ps_comment, s3_ps_comment);
-     (ps_partkey, s3_ps_partkey); (ps_suppkey, s3_ps_suppkey);
-     (ps_supplycost, s3_ps_supplycost)] |}]
+     (ps_partkey, l_partkey); (ps_partkey, s3_ps_partkey);
+     (ps_suppkey, l_suppkey); (ps_suppkey, s3_ps_suppkey);
+     (ps_supplycost, s3_ps_supplycost); (s3_ps_availqty, ps_availqty);
+     (s3_ps_comment, ps_comment); (s3_ps_partkey, l_partkey);
+     (s3_ps_partkey, ps_partkey); (s3_ps_suppkey, l_suppkey);
+     (s3_ps_suppkey, ps_suppkey); (s3_ps_supplycost, ps_supplycost)] |}]
+
+let%expect_test "" =
+  run_test (Lazy.force tpch_conn)
+    {|
+dedup(
+    select([substring(c1_phone, 0, 2) as cntrycode, c1_acctbal],
+      filter((true &&
+             ((substring(c1_phone, 0, 2) = "") ||
+             ((substring(c1_phone, 0, 2) = "") ||
+             ((substring(c1_phone, 0, 2) = "") ||
+             ((substring(c1_phone, 0, 2) = "") ||
+             ((substring(c1_phone, 0, 2) = "") ||
+             ((substring(c1_phone, 0, 2) = "") || (substring(c1_phone, 0, 2) = "")))))))),
+        select([s0_c1_phone as c1_phone, s0_c1_acctbal as c1_acctbal, s0_c1_custkey as c1_custkey],
+          join((s0_c1_acctbal > q0),
+            dedup(
+              select([c1_acctbal as s0_c1_acctbal, c1_custkey as s0_c1_custkey, c1_phone as s0_c1_phone],
+                alist(select([c_phone as c1_phone, c_acctbal as c1_acctbal, 
+                              c_custkey as c1_custkey, c_acctbal as s1_c1_acctbal, 
+                              c_custkey as s1_c1_custkey, c_phone as s1_c1_phone],
+                        dedup(select([c_phone, c_acctbal, c_custkey], customer))) as k1,
+                  select([s1_c1_acctbal, s1_c1_custkey, s1_c1_phone, 
+                          s1_c1_phone as c1_phone, s1_c1_acctbal as c1_acctbal, 
+                          s1_c1_custkey as c1_custkey],
+                    join((o_custkey = s1_c1_custkey),
+                      dedup(
+                        select([c_acctbal as s1_c1_acctbal, c_custkey as s1_c1_custkey, c_phone as s1_c1_phone],
+                          filter(((c_phone = k1.c1_phone) &&
+                                 ((c_acctbal = k1.c1_acctbal) &&
+                                 ((c_custkey = k1.c1_custkey) &&
+                                 ((c_acctbal = k1.s1_c1_acctbal) &&
+                                 ((c_custkey = k1.s1_c1_custkey) && ((c_phone = k1.s1_c1_phone) && true)))))),
+                            customer))),
+                      orders))))),
+            select([avg(c_acctbal) as q0],
+              filter(((c_acctbal > 0.0) &&
+                     ((substring(c_phone, 0, 2) = "") ||
+                     ((substring(c_phone, 0, 2) = "") ||
+                     ((substring(c_phone, 0, 2) = "") ||
+                     ((substring(c_phone, 0, 2) = "") ||
+                     ((substring(c_phone, 0, 2) = "") ||
+                     ((substring(c_phone, 0, 2) = "") || (substring(c_phone, 0, 2) = "")))))))),
+                customer)))))))
+|};
+  [%expect {|
+    [(c1_acctbal, c_acctbal); (c1_acctbal, s0_c1_acctbal);
+     (c1_acctbal, s1_c1_acctbal); (c1_acctbal, k1.c1_acctbal);
+     (c1_acctbal, k1.s1_c1_acctbal); (c1_custkey, c_custkey);
+     (c1_custkey, o_custkey); (c1_custkey, s0_c1_custkey);
+     (c1_custkey, s1_c1_custkey); (c1_custkey, k1.c1_custkey);
+     (c1_custkey, k1.s1_c1_custkey); (c1_phone, c_phone);
+     (c1_phone, s0_c1_phone); (c1_phone, s1_c1_phone); (c1_phone, k1.c1_phone);
+     (c1_phone, k1.s1_c1_phone); (c_acctbal, c1_acctbal);
+     (c_acctbal, s0_c1_acctbal); (c_acctbal, s1_c1_acctbal);
+     (c_acctbal, k1.c1_acctbal); (c_acctbal, k1.s1_c1_acctbal);
+     (c_custkey, c1_custkey); (c_custkey, o_custkey); (c_custkey, s0_c1_custkey);
+     (c_custkey, s1_c1_custkey); (c_custkey, k1.c1_custkey);
+     (c_custkey, k1.s1_c1_custkey); (c_phone, c1_phone); (c_phone, s0_c1_phone);
+     (c_phone, s1_c1_phone); (c_phone, k1.c1_phone); (c_phone, k1.s1_c1_phone);
+     (o_custkey, c1_custkey); (o_custkey, c_custkey); (o_custkey, s0_c1_custkey);
+     (o_custkey, s1_c1_custkey); (o_custkey, k1.c1_custkey);
+     (o_custkey, k1.s1_c1_custkey); (s0_c1_acctbal, c1_acctbal);
+     (s0_c1_acctbal, c_acctbal); (s0_c1_acctbal, s1_c1_acctbal);
+     (s0_c1_acctbal, k1.c1_acctbal); (s0_c1_acctbal, k1.s1_c1_acctbal);
+     (s0_c1_custkey, c1_custkey); (s0_c1_custkey, c_custkey);
+     (s0_c1_custkey, o_custkey); (s0_c1_custkey, s1_c1_custkey);
+     (s0_c1_custkey, k1.c1_custkey); (s0_c1_custkey, k1.s1_c1_custkey);
+     (s0_c1_phone, c1_phone); (s0_c1_phone, c_phone); (s0_c1_phone, s1_c1_phone);
+     (s0_c1_phone, k1.c1_phone); (s0_c1_phone, k1.s1_c1_phone);
+     (s1_c1_acctbal, c1_acctbal); (s1_c1_acctbal, c_acctbal);
+     (s1_c1_acctbal, s0_c1_acctbal); (s1_c1_acctbal, k1.c1_acctbal);
+     (s1_c1_acctbal, k1.s1_c1_acctbal); (s1_c1_custkey, c1_custkey);
+     (s1_c1_custkey, c_custkey); (s1_c1_custkey, o_custkey);
+     (s1_c1_custkey, s0_c1_custkey); (s1_c1_custkey, k1.c1_custkey);
+     (s1_c1_custkey, k1.s1_c1_custkey); (s1_c1_phone, c1_phone);
+     (s1_c1_phone, c_phone); (s1_c1_phone, s0_c1_phone);
+     (s1_c1_phone, k1.c1_phone); (s1_c1_phone, k1.s1_c1_phone);
+     (k1.c1_acctbal, c1_acctbal); (k1.c1_acctbal, c_acctbal);
+     (k1.c1_acctbal, s0_c1_acctbal); (k1.c1_acctbal, s1_c1_acctbal);
+     (k1.c1_acctbal, k1.s1_c1_acctbal); (k1.c1_custkey, c1_custkey);
+     (k1.c1_custkey, c_custkey); (k1.c1_custkey, o_custkey);
+     (k1.c1_custkey, s0_c1_custkey); (k1.c1_custkey, s1_c1_custkey);
+     (k1.c1_custkey, k1.s1_c1_custkey); (k1.c1_phone, c1_phone);
+     (k1.c1_phone, c_phone); (k1.c1_phone, s0_c1_phone);
+     (k1.c1_phone, s1_c1_phone); (k1.c1_phone, k1.s1_c1_phone);
+     (k1.s1_c1_acctbal, c1_acctbal); (k1.s1_c1_acctbal, c_acctbal);
+     (k1.s1_c1_acctbal, s0_c1_acctbal); (k1.s1_c1_acctbal, s1_c1_acctbal);
+     (k1.s1_c1_acctbal, k1.c1_acctbal); (k1.s1_c1_custkey, c1_custkey);
+     (k1.s1_c1_custkey, c_custkey); (k1.s1_c1_custkey, o_custkey);
+     (k1.s1_c1_custkey, s0_c1_custkey); (k1.s1_c1_custkey, s1_c1_custkey);
+     (k1.s1_c1_custkey, k1.c1_custkey); (k1.s1_c1_phone, c1_phone);
+     (k1.s1_c1_phone, c_phone); (k1.s1_c1_phone, s0_c1_phone);
+     (k1.s1_c1_phone, s1_c1_phone); (k1.s1_c1_phone, k1.c1_phone)] |}]
