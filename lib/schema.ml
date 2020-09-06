@@ -76,8 +76,10 @@ let schema_open schema r =
   | ATuple (r :: _, Concat) -> schema r |> unscoped
   | Relation r -> Relation.schema r |> unscoped
   | Range (p, p') ->
-      let t = Prim_type.unify (to_type p) (to_type p') in
-      [ Name.create ~type_:t "range" ]
+      let t =
+        try Some (Prim_type.unify (to_type p) (to_type p')) with _ -> None
+      in
+      [ Name.create ?type_:t "range" ]
 
 let schema_open_full schema r =
   match r.node with
