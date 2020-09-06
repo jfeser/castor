@@ -1043,7 +1043,7 @@ module Make (C : Config.S) = struct
 
   let elim_subquery_join = global elim_subquery_join "elim-subquery-join"
 
-  let elim_correlated_subquery r =
+  let elim_correlated_first_subquery r =
     let open Option.Let_syntax in
     let visitor =
       object (self : 'self)
@@ -1076,12 +1076,7 @@ module Make (C : Config.S) = struct
     in
     let schema = Schema.scoped scope schema in
     match subquery with
-    | Exists r ->
-        let unscoped_schema = Schema.unscoped schema in
-        return @@ A.dep_join r' scope @@ A.dedup
-        @@ A.group_by (Schema.to_select_list unscoped_schema) unscoped_schema
-        @@ A.select (Schema.to_select_list schema)
-        @@ A.subst ctx r
+    | Exists _ -> None
     | First r ->
         return @@ A.dep_join r' scope
         @@ A.select (Schema.to_select_list schema)
@@ -1095,12 +1090,44 @@ module Make (C : Config.S) = struct
              r
     | _ -> failwith "not a subquery"
 
-  let elim_correlated_subquery =
-    of_func elim_correlated_subquery ~name:"elim-correlated-subquery"
+  let elim_correlated_first_subquery =
+    of_func elim_correlated_first_subquery
+      ~name:"elim-correlated-first-subquery"
+
+  let elim_correlated_exists_subquery r =
+    let open Option.Let_syntax in
+    let%bind p, r' = to_filter r in
+    let p, subqueries =
+      Pred.conjuncts p
+      |> List.partition_map ~f:(function Exists r -> Second r | p -> First p)
+    in
+    let%bind p, subquery =
+      match subqueries with
+      | [] -> None
+      | s :: ss -> Some (Pred.conjoin (p @ List.map ss ~f:P.exists), s)
+    in
+    let scope = Fresh.name Global.fresh "s%d" in
+    let schema = Schema.schema r' in
+    let ctx =
+      List.map schema ~f:(fun n -> (n, Name (Name.scoped scope n)))
+      |> Map.of_alist_exn (module Name)
+    in
+    let schema = Schema.scoped scope schema in
+    let unscoped_schema = Schema.unscoped schema in
+    return @@ A.dep_join r' scope @@ A.dedup @@ A.filter p
+    @@ A.group_by (Schema.to_select_list unscoped_schema) unscoped_schema
+    @@ A.select (Schema.to_select_list schema)
+    @@ A.subst ctx subquery
+
+  let elim_correlated_exists_subquery =
+    of_func elim_correlated_exists_subquery
+      ~name:"elim-correlated-exists-subquery"
 
   let elim_all_correlated_subqueries =
-    fix
-      (first elim_correlated_subquery Path.(all >>? is_filter >>? is_run_time))
+    for_all
+      (first_success
+         [ elim_correlated_first_subquery; elim_correlated_exists_subquery ])
+      Path.(all >>? is_filter >>? is_run_time)
 
   let unnest =
     global (fun _ r -> Some (Unnest.unnest r |> Ast.strip_meta)) "unnest"
