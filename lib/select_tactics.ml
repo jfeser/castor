@@ -5,9 +5,12 @@ open Schema
 module A = Abslayout
 module P = Pred.Infix
 module V = Visitors
+open Match
 
 module Config = struct
   module type S = sig
+    val params : Set.M(Name).t
+
     include Ops.Config.S
 
     include Tactics_util.Config.S
@@ -15,11 +18,11 @@ module Config = struct
 end
 
 module Make (C : Config.S) = struct
+  open C
+
   open Ops.Make (C)
 
   open Tactics_util.Make (C)
-
-  let to_select r = match r.node with Select (p, r) -> Some (p, r) | _ -> None
 
   (** Push a select that doesn't contain aggregates. *)
   let push_simple_select r =
@@ -95,7 +98,7 @@ module Make (C : Config.S) = struct
   let extend_with_tuple ns r =
     tuple (List.map ns ~f:(fun n -> scalar @@ P.name n) @ [ r ]) Cross
 
-  let push_select r =
+  let push_select_collection r =
     let open Option.Let_syntax in
     let%bind ps, r' = to_select r in
     let%bind () = match select_kind ps with `Agg -> Some () | _ -> None in
@@ -165,7 +168,20 @@ module Make (C : Config.S) = struct
                (Binop (Gt, Name (Name.create count_n), Int 0))
                (select inner_preds rv)))
 
-  let push_select = of_func push_select ~name:"push-select"
+  let push_select_collection =
+    of_func push_select_collection ~name:"push-select-collection"
+
+  let push_select_filter r =
+    let open Option.Let_syntax in
+    let%bind ps, r' = to_select r in
+    let%bind p', r'' = to_filter r' in
+    return @@ A.filter p' @@ A.select ps r''
+
+  let push_select_filter =
+    of_func_cond ~name:"push-select-filter" ~pre:Option.return
+      push_select_filter ~post:(fun r -> Resolve.resolve ~params r |> Result.ok)
+
+  let push_select = first_success [ push_select_collection; push_select_filter ]
 
   let push_subqueries r =
     let open Option.Let_syntax in
