@@ -127,3 +127,5 @@ val to_static : params:Set.M(Name).t -> t -> t
 val strip_meta : < .. > annot pred -> t
 
 val is_expensive : _ pred -> bool
+
+val cse : ?min_uses:int -> t -> t * (Name.t * t) list

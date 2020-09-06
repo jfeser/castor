@@ -427,3 +427,33 @@ let is_expensive p =
     | p -> V.Reduce.pred false ( || ) (fun _ -> false) pred p
   in
   pred p
+
+let cse ?(min_uses = 3) p =
+  let counts = Hashtbl.create (module T) in
+
+  let rec count_pred p =
+    Hashtbl.update counts p ~f:(function Some c -> c + 1 | None -> 1);
+    Visitors.Iter.pred (fun _ -> ()) count_pred p
+  in
+
+  let rec size p = Visitors.Reduce.pred 1 ( + ) (fun _ -> 1) size p in
+
+  let subst p p_k p_v =
+    let rec subst p =
+      if [%compare.equal: t] p p_k then p_v
+      else Visitors.Map.pred Fun.id subst p
+    in
+    subst p |> normalize
+  in
+
+  count_pred p;
+  Hashtbl.to_alist counts
+  |> List.filter ~f:(fun (p, c) -> c >= min_uses && size p > 1)
+  |> List.sort ~compare:(fun (p, _) (p', _) ->
+         [%compare: int] (size p') (size p))
+  |> List.fold_left ~init:(p, []) ~f:(fun ((p_old, m) as acc) (p_k, _) ->
+         let name = Name.create @@ Fresh.name Global.fresh "x%d" in
+
+         let p_new = subst p_old p_k (Name name) in
+         if [%compare.equal: t] p_new p_old then acc
+         else (p_new, (name, p_k) :: m))
