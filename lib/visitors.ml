@@ -100,7 +100,7 @@ module Map = struct
 
   let bound pred (p, b) = (pred p, b)
 
-  let pred query pred = function
+  let pred annot pred = function
     | ( Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null _ | Count
       | Row_number ) as p ->
         p
@@ -112,8 +112,8 @@ module Map = struct
     | Max p -> Max (pred p)
     | Min p -> Min (pred p)
     | If (p, p', p'') -> If (pred p, pred p', pred p'')
-    | First q -> First (query q)
-    | Exists q -> Exists (query q)
+    | First q -> First (annot q)
+    | Exists q -> Exists (annot q)
     | Substring (p, p', p'') -> Substring (pred p, pred p', pred p'')
 
   let ordered_idx query pred
