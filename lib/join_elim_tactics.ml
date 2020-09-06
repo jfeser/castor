@@ -11,11 +11,21 @@ module Config = struct
     val params : Set.M(Name).t
 
     include Ops.Config.S
+
+    include Tactics_util.Config.S
+
+    include Simplify_tactic.Config.S
   end
 end
 
 module Make (C : Config.S) = struct
+  open C
+
   open Ops.Make (C)
+
+  open Simplify_tactic.Make (C)
+
+  module Tactics_util = Tactics_util.Make (C)
 
   let elim_join_nest r =
     let open Option.Let_syntax in
@@ -90,6 +100,36 @@ module Make (C : Config.S) = struct
     return @@ A.filter pred @@ A.join (Bool true) r1 r2
 
   let hoist_join_filter = of_func hoist_join_filter ~name:"hoist-join-filter"
+
+  let push_join_filter r =
+    let open Option.Let_syntax in
+    let stage = r.meta#stage in
+    let r = strip_meta r in
+    let%bind p, r, r' = to_join r in
+    let s = Schema.schema r |> Set.of_list (module Name)
+    and s' = Schema.schema r' |> Set.of_list (module Name) in
+    let left, right, above =
+      Pred.conjuncts p
+      |> List.partition3_map ~f:(fun p ->
+             if Tactics_util.is_supported stage s p then `Fst p
+             else if Tactics_util.is_supported stage s' p then `Snd p
+             else `Trd p)
+    in
+    if List.is_empty left && List.is_empty right then None
+    else
+      let r = if List.is_empty left then r else A.filter (Pred.conjoin left) r
+      and r' =
+        if List.is_empty right then r' else A.filter (Pred.conjoin right) r'
+      in
+      return @@ A.join (Pred.conjoin above) r r'
+
+  let push_join_filter =
+    seq'
+      (of_func_cond ~name:"push-join-filter"
+         ~pre:(fun r -> Some (Resolve.resolve_exn ~params r))
+         push_join_filter
+         ~post:(fun r -> Resolve.resolve ~params r |> Result.ok))
+      simplify
 
   let split_out path pk =
     let open A in
