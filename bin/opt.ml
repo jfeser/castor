@@ -147,6 +147,7 @@ let () =
       and () = Db.param
       and () = Type_cost.param
       and () = Join_opt.param
+      and () = Groupby_tactics.param
       and () = Type.param
       and () = Simplify_tactic.param
       and cost_timeout =

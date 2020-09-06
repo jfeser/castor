@@ -3,6 +3,8 @@ open Collections
 module A = Abslayout
 module P = Pred.Infix
 
+include (val Log.make ~level:(Some Warning) "castor-opt.groupby-tactics")
+
 module Config = struct
   module type S = sig
     include Ops.Config.S
@@ -17,8 +19,6 @@ module Make (C : Config.S) = struct
   open Tactics_util.Make (C)
 
   open Ops
-
-  let src = Logs.Src.create "groupby-tactics"
 
   (** Remove all references to names in params while ensuring that the resulting
      relation overapproximates the original. *)
@@ -78,7 +78,7 @@ module Make (C : Config.S) = struct
                  (scalars @ [ A.select rest (A.filter filter_pred r) ])
                  Cross
         | Error err ->
-            Logs.info ~src (fun m -> m "elim-groupby: %a" Error.pp err);
+            info (fun m -> m "elim-groupby: %a" Error.pp err);
             None )
     (* Otherwise, if some keys are computed, fail. *)
     | _ -> None
@@ -100,7 +100,7 @@ module Make (C : Config.S) = struct
         | Ok keys ->
             Some (A.list keys key_name (A.select ps (A.filter filter_pred r)))
         | Error err ->
-            Logs.info ~src (fun m -> m "elim-groupby-approx: %a" Error.pp err);
+            info (fun m -> m "elim-groupby-approx: %a" Error.pp err);
             None )
     (* Otherwise, if some keys are computed, fail. *)
     | _ -> None

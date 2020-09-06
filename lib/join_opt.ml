@@ -464,10 +464,7 @@ module Make (Config : Config.S) = struct
 
   let leaf_flat r =
     let open Option.Let_syntax in
-    if Is_serializable.is_static ~params r then return @@ Flat r
-    else (
-      info (fun m -> m "Flat join does not apply to@ %a." A.pp r);
-      None )
+    if Is_serializable.is_static ~params r then return @@ Flat r else None
 
   let leaf_id r =
     let open Option.Let_syntax in
@@ -494,7 +491,7 @@ module Make (Config : Config.S) = struct
       if all_in lhs_schema then return (`Lhs (s1, k))
       else if all_in rhs_schema then return (`Rhs (s2, k))
       else (
-        Log.debug (fun m -> m "Unknown key %a" Pred.pp k);
+        debug (fun m -> m "Unknown key %a" Pred.pp k);
         [] )
     in
     let%bind k1, k2 =
