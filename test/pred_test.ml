@@ -18,7 +18,8 @@ let%expect_test "" =
        partsupp))))
 |}
     [ Name.create "k0" ] "s0";
-  [%expect {|
+  [%expect
+    {|
     (value >
     (select([(sum((ps_supplycost * ps_availqty)) * param2) as v],
        join((ps_suppkey = s_suppkey),
@@ -98,3 +99,42 @@ let%expect_test "" =
     ((s0.l_quantity >= param5) &&
     ((s0.l_quantity <= (param5 + 10)) && (p_size <= 15)))))))))))
  |}]
+
+let%expect_test "" =
+  let p =
+    of_string_exn
+      {|
+((substring(c1_phone, 0, 2) = param0) ||
+           ((substring(c1_phone, 0, 2) = param1) ||
+           ((substring(c1_phone, 0, 2) = param2) ||
+           ((substring(c1_phone, 0, 2) = param3) ||
+           ((substring(c1_phone, 0, 2) = param4) ||
+           ((substring(c1_phone, 0, 2) = param5) ||
+           (substring(c1_phone, 0, 2) = param6)))))))
+|}
+  in
+  Fmt.pr "%a@." Fmt.Dump.(pair pp (list (pair Name.pp pp))) (cse p);
+  [%expect
+    {|
+    (((x0 = param0) ||
+     ((x0 = param1) ||
+     ((x0 = param2) ||
+     ((x0 = param3) || ((x0 = param4) || ((x0 = param5) || (x0 = param6))))))),
+     [(x0, substring(c1_phone, 0, 2))]) |}]
+
+let%expect_test "" =
+  let p =
+    of_string_exn
+      {|
+((x0 = param0) ||
+     ((x0 = param1) ||
+     ((x0 = param2) ||
+     ((x0 = param3) || ((x0 = param4) || ((x0 = param5) || (x0 = param6)))))))|}
+  in
+  Fmt.pr "%a@." Fmt.Dump.(pair pp (list (pair Name.pp pp))) (cse p);
+  [%expect {|
+    (((x0 = param0) ||
+     ((x0 = param1) ||
+     ((x0 = param2) ||
+     ((x0 = param3) || ((x0 = param4) || ((x0 = param5) || (x0 = param6))))))),
+     []) |}]
