@@ -105,18 +105,18 @@ module Make (Config : Config.S) = struct
     of_func f ~name:"apply-to-subqueries"
 
   let push_all_runtime_filters =
-    fix
-      (for_all Filter_tactics.push_filter
-         Path.(all >>? is_run_time >>? is_filter))
+    for_all Filter_tactics.push_filter Path.(all >>? is_run_time >>? is_filter)
+
+  let hoist_all_runtime_filters =
+    for_all Filter_tactics.hoist_filter
+      Path.(all >>? is_filter >>? is_run_time >> O.parent)
 
   let push_static_filters =
-    fix
-      (for_all Filter_tactics.push_filter
-         Path.(all >>? is_run_time >>? is_filter >>? Infix.not is_param_filter))
+    for_all Filter_tactics.push_filter
+      Path.(all >>? is_run_time >>? is_filter >>? Infix.not is_param_filter)
 
   let hoist_all_filters =
-    fix
-      (for_all Filter_tactics.hoist_filter Path.(all >>? is_filter >> O.parent))
+    for_all Filter_tactics.hoist_filter Path.(all >>? is_filter >> O.parent)
 
   let elim_param_filter tf test =
     (* Eliminate comparison filters. *)
@@ -124,9 +124,8 @@ module Make (Config : Config.S) = struct
     @@ seq_many
          [
            (* Hoist parameterized filters as far up as possible. *)
-           fix
-             (for_all Filter_tactics.hoist_filter
-                (Path.all >>? is_param_filter >> parent));
+           for_all Filter_tactics.hoist_filter
+             (Path.all >>? is_param_filter >> parent);
            Branching.(
              seq_many
                [
@@ -203,9 +202,8 @@ module Make (Config : Config.S) = struct
     traced ~name:"cse"
     @@ seq_many
          [
-           fix
-           @@ first Join_elim_tactics.push_join_filter Path.(all >>? is_join);
-           fix @@ first Filter_tactics.cse_filter Path.(all >>? is_filter);
+           for_all Join_elim_tactics.push_join_filter Path.(all >>? is_join);
+           for_all Filter_tactics.cse_filter Path.(all >>? is_filter);
          ]
 
   let opt =
@@ -228,9 +226,8 @@ module Make (Config : Config.S) = struct
                       first Groupby_tactics.elim_groupby
                         Path.(all >>? is_groupby);
                       fix push_static_filters;
-                      fix
-                      @@ first Join_elim_tactics.push_join_filter
-                           Path.(all >>? is_join);
+                      for_all Join_elim_tactics.push_join_filter
+                        Path.(all >>? is_join);
                     ];
                (* Hoist parameterized filters as far up as possible. *)
                traced ~name:"hoist-param-filters"
@@ -239,9 +236,8 @@ module Make (Config : Config.S) = struct
                     [
                       for_all Join_elim_tactics.hoist_join_param_filter
                         Path.(all >>? is_join);
-                      fix
-                      @@ first Filter_tactics.hoist_filter
-                           Path.(all >>? is_param_filter >> O.parent);
+                      for_all Filter_tactics.hoist_filter
+                        Path.(all >>? is_param_filter >> O.parent);
                     ];
                try_random
                @@ at_ Filter_tactics.elim_simple_filter
@@ -253,9 +249,8 @@ module Make (Config : Config.S) = struct
                     [
                       traced ~name:"elim-join-nests-opt"
                       @@ try_random
-                      @@ fix
-                           (first Join_opt.transform
-                              Path.(all >>? is_join >>? is_run_time));
+                      @@ for_all Join_opt.transform
+                           Path.(all >>? is_join >>? is_run_time);
                       traced ~name:"elim-join-nests-flat"
                       @@ try_random
                       @@ at_ Simple_tactics.row_store
@@ -285,17 +280,12 @@ module Make (Config : Config.S) = struct
                               [
                                 (* Push constant filters *)
                                 traced ~name:"push-constant-filters"
-                                @@ fix
-                                @@ at_ Filter_tactics.push_filter
-                                     Castor.Path.(
-                                       all >>? is_const_filter >>| shallowest);
+                                @@ for_all Filter_tactics.push_filter
+                                     Castor.Path.(all >>? is_const_filter);
                                 (* Push orderby operators into compile time position if possible. *)
                                 traced ~name:"push-orderby"
-                                @@ fix
-                                @@ at_ Orderby_tactics.push_orderby
-                                     Path.(
-                                       all >>? is_orderby >>? is_run_time
-                                       >>| shallowest);
+                                @@ for_all Orderby_tactics.push_orderby
+                                     Path.(all >>? is_orderby >>? is_run_time);
                                 (* Eliminate comparison filters. *)
                                 traced ~name:"elim-cmp-filters"
                                 @@ elim_param_filter
@@ -328,18 +318,14 @@ module Make (Config : Config.S) = struct
                                 @@ push_all_runtime_filters;
                                 (* Push selections above collections. *)
                                 traced ~name:"push-select-above-collection"
-                                @@ fix
                                 @@ for_all Select_tactics.push_select
                                      Path.(
                                        all >>? is_select >>? is_run_time
                                        >>? above is_collection);
                                 (* Push orderby operators into compile time position if possible. *)
                                 traced ~name:"push-orderby-into-ctime"
-                                @@ fix
-                                @@ at_ Orderby_tactics.push_orderby
-                                     Path.(
-                                       all >>? is_orderby >>? is_run_time
-                                       >>| shallowest)
+                                @@ for_all Orderby_tactics.push_orderby
+                                     Path.(all >>? is_orderby >>? is_run_time)
                                 (* Last-ditch tactic to eliminate orderby. *);
                                 traced ~name:"final-orderby-elim"
                                 @@ for_all Simple_tactics.row_store
@@ -368,6 +354,7 @@ module Make (Config : Config.S) = struct
                                 traced ~name:"cleanup" @@ fix
                                 @@ seq_many
                                      [
+                                       cse;
                                        for_all Select_tactics.push_simple_select
                                          Path.(all >>? is_select);
                                        for_all Dedup_tactics.push_dedup
@@ -375,9 +362,9 @@ module Make (Config : Config.S) = struct
                                        for_all Dedup_tactics.elim_dedup
                                          Path.(all >>? is_dedup);
                                      ];
-                                fix project;
-                                push_all_runtime_filters;
-                                Simplify_tactic.simplify;
+                                traced ~name:"project" @@ fix project;
+                                traced ~name:"prf" @@ push_all_runtime_filters;
+                                traced ~name:"simp" @@ Simplify_tactic.simplify;
                                 traced @@ filter is_serializable'';
                               ]);
                        ]);
