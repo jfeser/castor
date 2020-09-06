@@ -217,7 +217,16 @@ module Make (Config : Config.S) = struct
                traced ~name:"simplify-preds"
                @@ for_all Filter_tactics.simplify Path.(all);
                (* CSE *)
-               cse;
+               seq_many
+                 [
+                   cse;
+                   for_all Select_tactics.push_select Path.(all >>? is_select);
+                   for_all Simple_tactics.row_store
+                     Path.(
+                       all >>? is_run_time >>? not has_params
+                       >>? not is_serializable
+                       >>? not (contains is_collection));
+                 ];
                (* Eliminate groupby operators. *)
                traced ~name:"elim-groupby"
                @@ fix
@@ -299,7 +308,6 @@ module Make (Config : Config.S) = struct
                                      is_param_filter;
                                 traced ~name:"push-all-unparam-filters"
                                 @@ push_all_runtime_filters;
-                                cse;
                                 (* Eliminate all unparameterized relations. *)
                                 traced ~name:"elim-unparam-relations"
                                 @@ fix
@@ -354,7 +362,6 @@ module Make (Config : Config.S) = struct
                                 traced ~name:"cleanup" @@ fix
                                 @@ seq_many
                                      [
-                                       cse;
                                        for_all Select_tactics.push_simple_select
                                          Path.(all >>? is_select);
                                        for_all Dedup_tactics.push_dedup
