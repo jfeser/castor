@@ -1,4 +1,5 @@
 open Ast
+module A = Abslayout
 open Abslayout
 module V = Visitors
 open Schema
@@ -20,9 +21,17 @@ module Make (C : Config.S) = struct
     match r.node with
     | Filter (Bool true, r') -> Some r'
     | Filter (Bool false, _) -> Some empty
+    | Filter (p, r') -> Some (A.filter (Pred.simplify p) r')
     | _ -> None
 
   let filter_const = of_func filter_const ~name:"filter-const"
+
+  let join_simplify r =
+    match r.node with
+    | Join { pred; r1; r2 } -> Some (A.join (Pred.simplify pred) r1 r2)
+    | _ -> None
+
+  let join_simplify = of_func join_simplify ~name:"join-simplify"
 
   let elim_structure r =
     let r = strip_meta r in
@@ -101,6 +110,70 @@ module Make (C : Config.S) = struct
 
   let dealias_select = of_func dealias_select ~name:"de-alias-select"
 
+  module Subst = struct
+    let select_list_open pred ctx ps =
+      List.map ps ~f:(fun p ->
+          match Pred.to_name p with
+          | Some n -> P.as_ p @@ Name.name n
+          | None -> p)
+      |> List.map ~f:(pred ctx)
+      |> Select_list.of_list
+
+    let query_open annot pred ctx = function
+      | Select (ps, r) ->
+          let ps' = select_list_open pred ctx ps in
+          Select (ps', annot ctx r)
+      | GroupBy (ps, key, r) ->
+          let ps' = select_list_open pred ctx ps
+          and key' =
+            List.map key ~f:(fun n ->
+                match Map.find ctx n with Some n' -> n' | None -> n)
+            |> List.dedup_and_sort ~compare:[%compare: Name.t]
+          and r' = annot ctx r in
+          GroupBy (ps', key', r')
+      | q -> V.Map.query (annot ctx) (pred ctx) q
+
+    let rec pred ctx = function
+      | Name n as p -> (
+          match Map.find ctx n with Some p' -> Name p' | None -> p )
+      | p -> V.Map.pred (annot ctx) (pred ctx) p
+
+    and query ctx q = query_open annot pred ctx q
+
+    and annot ctx r = V.Map.annot (query ctx) r
+  end
+
+  let subst_path ctx path r =
+    let subst_top r =
+      V.Map.annot (Subst.query_open (fun _ r -> r) Subst.pred ctx) r
+    in
+    Path.get_exn path r |> subst_top |> Path.set_exn path r
+
+  let rec subst_along_path ctx path r =
+    let r' = subst_path ctx path r in
+    let is_select =
+      match r'.node with Select _ | GroupBy _ -> true | _ -> false
+    in
+    if is_select then r'
+    else
+      match Path.parent path with
+      | Some path' -> subst_along_path ctx path' r'
+      | None -> r'
+
+  let elim_select p r =
+    let open Option.Let_syntax in
+    let%bind sel, r' = Path.get_exn p r |> to_select in
+    let%bind subst =
+      List.map sel ~f:(function
+        | As_pred (Name n, n') -> Some (Name.create n', n)
+        | _ -> None)
+      |> Option.all
+    in
+    let subst_ctx = Map.of_alist_exn (module Name) subst in
+    return @@ Path.set_exn p (subst_along_path subst_ctx p r) r'
+
+  let elim_select = global elim_select "flatten-select"
+
   let flatten_select r =
     match r.node with
     | Select (ps, { node = Select (ps', r); _ }) ->
@@ -143,11 +216,25 @@ module Make (C : Config.S) = struct
   let elim_filter_above_join =
     of_func elim_filter_above_join ~name:"elim-filter-above-join"
 
+  (** Eliminate dedup(groupby(...)) if all of the groupby keys appear in the select list. *)
+  let elim_dedup_above_groupby r =
+    let open Option.Let_syntax in
+    let%bind r' = to_dedup r in
+    let%bind sel, key, r'' = to_groupby r' in
+    let sel_names =
+      List.filter_map sel ~f:Pred.to_name |> Set.of_list (module Name)
+    in
+    if List.for_all key ~f:(Set.mem sel_names) then return r' else None
+
+  let elim_dedup_above_groupby =
+    of_func elim_dedup_above_groupby ~name:"elim-dedup-above-groupby"
+
   let simplify =
     seq_many
       [
         (* Drop constant filters if possible. *)
         for_all filter_const Path.(all >>? is_filter);
+        for_all join_simplify Path.(all >>? is_join);
         (* Eliminate complex structures in compile time position. *)
         fix
           (at_ elim_structure
@@ -161,7 +248,31 @@ module Make (C : Config.S) = struct
         for_all dealias_select Path.(all >>? is_select);
         for_all flatten_select Path.(all >>? is_select);
         for_all elim_filter_above_join Path.(all >>? is_filter);
+        for_all elim_dedup_above_groupby Path.(all >>? is_dedup);
       ]
+
+  let unnest_and_simplify _ r =
+    let simplify q = Option.value_exn (apply simplify Path.root q) in
+    let remove_dedup q =
+      if false then
+        q |> Unnest.hoist_meta
+        |> Cardinality.extend ~dedup:false
+        |> Join_elim.remove_dedup |> strip_meta
+      else q |> strip_meta
+    in
+    let start_time = Time.now () in
+    let ret =
+      (r :> Ast.t)
+      |> simplify |> Unnest.unnest
+      |> Cardinality.extend ~dedup:false
+      |> Join_elim.remove_joins |> remove_dedup |> simplify
+    in
+    let end_time = Time.now () in
+    info (fun m ->
+        m "Simplify ran in %a" Time.Span.pp (Time.diff end_time start_time));
+    Some ret
+
+  let unnest_and_simplify = global unnest_and_simplify "unnest-and-simplify"
 end
 
 let simplify ?(dedup = false) ?(params = Set.empty (module Name)) conn r =
@@ -172,20 +283,4 @@ let simplify ?(dedup = false) ?(params = Set.empty (module Name)) conn r =
   end in
   let module O = Ops.Make (C) in
   let module S = Make (C) in
-  let simplify q = Option.value_exn (O.apply S.simplify Path.root q) in
-  let remove_dedup q =
-    if false then
-      q |> Unnest.hoist_meta |> Cardinality.extend ~dedup
-      |> Join_elim.remove_dedup |> strip_meta
-    else q |> strip_meta
-  in
-  let start_time = Time.now () in
-  let ret =
-    (r :> Ast.t)
-    |> simplify |> Unnest.unnest |> Cardinality.extend ~dedup
-    |> Join_elim.remove_joins |> remove_dedup |> simplify
-  in
-  let end_time = Time.now () in
-  info (fun m ->
-      m "Simplify ran in %a" Time.Span.pp (Time.diff end_time start_time));
-  ret
+  Option.value_exn (O.apply S.unnest_and_simplify Path.root r)
