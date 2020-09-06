@@ -666,14 +666,14 @@ module Make (C : Config.S) = struct
     let%bind p, r = to_filter r in
     let clauses = Pred.disjuncts p in
     if List.length clauses > 1 then
-      if
-        ( try
-            Tactics_util.all_disjoint
-              (List.map ~f:(Pred.to_static ~params) clauses)
-              r
-          with _ -> false )
-        && List.length clauses > 1
-      then Some (A.tuple (List.map clauses ~f:(fun p -> A.filter p r)) Concat)
+      let%bind all_disjoint =
+        Tactics_util.all_disjoint
+          (List.map ~f:(Pred.to_static ~params) clauses)
+          r
+        |> Or_error.ok
+      in
+      if all_disjoint && List.length clauses > 1 then
+        Some (A.tuple (List.map clauses ~f:(fun p -> A.filter p r)) Concat)
       else None
     else None
 

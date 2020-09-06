@@ -174,9 +174,10 @@ module Make (Config : Config.S) = struct
   (** For a set of predicates, check whether more than one predicate is true at
      any time. *)
   let all_disjoint ps r =
-    if List.length ps <= 1 then true
+    let open Or_error.Let_syntax in
+    if List.length ps <= 1 then return true
     else
-      let tups =
+      let%map tups =
         let sql =
           let pred =
             all_pairs ps |> List.map ~f:(fun (p, p') -> P.(p && p')) |> disjoin
@@ -184,7 +185,7 @@ module Make (Config : Config.S) = struct
           filter pred @@ r |> Unnest.unnest |> Sql.of_ralgebra |> Sql.to_string
         in
         Log.debug (fun m -> m "All disjoint sql: %s" sql);
-        Db.exec1 conn sql
+        Db.run conn sql
       in
       List.length tups = 0
 
