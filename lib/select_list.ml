@@ -14,3 +14,15 @@ let ( @ ) l l' =
         |> Option.value ~default:true)
   in
   l @ l'
+
+let of_list ps =
+  let ps', _ =
+    List.fold_left ps ~init:([], String.Set.empty)
+      ~f:(fun ((ps, names) as acc) p ->
+        match Pred.to_name p with
+        | Some n ->
+            let n = Name.name n in
+            if Set.mem names n then acc else (p :: ps, Set.add names n)
+        | None -> (p :: ps, names))
+  in
+  List.rev ps'
