@@ -9,3 +9,5 @@ let to_filter r = match r.node with Filter (p, r) -> Some (p, r) | _ -> None
 
 let to_groupby r =
   match r.node with GroupBy (p, k, r) -> Some (p, k, r) | _ -> None
+
+let to_select r = match r.node with Select (s, r) -> Some (s, r) | _ -> None
