@@ -340,7 +340,7 @@ module Make (C : Config.S) = struct
     let is_field n =
       Db.relation_has_field C.conn (Name.name n) |> Option.is_some
     in
-    let%bind param, attr =
+    let%bind _param, attr =
       match names with
       | [ n1; n2 ] when is_param n1 && is_field n2 -> return (n1, n2)
       | [ n2; n1 ] when is_param n1 && is_field n2 -> return (n1, n2)
@@ -760,7 +760,7 @@ module Make (C : Config.S) = struct
 
         method! visit_Exists _ this _ = this
 
-        method visit_First _ this _ = this
+        method! visit_First _ this _ = this
       end
     in
     v#visit_t ()
@@ -845,10 +845,10 @@ module Make (C : Config.S) = struct
     match (fields, key_range) with
     | [ (f, aliases) ], (Some l, Some h) ->
         partition_with_bounds f aliases l h r n
-    | fs, (None, _ | _, None) ->
+    | _, (None, _ | _, None) ->
         fail "Could not find bounds for fields";
         None
-    | fs, _ ->
+    | _ ->
         fail "Found too many fields";
         None
 
@@ -977,7 +977,7 @@ module Make (C : Config.S) = struct
     in
     let scope = fresh_name "s%d" in
     let visitor =
-      object (self : 'self)
+      object
         inherit Tactics_util.extract_subquery_visitor
 
         method can_hoist = can_hoist
@@ -996,7 +996,7 @@ module Make (C : Config.S) = struct
       match subqueries with
       | [] -> None
       | [ x ] -> Some x
-      | xs -> Some (A.tuple subqueries Cross)
+      | _ -> Some (A.tuple subqueries Cross)
     in
     Path.set_exn p r (A.dep_join lhs scope rhs)
 
@@ -1014,7 +1014,7 @@ module Make (C : Config.S) = struct
              || match stage n with `Compile -> true | _ -> false)
     in
     let visitor =
-      object (self : 'self)
+      object
         inherit Tactics_util.extract_subquery_visitor
 
         method can_hoist = can_hoist
@@ -1037,7 +1037,7 @@ module Make (C : Config.S) = struct
       match subqueries with
       | [] -> None
       | [ x ] -> Some x
-      | xs -> Some (A.tuple subqueries Cross)
+      | _ -> Some (A.tuple subqueries Cross)
     in
     Path.set_exn p r (A.join pred' r' rhs)
 
@@ -1046,7 +1046,7 @@ module Make (C : Config.S) = struct
   let elim_correlated_first_subquery r =
     let open Option.Let_syntax in
     let visitor =
-      object (self : 'self)
+      object
         inherit Tactics_util.extract_subquery_visitor
 
         val mutable is_first = true

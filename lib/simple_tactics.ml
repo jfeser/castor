@@ -4,8 +4,6 @@ module A = Abslayout
 
 module Config = struct
   module type S = sig
-    val params : Set.M(Name).t
-
     include Ops.Config.S
   end
 end

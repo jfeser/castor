@@ -20,7 +20,7 @@ module Make (C : Config.S) = struct
     let open Option.Let_syntax in
     let%bind r = to_dedup r in
     match Cardinality.estimate r with
-    | Abs_int.Interval (l, h) when h <= 1 -> Some r
+    | Abs_int.Interval (_, h) when h <= 1 -> Some r
     | _ -> None
 
   let elim_dedup = O.of_func elim_dedup ~name:"elim-dedup"
@@ -28,7 +28,7 @@ module Make (C : Config.S) = struct
   let lhs_visible lhs rhs =
     Set.is_subset
       (Set.of_list (module Name) (Schema.schema lhs))
-      (Set.of_list (module Name) (Schema.schema rhs))
+      ~of_:(Set.of_list (module Name) (Schema.schema rhs))
 
   let push_dedup r =
     let open Option.Let_syntax in

@@ -8,7 +8,7 @@ module V = Visitors
 
 include (val Log.make ~level:(Some Warning) "castor-opt.join-opt")
 
-let max_nest_joins = ref 0
+let max_nest_joins = ref 1
 
 let param =
   let open Command.Let_syntax in
@@ -153,7 +153,6 @@ module Join_graph = struct
       Returns a graph where the nodes are the queries at the leaves of the join
      tree and the edges are join predicates. *)
   let rec to_graph leaves r =
-    let open Option.Let_syntax in
     let union_filters f1 f2 =
       let merger ~key:_ = function
         | `Left x | `Right x -> Some x
@@ -225,7 +224,6 @@ module Join_graph = struct
         end
 
   let of_abslayout r =
-    let open Option.Let_syntax in
     debug (fun m -> m "Planning join for %a." A.pp r);
     let leaves =
       to_leaves r |> Set.to_list
@@ -383,7 +381,6 @@ module Make (Config : Config.S) = struct
 
     (* Remove parameters from the join nest where possible. *)
     let static_r =
-      let open Visitors in
       let rec annot r = V.Map.annot query r
       and query q = V.Map.query annot pred q
       and pred p = Pred.to_static ~params p in
@@ -402,19 +399,22 @@ module Make (Config : Config.S) = struct
             As_pred (Avg c, "avg");
           ]
         @@ group_by [ P.as_ Count "c" ] (Set.to_list parts) static_r)
-      |> Simplify_tactic.simplify ~dedup:true cost_conn
+      |> Simplify_tactic.simplify cost_conn
     in
     let sql = Sql.of_ralgebra parted_r |> Sql.to_string
     and schema = Prim_type.[ int_t; int_t; fixed_t ] in
-    let tups = Db.exec_exn cost_conn schema sql in
 
-    match tups with
-    | [ Int min; Int max; Fixed avg ] :: _ ->
-        (min, max, Fixed_point.to_float avg)
-    | [ Null; Null; Null ] :: _ -> (0, 0, 0.0)
-    | _ ->
-        err (fun m -> m "Unexpected tuples: %s" sql);
-        failwith "Unexpected tuples."
+    try
+      let tups = Db.exec_exn cost_conn schema sql in
+
+      match tups with
+      | [ Int min; Int max; Fixed avg ] :: _ ->
+          (min, max, Fixed_point.to_float avg)
+      | [ Null; Null; Null ] :: _ -> (0, 0, 0.0)
+      | _ ->
+          err (fun m -> m "Unexpected tuples: %s" sql);
+          failwith "Unexpected tuples."
+    with _ -> (Int.max_value, Int.max_value, Float.max_value)
 
   let to_parts rhs pred =
     let rhs_schema = Schema.schema rhs |> Set.of_list (module Name) in
@@ -600,7 +600,6 @@ module Make (Config : Config.S) = struct
     opt
 
   let opt r =
-    let open Option.Let_syntax in
     let s = G.of_abslayout r in
     let joins = opt (Set.empty (module Name)) s#graph in
     object

@@ -10,7 +10,7 @@
    combinat
    ocamlgraph
  )
- (flags -open Core -open Castor -unboxed-types)
+ (flags :standard -open Core -open Castor -unboxed-types -w -9)
  (inline_tests)
  (preprocess
   (pps

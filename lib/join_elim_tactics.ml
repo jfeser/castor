@@ -8,8 +8,6 @@ open Match
 
 module Config = struct
   module type S = sig
-    val params : Set.M(Name).t
-
     include Ops.Config.S
 
     include Tactics_util.Config.S

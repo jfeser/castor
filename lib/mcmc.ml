@@ -28,7 +28,7 @@ module Random_choice = struct
         rand.pairs <- ((n, r), true) :: rand.pairs;
         true
 
-  let rec perturb rand =
+  let perturb rand =
     let i' = Random.State.int rand.state @@ List.length rand.pairs in
     {
       rand with

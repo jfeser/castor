@@ -1,7 +1,5 @@
 open Collections
 open Ast
-open Abslayout
-open Schema
 module R = Resolve
 module V = Visitors
 
@@ -249,6 +247,7 @@ module Make (Config : Config.S) = struct
                         Path.(all >>? is_param_filter >> O.parent);
                     ];
                try_random
+               @@ traced ~name:"elim-simple-filter"
                @@ at_ Filter_tactics.elim_simple_filter
                     Path.(all >>? is_expensive_filter >>| shallowest);
                (* Eliminate unparameterized join nests. Try using join optimization and

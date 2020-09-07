@@ -9,8 +9,6 @@ open Match
 
 module Config = struct
   module type S = sig
-    val params : Set.M(Name).t
-
     include Ops.Config.S
 
     include Tactics_util.Config.S
@@ -187,7 +185,7 @@ module Make (C : Config.S) = struct
     let open Option.Let_syntax in
     let%bind ps, r = to_select r in
     let visitor =
-      object (self : 'self)
+      object
         inherit extract_subquery_visitor
 
         method can_hoist _ = true

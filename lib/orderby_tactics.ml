@@ -53,7 +53,6 @@ module Make (Config : Config.S) = struct
     mk (C.order_by key lhs) scope rhs
 
   let push_orderby r =
-    let open Option.Let_syntax in
     let open C in
     let orderby_cross_tuple key rs =
       match rs with
