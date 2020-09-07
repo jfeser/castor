@@ -776,12 +776,12 @@ module Make (Config : Config.S) () = struct
     let ctx = add_layout_start ctx r in
     match (r.node, t) with
     | _, Type.EmptyT -> ()
-    | AScalar r', IntT t' -> scan_int ctx b t' cb
-    | AScalar r', DateT t' -> scan_date ctx b t' cb
-    | AScalar r', FixedT t' -> scan_fixed ctx b t' cb
-    | AScalar r', BoolT t' -> scan_bool ctx b cb
-    | AScalar r', StringT t' -> scan_string ctx b t' cb
-    | AScalar r', NullT -> scan_null b cb
+    | AScalar _, IntT t' -> scan_int ctx b t' cb
+    | AScalar _, DateT t' -> scan_date ctx b t' cb
+    | AScalar _, FixedT t' -> scan_fixed ctx b t' cb
+    | AScalar _, BoolT _ -> scan_bool ctx b cb
+    | AScalar _, StringT t' -> scan_string ctx b t' cb
+    | AScalar _, NullT -> scan_null b cb
     | ATuple r', TupleT t' -> scan_tuple scan ctx b r' t' cb
     | AList r', ListT t' -> scan_list scan ctx b r' t' cb
     | AHashIdx r', HashIdxT t' -> scan_hash_idx scan of_pred ctx b r' t' cb

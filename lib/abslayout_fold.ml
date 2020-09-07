@@ -36,34 +36,6 @@ let two_arg_fold f =
   in
   Fold.Fold { init; fold; extract }
 
-(* let group_by eq strm =
- *   let open RevList in
- *   let cur = ref (`Group empty) in
- *   let rec next () =
- *     match !cur with
- *     | `Done -> return None
- *     | `Group g -> (
- *         Seq.get strm >>= function
- *         | None ->
- *             cur := `Done;
- * 
- *             (\* Never return empty groups. *\)
- *             if is_empty g then return None else return (Some (to_list g))
- *         | Some x -> (
- *             match last g with
- *             | None ->
- *                 cur := `Group (singleton x);
- *                 next ()
- *             | Some y ->
- *                 if eq x y then (
- *                   cur := `Group (g ++ x);
- *                   next () )
- *                 else (
- *                   cur := `Group (singleton x);
- *                   return (Some (to_list g)) ) ) )
- *   in
- *   Stream.from next *)
-
 let group_by eq x = Seq.group ~break:(fun x x' -> not (eq x x')) x
 
 let repeat n x = Seq.take (Seq.repeat x) n
@@ -98,7 +70,7 @@ let extract_group widths ctr tups =
   let group = Seq.of_list group in
   (Seq.map group ~f:extract_tuple, tups)
 
-let rec map_accum ~f ~init l =
+let map_accum ~f ~init l =
   let rec m accum acc = function
     | [] -> (accum, RevList.to_list acc)
     | x :: xs ->
@@ -309,7 +281,7 @@ class virtual ['self] abslayout_fold =
         else tups
       in
       let widths = List.map qs ~f:Q.width in
-      let v, tups =
+      let v, _ =
         List.foldi ~init:(init, tups) qs ~f:(fun oidx (acc, tups) q ->
             let group, tups = extract_group widths oidx tups in
             let v = self#eval lctx group q in
@@ -361,10 +333,10 @@ class virtual ['self] abslayout_fold =
           binds
       in
       (* The n+1 group contains values for the layout in the body of the let. *)
-      let strm, tups = extract_group widths (List.length binds) tups in
+      let strm, _ = extract_group widths (List.length binds) tups in
       self#eval lctx strm q
 
-    method private eval_var lctx tups n : 'a = Map.find_exn lctx n
+    method private eval_var lctx _ n : 'a = Map.find_exn lctx n
 
     method private eval lctx tups (a : (int, _ option) Q.t) : 'a =
       let tups =
@@ -393,7 +365,7 @@ class virtual ['self] abslayout_fold =
       (* Convert that query to a ralgebra and simplify it. *)
       let r = q |> Q.to_ralgebra in
       info (fun m -> m "Pre-simplify ralgebra:@ %a" Abslayout.pp r);
-      let r = Simplify_tactic.simplify ~dedup:true conn r in
+      let r = Simplify_tactic.simplify conn r in
       info (fun m -> m "Post-simplify ralgebra:@ %a" Abslayout.pp r);
       (* Convert the ralgebra to sql. *)
       let sql = Sql.of_ralgebra r in

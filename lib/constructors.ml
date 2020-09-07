@@ -140,12 +140,9 @@ module Annot = struct
 
   let with_strip_meta (type t) (default : unit -> t) =
     ( module struct
-      type 'a meta = 'a
-
       type nonrec t = t
 
-      let rec strip { node; meta } =
-        { node = strip_query node; meta = default () }
+      let rec strip { node; _ } = { node = strip_query node; meta = default () }
 
       and strip_query q = V.Map.query strip strip_pred q
 

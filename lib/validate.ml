@@ -114,7 +114,7 @@ let rec annot r = V.Iter.annot query meta r
 
 and meta _ = ()
 
-and query q = function
+and query = function
   | Select (ps, _) -> duplicate_preds ps
   | GroupBy (ps, ns, _) ->
       duplicate_preds ps;

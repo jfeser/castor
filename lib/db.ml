@@ -273,6 +273,11 @@ let exec db schema query =
 
 let exec_exn db schema query = exec db schema query |> Or_error.ok_exn
 
+let exec1 conn s query =
+  let open Or_error.Let_syntax in
+  let%map results = exec conn [ s ] query in
+  List.map results ~f:(function [ x ] -> x | _ -> assert false)
+
 let all_relations conn =
   let names =
     run1 conn

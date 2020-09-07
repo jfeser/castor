@@ -134,7 +134,7 @@ let order_by of_ralgebra key r =
   in
   (* Remove constant integer predicates (sql interprets these specially). *)
   let key =
-    List.filter key ~f:(fun (p, o) ->
+    List.filter key ~f:(fun (p, _) ->
         match Pred.remove_as p with Int _ -> false | _ -> true)
   in
   Query { spj with order = key }

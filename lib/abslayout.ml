@@ -182,8 +182,6 @@ let of_lexbuf lexbuf =
   with Parser_utils.ParseError (msg, line, col) ->
     Error (`Parse_error (msg, line, col))
 
-let of_lexbuf_exn x = of_lexbuf x |> ok_exn
-
 let of_channel ch = of_lexbuf (Lexing.from_channel ch)
 
 let of_channel_exn x = of_channel x |> ok_exn
@@ -320,8 +318,7 @@ let aliases =
       method one k v = Map.singleton (module Name) k v
 
       method plus =
-        Map.merge ~f:(fun ~key:_ ->
-          function
+        Map.merge ~f:(fun ~key:_ -> function
           | `Left r | `Right r -> Some r
           | `Both (r1, r2) ->
               if Pred.O.(r1 = r2) then Some r1

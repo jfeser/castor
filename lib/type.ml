@@ -462,10 +462,7 @@ module Parallel = struct
       { aggs = [ Simple min; Simple max ]; build }
 
     let bool_t =
-      {
-        aggs = [];
-        build = (fun ctx _ -> BoolT { nullable = false (* TODO *) });
-      }
+      { aggs = []; build = (fun _ _ -> BoolT { nullable = false (* TODO *) }) }
 
     let date_t p =
       let min = wrap @@ Min p and max = wrap @@ Max p in
@@ -483,7 +480,7 @@ module Parallel = struct
       {
         aggs = [];
         build =
-          (fun ctx _ ->
+          (fun _ _ ->
             FixedT { value = AbsFixed.top; nullable = false (* TODO *) });
       }
 
@@ -491,7 +488,7 @@ module Parallel = struct
       {
         aggs = [];
         build =
-          (fun ctx _ -> StringT { nchars = I.top; nullable = false (* TODO *) });
+          (fun _ _ -> StringT { nchars = I.top; nullable = false (* TODO *) });
       }
 
     let scalar_t p =

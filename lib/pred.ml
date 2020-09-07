@@ -84,6 +84,8 @@ module Infix = struct
     | _ -> a
 
   let exists r = Exists r
+
+  let count = Count
 end
 
 let to_type p = Schema.to_type p

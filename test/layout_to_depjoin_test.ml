@@ -37,7 +37,7 @@ let%expect_test "" =
                 depjoin(join((l_orderkey = o_orderkey),
                           join((c_custkey = o_custkey), customer, orders),
                           lineitem) as s4,
-                  select([s4.c_nationkey], ascalar(0 as x1))))) as s3,
+                  select([s4.c_nationkey], ascalar(0 as x2))))) as s3,
       select([s3.c_nationkey, c_custkey, c_name, c_address, c_phone, c_acctbal,
               c_mktsegment, c_comment, o_orderkey, o_custkey, o_orderstatus,
               o_totalprice, o_orderdate, o_orderpriority, o_clerk,
@@ -60,4 +60,4 @@ let%expect_test "" =
                       s1.l_returnflag, s1.l_linestatus, s1.l_shipdate,
                       s1.l_commitdate, s1.l_receiptdate, s1.l_shipinstruct,
                       s1.l_shipmode, s1.l_comment],
-                ascalar(0 as x0))))))) |}]
+                ascalar(0 as x1))))))) |}]

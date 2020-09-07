@@ -138,7 +138,7 @@ let is_serializeable ?(path = Path.root) ?params r =
 
 class ['a] ops_spine_serializable_visitor =
   object
-    inherit ['a] ops_serializable_visitor as super
+    inherit ['a] ops_serializable_visitor
 
     method! visit_Exists _ _ = ()
 
@@ -147,7 +147,7 @@ class ['a] ops_spine_serializable_visitor =
 
 class ['a] names_spine_serializable_visitor stage =
   object
-    inherit ['a] names_serializable_visitor stage as super
+    inherit ['a] names_serializable_visitor stage
 
     method! visit_Exists _ _ = ()
 

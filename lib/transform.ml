@@ -896,7 +896,8 @@ module Make (Config : Config.S) () = struct
 
                method! visit_Name () n = Set.mem Config.params n
             end)
-              #visit_pred () p);
+              #visit_pred
+              () p);
     }
     |> run_everywhere
 
@@ -1300,7 +1301,8 @@ module Make (Config : Config.S) () = struct
                    self#plus xs
                      [ (Name.create ~type_:result_type result_name, query) ]
             end)
-              #visit_pred [] pred
+              #visit_pred
+              [] pred
           in
           let subst_query ~for_:r ~in_:outer_pred new_pred =
             (object
@@ -1312,7 +1314,8 @@ module Make (Config : Config.S) () = struct
                method! visit_First () p' r' =
                  if [%compare.equal: Ast.t] r r' then new_pred else p'
             end)
-              #visit_pred () outer_pred
+              #visit_pred
+              () outer_pred
           in
           let pred = normal_meta_pred pred in
           let r = strip_meta r in

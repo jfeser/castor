@@ -339,7 +339,7 @@ let stage =
     Map.merge ~f:(fun ~key -> function
       | `Left x | `Right x -> Some x
       | `Both (x, x') when Poly.(x = x') -> Some x
-      | `Both (x, x') -> raise (Inner_resolve_error (`Ambiguous_stage key)))
+      | `Both _ -> raise (Inner_resolve_error (`Ambiguous_stage key)))
   in
   let rec annot r =
     let meta =

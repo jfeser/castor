@@ -220,7 +220,7 @@ module Make (C : Config.S) = struct
   let elim_dedup_above_groupby r =
     let open Option.Let_syntax in
     let%bind r' = to_dedup r in
-    let%bind sel, key, r'' = to_groupby r' in
+    let%bind sel, key, _ = to_groupby r' in
     let sel_names =
       List.filter_map sel ~f:Pred.to_name |> Set.of_list (module Name)
     in
@@ -253,19 +253,12 @@ module Make (C : Config.S) = struct
 
   let unnest_and_simplify _ r =
     let simplify q = Option.value_exn (apply simplify Path.root q) in
-    let remove_dedup q =
-      if false then
-        q |> Unnest.hoist_meta
-        |> Cardinality.extend ~dedup:false
-        |> Join_elim.remove_dedup |> strip_meta
-      else q |> strip_meta
-    in
     let start_time = Time.now () in
     let ret =
       (r :> Ast.t)
       |> simplify |> Unnest.unnest
       |> Cardinality.extend ~dedup:false
-      |> Join_elim.remove_joins |> remove_dedup |> simplify
+      |> Join_elim.remove_joins |> strip_meta |> simplify
     in
     let end_time = Time.now () in
     info (fun m ->
@@ -275,7 +268,7 @@ module Make (C : Config.S) = struct
   let unnest_and_simplify = global unnest_and_simplify "unnest-and-simplify"
 end
 
-let simplify ?(dedup = false) ?(params = Set.empty (module Name)) conn r =
+let simplify ?(params = Set.empty (module Name)) conn r =
   let module C = struct
     let conn = conn
 

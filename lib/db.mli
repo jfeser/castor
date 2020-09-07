@@ -18,6 +18,8 @@ val run : t -> string -> string list list Or_error.t
 
 val exec : t -> Prim_type.t list -> string -> Value.t list list Or_error.t
 
+val exec1 : t -> Prim_type.t -> string -> Value.t list Or_error.t
+
 val exec_exn : t -> Prim_type.t list -> string -> Value.t list list
 
 val exec_cursor_exn :

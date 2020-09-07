@@ -68,6 +68,8 @@ module Infix : sig
   val as_ : 'a annot pred -> string -> 'a annot pred
 
   val exists : 'a annot -> 'a annot pred
+
+  val count : 'a annot pred
 end
 
 val pp : Format.formatter -> 'a annot pred -> unit

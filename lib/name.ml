@@ -13,8 +13,6 @@ let name n = n.name
 
 let scope n = n.scope
 
-let meta n = n.meta
-
 let rel = scope
 
 include Comparator.Make (T)
