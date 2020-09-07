@@ -132,27 +132,15 @@ and pred p = V.Iter.pred annot pred p
 
 include (val Log.make "castor.validate")
 
-let log_err kind r r' =
-  err (fun m -> m "Not %s invariant:@ %a@ %a" kind A.pp r A.pp r')
+let err kind r r' =
+  failwith @@ Fmt.str "Not %s invariant:@ %a@ %a" kind A.pp r A.pp r'
 
 let schema q q' =
   let open Schema in
   let s = schema q in
   let s' = schema q' in
-  if not ([%compare.equal: t] s s') then (
-    log_err "schema" q q';
-    failwith
-      (Fmt.str "Not schema invariant:@ %a@ %a@." Schema.pp s Schema.pp s') )
+  if not ([%compare.equal: t] s s') then err "schema" q q'
 
 let resolve ?params q q' =
-  let r =
-    try
-      Resolve.resolve ?params q |> ignore;
-      true
-    with _ -> false
-  in
-  if r then (
-    try Resolve.resolve ?params q' |> ignore
-    with exn ->
-      log_err "resolution" q q';
-      Error.(of_exn exn |> tag ~tag:"Not resolution invariant" |> raise) )
+  let does_resolve q = Resolve.resolve ?params q |> Result.is_ok in
+  if Bool.(does_resolve q <> does_resolve q') then err "resolution" q q'
