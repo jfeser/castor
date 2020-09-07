@@ -98,7 +98,9 @@ module Make (C : Config.S) = struct
         (* Try to remove any remaining parameters from the keys relation. *)
         match all_values_approx key_preds r with
         | Ok keys ->
-            Some (A.list keys key_name (A.select ps (A.filter filter_pred r)))
+            Some
+              (A.list (A.dedup keys) key_name
+                 (A.select ps (A.filter filter_pred r)))
         | Error err ->
             info (fun m -> m "elim-groupby-approx: %a" Error.pp err);
             None )
