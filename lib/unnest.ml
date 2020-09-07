@@ -207,7 +207,7 @@ let push_select d (preds, q) =
   let d_schema = schema d in
   let preds = (d_schema |> List.map ~f:P.name) @ preds in
   match A.select_kind preds with
-  | `Scalar -> C.select preds (dep_join d q)
+  | `Scalar -> C.select (Select_list.of_list preds) (dep_join d q)
   | `Agg ->
       let preds =
         List.map preds ~f:(fun p ->
@@ -222,7 +222,7 @@ let push_select d (preds, q) =
                 | None -> Min p )
             | `Window -> p)
       in
-      C.group_by preds d_schema (dep_join d q)
+      C.group_by (Select_list.of_list preds) d_schema (dep_join d q)
 
 (** Push a dependent join with an orderby on the rhs. Preserves the order of the
    lhs and the rhs. *)
