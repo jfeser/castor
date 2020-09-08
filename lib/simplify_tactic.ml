@@ -15,6 +15,8 @@ module Config = struct
 end
 
 module Make (C : Config.S) = struct
+  open C
+
   open Ops.Make (C)
 
   let filter_const r =
@@ -256,7 +258,7 @@ module Make (C : Config.S) = struct
     let start_time = Time.now () in
     let ret =
       (r :> Ast.t)
-      |> simplify |> Unnest.unnest
+      |> simplify |> Unnest.unnest ~params
       |> Cardinality.extend ~dedup:false
       |> Join_elim.remove_joins |> strip_meta |> simplify
     in

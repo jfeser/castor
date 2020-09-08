@@ -1,6 +1,5 @@
 open Ast
 module V = Visitors
-open Schema
 module A = Abslayout
 module P = Pred.Infix
 
@@ -25,21 +24,32 @@ let rec schema q =
   match q.node with
   | DepJoin { d_lhs; d_rhs; d_alias } ->
       ( schema d_lhs
-      |> List.map ~f:(fun n ->
-             Name.create (sprintf "%s_%s" d_alias (Name.name n))) )
+      |> List.map ~f:(fun (n, t) ->
+             (Option.map n ~f:(sprintf "%s_%s" d_alias), t)) )
       @ schema d_rhs
-  | _ -> Schema.schema_open schema q
+  | _ -> Schema.schema_open_opt schema q
+
+let to_base_names = List.filter_map ~f:(fun (n, _) -> n)
+
+let to_names x = to_base_names x |> List.map ~f:Name.create
+
+let to_select_list x = to_names x |> List.map ~f:P.name
 
 let schema_invariant q q' =
-  let s = Schema.schema q in
-  let s' = schema q' in
-  if [%compare.equal: Schema.t] s s' then ()
+  let s = Schema.schema_opt q |> to_base_names in
+  let s' = schema q' |> to_base_names in
+  if [%compare.equal: string list] s s' then ()
   else
     Error.create "Schema mismatch" (s, s', q, q')
-      [%sexp_of: Schema.t * Schema.t * _ annot * _ annot]
+      [%sexp_of: string list * string list * _ annot * _ annot]
     |> Error.raise
 
-let attrs q = schema q |> Set.of_list (module Name)
+let attrs q =
+  schema q |> List.filter_map ~f:(fun (n, _) -> n) |> Set.of_list (module String)
+
+let free q =
+  Free.free q |> Set.to_list |> List.map ~f:Name.name
+  |> Set.of_list (module String)
 
 let unscope n =
   match Name.rel n with
@@ -67,17 +77,21 @@ class to_lhs_visible_depjoin =
          depjoin semantics. Note that we use Schema.schema on the unprocessed
          rhs and schema on the processed rhs to account for the difference in
          semantics. *)
-      let old_rhs_schema = Schema.schema d.d_rhs in
-      let old_lhs_schema = Schema.schema d.d_lhs in
+      let old_rhs_schema = Schema.schema_opt d.d_rhs in
+      let old_lhs_schema = Schema.schema_opt d.d_lhs in
       let d = super#visit_depjoin () d in
       let projection =
-        List.map2_exn (schema d.d_rhs) old_rhs_schema ~f:(fun n n' ->
-            if [%compare.equal: Name.t] n n' then P.name n
-            else P.(as_ (name n) (Name.name n')))
+        List.map2_exn (schema d.d_rhs) old_rhs_schema ~f:(fun (n, _) (n', _) ->
+            Option.map2 n n' ~f:(fun n n' ->
+                if String.(n = n') then P.name (Name.create n)
+                else P.(as_ (name @@ Name.create n) n')))
+        |> List.filter_map ~f:Fun.id
       in
       let renaming =
-        List.map2_exn (schema d.d_lhs) old_lhs_schema ~f:(fun n n' ->
-            P.(as_ (name n) (sprintf "%s_%s" d.d_alias (Name.name n'))))
+        List.map2_exn (schema d.d_lhs) old_lhs_schema ~f:(fun (n, _) (n', _) ->
+            Option.map2 n n' ~f:(fun n n' ->
+                P.(as_ (name @@ Name.create n) (sprintf "%s_%s" d.d_alias n'))))
+        |> List.filter_map ~f:Fun.id
       in
       Q.select projection
         (A.dep_join' { d with d_lhs = A.select renaming d.d_lhs })
@@ -111,13 +125,14 @@ let simple_join lhs rhs =
 
 let to_nice_depjoin t1 t2 =
   let t1_attr = attrs t1 in
-  let t2_free = Free.free t2 in
+  let t2_free = free t2 in
 
   (* Create a relation of the unique values of the attributes that come from t1
      and are bound in t2. *)
   let d =
     let attrs =
-      Set.inter t2_free t1_attr |> Set.to_list |> List.map ~f:P.name
+      Set.inter t2_free t1_attr |> Set.to_list
+      |> List.map ~f:(fun n -> P.name @@ Name.create n)
     in
     C.dedup @@ C.select attrs t1
   in
@@ -126,18 +141,20 @@ let to_nice_depjoin t1 t2 =
      join d and t1 without name clashes. *)
   let subst =
     schema d
-    |> List.map ~f:(fun n -> (n, Fresh.name Global.fresh "bnd%d"))
-    |> Map.of_alist_exn (module Name)
+    |> List.filter_map ~f:(fun (n, _) ->
+           Option.map n ~f:(fun n -> (n, Fresh.name Global.fresh "bnd%d")))
+    |> Map.of_alist_exn (module String)
   in
 
   (* Apply the renaming to t1. *)
   let t1 =
     let select_list =
       schema t1
-      |> List.map ~f:(fun n ->
-             match Map.find subst n with
-             | Some alias -> Pred.Infix.(as_ (name n) alias)
-             | None -> P.name n)
+      |> List.filter_map ~f:(fun (n, _) ->
+             Option.map n ~f:(fun n ->
+                 match Map.find subst n with
+                 | Some alias -> P.(as_ (name @@ Name.create n) alias)
+                 | None -> P.name @@ Name.create n))
     in
     C.select select_list t1
   in
@@ -145,7 +162,8 @@ let to_nice_depjoin t1 t2 =
   (* Create a predicate that joins t1 and d. *)
   let join_pred =
     Map.to_alist subst
-    |> List.map ~f:(fun (n, n') -> Pred.Infix.(name n = name (Name.create n')))
+    |> List.map ~f:(fun (n, n') ->
+           P.(name @@ Name.create n = name @@ Name.create n'))
     |> Pred.conjoin
   in
 
@@ -164,30 +182,34 @@ and to_nice_pred p = V.Map.pred to_nice to_nice_pred p
 let push_join d { pred = p; r1 = t1; r2 = t2 } =
   let d_attr = attrs d in
   (* A selection list that maintains the original schema. *)
-  let orig_select = schema d @ schema t1 @ schema t2 |> List.map ~f:P.name in
+  let orig_select = schema d @ schema t1 @ schema t2 |> to_select_list in
   if
     (* The rhs of the join is not dependent. *)
-    Set.inter (Free.free t2) d_attr |> Set.is_empty
+    Set.inter (free t2) d_attr |> Set.is_empty
   then C.join p (dep_join d t1) t2
   else if
     (* The lhs of the join is not dependent. *)
-    Set.inter (Free.free t1) d_attr |> Set.is_empty
+    Set.inter (free t1) d_attr |> Set.is_empty
   then
     (* Pushing the depjoin to the right will change the schema. *)
     C.select orig_select @@ C.join p t1 @@ dep_join d t2
   else
     (* Rename the d relation in the rhs of the join *)
     let d_rhs =
-      schema d |> List.map ~f:(fun n -> (n, Fresh.name Global.fresh "d%d"))
+      schema d
+      |> List.filter_map ~f:(fun (n, _) ->
+             Option.map n ~f:(fun n -> (n, Fresh.name Global.fresh "d%d")))
     in
     let rhs_select =
-      List.map d_rhs ~f:(fun (x, x') -> Infix.(as_ (name x) x'))
-      @ (schema t2 |> List.map ~f:P.name)
+      List.map d_rhs ~f:(fun (x, x') -> P.(as_ (name @@ Name.create x) x'))
+      @ (schema t2 |> to_select_list)
     in
 
     (* Perform a natural join on the two copies of d *)
     let d_pred =
-      List.map d_rhs ~f:(fun (x, x') -> Infix.(name x = n x')) |> Pred.conjoin
+      List.map d_rhs ~f:(fun (x, x') ->
+          P.(name @@ Name.create x = name @@ Name.create x'))
+      |> Pred.conjoin
     in
     C.select orig_select
     @@ C.join
@@ -199,13 +221,14 @@ let push_filter d (p, t2) = C.filter p (dep_join d t2)
 
 let push_groupby d (aggs, keys, q) =
   let schema = schema d in
-  let aggs = Select_list.(Schema.to_select_list schema @ aggs)
-  and keys = keys @ schema in
+  let aggs = Select_list.(to_select_list schema @ aggs)
+  and keys = keys @ to_names schema in
   C.group_by aggs keys (dep_join d q)
 
 let push_select d (preds, q) =
   let d_schema = schema d in
-  let preds = (d_schema |> List.map ~f:P.name) @ preds in
+  let d_schema_names = to_names d_schema in
+  let preds = to_select_list d_schema @ preds in
   match A.select_kind preds with
   | `Scalar -> C.select (Select_list.of_list preds) (dep_join d q)
   | `Agg ->
@@ -216,13 +239,13 @@ let push_select d (preds, q) =
             | `Scalar -> (
                 match Pred.to_name p with
                 | Some n ->
-                    if List.mem d_schema ~equal:[%compare.equal: Name.t] n then
-                      P.name n
+                    if List.mem ~equal:[%compare.equal: Name.t] d_schema_names n
+                    then P.name n
                     else P.as_ (Min p) (Name.name n)
                 | None -> Min p )
             | `Window -> p)
       in
-      C.group_by (Select_list.of_list preds) d_schema (dep_join d q)
+      C.group_by (Select_list.of_list preds) d_schema_names (dep_join d q)
 
 (** Push a dependent join with an orderby on the rhs. Preserves the order of the
    lhs and the rhs. *)
@@ -270,7 +293,7 @@ let rec push_depjoin r =
 
       (* If the join is not really dependent, then replace with a regular join.
          *)
-      if Set.inter (Free.free d_rhs) (attrs d_lhs) |> Set.is_empty then
+      if Set.inter (free d_rhs) (attrs d_lhs) |> Set.is_empty then
         simple_join d_lhs d_rhs
       else
         (* Otherwise, push the depjoin further down the tree. *)
@@ -295,7 +318,7 @@ and push_depjoin_pred p = V.Map.pred push_depjoin push_depjoin_pred p
 
 let hoist_meta r = V.map_meta (fun m -> m#meta) r
 
-let unnest q =
+let unnest ~params q =
   let check q' =
     schema_invariant q q';
     Validate.annot q'
@@ -322,5 +345,5 @@ let unnest q =
     |> Join_elim.remove_joins |> hoist_meta
   in
   check q';
-  Validate.resolve q q';
+  Validate.resolve ~params q q';
   q'

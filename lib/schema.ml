@@ -3,6 +3,9 @@ open Prim_type
 
 type t = Name.t list [@@deriving compare, sexp]
 
+type opt_t = (string option * Prim_type.t option) list
+[@@deriving compare, sexp]
+
 let pp = Fmt.Dump.list Name.pp
 
 let scoped s = List.map ~f:(Name.scoped s)
@@ -40,6 +43,57 @@ let to_type_open schema to_type = function
       | [ n ] -> Name.type_exn n
       | [] -> failwith "Unexpected empty schema."
       | _ -> failwith "Too many fields." )
+
+let schema_open_opt schema r : (string option * _ option) list =
+  let rec to_type p =
+    to_type_open
+      (fun r ->
+        schema r |> List.map ~f:(fun (_, t) -> Name.create ?type_:t "dummy"))
+      to_type p
+  in
+  let of_preds =
+    List.map ~f:(fun p ->
+        let t = Or_error.try_with (fun () -> to_type p) |> Or_error.ok in
+        (to_name p |> Option.map ~f:Name.name, t))
+  in
+  match r.node with
+  | AList { l_values = r; _ }
+  | DepJoin { d_rhs = r; _ }
+  | Filter (_, r)
+  | Dedup r
+  | OrderBy { rel = r; _ } ->
+      schema r
+  | Select (x, _) | GroupBy (x, _, _) -> of_preds x
+  | Join { r1; r2; _ } -> schema r1 @ schema r2
+  | AOrderedIdx { oi_keys = r1; oi_values = r2; _ }
+  | AHashIdx { hi_keys = r1; hi_values = r2; _ } ->
+      let schema_r2 = schema r2 in
+      let schema_r1 =
+        List.filter (schema r1) ~f:(function
+          | Some n, _ ->
+              not
+                (List.exists
+                   ~f:(function
+                     | Some n', _ -> String.(n = n') | None, _ -> false)
+                   schema_r2)
+          | None, _ -> true)
+      in
+      schema_r1 @ schema_r2
+  | AEmpty -> []
+  | AScalar e -> of_preds [ e ]
+  | ATuple (rs, (Cross | Zip)) -> List.concat_map ~f:schema rs
+  | ATuple ([], Concat) -> []
+  | ATuple (r :: _, Concat) -> schema r
+  | Relation r ->
+      Relation.schema_exn r
+      |> List.map ~f:(fun (n, t) -> (Some (Name.name n), Some t))
+  | Range (p, p') ->
+      let t =
+        try Some (Prim_type.unify (to_type p) (to_type p')) with _ -> None
+      in
+      [ (Some "range", t) ]
+
+let rec schema_opt r = schema_open_opt schema_opt r
 
 let schema_open schema r =
   let rec to_type p = to_type_open schema to_type p in

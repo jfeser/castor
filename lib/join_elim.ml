@@ -42,10 +42,16 @@ let extension eqs schema_lhs schema_rhs =
   List.map ext ~f:(fun (n, n') -> As_pred (Name n', Name.name n))
 
 let try_extend eqs pred lhs rhs =
-  let schema_lhs = Schema.schema lhs and schema_rhs = Schema.schema rhs in
+  let schema_lhs =
+    Schema.schema_opt lhs
+    |> List.filter_map ~f:(fun (n, _) -> Option.map n ~f:Name.create)
+  and schema_rhs =
+    Schema.schema_opt rhs
+    |> List.filter_map ~f:(fun (n, _) -> Option.map n ~f:Name.create)
+  in
   match extension eqs schema_lhs schema_rhs with
   | Some ex ->
-      let sl = ex @ Schema.to_select_list @@ Schema.schema rhs in
+      let sl = ex @ Schema.to_select_list schema_rhs in
       debug (fun m ->
           m "Extending with:@ %a@ to avoid join of:@ %a@ with:@ %a"
             (Fmt.Dump.list Pred.pp) sl A.pp lhs A.pp rhs);
