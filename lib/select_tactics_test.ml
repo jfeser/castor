@@ -40,7 +40,6 @@ select([sum(o_totalprice) as revenue],
 |}
   in
   let r' = Option.value_exn (apply push_select Path.root r) in
-  Validate.resolve r r';
   Format.printf "%a\n" pp r';
   [%expect
     {|
@@ -73,7 +72,8 @@ select([substring(c1_phone, 0, 2) as x669, c1_phone, c1_acctbal, c1_custkey],
 |}
   in
   apply push_select_filter Path.root r |> Option.iter ~f:(Fmt.pr "%a@." pp);
-  [%expect {|
+  [%expect
+    {|
     filter((c1_acctbal >
            (select([avg(c_acctbal) as avgbal],
               filter(((c_acctbal > 0.0) &&

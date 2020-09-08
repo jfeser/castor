@@ -182,7 +182,9 @@ module Make (Config : Config.S) = struct
           let pred =
             all_pairs ps |> List.map ~f:(fun (p, p') -> P.(p && p')) |> disjoin
           in
-          filter pred @@ r |> Unnest.unnest |> Sql.of_ralgebra |> Sql.to_string
+          filter pred @@ r
+          |> Unnest.unnest ~params:(Set.empty (module Name))
+          |> Sql.of_ralgebra |> Sql.to_string
         in
         Log.debug (fun m -> m "All disjoint sql: %s" sql);
         Db.run conn sql

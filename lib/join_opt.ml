@@ -28,7 +28,8 @@ module Join_graph = struct
   module Vertex = struct
     module T = struct
       type t =
-        (< stage : Name.t -> [ `Compile | `Run | `No_scope ] >
+        (< stage : Name.t -> [ `Compile | `Run | `No_scope ]
+         ; resolved : Resolve.resolved >
         [@ignore] [@opaque])
         annot
       [@@deriving compare, hash, sexp]
@@ -43,7 +44,8 @@ module Join_graph = struct
   module Edge = struct
     module T = struct
       type t =
-        (< stage : Name.t -> [ `Compile | `Run | `No_scope ] >
+        (< stage : Name.t -> [ `Compile | `Run | `No_scope ]
+         ; resolved : Resolve.resolved >
         [@ignore] [@opaque])
         annot
         pred
@@ -420,27 +422,12 @@ module Make (Config : Config.S) = struct
     let rhs_schema = Schema.schema rhs |> Set.of_list (module Name) in
     Pred.names pred |> Set.filter ~f:(Set.mem rhs_schema)
 
-  let rec size_cost parts r =
-    let sum = List.sum (module Float) in
-    match r with
-    | Flat _ | Id _ ->
-        let _, _, nt = estimate_ntuples_parted parts r in
-        (sum (Schema.types (to_ralgebra r)) ~f:Cost.size *. nt)
-        +. Cost.list_size
-    | Nest { lhs; rhs; pred } ->
-        let _, _, lhs_nt = estimate_ntuples_parted parts lhs in
-        let rhs_per_partition_cost =
-          size_cost (Set.union (to_parts (to_ralgebra rhs) pred) parts) rhs
-        in
-        size_cost parts lhs +. (lhs_nt *. rhs_per_partition_cost)
-    | Hash { lhs; rhs; _ } -> size_cost parts lhs +. size_cost parts rhs
-
   let rec scan_cost parts r =
     let sum = List.sum (module Float) in
     match r with
     | Flat _ | Id _ ->
         let _, _, nt = estimate_ntuples_parted parts r in
-        sum (Schema.types (to_ralgebra r)) ~f:Cost.read *. nt
+        sum (Schema_types.types (to_ralgebra r)) ~f:Cost.read *. nt
     | Nest { lhs; rhs; pred } ->
         let _, _, lhs_nt = estimate_ntuples_parted parts lhs in
         let rhs_per_partition_cost =
@@ -637,11 +624,14 @@ module Make (Config : Config.S) = struct
   let transform =
     let open Option.Let_syntax in
     let f p r =
+      let%bind r = Resolve.resolve ~params r |> Result.ok in
       let r =
         Is_serializable.annotate_stage r
         |> Visitors.map_meta (fun meta ->
                object
                  method stage = meta#stage
+
+                 method resolved = meta#meta#resolved
                end)
       in
       let x = opt (Castor.Path.get_exn p r) in

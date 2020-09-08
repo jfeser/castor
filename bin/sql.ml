@@ -36,7 +36,7 @@ let main ~params:all_params ~simplify ~project ~unnest ~sql ~cse ch =
   let query = simplify query in
   let query =
     let q =
-      if unnest then Unnest.unnest query
+      if unnest then Unnest.unnest ~params query
       else
         ( Cardinality.annotate query
           :> < cardinality_matters : bool ; why_card_matters : string >
@@ -46,7 +46,7 @@ let main ~params:all_params ~simplify ~project ~unnest ~sql ~cse ch =
     |> Join_elim.remove_joins |> Unnest.hoist_meta |> strip_meta
   in
   let query = simplify query in
-  let query = if project then Project.project query else query in
+  let query = if project then Project.project ~params query else query in
   let query = simplify query in
   let query =
     if cse then `Sql (Cse.extract_common query |> Cse.to_sql) else `Query query

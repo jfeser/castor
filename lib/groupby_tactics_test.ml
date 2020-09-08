@@ -79,8 +79,9 @@ groupby([o_year,
       |> Option.iter ~f:(Format.printf "%a@." Abslayout.pp));
   [%expect
     {|
-      alist(select([to_year(o_orderdate) as o_year],
-              dedup(select([o_orderdate], orders))) as k0,
+      alist(dedup(
+              select([to_year(o_orderdate) as o_year],
+                dedup(select([o_orderdate], orders)))) as k0,
         select([o_year,
                 (sum((if (nation_name = param1) then volume else 0.0)) /
                 sum(volume)) as mkt_share],

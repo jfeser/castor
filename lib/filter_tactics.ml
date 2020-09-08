@@ -1130,7 +1130,9 @@ module Make (C : Config.S) = struct
       Path.(all >>? is_filter >>? is_run_time)
 
   let unnest =
-    global (fun _ r -> Some (Unnest.unnest r |> Ast.strip_meta)) "unnest"
+    global
+      (fun _ r -> Some (Unnest.unnest ~params r |> Ast.strip_meta))
+      "unnest"
 
   let simplify r =
     let open Option.Let_syntax in
