@@ -22,3 +22,6 @@ let load_layout ?(params = Set.empty (module Name)) conn l =
 
 let load_string_exn ?params conn s =
   of_string_exn s |> load_layout_exn conn ?params |> strip_meta
+
+let load_string_nostrip_exn ?params conn s =
+  of_string_exn s |> load_layout_exn conn ?params

@@ -116,20 +116,20 @@ let no_project_open project no_project project_pred r =
   | _ ->
       { node = V.Map.query no_project project_pred r.node; meta = object end }
 
-let project_once r =
+let project_once ~params r =
   let rec project r = project_open project no_project project_pred r
   and project_pred p = project_pred_open project project_pred p
   and no_project r = no_project_open project no_project project_pred r in
   let r' = Cardinality.annotate r |> project in
   Validate.schema r r';
-  Validate.resolve r r';
+  Validate.resolve ~params r r';
   r'
 
-let project ?(params = Set.empty (module Name)) ?(max_iters = 100) r =
+let project ~params ?(max_iters = 100) r =
   let rec loop ct r =
     if ct >= max_iters then r
     else
-      let r' = Resolve.resolve_exn r ~params |> project_once in
+      let r' = Resolve.resolve_exn r ~params |> project_once ~params in
       if [%compare.equal: _ annot] r r' then r' else loop (ct + 1) r'
   in
   loop 0 (strip_meta r)

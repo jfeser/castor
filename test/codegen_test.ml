@@ -1,12 +1,13 @@
 open Util
 open Test_util
+open Abslayout_load
 
 let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
     layout_str =
   let layout_file = Filename.temp_file "layout" "txt" in
-  let open Abslayout_load in
   let conn = Lazy.force test_db_conn in
   let (module I), (module C) = Setup.make_modules ?irgen_debug () in
+
   let run_compiler layout =
     let out_dir = Filename.temp_dir "bin" "" in
     let exe_fn, data_fn =
@@ -30,13 +31,21 @@ let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
     print_endline (Unix.Exit_or_signal.to_string_hum ret);
     Out_channel.flush stdout
   in
+
   let run () =
     let layout =
       let params =
         List.map params ~f:(fun (n, t, _) -> Name.copy ~type_:(Some t) n)
         |> Set.of_list (module Name)
       in
-      load_string_exn conn ~params layout_str |> Type.annotate conn
+      load_string_nostrip_exn conn ~params layout_str
+      |> Type.annotate conn
+      |> V.map_meta (fun m ->
+             object
+               method resolved = m#meta#resolved
+
+               method type_ = m#type_
+             end)
     in
 
     if fork then run_in_fork (fun () -> run_compiler layout)

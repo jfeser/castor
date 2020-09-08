@@ -1,28 +1,33 @@
+open Abslayout_load
 open Test_util
 
 let run_test ?(params = []) ?(print_code = true) layout_str =
   let (module I), (module C) = Setup.make_modules ~code_only:true () in
-  let open Abslayout_load in
   let conn = Lazy.force test_db_conn in
-
-  try
-    let layout =
-      let params =
-        List.map params ~f:(fun (n, t, _) -> Name.copy ~type_:(Some t) n)
-        |> Set.of_list (module Name)
-      in
-      load_string_exn conn ~params layout_str |> Type.annotate conn
+  let layout =
+    let params =
+      List.map params ~f:(fun (n, t, _) -> Name.copy ~type_:(Some t) n)
+      |> Set.of_list (module Name)
     in
-    print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] layout.meta#type_));
-    let layout, len = Serialize.serialize conn "/tmp/buf" layout in
-    let params = List.map params ~f:(fun (n, t, _) -> (n, t)) in
-    let ir = I.irgen ~params ~len layout in
-    if print_code then I.pp Caml.Format.std_formatter ir
-  with exn ->
-    Backtrace.(
-      elide := false;
-      Exn.most_recent () |> to_string |> print_endline);
-    Exn.(to_string exn |> print_endline)
+    load_string_nostrip_exn conn ~params layout_str |> Type.annotate conn
+  in
+  print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] layout.meta#type_));
+  let layout, len = Serialize.serialize conn "/tmp/buf" layout in
+  let layout =
+    V.map_meta
+      (fun m ->
+        object
+          method pos = m#pos
+
+          method type_ = m#type_
+
+          method resolved = m#meta#meta#resolved
+        end)
+      layout
+  in
+  let params = List.map params ~f:(fun (n, t, _) -> (n, t)) in
+  let ir = I.irgen ~params ~len layout in
+  if print_code then I.pp Caml.Format.std_formatter ir
 
 let%expect_test "tuple-simple-cross" =
   run_test "ATuple([AScalar(1), AScalar(2)], cross)";

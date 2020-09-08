@@ -11,10 +11,22 @@ let run_test ?(params = []) layout_str opt_func =
       List.map params ~f:(fun (n, t, _) -> Name.copy ~type_:(Some t) n)
       |> Set.of_list (module Name)
     in
-    load_string_exn conn ~params layout_str |> Type.annotate conn
+    load_string_nostrip_exn conn ~params layout_str |> Type.annotate conn
   in
   let layout, len = Serialize.serialize conn "/tmp/buf" layout in
   let params = List.map params ~f:(fun (n, t, _) -> (n, t)) in
+  let layout =
+    V.map_meta
+      (fun m ->
+        object
+          method pos = m#pos
+
+          method type_ = m#type_
+
+          method resolved = m#meta#meta#resolved
+        end)
+      layout
+  in
   I.irgen ~params ~len layout |> opt_func |> I.pp Caml.Format.std_formatter
 
 let%expect_test "example-1" =
@@ -117,13 +129,16 @@ let%test_module _ =
 
     let%expect_test "" =
       let r =
-        load_string_exn conn "filter(c > 0, select([count() as c], ascalar(0)))"
+        load_string_nostrip_exn conn
+          "filter(c > 0, select([count() as c], ascalar(0)))"
         |> Type.annotate conn
         |> map_meta (fun m ->
                object
                  method type_ = m#type_
 
                  method pos = None
+
+                 method resolved = m#meta#resolved
                end)
       in
       let ir = I.irgen ~params:[] ~len:0 r in

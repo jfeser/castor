@@ -4,7 +4,7 @@ open Abslayout_fold
 module V = Visitors
 open Header
 
-type meta = < type_ : Type.t ; pos : int option >
+type 'a meta = < type_ : Type.t ; pos : int option ; meta : 'a >
 
 let int_of_string bs =
   if String.length bs > 4 then failwith "Too many bytes.";
@@ -539,7 +539,7 @@ class ['self] serialize_fold ?debug () =
       main
   end
 
-let set_pos (r : meta annot) (pos : int) =
+let set_pos (r : _ meta annot) (pos : int) =
   {
     r with
     meta =
@@ -550,6 +550,8 @@ let set_pos (r : meta annot) (pos : int) =
           match r.meta#pos with
           | Some pos' -> if pos = pos' then Some pos else None
           | None -> Some pos
+
+        method meta = r.meta#meta
       end;
   }
 
@@ -561,6 +563,8 @@ let serialize ?layout_file conn fn l =
           method type_ = t#type_
 
           method pos = None
+
+          method meta = t
         end)
       l
   in

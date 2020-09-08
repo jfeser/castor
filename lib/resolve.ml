@@ -4,6 +4,14 @@ module A = Abslayout
 module P = Pred.Infix
 module N = Name
 
+type resolved = unit
+
+type 'a meta =
+  < refs : bool Map.M(Name).t
+  ; stage : [ `Compile | `Run ] Map.M(Name).t
+  ; resolved : resolved
+  ; meta : 'a >
+
 type inner_error =
   [ `Ambiguous_names of Name.t list
   | `Ambiguous_stage of Name.t
@@ -365,6 +373,8 @@ let refs =
 
         method refs = Ctx.refs r.meta#inner
 
+        method resolved = ()
+
         method meta = r.meta#meta
       end
     in
@@ -374,7 +384,7 @@ let refs =
   annot
 
 (** Annotate names in an algebra expression with types. *)
-let resolve_exn ?(params = Set.empty (module Name)) r =
+let resolve_exn ~params r =
   let param_ctx = Ctx.of_names `Run @@ Set.to_list params in
   let r, ctx =
     try resolve `Run param_ctx r
@@ -388,5 +398,5 @@ let resolve_exn ?(params = Set.empty (module Name)) r =
   (* Add metadata *)
   stage r |> refs
 
-let resolve ?params r =
-  try Ok (resolve_exn ?params r) with Resolve_error (#error as x) -> Error x
+let resolve ~params r =
+  try Ok (resolve_exn ~params r) with Resolve_error (#error as x) -> Error x

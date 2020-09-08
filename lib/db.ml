@@ -430,5 +430,5 @@ module Async = struct
   let exec ?timeout ?bound db r =
     info (fun m -> m "Running query:@ %a" Abslayout_pp.pp r);
     exec_sql ?timeout ?bound db
-      (Schema.types r, Sql.of_ralgebra r |> Sql.to_string)
+      (Schema_types.types r, Sql.of_ralgebra r |> Sql.to_string)
 end

@@ -4,6 +4,8 @@ open Abslayout
 open Unnest
 open Test_util
 
+let run r = unnest ~params:(Set.empty (module Name)) r
+
 let%expect_test "" =
   let conn = Lazy.force Test_util.test_db_conn in
 
@@ -18,13 +20,13 @@ let%expect_test "" =
 
   let d = match q.node with DepJoin d -> d | _ -> assert false in
   let t1_attr = attrs d.d_lhs in
-  let t2_free = Free.free d.d_rhs in
-  t2_free |> [%sexp_of: Set.M(Name).t] |> print_s;
-  [%expect "(((name k_f) (meta <opaque>)))"];
-  t1_attr |> [%sexp_of: Set.M(Name).t] |> print_s;
-  [%expect "(((name k_f) (meta <opaque>)))"];
-  Set.inter t1_attr t2_free |> [%sexp_of: Set.M(Name).t] |> print_s;
-  [%expect "(((name k_f) (meta <opaque>)))"];
+  let t2_free = free d.d_rhs in
+  t2_free |> [%sexp_of: Set.M(String).t] |> print_s;
+  [%expect "(k_f)"];
+  t1_attr |> [%sexp_of: Set.M(String).t] |> print_s;
+  [%expect "(k_f)"];
+  Set.inter t1_attr t2_free |> [%sexp_of: Set.M(String).t] |> print_s;
+  [%expect "(k_f)"];
   to_nice_depjoin d.d_lhs d.d_rhs |> Format.printf "%a" pp;
   [%expect
     {|
@@ -61,7 +63,7 @@ let%expect_test "" =
     |> Abslayout_load.load_layout_exn conn
   in
 
-  unnest q |> Format.printf "%a" pp;
+  run q |> Format.printf "%a" pp;
   [%expect
     {|
     select([g],
@@ -93,8 +95,7 @@ depjoin(select([row_number() as rn2, agg5, agg4, agg3, agg2, agg1, agg0, l_retur
     |}
     |> Abslayout_load.load_string_exn conn
   in
-  let r' = unnest r in
-  Validate.equiv conn r r' |> Or_error.ok_exn
+  run r |> ignore
 
 let%test_unit "" =
   let conn = Lazy.force tpch_conn in
@@ -107,8 +108,7 @@ depjoin(dedup(select([l_shipdate as k2], lineitem)) as s2,
     |}
     |> Abslayout_load.load_string_exn conn
   in
-  let r' = unnest r in
-  Validate.equiv conn r r' |> Or_error.ok_exn
+  run r |> ignore
 
 let%expect_test "" =
   let conn = Lazy.force tpch_conn in
@@ -135,7 +135,7 @@ let%expect_test "" =
       range(k1.lo, k1.hi))
 |}
   |> Abslayout_load.load_string_exn conn
-  |> unnest |> Format.printf "%a" pp;
+  |> run |> Format.printf "%a" pp;
   [%expect
     {|
     select([range],
@@ -189,7 +189,7 @@ let%expect_test "" =
           depjoin(select([ps_availqty as s46_ps_availqty],
                     select([s41_ps_availqty as ps_availqty], ascalar(0 as y))) as s46,
             select([s46_ps_availqty as ps_availqty], ascalar(0 as x)))))) |}];
-  r |> unnest |> Format.printf "%a" pp;
+  r |> run |> Format.printf "%a" pp;
   [%expect
     {|
     select([ps_availqty],
@@ -246,7 +246,7 @@ let%expect_test "" =
                 ascalar(s15_l_discount as l_discount),
                 ascalar(s15_p_type as p_type)],
           cross))) |}];
-  r |> unnest |> Format.printf "%a" pp;
+  r |> run |> Format.printf "%a" pp;
   [%expect
     {|
     select([count0, l_extendedprice, l_discount, p_type],
@@ -288,7 +288,8 @@ depjoin(partsupp as s1,
     |> Abslayout_load.load_string_exn (Lazy.force tpch_conn)
   in
   Simplify_tactic.simplify (Lazy.force tpch_conn) r |> Fmt.pr "%a@." pp;
-  [%expect {|
+  [%expect
+    {|
     dedup(
       select([ps_partkey, ps_suppkey, ps_availqty, ps_supplycost, ps_comment],
         groupby([s1_ps_availqty, s1_ps_comment, s1_ps_partkey, s1_ps_suppkey,
@@ -359,7 +360,7 @@ let%expect_test "" =
 |}
     |> Abslayout_load.load_string_exn conn
   in
-  unnest r |> Fmt.pr "%a" pp;
+  run r |> Fmt.pr "%a" pp;
   [%expect
     {|
     select([x122, x123, x124, x125, x126, x127, x128],

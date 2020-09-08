@@ -145,9 +145,9 @@ let%expect_test "" =
         [o_orderdate],
         dedup(select([o_orderdate, o_orderkey], orders))) |}]
 
-let run_test ?params conn s =
-  load_string_exn ?params conn s
-  |> project ?params
+let run_test ?(params = Set.empty (module Name)) conn s =
+  load_string_exn ~params conn s
+  |> project ~params
   |> Format.printf "%a@." Abslayout.pp
 
 let%expect_test "" =
@@ -240,7 +240,8 @@ let%expect_test "" =
                     ascalar(s5.ps_comment)],
               cross))))
 |};
-  [%expect {|
+  [%expect
+    {|
     select([p_brand, p_type, p_size, count() as supplier_cnt],
       alist(select([p_brand, p_type, p_size],
               select([p_brand, p_type, p_size],
@@ -297,7 +298,8 @@ let%expect_test "" =
                           ascalar(s5.ps_supplycost), ascalar(s5.ps_comment)],
                     cross))))))))
 |};
-  [%expect {|
+  [%expect
+    {|
     alist(dedup(
             select([p_brand, p_type, p_size],
               dedup(

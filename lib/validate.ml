@@ -141,6 +141,6 @@ let schema q q' =
   let s' = schema q' in
   if not ([%compare.equal: t] s s') then err "schema" q q'
 
-let resolve ?params q q' =
-  let does_resolve q = Resolve.resolve ?params q |> Result.is_ok in
+let resolve ~params q q' =
+  let does_resolve q = Resolve.resolve ~params q |> Result.is_ok in
   if Bool.(does_resolve q <> does_resolve q') then err "resolution" q q'

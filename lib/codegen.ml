@@ -1,3 +1,4 @@
+module V = Visitors
 open Collections
 open Llvm_analysis
 open Llvm_target
@@ -1077,6 +1078,18 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     (* Serialize layout. *)
     let layout, len =
       Serialize.serialize ?layout_file:layout_log conn data_fn layout
+    in
+    let layout =
+      V.map_meta
+        (fun m ->
+          object
+            method pos = m#pos
+
+            method type_ = m#type_
+
+            method resolved = m#meta#resolved
+          end)
+        layout
     in
 
     (* Generate IR module. *)

@@ -395,13 +395,15 @@ let annotate conn r =
   in
   let r =
     V.map_meta
-      (fun _ ->
+      (fun m ->
         object
           val mutable type_ = None
 
           method type_ = Option.value_exn type_
 
           method set_type t = type_ <- Some t
+
+          method meta = m
         end)
       r
   in
@@ -414,7 +416,14 @@ let annotate conn r =
     end
   in
   visitor#visit_t () r;
-  (r :> < type_ : t > annot)
+  V.map_meta
+    (fun m ->
+      object
+        method type_ = m#type_
+
+        method meta = m#meta
+      end)
+    r
 
 module Parallel = struct
   type error = [ `Db_error of Db.Async.error ]
@@ -715,7 +724,10 @@ module Parallel = struct
              Context.to_ralgebra ctx builders)
       |> List.map ~f:(fun r ->
              debug (fun m -> m "Pre-opt:@ %a" A.pp r);
-             let%map r = Simplify_tactic.simplify conn r |> Resolve.resolve in
+             let%map r =
+               Simplify_tactic.simplify conn r
+               |> Resolve.resolve ~params:(Set.empty (module Name))
+             in
              debug (fun m -> m "Post-opt:@ %a" A.pp r);
              r)
       |> Result.all

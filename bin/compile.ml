@@ -56,6 +56,12 @@ let main ~debug ~gprof ~params ~code_only ~query ~enable_redshift_dates ?out_dir
   in
   let params = List.map params ~f:(fun (n, t) -> (Name.create n, t)) in
   Type.annotate Config.conn ralgebra
+  |> V.map_meta (fun m ->
+         object
+           method resolved = m#meta#resolved
+
+           method type_ = m#type_
+         end)
   |> C.compile ~gprof ~params ?out_dir ?layout_log:layout_file Config.conn
   |> ignore
 

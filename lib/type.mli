@@ -89,7 +89,7 @@ val least_general_of_primtype : Prim_type.t -> t
 
 val type_of : ?timeout:float -> Db.t -> < .. > annot -> t
 
-val annotate : Db.t -> 'a annot -> < type_ : t > annot
+val annotate : Db.t -> (< .. > as 'a) annot -> < type_ : t ; meta : 'a > annot
 
 module Parallel : sig
   type error = [ `Db_error of Db.Async.error ]

@@ -94,13 +94,6 @@ let rec schema_full r = schema_open_full schema_full r
 
 let names r = schema r |> List.map ~f:Name.name
 
-let types r = schema r |> List.map ~f:Name.type_exn
-
-let types_full r = schema_full r |> List.map ~f:Name.type_exn
-
-let names_and_types r =
-  schema r |> List.map ~f:(fun n -> (Name.name n, Name.type_exn n))
-
 let to_type q =
   let rec to_type q = to_type_open schema to_type q in
   try to_type q

@@ -18,21 +18,9 @@ let pp_with_refcount, _ =
       fprintf fmt "}@]")
     ()
 
-(* let pp_with_stage, _ =
- *   mk_pp ~pp_name:Name.pp
- *     ~pp_meta:(fun fmt meta ->
- *       let open Format in
- *       let compile, run =
- *         Map.to_alist meta#stage
- *         |> List.partition_map ~f:(fun (n, s) ->
- *                match s with `Compile -> `Fst n | `Run -> `Snd n)
- *       in
- *       let pp_names = Fmt.Dump.list Name.pp in
- *       Fmt.pf fmt "@[<hov 2>{compile=%a,@ run=%a}@]" pp_names compile pp_names
- *         run)
- *     () *)
-
-let load s = load_string_exn conn s |> Resolve.resolve_exn
+let load s =
+  load_string_exn conn s
+  |> Resolve.resolve_exn ~params:(Set.empty (module Name))
 
 let%expect_test "" =
   let r =

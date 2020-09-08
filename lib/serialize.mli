@@ -1,13 +1,13 @@
 open Ast
 
-type meta = < type_ : Type.t ; pos : int option >
+type 'a meta = < type_ : Type.t ; pos : int option ; meta : 'a >
 
 val serialize :
   ?layout_file:string ->
   Db.t ->
   string ->
-  < type_ : Type.t ; .. > annot ->
-  meta annot * int
+  (< type_ : Type.t ; .. > as 'a) annot ->
+  'a meta annot * int
 (** Serialize a layout to a binary format.
 
       @return The layout, annotated with the byte position of each

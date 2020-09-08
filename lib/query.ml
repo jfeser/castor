@@ -41,7 +41,7 @@ let annotate conn q =
              |> Set.of_list (module Name) );
   }
 
-let of_many qs =
+let of_many conn qs =
   let qs = List.map ~f:(fun q -> { q with body = strip_meta q.body }) qs in
   let queries =
     List.map qs ~f:(fun q ->
@@ -52,7 +52,8 @@ let of_many qs =
           |> List.unzip
         in
         let ctx = Map.of_alist_exn (module Name) ctx in
-        { q with args; body = Abslayout.subst ctx q.body })
+        let body = Abslayout.subst ctx q.body in
+        annotate conn { q with args; body })
   in
   let name = List.map queries ~f:(fun q -> q.name) |> String.concat ~sep:"_" in
   let args =
@@ -60,7 +61,7 @@ let of_many qs =
     :: List.concat_map queries ~f:(fun q -> q.args)
   in
   let bodies = List.map queries ~f:(fun q -> q.body) in
-  let all_attrs = List.concat_map bodies ~f:Schema.names_and_types in
+  let all_attrs = List.concat_map bodies ~f:Schema_types.names_and_types in
   List.map all_attrs ~f:(fun (n, _) -> n)
   |> List.find_a_dup ~compare:[%compare: string]
   |> Option.iter ~f:(fun n ->
@@ -90,7 +91,7 @@ let of_many qs =
              [
                filter P.(name (Name.create "query_id") = int i)
                @@ scalar (Int i);
-               r;
+               strip_meta r;
              ]
              Cross)
   in

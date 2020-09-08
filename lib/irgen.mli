@@ -23,7 +23,7 @@ module type S = sig
   val irgen :
     params:(Name.t * Prim_type.t) list ->
     len:int ->
-    Serialize.meta annot ->
+    < resolved : Resolve.resolved ; type_ : Type.t ; pos : int option > annot ->
     ir_module
 
   val pp : Formatter.t -> ir_module -> unit

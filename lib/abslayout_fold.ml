@@ -365,7 +365,10 @@ class virtual ['self] abslayout_fold =
       (* Convert that query to a ralgebra and simplify it. *)
       let r = q |> Q.to_ralgebra in
       info (fun m -> m "Pre-simplify ralgebra:@ %a" Abslayout.pp r);
-      let r = Simplify_tactic.simplify conn r in
+      let r =
+        Simplify_tactic.simplify conn r
+        |> Resolve.resolve_exn ~params:(Set.empty (module Name))
+      in
       info (fun m -> m "Post-simplify ralgebra:@ %a" Abslayout.pp r);
       (* Convert the ralgebra to sql. *)
       let sql = Sql.of_ralgebra r in
@@ -386,8 +389,7 @@ class virtual ['self] abslayout_fold =
             |> Lwt_stream.to_list |> Lwt_main.run |> Seq.of_list
             |> Seq.concat_map ~f:Seq.of_list
         | None ->
-            Db.exec_cursor_exn conn (Schema.types r)
-              (Sql.of_ralgebra r |> Sql.to_string)
+            Db.exec_cursor_exn conn (Schema_types.types r) (Sql.to_string sql)
             |> Seq.concat_map ~f:Seq.of_list
       in
       (* Replace the ralgebra queries at the leaves of the fold query with their

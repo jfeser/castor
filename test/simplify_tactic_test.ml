@@ -108,6 +108,28 @@ let%expect_test "" =
   let r =
     load_string
       {|
+select([min(c) as min_, max(c) as max_, avg(c) as avg_],
+  groupby([count() as c], [],
+    alist(nation as s5, atuple([ascalar(true), ascalar(true), ascalar(true), ascalar(true)], cross))))
+|}
+  in
+  apply unnest_and_simplify Path.root r |> Option.iter ~f:(Fmt.pr "%a@." pp);
+  [%expect
+    {|
+    select([min(c) as min_, max(c) as max_, avg(c) as avg_],
+      groupby([count() as c],
+        [],
+        select([],
+          join(true,
+            select([n_nationkey as s5_n_nationkey, n_name as s5_n_name,
+                    n_regionkey as s5_n_regionkey, n_comment as s5_n_comment],
+              nation),
+            select([], ascalar(0 as x0)))))) |}]
+
+let%expect_test "" =
+  let r =
+    load_string
+      {|
       dedup(
         select([s_name, s_address],
           orderby([s_name],
