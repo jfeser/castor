@@ -58,16 +58,11 @@ module Make (Config : Config.S) = struct
         then Branching.apply tf p r
         else Seq.singleton r)
 
-  let project r =
-    Some (r |> Resolve.resolve_exn ~params |> Project.project_once ~params)
-
-  let project = of_func project ~name:"project"
-
   module Config = struct
     include Config
 
     let simplify =
-      let tf = fix (seq_many [ project; Simplify_tactic.simplify ]) in
+      let tf = fix (seq_many Simplify_tactic.[ project; simplify ]) in
       Some (fun r -> Option.value (apply tf Path.root r) ~default:r)
   end
 
@@ -143,7 +138,7 @@ module Make (Config : Config.S) = struct
                         O.for_all Simple_tactics.row_store
                           Path.(all >>? is_run_time >>? is_relation);
                         push_all_runtime_filters;
-                        fix project;
+                        fix Simplify_tactic.project;
                         Simplify_tactic.simplify;
                       ]);
                ]
@@ -199,10 +194,10 @@ module Make (Config : Config.S) = struct
 
   let cse =
     traced ~name:"cse"
-    @@ seq_many
+    @@ seq_many'
          [
            for_all Join_elim_tactics.push_join_filter Path.(all >>? is_join);
-           for_all Filter_tactics.cse_filter Path.(all >>? is_filter);
+           for_all' Filter_tactics.cse_filter Path.(all >>? is_filter);
          ]
 
   let opt =
@@ -215,7 +210,7 @@ module Make (Config : Config.S) = struct
             traced ~name:"simplify-preds"
             @@ for_all Filter_tactics.simplify Path.(all);
             (* CSE *)
-            seq_many
+            seq_many'
               [
                 cse;
                 for_all Select_tactics.push_select Path.(all >>? is_select);
@@ -270,7 +265,7 @@ module Make (Config : Config.S) = struct
                     [
                       try_random @@ traced @@ Filter_tactics.elim_subquery;
                       try_random @@ push_all_runtime_filters;
-                      project;
+                      Simplify_tactic.project;
                       traced ~name:"elim-join-filter"
                       @@ at_ Join_elim_tactics.elim_join_filter
                            Path.(all >>? is_join >>| shallowest);
@@ -363,7 +358,8 @@ module Make (Config : Config.S) = struct
                                     for_all Dedup_tactics.elim_dedup
                                       Path.(all >>? is_dedup);
                                   ];
-                             traced ~name:"project" @@ fix project;
+                             traced ~name:"project"
+                             @@ fix Simplify_tactic.project;
                              traced ~name:"prf" @@ push_all_runtime_filters;
                              traced ~name:"simp" @@ Simplify_tactic.simplify;
                              traced @@ filter is_serializable'';
