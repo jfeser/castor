@@ -128,7 +128,7 @@ alist(filter((0 = g),
       {|
         select([f, g],
           ahashidx(depjoin(select([min(f) as lo, max(f) as hi],
-                             select([f], select([f], dedup(select([f], r))))) as k1,
+                             select([f], dedup(select([f], r)))) as k1,
                      select([range as k0], range(k1.lo, k1.hi))) as s0,
             filter((f = s0.k0), r),
             param))
@@ -161,7 +161,7 @@ alist(filter((0 = g),
           select([fresh],
             ahashidx(dedup(
                        atuple([select([fresh as x0],
-                                 select([f as fresh], dedup(select([f], r))))],
+                                 dedup(select([fresh], select([f as fresh], r))))],
                          cross)) as s0,
               filter((fresh = s0.x0), select([f as fresh], filter((g = param), r))),
               param)) |}]
