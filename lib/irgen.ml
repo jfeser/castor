@@ -266,7 +266,7 @@ module Make (Config : Config.S) () = struct
         (* Don't use the passed in start value. Subquery layouts are not stored
            inline. *)
         let ctx = Map.remove ctx (Name.create "start") in
-        let ret_var = build_var "first" (List.hd_exn (types r)) b in
+        let ret_var = build_init "first" (List.hd_exn (types r)) b in
         scan ctx b r r.meta#type_ (fun b tup ->
             build_assign (List.hd_exn tup) ret_var b);
         ret_var

@@ -932,6 +932,7 @@ let%expect_test "subquery-first" =
         i12 = 0;
         count13 = 5;
         loop (i12 < count13) {
+            first14 = 0;
             found_tup17 = false;
             min18 = 4611686018427387903;
             cstart19 = 0;
@@ -974,6 +975,7 @@ let%expect_test "subquery-first" =
         i1 = 0;
         count2 = 5;
         loop (i1 < count2) {
+            first3 = 0;
             found_tup6 = false;
             min7 = 4611686018427387903;
             cstart8 = 0;

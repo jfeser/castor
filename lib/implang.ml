@@ -462,6 +462,15 @@ module Builder = struct
     build_assign e var b;
     var
 
+  let build_init n t b =
+    let init =
+      match t with
+      | Prim_type.IntT { nullable = false } -> Some (Int 0)
+      | FixedT { nullable = false } -> Some (Fixed (Fixed_point.of_int 0))
+      | _ -> None
+    in
+    match init with Some init -> build_defn n init b | None -> build_var n t b
+
   let build_count_loop c f b =
     let ctr = build_defn "i" (Int 0) b in
     let count = build_defn "count" c b in

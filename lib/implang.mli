@@ -172,8 +172,13 @@ module Builder : sig
     cond:expr -> then_:(t -> unit) -> else_:(t -> unit) -> t -> unit
 
   val build_var : ?persistent:bool -> string -> Prim_type.t -> t -> expr
+  (** Create a fresh variable. *)
 
   val build_defn : ?persistent:bool -> string -> expr -> t -> expr
+  (** Create a fresh definition. *)
+
+  val build_init : string -> Prim_type.t -> t -> expr
+  (** Create a fresh default initialized variable. *)
 
   val build_count_loop : expr -> (t -> unit) -> t -> unit
 
