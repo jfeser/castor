@@ -191,7 +191,9 @@ module Make (C : Config.S) = struct
   let flatten_select = of_func flatten_select ~name:"flatten-select"
 
   let flatten_dedup r =
-    match r.node with Dedup { node = Dedup r'; _ } -> Some r' | _ -> None
+    match r.node with
+    | Dedup { node = Dedup r'; _ } -> Some (A.dedup r')
+    | _ -> None
 
   let flatten_dedup = of_func flatten_dedup ~name:"flatten-dedup"
 
@@ -252,6 +254,19 @@ module Make (C : Config.S) = struct
         for_all elim_filter_above_join Path.(all >>? is_filter);
         for_all elim_dedup_above_groupby Path.(all >>? is_dedup);
       ]
+
+  let join_elim =
+    let f _ r =
+      Cardinality.annotate r |> Join_elim.remove_joins |> strip_meta
+      |> Option.return
+    in
+    global f "join-elim"
+
+  let project =
+    let project r =
+      Some (r |> Resolve.resolve_exn ~params |> Project.project_once ~params)
+    in
+    of_func project ~name:"project"
 
   let unnest_and_simplify _ r =
     let simplify q = Option.value_exn (apply simplify Path.root q) in
