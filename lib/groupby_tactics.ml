@@ -1,5 +1,6 @@
 open Visitors
 open Collections
+open Match
 module A = Abslayout
 module P = Pred.Infix
 
@@ -14,38 +15,11 @@ module Config = struct
 end
 
 module Make (C : Config.S) = struct
-  module Ops = Ops.Make (C)
+  open Ops.Make (C)
 
   open Tactics_util.Make (C)
 
-  open Ops
-
-  (** Remove all references to names in params while ensuring that the resulting
-     relation overapproximates the original. *)
-  let over_approx params r =
-    let visitor =
-      object (self)
-        inherit [_] map as super
-
-        method! visit_Filter () (p, r) =
-          if Set.is_empty (Set.inter (Pred.names p) params) then
-            super#visit_Filter () (p, r)
-          else (self#visit_t () r).node
-
-        method! visit_Select () (ps, r) =
-          match A.select_kind ps with
-          | `Agg -> Select (ps, r)
-          | `Scalar -> Select (ps, self#visit_t () r)
-
-        method! visit_GroupBy () (ps, ks, r) = GroupBy (ps, ks, r)
-      end
-    in
-    let r = visitor#visit_t () r in
-    let remains = Set.inter (Free.free r) params in
-    if Set.is_empty remains then Ok r
-    else
-      Or_error.error "Failed to remove all parameters." remains
-        [%sexp_of: Set.M(Name).t]
+  module Simplify_tactic = Simplify_tactic.Make (C)
 
   (** Eliminate a group by operator without representing duplicate key values. *)
   let elim_groupby_flat r =
@@ -86,26 +60,26 @@ module Make (C : Config.S) = struct
   let elim_groupby_flat = of_func elim_groupby_flat ~name:"elim-groupby-flat"
 
   let elim_groupby_approx r =
-    match r.node with
-    | GroupBy (ps, key, r) -> (
-        let key_name = Fresh.name Global.fresh "k%d" in
-        let key_preds = List.map key ~f:P.name in
-        let filter_pred =
-          List.map key ~f:(fun n ->
-              Pred.Infix.(name n = name (Name.copy n ~scope:(Some key_name))))
-          |> Pred.conjoin
-        in
-        (* Try to remove any remaining parameters from the keys relation. *)
-        match all_values_approx key_preds r with
-        | Ok keys ->
-            Some
-              (A.list (A.dedup keys) key_name
-                 (A.select ps (A.filter filter_pred r)))
-        | Error err ->
-            info (fun m -> m "elim-groupby-approx: %a" Error.pp err);
-            None )
-    (* Otherwise, if some keys are computed, fail. *)
-    | _ -> None
+    let open Option.Let_syntax in
+    let%bind ps, key, r = to_groupby r in
+    let key_name = Fresh.name Global.fresh "k%d" in
+    let key_preds = List.map key ~f:P.name in
+    let filter_pred =
+      List.map key ~f:(fun n ->
+          Pred.Infix.(name n = name (Name.copy n ~scope:(Some key_name))))
+      |> Pred.conjoin
+    in
+    (* Try to remove any remaining parameters from the keys relation. *)
+    let%bind keys =
+      match all_values_approx key_preds r with
+      | Ok keys -> return @@ A.dedup keys
+      | Error err ->
+          (* Otherwise, if some keys are computed, fail. *)
+          info (fun m -> m "elim-groupby-approx: %a" Error.pp err);
+          None
+    in
+    Fmt.pr "Keys: %a@." A.pp keys;
+    return @@ A.list keys key_name (A.select ps (A.filter filter_pred r))
 
   let elim_groupby_approx =
     of_func elim_groupby_approx ~name:"elim-groupby-approx"

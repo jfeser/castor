@@ -2,6 +2,7 @@ open Ast
 open Abslayout
 open Collections
 open Schema
+module V = Visitors
 module A = Abslayout
 module P = Pred.Infix
 
@@ -10,17 +11,51 @@ module Config = struct
     val conn : Db.t
 
     val cost_conn : Db.t
+
+    val params : Set.M(Name).t
   end
 end
 
 module Make (Config : Config.S) = struct
   open Config
 
+  (** Remove all references to names in params while ensuring that the resulting
+     relation overapproximates the original. *)
+  let over_approx params r =
+    let visitor =
+      object (self)
+        inherit [_] V.map as super
+
+        method! visit_Filter () (p, r) =
+          if Set.is_empty (Set.inter (Pred.names p) params) then
+            super#visit_Filter () (p, r)
+          else (self#visit_t () r).node
+
+        method! visit_Select () (ps, r) =
+          match A.select_kind ps with
+          | `Agg -> Select (ps, r)
+          | `Scalar -> Select (ps, self#visit_t () r)
+
+        method! visit_GroupBy () (ps, ks, r) = GroupBy (ps, ks, r)
+      end
+    in
+    let r = visitor#visit_t () r in
+    let remains = Set.inter (Free.free r) params in
+    if Set.is_empty remains then Ok r
+    else
+      Or_error.error "Failed to remove all parameters." remains
+        [%sexp_of: Set.M(Name).t]
+
   (** Precise selection of all valuations of a list of predicates from a relation.
    *)
   let all_values_precise ps r =
     if Set.is_empty (Free.free r) then Ok (A.dedup (A.select ps r))
     else Or_error.errorf "Predicate contains free variables."
+
+  let all_values_approx_1 ps r =
+    let open Or_error.Let_syntax in
+    let%map r' = over_approx params r in
+    A.dedup @@ A.select ps r'
 
   let rec closure m =
     let m' = Map.map m ~f:(Pred.subst m) in
@@ -63,7 +98,7 @@ module Make (Config : Config.S) = struct
   (** Approximate selection of all valuations of a list of predicates from a
    relation. Works if the relation is parameterized, but only when the
    predicates do not depend on those parameters. *)
-  let all_values_approx ps r =
+  let all_values_approx_2 ps r =
     let open Or_error.Let_syntax in
     (* Otherwise, if all grouping keys are from named relations, select all
        possible grouping keys. *)
@@ -127,8 +162,15 @@ module Make (Config : Config.S) = struct
     | Some r -> Ok (select sel_list r)
     | None -> Or_error.errorf "No relations found."
 
+  let all_values_approx ps r =
+    match all_values_approx_1 ps r with
+    | Ok r' -> Ok r'
+    | Error _ -> all_values_approx_2 ps r
+
   let all_values ps r =
-    Or_error.find_ok [ all_values_precise ps r; all_values_approx ps r ]
+    match all_values_precise ps r with
+    | Ok r' -> Ok r'
+    | Error _ -> all_values_approx ps r
 
   (** Check that a predicate is fully supported by a relation (it does not
       depend on anything in the context.) *)
