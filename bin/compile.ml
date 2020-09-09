@@ -71,6 +71,7 @@ let () =
     [%map_open
       let () = Log.param
       and () = Db.param
+      and () = Join_elim.param
       and debug = flag "debug" ~aliases:[ "g" ] no_arg ~doc:"enable debug mode"
       and gprof = flag "prof" ~aliases:[ "pg" ] no_arg ~doc:"enable profiling"
       and enable_redshift_dates =
