@@ -14,7 +14,7 @@ let%expect_test "" =
   printf "%s" (Sql.to_string_hum sql);
   [%expect
     {|
-      SELECT
+      SELECT DISTINCT
           "x0_0" AS "x0_0_0",
           "x1_0" AS "x1_0_0",
           "x2_0" AS "x2_0_0",
@@ -54,7 +54,7 @@ let%expect_test "" =
   printf "%s" (Sql.to_string_hum sql);
   [%expect
     {|
-      SELECT
+      SELECT DISTINCT
           "counter0_0" AS "counter0_0_0",
           "f_3" AS "f_3_0",
           "x4_0" AS "x4_0_0",
@@ -110,14 +110,15 @@ let%expect_test "" =
   [%expect
     {|
       orderby([x9, x10],
-        depjoin(groupby([count() as ct2, f, g], [f, g], r1) as k,
-          select([k.ct2 as x8, k.f as x9, k.g as x10, f as x11, v as x12],
-            atuple([ascalar(k.f), ascalar((k.g - k.f) as v)], cross)))) |}];
+        dedup(
+          depjoin(groupby([count() as ct2, f, g], [f, g], r1) as k,
+            select([k.ct2 as x8, k.f as x9, k.g as x10, f as x11, v as x12],
+              atuple([ascalar(k.f), ascalar((k.g - k.f) as v)], cross))))) |}];
   let sql = Sql.of_ralgebra r in
   printf "%s" (Sql.to_string_hum sql);
   [%expect
     {|
-      SELECT
+      SELECT DISTINCT
           "x8_0" AS "x8_0_0",
           "x9_0" AS "x9_0_0",
           "x10_0" AS "x10_0_0",
@@ -160,17 +161,18 @@ let%expect_test "" =
   [%expect
     {|
         orderby([x18, x19, x21, x22],
-          depjoin(groupby([count() as ct3, f, g], [f, g], r1) as k,
-            select([k.ct3 as x17, k.f as x18, k.g as x19, x13 as x20, x14 as x21,
-                    x15 as x22, x16 as x23],
-              depjoin(groupby([count() as ct4, f, g], [f, g], r1) as j,
-                select([j.ct4 as x13, j.f as x14, j.g as x15, f as x16],
-                  atuple([ascalar(j.f)], cross)))))) |}];
+          dedup(
+            depjoin(groupby([count() as ct3, f, g], [f, g], r1) as k,
+              select([k.ct3 as x17, k.f as x18, k.g as x19, x13 as x20, x14 as x21,
+                      x15 as x22, x16 as x23],
+                depjoin(groupby([count() as ct4, f, g], [f, g], r1) as j,
+                  select([j.ct4 as x13, j.f as x14, j.g as x15, f as x16],
+                    atuple([ascalar(j.f)], cross))))))) |}];
   let sql = Sql.of_ralgebra r in
   printf "%s" (Sql.to_string_hum sql);
   [%expect
     {|
-        SELECT
+        SELECT DISTINCT
             "x17_0" AS "x17_0_0",
             "x18_0" AS "x18_0_0",
             "x19_0" AS "x19_0_0",

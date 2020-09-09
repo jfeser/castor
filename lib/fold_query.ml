@@ -1,5 +1,4 @@
 open Ast
-open Abslayout
 module V = Visitors
 open Schema
 module A = Abslayout
@@ -152,14 +151,14 @@ let to_scalars rs =
 let of_list of_ralgebra q { l_keys = q1; l_scope = scope; l_values = q2 } =
   let q1 =
     let order_key = total_order_key q1 in
-    order_by order_key (strip_meta q1)
+    A.order_by order_key (strip_meta q1)
   in
   for_ q (q1, scope, of_ralgebra q2, false)
 
 let of_hash_idx of_ralgebra q h =
   let q1 =
     let order_key = total_order_key h.hi_keys in
-    order_by order_key (dedup @@ strip_meta h.hi_keys)
+    A.order_by order_key @@ A.dedup @@ strip_meta h.hi_keys
   in
   for_ q (q1, h.hi_scope, of_ralgebra h.hi_values, true)
 
@@ -167,7 +166,7 @@ let of_ordered_idx of_ralgebra q
     { oi_keys = q1; oi_values = q2; oi_scope = scope; _ } =
   let q1 =
     let order_key = total_order_key q1 in
-    order_by order_key (dedup @@ strip_meta q1)
+    A.order_by order_key @@ A.dedup @@ strip_meta q1
   in
   for_ q (q1, scope, of_ralgebra q2, true)
 
@@ -221,7 +220,7 @@ let unwrap q = map_meta ~f:(fun m -> Option.value_exn m) q
    fold acts on. *)
 let rec to_ralgebra q =
   match q.node with
-  | Var _ -> scalar (As_pred (Int 0, Fresh.name Global.fresh "var%d"))
+  | Var _ -> A.scalar @@ As_pred (Int 0, Fresh.name Global.fresh "var%d")
   | Let (binds, q) -> to_ralgebra (to_concat binds q)
   | For (q1, scope, q2, distinct) ->
       (* Extend the lhs query with a row number. Even if this query emits
@@ -234,7 +233,7 @@ let rec to_ralgebra q =
           if distinct then (o1, q1)
           else
             ( o1,
-              group_by
+              A.group_by
                 (As_pred (Count, count) :: (schema q1 |> Schema.to_select_list))
                 (schema q1) q1 )
         in
@@ -262,7 +261,7 @@ let rec to_ralgebra q =
         in
         List.map (o1 @ o2) ~f:(fun (p, o) -> (Pred.subst sctx p, o))
       in
-      order_by order (dep_join q1 scope (select slist q2))
+      A.order_by order @@ A.dep_join q1 scope @@ A.select slist q2
   | Concat qs ->
       let counter_name = Fresh.name Global.fresh "counter%d" in
       let orders, qs =
@@ -284,13 +283,13 @@ let rec to_ralgebra q =
                      in
                      List.map (schema q') ~f)
             in
-            select select_list q)
+            A.select select_list q)
       and order =
         (P.name (Name.create counter_name), Asc) :: List.concat orders
       in
-      order_by order (tuple queries_norm Concat)
+      A.order_by order @@ A.tuple queries_norm Concat
   | Empty -> A.empty
-  | Scalars ps -> tuple (List.map ps ~f:scalar) Cross
+  | Scalars ps -> A.tuple (List.map ps ~f:A.scalar) Cross
 
 let rec n_parallel q =
   match q.node with
@@ -302,7 +301,8 @@ let rec n_parallel q =
 
 let to_ralgebra q =
   Log.info (fun m -> m "Potential parallelism: %d queries" (n_parallel q));
-  wrap q |> to_ralgebra
+  let order, query = unwrap_order @@ to_ralgebra @@ wrap q in
+  A.order_by order @@ A.dedup query
 
 let rec width' q =
   match q.node with
