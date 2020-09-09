@@ -26,12 +26,34 @@ let main ~name ~params ~ch =
   end in
   let module T = Transform.Make (Config) in
   let open Ops.Make (Config) in
-  let open T.Filter_tactics in
-  let open T.Groupby_tactics in
-  let open T.Orderby_tactics in
-  let open T.Simple_tactics in
-  let open T.Join_elim_tactics in
-  let open T.Select_tactics in
+  let open Simplify_tactic.Make (Config) in
+  let open Filter_tactics.Make (Config) in
+  let open Groupby_tactics.Make (Config) in
+  let open Orderby_tactics.Make (Config) in
+  let open Simple_tactics.Make (Config) in
+  let open Join_elim_tactics.Make (Config) in
+  let open Select_tactics.Make (Config) in
+  (* Recursively optimize subqueries. *)
+  let apply_to_subqueries tf =
+    let f r =
+      let visitor =
+        object (self : 'a)
+          inherit [_] V.map
+
+          method visit_subquery r =
+            Option.value_exn ~message:"Transforming subquery failed."
+              (apply tf Path.root r)
+
+          method! visit_Exists () r = Exists (self#visit_subquery r)
+
+          method! visit_First () r = First (self#visit_subquery r)
+        end
+      in
+      Some (visitor#visit_t () r)
+    in
+    of_func f ~name:"apply-to-subqueries"
+  in
+
   let xform_1 =
     seq_many
       [
@@ -41,12 +63,12 @@ let main ~name ~params ~ch =
         |> Branching.lower Seq.hd;
         at_ push_filter Path.(all >>? is_filter >>| shallowest);
         at_ push_filter Path.(all >>? is_filter >>| shallowest);
-        T.project;
-        T.Simplify_tactic.simplify;
+        project;
+        simplify;
         at_ push_select Path.(all >>? is_select >>| shallowest);
         at_ row_store Path.(all >>? is_filter >>| shallowest);
-        T.project;
-        T.Simplify_tactic.simplify;
+        project;
+        simplify;
       ]
   in
 
@@ -68,7 +90,7 @@ let main ~name ~params ~ch =
         at_ hoist_filter Path.(all >>? is_orderby >>| shallowest);
         at_ elim_eq_filter Path.(all >>? is_filter >>| shallowest);
         at_ push_orderby Path.(all >>? is_orderby >>| shallowest);
-        T.Simplify_tactic.simplify;
+        simplify;
         at_ push_filter Path.(all >>? is_filter >>| shallowest);
         at_
           (split_out
@@ -81,7 +103,7 @@ let main ~name ~params ~ch =
              >>= parent )
              "s1_suppkey")
           Path.(all >>? is_filter >>| shallowest);
-        fix T.project;
+        fix project;
         at_ split_filter Path.(all >>? is_filter >>| shallowest);
         at_ hoist_filter Path.(all >>? is_filter >>| shallowest);
         at_ split_filter Path.(all >>? is_filter >>| shallowest);
@@ -94,8 +116,8 @@ let main ~name ~params ~ch =
         at_ row_store (Path.(all >>? is_param_filter >>| deepest) >>= child' 0);
         at_ row_store
           (Path.(all >>? is_hash_idx >>| deepest) >>= child' 1 >>= child' 0);
-        T.project;
-        T.Simplify_tactic.simplify;
+        project;
+        simplify;
       ]
   in
 
@@ -120,11 +142,11 @@ let main ~name ~params ~ch =
         at_ split_filter Path.(all >>? is_filter >>| shallowest);
         at_ split_filter Path.(all >>? is_filter >>| shallowest);
         at_ split_filter Path.(all >>? is_filter >>| shallowest);
-        at_ T.Simple_tactics.row_store
+        at_ row_store
           Infix.(
             Path.(all >>? is_filter >>? not is_param_filter >>| shallowest));
-        T.project;
-        T.Simplify_tactic.simplify;
+        project;
+        simplify;
       ]
   in
 
@@ -137,11 +159,11 @@ let main ~name ~params ~ch =
         Branching.at_ elim_cmp_filter Path.(all >>? is_filter >>| shallowest)
         |> Branching.lower Seq.hd;
         fix @@ at_ push_filter Path.(all >>? is_filter >>| shallowest);
-        T.Simplify_tactic.simplify;
+        simplify;
         at_ push_select Path.(all >>? is_select >>| shallowest);
         at_ row_store Path.(all >>? is_filter >>| shallowest);
-        T.project;
-        T.Simplify_tactic.simplify;
+        project;
+        simplify;
       ]
   in
 
@@ -162,11 +184,11 @@ let main ~name ~params ~ch =
         Branching.at_ elim_cmp_filter
           Path.(all >>? is_param_filter >>| shallowest)
         |> Branching.lower Seq.hd;
-        T.Simplify_tactic.simplify;
+        simplify;
         at_ push_select Path.(all >>? is_select >>? is_run_time >>| deepest);
         at_ row_store Path.(all >>? is_filter >>? is_run_time >>| shallowest);
-        T.project;
-        T.Simplify_tactic.simplify;
+        project;
+        simplify;
       ]
   in
 
@@ -193,8 +215,8 @@ let main ~name ~params ~ch =
         |> Branching.lower Seq.hd;
         push_no_param_filter;
         at_ row_store Path.(all >>? is_filter >>| deepest);
-        fix T.project;
-        T.Simplify_tactic.simplify;
+        fix project;
+        simplify;
       ]
   in
 
@@ -208,8 +230,8 @@ let main ~name ~params ~ch =
           (partition_domain "param1" "nation.n_name")
           Path.(all >>? is_collection >>| shallowest);
         at_ row_store Path.(all >>? is_orderby >>| shallowest);
-        T.project;
-        T.Simplify_tactic.simplify;
+        project;
+        simplify;
       ]
   in
 
@@ -228,8 +250,8 @@ let main ~name ~params ~ch =
         push_no_param_filter;
         at_ hoist_join_param_filter Path.(all >>? is_join >>| shallowest);
         at_ row_store Path.(all >>? is_join >>| shallowest);
-        T.project;
-        T.Simplify_tactic.simplify;
+        project;
+        simplify;
       ]
   in
 
@@ -266,8 +288,8 @@ let main ~name ~params ~ch =
           Path.(all >>? is_param_filter >>| shallowest);
         at_ row_store
           (Path.(all >>? is_param_filter >>| shallowest) >>= child' 0);
-        T.project;
-        T.Simplify_tactic.simplify;
+        project;
+        simplify;
       ]
   in
 
@@ -285,8 +307,8 @@ let main ~name ~params ~ch =
         at_ split_filter Path.(all >>? is_param_filter >>| shallowest);
         at_ row_store
           (Path.(all >>? is_param_filter >>| shallowest) >>= child' 0);
-        T.project;
-        T.Simplify_tactic.simplify;
+        project;
+        simplify;
       ]
   in
 
@@ -302,8 +324,8 @@ let main ~name ~params ~ch =
         at_ hoist_param (Path.(all >>? is_depjoin >>| shallowest) >>= child' 0);
         at_ row_store
           (Path.(all >>? is_depjoin >>| shallowest) >>= child' 0 >>= child' 0);
-        T.project;
-        T.Simplify_tactic.simplify;
+        project;
+        simplify;
       ]
   in
 
@@ -334,13 +356,13 @@ let main ~name ~params ~ch =
         at_ split_filter Path.(all >>? is_param_filter >>| deepest);
         Branching.at_ elim_cmp_filter Path.(all >>? is_param_filter >>| deepest)
         |> Branching.lower Seq.hd;
-        T.Simplify_tactic.simplify;
+        simplify;
         at_ push_select Path.(all >>? is_select >>? is_run_time >>| shallowest);
         at_ row_store
           Infix.(
             Path.(all >>? is_filter >>? not is_param_filter >>| shallowest));
-        T.project;
-        T.Simplify_tactic.simplify;
+        project;
+        simplify;
       ]
   in
 
@@ -351,11 +373,11 @@ let main ~name ~params ~ch =
           (Path.(all >>? is_param_filter >>| shallowest) >>= parent);
         Branching.at_ elim_cmp_filter Path.(all >>? is_filter >>| shallowest)
         |> Branching.lower Seq.hd;
-        T.Simplify_tactic.simplify;
-        T.Select_tactics.push_select;
+        simplify;
+        push_select;
         at_ row_store Path.(all >>? is_filter >>| shallowest);
-        T.project;
-        T.Simplify_tactic.simplify;
+        project;
+        simplify;
       ]
   in
 
@@ -368,8 +390,8 @@ let main ~name ~params ~ch =
         at_ row_store Path.(all >>? is_orderby >>| shallowest);
         at_ hoist_join_filter Path.(all >>? is_join >>| shallowest);
         at_ elim_subquery_join Path.(all >>? is_filter >>| shallowest);
-        T.project;
-        T.Simplify_tactic.simplify;
+        project;
+        simplify;
       ]
   in
 
@@ -386,8 +408,8 @@ let main ~name ~params ~ch =
           Path.(all >>? is_groupby >>| shallowest)
         |> Branching.lower (fun s -> Seq.nth s 2);
         at_ row_store Path.(all >>? is_groupby >>| shallowest);
-        T.project;
-        T.Simplify_tactic.simplify;
+        project;
+        simplify;
       ]
   in
 
@@ -397,7 +419,7 @@ let main ~name ~params ~ch =
         at_ hoist_filter
           (Path.(all >>? is_param_filter >>| shallowest) >>= parent);
         at_ elim_eq_filter Path.(all >>? is_param_filter >>| shallowest);
-        T.apply_to_subqueries
+        apply_to_subqueries
           (seq_many
              [
                at_
@@ -407,9 +429,9 @@ let main ~name ~params ~ch =
                  Path.(all >>? is_select >>? is_run_time >>| deepest);
              ]);
         at_ row_store Path.(all >>? is_filter >>| deepest);
-        T.Simplify_tactic.simplify;
-        T.project;
-        T.project;
+        simplify;
+        project;
+        project;
       ]
   in
 
@@ -418,7 +440,7 @@ let main ~name ~params ~ch =
       [
         fix
         @@ at_ hoist_filter (Path.(all >>? is_filter >>| shallowest) >>= parent);
-        T.apply_to_subqueries
+        apply_to_subqueries
           (seq_many
              [
                split_filter;
@@ -430,12 +452,12 @@ let main ~name ~params ~ch =
                  (Path.(all >>? is_param_filter >>| shallowest) >>= child' 0);
                at_ row_store
                  (Path.(all >>? is_collection >>| shallowest) >>= child' 1);
-               T.Simplify_tactic.simplify;
+               simplify;
              ]);
-        T.project;
+        project;
         at_ row_store Path.(all >>? is_orderby >>| shallowest);
-        T.project;
-        T.Simplify_tactic.simplify;
+        project;
+        simplify;
       ]
   in
 
@@ -454,8 +476,8 @@ let main ~name ~params ~ch =
                Path.(
                  all >>? is_filter >>? not is_param_filter >>? is_run_time
                  >>| shallowest));
-        T.project;
-        T.Simplify_tactic.simplify;
+        project;
+        simplify;
       ]
   in
 

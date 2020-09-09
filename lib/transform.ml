@@ -5,23 +5,11 @@ module V = Visitors
 
 module Config = struct
   module type S = sig
-    include Ops.Config.S
+    val conn : Db.t
 
-    include Simplify_tactic.Config.S
+    val cost_conn : Db.t
 
-    include Filter_tactics.Config.S
-
-    include Simple_tactics.Config.S
-
-    include Join_opt.Config.S
-
-    include Select_tactics.Config.S
-
-    include Groupby_tactics.Config.S
-
-    include Join_elim_tactics.Config.S
-
-    include Type_cost.Config.S
+    val params : Set.M(Name).t
 
     val cost_timeout : float option
 
@@ -43,6 +31,7 @@ module Make (Config : Config.S) = struct
   module Tactics_util = Tactics_util.Make (Config)
   module Dedup_tactics = Dedup_tactics.Make (Config)
   module Orderby_tactics = Orderby_tactics.Make (Config)
+  module Cost = Type_cost.Make (Config)
 
   let try_random tf =
     global
@@ -58,16 +47,6 @@ module Make (Config : Config.S) = struct
         then Branching.apply tf p r
         else Seq.singleton r)
 
-  module Config = struct
-    include Config
-
-    let simplify =
-      let tf = fix (seq_many Simplify_tactic.[ project; simplify ]) in
-      Some (fun r -> Option.value (apply tf Path.root r) ~default:r)
-  end
-
-  module Cost = Type_cost.Make (Config)
-
   let is_serializable r p =
     Is_serializable.is_serializeable ~params ~path:p r |> Result.is_ok
 
@@ -78,32 +57,8 @@ module Make (Config : Config.S) = struct
 
   let has_free r p = not (Set.is_empty (Free.free (Path.get_exn p r)))
 
-  (* Recursively optimize subqueries. *)
-  let apply_to_subqueries tf =
-    let f r =
-      let visitor =
-        object (self : 'a)
-          inherit [_] V.map
-
-          method visit_subquery r =
-            Option.value_exn ~message:"Transforming subquery failed."
-              (O.apply tf Path.root r)
-
-          method! visit_Exists () r = Exists (self#visit_subquery r)
-
-          method! visit_First () r = First (self#visit_subquery r)
-        end
-      in
-      Some (visitor#visit_t () r)
-    in
-    of_func f ~name:"apply-to-subqueries"
-
   let push_all_runtime_filters =
     for_all Filter_tactics.push_filter Path.(all >>? is_run_time >>? is_filter)
-
-  let hoist_all_runtime_filters =
-    for_all Filter_tactics.hoist_filter
-      Path.(all >>? is_filter >>? is_run_time >> O.parent)
 
   let push_static_filters =
     for_all Filter_tactics.push_filter
@@ -185,7 +140,7 @@ module Make (Config : Config.S) = struct
 
   let is_serializable'' r = Result.is_ok @@ is_serializable' r
 
-  let elim_subqueries =
+  let _elim_subqueries =
     seq_many
       [
         Filter_tactics.elim_all_correlated_subqueries;
