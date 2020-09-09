@@ -648,9 +648,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         let new_len = codegen_expr fctx e3 in
         let s = Llstring.unpack v1 in
         let new_pos =
-          build_add
-            (build_sub v2 (const_int int_type 1) "" builder)
-            s.pos "" builder
+          build_in_bounds_gep s.pos
+            [| build_sub v2 (const_int int_type 1) "" builder |]
+            "" builder
         in
         Llstring.pack { pos = new_pos; len = new_len }
 
