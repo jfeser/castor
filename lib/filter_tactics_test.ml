@@ -467,6 +467,24 @@ filter(exists(filter((ps_partkey = p_partkey),
                 filter((s0.ps_partkey = p_partkey),
                   filter((strpos(p_name, "test") = 1), part))))))) |}]
 
+  let%expect_test "partition" =
+    let s_suppkey = Name.create "s_suppkey" in
+    let r =
+      load_string_exn
+        ~params:(Set.singleton (module Name) s_suppkey)
+        (Lazy.force tpch_conn)
+        {|
+filter((s_suppkey = ps_suppkey),
+  filter(exists(filter((ps_partkey = p_partkey), filter((strpos(p_name, "test") = 1), part))),
+    filter((ps_availqty >
+           (select([(0.5 * sum(l_quantity)) as tot],
+              filter(((l_partkey = ps_partkey) && ((l_suppkey = ps_suppkey))),
+                lineitem)))),
+      partsupp)))
+|}
+    in
+    partition_on r s_suppkey |> Option.iter ~f:(Fmt.pr "%a@." pp)
+
   let%expect_test "elim-correlated-subquery" =
     let r =
       load_string_exn (Lazy.force tpch_conn)

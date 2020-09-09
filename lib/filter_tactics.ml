@@ -816,6 +816,20 @@ module Make (C : Config.S) = struct
       @@ A.select Schema.(schema r' |> to_select_list)
       @@ A.hash_idx keys scope r' [ Name n ]
 
+  let exists_correlated_subquery r n =
+    let zero = false and plus = ( || ) in
+    let rec annot in_subquery r =
+      V.Reduce.annot zero plus (query in_subquery) meta r
+    and meta _ = zero
+    and pred in_subquery = function
+      | Name n' -> in_subquery && [%compare.equal: Name.t] n n'
+      | Exists r | First r -> annot true r
+      | p -> V.Reduce.pred zero plus (annot in_subquery) (pred in_subquery) p
+    and query in_subquery q =
+      V.Reduce.query zero plus (annot in_subquery) (pred in_subquery) q
+    in
+    annot false r
+
   (** Try to partition a layout on values of an attribute. *)
   let partition_on r n =
     let open Option.Let_syntax in
@@ -842,15 +856,22 @@ module Make (C : Config.S) = struct
           m "Partition: %s %a" msg (Fmt.Dump.list Pred.pp)
             (List.map ~f:Tuple.T2.get1 fields))
     in
-    match (fields, key_range) with
-    | [ (f, aliases) ], (Some l, Some h) ->
-        partition_with_bounds f aliases l h r n
-    | _, (None, _ | _, None) ->
-        fail "Could not find bounds for fields";
-        None
-    | _ ->
-        fail "Found too many fields";
-        None
+    let%bind f, aliases, l, h =
+      match (fields, key_range) with
+      | [ (f, aliases) ], (Some l, Some h) -> return (f, aliases, l, h)
+      | _, (None, _ | _, None) ->
+          fail "Could not find bounds for fields";
+          None
+      | _ ->
+          fail "Found too many fields";
+          None
+    in
+    (* Don't try to partition if there's a subquery that refers to the partition attribute. *)
+    if
+      Pred.names f |> Set.to_sequence
+      |> Sequence.exists ~f:(exists_correlated_subquery r)
+    then None
+    else partition_with_bounds f aliases l h r n
 
   let partition _ r =
     Set.to_sequence params |> Seq.filter_map ~f:(partition_on r)
