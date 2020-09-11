@@ -101,15 +101,15 @@ module Data = struct
     (* Convert the ralgebra to sql. *)
     (r, Sql.of_ralgebra r)
 
-  let of_ralgebra conn r_fold =
+  let of_ralgebra ?(dir = ".") conn r_fold =
     let r_tups, sql = to_query r_fold |> to_sql conn in
     info (fun m -> m "Running SQL: %s" (Sql.to_string_hum sql));
     (* Run the sql to get a stream of tuples. *)
-    let fn = Filename.temp_file ~in_dir:"." "query" "sexp" in
+    let fn = Filename.temp_file ~in_dir:dir "query" ".sexp" in
     Db.exec_to_file ~fn conn (Schema_types.types r_tups) (Sql.to_string sql);
     { fn; ralgebra = strip_meta r_fold }
 
-  let annotate conn r =
+  let annotate ?dir conn r =
     let r =
       V.map_meta
         (fun m ->
@@ -125,12 +125,13 @@ module Data = struct
         r
     in
 
-    r.meta#set_fold_stream @@ of_ralgebra conn r;
+    r.meta#set_fold_stream @@ of_ralgebra ?dir conn r;
     let visitor =
       object
         inherit [_] Visitors.runtime_subquery_visitor
 
-        method visit_Subquery r = r.meta#set_fold_stream @@ of_ralgebra conn r
+        method visit_Subquery r =
+          r.meta#set_fold_stream @@ of_ralgebra ?dir conn r
       end
     in
     visitor#visit_t () r;

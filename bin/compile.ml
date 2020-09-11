@@ -58,7 +58,7 @@ let main ~debug ~gprof ~params ~code_only ~query ~enable_redshift_dates ?out_dir
   let params = List.map params ~f:(fun (n, t) -> (Name.create n, t)) in
 
   (* Attach the streams needed for folding over the ast. *)
-  let ralgebra = Abslayout_fold.Data.annotate conn ralgebra in
+  let ralgebra = Abslayout_fold.Data.annotate ?dir:out_dir conn ralgebra in
 
   (* Annotate with types. *)
   let ralgebra = Type.annotate ralgebra in
