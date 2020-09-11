@@ -12,8 +12,7 @@ let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
     let out_dir = Filename.temp_dir "bin" "" in
     let exe_fn, data_fn =
       let params = List.map ~f:(fun (n, t, _) -> (n, t)) params in
-      C.compile ~out_dir ~layout_log:layout_file ~gprof:false ~params conn
-        layout
+      C.compile ~out_dir ~layout_log:layout_file ~gprof:false ~params layout
     in
     if print_layout then
       In_channel.input_all (In_channel.create layout_file) |> print_endline;
@@ -39,10 +38,13 @@ let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
         |> Set.of_list (module Name)
       in
       load_string_nostrip_exn conn ~params layout_str
-      |> Type.annotate conn
+      |> Abslayout_fold.Data.annotate conn
+      |> Type.annotate
       |> V.map_meta (fun m ->
              object
-               method resolved = m#meta#resolved
+               method fold_stream = m#fold_stream
+
+               method resolved = m#meta#meta#resolved
 
                method type_ = m#type_
              end)

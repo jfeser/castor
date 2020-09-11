@@ -45,7 +45,7 @@ let type_test conn q =
   in
   print_endline "Parallel type (imprecise):";
   [%sexp_of: Type.t] type_ |> print_s;
-  let type_ = Type.type_of conn q in
+  let type_ = Type.type_of @@ Abslayout_fold.Data.annotate conn q in
   print_endline "Serial type (precise):";
   [%sexp_of: Type.t] type_ |> print_s
 

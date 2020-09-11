@@ -11,9 +11,11 @@ let run_test ?(params = []) layout_str opt_func =
       List.map params ~f:(fun (n, t, _) -> Name.copy ~type_:(Some t) n)
       |> Set.of_list (module Name)
     in
-    load_string_nostrip_exn conn ~params layout_str |> Type.annotate conn
+    load_string_nostrip_exn conn ~params layout_str
+    |> Abslayout_fold.Data.annotate conn
+    |> Type.annotate
   in
-  let layout, len = Serialize.serialize conn "/tmp/buf" layout in
+  let layout, len = Serialize.serialize "/tmp/buf" layout in
   let params = List.map params ~f:(fun (n, t, _) -> (n, t)) in
   let layout =
     V.map_meta
@@ -23,7 +25,7 @@ let run_test ?(params = []) layout_str opt_func =
 
           method type_ = m#type_
 
-          method resolved = m#meta#meta#resolved
+          method resolved = m#meta#meta#meta#resolved
         end)
       layout
   in
@@ -131,14 +133,15 @@ let%test_module _ =
       let r =
         load_string_nostrip_exn conn
           "filter(c > 0, select([count() as c], ascalar(0)))"
-        |> Type.annotate conn
+        |> Abslayout_fold.Data.annotate conn
+        |> Type.annotate
         |> map_meta (fun m ->
                object
                  method type_ = m#type_
 
                  method pos = None
 
-                 method resolved = m#meta#resolved
+                 method resolved = m#meta#meta#resolved
                end)
       in
       let ir = I.irgen ~params:[] ~len:0 r in

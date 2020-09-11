@@ -18,11 +18,13 @@ let run_test ?(params = []) layout_str =
       List.map params ~f:(fun (n, t, _) -> Name.copy ~type_:(Some t) n)
       |> Set.of_list (module Name)
     in
-    load_string_exn ~params conn layout_str |> Type.annotate conn
+    load_string_exn ~params conn layout_str
+    |> Abslayout_fold.Data.annotate conn
+    |> Type.annotate
   in
   let type_ = layout.meta#type_ in
   let _, len =
-    Serialize.serialize ~layout_file:layout_log_file conn layout_file layout
+    Serialize.serialize ~layout_file:layout_log_file layout_file layout
   in
   let buf_str = In_channel.read_all layout_file |> String.escaped in
   let layout_log, did_modify =

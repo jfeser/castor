@@ -16,7 +16,8 @@ let run_print_test ?params query =
           |> Set.of_list (module Name))
     in
     let layout = load_string_exn ?params:sparams conn query in
-    (new print_fold)#run conn layout |> List.iter ~f:print_endline
+    let stream = Data.of_ralgebra conn layout in
+    (new print_fold)#run stream layout |> List.iter ~f:print_endline
   in
   Exn.handle_uncaught ~exit:false run
 

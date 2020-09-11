@@ -9,10 +9,13 @@ let run_test ?(params = []) ?(print_code = true) layout_str =
       List.map params ~f:(fun (n, t, _) -> Name.copy ~type_:(Some t) n)
       |> Set.of_list (module Name)
     in
-    load_string_nostrip_exn conn ~params layout_str |> Type.annotate conn
+    load_string_nostrip_exn conn ~params layout_str
+    |> Abslayout_fold.Data.annotate conn
+    |> Type.annotate
   in
+
   print_endline (Sexp.to_string_hum ([%sexp_of: Type.t] layout.meta#type_));
-  let layout, len = Serialize.serialize conn "/tmp/buf" layout in
+  let layout, len = Serialize.serialize "/tmp/buf" layout in
   let layout =
     V.map_meta
       (fun m ->
@@ -21,7 +24,7 @@ let run_test ?(params = []) ?(print_code = true) layout_str =
 
           method type_ = m#type_
 
-          method resolved = m#meta#meta#resolved
+          method resolved = m#meta#meta#meta#resolved
         end)
       layout
   in
