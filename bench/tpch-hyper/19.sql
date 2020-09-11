@@ -1,2 +1,0 @@
-select sum(l_extendedprice * (1 - l_discount)) from
-                                                   (select * from q19_1 where p_brand = 'Brand#12' and l_quantity <= 1.0 + 10 and l_quantity >= 1.0  union all select * from q19_2 where p_brand = 'Brand#23' and l_quantity <= 10.0 + 10 and l_quantity >= 10.0 union all select * from q19_3 where p_brand = 'Brand#34' and l_quantity <= 20.0 + 10 and l_quantity >= 20.0) as t;

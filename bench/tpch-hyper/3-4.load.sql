@@ -1,6 +1,0 @@
-COPY q3
-FROM
-'q3.tbl' DELIMITER '|';
-COPY q4
-FROM
-'q4.tbl' DELIMITER '|';
