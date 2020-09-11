@@ -163,9 +163,11 @@ module Make (Config : Config.S) = struct
     | None -> Or_error.errorf "No relations found."
 
   let all_values_approx ps r =
-    match all_values_approx_1 ps r with
-    | Ok r' -> Ok r'
-    | Error _ -> all_values_approx_2 ps r
+    if List.length ps = 1 then all_values_approx_2 ps r
+    else
+      match all_values_approx_1 ps r with
+      | Ok r' -> Ok r'
+      | Error _ -> all_values_approx_2 ps r
 
   let all_values ps r =
     match all_values_precise ps r with
