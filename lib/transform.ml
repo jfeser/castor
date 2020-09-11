@@ -163,7 +163,7 @@ module Make (Config : Config.S) = struct
           [
             (* Simplify predicates. *)
             traced ~name:"simplify-preds"
-            @@ for_all Filter_tactics.simplify Path.(all);
+            @@ for_all Filter_tactics.simplify_filter Path.all;
             (* CSE *)
             seq_many'
               [

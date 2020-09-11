@@ -1155,14 +1155,14 @@ module Make (C : Config.S) = struct
       (fun _ r -> Some (Unnest.unnest ~params r |> Ast.strip_meta))
       "unnest"
 
-  let simplify r =
+  let simplify_filter r =
     let open Option.Let_syntax in
     match r.node with
     | Filter (p, r) -> return @@ A.filter (Pred.simplify p) r
     | Join { pred; r1; r2 } -> return @@ A.join (Pred.simplify pred) r1 r2
     | _ -> None
 
-  let simplify = of_func ~name:"simplify" simplify
+  let simplify_filter = of_func ~name:"simplify-filter" simplify_filter
 
   let precompute_filter_bv args =
     let open A in
