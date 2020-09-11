@@ -22,6 +22,8 @@ module Make (C : Config.S) = struct
 
   open Tactics_util.Make (C)
 
+  open Simplify_tactic.Make (C)
+
   (** Push a select that doesn't contain aggregates. *)
   let push_simple_select r =
     let open Option.Let_syntax in
@@ -121,53 +123,36 @@ module Make (C : Config.S) = struct
             return @@ gen_concat_select_list ps (schema rv)
         | _ -> None
       and mk_collection =
-        let extend rk rv scope =
-          let rk_schema = schema rk and rv_schema = schema rv in
-          let ext =
-            rk_schema |> unscoped
-            |> List.filter ~f:(fun n ->
-                   not (List.mem rv_schema n ~equal:[%compare.equal: Name.t]))
-            |> scoped scope
-          in
-          extend_with_tuple ext rv
-        in
         match r'.node with
         | AHashIdx h ->
-            let rk = h.hi_keys and rv = h.hi_values and scope = h.hi_scope in
-            let rv = extend rk rv scope in
+            let rk = h.hi_keys and rv = h.hi_values in
             return @@ fun mk ->
-            hash_idx' { h with hi_values = mk (schema rk) rv }
+            hash_idx' { h with hi_values = mk (schema rk) h.hi_scope rv }
         | AOrderedIdx o ->
-            let rk = o.oi_keys
-            and rv = extend o.oi_keys o.oi_values o.oi_scope in
+            let rk = o.oi_keys and rv = o.oi_values in
             return @@ fun mk ->
-            ordered_idx' { o with oi_values = mk (schema rk) rv }
+            ordered_idx' { o with oi_values = mk (schema rk) o.oi_scope rv }
         | AList l ->
-            return @@ fun mk -> list' { l with l_values = mk [] l.l_values }
-        | ATuple (r' :: rs', Concat) ->
-            return @@ fun mk -> tuple (List.map (r' :: rs') ~f:(mk [])) Concat
+            return @@ fun mk ->
+            list' { l with l_values = mk [] l.l_scope l.l_values }
         | _ -> None
       in
-      let count_n = Fresh.name Global.fresh "count%d" in
-      select outer_preds
-        (mk_collection (fun rk_schema rv ->
-             let inner_preds =
-               P.as_ Count count_n :: inner_preds
-               |> List.filter ~f:(fun p ->
-                      Pred.to_name p
-                      |> Option.map ~f:(fun n ->
-                             not
-                               (List.mem rk_schema n
-                                  ~equal:[%compare.equal: Name.t]))
-                      |> Option.value ~default:true)
-             in
-
-             A.filter
-               (Binop (Gt, Name (Name.create count_n), Int 0))
-               (select inner_preds rv)))
+      select outer_preds @@ mk_collection
+      @@ fun rk_schema scope rv ->
+      let inner_preds =
+        List.map inner_preds ~f:(Pred.scoped rk_schema scope)
+        |> List.filter ~f:(fun p ->
+               Pred.to_name p
+               |> Option.map ~f:(fun n ->
+                      not (List.mem rk_schema n ~equal:[%compare.equal: Name.t]))
+               |> Option.value ~default:true)
+      in
+      select inner_preds rv
 
   let push_select_collection =
-    of_func push_select_collection ~name:"push-select-collection"
+    of_func_cond ~pre:Option.return
+      ~post:(fun r -> Resolve.resolve ~params r |> Result.ok)
+      push_select_collection ~name:"push-select-collection"
 
   let push_select_filter r =
     let open Option.Let_syntax in
@@ -179,7 +164,22 @@ module Make (C : Config.S) = struct
     of_func_cond ~name:"push-select-filter" ~pre:Option.return
       push_select_filter ~post:(fun r -> Resolve.resolve ~params r |> Result.ok)
 
-  let push_select = first_success [ push_select_collection; push_select_filter ]
+  let push_select_depjoin r =
+    let open Option.Let_syntax in
+    let%bind ps, r' = to_select r in
+    let%bind { d_lhs; d_alias; d_rhs } = to_depjoin r' in
+    return @@ A.dep_join d_lhs d_alias @@ A.select ps d_rhs
+
+  let push_select_depjoin =
+    of_func ~name:"push-select-depjoin" push_select_depjoin
+
+  let push_select =
+    seq_many
+      [
+        flatten_select;
+        first_success
+          [ push_select_collection; push_select_filter; push_select_depjoin ];
+      ]
 
   let push_subqueries r =
     let open Option.Let_syntax in

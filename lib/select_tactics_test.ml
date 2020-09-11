@@ -45,11 +45,9 @@ select([sum(o_totalprice) as revenue],
     {|
     select([sum(agg0) as revenue],
       aorderedidx(select([o_orderdate], dedup(select([o_orderdate], orders))) as s1,
-        filter((count0 > 0),
-          select([count() as count0, sum(o_totalprice) as agg0, o_orderkey,
-                  o_custkey, o_orderstatus, o_totalprice, o_orderpriority,
-                  o_clerk, o_shippriority, o_comment],
-            atuple([filter((o_orderdate = s1.o_orderdate), orders)], cross))),
+        select([sum(o_totalprice) as agg0, o_orderkey, o_custkey, o_orderstatus,
+                o_totalprice, o_orderpriority, o_clerk, o_shippriority, o_comment],
+          filter((o_orderdate = s1.o_orderdate), orders)),
         >= date("0001-01-01"), < (date("0001-01-01") + year(1)))) |}]
 
 let%expect_test "" =
