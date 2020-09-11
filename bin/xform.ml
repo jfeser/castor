@@ -4,6 +4,35 @@ open Collections
 open Castor_opt
 open Abslayout_load
 module A = Abslayout
+open Match
+
+module type CONFIG = sig
+  val conn : Db.t
+
+  val params : Set.M(Name).t
+
+  val cost_conn : Db.t
+end
+
+module Xforms (C : CONFIG) = struct
+  module O = Ops.Make (C)
+  module Simplify = Simplify_tactic.Make (C)
+  module Filter = Filter_tactics.Make (C)
+  module Groupby = Groupby_tactics.Make (C)
+  module Orderby = Orderby_tactics.Make (C)
+  module Simple = Simple_tactics.Make (C)
+  module Join_elim = Join_elim_tactics.Make (C)
+  module Select = Select_tactics.Make (C)
+end
+
+let config conn params =
+  ( module struct
+    let conn = conn
+
+    let cost_conn = conn
+
+    let params = params
+  end : CONFIG )
 
 let main ~name ~params ~ch =
   let conn = Db.create (Sys.getenv_exn "CASTOR_DB") in
@@ -13,45 +42,64 @@ let main ~name ~params ~ch =
   in
   let query = load_string_exn ~params conn @@ In_channel.input_all ch in
 
-  let module Config = struct
-    let conn = conn
-
-    let cost_conn = conn
-
-    let params = params
-
-    let cost_timeout = None
-
-    let random = Mcmc.Random_choice.create ()
-  end in
-  let module T = Transform.Make (Config) in
-  let open Ops.Make (Config) in
-  let open Simplify_tactic.Make (Config) in
-  let open Filter_tactics.Make (Config) in
-  let open Groupby_tactics.Make (Config) in
-  let open Orderby_tactics.Make (Config) in
-  let open Simple_tactics.Make (Config) in
-  let open Join_elim_tactics.Make (Config) in
-  let open Select_tactics.Make (Config) in
+  let (module C) = config conn params in
+  let open Xforms (C) in
+  let open O in
+  let open Simplify in
+  let open Filter in
+  let open Groupby in
+  let open Orderby in
+  let open Select in
+  let open Simple in
+  let open Join_elim in
   (* Recursively optimize subqueries. *)
   let apply_to_subqueries tf =
-    let f r =
-      let visitor =
-        object (self : 'a)
-          inherit [_] V.map
+    let subquery_visitor tf =
+      object (self : 'a)
+        inherit [_] V.map
 
-          method visit_subquery r =
-            Option.value_exn ~message:"Transforming subquery failed."
-              (apply tf Path.root r)
+        method visit_subquery r =
+          Option.value_exn ~message:"Transforming subquery failed."
+            (apply tf Path.root r)
 
-          method! visit_Exists () r = Exists (self#visit_subquery r)
+        method! visit_Exists () r = Exists (self#visit_subquery r)
 
-          method! visit_First () r = First (self#visit_subquery r)
-        end
-      in
-      Some (visitor#visit_t () r)
+        method! visit_First () r = First (self#visit_subquery r)
+      end
     in
+
+    let f r = Some ((subquery_visitor tf)#visit_t () r) in
     of_func f ~name:"apply-to-subqueries"
+  in
+
+  let apply_to_filter_subquery tf =
+    let open Option.Let_syntax in
+    let subquery_visitor tf =
+      object (self : 'a)
+        inherit [_] V.map
+
+        method visit_subquery r =
+          let module C = struct
+            let conn = conn
+
+            let cost_conn = conn
+
+            let params = Set.union params (Free.free r)
+          end in
+          Option.value_exn ~message:"Transforming subquery failed."
+            (apply (tf (module C : CONFIG)) Path.root r)
+
+        method! visit_Exists () r = Exists (self#visit_subquery r)
+
+        method! visit_First () r = First (self#visit_subquery r)
+      end
+    in
+
+    let f r =
+      let%bind p, r' = to_filter r in
+      return @@ A.filter ((subquery_visitor tf)#visit_pred () p) r'
+    in
+    of_func f ~name:"apply-to-filter-subquery"
   in
 
   let xform_1 =
@@ -477,7 +525,96 @@ let main ~name ~params ~ch =
                  all >>? is_filter >>? not is_param_filter >>? is_run_time
                  >>| shallowest));
         project;
+        try_ simplify;
+      ]
+  in
+
+  let xform_20 =
+    seq_many
+      [
+        partition_domain "param2" "nation.n_name";
+        at_ hoist_filter Path.(all >>? is_join >>| shallowest);
+        at_ hoist_filter Path.(all >>? is_orderby >>| shallowest);
+        at_ split_filter Path.(all >>? is_filter >>| shallowest);
+        at_ hoist_filter Path.(all >>? is_filter >>| shallowest);
+        at_ split_filter Path.(all >>? is_filter >>| shallowest);
+        at_
+          ( apply_to_filter_subquery @@ fun (module C : CONFIG) ->
+            seq_many
+              [
+                at_
+                  ( apply_to_filter_subquery @@ fun _ ->
+                    seq_many
+                      [
+                        Branching.at_
+                          (partition_eq "part.p_partkey")
+                          Path.(all >>? is_filter >>| shallowest)
+                        |> Branching.lower Seq.hd;
+                        swap_filter Path.(all >>? is_filter >>| shallowest);
+                        first row_store Path.(all >>? is_run_time);
+                      ] )
+                  Path.(all >>? is_filter >>| shallowest);
+                at_
+                  ( apply_to_filter_subquery @@ fun (module C : CONFIG) ->
+                    let open Filter_tactics.Make (C) in
+                    let open Simplify_tactic.Make (C) in
+                    seq_many
+                      [
+                        at_ elim_eq_filter Path.(all >>? is_filter >>| deepest);
+                        at_ push_filter
+                          Path.(all >>? is_param_filter >>| shallowest);
+                        Branching.at_ elim_cmp_filter
+                          Path.(all >>? is_param_filter >>| shallowest)
+                        |> Branching.lower Seq.hd;
+                        simplify;
+                        first row_store Path.(all >>? is_run_time);
+                        try_ project;
+                      ] )
+                  (Path.(all >>? is_filter >>| shallowest) >>= child' 0);
+                (let open Filter_tactics.Make (C) in
+                at_ elim_eq_filter Path.(all >>? is_filter >>| deepest));
+                first row_store Path.(all >>? is_run_time);
+              ] )
+          Path.(all >>? is_filter >>| shallowest);
+        first row_store Path.(all >>? is_run_time);
+        project;
+      ]
+  in
+  let xform_21 =
+    seq_many
+      [
+        partition_domain "param0" "nation.n_name";
+        first row_store Path.(all >>? is_run_time);
         simplify;
+        project;
+      ]
+  in
+  let xform_22 =
+    seq_many
+      [
+        elim_groupby;
+        for_all push_select Path.(all >>? is_select);
+        for_all cse_filter Path.(all >>? is_filter);
+        for_all push_select Path.(all >>? is_select);
+        at_ push_filter Path.(all >>? is_filter >>| shallowest);
+        at_ push_filter Path.(all >>? is_filter >>| shallowest);
+        swap_filter Path.(all >>? is_filter >>| shallowest);
+        swap_filter (Path.(all >>? is_filter >>| shallowest) >>= child' 0);
+        at_
+          ( apply_to_filter_subquery @@ fun (module C : CONFIG) ->
+            let open Ops.Make (C) in
+            let open Filter_tactics.Make (C) in
+            seq_many
+              [
+                for_all cse_filter Path.(all >>? is_filter);
+                first row_store Path.all;
+                simplify;
+                project;
+              ] )
+          (Path.(all >>? is_filter >>| shallowest) >>= child' 0);
+        first row_store Path.(all >>? is_run_time);
+        simplify;
+        project;
       ]
   in
 
@@ -501,6 +638,9 @@ let main ~name ~params ~ch =
     | "17" -> xform_17
     | "18" -> xform_18
     | "19" -> xform_19
+    | "20" -> xform_20
+    | "21-no" -> xform_21
+    | "22-no" -> xform_22
     | _ -> failwith "unknown query name"
   in
   let query' = apply xform Path.root query in
@@ -515,6 +655,7 @@ let () =
       and () = Db.param
       and () = Type_cost.param
       and () = Join_opt.param
+      and () = Groupby_tactics.param
       and () = Type.param
       and () = Simplify_tactic.param
       and params =
