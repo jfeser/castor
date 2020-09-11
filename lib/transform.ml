@@ -254,6 +254,23 @@ module Make (Config : Config.S) = struct
                                   is_param_filter;
                              traced ~name:"push-all-unparam-filters"
                              @@ push_all_runtime_filters;
+                             (* Push aggregate selects until they can be eliminated into
+                                a row store. If the elimination doesn't happen, no change
+                                is made. *)
+                             traced ~name:"push-agg-select"
+                             @@ for_all_disjoint
+                                  (until'
+                                     (at_
+                                        (traced Select_tactics.push_select)
+                                        Path.(
+                                          all >>? is_agg_select >>? is_run_time
+                                          >>| deepest))
+                                     (at_
+                                        (traced Simple_tactics.row_store)
+                                        Path.(
+                                          all >>? is_agg_select >>? is_run_time
+                                          >>| deepest)))
+                                  Path.(all >>? is_agg_select >>? is_run_time);
                              (* Eliminate all unparameterized relations. *)
                              traced ~name:"elim-unparam-relations"
                              @@ fix
@@ -269,12 +286,6 @@ module Make (Config : Config.S) = struct
                                   ];
                              traced ~name:"push-all-unparam-filters"
                              @@ push_all_runtime_filters;
-                             (* Push selections above collections. *)
-                             traced ~name:"push-select-above-collection"
-                             @@ for_all Select_tactics.push_select
-                                  Path.(
-                                    all >>? is_select >>? is_run_time
-                                    >>? above is_collection);
                              (* Push orderby operators into compile time position if possible. *)
                              traced ~name:"push-orderby-into-ctime"
                              @@ for_all Orderby_tactics.push_orderby
