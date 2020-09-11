@@ -87,9 +87,11 @@ val oi_ptr_size : t -> ordered_idx -> int
 
 val least_general_of_primtype : Prim_type.t -> t
 
-val type_of : ?timeout:float -> Db.t -> < .. > annot -> t
+val type_of : < fold_stream : Abslayout_fold.Data.t ; .. > annot -> t
 
-val annotate : Db.t -> (< .. > as 'a) annot -> < type_ : t ; meta : 'a > annot
+val annotate :
+  (< fold_stream : Abslayout_fold.Data.t ; .. > as 'a) annot ->
+  < fold_stream : Abslayout_fold.Data.t ; meta : 'a ; type_ : t > annot
 
 module Parallel : sig
   type error = [ `Db_error of Db.Async.error ]

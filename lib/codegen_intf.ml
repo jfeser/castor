@@ -10,7 +10,10 @@ module type S = sig
     ?layout_log:string ->
     gprof:bool ->
     params:(Name.t * Prim_type.t) list ->
-    Db.t ->
-    < type_ : Type.t ; resolved : Resolve.resolved ; .. > annot ->
+    < fold_stream : Abslayout_fold.Data.t
+    ; type_ : Type.t
+    ; resolved : Resolve.resolved
+    ; .. >
+    annot ->
     string * string
 end

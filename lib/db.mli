@@ -25,6 +25,10 @@ val exec_exn : t -> Prim_type.t list -> string -> Value.t list list
 val exec_cursor_exn :
   ?count:int -> t -> Prim_type.t list -> string -> Value.t list list Sequence.t
 
+val exec_to_file : fn:string -> t -> Prim_type.t list -> string -> unit
+
+val exec_from_file : fn:string -> Value.t list Sequence.t
+
 val check : t -> string -> unit Or_error.t
 
 val relation : t -> string -> Relation.t

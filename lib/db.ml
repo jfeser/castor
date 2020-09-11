@@ -312,6 +312,16 @@ let exec_cursor_exn ?(count = 4096) db schema query =
         close db;
         None ))
 
+let exec_to_file ~fn db schema query =
+  Out_channel.with_file fn ~f:(fun ch ->
+      exec_cursor_exn db schema query
+      |> Seq.concat_map ~f:Seq.of_list
+      |> Seq.iter ~f:(fun row ->
+             Sexp.output_mach ch @@ [%sexp_of: Value.t list] row))
+
+let exec_from_file ~fn =
+  Sexp.load_sexps_conv_exn fn [%of_sexp: Value.t list] |> Seq.of_list
+
 let check db sql =
   let open Or_error.Let_syntax in
   let name = Fresh.name Global.fresh "check%d" in

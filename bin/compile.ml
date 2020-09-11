@@ -26,6 +26,7 @@ let main ~debug ~gprof ~params ~code_only ~query ~enable_redshift_dates ?out_dir
   in
   let module I = Irgen.Make (Config) () in
   let module C = Codegen.Make (Config) (I) () in
+  let open Config in
   let ch =
     match fn with Some fn -> In_channel.create fn | None -> In_channel.stdin
   in
@@ -52,18 +53,30 @@ let main ~debug ~gprof ~params ~code_only ~query ~enable_redshift_dates ?out_dir
       List.map params ~f:(fun (n, t) -> Name.create ~type_:t n)
       |> Set.of_list (module Name)
     in
-    load_layout_exn ~params:load_params Config.conn ralgebra
+    load_layout_exn ~params:load_params conn ralgebra
   in
   let params = List.map params ~f:(fun (n, t) -> (Name.create n, t)) in
-  Type.annotate Config.conn ralgebra
-  |> V.map_meta (fun m ->
-         object
-           method resolved = m#meta#resolved
 
-           method type_ = m#type_
-         end)
-  |> C.compile ~gprof ~params ?out_dir ?layout_log:layout_file Config.conn
-  |> ignore
+  (* Attach the streams needed for folding over the ast. *)
+  let ralgebra = Abslayout_fold.Data.annotate conn ralgebra in
+
+  (* Annotate with types. *)
+  let ralgebra = Type.annotate ralgebra in
+
+  let ralgebra =
+    V.map_meta
+      (fun m ->
+        object
+          method fold_stream = m#fold_stream
+
+          method resolved = m#meta#meta#resolved
+
+          method type_ = m#type_
+        end)
+      ralgebra
+  in
+
+  C.compile ~gprof ~params ?out_dir ?layout_log:layout_file ralgebra |> ignore
 
 let () =
   let open Command.Let_syntax in

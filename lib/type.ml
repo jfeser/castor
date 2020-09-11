@@ -353,13 +353,13 @@ class ['self] type_fold =
       Fold { init; fold; extract }
   end
 
-let type_of ?timeout conn r =
+let type_of r =
   info (fun m -> m "Computing type of abstract layout.");
-  let type_ = (new type_fold)#run ?timeout conn r in
+  let type_ = (new type_fold)#run r.meta#fold_stream r in
   info (fun m -> m "The type is: %s" (Sexp.to_string_hum ([%sexp_of: t] type_)));
   type_
 
-let annotate conn r =
+let annotate r =
   let rec annot r t =
     r.meta#set_type t;
     match (r.node, t) with
@@ -399,6 +399,8 @@ let annotate conn r =
         object
           val mutable type_ = None
 
+          method fold_stream = m#fold_stream
+
           method type_ = Option.value_exn type_
 
           method set_type t = type_ <- Some t
@@ -407,12 +409,12 @@ let annotate conn r =
         end)
       r
   in
-  annot r (type_of conn r);
+  annot r @@ type_of r;
   let visitor =
     object
       inherit [_] Visitors.runtime_subquery_visitor
 
-      method visit_Subquery r = annot r (type_of conn r)
+      method visit_Subquery r = annot r @@ type_of r
     end
   in
   visitor#visit_t () r;
@@ -420,6 +422,8 @@ let annotate conn r =
     (fun m ->
       object
         method type_ = m#type_
+
+        method fold_stream = m#fold_stream
 
         method meta = m#meta
       end)

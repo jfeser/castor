@@ -1,16 +1,19 @@
 open Ast
 
-type 'a meta = < type_ : Type.t ; pos : int option ; meta : 'a >
+type 'a meta =
+  < type_ : Type.t
+  ; pos : int option
+  ; fold_stream : Abslayout_fold.Data.t
+  ; meta : 'a >
 
 val serialize :
   ?layout_file:string ->
-  Db.t ->
   string ->
-  (< type_ : Type.t ; .. > as 'a) annot ->
+  (< fold_stream : Abslayout_fold.Data.t ; type_ : Type.t ; .. > as 'a) annot ->
   'a meta annot * int
 (** Serialize a layout to a binary format.
 
-      @return The layout, annotated with the byte position of each
+      @return the layout, annotated with the byte position of each
       single-appearing sub-layout. Also returns the number of bytes written. *)
 
 (** Sentinal values for use when a value is null. *)

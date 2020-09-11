@@ -4,7 +4,11 @@ open Abslayout_fold
 module V = Visitors
 open Header
 
-type 'a meta = < type_ : Type.t ; pos : int option ; meta : 'a >
+type 'a meta =
+  < type_ : Type.t
+  ; pos : int option
+  ; fold_stream : Abslayout_fold.Data.t
+  ; meta : 'a >
 
 let int_of_string bs =
   if String.length bs > 4 then failwith "Too many bytes.";
@@ -539,11 +543,13 @@ class ['self] serialize_fold ?debug () =
       main
   end
 
-let set_pos (r : _ meta annot) (pos : int) =
+let set_pos (r : _ annot) (pos : int) =
   {
     r with
     meta =
       object
+        method fold_stream = r.meta#fold_stream
+
         method type_ = r.meta#type_
 
         method pos =
@@ -555,11 +561,13 @@ let set_pos (r : _ meta annot) (pos : int) =
       end;
   }
 
-let serialize ?layout_file conn fn l =
+let serialize ?layout_file fn l =
   let l =
     V.map_meta
       (fun t ->
         object
+          method fold_stream = t#fold_stream
+
           method type_ = t#type_
 
           method pos = None
@@ -574,7 +582,7 @@ let serialize ?layout_file conn fn l =
 
   (* Serialize the main layout. *)
   let l = set_pos l serializer#pos in
-  let w = (new serialize_fold ~debug ())#run conn l in
+  let w = (new serialize_fold ~debug ())#run l.meta#fold_stream l in
   w#write_into serializer;
 
   (* Serialize subquery layouts. *)
@@ -584,7 +592,7 @@ let serialize ?layout_file conn fn l =
 
       method visit_Subquery r =
         let r = set_pos r serializer#pos in
-        let w = (new serialize_fold ~debug ())#run conn r in
+        let w = (new serialize_fold ~debug ())#run r.meta#fold_stream r in
         w#write_into serializer;
         r
     end

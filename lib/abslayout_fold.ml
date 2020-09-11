@@ -81,6 +81,71 @@ let map_accum ~f ~init l =
 
 let default_simplify r = Project.project r
 
+module Data = struct
+  type t = { fn : string; ralgebra : Ast.t }
+
+  let to_query r =
+    (* Generate a query that enumerates the stream to fold over. *)
+    A.ensure_alias r |> Q.of_ralgebra |> Q.map_meta ~f:Option.some
+    |> Q.hoist_all
+
+  let to_sql conn q =
+    (* Convert that query to a ralgebra and simplify it. *)
+    let r = Q.to_ralgebra q in
+    info (fun m -> m "Pre-simplify ralgebra:@ %a" Abslayout.pp r);
+    let r =
+      Simplify_tactic.simplify conn r
+      |> Resolve.resolve_exn ~params:(Set.empty (module Name))
+    in
+    info (fun m -> m "Post-simplify ralgebra:@ %a" Abslayout.pp r);
+    (* Convert the ralgebra to sql. *)
+    (r, Sql.of_ralgebra r)
+
+  let of_ralgebra conn r_fold =
+    let r_tups, sql = to_query r_fold |> to_sql conn in
+    info (fun m -> m "Running SQL: %s" (Sql.to_string_hum sql));
+    (* Run the sql to get a stream of tuples. *)
+    let fn = Filename.temp_file ~in_dir:"." "query" "sexp" in
+    Db.exec_to_file ~fn conn (Schema_types.types r_tups) (Sql.to_string sql);
+    { fn; ralgebra = strip_meta r_fold }
+
+  let annotate conn r =
+    let r =
+      V.map_meta
+        (fun m ->
+          object
+            val mutable fold_stream = None
+
+            method fold_stream = Option.value_exn fold_stream
+
+            method set_fold_stream t = fold_stream <- Some t
+
+            method meta = m
+          end)
+        r
+    in
+
+    r.meta#set_fold_stream @@ of_ralgebra conn r;
+    let visitor =
+      object
+        inherit [_] Visitors.runtime_subquery_visitor
+
+        method visit_Subquery r = r.meta#set_fold_stream @@ of_ralgebra conn r
+      end
+    in
+    visitor#visit_t () r;
+    r
+
+  let to_stream { fn; ralgebra } r =
+    if not ([%compare.equal: Ast.t] ralgebra (strip_meta r)) then
+      failwith @@ Fmt.str "Mismatched algebras: %a@ %a@." A.pp ralgebra A.pp r
+    else
+      (* Replace the ralgebra queries at the leaves of the fold query with their
+         output widths. *)
+      let q = to_query r |> Q.to_width in
+      (Db.exec_from_file ~fn, q)
+end
+
 class virtual ['self] abslayout_fold =
   object (self : 'self)
     method virtual list : _
@@ -356,45 +421,8 @@ class virtual ['self] abslayout_fold =
       | Q.Empty -> self#eval_empty lctx tups a
       | Q.Scalars x -> self#eval_scalars lctx tups a x
 
-    method run ?timeout conn r =
-      (* Generate a query that enumerates the stream to fold over. *)
-      let q =
-        A.ensure_alias r |> Q.of_ralgebra |> Q.map_meta ~f:Option.some
-        |> Q.hoist_all
-      in
-      (* Convert that query to a ralgebra and simplify it. *)
-      let r = q |> Q.to_ralgebra in
-      info (fun m -> m "Pre-simplify ralgebra:@ %a" Abslayout.pp r);
-      let r =
-        Simplify_tactic.simplify conn r
-        |> Resolve.resolve_exn ~params:(Set.empty (module Name))
-      in
-      info (fun m -> m "Post-simplify ralgebra:@ %a" Abslayout.pp r);
-      (* Convert the ralgebra to sql. *)
-      let sql = Sql.of_ralgebra r in
-      info (fun m -> m "Running SQL: %s" (Sql.to_string_hum sql));
-      (* Run the sql to get a stream of tuples. *)
-      let tups =
-        match timeout with
-        | Some timeout ->
-            Db.Async.exec ~timeout conn r
-            |> Lwt_stream.map (function
-                 | Ok x -> x
-                 | Error Db.Async.{ info = `Timeout; _ } ->
-                     raise Lwt_unix.Timeout
-                 | Error ({ query; _ } as e) ->
-                     err (fun m ->
-                         m "Running SQL failed: %s" (Sql.format query));
-                     Db.Async.to_error e |> Error.raise)
-            |> Lwt_stream.to_list |> Lwt_main.run |> Seq.of_list
-            |> Seq.concat_map ~f:Seq.of_list
-        | None ->
-            Db.exec_cursor_exn conn (Schema_types.types r) (Sql.to_string sql)
-            |> Seq.concat_map ~f:Seq.of_list
-      in
-      (* Replace the ralgebra queries at the leaves of the fold query with their
-         output widths. *)
-      let q = Q.to_width q in
+    method run strm r =
+      let tups, q = Data.to_stream strm r in
       (* Run the fold on the tuple stream. *)
       self#eval (Map.empty (module String)) tups q
   end
