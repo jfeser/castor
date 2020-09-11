@@ -177,16 +177,21 @@ module Make (C : Config.S) = struct
   let elim_select = global elim_select "flatten-select"
 
   let flatten_select r =
-    match r.node with
-    | Select (ps, { node = Select (ps', r); _ }) ->
-        let ctx =
-          List.filter_map ps' ~f:(fun p ->
-              Option.map (Pred.to_name p) ~f:(fun n -> (n, p)))
-          |> Map.of_alist_exn (module Name)
-        in
-        let ps = List.map ps ~f:(Pred.subst ctx) in
-        Some (select ps r)
-    | _ -> None
+    let open Option.Let_syntax in
+    let%bind ps, r' = to_select r in
+    let%bind ps', r'' = to_select r' in
+    let%bind () =
+      match (A.select_kind ps, A.select_kind ps') with
+      | `Agg, `Agg -> None
+      | _ -> Some ()
+    in
+    let ctx =
+      List.filter_map ps' ~f:(fun p ->
+          Option.map (Pred.to_name p) ~f:(fun n -> (n, p)))
+      |> Map.of_alist_exn (module Name)
+    in
+    let ps = List.map ps ~f:(Pred.subst ctx) in
+    return @@ A.select ps r''
 
   let flatten_select = of_func flatten_select ~name:"flatten-select"
 
@@ -237,22 +242,22 @@ module Make (C : Config.S) = struct
     seq_many
       [
         (* Drop constant filters if possible. *)
-        for_all filter_const Path.(all >>? is_filter);
-        for_all join_simplify Path.(all >>? is_join);
+        try_ @@ for_all filter_const Path.(all >>? is_filter);
+        try_ @@ for_all join_simplify Path.(all >>? is_join);
         (* Eliminate complex structures in compile time position. *)
-        fix
-          (at_ elim_structure
+        try_ @@ fix
+        @@ at_ elim_structure
              Path.(
                all >>? is_compile_time
                >>? Infix.(is_list || is_hash_idx || is_ordered_idx)
-               >>| shallowest));
-        for_all elim_depjoin Path.(all >>? is_depjoin);
-        for_all flatten_select Path.(all >>? is_select);
-        for_all flatten_dedup Path.(all >>? is_dedup);
-        for_all dealias_select Path.(all >>? is_select);
-        for_all flatten_select Path.(all >>? is_select);
-        for_all elim_filter_above_join Path.(all >>? is_filter);
-        for_all elim_dedup_above_groupby Path.(all >>? is_dedup);
+               >>| shallowest);
+        try_ @@ for_all elim_depjoin Path.(all >>? is_depjoin);
+        try_ @@ for_all flatten_select Path.(all >>? is_select);
+        try_ @@ for_all flatten_dedup Path.(all >>? is_dedup);
+        try_ @@ for_all dealias_select Path.(all >>? is_select);
+        try_ @@ for_all flatten_select Path.(all >>? is_select);
+        try_ @@ for_all elim_filter_above_join Path.(all >>? is_filter);
+        try_ @@ for_all elim_dedup_above_groupby Path.(all >>? is_dedup);
       ]
 
   let join_elim =
