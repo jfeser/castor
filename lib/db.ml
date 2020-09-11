@@ -320,7 +320,11 @@ let exec_to_file ~fn db schema query =
              Sexp.output_mach ch @@ [%sexp_of: Value.t list] row))
 
 let exec_from_file ~fn =
-  Sexp.load_sexps_conv_exn fn [%of_sexp: Value.t list] |> Seq.of_list
+  let ch = In_channel.create fn in
+  let lexbuf = Lexing.from_channel ch in
+  Seq.unfold ~init:() ~f:(fun () ->
+      Sexp.scan_sexp_opt lexbuf
+      |> Option.map ~f:(fun s -> ([%of_sexp: Value.t list] s, ())))
 
 let check db sql =
   let open Or_error.Let_syntax in
