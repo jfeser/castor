@@ -19,8 +19,6 @@ module Make (C : Config.S) = struct
 
   open Tactics_util.Make (C)
 
-  module Simplify_tactic = Simplify_tactic.Make (C)
-
   (** Eliminate a group by operator without representing duplicate key values. *)
   let elim_groupby_flat r =
     match r.node with
@@ -78,7 +76,6 @@ module Make (C : Config.S) = struct
           info (fun m -> m "elim-groupby-approx: %a" Error.pp err);
           None
     in
-    Fmt.pr "Keys: %a@." A.pp keys;
     return @@ A.list keys key_name (A.select ps (A.filter filter_pred r))
 
   let elim_groupby_approx =

@@ -31,36 +31,35 @@ module Make (Config : Config.S) = struct
     | HashIdxT (_, vt, _) -> I.(join zero (read vt))
     | OrderedIdxT (_, vt, _) -> I.(join zero (read vt))
 
+  let cost kind r =
+    info (fun m -> m "Computing cost of:@, %a." Abslayout.pp r);
+    let out =
+      let open Result.Let_syntax in
+      let%bind layout = load_layout ~params cost_conn r in
+      let%bind type_ =
+        Parallel.type_of ?timeout:cost_timeout cost_conn (strip_meta layout)
+      in
+      let c = read type_ in
+      match kind with
+      | `Min -> I.inf c
+      | `Max -> I.sup c
+      | `Avg ->
+          let%bind l = I.inf c in
+          let%map h = I.sup c in
+          l + ((h - l) / 2)
+    in
+    match out with
+    | Ok x ->
+        let x = Float.of_int x in
+        info (fun m -> m "Found cost %f." x);
+        x
+    | Error e ->
+        warn (fun m ->
+            m "Computing cost failed: %a"
+              (Resolve.pp_err @@ Parallel.pp_err @@ Fmt.nop)
+              e);
+        Float.max_value
+
   let cost ?(kind = `Avg) =
-    Memo.general
-      ~hashable:(Hashtbl.Hashable.of_key (module Ast))
-      (fun r ->
-        info (fun m -> m "Computing cost of:@, %a." Abslayout.pp r);
-        let out =
-          let open Result.Let_syntax in
-          let%bind layout = load_layout ~params cost_conn r in
-          let%bind type_ =
-            strip_meta layout
-            |> Parallel.type_of ?timeout:cost_timeout cost_conn
-          in
-          let c = read type_ in
-          match kind with
-          | `Min -> I.inf c
-          | `Max -> I.sup c
-          | `Avg ->
-              let%bind l = I.inf c in
-              let%map h = I.sup c in
-              l + ((h - l) / 2)
-        in
-        match out with
-        | Ok x ->
-            let x = Float.of_int x in
-            info (fun m -> m "Found cost %f." x);
-            x
-        | Error e ->
-            warn (fun m ->
-                m "Computing cost failed: %a"
-                  (Resolve.pp_err @@ Parallel.pp_err @@ Fmt.nop)
-                  e);
-            Float.max_value)
+    Memo.general ~hashable:(Hashtbl.Hashable.of_key (module Ast)) (cost kind)
 end
