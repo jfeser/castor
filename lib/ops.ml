@@ -5,9 +5,14 @@ module A = Abslayout
 
 include (val Log.make ~level:(Some Warning) "castor.ops")
 
+(** Enables transform tracing. *)
 let trace = ref false
 
+(** Enables transform validation. *)
 let validate = ref true
+
+(** Probability of running expensive resolve validation after a transformation. *)
+let validate_resolve_prob = ref None
 
 let param =
   let open Command.Let_syntax in
@@ -16,9 +21,13 @@ let param =
     and trace_ = flag "trace" no_arg ~doc:"enable transform tracing"
     and no_validate =
       flag "disable-validation" no_arg ~doc:"disable transform validation"
+    and prob =
+      flag "validate-resolve-prob" (optional float)
+        ~doc:" probability to run resolve validation"
     in
     trace := trace_;
-    validate := not no_validate]
+    validate := not no_validate;
+    validate_resolve_prob := prob]
 
 module Config = struct
   module type S = sig
@@ -195,7 +204,64 @@ module Make (C : Config.S) = struct
     in
     global ~reraise:false ~short_name:"fix" fix (sprintf "fix(%s)" tf.name)
 
+  let fix' tf =
+    let fix p r =
+      let rec fix r_in =
+        match apply tf p r_in with
+        | Some r_out -> if A.O.(r_in = r_out) then r_in else fix r_out
+        | None -> r_in
+      in
+      let r' = fix r in
+      if A.O.(r = r') then None else Some r'
+    in
+    global ~reraise:false ~short_name:"fix'" fix (sprintf "fix'(%s)" tf.name)
+
+  let until' tf tf' =
+    let until' p r =
+      let rec fix r_in =
+        match apply tf p r_in with
+        | Some r_out -> (
+            if A.O.(r_in = r_out) then None
+            else
+              match apply tf' p r_out with
+              | Some r_out' -> Some r_out'
+              | None -> fix r_out )
+        | None -> None
+      in
+      match fix r with
+      | Some r' -> if A.O.(r = r') then None else Some r'
+      | None -> None
+    in
+    global ~reraise:false ~short_name:"until'" until'
+      (sprintf "until'(%s)" tf.name)
+
   let for_all tf pset = fix (first tf pset)
+
+  let for_all' tf pset = fix' (first tf pset)
+
+  let for_all_disjoint tf pset =
+    let f p r =
+      let pset =
+        pset (Path.get_exn p r)
+        |> Seq.to_list
+        |> List.sort ~compare:(fun p p' ->
+               [%compare: int] (Path.length p) (Path.length p'))
+      in
+      let rec remove_prefixes = function
+        | p :: ps ->
+            p
+            :: ( List.filter ps ~f:(fun p' -> not (Path.is_prefix ~prefix:p p'))
+               |> remove_prefixes )
+        | [] -> []
+      in
+      let pset = remove_prefixes pset in
+      let r' =
+        List.fold_left pset ~init:r ~f:(fun r p' ->
+            apply (at_ tf (fun _ -> Some p')) p r |> Option.value ~default:r)
+      in
+      if A.O.(r = r') then None else Some r'
+    in
+    global f "for-all-disjoint"
 
   let seq t1 t2 =
     let seq p r =
@@ -229,27 +295,35 @@ module Make (C : Config.S) = struct
     | [ t ] -> t
     | t :: ts -> seq t (seq_many ts)
 
+  let rec seq_many' = function
+    | [] -> failwith "Empty transform list."
+    | [ t ] -> t
+    | t :: ts -> seq' t (seq_many' ts)
+
   let id = local (fun r -> Some r) "id"
+
+  let prep r = Abslayout_load.annotate conn r
 
   let schema_validated tf =
     let schema_validated p r =
-      Option.map (apply tf p r) ~f:(fun r' ->
-          let () =
-            let prep r = Abslayout_load.annotate conn r in
-            Validate.schema (prep r) (prep r')
-          in
-          r')
+      let r' = apply tf p r in
+      Option.iter r' ~f:(fun r' -> Validate.schema (prep r) (prep r'));
+      r'
     in
     global schema_validated (sprintf "%s" tf.name)
 
   let resolve_validated tf =
     let resolve_validated p r =
-      Option.map (apply tf p r) ~f:(fun r' ->
-          let () =
-            let prep r = Abslayout_load.annotate conn r in
-            Validate.resolve ~params (prep r) (prep r')
-          in
-          r')
+      let r' = apply tf p r in
+      let should_run =
+        Option.map !validate_resolve_prob ~f:(fun p ->
+            Float.(Random.float 1.0 < p))
+        |> Option.value ~default:true
+      in
+      if should_run then
+        Option.iter r' ~f:(fun r' ->
+            Validate.resolve ~params (prep r) (prep r'));
+      r'
     in
     global resolve_validated (sprintf "%s" tf.name)
 
