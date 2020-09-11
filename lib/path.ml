@@ -27,6 +27,8 @@ let root = []
 
 let length = List.length
 
+let is_prefix = List.is_prefix ~equal:[%compare.equal: int]
+
 let rec set_exn p r s =
   match (p, r.node) with
   | [], _ -> s
@@ -231,6 +233,8 @@ let shallowest ps r =
       | None -> Some p
       | Some p_min -> Some (if length p < length p_min then p else p_min))
 
+type 'a pred = 'a annot -> t -> bool
+
 let is_join r p = match (get_exn p r).node with Join _ -> true | _ -> false
 
 let is_groupby r p =
@@ -254,6 +258,11 @@ let is_relation r p =
 
 let is_select r p =
   match (get_exn p r).node with Select _ -> true | _ -> false
+
+let is_agg_select r p =
+  match (get_exn p r).node with
+  | Select (ps, _) -> ( match select_kind ps with `Agg -> true | _ -> false )
+  | _ -> false
 
 let is_hash_idx r p =
   match (get_exn p r).node with AHashIdx _ -> true | _ -> false

@@ -22,44 +22,51 @@ val stage_exn : t -> 'a annot -> [ `Compile | `Run ]
 
 val all : 'a annot -> t Seq.t
 
-val is_run_time : 'a annot -> t -> bool
-
-val is_compile_time : 'a annot -> t -> bool
-
 val parent : t -> t option
 
 val child : t -> int -> t
+
+val is_prefix : t -> prefix:t -> bool
 
 val deepest : ('a -> t Seq.t) -> 'a -> t option
 
 val shallowest : ('a -> t Seq.t) -> 'a -> t option
 
-val is_join : 'a annot -> t -> bool
+type 'a pred = 'a annot -> t -> bool
+(** Path predicate *)
 
-val is_groupby : 'a annot -> t -> bool
+val is_run_time : 'a pred
 
-val is_orderby : 'a annot -> t -> bool
+val is_compile_time : 'a pred
 
-val is_filter : 'a annot -> t -> bool
+val is_join : 'a pred
 
-val is_expensive_filter : 'a annot -> t -> bool
+val is_groupby : 'a pred
 
-val is_dedup : 'a annot -> t -> bool
+val is_orderby : 'a pred
 
-val is_relation : 'a annot -> t -> bool
+val is_filter : 'a pred
 
-val is_select : 'a annot -> t -> bool
+val is_expensive_filter : 'a pred
 
-val is_hash_idx : 'a annot -> t -> bool
+val is_dedup : 'a pred
 
-val is_ordered_idx : 'a annot -> t -> bool
+val is_relation : 'a pred
 
-val is_scalar : 'a annot -> t -> bool
+val is_select : 'a pred
 
-val is_list : 'a annot -> t -> bool
+val is_agg_select : 'a pred
 
-val is_tuple : 'a annot -> t -> bool
+val is_hash_idx : 'a pred
 
-val is_depjoin : 'a annot -> t -> bool
+val is_ordered_idx : 'a pred
 
-val has_child : ('a annot -> t -> bool) -> 'a annot -> t -> bool
+val is_scalar : 'a pred
+
+val is_list : 'a pred
+
+val is_tuple : 'a pred
+
+val is_depjoin : 'a pred
+
+val has_child : 'a pred -> 'a pred
