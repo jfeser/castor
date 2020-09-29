@@ -558,6 +558,7 @@ let main ~name ~params ~ch =
                   ( apply_to_filter_subquery @@ fun (module C : CONFIG) ->
                     let open Filter_tactics.Make (C) in
                     let open Simplify_tactic.Make (C) in
+                    let open Select_tactics.Make (C) in
                     seq_many
                       [
                         at_ elim_eq_filter Path.(all >>? is_filter >>| deepest);
@@ -567,13 +568,19 @@ let main ~name ~params ~ch =
                           Path.(all >>? is_param_filter >>| shallowest)
                         |> Branching.lower Seq.hd;
                         simplify;
+                        at_ push_select Path.(all >>? is_select >>| shallowest);
+                        simplify;
+                        at_ push_select
+                          Path.(all >>? is_select >>? is_run_time >>| deepest);
+                        project;
                         first row_store Path.(all >>? is_run_time);
-                        try_ project;
+                        project;
                       ] )
                   (Path.(all >>? is_filter >>| shallowest) >>= child' 0);
                 (let open Filter_tactics.Make (C) in
                 at_ elim_eq_filter Path.(all >>? is_filter >>| deepest));
-                first row_store Path.(all >>? is_run_time);
+                at_ row_store
+                  Path.(all >>? is_run_time >>? is_filter >>| deepest);
               ] )
           Path.(all >>? is_filter >>| shallowest);
         first row_store Path.(all >>? is_run_time);
@@ -613,6 +620,7 @@ let main ~name ~params ~ch =
               ] )
           (Path.(all >>? is_filter >>| shallowest) >>= child' 0);
         first row_store Path.(all >>? is_run_time);
+        elim_subquery;
         simplify;
         project;
       ]
