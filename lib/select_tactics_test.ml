@@ -27,7 +27,7 @@ open Ops.Make (C)
 
 let () =
   Log.setup_stderr ();
-  Logs.Src.set_level Validate.src (Some Error)
+  Logs.Src.set_level Check.src (Some Error)
 
 let%expect_test "push-select-index" =
   let r =

@@ -255,13 +255,12 @@ module Join_graph = struct
       if k >= n then acc
       else
         let acc =
-          let open Combinat.Combination in
-          create ~n ~k
-          |> fold ~init:acc ~f:(fun acc vs ->
+          Combinat.combinations (List.init n ~f:Fun.id) ~k
+          |> Iter.fold ~init:acc ~f:(fun acc vs ->
                  let g1, g2, es =
                    partition graph
-                     ( List.init k ~f:(fun i -> vertices.(vs.{i}))
-                     |> Set.of_list (module Vertex) )
+                     (List.init k ~f:(fun i -> vertices.(vs.(i)))
+                     |> Set.of_list (module Vertex))
                  in
                  if is_connected g1 && is_connected g2 then f acc (g1, g2, es)
                  else acc)
@@ -373,8 +372,8 @@ module Make (Config : Config.S) = struct
 
   let ntuples r =
     let r = to_ralgebra r in
-    ( Explain.explain cost_conn (Sql.of_ralgebra r |> Sql.to_string)
-    |> Or_error.ok_exn )
+    (Explain.explain cost_conn (Sql.of_ralgebra r |> Sql.to_string)
+    |> Or_error.ok_exn)
       .nrows |> Float.of_int
 
   let estimate_ntuples_parted parts join =
@@ -479,7 +478,7 @@ module Make (Config : Config.S) = struct
       else if all_in rhs_schema then return (`Rhs (s2, k))
       else (
         debug (fun m -> m "Unknown key %a" Pred.pp k);
-        [] )
+        [])
     in
     let%bind k1, k2 =
       match pred with
@@ -597,8 +596,8 @@ module Make (Config : Config.S) = struct
 
   let reshape top_filters j _ =
     Some
-      ( A.filter (Pred.conjoin (top_filters :> Pred.t list))
-      @@ (to_ralgebra j :> Ast.t) )
+      (A.filter (Pred.conjoin (top_filters :> Pred.t list))
+      @@ (to_ralgebra j :> Ast.t))
 
   let rec emit_joins =
     let open Join_elim_tactics.Make (Config) in
