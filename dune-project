@@ -51,7 +51,7 @@
   (visitors (>= 20180513))
 
   ounit
-  (expect_test_helpers_kernel (>= v0.12))))
+  (expect_test_helpers_core (>= v0.12))))
 
 
 (using fmt 1.1)
