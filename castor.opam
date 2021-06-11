@@ -31,4 +31,5 @@ depends: [
   "ppx_hash" {>= "v0.12"}
   "ppx_let" {>= "v0.12"}
   "visitors" {>= "20180513"}
+  "yojson"
 ]

@@ -27,7 +27,8 @@
   (ppx_sexp_conv (>= v0.12))
   (ppx_hash (>= v0.12))
   (ppx_let (>= v0.12))
-  (visitors (>= 20180513))))
+  (visitors (>= 20180513))
+  yojson))
 
 (package
  (name castor_test)
