@@ -4,7 +4,7 @@ module Psql = Postgresql
 
 include (val Log.make ~level:(Some Warning) "castor.db")
 
-let default_pool_size = 3
+let default_pool_size = 10
 
 let () =
   Caml.Printexc.register_printer (function
@@ -400,6 +400,9 @@ module Async = struct
             info (fun m -> m "Query timeout: %s" query);
             psql_exec db
             @@ sprintf "select pg_cancel_backend(%d);" conn#backend_pid
+            |> ignore;
+            psql_exec db
+            @@ sprintf "select pg_terminate_backend(%d);" conn#backend_pid
             |> ignore;
             fail `Timeout
           in

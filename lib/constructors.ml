@@ -24,9 +24,9 @@ module Query = struct
   let join a b c = Join { pred = a; r1 = b; r2 = c }
 
   let filter a b =
-    ( match Pred.kind a with
+    (match Pred.kind a with
     | `Scalar -> ()
-    | `Agg | `Window -> failwith "Aggregates not allowed in filter." );
+    | `Agg | `Window -> failwith "Aggregates not allowed in filter.");
     Filter (a, b)
 
   let group_by a b c =
@@ -88,7 +88,7 @@ module Annot = struct
 
     val dep_join : _ meta annot -> scope -> _ meta annot -> t annot
 
-    val dep_join' : _ meta annot depjoin -> t annot
+    val dep_join' : (_ meta annot, scope) depjoin -> t annot
 
     val join : _ meta annot pred -> _ meta annot -> _ meta annot -> t annot
 
@@ -109,7 +109,7 @@ module Annot = struct
 
     val list : _ meta annot -> scope -> _ meta annot -> t annot
 
-    val list' : (_ meta annot pred, _ meta annot) list_ -> t annot
+    val list' : (_ meta annot pred, _ meta annot, scope) list_ -> t annot
 
     val tuple : _ meta annot list -> tuple -> t annot
 
@@ -121,7 +121,7 @@ module Annot = struct
       _ meta annot pred list ->
       t annot
 
-    val hash_idx' : (_ meta annot pred, _ meta annot) hash_idx -> t annot
+    val hash_idx' : (_ meta annot pred, _ meta annot, scope) hash_idx -> t annot
 
     val ordered_idx :
       ?key_layout:_ meta annot ->
@@ -131,7 +131,8 @@ module Annot = struct
       (_ meta annot pred bound option * _ meta annot pred bound option) list ->
       t annot
 
-    val ordered_idx' : (_ meta annot pred, _ meta annot) ordered_idx -> t annot
+    val ordered_idx' :
+      (_ meta annot pred, _ meta annot, scope) ordered_idx -> t annot
 
     val pred : _ meta annot pred -> t annot pred
   end
@@ -139,7 +140,7 @@ module Annot = struct
   module type S_strip = S with type 'a meta := 'a
 
   let with_strip_meta (type t) (default : unit -> t) =
-    ( module struct
+    (module struct
       type nonrec t = t
 
       let rec strip { node; _ } = { node = strip_query node; meta = default () }
@@ -215,7 +216,7 @@ module Annot = struct
         ordered_idx ?key_layout:o.oi_key_layout o.oi_keys o.oi_scope o.oi_values
           o.oi_lookup
     end : S_strip
-      with type t = t )
+      with type t = t)
 
   module type S_default = sig
     type t
@@ -224,7 +225,7 @@ module Annot = struct
   end
 
   let with_default (type t) default =
-    ( module struct
+    (module struct
       type nonrec t = t
 
       let pred = Fun.id
@@ -276,7 +277,7 @@ module Annot = struct
         ordered_idx ?key_layout:o.oi_key_layout o.oi_keys o.oi_scope o.oi_values
           o.oi_lookup
     end : S_default
-      with type t = t )
+      with type t = t)
 
   include (val with_strip_meta (fun () -> ()))
 end

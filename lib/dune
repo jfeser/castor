@@ -36,7 +36,7 @@
    genhash
    core.bigstring_unix
  )
- (flags :standard -open Core -unboxed-types -w -9)
+ (flags :standard -open Core -w -9)
  (inline_tests)
  (preprocess
   (pps

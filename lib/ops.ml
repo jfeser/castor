@@ -225,7 +225,7 @@ module Make (C : Config.S) = struct
             else
               match apply tf' p r_out with
               | Some r_out' -> Some r_out'
-              | None -> fix r_out )
+              | None -> fix r_out)
         | None -> None
       in
       match fix r with
@@ -250,8 +250,9 @@ module Make (C : Config.S) = struct
       let rec remove_prefixes = function
         | p :: ps ->
             p
-            :: ( List.filter ps ~f:(fun p' -> not (Path.is_prefix ~prefix:p p'))
-               |> remove_prefixes )
+            ::
+            (List.filter ps ~f:(fun p' -> not (Path.is_prefix ~prefix:p p'))
+            |> remove_prefixes)
         | [] -> []
       in
       let pset = remove_prefixes pset in
@@ -281,7 +282,7 @@ module Make (C : Config.S) = struct
     let rec f tfs p r =
       match tfs with
       | tf :: tfs -> (
-          match apply tf p r with Some r' -> Some r' | None -> f tfs p r )
+          match apply tf p r with Some r' -> Some r' | None -> f tfs p r)
       | [] -> None
     in
     global (f tfs) "first-success"
@@ -307,7 +308,7 @@ module Make (C : Config.S) = struct
   let schema_validated tf =
     let schema_validated p r =
       let r' = apply tf p r in
-      Option.iter r' ~f:(fun r' -> Validate.schema (prep r) (prep r'));
+      Option.iter r' ~f:(fun r' -> Check.schema (prep r) (prep r'));
       r'
     in
     global schema_validated (sprintf "%s" tf.name)
@@ -321,8 +322,7 @@ module Make (C : Config.S) = struct
         |> Option.value ~default:true
       in
       if should_run then
-        Option.iter r' ~f:(fun r' ->
-            Validate.resolve ~params (prep r) (prep r'));
+        Option.iter r' ~f:(fun r' -> Check.resolve ~params (prep r) (prep r'));
       r'
     in
     global resolve_validated (sprintf "%s" tf.name)
@@ -333,13 +333,13 @@ module Make (C : Config.S) = struct
       info (fun m -> m "Running %s on:@ %a" name A.pp (Path.get_exn p r));
       match apply tf p r with
       | Some r' ->
-          ( if A.O.(r = r') then
-            info (fun m -> m "Invariant transformation %s" name)
+          (if A.O.(r = r') then
+           info (fun m -> m "Invariant transformation %s" name)
           else
             let local_r = Path.get_exn p r and local_r' = Path.get_exn p r' in
             info (fun m ->
                 m "%s transformed:@ %a@ ===== to ======@ %a" name A.pp local_r
-                  A.pp local_r') );
+                  A.pp local_r'));
           Some r'
       | None ->
           info (fun m -> m "Transform %s does not apply" name);
@@ -414,8 +414,8 @@ module Make (C : Config.S) = struct
       let schema_validated p r =
         Seq.map (apply tf p r) ~f:(fun r' ->
             let prep r = Abslayout_load.annotate conn r in
-            Validate.annot r';
-            Validate.schema (prep r) (prep r');
+            Check.annot r';
+            Check.schema (prep r) (prep r');
             r')
       in
       global ~name:(sprintf "%s" @@ name tf) schema_validated
@@ -424,7 +424,7 @@ module Make (C : Config.S) = struct
       let resolve_validated p r =
         Seq.map (apply tf p r) ~f:(fun r' ->
             let prep r = Abslayout_load.annotate conn r in
-            Validate.resolve ~params (prep r) (prep r');
+            Check.resolve ~params (prep r) (prep r');
             r')
       in
       global ~name:(sprintf "%s" @@ name tf) resolve_validated

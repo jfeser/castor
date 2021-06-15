@@ -35,7 +35,7 @@ val select : Pred.t list -> t -> t
 
 val dep_join : t -> string -> t -> t
 
-val dep_join' : t depjoin -> t
+val dep_join' : (t, scope) depjoin -> t
 
 val join : Pred.t -> t -> t -> t
 
@@ -55,15 +55,16 @@ val scalar : Pred.t -> t
 
 val list : t -> string -> t -> t
 
-val list' : (Pred.t, t) list_ -> t
+val list' : (Pred.t, t, scope) list_ -> t
 
 val tuple : t list -> tuple -> t
 
 val hash_idx : ?key_layout:t -> t -> string -> t -> Pred.t list -> t
 
-val hash_idx' : (Pred.t, t) hash_idx -> t
+val hash_idx' : (Pred.t, t, scope) hash_idx -> t
 
-val h_key_layout : ((< .. > as 'a) annot pred, 'a annot) hash_idx -> < > annot
+val h_key_layout :
+  ((< .. > as 'a) annot pred, 'a annot, scope) hash_idx -> < > annot
 
 val ordered_idx :
   ?key_layout:t ->
@@ -73,10 +74,10 @@ val ordered_idx :
   (Pred.t bound option * Pred.t bound option) list ->
   t
 
-val ordered_idx' : (Pred.t, t) ordered_idx -> t
+val ordered_idx' : (Pred.t, t, scope) ordered_idx -> t
 
 val o_key_layout :
-  (< .. > as 'a) annot * 'a annot * ('a annot pred, 'a annot) ordered_idx ->
+  (< .. > as 'a) annot * 'a annot * ('a annot pred, 'a annot, scope) ordered_idx ->
   < > annot
 
 val alpha_scopes : 'a annot -> 'a annot

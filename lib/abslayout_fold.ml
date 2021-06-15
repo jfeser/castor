@@ -187,7 +187,7 @@ class virtual ['self] abslayout_fold =
       | Dedup c -> (self#dedup r.meta, c)
       | x ->
           Error.create "Expected a function." x
-            [%sexp_of: (_ annot pred, _ annot) query]
+            [%sexp_of: (_ annot pred, _ annot, scope) query]
           |> Error.raise
 
     method private qempty : (int, _) Q.t -> 'a =
@@ -207,7 +207,7 @@ class virtual ['self] abslayout_fold =
             fun t ->
               match t with
               | [ v ] -> self#scalar r.meta x v
-              | _ -> failwith "Expected a singleton tuple." )
+              | _ -> failwith "Expected a singleton tuple.")
         | ATuple ((xs, _) as x) ->
             fun t ->
               let (Fold.Fold { init; fold; extract }) = self#tuple r.meta x in

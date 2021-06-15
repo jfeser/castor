@@ -23,9 +23,9 @@ module C = (val Constructors.Annot.with_strip_meta (fun () -> default_meta))
 let rec schema q =
   match q.node with
   | DepJoin { d_lhs; d_rhs; d_alias } ->
-      ( schema d_lhs
+      (schema d_lhs
       |> List.map ~f:(fun (n, t) ->
-             (Option.map n ~f:(sprintf "%s_%s" d_alias), t)) )
+             (Option.map n ~f:(sprintf "%s_%s" d_alias), t)))
       @ schema d_rhs
   | _ -> Schema.schema_open_opt schema q
 
@@ -45,7 +45,9 @@ let schema_invariant q q' =
     |> Error.raise
 
 let attrs q =
-  schema q |> List.filter_map ~f:(fun (n, _) -> n) |> Set.of_list (module String)
+  schema q
+  |> List.filter_map ~f:(fun (n, _) -> n)
+  |> Set.of_list (module String)
 
 let free q =
   Free.free q |> Set.to_list |> List.map ~f:Name.name
@@ -242,7 +244,7 @@ let push_select d (preds, q) =
                     if List.mem ~equal:[%compare.equal: Name.t] d_schema_names n
                     then P.name n
                     else P.as_ (Min p) (Name.name n)
-                | None -> Min p )
+                | None -> Min p)
             | `Window -> p)
       in
       C.group_by (Select_list.of_list preds) d_schema_names (dep_join d q)
@@ -256,7 +258,8 @@ let push_orderby d { key; rel } =
 let push_concat_tuple d qs = C.tuple (List.map qs ~f:(dep_join d)) Concat
 
 let stuck d =
-  Error.create "Stuck depjoin" d [%sexp_of: _ annot depjoin] |> Error.raise
+  Error.create "Stuck depjoin" d [%sexp_of: (_ annot, scope) depjoin]
+  |> Error.raise
 
 let push_cross_tuple d qs =
   let select_list =
@@ -321,7 +324,7 @@ let hoist_meta r = V.map_meta (fun m -> m#meta) r
 let unnest ~params q =
   let check q' =
     schema_invariant q q';
-    Validate.annot q'
+    Check.annot q'
   in
   let q_visible =
     q |> strip_meta |> Layout_to_depjoin.annot |> to_visible_depjoin
@@ -345,5 +348,5 @@ let unnest ~params q =
     |> Join_elim.remove_joins |> hoist_meta
   in
   check q';
-  Validate.resolve ~params q q';
+  Check.resolve ~params q q';
   q'

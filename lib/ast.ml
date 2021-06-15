@@ -52,10 +52,10 @@ type 'r pred =
   | Substring of 'r pred * 'r pred * 'r pred
 [@@deriving compare, hash, sexp, variants]
 
-type ('p, 'r) hash_idx = {
+type ('p, 'r, 's) hash_idx = {
   hi_keys : 'r;
   hi_values : 'r;
-  hi_scope : scope;
+  hi_scope : 's;
   hi_key_layout : 'r option; [@sexp.option]
   hi_lookup : 'p list;
 }
@@ -63,46 +63,46 @@ type ('p, 'r) hash_idx = {
 
 type 'p bound = 'p * [ `Open | `Closed ] [@@deriving compare, hash, sexp]
 
-type ('p, 'r) ordered_idx = {
+type ('p, 'r, 's) ordered_idx = {
   oi_keys : 'r;
   oi_values : 'r;
-  oi_scope : scope;
+  oi_scope : 's;
   oi_key_layout : 'r option; [@sexp.option]
   oi_lookup : ('p bound option * 'p bound option) list;
 }
 [@@deriving compare, hash, sexp]
 
-type ('p, 'r) list_ = { l_keys : 'r; l_values : 'r; l_scope : scope }
+type ('p, 'r, 's) list_ = { l_keys : 'r; l_values : 'r; l_scope : 's }
 [@@deriving compare, hash, sexp]
 
-type 'r depjoin = { d_lhs : 'r; d_alias : scope; d_rhs : 'r }
+type ('r, 's) depjoin = { d_lhs : 'r; d_alias : 's; d_rhs : 'r }
 [@@deriving compare, hash, sexp]
 
-type ('p, 'r) join = { pred : 'p; r1 : 'r; r2 : 'r }
+type ('p, 'r, 's) join = { pred : 'p; r1 : 'r; r2 : 'r }
 [@@deriving compare, hash, sexp]
 
-type ('p, 'r) order_by = { key : ('p * order) list; rel : 'r }
+type ('p, 'r, 's) order_by = { key : ('p * order) list; rel : 'r }
 [@@deriving compare, hash, sexp]
 
-type ('p, 'r) query =
+type ('p, 'r, 's) query =
   | Select of ('p list * 'r)
   | Filter of ('p * 'r)
-  | Join of ('p, 'r) join
-  | DepJoin of 'r depjoin
+  | Join of ('p, 'r, 's) join
+  | DepJoin of ('r, 's) depjoin
   | GroupBy of ('p list * Name.t list * 'r)
-  | OrderBy of ('p, 'r) order_by
+  | OrderBy of ('p, 'r, 's) order_by
   | Dedup of 'r
   | Relation of Relation.t
   | Range of ('p * 'p)
   | AEmpty
   | AScalar of 'p
-  | AList of ('p, 'r) list_
+  | AList of ('p, 'r, 's) list_
   | ATuple of ('r list * tuple)
-  | AHashIdx of ('p, 'r) hash_idx
-  | AOrderedIdx of ('p, 'r) ordered_idx
+  | AHashIdx of ('p, 'r, 's) hash_idx
+  | AOrderedIdx of ('p, 'r, 's) ordered_idx
 [@@deriving compare, hash, sexp, variants]
 
-type 'm annot = { node : ('m annot pred, 'm annot) query; meta : 'm }
+type 'm annot = { node : ('m annot pred, 'm annot, scope) query; meta : 'm }
 [@@deriving compare, hash, sexp]
 
 module T = struct

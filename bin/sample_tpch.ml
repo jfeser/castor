@@ -9,7 +9,7 @@ let subst_params params query =
 
 let exec ?(params = []) _ query = printf "%s;\n" (subst_params params query)
 
-let main ?(seed = 0) ~db_in ~db_out ~sample =
+let main ?(seed = 0) ~db_in ~db_out ~sample () =
   let conn = () in
   Logs.info (fun m -> m "Creating new database %s." db_out);
   exec conn ~params:[ db_out ] "drop database if exists $0";
@@ -66,5 +66,5 @@ let () =
        if verbose then Logs.set_level (Some Logs.Debug)
        else if quiet then Logs.set_level (Some Logs.Error)
        else Logs.set_level (Some Logs.Info);
-       main ?seed ~db_in ~db_out ~sample)
+       main ?seed ~db_in ~db_out ~sample ())
   |> run

@@ -19,7 +19,7 @@ module List = struct
         match List.find xs ~f:(fun x' -> Poly.(x <> x')) with
         | Some x' ->
             Or_error.error "Unequal elements." (x, x') [%sexp_of: t * t]
-        | None -> Or_error.return x )
+        | None -> Or_error.return x)
 
   let all_equal_exn : 'a list -> 'a = fun l -> Or_error.ok_exn (all_equal l)
 
@@ -157,7 +157,7 @@ module Seq = struct
             Q.enqueue q x;
             Yield (x, (seq', q))
         | None -> (
-            match Q.dequeue q with Some x -> Skip (step x, q) | None -> Done ))
+            match Q.dequeue q with Some x -> Skip (step x, q) | None -> Done))
 
   let dfs : 'a -> ('a -> 'a t) -> 'a t =
    fun seed step ->
@@ -166,8 +166,7 @@ module Seq = struct
       ~f:(fun (seq, xs) ->
         match next seq with
         | Some (x, seq') -> Yield (x, (seq', x :: xs))
-        | None -> (
-            match xs with x :: xs' -> Skip (step x, xs') | [] -> Done ))
+        | None -> ( match xs with x :: xs' -> Skip (step x, xs') | [] -> Done))
 
   let all_equal (type a) ?(sexp_of_t = fun _ -> [%sexp_of: string] "unknown")
       (l : a t) =
@@ -377,3 +376,10 @@ class ['s] disj_monoid =
 
     method private plus = ( || )
   end
+
+module Iter = struct
+  let fold ~f ~init s =
+    let acc = ref init in
+    s (fun x -> acc := f !acc x);
+    !acc
+end

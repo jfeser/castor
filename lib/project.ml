@@ -20,7 +20,7 @@ let project_def refcnt p =
       | Some c -> c
       | None ->
           (* Be conservative if refcount is missing. *)
-          true )
+          true)
 
 let project_defs refcnt ps =
   let ps = List.filter ps ~f:(project_def refcnt) in
@@ -121,8 +121,8 @@ let project_once ~params r =
   and project_pred p = project_pred_open project project_pred p
   and no_project r = no_project_open project no_project project_pred r in
   let r' = Cardinality.annotate r |> project in
-  Validate.schema r r';
-  Validate.resolve ~params r r';
+  Check.schema r r';
+  Check.resolve ~params r r';
   r'
 
 let project ~params ?(max_iters = 100) r =

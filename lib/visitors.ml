@@ -29,58 +29,66 @@ type 'r pred = 'r Ast.pred =
 
 and scope = string
 
-and ('p, 'r) hash_idx = ('p, 'r) Ast.hash_idx = {
+and ('p, 'r, 's0) hash_idx = ('p, 'r, 's0) Ast.hash_idx = {
   hi_keys : 'r;
   hi_values : 'r;
-  hi_scope : scope;
+  hi_scope : 's0;
   hi_key_layout : 'r option;
   hi_lookup : 'p list;
 }
 
 and 'p bound = 'p * ([ `Open | `Closed ][@opaque])
 
-and ('p, 'r) ordered_idx = ('p, 'r) Ast.ordered_idx = {
+and ('p, 'r, 's0) ordered_idx = ('p, 'r, 's0) Ast.ordered_idx = {
   oi_keys : 'r;
   oi_values : 'r;
-  oi_scope : scope;
+  oi_scope : 's0;
   oi_key_layout : 'r option;
   oi_lookup : ('p bound option * 'p bound option) list;
 }
 
-and ('p, 'r) list_ = ('p, 'r) Ast.list_ = {
+and ('p, 'r, 's0) list_ = ('p, 'r, 's0) Ast.list_ = {
   l_keys : 'r;
   l_values : 'r;
-  l_scope : scope;
+  l_scope : 's0;
 }
 
-and 'r depjoin = 'r Ast.depjoin = { d_lhs : 'r; d_alias : scope; d_rhs : 'r }
+and ('r, 's0) depjoin = ('r, 's0) Ast.depjoin = {
+  d_lhs : 'r;
+  d_alias : 's0;
+  d_rhs : 'r;
+}
 
-and ('p, 'r) join = ('p, 'r) Ast.join = { pred : 'p; r1 : 'r; r2 : 'r }
+and ('p, 'r, 's0) join = ('p, 'r, 's0) Ast.join = {
+  pred : 'p;
+  r1 : 'r;
+  r2 : 'r;
+}
 
-and ('p, 'r) order_by = ('p, 'r) Ast.order_by = {
+and ('p, 'r, 's0) order_by = ('p, 'r, 's0) Ast.order_by = {
   key : ('p * (Ast.order[@opaque])) list;
   rel : 'r;
 }
 
-and ('p, 'r) query = ('p, 'r) Ast.query =
+and ('p, 'r, 's0) query = ('p, 'r, 's0) Ast.query =
   | Select of ('p list * 'r)
   | Filter of ('p * 'r)
-  | Join of ('p, 'r) join
-  | DepJoin of 'r depjoin
+  | Join of ('p, 'r, 's0) join
+  | DepJoin of ('r, 's0) depjoin
   | GroupBy of ('p list * (Name.t[@opaque]) list * 'r)
-  | OrderBy of ('p, 'r) order_by
+  | OrderBy of ('p, 'r, 's0) order_by
   | Dedup of 'r
   | Relation of (Relation.t[@opaque])
   | Range of ('p * 'p)
   | AEmpty
   | AScalar of 'p
-  | AList of ('p, 'r) list_
+  | AList of ('p, 'r, 's0) list_
   | ATuple of ('r list * (Ast.tuple[@opaque]))
-  | AHashIdx of ('p, 'r) hash_idx
-  | AOrderedIdx of ('p, 'r) ordered_idx
+  | AHashIdx of ('p, 'r, 's0) hash_idx
+  | AOrderedIdx of ('p, 'r, 's0) ordered_idx
 
 and 'm annot = 'm Ast.annot = {
-  node : ('m annot pred, 'm annot) query;
+  node : ('m annot pred, 'm annot, scope) query;
   meta : 'm;
 }
 
@@ -338,6 +346,8 @@ class virtual ['self] endo =
 
     method visit_'r = self#visit_t
 
+    method visit_'s0 = self#visit_scope
+
     method visit_'m _ x = x
   end
 
@@ -348,6 +358,8 @@ class virtual ['self] map =
     method visit_'p = self#visit_pred
 
     method visit_'r = self#visit_t
+
+    method visit_'s0 = self#visit_scope
 
     method visit_'m _ x = x
   end
@@ -360,6 +372,8 @@ class virtual ['self] iter =
 
     method visit_'r = self#visit_t
 
+    method visit_'s0 = self#visit_scope
+
     method visit_'m _ _ = ()
   end
 
@@ -371,6 +385,8 @@ class virtual ['self] reduce =
 
     method visit_'r = self#visit_t
 
+    method visit_'s0 = self#visit_scope
+
     method visit_'m _ _ = self#zero
   end
 
@@ -381,6 +397,8 @@ class virtual ['self] mapreduce =
     method visit_'p = self#visit_pred
 
     method visit_'r = self#visit_t
+
+    method visit_'s0 = self#visit_scope
 
     method visit_'m _ x = (x, self#zero)
   end
