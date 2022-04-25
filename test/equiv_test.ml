@@ -33,7 +33,8 @@ alist(dedup(select([l_suppkey as l1_suppkey], lineitem)) as k0,
                             cross))),
                       >= date("0000-01-01"), < (date("0000-01-01") + month(3)))))
 |};
-  [%expect {|
+  [%expect
+    {|
     [(l1_suppkey, l_suppkey); (l1_suppkey, supplier_no); (l_suppkey, l1_suppkey);
      (l_suppkey, supplier_no); (supplier_no, l1_suppkey);
      (supplier_no, l_suppkey)] |}]
@@ -107,7 +108,8 @@ dedup(
                      ((substring(c_phone, 0, 2) = "") || (substring(c_phone, 0, 2) = "")))))))),
                 customer)))))))
 |};
-  [%expect {|
+  [%expect
+    {|
     [(c1_acctbal, c_acctbal); (c1_acctbal, s0_c1_acctbal);
      (c1_acctbal, s1_c1_acctbal); (c1_acctbal, k1.c1_acctbal);
      (c1_acctbal, k1.s1_c1_acctbal); (c1_custkey, c_custkey);

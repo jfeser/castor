@@ -1,3 +1,4 @@
+open Core
 open Ast
 open Collections
 
@@ -105,7 +106,6 @@ and t = (meta[@opaque]) annot
 
 module Map = struct
   let annot query { node; meta } = { node = query node; meta }
-
   let bound pred (p, b) = (pred p, b)
 
   let pred annot pred = function
@@ -174,7 +174,6 @@ let rec map_meta f { node; meta } =
   { node = map_meta_query f node; meta = f meta }
 
 and map_meta_query f q = Map.query (map_meta f) (map_meta_pred f) q
-
 and map_meta_pred f p = Map.pred (map_meta f) (map_meta_pred f) p
 
 module Reduce = struct
@@ -230,13 +229,11 @@ module Stage_reduce = struct
         annot `Compile q + annot stage q'
     | AScalar p -> pred `Compile p
     | AHashIdx { hi_keys; hi_values; hi_key_layout; hi_lookup; _ } ->
-        annot `Compile hi_keys
-        + annot stage hi_values
+        annot `Compile hi_keys + annot stage hi_values
         + option zero (annot stage) hi_key_layout
         + list zero ( + ) (pred stage) hi_lookup
     | AOrderedIdx { oi_keys; oi_values; oi_key_layout; oi_lookup } ->
-        annot `Compile oi_keys
-        + annot stage oi_values
+        annot `Compile oi_keys + annot stage oi_values
         + option zero (annot stage) oi_key_layout
         + list zero ( + )
             (fun (b, b') ->
@@ -318,7 +315,6 @@ module Annotate = struct
     { node; meta = f (fun r' -> r'.meta) node }
 
   and query f q = (Map.query (annot f) (pred f)) q
-
   and pred f p = Map.pred (annot f) (pred f) p
 end
 
@@ -328,7 +324,6 @@ module Annotate_obj = struct
     { node; meta = set r.meta @@ f (fun r' -> get r'.meta) node }
 
   and query get set f q = (Map.query (annot get set f) (pred get set f)) q
-
   and pred get set f p = Map.pred (annot get set f) (pred get set f) p
 end
 
@@ -341,76 +336,53 @@ and annotate_pred f p = Map.pred (annotate f) (annotate_pred f) p
 class virtual ['self] endo =
   object (self : 'self)
     inherit [_] base_endo
-
     method visit_'p = self#visit_pred
-
     method visit_'r = self#visit_t
-
     method visit_'s0 = self#visit_scope
-
     method visit_'m _ x = x
   end
 
 class virtual ['self] map =
   object (self : 'self)
     inherit [_] base_map
-
     method visit_'p = self#visit_pred
-
     method visit_'r = self#visit_t
-
     method visit_'s0 = self#visit_scope
-
     method visit_'m _ x = x
   end
 
 class virtual ['self] iter =
   object (self : 'self)
     inherit [_] base_iter
-
     method visit_'p = self#visit_pred
-
     method visit_'r = self#visit_t
-
     method visit_'s0 = self#visit_scope
-
     method visit_'m _ _ = ()
   end
 
 class virtual ['self] reduce =
   object (self : 'self)
     inherit [_] base_reduce
-
     method visit_'p = self#visit_pred
-
     method visit_'r = self#visit_t
-
     method visit_'s0 = self#visit_scope
-
     method visit_'m _ _ = self#zero
   end
 
 class virtual ['self] mapreduce =
   object (self : 'self)
     inherit [_] base_mapreduce
-
     method visit_'p = self#visit_pred
-
     method visit_'r = self#visit_t
-
     method visit_'s0 = self#visit_scope
-
     method visit_'m _ x = (x, self#zero)
   end
 
 class ['a] names_visitor =
   object (self : 'a)
     inherit [_] reduce as super
-
     method zero = Set.empty (module Name)
-
     method plus = Set.union
-
     method! visit_Name () n = Set.singleton (module Name) n
 
     method! visit_pred () p =
@@ -422,16 +394,12 @@ class ['a] names_visitor =
 class virtual ['m] runtime_subquery_visitor =
   object (self : 'a)
     inherit [_] iter as super
-
     method virtual visit_Subquery : 'm annot -> unit
 
     (* Don't annotate subqueries that run at compile time. *)
     method! visit_AScalar () _ = ()
-
     method! visit_AList () { l_values = r; _ } = super#visit_t () r
-
     method! visit_AHashIdx () { hi_values = r; _ } = super#visit_t () r
-
     method! visit_AOrderedIdx () { oi_values = r; _ } = super#visit_t () r
 
     method! visit_Exists () r =
@@ -446,7 +414,6 @@ class virtual ['m] runtime_subquery_visitor =
 class virtual ['self] runtime_subquery_map =
   object (self : 'self)
     inherit [_] map as super
-
     method virtual visit_Subquery : _
 
     (* Don't annotate subqueries that run at compile time. *)

@@ -1,3 +1,4 @@
+open Core
 open Ast
 open Abslayout
 module V = Visitors
@@ -6,7 +7,6 @@ let annotate_relations conn =
   let visitor =
     object
       inherit [_] V.endo
-
       method! visit_Relation () _ r = Relation (Db.relation conn r.r_name)
     end
   in

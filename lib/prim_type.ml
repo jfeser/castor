@@ -1,3 +1,5 @@
+open Core
+
 type t =
   | NullT
   | IntT of { nullable : bool [@sexp.bool] }
@@ -10,15 +12,10 @@ type t =
 [@@deriving compare, hash, sexp]
 
 let null_t = NullT
-
 let int_t = IntT { nullable = false }
-
 let date_t = DateT { nullable = false }
-
 let fixed_t = FixedT { nullable = false }
-
 let string_t = StringT { nullable = false; padded = false }
-
 let bool_t = BoolT { nullable = false }
 
 let to_sql = function

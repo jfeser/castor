@@ -1,3 +1,5 @@
+open Core
+
 module T = struct
   type t = {
     r_name : string;
@@ -15,7 +17,6 @@ let schema_exn { r_schema; r_name } =
     r_schema
 
 let types_exn r = schema_exn r |> List.map ~f:(fun (_, t) -> t)
-
 let names_exn r = schema_exn r |> List.map ~f:(fun (n, _) -> n)
 
 let schema r =

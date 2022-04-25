@@ -1,3 +1,5 @@
+open Core
+
 module Date = struct
   include Date
 
@@ -93,13 +95,9 @@ module Set = struct
 
   module O = struct
     let ( <= ) s1 s2 = Set.is_subset s1 ~of_:s2
-
     let ( >= ) s1 s2 = Set.is_subset s2 ~of_:s1
-
     let ( || ) = Set.union
-
     let ( && ) = Set.inter
-
     let ( - ) = Set.diff
   end
 end
@@ -192,7 +190,6 @@ module Bytes = struct
     | _ -> failwith "Bad sexp."
 
   let sexp_of_t : t -> Sexp.t = fun x -> Atom (to_string x)
-
   let econcat = concat empty
 end
 
@@ -246,7 +243,6 @@ end
 module Tree = struct
   module T = struct
     type 'a t = Empty | Node of 'a * 'a t list [@@deriving sexp, compare]
-
     type 'a elt = 'a
 
     let fold t ~init ~f =
@@ -268,7 +264,6 @@ module Tree = struct
       iter t
 
     let iter = `Custom iter
-
     let length = `Define_using_fold
   end
 
@@ -280,7 +275,6 @@ module Array = struct
   include Array
 
   let take a n = Array.sub ~pos:0 ~len:n a
-
   let drop a n = Array.sub ~pos:n ~len:(Array.length a - n) a
 end
 
@@ -291,67 +285,48 @@ module RevList : sig
   include Sexpable.S1 with type 'a t := 'a t
 
   val empty : 'a t
-
   val ( ++ ) : 'a t -> 'a -> 'a t
-
   val singleton : 'a -> 'a t
-
   val is_empty : 'a t -> bool
-
   val length : 'a t -> int
-
   val to_list : 'a t -> 'a list
-
   val last : 'a t -> 'a option
 end = struct
   type 'a t = 'a list [@@deriving sexp]
 
   let empty = []
-
   let is_empty = List.is_empty
-
   let singleton x = [ x ]
-
   let ( ++ ) l x = x :: l
-
   let to_list = List.rev
-
   let last = List.hd
-
   let length = List.length
 end
 
 class ['s] tuple2_monoid m1 m2 =
   object
     inherit ['s] VisitorsRuntime.monoid
-
     method private zero = (m1#zero, m2#zero)
-
     method private plus (x, y) (x', y') = (m1#plus x x', m2#plus y y')
   end
 
 class ['s] list_monoid =
   object
     inherit ['s] VisitorsRuntime.monoid
-
     method private zero = []
-
     method private plus = ( @ )
   end
 
 class ['s] set_monoid m =
   object
     inherit ['s] VisitorsRuntime.monoid
-
     method private zero = Set.empty m
-
     method private plus = Set.union
   end
 
 class ['s] map_monoid m =
   object
     inherit ['s] VisitorsRuntime.monoid
-
     method private zero = Map.empty m
 
     method private plus =
@@ -362,18 +337,14 @@ class ['s] map_monoid m =
 class ['s] conj_monoid =
   object
     inherit ['s] VisitorsRuntime.monoid
-
     method private zero = true
-
     method private plus = ( && )
   end
 
 class ['s] disj_monoid =
   object
     inherit ['s] VisitorsRuntime.monoid
-
     method private zero = false
-
     method private plus = ( || )
   end
 

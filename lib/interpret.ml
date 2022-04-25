@@ -1,3 +1,4 @@
+open Core
 open Abslayout
 open Collections
 module A = Abslayout
@@ -14,7 +15,6 @@ module Tuple = struct
 
   include T
   module C = Comparable.Make (T)
-
   module O : Comparable.Infix with type t := t = C
 
   let ( @ ) = Array.append
@@ -31,18 +31,17 @@ module Ctx = struct
   type t = scope list [@@deriving sexp_of]
 
   let bind ctx schema t = Tuple (t, schema) :: ctx
-
   let merge = bind
 
   let rec find ctx n =
     match ctx with
     | [] -> None
     | Ctx map :: ctx' -> (
-        match Map.find map n with Some v -> Some v | None -> find ctx' n )
+        match Map.find map n with Some v -> Some v | None -> find ctx' n)
     | Tuple (t, schema) :: ctx' -> (
         match Hashtbl.find schema n with
         | Some i -> Some t.(i)
-        | None -> find ctx' n )
+        | None -> find ctx' n)
 
   let of_map m = [ Ctx m ]
 end
@@ -148,7 +147,7 @@ let eval { db; params } r =
         | None ->
             Error.(
               create "Unknown name." (n, ctx) [%sexp_of: Name.t * Ctx.t]
-              |> raise) )
+              |> raise))
     | Fixed x -> Fixed x
     | Date x -> Date x
     | Bool x -> Bool x
@@ -175,8 +174,7 @@ let eval { db; params } r =
         | ExtractD -> Int (to_date_exn (e p) |> Date.day)
         | _ ->
             Error.(
-              create "Unexpected operator" op [%sexp_of: Pred.Unop.t] |> raise)
-        )
+              create "Unexpected operator" op [%sexp_of: Pred.Unop.t] |> raise))
     | Binop (op, p1, p2) -> (
         match op with
         | Eq -> O.(e p1 = e p2) |> bool
@@ -196,7 +194,7 @@ let eval { db; params } r =
             | Unop (Year, p2) ->
                 Date.add_years (e p1 |> to_date_exn) (e p2 |> to_int_exn)
                 |> date
-            | p2 -> e p1 + e p2 )
+            | p2 -> e p1 + e p2)
         | Sub -> (
             match p2 with
             | Unop (Day, p2) ->
@@ -214,7 +212,7 @@ let eval { db; params } r =
                   (e p1 |> to_date_exn)
                   (e p2 |> to_int_exn |> Int.neg)
                 |> date
-            | p2 -> e p1 + e p2 )
+            | p2 -> e p1 + e p2)
         | Mul -> e p1 * e p2
         | Div -> e p1 / e p2
         | Mod -> e p1 % e p2
@@ -225,7 +223,7 @@ let eval { db; params } r =
                 ~pattern:(to_string_exn (e p2))
             with
             | Some x -> int Int.(x + 1)
-            | None -> int 0 ) )
+            | None -> int 0))
   and eval ctx r : Tuple.t Seq.t =
     match r.node with
     | Relation r -> scan r.r_name

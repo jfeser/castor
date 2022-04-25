@@ -1,3 +1,4 @@
+open Core
 open Ast
 module V = Visitors
 module Binop = Ast.Binop
@@ -12,7 +13,6 @@ end
 include T
 include Comparator.Make (T)
 module C = Comparable.Make (T)
-
 module O : Comparable.Infix with type t := t = C
 
 let to_name p = Schema.to_name p
@@ -22,59 +22,32 @@ module Infix = struct
   open Ast.Binop
 
   let name = name
-
   let int = int
-
   let fixed = fixed
-
   let date = date
-
   let bool = bool
-
   let string = string
-
   let null = null
-
   let not p = unop Not p
-
   let day p = unop Day p
-
   let month p = unop Month p
-
   let year p = unop Year p
-
   let strlen p = unop Strlen p
-
   let extract_y p = unop ExtractY p
-
   let extract_m p = unop ExtractM p
-
   let extract_d p = unop ExtractD p
-
   let ( + ) p p' = binop Add p p'
-
   let ( - ) p p' = binop Sub p p'
-
   let ( / ) p p' = binop Div p p'
-
   let ( * ) p p' = binop Mul p p'
-
   let ( = ) p p' = binop Eq p p'
-
   let ( < ) p p' = binop Lt p p'
-
   let ( <= ) p p' = binop Le p p'
-
   let ( > ) p p' = binop Gt p p'
-
   let ( >= ) p p' = binop Ge p p'
-
   let ( && ) p p' = binop And p p'
-
   let ( || ) p p' = binop Or p p'
-
   let ( mod ) p p' = binop Mod p p'
-
   let strpos p p' = binop Strpos p p'
 
   let as_ a b =
@@ -84,27 +57,20 @@ module Infix = struct
     | _ -> a
 
   let exists r = Exists r
-
   let count = Count
 end
 
 let to_type p = Schema.to_type p
-
 let to_type_opt p = Schema.to_type_opt p
-
 let pp fmt p = Abslayout_pp.pp_pred fmt p
-
 let names r = (new V.names_visitor)#visit_pred () r
 
 let normalize p =
   let visitor =
     object (self)
       inherit [_] V.endo
-
       method! visit_As_pred () _ (p, _) = self#visit_pred () p
-
       method! visit_Exists () p _ = p
-
       method! visit_First () p _ = p
     end
   in
@@ -126,7 +92,6 @@ let collect_aggs p =
   let visitor =
     object (self : 'a)
       inherit [_] V.mapreduce
-
       inherit [_] Util.list_monoid
 
       method private visit_Agg kind p =
@@ -138,13 +103,9 @@ let collect_aggs p =
         (Name (Name.create ?type_ n), [ (n, p) ])
 
       method! visit_Sum () p = self#visit_Agg "sum" (Sum p)
-
       method! visit_Count () = self#visit_Agg "count" Count
-
       method! visit_Min () p = self#visit_Agg "min" (Min p)
-
       method! visit_Max () p = self#visit_Agg "max" (Max p)
-
       method! visit_Avg () p = self#visit_Agg "avg" (Avg p)
     end
   in
@@ -168,9 +129,7 @@ let eqs p =
   let visitor =
     object (self : 'a)
       inherit [_] V.reduce
-
       method zero = []
-
       method plus = ( @ )
 
       method! visit_Binop () op p1 p2 =
@@ -187,7 +146,6 @@ let remove_as p =
   let visitor =
     object
       inherit [_] V.map
-
       method! visit_As_pred () (p, _) = p
     end
   in
@@ -197,21 +155,13 @@ let kind p =
   let visitor =
     object
       inherit [_] V.reduce
-
       inherit [_] Util.disj_monoid
-
       method! visit_Exists () _ = false
-
       method! visit_First () _ = false
-
       method! visit_Sum () _ = true
-
       method! visit_Avg () _ = true
-
       method! visit_Min () _ = true
-
       method! visit_Max () _ = true
-
       method! visit_Count () = true
     end
   in
@@ -280,7 +230,7 @@ let ensure_alias = function
   | p -> (
       match to_name p with
       | Some n -> As_pred (p, Name.name n)
-      | None -> As_pred (p, Fresh.name Global.fresh "a%d") )
+      | None -> As_pred (p, Fresh.name Global.fresh "a%d"))
 
 let to_nnf p =
   let visitor =
@@ -377,15 +327,11 @@ let simplify p =
   p |> common_visitor#visit_pred () |> trivial_visitor#visit_pred ()
 
 let max_of p1 p2 = Infix.(if_ (p1 < p2) p2 p1)
-
 let min_of p1 p2 = Infix.(if_ (p1 < p2) p1 p2)
-
 let pseudo_bool p = if_ p (Int 1) (Int 0)
-
 let sum_exn ps = List.reduce_exn ~f:Infix.( + ) ps
 
 type a = [ `Leaf of t | `And of b list ]
-
 and b = [ `Leaf of t | `Or of a list ]
 
 let rec to_and_or : t -> [ a | b ] = function
@@ -393,12 +339,12 @@ let rec to_and_or : t -> [ a | b ] = function
       match (to_and_or p1, to_and_or p2) with
       | `And p1, `And p2 -> `And (p1 @ p2)
       | `And p1, (#b as p2) | (#b as p2), `And p1 -> `And (p2 :: p1)
-      | (#b as p1), (#b as p2) -> `And [ p1; p2 ] )
+      | (#b as p1), (#b as p2) -> `And [ p1; p2 ])
   | Binop (Or, p1, p2) -> (
       match (to_and_or p1, to_and_or p2) with
       | `Or p1, `Or p2 -> `Or (p1 @ p2)
       | `Or p1, (#a as p2) | (#a as p2), `Or p1 -> `Or (p2 :: p1)
-      | (#a as p1), (#a as p2) -> `Or [ p1; p2 ] )
+      | (#a as p1), (#a as p2) -> `Or [ p1; p2 ])
   | p -> `Leaf p
 
 let is_static ~params p =

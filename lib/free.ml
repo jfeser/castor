@@ -8,11 +8,8 @@ let pred_free_open free p =
   let visitor =
     object (self : 'a)
       inherit [_] V.reduce as super
-
       inherit [_] Util.set_monoid (module Name)
-
       method visit_subquery r = free r
-
       method! visit_Name () n = singleton n
 
       method! visit_pred () p =
@@ -78,14 +75,13 @@ let free_open free r =
         in
         Set.O.(
           union_list
-            ( [ free r' - exposed r'; free r'' - exposed ~scope r' ]
-            @ List.map ~f:bound_free oi_lookup ))
+            ([ free r' - exposed r'; free r'' - exposed ~scope r' ]
+            @ List.map ~f:bound_free oi_lookup))
     | ATuple (rs, (Zip | Concat | Cross)) -> List.map rs ~f:free |> union_list
   in
   free_set
 
 let rec free r = free_open free r.node
-
 let pred_free p = pred_free_open free p
 
 let annotate r =
@@ -94,7 +90,6 @@ let annotate r =
     (fun m x ->
       object
         method meta = m
-
         method free = x
       end)
     free_open r

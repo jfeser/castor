@@ -1,3 +1,4 @@
+open Core
 open! Lwt
 open Ast
 open Collections
@@ -26,16 +27,13 @@ let shadow_check r =
   let relations_visitor =
     object
       inherit [_] V.reduce
-
       inherit [_] Util.set_monoid (module String)
-
       method! visit_Relation () r = Set.singleton (module String) r.r_name
     end
   in
   let alias_visitor relations =
     object (self)
       inherit [_] V.iter
-
       val aliases = Hash_set.create (module String)
 
       method check_name n =
@@ -76,7 +74,6 @@ let duplicate_names ns =
          failwith @@ Fmt.str "Found duplicate names: %a" Name.pp n)
 
 let rec annot r = V.Iter.annot query meta r
-
 and meta _ = ()
 
 and query = function

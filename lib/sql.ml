@@ -1,3 +1,4 @@
+open Core
 open Collections
 open Ast
 open Schema
@@ -5,7 +6,6 @@ open Abslayout
 module V = Visitors
 module A = Abslayout
 module P = Pred.Infix
-
 include (val Log.make "castor.sql")
 
 type select_entry = { pred : Pred.t; alias : string; cast : Prim_type.t option }
@@ -16,10 +16,10 @@ type spj = {
   distinct : bool;
   conds : Pred.t list;
   relations :
-    ( [ `Subquery of t * string
-      | `Table of Relation.t * string
-      | `Series of Pred.t * Pred.t * string ]
-    * [ `Left | `Lateral ] )
+    ([ `Subquery of t * string
+     | `Table of Relation.t * string
+     | `Series of Pred.t * Pred.t * string ]
+    * [ `Left | `Lateral ])
     list;
   order : (Pred.t * order) list;
   group : Pred.t list;
@@ -53,9 +53,7 @@ let to_select = function
   | Query { select; _ } -> select
 
 let to_group = function Union_all _ -> [] | Query q -> q.group
-
 let to_distinct = function Union_all _ -> false | Query q -> q.distinct
-
 let to_limit = function Union_all _ -> None | Query q -> q.limit
 
 let preds_has_aggregates ps =
@@ -143,7 +141,6 @@ let scoped_names ns p =
   let visitor =
     object (self)
       inherit [_] V.reduce
-
       inherit [_] Util.set_monoid (module Name)
 
       method! visit_Name () n =
@@ -151,7 +148,6 @@ let scoped_names ns p =
         else Set.singleton (module Name) n
 
       method! visit_Exists () _ = self#zero
-
       method! visit_First () _ = self#zero
     end
   in
@@ -311,7 +307,7 @@ let rec pred_to_sql p =
       | Strlen -> sprintf "char_length(%s)" s
       | ExtractY -> sprintf "cast(date_part('year', %s) as integer)" s
       | ExtractM -> sprintf "cast(date_part('month', %s) as integer)" s
-      | ExtractD -> sprintf "cast(date_part('day', %s) as integer)" s )
+      | ExtractD -> sprintf "cast(date_part('day', %s) as integer)" s)
   | Binop (Add, p, Unop (Month, p')) when !Global.enable_redshift_dates ->
       sprintf "dateadd(month, %s, %s)" (p2s p') (p2s p)
   | Binop (op, p1, p2) -> (
@@ -330,7 +326,7 @@ let rec pred_to_sql p =
       | Mul -> sprintf "%s * %s" s1 s2
       | Div -> sprintf "%s / %s" s1 s2
       | Mod -> sprintf "%s %% %s" s1 s2
-      | Strpos -> sprintf "strpos(%s, %s)" s1 s2 )
+      | Strpos -> sprintf "strpos(%s, %s)" s1 s2)
   | If (p1, p2, p3) ->
       sprintf "case when %s then %s else %s end" (p2s p1) (p2s p2) (p2s p3)
   | Exists r ->
@@ -397,7 +393,7 @@ generate_series(%s :: timestamp, %s :: timestamp, '1 day' :: interval) range) as
                 | IntT _ ->
                     sprintf "generate_series(%s, %s) as %s(range)"
                       (pred_to_sql p) (pred_to_sql p') alias
-                | _ -> failwith "Unexpected series type." )
+                | _ -> failwith "Unexpected series type.")
           in
           let join_str =
             match join_type with `Left -> "" | `Lateral -> "lateral"

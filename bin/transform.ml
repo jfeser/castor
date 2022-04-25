@@ -10,11 +10,8 @@ let main ?(debug = false) ?sample:_ ?(transforms = "") ~db ~params query_str =
   in
   let module Config = struct
     let conn = Db.create db
-
     let params = params
-
     let check_transforms = debug
-
     let simplify = None
   end in
   let module M = Abslayout_db.Make (Config) in

@@ -43,9 +43,7 @@ let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
       |> V.map_meta (fun m ->
              object
                method fold_stream = m#fold_stream
-
                method resolved = m#meta#meta#resolved
-
                method type_ = m#type_
              end)
     in

@@ -2,7 +2,6 @@ open Ast
 
 module type S = sig
   val codegen : Irgen.ir_module -> Llvm.llmodule
-
   val write_header : Out_channel.t -> unit
 
   val compile :

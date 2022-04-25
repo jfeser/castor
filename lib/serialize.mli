@@ -19,11 +19,7 @@ val serialize :
 (** Sentinal values for use when a value is null. *)
 
 val string_sentinal : Type.string_ -> int
-
 val int_sentinal : Type.int_ -> int
-
 val date_sentinal : Type.date -> int
-
 val fixed_sentinal : Type.fixed -> int
-
 val bool_sentinal : int

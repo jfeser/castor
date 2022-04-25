@@ -79,7 +79,8 @@ let test_db_conn =
      create_simple conn "r1" [ "f"; "g" ]
        [ [ 1; 2 ]; [ 1; 3 ]; [ 2; 1 ]; [ 2; 2 ]; [ 3; 4 ] ];
      create_simple conn "one" [] [];
-     create conn "r2" [ ("a", fixed_t) ]
+     create conn "r2"
+       [ ("a", fixed_t) ]
        [
          [ Fixed (Fixed_point.of_string "0.01") ];
          [ Fixed (Fixed_point.of_string "5") ];
@@ -99,7 +100,8 @@ let test_db_conn =
      create conn "unique_str"
        [ ("str_field", string_t) ]
        [ [ String "a" ]; [ String "b" ]; [ String "c" ] ];
-     create conn "ints" [ ("x", int_t) ]
+     create conn "ints"
+       [ ("x", int_t) ]
        (List.init 10 ~f:(fun i -> [ Value.Int i ]));
      conn)
 
@@ -176,5 +178,4 @@ let sum_complex =
    ATuple([AScalar(k.f), AScalar((k.g - k.f) as v)], cross)))"
 
 let tpch_conn = lazy (Db.create @@ Sys.getenv_exn "CASTOR_TPCH_TEST_DB")
-
 let tpch_full_conn = lazy (Db.create @@ Sys.getenv_exn "CASTOR_TPCH_DB")

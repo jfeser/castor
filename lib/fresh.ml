@@ -1,3 +1,5 @@
+open Core
+
 type t = int Hashtbl.M(String).t
 
 let create () = Hashtbl.create (module String)
@@ -13,5 +15,4 @@ let name tbl fmt =
   name
 
 let int tbl = name tbl "%d" |> Int.of_string
-
 let reset = Hashtbl.clear

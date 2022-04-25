@@ -344,9 +344,9 @@ select([s1_acctbal, s1_name, n1_name, p1_partkey, p1_mfgr, s1_address,
        0))
 |}
   in
-  ( match Parallel.type_of conn r with
+  (match Parallel.type_of conn r with
   | Ok t -> [%sexp_of: Type.t] t |> print_s
-  | _ -> () );
+  | _ -> ());
   [%expect
     {|
     (FuncT
@@ -459,9 +459,9 @@ select([s1_acctbal, s1_name, n1_name, p1_partkey, p1_mfgr, s1_address,
        0))
 |}
   in
-  ( match Parallel.type_of conn r with
+  (match Parallel.type_of conn r with
   | Ok t -> [%sexp_of: Type.t] t |> print_s
-  | _ -> () );
+  | _ -> ());
   [%expect
     {|
     (FuncT
@@ -635,9 +635,9 @@ select([sum((l_extendedprice * (1 - l_discount))) as revenue],
        concat))
 |}
   in
-  ( match Parallel.type_of conn r with
+  (match Parallel.type_of conn r with
   | Ok t -> [%sexp_of: Type.t] t |> print_s
-  | _ -> () );
+  | _ -> ());
   [%expect
     {|
     (FuncT

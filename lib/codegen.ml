@@ -1,3 +1,4 @@
+open Core
 module V = Visitors
 open Collections
 open Llvm_analysis
@@ -43,7 +44,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     Option.value_exn ~message:"Could not find a working clang." c
 
   let opt = Global.llvm_root () ^ "/bin/opt"
-
   let ctx = create_context ()
 
   let module_ =
@@ -70,21 +70,13 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     Builtin.create module_
 
   let builder = builder ctx
-
   let root = Tbaa.TypeDesc.Root (Some "castor_root")
-
   let db_val = Tbaa.TypeDesc.Scalar { name = "db"; parent = root }
-
   let db_int = Tbaa.TypeDesc.Scalar { name = "db_int"; parent = db_val }
-
   let db_bool = Tbaa.TypeDesc.Scalar { name = "db_bool"; parent = db_val }
-
   let param_val = Tbaa.TypeDesc.Scalar { name = "param"; parent = root }
-
   let runtime_val = Tbaa.TypeDesc.Scalar { name = "runtime"; parent = root }
-
   let consumer_val = Tbaa.TypeDesc.Scalar { name = "consumer"; parent = root }
-
   let string_val = Tbaa.TypeDesc.Scalar { name = "string"; parent = root }
 
   let tbaa_ctx =
@@ -133,7 +125,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
             | None ->
                 Error.create "Params not found." (Hashtbl.keys m)
                   [%sexp_of: string list]
-                |> Error.raise )
+                |> Error.raise)
         | None, [] -> Error.of_string "Empty namespace." |> Error.raise
       in
       (* Look up a name in a scope. *)
@@ -155,11 +147,11 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
                 Error.create "Unknown variable."
                   (k, List.map ~f:Hashtbl.keys maps)
                   [%sexp_of: string * string list list]
-                |> Error.raise )
+                |> Error.raise)
         | m :: ms -> (
             match lookup_single m k with
             | Some v -> v
-            | None -> lookup_chain ms k )
+            | None -> lookup_chain ms k)
       in
       lookup_chain maps key
   end
@@ -181,26 +173,17 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
             |> Error.raise
 
       method values : var Hashtbl.M(String).t = values
-
       method name : string = func.I.name
-
       method func : I.func = func
-
       method tctx : Prim_type.t Hashtbl.M(String).t = tctx
-
       val mutable llfunc = None
-
       method set_llfunc x = llfunc <- Some x
-
       method llfunc : llvalue = Option.value_exn llfunc
     end
 
   let funcs = Hashtbl.create (module String)
-
   let globals = Hashtbl.create (module String)
-
   let params_struct_t = ref (void_type ctx)
-
   let get_val ?params ctx = SymbolTable.lookup ?params [ ctx#values; globals ]
 
   let call_printf fmt_str args =
@@ -222,13 +205,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       (DataLayout.size_in_bits int_type data_layout |> Int64.to_int_exn)
 
   let str_pointer_type = pointer_type (i8_type ctx)
-
   let str_len_type = i64_type ctx
-
   let str_type = struct_type ctx [| str_pointer_type; str_len_type |]
-
   let bool_type = i1_type ctx
-
   let fixed_type = double_type ctx
 
   let rec codegen_type t =
@@ -528,7 +507,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
               key_ptr builder
             |> tag runtime_val |> ignore;
             let key_offset = build_ptrtoint key_ptr (i64_type ctx) "" builder in
-            build_add key_offset (size_of (i8_type ctx)) "" builder )
+            build_add key_offset (size_of (i8_type ctx)) "" builder)
           else key_offset
         in
         key_offset)
@@ -717,23 +696,14 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     build_store val_ var builder |> tag runtime_val |> ignore
 
   let true_str = build_global_stringptr "t" "true_str" builder
-
   let false_str = build_global_stringptr "f" "false_str" builder
-
   let null_str = build_global_stringptr "null" "null_str" builder
-
   let void_str = build_global_stringptr "()" "void_str" builder
-
   let sep_str = build_global_stringptr "|" "sep_str" builder
-
   let newline_str = build_global_stringptr "\n" "newline_str" builder
-
   let int_fmt = build_global_stringptr "%d" "int_fmt" builder
-
   let str_fmt = build_global_stringptr "%.*s" "str_fmt" builder
-
   let float_fmt = build_global_stringptr "%f" "float_fmt" builder
-
   let date_fmt = build_global_stringptr "%04d-%02d-%02d" "date_fmt" builder
 
   let codegen_print fctx type_ expr =
@@ -830,10 +800,10 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let name = fctx#name in
     let I.{ args; locals; ret_type; body; _ } = fctx#func in
     Log.debug (fun m -> m "Codegen for func %s started." name);
-    ( if
-      (* Check that function is not already defined. *)
-      Hashtbl.(mem funcs name)
-    then Error.(of_string "Function already defined." |> raise) );
+    (if
+     (* Check that function is not already defined. *)
+     Hashtbl.(mem funcs name)
+    then Error.(of_string "Function already defined." |> raise));
 
     (* Create function. *)
     let func_t =
@@ -953,7 +923,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
                 [ ("params", Local (param llfunc 0)) ]
 
             method values = values
-
             method llfunc = llfunc
           end
         in
@@ -999,7 +968,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
           | 16 -> fprintf fmt "short"
           | 32 -> fprintf fmt "int"
           | 64 -> fprintf fmt "long"
-          | x -> Error.(create "Unknown bitwidth" x [%sexp_of: int] |> raise) )
+          | x -> Error.(create "Unknown bitwidth" x [%sexp_of: int] |> raise))
       | Pointer ->
           let elem_t = element_type t in
           let elem_t =
@@ -1084,9 +1053,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
         (fun m ->
           object
             method pos = m#pos
-
             method type_ = m#type_
-
             method resolved = m#meta#resolved
           end)
         layout
@@ -1151,8 +1118,8 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     in
     if debug then
       Util.command_exn ~quiet:()
-        ( [ clang ] @ cflags
-        @ [ module_fn; stdlib_fn; date_fn; main_fn; "-o"; exe_fn ] )
+        ([ clang ] @ cflags
+        @ [ module_fn; stdlib_fn; date_fn; main_fn; "-o"; exe_fn ])
     else (
       Util.command_exn ~quiet:()
         [
@@ -1166,7 +1133,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
           "2>/dev/null";
         ];
       Util.command_exn ~quiet:()
-        ( [ clang ] @ cflags
+        ([ clang ] @ cflags
         @ [
             opt_module_fn;
             stdlib_fn;
@@ -1175,6 +1142,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
             "-o";
             exe_fn;
             "2>/dev/null";
-          ] ) );
+          ]));
     (exe_fn, data_fn)
 end

@@ -1,3 +1,4 @@
+open Core
 open Ast
 module A = Abslayout
 open Abslayout
@@ -5,7 +6,6 @@ module V = Visitors
 open Schema
 open Match
 module P = Pred.Infix
-
 include (val Log.make ~level:(Some Warning) "castor.simplify-tactic")
 
 module Config = struct
@@ -16,8 +16,8 @@ end
 
 module Make (C : Config.S) = struct
   open C
-
-  open Ops.Make (C)
+  module O = Ops.Make (C)
+  open O
 
   let filter_const r =
     match r.node with
@@ -137,11 +137,10 @@ module Make (C : Config.S) = struct
 
     let rec pred ctx = function
       | Name n as p -> (
-          match Map.find ctx n with Some p' -> Name p' | None -> p )
+          match Map.find ctx n with Some p' -> Name p' | None -> p)
       | p -> V.Map.pred (annot ctx) (pred ctx) p
 
     and query ctx q = query_open annot pred ctx q
-
     and annot ctx r = V.Map.annot (query ctx) r
   end
 
@@ -293,7 +292,6 @@ end
 let simplify ?(params = Set.empty (module Name)) conn r =
   let module C = struct
     let conn = conn
-
     let params = params
   end in
   let module O = Ops.Make (C) in

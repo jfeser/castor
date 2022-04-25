@@ -78,5 +78,9 @@ select([s_name, s_address],
 |}
     |> Abslayout_load.load_string_exn @@ Lazy.force Test_util.tpch_conn
   in
-  match is_serializeable r with Ok () -> () | Error str -> print_endline str;
-  [%expect {| Cannot serialize: Bad operator in run-time position lineitem |}]
+  match is_serializeable r with
+  | Ok () -> ()
+  | Error str ->
+      print_endline str;
+      [%expect
+        {| Cannot serialize: Bad operator in run-time position lineitem |}]

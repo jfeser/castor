@@ -1,5 +1,4 @@
 %{
-module A = Ast
 open Parser_utils
 %}
 
@@ -36,11 +35,11 @@ value_eof: x = value; EOF { x }
 
 param_eof:
   | x = param; EOF { x }
-  | error; EOF { error "Expected a parameter." $startpos }
+  | error { error "Expected a parameter." $startpos }
 
 query_eof:
   | x = query; EOF { x }
-  | error; EOF { error "Expected a query." $startpos }
+  | error { error "Expected a query." $startpos }
 
 arg:
   | k=ID; COLON; t=primtype; { (k, t) }
@@ -70,74 +69,74 @@ key:
 query:
   | QUERY; error { error "Expected a query name." $startpos }
   | QUERY; name=ID; LPAREN; args=separated_list(COMMA, arg); RPAREN;
-    LCURLY; body = ralgebra; RCURLY { A.Query.{ name; args; body } }
+    LCURLY; body = ralgebra; RCURLY { Ast.Query.{ name; args; body } }
 
 ralgebra:
   | r = ralgebra_subquery { r }
-  | name = ID { A.Relation {r_name=name; r_schema=None} |> node $symbolstartpos $endpos }
+  | name = ID { Ast.Relation {r_name=name; r_schema=None} |> node $symbolstartpos $endpos }
 
 ub_op: LT { `Open } | LE { `Closed }
 lb_op: GT { `Open } | GE { `Closed }
 
 ralgebra_subquery:
   | SELECT; LPAREN; x = bracket_list(expr); COMMA; r = ralgebra; RPAREN
-    { A.Select (x, r) |> node $symbolstartpos $endpos }
+    { Ast.Select (x, r) |> node $symbolstartpos $endpos }
 
   | GROUPBY; LPAREN;
 x = bracket_list(expr); COMMA;
 k = bracket_list(name); COMMA;
 r = ralgebra;
-RPAREN { A.GroupBy (x, k, r) |> node $symbolstartpos $endpos }
+RPAREN { Ast.GroupBy (x, k, r) |> node $symbolstartpos $endpos }
 
   | FILTER; LPAREN; x = expr; COMMA; r = ralgebra; RPAREN
-    { A.Filter (x, r) |> node $symbolstartpos $endpos }
+    { Ast.Filter (x, r) |> node $symbolstartpos $endpos }
 
   | DEPJOIN; LPAREN; d_lhs = ralgebra; AS; d_alias = ID; COMMA; d_rhs = ralgebra; RPAREN
-    { A.DepJoin {d_lhs; d_alias; d_rhs} |> node $symbolstartpos $endpos }
+    { Ast.DepJoin {d_lhs; d_alias; d_rhs} |> node $symbolstartpos $endpos }
 
   | JOIN; LPAREN; p = expr; COMMA; r1 = ralgebra; COMMA; r2 = ralgebra; RPAREN
-    { A.Join({pred = p; r1; r2}) |> node $symbolstartpos $endpos }
+    { Ast.Join({pred = p; r1; r2}) |> node $symbolstartpos $endpos }
 
   | DEDUP; LPAREN; r = ralgebra; RPAREN
-    { A.Dedup r |> node $symbolstartpos $endpos }
+    { Ast.Dedup r |> node $symbolstartpos $endpos }
 
   | ORDERBY; LPAREN;
 key = bracket_list(pair(expr, option(ORDER))); COMMA;
 rel = ralgebra;
-RPAREN { A.OrderBy { key = List.map ~f:(fun (e, o) -> match o with
+RPAREN { Ast.OrderBy { key = List.map (fun (e, o) -> match o with
                                                    | Some o -> e, o
-                                                   | None -> e, A.Asc) key; rel }
+                                                   | None -> e, Ast.Asc) key; rel }
          |> node $symbolstartpos $endpos }
 
   | AEMPTY { node $symbolstartpos $endpos AEmpty }
 
-  | ASCALAR; e = parens(expr) { A.AScalar e |> node $symbolstartpos $endpos }
+  | ASCALAR; e = parens(expr) { Ast.AScalar e |> node $symbolstartpos $endpos }
 
   | ALIST; LPAREN; k = ralgebra; AS; s = ID; COMMA; v = ralgebra; RPAREN
     {
-      A.AList { l_keys = k; l_scope = s; l_values = v } |> node $symbolstartpos $endpos
+      Ast.AList { l_keys = k; l_scope = s; l_values = v } |> node $symbolstartpos $endpos
     }
 
   | ATUPLE; LPAREN; ls = bracket_list(ralgebra); COMMA; k = KIND; RPAREN
-    { A.ATuple (ls, k) |> node $symbolstartpos $endpos }
+    { Ast.ATuple (ls, k) |> node $symbolstartpos $endpos }
 
   | AHASHIDX; LPAREN;
 r = ralgebra; AS; s = ID; COMMA;
 x = ralgebra; COMMA;
 e = key;
-RPAREN { A.(AHashIdx {hi_keys= r; hi_values= x; hi_key_layout = None; hi_lookup=e; hi_scope=s}) |> node $symbolstartpos $endpos }
+RPAREN { Ast.(AHashIdx {hi_keys= r; hi_values= x; hi_key_layout = None; hi_lookup=e; hi_scope=s}) |> node $symbolstartpos $endpos }
 
   | AORDEREDIDX; LPAREN;
 r = ralgebra; AS; s = ID; COMMA;
 x = ralgebra; COMMA;
 b = separated_list(COMMA, bound) RPAREN
     {
-      A.(AOrderedIdx ({ oi_keys = r; oi_scope = s; oi_values = x; oi_lookup = b; oi_key_layout = None }))
+      Ast.(AOrderedIdx ({ oi_keys = r; oi_scope = s; oi_values = x; oi_lookup = b; oi_key_layout = None }))
       |> node $symbolstartpos $endpos
     }
 
   | RANGE; LPAREN; pl=expr; COMMA; ph=expr; RPAREN
-    { A.(Range (pl, ph)) |> node $symbolstartpos $endpos }
+    { Ast.(Range (pl, ph)) |> node $symbolstartpos $endpos }
 
   | error { error "Expected an operator or relation." $startpos }
 
@@ -156,76 +155,75 @@ e0_binop: x = STRPOS { x }
 e0_unop: x = DAY | x = MONTH | x = YEAR | x = STRLEN | x = EXTRACTY | x = EXTRACTM | x = EXTRACTD { x }
 
 null:
-  | NULL; COLON; t = primtype { A.Null (Some t) }
-  | NULL { A.Null None }
+  | NULL; COLON; t = primtype { Ast.Null (Some t) }
+  | NULL { Ast.Null None }
 
 value:
-  | x = INT { A.Int x }
-  | DATEKW; x = parens(STR); { A.Date (Date.of_string x) }
-  | x = FIXED { A.Fixed x }
-  | x = BOOL { A.Bool x }
-  | x = STR { A.String x }
+  | x = INT { Ast.Int x }
+  | DATEKW; x = parens(STR); { Ast.Date (Core.Date.of_string x) }
+  | x = FIXED { Ast.Fixed x }
+  | x = BOOL { Ast.Bool x }
+  | x = STR { Ast.String x }
   | x = null { x }
 
 e0:
   | x = value { x }
-  | n = name { A.Name n }
-  | op = e0_unop; x = parens(expr); { A.Unop (op, x) }
-  | NOT; x = e0 {A.Unop (Not, x)}
-  | MIN; f = parens(expr) { A.Min f }
-  | MAX; f = parens(expr) { A.Max f }
-  | AVG; f = parens(expr) { A.Avg f }
-  | SUM; f = parens(expr) { A.Sum f }
-  | COUNT; LPAREN; RPAREN; { A.Count }
-  | ROW_NUMBER; LPAREN; RPAREN; { A.Row_number }
-  | EXISTS; r = parens(ralgebra); {A.Exists (r)}
+  | n = name { Ast.Name n }
+  | op = e0_unop; x = parens(expr); { Ast.Unop (op, x) }
+  | NOT; x = e0 {Ast.Unop (Not, x)}
+  | MIN; f = parens(expr) { Ast.Min f }
+  | MAX; f = parens(expr) { Ast.Max f }
+  | AVG; f = parens(expr) { Ast.Avg f }
+  | SUM; f = parens(expr) { Ast.Sum f }
+  | COUNT; LPAREN; RPAREN; { Ast.Count }
+  | ROW_NUMBER; LPAREN; RPAREN; { Ast.Row_number }
+  | EXISTS; r = parens(ralgebra); {Ast.Exists (r)}
   | SUBSTRING; xs = parens(separated_nonempty_list(COMMA, expr)) {
                             match xs with
-                            | [x1; x2; x3] -> A.Substring (x1, x2, x3)
+                            | [x1; x2; x3] -> Ast.Substring (x1, x2, x3)
                             | _ -> error "Unexpected arguments." $startpos
                           }
   | op = e0_binop; xs = parens(separated_nonempty_list(COMMA, expr)) {
                                 match xs with
-                                | [x1; x2] -> A.Binop (op, x1, x2)
+                                | [x1; x2] -> Ast.Binop (op, x1, x2)
                                 | _ -> error "Unexpected arguments." $startpos
                               }
-  | r = parens(ralgebra_subquery); {A.First (r)}
+  | r = parens(ralgebra_subquery); {Ast.First (r)}
   | x = parens(expr) { x }
 
 e1:
-  | p = e0; AS; id = ID { A.As_pred (p, id) }
+  | p = e0; AS; id = ID { Ast.As_pred (p, id) }
   | x = e0 { x }
 
 e2_op: x = MUL | x = DIV | x = MOD { x }
 
 e2:
-  | p1 = e2; op = e2_op; p2 = e1 { A.Binop (op, p1, p2) }
+  | p1 = e2; op = e2_op; p2 = e1 { Ast.Binop (op, p1, p2) }
   | x = e1 { x }
 
 e3_op: x = ADD | x = SUB { x }
 
 e3:
-  | p1 = e3; op = e3_op; p2 = e2 { A.Binop (op, p1, p2) }
+  | p1 = e3; op = e3_op; p2 = e2 { Ast.Binop (op, p1, p2) }
   | x = e2 { x }
 
 e4_op: x = EQ | x = LT | x = LE | x = GT | x = GE { x }
 
 e4:
-  | p1 = e4; op = e4_op; p2 = e3 { A.Binop (op, p1, p2) }
+  | p1 = e4; op = e4_op; p2 = e3 { Ast.Binop (op, p1, p2) }
   | x = e3 { x }
 
 e5:
-  | p1 = e4; op = AND; p2 = e5 { A.Binop (op, p1, p2) }
+  | p1 = e4; op = AND; p2 = e5 { Ast.Binop (op, p1, p2) }
   | x = e4 { x }
 
 e6:
-  | p1 = e5; op = OR; p2 = e6 { A.Binop (op, p1, p2) }
+  | p1 = e5; op = OR; p2 = e6 { Ast.Binop (op, p1, p2) }
   | x = e5 { x }
 
 e7:
-  | IF; p1 = e6; THEN; p2 = e7; ELSE; p3 = e7 { A.If (p1, p2, p3) }
+  | IF; p1 = e6; THEN; p2 = e7; ELSE; p3 = e7 { Ast.If (p1, p2, p3) }
   | x = e6 { x }
 
 expr:
   | x = e7 { x }
-

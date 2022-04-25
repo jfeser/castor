@@ -1,3 +1,5 @@
+open Core
+
 type t = Bottom | Interval of int * int | Top [@@deriving compare, sexp]
 
 let pp fmt = function
@@ -6,9 +8,7 @@ let pp fmt = function
   | Interval (l, h) -> Format.fprintf fmt "[%d, %d]" l h
 
 let top = Top
-
 let bot = Bottom
-
 let zero = Interval (0, 0)
 
 let inf = function
@@ -67,7 +67,6 @@ let byte_width ~nullable = function
 
 module O = struct
   let ( + ) = lift2 (fun l1 h1 l2 h2 -> Interval (l1 + l2, h1 + h2))
-
   let ( - ) = lift2 (fun l1 h1 l2 h2 -> Interval (l1 - h2, l2 - h1))
 
   let ( * ) =
@@ -78,7 +77,6 @@ module O = struct
         Interval (min_many xs, max_many xs))
 
   let ( && ) = meet
-
   let ( || ) = join
 end
 

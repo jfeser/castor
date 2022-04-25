@@ -6,7 +6,6 @@ module A = Abslayout
 module P = Pred.Infix
 
 let dummy_pred = As_pred (Bool false, "dummy")
-
 let dummy = A.scalar dummy_pred
 
 let project_def refcnt p =

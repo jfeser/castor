@@ -1,3 +1,5 @@
+open Core
+
 type meta = < >
 
 module Binop = struct
@@ -24,9 +26,7 @@ module Unop = struct
 end
 
 type scope = string [@@deriving compare, hash, sexp]
-
 type tuple = Cross | Zip | Concat [@@deriving compare, hash, sexp]
-
 type order = Asc | Desc [@@deriving compare, hash, sexp]
 
 type 'r pred =

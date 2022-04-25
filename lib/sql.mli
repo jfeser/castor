@@ -8,10 +8,10 @@ type spj = {
   distinct : bool;
   conds : Pred.t list;
   relations :
-    ( [ `Subquery of t * string
-      | `Table of Relation.t * string
-      | `Series of Pred.t * Pred.t * string ]
-    * [ `Left | `Lateral ] )
+    ([ `Subquery of t * string
+     | `Table of Relation.t * string
+     | `Series of Pred.t * Pred.t * string ]
+    * [ `Left | `Lateral ])
     list;
   order : (Pred.t * order) list;
   group : Pred.t list;
@@ -21,19 +21,12 @@ type spj = {
 and t = Query of spj | Union_all of spj list [@@deriving compare, sexp_of]
 
 val src : Logs.Src.t
-
 val of_ralgebra : < .. > annot -> t
-
 val has_aggregates : t -> bool
-
 val to_schema : t -> string list
-
 val sample : int -> string -> string
-
 val trash_sample : int -> string -> string
-
 val to_string : t -> string
-
 val format : string -> string
 
 val to_string_hum : t -> string

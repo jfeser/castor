@@ -1,3 +1,4 @@
+open Core
 open Ast
 
 type resolved
@@ -18,7 +19,6 @@ type 'a meta =
 exception Resolve_error of error
 
 val pp_err : ([> error ] as 'a) Fmt.t -> 'a Fmt.t
-
 val resolve_exn : params:Set.M(Name).t -> (< .. > as 'a) annot -> 'a meta annot
 
 val resolve :

@@ -1,3 +1,4 @@
+open Core
 open Ast
 module V = Visitors
 module A = Abslayout
@@ -9,7 +10,7 @@ let subst r ~pat ~with_ =
   let rec annot r =
     if [%compare.equal: _ annot] r pat then (
       success := true;
-      with_ )
+      with_)
     else V.Map.annot query r
   and query q = V.Map.query annot pred q
   and pred p = V.Map.pred annot pred p in

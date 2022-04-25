@@ -1,7 +1,7 @@
+open Core
 open Ast
 module A = Abslayout
 module V = Visitors
-
 include (val Log.make "castor.join-elim")
 
 (** Given two sets of names and an equivalence relation, return a translation

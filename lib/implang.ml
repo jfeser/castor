@@ -1,3 +1,4 @@
+open Core
 open Collections
 module A = Abslayout
 include Implang0
@@ -62,7 +63,7 @@ let rec pp_expr : Format.formatter -> expr -> unit =
         match op_to_string op with
         | `Prefix str -> fprintf fmt "%s(%a, %a)" str pp_expr arg1 pp_expr arg2
         | `Infix str ->
-            fprintf fmt "@[<hov>%a %s@ %a@]" pp_expr arg1 str pp_expr arg2 )
+            fprintf fmt "@[<hov>%a %s@ %a@]" pp_expr arg1 str pp_expr arg2)
     | Unop { op; arg } ->
         let (`Infix str | `Prefix str) = op_to_string op in
         fprintf fmt "@[<hov>%s(%a)@]" str pp_expr arg
@@ -124,27 +125,16 @@ module Infix = struct
     | _ -> Binop { op = `IntAdd; arg1 = x; arg2 = y }
 
   let ( - ) x y = Binop { op = `IntSub; arg1 = x; arg2 = y }
-
   let ( * ) x y = Binop { op = `IntMul; arg1 = x; arg2 = y }
-
   let ( / ) x y = Binop { op = `IntDiv; arg1 = x; arg2 = y }
-
   let ( % ) x y = Binop { op = `Mod; arg1 = x; arg2 = y }
-
   let ( lsr ) x y = Binop { op = `Lsr; arg1 = x; arg2 = y }
-
   let ( < ) x y = Binop { op = `IntLt; arg1 = x; arg2 = y }
-
   let ( > ) x y = y < x
-
   let ( <= ) x y = x - int 1 < y
-
   let ( >= ) x y = y <= x
-
   let ( && ) x y = Binop { op = `And; arg1 = x; arg2 = y }
-
   let ( || ) x y = Binop { op = `Or; arg1 = x; arg2 = y }
-
   let not x = Unop { op = `Not; arg = x }
 
   let index tup idx =
@@ -197,20 +187,15 @@ module Ctx0 = struct
 end
 
 let int2fl x = Unop { op = `Int2Fl; arg = x }
-
 let date2int x = Unop { op = `Date2Int; arg = x }
 
 let check_type fail =
   let open Prim_type in
   object
     method is_int = function IntT _ -> () | _ -> fail ()
-
     method is_bool = function BoolT _ -> () | _ -> fail ()
-
     method is_date = function DateT _ -> () | _ -> fail ()
-
     method is_string = function StringT _ -> () | _ -> fail ()
-
     method is_fixed = function FixedT _ -> () | _ -> fail ()
   end
 
@@ -229,7 +214,7 @@ let rec type_of ctx e =
       | None ->
           Error.create "Type lookup failed." (x, ctx)
             [%sexp_of: string * t Hashtbl.M(String).t]
-          |> Error.raise )
+          |> Error.raise)
   | Tuple xs -> TupleT (List.map xs ~f:(fun e -> type_of ctx e))
   | Binop { op; arg1; arg2 } -> (
       let t1 = type_of ctx arg1 in
@@ -287,7 +272,7 @@ let rec type_of ctx e =
       | `StrPos ->
           c#is_string t1;
           c#is_string t2;
-          int_t )
+          int_t)
   | Unop { op; arg } -> (
       let t = type_of ctx arg in
       let fail () =
@@ -315,7 +300,7 @@ let rec type_of ctx e =
           bool_t
       | `ExtractM | `ExtractD | `ExtractY ->
           c#is_date t;
-          int_t )
+          int_t)
   | Slice (arg, _) -> (
       let t = type_of ctx arg in
       match t with
@@ -323,11 +308,11 @@ let rec type_of ctx e =
       | _ ->
           fail
             (Error.create "Type error." (e, t, ctx)
-               [%sexp_of: expr * t * t Hashtbl.M(String).t]) )
+               [%sexp_of: expr * t * t Hashtbl.M(String).t]))
   | Index (tup, idx) -> (
       match type_of ctx tup with
       | TupleT ts -> List.nth_exn ts idx
-      | t -> fail (Error.create "Expected a tuple." t [%sexp_of: t]) )
+      | t -> fail (Error.create "Expected a tuple." t [%sexp_of: t]))
   | Done _ -> BoolT { nullable = false }
   | Ternary (e1, e2, e3) -> (
       match type_of ctx e1 with
@@ -335,7 +320,7 @@ let rec type_of ctx e =
           let t1 = type_of ctx e2 in
           let t2 = type_of ctx e3 in
           unify t1 t2
-      | _ -> failwith "Unexpected conditional type." )
+      | _ -> failwith "Unexpected conditional type.")
   | TupleHash _ -> IntT { nullable = false }
   | Substr _ -> string_t
 
@@ -613,7 +598,6 @@ module Builder = struct
         |> Error.raise
 
   let build_gt x y b = Infix.(not (build_le x y b))
-
   let build_ge x y b = Infix.(not (build_lt x y b))
 
   let build_to_int x b =
@@ -690,7 +674,6 @@ module Builder = struct
     |> fun x -> Tuple x
 
   let build_printstr s b = build_print (String s) b
-
   let _ = build_printstr
 
   module Test = struct
@@ -737,7 +720,7 @@ module Ctx = struct
            | Global _ -> (
                match Map.add ~key ~data:var cctx with
                | `Duplicate -> (cctx, args)
-               | `Ok cctx -> (cctx, args) )
+               | `Ok cctx -> (cctx, args))
            | Arg _ | Field _ ->
                (* Pass caller arguments and fields in as arguments to the callee. *)
                let callee_var = Arg (List.length args) in

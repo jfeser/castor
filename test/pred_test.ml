@@ -17,7 +17,8 @@ let%expect_test "" =
          filter((n_name = k0), nation)),
        partsupp))))
 |}
-    [ Name.create "k0" ] "s0";
+    [ Name.create "k0" ]
+    "s0";
   [%expect
     {|
     (value >
@@ -132,7 +133,8 @@ let%expect_test "" =
      ((x0 = param3) || ((x0 = param4) || ((x0 = param5) || (x0 = param6)))))))|}
   in
   Fmt.pr "%a@." Fmt.Dump.(pair pp (list (pair Name.pp pp))) (cse p);
-  [%expect {|
+  [%expect
+    {|
     (((x0 = param0) ||
      ((x0 = param1) ||
      ((x0 = param2) ||

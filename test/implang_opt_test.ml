@@ -22,9 +22,7 @@ let run_test ?(params = []) layout_str opt_func =
       (fun m ->
         object
           method pos = m#pos
-
           method type_ = m#type_
-
           method resolved = m#meta#meta#meta#resolved
         end)
       layout
@@ -115,7 +113,7 @@ let%expect_test "example-1" =
     } |}]
 
 let%test_module _ =
-  ( module struct
+  (module struct
     open Abslayout_load
 
     let conn = Lazy.force Test_util.test_db_conn
@@ -124,7 +122,6 @@ let%test_module _ =
       Irgen.Make
         (struct
           let debug = false
-
           let code_only = true
         end)
         ()
@@ -138,9 +135,7 @@ let%test_module _ =
         |> map_meta (fun m ->
                object
                  method type_ = m#type_
-
                  method pos = None
-
                  method resolved = m#meta#meta#resolved
                end)
       in
@@ -240,4 +235,4 @@ let%test_module _ =
 
             }
         } |}]
-  end )
+  end)

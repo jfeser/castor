@@ -21,9 +21,7 @@ let run_test ?(params = []) ?(print_code = true) layout_str =
       (fun m ->
         object
           method pos = m#pos
-
           method type_ = m#type_
-
           method resolved = m#meta#meta#meta#resolved
         end)
       layout

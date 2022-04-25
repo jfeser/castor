@@ -1,3 +1,4 @@
+open Core
 open Ast
 module V = Visitors
 open Schema
@@ -6,7 +7,7 @@ module P = Pred.Infix
 
 [@@@warning "-17"]
 
-type scalar = (< >[@opaque]) annot pred [@@deriving sexp_of]
+type scalar = (< >[@sexp.opaque]) annot pred [@@deriving sexp]
 
 type ('q, 'm) node =
   | Empty
@@ -26,15 +27,10 @@ and ('q, 'm) t = { node : ('q, 'm) node; meta : 'm }
 [@@@warning "+17"]
 
 let empty c = { node = Empty; meta = c }
-
 let scalars c p = { node = Scalars p; meta = c }
-
 let concat c x = { node = Concat x; meta = c }
-
 let for_ c x = { node = For x; meta = c }
-
 let let_ c x = { node = Let x; meta = c }
-
 let var c x = { node = Var x; meta = c }
 
 (** A query is invariant in a set of scopes if it doesn't refer to any name in
@@ -43,7 +39,6 @@ let is_invariant ss q =
   let names_visitor =
     object
       inherit [_] V.reduce
-
       inherit [_] Util.conj_monoid
 
       method! visit_Name () n =
@@ -55,19 +50,14 @@ let is_invariant ss q =
   let visitor =
     object (self : 'self)
       inherit [_] reduce
-
       inherit [_] Util.conj_monoid
-
       method visit_'q () q = names_visitor#visit_t () q
-
       method visit_'m () _ = self#zero
-
       method visit_pred () p = names_visitor#visit_pred () p
 
       (* Vars are not invariant so we don't have to reason about hoisting above
          other let bindings. *)
       method! visit_Var () _ = false
-
       method! visit_Empty () = false
     end
   in
@@ -77,13 +67,9 @@ let hoist_invariant ss q =
   let visitor =
     object (self : 'self)
       inherit [_] mapreduce as super
-
       inherit [_] Util.list_monoid
-
       method visit_'m _ x = (x, self#zero)
-
       method visit_pred _ x = (x, self#zero)
-
       method visit_'q _ x = (x, self#zero)
 
       method! visit_For ss (r, s, q, x) =
@@ -103,11 +89,8 @@ let hoist_all q =
   let visitor =
     object (self : 'self)
       inherit [_] map as super
-
       method visit_pred _ x = x
-
       method visit_'q _ x = x
-
       method visit_'m _ x = x
 
       method! visit_t ss q =
@@ -117,8 +100,7 @@ let hoist_all q =
             let q', binds = hoist_invariant ss q' in
             match binds with
             | [] -> for_ q.meta (r, s, self#visit_t ss q', x)
-            | _ -> let_ None (binds, for_ q.meta (r, s, self#visit_t ss q', x))
-            )
+            | _ -> let_ None (binds, for_ q.meta (r, s, self#visit_t ss q', x)))
         | _ -> super#visit_t ss q
     end
   in
@@ -128,11 +110,8 @@ let to_width q =
   let visitor =
     object
       inherit [_] map
-
       method visit_'q () q = List.length (schema q)
-
       method visit_'m () x = x
-
       method visit_pred () x = x
     end
   in
@@ -182,7 +161,7 @@ let rec of_ralgebra : 'a. (< .. > as 'a) annot -> (< > annot, 'a annot) t =
   | ATuple (ts, _) -> (
       match to_scalars ts with
       | Some ps -> scalars q (List.map ~f:Pred.strip_meta ps)
-      | None -> concat q (List.map ~f:of_ralgebra ts) )
+      | None -> concat q (List.map ~f:of_ralgebra ts))
   | DepJoin { d_lhs = q1; d_rhs = q2; _ } | Join { r1 = q1; r2 = q2; _ } ->
       concat q [ of_ralgebra q1; of_ralgebra q2 ]
   | Select (_, q')
@@ -202,18 +181,14 @@ let map_meta ~f q =
   let visitor =
     object
       inherit [_] map
-
       method visit_'m () = f
-
       method visit_'q () x = x
-
       method visit_pred () x = x
     end
   in
   visitor#visit_t () q
 
 let wrap q = map_meta ~f:Option.some q
-
 let unwrap q = map_meta ~f:(fun m -> Option.value_exn m) q
 
 (** Convert a fold query into a ralgebra query that produces the stream that the

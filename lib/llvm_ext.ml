@@ -1,3 +1,5 @@
+open Core
+
 include (
   Llvm :
     module type of Llvm
@@ -6,7 +8,7 @@ include (
        and type llvalue = Llvm.llvalue
        and type llmodule = Llvm.llmodule
        and type llcontext = Llvm.llcontext
-       and type llmdkind = Llvm.llmdkind )
+       and type llmdkind = Llvm.llmdkind)
 
 module TypeKind = struct
   type t = Llvm.TypeKind.t =
@@ -31,7 +33,6 @@ module TypeKind = struct
 end
 
 let sexp_of_llvalue v = Sexp.Atom (string_of_llvalue v)
-
 let sexp_of_lltype v = Sexp.Atom (string_of_lltype v)
 
 let define_fresh_global ?(linkage = Linkage.Internal) v n m =
@@ -76,7 +77,7 @@ let build_extractvalue v i n b =
   if [%compare.equal: TypeKind.t] kind Struct then (
     if i >= Array.length (struct_element_types typ) then
       Error.create "Tuple index out of bounds." (v, i) [%sexp_of: llvalue * int]
-      |> Error.raise )
+      |> Error.raise)
   else
     Error.create "Expected a tuple." (v, kind, i)
       [%sexp_of: llvalue * TypeKind.t * int]

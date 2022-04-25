@@ -1,3 +1,4 @@
+open Core
 open Collections
 open Abslayout
 open Schema
@@ -289,7 +290,7 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
               extend
                 (List.fold_left ~init:c ~f:extend queries)
                 { empty with top_query = `Query name; queries = [ query ] }
-          | `Agg -> self#agg_select sel q )
+          | `Agg -> self#agg_select sel q)
       | GroupBy (sel, key, q) ->
           let kc = self#query (dedup (select (List.map ~f:P.name key) q)) in
           let filter_preds, pred_args =

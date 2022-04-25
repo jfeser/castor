@@ -1,10 +1,10 @@
+open Core
 open Ast
 open Abslayout_fold
 module V = Visitors
 open Collections
 module A = Abslayout
 module I = Abs_int
-
 include (val Log.make "castor.type")
 
 exception TypeError of Error.t [@@deriving sexp]
@@ -15,11 +15,8 @@ module AbsFixed = struct
   type t = { range : I.t; scale : int } [@@deriving compare, sexp]
 
   let of_fixed f = { range = I.of_int f.Fixed_point.value; scale = f.scale }
-
   let zero = of_fixed (Fixed_point.of_int 0)
-
   let bot = { range = I.bot; scale = 1 }
-
   let top = { range = I.top; scale = 1 }
 
   let rec unify dir f1 f2 =
@@ -31,7 +28,6 @@ module AbsFixed = struct
       { f2 with range = dir f2.range scaled_range }
 
   let meet = unify I.meet
-
   let join = unify I.join
 end
 
@@ -39,18 +35,14 @@ type int_ = { range : I.t; nullable : bool [@sexp.bool] }
 [@@deriving compare, sexp]
 
 type date = int_ [@@deriving compare, sexp]
-
 type bool_ = { nullable : bool [@sexp.bool] } [@@deriving compare, sexp]
 
 type string_ = { nchars : I.t; nullable : bool [@sexp.bool] }
 [@@deriving compare, sexp]
 
 type list_ = { count : I.t } [@@deriving compare, sexp]
-
 type tuple = { kind : [ `Cross | `Concat ] } [@@deriving compare, sexp]
-
 type hash_idx = { key_count : I.t } [@@deriving compare, sexp]
-
 type ordered_idx = { key_count : I.t } [@@deriving compare, sexp]
 
 type fixed = { value : AbsFixed.t; nullable : bool [@sexp.bool] }
@@ -167,13 +159,7 @@ let rec count = function
   | ListT (_, { count }) -> count
   | FuncT _ -> I.top
 
-let hash_kind_of_key_type c = function
-  | IntT { range = r; _ } | DateT { range = r; _ } -> (
-      match (c, r) with
-      | I.Interval (_, h_count), Interval (l_range, h_range) ->
-          if h_count / (h_range - l_range) < 5 then `Direct else `Cmph
-      | _ -> `Cmph )
-  | _ -> `Cmph
+let hash_kind_of_key_type _ _ = `Direct
 
 let hash_kind_exn = function
   | HashIdxT (kt, _, m) -> hash_kind_of_key_type m.key_count kt
@@ -215,7 +201,6 @@ let rec len =
   | NullT as t -> Error.create "Unexpected type." t [%sexp_of: t] |> Error.raise
 
 and oi_map_len kt vt m = I.(m.key_count * (len kt + of_int (oi_ptr_size vt m)))
-
 and oi_ptr_size vt m = I.(byte_width ~nullable:false (m.key_count * len vt))
 
 and hi_hash_len ?(bytes_per_key = I.of_int 1) kt m =
@@ -275,17 +260,11 @@ let least_general_of_layout r =
 class ['self] type_fold =
   object (_ : 'self)
     inherit [_] abslayout_fold
-
     method! select _ (exprs, _) t = FuncT ([ t ], `Width (List.length exprs))
-
     method join _ _ t1 t2 = FuncT ([ t1; t2 ], `Child_sum)
-
     method depjoin _ _ t1 t2 = FuncT ([ t1; t2 ], `Child_sum)
-
     method! filter _ _ t = FuncT ([ t ], `Child_sum)
-
     method! order_by _ _ t = FuncT ([ t ], `Child_sum)
-
     method! dedup _ t = FuncT ([ t ], `Child_sum)
 
     method! group_by _ (exprs, _, _) t =
@@ -381,7 +360,7 @@ let annotate r =
         | Unequal_lengths ->
             Error.create "Mismatched tuple type." (r, t)
               [%sexp_of: _ Ast.annot * t]
-            |> Error.raise )
+            |> Error.raise)
     | DepJoin { d_lhs; d_rhs; _ }, FuncT ([ t1; t2 ], _) ->
         annot d_lhs t1;
         annot d_rhs t2
@@ -398,13 +377,9 @@ let annotate r =
       (fun m ->
         object
           val mutable type_ = None
-
           method fold_stream = m#fold_stream
-
           method type_ = Option.value_exn type_
-
           method set_type t = type_ <- Some t
-
           method meta = m
         end)
       r
@@ -413,7 +388,6 @@ let annotate r =
   let visitor =
     object
       inherit [_] Visitors.runtime_subquery_visitor
-
       method visit_Subquery r = annot r @@ type_of r
     end
   in
@@ -422,9 +396,7 @@ let annotate r =
     (fun m ->
       object
         method type_ = m#type_
-
         method fold_stream = m#fold_stream
-
         method meta = m#meta
       end)
     r
@@ -451,11 +423,8 @@ module Parallel = struct
       Map.find ctx (Name.name @@ Option.value_exn (Pred.to_name p))
 
     let wrap p = As_pred (p, Fresh.name Global.fresh "x%d")
-
     let func_t t = { aggs = []; build = (fun _ ts -> FuncT (ts, t)) }
-
     let empty_t = { aggs = []; build = (fun _ _ -> EmptyT) }
-
     let null_t = { aggs = []; build = (fun _ _ -> NullT) }
 
     let eval_interval ~to_int ctx lo hi =
@@ -575,7 +544,6 @@ module Parallel = struct
       }
 
     and query q = V.Map.query annot pred q
-
     and pred p = V.Map.pred annot pred p
 
     let type_of ctx r =
@@ -750,9 +718,9 @@ module Parallel = struct
               info (fun m ->
                   m "Query succeeded after %a." Time.Span.pp total_time);
               return
-                ( List.hd_exn t
+                (List.hd_exn t
                 |> List.map2_exn (Schema.names r) ~f:(fun n v -> (n, v))
-                |> Option.return |> Result.return )
+                |> Option.return |> Result.return)
           | Some (Error { info = `Timeout; _ }) ->
               info (fun m ->
                   m "Query timed out after %a." Time.Span.pp total_time);

@@ -1,52 +1,25 @@
 (menhir
- (infer false)
  (modules ralgebra_parser))
 
 (ocamllex ralgebra_lexer)
 
 (menhir
- (infer false)
  (modules transform_parser))
 
 (ocamllex transform_lexer)
 
 (menhir
- (infer false)
  (modules cozy_parser))
 
 (ocamllex cozy_lexer)
 
 (library
  (public_name castor)
- (libraries
-   core
-   lwt
-   lwt.unix
-   postgresql
-   llvm
-   llvm.analysis
-   llvm.target
-   llvm.all_backends
-   logs
-   cmph
-   visitors.runtime
-   hashcons
-   fmt
-   fmt.tty
-   genhash
-   core.bigstring_unix
- )
- (flags :standard -open Core -w -9)
+ (libraries core core.bigstring_unix lwt lwt.unix postgresql llvm
+   llvm.analysis llvm.target llvm.all_backends logs visitors.runtime hashcons
+   fmt fmt.tty genhash)
+ (flags :standard -w -9)
  (inline_tests)
  (preprocess
-  (pps
-    ppx_sexp_conv
-    ppx_compare
-    ppx_hash
-    ppx_expect
-    ppx_let
-    visitors.ppx
-    ppx_variants_conv
-    lwt_ppx
- ))
-)
+  (pps ppx_sexp_conv ppx_compare ppx_hash ppx_expect ppx_let visitors.ppx
+    ppx_variants_conv lwt_ppx)))

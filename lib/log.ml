@@ -1,3 +1,5 @@
+open Core
+
 let src = Logs.Src.create ~doc:"Main logging source for Castor." "castor"
 
 let format_reporter ppf =
@@ -75,12 +77,11 @@ module type LOG = sig
   include Logs.LOG
 
   val src : Logs.Src.t
-
   val param : unit Command.Param.t
 end
 
 let make ?(level = Some Logs.Info) name =
-  ( module struct
+  (module struct
     let src =
       let s = Logs.Src.create name in
       Logs.Src.set_level s level;
@@ -97,4 +98,4 @@ let make ?(level = Some Logs.Info) name =
         Option.iter level ~f:(Logs.Src.set_level src)]
 
     include (val Logs.src_log src)
-  end : LOG )
+  end : LOG)

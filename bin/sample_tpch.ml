@@ -18,7 +18,8 @@ let main ?(seed = 0) ~db_in ~db_out ~sample () =
   exec conn ~params:[ Int.to_string seed ] "set seed to $0";
   Logs.info (fun m -> m "Sampling %d tuples from lineitem." sample);
   exec conn "alter table lineitem rename to old_lineitem";
-  exec conn ~params:[ Int.to_string sample ]
+  exec conn
+    ~params:[ Int.to_string sample ]
     "create table lineitem as (select * from old_lineitem order by random() \
      limit $0)";
   exec conn "drop table old_lineitem cascade";

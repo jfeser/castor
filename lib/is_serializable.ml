@@ -1,3 +1,4 @@
+open Core
 open Ast
 module V = Visitors
 module A = Abslayout
@@ -46,7 +47,7 @@ let stage ?(params = Set.empty (module Name)) r =
         | DepJoin { d_alias; _ } -> (
             match stage with
             | `Compile -> (single d_alias, empty)
-            | `Run -> (empty, single d_alias) )
+            | `Run -> (empty, single d_alias))
         | _ -> zero
       and rest = V.Stage_reduce.query zero plus annot pred stage q in
       plus this rest
@@ -71,7 +72,6 @@ let annotate_stage r =
     and meta =
       object
         method meta = r.meta
-
         method stage = stage
       end
     in
@@ -139,18 +139,14 @@ let is_serializeable ?(path = Path.root) ?params r =
 class ['a] ops_spine_serializable_visitor =
   object
     inherit ['a] ops_serializable_visitor
-
     method! visit_Exists _ _ = ()
-
     method! visit_First _ _ = ()
   end
 
 class ['a] names_spine_serializable_visitor stage =
   object
     inherit ['a] names_serializable_visitor stage
-
     method! visit_Exists _ _ = ()
-
     method! visit_First _ _ = ()
   end
 

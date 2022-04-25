@@ -5,7 +5,10 @@ open Parser_utils
 
 module A = Ast
 
-let keyword_tbl = Hashtbl.of_alist_exn (module String) [
+
+let keyword_tbl =
+let open Core in
+Hashtbl.of_alist_exn (module String) [
 "query", QUERY;
 "select", SELECT;
 "dedup", DEDUP;
@@ -90,17 +93,20 @@ rule token = parse
   | "*"        { MUL A.Binop.Mul }
   | "/"        { DIV A.Binop.Div }
   | "%"        { MOD A.Binop.Mod }
-  | int as x   { INT (Int.of_string x) }
+  | int as x   { INT (Core.Int.of_string x) }
   | fixed as x { FIXED (Fixed_point.of_string x) }
   | '"'        { STR (string (Buffer.create 10) lexbuf) }
   | '#'        { comment lexbuf }
   | id as x    {
+      let open Core in
       match Hashtbl.find keyword_tbl (String.lowercase x) with
         | Some t -> t
         | None -> ID x
     }
   | eof        { EOF }
-  | _          { lex_error lexbuf (sprintf "unexpected character '%c'"
+  | _          {
+let open Core in
+lex_error lexbuf (sprintf "unexpected character '%c'"
                                      (Lexing.lexeme_char lexbuf
                                         (Lexing.lexeme_start lexbuf)) ) }
 and comment = parse
@@ -120,6 +126,8 @@ and string buf = parse
   | '\\' { Buffer.add_char buf '\\'; string buf lexbuf }
   | '"' { Buffer.contents buf }
   | eof { lex_error lexbuf "eof in string literal" }
-  | _ { lex_error lexbuf (sprintf "unexpected character '%c'"
+  | _ {
+let open Core in
+lex_error lexbuf (sprintf "unexpected character '%c'"
                                      (Lexing.lexeme_char lexbuf
                                         (Lexing.lexeme_start lexbuf)) ) }

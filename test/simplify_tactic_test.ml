@@ -3,19 +3,16 @@ open Simplify_tactic
 
 module Config = struct
   let conn = Db.create "postgresql:///tpch_1k"
-
   let params = Set.empty (module Name)
-
   let param_ctx = Map.empty (module Name)
-
   let validate = false
-
   let simplify = None
 end
 
-open Make (Config)
-
-open Ops.Make (Config)
+module S = Make (Config)
+open S
+module O = Ops.Make (Config)
+open O
 
 let load_string ?params s = Abslayout_load.load_string_exn ?params Config.conn s
 

@@ -11,9 +11,7 @@ let main ~debug ~gprof ~params ~code_only ~query ~enable_redshift_dates ?out_dir
       m "Command: %a" Fmt.(array ~sep:sp string) (Sys.get_argv ()));
   let module Config = struct
     let conn = Db.create (Sys.getenv_exn "CASTOR_DB")
-
     let debug = debug
-
     let code_only = code_only
   end in
   let layout_file =
@@ -68,9 +66,7 @@ let main ~debug ~gprof ~params ~code_only ~query ~enable_redshift_dates ?out_dir
       (fun m ->
         object
           method fold_stream = m#fold_stream
-
           method resolved = m#meta#meta#resolved
-
           method type_ = m#type_
         end)
       ralgebra

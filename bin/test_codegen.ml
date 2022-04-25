@@ -53,9 +53,7 @@ let main () =
         open Llvm
 
         let ctx = global_context ()
-
         let module_ = module_
-
         let builder = builder ctx
       end)
       ()

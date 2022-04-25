@@ -1,3 +1,4 @@
+open Core
 open Ast
 
 let pp_option pp fmt =
@@ -85,7 +86,7 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
         | `Infix str ->
             fprintf fmt "@[<hov>(%a@ %s@ %a)@]" pp_pred p1 str pp_pred p2
         | `Prefix str ->
-            fprintf fmt "@[<hov>%s(%a,@ %a)@]" str pp_pred p1 pp_pred p2 )
+            fprintf fmt "@[<hov>%s(%a,@ %a)@]" str pp_pred p1 pp_pred p2)
     | Row_number -> fprintf fmt "row_number()"
     | Count -> fprintf fmt "count()"
     | Sum n -> fprintf fmt "sum(%a)" pp_pred n
@@ -112,7 +113,7 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
   and pp fmt { node; meta } =
     fprintf fmt "@[<hv 2>";
     Option.iter pp_meta ~f:(fun ppm -> fprintf fmt "@[<hv 2>%a@]#@," ppm meta);
-    ( match node with
+    (match node with
     | Select (ps, r) -> fprintf fmt "select(%a,@ %a)" (pp_list pp_pred) ps pp r
     | Filter (p, r) -> fprintf fmt "filter(%a,@ %a)" pp_pred p pp r
     | DepJoin { d_lhs; d_alias; d_rhs } ->
@@ -142,7 +143,7 @@ let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
           (pp_list ~bracket:("", "") (fun fmt (lb, ub) ->
                fprintf fmt "%a, %a" (pp_option pp_lower_bound) lb
                  (pp_option pp_upper_bound) ub))
-          oi_lookup );
+          oi_lookup);
     fprintf fmt "@]"
   in
   (pp, pp_pred)

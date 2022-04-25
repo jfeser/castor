@@ -29,11 +29,8 @@ let run_candidate :
   Logs.info (fun m -> m "Benchmarking %s." (Ralgebra.to_string ralgebra));
   let module CConfig = struct
     let debug = debug
-
     let ctx = Llvm.create_context ()
-
     let module_ = Llvm.create_module ctx "scanner"
-
     let builder = Llvm.builder ctx
   end in
   let module Codegen = Codegen.Make (CConfig) () in
@@ -105,8 +102,7 @@ let run_candidate :
          scanner.ll > scanner-opt.ll";
       ];
     command_exn
-      ((clang :: cflags) @ [ "scanner-opt.ll"; "main.c"; "-o"; "scanner.exe" ])
-    );
+      ((clang :: cflags) @ [ "scanner-opt.ll"; "main.c"; "-o"; "scanner.exe" ]));
   Llvm.dispose_module CConfig.module_;
   Llvm.dispose_context CConfig.ctx;
 
@@ -130,7 +126,7 @@ let run_candidate :
       > 0
     in
     if outputs_differ then Logs.err (fun m -> m "Outputs differ.");
-    (runs_per_sec, db_size, exe_size, scanner_crashed || outputs_differ) )
+    (runs_per_sec, db_size, exe_size, scanner_crashed || outputs_differ))
   else (0.0, 0L, 0L, false)
 
 let benchmark : ?sample:int -> db:string -> Bench.t -> unit =
@@ -148,18 +144,17 @@ let benchmark : ?sample:int -> db:string -> Bench.t -> unit =
   in
   let module Config = struct
     let conn = new connection ~dbname:db ()
-
     let testctx = Layout.PredCtx.of_vars test_params
   end in
   let module Transform = Transform.Make (Config) in
   let ralgebra = Ralgebra.of_string_exn query |> Ralgebra.resolve Config.conn in
   (* If we need to sample, generate sample tables and swap them in the
        expression. *)
-  ( match sample with
+  (match sample with
   | Some s ->
       Ralgebra.relations ralgebra
       |> List.iter ~f:(Db.Relation.sample Config.conn s)
-  | None -> () );
+  | None -> ());
 
   (* Create sqlite for results. *)
   let result_db = Sqlite3.db_open "results.sqlite" in
@@ -227,18 +222,17 @@ let main :
  fun ?transforms ?dir ?sample ~debug ~gprof ~params ~db ~ralgebra ->
   let module Config = struct
     let conn = new connection ~dbname:db ()
-
     let testctx = Layout.PredCtx.of_vars params
   end in
   let module Transform = Transform.Make (Config) in
   let ralgebra = Ralgebra.resolve Config.conn ralgebra in
   (* If we need to sample, generate sample tables and swap them in the
        expression. *)
-  ( match sample with
+  (match sample with
   | Some s ->
       Ralgebra.relations ralgebra
       |> List.iter ~f:(Db.Relation.sample Config.conn s)
-  | None -> () );
+  | None -> ());
   let candidates =
     match transforms with
     | Some tfs ->

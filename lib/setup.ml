@@ -3,7 +3,6 @@ let make_modules ?(irgen_debug = false) ?(code_only = false) () =
     Irgen.Make
       (struct
         let code_only = code_only
-
         let debug = irgen_debug
       end)
       ()

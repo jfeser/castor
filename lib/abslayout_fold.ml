@@ -1,9 +1,9 @@
+open Core
 open Ast
 open Collections
 module V = Visitors
 module A = Abslayout
 module Q = Fold_query
-
 include (val Log.make "castor.abslayout-fold")
 
 module Fold = struct
@@ -37,7 +37,6 @@ let two_arg_fold f =
   Fold.Fold { init; fold; extract }
 
 let group_by eq x = Seq.group ~break:(fun x x' -> not (eq x x')) x
-
 let repeat n x = Seq.take (Seq.repeat x) n
 
 let view ~f s =
@@ -115,11 +114,8 @@ module Data = struct
         (fun m ->
           object
             val mutable fold_stream = None
-
             method fold_stream = Option.value_exn fold_stream
-
             method set_fold_stream t = fold_stream <- Some t
-
             method meta = m
           end)
         r
@@ -150,31 +146,18 @@ end
 class virtual ['self] abslayout_fold =
   object (self : 'self)
     method virtual list : _
-
     method virtual hash_idx : _
-
     method virtual ordered_idx : _
-
     method virtual tuple : _
-
     method virtual empty : _
-
     method virtual scalar : _
-
     method select _ _ x = x
-
     method filter _ _ x = x
-
     method virtual depjoin : _
-
     method order_by _ _ x = x
-
     method group_by _ _ x = x
-
     method dedup _ x = x
-
     method virtual join : _
-
     method private debug = false
 
     method private func a =
@@ -457,17 +440,13 @@ class ['self] print_fold =
       Fold.Fold { init = [ kind ]; fold; extract }
 
     method hash_idx _ _ = self#collection "HashIdx"
-
     method ordered_idx _ _ = self#collection "OrderedIdx"
-
     method tuple _ _ = Fold.Fold { init = [ "Tuple" ]; fold = ( @ ); extract }
-
     method empty _ = [ "Empty" ]
 
     method scalar _ _ v =
       [ sprintf "Scalar: %s" ([%sexp_of: Value.t] v |> Sexp.to_string_hum) ]
 
     method depjoin _ _ = ( @ )
-
     method join _ _ = ( @ )
   end

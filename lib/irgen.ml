@@ -1,3 +1,4 @@
+open Core
 open Ast
 open Collections
 open Implang
@@ -18,7 +19,6 @@ exception IRGenError of Error.t [@@deriving sexp]
 module Config = struct
   module type S = sig
     val debug : bool
-
     val code_only : bool
   end
 end
@@ -35,11 +35,8 @@ end
 
 module Make (Config : Config.S) () = struct
   let iters = ref []
-
   let schema = Schema.schema_full
-
   let types = Schema_types.types_full
-
   let add_iter i = iters := i :: !iters
 
   let debug_print msg v b =
@@ -203,7 +200,7 @@ module Make (Config : Config.S) () = struct
         | Strlen -> Unop { op = `StrLen; arg = x }
         | ExtractY -> Unop { op = `ExtractY; arg = x }
         | ExtractM -> Unop { op = `ExtractM; arg = x }
-        | ExtractD -> Unop { op = `ExtractD; arg = x } )
+        | ExtractD -> Unop { op = `ExtractD; arg = x })
     | Bool x -> Bool x
     | As_pred (x, _) -> gen x b
     | Name n -> (
@@ -211,7 +208,7 @@ module Make (Config : Config.S) () = struct
         | Some e -> e
         | None ->
             Error.create "Unbound variable." (n, ctx) [%sexp_of: Name.t * Ctx.t]
-            |> Error.raise )
+            |> Error.raise)
     (* Special cases for date intervals. *)
     | Binop (Add, arg1, Unop (Year, arg2)) ->
         Binop { op = `AddY; arg1 = gen arg1 b; arg2 = gen arg2 b }
@@ -244,7 +241,7 @@ module Make (Config : Config.S) () = struct
         | Mul -> build_mul e1 e2 b
         | Div -> build_div e1 e2 b
         | Mod -> Infix.(e1 % e2)
-        | Strpos -> Binop { op = `StrPos; arg1 = e1; arg2 = e2 } )
+        | Strpos -> Binop { op = `StrPos; arg1 = e1; arg2 = e2 })
     | (Count | Min _ | Max _ | Sum _ | Avg _ | Row_number) as p ->
         Error.create "Not a scalar predicate." p [%sexp_of: _ pred]
         |> Error.raise
@@ -476,9 +473,7 @@ module Make (Config : Config.S) () = struct
              let msg = "Tried to get metadata from key layout" in
              object
                method pos = None
-
                method type_ = failwith (msg ^ ": type_")
-
                method resolved = assert false
              end)
     in
@@ -514,8 +509,6 @@ module Make (Config : Config.S) () = struct
         | `Direct, _ -> failwith "Unexpected direct hash."
         | `Universal, [ x ] -> universal_hash hash_data_start x
         | `Universal, _ -> failwith "Unexpected universal hash."
-        | `Cmph, [ x ] -> build_hash hash_data_start x b
-        | `Cmph, xs -> build_hash hash_data_start (Tuple xs) b
       in
       let hash_func_var =
         build_var ~persistent:false "hash" Prim_type.int_t b

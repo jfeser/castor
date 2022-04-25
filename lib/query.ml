@@ -1,3 +1,4 @@
+open Core
 open Ast
 module A = Abslayout
 module P = Pred.Infix
@@ -14,7 +15,6 @@ type error = [ `Parse_error of string * int * int ] [@@deriving sexp]
 (* let () = Log.err (fun m -> m "Parse error: %s (line: %d, col: %d)" msg line col) *)
 
 let pp_arg fmt (n, t) = Fmt.pf fmt "%s: %a" n Prim_type.pp t
-
 let pp_args = Fmt.(list ~sep:comma pp_arg)
 
 let pp fmt q =
@@ -27,7 +27,6 @@ let of_lexbuf lexbuf =
     Error (`Parse_error (msg, line, col))
 
 let of_channel ch = of_lexbuf (Lexing.from_channel ch)
-
 let of_string s = of_lexbuf (Lexing.from_string s)
 
 let annotate conn q =
@@ -37,8 +36,8 @@ let annotate conn q =
       Abslayout_load.annotate_relations conn q.body
       |> Resolve.resolve_exn
            ~params:
-             ( List.map q.args ~f:(fun (n, t) -> Name.create n ~type_:t)
-             |> Set.of_list (module Name) );
+             (List.map q.args ~f:(fun (n, t) -> Name.create n ~type_:t)
+             |> Set.of_list (module Name));
   }
 
 let of_many conn qs =

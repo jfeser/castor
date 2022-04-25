@@ -1,3 +1,4 @@
+open Core
 open Ast
 open Prim_type
 
@@ -7,9 +8,7 @@ type opt_t = (string option * Prim_type.t option) list
 [@@deriving compare, sexp]
 
 let pp = Fmt.Dump.list Name.pp
-
 let scoped s = List.map ~f:(Name.scoped s)
-
 let unscoped = List.map ~f:Name.unscoped
 
 let to_name = function
@@ -42,7 +41,7 @@ let to_type_open schema to_type = function
       match schema r with
       | [ n ] -> Name.type_exn n
       | [] -> failwith "Unexpected empty schema."
-      | _ -> failwith "Too many fields." )
+      | _ -> failwith "Too many fields.")
 
 let schema_open_opt schema r : (string option * _ option) list =
   let rec to_type p =
@@ -119,8 +118,8 @@ let schema_open schema r =
       let schema_r1 =
         List.filter (schema r1) ~f:(fun n ->
             not
-              ( List.mem ~equal:[%compare.equal: Name.t] schema_r2
-              @@ Name.unscoped n ))
+              (List.mem ~equal:[%compare.equal: Name.t] schema_r2
+              @@ Name.unscoped n))
       in
       schema_r1 @ schema_r2 |> unscoped
   | AEmpty -> []
@@ -143,9 +142,7 @@ let schema_open_full schema r =
   | _ -> schema_open schema r
 
 let rec schema r = schema_open schema r
-
 let rec schema_full r = schema_open_full schema_full r
-
 let names r = schema r |> List.map ~f:Name.name
 
 let to_type q =
@@ -157,5 +154,4 @@ let to_type q =
     |> Error.raise
 
 let to_type_opt q = Or_error.try_with (fun () -> to_type q)
-
 let to_select_list s = List.map s ~f:(fun n -> Name n)

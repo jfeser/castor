@@ -1,19 +1,16 @@
+open Core
 include Ast
 include Comparator.Make (Ast)
 include Abslayout_pp
 module V = Visitors
-
 module O : Comparable.Infix with type t := Ast.t = Comparable.Make (Ast)
-
 open Schema
 
 let scopes r =
   let visitor =
     object
       inherit [_] V.reduce
-
       inherit [_] Util.set_monoid (module String)
-
       method! visit_scope () s = Set.singleton (module String) s
     end
   in
@@ -90,15 +87,10 @@ let filter a b =
       |> Error.raise
 
 let group_by a b c = wrap (GroupBy (a, b, strip_meta c))
-
 let dedup a = wrap (Dedup (strip_meta a))
-
 let order_by a b = wrap (OrderBy { key = a; rel = strip_meta b })
-
 let relation r = wrap (Relation r)
-
 let empty = wrap AEmpty
-
 let scalar a = wrap (AScalar a)
 
 let list a b c =
@@ -183,11 +175,8 @@ let of_lexbuf lexbuf =
     Error (`Parse_error (msg, line, col))
 
 let of_channel ch = of_lexbuf (Lexing.from_channel ch)
-
 let of_channel_exn x = of_channel x |> ok_exn
-
 let of_string s = of_lexbuf (Lexing.from_string s)
-
 let of_string_exn x = of_string x |> ok_exn
 
 let name_of_lexbuf lexbuf =
@@ -196,9 +185,7 @@ let name_of_lexbuf lexbuf =
     Error (`Parse_error (msg, line, col))
 
 let name_of_string s = name_of_lexbuf (Lexing.from_string s)
-
 let name_of_string_exn s = name_of_string s |> ok_exn
-
 let names r = (new V.names_visitor)#visit_t () r
 
 let subst ctx =
@@ -312,9 +299,7 @@ let aliases =
   let visitor =
     object (self : 'a)
       inherit [_] V.reduce
-
       method zero = Map.empty (module Name)
-
       method one k v = Map.singleton (module Name) k v
 
       method plus =
@@ -325,7 +310,6 @@ let aliases =
               else failwith "Multiple relations with same alias")
 
       method! visit_Exists () _ = self#zero
-
       method! visit_First () _ = self#zero
 
       method! visit_Select () (ps, r) =
@@ -344,9 +328,7 @@ let relations =
   let visitor =
     object
       inherit [_] V.reduce
-
       inherit [_] Util.set_monoid (module Relation)
-
       method! visit_Relation () r = Set.singleton (module Relation) r
     end
   in
@@ -359,7 +341,7 @@ let h_key_layout { hi_key_layout; hi_keys; _ } =
       match List.map (schema hi_keys) ~f:(fun n -> scalar (Name n)) with
       | [] -> failwith "empty schema"
       | [ x ] -> x
-      | xs -> tuple xs Cross )
+      | xs -> tuple xs Cross)
 
 let o_key_layout (oi_keys, _, { oi_key_layout; _ }) =
   match oi_key_layout with
@@ -368,4 +350,4 @@ let o_key_layout (oi_keys, _, { oi_key_layout; _ }) =
       match List.map (schema oi_keys) ~f:(fun n -> scalar (Name n)) with
       | [] -> failwith "empty schema"
       | [ x ] -> x
-      | xs -> tuple xs Cross )
+      | xs -> tuple xs Cross)

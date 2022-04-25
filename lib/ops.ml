@@ -1,8 +1,8 @@
+open Core
 open Printf
 open Collections
 open Ast
 module A = Abslayout
-
 include (val Log.make ~level:(Some Warning) "castor.ops")
 
 (** Enables transform tracing. *)
@@ -32,7 +32,6 @@ let param =
 module Config = struct
   module type S = sig
     val conn : Db.t
-
     val params : Set.M(Name).t
   end
 end
@@ -96,27 +95,21 @@ module Make (C : Config.S) = struct
   include T
 
   type ('r, 'p) path_set = 'r -> 'p Seq.t
-
   type ('r, 'p) path_filter = 'r -> 'p -> bool
-
   type ('r, 'p) path_selector = ('r, 'p) path_set -> 'r -> 'p option
 
   let overlaps s1 s2 = not (Set.inter s1 s2 |> Set.is_empty)
-
   let ( >> ) s f r = s r |> Seq.filter_map ~f:(f r)
 
   let ( >>? ) (s : ('r, 'p) path_set) (f : ('r, 'p) path_filter) r =
     s r |> Seq.filter ~f:(fun p -> f r p)
 
   let ( >>| ) (s : ('r, 'p) path_set) (f : ('r, 'p) path_selector) = f s
-
   let ( >>= ) p f r = Option.bind (p r) ~f:(f r)
 
   module Infix = struct
     let ( && ) f1 f2 r p = f1 r p && f2 r p
-
     let ( || ) f1 f2 r p = f1 r p || f2 r p
-
     let not f r p = not (f r p)
   end
 
@@ -164,9 +157,7 @@ module Make (C : Config.S) = struct
     Path.(is_hash_idx r p || is_ordered_idx r p || is_list r p || is_tuple r p)
 
   let child i _ = Some (Path.child Path.root i)
-
   let child' i _ p = Some (Path.child p i)
-
   let parent _ p = Path.parent p
 
   let rec apply tf p r =
@@ -236,7 +227,6 @@ module Make (C : Config.S) = struct
       (sprintf "until'(%s)" tf.name)
 
   let for_all tf pset = fix (first tf pset)
-
   let for_all' tf pset = fix' (first tf pset)
 
   let for_all_disjoint tf pset =
@@ -250,9 +240,8 @@ module Make (C : Config.S) = struct
       let rec remove_prefixes = function
         | p :: ps ->
             p
-            ::
-            (List.filter ps ~f:(fun p' -> not (Path.is_prefix ~prefix:p p'))
-            |> remove_prefixes)
+            :: (List.filter ps ~f:(fun p' -> not (Path.is_prefix ~prefix:p p'))
+               |> remove_prefixes)
         | [] -> []
       in
       let pset = remove_prefixes pset in
@@ -302,7 +291,6 @@ module Make (C : Config.S) = struct
     | t :: ts -> seq' t (seq_many' ts)
 
   let id = local (fun r -> Some r) "id"
-
   let prep r = Abslayout_load.annotate conn r
 
   let schema_validated tf =
@@ -399,9 +387,7 @@ module Make (C : Config.S) = struct
       }
 
     let ( *> ) x y = global (fun r -> y (x r)) ""
-
     let apply tf p r = tf.b_f p r
-
     let name tf = tf.b_name
 
     let local ~name b_f =

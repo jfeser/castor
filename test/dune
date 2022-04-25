@@ -1,15 +1,7 @@
 (library
  (public_name castor_test)
- (libraries
-   castor
-   str
-   core
- )
+ (libraries castor str core)
  (flags -open Core -open Castor)
  (inline_tests)
  (preprocess
-  (pps
-    ppx_sexp_conv
-    ppx_compare
-    ppx_expect
-)))
+  (pps ppx_sexp_conv ppx_compare ppx_expect)))

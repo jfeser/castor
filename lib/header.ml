@@ -1,3 +1,5 @@
+open Core
+
 module Field = struct
   type t = {
     name : string;
@@ -51,7 +53,7 @@ let rec make_position' hdr name start =
               name start
         | `Variable -> failwith "Cannot read field."
         | `Empty _ ->
-            make_position' (prev_hdr @ [ f ], ptr, next_hdr) name start )
+            make_position' (prev_hdr @ [ f ], ptr, next_hdr) name start)
 
 and make_position hdr name start = make_position' ([], start, hdr) name start
 

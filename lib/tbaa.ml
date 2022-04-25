@@ -1,3 +1,4 @@
+open Core
 open Llvm
 
 module TypeDesc = struct

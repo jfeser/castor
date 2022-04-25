@@ -3,7 +3,9 @@
 open Cozy_parser
 open Parser_utils
 
-let keyword_tbl = Hashtbl.of_alist_exn (module String) [
+let keyword_tbl =
+  let open Core in
+  Hashtbl.of_alist_exn (module String) [
     "filter", FILTER;
     "map", MAP;
     "flatmap", FLATMAP;
@@ -47,12 +49,16 @@ rule token = parse
   | "-"        { BINOP `Sub }
   | "*"        { BINOP `Mul }
   | "/"        { BINOP `Div }
-  | int as x   { INT (Int.of_string x) }
+  | int as x   { INT (Core.Int.of_string x) }
   | id as x    {
+      let open Core in
       match Hashtbl.find keyword_tbl (String.lowercase x) with
         | Some t -> t
         | None -> ID x
     }
   | eof        { EOF }
-  | _          { lex_error lexbuf (sprintf "unexpected character '%s'"
-                                     (Lexing.lexeme lexbuf) ) }
+  | _          {
+      let open Core in  
+      lex_error lexbuf (sprintf "unexpected character '%s'"
+                          (Lexing.lexeme lexbuf) ) 
+      }

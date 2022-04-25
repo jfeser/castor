@@ -1,9 +1,9 @@
+open Core
 open Ast
 open Abslayout
 open Collections
 
 type elem = int [@@deriving compare, sexp]
-
 type t = elem list [@@deriving compare, sexp]
 
 let ( @ ) = ( @ )
@@ -24,9 +24,7 @@ let%expect_test "" =
   [%expect {| (() (0) (1) (1 0)) |}]
 
 let root = []
-
 let length = List.length
-
 let is_prefix = List.is_prefix ~equal:[%compare.equal: int]
 
 let rec set_exn p r s =
@@ -261,7 +259,7 @@ let is_select r p =
 
 let is_agg_select r p =
   match (get_exn p r).node with
-  | Select (ps, _) -> ( match select_kind ps with `Agg -> true | _ -> false )
+  | Select (ps, _) -> ( match select_kind ps with `Agg -> true | _ -> false)
   | _ -> false
 
 let is_hash_idx r p =
@@ -274,7 +272,6 @@ let is_scalar r p =
   match (get_exn p r).node with AScalar _ -> true | _ -> false
 
 let is_list r p = match (get_exn p r).node with AList _ -> true | _ -> false
-
 let is_tuple r p = match (get_exn p r).node with ATuple _ -> true | _ -> false
 
 let is_depjoin r p =

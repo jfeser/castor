@@ -1,3 +1,4 @@
+open Core
 open Ast
 module V = Visitors
 module A = Abslayout
@@ -15,7 +16,6 @@ module Bool_exp = struct
     else { v = true; why = `And (w1, w2) }
 
   let t x = { v = true; why = x }
-
   let f x = { v = false; why = x }
 end
 
@@ -24,9 +24,7 @@ let rec pred_card_matters =
   function
   | Count | Sum _ | Avg _ -> t `Counting_agg
   | p ->
-      V.Reduce.pred
-        (f `No_counting_agg)
-        ( || )
+      V.Reduce.pred (f `No_counting_agg) ( || )
         (fun _ -> f `Meta)
         pred_card_matters p
 
@@ -53,9 +51,7 @@ let rec annot c r =
   let meta =
     object
       method cardinality_matters = c.Bool_exp.v
-
       method why_card_matters = explanation c.why
-
       method meta = r.meta
     end
   in
@@ -70,7 +66,7 @@ and query c =
   | Select (ps, r) -> (
       match A.select_kind ps with
       | `Scalar -> Select (List.map ~f:pred ps, annot c r)
-      | `Agg -> Select (List.map ~f:pred ps, annot (select_card_matters ps) r) )
+      | `Agg -> Select (List.map ~f:pred ps, annot (select_card_matters ps) r))
   | AHashIdx ({ hi_keys; hi_values; hi_key_layout; hi_lookup; _ } as h) ->
       AHashIdx
         {
@@ -120,7 +116,7 @@ and query = function
   | AEmpty -> I.of_int 0
   | AScalar _ -> I.of_int 1
   | Select (ps, r) -> (
-      match A.select_kind ps with `Scalar -> annot r | `Agg -> I.top )
+      match A.select_kind ps with `Scalar -> annot r | `Agg -> I.top)
   | Dedup r
   | Filter (_, r)
   | AHashIdx { hi_values = r }

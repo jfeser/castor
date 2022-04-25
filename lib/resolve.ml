@@ -1,3 +1,4 @@
+open Core
 open Ast
 module V = Visitors
 module A = Abslayout
@@ -33,14 +34,12 @@ let pp_err f fmt = function
   | x -> f fmt x
 
 exception Inner_resolve_error of inner_error [@@deriving sexp]
-
 exception Resolve_error of error [@@deriving sexp]
 
 module Flag : sig
   type t [@@deriving sexp]
 
   val of_bool : bool -> t
-
   val bool_of : t -> bool
 
   val all : t list -> t
@@ -51,7 +50,6 @@ end = struct
   type t = { this : bool ref; deps : t list } [@@deriving sexp]
 
   let of_bool x = { this = ref x; deps = [] }
-
   let bool_of x = !(x.this)
 
   let rec set x =
@@ -117,7 +115,7 @@ module Ctx = struct
         ~f:(fun r ->
           if List.mem c2 ~equal:[%compare.equal: row] r then (
             Log.warn (fun m -> m "Shadowing of %a." N.pp r.rname);
-            false )
+            false)
           else true)
     in
     of_list (c1 @ c2)
@@ -137,7 +135,7 @@ module Ctx = struct
                Log.warn (fun m ->
                    m "Name does not appear in all concat fields: %a" N.pp
                      r.rname);
-               false )))
+               false)))
     |> List.map ~f:(List.sort ~compare:[%compare: row])
     |> List.transpose_exn
     |> List.map
@@ -334,9 +332,7 @@ let rec resolve stage outer_ctx r =
   let meta =
     object
       method outer = outer_ctx
-
       method inner = ctx
-
       method meta = r.meta
     end
   in
@@ -356,7 +352,6 @@ let stage =
           merge (Ctx.to_stage_map r.meta#outer) (Ctx.to_stage_map r.meta#inner)
 
         method inner = r.meta#inner
-
         method meta = r.meta#meta
       end
     in
@@ -370,11 +365,8 @@ let refs =
     let meta =
       object
         method stage = r.meta#stage
-
         method refs = Ctx.refs r.meta#inner
-
         method resolved = ()
-
         method meta = r.meta#meta
       end
     in

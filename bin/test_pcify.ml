@@ -62,7 +62,7 @@ let main () =
     @ Implang.Infix.
         [
           loop (int 40)
-            ( pprog.body
+            (pprog.body
             @ Implang.Infix.
                 [
                   ite (Var pprog.is_yield_var)
@@ -70,7 +70,7 @@ let main () =
                       Yield (Var pprog.yield_val_var); pprog.is_yield_var := fls;
                     ]
                     [];
-                ] );
+                ]);
         ]
   in
   Implang.pp_prog Format.std_formatter nprog;

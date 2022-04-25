@@ -1,8 +1,8 @@
+open Core
 open Ast
 module V = Visitors
 module A = Abslayout
 module P = Pred.Infix
-
 include (val Log.make "castor.unnest")
 
 let default_meta =
@@ -11,7 +11,6 @@ let default_meta =
   end
 
 module Q = Constructors.Query
-
 module C = (val Constructors.Annot.with_strip_meta (fun () -> default_meta))
 
 (** In this module, we assume that dep_join returns attributes from both its lhs
@@ -30,9 +29,7 @@ let rec schema q =
   | _ -> Schema.schema_open_opt schema q
 
 let to_base_names = List.filter_map ~f:(fun (n, _) -> n)
-
 let to_names x = to_base_names x |> List.map ~f:Name.create
-
 let to_select_list x = to_names x |> List.map ~f:P.name
 
 let schema_invariant q q' =
@@ -61,7 +58,6 @@ let unscope n =
 class to_lhs_visible_depjoin =
   object (self)
     inherit [_] V.map as super
-
     method! visit_Name () n = Name (unscope n)
 
     method visit_output_pred p =

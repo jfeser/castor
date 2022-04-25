@@ -228,4 +228,5 @@ filter((ps_availqty >
 |}
   in
   Fmt.pr "%a@." pp (schema r);
-  [%expect {| [ps_partkey; ps_suppkey; ps_availqty; ps_supplycost; ps_comment] |}]
+  [%expect
+    {| [ps_partkey; ps_suppkey; ps_availqty; ps_supplycost; ps_comment] |}]

@@ -1,3 +1,4 @@
+open Core
 open Collections
 
 module T = struct
@@ -13,7 +14,6 @@ end
 
 include T
 module C = Comparable.Make (T)
-
 module O : Comparable.Infix with type t := t = C
 
 let of_pred =
@@ -46,13 +46,9 @@ let to_param = function
   | Null -> "null"
 
 let pp fmt v = Format.fprintf fmt "%s" (to_sql v)
-
 let to_int = function Int x -> Some x | _ -> None
-
 let to_date = function Date x -> Some x | _ -> None
-
 let to_bool = function Bool x -> Some x | _ -> None
-
 let to_string = function String x -> Some x | _ -> None
 
 let type_error expected v =
@@ -60,11 +56,8 @@ let type_error expected v =
   |> Error.raise
 
 let to_int_exn = function Int x -> x | v -> type_error "int" v
-
 let to_date_exn = function Date x -> x | v -> type_error "date" v
-
 let to_bool_exn = function Bool x -> x | v -> type_error "bool" v
-
 let to_string_exn = function String x -> x | v -> type_error "string" v
 
 let to_pred =

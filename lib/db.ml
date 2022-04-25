@@ -1,7 +1,7 @@
+open Core
 open! Lwt
 open Collections
 module Psql = Postgresql
-
 include (val Log.make ~level:(Some Warning) "castor.db")
 
 let default_pool_size = 10
@@ -49,7 +49,6 @@ let create ?(pool_size = default_pool_size) uri =
   }
 
 let close { conn; _ } = ensure_finish conn
-
 let conn { conn; _ } = conn
 
 let rec psql_exec ?(max_retries = 0) db query =
@@ -70,7 +69,7 @@ let rec psql_exec ?(max_retries = 0) db query =
             max_retries > 0
           then psql_exec ~max_retries:(max_retries - 1) db query
           else fail r
-      | _ -> fail r )
+      | _ -> fail r)
   | Single_tuple | Tuples_ok | Command_ok -> Ok r
   | _ -> fail r
 
@@ -169,12 +168,12 @@ from "%s"
               else (
                 warn (fun m ->
                     m "Numeric column loaded as string: %s.%s" rname fname);
-                StringT { nullable; padded = false } )
+                StringT { nullable; padded = false })
             else FixedT { nullable }
         | "real" | "double" -> return @@ FixedT { nullable }
         | "timestamp without time zone" | "time without time zone" ->
             return @@ StringT { nullable; padded = false }
-        | s -> Or_error.error "Unknown dtype" s [%sexp_of: string] )
+        | s -> Or_error.error "Unknown dtype" s [%sexp_of: string])
     | _ -> Or_error.error_string "unexpected query result"
   in
   let memo = Memo.general (fun (conn, n1, n2) -> f conn n1 n2) in
@@ -209,7 +208,6 @@ let relation conn r_name =
   Relation.{ r_name; r_schema }
 
 let relation_memo = Memo.general (fun (conn, rname) -> relation conn rname)
-
 let relation conn rname = relation_memo (conn, rname)
 
 let load_int s =
@@ -218,13 +216,11 @@ let load_int s =
     (* Try loading 'ints' of the form x.00 *)
     match String.chop_suffix s ~suffix:".00" with
     | Some s' -> (
-        try Ok (Int.of_string s') with Failure e -> Or_error.error_string e )
-    | None -> Or_error.error_string "Not an integer." )
+        try Ok (Int.of_string s') with Failure e -> Or_error.error_string e)
+    | None -> Or_error.error_string "Not an integer.")
 
 let%test "" = Poly.(load_int "5" = Ok 5)
-
 let%test "" = Poly.(load_int "5.00" = Ok 5)
-
 let%test "" = Result.is_error @@ load_int "5.01"
 
 let load_padded_string v = String.rstrip ~drop:(fun c -> Char.(c = ' ')) v
@@ -237,8 +233,7 @@ let load_value type_ =
         match value with
         | "t" -> Ok (Value.Bool true)
         | "f" -> Ok (Bool false)
-        | _ -> Or_error.error "Unknown boolean value." value [%sexp_of: string]
-      )
+        | _ -> Or_error.error "Unknown boolean value." value [%sexp_of: string])
   | IntT _ ->
       fun value -> Or_error.map (load_int value) ~f:(fun x -> Value.Int x)
   | StringT { padded = true; _ } ->
@@ -310,7 +305,7 @@ let exec_cursor_exn ?(count = 4096) db schema query =
       else (
         psql_exec db close_trans |> Or_error.ok_exn |> command_ok_exn;
         close db;
-        None ))
+        None))
 
 let exec_to_file ~fn db schema query =
   Out_channel.with_file fn ~f:(fun ch ->
@@ -419,7 +414,7 @@ module Async = struct
                     in
                     k ()
                 | Fatal_error -> fail (`Msg r#error)
-                | _ -> fail (`Msg "Unexpected status") )
+                | _ -> fail (`Msg "Unexpected status"))
             | None ->
                 strm#close;
                 return_unit

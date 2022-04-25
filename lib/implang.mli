@@ -1,3 +1,4 @@
+open Core
 open Collections
 
 type unop =
@@ -90,49 +91,30 @@ type func = Implang0.func = {
 [@@deriving compare, sexp]
 
 val pp_stmt : Formatter.t -> stmt -> unit
-
 val pp_func : Formatter.t -> func -> unit
-
 val yield_count : func -> int
-
 val name_of_var : expr -> string
-
 val int2fl : expr -> expr
 
 module Infix : sig
   val int : int -> expr
-
   val ( + ) : expr -> expr -> expr
-
   val ( - ) : expr -> expr -> expr
-
   val ( * ) : expr -> expr -> expr
-
   val ( / ) : expr -> expr -> expr
-
   val ( % ) : expr -> expr -> expr
-
   val ( < ) : expr -> expr -> expr
-
   val ( > ) : expr -> expr -> expr
-
   val ( <= ) : expr -> expr -> expr
-
   val ( >= ) : expr -> expr -> expr
-
   val ( && ) : expr -> expr -> expr
-
   val ( || ) : expr -> expr -> expr
-
   val ( lsr ) : expr -> expr -> expr
-
   val not : expr -> expr
-
   val index : expr -> int -> expr
 end
 
 type _var = Global of expr | Arg of int | Field of expr
-
 type _ctx = _var Map.M(Name).t
 
 val type_of : Prim_type.t Hashtbl.M(String).t -> expr -> Prim_type.t
@@ -141,31 +123,18 @@ module Builder : sig
   type t
 
   val type_of : expr -> t -> Prim_type.t
-
   val create : ctx:_ctx -> name:string -> ret:Prim_type.t -> t
-
   val new_scope : t -> t
-
   val build_arg : int -> t -> expr
-
   val build_yield : expr -> t -> unit
-
   val build_func : t -> func
-
   val build_assign : expr -> expr -> t -> unit
-
   val build_unchecked_assign : expr -> expr -> t -> unit
-
   val build_print : expr -> t -> unit
-
   val build_consume : expr -> t -> unit
-
   val build_return : expr -> t -> unit
-
   val build_loop : expr -> (t -> unit) -> t -> unit
-
   val build_iter : func -> expr list -> t -> unit
-
   val build_step : expr -> func -> t -> unit
 
   val build_if :
@@ -194,31 +163,18 @@ module Builder : sig
     unit
 
   val build_eq : expr -> expr -> t -> expr
-
   val build_lt : expr -> expr -> t -> expr
-
   val build_le : expr -> expr -> t -> expr
-
   val build_gt : expr -> expr -> t -> expr
-
   val build_ge : expr -> expr -> t -> expr
-
   val build_add : expr -> expr -> t -> expr
-
   val build_sub : expr -> expr -> t -> expr
-
   val build_mul : expr -> expr -> t -> expr
-
   val build_div : expr -> expr -> t -> expr
-
   val build_concat : expr list -> t -> expr
-
   val build_printstr : string -> t -> unit
-
   val build_hash : expr -> expr -> t -> expr
-
   val build_to_int : expr -> t -> expr
-
   val const_int : Prim_type.t -> int -> expr
 end
 
@@ -229,22 +185,13 @@ module Ctx : sig
   type t = _ctx [@@deriving compare, sexp]
 
   val empty : t
-
   val of_alist_exn : (Name.t * var) list -> t
-
   val of_schema : Name.t list -> expr list -> t
-
   val make_caller_args : t -> (string * Prim_type.t) list
-
   val bind : t -> string -> Prim_type.t -> expr -> t
-
   val var_to_expr : var -> Builder.t -> expr
-
   val make_callee_context : t -> Builder.t -> t * expr list
-
   val find : t -> Name.t -> Builder.t -> expr option
-
   val find_exn : t -> Name.t -> Builder.t -> expr
-
   val bind_ctx : t -> t -> t
 end

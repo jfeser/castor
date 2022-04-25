@@ -1,3 +1,5 @@
+open Core
+
 (** Run a command, logging it if it fails. *)
 let command_exn ?quiet:_ = function
   | [] -> Error.of_string "Empty command" |> Error.raise
@@ -57,75 +59,59 @@ let channel =
 class ['s] tuple2_monoid m1 m2 =
   object
     inherit ['s] VisitorsRuntime.monoid
-
     method private zero = (m1#zero, m2#zero)
-
     method private plus (x, y) (x', y') = (m1#plus x x', m2#plus y y')
   end
 
 class ['s] list_monoid =
   object
     inherit ['s] VisitorsRuntime.monoid
-
     method private zero = []
-
     method private plus = ( @ )
   end
 
 class ['s] set_monoid m =
   object
     inherit ['s] VisitorsRuntime.monoid
-
     method private zero = Set.empty m
-
     method private plus = Set.union
   end
 
 class ['s] map_monoid m =
   object
     inherit ['s] VisitorsRuntime.monoid
-
     method private zero = Map.empty m
 
     method private plus =
-      Map.merge ~f:(fun ~key:_ ->
-        function
+      Map.merge ~f:(fun ~key:_ -> function
         | `Both _ -> failwith "Duplicate key" | `Left x | `Right x -> Some x)
   end
 
 class ['s] conj_monoid =
   object
     inherit ['s] VisitorsRuntime.monoid
-
     method private zero = true
-
     method private plus = ( && )
   end
 
 class ['s] disj_monoid =
   object
     inherit ['s] VisitorsRuntime.monoid
-
     method private zero = false
-
     method private plus = ( || )
   end
 
 class ['s] int_sum_monoid =
   object
     inherit ['s] VisitorsRuntime.monoid
-
     method private zero = 0
-
     method private plus = ( + )
   end
 
 class ['s] float_sum_monoid =
   object
     inherit ['s] VisitorsRuntime.monoid
-
     method private zero = 0.0
-
     method private plus = ( +. )
   end
 
@@ -155,12 +141,12 @@ let run_in_fork_timed (type a) ?time ?(sleep_sec = 0.001) (thunk : unit -> a) :
           let rec sleep () =
             if Time.Span.(Time.(diff (now ()) start) > span) then (
               Signal.(send_i kill (`Pid pid));
-              None )
+              None)
             else (
               Unix.nanosleep sleep_sec |> ignore;
               match Unix.wait_nohang (`Pid pid) with
               | None -> sleep ()
-              | Some _ -> Some Marshal.(from_channel rd) )
+              | Some _ -> Some Marshal.(from_channel rd))
           in
           sleep ()
-      | None -> Some Marshal.(from_channel rd) )
+      | None -> Some Marshal.(from_channel rd))

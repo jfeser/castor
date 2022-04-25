@@ -1,3 +1,4 @@
+open Core
 open Printf
 open Collections
 open Ast
@@ -9,9 +10,7 @@ module P = Pred.Infix
 module Config = struct
   module type S = sig
     val conn : Db.t
-
     val check_transforms : bool
-
     val params : Set.M(Name).t
   end
 end
@@ -22,7 +21,6 @@ module Make (Config : Config.S) () = struct
   type t = { name : string; f : Ast.t -> Ast.t list } [@@deriving sexp]
 
   let fresh = Global.fresh
-
   let db_relation n = A.relation (Db.relation Config.conn n)
 
   let run_everywhere ?(stage = `Both) tf =
@@ -53,7 +51,7 @@ module Make (Config : Config.S) () = struct
     let len = List.length rs in
     if len > 0 then (
       List.iteri rs ~f:(fun i -> Format.printf "%d\n%a@.\n\n" i A.pp);
-      Logs.info (fun m -> m "%d new candidates from running %s." len t.name) );
+      Logs.info (fun m -> m "%d new candidates from running %s." len t.name));
     rs
 
   let run_checked t r =
@@ -77,7 +75,6 @@ module Make (Config : Config.S) () = struct
         r')
 
   let run = if Config.check_transforms then run_checked else run_unchecked
-
   let no_params r = Set.is_empty (Set.inter (A.names r) Config.params)
 
   let replace_rel rel new_rel r =
@@ -269,8 +266,8 @@ module Make (Config : Config.S) () = struct
                           ( Eq,
                             Name n,
                             Name
-                              ( Map.find_exn key_aliases (Name.name n)
-                              |> Name.create ) ))
+                              (Map.find_exn key_aliases (Name.name n)
+                              |> Name.create) ))
                     |> List.reduce_exn ~f:(fun p p' -> Binop (And, p, p'))
                   in
                   wrap_rel rel (fun r -> (filter filter_pred r).node))
@@ -454,7 +451,7 @@ module Make (Config : Config.S) () = struct
           | DateT _ -> Ok (Binop (Add, bound, Unop (Day, Int 1)))
           | FixedT _ -> Error "No open inequalities with fixed."
           | NullT | StringT _ | BoolT _ | TupleT _ | VoidT ->
-              failwith "Unexpected type." )
+              failwith "Unexpected type.")
     in
     let fix_lower_bound bound kind =
       match kind with
@@ -466,7 +463,7 @@ module Make (Config : Config.S) () = struct
           | DateT _ -> Ok (Binop (Add, bound, Unop (Day, Int 1)))
           | FixedT _ -> Error "No open inequalities with fixed."
           | NullT | StringT _ | BoolT _ | TupleT _ | VoidT ->
-              failwith "Unexpected type." )
+              failwith "Unexpected type.")
     in
     let open Result.Let_syntax in
     let%bind lb =
@@ -581,7 +578,7 @@ module Make (Config : Config.S) () = struct
                         let s' = Hashtbl.find_exn eq_map n' in
                         Union_find.same_class s s')
                   in
-                  match n' with Some n' -> Name n' | None -> raise No_key )
+                  match n' with Some n' -> Name n' | None -> raise No_key)
               | None -> raise No_key
             in
             (p', o))
@@ -641,7 +638,6 @@ module Make (Config : Config.S) () = struct
       let visitor =
         object (self : 'a)
           inherit [_] V.mapreduce
-
           inherit [_] Util.list_monoid
 
           method add_agg aggs a =
@@ -737,7 +733,6 @@ module Make (Config : Config.S) () = struct
       let visitor =
         object (self : 'a)
           inherit [_] V.mapreduce
-
           inherit [_] Util.list_monoid
 
           method add_agg aggs a =
@@ -795,9 +790,7 @@ module Make (Config : Config.S) () = struct
     let visitor =
       object
         inherit [_] V.reduce
-
         method zero = true
-
         method plus = ( && )
 
         method! visit_Exists () _ =
@@ -860,7 +853,7 @@ module Make (Config : Config.S) () = struct
              Logs.debug (fun m ->
                  m "Cannot hoist: %a" Sexp.pp_hum
                    ([%sexp_of: Name.t list] schema));
-             None ))
+             None))
 
   let tf_hoist_orderby _ =
     let f r =
@@ -872,8 +865,8 @@ module Make (Config : Config.S) () = struct
               (select
                  (extend_select ps rel
                     ~with_:
-                      ( List.map key ~f:(fun (p, _) -> Free.pred_free p)
-                      |> Set.union_list (module Name) ))
+                      (List.map key ~f:(fun (p, _) -> Free.pred_free p)
+                      |> Set.union_list (module Name)))
                  rel);
           ]
       | _ -> []
@@ -889,15 +882,12 @@ module Make (Config : Config.S) () = struct
       name = "hoist-param-filter";
       f =
         hoist_filter_if ~f:(fun (p, _) ->
-            (object
-               inherit [_] V.reduce
-
-               inherit [_] Util.disj_monoid
-
-               method! visit_Name () n = Set.mem Config.params n
-            end)
-              #visit_pred
-              () p);
+            object
+              inherit [_] V.reduce
+              inherit [_] Util.disj_monoid
+              method! visit_Name () n = Set.mem Config.params n
+            end
+              #visit_pred () p);
     }
     |> run_everywhere
 
@@ -994,7 +984,6 @@ module Make (Config : Config.S) () = struct
     let visitor =
       object
         inherit [_] V.reduce
-
         inherit [_] Util.list_monoid
 
         method! visit_Binop ps op arg1 arg2 =
@@ -1264,16 +1253,15 @@ module Make (Config : Config.S) () = struct
           match Name.rel n with
           | Some r ->
               [ dedup (select [ As_pred (Name n, n') ] (db_relation r)) ]
-          | None -> [] )
+          | None -> [])
       | _ -> []
     in
     { name = "approx-dedup"; f } |> run_everywhere ~stage:`Both
 
   let is_correlated subquery input_schema =
     not
-      ( Set.is_empty
-      @@ Set.inter subquery.meta#free (Set.of_list (module Name) input_schema)
-      )
+      (Set.is_empty
+      @@ Set.inter subquery.meta#free (Set.of_list (module Name) input_schema))
 
   let tf_elim_subquery _ =
     let open A in
@@ -1284,36 +1272,35 @@ module Make (Config : Config.S) () = struct
           let schema = Schema.schema r in
           (* Mapping from uncorrelated subqueries to unique names. *)
           let query_names =
-            (object (self)
-               inherit [_] V.reduce
+            object (self)
+              inherit [_] V.reduce
+              inherit [_] Util.list_monoid
 
-               inherit [_] Util.list_monoid
-
-               method! visit_t xs query =
-                 if is_correlated query schema then xs
-                 else
-                   let result_type =
-                     match Schema.schema query with
-                     | [ n ] -> Name.type_exn n
-                     | _ -> failwith "Unexpected schema."
-                   in
-                   let result_name = Fresh.name fresh "x%d" in
-                   self#plus xs
-                     [ (Name.create ~type_:result_type result_name, query) ]
-            end)
+              method! visit_t xs query =
+                if is_correlated query schema then xs
+                else
+                  let result_type =
+                    match Schema.schema query with
+                    | [ n ] -> Name.type_exn n
+                    | _ -> failwith "Unexpected schema."
+                  in
+                  let result_name = Fresh.name fresh "x%d" in
+                  self#plus xs
+                    [ (Name.create ~type_:result_type result_name, query) ]
+            end
               #visit_pred
               [] pred
           in
           let subst_query ~for_:r ~in_:outer_pred new_pred =
-            (object
-               inherit [_] V.endo
+            object
+              inherit [_] V.endo
 
-               method! visit_Exists () p' r' =
-                 if [%compare.equal: Ast.t] r r' then new_pred else p'
+              method! visit_Exists () p' r' =
+                if [%compare.equal: Ast.t] r r' then new_pred else p'
 
-               method! visit_First () p' r' =
-                 if [%compare.equal: Ast.t] r r' then new_pred else p'
-            end)
+              method! visit_First () p' r' =
+                if [%compare.equal: Ast.t] r r' then new_pred else p'
+            end
               #visit_pred
               () outer_pred
           in

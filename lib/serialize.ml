@@ -1,3 +1,4 @@
+open Core
 open Ast
 open Collections
 open Abslayout_fold
@@ -64,20 +65,6 @@ let null_sentinal = function
   | FixedT x -> fixed_sentinal x
   | t -> Error.(create "Unexpected layout type." t [%sexp_of: Type.t] |> raise)
 
-let serialize_key = function
-  | [ Value.String s ] -> s
-  | vs ->
-      List.map vs ~f:(function
-        | Int x -> of_int ~byte_width:8 x
-        | Date x -> Date.to_int x |> of_int ~byte_width:8
-        | Bool true -> of_int 1 ~byte_width:1
-        | Bool false -> of_int 1 ~byte_width:1
-        | String s -> s
-        | v ->
-            Error.(
-              create "Unexpected key value." v [%sexp_of: Value.t] |> raise))
-      |> String.concat ~sep:"|"
-
 let make_direct_hash keys =
   let hash =
     Seq.map keys ~f:(fun (k, p) ->
@@ -90,38 +77,6 @@ let make_direct_hash keys =
         (h, p))
   in
   (hash, "")
-
-let log_count ?(batch = 1000) ~name f =
-  let count = ref 0 in
-  fun args ->
-    let ret = f args in
-    incr count;
-    if !count mod batch = 0 then
-      Log.info (fun m -> m "Run %s %d times." name !count);
-    ret
-
-let make_cmph_hash keys =
-  if Seq.length keys = 0 then (Seq.empty, "")
-  else
-    let open Cmph in
-    let keys =
-      Seq.map keys ~f:(fun (k, p) -> (serialize_key k, p)) |> Seq.to_list
-    in
-    (* Create a CMPH hash from the keyset. *)
-    List.find_map_exn [ Config.default_chd; `Bdz; `Bmz; `Chm ] ~f:(fun algo ->
-        try
-          let keyset = List.map keys ~f:(fun (k, _) -> k) |> KeySet.create in
-          Config.with_config ~verbose:true ~seed:0 ~algo keyset @@ fun config ->
-          Hash.with_hash config @@ fun hash ->
-          (* Populate hash table with CMPH hash values. *)
-          let hash_vals =
-            List.map keys ~f:(fun (k, p) -> (Hash.hash hash k, p))
-            |> Seq.of_list
-          in
-          Some (hash_vals, Hash.to_packed hash)
-        with Error _ -> None)
-
-let make_cmph_hash = log_count ~name:"make-cmph-hash" make_cmph_hash
 
 let make_ms_hash keys =
   let nkeys = Seq.length keys in
@@ -158,7 +113,6 @@ let make_hash type_ keys =
     match Type.hash_kind_exn type_ with
     | `Direct -> make_direct_hash keys
     | `Universal -> make_ms_hash keys
-    | `Cmph -> make_cmph_hash keys
   in
   let max_key = Seq.fold hash ~init:0 ~f:(fun m (h, _) -> Int.max h m) in
   let hash_array = Array.create ~len:(max_key + 1) 0 in
@@ -168,11 +122,8 @@ let make_hash type_ keys =
 class _buffer_serializer ?(size = 1024) () =
   object (self : 'self)
     val buf = Buffer.create size
-
     method buf = buf
-
     method pos = Buffer.length buf
-
     method write_string s = Buffer.add_string buf s
 
     method write_into (s : 'self) =
@@ -185,11 +136,8 @@ class _buffer_serializer ?(size = 1024) () =
 class bigbuffer_serializer ?(size = 8) () =
   object (self : 'self)
     val buf = Bigbuffer.create size
-
     method buf = buf
-
     method pos = Bigbuffer.length buf
-
     method write_string s = Bigbuffer.add_string buf s
 
     method write_into (s : 'self) =
@@ -205,19 +153,17 @@ type msg = { msg : string; pos : int; len : int }
 class logged_serializer ?(debug = false) ?size () =
   object (self : 'self)
     inherit bigbuffer_serializer ?size () as super
-
     val mutable msgs = []
-
     method msgs = msgs
-
     method set_msgs m = msgs <- m
 
     method log : 'a. string -> f:(unit -> 'a) -> 'a =
       fun msg ~f -> self#logf (fun m -> m "%s" msg) ~f
 
     method logf
-        : 'a 'b. ((('a, unit, string) format -> 'a) -> string) ->
-          f:(unit -> 'b) -> 'b =
+        : 'a 'b.
+          ((('a, unit, string) format -> 'a) -> string) -> f:(unit -> 'b) -> 'b
+        =
       fun msgf ~f ->
         if debug then (
           let start = self#pos in
@@ -226,7 +172,7 @@ class logged_serializer ?(debug = false) ?size () =
             { pos = start; len = self#pos - start; msg = msgf Format.sprintf }
           in
           msgs <- m :: msgs;
-          ret )
+          ret)
         else f ()
 
     method! write_into (s : 'self) =
@@ -243,7 +189,7 @@ class logged_serializer ?(debug = false) ?size () =
                [%compare: int * int] (m1.pos, -m1.len) (m2.pos, -m2.len))
         |> List.iter ~f:(fun m ->
                Out_channel.fprintf ch "%d:%d %s\n" m.pos m.len m.msg);
-        Out_channel.flush ch )
+        Out_channel.flush ch)
   end
 
 let size_exn hdr name = Or_error.ok_exn (size hdr name)
@@ -254,11 +200,8 @@ let serialize_field hdr name value =
 class ['self] serialize_fold ?debug () =
   object (self : 'self)
     inherit [_] abslayout_fold
-
     method type_ meta = meta#type_
-
     method serializer = new logged_serializer ?debug ()
-
     method empty _ = self#serializer
 
     method list meta _ =
@@ -331,7 +274,6 @@ class ['self] serialize_fold ?debug () =
         [ lhs; rhs ]
 
     method join meta _ lhs rhs = self#join' meta lhs rhs
-
     method depjoin meta _ lhs rhs = self#join' meta lhs rhs
 
     method hash_idx meta _ =
@@ -549,7 +491,6 @@ let set_pos (r : _ annot) (pos : int) =
     meta =
       object
         method fold_stream = r.meta#fold_stream
-
         method type_ = r.meta#type_
 
         method pos =
@@ -567,11 +508,8 @@ let serialize ?layout_file fn l =
       (fun t ->
         object
           method fold_stream = t#fold_stream
-
           method type_ = t#type_
-
           method pos = None
-
           method meta = t
         end)
       l

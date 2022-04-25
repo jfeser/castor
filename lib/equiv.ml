@@ -1,6 +1,6 @@
+open Core
 open Ast
 module V = Visitors
-
 include (val Log.make "castor.equiv")
 
 module Eq = struct
@@ -15,11 +15,8 @@ end
 type t = Set.M(Eq).t [@@deriving compare, sexp]
 
 let empty = Set.empty (module Eq)
-
 let ( || ) l1 l2 = Set.union l1 l2
-
 let ( && ) l1 l2 = Set.inter l1 l2
-
 let of_list = Set.of_list (module Eq)
 
 let names eq =
@@ -76,7 +73,7 @@ let eqs_open (eqs : 'a annot -> Set.M(Eq).t) r : Set.M(Eq).t =
           List.filter_map ls ~f:(fun (n, p) ->
               match p with Name n' -> Some (n, n') | _ -> None)
           |> of_list
-      | Unequal_lengths -> empty )
+      | Unequal_lengths -> empty)
   | ATuple (ts, Cross) ->
       List.map ts ~f:eqs |> List.reduce ~f:( || ) |> Option.value ~default:empty
   | _ -> empty
@@ -87,7 +84,6 @@ let annotate r =
     (fun m eq ->
       object
         method meta = m
-
         method eq = eq
       end)
     eqs_open r
@@ -131,7 +127,6 @@ module Context = struct
       meta =
         object
           method eqs = eqs
-
           method meta = r.meta
         end;
     }

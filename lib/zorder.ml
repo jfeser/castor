@@ -1,3 +1,5 @@
+open Core
+
 let less_msb x y = x < y && x < x lxor y
 
 let compare lhs rhs =
@@ -12,8 +14,8 @@ let sort tups = List.sort tups ~compare
 
 let%expect_test "" =
   sort
-    ( List.init 7 ~f:(fun i -> List.init 7 ~f:(fun j -> [| i; j |]))
-    |> List.concat )
+    (List.init 7 ~f:(fun i -> List.init 7 ~f:(fun j -> [| i; j |]))
+    |> List.concat)
   |> [%sexp_of: int array list] |> print_s;
   [%expect
     {|
@@ -25,8 +27,8 @@ let%expect_test "" =
 
 let%expect_test "" =
   sort
-    ( List.init 7 ~f:(fun i -> List.init 7 ~f:(fun _ -> [| i; i |]))
-    |> List.concat )
+    (List.init 7 ~f:(fun i -> List.init 7 ~f:(fun _ -> [| i; i |]))
+    |> List.concat)
   |> [%sexp_of: int array list] |> print_s;
   [%expect
     {|

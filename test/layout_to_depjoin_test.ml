@@ -31,7 +31,8 @@ let%expect_test "" =
                 s2.n_nationkey)
 |}
   |> Layout_to_depjoin.annot |> Abslayout.pp Fmt.stdout;
-  [%expect {|
+  [%expect
+    {|
     depjoin(dedup(
               select([c_nationkey],
                 depjoin(join((l_orderkey = o_orderkey),

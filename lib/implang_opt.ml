@@ -1,3 +1,4 @@
+open Core
 module A = Abslayout
 open Collections
 open Implang0
@@ -6,9 +7,7 @@ let read_names func =
   let visitor =
     object
       inherit [_] reduce
-
       inherit [_] Util.set_monoid (module String)
-
       method! visit_Var () n = Set.singleton (module String) n
     end
   in
@@ -18,11 +17,8 @@ let written_names func =
   let visitor =
     object
       inherit [_] reduce
-
       inherit [_] Util.set_monoid (module String)
-
       method! visit_Assign () n _ = Set.singleton (module String) n
-
       method! visit_Step () n _ = Set.singleton (module String) n
     end
   in
@@ -41,7 +37,7 @@ let prune_args m =
             if Set.mem ns n then Some i
             else (
               Log.debug (fun m -> m "Removing parameter %s from %s." n f.name);
-              None ))
+              None))
       in
       Hashtbl.set needed_args ~key:f.name ~data:args);
   let prune_func f =
@@ -123,7 +119,6 @@ let inline sl_iters func =
               let yield_visitor =
                 object
                   inherit [_] endo
-
                   method! visit_Yield () _ e = Assign { lhs = var; rhs = e }
                 end
               in
@@ -154,9 +149,7 @@ let inline_sl_iter m =
       let visitor =
         object (self : 'a)
           inherit [_] reduce
-
           method private zero = (false, 0)
-
           method private plus (l, y) (l', y') = (l || l', y + y')
 
           method! visit_Loop () _ p =
@@ -178,9 +171,7 @@ let calls f f' =
   let visitor =
     object
       inherit [_] reduce
-
       inherit [_] Util.disj_monoid
-
       method! visit_Step () _ n = String.(f'.name = n)
     end
   in
@@ -198,9 +189,7 @@ let prune_funcs = to_fixed_point prune_funcs
 class is_const_expr_visitor const_names =
   object
     inherit [_] reduce
-
     inherit [_] Util.conj_monoid
-
     method! visit_Var (_ : bool) n = Set.mem const_names n
   end
 
@@ -211,15 +200,10 @@ let is_trivial_expr = function
 class hoist_visitor const_names const_types =
   object
     inherit [_] map as super
-
     inherit [_] Util.list_monoid
-
     val mutable hoisted = []
-
     val mutable const_names = const_names
-
     val tctx = Hashtbl.of_alist_exn (module String) const_types
-
     method hoisted = List.rev hoisted
 
     method! visit_expr () expr =
@@ -231,7 +215,7 @@ class hoist_visitor const_names const_types =
         hoisted <- (name, expr, type_) :: hoisted;
         const_names <- Set.add const_names name;
         Hashtbl.add_exn tctx ~key:name ~data:type_;
-        Var name )
+        Var name)
       else expr
   end
 
@@ -249,8 +233,8 @@ let hoist_const_exprs m =
         let const_types = func.args @ const_types in
         let const_names =
           Set.union const_names
-            ( List.map func.args ~f:(fun (n, _) -> n)
-            |> Set.of_list (module String) )
+            (List.map func.args ~f:(fun (n, _) -> n)
+            |> Set.of_list (module String))
         in
         let hoister = new hoist_visitor const_names const_types in
         let func' = hoister#visit_func () func in
@@ -277,7 +261,6 @@ let split_expensive_predicates f =
   let is_expensive_visitor =
     object
       inherit [_] reduce as super
-
       inherit [_] Util.disj_monoid
 
       method! visit_Unop () op p =

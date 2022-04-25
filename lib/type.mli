@@ -1,7 +1,7 @@
+open Core
 open Ast
 
 val param : unit Command.Param.t
-
 val src : Logs.Src.t
 
 exception TypeError of Core.Error.t
@@ -10,36 +10,22 @@ module AbsFixed : sig
   type t = { range : Abs_int.t; scale : int } [@@deriving compare, sexp]
 
   val of_fixed : Fixed_point.t -> t
-
   val zero : t
-
   val bot : t
-
   val top : t
-
   val unify : (Abs_int.t -> Abs_int.t -> Abs_int.t) -> t -> t -> t
-
   val meet : t -> t -> t
-
   val join : t -> t -> t
 end
 
 type int_ = { range : Abs_int.t; nullable : bool }
-
 type date = int_
-
 type bool_ = { nullable : bool }
-
 type string_ = { nchars : Abs_int.t; nullable : bool }
-
 type list_ = { count : Abs_int.t }
-
 type tuple = { kind : [ `Concat | `Cross ] }
-
 type hash_idx = { key_count : Abs_int.t }
-
 type ordered_idx = { key_count : Abs_int.t }
-
 type fixed = { value : AbsFixed.t; nullable : bool }
 
 type t =
@@ -58,16 +44,14 @@ type t =
 [@@deriving compare, sexp]
 
 val unify_exn : t -> t -> t
-
 val count : t -> Abs_int.t
-
 val len : t -> Abs_int.t
 
 val width : t -> int
 (** Returns the width of the tuples produced by reading a layout with this type.
    *)
 
-val hash_kind_exn : t -> [ `Cmph | `Universal | `Direct ]
+val hash_kind_exn : t -> [ `Universal | `Direct ]
 (** Use the type of a hash index to decide what hash method to use. *)
 
 val hi_hash_len : ?bytes_per_key:Abs_int.t -> t -> hash_idx -> Abs_int.t
@@ -86,7 +70,6 @@ val oi_ptr_size : t -> ordered_idx -> int
 (** Size of pointers (in bytes) in ordered indexes. *)
 
 val least_general_of_primtype : Prim_type.t -> t
-
 val type_of : < fold_stream : Abslayout_fold.Data.t ; .. > annot -> t
 
 val annotate :

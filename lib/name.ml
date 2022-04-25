@@ -1,3 +1,5 @@
+open Core
+
 module T = struct
   type t = {
     scope : string option; [@sexp.option]
@@ -10,9 +12,7 @@ end
 include T
 
 let name n = n.name
-
 let scope n = n.scope
-
 let rel = scope
 
 include Comparator.Make (T)
@@ -22,7 +22,6 @@ module O : Comparable.Infix with type t := t = struct
   include Comparable.Make (T)
 
   let ( = ) = equal
-
   let ( <> ) x y = not (equal x y)
 end
 
@@ -65,7 +64,6 @@ let to_sql n =
   | None -> sprintf "\"%s\"" (name n)
 
 let scoped s n = copy ~scope:(Some s) n
-
 let unscoped n = copy ~scope:None n
 
 let pp fmt n =

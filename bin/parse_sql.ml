@@ -75,9 +75,7 @@ module Sql = Sqlgg.Sql
 class conv_sql db =
   object (self : 'a)
     val mutable aliases = Set.empty (module String)
-
     val mutable alias_of_name = Map.empty (module String)
-
     method alias = sprintf "%s_%s"
 
     method unop =
@@ -143,7 +141,7 @@ class conv_sql db =
               join (bool true) (self#source q) (self#nested (q', qs'))
           | `Search e ->
               join (self#expr e) (self#source q) (self#nested (q', qs'))
-          | `Using _ | `Natural -> failwith "Join type not supported" )
+          | `Using _ | `Natural -> failwith "Join type not supported")
 
     method subquery = self#query
 
@@ -154,7 +152,7 @@ class conv_sql db =
         | None -> (
             match Map.find alias_of_name c.cname with
             | Some a -> self#alias a c.cname
-            | None -> c.cname )
+            | None -> c.cname)
       in
       Name.create n
 
@@ -168,7 +166,7 @@ class conv_sql db =
           | String s -> String s
           | Bool x -> Bool x
           | Float x -> Fixed (Fixed_point.of_float x)
-          | Null -> Null None )
+          | Null -> Null None)
       | Param _ | Choices (_, _) | Inserted _ | Sequence _ ->
           failwith "unsupported"
       | Case (branches, else_) ->
@@ -264,7 +262,7 @@ class conv_sql db =
           match op with
           | `UnionAll -> tuple [ q; self#clauses c ] Concat
           | `Union -> dedup (tuple [ q; self#clauses c ] Concat)
-          | `Intersect | `Except -> failwith "Unsupported compound op." )
+          | `Intersect | `Except -> failwith "Unsupported compound op.")
 
     method query q =
       self#clauses q.Sql.clauses |> self#order q.Sql.order
