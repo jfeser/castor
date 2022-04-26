@@ -9,13 +9,9 @@ module Expect_test_config = struct
     ()
 end
 
-let pg_tmp = Sys.getenv_exn "CASTOR_ROOT" ^ "/vendor/ephemeralpg/pg_tmp"
-
-let create_test_db () =
-  let ch = Unix.open_process_in pg_tmp in
-  let url = In_channel.input_all ch in
-  Unix.close_process_in ch |> Unix.Exit_or_signal.or_error |> Or_error.ok_exn;
-  Db.create url
+(* Don't currently have support for hashtables w/ composite keys. *)
+let complex_hashtables = false
+let create_test_db () = Db.create "postgresql:///castor_test"
 
 (** Create a simple database table that only contains integers. *)
 let create_simple db name fields values =
@@ -23,7 +19,10 @@ let create_simple db name fields values =
     List.map fields ~f:(sprintf "%s integer") |> String.concat ~sep:", "
   in
   Db.(
-    psql_exec db (sprintf "create table if not exists %s (%s)" name fields_sql)
+    psql_exec db (sprintf "drop table if exists %s" name)
+    |> Or_error.ok_exn |> command_ok_exn);
+  Db.(
+    psql_exec db (sprintf "create table %s (%s)" name fields_sql)
     |> Or_error.ok_exn |> command_ok_exn);
   List.iter values ~f:(fun vs ->
       let values_sql =
@@ -45,6 +44,9 @@ let create db name fields values =
         | _ -> failwith "Unexpected type.")
     |> String.concat ~sep:", "
   in
+  Db.(
+    psql_exec db (sprintf "drop table if exists %s" name)
+    |> Or_error.ok_exn |> command_ok_exn);
   Db.(
     psql_exec db (sprintf "create table %s (%s)" name fields_sql)
     |> Or_error.ok_exn |> command_ok_exn);
