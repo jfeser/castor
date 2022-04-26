@@ -223,11 +223,9 @@ let hoist_const_exprs m =
   let const_names =
     Set.of_list
       (module String)
-      ("buf" :: List.map m.Irgen.params ~f:(fun (n, _) -> Name.name n))
+      ("buf" :: List.map m.Irgen.params ~f:(fun (n, _) -> n))
   in
-  let const_types =
-    List.map m.Irgen.params ~f:(fun (n, t) -> (Name.name n, t))
-  in
+  let const_types = m.Irgen.params in
   let funcs' =
     List.map m.Irgen.funcs ~f:(fun func ->
         let const_types = func.args @ const_types in

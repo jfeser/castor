@@ -33,17 +33,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let machine = TargetMachine.create ~triple Target.(by_triple triple) in
     TargetMachine.data_layout machine
 
-  let clang =
-    let configs =
-      [ "/usr/local/Cellar/llvm/9*/bin/clang"; "clang-9"; "clang" ]
-    in
-    let c =
-      List.find configs ~f:(fun c ->
-          Sys.command (sprintf "which %s > /dev/null 2>&1" c) = 0)
-    in
-    Option.value_exn ~message:"Could not find a working clang." c
-
-  let opt = Global.llvm_root () ^ "/bin/opt"
   let ctx = create_context ()
 
   let module_ =
@@ -939,16 +928,15 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     (* Generate global constant for buffer. *)
     let buf_t = pointer_type (array_type int_type (buffer_len / 8)) in
     SB.build_global sb "buf" buf_t;
-    let typed_params = List.map params ~f:(fun (n, t) -> Name.(name n, t)) in
     (* Generate global constants for parameters. *)
-    List.iter typed_params ~f:(fun (n, t) ->
+    List.iter params ~f:(fun (n, t) ->
         let lltype = codegen_type t in
         SB.build_global sb n lltype);
-    let fctxs = List.map ir_funcs ~f:(fun func -> new fctx func typed_params) in
+    let fctxs = List.map ir_funcs ~f:(fun func -> new fctx func params) in
     params_struct_t := SB.build_param_struct sb "params";
     List.iter fctxs ~f:codegen_func;
     codegen_create ();
-    codegen_param_setters typed_params;
+    codegen_param_setters params;
     assert_valid_module module_;
     Log.info (fun m -> m "Codegen completed.");
     module_
@@ -1018,7 +1006,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
   let c_template fn args =
     let args_strs = List.map args ~f:(fun (n, x) -> sprintf "-D%s=%s" n x) in
-    Util.command_out_exn ([ clang; "-E" ] @ args_strs @ [ fn ])
+    Util.command_out_exn ([ "clang"; "-E" ] @ args_strs @ [ fn ])
 
   let from_fn fn n i =
     let template = Global.build_root () ^ "/etc/" ^ fn in
@@ -1078,9 +1066,9 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       let funcs, calls =
         List.filter params ~f:(fun (n, _) ->
             List.exists ir_module.Irgen.params ~f:(fun (n', _) ->
-                Name.O.(n = n')))
+                [%equal: string] n n'))
         |> List.mapi ~f:(fun i (n, t) ->
-               Log.debug (fun m -> m "Creating loader for %a." Name.pp n);
+               Log.debug (fun m -> m "Creating loader for %s." n);
                let loader_fn =
                  match t with
                  | NullT -> failwith "No null parameters."
@@ -1091,7 +1079,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
                  | FixedT _ -> "load_float.c"
                  | VoidT | TupleT _ -> failwith "Unsupported parameter type."
                in
-               (from_fn loader_fn) (Name.name n) i)
+               (from_fn loader_fn) n i)
         |> List.unzip
       in
       let header_str = "#include \"scanner.h\"" in
@@ -1110,7 +1098,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       let module_ = codegen ir_module in
       Llvm.print_module module_fn module_
     in
-    let cflags = [ "$CPPFLAGS"; "-g"; "-lcmph" ] in
+    let cflags = [ "$CPPFLAGS"; "-g" ] in
     let cflags =
       (if gprof then [ "-pg" ] else [])
       @ (if debug then [ "-O0" ] else [ "-O3" ])
@@ -1118,12 +1106,12 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     in
     if debug then
       Util.command_exn ~quiet:()
-        ([ clang ] @ cflags
+        ([ "clang" ] @ cflags
         @ [ module_fn; stdlib_fn; date_fn; main_fn; "-o"; exe_fn ])
     else (
       Util.command_exn ~quiet:()
         [
-          opt;
+          "opt";
           "-S";
           sprintf "-pass-remarks-output=%s" remarks_fn;
           "-O3 -enable-unsafe-fp-math";
@@ -1133,7 +1121,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
           "2>/dev/null";
         ];
       Util.command_exn ~quiet:()
-        ([ clang ] @ cflags
+        ([ "clang" ] @ cflags
         @ [
             opt_module_fn;
             stdlib_fn;

@@ -25,3 +25,10 @@ let load_string_exn ?params conn s =
 
 let load_string_nostrip_exn ?params conn s =
   of_string_exn s |> load_layout_exn conn ?params
+
+let load_stdin_nostrip_exn params conn =
+  let params =
+    List.map params ~f:(fun (n, t) -> Name.create ~type_:t n)
+    |> Set.of_list (module Name)
+  in
+  of_channel_exn In_channel.stdin |> load_layout_exn conn ~params

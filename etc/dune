@@ -15,7 +15,7 @@
   castorlib_test.output
   (run ./castorlib_test.exe)))
 
-(alias
- (name runtest)
+(rule
+ (alias runtest)
  (action
   (diff castorlib_test.expected castorlib_test.output)))

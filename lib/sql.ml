@@ -443,10 +443,8 @@ and to_string = function
       List.map qs ~f:(fun q -> sprintf "(%s)" (spj_to_sql q))
       |> String.concat ~sep:" union all "
 
-let pg_format = Sys.getenv_exn "CASTOR_ROOT" ^ "/vendor/pgFormatter/pg_format"
-
 let format sql =
-  let proc = Unix.open_process pg_format in
+  let proc = Unix.open_process "sqlformat -k upper -r -" in
   let stdout, stdin = proc in
   Out_channel.output_string stdin sql;
   Out_channel.close stdin;

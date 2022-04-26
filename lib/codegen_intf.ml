@@ -8,7 +8,7 @@ module type S = sig
     ?out_dir:string ->
     ?layout_log:string ->
     gprof:bool ->
-    params:(Name.t * Prim_type.t) list ->
+    params:(string * Prim_type.t) list ->
     < fold_stream : Abslayout_fold.Data.t
     ; type_ : Type.t
     ; resolved : Resolve.resolved

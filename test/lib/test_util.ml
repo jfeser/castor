@@ -15,23 +15,18 @@ let test_db_conn = lazy (Db.create "postgresql:///castor_test")
 
 module Demomatch = struct
   let example_params =
-    [
-      (Name.create "id_p", Prim_type.int_t, Value.Int 1);
-      (Name.create "id_c", Prim_type.int_t, Int 2);
-    ]
+    [ ("id_p", Prim_type.int_t, Value.Int 1); ("id_c", Prim_type.int_t, Int 2) ]
 
   let example_str_params =
     [
-      (Name.create "id_p", Prim_type.string_t, Value.String "foo");
-      (Name.create "id_c", Prim_type.string_t, String "fizzbuzz");
+      ("id_p", Prim_type.string_t, Value.String "foo");
+      ("id_c", Prim_type.string_t, String "fizzbuzz");
     ]
 
   let example_db_params =
     [
-      ( Name.create "id_p",
-        Prim_type.string_t,
-        Value.String "-1451410871729396224" );
-      (Name.create "id_c", Prim_type.string_t, String "8557539814359574196");
+      ("id_p", Prim_type.string_t, Value.String "-1451410871729396224");
+      ("id_c", Prim_type.string_t, String "8557539814359574196");
     ]
 
   let example1 log =

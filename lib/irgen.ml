@@ -7,7 +7,7 @@ module A = Abslayout
 type ir_module = {
   iters : func list;
   funcs : func list;
-  params : (Name.t * Prim_type.t) list;
+  params : (string * Prim_type.t) list;
   buffer_len : int;
 }
 [@@deriving compare, sexp]
@@ -25,7 +25,7 @@ end
 
 module type S = sig
   val irgen :
-    params:(Name.t * Prim_type.t) list ->
+    params:(string * Prim_type.t) list ->
     len:int ->
     < resolved : Resolve.resolved ; type_ : Type.t ; pos : int option > annot ->
     ir_module
@@ -807,7 +807,7 @@ module Make (Config : Config.S) () = struct
   let irgen ~params ~len r =
     let ctx =
       List.map params ~f:(fun (n, t) ->
-          (Name.copy ~type_:(Some t) n, Ctx.Global (Var (Name.name n))))
+          (Name.create ~type_:t n, Ctx.Global (Var n)))
       |> Ctx.of_alist_exn
     in
     let type_ = r.meta#type_ in
