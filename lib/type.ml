@@ -351,7 +351,8 @@ let annotate r =
     | AHashIdx h, HashIdxT (kt, vt, _) ->
         Option.iter h.hi_key_layout ~f:(fun kr -> annot kr kt);
         annot h.hi_values vt
-    | AOrderedIdx { oi_values = vr; oi_key_layout }, OrderedIdxT (kt, vt, _) ->
+    | AOrderedIdx { oi_values = vr; oi_key_layout; _ }, OrderedIdxT (kt, vt, _)
+      ->
         Option.iter oi_key_layout ~f:(fun kr -> annot kr kt);
         annot vr vt
     | ATuple (rs, _), TupleT (ts, _) -> (
@@ -564,8 +565,8 @@ module Parallel = struct
               [ annot r1; annot r2 ]
           | ATuple (rs, _) -> List.map rs ~f:annot
           | AEmpty | AScalar _ | Relation _ | Range _ -> []
-          | AOrderedIdx { oi_key_layout = None }
-          | AHashIdx { hi_key_layout = None } ->
+          | AOrderedIdx { oi_key_layout = None; _ }
+          | AHashIdx { hi_key_layout = None; _ } ->
               failwith "Missing key layout."
         in
         r.meta#builder.build ctx ts
@@ -667,8 +668,8 @@ module Parallel = struct
         match r.node with
         | AList { l_keys = qk; l_scope; l_values = qv } ->
             wrap (qk, l_scope) (annot qv)
-        | AOrderedIdx { oi_keys = qk; oi_values = qv; oi_scope; oi_key_layout }
-          ->
+        | AOrderedIdx
+            { oi_keys = qk; oi_values = qv; oi_scope; oi_key_layout; _ } ->
             let wrap = wrap (qk, oi_scope) in
             let qk = Option.value_exn oi_key_layout in
             plus (wrap (annot qv)) (wrap (annot qk))

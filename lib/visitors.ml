@@ -2,9 +2,7 @@ open Core
 open Ast
 open Collections
 
-(* Visitors doesn't use the special method override syntax that warning 7 checks
-   for. *)
-[@@@warning "-deprecated-7-17"]
+let ( == ) = phys_equal
 
 type 'r pred = 'r Ast.pred =
   | Name of (Name.t[@opaque])
@@ -102,8 +100,6 @@ and t = (meta[@opaque]) annot
     visitors
       { variety = "mapreduce"; name = "base_mapreduce"; irregular = true }]
 
-[@@@warning "+deprecated+7+17"]
-
 module Map = struct
   let annot query { node; meta } = { node = query node; meta }
   let bound pred (p, b) = (pred p, b)
@@ -146,7 +142,7 @@ module Map = struct
       hi_lookup = List.map hi_lookup ~f:pred;
     }
 
-  let list query pred l =
+  let list query l =
     { l with l_keys = query l.l_keys; l_values = query l.l_values }
 
   let query annot pred = function
@@ -164,7 +160,7 @@ module Map = struct
     | (Relation _ | AEmpty) as q -> q
     | Range (p, p') -> Range (pred p, pred p')
     | AScalar p -> AScalar (pred p)
-    | AList l -> AList (list annot pred l)
+    | AList l -> AList (list annot l)
     | ATuple (qs, t) -> ATuple (List.map qs ~f:annot, t)
     | AHashIdx h -> AHashIdx (hash_idx annot pred h)
     | AOrderedIdx o -> AOrderedIdx (ordered_idx annot pred o)
@@ -218,7 +214,7 @@ module Reduce = struct
               + option zero (fun (p, _) -> pred p) b')
             oi_lookup
 
-  let annot zero ( + ) query meta { node; meta = m } = query node + meta m
+  let annot _zero ( + ) query meta { node; meta = m } = query node + meta m
 end
 
 module Stage_reduce = struct
@@ -232,7 +228,7 @@ module Stage_reduce = struct
         annot `Compile hi_keys + annot stage hi_values
         + option zero (annot stage) hi_key_layout
         + list zero ( + ) (pred stage) hi_lookup
-    | AOrderedIdx { oi_keys; oi_values; oi_key_layout; oi_lookup } ->
+    | AOrderedIdx { oi_keys; oi_values; oi_key_layout; oi_lookup; _ } ->
         annot `Compile oi_keys + annot stage oi_values
         + option zero (annot stage) oi_key_layout
         + list zero ( + )

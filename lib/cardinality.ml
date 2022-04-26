@@ -119,10 +119,10 @@ and query = function
       match A.select_kind ps with `Scalar -> annot r | `Agg -> I.top)
   | Dedup r
   | Filter (_, r)
-  | AHashIdx { hi_values = r }
+  | AHashIdx { hi_values = r; _ }
   | OrderBy { rel = r; _ } ->
       annot r
-  | Join { r1; r2 }
+  | Join { r1; r2; _ }
   | AList { l_keys = r1; l_values = r2; _ }
   | DepJoin { d_lhs = r1; d_rhs = r2; _ } ->
       I.(O.(of_int 0 || (annot r1 * annot r2)))

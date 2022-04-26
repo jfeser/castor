@@ -74,7 +74,7 @@ let rec annot r = { r with node = query r.node }
 and query = function
   | AOrderedIdx o -> DepJoin (ordered_idx (V.Map.ordered_idx annot pred o))
   | AHashIdx h -> DepJoin (hash_idx (V.Map.hash_idx annot pred h))
-  | AList l -> DepJoin (list @@ V.Map.list annot pred l)
+  | AList l -> DepJoin (list @@ V.Map.list annot l)
   | ATuple (ts, Cross) -> cross_tuple (List.map ~f:annot ts)
   | q -> V.Map.query annot pred q
 

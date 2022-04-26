@@ -41,7 +41,7 @@ type binop =
   | `AddD ]
 [@@deriving compare, sexp]
 
-[@@@warning "-deprecated"]
+let ( == ) = phys_equal
 
 type expr =
   | Null
@@ -95,8 +95,6 @@ and func = {
     visitors { variety = "mapreduce" },
     visitors { variety = "iter" },
     visitors { variety = "reduce" }]
-
-[@@@warning "+deprecated"]
 
 let rec conjuncts = function
   | Binop { op = `And; arg1 = p1; arg2 = p2 } -> conjuncts p1 @ conjuncts p2

@@ -217,7 +217,7 @@ let order_open order r =
                 Some (Name (Name.create n), d)
             | p' when [%compare.equal: _ pred] p p' -> Some (p', d)
             | _ -> None))
-  | AList { l_keys = r; l_values = r' } ->
+  | AList { l_keys = r; l_values = r'; _ } ->
       let open Name.O in
       let s' = schema r' and eq' = r'.meta#eq in
       List.filter_map (order r) ~f:(function
