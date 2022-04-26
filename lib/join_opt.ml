@@ -5,7 +5,6 @@ open Ast
 module A = Abslayout
 module P = Pred.Infix
 module V = Visitors
-
 include (val Log.make ~level:(Some Warning) "castor-opt.join-opt")
 
 let max_nest_joins = ref 1
@@ -21,7 +20,6 @@ let param =
     Option.iter nest_joins ~f:(fun x -> max_nest_joins := x)]
 
 let filter p r = { node = Filter (p, r); meta = r.meta }
-
 let join pred r1 r2 = { node = Join { pred; r1; r2 }; meta = r1.meta }
 
 module Join_graph = struct
@@ -171,9 +169,7 @@ module Join_graph = struct
         let x =
           object
             method graph = graph
-
             method leaf_filters = leaf_filters
-
             method top_filters = top_filters
           end
         in
@@ -194,34 +190,26 @@ module Join_graph = struct
                 in
                 object
                   method graph = acc#graph
-
                   method leaf_filters = leaf_filters
-
                   method top_filters = acc#top_filters
                 end
             | Ok [ r1; r2 ] ->
                 let graph = add_or_update_edge acc#graph (r1, p, r2) in
                 object
                   method graph = graph
-
                   method leaf_filters = acc#leaf_filters
-
                   method top_filters = acc#top_filters
                 end
             | _ ->
                 object
                   method graph = acc#graph
-
                   method leaf_filters = acc#leaf_filters
-
                   method top_filters = p :: acc#top_filters
                 end)
     | _ ->
         object
           method graph = empty
-
           method leaf_filters = Map.empty (module Vertex)
-
           method top_filters = []
         end
 
@@ -244,7 +232,6 @@ module Join_graph = struct
     in
     object
       method graph = graph
-
       method top_filters = x#top_filters
     end
 
@@ -274,7 +261,6 @@ module Pareto_set = struct
   type 'a t = (float array * 'a) list
 
   let empty = []
-
   let singleton c v = [ (c, v) ]
 
   let dominates x y =
@@ -300,35 +286,27 @@ module Pareto_set = struct
     |> Option.map ~f:(fun (_, x) -> x)
 
   let of_list l = List.fold_left l ~init:[] ~f:(fun s (c, v) -> add s c v)
-
   let length = List.length
-
   let union_all ss = List.concat ss |> of_list
 end
 
 module Config = struct
   module type My_S = sig
     val cost_conn : Db.t
-
     val params : Set.M(Name).t
-
     val random : Mcmc.Random_choice.t
   end
 
   module type S = sig
     include Ops.Config.S
-
     include Simple_tactics.Config.S
-
     include My_S
   end
 end
 
 module Make (Config : Config.S) = struct
   open Config
-
   open Ops.Make (Config)
-
   module G = Join_graph
 
   type t =
@@ -340,8 +318,8 @@ module Make (Config : Config.S) = struct
 
   let rec num_nest = function
     | Flat _ | Id _ -> 0
-    | Hash { lhs; rhs } -> num_nest lhs + num_nest rhs
-    | Nest { lhs; rhs } -> 1 + num_nest lhs + num_nest rhs
+    | Hash { lhs; rhs; _ } -> num_nest lhs + num_nest rhs
+    | Nest { lhs; rhs; _ } -> 1 + num_nest lhs + num_nest rhs
 
   let rec to_ralgebra = function
     | Flat r | Id r -> r
@@ -528,8 +506,9 @@ module Make (Config : Config.S) = struct
       if G.nb_vertex s = 1 then
         (* Select strategy for the leaves of the join tree. *)
         let r = G.choose_vertex s in
-        [ leaf_flat r; leaf_id r ] |> List.filter_map ~f:Fun.id
-        |> filter_nest_joins |> add_cost |> Pareto_set.of_list
+        [ leaf_flat r; leaf_id r ]
+        |> List.filter_map ~f:Fun.id |> filter_nest_joins |> add_cost
+        |> Pareto_set.of_list
       else
         G.partition_fold s ~init:Pareto_set.empty ~f:(fun cs (s1, s2, es) ->
             let pred = Pred.conjoin (List.map es ~f:(fun (_, p, _) -> p)) in
@@ -590,7 +569,6 @@ module Make (Config : Config.S) = struct
     let joins = opt (Set.empty (module Name)) s#graph in
     object
       method joins = joins
-
       method top_filters = s#top_filters
     end
 
@@ -629,7 +607,6 @@ module Make (Config : Config.S) = struct
         |> Visitors.map_meta (fun meta ->
                object
                  method stage = meta#stage
-
                  method resolved = meta#meta#resolved
                end)
       in

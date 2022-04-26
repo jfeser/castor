@@ -10,18 +10,14 @@ open Match
 module Config = struct
   module type S = sig
     include Ops.Config.S
-
     include Tactics_util.Config.S
   end
 end
 
 module Make (C : Config.S) = struct
   open C
-
   open Ops.Make (C)
-
   open Tactics_util.Make (C)
-
   open Simplify_tactic.Make (C)
 
   (** Push a select that doesn't contain aggregates. *)
@@ -56,13 +52,9 @@ module Make (C : Config.S) = struct
     let visitor =
       object
         inherit [_] V.map
-
         method! visit_Sum () p = Sum (add_agg (Sum p))
-
         method! visit_Count () = Sum (add_agg Count)
-
         method! visit_Min () p = Min (add_agg (Min p))
-
         method! visit_Max () p = Max (add_agg (Max p))
 
         method! visit_Avg () p =
@@ -117,8 +109,8 @@ module Make (C : Config.S) = struct
                 | _ -> true)
             in
             return (o, i)
-        | AOrderedIdx { oi_values = rv }
-        | AList { l_values = rv }
+        | AOrderedIdx { oi_values = rv; _ }
+        | AList { l_values = rv; _ }
         | ATuple (rv :: _, Concat) ->
             return @@ gen_concat_select_list ps (schema rv)
         | _ -> None
@@ -187,9 +179,7 @@ module Make (C : Config.S) = struct
     let visitor =
       object
         inherit extract_subquery_visitor
-
         method can_hoist _ = true
-
         method fresh_name () = Name.create @@ Fresh.name Global.fresh "q%d"
       end
     in
