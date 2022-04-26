@@ -2,7 +2,7 @@
  (package castor)
  (public_name castor-pretty)
  (name pretty)
- (libraries core castor)
+ (libraries core core_unix.command_unix castor)
  (preprocess
   (pps ppx_sexp_conv ppx_let))
  (modules pretty))
@@ -11,7 +11,7 @@
  (package castor)
  (public_name castor-compile)
  (name compile)
- (libraries core castor logs)
+ (libraries core core_unix.command_unix castor logs)
  (preprocess
   (pps ppx_sexp_conv ppx_let))
  (modules compile))
@@ -20,7 +20,7 @@
  (package castor)
  (public_name castor-to-cozy)
  (name to_cozy)
- (libraries core castor)
+ (libraries core core_unix.command_unix castor)
  (preprocess
   (pps ppx_sexp_conv ppx_let))
  (modules to_cozy))
@@ -29,7 +29,7 @@
  (package castor)
  (public_name sample-tpch)
  (name sample_tpch)
- (libraries core postgresql castor logs)
+ (libraries core core_unix.command_unix postgresql castor logs)
  (preprocess
   (pps ppx_sexp_conv ppx_let))
  (modules sample_tpch))
@@ -38,7 +38,7 @@
  (package castor)
  (public_name sql-to-castor)
  (name parse_sql)
- (libraries core sqlgg castor yojson)
+ (libraries core core_unix.command_unix sqlgg castor yojson)
  (preprocess
   (pps ppx_sexp_conv ppx_let))
  (modules parse_sql))
@@ -47,7 +47,7 @@
  (package castor)
  (public_name cozy-to-castor)
  (name parse_cozy)
- (libraries core castor)
+ (libraries core core_unix.command_unix castor)
  (preprocess
   (pps ppx_sexp_conv ppx_let))
  (modules parse_cozy))
@@ -56,7 +56,7 @@
  (package castor)
  (public_name castor-combine)
  (name combine)
- (libraries core castor)
+ (libraries core core_unix.command_unix castor)
  (preprocess
   (pps ppx_sexp_conv ppx_let))
  (modules combine))

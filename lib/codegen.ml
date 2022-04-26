@@ -1018,9 +1018,11 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
   let compile ?out_dir ?layout_log ~gprof ~params layout =
     let out_dir =
-      match out_dir with Some x -> x | None -> Filename.temp_dir "bin" ""
+      match out_dir with Some x -> x | None -> Filename_unix.temp_dir "bin" ""
     in
-    (match Sys.is_directory out_dir with `No -> Unix.mkdir out_dir | _ -> ());
+    (match Sys_unix.is_directory out_dir with
+    | `No -> Core_unix.mkdir out_dir
+    | _ -> ());
     let stdlib_fn = Global.build_root () ^ "/etc/castorlib.c" in
     let date_fn = Global.build_root () ^ "/etc/date.c" in
     let main_fn = out_dir ^ "/main.c" in

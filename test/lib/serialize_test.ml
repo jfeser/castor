@@ -11,8 +11,8 @@ let run_test ?(params = []) layout_str =
   let open Abslayout_load in
   let conn = Lazy.force test_db_conn in
 
-  let layout_file = Filename.temp_file "layout" "bin" in
-  let layout_log_file = Filename.temp_file "layout" "txt" in
+  let layout_file = Filename_unix.temp_file "layout" "bin" in
+  let layout_log_file = Filename_unix.temp_file "layout" "txt" in
   let layout =
     let params =
       List.map params ~f:(fun (n, t, _) -> Name.copy ~type_:(Some t) n)

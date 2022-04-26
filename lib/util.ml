@@ -6,10 +6,10 @@ let command_exn ?quiet:_ = function
   | cmd ->
       let cmd_str = String.concat cmd ~sep:" " in
       Log.info (fun m -> m "%s" cmd_str);
-      let err = Unix.system cmd_str in
+      let err = Core_unix.system cmd_str in
       Or_error.(
         tag_arg
-          (Unix.Exit_or_signal.or_error err)
+          (Core_unix.Exit_or_signal.or_error err)
           "Running command failed." cmd_str [%sexp_of: string]
         |> ok_exn)
 
@@ -17,7 +17,7 @@ let command_exn ?quiet:_ = function
 let command_out_exn ?quiet:_ = function
   | [] -> Error.of_string "Empty command" |> Error.raise
   | cmd ->
-      let open Unix in
+      let open Core_unix in
       let cmd_str = String.concat cmd ~sep:" " in
       Log.info (fun m -> m "%s" cmd_str);
       let ch = open_process_in cmd_str in
@@ -116,10 +116,10 @@ class ['s] float_sum_monoid =
   end
 
 let run_in_fork (type a) (thunk : unit -> a) : a =
-  let rd, wr = Unix.pipe () in
-  let rd = Unix.in_channel_of_descr rd in
-  let wr = Unix.out_channel_of_descr wr in
-  match Unix.fork () with
+  let rd, wr = Core_unix.pipe () in
+  let rd = Core_unix.in_channel_of_descr rd in
+  let wr = Core_unix.out_channel_of_descr wr in
+  match Core_unix.fork () with
   | `In_the_child ->
       Marshal.(to_channel wr (thunk ()) [ Closures ]);
       exit 0
@@ -127,10 +127,10 @@ let run_in_fork (type a) (thunk : unit -> a) : a =
 
 let run_in_fork_timed (type a) ?time ?(sleep_sec = 0.001) (thunk : unit -> a) :
     a option =
-  let rd, wr = Unix.pipe () in
-  let rd = Unix.in_channel_of_descr rd in
-  let wr = Unix.out_channel_of_descr wr in
-  match Unix.fork () with
+  let rd, wr = Core_unix.pipe () in
+  let rd = Core_unix.in_channel_of_descr rd in
+  let wr = Core_unix.out_channel_of_descr wr in
+  match Core_unix.fork () with
   | `In_the_child ->
       Marshal.(to_channel wr (thunk ()) [ Closures ]);
       exit 0
@@ -140,11 +140,11 @@ let run_in_fork_timed (type a) ?time ?(sleep_sec = 0.001) (thunk : unit -> a) :
           let start = Time.now () in
           let rec sleep () =
             if Time.Span.(Time.(diff (now ()) start) > span) then (
-              Signal.(send_i kill (`Pid pid));
+              Signal_unix.send_i Signal.kill (`Pid pid);
               None)
             else (
-              Unix.nanosleep sleep_sec |> ignore;
-              match Unix.wait_nohang (`Pid pid) with
+              Core_unix.nanosleep sleep_sec |> ignore;
+              match Core_unix.wait_nohang (`Pid pid) with
               | None -> sleep ()
               | Some _ -> Some Marshal.(from_channel rd))
           in

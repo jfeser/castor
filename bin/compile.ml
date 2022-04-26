@@ -73,28 +73,28 @@ let main ~debug ~gprof ~params ~code_only ~query ~enable_redshift_dates ?out_dir
 
   C.compile ~gprof ~params ?out_dir ?layout_log:layout_file ralgebra |> ignore
 
-let () =
+let spec =
   let open Command.Let_syntax in
-  Command.basic ~summary:"Compile a query."
-    [%map_open
-      let () = Log.param
-      and () = Db.param
-      and () = Join_elim.param
-      and debug = flag "debug" ~aliases:[ "g" ] no_arg ~doc:"enable debug mode"
-      and gprof = flag "prof" ~aliases:[ "pg" ] no_arg ~doc:"enable profiling"
-      and enable_redshift_dates =
-        flag "enable-redshift-dates" no_arg ~doc:"enable redshift date syntax"
-      and out_dir =
-        flag "output" ~aliases:[ "o" ] (optional string)
-          ~doc:"DIR directory to write compiler output in"
-      and params =
-        flag "param" ~aliases:[ "p" ] (listed Util.param)
-          ~doc:"NAME:TYPE query parameters"
-      and code_only = flag "code-only" no_arg ~doc:"only emit code"
-      and query =
-        flag "query" ~aliases:[ "r" ] no_arg ~doc:"parse input as a query"
-      and fn = anon (maybe ("query" %: string)) in
-      fun () ->
-        main ~debug ~gprof ~params ~code_only ~query ~enable_redshift_dates
-          ?out_dir fn]
-  |> Command.run
+  [%map_open
+    let () = Log.param
+    and () = Db.param
+    and () = Join_elim.param
+    and debug = flag "debug" ~aliases:[ "g" ] no_arg ~doc:"enable debug mode"
+    and gprof = flag "prof" ~aliases:[ "pg" ] no_arg ~doc:"enable profiling"
+    and enable_redshift_dates =
+      flag "enable-redshift-dates" no_arg ~doc:"enable redshift date syntax"
+    and out_dir =
+      flag "output" ~aliases:[ "o" ] (optional string)
+        ~doc:"DIR directory to write compiler output in"
+    and params =
+      flag "param" ~aliases:[ "p" ] (listed Util.param)
+        ~doc:"NAME:TYPE query parameters"
+    and code_only = flag "code-only" no_arg ~doc:"only emit code"
+    and query =
+      flag "query" ~aliases:[ "r" ] no_arg ~doc:"parse input as a query"
+    and fn = anon (maybe ("query" %: string)) in
+    fun () ->
+      main ~debug ~gprof ~params ~code_only ~query ~enable_redshift_dates
+        ?out_dir fn]
+
+let () = Command.basic spec ~summary:"Compile a query." |> Command_unix.run

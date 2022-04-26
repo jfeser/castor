@@ -290,17 +290,19 @@ let main params fn =
       let r = (new conv_sql conn)#query q in
       unsub params r |> Format.printf "%a\n@." Abslayout.pp)
 
+let spec =
+  let open Command.Let_syntax in
+  [%map_open
+    let () = Log.param
+    and () = Db.param
+    and params = flag ~doc:" parameter file" "p" (required string)
+    and file = anon ("file" %: string) in
+    fun () -> main params file]
+
+let cmd = Command.basic spec ~summary:"Convert a SQL query to a Castor spec."
+
 let () =
   (* Set early so we get logs from command parsing code. *)
   Logs.set_reporter (Logs.format_reporter ());
   Logs.set_level (Some Logs.Info);
-  let open Command in
-  let open Let_syntax in
-  basic ~summary:"Convert a SQL query to a Castor spec."
-    [%map_open
-      let () = Log.param
-      and () = Db.param
-      and params = flag ~doc:" parameter file" "p" (required string)
-      and file = anon ("file" %: string) in
-      fun () -> main params file]
-  |> run
+  Command_unix.run cmd

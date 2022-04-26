@@ -444,12 +444,13 @@ and to_string = function
       |> String.concat ~sep:" union all "
 
 let format sql =
-  let proc = Unix.open_process "sqlformat -k upper -r -" in
+  let proc = Core_unix.open_process "sqlformat -k upper -r -" in
   let stdout, stdin = proc in
   Out_channel.output_string stdin sql;
   Out_channel.close stdin;
   let out = In_channel.input_all stdout in
-  Unix.close_process proc |> Unix.Exit_or_signal.or_error |> Or_error.ok_exn;
+  Core_unix.close_process proc
+  |> Core_unix.Exit_or_signal.or_error |> Or_error.ok_exn;
   String.strip out
 
 let to_string_hum sql = to_string sql |> format

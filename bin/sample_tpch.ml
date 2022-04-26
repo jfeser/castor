@@ -49,23 +49,22 @@ let main ?(seed = 0) ~db_in ~db_out ~sample () =
     {|create table partsupp as (select * from old_partsupp where ps_partkey in (select p_partkey from part) and ps_suppkey in (select s_suppkey from supplier))|};
   exec conn "drop table old_partsupp cascade" |> ignore
 
+let spec =
+  let open Command.Let_syntax in
+  let%map_open verbose =
+    flag "verbose" ~aliases:[ "v" ] no_arg ~doc:"increase verbosity"
+  and quiet = flag "quiet" ~aliases:[ "q" ] no_arg ~doc:"decrease verbosity"
+  and db_in = flag "i" (required string) ~doc:"DB the input database"
+  and db_out = flag "o" (required string) ~doc:"DB the output database"
+  and sample =
+    flag "n" (required int)
+      ~doc:"SIZE the sample size for the lineitem relation"
+  and seed = flag "s" (optional int) ~doc:"the random seed" in
+  if verbose then Logs.set_level (Some Logs.Debug)
+  else if quiet then Logs.set_level (Some Logs.Error)
+  else Logs.set_level (Some Logs.Info);
+  main ?seed ~db_in ~db_out ~sample
+
 let () =
-  (* Set early so we get logs from command parsing code. *)
-  let open Command in
-  let open Let_syntax in
-  basic ~summary:"Generate a sample database for a benchmark."
-    (let%map_open verbose =
-       flag "verbose" ~aliases:[ "v" ] no_arg ~doc:"increase verbosity"
-     and quiet = flag "quiet" ~aliases:[ "q" ] no_arg ~doc:"decrease verbosity"
-     and db_in = flag "i" (required string) ~doc:"DB the input database"
-     and db_out = flag "o" (required string) ~doc:"DB the output database"
-     and sample =
-       flag "n" (required int)
-         ~doc:"SIZE the sample size for the lineitem relation"
-     and seed = flag "s" (optional int) ~doc:"the random seed" in
-     fun () ->
-       if verbose then Logs.set_level (Some Logs.Debug)
-       else if quiet then Logs.set_level (Some Logs.Error)
-       else Logs.set_level (Some Logs.Info);
-       main ?seed ~db_in ~db_out ~sample ())
-  |> run
+  Command.basic spec ~summary:"Generate a sample database for a benchmark."
+  |> Command_unix.run

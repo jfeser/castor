@@ -13,15 +13,17 @@ let main params file =
   in
   Cozy.to_string bench_name params ralgebra |> print_string
 
+let spec =
+  let open Command.Let_syntax in
+  let%map_open () = Log.param
+  and () = Db.param
+  and params =
+    flag "param" ~aliases:[ "p" ] (listed Util.param)
+      ~doc:"NAME:TYPE query parameters"
+  and file = anon ("file" %: string) in
+  fun () -> main params file
+
 let () =
-  let open Command in
-  let open Let_syntax in
-  basic ~summary:"Convert a relational algebra spec to a Cozy spec."
-    (let%map_open () = Log.param
-     and () = Db.param
-     and params =
-       flag "param" ~aliases:[ "p" ] (listed Util.param)
-         ~doc:"NAME:TYPE query parameters"
-     and file = anon ("file" %: string) in
-     fun () -> main params file)
-  |> run
+  Command.basic spec
+    ~summary:"Convert a relational algebra spec to a Cozy spec."
+  |> Command_unix.run

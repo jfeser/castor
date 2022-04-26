@@ -14,14 +14,15 @@ let main ~in_place file =
         write fmt)
   else write std_formatter
 
+let spec =
+  let open Command.Let_syntax in
+  let%map_open file = anon ("file" %: string)
+  and in_place = flag "i" no_arg ~doc:"write output in place" in
+  fun () -> main ~in_place file
+
 let () =
   (* Set early so we get logs from command parsing code. *)
   Logs.set_reporter (Logs.format_reporter ());
   Logs.set_level (Some Logs.Info);
-  let open Command in
-  let open Let_syntax in
-  basic ~summary:"Format a relational algebra expression."
-    (let%map_open file = anon ("file" %: string)
-     and in_place = flag "i" no_arg ~doc:"write output in place" in
-     fun () -> main ~in_place file)
-  |> run
+  Command.basic spec ~summary:"Format a relational algebra expression."
+  |> Command_unix.run

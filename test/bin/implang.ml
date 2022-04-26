@@ -51,4 +51,5 @@ let spec =
   run_test ~params ?implang ?type_ ?opt
 
 let () =
-  Command.basic ~summary:"Generate intermediate language." spec |> Command.run
+  Command.basic ~summary:"Generate intermediate language." spec
+  |> Command_unix.run

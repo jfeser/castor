@@ -11,11 +11,10 @@ let main fn =
   print_s ([%sexp_of: Cozy.query] cozy);
   print_s ([%sexp_of: Big_o.t] (Cozy.cost cozy))
 
-let () =
-  let open Command in
-  let open Let_syntax in
-  basic ~summary:""
-    [%map_open
-      let () = Log.param and file = anon ("file" %: string) in
-      fun () -> main file]
-  |> run
+let spec =
+  let open Command.Let_syntax in
+  [%map_open
+    let () = Log.param and file = anon ("file" %: string) in
+    fun () -> main file]
+
+let () = Command.basic spec ~summary:"" |> Command_unix.run

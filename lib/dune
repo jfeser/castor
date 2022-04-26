@@ -15,7 +15,7 @@
 
 (library
  (public_name castor)
- (libraries core core.bigstring_unix lwt lwt.unix postgresql llvm
+ (libraries core core_unix.time_unix core_unix.bigstring_unix core_unix.filename_unix lwt lwt.unix postgresql llvm
    llvm.analysis llvm.target llvm.all_backends logs visitors.runtime hashcons
    fmt fmt.tty genhash)
  (flags :standard -w -9)

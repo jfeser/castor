@@ -21,7 +21,7 @@ let format_reporter ppf =
       Fmt.kpf k ppf
         ("@[[%a] [%a] [%s]@ " ^^ fmt ^^ "@]@.")
         Fmt.(styled style Logs.pp_level)
-        level Time.pp (Time.now ()) (Src.name src)
+        level Time_unix.pp (Time.now ()) (Src.name src)
     in
     msgf format
   in

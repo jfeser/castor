@@ -540,9 +540,9 @@ let serialize ?layout_file fn l =
   let len = serializer#pos in
   Out_channel.with_file fn ~f:serializer#write_into_channel;
   Option.iter layout_file ~f:(fun fn ->
-      let layout_fn, layout_ch = Filename.open_temp_file "layout" "txt" in
+      let layout_fn, layout_ch = Filename_unix.open_temp_file "layout" "txt" in
       serializer#render layout_ch;
-      (Unix.create_process ~prog:"mv" ~args:[ layout_fn; fn ]).pid
-      |> Unix.waitpid |> ignore;
+      (Core_unix.create_process ~prog:"mv" ~args:[ layout_fn; fn ]).pid
+      |> Core_unix.waitpid |> ignore;
       Out_channel.close layout_ch);
   (l, len)

@@ -104,7 +104,7 @@ module Data = struct
     let r_tups, sql = to_query r_fold |> to_sql conn in
     info (fun m -> m "Running SQL: %s" (Sql.to_string_hum sql));
     (* Run the sql to get a stream of tuples. *)
-    let fn = Filename.temp_file ~in_dir:dir "query" ".sexp" in
+    let fn = Filename_unix.temp_file ~in_dir:dir "query" ".sexp" in
     Db.exec_to_file ~fn conn (Schema_types.types r_tups) (Sql.to_string sql);
     { fn; ralgebra = strip_meta r_fold }
 

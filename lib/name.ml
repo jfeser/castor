@@ -30,7 +30,9 @@ let type_k = Univ_map.Key.create ~name:"type" [%sexp_of: Prim_type.t]
 let create ?scope ?type_ name =
   let meta = Univ_map.empty in
   let meta =
-    match type_ with Some t -> Univ_map.set meta type_k t | None -> meta
+    match type_ with
+    | Some t -> Univ_map.set meta ~key:type_k ~data:t
+    | None -> meta
   in
   { scope; name; meta }
 

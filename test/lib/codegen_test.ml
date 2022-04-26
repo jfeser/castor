@@ -4,12 +4,12 @@ open Abslayout_load
 
 let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
     layout_str =
-  let layout_file = Filename.temp_file "layout" "txt" in
+  let layout_file = Filename_unix.temp_file "layout" "txt" in
   let conn = Lazy.force test_db_conn in
   let (module I), (module C) = Setup.make_modules ?irgen_debug () in
 
   let run_compiler layout =
-    let out_dir = Filename.temp_dir "bin" "" in
+    let out_dir = Filename_unix.temp_dir "bin" "" in
     let exe_fn, data_fn =
       let params = List.map ~f:(fun (n, t, _) -> (n, t)) params in
       C.compile ~out_dir ~layout_log:layout_file ~gprof:false ~params layout
@@ -23,11 +23,11 @@ let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
       in
       sprintf "%s -p %s %s" exe_fn data_fn params_str
     in
-    let cmd_ch = Unix.open_process_in cmd in
+    let cmd_ch = Core_unix.open_process_in cmd in
     let cmd_output = In_channel.input_all cmd_ch in
-    let ret = Unix.close_process_in cmd_ch in
+    let ret = Core_unix.close_process_in cmd_ch in
     print_endline cmd_output;
-    print_endline (Unix.Exit_or_signal.to_string_hum ret);
+    print_endline (Core_unix.Exit_or_signal.to_string_hum ret);
     Out_channel.flush stdout
   in
 
