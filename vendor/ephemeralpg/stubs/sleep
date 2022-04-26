@@ -1,2 +1,0 @@
-#!/bin/sh
->&2 echo $(basename $0) $*
