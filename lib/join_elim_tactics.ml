@@ -9,20 +9,15 @@ open Match
 module Config = struct
   module type S = sig
     include Ops.Config.S
-
     include Tactics_util.Config.S
-
     include Simplify_tactic.Config.S
   end
 end
 
 module Make (C : Config.S) = struct
   open C
-
   open Ops.Make (C)
-
   open Simplify_tactic.Make (C)
-
   module Tactics_util = Tactics_util.Make (C)
 
   let elim_join_nest r =
@@ -162,9 +157,9 @@ module Make (C : Config.S) = struct
               (dedup (select [ As_pred (Name pk, Name.name alias) ] rel))
               scope
               (select
-                 ( List.map fst_sel_list ~f:(fun n ->
-                       Name (Name.scoped scope2 n))
-                 @ Schema.to_select_list snd_sel_list )
+                 (List.map fst_sel_list ~f:(fun n ->
+                      Name (Name.scoped scope2 n))
+                 @ Schema.to_select_list snd_sel_list)
                  (filter (Binop (Eq, Name pk, Name alias)) rel))
               [ Name (Name.scoped scope2 pk) ])
     else None

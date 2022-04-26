@@ -49,7 +49,7 @@ let run ?(max_time = Time.Span.of_min 10.0) eval =
     info (fun m -> m "State space size: %d" (Random_choice.length state));
     if Time.(Span.(diff (now ()) start_time > max_time)) then (
       info (fun m -> m "Out of time. Final score %f" score);
-      (state, score) )
+      (state, score))
     else
       let state' = Random_choice.perturb state in
       let score' = eval state' in
@@ -58,9 +58,9 @@ let run ?(max_time = Time.Span.of_min 10.0) eval =
       if Float.(u < h) then (
         info (fun m ->
             m "Transitioning. Old score %f, new score %f" score score');
-        loop state' score' )
+        loop state' score')
       else (
         info (fun m -> m "Staying. Old score %f, new score %f" score score');
-        loop state score )
+        loop state score)
   in
   loop state score

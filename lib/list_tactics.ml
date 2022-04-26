@@ -15,7 +15,6 @@ end
 
 module Make (C : Config.S) = struct
   open C
-
   open Ops.Make (C)
 
   let split_list ?(min_factor = 3) r =
@@ -54,12 +53,12 @@ module Make (C : Config.S) = struct
            (A.dedup @@ A.select [ P.name split_field ] @@ r)
            fresh_scope
            (A.list
-              ( A.select other_fields_select
+              (A.select other_fields_select
               @@ A.filter
                    P.(
                      name split_field
                      = name (Name.scoped fresh_scope split_field))
-              @@ r )
+              @@ r)
               l_scope
               (A.subst
                  (Map.singleton

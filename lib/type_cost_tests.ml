@@ -3,9 +3,7 @@ open Castor_test.Test_util
 
 open Type_cost.Make (struct
   let params = Set.empty (module Name)
-
   let cost_timeout = Some 60.0
-
   let cost_conn = Lazy.force tpch_conn
 end)
 

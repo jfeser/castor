@@ -6,13 +6,9 @@ module V = Visitors
 module Config = struct
   module type S = sig
     val conn : Db.t
-
     val cost_conn : Db.t
-
     val params : Set.M(Name).t
-
     val cost_timeout : float option
-
     val random : Mcmc.Random_choice.t
   end
 end
@@ -54,7 +50,6 @@ module Make (Config : Config.S) = struct
     Is_serializable.is_spine_serializeable ~params ~path:p r |> Result.is_ok
 
   let has_params r p = Path.get_exn p r |> Free.free |> overlaps params
-
   let has_free r p = not (Set.is_empty (Free.free (Path.get_exn p r)))
 
   let push_all_runtime_filters =
@@ -295,7 +290,7 @@ module Make (Config : Config.S) = struct
                              @@ for_all Simple_tactics.row_store
                                   Path.(all >>? is_orderby >>? is_run_time);
                              (* Try throwing away structure if it reduces overall cost. *)
-                             ( traced ~name:"drop-structure"
+                             (traced ~name:"drop-structure"
                              @@ Branching.(
                                   seq_many
                                     [
@@ -312,7 +307,7 @@ module Make (Config : Config.S) = struct
                                            ]);
                                       filter is_spine_serializable;
                                     ]
-                                  |> lower (min Cost.cost)) );
+                                  |> lower (min Cost.cost)));
                              (* Cleanup*)
                              traced ~name:"cleanup" @@ fix
                              @@ seq_many
@@ -365,7 +360,6 @@ and optimize_subqueries (module C : Config.S) r =
         optimize_exn (module C) r
 
       method! visit_Exists () r = Exists (self#visit_subquery r)
-
       method! visit_First () r = First (self#visit_subquery r)
 
       method! visit_AList () l =

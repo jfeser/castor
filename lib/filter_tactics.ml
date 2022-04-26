@@ -15,28 +15,20 @@ module Config = struct
 
   module type S = sig
     include Ops.Config.S
-
     include Simplify_tactic.Config.S
-
     include Tactics_util.Config.S
-
     include My_S
   end
 end
 
 module Make (C : Config.S) = struct
   open Ops.Make (C)
-
   open Simplify_tactic.Make (C)
-
   module Tactics_util = Tactics_util.Make (C)
-
   module My_C : Config.My_S = C
-
   open My_C
 
   let fresh_name = Fresh.name Global.fresh
-
   let schema_set r = Schema.schema r |> Set.of_list (module Name)
 
   (** Split predicates that sit under a binder into the parts that depend on
@@ -75,14 +67,14 @@ module Make (C : Config.S) = struct
             if Tactics_util.select_contains (Free.pred_free p) ps r then
               Some (A.filter p (A.select ps r))
             else None
-        | `Agg -> None )
+        | `Agg -> None)
     | Join { pred; r1; r2 } -> (
         match (to_filter r1, to_filter r2) with
         | Some (p1, r1), Some (p2, r2) ->
             Some (filter_many [ p1; p2 ] (A.join pred r1 r2))
         | None, Some (p, r2) -> Some (A.filter p (A.join pred r1 r2))
         | Some (p, r1), None -> Some (A.filter p (A.join pred r1 r2))
-        | None, None -> None )
+        | None, None -> None)
     | Dedup r ->
         let%map p, r = to_filter r in
         A.filter p (A.dedup r)
@@ -118,7 +110,7 @@ module Make (C : Config.S) = struct
                 (Set.diff (Free.pred_free p) params)
                 ps r
             then Some (A.filter p (A.select ps r))
-            else None )
+            else None)
     | _ -> None
 
   let hoist_filter_agg = of_func hoist_filter_agg ~name:"hoist-filter-agg"
@@ -140,7 +132,7 @@ module Make (C : Config.S) = struct
               |> List.map ~f:(fun n -> Name n)
             in
             Some (A.filter p @@ A.select (ps @ ext) r)
-        | `Agg -> None )
+        | `Agg -> None)
     | GroupBy (ps, key, r) ->
         let%bind p, r = to_filter r in
         let ext =
@@ -179,8 +171,8 @@ module Make (C : Config.S) = struct
         if List.is_empty has_params || List.is_empty no_params then None
         else
           Some
-            ( A.filter (Pred.conjoin has_params)
-            @@ A.filter (Pred.conjoin no_params) r )
+            (A.filter (Pred.conjoin has_params)
+            @@ A.filter (Pred.conjoin no_params) r)
     | _ -> None
 
   let split_filter_params =
@@ -195,7 +187,6 @@ module Make (C : Config.S) = struct
     let visitor =
       object
         inherit [_] V.endo
-
         method! visit_Name () _ n = Name (Name.copy ~scope:(Some rn) n)
       end
     in
@@ -322,7 +313,7 @@ module Make (C : Config.S) = struct
         | Ok r -> Seq.singleton (filter_many rest r)
         | Error err ->
             Logs.warn (fun m -> m "Elim-cmp: %a" Error.pp err);
-            Seq.empty )
+            Seq.empty)
     | _ -> Seq.empty
 
   let elim_cmp_filter =
@@ -495,7 +486,6 @@ module Make (C : Config.S) = struct
     let visitor =
       object (self)
         inherit [_] V.reduce
-
         inherit [_] Util.disj_monoid
 
         method! visit_Unop () op p =
@@ -508,7 +498,6 @@ module Make (C : Config.S) = struct
     let visitor =
       object (self)
         inherit [_] V.reduce
-
         inherit [_] Util.conj_monoid
 
         method! visit_Binop () op p1 p2 =
@@ -576,7 +565,7 @@ module Make (C : Config.S) = struct
           | _, Ok _ | Ok _, _ ->
               Or_error.error "No candidate keys." (p1, p2)
                 [%sexp_of: Pred.t * Pred.t]
-          | Error e1, Error e2 -> Error (Error.of_list [ e1; e2 ]) )
+          | Error e1, Error e2 -> Error (Error.of_list [ e1; e2 ]))
       | p ->
           Or_error.error "Not part of an equality predicate." p
             [%sexp_of: Pred.t]
@@ -587,8 +576,7 @@ module Make (C : Config.S) = struct
         | And (d1, d2) ->
             let e1 = extract d1 and e2 = extract d2 in
             let n1 = schema e1 and n2 = schema e2 in
-            A.dedup
-            @@ A.select [ Name n1 ]
+            A.dedup @@ A.select [ Name n1 ]
             @@ A.join (Binop (Eq, Name n1, Name n2)) e1 e2
         | Or (d1, d2) ->
             let e1 = extract d1 and e2 = extract d2 in
@@ -614,7 +602,7 @@ module Make (C : Config.S) = struct
       Logs.info ~src:elim_eq_filter_src (fun m ->
           m "Would need to join too many relations (%d > %d)" n
             elim_eq_filter_limit);
-      None )
+      None)
     else Some ()
 
   let elim_eq_filter r =
@@ -739,13 +727,12 @@ module Make (C : Config.S) = struct
     let visitor =
       object
         inherit [_] V.reduce as super
-
         inherit [_] Util.list_monoid
 
         method! visit_Filter () (p, r) =
           super#visit_Filter () (p, r)
-          @ ( Pred.conjuncts p
-            |> List.filter ~f:(fun p -> Set.mem (Pred.names p) n) )
+          @ (Pred.conjuncts p
+            |> List.filter ~f:(fun p -> Set.mem (Pred.names p) n))
       end
     in
     visitor#visit_t () r
@@ -759,7 +746,6 @@ module Make (C : Config.S) = struct
           match Map.find ctx v with Some x -> x | None -> this
 
         method! visit_Exists _ this _ = this
-
         method! visit_First _ this _ = this
       end
     in
@@ -877,7 +863,6 @@ module Make (C : Config.S) = struct
     Set.to_sequence params |> Seq.filter_map ~f:(partition_on r)
 
   let partition = Branching.global partition ~name:"partition"
-
   let db_relation n = A.relation (Db.relation C.conn n)
 
   let partition_eq n =
@@ -885,7 +870,6 @@ module Make (C : Config.S) = struct
       let visitor =
         object
           inherit [_] V.reduce
-
           inherit [_] Util.list_monoid
 
           method! visit_Binop ps op arg1 arg2 =
@@ -1000,7 +984,6 @@ module Make (C : Config.S) = struct
     let visitor =
       object
         inherit Tactics_util.extract_subquery_visitor
-
         method can_hoist = can_hoist
 
         method fresh_name () =
@@ -1037,9 +1020,7 @@ module Make (C : Config.S) = struct
     let visitor =
       object
         inherit Tactics_util.extract_subquery_visitor
-
         method can_hoist = can_hoist
-
         method fresh_name () = Name.create @@ Fresh.name Global.fresh "q%d"
       end
     in
@@ -1051,7 +1032,7 @@ module Make (C : Config.S) = struct
         | n, First r -> (
             match Schema.schema r with
             | [ n' ] -> return @@ A.select [ As_pred (Name n', Name.name n) ] r
-            | _ -> None )
+            | _ -> None)
         | _ -> None)
     in
     let%map rhs =
@@ -1069,13 +1050,12 @@ module Make (C : Config.S) = struct
     let visitor =
       object
         inherit Tactics_util.extract_subquery_visitor
-
         val mutable is_first = true
 
         method can_hoist _ =
           if is_first then (
             is_first <- false;
-            true )
+            true)
           else false
 
         method fresh_name () = Name.create @@ Fresh.name Global.fresh "q%d"
@@ -1270,8 +1250,8 @@ module Make (C : Config.S) = struct
     else
       return @@ A.filter p'
       @@ A.select
-           ( List.map binds ~f:(fun (n, p) -> P.as_ p (Name.name n))
-           @ Schema.(schema r |> to_select_list) )
+           (List.map binds ~f:(fun (n, p) -> P.as_ p (Name.name n))
+           @ Schema.(schema r |> to_select_list))
       @@ r
 
   let cse_filter = of_func ~name:"cse-filter" cse_filter

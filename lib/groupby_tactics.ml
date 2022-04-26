@@ -3,20 +3,17 @@ open Collections
 open Match
 module A = Abslayout
 module P = Pred.Infix
-
 include (val Log.make ~level:(Some Warning) "castor-opt.groupby-tactics")
 
 module Config = struct
   module type S = sig
     include Ops.Config.S
-
     include Tactics_util.Config.S
   end
 end
 
 module Make (C : Config.S) = struct
   open Ops.Make (C)
-
   open Tactics_util.Make (C)
 
   (** Eliminate a group by operator without representing duplicate key values. *)
@@ -51,7 +48,7 @@ module Make (C : Config.S) = struct
                  Cross
         | Error err ->
             info (fun m -> m "elim-groupby: %a" Error.pp err);
-            None )
+            None)
     (* Otherwise, if some keys are computed, fail. *)
     | _ -> None
 
@@ -82,7 +79,6 @@ module Make (C : Config.S) = struct
     of_func elim_groupby_approx ~name:"elim-groupby-approx"
 
   let elim_groupby = elim_groupby_approx
-
   let db_relation n = A.relation (Db.relation C.conn n)
 
   let elim_groupby_partial =

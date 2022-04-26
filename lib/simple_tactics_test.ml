@@ -7,22 +7,15 @@ module C = struct
     Set.singleton (module Name) (Name.create ~type_:Prim_type.int_t "param")
 
   let fresh = Fresh.create ()
-
   let verbose = false
-
   let validate = false
-
   let param_ctx = Map.empty (module Name)
-
   let conn = Lazy.force test_db_conn
-
   let cost_conn = Lazy.force test_db_conn
-
   let simplify = None
 end
 
 open Make (C)
-
 open Ops.Make (C)
 
 let load_string ?params s = Abslayout_load.load_string_exn ?params C.conn s

@@ -5,24 +5,16 @@ open Castor_test.Test_util
 
 module C = struct
   let params = Set.empty (module Name)
-
   let fresh = Fresh.create ()
-
   let verbose = false
-
   let validate = true
-
   let param_ctx = Map.empty (module Name)
-
   let conn = Lazy.force tpch_conn
-
   let cost_conn = conn
-
   let simplify = None
 end
 
 open Make (C)
-
 open Ops.Make (C)
 
 let () =

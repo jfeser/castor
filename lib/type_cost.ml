@@ -2,15 +2,12 @@ open Ast
 open Abslayout_load
 open Type
 module I = Abs_int
-
 include (val Log.make ~level:(Some Warning) "castor-opt.type-cost")
 
 module Config = struct
   module type S = sig
     val params : Set.M(Name).t
-
     val cost_timeout : float option
-
     val cost_conn : Db.t
   end
 end

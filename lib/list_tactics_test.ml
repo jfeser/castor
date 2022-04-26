@@ -4,14 +4,11 @@ open Castor_test.Test_util
 
 module C = struct
   let params = Set.empty (module Name)
-
   let conn = Lazy.force tpch_conn
-
   let cost_conn = Lazy.force tpch_conn
 end
 
 open List_tactics.Make (C)
-
 open Ops.Make (C)
 
 let load_string ?params s = load_string_exn ?params C.conn s
@@ -26,7 +23,8 @@ alist(select([substring(c_phone, 0, 2) as x395, c_acctbal],
 |}
   in
   apply split_list Path.root r |> Option.iter ~f:(Fmt.pr "%a@." pp);
-  [%expect {|
+  [%expect
+    {|
     alist(dedup(
             select([c_acctbal],
               alist(select([substring(c_phone, 0, 2) as x395, c_acctbal],

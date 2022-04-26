@@ -9,9 +9,7 @@ module P = Pred.Infix
 module Config = struct
   module type S = sig
     val conn : Db.t
-
     val cost_conn : Db.t
-
     val params : Set.M(Name).t
   end
 end
@@ -86,7 +84,7 @@ module Make (Config : Config.S) = struct
                 match p with
                 | As_pred (p, n) -> plus (one (Name.create n) p) m
                 | _ -> m)
-        | `Agg -> zero )
+        | `Agg -> zero)
     | Filter (_, r) | Dedup r -> aliases r
     | _ -> zero
 
@@ -181,22 +179,22 @@ module Make (Config : Config.S) = struct
         Set.mem bound n
         (* TODO: We assume that compile time names that are bound in the context
            are ok, but this might not be true? *)
-        || ( match Map.find stage n with
+        || (match Map.find stage n with
            | Some `Compile -> true
            | Some `Run -> false
            | None ->
                Logs.warn (fun m -> m "Missing stage on %a" Name.pp n);
-               false )
+               false)
            && Option.is_some (Name.rel n))
 
   (** Remove names from a selection list. *)
   let select_out ns r =
     let ns = List.map ns ~f:Name.unscoped in
     select
-      ( schema r
+      (schema r
       |> List.filter ~f:(fun n' ->
              not (List.mem ~equal:Name.O.( = ) ns (Name.unscoped n')))
-      |> List.map ~f:P.name )
+      |> List.map ~f:P.name)
       r
 
   let select_contains names ps r =
@@ -254,11 +252,8 @@ module Make (Config : Config.S) = struct
   class virtual extract_subquery_visitor =
     object (self : 'self)
       inherit [_] Visitors.mapreduce
-
       inherit [_] Util.list_monoid
-
       method virtual can_hoist : Ast.t -> bool
-
       method virtual fresh_name : unit -> Name.t
 
       method! visit_AList () l =

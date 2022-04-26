@@ -5,7 +5,6 @@ module P = Pred.Infix
 module Config = struct
   module type S = sig
     include Ops.Config.S
-
     include Tactics_util.Config.S
   end
 end

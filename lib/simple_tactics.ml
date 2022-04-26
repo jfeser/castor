@@ -10,7 +10,6 @@ end
 
 module Make (Config : Config.S) = struct
   open Config
-
   open Ops.Make (Config)
 
   let row_store r =

@@ -4,7 +4,6 @@ module A = Abslayout
 module Config = struct
   module type S = sig
     include Ops.Config.S
-
     include Tactics_util.Config.S
 
     val params : Set.M(Name).t
@@ -13,7 +12,6 @@ end
 
 module Make (Config : Config.S) = struct
   open Ops.Make (Config)
-
   module Tactics_util = Tactics_util.Make (Config)
 
   let key_is_supported r key =

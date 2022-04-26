@@ -6,49 +6,34 @@ let () = Logs.Src.set_level Join_opt.src (Some Warning)
 
 module Config = struct
   let cost_conn = Db.create "postgresql:///tpch_1k"
-
   let conn = cost_conn
-
   let validate = false
-
   let param_ctx = Map.empty (module Name)
-
   let params = Set.empty (module Name)
-
   let verbose = false
-
   let simplify = None
-
   let random = Mcmc.Random_choice.create ()
 end
 
 open Ops.Make (Config)
-
 open Join_opt.Make (Config)
 
 module C =
-( val Constructors.Annot.with_default
-        (object
+  (val Constructors.Annot.with_default
+         object
            method stage : Name.t -> [ `Compile | `Run | `No_scope ] =
              assert false
 
            method resolved : Resolve.resolved = assert false
-        end) )
+         end)
 
 let type_ = Prim_type.IntT { nullable = false }
-
 let c_custkey = Name.create ~type_ "c_custkey"
-
 let c_nationkey = Name.create ~type_ "c_nationkey"
-
 let n_nationkey = Name.create ~type_ "n_nationkey"
-
 let o_custkey = Name.create ~type_ "o_custkey"
-
 let orders = Db.relation Config.cost_conn "orders"
-
 let customer = Db.relation Config.cost_conn "customer"
-
 let nation = Db.relation Config.cost_conn "nation"
 
 let%expect_test "parted-cost" =
@@ -301,11 +286,8 @@ let%expect_test "" =
   in
   let module Config = struct
     let cost_conn = Db.create "postgresql:///tpch_1k"
-
     let conn = cost_conn
-
     let params = params
-
     let random = Mcmc.Random_choice.create ()
   end in
   let open Join_opt.Make (Config) in

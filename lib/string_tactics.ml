@@ -8,13 +8,11 @@ module P = Pred.Infix
 module Config = struct
   module type My_s = sig
     val conn : Db.t
-
     val params : Set.M(Name).t
   end
 
   module type S = sig
     include My_s
-
     include Ops.Config.S
   end
 end
@@ -22,9 +20,7 @@ end
 module Make (C : Config.S) = struct
   module Ops = Ops.Make (C)
   open Ops
-
   module C : Config.My_s = C
-
   open C
 
   let subst_rel ~key ~data r =
@@ -43,7 +39,6 @@ module Make (C : Config.S) = struct
     let preds_v =
       object
         inherit [_] V.reduce
-
         inherit [_] Util.list_monoid
 
         method! visit_Binop () op a1 a2 =
@@ -63,7 +58,7 @@ module Make (C : Config.S) = struct
                  if Set.mem params n2 then Some (n1, rel, n2) else None
              | None, Some rel ->
                  if Set.mem params n1 then Some (n2, rel, n1) else None
-             | _ -> None )
+             | _ -> None)
          | _ -> None)
     |> List.map ~f:(fun (key, rel, lookup) ->
            let count_name = Fresh.name Global.fresh "c%d" in

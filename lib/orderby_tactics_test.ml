@@ -3,22 +3,15 @@ module A = Abslayout
 
 module Config = struct
   let cost_conn = Db.create "postgresql:///tpch_1k"
-
   let conn = cost_conn
-
   let validate = false
-
   let param_ctx = Map.empty (module Name)
-
   let params = Set.empty (module Name)
-
   let verbose = false
-
   let simplify = None
 end
 
 open Orderby_tactics.Make (Config)
-
 module O = Ops.Make (Config)
 
 let%expect_test "" =

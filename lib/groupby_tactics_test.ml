@@ -3,11 +3,8 @@ open Abslayout_load
 
 module C = struct
   let conn = Db.create "postgresql:///tpch_1k"
-
   let cost_conn = conn
-
   let verbose = false
-
   let validate = false
 
   let params =
@@ -21,18 +18,13 @@ module C = struct
       ]
 
   let param_ctx = Map.empty (module Name)
-
   let fresh = Fresh.create ()
-
   let simplify = None
 end
 
 open C
-
 open Groupby_tactics.Make (C)
-
 open Ops.Make (C)
-
 open Tactics_util.Make (C)
 
 let with_logs src f =
@@ -122,9 +114,7 @@ let%expect_test "" =
   in
   let module C = struct
     let conn = Db.create "postgresql:///tpch_1k"
-
     let cost_conn = conn
-
     let params = params
   end in
   let open Groupby_tactics.Make (C) in
@@ -162,7 +152,8 @@ groupby([l_orderkey, sum((l_extendedprice * (1 - l_discount))) as revenue, o_ord
 |}
   in
   apply elim_groupby Path.root r |> Option.iter ~f:(Fmt.pr "%a@." pp);
-  [%expect {|
+  [%expect
+    {|
     alist(dedup(
             dedup(
               select([l_orderkey, o_orderdate, o_shippriority],
