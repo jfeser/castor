@@ -3,6 +3,7 @@
  (libraries castor str core)
  (flags -open Core -open Castor)
  (inline_tests
-  (deps (alias ../test_db)))
+  (deps
+   (alias ../test_db)))
  (preprocess
   (pps ppx_sexp_conv ppx_compare ppx_expect)))

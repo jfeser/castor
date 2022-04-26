@@ -25,8 +25,7 @@ let%expect_test "select-agg" =
 
 let%expect_test "project" =
   run_test "Select([f], r)";
-  [%expect
-    {|
+  [%expect {|
     SELECT r_0."f" AS "f_1"
     FROM "r" AS "r_0" |}]
 
@@ -73,15 +72,13 @@ let%expect_test "order-by" =
 
 let%expect_test "order-by" =
   run_test "OrderBy([0 desc], Dedup(Select([f], r1)))";
-  [%expect
-    {|
+  [%expect {|
     SELECT DISTINCT r1_0."f" AS "f_1"
     FROM "r1" AS "r1_0" |}]
 
 let%expect_test "order-by" =
   run_test "OrderBy([0 as x desc], Dedup(Select([f], r1)))";
-  [%expect
-    {|
+  [%expect {|
     SELECT DISTINCT r1_0."f" AS "f_1"
     FROM "r1" AS "r1_0" |}]
 
@@ -95,15 +92,13 @@ let%expect_test "dedup" =
 
 let%expect_test "dedup" =
   run_test "Dedup(Select([f], r1))";
-  [%expect
-    {|
+  [%expect {|
     SELECT DISTINCT r1_0."f" AS "f_1"
     FROM "r1" AS "r1_0" |}]
 
 let%expect_test "select" =
   run_test "Select([f], r1)";
-  [%expect
-    {|
+  [%expect {|
     SELECT r1_0."f" AS "f_1"
     FROM "r1" AS "r1_0" |}]
 
