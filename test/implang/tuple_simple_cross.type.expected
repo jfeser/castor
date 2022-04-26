@@ -1,0 +1,3 @@
+(TupleT
+ (((IntT ((range (Interval 1 1)))) (IntT ((range (Interval 2 2)))))
+  ((kind Cross))))

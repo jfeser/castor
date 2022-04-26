@@ -1,0 +1,214 @@
+       // Locals:
+       // i30 : int (persists=true)
+       // cstart29 : int (persists=true)
+       // vstart35 : int (persists=true)
+       // cstart47 : int (persists=true)
+       // i45 : int (persists=true)
+       // cstart44 : int (persists=true)
+       // vstart26 : int (persists=false)
+       // key42 : tuple[int] (persists=false)
+       // cstart48 : int (persists=true)
+       // low37 : int (persists=true)
+       // key36 : tuple[int] (persists=true)
+       // kstart25 : int (persists=false)
+       // key43 : tuple[int] (persists=true)
+       // count31 : int (persists=true)
+       // idx41 : int (persists=true)
+       // cstart33 : int (persists=true)
+       // mid39 : int (persists=true)
+       // key27 : tuple[string] (persists=false)
+       // key49 : tuple[int] (persists=false)
+       // count46 : int (persists=true)
+       // hash28 : int (persists=false)
+       // kstart34 : int (persists=true)
+       // high38 : int (persists=true)
+       // key40 : tuple[int] (persists=false)
+       // cstart32 : int (persists=true)
+       fun printer () : void {
+           hash28 = hash(6, id_p) * 1;
+           if (hash28 < 0 || buf[6 + buf[4 : 2] : 1] - 1 < hash28) {
+
+           } else {
+                kstart25 =
+                buf[6 + buf[4 : 2] + 1 + hash28 : 1] +
+                6 + buf[4 : 2] + 1 + buf[6 + buf[4 : 2] : 1];
+                key27 = (load_str(kstart25 + 1, buf[kstart25 : 1]));
+                vstart26 =
+                buf[6 + buf[4 : 2] + 1 + hash28 : 1] +
+                6 + buf[4 : 2] + 1 + buf[6 + buf[4 : 2] : 1] +
+                1 +
+                buf[buf[6 + buf[4 : 2] + 1 + hash28 : 1] +
+                    6 + buf[4 : 2] + 1 + buf[6 + buf[4 : 2] : 1] : 1];
+                if (true && key27[0] == id_p) {
+                    cstart29 = vstart26 + 1 + 1;
+                    i30 = 0;
+                    count31 = buf[vstart26 : 1];
+                    loop (i30 < count31) {
+                        cstart32 = cstart29;
+                        cstart33 = cstart32 + 1;
+                        low37 = 0;
+                        high38 = 10 / 2;
+                        loop (low37 < high38) {
+                            mid39 = low37 + high38 / 2;
+                            kstart34 = 2 + buf[2 : 2] + 1 + mid39 * 2;
+                            key40 = (buf[kstart34 : 1]);
+                            if (not(key40[0] < buf[cstart32 : 1])) {
+                                high38 = mid39;
+                            } else {
+                                 low37 = mid39 + 1;
+                            }
+                        }
+                        idx41 = low37;
+                        if (idx41 < 10 / 2) {
+                            kstart34 = 2 + buf[2 : 2] + 1 + idx41 * 2;
+                            key42 = (buf[kstart34 : 1]);
+                            key43 = key42;
+                            loop (key43[0] < buf[cstart33 : 1] && idx41 < 10 / 2) {
+                                if (key43[0] < buf[cstart33 : 1] &&
+                                    not(key43[0] < buf[cstart32 : 1])) {
+                                    vstart35 =
+                                    buf[2 + buf[2 : 2] + 1 + idx41 * 2 + 1 : 1] + 10 +
+                                    2 + buf[2 : 2] + 1;
+                                    key36 = key43;
+                                    cstart44 = vstart35 + 1;
+                                    i45 = 0;
+                                    count46 = 1;
+                                    loop (i45 < count46) {
+                                        cstart47 = cstart44 + 1;
+                                        cstart48 = cstart47 + 1 + buf[cstart47 : 1];
+                                        if (load_str(cstart47 + 1, buf[cstart47 :
+                                            1]) == id_c) {
+                                            print(tuple[int, int],
+                                            (buf[cstart32 : 1], buf[cstart48 : 1]));
+                                        } else {
+
+                                        }
+                                        cstart44 = cstart44 + buf[cstart44 : 1];
+                                        i45 = i45 + 1;
+                                    }
+                                } else {
+
+                                }
+                                idx41 = idx41 + 1;
+                                kstart34 = 2 + buf[2 : 2] + 1 + idx41 * 2;
+                                key49 = (buf[kstart34 : 1]);
+                                key43 = key49;
+                            }
+                        } else {
+
+                        }
+                        cstart29 = cstart29 + 2;
+                        i30 = i30 + 1;
+                    }
+                } else {
+
+                }
+           }
+       }
+       // Locals:
+       // i5 : int (persists=true)
+       // vstart10 : int (persists=true)
+       // key17 : tuple[int] (persists=false)
+       // key11 : tuple[int] (persists=true)
+       // cstart22 : int (persists=true)
+       // cstart8 : int (persists=true)
+       // key24 : tuple[int] (persists=false)
+       // key2 : tuple[string] (persists=false)
+       // cstart4 : int (persists=true)
+       // cstart23 : int (persists=true)
+       // cstart19 : int (persists=true)
+       // cstart7 : int (persists=true)
+       // mid14 : int (persists=true)
+       // count6 : int (persists=true)
+       // key15 : tuple[int] (persists=false)
+       // kstart0 : int (persists=false)
+       // i20 : int (persists=true)
+       // hash3 : int (persists=false)
+       // count21 : int (persists=true)
+       // vstart1 : int (persists=false)
+       // idx16 : int (persists=true)
+       // high13 : int (persists=true)
+       // key18 : tuple[int] (persists=true)
+       // low12 : int (persists=true)
+       // kstart9 : int (persists=true)
+       fun consumer () : void {
+           hash3 = hash(6, id_p) * 1;
+           if (hash3 < 0 || buf[6 + buf[4 : 2] : 1] - 1 < hash3) {
+
+           } else {
+                kstart0 =
+                buf[6 + buf[4 : 2] + 1 + hash3 : 1] +
+                6 + buf[4 : 2] + 1 + buf[6 + buf[4 : 2] : 1];
+                key2 = (load_str(kstart0 + 1, buf[kstart0 : 1]));
+                vstart1 =
+                buf[6 + buf[4 : 2] + 1 + hash3 : 1] +
+                6 + buf[4 : 2] + 1 + buf[6 + buf[4 : 2] : 1] +
+                1 +
+                buf[buf[6 + buf[4 : 2] + 1 + hash3 : 1] +
+                    6 + buf[4 : 2] + 1 + buf[6 + buf[4 : 2] : 1] : 1];
+                if (true && key2[0] == id_p) {
+                    cstart4 = vstart1 + 1 + 1;
+                    i5 = 0;
+                    count6 = buf[vstart1 : 1];
+                    loop (i5 < count6) {
+                        cstart7 = cstart4;
+                        cstart8 = cstart7 + 1;
+                        low12 = 0;
+                        high13 = 10 / 2;
+                        loop (low12 < high13) {
+                            mid14 = low12 + high13 / 2;
+                            kstart9 = 2 + buf[2 : 2] + 1 + mid14 * 2;
+                            key15 = (buf[kstart9 : 1]);
+                            if (not(key15[0] < buf[cstart7 : 1])) {
+                                high13 = mid14;
+                            } else {
+                                 low12 = mid14 + 1;
+                            }
+                        }
+                        idx16 = low12;
+                        if (idx16 < 10 / 2) {
+                            kstart9 = 2 + buf[2 : 2] + 1 + idx16 * 2;
+                            key17 = (buf[kstart9 : 1]);
+                            key18 = key17;
+                            loop (key18[0] < buf[cstart8 : 1] && idx16 < 10 / 2) {
+                                if (key18[0] < buf[cstart8 : 1] &&
+                                    not(key18[0] < buf[cstart7 : 1])) {
+                                    vstart10 =
+                                    buf[2 + buf[2 : 2] + 1 + idx16 * 2 + 1 : 1] + 10 +
+                                    2 + buf[2 : 2] + 1;
+                                    key11 = key18;
+                                    cstart19 = vstart10 + 1;
+                                    i20 = 0;
+                                    count21 = 1;
+                                    loop (i20 < count21) {
+                                        cstart22 = cstart19 + 1;
+                                        cstart23 = cstart22 + 1 + buf[cstart22 : 1];
+                                        if (load_str(cstart22 + 1, buf[cstart22 :
+                                            1]) == id_c) {
+                                            consume(tuple[int, int],
+                                            (buf[cstart7 : 1], buf[cstart23 : 1]));
+                                        } else {
+
+                                        }
+                                        cstart19 = cstart19 + buf[cstart19 : 1];
+                                        i20 = i20 + 1;
+                                    }
+                                } else {
+
+                                }
+                                idx16 = idx16 + 1;
+                                kstart9 = 2 + buf[2 : 2] + 1 + idx16 * 2;
+                                key24 = (buf[kstart9 : 1]);
+                                key18 = key24;
+                            }
+                        } else {
+
+                        }
+                        cstart4 = cstart4 + 2;
+                        i5 = i5 + 1;
+                    }
+                } else {
+
+                }
+           }
+       }

@@ -1,0 +1,1 @@
+depjoin(AList(r1 as kl, AScalar(kl.f)) as k, AOrderedIdx(dedup(select([f as kf], r1)) as k1, ascalar(k1.kf+1), k.f, k.f+1))

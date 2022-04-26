@@ -1,0 +1,6 @@
+(executable
+ (name implang)
+ (libraries castor castor_test str core)
+ (flags -open Core -open Castor)
+ (preprocess (pps ppx_sexp_conv ppx_compare ppx_let))
+ (modules Implang))

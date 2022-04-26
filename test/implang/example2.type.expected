@@ -1,0 +1,12 @@
+       (FuncT
+        (((HashIdxT
+           ((TupleT
+             (((IntT ((range (Interval 1 1)))) (IntT ((range (Interval 2 3)))))
+              ((kind Cross))))
+            (ListT
+             ((TupleT
+               (((IntT ((range (Interval 1 4)))) (IntT ((range (Interval 2 5)))))
+                ((kind Cross))))
+              ((count (Interval 1 2)))))
+            ((key_count (Interval 2 2))))))
+         (Width 2)))

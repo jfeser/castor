@@ -1,0 +1,15 @@
+(FuncT
+ (((FuncT
+    (((ListT
+       ((TupleT
+         (((IntT ((range (Interval 1 1)))) (IntT ((range (Interval 1 4))))
+           (ListT
+            ((TupleT
+              (((IntT ((range (Interval 2 3))))
+                (IntT ((range (Interval 2 5)))))
+               ((kind Cross))))
+             ((count (Interval 1 2))))))
+          ((kind Cross))))
+        ((count (Interval 2 2))))))
+     Child_sum)))
+  (Width 2)))

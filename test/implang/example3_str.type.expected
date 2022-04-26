@@ -1,0 +1,25 @@
+       (FuncT
+        (((FuncT
+           (((HashIdxT
+              ((StringT ((nchars (Interval 3 8))))
+               (ListT
+                ((TupleT
+                  (((IntT ((range (Interval 1 5)))) (IntT ((range (Interval 3 6)))))
+                   ((kind Cross))))
+                 ((count (Interval 1 2)))))
+               ((key_count (Interval 3 3)))))
+             (FuncT
+              (((FuncT
+                 (((OrderedIdxT
+                    ((IntT ((range (Interval 1 5))))
+                     (ListT
+                      ((TupleT
+                        (((StringT ((nchars (Interval 3 8))))
+                          (IntT ((range (Interval 1 5)))))
+                         ((kind Cross))))
+                       ((count (Interval 1 1)))))
+                     ((key_count (Interval 5 5))))))
+                  Child_sum)))
+               (Width 2))))
+            Child_sum)))
+         (Width 2)))

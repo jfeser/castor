@@ -1,0 +1,1 @@
+AList(r1 as k, ATuple([AScalar(k.f), AScalar(k.g - k.f)], cross))

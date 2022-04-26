@@ -1,0 +1,1 @@
+depjoin(AList(r1 as kl, AScalar(kl.f)) as k, AHashIdx(dedup(select([f], r1)) as kh, ascalar(kh.f + 1), k.f))

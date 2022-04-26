@@ -1,0 +1,86 @@
+       // Locals:
+       // i18 : int (persists=true)
+       // key13 : tuple[int, int] (persists=false)
+       // cstart21 : int (persists=true)
+       // cstart16 : int (persists=true)
+       // hash14 : int (persists=false)
+       // cstart17 : int (persists=true)
+       // kstart11 : int (persists=false)
+       // cstart15 : int (persists=true)
+       // vstart12 : int (persists=false)
+       // count19 : int (persists=true)
+       // cstart20 : int (persists=true)
+       fun printer () : void {
+           hash14 = <tuplehash> * 1;
+           if (hash14 < 0 || buf[4 + buf[2 : 2] : 1] - 1 < hash14) {
+
+           } else {
+                kstart11 =
+                buf[4 + buf[2 : 2] + 1 + hash14 : 1] +
+                4 + buf[2 : 2] + 1 + buf[4 + buf[2 : 2] : 1];
+                cstart15 = kstart11;
+                cstart16 = cstart15 + 1;
+                key13 = (buf[cstart15 : 1], buf[cstart16 : 1]);
+                vstart12 =
+                buf[4 + buf[2 : 2] + 1 + hash14 : 1] +
+                4 + buf[2 : 2] + 1 + buf[4 + buf[2 : 2] : 1] + 2;
+                if (true && key13[0] == id_p && key13[1] == id_c) {
+                    cstart17 = vstart12 + 1 + 1;
+                    i18 = 0;
+                    count19 = buf[vstart12 : 1];
+                    loop (i18 < count19) {
+                        cstart20 = cstart17;
+                        cstart21 = cstart20 + 1;
+                        print(tuple[int, int],
+                        (buf[cstart20 : 1], buf[cstart21 : 1]));
+                        cstart17 = cstart17 + 2;
+                        i18 = i18 + 1;
+                    }
+                } else {
+
+                }
+           }
+       }
+       // Locals:
+       // count8 : int (persists=true)
+       // i7 : int (persists=true)
+       // cstart9 : int (persists=true)
+       // kstart0 : int (persists=false)
+       // hash3 : int (persists=false)
+       // vstart1 : int (persists=false)
+       // key2 : tuple[int, int] (persists=false)
+       // cstart4 : int (persists=true)
+       // cstart10 : int (persists=true)
+       // cstart6 : int (persists=true)
+       // cstart5 : int (persists=true)
+       fun consumer () : void {
+           hash3 = <tuplehash> * 1;
+           if (hash3 < 0 || buf[4 + buf[2 : 2] : 1] - 1 < hash3) {
+
+           } else {
+                kstart0 =
+                buf[4 + buf[2 : 2] + 1 + hash3 : 1] +
+                4 + buf[2 : 2] + 1 + buf[4 + buf[2 : 2] : 1];
+                cstart4 = kstart0;
+                cstart5 = cstart4 + 1;
+                key2 = (buf[cstart4 : 1], buf[cstart5 : 1]);
+                vstart1 =
+                buf[4 + buf[2 : 2] + 1 + hash3 : 1] +
+                4 + buf[2 : 2] + 1 + buf[4 + buf[2 : 2] : 1] + 2;
+                if (true && key2[0] == id_p && key2[1] == id_c) {
+                    cstart6 = vstart1 + 1 + 1;
+                    i7 = 0;
+                    count8 = buf[vstart1 : 1];
+                    loop (i7 < count8) {
+                        cstart9 = cstart6;
+                        cstart10 = cstart9 + 1;
+                        consume(tuple[int, int],
+                        (buf[cstart9 : 1], buf[cstart10 : 1]));
+                        cstart6 = cstart6 + 2;
+                        i7 = i7 + 1;
+                    }
+                } else {
+
+                }
+           }
+       }

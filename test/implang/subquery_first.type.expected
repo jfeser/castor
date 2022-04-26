@@ -1,0 +1,5 @@
+(FuncT
+ (((FuncT
+    (((ListT ((IntT ((range (Interval 1 3)))) ((count (Interval 5 5))))))
+     Child_sum)))
+  (Width 1)))
