@@ -1,0 +1,3 @@
+(rule
+ (alias test_db)
+ (action (run bin/gen_test_db.exe)))

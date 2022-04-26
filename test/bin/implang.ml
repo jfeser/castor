@@ -1,7 +1,7 @@
 open Abslayout_load
 open Castor_test.Test_util
 
-let run_test ?(params = []) ?implang ?type_ () =
+let run_test ?(params = []) ?implang ?type_ ?opt () =
   let (module I), (module C) = Setup.make_modules ~code_only:true () in
   let conn = Lazy.force test_db_conn in
   let layout =
@@ -27,6 +27,11 @@ let run_test ?(params = []) ?implang ?type_ () =
       Out_channel.with_file fn ~f:(fun ch ->
           Fmt.pf (Format.formatter_of_out_channel ch) "%a" I.pp ir));
 
+  Option.iter opt ~f:(fun fn ->
+      Out_channel.with_file fn ~f:(fun ch ->
+          Fmt.pf (Format.formatter_of_out_channel ch) "%a" I.pp
+          @@ Implang_opt.opt ir));
+
   Option.iter type_ ~f:(fun fn ->
       Out_channel.with_file fn ~f:(fun ch ->
           Fmt.pf
@@ -41,8 +46,9 @@ let spec =
     flag "param" ~aliases:[ "p" ] (listed Util.param)
       ~doc:"NAME:TYPE query parameters"
   and implang = flag "implang" (optional string) ~doc:"write intermediate"
+  and opt = flag "opt" (optional string) ~doc:"write optimized intermediate"
   and type_ = flag "type" (optional string) ~doc:"write type" in
-  run_test ~params ?implang ?type_
+  run_test ~params ?implang ?type_ ?opt
 
 let () =
   Command.basic ~summary:"Generate intermediate language." spec |> Command.run

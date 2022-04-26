@@ -1,6 +1,13 @@
 (executable
  (name implang)
- (libraries castor castor_test str core)
+ (libraries castor castor_test core)
  (flags -open Core -open Castor)
  (preprocess (pps ppx_sexp_conv ppx_compare ppx_let))
  (modules Implang))
+
+(executable
+ (name gen_test_db)
+ (libraries castor core)
+ (flags -open Core -open Castor)
+ (preprocess (pps ppx_sexp_conv ppx_compare ppx_let))
+ (modules Gen_test_db))

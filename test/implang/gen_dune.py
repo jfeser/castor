@@ -10,6 +10,7 @@ tests = [
     ("hashtbl", ""),
     ("ordered_idx", ""),
     ("ordered_idx_date", ""),
+    ("hoist_test", ""),
     ("subquery_first", "-p id_p:int -p id_c:int"),
     ("example1", "-p id_p:int -p id_c:int"),
     # ("example2", "-p id_p:int -p id_c:int"),
@@ -21,14 +22,17 @@ for (name, params) in tests:
     print(
         f"""
 (rule
- (targets {name}.type.output {name}.implang.output)
- (locks postgres)
- (action (with-stdin-from {name} (run ../bin/implang.exe {params} -t {name}.type.output -i {name}.implang.output))))
+ (targets {name}.type.output {name}.implang.output {name}.opt.output)
+ (deps (alias ../test_db))
+ (action (with-stdin-from {name} (run ../bin/implang.exe {params} -t {name}.type.output -i {name}.implang.output -o {name}.opt.output))))
 (rule
  (alias runtest)
  (action (diff {name}.type.expected {name}.type.output)))
 (rule
  (alias runtest)
  (action (diff {name}.implang.expected {name}.implang.output)))
+(rule
+ (alias runtest)
+ (action (diff {name}.opt.expected {name}.opt.output)))
 """
     )
