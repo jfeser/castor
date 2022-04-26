@@ -12,16 +12,16 @@ let dump fn r =
 (** Run a command and return its output on stdout, logging it if it fails. *)
 let command_out cmd =
   let open Or_error.Let_syntax in
-  let ch = Unix.open_process_in cmd in
+  let ch = Core_unix.open_process_in cmd in
   let out = In_channel.input_all ch in
   let%map () =
-    Unix.Exit_or_signal.or_error (Unix.close_process_in ch)
+    Core_unix.Exit_or_signal.or_error (Core_unix.close_process_in ch)
     |> Or_error.tag ~tag:cmd
   in
   out
 
 let system_exn cmd =
-  match Unix.system cmd with
+  match Core_unix.system cmd with
   | Ok () -> ()
   | Error (`Exit_non_zero code) ->
       failwith @@ sprintf "Command '%s' exited with code %d" cmd code
@@ -33,13 +33,9 @@ let system_exn cmd =
 let opt conn cost_conn params cost_timeout state query =
   let module Config = struct
     let conn = conn
-
     let cost_conn = cost_conn
-
     let params = params
-
     let cost_timeout = cost_timeout
-
     let random = state
   end in
   let module T = Transform.Make (Config) in
@@ -48,7 +44,7 @@ let opt conn cost_conn params cost_timeout state query =
       if is_ok @@ T.is_serializable opt_query then Some opt_query
       else (
         Logs.warn (fun m -> m "Not serializable:@ %a" A.pp opt_query);
-        None )
+        None)
   | Second failed_subquery ->
       Logs.warn (fun m ->
           m "Optimization failed for subquery:@ %a" A.pp failed_subquery);
@@ -126,11 +122,11 @@ let main ~params ~cost_timeout ~timeout ~out_dir ~out_file ch =
         | Ok cost ->
             if Float.(cost < !best_cost) then (
               copy_out out_file out_dir query';
-              best_cost := cost );
+              best_cost := cost);
             cost
         | Error err ->
             Logs.warn (fun m -> m "Evaluation failed: %a" Error.pp err);
-            Float.infinity )
+            Float.infinity)
     | None -> Float.infinity
   in
 
@@ -140,35 +136,35 @@ let main ~params ~cost_timeout ~timeout ~out_dir ~out_file ch =
   try Mcmc.run ?max_time cost |> ignore
   with Resolve.Resolve_error r -> Fmt.epr "%a@." (Resolve.pp_err Fmt.nop) r
 
-let () =
+let spec =
   let open Command.Let_syntax in
-  Command.basic ~summary:"Optimize a query."
-    [%map_open
-      let () = Log.param
-      and () = Ops.param
-      and () = Db.param
-      and () = Type_cost.param
-      and () = Join_opt.param
-      and () = Groupby_tactics.param
-      and () = Type.param
-      and () = Simplify_tactic.param
-      and cost_timeout =
-        flag "cost-timeout" (optional float)
-          ~doc:"SEC time to run cost estimation"
-      and timeout =
-        flag "timeout" (optional float) ~doc:"SEC time to run optimizer"
-      and params =
-        flag "param" ~aliases:[ "p" ]
-          (listed Util.param_and_value)
-          ~doc:"NAME:TYPE query parameters"
-      and out_dir =
-        flag "out-dir" (required string) ~aliases:[ "o" ]
-          ~doc:"DIR output directory"
-      and out_file =
-        flag "out-file" (required string) ~aliases:[ "f" ]
-          ~doc:"FILE output directory"
-      and ch =
-        anon (maybe_with_default In_channel.stdin ("query" %: Util.channel))
-      in
-      fun () -> main ~params ~cost_timeout ~timeout ~out_dir ~out_file ch]
-  |> Command.run
+  [%map_open
+    let () = Log.param
+    and () = Ops.param
+    and () = Db.param
+    and () = Type_cost.param
+    and () = Join_opt.param
+    and () = Groupby_tactics.param
+    and () = Type.param
+    and () = Simplify_tactic.param
+    and cost_timeout =
+      flag "cost-timeout" (optional float)
+        ~doc:"SEC time to run cost estimation"
+    and timeout =
+      flag "timeout" (optional float) ~doc:"SEC time to run optimizer"
+    and params =
+      flag "param" ~aliases:[ "p" ]
+        (listed Util.param_and_value)
+        ~doc:"NAME:TYPE query parameters"
+    and out_dir =
+      flag "out-dir" (required string) ~aliases:[ "o" ]
+        ~doc:"DIR output directory"
+    and out_file =
+      flag "out-file" (required string) ~aliases:[ "f" ]
+        ~doc:"FILE output directory"
+    and ch =
+      anon (maybe_with_default In_channel.stdin ("query" %: Util.channel))
+    in
+    fun () -> main ~params ~cost_timeout ~timeout ~out_dir ~out_file ch]
+
+let () = Command.basic spec ~summary:"Optimize a query." |> Command_unix.run

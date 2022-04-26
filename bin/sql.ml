@@ -16,7 +16,6 @@ let main ~params:all_params ~simplify ~project ~unnest ~sql ~cse ch =
   in
   let module Config = struct
     let conn = Db.create (Sys.getenv_exn "CASTOR_DB")
-
     let params = params
   end in
   let module S = Simplify_tactic.Make (Config) in
@@ -38,9 +37,9 @@ let main ~params:all_params ~simplify ~project ~unnest ~sql ~cse ch =
     let q =
       if unnest then Unnest.unnest ~params query
       else
-        ( Cardinality.annotate query
+        (Cardinality.annotate query
           :> < cardinality_matters : bool ; why_card_matters : string >
-             Ast.annot )
+             Ast.annot)
     in
     Cardinality.extend ~dedup:true q
     |> Join_elim.remove_joins |> Unnest.hoist_meta |> strip_meta
@@ -62,25 +61,26 @@ let main ~params:all_params ~simplify ~project ~unnest ~sql ~cse ch =
   | `Sql x -> Sql.format x |> print_endline
   | `Query x -> Format.printf "%a@." Abslayout.pp x
 
-let () =
+let spec =
   let open Command.Let_syntax in
-  Command.basic ~summary:"Optimize a query for sql."
-    [%map_open
-      let () = Log.param
-      and sql = flag "sql" no_arg ~doc:"dump sql"
-      and simplify =
-        flag "simplify" ~aliases:[ "s" ] no_arg ~doc:"simplify the query"
-      and unnest =
-        flag "unnest" ~aliases:[ "u" ] no_arg ~doc:"unnest before simplifying"
-      and project =
-        flag "project" ~aliases:[ "r" ] no_arg ~doc:"project the query"
-      and cse = flag "cse" ~aliases:[ "c" ] no_arg ~doc:"apply cse"
-      and params =
-        flag "param" ~aliases:[ "p" ]
-          (listed Util.param_and_value)
-          ~doc:"NAME:TYPE query parameters"
-      and ch =
-        anon (maybe_with_default In_channel.stdin ("query" %: Util.channel))
-      in
-      fun () -> main ~params ~simplify ~project ~unnest ~sql ~cse ch]
-  |> Command.run
+  [%map_open
+    let () = Log.param
+    and sql = flag "sql" no_arg ~doc:"dump sql"
+    and simplify =
+      flag "simplify" ~aliases:[ "s" ] no_arg ~doc:"simplify the query"
+    and unnest =
+      flag "unnest" ~aliases:[ "u" ] no_arg ~doc:"unnest before simplifying"
+    and project =
+      flag "project" ~aliases:[ "r" ] no_arg ~doc:"project the query"
+    and cse = flag "cse" ~aliases:[ "c" ] no_arg ~doc:"apply cse"
+    and params =
+      flag "param" ~aliases:[ "p" ]
+        (listed Util.param_and_value)
+        ~doc:"NAME:TYPE query parameters"
+    and ch =
+      anon (maybe_with_default In_channel.stdin ("query" %: Util.channel))
+    in
+    fun () -> main ~params ~simplify ~project ~unnest ~sql ~cse ch]
+
+let () =
+  Command.basic spec ~summary:"Optimize a query for sql." |> Command_unix.run

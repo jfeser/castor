@@ -8,9 +8,7 @@ open Match
 
 module type CONFIG = sig
   val conn : Db.t
-
   val params : Set.M(Name).t
-
   val cost_conn : Db.t
 end
 
@@ -26,13 +24,11 @@ module Xforms (C : CONFIG) = struct
 end
 
 let config conn params =
-  ( module struct
+  (module struct
     let conn = conn
-
     let cost_conn = conn
-
     let params = params
-  end : CONFIG )
+  end : CONFIG)
 
 let main ~name ~params ~ch =
   let conn = Db.create (Sys.getenv_exn "CASTOR_DB") in
@@ -63,7 +59,6 @@ let main ~name ~params ~ch =
             (apply tf Path.root r)
 
         method! visit_Exists () r = Exists (self#visit_subquery r)
-
         method! visit_First () r = First (self#visit_subquery r)
       end
     in
@@ -81,16 +76,13 @@ let main ~name ~params ~ch =
         method visit_subquery r =
           let module C = struct
             let conn = conn
-
             let cost_conn = conn
-
             let params = Set.union params (Free.free r)
           end in
           Option.value_exn ~message:"Transforming subquery failed."
             (apply (tf (module C : CONFIG)) Path.root r)
 
         method! visit_Exists () r = Exists (self#visit_subquery r)
-
         method! visit_First () r = First (self#visit_subquery r)
       end
     in
@@ -142,13 +134,13 @@ let main ~name ~params ~ch =
         at_ push_filter Path.(all >>? is_filter >>| shallowest);
         at_
           (split_out
-             ( Path.(
-                 all >>? is_relation
-                 >>? matches (function
-                       | Relation r -> String.(r.r_name = "supplier")
-                       | _ -> false)
-                 >>| deepest)
-             >>= parent )
+             (Path.(
+                all >>? is_relation
+                >>? matches (function
+                      | Relation r -> String.(r.r_name = "supplier")
+                      | _ -> false)
+                >>| deepest)
+             >>= parent)
              "s1_suppkey")
           Path.(all >>? is_filter >>| shallowest);
         fix project;
@@ -157,9 +149,9 @@ let main ~name ~params ~ch =
         at_ split_filter Path.(all >>? is_filter >>| shallowest);
         at_ split_filter Path.(all >>? is_filter >>| shallowest);
         at_
-          ( precompute_filter "p_type"
+          (precompute_filter "p_type"
           @@ List.map ~f:(sprintf "\"%s\"")
-               [ "TIN"; "COPPER"; "NICKEL"; "BRASS"; "STEEL" ] )
+               [ "TIN"; "COPPER"; "NICKEL"; "BRASS"; "STEEL" ])
           (Path.(all >>? is_param_filter >>| shallowest) >>= child' 0);
         at_ row_store (Path.(all >>? is_param_filter >>| deepest) >>= child' 0);
         at_ row_store
@@ -317,7 +309,7 @@ let main ~name ~params ~ch =
           (Path.(all >>? is_param_filter >>| shallowest) >>= parent);
         at_ split_filter Path.(all >>? is_param_filter >>| shallowest);
         at_
-          ( precompute_filter_bv
+          (precompute_filter_bv
           @@ List.map ~f:(sprintf "\"%s\"")
                [
                  "black";
@@ -332,7 +324,7 @@ let main ~name ~params ~ch =
                  "red";
                  "white";
                  "yellow";
-               ] )
+               ])
           Path.(all >>? is_param_filter >>| shallowest);
         at_ row_store
           (Path.(all >>? is_param_filter >>| shallowest) >>= child' 0);
@@ -516,8 +508,8 @@ let main ~name ~params ~ch =
         at_ elim_disjunct Path.(all >>? is_filter >>| shallowest);
         fix
         @@ at_ split_filter_params
-             ( Path.(all >>? above is_param_filter >>? is_join >>| deepest)
-             >>= parent );
+             (Path.(all >>? above is_param_filter >>? is_join >>| deepest)
+             >>= parent);
         fix
         @@ at_ row_store
              Infix.(
@@ -654,25 +646,27 @@ let main ~name ~params ~ch =
   let query' = apply xform Path.root query in
   Option.iter query' ~f:(A.pp Fmt.stdout)
 
-let () =
+let spec =
   let open Command.Let_syntax in
-  Command.basic ~summary:"Apply transformations to a query."
-    [%map_open
-      let () = Log.param
-      and () = Ops.param
-      and () = Db.param
-      and () = Type_cost.param
-      and () = Join_opt.param
-      and () = Groupby_tactics.param
-      and () = Type.param
-      and () = Simplify_tactic.param
-      and params =
-        flag "param" ~aliases:[ "p" ]
-          (listed Util.param_and_value)
-          ~doc:"NAME:TYPE query parameters"
-      and name = flag "name" (required string) ~doc:"query name"
-      and ch =
-        anon (maybe_with_default In_channel.stdin ("query" %: Util.channel))
-      in
-      fun () -> main ~name ~params ~ch]
-  |> Command.run
+  [%map_open
+    let () = Log.param
+    and () = Ops.param
+    and () = Db.param
+    and () = Type_cost.param
+    and () = Join_opt.param
+    and () = Groupby_tactics.param
+    and () = Type.param
+    and () = Simplify_tactic.param
+    and params =
+      flag "param" ~aliases:[ "p" ]
+        (listed Util.param_and_value)
+        ~doc:"NAME:TYPE query parameters"
+    and name = flag "name" (required string) ~doc:"query name"
+    and ch =
+      anon (maybe_with_default In_channel.stdin ("query" %: Util.channel))
+    in
+    fun () -> main ~name ~params ~ch]
+
+let () =
+  Command.basic spec ~summary:"Apply transformations to a query."
+  |> Command_unix.run
