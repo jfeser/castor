@@ -241,8 +241,7 @@ let push_orderby d { key; rel } =
 let push_concat_tuple d qs = C.tuple (List.map qs ~f:(dep_join d)) Concat
 
 let stuck d =
-  Error.create "Stuck depjoin" d [%sexp_of: (_ annot, scope) depjoin]
-  |> Error.raise
+  Error.create "Stuck depjoin" d [%sexp_of: _ annot depjoin] |> Error.raise
 
 let push_cross_tuple d qs =
   let select_list =

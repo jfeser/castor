@@ -62,7 +62,7 @@ module Annot = struct
     val select : _ meta annot pred Select_list.t -> _ meta annot -> t annot
     val range : _ meta annot pred -> _ meta annot pred -> t annot
     val dep_join : _ meta annot -> scope -> _ meta annot -> t annot
-    val dep_join' : (_ meta annot, scope) depjoin -> t annot
+    val dep_join' : _ meta annot depjoin -> t annot
     val join : _ meta annot pred -> _ meta annot -> _ meta annot -> t annot
     val filter : _ meta annot pred -> _ meta annot -> t annot
 
@@ -75,7 +75,7 @@ module Annot = struct
     val empty : t annot
     val scalar : _ meta annot pred scalar -> t annot
     val list : _ meta annot -> scope -> _ meta annot -> t annot
-    val list' : (_ meta annot pred, _ meta annot, scope) list_ -> t annot
+    val list' : (_ meta annot pred, _ meta annot) list_ -> t annot
     val tuple : _ meta annot list -> tuple -> t annot
 
     val hash_idx :
@@ -86,7 +86,7 @@ module Annot = struct
       _ meta annot pred list ->
       t annot
 
-    val hash_idx' : (_ meta annot pred, _ meta annot, scope) hash_idx -> t annot
+    val hash_idx' : (_ meta annot pred, _ meta annot) hash_idx -> t annot
 
     val ordered_idx :
       ?key_layout:_ meta annot ->
@@ -96,9 +96,7 @@ module Annot = struct
       (_ meta annot pred bound option * _ meta annot pred bound option) list ->
       t annot
 
-    val ordered_idx' :
-      (_ meta annot pred, _ meta annot, scope) ordered_idx -> t annot
-
+    val ordered_idx' : (_ meta annot pred, _ meta annot) ordered_idx -> t annot
     val pred : _ meta annot pred -> t annot pred
   end
 

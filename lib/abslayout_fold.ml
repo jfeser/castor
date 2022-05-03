@@ -168,7 +168,7 @@ class virtual ['a, 'm] abslayout_fold =
       | Dedup c -> (self#dedup r.meta, c)
       | x ->
           Error.create "Expected a function." x
-            [%sexp_of: (_ annot pred, _ annot, scope) query]
+            [%sexp_of: (_ annot pred, _ annot) query]
           |> Error.raise
 
     method private qempty : (int, _) Q.t -> 'a =

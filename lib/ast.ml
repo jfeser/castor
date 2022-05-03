@@ -51,10 +51,10 @@ type 'r pred =
   | Substring of 'r pred * 'r pred * 'r pred
 [@@deriving compare, hash, sexp, variants]
 
-type ('p, 'r, 's) hash_idx = {
+type ('p, 'r) hash_idx = {
   hi_keys : 'r;
   hi_values : 'r;
-  hi_scope : 's;
+  hi_scope : scope;
   hi_key_layout : 'r option; [@sexp.option]
   hi_lookup : 'p list;
 }
@@ -62,19 +62,19 @@ type ('p, 'r, 's) hash_idx = {
 
 type 'p bound = 'p * [ `Open | `Closed ] [@@deriving compare, hash, sexp]
 
-type ('p, 'r, 's) ordered_idx = {
+type ('p, 'r) ordered_idx = {
   oi_keys : 'r;
   oi_values : 'r;
-  oi_scope : 's;
+  oi_scope : scope;
   oi_key_layout : 'r option; [@sexp.option]
   oi_lookup : ('p bound option * 'p bound option) list;
 }
 [@@deriving compare, hash, sexp]
 
-type ('p, 'r, 's) list_ = { l_keys : 'r; l_values : 'r; l_scope : 's }
+type ('p, 'r) list_ = { l_keys : 'r; l_values : 'r; l_scope : scope }
 [@@deriving compare, hash, sexp]
 
-type ('r, 's) depjoin = { d_lhs : 'r; d_alias : 's; d_rhs : 'r }
+type 'r depjoin = { d_lhs : 'r; d_alias : scope; d_rhs : 'r }
 [@@deriving compare, hash, sexp]
 
 type ('p, 'r) join = { pred : 'p; r1 : 'r; r2 : 'r }
@@ -86,11 +86,11 @@ type ('p, 'r) order_by = { key : ('p * order) list; rel : 'r }
 type 'p scalar = { s_pred : 'p; s_name : string }
 [@@deriving compare, hash, sexp]
 
-type ('p, 'r, 's) query =
+type ('p, 'r) query =
   | Select of ('p Select_list.t * 'r)
   | Filter of ('p * 'r)
   | Join of ('p, 'r) join
-  | DepJoin of ('r, 's) depjoin
+  | DepJoin of 'r depjoin
   | GroupBy of ('p Select_list.t * Name.t list * 'r)
   | OrderBy of ('p, 'r) order_by
   | Dedup of 'r
@@ -98,13 +98,13 @@ type ('p, 'r, 's) query =
   | Range of ('p * 'p)
   | AEmpty
   | AScalar of 'p scalar
-  | AList of ('p, 'r, 's) list_
+  | AList of ('p, 'r) list_
   | ATuple of ('r list * tuple)
-  | AHashIdx of ('p, 'r, 's) hash_idx
-  | AOrderedIdx of ('p, 'r, 's) ordered_idx
+  | AHashIdx of ('p, 'r) hash_idx
+  | AOrderedIdx of ('p, 'r) ordered_idx
 [@@deriving compare, hash, sexp, variants]
 
-type 'm annot = { node : ('m annot pred, 'm annot, scope) query; meta : 'm }
+type 'm annot = { node : ('m annot pred, 'm annot) query; meta : 'm }
 [@@deriving compare, hash, sexp]
 
 module T = struct
