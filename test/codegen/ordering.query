@@ -1,0 +1,1 @@
+alist(orderby([f desc], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross))

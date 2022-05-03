@@ -1,0 +1,22 @@
+// Locals:
+// hoisted0 : date (persists=false)
+// hoisted1 : tuple[int, int, fixed, fixed, fixed, string, string, date, bool, bool] (persists=false)
+fun printer () : void {
+    hoisted0 = 1994-01-04;
+    hoisted1 =
+    (1, 100, 1.0, 0.0001, 1.0001, "this is a test", "test with, commas",
+     hoisted0, true, false);
+    print(tuple[int, int, fixed, fixed, fixed, string, string, date, bool,
+    bool], hoisted1);
+}
+// Locals:
+// hoisted2 : date (persists=false)
+// hoisted3 : tuple[int, int, fixed, fixed, fixed, string, string, date, bool, bool] (persists=false)
+fun consumer () : void {
+    hoisted2 = 1994-01-04;
+    hoisted3 =
+    (1, 100, 1.0, 0.0001, 1.0001, "this is a test", "test with, commas",
+     hoisted2, true, false);
+    consume(tuple[int, int, fixed, fixed, fixed, string, string, date, bool,
+    bool], hoisted3);
+}

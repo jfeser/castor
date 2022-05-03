@@ -1,0 +1,170 @@
+; ModuleID = 'scanner'
+source_filename = "scanner"
+target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+target triple = "x86_64-unknown-linux-gnu"
+
+%params = type { [0 x i64]* }
+
+@true_str = private unnamed_addr constant [2 x i8] c"t\00", align 1
+@false_str = private unnamed_addr constant [2 x i8] c"f\00", align 1
+@null_str = private unnamed_addr constant [5 x i8] c"null\00", align 1
+@void_str = private unnamed_addr constant [3 x i8] c"()\00", align 1
+@sep_str = private unnamed_addr constant [2 x i8] c"|\00", align 1
+@newline_str = private unnamed_addr constant [2 x i8] c"\0A\00", align 1
+@int_fmt = private unnamed_addr constant [3 x i8] c"%d\00", align 1
+@str_fmt = private unnamed_addr constant [5 x i8] c"%.*s\00", align 1
+@float_fmt = private unnamed_addr constant [3 x i8] c"%f\00", align 1
+@date_fmt = private unnamed_addr constant [15 x i8] c"%04d-%02d-%02d\00", align 1
+
+; Function Attrs: argmemonly nofree nosync nounwind willreturn
+declare void @llvm.lifetime.start.p0i8(i64 immarg, i8* nocapture) #0
+
+; Function Attrs: argmemonly nofree nosync nounwind willreturn
+declare void @llvm.lifetime.end.p0i8(i64 immarg, i8* nocapture) #0
+
+; Function Attrs: argmemonly readonly speculatable
+declare i32 @cmph_search_packed(i8*, i8*, i32) #1
+
+declare i32 @printf(i8*, ...)
+
+; Function Attrs: argmemonly norecurse nounwind readonly speculatable
+declare i32 @strncmp(i8* noalias nocapture, i8* noalias nocapture, i64) #2
+
+declare i8* @strncpy(i8*, i8*, i32)
+
+; Function Attrs: argmemonly norecurse nounwind readonly speculatable
+declare i64 @strpos(i8* nocapture, i64, i8* nocapture, i64) #2
+
+; Function Attrs: readnone
+declare i64 @extract_year(i64) #3
+
+; Function Attrs: readnone
+declare i64 @extract_month(i64) #3
+
+; Function Attrs: readnone
+declare i64 @extract_day(i64) #3
+
+; Function Attrs: readnone
+declare i64 @add_month(i64, i64) #3
+
+; Function Attrs: readnone
+declare i64 @add_year(i64, i64) #3
+
+; Function Attrs: argmemonly norecurse nounwind readonly speculatable
+define i1 @scmp({ i8*, i64 } %0, { i8*, i64 } %1) #2 {
+entry:
+  %len = extractvalue { i8*, i64 } %0, 1
+  %pos = extractvalue { i8*, i64 } %0, 0
+  %len1 = extractvalue { i8*, i64 } %1, 1
+  %pos2 = extractvalue { i8*, i64 } %1, 0
+  %len_cmp = icmp eq i64 %len, %len1
+  br i1 %len_cmp, label %eq, label %neq
+
+eq:                                               ; preds = %entry
+  %str_cmp = call i32 @strncmp(i8* %pos, i8* %pos2, i64 %len), !tbaa !0
+  %str_cmp3 = icmp eq i32 %str_cmp, 0
+  ret i1 %str_cmp3
+
+neq:                                              ; preds = %entry
+  ret i1 false
+}
+
+; Function Attrs: argmemonly norecurse nounwind readonly
+define void @printer(%params* noalias %0) #4 {
+entry:
+  %tupleptrtmp = alloca { i64, i64 }, align 8
+  %hoisted0 = alloca i64, align 8
+  %hoisted1 = alloca i64, align 8
+  %hoisted2 = alloca i64, align 8
+  %hoisted3 = alloca i64, align 8
+  %hoisted4 = alloca { i64, i64 }, align 8
+  store i64 10043, i64* %hoisted0, align 8, !tbaa !3
+  %hoisted01 = load i64, i64* %hoisted0, align 8, !tbaa !3
+  %1 = call i64 @add_month(i64 %hoisted01, i64 3)
+  store i64 %1, i64* %hoisted1, align 8, !tbaa !3
+  store i64 10043, i64* %hoisted2, align 8, !tbaa !3
+  %hoisted22 = load i64, i64* %hoisted2, align 8, !tbaa !3
+  %addtmp = add nsw i64 %hoisted22, 90
+  store i64 %addtmp, i64* %hoisted3, align 8, !tbaa !3
+  %hoisted13 = load i64, i64* %hoisted1, align 8, !tbaa !3
+  %hoisted34 = load i64, i64* %hoisted3, align 8, !tbaa !3
+  %ptrtmp = getelementptr inbounds { i64, i64 }, { i64, i64 }* %tupleptrtmp, i32 0, i32 0
+  store i64 %hoisted13, i64* %ptrtmp, align 8, !tbaa !3
+  %ptrtmp5 = getelementptr inbounds { i64, i64 }, { i64, i64 }* %tupleptrtmp, i32 0, i32 1
+  store i64 %hoisted34, i64* %ptrtmp5, align 8, !tbaa !3
+  %tupletmp = load { i64, i64 }, { i64, i64 }* %tupleptrtmp, align 8, !tbaa !3
+  store { i64, i64 } %tupletmp, { i64, i64 }* %hoisted4, align 8, !tbaa !3
+  %hoisted46 = load { i64, i64 }, { i64, i64 }* %hoisted4, align 8, !tbaa !3
+  %elemtmp = extractvalue { i64, i64 } %hoisted46, 1
+  %elemtmp7 = extractvalue { i64, i64 } %hoisted46, 0
+  %2 = call i64 @extract_year(i64 %elemtmp7)
+  %3 = call i64 @extract_month(i64 %elemtmp7)
+  %4 = call i64 @extract_day(i64 %elemtmp7)
+  %5 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([15 x i8], [15 x i8]* @date_fmt, i32 0, i32 0), i64 %2, i64 %3, i64 %4)
+  %6 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([2 x i8], [2 x i8]* @sep_str, i32 0, i32 0))
+  %7 = call i64 @extract_year(i64 %elemtmp)
+  %8 = call i64 @extract_month(i64 %elemtmp)
+  %9 = call i64 @extract_day(i64 %elemtmp)
+  %10 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([15 x i8], [15 x i8]* @date_fmt, i32 0, i32 0), i64 %7, i64 %8, i64 %9)
+  %11 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([2 x i8], [2 x i8]* @newline_str, i32 0, i32 0))
+  ret void
+}
+
+; Function Attrs: argmemonly norecurse nounwind readonly
+define void @consumer(%params* noalias %0) #4 {
+entry:
+  %tupleptrtmp = alloca { i64, i64 }, align 8
+  %hoisted5 = alloca i64, align 8
+  %hoisted6 = alloca i64, align 8
+  %hoisted7 = alloca i64, align 8
+  %hoisted8 = alloca i64, align 8
+  %hoisted9 = alloca { i64, i64 }, align 8
+  store i64 10043, i64* %hoisted5, align 8, !tbaa !3
+  %hoisted51 = load i64, i64* %hoisted5, align 8, !tbaa !3
+  %1 = call i64 @add_month(i64 %hoisted51, i64 3)
+  store i64 %1, i64* %hoisted6, align 8, !tbaa !3
+  store i64 10043, i64* %hoisted7, align 8, !tbaa !3
+  %hoisted72 = load i64, i64* %hoisted7, align 8, !tbaa !3
+  %addtmp = add nsw i64 %hoisted72, 90
+  store i64 %addtmp, i64* %hoisted8, align 8, !tbaa !3
+  %hoisted63 = load i64, i64* %hoisted6, align 8, !tbaa !3
+  %hoisted84 = load i64, i64* %hoisted8, align 8, !tbaa !3
+  %ptrtmp = getelementptr inbounds { i64, i64 }, { i64, i64 }* %tupleptrtmp, i32 0, i32 0
+  store i64 %hoisted63, i64* %ptrtmp, align 8, !tbaa !3
+  %ptrtmp5 = getelementptr inbounds { i64, i64 }, { i64, i64 }* %tupleptrtmp, i32 0, i32 1
+  store i64 %hoisted84, i64* %ptrtmp5, align 8, !tbaa !3
+  %tupletmp = load { i64, i64 }, { i64, i64 }* %tupleptrtmp, align 8, !tbaa !3
+  store { i64, i64 } %tupletmp, { i64, i64 }* %hoisted9, align 8, !tbaa !3
+  %hoisted96 = load { i64, i64 }, { i64, i64 }* %hoisted9, align 8, !tbaa !3
+  %elemtmp = extractvalue { i64, i64 } %hoisted96, 1
+  %elemtmp7 = extractvalue { i64, i64 } %hoisted96, 0
+  call void asm sideeffect "", "X,~{memory}"(i64 %elemtmp7), !tbaa !5
+  call void asm sideeffect "", "X,~{memory}"(i64 %elemtmp), !tbaa !5
+  ret void
+}
+
+define %params* @create(i64* %0) {
+entry:
+  %malloccall = tail call i8* @malloc(i32 ptrtoint (i1** getelementptr (i1*, i1** null, i32 1) to i32))
+  %paramstmp = bitcast i8* %malloccall to %params*
+  %buf = getelementptr inbounds %params, %params* %paramstmp, i32 0, i32 0
+  %tmpbufp = bitcast i64* %0 to [0 x i64]*
+  store [0 x i64]* %tmpbufp, [0 x i64]** %buf, align 8
+  ret %params* %paramstmp
+}
+
+declare noalias i8* @malloc(i32)
+
+attributes #0 = { argmemonly nofree nosync nounwind willreturn }
+attributes #1 = { argmemonly readonly speculatable }
+attributes #2 = { argmemonly norecurse nounwind readonly speculatable }
+attributes #3 = { readnone }
+attributes #4 = { argmemonly norecurse nounwind readonly }
+
+!0 = !{!1, !1, i64 0, i64 0}
+!1 = !{!"string", !2}
+!2 = !{!"castor_root"}
+!3 = !{!4, !4, i64 0, i64 0}
+!4 = !{!"runtime", !2}
+!5 = !{!6, !6, i64 0, i64 0}
+!6 = !{!"consumer", !2}

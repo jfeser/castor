@@ -1,0 +1,1 @@
+select([1 as a, 100 as b, 1.0 as c, 0.0001 as d, 1.0001 as f, "this is a test" as g, "test with, commas" as h, date("1994-01-04") as i, true as j, false as k], ascalar(0 as l))

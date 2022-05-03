@@ -1,0 +1,32 @@
+// Locals:
+// hoisted0 : int (persists=false)
+// count5 : int (persists=true)
+// i4 : int (persists=true)
+// cstart3 : int (persists=true)
+fun printer () : void {
+    hoisted0 = buf[5 : 1];
+    cstart3 = 0;
+    i4 = 0;
+    count5 = 5;
+    loop (i4 < count5) {
+        print(tuple[int], (buf[cstart3 : 1] + hoisted0));
+        cstart3 = cstart3 + 1;
+        i4 = i4 + 1;
+    }
+}
+// Locals:
+// hoisted1 : int (persists=false)
+// i1 : int (persists=true)
+// cstart0 : int (persists=true)
+// count2 : int (persists=true)
+fun consumer () : void {
+    hoisted1 = buf[5 : 1];
+    cstart0 = 0;
+    i1 = 0;
+    count2 = 5;
+    loop (i1 < count2) {
+        consume(tuple[int], (buf[cstart0 : 1] + hoisted1));
+        cstart0 = cstart0 + 1;
+        i1 = i1 + 1;
+    }
+}

@@ -1,0 +1,52 @@
+0:22 Tuple body
+0:10 List body
+0:2 Tuple body
+0:1 Scalar (=(Int 1))
+0:0 Tuple len (=22)
+0:0 List len (=10)
+0:0 List count (=5)
+0:0 Tuple len (=2)
+1:1 Scalar (=(Int 2))
+2:2 Tuple body
+2:1 Scalar (=(Int 1))
+2:0 Tuple len (=2)
+3:1 Scalar (=(Int 3))
+4:2 Tuple body
+4:1 Scalar (=(Int 2))
+4:0 Tuple len (=2)
+5:1 Scalar (=(Int 1))
+6:2 Tuple body
+6:1 Scalar (=(Int 2))
+6:0 Tuple len (=2)
+7:1 Scalar (=(Int 2))
+8:2 Tuple body
+8:1 Scalar (=(Int 3))
+8:0 Tuple len (=2)
+9:1 Scalar (=(Int 4))
+10:2 Tuple body
+10:1 Scalar (=(Int 9))
+10:0 Tuple len (=2)
+11:1 Scalar (=(Int 9))
+12:10 List body
+12:2 Tuple body
+12:1 Scalar (=(Int 3))
+12:0 List len (=10)
+12:0 List count (=5)
+12:0 Tuple len (=2)
+13:1 Scalar (=(Int 4))
+14:2 Tuple body
+14:1 Scalar (=(Int 2))
+14:0 Tuple len (=2)
+15:1 Scalar (=(Int 1))
+16:2 Tuple body
+16:1 Scalar (=(Int 2))
+16:0 Tuple len (=2)
+17:1 Scalar (=(Int 2))
+18:2 Tuple body
+18:1 Scalar (=(Int 1))
+18:0 Tuple len (=2)
+19:1 Scalar (=(Int 2))
+20:2 Tuple body
+20:1 Scalar (=(Int 1))
+20:0 Tuple len (=2)
+21:1 Scalar (=(Int 3))

@@ -1,0 +1,8 @@
+0:10 List body
+0:2 Scalar (=(Fixed ((value -42) (scale 100))))
+0:0 List len (=10)
+0:0 List count (=5)
+2:2 Scalar (=(Fixed ((value 1) (scale 100))))
+4:2 Scalar (=(Fixed ((value 88) (scale 100))))
+6:2 Scalar (=(Fixed ((value 5) (scale 1))))
+8:2 Scalar (=(Fixed ((value 3442) (scale 100))))

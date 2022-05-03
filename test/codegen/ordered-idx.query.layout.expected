@@ -1,0 +1,27 @@
+0:1 Ordered idx len (=18)
+1:6 Ordered idx map
+1:1 Ordered idx key
+1:1 Scalar (=(Int 1))
+1:0 Ordered idx index len (=6)
+2:1 Ordered idx ptr (=0)
+3:1 Ordered idx key
+3:1 Scalar (=(Int 2))
+4:1 Ordered idx ptr (=4)
+5:1 Ordered idx key
+5:1 Scalar (=(Int 3))
+6:1 Ordered idx ptr (=8)
+7:11 Ordered idx body
+7:1 List count (=2)
+8:1 List len (=4)
+9:2 List body
+9:1 Scalar (=(Int 2))
+10:1 Scalar (=(Int 3))
+11:1 List count (=2)
+12:1 List len (=4)
+13:2 List body
+13:1 Scalar (=(Int 1))
+14:1 Scalar (=(Int 2))
+15:1 List count (=1)
+16:1 List len (=3)
+17:1 List body
+17:1 Scalar (=(Int 4))

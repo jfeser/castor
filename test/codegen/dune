@@ -1,0 +1,9 @@
+(include dune.inc)
+
+(rule
+ (deps (glob_files *.query))
+ (action (with-stdout-to dune.inc.gen (run ./gen_dune.py %{deps}))))
+
+(rule
+ (alias runtest)
+ (action (diff dune.inc dune.inc.gen)))

@@ -1,0 +1,182 @@
+// Locals:
+// hoisted0 : int (persists=false)
+// hoisted1 : date (persists=false)
+// hoisted2 : int (persists=false)
+// hoisted3 : date (persists=false)
+// hoisted4 : int (persists=false)
+// hoisted5 : int (persists=false)
+// hoisted6 : date (persists=false)
+// hoisted7 : int (persists=false)
+// hoisted8 : date (persists=false)
+// hoisted9 : int (persists=false)
+// hoisted10 : int (persists=false)
+// hoisted11 : date (persists=false)
+// hoisted12 : int (persists=false)
+// hoisted13 : date (persists=false)
+// hoisted14 : int (persists=false)
+// hoisted15 : date (persists=false)
+// hoisted16 : int (persists=false)
+// hoisted17 : date (persists=false)
+// hoisted18 : int (persists=false)
+// low14 : int (persists=true)
+// key13 : tuple[date] (persists=true)
+// key20 : tuple[date] (persists=true)
+// key19 : tuple[date] (persists=false)
+// key17 : tuple[date] (persists=false)
+// mid16 : int (persists=true)
+// kstart11 : int (persists=true)
+// vstart12 : int (persists=true)
+// key21 : tuple[date] (persists=false)
+// high15 : int (persists=true)
+// idx18 : int (persists=true)
+fun printer () : void {
+    hoisted0 = 15 / 3;
+    hoisted1 = 2017-10-05;
+    hoisted2 = date2int(hoisted1);
+    hoisted3 = 2017-10-05;
+    hoisted4 = date2int(hoisted3);
+    hoisted5 = 15 / 3;
+    hoisted6 = 2018-09-01;
+    hoisted7 = date2int(hoisted6);
+    hoisted8 = 2018-09-01;
+    hoisted9 = date2int(hoisted8);
+    hoisted10 = 15 / 3;
+    hoisted11 = 2018-09-01;
+    hoisted12 = date2int(hoisted11);
+    hoisted13 = 2018-09-01;
+    hoisted14 = date2int(hoisted13);
+    hoisted15 = 2017-10-05;
+    hoisted16 = date2int(hoisted15);
+    hoisted17 = 2017-10-05;
+    hoisted18 = date2int(hoisted17);
+    low14 = 0;
+    high15 = hoisted0;
+    loop (low14 < high15) {
+        mid16 = low14 + high15 / 2;
+        kstart11 = 0 + mid16 * 3;
+        key17 = (int2date(buf[kstart11 : 2]));
+        if (not(date2int(key17[0]) < hoisted2 ||
+                date2int(key17[0]) == hoisted4)) {
+            high15 = mid16;
+        } else {
+             low14 = mid16 + 1;
+        }
+    }
+    idx18 = low14;
+    if (idx18 < hoisted5) {
+        kstart11 = 0 + idx18 * 3;
+        key19 = (int2date(buf[kstart11 : 2]));
+        key20 = key19;
+        loop (date2int(key20[0]) < hoisted7 || date2int(key20[0]) == hoisted9 &&
+              idx18 < hoisted10) {
+            if (date2int(key20[0]) < hoisted12 ||
+                date2int(key20[0]) == hoisted14 &&
+                not(date2int(key20[0]) < hoisted16 ||
+                    date2int(key20[0]) == hoisted18)) {
+                vstart12 = buf[0 + idx18 * 3 + 2 : 1] + 15 + 0;
+                key13 = key20;
+                print(tuple[date, date],
+                (key13[0], int2date(buf[vstart12 : 2])));
+            } else {
+                 
+            }
+            idx18 = idx18 + 1;
+            kstart11 = 0 + idx18 * 3;
+            key21 = (int2date(buf[kstart11 : 2]));
+            key20 = key21;
+        }
+    } else {
+         
+    }
+}
+// Locals:
+// hoisted19 : int (persists=false)
+// hoisted20 : date (persists=false)
+// hoisted21 : int (persists=false)
+// hoisted22 : date (persists=false)
+// hoisted23 : int (persists=false)
+// hoisted24 : int (persists=false)
+// hoisted25 : date (persists=false)
+// hoisted26 : int (persists=false)
+// hoisted27 : date (persists=false)
+// hoisted28 : int (persists=false)
+// hoisted29 : int (persists=false)
+// hoisted30 : date (persists=false)
+// hoisted31 : int (persists=false)
+// hoisted32 : date (persists=false)
+// hoisted33 : int (persists=false)
+// hoisted34 : date (persists=false)
+// hoisted35 : int (persists=false)
+// hoisted36 : date (persists=false)
+// hoisted37 : int (persists=false)
+// mid5 : int (persists=true)
+// key10 : tuple[date] (persists=false)
+// key9 : tuple[date] (persists=true)
+// high4 : int (persists=true)
+// kstart0 : int (persists=true)
+// key6 : tuple[date] (persists=false)
+// idx7 : int (persists=true)
+// vstart1 : int (persists=true)
+// key2 : tuple[date] (persists=true)
+// key8 : tuple[date] (persists=false)
+// low3 : int (persists=true)
+fun consumer () : void {
+    hoisted19 = 15 / 3;
+    hoisted20 = 2017-10-05;
+    hoisted21 = date2int(hoisted20);
+    hoisted22 = 2017-10-05;
+    hoisted23 = date2int(hoisted22);
+    hoisted24 = 15 / 3;
+    hoisted25 = 2018-09-01;
+    hoisted26 = date2int(hoisted25);
+    hoisted27 = 2018-09-01;
+    hoisted28 = date2int(hoisted27);
+    hoisted29 = 15 / 3;
+    hoisted30 = 2018-09-01;
+    hoisted31 = date2int(hoisted30);
+    hoisted32 = 2018-09-01;
+    hoisted33 = date2int(hoisted32);
+    hoisted34 = 2017-10-05;
+    hoisted35 = date2int(hoisted34);
+    hoisted36 = 2017-10-05;
+    hoisted37 = date2int(hoisted36);
+    low3 = 0;
+    high4 = hoisted19;
+    loop (low3 < high4) {
+        mid5 = low3 + high4 / 2;
+        kstart0 = 0 + mid5 * 3;
+        key6 = (int2date(buf[kstart0 : 2]));
+        if (not(date2int(key6[0]) < hoisted21 ||
+                date2int(key6[0]) == hoisted23)) {
+            high4 = mid5;
+        } else {
+             low3 = mid5 + 1;
+        }
+    }
+    idx7 = low3;
+    if (idx7 < hoisted24) {
+        kstart0 = 0 + idx7 * 3;
+        key8 = (int2date(buf[kstart0 : 2]));
+        key9 = key8;
+        loop (date2int(key9[0]) < hoisted26 || date2int(key9[0]) == hoisted28 &&
+              idx7 < hoisted29) {
+            if (date2int(key9[0]) < hoisted31 ||
+                date2int(key9[0]) == hoisted33 &&
+                not(date2int(key9[0]) < hoisted35 ||
+                    date2int(key9[0]) == hoisted37)) {
+                vstart1 = buf[0 + idx7 * 3 + 2 : 1] + 15 + 0;
+                key2 = key9;
+                consume(tuple[date, date],
+                (key2[0], int2date(buf[vstart1 : 2])));
+            } else {
+                 
+            }
+            idx7 = idx7 + 1;
+            kstart0 = 0 + idx7 * 3;
+            key10 = (int2date(buf[kstart0 : 2]));
+            key9 = key10;
+        }
+    } else {
+         
+    }
+}

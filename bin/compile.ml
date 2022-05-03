@@ -3,19 +3,25 @@ open Castor
 open Collections
 open Abslayout_load
 
-let main ~debug ~gprof ~params ~code_only ~query ~enable_redshift_dates ?out_dir
-    fn =
+let main ~debug ~gprof ~params ~code_only ~query ~enable_redshift_dates
+    ~output_layout ?db ?out_dir fn =
   let open Result.Let_syntax in
   Global.enable_redshift_dates := enable_redshift_dates;
   Log.info (fun m ->
       m "Command: %a" Fmt.(array ~sep:sp string) (Sys.get_argv ()));
+
+  let conn =
+    Option.value_or_thunk db ~default:(fun () -> Sys.getenv_exn "CASTOR_DB")
+    |> Db.create
+  in
+
   let module Config = struct
-    let conn = Db.create (Sys.getenv_exn "CASTOR_DB")
+    let conn = conn
     let debug = debug
     let code_only = code_only
   end in
   let layout_file =
-    if debug then
+    if debug || output_layout then
       let layout_file =
         match out_dir with Some d -> d ^ "/layout.txt" | None -> "layout.txt"
       in
@@ -92,9 +98,12 @@ let spec =
     and code_only = flag "code-only" no_arg ~doc:"only emit code"
     and query =
       flag "query" ~aliases:[ "r" ] no_arg ~doc:"parse input as a query"
+    and db = flag "db" (optional string) ~doc:" database url"
+    and output_layout =
+      flag "output-layout" no_arg ~doc:" output layout description"
     and fn = anon (maybe ("query" %: string)) in
     fun () ->
       main ~debug ~gprof ~params ~code_only ~query ~enable_redshift_dates
-        ?out_dir fn]
+        ?out_dir ?db ~output_layout fn]
 
 let () = Command.basic spec ~summary:"Compile a query." |> Command_unix.run

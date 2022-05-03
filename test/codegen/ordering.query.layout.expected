@@ -1,0 +1,23 @@
+0:10 List body
+0:2 Tuple body
+0:1 Scalar (=(Int 3))
+0:0 List len (=10)
+0:0 List count (=5)
+0:0 Tuple len (=2)
+1:1 Scalar (=(Int 4))
+2:2 Tuple body
+2:1 Scalar (=(Int 2))
+2:0 Tuple len (=2)
+3:1 Scalar (=(Int 1))
+4:2 Tuple body
+4:1 Scalar (=(Int 2))
+4:0 Tuple len (=2)
+5:1 Scalar (=(Int 2))
+6:2 Tuple body
+6:1 Scalar (=(Int 1))
+6:0 Tuple len (=2)
+7:1 Scalar (=(Int 2))
+8:2 Tuple body
+8:1 Scalar (=(Int 1))
+8:0 Tuple len (=2)
+9:1 Scalar (=(Int 3))

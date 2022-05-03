@@ -1,0 +1,36 @@
+// Locals:
+// cstart8 : int (persists=true)
+// cstart9 : int (persists=true)
+// count7 : int (persists=true)
+// cstart5 : int (persists=true)
+// i6 : int (persists=true)
+fun printer () : void {
+    cstart5 = 0;
+    i6 = 0;
+    count7 = 5;
+    loop (i6 < count7) {
+        cstart8 = cstart5;
+        cstart9 = cstart8 + 1;
+        print(tuple[int, int], (buf[cstart8 : 1], buf[cstart9 : 1]));
+        cstart5 = cstart5 + 2;
+        i6 = i6 + 1;
+    }
+}
+// Locals:
+// i1 : int (persists=true)
+// cstart4 : int (persists=true)
+// cstart3 : int (persists=true)
+// cstart0 : int (persists=true)
+// count2 : int (persists=true)
+fun consumer () : void {
+    cstart0 = 0;
+    i1 = 0;
+    count2 = 5;
+    loop (i1 < count2) {
+        cstart3 = cstart0;
+        cstart4 = cstart3 + 1;
+        consume(tuple[int, int], (buf[cstart3 : 1], buf[cstart4 : 1]));
+        cstart0 = cstart0 + 2;
+        i1 = i1 + 1;
+    }
+}

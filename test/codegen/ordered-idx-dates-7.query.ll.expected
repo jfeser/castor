@@ -1,0 +1,890 @@
+; ModuleID = 'scanner'
+source_filename = "scanner"
+target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+target triple = "x86_64-unknown-linux-gnu"
+
+%params = type { [4 x i64]* }
+
+@true_str = private unnamed_addr constant [2 x i8] c"t\00", align 1
+@false_str = private unnamed_addr constant [2 x i8] c"f\00", align 1
+@null_str = private unnamed_addr constant [5 x i8] c"null\00", align 1
+@void_str = private unnamed_addr constant [3 x i8] c"()\00", align 1
+@sep_str = private unnamed_addr constant [2 x i8] c"|\00", align 1
+@newline_str = private unnamed_addr constant [2 x i8] c"\0A\00", align 1
+@int_fmt = private unnamed_addr constant [3 x i8] c"%d\00", align 1
+@str_fmt = private unnamed_addr constant [5 x i8] c"%.*s\00", align 1
+@float_fmt = private unnamed_addr constant [3 x i8] c"%f\00", align 1
+@date_fmt = private unnamed_addr constant [15 x i8] c"%04d-%02d-%02d\00", align 1
+
+; Function Attrs: argmemonly nofree nosync nounwind willreturn
+declare void @llvm.lifetime.start.p0i8(i64 immarg, i8* nocapture) #0
+
+; Function Attrs: argmemonly nofree nosync nounwind willreturn
+declare void @llvm.lifetime.end.p0i8(i64 immarg, i8* nocapture) #0
+
+; Function Attrs: argmemonly readonly speculatable
+declare i32 @cmph_search_packed(i8*, i8*, i32) #1
+
+declare i32 @printf(i8*, ...)
+
+; Function Attrs: argmemonly norecurse nounwind readonly speculatable
+declare i32 @strncmp(i8* noalias nocapture, i8* noalias nocapture, i64) #2
+
+declare i8* @strncpy(i8*, i8*, i32)
+
+; Function Attrs: argmemonly norecurse nounwind readonly speculatable
+declare i64 @strpos(i8* nocapture, i64, i8* nocapture, i64) #2
+
+; Function Attrs: readnone
+declare i64 @extract_year(i64) #3
+
+; Function Attrs: readnone
+declare i64 @extract_month(i64) #3
+
+; Function Attrs: readnone
+declare i64 @extract_day(i64) #3
+
+; Function Attrs: readnone
+declare i64 @add_month(i64, i64) #3
+
+; Function Attrs: readnone
+declare i64 @add_year(i64, i64) #3
+
+; Function Attrs: argmemonly norecurse nounwind readonly speculatable
+define i1 @scmp({ i8*, i64 } %0, { i8*, i64 } %1) #2 {
+entry:
+  %len = extractvalue { i8*, i64 } %0, 1
+  %pos = extractvalue { i8*, i64 } %0, 0
+  %len1 = extractvalue { i8*, i64 } %1, 1
+  %pos2 = extractvalue { i8*, i64 } %1, 0
+  %len_cmp = icmp eq i64 %len, %len1
+  br i1 %len_cmp, label %eq, label %neq
+
+eq:                                               ; preds = %entry
+  %str_cmp = call i32 @strncmp(i8* %pos, i8* %pos2, i64 %len), !tbaa !0
+  %str_cmp3 = icmp eq i32 %str_cmp, 0
+  ret i1 %str_cmp3
+
+neq:                                              ; preds = %entry
+  ret i1 false
+}
+
+; Function Attrs: argmemonly norecurse nounwind readonly
+define void @printer(%params* noalias %0) #4 {
+entry:
+  %tupleptrtmp207 = alloca { i64, i64 }, align 8
+  %tupleptrtmp175 = alloca { i64, i64, i64 }, align 8
+  %tupleptrtmp86 = alloca { i64, i64 }, align 8
+  %tupleptrtmp = alloca { i64, i64 }, align 8
+  %hoisted0 = alloca i64, align 8
+  %hoisted1 = alloca i64, align 8
+  %hoisted2 = alloca i64, align 8
+  %hoisted3 = alloca i64, align 8
+  %hoisted4 = alloca i64, align 8
+  %hoisted5 = alloca i64, align 8
+  %hoisted6 = alloca i64, align 8
+  %hoisted7 = alloca i64, align 8
+  %hoisted8 = alloca i64, align 8
+  %hoisted9 = alloca i64, align 8
+  %hoisted10 = alloca i64, align 8
+  %hoisted11 = alloca i64, align 8
+  %hoisted12 = alloca i64, align 8
+  %hoisted13 = alloca i64, align 8
+  %hoisted14 = alloca i64, align 8
+  %hoisted15 = alloca i64, align 8
+  %hoisted16 = alloca i64, align 8
+  %hoisted17 = alloca i64, align 8
+  %hoisted18 = alloca i64, align 8
+  %hoisted19 = alloca i64, align 8
+  %hoisted20 = alloca i64, align 8
+  %hoisted21 = alloca i64, align 8
+  %hoisted22 = alloca i64, align 8
+  %cstart29 = alloca i64, align 8
+  %cstart24 = alloca i64, align 8
+  %cstart25 = alloca i64, align 8
+  %mid22 = alloca i64, align 8
+  %key19 = alloca { i64, i64 }, align 8
+  %kstart17 = alloca i64, align 8
+  %key31 = alloca { i64, i64 }, align 8
+  %idx26 = alloca i64, align 8
+  %vstart18 = alloca i64, align 8
+  %key30 = alloca { i64, i64 }, align 8
+  %low20 = alloca i64, align 8
+  %high21 = alloca i64, align 8
+  %cstart28 = alloca i64, align 8
+  %cstart33 = alloca i64, align 8
+  %key23 = alloca { i64, i64 }, align 8
+  %key27 = alloca { i64, i64 }, align 8
+  %cstart32 = alloca i64, align 8
+  store i64 5, i64* %hoisted0, align 8, !tbaa !3
+  store i64 -719527, i64* %hoisted1, align 8, !tbaa !3
+  %hoisted110 = load i64, i64* %hoisted1, align 8, !tbaa !3
+  store i64 %hoisted110, i64* %hoisted2, align 8, !tbaa !3
+  store i64 -719527, i64* %hoisted3, align 8, !tbaa !3
+  %hoisted311 = load i64, i64* %hoisted3, align 8, !tbaa !3
+  store i64 %hoisted311, i64* %hoisted4, align 8, !tbaa !3
+  store i64 5, i64* %hoisted5, align 8, !tbaa !3
+  store i64 2932532, i64* %hoisted6, align 8, !tbaa !3
+  %hoisted612 = load i64, i64* %hoisted6, align 8, !tbaa !3
+  store i64 %hoisted612, i64* %hoisted7, align 8, !tbaa !3
+  store i64 2932532, i64* %hoisted8, align 8, !tbaa !3
+  %hoisted813 = load i64, i64* %hoisted8, align 8, !tbaa !3
+  store i64 %hoisted813, i64* %hoisted9, align 8, !tbaa !3
+  store i64 17775, i64* %hoisted10, align 8, !tbaa !3
+  %hoisted1014 = load i64, i64* %hoisted10, align 8, !tbaa !3
+  store i64 %hoisted1014, i64* %hoisted11, align 8, !tbaa !3
+  store i64 5, i64* %hoisted12, align 8, !tbaa !3
+  store i64 2932532, i64* %hoisted13, align 8, !tbaa !3
+  %hoisted1315 = load i64, i64* %hoisted13, align 8, !tbaa !3
+  store i64 %hoisted1315, i64* %hoisted14, align 8, !tbaa !3
+  store i64 2932532, i64* %hoisted15, align 8, !tbaa !3
+  %hoisted1516 = load i64, i64* %hoisted15, align 8, !tbaa !3
+  store i64 %hoisted1516, i64* %hoisted16, align 8, !tbaa !3
+  store i64 17775, i64* %hoisted17, align 8, !tbaa !3
+  %hoisted1717 = load i64, i64* %hoisted17, align 8, !tbaa !3
+  store i64 %hoisted1717, i64* %hoisted18, align 8, !tbaa !3
+  store i64 -719527, i64* %hoisted19, align 8, !tbaa !3
+  %hoisted1918 = load i64, i64* %hoisted19, align 8, !tbaa !3
+  store i64 %hoisted1918, i64* %hoisted20, align 8, !tbaa !3
+  store i64 -719527, i64* %hoisted21, align 8, !tbaa !3
+  %hoisted2119 = load i64, i64* %hoisted21, align 8, !tbaa !3
+  store i64 %hoisted2119, i64* %hoisted22, align 8, !tbaa !3
+  store i64 0, i64* %low20, align 8, !tbaa !3
+  %hoisted020 = load i64, i64* %hoisted0, align 8, !tbaa !3
+  store i64 %hoisted020, i64* %high21, align 8, !tbaa !3
+  br label %loopcond
+
+loopcond:                                         ; preds = %entry
+  %low2021 = load i64, i64* %low20, align 8, !tbaa !3
+  %high2122 = load i64, i64* %high21, align 8, !tbaa !3
+  %lttmp = icmp slt i64 %low2021, %high2122
+  br i1 %lttmp, label %loopbody, label %loopend
+
+loopbody:                                         ; preds = %ifend, %loopcond
+  %low2023 = load i64, i64* %low20, align 8, !tbaa !3
+  %high2124 = load i64, i64* %high21, align 8, !tbaa !3
+  %addtmp = add nsw i64 %low2023, %high2124
+  %divtmp = sdiv i64 %addtmp, 2
+  store i64 %divtmp, i64* %mid22, align 8, !tbaa !3
+  %mid2225 = load i64, i64* %mid22, align 8, !tbaa !3
+  %multmp = mul nsw i64 %mid2225, 5
+  %addtmp26 = add nsw i64 0, %multmp
+  store i64 %addtmp26, i64* %kstart17, align 8, !tbaa !3
+  %kstart1727 = load i64, i64* %kstart17, align 8, !tbaa !3
+  store i64 %kstart1727, i64* %cstart24, align 8, !tbaa !3
+  %cstart2428 = load i64, i64* %cstart24, align 8, !tbaa !3
+  %addtmp29 = add nsw i64 %cstart2428, 2
+  store i64 %addtmp29, i64* %cstart25, align 8, !tbaa !3
+  %cstart2430 = load i64, i64* %cstart24, align 8, !tbaa !3
+  %buf = getelementptr inbounds %params, %params* %0, i32 0, i32 0
+  %buf_ptr = load [4 x i64]*, [4 x i64]** %buf, align 8, !tbaa !5
+  %buf_ptr_cast = bitcast [4 x i64]* %buf_ptr to i8*
+  %slice_ptr = getelementptr inbounds i8, i8* %buf_ptr_cast, i64 %cstart2430
+  %slice_ptr_cast = bitcast i8* %slice_ptr to i16*
+  %slice_val = load i16, i16* %slice_ptr_cast, align 2, !tbaa !7
+  %int_val = sext i16 %slice_val to i64
+  %cstart2531 = load i64, i64* %cstart25, align 8, !tbaa !3
+  %buf32 = getelementptr inbounds %params, %params* %0, i32 0, i32 0
+  %buf_ptr33 = load [4 x i64]*, [4 x i64]** %buf32, align 8, !tbaa !5
+  %buf_ptr_cast34 = bitcast [4 x i64]* %buf_ptr33 to i8*
+  %slice_ptr35 = getelementptr inbounds i8, i8* %buf_ptr_cast34, i64 %cstart2531
+  %slice_ptr_cast36 = bitcast i8* %slice_ptr35 to i16*
+  %slice_val37 = load i16, i16* %slice_ptr_cast36, align 2, !tbaa !7
+  %int_val38 = sext i16 %slice_val37 to i64
+  %ptrtmp = getelementptr inbounds { i64, i64 }, { i64, i64 }* %tupleptrtmp, i32 0, i32 0
+  store i64 %int_val, i64* %ptrtmp, align 8, !tbaa !3
+  %ptrtmp39 = getelementptr inbounds { i64, i64 }, { i64, i64 }* %tupleptrtmp, i32 0, i32 1
+  store i64 %int_val38, i64* %ptrtmp39, align 8, !tbaa !3
+  %tupletmp = load { i64, i64 }, { i64, i64 }* %tupleptrtmp, align 8, !tbaa !3
+  store { i64, i64 } %tupletmp, { i64, i64 }* %key23, align 8, !tbaa !3
+  br label %if
+
+loopend:                                          ; preds = %ifend, %loopcond
+  %low2056 = load i64, i64* %low20, align 8, !tbaa !3
+  store i64 %low2056, i64* %idx26, align 8, !tbaa !3
+  br label %if57
+
+if:                                               ; preds = %loopbody
+  %key2340 = load { i64, i64 }, { i64, i64 }* %key23, align 8, !tbaa !3
+  %elemtmp = extractvalue { i64, i64 } %key2340, 1
+  %elemtmp41 = extractvalue { i64, i64 } %key2340, 0
+  %hoisted242 = load i64, i64* %hoisted2, align 8, !tbaa !3
+  %lttmp43 = icmp slt i64 %elemtmp41, %hoisted242
+  %nottmp = xor i1 %lttmp43, true
+  %key2344 = load { i64, i64 }, { i64, i64 }* %key23, align 8, !tbaa !3
+  %elemtmp45 = extractvalue { i64, i64 } %key2344, 1
+  %elemtmp46 = extractvalue { i64, i64 } %key2344, 0
+  %hoisted447 = load i64, i64* %hoisted4, align 8, !tbaa !3
+  %lttmp48 = icmp slt i64 %elemtmp45, %hoisted447
+  %nottmp49 = xor i1 %lttmp48, true
+  %ortmp = or i1 %nottmp, %nottmp49
+  br i1 %ortmp, label %then, label %else
+
+then:                                             ; preds = %if
+  %mid2250 = load i64, i64* %mid22, align 8, !tbaa !3
+  store i64 %mid2250, i64* %high21, align 8, !tbaa !3
+  br label %ifend
+
+else:                                             ; preds = %if
+  %mid2251 = load i64, i64* %mid22, align 8, !tbaa !3
+  %addtmp52 = add nsw i64 %mid2251, 1
+  store i64 %addtmp52, i64* %low20, align 8, !tbaa !3
+  br label %ifend
+
+ifend:                                            ; preds = %else, %then
+  %low2053 = load i64, i64* %low20, align 8, !tbaa !3
+  %high2154 = load i64, i64* %high21, align 8, !tbaa !3
+  %lttmp55 = icmp slt i64 %low2053, %high2154
+  br i1 %lttmp55, label %loopbody, label %loopend
+
+if57:                                             ; preds = %loopend
+  %idx2661 = load i64, i64* %idx26, align 8, !tbaa !3
+  %hoisted562 = load i64, i64* %hoisted5, align 8, !tbaa !3
+  %lttmp63 = icmp slt i64 %idx2661, %hoisted562
+  br i1 %lttmp63, label %then58, label %else59
+
+then58:                                           ; preds = %if57
+  %idx2664 = load i64, i64* %idx26, align 8, !tbaa !3
+  %multmp65 = mul nsw i64 %idx2664, 5
+  %addtmp66 = add nsw i64 0, %multmp65
+  store i64 %addtmp66, i64* %kstart17, align 8, !tbaa !3
+  %kstart1767 = load i64, i64* %kstart17, align 8, !tbaa !3
+  store i64 %kstart1767, i64* %cstart28, align 8, !tbaa !3
+  %cstart2868 = load i64, i64* %cstart28, align 8, !tbaa !3
+  %addtmp69 = add nsw i64 %cstart2868, 2
+  store i64 %addtmp69, i64* %cstart29, align 8, !tbaa !3
+  %cstart2870 = load i64, i64* %cstart28, align 8, !tbaa !3
+  %buf71 = getelementptr inbounds %params, %params* %0, i32 0, i32 0
+  %buf_ptr72 = load [4 x i64]*, [4 x i64]** %buf71, align 8, !tbaa !5
+  %buf_ptr_cast73 = bitcast [4 x i64]* %buf_ptr72 to i8*
+  %slice_ptr74 = getelementptr inbounds i8, i8* %buf_ptr_cast73, i64 %cstart2870
+  %slice_ptr_cast75 = bitcast i8* %slice_ptr74 to i16*
+  %slice_val76 = load i16, i16* %slice_ptr_cast75, align 2, !tbaa !7
+  %int_val77 = sext i16 %slice_val76 to i64
+  %cstart2978 = load i64, i64* %cstart29, align 8, !tbaa !3
+  %buf79 = getelementptr inbounds %params, %params* %0, i32 0, i32 0
+  %buf_ptr80 = load [4 x i64]*, [4 x i64]** %buf79, align 8, !tbaa !5
+  %buf_ptr_cast81 = bitcast [4 x i64]* %buf_ptr80 to i8*
+  %slice_ptr82 = getelementptr inbounds i8, i8* %buf_ptr_cast81, i64 %cstart2978
+  %slice_ptr_cast83 = bitcast i8* %slice_ptr82 to i16*
+  %slice_val84 = load i16, i16* %slice_ptr_cast83, align 2, !tbaa !7
+  %int_val85 = sext i16 %slice_val84 to i64
+  %ptrtmp87 = getelementptr inbounds { i64, i64 }, { i64, i64 }* %tupleptrtmp86, i32 0, i32 0
+  store i64 %int_val77, i64* %ptrtmp87, align 8, !tbaa !3
+  %ptrtmp88 = getelementptr inbounds { i64, i64 }, { i64, i64 }* %tupleptrtmp86, i32 0, i32 1
+  store i64 %int_val85, i64* %ptrtmp88, align 8, !tbaa !3
+  %tupletmp89 = load { i64, i64 }, { i64, i64 }* %tupleptrtmp86, align 8, !tbaa !3
+  store { i64, i64 } %tupletmp89, { i64, i64 }* %key27, align 8, !tbaa !3
+  %key2790 = load { i64, i64 }, { i64, i64 }* %key27, align 8, !tbaa !3
+  store { i64, i64 } %key2790, { i64, i64 }* %key30, align 8, !tbaa !3
+  br label %loopcond91
+
+else59:                                           ; preds = %if57
+  br label %ifend60
+
+ifend60:                                          ; preds = %else59, %loopend93
+  ret void
+
+loopcond91:                                       ; preds = %then58
+  %key3094 = load { i64, i64 }, { i64, i64 }* %key30, align 8, !tbaa !3
+  %elemtmp95 = extractvalue { i64, i64 } %key3094, 1
+  %elemtmp96 = extractvalue { i64, i64 } %key3094, 0
+  %hoisted797 = load i64, i64* %hoisted7, align 8, !tbaa !3
+  %lttmp98 = icmp slt i64 %elemtmp96, %hoisted797
+  %key3099 = load { i64, i64 }, { i64, i64 }* %key30, align 8, !tbaa !3
+  %elemtmp100 = extractvalue { i64, i64 } %key3099, 1
+  %elemtmp101 = extractvalue { i64, i64 } %key3099, 0
+  %hoisted9102 = load i64, i64* %hoisted9, align 8, !tbaa !3
+  %eqtmp = icmp eq i64 %elemtmp101, %hoisted9102
+  %ortmp103 = or i1 %lttmp98, %eqtmp
+  %key30104 = load { i64, i64 }, { i64, i64 }* %key30, align 8, !tbaa !3
+  %elemtmp105 = extractvalue { i64, i64 } %key30104, 1
+  %elemtmp106 = extractvalue { i64, i64 } %key30104, 0
+  %hoisted11107 = load i64, i64* %hoisted11, align 8, !tbaa !3
+  %lttmp108 = icmp slt i64 %elemtmp105, %hoisted11107
+  %ortmp109 = or i1 %ortmp103, %lttmp108
+  %idx26110 = load i64, i64* %idx26, align 8, !tbaa !3
+  %hoisted12111 = load i64, i64* %hoisted12, align 8, !tbaa !3
+  %lttmp112 = icmp slt i64 %idx26110, %hoisted12111
+  %andtmp = and i1 %ortmp109, %lttmp112
+  br i1 %andtmp, label %loopbody92, label %loopend93
+
+loopbody92:                                       ; preds = %ifend116, %loopcond91
+  br label %if113
+
+loopend93:                                        ; preds = %ifend116, %loopcond91
+  br label %ifend60
+
+if113:                                            ; preds = %loopbody92
+  %key30117 = load { i64, i64 }, { i64, i64 }* %key30, align 8, !tbaa !3
+  %elemtmp118 = extractvalue { i64, i64 } %key30117, 1
+  %elemtmp119 = extractvalue { i64, i64 } %key30117, 0
+  %hoisted14120 = load i64, i64* %hoisted14, align 8, !tbaa !3
+  %lttmp121 = icmp slt i64 %elemtmp119, %hoisted14120
+  %key30122 = load { i64, i64 }, { i64, i64 }* %key30, align 8, !tbaa !3
+  %elemtmp123 = extractvalue { i64, i64 } %key30122, 1
+  %elemtmp124 = extractvalue { i64, i64 } %key30122, 0
+  %hoisted16125 = load i64, i64* %hoisted16, align 8, !tbaa !3
+  %eqtmp126 = icmp eq i64 %elemtmp124, %hoisted16125
+  %ortmp127 = or i1 %lttmp121, %eqtmp126
+  %key30128 = load { i64, i64 }, { i64, i64 }* %key30, align 8, !tbaa !3
+  %elemtmp129 = extractvalue { i64, i64 } %key30128, 1
+  %elemtmp130 = extractvalue { i64, i64 } %key30128, 0
+  %hoisted18131 = load i64, i64* %hoisted18, align 8, !tbaa !3
+  %lttmp132 = icmp slt i64 %elemtmp129, %hoisted18131
+  %key30133 = load { i64, i64 }, { i64, i64 }* %key30, align 8, !tbaa !3
+  %elemtmp134 = extractvalue { i64, i64 } %key30133, 1
+  %elemtmp135 = extractvalue { i64, i64 } %key30133, 0
+  %hoisted20136 = load i64, i64* %hoisted20, align 8, !tbaa !3
+  %lttmp137 = icmp slt i64 %elemtmp135, %hoisted20136
+  %nottmp138 = xor i1 %lttmp137, true
+  %key30139 = load { i64, i64 }, { i64, i64 }* %key30, align 8, !tbaa !3
+  %elemtmp140 = extractvalue { i64, i64 } %key30139, 1
+  %elemtmp141 = extractvalue { i64, i64 } %key30139, 0
+  %hoisted22142 = load i64, i64* %hoisted22, align 8, !tbaa !3
+  %lttmp143 = icmp slt i64 %elemtmp140, %hoisted22142
+  %nottmp144 = xor i1 %lttmp143, true
+  %andtmp145 = and i1 %nottmp138, %nottmp144
+  %andtmp146 = and i1 %lttmp132, %andtmp145
+  %andtmp147 = and i1 %ortmp127, %andtmp146
+  br i1 %andtmp147, label %then114, label %else115
+
+then114:                                          ; preds = %if113
+  %idx26148 = load i64, i64* %idx26, align 8, !tbaa !3
+  %multmp149 = mul nsw i64 %idx26148, 5
+  %addtmp150 = add nsw i64 0, %multmp149
+  %addtmp151 = add nsw i64 %addtmp150, 4
+  %buf152 = getelementptr inbounds %params, %params* %0, i32 0, i32 0
+  %buf_ptr153 = load [4 x i64]*, [4 x i64]** %buf152, align 8, !tbaa !5
+  %buf_ptr_cast154 = bitcast [4 x i64]* %buf_ptr153 to i8*
+  %slice_ptr155 = getelementptr inbounds i8, i8* %buf_ptr_cast154, i64 %addtmp151
+  %slice_val156 = load i8, i8* %slice_ptr155, align 1, !tbaa !7
+  %int_val157 = sext i8 %slice_val156 to i64
+  %addtmp158 = add nsw i64 %int_val157, 25
+  %addtmp159 = add nsw i64 %addtmp158, 0
+  store i64 %addtmp159, i64* %vstart18, align 8, !tbaa !3
+  %key30160 = load { i64, i64 }, { i64, i64 }* %key30, align 8, !tbaa !3
+  store { i64, i64 } %key30160, { i64, i64 }* %key19, align 8, !tbaa !3
+  %key19161 = load { i64, i64 }, { i64, i64 }* %key19, align 8, !tbaa !3
+  %elemtmp162 = extractvalue { i64, i64 } %key19161, 1
+  %elemtmp163 = extractvalue { i64, i64 } %key19161, 0
+  %key19164 = load { i64, i64 }, { i64, i64 }* %key19, align 8, !tbaa !3
+  %elemtmp165 = extractvalue { i64, i64 } %key19164, 1
+  %elemtmp166 = extractvalue { i64, i64 } %key19164, 0
+  %vstart18167 = load i64, i64* %vstart18, align 8, !tbaa !3
+  %buf168 = getelementptr inbounds %params, %params* %0, i32 0, i32 0
+  %buf_ptr169 = load [4 x i64]*, [4 x i64]** %buf168, align 8, !tbaa !5
+  %buf_ptr_cast170 = bitcast [4 x i64]* %buf_ptr169 to i8*
+  %slice_ptr171 = getelementptr inbounds i8, i8* %buf_ptr_cast170, i64 %vstart18167
+  %slice_ptr_cast172 = bitcast i8* %slice_ptr171 to i16*
+  %slice_val173 = load i16, i16* %slice_ptr_cast172, align 2, !tbaa !7
+  %int_val174 = sext i16 %slice_val173 to i64
+  %ptrtmp176 = getelementptr inbounds { i64, i64, i64 }, { i64, i64, i64 }* %tupleptrtmp175, i32 0, i32 0
+  store i64 %elemtmp163, i64* %ptrtmp176, align 8, !tbaa !3
+  %ptrtmp177 = getelementptr inbounds { i64, i64, i64 }, { i64, i64, i64 }* %tupleptrtmp175, i32 0, i32 1
+  store i64 %elemtmp165, i64* %ptrtmp177, align 8, !tbaa !3
+  %ptrtmp178 = getelementptr inbounds { i64, i64, i64 }, { i64, i64, i64 }* %tupleptrtmp175, i32 0, i32 2
+  store i64 %int_val174, i64* %ptrtmp178, align 8, !tbaa !3
+  %tupletmp179 = load { i64, i64, i64 }, { i64, i64, i64 }* %tupleptrtmp175, align 8, !tbaa !3
+  %elemtmp180 = extractvalue { i64, i64, i64 } %tupletmp179, 2
+  %elemtmp181 = extractvalue { i64, i64, i64 } %tupletmp179, 1
+  %elemtmp182 = extractvalue { i64, i64, i64 } %tupletmp179, 0
+  %1 = call i64 @extract_year(i64 %elemtmp182)
+  %2 = call i64 @extract_month(i64 %elemtmp182)
+  %3 = call i64 @extract_day(i64 %elemtmp182)
+  %4 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([15 x i8], [15 x i8]* @date_fmt, i32 0, i32 0), i64 %1, i64 %2, i64 %3)
+  %5 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([2 x i8], [2 x i8]* @sep_str, i32 0, i32 0))
+  %6 = call i64 @extract_year(i64 %elemtmp181)
+  %7 = call i64 @extract_month(i64 %elemtmp181)
+  %8 = call i64 @extract_day(i64 %elemtmp181)
+  %9 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([15 x i8], [15 x i8]* @date_fmt, i32 0, i32 0), i64 %6, i64 %7, i64 %8)
+  %10 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([2 x i8], [2 x i8]* @sep_str, i32 0, i32 0))
+  %11 = call i64 @extract_year(i64 %elemtmp180)
+  %12 = call i64 @extract_month(i64 %elemtmp180)
+  %13 = call i64 @extract_day(i64 %elemtmp180)
+  %14 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([15 x i8], [15 x i8]* @date_fmt, i32 0, i32 0), i64 %11, i64 %12, i64 %13)
+  %15 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([2 x i8], [2 x i8]* @newline_str, i32 0, i32 0))
+  br label %ifend116
+
+else115:                                          ; preds = %if113
+  br label %ifend116
+
+ifend116:                                         ; preds = %else115, %then114
+  %idx26183 = load i64, i64* %idx26, align 8, !tbaa !3
+  %addtmp184 = add nsw i64 %idx26183, 1
+  store i64 %addtmp184, i64* %idx26, align 8, !tbaa !3
+  %idx26185 = load i64, i64* %idx26, align 8, !tbaa !3
+  %multmp186 = mul nsw i64 %idx26185, 5
+  %addtmp187 = add nsw i64 0, %multmp186
+  store i64 %addtmp187, i64* %kstart17, align 8, !tbaa !3
+  %kstart17188 = load i64, i64* %kstart17, align 8, !tbaa !3
+  store i64 %kstart17188, i64* %cstart32, align 8, !tbaa !3
+  %cstart32189 = load i64, i64* %cstart32, align 8, !tbaa !3
+  %addtmp190 = add nsw i64 %cstart32189, 2
+  store i64 %addtmp190, i64* %cstart33, align 8, !tbaa !3
+  %cstart32191 = load i64, i64* %cstart32, align 8, !tbaa !3
+  %buf192 = getelementptr inbounds %params, %params* %0, i32 0, i32 0
+  %buf_ptr193 = load [4 x i64]*, [4 x i64]** %buf192, align 8, !tbaa !5
+  %buf_ptr_cast194 = bitcast [4 x i64]* %buf_ptr193 to i8*
+  %slice_ptr195 = getelementptr inbounds i8, i8* %buf_ptr_cast194, i64 %cstart32191
+  %slice_ptr_cast196 = bitcast i8* %slice_ptr195 to i16*
+  %slice_val197 = load i16, i16* %slice_ptr_cast196, align 2, !tbaa !7
+  %int_val198 = sext i16 %slice_val197 to i64
+  %cstart33199 = load i64, i64* %cstart33, align 8, !tbaa !3
+  %buf200 = getelementptr inbounds %params, %params* %0, i32 0, i32 0
+  %buf_ptr201 = load [4 x i64]*, [4 x i64]** %buf200, align 8, !tbaa !5
+  %buf_ptr_cast202 = bitcast [4 x i64]* %buf_ptr201 to i8*
+  %slice_ptr203 = getelementptr inbounds i8, i8* %buf_ptr_cast202, i64 %cstart33199
+  %slice_ptr_cast204 = bitcast i8* %slice_ptr203 to i16*
+  %slice_val205 = load i16, i16* %slice_ptr_cast204, align 2, !tbaa !7
+  %int_val206 = sext i16 %slice_val205 to i64
+  %ptrtmp208 = getelementptr inbounds { i64, i64 }, { i64, i64 }* %tupleptrtmp207, i32 0, i32 0
+  store i64 %int_val198, i64* %ptrtmp208, align 8, !tbaa !3
+  %ptrtmp209 = getelementptr inbounds { i64, i64 }, { i64, i64 }* %tupleptrtmp207, i32 0, i32 1
+  store i64 %int_val206, i64* %ptrtmp209, align 8, !tbaa !3
+  %tupletmp210 = load { i64, i64 }, { i64, i64 }* %tupleptrtmp207, align 8, !tbaa !3
+  store { i64, i64 } %tupletmp210, { i64, i64 }* %key31, align 8, !tbaa !3
+  %key31211 = load { i64, i64 }, { i64, i64 }* %key31, align 8, !tbaa !3
+  store { i64, i64 } %key31211, { i64, i64 }* %key30, align 8, !tbaa !3
+  %key30212 = load { i64, i64 }, { i64, i64 }* %key30, align 8, !tbaa !3
+  %elemtmp213 = extractvalue { i64, i64 } %key30212, 1
+  %elemtmp214 = extractvalue { i64, i64 } %key30212, 0
+  %hoisted7215 = load i64, i64* %hoisted7, align 8, !tbaa !3
+  %lttmp216 = icmp slt i64 %elemtmp214, %hoisted7215
+  %key30217 = load { i64, i64 }, { i64, i64 }* %key30, align 8, !tbaa !3
+  %elemtmp218 = extractvalue { i64, i64 } %key30217, 1
+  %elemtmp219 = extractvalue { i64, i64 } %key30217, 0
+  %hoisted9220 = load i64, i64* %hoisted9, align 8, !tbaa !3
+  %eqtmp221 = icmp eq i64 %elemtmp219, %hoisted9220
+  %ortmp222 = or i1 %lttmp216, %eqtmp221
+  %key30223 = load { i64, i64 }, { i64, i64 }* %key30, align 8, !tbaa !3
+  %elemtmp224 = extractvalue { i64, i64 } %key30223, 1
+  %elemtmp225 = extractvalue { i64, i64 } %key30223, 0
+  %hoisted11226 = load i64, i64* %hoisted11, align 8, !tbaa !3
+  %lttmp227 = icmp slt i64 %elemtmp224, %hoisted11226
+  %ortmp228 = or i1 %ortmp222, %lttmp227
+  %idx26229 = load i64, i64* %idx26, align 8, !tbaa !3
+  %hoisted12230 = load i64, i64* %hoisted12, align 8, !tbaa !3
+  %lttmp231 = icmp slt i64 %idx26229, %hoisted12230
+  %andtmp232 = and i1 %ortmp228, %lttmp231
+  br i1 %andtmp232, label %loopbody92, label %loopend93
+}
+
+; Function Attrs: argmemonly norecurse nounwind readonly
+define void @consumer(%params* noalias %0) #4 {
+entry:
+  %tupleptrtmp198 = alloca { i64, i64 }, align 8
+  %tupleptrtmp166 = alloca { i64, i64, i64 }, align 8
+  %tupleptrtmp77 = alloca { i64, i64 }, align 8
+  %tupleptrtmp = alloca { i64, i64 }, align 8
+  %hoisted23 = alloca i64, align 8
+  %hoisted24 = alloca i64, align 8
+  %hoisted25 = alloca i64, align 8
+  %hoisted26 = alloca i64, align 8
+  %hoisted27 = alloca i64, align 8
+  %hoisted28 = alloca i64, align 8
+  %hoisted29 = alloca i64, align 8
+  %hoisted30 = alloca i64, align 8
+  %hoisted31 = alloca i64, align 8
+  %hoisted32 = alloca i64, align 8
+  %hoisted33 = alloca i64, align 8
+  %hoisted34 = alloca i64, align 8
+  %hoisted35 = alloca i64, align 8
+  %hoisted36 = alloca i64, align 8
+  %hoisted37 = alloca i64, align 8
+  %hoisted38 = alloca i64, align 8
+  %hoisted39 = alloca i64, align 8
+  %hoisted40 = alloca i64, align 8
+  %hoisted41 = alloca i64, align 8
+  %hoisted42 = alloca i64, align 8
+  %hoisted43 = alloca i64, align 8
+  %hoisted44 = alloca i64, align 8
+  %hoisted45 = alloca i64, align 8
+  %mid5 = alloca i64, align 8
+  %key13 = alloca { i64, i64 }, align 8
+  %key10 = alloca { i64, i64 }, align 8
+  %cstart12 = alloca i64, align 8
+  %high4 = alloca i64, align 8
+  %cstart8 = alloca i64, align 8
+  %cstart15 = alloca i64, align 8
+  %key14 = alloca { i64, i64 }, align 8
+  %key2 = alloca { i64, i64 }, align 8
+  %low3 = alloca i64, align 8
+  %cstart7 = alloca i64, align 8
+  %cstart16 = alloca i64, align 8
+  %kstart0 = alloca i64, align 8
+  %key6 = alloca { i64, i64 }, align 8
+  %cstart11 = alloca i64, align 8
+  %vstart1 = alloca i64, align 8
+  %idx9 = alloca i64, align 8
+  store i64 5, i64* %hoisted23, align 8, !tbaa !3
+  store i64 -719527, i64* %hoisted24, align 8, !tbaa !3
+  %hoisted241 = load i64, i64* %hoisted24, align 8, !tbaa !3
+  store i64 %hoisted241, i64* %hoisted25, align 8, !tbaa !3
+  store i64 -719527, i64* %hoisted26, align 8, !tbaa !3
+  %hoisted262 = load i64, i64* %hoisted26, align 8, !tbaa !3
+  store i64 %hoisted262, i64* %hoisted27, align 8, !tbaa !3
+  store i64 5, i64* %hoisted28, align 8, !tbaa !3
+  store i64 2932532, i64* %hoisted29, align 8, !tbaa !3
+  %hoisted293 = load i64, i64* %hoisted29, align 8, !tbaa !3
+  store i64 %hoisted293, i64* %hoisted30, align 8, !tbaa !3
+  store i64 2932532, i64* %hoisted31, align 8, !tbaa !3
+  %hoisted314 = load i64, i64* %hoisted31, align 8, !tbaa !3
+  store i64 %hoisted314, i64* %hoisted32, align 8, !tbaa !3
+  store i64 17775, i64* %hoisted33, align 8, !tbaa !3
+  %hoisted335 = load i64, i64* %hoisted33, align 8, !tbaa !3
+  store i64 %hoisted335, i64* %hoisted34, align 8, !tbaa !3
+  store i64 5, i64* %hoisted35, align 8, !tbaa !3
+  store i64 2932532, i64* %hoisted36, align 8, !tbaa !3
+  %hoisted366 = load i64, i64* %hoisted36, align 8, !tbaa !3
+  store i64 %hoisted366, i64* %hoisted37, align 8, !tbaa !3
+  store i64 2932532, i64* %hoisted38, align 8, !tbaa !3
+  %hoisted387 = load i64, i64* %hoisted38, align 8, !tbaa !3
+  store i64 %hoisted387, i64* %hoisted39, align 8, !tbaa !3
+  store i64 17775, i64* %hoisted40, align 8, !tbaa !3
+  %hoisted408 = load i64, i64* %hoisted40, align 8, !tbaa !3
+  store i64 %hoisted408, i64* %hoisted41, align 8, !tbaa !3
+  store i64 -719527, i64* %hoisted42, align 8, !tbaa !3
+  %hoisted429 = load i64, i64* %hoisted42, align 8, !tbaa !3
+  store i64 %hoisted429, i64* %hoisted43, align 8, !tbaa !3
+  store i64 -719527, i64* %hoisted44, align 8, !tbaa !3
+  %hoisted4410 = load i64, i64* %hoisted44, align 8, !tbaa !3
+  store i64 %hoisted4410, i64* %hoisted45, align 8, !tbaa !3
+  store i64 0, i64* %low3, align 8, !tbaa !3
+  %hoisted2311 = load i64, i64* %hoisted23, align 8, !tbaa !3
+  store i64 %hoisted2311, i64* %high4, align 8, !tbaa !3
+  br label %loopcond
+
+loopcond:                                         ; preds = %entry
+  %low312 = load i64, i64* %low3, align 8, !tbaa !3
+  %high413 = load i64, i64* %high4, align 8, !tbaa !3
+  %lttmp = icmp slt i64 %low312, %high413
+  br i1 %lttmp, label %loopbody, label %loopend
+
+loopbody:                                         ; preds = %ifend, %loopcond
+  %low314 = load i64, i64* %low3, align 8, !tbaa !3
+  %high415 = load i64, i64* %high4, align 8, !tbaa !3
+  %addtmp = add nsw i64 %low314, %high415
+  %divtmp = sdiv i64 %addtmp, 2
+  store i64 %divtmp, i64* %mid5, align 8, !tbaa !3
+  %mid516 = load i64, i64* %mid5, align 8, !tbaa !3
+  %multmp = mul nsw i64 %mid516, 5
+  %addtmp17 = add nsw i64 0, %multmp
+  store i64 %addtmp17, i64* %kstart0, align 8, !tbaa !3
+  %kstart018 = load i64, i64* %kstart0, align 8, !tbaa !3
+  store i64 %kstart018, i64* %cstart7, align 8, !tbaa !3
+  %cstart719 = load i64, i64* %cstart7, align 8, !tbaa !3
+  %addtmp20 = add nsw i64 %cstart719, 2
+  store i64 %addtmp20, i64* %cstart8, align 8, !tbaa !3
+  %cstart721 = load i64, i64* %cstart7, align 8, !tbaa !3
+  %buf = getelementptr inbounds %params, %params* %0, i32 0, i32 0
+  %buf_ptr = load [4 x i64]*, [4 x i64]** %buf, align 8, !tbaa !5
+  %buf_ptr_cast = bitcast [4 x i64]* %buf_ptr to i8*
+  %slice_ptr = getelementptr inbounds i8, i8* %buf_ptr_cast, i64 %cstart721
+  %slice_ptr_cast = bitcast i8* %slice_ptr to i16*
+  %slice_val = load i16, i16* %slice_ptr_cast, align 2, !tbaa !7
+  %int_val = sext i16 %slice_val to i64
+  %cstart822 = load i64, i64* %cstart8, align 8, !tbaa !3
+  %buf23 = getelementptr inbounds %params, %params* %0, i32 0, i32 0
+  %buf_ptr24 = load [4 x i64]*, [4 x i64]** %buf23, align 8, !tbaa !5
+  %buf_ptr_cast25 = bitcast [4 x i64]* %buf_ptr24 to i8*
+  %slice_ptr26 = getelementptr inbounds i8, i8* %buf_ptr_cast25, i64 %cstart822
+  %slice_ptr_cast27 = bitcast i8* %slice_ptr26 to i16*
+  %slice_val28 = load i16, i16* %slice_ptr_cast27, align 2, !tbaa !7
+  %int_val29 = sext i16 %slice_val28 to i64
+  %ptrtmp = getelementptr inbounds { i64, i64 }, { i64, i64 }* %tupleptrtmp, i32 0, i32 0
+  store i64 %int_val, i64* %ptrtmp, align 8, !tbaa !3
+  %ptrtmp30 = getelementptr inbounds { i64, i64 }, { i64, i64 }* %tupleptrtmp, i32 0, i32 1
+  store i64 %int_val29, i64* %ptrtmp30, align 8, !tbaa !3
+  %tupletmp = load { i64, i64 }, { i64, i64 }* %tupleptrtmp, align 8, !tbaa !3
+  store { i64, i64 } %tupletmp, { i64, i64 }* %key6, align 8, !tbaa !3
+  br label %if
+
+loopend:                                          ; preds = %ifend, %loopcond
+  %low347 = load i64, i64* %low3, align 8, !tbaa !3
+  store i64 %low347, i64* %idx9, align 8, !tbaa !3
+  br label %if48
+
+if:                                               ; preds = %loopbody
+  %key631 = load { i64, i64 }, { i64, i64 }* %key6, align 8, !tbaa !3
+  %elemtmp = extractvalue { i64, i64 } %key631, 1
+  %elemtmp32 = extractvalue { i64, i64 } %key631, 0
+  %hoisted2533 = load i64, i64* %hoisted25, align 8, !tbaa !3
+  %lttmp34 = icmp slt i64 %elemtmp32, %hoisted2533
+  %nottmp = xor i1 %lttmp34, true
+  %key635 = load { i64, i64 }, { i64, i64 }* %key6, align 8, !tbaa !3
+  %elemtmp36 = extractvalue { i64, i64 } %key635, 1
+  %elemtmp37 = extractvalue { i64, i64 } %key635, 0
+  %hoisted2738 = load i64, i64* %hoisted27, align 8, !tbaa !3
+  %lttmp39 = icmp slt i64 %elemtmp36, %hoisted2738
+  %nottmp40 = xor i1 %lttmp39, true
+  %ortmp = or i1 %nottmp, %nottmp40
+  br i1 %ortmp, label %then, label %else
+
+then:                                             ; preds = %if
+  %mid541 = load i64, i64* %mid5, align 8, !tbaa !3
+  store i64 %mid541, i64* %high4, align 8, !tbaa !3
+  br label %ifend
+
+else:                                             ; preds = %if
+  %mid542 = load i64, i64* %mid5, align 8, !tbaa !3
+  %addtmp43 = add nsw i64 %mid542, 1
+  store i64 %addtmp43, i64* %low3, align 8, !tbaa !3
+  br label %ifend
+
+ifend:                                            ; preds = %else, %then
+  %low344 = load i64, i64* %low3, align 8, !tbaa !3
+  %high445 = load i64, i64* %high4, align 8, !tbaa !3
+  %lttmp46 = icmp slt i64 %low344, %high445
+  br i1 %lttmp46, label %loopbody, label %loopend
+
+if48:                                             ; preds = %loopend
+  %idx952 = load i64, i64* %idx9, align 8, !tbaa !3
+  %hoisted2853 = load i64, i64* %hoisted28, align 8, !tbaa !3
+  %lttmp54 = icmp slt i64 %idx952, %hoisted2853
+  br i1 %lttmp54, label %then49, label %else50
+
+then49:                                           ; preds = %if48
+  %idx955 = load i64, i64* %idx9, align 8, !tbaa !3
+  %multmp56 = mul nsw i64 %idx955, 5
+  %addtmp57 = add nsw i64 0, %multmp56
+  store i64 %addtmp57, i64* %kstart0, align 8, !tbaa !3
+  %kstart058 = load i64, i64* %kstart0, align 8, !tbaa !3
+  store i64 %kstart058, i64* %cstart11, align 8, !tbaa !3
+  %cstart1159 = load i64, i64* %cstart11, align 8, !tbaa !3
+  %addtmp60 = add nsw i64 %cstart1159, 2
+  store i64 %addtmp60, i64* %cstart12, align 8, !tbaa !3
+  %cstart1161 = load i64, i64* %cstart11, align 8, !tbaa !3
+  %buf62 = getelementptr inbounds %params, %params* %0, i32 0, i32 0
+  %buf_ptr63 = load [4 x i64]*, [4 x i64]** %buf62, align 8, !tbaa !5
+  %buf_ptr_cast64 = bitcast [4 x i64]* %buf_ptr63 to i8*
+  %slice_ptr65 = getelementptr inbounds i8, i8* %buf_ptr_cast64, i64 %cstart1161
+  %slice_ptr_cast66 = bitcast i8* %slice_ptr65 to i16*
+  %slice_val67 = load i16, i16* %slice_ptr_cast66, align 2, !tbaa !7
+  %int_val68 = sext i16 %slice_val67 to i64
+  %cstart1269 = load i64, i64* %cstart12, align 8, !tbaa !3
+  %buf70 = getelementptr inbounds %params, %params* %0, i32 0, i32 0
+  %buf_ptr71 = load [4 x i64]*, [4 x i64]** %buf70, align 8, !tbaa !5
+  %buf_ptr_cast72 = bitcast [4 x i64]* %buf_ptr71 to i8*
+  %slice_ptr73 = getelementptr inbounds i8, i8* %buf_ptr_cast72, i64 %cstart1269
+  %slice_ptr_cast74 = bitcast i8* %slice_ptr73 to i16*
+  %slice_val75 = load i16, i16* %slice_ptr_cast74, align 2, !tbaa !7
+  %int_val76 = sext i16 %slice_val75 to i64
+  %ptrtmp78 = getelementptr inbounds { i64, i64 }, { i64, i64 }* %tupleptrtmp77, i32 0, i32 0
+  store i64 %int_val68, i64* %ptrtmp78, align 8, !tbaa !3
+  %ptrtmp79 = getelementptr inbounds { i64, i64 }, { i64, i64 }* %tupleptrtmp77, i32 0, i32 1
+  store i64 %int_val76, i64* %ptrtmp79, align 8, !tbaa !3
+  %tupletmp80 = load { i64, i64 }, { i64, i64 }* %tupleptrtmp77, align 8, !tbaa !3
+  store { i64, i64 } %tupletmp80, { i64, i64 }* %key10, align 8, !tbaa !3
+  %key1081 = load { i64, i64 }, { i64, i64 }* %key10, align 8, !tbaa !3
+  store { i64, i64 } %key1081, { i64, i64 }* %key13, align 8, !tbaa !3
+  br label %loopcond82
+
+else50:                                           ; preds = %if48
+  br label %ifend51
+
+ifend51:                                          ; preds = %else50, %loopend84
+  ret void
+
+loopcond82:                                       ; preds = %then49
+  %key1385 = load { i64, i64 }, { i64, i64 }* %key13, align 8, !tbaa !3
+  %elemtmp86 = extractvalue { i64, i64 } %key1385, 1
+  %elemtmp87 = extractvalue { i64, i64 } %key1385, 0
+  %hoisted3088 = load i64, i64* %hoisted30, align 8, !tbaa !3
+  %lttmp89 = icmp slt i64 %elemtmp87, %hoisted3088
+  %key1390 = load { i64, i64 }, { i64, i64 }* %key13, align 8, !tbaa !3
+  %elemtmp91 = extractvalue { i64, i64 } %key1390, 1
+  %elemtmp92 = extractvalue { i64, i64 } %key1390, 0
+  %hoisted3293 = load i64, i64* %hoisted32, align 8, !tbaa !3
+  %eqtmp = icmp eq i64 %elemtmp92, %hoisted3293
+  %ortmp94 = or i1 %lttmp89, %eqtmp
+  %key1395 = load { i64, i64 }, { i64, i64 }* %key13, align 8, !tbaa !3
+  %elemtmp96 = extractvalue { i64, i64 } %key1395, 1
+  %elemtmp97 = extractvalue { i64, i64 } %key1395, 0
+  %hoisted3498 = load i64, i64* %hoisted34, align 8, !tbaa !3
+  %lttmp99 = icmp slt i64 %elemtmp96, %hoisted3498
+  %ortmp100 = or i1 %ortmp94, %lttmp99
+  %idx9101 = load i64, i64* %idx9, align 8, !tbaa !3
+  %hoisted35102 = load i64, i64* %hoisted35, align 8, !tbaa !3
+  %lttmp103 = icmp slt i64 %idx9101, %hoisted35102
+  %andtmp = and i1 %ortmp100, %lttmp103
+  br i1 %andtmp, label %loopbody83, label %loopend84
+
+loopbody83:                                       ; preds = %ifend107, %loopcond82
+  br label %if104
+
+loopend84:                                        ; preds = %ifend107, %loopcond82
+  br label %ifend51
+
+if104:                                            ; preds = %loopbody83
+  %key13108 = load { i64, i64 }, { i64, i64 }* %key13, align 8, !tbaa !3
+  %elemtmp109 = extractvalue { i64, i64 } %key13108, 1
+  %elemtmp110 = extractvalue { i64, i64 } %key13108, 0
+  %hoisted37111 = load i64, i64* %hoisted37, align 8, !tbaa !3
+  %lttmp112 = icmp slt i64 %elemtmp110, %hoisted37111
+  %key13113 = load { i64, i64 }, { i64, i64 }* %key13, align 8, !tbaa !3
+  %elemtmp114 = extractvalue { i64, i64 } %key13113, 1
+  %elemtmp115 = extractvalue { i64, i64 } %key13113, 0
+  %hoisted39116 = load i64, i64* %hoisted39, align 8, !tbaa !3
+  %eqtmp117 = icmp eq i64 %elemtmp115, %hoisted39116
+  %ortmp118 = or i1 %lttmp112, %eqtmp117
+  %key13119 = load { i64, i64 }, { i64, i64 }* %key13, align 8, !tbaa !3
+  %elemtmp120 = extractvalue { i64, i64 } %key13119, 1
+  %elemtmp121 = extractvalue { i64, i64 } %key13119, 0
+  %hoisted41122 = load i64, i64* %hoisted41, align 8, !tbaa !3
+  %lttmp123 = icmp slt i64 %elemtmp120, %hoisted41122
+  %key13124 = load { i64, i64 }, { i64, i64 }* %key13, align 8, !tbaa !3
+  %elemtmp125 = extractvalue { i64, i64 } %key13124, 1
+  %elemtmp126 = extractvalue { i64, i64 } %key13124, 0
+  %hoisted43127 = load i64, i64* %hoisted43, align 8, !tbaa !3
+  %lttmp128 = icmp slt i64 %elemtmp126, %hoisted43127
+  %nottmp129 = xor i1 %lttmp128, true
+  %key13130 = load { i64, i64 }, { i64, i64 }* %key13, align 8, !tbaa !3
+  %elemtmp131 = extractvalue { i64, i64 } %key13130, 1
+  %elemtmp132 = extractvalue { i64, i64 } %key13130, 0
+  %hoisted45133 = load i64, i64* %hoisted45, align 8, !tbaa !3
+  %lttmp134 = icmp slt i64 %elemtmp131, %hoisted45133
+  %nottmp135 = xor i1 %lttmp134, true
+  %andtmp136 = and i1 %nottmp129, %nottmp135
+  %andtmp137 = and i1 %lttmp123, %andtmp136
+  %andtmp138 = and i1 %ortmp118, %andtmp137
+  br i1 %andtmp138, label %then105, label %else106
+
+then105:                                          ; preds = %if104
+  %idx9139 = load i64, i64* %idx9, align 8, !tbaa !3
+  %multmp140 = mul nsw i64 %idx9139, 5
+  %addtmp141 = add nsw i64 0, %multmp140
+  %addtmp142 = add nsw i64 %addtmp141, 4
+  %buf143 = getelementptr inbounds %params, %params* %0, i32 0, i32 0
+  %buf_ptr144 = load [4 x i64]*, [4 x i64]** %buf143, align 8, !tbaa !5
+  %buf_ptr_cast145 = bitcast [4 x i64]* %buf_ptr144 to i8*
+  %slice_ptr146 = getelementptr inbounds i8, i8* %buf_ptr_cast145, i64 %addtmp142
+  %slice_val147 = load i8, i8* %slice_ptr146, align 1, !tbaa !7
+  %int_val148 = sext i8 %slice_val147 to i64
+  %addtmp149 = add nsw i64 %int_val148, 25
+  %addtmp150 = add nsw i64 %addtmp149, 0
+  store i64 %addtmp150, i64* %vstart1, align 8, !tbaa !3
+  %key13151 = load { i64, i64 }, { i64, i64 }* %key13, align 8, !tbaa !3
+  store { i64, i64 } %key13151, { i64, i64 }* %key2, align 8, !tbaa !3
+  %key2152 = load { i64, i64 }, { i64, i64 }* %key2, align 8, !tbaa !3
+  %elemtmp153 = extractvalue { i64, i64 } %key2152, 1
+  %elemtmp154 = extractvalue { i64, i64 } %key2152, 0
+  %key2155 = load { i64, i64 }, { i64, i64 }* %key2, align 8, !tbaa !3
+  %elemtmp156 = extractvalue { i64, i64 } %key2155, 1
+  %elemtmp157 = extractvalue { i64, i64 } %key2155, 0
+  %vstart1158 = load i64, i64* %vstart1, align 8, !tbaa !3
+  %buf159 = getelementptr inbounds %params, %params* %0, i32 0, i32 0
+  %buf_ptr160 = load [4 x i64]*, [4 x i64]** %buf159, align 8, !tbaa !5
+  %buf_ptr_cast161 = bitcast [4 x i64]* %buf_ptr160 to i8*
+  %slice_ptr162 = getelementptr inbounds i8, i8* %buf_ptr_cast161, i64 %vstart1158
+  %slice_ptr_cast163 = bitcast i8* %slice_ptr162 to i16*
+  %slice_val164 = load i16, i16* %slice_ptr_cast163, align 2, !tbaa !7
+  %int_val165 = sext i16 %slice_val164 to i64
+  %ptrtmp167 = getelementptr inbounds { i64, i64, i64 }, { i64, i64, i64 }* %tupleptrtmp166, i32 0, i32 0
+  store i64 %elemtmp154, i64* %ptrtmp167, align 8, !tbaa !3
+  %ptrtmp168 = getelementptr inbounds { i64, i64, i64 }, { i64, i64, i64 }* %tupleptrtmp166, i32 0, i32 1
+  store i64 %elemtmp156, i64* %ptrtmp168, align 8, !tbaa !3
+  %ptrtmp169 = getelementptr inbounds { i64, i64, i64 }, { i64, i64, i64 }* %tupleptrtmp166, i32 0, i32 2
+  store i64 %int_val165, i64* %ptrtmp169, align 8, !tbaa !3
+  %tupletmp170 = load { i64, i64, i64 }, { i64, i64, i64 }* %tupleptrtmp166, align 8, !tbaa !3
+  %elemtmp171 = extractvalue { i64, i64, i64 } %tupletmp170, 2
+  %elemtmp172 = extractvalue { i64, i64, i64 } %tupletmp170, 1
+  %elemtmp173 = extractvalue { i64, i64, i64 } %tupletmp170, 0
+  call void asm sideeffect "", "X,~{memory}"(i64 %elemtmp173), !tbaa !9
+  call void asm sideeffect "", "X,~{memory}"(i64 %elemtmp172), !tbaa !9
+  call void asm sideeffect "", "X,~{memory}"(i64 %elemtmp171), !tbaa !9
+  br label %ifend107
+
+else106:                                          ; preds = %if104
+  br label %ifend107
+
+ifend107:                                         ; preds = %else106, %then105
+  %idx9174 = load i64, i64* %idx9, align 8, !tbaa !3
+  %addtmp175 = add nsw i64 %idx9174, 1
+  store i64 %addtmp175, i64* %idx9, align 8, !tbaa !3
+  %idx9176 = load i64, i64* %idx9, align 8, !tbaa !3
+  %multmp177 = mul nsw i64 %idx9176, 5
+  %addtmp178 = add nsw i64 0, %multmp177
+  store i64 %addtmp178, i64* %kstart0, align 8, !tbaa !3
+  %kstart0179 = load i64, i64* %kstart0, align 8, !tbaa !3
+  store i64 %kstart0179, i64* %cstart15, align 8, !tbaa !3
+  %cstart15180 = load i64, i64* %cstart15, align 8, !tbaa !3
+  %addtmp181 = add nsw i64 %cstart15180, 2
+  store i64 %addtmp181, i64* %cstart16, align 8, !tbaa !3
+  %cstart15182 = load i64, i64* %cstart15, align 8, !tbaa !3
+  %buf183 = getelementptr inbounds %params, %params* %0, i32 0, i32 0
+  %buf_ptr184 = load [4 x i64]*, [4 x i64]** %buf183, align 8, !tbaa !5
+  %buf_ptr_cast185 = bitcast [4 x i64]* %buf_ptr184 to i8*
+  %slice_ptr186 = getelementptr inbounds i8, i8* %buf_ptr_cast185, i64 %cstart15182
+  %slice_ptr_cast187 = bitcast i8* %slice_ptr186 to i16*
+  %slice_val188 = load i16, i16* %slice_ptr_cast187, align 2, !tbaa !7
+  %int_val189 = sext i16 %slice_val188 to i64
+  %cstart16190 = load i64, i64* %cstart16, align 8, !tbaa !3
+  %buf191 = getelementptr inbounds %params, %params* %0, i32 0, i32 0
+  %buf_ptr192 = load [4 x i64]*, [4 x i64]** %buf191, align 8, !tbaa !5
+  %buf_ptr_cast193 = bitcast [4 x i64]* %buf_ptr192 to i8*
+  %slice_ptr194 = getelementptr inbounds i8, i8* %buf_ptr_cast193, i64 %cstart16190
+  %slice_ptr_cast195 = bitcast i8* %slice_ptr194 to i16*
+  %slice_val196 = load i16, i16* %slice_ptr_cast195, align 2, !tbaa !7
+  %int_val197 = sext i16 %slice_val196 to i64
+  %ptrtmp199 = getelementptr inbounds { i64, i64 }, { i64, i64 }* %tupleptrtmp198, i32 0, i32 0
+  store i64 %int_val189, i64* %ptrtmp199, align 8, !tbaa !3
+  %ptrtmp200 = getelementptr inbounds { i64, i64 }, { i64, i64 }* %tupleptrtmp198, i32 0, i32 1
+  store i64 %int_val197, i64* %ptrtmp200, align 8, !tbaa !3
+  %tupletmp201 = load { i64, i64 }, { i64, i64 }* %tupleptrtmp198, align 8, !tbaa !3
+  store { i64, i64 } %tupletmp201, { i64, i64 }* %key14, align 8, !tbaa !3
+  %key14202 = load { i64, i64 }, { i64, i64 }* %key14, align 8, !tbaa !3
+  store { i64, i64 } %key14202, { i64, i64 }* %key13, align 8, !tbaa !3
+  %key13203 = load { i64, i64 }, { i64, i64 }* %key13, align 8, !tbaa !3
+  %elemtmp204 = extractvalue { i64, i64 } %key13203, 1
+  %elemtmp205 = extractvalue { i64, i64 } %key13203, 0
+  %hoisted30206 = load i64, i64* %hoisted30, align 8, !tbaa !3
+  %lttmp207 = icmp slt i64 %elemtmp205, %hoisted30206
+  %key13208 = load { i64, i64 }, { i64, i64 }* %key13, align 8, !tbaa !3
+  %elemtmp209 = extractvalue { i64, i64 } %key13208, 1
+  %elemtmp210 = extractvalue { i64, i64 } %key13208, 0
+  %hoisted32211 = load i64, i64* %hoisted32, align 8, !tbaa !3
+  %eqtmp212 = icmp eq i64 %elemtmp210, %hoisted32211
+  %ortmp213 = or i1 %lttmp207, %eqtmp212
+  %key13214 = load { i64, i64 }, { i64, i64 }* %key13, align 8, !tbaa !3
+  %elemtmp215 = extractvalue { i64, i64 } %key13214, 1
+  %elemtmp216 = extractvalue { i64, i64 } %key13214, 0
+  %hoisted34217 = load i64, i64* %hoisted34, align 8, !tbaa !3
+  %lttmp218 = icmp slt i64 %elemtmp215, %hoisted34217
+  %ortmp219 = or i1 %ortmp213, %lttmp218
+  %idx9220 = load i64, i64* %idx9, align 8, !tbaa !3
+  %hoisted35221 = load i64, i64* %hoisted35, align 8, !tbaa !3
+  %lttmp222 = icmp slt i64 %idx9220, %hoisted35221
+  %andtmp223 = and i1 %ortmp219, %lttmp222
+  br i1 %andtmp223, label %loopbody83, label %loopend84
+}
+
+define %params* @create(i64* %0) {
+entry:
+  %malloccall = tail call i8* @malloc(i32 ptrtoint (i1** getelementptr (i1*, i1** null, i32 1) to i32))
+  %paramstmp = bitcast i8* %malloccall to %params*
+  %buf = getelementptr inbounds %params, %params* %paramstmp, i32 0, i32 0
+  %tmpbufp = bitcast i64* %0 to [4 x i64]*
+  store [4 x i64]* %tmpbufp, [4 x i64]** %buf, align 8
+  ret %params* %paramstmp
+}
+
+declare noalias i8* @malloc(i32)
+
+attributes #0 = { argmemonly nofree nosync nounwind willreturn }
+attributes #1 = { argmemonly readonly speculatable }
+attributes #2 = { argmemonly norecurse nounwind readonly speculatable }
+attributes #3 = { readnone }
+attributes #4 = { argmemonly norecurse nounwind readonly }
+
+!0 = !{!1, !1, i64 0, i64 0}
+!1 = !{!"string", !2}
+!2 = !{!"castor_root"}
+!3 = !{!4, !4, i64 0, i64 0}
+!4 = !{!"runtime", !2}
+!5 = !{!6, !6, i64 0, i64 1}
+!6 = !{!"db", !2}
+!7 = !{!8, !8, i64 0, i64 1}
+!8 = !{!"db_int", !6}
+!9 = !{!10, !10, i64 0, i64 0}
+!10 = !{!"consumer", !2}

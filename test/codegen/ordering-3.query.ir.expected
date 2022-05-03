@@ -1,0 +1,86 @@
+// Locals:
+// cstart24 : int (persists=true)
+// cstart18 : int (persists=true)
+// cstart25 : int (persists=true)
+// count16 : int (persists=true)
+// cstart21 : int (persists=true)
+// i22 : int (persists=true)
+// count23 : int (persists=true)
+// cstart17 : int (persists=true)
+// cstart13 : int (persists=true)
+// i15 : int (persists=true)
+// cstart14 : int (persists=true)
+// cstart20 : int (persists=true)
+// cstart19 : int (persists=true)
+fun printer () : void {
+    cstart13 = 0;
+    cstart14 = cstart13;
+    i15 = 0;
+    count16 = 5;
+    loop (i15 < count16) {
+        cstart17 = cstart14;
+        cstart18 = cstart17 + 1;
+        print(tuple[int, int], (buf[cstart17 : 1], buf[cstart18 : 1]));
+        cstart14 = cstart14 + 2;
+        i15 = i15 + 1;
+    }
+    cstart13 = cstart13 + 10;
+    cstart19 = cstart13;
+    cstart20 = cstart19 + 1;
+    print(tuple[int, int], (buf[cstart19 : 1], buf[cstart20 : 1]));
+    cstart13 = cstart13 + 2;
+    cstart21 = cstart13;
+    i22 = 0;
+    count23 = 5;
+    loop (i22 < count23) {
+        cstart24 = cstart21;
+        cstart25 = cstart24 + 1;
+        print(tuple[int, int], (buf[cstart24 : 1], buf[cstart25 : 1]));
+        cstart21 = cstart21 + 2;
+        i22 = i22 + 1;
+    }
+    cstart13 = cstart13 + 10;
+}
+// Locals:
+// cstart7 : int (persists=true)
+// cstart12 : int (persists=true)
+// i2 : int (persists=true)
+// cstart8 : int (persists=true)
+// cstart11 : int (persists=true)
+// count10 : int (persists=true)
+// cstart1 : int (persists=true)
+// cstart4 : int (persists=true)
+// count3 : int (persists=true)
+// i9 : int (persists=true)
+// cstart0 : int (persists=true)
+// cstart6 : int (persists=true)
+// cstart5 : int (persists=true)
+fun consumer () : void {
+    cstart0 = 0;
+    cstart1 = cstart0;
+    i2 = 0;
+    count3 = 5;
+    loop (i2 < count3) {
+        cstart4 = cstart1;
+        cstart5 = cstart4 + 1;
+        consume(tuple[int, int], (buf[cstart4 : 1], buf[cstart5 : 1]));
+        cstart1 = cstart1 + 2;
+        i2 = i2 + 1;
+    }
+    cstart0 = cstart0 + 10;
+    cstart6 = cstart0;
+    cstart7 = cstart6 + 1;
+    consume(tuple[int, int], (buf[cstart6 : 1], buf[cstart7 : 1]));
+    cstart0 = cstart0 + 2;
+    cstart8 = cstart0;
+    i9 = 0;
+    count10 = 5;
+    loop (i9 < count10) {
+        cstart11 = cstart8;
+        cstart12 = cstart11 + 1;
+        consume(tuple[int, int], (buf[cstart11 : 1], buf[cstart12 : 1]));
+        cstart8 = cstart8 + 2;
+        i9 = i9 + 1;
+    }
+    cstart0 = cstart0 + 10;
+}

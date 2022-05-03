@@ -1,0 +1,39 @@
+0:25 Ordered idx map
+0:4 Ordered idx key
+0:4 Tuple body
+0:2 Scalar (=(Date 2016-12-01))
+0:0 Ordered idx index len (=25)
+0:0 Ordered idx len (=35)
+0:0 Tuple len (=4)
+2:2 Scalar (=(Date 2016-12-01))
+4:1 Ordered idx ptr (=0)
+5:4 Ordered idx key
+5:4 Tuple body
+5:2 Scalar (=(Date 2017-10-05))
+5:0 Tuple len (=4)
+7:2 Scalar (=(Date 2017-10-05))
+9:1 Ordered idx ptr (=2)
+10:4 Ordered idx key
+10:4 Tuple body
+10:2 Scalar (=(Date 2018-01-01))
+10:0 Tuple len (=4)
+12:2 Scalar (=(Date 2018-01-01))
+14:1 Ordered idx ptr (=4)
+15:4 Ordered idx key
+15:4 Tuple body
+15:2 Scalar (=(Date 2018-01-23))
+15:0 Tuple len (=4)
+17:2 Scalar (=(Date 2018-01-23))
+19:1 Ordered idx ptr (=6)
+20:4 Ordered idx key
+20:4 Tuple body
+20:2 Scalar (=(Date 2018-09-01))
+20:0 Tuple len (=4)
+22:2 Scalar (=(Date 2018-09-01))
+24:1 Ordered idx ptr (=8)
+25:10 Ordered idx body
+25:2 Scalar (=(Date 2016-12-01))
+27:2 Scalar (=(Date 2017-10-05))
+29:2 Scalar (=(Date 2018-01-01))
+31:2 Scalar (=(Date 2018-01-23))
+33:2 Scalar (=(Date 2018-09-01))

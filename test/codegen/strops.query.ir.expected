@@ -1,0 +1,20 @@
+// Locals:
+// hoisted0 : int (persists=false)
+// hoisted1 : int (persists=false)
+// hoisted2 : tuple[int, int] (persists=false)
+fun printer () : void {
+    hoisted0 = strlen("test");
+    hoisted1 = strpos("testing", "in");
+    hoisted2 = (hoisted0, hoisted1);
+    print(tuple[int, int], hoisted2);
+}
+// Locals:
+// hoisted3 : int (persists=false)
+// hoisted4 : int (persists=false)
+// hoisted5 : tuple[int, int] (persists=false)
+fun consumer () : void {
+    hoisted3 = strlen("test");
+    hoisted4 = strpos("testing", "in");
+    hoisted5 = (hoisted3, hoisted4);
+    consume(tuple[int, int], hoisted5);
+}
