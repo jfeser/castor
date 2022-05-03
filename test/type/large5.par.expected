@@ -1,0 +1,104 @@
+(FuncT
+ (((HashIdxT
+    ((IntT ((range (Interval 1 50))))
+     (FuncT
+      (((FuncT
+         (((FuncT
+            (((FuncT
+               (((ListT
+                  ((FuncT
+                    (((FuncT
+                       (((FuncT
+                          (((FuncT
+                             (((ListT
+                                ((TupleT
+                                  (((IntT ((range (Interval 0 24))))
+                                    (IntT ((range (Interval 0 4)))))
+                                   ((kind Cross))))
+                                 ((count (Interval 25 25)))))
+                               (ListT
+                                ((TupleT
+                                  (((IntT ((range (Interval 0 4))))
+                                    (StringT ((nchars Top))))
+                                   ((kind Cross))))
+                                 ((count (Interval 5 5))))))
+                              Child_sum))
+                            (ListT
+                             ((TupleT
+                               (((IntT ((range (Interval 8 9997))))
+                                 (IntT ((range (Interval 0 24)))))
+                                ((kind Cross))))
+                              ((count (Interval 946 946))))))
+                           Child_sum))
+                         (ListT
+                          ((TupleT
+                            (((IntT ((range (Interval 71 199682))))
+                              (IntT ((range (Interval 8 9997))))
+                              (FixedT ((value ((range Top) (scale 1))))))
+                             ((kind Cross))))
+                           ((count (Interval 1252 1252))))))
+                        Child_sum)))
+                     (Width 3)))
+                   ((count (Interval 1203 1203)))))
+                 (FuncT
+                  (((FuncT
+                     (((FuncT
+                        (((FuncT
+                           (((FuncT
+                              (((ListT
+                                 ((TupleT
+                                   (((IntT ((range (Interval 0 24))))
+                                     (StringT ((nchars Top)))
+                                     (IntT ((range (Interval 0 4)))))
+                                    ((kind Cross))))
+                                  ((count (Interval 25 25))))))
+                               (Width 3)))
+                             (FuncT
+                              (((ListT
+                                 ((TupleT
+                                   (((IntT ((range (Interval 0 4))))
+                                     (StringT ((nchars Top))))
+                                    ((kind Cross))))
+                                  ((count (Interval 5 5))))))
+                               (Width 2))))
+                            Child_sum))
+                          (FuncT
+                           (((ListT
+                              ((TupleT
+                                (((IntT ((range (Interval 8 9997))))
+                                  (StringT ((nchars Top)))
+                                  (StringT ((nchars Top)))
+                                  (IntT ((range (Interval 0 24))))
+                                  (StringT ((nchars Top)))
+                                  (FixedT ((value ((range Top) (scale 1)))))
+                                  (StringT ((nchars Top))))
+                                 ((kind Cross))))
+                               ((count (Interval 946 946))))))
+                            (Width 7))))
+                         Child_sum))
+                       (FuncT
+                        (((ListT
+                           ((TupleT
+                             (((IntT ((range (Interval 71 199682))))
+                               (IntT ((range (Interval 8 9997))))
+                               (FixedT ((value ((range Top) (scale 1))))))
+                              ((kind Cross))))
+                            ((count (Interval 1252 1252))))))
+                         (Width 3))))
+                      Child_sum))
+                    (FuncT
+                     (((ListT
+                        ((TupleT
+                          (((IntT ((range (Interval 71 199682))))
+                            (StringT ((nchars Top))) (StringT ((nchars Top)))
+                            (IntT ((range (Interval 1 50)))))
+                           ((kind Cross))))
+                         ((count (Interval 998 998))))))
+                      (Width 4))))
+                   Child_sum)))
+                Child_sum)))
+             Child_sum)))
+          Child_sum)))
+       (Width 8)))
+     ((key_count (Interval 50 50))))))
+  (Width 8)))

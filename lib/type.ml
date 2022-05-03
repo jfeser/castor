@@ -689,6 +689,7 @@ module Parallel = struct
 
   let type_of ?timeout conn r =
     let open Result.Let_syntax in
+    let r = (r :> < > annot) in
     let r = Type_builder.annot r in
     let%bind queries =
       contexts r |> Map.to_alist

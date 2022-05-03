@@ -1,0 +1,20 @@
+(ListT
+ ((FuncT
+   (((OrderedIdxT
+      ((DateT ((range (Interval 8037 10552))))
+       (FuncT
+        (((ListT
+           ((TupleT
+             (((IntT ((range (Interval 1 50))))
+               (FixedT
+                ((value ((range (Interval 98606 10084102)) (scale 100)))))
+               (FixedT ((value ((range (Interval 0 10)) (scale 100)))))
+               (FixedT ((value ((range (Interval 0 8)) (scale 100)))))
+               (StringT ((nchars (Interval 1 1))))
+               (StringT ((nchars (Interval 1 1)))))
+              ((kind Cross))))
+            ((count (Interval 1 5))))))
+         (Width 6)))
+       ((key_count (Interval 3 412))))))
+    (Width 10)))
+  ((count (Interval 4 4)))))

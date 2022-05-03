@@ -1,0 +1,20 @@
+(FuncT
+ (((HashIdxT
+    ((IntT ((range (Interval 1 50))))
+     (FuncT
+      (((ListT
+         ((FuncT
+           (((TupleT
+              (((StringT ((nchars Top))) (StringT ((nchars Top)))
+                (FixedT ((value ((range Top) (scale 1)))))
+                (StringT ((nchars Top))) (StringT ((nchars Top)))
+                (StringT ((nchars Top))) (StringT ((nchars Top)))
+                (StringT ((nchars Top)))
+                (IntT ((range (Interval 71 199682))))
+                (StringT ((nchars Top))))
+               ((kind Cross)))))
+            Child_sum))
+          ((count (Interval 14 36))))))
+       (Width 8)))
+     ((key_count (Interval 50 50))))))
+  (Width 8)))

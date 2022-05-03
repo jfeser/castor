@@ -1,0 +1,1 @@
+ahashidx(select([f], r1) as k, ascalar(k.f), 0)

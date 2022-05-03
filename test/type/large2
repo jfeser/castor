@@ -1,0 +1,12 @@
+    aorderedidx(select([o_orderdate], dedup(select([o_orderdate], orders))) as s7,
+                      atuple([alist(select([l_extendedprice, l_discount],
+                                      join(((o_orderdate = s7.o_orderdate) &&
+                                           (((l_returnflag = "R")) &&
+                                           (l_orderkey = o_orderkey))),
+                                        lineitem,
+                                        orders)) as s2,
+                                atuple([ascalar(s2.l_extendedprice),
+                                        ascalar(s2.l_discount)],
+                                  cross))],
+                        cross),
+      >= param0, < (param0 + month(3)))

@@ -13,3 +13,11 @@
  (preprocess
   (pps ppx_sexp_conv ppx_compare ppx_let))
  (modules Gen_test_db))
+
+(executable
+ (name type)
+ (libraries castor castor_test core core_unix.command_unix)
+ (flags -open Core -open Castor)
+ (preprocess
+  (pps ppx_sexp_conv ppx_let))
+ (modules Type))

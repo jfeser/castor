@@ -84,6 +84,6 @@ module Parallel : sig
   val type_of :
     ?timeout:float ->
     Db.t ->
-    < > annot ->
+    < .. > annot ->
     (t, [> error | Resolve.error ]) Result.t
 end

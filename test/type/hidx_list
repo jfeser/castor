@@ -1,0 +1,1 @@
+ahashidx(select([f], r1) as k, alist(select([g], filter(k.f = f, r1)) as k1, ascalar(k1.g)), 0)
