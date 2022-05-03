@@ -234,7 +234,7 @@ let least_general_of_layout r =
         FuncT ([ f r' ], `Child_sum)
     | Join { r1; r2; _ } -> FuncT ([ f r1; f r2 ], `Child_sum)
     | AEmpty -> EmptyT
-    | AScalar p -> Pred.to_type p |> least_general_of_primtype
+    | AScalar s -> Pred.to_type s.s_pred |> least_general_of_primtype
     | AList { l_values = r'; _ } -> ListT (f r', { count = Bottom })
     | DepJoin { d_lhs; d_rhs; _ } -> FuncT ([ f d_lhs; f d_rhs ], `Child_sum)
     | AHashIdx { hi_key_layout = Some kr; hi_values = vr; _ } ->
@@ -259,7 +259,7 @@ let least_general_of_layout r =
 (** Returns a layout type that is general enough to hold all of the data. *)
 class ['self] type_fold =
   object (_ : 'self)
-    inherit [_] abslayout_fold
+    inherit [_, _] abslayout_fold
     method! select _ (exprs, _) t = FuncT ([ t ], `Width (List.length exprs))
     method join _ _ t1 t2 = FuncT ([ t1; t2 ], `Child_sum)
     method depjoin _ _ t1 t2 = FuncT ([ t1; t2 ], `Child_sum)
@@ -413,17 +413,17 @@ module Parallel = struct
   module Type_builder = struct
     open Option.Let_syntax
 
-    type agg = Simple of Pred.t | Subquery of (Ast.t * Pred.t list)
+    type agg =
+      | Simple of (Pred.t * string)
+      | Subquery of (Ast.t * (Pred.t * string) list)
 
     type nonrec t = {
       aggs : agg list;
       build : Value.t Map.M(String).t -> t list -> t;
     }
 
-    let eval ctx p =
-      Map.find ctx (Name.name @@ Option.value_exn (Pred.to_name p))
-
-    let wrap p = As_pred (p, Fresh.name Global.fresh "x%d")
+    let eval ctx (_, n) = Map.find ctx n
+    let wrap p = (p, Fresh.name Global.fresh "x%d")
     let func_t t = { aggs = []; build = (fun _ ts -> FuncT (ts, t)) }
     let empty_t = { aggs = []; build = (fun _ _ -> EmptyT) }
     let null_t = { aggs = []; build = (fun _ _ -> NullT) }
@@ -486,7 +486,7 @@ module Parallel = struct
 
     let count_t q f =
       let agg_name = Fresh.name Global.fresh "ct%d" in
-      let counts = A.group_by [ As_pred (Count, agg_name) ] [] q in
+      let counts = A.group_by [ (Count, agg_name) ] [] q in
       let count = Name (Name.create agg_name) in
       let min = wrap @@ Min count and max = wrap @@ Max count in
       let build ctx ts =
@@ -527,7 +527,7 @@ module Parallel = struct
       | Select (ps, _) | GroupBy (ps, _, _) -> func_t (`Width (List.length ps))
       | Join _ | DepJoin _ | Filter _ | OrderBy _ | Dedup _ -> func_t `Child_sum
       | AEmpty -> empty_t
-      | AScalar p -> scalar_t p
+      | AScalar p -> scalar_t p.s_pred
       | AList x -> list_t x
       | AHashIdx x -> hash_idx_t x
       | AOrderedIdx x -> ordered_idx_t x
@@ -602,10 +602,10 @@ module Parallel = struct
                      (n, unscope n)))
         in
         let select_list =
-          List.map renaming ~f:(fun (n, n') -> As_pred (Name n, Name.name n'))
+          List.map renaming ~f:(fun (n, n') -> (Name n, Name.name n'))
         in
         let bindings =
-          let one = A.scalar (As_pred (Int 0, Fresh.name Global.fresh "x%d")) in
+          let one = A.scalar (Int 0) (Fresh.name Global.fresh "x%d") in
           if List.is_empty select_list then one
           else
             let select = A.select select_list one in
@@ -620,7 +620,7 @@ module Parallel = struct
             List.map renaming ~f:(fun (n, n') -> (n, Name n'))
             |> Map.of_alist_exn (module Name)
           in
-          List.map aggs ~f:(Pred.subst subst)
+          List.map aggs ~f:(fun (p, n) -> (Pred.subst subst p, n))
         in
         [ A.group_by aggs [] bindings ]
 

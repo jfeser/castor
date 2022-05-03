@@ -6,4 +6,4 @@
   (deps
    (alias ../test_db)))
  (preprocess
-  (pps ppx_sexp_conv ppx_compare ppx_expect)))
+  (pps ppx_sexp_conv ppx_compare ppx_expect ppx_sexp_message)))

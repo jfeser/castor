@@ -68,8 +68,8 @@ let%expect_test "ordered-idx" =
 
 let%expect_test "agg" =
   run_test
-    "select([1.0 + 2.0, avg(a), count(), sum(a), min(a), max(a)], alist(r2 as \
-     k, ascalar(k.a)))";
+    "select([(1.0 + 2.0) as x, avg(a) as y, count() as z, sum(a) as r, min(a) \
+     as s, max(a) as t], alist(r2 as k, ascalar(k.a)))";
   [%expect
     {|
           3.000000|7.978000|5|39.890000|-0.420000|34.420000
@@ -89,7 +89,7 @@ let%expect_test "hash-idx" =
 let%expect_test "strops" =
   run_test ~params:[]
     {|
-      select([strlen("test"), strpos("testing", "in")], ascalar(0))
+      select([strlen("test") as l, strpos("testing", "in") as p], ascalar(0 as z))
       |};
   [%expect {|
           4|5
@@ -301,7 +301,7 @@ let%expect_test "example-1-str" =
 
 let%expect_test "output-test" =
   run_test
-    {|select([1, 100, 1.0, 0.0001, 1.0001, "this is a test", "test with, commas", date("1994-01-04"), true, false], ascalar(0))|};
+    {|select([1 as a, 100 as b, 1.0 as c, 0.0001 as d, 1.0001 as f, "this is a test" as g, "test with, commas" as h, date("1994-01-04") as i, true as j, false as k], ascalar(0 as l))|};
   [%expect
     {|
           1|100|1.000000|0.000100|1.000100|this is a test|test with, commas|1994-01-04|t|f
@@ -332,7 +332,7 @@ let%expect_test "ordering" =
 
           exited normally |}];
   run_test
-    {|atuple([alist(orderby([f desc], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([f], r1) as k1, atuple([ascalar(k1.f), ascalar(k1.g)], cross))], concat)|};
+    {|atuple([alist(orderby([f desc], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross)), atuple([ascalar(9 as x), ascalar(9 as y)], cross), alist(orderby([f], r1) as k1, atuple([ascalar(k1.f), ascalar(k1.g)], cross))], concat)|};
   [%expect
     {|
           3|4
@@ -349,7 +349,7 @@ let%expect_test "ordering" =
 
           exited normally |}];
   run_test
-    {|atuple([alist(orderby([f], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([f desc], r1) as k1, atuple([ascalar(k1.f), ascalar(k1.g)], cross))], concat)|};
+    {|atuple([alist(orderby([f], r1) as k, atuple([ascalar(k.f), ascalar(k.g)], cross)), atuple([ascalar(9 as x), ascalar(9 as y)], cross), alist(orderby([f desc], r1) as k1, atuple([ascalar(k1.f), ascalar(k1.g)], cross))], concat)|};
   [%expect
     {|
           1|2
@@ -487,7 +487,9 @@ let%expect_test "ordered-idx-dates" =
 
 let%expect_test "date-arith" =
   run_test
-    {|select([date("1997-07-01") + month(3), date("1997-07-01") + day(90)], ascalar(0))|};
+    {|
+select([(date("1997-07-01") + month(3)) as d, (date("1997-07-01") + day(90)) as dd], ascalar(0 as z))
+|};
   [%expect {|
           1997-10-01|1997-09-29
 
@@ -495,8 +497,9 @@ let%expect_test "date-arith" =
 
 let%expect_test "depjoin" =
   run_test
-    "depjoin(alist(r1 as k1, ascalar(k1.f)) as k3, select([k3.f + g], \
-     ascalar(5 as g)))";
+    {|
+depjoin(alist(r1 as k1, ascalar(k1.f)) as k3, select([(k3.f + g) as x], ascalar(5 as g)))
+|};
   [%expect
     {|
           6

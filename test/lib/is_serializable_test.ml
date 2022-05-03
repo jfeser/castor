@@ -53,7 +53,7 @@ select([s_name, s_address],
                                      dedup(select([ps_suppkey], partsupp)))) as s80,
                           alist(filter((s80.x1228 = ps_suppkey), partsupp) as s78,
                             filter(((ps_availqty >
-                                    (select([(0.5 * sum(l_quantity))],
+                                    (select([(0.5 * sum(l_quantity)) as x],
                                        filter(((l_partkey = ps_partkey) &&
                                               ((l_suppkey = ps_suppkey) &&
                                               ((l_shipdate >= date("2020-01-01")) &&

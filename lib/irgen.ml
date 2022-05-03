@@ -202,7 +202,6 @@ module Make (Config : Config.S) () = struct
         | ExtractM -> Unop { op = `ExtractM; arg = x }
         | ExtractD -> Unop { op = `ExtractD; arg = x })
     | Bool x -> Bool x
-    | As_pred (x, _) -> gen x b
     | Name n -> (
         match Ctx.find ctx n b with
         | Some e -> e
@@ -625,8 +624,7 @@ module Make (Config : Config.S) () = struct
 
   let agg_init of_pred ctx p b =
     let open Builder in
-    let open Pred in
-    match remove_as p with
+    match p with
     | Count ->
         `Count
           (build_defn ~persistent:false "count" (const_int Prim_type.int_t 0) b)
@@ -689,11 +687,19 @@ module Make (Config : Config.S) () = struct
               let child_schema = schema child_layout in
               Ctx.bind_ctx ctx (Ctx.of_schema child_schema tup)
             in
-            cb b (List.map args ~f:(fun p -> of_pred ctx p b)))
+            cb b
+              (Select_list.preds args
+              |> Iter.map (fun p -> of_pred ctx p b)
+              |> Iter.to_list))
     | `Agg ->
         (* Extract all the aggregates from the arguments. *)
         let scalar_preds, agg_preds =
-          List.map ~f:Pred.collect_aggs args |> List.unzip
+          List.map
+            ~f:(fun (p, n) ->
+              let s, a = Pred.collect_aggs p in
+              ((s, n), a))
+            args
+          |> List.unzip
         in
         let agg_preds = List.concat agg_preds in
         let last_tup =
@@ -709,20 +715,20 @@ module Make (Config : Config.S) () = struct
         in
         (* Holds the state for each aggregate. *)
         let agg_temps =
-          List.map agg_preds ~f:(fun (n, p) ->
-              (n, agg_init of_pred pred_ctx p b))
+          List.map agg_preds ~f:(fun (p, n) ->
+              (agg_init of_pred pred_ctx p b, n))
         in
         (* Compute the aggregates. *)
         scan ctx b child_layout child_type (fun b tup ->
             build_assign (Tuple tup) last_tup b;
-            List.iter agg_temps ~f:(fun (_, p) -> agg_step of_pred pred_ctx b p);
+            List.iter agg_temps ~f:(fun (p, _) -> agg_step of_pred pred_ctx b p);
             build_assign (Bool true) found_tup b);
 
         (* Extract and return aggregates. *)
         build_if ~cond:found_tup
           ~then_:(fun b ->
             let agg_temps =
-              List.map agg_temps ~f:(fun (n, p) ->
+              List.map agg_temps ~f:(fun (p, n) ->
                   (n, agg_extract of_pred ctx b p))
             in
             let output_ctx =
@@ -730,7 +736,7 @@ module Make (Config : Config.S) () = struct
                   Ctx.bind ctx n (type_of v b) v)
             in
             let output =
-              List.map ~f:(fun p -> of_pred output_ctx p b) scalar_preds
+              List.map ~f:(fun (p, _) -> of_pred output_ctx p b) scalar_preds
             in
             debug_print "select produced" (Tuple output) b;
             cb b output)

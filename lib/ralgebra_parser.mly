@@ -1,6 +1,6 @@
 %{
-open Parser_utils
-%}
+    open Parser_utils
+         %}
 
 %token <string> ID
 %token <int> INT
@@ -54,8 +54,17 @@ param:
 primtype:
   | x = PRIMTYPE { x }
   | DATEKW { Prim_type.DateT {nullable=false} }
+  | error { error "Expected a primitive type." $startpos }
 
 bracket_list(X): LSBRAC; l = separated_list(COMMA, X); RSBRAC { l }
+
+select_list:
+  | x = bracket_list(named_pred) {
+                      match Select_list.of_list x with
+                      | Ok sl -> sl
+                      | Error err -> error (Core.Error.to_string_hum err) $startpos
+                    }
+  | error { error "Expected a selection list." $startpos }
 
 separated_nonunit_list(sep, X):
   | x = X; sep; xs = separated_nonempty_list(sep, X) { x::xs }
@@ -69,7 +78,7 @@ key:
 query:
   | QUERY; error { error "Expected a query name." $startpos }
   | QUERY; name=ID; LPAREN; args=separated_list(COMMA, arg); RPAREN;
-    LCURLY; body = ralgebra; RCURLY { Ast.Query.{ name; args; body } }
+LCURLY; body = ralgebra; RCURLY { Ast.Query.{ name; args; body } }
 
 ralgebra:
   | r = ralgebra_subquery { r }
@@ -79,11 +88,11 @@ ub_op: LT { `Open } | LE { `Closed }
 lb_op: GT { `Open } | GE { `Closed }
 
 ralgebra_subquery:
-  | SELECT; LPAREN; x = bracket_list(expr); COMMA; r = ralgebra; RPAREN
+  | SELECT; LPAREN; x = select_list; COMMA; r = ralgebra; RPAREN
     { Ast.Select (x, r) |> node $symbolstartpos $endpos }
 
   | GROUPBY; LPAREN;
-x = bracket_list(expr); COMMA;
+x = select_list; COMMA;
 k = bracket_list(name); COMMA;
 r = ralgebra;
 RPAREN { Ast.GroupBy (x, k, r) |> node $symbolstartpos $endpos }
@@ -104,13 +113,16 @@ RPAREN { Ast.GroupBy (x, k, r) |> node $symbolstartpos $endpos }
 key = bracket_list(pair(expr, option(ORDER))); COMMA;
 rel = ralgebra;
 RPAREN { Ast.OrderBy { key = List.map (fun (e, o) -> match o with
-                                                   | Some o -> e, o
-                                                   | None -> e, Ast.Asc) key; rel }
+                                                     | Some o -> e, o
+                                                     | None -> e, Ast.Asc) key; rel }
          |> node $symbolstartpos $endpos }
 
   | AEMPTY { node $symbolstartpos $endpos AEmpty }
 
-  | ASCALAR; e = parens(expr) { Ast.AScalar e |> node $symbolstartpos $endpos }
+  | ASCALAR; e = parens(named_pred) {
+     let (p, n) = e in
+     Ast.AScalar { s_pred = p; s_name = n } |> node $symbolstartpos $endpos
+    }
 
   | ALIST; LPAREN; k = ralgebra; AS; s = ID; COMMA; v = ralgebra; RPAREN
     {
@@ -151,8 +163,14 @@ name:
   | f = ID; COLON; t = PRIMTYPE { Name.create ~type_:t f }
   | RANGE { Name.create "range" }
 
+named_pred:
+  | x = name { (Ast.Name x, Name.name x) }
+  | p = e0; AS; id = ID { (p, id) }
+  | error { error "Expected a named predicate." $startpos }
+
 e0_binop: x = STRPOS { x }
-e0_unop: x = DAY | x = MONTH | x = YEAR | x = STRLEN | x = EXTRACTY | x = EXTRACTM | x = EXTRACTD { x }
+e0_unop:
+  | x = DAY | x = MONTH | x = YEAR | x = STRLEN | x = EXTRACTY | x = EXTRACTM | x = EXTRACTD { x }
 
 null:
   | NULL; COLON; t = primtype { Ast.Null (Some t) }
@@ -190,10 +208,9 @@ e0:
                               }
   | r = parens(ralgebra_subquery); {Ast.First (r)}
   | x = parens(expr) { x }
+  | error { error "Expected an expression." $startpos }
 
-e1:
-  | p = e0; AS; id = ID { Ast.As_pred (p, id) }
-  | x = e0 { x }
+e1: x = e0 { x }
 
 e2_op: x = MUL | x = DIV | x = MOD { x }
 

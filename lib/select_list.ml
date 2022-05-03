@@ -1,29 +1,25 @@
 open Core
-open Ast
 
-type 'a t = 'a annot pred list
-
-let ( @ ) l l' =
-  let l_names =
-    List.filter_map l ~f:(fun p -> Pred.to_name p |> Option.map ~f:Name.name)
-    |> String.Set.of_list
-  in
-  let l' =
-    List.filter l' ~f:(fun p ->
-        Pred.to_name p
-        |> Option.map ~f:(fun n -> not (Set.mem l_names @@ Name.name n))
-        |> Option.value ~default:true)
-  in
-  l @ l'
+type 'p t = ('p * string) list [@@deriving compare, hash, sexp]
 
 let of_list ps =
-  let ps', _ =
-    List.fold_left ps ~init:([], String.Set.empty)
-      ~f:(fun ((ps, names) as acc) p ->
-        match Pred.to_name p with
-        | Some n ->
-            let n = Name.name n in
-            if Set.mem names n then acc else (p :: ps, Set.add names n)
-        | None -> (p :: ps, names))
-  in
-  List.rev ps'
+  match
+    List.find_a_dup ps ~compare:(fun (_, n) (_, n') -> [%compare: string] n n')
+  with
+  | Some (_, n) -> Or_error.errorf "duplicate name: %s" n
+  | None -> Ok ps
+
+let of_list_exn ps = Or_error.ok_exn @@ of_list ps
+let to_list = Fun.id
+let map ps ~f = List.map ps ~f:(fun (p, n) -> (f p n, n))
+let filter ps ~f = List.filter ps ~f:(fun (p, n) -> f p n)
+
+let fold_map ps ~f ~init =
+  List.fold_map ps
+    ~f:(fun acc (p, n) ->
+      let acc', p' = f acc p n in
+      (acc', (p', n)))
+    ~init
+
+let preds ps = Iter.of_list ps |> Iter.map Tuple.T2.get1
+let names ps = Iter.of_list ps |> Iter.map Tuple.T2.get2

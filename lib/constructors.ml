@@ -3,19 +3,7 @@ open Ast
 module V = Visitors
 
 module Query = struct
-  (** Check that the names in a select list are unique. *)
-  let assert_unique_names ps =
-    List.filter_map ps ~f:Pred.to_name
-    |> List.find_a_dup ~compare:[%compare: Name.t]
-    |> Option.iter ~f:(fun dup ->
-           Error.create "Select list contains duplicate names" dup
-             [%sexp_of: Name.t]
-           |> Error.raise)
-
-  let select a b =
-    assert_unique_names a;
-    Select (a, b)
-
+  let select a b = Select (Select_list.of_list_exn a, b)
   let range a b = Range (a, b)
   let dep_join a b c = DepJoin { d_lhs = a; d_alias = b; d_rhs = c }
   let dep_join' d = dep_join d.d_lhs d.d_alias d.d_rhs
@@ -27,10 +15,7 @@ module Query = struct
     | `Agg | `Window -> failwith "Aggregates not allowed in filter.");
     Filter (a, b)
 
-  let group_by a b c =
-    assert_unique_names a;
-    GroupBy (a, b, c)
-
+  let group_by a b c = GroupBy (Select_list.of_list_exn a, b, c)
   let dedup a = Dedup a
   let order_by a b = OrderBy { key = a; rel = b }
   let relation r = Relation r
@@ -74,7 +59,7 @@ module Annot = struct
     type 'a meta
     type t
 
-    val select : _ meta annot pred list -> _ meta annot -> t annot
+    val select : _ meta annot pred Select_list.t -> _ meta annot -> t annot
     val range : _ meta annot pred -> _ meta annot pred -> t annot
     val dep_join : _ meta annot -> scope -> _ meta annot -> t annot
     val dep_join' : (_ meta annot, scope) depjoin -> t annot
@@ -82,13 +67,13 @@ module Annot = struct
     val filter : _ meta annot pred -> _ meta annot -> t annot
 
     val group_by :
-      _ meta annot pred list -> Name.t list -> _ meta annot -> t annot
+      _ meta annot pred Select_list.t -> Name.t list -> _ meta annot -> t annot
 
     val dedup : _ meta annot -> t annot
     val order_by : (_ meta annot pred * order) list -> _ meta annot -> t annot
     val relation : Relation.t -> t annot
     val empty : t annot
-    val scalar : _ meta annot pred -> t annot
+    val scalar : _ meta annot pred scalar -> t annot
     val list : _ meta annot -> scope -> _ meta annot -> t annot
     val list' : (_ meta annot pred, _ meta annot, scope) list_ -> t annot
     val tuple : _ meta annot list -> tuple -> t annot
@@ -129,6 +114,7 @@ module Annot = struct
 
       let pred = strip_pred
       let strips = List.map ~f:strip
+      let strip_select_list ps = Select_list.map ~f:(fun p _ -> strip_pred p) ps
       let strip_preds = List.map ~f:strip_pred
 
       let strip_bounds =
@@ -138,7 +124,7 @@ module Annot = struct
 
       let strip_order = List.map ~f:(fun (p, o) -> (strip_pred p, o))
       let wrap q = { node = strip_query q; meta = default () }
-      let select a b = wrap @@ Query.select (strip_preds a) (strip b)
+      let select a b = wrap @@ Query.select (strip_select_list a) (strip b)
       let range a b = wrap @@ Query.range (strip_pred a) (strip_pred b)
 
       let dep_join a b c =
@@ -148,12 +134,18 @@ module Annot = struct
       let dep_join' d = dep_join d.d_lhs d.d_alias d.d_rhs
       let join a b c = wrap @@ Query.join (strip_pred a) (strip b) (strip c)
       let filter a b = wrap @@ Query.filter (strip_pred a) (strip b)
-      let group_by a b c = wrap @@ Query.group_by (strip_preds a) b (strip c)
+
+      let group_by a b c =
+        wrap @@ Query.group_by (strip_select_list a) b (strip c)
+
       let dedup a = wrap @@ Query.dedup @@ strip a
       let order_by a b = wrap @@ Query.order_by (strip_order a) (strip b)
       let relation r = wrap @@ Query.relation r
       let empty = wrap @@ Query.empty
-      let scalar a = wrap @@ Query.scalar @@ strip_pred a
+
+      let scalar a =
+        wrap @@ Query.scalar @@ { a with s_pred = strip_pred a.s_pred }
+
       let list a b c = wrap @@ Query.list (strip a) b (strip c)
       let list' l = list l.l_keys l.l_scope l.l_values
       let tuple a b = wrap @@ Query.tuple (strips a) b

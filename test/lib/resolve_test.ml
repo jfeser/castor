@@ -4,19 +4,13 @@ open Test_util
 
 let conn = Lazy.force tpch_conn
 
-let pp x =
-  let pp, _ = mk_pp ~pp_name:Name.pp () in
-  pp x
+let pp_refcount fmt meta =
+  Fmt.pf fmt "@[<hov 2>{";
+  Map.iteri meta#refs ~f:(fun ~key:n ~data:c ->
+      if c then Fmt.pf fmt "%a,@ " Name.pp n);
+  Fmt.pf fmt "}@]"
 
-let pp_with_refcount, _ =
-  mk_pp ~pp_name:Name.pp
-    ~pp_meta:(fun fmt meta ->
-      let open Format in
-      fprintf fmt "@[<hov 2>{";
-      Map.iteri meta#refs ~f:(fun ~key:n ~data:c ->
-          if c then fprintf fmt "%a,@ " Name.pp n);
-      fprintf fmt "}@]")
-    ()
+let pp_with_refcount = Abslayout_pp.pp_with_meta pp_refcount
 
 let load s =
   load_string_exn conn s
@@ -74,7 +68,7 @@ let%expect_test "" =
 let%expect_test "" =
   let r =
     {|
-      alist(lineitem as k2, select([l_shipmode], atuple([ascalar(k2.l_shipmode), ascalar(0)], cross)))
+      alist(lineitem as k2, select([l_shipmode], atuple([ascalar(k2.l_shipmode), ascalar(0 as z)], cross)))
     |}
     |> load
   in
@@ -86,7 +80,7 @@ let%expect_test "" =
       {l_shipmode, }#
         select([l_shipmode],
         {l_shipmode, }#
-          atuple([{l_shipmode, }#ascalar(k2.l_shipmode), {}#ascalar(0)],
+          atuple([{l_shipmode, }#ascalar(k2.l_shipmode), {}#ascalar(0 as z)],
           cross))) |}]
 
 let%test_unit "" =

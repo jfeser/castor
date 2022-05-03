@@ -7,11 +7,11 @@ module P = Pred.Infix
 
 [@@@warning "-17"]
 
-type scalar = (< >[@sexp.opaque]) annot pred [@@deriving sexp]
+type scalar = (< >[@sexp.opaque]) annot pred Ast.scalar [@@deriving sexp]
 
 type ('q, 'm) node =
   | Empty
-  | Scalars of (scalar[@name "pred"]) list
+  | Scalars of scalar list
   | Concat of ('q, 'm) t list
   | For of ('q * string * ('q, 'm) t * bool)
   | Let of ((string * ('q, 'm) t) list * ('q, 'm) t)
@@ -54,6 +54,7 @@ let is_invariant ss q =
       method visit_'q () q = names_visitor#visit_t () q
       method visit_'m () _ = self#zero
       method visit_pred () p = names_visitor#visit_pred () p
+      method visit_scalar () s = names_visitor#visit_pred () s.s_pred
 
       (* Vars are not invariant so we don't have to reason about hoisting above
          other let bindings. *)
@@ -71,6 +72,7 @@ let hoist_invariant ss q =
       method visit_'m _ x = (x, self#zero)
       method visit_pred _ x = (x, self#zero)
       method visit_'q _ x = (x, self#zero)
+      method visit_scalar _ x = (x, self#zero)
 
       method! visit_For ss (r, s, q, x) =
         let q', binds = self#visit_t (s :: ss) q in
@@ -92,6 +94,7 @@ let hoist_all q =
       method visit_pred _ x = x
       method visit_'q _ x = x
       method visit_'m _ x = x
+      method visit_scalar _ x = x
 
       method! visit_t ss q =
         match q.node with
@@ -113,6 +116,7 @@ let to_width q =
       method visit_'q () q = List.length (schema q)
       method visit_'m () x = x
       method visit_pred () x = x
+      method visit_scalar () x = x
     end
   in
   visitor#visit_t () q
@@ -157,10 +161,14 @@ let rec of_ralgebra : 'a. (< .. > as 'a) annot -> (< > annot, 'a annot) t =
   | AHashIdx h -> of_hash_idx of_ralgebra q h
   | AOrderedIdx x -> of_ordered_idx of_ralgebra q x
   | AEmpty | Range _ -> empty q
-  | AScalar p -> scalars q [ Pred.strip_meta p ]
+  | AScalar p -> scalars q [ { p with s_pred = Pred.strip_meta p.s_pred } ]
   | ATuple (ts, _) -> (
       match to_scalars ts with
-      | Some ps -> scalars q (List.map ~f:Pred.strip_meta ps)
+      | Some ps ->
+          scalars q
+          @@ List.map
+               ~f:(fun s -> { s with s_pred = Pred.strip_meta s.s_pred })
+               ps
       | None -> concat q (List.map ~f:of_ralgebra ts))
   | DepJoin { d_lhs = q1; d_rhs = q2; _ } | Join { r1 = q1; r2 = q2; _ } ->
       concat q [ of_ralgebra q1; of_ralgebra q2 ]
@@ -184,6 +192,7 @@ let map_meta ~f q =
       method visit_'m () = f
       method visit_'q () x = x
       method visit_pred () x = x
+      method visit_scalar () x = x
     end
   in
   visitor#visit_t () q
@@ -195,7 +204,7 @@ let unwrap q = map_meta ~f:(fun m -> Option.value_exn m) q
    fold acts on. *)
 let rec to_ralgebra q =
   match q.node with
-  | Var _ -> A.scalar @@ As_pred (Int 0, Fresh.name Global.fresh "var%d")
+  | Var _ -> A.scalar (Int 0) (Fresh.name Global.fresh "var%d")
   | Let (binds, q) -> to_ralgebra (to_concat binds q)
   | For (q1, scope, q2, distinct) ->
       (* Extend the lhs query with a row number. Even if this query emits
@@ -209,7 +218,7 @@ let rec to_ralgebra q =
           else
             ( o1,
               A.group_by
-                (As_pred (Count, count) :: (schema q1 |> Schema.to_select_list))
+                ((Count, count) :: (schema q1 |> Schema.to_select_list))
                 (schema q1) q1 )
         in
         (o1, q1)
@@ -222,7 +231,7 @@ let rec to_ralgebra q =
                let n' = Fresh.name Global.fresh "x%d" in
                (n, n'))
       in
-      let slist = List.map sctx ~f:(fun (n, n') -> P.as_ (P.name n) n') in
+      let slist = List.map sctx ~f:(fun (n, n') -> (P.name n, n')) in
       (* Stick together the orders from the lhs and rhs queries. *)
       let order =
         let sctx =
@@ -249,12 +258,13 @@ let rec to_ralgebra q =
         List.mapi qs ~f:(fun i q ->
             let select_list =
               (* Add a counter so we know which query we're on. *)
-              P.(as_ (int i) counter_name)
+              P.(int i, counter_name)
               :: List.concat_mapi qs ~f:(fun j q' ->
                      let f n =
                        (* Take the names from this query's schema. *)
-                       if i = j then P.name n (* Otherwise emit null. *)
-                       else P.as_ (Null (Some (Name.type_exn n))) (Name.name n)
+                       if i = j then (P.name n, Name.name n)
+                         (* Otherwise emit null. *)
+                       else (Null (Some (Name.type_exn n)), Name.name n)
                      in
                      List.map (schema q') ~f)
             in
@@ -264,7 +274,7 @@ let rec to_ralgebra q =
       in
       A.order_by order @@ A.tuple queries_norm Concat
   | Empty -> A.empty
-  | Scalars ps -> A.tuple (List.map ps ~f:A.scalar) Cross
+  | Scalars ps -> A.tuple (List.map ps ~f:A.scalar') Cross
 
 let rec n_parallel q =
   match q.node with

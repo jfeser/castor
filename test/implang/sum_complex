@@ -1,2 +1,3 @@
-Select([sum(f) + 5, count() + sum(f / 2)], AList(r1 as k,
+Select([(sum(f) + 5) as p5, (count() + sum(f / 2)) as x],
+  AList(r1 as k,
    ATuple([AScalar(k.f), AScalar((k.g - k.f) as v)], cross)))

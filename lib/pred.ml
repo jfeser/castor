@@ -15,8 +15,6 @@ include Comparator.Make (T)
 module C = Comparable.Make (T)
 module O : Comparable.Infix with type t := t = C
 
-let to_name p = Schema.to_name p
-
 module Infix = struct
   open Ast.Unop
   open Ast.Binop
@@ -49,13 +47,6 @@ module Infix = struct
   let ( || ) p p' = binop Or p p'
   let ( mod ) p p' = binop Mod p p'
   let strpos p p' = binop Strpos p p'
-
-  let as_ a b =
-    match to_name a with
-    | Some n when String.(Name.name n <> b) -> As_pred (a, b)
-    | None -> As_pred (a, b)
-    | _ -> a
-
   let exists r = Exists r
   let count = Count
 end
@@ -64,19 +55,6 @@ let to_type p = Schema.to_type p
 let to_type_opt p = Schema.to_type_opt p
 let pp fmt p = Abslayout_pp.pp_pred fmt p
 let names r = (new V.names_visitor)#visit_pred () r
-
-let normalize p =
-  let visitor =
-    object (self)
-      inherit [_] V.endo
-      method! visit_As_pred () _ (p, _) = self#visit_pred () p
-      method! visit_Exists () p _ = p
-      method! visit_First () p _ = p
-    end
-  in
-  match p with
-  | As_pred (p', n) -> As_pred (visitor#visit_pred () p', n)
-  | p -> visitor#visit_pred () p
 
 let rec conjoin = function
   | [] -> Bool true
@@ -100,7 +78,7 @@ let collect_aggs p =
           if String.(kind = "avg") then Some Prim_type.fixed_t
           else to_type_opt p |> Or_error.ok
         in
-        (Name (Name.create ?type_ n), [ (n, p) ])
+        (Name (Name.create ?type_ n), [ (p, n) ])
 
       method! visit_Sum () p = self#visit_Agg "sum" (Sum p)
       method! visit_Count () = self#visit_Agg "count" Count
@@ -142,15 +120,6 @@ let eqs p =
   in
   visitor#visit_pred () p |> dedup_pairs
 
-let remove_as p =
-  let visitor =
-    object
-      inherit [_] V.map
-      method! visit_As_pred () (p, _) = p
-    end
-  in
-  visitor#visit_pred () p
-
 let kind p =
   let visitor =
     object
@@ -165,7 +134,7 @@ let kind p =
       method! visit_Count () = true
     end
   in
-  match remove_as p with
+  match p with
   | Row_number -> `Window
   | _ -> if visitor#visit_pred () p then `Agg else `Scalar
 
@@ -189,7 +158,7 @@ class ['s, 'c] subst_visitor ctx =
 
 let subst ctx p =
   let v = new subst_visitor ctx in
-  v#visit_pred () p |> normalize
+  v#visit_pred () p
 
 let subst_tree ctx p =
   let v =
@@ -202,7 +171,7 @@ let subst_tree ctx p =
         | None -> super#visit_pred () this
     end
   in
-  v#visit_pred () p |> normalize
+  v#visit_pred () p
 
 let scoped names scope p =
   let ctx =
@@ -224,13 +193,6 @@ let unscoped scope p =
     end
   in
   v#visit_pred () p
-
-let ensure_alias = function
-  | As_pred _ as p -> p
-  | p -> (
-      match to_name p with
-      | Some n -> As_pred (p, Name.name n)
-      | None -> As_pred (p, Fresh.name Global.fresh "a%d"))
 
 let to_nnf p =
   let visitor =
@@ -369,7 +331,7 @@ let to_static ~params p =
   in
   to_static p
 
-let strip_meta p = (p :> t)
+let strip_meta (p : < .. > annot pred) = (p :> t)
 
 let is_expensive p =
   let rec pred = function
@@ -393,7 +355,7 @@ let cse ?(min_uses = 3) p =
       if [%compare.equal: t] p p_k then p_v
       else Visitors.Map.pred Fun.id subst p
     in
-    subst p |> normalize
+    subst p
   in
 
   count_pred p;

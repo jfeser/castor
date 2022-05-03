@@ -20,6 +20,13 @@ let pred_free_open free p =
   in
   visitor#visit_pred () p
 
+let empty = Set.empty (module Name)
+let of_list = Set.of_list (module Name)
+let union_list = Set.union_list (module Name)
+
+let select_list_free pred_free ps =
+  List.map ps ~f:(fun (p, _) -> pred_free p) |> union_list
+
 let free_open free r =
   let pred_free = pred_free_open free
   and empty = Set.empty (module Name)
@@ -32,10 +39,9 @@ let free_open free r =
     match r with
     | Relation _ | AEmpty -> empty
     | Range (p, p') -> Set.O.(pred_free p || pred_free p')
-    | AScalar p -> pred_free p
+    | AScalar p -> select_list_free pred_free [ (p.s_pred, p.s_name) ]
     | Select (ps, r') ->
-        Set.O.(
-          free r' || ((List.map ps ~f:pred_free |> union_list) - exposed r'))
+        Set.O.(free r' || (select_list_free pred_free ps - exposed r'))
     | Filter (p, r') ->
         Set.union (free r') (Set.diff (pred_free p) (exposed r'))
     | Dedup r' -> free r'
@@ -47,8 +53,7 @@ let free_open free r =
     | GroupBy (ps, key, r') ->
         Set.O.(
           free r'
-          || (List.map ps ~f:pred_free |> union_list || of_list key)
-             - exposed r')
+          || ((select_list_free pred_free ps || of_list key) - exposed r'))
     | OrderBy { key; rel } ->
         Set.O.(
           free rel

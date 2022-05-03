@@ -7,12 +7,7 @@ open Schema
 open Match
 module P = Pred.Infix
 include (val Log.make ~level:(Some Warning) "castor.simplify-tactic")
-
-module Config = struct
-  module type S = sig
-    include Ops.Config.S
-  end
-end
+module Config = Ops.Config
 
 module Make (C : Config.S) = struct
   open C
@@ -49,131 +44,51 @@ module Make (C : Config.S) = struct
   let elim_structure = of_func elim_structure ~name:"elim-structure"
 
   let concat_select ps ps' =
-    let ns = List.filter_map ps ~f:Pred.to_name |> Set.of_list (module Name) in
-    let ps' =
-      List.filter ps' ~f:(fun p ->
-          Option.map (Pred.to_name p) ~f:(fun n -> not (Set.mem ns n))
-          |> Option.value ~default:true)
-    in
+    let module Sl = Select_list in
+    let ns = Sl.names ps |> Iter.to_list |> Set.of_list (module String) in
+    let ps' = Sl.filter ps' ~f:(fun _ n -> not (Set.mem ns n)) in
     ps @ ps'
 
+  let mk_unscoped_select scope ps =
+    List.map ps ~f:(fun (p, n) -> (Pred.unscoped scope p, n))
+
   let elim_depjoin r =
-    match r.node with
-    | DepJoin { d_lhs; d_alias; d_rhs = { node = AScalar p; _ } } ->
-        Some (select [ Pred.unscoped d_alias p ] d_lhs)
-    | DepJoin { d_lhs; d_alias; d_rhs = { node = ATuple (rs, Cross); _ } } ->
-        let open Option.Let_syntax in
+    let open Option.Let_syntax in
+    let%bind { d_lhs; d_alias; d_rhs } = to_depjoin r in
+    match d_rhs.node with
+    | AScalar s ->
+        return
+        @@ select (mk_unscoped_select d_alias [ (s.s_pred, s.s_name) ]) d_lhs
+    | ATuple (rs, Cross) ->
         let%bind s =
           List.map rs ~f:(fun r ->
-              match r.node with AScalar p -> Some p | _ -> None)
+              match r.node with
+              | AScalar p -> Some (p.s_pred, p.s_name)
+              | _ -> None)
           |> Option.all
         in
-        let s = List.map ~f:(Pred.unscoped d_alias) s in
-        Some (select s d_lhs)
-    (* depjoin(r, select(ps, atuple(ps'))) -> select(ps, select(ps', r)) *)
-    | DepJoin
-        {
-          d_lhs;
-          d_alias;
-          d_rhs = { node = Select (ps, { node = ATuple (rs, Cross); _ }); _ };
-        } ->
-        let open Option.Let_syntax in
+        return (select (mk_unscoped_select d_alias s) d_lhs)
+        (* depjoin(r, select(ps, atuple(ps'))) -> select(ps, select(ps', r)) *)
+    | Select (ps, { node = ATuple (rs, Cross); _ }) ->
         let%bind ps' =
           List.map rs ~f:(fun r ->
-              match r.node with AScalar p -> Some p | _ -> None)
+              match r.node with
+              | AScalar p -> Some (p.s_pred, p.s_name)
+              | _ -> None)
           |> Option.all
         in
-        let ps' = List.map ~f:(Pred.unscoped d_alias) ps' in
-        (* Ensure that no fields are dropped by the first select. *)
-        let ps' = concat_select ps' (schema d_lhs |> to_select_list) in
-        let ps = List.map ~f:(Pred.unscoped d_alias) ps in
-        Some (select ps (select ps' d_lhs))
-    | DepJoin
-        {
-          d_lhs;
-          d_alias;
-          d_rhs = { node = Select (ps, { node = AScalar (Null None); _ }); _ };
-        } ->
-        Some (select (List.map ~f:(Pred.unscoped d_alias) ps) d_lhs)
+        (* Ensure that no fields are dropped by the first select by concatting on all of the fields. *)
+        let ps' =
+          concat_select
+            (mk_unscoped_select d_alias ps')
+            (schema d_lhs |> to_select_list)
+        in
+        return (select (mk_unscoped_select d_alias ps) (select ps' d_lhs))
+    | Select (ps, { node = AScalar { s_pred = Null None; _ }; _ }) ->
+        return (select (mk_unscoped_select d_alias ps) d_lhs)
     | _ -> None
 
   let elim_depjoin = of_func elim_depjoin ~name:"elim-depjoin"
-
-  let dealias_select r =
-    match r.node with
-    | Select (ps, r') ->
-        let ps' =
-          List.map ps ~f:(function
-            | As_pred (Name n, a) when String.(Name.name n = a) -> Name n
-            | p -> p)
-        in
-        Some (select ps' r')
-    | _ -> None
-
-  let dealias_select = of_func dealias_select ~name:"de-alias-select"
-
-  module Subst = struct
-    let select_list_open pred ctx ps =
-      List.map ps ~f:(fun p ->
-          match Pred.to_name p with
-          | Some n -> P.as_ p @@ Name.name n
-          | None -> p)
-      |> List.map ~f:(pred ctx)
-      |> Select_list.of_list
-
-    let query_open annot pred ctx = function
-      | Select (ps, r) ->
-          let ps' = select_list_open pred ctx ps in
-          Select (ps', annot ctx r)
-      | GroupBy (ps, key, r) ->
-          let ps' = select_list_open pred ctx ps
-          and key' =
-            List.map key ~f:(fun n ->
-                match Map.find ctx n with Some n' -> n' | None -> n)
-            |> List.dedup_and_sort ~compare:[%compare: Name.t]
-          and r' = annot ctx r in
-          GroupBy (ps', key', r')
-      | q -> V.Map.query (annot ctx) (pred ctx) q
-
-    let rec pred ctx = function
-      | Name n as p -> (
-          match Map.find ctx n with Some p' -> Name p' | None -> p)
-      | p -> V.Map.pred (annot ctx) (pred ctx) p
-
-    and query ctx q = query_open annot pred ctx q
-    and annot ctx r = V.Map.annot (query ctx) r
-  end
-
-  let subst_path ctx path r =
-    let subst_top r =
-      V.Map.annot (Subst.query_open (fun _ r -> r) Subst.pred ctx) r
-    in
-    Path.get_exn path r |> subst_top |> Path.set_exn path r
-
-  let rec subst_along_path ctx path r =
-    let r' = subst_path ctx path r in
-    let is_select =
-      match r'.node with Select _ | GroupBy _ -> true | _ -> false
-    in
-    if is_select then r'
-    else
-      match Path.parent path with
-      | Some path' -> subst_along_path ctx path' r'
-      | None -> r'
-
-  let elim_select p r =
-    let open Option.Let_syntax in
-    let%bind sel, r' = Path.get_exn p r |> to_select in
-    let%bind subst =
-      List.map sel ~f:(function
-        | As_pred (Name n, n') -> Some (Name.create n', n)
-        | _ -> None)
-      |> Option.all
-    in
-    let subst_ctx = Map.of_alist_exn (module Name) subst in
-    return @@ Path.set_exn p (subst_along_path subst_ctx p r) r'
-
-  let elim_select = global elim_select "flatten-select"
 
   let flatten_select r =
     let open Option.Let_syntax in
@@ -185,11 +100,10 @@ module Make (C : Config.S) = struct
       | _ -> Some ()
     in
     let ctx =
-      List.filter_map ps' ~f:(fun p ->
-          Option.map (Pred.to_name p) ~f:(fun n -> (n, p)))
+      List.map ps' ~f:(fun (p, n) -> (Name.create n, p))
       |> Map.of_alist_exn (module Name)
     in
-    let ps = List.map ps ~f:(Pred.subst ctx) in
+    let ps = Select_list.map ps ~f:(fun p _ -> Pred.subst ctx p) in
     return @@ A.select ps r''
 
   let flatten_select = of_func flatten_select ~name:"flatten-select"
@@ -200,20 +114,6 @@ module Make (C : Config.S) = struct
     | _ -> None
 
   let flatten_dedup = of_func flatten_dedup ~name:"flatten-dedup"
-
-  let flatten_tuple r =
-    match r.node with
-    | ATuple (ts, k) ->
-        let ts =
-          List.concat_map ts ~f:(fun r' ->
-              match r'.node with
-              | ATuple (ts', k') when Poly.(k = k') -> ts'
-              | _ -> [ r' ])
-        in
-        Some (tuple ts k)
-    | _ -> None
-
-  let flatten_tuple = of_func flatten_tuple ~name:"flatten-tuple"
 
   let elim_filter_above_join r =
     let open Option.Let_syntax in
@@ -230,7 +130,8 @@ module Make (C : Config.S) = struct
     let%bind r' = to_dedup r in
     let%bind sel, key, _ = to_groupby r' in
     let sel_names =
-      List.filter_map sel ~f:Pred.to_name |> Set.of_list (module Name)
+      Select_list.names sel |> Iter.map Name.create |> Iter.to_list
+      |> Set.of_list (module Name)
     in
     if List.for_all key ~f:(Set.mem sel_names) then return r' else None
 
@@ -253,24 +154,10 @@ module Make (C : Config.S) = struct
         try_ @@ for_all elim_depjoin Path.(all >>? is_depjoin);
         try_ @@ for_all flatten_select Path.(all >>? is_select);
         try_ @@ for_all flatten_dedup Path.(all >>? is_dedup);
-        try_ @@ for_all dealias_select Path.(all >>? is_select);
         try_ @@ for_all flatten_select Path.(all >>? is_select);
         try_ @@ for_all elim_filter_above_join Path.(all >>? is_filter);
         try_ @@ for_all elim_dedup_above_groupby Path.(all >>? is_dedup);
       ]
-
-  let join_elim =
-    let f _ r =
-      Cardinality.annotate r |> Join_elim.remove_joins |> strip_meta
-      |> Option.return
-    in
-    global f "join-elim"
-
-  let project =
-    let project r =
-      Some (r |> Resolve.resolve_exn ~params |> Project.project_once ~params)
-    in
-    of_func project ~name:"project"
 
   let unnest_and_simplify _ r =
     let simplify q = Option.value_exn (apply simplify Path.root q) in

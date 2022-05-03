@@ -3,7 +3,7 @@ open Cse
 
 let%expect_test "" =
   let r =
-    "join(true, dedup(r), select([min(f)], dedup(r)))"
+    "join(true, dedup(r), select([min(f) as m], dedup(r)))"
     |> Abslayout_load.load_string_exn (Lazy.force test_db_conn)
   in
   let common = extract_common r in
@@ -24,13 +24,13 @@ let%expect_test "" =
 
     SELECT "f_2" AS "f_2_0",
            "g_2" AS "g_2_0",
-           "a0_0" AS "a0_0_0"
+           "m_0" AS "m_0_0"
     FROM
       (SELECT r0_2."f" AS "f_2",
               r0_2."g" AS "g_2"
        FROM "r0" AS "r0_2") AS "t1",
 
-      (SELECT min("f_1") AS "a0_0"
+      (SELECT min("f_1") AS "m_0"
        FROM
          (SELECT r0_1."f" AS "f_1",
                  r0_1."g" AS "g_1"

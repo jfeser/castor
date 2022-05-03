@@ -142,13 +142,13 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
       let c = self#query q in
       let subst = subst_of_schema "t" (schema q) in
       let out_exprs, queries =
-        List.map sel ~f:(fun p ->
+        List.map sel ~f:(fun (p, n) ->
             match Pred.kind p with
             | `Window -> failwith "Windows not implemented"
             | `Scalar ->
                 let c', s = self#pred subst p in
                 let c'', dummy =
-                  match schema (select [ p ] q) with
+                  match schema (select [ (p, n) ] q) with
                   | [ n ] ->
                       let lit =
                         match Name.type_exn n with
@@ -167,7 +167,7 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
             | `Agg ->
                 let outer, inner = Pred.collect_aggs p in
                 let binds, queries =
-                  List.map inner ~f:(fun (name, agg) ->
+                  List.map inner ~f:(fun (agg, name) ->
                       let mk_simple_agg name p =
                         let q, s = self#pred subst p in
                         (q, sprintf "%s [%s | t <- q]" name s)
@@ -280,7 +280,7 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
               let subst = subst_of_schema "t" (schema q) in
               let c = self#query q in
               let queries, preds =
-                List.map sel ~f:(self#pred subst) |> List.unzip
+                List.map sel ~f:(fun (p, _) -> self#pred subst p) |> List.unzip
               in
               let out_tuple = mk_tuple preds in
               let ((name, _) as query) =
@@ -292,7 +292,11 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
                 { empty with top_query = `Query name; queries = [ query ] }
           | `Agg -> self#agg_select sel q)
       | GroupBy (sel, key, q) ->
-          let kc = self#query (dedup (select (List.map ~f:P.name key) q)) in
+          let kc =
+            self#query
+              (dedup
+              @@ select (List.map ~f:(fun n -> (P.name n, Name.name n)) key) q)
+          in
           let filter_preds, pred_args =
             List.map key ~f:(fun k ->
                 let arg =
@@ -336,7 +340,6 @@ class to_cozy ?fresh ?(subst = Map.empty (module Name)) args =
     method pred s (p : Pred.t) : t * _ =
       let subst = Map.merge_exn subst s in
       match p with
-      | As_pred (p, _) -> self#pred s p
       | Name n ->
           (empty, Map.find subst n |> Option.value ~default:(Name.name n))
       | Int x -> (empty, Int.to_string x)

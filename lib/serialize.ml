@@ -199,7 +199,7 @@ let serialize_field hdr name value =
 
 class ['self] serialize_fold ?debug () =
   object (self : 'self)
-    inherit [_] abslayout_fold
+    inherit [_, _] abslayout_fold
     method type_ meta = meta#type_
     method serializer = new logged_serializer ?debug ()
     method empty _ = self#serializer

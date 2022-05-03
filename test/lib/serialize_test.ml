@@ -36,7 +36,7 @@ let run_test ?(params = []) layout_str =
   else [%sexp_of: Type.t * int * string] (type_, len, buf_str) |> print_s
 
 let%expect_test "scalar-int" =
-  run_test "AScalar(1)";
+  run_test "AScalar(1 as x)";
   [%expect
     {|
     0:1 Scalar (=(Int 1))
@@ -44,14 +44,14 @@ let%expect_test "scalar-int" =
     ((IntT ((range (Interval 1 1)))) 1 "\\001") |}]
 
 let%expect_test "scalar-bool" =
-  run_test "AScalar(true)";
+  run_test "AScalar(true as x)";
   [%expect {|
     0:1 Scalar (=(Bool true))
 
     ((BoolT ()) 1 "\\001") |}]
 
 let%expect_test "scalar-string" =
-  run_test "AScalar(\"test\")";
+  run_test "AScalar(\"test\" as x)";
   [%expect
     {|
     0:4 Scalar (=(String test))
@@ -61,7 +61,7 @@ let%expect_test "scalar-string" =
     ((StringT ((nchars (Interval 4 4)))) 4 test) |}]
 
 let%expect_test "tuple" =
-  run_test "ATuple([AScalar(1), AScalar(\"test\")], Cross)";
+  run_test "ATuple([AScalar(1 as x), AScalar(\"test\" as y)], Cross)";
   [%expect
     {|
     0:5 Tuple body
@@ -221,7 +221,7 @@ let%expect_test "list-list" =
      "\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003\\001\\001\\002\\002\\003") |}]
 
 let%expect_test "depjoin" =
-  run_test "depjoin(alist(r1 as k1, ascalar(k1.f)) as k3, ascalar(5))";
+  run_test "depjoin(alist(r1 as k1, ascalar(k1.f)) as k3, ascalar(5 as x))";
   [%expect
     {|
     0:6 Tuple body

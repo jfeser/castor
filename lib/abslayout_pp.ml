@@ -1,29 +1,23 @@
 open Core
 open Ast
 
-let pp_option pp fmt =
-  let open Format in
-  function Some x -> fprintf fmt "%a" pp x | None -> ()
-
-let pp_tuple ?(sep = ", ") pp fmt (x, y) =
-  let open Format in
-  fprintf fmt "%a%s%a" pp x sep pp y
+let pp_option pp fmt = function Some x -> Fmt.pf fmt "%a" pp x | None -> ()
 
 let pp_list ?(bracket = ("[", "]")) pp fmt ls =
   let openb, closeb = bracket in
   let open Format in
   pp_open_hovbox fmt 1;
-  fprintf fmt "%s" openb;
+  Fmt.pf fmt "%s" openb;
   let rec loop = function
     | [] -> ()
-    | [ x ] -> fprintf fmt "@[<hov>%a@]" pp x
+    | [ x ] -> Fmt.pf fmt "@[<hov>%a@]" pp x
     | x :: xs ->
-        fprintf fmt "@[<hov>%a@],@ " pp x;
+        Fmt.pf fmt "@[<hov>%a@],@ " pp x;
         loop xs
   in
   loop ls;
   pp_close_box fmt ();
-  fprintf fmt "%s" closeb
+  Fmt.pf fmt "%s" closeb
 
 let op_to_str =
   let open Binop in
@@ -54,7 +48,7 @@ let unop_to_str =
   | ExtractM -> "to_mon"
   | ExtractD -> "to_day"
 
-let pp_op fmt = function `Infix x | `Prefix x -> Format.fprintf fmt "%s" x
+let pp_op fmt = function `Infix x | `Prefix x -> Fmt.pf fmt "%s" x
 
 let pp_kind fmt =
   Format.(
@@ -63,105 +57,110 @@ let pp_kind fmt =
     | Zip -> fprintf fmt "zip"
     | Concat -> fprintf fmt "concat")
 
-let mk_pp ?(pp_name = Name.pp) ?pp_meta () =
-  let open Format in
-  let rec pp_key fmt = function
-    | [] -> failwith "Unexpected empty key."
-    | [ p ] -> pp_pred fmt p
-    | ps -> pp_list ~bracket:("(", ")") pp_pred fmt ps
-  and pp_pred fmt = function
-    | As_pred (p, n) -> fprintf fmt "@[<h>%a@ as@ %s@]" pp_pred p n
-    | Null None -> fprintf fmt "null"
-    | Null (Some t) -> fprintf fmt "null:%a" Prim_type.pp t
-    | Int x ->
-        if x >= 0 then fprintf fmt "%d" x else fprintf fmt "(0 - %d)" (-x)
-    | Fixed x -> fprintf fmt "%s" (Fixed_point.to_string x)
-    | Date x -> fprintf fmt "date(\"%s\")" (Date.to_string x)
-    | Unop (op, x) -> fprintf fmt "%s(%a)" (unop_to_str op) pp_pred x
-    | Bool x -> fprintf fmt "%B" x
-    | String x -> fprintf fmt "%S" x
-    | Name n -> pp_name fmt n
-    | Binop (op, p1, p2) -> (
-        match op_to_str op with
-        | `Infix str ->
-            fprintf fmt "@[<hov>(%a@ %s@ %a)@]" pp_pred p1 str pp_pred p2
-        | `Prefix str ->
-            fprintf fmt "@[<hov>%s(%a,@ %a)@]" str pp_pred p1 pp_pred p2)
-    | Row_number -> fprintf fmt "row_number()"
-    | Count -> fprintf fmt "count()"
-    | Sum n -> fprintf fmt "sum(%a)" pp_pred n
-    | Avg n -> fprintf fmt "avg(%a)" pp_pred n
-    | Min n -> fprintf fmt "min(%a)" pp_pred n
-    | Max n -> fprintf fmt "max(%a)" pp_pred n
-    | If (p1, p2, p3) ->
-        fprintf fmt "(if %a then %a else %a)" pp_pred p1 pp_pred p2 pp_pred p3
-    | First r -> fprintf fmt "(%a)" pp r
-    | Exists r -> fprintf fmt "@[<hv 2>exists(%a)@]" pp r
-    | Substring (p1, p2, p3) ->
-        fprintf fmt "@[<hov>substring(%a,@ %a,@ %a)@]" pp_pred p1 pp_pred p2
-          pp_pred p3
-  and pp_order fmt (p, o) =
-    match o with
-    | Asc -> fprintf fmt "@[<hov>%a@]" pp_pred p
-    | Desc -> fprintf fmt "@[<hov>%a@ desc@]" pp_pred p
-  and pp_lower_bound fmt (p, b) =
-    let op = match b with `Closed -> Binop.Ge | `Open -> Binop.Gt in
-    fprintf fmt "%a %a" pp_op (op_to_str op) pp_pred p
-  and pp_upper_bound fmt (p, b) =
-    let op = match b with `Closed -> Binop.Le | `Open -> Binop.Lt in
-    fprintf fmt "%a %a" pp_op (op_to_str op) pp_pred p
-  and pp fmt { node; meta } =
-    fprintf fmt "@[<hv 2>";
-    Option.iter pp_meta ~f:(fun ppm -> fprintf fmt "@[<hv 2>%a@]#@," ppm meta);
-    (match node with
-    | Select (ps, r) -> fprintf fmt "select(%a,@ %a)" (pp_list pp_pred) ps pp r
-    | Filter (p, r) -> fprintf fmt "filter(%a,@ %a)" pp_pred p pp r
-    | DepJoin { d_lhs; d_alias; d_rhs } ->
-        fprintf fmt "depjoin(%a as %s,@ %a)" pp d_lhs d_alias pp d_rhs
-    | Join { pred; r1; r2 } ->
-        fprintf fmt "join(%a,@ %a,@ %a)" pp_pred pred pp r1 pp r2
-    | GroupBy (a, k, r) ->
-        fprintf fmt "groupby(%a,@ %a,@ %a)" (pp_list pp_pred) a
-          (pp_list pp_name) k pp r
-    | OrderBy { key; rel } ->
-        fprintf fmt "orderby(%a,@ %a)" (pp_list pp_order) key pp rel
-    | Dedup r -> fprintf fmt "dedup(@,%a)" pp r
-    | Relation { r_name; _ } -> fprintf fmt "%s" r_name
-    | Range (pl, ph) -> fprintf fmt "range(%a, %a)" pp_pred pl pp_pred ph
-    | AEmpty -> fprintf fmt "aempty"
-    | AScalar p -> fprintf fmt "ascalar(%a)" pp_pred p
-    | AList { l_keys = r1; l_scope; l_values = r2 } ->
-        fprintf fmt "alist(%a as %s,@ %a)" pp r1 l_scope pp r2
-    | ATuple (rs, kind) ->
-        fprintf fmt "atuple(%a,@ %a)" (pp_list pp) rs pp_kind kind
-    | AHashIdx { hi_keys = r1; hi_scope = s; hi_values = r2; hi_lookup; _ } ->
-        fprintf fmt "ahashidx(%a as %s,@ %a,@ %a)" pp r1 s pp r2 pp_key
-          hi_lookup
-    | AOrderedIdx { oi_keys = r1; oi_scope = s; oi_values = r2; oi_lookup; _ }
-      ->
-        fprintf fmt "aorderedidx(%a as %s,@ %a,@ %a)" pp r1 s pp r2
-          (pp_list ~bracket:("", "") (fun fmt (lb, ub) ->
-               fprintf fmt "%a, %a" (pp_option pp_lower_bound) lb
-                 (pp_option pp_upper_bound) ub))
-          oi_lookup);
-    fprintf fmt "@]"
-  in
-  (pp, pp_pred)
+let pp_key pp_pred fmt = function
+  | [] -> failwith "Unexpected empty key."
+  | [ p ] -> pp_pred fmt p
+  | ps -> pp_list ~bracket:("(", ")") pp_pred fmt ps
 
-let pp fmt r =
-  let f, _ = mk_pp () in
-  f fmt r
+let pp_pred_open pp_query pp_pred fmt = function
+  | Null None -> Fmt.pf fmt "null"
+  | Null (Some t) -> Fmt.pf fmt "null:%a" Prim_type.pp t
+  | Int x -> if x >= 0 then Fmt.pf fmt "%d" x else Fmt.pf fmt "(0 - %d)" (-x)
+  | Fixed x -> Fmt.pf fmt "%s" (Fixed_point.to_string x)
+  | Date x -> Fmt.pf fmt "date(\"%s\")" (Date.to_string x)
+  | Unop (op, x) -> Fmt.pf fmt "%s(%a)" (unop_to_str op) pp_pred x
+  | Bool x -> Fmt.pf fmt "%B" x
+  | String x -> Fmt.pf fmt "%S" x
+  | Name n -> Name.pp fmt n
+  | Binop (op, p1, p2) -> (
+      match op_to_str op with
+      | `Infix str ->
+          Fmt.pf fmt "@[<hov>(%a@ %s@ %a)@]" pp_pred p1 str pp_pred p2
+      | `Prefix str ->
+          Fmt.pf fmt "@[<hov>%s(%a,@ %a)@]" str pp_pred p1 pp_pred p2)
+  | Row_number -> Fmt.pf fmt "row_number()"
+  | Count -> Fmt.pf fmt "count()"
+  | Sum n -> Fmt.pf fmt "sum(%a)" pp_pred n
+  | Avg n -> Fmt.pf fmt "avg(%a)" pp_pred n
+  | Min n -> Fmt.pf fmt "min(%a)" pp_pred n
+  | Max n -> Fmt.pf fmt "max(%a)" pp_pred n
+  | If (p1, p2, p3) ->
+      Fmt.pf fmt "(if %a then %a else %a)" pp_pred p1 pp_pred p2 pp_pred p3
+  | First r -> Fmt.pf fmt "(%a)" pp_query r
+  | Exists r -> Fmt.pf fmt "@[<hv 2>exists(%a)@]" pp_query r
+  | Substring (p1, p2, p3) ->
+      Fmt.pf fmt "@[<hov>substring(%a,@ %a,@ %a)@]" pp_pred p1 pp_pred p2
+        pp_pred p3
 
-let pp_pred fmt r =
-  let _, f = mk_pp () in
-  f fmt r
+let pp_order pp_pred fmt (p, o) =
+  match o with
+  | Asc -> Fmt.pf fmt "@[<hov>%a@]" pp_pred p
+  | Desc -> Fmt.pf fmt "@[<hov>%a@ desc@]" pp_pred p
 
-let pp_small fmt x =
-  let max = Format.pp_get_max_boxes fmt () in
-  Format.pp_set_max_boxes fmt 5;
-  pp fmt x;
-  Format.pp_set_max_boxes fmt max
+let pp_lower_bound pp_pred fmt (p, b) =
+  let op = match b with `Closed -> Binop.Ge | `Open -> Binop.Gt in
+  Fmt.pf fmt "%a %a" pp_op (op_to_str op) pp_pred p
 
-let pp_small_str () x =
-  Format.(pp_small str_formatter x);
-  Format.flush_str_formatter ()
+let pp_upper_bound pp_pred fmt (p, b) =
+  let op = match b with `Closed -> Binop.Le | `Open -> Binop.Lt in
+  Fmt.pf fmt "%a %a" pp_op (op_to_str op) pp_pred p
+
+let pp_select_pred pp_pred fmt (p, n) =
+  match p with
+  | Name n' when [%equal: string] (Name.name n') n -> pp_pred fmt p
+  | _ -> Fmt.pf fmt "%a as %s" pp_pred p n
+
+let pp_select_list pp_pred fmt sl = pp_list (pp_select_pred pp_pred) fmt sl
+
+let pp_query_open pp_query pp_pred pp_meta fmt { node; meta } =
+  Fmt.pf fmt "@[<hv 2>";
+  Option.iter pp_meta ~f:(fun ppm -> Fmt.pf fmt "@[<hv 2>%a@]#@," ppm meta);
+  (match node with
+  | Select (ps, r) ->
+      Fmt.pf fmt "select(%a,@ %a)" (pp_select_list pp_pred) ps pp_query r
+  | Filter (p, r) -> Fmt.pf fmt "filter(%a,@ %a)" pp_pred p pp_query r
+  | DepJoin { d_lhs; d_alias; d_rhs } ->
+      Fmt.pf fmt "depjoin(%a as %s,@ %a)" pp_query d_lhs d_alias pp_query d_rhs
+  | Join { pred; r1; r2 } ->
+      Fmt.pf fmt "join(%a,@ %a,@ %a)" pp_pred pred pp_query r1 pp_query r2
+  | GroupBy (a, k, r) ->
+      Fmt.pf fmt "groupby(%a,@ %a,@ %a)" (pp_select_list pp_pred) a
+        (pp_list Name.pp) k pp_query r
+  | OrderBy { key; rel } ->
+      Fmt.pf fmt "orderby(%a,@ %a)"
+        (pp_list (pp_order pp_pred))
+        key pp_query rel
+  | Dedup r -> Fmt.pf fmt "dedup(@,%a)" pp_query r
+  | Relation { r_name; _ } -> Fmt.pf fmt "%s" r_name
+  | Range (pl, ph) -> Fmt.pf fmt "range(%a, %a)" pp_pred pl pp_pred ph
+  | AEmpty -> Fmt.pf fmt "aempty"
+  | AScalar p ->
+      Fmt.pf fmt "ascalar(%a)" (pp_select_pred pp_pred) (p.s_pred, p.s_name)
+  | AList { l_keys = r1; l_scope; l_values = r2 } ->
+      Fmt.pf fmt "alist(%a as %s,@ %a)" pp_query r1 l_scope pp_query r2
+  | ATuple (rs, kind) ->
+      Fmt.pf fmt "atuple(%a,@ %a)" (pp_list pp_query) rs pp_kind kind
+  | AHashIdx { hi_keys = r1; hi_scope = s; hi_values = r2; hi_lookup; _ } ->
+      Fmt.pf fmt "ahashidx(%a as %s,@ %a,@ %a)" pp_query r1 s pp_query r2
+        (pp_key pp_pred) hi_lookup
+  | AOrderedIdx { oi_keys = r1; oi_scope = s; oi_values = r2; oi_lookup; _ } ->
+      Fmt.pf fmt "aorderedidx(%a as %s,@ %a,@ %a)" pp_query r1 s pp_query r2
+        (pp_list ~bracket:("", "") (fun fmt (lb, ub) ->
+             Fmt.pf fmt "%a, %a"
+               (pp_option (pp_lower_bound pp_pred))
+               lb
+               (pp_option (pp_upper_bound pp_pred))
+               ub))
+        oi_lookup);
+  Fmt.pf fmt "@]"
+
+let rec pp_with_meta pp_meta fmt q =
+  pp_query_open (pp_with_meta pp_meta)
+    (pp_pred_with_meta pp_meta)
+    (Some pp_meta) fmt q
+
+and pp_pred_with_meta pp_meta fmt p =
+  pp_pred_open (pp_with_meta pp_meta) (pp_pred_with_meta pp_meta) fmt p
+
+let rec pp fmt q = pp_query_open pp pp_pred None fmt q
+and pp_pred fmt p = pp_pred_open pp pp_pred fmt p

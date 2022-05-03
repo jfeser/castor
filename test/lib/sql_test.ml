@@ -76,12 +76,6 @@ let%expect_test "order-by" =
     SELECT DISTINCT r1_0."f" AS "f_1"
     FROM "r1" AS "r1_0" |}]
 
-let%expect_test "order-by" =
-  run_test "OrderBy([0 as x desc], Dedup(Select([f], r1)))";
-  [%expect {|
-    SELECT DISTINCT r1_0."f" AS "f_1"
-    FROM "r1" AS "r1_0" |}]
-
 let%expect_test "dedup" =
   run_test "dedup(r)";
   [%expect
@@ -168,10 +162,10 @@ let%expect_test "join-cond" =
            AND (FALSE)) |}]
 
 let%expect_test "select-groupby" =
-  run_test "select([max(x)], groupby([f, sum((f * g)) as x], [f], r1))";
+  run_test "select([max(x) as m], groupby([f, sum((f * g)) as x], [f], r1))";
   [%expect
     {|
-      SELECT max("x_0") AS "a0_0"
+      SELECT max("x_0") AS "m_0"
       FROM
         (SELECT "f_0" AS "f_1",
                 sum(("f_0") * ("g_0")) AS "x_0"
@@ -182,10 +176,10 @@ let%expect_test "select-groupby" =
          GROUP BY "f_0") AS "t1" |}]
 
 let%expect_test "select-fusion-1" =
-  run_test "select([max(x)], select([min(f) as x], r1))";
+  run_test "select([max(x) as m], select([min(f) as x], r1))";
   [%expect
     {|
-      SELECT max("x_0") AS "a0_0"
+      SELECT max("x_0") AS "m_0"
       FROM
         (SELECT min("f_0") AS "x_0"
          FROM
@@ -194,10 +188,10 @@ let%expect_test "select-fusion-1" =
             FROM "r1" AS "r1_0") AS "t0") AS "t1" |}]
 
 let%expect_test "select-fusion-2" =
-  run_test "select([max(x)], select([f as x], r1))";
+  run_test "select([max(x) as m], select([f as x], r1))";
   [%expect
     {|
-    SELECT max("x_0") AS "a0_0"
+    SELECT max("x_0") AS "m_0"
     FROM
       (SELECT r1_0."f" AS "x_0"
        FROM "r1" AS "r1_0") AS "t0" |}]
@@ -232,13 +226,13 @@ let%expect_test "hash-idx" =
     "ahashidx(select([f], r1) as k, select([g], filter(f = k.f, r1)), null)";
   [%expect
     {|
-    SELECT "f_1_0" AS "f_1_0_0",
+    SELECT "f_3" AS "f_3_0",
            "g_3" AS "g_3_0"
     FROM
       (SELECT r1_0."f" AS "f_1"
        FROM "r1" AS "r1_0") AS "t1",
          LATERAL
-      (SELECT "f_1" AS "f_1_0",
+      (SELECT "f_1" AS "f_3",
               r1_1."g" AS "g_3"
        FROM "r1" AS "r1_1"
        WHERE (("f_1") = (NULL))
@@ -263,78 +257,67 @@ let%expect_test "ordered-idx" =
               AND (("f") < (NULL)))
          AND ((r1_1."f") = ("f_1"))) AS "t0" |}]
 
-let%expect_test "depjoin-agg" =
+let%expect_test "depjoin-agg-1" =
   run_test
-    "depjoin(select([f, g], r) as k, select([min(k.f), max(k.g)], ascalar(0)))";
+    "depjoin(select([f, g], r) as k, select([min(k.f) as l, max(k.g) as h], \
+     ascalar(0 as z)))";
   [%expect
     {|
-    SELECT "a1_0" AS "a1_0_0",
-           "a2_0" AS "a2_0_0"
+    SELECT "l_0" AS "l_0_0",
+           "h_0" AS "h_0_0"
     FROM
       (SELECT r_0."f" AS "f_1",
               r_0."g" AS "g_1"
        FROM "r" AS "r_0") AS "t3",
          LATERAL
-      (SELECT min("f_1") AS "a1_0",
-              max("g_1") AS "a2_0"
+      (SELECT min("f_1") AS "l_0",
+              max("g_1") AS "h_0"
        FROM
-         (SELECT "a0_0" AS "a0_0_0",
+         (SELECT "z_0" AS "z_0_0",
                  "f_1",
                  "g_1"
           FROM
-            (SELECT 0 AS "a0_0") AS "t0") AS "t1") AS "t2"
+            (SELECT 0 AS "z_0") AS "t0") AS "t1") AS "t2"
 |}]
 
-let%expect_test "depjoin-agg" =
-  run_test "depjoin(select([f, g], r) as k, select([count(), f], ascalar(k.f)))";
+let%expect_test "depjoin-agg-2" =
+  run_test
+    "depjoin(select([f, g], r) as k, select([count() as c, f], ascalar(k.f)))";
   [%expect
     {|
-    SELECT "a0_0" AS "a0_0_0",
+    SELECT "c_0" AS "c_0_0",
            "f_3" AS "f_3_0"
     FROM
       (SELECT r_0."f" AS "f_1",
               r_0."g" AS "g_1"
        FROM "r" AS "r_0") AS "t2",
          LATERAL
-      (SELECT count(*) AS "a0_0",
+      (SELECT count(*) AS "c_0",
               min("f_2") AS "f_3"
        FROM
          (SELECT "f_1" AS "f_2") AS "t0") AS "t1"
 |}]
 
 let%expect_test "select-agg-window" =
-  run_test "select([count(), min(f), row_number()], r)";
+  run_test "select([count() as c, min(f) as m, row_number() as n], r)";
   [%expect
     {|
-    SELECT count(*) AS "a0_0",
-           min("f_0") AS "a1_0",
-           row_number() OVER () AS "a2_0"
+    SELECT count(*) AS "c_0",
+           min("f_0") AS "m_0",
+           row_number() OVER () AS "n_0"
     FROM
       (SELECT r_0."f" AS "f_0",
               r_0."g" AS "g_0"
        FROM "r" AS "r_0") AS "t0"
 |}]
 
-let%expect_test "orderby-filter" =
-  run_test ~conn:Test_util.tpch_conn
-    {|
-select([p_partkey],
-  dedup(select([p_partkey], orderby([p_partkey, p_type], filter(0 = 0, part)))))
-|};
-  [%expect
-    {|
-    ("Unexpected query response."
-      "ERROR:  for SELECT DISTINCT, ORDER BY expressions must appear in select list\
-     \nLINE 7:             part_0.\"p_type\") AS \"t0\"\
-     \n                    ^\
-     \n")
-    SELECT "p_partkey_1" AS "p_partkey_2"
-    FROM
-      (SELECT DISTINCT part_0."p_partkey" AS "p_partkey_1"
-       FROM "part" AS "part_0"
-       WHERE ((0) = (0))
-       ORDER BY part_0."p_partkey",
-                part_0."p_type") AS "t0" |}]
+(* FIXME *)
+(* let%expect_test "orderby-filter" = *)
+(*   run_test ~conn:Test_util.tpch_conn *)
+(* {| *)
+   (* select([p_partkey], *)
+   (*   dedup(select([p_partkey], orderby([p_partkey, p_type], filter(0 = 0, part))))) *)
+   (* |} *)
 
 let%expect_test "select-fusion-window" =
   run_test

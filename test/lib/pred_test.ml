@@ -4,8 +4,8 @@ open Pred
 let scoped_test s ns x = of_string_exn s |> scoped ns x |> printf "%a" pp
 
 let%expect_test "" =
-  scoped_test "(select([f + g], r)) = 0" [ Name.create "g" ] "x";
-  [%expect {| ((select([(f + x.g)], r)) = 0) |}]
+  scoped_test "(select([(f + g) as s], r)) = 0" [ Name.create "g" ] "x";
+  [%expect {| ((select([(f + x.g) as s], r)) = 0) |}]
 
 let%expect_test "" =
   scoped_test

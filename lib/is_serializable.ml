@@ -27,7 +27,7 @@ class ['a] stage_iter =
       self#visit_t (ctx, `Compile) rk;
       self#visit_t (ctx, phase) rv
 
-    method! visit_AScalar (ctx, _) p = self#visit_pred (ctx, `Compile) p
+    method! visit_AScalar (ctx, _) p = self#visit_pred (ctx, `Compile) p.s_pred
   end
 
 let stage ?(params = Set.empty (module Name)) r =

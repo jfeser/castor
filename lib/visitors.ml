@@ -4,6 +4,8 @@ open Collections
 
 let ( == ) = phys_equal
 
+[@@@warning "-17"]
+
 type 'r pred = 'r Ast.pred =
   | Name of (Name.t[@opaque])
   | Int of (int[@opaque])
@@ -14,7 +16,6 @@ type 'r pred = 'r Ast.pred =
   | Null of (Prim_type.t option[@opaque])
   | Unop of (Unop.t[@opaque]) * 'r pred
   | Binop of (Binop.t[@opaque]) * 'r pred * 'r pred
-  | As_pred of ('r pred * string)
   | Count
   | Row_number
   | Sum of 'r pred
@@ -58,29 +59,28 @@ and ('r, 's0) depjoin = ('r, 's0) Ast.depjoin = {
   d_rhs : 'r;
 }
 
-and ('p, 'r, 's0) join = ('p, 'r, 's0) Ast.join = {
-  pred : 'p;
-  r1 : 'r;
-  r2 : 'r;
-}
+and ('p, 'r) join = ('p, 'r) Ast.join = { pred : 'p; r1 : 'r; r2 : 'r }
 
-and ('p, 'r, 's0) order_by = ('p, 'r, 's0) Ast.order_by = {
+and ('p, 'r) order_by = ('p, 'r) Ast.order_by = {
   key : ('p * (Ast.order[@opaque])) list;
   rel : 'r;
 }
 
+and 'p scalar = 'p Ast.scalar = { s_pred : 'p; s_name : string }
+
 and ('p, 'r, 's0) query = ('p, 'r, 's0) Ast.query =
-  | Select of ('p list * 'r)
+  | Select of (('p Select_list.t[@name "select_list"]) * 'r)
   | Filter of ('p * 'r)
-  | Join of ('p, 'r, 's0) join
+  | Join of ('p, 'r) join
   | DepJoin of ('r, 's0) depjoin
-  | GroupBy of ('p list * (Name.t[@opaque]) list * 'r)
-  | OrderBy of ('p, 'r, 's0) order_by
+  | GroupBy of
+      (('p Select_list.t[@name "select_list"]) * (Name.t[@opaque]) list * 'r)
+  | OrderBy of ('p, 'r) order_by
   | Dedup of 'r
   | Relation of (Relation.t[@opaque])
   | Range of ('p * 'p)
   | AEmpty
-  | AScalar of 'p
+  | AScalar of 'p scalar
   | AList of ('p, 'r, 's0) list_
   | ATuple of ('r list * (Ast.tuple[@opaque]))
   | AHashIdx of ('p, 'r, 's0) hash_idx
@@ -100,6 +100,8 @@ and t = (meta[@opaque]) annot
     visitors
       { variety = "mapreduce"; name = "base_mapreduce"; irregular = true }]
 
+[@@@warning "+17"]
+
 module Map = struct
   let annot query { node; meta } = { node = query node; meta }
   let bound pred (p, b) = (pred p, b)
@@ -110,7 +112,6 @@ module Map = struct
         p
     | Unop (o, p) -> Unop (o, pred p)
     | Binop (o, p, p') -> Binop (o, pred p, pred p')
-    | As_pred (p, s) -> As_pred (pred p, s)
     | Sum p -> Sum (pred p)
     | Avg p -> Avg (pred p)
     | Max p -> Max (pred p)
@@ -145,21 +146,24 @@ module Map = struct
   let list query l =
     { l with l_keys = query l.l_keys; l_values = query l.l_values }
 
+  let scalar pred x = { x with s_pred = pred x.s_pred }
+  let select_list pred ps = Select_list.map ps ~f:(fun p _ -> pred p)
+
   let query annot pred = function
-    | Select (ps, q) -> Select (List.map ~f:pred ps, annot q)
+    | Select (ps, q) -> Select (select_list pred ps, annot q)
     | Filter (p, q) -> Filter (pred p, annot q)
     | Join { pred = p; r1; r2 } ->
         Join { pred = pred p; r1 = annot r1; r2 = annot r2 }
     | DepJoin ({ d_lhs; d_rhs; _ } as d) ->
         DepJoin { d with d_lhs = annot d_lhs; d_rhs = annot d_rhs }
-    | GroupBy (ps, ns, q) -> GroupBy (List.map ~f:pred ps, ns, annot q)
+    | GroupBy (ps, ns, q) -> GroupBy (select_list pred ps, ns, annot q)
     | OrderBy { key; rel } ->
         OrderBy
           { key = List.map key ~f:(fun (p, o) -> (pred p, o)); rel = annot rel }
     | Dedup q -> Dedup (annot q)
     | (Relation _ | AEmpty) as q -> q
     | Range (p, p') -> Range (pred p, pred p')
-    | AScalar p -> AScalar (pred p)
+    | AScalar p -> AScalar (scalar pred p)
     | AList l -> AList (list annot l)
     | ATuple (qs, t) -> ATuple (List.map qs ~f:annot, t)
     | AHashIdx h -> AHashIdx (hash_idx annot pred h)
@@ -178,18 +182,22 @@ module Reduce = struct
 
   let option zero f = function Some x -> f x | None -> zero
 
+  let select_list zero ( + ) pred ps =
+    list zero ( + ) (fun (p, _) -> pred p) (Select_list.to_list ps)
+
   let pred zero ( + ) annot pred = function
     | Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null _ | Count
     | Row_number ->
         zero
-    | Unop (_, p) | As_pred (p, _) | Sum p | Avg p | Max p | Min p -> pred p
+    | Unop (_, p) | Sum p | Avg p | Max p | Min p -> pred p
     | Binop (_, p, p') -> pred p + pred p'
     | If (p, p', p'') | Substring (p, p', p'') -> pred p + pred p' + pred p''
     | First q | Exists q -> annot q
 
   let query zero ( + ) annot pred = function
     | Relation _ | AEmpty -> zero
-    | Select (ps, q) | GroupBy (ps, _, q) -> list zero ( + ) pred ps + annot q
+    | Select (ps, q) | GroupBy (ps, _, q) ->
+        select_list zero ( + ) pred ps + annot q
     | Filter (p, q) -> pred p + annot q
     | Join { pred = p; r1; r2 } -> pred p + annot r1 + annot r2
     | DepJoin { d_lhs = q; d_rhs = q'; _ }
@@ -199,7 +207,7 @@ module Reduce = struct
         list zero ( + ) (fun (p, _) -> pred p) key + annot rel
     | Dedup q -> annot q
     | Range (p, p') -> pred p + pred p'
-    | AScalar p -> pred p
+    | AScalar p -> pred p.s_pred
     | ATuple (qs, _) -> list zero ( + ) annot qs
     | AHashIdx { hi_keys; hi_values; hi_key_layout; hi_lookup; _ } ->
         annot hi_keys + annot hi_values
@@ -223,7 +231,7 @@ module Stage_reduce = struct
   let query zero ( + ) annot pred stage = function
     | AList { l_keys = q; l_values = q'; _ } ->
         annot `Compile q + annot stage q'
-    | AScalar p -> pred `Compile p
+    | AScalar p -> pred `Compile p.s_pred
     | AHashIdx { hi_keys; hi_values; hi_key_layout; hi_lookup; _ } ->
         annot `Compile hi_keys + annot stage hi_values
         + option zero (annot stage) hi_key_layout
@@ -250,7 +258,7 @@ module Iter = struct
     | Name _ | Int _ | Fixed _ | Date _ | Bool _ | String _ | Null _ | Count
     | Row_number ->
         ()
-    | Unop (_, p) | As_pred (p, _) | Sum p | Avg p | Max p | Min p -> pred p
+    | Unop (_, p) | Sum p | Avg p | Max p | Min p -> pred p
     | Binop (_, p, p') ->
         pred p;
         pred p'
@@ -263,7 +271,7 @@ module Iter = struct
   let query annot pred = function
     | Relation _ | AEmpty -> ()
     | Select (ps, q) | GroupBy (ps, _, q) ->
-        List.iter ~f:pred ps;
+        List.iter ~f:(fun (p, _) -> pred p) (Select_list.to_list ps);
         annot q
     | Filter (p, q) ->
         pred p;
@@ -283,7 +291,7 @@ module Iter = struct
     | Range (p, p') ->
         pred p;
         pred p'
-    | AScalar p -> pred p
+    | AScalar p -> pred p.s_pred
     | ATuple (qs, _) -> List.iter ~f:annot qs
     | AHashIdx { hi_keys; hi_values; hi_key_layout; hi_lookup; _ } ->
         annot hi_keys;
@@ -336,6 +344,9 @@ class virtual ['self] endo =
     method visit_'r = self#visit_t
     method visit_'s0 = self#visit_scope
     method visit_'m _ x = x
+
+    method visit_select_list visit_pred env this =
+      Select_list.map this ~f:(fun p _ -> visit_pred env p)
   end
 
 class virtual ['self] map =
@@ -345,6 +356,9 @@ class virtual ['self] map =
     method visit_'r = self#visit_t
     method visit_'s0 = self#visit_scope
     method visit_'m _ x = x
+
+    method visit_select_list visit_pred env this =
+      Select_list.map this ~f:(fun p _ -> visit_pred env p)
   end
 
 class virtual ['self] iter =
@@ -354,6 +368,9 @@ class virtual ['self] iter =
     method visit_'r = self#visit_t
     method visit_'s0 = self#visit_scope
     method visit_'m _ _ = ()
+
+    method visit_select_list visit_pred env this =
+      Select_list.to_list this |> List.iter ~f:(fun (p, _) -> visit_pred env p)
   end
 
 class virtual ['self] reduce =
@@ -363,6 +380,11 @@ class virtual ['self] reduce =
     method visit_'r = self#visit_t
     method visit_'s0 = self#visit_scope
     method visit_'m _ _ = self#zero
+
+    method visit_select_list visit_pred env this =
+      Select_list.to_list this
+      |> List.fold_left ~init:self#zero ~f:(fun acc (p, _) ->
+             self#plus acc (visit_pred env p))
   end
 
 class virtual ['self] mapreduce =
@@ -372,6 +394,16 @@ class virtual ['self] mapreduce =
     method visit_'r = self#visit_t
     method visit_'s0 = self#visit_scope
     method visit_'m _ x = (x, self#zero)
+
+    method visit_select_list visit_pred env this =
+      let acc, this' =
+        Select_list.fold_map this
+          ~f:(fun acc p _ ->
+            let p', acc' = visit_pred env p in
+            (self#plus acc acc', p'))
+          ~init:self#zero
+      in
+      (this', acc)
   end
 
 class ['a] names_visitor =

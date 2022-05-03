@@ -39,7 +39,7 @@ let translate eqs ~from ~to_ =
 let extension eqs schema_lhs schema_rhs =
   let open Option.Let_syntax in
   let%map ext = translate eqs ~from:schema_lhs ~to_:schema_rhs in
-  List.map ext ~f:(fun (n, n') -> As_pred (Name n', Name.name n))
+  List.map ext ~f:(fun (n, n') -> (Name n', Name.name n))
 
 let try_extend eqs pred lhs rhs =
   let schema_lhs =
@@ -54,7 +54,8 @@ let try_extend eqs pred lhs rhs =
       let sl = ex @ Schema.to_select_list schema_rhs in
       debug (fun m ->
           m "Extending with:@ %a@ to avoid join of:@ %a@ with:@ %a"
-            (Fmt.Dump.list Pred.pp) sl A.pp lhs A.pp rhs);
+            (Fmt.Dump.list @@ Fmt.Dump.pair Pred.pp Fmt.string)
+            sl A.pp lhs A.pp rhs);
       Select (sl, rhs)
   | None ->
       debug (fun m ->

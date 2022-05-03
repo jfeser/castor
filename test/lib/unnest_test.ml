@@ -2,9 +2,11 @@ open Castor
 open Ast
 open Abslayout
 open Unnest
+open Unnest.Private
 open Test_util
 
 let run r = unnest ~params:(Set.empty (module Name)) r
+let n n = Name (Name.create n)
 
 let%expect_test "" =
   let conn = Lazy.force Test_util.test_db_conn in
@@ -12,9 +14,9 @@ let%expect_test "" =
   let q =
     Infix.(
       dep_join
-        (select [ Pred.Infix.as_ (n "f") "k_f" ] @@ r "r")
+        (select [ (n "f", "k_f") ] @@ r "r")
         "k"
-        (select [ n "g" ] (filter (n "k_f" = n "f") (r "r1"))))
+        (select [ (n "g", "g") ] (filter (n "k_f" = n "f") (r "r1"))))
     |> Abslayout_load.annotate_relations conn
   in
 
@@ -41,7 +43,7 @@ let%expect_test "" =
   let q =
     Infix.(
       dep_join (r "r") "k"
-        (select [ n "g" ] (filter (n "k.f" = n "f") (r "r1"))))
+        (select [ (n "g", "g") ] (filter (n "k.f" = n "f") (r "r1"))))
     |> Abslayout_load.load_layout_exn conn
     |> strip_meta |> to_visible_depjoin
   in
@@ -59,7 +61,7 @@ let%expect_test "" =
   let q =
     Infix.(
       dep_join (r "r") "k"
-        (select [ n "g" ] (filter (n "k.f" = n "f") (r "r1"))))
+        (select [ (n "g", "g") ] (filter (n "k.f" = n "f") (r "r1"))))
     |> Abslayout_load.load_layout_exn conn
   in
 
@@ -367,9 +369,7 @@ let%expect_test "" =
       join((s7_o_orderdate = bnd3),
         select([s7_o_orderdate as bnd3],
           select([o_orderdate as s7_o_orderdate],
-            dedup(
-              select([o_orderdate as o_orderdate],
-                dedup(select([o_orderdate as o_orderdate], orders)))))),
+            dedup(select([o_orderdate], dedup(select([o_orderdate], orders)))))),
         select([s7_o_orderdate, s7_o_orderdate as x122, counter2 as x123,
                 var0 as x124, x118 as x125, x119 as x126, x120 as x127,
                 x121 as x128],
@@ -378,8 +378,8 @@ let%expect_test "" =
                       select([s7_o_orderdate],
                         select([o_orderdate as s7_o_orderdate],
                           dedup(
-                            select([o_orderdate as o_orderdate],
-                              dedup(select([o_orderdate as o_orderdate], orders))))))),
+                            select([o_orderdate],
+                              dedup(select([o_orderdate], orders))))))),
                     select([0 as counter2, var0, null:int as x118,
                             null:fixed as x119, null:fixed as x120,
                             null:fixed as x121],
@@ -403,9 +403,8 @@ let%expect_test "" =
                               groupby([s7_o_orderdate, count() as ct21,
                                        l_extendedprice, l_discount],
                                 [l_extendedprice, l_discount, s7_o_orderdate],
-                                select([s7_o_orderdate,
-                                        l_extendedprice as l_extendedprice,
-                                        l_discount as l_discount],
+                                select([s7_o_orderdate, l_extendedprice,
+                                        l_discount],
                                   join(((o_orderdate = s7_o_orderdate) &&
                                        ((l_returnflag = "R") &&
                                        (l_orderkey = o_orderkey))),
@@ -414,10 +413,9 @@ let%expect_test "" =
                                         select([s7_o_orderdate],
                                           select([o_orderdate as s7_o_orderdate],
                                             dedup(
-                                              select([o_orderdate as o_orderdate],
+                                              select([o_orderdate],
                                                 dedup(
-                                                  select([o_orderdate as o_orderdate],
-                                                    orders))))))),
+                                                  select([o_orderdate], orders))))))),
                                       lineitem),
                                     orders))))),
                           select([s7_o_orderdate as d0, s2_ct21, s2_l_discount,
@@ -441,8 +439,7 @@ let%expect_test "" =
                                           [l_extendedprice, l_discount,
                                            s7_o_orderdate],
                                           select([s7_o_orderdate,
-                                                  l_extendedprice as l_extendedprice,
-                                                  l_discount as l_discount],
+                                                  l_extendedprice, l_discount],
                                             join(((o_orderdate = s7_o_orderdate)
                                                  &&
                                                  ((l_returnflag = "R") &&
@@ -452,9 +449,9 @@ let%expect_test "" =
                                                   select([s7_o_orderdate],
                                                     select([o_orderdate as s7_o_orderdate],
                                                       dedup(
-                                                        select([o_orderdate as o_orderdate],
+                                                        select([o_orderdate],
                                                           dedup(
-                                                            select([o_orderdate as o_orderdate],
+                                                            select([o_orderdate],
                                                               orders))))))),
                                                 lineitem),
                                               orders)))))),

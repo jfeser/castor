@@ -1,1 +1,1 @@
-filter(c > 0, select([count() as c], ascalar(0)))
+filter(c > 0, select([count() as c], ascalar(0 as z)))

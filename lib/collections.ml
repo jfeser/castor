@@ -347,10 +347,3 @@ class ['s] disj_monoid =
     method private zero = false
     method private plus = ( || )
   end
-
-module Iter = struct
-  let fold ~f ~init s =
-    let acc = ref init in
-    s (fun x -> acc := f !acc x);
-    !acc
-end

@@ -60,14 +60,6 @@ let shadow_check r =
   let rels = relations_visitor#visit_t () r in
   (alias_visitor rels)#visit_t () r
 
-let duplicate_preds ps =
-  List.filter_map ps ~f:Pred.to_name
-  |> List.filter ~f:(fun n -> String.(Name.name n <> "dummy"))
-  |> List.find_a_dup ~compare:[%compare: Name.t]
-  |> Option.iter ~f:(fun n ->
-         failwith
-         @@ Fmt.str "Found two expressions with the same name: %a" Name.pp n)
-
 let duplicate_names ns =
   List.find_a_dup ~compare:[%compare: Name.t] ns
   |> Option.iter ~f:(fun n ->
@@ -76,11 +68,12 @@ let duplicate_names ns =
 let rec annot r = V.Iter.annot query meta r
 and meta _ = ()
 
-and query = function
-  | Select (ps, _) -> duplicate_preds ps
-  | GroupBy (ps, ns, _) ->
-      duplicate_preds ps;
-      duplicate_names ns
+and query q =
+  V.Iter.query annot pred q;
+  match q with
+  | GroupBy (_, ns, q) ->
+      duplicate_names ns;
+      annot q
   | ATuple (r :: rs, Concat) ->
       let s = schema r in
       List.iter rs ~f:(fun r' ->
@@ -88,7 +81,7 @@ and query = function
           if not ([%compare.equal: Schema.t] s s') then
             failwith
             @@ Fmt.str "Mismatched schemas in concat tuple:@ %a@ %a" pp s pp s')
-  | q -> V.Iter.query annot pred q
+  | _ -> ()
 
 and pred p = V.Iter.pred annot pred p
 

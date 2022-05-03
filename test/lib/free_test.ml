@@ -17,7 +17,7 @@ let%expect_test "" =
   in
   let r s = Db.relation conn s |> A.relation in
 
-  A.select [ n "g" ] (A.filter Pred.Infix.(n "k.f" = n "f") (r "r1"))
+  A.select [ (n "g", "g") ] (A.filter Pred.Infix.(n "k.f" = n "f") (r "r1"))
   |> free |> [%sexp_of: Set.M(Name).t] |> print_s;
   [%expect {| (((scope k) (name f) (meta <opaque>))) |}]
 

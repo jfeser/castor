@@ -53,7 +53,7 @@ let eqs_open (eqs : 'a annot -> Set.M(Eq).t) r : Set.M(Eq).t =
   | Select (ps, r) | GroupBy (ps, _, r) ->
       eqs r
       || List.filter_map ps ~f:(function
-           | As_pred (Name n, s) -> Some (n, Name.create s)
+           | Name n, s when String.(Name.name n <> s) -> Some (n, Name.create s)
            | _ -> None)
          |> of_list
   | Join { pred = p; r1; r2 } ->

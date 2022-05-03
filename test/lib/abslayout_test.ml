@@ -88,7 +88,8 @@ let%expect_test "" =
         Scalar: (Int 3) |}]
 
 let%expect_test "" =
-  run_print_test "atuple([filter(false, ascalar(0)), ascalar(1)], cross)";
+  run_print_test
+    "atuple([filter(false, ascalar(0 as a)), ascalar(1 as b)], cross)";
   [%expect {|
         Tuple
         Scalar: (Int 0)
@@ -96,8 +97,8 @@ let%expect_test "" =
 
 let%expect_test "" =
   run_print_test
-    "alist(r as k, atuple([filter(false, ascalar(k.f)), ascalar(k.f+1)], \
-     cross))";
+    "alist(r as k, atuple([filter(false, ascalar(k.f)), ascalar((k.f+1) as \
+     x)], cross))";
   [%expect
     {|
         List
@@ -158,7 +159,7 @@ let%expect_test "sum-complex" =
 
 let%expect_test "orderby-tuple" =
   run_print_test
-    {|atuple([alist(orderby([f desc], r1) as r1a, atuple([ascalar(r1a.f), ascalar(r1a.g)], cross)), atuple([ascalar(9), ascalar(9)], cross), alist(orderby([f asc], r1) as r1b, atuple([ascalar(r1b.f), ascalar(r1b.g)], cross))], concat)|};
+    {|atuple([alist(orderby([f desc], r1) as r1a, atuple([ascalar(r1a.f), ascalar(r1a.g)], cross)), atuple([ascalar(9 as x), ascalar(9 as y)], cross), alist(orderby([f asc], r1) as r1b, atuple([ascalar(r1b.f), ascalar(r1b.g)], cross))], concat)|};
   [%expect
     {|
     Tuple
@@ -384,7 +385,7 @@ let%expect_test "subst" =
        ((Binop Eq (Int 1) (Int 2))
         ((node
           (Select
-           (((Int 1) (Int 2))
+           ((((Int 1) f) ((Int 2) g))
             ((node (Relation ((r_name r) (r_schema ())))) (meta <opaque>)))))
          (meta <opaque>)))))
      (meta <opaque>)) |}]

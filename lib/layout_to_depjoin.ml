@@ -19,7 +19,8 @@ let hash_idx h =
         Binop (Eq, Name p1, Pred.strip_meta p2))
     |> Pred.conjoin
   and slist =
-    rk_schema @ rv_schema |> dedup_names |> List.map ~f:(fun n -> Name n)
+    rk_schema @ rv_schema |> dedup_names
+    |> List.map ~f:(fun n -> (Name n, Name.name n))
   in
   {
     d_lhs = strip_meta h.hi_keys;
@@ -52,19 +53,22 @@ let ordered_idx { oi_keys = rk; oi_values = rv; oi_scope = scope; oi_lookup; _ }
            p1 @ p2)
     |> Pred.conjoin
   and slist =
-    rk_schema @ rv_schema |> dedup_names |> List.map ~f:(fun n -> Name n)
+    rk_schema @ rv_schema |> dedup_names
+    |> List.map ~f:(fun n -> (Name n, Name.name n))
   in
   { d_lhs = rk; d_alias = scope; d_rhs = select slist (filter key_pred rv) }
 
 let cross_tuple ts =
   let scalars, others =
     List.partition_map ts ~f:(fun r ->
-        match r.node with AScalar p -> First p | _ -> Second r)
+        match r.node with
+        | AScalar p -> First (p.s_pred, p.s_name)
+        | _ -> Second r)
   in
   let base_relation, base_schema =
     match List.reduce others ~f:(join (Bool true)) with
     | Some r -> (r, S.schema r)
-    | None -> (scalar (As_pred (Int 0, Fresh.name Global.fresh "x%d")), [])
+    | None -> (scalar (Int 0) (Fresh.name Global.fresh "x%d"), [])
   in
   let select_list = scalars @ S.to_select_list base_schema in
   Select (select_list, base_relation)

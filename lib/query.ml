@@ -70,7 +70,7 @@ let of_many conn qs =
     let s = Schema.schema r in
     List.map all_attrs ~f:(fun (n, t) ->
         let nn = Name.create n in
-        if List.mem s nn ~equal:[%compare.equal: Name.t] then Name nn
+        if List.mem s nn ~equal:[%compare.equal: Name.t] then (Name nn, n)
         else
           let dummy =
             match t with
@@ -80,7 +80,7 @@ let of_many conn qs =
             | StringT _ -> String ""
             | _ -> failwith "Unexpected type"
           in
-          As_pred (dummy, n))
+          (dummy, n))
   in
   let bodies =
     List.mapi bodies ~f:(fun i r ->
@@ -89,7 +89,7 @@ let of_many conn qs =
         @@ tuple
              [
                filter P.(name (Name.create "query_id") = int i)
-               @@ scalar (Int i);
+               @@ scalar (Int i) "unit";
                strip_meta r;
              ]
              Cross)

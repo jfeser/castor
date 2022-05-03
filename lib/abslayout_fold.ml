@@ -78,15 +78,12 @@ let map_accum ~f ~init l =
   in
   m init RevList.empty l
 
-let default_simplify r = Project.project r
-
 module Data = struct
   type t = { fn : string; ralgebra : Ast.t }
 
   let to_query r =
     (* Generate a query that enumerates the stream to fold over. *)
-    A.ensure_alias r |> Q.of_ralgebra |> Q.map_meta ~f:Option.some
-    |> Q.hoist_all
+    Q.of_ralgebra r |> Q.map_meta ~f:Option.some |> Q.hoist_all
 
   let to_sql conn q =
     (* Convert that query to a ralgebra and simplify it. *)
@@ -143,8 +140,9 @@ module Data = struct
       (Db.exec_from_file ~fn, q)
 end
 
-class virtual ['self] abslayout_fold =
-  object (self : 'self)
+class virtual ['a, 'm] abslayout_fold =
+  object (self)
+    constraint 'm = < .. >
     method virtual list : _
     method virtual hash_idx : _
     method virtual ordered_idx : _
@@ -156,7 +154,7 @@ class virtual ['self] abslayout_fold =
     method virtual depjoin : _
     method order_by _ _ x = x
     method group_by _ _ x = x
-    method dedup _ x = x
+    method dedup (_ : 'm) x = x
     method virtual join : _
     method private debug = false
 
@@ -353,7 +351,7 @@ class virtual ['self] abslayout_fold =
         | Some t ->
             Error.(
               create "Scalar: unexpected tuple width." (ps, t)
-                [%sexp_of: _ annot pred list * Value.t list]
+                [%sexp_of: Q.scalar list * Value.t list]
               |> raise)
         | None -> failwith "Expected a tuple."
       in
@@ -411,10 +409,11 @@ class virtual ['self] abslayout_fold =
       self#eval (Map.empty (module String)) tups q
   end
 
-class ['self] print_fold =
+class ['m] print_fold =
   let extract = Fun.id in
-  object (self : 'self)
-    inherit [_] abslayout_fold
+  object (self)
+    inherit [_, 'm] abslayout_fold
+    constraint 'm = < .. >
 
     method collection kind =
       let fold msgs (k, _, v) =

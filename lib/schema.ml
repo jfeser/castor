@@ -11,15 +11,8 @@ let pp = Fmt.Dump.list Name.pp
 let scoped s = List.map ~f:(Name.scoped s)
 let unscoped = List.map ~f:Name.unscoped
 
-let to_name = function
-  | Name n ->
-      (* NOTE: Scopes are not emitted as part of schemas. *)
-      Some (Name.copy ~scope:None n)
-  | As_pred (_, n) -> Some (Name.create n)
-  | _ -> None
-
 let to_type_open schema to_type = function
-  | As_pred (p, _) | Sum p | Min p | Max p -> to_type p
+  | Sum p | Min p | Max p -> to_type p
   | Name n -> Name.type_exn n
   | Date _ | Unop ((Year | Month | Day), _) -> date_t
   | Int _ | Row_number
@@ -51,9 +44,9 @@ let schema_open_opt schema r : (string option * _ option) list =
       to_type p
   in
   let of_preds =
-    List.map ~f:(fun p ->
+    List.map ~f:(fun (p, n) ->
         let t = Or_error.try_with (fun () -> to_type p) |> Or_error.ok in
-        (to_name p |> Option.map ~f:Name.name, t))
+        (Some n, t))
   in
   match r.node with
   | AList { l_values = r; _ }
@@ -62,7 +55,7 @@ let schema_open_opt schema r : (string option * _ option) list =
   | Dedup r
   | OrderBy { rel = r; _ } ->
       schema r
-  | Select (x, _) | GroupBy (x, _, _) -> of_preds x
+  | Select (x, _) | GroupBy (x, _, _) -> of_preds (Select_list.to_list x)
   | Join { r1; r2; _ } -> schema r1 @ schema r2
   | AOrderedIdx { oi_keys = r1; oi_values = r2; _ }
   | AHashIdx { hi_keys = r1; hi_values = r2; _ } ->
@@ -79,7 +72,7 @@ let schema_open_opt schema r : (string option * _ option) list =
       in
       schema_r1 @ schema_r2
   | AEmpty -> []
-  | AScalar e -> of_preds [ e ]
+  | AScalar e -> of_preds [ (e.s_pred, e.s_name) ]
   | ATuple (rs, (Cross | Zip)) -> List.concat_map ~f:schema rs
   | ATuple ([], Concat) -> []
   | ATuple (r :: _, Concat) -> schema r
@@ -97,11 +90,9 @@ let rec schema_opt r = schema_open_opt schema_opt r
 let schema_open schema r =
   let rec to_type p = to_type_open schema to_type p in
   let of_preds =
-    List.map ~f:(fun p ->
+    List.map ~f:(fun (p, n) ->
         let t = Or_error.try_with (fun () -> to_type p) |> Or_error.ok in
-        match to_name p with
-        | Some n -> Name.copy ~type_:t n
-        | None -> Name.create ?type_:t (Fresh.name Global.fresh "x%d"))
+        Name.create ?type_:t n)
   in
   match r.node with
   | AList { l_values = r; _ }
@@ -110,7 +101,8 @@ let schema_open schema r =
   | Dedup r
   | OrderBy { rel = r; _ } ->
       schema r |> unscoped
-  | Select (x, _) | GroupBy (x, _, _) -> of_preds x |> unscoped
+  | Select (x, _) | GroupBy (x, _, _) ->
+      Select_list.to_list x |> of_preds |> unscoped
   | Join { r1; r2; _ } -> schema r1 @ schema r2 |> unscoped
   | AOrderedIdx { oi_keys = r1; oi_values = r2; _ }
   | AHashIdx { hi_keys = r1; hi_values = r2; _ } ->
@@ -123,7 +115,7 @@ let schema_open schema r =
       in
       schema_r1 @ schema_r2 |> unscoped
   | AEmpty -> []
-  | AScalar e -> of_preds [ e ] |> unscoped
+  | AScalar e -> of_preds [ (e.s_pred, e.s_name) ] |> unscoped
   | ATuple (rs, (Cross | Zip)) -> List.concat_map ~f:schema rs |> unscoped
   | ATuple ([], Concat) -> []
   | ATuple (r :: _, Concat) -> schema r |> unscoped
@@ -154,4 +146,4 @@ let to_type q =
     |> Error.raise
 
 let to_type_opt q = Or_error.try_with (fun () -> to_type q)
-let to_select_list s = List.map s ~f:(fun n -> Name n)
+let to_select_list s = List.map s ~f:(fun n -> (Name n, Name.name n))

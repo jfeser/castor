@@ -1,6 +1,7 @@
 open Abslayout
 open Abslayout_load
 open Abslayout_fold
+module Q = Fold_query
 
 let test_conn = Test_util.test_db_conn |> Lazy.force
 
@@ -38,8 +39,10 @@ let%expect_test "" =
 
 let%expect_test "" =
   let ralgebra =
-    "depjoin(ascalar(0 as f) as k, select([k.f + g], alist(r1 as k1, \
-     ascalar(k1.g))))" |> load_string_exn test_conn
+    {|
+depjoin(ascalar(0 as f) as k, select([(k.f + g) as s], alist(r1 as k1, ascalar(k1.g))))
+|}
+    |> load_string_exn test_conn
   in
   let q = Q.of_ralgebra ralgebra in
   let r = Q.to_ralgebra q in

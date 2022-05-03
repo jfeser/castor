@@ -32,14 +32,13 @@ let create_query ?(distinct = false) ?(conds = []) ?(relations = [])
     ?(order = []) ?(group = []) ?limit select =
   { select; distinct; conds; relations; order; group; limit }
 
-let create_entry ?alias ?cast pred =
-  match (alias, Pred.to_name pred) with
-  | Some a, _ -> { pred; alias = a; cast }
-  | _, Some n ->
-      let fmt = Scanf.format_from_string (Name.to_var n ^ "_%d") "%d" in
+let create_entry ?alias ?cast pred name =
+  match alias with
+  | Some a -> { pred; alias = a; cast }
+  | None ->
+      let fmt = Scanf.format_from_string (name ^ "_%d") "%d" in
       let new_n = Fresh.name Global.fresh fmt in
       { pred; alias = new_n; cast }
-  | None, None -> { pred; alias = Fresh.name Global.fresh "x%d"; cast }
 
 let select_entry_name { alias; _ } = alias
 
@@ -56,21 +55,21 @@ let to_group = function Union_all _ -> [] | Query q -> q.group
 let to_distinct = function Union_all _ -> false | Query q -> q.distinct
 let to_limit = function Union_all _ -> None | Query q -> q.limit
 
-let preds_has_aggregates ps =
-  List.exists ps ~f:(fun p ->
+let preds_has_aggregates =
+  Iter.exists (fun p ->
       match Pred.kind p with `Agg -> true | `Window | `Scalar -> false)
 
 let select_has_aggregates s =
-  List.map s ~f:(fun { pred = p; _ } -> p) |> preds_has_aggregates
+  Iter.of_list s |> Iter.map (fun { pred = p; _ } -> p) |> preds_has_aggregates
 
 let has_aggregates sql = to_select sql |> select_has_aggregates
 
-let preds_has_windows ps =
-  List.exists ps ~f:(fun p ->
+let preds_has_windows =
+  Iter.exists (fun p ->
       match Pred.kind p with `Window -> true | `Agg | `Scalar -> false)
 
 let select_has_windows s =
-  List.map s ~f:(fun { pred = p; _ } -> p) |> preds_has_windows
+  Iter.of_list s |> Iter.map (fun { pred = p; _ } -> p) |> preds_has_windows
 
 let has_windows sql = to_select sql |> select_has_windows
 
@@ -79,7 +78,7 @@ let create_subquery ?(extra_select = []) q =
   let alias = Fresh.name Global.fresh "t%d" in
   let select_list =
     to_schema q @ extra_select
-    |> List.map ~f:(fun n -> create_entry (Name (Name.create n)))
+    |> List.map ~f:(fun n -> create_entry (Name (Name.create n)) n)
   in
   create_query ~relations:[ (`Subquery (q, alias), `Left) ] select_list
 
@@ -132,8 +131,7 @@ let order_by of_ralgebra key r =
   in
   (* Remove constant integer predicates (sql interprets these specially). *)
   let key =
-    List.filter key ~f:(fun (p, _) ->
-        match Pred.remove_as p with Int _ -> false | _ -> true)
+    List.filter key ~f:(fun (p, _) -> match p with Int _ -> false | _ -> true)
   in
   Query { spj with order = key }
 
@@ -155,7 +153,8 @@ let scoped_names ns p =
 
 let select ?groupby of_ralgebra ps r =
   let sql = of_ralgebra r in
-  let has_aggs = preds_has_aggregates ps in
+  let preds = Select_list.preds ps in
+  let has_aggs = preds_has_aggregates preds in
   let spj =
     let needs_subquery =
       (* Creating a subquery is always safe, but we want to avoid it if
@@ -165,7 +164,7 @@ let select ?groupby of_ralgebra ps r =
          aggregates.
 
          If the inner query is distinct then it must be wrapped. *)
-      has_aggs || preds_has_windows ps || to_distinct sql
+      has_aggs || preds_has_windows preds || to_distinct sql
     in
     if needs_subquery then create_subquery sql else to_spj sql
   in
@@ -176,19 +175,23 @@ let select ?groupby of_ralgebra ps r =
     (* Names that must have come from an outer scope because they are not in the
        schema of the child. *)
     let scoped =
-      List.map ps ~f:(scoped_names (schema r |> Set.of_list (module Name)))
+      List.map ps ~f:(fun (p, _) ->
+          scoped_names (schema r |> Set.of_list (module Name)) p)
       |> Set.union_list (module Name)
     in
     if has_aggs && not (Set.is_empty scoped) then
       let extra_fields =
         Set.to_list scoped
-        |> List.map ~f:(fun n -> create_entry ~alias:(Name.name n) (Name n))
+        |> List.map ~f:(fun n ->
+               create_entry ~alias:(Name.name n) (Name n) (Name.name n))
       in
       create_subquery (Query { spj with select = spj.select @ extra_fields })
     else spj
   in
   let sctx = make_ctx (schema r) spj.select in
-  let fields = List.map ps ~f:(fun p -> p |> Pred.subst sctx |> create_entry) in
+  let fields =
+    List.map ps ~f:(fun (p, n) -> create_entry (Pred.subst sctx p) n)
+  in
   let spj = { spj with select = fields } in
   let spj =
     match groupby with
@@ -230,7 +233,7 @@ let dep_join of_ralgebra q1 scope q2 =
   let sql2 = Query { (of_ralgebra q2 |> to_spj) with order = [] } in
   let sql2_names = to_schema sql2 in
   let select_list =
-    List.map sql2_names ~f:(fun n -> create_entry (Name (Name.create n)))
+    List.map sql2_names ~f:(fun n -> create_entry (Name (Name.create n)) n)
   in
   Query
     (create_query
@@ -249,14 +252,16 @@ let of_ralgebra r =
         Query
           (create_query
              ~relations:[ (`Series (p, p', alias), `Left) ]
-             [ create_entry (Name (Name.create "range")) ])
+             [ create_entry (Name (Name.create "range")) "range" ])
     | Dedup r -> Query { (to_spj (f r)) with distinct = true }
     | Relation ({ r_name = tbl; _ } as rel) ->
         let tbl_alias = tbl ^ Fresh.name Global.fresh "_%d" in
         (* Add table alias to all fields to generate a select list. *)
         let select_list =
           List.map (schema r) ~f:(fun n ->
-              create_entry (Name (Name.copy n ~scope:(Some tbl_alias))))
+              create_entry
+                (Name (Name.copy n ~scope:(Some tbl_alias)))
+                (Name.name n))
         in
         let relations = [ (`Table (rel, tbl_alias), `Left) ] in
         Query (create_query ~relations select_list)
@@ -275,19 +280,18 @@ let of_ralgebra r =
         join (schema q1) (schema q2) (f q1) (f q2) (Bool true)
     | ATuple (rs, Concat) -> Union_all (List.map ~f:(fun r -> to_spj (f r)) rs)
     | ATuple ([], _) | AEmpty -> Query (create_query ~limit:0 [])
-    | AScalar p -> Query (create_query [ create_entry p ])
+    | AScalar p -> Query (create_query [ create_entry p.s_pred p.s_name ])
     | ATuple (_, Zip) ->
         Error.(create "Unsupported." r [%sexp_of: _ annot] |> raise)
     | AList l -> f @@ dep_join' (Layout_to_depjoin.list l)
     | AHashIdx h -> f @@ dep_join' (Layout_to_depjoin.hash_idx h)
     | AOrderedIdx o -> f @@ dep_join' (Layout_to_depjoin.ordered_idx o)
   in
-  strip_meta r |> A.ensure_alias |> f
+  strip_meta r |> f
 
 let rec pred_to_sql p =
   let p2s = pred_to_sql in
   match p with
-  | As_pred (p, _) -> p2s p
   | Name n -> sprintf "%s" (Name.to_sql n)
   | Int x -> Int.to_string x
   | Fixed x -> Fixed_point.to_string x

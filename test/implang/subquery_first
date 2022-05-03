@@ -1,2 +1,2 @@
-    select([id], filter((select([min(counter)],
+select([id], filter((select([min(counter) as m],
  alist(log as l, ascalar(l.counter)))) = id, alist(log as ll, ascalar(ll.id))))

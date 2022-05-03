@@ -32,7 +32,8 @@ let rec pred_card_matters =
     selection or groupby. *)
 let select_card_matters ps =
   let open Bool_exp in
-  List.map ps ~f:pred_card_matters
+  Select_list.to_list ps
+  |> List.map ~f:(fun (p, _) -> pred_card_matters p)
   |> List.fold_left ~init:(f `Empty_select) ~f:( || )
 
 let rec explanation = function
@@ -57,16 +58,18 @@ let rec annot c r =
   in
   { node; meta }
 
+and select_list ps = Select_list.map ~f:(fun p _ -> pred p) ps
+
 and query c =
   let open Bool_exp in
   function
   | Dedup r -> Dedup (annot (f `In_dedup) r)
   | GroupBy (ps, ns, r) ->
-      GroupBy (List.map ~f:pred ps, ns, annot (select_card_matters ps) r)
+      GroupBy (select_list ps, ns, annot (select_card_matters ps) r)
   | Select (ps, r) -> (
       match A.select_kind ps with
-      | `Scalar -> Select (List.map ~f:pred ps, annot c r)
-      | `Agg -> Select (List.map ~f:pred ps, annot (select_card_matters ps) r))
+      | `Scalar -> Select (select_list ps, annot c r)
+      | `Agg -> Select (select_list ps, annot (select_card_matters ps) r))
   | AHashIdx ({ hi_keys; hi_values; hi_key_layout; hi_lookup; _ } as h) ->
       AHashIdx
         {

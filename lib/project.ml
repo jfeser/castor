@@ -1,29 +1,23 @@
 open Ast
-open Schema
 module V = Visitors
 open Collections
 module A = Abslayout
 module P = Pred.Infix
 
-let dummy_pred = As_pred (Bool false, "dummy")
-let dummy = A.scalar dummy_pred
+let dummy_select = (Bool false, "dummy")
+let dummy = A.scalar (Bool false) "dummy"
 
-let project_def refcnt p =
-  match Pred.to_name p with
+let project_def refcnt (_, n) =
+  (* Filter out definitions that are never referenced. *)
+  match Map.find refcnt @@ Name.create n with
+  | Some c -> c
   | None ->
-      (* Filter out definitions that have no name *)
-      false
-  | Some n -> (
-      (* Filter out definitions that are never referenced. *)
-      match Map.find refcnt n with
-      | Some c -> c
-      | None ->
-          (* Be conservative if refcount is missing. *)
-          true)
+      (* Be conservative if refcount is missing. *)
+      true
 
 let project_defs refcnt ps =
   let ps = List.filter ps ~f:(project_def refcnt) in
-  if List.is_empty ps then [ dummy_pred ] else ps
+  if List.is_empty ps then [ dummy_select ] else ps
 
 (** True if all fields emitted by r are unreferenced when emitted by r'. *)
 let all_unref_at r r' =
@@ -36,18 +30,21 @@ let all_unref_at r r' =
 (** True if all fields emitted by r are unreferenced. *)
 let all_unref r = all_unref_at r r
 
-let project_list project no_project project_pred
+let project_list project no_project
     { l_keys = rk; l_values = rv; l_scope = scope } =
   let rk =
-    let old_n = schema rk |> List.length in
+    let old_n = Schema.schema rk |> List.length in
     let ps =
-      project_defs rk.meta#meta#refs (schema rk |> List.map ~f:P.name)
-      |> List.map ~f:project_pred
+      Schema.schema rk |> Schema.to_select_list
+      |> project_defs rk.meta#meta#refs
     in
     let new_n = List.length ps in
     if old_n > new_n then A.select ps (no_project rk) else project rk
   in
   A.list rk scope (project rv)
+
+let project_select_list project_pred refs ps =
+  project_defs refs ps |> List.map ~f:(fun (p, n) -> (project_pred p, n))
 
 let project_open project no_project project_pred r =
   let refs = r.meta#meta#refs in
@@ -56,16 +53,16 @@ let project_open project no_project project_pred r =
   else
     match r.node with
     | Select (ps, r) ->
-        A.select (project_defs refs ps |> List.map ~f:project_pred) (project r)
+        A.select (project_select_list project_pred refs ps) (project r)
     | GroupBy (ps, ns, r) ->
-        A.group_by
-          (project_defs refs ps |> List.map ~f:project_pred)
-          ns (project r)
+        A.group_by (project_select_list project_pred refs ps) ns (project r)
     | Dedup r ->
         if card_matters then A.dedup @@ no_project r else A.dedup @@ project r
-    | AList l -> project_list project no_project project_pred l
-    | AScalar p ->
-        if project_def refs p then A.scalar (project_pred p) else dummy
+    | AList l -> project_list project no_project l
+    | AScalar s ->
+        if project_def refs (s.s_pred, s.s_name) then
+          A.scalar' { s with s_pred = project_pred s.s_pred }
+        else dummy
     | ATuple ([], _) -> A.empty
     | ATuple ([ r ], _) -> project r
     | ATuple (rs, Concat) -> A.tuple (List.map rs ~f:project) Concat
@@ -110,8 +107,8 @@ let project_pred_open project project_pred p =
 (** Apply no projection until a select is reached, under which projection resumes. *)
 let no_project_open project no_project project_pred r =
   match r.node with
-  | Select (ps, r) -> A.select (ps :> Pred.t list) (project r)
-  | AList l -> project_list no_project no_project project_pred l
+  | Select (ps, r) -> A.select (ps :> Pred.t Select_list.t) (project r)
+  | AList l -> project_list no_project no_project l
   | _ ->
       { node = V.Map.query no_project project_pred r.node; meta = object end }
 

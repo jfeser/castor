@@ -39,7 +39,6 @@ type 'r pred =
   | Null of Prim_type.t option
   | Unop of Unop.t * 'r pred
   | Binop of Binop.t * 'r pred * 'r pred
-  | As_pred of ('r pred * string)
   | Count
   | Row_number
   | Sum of 'r pred
@@ -78,24 +77,27 @@ type ('p, 'r, 's) list_ = { l_keys : 'r; l_values : 'r; l_scope : 's }
 type ('r, 's) depjoin = { d_lhs : 'r; d_alias : 's; d_rhs : 'r }
 [@@deriving compare, hash, sexp]
 
-type ('p, 'r, 's) join = { pred : 'p; r1 : 'r; r2 : 'r }
+type ('p, 'r) join = { pred : 'p; r1 : 'r; r2 : 'r }
 [@@deriving compare, hash, sexp]
 
-type ('p, 'r, 's) order_by = { key : ('p * order) list; rel : 'r }
+type ('p, 'r) order_by = { key : ('p * order) list; rel : 'r }
+[@@deriving compare, hash, sexp]
+
+type 'p scalar = { s_pred : 'p; s_name : string }
 [@@deriving compare, hash, sexp]
 
 type ('p, 'r, 's) query =
-  | Select of ('p list * 'r)
+  | Select of ('p Select_list.t * 'r)
   | Filter of ('p * 'r)
-  | Join of ('p, 'r, 's) join
+  | Join of ('p, 'r) join
   | DepJoin of ('r, 's) depjoin
-  | GroupBy of ('p list * Name.t list * 'r)
-  | OrderBy of ('p, 'r, 's) order_by
+  | GroupBy of ('p Select_list.t * Name.t list * 'r)
+  | OrderBy of ('p, 'r) order_by
   | Dedup of 'r
   | Relation of Relation.t
   | Range of ('p * 'p)
   | AEmpty
-  | AScalar of 'p
+  | AScalar of 'p scalar
   | AList of ('p, 'r, 's) list_
   | ATuple of ('r list * tuple)
   | AHashIdx of ('p, 'r, 's) hash_idx

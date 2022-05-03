@@ -1,1 +1,1 @@
-ATuple([AScalar(1), AScalar(2)], cross)
+ATuple([AScalar(1 as one), AScalar(2 as two)], cross)

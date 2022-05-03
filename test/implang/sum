@@ -1,1 +1,1 @@
-Select([sum(f), count()], AList(r1 as k, ATuple([AScalar(k.f), AScalar(k.g - k.f)], cross)))
+Select([sum(f) as s, count() as c], AList(r1 as k, ATuple([AScalar(k.f), AScalar((k.g - k.f) as d)], cross)))

@@ -165,16 +165,15 @@ module Ctx = struct
   let incr_refs s (m : t) =
     in_stage m s |> List.iter ~f:(fun { rref; _ } -> Flag.set rref)
 
-  let to_schema p =
-    Option.map (Pred.to_name p) ~f:(N.copy ~type_:(Some (Pred.to_type p)))
-
   let to_stage_map (c : t) =
     List.map (c :> row list) ~f:(fun r -> (r.rname, r.rstage))
     |> Map.of_alist_exn (module Name)
 
   (** Create a context from a selection list. *)
-  let of_defs rstage (ps : 'a annot pred list) =
-    List.filter_map ps ~f:to_schema |> of_names rstage
+  let of_select_list rstage (ps : 'a annot pred Select_list.t) =
+    Select_list.to_list ps
+    |> List.map ~f:(fun (p, n) -> N.create ~type_:(Pred.to_type p) n)
+    |> of_names rstage
 
   let refs (ctx : t) =
     List.map (ctx :> row list) ~f:(fun r -> (r.rname, Flag.bool_of r.rref))
@@ -267,9 +266,9 @@ let resolve_open resolve stage outer_ctx =
       let r, preds =
         let r, inner_ctx = rsame outer_ctx r in
         let ctx = Ctx.merge outer_ctx inner_ctx in
-        (r, List.map preds ~f:(resolve_pred stage ctx))
+        (r, Select_list.map preds ~f:(fun p _ -> resolve_pred stage ctx p))
       in
-      let ctx = Ctx.of_defs stage preds in
+      let ctx = Ctx.of_select_list stage preds in
       (Select (preds, r), ctx)
   | Filter (pred, r) ->
       let r, value_ctx = rsame outer_ctx r in
@@ -295,18 +294,20 @@ let resolve_open resolve stage outer_ctx =
   | GroupBy (aggs, key, r) ->
       let r, inner_ctx = rsame outer_ctx r in
       let ctx = Ctx.merge outer_ctx inner_ctx in
-      let aggs = List.map ~f:(resolve_pred stage ctx) aggs in
+      let aggs =
+        Select_list.map ~f:(fun p _ -> resolve_pred stage ctx p) aggs
+      in
       let key = List.map key ~f:(resolve_name ctx) in
-      let ctx = Ctx.of_defs stage aggs in
+      let ctx = Ctx.of_select_list stage aggs in
       (GroupBy (aggs, key, r), ctx)
   | Dedup r ->
       let r, inner_ctx = rsame outer_ctx r in
       (Dedup r, inner_ctx)
   | AEmpty -> (AEmpty, Ctx.of_list [])
-  | AScalar p ->
-      let p = resolve_pred stage outer_ctx p in
-      let ctx = Ctx.of_defs stage [ p ] in
-      (AScalar p, ctx)
+  | AScalar s ->
+      let p = resolve_pred stage outer_ctx s.s_pred in
+      let ctx = Ctx.of_select_list stage [ (p, s.s_name) ] in
+      (AScalar { s with s_pred = p }, ctx)
   | AList ({ l_keys = rk; l_scope = scope; l_values = rv } as l) ->
       let rk, kctx = resolve `Compile outer_ctx rk in
       let rv, vctx = rsame (Ctx.bind outer_ctx (Ctx.scoped scope kctx)) rv in

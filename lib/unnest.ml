@@ -30,7 +30,9 @@ let rec schema q =
 
 let to_base_names = List.filter_map ~f:(fun (n, _) -> n)
 let to_names x = to_base_names x |> List.map ~f:Name.create
-let to_select_list x = to_names x |> List.map ~f:P.name
+
+let to_select_list x =
+  to_names x |> List.map ~f:(fun n -> (P.name n, Name.name n))
 
 let schema_invariant q q' =
   let s = Schema.schema_opt q |> to_base_names in
@@ -56,19 +58,9 @@ let unscope n =
   | None -> n
 
 class to_lhs_visible_depjoin =
-  object (self)
+  object
     inherit [_] V.map as super
     method! visit_Name () n = Name (unscope n)
-
-    method visit_output_pred p =
-      match Pred.to_name p with
-      | None -> self#visit_pred () p
-      | Some n -> P.as_ (self#visit_pred () p) (Name.name n)
-
-    method! visit_AScalar () p = AScalar (self#visit_output_pred p)
-
-    method! visit_Select () (ps, r) =
-      Select (List.map ~f:self#visit_output_pred ps, self#visit_t () r)
 
     method! visit_DepJoin () d =
       (* Ensure that the output attributes are the same under the modified
@@ -80,15 +72,13 @@ class to_lhs_visible_depjoin =
       let d = super#visit_depjoin () d in
       let projection =
         List.map2_exn (schema d.d_rhs) old_rhs_schema ~f:(fun (n, _) (n', _) ->
-            Option.map2 n n' ~f:(fun n n' ->
-                if String.(n = n') then P.name (Name.create n)
-                else P.(as_ (name @@ Name.create n) n')))
+            Option.map2 n n' ~f:(fun n n' -> (P.name (Name.create n), n')))
         |> List.filter_map ~f:Fun.id
       in
       let renaming =
         List.map2_exn (schema d.d_lhs) old_lhs_schema ~f:(fun (n, _) (n', _) ->
             Option.map2 n n' ~f:(fun n n' ->
-                P.(as_ (name @@ Name.create n) (sprintf "%s_%s" d.d_alias n'))))
+                (P.name @@ Name.create n, sprintf "%s_%s" d.d_alias n')))
         |> List.filter_map ~f:Fun.id
       in
       Q.select projection
@@ -130,7 +120,7 @@ let to_nice_depjoin t1 t2 =
   let d =
     let attrs =
       Set.inter t2_free t1_attr |> Set.to_list
-      |> List.map ~f:(fun n -> P.name @@ Name.create n)
+      |> List.map ~f:(fun n -> (P.name @@ Name.create n, n))
     in
     C.dedup @@ C.select attrs t1
   in
@@ -151,8 +141,8 @@ let to_nice_depjoin t1 t2 =
       |> List.filter_map ~f:(fun (n, _) ->
              Option.map n ~f:(fun n ->
                  match Map.find subst n with
-                 | Some alias -> P.(as_ (name @@ Name.create n) alias)
-                 | None -> P.name @@ Name.create n))
+                 | Some alias -> (P.name @@ Name.create n, alias)
+                 | None -> (P.name @@ Name.create n, n)))
     in
     C.select select_list t1
   in
@@ -199,7 +189,7 @@ let push_join d { pred = p; r1 = t1; r2 = t2 } =
              Option.map n ~f:(fun n -> (n, Fresh.name Global.fresh "d%d")))
     in
     let rhs_select =
-      List.map d_rhs ~f:(fun (x, x') -> P.(as_ (name @@ Name.create x) x'))
+      List.map d_rhs ~f:(fun (x, x') -> (name @@ Name.create x, x'))
       @ (schema t2 |> to_select_list)
     in
 
@@ -219,8 +209,7 @@ let push_filter d (p, t2) = C.filter p (dep_join d t2)
 
 let push_groupby d (aggs, keys, q) =
   let schema = schema d in
-  let aggs = Select_list.(to_select_list schema @ aggs)
-  and keys = keys @ to_names schema in
+  let aggs = to_select_list schema @ aggs and keys = keys @ to_names schema in
   C.group_by aggs keys (dep_join d q)
 
 let push_select d (preds, q) =
@@ -228,22 +217,20 @@ let push_select d (preds, q) =
   let d_schema_names = to_names d_schema in
   let preds = to_select_list d_schema @ preds in
   match A.select_kind preds with
-  | `Scalar -> C.select (Select_list.of_list preds) (dep_join d q)
+  | `Scalar -> C.select preds (dep_join d q)
   | `Agg ->
       let preds =
-        List.map preds ~f:(fun p ->
+        Select_list.map preds ~f:(fun p n ->
             match Pred.kind p with
             | `Agg -> p
-            | `Scalar -> (
-                match Pred.to_name p with
-                | Some n ->
-                    if List.mem ~equal:[%compare.equal: Name.t] d_schema_names n
-                    then P.name n
-                    else P.as_ (Min p) (Name.name n)
-                | None -> Min p)
+            | `Scalar ->
+                let n = Name.create n in
+                if List.mem ~equal:[%compare.equal: Name.t] d_schema_names n
+                then P.name n
+                else Min p
             | `Window -> p)
       in
-      C.group_by (Select_list.of_list preds) d_schema_names (dep_join d q)
+      C.group_by preds d_schema_names (dep_join d q)
 
 (** Push a dependent join with an orderby on the rhs. Preserves the order of the
    lhs and the rhs. *)
@@ -261,12 +248,12 @@ let push_cross_tuple d qs =
   let select_list =
     (schema d.d_lhs |> to_select_list)
     @ List.map qs ~f:(fun q ->
-          match q.node with AScalar p -> p | _ -> stuck d)
+          match q.node with AScalar p -> (p.s_pred, p.s_name) | _ -> stuck d)
   in
   C.select select_list d.d_lhs
 
 let push_scalar d p =
-  let select_list = (schema d |> to_select_list) @ [ p ] in
+  let select_list = (schema d |> to_select_list) @ [ (p.s_pred, p.s_name) ] in
   C.select select_list d
 
 let push_dedup d q = C.dedup (dep_join d q)
@@ -275,8 +262,8 @@ let push_range d (lo, hi) =
   let fresh_name f = Fresh.name Global.fresh f in
   let rhs =
     C.range
-      (First (C.group_by [ P.as_ (Min lo) (fresh_name "min%d") ] [] d))
-      (First (C.group_by [ P.as_ (Max hi) (fresh_name "max%d") ] [] d))
+      (First (C.group_by [ (Min lo, fresh_name "min%d") ] [] d))
+      (First (C.group_by [ (Max hi, fresh_name "max%d") ] [] d))
   and join_pred =
     let v = Name (Name.create "range") in
     P.(lo <= v && v <= hi)
@@ -346,3 +333,10 @@ let unnest ~params q =
   check q';
   Check.resolve ~params q q';
   q'
+
+module Private = struct
+  let attrs = attrs
+  let free = free
+  let to_nice_depjoin = to_nice_depjoin
+  let to_visible_depjoin = to_visible_depjoin
+end
