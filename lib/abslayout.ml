@@ -211,8 +211,7 @@ let order_open order r =
       (* perform renaming through select *)
       List.filter_map (order r) ~f:(fun (p, d) ->
           List.find_map ps ~f:(fun (p', n) ->
-              if [%compare.equal: _ pred] p p' then
-                Some (Name (Name.create n), d)
+              if [%equal: _ pred] p p' then Some (Name (Name.create n), d)
               else None))
   | AList { l_keys = r; l_values = r'; _ } ->
       let open Name.O in

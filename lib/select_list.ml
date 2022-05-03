@@ -1,6 +1,6 @@
 open Core
 
-type 'p t = ('p * string) list [@@deriving compare, hash, sexp]
+type 'p t = ('p * string) list [@@deriving compare, equal, hash, sexp]
 
 let of_list ps =
   match

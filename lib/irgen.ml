@@ -10,7 +10,7 @@ type ir_module = {
   params : (string * Prim_type.t) list;
   buffer_len : int;
 }
-[@@deriving compare, sexp]
+[@@deriving compare, equal, sexp]
 
 type callback = Builder.t -> expr list -> unit
 

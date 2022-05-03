@@ -5,7 +5,7 @@ module T = struct
     r_name : string;
     r_schema : (Name.t * Prim_type.t) list option; [@opaque]
   }
-  [@@deriving compare, hash, sexp]
+  [@@deriving compare, equal, hash, sexp]
 end
 
 include T
@@ -21,4 +21,3 @@ let names_exn r = schema_exn r |> List.map ~f:(fun (n, _) -> n)
 
 let schema r =
   schema_exn r |> List.map ~f:(fun (n, t) -> Name.copy ~type_:(Some t) n)
-  [@@deprecated]

@@ -4,9 +4,9 @@ module T = struct
   type t = {
     scope : string option; [@sexp.option]
     name : string;
-    meta : (Univ_map.t[@sexp.opaque]); [@compare.ignore]
+    meta : (Univ_map.t[@sexp.opaque]); [@ignore]
   }
-  [@@deriving compare, hash, sexp]
+  [@@deriving compare, equal, hash, sexp]
 end
 
 include T

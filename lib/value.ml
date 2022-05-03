@@ -9,7 +9,7 @@ module T = struct
     | Bool of bool
     | Fixed of Fixed_point.t
     | Null
-  [@@deriving compare, hash, sexp, variants]
+  [@@deriving compare, equal, hash, sexp, variants]
 end
 
 include T

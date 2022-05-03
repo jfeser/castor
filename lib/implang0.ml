@@ -10,7 +10,7 @@ type unop =
   | `Not
   | `StrLen
   | `LoadBool ]
-[@@deriving compare, sexp]
+[@@deriving compare, equal, sexp]
 
 type binop =
   [ `IntAdd
@@ -39,7 +39,7 @@ type binop =
   | `AddY
   | `AddM
   | `AddD ]
-[@@deriving compare, sexp]
+[@@deriving compare, equal, sexp]
 
 let ( == ) = phys_equal
 
@@ -89,6 +89,7 @@ and func = {
 }
 [@@deriving
   compare,
+    equal,
     sexp,
     visitors { variety = "endo" },
     visitors { variety = "map" },

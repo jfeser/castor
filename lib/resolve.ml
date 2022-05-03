@@ -62,7 +62,7 @@ end
 module Ctx = struct
   module T : sig
     type row = { rname : N.t; rstage : [ `Run | `Compile ]; rref : Flag.t }
-    [@@deriving compare]
+    [@@deriving compare, equal]
 
     type t = private row list [@@deriving sexp_of]
 
@@ -74,6 +74,7 @@ module Ctx = struct
     type t = row list [@@deriving sexp_of]
 
     let compare_row r1 r2 = [%compare: N.t] r1.rname r2.rname
+    let equal_row r1 r2 = [%equal: N.t] r1.rname r2.rname
 
     let of_list l =
       let dups =
@@ -113,7 +114,7 @@ module Ctx = struct
       List.filter
         (c1 :> row list)
         ~f:(fun r ->
-          if List.mem c2 ~equal:[%compare.equal: row] r then (
+          if List.mem c2 ~equal:[%equal: row] r then (
             Log.warn (fun m -> m "Shadowing of %a." N.pp r.rname);
             false)
           else true)
@@ -160,7 +161,7 @@ module Ctx = struct
   let in_stage (c : t) s =
     List.filter
       (c :> row list)
-      ~f:(fun r -> [%compare.equal: [ `Run | `Compile ]] r.rstage s)
+      ~f:(fun r -> [%equal: [ `Run | `Compile ]] r.rstage s)
 
   let incr_refs s (m : t) =
     in_stage m s |> List.iter ~f:(fun { rref; _ } -> Flag.set rref)

@@ -1,6 +1,6 @@
 open Core
 
-type t [@@deriving compare, hash, sexp]
+type t [@@deriving compare, equal, hash, sexp]
 
 include Comparator.S with type t := t
 module O : Comparable.Infix with type t := t

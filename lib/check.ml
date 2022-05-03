@@ -6,7 +6,7 @@ open Schema
 module A = Abslayout
 module V = Visitors
 
-type tuple = Value.t list [@@deriving compare, sexp]
+type tuple = Value.t list [@@deriving compare, equal, sexp]
 
 let normal_order r =
   A.order_by (List.map (schema r) ~f:(fun n -> (Name n, Desc))) r
@@ -16,7 +16,7 @@ let to_err = Result.map_error ~f:Db.Async.to_error
 let compare t1 t2 =
   match (to_err t1, to_err t2) with
   | Ok t1, Ok t2 ->
-      if [%compare.equal: tuple list] t1 t2 then Ok ()
+      if [%equal: tuple list] t1 t2 then Ok ()
       else
         Or_error.error "Mismatched tuples." (t1, t2)
           [%sexp_of: tuple list * tuple list]
@@ -78,7 +78,7 @@ and query q =
       let s = schema r in
       List.iter rs ~f:(fun r' ->
           let s' = schema r' in
-          if not ([%compare.equal: Schema.t] s s') then
+          if not ([%equal: Schema.t] s s') then
             failwith
             @@ Fmt.str "Mismatched schemas in concat tuple:@ %a@ %a" pp s pp s')
   | _ -> ()
@@ -94,7 +94,7 @@ let schema q q' =
   let open Schema in
   let s = schema q in
   let s' = schema q' in
-  if not ([%compare.equal: t] s s') then err "schema" q q'
+  if not ([%equal: t] s s') then err "schema" q q'
 
 let resolve ~params q q' =
   let does_resolve q = Resolve.resolve ~params q |> Result.is_ok in

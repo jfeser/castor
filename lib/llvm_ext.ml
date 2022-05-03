@@ -29,7 +29,7 @@ module TypeKind = struct
     | Metadata
     | X86_mmx
     | Token
-  [@@deriving compare, sexp]
+  [@@deriving compare, equal, sexp]
 end
 
 let sexp_of_llvalue v = Sexp.Atom (string_of_llvalue v)
@@ -74,7 +74,7 @@ let build_extractvalue v i n b =
          valid. *)
   let typ = type_of v in
   let kind = classify_type typ in
-  if [%compare.equal: TypeKind.t] kind Struct then (
+  if [%equal: TypeKind.t] kind Struct then (
     if i >= Array.length (struct_element_types typ) then
       Error.create "Tuple index out of bounds." (v, i) [%sexp_of: llvalue * int]
       |> Error.raise)

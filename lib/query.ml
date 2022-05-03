@@ -70,7 +70,7 @@ let of_many conn qs =
     let s = Schema.schema r in
     List.map all_attrs ~f:(fun (n, t) ->
         let nn = Name.create n in
-        if List.mem s nn ~equal:[%compare.equal: Name.t] then (Name nn, n)
+        if List.mem s nn ~equal:[%equal: Name.t] then (Name nn, n)
         else
           let dummy =
             match t with

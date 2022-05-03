@@ -7,7 +7,7 @@ type t =
   | BoolT of { nullable : bool }
   | TupleT of t list
   | VoidT
-[@@deriving compare, hash, sexp]
+[@@deriving compare, equal, hash, sexp]
 
 val pp : Format.formatter -> t -> unit
 val null_t : t

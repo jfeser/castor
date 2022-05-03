@@ -5,7 +5,7 @@ module Binop = Ast.Binop
 module Unop = Ast.Unop
 
 module T = struct
-  type t = Ast.t Ast.pred [@@deriving compare, hash, sexp_of]
+  type t = Ast.t Ast.pred [@@deriving compare, equal, hash, sexp_of]
 
   let t_of_sexp _ = assert false
 end
@@ -352,8 +352,7 @@ let cse ?(min_uses = 3) p =
 
   let subst p p_k p_v =
     let rec subst p =
-      if [%compare.equal: t] p p_k then p_v
-      else Visitors.Map.pred Fun.id subst p
+      if [%equal: t] p p_k then p_v else Visitors.Map.pred Fun.id subst p
     in
     subst p
   in
@@ -367,5 +366,4 @@ let cse ?(min_uses = 3) p =
          let name = Name.create @@ Fresh.name Global.fresh "x%d" in
 
          let p_new = subst p_old p_k (Name name) in
-         if [%compare.equal: t] p_new p_old then acc
-         else (p_new, (name, p_k) :: m))
+         if [%equal: t] p_new p_old then acc else (p_new, (name, p_k) :: m))

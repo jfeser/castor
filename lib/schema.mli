@@ -1,6 +1,6 @@
 open Ast
 
-type t = Name.t list [@@deriving compare, sexp]
+type t = Name.t list [@@deriving compare, equal, sexp]
 
 type opt_t = (string option * Prim_type.t option) list
 [@@deriving compare, sexp]

@@ -17,17 +17,17 @@ module Binop = struct
     | Div
     | Mod
     | Strpos
-  [@@deriving compare, hash, sexp]
+  [@@deriving compare, equal, hash, sexp]
 end
 
 module Unop = struct
   type t = Not | Day | Month | Year | Strlen | ExtractY | ExtractM | ExtractD
-  [@@deriving compare, hash, sexp]
+  [@@deriving compare, equal, hash, sexp]
 end
 
-type scope = string [@@deriving compare, hash, sexp]
-type tuple = Cross | Zip | Concat [@@deriving compare, hash, sexp]
-type order = Asc | Desc [@@deriving compare, hash, sexp]
+type scope = string [@@deriving compare, equal, hash, sexp]
+type tuple = Cross | Zip | Concat [@@deriving compare, equal, hash, sexp]
+type order = Asc | Desc [@@deriving compare, equal, hash, sexp]
 
 type 'r pred =
   | Name of Name.t
@@ -49,7 +49,7 @@ type 'r pred =
   | First of 'r
   | Exists of 'r
   | Substring of 'r pred * 'r pred * 'r pred
-[@@deriving compare, hash, sexp, variants]
+[@@deriving compare, equal, hash, sexp, variants]
 
 type ('p, 'r) hash_idx = {
   hi_keys : 'r;
@@ -58,9 +58,9 @@ type ('p, 'r) hash_idx = {
   hi_key_layout : 'r option; [@sexp.option]
   hi_lookup : 'p list;
 }
-[@@deriving compare, hash, sexp]
+[@@deriving compare, equal, hash, sexp]
 
-type 'p bound = 'p * [ `Open | `Closed ] [@@deriving compare, hash, sexp]
+type 'p bound = 'p * [ `Open | `Closed ] [@@deriving compare, equal, hash, sexp]
 
 type ('p, 'r) ordered_idx = {
   oi_keys : 'r;
@@ -69,22 +69,22 @@ type ('p, 'r) ordered_idx = {
   oi_key_layout : 'r option; [@sexp.option]
   oi_lookup : ('p bound option * 'p bound option) list;
 }
-[@@deriving compare, hash, sexp]
+[@@deriving compare, equal, hash, sexp]
 
 type ('p, 'r) list_ = { l_keys : 'r; l_values : 'r; l_scope : scope }
-[@@deriving compare, hash, sexp]
+[@@deriving compare, equal, hash, sexp]
 
 type 'r depjoin = { d_lhs : 'r; d_alias : scope; d_rhs : 'r }
-[@@deriving compare, hash, sexp]
+[@@deriving compare, equal, hash, sexp]
 
 type ('p, 'r) join = { pred : 'p; r1 : 'r; r2 : 'r }
-[@@deriving compare, hash, sexp]
+[@@deriving compare, equal, hash, sexp]
 
 type ('p, 'r) order_by = { key : ('p * order) list; rel : 'r }
-[@@deriving compare, hash, sexp]
+[@@deriving compare, equal, hash, sexp]
 
 type 'p scalar = { s_pred : 'p; s_name : string }
-[@@deriving compare, hash, sexp]
+[@@deriving compare, equal, hash, sexp]
 
 type ('p, 'r) query =
   | Select of ('p Select_list.t * 'r)
@@ -102,14 +102,14 @@ type ('p, 'r) query =
   | ATuple of ('r list * tuple)
   | AHashIdx of ('p, 'r) hash_idx
   | AOrderedIdx of ('p, 'r) ordered_idx
-[@@deriving compare, hash, sexp, variants]
+[@@deriving compare, equal, hash, sexp, variants]
 
 type 'm annot = { node : ('m annot pred, 'm annot) query; meta : 'm }
-[@@deriving compare, hash, sexp]
+[@@deriving compare, equal, hash, sexp]
 
 module T = struct
-  type t = (meta[@compare.ignore] [@sexp.opaque]) annot
-  [@@deriving compare, hash, sexp]
+  type t = (meta[@ignore] [@sexp.opaque]) annot
+  [@@deriving compare, equal, hash, sexp]
 end
 
 include T

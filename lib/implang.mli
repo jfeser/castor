@@ -88,7 +88,7 @@ type func = Implang0.func = {
   ret_type : Prim_type.t;
   locals : local list;
 }
-[@@deriving compare, sexp]
+[@@deriving compare, equal, sexp]
 
 val pp_stmt : Formatter.t -> stmt -> unit
 val pp_func : Formatter.t -> func -> unit

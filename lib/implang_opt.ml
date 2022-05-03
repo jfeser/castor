@@ -26,7 +26,7 @@ let written_names func =
 
 let rec to_fixed_point opt m =
   let m' = opt m in
-  if [%compare.equal: Irgen.ir_module] m m' then m' else to_fixed_point opt m'
+  if [%equal: Irgen.ir_module] m m' then m' else to_fixed_point opt m'
 
 let prune_args m =
   let needed_args = Hashtbl.create (module String) in
@@ -105,8 +105,7 @@ let inline sl_iters func =
           | [] -> []
           | [ s ] -> [ self#visit_stmt () s ]
           | Iter { func = iter'; args; _ } :: Step { var; iter } :: ss
-            when [%compare.equal: string] iter' iter
-                 && Hashtbl.mem sl_iters iter ->
+            when [%equal: string] iter' iter && Hashtbl.mem sl_iters iter ->
               Log.debug (fun m -> m "Inlining %s into %s." iter func.name);
               let func = Hashtbl.find_exn sl_iters iter in
               (* Substitute arguments into the inlinee. *)

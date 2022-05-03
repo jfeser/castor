@@ -25,7 +25,7 @@ let%expect_test "" =
 
 let root = []
 let length = List.length
-let is_prefix = List.is_prefix ~equal:[%compare.equal: int]
+let is_prefix = List.is_prefix ~equal:[%equal: int]
 
 let rec set_exn p r s =
   match (p, r.node) with

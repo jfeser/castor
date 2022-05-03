@@ -1,4 +1,4 @@
-type 'p t = ('p * string) list [@@deriving compare, hash, sexp]
+type 'p t = ('p * string) list [@@deriving compare, equal, hash, sexp]
 
 val of_list : ('p * string) list -> 'p t Core.Or_error.t
 val of_list_exn : ('p * string) list -> 'p t

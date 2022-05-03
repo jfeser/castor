@@ -126,6 +126,6 @@ let project ~params ?(max_iters = 100) r =
     if ct >= max_iters then r
     else
       let r' = Resolve.resolve_exn r ~params |> project_once ~params in
-      if [%compare.equal: _ annot] r r' then r' else loop (ct + 1) r'
+      if [%equal: _ annot] r r' then r' else loop (ct + 1) r'
   in
   loop 0 (strip_meta r)

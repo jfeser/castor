@@ -37,7 +37,7 @@ let to_select_list x =
 let schema_invariant q q' =
   let s = Schema.schema_opt q |> to_base_names in
   let s' = schema q' |> to_base_names in
-  if [%compare.equal: string list] s s' then ()
+  if [%equal: string list] s s' then ()
   else
     Error.create "Schema mismatch" (s, s', q, q')
       [%sexp_of: string list * string list * _ annot * _ annot]
@@ -225,8 +225,8 @@ let push_select d (preds, q) =
             | `Agg -> p
             | `Scalar ->
                 let n = Name.create n in
-                if List.mem ~equal:[%compare.equal: Name.t] d_schema_names n
-                then P.name n
+                if List.mem ~equal:[%equal: Name.t] d_schema_names n then
+                  P.name n
                 else Min p
             | `Window -> p)
       in

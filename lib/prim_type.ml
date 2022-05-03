@@ -9,7 +9,7 @@ type t =
   | BoolT of { nullable : bool [@sexp.bool] }
   | TupleT of t list [@sexp.list]
   | VoidT
-[@@deriving compare, hash, sexp]
+[@@deriving compare, equal, hash, sexp]
 
 let null_t = NullT
 let int_t = IntT { nullable = false }

@@ -960,7 +960,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       | Pointer ->
           let elem_t = element_type t in
           let elem_t =
-            if [%compare.equal: TypeKind.t] (classify_type elem_t) Array then
+            if [%equal: TypeKind.t] (classify_type elem_t) Array then
               element_type elem_t
             else elem_t
           in
@@ -981,7 +981,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
       match classify_type t with
       | Pointer ->
           let elem_t = element_type t in
-          if [%compare.equal: TypeKind.t] (classify_type elem_t) Function then
+          if [%equal: TypeKind.t] (classify_type elem_t) Function then
             let t = elem_t in
             fprintf fmt "%a %s(%a);@," pp_type (return_type t) n pp_params
               (param_types t)

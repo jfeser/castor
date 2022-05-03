@@ -7,16 +7,16 @@ type t =
   | Log of t
   | Prod of t * t
   | Sum of t * t
-[@@deriving compare, sexp]
+[@@deriving compare, equal, sexp]
 
 let ( + ) x y =
   match (x, y) with
   | Const, z | z, Const -> z
-  | _ -> if [%compare.equal: t] x y then x else Sum (x, y)
+  | _ -> if [%equal: t] x y then x else Sum (x, y)
 
 let ( * ) x y =
   match (x, y) with
   | Const, z | z, Const -> z
-  | _ -> if [%compare.equal: t] x y then Poly (x, 2) else Prod (x, y)
+  | _ -> if [%equal: t] x y then Poly (x, 2) else Prod (x, y)
 
 let sum xs = List.fold_left xs ~init:Const ~f:( + )

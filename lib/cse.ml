@@ -8,7 +8,7 @@ type 'a t = { views : (string * 'a annot) list; main : 'a annot }
 let subst r ~pat ~with_ =
   let success = ref false in
   let rec annot r =
-    if [%compare.equal: _ annot] r pat then (
+    if [%equal: _ annot] r pat then (
       success := true;
       with_)
     else V.Map.annot query r

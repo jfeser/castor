@@ -2,7 +2,7 @@ open Core
 open Ast
 open Prim_type
 
-type t = Name.t list [@@deriving compare, sexp]
+type t = Name.t list [@@deriving compare, equal, sexp]
 
 type opt_t = (string option * Prim_type.t option) list
 [@@deriving compare, sexp]
@@ -109,9 +109,7 @@ let schema_open schema r =
       let schema_r2 = schema r2 in
       let schema_r1 =
         List.filter (schema r1) ~f:(fun n ->
-            not
-              (List.mem ~equal:[%compare.equal: Name.t] schema_r2
-              @@ Name.unscoped n))
+            not (List.mem ~equal:[%equal: Name.t] schema_r2 @@ Name.unscoped n))
       in
       schema_r1 @ schema_r2 |> unscoped
   | AEmpty -> []

@@ -38,7 +38,7 @@ let closure eq =
   |> List.concat_map ~f:(fun (n, k) ->
          Map.to_alist keys
          |> List.concat_map ~f:(fun (n', k') ->
-                if [%compare.equal: Name.t] n n' then []
+                if [%equal: Name.t] n n' then []
                 else if Union_find.same_class k k' then [ (n, n'); (n', n) ]
                 else []))
   |> Set.of_list (module Eq)

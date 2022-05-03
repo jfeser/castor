@@ -131,7 +131,7 @@ module Data = struct
     r
 
   let to_stream { fn; ralgebra } r =
-    if not ([%compare.equal: Ast.t] ralgebra (strip_meta r)) then
+    if not ([%equal: Ast.t] ralgebra (strip_meta r)) then
       failwith @@ Fmt.str "Mismatched algebras: %a@ %a@." A.pp ralgebra A.pp r
     else
       (* Replace the ralgebra queries at the leaves of the fold query with their
@@ -272,8 +272,7 @@ class virtual ['a, 'm] abslayout_fold =
           (* Split each tuple into lhs and rhs. *)
           |> Seq.map ~f:(fun t -> (extract_lhs t, extract_rhs t))
           (* Group by lhs *)
-          |> group_by (fun (t1, _) (t2, _) ->
-                 [%compare.equal: Value.t list] t1 t2)
+          |> group_by (fun (t1, _) (t2, _) -> [%equal: Value.t list] t1 t2)
           (* Split each group into one lhs and many rhs. *)
           |> Seq.map ~f:(fun g ->
                  let lhs = List.hd_exn g |> Tuple.T2.get1
@@ -294,7 +293,7 @@ class virtual ['a, 'm] abslayout_fold =
                  (ct, lhs, rhs))
           (* Group by lhs *)
           |> group_by (fun (_, t1, _) (_, t2, _) ->
-                 [%compare.equal: Value.t list] t1 t2)
+                 [%equal: Value.t list] t1 t2)
           |> Seq.concat_map ~f:(fun g ->
                  (* Split each group into one lhs and many rhs. *)
                  let count = List.hd_exn g |> Tuple.T3.get1

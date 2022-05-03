@@ -15,7 +15,7 @@ type ir_module = {
   params : (string * Prim_type.t) list;
   buffer_len : int;
 }
-[@@deriving compare, sexp]
+[@@deriving compare, equal, sexp]
 
 exception IRGenError of Error.t
 
