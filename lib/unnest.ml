@@ -301,8 +301,6 @@ let rec push_depjoin r =
 
 and push_depjoin_pred p = V.Map.pred push_depjoin push_depjoin_pred p
 
-let hoist_meta r = V.map_meta (fun m -> m#meta) r
-
 let unnest ~params q =
   let check q' =
     schema_invariant q q';
@@ -327,7 +325,7 @@ let unnest ~params q =
 
              method why_card_matters = m#why_card_matters
            end)
-    |> Join_elim.remove_joins |> hoist_meta
+    |> Join_elim.remove_joins |> A.hoist_meta
   in
   check q';
   Check.resolve ~params q q';

@@ -325,3 +325,5 @@ let h_key_layout { hi_key_layout; hi_keys; _ } =
 (*       | [] -> failwith "empty schema" *)
 (*       | [ x ] -> x *)
 (*       | xs -> tuple xs Cross) *)
+
+let hoist_meta r = V.map_meta (fun m -> m#meta) r

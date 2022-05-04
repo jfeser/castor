@@ -4,7 +4,7 @@ module A = Abslayout
 open Abslayout
 module V = Visitors
 open Schema
-open Match
+open Match.Query
 module P = Pred.Infix
 include (val Log.make ~level:(Some Warning) "castor.simplify-tactic")
 module Config = Ops.Config
@@ -158,6 +158,12 @@ module Make (C : Config.S) = struct
         try_ @@ for_all elim_filter_above_join Path.(all >>? is_filter);
         try_ @@ for_all elim_dedup_above_groupby Path.(all >>? is_dedup);
       ]
+
+  let project =
+    let project r =
+      Some (r |> Resolve.resolve_exn ~params |> Project.project_once ~params)
+    in
+    of_func project ~name:"project"
 
   let unnest_and_simplify _ r =
     let simplify q = Option.value_exn (apply simplify Path.root q) in

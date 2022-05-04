@@ -86,12 +86,14 @@ type ('p, 'r) order_by = { key : ('p * order) list; rel : 'r }
 type 'p scalar = { s_pred : 'p; s_name : string }
 [@@deriving compare, equal, hash, sexp]
 
+type 'p select_list = ('p * string) list [@@deriving compare, equal, hash, sexp]
+
 type ('p, 'r) query =
-  | Select of ('p Select_list.t * 'r)
+  | Select of ('p select_list * 'r)
   | Filter of ('p * 'r)
   | Join of ('p, 'r) join
   | DepJoin of 'r depjoin
-  | GroupBy of ('p Select_list.t * Name.t list * 'r)
+  | GroupBy of ('p select_list * Name.t list * 'r)
   | OrderBy of ('p, 'r) order_by
   | Dedup of 'r
   | Relation of Relation.t

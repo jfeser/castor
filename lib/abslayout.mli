@@ -28,6 +28,7 @@ val relation : Relation.t -> t
 val empty : t
 val scalar : Pred.t -> string -> t
 val scalar' : Pred.t scalar -> t
+val scalar_name : Name.t -> t
 val list : t -> string -> t -> t
 val list' : (Pred.t, t) list_ -> t
 val tuple : t list -> tuple -> t
@@ -64,3 +65,5 @@ val annotate_key_layouts : t -> t
 
 (* val aliases : t -> Pred.t Map.M(Name).t *)
 (* val relations : t -> Set.M(Relation).t *)
+
+val hoist_meta : < meta : 'a ; .. > annot -> 'a annot
