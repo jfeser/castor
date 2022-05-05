@@ -13,6 +13,7 @@ module Eq = struct
 end
 
 type t = Set.M(Eq).t [@@deriving compare, sexp]
+type meta = < eq : t >
 
 let empty = Set.empty (module Eq)
 let ( || ) l1 l2 = Set.union l1 l2
@@ -90,37 +91,11 @@ let annotate r =
 
 let rec eqs r = closure @@ eqs_open eqs r.node
 
-let is_equiv eqs n n' =
-  let eqs = Set.to_list eqs in
-  let classes =
-    [ n; n' ] @ List.concat_map eqs ~f:(fun (n, n') -> [ n; n' ])
-    |> List.dedup_and_sort ~compare:[%compare: Name.t]
-    |> List.map ~f:(fun n -> (n, Union_find.create n))
-    |> Map.of_alist_exn (module Name)
-  in
-  List.iter eqs ~f:(fun (n, n') ->
-      Union_find.union (Map.find_exn classes n) (Map.find_exn classes n'));
-  Union_find.same_class (Map.find_exn classes n) (Map.find_exn classes n')
-
-let all_equiv eqs n =
-  let eqs = Set.to_list eqs in
-  let classes =
-    n :: List.concat_map eqs ~f:(fun (n, n') -> [ n; n' ])
-    |> List.dedup_and_sort ~compare:[%compare: Name.t]
-    |> List.map ~f:(fun n -> (n, Union_find.create n))
-    |> Map.of_alist_exn (module Name)
-  in
-  List.iter eqs ~f:(fun (n, n') ->
-      Union_find.union (Map.find_exn classes n) (Map.find_exn classes n'));
-  let c = Map.find_exn classes n in
-  Map.to_alist classes
-  |> List.filter_map ~f:(fun (n', c') ->
-         if Union_find.same_class c c' then Some n' else None)
-  |> Set.of_list (module Name)
-
 (** Two attributes are equivalent in a context if they can be substituted
    without changing the final relation. *)
 module Context = struct
+  type meta = < eqs : t >
+
   let rec annot eqs r =
     {
       node = query eqs r.node;
@@ -145,4 +120,8 @@ module Context = struct
   and pred eqs p = V.Map.pred (annot eqs) (pred eqs) p
 
   let annotate r = annot empty r
+end
+
+module Private = struct
+  let eqs = eqs
 end

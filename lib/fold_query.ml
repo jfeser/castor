@@ -4,6 +4,7 @@ module V = Visitors
 open Schema
 module A = Abslayout
 module P = Pred.Infix
+module C = Constructors.Annot
 
 [@@@warning "-17"]
 
@@ -134,14 +135,14 @@ let to_scalars rs =
 let of_list of_ralgebra q { l_keys = q1; l_scope = scope; l_values = q2 } =
   let q1 =
     let order_key = total_order_key q1 in
-    A.order_by order_key (strip_meta q1)
+    C.order_by order_key q1
   in
   for_ q (q1, scope, of_ralgebra q2, false)
 
 let of_hash_idx of_ralgebra q h =
   let q1 =
     let order_key = total_order_key h.hi_keys in
-    A.order_by order_key @@ A.dedup @@ strip_meta h.hi_keys
+    C.order_by order_key (C.dedup h.hi_keys)
   in
   for_ q (q1, h.hi_scope, of_ralgebra h.hi_values, true)
 
@@ -149,13 +150,12 @@ let of_ordered_idx of_ralgebra q
     { oi_keys = q1; oi_values = q2; oi_scope = scope; _ } =
   let q1 =
     let order_key = total_order_key q1 in
-    A.order_by order_key @@ A.dedup @@ strip_meta q1
+    C.order_by order_key (C.dedup q1)
   in
   for_ q (q1, scope, of_ralgebra q2, true)
 
 (** Convert a query to the simplified fold query AST. *)
-let rec of_ralgebra : 'a. (< .. > as 'a) annot -> (< > annot, 'a annot) t =
- fun q ->
+let rec of_ralgebra q =
   match q.Ast.node with
   | AList x -> of_list of_ralgebra q x
   | AHashIdx h -> of_hash_idx of_ralgebra q h

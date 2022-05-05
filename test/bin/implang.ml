@@ -6,6 +6,7 @@ let run_test ?(params = []) ?implang ?type_ ?opt () =
   let conn = Lazy.force test_db_conn in
   let layout =
     load_stdin_nostrip_exn params conn
+    |> Equiv.annotate
     |> Abslayout_fold.Data.annotate conn
     |> Type.annotate
   in
@@ -17,7 +18,7 @@ let run_test ?(params = []) ?implang ?type_ ?opt () =
         object
           method pos = m#pos
           method type_ = m#type_
-          method resolved = m#meta#meta#meta#resolved
+          method resolved = m#meta#meta#meta#meta#resolved
         end)
       layout
   in

@@ -9,6 +9,7 @@ type 'a meta =
   < type_ : Type.t
   ; pos : int option
   ; fold_stream : Abslayout_fold.Data.t
+  ; eq : Set.M(Equiv.Eq).t
   ; meta : 'a >
 
 let int_of_string bs =
@@ -492,6 +493,7 @@ let set_pos (r : _ annot) (pos : int) =
       object
         method fold_stream = r.meta#fold_stream
         method type_ = r.meta#type_
+        method eq = r.meta#eq
 
         method pos =
           match r.meta#pos with
@@ -509,6 +511,7 @@ let serialize ?layout_file fn l =
         object
           method fold_stream = t#fold_stream
           method type_ = t#type_
+          method eq = t#eq
           method pos = None
           method meta = t
         end)

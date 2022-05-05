@@ -1,3 +1,4 @@
+open Core
 open Ast
 
 module type S = sig
@@ -12,6 +13,7 @@ module type S = sig
     < fold_stream : Abslayout_fold.Data.t
     ; type_ : Type.t
     ; resolved : Resolve.resolved
+    ; eq : Set.M(Equiv.Eq).t
     ; .. >
     annot ->
     string * string

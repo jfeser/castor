@@ -61,7 +61,9 @@ let main ~debug ~gprof ~params ~code_only ~query ~enable_redshift_dates
   in
 
   (* Attach the streams needed for folding over the ast. *)
-  let ralgebra = Abslayout_fold.Data.annotate ?dir:out_dir conn ralgebra in
+  let ralgebra =
+    Abslayout_fold.Data.annotate ?dir:out_dir conn @@ Equiv.annotate ralgebra
+  in
 
   (* Annotate with types. *)
   let ralgebra = Type.annotate ralgebra in
@@ -71,8 +73,9 @@ let main ~debug ~gprof ~params ~code_only ~query ~enable_redshift_dates
       (fun m ->
         object
           method fold_stream = m#fold_stream
-          method resolved = m#meta#meta#resolved
+          method resolved = m#meta#meta#meta#resolved
           method type_ = m#type_
+          method eq = m#meta#meta#eq
         end)
       ralgebra
   in

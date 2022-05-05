@@ -11,7 +11,7 @@ let default_meta =
   end
 
 module Q = Constructors.Query
-module C = (val Constructors.Annot.with_strip_meta (fun () -> default_meta))
+module C = (val Constructors.Annot_default.with_meta default_meta)
 
 (** In this module, we assume that dep_join returns attributes from both its lhs
    and rhs. This assumption is safe because we first wrap depjoins in selects
@@ -235,7 +235,10 @@ let push_select d (preds, q) =
 (** Push a dependent join with an orderby on the rhs. Preserves the order of the
    lhs and the rhs. *)
 let push_orderby d { key; rel } =
-  let d_order = A.order_of d |> List.map ~f:(fun (p, o) -> (C.pred p, o)) in
+  let d_order =
+    A.order_of (Equiv.annotate d)
+    |> List.map ~f:(fun (p, o) -> (A.hoist_meta_pred p, o))
+  in
   C.order_by (d_order @ key) (dep_join d rel)
 
 let push_concat_tuple d qs = C.tuple (List.map qs ~f:(dep_join d)) Concat

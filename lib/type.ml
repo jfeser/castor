@@ -381,6 +381,7 @@ let annotate r =
           method fold_stream = m#fold_stream
           method type_ = Option.value_exn type_
           method set_type t = type_ <- Some t
+          method eq = m#eq
           method meta = m
         end)
       r
@@ -398,6 +399,7 @@ let annotate r =
       object
         method type_ = m#type_
         method fold_stream = m#fold_stream
+        method eq = m#eq
         method meta = m#meta
       end)
     r

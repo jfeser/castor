@@ -4,13 +4,14 @@ open Ast
 module Data : sig
   type t
 
-  val of_ralgebra : ?dir:scope -> Db.t -> < .. > annot -> t
+  val of_ralgebra : ?dir:scope -> Db.t -> < Equiv.meta ; .. > annot -> t
 
   val annotate :
     ?dir:scope ->
     Db.t ->
-    'a annot ->
-    < fold_stream : t ; meta : 'a ; set_fold_stream : t -> unit > annot
+    (< Equiv.meta ; .. > as 'm) annot ->
+    < Equiv.meta ; fold_stream : t ; set_fold_stream : t -> unit ; meta : 'm >
+    annot
 end
 
 module Fold : sig
@@ -28,7 +29,7 @@ end
 
 class virtual ['a, 'm] abslayout_fold :
   object
-    constraint 'm = < .. >
+    constraint 'm = < Equiv.meta ; .. >
     (** metadata *)
 
     constraint 'r = 'm annot
@@ -59,7 +60,7 @@ class virtual ['a, 'm] abslayout_fold :
 
 class ['m] print_fold :
   object
-    constraint 'm = < .. >
+    constraint 'm = < Equiv.meta ; .. >
     (** metadata *)
 
     constraint 'r = 'm annot

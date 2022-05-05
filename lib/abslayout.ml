@@ -232,10 +232,6 @@ let order_open order r =
 
 let rec order_of r = order_open order_of r
 
-let order_of r =
-  let r = Equiv.annotate r in
-  (order_of r :> (< > annot pred * order) list)
-
 let annotate_key_layouts r =
   let key_layout schema =
     match List.map schema ~f:(fun n -> scalar_name n) with
@@ -326,4 +322,8 @@ let h_key_layout { hi_key_layout; hi_keys; _ } =
 (*       | [ x ] -> x *)
 (*       | xs -> tuple xs Cross) *)
 
-let hoist_meta r = V.map_meta (fun m -> m#meta) r
+let rec hoist_meta { node; meta } =
+  { node = hoist_meta_query node; meta = meta#meta }
+
+and hoist_meta_query q = V.Map.query hoist_meta hoist_meta_pred q
+and hoist_meta_pred p = V.Map.pred hoist_meta hoist_meta_pred p

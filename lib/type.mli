@@ -70,11 +70,19 @@ val oi_ptr_size : t -> ordered_idx -> int
 (** Size of pointers (in bytes) in ordered indexes. *)
 
 val least_general_of_primtype : Prim_type.t -> t
-val type_of : < fold_stream : Abslayout_fold.Data.t ; .. > annot -> t
+
+val type_of :
+  < fold_stream : Abslayout_fold.Data.t ; eq : Set.M(Equiv.Eq).t ; .. > annot ->
+  t
 
 val annotate :
-  (< fold_stream : Abslayout_fold.Data.t ; .. > as 'a) annot ->
-  < fold_stream : Abslayout_fold.Data.t ; meta : 'a ; type_ : t > annot
+  (< fold_stream : Abslayout_fold.Data.t ; eq : Set.M(Equiv.Eq).t ; .. > as 'a)
+  annot ->
+  < fold_stream : Abslayout_fold.Data.t
+  ; eq : Set.M(Equiv.Eq).t
+  ; type_ : t
+  ; meta : 'a >
+  annot
 
 module Parallel : sig
   type error = [ `Db_error of Db.Async.error ]

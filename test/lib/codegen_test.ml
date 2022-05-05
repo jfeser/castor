@@ -38,13 +38,15 @@ let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
         |> Set.of_list (module Name)
       in
       load_string_nostrip_exn conn ~params layout_str
+      |> Equiv.annotate
       |> Abslayout_fold.Data.annotate conn
       |> Type.annotate
       |> V.map_meta (fun m ->
              object
                method fold_stream = m#fold_stream
-               method resolved = m#meta#meta#resolved
+               method resolved = m#meta#meta#meta#resolved
                method type_ = m#type_
+               method eq = m#meta#meta#eq
              end)
     in
 

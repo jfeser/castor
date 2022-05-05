@@ -19,6 +19,7 @@ let run_test ?(params = []) layout_str =
       |> Set.of_list (module Name)
     in
     load_string_exn ~params conn layout_str
+    |> Equiv.annotate
     |> Abslayout_fold.Data.annotate conn
     |> Type.annotate
   in

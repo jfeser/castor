@@ -4,12 +4,16 @@ type 'a meta =
   < type_ : Type.t
   ; pos : int option
   ; fold_stream : Abslayout_fold.Data.t
+  ; Equiv.meta
   ; meta : 'a >
 
 val serialize :
   ?layout_file:string ->
   string ->
-  (< fold_stream : Abslayout_fold.Data.t ; type_ : Type.t ; .. > as 'a) annot ->
+  (< fold_stream : Abslayout_fold.Data.t ; type_ : Type.t ; Equiv.meta ; .. >
+   as
+   'a)
+  annot ->
   'a meta annot * int
 (** Serialize a layout to a binary format.
 

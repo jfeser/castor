@@ -113,6 +113,7 @@ module Data = struct
             val mutable fold_stream = None
             method fold_stream = Option.value_exn fold_stream
             method set_fold_stream t = fold_stream <- Some t
+            method eq = m#eq
             method meta = m
           end)
         r
@@ -142,7 +143,7 @@ end
 
 class virtual ['a, 'm] abslayout_fold =
   object (self)
-    constraint 'm = < .. >
+    constraint 'm = < eq : Set.M(Equiv.Eq).t ; .. >
     method virtual list : _
     method virtual hash_idx : _
     method virtual ordered_idx : _
@@ -412,7 +413,7 @@ class ['m] print_fold =
   let extract = Fun.id in
   object (self)
     inherit [_, 'm] abslayout_fold
-    constraint 'm = < .. >
+    constraint 'm = < eq : Set.M(Equiv.Eq).t ; .. >
 
     method collection kind =
       let fold msgs (k, _, v) =

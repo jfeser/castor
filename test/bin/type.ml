@@ -13,7 +13,8 @@ let run_test ~params ~db ?parallel ?serial () =
 
   Option.iter serial ~f:(fun fn ->
       Out_channel.with_file fn ~f:(fun ch ->
-          Abslayout_fold.Data.annotate conn layout
+          layout |> Equiv.annotate
+          |> Abslayout_fold.Data.annotate conn
           |> Type.type_of |> [%sexp_of: Type.t] |> Sexp.output_hum ch))
 
 let spec =

@@ -15,7 +15,7 @@ let run_print_test ?params query =
           List.map ~f:(fun (n, t, _) -> Name.create ~type_:t n) p
           |> Set.of_list (module Name))
     in
-    let layout = load_string_exn ?params:sparams conn query in
+    let layout = load_string_exn ?params:sparams conn query |> Equiv.annotate in
     let stream = Data.of_ralgebra conn layout in
     (new print_fold)#run stream layout |> List.iter ~f:print_endline
   in

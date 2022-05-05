@@ -18,6 +18,10 @@ let%expect_test "" =
         "k"
         (select [ (n "g", "g") ] (filter (n "k_f" = n "f") (r "r1"))))
     |> Abslayout_load.annotate_relations conn
+    |> Visitors.map_meta (fun _ ->
+           object
+             method was_depjoin = false
+           end)
   in
 
   let d = match q.node with DepJoin d -> d | _ -> assert false in
