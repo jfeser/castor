@@ -66,10 +66,7 @@ and stmt =
   | Consume of (Prim_type.t[@opaque]) * expr
   | Loop of { cond : expr; body : prog }
   | If of { cond : expr; tcase : prog; fcase : prog }
-  | Iter of { var : string; func : string; args : expr list }
-  | Step of { var : string; iter : string }
   | Assign of { lhs : string; rhs : expr }
-  | Yield of expr
   | Return of expr
 
 and prog = stmt list

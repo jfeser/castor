@@ -73,10 +73,7 @@ type stmt = Implang0.stmt =
   | Consume of Prim_type.t * expr
   | Loop of { cond : expr; body : prog }
   | If of { cond : expr; tcase : prog; fcase : prog }
-  | Iter of { var : string; func : string; args : expr list }
-  | Step of { var : string; iter : string }
   | Assign of { lhs : string; rhs : expr }
-  | Yield of expr
   | Return of expr
 
 and prog = stmt list [@@deriving compare, sexp]
@@ -92,7 +89,6 @@ type func = Implang0.func = {
 
 val pp_stmt : Formatter.t -> stmt -> unit
 val pp_func : Formatter.t -> func -> unit
-val yield_count : func -> int
 val name_of_var : expr -> string
 val int2fl : expr -> expr
 
@@ -126,7 +122,6 @@ module Builder : sig
   val create : ctx:_ctx -> name:string -> ret:Prim_type.t -> t
   val new_scope : t -> t
   val build_arg : int -> t -> expr
-  val build_yield : expr -> t -> unit
   val build_func : t -> func
   val build_assign : expr -> expr -> t -> unit
   val build_unchecked_assign : expr -> expr -> t -> unit
@@ -134,8 +129,6 @@ module Builder : sig
   val build_consume : expr -> t -> unit
   val build_return : expr -> t -> unit
   val build_loop : expr -> (t -> unit) -> t -> unit
-  val build_iter : func -> expr list -> t -> unit
-  val build_step : expr -> func -> t -> unit
 
   val build_if :
     cond:expr -> then_:(t -> unit) -> else_:(t -> unit) -> t -> unit
@@ -150,18 +143,6 @@ module Builder : sig
   (** Create a fresh default initialized variable. *)
 
   val build_count_loop : expr -> (t -> unit) -> t -> unit
-
-  val build_foreach :
-    ?count:Abs_int.t ->
-    ?header:(expr -> t -> unit) ->
-    ?footer:(expr -> t -> unit) ->
-    ?persistent:bool ->
-    func ->
-    expr list ->
-    (expr -> t -> unit) ->
-    t ->
-    unit
-
   val build_eq : expr -> expr -> t -> expr
   val build_lt : expr -> expr -> t -> expr
   val build_le : expr -> expr -> t -> expr

@@ -37,7 +37,6 @@ module Make (Config : Config.S) () = struct
   let iters = ref []
   let schema = Schema.schema_full
   let types = Schema_types.types_full
-  let add_iter i = iters := i :: !iters
 
   let debug_print msg v b =
     let open Builder in
@@ -370,59 +369,6 @@ module Make (Config : Config.S) () = struct
     debug_print "scanning crosstuple" (Int 0) b;
     make_loops ctx [] child_layouts child_types child_starts b
 
-  let scan_ziptuple scan ctx b r t cb =
-    let open Builder in
-    let child_layouts, _ = r in
-    let child_types, _ = t in
-    let hdr = Header.make_header (TupleT t) in
-    let pstart = Ctx.find_exn ctx (Name.create "start") b in
-    let cstart = build_defn "cstart" pstart b in
-    let ctx = Ctx.bind ctx "start" Prim_type.int_t cstart in
-    let callee_ctx, callee_args = Ctx.make_callee_context ctx b in
-    (* Build iterator initializers using the computed start positions. *)
-    build_assign (Header.make_position hdr "value" pstart) cstart b;
-    let callee_funcs =
-      List.zip_exn child_layouts child_types
-      |> List.map ~f:(fun (callee_layout, callee_type) ->
-             (* Construct a pull based iterator for each column in the zip tuple.
-                This loop also initializes the iterator and computes the next start
-                position. *)
-             let b' =
-               create ~ctx:callee_ctx
-                 ~name:(Fresh.name Global.fresh "zt_%d")
-                 ~ret:(type_of_layout callee_layout)
-             in
-             scan callee_ctx b' callee_layout callee_type (fun b tup ->
-                 build_yield (Tuple tup) b);
-             let iter = build_func b' in
-             add_iter iter;
-             build_iter iter callee_args b;
-             build_assign Infix.(cstart + len cstart callee_type) cstart b;
-             iter)
-    in
-    let child_tuples =
-      List.map callee_funcs ~f:(fun f -> build_var "tup" f.ret_type b)
-    in
-    let build_body b =
-      List.iter2_exn callee_funcs child_tuples ~f:(fun f t -> build_step t f b);
-      let tup =
-        List.map2_exn child_types child_tuples ~f:(fun in_t child_tup ->
-            List.init (Type.width in_t) ~f:(fun i -> Infix.(index child_tup i)))
-        |> List.concat
-        |> fun l -> Tuple l
-      in
-      cb b (list_of_tuple tup b)
-    in
-    match Type.count (TupleT t) |> Abs_int.to_int with
-    | Some x -> build_count_loop Infix.(int x) build_body b
-    | None ->
-        build_body b;
-        let not_done =
-          List.fold_left callee_funcs ~init:(Bool true) ~f:(fun acc f ->
-              Infix.(acc && not (Done f.name)))
-        in
-        build_loop not_done build_body b
-
   let scan_concattuple scan ctx b r t cb =
     let open Builder in
     let child_layouts, _ = r in
@@ -441,8 +387,8 @@ module Make (Config : Config.S) () = struct
   let scan_tuple scan ctx b ((_, kind) as r) t (cb : callback) =
     match kind with
     | Cross -> scan_crosstuple scan ctx b r t cb
-    | Zip -> scan_ziptuple scan ctx b r t cb
     | Concat -> scan_concattuple scan ctx b r t cb
+    | Zip -> failwith "zip is unsupported"
 
   let scan_list scan ctx b { l_values = child_layout; _ } ((child_type, _) as t)
       (cb : callback) =

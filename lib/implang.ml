@@ -84,12 +84,7 @@ and pp_stmt : Format.formatter -> stmt -> unit =
     | If { cond; tcase; fcase } ->
         fprintf fmt "@[<v 4>if (@[<hov>%a@]) {@,%a@]@,}@[<v 4> else {@,%a@]@,}"
           pp_expr cond pp_prog tcase pp_prog fcase
-    | Step { var; iter } -> fprintf fmt "@[<hov>%s =@ next(%s);@]" var iter
-    | Iter { func; args; _ } ->
-        fprintf fmt "@[<hov>init %s(@[<hov>%a@]);@]" func (pp_tuple pp_expr)
-          args
     | Assign { lhs; rhs } -> fprintf fmt "@[<hov>%s =@ %a;@]" lhs pp_expr rhs
-    | Yield e -> fprintf fmt "@[<hov>yield@ %a;@]" pp_expr e
     | Return e -> fprintf fmt "@[<hov>return@ %a;@]" pp_expr e
     | Print (t, e) ->
         fprintf fmt "@[<hov>print(%a,@ %a);@]" Prim_type.pp t pp_expr e
@@ -141,9 +136,6 @@ module Infix = struct
     assert (Int.(idx >= 0));
     match tup with Tuple t -> List.nth_exn t idx | _ -> Index (tup, idx)
 end
-
-let yield_count { body; _ } =
-  List.sum (module Int) body ~f:(function Yield _ -> 1 | _ -> 0)
 
 let name_of_var = function
   | Var n -> n
@@ -380,8 +372,6 @@ module Builder = struct
     | None ->
         Error.create "Not an argument index." (i, b) [%sexp_of: int * t] |> fail
 
-  let build_yield e b = b.body := RevList.(!(b.body) ++ Yield e)
-
   let build_func { name; args; ret; locals; body; _ } =
     {
       name;
@@ -415,13 +405,6 @@ module Builder = struct
     f child_b;
     b.body :=
       RevList.(!(b.body) ++ Loop { cond = c; body = to_list !(child_b.body) })
-
-  let build_iter (f : func) a b =
-    b.body := RevList.(!(b.body) ++ Iter { func = f.name; args = a; var = "" })
-
-  let build_step var (iter : func) b =
-    b.body :=
-      RevList.(!(b.body) ++ Step { var = name_of_var var; iter = iter.name })
 
   let build_if ~cond ~then_ ~else_ b =
     let b_then = new_scope b in
@@ -465,37 +448,6 @@ module Builder = struct
         f b;
         build_assign Infix.(ctr + int 1) ctr b)
       b
-
-  let build_foreach ?count ?header ?footer ?persistent iter_ args body b =
-    let tup = build_var ?persistent "tup" iter_.ret_type b in
-    build_iter iter_ args b;
-    Option.iter header ~f:(fun f -> f tup b);
-    let add_footer b = Option.iter footer ~f:(fun f -> f tup b) in
-    match Option.bind count ~f:Abs_int.to_int with
-    | Some 0 -> add_footer b
-    | Some 1 ->
-        build_step tup iter_ b;
-        body tup b;
-        add_footer b
-    | Some x ->
-        build_count_loop
-          Infix.(int x)
-          (fun b ->
-            build_step tup iter_ b;
-            body tup b)
-          b;
-        add_footer b
-    | None ->
-        build_loop
-          Infix.(not (Done iter_.name))
-          (fun b ->
-            build_step tup iter_ b;
-            build_if
-              ~cond:Infix.(not (Done iter_.name))
-              ~then_:(fun b -> body tup b)
-              ~else_:(fun b -> add_footer b)
-              b)
-          b
 
   let rec build_eq x y b =
     let t1 = type_of x b in

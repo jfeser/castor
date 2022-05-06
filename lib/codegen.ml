@@ -781,7 +781,6 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     | Print (type_, expr) -> codegen_print fctx type_ expr
     | Consume (type_, expr) -> codegen_consume fctx type_ expr
     | Return expr -> codegen_return fctx expr
-    | Iter _ | Step _ | Yield _ -> failwith "Iterators are unsupported."
 
   and codegen_prog fctx p = List.iter ~f:(codegen_stmt fctx) p
 
