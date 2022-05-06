@@ -13,23 +13,13 @@ let read_names func =
   in
   visitor#visit_func () func
 
-let written_names func =
-  let visitor =
-    object
-      inherit [_] reduce
-      inherit [_] Util.set_monoid (module String)
-      method! visit_Assign () n _ = Set.singleton (module String) n
-    end
-  in
-  visitor#visit_func () func
-
 let rec to_fixed_point opt m =
   let m' = opt m in
   if [%equal: Irgen.ir_module] m m' then m' else to_fixed_point opt m'
 
 let prune_args m =
   let needed_args = Hashtbl.create (module String) in
-  List.iter (m.Irgen.iters @ m.Irgen.funcs) ~f:(fun f ->
+  List.iter m.Irgen.funcs ~f:(fun f ->
       let ns = read_names f in
       let args =
         List.filter_mapi f.args ~f:(fun i (n, _) ->
@@ -46,28 +36,9 @@ let prune_args m =
     { f with args = args' }
   in
   let funcs' = List.map m.funcs ~f:(fun f -> f |> prune_func) in
-  let iters' = List.map m.iters ~f:(fun f -> f |> prune_func) in
-  { m with funcs = funcs'; iters = iters' }
+  { m with funcs = funcs' }
 
 let prune_args = to_fixed_point prune_args
-
-let prune_locals m =
-  let iters' =
-    List.map m.Irgen.iters ~f:(fun f ->
-        let ns =
-          Set.union (written_names f)
-            (List.map f.args ~f:(fun (n, _) -> n) |> Set.of_list (module String))
-        in
-        let locals' =
-          List.filter f.locals ~f:(fun { lname; _ } ->
-              let should_prune = not (Set.mem ns lname) in
-              if should_prune then
-                Log.debug (fun m -> m "Dropping local %s in %s." lname f.name);
-              not should_prune)
-        in
-        { f with locals = locals' })
-  in
-  { m with iters = iters' }
 
 (* let alpha_rename_visitor  *)
 
@@ -182,5 +153,5 @@ let split_expensive_predicates f =
 let for_all_funcs ~f m = { m with Irgen.funcs = List.map m.Irgen.funcs ~f }
 
 let opt m =
-  m |> prune_args |> prune_locals |> hoist_const_exprs
+  m |> prune_args |> hoist_const_exprs
   |> for_all_funcs ~f:split_expensive_predicates

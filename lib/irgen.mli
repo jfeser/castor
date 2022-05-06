@@ -10,7 +10,6 @@ module Config : sig
 end
 
 type ir_module = {
-  iters : func list;
   funcs : func list;
   params : (string * Prim_type.t) list;
   buffer_len : int;

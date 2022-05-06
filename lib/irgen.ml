@@ -5,7 +5,6 @@ open Implang
 module A = Abslayout
 
 type ir_module = {
-  iters : func list;
   funcs : func list;
   params : (string * Prim_type.t) list;
   buffer_len : int;
@@ -34,7 +33,6 @@ module type S = sig
 end
 
 module Make (Config : Config.S) () = struct
-  let iters = ref []
   let schema = Schema.schema_full
   let types = Schema_types.types_full
 
@@ -766,16 +764,15 @@ module Make (Config : Config.S) () = struct
     let rec scan ctx b r t cb = scan_open scan of_pred ctx b r t cb
     and of_pred ctx p b = of_pred_open scan of_pred ctx p b in
     {
-      iters = !iters;
       funcs = [ printer scan ctx r type_; consumer scan ctx r type_ ];
       params;
       buffer_len = len;
     }
 
-  let pp fmt { funcs; iters; _ } =
+  let pp fmt { funcs; _ } =
     let open Caml.Format in
     pp_open_vbox fmt 0;
-    List.iter (iters @ funcs) ~f:(pp_func fmt);
+    List.iter funcs ~f:(pp_func fmt);
     pp_close_box fmt ();
     pp_print_flush fmt ()
 end
