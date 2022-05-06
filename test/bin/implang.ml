@@ -2,7 +2,6 @@ open Abslayout_load
 open Castor_test.Test_util
 
 let run_test ?(params = []) ?implang ?type_ ?opt () =
-  let (module I), (module C) = Setup.make_modules ~code_only:true () in
   let conn = Lazy.force test_db_conn in
   let layout =
     load_stdin_nostrip_exn params conn
@@ -22,15 +21,15 @@ let run_test ?(params = []) ?implang ?type_ ?opt () =
         end)
       layout
   in
-  let ir = I.irgen ~params ~len layout in
+  let ir = Irgen.irgen ~params ~len layout in
 
   Option.iter implang ~f:(fun fn ->
       Out_channel.with_file fn ~f:(fun ch ->
-          Fmt.pf (Format.formatter_of_out_channel ch) "%a" I.pp ir));
+          Fmt.pf (Format.formatter_of_out_channel ch) "%a" Irgen.pp ir));
 
   Option.iter opt ~f:(fun fn ->
       Out_channel.with_file fn ~f:(fun ch ->
-          Fmt.pf (Format.formatter_of_out_channel ch) "%a" I.pp
+          Fmt.pf (Format.formatter_of_out_channel ch) "%a" Irgen.pp
           @@ Implang_opt.opt ir));
 
   Option.iter type_ ~f:(fun fn ->

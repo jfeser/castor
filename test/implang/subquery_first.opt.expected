@@ -17,7 +17,7 @@ fun printer () : void {
         first14 = 0;
         found_tup17 = false;
         min18 = 4611686018427387903;
-        cstart19 = 0;
+        cstart19 = 5;
         i20 = 0;
         count21 = 5;
         loop (i20 < count21) {
@@ -60,7 +60,7 @@ fun consumer () : void {
         first3 = 0;
         found_tup6 = false;
         min7 = 4611686018427387903;
-        cstart8 = 0;
+        cstart8 = 5;
         i9 = 0;
         count10 = 5;
         loop (i9 < count10) {

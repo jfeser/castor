@@ -8,6 +8,7 @@ module type S = sig
   val compile :
     ?out_dir:string ->
     ?layout_log:string ->
+    ?debug:bool ->
     gprof:bool ->
     params:(string * Prim_type.t) list ->
     < fold_stream : Abslayout_fold.Data.t

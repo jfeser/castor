@@ -23,7 +23,7 @@ module Config = struct
   end
 end
 
-module Make (Config : Config.S) (IG : Irgen.S) () = struct
+module Make (Config : Config.S) () = struct
   module I = Implang
   open Config
 
@@ -1015,7 +1015,7 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
     let call = sprintf "set_%s(params, input_%s(argv, optind));" n n in
     (func, call)
 
-  let compile ?out_dir ?layout_log ~gprof ~params layout =
+  let compile ?out_dir ?layout_log ?(debug = false) ~gprof ~params layout =
     let out_dir =
       match out_dir with Some x -> x | None -> Filename_unix.temp_dir "bin" ""
     in
@@ -1050,13 +1050,13 @@ module Make (Config : Config.S) (IG : Irgen.S) () = struct
 
     (* Generate IR module. *)
     let ir_module =
-      let unopt = IG.irgen ~params ~len layout in
+      let unopt = Irgen.irgen ~debug ~params ~len layout in
       Log.info (fun m -> m "Optimizing intermediate language.");
       Implang_opt.opt unopt
     in
     Out_channel.with_file ir_fn ~f:(fun ch ->
         let fmt = Caml.Format.formatter_of_out_channel ch in
-        IG.pp fmt ir_module);
+        Irgen.pp fmt ir_module);
 
     (* Generate header. *)
     Out_channel.with_file header_fn ~f:write_header;

@@ -2,11 +2,10 @@ open Util
 open Test_util
 open Abslayout_load
 
-let run_test ?(params = []) ?(print_layout = false) ?(fork = false) ?irgen_debug
-    layout_str =
+let run_test ?(params = []) ?(print_layout = false) ?(fork = false) layout_str =
   let layout_file = Filename_unix.temp_file "layout" "txt" in
   let conn = Lazy.force test_db_conn in
-  let (module I), (module C) = Setup.make_modules ?irgen_debug () in
+  let (module C) = Setup.make_modules () in
 
   let run_compiler layout =
     let out_dir = Filename_unix.temp_dir "bin" "" in

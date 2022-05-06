@@ -3,8 +3,8 @@ open Castor
 open Collections
 open Abslayout_load
 
-let main ~debug ~gprof ~params ~code_only ~query ~enable_redshift_dates
-    ~output_layout ?db ?out_dir fn =
+let main ~debug ~gprof ~params ~query ~enable_redshift_dates ~output_layout ?db
+    ?out_dir fn =
   let open Result.Let_syntax in
   Global.enable_redshift_dates := enable_redshift_dates;
   Log.info (fun m ->
@@ -18,7 +18,6 @@ let main ~debug ~gprof ~params ~code_only ~query ~enable_redshift_dates
   let module Config = struct
     let conn = conn
     let debug = debug
-    let code_only = code_only
   end in
   let layout_file =
     if debug || output_layout then
@@ -28,8 +27,7 @@ let main ~debug ~gprof ~params ~code_only ~query ~enable_redshift_dates
       Some layout_file
     else None
   in
-  let module I = Irgen.Make (Config) () in
-  let module C = Codegen.Make (Config) (I) () in
+  let module C = Codegen.Make (Config) () in
   let open Config in
   let ch =
     match fn with Some fn -> In_channel.create fn | None -> In_channel.stdin
@@ -98,7 +96,6 @@ let spec =
     and params =
       flag "param" ~aliases:[ "p" ] (listed Util.param)
         ~doc:"NAME:TYPE query parameters"
-    and code_only = flag "code-only" no_arg ~doc:"only emit code"
     and query =
       flag "query" ~aliases:[ "r" ] no_arg ~doc:"parse input as a query"
     and db = flag "db" (optional string) ~doc:" database url"
@@ -106,7 +103,7 @@ let spec =
       flag "output-layout" no_arg ~doc:" output layout description"
     and fn = anon (maybe ("query" %: string)) in
     fun () ->
-      main ~debug ~gprof ~params ~code_only ~query ~enable_redshift_dates
-        ?out_dir ?db ~output_layout fn]
+      main ~debug ~gprof ~params ~query ~enable_redshift_dates ?out_dir ?db
+        ~output_layout fn]
 
 let () = Command.basic spec ~summary:"Compile a query." |> Command_unix.run

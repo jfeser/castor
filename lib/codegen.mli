@@ -6,4 +6,4 @@ end
 
 module type S = Codegen_intf.S
 
-module Make (Config : Config.S) (IG : Irgen.S) () : S
+module Make (Config : Config.S) () : S
