@@ -20,6 +20,7 @@ module Infix = struct
   open Ast.Binop
 
   let name = name
+  let name_s n = name (Name.create n)
   let int = int
   let fixed = fixed
   let date = date

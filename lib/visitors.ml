@@ -63,13 +63,18 @@ and ('p, 'r) order_by = ('p, 'r) Ast.order_by = {
 
 and 'p scalar = 'p Ast.scalar = { s_pred : 'p; s_name : string }
 
+and 'p scan_type = 'p Ast.scan_type = {
+  select : 'p select_list;
+  filter : 'p list;
+  tables : (Relation.t[@opaque]) list;
+}
+
 and ('p, 'r) query = ('p, 'r) Ast.query =
-  | Select of (('p Select_list.t[@name "select_list"]) * 'r)
+  | Select of ('p select_list * 'r)
   | Filter of ('p * 'r)
   | Join of ('p, 'r) join
   | DepJoin of 'r depjoin
-  | GroupBy of
-      (('p Select_list.t[@name "select_list"]) * (Name.t[@opaque]) list * 'r)
+  | GroupBy of ('p select_list * (Name.t[@opaque]) list * 'r)
   | OrderBy of ('p, 'r) order_by
   | Dedup of 'r
   | Relation of (Relation.t[@opaque])
@@ -80,6 +85,7 @@ and ('p, 'r) query = ('p, 'r) Ast.query =
   | ATuple of ('r list * (Ast.tuple[@opaque]))
   | AHashIdx of ('p, 'r) hash_idx
   | AOrderedIdx of ('p, 'r) ordered_idx
+  | Call of 'p scan_type * string
 
 and 'm annot = 'm Ast.annot = {
   node : ('m annot pred, 'm annot) query;
@@ -163,6 +169,7 @@ module Map = struct
     | ATuple (qs, t) -> ATuple (List.map qs ~f:annot, t)
     | AHashIdx h -> AHashIdx (hash_idx annot pred h)
     | AOrderedIdx o -> AOrderedIdx (ordered_idx annot pred o)
+    | _ -> failwith "unsupported"
 end
 
 let rec map_meta f { node; meta } =
@@ -216,6 +223,7 @@ module Reduce = struct
               option zero (fun (p, _) -> pred p) b
               + option zero (fun (p, _) -> pred p) b')
             oi_lookup
+    | _ -> failwith "unsupported"
 
   let annot _zero ( + ) query meta { node; meta = m } = query node + meta m
 end
@@ -302,6 +310,7 @@ module Iter = struct
             Option.iter ~f:(fun (p, _) -> pred p) b;
             Option.iter ~f:(fun (p, _) -> pred p) b')
           oi_lookup
+    | _ -> failwith "unsupported"
 
   let annot query meta { node; meta = m } =
     query node;

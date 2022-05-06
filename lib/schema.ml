@@ -84,6 +84,7 @@ let schema_open_opt schema r : (string option * _ option) list =
         try Some (Prim_type.unify (to_type p) (to_type p')) with _ -> None
       in
       [ (Some "range", t) ]
+  | _ -> failwith "unsupported"
 
 let rec schema_opt r = schema_open_opt schema_opt r
 
@@ -123,6 +124,7 @@ let schema_open schema r =
         try Some (Prim_type.unify (to_type p) (to_type p')) with _ -> None
       in
       [ Name.create ?type_:t "range" ]
+  | _ -> failwith "unsupported"
 
 let schema_open_full schema r =
   match r.node with

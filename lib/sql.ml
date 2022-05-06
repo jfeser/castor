@@ -286,6 +286,7 @@ let of_ralgebra r =
     | AList l -> f @@ dep_join' (Layout_to_depjoin.list l)
     | AHashIdx h -> f @@ dep_join' (Layout_to_depjoin.hash_idx h)
     | AOrderedIdx o -> f @@ dep_join' (Layout_to_depjoin.ordered_idx o)
+    | _ -> failwith "unsupported"
   in
   strip_meta r |> f
 

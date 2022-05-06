@@ -88,6 +88,13 @@ type 'p scalar = { s_pred : 'p; s_name : string }
 
 type 'p select_list = ('p * string) list [@@deriving compare, equal, hash, sexp]
 
+type 'p scan_type = {
+  select : 'p select_list;
+  filter : 'p list;
+  tables : Relation.t list;
+}
+[@@deriving compare, equal, hash, sexp]
+
 type ('p, 'r) query =
   | Select of ('p select_list * 'r)
   | Filter of ('p * 'r)
@@ -104,6 +111,7 @@ type ('p, 'r) query =
   | ATuple of ('r list * tuple)
   | AHashIdx of ('p, 'r) hash_idx
   | AOrderedIdx of ('p, 'r) ordered_idx
+  | Call of 'p scan_type * string
 [@@deriving compare, equal, hash, sexp, variants]
 
 type 'm annot = { node : ('m annot pred, 'm annot) query; meta : 'm }

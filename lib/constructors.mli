@@ -36,6 +36,7 @@ module Annot : sig
   type 'm order_list = ('m pred * Ast.order) list
 
   val select : _ select_list -> _ annot -> < > annot
+  val select_ns : string list -> _ annot -> < > annot
   val range : _ pred -> _ pred -> < > annot
   val dep_join : _ annot -> string -> _ annot -> < > annot
   val join : _ pred -> _ annot -> _ annot -> < > annot
@@ -46,8 +47,10 @@ module Annot : sig
   val relation : Relation.t -> < > annot
   val empty : < > annot
   val scalar : _ pred -> string -> < > annot
+  val scalar_s : string -> < > annot
   val list : _ annot -> string -> _ annot -> < > annot
   val tuple : _ annot list -> Ast.tuple -> < > annot
+  val call : _ pred Ast.scan_type -> string -> < > annot
 
   val hash_idx :
     ?key_layout:_ annot ->

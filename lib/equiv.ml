@@ -15,6 +15,7 @@ end
 type t = Set.M(Eq).t [@@deriving compare, sexp]
 type meta = < eq : t >
 
+let pp_meta fmt m = Fmt.pf fmt "%a" Sexp.pp_hum ([%sexp_of: t] m#eq)
 let empty = Set.empty (module Eq)
 let ( || ) l1 l2 = Set.union l1 l2
 let ( && ) l1 l2 = Set.inter l1 l2

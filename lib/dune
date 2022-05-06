@@ -17,4 +17,4 @@
  (inline_tests)
  (preprocess
   (pps ppx_sexp_conv ppx_compare ppx_hash ppx_expect ppx_let visitors.ppx
-    ppx_variants_conv lwt_ppx)))
+    ppx_variants_conv lwt_ppx ppx_sexp_message)))

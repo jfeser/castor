@@ -23,3 +23,4 @@ val to_sql : t -> string
 val to_var : t -> string
 val pp : Formatter.t -> t -> unit
 val fresh : (int -> string, unit, string) format -> t
+val of_string_exn : string -> t

@@ -134,6 +134,7 @@ and query = function
       List.map ts ~f:annot |> List.fold_left ~f:I.O.( * ) ~init:(I.of_int 1)
   | ATuple (_, Zip) -> failwith "Zip tuples not supported"
   | GroupBy _ | AOrderedIdx _ | Relation _ | Range _ -> I.top
+  | _ -> failwith "unsupported"
 
 and pred _ = failwith "Predicates have no cardinality"
 

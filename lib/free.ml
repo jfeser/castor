@@ -83,6 +83,7 @@ let free_open free r =
             ([ free r' - exposed r'; free r'' - exposed ~scope r' ]
             @ List.map ~f:bound_free oi_lookup))
     | ATuple (rs, (Zip | Concat | Cross)) -> List.map rs ~f:free |> union_list
+    | _ -> failwith "unsupported"
   in
   free_set
 

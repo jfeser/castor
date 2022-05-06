@@ -405,4 +405,4 @@ let%expect_test "pred_names" =
                    (param1 + day(1)), ((param1 + month(3)) + day(1))))))))|}
   in
   Pred.names p |> [%sexp_of: Set.M(Name).t] |> print_s;
-  [%expect {| (((name total_revenue) (meta <opaque>))) |}]
+  [%expect {| (((name total_revenue))) |}]

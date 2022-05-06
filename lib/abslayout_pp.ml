@@ -151,7 +151,8 @@ let pp_query_open pp_query pp_pred pp_meta fmt { node; meta } =
                lb
                (pp_option (pp_upper_bound pp_pred))
                ub))
-        oi_lookup);
+        oi_lookup
+  | _ -> ());
   Fmt.pf fmt "@]"
 
 let rec pp_with_meta pp_meta fmt q =

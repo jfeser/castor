@@ -97,6 +97,7 @@ let stage_exn p r =
     | _, AOrderedIdx _ ->
         Error.create "Invalid path in get." (p, r) [%sexp_of: t * _ annot]
         |> Error.raise
+    | _ -> failwith "unsupported"
   in
   stage p r `Run
 
@@ -138,6 +139,7 @@ let rec get_exn p r =
   | _, AOrderedIdx _ ->
       Error.create "Invalid path in get." (p, r) [%sexp_of: t * _ annot]
       |> Error.raise
+  | _ -> failwith "unsupported"
 
 let all r =
   let open RevList in
@@ -165,7 +167,9 @@ let all r =
             | ATuple (rs, _) ->
                 List.foldi rs ~init:q ~f:(fun i q r ->
                     Fqueue.enqueue q (r, p ++ i))
+            | _ -> failwith "unsupported"
           in
+
           Some (RevList.to_list p, q)
       | None -> None)
 

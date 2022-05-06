@@ -10,6 +10,7 @@ end
 type t = Set.M(Eq).t [@@deriving compare, sexp]
 type meta = < eq : t >
 
+val pp_meta : < meta ; .. > Fmt.t
 val annotate : 'a annot -> < meta ; meta : 'a > annot
 
 (** Two attributes are equivalent in a context if they can be substituted

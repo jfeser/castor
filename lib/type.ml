@@ -253,6 +253,7 @@ let least_general_of_layout r =
     | AHashIdx { hi_key_layout = None; _ } ->
         failwith "Missing key layout."
     | Relation _ -> failwith "Layout is still abstract."
+    | _ -> failwith "unsupported"
   in
   f r
 
@@ -372,7 +373,9 @@ let annotate r =
         | ListT _ | HashIdxT _ | OrderedIdxT _ | FuncT _ | EmptyT ) ) ->
         Error.create "Unexpected type." (r, t) [%sexp_of: _ annot * t]
         |> Error.raise
+    | _ -> failwith "unsupported"
   in
+
   let r =
     V.map_meta
       (fun m ->
@@ -535,6 +538,7 @@ module Parallel = struct
       | AOrderedIdx x -> ordered_idx_t x
       | ATuple (_, kind) -> tuple_t kind
       | Relation _ | Range _ -> null_t
+      | _ -> failwith "unsupported"
 
     let rec annot r =
       {
@@ -570,7 +574,9 @@ module Parallel = struct
           | AOrderedIdx { oi_key_layout = None; _ }
           | AHashIdx { hi_key_layout = None; _ } ->
               failwith "Missing key layout."
+          | _ -> failwith "unsupported"
         in
+
         r.meta#builder.build ctx ts
       in
       try annot r

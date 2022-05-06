@@ -327,6 +327,7 @@ let resolve_open resolve stage outer_ctx =
       (OrderBy { key; rel }, inner_ctx)
   | AOrderedIdx o -> resolve_ordered_idx resolve stage outer_ctx o
   | AHashIdx h -> resolve_hash_idx resolve stage outer_ctx h
+  | _ -> failwith "unsupported"
 
 let rec resolve stage outer_ctx r =
   let node, ctx = resolve_open resolve stage outer_ctx r.node in

@@ -152,6 +152,7 @@ let name r =
   | AHashIdx _ -> "hash_idx"
   | AOrderedIdx _ -> "ordered_idx"
   | Range _ -> "range"
+  | Call _ -> "call"
 
 type error = [ `Parse_error of string * int * int ] [@@deriving sexp]
 
@@ -229,6 +230,7 @@ let order_open order r =
   | ATuple (_, (Zip | Concat))
   | AScalar _ | Range _ ->
       []
+  | _ -> failwith "unsupported"
 
 let rec order_of r = order_open order_of r
 

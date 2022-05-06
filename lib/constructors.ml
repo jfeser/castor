@@ -5,6 +5,10 @@ module Query = struct
   open Ast
 
   let select a b = select (Select_list.of_list_exn a, b)
+
+  let select_ns a b =
+    select (Select_list.of_names @@ List.map ~f:Name.of_string_exn a) b
+
   let range a b = range (a, b)
   let dep_join a b c = depjoin { d_lhs = a; d_alias = b; d_rhs = c }
   let join a b c = join { pred = a; r1 = b; r2 = c }
@@ -21,7 +25,13 @@ module Query = struct
   let relation r = relation r
   let empty = aempty
   let scalar s_pred s_name = ascalar { s_pred; s_name }
+
+  let scalar_s s =
+    let n = Name.of_string_exn s in
+    scalar (Name n) (Name.name n)
+
   let tuple a b = atuple (a, b)
+  let call = call
 
   let hash_idx ?key_layout a b c d =
     ahashidx
@@ -59,6 +69,7 @@ module Annot = struct
 
   let wrap node = Ast.{ node; meta = object end }
   let select a b = wrap @@ Query.select (a :> select_list') (b :> annot')
+  let select_ns a b = wrap @@ Query.select_ns a (b :> annot')
   let range a b = wrap @@ Query.range (a :> pred') (b :> pred')
   let dep_join a b c = wrap @@ Query.dep_join (a :> annot') b (c :> annot')
   let join a b c = wrap @@ Query.join (a :> pred') (b :> annot') (c :> annot')
@@ -72,8 +83,10 @@ module Annot = struct
   let relation r = wrap @@ Query.relation r
   let empty = wrap @@ Query.empty
   let scalar a b = wrap @@ Query.scalar (a :> pred') b
+  let scalar_s a = wrap @@ Query.scalar_s a
   let list a b c = wrap @@ Query.list (a :> annot') b (c :> annot')
   let tuple a b = wrap @@ Query.tuple (a :> annot' list) b
+  let call a b = wrap @@ Query.call (a :> pred' Ast.scan_type) b
 
   let hash_idx ?key_layout a b c d =
     wrap

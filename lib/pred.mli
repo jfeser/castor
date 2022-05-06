@@ -10,6 +10,7 @@ module O : Comparable.Infix with type t := t
 
 module Infix : sig
   val name : Name.t -> 'a annot pred
+  val name_s : string -> 'a annot pred
   val int : int -> 'a annot pred
   val fixed : Fixed_point.t -> 'a annot pred
   val date : Date.t -> 'a annot pred

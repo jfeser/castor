@@ -179,6 +179,7 @@ let rec of_ralgebra q =
   | GroupBy (_, _, q') ->
       { (of_ralgebra q') with meta = q }
   | Relation _ -> failwith "Bare relation."
+  | _ -> failwith "unsupported"
 
 let to_concat binds q = concat None (List.map binds ~f:Tuple.T2.get2 @ [ q ])
 

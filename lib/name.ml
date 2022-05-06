@@ -4,7 +4,7 @@ module T = struct
   type t = {
     scope : string option; [@sexp.option]
     name : string;
-    meta : (Univ_map.t[@sexp.opaque]); [@ignore]
+    type_ : Prim_type.t option; [@sexp.option] [@ignore]
   }
   [@@deriving compare, equal, hash, sexp]
 end
@@ -25,18 +25,15 @@ module O : Comparable.Infix with type t := t = struct
   let ( <> ) x y = not (equal x y)
 end
 
-let type_k = Univ_map.Key.create ~name:"type" [%sexp_of: Prim_type.t]
+let create ?scope ?type_ name = { scope; name; type_ }
 
-let create ?scope ?type_ name =
-  let meta = Univ_map.empty in
-  let meta =
-    match type_ with
-    | Some t -> Univ_map.set meta ~key:type_k ~data:t
-    | None -> meta
-  in
-  { scope; name; meta }
+let of_string_exn s =
+  match String.split s ~on:'.' with
+  | [ n ] -> create n
+  | [ s; n ] -> create ~scope:s n
+  | _ -> raise_s [%message "unexpected name" s]
 
-let type_ n = Univ_map.find n.meta type_k
+let type_ n = n.type_
 
 let copy ?scope:s ?type_:t ?name:n nm =
   let s = Option.value s ~default:(scope nm) in
