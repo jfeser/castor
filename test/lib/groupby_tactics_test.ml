@@ -74,11 +74,11 @@ groupby([o_year,
     {|
       alist(dedup(
               select([to_year(o_orderdate) as o_year],
-                dedup(select([o_orderdate], orders)))) as k0,
+                dedup(select([o_orderdate], orders)))) as k1,
         select([o_year,
                 (sum((if (nation_name = param1) then volume else 0.0)) /
                 sum(volume)) as mkt_share],
-          filter((o_year = k0.o_year),
+          filter((o_year = k1.o_year),
             select([to_year(o_orderdate) as o_year,
                     (l_extendedprice * (1 - l_discount)) as volume,
                     n2_name as nation_name],
@@ -185,12 +185,12 @@ groupby([l_orderkey, sum((l_extendedprice * (1 - l_discount))) as revenue, o_ord
                             ascalar(s12.c_address), ascalar(s12.c_nationkey),
                             ascalar(s12.c_phone), ascalar(s12.c_acctbal),
                             ascalar(s12.c_mktsegment), ascalar(s12.c_comment)],
-                      cross)))))) as k1,
+                      cross)))))) as k2,
       select([l_orderkey, sum((l_extendedprice * (1 - l_discount))) as revenue,
               o_orderdate, o_shippriority],
-        filter(((l_orderkey = k1.l_orderkey) &&
-               ((o_orderdate = k1.o_orderdate) &&
-               (o_shippriority = k1.o_shippriority))),
+        filter(((l_orderkey = k2.l_orderkey) &&
+               ((o_orderdate = k2.o_orderdate) &&
+               (o_shippriority = k2.o_shippriority))),
           join((c_custkey = o_custkey),
             join((l_orderkey = o_orderkey),
               filter((o_orderdate < param1),

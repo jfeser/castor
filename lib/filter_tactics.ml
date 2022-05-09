@@ -769,14 +769,15 @@ module Make (C : Config.S) = struct
     let%bind keys =
       match Pred.to_type field with
       | IntT _ | DateT _ ->
-          let val_name = fresh_name "v%d" in
+          let%bind field_name = Match.Pred.to_name field in
           let%map vals =
-            Tactics_util.all_values [ (field, val_name) ] r |> Or_error.ok
+            Tactics_util.all_values [ (field, Name.name field_name) ] r
+            |> Or_error.ok
           in
           let vals =
             let select_list =
               let alias_binds = List.filter_map aliases ~f:Fun.id in
-              Select_list.of_names (Name.create val_name :: alias_binds)
+              Select_list.of_names (field_name :: alias_binds)
             in
             A.select select_list vals
           and scope = fresh_name "k%d" in
