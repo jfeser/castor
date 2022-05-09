@@ -15,10 +15,6 @@ let main ~debug ~gprof ~params ~query ~enable_redshift_dates ~output_layout ?db
     |> Db.create
   in
 
-  let module Config = struct
-    let conn = conn
-    let debug = debug
-  end in
   let layout_file =
     if debug || output_layout then
       let layout_file =
@@ -27,8 +23,7 @@ let main ~debug ~gprof ~params ~query ~enable_redshift_dates ~output_layout ?db
       Some layout_file
     else None
   in
-  let module C = Codegen.Make (Config) () in
-  let open Config in
+
   let ch =
     match fn with Some fn -> In_channel.create fn | None -> In_channel.stdin
   in
@@ -78,7 +73,8 @@ let main ~debug ~gprof ~params ~query ~enable_redshift_dates ~output_layout ?db
       ralgebra
   in
 
-  C.compile ~gprof ~params ?out_dir ?layout_log:layout_file ralgebra |> ignore
+  Codegen.compile ~gprof ~params ?out_dir ?layout_log:layout_file ralgebra
+  |> ignore
 
 let spec =
   let open Command.Let_syntax in

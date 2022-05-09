@@ -5,13 +5,13 @@ open Abslayout_load
 let run_test ?(params = []) ?(print_layout = false) ?(fork = false) layout_str =
   let layout_file = Filename_unix.temp_file "layout" "txt" in
   let conn = Lazy.force test_db_conn in
-  let (module C) = Setup.make_modules () in
 
   let run_compiler layout =
     let out_dir = Filename_unix.temp_dir "bin" "" in
     let exe_fn, data_fn =
       let params = List.map ~f:(fun (n, t, _) -> (n, t)) params in
-      C.compile ~out_dir ~layout_log:layout_file ~gprof:false ~params layout
+      Codegen.compile ~out_dir ~layout_log:layout_file ~gprof:false ~params
+        layout
     in
     if print_layout then
       In_channel.input_all (In_channel.create layout_file) |> print_endline;

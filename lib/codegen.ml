@@ -5,8 +5,6 @@ open Llvm_analysis
 open Llvm_target
 open Llvm_ext
 
-module type S = Codegen_intf.S
-
 (* Turn on some llvm error handling. *)
 let () =
   enable_pretty_stacktrace ();
@@ -17,15 +15,13 @@ let () =
       print_endline err);
   Llvm_all_backends.initialize ()
 
-module Config = struct
-  module type S = sig
-    val debug : bool
-  end
+module type S = sig
+  val codegen : Irgen.ir_module -> llmodule
+  val write_header : Out_channel.t -> unit
 end
 
-module Make (Config : Config.S) () = struct
+module Make () = struct
   module I = Implang
-  open Config
 
   let triple = Target.default_triple ()
 
@@ -181,11 +177,6 @@ module Make (Config : Config.S) () = struct
     in
     let fmt_args = Array.append [| fmt_str_ptr |] (Array.of_list args) in
     build_call printf fmt_args "" builder |> ignore
-
-  let _debug_printf fmt args =
-    if debug then
-      let fmt_str = define_fresh_global (const_stringz ctx fmt) "fmt" module_ in
-      call_printf fmt_str args
 
   let int_type = i64_type ctx
 
@@ -1002,135 +993,150 @@ module Make (Config : Config.S) () = struct
     Hashtbl.data funcs |> List.iter ~f:(fun llfunc -> pp_value_decl fmt llfunc);
     pp_close_box fmt ();
     pp_print_flush fmt ()
-
-  let c_template fn args =
-    let args_strs = List.map args ~f:(fun (n, x) -> sprintf "-D%s=%s" n x) in
-    Util.command_out_exn ([ "clang"; "-E" ] @ args_strs @ [ fn ])
-
-  let from_fn fn n i =
-    let template = Global.build_root () ^ "/etc/" ^ fn in
-    let func =
-      c_template template [ ("PARAM_NAME", n); ("PARAM_IDX", Int.to_string i) ]
-    in
-    let call = sprintf "set_%s(params, input_%s(argv, optind));" n n in
-    (func, call)
-
-  let compile ?out_dir ?layout_log ?(debug = false) ~gprof ~params layout =
-    let out_dir =
-      match out_dir with Some x -> x | None -> Filename_unix.temp_dir "bin" ""
-    in
-    (match Sys_unix.is_directory out_dir with
-    | `No -> Core_unix.mkdir out_dir
-    | _ -> ());
-    let stdlib_fn = Global.build_root () ^ "/etc/castorlib.c" in
-    let date_fn = Global.build_root () ^ "/etc/date.c" in
-    let main_fn = out_dir ^ "/main.c" in
-    let ir_fn = out_dir ^ "/scanner.ir" in
-    let module_fn = out_dir ^ "/scanner.ll" in
-    let exe_fn = out_dir ^ "/scanner.exe" in
-    let opt_module_fn = out_dir ^ "/scanner-opt.ll" in
-    let remarks_fn = out_dir ^ "/remarks.yml" in
-    let header_fn = out_dir ^ "/scanner.h" in
-    let data_fn = out_dir ^ "/data.bin" in
-    let open Prim_type in
-    (* Serialize layout. *)
-    let layout, len =
-      Serialize.serialize ?layout_file:layout_log data_fn layout
-    in
-    let layout =
-      V.map_meta
-        (fun m ->
-          object
-            method pos = m#pos
-            method type_ = m#type_
-            method resolved = m#meta#resolved
-          end)
-        layout
-    in
-
-    (* Generate IR module. *)
-    let ir_module =
-      let unopt = Irgen.irgen ~debug ~params ~len layout in
-      Log.info (fun m -> m "Optimizing intermediate language.");
-      Implang_opt.opt unopt
-    in
-    Out_channel.with_file ir_fn ~f:(fun ch ->
-        let fmt = Caml.Format.formatter_of_out_channel ch in
-        Irgen.pp fmt ir_module);
-
-    (* Generate header. *)
-    Out_channel.with_file header_fn ~f:write_header;
-
-    (* Generate main file. *)
-    let () =
-      Log.debug (fun m -> m "Creating main file.");
-      let funcs, calls =
-        List.filter params ~f:(fun (n, _) ->
-            List.exists ir_module.Irgen.params ~f:(fun (n', _) ->
-                [%equal: string] n n'))
-        |> List.mapi ~f:(fun i (n, t) ->
-               Log.debug (fun m -> m "Creating loader for %s." n);
-               let loader_fn =
-                 match t with
-                 | NullT -> failwith "No null parameters."
-                 | IntT _ -> "load_int.c"
-                 | DateT _ -> "load_date.c"
-                 | BoolT _ -> "load_bool.c"
-                 | StringT _ -> "load_string.c"
-                 | FixedT _ -> "load_float.c"
-                 | VoidT | TupleT _ -> failwith "Unsupported parameter type."
-               in
-               (from_fn loader_fn) n i)
-        |> List.unzip
-      in
-      let header_str = "#include \"scanner.h\"" in
-      let funcs_str = String.concat (header_str :: funcs) ~sep:"\n" in
-      let calls_str = String.concat calls ~sep:"\n" in
-      let perf_template = Global.build_root () ^ "/etc/perf.c" in
-      let perf_c =
-        let open In_channel in
-        with_file perf_template ~f:(fun ch ->
-            String.template (input_all ch) [ funcs_str; calls_str ])
-      in
-      Out_channel.(with_file main_fn ~f:(fun ch -> output_string ch perf_c))
-    in
-    (* Generate scanner module. *)
-    let () =
-      let module_ = codegen ir_module in
-      Llvm.print_module module_fn module_
-    in
-    let cflags = [ "$CPPFLAGS"; "-g" ] in
-    let cflags =
-      (if gprof then [ "-pg" ] else [])
-      @ (if debug then [ "-O0" ] else [ "-O3" ])
-      @ cflags
-    in
-    if debug then
-      Util.command_exn ~quiet:()
-        ([ "clang" ] @ cflags
-        @ [ module_fn; stdlib_fn; date_fn; main_fn; "-o"; exe_fn ])
-    else (
-      Util.command_exn ~quiet:()
-        [
-          "opt";
-          "-S";
-          sprintf "-pass-remarks-output=%s" remarks_fn;
-          "-O3 -enable-unsafe-fp-math";
-          module_fn;
-          ">";
-          opt_module_fn;
-          "2>/dev/null";
-        ];
-      Util.command_exn ~quiet:()
-        ([ "clang" ] @ cflags
-        @ [
-            opt_module_fn;
-            stdlib_fn;
-            date_fn;
-            main_fn;
-            "-o";
-            exe_fn;
-            "2>/dev/null";
-          ]));
-    (exe_fn, data_fn)
 end
+
+module Ctx = struct
+  type t = (module S)
+
+  let create () = (module Make () : S)
+end
+
+let codegen c =
+  let module C = (val c : S) in
+  C.codegen
+
+let write_header c =
+  let module C = (val c : S) in
+  C.write_header
+
+let c_template fn args =
+  let args_strs = List.map args ~f:(fun (n, x) -> sprintf "-D%s=%s" n x) in
+  Util.command_out_exn ([ "clang"; "-E" ] @ args_strs @ [ fn ])
+
+let from_fn fn n i =
+  let template = Global.build_root () ^ "/etc/" ^ fn in
+  let func =
+    c_template template [ ("PARAM_NAME", n); ("PARAM_IDX", Int.to_string i) ]
+  in
+  let call = sprintf "set_%s(params, input_%s(argv, optind));" n n in
+  (func, call)
+
+let compile ?out_dir ?layout_log ?(debug = false) ~gprof ~params layout =
+  let out_dir =
+    match out_dir with Some x -> x | None -> Filename_unix.temp_dir "bin" ""
+  in
+  (match Sys_unix.is_directory out_dir with
+  | `No -> Core_unix.mkdir out_dir
+  | _ -> ());
+  let stdlib_fn = Global.build_root () ^ "/etc/castorlib.c" in
+  let date_fn = Global.build_root () ^ "/etc/date.c" in
+  let main_fn = out_dir ^ "/main.c" in
+  let ir_fn = out_dir ^ "/scanner.ir" in
+  let module_fn = out_dir ^ "/scanner.ll" in
+  let exe_fn = out_dir ^ "/scanner.exe" in
+  let opt_module_fn = out_dir ^ "/scanner-opt.ll" in
+  let remarks_fn = out_dir ^ "/remarks.yml" in
+  let header_fn = out_dir ^ "/scanner.h" in
+  let data_fn = out_dir ^ "/data.bin" in
+  let open Prim_type in
+  (* Serialize layout. *)
+  let layout, len =
+    Serialize.serialize ?layout_file:layout_log data_fn layout
+  in
+  let layout =
+    V.map_meta
+      (fun m ->
+        object
+          method pos = m#pos
+          method type_ = m#type_
+          method resolved = m#meta#resolved
+        end)
+      layout
+  in
+
+  (* Generate IR module. *)
+  let ir_module =
+    let unopt = Irgen.irgen ~debug ~params ~len layout in
+    Log.info (fun m -> m "Optimizing intermediate language.");
+    Implang_opt.opt unopt
+  in
+  Out_channel.with_file ir_fn ~f:(fun ch ->
+      let fmt = Caml.Format.formatter_of_out_channel ch in
+      Irgen.pp fmt ir_module);
+
+  let ctx = Ctx.create () in
+  (* Generate header. *)
+  Out_channel.with_file header_fn ~f:(write_header ctx);
+
+  (* Generate main file. *)
+  let () =
+    Log.debug (fun m -> m "Creating main file.");
+    let funcs, calls =
+      List.filter params ~f:(fun (n, _) ->
+          List.exists ir_module.Irgen.params ~f:(fun (n', _) ->
+              [%equal: string] n n'))
+      |> List.mapi ~f:(fun i (n, t) ->
+             Log.debug (fun m -> m "Creating loader for %s." n);
+             let loader_fn =
+               match t with
+               | NullT -> failwith "No null parameters."
+               | IntT _ -> "load_int.c"
+               | DateT _ -> "load_date.c"
+               | BoolT _ -> "load_bool.c"
+               | StringT _ -> "load_string.c"
+               | FixedT _ -> "load_float.c"
+               | VoidT | TupleT _ -> failwith "Unsupported parameter type."
+             in
+             (from_fn loader_fn) n i)
+      |> List.unzip
+    in
+    let header_str = "#include \"scanner.h\"" in
+    let funcs_str = String.concat (header_str :: funcs) ~sep:"\n" in
+    let calls_str = String.concat calls ~sep:"\n" in
+    let perf_template = Global.build_root () ^ "/etc/perf.c" in
+    let perf_c =
+      let open In_channel in
+      with_file perf_template ~f:(fun ch ->
+          String.template (input_all ch) [ funcs_str; calls_str ])
+    in
+    Out_channel.(with_file main_fn ~f:(fun ch -> output_string ch perf_c))
+  in
+  (* Generate scanner module. *)
+  let () =
+    let module_ = codegen ctx ir_module in
+    Llvm.print_module module_fn module_
+  in
+  let cflags = [ "$CPPFLAGS"; "-g" ] in
+  let cflags =
+    (if gprof then [ "-pg" ] else [])
+    @ (if debug then [ "-O0" ] else [ "-O3" ])
+    @ cflags
+  in
+  if debug then
+    Util.command_exn ~quiet:()
+      ([ "clang" ] @ cflags
+      @ [ module_fn; stdlib_fn; date_fn; main_fn; "-o"; exe_fn ])
+  else (
+    Util.command_exn ~quiet:()
+      [
+        "opt";
+        "-S";
+        sprintf "-pass-remarks-output=%s" remarks_fn;
+        "-O3 -enable-unsafe-fp-math";
+        module_fn;
+        ">";
+        opt_module_fn;
+        "2>/dev/null";
+      ];
+    Util.command_exn ~quiet:()
+      ([ "clang" ] @ cflags
+      @ [
+          opt_module_fn;
+          stdlib_fn;
+          date_fn;
+          main_fn;
+          "-o";
+          exe_fn;
+          "2>/dev/null";
+        ]));
+  (exe_fn, data_fn)
