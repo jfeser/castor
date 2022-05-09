@@ -4,7 +4,7 @@ open Schema
 open Collections
 module P = Pred.Infix
 module A = Abslayout
-open Match
+open Match.Query
 
 module Config = struct
   module type S = sig
@@ -27,8 +27,7 @@ module Make (C : Config.S) = struct
     let pred = Pred.scoped (schema r1) scope pred in
     let lhs =
       let scalars =
-        schema r1 |> Schema.scoped scope |> Schema.to_select_list
-        |> List.map ~f:A.scalar
+        schema r1 |> Schema.scoped scope |> List.map ~f:A.scalar_name
       in
       A.tuple scalars Cross
     and rhs = A.filter pred r2 in
@@ -48,11 +47,11 @@ module Make (C : Config.S) = struct
         let layout =
           let slist =
             let r1_schema = Schema.scoped join_scope r1_schema in
-            r1_schema @ schema r2 |> List.map ~f:P.name
+            r1_schema @ schema r2 |> Select_list.of_names
           in
           A.dep_join r1 join_scope @@ A.select slist
           @@ A.hash_idx
-               (A.dedup @@ A.select [ kr ] r2)
+               (A.dedup @@ A.select [ (kr, "key") ] r2)
                hash_scope
                (A.filter
                   (Binop (Eq, Pred.scoped r2_schema hash_scope kr, kr))
@@ -154,12 +153,12 @@ module Make (C : Config.S) = struct
            (select (Schema.to_select_list fst_sel_list) r)
            scope2
            (hash_idx
-              (dedup (select [ As_pred (Name pk, Name.name alias) ] rel))
+              (dedup (select [ (Name pk, Name.name alias) ] rel))
               scope
               (select
-                 (List.map fst_sel_list ~f:(fun n ->
-                      Name (Name.scoped scope2 n))
-                 @ Schema.to_select_list snd_sel_list)
+                 (Select_list.of_names
+                    (List.map fst_sel_list ~f:(fun n -> Name.scoped scope2 n)
+                    @ snd_sel_list))
                  (filter (Binop (Eq, Name pk, Name alias)) rel))
               [ Name (Name.scoped scope2 pk) ])
     else None

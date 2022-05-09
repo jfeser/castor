@@ -1,9 +1,10 @@
+open Core
 open Ast
 open Collections
 module A = Abslayout
 module P = Pred.Infix
 module V = Visitors
-open Match
+open Match.Query
 
 (** Enable partitioning when a parameter is used in a range predicate. *)
 let enable_partition_cmp = ref false
@@ -93,7 +94,7 @@ module Make (C : Config.S) = struct
         let above = List.map above ~f:(Pred.unscoped o.oi_scope) in
         filter_many above
         @@ A.ordered_idx' { o with oi_values = filter_many below r }
-    | DepJoin _ | Relation _ | AEmpty | AScalar _ | ATuple _ | Range _ -> None
+    | _ -> None
 
   let hoist_filter = of_func hoist_filter ~name:"hoist-filter"
 
@@ -115,6 +116,14 @@ module Make (C : Config.S) = struct
 
   let hoist_filter_agg = of_func hoist_filter_agg ~name:"hoist-filter-agg"
 
+  (** Hoist a filter past a selection or grouping operator, adding additional
+      attrs to the select or groupby.
+
+      Note: the new attrs must be present in the grouping key to be added to the
+      select list.
+
+      TODO: This transform changes the schema and therefore could change the
+      cardinality of the result depending on context. *)
   let hoist_filter_extend r =
     let open Option.Let_syntax in
     match r.node with
@@ -129,23 +138,23 @@ module Make (C : Config.S) = struct
                        (Tactics_util.select_contains
                           (Set.singleton (module Name) f)
                           ps r))
-              |> List.map ~f:(fun n -> Name n)
+              |> Select_list.of_names
             in
-            Some (A.filter p @@ A.select (ps @ ext) r)
+            return @@ A.filter p @@ A.select (ps @ ext) r
         | `Agg -> None)
     | GroupBy (ps, key, r) ->
         let%bind p, r = to_filter r in
         let ext =
-          let key_preds = List.map ~f:(fun n -> Name n) key in
+          let key_select = Select_list.of_names key in
           Free.pred_free p |> Set.to_list
           |> List.filter ~f:(fun f ->
                  (not (Set.mem params f))
                  && (not
                        (Tactics_util.select_contains
                           (Set.singleton (module Name) f)
-                          key_preds r))
+                          key_select r))
                  && List.mem key ~equal:[%compare.equal: Name.t] f)
-          |> List.map ~f:(fun n -> Name n)
+          |> Select_list.of_names
         in
         Some (A.filter p @@ A.group_by (ps @ ext) key r)
     | _ -> None
@@ -196,7 +205,7 @@ module Make (C : Config.S) = struct
     let k = fresh_name "k%d" in
     let n = fresh_name "x%d" in
     A.ordered_idx
-      (A.dedup (A.select [ P.as_ p n ] rk))
+      (A.dedup (A.select [ (p, n) ] rk))
       k
       (A.filter (Binop (Eq, Name (Name.create ~scope:k n), p)) rv)
       [ (lb, ub) ]
@@ -345,10 +354,10 @@ module Make (C : Config.S) = struct
       |> Schema.to_select_list
     in
     return
-    @@ A.list (A.dedup @@ A.select [ Name attr ] r) scope
+    @@ A.list (A.dedup @@ A.select (Select_list.of_names [ attr ]) r) scope
     @@ A.tuple
          [
-           A.filter p @@ A.scalar (Name sattr);
+           A.filter p @@ A.scalar_name sattr;
            A.select select_list @@ A.filter P.(Name attr = Name sattr) r;
          ]
          Cross
@@ -394,17 +403,15 @@ module Make (C : Config.S) = struct
     match A.select_kind ps with
     | `Scalar ->
         let ctx =
-          List.filter_map ps ~f:(fun p ->
-              Option.map (Pred.to_name p) ~f:(fun n -> (n, Pred.remove_as p)))
+          List.map ps ~f:(fun (p, n) -> (Name.create n, p))
           |> Map.of_alist_exn (module Name)
         in
         let p' = Pred.subst ctx p in
         A.select ps (A.filter p' r)
     | `Agg ->
         let scalar_ctx =
-          List.filter_map ps ~f:(fun p ->
-              if Poly.(Pred.kind p = `Scalar) then
-                Option.map (Pred.to_name p) ~f:(fun n -> (n, Pred.remove_as p))
+          List.filter_map ps ~f:(fun (p, n) ->
+              if Poly.(Pred.kind p = `Scalar) then Some (Name.create n, p)
               else None)
           |> Map.of_alist_exn (module Name)
         in
@@ -576,21 +583,19 @@ module Make (C : Config.S) = struct
         | And (d1, d2) ->
             let e1 = extract d1 and e2 = extract d2 in
             let n1 = schema e1 and n2 = schema e2 in
-            A.dedup @@ A.select [ Name n1 ]
+            A.dedup
+            @@ A.select (Select_list.of_names [ n1 ])
             @@ A.join (Binop (Eq, Name n1, Name n2)) e1 e2
         | Or (d1, d2) ->
             let e1 = extract d1 and e2 = extract d2 in
             let n1 = schema e1 and n2 = schema e2 and n = fresh_name "x%d" in
             A.dedup
             @@ A.tuple
-                 [
-                   A.select [ P.as_ (Name n1) n ] e1;
-                   A.select [ P.as_ (Name n2) n ] e2;
-                 ]
+                 [ A.select [ (Name n1, n) ] e1; A.select [ (Name n2, n) ] e2 ]
                  Concat
         | Domain d ->
             let n = schema d and n' = fresh_name "x%d" in
-            A.select [ P.as_ (Name n) n' ] d
+            A.select [ (Name n, n') ] d
       in
       Map.map d ~f:extract
   end
@@ -761,11 +766,8 @@ module Make (C : Config.S) = struct
           let vals =
             let val_name = List.hd_exn (Schema.schema vals) in
             let select_list =
-              let alias_binds =
-                List.filter_map aliases ~f:Fun.id
-                |> List.map ~f:(fun n -> P.as_ (Name val_name) @@ Name.name n)
-              in
-              P.name val_name :: alias_binds
+              let alias_binds = List.filter_map aliases ~f:Fun.id in
+              Select_list.of_names (val_name :: alias_binds)
             in
             A.select select_list vals
           and scope = fresh_name "k%d" in
@@ -781,7 +783,7 @@ module Make (C : Config.S) = struct
       | StringT _ ->
           let%map keys = Tactics_util.all_values [ field ] r |> Or_error.ok in
           let select_list =
-            [ P.(as_ (name (List.hd_exn (Schema.schema keys))) key_name) ]
+            [ P.(name (List.hd_exn (Schema.schema keys)), key_name) ]
           in
           A.select select_list keys
       | _ -> None
@@ -914,7 +916,7 @@ module Make (C : Config.S) = struct
         let lhs =
           dedup
             (select
-               [ As_pred (Name (Name.copy ~scope:None name), fresh_name) ]
+               [ (Name (Name.copy ~scope:None name), fresh_name) ]
                (db_relation rel))
         in
         let scope = Fresh.name Global.fresh "s%d" in
@@ -945,7 +947,10 @@ module Make (C : Config.S) = struct
     in
     let rel = Name.rel_exn n_domain in
     let lhs =
-      dedup (select [ Name (Name.unscoped n_domain) ] (db_relation rel))
+      dedup
+        (select
+           [ (Name (Name.unscoped n_domain), Name.name n_domain) ]
+           (db_relation rel))
     in
     let scope = Fresh.name Global.fresh "s%d" in
     of_func ~name:"partition-domain" @@ fun r ->
@@ -993,8 +998,7 @@ module Make (C : Config.S) = struct
     let rhs, subqueries = visitor#visit_t () @@ Path.get_exn p r in
     let subqueries =
       List.map subqueries ~f:(fun (n, p) ->
-          A.select [ As_pred (p, Name.name n) ]
-          @@ A.scalar (As_pred (Int 0, "dummy")))
+          A.select [ (p, Name.name n) ] @@ A.scalar (Int 0) "dummy")
     in
     let%map lhs =
       match subqueries with
@@ -1031,7 +1035,7 @@ module Make (C : Config.S) = struct
       List.filter_map subqueries ~f:(function
         | n, First r -> (
             match Schema.schema r with
-            | [ n' ] -> return @@ A.select [ As_pred (Name n', Name.name n) ] r
+            | [ n' ] -> return @@ A.select [ (Name n', Name.name n) ] r
             | _ -> None)
         | _ -> None)
     in
@@ -1084,9 +1088,8 @@ module Make (C : Config.S) = struct
         @@ A.subst ctx @@ A.filter p'
         @@ A.select
              [
-               P.as_
-                 (P.name @@ List.hd_exn @@ Schema.schema r)
-                 (Name.name subquery_name);
+               ( P.name @@ List.hd_exn @@ Schema.schema r,
+                 Name.name subquery_name );
              ]
              r
     | _ -> failwith "not a subquery"
@@ -1169,9 +1172,8 @@ module Make (C : Config.S) = struct
           let witness_name = Fresh.name Global.fresh "wit%d_" in
           let witnesses =
             List.mapi values ~f:(fun i v ->
-                As_pred
-                  ( Pred.subst (Map.singleton (module Name) free_var v) p,
-                    sprintf "%s_%d" witness_name i ))
+                ( Pred.subst (Map.singleton (module Name) free_var v) p,
+                  sprintf "%s_%d" witness_name i ))
           in
           let filter_pred =
             List.foldi values ~init:p ~f:(fun i else_ v ->
@@ -1180,7 +1182,7 @@ module Make (C : Config.S) = struct
                     Name (Name.create (sprintf "%s_%d" witness_name i)),
                     else_ ))
           in
-          let select_list = witnesses @ List.map schema ~f:(fun n -> Name n) in
+          let select_list = witnesses @ Select_list.of_names schema in
           Some (filter filter_pred (select select_list r'))
       | _ -> None
     in
@@ -1227,8 +1229,7 @@ module Make (C : Config.S) = struct
           in
           let fresh_name = Fresh.name Global.fresh "p%d_" ^ Name.name field in
           let select_list =
-            As_pred (encoder, fresh_name)
-            :: List.map schema ~f:(fun n -> Name n)
+            (encoder, fresh_name) :: Select_list.of_names schema
           in
           Option.return
           @@ filter
@@ -1250,7 +1251,7 @@ module Make (C : Config.S) = struct
     else
       return @@ A.filter p'
       @@ A.select
-           (List.map binds ~f:(fun (n, p) -> P.as_ p (Name.name n))
+           (List.map binds ~f:(fun (n, p) -> (p, Name.name n))
            @ Schema.(schema r |> to_select_list))
       @@ r
 

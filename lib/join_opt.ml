@@ -1,4 +1,4 @@
-open Graph
+open Core
 open Printf
 open Collections
 open Ast
@@ -56,11 +56,11 @@ module Join_graph = struct
     let default = Bool true
   end
 
-  module G = Persistent.Graph.ConcreteLabeled (Vertex) (Edge)
+  module G = Graph.Persistent.Graph.ConcreteLabeled (Vertex) (Edge)
   include G
-  include Oper.P (G)
-  include Oper.Choose (G)
-  module Dfs = Traverse.Dfs (G)
+  include Graph.Oper.P (G)
+  include Graph.Oper.Choose (G)
+  module Dfs = Graph.Traverse.Dfs (G)
 
   let source_relation leaves n =
     List.find_map leaves ~f:(fun (r, s) -> if Set.mem s n then Some r else None)
@@ -243,7 +243,8 @@ module Join_graph = struct
       else
         let acc =
           Combinat.combinations (List.init n ~f:Fun.id) ~k
-          |> Iter.fold ~init:acc ~f:(fun acc vs ->
+          |> Iter.fold
+               (fun acc vs ->
                  let g1, g2, es =
                    partition graph
                      (List.init k ~f:(fun i -> vertices.(vs.(i)))
@@ -251,6 +252,7 @@ module Join_graph = struct
                  in
                  if is_connected g1 && is_connected g2 then f acc (g1, g2, es)
                  else acc)
+               acc
         in
         loop acc (k + 1)
     in
@@ -371,13 +373,8 @@ module Make (Config : Config.S) = struct
     let parted_r =
       let c = P.name (Name.create "c") in
       A.(
-        select
-          [
-            As_pred (Min c, "min");
-            As_pred (Max c, "max");
-            As_pred (Avg c, "avg");
-          ]
-        @@ group_by [ P.as_ Count "c" ] (Set.to_list parts) static_r)
+        select [ (Min c, "min"); (Max c, "max"); (Avg c, "avg") ]
+        @@ group_by [ (Count, "c") ] (Set.to_list parts) static_r)
       |> Simplify_tactic.simplify cost_conn
     in
     let sql = Sql.of_ralgebra parted_r |> Sql.to_string

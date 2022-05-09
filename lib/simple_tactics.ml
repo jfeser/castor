@@ -17,8 +17,7 @@ module Make (Config : Config.S) = struct
     if Is_serializable.is_static ~params r then
       let scope = Fresh.name Global.fresh "s%d" in
       let scalars =
-        Schema.schema r |> Schema.scoped scope
-        |> List.map ~f:(fun n -> A.scalar (Name n))
+        Schema.schema r |> Schema.scoped scope |> List.map ~f:A.scalar_name
       in
       Some (A.list (strip_meta r) scope (A.tuple scalars Cross))
     else None

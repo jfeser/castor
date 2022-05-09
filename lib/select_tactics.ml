@@ -1,3 +1,4 @@
+open Core
 open Ast
 open Abslayout
 open Collections
@@ -5,7 +6,7 @@ open Schema
 module A = Abslayout
 module P = Pred.Infix
 module V = Visitors
-open Match
+open Match.Query
 
 module Config = struct
   module type S = sig
@@ -72,11 +73,9 @@ module Make (C : Config.S) = struct
           let ip, p = extend_aggs ip p in
           (op @ [ p ], ip))
     in
-    let inner_aggs =
-      List.map inner_aggs ~f:(fun (n, a) -> P.as_ a @@ Name.name n)
-    in
+    let inner_aggs = List.map inner_aggs ~f:(fun (n, a) -> (a, Name.name n)) in
     (* Don't want to project out anything that we might need later. *)
-    let inner_fields = inner_schema |> List.map ~f:P.name in
+    let inner_fields = Select_list.of_names inner_schema in
     (outer_aggs, inner_aggs @ inner_fields)
 
   (* Look for evidence of a previous pushed select. *)
@@ -87,8 +86,7 @@ module Make (C : Config.S) = struct
       | _ -> false
     with _ -> false
 
-  let extend_with_tuple ns r =
-    tuple (List.map ns ~f:(fun n -> scalar @@ P.name n) @ [ r ]) Cross
+  let extend_with_tuple ns r = tuple (List.map ns ~f:scalar_name @ [ r ]) Cross
 
   let push_select_collection r =
     let open Option.Let_syntax in

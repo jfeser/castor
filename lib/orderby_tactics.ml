@@ -1,5 +1,7 @@
+open Core
 open Ast
 module A = Abslayout
+module C = Constructors.Annot
 
 module Config = struct
   module type S = sig
@@ -18,8 +20,6 @@ module Make (Config : Config.S) = struct
     let s = Set.of_list (module Name) (Schema.schema r) in
     List.for_all key ~f:(fun (p, _) ->
         Tactics_util.is_supported r.meta#stage s p)
-
-  module C = (val Constructors.Annot.with_strip_meta (fun () -> object end))
 
   let push_orderby_depjoin key mk lhs scope rhs meta =
     let open Option.Let_syntax in

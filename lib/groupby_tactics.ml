@@ -1,6 +1,7 @@
+open Core
 open Visitors
 open Collections
-open Match
+open Match.Query
 module A = Abslayout
 module P = Pred.Infix
 include (val Log.make ~level:(Some Warning) "castor-opt.groupby-tactics")
@@ -58,7 +59,6 @@ module Make (C : Config.S) = struct
     let open Option.Let_syntax in
     let%bind ps, key, r = to_groupby r in
     let key_name = Fresh.name Global.fresh "k%d" in
-    let key_preds = List.map key ~f:P.name in
     let filter_pred =
       List.map key ~f:(fun n ->
           Pred.Infix.(name n = name (Name.copy n ~scope:(Some key_name))))
@@ -66,7 +66,7 @@ module Make (C : Config.S) = struct
     in
     (* Try to remove any remaining parameters from the keys relation. *)
     let%bind keys =
-      match all_values_approx key_preds r with
+      match all_values_approx key r with
       | Ok keys -> return @@ A.dedup keys
       | Error err ->
           (* Otherwise, if some keys are computed, fail. *)

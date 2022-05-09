@@ -68,12 +68,12 @@ module Make (C : Config.S) = struct
            let mapping =
              select
                [
-                 As_pred (Row_number, encoded_name); Name (Name.create map_name);
+                 (Row_number, encoded_name);
+                 (Name (Name.create map_name), map_name);
                ]
                (order_by
                   [ (Name (Name.create encoded_name), Desc) ]
-                  (dedup
-                     (select [ As_pred (Name key, map_name) ] (relation rel))))
+                  (dedup (select [ (Name key, map_name) ] (relation rel))))
            in
            let encoded_rel =
              join
@@ -84,23 +84,22 @@ module Make (C : Config.S) = struct
              let scope = Fresh.name Global.fresh "s%d" in
              select
                [
-                 As_pred
-                   ( If
-                       ( Binop (Gt, Name (Name.create count_name), Int 0),
-                         Name (Name.create encoded_name),
-                         Int (-1) ),
-                     encoded_lookup_name );
+                 ( If
+                     ( Binop (Gt, Name (Name.create count_name), Int 0),
+                       Name (Name.create encoded_name),
+                       Int (-1) ),
+                   encoded_lookup_name );
                ]
                (select
                   [
-                    As_pred (Count, count_name); Name (Name.create encoded_name);
+                    (Count, count_name);
+                    (Name (Name.create encoded_name), encoded_name);
                   ]
                   (hash_idx
-                     (dedup
-                        (select [ As_pred (Name key, map_name) ] (relation rel)))
+                     (dedup (select [ (Name key, map_name) ] (relation rel)))
                      scope
                      (select
-                        [ Name (Name.create encoded_name) ]
+                        [ (Name (Name.create encoded_name), encoded_name) ]
                         (A.filter
                            P.(
                              Name (Name.create ~scope map_name)

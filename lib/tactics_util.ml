@@ -65,8 +65,6 @@ module Make (Config : Config.S) = struct
       ~f:(fun m e -> Map.add_multi m ~key:(f e) ~data:e)
       l
 
-  let alias_map r = aliases r |> closure
-
   (** Collect a map from names to defining expressions from a relation. *)
   let rec aliases r =
     let plus =
@@ -81,85 +79,85 @@ module Make (Config : Config.S) = struct
     | Select (ps, r) -> (
         match select_kind ps with
         | `Scalar ->
-            List.fold_left ps ~init:(aliases r) ~f:(fun m p ->
-                match p with
-                | As_pred (p, n) -> plus (one (Name.create n) p) m
-                | _ -> m)
+            List.fold_left ps ~init:(aliases r) ~f:(fun m (p, n) ->
+                plus (one (Name.create n) p) m)
         | `Agg -> zero)
     | Filter (_, r) | Dedup r -> aliases r
     | _ -> zero
 
+  let alias_map r = aliases r |> closure
+
   let all_values_attr n =
     let open Option.Let_syntax in
     let%bind rel = Db.relation_has_field cost_conn (Name.name n) in
-    return @@ A.select [ Name n ] @@ A.relation rel
+    return @@ A.select [ (Name n, Name.name n) ] @@ A.relation rel
 
   (** Approximate selection of all valuations of a list of predicates from a
    relation. Works if the relation is parameterized, but only when the
    predicates do not depend on those parameters. *)
-  let all_values_approx_2 ps r =
-    let open Or_error.Let_syntax in
-    (* Otherwise, if all grouping keys are from named relations, select all
-       possible grouping keys. *)
-    let alias_map = aliases r in
-    (* Find the definition of each key and collect all the names in that
-       definition. If they all come from base relations, then we can enumerate
-       the keys. *)
-    let orig_names = List.map ps ~f:Pred.to_name in
-    let ps = List.map ps ~f:(Pred.subst alias_map) in
+  let all_values_approx_2 (_ : _ pred select_list) _ = failwith ""
+  (* let open Or_error.Let_syntax in *)
+  (* (\* Otherwise, if all grouping keys are from named relations, select all *)
+  (*    possible grouping keys. *\) *)
+  (* let alias_map = aliases r in *)
+  (* (\* Find the definition of each key and collect all the names in that *)
+  (*    definition. If they all come from base relations, then we can enumerate *)
+  (*    the keys. *\) *)
+  (* let orig_names = List.map ps ~f:Pred.to_name in *)
+  (* let ps = List.map ps ~f:(Pred.subst alias_map) in *)
 
-    (* Try to substitute names that don't come from base relations with equivalent names that do. *)
-    let subst =
-      Equiv.eqs r |> Set.to_list
-      |> List.filter_map ~f:(fun (n, n') ->
-             match
-               ( Db.relation_has_field cost_conn (Name.name n),
-                 Db.relation_has_field cost_conn (Name.name n') )
-             with
-             | None, None | Some _, Some _ -> None
-             | Some _, None -> Some (n', n)
-             | None, Some _ -> Some (n, n'))
-      |> Map.of_alist_reduce (module Name) ~f:(fun n _ -> n)
-      |> Map.map ~f:P.name
-    in
+  (* (\* Try to substitute names that don't come from base relations with equivalent names that do. *\) *)
+  (* let subst = *)
+  (*   Equiv.eqs r |> Set.to_list *)
+  (*   |> List.filter_map ~f:(fun (n, n') -> *)
+  (*          match *)
+  (*            ( Db.relation_has_field cost_conn (Name.name n), *)
+  (*              Db.relation_has_field cost_conn (Name.name n') ) *)
+  (*          with *)
+  (*          | None, None | Some _, Some _ -> None *)
+  (*          | Some _, None -> Some (n', n) *)
+  (*          | None, Some _ -> Some (n, n')) *)
+  (*   |> Map.of_alist_reduce (module Name) ~f:(fun n _ -> n) *)
+  (*   |> Map.map ~f:P.name *)
+  (* in *)
 
-    let preds = List.map ps ~f:(Pred.subst subst) in
+  (* let preds = List.map ps ~f:(Pred.subst subst) in *)
 
-    (* Collect the relations referred to by the predicate list. *)
-    let%bind rels =
-      List.map preds ~f:(fun p ->
-          List.map
-            (Pred.names p |> Set.to_list)
-            ~f:(fun n ->
-              match Db.relation_has_field cost_conn (Name.name n) with
-              | Some r -> Ok (r, n)
-              | None ->
-                  Or_error.error "Name does not come from base relation." n
-                    [%sexp_of: Name.t])
-          |> Or_error.all)
-      |> Or_error.all
-    in
+  (* (\* Collect the relations referred to by the predicate list. *\) *)
+  (* let%bind rels = *)
+  (*   List.map preds ~f:(fun p -> *)
+  (*       List.map *)
+  (*         (Pred.names p |> Set.to_list) *)
+  (*         ~f:(fun n -> *)
+  (*           match Db.relation_has_field cost_conn (Name.name n) with *)
+  (*           | Some r -> Ok (r, n) *)
+  (*           | None -> *)
+  (*               Or_error.error "Name does not come from base relation." n *)
+  (*                 [%sexp_of: Name.t]) *)
+  (*       |> Or_error.all) *)
+  (*   |> Or_error.all *)
+  (* in *)
 
-    let joined_rels =
-      List.concat rels
-      |> List.map ~f:(fun (r, n) -> (r.Relation.r_name, n))
-      |> Map.of_alist_multi (module String)
-      |> Map.to_alist
-      |> List.map ~f:(fun (r, ns) ->
-             dedup
-             @@ select (Select_list.of_list @@ List.map ns ~f:P.name)
-             @@ relation (Db.relation cost_conn r))
-      |> List.reduce ~f:(join (Bool true))
-    in
+  (* let joined_rels = *)
+  (*   List.concat rels *)
+  (*   |> List.map ~f:(fun (r, n) -> (r.Relation.r_name, n)) *)
+  (*   |> Map.of_alist_multi (module String) *)
+  (*   |> Map.to_alist *)
+  (*   |> List.map ~f:(fun (r, ns) -> *)
+  (*          dedup *)
+  (*          @@ select (Select_list.of_list @@ List.map ns ~f:P.name) *)
+  (*          @@ relation (Db.relation cost_conn r)) *)
+  (*   |> List.reduce ~f:(join (Bool true)) *)
+  (* in *)
 
-    let sel_list =
-      List.map2_exn orig_names preds ~f:(fun n p ->
-          match n with Some n -> P.as_ p (Name.name n) | None -> p)
-      |> Select_list.of_list
-    in
-    match joined_rels with
-    | Some r -> Ok (select sel_list r)
-    | None -> Or_error.errorf "No relations found."
+  (* let sel_list = *)
+  (*   List.map2_exn orig_names preds ~f:(fun n p -> *)
+  (*       match n with Some n -> P.as_ p (Name.name n) | None -> p) *)
+  (*   |> Select_list.of_list *)
+  (* in *)
+  (* match joined_rels with *)
+  (* | Some r -> Ok (select sel_list r) *)
+  (* | None -> Or_error.errorf "No relations found." *)
 
   let all_values_approx ps r =
     if List.length ps = 1 then all_values_approx_2 ps r
@@ -195,7 +193,7 @@ module Make (Config : Config.S) = struct
       (schema r
       |> List.filter ~f:(fun n' ->
              not (List.mem ~equal:Name.O.( = ) ns (Name.unscoped n')))
-      |> List.map ~f:P.name)
+      |> Select_list.of_names)
       r
 
   let select_contains names ps r =
@@ -203,7 +201,9 @@ module Make (Config : Config.S) = struct
       is_empty
         (diff
            (inter names (of_list (module Name) (schema r)))
-           (of_list (module Name) (List.filter_map ~f:Pred.to_name ps))))
+           (of_list
+              (module Name)
+              (List.map ~f:(fun (_, n) -> Name.create n) ps))))
 
   let rec all_pairs = function
     | [] -> []

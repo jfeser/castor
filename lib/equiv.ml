@@ -122,7 +122,3 @@ module Context = struct
 
   let annotate r = annot empty r
 end
-
-module Private = struct
-  let eqs = eqs
-end

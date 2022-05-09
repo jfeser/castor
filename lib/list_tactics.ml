@@ -4,7 +4,7 @@ open Collections
 module A = Abslayout
 module P = Pred.Infix
 module V = Visitors
-open Match
+open Match.Query
 
 module Config = struct
   module type S = sig
@@ -27,7 +27,10 @@ module Make (C : Config.S) = struct
       let%bind counts =
         List.map schema ~f:(fun n ->
             let%bind result =
-              A.select [ P.count ] @@ A.dedup @@ A.select [ P.name n ] @@ l_keys
+              A.select [ (P.count, "count") ]
+              @@ A.dedup
+              @@ A.select [ (P.name n, Name.name n) ]
+              @@ l_keys
               |> Sql.of_ralgebra |> Sql.to_string
               |> Db.exec1 cost_conn Prim_type.int_t
               |> Or_error.ok
@@ -51,7 +54,8 @@ module Make (C : Config.S) = struct
       let fresh_scope = Fresh.name Global.fresh "s%d" in
       return
       @@ A.list
-           (A.dedup @@ A.select [ P.name split_field ] @@ r)
+           (A.dedup
+           @@ A.select [ (P.name split_field, Name.name split_field) ] r)
            fresh_scope
            (A.list
               (A.select other_fields_select
