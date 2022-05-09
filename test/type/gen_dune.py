@@ -15,15 +15,20 @@ tests = [
     ("large4", "", False, tpch_db),
     ("large5", "", False, tpch_db),
     ("large6", "", False, tpch_db),
+    ("cost1", "", False, tpch_db),
+    ("cost2", "", False, tpch_db),
 ]
 
 for (name, params, run_ser, db) in tests:
-    targets = f"{name}.par.output"
-    options = f"-parallel {name}.par.output"
+    targets = f"{name}.par.output {name}.cost.output"
+    options = f"-parallel {name}.par.output -cost {name}.cost.output"
     diff_rules = f"""
 (rule
  (alias runtest)
  (action (diff {name}.par.expected {name}.par.output)))
+(rule
+ (alias runtest)
+ (action (diff {name}.cost.expected {name}.cost.output)))
 """
     if run_ser:
         targets += f" {name}.ser.output"

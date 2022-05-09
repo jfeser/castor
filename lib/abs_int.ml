@@ -1,6 +1,7 @@
 open Core
 
 type t = Bottom | Interval of int * int | Top [@@deriving compare, sexp]
+type msg = [ `No_infimum | `No_supremum ] [@@deriving sexp]
 
 let pp fmt = function
   | Top -> Format.fprintf fmt "⊤"

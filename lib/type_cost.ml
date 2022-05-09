@@ -29,6 +29,17 @@ module Make (Config : Config.S) = struct
     | HashIdxT (_, vt, _) -> I.(join zero (read vt))
     | OrderedIdxT (_, vt, _) -> I.(join zero (read vt))
 
+  let of_type ?(kind = `Avg) type_ =
+    let open Result.Let_syntax in
+    let c = read type_ in
+    match kind with
+    | `Min -> I.inf c
+    | `Max -> I.sup c
+    | `Avg ->
+        let%bind l = I.inf c in
+        let%map h = I.sup c in
+        l + ((h - l) / 2)
+
   let cost kind r =
     info (fun m -> m "Computing cost of:@, %a." Abslayout.pp r);
     let out =
@@ -37,14 +48,7 @@ module Make (Config : Config.S) = struct
       let%bind type_ =
         Parallel.type_of ?timeout:cost_timeout cost_conn (strip_meta layout)
       in
-      let c = read type_ in
-      match kind with
-      | `Min -> I.inf c
-      | `Max -> I.sup c
-      | `Avg ->
-          let%bind l = I.inf c in
-          let%map h = I.sup c in
-          l + ((h - l) / 2)
+      of_type ~kind type_
     in
     match out with
     | Ok x ->
