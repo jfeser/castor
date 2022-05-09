@@ -1,0 +1,9 @@
+(library
+ (name join_opt_test)
+ (libraries castor castor_test str core)
+ (flags -open Core -open Castor -open Castor_test)
+ (inline_tests
+  (deps
+   (alias ../test_db)))
+ (preprocess
+  (pps ppx_sexp_conv ppx_compare ppx_expect ppx_sexp_message)))
